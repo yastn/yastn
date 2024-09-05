@@ -41,7 +41,7 @@ b_Dsize= 1048
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("-backend", type=str, choices=['np', 'np-c-mp', 'np-mp', 'torch', 'torch-mp', 'torch-cpp'], default='np-c-mp')
+    parser.add_argument("-backend", type=str, choices=['np', 'np-c', 'np-mp', 'torch', 'torch-mp', 'torch-cpp'], default='np-c')
     parser.add_argument("-device", type=str, default='cpu')
     parser.add_argument("-niter", type=int, default=1000)
     parser.add_argument("-num_threads", type=int, default=-1)
@@ -49,8 +49,8 @@ if __name__ == '__main__':
 
     if args.backend == 'np':
         import backend_np_1d as backend
-    elif args.backend == 'np-c-mp':
-        import backend_np_c_mp_1d as backend
+    elif args.backend == 'np-c':
+        import backend_np_c_1d as backend
     elif args.backend == 'torch':
         import backend_torch_1d as backend
         if args.num_threads>0:
@@ -130,7 +130,7 @@ if __name__ == '__main__':
 
     print('Total time : %.2f seconds' % (time.time() - keep_time))
 
-    if args.backend=='np-c-mp':
+    if args.backend=='np-c':
         import numpy as np
         import backend_np_1d as backend_np
         keep_time = time.time()

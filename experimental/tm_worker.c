@@ -1,3 +1,20 @@
+/*
+# Copyright 2024 The YASTN Authors. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+*/
+
 #include <stdio.h>
 #include <math.h>
 #include <string.h>
@@ -13,6 +30,7 @@
 
 #define MAX_ORDER 32
 
+// test function if DLL import and function calling works
 DLLEXPORT
 void test_empty(void)
 {
@@ -83,18 +101,18 @@ DLLEXPORT
 int tm_worker(double *newdata, int sln0, int Dn1, int Dslc0, int Dslc1,
                 double *data, int slo0, int *Do, int *order, int Drsh1, int n_order, int itemsize)
 {
-    int iDo[MAX_ORDER];       // indexes of Do array are used to loop
+    int iDo[MAX_ORDER];       // indexes of Do array that are used to loop
     int strandsDt[MAX_ORDER]; // strands of Do.transpose(order) array
     int j, k, idx_Do, idx_Dt, id0, id1, nDt;
 
     if (n_order > MAX_ORDER)
     {
-        printf("tm_worker error: n_order > MAX_ORDER=32. Results will be WRONG.\n");
+        printf("tm_worker error: n_order > MAX_ORDER=32 not implemented.\n");
         return -1;
     }
     if ((itemsize != 8) && (itemsize != 16))
     {
-        printf("tm_worker error: itemsize != 8 && itemsize != 16.\n");
+        printf("tm_worker error: (itemsize != 8) && (itemsize != 16) not implemented.\n");
         return -1;
     }
 
@@ -143,7 +161,7 @@ int tm_worker(double *newdata, int sln0, int Dn1, int Dslc0, int Dslc1,
             //  itemsize cannot be passed as free parameter -> compiler optimizes transfers for 8-bytes and 16-bytes differently
             // memcpy(newdataslc + idx_Dt / Drsh1*Dn1 + idx_Dt % Drsh1, dataslo + idx_Do, 8); // avoiding local variables -> the same
             // newdataslc[id0*Dn1 + id1] = dataslo[idx_Do]; // performance - identical as above line
-            // int vs int -> no performance change
+            // int vs int32_t -> no performance change but int32_t limits data to 32 GB
 
             // next element of Do array  and newdata array
             idx_Do++;
@@ -194,9 +212,10 @@ int tm_worker_parallel_float64(int tasks, double *newdata, int *sln0, int *Dn1, 
                                     double *data, int *slo0, int *Do, int *order, int *Drsh1, int n_order)
 {
     int k;
-
-    #pragma omp parallel for 
-	// num_threads(2)
+// tests 2024-09-03
+// 4 threads are optimal (speed/cpu usage) for Xeon cpu
+// 2 threads are optimal (speed/cpu usage) for i5 cpu
+    #pragma omp parallel for     // num_threads(4)
     for (k = 0; k < tasks; k++)
     {
         tm_worker(newdata, sln0[k], Dn1[k], Dslc0[k], Dslc1[k], data, slo0[k], Do + k * n_order, order, Drsh1[k], n_order, 8);
@@ -210,10 +229,9 @@ int tm_worker_parallel_complex128(int tasks, double *newdata, int *sln0, int *Dn
 {
     int k;
 
-    #pragma omp parallel for 
-	// num_threads(2)
+    #pragma omp parallel for    // num_threads(4)
     // schedule(dynamic,1)
-    // schedule(static, 1)   // test 2024-09-01   static is a bit faster
+    // schedule(static, 1)   //  static is default and a bit faster
     for (k = 0; k < tasks; k++)
     {
         tm_worker(newdata, sln0[k], Dn1[k], Dslc0[k], Dslc1[k], data, slo0[k], Do + k * n_order, order, Drsh1[k], n_order, 16);
@@ -249,11 +267,3 @@ int np_data_2d_cpy(double *dest, double *src, int dest_stride0, int dest_stride1
 
 #undef DLLEXPORT
 #undef MAX_ORDER
-
-/* 2024-09-01 benchmark  complex128, 1000 iterations, a_Dsize=954145  (281 tasks)
-pure numpy(openblas): 9.65 s
-c worker_parallel: 1 thread: 6.65 s, already faster because  xmm registers are used for 16-byte data transfer
-c worker_parallel: 2 threads: 5.36 s
-c worker_parallel: 3 threads: 4.94 s
-c worker_parallel: 4 threads: 4.88 s
-*/

@@ -12,23 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+
+""" 
+this module patches some functions from backend_np_1d.py
+using faster versions written in C, 
+where usage of OpenMP is simpler and faster.
+
+"OMP_NUM_THREADS" is set in backend_np_1d
+"""
+
+from backend_np_1d import *
+
 import os
-
-_NUM_THREADS="4"
-os.environ["OMP_NUM_THREADS"] = _NUM_THREADS
-os.environ["OPENBLAS_NUM_THREADS"] = _NUM_THREADS
-os.environ["MKL_NUM_THREADS"] = _NUM_THREADS
-os.environ["VECLIB_MAXIMUM_THREADS"] = _NUM_THREADS
-os.environ["NUMEXPR_NUM_THREADS"] = _NUM_THREADS
-
-# if other parts of the software require different optimal _NUM_THREADS,
-# the value of 2 can can be hardcoded into tm_worker.c
+import platform
 
 from itertools import groupby
-import platform
 import ctypes, ctypes.util
 import numpy as np
-
 
 name = "tm_worker"
 path = os.path.dirname(os.path.abspath(__file__)) + os.sep  # same path as this wrapper
@@ -51,13 +51,6 @@ else:
 _lib = ctypes.CDLL(name)
 
 _test_empty = _lib.test_empty
-
-# python call:
-#   tm_wrapper.tm_worker_parallel(ct_tasks, newdata, ct_sln0, ct_Dn1, ct_Dslc0, ct_Dslc1, 
-#                                   data, ct_slo0, ct_Do, ct_order, ct_Drsh1, ct_len_order)
-# C source:
-#   int tm_worker_parallel(int tasks, double *newdata, int *sln0, int *Dn1, int *Dslc0, int *Dslc1, 
-#                           double *data, int *slo0, int *Do, int *order, int *Drsh1, int n_order)
 
 _tm_worker_parallel_float64 = _lib.tm_worker_parallel_float64
 _tm_worker_parallel_float64.argtypes = [
@@ -95,10 +88,6 @@ _tm_worker_parallel_complex128.restype = ctypes.c_int
 
 # -------------------------------------
 
-def randR(D, device='cpu', dtype=np.float64):
-    return 2 * np.random.random_sample(D).astype(dtype) - 1
-
-# calls C worker that uses OpenMP, 2 threads seems to be optimal
 def transpose_and_merge(data, order, meta_new, meta_mrg, Dsize):
     newdata = np.zeros((Dsize,), dtype=data.dtype)
     tasks = 0
@@ -131,7 +120,6 @@ def transpose_and_merge(data, order, meta_new, meta_mrg, Dsize):
             ct_Drsh1[task] = Drsh[1]
             for i in range(len(order)):
                 ct_Do[i + task * len(order)] = Do[i]
-            # print(f"{task=}, {sln[1]-sln[0]=}, {slo[1]-slo[0]=}, {Do[len(order)-1]=}")
             task += 1
 
     # even with a single thread available, 
@@ -143,5 +131,5 @@ def transpose_and_merge(data, order, meta_new, meta_mrg, Dsize):
         _tm_worker_parallel_complex128(ct_tasks, newdata, ct_sln0, ct_Dn1, ct_Dslc0, ct_Dslc1, 
                                                  data, ct_slo0, ct_Do, ct_order, ct_Drsh1, ct_len_order)
     else:
-        raise Exception(f"No tm_wrapper.tm_worker_parallel_... implemented for itemsize=={data.itemsize}")
+        raise Exception(f"No _tm_worker_parallel_... implemented for {data.itemsize=}")
     return newdata
