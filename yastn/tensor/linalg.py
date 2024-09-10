@@ -40,7 +40,7 @@ def norm(a, p='fro') -> number:
 
 
 def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
-        Uaxis=-1, Vaxis=0, policy='fullrank', fix_signs=False,
+        Uaxis=-1, Vaxis=0, policy='fullrank', fix_signs=False, svd_on_cpu=False,
         tol=0, tol_block=0, D_block=float('inf'), D_total=float('inf'),
         truncate_multiplets=False, mask_f=None, **kwargs) -> tuple[yastn.Tensor, yastn.Tensor, yastn.Tensor]:
     r"""
@@ -102,7 +102,8 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
     U, S, V
     """
     diagnostics = kwargs['diagonostics'] if 'diagonostics' in kwargs else None
-    U, S, V = svd(a, axes=axes, sU=sU, nU=nU, policy=policy, D_block=D_block, diagnostics=diagnostics, fix_signs=fix_signs)
+    U, S, V = svd(a, axes=axes, sU=sU, nU=nU, policy=policy, D_block=D_block,
+                  diagnostics=diagnostics, fix_signs=fix_signs, svd_on_cpu=svd_on_cpu)
 
     if mask_f:
         Smask = mask_f(S)
@@ -119,7 +120,7 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
 
 def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         Uaxis=-1, Vaxis=0, policy='fullrank',
-        fix_signs=False, **kwargs) -> tuple[yastn.Tensor, yastn.Tensor, yastn.Tensor] | yastn.Tensor:
+        fix_signs=False, svd_on_cpu=False, **kwargs) -> tuple[yastn.Tensor, yastn.Tensor, yastn.Tensor] | yastn.Tensor:
     r"""
     Split tensor into :math:`a = U S V` using exact singular value decomposition (SVD),
     where the columns of `U` and the rows of `V` form orthonormal bases
@@ -156,6 +157,13 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         Provide uniqueness of decomposition for non-degenerate cases.
         The default is False.
 
+    svd_on_cpu: bool
+        GPU tends to be very slow when executing SVD.
+        If True, the data will be copied to CPU for SVD,
+        and the results will be copied back to the device.
+        Nothing is done for data already residing on CPU.
+        The default is False.
+
     Returns
     -------
     U, S, V or S
@@ -165,6 +173,10 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     axes = _unpack_axes(a.mfs, lout_l, lout_r)
 
     data, struct, slices, ls_l, ls_r = _merge_to_matrix(a, axes)
+
+    if svd_on_cpu:
+        device = a.config.backend.get_device(data)
+        data = a.config.backend.move_to(data, device='cpu')
 
     minD = tuple(min(ds) for ds in struct.D)
     if policy == 'lowrank':
@@ -190,6 +202,12 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         Udata, Sdata, Vdata = a.config.backend.svd_lowrank(data, meta, sizes, **kwargs)
     else:
         raise YastnError('svd policy should in (`lowrank`, `fullrank`). compute_uv == False only works with `fullrank`')
+
+    if svd_on_cpu:
+        Sdata = a.config.backend.move_to(Sdata, device=device)
+        if compute_uv:
+            Udata = a.config.backend.move_to(Udata, device=device)
+            Vdata = a.config.backend.move_to(Vdata, device=device)
 
     if compute_uv and fix_signs:
         Udata, Vdata = a.config.backend.fix_svd_signs(Udata, Vdata, meta)
