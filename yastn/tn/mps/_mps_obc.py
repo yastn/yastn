@@ -484,7 +484,7 @@ class MpsMpoOBC(_MpsMpoParent):
         nl, nr = bd
         axes = ((0, 1), (2, 3)) if self.nr_phys == 1 else ((0, 1, 2), (3, 4, 5))
         self.pC = bd
-        U, S, V = tensor.svd(AA, axes=axes, sU=1, Uaxis=2)
+        U, S, V = tensor.svd(AA, axes=axes, sU=1, Uaxis=2, **opts_svd)
         mask = tensor.truncation_mask(S, **opts_svd)
         self.A[nl], self.A[bd], self.A[nr] = mask.apply_mask(U, S, V, axes=(2, 0, 0))
         return tensor.bitwise_not(mask).apply_mask(S, axes=0).norm() / S.norm()  # discarded weight

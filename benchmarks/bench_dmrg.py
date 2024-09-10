@@ -48,7 +48,7 @@ def dmrg_Heisenberg(args):
     #
     Ds = {0: 10, 2: 32, 4: 64, 6: 128, 8: 256, 10: 384, 12: 512, 14: 768, 16: 1024, 18: 1536, 20: 2048}  # sweep no.: dimension
     opts_svd = {"D_total": Ds[0], 'svd_on_cpu': args.svd_on_cpu} #, 'tol': 1e-14}
-    opts_eigs = {'hermitian': True, 'ncv': 3, 'which': 'SR'}  # default opts_eigs in dmrg_; provided here to be explicit
+    opts_eigs = {'hermitian': True, 'ncv': 3, 'which': 'SR'}  # default opts_eigs in dmrg_; provided here to show them explicitly
     dmrg = mps.dmrg_(psi, H, method='2site', iterator_step=1, max_sweeps=22, opts_svd=opts_svd, opts_eigs=opts_eigs)
     #
     # execute dmrg generator
