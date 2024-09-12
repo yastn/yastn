@@ -13,24 +13,23 @@
 # limitations under the License.
 # ==============================================================================
 """ benchmark DMRG in Heisenberg spin-1 model """
-import argparse
-import time
-import yastn.tn.mps as mps
-import yastn
-
 
 def dmrg_Heisenberg(args):
     """
     Initialize MPS in a Neel state and run a few sweeps of
     DMRG 2-site with the Heisenberg spin-1 Hamiltonian.
     """
+    import time
+    import yastn.tn.mps as mps
+    import yastn
+
     N = 100
     if args.backend == 'np':
         import yastn.backend.backend_np as backend
     elif args.backend == 'torch':
         import yastn.backend.backend_torch as backend
-    ops = yastn.operators.Spin1(sym=args.sym, backend=backend, default_device=args.device)
     #
+    ops = yastn.operators.Spin1(sym=args.sym, backend=backend, default_device=args.device)
     sp, sm, sz = ops.sp(), ops.sm(), ops.sz()
     #
     # Hamiltonian MPO
@@ -45,38 +44,50 @@ def dmrg_Heisenberg(args):
     #
     psi = mps.product_mps([ops.vec_z(1), ops.vec_z(-1)], N)
     #
-    # setting up DMRG parameters
+    # DMRG parameters
     #
-    Ds = [10, 32, 64, 128, 256, 384, 512, 768, 1024, 1536, 2048]
-    rep = 2  # we will make 2 sweeps per D in Ds
-    opts_svd = {"D_total": Ds[0]}
-    dmrg = mps.dmrg_(psi, H, method='2site', iterator_step=1, max_sweeps=rep * len(Ds), opts_svd=opts_svd)
+    Ds = {0: 10, 2: 32, 4: 64, 6: 128, 8: 256, 10: 384, 12: 512, 14: 768, 16: 1024, 18: 1536, 20: 2048}  # sweep no.: dimension
+    opts_svd = {"D_total": Ds[0], 'svd_on_cpu': args.svd_on_cpu} #, 'tol': 1e-14}
+    opts_eigs = {'hermitian': True, 'ncv': 3, 'which': 'SR'}  # default opts_eigs in dmrg_; provided here to show them explicitly
+    dmrg = mps.dmrg_(psi, H, method='2site', iterator_step=1, max_sweeps=22, opts_svd=opts_svd, opts_eigs=opts_eigs)
     #
     # execute dmrg generator
     #
-    ref_time = time.time()
-    ref_time_global = ref_time
+    ref_time_sweep = ref_time_total = time.time()
     for info in dmrg:
-        wall_time = time.time() - ref_time
+        wall_time = time.time() - ref_time_sweep
         print(f"Sweep={info.sweeps:02d}; Energy={info.energy:4.12f}; D={max(psi.get_bond_dimensions()):4d}; time={wall_time:3.1f}")
-        ref_time = time.time()
-        if info.sweeps % rep == 0 and info.sweeps // rep < len(Ds):
-            opts_svd["D_total"] = Ds[info.sweeps // rep]  # update D used by DMRG
+        ref_time_sweep  = time.time()
+        if info.sweeps in Ds:
+            opts_svd["D_total"] = Ds[info.sweeps]  # update D_total used by DMRG
 
-        if ref_time - ref_time_global > args.max_seconds:
-            print(f"Maximal simulation time reached after {ref_time - ref_time_global:0.1f}")
+        total_time = time.time() - ref_time_total
+        if total_time  > args.max_seconds:
+            print(f"Maximal simulation time reached after {total_time:0.1f}")
             break
 
-    print("Cache info")
-    for x in yastn.get_cache_info().items():
-        print(x)
+    # print("Cache info")  # auxiliary information from lru_cache
+    # for x in yastn.get_cache_info().items():
+    #     print(x)
+
 
 if __name__ == "__main__":
+    import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("-sym", type=str, default='U1', choices=['Z3', 'dense', 'U1'])
     parser.add_argument("-backend", type=str, default='np', choices=['np', 'torch'])
     parser.add_argument("-device", type=str, default='cpu', choices=['cpu', 'cuda'])
+    parser.add_argument("-svd_on_cpu", dest='svd_on_cpu', action='store_true')
     parser.add_argument("-max_seconds", type=int, default=3600)
+    parser.add_argument("-num_threads", type=str, default='none', choices=['none'] + [str(n) for n in range(1, 33)])
     args = parser.parse_args()
+
+    if args.num_threads != 'none':
+        import os
+        os.environ["OMP_NUM_THREADS"] = args.num_threads
+        os.environ["OPENBLAS_NUM_THREADS"] = args.num_threads
+        os.environ["MKL_NUM_THREADS"] = args.num_threads
+        os.environ["VECLIB_MAXIMUM_THREADS"] = args.num_threads
+        os.environ["NUMEXPR_NUM_THREADS"] = args.num_threads
 
     dmrg_Heisenberg(args)
