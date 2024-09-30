@@ -174,6 +174,10 @@ def zeros(D, dtype='float64', **kwargs):
     return np.zeros(D, dtype=DTYPE[dtype])
 
 
+def empty(D, dtype='float64', **kwargs):
+    return np.empty(D, dtype=DTYPE[dtype])
+
+
 def ones(D, dtype='float64', **kwargs):
     return np.ones(D, dtype=DTYPE[dtype])
 

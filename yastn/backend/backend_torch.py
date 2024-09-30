@@ -206,6 +206,8 @@ def entropy(data, alpha, tol):
 def zeros(D, dtype='float64', device='cpu'):
     return torch.zeros(D, dtype=DTYPE[dtype], device=device)
 
+def empty(D, dtype='float64', device='cpu'):
+    return torch.empty(D, dtype=DTYPE[dtype], device=device)
 
 def ones(D, dtype='float64', device='cpu'):
     return torch.ones(D, dtype=DTYPE[dtype], device=device)
