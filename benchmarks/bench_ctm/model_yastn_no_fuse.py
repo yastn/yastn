@@ -26,12 +26,7 @@ class CtmBenchYastnNoFuse(CtmBenchParent):
         """ Initialize tensors for contraction. """
         super().__init__(args.fname)
 
-        if args.backend == 'np':
-            import yastn.backend.backend_np as backend
-        elif args.backend == 'torch':
-            import yastn.backend.backend_torch as backend
-
-        config = yastn.make_config(sym=self.d["symmetry"], backend=backend, device=args.device)
+        config = yastn.make_config(sym=self.d["symmetry"], backend=args.backend, device=args.device)
 
         legs = {k: yastn.Leg(config, s=v['signature'], t=v['charges'], D=v['dimensions'])
                 for k, v in self.d.items() if "leg" in k}

@@ -14,7 +14,6 @@
 # ==============================================================================
 import pytest
 import yastn
-from yastn.backend import backend_np
 try:
     from .configs import config_U1, config_Z2, config_Z2_fermionic
 except ImportError:
@@ -41,16 +40,17 @@ def test_config_exceptions():
 @pytest.mark.skipif(config_U1.backend.BACKEND_ID=="numpy", reason="requires different backends or devices")
 def test_config_exceptions_torch():
     """ mismatches requiring different backends or devices"""
-    a = yastn.rand(config=config_U1, s=(1, -1, 1), t=((0, 1), (0, 1), (0, 1)), D=((1, 2), (1, 2), (1, 2)))
+    config_np = yastn.make_config(sym='U1', backend='np')
+    config_torch = yastn.make_config(sym='U1', backend='torch')
+    a = yastn.rand(config=config_torch, s=(1, -1, 1), t=((0, 1), (0, 1), (0, 1)), D=((1, 2), (1, 2), (1, 2)))
     with pytest.raises(yastn.YastnError):
-        wrong_config = a.config._replace(backend=backend_np)
-        b = yastn.rand(config=wrong_config, s=(1, -1, 1), t=((0, 1), (0, 1), (0, 1)), D=((1, 2), (1, 2), (1, 2)))
+        b = yastn.rand(config=config_np, s=(1, -1, 1), t=((0, 1), (0, 1), (0, 1)), D=((1, 2), (1, 2), (1, 2)))
         _ = a + b
         # Two tensors have different backends.
     if config_U1.backend.torch.cuda.is_available():
         with pytest.raises(yastn.YastnError):
             a = a.to(device='cpu')
-            b = yastn.rand(config=config_U1, s=(1, -1, 1), t=((0, 1), (0, 1), (0, 1)), D=((1, 2), (1, 2), (1, 2)))
+            b = yastn.rand(config=config_torch, s=(1, -1, 1), t=((0, 1), (0, 1), (0, 1)), D=((1, 2), (1, 2), (1, 2)))
             b = b.to(device='cuda')
             _ = a + b
             # Devices of the two tensors do not match.
@@ -61,9 +61,12 @@ def test_make_config():
     assert cfg_U1.sym == config_U1.sym
 
     with pytest.raises(yastn.YastnError):
-        yastn.make_config(sym="random_name1")
+        yastn.make_config(sym="random_name")
         #  sym encoded as string only supports: 'dense', 'Z2', 'Z3', 'U1', 'U1xU1', 'U1xU1xZ2'
 
+    with pytest.raises(yastn.YastnError):
+        yastn.make_config(backend="random_name")
+        # backend encoded as string only supports: 'np', 'torch'
 
 if __name__ == '__main__':
     # test_config_exceptions()

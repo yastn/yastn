@@ -44,13 +44,14 @@ def make_config(**kwargs) -> NamedTuple:
 
     Parameters
     ----------
-    backend : backend module or compatible object
+    backend : backend module or str
         Specify ``backend`` providing linear algebra and base dense tensors.
         Currently supported backends are
 
             * NumPy as ``yastn.backend.backend_np``
             * PyTorch as ``yastn.backend.backend_torch``
 
+        Understands string inputs "np", "torch".
         Defaults to NumPy backend.
 
     sym : symmetry module or compatible object or str
@@ -81,9 +82,13 @@ def make_config(**kwargs) -> NamedTuple:
     force_fusion : str
         Overrides fusion strategy provided in :meth:`yastn.Tensor.fuse_legs`. Default is ``None``.
     """
-    if "backend" not in kwargs:
-
+    if "backend" not in kwargs or kwargs["backend"] == 'np':
         kwargs["backend"] = backend_np
+    elif kwargs["backend"] == 'torch':
+        from .backend import backend_torch
+        kwargs["backend"] = backend_torch
+    elif isinstance(kwargs["backend"], str):
+        raise YastnError("backend encoded as string only supports: 'np', 'torch'")
     if "sym" not in kwargs:
         kwargs["sym"] = sym_none
     elif isinstance(kwargs["sym"], str):
