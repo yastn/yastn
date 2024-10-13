@@ -14,37 +14,32 @@
 # limitations under the License.
 # ==============================================================================
 """ Contractions for benchmarks: yastn with ctm tensors with no legs fused. """
+from __future__ import annotations
 from model_yastn_basic_double_layer import CtmBenchYastnBasicDL
-import yastn.tn.fpeps as fpeps
+import yastn
 
 
-class CtmBenchYastnfpeps(CtmBenchYastnBasicDL):
-
-
-    def __init__(self, *args):
-        """ Initialize tensors for contraction. """
-        super().__init__(*args)
-        self.a = self.a.fuse_legs(axes=((1, 2), (3, 4), 0))
-        self.Tt = self.Tt.fuse_legs(axes=(0, (1, 2), 3))
-        self.Tr = self.Tr.fuse_legs(axes=(0, (1, 2), 3))
-        self.A = fpeps.DoublePepsTensor(self.a, self.a)
+class CtmBenchYastnBasicSL(CtmBenchYastnBasicDL):
 
     def print_header(self, file=None):
-        print("Attach a and a* sequentially; Fusion of some legs in input and intermidiate tensors; Used in yastn.tn.fpeps.", file=file)
+        print("Form double-layer A tensor on the fly; no fusion in building tensors.", file=file)
+
 
     def enlarged_corner(self):
         """
         Contract the network
 
-        (0)-----Tt---Ctr
-                /|    |
-        (1)=----a|---=Tr
-            \---|a*-/ |
-                \|    |
-                (3)  (2)
+        a(0-)--Tt--(3+)A(0-)--Ctr
+              / |              |
+             (1+)(2-)         (1+)
+             C   E             B
+             |   |            (0-)
+        b----a---|-----D(1+)---Tr
+             | G |            / |
+        c----|---a*----F(2-)-/  |
+             |   |            (3+)
+             e   f              d
         """
-        vec_tr = self.Tt @ (self.Ctr @ self.Tr)
-        self.C2x2tr = self.A._attach_30(vec_tr)
-
-    def fuse_enlarged_corner(self):
-        self.C2x2mat = self.C2x2tr.fuse_legs(axes=((0, 1), (2, 3)))
+        self.C2x2tr = yastn.einsum('aCEA,AB,BDFd,GCbeD,GEcfF->abcdef',
+                            self.Tt, self.Ctr, self.Tr, self.a, self.a.conj(),
+                            order='ABGCDEF')

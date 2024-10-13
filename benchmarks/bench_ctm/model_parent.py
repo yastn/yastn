@@ -14,42 +14,39 @@
 # limitations under the License.
 # ==============================================================================
 """ Parent class specifying contractions for benchmarks. """
-from __future__ import annotations
 import abc
 import json
-import os
 
 
 class CtmBenchParent(metaclass=abc.ABCMeta):
 
-    def __init__(self, fname):
+    def __init__(self, fname, *args):
         """
-        Read tensor legs for testing.
+        Read tensors legs and other information into dictionary self.d
         """
-        dirname = os.path.dirname(__file__)
-        fpath = os.path.join(dirname, "input_shapes/" + fname)
 
-        with open(fpath, "r") as f:
+        self.bench_pipeline = ["enlarged_corner", "fuse_enlarged_corner", "svd_enlarged_corner"]
+
+        with open(fname, "r") as f:
             self.d = json.load(f)
 
+    def print_header(self, file=None):
+        print(" No benchmark ", file=file)
 
-    def print_info(self):
-        print(" Fill-in contractions. ")
+    def print_properties(self, file=None):
+        print(" Fill-in contractions. ", file=file)
 
     def enlarged_corner(self):
         """
         Contract the network
 
-        a(0-)--T_t---(3+)A(0-)---C
-              / |                |
-             (1+)(2-)           (1+)
-             C   E               B
-             |   |              (0-)
-        b----a---|--------D(1+)--T_r
-             | \ |              /|
-        c----|---a*--------F(2-) |
-             |   |              (3+)
-             e   f               d
+        -----Tt---Ctr
+            / |    |
+           |  |    |
+        ---a--|----Tr
+           |\ |   /|
+        ---|--a*-/ |
+           |  |    |
         """
         self.C2x2_tr = None
 
@@ -72,3 +69,6 @@ class CtmBenchParent(metaclass=abc.ABCMeta):
         """
         self.U, self.S, self.V = None, None, None
 
+    def final_cleanup(self):
+        """ For operations done after executing benchmarks """
+        pass
