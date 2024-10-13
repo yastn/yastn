@@ -27,7 +27,7 @@ class CtmBenchParent(metaclass=abc.ABCMeta):
 
         self.bench_pipeline = ["enlarged_corner", "fuse_enlarged_corner", "svd_enlarged_corner"]
 
-        with open(fname, "r") as f:
+        with open(fname, "r", encoding='utf-8') as f:
             self.d = json.load(f)
 
     def print_header(self, file=None):
