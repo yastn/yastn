@@ -355,7 +355,7 @@ class TestSyntaxGeneral(unittest.TestCase):
         tensor = a.to(device='cpu')
         tensor = a.to(dtype='complex128')
         # get info
-        a.show_properties()
+        a.print_properties()
         a.get_rank()
         a.size
         a.get_tensor_charge()

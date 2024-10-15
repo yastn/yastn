@@ -44,13 +44,14 @@ def make_config(**kwargs) -> NamedTuple:
 
     Parameters
     ----------
-    backend : backend module or compatible object
+    backend : backend module or str
         Specify ``backend`` providing linear algebra and base dense tensors.
         Currently supported backends are
 
             * NumPy as ``yastn.backend.backend_np``
             * PyTorch as ``yastn.backend.backend_torch``
 
+        Understands string inputs "np", "torch".
         Defaults to NumPy backend.
 
     sym : symmetry module or compatible object or str
@@ -59,6 +60,7 @@ def make_config(**kwargs) -> NamedTuple:
         Defaults to ``yastn.sym.sym_none``, effectively a dense tensor.
         For predefined symmetries, takes string input from
         'dense', 'Z2', 'Z3', 'U1', 'U1xU1', 'U1xU1xZ2'.
+
     default_device : str
         Tensors can be stored on various devices as supported by ``backend``
 
@@ -81,9 +83,14 @@ def make_config(**kwargs) -> NamedTuple:
     force_fusion : str
         Overrides fusion strategy provided in :meth:`yastn.Tensor.fuse_legs`. Default is ``None``.
     """
-    if "backend" not in kwargs:
-
+    if "backend" not in kwargs or kwargs["backend"] == 'np':
         kwargs["backend"] = backend_np
+    elif kwargs["backend"] == 'torch':
+        from .backend import backend_torch
+        kwargs["backend"] = backend_torch
+    elif isinstance(kwargs["backend"], str):
+        raise YastnError("backend encoded as string only supports: 'np', 'torch'")
+
     if "sym" not in kwargs:
         kwargs["sym"] = sym_none
     elif isinstance(kwargs["sym"], str):
@@ -91,6 +98,7 @@ def make_config(**kwargs) -> NamedTuple:
             kwargs["sym"] = _syms[kwargs["sym"]]
         except KeyError:
             raise YastnError("sym encoded as string only supports: 'dense', 'Z2', 'Z3', 'U1', 'U1xU1', 'U1xU1xZ2'.")
+
     return _config(**{a: kwargs[a] for a in _config._fields if a in kwargs})
 
 
