@@ -42,6 +42,8 @@ def test_double_peps_tensor():
 
     # create double peps tensor
     T0123 = fpeps.DoublePepsTensor(bra=A, ket=A)
+    T0123.print_properties()
+
     f0123 = T0123.fuse_layers()
     assert T0123.get_shape() == (25, 16, 9, 4)
     assert f0123.get_shape() == (25, 16, 9, 4)
