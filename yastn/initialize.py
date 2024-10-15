@@ -166,7 +166,7 @@ def rand_like(T: yastn.Tensor, **kwargs) -> yastn.Tensor:
     Draws from a uniform distribution in [-1, 1] or [-1, 1] + 1j * [-1, 1],
     depending on desired ``dtype``.
     """
-    return rand(config=T.config, legs=T.get_legs(), n=T.n, isdiag=T.is_diag, **kwargs)
+    return rand(config=T.config, legs=T.get_legs(), n=T.n, isdiag=T.isdiag, **kwargs)
 
 
 def randR(config=None, legs=(), n=None, isdiag=False, **kwargs) -> yastn.Tensor:
