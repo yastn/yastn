@@ -143,7 +143,7 @@ def compress_to_1d(a, meta=None) -> tuple[numpy.array | torch.tensor, dict]:
 ############################
 
 
-def show_properties(a) -> Never:
+def print_properties(a, file=None) -> Never:
     """
     Print basic properties of the tensor:
         * it's symmetry
@@ -160,18 +160,18 @@ def show_properties(a) -> Never:
         * fusion history with 'o' indicating original legs, 'm' meta-fusion,
           'p' hard-fusion (product), 's' blocking (sum).
     """
-    print("Symmetry     :", a.config.sym.SYM_ID)
-    print("signature    :", a.struct.s)  # signature
-    print("charge       :", a.struct.n)  # total charge of tensor
-    print("isdiag       :", a.isdiag)
-    print("dim meta     :", a.ndim)  # number of meta legs
-    print("dim native   :", a.ndim_n)  # number of native legs
-    print("shape meta   :", a.get_shape(native=False))
-    print("shape native :", a.get_shape(native=True))
-    print("no. blocks   :", len(a.struct.t))  # number of blocks
-    print("size         :", a.struct.size)  # total number of elements in all blocks
+    print("Symmetry     :", a.config.sym.SYM_ID, file=file)
+    print("signature    :", a.struct.s, file=file)  # signature
+    print("charge       :", a.struct.n, file=file)  # total charge of tensor
+    print("isdiag       :", a.isdiag, file=file)
+    print("dim meta     :", a.ndim, file=file)  # number of meta legs
+    print("dim native   :", a.ndim_n, file=file)  # number of native legs
+    print("shape meta   :", a.get_shape(native=False), file=file)
+    print("shape native :", a.get_shape(native=True), file=file)
+    print("no. blocks   :", len(a.struct.t), file=file)  # number of blocks
+    print("size         :", a.struct.size, file=file)  # total number of elements in all blocks
     st = {i: leg.history() for i, leg in enumerate(a.get_legs())}
-    print("legs fusions :", st, "\n")
+    print("legs fusions :", st, "\n", file=file)
 
 
 def __str__(a) -> str:
