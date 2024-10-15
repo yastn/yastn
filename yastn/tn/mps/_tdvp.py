@@ -34,7 +34,7 @@ class TDVP_out(NamedTuple):
 def tdvp_(psi, H,
           times=(0, 0.1), dt=0.1, u=1j, method='1site', order='2nd',
           opts_expmv=None, opts_svd=None, normalize=True,
-          progressbar=False):
+          progressbar=False, yield_initial=False):
     r"""
     Iterator performing TDVP sweeps to solve :math:`\frac{d}{dt} |\psi(t)\rangle = -uH|\psi(t)\rangle`,
 
@@ -80,7 +80,9 @@ def tdvp_(psi, H,
 
     progressbar: bool
         Whether to show the progress bar toward the next snapshot. The default is False.
-        We employ tq
+
+    yield_initial: bool
+        Whether to yield the initial state before performing evolution. The default is False.
 
     Returns
     -------
@@ -121,6 +123,8 @@ def tdvp_(psi, H,
         raise YastnError('TDVP: tdvp method %s not recognized' % method)
 
     env = None
+    if yield_initial:
+        yield TDVP_out(times[0], times[0], time_independent, dt, 0)
     # perform time-steps
     for t0, t1 in zip(times[:-1], times[1:]):
         steps = int((t1 - t0 - 1e-12) // dt) + 1
