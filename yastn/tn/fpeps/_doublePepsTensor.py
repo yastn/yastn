@@ -191,3 +191,10 @@ class DoublePepsTensor:
         tt = tt.fuse_legs(axes=(0, (1, 3), (2, 4)))  # [[t t'] [l l']] [b b'] [r r']
         tt = tt.unfuse_legs(axes=0) # [t t'] [l l'] [b b'] [r r']
         return tt.transpose(axes=self._t)
+
+    def print_properties(self, file=None):
+        """ Print basic properties of DoublePepsTensor. """
+        print("DoublePepsTensor", file=file)
+        print("shape   :", self.get_shape(), file=file)
+        st = {i: leg.history() for i, leg in enumerate(self.get_legs())}
+        print("legs fusions :", st, "\n", file=file)

@@ -333,7 +333,10 @@ def eigh(data, meta=None, sizes=(1, 1)):
     Udata = np.zeros((sizes[1],), dtype=data.dtype)
     if meta is not None:
         for (sl, D, slU, DU, slS) in meta:
-            S, U = np.linalg.eigh(data[slice(*sl)].reshape(D))
+            try:
+                S, U = scipy.linalg.eigh(data[slice(*sl)].reshape(D))
+            except scipy.linalg.LinAlgError:  # pragma: no cover
+                S, U = np.linalg.eigh(data[slice(*sl)].reshape(D))
             Sdata[slice(*slS)] = S
             Udata[slice(*slU)].reshape(DU)[:] = U
         return Sdata, Udata
