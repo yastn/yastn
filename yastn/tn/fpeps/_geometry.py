@@ -171,9 +171,10 @@ class SquareLattice():
             return 'v', False
         raise YastnError(f"{bond} is not a nearest-neighbor bond.")
 
-    def f_ordered(self, bond) -> bool:
-        """ Check if bond sites appear in fermionic order. """
-        s0, s1 = bond
+    def f_ordered(self, s0, s1) -> bool:
+        """
+        Check if sites s0, s1 are fermionicaly ordered.
+        """
         return s0[1] < s1[1] or (s0[1] == s1[1] and s0[0] <= s1[0])
 
     def site2index(self, site):

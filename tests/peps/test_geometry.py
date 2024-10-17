@@ -55,10 +55,10 @@ def test_CheckerboardLattice(net=None):
     assert all(net.nn_bond_type(bond) == ('h', True) for bond in net.bonds(dirn='h'))
     assert all(net.nn_bond_type(bond) == ('v', True) for bond in net.bonds(dirn='v'))
 
-    assert net.f_ordered(Bond((2, 0), (4, 0)))
-    assert net.f_ordered(Bond((4, 0), (0, 4)))
-    assert all(net.f_ordered((s0, s1)) for s0, s1 in zip(net.sites(), net.sites()[1:]))
-    assert all(net.f_ordered(bond) for bond in net.bonds())
+    assert net.f_ordered((2, 0), (4, 0))
+    assert net.f_ordered((4, 0), (0, 4))
+    assert all(net.f_ordered(s0, s1) for s0, s1 in zip(net.sites(), net.sites()[1:]))
+    assert all(net.f_ordered(*bond) for bond in net.bonds())
 
 
 def test_SquareLattice():
@@ -95,11 +95,11 @@ def test_SquareLattice():
     assert all(net.nn_bond_type(bond) == ('h', True) for bond in net.bonds(dirn='h'))
     assert all(net.nn_bond_type(bond) == ('v', True) for bond in net.bonds(dirn='v'))
 
-    assert net.f_ordered(Bond((0, 0), (1, 0)))
-    assert net.f_ordered(Bond((0, 0), (0, 1)))
-    assert net.f_ordered(Bond((1, 0), (0, 1)))
-    assert all(net.f_ordered((s0, s1)) for s0, s1 in zip(net.sites(), net.sites()[1:]))
-    assert all(net.f_ordered(bond) for bond in net.bonds())
+    assert net.f_ordered((0, 0), (1, 0))
+    assert net.f_ordered((0, 0), (0, 1))
+    assert net.f_ordered((1, 0), (0, 1))
+    assert all(net.f_ordered(s0, s1) for s0, s1 in zip(net.sites(), net.sites()[1:]))
+    assert all(net.f_ordered(*bond) for bond in net.bonds())
 
     ##########
 
@@ -138,11 +138,11 @@ def test_SquareLattice():
 
     assert net.nn_bond_type(Bond((2, 0), (0, 0))) == ('v', True)
     assert net.nn_bond_type(Bond((0, 0), (2, 0))) == ('v', False)
-    assert not net.f_ordered(Bond((2, 0), (0, 0)))
-    assert net.f_ordered(Bond((0, 0), (2, 0)))
+    assert not net.f_ordered((2, 0), (0, 0))
+    assert net.f_ordered((0, 0), (2, 0))
 
-    assert all(net.f_ordered((s0, s1)) for s0, s1 in zip(net.sites(), net.sites()[1:]))
-    assert not all(net.f_ordered(bond) for bond in net.bonds())  #  PBC bonds in cylinder are not fermionically alligned
+    assert all(net.f_ordered(s0, s1) for s0, s1 in zip(net.sites(), net.sites()[1:]))
+    assert not all(net.f_ordered(*bond) for bond in net.bonds())  #  PBC bonds in cylinder are not fermionically alligned
 
     ##########
 
@@ -174,8 +174,8 @@ def test_SquareLattice():
     assert all(net.nn_bond_type(bond) == ('h', True) for bond in net.bonds(dirn='h'))
     assert all(net.nn_bond_type(bond) == ('v', True) for bond in net.bonds(dirn='v'))
 
-    assert all(net.f_ordered((s0, s1)) for s0, s1 in zip(net.sites(), net.sites()[1:]))
-    assert all(net.f_ordered(bond) for bond in net.bonds())
+    assert all(net.f_ordered(s0, s1) for s0, s1 in zip(net.sites(), net.sites()[1:]))
+    assert all(net.f_ordered(*bond) for bond in net.bonds())
 
     ##########
 
@@ -197,7 +197,7 @@ def test_RectangularUnitCell_1x1():
     assert g.nn_site(Site(0, 0), d='b') == (1, 0)
 
     assert all(g.site2index(site) == 0 for site in [(0, 0), (1, 1), (-3, 3), (1, -1), (2, 0)])
-    assert all(g.f_ordered(bond) for bond in g.bonds())
+    assert all(g.f_ordered(*bond) for bond in g.bonds())
 
 
 def test_RectangularUnitCell_2x2_bipartite():
@@ -282,7 +282,7 @@ def test_Peps_inheritance():
     assert len(psi.sites()) == 6
     assert psi.nn_site((0, 0), 'r') == (0, 1)
     assert psi.nn_bond_type(Bond((0, 0), (0, 1))) == ('h', True)  # 'lr'
-    assert psi.f_ordered(Bond((0, 0), (0, 1)))
+    assert psi.f_ordered((0, 0), (0, 1))
 
 
 if __name__ == '__main__':

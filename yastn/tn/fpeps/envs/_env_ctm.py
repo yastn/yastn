@@ -212,7 +212,7 @@ class EnvCTM(Peps):
 
         bond = Bond(*bond)
         dirn, l_ordered = self.nn_bond_type(bond)
-        f_ordered = self.f_ordered(bond)
+        f_ordered = self.f_ordered(*bond)
         s0, s1 = bond if l_ordered else bond[::-1]
         env0, env1 = self[s0], self[s1]
         ten0, ten1 = self.psi[s0], self.psi[s1]

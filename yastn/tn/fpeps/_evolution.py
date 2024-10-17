@@ -120,7 +120,7 @@ def apply_nn_truncate_optimize_(env, psi, gate, opts_svd,
     info = {'bond': gate.bond}
 
     dirn, l_ordered = psi.nn_bond_type(gate.bond)
-    f_ordered = psi.f_ordered(gate.bond)
+    f_ordered = psi.f_ordered(*gate.bond)
     s0, s1 = gate.bond if l_ordered else gate.bond[::-1]
 
     G0, G1 = gate_fix_order(gate.G0, gate.G1, l_ordered, f_ordered)

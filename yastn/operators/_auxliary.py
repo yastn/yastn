@@ -26,11 +26,11 @@ def swap_charges(charges_0, charges_1, fss) -> int:
     return 1 - 2 * (np.sum((t0 * t1)[:, fss], dtype=np.int64).item() % 2)
 
 
-def sign_canonical_order(*operators, sites=None, tn='fpeps') -> int:
+def sign_canonical_order(*operators, sites=None, f_ordered=None) -> int:
     """
     Calculates a sign corresponding to the commutation of operators into canonical order,
     where the corresponding sites get ordered according to fermionic order.
-    In the canonical ordering, the operators at sites appearing
+    We assume that in canonical ordering, the operators at sites appearing
     later in the fermionic order are applied first.
 
     For instance, consider operators O, P at sites=(s0, s1),
@@ -55,22 +55,20 @@ def sign_canonical_order(*operators, sites=None, tn='fpeps') -> int:
     if not fss:
         return 1
 
-    if tn == 'fpeps':
-        key = lambda x: x[::-1]
-    elif tn == 'mps':
-        key = lambda x: x
-
-    osites = sorted(sites, key=key)
     sites = list(sites)
+    # operators = list(operators)
     charges = [op.n for op in operators]
 
     charges_0, charges_1 = [], []
 
-    for site in osites:
-        ind = sites.index(site)
-        sites.pop(ind)
-        c1 = charges.pop(ind)
-        for c0 in charges[:ind]:
+    while sites:
+        first_ind, first_site = 0, sites[0]
+        for ind, site in enumerate(sites[1:], start=1):
+            if not f_ordered(first_site, site):
+                first_ind, first_site = ind, site
+        sites.pop(first_ind)
+        c1 = charges.pop(first_ind)
+        for c0 in charges[:first_ind]:
             charges_0.append(c0)
             charges_1.append(c1)
 
