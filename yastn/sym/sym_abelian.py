@@ -79,6 +79,8 @@ class sym_abelian(metaclass=sym_meta):
         new_s: int
             The default is 1.
         """
+        if len(charges) == 0:
+            return cls.zero()
         if s is None:
             s = (1,) * len(charges)
         charges = np.array(charges, dtype=np.int64).reshape(1, len(charges), cls.NSYM)

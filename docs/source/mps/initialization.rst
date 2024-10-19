@@ -74,8 +74,6 @@ For an example, see :ref:`MPO for spinless fermions with long-range hopping via 
 
 .. autoclass:: yastn.tn.mps.Hterm
 .. autofunction:: yastn.tn.mps.generate_mpo
-.. autofunction:: yastn.tn.mps.generate_mpo_fast
-.. autofunction:: yastn.tn.mps.generate_mpo_preprocessing
 
 
 Generator class for MPO/MPS (beta)

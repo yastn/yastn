@@ -173,7 +173,7 @@ class SquareLattice():
 
     def f_ordered(self, s0, s1) -> bool:
         """
-        Check if sites s0, s1 are fermionicaly ordered.
+        Check if sites s0, s1 are fermionicaly ordered (or identical).
         """
         return s0[1] < s1[1] or (s0[1] == s1[1] and s0[0] <= s1[0])
 
