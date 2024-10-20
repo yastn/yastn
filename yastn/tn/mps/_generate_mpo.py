@@ -99,7 +99,7 @@ def generate_mpo(I, terms=None, opts_svd=None) -> yastn.tn.mps.MpsMpoOBC:
         raise YastnError("Hterm: positions and operators should be provided as lists or tuples.")
 
     Iop = [I[n].remove_leg(axis=0).remove_leg(axis=1) for n in I.sweep(to='last')]
-    N = len(Iop)
+    M, N = len(terms), len(Iop)
 
     unique_ops = []
     Iind = [ind_list_tensors(op, unique_ops) for op in Iop]
@@ -116,7 +116,7 @@ def generate_mpo(I, terms=None, opts_svd=None) -> yastn.tn.mps.MpsMpoOBC:
         if any(site < 0 or site > N or not isinstance(site, numbers.Integral) for site in term.positions):
             raise YastnError("position in Hterm should be in 0, 1, ..., N-1")
         if any(op.s != Iop[site].s for op, site in zip(term.operators, term.positions)):
-            raise YastnError("operator in Hterm should be a matrix with signature matching I")
+            raise YastnError("operator in Hterm should be a matrix with signature matching I at given site")
 
         signs.append(sign_canonical_order(*term.operators, sites=term.positions, f_ordered=f_ordered))
         sites_ops = sorted(zip(term.positions, term.operators), key=itemgetter(0))
@@ -136,7 +136,7 @@ def generate_mpo(I, terms=None, opts_svd=None) -> yastn.tn.mps.MpsMpoOBC:
 
     # encoding local operators for each term and each site in range(N)
     # include information about charges connecing local operators
-    mapH = np.zeros((len(terms), N), dtype=np.int64)
+    mapH = np.zeros((M, N), dtype=np.int64)
     charges_ops = []
     for mH, sites, ind in zip(mapH, sitess, opss):
         ops, n_pattern = op_patterns[ind], n_patterns[ind]
@@ -161,6 +161,15 @@ def generate_mpo(I, terms=None, opts_svd=None) -> yastn.tn.mps.MpsMpoOBC:
         dressed_ops.append(op)
         assert op.n == sym.zero(), "Should not have happen if charges are correctly added."
 
+    # is a product state
+    if M == 1:
+        mH = mapH[0]
+        O = Mpo(N)
+        for n in O.sweep():
+            O[n] = dressed_ops[mH[n]]
+        O[0] = O[0] * (terms[0].amplitude * signs[0])
+        return O
+
     basis, t1bs, t2bs, tfbs, ifbs = [], [], [], [], []
     for n in range(I.N):
         un = sorted(np.unique(mapH[:, n]).tolist())
@@ -179,6 +188,10 @@ def generate_mpo(I, terms=None, opts_svd=None) -> yastn.tn.mps.MpsMpoOBC:
         basis.append(base)
 
     tleft = [t1bs[0][i] for i in mapH[:, 0].tolist()]
+    if len(set(tleft)) != 1:
+        raise YastnError("generate_mpo: provided terms do not all have the same total charge.")
+    tl0 = tleft[0]
+
 
     trans = []
     for n in I.sweep():
@@ -212,33 +225,24 @@ def generate_mpo(I, terms=None, opts_svd=None) -> yastn.tn.mps.MpsMpoOBC:
         trans.append(tran)
 
     amplitudes = [term.amplitude * sign for term, sign in zip(terms, signs)]
+    dtype = 'complex128' if any(isinstance(a, complex) for a in amplitudes) else config.default_dtype
+    J = Tensor(config=config, s=(-1, 1), dtype=dtype)
+    J.set_block(ts=(tl0, tl0), Ds=(1, len(terms)), val=amplitudes)
 
     if opts_svd is None:
         opts_svd = {'tol': 1e-13}
 
-    Js = {}
-    for a, t in zip(amplitudes, tleft):
-        if t in Js:
-            Js[t].append(a)
-        else:
-            Js[t] = [a]
-
-    dtype = 'complex128' if any(isinstance(a, complex) for a in amplitudes) else config.default_dtype
-    J = Tensor(config=config, s=(-1, 1), dtype=dtype)
-    for t, val in Js.items():
-        J.set_block(ts=(t, t), Ds=(1, len(val)), val=val)
-
-    M = Mpo(len(basis))
-    for n in M.sweep():
+    O = Mpo(N)
+    for n in O.sweep():
         nJ = J @ trans[n]
         nJ = ncon([nJ, basis[n]], [[0, 1, -3], [1, -1, -2]])
-        if n < M.last:
+        if n < O.last:
             nJ, S, V = svd_with_truncation(nJ, axes=((0, 1, 2), 3), sU=1, **opts_svd)
             nS = S.norm()
             nJ = nS * nJ
             J = (S / nS) @ V
-        M[n] = nJ.transpose(axes=(0, 1, 3, 2))
-    return M
+        O[n] = nJ.transpose(axes=(0, 1, 3, 2))
+    return O
 
 
 # def generate_product_mpo_from_Hterm(I, term, amplitude=True) -> yastn.tn.mps.MpsMpoOBC:
