@@ -98,12 +98,12 @@ def generate_mpo(I, terms=None, opts_svd=None) -> yastn.tn.mps.MpsMpoOBC:
     except TypeError:
         raise YastnError("Hterm: positions and operators should be provided as lists or tuples.")
 
-    Iop = [I[n].remove_leg(axis=0).remove_leg(axis=1) for n in I.sweep(to='last')]
-    M, N = len(terms), len(Iop)
-
     unique_ops = []
-    Iind = [ind_list_tensors(op, unique_ops) for op in Iop]
+    Iind = [ind_list_tensors(I[n], unique_ops) for n in I.sweep()]
+    unique_ops = [op.remove_leg(axis=0).remove_leg(axis=1) for op in unique_ops]
+    Iop = [unique_ops[k] for k in Iind]
 
+    M, N = len(terms), len(Iop)
     config = unique_ops[0].config
     sym = config.sym
 
@@ -145,15 +145,15 @@ def generate_mpo(I, terms=None, opts_svd=None) -> yastn.tn.mps.MpsMpoOBC:
         for n in range(N):
             if n == site:
                 op, tr = ops[ii], n_pattern[ii + 1]
-                mH[n] = ind_list((op, tl, tr), charges_ops)
+                mH[n] = ind_list((tl, op, tr), charges_ops)
                 ii += 1
                 site, tl = sites[ii], n_pattern[ii]
             else:
-                mH[n] = ind_list((Iind[n], tl, tl), charges_ops)
+                mH[n] = ind_list((tl, Iind[n], tl), charges_ops)
 
     # turn 2-leg local operators into 4-legs local operators that will build MPO
     dressed_ops = []
-    for ind, tl, tr in charges_ops:
+    for tl, ind, tr in charges_ops:
         op = unique_ops[ind]
         op = op.swap_gate(axes=1, charge=tr)
         op = op.add_leg(axis=1, s=1, t=tr)
@@ -171,27 +171,24 @@ def generate_mpo(I, terms=None, opts_svd=None) -> yastn.tn.mps.MpsMpoOBC:
         return O
 
     basis, t1bs, t2bs, tfbs, ifbs = [], [], [], [], []
-    for n in range(I.N):
+    for n in range(N):
         un = sorted(np.unique(mapH[:, n]).tolist())
-        dun = {v: k for  k, v in enumerate(un)}
-        for jj in range(len(mapH[:, n])):
-            mapH[jj, n] = dun[mapH[jj, n]]
-        base = [dressed_ops[k] for k in un]
+        t1bs.append({k: charges_ops[k][0] for k in un})
+        t2bs.append({k: charges_ops[k][2] for k in un})
+        tfbs.append({k: unique_ops[charges_ops[k][1]].n for k in un})
+        tmp, ifb = {}, {}
+        for k, t in tfbs[-1].items():
+            ifb[k] = tmp.get(t, 0)
+            tmp[t] = ifb[k] + 1
+        ifbs.append(ifb)
 
-        t1bs.append([ten.get_legs(axes=0).t[0] for ten in base])
-        t2bs.append([ten.get_legs(axes=2).t[0] for ten in base])
-        base = [ten.fuse_legs(axes=((0, 2), 1, 3)).drop_leg_history() for ten in base]
-        tfb = [ten.get_legs(axes=0).t[0] for ten in base]
-        tfbs.append(tfb)
-        ifbs.append([sum(x == y for x in tfb[:i]) for i, y in enumerate(tfb)])
-        base = block(dict(enumerate(base)), common_legs=(1, 2)).drop_leg_history()
-        basis.append(base)
+        base = {k: dressed_ops[k].fuse_legs(axes=((0, 2), 1, 3)).drop_leg_history() for k in un}
+        basis.append(block(base, common_legs=(1, 2)).drop_leg_history())
 
-    tleft = [t1bs[0][i] for i in mapH[:, 0].tolist()]
-    if len(set(tleft)) != 1:
+    tleft = set(t1bs[0].values())
+    if len(tleft) != 1:
         raise YastnError("generate_mpo: provided terms do not all have the same total charge.")
-    tl0 = tleft[0]
-
+    tleft = tleft.pop()
 
     trans = []
     for n in I.sweep():
@@ -200,11 +197,11 @@ def generate_mpo(I, terms=None, opts_svd=None) -> yastn.tn.mps.MpsMpoOBC:
         iind = iind.ravel().tolist()
         rind = rind.ravel().tolist()
 
-        i2bs = {t: {} for t in t2bs[n]}
+        i2bs = {t: {} for t in t2bs[n].values()}
         for ii, rr in enumerate(rind):
             i2bs[t2bs[n][mapH0[rr]]][ii] = len(i2bs[t2bs[n][mapH0[rr]]])
 
-        i1bs = {t: 0 for t in t1bs[n]}
+        i1bs = {t: 0 for t in t1bs[n].values()}
         for ii, rr in enumerate(mapH0):
             i1bs[t1bs[n][rr]] += 1
 
@@ -213,7 +210,7 @@ def generate_mpo(I, terms=None, opts_svd=None) -> yastn.tn.mps.MpsMpoOBC:
         leg3 = Leg(config, s=1, t=list(i2bs.keys()), D=[len(x) for x in i2bs.values()])
         tran = zeros(config=config, legs=[leg1, leg2, leg3])
 
-        li = {x: -1 for x in t1bs[n]}
+        li = {x: -1 for x in t1bs[n].values()}
         for bl, br in zip(mapH0, iind):
             lt = t1bs[n][bl]
             li[lt] += 1
@@ -227,7 +224,7 @@ def generate_mpo(I, terms=None, opts_svd=None) -> yastn.tn.mps.MpsMpoOBC:
     amplitudes = [term.amplitude * sign for term, sign in zip(terms, signs)]
     dtype = 'complex128' if any(isinstance(a, complex) for a in amplitudes) else config.default_dtype
     J = Tensor(config=config, s=(-1, 1), dtype=dtype)
-    J.set_block(ts=(tl0, tl0), Ds=(1, len(terms)), val=amplitudes)
+    J.set_block(ts=(tleft, tleft), Ds=(1, M), val=amplitudes)
 
     if opts_svd is None:
         opts_svd = {'tol': 1e-13}

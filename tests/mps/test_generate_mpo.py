@@ -36,6 +36,7 @@ def build_mpo_hopping_Hterm(J, sym="U1", config=None):
                    'default_device': config.default_device}
     # pytest uses config to inject various backends and devices for testing
     ops = yastn.operators.SpinlessFermions(sym=sym, **opts_config)
+    c, cp, occ = ops.c(), ops.cp(), ops.n()
     #
     Hterms = []  # list of Hterm(amplitude, positions, operators)
     #
@@ -50,7 +51,7 @@ def build_mpo_hopping_Hterm(J, sym="U1", config=None):
         if abs(J[n][n]) > 0:
             Hterms.append(mps.Hterm(amplitude=J[n][n],
                                     positions=[n],
-                                    operators=[ops.n()]))
+                                    operators=[occ]))
     #
     # hopping term between sites m and n
     for m in range(N):
@@ -58,10 +59,10 @@ def build_mpo_hopping_Hterm(J, sym="U1", config=None):
             if abs(J[m][n]) > 0:
                 Hterms.append(mps.Hterm(amplitude=J[m][n],
                                         positions=(m, n),
-                                        operators=(ops.cp(), ops.c())))
+                                        operators=(cp, c)))
                 Hterms.append(mps.Hterm(amplitude=np.conj(J[m][n]),
                                         positions=(n, m),
-                                        operators=(ops.cp(), ops.c())))
+                                        operators=(cp, c)))
     #
     # We need an identity MPO operator.
     #
@@ -157,7 +158,7 @@ def test_generate_mpo_basic(config=cfg):
                mps.Hterm(1., positions=[0, 3, 2, 3], operators=[c, cp, cp, c])]
     O = mps.generate_mpo(I, Hterms)
     assert abs(mps.vdot(psi, O, psi) + 2) < 1e-12
-    psir = mps.random_mps(I, n=3, D_total=4, dtype='complex128')
+    psir = mps.random_mps(I, n=2, D_total=16, dtype='complex128')
     tmp = mps.vdot(psir, O, psir).item()
     assert abs(tmp.imag) < 1e-12  # expectation value is real for hermitian O
 
