@@ -18,8 +18,9 @@ from operator import itemgetter
 import numpy as np
 import numbers
 from typing import NamedTuple
-from ... import zeros, ncon, Leg, YastnError, Tensor, block, svd_with_truncation, allclose
-from ._mps_obc import Mpo
+from ... import zeros, ncon, Leg, YastnError, Tensor, block, svd_with_truncation
+from ._mps_obc import Mpo, MpsMpoOBC
+from ._initialize import product_mpo
 from ...operators import sign_canonical_order
 from itertools import groupby
 
@@ -67,29 +68,41 @@ def ind_list(el, unique):
     return ind
 
 
-def generate_mpo(I, terms=None, opts_svd=None) -> yastn.tn.mps.MpsMpoOBC:
+def generate_mpo(I, terms=None, opts_svd=None, N=None) -> yastn.tn.mps.MpsMpoOBC:
     r"""
     Generate MPO provided a list of :class:`Hterm`\-s and identity MPO ``I``.
 
-    Apply swap_gates to introduce fermionic degrees of freedom.
-    The fermionic order matches the order of sites in Mps.
+    Apply swap_gates to introduce fermionic degrees of freedom, where
+    the fermionic order matches the order of sites in Mps.
     With this respect, local operators specified in term.operators are applied starting with the last element,
     i.e., from right to left.
 
+    The function compresses MPO using a series of SVDs.
+    It might get expensive if the number of terms is large, e.g., for all-to-all 2-site terms and N in hundreds.
+    If this becomes an issue, it is best to use some divide-and-conquer strategy or precompute MPO once.
+
     Parameters
     ----------
+    I: yastn.tn.mps.MpsMpoOBC | yastn.Tensor | Sequence[yastn.Tensor]
+        Identity MPO, which specifies local identity operators at each site and the number of sites.
+        It is also possible to provide an identity operator or list of such operators, together with ``N``,
+        following the syntax of :meth:`mps.product_mpo<yastn.tn.mps.product_mpo>`.
+
     terms: Sequence[yastn.tn.mps.Hterm]
         Product operators making up MPO.
-    I: yastn.tn.mps.MpsMpoOBC
-        Identity MPO.
-    opts: dict
+
+    opts_svd: dict
         Options passed to :meth:`yastn.linalg.svd_with_truncation`.
         The function employs SVD while compressing the MPO bond dimensions.
         Default ``None`` sets truncation ``tol`` close to the numerical precision,
         which typically results in lossless compression.
+
+    N: int
+        Number of MPO sites.
+        If identity MPO is provided, it is overridden by ``I.N``.
     """
     if not terms:
-        return I.copy()
+        return I.copy() if isinstance(I, MpsMpoOBC) else product_mpo(I, N)
 
     try:
         if any(len(term.positions) != len(term.operators) for term in terms):
@@ -98,11 +111,22 @@ def generate_mpo(I, terms=None, opts_svd=None) -> yastn.tn.mps.MpsMpoOBC:
         raise YastnError("Hterm: positions and operators should be provided as lists or tuples.")
 
     unique_ops = []
-    Iind = [ind_list_tensors(I[n], unique_ops) for n in I.sweep()]
-    unique_ops = [op.remove_leg(axis=0).remove_leg(axis=1) for op in unique_ops]
-    Iop = [unique_ops[k] for k in Iind]
+    if isinstance(I, MpsMpoOBC):
+        N = len(I)
+        Iind = [ind_list_tensors(I[n], unique_ops) for n in I.sweep()]
+        unique_ops = [op.remove_leg(axis=0).remove_leg(axis=1) for op in unique_ops]
+    else:
+        try:  # handle inputing single bare Tensor
+            I = list(I)
+        except TypeError:
+            I = [I]
+        if N is None:
+            N = len(I)
+        Nv = len(I)
+        Iind = [ind_list_tensors(In, unique_ops) for In in I]
+        Iind = [Iind[n % Nv] for n in range(N)]
 
-    M, N = len(terms), len(Iop)
+    M = len(terms)
     config = unique_ops[0].config
     sym = config.sym
 
@@ -114,7 +138,7 @@ def generate_mpo(I, terms=None, opts_svd=None) -> yastn.tn.mps.MpsMpoOBC:
     for term in terms:
         if any(site < 0 or site > N or not isinstance(site, numbers.Integral) for site in term.positions):
             raise YastnError("position in Hterm should be in 0, 1, ..., N-1")
-        if any(op.s != Iop[site].s for op, site in zip(term.operators, term.positions)):
+        if any(op.s != unique_ops[Iind[site]].s for op, site in zip(term.operators, term.positions)):
             raise YastnError("operator in Hterm should be a matrix with signature matching I at given site")
 
         signs.append(sign_canonical_order(*term.operators, sites=term.positions, f_ordered=f_ordered))
@@ -190,7 +214,7 @@ def generate_mpo(I, terms=None, opts_svd=None) -> yastn.tn.mps.MpsMpoOBC:
     tleft = tleft.pop()
 
     reshapes = []
-    for n in I.sweep():
+    for n in range(N):
         mapH0 = mapH[:, 0].tolist()
         mapH, rind, iind = np.unique(mapH[:, 1:], axis=0, return_index=True, return_inverse=True)
         iind = iind.ravel().tolist()
@@ -206,8 +230,8 @@ def generate_mpo(I, terms=None, opts_svd=None) -> yastn.tn.mps.MpsMpoOBC:
             i1bs[t1bs[n][rr]] += 1
 
         # leg1 = Leg(config, s=-1, t=list(i1bs.keys()), D=list(i1bs.values()))
-        leg2 = basis[n].get_legs(axes=0).conj()
-        leg3 = Leg(config, s=1, t=list(i2bs.keys()), D=[len(x) for x in i2bs.values()])
+        leg2 = Leg(config, s=1, t=list(i2bs.keys()), D=[len(x) for x in i2bs.values()])
+        leg3 = basis[n].get_legs(axes=0).conj()
 
         reshape = []
         #zeros(config=config, legs=[leg1, leg2, leg3])
@@ -220,7 +244,7 @@ def generate_mpo(I, terms=None, opts_svd=None) -> yastn.tn.mps.MpsMpoOBC:
             fi = ifbs[n][bl]
             rt = t2bs[n][bl]
             ri = i2bs[rt][br]
-            reshape.append(((lt, ft, rt), (li[lt], fi, ri)))
+            reshape.append(((lt, rt, ft), (li[lt], ri, fi)))
         reshapes.append((leg2, leg3, sorted(reshape)))
 
     amplitudes = [term.amplitude * sign for term, sign in zip(terms, signs)]
@@ -236,13 +260,13 @@ def generate_mpo(I, terms=None, opts_svd=None) -> yastn.tn.mps.MpsMpoOBC:
         leg1 = J.get_legs(axes=0)
         leg2, leg3, reshape = reshapes[n]
         nJ = zeros(config=config, legs=[leg1, leg2, leg3], dtype=dtype)
-        for (lt, ft, rt), group in groupby(reshape, key=itemgetter(0)):
+        for (lt, rt, ft), group in groupby(reshape, key=itemgetter(0)):
             if lt in leg1.t:
                 Jblock = J[lt + lt]
-                nJblock = nJ[lt + ft + rt]
-                for _, (li, fi, ri) in group:
-                    nJblock[:, fi, ri] += Jblock[:, li]
-        nJ = ncon([nJ, basis[n]], [[0, 1, -3], [1, -1, -2]])
+                nJblock = nJ[lt + rt + ft]
+                for _, (li, ri, fi) in group:
+                    nJblock[:, ri, fi] += Jblock[:, li]
+        nJ = ncon([nJ, basis[n]], [[-0, -3, 1], [1, -1, -2]])
         if n < O.last:
             nJ, S, V = svd_with_truncation(nJ, axes=((0, 1, 2), 3), sU=1, **opts_svd)
             nS = S.norm()

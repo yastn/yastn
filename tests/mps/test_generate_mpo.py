@@ -129,8 +129,7 @@ def test_generate_mpo_basic(config=cfg):
     # pytest uses config to inject various backends and devices for testing
     ops = yastn.operators.SpinlessFermions(sym='U1', **opts_config)
     I = mps.product_mpo(ops.I(), N=4)
-
-    I2 = mps.generate_mpo(I, [])
+    I2 = mps.generate_mpo(ops.I(), N=4)
     assert (I - I2).norm() < 1e-12
 
     c, cp, n = ops.c(), ops.cp(), ops.n()
@@ -141,7 +140,7 @@ def test_generate_mpo_basic(config=cfg):
 
     # test product operator with fermionic anti-commutation relations
     Hterms1 = [mps.Hterm(1., positions=[0, 3, 2], operators=[cp, n, c])]
-    O1 = mps.generate_mpo(I, Hterms1)
+    O1 = mps.generate_mpo(ops.I(), Hterms1, N=4)
     Hterms2 = [mps.Hterm(1., positions=[2, 3, 0, 3], operators=[c, cp, cp, c])]
     O2 = mps.generate_mpo(I, Hterms2)
     assert abs(O1.norm() - 2 ** 0.5) < 1e-12
@@ -150,7 +149,7 @@ def test_generate_mpo_basic(config=cfg):
     assert abs(mps.vdot(psi, O1, psi) + 1) < 1e-12
 
     # two identical terms
-    O12 = mps.generate_mpo(I, Hterms1 + Hterms2)
+    O12 = mps.generate_mpo([ops.I(), ops.I()], Hterms1 + Hterms2, N=4)
     assert (2 * O1 - O12).norm() < 1e-12
 
     # make O hetmitian
