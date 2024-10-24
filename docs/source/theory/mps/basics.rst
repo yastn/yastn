@@ -6,62 +6,73 @@ Matrix product state (MPS)
 
 Numerical simulations of quantum many-body systems prove to be hard due to the exponentially
 growing size of the matrix representation of the system with the number of constituent particles.
-In particular, if the local Hilbert space for *j*-th particle, :math:`\mathcal{H}_j`, has dimension :math:`d`
-(e.g., :math:`d=2` for qubit and :math:`d=3` for qutrit) then :math:`N` sites
-will have the total Hilbert space :math:`\mathcal{H} = \mathcal{H}_0 \otimes \mathcal{H}_1 \cdots \otimes \mathcal{H}_{N-1}`
-of dimension :math:`d^N`. Bipartite tensor networks, such as matrix product states,
+In particular, if the local Hilbert space for the *j*-th particle, :math:`\mathcal{H}_j`, 
+has dimension :math:`d_j` (e.g., :math:`d_j=2` for a qubit and :math:`d_j=3` for a qutrit), then :math:`N` 
+sites will have the total Hilbert space :math:`\mathcal{H} = \bigotimes_{j=0}^{N-1} \mathcal{H}_j` of dimension 
+:math:`d = \prod_{j=0}^{N-1} d_j`. 
+Bipartite tensor networks, such as matrix product states,
 introduce a concept of efficient separation of variables which splits groups of particles
 performing :ref:`spectral decomposition<tensor/algebra:spectral decompositions and truncation>`,
 e.g., singular value decomposition (`SVD <https://en.wikipedia.org/wiki/Singular_value_decomposition>`_).
-To form a `matrix product state`, SVD at first isolates `0`-th site from `1-to-N-1`-th,
-then `0-to-1` from `2-to-N-1`-th, and so on until the state is decomposed into `N` tensors.
+To form a `matrix product state`, SVD at first isolates `0`-th site from `1-to-(N-1)`-th,
+then `0-to-1` from `2-to-(N-1)`-th, and so on until the state is decomposed into a product of `N` tensors.
 
 .. math::
     \Psi^{\sigma_0,\sigma_1\dots \sigma_{N-1}} \in \mathcal{H}_0 \otimes \mathcal{H}_1 \cdots \otimes \mathcal{H}_{N-1} \xrightarrow{SVD}{\sum_{j_0,j_1\dots j_{N-1}} \, A^{\sigma_0}_{,j_0} A^{\sigma_1}_{j_0,j_1} \dots A^{\sigma_{N-2}}_{j_{N-2},j_{N-1}} A^{\sigma_{N-1}}_{j_{N-1},}}
 
-A single tensor :math:`A_j` is a rank-3 array of size :math:`D_{j-1,j}{\times}d_j{\times}D_{j,j+1}`.
+A single tensor :math:`A_j` is a rank-3 array of size :math:`D_{j-1,j}{\times}d_j{\times}D_{j,j+1}`, 
+where :math:`d_j` is, previously mentioned, dimension of local Hilbert space 
+(or equivalently dimension of local variables) so--called *physical* dimension 
+and :math:`D_{j-1,j}` and :math:`D_{j,j+1}` are *virtual* bond dimensions shared between 
+sites :math:`j-1` and :math:`j` and between :math:`j` and :math:`j+1` respectively. 
+The bond dimension is introduced by the spectral decompositon and can be interpreted as dimension 
+encoding correlations between physical tensor variables. An example MPS tensor is shown in the diagram below. 
 
 ::
 
-    # individual tensor in MPS
+    # individual tensor in the MPS
                       ___
     A_j = D_{j-1,j}--|___|--D_{j,j+1}
                        |
                       d_j
 
-The MPS forms a one-dimensional structure with each tensor having a physical dimension :math:`d` (:math:`d_j` for general case when qudits at each site are different) and virtual dimensions
-:math:`D_{j-1,j}` connecting *j-1*-th site with *j*-th site. :code:`yastn.tn.mps` implements operations on one-dimensional MPS with open boundary conditions.
-The schematic picture for general MPS is shown below. Notice that for open boundary conditions, we always have edge tensor with dimension :math:`1\times d_0{\times}D_{0,1}`
-on the left edge and :math:`D_{N-2,N-1}{\times}d_{N-1}{\times}1` on the right edge.
+:code:`yastn.tn.mps` implements operations on one-dimensional MPS with open boundary conditions.
+The schematic picture for general MPS is shown below. Notice that for open boundary conditions, 
+we always have edge tensor with dimension :math:`1\times d_0{\times}D_{0,1}`
+on the left edge and :math:`D_{N-2,N-1}{\times}d_{N-1}{\times}1` on the right edge, i.e. terminal 
+bond dimensions are :math:`D_{-1,0}=1` and :math:`D_{N-1,N}=1`. 
 
 ::
 
-        # matrix product state for N=5 sites with open boundary conditions
+        # MPS for N=5 sites with open boundary conditions
            ___           ___           ___           ___           ___
         1-|___|-D_{0,1}-|___|-D_{1,2}-|___|-D_{2,3}-|___|-D_{3,4}-|___|-1
             |             |             |             |             |
            d_0           d_1           d_2           d_3           d_4
 
-The above discussion presents top-to-bottom construction.
+The above discussion presents top-to-bottom construction of the MPS. 
 However, one can also treat MPS as an ansatz, that provides a good approximation of weakly entangled states.
 The paradigmatic example is energy minimization to find the best approximation of the ground state of a system.
 The MPS ansatz with fixed virtual dimensions defines the manifold of states we can reach. Virtual bond dimension
-controls the quality of the approximation, where the exact representation is recovered for :math:`D\rightarrow\infty`.
+controls the quality of the approximation, where the exact representation is recovered for :math:`D_{j,j+1}\rightarrow\infty`.
 
-The MPS can be equipped with symmetries by making its individual tensors symmetric.
-Note that the construction of MPS requires common virtual spaces to be matching.
-
+Note that the construction of MPS requires common virtual spaces to be matching. 
+The MPS can be equipped with symmetries by making its individual tensors symmetric. 
+For symmetric tensors both bond dimensions and blocks have to be matching. 
 
 Matrix product operator (MPO)
 -----------------------------
 
-*Matrix product operator* is an efficient representation of an operator acting in the space of :math:`N` particles,
-in general a :math:`d^N{\times}d^N` matrix, by a product of :math:`N` tensors with two physical and two virtual indices.
+*Matrix product operator* is an efficient representation of an operator acting in the space of :math:`N` particles, 
+in general a square matrix of dimension of dimension :math:`d = \prod_{j=0}^{N-1} d_j`, by a product of :math:`N` 
+tensors with two physical and two virtual indices.
 The concept of MPO is analogous to :ref:`MPS <theory/mps/basics:Matrix product state (MPS)>`.
+
+A single tensor is a rank-4 array of size :math:`D_{j-1,j}{\times}d_j{\times}D_{j,j+1}{\times}d^j` as depicted below. 
 
 ::
 
-        # individual tensor in MPO
+        # individual tensor in the MPO
 
                     d^j
                     _|_
@@ -69,12 +80,21 @@ The concept of MPO is analogous to :ref:`MPS <theory/mps/basics:Matrix product s
                      |
                     d_j
 
-It allows to encode operators, e.g., Hamiltonian or other observables associated with expectation values, a density matrix, transfer matrices, etc.
-MPO with open boundary conditions has a bond dimension :math:`D=1` on the edges of the MPO chain.
+
+The *physical* dimensions :math:`d_j` and :math:`d^j` represent left (bra) and right (ket) vector spaces. 
+Similar to MPS, the *virtual* bond dimensions of a tensor are :math:`D_{j-1,j}` and :math:`D_{j,j+1}` shared between 
+sites :math:`j-1` and :math:`j` and between :math:`j` and :math:`j+1` respectively. 
+Those also encode correlations between physical tensor variables. 
+The MPO ansatz is suitable to represent operators, e.g., Hamiltonian, operators of observables, a density matrix, 
+transfer matrices. 
+
+:code:`yastn.tn.mps` implements operations on one-dimensional MPS with open boundary conditions.
+The full MPO is diagrammatically depicted below. Notice, that for open boundary conditions, 
+terminal bond dimensions are :math:`D_{-1,0}=1` and :math:`D_{N-1,N}=1`. 
 
 ::
 
-        # matrix product operator acting on N=5 sites with open boundary conditions
+        # MPO for N=5 sites with open boundary conditions
 
            d_0           d_1           d_2           d_3           d_4
            _|_           _|_           _|_           _|_           _|_
@@ -83,23 +103,24 @@ MPO with open boundary conditions has a bond dimension :math:`D=1` on the edges 
            d_0           d_1           d_2           d_3           d_4
 
 
+
+The MPO operators can be equipped with :ref:`fermionic order <tensor/configuration:YASTN configuration>`. 
+For fermionic operators, :meth:`swap gates<yastn.swap_gate>` are used to enforce the correct fermionic ordering. 
+This allows to ensure antisymmetric nature of fermions and proper commutation relation of the operator. 
+For reference see `P. Corboz and G. Vidal, Phys. Rev. B 80, 165129 (2009) <https://journals.aps.org/prb/abstract/10.1103/PhysRevB.80.165129>`_ 
+and `P. Corboz et al. Phys. Rev. B 81, 165104 (2010) <https://journals.aps.org/prb/abstract/10.1103/PhysRevB.81.165104>`_. 
+
 Canonical form
 --------------
 
 The practical success of matrix product states is closely related to their canonical forms and the possibility to efficiently transform between them.
-Among others, the proper canonical form allows using local :ref:`sepctral decomposition<tensor/algebra:spectral decompositions and truncation>` to perform globally optimal truncation of the MPS on a specific bond.
-*Canonical decomposition* is also an integral element of every :ref:`MPS algorithm<theory/mps/basics:Algorithms>`, including energy minimization with DMRG or time evolution with TDVP.
-In those algorithms, one locally updates individual MPS tensors, adjusting its canonical form while sweeping through the lattice.
-
-We choose to put MPS in the `canonical form` with respect to the *j*-to-*j+1*-th bond.
-This is equivalent to performing Schmidt decomposition of the MPS with :math:`D_{j,j+1}` left Schmidt vectors :math:`|L_{0,1\cdots j}\rangle`,
-:math:`D_{j,j+1}` right Schmidt vectors :math:`|R_{j+1,j+2\cdots N-1}\rangle`, and a diagonal matrix of Schmidt values :math:`\Lambda_{j,j+1}`.
-More generally, instead of a diagonal positive matrix :math:`\Lambda_{j,j+1}`,
-one often works with a central matrix (block) :math:`C_{j,j+1}`, which SVD gives the Schmidt values on the bond.
+The canonical form is defined with respect to specific position in the MPS. 
+Let us choose to write `canonical form` with respect to the *j*-to-*j+1*-th bond of the MPS. 
+The diagrammatic representation of the MPS in the canonical form for that case is presented below. 
 
 ::
 
-        # canonical form of MPS from SVD
+        # canonical form of the MPS
            _________________                         ___________________
           |                 |   __________________  |                   |
           | L_{0,1\cdots j} |--|_\Lambda_{j,j+1}_|--| R_{j+1\cdots N-1} |
@@ -108,13 +129,24 @@ one often works with a central matrix (block) :math:`C_{j,j+1}`, which SVD gives
           {d_0 x d_1...x d_j}                       {d_{j+1} x...x d_{N-1}}
 
 
+In the canonical form, the MPS is split as in the Schmidt decomposition (or SVD) resulting in 
+:math:`D_{j,j+1}` pairs of left Schmidt vectors :math:`|L_{0,1\cdots j}\rangle` and right Schmidt vectors :math:`|R_{j+1,j+2\cdots N-1}\rangle` 
+weighted by Schmidt values :math:`\Lambda_{j,j+1}`.
+More generally, instead of a diagonal positive matrix :math:`\Lambda_{j,j+1}`,
+one often works with a central matrix (block) :math:`C_{j,j+1}` that can be obtained through :meth:`QR decompositions<yastn.linalg.qr>` decomposition. 
+Keeping the canonical form we ensure efficient compression and globally optimal truncation of :ref:`spectral decomposition<tensor/algebra:spectral decompositions and truncation>` 
+for a specific bond.
+
 The left and right Schmidt vectors, forming columns of the matrix :math:`L_{0,1\cdots j}` and rows of the matrix :math:`R_{j+1,j+2\cdots N-1}` are orthonormal.
-It implies that :math:`L^\dagger L=I` and  :math:`R R^\dagger=I`, where :math:`I` is an identity matrix on the virtual bond, which we obtain after contracting physical indices.
-The virtual bond of MPS can be efficiently truncated by discarding singular values :math:`\Lambda_{j,j+1}` of the smallest magnitude.
-If, for every MPS tensor, the left environment is unitary, i.e., for corresponding left vectors :math:`L_j^\dagger L_j=I`, then we say that MPS is in the `left canonical form`.
-It can be obtained by consecutive :meth:`QR decompositions<yastn.linalg.qr>` of each MPS tensor, starting from `0`-th, where the unitary part forms a new tensor, and the upper-triangular part becomes a central tensor that gets attached to the subsequent MPS tensor.
-Similarly, if for every MPS tensor the right environment is unitary, :math:`R_j R_j^\dagger=I`, then we say that MPS is in the `right canonical form`.
-A mixed canonical form with respect to some bond or MPS site interpolates between those two extremes.
+It implies that the overlaps :math:`L^\dagger L=I_L` and  :math:`R R^\dagger=I_R` (where physical indices are contracted) results in left (right) identity 
+matrices  :math:`I_{L(R)}` on virtual indices. 
+Canonical decomposition is also an integral element of every :ref:`MPS algorithm<theory/mps/basics:Algorithms>`, including energy minimization with 
+DMRG or time evolution with TDVP allowing to avoid treating the state norm operator explicitely and allowing for optimal truncation. 
+
+If the right and left overlaps involve part of the MPS, we say it is in a *mixed canonical* form with respect to a bond. 
+On the other hand, itf for every MPS tensor, the left environment is unitary, i.e., for corresponding left vectors :math:`L_j^\dagger L_j=I_L` on virtuals, 
+then we say that MPS is in the *left canonical form*. 
+Similarly is the same holds for right environment then we say that MPS is in the *right canonical form*. 
 
 .. note::
         In :code:`yastn.tn.mps` we refer to 0-th site as :code:`'first'`, and N-1-th site as :code:`'last'`.

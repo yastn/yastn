@@ -161,8 +161,8 @@ def gs_correlation_matrix_exact(J, n):
 def evolve_correlation_matrix_exact(Ci, J, t):
     """
     Evolve correlation matrix C by time t with hopping Hamiltonian J.
-    Diagonal od J gives chemical on-site potentials and
-    upper triangular of J are hopping amplitudes.
+    Diagonal elements of J array is on-site potential and
+    upper triangular terms of J are hopping amplitudes.
     """
     J = np.triu(J, 0) + np.triu(J, 1).T.conj()
     # U = expm(1j * t * J)

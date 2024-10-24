@@ -38,8 +38,9 @@ def compression_(psi, target, method='1site',
 
     The outer loop sweeps over ``psi`` updating sites from the first site to the last and back.
     Convergence can be controlled based on overlap and/or Schmidt values (which is a more sensitive measure of convergence).
-    The algorithm performs at most :code:`max_sweeps`. If tolerance measures are provided, it terminates earlier
-    if the convergence criteria are satisfied: change in overlap or Schmidt values is less than the provided tolerance during a single sweep.
+    The algorithm performs at most :code:`max_sweeps`. If tolerance measures are provided, 
+    the calculation ends when the convergence criteria are satisfied, e.g., change in overlap or Schmidt values between sweeps 
+    is less than the provided tolerance.
 
     Works for
 
@@ -60,21 +61,23 @@ def compression_(psi, target, method='1site',
         State resulting from :code:`compression_` is canonized to the first site.
 
     target: MPS or MPO
-        Defines target state. Can be an MPS (e.g. target = MPS or [MPS]),
-        or MPO acting on MPS (target = [MPO, MPS]), sum of MPOs acting on MPS.
-        (e.g, [[MPO, MPO], MPS]), of the sum of the above, e.g., [[MPS], [MPO, MPS], [[MPO, MPO], MPS]].
-        For psi and target being MPO, replace MPS above with MPO.
+        Defines target state. The target can be:
+        * an MPS, e.g. target = MPS or [MPS],
+        * an MPO acting on MPS (target = [MPO, MPS]), 
+        * sum of MPOs acting on MPS, e.g, [[MPO, MPO], MPS], 
+        * or the sum of the above, e.g., [[MPS], [MPO, MPS], [[MPO, MPO], MPS]].
+        If `psi` and `target` are MPO, the MPS in above list is replaced by MPO.
 
     method: str
-        Which optimization variant to use from :code:`'1site'`, :code:`'2site'`
+        Which optimization variant to use from `'1site'`, `'2site'`
 
     overlap_tol: float
         Convergence tolerance for the change of relative overlap in a single sweep.
-        By default is None, in which case overlap convergence is not checked.
+        By default is `None`, in which case overlap convergence is not checked.
 
     Schmidt_tol: float
         Convergence tolerance for the change of Schmidt values on the worst cut/bond in a single sweep.
-        By default is None, in which case Schmidt values convergence is not checked.
+        By default is `None`, in which case Schmidt values convergence is not checked.
 
     max_sweeps: int
         Maximal number of sweeps.

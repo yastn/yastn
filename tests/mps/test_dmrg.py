@@ -68,7 +68,7 @@ def run_dmrg(phi, H, O_occ, E_target, occ_target, opts_svd, tol):
         assert abs(eng - ref_eng) < tol * 100
         assert abs(occ - ref_occ) < tol
         #
-        # We furthe iterate with '1site' DMRG
+        # We further iterate with '1site' DMRG
         # and stricter convergence criterion.
         #
         out = mps.dmrg_(psi, H, project=project, method='1site',
@@ -104,7 +104,7 @@ def dmrg_XX_model_dense(config=None, tol=1e-6):
     Initialize random MPS of dense tensors and
     runs a few sweeps of DMRG with the Hamiltonian of XX model.
     """
-    # Knowing the exact solution we can compare it DMRG result.
+    # Knowing the exact solution we can compare it with the DMRG result.
     # In this test we will consider sectors of different occupations.
     #
     # In this example we use yastn.Tensor with no symmetry imposed.
