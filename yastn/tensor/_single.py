@@ -33,7 +33,7 @@ def copy(a) -> yastn.Tensor:
     from the original.
 
     .. warning::
-        this operation does not preserve autograd on returned :class:`yastn.Tensor`
+        This operation does not preserve autograd on returned :class:`yastn.Tensor`.
 
     Returns
     -------
@@ -55,9 +55,9 @@ def clone(a) -> yastn.Tensor:
 
 def to(a, device=None, dtype=None) -> yastn.Tensor:
     r"""
-    Move tensor to device and cast to dtype.
+    Move tensor to device and cast to given datatype. 
 
-    Returns a clone of the tensor residing on ``device`` in desired ``dtype``.
+    Returns a clone of the tensor residing on ``device`` in desired datatype ``dtype``.
     If tensor already resides on ``device``, returns ``self``. This operation preserves autograd.
     If no change is needed, makes only a shallow copy of the tensor data.
 
@@ -82,7 +82,7 @@ def detach(a) -> yastn.Tensor:
     In case of NumPy backend, returns ``self``.
 
     .. warning::
-        this operation does not preserve autograd on returned :class:`yastn.Tensor`
+        This operation does not preserve autograd on returned :class:`yastn.Tensor`.
     """
     data = a.config.backend.detach(a._data)
     return a._replace(data=data)
@@ -225,8 +225,8 @@ def transpose(a, axes=None) -> yastn.Tensor:
     Parameters
     ----------
     axes: Sequence[int]
-        new order of legs. Has to be a valid permutation of (0, 1, ..., ndim-1)
-        If not provided, defaults to range(a.ndim)[::-1], which reverses the order of the axes.
+        new order of legs. Has to be a valid permutation of :code:`(0, 1, ..., ndim-1)` where :code:`ndim` is tensor order (number of legs). 
+        By default is :code:`range(a.ndim)[::-1]`, which reverses the order of the axes.
     """
     if axes is None:
         axes = tuple(range(a.ndim-1, -1, -1))

@@ -45,7 +45,7 @@ class Qdit(meta_operators):
         self.operators = ('I',)
 
     def space(self, d=None) -> yastn.Leg:
-        r""" :class:`yastn.Leg` describing local Hilbert space. Can override default dimension by providing d. """
+        r""" :class:`yastn.Leg` object describing local Hilbert space. Can override default dimension by providing d. """
         return Leg(self.config, s=1, D=(self._d if d is None else d,))
 
     def I(self, d=None) -> yastn.Tensor:

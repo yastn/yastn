@@ -147,11 +147,12 @@ def rand(config=None, legs=(), n=None, isdiag=False, **kwargs) -> yastn.Tensor:
     n : int | Sequence[int]
         Total charge of the tensor.
     isdiag : bool
-        whether or not to make tensor diagonal
+        whether or not to make tensor diagonal.
     dtype : str
-        Desired dtype, overrides default_dtype specified in config
+        Desired datatype, overrides :code:`default_dtype` specified in configuration.
     device : str
-        Device on which the tensor should be initialized. Overrides default_device. specified in config
+        Device on which the tensor should be initialized. Overrides attribute :code:`default_device`
+        specified in configuration.
     s : Optional[Sequence[int]]
         (alternative) Tensor signature. Also determines the number of legs. Default is s=().
     t : Optional[Sequence[Sequence[int | Sequence[int]]]]
@@ -161,8 +162,8 @@ def rand(config=None, legs=(), n=None, isdiag=False, **kwargs) -> yastn.Tensor:
 
     Note
     ----
-    If any of `s`, `t`, or `D` are specified,
-    `legs` are overriden and only `t`, `D`, and `s` are used.
+    If any of :code:`s`, :code:`t`, or :code:`D` are specified,
+    :code:`legs` are overriden and only :code:`t`, :code:`D`, and :code:`s` are used.
     """
     return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='rand', **kwargs)
 
@@ -200,10 +201,10 @@ def zeros(config=None, legs=(), n=None, isdiag=False, **kwargs) -> yastn.Tensor:
     isdiag : bool
         whether or not to make tensor diagonal
     dtype : str
-        desired dtype, overrides default_dtype specified in config.
+        Desired datatype, overrides :code:`default_dtype` specified in configuration.
     device : str
-        Device on which the tensor should be initialized. Overrides default_device.
-        specified in config.
+        Device on which the tensor should be initialized. Overrides attribute :code:`default_device`
+        specified in configuration.
     s : Optional[Sequence[int]]
         (alternative) Tensor signature. Also determines the number of legs. Default is s=().
     t : Optional[Sequence[Sequence[int | Sequence[int]]]]
@@ -213,8 +214,8 @@ def zeros(config=None, legs=(), n=None, isdiag=False, **kwargs) -> yastn.Tensor:
 
     Note
     ----
-    If any of `s`, `t`, or `D` are specified,
-    `legs` are overriden and only `t`, `D`, and `s` are used.
+    If any of :code:`s`, :code:`t`, or :code:`D` are specified,
+    :code:`legs` are overriden and only :code:`t`, :code:`D`, and :code:`s` are used.
     """
     return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='zeros', **kwargs)
 
@@ -232,12 +233,12 @@ def ones(config=None, legs=(), n=None, isdiag=False, **kwargs) -> yastn.Tensor:
     n : int | Sequence[int]
         total charge of the tensor.
     isdiag : bool
-        whether or not to make tensor diagonal
+        whether or not to make tensor diagonal.
     dtype : str
-        desired dtype, overrides default_dtype specified in config.
+        Desired datatype, overrides :code:`default_dtype` specified in configuration.
     device : str
-        Device on which the tensor should be initialized. Overrides default_device.
-        specified in config.
+        Device on which the tensor should be initialized. Overrides attribute :code:`default_device`
+        specified in configuration.
     s : Optional[Sequence[int]]
         (alternative) Tensor signature. Also determines the number of legs. Default is s=().
     t : Optional[Sequence[Sequence[int | Sequence[int]]]]
@@ -247,18 +248,19 @@ def ones(config=None, legs=(), n=None, isdiag=False, **kwargs) -> yastn.Tensor:
 
     Note
     ----
-    If any of `s`, `t`, or `D` are specified,
-    `legs` are overriden and only `t`, `D`, and `s` are used.
+    If any of :code:`s`, :code:`t`, or :code:`D` are specified,
+    :code:`legs` are overriden and only :code:`t`, :code:`D`, and :code:`s` are used.
     """
     return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='ones', **kwargs)
 
 
 def eye(config=None, legs=(), isdiag=True, **kwargs) -> yastn.Tensor:
     r"""
-    Initialize `diagonal` identity matrix. Such matrix is block-diagonal with all allowed blocks filled with identity matrices.
+    Initialize diagonal tensor of identity matrix. 
+    In presence of symmetries, such matrix is block-diagonal with all allowed blocks filled with identity matrices.
 
     .. note::
-        currently supports either one or two legs as input. In case of a single leg,
+        Currently supports either one or two legs as input. In case of a single leg,
         an identity matrix with Leg and its conjugate :meth:`yastn.Leg.conj()` is returned.
 
     Parameters
@@ -268,14 +270,14 @@ def eye(config=None, legs=(), isdiag=True, **kwargs) -> yastn.Tensor:
     legs : Sequence[yastn.Leg]
         Specify legs of the tensor passing a list of :class:`yastn.Leg`.
     isdiag : bool
-        Whether to return explicitly diagonal tensor.
-        If True, the signatures of the legs have to be opposite, and fused legs are not supported.
-        If False, it supports having fused legs and any combination of signatures.
+        Specify by bool whether to return explicitly diagonal tensor.
+        If :code:`True`, the signatures of the legs have to be opposite, and fused legs are not supported.
+        If :code:`False`, it supports having fused legs and any combination of signatures.
     device : str
-        Device on which the tensor should be initialized. Overrides default_device
-        specified in config.
+        Device on which the tensor should be initialized. Overrides attribute :code:`default_device`
+        specified in configuration.
     s : Optional[Sequence[int]]
-        (alternative) Tensor signature; should be (1, -1) or (-1, 1). Default is s=(1, -1)
+        (alternative) Tensor signature; should be (1, -1) or (-1, 1). Default is s=(1, -1).
     t : Optional[Sequence[Sequence[int | Sequence[int]]]]
         (alternative) List of charges for each leg. Default is t=().
     D : Optional[list]
@@ -283,8 +285,8 @@ def eye(config=None, legs=(), isdiag=True, **kwargs) -> yastn.Tensor:
 
     Note
     ----
-    If any of `s`, `t`, or `D` are specified,
-    `legs` are overriden and only `t`, `D`, and `s` are used.
+    If any of :code:`s`, :code:`t`, or :code:`D` are specified,
+    :code:`legs` are overriden and only :code:`t`, :code:`D`, and :code:`s` are used.
     """
     if isdiag:
         return _fill(config=config, legs=legs, isdiag=True, val='ones', **kwargs)
@@ -294,7 +296,7 @@ def eye(config=None, legs=(), isdiag=True, **kwargs) -> yastn.Tensor:
         legs = (legs[0], legs[0].conj())
     legs = legs[:2]  # in case more then 2 legs are provided
     if any(leg.fusion != 'hard' for leg in legs):
-        raise YastnError("eye does not support 'meta'-fused legs")
+        raise YastnError("eye() does not support 'meta'-fused legs")
     tmp = _fill(config=config, legs=legs, val='zeros', **kwargs)
     for t, D in zip(tmp.struct.t, tmp.struct.D):
         blk = tmp[t]
@@ -304,7 +306,7 @@ def eye(config=None, legs=(), isdiag=True, **kwargs) -> yastn.Tensor:
 
 def load_from_dict(config=None, d=None) -> yastn.Tensor:
     """
-    Create tensor from the dictionary `d`.
+    Create tensor from the dictionary :code:`d`.
 
     Parameters
     ----------
@@ -312,7 +314,7 @@ def load_from_dict(config=None, d=None) -> yastn.Tensor:
         :ref:`YASTN configuration <tensor/configuration:yastn  configuration>`
     d : dict
         Tensor stored in form of a dictionary. Typically provided by an output
-        of :meth:`yastn.Tensor.save_to_dict`
+        of :meth:`yastn.Tensor.save_to_dict`.
     """
     if d is not None:
         c_isdiag = bool(d['isdiag'])
@@ -342,7 +344,7 @@ def load_from_hdf5(config, file, path) -> yastn.Tensor:
     file:
         pointer to opened HDF5 file.
     path:
-        path inside the file which contains the state
+        path inside the file which contains the state.
     """
     g = file.get(path)
     c_isdiag = bool(g.get('isdiag')[:][0])
@@ -367,11 +369,11 @@ def load_from_hdf5(config, file, path) -> yastn.Tensor:
 
 def decompress_from_1d(r1d, meta) -> yastn.Tensor:
     """
-    Generate tensor from dictionary `meta` describing the structure of the tensor,
-    charges and dimensions of its non-zero blocks, and 1-D array `r1d` containing
+    Generate tensor from dictionary :code:`meta` describing the structure of the tensor,
+    charges and dimensions of its non-zero blocks, and 1-D array :code:`r1d` containing
     serialized data of non-zero blocks.
 
-    Typically, the pair `r1d` and `meta` is obtained from :meth:`yastn.Tensor.compress_to_1d`.
+    Typically, the pair :code:`r1d` and :code:`meta` is obtained from :meth:`yastn.Tensor.compress_to_1d`.
 
     Parameters
     ----------
@@ -381,7 +383,7 @@ def decompress_from_1d(r1d, meta) -> yastn.Tensor:
     meta : dict
         structure of symmetric tensor. Non-zero blocks are indexed by associated charges.
         Each such entry contains block's dimensions and the location of its data
-        in rank-1 tensor `r1d`
+        in rank-1 tensor :code:`r1d`.
     """
     hfs = tuple(leg.legs[0] for leg in meta['legs'])
     a = Tensor(config=meta['config'], hfs=hfs, mfs=meta['mfs'], struct=meta['struct'], slices=meta['slices'])
@@ -401,7 +403,7 @@ def block(tensors, common_legs=None) -> yastn.Tensor:
     ----------
     tensors : dict[Sequence[int], yastn.Tensor]
         dictionary of tensors {(x,y,...): tensor at position x,y,.. in the new, blocked super-tensor}.
-        Length of tuple should be equall to tensor.ndim - len(common_legs)
+        Length of tuple should be equall to :code:`tensor.ndim - len(common_legs)`.
 
     common_legs : Sequence[int]
         Legs that are not blocked.

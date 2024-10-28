@@ -22,15 +22,15 @@ class Spin12(meta_operators):
     # Predefined set of Pauli operators and spin-1/2 operators.
     def __init__(self, **kwargs):
         r"""
-        A set of standard operators for 2-dimensional Hilbert space. Defines identity,
-        :math:`S^z,\ S^x,\ S^y` operators and :math:`S^+,\ S^-` raising and lowering operators,
+        A set of standard operators for 2-dimensional Hilbert space. Defines identity, :math:`S^z,\ S^x,\ S^y` operators and :math:`S^+,\ S^-` raising and lowering operators,
         and Pauli matrices (if allowed by symmetry).
-        Define eigenvectors of :math:`S^z`, :math:`S^x`, :math:`S^y`, and local Hilbert space as a :class:`yastn.Leg`.
+        Class contains also eigenvectors of :math:`S^z`, :math:`S^x`, :math:`S^y`, 
+        and local Hilbert space that is :class:`yastn.Leg`.
 
         Parameters
         ----------
         sym : str
-            Explicit symmetry to used. Allowed options are :code:`'dense'`, ``'Z2'``, or ``'U1'``.
+            Explicit symmetry to be used. Allowed options are :code:`'dense'`, ``'Z2'``, or ``'U1'``.
 
         kwargs
             Other YASTN configuration parameters can be provided, see :meth:`yastn.make_config`.
@@ -40,10 +40,8 @@ class Spin12(meta_operators):
         The following basis ordering and charge conventions are assumed
 
             * For :code:`sym='dense'`, the basis order is (z=+1, z=-1).
-            * For :code:`sym='Z2'`, charge t=0 -> z=1, t=1 -> z=-1; i.e., :math:`z = e^{i \pi t}`.
-            * For :code:`sym='U1'`, charge t=-1 -> z=-1, t=1 -> z=1; i.e., z = t.
-
-        Default configuration sets :code:`fermionic` to :code:`False`.
+            * For :code:`sym='Z2'`, charge t=0 :math:`\rightarrow` z=1, t=1 :math:`\rightarrow` z=-1; i.e., :math:`z = e^{i \pi t}`.
+            * For :code:`sym='U1'`, charge t=-1 :math:`\rightarrow` z=-1, t=1 :math:`\rightarrow` z=1; i.e., z = t.
 
         When using :meth:`yastn.to_numpy` to recover usual dense representation of the algebra
         for :code:`sym='U1'` symmetry, :code:`reverse=True` is required
@@ -59,7 +57,7 @@ class Spin12(meta_operators):
         self.operators = ('I', 'x', 'y', 'iy', 'z', 'sx', 'sy', 'isy', 'sz', 'sp', 'sm')
 
     def space(self) -> yastn.Leg:
-        r""" :class:`yastn.Leg` describing local Hilbert space. """
+        r""" :class:`yastn.Leg` object describing local Hilbert space. """
         if self._sym == 'dense':
             leg = Leg(self.config, s=1, D=(2,))
         if self._sym == 'Z2':

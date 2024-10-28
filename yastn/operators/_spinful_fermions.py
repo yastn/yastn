@@ -30,9 +30,9 @@ class SpinfulFermions(meta_operators):
         Parameters
         ----------
         sym : str
-            Explicit symmetry to used. Allowed options are :code:`'Z2'`, :code:`'U1'`, :code:`'U1xU1'`, or :code:`'U1xU1xZ2'`.
+            Explicit symmetry to be used. Allowed options are :code:`'Z2'`, :code:`'U1'`, :code:`'U1xU1'`, or :code:`'U1xU1xZ2'`.
 
-        **kwargs : any
+        kwargs : any
             Passed to :meth:`yastn.make_config` to change backend, default_device or other config parameters.
 
         Notes
@@ -61,7 +61,7 @@ class SpinfulFermions(meta_operators):
         self.operators = ('I', 'n', 'c', 'cp')
 
     def space(self) -> yastn.Leg:
-        r""" :class:`yastn.Leg` describing local Hilbert space. """
+        r""" :class:`yastn.Leg` object describing local Hilbert space. """
         if self._sym == 'Z2':  # charges: 0 = (|00>, |11>); 1 = (|10>, |01>)  |occ_u occ_d>
             return Leg(self.config, s=1, t=(0, 1), D=(2, 2))
         if self._sym == 'U1':  # charges: 0 = |00>; 1 = (|10>, |01>); 2 = |11>  |occ_u occ_d>
@@ -148,7 +148,7 @@ class SpinfulFermions(meta_operators):
         return I
 
     def n(self, spin='u') -> yastn.Tensor:
-        r""" Particle number operator, with spin='u' for spin-up, and 'd' for spin-down. """
+        r""" Particle number operator, with :code:`spin='u'` for spin-up, and :code:`spin='d'` for spin-down. """
         n = Tensor(config=self.config, s=self.s)
         if spin == 'u':
             if self._sym == 'Z2':  # charges: 0 = (|00>, |11>); 1 = (|10>, |01>)  |occ_u occ_d>
@@ -181,7 +181,7 @@ class SpinfulFermions(meta_operators):
         return n
 
     def cp(self, spin='u') -> yastn.Tensor:
-        r""" Creation operator, with spin='u' for spin-up, and 'd' for spin-down. """
+        r""" Creation operator, with :code:`spin='u'` for spin-up, and :code:`spin='d'` for spin-down. """
         # |ud>; |11> = cu+ cd+ |00>;
         # cu |11> =  |01>; cu |10> = |00>
         # cd |11> = -|10>; cd |01> = |00>
@@ -224,7 +224,7 @@ class SpinfulFermions(meta_operators):
         return cp
 
     def c(self, spin='u') -> yastn.Tensor:
-        r""" Annihilation operator, with spin='u' for spin-up, and 'd' for spin-down. """
+        r""" Annihilation operator, with :code:`spin='u'` for spin-up, and :code:`spin='d'` for spin-down. """
         # |ud>; |11> = cu+ cd+ |00>;
         # cu |11> =  |01>; cu |10> = |00>
         # cd |11> = -|10>; cd |01> = |00>
