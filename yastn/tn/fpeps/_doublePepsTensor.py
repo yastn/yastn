@@ -177,7 +177,7 @@ class DoublePepsTensor:
 
     def fuse_layers(self):
         """
-        Fuse the top and btm tensors into a single :class:`yastn.Tensor`.
+        Fuse the top and bottom tensors into a single :class:`yastn.Tensor`.
         """
         tt = tensordot(self.ket, self.bra, axes=(2, 2), conj=(0, 1))  # [t l] [b r] [t' l'] [b' r']
         tt = tt.fuse_legs(axes=(0, 2, (1, 3)))  # [t l] [t' l'] [[b r] [b' r']]

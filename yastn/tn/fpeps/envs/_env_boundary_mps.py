@@ -20,7 +20,7 @@ from ._env_auxlliary import identity_tm_boundary
 
 class EnvBoundaryMps:
     r"""
-    BoundaryMPS class for finite PEPS contraction.
+    Boundary MPS class for finite PEPS contraction.
     """
 
     def __init__(self, psi, opts_svd, setup='l', opts_var=None):
@@ -86,7 +86,7 @@ class EnvBoundaryMps:
         """
         Calculate all 1-point expectation values <o> in a finite peps.
 
-        Takes CTM emvironments and operators.
+        Takes CTM environments and operators.
 
         o1 are given as dict[tuple[int, int], dict[int, operators]],
         mapping sites with list of operators at each site.
@@ -115,9 +115,9 @@ class EnvBoundaryMps:
 
     def measure_2site(peps_env, op1, op2, opts_svd, opts_var=None):
         """
-        Calculate all 2-point correlations <o1 o2> in a finite peps.
+        Calculate all 2-point correlations <op1 op2> in a finite peps.
 
-        Takes CTM emvironments and operators.
+        Takes CTM environments and operators.
 
         o1 and o2 are given as dict[tuple[int, int], dict[int, operators]],
         mapping sites with list of operators at each site.
@@ -190,9 +190,9 @@ class EnvBoundaryMps:
 
     def sample(peps_env, projectors, opts_svd=None, opts_var=None):
         """
-        Sample a random configuration from a finite peps.
+        Sample a random configuration from a finite PEPS.
 
-        Takes  CTM emvironments and a complete list of projectors to sample from.
+        Takes  CTM environments and a complete list of projectors to sample from.
         """
         psi = peps_env.psi
         config = psi[0, 0].config
@@ -239,10 +239,10 @@ class EnvBoundaryMps:
 
     def sample_MC_(proj_env, st0, st1, st2, psi, projectors, opts_svd, opts_var, trial="local"):
         """
-        MC steps in a finite peps. Makes two steps
+        Monte Carlo steps in a finite peps. Makes two steps
         while sweeping finite lattice back and forth.
 
-        Takes emvironments and a complete list of projectors to sample from.
+        Takes environments and a complete list of projectors to sample from.
 
         proj_env, st1, st2 are updated in place
         """
