@@ -4,11 +4,9 @@ Creating PEPS
 Initializing empty PEPS
 -----------------------
 
-PEPS is an instance of a class :class:`yastn.tn.fpeps.Peps`.
-It extends lattice geometry, associating each unique lattice site with a tensor.
-
-.. autoclass:: yastn.tn.fpeps.Peps
-    :members: copy, clone, save_to_dict, transfer_mpo
+PEPS is an instance of a class :class:`yastn.tn.fpeps.Peps`, utilizing a lattice geometry setup 
+(e.g., SquareLattice or CheckerboardLattice). Each unique lattice site is associated with a tensor, 
+following the layout specified by the lattice geometry.
 
 ::
 
@@ -25,6 +23,9 @@ It extends lattice geometry, associating each unique lattice site with a tensor.
                      |       \
                  phys `4th`  bottom `2nd`
 
+.. autoclass:: yastn.tn.fpeps.Peps
+    :members: copy, clone, save_to_dict, transfer_mpo
+
 
 Initializing product PEPS
 -------------------------
@@ -37,8 +38,10 @@ Examples are given in :ref:`quickstart<yastn.quickstart:QUICKSTART>`.
 Import and export PEPS
 ----------------------
 
-PEPS can be saved as Python dict after serialization by
-:meth:`yastn.tn.fpeps.Peps.save_to_dict` and deserialized back using :meth:`yastn.tn.fpeps.load_from_dict`.
+PEPS instances can be saved as Python dict after serialization by
+:meth:`yastn.tn.fpeps.Peps.save_to_dict`. This enables saving the PEPS structure,
+lattice geometry, and tensor data for storage or transfer. A PEPS object can later be
+deserialized back using :meth:`yastn.tn.fpeps.load_from_dict`.
 
 .. autofunction:: yastn.tn.fpeps.load_from_dict
 
