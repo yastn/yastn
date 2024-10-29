@@ -165,7 +165,7 @@ class Tensor:
         Signature of tensor's native legs.
 
         This includes legs (spaces) which have been fused together
-        by :meth:`yastn.fuse_legs` using mode=`meta`.
+        by :meth:`yastn.fuse_legs` using ``mode='meta'``.
         """
         return self.struct.s
 
@@ -194,7 +194,7 @@ class Tensor:
         Native rank of the tensor.
 
         This includes legs (spaces) which have been fused together
-        by :meth:`yastn.fuse_legs` using mode=`meta`.
+        by :meth:`yastn.fuse_legs` using ``mode='meta'``.
         """
         return len(self.struct.s)
 
@@ -220,7 +220,7 @@ class Tensor:
 
     @property
     def dtype(self) -> numpy.dtype | torch.dtype:
-        """ Datatype dtype of tensor data used by the backend. """
+        """ Datatype ``dtype`` of tensor data used by the ``backend``. """
         return self.config.backend.get_dtype(self._data)
 
     @property
@@ -240,5 +240,5 @@ class Tensor:
 
     @property
     def H(self) -> yastn.Tensor:
-        r""" Same as self.T.conj(), i.e., transpose and conjugate. """
+        r""" Same as :meth:`self.T.conj()`, i.e., transpose and conjugate. """
         return self.transpose().conj()

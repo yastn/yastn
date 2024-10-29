@@ -103,6 +103,7 @@ def requires_grad_(a, requires_grad=True) -> Never:
     Parameters
     ----------
     requires_grad: bool
+        if ``True`` activates autograd.
     """
     a.config.backend.requires_grad_(a._data, requires_grad=requires_grad)
 
@@ -112,7 +113,7 @@ def conj(a) -> yastn.Tensor:
     Return conjugated tensor. In particular, change the sign of the signature `s` to `-s`,
     the total charge `n` to `-n`, and complex conjugate each block of the tensor.
 
-    Follows the behavior of the backend.conj() when it comes to creating a new copy of the data.
+    Follows the behavior of the :code:`backend.conj()` when it comes to creating a new copy of the data.
     """
     newn = a.config.sym.add_charges(a.struct.n, new_s=-1)
     news = tuple(-x for x in a.struct.s)
@@ -127,7 +128,7 @@ def conj_blocks(a) -> yastn.Tensor:
     Complex-conjugate all blocks leaving symmetry structure (signature, blocks charge, and
     total charge) unchanged.
 
-    Follows the behavior of the backend.conj() when it comes to creating a new copy of the data.
+    Follows the behavior of the :code:`backend.conj()` when it comes to creating a new copy of the data.
     """
     data = a.config.backend.conj(a._data)
     return a._replace(data=data)
@@ -196,14 +197,15 @@ def flip_charges(a, axes=None) -> yastn.Tensor:
 
 def drop_leg_history(a, axes=None) -> yastn.Tensor:
     r"""
-    Drops information about original structure of fused or blocked legs that have been combined into a selected tensor leg(s).
+    Drops information about original structure of fused or blocked legs 
+    that have been combined into a selected tensor leg(s).
 
     Makes a shallow copy of tensor data.
 
     Parameters
     ----------
     axes: int | Sequence[int]
-        index of the leg, or a group of legs. If None, drops information from all legs.
+        index of the leg, or a group of legs. If :code:`None`, drops information from all legs.
     """
     if axes is None:
         axes = tuple(range(a.ndim))
@@ -225,7 +227,8 @@ def transpose(a, axes=None) -> yastn.Tensor:
     Parameters
     ----------
     axes: Sequence[int]
-        new order of legs. Has to be a valid permutation of :code:`(0, 1, ..., ndim-1)` where :code:`ndim` is tensor order (number of legs). 
+        new order of legs. Has to be a valid permutation of :code:`(0, 1, ..., ndim-1)` 
+        where :code:`ndim` is tensor order (number of legs). 
         By default is :code:`range(a.ndim)[::-1]`, which reverses the order of the axes.
     """
     if axes is None:
@@ -303,7 +306,7 @@ def add_leg(a, axis=-1, s=-1, t=None, leg=None) -> yastn.Tensor:
     r"""
     Creates a new tensor with an extra leg that carries the charge (or part of it)
     of the orignal tensor. This is achieved by the extra leg having a single charge sector
-    of dimension D=1. The total charge of the tensor :attr:`yastn.Tensor.n` can be modified this way.
+    of dimension `D=1`. The total charge of the tensor :attr:`yastn.Tensor.n` can be modified this way.
 
     Makes a shallow copy of tensor data.
 
@@ -314,7 +317,7 @@ def add_leg(a, axis=-1, s=-1, t=None, leg=None) -> yastn.Tensor:
 
     s : int
         signature of the new leg, +1 or -1.
-        The default is -1, where the leg charge is equal to the tensor charge for t=None.
+        The default is -1, where the leg charge is equal to the tensor charge for :code:`t=None`.
 
     t : int | Sequence[int]
         charge carried by the new leg. If ``None``, takes the total charge `n`
@@ -323,7 +326,7 @@ def add_leg(a, axis=-1, s=-1, t=None, leg=None) -> yastn.Tensor:
     leg : Optional[Leg]
         It is possible to provide a new leg directly.
         It has to be of dimension one but can contain information about the fusion of other dimension-one legs.
-        If given (not None), it overrides information provided in `s` and `t`.
+        If given (not None), it overrides information provided in ``s`` and ``t``.
     """
     if a.isdiag:
         raise YastnError('Cannot add axis to a diagonal tensor.')
@@ -379,7 +382,7 @@ def remove_leg(a, axis=-1) -> yastn.Tensor:
     Parameters
     ----------
     axis: int
-        index of the leg to be removed
+        index of the leg to be removed.
     """
     if a.isdiag:
         raise YastnError('Cannot remove axis to a diagonal tensor.')
@@ -416,7 +419,7 @@ def remove_leg(a, axis=-1) -> yastn.Tensor:
 
 def diag(a) -> yastn.Tensor:
     """
-    Select diagonal of 2d tensor and output it as a diagonal tensor, or vice versa.
+    Select diagonal of 2D tensor and output it as a diagonal tensor, or vice versa.
     """
     if not a.isdiag:  # isdiag=False -> isdiag=True
         if a.ndim_n != 2 or sum(a.struct.s) != 0:
@@ -443,7 +446,7 @@ def diag(a) -> yastn.Tensor:
 
 def remove_zero_blocks(a, rtol=1e-12, atol=0) -> yastn.Tensor:
     r"""
-    Remove from the tensor blocks where all elements are below a cutoff.
+    Remove blocks where all elements are below a cutoff.
 
     Cutoff is a combination of absolut tolerance and
     relative tolerance with respect to maximal element in the tensor.

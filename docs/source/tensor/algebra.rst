@@ -51,7 +51,6 @@ Functions below facilitate the computation of
 
 or composition of such operations over several tensors.
 
-
 See examples: :ref:`examples/tensor/algebra:tensor contractions`.
 
 .. automethod:: yastn.Tensor.__matmul__
@@ -131,7 +130,7 @@ Spectral decompositions and truncation
 Auxliary
 --------
 
-Methods called by :doc:`Krylov-based algorithms</tensor/krylov>`
+Methods called by :doc:`Krylov-based algorithms</tensor/krylov>`.
 
 .. automethod:: yastn.Tensor.expand_krylov_space
 .. automethod:: yastn.Tensor.linear_combination
