@@ -51,8 +51,8 @@ def sign_canonical_order(*operators, sites=None, f_ordered=None) -> int:
     tn: str
         type of lattice: 'peps' or 'mps', informing about the fermionic order of sites.
     """
-    fss = operators[0].config.fermionic
-    if not fss:
+
+    if not operators or not operators[0].config.fermionic:
         return 1
 
     sites = list(sites)
@@ -74,4 +74,4 @@ def sign_canonical_order(*operators, sites=None, f_ordered=None) -> int:
 
     if len(charges_0) == 0:
         return 1
-    return swap_charges(charges_0, charges_1, fss)
+    return swap_charges(charges_0, charges_1, operators[0].config.fermionic)

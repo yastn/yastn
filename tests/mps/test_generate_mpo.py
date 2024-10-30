@@ -128,36 +128,45 @@ def test_generate_mpo_basic(config=cfg):
                   {'backend': config.backend, 'default_device': config.default_device}
     # pytest uses config to inject various backends and devices for testing
     ops = yastn.operators.SpinlessFermions(sym='U1', **opts_config)
-    I = mps.product_mpo(ops.I(), N=4)
-    I2 = mps.generate_mpo(ops.I(), N=4)
-    assert (I - I2).norm() < 1e-12
 
+    I1 = mps.product_mpo(ops.I(), N=4)  # identity as single operator
+    I2 = mps.generate_mpo([ops.I(), ops.I()], N=4)  # no terms provided; identity as a list
+    I3 = mps.generate_mpo([ops.I(), ops.I(), ops.I(), ops.I()], terms=[])  # empty terms; identity as a list; N not provided
+    I4 = mps.generate_mpo(ops.I(), terms=[mps.Hterm(amplitude=4)], N=4)  # single term with no operators
+
+    assert (I1 - I2).norm() < 1e-12
+    assert (I1 - I3).norm() < 1e-12
+    assert (4 * I1 - I4).norm() < 1e-12
+
+    # local operators and state for testing
     c, cp, n = ops.c(), ops.cp(), ops.n()
     v0, v1 = ops.vec_n(0), ops.vec_n(1)
     v1101 = mps.product_mps([v1, v1, v0, v1])
     v0111 = mps.product_mps([v0, v1, v1, v1])
     psi = v0111 + v1101
 
-    # test product operator with fermionic anti-commutation relations
+    # test product operator with fermionic anticommutation relations
     Hterms1 = [mps.Hterm(1., positions=[0, 3, 2], operators=[cp, n, c])]
     O1 = mps.generate_mpo(ops.I(), Hterms1, N=4)
     Hterms2 = [mps.Hterm(1., positions=[2, 3, 0, 3], operators=[c, cp, cp, c])]
-    O2 = mps.generate_mpo(I, Hterms2)
+    O2 = mps.generate_mpo(I1, Hterms2)
     assert abs(O1.norm() - 2 ** 0.5) < 1e-12
     assert abs(O2.norm() - 2 ** 0.5) < 1e-12
     assert (O1 - O2).norm() < 1e-12
     assert abs(mps.vdot(psi, O1, psi) + 1) < 1e-12
 
     # two identical terms
-    O12 = mps.generate_mpo([ops.I(), ops.I()], Hterms1 + Hterms2, N=4)
+    O12 = mps.generate_mpo(ops.I(), Hterms1 + Hterms2, N=4)
+    assert (2 * O1 - O12).norm() < 1e-12
+    O12 = mps.generate_mpo(ops.I(), Hterms1 + Hterms1, N=4)
     assert (2 * O1 - O12).norm() < 1e-12
 
     # make O hetmitian
     Hterms = [mps.Hterm(1., positions=[2, 3, 0, 3], operators=[c, cp, cp, c]),
                mps.Hterm(1., positions=[0, 3, 2, 3], operators=[c, cp, cp, c])]
-    O = mps.generate_mpo(I, Hterms)
+    O = mps.generate_mpo(I1, Hterms)
     assert abs(mps.vdot(psi, O, psi) + 2) < 1e-12
-    psir = mps.random_mps(I, n=2, D_total=16, dtype='complex128')
+    psir = mps.random_mps(I1, n=2, D_total=16, dtype='complex128')
     tmp = mps.vdot(psir, O, psir).item()
     assert abs(tmp.imag) < 1e-12  # expectation value is real for hermitian O
 
@@ -171,7 +180,7 @@ def test_generate_mpo_basic(config=cfg):
               mps.Hterm(1j, positions=[0, 2, 3], operators=[cp, c, c]), # 0111 + 1101 -> 0110 + 1100 -> -0100 -> -1100
               mps.Hterm(1, positions=[2, 3, 2], operators=[cp, c, c])]  # 0111 + 1101 -> -0101 -> 0100 -> -0110
 
-    O23 = mps.generate_mpo(I, Hterms)
+    O23 = mps.generate_mpo(I1, Hterms)
     assert abs(mps.vdot(psi2, O23, psi) - 1 + 2j) < 1e-12
 
 
@@ -182,27 +191,27 @@ def test_generate_mpo_raise(config=cfg):
     ops = yastn.operators.Spin12(sym='U1', **opts_config)
     I = mps.product_mpo(ops.I(), N=7)
 
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match="Hterm: positions should be in 0, 1, ..., N-1."):
         Hterms = [mps.Hterm(1., positions=[20], operators=[ops.sz()])]
         mps.generate_mpo(I, Hterms)
-        # position in Hterm should be in 0, 1, ..., N-1
-    with pytest.raises(yastn.YastnError):
+
+    with pytest.raises(yastn.YastnError,
+                       match="Hterm: numbers of provided positions and operators do not match."):
         Hterms = [mps.Hterm(1., positions=[2], operators=[ops.sz(), ops.sz()])]
         mps.generate_mpo(I, Hterms)
-        # Hterm: numbers of positions and operators do not match.
-    with pytest.raises(yastn.YastnError):
+
+    with pytest.raises(yastn.YastnError,
+                       match="Hterm: operator should be a Tensor with ndim=2 and signature matching identity I at the corresponding site."):
         Hterms = [mps.Hterm(1., positions=[2], operators=[ops.sz().conj()])]
         mps.generate_mpo(I, Hterms)
-        # operator in Hterm should be a matrix with signature matching I at given site
-    with pytest.raises(yastn.YastnError):
-        Hterms = [mps.Hterm(1., positions=2, operators=ops.sz())]
-        mps.generate_mpo(I, Hterms)
-        # Hterm: positions and operators should be provided as lists or tuples.
-    with pytest.raises(yastn.YastnError):
+
+    with pytest.raises(yastn.YastnError,
+                       match="generate_mpo: provided terms do not all add up to the same total charge."):
         Hterms = [mps.Hterm(1., positions=[3], operators=[ops.sp()]),
                   mps.Hterm(1., positions=[3], operators=[ops.sm()])]
         mps.generate_mpo(I, Hterms)
-        # generate_mpo: Provided terms do not all have the same total charge.
+
 
 if __name__ == "__main__":
     test_generate_mpo_basic()

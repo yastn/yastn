@@ -101,14 +101,27 @@ def generate_mpo(I, terms=None, opts_svd=None, N=None) -> yastn.tn.mps.MpsMpoOBC
         Number of MPO sites.
         If identity MPO is provided, it is overridden by ``I.N``.
     """
+
     if not terms:
         return I.copy() if isinstance(I, MpsMpoOBC) else product_mpo(I, N)
 
-    try:
-        if any(len(term.positions) != len(term.operators) for term in terms):
-            raise YastnError("Hterm: numbers of positions and operators do not match. ")
-    except TypeError:
-        raise YastnError("Hterm: positions and operators should be provided as lists or tuples.")
+    clean_terms = []
+    for term in terms:
+        reset = False
+        try:
+            positions = list(term.positions)
+        except TypeError:
+            positions, reset = [term.positions], True
+        try:
+            operators = list(term.operators)
+        except TypeError:
+            operators, reset = [term.operators], True
+        if len(positions) != len(operators):
+            raise YastnError("Hterm: numbers of provided positions and operators do not match.")
+        if reset:
+            term = Hterm(term.amplitude, positions, operators)
+        clean_terms.append(term)
+    terms = clean_terms
 
     unique_ops = []
     if isinstance(I, MpsMpoOBC):
@@ -116,15 +129,14 @@ def generate_mpo(I, terms=None, opts_svd=None, N=None) -> yastn.tn.mps.MpsMpoOBC
         Iind = [ind_list_tensors(I[n], unique_ops) for n in I.sweep()]
         unique_ops = [op.remove_leg(axis=0).remove_leg(axis=1) for op in unique_ops]
     else:
-        try:  # handle inputing single bare Tensor
+        try:  # list of identity tensors to periodically distribute along the chain
             I = list(I)
-        except TypeError:
+        except TypeError:  # handle single identity tensor
             I = [I]
         if N is None:
             N = len(I)
-        Nv = len(I)
         Iind = [ind_list_tensors(In, unique_ops) for In in I]
-        Iind = [Iind[n % Nv] for n in range(N)]
+        Iind = [Iind[n % len(Iind)] for n in range(N)]
 
     M = len(terms)
     config = unique_ops[0].config
@@ -137,9 +149,9 @@ def generate_mpo(I, terms=None, opts_svd=None, N=None) -> yastn.tn.mps.MpsMpoOBC
     signs, sitess, opss, op_patterns = [], [], [], []
     for term in terms:
         if any(site < 0 or site > N or not isinstance(site, numbers.Integral) for site in term.positions):
-            raise YastnError("position in Hterm should be in 0, 1, ..., N-1")
+            raise YastnError("Hterm: positions should be in 0, 1, ..., N-1.")
         if any(op.s != unique_ops[Iind[site]].s for op, site in zip(term.operators, term.positions)):
-            raise YastnError("operator in Hterm should be a matrix with signature matching I at given site")
+            raise YastnError("Hterm: operator should be a Tensor with ndim=2 and signature matching identity I at the corresponding site.")
 
         signs.append(sign_canonical_order(*term.operators, sites=term.positions, f_ordered=f_ordered))
         sites_ops = sorted(zip(term.positions, term.operators), key=itemgetter(0))
@@ -210,7 +222,7 @@ def generate_mpo(I, terms=None, opts_svd=None, N=None) -> yastn.tn.mps.MpsMpoOBC
 
     tleft = set(t1bs[0].values())
     if len(tleft) != 1:
-        raise YastnError("generate_mpo: provided terms do not all have the same total charge.")
+        raise YastnError("generate_mpo: provided terms do not all add up to the same total charge.")
     tleft = tleft.pop()
 
     reshapes = []
