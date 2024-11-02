@@ -44,14 +44,15 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
         tol=0, tol_block=0, D_block=float('inf'), D_total=float('inf'),
         truncate_multiplets=False, mask_f=None, **kwargs) -> tuple[yastn.Tensor, yastn.Tensor, yastn.Tensor]:
     r"""
-    Split tensor into :math:`a = U S V` using exact singular value decomposition (SVD),
+    Split tensor using exact singular value decomposition (SVD) into :math:`a = U S V`,
     where the columns of `U` and the rows of `V` form orthonormal bases
-    and `S` is positive and diagonal matrix. Optionally, truncate the result.
-
+    and `S` is positive and diagonal matrix. 
+    
+    The function allows for optional truncation.
     Truncation can be based on relative tolerance, bond dimension of each block,
     and total bond dimension across all blocks (whichever gives smaller total dimension).
 
-    Charge of input tensor `a` is attached to `U` if `nU` and to `V` otherwise.
+    Charge of input tensor ``a`` is attached to `U` if ``nU=True`` and to `V` otherwise.
 
     Parameters
     ----------
@@ -64,16 +65,16 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
         V is going to have opposite signature on connecting leg.
 
     nU: bool
-        Whether or not to attach the charge of  `a` to `U`.
-        Otherwise it is attached to `V`. The default is True.
+        Whether or not to attach the charge of  ``a`` to `U`.
+        If ``False``, it is attached to `V`. The default is ``True``.
 
     Uaxis, Vaxis: int
-        specify which leg of U and V tensors are connecting with S. By default,
-        it is the last leg of U and the first of V.
+        specify which leg of `U` and `V` tensors are connecting with `S`. By default,
+        it is the last leg of `U` and the first of `V`.
 
     policy: str
-        "fullrank" or "lowrank". Use standard full (but reduced) SVD for "fullrank".
-        For "lowrank", uses randomized/truncated SVD and requires providing `D_block` in `kwargs`.
+        ``"fullrank"`` or ``"lowrank"`` are allowed. For ``"fullrank"`` use standard full (but reduced) SVD, 
+        and for ``"lowrank"`` use randomized/truncated SVD and requires providing ``D_block`` in ``kwargs``.
 
     tol: float
         relative tolerance of singular values below which to truncate across all blocks.
@@ -88,10 +89,10 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
         largest total number of singular values to keep.
 
     truncate_multiplets: bool
-        If True, enlarge the truncation range specified by other arguments by shifting
+        If ``True``, enlarge the truncation range specified by other arguments by shifting
         the cut to the largest gap between to-be-truncated singular values across all blocks.
         It provides a heuristic mechanism to avoid truncating part of a multiplet.
-        The default is False.
+        The default is ``False``.
 
     mask_f: function[yastn.Tensor] -> yastn.Tensor
         custom truncation-mask function.
@@ -133,40 +134,42 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         their final order.
 
     sU: int
-        Signature of the new leg in U; equal to 1 or -1. The default is 1.
-        V is going to have the opposite signature on the connecting leg.
+        Signature of the new leg in `U`; equal to 1 or -1. The default is 1.
+        `V` is going to have the opposite signature on the connecting leg.
 
     nU: bool
-        Whether or not to attach the charge of  `a` to `U`.
-        Otherwise it is attached to `V`. The default is True.
+        Whether or not to attach the charge of ``a`` to `U`.
+        If ``False``, it is attached to `V`. The default is ``True``.
 
     compute_uv: bool
-        If True, compute U and V in addition to S. The default is True.
+        If ``True``, compute `U` and `V` in addition to `S` and only `S` otherwise. 
+        The default is ``True``. 
 
     Uaxis, Vaxis: int
-        Specify which leg of U and V tensors are connecting with S. By default,
-        it is the last leg of U and the first of V, in which case a = U @ S @ V.
+        Specify which leg of `U` and `V` tensors are connecting with `S`. By default,
+        it is the last leg of U and the first of `V`, in which case ``a = U @ S @ V``.
 
     policy: str
-        "fullrank" or "lowrank". Use standard full (but reduced) SVD for "fullrank".
-        For "lowrank", uses randomized/truncated SVD and requires providing `D_block` in `kwargs`.
+        ``"fullrank"`` or ``"lowrank"`` are allowed. Use standard full (but reduced) SVD for ``"fullrank"``.
+        For ``"lowrank"``, uses randomized/truncated SVD and requires providing ``D_block`` in ``kwargs``.
 
     fix_signs: bool
         Whether or not to fix phases in `U` and `V`,
         so that the largest element in each column of `U` is positive.
         Provide uniqueness of decomposition for non-degenerate cases.
-        The default is False.
+        The default is ``False``.
 
     svd_on_cpu: bool
         GPU tends to be very slow when executing SVD.
-        If True, the data will be copied to CPU for SVD,
+        If ``True``, the data will be copied to CPU for SVD,
         and the results will be copied back to the device.
         Nothing is done for data already residing on CPU.
-        The default is False.
+        The default is ``False``.
 
     Returns
     -------
     U, S, V or S
+        The first option, with ``compute_uv=True``, is default.
     """
     _test_axes_all(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
@@ -201,7 +204,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     elif compute_uv and policy == 'lowrank':
         Udata, Sdata, Vdata = a.config.backend.svd_lowrank(data, meta, sizes, **kwargs)
     else:
-        raise YastnError('svd policy should in (`lowrank`, `fullrank`). compute_uv == False only works with `fullrank`')
+        raise YastnError('svd() policy should in (`lowrank`, `fullrank`). compute_uv == False only works with `fullrank`')
 
     if svd_on_cpu:
         Sdata = a.config.backend.move_to(Sdata, device=device)
@@ -246,7 +249,7 @@ def _meta_svd(config, struct, slices, minD, sU, nU):
     U has signature = (struct.s[0], sU)
     S has signature = (-sU, sU)
     V has signature = (-sU, struct.s[1])
-    if nU than U carries struct.n, otherwise V
+    if nU than U carries struct.n, otherwise V.
     """
     n0 = config.sym.zero()
     nsym = config.sym.NSYM
@@ -299,7 +302,7 @@ def _meta_svd(config, struct, slices, minD, sU, nU):
 def truncation_mask_multiplets(S, tol=0, D_total=float('inf'),
                                eps_multiplet=1e-13, **kwargs) -> yastn.Tensor[bool]:
     """
-    Generate a mask tensor from real positive spectrum S, while preserving
+    Generate a mask tensor from real positive spectrum ``S``, while preserving
     degenerate multiplets. This is achieved by truncating the spectrum
     at the boundary between multiplets.
 
@@ -309,18 +312,18 @@ def truncation_mask_multiplets(S, tol=0, D_total=float('inf'),
         Diagonal tensor with spectrum.
 
     tol: float
-        relative tolerance
+        relative tolerance.
 
     D_total: int
-        maximum number of elements kept
+        maximum number of elements kept in the result.
 
     eps_multiplet: float
         relative tolerance on multiplet splitting. If relative difference between
-        two consecutive elements of S is larger than ``eps_multiplet``, these
+        two consecutive elements of ``S`` is larger than ``eps_multiplet``, these
         elements are not considered as part of the same multiplet.
     """
     if not (S.isdiag and S.yast_dtype == "float64"):
-        raise YastnError("Truncation_mask requires S to be real and diagonal")
+        raise YastnError("Truncation_mask requires S to be real and diagonal.")
 
     # makes a copy for partial truncations; also detaches from autograd computation graph
     Smask = S.copy()
@@ -383,7 +386,7 @@ def truncation_mask(S, tol=0, tol_block=0,
                     D_block=float('inf'), D_total=float('inf'),
                     truncate_multiplets=False, **kwargs) -> yastn.Tensor[bool]:
     """
-    Generate mask tensor based on diagonal and real tensor S.
+    Generate mask tensor based on diagonal and real tensor ``S``.
     It can be then used for truncation.
 
     Per block options ``D_block`` and ``tol_block`` govern truncation within individual blocks,
@@ -395,26 +398,26 @@ def truncation_mask(S, tol=0, tol_block=0,
         Diagonal tensor with spectrum.
 
     tol: float
-        relative tolerance
+        relative tolerance.
 
     tol_block: float
-        relative tolerance per block
+        relative tolerance per block.
 
     D_total: int
-        maximum number of elements kept across all blocks
+        maximum number of elements kept across all blocks.
 
     D_block: int
-        maximum number of elements kept per block
+        maximum number of elements kept per block.
 
     truncate_multiplets: bool
-        If True, enlarge the truncation range specified by other arguments by shifting
+        If ``True``, enlarge the truncation range specified by other arguments by shifting
         the cut to the largest gap between to-be-truncated singular values across all blocks.
         It provides a heuristic mechanism to avoid truncating part of a multiplet.
-        If True, tol_block and D_block are ignored, as truncate_multiplets is a global condition.
-        The default is False.
+        If ``True``, ``tol_block`` and ``D_block`` are ignored, as ``truncate_multiplets`` is a global condition.
+        The default is ``False``.
     """
     if not (S.isdiag and S.yast_dtype == "float64"):
-        raise YastnError("Truncation_mask requires S to be real and diagonal")
+        raise YastnError("truncation_mask() requires S to be real and diagonal.")
 
     # makes a copy for partial truncations; also detaches from autograd computation graph
     S = S.copy()
@@ -466,7 +469,7 @@ def truncation_mask(S, tol=0, tol_block=0,
 def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0) -> tuple[yastn.Tensor, yastn.Tensor]:
     r"""
     Split tensor using reduced QR decomposition, such that :math:`a = Q R`,
-    with :math:`QQ^\dagger=I`. The charge of R is zero.
+    with :math:`QQ^\dagger=I`. The charge of `R` is zero.
 
     Parameters
     ----------
@@ -475,11 +478,11 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0) -> tuple[yastn.Tensor, yastn.Ten
 
     sQ: int
         signature of connecting leg in Q; equal 1 or -1. The default is 1.
-        R is going to have opposite signature on connecting leg.
+        `R` is going to have opposite signature on connecting leg.
 
     Qaxis, Raxis: int
-        specify which leg of Q and R tensors are connecting to the other tensor.
-        By default, it is the last leg of Q and the first leg of R.
+        specify which leg of `Q` and `R` tensors are connecting to the other tensor.
+        By default, it is the last leg of `Q` and the first leg of `R`.
 
     Returns
     -------
@@ -556,7 +559,7 @@ def eigh(a, axes, sU=1, Uaxis=-1) -> tuple[yastn.Tensor, yastn.Tensor]:
     r"""
     Split symmetric tensor using exact eigenvalue decomposition, :math:`a= USU^{\dagger}`.
 
-    Tensor is expected to be symmetric (hermitian) with total charge 0.
+    Tensor is expected to be symmetric (hermitian) with total charge `0`.
 
     Parameters
     ----------
@@ -564,10 +567,10 @@ def eigh(a, axes, sU=1, Uaxis=-1) -> tuple[yastn.Tensor, yastn.Tensor]:
         Specify two groups of legs between which to perform svd, as well as their final order.
 
     sU: int
-        signature of connecting leg in U equall 1 or -1. The default is 1.
+        signature of connecting leg in `U` equall 1 or -1. The default is 1.
 
     Uaxis: int
-        specify which leg of U is the new connecting leg. By default, it is the last leg.
+        specify which leg of `U` is the new connecting leg. By default, it is the last leg.
 
     Returns
     -------
@@ -578,12 +581,12 @@ def eigh(a, axes, sU=1, Uaxis=-1) -> tuple[yastn.Tensor, yastn.Tensor]:
     axes = _unpack_axes(a.mfs, lout_l, lout_r)
 
     if not all(x == 0 for x in a.struct.n):
-        raise YastnError('eigh requires tensor charge to be zero')
+        raise YastnError('eigh requires tensor charge to be zero.')
 
     data, struct, slices, ls_l, ls_r = _merge_to_matrix(a, axes)
 
     if ls_l != ls_r:
-        raise YastnError("Tensor likely not hermitian. Legs of effective square blocks not match.")
+        raise YastnError("Tensor likely is not hermitian. Legs of effective square blocks not match.")
 
     meta, Sstruct, Sslices, Ustruct, Uslices = _meta_eigh(a.config, struct, slices, sU)
     sizes = tuple(x.size for x in (Sstruct, Ustruct))
@@ -660,16 +663,16 @@ def eigh_with_truncation(a, axes, sU=1, Uaxis=-1,
         Specify two groups of legs between which to perform svd, as well as their final order.
 
     sU: int
-        signature of connecting leg in U equall 1 or -1. The default is 1.
+        signature of connecting leg in `U` equall 1 or -1. The default is 1.
 
     Uaxis: int
-        specify which leg of U is the new connecting leg. By default, it is the last leg.
+        specify which leg of `U` is the new connecting leg. By default, it is the last leg.
 
     tol: float
         relative tolerance of singular values below which to truncate across all blocks.
 
     tol_block: float
-        relative tolerance of singular values below which to truncate within individual blocks
+        relative tolerance of singular values below which to truncate within individual blocks.
 
     D_block: int
         largest number of singular values to keep in a single block.
@@ -694,20 +697,20 @@ def eigh_with_truncation(a, axes, sU=1, Uaxis=-1,
 
 def entropy(a, alpha=1, tol=1e-12) -> number:
     r"""
-    Calculate entropy from probabilities encoded in diagonal tensor `a`.
+    Calculate entropy from probabilities encoded in diagonal tensor ``a``.
 
-    Normalizes (sum of) `a` to 1, but do not check correctness otherwise.
-    Use base-2 log. For empty or zero tensor, return 0.
+    Normalizes (sum of) ``a`` to 1, but do not check correctness otherwise.
+    Use base-2 log. For empty or zero tensor, returns ``0``.
 
     Parameters
     ----------
     alpha: float
         Order of Renyi entropy.
-        alpha == 1 is von Neuman entropy: -Tr(a log2(a))
-        otherwise: 1/(1-alpha) log2(Tr(a ** alpha))
+        ``alpha == 1`` is von Neuman entropy: :math:`-{\rm Tr}(a {\rm log2}(a))`
+        otherwise: :math:`1/(1-alpha) {\rm log2}({\rm Tr}(a ** alpha))`
 
     tol: float
-        Discard all probabilities smaller than `tol` during calculation.
+        Discard all probabilities smaller than ``tol`` during calculation.
     """
     if not a.isdiag:
         raise YastnError("yastn.linalg.entropy requires diagonal tensor.")

@@ -6,8 +6,7 @@ Basic algebra operations with symmetric tensors
 
 Symmetric tensors can be added and multiplied by a scalar
 through usual operations ``+``, ``-``, ``*``, ``/``.
-You can also raise each element of tensor to some power using
-standard power operation ``**``.
+Element-wise raising to a power is done by the standard power operation ``**``.
 
 See examples: :ref:`examples/tensor/algebra:basic algebra operations`.
 
@@ -52,7 +51,6 @@ Functions below facilitate the computation of
 
 or composition of such operations over several tensors.
 
-
 See examples: :ref:`examples/tensor/algebra:tensor contractions`.
 
 .. automethod:: yastn.Tensor.__matmul__
@@ -82,11 +80,11 @@ Fusion of legs (reshaping)
 --------------------------
 
 Fusion of several vector spaces :math:`V_1,V_2,\ldots,V_n` creates a new vector space as direct product :math:`W=V_1 \otimes V_2 \otimes \ldots \otimes V_n`,
-which is then indexed by a single index of dimension :math:`\prod_i dim(V_i)`.
+which is then indexed by a single index of dimension :math:`\prod_i {\rm dim}(V_i)`.
 Here multiplication depends on abelian symmetry, as the resulting total dimension is a sum of dimensions for effective charges.
 The inverse operation can split the fused space into its original constituents.
 
-For dense tensors, this operation corresponds to reshaping.
+For dense tensors, the operation corresponds to reshaping.
 
 Fusion can be used to vary compression between (unfused) symmetric tensors with many small non-zero blocks and tensors with several fused spaces having just few, but large non-zero blocks.
 
@@ -132,7 +130,7 @@ Spectral decompositions and truncation
 Auxliary
 --------
 
-Methods called by :doc:`Krylov-based algorithms</tensor/krylov>`
+Methods called by :doc:`Krylov-based algorithms</tensor/krylov>`.
 
 .. automethod:: yastn.Tensor.expand_krylov_space
 .. automethod:: yastn.Tensor.linear_combination

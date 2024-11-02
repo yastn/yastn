@@ -52,7 +52,7 @@ def _flatten(nested_iterator):
 
 
 def _unpack_axes(mfs, *args):
-    """ Unpack meta axes into native axes based on a.mfs """
+    """ Unpack meta axes into native axes based on ``a.mfs``. """
     clegs = tuple(accumulate(x[0] for x in mfs))
     return tuple(tuple(chain(*(range(clegs[ii] - mfs[ii][0], clegs[ii]) for ii in axes))) for axes in args)
 

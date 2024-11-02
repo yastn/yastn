@@ -15,9 +15,9 @@ Single-site DMRG
 In the algorithm we `sweep` through the MPS, starting from the initial guess :code:`psi`,
 optimizing each :class:`yastn.Tensor` :math:`A_j` one by one while keeping
 all other tensors fixed (alternating least squares).
-At each step, the best :math:`A_j` is then found by minimizing the energy
-of the local effective Hamiltonian :math:`H_{\rm eff}`. DMRG :code:`method='1site'`
-works with single-site effective :math:`H_{\rm eff}`.
+At each step, the best tensor :math:`A_j` is found by minimizing the energy
+of the local effective Hamiltonian :math:`H_{\rm eff}`. DMRG with :code:`method='1site'`
+works with single-site effective Hamiltonians.
 
 ::
 

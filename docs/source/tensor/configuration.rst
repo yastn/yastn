@@ -1,26 +1,29 @@
 YASTN configuration
 ===================
 
-All YASTN tensors have to be provided with `configuration`, which defines
+All YASTN tensors have to be provided with **configuration**, which defines:
 
-#. Linear algebra backend
-#. :doc:`abelian symmetry group</tensor/symmetry>`
-#. how to handle fusion (reshaping) of tensors
-#. default dtype (``float64``, ``complex128``) and device (provided it is supported by backend)
-   of tensors
+   #. linear algebra backend,
 
-The configuration can be a Python module,
+   #. :doc:`abelian symmetry group</tensor/symmetry>`,
+
+   #. how to handle fusion (reshaping) of tensors,
+   
+   #. default data type (``float64``, ``complex128``) and device (provided it is supported by backend)
+   of tensors.
+
+The configuration can be provided as a Python module,
 `types.SimpleNamespace <https://docs.python.org/3/library/types.html#types.SimpleNamespace>`_,
 `typing.NamedTuple <https://docs.python.org/3/library/typing.html#typing.NamedTuple>`_ or similar which defines following members
 
-* required: ``backend``, ``sym``
-* optional: ``default_device``, ``default_dtype``, ``default_fusion``, ``fermionic``, ``force_fusion``
+* required: ``backend``, ``sym``,
+* optional: ``default_device``, ``default_dtype``, ``default_fusion``, ``fermionic``, ``force_fusion``.
 
-For easy way to generate `configurations`, a convenience function is provided
+The configuration can be conveninently generated using 
 
 .. autofunction:: yastn.make_config
 
-Below is an example of `configuration` defined as a plain Python module,
-using NumPy backend and :math:`U(1)` symmetry
+Below is an example of configuration defined as a plain Python module,
+using NumPy backend and :math:`U(1)` symmetry.
 
 .. literalinclude::  /../../tests/tensor/configs/config_U1.py

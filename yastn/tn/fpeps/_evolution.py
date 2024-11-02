@@ -58,8 +58,8 @@ def evolution_step_(env, gates, opts_svd, symmetrize=True,
     symmetrize: bool
         Whether to iterate through provided gates forward and then backward, resulting in a 2nd order method.
         In that case, each gate should correspond to half of the desired timestep.
-    fix_metric: int | None:
-        Error_measure of the metric tensor is a sum of: the norm of its non-hermitian part,
+    fix_metric: int | None
+        Error measure of the metric tensor is a sum of: the norm of its non-hermitian part,
         and absolute value of the most negative eigenvalue (if present).
         If fix_metric is not None, replace eigenvalues smaller than the error_measure by fix_metric * error_measure.
         Sensible values of fix_metric are 0 and 1. The default is 0.

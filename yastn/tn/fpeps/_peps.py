@@ -14,6 +14,7 @@
 # ==============================================================================
 from __future__ import annotations
 from typing import Sequence, Union
+import yastn
 from yastn import Tensor
 from ...tn.mps import Mpo
 from ._doublePepsTensor import DoublePepsTensor
@@ -24,17 +25,18 @@ class Peps():
 
     def __init__(self, geometry=None, tensors : Union[None, Sequence[Sequence[Tensor]], dict[tuple[int,int],Tensor] ]= None):
         """
-        Empty PEPS instance on a lattice specified by provided geometry and optionally tensors.
+        A PEPS instance on a specified lattice can be initialized as empty or with optional tensors already assigned to each lattice site.
 
             i), ii)
             iii) geometry and tensors. Here, the tensors and geometry must be compatible in terms of non-equivalent sites ?
 
-        Inherits methods from geometry.
+        PEPS inherits key methods (e.g., sites, bonds, dims) from the associated lattice geometry.
 
         Empty PEPS has no tensors assigned.
         Supports :code:`[]` notation to get/set individual tensors.
-        Intended both for PEPS with physical legs (rank-5 PEPS tensors)
-        and without physical legs (rank-4 PEPS tensors).
+        PEPS tensors can be either rank-5 (including physical legs) or 
+        rank-4 (without physical legs). Leg enumeration follows the 
+        order: top, left, bottom, right, and physical leg 
 
         Example 1
         ---------
@@ -54,7 +56,7 @@ class Peps():
             #
             A00 = yastn.rand(config, legs=[leg.conj(), leg, leg, leg.conj(), leg])
             psi[0, 0] = A00
-            # Currently, PEPS tensor with 5 legs gets fused as (oo)(oo)o by __setitem__.
+            # Currently, 5-leg PEPS tensors are fused by __setitem__ as ((top-left)(bottom-right) physical).
             # This is done to work with object having smaller number of blocks.
             assert psi[0, 0].ndim == 3
             assert (psi[0, 0].unfuse_legs(axes=(0, 1)) - A00).norm() < 1e-13
@@ -71,6 +73,7 @@ class Peps():
         ---------
 
         ::
+        
             # directly pass the pattern of tensors in the unit cell as a dictionary. The geometry is created implicitly.
             psi = fpeps.PepsExtended(tensors={ (0,0):A00, (0,1):A01, (1,0):A01, (1,1):A00 })
             #
@@ -155,8 +158,9 @@ class Peps():
 
     def copy(self):
         r"""
-        Makes a copy of PEPS by :meth:`copying<yastn.Tensor.copy>` all :class:`yastn.Tensor<yastn.Tensor>`'s
-        into a new and independent :class:`yastn.tn.fpeps.Peps`.
+        Returns an independent copy of the PEPS instance with each :class:`yastn.Tensor<yastn.Tensor>` object in
+        the network sharing the same data blocks as the original instance. This method does not create a deep copy of tensors;
+        each tensor in the copied PEPS will reference the same blocks as in the original.
         """
         psi = Peps(geometry=self.geometry)
         for ind in self._data:
@@ -165,8 +169,8 @@ class Peps():
 
     def clone(self):
         r"""
-        Makes a clone of PEPS by :meth:`copying<yastn.Tensor.clone>` all :class:`yastn.Tensor<yastn.Tensor>`'s
-        into a new and independent :class:`yastn.tn.fpeps.Peps`.
+        Returns a deep copy of the PEPS instance by :meth:`cloning<yastn.Tensor.clone>` each tensor in
+        the network. Each tensor in the cloned PEPS will contain its own independent data blocks.
         """
         psi = Peps(geometry=self.geometry)
         for ind in self._data:
@@ -175,9 +179,11 @@ class Peps():
 
     def transfer_mpo(self, n=0, dirn='v') -> yastn.tn.mps.MpsMpo:
         """
-        Converts a specific row or column of PEPS into MPO.
+        Converts a specified row or column of the PEPS into a Matrix Product Operator (MPO) representation,
+        facilitating boundary or contraction calculations along that direction.
 
-        For tensors with physical leg, Mpo consists of DoublePepsTensor (2-layers).
+        For tensors with physical legs, the MPO is composed of `DoublePepsTensor` instances (2-layered tensors, see
+        :class:`yastn.tn.fpeps.DoublePepsTensor`)
         For tensors without a physical leg directly use Peps tensors (1-layer).
 
         Parameters

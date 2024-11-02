@@ -28,22 +28,22 @@ __all__ = ['Leg', 'leg_union', 'random_leg', 'leg_outer_product', 'leg_undo_prod
 @dataclass(frozen=True, repr=False)
 class Leg:
     r"""
-    `Leg` is a hashable `dataclass <https://docs.python.org/3/library/dataclasses.html>`_,
+    :meth:`Leg` is a hashable `dataclass <https://docs.python.org/3/library/dataclasses.html>`_,
     defining a vector space.
 
     An abelian symmetric vector space can be specified as a direct
-    sum of `plain` vector spaces (sectors), each labeled by charge `t`
+    sum of *plain* vector spaces (sectors), each labeled by charge :math:`t`
 
     .. math::
         V = \bigoplus_t V_t
 
     The action of abelian symmetry on elements of such space
-    depends only on the charge `t` of the element
+    depends only on the charge :math:`t` of the element
 
     .. math::
-        g \in G:\quad U(g)V = \bigoplus_t U(g)_t V_t.
+        g \in G:\quad U(g) V = \bigoplus_t U(g)_t V_t.
 
-    The size of individual sectors :math:`dim(V_t)` is arbitrary.
+    The size of individual sectors :math:`{\rm dim}(V_t)` is arbitrary.
 
     Parameters
     ----------
@@ -54,12 +54,12 @@ class Leg:
     t : Sequence[int] | Sequence[Sequence[int]]
         List of charge sectors.
     D : Sequence[int]
-        List of corresponding charge sector dimensions.
-        The lengths `len(D)` and `len(t)` must be equal.
+        List of dimensions of corresponding charge sectors.
+        The lengths :code:`len(D)` and :code:`len(t)` must be equal.
     legs: Sequence[yastn.Leg]
         Includes information about fused (sub-)legs.
     fusion: str
-        and how the fusion was performed.
+        Specification of how the fusion was performed.
     """
     sym: any = sym_none
     s: int = 1  # leg signature in (1, -1)
@@ -121,7 +121,7 @@ class Leg:
 
     def __getitem__(self, t) -> int:
         r"""
-        Size of a charge sector
+        Size of a charge sector.
 
         Parameters
         ----------
@@ -165,7 +165,7 @@ class Leg:
         return _str_tree(hf.tree, hf.op)
 
     def is_fused(self) -> bool:
-        """ Return True if the leg is a result of some fusion, and False is it is elementary. """
+        """ Return :code:`True` if the leg is a result of some fusion, and :code:`False` is it is elementary. """
         return len(self.legs) > 1 or self.legs[0].tree[0] > 1
 
     def unfuse_leg(self):
@@ -184,15 +184,15 @@ def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, nonnegative=F
     s : int
         Signature of the leg. Either 1 (ingoing) or -1 (outgoing).
     n : int or tuple
-        mean charge of the distribution
+        mean charge of the distribution.
     sigma : number
-        standard deviation of the distribution
+        standard deviation of the distribution.
     D_total : int
-        total bond dimension of the leg, to be distributed to sectors
+        total bond dimension of the leg, to be distributed to sectors.
     nonnegative : bool
-        If True, cut off negative charges
+        If :code:`True`, cut off negative charges.
     legs : Sequence[yastn.Leg]
-        limits charges to match provided legs (e.g., in tensor with zero charge)
+        limits charges to match provided legs (e.g., in tensor with zero charge).
     """
     if config.sym.NSYM == 0:
         return Leg(config, s=s, D=(D_total,))
@@ -259,7 +259,7 @@ def _leg_fusions_need_mask(*legs):
     if all(isinstance(leg.fusion, tuple) for leg in legs):
         mf = legs[0].fusion
         return any(_leg_fusions_need_mask(*(mleg.legs[n] for mleg in legs)) for n in range(mf[0]))
-    raise YastnError("mixing meta- and hard-fused legs")
+    raise YastnError("Mixing meta- and hard-fused legs")
 
 
 def leg_outer_product(*legs, t_allowed=None) -> yastn.Leg:

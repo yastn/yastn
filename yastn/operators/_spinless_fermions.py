@@ -29,9 +29,9 @@ class SpinlessFermions(meta_operators):
         Parameters
         ----------
             sym : str
-                Explicit symmetry to used. Allowed options are :code:`'Z2'`, or :code:`'U1'`.
+                Explicit symmetry to be used. Allowed options are :code:`'Z2'`, or :code:`'U1'`.
 
-            **kwargs : any
+            kwargs : any
                 Passed to :meth:`yastn.make_config` to change backend,
                 default_device or other config parameters.
 
@@ -47,7 +47,7 @@ class SpinlessFermions(meta_operators):
         self.operators = ('I', 'n', 'c', 'cp')
 
     def space(self) -> yastn.Leg:
-        r""" :class:`yastn.Leg` describing local Hilbert space. """
+        r""" :class:`yastn.Leg` object describing local Hilbert space. """
         return Leg(self.config, s=1, t=(0, 1), D=(1, 1))  # the same for U1 and Z2
 
     def I(self) -> yastn.Tensor:

@@ -48,7 +48,7 @@ def build_mpo_nn_hopping_manually(N, t, mu, sym='U1', config=None):
     #         ^(+1)
     #         |
     #
-    # We set fermionic=True for conistency as in tests
+    # We set fermionic=True for consistency as in tests
     # MPO is compared with operators.SpinlessFermions.
     # backend and device is inherited from config to automitize pytest testing.
 
@@ -120,37 +120,37 @@ def build_mpo_nn_hopping_manually(N, t, mu, sym='U1', config=None):
 
     elif sym == 'U1':  # U1 symmetry
         for n in H.sweep(to='last'):
-            H.A[n] = yastn.Tensor(config=config, s=(-1, 1, 1, -1), n=0)
+            H[n] = yastn.Tensor(config=config, s=(-1, 1, 1, -1), n=0)
             if n == H.first:
-                H.A[n].set_block(ts=(0, 0, 0, 0),
+                H[n].set_block(ts=(0, 0, 0, 0),
                                  val=[0, 1], Ds=(1, 1, 2, 1))
-                H.A[n].set_block(ts=(0, 1, 0, 1),
+                H[n].set_block(ts=(0, 1, 0, 1),
                                  val=[mu, 1], Ds=(1, 1, 2, 1))
-                H.A[n].set_block(ts=(0, 0, 1, 1),
+                H[n].set_block(ts=(0, 0, 1, 1),
                                  val=[t], Ds=(1, 1, 1, 1))
-                H.A[n].set_block(ts=(0, 1, -1, 0),
+                H[n].set_block(ts=(0, 1, -1, 0),
                                  val=[t], Ds=(1, 1, 1, 1))
             elif n == H.last:
-                H.A[n].set_block(ts=(0, 0, 0, 0),
+                H[n].set_block(ts=(0, 0, 0, 0),
                                  Ds=(2, 1, 1, 1), val=[1, 0])
-                H.A[n].set_block(ts=(0, 1, 0, 1),
+                H[n].set_block(ts=(0, 1, 0, 1),
                                  Ds=(2, 1, 1, 1), val=[1, mu])
-                H.A[n].set_block(ts=(1, 1, 0, 0),
+                H[n].set_block(ts=(1, 1, 0, 0),
                                  Ds=(1, 1, 1, 1), val=[1])
-                H.A[n].set_block(ts=(-1, 0, 0, 1),
+                H[n].set_block(ts=(-1, 0, 0, 1),
                                  Ds=(1, 1, 1, 1), val=[1])
             else:
-                H.A[n].set_block(ts=(0, 0, 0, 0),
+                H[n].set_block(ts=(0, 0, 0, 0),
                                  Ds=(2, 1, 2, 1), val=[[1, 0], [0, 1]])
-                H.A[n].set_block(ts=(0, 1, 0, 1),
+                H[n].set_block(ts=(0, 1, 0, 1),
                                  Ds=(2, 1, 2, 1), val=[[1, 0], [mu, 1]])
-                H.A[n].set_block(ts=(0, 0, 1, 1),
+                H[n].set_block(ts=(0, 0, 1, 1),
                                  Ds=(2, 1, 1, 1), val=[0, t])
-                H.A[n].set_block(ts=(0, 1, -1, 0),
+                H[n].set_block(ts=(0, 1, -1, 0),
                                  Ds=(2, 1, 1, 1), val=[0, t])
-                H.A[n].set_block(ts=(1, 1, 0, 0),
+                H[n].set_block(ts=(1, 1, 0, 0),
                                  Ds=(1, 1, 2, 1), val=[1, 0])
-                H.A[n].set_block(ts=(-1, 0, 0, 1),
+                H[n].set_block(ts=(-1, 0, 0, 1),
                                  Ds=(1, 1, 2, 1), val=[1, 0])
     return H
 

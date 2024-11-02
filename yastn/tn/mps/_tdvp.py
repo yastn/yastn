@@ -47,8 +47,8 @@ def tdvp_(psi, H,
 
     H: yastn.tn.mps.MpsMpoOBC | Sequence | Callable
         Evolution generator given either as (sum of) MPO for time-independent problem
-        or as a function returning (sum of) MPO for time-dependent problem, i.e. ``Callable[[float], Mpo]``
-        or ``Callable[[float], Sequence[Mpo]]``, see :meth:`Env<yastn.tn.mps.Env>`.
+        or as a function returning (sum of) MPO for time-dependent problem, i.e. :code:`Callable[[float], Mpo]`
+        or :code:`Callable[[float], Sequence[Mpo]]`, see :meth:`Env<yastn.tn.mps.Env>`.
 
     time: float64 or tuple(float64)
         Initial and final times; can also provide intermediate times for snapshots returned
@@ -63,14 +63,14 @@ def tdvp_(psi, H,
         Default is 1j.
 
     method: str
-        Algorithm to use in ('1site', '2site', '12site')
+        Algorithm to use in (`'1site'`, `'2site'`, `'12site'`)
 
     order: str
-        Order of Suzuki-Trotter decomposition in ('2nd', '4th').
+        Order of Suzuki-Trotter decomposition in (`'2nd'`, `'4th'`).
         4th order step is composed of five 2nd order steps.
 
     opts_expmv: dict
-        Options passed to :meth:`yastn.expmv`, in particular wherher ``H`` is hermitian.
+        Options passed to :meth:`yastn.expmv`, in particular whether `H` is hermitian.
         Unspecified options use default :meth:`yastn.expmv` settings.
         If there is information from previous time-steps stored under the hood,
         the initial guess of the size of krylov space opts_expmv['ncv'] is overriden.
@@ -79,7 +79,7 @@ def tdvp_(psi, H,
         Options passed to :meth:`yastn.linalg.svd` used to truncate virtual spaces in :code:`method='2site'` and :code:`'12site'`.
 
     progressbar: bool
-        Whether to show the progress bar toward the next snapshot. The default is False.
+        Whether to show the progress bar toward the next snapshot. The default is False. 
 
     yield_initial: bool
         Whether to yield the initial state before performing evolution. The default is False.

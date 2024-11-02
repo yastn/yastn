@@ -169,7 +169,7 @@ def distribute(geometry, gates_nn=None, gates_local=None) -> Gates:
 
     Parameters
     ----------
-    geomtry : yastn.tn.fpeps.SquareLattice | yastn.tn.fpeps.CheckerboardLattice | yast.tn.fpeps.Peps
+    geometry : yastn.tn.fpeps.SquareLattice | yastn.tn.fpeps.CheckerboardLattice | yast.tn.fpeps.Peps
         Geometry of PEPS lattice.
         Can be any structure that includes geometric information about the lattice, like the Peps class.
 
