@@ -4,10 +4,10 @@ Creating symmetric YASTN tensors
 Initializing symmetric tensors from scratch
 -------------------------------------------
 
-Symmetric tensor can be initialized as "blank" or more precisely empty.
-In this case only its rank (specified through signature) and symmetry
+Symmetric tensor can be initialized as ''blank`` or more precisely empty.
+In this case only its rank (specified through signature tuple) and symmetry
 needs to be known when initializing such empty symmetric tensors.
-The data, in form of non-zero blocks, can be added at later time.
+The data, in a form of non-zero blocks, can be added at later time.
 
 See examples: :ref:`examples/tensor/init:create empty tensor and fill it block by block`.
 
@@ -18,12 +18,12 @@ See examples: :ref:`examples/tensor/init:create empty tensor and fill it block b
 Basic creation operations
 -------------------------
 
-Basic creation operations such as random tensors,
+Basic creation operations includes operations such as creating random tensors,
 tensors filled with zeros, or diagonal identity tensors.
 
 The symmetry structure of the tensor can be given either
 by directly listing all charge sectors for each leg and dimensions
-of these sectors `or` by passing a list of legs.
+of these sectors or by passing a list of legs.
 
 See examples: :ref:`examples/tensor/init:create tensors from scratch`.
 
@@ -32,12 +32,11 @@ See examples: :ref:`examples/tensor/init:create tensors from scratch`.
    :members: rand, randR, randC, zeros, ones, eye
    :show-inheritance:
 
-
 Copying and cloning with autograd
 ---------------------------------
 
 YASTN follows the semantics of PyTorch with regards to creating
-differentiable `clones` or non-differentiable `copies` of symmetric
+differentiable *clones* or non-differentiable *copies* of symmetric
 tensors. See
 `clone <https://pytorch.org/docs/stable/generated/torch.clone.html#torch.clone>`_
 and
@@ -56,10 +55,10 @@ Changing tensor's device or dtype
 Support for different compute devices, i.e. `CPU`, `GPU`, or others,
 depends on the selected backend. For example
 
-    * `NumPy` backend supports only `CPU`
-    * `PyTorch` backend supports also `GPU` (and other devices)
+    * `NumPy` backend supports only `CPU`,
+    * `PyTorch` backend supports also `GPU` (and other devices).
 
-Tensors can be moved between devices and/or their `dtype` changed
+Tensors can be moved between devices and/or their `dtype` may be changed
 
 .. automethod:: yastn.Tensor.to
 
@@ -68,7 +67,7 @@ Import/Export of YASTN tensors from/to different formats
 --------------------------------------------------------
 
 These utility operations can export and then import tensors from
-different formats. For example, 1D representation or dictionaries.
+different formats. For example, exporting and importing tensor or MPS to and from a file.
 
 See examples: :ref:`examples/tensor/init:serialization of symmetric tensors`.
 

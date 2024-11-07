@@ -22,7 +22,7 @@ import copy
 
 def Env(bra, target):
     r"""
-    Initialize proper environment supporting contraction of MPS/MPO's:
+    Initialize a proper environment supporting contraction of MPS/MPO's:
     :math:`\langle \textrm{bra} | \textrm{target} \rangle`, where
     :math:`|\textrm{target} \rangle` can be an MPS/MPO, an operator acting on MPS/MPO, or a sum of thereof.
 
@@ -110,7 +110,7 @@ class EnvParent(metaclass=abc.ABCMeta):
 
     def clear_site_(self, *args):
         r"""
-        Clear environments pointing from sites which indices are provided in args.
+        Clear environments pointing from sites whose indices are provided in args.
         """
         for n in args:
             self.F.pop((n, n - 1), None)
@@ -189,7 +189,7 @@ class EnvParent(metaclass=abc.ABCMeta):
         ----------
         AA: tensor
             merged tensor for 2 sites.
-            Physical legs should be fused turning it effectivly into 1-site update.
+            Physical legs should be fused turning it effectively into 1-site update.
         bd: tuple
             index of bond on which it acts, e.g. (1, 2) [or (2, 1) as it gets ordered]
         """

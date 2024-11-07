@@ -47,7 +47,7 @@ def build_aklt_state_manually(N=5, lvec=(1, 0), rvec=(0, 1), config=None):
     A.set_block(Ds=(2, 3, 2), val=[[[0, s23], [-s13, 0], [0, 0]],
                                    [[0, 0], [0, s13], [-s23, 0]]])
     #
-    # as well as left and right boundar vectors
+    # as well as left and right boundary vectors
     #
     LV = yastn.Tensor(config, s=(-1, 1))
     LV.set_block(Ds=(1, 2), val=lvec)

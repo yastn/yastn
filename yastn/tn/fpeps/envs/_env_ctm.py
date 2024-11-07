@@ -97,23 +97,24 @@ class EnvCTM(Peps):
 
     def reset_(self, init='rand', leg=None):
         r"""
-        Initialize random CTMRG environments of peps tensors.
+        Initialize random CTMRG environments of PEPS tensors.
 
         Parameters
         ----------
         init: str
             'eye' or 'rand'.
-            For 'eye' starts with identity environments of dimension 1.
-            For 'rand' sets environments randomly.
+            - If :code:`eye`, it starts with identity environments of dimension 1.
+            - If :code:`rand`, environmental tensors are set randomly.
 
-        leg: None | yastn.Leg
-            If not provided, random initialization has CTMRG bond dimension set to 1.
-            Otherwise, the provided Leg is used to initialize CTMRG virtual legs.
+        leg : None | yastn.Leg
+            Specifies the leg structure for CTMRG virtual legs during initialization.
+            - If :code:`None`, sets the CTMRG bond dimension to 1 in random initialization.
+            - If :code:`yastn.Leg`, uses the provided leg for initializing CTMRG virtual legs.
         """
         config = self.psi.config
         leg0 = Leg(config, s=1, t=(config.sym.zero(),), D=(1,))
 
-        if init == 'nn':
+        if init == 'nn': #None?
             pass
         else:
             if leg is None:
@@ -163,12 +164,12 @@ class EnvCTM(Peps):
         r"""
         Calculate local expectation values within CTM environment.
 
-        Return a number if site is provided.
+        Returns a number if site is provided.
         If None, returns a dictionary {site: value} for all unique lattice sites.
 
         Parameters
         ----------
-        env: class CtmEnv
+        env: class EnvCtm
             class containing ctm environment tensors along with lattice structure data
 
         op: single site operator
@@ -419,7 +420,7 @@ class EnvCTM(Peps):
         Sample random configurations from PEPS. Output a dictionary linking sites with lists of sampled projectors` keys for each site.
 
         It does not check whether projectors sum up to identity -- probabilities of provided projectors get normalized to one.
-        If negative probabilities are observed (signaling contraction errors), error = max(abs(negatives)),
+        If negative probabilities are observed (signaling contraction errors), ``error = max(abs(negatives))``,
         and all probabilities below that error level are fixed to error (before consecutive renormalization of probabilities to one).
 
         Parameters
@@ -427,7 +428,7 @@ class EnvCTM(Peps):
         xrange: tuple[int, int]
             range of rows to sample from, [r0, r1); r0 included, r1 excluded.
 
-        trange: tuple[int, int]
+        yrange: tuple[int, int]
             range of columns to sample from.
 
         projectors: Dict[Any, yast.Tensor] | Sequence[yast.Tensor] | Dict[Site, Dict[Any, yast.Tensor]]
@@ -442,7 +443,7 @@ class EnvCTM(Peps):
             Options passed to :meth:`yastn.linalg.svd` used to truncate virtual spaces of boundary MPSs used in sampling.
             The default is None, in which case take :code:`D_total` as the largest dimension from CTM environment.
 
-        opts_svd: dict
+        opts_var: dict
             Options passed to :meth:`yastn.tn.mps.compression_` used in the refining of boundary MPSs.
             The default is None, in which case make 2 variational sweeps.
 
@@ -618,7 +619,7 @@ class EnvCTM(Peps):
     def ctmrg_(env, opts_svd=None, method='2site', max_sweeps=1, iterator_step=None, corner_tol=None):
         r"""
         Perform CTMRG updates :meth:`yastn.tn.fpeps.EnvCTM.update_` until convergence.
-        Convergence is based on singular values of CTM environment corner tensors.
+        Convergence is measured based on singular values of CTM environment corner tensors.
 
         Outputs iterator if :code:`iterator_step` is given, which allows
         inspecting :code:`env`, e.g., calculating expectation values,

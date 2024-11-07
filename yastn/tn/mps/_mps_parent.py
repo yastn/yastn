@@ -68,8 +68,10 @@ class _MpsMpoParent:
         ----------
         to: str
             'first' or 'last'.
-        df, dl: int
-            shift iterator by :math:`df \ge 0` and :math:`dl \ge 0` from the first and the last site, respectively.
+        df: int
+            shift iterator by :math:`{\rm df}\ge 0` from the first site.
+        dl: int
+            shift iterator by :math:`{\rm dl}\ge 0` from the last site.
         """
         if to == 'last':
             return range(df, self.N - dl)

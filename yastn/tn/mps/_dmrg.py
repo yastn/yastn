@@ -55,21 +55,24 @@ def dmrg_(psi, H, project=None, method='1site',
     ----------
     psi: yastn.tn.mps.MpsMpoOBC
         Initial state. It is updated during execution.
-        It is first canonized to the first site, if not provided in such a form.
-        State resulting from :code:`dmrg_` is canonized to the first site.
+        If `psi` is not already canonized to the first site, it will be canonized at the start of the algorithm. 
+        The output state from :code:`dmrg_` is canonized to the first site.
 
     H: yastn.tn.mps.MpsMpoOBC | Sequence
         MPO (or a sum of MPOs) to minimize against, see :meth:`Env<yastn.tn.mps.Env>`.
 
     project: Sequence[yastn.tn.mps.MpsMpoOBC | tuple[float, yastn.tn.mps.MpsMpoOBC]]
-        Add a penalty to the directions spanned by MPSs in the list.
+        Add a penalty to the directions spanned by MPSs in the list. 
+        In practice, the penalty is a multiplicative factor that adds a penalty term to the Hamiltonian. 
+        As a result, the energy of said MPS rizes and another lowest-energy is targeted by energy minimization. 
         It can be used to find a few low-energy states of the Hamiltonian
         if the penalty is larger than the energy gap from the ground state.
-        Use :code:`[(penalty, MPS), ...]` to provide penalty by hand
-        :code:`[mps, ...]` uses default :code:`penalty=100`.
+        Use :code:`[(penalty, MPS), ...]` to provide individual penalty for 
+        each MPS by hand as a list of tuples :code:`(penalty, MPS)`, where :code:`penalty` is a number and :code:`MPS` is an MPS bject. 
+        If input is a list of MPSs, i.e., :code:`[mps, ...]`, the option uses default :code:`penalty=100`.
 
     method: str
-        Which DMRG variant to use from '1site', '2site'
+        DMRG variant to use; options are `'1site'` or `'2site'`.
 
     energy_tol: float
         Convergence tolerance for the change of energy in a single sweep.
@@ -91,7 +94,7 @@ def dmrg_(psi, H, project=None, method='1site',
         If None, use default {'hermitian': True, 'ncv': 3, 'which': 'SR'}
 
     opts_svd: dict
-        Options passed to :meth:`yastn.linalg.svd_with_truncation` used to truncate virtual spaces in method='2site'.
+        Options passed to :meth:`yastn.linalg.svd_with_truncation` used to truncate virtual spaces (virtual bond dimension of tensors) in :code:`method='2site'`.
 
     Returns
     -------

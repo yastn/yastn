@@ -31,14 +31,14 @@ def save_to_dict(a) -> dict:
     r"""
     Export YASTN tensor to dictionary containing all the information needed to recreate the tensor.
 
-    Allows saving the tensor, e.g., with numpy.save()
+    Allows saving the tensor, e.g., with :func:`numpy.save`.
 
-    Complementary function is :meth:`yastn.load_from_dict`
+    Complementary function is :meth:`yastn.load_from_dict`.
 
     Parameters
     ----------
     a: yastn.Tensor
-        tensor to export
+        tensor to export.
     """
     _d = a.config.backend.to_numpy(a._data)
     hfs = [hf._asdict() for hf in a.hfs]
@@ -52,12 +52,12 @@ def save_to_hdf5(a, file, path) -> Never:
     """
     Export tensor into hdf5 type file.
 
-    Complementary function is :meth:`yastn.load_from_hdf5`
+    Complementary function is :meth:`yastn.load_from_hdf5`.
 
     Parameters
     ----------
     a : yastn.Tensor
-        tensor to export
+        tensor to export.
     """
     _d = a.config.backend.to_numpy(a._data)
     hfs = tuple(tuple(hf) for hf in a.hfs)
@@ -79,24 +79,24 @@ def compress_to_1d(a, meta=None) -> tuple[numpy.array | torch.tensor, dict]:
     Parameters
     ----------
         a: yastn.Tensor
-            tensor to export
+            Specifies tensor to export.
         meta: dict
-            There is an option to provide meta obtained from earlier application of :meth:`yastn.Tensor.compress_to_1d`.
-            Extra zero blocks (missing in tensor) are then included in the returned 1D array
-            to make it consistent with structure given in meta.
-            Raises error if tensor has some blocks which are not included in meta or otherwise
-            meta does not match the tensor.
+            There is an option to provide meta-data obtained from earlier application of :meth:`yastn.Tensor.compress_to_1d`.
+            Extra zero blocks (missing in tensor) are then included in the returned 1D array 
+            to make it consistent with structure given in :code:`meta`.
+            Raises error if tensor has some blocks which are not included in :code:`meta` or otherwise
+            :code:`meta` does not match the tensor.
 
     .. note::
         :meth:`yastn.Tensor.compress_to_1d` and :meth:`yastn.decompress_from_1d`
-        provide mechanism that allows using external matrix-free methods, such as eigs implemented in scipy.
+        provide mechanism that allows using external matrix-free methods, such as :func:`eigs` implemented in SciPy.
 
     Returns
     -------
     tensor (type derived from backend)
-        1D array with tensor data
+        1D array with tensor data.
     dict
-        metadata with structure of the symmetric tensor
+        metadata with structure of the symmetric tensor needed to encode the 1D array into blocks. 
     """
     if meta is None:
         meta = {'config': a.config, 'struct': a.struct, 'slices': a.slices,
@@ -146,21 +146,21 @@ def compress_to_1d(a, meta=None) -> tuple[numpy.array | torch.tensor, dict]:
 def print_properties(a, file=None) -> Never:
     """
     Print basic properties of the tensor:
-        * it's symmetry
-        * signature
-        * total charge
-        * whether it is a diagonal tensor
-        * meta/logical rank - treating meta-fused legs as a single logical leg
-        * native rank
-        * total dimension of all existing charge sectors for each leg, treating meta-fused legs as a single leg
-        * total dimension of all existing charge sectors for native leg
+        * symmetry,
+        * signature,
+        * total charge,
+        * whether it is a diagonal tensor,
+        * meta/logical rank - treating meta-fused legs as a single logical leg,
+        * native rank,
+        * total dimension of all existing charge sectors for each leg, treating meta-fused legs as a single leg,
+        * total dimension of all existing charge sectors for native leg,
         * number of non-empty blocks
-        * total number of elements across all non-empty blocks
-        * fusion tree for each leg
-        * fusion history with 'o' indicating original legs, 'm' meta-fusion,
-          'p' hard-fusion (product), 's' blocking (sum).
+        * total number of elements across all non-empty blocks,
+        * fusion tree for each leg,
+        * fusion history with ``'o'`` indicating original legs, ``'m'`` meta-fusion,
+          ``'p'`` hard-fusion (product), ``'s'`` blocking (sum).
     """
-    print("Symmetry     :", a.config.sym.SYM_ID, file=file)
+    print("symmetry     :", a.config.sym.SYM_ID, file=file)
     print("signature    :", a.struct.s, file=file)  # signature
     print("charge       :", a.struct.n, file=file)  # total charge of tensor
     print("isdiag       :", a.isdiag, file=file)
@@ -186,14 +186,14 @@ def __str__(a) -> str:
 
 def requires_grad(a) -> bool:
     """
-    Return ``True`` if tensor data have autograd enabled
+    Return ``True`` if tensor data have autograd enabled.
     """
     return a.config.backend.requires_grad(a._data)
 
 
 def print_blocks_shape(a) -> str:
     """
-    Print shapes of blocks as a sequence of block's charge followed by its shape
+    Print shapes of blocks as a sequence of block's charge followed by its shape.
     """
     for t, D in zip(a.struct.t, a.struct.D):
         print(f"{t} {D}")
@@ -201,14 +201,14 @@ def print_blocks_shape(a) -> str:
 
 def is_complex(a) -> bool:
     """
-    Return ``True`` if tensor data are complex
+    Return ``True`` if tensor data are complex.
     """
     return a.config.backend.is_complex(a._data)
 
 
 def get_tensor_charge(a) -> Sequence[int]:
     """
-    Return :attr:`yastn.Tensor.n`
+    Return :attr:`yastn.Tensor.n`.
     """
     return a.struct.n
 
@@ -226,7 +226,7 @@ def get_rank(a, native=False) -> int:
     """
     Return tensor rank equivalent to :attr:`yastn.Tensor.ndim`.
 
-    If native, the native rank of the tensor is returned, see :attr:`yastn.Tensor.ndim_n`.
+    If ``native``, the native rank of the tensor is returned, see :attr:`yastn.Tensor.ndim_n`.
     """
     return a.ndim_n if native else a.ndim
 
@@ -235,7 +235,8 @@ def get_blocks_charge(a) -> Sequence[Sequence[int]]:
     """
     Return charges of all native blocks.
 
-    In case of product of abelian symmetries, for each block the individual symmetry charges are flattened into a single tuple.
+    In case of product of abelian symmetries, for each block the individual symmetry 
+    charges are flattened into a single tuple.
     """
     return a.struct.t
 
@@ -254,7 +255,7 @@ def get_shape(a, axes=None, native=False) ->  int | Sequence[int]:
     Parameters
     ----------
     axes : int | Sequence[int]
-        indices of legs; If axes is ``None`` returns for all legs (default).s
+        indices of legs; If ``axes=None`` returns shape for all legs. Default is ``axes=None``.
     """
     if axes is None:
         axes = tuple(n for n in range(a.ndim_n if native else a.ndim))
@@ -265,7 +266,7 @@ def get_shape(a, axes=None, native=False) ->  int | Sequence[int]:
 
 def get_dtype(a) -> numpy.dtype | torch.dtype:
     """
-    dtype of tensor data used by the backend.
+    ``dtype`` of tensor data used by the backend.
     """
     return a.config.backend.get_dtype(a._data)
 
@@ -274,9 +275,9 @@ def __getitem__(a, key) -> numpy.ndarray | torch.tensor:
     """
     Block corresponding to a given charge combination.
 
-    The type of the returned tensor depends on the backend,
-    for example :class:`numpy.ndarray` or :class:`torch.Tensor`.
-    In case of diagonal tensor, returns 1D array.
+    The type of the returned tensor corresponds to specified backend, e.g.,
+    :class:`numpy.ndarray` or :class:`torch.Tensor` for *NumPy* and *PyTorch* respectively. 
+    In case of diagonal tensor, the output is a 1D array.
 
     Parameters
     ----------
@@ -287,7 +288,7 @@ def __getitem__(a, key) -> numpy.ndarray | torch.tensor:
     try:
         ind = a.struct.t.index(key)
     except ValueError as exc:
-        raise YastnError('tensor does not have block specify by key') from exc
+        raise YastnError('Tensor does not have block specify by key.') from exc
     x = a._data[slice(*a.slices[ind].slcs[0])]
 
     # TODO this should be reshape called from backend ?
@@ -306,15 +307,15 @@ def __contains__(a, key) -> bool:
 
 def get_legs(a, axes=None, native=False) -> yastn.Leg | Sequence[yastn.Leg]:
     r"""
-    Return a leg or a set of legs of a Tensor.
+    Return a leg or a set of legs of the tensor ``a``.
 
     Parameters
     ----------
     axes : int | Sequence[int] | None
-        indices of legs to retrieve. If ``None`` return list with all legs.
+        indices of legs to retrieve. If ``None`` returns list with all legs.
 
     native : bool
-        consider native legs if ``True``; otherwise returns fused legs (default).
+        if ``True`` considers native legs; otherwise returns fused legs. Default is ``native=False``.
     """
     legs = []
     tset = np.array(a.struct.t, dtype=np.int64).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
@@ -359,8 +360,9 @@ def to_dense(a, legs=None, native=False, reverse=False) -> numpy.ndarray | torch
 
     The type of the returned tensor depends on the backend, i.e. ``numpy.ndarray`` or ``torch.tensor``.
     Blocks are ordered according to increasing charges on each leg.
-    It is possible to supply a list of additional charge sectors to be included by explictly specifying `legs`.
-    These legs should be consistent with current structure of the tensor.
+    It is possible to supply a list of additional charge sectors to be included by 
+    explictly specifying ``legs``. 
+    Specified ``legs`` should be consistent with current structure of the tensor.
     This allows to fill in extra zero blocks.
 
     Parameters
@@ -404,12 +406,12 @@ def to_raw_tensor(a) -> numpy.ndarray | torch.tensor:
 
 def to_nonsymmetric(a, legs=None, native=False, reverse=False) -> yastn.Tensor:
     r"""
-    Create equivalent ``yastn.Tensor`` with no explict symmetry. All blocks of the original
+    Create equivalent :class:`yastn.Tensor` with no explict symmetry. All blocks of the original
     tensor are accummulated into a single block.
 
     Blocks are ordered according to increasing charges on each leg.
     It is possible to supply a list of additional charge sectors to be included by explictly
-    specifying `legs`. These legs should be consistent with current structure of the tensor.
+    specifying ``legs``. These legs should be consistent with current structure of the tensor.
     This allows to fill in extra zero blocks.
 
     .. note::
@@ -494,7 +496,7 @@ def to_number(a, part=None) -> number:
     return this element as a scalar.
 
     The type of the scalar is given by the backend.
-    For empty tensor return 0.
+    For empty tensor returns `0`.
 
     .. note::
         This operation preserves autograd.
@@ -502,7 +504,7 @@ def to_number(a, part=None) -> number:
     Parameters
     ----------
     part : str
-        if 'real', returns real part only.
+        if :code:`'real'`, returns real part only.
     """
     size = a.size
     if size == 1:
@@ -519,7 +521,7 @@ def item(a) -> float:
     Assuming the symmetric tensor has just a single non-empty block of total dimension one,
     return this element as standard Python scalar.
 
-    For empty tensor, returns 0.
+    For empty tensor returns :math:`0`.
     """
     size = a.size
     if size == 1:

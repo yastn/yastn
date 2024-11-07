@@ -179,6 +179,10 @@ class MpsMpoOBC(_MpsMpoParent):
         :ref:`The legs' order <mps/properties:index convention>` of each tensor is:
         (0) virtual leg pointing towards the first site, (1) 1st physical leg, i.e., :math:`|\textrm{ket}\rangle`,
         (2) virtual leg pointing towards the last site, and, in case of MPO, (3) 2nd physical leg, i.e., :math:`\langle \textrm{bra}|`.
+
+        The canonical form can be used with the MPS/MPO freely. 
+        If the MPS/MPO is not normalized the amplitude is kept as :code:`self.factor` paramter of the object. 
+        If the object is normalized, then :code:`self.factor=1`. 
         """
         super().__init__(N=N, nr_phys=nr_phys)
         self.pC = None  # index of the central block, None if it does not exist
@@ -254,7 +258,8 @@ class MpsMpoOBC(_MpsMpoParent):
 
     def diagonalize_central_(self, opts_svd, normalize=True) -> number:
         r"""
-        Perform svd of the central block C = U @ S @ V. Truncation is done based on opts_svd.
+        Use svd() to perform SVD of the central block C = U @ S @ V, where S contains singular (Schmidt) values. 
+        Truncation is done based on opts_svd.
 
         Attach U and V respectively to the left and right sites
         (or to the central site at the edges when there are no left or right sites).
@@ -312,7 +317,7 @@ class MpsMpoOBC(_MpsMpoParent):
         r"""
         Absorb central block towards the first or the last site.
 
-        If the central block is outside of the chain, it is goes in the one direction possible.
+        If the central block is outside of the chain, it goes in the one direction possible.
         Do nothing if central does not exist.
 
         Parameters
@@ -346,8 +351,9 @@ class MpsMpoOBC(_MpsMpoParent):
         It is assumed that tensors are enumerated
         by index increasing from 0 (:code:`first`) to N-1 (:code:`last`).
 
-        Finally, the trivial central block is attached to the end of the chain.
-
+        Finally, the trivial central block of dimension *1* obtained for terminal sites 
+        is attached at the end of the chain. 
+ 
         It updates MPS/MPO in place.
 
         Parameters
@@ -409,9 +415,11 @@ class MpsMpoOBC(_MpsMpoParent):
         by index increasing from 0 (:code:`first`) to N-1 (:code:`last`).
 
         Access to singular values during sweeping allows truncation of virtual spaces.
-        This truncation makes sense if MPS/MPO is already in the canonical form (not checked/enforced)
-        in the direction opposite to the current sweep, i.e., right canonical form for :code:`to='last'`
-        or left canonical form for :code:`to='first'`.
+        
+        The truncation is effective when it is done in the canonical form. 
+        The canonical form has to be ensured prior truncation by setting it opposite to the sweep of :code:`truncate_`.
+        I.e., prepare MPS/MPO in the right canonical form (:code:`to='first'`) for truncation with :code:`to='last'` 
+        and left canonical form (:code:`to='last'`) for truncation with :code:`to='first'`.
 
         The MPS/MPO is updated in place.
 
@@ -499,7 +507,9 @@ class MpsMpoOBC(_MpsMpoParent):
         ----------
         alpha: int
             Order of Renyi entropy.
-            The default value is 1, which corresponds to the Von Neumann entropy.
+            alpha == 1 is von Neuman entropy: -Tr(a log2(a))
+            otherwise: 1/(1-alpha) log2(Tr(a ** alpha))
+            The default value is 1, which corresponds to the von Neumann entropy.
         """
         schmidt_spectra = self.get_Schmidt_values()
         return [tensor.entropy(spectrum ** 2, alpha=alpha) for spectrum in schmidt_spectra]

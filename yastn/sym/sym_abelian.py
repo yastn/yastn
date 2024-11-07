@@ -45,19 +45,20 @@ class sym_abelian(metaclass=sym_meta):
         Parameters
         ----------
         charges: numpy.ndarray(int)
-            `k x m x nsym` matrix, where `k` is the number of
-            independent blocks, and `m` is the number of fused legs.
+            :math:`k \times m \times nsym` matrix, where :math:`k` is the number of
+            independent blocks, and :math:`m` is the number of fused legs.
 
         signatures: numpy.ndarray(int)
-            integer vector with `m` elements in `{-1, +1}`
+            integer vector with :math:`m` elements in :math:`{-1, +1}`.
 
         new_signature: int
+            new signature for a new leg from fused legs.
 
         Returns
         -------
         numpy.ndarray(int)
             integer matrix with shape (k, NSYM) of fused charges;
-            includes multiplication by ``new_signature``
+            includes multiplication by ``new_signature``.
         """
         raise NotImplementedError("Subclasses need to override the fuse function")  # pragma: no cover
 
@@ -78,6 +79,11 @@ class sym_abelian(metaclass=sym_meta):
 
         new_s: int
             The default is 1.
+        
+        Returns
+        -------
+        tuple
+            resulting tuple of charges
         """
         if len(charges) == 0:
             return cls.zero()

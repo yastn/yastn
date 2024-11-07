@@ -21,7 +21,7 @@ with the lowest weights (smallest singular values).
 See examples: :ref:`examples/mps/algebra:canonical form by svd`.
 
 The above routines operate on entire MPS or MPO.
-They are build from functions operating on individual tensors of MPS/MPO:
+They are built from functions operating on individual tensors of MPS/MPO:
 
 .. automethod:: yastn.tn.mps.MpsMpoOBC.orthogonalize_site_
 .. automethod:: yastn.tn.mps.MpsMpoOBC.absorb_central_

@@ -46,4 +46,12 @@ where all sites to the left are in :ref:`left-canonical form<theory/mps/basics:c
 are in :ref:`right-canonical form<theory/mps/basics:canonical form>`.
 
 .. automethod:: yastn.tn.mps.MpsMpoOBC.get_Schmidt_values
+
+The SVD is used to calculate the entropy at each bond. 
+It allows to get *quantum Renyi entropy* that is defined as 
+:math:`S_\alpha(\rho)=\frac{1}{1-\alpha}\log_2 Tr(\rho^\alpha)`, 
+where :math:`\rho` indicades reduced density matrix for the bipartition at the bond. 
+For :math:`\alpha=1` we get *von Neumann entropy*, so-called *entanglement entropy*, that is 
+:math:`S_1(\rho)=-Tr(\rho_{j,j+1}\log_2 \rho)`. The entropy is counted in bits of entropy, i.e., using logarithm of base *2*.
+
 .. automethod:: yastn.tn.mps.MpsMpoOBC.get_entropy

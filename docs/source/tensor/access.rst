@@ -4,7 +4,8 @@ Accessing YASTN tensors
 Direct access to blocks
 -----------------------
 
-Blocks of YASTN tensor can be simply accessed as ``dict`` i.e. with ``[]`` operator.
+Blocks of YASTN tensor can be simply accessed in the same way as 
+standard dictionary. For example,
 
 .. literalinclude:: /../../tests/tensor/test_syntax.py
    :pyobject: TestSyntaxBlockAccess.test_syntax_block_access
