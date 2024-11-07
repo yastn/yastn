@@ -29,7 +29,13 @@ from .backend import backend_np
 from .sym import sym_none, sym_U1, sym_Z2, sym_Z3, sym_U1xU1, sym_U1xU1xZ2
 
 
-_syms = {"dense": sym_none, "U1": sym_U1, "Z2": sym_Z2, "Z3": sym_Z3, "U1xU1": sym_U1xU1, "U1xU1xZ2": sym_U1xU1xZ2}
+_syms = {"dense": sym_none,
+         "none": sym_none,
+         "U1": sym_U1,
+         "Z2": sym_Z2,
+         "Z3": sym_Z3,
+         "U1xU1": sym_U1xU1,
+         "U1xU1xZ2": sym_U1xU1xZ2}
 
 __all__ = ['rand', 'randR', 'randC', 'zeros', 'ones', 'eye', 'block',
            'make_config', 'load_from_dict', 'load_from_hdf5', 'decompress_from_1d']
@@ -256,7 +262,7 @@ def ones(config=None, legs=(), n=None, isdiag=False, **kwargs) -> yastn.Tensor:
 
 def eye(config=None, legs=(), isdiag=True, **kwargs) -> yastn.Tensor:
     r"""
-    Initialize diagonal tensor of identity matrix. 
+    Initialize diagonal tensor of identity matrix.
     In presence of symmetries, such matrix is block-diagonal with all allowed blocks filled with identity matrices.
 
     .. note::

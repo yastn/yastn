@@ -20,7 +20,7 @@ import numpy as np
 import torch
 
 __all__= [
-    '_torch_version_check', 'DTYPE',
+    '_torch_version_check', 'DTYPE', 'cuda_is_available',
     'SVDGESDD','SYMEIG',
     'get_dtype', 'is_complex', 'get_device', 'random_seed', 'set_num_threads', 'grad',
     'detach', 'detach_', 'clone', 'copy',
@@ -64,6 +64,11 @@ torch.random.seed()
 BACKEND_ID = "torch"
 DTYPE = {'float64': torch.float64,
          'complex128': torch.complex128}
+
+
+def cuda_is_available():
+    return torch.cuda.is_available()
+
 
 def get_dtype(t):
     return t.dtype

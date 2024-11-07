@@ -30,6 +30,10 @@ DTYPE = {'float64': np.float64,
          'complex128': np.complex128}
 
 
+def cuda_is_available():
+    return False
+
+
 def get_dtype(t):
     return t.dtype
 

@@ -14,14 +14,14 @@
 # ==============================================================================
 import pytest
 import yastn
-try:
-    from .configs import config_U1, config_Z2, config_Z2_fermionic
-except ImportError:
-    from configs import config_U1, config_Z2, config_Z2_fermionic
 
 
-def test_config_exceptions():
-    """ handling mismatches of tensor configs when combining two tensors"""
+def test_config_exceptions(config_kwargs):
+    """ Handling mismatches of tensor configs when combining two tensors. """
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    config_Z2 = yastn.make_config(sym='Z2', **config_kwargs)
+    config_Z2_f = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
+
     leg_U1 = yastn.Leg(config_U1, s=1, t=(0, 1), D=(1, 2))
     leg_Z2 = yastn.Leg(config_Z2, s=1, t=(0, 1), D=(1, 2))
     with pytest.raises(yastn.YastnError):
@@ -32,33 +32,39 @@ def test_config_exceptions():
     with pytest.raises(yastn.YastnError):
         a = yastn.rand(config=config_Z2, legs=[leg_Z2, leg_Z2, leg_Z2.conj()])
         # leg do not depend on fermionic statistics so the next line is fine
-        b = yastn.rand(config=config_Z2_fermionic, legs=[leg_Z2, leg_Z2, leg_Z2.conj()])
+        b = yastn.rand(config=config_Z2_f, legs=[leg_Z2, leg_Z2, leg_Z2.conj()])
         _ = a + b
         # Two tensors have different assignment of fermionic statistics.
 
 
-@pytest.mark.skipif(config_U1.backend.BACKEND_ID=="numpy", reason="requires different backends or devices")
-def test_config_exceptions_torch():
-    """ mismatches requiring different backends or devices"""
+def test_config_exceptions_torch(config_kwargs):
+    """ Mismatches requiring different backends or devices. """
+    config = yastn.make_config(sym='U1', **config_kwargs)
     config_np = yastn.make_config(sym='U1', backend='np')
-    config_torch = yastn.make_config(sym='U1', backend='torch')
-    a = yastn.rand(config=config_torch, s=(1, -1, 1), t=((0, 1), (0, 1), (0, 1)), D=((1, 2), (1, 2), (1, 2)))
-    with pytest.raises(yastn.YastnError):
+
+    if config.backend != config_np.backend:
+        a = yastn.rand(config=config, s=(1, -1, 1), t=((0, 1), (0, 1), (0, 1)), D=((1, 2), (1, 2), (1, 2)))
         b = yastn.rand(config=config_np, s=(1, -1, 1), t=((0, 1), (0, 1), (0, 1)), D=((1, 2), (1, 2), (1, 2)))
-        _ = a + b
-        # Two tensors have different backends.
-    if config_U1.backend.torch.cuda.is_available():
         with pytest.raises(yastn.YastnError):
-            a = a.to(device='cpu')
-            b = yastn.rand(config=config_torch, s=(1, -1, 1), t=((0, 1), (0, 1), (0, 1)), D=((1, 2), (1, 2), (1, 2)))
-            b = b.to(device='cuda')
+            _ = a + b
+            # Two tensors have different backends.
+
+    if config.backend.cuda_is_available():
+        a = yastn.rand(config=config, s=(1, -1, 1), t=((0, 1), (0, 1), (0, 1)), D=((1, 2), (1, 2), (1, 2)))
+        b = yastn.rand(config=config, s=(1, -1, 1), t=((0, 1), (0, 1), (0, 1)), D=((1, 2), (1, 2), (1, 2)))
+        a = a.to(device='cpu')
+        b = b.to(device='cuda')
+        assert 'cpu' in a.device
+        assert 'cuda' in b.device
+        with pytest.raises(yastn.YastnError):
             _ = a + b
             # Devices of the two tensors do not match.
 
 
-def test_make_config():
-    cfg_U1 = yastn.make_config(sym="U1", backend=config_U1.backend)
-    assert cfg_U1.sym == config_U1.sym
+def test_make_config(config_kwargs):
+    """ Parameters in yastn.make_config(). """
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    assert config_U1.sym.SYM_ID == 'U1'
 
     with pytest.raises(yastn.YastnError):
         yastn.make_config(sym="random_name")
@@ -68,7 +74,9 @@ def test_make_config():
         yastn.make_config(backend="random_name")
         # backend encoded as string only supports: 'np', 'torch'
 
+
 if __name__ == '__main__':
-    # test_config_exceptions()
-    # test_config_exceptions_torch()
-    test_make_config()
+    config_kwargs = {'backend': 'np'}
+    test_config_exceptions(config_kwargs)
+    test_config_exceptions_torch(config_kwargs)
+    test_make_config(config_kwargs)
