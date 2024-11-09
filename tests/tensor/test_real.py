@@ -12,19 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-""" yastn.real yastn.imag """
+""" yastn.real yastn.imag() """
 import numpy as np
+import pytest
 import yastn
-try:
-    from .configs import config_U1
-except ImportError:
-    from configs import config_U1
 
 tol = 1e-12  #pylint: disable=invalid-name
 
 
-def test_real_basic():
+def test_real_basic(config_kwargs):
     """ real and imag parts of tensor"""
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     leg = yastn.Leg(config_U1, s=1, t=(0, 1), D=(1, 2))
 
     a = yastn.rand(config=config_U1, legs=[leg, leg.conj()], dtype='complex128')
@@ -55,4 +53,4 @@ def test_real_basic():
 
 
 if __name__ == '__main__':
-    test_real_basic()
+    pytest.main([__file__, "-vs", "--durations=0"])

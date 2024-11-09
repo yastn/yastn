@@ -13,17 +13,15 @@
 # limitations under the License.
 # ==============================================================================
 """ changing tests controls and size of lru_cache in some auxiliary functions """
+import pytest
 import yastn
-try:
-    from .configs import config_Z2
-except ImportError:
-    from configs import config_Z2
 
 tol = 1e-12  #pylint: disable=invalid-name
 
 
-def test_cache():
-    a = yastn.rand(config=config_Z2, s=(-1, 1, 1, -1),
+def test_cache(config_kwargs):
+    config = yastn.make_config(sym='Z2', **config_kwargs)
+    a = yastn.rand(config=config, s=(-1, 1, 1, -1),
                   t=((0, 1), (0, 1), (0, 1), (0, 1)),
                   D=((1, 2), (2, 3), (3, 4), (4, 5)))
     for _ in range(100):
@@ -40,7 +38,7 @@ def test_cache():
         a.svd(axes=((0, 2), (1, 3)))
         a.svd(axes=((1, 3), (2, 0)))
 
-    b = yastn.eye(config=config_Z2, t=(0, 1), D=(4, 5))
+    b = yastn.eye(config=config, t=(0, 1), D=(4, 5))
     for _ in range(100):
         b.broadcast(a, axes=3)
 
@@ -54,4 +52,4 @@ def test_cache():
 
 
 if __name__ == '__main__':
-    test_cache()
+    pytest.main([__file__, "-vs", "--durations=0"])

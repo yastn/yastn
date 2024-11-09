@@ -15,17 +15,13 @@
 """ yastn.swap_gate() to introduce fermionic statistics. """
 import pytest
 import yastn
-try:
-    from .configs import config_dense, config_Z2_fermionic, config_Z2
-except ImportError:
-    from configs import config_dense, config_Z2_fermionic, config_Z2
-
 
 tol = 1e-12  #pylint: disable=invalid-name
 
 
-def test_swap_gate_basic():
+def test_swap_gate_basic(config_kwargs):
     """ basic tests of swap_gate """
+    config_Z2_fermionic = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
     leg = yastn.Leg(config_Z2_fermionic, t=(0, 1), D=(1, 1))
     a = yastn.ones(config=config_Z2_fermionic, legs=[leg, leg, leg, leg], n=0)
     assert pytest.approx(sum(a.to_numpy().ravel()), rel=tol) == 8
@@ -55,6 +51,7 @@ def test_swap_gate_basic():
     assert pytest.approx(yastn.vdot(b, d).item(), rel=tol) == -4
     assert pytest.approx(yastn.vdot(c, d).item(), rel=tol) == 4
 
+    config_Z2 = yastn.make_config(sym='Z2', fermionic=False, **config_kwargs)
     leg = yastn.Leg(config_Z2, t=(0, 1), D=(1, 1))
     a_bosonic = yastn.ones(config=config_Z2, legs=[leg, leg, leg, leg], n=0)
     b_bosonic = a_bosonic.swap_gate(axes=(0, 1))
@@ -77,14 +74,14 @@ def apply_operator(psi, c, site):
     return cpsi
 
 
-def test_apply_operators():
+def test_apply_operators(config_kwargs):
     """
     Apply swap_gate during calculation of expectation value such as, e.g. <psi| c_1 cdag_3 |psi>.
 
     Use SpinfulFermions defined in :class:`yastn.operators.SpinfulFermions`
     """
     for sym in ['Z2', 'U1xU1xZ2', 'U1xU1']:
-        ops = yastn.operators.SpinfulFermions(sym=sym, backend=config_dense.backend, default_device=config_dense.default_device)
+        ops = yastn.operators.SpinfulFermions(sym=sym, **config_kwargs)
         # pytest switches backends in configs imported in tests
 
         vac = vacum_spinful(sites=4, ops=ops)
@@ -127,12 +124,10 @@ def vacum_spinful(sites, ops):
     return psi
 
 
-def test_swap_gate_charge():
+def test_swap_gate_charge(config_kwargs):
     """ test is swap_gate(axes, charge) give the same results as swap_gate(axes)"""
     for sym in ['Z2', 'U1xU1xZ2', 'U1xU1']:
-        ops = yastn.operators.SpinfulFermions(sym=sym,
-                                              backend=config_dense.backend,
-                                              default_device=config_dense.default_device)
+        ops = yastn.operators.SpinfulFermions(sym=sym, **config_kwargs)
 
         cpu, cpd, = ops.c('u'), ops.c('d')
         cu, cd = ops.cp('u'), ops.cp('d')
@@ -171,9 +166,10 @@ def test_swap_gate_charge():
             assert (xyz1 - xyz2).norm() < tol
 
 
-def test_swap_gate_exceptions():
+def test_swap_gate_exceptions(config_kwargs):
     """ swap_gate raising exceptions """
     t1, D1 = (0, 1, 2, 3), (2, 2, 2, 2)
+    config_Z2_fermionic = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
     a = yastn.rand(config=config_Z2_fermionic, s=(1, -1, 1, -1), t=(t1, t1, t1, t1), D=(D1, D1, D1, D1))
     with pytest.raises(yastn.YastnError):
         a.swap_gate(axes=(0, 1, 2))
@@ -187,7 +183,4 @@ def test_swap_gate_exceptions():
 
 
 if __name__ == '__main__':
-    test_swap_gate_basic()
-    test_apply_operators()
-    test_swap_gate_charge()
-    test_swap_gate_exceptions()
+    pytest.main([__file__, "-vs", "--durations=0"])

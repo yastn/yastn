@@ -14,11 +14,8 @@
 # ==============================================================================
 """ yastn.linalg.qr() """
 from itertools import product
+import pytest
 import yastn
-try:
-    from .configs import config_dense, config_U1, config_Z2xU1, config_Z3
-except ImportError:
-    from configs import config_dense, config_U1, config_Z2xU1, config_Z3
 
 tol = 1e-10  #pylint: disable=invalid-name
 
@@ -51,13 +48,15 @@ def check_diag_R_nonnegative(R):
         assert all(R.config.backend.diag_get(R.imag()[t]) == 0)
 
 
-def test_qr_basic():
+def test_qr_basic(config_kwargs):
     """ test qr decomposition for various symmetries """
     # dense
+    config_dense = yastn.make_config(sym='none', **config_kwargs)
     a = yastn.rand(config=config_dense, s=(-1, 1, -1, 1), D=[11, 12, 13, 21])
     run_qr_combine(a)
 
     # U1
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     legs = [yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(2, 3, 4)),
             yastn.Leg(config_U1, s=-1, t=(-2, 0, 2), D=(5, 6, 7)),
             yastn.Leg(config_U1, s=1, t=(-2, -1, 0, 1, 2), D=(6, 5, 4, 3, 2)),
@@ -66,6 +65,7 @@ def test_qr_basic():
     run_qr_combine(a)
 
     # Z2xU1
+    config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
     legs = [yastn.Leg(config_Z2xU1, s=1, t=[(0, 0), (0, 2), (1, 0), (1, 2)], D=(2, 3, 4, 5)),
             yastn.Leg(config_Z2xU1, s=1, t=[(0, 0), (0, 2), (1, 0), (1, 2)], D=(5, 4, 3, 2)),
             yastn.Leg(config_Z2xU1, s=-1, t=[(0, 0), (0, 2), (1, 0), (1, 2)], D=(3, 4, 5, 6)),
@@ -74,8 +74,9 @@ def test_qr_basic():
     run_qr_combine(a)
 
 
-def test_qr_Z3():
+def test_qr_Z3(config_kwargs):
     # Z3
+    config_Z3 = yastn.make_config(sym='Z3', **config_kwargs)
     sset = ((1, 1), (1, -1), (-1, 1), (-1, -1))
     nset = (0, 1, 2)
     sQset = (-1, 1)
@@ -88,5 +89,4 @@ def test_qr_Z3():
         check_diag_R_nonnegative(R)
 
 if __name__ == '__main__':
-    test_qr_basic()
-    test_qr_Z3()
+    pytest.main([__file__, "-vs", "--durations=0"])

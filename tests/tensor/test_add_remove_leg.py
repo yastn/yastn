@@ -225,9 +225,4 @@ def test_remove_leg_exceptions(config_kwargs):
 
 
 if __name__ == '__main__':
-    config_kwargs = {'backend': 'np'}
-    test_add_leg_basic(config_kwargs)
-    test_add_leg_fused(config_kwargs)
-    test_operators_chain(config_kwargs)
-    test_add_leg_exceptions(config_kwargs)
-    test_remove_leg_exceptions(config_kwargs)
+    pytest.main([__file__, "-vs", "--durations=0"])

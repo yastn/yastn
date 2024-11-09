@@ -16,10 +16,6 @@
 import numpy as np
 import pytest
 import yastn
-try:
-    from .configs import config_dense, config_U1, config_Z2xU1
-except ImportError:
-    from configs import config_dense, config_U1, config_Z2xU1
 
 tol = 1e-12  #pylint: disable=invalid-name
 
@@ -55,9 +51,10 @@ def tensordot_vs_numpy(a, b, axes, conj):
     return c
 
 
-def test_dot_basic():
+def test_dot_basic(config_kwargs):
     """ test tensordot for different symmetries. """
     # dense
+    config_dense = yastn.make_config(sym='none', **config_kwargs)
     a = yastn.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5), dtype='complex128')
     b = yastn.rand(config=config_dense, s=(1, -1, 1), D=(2, 3, 5), dtype='complex128')
     c1 = tensordot_vs_numpy(a, b, axes=((0, 3), (0, 2)), conj=(0, 0))
@@ -65,6 +62,7 @@ def test_dot_basic():
     assert yastn.norm(c1.conj() - c2.transpose(axes=(1, 2, 0)))
 
     # U1
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1),
                   t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
                   D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
@@ -90,6 +88,7 @@ def test_dot_basic():
     tensordot_vs_numpy(a, b, axes=((0, 3, 1), (1, 2, 0)), conj=(0, 0))
 
     # Z2xU1
+    config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
     t1 = [(0, -1), (0, 1), (1, -1), (1, 1)]
     t2 = [(0, 0), (0, 2), (1, 0), (1, 2)]
     a = yastn.rand(config=config_Z2xU1, s=(-1, 1, 1, -1),
@@ -103,7 +102,9 @@ def test_dot_basic():
     tensordot_vs_numpy(b, a, axes=((1, 0), (1, 0)), conj=(0, 0))
 
 
-def test_tensordot_diag():
+def test_tensordot_diag(config_kwargs):
+    # Z2xU1
+    config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
     t1 = [(0, -1), (0, 1), (1, -1), (1, 1)]
     D1 = (1, 2, 2, 4)
 
@@ -137,8 +138,9 @@ def tensordot_hf(a, b, hf_axes1):
     assert all(yastn.norm(c - x) < tol for x in (fc, ffc))
 
 
-def test_tensordot_fuse_hard():
+def test_tensordot_fuse_hard(config_kwargs):
     """ test tensordot combined with hard-fusion."""
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     t1, t2, t3 = (-1, 0, 1), (-2, 0, 2), (-3, 0, 3)
     D1, D2, D3 = (1, 3, 2), (3, 3, 4), (5, 3, 6)
     a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1, 1),
@@ -149,7 +151,8 @@ def test_tensordot_fuse_hard():
     tensordot_hf(a, b, hf_axes1=(0, (4, 3, 1, 5), 2))
 
 
-def test_tensordot_fuse_meta():
+def test_tensordot_fuse_meta(config_kwargs):
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1),
                   t=((0, 1), (0, 1), (0, 1), (0, 1), (0, 1)),
                   D=((1, 2), (3, 4), (5, 6), (7, 8), (3, 4)))
@@ -169,8 +172,9 @@ def test_tensordot_fuse_meta():
     assert all(yastn.norm(c - x) < tol for x in (fc, ffc))
 
 
-def test_tensordot_exceptions():
+def test_tensordot_exceptions(config_kwargs):
     """ special cases and exceptions"""
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     t1, t2 = (-1, 0, 1), (-1, 0, 2)
     D1, D2 = (2, 3, 4), (2, 4, 5)
     a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1),
@@ -220,10 +224,12 @@ def test_tensordot_exceptions():
         # Outer product with diagonal tensor not supported. Use yastn.diag() first.
 
 
-@pytest.mark.skipif(config_dense.backend.BACKEND_ID=="numpy", reason="numpy backend does not support autograd")
-def test_tensordot_fuse_hard_backward():
+@pytest.mark.skipif("'torch' not in config.getoption('--backend')",
+                    reason="Uses torch.autograd.gradcheck().")
+def test_tensordot_fuse_hard_backward(config_kwargs):
     import torch
     # U1
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     t1, t2, t3 = (-1, 0, 1), (-2, 0, 2), (-3, 0, 3)
     D1, D2, D3 = (1, 2, 2), (2, 2, 2), (2, 2, 2)
     a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1, 1),
@@ -248,10 +254,13 @@ def test_tensordot_fuse_hard_backward():
     test = torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4)
     assert test
 
-@pytest.mark.skipif(config_dense.backend.BACKEND_ID=="numpy", reason="numpy backend does not support autograd")
-def test_tensordot_backward():
+
+@pytest.mark.skipif("'torch' not in config.getoption('--backend')",
+                    reason="Uses torch.autograd.gradcheck().")
+def test_tensordot_backward(config_kwargs):
     import torch
     # U1
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.rand(config=config_U1, s=(-1, -1, 1, 1),
                   t=[(0, 1), (0, 1), (0, 1), (0, 1)],
                   D=[(2, 3), (4, 5), (4, 3), (2, 1)], dtype='complex128')
@@ -272,11 +281,7 @@ def test_tensordot_backward():
     test = torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4)
     assert test
 
+
 if __name__ == '__main__':
-    test_dot_basic()
-    test_tensordot_fuse_hard()
-    test_tensordot_diag()
-    test_tensordot_fuse_meta()
-    test_tensordot_exceptions()
-    test_tensordot_backward()
-    test_tensordot_fuse_hard_backward()
+    # pytest.main([__file__, "-vs", "--durations=0"])
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])

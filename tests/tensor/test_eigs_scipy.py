@@ -12,20 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+""" yastn.compress_to_1d() yastn.decompress_from_1d()  in combination with scipy LinearOperator and eigs """
 import numpy as np
 import pytest
 from scipy.sparse.linalg import eigs, LinearOperator
 import yastn
-try:
-    from .configs import config_U1
-except ImportError:
-    from configs import config_U1
 
 tol = 1e-8  #pylint: disable=invalid-name
 
 
-@pytest.mark.skipif(not config_U1.backend.BACKEND_ID=="numpy", reason="uses scipy for raw data")
-def test_eigs_simple():
+@pytest.mark.skipif("'np' not in config.getoption('--backend')",
+                    reason="using scipy procedures for raw data requires np")
+def test_eigs_simple(config_kwargs):
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     legs = [yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 2)),
             yastn.Leg(config_U1, s=1, t=(0, 1), D=(1, 1)),
             yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(2, 3, 2))]
@@ -81,10 +80,13 @@ def test_eigs_simple():
     print("vb -> ", vb.pop())
 
 
-@pytest.mark.skipif(not config_U1.backend.BACKEND_ID=="numpy", reason="uses scipy procedures for raw data")
-def test_eigs_mismatches():
+@pytest.mark.skipif("'np' not in config.getoption('--backend')",
+                    reason="using scipy procedures for raw data requires np")
+def test_eigs_mismatches(config_kwargs):
+    #
     # here define a problem in a way that there are some mismatches in legs to be resolved
-
+    #
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     leg0 = yastn.Leg(config_U1, s=1, t=(-2, -1, 0, 1), D=(1, 2, 3 ,4))
     leg1 = yastn.Leg(config_U1, s=1, t=(0, 1), D=(2, 3))
     leg2 = yastn.Leg(config_U1, s=1, t=(-1, 0, 1, 2), D=(2, 3 ,4, 5))
@@ -127,14 +129,16 @@ def test_eigs_mismatches():
     # for others there might be superposition between +1 and -1
 
 
-@pytest.mark.skipif(not config_U1.backend.BACKEND_ID=="numpy", reason=" torch TODO, some problem to identify ")
-def test_eigs_temp():
-    config_U1.backend.random_seed(seed=0)  # fix for tests
+@pytest.mark.skipif("'np' not in config.getoption('--backend')",
+                    reason="torch TODO, some problem to identify")  # TODO
+def test_eigs_temp(config_kwargs):
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    config_U1.backend.random_seed(seed=0)  # fix seed for testing
 
     legs = [yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 4)),
             yastn.Leg(config_U1, s=1, t=(0, 1), D=(1, 1)),
             yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(2, 3, 4))]
-    a = yastn.rand(config=config_U1, legs=legs)  # could be mps tensor
+    a = yastn.rand(config=config_U1, legs=legs)  # could be an MPS tensor
 
     tm = yastn.ncon([a, a.conj()], [(-1, 1, -3), (-2, 1, -4)])
     tm = tm.fuse_legs(axes=((2, 3), (0, 1)), mode='hard')
@@ -159,7 +163,8 @@ def test_eigs_temp():
         assert abs(w_ref - w.item()) < tol
 
     tmn = tmn + tmn.T
-    f = lambda t: yastn.ncon([t, a, a.conj()], [(1, 3, -3), (1, 2, -1), (3, 2, -2)]) + yastn.ncon([t, a.conj(), a], [(1, 3, -3), (-1, 2, 1), (-2, 2, 3)])
+    f = lambda t: yastn.ncon([t, a, a.conj()], [(1, 3, -3), (1, 2, -1), (3, 2, -2)]) + \
+                  yastn.ncon([t, a.conj(), a], [(1, 3, -3), (-1, 2, 1), (-2, 2, 3)])
 
     for which in ('LM', 'LR', 'SR'):
         w_ref, _ = eigs(tmn, k=1, which=which)  # use scipy.sparse.linalg.eigs
@@ -175,8 +180,5 @@ def test_eigs_temp():
         assert abs(w_ref - w.item()) < tol
 
 
-
 if __name__ == '__main__':
-    test_eigs_simple()
-    test_eigs_mismatches()
-    test_eigs_temp()
+    pytest.main([__file__, "-vs", "--durations=0"])

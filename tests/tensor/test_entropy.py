@@ -12,20 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-""" yastn.linalg.entropy """
+""" yastn.linalg.entropy() """
 import numpy as np
 import pytest
 import yastn
-try:
-    from .configs import config_U1
-except ImportError:
-    from configs import config_U1
 
 tol = 1e-12  #pylint: disable=invalid-name
 
 
-def test_entropy():
-
+def test_entropy(config_kwargs):
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     P = yastn.eye(config=config_U1, legs=yastn.Leg(config_U1, s=1, t=(-2, -1, 0), D=(4, 12, 25)))
 
     # here P does not sum to 1.
@@ -55,4 +51,4 @@ def test_entropy():
 
 
 if __name__ == '__main__':
-    test_entropy()
+    pytest.main([__file__, "-vs", "--durations=0"])

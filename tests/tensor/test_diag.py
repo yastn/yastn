@@ -13,19 +13,16 @@
 # limitations under the License.
 # ==============================================================================
 """ yastn.diag() """
-import pytest
 import numpy as np
+import pytest
 import yastn
-try:
-    from .configs import config_U1
-except ImportError:
-    from configs import config_U1
 
 tol = 1e-12  #pylint: disable=invalid-name
 
 
-def test_diag_basic():
+def test_diag_basic(config_kwargs):
     """ test yastn.diag() """
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     leg = yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6))
 
     a1 = yastn.rand(config=config_U1, legs=[leg, leg.conj()])  # isdiag == False
@@ -44,8 +41,9 @@ def test_diag_basic():
     assert yastn.norm(a1 - a5) > tol  # are not identical
 
 
-def test_diag_exceptions():
+def test_diag_exceptions(config_kwargs):
     """ triggering exceptions by yastn.diag()"""
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     t1, D1, D2 = (-1, 0, 1), (2, 3, 4), (3, 4, 5)
     with pytest.raises(yastn.YastnError):
         a = yastn.rand(config=config_U1, s=(-1, 1, 1), t=(t1, t1, t1), D=(D1, D1, D1))
@@ -70,5 +68,5 @@ def test_diag_exceptions():
 
 
 if __name__ == '__main__':
-    test_diag_basic()
-    test_diag_exceptions()
+    pytest.main([__file__, "-vs", "--durations=0"])
+

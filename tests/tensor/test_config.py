@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+""" yastn.make_config(); catching some config mismatches between tensors. """
 import pytest
 import yastn
 
@@ -76,7 +77,5 @@ def test_make_config(config_kwargs):
 
 
 if __name__ == '__main__':
-    config_kwargs = {'backend': 'np'}
-    test_config_exceptions(config_kwargs)
-    test_config_exceptions_torch(config_kwargs)
-    test_make_config(config_kwargs)
+    # pytest.main([__file__, "-vs", "--durations=0"])
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])

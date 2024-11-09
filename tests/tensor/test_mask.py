@@ -15,19 +15,16 @@
 """ Test yastn.mask() """
 import pytest
 import yastn
-try:
-    from .configs import config_U1, config_Z2xU1
-except ImportError:
-    from configs import config_U1, config_Z2xU1
 
 tol = 1e-12  #pylint: disable=invalid-name
 
 
-def test_mask_basic():
+def test_mask_basic(config_kwargs):
     """ series of tests for apply_mask """
-    config_U1.backend.random_seed(seed=0)  # fix for tests
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    config_U1.backend.random_seed(seed=0)  # fix random seed for testing
 
-    # start with U1
+    # U1 symmetry
     leg1 =  yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9))
     leg2 =  yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(5, 6, 7))
     a = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1, leg2.conj()])
@@ -57,7 +54,8 @@ def test_mask_basic():
     assert (d2 - d0).norm() < tol
     assert (c2 - c).norm() < tol
 
-    # here using Z2xU1 symmetry
+    # Z2xU1 symmetry
+    config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
     legs = [yastn.Leg(config_Z2xU1, s=-1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(6, 3, 9, 6)),
             yastn.Leg(config_Z2xU1, s=-1, t=((0, 0), (0, 2)), D=(3, 2)),
             yastn.Leg(config_Z2xU1, s=1, t=((0, 1), (1, 0), (0, 0), (1, 1)), D=(4, 5, 6, 3)),
@@ -87,8 +85,9 @@ def test_mask_basic():
     assert ble.apply_mask(bgt, axes=1).trace() < tol  # == 0.
 
 
-def test_mask_exceptions():
+def test_mask_exceptions(config_kwargs):
     """ trigger exceptions for apply_mask """
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     legd =  yastn.Leg(config_U1, s=1, t=(-1, 1), D=(8, 8))
     a = yastn.rand(config=config_U1, isdiag=True, legs=legd)
     a_nondiag = a.diag()
@@ -116,5 +115,4 @@ def test_mask_exceptions():
 
 
 if __name__ == '__main__':
-    test_mask_basic()
-    test_mask_exceptions()
+    pytest.main([__file__, "-vs", "--durations=0"])

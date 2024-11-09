@@ -17,4 +17,4 @@ You can activate autograd on YASTN tensor
 The operations on tensor are then recorded for later differentiation.
 
 .. literalinclude:: /../../tests/tensor/test_autograd.py
-   :pyobject: TestSyntaxAutograd.test_requires_grad
+   :pyobject: test_requires_grad
