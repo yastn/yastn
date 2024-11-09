@@ -13,21 +13,16 @@
 # limitations under the License.
 # ==============================================================================
 """ product and random Mps initialization """
-import pytest
 import numpy as np
+import pytest
 import yastn
 import yastn.tn.mps as mps
-try:
-    from .configs import config_dense as cfg
-except ImportError:
-    from configs import config_dense as cfg
-# pytest modifies cfg to inject different backends and devices during tests
 
 
-def test_MpsMpoOBC_getitem_setitem():
+def test_MpsMpoOBC_getitem_setitem(config_kwargs):
     """ raise exceptions in MpsMpoOBC, __getitem__, __setitem__"""
     #
-    #  empry Mps and Mpo
+    #  empty Mps and Mpo
     N = 8
     psi3 = mps.Mps(N=N)
     psi4 = mps.Mpo(N=N)
@@ -35,11 +30,11 @@ def test_MpsMpoOBC_getitem_setitem():
     for psi in (psi3, psi4):
         assert psi.pC is None and len(psi.A) == len(psi) == N
         assert all(psi[n] is None for n in psi.sweep())
-
     #
     #  directly assigning tensors to sites
-    T3 = yastn.ones(config=cfg, s=(-1, 1, 1), D=(2, 3, 4))
-    T4 = yastn.ones(config=cfg, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
+    config = yastn.make_config(sym='none', **config_kwargs)
+    T3 = yastn.ones(config , s=(-1, 1, 1), D=(2, 3, 4))
+    T4 = yastn.ones(config, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
     psi3[1] = T3
     psi4[1] = T4
     assert psi3[1] == T3
@@ -79,15 +74,11 @@ def test_MpsMpoOBC_getitem_setitem():
         # "to" in sweep should be in "first" or "last"
 
 
-def test_product_mps(config=cfg, tol=1e-12):
+def test_product_mps(config_kwargs, tol=1e-12):
     """ test mps.product_mps """
 
-    opts_config = {} if config is None else \
-            {'backend': config.backend,
-            'default_device': config.default_device}
-
     for sym, nl, nr in [('U1', (1,), (0,)), ('Z2', (1,), (0,)), ('dense', (), ())]:
-        ops = yastn.operators.Spin12(sym=sym, **opts_config)
+        ops = yastn.operators.Spin12(sym=sym, **config_kwargs)
         vp1 = ops.vec_z(val=+1)
         vm1 = ops.vec_z(val=-1)
 
@@ -102,7 +93,7 @@ def test_product_mps(config=cfg, tol=1e-12):
         assert mps.measure_1site(psi, ops.z(), psi) == {0: +1.0, 1: -1.0, 2: +1.0, 3: -1.0, 4: +1.0, 5: -1.0, 6: +1.0}
 
     for sym, ntot in [('U1', (4,)), ('Z2', (0,))]:
-        ops = yastn.operators.SpinlessFermions(sym=sym, **opts_config)
+        ops = yastn.operators.SpinlessFermions(sym=sym, **config_kwargs)
         v0 = ops.vec_n(val=0)
         v1 = ops.vec_n(val=1)
 
@@ -120,24 +111,20 @@ def test_product_mps(config=cfg, tol=1e-12):
             psi = mps.product_mps(v1.add_leg(), N=4)
             # Vector should have ndim = 1.
 
-    psi = mps.random_dense_mps(N=5, D=4, d=3, **opts_config)
+    psi = mps.random_dense_mps(N=5, D=4, d=3, **config_kwargs)
     assert len(psi) == 5
     assert psi.get_bond_dimensions() == (1, 4, 4, 4, 4, 1)
     assert (leg.D == (3,) for leg in psi.get_physical_legs())
-    assert opts_config["default_device"] in psi[0].device
-    assert opts_config["backend"] == psi.config.backend
+    assert config_kwargs["default_device"] in psi[0].device
+    assert config_kwargs["backend"] == psi.config.backend.BACKEND_ID
 
 
-def test_product_mpo(config=cfg, tol=1e-12):
+def test_product_mpo(config_kwargs, tol=1e-12):
     """ test mps.product_mpo """
-    #
-    opts_config = {} if config is None else \
-        {'backend': config.backend,
-        'default_device': config.default_device}
     #
     # initializing identity MPO
     for sym, nl, nr in [('U1', (0,), (0,)), ('Z2', (0,), (0,)), ('dense', (), ())]:
-        ops = yastn.operators.Spin12(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
+        ops = yastn.operators.Spin12(sym=sym, **config_kwargs)
         N = 8
         I = mps.product_mpo(ops.I(), N=8)
 
@@ -151,15 +138,15 @@ def test_product_mpo(config=cfg, tol=1e-12):
             mps.product_mpo(ops.vec_z(val=1), N=8)
             # Operator should have ndim = 2.
 
-    H = mps.random_dense_mpo(N=5, D=4, d=3, **opts_config)
+    H = mps.random_dense_mpo(N=5, D=4, d=3, **config_kwargs)
     assert len(H) == 5
     assert H.get_bond_dimensions() == (1, 4, 4, 4, 4, 1)
     assert (leg[0].D == (3,) and leg[1].D == (3,) for leg in H.get_physical_legs())
-    assert opts_config["default_device"] in H[0].device
-    assert opts_config["backend"] == H.config.backend
+    assert config_kwargs["default_device"] in H[0].device
+    assert config_kwargs["backend"] == H.config.backend.BACKEND_ID
 
 
-def random_mps_spinless_fermions(N=10, D_total=16, sym='Z2', n=1, config=None):
+def random_mps_spinless_fermions(N=10, D_total=16, sym='Z2', n=1, config_kwargs=None):
     """
     Generate random MPS of N sites, with bond dimension D_total,
     tensors with symmetry sym and total charge n.
@@ -167,11 +154,7 @@ def random_mps_spinless_fermions(N=10, D_total=16, sym='Z2', n=1, config=None):
     #
     # load local operators
     #
-    opts_config = {} if config is None else \
-                  {'backend': config.backend,
-                   'default_device': config.default_device}
-    # pytest uses config to inject various backends and devices for testing
-    ops = yastn.operators.SpinlessFermions(sym=sym, **opts_config)
+    ops = yastn.operators.SpinlessFermions(sym=sym, **config_kwargs)
     #
     ops.random_seed(seed=0)  # fix seed
     I = mps.product_mpo(ops.I(), N)  # identity MPS
@@ -190,15 +173,11 @@ def random_mps_spinless_fermions(N=10, D_total=16, sym='Z2', n=1, config=None):
     return psi
 
 
-def random_mpo_spinless_fermions(N=10, D_total=16, sym='Z2', config=None):
+def random_mpo_spinless_fermions(N=10, D_total=16, sym='Z2', config_kwargs=None):
     """
     Generate random MPO of N sites, with bond dimension D_total and tensors with symmetry sym.
     """
-    opts_config = {} if config is None else \
-                  {'backend': config.backend,
-                   'default_device': config.default_device}
-    # pytest uses config to inject various backends and devices for testing
-    ops = yastn.operators.SpinlessFermions(sym=sym, **opts_config)
+    ops = yastn.operators.SpinlessFermions(sym=sym, **config_kwargs)
     #
     I = mps.product_mpo(ops.I(), N)  # identity MPS
     ops.random_seed(seed=0)  # fix seed
@@ -214,7 +193,7 @@ def random_mpo_spinless_fermions(N=10, D_total=16, sym='Z2', config=None):
     return H
 
 
-def test_generate_random_mps():
+def test_generate_random_mps(config_kwargs):
     """
     test states from random_mpo_spinless_fermions, random_mps_spinless_fermions
     """
@@ -223,7 +202,7 @@ def test_generate_random_mps():
     bds = (1,) + (D_total,) * (N - 1) + (1,)
     #
     for sym, nn in (('Z2', (0,)), ('Z2', (1,)), ('U1', (N // 2,))):
-        psi = random_mps_spinless_fermions(N, D_total, sym, nn, config=cfg)
+        psi = random_mps_spinless_fermions(N, D_total, sym, nn, config_kwargs)
         n0 = psi.config.sym.zero()
         leg = psi[psi.first].get_legs(axes=0)
         assert leg.t == (nn,) and leg.s == -1
@@ -233,7 +212,7 @@ def test_generate_random_mps():
         assert bds[0] == bds[-1] == 1
         assert all(bd > D_total/2 for bd in bds[2:-2])  # > D_total / 2 as randomness might not allow saturation.
 
-        H = random_mpo_spinless_fermions(N, D_total, sym, config=cfg)
+        H = random_mpo_spinless_fermions(N, D_total, sym, config_kwargs)
         leg = H[H.first].get_legs(axes=0)
         assert leg.t == (n0,) and leg.s == -1
         leg = H[H.last].get_legs(axes=2)
@@ -243,12 +222,12 @@ def test_generate_random_mps():
         assert all(bd > D_total/2 for bd in bds[2:-2])
 
     with pytest.raises(yastn.YastnError):
-        random_mps_spinless_fermions(N=5, D_total=4, sym="U1", n=20)  # impossible number of particles for given N.
+        random_mps_spinless_fermions(N=5, D_total=4, sym="U1", n=20, config_kwargs=config_kwargs)  # impossible number of particles for given N.
         # MPS: Random mps is a zero state. Check parameters,
         # or try running again in this is due to randomness of the initialization.
 
     with pytest.raises(yastn.YastnError):
-        ops = yastn.operators.SpinfulFermions(sym='U1xU1', backend=H.config.backend)
+        ops = yastn.operators.SpinfulFermions(sym='U1xU1', **config_kwargs)
         ops.random_seed(seed=0)  # fix seed
         I = mps.product_mpo(ops.I(), 100)  # identity MPS
         mps.random_mpo(I, D_total=1, sigma=4)
@@ -256,11 +235,11 @@ def test_generate_random_mps():
         # or try running again in this is due to randomness of the initialization.
 
 
-
-def test_mixed_dims_mpo_and_transpose():
+def test_mixed_dims_mpo_and_transpose(config_kwargs):
     N = 5
-    b1 = yastn.ones(config=cfg, s=(1, -1), D=(2, 3))
-    b2 = yastn.ones(config=cfg, s=(1, -1), D=(3, 4))
+    config = yastn.make_config(sym='none', **config_kwargs)
+    b1 = yastn.ones(config, s=(1, -1), D=(2, 3))
+    b2 = yastn.ones(config, s=(1, -1), D=(3, 4))
     # reference mpo
     ref = mps.product_mpo([b1, b2], N)
     #
@@ -302,13 +281,10 @@ def test_mixed_dims_mpo_and_transpose():
     assert phys_dims == [((3,), (2,)), ((4,), (3,)), ((3,), (2,)), ((4,), (3,)), ((3,), (2,))]
 
 
-def test_MpsMpoOBC_properties(config=cfg):
+def test_MpsMpoOBC_properties(config_kwargs):
     """ Test reading MPS/MPO properties """
-    opts_config = {} if config is None else \
-                {'backend': config.backend, 'default_device': config.default_device}
-
     N = 11
-    ops = yastn.operators.Spin12(sym="dense", **opts_config)
+    ops = yastn.operators.Spin12(sym="dense", **config_kwargs)
     I = mps.product_mpo(ops.I(), N)
     psi = mps.random_mps(I, D_total=16)
     psi.canonize_(to='last').canonize_(to='first')
@@ -343,13 +319,10 @@ def test_MpsMpoOBC_properties(config=cfg):
     assert all(leg == (ops.space(), ops.space().conj()) for leg in legs)
 
 
-def test_MpsMpoOBC_copy(config=cfg):
+def test_MpsMpoOBC_copy(config_kwargs):
     """ Initialize random mps of full tensors and checks copying. """
-    opts_config = {} if config is None else \
-                {'backend': config.backend, 'default_device': config.default_device}
-
     N = 16
-    ops = yastn.operators.Spin1(sym='Z3', **opts_config)
+    ops = yastn.operators.Spin1(sym='Z3', **config_kwargs)
     generate = mps.Generator(N=N, operators=ops)
 
     psi = generate.random_mps(n=(1,), D_total=16)
@@ -372,12 +345,5 @@ def test_MpsMpoOBC_copy(config=cfg):
     assert all(psi[n] is phi[n] for n in psi.A)
 
 
-
-if __name__ == "__main__":
-    test_MpsMpoOBC_getitem_setitem()
-    test_product_mps()
-    test_product_mpo()
-    test_generate_random_mps()
-    test_mixed_dims_mpo_and_transpose()
-    test_MpsMpoOBC_properties()
-    test_MpsMpoOBC_copy()
+if __name__ == '__main__':
+    pytest.main([__file__, "-vs", "--durations=0"])

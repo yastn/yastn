@@ -13,14 +13,9 @@
 # limitations under the License.
 # ==============================================================================
 """ yastn.save_to_dict() yastn.load_from_dict() yastn.save_to_hdf5() yastn.load_from_hdf5(). """
-import warnings
 import os
-import pytest
 import numpy as np
-try:
-    import h5py
-except ImportError:
-    warnings.warn("h5py module not available", ImportWarning)
+import pytest
 import yastn
 
 tol = 1e-12  #pylint: disable=invalid-name
@@ -47,6 +42,7 @@ def check_to_numpy(a1, config):
 def check_to_hdf5(a, *args):
     """ Test if two Tensor-s have the same values. """
     # os.remove("tmp.h5") remove if exists .. perhaps 'w' in the line below
+    h5py = pytest.importorskip("h5py")
     try:
         os.remove("tmp.h5")
     except OSError:
@@ -63,7 +59,6 @@ def check_to_hdf5(a, *args):
 
 @pytest.mark.parametrize("test_f", [check_to_numpy, check_to_hdf5])
 def test_dict(config_kwargs, test_f):
-    if test_f==check_to_hdf5: pytest.importorskip("h5py")
     """ test exporting tensor to native python data-structure,
         that allows robust saving/loading with np.save/load."""
     config_dense = yastn.make_config(sym='none', **config_kwargs)

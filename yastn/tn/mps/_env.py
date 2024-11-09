@@ -342,7 +342,7 @@ class Env2(EnvParent):
             self.F[(n, n + 1)] = tensordot(self.bra[n].conj(), temp, axes=axes)
 
     def Heff0(self, C, bd):
-        raise YastnError("Should not be triggered by current higher-level functions.")  # pragma: no cover
+        raise YastnError("Should not be triggered by current higher-level functions.")
         # bd, ibd = (bd[::-1], bd) if bd[1] < bd[0] else (bd, bd[::-1])
         # C = self.op.factor * C
         # return self.F[bd] @ C @ self.F[ibd]
@@ -386,7 +386,7 @@ class Env2(EnvParent):
             self.F[(n, n + 1)] = tensordot(temp, self.ket[n], axes=axes)
 
     def charges_missing(self, n):
-        raise YastnError("Should not be triggered by current higher-level functions.")  # pragma: no cover
+        raise YastnError("Should not be triggered by current higher-level functions.")
 
 
 class Env_project(Env2):

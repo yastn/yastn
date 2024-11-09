@@ -19,6 +19,9 @@ import yastn
 
 tol = 1e-10  #pylint: disable=invalid-name
 
+torch_test = pytest.mark.skipif("'torch' not in config.getoption('--backend')",
+                                reason="Uses torch.autograd.gradcheck().")
+
 
 def test_fuse_hard(config_kwargs):
     # define a rank-5 U1-symmetric tensor
@@ -358,8 +361,7 @@ def test_fuse_hard_dense(config_kwargs):
     assert yastn.norm(tra - traf) < tol
 
 
-@pytest.mark.skipif("'torch' not in config.getoption('--backend')",
-                    reason="Uses torch.autograd.gradcheck().")
+@torch_test
 def test_transpose_and_merge_backward(config_kwargs):
     import torch
     # U1
@@ -386,8 +388,7 @@ def test_transpose_and_merge_backward(config_kwargs):
     assert test
 
 
-@pytest.mark.skipif("'torch' not in config.getoption('--backend')",
-                    reason="Uses torch.autograd.gradcheck().")
+@torch_test
 def test_unmerge_backward(config_kwargs):
     import torch
     # U1

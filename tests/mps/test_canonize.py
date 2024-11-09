@@ -16,20 +16,13 @@
 import pytest
 import yastn
 import yastn.tn.mps as mps
-try:
-    from .configs import config_dense as cfg
-except ImportError:
-    from configs import config_dense as cfg
-# pytest modifies cfg to inject different backends and divices during tests
 
 
-def test_canonize(config=cfg, tol=1e-12):
+def test_canonize(config_kwargs, tol=1e-12):
     """ Initialize random mps and checks canonization. """
-    opts_config = {} if config is None else \
-                {'backend': config.backend, 'default_device': config.default_device}
-    N = 16
+    ops = yastn.operators.Spin1(sym='Z3', **config_kwargs)
 
-    ops = yastn.operators.Spin1(sym='Z3', **opts_config)
+    N = 16
     I = mps.product_mpo(ops.I(), N=N)
     for n in (0, 1, 2):
         psi = mps.random_mps(I, n=n, D_total=16)
@@ -37,7 +30,7 @@ def test_canonize(config=cfg, tol=1e-12):
     H = mps.random_mpo(I, D_total=8, dtype='complex128')
     check_canonize(H, tol)
 
-    ops = yastn.operators.Spin12(sym='dense', **opts_config)
+    ops = yastn.operators.Spin12(sym='dense', **config_kwargs)
     psi = mps.random_mps(I, D_total=16, dtype='complex128')
     check_canonize(psi, tol)
     H = mps.random_mpo(I, D_total=8)
@@ -72,13 +65,10 @@ def check_canonize(psi, tol):
         assert abs(mps.vdot(phi, phi) - 1) < tol
 
 
-def test_reverse(config=cfg, tol=1e-12):
+def test_reverse(config_kwargs, tol=1e-12):
     """ Initialize random mps and checks canonization. """
-    opts_config = {} if config is None else \
-                {'backend': config.backend, 'default_device': config.default_device}
-
     N = 8
-    ops = yastn.operators.Spin1(sym='Z3', **opts_config)
+    ops = yastn.operators.Spin1(sym='Z3', **config_kwargs)
     I = mps.product_mpo(ops.I(), N=N)
 
     psi = mps.random_mps(I, n=2, D_total=16).canonize_(to='first')
@@ -91,13 +81,11 @@ def test_reverse(config=cfg, tol=1e-12):
     psi.absorb_central_(to='last')
     assert abs(mps.vdot(phi, psi) - 1) < tol
 
-
     psi = mps.random_mpo(I, D_total=8)
     phi = psi.reverse_sites()
     phi = phi.reverse_sites()
     assert abs(mps.vdot(phi, psi) / mps.vdot(phi, phi) - 1) < tol
 
 
-if __name__ == "__main__":
-    test_canonize()
-    test_reverse()
+if __name__ == '__main__':
+    pytest.main([__file__, "-vs", "--durations=0"])

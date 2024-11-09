@@ -686,8 +686,8 @@ class EnvNTU:
 
             hp1m2_l, hp0m2_l = cut_into_hairs(cor_bl(m[1, -3], hb=hp1m3_b) @ cor_tl(m[0, -3], ht=hp0m3_t))
             hp1m1_l, hp0m1_l = cut_into_hairs(cor_bl(m[1, -2], hb=hp1m2_b, hl=hp1m2_l) @ cor_tl(m[0, -2], hl=hp0m2_l, ht=hp0m2_t))
-            hp0p2_r, hp1p2_r  = cut_into_hairs(cor_tr(m[0, 3], ht=hp0p3_t) @ cor_br(m[1, 3], hb=hp1p3_b))
-            hp0p1_r, hp1p1_r  = cut_into_hairs(cor_tr(m[0, 2], ht=hp0p2_t, hr=hp0p2_r) @ cor_br(m[1, 2], hb=hp1p2_b, hr=hp1p2_r))
+            hp0p2_r, hp1p2_r = cut_into_hairs(cor_tr(m[0, 3], ht=hp0p3_t) @ cor_br(m[1, 3], hb=hp1p3_b))
+            hp0p1_r, hp1p1_r = cut_into_hairs(cor_tr(m[0, 2], ht=hp0p2_t, hr=hp0p2_r) @ cor_br(m[1, 2], hb=hp1p2_b, hr=hp1p2_r))
 
             etl = edge_l(m[0, -1], hl=hp0m1_l)
             ctl = cor_tl(m[-1, -1], hl=hm1m1_l, ht=hm1m1_t)

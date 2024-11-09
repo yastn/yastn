@@ -147,7 +147,7 @@ def _meta_merge_to_matrix(config, struct, slices, axes, inds):
     smeta = sorted((tel, ter, tl, tr, slo.slcs[0], Do)
                 for tel, ter, tl, tr, slo, Do in zip(teff[0], teff[1], t[0], t[1], sl_old, D_old))
 
-    meta_mrg, t_new, D_new, slices_new, Dlow = [], [], [], [],  0
+    meta_mrg, t_new, D_new, slices_new, Dlow = [], [], [], [], 0
     for (tel, ter), gr in groupby(smeta, key=lambda x: x[:2]):
         ind0 = ls[0].t.index(tel)
         ind1 = ls[1].t.index(ter)

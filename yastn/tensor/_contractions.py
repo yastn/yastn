@@ -28,8 +28,8 @@ __all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon', 'einsum', 'broadca
 
 def __matmul__(a, b) -> yastn.Tensor:
     """
-    The operation ``A @ B`` uses ``@`` operator to compute tensor dot product. 
-    The operation contracts the last axis of :code:`self`, i.e., :code:`a`, 
+    The operation ``A @ B`` uses ``@`` operator to compute tensor dot product.
+    The operation contracts the last axis of :code:`self`, i.e., :code:`a`,
     with the first axis of :code:`b`.
 
     It is equivalent to :code:`yastn.tensordot(a, b, axes=(a.ndim - 1, 0))`.
@@ -231,8 +231,8 @@ def _meta_broadcast(b_struct, b_slices, a_struct, a_slices, axis):
 def apply_mask(a, *args, axes=0) -> yastn.Tensor | iterable[yastn.Tensor]:
     r"""
     Apply mask given by nonzero elements of diagonal tensor :code:`a` on specified axes of tensors in args.
-    Number of tensors in :code:`args` is not restricted. 
-    The length of the list :code:`axes` has to be mathing with :code:`args`. 
+    Number of tensors in :code:`args` is not restricted.
+    The length of the list :code:`axes` has to be mathing with :code:`args`.
 
     Legs of resulting tensor are ordered in the same way as those of tensors in :code:`args`.
     Bond dimensions of specified :code:`axes` of :code:`args` are truncated according to the mask `a`.
@@ -322,7 +322,7 @@ def vdot(a, b, conj=(1, 0)) -> number:
         struct_a, slices_a = a.struct, a.slices
         struct_b, slices_b = b.struct, b.slices
     else:
-        ia, ib, ta, Da, Dpa, inter_sla,  tb, Db, Dpb, inter_slb,  = 0, 0, [], [], [], [], [], [], [], []
+        ia, ib, ta, Da, Dpa, inter_sla,  tb, Db, Dpb, inter_slb = 0, 0, [], [], [], [], [], [], [], []
         while ia < len(a.struct.t) and ib < len(b.struct.t):
             if a.struct.t[ia] == b.struct.t[ib]:
                 ta.append(a.struct.t[ia])

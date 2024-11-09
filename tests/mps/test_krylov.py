@@ -12,31 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-""" test tdvp """
+""" extending krylov to mps """
 import pytest
-import numpy as np
-import time
 import yastn.tn.mps as mps
 import yastn
-try:
-    from .configs import config_dense as cfg
-except ImportError:
-    from configs import config_dense as cfg
-# pytest modifies cfg to inject different backends and devices during tests
 
 
-def test_krylov():
+def test_krylov(config_kwargs):
     """ krylov in mps """
     #
     N = 10  # Consider a system of 10 sites
     #
     # Load spin-1/2 operators
-    #
-    opts_config = {'backend': cfg.backend,
-                   'default_device': cfg.default_device}
-    # pytest uses config to inject various backends and devices for testing
-    #
-    ops = yastn.operators.Spin12(sym='dense', **opts_config)
+    ops = yastn.operators.Spin12(sym='dense', **config_kwargs)
     ops.random_seed(seed=0)
     #
     # Hterm-s to generate H = -sum_i X_i X_{i+1} - g * Z_i
@@ -53,6 +41,5 @@ def test_krylov():
     # yastn.expmv(lambda x: H @ x, psi, 0.1)
 
 
-
-if __name__ == "__main__":
-    test_krylov()
+if __name__ == '__main__':
+    pytest.main([__file__, "-vs", "--durations=0"])

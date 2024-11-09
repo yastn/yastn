@@ -19,6 +19,9 @@ import yastn
 
 tol = 1e-12  #pylint: disable=invalid-name
 
+torch_test = pytest.mark.skipif("'torch' not in config.getoption('--backend')",
+                                reason="Uses torch.autograd.gradcheck().")
+
 
 def tensordot_vs_numpy(a, b, axes, conj):
     outa = tuple(ii for ii in range(a.ndim) if ii not in axes[0])
@@ -224,8 +227,7 @@ def test_tensordot_exceptions(config_kwargs):
         # Outer product with diagonal tensor not supported. Use yastn.diag() first.
 
 
-@pytest.mark.skipif("'torch' not in config.getoption('--backend')",
-                    reason="Uses torch.autograd.gradcheck().")
+@torch_test
 def test_tensordot_fuse_hard_backward(config_kwargs):
     import torch
     # U1
@@ -255,8 +257,7 @@ def test_tensordot_fuse_hard_backward(config_kwargs):
     assert test
 
 
-@pytest.mark.skipif("'torch' not in config.getoption('--backend')",
-                    reason="Uses torch.autograd.gradcheck().")
+@torch_test
 def test_tensordot_backward(config_kwargs):
     import torch
     # U1

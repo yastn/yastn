@@ -38,8 +38,8 @@ def compression_(psi, target, method='1site',
 
     The outer loop sweeps over ``psi`` updating sites from the first site to the last and back.
     Convergence can be controlled based on overlap and/or Schmidt values (which is a more sensitive measure of convergence).
-    The algorithm performs at most :code:`max_sweeps`. If tolerance measures are provided, 
-    the calculation ends when the convergence criteria are satisfied, e.g., change in overlap or Schmidt values between sweeps 
+    The algorithm performs at most :code:`max_sweeps`. If tolerance measures are provided,
+    the calculation ends when the convergence criteria are satisfied, e.g., change in overlap or Schmidt values between sweeps
     is less than the provided tolerance.
 
     Works for
@@ -63,8 +63,8 @@ def compression_(psi, target, method='1site',
     target: MPS or MPO
         Defines target state. The target can be:
         * an MPS, e.g. target = MPS or [MPS],
-        * an MPO acting on MPS (target = [MPO, MPS]), 
-        * sum of MPOs acting on MPS, e.g, [[MPO, MPO], MPS], 
+        * an MPO acting on MPS (target = [MPO, MPS]),
+        * sum of MPOs acting on MPS, e.g, [[MPO, MPO], MPS],
         * or the sum of the above, e.g., [[MPS], [MPO, MPS], [[MPO, MPO], MPS]].
         If `psi` and `target` are MPO, the MPS in above list is replaced by MPO.
 
@@ -370,7 +370,7 @@ def _zipper_MpoPBC(a, psi, opts_svd, normalize) -> yastn.tn.mps.MpsMpo:
             if a.tol is not None and a.tol > 0:
                 Uc, Sc, Vc = tensor.svd_with_truncation(tmp, axes=(1, (0, 2, 3)), tol=a.tol)
                 tmp = (Sc @ Vc).transpose(axes=(1, 0, 2, 3))
-                connector  = connector @ Uc
+                connector = connector @ Uc
 
             psi.factor = psi.factor * nS
         else:  # n == first

@@ -19,6 +19,9 @@ import yastn
 
 tol = 1e-10  #pylint: disable=invalid-name
 
+torch_test = pytest.mark.skipif("'torch' not in config.getoption('--backend')",
+                                reason="Uses torch.autograd.gradcheck().")
+
 
 def svd_combine(a):
     """ decompose and contracts tensor using svd decomposition """
@@ -228,7 +231,9 @@ def test_svd_truncate(config_kwargs):
 
 
 def test_svd_truncate_lowrank(config_kwargs):
-    pytest.importorskip("fbpca")
+    if "np" in config_kwargs["backend"]:
+        pytest.importorskip("fbpca")
+
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     legs = [yastn.Leg(config_U1, s=1, t=(0, 1), D=(5, 6)),
             yastn.Leg(config_U1, s=1, t=(-1, 0), D=(5, 6)),
@@ -329,8 +334,7 @@ def test_svd_tensor_charge_division(config_kwargs):
     assert V2.struct.n == (3,)
 
 
-@pytest.mark.skipif("'torch' not in config.getoption('--backend')",
-                    reason="Uses torch.autograd.gradcheck().")
+@torch_test
 def test_svd_backward_basic(config_kwargs):
     import torch
     # U1
@@ -351,8 +355,7 @@ def test_svd_backward_basic(config_kwargs):
             assert test
 
 
-@pytest.mark.skipif("'torch' not in config.getoption('--backend')",
-                    reason="Uses torch.autograd.gradcheck().")
+@torch_test
 def test_svd_backward_truncate(config_kwargs):
     import torch
     # U1

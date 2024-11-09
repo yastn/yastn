@@ -60,7 +60,7 @@ class sym_abelian(metaclass=sym_meta):
             integer matrix with shape (k, NSYM) of fused charges;
             includes multiplication by ``new_signature``.
         """
-        raise NotImplementedError("Subclasses need to override the fuse function")  # pragma: no cover
+        raise NotImplementedError("Subclasses need to override the fuse function")
 
     @classmethod
     def add_charges(cls, *charges, s=None, new_s=1):
@@ -79,7 +79,7 @@ class sym_abelian(metaclass=sym_meta):
 
         new_s: int
             The default is 1.
-        
+
         Returns
         -------
         tuple

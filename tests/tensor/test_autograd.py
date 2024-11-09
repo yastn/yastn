@@ -18,9 +18,11 @@ import yastn
 
 tol = 1e-12  #pylint: disable=invalid-name
 
+no_numpy_test = pytest.mark.skipif("'np' in config.getoption('--backend')",
+                                   reason="numpy backend does not support autograd")
 
-@pytest.mark.skipif("'np' in config.getoption('--backend')",
-                    reason="numpy backend does not support autograd")
+
+@no_numpy_test
 def test_requires_grad(config_kwargs):
     #
     # create a random U1 symmetric tensor. By default, such tensor
@@ -41,8 +43,7 @@ def test_requires_grad(config_kwargs):
     assert c.requires_grad
 
 
-@pytest.mark.skipif("'np' in config.getoption('--backend')",
-                    reason="numpy backend does not support autograd")
+@no_numpy_test
 def test_clone_copy(config_kwargs):
     #
     # create random U1 symmetric tensor and flag it for autograd
@@ -79,8 +80,7 @@ def test_clone_copy(config_kwargs):
     assert yastn.are_independent(a, d)
 
 
-@pytest.mark.skipif("'np' in config.getoption('--backend')",
-                    reason="numpy backend does not support autograd")
+@no_numpy_test
 def test_trace_0(config_kwargs):
     config = yastn.make_config(sym='none', **config_kwargs)
     H = yastn.Tensor(config=config, s=(-1, -1, 1, 1))
@@ -116,8 +116,7 @@ def test_trace_0(config_kwargs):
         assert pytest.approx(v.grad()[()][t].item(), rel=tol) == g[()][t].item()
 
 
-@pytest.mark.skipif("'np' in config.getoption('--backend')",
-                    reason="numpy backend does not support autograd")
+@no_numpy_test
 def test_trace_1(config_kwargs):
     config = yastn.make_config(sym='U1', **config_kwargs)
     H = yastn.Tensor(config=config, s=(-1, -1, 1, 1))

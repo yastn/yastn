@@ -17,14 +17,9 @@ import pytest
 import numpy as np
 import yastn
 import yastn.tn.mps as mps
-try:
-    from .configs import config_dense as cfg
-except ImportError:
-    from configs import config_dense as cfg
-# pytest modifies cfg to inject different backends and devices during tests
 
 
-def build_aklt_state_manually(N=5, lvec=(1, 0), rvec=(0, 1), config=None):
+def build_aklt_state_manually(N=5, lvec=(1, 0), rvec=(0, 1), config_kwargs=None):
     """
     Initialize MPS tensors by hand. Example for Spin-1 AKLT state of N sites.
 
@@ -37,11 +32,7 @@ def build_aklt_state_manually(N=5, lvec=(1, 0), rvec=(0, 1), config=None):
     #                |
     #           dim(Spin-1)=3
     #
-    opts_config = {} if config is None else \
-                  {'backend': config.backend,
-                   'default_device': config.default_device}
-    # pytest uses config to inject various backends and devices for testing
-    config = yastn.make_config(**opts_config)
+    config = yastn.make_config(sym='none', **config_kwargs)
     A = yastn.Tensor(config, s=(-1, 1, 1))
     s13, s23 = np.sqrt(1. / 3), np.sqrt(2. / 3)
     A.set_block(Ds=(2, 3, 2), val=[[[0, s23], [-s13, 0], [0, 0]],
@@ -72,17 +63,13 @@ def build_aklt_state_manually(N=5, lvec=(1, 0), rvec=(0, 1), config=None):
     return psi
 
 
-@pytest.mark.parametrize('kwargs', [{'config': cfg}])
-def test_measure_mps_aklt(kwargs):
-    measure_mps_aklt(**kwargs, tol=1e-12)
-
-def measure_mps_aklt(config=None, tol=1e-12):
+def test_measure_mps_aklt(config_kwargs, tol=1e-12):
     """ Test measuring MPS expectation values in AKLT state"""
     #
     # AKLT state with open boundary conditions and N = 31 sites.
     #
     N = 31
-    psi = build_aklt_state_manually(N=N, lvec=(1, 0), rvec=(1, 0), config=config)
+    psi = build_aklt_state_manually(N=N, lvec=(1, 0), rvec=(1, 0), config_kwargs=config_kwargs)
     #
     # We verify transfer matrix in the middle of AKLT state
     # to specify the effect of lvec and rvec
@@ -107,11 +94,7 @@ def measure_mps_aklt(config=None, tol=1e-12):
     #
     # Initialize dense Spin1 operators for expectation values calculations
     #
-    opts_config = {} if config is None else \
-                  {'backend': config.backend,
-                   'default_device': config.default_device}
-    # pytest uses config to inject various backends and devices for testing
-    ops = yastn.operators.Spin1(sym='dense', **opts_config)
+    ops = yastn.operators.Spin1(sym='dense', **config_kwargs)
     #
     # Measure Sz at the first and last sites
     #
@@ -154,21 +137,12 @@ def measure_mps_aklt(config=None, tol=1e-12):
     assert abs(Estring + 4. / 9) < tol
 
 
-@pytest.mark.parametrize('kwargs', [{'sym': 'dense', 'config': cfg},
-                                    {'sym': 'Z3', 'config': cfg},
-                                    {'sym': 'U1', 'config': cfg}])
-def test_mps_spectrum_ghz(kwargs):
-    mps_spectrum_ghz(**kwargs)
-
-def mps_spectrum_ghz(sym='dense', config=None, tol=1e-12):
+@pytest.mark.parametrize('sym', ['dense', 'Z3', 'U1'])
+def test_mps_spectrum_ghz(config_kwargs, sym, tol=1e-12):
     """ Test measuring Schmidt spectrum and entropy of mps. """
     N = 8
     # consider 3-dimensional local Hilbert space
-    opts_config = {} if config is None else \
-                    {'backend': config.backend,
-                    'default_device': config.default_device}
-    # pytest uses config to inject various backends and devices for testing
-    ops = yastn.operators.Spin1(sym=sym, **opts_config)
+    ops = yastn.operators.Spin1(sym=sym, **config_kwargs)
     #
     # take 3 orthonormal product states
     #
@@ -220,15 +194,11 @@ def mps_spectrum_ghz(sym='dense', config=None, tol=1e-12):
     # similar thing can be done for MPO
 
 
-@pytest.mark.parametrize("sym, config", [('dense', cfg), ('Z3', cfg), ('U1', cfg)])
-def test_mpo_spectrum(sym, config, tol=1e-12):
+@pytest.mark.parametrize('sym', ['dense', 'Z3', 'U1'])
+def test_mpo_spectrum(config_kwargs, sym, tol=1e-12):
     """ Test measuring Schmidt spectrum and entropy of mps. """
     N = 8
-    opts_config = {} if config is None else \
-                    {'backend': config.backend,
-                    'default_device': config.default_device}
-    # pytest uses config to inject various backends and devices for testing
-    ops = yastn.operators.Spin1(sym=sym, **opts_config)
+    ops = yastn.operators.Spin1(sym=sym, **config_kwargs)
     #
     # take 3 orthogonal operator-product states
     #
@@ -274,23 +244,20 @@ def test_mpo_spectrum(sym, config, tol=1e-12):
     assert abs(entropies[0]) < tol and abs(entropies[-1]) < tol
 
 
-@pytest.mark.parametrize("sym, config", [('Z2', cfg), ('U1', cfg)])
-def test_measure_fermions_and_unbalanced(sym, config, tol=1e-12):
+@pytest.mark.parametrize("sym", ['Z2', 'U1'])
+def test_measure_fermions_and_unbalanced(config_kwargs, sym, tol=1e-12):
     """ Initialize small MPS and measure fermionic correlators. Additionally text measure_2site syntax. """
-    opts_config = {} if config is None else \
-                {'backend': config.backend,
-                'default_device': config.default_device}
 
     if sym == 'U1' or sym == 'Z2':
-        ops = yastn.operators.SpinlessFermions(sym=sym, **opts_config)
+        ops = yastn.operators.SpinlessFermions(sym=sym, **config_kwargs)
         v0, v1 = ops.vec_n(0), ops.vec_n(1)
     elif sym == 'U1xU1':
         # here two spicies commute; we can have particles in "d" and still match spinless case
-        ops = yastn.operators.SpinfulFermions(sym=sym, **opts_config)
+        ops = yastn.operators.SpinfulFermions(sym=sym, **config_kwargs)
         v0, v1 = ops.vec_n((0, 1)), ops.vec_n((1, 1))
     elif sym == 'U1xU1xZ2':
         # here two spicies anti-commute; no particles in "d" to match spinless case
-        ops = yastn.operators.SpinfulFermions(sym=sym, **opts_config)
+        ops = yastn.operators.SpinfulFermions(sym=sym, **config_kwargs)
         v0, v1 = ops.vec_n((0, 0)), ops.vec_n((1, 0))
     I = mps.product_mpo(ops.I(), 4)
 
@@ -361,9 +328,8 @@ def test_measure_fermions_and_unbalanced(sym, config, tol=1e-12):
         assert abs(ecpcp31[k] + psi1_c_c_psi3[k].conjugate()) < tol
 
 
-def test_measure_syntax_raises():
-    opts_config = {'backend': cfg.backend, 'default_device': cfg.default_device}
-    ops = yastn.operators.SpinlessFermions(sym='U1', **opts_config)
+def test_measure_syntax_raises(config_kwargs):
+    ops = yastn.operators.SpinlessFermions(sym='U1', **config_kwargs)
     v0, v1 = ops.vec_n(0), ops.vec_n(1)
     v1101 = mps.product_mps([v1, v1, v0, v1])
     v0111 = mps.product_mps([v0, v1, v1, v1])
@@ -425,11 +391,15 @@ def test_measure_syntax_raises():
         out = mps.measure_2site(psi3, ops.cp(), {1: ops.n(), 2: ops.c()}, psi3)
         # In mps.measure_2site, all operators in P should have the same charge.
 
-if __name__ == "__main__":
-    measure_mps_aklt()
-    for sym in ['dense', 'Z3', 'U1']:
-        mps_spectrum_ghz(sym=sym)
-        test_mpo_spectrum(sym=sym, config=cfg)
-    for sym in ['Z2', 'U1', 'U1xU1', 'U1xU1xZ2']:
-        test_measure_fermions_and_unbalanced(sym=sym, config=cfg)
-    test_measure_syntax_raises()
+
+if __name__ == '__main__':
+    pytest.main([__file__, "-vs", "--durations=0"])
+
+# if __name__ == "__main__":
+#     measure_mps_aklt()
+#     for sym in ['dense', 'Z3', 'U1']:
+#         mps_spectrum_ghz(sym=sym)
+#         test_mpo_spectrum(sym=sym, config=cfg)
+#     for sym in ['Z2', 'U1', 'U1xU1', 'U1xU1xZ2']:
+#         test_measure_fermions_and_unbalanced(sym=sym, config=cfg)
+#     test_measure_syntax_raises()

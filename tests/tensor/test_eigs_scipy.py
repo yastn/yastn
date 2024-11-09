@@ -20,9 +20,11 @@ import yastn
 
 tol = 1e-8  #pylint: disable=invalid-name
 
+numpy_test = pytest.mark.skipif("'np' not in config.getoption('--backend')",
+                                reason="using scipy procedures for raw data requires np")
 
-@pytest.mark.skipif("'np' not in config.getoption('--backend')",
-                    reason="using scipy procedures for raw data requires np")
+
+@numpy_test
 def test_eigs_simple(config_kwargs):
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     legs = [yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 2)),
@@ -80,8 +82,7 @@ def test_eigs_simple(config_kwargs):
     print("vb -> ", vb.pop())
 
 
-@pytest.mark.skipif("'np' not in config.getoption('--backend')",
-                    reason="using scipy procedures for raw data requires np")
+@numpy_test
 def test_eigs_mismatches(config_kwargs):
     #
     # here define a problem in a way that there are some mismatches in legs to be resolved
