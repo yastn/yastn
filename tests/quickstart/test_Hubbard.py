@@ -51,7 +51,8 @@ metts_values = {("energy", 2.0): (-2.8040, 0.0026),
 #
 #
 @pytest.mark.skipif("not config.getoption('quickstarts')")
-def test_quickstart_hubbard(D=12, betas=[0.5]):
+@pytest.mark.parametrize('D, betas', [[12, [0.5]]])
+def test_quickstart_hubbard(config_kwargs, D, betas):
 
     import yastn
     import yastn.tn.fpeps as fpeps
@@ -61,7 +62,7 @@ def test_quickstart_hubbard(D=12, betas=[0.5]):
     mu = 0
     U = 10
 
-    ops = yastn.operators.SpinfulFermions(sym='U1xU1')
+    ops = yastn.operators.SpinfulFermions(sym='U1xU1', **config_kwargs)
     I = ops.I()
     c_up, cdag_up, n_up = ops.c('u'), ops.cp('u'), ops.n('u')
     c_dn, cdag_dn, n_dn = ops.c('d'), ops.cp('d'), ops.n('d')
@@ -151,4 +152,4 @@ def test_quickstart_hubbard(D=12, betas=[0.5]):
 
 
 if __name__ == '__main__':
-    test_quickstart_hubbard(D=12, betas=[0.5])
+    pytest.main([__file__, "-vs", "--durations=0", "--quickstarts"])

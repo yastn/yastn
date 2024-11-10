@@ -310,7 +310,7 @@ def test_syntax_noDocs(config_kwargs):
     # initialization
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     # with config that is not imported as usually
-    if config_U1.backend.BACKEND_ID == 'numpy':
+    if config_U1.backend.BACKEND_ID == 'np':
         cfg_U1 = yastn.make_config(sym=yastn.sym.sym_U1, backend=yastn.backend.backend_np, default_device=config_U1.default_device)
     elif config_U1.backend.BACKEND_ID == 'torch':
         cfg_U1 = yastn.make_config(sym=yastn.sym.sym_U1, backend=yastn.backend.backend_torch, default_device=config_U1.default_device)

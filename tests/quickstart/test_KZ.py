@@ -16,7 +16,7 @@
 import pytest
 
 @pytest.mark.skipif("not config.getoption('quickstarts')")
-def test_quickstart_KZ():
+def test_quickstart_KZ(config_kwargs):
     """ test quickstart Kibble-Zurek example"""
 
     import math
@@ -46,7 +46,7 @@ def test_quickstart_KZ():
     dt = ta / steps
     #
     # Load operators. Problem has Z2 symmetry, which we impose.
-    ops = yastn.operators.Spin12(sym='Z2')
+    ops = yastn.operators.Spin12(sym='Z2', **config_kwargs)
     #
     print("PEPS simulations")
     #
@@ -185,8 +185,8 @@ def test_quickstart_KZ():
     ax[1].set_ylim([-1.05, 1.05])
     fig.suptitle(f"{Lx}x{Ly} lattice; annealing_time = {ta:0.1f}")
     # fig.show()
-    fig.savefig(f"corr_{Lx}x{Ly}_{ta=}.png")
+    # fig.savefig(f"corr_{Lx}x{Ly}_{ta=}.png")
 
 
 if __name__ == '__main__':
-    test_quickstart_KZ()
+    pytest.main([__file__, "-vs", "--durations=0", "--quickstarts"])

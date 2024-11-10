@@ -17,18 +17,12 @@ import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
 
-try:
-    from .configs import config as cfg
-    # cfg is used by pytest to inject different backends and divices
-except ImportError:
-    from configs import config as cfg
+tol = 1e-12  #pylint: disable=invalid-name
 
 
-tol = 1e-12
-
-def test_propuct_peps():
+def test_propuct_peps(config_kwargs):
     """ Generate a few lattices veryfing expected output of some functions. """
-    ops = yastn.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
+    ops = yastn.operators.SpinlessFermions(sym='U1', **config_kwargs)
 
     geometry = fpeps.CheckerboardLattice()
     v0 = ops.vec_n(val=0)
@@ -61,16 +55,17 @@ def test_propuct_peps():
         # Geometry should be an instance of SquareLattice or CheckerboardLattice
 
 
-def test_save_load_copy():
+def test_save_load_copy(config_kwargs):
     geometries = [fpeps.SquareLattice(dims=(3, 2), boundary='obc'),
                   fpeps.CheckerboardLattice()]
 
+    config = yastn.make_config(sym='none', **config_kwargs)
     for geometry in geometries:
-        vecs = {site: yastn.rand(cfg, s=(1,), D=(3,)) for site in geometry.sites()}
+        vecs = {site: yastn.rand(config, s=(1,), D=(3,)) for site in geometry.sites()}
         psi = fpeps.product_peps(geometry, vecs)
 
         d = psi.save_to_dict()
-        psi2 = fpeps.load_from_dict(cfg, d)
+        psi2 = fpeps.load_from_dict(config, d)
         psi3 = psi.copy()
         psi4 = psi.clone()
 
@@ -80,5 +75,4 @@ def test_save_load_copy():
 
 
 if __name__ == '__main__':
-    test_propuct_peps()
-    test_save_load_copy()
+    pytest.main([__file__, "-vs", "--durations=0"])

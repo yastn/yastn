@@ -17,24 +17,18 @@ import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
 import yastn.tn.mps as mps
-try:
-    from .configs import config as cfg
-    # cfg is used by pytest to inject different backends and divices
-except ImportError:
-    from configs import config as cfg
 
-
-tol = 1e-12
+tol = 1e-12  #pylint: disable=invalid-name
 
 def mean(xs):
     return sum(xs) / len(xs)
 
 
 @pytest.mark.parametrize("boundary", ["obc", "cylinder"])
-def test_mpsboundary_measure(boundary):
+def test_mpsboundary_measure(config_kwargs, boundary):
     """ Initialize a product PEPS and perform a set of measurment. """
 
-    ops = yastn.operators.Spin1(sym='Z3', backend=cfg.backend, default_device=cfg.default_device)
+    ops = yastn.operators.Spin1(sym='Z3', **config_kwargs)
 
     # initialized PEPS in a product state
     geometry = fpeps.SquareLattice(dims=(4, 3), boundary=boundary)
@@ -89,7 +83,7 @@ def test_mpsboundary_measure(boundary):
         # trial='some' not supported.
 
 
-def test_finite_spinless_boundary_mps_ctmrg():
+def test_finite_spinless_boundary_mps_ctmrg(config_kwargs):
     """ compare boundary Mps with CTM"""
     boundary = 'obc'
     Nx, Ny = 3, 2
@@ -102,7 +96,7 @@ def test_finite_spinless_boundary_mps_ctmrg():
 
     D = 5
 
-    ops = yastn.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
+    ops = yastn.operators.SpinlessFermions(sym='U1', **config_kwargs)
     I, c, cdag = ops.I(), ops.c(), ops.cp()
 
     g_hop = fpeps.gates.gate_nn_hopping(t, dbeta / 2, I, c, cdag)  # nn gate for 2D fermi sea
@@ -160,8 +154,5 @@ def test_finite_spinless_boundary_mps_ctmrg():
         assert abs(mps.vdot(vB0, vB1) / (vB0.norm() * vB1.norm()) - 1) < 1e-7
 
 
-
 if __name__ == '__main__':
-    test_mpsboundary_measure(boundary='obc')
-    test_mpsboundary_measure(boundary='cylinder')
-    test_finite_spinless_boundary_mps_ctmrg()
+    pytest.main([__file__, "-vs", "--durations=0"])

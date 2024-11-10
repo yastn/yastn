@@ -1,17 +1,10 @@
-import numpy as np
 import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
 import logging
 
-try:
-    from .configs import config as cfg
-    # cfg is used by pytest to inject different backends and divices
-except ImportError:
-    from configs import config as cfg
 
-
-def purification_tJ(mu):
+def purification_tJ(config_kwargs, mu):
     D = 8
     chi = 16
     sym = "U1xU1xZ2"
@@ -24,7 +17,7 @@ def purification_tJ(mu):
 
     tot_sites = int(2 * 3)
     net = fpeps.SquareLattice((2, 3), "obc")
-    opt = yastn.operators.SpinfulFermions_tJ(sym = sym, backend=cfg.backend, default_device=cfg.default_device)
+    opt = yastn.operators.SpinfulFermions_tJ(sym = sym, **config_kwargs)
     I = opt.I()
     c_up, c_dn = opt.c(spin='u'), opt.c(spin='d')
     cdag_up, cdag_dn = opt.cp(spin='u'), opt.cp(spin='d')
@@ -104,8 +97,8 @@ def purification_tJ(mu):
     return energy, density, cdagc_up, cdagc_dn, SpSm, SzSz, nn, nu, nd
 
 
-@pytest.mark.parametrize('mu', [2.0])
-def test_purification_tJ(mu):
+@pytest.mark.parametrize('mu', [0.0, 2.0, 4.0])
+def test_purification_tJ(config_kwargs, mu):
     #
     # key are mu's
     energy_ED   = {4.0: -2.944895, 2.0: -1.476636, 0.0: -0.092255}
@@ -137,7 +130,7 @@ def test_purification_tJ(mu):
     #
     print(f"Calculations for {mu=}")
     #
-    energy, density, cdagc_up, cdagc_dn, SpSm, SzSz, nn, n_up, n_dn = purification_tJ(mu)
+    energy, density, cdagc_up, cdagc_dn, SpSm, SzSz, nn, n_up, n_dn = purification_tJ(config_kwargs, mu)
     assert abs(energy - energy_ED[mu]) < 5e-4
 
     for bond in [((0, 0), (0, 1)), ((0, 1), (1, 1)), ((0, 0), (1, 0))]:
@@ -153,6 +146,5 @@ def test_purification_tJ(mu):
         assert abs(n_dn[site] - n_ED[mu][site]) / n_ED[mu][site] < 1e-4
 
 
-if __name__== '__main__':
-    for mu in [0.0, 2.0, 4.0]:
-        test_purification_tJ(mu)
+if __name__ == '__main__':
+    pytest.main([__file__, "-vs", "--durations=0"])

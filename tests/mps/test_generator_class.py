@@ -18,13 +18,9 @@ import yastn
 import yastn.tn.mps as mps
 
 from yastn.tn.mps._latex2term import splitt, interpret, string2list, latex2term, single_term
-try:
-    from .test_build_mpo_manually import build_mpo_nn_hopping_manually
-    from .test_generate_mpo import build_mpo_hopping_Hterm
-except ImportError:
-    from test_build_mpo_manually import build_mpo_nn_hopping_manually
-    from test_generate_mpo import build_mpo_hopping_Hterm
-# pytest modifies cfg to inject different backends and devices during tests
+
+from tests.mps.test_build_mpo_manually import build_mpo_nn_hopping_manually
+from tests.mps.test_generate_mpo import build_mpo_hopping_Hterm
 
 
 def mpo_nn_hopping_latex(N, t, mu, sym, config_kwargs):

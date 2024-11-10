@@ -18,6 +18,7 @@ import yastn
 import yastn.tn.fpeps as fpeps
 from yastn.tn.fpeps import Site, Bond
 
+
 def test_CheckerboardLattice(net=None):
     """ Generate a few lattices and verify the expected output of some functions. """
 
@@ -61,7 +62,7 @@ def test_CheckerboardLattice(net=None):
     assert all(net.f_ordered(*bond) for bond in net.bonds())
 
 
-def test_SquareLattice():
+def test_SquareLattice(config_kwargs):
     net = fpeps.SquareLattice(dims=(3, 2), boundary='obc')
 
     assert net.dims == (3, 2)
@@ -184,7 +185,7 @@ def test_SquareLattice():
         #  boundary='some' not recognized; should be 'obc', 'infinite', or 'cylinder'
 
 
-def test_RectangularUnitCell_1x1():
+def test_RectangularUnitCell_1x1(config_kwargs):
     g = fpeps.RectangularUnitcell(pattern=[[0,],])
 
     assert g.dims == (1,1)
@@ -200,7 +201,7 @@ def test_RectangularUnitCell_1x1():
     assert all(g.f_ordered(*bond) for bond in g.bonds())
 
 
-def test_RectangularUnitCell_2x2_bipartite():
+def test_RectangularUnitCell_2x2_bipartite(config_kwargs):
     for pattern in ([[0, 1], [1, 0]],
                     {(0, 0): 0, (1, 1): 0, (0, 1): 1, (1, 0): 1}):
 
@@ -215,7 +216,7 @@ def test_RectangularUnitCell_2x2_bipartite():
         assert all(g.sites()[g.site2index(s)] == (0, 1) for s in [(1, 0), (0, 1), (2, 5), (1, 2), (-1, 0)])
 
 
-def test_RectangularUnitCell_3x3_Q_1o3_1o3():
+def test_RectangularUnitCell_3x3_Q_1o3_1o3(config_kwargs):
     g = fpeps.RectangularUnitcell(pattern=[[0,1,2],[1,2,0],[2,0,1]])
 
     assert g.dims == (3, 3)
@@ -233,7 +234,7 @@ def test_RectangularUnitCell_3x3_Q_1o3_1o3():
     assert all(g.sites()[g.site2index(s)] == (0, 2) for s in [(0, 2), (0, 5), (0, -1), (1, 1), (-2, 4)])
 
 
-def test_Peps_get_set():
+def test_Peps_get_set(config_kwargs):
     """ Setitem and getitem in peps allows to acces individual tensors. """
     net = fpeps.CheckerboardLattice()
     #
@@ -271,7 +272,7 @@ def test_Peps_get_set():
     assert psi[(0, 1)] is None
 
 
-def test_Peps_inheritance():
+def test_Peps_inheritance(config_kwargs):
     net = fpeps.SquareLattice(dims=(3, 2), boundary='infinite')
     psi = fpeps.Peps(net)
 
@@ -286,10 +287,4 @@ def test_Peps_inheritance():
 
 
 if __name__ == '__main__':
-    test_CheckerboardLattice()
-    test_SquareLattice()
-    test_Peps_get_set()
-    test_Peps_inheritance()
-    test_RectangularUnitCell_1x1()
-    test_RectangularUnitCell_2x2_bipartite()
-    test_RectangularUnitCell_3x3_Q_1o3_1o3()
+    pytest.main([__file__, "-vs", "--durations=0"])

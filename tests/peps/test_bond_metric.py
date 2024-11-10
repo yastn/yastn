@@ -17,14 +17,8 @@ import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
 
-try:
-    from .configs import config as cfg
-    # cfg is used by pytest to inject different backends and divices
-except ImportError:
-    from configs import config as cfg
 
-
-def test_spinless_infinite_approx():
+def test_spinless_infinite_approx(config_kwargs):
     """ Simulate purification of free fermions in an infinite system.s """
     geometry = fpeps.SquareLattice(dims=(2, 3), boundary='infinite')
 
@@ -32,7 +26,7 @@ def test_spinless_infinite_approx():
     D = 4
     dbeta = 0.1
 
-    ops = yastn.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
+    ops = yastn.operators.SpinlessFermions(sym='U1', **config_kwargs)
     I, c, cdag = ops.I(), ops.c(), ops.cp()
     g_hop = fpeps.gates.gate_nn_hopping(t, dbeta / 2, I, c, cdag)  # nn gate for 2D fermi sea
     gates = fpeps.gates.distribute(geometry, gates_nn=g_hop)
@@ -64,7 +58,6 @@ def test_spinless_infinite_approx():
     for _ in range(4):
         envs['FU'].update_(opts_svd=opts_svd)  # single CMTRG sweep
 
-
     for s0, s1, dirn in [[(0, 0), (0, 1), 'h'], [(0, 1), (1, 1), 'v']]:
         QA, QB = psi[s0], psi[s1]
         Gs = {k: env.bond_metric(QA, QB, s0, s1, dirn) for k, env in envs.items()}
@@ -92,4 +85,4 @@ def test_spinless_infinite_approx():
 
 
 if __name__ == '__main__':
-    test_spinless_infinite_approx()
+    pytest.main([__file__, "-vs", "--durations=0"])

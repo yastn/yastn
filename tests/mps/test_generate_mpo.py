@@ -18,6 +18,7 @@ import yastn
 import yastn.tn.mps as mps
 import time
 
+
 def build_mpo_hopping_Hterm(J, sym, config_kwargs):
     """
     Fermionic hopping Hamiltonian on N sites with hoppings at arbitrary range.

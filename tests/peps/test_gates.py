@@ -18,22 +18,14 @@ import yastn
 import yastn.tn.fpeps as fpeps
 from yastn.tn.fpeps._gates_auxiliary import fkron, gate_product_operator
 
-try:
-    from .configs import config as cfg
-    # cfg is used by pytest to inject different backends and divices
-except ImportError:
-    from configs import config as cfg
+tol = 1e-12  #pylint: disable=invalid-name
 
 
-tol = 1e-12
-
-def test_fkron():
-    kwargs = {'backend': cfg.backend, 'default_device': cfg.default_device}
-
+def test_fkron(config_kwargs):
     for sym in ['Z2', 'U1', 'U1xU1xZ2', 'U1xU1']:
         for opsclass in [yastn.operators.SpinfulFermions,
                          yastn.operators.SpinfulFermions_tJ]:
-            ops = opsclass(sym=sym, **kwargs)
+            ops = opsclass(sym=sym, **config_kwargs)
 
             Sm1Sp0 = fkron(ops.Sp(), ops.Sm(), sites=(0, 1))  # Sp_0 Sm_1
             Sp0Sm1 = fkron(ops.Sm(), ops.Sp(), sites=(1, 0))  # Sm_1 Sp_0
@@ -45,7 +37,7 @@ def test_fkron():
                 assert yastn.norm(cp0c1 + c1cp0) < tol  # {cp_0, c_1} = 0
 
     for sym, sgn in zip(['Z2', 'U1', 'U1xU1xZ2', 'U1xU1'], [-1, -1, -1, 1]):   # for U1xU1, cu and cd commute
-        ops = yastn.operators.SpinfulFermions(sym=sym, **kwargs)
+        ops = yastn.operators.SpinfulFermions(sym=sym, **config_kwargs)
         v0110 = yastn.ncon([ops.vec_n((0, 1)), ops.vec_n((1, 0))], [[-0], [-1]])
         v1100 = yastn.ncon([ops.vec_n((1, 1)), ops.vec_n((0, 0))], [[-0], [-1]])
         v0011 = yastn.ncon([ops.vec_n((0, 0)), ops.vec_n((1, 1))], [[-0], [-1]])
@@ -92,16 +84,14 @@ def test_fkron():
             assert abs(yastn.vdot(phi, psi) / yastn.vdot(psi, psi) - 1 / 3) < tol
 
 
-def test_hopping_gate():
-    kwargs = {'backend': cfg.backend, 'default_device': cfg.default_device}
-
-    ops = yastn.operators.SpinlessFermions(sym='U1', **kwargs)
+def test_hopping_gate(config_kwargs):
+    ops = yastn.operators.SpinlessFermions(sym='U1', **config_kwargs)
     check_hopping_gate(ops, t=0.5, ds=0.02)
 
-    ops = yastn.operators.SpinfulFermions(sym='U1xU1', **kwargs)
+    ops = yastn.operators.SpinfulFermions(sym='U1xU1', **config_kwargs)
     check_hopping_gate(ops, t=2, ds=0.005)
 
-    ops = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', **kwargs)
+    ops = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', **config_kwargs)
     check_hopping_gate(ops, t=1, ds=0.1)
 
 
@@ -128,25 +118,23 @@ def check_hopping_gate(ops, t, ds):
 
     assert ((O - O2).norm()) < (ds * t) ** 5
 
-# def test_heisenberg_gates():
-#     kwargs = {'backend': cfg.backend, 'default_device': cfg.default_device}
-
-#     ops = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', **kwargs)
+# def test_heisenberg_gates(config_kwargs):
+#     ops = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', **config_kwargs)
 #     check_heisenberg_gates(ops, Jz=2, J=1, Jn = 0.5, ds=0.005)
 
-#     ops = yastn.operators.SpinfulFermions_tJ(sym='U1xU1xZ2', **kwargs)
+#     ops = yastn.operators.SpinfulFermions_tJ(sym='U1xU1xZ2', **config_kwargs)
 #     check_heisenberg_gates(ops, Jz=1, J=1, Jn = 1, ds=0.005)
 
-#     ops = yastn.operators.SpinfulFermions(sym='Z2', **kwargs)
+#     ops = yastn.operators.SpinfulFermions(sym='Z2', **config_kwargs)
 #     check_heisenberg_gates(ops, Jz=2, J=1, Jn = 0.5, ds=0.005)
 
-#     ops = yastn.operators.SpinfulFermions_tJ(sym='Z2', **kwargs)
+#     ops = yastn.operators.SpinfulFermions_tJ(sym='Z2', **config_kwargs)
 #     check_heisenberg_gates(ops, Jz=1, J=1, Jn = 1, ds=0.005)
 
-#     ops = yastn.operators.SpinfulFermions(sym='U1xU1', **kwargs)
+#     ops = yastn.operators.SpinfulFermions(sym='U1xU1', **config_kwargs)
 #     check_heisenberg_gates(ops, Jz=1, J=2, Jn = 0.5, ds=0.005)
 
-#     ops = yastn.operators.SpinfulFermions_tJ(sym='U1xU1', **kwargs)
+#     ops = yastn.operators.SpinfulFermions_tJ(sym='U1xU1', **config_kwargs)
 #     check_heisenberg_gates(ops, Jz=1, J=1, Jn = 1, ds=0.005)
 
 # def check_heisenberg_gates(ops, Jz, J, Jn, ds):
@@ -175,9 +163,8 @@ def check_hopping_gate(ops, t, ds):
 
 
 
-def test_gate_raises():
-    kwargs = {'backend': cfg.backend, 'default_device': cfg.default_device}
-    ops = yastn.operators.SpinlessFermions(sym='U1', **kwargs)
+def test_gate_raises(config_kwargs):
+    ops = yastn.operators.SpinlessFermions(sym='U1', **config_kwargs)
 
     c, cdag = ops.c(), ops.cp()
 
@@ -186,9 +173,5 @@ def test_gate_raises():
         # sites should be equal to (0, 1) or (1, 0)
 
 
-
-
 if __name__ == '__main__':
-    test_hopping_gate()
-    test_gate_raises()
-    test_fkron()
+    pytest.main([__file__, "-vs", "--durations=0"])

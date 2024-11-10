@@ -17,11 +17,8 @@ import numpy as np
 import pytest
 import yastn
 import yastn.tn.mps as mps
-try:
-    from .test_generate_mpo import build_mpo_hopping_Hterm
-except ImportError:
-    from test_generate_mpo import build_mpo_hopping_Hterm
-# pytest modifies cfg to inject different backends and devices during tests
+
+from tests.mps.test_generate_mpo import build_mpo_hopping_Hterm
 
 
 @pytest.mark.parametrize('sym', ['U1', 'Z2'])
