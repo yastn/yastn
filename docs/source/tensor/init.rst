@@ -82,4 +82,3 @@ See examples: :ref:`examples/tensor/init:serialization of symmetric tensors`.
 .. autofunction:: yastn.load_from_hdf5
 
 .. autofunction:: yastn.decompress_from_1d
-

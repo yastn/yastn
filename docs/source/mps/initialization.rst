@@ -21,7 +21,7 @@ Setting MPS/MPO tensors by hand
 
 An empty MPS/MPO can be filled with tensors by setting them one by one.
 
-.. code-block::
+.. code-block:: python
 
     import yastn
     import yastn.tn.mps as mps

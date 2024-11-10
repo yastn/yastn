@@ -48,7 +48,7 @@ Following example show an addition of two MPSs:
     import yastn.tn.mps as mps
 
 .. literalinclude:: /../../tests/mps/test_algebra.py
-        :pyobject: addition_example
+        :pyobject: test_addition_example
 
 
 Products of MPO and MPS
@@ -92,6 +92,6 @@ Multiplication with truncation
 ------------------------------
 
 A fast procedure to multiply MPO by MPO/MPS while performing truncation is a `zipper`.
-The result can be subsequently fine-tuned using :ref:`variational optimization<mps/algorithms_overlap:Variational overlap maximalization>`.
+The result can be subsequently fine-tuned using :ref:`variational optimization<mps/algorithms_overlap:Variational overlap maximization>`.
 
 .. autofunction:: yastn.tn.mps.zipper

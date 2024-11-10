@@ -10,7 +10,7 @@ we need the hermitian operator (typically a Hamiltonian) written as MPO and an i
 Here is a simple example of DMRG used to obtain the ground state of quadratic Hamiltonian:
 
 .. literalinclude:: /../../tests/mps/test_dmrg.py
-        :pyobject: dmrg_XX_model_dense
+        :pyobject: test_dmrg_XX_model_dense
 
 .. literalinclude:: /../../tests/mps/test_dmrg.py
         :pyobject: run_dmrg
@@ -19,10 +19,10 @@ Here is a simple example of DMRG used to obtain the ground state of quadratic Ha
 The same can be done for other symmetries:
 
 .. literalinclude:: /../../tests/mps/test_dmrg.py
-        :pyobject: dmrg_XX_model_Z2
+        :pyobject: test_dmrg_XX_model_Z2
 
 .. literalinclude:: /../../tests/mps/test_dmrg.py
-        :pyobject: dmrg_XX_model_U1
+        :pyobject: test_dmrg_XX_model_U1
 
 See as well the examples for :ref:`examples/mps/algebra:Multiplication`,
 which contains DMRG and variational MPS compression.
@@ -35,7 +35,7 @@ Sudden quench in a free-fermionic model
 """""""""""""""""""""""""""""""""""""""
 
 .. literalinclude:: /../../tests/mps/test_tdvp.py
-        :pyobject: tdvp_sudden_quench
+        :pyobject: test_tdvp_sudden_quench
 
 .. literalinclude:: /../../tests/mps/test_tdvp.py
         :pyobject: correlation_matrix_from_mps
@@ -51,4 +51,4 @@ Slow quench across a quantum critical point in a transverse Ising chain
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
 .. literalinclude:: /../../tests/mps/test_tdvp.py
-        :pyobject: tdvp_KZ_quench
+        :pyobject: test_tdvp_KZ_quench

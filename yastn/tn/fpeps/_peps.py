@@ -24,7 +24,7 @@ from ._geometry import SquareLattice, CheckerboardLattice, RectangularUnitcell
 class Peps():
 
     def __init__(self, geometry=None, tensors : Union[None, Sequence[Sequence[Tensor]], dict[tuple[int,int],Tensor] ]= None):
-        """
+        r"""
         A PEPS instance on a specified lattice can be initialized as empty or with optional tensors already assigned to each lattice site.
 
             i), ii)
@@ -34,12 +34,12 @@ class Peps():
 
         Empty PEPS has no tensors assigned.
         Supports :code:`[]` notation to get/set individual tensors.
-        PEPS tensors can be either rank-5 (including physical legs) or 
-        rank-4 (without physical legs). Leg enumeration follows the 
-        order: top, left, bottom, right, and physical leg 
+        PEPS tensors can be either rank-5 (including physical legs) or
+        rank-4 (without physical legs). Leg enumeration follows the
+        order: top, left, bottom, right, and physical leg
 
-        Example 1
-        ---------
+        Example
+        -------
 
         ::
 
@@ -69,11 +69,11 @@ class Peps():
             psi[0, 0] = B00
             assert psi[0, 0].ndim == 4
 
-        Example 2
-        ---------
+        Example
+        -------
 
         ::
-        
+
             # directly pass the pattern of tensors in the unit cell as a dictionary. The geometry is created implicitly.
             psi = fpeps.PepsExtended(tensors={ (0,0):A00, (0,1):A01, (1,0):A01, (1,1):A00 })
             #

@@ -84,7 +84,7 @@ Using Python's dictionary
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. literalinclude:: /../../tests/mps/test_save_load.py
-        :pyobject: save_load_mps_dict
+        :pyobject: test_save_load_mps_dict
 
 Using HDF5 format
 ^^^^^^^^^^^^^^^^^
@@ -95,4 +95,4 @@ Using HDF5 format
     import h5py
 
 .. literalinclude:: /../../tests/mps/test_save_load.py
-        :pyobject: save_load_mps_hdf5
+        :pyobject: test_save_load_mps_hdf5

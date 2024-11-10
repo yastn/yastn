@@ -1,9 +1,14 @@
 Basic tensor initialization and creation operations
 ===================================================
 
-::
+In all examples, start with importing the repository and
+setting configuration options to employ a numpy backend (a default option).
+Other configuration options will be taken as :ref:`default. <tensor/configuration:YASTN configuration>`
+
+.. code-block:: python
 
    import yastn
+   config_kwargs = {"backend": "np"}
 
 
 Create tensors from scratch

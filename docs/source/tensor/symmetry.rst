@@ -3,7 +3,7 @@ Specifying symmetry
 
 YASTN specifies symmetry through any object that is a plain Python module or class which defines
 
-    #. ``SYM_ID`` string label specyfying the symmetry, 
+    #. ``SYM_ID`` string label specyfying the symmetry,
 
     #. ``NSYM`` number of elements in the charge vector. For example, `NSYM=1`
        for :math:`U(1)` or :math:`Z_2` group. For product groups such
@@ -15,7 +15,7 @@ YASTN specifies symmetry through any object that is a plain Python module or cla
     :members: sym_abelian
 
 Example symmetries defined in YASTN
-------------------
+-----------------------------------
 
 * :math:`U(1)` symmetry
 
@@ -29,5 +29,5 @@ Example symmetries defined in YASTN
 
 * :math:`Z_2\times U(1)`
 
-.. literalinclude:: /../../tests/tensor/configs/syms/sym_Z2xU1.py
+.. literalinclude:: /../../yastn/sym/sym_Z2xU1.py
     :pyobject: sym_Z2xU1
