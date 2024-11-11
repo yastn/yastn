@@ -34,7 +34,7 @@ class sym_abelian(metaclass=sym_meta):
 
     @classmethod
     def fuse(cls, charges, signatures, new_signature):
-        """
+        r"""
         Fusion rule for abelian symmetry.
 
         An `i`-th row ``charges[i,:,:]`` contains `m` length-`NSYM`
@@ -64,9 +64,9 @@ class sym_abelian(metaclass=sym_meta):
 
     @classmethod
     def add_charges(cls, *charges, s=None, new_s=1):
-        """
+        r"""
         Auxiliary function for adding tensor charges.
-        It employs fuse function and returns resulting charge as a tuple.
+        It employs :meth:`fuse` function and returns resulting charge as a tuple.
 
         Parameters
         ----------

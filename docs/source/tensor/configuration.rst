@@ -7,17 +7,16 @@ All YASTN tensors have to be provided with **configuration**, which defines:
 
    #. :doc:`abelian symmetry group</tensor/symmetry>`,
 
-   #. how to handle fusion (reshaping) of tensors,
+   #. default data type (``float64``, ``complex128``) and device (provided it is supported by backend) of tensors,
 
-   #. default data type (``float64``, ``complex128``) and device (provided it is supported by backend)
-   of tensors.
+   #. fermionic statistics (controlling action of :meth:`yastn.swap_gate`),
 
 The configuration can be provided as a Python module,
 `types.SimpleNamespace <https://docs.python.org/3/library/types.html#types.SimpleNamespace>`_,
 `typing.NamedTuple <https://docs.python.org/3/library/typing.html#typing.NamedTuple>`_ or similar which defines following members
 
 * required: ``backend``, ``sym``,
-* optional: ``default_device``, ``default_dtype``, ``default_fusion``, ``fermionic``, ``force_fusion``.
+* optional: ``default_device``, ``default_dtype``, ``fermionic``, ``default_fusion``,  ``force_fusion``.
 
 The configuration can be conveninently generated using
 

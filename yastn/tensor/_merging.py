@@ -215,9 +215,9 @@ def fuse_legs(a, axes, mode=None) -> yastn.Tensor:
 
     Two types of fusion are supported: `meta` and `hard`:
 
-        * ``'meta'`` performs the fusion only at the level of syntax, where it operates as a tensor with lower rank. Tensor structure and data (blocks) are not affected - apart from a transpose that may be needed for consistency.
-
         * ``'hard'`` changes both the structure and data by aggregating smaller blocks into larger ones. Such fusion allows to balance number of non-zero blocks and typical block size.
+
+        * ``'meta'`` performs the fusion only at the level of syntax, where it operates as a tensor with lower rank. Tensor structure and data (blocks) are not affected - apart from a transpose that may be needed for consistency.
 
     It is possible to use both `meta` and `hard` fusion of legs on the same tensor.
     Applying hard fusion on tensor turns all previous meta fused legs into hard fused

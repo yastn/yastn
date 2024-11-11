@@ -16,5 +16,10 @@ You can activate autograd on YASTN tensor
 
 The operations on tensor are then recorded for later differentiation.
 
+.. code-block:: python
+
+   import yastn
+   config_kwargs = {"backend": "torch"}
+
 .. literalinclude:: /../../tests/tensor/test_autograd.py
    :pyobject: test_requires_grad

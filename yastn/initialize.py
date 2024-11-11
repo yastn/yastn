@@ -88,6 +88,13 @@ def make_config(**kwargs) -> NamedTuple:
         for details. Default is ``'hard'``.
     force_fusion : str
         Overrides fusion strategy provided in :meth:`yastn.Tensor.fuse_legs`. Default is ``None``.
+
+    Example
+    -------
+
+    ::
+
+        config = yastn.make_config(backend='np', sym='U1')
     """
     if "backend" not in kwargs or kwargs["backend"] == 'np':
         kwargs["backend"] = backend_np

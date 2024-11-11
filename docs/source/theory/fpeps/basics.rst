@@ -60,7 +60,7 @@ Each tensor :math:`A_{(x,y)}` in PEPS is a rank-:math:`5` tensor defined as foll
 
 
 The hermitian conjugate of the above tensor :math:`A_{x,y}^{\dagger}` is represented as its mirror image of the tensor structure,
-with **element-wise complex conjugation** of each entry in :math:`A_{(x,y)}`. This means that each element 
+with **element-wise complex conjugation** of each entry in :math:`A_{(x,y)}`. This means that each element
 :math:`a_{ijkl} \rightarrow \overline{a_{ijkl}}` while the bond dimensions remain the same.
 
 ::
@@ -112,20 +112,20 @@ Fermionic anticommutation rules in PEPS
 We follow the recipe introduced by Corboz et al. in Ref. :ref:`[4] <ref4>`.
 This approach relies on two main techniques:
 (a) using parity-preserving tensors, which ensure that each tensor respects fermion parity, and
-(b) adding fermionic swap gates through :meth:`yastn.swap_gate` at line (leg) crossings in a 
+(b) adding fermionic swap gates through :meth:`yastn.swap_gate` at line (leg) crossings in a
 planar projection of the network.
 
 In PEPS, the ordering of fermionic operators impacts their anticommutation properties, which are essential for accurate
-simulations of fermionic systems. We establish a **fermionic order** to guide the application of swap gates, with each 
+simulations of fermionic systems. We establish a **fermionic order** to guide the application of swap gates, with each
 swap gate ensuring correct anticommutation for fermionic crossings. These crossings in the 2D plane project the 3D fermionic
-ordering onto a 2D layout, where fermionic swap gates manage the antisymmetry. 
+ordering onto a 2D layout, where fermionic swap gates manage the antisymmetry.
 
-In terms of numerical cost, contracting fermionic and bosonic (or spin) PEPS networks is comparable. The swap gates introduce 
+In terms of numerical cost, contracting fermionic and bosonic (or spin) PEPS networks is comparable. The swap gates introduce
 only a subleading overhead, making this approach efficient. The module :code:`yastn.tn.fpeps` handles both fermionic and bosonic
-statistics, controlled by the :code:`fermionic` flag in the :ref:`tensor configuration <tensor/configuration:yastn configuration>`. 
+statistics, controlled by the :code:`fermionic` flag in the :ref:`tensor configuration <tensor/configuration:yastn configuration>`.
 We use the name :code:`fpeps` to emphasize the incorporation of fermionic statistics in the module.
 
-Below, we illustrate the fermionic order in a :math:`3{\times}3` PEPS example. Using parity-preserving tensors allows flexibility in 
+Below, we illustrate the fermionic order in a :math:`3{\times}3` PEPS example. Using parity-preserving tensors allows flexibility in
 the placement of swap gates, as tensor parity invariance permits line crossings over or under the tensors without changing the physical results.
 
 ::
@@ -144,7 +144,7 @@ the placement of swap gates, as tensor parity invariance permits line crossings 
                ---------------------------------->
                                  fermionic order
 
-In this 2D representation, physical lines are placed on one edge of each tensor, allowing for a consistent and 
+In this 2D representation, physical lines are placed on one edge of each tensor, allowing for a consistent and
 localized application of swap gates to uphold fermionic anticommutation, supporting efficient network contraction.
 
 
@@ -152,12 +152,12 @@ localized application of swap gates to uphold fermionic anticommutation, support
 Infinite PEPS (iPEPS)
 ---------------------
 
-While finite PEPS is widely used, infinite PEPS (iPEPS) :ref:`[5] <ref5>` has shown strong performance, especially 
+While finite PEPS is widely used, infinite PEPS (iPEPS) :ref:`[5] <ref5>` has shown strong performance, especially
 in capturing properties directly in the thermodynamic limit with translational invariance. In iPEPS, a unit
 cell of tensors is repeated over an infinite lattice.
 
-A common setup is a **checkerboard lattice** with a :math:`2{\times}2` unit cell, containing two tensors, :math:`A` and :math:`B`, 
-which alternate across the lattice. Each tensor represents local degrees of freedom. The **bond dimension** :math:`D` (typically same for all bonds) 
+A common setup is a **checkerboard lattice** with a :math:`2{\times}2` unit cell, containing two tensors, :math:`A` and :math:`B`,
+which alternate across the lattice. Each tensor represents local degrees of freedom. The **bond dimension** :math:`D` (typically same for all bonds)
 controls the maximum entanglement between neighboring tensors, defining the parameter for the computational cost.
 
 ::
@@ -191,8 +191,8 @@ for a small time step :math:`d\beta`, here in the imaginary time,
 is approximated by a product of local two-site gates.
 
 For a Hamiltonian with nearest-neighbor interactions, we define :math:`H` in terms of bond Hamiltonians
-:math:`H_{\langle i,j \rangle}`, where :math:`\langle i,j \rangle` refers to a bond between neighboring 
-sites (or tensors) :math:`A_i` and :math:`A_j`. On a :math:`2{\times}2` lattice with sites labeled :math:`1, 2, 3,` 
+:math:`H_{\langle i,j \rangle}`, where :math:`\langle i,j \rangle` refers to a bond between neighboring
+sites (or tensors) :math:`A_i` and :math:`A_j`. On a :math:`2{\times}2` lattice with sites labeled :math:`1, 2, 3,`
 and :math:`4`, there are four disjoint bonds:
 
 - Two horizontal bonds, :math:`H_{\langle 1,2 \rangle}` and :math:`H_{\langle 3,4 \rangle}`
@@ -232,7 +232,7 @@ a truncation procedure to reduce the virtual bond dimension back to :math:`D`.
 In 1D systems, Matrix Product States (MPS) benefit from a **canonical form**, which enables
 optimal truncation of bond dimensions using Singular Value Decomposition (SVD).
 This truncation is globally optimal in the Frobenius norm because the canonical form
-decouples sections of the MPS, allowing each bond to be truncated independently without 
+decouples sections of the MPS, allowing each bond to be truncated independently without
 impacting the global accuracy of the state. However, in PEPS, the two-dimensional structure
 introduces loops, which hinder the use of canonical forms and make simple SVD-based truncation suboptimal.
 A successful algorithm requires using optimization techniques on top of SVD to manage truncation effectively.
@@ -317,7 +317,7 @@ uses only the sites directly surrounding the updated bond to calculate the metri
                             |     \       |     \
 
 
-By construction, the metric tensor for the bond is always Hermitian and non-negative, ensuring numerical stability. A 
+By construction, the metric tensor for the bond is always Hermitian and non-negative, ensuring numerical stability. A
 family of such environments is supported by :class:`yastn.tn.fpeps.EnvNTU`.
 
 
@@ -343,7 +343,7 @@ The renormalization procedure involves:
 - **Fixed-Point Convergence**: Over successive iterations, the environment tensors converge towards a stable fixed-point form, capturing the lattice environment accurately while maintaining computational feasibility.
 
 In a 2D square lattice, the environment is represented by a combination of four corner :math:`C_{nw},C_{sw},C_{ne},C_{se}`
-and four transfer :math:`T_{n},T_{w},T_{e},T_{s}` tensors of finite size, as depicted in the following figure. Tensor :math:`a` in the diagram 
+and four transfer :math:`T_{n},T_{w},T_{e},T_{s}` tensors of finite size, as depicted in the following figure. Tensor :math:`a` in the diagram
 below results from contracting a single-site PEPS tensor :math:`A` and its conjugate :math:`A^\dagger` over the physical dimension.
 
 ::
@@ -402,13 +402,13 @@ the trace over the ancillary degrees of freedom of the total density matrix:
 where :math:`Z = \text{Tr}(\exp(-\beta H))` ensures normalization.
 
 In YASTN, legs corresponding to system space and ancilla space are always fused to
-form one physical PEPS leg. During numerical simulations, the Hamiltonian acting on the system degrees of 
-freedom is augmented with an identity operator acting on the ancillas. This means the Hamiltonian acts 
+form one physical PEPS leg. During numerical simulations, the Hamiltonian acting on the system degrees of
+freedom is augmented with an identity operator acting on the ancillas. This means the Hamiltonian acts
 only on the system space, represented as:
 
 :math:`H_{\text{total}} = H \otimes I_{\text{ancilla}},`
 
-where :math:`H` is the Hamiltonian on the system Hilbert space, and :math:`I_{\text{ancilla}}` is the identity on the ancilla space. 
+where :math:`H` is the Hamiltonian on the system Hilbert space, and :math:`I_{\text{ancilla}}` is the identity on the ancilla space.
 This setup ensures that evolution in imaginary time affects only the system's degrees of freedom.
 
 

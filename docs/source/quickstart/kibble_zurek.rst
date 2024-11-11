@@ -12,13 +12,18 @@ lattice with open boundary conditions (OBC). The Hamiltonian reads
 
 where :math:`\sigma^x` and :math:`\sigma^z` are standard Pauli matrices,
 and we assume random couplings :math:`J_{i,j}`.
+
 The amplitude of couplings is gradually turned on as :math:`f(s) = \sin(\pi (s - 0.5)) + 1`,
 and the transverse field is gradually turned off as :math:`g(s) = 1 - \sin(\pi (s - 0.5))`.
+
+.. image:: KZschedule.png
+
 The system is initialized in the ground (product) state at :math:`s=0`,
 where transverse field :math:`g(0)=2`, and couplings :math:`f(0)=0`.
 The evolution ends upon reaching :math:`s=1`,
 where transverse field :math:`g(0)=0`, and coupling amplitude :math:`f(0)=2`.
 The quench rate is controlled by an annealing time :math:`t_a` as :math:`s= t / t_a`.
+The system gets excited while passing the quantum critical point between disordered and ordered phases in finite time :math:`t_a`.
 
 We compare the results obtained using MPS and PEPS routines.
 

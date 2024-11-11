@@ -82,7 +82,7 @@ def test_random_leg(config_kwargs):
     leg0 = yastn.Leg(config_U1, s=1, t=(0, 1), D=(2, 3))
     leg1 = yastn.Leg(config_U1, s=1, t=(0, 1), D=(2, 4))
 
-    leg = yastn.leg_outer_product(leg0, leg1)
+    leg = yastn.leg_product(leg0, leg1)
     print(leg)
     assert leg.is_fused()
 

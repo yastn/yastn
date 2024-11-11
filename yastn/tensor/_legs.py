@@ -22,7 +22,7 @@ from ._tests import YastnError
 from ..sym import sym_none
 from ._merging import _Fusion, _pure_hfs_union, _fuse_hfs, _unfuse_Fusion
 
-__all__ = ['Leg', 'leg_union', 'random_leg', 'leg_outer_product', 'leg_undo_product']
+__all__ = ['Leg', 'leg_union', 'random_leg', 'leg_product', 'leg_undo_product']
 
 
 @dataclass(frozen=True, repr=False)
@@ -262,7 +262,7 @@ def _leg_fusions_need_mask(*legs):
     raise YastnError("Mixing meta- and hard-fused legs")
 
 
-def leg_outer_product(*legs, t_allowed=None) -> yastn.Leg:
+def leg_product(*legs, t_allowed=None) -> yastn.Leg:
     """
     Output Leg being an outer product of a list of legs.
 

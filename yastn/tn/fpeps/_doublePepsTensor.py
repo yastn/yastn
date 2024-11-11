@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from ... import tensordot, leg_outer_product, YastnError
+from ... import tensordot, leg_product, YastnError
 from .envs._env_auxlliary import append_vec_tl, append_vec_br, append_vec_tr, append_vec_bl
 from ._gates_auxiliary import match_ancilla
 
@@ -89,7 +89,7 @@ class DoublePepsTensor:
         lbs = [lbs[i] for i in axes]
         # lts = self.ket.get_legs(axes=axes)
         # lbs = self.bra.get_legs(axes=axes)
-        legs = tuple(leg_outer_product(lt, lb.conj()) for lt, lb in zip(lts, lbs))
+        legs = tuple(leg_product(lt, lb.conj()) for lt, lb in zip(lts, lbs))
         return legs if multiple_legs else legs[0]
 
     def transpose(self, axes):

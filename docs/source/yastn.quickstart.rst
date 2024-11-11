@@ -1,5 +1,5 @@
 ##########
-QUICKSTART
+Quickstart
 ##########
 
 .. toctree::

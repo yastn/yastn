@@ -417,7 +417,7 @@ def test_unmerge_backward(config_kwargs):
     assert test
 
 
-def test_leg_outer_product(config_kwargs):
+def test_leg_product(config_kwargs):
     config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
     l0 = yastn.Leg(config_Z2xU1, s=-1, t=[(0, -1), (0, 1), (1, -1), (1, 1)], D=(1, 2, 2, 4))
     l1 = yastn.Leg(config_Z2xU1, s=1, t=[(0, 0), (0, 2), (1, 0), (1, 2)], D=(7, 8, 9, 10))
@@ -427,14 +427,14 @@ def test_leg_outer_product(config_kwargs):
     a = yastn.rand(config=config_Z2xU1, legs=[l0, l1, l2, l3])
 
     fa = yastn.fuse_legs(a, axes=((0, 1), (2, 3)), mode='hard')
-    pfa0 = yastn.leg_outer_product(l0, l1)
+    pfa0 = yastn.leg_product(l0, l1)
     lfa0 = fa.get_legs(axes=0)
-    pfa1 = yastn.leg_outer_product(l2, l3)
+    pfa1 = yastn.leg_product(l2, l3)
     lfa1 = fa.get_legs(axes=1)
     assert (pfa0, pfa1) == (lfa0, lfa1)
 
     ffa = yastn.fuse_legs(fa, axes=[(0, 1)], mode='hard')
-    pffa = yastn.leg_outer_product(lfa0, lfa1, t_allowed=[(0, 0)])
+    pffa = yastn.leg_product(lfa0, lfa1, t_allowed=[(0, 0)])
     lffa = ffa.get_legs(axes=0)
     assert pffa == lffa
     assert pffa.is_fused()

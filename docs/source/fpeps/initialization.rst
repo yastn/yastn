@@ -4,8 +4,8 @@ Creating PEPS
 Initializing empty PEPS
 -----------------------
 
-PEPS is an instance of a class :class:`yastn.tn.fpeps.Peps`, utilizing a lattice geometry setup 
-(e.g., SquareLattice or CheckerboardLattice). Each unique lattice site is associated with a tensor, 
+PEPS is an instance of a class :class:`yastn.tn.fpeps.Peps`, utilizing a lattice geometry setup
+(e.g., SquareLattice or CheckerboardLattice). Each unique lattice site is associated with a tensor,
 following the layout specified by the lattice geometry.
 
 ::
@@ -64,7 +64,6 @@ Double PEPS Tensor
 The auxiliary class allows treating top and bottom PEPS tensors---to be contracted along
 physical dimensions---as a single tensor of rank-4 for various operations.
 It provides a dispatching mechanism for efficient contraction in construction of enlarge corners in CTMRG or boundary MPS algorithms.
-Equivalent operations in :code:`yastn.Tensor` are :ref:`here<tensor/dispatch:Dispatching contractions>`.
 
 ::
 
