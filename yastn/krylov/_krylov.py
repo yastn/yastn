@@ -163,7 +163,7 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
 
 def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=False, **kwargs) -> tuple[array, Sequence[vectors]]:
     r"""
-    Search for dominant eigenvalues of linear operator ``f`` using Arnoldi algorithm. 
+    Search for dominant eigenvalues of linear operator ``f`` using Arnoldi algorithm.
     Economic implementation (without restart) for internal use within :meth:`yastn.tn.dmrg_`.
 
     Parameters
@@ -176,25 +176,25 @@ def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=Fals
             Initial guess, 'vector' to span the Krylov space.
 
         k: int
-            Number of desired eigenvalues and eigenvectors. Default is 1.
+            Number of desired eigenvalues and eigenvectors. The default is 1.
 
         which: str
             One of [``‘LM’``, ``‘LR’``, ``‘SR’``] specifying which `k` eigenvectors and eigenvalues to find:
-            ``‘LM’`` : largest magnitude, 
-            ``‘SM’`` : smallest magnitude, 
-            ``‘LR’`` : largest real part, 
+            ``‘LM’`` : largest magnitude,
+            ``‘SM’`` : smallest magnitude,
+            ``‘LR’`` : largest real part,
             ``‘SR’`` : smallest real part.
 
         ncv: int
-            Dimension of the employed Krylov space. Default is 10.
+            Dimension of the employed Krylov space. The default is 10.
             Must be greated than `k`.
 
         maxiter: int
             Maximal number of restarts; (not implemented for now)
 
         tol: float
-            Stopping criterion for an expansion of the Krylov subspace. 
-            Default is ``1e-13``. (not implemented for now)
+            Stopping criterion for an expansion of the Krylov subspace.
+            The default is ``1e-13``. (not implemented for now)
 
         hermitian: bool
             Assume that ``f`` is a hermitian operator, in which case Lanczos iterations are used.

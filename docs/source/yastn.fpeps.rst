@@ -45,3 +45,5 @@ Examples: basics of usage
 
    examples/fpeps/geometry
    examples/fpeps/ctmrg
+   quickstart/hubbard_purification
+   quickstart/kibble_zurek

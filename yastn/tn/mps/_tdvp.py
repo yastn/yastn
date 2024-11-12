@@ -60,7 +60,7 @@ def tdvp_(psi, H,
 
     u: number
         '1j' for real time evolution, 1 for imaginary time evolution.
-        Default is 1j.
+        The default is 1j.
 
     method: str
         Algorithm to use in (`'1site'`, `'2site'`, `'12site'`)
@@ -79,7 +79,7 @@ def tdvp_(psi, H,
         Options passed to :meth:`yastn.linalg.svd` used to truncate virtual spaces in :code:`method='2site'` and :code:`'12site'`.
 
     progressbar: bool
-        Whether to show the progress bar toward the next snapshot. The default is False. 
+        Whether to show the progress bar toward the next snapshot. The default is False.
 
     yield_initial: bool
         Whether to yield the initial state before performing evolution. The default is False.

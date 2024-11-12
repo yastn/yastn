@@ -1,7 +1,7 @@
 2D Fermi-Hubbard model at finite temperature
 ============================================
 
-This guide provides a quick overview of how to simulate the Fermi-Hubbard model at finite temperature
+This guide provides a quick overview of simulating the Fermi-Hubbard model at finite temperature
 and on the infinite square lattice using purification and the **YASTN** tensor network library.
 We'll focus on initializing the model, setting up the simulation, and calculating expectation values.
 
@@ -22,7 +22,7 @@ where:
 
 
 1. *Initialization of Model Parameters*:
-    We set our model parameters keeping in mind that in the purification there is no clear way to fix particle number
+    We set our model parameters keeping in mind that in the purification, there is no clear way to fix particle number
     and it is controlled by changing chemical potential :math:`\mu`.
 
     .. code-block:: python
@@ -49,20 +49,20 @@ where:
     .. code-block:: python
 
         geometry = peps.CheckerboardLattice()
-        # for bigger unit cells, set
+        # For bigger unit cells, set
         # geometry = peps.SquareLattice(dims=(m, n))
-        # for finite lattice, set
+        # For finite lattice, set
         # geometry = peps.SquareLattice(dims=(m, n), boundary='finite')
         #
-        # purification at infinite temperature (unnormalized)
+        # Purification at infinite temperature (unnormalized)
         psi = peps.product_peps(geometry=geometry, vectors=I)
 
 
 4. *Hamiltonian Gates Definition*:
     .. code-block:: python
 
-        db = 0.01  # Trotter step size
-        # making sure we have integer number of steps to target beta / 2
+        db = 0.01  # intended Trotter step size
+        # We make sure the target beta / 2 is reached in integer number of steps.
         steps = round((beta / 2) / db)
         db = (beta / 2) / steps
         #
@@ -78,30 +78,31 @@ where:
     .. code-block:: python
 
         env = peps.EnvNTU(psi, which='NN')
-        # this is set up for neighborhood tensor update optimization
-        # as described in https://arxiv.org/pdf/2209.00985.pdf
+        # The environment used to calculate bond metric tensor.
+        # This is a setup for neighborhood tensor update (NTU) optimization
+        # as described in https://arxiv.org/abs/2209.00985
 
         D = 12  # bond dimenson
 
         opts_svd = {'D_total': D, 'tol': 1e-12}
-        infoss = []  # for evolution diagnostics
+        infoss = []  # for diagnostics information
         #
         for step in tqdm(range(1, steps + 1)):
             infos = peps.evolution_step_(env, gates, opts_svd=opts_svd)
-            # The state psi is contained in env;
+            # The state psi is contained in env
             # evolution_step_ updates psi in place.
             #
             infoss.append(infos)
         #
         Delta = fpeps.accumulated_truncation_error(infoss)
-        print(f"Accumulated truncation error {Delta:0.5f}")
+        print(f"Accumulated truncation error: {Delta:0.5f}")
 
 
 5. *CTMRG and Expectation Values*:
-    This part sets up CTMRG procedure for calculating corners and
-    transfer matrices to be used to calculate any expectation value.
+    This part sets up the CTMRG procedure for calculating corners
+    and transfer matrices used to evaluate any expectation value.
     It can accessed through an instance of peps.EnvCTM class.
-    Here, the convergence criterion is based on total energy.
+    Here, we base the convergence criterion on total energy.
 
     .. code-block:: python
 
@@ -120,11 +121,11 @@ where:
             #
             # calculate energy expectation value
             #
-            # calculate for all unique sites; {site: value}
+            # measure_1site returns {site: value} for all unique sites
             ev_nn = env_ctm.measure_1site((n_up - I / 2) @ (n_dn - I / 2))
             ev_nn = mean([*ev_nn.values()])  # mean over all sites
             #
-            # calculate for all unique bonds; {bond: value}
+            # measure_nn returns {bond: value} for all unique bonds
             ev_cdagc_up = env_ctm.measure_nn(cdag_up, c_up)
             ev_cdagc_dn = env_ctm.measure_nn(cdag_dn, c_dn)
             ev_cdagc_up = mean([*ev_cdagc_up.values()])  # mean over bonds
@@ -132,7 +133,7 @@ where:
             #
             energy = -4 * t * (ev_cdagc_up + ev_cdagc_dn) + U * ev_nn
             #
-            print(f"Energy per site after iteration {i}: {energy:0.8f}")
+            print(f"Energy per site after iteration {info.sweeps}: {energy:0.8f}")
             if abs(energy - energy_old) < tol_exp:
                 break
             energy_old = energy
@@ -145,7 +146,7 @@ where:
 
 
 6. *Specific Expectation Values*:
-    Now we move to calculate expectation values of interest.
+    Now we calculate other expectation values of interest.
 
     .. code-block:: python
 
@@ -159,7 +160,7 @@ where:
         # occupation spin up:  0.50000000
         # occupation spin dn:  0.50000000
 
-        print("kinetic energy per bond")
+        print("Kinetic energy per bond")
         print(f"spin up electrons: {2 * ev_cdagc_up:0.6f}")
         print(f"spin dn electrons: {2 * ev_cdagc_dn:0.6f}")
         # Kinetic energy per bond
@@ -172,10 +173,11 @@ where:
         # Average double occupancy: 0.062592
 
         Sz = 0.5 * (n_up - n_dn)   # Sz operator
-        SzSz_NN = env_ctm.measure_nn(Sz, Sz)
-        SzSz_NN = mean([*SzSz_NN.values()])
-        print(f"Average NN spin-spin correlator: {SzSz_NN:0.6f}")
+        ev_SzSz = env_ctm.measure_nn(Sz, Sz)
+        ev_SzSz = mean([*ev_SzSz.values()])
+        print(f"Average NN spin-spin correlator: {ev_SzSz:0.6f}")
         # Average NN spin-spin correlator: -0.006933
         #
-        # for a benchmark against METTS on a finite cylinder
-        # at lower temperatures, see tests/quickstart/test_Hubbard.py
+        # For a comparison of iPEPS simulation results with
+        # MPS METTS simulations on a finite cylinder at lower temperatures
+        # see the data in tests/quickstart/test_Hubbard.py

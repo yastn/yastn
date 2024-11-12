@@ -116,6 +116,8 @@ Tensor norms
 Spectral decompositions and truncation
 --------------------------------------
 
+See examples: :ref:`examples/tensor/decomposition:decompositions of symmetric tensors`.
+
 .. autofunction:: yastn.linalg.svd
 .. autofunction:: yastn.linalg.svd_with_truncation
 .. autofunction:: yastn.linalg.qr

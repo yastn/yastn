@@ -55,20 +55,20 @@ def dmrg_(psi, H, project=None, method='1site',
     ----------
     psi: yastn.tn.mps.MpsMpoOBC
         Initial state. It is updated during execution.
-        If `psi` is not already canonized to the first site, it will be canonized at the start of the algorithm. 
+        If `psi` is not already canonized to the first site, it will be canonized at the start of the algorithm.
         The output state from :code:`dmrg_` is canonized to the first site.
 
     H: yastn.tn.mps.MpsMpoOBC | Sequence
         MPO (or a sum of MPOs) to minimize against, see :meth:`Env<yastn.tn.mps.Env>`.
 
     project: Sequence[yastn.tn.mps.MpsMpoOBC | tuple[float, yastn.tn.mps.MpsMpoOBC]]
-        Add a penalty to the directions spanned by MPSs in the list. 
-        In practice, the penalty is a multiplicative factor that adds a penalty term to the Hamiltonian. 
-        As a result, the energy of said MPS rizes and another lowest-energy is targeted by energy minimization. 
+        Add a penalty to the directions spanned by MPSs in the list.
+        In practice, the penalty is a multiplicative factor that adds a penalty term to the Hamiltonian.
+        As a result, the energy of said MPS rizes and another lowest-energy is targeted by energy minimization.
         It can be used to find a few low-energy states of the Hamiltonian
         if the penalty is larger than the energy gap from the ground state.
-        Use :code:`[(penalty, MPS), ...]` to provide individual penalty for 
-        each MPS by hand as a list of tuples :code:`(penalty, MPS)`, where :code:`penalty` is a number and :code:`MPS` is an MPS bject. 
+        Use :code:`[(penalty, MPS), ...]` to provide individual penalty for
+        each MPS by hand as a list of tuples :code:`(penalty, MPS)`, where :code:`penalty` is a number and :code:`MPS` is an MPS bject.
         If input is a list of MPSs, i.e., :code:`[mps, ...]`, the option uses default :code:`penalty=100`.
 
     method: str
@@ -87,7 +87,7 @@ def dmrg_(psi, H, project=None, method='1site',
 
     iterator_step: int
         If int, :code:`dmrg_` returns a generator that would yield output after every iterator_step sweeps.
-        Default is None, in which case  :code:`dmrg_` sweeps are performed immediately.
+        The default is None, in which case  :code:`dmrg_` sweeps are performed immediately.
 
     opts_eigs: dict
         options passed to :meth:`yastn.eigs`.

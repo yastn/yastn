@@ -436,13 +436,13 @@ class EnvParent_3_obc(EnvParent_3):
         # init boundaries
         legs = [self.bra.virtual_leg('first'), self.ket.virtual_leg('first').conj()]
         legv=op.virtual_leg('first').conj()
-        n_left = ket.config.sym.add_charges(legv.t[0], s=(legv.s,), new_s=-1)
+        n_left = ket.config.sym.add_charges(legv.t[0], signatures=(legv.s,), new_signature=-1)
         tmp = eye(self.config, legs=legs, isdiag=False, n=n_left)
         self.F[(-1, 0)] = tmp.add_leg(axis=1, leg=legv)
 
         legs = [self.ket.virtual_leg('last').conj(), self.bra.virtual_leg('last')]
         legv=op.virtual_leg('last').conj()
-        n_right = ket.config.sym.add_charges(legv.t[0], s=(legv.s,), new_s=-1)
+        n_right = ket.config.sym.add_charges(legv.t[0], signatures=(legv.s,), new_signature=-1)
         tmp = eye(self.config, legs=legs, isdiag=False, n=n_right)
         self.F[(self.N, self.N - 1)] = tmp.add_leg(axis=1, leg=legv)
 

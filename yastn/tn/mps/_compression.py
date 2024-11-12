@@ -84,7 +84,7 @@ def compression_(psi, target, method='1site',
 
     iterator_step: int
         If int, :code:`compression_` returns a generator that would yield output after every iterator_step sweeps.
-        Default is None, in which case  :code:`compression_` sweeps are performed immediately.
+        The default is None, in which case  :code:`compression_` sweeps are performed immediately.
 
     opts_svd: dict
         Options passed to :meth:`yastn.linalg.svd` used to truncate virtual spaces in :code:`method='2site'`.
@@ -262,7 +262,7 @@ def zipper(a, b, opts_svd=None, normalize=True, return_discarded=False) -> yastn
 
     return_discarded: bool
         Whether to return the approximation discarded weights together with the resulting MPS/MPO.
-        Default is False, i.e., returns only MPS/MPO.
+        The default is False, i.e., returns only MPS/MPO.
         Discarded weight approximates norm of truncated elements normalized by the norm of the untruncated state.
     """
     if a.N != b.N:

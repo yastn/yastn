@@ -180,9 +180,9 @@ class MpsMpoOBC(_MpsMpoParent):
         (0) virtual leg pointing towards the first site, (1) 1st physical leg, i.e., :math:`|\textrm{ket}\rangle`,
         (2) virtual leg pointing towards the last site, and, in case of MPO, (3) 2nd physical leg, i.e., :math:`\langle \textrm{bra}|`.
 
-        The canonical form can be used with the MPS/MPO freely. 
-        If the MPS/MPO is not normalized the amplitude is kept as :code:`self.factor` paramter of the object. 
-        If the object is normalized, then :code:`self.factor=1`. 
+        The canonical form can be used with the MPS/MPO freely.
+        If the MPS/MPO is not normalized the amplitude is kept as :code:`self.factor` paramter of the object.
+        If the object is normalized, then :code:`self.factor=1`.
         """
         super().__init__(N=N, nr_phys=nr_phys)
         self.pC = None  # index of the central block, None if it does not exist
@@ -258,7 +258,7 @@ class MpsMpoOBC(_MpsMpoParent):
 
     def diagonalize_central_(self, opts_svd, normalize=True) -> number:
         r"""
-        Use svd() to perform SVD of the central block C = U @ S @ V, where S contains singular (Schmidt) values. 
+        Use svd() to perform SVD of the central block C = U @ S @ V, where S contains singular (Schmidt) values.
         Truncation is done based on opts_svd.
 
         Attach U and V respectively to the left and right sites
@@ -351,9 +351,9 @@ class MpsMpoOBC(_MpsMpoParent):
         It is assumed that tensors are enumerated
         by index increasing from 0 (:code:`first`) to N-1 (:code:`last`).
 
-        Finally, the trivial central block of dimension *1* obtained for terminal sites 
-        is attached at the end of the chain. 
- 
+        Finally, the trivial central block of dimension *1* obtained for terminal sites
+        is attached at the end of the chain.
+
         It updates MPS/MPO in place.
 
         Parameters
@@ -385,7 +385,7 @@ class MpsMpoOBC(_MpsMpoParent):
             Can check a single site if int provided. If None, check all sites.
 
         tol: float
-            Tolerance of the check. Default is 1e-12.
+            Tolerance of the check. The default is 1e-12.
         """
         if to == 'first':
             # 0--A*--
@@ -415,10 +415,10 @@ class MpsMpoOBC(_MpsMpoParent):
         by index increasing from 0 (:code:`first`) to N-1 (:code:`last`).
 
         Access to singular values during sweeping allows truncation of virtual spaces.
-        
-        The truncation is effective when it is done in the canonical form. 
+
+        The truncation is effective when it is done in the canonical form.
         The canonical form has to be ensured prior truncation by setting it opposite to the sweep of :code:`truncate_`.
-        I.e., prepare MPS/MPO in the right canonical form (:code:`to='first'`) for truncation with :code:`to='last'` 
+        I.e., prepare MPS/MPO in the right canonical form (:code:`to='first'`) for truncation with :code:`to='last'`
         and left canonical form (:code:`to='last'`) for truncation with :code:`to='first'`.
 
         The MPS/MPO is updated in place.

@@ -57,7 +57,7 @@ in a proper basis can be represented by diagonal matrices :math:`U(g)` acting on
     (gT)^{ab...}_{ij...} = \sum_{a'b'...i'j'...} T^{a'b'...}_{i'j'...} [U(g)^*]^{a}_{a'} [U(g)^*]^{b}_{b'} ... {U(g)}^{i'}_{i} {U(g)}^{j'}_{j}...,
 
 where the elements of :math:`U(g)` are complex phases defined by **charges** :math:`t_i`.
-In YASTN the charges are integers :math:`t_i\in\mathbb{Z}` or their subset.
+In YASTN the charges are integers :math:`t_i\in\mathbb{Z}` or their subset---or tuples of integers for direct product of multiple symmetric groups.
 They are related to symmetry transformation
 
 .. math::
@@ -123,7 +123,7 @@ Conjugation
 
 Conjugation of a tensor acts such as all tensor elements are complex-conjugated, tensor leg signature is flipped by
 replacing :math:`\pm 1 \to \mp 1` in leg signature :attr:`yastn.Tensor.s`, and, similarly, the total charge is flipped :math:`n \to -n`.
-In the latter, the change of a sign by :math:`-` depends on the abelian group.
+In the latter, the change of a sign by minus depends on the abelian group.
 
 Individual flip of the signature of a specific leg is also possible and is accompanied by negation of charges on that leg.
 

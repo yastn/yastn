@@ -641,7 +641,7 @@ class EnvCTM(Peps):
 
         iterator_step: int
             If int, :code:`ctmrg_` returns a generator that would yield output after every iterator_step sweeps.
-            Default is None, in which case  :code:`ctmrg_` sweeps are performed immediately.
+            The default is None, in which case  :code:`ctmrg_` sweeps are performed immediately.
 
         corner_tol: float
             Convergence tolerance for the change of singular values of all corners in a single update.

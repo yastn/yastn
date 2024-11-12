@@ -133,22 +133,22 @@ def test_add_charges():
     assert sym_none.add_charges((), (), ()) == ()
     #
     assert sym_Z2.add_charges((1,), (1,), (0,), (1,)) == (1,)
-    assert sym_Z2.add_charges((1,), (1,), (1,), s=(1, -1, -1), new_s=-1) == (1,)
+    assert sym_Z2.add_charges((1,), (1,), (1,), signatures=(1, -1, -1), new_signature=-1) == (1,)
     assert sym_Z2.add_charges(1, 0, 0, 1,) == (0,)  # flattened input also works, but only for NSYM=1
     #
-    assert sym_Z3.add_charges((2,), (2,), (1,), s=[1, 1, -1]) == (0,)
+    assert sym_Z3.add_charges((2,), (2,), (1,), signatures=[1, 1, -1]) == (0,)
     assert sym_Z3.add_charges((2,), (2,), (1,)) == (2,)
-    assert sym_Z3.add_charges((2,), (2,), (1,), s=[1, 1, 1]) == (2,)
-    assert sym_Z3.add_charges((2,), (2,), (1,), new_s=-1) == (1,)
-    assert sym_Z3.add_charges((1,), new_s=-1) == (2,)
+    assert sym_Z3.add_charges((2,), (2,), (1,), signatures=[1, 1, 1]) == (2,)
+    assert sym_Z3.add_charges((2,), (2,), (1,), new_signature=-1) == (1,)
+    assert sym_Z3.add_charges((1,), new_signature=-1) == (2,)
     #
     assert sym_U1.add_charges((1,), (2,), (-1,)) == (2,)
-    assert sym_U1.add_charges((1,), (2,), s=[1, -1]) == (-1,)
-    assert sym_U1.add_charges((2,), new_s=-1) == (-2,)
+    assert sym_U1.add_charges((1,), (2,), signatures=[1, -1]) == (-1,)
+    assert sym_U1.add_charges((2,), new_signature=-1) == (-2,)
     #
     assert sym_U1xU1.add_charges((1, 0), (-1, 1), (1, -2)) == (1, -1)
     #
-    assert sym_U1xU1xZ2.add_charges((2, 1, 1), new_s=-1) == (-2, -1, 1)
+    assert sym_U1xU1xZ2.add_charges((2, 1, 1), new_signature=-1) == (-2, -1, 1)
     charge = sym_U1xU1xZ2.add_charges((1, 0, 1), (-1, 1, 0), (1, -2, 1))
     assert charge == (1, -1, 0)
     assert all(isinstance(x, int) for x in charge)

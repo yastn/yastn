@@ -55,7 +55,7 @@ def clone(a) -> yastn.Tensor:
 
 def to(a, device=None, dtype=None) -> yastn.Tensor:
     r"""
-    Move tensor to device and cast to given datatype. 
+    Move tensor to device and cast to given datatype.
 
     Returns a clone of the tensor residing on ``device`` in desired datatype ``dtype``.
     If tensor already resides on ``device``, returns ``self``. This operation preserves autograd.
@@ -115,7 +115,7 @@ def conj(a) -> yastn.Tensor:
 
     Follows the behavior of the :code:`backend.conj()` when it comes to creating a new copy of the data.
     """
-    newn = a.config.sym.add_charges(a.struct.n, new_s=-1)
+    newn = a.config.sym.add_charges(a.struct.n, new_signature=-1)
     news = tuple(-x for x in a.struct.s)
     struct = a.struct._replace(s=news, n=newn)
     hfs = tuple(hf.conj() for hf in a.hfs)
@@ -142,7 +142,7 @@ def flip_signature(a) -> yastn.Tensor:
 
     Creates a shallow copy of the data.
     """
-    newn = a.config.sym.add_charges(a.struct.n, new_s=-1)
+    newn = a.config.sym.add_charges(a.struct.n, new_signature=-1)
     news = tuple(-x for x in a.struct.s)
     struct = a.struct._replace(s=news, n=newn)
     hfs = tuple(hf.conj() for hf in a.hfs)
@@ -197,7 +197,7 @@ def flip_charges(a, axes=None) -> yastn.Tensor:
 
 def drop_leg_history(a, axes=None) -> yastn.Tensor:
     r"""
-    Drops information about original structure of fused or blocked legs 
+    Drops information about original structure of fused or blocked legs
     that have been combined into a selected tensor leg(s).
 
     Makes a shallow copy of tensor data.
@@ -227,8 +227,8 @@ def transpose(a, axes=None) -> yastn.Tensor:
     Parameters
     ----------
     axes: Sequence[int]
-        new order of legs. Has to be a valid permutation of :code:`(0, 1, ..., ndim-1)` 
-        where :code:`ndim` is tensor order (number of legs). 
+        new order of legs. Has to be a valid permutation of :code:`(0, 1, ..., ndim-1)`
+        where :code:`ndim` is tensor order (number of legs).
         By default is :code:`range(a.ndim)[::-1]`, which reverses the order of the axes.
     """
     if axes is None:
@@ -355,14 +355,14 @@ def add_leg(a, axis=-1, s=-1, t=None, leg=None) -> yastn.Tensor:
     axis = sum(a.mfs[ii][0] for ii in range(axis))  # unpack mfs
     nsym = a.config.sym.NSYM
     if t is None:
-        t = a.config.sym.add_charges(a.struct.n, s=(-1,), new_s=s)
+        t = a.config.sym.add_charges(a.struct.n, signatures=(-1,), new_signature=s)
     else:
         if (isinstance(t, int) and nsym != 1) or len(t) != nsym:
             raise YastnError('len(t) does not match the number of symmetry charges.')
-        t = a.config.sym.add_charges(t, s=(s,), new_s=s)
+        t = a.config.sym.add_charges(t, signatures=(s,), new_signature=s)
 
     news = a.struct.s[:axis] + (s,) + a.struct.s[axis:]
-    newn = a.config.sym.add_charges(a.struct.n, t, s=(1, s))
+    newn = a.config.sym.add_charges(a.struct.n, t, signatures=(1, s))
     newt = tuple(x[:axis * nsym] + t + x[axis * nsym:] for x in a.struct.t)
     newD = tuple(x[:axis] + (1,) + x[axis:] for x in a.struct.D)
     struct = a.struct._replace(t=newt, D=newD, s=news, n=newn)
@@ -408,7 +408,7 @@ def remove_leg(a, axis=-1) -> yastn.Tensor:
         raise YastnError('Axis to be removed must have single charge of dimension one.')
 
     news = a.struct.s[:axis] + a.struct.s[axis + 1:]
-    newn = a.config.sym.add_charges(a.struct.n, t, s=(-1, a.struct.s[axis]), new_s=-1)
+    newn = a.config.sym.add_charges(a.struct.n, t, signatures=(-1, a.struct.s[axis]), new_signature=-1)
     newt = tuple(x[: axis * nsym] + x[(axis + 1) * nsym:] for x in a.struct.t)
     newD = tuple(x[: axis] + x[axis + 1:] for x in a.struct.D)
     struct = a.struct._replace(t=newt, D=newD, s=news, n=newn)

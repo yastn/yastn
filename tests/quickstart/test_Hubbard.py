@@ -51,7 +51,7 @@ metts_values = {("energy", 2.0): (-2.8040, 0.0026),
 #
 #
 @pytest.mark.skipif("not config.getoption('quickstarts')")
-@pytest.mark.parametrize('D, betas', [[12, [0.5]]])
+@pytest.mark.parametrize('D, betas', [(12, [0.5])])
 def test_quickstart_hubbard(config_kwargs, D, betas):
 
     import yastn
@@ -74,16 +74,16 @@ def test_quickstart_hubbard(config_kwargs, D, betas):
     for beta in betas:
         db = 0.01  # Trotter step size
         # making sure we have integer number of steps to target beta / 2
-        steps = round(((beta-beta0) / 2) / db)
-        db = ((beta-beta0) / 2) / steps
+        steps = round(((beta - beta0) / 2) / db)
+        db = ((beta - beta0) / 2) / steps
         beta0 = beta
         #
         g_hop_u = fpeps.gates.gate_nn_hopping(t, db / 2, I, c_up, cdag_up)
         g_hop_d = fpeps.gates.gate_nn_hopping(t, db / 2, I, c_dn, cdag_dn)
         g_loc = fpeps.gates.gate_local_Coulomb(mu, mu, U, db/2, I, n_up, n_dn)
         gates = fpeps.gates.distribute(geometry,
-                                    gates_nn=[g_hop_u, g_hop_d],
-                                    gates_local=g_loc)
+                                       gates_nn=[g_hop_u, g_hop_d],
+                                       gates_local=g_loc)
         #
         env = fpeps.EnvNTU(psi, which='NN')
         opts_svd = {'D_total': D, 'tol': 1e-12}
@@ -95,7 +95,7 @@ def test_quickstart_hubbard(config_kwargs, D, betas):
             infoss.append(infos)
 
         Delta = fpeps.accumulated_truncation_error(infoss)
-        print(f"Accumulated truncation error {Delta:0.5f}")
+        print(f"Accumulated truncation error: {Delta:0.5f}")
 
         env_ctm = fpeps.EnvCTM(psi, init='eye')
         chi = 5 * D
@@ -113,15 +113,15 @@ def test_quickstart_hubbard(config_kwargs, D, betas):
             #
             # calculate energy expectation value
             #
-            # calculate for all unique sites; {site: value}
+            # measure_1site returns {site: value} for all unique sites
             ev_nn = env_ctm.measure_1site((n_up - I / 2) @ (n_dn - I / 2))
             ev_nn = mean([*ev_nn.values()])  # mean over all sites
             #
-            # calculate for all unique bonds; {bond: value}
+            # measure_nn returns {bond: value} for all unique bonds
             ev_cdagc_up = env_ctm.measure_nn(cdag_up, c_up)
             ev_cdagc_dn = env_ctm.measure_nn(cdag_dn, c_dn)
-            ev_cdagc_up = mean([*ev_cdagc_up.values()]) # mean over bonds
-            ev_cdagc_dn = mean([*ev_cdagc_dn.values()])
+            ev_cdagc_up = mean([*ev_cdagc_up.values()])  # mean over bonds
+            ev_cdagc_dn = mean([*ev_cdagc_dn.values()])  # mean over bonds
             #
             energy = -4 * t * (ev_cdagc_up + ev_cdagc_dn) + U * ev_nn
             #
@@ -146,9 +146,9 @@ def test_quickstart_hubbard(config_kwargs, D, betas):
         print(f"Average double occupancy: {double_occ:0.6f}")
 
         Sz = 0.5 * (n_up - n_dn)   # Sz operator
-        SzSz_NN = env_ctm.measure_nn(Sz, Sz)
-        SzSz_NN = mean([*SzSz_NN.values()])
-        print(f"Average NN spin-spin correlator: {SzSz_NN:0.6f}")
+        ev_SzSz = env_ctm.measure_nn(Sz, Sz)
+        ev_SzSz = mean([*ev_SzSz.values()])
+        print(f"Average NN spin-spin correlator: {ev_SzSz:0.6f}")
 
 
 if __name__ == '__main__':

@@ -82,7 +82,7 @@ def compress_to_1d(a, meta=None) -> tuple[numpy.array | torch.tensor, dict]:
             Specifies tensor to export.
         meta: dict
             There is an option to provide meta-data obtained from earlier application of :meth:`yastn.Tensor.compress_to_1d`.
-            Extra zero blocks (missing in tensor) are then included in the returned 1D array 
+            Extra zero blocks (missing in tensor) are then included in the returned 1D array
             to make it consistent with structure given in :code:`meta`.
             Raises error if tensor has some blocks which are not included in :code:`meta` or otherwise
             :code:`meta` does not match the tensor.
@@ -96,7 +96,7 @@ def compress_to_1d(a, meta=None) -> tuple[numpy.array | torch.tensor, dict]:
     tensor (type derived from backend)
         1D array with tensor data.
     dict
-        metadata with structure of the symmetric tensor needed to encode the 1D array into blocks. 
+        metadata with structure of the symmetric tensor needed to encode the 1D array into blocks.
     """
     if meta is None:
         meta = {'config': a.config, 'struct': a.struct, 'slices': a.slices,
@@ -235,7 +235,7 @@ def get_blocks_charge(a) -> Sequence[Sequence[int]]:
     """
     Return charges of all native blocks.
 
-    In case of product of abelian symmetries, for each block the individual symmetry 
+    In case of product of abelian symmetries, for each block the individual symmetry
     charges are flattened into a single tuple.
     """
     return a.struct.t
@@ -255,7 +255,7 @@ def get_shape(a, axes=None, native=False) ->  int | Sequence[int]:
     Parameters
     ----------
     axes : int | Sequence[int]
-        indices of legs; If ``axes=None`` returns shape for all legs. Default is ``axes=None``.
+        indices of legs; If ``axes=None`` returns shape for all legs. The default is ``axes=None``.
     """
     if axes is None:
         axes = tuple(n for n in range(a.ndim_n if native else a.ndim))
@@ -276,7 +276,7 @@ def __getitem__(a, key) -> numpy.ndarray | torch.tensor:
     Block corresponding to a given charge combination.
 
     The type of the returned tensor corresponds to specified backend, e.g.,
-    :class:`numpy.ndarray` or :class:`torch.Tensor` for *NumPy* and *PyTorch* respectively. 
+    :class:`numpy.ndarray` or :class:`torch.Tensor` for *NumPy* and *PyTorch* respectively.
     In case of diagonal tensor, the output is a 1D array.
 
     Parameters
@@ -315,7 +315,7 @@ def get_legs(a, axes=None, native=False) -> yastn.Leg | Sequence[yastn.Leg]:
         indices of legs to retrieve. If ``None`` returns list with all legs.
 
     native : bool
-        if ``True`` considers native legs; otherwise returns fused legs. Default is ``native=False``.
+        if ``True`` considers native legs; otherwise returns fused legs. The default is ``native=False``.
     """
     legs = []
     tset = np.array(a.struct.t, dtype=np.int64).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
@@ -360,8 +360,8 @@ def to_dense(a, legs=None, native=False, reverse=False) -> numpy.ndarray | torch
 
     The type of the returned tensor depends on the backend, i.e. ``numpy.ndarray`` or ``torch.tensor``.
     Blocks are ordered according to increasing charges on each leg.
-    It is possible to supply a list of additional charge sectors to be included by 
-    explictly specifying ``legs``. 
+    It is possible to supply a list of additional charge sectors to be included by
+    explictly specifying ``legs``.
     Specified ``legs`` should be consistent with current structure of the tensor.
     This allows to fill in extra zero blocks.
 

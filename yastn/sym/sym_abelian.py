@@ -28,12 +28,12 @@ class sym_abelian(metaclass=sym_meta):
     NSYM = len('length-of-charge-vector')
 
     @classmethod
-    def zero(cls):
+    def zero(cls) -> tuple[int, ...]:
         """ Zero charge. """
         return (0,) * cls.NSYM
 
     @classmethod
-    def fuse(cls, charges, signatures, new_signature):
+    def fuse(cls, charges, signatures, new_signature) -> np.ndarray[np.int64]:
         r"""
         Fusion rule for abelian symmetry.
 
@@ -44,11 +44,11 @@ class sym_abelian(metaclass=sym_meta):
 
         Parameters
         ----------
-        charges: numpy.ndarray(int)
+        charges: np.ndarray[int]
             :math:`k \times m \times nsym` matrix, where :math:`k` is the number of
             independent blocks, and :math:`m` is the number of fused legs.
 
-        signatures: numpy.ndarray(int)
+        signatures: np.ndarray[int]
             integer vector with :math:`m` elements in :math:`{-1, +1}`.
 
         new_signature: int
@@ -56,39 +56,34 @@ class sym_abelian(metaclass=sym_meta):
 
         Returns
         -------
-        numpy.ndarray(int)
-            integer matrix with shape (k, NSYM) of fused charges;
+        np.ndarray[int]
+            matrix of integers with shape (k, NSYM) of fused charges;
             includes multiplication by ``new_signature``.
         """
         raise NotImplementedError("Subclasses need to override the fuse function")
 
     @classmethod
-    def add_charges(cls, *charges, s=None, new_s=1):
+    def add_charges(cls, *charges, signatures=None, new_signature=1) -> tuple[int, ...]:
         r"""
         Auxiliary function for adding tensor charges.
         It employs :meth:`fuse` function and returns resulting charge as a tuple.
 
         Parameters
         ----------
-        charges: tuple[int, ...]
+        charges: Sequence[tuple[int, ...]]
             Sequence of charges to be added.
 
-        s: None | Sequence[int]
+        signatures: None | Sequence[int]
+            Signature for provided charges.
             The default None uses signature 1 for all charges.
-            For subtraction, it is possible to provide signatures by hand.
 
-        new_s: int
-            The default is 1.
-
-        Returns
-        -------
-        tuple
-            resulting tuple of charges
+        new_signature: int
+            Signature related to the result. The default is 1.
         """
         if len(charges) == 0:
             return cls.zero()
-        if s is None:
-            s = (1,) * len(charges)
+        if signatures is None:
+            signatures = (1,) * len(charges)
         charges = np.array(charges, dtype=np.int64).reshape(1, len(charges), cls.NSYM)
-        new_charge = cls.fuse(charges, s, new_s)
+        new_charge = cls.fuse(charges, signatures, new_signature)
         return tuple(new_charge.reshape(cls.NSYM).tolist())

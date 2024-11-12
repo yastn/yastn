@@ -124,7 +124,7 @@ def measure_1site(bra, O, ket, sites=None) -> dict[int, number]:
         op = {k: O for k in sites}
         O0 = O
 
-    n_left = O0.config.sym.add_charges(O0.n, new_s=-1)
+    n_left = O0.config.sym.add_charges(O0.n, new_signature=-1)
     env = Env2(bra, ket, n_left=n_left)
     env.setup_(to='first').setup_(to='last')
 
@@ -194,7 +194,7 @@ def measure_2site(bra, O, P, ket, bonds='<') -> dict[tuple[int, int], float] | f
         P0 = P
         P = {k: P for k in range(ket.N)}
 
-    n_left = O0.config.sym.add_charges(O0.n, P0.n, new_s=-1)
+    n_left = O0.config.sym.add_charges(O0.n, P0.n, new_signature=-1)
 
     pairs = [(n0, n1) for n0, n1 in pairs if (n0 in O and n1 in P)]
     s0s1 = [pair for pair in pairs if pair[0] < pair[1]]

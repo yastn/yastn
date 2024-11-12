@@ -57,7 +57,7 @@ def tensordot(a, b, axes, conj=(0, 0)) -> yastn.Tensor:
 
     conj: tuple[int, int]
         specify tensors to conjugate by: ``(0, 0)``, ``(0, 1)``, ``(1, 0)``, or ``(1, 1)``.
-        Default is ``(0, 0)``, i.e. neither tensor is conjugated.
+        The default is ``(0, 0)``, i.e. neither tensor is conjugated.
     """
     if conj[0]:
         a = a.conj()
@@ -309,7 +309,7 @@ def vdot(a, b, conj=(1, 0)) -> number:
 
     conj: tuple[int, int]
         shows which tensor to conjugate: ``(0, 0)``, ``(0, 1)``, ``(1, 0)``, or ``(1, 1)``.
-        Default is ``(1, 0)``, i.e. tensor ``a`` is conjugated.
+        The default is ``(1, 0)``, i.e. tensor ``a`` is conjugated.
     """
     _test_can_be_combined(a, b)
     if conj[0] == 1:
@@ -455,7 +455,8 @@ def swap_gate(a, axes, charge=None) -> yastn.Tensor:
     """
     Return tensor after application of a swap gate.
 
-    Multiply blocks with odd charges on swapped legs by -1.
+    Multiply blocks with odd charges on swapped legs by -1, where the information which charges to include here is controled by
+    a ``fermionic`` flag in tensor :ref:`config <tensor/configuration:YASTN configuration>`.
 
     Parameters
     ----------

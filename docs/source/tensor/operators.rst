@@ -1,8 +1,8 @@
 Predefined YASTN tensors
 ========================
 
-In YASTN there are a number of predefined bases for typical models. These can be used to generate a model of given physical definition. 
-For more general case a custom operator basis class can be defined. 
+In YASTN, we predefined several classes containing sets of standard operators,
+which can be employed in simulations of many typical physical models.
 
 Spin-1/2 and Pauli matrices
 ---------------------------

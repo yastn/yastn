@@ -9,7 +9,7 @@ YASTN specifies symmetry through any object that is a plain Python module or cla
        for :math:`U(1)` or :math:`Z_2` group. For product groups such
        as :math:`U(1)\times U(1)` instead `NSYM=2`.
 
-    #. how to add up charges by implementing a `fuse` function.
+    #. how to add up charges by implementing a ``fuse`` function.
 
 .. automodule:: yastn.sym.sym_abelian
     :members: sym_abelian
