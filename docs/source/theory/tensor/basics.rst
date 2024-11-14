@@ -11,7 +11,7 @@ Tensors are multilinear maps from products of several vector spaces
     T:\quad V^i\otimes V^j\otimes V^k\otimes...\otimes V_a\otimes V_b\otimes V_c\otimes... \rightarrow scalar,
 
 where :math:`V^j` and :math:`V_j` refers to vector space that is either covariant or contravariant with respect to transformations acting on these spaces.
-YASTN refers to individual spaces :math:`V` as ''legs``.
+YASTN refers to individual spaces :math:`V` as **legs**.
 The tensor :math:`T` expressed in bases and components is
 
 .. math::
@@ -41,7 +41,7 @@ In quantum mechanics, we introduce an operator
 
 where due to different actions of symmetry transformations vector spaces are split between :math:`\langle bra |` and :math:`|ket \rangle` spaces, or Hilbert space :math:`\mathcal{H}` and its dual :math:`\mathcal{H}^*`.
 In YASTN, similar to other implementations (:ref:`see below <refs_basics>`), the distinction between
-:math:`\langle bra |` and :math:`|ket \rangle` spaces, is encoded through ''signature`` atribute of :class:`yastn.Leg` assigned to a tensor.
+:math:`\langle bra |` and :math:`|ket \rangle` spaces, is encoded through **signature** atribute of :class:`yastn.Leg` assigned to a tensor.
 
 .. note::
     Signature of the tensor, i.e, :attr:`yastn.Tensor.s`, is a tuple of signs :math:`\pm 1` matching signatures of individual legs.
@@ -104,19 +104,15 @@ considered.
 Examples for selected groups
 ----------------------------
 
-* :math:`\mathbf{U(1)}`: allowed charges are integers :math:`t_i \in \mathbb{Z}` with usual integer addition
-    and :math:`\theta_g` is usual angle :math:`\theta_g \in [0,2\pi)`.
-* :math:`\mathbf{Z_2}`: allowed charges are a subset of integers :math:`t_i \in \{0,1\}` with addition :math:`\textrm{mod 2}`.
-    Two elements of the group map to angles :math:`\{0,1\}\xrightarrow{\theta} \{0,\pi\}`.
-* :math:`\mathbf{Z_2 \times U(1)}`: direct product of two symmetries lead to allowed charges
-    that are individual group charges accummulated in a vector :math:`t_i \in \{0,1\} \otimes \mathbb{Z}`. The addition is distributed, i.e.,
+* :math:`U(1)`: allowed charges are integers :math:`t_i \in \mathbb{Z}` with usual integer addition and :math:`\theta_g` is usual angle :math:`\theta_g \in [0,2\pi)`.
+* :math:`Z_2`: allowed charges are a subset of integers :math:`t_i \in \{0,1\}` with addition :math:`\textrm{mod 2}`. Two elements of the group map to angles :math:`\{0,1\}\xrightarrow{\theta} \{0,\pi\}`.
+* :math:`Z_2 \times U(1)`: direct product of two symmetries lead to allowed charges that are individual group charges accummulated in a vector :math:`t_i \in \{0,1\} \otimes \mathbb{Z}`. The addition is distributed, i.e.,
 
 .. math::
 
     t_i+t'_i := \begin{pmatrix} t_{i,0} \\ t_{i,1} \end{pmatrix} + \begin{pmatrix} t'_{i,0} \\ t'_{i,1} \end{pmatrix} = \begin{pmatrix} t_{i,0} + t'_{i,0}\ \textrm{mod}\ 2\\ t'_{i,1} + t'_{i,1} \end{pmatrix}
 
-.. note::
-    See the above examples and how YASTN defines symmetries in :ref:`API docs<tensor/symmetry:specifying symmetry>`.
+See :ref:`API docs<tensor/symmetry:specifying symmetry>` on how YASTN defines symmetries.
 
 Conjugation
 -----------
@@ -127,8 +123,7 @@ In the latter, the change of a sign by minus depends on the abelian group.
 
 Individual flip of the signature of a specific leg is also possible and is accompanied by negation of charges on that leg.
 
-.. note::
-    See :ref:`API docs<tensor/algebra:Conjugation of symmetric tensors>`, for various types of conjugation.
+See :ref:`API docs<tensor/algebra:Conjugation of symmetric tensors>` for various types of conjugation.
 
 .. _refs_basics:
 

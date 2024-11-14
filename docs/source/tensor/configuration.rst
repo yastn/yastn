@@ -3,13 +3,13 @@ YASTN configuration
 
 All YASTN tensors have to be provided with **configuration**, which defines:
 
-   #. linear algebra backend,
+   #. linear algebra backend
 
-   #. :doc:`abelian symmetry group</tensor/symmetry>`,
+   #. :doc:`abelian symmetry group</tensor/symmetry>`
 
-   #. default data type (``float64``, ``complex128``) and device (provided it is supported by backend) of tensors,
+   #. default data type (``float64``, ``complex128``) and device (provided it is supported by backend) of a tensor
 
-   #. fermionic statistics (controlling action of :meth:`yastn.swap_gate`),
+   #. fermionic statistics (controlling action of :meth:`yastn.swap_gate`)
 
 The configuration can be provided as a Python module,
 `types.SimpleNamespace <https://docs.python.org/3/library/types.html#types.SimpleNamespace>`_,

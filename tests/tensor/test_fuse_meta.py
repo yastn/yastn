@@ -29,7 +29,7 @@ def test_fuse(config_kwargs):
     c = b.fuse_legs(axes=(1, (0, 2)), mode='meta')
     c = c.unfuse_legs(axes=1)
     c = c.unfuse_legs(axes=2)
-    d = c.move_leg(source=1, destination=0)
+    d = c.moveaxis(source=1, destination=0)
     assert yastn.norm(a - d) < tol  # == 0.0
 
 
@@ -55,7 +55,7 @@ def test_fuse_split(config_kwargs):
     a3 = yastn.tensordot(USf, Vf, axes=(1, 0))
     assert yastn.norm(af - a3) < tol  # == 0.0
     a3 = a3.unfuse_legs(axes=0)
-    a3 = a3.unfuse_legs(axes=(1, 2)).move_leg(source=2, destination=1)
+    a3 = a3.unfuse_legs(axes=(1, 2)).moveaxis(source=2, destination=1)
     assert yastn.norm(a - a3) < tol  # == 0.0
 
     Qf, Rf = yastn.linalg.qr(af, axes=(0, 1))
@@ -91,7 +91,7 @@ def test_fuse_transpose(config_kwargs):
     fc = fc.unfuse_legs(axes=(1, 3))
     assert fc.get_shape() == (13, 9, 11, 7, 3, 5)
 
-    fc = fa.move_leg(source=1, destination=2)
+    fc = fa.moveaxis(source=1, destination=2)
     assert fc.get_shape() == (15, 99, 7, 13)
 
     c = fc.unfuse_legs(axes=(1, 0))

@@ -68,7 +68,7 @@ def apply_operator(psi, c, site):
     ndim = psi.ndim
     ca = c.add_leg(axis=-1)
     cpsi = yastn.tensordot(psi, ca, axes=(site, 1))
-    cpsi = cpsi.move_leg(source=ndim - 1, destination=site)
+    cpsi = cpsi.moveaxis(source=ndim - 1, destination=site)
     cpsi = cpsi.swap_gate(axes=(tuple(range(site)), ndim))
     cpsi = cpsi.remove_leg(axis=-1)
     return cpsi

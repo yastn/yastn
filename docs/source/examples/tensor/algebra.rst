@@ -1,6 +1,11 @@
 Linear algebra with symmetric tensors
 =====================================
 
+.. code-block:: python
+
+   import yastn
+   config_kwargs = {"backend": "np"}
+
 Basic algebra operations
 ------------------------
 
@@ -11,7 +16,7 @@ Basic algebra operations
 Tensor contractions
 -------------------
 
-Basic contractions with :meth:`yastn.tensordot`,  matrix-multiplication operator ``@``, tracing with :meth:`yastn.trace`
+Basic contractions with :meth:`yastn.tensordot`, matrix-multiplication operator ``@``, tracing with :meth:`yastn.trace`
 
 .. literalinclude:: /../../tests/tensor/test_syntax.py
    :pyobject: test_syntax_contraction
@@ -32,7 +37,7 @@ Transposition
 Fusion (reshaping)
 ------------------
 
-Following example showcases fusion, in particular its `hard` mode.
+Following example showcases fusion, in particular its ``'hard'`` mode (the default).
 In this case, the tensor data is reshuffled/resized in memory.
 
 .. literalinclude:: /../../tests/tensor/test_fuse_hard.py

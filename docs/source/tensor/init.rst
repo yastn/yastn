@@ -4,12 +4,12 @@ Creating symmetric YASTN tensors
 Initializing symmetric tensors from scratch
 -------------------------------------------
 
-Symmetric tensor can be initialized as ''blank`` or more precisely empty.
-In this case only its rank (specified through signature tuple) and symmetry
+Symmetric tensor can be initialized as blank or, more precisely, empty.
+In this case only its rank (specified through tuple of signatures) and symmetry
 needs to be known when initializing such empty symmetric tensors.
 The data, in a form of non-zero blocks, can be added at later time.
 
-See examples: :ref:`examples/tensor/init:create empty tensor and fill it block by block`.
+See examples at :ref:`examples/tensor/init:create empty tensor and fill it block by block`.
 
 .. autoclass:: yastn.Tensor
 
@@ -18,14 +18,14 @@ See examples: :ref:`examples/tensor/init:create empty tensor and fill it block b
 Basic creation operations
 -------------------------
 
+See examples at :ref:`examples/tensor/init:create tensors from scratch`.
+
 Basic creation operations includes operations such as creating random tensors,
 tensors filled with zeros, or diagonal identity tensors.
 
 The symmetry structure of the tensor can be given either
 by directly listing all charge sectors for each leg and dimensions
 of these sectors or by passing a list of legs.
-
-See examples: :ref:`examples/tensor/init:create tensors from scratch`.
 
 .. automodule:: yastn
    :noindex:
@@ -35,14 +35,14 @@ See examples: :ref:`examples/tensor/init:create tensors from scratch`.
 Copying and cloning with autograd
 ---------------------------------
 
+See examples at :ref:`examples/tensor/init:clone, detach or copy tensors`.
+
 YASTN follows the semantics of PyTorch with regards to creating
 differentiable *clones* or non-differentiable *copies* of symmetric
 tensors. See
 `clone <https://pytorch.org/docs/stable/generated/torch.clone.html#torch.clone>`_
 and
 `detach <https://pytorch.org/docs/stable/generated/torch.Tensor.detach.html?highlight=detach#torch.Tensor.detach>`_ for PyTorch.
-
-See YASTN examples: :ref:`examples/tensor/init:clone, detach or copy tensors`.
 
 .. automethod:: yastn.Tensor.copy
 .. automethod:: yastn.Tensor.clone
@@ -66,10 +66,10 @@ Tensors can be moved between devices and/or their `dtype` may be changed
 Import/Export of YASTN tensors from/to different formats
 --------------------------------------------------------
 
+See examples at :ref:`examples/tensor/init:serialization of symmetric tensors`.
+
 These utility operations can export and then import tensors from
 different formats. For example, exporting and importing tensor or MPS to and from a file.
-
-See examples: :ref:`examples/tensor/init:serialization of symmetric tensors`.
 
 .. autofunction:: yastn.Tensor.save_to_dict
 

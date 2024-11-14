@@ -46,13 +46,11 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
     r"""
     Split tensor using exact singular value decomposition (SVD) into :math:`a = U S V`,
     where the columns of `U` and the rows of `V` form orthonormal bases
-    and `S` is positive and diagonal matrix. 
-    
+    and `S` is positive and diagonal matrix.
+
     The function allows for optional truncation.
     Truncation can be based on relative tolerance, bond dimension of each block,
     and total bond dimension across all blocks (whichever gives smaller total dimension).
-
-    Charge of input tensor ``a`` is attached to `U` if ``nU=True`` and to `V` otherwise.
 
     Parameters
     ----------
@@ -73,7 +71,7 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
         it is the last leg of `U` and the first of `V`.
 
     policy: str
-        ``"fullrank"`` or ``"lowrank"`` are allowed. For ``"fullrank"`` use standard full (but reduced) SVD, 
+        ``"fullrank"`` or ``"lowrank"`` are allowed. For ``"fullrank"`` use standard full (but reduced) SVD,
         and for ``"lowrank"`` use randomized/truncated SVD and requires providing ``D_block`` in ``kwargs``.
 
     tol: float
@@ -100,7 +98,7 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
 
     Returns
     -------
-    U, S, V
+    `U`, `S`, `V`
     """
     diagnostics = kwargs['diagonostics'] if 'diagonostics' in kwargs else None
     U, S, V = svd(a, axes=axes, sU=sU, nU=nU, policy=policy, D_block=D_block,
@@ -114,8 +112,8 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
                                 truncate_multiplets=truncate_multiplets)
     U, S, V = Smask.apply_mask(U, S, V, axes=(-1, 0, 0))
 
-    U = U.move_leg(source=-1, destination=Uaxis)
-    V = V.move_leg(source=0, destination=Vaxis)
+    U = U.moveaxis(source=-1, destination=Uaxis)
+    V = V.moveaxis(source=0, destination=Vaxis)
     return U, S, V
 
 
@@ -142,12 +140,12 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         If ``False``, it is attached to `V`. The default is ``True``.
 
     compute_uv: bool
-        If ``True``, compute `U` and `V` in addition to `S` and only `S` otherwise. 
-        The default is ``True``. 
+        If ``True``, compute and return `U`, `S`, `V`.  If ``False``, compute and return onlys `S`.
+        The default is ``True``.
 
     Uaxis, Vaxis: int
         Specify which leg of `U` and `V` tensors are connecting with `S`. By default,
-        it is the last leg of U and the first of `V`, in which case ``a = U @ S @ V``.
+        it is the last leg of `U` and the first of `V`, in which case ``a = U @ S @ V``.
 
     policy: str
         ``"fullrank"`` or ``"lowrank"`` are allowed. Use standard full (but reduced) SVD for ``"fullrank"``.
@@ -168,8 +166,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
 
     Returns
     -------
-    U, S, V or S
-        The first option, with ``compute_uv=True``, is default.
+    `U`, `S`, `V` (when ``compute_uv=True``) or `S` (when ``compute_uv=False``)
     """
     _test_axes_all(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
@@ -238,8 +235,8 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     Vhfs = (_Fusion(s=(-sU,)),) + tuple(a.hfs[ii] for ii in axes[1])
     V = a._replace(struct=Vstruct, slices=Vslices, data=Vdata, mfs=Vmfs, hfs=Vhfs)
 
-    U = U.move_leg(source=-1, destination=Uaxis)
-    V = V.move_leg(source=0, destination=Vaxis)
+    U = U.moveaxis(source=-1, destination=Uaxis)
+    V = V.moveaxis(source=0, destination=Vaxis)
     return U, S, V
 
 
@@ -469,7 +466,7 @@ def truncation_mask(S, tol=0, tol_block=0,
 def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0) -> tuple[yastn.Tensor, yastn.Tensor]:
     r"""
     Split tensor using reduced QR decomposition, such that :math:`a = Q R`,
-    with :math:`QQ^\dagger=I`. The charge of `R` is zero.
+    with :math:`QQ^\dagger=I`. The charge of `R` is zero. The charge of ``a`` is carried by `Q`.
 
     Parameters
     ----------
@@ -477,7 +474,7 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0) -> tuple[yastn.Tensor, yastn.Ten
         Specify two groups of legs between which to perform QR, as well as their final order.
 
     sQ: int
-        signature of connecting leg in Q; equal 1 or -1. The default is 1.
+        signature of connecting leg in `Q`; equal 1 or -1. The default is 1.
         `R` is going to have opposite signature on connecting leg.
 
     Qaxis, Raxis: int
@@ -486,7 +483,7 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0) -> tuple[yastn.Tensor, yastn.Ten
 
     Returns
     -------
-    Q, R
+    `Q`, `R`
     """
     _test_axes_all(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
@@ -514,8 +511,8 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0) -> tuple[yastn.Tensor, yastn.Ten
     Rhfs = (_Fusion(s=(-sQ,)),) + tuple(a.hfs[ii] for ii in axes[1])
     R = a._replace(struct=Rstruct, slices=Rslices, data=Rdata, mfs=Rmfs, hfs=Rhfs)
 
-    Q = Q.move_leg(source=-1, destination=Qaxis)
-    R = R.move_leg(source=0, destination=Raxis)
+    Q = Q.moveaxis(source=-1, destination=Qaxis)
+    R = R.moveaxis(source=0, destination=Raxis)
     return Q, R
 
 
@@ -564,7 +561,7 @@ def eigh(a, axes, sU=1, Uaxis=-1) -> tuple[yastn.Tensor, yastn.Tensor]:
     Parameters
     ----------
     axes: tuple[int, int] | tuple[Sequence[int], Sequence[int]]
-        Specify two groups of legs between which to perform svd, as well as their final order.
+        Specify two groups of legs between which to perform eigh, as well as their final order.
 
     sU: int
         signature of connecting leg in `U` equall 1 or -1. The default is 1.
@@ -574,7 +571,7 @@ def eigh(a, axes, sU=1, Uaxis=-1) -> tuple[yastn.Tensor, yastn.Tensor]:
 
     Returns
     -------
-    S, U
+    `S`, `U`
     """
     _test_axes_all(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
@@ -606,7 +603,7 @@ def eigh(a, axes, sU=1, Uaxis=-1) -> tuple[yastn.Tensor, yastn.Tensor]:
     Shfs = (_Fusion(s=(-sU,)), _Fusion(s=(sU,)))
     S = a._replace(struct=Sstruct, slices=Sslices, data=Sdata, mfs=Smfs, hfs=Shfs)
 
-    U = U.move_leg(source=-1, destination=Uaxis)
+    U = U.moveaxis(source=-1, destination=Uaxis)
     return S, U
 
 
@@ -660,7 +657,7 @@ def eigh_with_truncation(a, axes, sU=1, Uaxis=-1,
     Parameters
     ----------
     axes: tuple[int, int] | tuple[Sequence[int], Sequence[int]]
-        Specify two groups of legs between which to perform svd, as well as their final order.
+        Specify two groups of legs between which to perform eigh, as well as their final order.
 
     sU: int
         signature of connecting leg in `U` equall 1 or -1. The default is 1.
@@ -669,20 +666,20 @@ def eigh_with_truncation(a, axes, sU=1, Uaxis=-1,
         specify which leg of `U` is the new connecting leg. By default, it is the last leg.
 
     tol: float
-        relative tolerance of singular values below which to truncate across all blocks.
+        relative tolerance of eigen-values below which to truncate across all blocks.
 
     tol_block: float
-        relative tolerance of singular values below which to truncate within individual blocks.
+        relative tolerance of eigen-values below which to truncate within individual blocks.
 
     D_block: int
-        largest number of singular values to keep in a single block.
+        largest number of eigen-values to keep in a single block.
 
     D_total: int
-        largest total number of singular values to keep.
+        largest total number of eigen-values to keep.
 
     Returns
     -------
-    S, U
+    `S`, `U`
     """
     S, U = eigh(a, axes=axes, sU=sU)
 
@@ -691,7 +688,7 @@ def eigh_with_truncation(a, axes, sU=1, Uaxis=-1,
                             truncate_multiplets=truncate_multiplets)
 
     S, U = Smask.apply_mask(S, U, axes=(0, -1))
-    U = U.move_leg(source=-1, destination=Uaxis)
+    U = U.moveaxis(source=-1, destination=Uaxis)
     return S, U
 
 
@@ -706,8 +703,8 @@ def entropy(a, alpha=1, tol=1e-12) -> number:
     ----------
     alpha: float
         Order of Renyi entropy.
-        ``alpha == 1`` is von Neuman entropy: :math:`-{\rm Tr}(a {\rm log2}(a))`
-        otherwise: :math:`1/(1-alpha) {\rm log2}({\rm Tr}(a ** alpha))`
+        ``alpha=1`` is von Neuman entropy: :math:`-{\rm Tr}(a {\rm log2}(a))`
+        otherwise: :math:`\frac{1}{1-alpha} {\rm log2}({\rm Tr}(a^{alpha}))`
 
     tol: float
         Discard all probabilities smaller than ``tol`` during calculation.

@@ -24,7 +24,7 @@ where transverse field :math:`g(0)=0`.
 The quench rate is controlled by an annealing time :math:`t_a` as :math:`s= t / t_a`.
 The system gets excited while passing the quantum critical point between
 paramagnetic and spin-glass phases in finite annealing time :math:`t_a`.
-This provides a minimal example of the problem considered in https://arxiv.org/abs/2403.00910
+This provides a minimal example of a class of problems considered in https://arxiv.org/abs/2403.00910
 
 
 We compare the results obtained using MPS and PEPS routines.

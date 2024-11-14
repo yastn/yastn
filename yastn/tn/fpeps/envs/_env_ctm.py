@@ -185,7 +185,10 @@ class EnvCTM(Peps):
         tmp = ten._attach_01(vect)
         val_no = tensordot(vecb, tmp, axes=((0, 1, 2, 3), (2, 3, 1, 0))).to_number()
 
-        ten.set_operator_(op)
+        if op.ndim == 2:
+            ten.set_operator_(op)
+        else:  # for a single-layer Peps, replace with new peps tensor
+            ten = op
         tmp = ten._attach_01(vect)
         val_op = tensordot(vecb, tmp, axes=((0, 1, 2, 3), (2, 3, 1, 0))).to_number()
 
@@ -222,8 +225,8 @@ class EnvCTM(Peps):
             G0, G1 = gate_product_operator(O0, O1, l_ordered, f_ordered)
         elif O0.ndim == 3 and O1.ndim == 3:
             G0, G1 = gate_fix_order(O0, O1, l_ordered, f_ordered)
-        else:
-            raise YastnError("Both operators O0 and O1 should have the same ndim==2, or ndim=3.")
+        # else:
+        #     raise YastnError("Both operators O0 and O1 should have the same ndim==2, or ndim=3.")
 
         if dirn == 'h':
             vecl = (env0.bl @ env0.l) @ (env0.tl @ env0.t)
@@ -235,8 +238,14 @@ class EnvCTM(Peps):
             tmp1 = tensordot(env1.t, tmp1, axes=((2, 1), (0, 1)))
             val_no = tensordot(tmp0, tmp1, axes=((0, 1, 2), (1, 0, 2))).to_number()
 
-            ten0.ket = apply_gate_onsite(ten0.ket, G0, dirn='l')
-            ten1.ket = apply_gate_onsite(ten1.ket, G1, dirn='r')
+            if O0.ndim <= 3:
+                ten0.ket = apply_gate_onsite(ten0.ket, G0, dirn='l')
+            else:
+                ten0 = O0
+            if O1.ndim <= 3:
+                ten1.ket = apply_gate_onsite(ten1.ket, G1, dirn='r')
+            else:
+                ten1 = O1
 
             tmp0 = ten0._attach_01(vecl)
             tmp0 = tensordot(env0.b, tmp0, axes=((2, 1), (0, 1)))
@@ -253,8 +262,15 @@ class EnvCTM(Peps):
             tmp1 = tensordot(tmp1, env1.l, axes=((2, 3), (0, 1)))
             val_no = tensordot(tmp0, tmp1, axes=((0, 1, 2), (2, 1, 0))).to_number()
 
-            ten0.ket = apply_gate_onsite(ten0.ket, G0, dirn='t')
-            ten1.ket = apply_gate_onsite(ten1.ket, G1, dirn='b')
+            if O0.ndim <= 3:
+                ten0.ket = apply_gate_onsite(ten0.ket, G0, dirn='t')
+            else:
+                ten0 = O0
+
+            if O1.ndim <= 3:
+                ten1.ket = apply_gate_onsite(ten1.ket, G1, dirn='b')
+            else:
+                ten1 = O1
 
             tmp0 = ten0._attach_01(vect)
             tmp0 = tensordot(tmp0, env0.r, axes=((2, 3), (0, 1)))
@@ -380,7 +396,13 @@ class EnvCTM(Peps):
 
         for site, op in ops.items():
             ind = site[0] - xs[0] + site[1] - ys[0] + 1
-            tm[ind].set_operator_(op)
+
+            if op.ndim == 2:
+                tm[ind].set_operator_(op)
+            elif len(xs) == 1:  # 'h'
+                tm[ind] = op.transpose(axes=(1, 2, 3, 0))
+            else:  # 'v'
+                tm[ind] = op.transpose(axes=(0, 3, 2, 1))
 
         val_op = mps.vdot(vl, tm, vr)
         return val_op / val_no

@@ -26,7 +26,7 @@ def __add__(a, b) -> yastn.Tensor:
     """
     Add two tensors, use: :math:`a + b`.
 
-    Signatures and total charges should match.
+    Signatures and total charges of two tensors should match.
     """
     _test_can_be_combined(a, b)
     aA, bA, hfs, meta, struct, slices = _addition_meta(a, b)
@@ -38,7 +38,7 @@ def __sub__(a, b) -> yastn.Tensor:
     """
     Subtract two tensors, use: :math:`a - b`.
 
-    Both signatures and total charges should match.
+    Signatures and total charges of two tensors should match.
     """
     _test_can_be_combined(a, b)
     aA, bA, hfs, meta, struct, slices = _addition_meta(a, b)
@@ -150,7 +150,7 @@ def allclose(a, b, rtol=1e-13, atol=1e-13) -> bool:
     ----------
     a, b: yastn.Tensor
         Tensor for comparison.
-    
+
     rtol, atol: float
         Desired relative and absolute precision.
     """
@@ -162,7 +162,7 @@ def allclose(a, b, rtol=1e-13, atol=1e-13) -> bool:
 def __lt__(a, number) -> yastn.Tensor[bool]:
     """
     Logical tensor with elements less-than a number (if it makes sense for backend data tensors),
-    use: `tensor < number`
+    use: `mask = tensor < number`
 
     Intended for diagonal tensor to be applied as a truncation mask.
     """
@@ -173,7 +173,7 @@ def __lt__(a, number) -> yastn.Tensor[bool]:
 def __gt__(a, number) -> yastn.Tensor[bool]:
     """
     Logical tensor with elements greater-than a number (if it makes sense for backend data tensors),
-    use: `tensor > number`
+    use: `mask = tensor > number`
 
     Intended for diagonal tensor to be applied as a truncation mask.
     """
@@ -184,7 +184,7 @@ def __gt__(a, number) -> yastn.Tensor[bool]:
 def __le__(a, number) -> yastn.Tensor[bool]:
     """
     Logical tensor with elements less-than-or-equal-to a number (if it makes sense for backend data tensors),
-    use: `tensor <= number`
+    use: `mask = tensor <= number`
 
     Intended for diagonal tensor to be applied as a truncation mask.
     """
@@ -195,7 +195,7 @@ def __le__(a, number) -> yastn.Tensor[bool]:
 def __ge__(a, number) -> yastn.Tensor[bool]:
     """
     Logical tensor with elements greater-than-or-equal-to a number (if it makes sense for backend data tensors),
-    use: `tensor >= number`
+    use: `mask = tensor >= number`
 
     Intended for diagonal tensor to be applied as a truncation mask.
     """
@@ -281,7 +281,7 @@ def imag(a) -> yastn.Tensor:
 
 
 def sqrt(a) -> yastn.Tensor:
-    """ Return tensor after applying element-wise square root for each ternso element. """
+    """ Return tensor after applying element-wise square root for each tensor element. """
     data = a.config.backend.sqrt(a._data)
     return a._replace(data=data)
 

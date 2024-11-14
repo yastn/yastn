@@ -16,12 +16,6 @@
 import pytest
 import yastn
 
-tol = 1e-12  #pylint: disable=invalid-name
-
-
-# a = yastn.randR(config=config_U1, s=(-1, 1, 1, -1),
-#             t=((-1, 1, 0), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
-#             D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
 
 def test_syntax_tensor_creation_operations(config_kwargs):
     #
@@ -87,7 +81,7 @@ def test_syntax_create_empty_tensor_and_fill(config_kwargs):
     # In the example above sector with charge 2 on 3rd leg has dimension 9.
     #
     # Attempting to create new block with different dimension for the same
-    # sector 2 on 3rd leg throws an error
+    # sector 2 on 3rd leg throws an error.
     #
     with pytest.raises(yastn.YastnError,
                        match="Inconsist assigment of bond dimension to some charge."):
@@ -197,9 +191,17 @@ def test_syntax_block_access(config_kwargs):
     a = yastn.rand(config=config_U1, legs=legs)
 
     #
-    # directly access block with charges (1, 2, 1).
+    # Directly access block with charges (1, 2, 1).
     #
     a[(1, 2, 1)]
+    assert a[(1, 2, 1)].shape == (3, 6, 8)
+
+    #
+    # Cannot access non-existing block.
+    #
+    with pytest.raises(yastn.YastnError,
+                       match="Tensor does not have block specify by key."):
+        a[(0, 3, 3)]
 
 
 def test_syntax_block_tensors(config_kwargs):
@@ -223,7 +225,7 @@ def test_syntax_block_tensors(config_kwargs):
                 yastn.tensordot(b, d.conj(), axes=((1, 2), (2, 1)))
 
     # new tensor filled with ones, matching structure of selected legs -- to be used for e.g. dot
-    assert yastn.norm(result1 - result2) < tol
+    assert yastn.norm(result1 - result2) < 1e-12
 
 
 def test_syntax_contraction(config_kwargs):
@@ -247,9 +249,10 @@ def test_syntax_contraction(config_kwargs):
     # The order of the indices on the resulting tensor is as follows:
     # First, the outgoing indices of a (the first argument to tensordot), then
     # the outgoing indices of tensor b
-    tensor = yastn.tensordot(a, b, axes=((1, 2), (1, 2)), conj=(1, 0))
+    tensor = yastn.tensordot(a.conj(), b, axes=((1, 2), (1, 2)))
 
-    # tensordot can also be invoked also as a function of the tensor itself
+    # Tensordot can also be invoked also as a function of the tensor itself.
+    # Conjugating tensors can be also invoked using conj parameter in tensordot.
     #
     tensor = a.tensordot(b, axes=((1, 2), (1, 2)), conj=(1, 0))
 
@@ -267,26 +270,26 @@ def test_syntax_contraction(config_kwargs):
     #
     # is the @ operator. For rank-2 tensor it is thus equivalent to matrix multiplication
     t1 = a @ c
-    assert yastn.norm(t0 - t1) < tol
+    assert yastn.norm(t0 - t1) < 1e-12
     #
     # Utility functions simplifying execution of contractions
     t2 = yastn.ncon([a, c], ((-0, -1, -2, 1), (1, -3, -4)))
     t3 = yastn.einsum('ijkx,xlm->ijklm', a, c)
-    assert yastn.norm(t0 - t2) < tol
-    assert yastn.norm(t0 - t3) < tol
+    assert yastn.norm(t0 - t2) < 1e-12
+    assert yastn.norm(t0 - t3) < 1e-12
 
 
-    # Another special case of tensor contraction is a dot product of vectorized tensors
+    # Another special case of tensor contraction is a dot product of vectorized tensors.
     #  __           _
     # |a*|-<-0 0-<-|b| = scalar
     # |  |->-1 1->-| |
     # |  |->-2 2->-| |
     # |__|-<-3 3-<-|_|
-    tensor = a.tensordot(b, axes=((0, 1, 2, 3), (0, 1, 2, 3)), conj=(1, 0))
+    tensor = a.conj().tensordot(b, axes=((0, 1, 2, 3), (0, 1, 2, 3)))
     assert isinstance(tensor,yastn.Tensor)
     #
-    # such single element symmetric Tensor can be converted to a single-element
-    # tensor of the backend type, or even further to python scalar
+    # Such single element symmetric Tensor can be converted to a single-element
+    # tensor of the backend type, or even further to python scalar.
     number = tensor.to_number()
     python_scalar = tensor.item()
     assert isinstance(python_scalar,float)
@@ -297,7 +300,7 @@ def test_syntax_contraction(config_kwargs):
 
     # Trace over certain indices can be computed using identically named function.
     # In this case, a2_ijil = a2_jl
-    a2 = yastn.tensordot(a, a, axes=((0, 1), (0, 1)), conj=(1, 0))
+    a2 = yastn.tensordot(a.conj(), a, axes=((0, 1), (0, 1)))
     tensor = a2.trace(axes=(0, 2))
     assert tensor.get_rank()==2
     #
@@ -376,10 +379,10 @@ def test_syntax_noDocs(config_kwargs):
     tensor = a.transpose(axes=(2, 3, 0, 1))
     tensor = yastn.transpose(a, axes=(2, 3, 0, 1))
 
-    tensor = a.move_leg(source=2, destination=3)
-    tensor = yastn.move_leg(a, source=2, destination=3)
+    tensor = a.moveaxis(source=2, destination=3)
+    tensor = yastn.moveaxis(a, source=2, destination=3)
 
-    a2 = yastn.tensordot(a, a, axes=((0, 1), (0, 1)), conj=(1, 0))
+    a2 = yastn.tensordot(a.conj(), a, axes=((0, 1), (0, 1)))
     # linalg / split
     U, S, V = yastn.linalg.svd(a, axes=((0, 1), (2, 3)))
     U, S, V = yastn.svd(a, axes=((0, 1), (2, 3)))

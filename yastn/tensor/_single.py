@@ -103,7 +103,7 @@ def requires_grad_(a, requires_grad=True) -> Never:
     Parameters
     ----------
     requires_grad: bool
-        if ``True`` activates autograd.
+        If ``True``, activates autograd.
     """
     a.config.backend.requires_grad_(a._data, requires_grad=requires_grad)
 
@@ -158,7 +158,8 @@ def flip_charges(a, axes=None) -> yastn.Tensor:
     Parameters
     ----------
     axes: int | Sequence[int]
-        index of the leg, or a group of legs. If None, flips all legs.
+        index of the leg, or a group of legs.
+        The default is ``None``, which flips all legs.
     """
     if a.isdiag:
         raise YastnError('Cannot flip charges of a diagonal tensor. Use diag() first.')
@@ -205,7 +206,8 @@ def drop_leg_history(a, axes=None) -> yastn.Tensor:
     Parameters
     ----------
     axes: int | Sequence[int]
-        index of the leg, or a group of legs. If :code:`None`, drops information from all legs.
+        index of the leg, or a group of legs.
+        The default is :code:`None`, which drops information from all legs.
     """
     if axes is None:
         axes = tuple(range(a.ndim))
@@ -263,11 +265,11 @@ def transpose(a, axes=None) -> yastn.Tensor:
     return a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, data=data)
 
 
-def move_leg(a, source, destination) -> yastn.Tensor:
+def moveaxis(a, source, destination) -> yastn.Tensor:
     r"""
     Change the position of an axis (or a group of axes) of the tensor.
     This is a convenience function for subset of possible permutations. It
-    computes the corresponding permutation and then calls :meth:`yastn.Tensor.transpose`.
+    computes the corresponding permutation and calls :meth:`yastn.transpose`.
 
     Makes a shallow copy of tensor data if the order is not changed.
 
@@ -287,19 +289,19 @@ def move_leg(a, source, destination) -> yastn.Tensor:
     return transpose(a, axes)
 
 
-def moveaxis(a, source, destination) -> yastn.Tensor:
+def move_leg(a, source, destination) -> yastn.Tensor:
     r"""
     Change the position of an axis (or a group of axes) of the tensor.
     This is a convenience function for subset of possible permutations. It
-    computes the corresponding permutation and then calls :meth:`yastn.Tensor.transpose`.
+    computes the corresponding permutation and calls :meth:`yastn.transpose`.
 
-    This function is an alias for :meth:`yastn.Tensor.move_leg`.
+    TODO: remove
 
     Parameters
     ----------
     source, destination: int | Sequence[int]
     """
-    return move_leg(a, source, destination)
+    return moveaxis(a, source, destination)
 
 
 def add_leg(a, axis=-1, s=-1, t=None, leg=None) -> yastn.Tensor:
@@ -320,13 +322,13 @@ def add_leg(a, axis=-1, s=-1, t=None, leg=None) -> yastn.Tensor:
         The default is -1, where the leg charge is equal to the tensor charge for :code:`t=None`.
 
     t : int | Sequence[int]
-        charge carried by the new leg. If ``None``, takes the total charge `n`
-        of the original tensor resulting in a tensor with `n=0`.
+        charge carried by the new leg. The default is ``None``,
+        which takes the total charge `n` of the original tensor resulting in a tensor with `n=0`.
 
     leg : Optional[Leg]
         It is possible to provide a new leg directly.
         It has to be of dimension one but can contain information about the fusion of other dimension-one legs.
-        If given (not None), it overrides information provided in ``s`` and ``t``.
+        If provided, it overrides information in ``s`` and ``t``. The default is ``None``.
     """
     if a.isdiag:
         raise YastnError('Cannot add axis to a diagonal tensor.')

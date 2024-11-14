@@ -43,7 +43,7 @@ def test_ncon_einsum_syntax(config_kwargs):
 
     # The same can be obtained using einsum function, which tries to mimic the syntax of np.einsum
     e1 = yastn.einsum('xbd,acx->abcd', a, b)
-    assert yastn.norm(e1 - e) < tol
+    assert yastn.norm(e1 - e) < 1e-12
 
     # Network composed of several tensors can be contracted by a single ncon call,
     # including traces and conjugations
@@ -67,7 +67,7 @@ def test_ncon_einsum_syntax(config_kwargs):
     # character '*' can be used in einsum subscripts to conjugate respective tensor
     # spaces in subscripts are ignored
     f1 = yastn.einsum('nCA, *DBo, nmkk, *mlol -> ABCD', a, b, c, d, order='klmno')
-    assert yastn.norm(f1 - f) < tol
+    assert yastn.norm(f1 - f) < 1e-12
 
 
 def test_ncon_einsum_basic(config_kwargs):

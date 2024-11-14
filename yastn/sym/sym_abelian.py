@@ -66,7 +66,7 @@ class sym_abelian(metaclass=sym_meta):
     def add_charges(cls, *charges, signatures=None, new_signature=1) -> tuple[int, ...]:
         r"""
         Auxiliary function for adding tensor charges.
-        It employs :meth:`fuse` function and returns resulting charge as a tuple.
+        It employs :meth:`fuse` function and returns resulting charge as a tuple of integers.
 
         Parameters
         ----------
@@ -78,7 +78,7 @@ class sym_abelian(metaclass=sym_meta):
             The default None uses signature 1 for all charges.
 
         new_signature: int
-            Signature related to the result. The default is 1.
+            Signature for the addition result. The default is 1.
         """
         if len(charges) == 0:
             return cls.zero()

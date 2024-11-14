@@ -38,7 +38,7 @@ class SpinfulFermions_tJ(meta_operators):
         -----
         For 'U1xU1xZ2', the two species (spin-up and spin-down) are treated as indistinguishable.
         In that case, creation and annihilation operators of the two species anti-commute
-        (fermionic statistics is encoded in the Z2 channel).
+        (fermionic statistics is encoded in the Z2 channel of U1xU1xZ2).
         """
         if 'fermionic' not in kwargs and isinstance(kwargs['sym'], str):
             kwargs['fermionic'] = (False, False, True) if kwargs['sym'] == 'U1xU1xZ2' else True

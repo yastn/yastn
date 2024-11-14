@@ -192,7 +192,7 @@ def fuse_legs(a, axes, mode=None) -> yastn.Tensor:
         Fusion can be reverted back by :meth:`yastn.Tensor.unfuse_legs`
 
     First, the legs are permuted into desired order. Then, selected groups of consecutive legs
-    are fused. The desired order of the legs is given by a tuple `axes`
+    are fused. The desired order of the legs is given by a tuple ``axes``
     of leg indices where the groups of legs to be fused are denoted by inner tuples ::
 
         axes=(0,1,(2,3,4),5)  keep leg order, fuse legs (2,3,4) into new leg
@@ -231,7 +231,7 @@ def fuse_legs(a, axes, mode=None) -> yastn.Tensor:
     mode: str
         can select ``'hard'`` or ``'meta'`` fusion. If ``None``, uses ``default_fusion``
         from tensor's :doc:`configuration </tensor/configuration>`.
-        Configuration option ``force_fusion`` can be used to override `mode` (introduced for debugging purposes).
+        Configuration option ``force_fusion`` can be used to override ``mode`` (introduced for debugging purposes).
     """
     if a.isdiag:
         raise YastnError('Cannot fuse legs of a diagonal tensor.')
@@ -348,7 +348,7 @@ def unfuse_legs(a, axes) -> yastn.Tensor:
     Unfuse legs, reverting one layer of fusion.
 
     If the tensor has been obtained by fusing some legs together, `unfuse_legs`
-    can revert such fusion. The legs to be unfused are passed in `axes` as `int`
+    can revert such fusion. The legs to be unfused are passed in ``axes`` as `int`
     or `tuple[int]` in case of more legs to be unfused. The unfused legs are inserted at
     the positions of the fused legs. The remaining legs are shifted accordingly ::
 
@@ -371,7 +371,7 @@ def unfuse_legs(a, axes) -> yastn.Tensor:
 
 
     Unfusing a leg obtained by fusing together other previously fused legs, unfuses
-    only the last fusion ::
+    only the last fusion. ::
 
         axes=2              unfuse leg 2 into legs 2,3
         ->   (0,1,2,3,4)
@@ -381,7 +381,7 @@ def unfuse_legs(a, axes) -> yastn.Tensor:
             |                 2--|__|--4<-3
             2=(2,3=(3,4))
 
-    fuse_legs may involve leg transposition, which is not undone by unfuse_legs.
+    `fuse_legs` may involve leg transposition, which is not undone by `unfuse_legs`.
 
     Parameters
     ----------

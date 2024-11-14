@@ -1,13 +1,10 @@
 Decompositions of symmetric tensors
 ===================================
 
-QR decompositions
------------------
+.. code-block:: python
 
-The function below takes tensor :code:`a` with 4 legs, decompose it using QR and contracts the resulting Q and R tensors back into :code:`a`.
-
-.. literalinclude:: /../../tests/tensor/test_qr.py
-   :pyobject: run_qr_combine
+   import yastn
+   config_kwargs = {"backend": "np"}
 
 
 SVD decompositions and truncation
@@ -17,8 +14,17 @@ SVD decompositions and truncation
    :pyobject: test_svd_truncate
 
 
-scipy.sparse.linalg.eigs
-------------------------
+QR decompositions
+-----------------
+
+The function below takes tensor :code:`a` with 4 legs, decompose it using QR and contracts the resulting Q and R tensors back into :code:`a`.
+
+.. literalinclude:: /../../tests/tensor/test_qr.py
+   :pyobject: run_qr_combine
+
+
+Combining with scipy.sparse.linalg.eigs
+---------------------------------------
 
 Calculate the dominant eigenvector of a transfer matrix by employing the Krylov-base eigs method available in SciPy.
 Tensor operations can be similarly passed to other SciPy methods, though this is limited to the NumPy backend.

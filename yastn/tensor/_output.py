@@ -90,6 +90,7 @@ def compress_to_1d(a, meta=None) -> tuple[numpy.array | torch.tensor, dict]:
     .. note::
         :meth:`yastn.Tensor.compress_to_1d` and :meth:`yastn.decompress_from_1d`
         provide mechanism that allows using external matrix-free methods, such as :func:`eigs` implemented in SciPy.
+        See example at :ref:`examples/tensor/decomposition:combining with scipy.sparse.linalg.eigs`.
 
     Returns
     -------
@@ -145,7 +146,8 @@ def compress_to_1d(a, meta=None) -> tuple[numpy.array | torch.tensor, dict]:
 
 def print_properties(a, file=None) -> Never:
     """
-    Print basic properties of the tensor:
+    Print a number of properties of the tensor:
+
         * symmetry,
         * signature,
         * total charge,
@@ -191,12 +193,12 @@ def requires_grad(a) -> bool:
     return a.config.backend.requires_grad(a._data)
 
 
-def print_blocks_shape(a) -> str:
+def print_blocks_shape(a, file=None) -> str:
     """
     Print shapes of blocks as a sequence of block's charge followed by its shape.
     """
     for t, D in zip(a.struct.t, a.struct.D):
-        print(f"{t} {D}")
+        print(f"{t} {D}", file=file)
 
 
 def is_complex(a) -> bool:
@@ -217,7 +219,7 @@ def get_signature(a, native=False) -> Sequence[int]:
     """
     Return tensor signature, equivalent to :attr:`yastn.Tensor.s`.
 
-    If native, returns the signature of tensors's native legs, see :attr:`yastn.Tensor.s_n`.
+    If ``native=True``, ignore fusion with ``mode=meta`` and return the signature of tensors's native legs, see :attr:`yastn.Tensor.s_n`.
     """
     return a.s_n if native else a.s
 
@@ -226,7 +228,7 @@ def get_rank(a, native=False) -> int:
     """
     Return tensor rank equivalent to :attr:`yastn.Tensor.ndim`.
 
-    If ``native``, the native rank of the tensor is returned, see :attr:`yastn.Tensor.ndim_n`.
+    If ``native=True``, ignore fusion with ``mode=meta`` and count native legs, see :attr:`yastn.Tensor.ndim_n`.
     """
     return a.ndim_n if native else a.ndim
 
@@ -312,10 +314,12 @@ def get_legs(a, axes=None, native=False) -> yastn.Leg | Sequence[yastn.Leg]:
     Parameters
     ----------
     axes : int | Sequence[int] | None
-        indices of legs to retrieve. If ``None`` returns list with all legs.
+        Indices of legs to retrieve. If ``None`` returns list with all legs.
 
     native : bool
-        if ``True`` considers native legs; otherwise returns fused legs. The default is ``native=False``.
+        If ``True``, ignore fusion with ``mode=meta`` and return native legs.
+        Otherwise returns meta-fused legs (if such leg fusion was performed).
+        The default is ``False``.
     """
     legs = []
     tset = np.array(a.struct.t, dtype=np.int64).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
@@ -490,7 +494,7 @@ def zero_of_dtype(a):
     return a.config.backend.zeros((), dtype=a.yast_dtype, device=a.device)
 
 
-def to_number(a, part=None) -> number:
+def to_number(a) -> number:
     r"""
     Assuming the symmetric tensor has just a single non-empty block of total dimension one,
     return this element as a scalar.
@@ -500,11 +504,6 @@ def to_number(a, part=None) -> number:
 
     .. note::
         This operation preserves autograd.
-
-    Parameters
-    ----------
-    part : str
-        if :code:`'real'`, returns real part only.
     """
     size = a.size
     if size == 1:
@@ -513,7 +512,7 @@ def to_number(a, part=None) -> number:
         x = a.zero_of_dtype()
     else:
         raise YastnError('Only single-element (symmetric) Tensor can be converted to scalar')
-    return a.config.backend.real(x) if part == 'real' else x
+    return x
 
 
 def item(a) -> float:

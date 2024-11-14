@@ -138,7 +138,7 @@ def test_conj_Z2xU1(config_kwargs):
     norm_F = yastn.tensordot(a, b, axes=((0, 1), (0, 1)))
     assert norm_F.get_tensor_charge() == (0, 0)
     assert norm_F.get_signature() == ()
-    assert abs(a.norm()**2 - norm_F.real().to_number()) < tol
+    assert abs(a.norm()**2 - norm_F.real().to_number()) < 1e-12
 
     #
     # only complex-conjugate elements of the blocks of tensor a, leaving
@@ -161,7 +161,7 @@ def test_conj_Z2xU1(config_kwargs):
     # opposite order). Hence, tensor b and tensor d should be numerically
     # identical
     #
-    assert yastn.norm(b - d)<tol
+    assert yastn.norm(b - d) < 1e-12
 
 
 if __name__ == '__main__':

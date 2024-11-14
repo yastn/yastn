@@ -49,7 +49,7 @@ def test_fuse_hard(config_kwargs):
     # Lets fuse last three legs of the tensor a into a new leg
     b = a.fuse_legs(axes=(0, 1, (2, 3, 4)), mode='hard')
 
-    # resulting tensor has just four non-zero blocks, with the largest
+    # Resulting tensor has just four non-zero blocks, with the largest
     # one holding 9176 elements
     b.print_blocks_shape()
     #
@@ -84,14 +84,14 @@ def test_fuse_hard(config_kwargs):
     #
     # unfuse step 2: 0 1 -> unfuse -> (0 1) 1->2 = 0 1 2
     c0_0 = c1.unfuse_legs(axes=0)
-    assert yastn.norm(c0_0 - c0) < tol
+    assert yastn.norm(c0_0 - c0) < 1e-12
 
     # unfuse step 1: 0 1 2 -> unfuse -> 0 (3->1 4->2) (2->3 1->4) = 0 1 2 3 4
     #
     # Hence, to retrieve original tensor, we have to permute its indices
     a_0 = c0_0.unfuse_legs(axes=(1, 2))
     a_0 = a_0.transpose(axes=(0, 4, 3, 1, 2))
-    assert yastn.norm(a - a_0) < tol
+    assert yastn.norm(a - a_0) < 1e-12
 
 
 def test_hard_corner_cases(config_kwargs):
@@ -143,7 +143,7 @@ def test_hard_split(config_kwargs):
     a3 = yastn.tensordot(USf, Vf, axes=(1, 0))
     assert yastn.norm(af - a3) < tol  # == 0.0
     a3 = a3.unfuse_legs(axes=0)
-    a3 = a3.unfuse_legs(axes=(1, 2)).move_leg(source=2, destination=1)
+    a3 = a3.unfuse_legs(axes=(1, 2)).moveaxis(source=2, destination=1)
     assert yastn.norm(a - a3) < tol  # == 0.0
 
     Qf, Rf = yastn.linalg.qr(af, axes=(0, 1))
@@ -179,7 +179,7 @@ def test_hard_transpose(config_kwargs):
     c = c.unfuse_legs(axes=(1, 3))
     assert c.get_shape() == (13, 9, 11, 7, 3, 5)
 
-    c = b.move_leg(source=1, destination=2)
+    c = b.moveaxis(source=1, destination=2)
     assert c.get_shape() == (15, 99, 7, 13)
 
     c = c.unfuse_legs(axes=(1, 0))

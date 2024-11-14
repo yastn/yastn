@@ -12,15 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-""" yastn.vdot() yastn.move_leg() """
+""" yastn.vdot() yastn.moveaxis() """
 import numpy as np
 import pytest
 import yastn
 
 tol = 1e-12  #pylint: disable=invalid-name
 
-def run_move_leg(a, ad, source, destination, result):
-    newa = a.move_leg(source=source, destination=destination)
+def run_moveaxis(a, ad, source, destination, result):
+    newa = a.moveaxis(source=source, destination=destination)
     assert newa.to_numpy().shape == result
     assert newa.get_shape() == result
     assert np.moveaxis(ad, source=source, destination=destination).shape == result
@@ -39,7 +39,7 @@ def run_transpose(a, ad, axes, result):
 
 def test_transpose_syntax(config_kwargs):
     #
-    # define rank-6 U1-symmetric tensor
+    # Define rank-6 U1-symmetric tensor.
     #
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
@@ -47,32 +47,32 @@ def test_transpose_syntax(config_kwargs):
                 D=[(2, 3), (4, 5), (6, 7), (6, 5), (4, 3), (2, 1)])
 
     #
-    # for each leg its dense dimension is given by the sum of dimensions
+    # For each leg its dense dimension is given by the sum of dimensions
     # of individual sectors. Hence, the (dense) shape of this tensor
-    # is (2+3, 4+5, 6+7, 6+5, 4+3, 2+1)
+    # is (2+3, 4+5, 6+7, 6+5, 4+3, 2+1).
     assert a.get_shape() == (5, 9, 13, 11, 7, 3)
 
     #
-    # permute the legs of the tensor and check the shape is changed
-    # accordingly
+    # Permute the legs of the tensor and check the shape
+    # is changed accordingly.
     b = a.transpose(axes=(0, 2, 4, 1, 3, 5))
     assert b.get_shape() == (5, 13, 7, 9, 11, 3)
 
     #
-    #  if axes is not provided, reverse the order
+    #  If axes is not provided, reverse the order
     #  This can be also done using a shorthand self.T
     a.transpose().get_shape() == (3, 7, 11, 13, 9, 5)
     a.T.get_shape() == (3, 7, 11, 13, 9, 5)
 
     #
-    # sometimes, instead of writing explicit permutation of all legs
+    # Sometimes, instead of writing explicit permutation of all legs
     # it is more convenient to only specify pairs of legs to switched.
     # In this example, we reverse the permutation done previously thus
     # ending up with tensor numerically identical to a.
     #
-    c = b.move_leg(source=(1, 2), destination=(2, 4))
+    c = b.moveaxis(source=(1, 2), destination=(2, 4))
     assert c.get_shape() == a.get_shape()
-    assert yastn.norm(a - c) < tol
+    assert yastn.norm(a - c) < 1e-12
 
 
 def test_transpose_basic(config_kwargs):
@@ -83,11 +83,11 @@ def test_transpose_basic(config_kwargs):
     assert a.get_shape() == (2, 3, 4, 5)
     ad = a.to_numpy()
     run_transpose(a, ad, axes=(1, 3, 2, 0), result=(3, 5, 4, 2))
-    run_move_leg(a, ad, source=1, destination=-1, result=(2, 4, 5, 3))
-    run_move_leg(a, ad, source=(1, 3), destination=(1, 0), result=(5, 3, 2, 4))
-    run_move_leg(a, ad, source=(3, 1), destination=(0, 1), result=(5, 3, 2, 4))
-    run_move_leg(a, ad, source=(3, 1), destination=(1, 0), result=(3, 5, 2, 4))
-    run_move_leg(a, ad, source=(1, 3), destination=(0, 1), result=(3, 5, 2, 4))
+    run_moveaxis(a, ad, source=1, destination=-1, result=(2, 4, 5, 3))
+    run_moveaxis(a, ad, source=(1, 3), destination=(1, 0), result=(5, 3, 2, 4))
+    run_moveaxis(a, ad, source=(3, 1), destination=(0, 1), result=(5, 3, 2, 4))
+    run_moveaxis(a, ad, source=(3, 1), destination=(1, 0), result=(3, 5, 2, 4))
+    run_moveaxis(a, ad, source=(1, 3), destination=(0, 1), result=(3, 5, 2, 4))
 
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
@@ -97,9 +97,9 @@ def test_transpose_basic(config_kwargs):
     ad = a.to_numpy()
     assert a.get_shape() == (5, 9, 13, 11, 7, 3)
     run_transpose(a, ad, axes=(1, 2, 3, 0, 5, 4), result=(9, 13, 11, 5, 3, 7))
-    run_move_leg(a, ad, source=1, destination=4, result=(5, 13, 11, 7, 9, 3))
-    run_move_leg(a, ad, source=(2, 0), destination=(0, 2), result=(13, 9, 5, 11, 7, 3))
-    run_move_leg(a, ad, source=(2, -1, 0), destination=(-1, 2, -2), result=(9, 11, 3, 7, 5, 13))
+    run_moveaxis(a, ad, source=1, destination=4, result=(5, 13, 11, 7, 9, 3))
+    run_moveaxis(a, ad, source=(2, 0), destination=(0, 2), result=(13, 9, 5, 11, 7, 3))
+    run_moveaxis(a, ad, source=(2, -1, 0), destination=(-1, 2, -2), result=(9, 11, 3, 7, 5, 13))
 
     # Z2xU1
     config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
@@ -111,7 +111,7 @@ def test_transpose_basic(config_kwargs):
     assert a.get_shape() == (19, 14, 18, 10)
     ad = a.to_numpy()
     run_transpose(a, ad, axes=(1, 2, 3, 0), result=(14, 18, 10, 19))
-    run_move_leg(a, ad, source=-1, destination=-3, result=(19, 10, 14, 18))
+    run_moveaxis(a, ad, source=-1, destination=-3, result=(19, 10, 14, 18))
 
 
 def test_transpose_diag(config_kwargs):

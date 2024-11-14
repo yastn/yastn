@@ -31,7 +31,7 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
     Parameters
     ----------
         f: Callable[[vector], vector]
-            defines an action of a 'square matrix' on vector.
+            defines an action of a "square matrix" on vector.
 
         v: vector
             input vector to apply exponential map onto.
@@ -51,7 +51,7 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
             Otherwise Arnoldi iterations are used to span the Krylov space.
 
         normalize: bool
-            The result is normalized to unity using 2-norm.
+            Whether to normalize the result to unity using 2-norm.
 
         return_info: bool
             if ``True``, returns ``(vector, info)``, where

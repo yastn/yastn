@@ -37,7 +37,7 @@ def test_real_basic(config_kwargs):
     c = yastn.tensordot(a, a, axes=((0, 1), (0, 1)), conj=(0, 1))  # ndim = 0
     num_c = c.to_number()  # dtype same as that of data in tensor c
     num_r1 = c.real().to_number()  # dtype same as that of data in tensor c.real()
-    num_r2 = c.to_number('real')  # takes real part of to_number (backend ascetic)
+    num_r2 = c.to_number().real  # takes real part of to_number (backend ascetic)
 
     assert isinstance(num_c.item(), complex)
     assert isinstance(num_r1.item(), float)

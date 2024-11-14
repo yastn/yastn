@@ -4,11 +4,11 @@ Algebra with YASTN tensors
 Basic algebra operations with symmetric tensors
 -----------------------------------------------
 
+See examples at :ref:`examples/tensor/algebra:basic algebra operations`.
+
 Symmetric tensors can be added and multiplied by a scalar
 through usual operations ``+``, ``-``, ``*``, ``/``.
 Element-wise raising to a power is done by the standard power operation ``**``.
-
-See examples: :ref:`examples/tensor/algebra:basic algebra operations`.
 
 Simple element-wise operations
 ------------------------------
@@ -41,6 +41,8 @@ Simple element-wise operations
 Tensor contractions
 -------------------
 
+See examples at :ref:`examples/tensor/algebra:tensor contractions`.
+
 Tensor contractions are the main building block of tensor network algorithms.
 Functions below facilitate the computation of
 
@@ -50,8 +52,6 @@ Functions below facilitate the computation of
 	  outer products :math:`M_{abkl} = A_{ak}{\times}B_{bl}`
 
 or composition of such operations over several tensors.
-
-See examples: :ref:`examples/tensor/algebra:tensor contractions`.
 
 .. automethod:: yastn.Tensor.__matmul__
 
@@ -68,16 +68,17 @@ See examples: :ref:`examples/tensor/algebra:tensor contractions`.
 Transposition
 -------------
 
-See examples: :ref:`examples/tensor/algebra:transposition`.
+See examples at :ref:`examples/tensor/algebra:transposition`.
 
-.. automethod:: yastn.Tensor.transpose
+.. autofunction:: yastn.transpose
 .. autoproperty:: yastn.Tensor.T
-.. automethod:: yastn.Tensor.move_leg
-.. automethod:: yastn.Tensor.moveaxis
+.. autofunction:: yastn.moveaxis
 
 
 Fusion of legs (reshaping)
 --------------------------
+
+See examples at :ref:`examples/tensor/algebra:fusion (reshaping)`.
 
 Fusion of several vector spaces :math:`V_1,V_2,\ldots,V_n` creates a new vector space as direct product :math:`W=V_1 \otimes V_2 \otimes \ldots \otimes V_n`,
 which is then indexed by a single index of dimension :math:`\prod_i {\rm dim}(V_i)`.
@@ -88,8 +89,6 @@ For dense tensors, the operation corresponds to reshaping.
 
 Fusion can be used to vary compression between (unfused) symmetric tensors with many small non-zero blocks and tensors with several fused spaces having just few, but large non-zero blocks.
 
-See examples: :ref:`examples/tensor/algebra:fusion (reshaping)`.
-
 .. automethod:: yastn.Tensor.fuse_legs
 .. automethod:: yastn.Tensor.unfuse_legs
 .. automethod:: yastn.Tensor.add_leg
@@ -99,7 +98,7 @@ See examples: :ref:`examples/tensor/algebra:fusion (reshaping)`.
 Conjugation of symmetric tensors
 --------------------------------
 
-See examples: :ref:`examples/tensor/algebra:conjugation of symmetric tensors`.
+See examples at :ref:`examples/tensor/algebra:conjugation of symmetric tensors`.
 
 .. automethod:: yastn.Tensor.conj
 .. automethod:: yastn.Tensor.conj_blocks
@@ -116,7 +115,7 @@ Tensor norms
 Spectral decompositions and truncation
 --------------------------------------
 
-See examples: :ref:`examples/tensor/decomposition:decompositions of symmetric tensors`.
+See examples at :ref:`examples/tensor/decomposition:decompositions of symmetric tensors`.
 
 .. autofunction:: yastn.linalg.svd
 .. autofunction:: yastn.linalg.svd_with_truncation

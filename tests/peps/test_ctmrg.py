@@ -180,5 +180,103 @@ def test_ctm_save_load_copy(config_kwargs):
             assert (ten0 - ten2).norm() < 1e-14
 
 
+
+def test_ctmrg_onsager_dense(config_kwargs):
+    r"""
+    Calculate magnetization for classical 2D Ising model and compares with the analytical result.
+    """
+    beta = 0.5
+    chi = 8
+    nn_exact = {0.3: 0.352250, 0.5: 0.872783, 0.6: 0.954543, 0.75: 0.988338}
+    local_exact  = {0.3: 0.000000, 0.5: 0.911319, 0.6: 0.973609, 0.75: 0.993785}
+
+    config = yastn.make_config(sym='none', **config_kwargs)
+    config.backend.random_seed(seed=0)
+
+
+    leg = yastn.Leg(config, s=1, D=[2])
+    TI = yastn.zeros(config, legs=[leg, leg, leg.conj(), leg.conj()])
+    TI[()][0, 0, 0, 0] = 1
+    TI[()][1, 1, 1, 1] = 1
+
+    TX = yastn.zeros(config, legs=[leg, leg, leg.conj(), leg.conj()])
+    TX[()][0, 0, 0, 0] = 1
+    TX[()][1, 1, 1, 1] = -1
+
+    B = yastn.zeros(config, legs=[leg, leg.conj()])
+    B.set_block(ts=(), val=[[np.exp(beta), np.exp(-beta)],
+                            [np.exp(-beta), np.exp(beta)]])
+
+    TI = yastn.ncon([TI, B, B], [(-0, -1, 2, 3), [2, -2], [3, -3]])
+    TX = yastn.ncon([TX, B, B], [(-0, -1, 2, 3), [2, -2], [3, -3]])
+
+    geometry = fpeps.SquareLattice(dims=(1, 1), boundary='infinite')
+    psi = fpeps.Peps(geometry=geometry, tensors={(0, 0): TI})
+
+    env = fpeps.EnvCTM(psi, init='rand')
+    opts_svd = {"D_total": chi}
+    info = env.ctmrg_(opts_svd=opts_svd, max_sweeps=100, corner_tol=1e-8)
+    print(info)
+
+    ev_XX = env.measure_nn(TX, TX)
+    for val in ev_XX.values():
+        assert abs(val - nn_exact[beta]) < 1e-5
+        print(val)
+
+    ev_X = env.measure_1site(TX)
+    assert abs(abs(ev_X[(0 ,0)]) - local_exact[beta]) < 1e-5
+
+
+
+def test_ctmrg_onsager_Z2(config_kwargs):
+    r"""
+    Use CTMRG to calculate some expectation values in 2D Ising model.
+    Compare with analytical results.
+
+    Here, we enforce Z2 symmetry of the model,
+    which prevents spontaneous symmetry breaking.
+    """
+    beta = 0.5
+    chi = 16
+    XX_exact = {0.3: 0.352250, 0.5: 0.872783, 0.6: 0.954543, 0.75: 0.988338}
+    local_exact  = {0.3: 0.000000, 0.5: 0.911319, 0.6: 0.973609, 0.75: 0.993785}
+
+    config = yastn.make_config(sym='Z2', **config_kwargs)
+
+    leg = yastn.Leg(config, s=1, t=(0, 1), D=(1, 1))
+    TI = yastn.ones(config, legs=[leg, leg, leg.conj(), leg.conj()], n=0)
+    TX = yastn.ones(config, legs=[leg, leg, leg.conj(), leg.conj()], n=1)
+
+    B = yastn.zeros(config, legs=[leg, leg.conj()])
+    B.set_block(ts=(0, 0), val=np.cosh(beta))
+    B.set_block(ts=(1, 1), val=np.sinh(beta))
+
+    TI = yastn.ncon([TI, B, B], [(-0, -1, 2, 3), [2, -2], [3, -3]])
+    TX = yastn.ncon([TX, B, B], [(-0, -1, 2, 3), [2, -2], [3, -3]])
+
+    geometry = fpeps.SquareLattice(dims=(1, 1), boundary='infinite')
+    psi = fpeps.Peps(geometry=geometry, tensors={(0, 0): TI})
+
+    env = fpeps.EnvCTM(psi, init='eye')
+    opts_svd = {"D_total": chi}
+    info = env.ctmrg_(opts_svd=opts_svd, max_sweeps=100, corner_tol=1e-8)
+    print(info)
+
+    # ev_XX = env.measure_nn(TX, TX)
+    # for val in ev_XX.values():
+    #     assert abs(val - XX_exact[beta]) < 1e-5
+
+
+    ev_h = env.measure_line(TX, TX, sites=[(0, 0), (0, 20)])
+    ev_v = env.measure_line(TX, TX, sites=[(0, 0), (20, 0)])
+
+    print(ev_h)
+    print(ev_v)
+    print(local_exact[beta] ** 2)
+
+
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0"])
+    config_kwargs = {}
+    test_ctmrg_onsager_Z2(config_kwargs)
+    # test_ctmrg_onsager_dense(config_kwargs)
+    #pytest.main([__file__, "-vs", "--durations=0"])

@@ -11,14 +11,14 @@ of the virtual spaces of MPS/MPO.
 
 .. automethod:: yastn.tn.mps.MpsMpoOBC.canonize_
 
-See examples: :ref:`examples/mps/algebra:canonical form by qr`.
+See examples at :ref:`examples/mps/algebra:canonical form by qr`.
 
 The canonization by SVD allows truncating virtual dimension/spaces
 with the lowest weights (smallest singular values).
 
 .. automethod:: yastn.tn.mps.MpsMpoOBC.truncate_
 
-See examples: :ref:`examples/mps/algebra:canonical form by svd`.
+See examples at :ref:`examples/mps/algebra:canonical form by svd`.
 
 The above routines operate on entire MPS or MPO.
 They are built from functions operating on individual tensors of MPS/MPO:

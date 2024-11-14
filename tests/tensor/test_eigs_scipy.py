@@ -33,20 +33,20 @@ def test_eigs_simple(config_kwargs):
     a = yastn.rand(config=config_U1, legs=legs)  # could be mps tensor
     a, _ = yastn.qr(a, axes=((0, 1), 2), sQ=-1)  # orthonormalize
 
-    # dense transfer matrix build from a; reference solution
+    # Dense transfer matrix build from a; reference solution
     tm = yastn.ncon([a, a.conj()], [(-1, 1, -3), (-2, 1, -4)])
     tm = tm.fuse_legs(axes=((2, 3), (0, 1)), mode='hard')
     tmn = tm.to_numpy()
     w_ref, v_ref = eigs(tmn, k=1, which='LM')  # use scipy.sparse.linalg.eigs
 
-    # initializing random tensor matching tm from left
-    # we add an extra 3-rd leg carrying charges -1, 0, 1
-    # to calculate eigs over those 3 subspaces in one go
+    # Initializing random tensor matching tm from left.
+    # We add an extra 3-rd leg carrying charges -1, 0, 1
+    # to calculate eigs over those 3 subspaces in one go.
     legs = [a.get_legs(0).conj(),
             a.get_legs(0),
             yastn.Leg(a.config, s=1, t=(-1, 0, 1), D=(1, 1, 1))]
     v0 = yastn.rand(config=a.config, legs=legs)
-    # define a wrapper that goes r1d -> yastn.tensor -> tm @ yastn.tensor -> r1d
+    # Define a wrapper that goes r1d -> yastn.tensor -> tm @ yastn.tensor -> r1d
     r1d, meta = yastn.compress_to_1d(v0)
     def f(x):
         t = yastn.decompress_from_1d(x, meta=meta)
@@ -54,12 +54,12 @@ def test_eigs_simple(config_kwargs):
         t3, _ = yastn.compress_to_1d(t2, meta=meta)
         return t3
     ff = LinearOperator(shape=(len(r1d), len(r1d)), matvec=f, dtype=np.float64)
-    # scipy.sparse.linalg.eigs that goes though yastn symmetric tensor
+    # scipy.sparse.linalg.eigs that goes though yastn symmetric tensor.
     wa, va1d = eigs(ff, v0=r1d, k=1, which='LM', tol=1e-10)
-    # transform eigenvectors into yastn tensors
+    # Transform eigenvectors into yastn tensors
     va = [yastn.decompress_from_1d(x, meta) for x in va1d.T]
-    # we can remove zero blocks now, as there are eigenvectors with well defined charge
-    # (though we might get superposition of symmetry sectors in case of degeneracy)
+    # We can remove zero blocks now, as there are eigenvectors with well defined charge
+    # (though we might get superposition of symmetry sectors in case of degeneracy).
     va = [x.remove_zero_blocks() for x in va]
 
     # we can also limit ourselves directly to eigenvectors with desired charge, here 0.
@@ -77,7 +77,7 @@ def test_eigs_simple(config_kwargs):
     vb = [yastn.decompress_from_1d(x, meta) for x in vb1d.T]  # eigenvectors as yastn tensors
 
     # dominant eigenvalue should have amplitude 1 (likely degenerate in our example)
-    assert all(pytest.approx(abs(x), rel=tol) == 1.0 for x in (w_ref, wa, wb))
+    assert all(pytest.approx(abs(x), rel=1e-10) == 1.0 for x in (w_ref, wa, wb))
     print("va -> ", va.pop())
     print("vb -> ", vb.pop())
 
