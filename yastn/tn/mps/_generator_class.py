@@ -97,7 +97,7 @@ class Generator:
         r"""
         Generate a random MPS of total charge ``n`` and bond dimension ``D_total``.
 
-        See, :meth:`mps.random_mps<yastn.tn.mps.random_mps>`.
+        Equivalent to :meth:`mps.random_mps<yastn.tn.mps.random_mps>`.
         """
         return random_mps(self._I, n=n, D_total=D_total, sigma=sigma, dtype=dtype)
 
@@ -105,7 +105,7 @@ class Generator:
         r"""
         Generate a random MPO with bond dimension ``D_total``.
 
-        See, :meth:`mps.random_mps<yastn.tn.mps.random_mpo>`.
+        Equivalent to :meth:`mps.random_mps<yastn.tn.mps.random_mpo>`.
         """
         return random_mpo(self._I, D_total=D_total, sigma=sigma, dtype=dtype)
 

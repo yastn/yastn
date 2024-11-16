@@ -31,7 +31,7 @@ def Mpo(N, periodic=False) -> yastn.tn.mps.MpsMpoOBC | yastn.tn.mps.MpoPBC:
     Generate empty MPO for system of `N` sites, fixing :code:`nr_phys=2`.
 
     A flag :code:`periodic` allows initializing periodic MPO,
-    which is a special class supported as an operator in MPS environments.
+    which is a special class supported as an operator in MPS :ref:`environments<mps/environment:Environments>`.
     """
     if periodic:
         return MpoPBC(N, nr_phys=2)
@@ -170,19 +170,18 @@ class MpsMpoOBC(_MpsMpoParent):
         Initialize empty MPS (:code:`nr_phys=1`) or MPO (:code:`nr_phys=2`)
         for system of `N` sites. Empty MPS/MPO has no tensors assigned.
 
-        MpsMpoOBC tensors (sites) are indexed by integers :math:`0, 1, 2, \ldots, N-1`,
-        where :math:`0` corresponds to the `'first'` site.
+        MpsMpoOBC tensors (sites) are indexed by integers :math:`0,1,2,\ldots,N-1`,
+        where :math:`0` corresponds to the ``'first'`` site.
         They can be accessed with ``[]`` operator.
-        MPS/MPO can contain a central block associated with a bond and indexed by a tuple :math:`(n, n+1)`.
+        MPS/MPO can contain a central block associated with a bond and indexed by a tuple :math:`(n,n+1)`.
         At most one central block is allowed.
 
         :ref:`The legs' order <mps/properties:index convention>` of each tensor is:
         (0) virtual leg pointing towards the first site, (1) 1st physical leg, i.e., :math:`|\textrm{ket}\rangle`,
         (2) virtual leg pointing towards the last site, and, in case of MPO, (3) 2nd physical leg, i.e., :math:`\langle \textrm{bra}|`.
 
-        The canonical form can be used with the MPS/MPO freely.
-        If the MPS/MPO is not normalized the amplitude is kept as :code:`self.factor` paramter of the object.
-        If the object is normalized, then :code:`self.factor=1`.
+        Parameter ``self.factor`` allows separating the norm of the object (potentially different from :math:`1`)
+        from the canonical form of MPS or MPO tensors.
         """
         super().__init__(N=N, nr_phys=nr_phys)
         self.pC = None  # index of the central block, None if it does not exist

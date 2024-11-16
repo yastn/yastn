@@ -25,15 +25,14 @@ def product_mps(vectors, N=None) -> yastn.tn.mps.MpsMpoOBC:
     r"""
     Generate an MPS with bond-dimension 1 from a list of vectors that get assigned to consecutive MPS sites.
 
-    If `N` is provided, vectors are cyclicly iterated to fill in `N` MPS sites.
+    If ``N`` is provided, vectors are cyclicly iterated to fill in ``N`` MPS sites.
 
     Parameters
     ----------
     vectors: Sequence[yastn.Tensor] | yastn.Tensor
         Tensors will be attributed to consecutive MPS sites.
         They can have non-zero charges that will be converted into matching MPS virtual legs.
-        Each tensor should have ``ndim=1`` and, typically, the signature ``s=+1``.
-        The latter is not enforced.
+        Each tensor should have ``ndim=1``.
 
     N: Optional[int]
         number of MPS sites. By default, it is equal to the number of provided `vectors`.
@@ -45,15 +44,14 @@ def product_mpo(operators, N=None) -> yastn.tn.mps.MpsMpoOBC:
     r"""
     Generate an MPO with bond-dimension 1 from a list of operators that get assigned to consecutive MPO sites.
 
-    If `N` is provided, operators are cyclicly iterated to fill in `N` MPO sites.
+    If ``N`` is provided, operators are cyclicly iterated to fill in ``N`` MPO sites.
 
     Parameters
     ----------
     operators: Sequence[yastn.Tensor] | yastn.Tensor
         Tensors will be attributed to consecutive MPS sites.
         They can have non-zero charges, that will be converted into matching MPO virtual legs.
-        Each tensor should have ``ndim=2`` and, typically, the signature ``s=(+1, -1)``.
-        The latter is not enforced.
+        Each tensor should have ``ndim=2``.
 
     N: Optional[int]
         number of MPO sites. By default, it is equal to the number of provided `operators`.
@@ -126,7 +124,7 @@ def random_mps(I, n=None, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.M
         Virtual MPS spaces are drawn randomly from a normal distribution,
         whose mean value changes linearly along the chain from `n` to 0.
     D_total: int
-        Largest bond dimension. Due to the random and local nature of the procedure,
+        Largest bond dimension. Note that due to the random and local nature of the procedure,
         the desired total bond dimension might not be reached on some bonds,
         in particular, for higher symmetries.
     sigma: int
@@ -188,7 +186,7 @@ def random_mpo(I, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.MpsMpoOBC
     I: yastn.tn.mps.MpsMpoOBC
         MPS or MPO that defines local spaces.
     D_total: int
-        Largest bond dimension. Due to the random and local nature of the procedure,
+        Largest bond dimension. Note that due to the random and local nature of the procedure,
         the desired total bond dimension might not be reached on some bonds,
         in particular, for higher symmetries.
     sigma: int

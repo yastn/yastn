@@ -27,7 +27,7 @@ from itertools import groupby
 
 class Hterm(NamedTuple):
     r"""
-    Defines a product operator :math:`O=`amplitude`{\times}\bigotimes_i o_i` of local operators :math:`o_i`.
+    Defines a product operator :math:`O= amplitude {\times} \bigotimes_i o_i` of local operators :math:`o_i`.
     Local operators that are not explicitly specified are assumed to be identity operators.
 
     If operators are fermionic, execution of :meth:`swap gates<yastn.swap_gate>` enforces fermionic order,
@@ -70,22 +70,22 @@ def ind_list(el, unique):
 
 def generate_mpo(I, terms=None, opts_svd=None, N=None) -> yastn.tn.mps.MpsMpoOBC:
     r"""
-    Generate MPO provided a list of :class:`Hterm`\-s and identity MPO ``I``.
+    Generate MPO provided a list of :class:`Hterm`\-s and identity operator ``I``.
 
-    Apply swap_gates to introduce fermionic degrees of freedom, where
+    Apply :meth:`yastn.swap_gate` to introduce fermionic degrees of freedom, where
     the fermionic order matches the order of sites in Mps.
     With this respect, local operators specified in term.operators are applied starting with the last element,
     i.e., from right to left.
 
     The function compresses MPO using a series of SVDs.
     It might get expensive if the number of terms is large, e.g., for all-to-all 2-site terms and N in hundreds.
-    If this becomes an issue, it is best to use some divide-and-conquer strategy or precompute MPO once.
+    If this becomes an issue, it is best to use some divide-and-conquer strategy or precompute desired MPO.
 
     Parameters
     ----------
     I: yastn.tn.mps.MpsMpoOBC | yastn.Tensor | Sequence[yastn.Tensor]
         Identity MPO, which specifies local identity operators at each site and the number of sites.
-        It is also possible to provide an identity operator or list of such operators, together with ``N``,
+        It is also possible to provide a local identity operator or list of such operators, together with ``N``,
         following the syntax of :meth:`mps.product_mpo<yastn.tn.mps.product_mpo>`.
 
     terms: Sequence[yastn.tn.mps.Hterm]

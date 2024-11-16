@@ -40,7 +40,7 @@ An empty MPS/MPO can be filled with tensors by setting them one by one.
     psi[1] = A_1
 
 Tensor should be of the rank expected for :ref:`MPS<theory/mps/basics:Matrix product state (MPS)>` or :ref:`MPO<theory/mps/basics:Matrix product operator (MPO)>`.
-The virtual dimensions/spaces of the neighboring MPS/MPO tensors should be consistent, which, however, is not tested during direct assigment.
+The virtual dimensions/spaces of the neighboring MPS/MPO tensors should be consistent, which, however, is not tested during assigment.
 For examples showing creation of MPS/MPO by hand, see :ref:`Ground state of Spin-1 AKLT model<examples/mps/build:Ground state of spin-1 AKLT model>`
 and :ref:`MPO for hopping model with U(1) symmetry<examples/mps/build:Hamiltonian for nearest-neighbor hopping/XX model>`.
 
