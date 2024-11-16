@@ -83,25 +83,28 @@ def measure_1site(bra, O, ket, sites=None) -> dict[int, number]:
     r"""
     Calculate expectation values :math:`\langle \textrm{bra}|\textrm{O}_i|\textrm{ket} \rangle` for local operator :code:`O` at sites `i`.
 
-    Local operators can be provided as dictionary {site: operator}, limiting the calculation to provided sites.
-    A list of sites can also be provided.
+    ``O`` can be provided as a dictionary {site: operator}, limiting the calculation to provided sites.
+    ``sites`` can also be provided in the form of a list.
 
     Conjugate of MPS :code:`bra` is computed internally.
+    For fermionic operators, a Jordan-Wigner string related to the operator charge is included in the contraction.
 
     Parameters
     -----------
     bra: yastn.tn.mps.MpsMpoOBC
         An MPS which will be conjugated.
 
-    O: yastn.Tensor or dict
-        An operator with signature (1, -1).
-        It is possible to provide a dictionary {site: operator} with all operators of the same charge.
+    O: yastn.Tensor | dict[int, yastn.Tensor]
+        A rank-2 operator, or a dictionary of such operators {site: operator}.
+        In the second case, all operators need to have the same charge.
 
     ket: yastn.tn.mps.MpsMpoOBC
 
     sites: int | Sequence[int] | None
-        Which 1-sites observables to calculate.
-        For a single site, int, return float; otherwise return dict[site, float]
+        It controls which 1-sites observables to calculate.
+        If *int* is provided here, compute the expectation value
+        for this single site and return a float.
+        In other cases, a dictionary {site: float} is returned.
         The default is None, in which case the calculation is done for all sites.
     """
     return_float = False
@@ -142,7 +145,7 @@ def measure_2site(bra, O, P, ket, bonds='<') -> dict[tuple[int, int], float] | f
     of local operators :code:`O` and :code:`P` for pairs of lattice sites :math:`i, j`.
 
     Conjugate of MPS :code:`bra` is computed internally.
-    Includes fermionic strings via swap_gate for fermionic operators.
+    Fermionic strings are incorporated for fermionic operators by employing :meth:`yastn.swap_gate`.
 
     Parameters
     -----------

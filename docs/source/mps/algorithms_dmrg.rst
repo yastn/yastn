@@ -4,7 +4,8 @@ Density matrix renormalization group (DMRG)
 DMRG is a variational technique devised to obtain a state that extremizes the expectation value of the Hermitian operator.
 A typical example is the search for the best MPS approximation of a ground-state of some Hamiltonian in the form of MPO.
 
-A high-level function organizing DMRG simulations is :code:`yastn.tn.mps.dmrg_()`. For examples, see :ref:`examples/mps/algorithms:dmrg`.
+A high-level function organizing DMRG simulations is :code:`yastn.tn.mps.dmrg_()`.
+See examples at :ref:`examples/mps/algorithms_dmrg:low energy states of the xx model`.
 
 .. autofunction:: yastn.tn.mps.dmrg_
 
@@ -71,5 +72,7 @@ Projecting out selected MPS
 ---------------------------
 
 The optimization can be performed in the restricted subspace, where contributions
-from some MPSs are projected out. This can be useful when searching for
-excited states. List of MPS to project out is given as :code:`project=[lower_E_MPS, ...]`.
+from some MPSs are projected out. An alternative approach that we utilize
+is adding penalty terms in the directions of those MPSs.
+This allows one to search for a few excited states of the Hamiltonian.
+The list of MPS to project out is given as :code:`project=[lower_E_MPS, ...]`.

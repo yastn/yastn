@@ -46,7 +46,7 @@ def dmrg_(psi, H, project=None, method='1site',
     The inner loop sweeps over MPS updating sites from the first site to the last and back, constituting a single iteration.
     Convergence can be controlled based on energy and/or Schmidt values (which is a more sensitive measure of convergence).
     The DMRG algorithm sweeps through the lattice at most :code:`max_sweeps` times
-    or until all convergence measures (with provided tolerance other than None) change by less than the provided tolerance during a single sweep.
+    or until all convergence measures (with provided tolerance other than the default ``None``) change by less than the provided tolerance during a single sweep.
 
     Outputs iterator if :code:`iterator_step` is given, which allows
     inspecting :code:`psi` outside of :code:`dmrg_` function after every :code:`iterator_step` sweeps.
@@ -55,11 +55,11 @@ def dmrg_(psi, H, project=None, method='1site',
     ----------
     psi: yastn.tn.mps.MpsMpoOBC
         Initial state. It is updated during execution.
-        If `psi` is not already canonized to the first site, it will be canonized at the start of the algorithm.
+        If ``psi`` is not already canonized to the first site, it will be canonized at the start of the algorithm.
         The output state from :code:`dmrg_` is canonized to the first site.
 
     H: yastn.tn.mps.MpsMpoOBC | Sequence
-        MPO (or a sum of MPOs) to minimize against, see :meth:`Env<yastn.tn.mps.Env>`.
+        MPO (or a sum of MPOs) to minimize against, see :meth:`Env()<yastn.tn.mps.Env>`.
 
     project: Sequence[yastn.tn.mps.MpsMpoOBC | tuple[float, yastn.tn.mps.MpsMpoOBC]]
         Add a penalty to the directions spanned by MPSs in the list.
@@ -72,7 +72,7 @@ def dmrg_(psi, H, project=None, method='1site',
         If input is a list of MPSs, i.e., :code:`[mps, ...]`, the option uses default :code:`penalty=100`.
 
     method: str
-        DMRG variant to use; options are `'1site'` or `'2site'`.
+        DMRG variant to use; options are '1site' or '2site'.
 
     energy_tol: float
         Convergence tolerance for the change of energy in a single sweep.

@@ -5,7 +5,7 @@ Canonical form by QR
 --------------------
 
 There are different algorithms, which can bring MPS/MPO into a canonical form.
-The cheapest way is by application of :meth:`QR decomposition<yastn.linalg.qr>`.
+The cheapest way is by application of :meth:`QR <yastn.linalg.qr>` decomposition.
 
 ::
 

@@ -62,6 +62,8 @@ Initializing random MPS/MPO
 Generating MPO using Hterm
 --------------------------
 
+See examples at :ref:`examples/mps/build:building mpo using hterm`.
+
 We provide functionality to build MPO representations for a broad class of
 operators, e.g., Hamiltonians, given as a sum of products of local (on-site) operators.
 They are encoded as a list of :class:`mps.Hterm<yastn.tn.mps.Hterm>`, where each :class:`mps.Hterm<yastn.tn.mps.Hterm>`
@@ -81,16 +83,15 @@ Generator class for MPO/MPS (beta)
 
 A class supporting automatizes generation of MPOs from LaTeX-like expressions.
 
+See examples at :ref:`examples/mps/build:generator class for mpo/mps`.
+
+
 .. autoclass:: yastn.tn.mps.Generator
 
 We can directly output identity MPO built from the identity ``I`` from the operator generator class.
 
 .. automethod:: yastn.tn.mps.Generator.I
 .. automethod:: yastn.tn.mps.Generator.mpo_from_latex
-
-Generator supports latex-like string instructions to help building MPOs.
-For examples, see :ref:`Generate MPO from LaTex<examples/mps/build:Generator class for MPO/MPS>`.
-
 
 Generator allows initialization of MPS and MPO filled with random tensors, where local Hilbert spaces are read from the identity operator in the Generator.
 It also provides a direct link to a random number generator in the backend to fix the seed.
@@ -115,11 +116,11 @@ It is also possible to make a shallow copy with :code:`psi.shallow_copy()`, wher
 Import and export MPS/MPO from/to different formats
 ---------------------------------------------------
 
+See examples at :ref:`examples/mps/build:save and load mps/mpo`.
+
 MPS/MPO can be saved as Python `dict` or `HDF5` file.
 The MPS/MPO previously serialized by :meth:`yastn.tn.mps.MpsMpoOBC.save_to_dict`
 or :meth:`yastn.tn.mps.MpsMpoOBC.save_to_hdf5` can be again deserialized into MPS/MPO.
-
-Examples of exporting and loading MPS/MPO can be found in :ref:`examples/mps/build:save and load mps/mpo`.
 
 .. automethod:: yastn.tn.mps.MpsMpoOBC.save_to_dict
 .. automethod:: yastn.tn.mps.MpsMpoOBC.save_to_hdf5

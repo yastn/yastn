@@ -48,7 +48,7 @@ def tdvp_(psi, H,
     H: yastn.tn.mps.MpsMpoOBC | Sequence | Callable
         Evolution generator given either as (sum of) MPO for time-independent problem
         or as a function returning (sum of) MPO for time-dependent problem, i.e. :code:`Callable[[float], Mpo]`
-        or :code:`Callable[[float], Sequence[Mpo]]`, see :meth:`Env<yastn.tn.mps.Env>`.
+        or :code:`Callable[[float], Sequence[Mpo]]`, see :meth:`Env()<yastn.tn.mps.Env>`.
 
     time: float64 or tuple(float64)
         Initial and final times; can also provide intermediate times for snapshots returned
@@ -59,14 +59,14 @@ def tdvp_(psi, H,
         It is adjusted down to have an integer number of time-steps to reach the next snapshot.
 
     u: number
-        '1j' for real time evolution, 1 for imaginary time evolution.
+        for real time evolution ``u=1j``, for imaginary time evolution ``u=1``.
         The default is 1j.
 
     method: str
-        Algorithm to use in (`'1site'`, `'2site'`, `'12site'`)
+        Algorithm to use among '1site', '2site', '12site'.
 
     order: str
-        Order of Suzuki-Trotter decomposition in (`'2nd'`, `'4th'`).
+        Order of Suzuki-Trotter decomposition, '2nd' or '4th'.
         4th order step is composed of five 2nd order steps.
 
     opts_expmv: dict

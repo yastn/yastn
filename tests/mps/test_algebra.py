@@ -26,7 +26,9 @@ def test_addition_example(config_kwargs, tol=1e-12):
     psi0 = mps.random_mps(I, D_total=5)
     psi1 = mps.random_mps(I, D_total=3, dtype='complex128')
 
-    # We want to calculate: res = psi0 + 2 * psi1. There is a couple of ways:
+    # We want to calculate: res = psi0 + 2 * psi1.
+    # There is a couple of ways:
+
     # A/
     resA = mps.add(psi0, 2.0 * psi1)
 

@@ -703,7 +703,7 @@ def entropy(a, alpha=1, tol=1e-12) -> number:
     ----------
     alpha: float
         Order of Renyi entropy.
-        ``alpha=1`` is von Neuman entropy: :math:`-{\rm Tr}(a {\rm log2}(a))`
+        ``alpha=1`` (the default) is von Neuman entropy: :math:`-{\rm Tr}(a \cdot {\rm log2}(a))`
         otherwise: :math:`\frac{1}{1-alpha} {\rm log2}({\rm Tr}(a^{alpha}))`
 
     tol: float

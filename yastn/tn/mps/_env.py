@@ -23,7 +23,7 @@ import copy
 def Env(bra, target):
     r"""
     Initialize a proper environment supporting contraction of MPS/MPO's:
-    :math:`\langle \textrm{bra} | \textrm{target} \rangle`, where
+    :math:`\langle \textrm{bra} | \textrm{target} \rangle` where
     :math:`|\textrm{target} \rangle` can be an MPS/MPO, an operator acting on MPS/MPO, or a sum of thereof.
 
     Parameters
@@ -32,14 +32,15 @@ def Env(bra, target):
         Can be an MPS or an MPO -- the target should be of the matching form.
 
     target : Sequence | yastn.tn.mps.MpsMpoOBC
-        Dispatch over a set of supported targets
+        Dispatch over a set of supported targets:
 
-            * ket or [ket] for :math:`\langle \textrm{bra} | \textrm{ket} \rangle`.
-            * [mpo, ket]  for :math:`\langle \textrm{bra} | \textrm{mpo} | \textrm{ket} \rangle`.
-            * [[mpo_1, mpo_2, ...], ket] for :math:`\langle \textrm{bra} | \sum_i \textrm{mpo}_i | \textrm{ket} \rangle`.
-            * [[ket_1], [mpo_2, ket_2], [[mpo_3, mpo_4], ket_3]] for a sum of any combination of the above.
-    Notes
-    -----
+        * ket or [ket] for :math:`\langle \textrm{bra} | \textrm{ket} \rangle`.
+        * [mpo, ket]  for :math:`\langle \textrm{bra} | \textrm{mpo} | \textrm{ket} \rangle`.
+        * [[mpo_1, mpo_2, ...], ket] for :math:`\langle \textrm{bra} | \sum_i \textrm{mpo}_i | \textrm{ket} \rangle`.
+        * [[ket_1], [mpo_2, ket_2], [[mpo_3, mpo_4], ket_3]] for a sum of any combination of the above.
+
+    Note
+    ----
     :meth:`compression_<yastn.tn.mps.compression_>` directly calls :code:`Env(psi, target)`.
     :meth:`dmrg_<yastn.tn.mps.dmrg_>` and :meth:`tdvp_<yastn.tn.mps.tdvp_>` call :code:`Env(psi, target=[H, psi])`.
     """
