@@ -19,7 +19,7 @@ import yastn.tn.mps as mps
 import time
 
 
-def build_mpo_hopping_Hterm(J, sym, config_kwargs):
+def mpo_hopping_Hterm(config_kwargs, sym='U1', J=[[1, 1, 1], [0, 1, 1], [0, 0, 1]]):
     """
     Fermionic hopping Hamiltonian on N sites with hoppings at arbitrary range.
 
@@ -41,8 +41,8 @@ def build_mpo_hopping_Hterm(J, sym, config_kwargs):
     for n in range(N):
         if abs(J[n][n]) > 0:
             Hterms.append(mps.Hterm(amplitude=J[n][n],
-                                    positions=[n],
-                                    operators=[occ]))
+                                    positions=n,
+                                    operators=occ))
     #
     # hopping term between sites m and n
     for m in range(N):
@@ -74,7 +74,7 @@ def bench_mpo_generator(config_kwargs={}, N=64):
 
     # N^2 terms in Hamiltonian makes it expensive for this generator.
     t0 = time.time()
-    H = build_mpo_hopping_Hterm(J, 'U1', config_kwargs)
+    H = mpo_hopping_Hterm(config_kwargs, 'U1', J)
     t1 = time.time()
 
     print("N =", N)
@@ -82,7 +82,7 @@ def bench_mpo_generator(config_kwargs={}, N=64):
     print("Time [sek]:", t1 - t0)
 
 
-def test_build_mpo_hopping_Hterm(config_kwargs, tol=1e-12):
+def test_mpo_hopping_Hterm(config_kwargs, tol=1e-12):
     """ test example generating mpo using Hterm """
     N = 25
     J = np.triu(np.random.rand(N, N))
@@ -91,7 +91,7 @@ def test_build_mpo_hopping_Hterm(config_kwargs, tol=1e-12):
     J += np.tril(J.T, 1).conj()
 
     for sym, n in [('Z2', (0,)), ('U1', (N // 2,))]:
-        H = build_mpo_hopping_Hterm(J, sym=sym, config_kwargs=config_kwargs)
+        H = mpo_hopping_Hterm(config_kwargs, sym, J)
         ops = yastn.operators.SpinlessFermions(sym=sym, **config_kwargs)
         I = mps.product_mpo(ops.I(), N)
         psi = mps.random_mps(I, D_total=16, n=n).canonize_(to='last').canonize_(to='first')

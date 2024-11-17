@@ -18,7 +18,7 @@ import yastn
 import yastn.tn.mps as mps
 
 
-def build_mpo_nn_hopping_manually(N, t, mu, sym, config_kwargs):
+def mpo_nn_hopping_manually(config_kwargs, sym='U1', N=9, t=1, mu=1):
     """
     Nearest-neighbor hopping Hamiltonian on N sites
     with hopping amplitude t and chemical potential mu,
@@ -26,7 +26,6 @@ def build_mpo_nn_hopping_manually(N, t, mu, sym, config_kwargs):
         + mu * sum_{n=1}^{N} cp_n c_n
 
     Initialize MPO symmetric tensors by hand with sym = 'dense', 'Z2', or 'U1'.
-    Config is used to inject non-default backend and default_device.
     """
     #
     # Build empty MPO for system of N sites
@@ -46,10 +45,9 @@ def build_mpo_nn_hopping_manually(N, t, mu, sym, config_kwargs):
     #
     # We set fermionic=True for consistency as in tests
     # MPO is compared with operators.SpinlessFermions.
-    # backend and device is inherited from config to automitize pytest testing.
 
 
-    config = yastn.make_config(fermionic=True, sym=sym, **config_kwargs)
+    config = yastn.make_config(sym=sym, fermionic=True, **config_kwargs)
 
     if sym == 'dense':  # no symmetry
         # Basic rank-2 blocks (matrices) of on-site tensors
@@ -148,12 +146,12 @@ def build_mpo_nn_hopping_manually(N, t, mu, sym, config_kwargs):
     return H
 
 
-def test_build_mpo_nn_hopping_manually(config_kwargs, tol=1e-12):
+def test_mpo_nn_hopping_manually(config_kwargs, tol=1e-12):
     """ test example generating mpo by hand """
     N, t, mu = 10, 1.0, 0.1
     H = {}
     for sym in ['dense', 'Z2', 'U1']:
-        H[sym] = build_mpo_nn_hopping_manually(N, t, mu, sym, config_kwargs)
+        H[sym] = mpo_nn_hopping_manually(config_kwargs, sym, N, t, mu)
 
     H_Z2_dense = mps.Mpo(N=N)
     H_U1_dense = mps.Mpo(N=N)

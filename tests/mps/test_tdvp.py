@@ -18,7 +18,7 @@ import pytest
 import yastn
 import yastn.tn.mps as mps
 
-from tests.mps.test_generate_mpo import build_mpo_hopping_Hterm
+from tests.mps.test_generate_mpo import mpo_hopping_Hterm
 
 
 @pytest.mark.parametrize('sym', ['U1', 'Z2'])
@@ -45,7 +45,7 @@ def test_tdvp_sudden_quench(config_kwargs, sym, tol=1e-10):
     #
     # Generate corresponding MPO using the function from previous examples
     #
-    H0 = build_mpo_hopping_Hterm(J0, sym, config_kwargs)
+    H0 = mpo_hopping_Hterm(config_kwargs, sym, J0)
     #
     # Find the ground state using DMRG
     # Bond dimension Dmax = 8 for N = 6 is large enough
@@ -83,7 +83,7 @@ def test_tdvp_sudden_quench(config_kwargs, sym, tol=1e-10):
           [ 0,   0  ,   0,   1,   0.5, 0  ],
           [ 0,   0  ,   0,   0,  -1,   0.5],
           [ 0,   0  ,   0,   0,   0,   1  ]]
-    H1 = build_mpo_hopping_Hterm(J1, sym, config_kwargs)
+    H1 = mpo_hopping_Hterm(config_kwargs, sym, J1)
     #
     # Run time evolution and calculate correlation matrix at two snapshots
     #
@@ -166,7 +166,7 @@ def test_tdvp_sudden_quench_mpo_sum(config_kwargs, sym, tol=1e-10):
           [0,   0,    0,   -1,    0.5j, 0   ],
           [0,   0,    0,    0,    1,    0.5j],
           [0,   0,    0,    0,    0,   -1   ]]
-    H0 = build_mpo_hopping_Hterm(J0, sym, config_kwargs)
+    H0 = mpo_hopping_Hterm(config_kwargs, sym, J0)
 
     Dmax = 8
     opts_svd = {'tol': 1e-15, 'D_total': Dmax}
@@ -197,7 +197,7 @@ def test_tdvp_sudden_quench_mpo_sum(config_kwargs, sym, tol=1e-10):
     J1s = [np.zeros_like(J1) for _ in range(J1.shape[0])]
     for i in range(len(J1s)):
         J1s[i][:, i]= J1[:, i]
-    H1 = [build_mpo_hopping_Hterm(col, sym, config_kwargs) for col in J1s]
+    H1 = [mpo_hopping_Hterm(config_kwargs, sym, col) for col in J1s]
     #
     # Run time evolution and calculate correlation matrix at two snapshots
     #
@@ -249,7 +249,7 @@ def test_tdvp_sudden_quench_Heisenberg(config_kwargs, sym, tol=1e-5):
           [0,   0,    0,   -1,    0.5j, 0   ],
           [0,   0,    0,    0,    1,    0.5j],
           [0,   0,    0,    0,    0,   -1   ]]
-    H0 = build_mpo_hopping_Hterm(J0, sym, config_kwargs)
+    H0 = mpo_hopping_Hterm(config_kwargs, sym, J0)
     # assert (H0 - H0.H).norm() < tol * H0.norm()  # flip signature of virtual legs?
     #
     Dmax = 8
@@ -273,7 +273,7 @@ def test_tdvp_sudden_quench_Heisenberg(config_kwargs, sym, tol=1e-5):
           [ 0,   0  ,   0,   1,   0.5, 0  ],
           [ 0,   0  ,   0,   0,  -1,   0.5],
           [ 0,   0  ,   0,   0,   0,   1  ]]
-    H1 = build_mpo_hopping_Hterm(J1, sym, config_kwargs)
+    H1 = mpo_hopping_Hterm(config_kwargs, sym, J1)
     #
     # C[m, n] = <c_n^dag c_m>
     pps = [(0, 1), (0, 2), (0, 3), (0, 4), (0, 5), (1, 2), (1, 3), (1, 4), (1, 5), (2, 3), (2, 4), (2, 5), (3, 4), (3, 5), (4, 5)]  # (m, n)
@@ -326,7 +326,7 @@ def test_tdvp_KZ_quench(config_kwargs, sym):
     I = mps.product_mpo(ops.I(), N)  # identity MPO
     termsXX = [mps.Hterm(-1, [i, (i + 1) % N], [ops.x(), ops.x()]) for i in range(N)]
     HXX = mps.generate_mpo(I, termsXX)
-    termsZ = [mps.Hterm(-1, [i], [ops.z()]) for i in range(N)]
+    termsZ = [mps.Hterm(-1, i, ops.z()) for i in range(N)]
     HZ = mps.generate_mpo(I, termsZ)
     #
     # Kibble-Zurek quench across a critical point at gc = 1

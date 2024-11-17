@@ -45,7 +45,7 @@ def test_canonize(config_kwargs, tol=1e-12):
         # Only one central block is allowed. Attach the existing central block before orthogonalizing site.
 
 
-def check_canonize(psi, tol):
+def check_canonize(psi, tol=1e-12):
     """ Canonize mps to left and right, running tests if it is canonical. """
     ref_s = (-1, 1, 1) if psi.nr_phys == 1 else (-1, 1, 1, -1)
     norm = psi.norm()

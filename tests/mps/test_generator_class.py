@@ -19,11 +19,11 @@ import yastn.tn.mps as mps
 
 from yastn.tn.mps._latex2term import splitt, interpret, string2list, latex2term, single_term
 
-from tests.mps.test_build_mpo_manually import build_mpo_nn_hopping_manually
-from tests.mps.test_generate_mpo import build_mpo_hopping_Hterm
+from tests.mps.test_build_mpo_manually import mpo_nn_hopping_manually
+from tests.mps.test_generate_mpo import mpo_hopping_Hterm
 
 
-def mpo_nn_hopping_latex(N, t, mu, sym, config_kwargs):
+def mpo_nn_hopping_latex(config_kwargs, sym='U1', N=9, t=1, mu=1):
     """
     Nearest-neighbor hopping Hamiltonian on N sites
     with hopping amplitude t and chemical potential mu.
@@ -35,7 +35,7 @@ def mpo_nn_hopping_latex(N, t, mu, sym, config_kwargs):
     parameters = {"t": t,
                   "mu": mu,
                   "sites": list(range(N)),
-                  "NN": list((i, i+1) for i in range(N-1))}
+                  "NN": [(i, i+1) for i in range(N-1)]}
 
     generate = mps.Generator(N, ops)
     H = generate.mpo_from_latex(Hstr, parameters=parameters)
@@ -58,8 +58,8 @@ def test_nn_hopping_latex_map(config_kwargs, tol=1e-12):
         for t in [0, 0.2, -0.3]:
             for mu in [0.2, -0.3]:
                 for N in [3, 4]:
-                    H2 = build_mpo_nn_hopping_manually(N, t, mu, sym, config_kwargs)
-                    H3 = mpo_nn_hopping_latex(N, t, mu, sym, config_kwargs)
+                    H2 = mpo_nn_hopping_manually(config_kwargs, sym, N, t, mu)
+                    H3 = mpo_nn_hopping_latex(config_kwargs, sym, N, t, mu)
                     H2norm = H2.norm()
                     example_mapping = [{i: i for i in range(N)},
                                        {str(i): i for i in range(N)},
@@ -67,13 +67,13 @@ def test_nn_hopping_latex_map(config_kwargs, tol=1e-12):
                     example_parameters = [
                         {"t": t * np.ones((N,N)), "mu": mu,
                          "sites": list(range(N)),
-                         "NN": list((i, i+1) for i in range(N - 1))},
+                         "NN": [(i, i+1) for i in range(N - 1)]},
                         {"t": t * np.ones((N,N)), "mu": mu,
                          "sites": [str(i) for i in range(N)],
-                         "NN": list((str(i), str(i+1)) for i in range(N - 1))},
+                         "NN": [(str(i), str(i+1)) for i in range(N - 1)]},
                         {"t": t * np.ones((N,N)), "mu": mu,
                          "sites": [(str(i),'A') for i in range(N)],
-                         "NN": list(((str(i), 'A'), (str(i+1), 'A')) for i in range(N - 1))}]
+                         "NN": [((str(i), 'A'), (str(i+1), 'A')) for i in range(N - 1)]}]
 
                     for (emap, eparam) in zip(example_mapping, example_parameters):
                         generate = mps.Generator(N, ops, map=emap)
@@ -82,7 +82,7 @@ def test_nn_hopping_latex_map(config_kwargs, tol=1e-12):
                         assert (H1 - H3).norm() < tol * H2norm
 
 
-def mpo_hopping_latex(J=np.array([[0.5, 1], [0, 0.2]]), sym="U1", config_kwargs=None):
+def mpo_hopping_latex(config_kwargs, sym="U1", J=np.array([[0.5, 1], [0, 0.2]])):
     """
     The upper triangular part of NxN matrix J defines hopping amplitudes,
     and the diagonal defines on-site chemical potentials of N-site Hamiltonian
@@ -96,8 +96,8 @@ def mpo_hopping_latex(J=np.array([[0.5, 1], [0, 0.2]]), sym="U1", config_kwargs=
     Hstr += r" + \sum_{i \in sites} J_{i,i} cp_{i} c_{i}"
     parameters = {"J": J,
                   "sites": list(range(N)),
-                  "NN": list((i, j) for i in range(N-1)
-                             for j in range(i + 1, N))}
+                  "NN": [(i, j) for i in range(N - 1)
+                                for j in range(i + 1, N)]}
 
     generate = mps.Generator(N, ops)
     H = generate.mpo_from_latex(Hstr, parameters=parameters)
@@ -124,8 +124,8 @@ def test_mpo_hopping_latex(config_kwargs, tol=1e-12):
     Hstr += r" + \sum_{j\in sites} mu_{j} cp_{j} c_{j}"
 
     H1 = generate.mpo_from_latex(Hstr, eparam)
-    H2 = build_mpo_hopping_Hterm(J, sym, config_kwargs)
-    H3 = mpo_hopping_latex(J, sym, config_kwargs)
+    H2 = mpo_hopping_Hterm(config_kwargs, sym, J)
+    H3 = mpo_hopping_latex(config_kwargs, sym, J)
 
     assert abs(mps.vdot(H1, H2) - H1.norm() * H2.norm()) < tol
     assert abs(mps.vdot(H1, H3) - H1.norm() * H3.norm()) < tol

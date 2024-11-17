@@ -32,7 +32,7 @@ def test_krylov(config_kwargs):
     I = mps.product_mpo(ops.I(), N)  # identity MPO
     termsXX = [mps.Hterm(-1, [i, (i + 1) % N], [ops.x(), ops.x()]) for i in range(N)]
     HXX = mps.generate_mpo(I, termsXX)
-    termsZ = [mps.Hterm(-1, [i], [ops.z()]) for i in range(N)]
+    termsZ = [mps.Hterm(-1, i, ops.z()) for i in range(N)]
     HZ = mps.generate_mpo(I, termsZ)
     #
     H = HXX + HZ

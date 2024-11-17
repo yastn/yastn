@@ -1,6 +1,16 @@
 Algorithms: TDVP
 ================
 
+.. code-block:: python
+
+    import numpy as np
+    import yastn
+    import yastn.tn.mps as mps
+    config_kwargs = {"backend": "np"}
+
+This tests employs ``mpo_hopping_Hterm`` function defined in :ref:`examples/mps/build:building mpo using hterm`,
+and auxlliary functions defined below.
+
 Sudden quench in a free-fermionic model
 ---------------------------------------
 

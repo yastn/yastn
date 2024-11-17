@@ -1,6 +1,13 @@
 Algebra
 =======
 
+.. code-block:: python
+
+    import numpy as np
+    import yastn
+    import yastn.tn.mps as mps
+    config_kwargs = {"backend": "np"}
+
 Canonical form by QR
 --------------------
 

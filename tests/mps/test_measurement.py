@@ -19,11 +19,11 @@ import yastn
 import yastn.tn.mps as mps
 
 
-def build_aklt_state_manually(N=5, lvec=(1, 0), rvec=(0, 1), config_kwargs=None):
+def build_aklt_state_manually(config_kwargs, N=5, lvec=(1, 0), rvec=(0, 1)):
     """
-    Initialize MPS tensors by hand. Example for Spin-1 AKLT state of N sites.
-
-    Allow inputing boundary vectors for an MPS with open boundary conditions.
+    Example for Spin-1 AKLT state of ``N`` sites.
+    Initialize MPS tensors by hand.
+    Allow inputing boundary vectors ``lvec`` an ``rvec`` for an MPS with OBC.
     """
     # Prepare rank-3 on-site tensor with virtual dimensions 2
     # and physical dimension dim(Spin-1)=3
@@ -69,7 +69,7 @@ def test_measure_mps_aklt(config_kwargs, tol=1e-12):
     # AKLT state with open boundary conditions and N = 31 sites.
     #
     N = 31
-    psi = build_aklt_state_manually(N=N, lvec=(1, 0), rvec=(1, 0), config_kwargs=config_kwargs)
+    psi = build_aklt_state_manually(config_kwargs, N, lvec=(1, 0), rvec=(1, 0))
     #
     # We verify transfer matrix in the middle of AKLT state
     # to specify the effect of lvec and rvec

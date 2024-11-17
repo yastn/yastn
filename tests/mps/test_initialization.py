@@ -146,7 +146,7 @@ def test_product_mpo(config_kwargs, tol=1e-12):
     assert config_kwargs["backend"] == H.config.backend.BACKEND_ID
 
 
-def random_mps_spinless_fermions(N=10, D_total=16, sym='Z2', n=1, config_kwargs=None):
+def random_mps_spinless_fermions(config_kwargs, sym='Z2', N=10, D_total=16, n=1):
     """
     Generate random MPS of N sites, with bond dimension D_total,
     tensors with symmetry sym and total charge n.
@@ -173,7 +173,7 @@ def random_mps_spinless_fermions(N=10, D_total=16, sym='Z2', n=1, config_kwargs=
     return psi
 
 
-def random_mpo_spinless_fermions(N=10, D_total=16, sym='Z2', config_kwargs=None):
+def random_mpo_spinless_fermions(config_kwargs, N=10, D_total=16, sym='Z2'):
     """
     Generate random MPO of N sites, with bond dimension D_total and tensors with symmetry sym.
     """
@@ -202,7 +202,7 @@ def test_generate_random_mps(config_kwargs):
     bds = (1,) + (D_total,) * (N - 1) + (1,)
     #
     for sym, nn in (('Z2', (0,)), ('Z2', (1,)), ('U1', (N // 2,))):
-        psi = random_mps_spinless_fermions(N, D_total, sym, nn, config_kwargs)
+        psi = random_mps_spinless_fermions(config_kwargs, sym, N, D_total, nn)
         n0 = psi.config.sym.zero()
         leg = psi[psi.first].get_legs(axes=0)
         assert leg.t == (nn,) and leg.s == -1
@@ -212,7 +212,7 @@ def test_generate_random_mps(config_kwargs):
         assert bds[0] == bds[-1] == 1
         assert all(bd > D_total/2 for bd in bds[2:-2])  # > D_total / 2 as randomness might not allow saturation.
 
-        H = random_mpo_spinless_fermions(N, D_total, sym, config_kwargs)
+        H = random_mpo_spinless_fermions(config_kwargs, N, D_total, sym)
         leg = H[H.first].get_legs(axes=0)
         assert leg.t == (n0,) and leg.s == -1
         leg = H[H.last].get_legs(axes=2)
@@ -221,8 +221,9 @@ def test_generate_random_mps(config_kwargs):
         assert bds[0] == bds[-1] == 1
         assert all(bd > D_total/2 for bd in bds[2:-2])
 
+    # impossible number of particles for given N.
     with pytest.raises(yastn.YastnError):
-        random_mps_spinless_fermions(N=5, D_total=4, sym="U1", n=20, config_kwargs=config_kwargs)  # impossible number of particles for given N.
+        random_mps_spinless_fermions(config_kwargs, 'U1', N=5, D_total=4, n=20)
         # MPS: Random mps is a zero state. Check parameters,
         # or try running again in this is due to randomness of the initialization.
 
