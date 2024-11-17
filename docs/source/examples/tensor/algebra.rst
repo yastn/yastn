@@ -4,6 +4,7 @@ Linear algebra with symmetric tensors
 .. code-block:: python
 
    import yastn
+   import pytest
    config_kwargs = {"backend": "np"}
 
 Basic algebra operations

@@ -8,6 +8,7 @@ Other tensor configuration options will take :ref:`default values. <tensor/confi
 .. code-block:: python
 
    import yastn
+   import pytest
    config_kwargs = {"backend": "np"}
 
 
