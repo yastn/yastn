@@ -24,7 +24,7 @@ following the layout specified by the lattice geometry.
                  phys `4th`  bottom `2nd`
 
 .. autoclass:: yastn.tn.fpeps.Peps
-    :members: copy, clone, save_to_dict, transfer_mpo
+    :members: copy, clone, shallow_copy, save_to_dict, transfer_mpo
 
 
 Initializing product PEPS
@@ -32,7 +32,7 @@ Initializing product PEPS
 
 .. autofunction:: yastn.tn.fpeps.product_peps
 
-Examples are given in :ref:`quickstart<yastn.quickstart:QUICKSTART>`.
+See examples at :ref:`quickstart/kibble_zurek:Kibble-Zurek quench in 2D transverse-field Ising model`.
 
 
 Import and export PEPS

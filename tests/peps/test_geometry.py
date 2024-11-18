@@ -62,7 +62,7 @@ def test_CheckerboardLattice(net=None):
     assert all(net.f_ordered(*bond) for bond in net.bonds())
 
 
-def test_SquareLattice(config_kwargs):
+def test_SquareLattice():
     net = fpeps.SquareLattice(dims=(3, 2), boundary='obc')
 
     assert net.dims == (3, 2)
@@ -185,23 +185,25 @@ def test_SquareLattice(config_kwargs):
         #  boundary='some' not recognized; should be 'obc', 'infinite', or 'cylinder'
 
 
-def test_RectangularUnitCell_1x1(config_kwargs):
-    g = fpeps.RectangularUnitcell(pattern=[[0,],])
+def test_RectangularUnitCell_1x1():
+    for pattern in [[[0,],],
+                    {(0, 0): 0}]:
+        g = fpeps.RectangularUnitcell(pattern=pattern)
 
-    assert g.dims == (1,1)
-    assert g.sites() == (Site(0, 0),)
+        assert g.dims == (1,1)
+        assert g.sites() == (Site(0, 0),)
 
-    assert g.bonds(dirn='h') == (Bond((0, 0), (0, 1)),)
-    assert g.bonds(dirn='v') == (Bond((0, 0), (1, 0)),)
+        assert g.bonds(dirn='h') == (Bond((0, 0), (0, 1)),)
+        assert g.bonds(dirn='v') == (Bond((0, 0), (1, 0)),)
 
-    assert g.nn_site(Site(0, 0), d='r') == (0, 1)
-    assert g.nn_site(Site(0, 0), d='b') == (1, 0)
+        assert g.nn_site(Site(0, 0), d='r') == (0, 1)
+        assert g.nn_site(Site(0, 0), d='b') == (1, 0)
 
-    assert all(g.site2index(site) == 0 for site in [(0, 0), (1, 1), (-3, 3), (1, -1), (2, 0)])
-    assert all(g.f_ordered(*bond) for bond in g.bonds())
+        assert all(g.site2index(site) == 0 for site in [(0, 0), (1, 1), (-3, 3), (1, -1), (2, 0)])
+        assert all(g.f_ordered(*bond) for bond in g.bonds())
 
 
-def test_RectangularUnitCell_2x2_bipartite(config_kwargs):
+def test_RectangularUnitCell_2x2_bipartite():
     for pattern in ([[0, 1], [1, 0]],
                     {(0, 0): 0, (1, 1): 0, (0, 1): 1, (1, 0): 1}):
 
@@ -216,8 +218,8 @@ def test_RectangularUnitCell_2x2_bipartite(config_kwargs):
         assert all(g.sites()[g.site2index(s)] == (0, 1) for s in [(1, 0), (0, 1), (2, 5), (1, 2), (-1, 0)])
 
 
-def test_RectangularUnitCell_3x3_Q_1o3_1o3(config_kwargs):
-    g = fpeps.RectangularUnitcell(pattern=[[0,1,2],[1,2,0],[2,0,1]])
+def test_RectangularUnitCell_3x3_Q_1o3_1o3():
+    g = fpeps.RectangularUnitcell(pattern=[[0, 1, 2], [1, 2, 0], [2, 0, 1]])
 
     assert g.dims == (3, 3)
     assert g.sites() == (Site(0, 0), Site(0, 1), Site(0, 2))
@@ -234,7 +236,28 @@ def test_RectangularUnitCell_3x3_Q_1o3_1o3(config_kwargs):
     assert all(g.sites()[g.site2index(s)] == (0, 2) for s in [(0, 2), (0, 5), (0, -1), (1, 1), (-2, 4)])
 
 
-def test_Peps_get_set(config_kwargs):
+def test_RectangularUnitCell_raises():
+    with pytest.raises(yastn.YastnError):
+        fpeps.RectangularUnitcell(pattern={(-1, -1): 1, (0, 0): 1, (0, -1): 2, (-1, 0): 2})
+        # RectangularUnitcell: pattern keys should cover a rectangle index (0, 0) to (Nx - 1, Ny - 1).
+    with pytest.raises(yastn.YastnError):
+        fpeps.RectangularUnitcell(pattern={(0, 0): 1, (1, 0): 1, (0, 1): 2})
+        # RectangularUnitcell: pattern keys should cover a rectangle index (0, 0) to (Nx - 1, Ny - 1).
+    with pytest.raises(yastn.YastnError):
+        fpeps.RectangularUnitcell(pattern=[[1, 0], [0]])
+        # RectangularUnitcell: pattern should form a two-dimensional square matrix of hashable labels.
+    with pytest.raises(yastn.YastnError):
+        fpeps.RectangularUnitcell(pattern=[1, 0])
+        # RectangularUnitcell: pattern should form a two-dimensional square matrix of hashable labels.
+    with pytest.raises(yastn.YastnError):
+        fpeps.RectangularUnitcell(pattern=[[1, 0], [['a'], 1]])
+        # RectangularUnitcell: pattern labels should be hashable.
+    with pytest.raises(yastn.YastnError):
+        fpeps.RectangularUnitcell(pattern=[[1, 0], [1, 1]])
+        # RectangularUnitcell: each unique label should have the same neighbors.
+
+
+def test_Peps_get_set():
     """ Setitem and getitem in peps allows to acces individual tensors. """
     net = fpeps.CheckerboardLattice()
     #
@@ -258,6 +281,7 @@ def test_Peps_get_set(config_kwargs):
 
     with pytest.raises(KeyError):
         psi[None]
+
     with pytest.raises(KeyError):
         psi[(5, 3)]
 
@@ -272,7 +296,7 @@ def test_Peps_get_set(config_kwargs):
     assert psi[(0, 1)] is None
 
 
-def test_Peps_inheritance(config_kwargs):
+def test_Peps_inheritance():
     net = fpeps.SquareLattice(dims=(3, 2), boundary='infinite')
     psi = fpeps.Peps(net)
 

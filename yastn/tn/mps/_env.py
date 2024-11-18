@@ -245,7 +245,7 @@ class EnvParent(metaclass=abc.ABCMeta):
 
     def shallow_copy(self):
         r"""
-        A copy of environment class, that cleates new copy of dictionary storing env tensors.
+        A shallow copy of environment class, that creates a new copy of dictionary storing env tensors.
         """
         env = copy.copy(self)
         env.F = dict(self.F)

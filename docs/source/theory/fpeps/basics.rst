@@ -19,7 +19,7 @@ with sites labeled by coordinates :math:`(x,y)` as shown below:
 
 ::
 
-       # coordinates of the underlying 2D lattice
+       # Coordinates of the underlying 2D lattice
 
         ----------->
        |
@@ -37,16 +37,16 @@ with sites labeled by coordinates :math:`(x,y)` as shown below:
 Each tensor :math:`A_{(x,y)}` in PEPS is a rank-:math:`5` tensor defined as follows:
 
 - **Four virtual bond dimensions** connecting neighboring tensors:
-    - :math:`D_{(x-1,y),(x,y)}`: bond dimension connecting to the left neighbor,
-    - :math:`D_{(x,y-1),(x,y)}`: bond dimension connecting below,
-    - :math:`D_{(x,y),(x+1,y)}`: bond dimension connecting to the right,
-    - :math:`D_{(x,y),(x,y+1)}`: bond dimension connecting above.
+    - :math:`D_{(x-1,y),(x,y)}`: bond dimension connecting to the top neighbor
+    - :math:`D_{(x,y-1),(x,y)}`: bond dimension connecting to the left neighbor
+    - :math:`D_{(x,y),(x+1,y)}`: bond dimension connecting to the bottom neighbor
+    - :math:`D_{(x,y),(x,y+1)}`: bond dimension connecting to the right neighbor
 
 - **One physical dimension** :math:`d_{(x,y)}`, associated with the lattice site's local degree of freedom.
 
 ::
 
-      # individual tensor of the PEPS lattice
+      # Individual tensor of the PEPS lattice
 
                                  D_(x-1,y),(x,y)
                                          \
@@ -60,12 +60,11 @@ Each tensor :math:`A_{(x,y)}` in PEPS is a rank-:math:`5` tensor defined as foll
 
 
 The hermitian conjugate of the above tensor :math:`A_{x,y}^{\dagger}` is represented as its mirror image of the tensor structure,
-with **element-wise complex conjugation** of each entry in :math:`A_{(x,y)}`. This means that each element
-:math:`a_{ijkl} \rightarrow \overline{a_{ijkl}}` while the bond dimensions remain the same.
+with element-wise complex conjugation of each entry in :math:`A_{(x,y)}`.
 
 ::
 
-      #   # Conjugate tensor in PEPS with element-wise complex conjugation
+      # Conjugate tensor in PEPS with element-wise complex conjugation
 
                                         d_(x,y)  D_(x,y),(x+1,y)
                                            |      /
@@ -79,7 +78,7 @@ with **element-wise complex conjugation** of each entry in :math:`A_{(x,y)}`. Th
 
 
 The module :code:`yastn.tn.fpeps` supports PEPS ansatz both for
-a finite system with open boundary conditions (OBC) and in the thermodynamic limit.
+a finite system with open boundary conditions (OBC) and an infinite system in the thermodynamic limit.
 A schematic diagram of PEPS with OBC is given below.
 
 ::
@@ -110,17 +109,17 @@ Fermionic anticommutation rules in PEPS
 ---------------------------------------
 
 We follow the recipe introduced by Corboz et al. in Ref. :ref:`[4] <ref4>`.
-This approach relies on two main techniques:
+This approach relies on two ingredients:
 (a) using parity-preserving tensors, which ensure that each tensor respects fermion parity, and
 (b) adding fermionic swap gates through :meth:`yastn.swap_gate` at line (leg) crossings in a
 planar projection of the network.
 
 In PEPS, the ordering of fermionic operators impacts their anticommutation properties, which are essential for accurate
 simulations of fermionic systems. We establish a **fermionic order** to guide the application of swap gates, with each
-swap gate ensuring correct anticommutation for fermionic crossings. These crossings in the 2D plane project the 3D fermionic
-ordering onto a 2D layout, where fermionic swap gates manage the antisymmetry.
+swap gate ensuring correct anticommutation for fermionic crossings. These crossings in the 2D plane project the 3D diagram
+encoding fermionic ordering onto a 2D layout, where swap gates manage the antisymmetry.
 
-In terms of numerical cost, contracting fermionic and bosonic (or spin) PEPS networks is comparable. The swap gates introduce
+In terms of the numerical cost, contracting fermionic and bosonic (or spin) PEPS networks is comparable. The swap gates introduce
 only a subleading overhead, making this approach efficient. The module :code:`yastn.tn.fpeps` handles both fermionic and bosonic
 statistics, controlled by the :code:`fermionic` flag in the :ref:`tensor configuration <tensor/configuration:yastn configuration>`.
 We use the name :code:`fpeps` to emphasize the incorporation of fermionic statistics in the module.
@@ -158,7 +157,7 @@ cell of tensors is repeated over an infinite lattice.
 
 A common setup is a **checkerboard lattice** with a :math:`2{\times}2` unit cell, containing two tensors, :math:`A` and :math:`B`,
 which alternate across the lattice. Each tensor represents local degrees of freedom. The **bond dimension** :math:`D` (typically same for all bonds)
-controls the maximum entanglement between neighboring tensors, defining the parameter for the computational cost.
+controls the maximum entanglement between neighboring tensors and determines dominant computational cost.
 
 ::
 
@@ -229,15 +228,13 @@ Each gate application increases the virtual bond dimension of the PEPS tensors b
 To keep the PEPS representation compact, each application of the gate has to be followed by
 a truncation procedure to reduce the virtual bond dimension back to :math:`D`.
 
-In 1D systems, Matrix Product States (MPS) benefit from a **canonical form**, which enables
-optimal truncation of bond dimensions using Singular Value Decomposition (SVD).
-This truncation is globally optimal in the Frobenius norm because the canonical form
-decouples sections of the MPS, allowing each bond to be truncated independently without
-impacting the global accuracy of the state. However, in PEPS, the two-dimensional structure
-introduces loops, which hinder the use of canonical forms and make simple SVD-based truncation suboptimal.
+In 1D systems, Matrix Product States (MPS) benefit from a **canonical forms**, which enables
+globally optimal truncation of a bond dimension using Singular Value Decomposition (SVD).
+However, in PEPS, the two-dimensional structure introduces loops,
+which hinder the use of canonical forms and make simple SVD-based truncation suboptimal.
 A successful algorithm requires using optimization techniques on top of SVD to manage truncation effectively.
-The aim is to minimize the Frobenius norm of: (a) PEPS after the application of the Trotter gate
-whose virtual bond dimension is now increased to :math:`r{\times}D`,
+The aim is to minimize the Frobenius norm of the difference between:
+(a) PEPS after the application of the Trotter gate whose virtual bond dimension is now increased to :math:`r{\times}D`,
 and (b) a new PEPS with the bond dimension truncated back to :math:`D`.
 
 ::
@@ -338,7 +335,7 @@ with a set of environmental tensors, where the approximation quality is controll
 which limits the size of these tensors. These environment tensors undergo a renormalization group procedure, iteratively converging towards their fixed-point forms.
 The renormalization procedure involves:
 
-- **Iterative Absorption and Truncation**: Initial corner and transfer tensors define the environment. During each iteration, tensors are contracted, decomposed and truncated to the bond dimension :math:`\chi\)`, balancing accuracy with efficiency.
+- **Iterative Absorption and Truncation**: Initial corner and transfer tensors define the environment. During each iteration, environment tensors are enlarge by conraction with PEPS tensors, decomposed and truncated back to the bond dimension :math:`\chi`.
 
 - **Fixed-Point Convergence**: Over successive iterations, the environment tensors converge towards a stable fixed-point form, capturing the lattice environment accurately while maintaining computational feasibility.
 
