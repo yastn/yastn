@@ -229,10 +229,13 @@ class EnvNTU:
             env_l = edge_l(Q0, hair_l(m[0,-1], hl=hair_l(m[0,-2]), ht=htl_t, hb=hbl_b))  # [bl bl'] [rr rr'] [tl tl']
             env_r = edge_r(Q1, hair_r(m[0, 2], hr=hair_r(m[0, 3]), ht=htr_t, hb=hbr_b))  # [tr tr'] [ll ll'] [br br']
 
-            ctl = cor_tl(m[-1, 0], ht=hair_t(m[-2, 0]), hl=htl_l)
-            ctr = cor_tr(m[-1, 1], ht=hair_t(m[-2, 1]), hr=htr_r)
-            cbr = cor_br(m[ 1, 1], hb=hair_b(m[ 2, 1]), hr=hbr_r)
-            cbl = cor_bl(m[ 1, 0], hb=hair_b(m[ 2, 0]), hl=hbl_l)
+            hm1p0_t, hm1p1_t = cut_into_hairs(cor_tl(m[-2, 0]) @ cor_tr(m[-2, 1]))
+            hp1p1_b, hp1p0_b = cut_into_hairs(cor_br(m[2, 1]) @ cor_bl(m[2, 0]))
+
+            ctl = cor_tl(m[-1, 0], ht=hm1p0_t, hl=htl_l)
+            ctr = cor_tr(m[-1, 1], ht=hm1p1_t, hr=htr_r)
+            cbr = cor_br(m[ 1, 1], hb=hp1p1_b, hr=hbr_r)
+            cbl = cor_bl(m[ 1, 0], hb=hp1p0_b, hl=hbl_l)
             g = tensordot((cbr @ cbl) @ env_l, (ctl @ ctr) @ env_r, axes=((0, 2), (2, 0)))  # [rr rr'] [ll ll']
         else: # dirn == "v":
             assert self.psi.nn_site(s0, (1, 0)) == s1
@@ -248,10 +251,14 @@ class EnvNTU:
 
             env_t = edge_t(Q0, hair_t(m[-1, 0], ht=hair_t(m[-2, 0]), hl=htl_l, hr=htr_r))  # [lt lt'] [bb bb'] [rt rt']
             env_b = edge_b(Q1, hair_b(m[ 2, 0], hb=hair_b(m[ 3, 0]), hl=hbl_l, hr=hbr_r))  # [rb rb'] [tt tt'] [lb lb']
-            cbl = cor_bl(m[1,-1], hl=hair_l(m[1,-2]), hb=hbl_b)
-            ctl = cor_tl(m[0,-1], hl=hair_l(m[0,-2]), ht=htl_t)
-            ctr = cor_tr(m[0, 1], hr=hair_r(m[0, 2]), ht=htr_t)
-            cbr = cor_br(m[1, 1], hr=hair_r(m[1, 2]), hb=hbr_b)
+
+            hp1m1_l, hp0m1_l = cut_into_hairs(cor_bl(m[1, -2]) @ cor_tl(m[0, -2]))
+            hp0p1_r, hp1p1_r = cut_into_hairs(cor_tr(m[0, 2]) @ cor_br(m[1, 2]))
+
+            cbl = cor_bl(m[1,-1], hl=hp1m1_l, hb=hbl_b)
+            ctl = cor_tl(m[0,-1], hl=hp0m1_l, ht=htl_t)
+            ctr = cor_tr(m[0, 1], hr=hp0p1_r, ht=htr_t)
+            cbr = cor_br(m[1, 1], hr=hp1p1_r, hb=hbr_b)
             g = tensordot((cbl @ ctl) @ env_t, (ctr @ cbr) @ env_b, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
         return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
 
