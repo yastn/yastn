@@ -1,22 +1,8 @@
-Environments
-============
-
-Contractions of PEPS lattice are supported by environment classes. Those include:
-    * :class:`yastn.tn.fpeps.EnvNTU` supports a family of NTU approximations of the bond metric for time evolution.
-    * :class:`yastn.tn.fpeps.EnvCTM` CTMRG for finite or infinite lattices. Supports local expectation values, bond metric, etc.
-    * :class:`yastn.tn.fpeps.EnvBoundaryMps` BoundaryMPS for contracting finite lattice. It supports expectation values, including long-range correlations, sampling, etc.
-    * :class:`yastn.tn.fpeps.EnvApproximate` Supports calculation of bond metric for larger clusters that are contracted approximately.
-
-
-Neighberhood tensor update environments
----------------------------------------
-
-.. autoclass:: yastn.tn.fpeps.EnvNTU
-    :members: bond_metric
-
+Environment CTMRG
+=================
 
 Corner transfer matrix renormalization group (CTMRG)
-----------------------------------------------------
+:class:`yastn.tn.fpeps.EnvCTM` CTMRG for finite or infinite lattices. Supports local expectation values, bond metric, etc.
 
 :class:`yastn.tn.fpeps.EnvCTM` associates with each lattice site
 a local CTM environment, that can be accessed via :code:`[]`, and
@@ -59,16 +45,3 @@ two-site nearest-neighbor observables :meth:`yastn.tn.fpeps.EnvCTM.measure_nn`.
     :members: save_to_dict, reset_, bond_metric, update_, ctmrg_, measure_1site, measure_nn, sample
 
 .. autoclass:: yastn.tn.fpeps.EnvCTM_local
-
-
-Boundary MPS
-------------
-
-.. autoclass:: yastn.tn.fpeps.EnvBoundaryMps
-    :members: measure_1site,  measure_2site, sample, sample_MC_
-
-Approximate cluster update
---------------------------
-
-.. autoclass:: yastn.tn.fpeps.EnvApproximate
-    :members: bond_metric

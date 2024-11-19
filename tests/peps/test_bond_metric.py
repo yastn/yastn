@@ -48,7 +48,7 @@ def test_spinless_infinite_approx(config_kwargs):
     for k in ['NN', 'NN+', 'NN++', 'NNN', 'NNN+', 'NNN++']:
         envs[k] = fpeps.EnvNTU(psi, which=k)
 
-    for k in ['43', '43h', '65', '65h', '87', '87h']:
+    for k in ['43', '43+', '65', '65+', '87', '87+']:
         envs[k] = fpeps.EnvApproximate(psi,
                                        which=k,
                                        opts_svd=opts_svd,
@@ -67,13 +67,13 @@ def test_spinless_infinite_approx(config_kwargs):
         assert (Gs['NN+'] - Gs['NN++']).norm() < 1e-3
         assert (Gs['NN++'] - Gs['NNN++']).norm() < 1e-3
         assert (Gs['NNN'] - Gs['43']).norm() < 1e-5
-        assert (Gs['NNN+'] - Gs['43h']).norm() < 1e-5
-        assert (Gs['43'] - Gs['43h']).norm() < 1e-2
-        assert (Gs['43h'] - Gs['65']).norm() < 1e-3
-        assert (Gs['65'] - Gs['65h']).norm() < 1e-4
-        assert (Gs['65h'] - Gs['87']).norm() < 1e-5
-        assert (Gs['87'] - Gs['87h']).norm() < 1e-5
-        assert (Gs['87h'] - Gs['FU']).norm() < 1e-5
+        assert (Gs['NNN+'] - Gs['43+']).norm() < 1e-5
+        assert (Gs['43'] - Gs['43+']).norm() < 1e-2
+        assert (Gs['43+'] - Gs['65']).norm() < 1e-3
+        assert (Gs['65'] - Gs['65+']).norm() < 1e-4
+        assert (Gs['65+'] - Gs['87']).norm() < 1e-5
+        assert (Gs['87'] - Gs['87+']).norm() < 1e-5
+        assert (Gs['87+'] - Gs['FU']).norm() < 1e-5
 
     with pytest.raises(yastn.YastnError):
         fpeps.EnvNTU(psi, which="some")
