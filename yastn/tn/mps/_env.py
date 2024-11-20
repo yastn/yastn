@@ -14,6 +14,7 @@
 # ==============================================================================
 """ Environments for the <mps| mpo |mps> and <mps|mps>  contractions. """
 from __future__ import annotations
+from numbers import Number
 from ... import eye, tensordot, ncon, vdot, YastnError, qr, svd
 from . import MpsMpoOBC, MpoPBC
 import abc
@@ -118,13 +119,13 @@ class EnvParent(metaclass=abc.ABCMeta):
             self.F.pop((n, n + 1), None)
 
     @abc.abstractmethod
-    def factor(self) -> number:
+    def factor(self) -> Number:
         r"""
         Collect factors from constituent MPSs and MPOs.
         """
 
     @abc.abstractmethod
-    def measure(self, bd=None) -> number:
+    def measure(self, bd=None) -> Number:
         r"""
         Calculate overlap between environments at :code:`bd` bond.
 

@@ -15,6 +15,7 @@
 """ Linalg methods for yastn.Tensor. """
 from __future__ import annotations
 from itertools import accumulate
+from numbers import Number
 import numpy as np
 from ._auxliary import _struct, _slc, _clear_axes, _unpack_axes
 from ._tests import YastnError, _test_axes_all
@@ -25,7 +26,7 @@ __all__ = ['qr', 'norm', 'entropy', 'truncation_mask', 'truncation_mask_multiple
            'svd', 'svd_with_truncation', 'eigh', 'eigh_with_truncation']
 
 
-def norm(a, p='fro') -> number:
+def norm(a, p='fro') -> Number:
     r"""
     Norm of the tensor.
 
@@ -692,7 +693,7 @@ def eigh_with_truncation(a, axes, sU=1, Uaxis=-1,
     return S, U
 
 
-def entropy(a, alpha=1, tol=1e-12) -> number:
+def entropy(a, alpha=1, tol=1e-12) -> Number:
     r"""
     Calculate entropy from probabilities encoded in diagonal tensor ``a``.
 

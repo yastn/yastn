@@ -16,6 +16,7 @@
 from __future__ import annotations
 import numpy as np
 from functools import reduce
+from numbers import Number
 from operator import mul
 from ._auxliary import _clear_axes, _unpack_axes, _struct, _slc, _flatten
 from ._tests import YastnError, _test_configs_match
@@ -494,7 +495,7 @@ def zero_of_dtype(a):
     return a.config.backend.zeros((), dtype=a.yast_dtype, device=a.device)
 
 
-def to_number(a) -> number:
+def to_number(a) -> Number:
     r"""
     Assuming the symmetric tensor has just a single non-empty block of total dimension one,
     return this element as a scalar.

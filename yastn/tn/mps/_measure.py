@@ -15,6 +15,7 @@
 """ Environments for the <mps| mpo |mps> and <mps|mps>  contractions. """
 from __future__ import annotations
 from itertools import groupby
+from numbers import Number
 from typing import Sequence
 from ... import YastnError
 from . import MpsMpoOBC
@@ -22,7 +23,7 @@ from ._env import Env, Env2
 from ...operators import swap_charges
 
 
-def vdot(*args) -> number:
+def vdot(*args) -> Number:
     r"""
     Calculate the overlap :math:`\langle \textrm{bra}|\textrm{ket}\rangle`,
     or :math:`\langle \textrm{bra}|\textrm{op}|\textrm{ket} \rangle` depending on the number of provided agruments.
@@ -36,7 +37,7 @@ def vdot(*args) -> number:
     return measure_mpo(*args)
 
 
-def measure_overlap(bra, ket) -> number:
+def measure_overlap(bra, ket) -> Number:
     r"""
     Calculate overlap :math:`\langle \textrm{bra}|\textrm{ket} \rangle`.
     Conjugate of MPS :code:`bra` is computed internally.
@@ -56,7 +57,7 @@ def measure_overlap(bra, ket) -> number:
     return env.measure(bd=(-1, 0))
 
 
-def measure_mpo(bra, op: MpsMpoOBC | Sequence[tuple(MpsMpoOBC, number)], ket) -> number:
+def measure_mpo(bra, op: MpsMpoOBC | Sequence[tuple(MpsMpoOBC, number)], ket) -> Number:
     r"""
     Calculate expectation value :math:`\langle \textrm{bra}|\textrm{op}|\textrm{ket} \rangle`.
 

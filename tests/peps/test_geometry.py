@@ -20,86 +20,115 @@ from yastn.tn.fpeps import Site, Bond
 
 
 def test_CheckerboardLattice(net=None):
-    """ Generate a few lattices and verify the expected output of some functions. """
-
-    assert str(Site(0, 0)) == "Site(0, 0)"
-    assert str(Bond(Site(0, 0), Site(0, 1))) == "Bond((0, 0), (0, 1))"
-
+    """ Test checkerboard lattice. """
     if net is None:
         net = fpeps.CheckerboardLattice()
 
-    assert net.dims == (2, 2)
-    assert net.sites() == (Site(0, 0), Site(0, 1))
+    assert net.dims == (2, 2)  # size of unit cell
+    assert net.sites() == (Site(0, 0), Site(0, 1))  # two unique sites
     assert net.sites(reverse=True) == (Site(0, 1), Site(0, 0))
-    assert net._periodic == 'ii'
+    assert net._periodic == 'ii'  # lattice is infinite in both directions.
 
+    # unique horizontal bonds
     assert net.bonds(dirn='h') == (Bond((0, 0), (0, 1)), Bond((0, 1), (0, 2)))
+    # unique vertical bonds
     assert net.bonds(dirn='v') == (Bond((0, 0), (1, 0)), Bond((0, 1), (1, 1)))
+    # all unique bonds; also in reversed order
     assert net.bonds(reverse=True)[::1] == net.bonds()[::-1]
 
-    assert all(net.site2index(site) == 0 for site in [(0, 0), (1, 1), (-3, 3), (1, -1), (2, 0)])
-    assert all(net.site2index(site) == 1 for site in [(1, 0), (0, 1), (2, 5), (1, 2), (-1, 0)])
+    # map from site to unique index
+    # it is used in Peps.__getitem__(site);  EncCTM.__getitem__(site), ...
+    assert all(net.site2index(site) == 0
+               for site in [(0, 0), (1, 1), (-3, 3), (1, -1), (2, 0)])
+    assert all(net.site2index(site) == 1
+               for site in [(1, 0), (0, 1), (2, 5), (1, 2), (-1, 0)])
 
+    # nearest-neighbor site to: right, left, top, bottom
     assert net.nn_site(Site(1, 1), d='r') == (1, 2)
     assert net.nn_site(Site(1, 0), d='l') == (1, -1)
     assert net.nn_site(Site(0, 0), d='t') == (-1, 0)
     assert net.nn_site(Site(1, 0), d='b') == (2, 0)
 
+    # whether a nearest-neighbor bond is horizontal or vertical and
+    # whether it is ordered as (left, right) or (top, bottom) lattice sites.
     assert net.nn_bond_type(Bond((0, 0), (0, 1))) == ('h', True)  # 'lr'
     assert net.nn_bond_type(Bond((0, 3), (0, 2))) == ('h', False) # 'rl'
     assert net.nn_bond_type(Bond((1, 3), (0, 3))) == ('v', False) # 'bt'
     assert net.nn_bond_type(Bond((1, 0), (2, 0))) == ('v', True)  # 'tb'
     with pytest.raises(yastn.YastnError):
         net.nn_bond_type(Bond((1, 0), (3, 0)))
-        # Bond((1, 0),(3, 0)) is not a nearest-neighboor bond.
+        # Bond((1, 0),(3, 0)) is not a nearest-neighbor bond.
 
-    assert all(net.nn_bond_type(bond) == ('h', True) for bond in net.bonds(dirn='h'))
-    assert all(net.nn_bond_type(bond) == ('v', True) for bond in net.bonds(dirn='v'))
+    # order of bonds in net.bond()
+    assert all(net.nn_bond_type(bond) == ('h', True)
+               for bond in net.bonds(dirn='h'))
+    assert all(net.nn_bond_type(bond) == ('v', True)
+               for bond in net.bonds(dirn='v'))
 
+    # pairs of sites consistent with the assumed fermionic order.
     assert net.f_ordered((2, 0), (4, 0))
     assert net.f_ordered((4, 0), (0, 4))
-    assert all(net.f_ordered(s0, s1) for s0, s1 in zip(net.sites(), net.sites()[1:]))
+    assert all(net.f_ordered(s0, s1)
+               for s0, s1 in zip(net.sites(), net.sites()[1:]))
     assert all(net.f_ordered(*bond) for bond in net.bonds())
 
 
 def test_SquareLattice_obc():
+    """ Test SquareLattice with open boundary conditions. """
     net = fpeps.SquareLattice(dims=(3, 2), boundary='obc')
 
-    assert net.dims == (3, 2)
+    assert net.dims == (3, 2)  # size of unit cell
+    # sites in the lattice
     assert net.sites() == ((0, 0), (1, 0), (2, 0), (0, 1), (1, 1), (2, 1))
+    # horizontal bonds
     assert net.bonds(dirn='h') == (Bond((0, 0), (0, 1)),
                                    Bond((1, 0), (1, 1)),
                                    Bond((2, 0), (2, 1)))
+    # vertical bonds
     assert net.bonds(dirn='v') == (Bond((0, 0), (1, 0)),
                                    Bond((1, 0), (2, 0)),
                                    Bond((0, 1), (1, 1)),
                                    Bond((1, 1), (2, 1)))
-
+    #
+    # Lattice has open boundary conditions in both directions.
+    assert net._periodic == 'oo'
+    #
+    # no nearest-neighbor sites from some edges in some directions
     assert net.nn_site((0, 1), d='r') is None
     assert net.nn_site((0, 1), d='t') is None
     assert net.nn_site((2, 0), d='l') is None
     assert net.nn_site((2, 0), d='b') is None
     assert net.nn_site(None, d='l') is None
-
+    #
+    # nn_site can shift by more then 1 site.
     assert net.nn_site((0, 1), d=(2, -1)) == Site(2, 0)
+    #
+    # trivial map from site to unique index
     assert net.site2index((1, 0)) == (1, 0)
     assert net.site2index(None) == None
 
+    # whether a nearest-neighbor bond is horizontal or vertical and
+    # whether it is ordered as (left, right) or (top, bottom) lattice sites.
     assert net.nn_bond_type(Bond((0, 0), (0, 1))) == ('h', True)  # 'lr'
     assert net.nn_bond_type(Bond((0, 1), (0, 0))) == ('h', False) # 'rl'
     assert net.nn_bond_type(Bond((2, 1), (1, 1))) == ('v', False) # 'bt'
     assert net.nn_bond_type(Bond((1, 0), (2, 0))) == ('v', True)  # 'tb'
     with pytest.raises(yastn.YastnError):
         net.nn_bond_type(Bond((0, 0), (2, 0)))
-        # Bond((0,0),(2,0)) is not a nearest-neighboor bond.
+        # Bond((0, 0), (2, 0)) is not a nearest-neighbor bond.
 
-    assert all(net.nn_bond_type(bond) == ('h', True) for bond in net.bonds(dirn='h'))
-    assert all(net.nn_bond_type(bond) == ('v', True) for bond in net.bonds(dirn='v'))
+    # order of bonds in net.bond()
+    assert all(net.nn_bond_type(bond) == ('h', True)
+               for bond in net.bonds(dirn='h'))
+    assert all(net.nn_bond_type(bond) == ('v', True)
+               for bond in net.bonds(dirn='v'))
 
+    # pairs of sites consistent with the assumed fermionic order.
     assert net.f_ordered((0, 0), (1, 0))
     assert net.f_ordered((0, 0), (0, 1))
     assert net.f_ordered((1, 0), (0, 1))
-    assert all(net.f_ordered(s0, s1) for s0, s1 in zip(net.sites(), net.sites()[1:]))
+    assert all(net.f_ordered(s0, s1)
+               for s0, s1 in zip(net.sites(), net.sites()[1:]))
     assert all(net.f_ordered(*bond) for bond in net.bonds())
 
 
@@ -132,10 +161,12 @@ def test_SquareLattice_cylinder():
     assert net.nn_bond_type(Bond((0, 1), (2, 1))) == ('v', False) # 'bt'
     with pytest.raises(yastn.YastnError):
         net.nn_bond_type(Bond((3, 0), (2, 0)))
-        # Bond((3, 0), (2, 0)) is not a nearest-neighboor bond.
+        # Bond((3, 0), (2, 0)) is not a nearest-neighbor bond.
 
-    assert all(net.nn_bond_type(bond) == ('h', True) for bond in net.bonds(dirn='h'))
-    assert all(net.nn_bond_type(bond) == ('v', True) for bond in net.bonds(dirn='v'))
+    assert all(net.nn_bond_type(bond) == ('h', True)
+               for bond in net.bonds(dirn='h'))
+    assert all(net.nn_bond_type(bond) == ('v', True)
+               for bond in net.bonds(dirn='v'))
 
     assert net.nn_bond_type(Bond((2, 0), (0, 0))) == ('v', True)
     assert net.nn_bond_type(Bond((0, 0), (2, 0))) == ('v', False)
@@ -147,6 +178,9 @@ def test_SquareLattice_cylinder():
 
 
 def test_SquareLattice_infinite():
+    assert str(Site(0, 0)) == "Site(0, 0)"
+    assert str(Bond(Site(0, 0), Site(0, 1))) == "Bond((0, 0), (0, 1))"
+
     net = fpeps.SquareLattice(dims=(3, 2), boundary='infinite')
 
     assert net.dims == (3, 2)

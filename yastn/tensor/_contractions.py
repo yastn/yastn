@@ -16,6 +16,7 @@
 from __future__ import annotations
 from functools import lru_cache
 from itertools import groupby, accumulate
+from numbers import Number
 import numpy as np
 from ._auxliary import _struct, _slc, _clear_axes, _unpack_axes, _flatten
 from ._tests import YastnError, _test_can_be_combined, _test_axes_match
@@ -300,7 +301,7 @@ def _meta_mask(a_struct, a_slices, a_isdiag, b_struct, b_slices, Dbnew, axis):
     return meta, c_struct, c_slices
 
 
-def vdot(a, b, conj=(1, 0)) -> number:
+def vdot(a, b, conj=(1, 0)) -> Number:
     r"""
     Compute scalar product :math:`\langle a|b \rangle` between two tensors.
 

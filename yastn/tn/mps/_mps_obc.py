@@ -14,6 +14,7 @@
 # ==============================================================================
 """ Mps structure and its basic manipulations. """
 from __future__ import annotations
+from numbers import Number
 from ... import tensor, initialize, YastnError
 from ._mps_parent import _MpsMpoParent
 
@@ -255,7 +256,7 @@ class MpsMpoOBC(_MpsMpoParent):
         self.A[self.pC] = R / nR
         self.factor = 1 if normalize else self.factor * nR
 
-    def diagonalize_central_(self, opts_svd, normalize=True) -> number:
+    def diagonalize_central_(self, opts_svd, normalize=True) -> Number:
         r"""
         Use svd() to perform SVD of the central block C = U @ S @ V, where S contains singular (Schmidt) values.
         Truncation is done based on ``opts_svd``.
@@ -336,7 +337,7 @@ class MpsMpoOBC(_MpsMpoParent):
             else:  # (to == 'last' and n2 <= self.last) or n1 < self.first
                 self.A[n2] = C @ self.A[n2]
 
-    def norm(self) -> number:
+    def norm(self) -> Number:
         """ Calculate norm of MPS/MPO via canonization. """
         phi = self.shallow_copy()
         #if not phi.is_canonical(to='first'):
@@ -406,7 +407,7 @@ class MpsMpoOBC(_MpsMpoParent):
                 return False
         return self.pC is None  # True if no central block
 
-    def truncate_(self, to='last', opts_svd=None, normalize=True) -> number:
+    def truncate_(self, to='last', opts_svd=None, normalize=True) -> Number:
         r"""
         Sweep through the MPS/MPO and put it in right/left canonical form
         (:code:`to='first'` or :code:`to='last'`, respectively)
@@ -470,7 +471,7 @@ class MpsMpoOBC(_MpsMpoParent):
         nl, nr = bd
         return tensor.tensordot(self.A[nl], self.A[nr], axes=(2, 0))
 
-    def unmerge_two_sites_(self, AA, bd, opts_svd) -> number:
+    def unmerge_two_sites_(self, AA, bd, opts_svd) -> Number:
         r"""
         Unmerge rank-4 tensor into two neighbouring MPS sites and a central block
         using :meth:`yastn.linalg.svd_with_truncation` to trunctate the bond dimension.
