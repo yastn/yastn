@@ -77,7 +77,7 @@ def test_evol_cylinder(config_kwargs):
     dt = tf / steps
 
     # prepare evolution gates
-    ops = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', **config_kwargs)
+    ops = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', default_dtype='complex128', **config_kwargs)
     I = ops.I()
     gates_nn = []
     gates_local = []
