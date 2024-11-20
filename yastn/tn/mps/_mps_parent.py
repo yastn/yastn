@@ -14,7 +14,7 @@
 # ==============================================================================
 """ MpsMpoParent structure and basic methods common for OBC and PBC. """
 from __future__ import annotations
-import numbers
+from numbers import Number, Integral
 from ... import YastnError
 
 
@@ -25,7 +25,7 @@ class _MpsMpoParent:
         r"""
         Parent class extracting common elements of periodic and open boundary MpsMpo
         """
-        if not isinstance(N, numbers.Integral) or N <= 0:
+        if not isinstance(N, Integral) or N <= 0:
             raise YastnError('Number of Mps sites N should be a positive integer.')
         if nr_phys not in (1, 2):
             raise YastnError('Number of physical legs, nr_phys, should be 1 or 2.')
@@ -92,7 +92,7 @@ class _MpsMpoParent:
 
         Assigning central block is not supported.
         """
-        if not isinstance(n, numbers.Integral) or n < self.first or n > self.last:
+        if not isinstance(n, Integral) or n < self.first or n > self.last:
             raise YastnError("MpsMpoOBC: n should be an integer in 0, 1, ..., N-1")
         if tensor.ndim != self.nr_phys + 2:
             raise YastnError(f"MpsMpoOBC: Tensor rank should be {self.nr_phys + 2}")
@@ -285,7 +285,7 @@ class _MpsMpoParent:
         return [self.A[n].get_legs(axes=1) for n in self.sweep(to='last')]
 
 
-    def save_to_dict(self) -> dict[str, dict | number]:
+    def save_to_dict(self) -> dict[str, dict | Number]:
         r"""
         Serialize MPS/MPO into a dictionary.
 

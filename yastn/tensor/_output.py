@@ -41,7 +41,7 @@ def save_to_dict(a) -> dict:
     a: yastn.Tensor
         tensor to export.
     """
-    _d = a.config.backend.to_numpy(a._data)
+    _d = a.config.backend.to_numpy(a._data).copy()
     hfs = [hf._asdict() for hf in a.hfs]
     return {'_d': _d, 's': a.struct.s, 'n': a.struct.n,
             't': a.struct.t, 'D': a.struct.D, 'isdiag': a.isdiag,
