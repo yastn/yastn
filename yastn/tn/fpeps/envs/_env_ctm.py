@@ -95,6 +95,20 @@ class EnvCTM(Peps):
                 setattr(env[site], dirn, getattr(self[site], dirn).copy())
         return env
 
+    def clone(self) -> EnvCTM:
+        env = EnvCTM(self.psi, init=None)
+        for site in env.sites():
+            for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
+                setattr(env[site], dirn, getattr(self[site], dirn).clone())
+        return env
+
+    def shallow_copy(self) -> EnvCTM:
+        env = EnvCTM(self.psi, init=None)
+        for site in env.sites():
+            for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
+                setattr(env[site], dirn, getattr(self[site], dirn))
+        return env
+
     def reset_(self, init='rand', leg=None):
         r"""
         Initialize CTMRG environments of PEPS tensors.

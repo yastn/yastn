@@ -100,7 +100,7 @@ def test_quickstart_KZ(config_kwargs):
                     "Schmidt_tol": 1e-5}
     #
     # setting-up environment
-    env_mps = peps.EnvBoundaryMps(psi,
+    env_mps = peps.EnvBoundaryMPS(psi,
                                   opts_svd=opts_svd_env,
                                   opts_var=opts_var_env, setup='lr')
     #

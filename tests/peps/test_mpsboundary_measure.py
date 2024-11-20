@@ -39,7 +39,7 @@ def test_mpsboundary_measure(config_kwargs, boundary):
     psi = fpeps.product_peps(geometry, occs)
 
     opts_svd = {'D_total': 2, 'tol': 1e-10}
-    env = fpeps.EnvBoundaryMps(psi, opts_svd=opts_svd, setup='lr')
+    env = fpeps.EnvBoundaryMPS(psi, opts_svd=opts_svd, setup='lr')
 
     esz = env.measure_1site(ops.sz())
     assert all(abs(v - esz[s]) < tol for s, v in vals.items())
@@ -67,7 +67,7 @@ def test_mpsboundary_measure(config_kwargs, boundary):
 
         proj_psi[k] = psi[k] @ prs[k][smpl[k]]
 
-    proj_env = fpeps.EnvBoundaryMps(proj_psi, opts_svd=opts_svd)
+    proj_env = fpeps.EnvBoundaryMPS(proj_psi, opts_svd=opts_svd)
 
     smpl1 = {}
     smpl2 = {}
@@ -84,7 +84,7 @@ def test_mpsboundary_measure(config_kwargs, boundary):
 
 
 def test_finite_spinless_boundary_mps_ctmrg(config_kwargs):
-    """ compare boundary Mps with CTM"""
+    """ compare boundary MPS with CTM"""
     boundary = 'obc'
     Nx, Ny = 3, 2
     geometry = fpeps.SquareLattice(dims=(Nx, Ny), boundary=boundary)
@@ -129,7 +129,7 @@ def test_finite_spinless_boundary_mps_ctmrg(config_kwargs):
             break
         energy_old = energy
 
-    mpsenv = fpeps.EnvBoundaryMps(psi, opts_svd=opts_svd_ctm, setup='tlbr')
+    mpsenv = fpeps.EnvBoundaryMPS(psi, opts_svd=opts_svd_ctm, setup='tlbr')
 
     for ny in range(psi.Ny):
         vR0 = env.boundary_mps(n=ny, dirn='r')

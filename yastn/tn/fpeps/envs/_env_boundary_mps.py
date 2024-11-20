@@ -18,7 +18,7 @@ from ... import mps
 from ._env_auxlliary import identity_tm_boundary
 
 
-class EnvBoundaryMps:
+class EnvBoundaryMPS:
     r"""
     Boundary MPS class for finite PEPS contraction.
     """

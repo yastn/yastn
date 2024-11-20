@@ -1,5 +1,5 @@
-Environment CTMRG
-=================
+Environment CTM
+===============
 
 Corner transfer matrix renormalization group (CTMRG) associates a local CTM environment with each lattice site
 and the corresponding rank-4 PEPS tensors **a** (potentially, coming from a :ref:`double-layer<fpeps/initialization:Double PEPS Tensor>` contraction of bra and ket PEPSs).

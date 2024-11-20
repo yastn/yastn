@@ -51,7 +51,7 @@ def test_CheckerboardLattice(net=None):
     assert net.nn_bond_type(Bond((1, 0), (2, 0))) == ('v', True)  # 'tb'
     with pytest.raises(yastn.YastnError):
         net.nn_bond_type(Bond((1, 0), (3, 0)))
-        # Bond((1,0),(3,0)) is not a nearest-neighboor bond.
+        # Bond((1, 0),(3, 0)) is not a nearest-neighboor bond.
 
     assert all(net.nn_bond_type(bond) == ('h', True) for bond in net.bonds(dirn='h'))
     assert all(net.nn_bond_type(bond) == ('v', True) for bond in net.bonds(dirn='v'))
@@ -62,7 +62,7 @@ def test_CheckerboardLattice(net=None):
     assert all(net.f_ordered(*bond) for bond in net.bonds())
 
 
-def test_SquareLattice():
+def test_SquareLattice_obc():
     net = fpeps.SquareLattice(dims=(3, 2), boundary='obc')
 
     assert net.dims == (3, 2)
@@ -102,8 +102,8 @@ def test_SquareLattice():
     assert all(net.f_ordered(s0, s1) for s0, s1 in zip(net.sites(), net.sites()[1:]))
     assert all(net.f_ordered(*bond) for bond in net.bonds())
 
-    ##########
 
+def test_SquareLattice_cylinder():
     net = fpeps.SquareLattice(dims=(3, 2), boundary='cylinder')
 
     assert net.dims == (3, 2)
@@ -132,7 +132,7 @@ def test_SquareLattice():
     assert net.nn_bond_type(Bond((0, 1), (2, 1))) == ('v', False) # 'bt'
     with pytest.raises(yastn.YastnError):
         net.nn_bond_type(Bond((3, 0), (2, 0)))
-        # Bond((3,0),(2,0)) is not a nearest-neighboor bond.
+        # Bond((3, 0), (2, 0)) is not a nearest-neighboor bond.
 
     assert all(net.nn_bond_type(bond) == ('h', True) for bond in net.bonds(dirn='h'))
     assert all(net.nn_bond_type(bond) == ('v', True) for bond in net.bonds(dirn='v'))
@@ -145,8 +145,8 @@ def test_SquareLattice():
     assert all(net.f_ordered(s0, s1) for s0, s1 in zip(net.sites(), net.sites()[1:]))
     assert not all(net.f_ordered(*bond) for bond in net.bonds())  #  PBC bonds in cylinder are not fermionically alligned
 
-    ##########
 
+def test_SquareLattice_infinite():
     net = fpeps.SquareLattice(dims=(3, 2), boundary='infinite')
 
     assert net.dims == (3, 2)

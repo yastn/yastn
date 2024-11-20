@@ -101,7 +101,7 @@ def test_evol_cylinder(config_kwargs):
         fpeps.evolution_step_(env, gates, opts_svd=opts_svd)
 
     opts_svd_mps = {'D_total': D, 'tol': 1e-10}
-    env = fpeps.EnvBoundaryMps(psi, opts_svd=opts_svd_mps, setup='lr')
+    env = fpeps.EnvBoundaryMPS(psi, opts_svd=opts_svd_mps, setup='lr')
     for spin in 'ud':
         print(f"{spin=}")
         occf = env.measure_1site(ops.n(spin=spin))

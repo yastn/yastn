@@ -20,6 +20,37 @@ import yastn.tn.fpeps as fpeps
 tol = 1e-12  #pylint: disable=invalid-name
 
 
+def run_ctm_save_load_copy(env):
+    # test save, load, copy, clone,
+
+    config = env.psi.config
+    d = env.save_to_dict()
+
+    env_save = fpeps.load_from_dict(config, d)
+    env_copy = env.copy()
+    env_clone = env.clone()
+    env_shallow = env.shallow_copy()
+
+
+    for site in env.sites():
+        for dirn in  ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
+            ten0 = getattr(env[site], dirn)
+            ten1 = getattr(env_save[site], dirn)
+            ten2 = getattr(env_copy[site], dirn)
+            ten3 = getattr(env_clone[site], dirn)
+            ten4 = getattr(env_shallow[site], dirn)
+
+            assert yastn.are_independent(ten0, ten1)
+            assert yastn.are_independent(ten0, ten2)
+            assert yastn.are_independent(ten0, ten3)
+            assert ten0 is ten4
+
+            assert (ten0 - ten1).norm() < 1e-14
+            assert (ten0 - ten2).norm() < 1e-14
+            assert (ten0 - ten3).norm() < 1e-14
+            assert (ten0 - ten4).norm() < 1e-14
+
+
 @pytest.mark.parametrize("boundary", ["obc", "infinite"])
 def test_ctmrg_measure_product(config_kwargs, boundary):
     """ Initialize a product PEPS and perform a set of measurment. """
@@ -95,6 +126,10 @@ def test_ctmrg_measure_product(config_kwargs, boundary):
     if boundary != 'obc':
         out = env.measure_2site(sz, sz, xrange=(3, 7), yrange=(-1, 2))
         assert all(abs(vals[g.site2index(s0)] * vals[g.site2index(s1)] - v) < tol for (s0, s1), v in out.items())
+    #
+    # save, copy, ...
+    #
+    run_ctm_save_load_copy(env)
 
     with pytest.raises(yastn.YastnError):
         env.measure_2x2(sz, sz, sz, sites=((0, 0), (1, 1)))

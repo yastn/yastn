@@ -347,20 +347,19 @@ below results from contracting a single-site PEPS tensor :math:`A` and its conju
 
 ::
 
-     _______     _______     _______
-    |       |   |       |chi|       |
-    |  C_nw |---|  T_n  |---|  C_ne |
-    |_______|   |_______|   |_______|
-        |           |           |
-     ___|___     ___|___     ___|___
-    |       |   |       |D^2|       |
-    |  T_w  |---|   a   |---|  T_e  |
-    |_______|   |_______|   |_______|
-        |chi        |           |
-     ___|___     ___|___     ___|___
-    |       |   |       |   |       |
-    |  C_sw |---|  T_s  |---|  C_se |
-    |_______|   |_______|   |_______|
+    ┌──────┐    ┌─────┐    ┌──────┐
+    | C_tl ├────┤ T_t ├────┤ C_tr |
+    └──┬───┘    └──┬──┘    └───┬──┘
+       |           |           |
+       │           |           |
+    ┌──┴──┐     ┌──┴──┐     ┌──┴──┐
+    | T_l ├─────┤  a  ├─────┤ T_r |
+    └──┬──┘     └──┬──┘     └──┬──┘
+       |           |           |
+       |           |           |
+    ┌──┴───┐    ┌──┴──┐    ┌───┴──┐
+    | C_bl ├────┤ T_b ├────┤ C_br |
+    └──────┘    └─────┘    └──────┘
 
 
 They are used to calculate expectation values by contracting PEPS site tensors and their environments.
