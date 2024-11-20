@@ -33,7 +33,7 @@ class Gate_nn(NamedTuple):
 
 
 class Gate_local(NamedTuple):
-    """
+    r"""
     ``G`` is a local operator with ``ndim=2``.
 
     If ``site`` is ``None``, this is a general operator.
@@ -44,7 +44,7 @@ class Gate_local(NamedTuple):
 
 
 class Gates(NamedTuple):
-    """
+    r"""
     List of nearest-neighbor and local operators to be applied to PEPS by :meth:`yastn.tn.fpeps.evolution_step_`.
     """
     nn : list = ()   # list of NN gates
@@ -52,7 +52,7 @@ class Gates(NamedTuple):
 
 
 def decompose_nn_gate(Gnn, bond=None) -> Gate_nn:
-    """
+    r"""
     Auxiliary function cutting a two-site gate with SVD
     into two local operators with the connecting legs.
     """
@@ -62,7 +62,7 @@ def decompose_nn_gate(Gnn, bond=None) -> Gate_nn:
 
 
 def gate_nn_hopping(t, step, I, c, cdag, bond=None) -> Gate_nn:
-    """
+    r"""
     Nearest-neighbor gate :math:`G = \exp(-step \cdot H)` for
     :math:`H = -t \cdot (cdag_1 c_2 + cdag_2 c_1)`
 
@@ -84,7 +84,7 @@ def gate_nn_hopping(t, step, I, c, cdag, bond=None) -> Gate_nn:
 
 
 def gate_nn_Ising(J, step, I, X, bond=None) -> Gate_nn:
-    """
+    r"""
     Nearest-neighbor gate :math:`G = \exp(-step \cdot H)` for
     :math:`H = J X_1 X_2`,
     where :math:`X` is a Pauli matrix.
@@ -100,7 +100,7 @@ def gate_nn_Ising(J, step, I, X, bond=None) -> Gate_nn:
 
 
 def gate_nn_tJ(J, tu, td, muu0, muu1, mud0, mud1, step, I, cu, cpu, cd, cpd, bond=None) -> Gate_nn:
-    """
+    r"""
     Nearest-neighbor gate :math:`G = \exp(-step \cdot H_{tj})`
     """
     nu = cpu @ cu
@@ -131,7 +131,7 @@ def gate_nn_tJ(J, tu, td, muu0, muu1, mud0, mud1, step, I, cu, cpu, cd, cpd, bon
 
 
 def gate_local_Coulomb(mu_up, mu_dn, U, step, I, n_up, n_dn, site=None) -> Gate_local:
-    """
+    r"""
     Local gate :math:`\exp(-step \cdot H)` for
     :math:`H = U \cdot (n_{up} - I / 2) \cdot (n_{dn} - I / 2) - mu_{up} \cdot n_{up} - mu_{dn} \cdot n_{dn}`
 
@@ -146,7 +146,7 @@ def gate_local_Coulomb(mu_up, mu_dn, U, step, I, n_up, n_dn, site=None) -> Gate_
 
 
 def gate_local_occupation(mu, step, I, n, site=None) -> Gate_local:
-    """
+    r"""
     Local gate :math:`G = \exp(-step \cdot H)` for
     :math:`H = -mu \cdot n`
 
@@ -157,7 +157,7 @@ def gate_local_occupation(mu, step, I, n, site=None) -> Gate_local:
 
 
 def gate_local_field(h, step, I, X, site=None) -> Gate_local:
-    """
+    r"""
     Local gate :math:`G = \exp(-step \cdot H)` for
     :math:`H = -h \cdot X`
     where :math:`X` is a Pauli matrix.
@@ -169,7 +169,7 @@ def gate_local_field(h, step, I, X, site=None) -> Gate_local:
 
 
 def distribute(geometry, gates_nn=None, gates_local=None) -> Gates:
-    """
+    r"""
     Distributes gates homogeneous over the lattice.
 
     Parameters
