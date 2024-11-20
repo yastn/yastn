@@ -926,4 +926,7 @@ def is_independent(x, y):
     """
     check if two arrays are identical, or share the same view.
     """
-    return not ((x is y) or (x.numel() > 0 and x.untyped_storage().data_ptr() == y.untyped_storage().data_ptr()))
+    if _torch_version_check("2.0"):
+        return (x is not y) and (x.numel() == 0 or x.untyped_storage().data_ptr() != y.untyped_storage().data_ptr())
+    else:
+        return (x is not y) and (x.numel() == 0 or x.storage().data_ptr() != y.storage().data_ptr())

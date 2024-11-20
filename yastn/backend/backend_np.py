@@ -577,4 +577,4 @@ def is_independent(x, y):
     """
     check if two arrays are identical, or share the same view.
     """
-    return not ((x is y) or (x.base is y) or (x is y.base))
+    return (x is not y) and (x.base is not y) and (x is not y.base)
