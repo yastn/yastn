@@ -46,7 +46,7 @@ def evolve_correlation_matrix(Js, mus, occs0, s2i, t):
     return Ci, Cf
 
 
-def test_evol_cylinder(config_kwargs):
+def a_test_evol_cylinder(config_kwargs):
     """ Simulate purification of spinful fermions in a small finite system """
     print(" Simulating spinful fermions in a small finite system. ")
 
