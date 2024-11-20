@@ -21,12 +21,12 @@ with sites labeled by coordinates :math:`(x,y)` as shown below:
 
        # Coordinates of the underlying 2D lattice
 
-        ----------->
-       |
-       |   (0,0)     (0,1)   ...     (0,Ly-1)
-       |
-       |   (1,0)     (1,1)   ...     (1,Ly-1)
-      \|/
+       ┌──────────ᐳ
+       │
+       │   (0,0)     (0,1)   ...     (0,Ly-1)
+       │
+       │   (1,0)     (1,1)   ...     (1,Ly-1)
+       ᐯ
              .         .               .
              .                         .
              .                .        .
@@ -129,23 +129,25 @@ the placement of swap gates, as tensor parity invariance permits line crossings 
 
 ::
 
-              ____         ____         ____
-             |____|-------|____|-------|____|
-               |  \         |  \         |  \
-               |  _\__      |  _\__      |  _\__
-               | |____|-----|-|____|-----|-|____|
-      |Psi> =  |   |  \     |   |  \     |   |  \
-               |   |  _\__  |   |  _\__  |   |  _\__
-               |   | |____|-|---|-|____|-|---|-|____|
+             ┌────┐       ┌────┐       ┌────┐
+             │    ├───────┤    ├───────┤    │
+             └─┬─┬┘       └─┬─┬┘       └─┬─┬┘
+               |  ╲         |  ╲         |  ╲
+               | ┌─┴──┐     | ┌─┴──┐     | ┌─┴──┐
+               | │    ├─────┼─┤    ├─────┼─┤    │
+               | └─┬─┬┘     | └─┬─┬┘     | └─┬─┬┘
+      |Psi> =  |   |  ╲     |   |  ╲     |   |  ╲
+               |   | ┌─┴──┐ |   | ┌─┴──┐ |   | ┌─┴──┐
+               |   | │    ├─┼───┼─┤    ├─┼───┼─┤    │
+               |   | └─┬──┘ |   | └─┬──┘ |   | └─┬──┘
                |   |   |    |   |   |    |   |   |
                |   |   |    |   |   |    |   |   |
 
-               ---------------------------------->
+               ───────────────────────────────────ᐳ
                                  fermionic order
 
 In this 2D representation, physical lines are placed on one edge of each tensor, allowing for a consistent and
 localized application of swap gates to uphold fermionic anticommutation, supporting efficient network contraction.
-
 
 
 Infinite PEPS (iPEPS)

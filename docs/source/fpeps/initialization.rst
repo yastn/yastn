@@ -14,14 +14,14 @@ following the layout specified by the lattice geometry.
       # top, left, bottom, right, physical
 
                   top `0th`
-                     \
-                   ___\_____
-                  |         |
-      left `1st`--| A_{x,y} |-- right `3rd`
-                  |_________|
-                     |      \
-                     |       \
-                 phys `4th`  bottom `2nd`
+                     ╲
+                      ╲
+                  ┌────┴────┐
+    left `1st` ───┤ A_{x,y} ├─── right `3rd`
+                  └──┬────┬─┘
+                     |     ╲
+                     |      ╲
+                phys `4th`  bottom `2nd`
 
 .. autoclass:: yastn.tn.fpeps.Peps
     :members: copy, clone, shallow_copy, save_to_dict, transfer_mpo
@@ -67,22 +67,21 @@ It provides a dispatching mechanism for efficient contraction in construction of
 
 ::
 
-                      t' t
-                       \ \
-                        | \
-                       /  _\_____
-                      /  |       |                            t' t
-                   /--|--|   A   |-------\                     \ \
-                  /   |  |_______|        \                   __\_\__
-             l --/    |    |      \        \-- r         l --|       |-- r
-                      |    |    __ \               ===       |   a   |
-             l'--\    |   _|___/_ \ \      /-- r'        l'--|_______|-- r'
-                  \   |  |       | \ \    /                      \ \
-                   \--|--|   A'  |--\-\--/                        \ \
-                      \  |_______|   \ \                          b' b
-                       \   /          \ \
-                        \_/            \ \
-                                       b' b
+                        t't
+                         ╲╲
+                         ╱ ╲
+                        ╱   ╲                                   t't
+                       ╱ ┌───┴───┐                               ╲╲
+                   /──┼──┤   A   ├─────\                          ╲╲
+                  ╱   |  └─┬────┬┘      ╲                       ┌──┴┴───┐
+            l ───/    |    |     ╲       \─── r    ════    l ───┤   a   ├─── r
+            l'───\    |    |   ___╲      /─── r'   ════    l'───┤       ├─── r'
+                  ╲   |  ┌─┴──┴──┐╲╲    ╱                       └──┬┬───┘
+                   \──┼──┤   A'  ├─╲╲──/                            ╲╲
+                      ╲  └─┬─────┘  ╲╲                               ╲╲
+                       ╲  ╱          ╲╲                              b'b
+                        ‾‾            ╲╲
+                                      b'b
 
 
 Note that in the following diagram the virtual legs of the peps tensor are labelled by
