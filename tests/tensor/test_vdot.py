@@ -15,10 +15,6 @@
 """ yastn.vdot() """
 import pytest
 import yastn
-try:
-    from .configs import config_dense, config_U1, config_Z2xU1
-except ImportError:
-    from configs import config_dense, config_U1, config_Z2xU1
 
 tol = 1e-12  #pylint: disable=invalid-name
 
@@ -41,14 +37,16 @@ def vdot_vs_numpy(a, b):
     return ns
 
 
-def test_vdot_basic():
+def test_vdot_basic(config_kwargs):
     """ basic tests for various symmetries. """
     # dense
+    config_dense = yastn.make_config(sym='none', **config_kwargs)
     a = yastn.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5), dtype='complex128')
     b = yastn.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5), dtype='complex128')
     vdot_vs_numpy(a, b)
 
     # U1
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     legs_a = [yastn.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(1, 2, 3)),
               yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6)),
               yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9)),
@@ -77,7 +75,9 @@ def test_vdot_basic():
     vdot_vs_numpy(c, b)
 
 
-def test_vdot_fuse_hard():
+def test_vdot_fuse_hard(config_kwargs):
+    # U1
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     t1, t2, t3 = (-1, 0, 1), (-2, 0, 2), (-3, 0, 3)
     D1, D2, D3 = (1, 3, 2), (3, 3, 4), (5, 3, 6)
     a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1, 1),
@@ -90,6 +90,8 @@ def test_vdot_fuse_hard():
     b.set_block(ts=(1, 1, -2, -2, -3, 3), Ds=(2, 4, 3, 1, 1, 4), val='rand')
     vdot_hf(a, b, hf_axes1=((0, 1), (2, 3), (4, 5)))
 
+    # Z2xU1
+    config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
     t1, t2 = [(0, -1), (0, 1), (1, -1), (1, 1)],  [(0, 0), (0, 1), (1, 1)]
     D1, D2 = (1, 2, 3, 4), (5, 2, 4)
     a2 = yastn.rand(config=config_Z2xU1, s=(-1, 1, 1, -1), t=(t2, t2, t1, t1), D=(D2, D2, D1, D1))
@@ -119,8 +121,9 @@ def vdot_hf(a, b, hf_axes1=(0, (2, 3), 1)):
     assert all(abs(s - x.item()) < tol for x in (fs, ffs, fffs, fs2.conj(), ffs2.conj(), fffs2.conj()))
 
 
-def test_vdot_exceptions():
+def test_vdot_exceptions(config_kwargs):
     """ special cases and exceptions"""
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.Tensor(config=config_U1, s=(), dtype='complex128')
     b = yastn.Tensor(config=config_U1, s=(), dtype='complex128')
     vdot_vs_numpy(a, b)  # == 0 for empty tensors
@@ -151,8 +154,9 @@ def test_vdot_exceptions():
         yastn.vdot(a, b)  # Bond dimensions do not match.
 
 
-def test_hf_intersect_exceptions():
+def test_hf_intersect_exceptions(config_kwargs):
     """ exceptions happening in resolving hard-fusion mismatches. """
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     t1, t2 = (-1, 0, 1), (-2, 0, 2)
     D1, D2 = (2, 3, 2), (2, 5, 2)
     with pytest.raises(yastn.YastnError):
@@ -184,7 +188,4 @@ def test_hf_intersect_exceptions():
 
 
 if __name__ == '__main__':
-    test_vdot_basic()
-    test_vdot_fuse_hard()
-    test_vdot_exceptions()
-    test_hf_intersect_exceptions()
+    pytest.main([__file__, "-vs", "--durations=0"])

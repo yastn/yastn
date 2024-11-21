@@ -16,25 +16,17 @@
 import pytest
 import yastn
 import yastn.tn.mps as mps
-try:
-    from .configs import config_dense as cfg
-except ImportError:
-    from configs import config_dense as cfg
-# pytest modifies cfg to inject different backends and devices during tests
 
 
-def test_truncate(config=cfg, tol=1e-12):
+def test_truncate(config_kwargs, tol=1e-12):
     """ Test mps.truncate_ on random input states. """
-    opts_config = {} if config is None else \
-                {'backend': config.backend, 'default_device': config.default_device}
-    #
+
     # initialize random MPO
-    #
     N = 14
     Di = 35  # initial D
     Df, svd_tol = 15, 6e-2  # truncation parameters
     for sym, n, seed in [("dense", (), 0), ("Z2", (0,), 1), ("Z2", (1,), 2)]:
-        ops = yastn.operators.Spin12(sym=sym, **opts_config)
+        ops = yastn.operators.Spin12(sym=sym, **config_kwargs)
         I = mps.product_mpo(ops.I(), N)
         ops.random_seed(seed=seed)
         #
@@ -95,18 +87,15 @@ def test_truncate(config=cfg, tol=1e-12):
         assert abs(phipsi ** 2 / psipsi + discarded ** 2 - 1) < tol
 
 
-def test_zipper(config=cfg, tol=1e-12):
+def test_zipper(config_kwargs, tol=1e-12):
     """ Test mps.zipper on random input states. """
-    opts_config = {} if config is None else \
-                {'backend': config.backend, 'default_device': config.default_device}
-    #
     N = 13
     for sym, n, seed in [("dense", (), 0), ("Z2", (0,), 1), ("Z2", (1,), 2)]:
         #
         #  zipper for MPO @ MPO
         #
         Dai, Dbi = 13, 8  # initial D
-        ops = yastn.operators.Spin12(sym=sym, **opts_config)
+        ops = yastn.operators.Spin12(sym=sym, **config_kwargs)
         I = mps.product_mpo(ops.I(), N)
         ops.random_seed(seed=seed)
         a = mps.random_mpo(I, D_total=Dai)
@@ -143,18 +132,15 @@ def test_zipper(config=cfg, tol=1e-12):
         assert abs(vcab ** 2 / vabab + discarded**2 - 1)  <  0.1  # discarded is only an estimate
 
 
-def test_compression(config=cfg, tol=1e-12):
+def test_compression(config_kwargs, tol=1e-12):
     """ Test mps.compression on random input states. """
-    opts_config = {} if config is None else \
-                {'backend': config.backend, 'default_device': config.default_device}
-    #
     N = 13
     for sym, n, seed in [("dense", (), 0), ("Z2", (0,), 1), ("Z2", (1,), 2)]:
         #
         #  compression for MPO @ MPO; initialize with zipper
         #
         Dai, Dbi = 13, 8  # initial D
-        ops = yastn.operators.Spin12(sym=sym, **opts_config)
+        ops = yastn.operators.Spin12(sym=sym, **config_kwargs)
         I = mps.product_mpo(ops.I(), N)
         ops.random_seed(seed=seed)
         a = 2.0 * mps.random_mpo(I, D_total=Dai)  # add extra factors
@@ -225,12 +211,9 @@ def test_compression(config=cfg, tol=1e-12):
         assert 0.6 < vca / vaa  < 1
 
 
-def test_compression_sum(config=cfg, tol=1e-6):
+def test_compression_sum(config_kwargs, tol=1e-6):
     """ Test various combinations of targets and environments. """
-    opts_config = {} if config is None else \
-                {'backend': config.backend, 'default_device': config.default_device}
-    #
-    ops = yastn.operators.SpinlessFermions(sym='Z2', **opts_config)
+    ops = yastn.operators.SpinlessFermions(sym='Z2', **config_kwargs)
     N = 7
     I = mps.product_mpo(ops.I(), N)
     terms = []
@@ -314,15 +297,12 @@ def test_compression_sum(config=cfg, tol=1e-6):
         assert abs(phi.norm() - abs(3 * E0 + 2j)) < tol
 
 
-def test_comression_raise(config=cfg):
-    opts_config = {} if config is None else \
-        {'backend': config.backend,
-        'default_device': config.default_device}
-    ops = yastn.operators.Spin12(sym='dense', **opts_config)
+def test_comression_raise(config_kwargs):
+    ops = yastn.operators.Spin12(sym='dense', **config_kwargs)
     N = 7
     I = mps.product_mpo(ops.I(), N=N)
     H = mps.random_mpo(I, D_total=5)
-    psi0  = mps.random_mpo(I, D_total=4)
+    psi0 = mps.random_mpo(I, D_total=4)
     psi1 = mps.random_mpo(I, D_total=4)
 
     with pytest.raises(yastn.YastnError):
@@ -341,18 +321,14 @@ def test_comression_raise(config=cfg):
         mps.compression_(psi1, [H, psi0], method='2site')
         # Compression: provide opts_svd for 2site method.
     with pytest.raises(yastn.YastnError):
-        psi_Np1  = mps.Mps(N=N+1)
+        psi_Np1 = mps.Mps(N=N+1)
         mps.zipper(H, psi_Np1)
         #  Zipper: Mpo and Mpo/Mps must have the same number of sites to be multiplied.
     with pytest.raises(yastn.YastnError):
-        H_pbc  = mps.Mpo(N, periodic=True)
+        H_pbc = mps.Mpo(N, periodic=True)
         mps.zipper(H_pbc, psi0)
         # Zipper: Application of MpoPBC on Mpo is currently not supported. Contact developers to add this functionality.
 
 
-if __name__ == "__main__":
-    test_truncate()
-    test_zipper()
-    test_compression()
-    test_compression_sum()
-    test_comression_raise()
+if __name__ == '__main__':
+    pytest.main([__file__, "-vs", "--durations=0"])

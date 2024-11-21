@@ -16,18 +16,13 @@
 import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
-try:
-    from .configs import config as cfg
-    # cfg is used by pytest to inject different backends and divices
-except ImportError:
-    from configs import config as cfg
+
+tol = 1e-12  #pylint: disable=invalid-name
 
 
-tol = 1e-12
-
-def test_double_peps_tensor():
+def test_double_peps_tensor(config_kwargs):
     """ Generate a few lattices veryfing expected output of some functions. """
-    ops = yastn.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
+    ops = yastn.operators.SpinlessFermions(sym='U1', **config_kwargs)
 
     # single peps tensor
     leg0 = yastn.Leg(ops.config, s=-1, t=(-1, 0, 1), D=(1, 3, 1))
@@ -186,4 +181,4 @@ def test_double_peps_tensor():
 
 
 if __name__ == '__main__':
-    test_double_peps_tensor()
+    pytest.main([__file__, "-vs", "--durations=0"])

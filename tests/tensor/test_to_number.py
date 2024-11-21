@@ -12,13 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-""" to_number() """
+""" tensor.to_number() """
 import pytest
 import yastn
-try:
-    from .configs import config_dense, config_U1
-except ImportError:
-    from configs import config_dense, config_U1
 
 tol = 1e-12  #pylint: disable=invalid-name
 
@@ -42,14 +38,16 @@ def run_to_number(a, b):
     assert type(it0) is not type(nb0)
 
 
-def test_to_number_basic():
-    """ test to_number() for various symmetries"""
+def test_to_number_basic(config_kwargs):
+    """ test yastn.to_number() for various symmetries"""
     # dense
+    config_dense = yastn.make_config(sym='none', **config_kwargs)
     a = yastn.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
     b = yastn.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
     run_to_number(a, b)
 
     # U1
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     legs = [yastn.Leg(config_U1, s=-1, t=(-1, 1, 0), D=(1, 2, 3)),
             yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6)),
             yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9)),
@@ -65,7 +63,8 @@ def test_to_number_basic():
     run_to_number(b, c)
 
 
-def test_to_number_exceptions():
+def test_to_number_exceptions(config_kwargs):
+    config_dense = yastn.make_config(sym='none', **config_kwargs)
     a = yastn.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
     with pytest.raises(yastn.YastnError):
         a.to_number()
@@ -76,5 +75,4 @@ def test_to_number_exceptions():
 
 
 if __name__ == '__main__':
-    test_to_number_basic()
-    test_to_number_exceptions()
+    pytest.main([__file__, "-vs", "--durations=0"])

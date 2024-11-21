@@ -38,8 +38,8 @@ def compression_(psi, target, method='1site',
 
     The outer loop sweeps over ``psi`` updating sites from the first site to the last and back.
     Convergence can be controlled based on overlap and/or Schmidt values (which is a more sensitive measure of convergence).
-    The algorithm performs at most :code:`max_sweeps`. If tolerance measures are provided, 
-    the calculation ends when the convergence criteria are satisfied, e.g., change in overlap or Schmidt values between sweeps 
+    The algorithm performs at most :code:`max_sweeps`. If tolerance measures are provided,
+    the calculation ends when the convergence criteria are satisfied, e.g., change in overlap or Schmidt values between sweeps
     is less than the provided tolerance.
 
     Works for
@@ -48,7 +48,7 @@ def compression_(psi, target, method='1site',
         * against MPO acting on MPS: ``target`` is a list ``[MPO, MPS]``.
         * against sum of MPOs acting on MPS: ``target`` is a list ``[[MPO, MPO, ...], MPS]``.
         * sum of any of the three above: target is ``[[MPS], [MPO, MPS], [[MPO, MPO, ...], MPS], ...]``
-        * for psi being MPO, where all MPS's above should be replaced with MPO, e.g., ``[MPO, MPO]``
+        * for ``psi`` being itself an MPO, all MPS's above should be replaced with MPO, e.g., ``[MPO, MPO]``
 
     Outputs iterator if :code:`iterator_step` is given, which allows
     inspecting :code:`psi` outside of :code:`compression_` function after every :code:`iterator_step` sweeps.
@@ -62,11 +62,12 @@ def compression_(psi, target, method='1site',
 
     target: MPS or MPO
         Defines target state. The target can be:
+
         * an MPS, e.g. target = MPS or [MPS],
-        * an MPO acting on MPS (target = [MPO, MPS]), 
-        * sum of MPOs acting on MPS, e.g, [[MPO, MPO], MPS], 
+        * an MPO acting on MPS (target = [MPO, MPS]),
+        * sum of MPOs acting on MPS, e.g, [[MPO, MPO], MPS],
         * or the sum of the above, e.g., [[MPS], [MPO, MPS], [[MPO, MPO], MPS]].
-        If `psi` and `target` are MPO, the MPS in above list is replaced by MPO.
+        * If ``psi`` and ``target`` are MPOs, the MPS in above list is replaced by MPO.
 
     method: str
         Which optimization variant to use from `'1site'`, `'2site'`
@@ -84,7 +85,7 @@ def compression_(psi, target, method='1site',
 
     iterator_step: int
         If int, :code:`compression_` returns a generator that would yield output after every iterator_step sweeps.
-        Default is None, in which case  :code:`compression_` sweeps are performed immediately.
+        The default is None, in which case  :code:`compression_` sweeps are performed immediately.
 
     opts_svd: dict
         Options passed to :meth:`yastn.linalg.svd` used to truncate virtual spaces in :code:`method='2site'`.
@@ -241,11 +242,11 @@ def _compression_2site_sweep_(env, opts_svd=None, Schmidt=None):
 
 def zipper(a, b, opts_svd=None, normalize=True, return_discarded=False) -> yastn.tn.mps.MpsMpoOBC:
     """
-    Apply MPO `a` on MPS/MPS `b`, performing svd compression during the sweep.
+    Apply MPO ``a`` on MPS/MPS ``b``, performing SVD compression during the sweep.
 
     Perform canonization of ``b`` to the last site.
-    Next, sweep back attaching elements of ``a`` one at a time
-    and truncating the resulting bond dimensions along the way.
+    Next, sweep back, attaching to it elements of ``a`` one at a time,
+    truncating the resulting bond dimensions along the way.
     The resulting state is canonized to the first site and normalized to unity.
 
     Parameters
@@ -257,12 +258,12 @@ def zipper(a, b, opts_svd=None, normalize=True, return_discarded=False) -> yastn
 
     normalize: bool
         Whether to keep track of the norm of the initial state projected on
-        the direction of the truncated state; default is True, i.e., sets the norm to unity.
+        the direction of the truncated state; default is ``True``, i.e., sets the norm to :math:`1`.
         The individual tensors at the end of the procedure are in a proper canonical form.
 
     return_discarded: bool
         Whether to return the approximation discarded weights together with the resulting MPS/MPO.
-        Default is False, i.e., returns only MPS/MPO.
+        The default is ``False``, i.e., returns only MPS/MPO.
         Discarded weight approximates norm of truncated elements normalized by the norm of the untruncated state.
     """
     if a.N != b.N:
@@ -370,7 +371,7 @@ def _zipper_MpoPBC(a, psi, opts_svd, normalize) -> yastn.tn.mps.MpsMpo:
             if a.tol is not None and a.tol > 0:
                 Uc, Sc, Vc = tensor.svd_with_truncation(tmp, axes=(1, (0, 2, 3)), tol=a.tol)
                 tmp = (Sc @ Vc).transpose(axes=(1, 0, 2, 3))
-                connector  = connector @ Uc
+                connector = connector @ Uc
 
             psi.factor = psi.factor * nS
         else:  # n == first

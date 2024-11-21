@@ -29,7 +29,13 @@ from .backend import backend_np
 from .sym import sym_none, sym_U1, sym_Z2, sym_Z3, sym_U1xU1, sym_U1xU1xZ2
 
 
-_syms = {"dense": sym_none, "U1": sym_U1, "Z2": sym_Z2, "Z3": sym_Z3, "U1xU1": sym_U1xU1, "U1xU1xZ2": sym_U1xU1xZ2}
+_syms = {"dense": sym_none,
+         "none": sym_none,
+         "U1": sym_U1,
+         "Z2": sym_Z2,
+         "Z3": sym_Z3,
+         "U1xU1": sym_U1xU1,
+         "U1xU1xZ2": sym_U1xU1xZ2}
 
 __all__ = ['rand', 'randR', 'randC', 'zeros', 'ones', 'eye', 'block',
            'make_config', 'load_from_dict', 'load_from_hdf5', 'decompress_from_1d']
@@ -51,7 +57,7 @@ def make_config(**kwargs) -> NamedTuple:
             * NumPy as ``yastn.backend.backend_np``
             * PyTorch as ``yastn.backend.backend_torch``
 
-        Understands string inputs "np", "torch".
+        The above backends can be specified as strings: "np", "torch".
         Defaults to NumPy backend.
 
     sym : symmetry module or compatible object or str
@@ -59,7 +65,7 @@ def make_config(**kwargs) -> NamedTuple:
         see :class:`yastn.sym.sym_abelian`.
         Defaults to ``yastn.sym.sym_none``, effectively a dense tensor.
         For predefined symmetries, takes string input from
-        'dense', 'Z2', 'Z3', 'U1', 'U1xU1', 'U1xU1xZ2'.
+        'none' (or 'dense'), 'Z2', 'Z3', 'U1', 'U1xU1', 'U1xU1xZ2'.
 
     default_device : str
         Tensors can be stored on various devices as supported by ``backend``
@@ -74,14 +80,21 @@ def make_config(**kwargs) -> NamedTuple:
         Default data type (dtype) of YASTN tensors. Supported options are: ``'float64'``,
         ``'complex128'``. If not specified, the default dtype is ``'float64'``.
     fermionic : bool or tuple[bool,...]
-        Specify behavior of :meth:`yastn.swap_gate` function, allowing to introduce fermionic symmetries.
+        Specify behavior of :meth:`yastn.swap_gate` function, allowing to introduce fermionic statistics.
         Allowed values: ``False``, ``True``, or a tuple ``(True, False, ...)`` with one bool for each component
-        charge vector, i.e., of length sym.NSYM. Default is ``False``.
+        charge vector, i.e., of length sym.NSYM. The default is ``False``.
     default_fusion: str
         Specify default strategy to handle leg fusion: ``'hard'`` or ``'meta'``. See :meth:`yastn.Tensor.fuse_legs`
-        for details. Default is ``'hard'``.
+        for details. The default is ``'hard'``.
     force_fusion : str
-        Overrides fusion strategy provided in :meth:`yastn.Tensor.fuse_legs`. Default is ``None``.
+        Overrides fusion strategy provided in :meth:`yastn.Tensor.fuse_legs`. The default is ``None``.
+
+    Example
+    -------
+
+    ::
+
+        config = yastn.make_config(backend='np', sym='U1')
     """
     if "backend" not in kwargs or kwargs["backend"] == 'np':
         kwargs["backend"] = backend_np
@@ -154,11 +167,11 @@ def rand(config=None, legs=(), n=None, isdiag=False, **kwargs) -> yastn.Tensor:
         Device on which the tensor should be initialized. Overrides attribute :code:`default_device`
         specified in configuration.
     s : Optional[Sequence[int]]
-        (alternative) Tensor signature. Also determines the number of legs. Default is s=().
+        (alternative) Tensor signature. Also determines the number of legs. The default is s=().
     t : Optional[Sequence[Sequence[int | Sequence[int]]]]
-        (alternative) List of charges for each leg. Default is t=().
+        (alternative) List of charges for each leg. The default is t=().
     D : Optional[Sequence[Sequence[int]]]
-        (alternative) List of corresponding bond dimensions. Default is D=().
+        (alternative) List of corresponding bond dimensions. The default is D=().
 
     Note
     ----
@@ -206,11 +219,11 @@ def zeros(config=None, legs=(), n=None, isdiag=False, **kwargs) -> yastn.Tensor:
         Device on which the tensor should be initialized. Overrides attribute :code:`default_device`
         specified in configuration.
     s : Optional[Sequence[int]]
-        (alternative) Tensor signature. Also determines the number of legs. Default is s=().
+        (alternative) Tensor signature. Also determines the number of legs. The default is s=().
     t : Optional[Sequence[Sequence[int | Sequence[int]]]]
-        (alternative) List of charges for each leg. Default is t=().
+        (alternative) List of charges for each leg. The default is t=().
     D : Optional[Sequence[Sequence[int]]]
-        (alternative) List of corresponding bond dimensions. Default is D=().
+        (alternative) List of corresponding bond dimensions. The default is D=().
 
     Note
     ----
@@ -240,11 +253,11 @@ def ones(config=None, legs=(), n=None, isdiag=False, **kwargs) -> yastn.Tensor:
         Device on which the tensor should be initialized. Overrides attribute :code:`default_device`
         specified in configuration.
     s : Optional[Sequence[int]]
-        (alternative) Tensor signature. Also determines the number of legs. Default is s=().
+        (alternative) Tensor signature. Also determines the number of legs. The default is s=().
     t : Optional[Sequence[Sequence[int | Sequence[int]]]]
-        (alternative) List of charges for each leg. Default is t=().
+        (alternative) List of charges for each leg. The default is t=().
     D : Optional[Sequence[Sequence[int]]]
-        (alternative) List of corresponding bond dimensions. Default is D=().
+        (alternative) List of corresponding bond dimensions. The default is D=().
 
     Note
     ----
@@ -256,7 +269,7 @@ def ones(config=None, legs=(), n=None, isdiag=False, **kwargs) -> yastn.Tensor:
 
 def eye(config=None, legs=(), isdiag=True, **kwargs) -> yastn.Tensor:
     r"""
-    Initialize diagonal tensor of identity matrix. 
+    Initialize diagonal tensor of identity matrix.
     In presence of symmetries, such matrix is block-diagonal with all allowed blocks filled with identity matrices.
 
     .. note::
@@ -277,11 +290,11 @@ def eye(config=None, legs=(), isdiag=True, **kwargs) -> yastn.Tensor:
         Device on which the tensor should be initialized. Overrides attribute :code:`default_device`
         specified in configuration.
     s : Optional[Sequence[int]]
-        (alternative) Tensor signature; should be (1, -1) or (-1, 1). Default is s=(1, -1).
+        (alternative) Tensor signature; should be (1, -1) or (-1, 1). The default is s=(1, -1).
     t : Optional[Sequence[Sequence[int | Sequence[int]]]]
-        (alternative) List of charges for each leg. Default is t=().
+        (alternative) List of charges for each leg. The default is t=().
     D : Optional[list]
-        (alternative) List of corresponding bond dimensions. Default is D=().
+        (alternative) List of corresponding bond dimensions. The default is D=().
 
     Note
     ----

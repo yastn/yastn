@@ -17,10 +17,6 @@ import numpy as np
 import pytest
 import scipy.linalg
 import yastn
-try:
-    from .configs import config_dense, config_U1, config_Z2
-except ImportError:
-    from configs import config_dense, config_U1, config_Z2
 
 
 def run_expmv(A, v, tau, tol, ncv, hermitian):
@@ -54,8 +50,13 @@ def run_expmv(A, v, tau, tol, ncv, hermitian):
 
 
 @pytest.mark.parametrize("D, ncv, tau, tol", [(8, 5, 2., 1e-10), (8, 5, 2j, 1e-10), (8, 5, -2., 1e-10), (8, 5, -2j, 1e-10), (8, 5, 0, 1e-10), (4, 20, 2, 1e-10)])
-def test_expmv(D, ncv, tau, tol):
+def test_expmv(config_kwargs, D, ncv, tau, tol):
     """ initialize test of yastn.expmv() for various symmetries. """
+    #
+    config_dense = yastn.make_config(sym='none', **config_kwargs)
+    config_Z2 = yastn.make_config(sym='Z2', **config_kwargs)
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    #
     leg_dense = yastn.Leg(config_dense, s=1, D=[D])
     leg_Z2 = yastn.Leg(config_Z2, s=1, t=(0, 1), D=(D//2, D//2))
     leg_U1 = yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(D//4, D//2, D//4))
@@ -74,10 +75,10 @@ def test_expmv(D, ncv, tau, tol):
     run_expmv(A, v0, tau, tol, ncv, hermitian=False)
 
 
-
 @pytest.mark.parametrize("t, tol", [(2.0j, 1e-10), (2.0j, 1e-4), (-2.0j, 1e-10), (-2.0j, 1e-4), (2.0, 1e-10), (2.0, 1e-4), (-2.0, 1e-10), (-2.0, 1e-4)])
-def test_expmv_tm(t, tol):
+def test_expmv_tm(config_kwargs, t, tol):
     """ combining yastn.expmv() with more complicated contraction """
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     legs = [yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 4)),
             yastn.Leg(config_U1, s=1, t=(0, 1), D=(2, 3)),
             yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(2, 3, 4))]
@@ -106,12 +107,4 @@ def test_expmv_tm(t, tol):
 
 
 if __name__ == '__main__':
-    test_expmv(8, 5, 2.0, 1e-10)
-    test_expmv(8, 5, 2.0j, 1e-10)
-    test_expmv(8, 5, -2.0, 1e-10)
-    test_expmv(8, 5, -2.0j, 1e-10)
-    test_expmv(8, 5, 0, 1e-10)
-    test_expmv(4, 20, 2.0, 1e-10)
-    test_expmv_tm(0.5j, 1e-10)
-    test_expmv_tm(0.5, 1e-3)
-    test_expmv_tm(0, 1e-3)
+    pytest.main([__file__, "-vs", "--durations=0"])

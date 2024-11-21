@@ -14,28 +14,19 @@
 # ==============================================================================
 """ Predefined spin-1/2 operators. """
 from itertools import chain
-import pytest
 import numpy as np
+import pytest
 import yastn
-try:
-    from .configs import config_dense
-except ImportError:
-    from configs import config_dense
-
 
 tol = 1e-12  #pylint: disable=invalid-name
 
 
-def test_spin12():
+def test_spin12(config_kwargs):
     """ Standard operators and some vectors in two-dimensional Hilbert space for various symmetries. """
-    # pytest switches backends and default_device in config files for testing
-    backend = config_dense.backend
-    default_device = config_dense.default_device
-
-    ops_dense = yastn.operators.Spin12(sym='dense', backend=backend, default_device=default_device)
-    ops_Z2 = yastn.operators.Spin12(sym='Z2', backend=backend, default_device=default_device)
+    ops_dense = yastn.operators.Spin12(sym='dense', **config_kwargs)
+    ops_Z2 = yastn.operators.Spin12(sym='Z2', **config_kwargs)
     # other way to initialize
-    config_U1 = yastn.make_config(sym='U1', backend=backend, default_device=default_device)
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     ops_U1 = yastn.operators.Spin12(**config_U1._asdict())
 
     rs = (False, False, True) # reverse option for to_numpy/to_dense/to_nonsymmetric
@@ -47,7 +38,6 @@ def test_spin12():
 
     assert all(leg == I.get_legs(axes=0) for (leg, I) in zip(legs, Is))
     assert all(np.allclose(I.to_numpy(reverse=r), np.eye(2)) for (I, r) in zip(Is, rs))
-    assert all(default_device in I.device for I in Is)  # accept 'cuda' in 'cuda:0'
 
     zs = [ops_dense.z(), ops_Z2.z(), ops_U1.z()]
     szs = [ops_dense.sz(), ops_Z2.sz(), ops_U1.sz()]
@@ -126,7 +116,6 @@ def test_spin12():
         ops_Z2.vec_y(val=1)
         # Eigenvalues val should be in (-1, 1) and eigenvectors of Sy are well defined only for dense tensors.
 
-
     # used in mps Generator
     d = ops_dense.to_dict()
     (d["I"](3) - ops_dense.I()).norm() < tol  # here 3 is a posible position in the mps
@@ -134,4 +123,4 @@ def test_spin12():
 
 
 if __name__ == '__main__':
-    test_spin12()
+    pytest.main([__file__, "-vs", "--durations=0"])

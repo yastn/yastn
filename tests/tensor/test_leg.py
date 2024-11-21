@@ -15,17 +15,14 @@
 """ Test: yastn.Leg, get_legs() """
 import pytest
 import yastn
-try:
-    from .configs import config_U1, config_Z3
-except ImportError:
-    from configs import config_U1, config_Z3
 
 tol = 1e-12  #pylint: disable=invalid-name
 
 
-def test_leg():
+def test_leg(config_kwargs):
     """ basic operations with yastn.Leg"""
     # U1
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     leg = yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 4))
     assert str(leg) == 'Leg(sym=U1, s=1, t=((-1,), (0,), (1,)), D=(2, 3, 4), hist=o)'
 
@@ -53,7 +50,11 @@ def test_leg():
     assert a.get_legs(-1) == a.get_legs(3)
 
 
-def test_random_leg():
+def test_random_leg(config_kwargs):
+    #
+    config_Z3 = yastn.make_config(sym='Z3', **config_kwargs)
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    #
     leg = yastn.random_leg(config_U1, n=0, s=1, D_total=1024)
     assert sum(leg.D) == 1024 and sum(t[0] * D for t, D in zip(leg.t, leg.D)) / 1024 < 0.2
     leg = yastn.random_leg(config_U1, s=1, D_total=1024)
@@ -81,14 +82,15 @@ def test_random_leg():
     leg0 = yastn.Leg(config_U1, s=1, t=(0, 1), D=(2, 3))
     leg1 = yastn.Leg(config_U1, s=1, t=(0, 1), D=(2, 4))
 
-    leg = yastn.leg_outer_product(leg0, leg1)
+    leg = yastn.leg_product(leg0, leg1)
     print(leg)
     assert leg.is_fused()
 
 
-def test_leg_meta_fusion():
+def test_leg_meta_fusion(config_kwargs):
     """ test get_leg with meta-fused tensor"""
     # U1
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     leg = yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 4))
     a = yastn.ones(config=config_U1, legs=[leg, leg, leg, leg.conj(), leg.conj()])
     assert a.get_legs([1, 3, 2, 4]) == (leg, leg.conj(), leg, leg.conj())
@@ -118,8 +120,9 @@ def test_leg_meta_fusion():
     assert umlegs.legs[0] == yastn.leg_union(legs[1], legs[3])
 
 
-def test_leg_hard_fusion():
+def test_leg_hard_fusion(config_kwargs):
     """ legs with hard fusion """
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     legs = [yastn.Leg(config_U1, s=-1, t=(-2, 0, 2), D=(1, 2, 3)),
             yastn.Leg(config_U1, s=1, t=(0, 2), D=(5, 4)),
             yastn.Leg(config_U1, s=-1, t=(0, 2), D=(2, 3)),
@@ -137,8 +140,9 @@ def test_leg_hard_fusion():
     assert cf.get_legs(axes=0).history() == 'm(p(oo)p(oo))'
 
 
-def test_leg_exceptions():
+def test_leg_exceptions(config_kwargs):
     """ raising exceptions """
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     # in initialization of new tensors with Leg
     legU1 = yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 4))
     a = yastn.ones(config=config_U1, legs=[legU1, legU1.conj()])
@@ -151,6 +155,7 @@ def test_leg_exceptions():
         yastn.eye(config_U1, legs=[b.get_legs(0)])
         # Diagonal tensor cannot be initialized with fused legs.
 
+    config_Z3 = yastn.make_config(sym='Z3', **config_kwargs)
     legZ3 = yastn.Leg(config_Z3, s=1, t=(0, 1, 2), D=(2, 3, 4))
     with pytest.raises(yastn.YastnError):
         a = yastn.ones(config=config_U1, legs=[legU1, legZ3])
@@ -223,8 +228,4 @@ def test_leg_exceptions():
 
 
 if __name__ == '__main__':
-    test_leg()
-    test_random_leg()
-    test_leg_meta_fusion()
-    test_leg_hard_fusion()
-    test_leg_exceptions()
+    pytest.main([__file__, "-vs", "--durations=0"])

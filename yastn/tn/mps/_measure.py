@@ -15,6 +15,7 @@
 """ Environments for the <mps| mpo |mps> and <mps|mps>  contractions. """
 from __future__ import annotations
 from itertools import groupby
+from numbers import Number
 from typing import Sequence
 from ... import YastnError
 from . import MpsMpoOBC
@@ -22,7 +23,7 @@ from ._env import Env, Env2
 from ...operators import swap_charges
 
 
-def vdot(*args) -> number:
+def vdot(*args) -> Number:
     r"""
     Calculate the overlap :math:`\langle \textrm{bra}|\textrm{ket}\rangle`,
     or :math:`\langle \textrm{bra}|\textrm{op}|\textrm{ket} \rangle` depending on the number of provided agruments.
@@ -36,7 +37,7 @@ def vdot(*args) -> number:
     return measure_mpo(*args)
 
 
-def measure_overlap(bra, ket) -> number:
+def measure_overlap(bra, ket) -> Number:
     r"""
     Calculate overlap :math:`\langle \textrm{bra}|\textrm{ket} \rangle`.
     Conjugate of MPS :code:`bra` is computed internally.
@@ -56,7 +57,7 @@ def measure_overlap(bra, ket) -> number:
     return env.measure(bd=(-1, 0))
 
 
-def measure_mpo(bra, op: MpsMpoOBC | Sequence[tuple(MpsMpoOBC, number)], ket) -> number:
+def measure_mpo(bra, op: MpsMpoOBC | Sequence[tuple(MpsMpoOBC, number)], ket) -> Number:
     r"""
     Calculate expectation value :math:`\langle \textrm{bra}|\textrm{op}|\textrm{ket} \rangle`.
 
@@ -83,25 +84,28 @@ def measure_1site(bra, O, ket, sites=None) -> dict[int, number]:
     r"""
     Calculate expectation values :math:`\langle \textrm{bra}|\textrm{O}_i|\textrm{ket} \rangle` for local operator :code:`O` at sites `i`.
 
-    Local operators can be provided as dictionary {site: operator}, limiting the calculation to provided sites.
-    A list of sites can also be provided.
+    ``O`` can be provided as a dictionary {site: operator}, limiting the calculation to provided sites.
+    ``sites`` can also be provided in the form of a list.
 
     Conjugate of MPS :code:`bra` is computed internally.
+    For fermionic operators, a Jordan-Wigner string related to the operator charge is included in the contraction.
 
     Parameters
     -----------
     bra: yastn.tn.mps.MpsMpoOBC
         An MPS which will be conjugated.
 
-    O: yastn.Tensor or dict
-        An operator with signature (1, -1).
-        It is possible to provide a dictionary {site: operator} with all operators of the same charge.
+    O: yastn.Tensor | dict[int, yastn.Tensor]
+        A rank-2 operator, or a dictionary of such operators {site: operator}.
+        In the second case, all operators need to have the same charge.
 
     ket: yastn.tn.mps.MpsMpoOBC
 
     sites: int | Sequence[int] | None
-        Which 1-sites observables to calculate.
-        For a single site, int, return float; otherwise return dict[site, float]
+        It controls which 1-sites observables to calculate.
+        If *int* is provided here, compute the expectation value
+        for this single site and return a float.
+        In other cases, a dictionary {site: float} is returned.
         The default is None, in which case the calculation is done for all sites.
     """
     return_float = False
@@ -124,7 +128,7 @@ def measure_1site(bra, O, ket, sites=None) -> dict[int, number]:
         op = {k: O for k in sites}
         O0 = O
 
-    n_left = O0.config.sym.add_charges(O0.n, new_s=-1)
+    n_left = O0.config.sym.add_charges(O0.n, new_signature=-1)
     env = Env2(bra, ket, n_left=n_left)
     env.setup_(to='first').setup_(to='last')
 
@@ -142,7 +146,7 @@ def measure_2site(bra, O, P, ket, bonds='<') -> dict[tuple[int, int], float] | f
     of local operators :code:`O` and :code:`P` for pairs of lattice sites :math:`i, j`.
 
     Conjugate of MPS :code:`bra` is computed internally.
-    Includes fermionic strings via swap_gate for fermionic operators.
+    Fermionic strings are incorporated for fermionic operators by employing :meth:`yastn.swap_gate`.
 
     Parameters
     -----------
@@ -194,7 +198,7 @@ def measure_2site(bra, O, P, ket, bonds='<') -> dict[tuple[int, int], float] | f
         P0 = P
         P = {k: P for k in range(ket.N)}
 
-    n_left = O0.config.sym.add_charges(O0.n, P0.n, new_s=-1)
+    n_left = O0.config.sym.add_charges(O0.n, P0.n, new_signature=-1)
 
     pairs = [(n0, n1) for n0, n1 in pairs if (n0 in O and n1 in P)]
     s0s1 = [pair for pair in pairs if pair[0] < pair[1]]

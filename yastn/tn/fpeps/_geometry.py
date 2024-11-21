@@ -14,7 +14,7 @@
 # ==============================================================================
 """ Basic structures forming PEPS network. """
 from __future__ import annotations
-from typing import Sequence, Union
+from typing import Sequence
 from typing import NamedTuple
 from ... import YastnError
 
@@ -57,8 +57,9 @@ class SquareLattice():
             Site(0, 0) corresponds to top-left corner of the unit cell.
 
         boundary: str
-            Finite lattice, infinite lattice, or finite cylinder periodic along rows,
-            respectively, for 'obc', 'infinite', or 'cylinder'.
+            'infinite' (the default) for an infinite lattice,
+            'obc' for a finite lattice, or
+            'cylinder' for a finite cylinder periodic along rows.
         """
         if boundary not in ('obc', 'infinite', 'cylinder'):
             raise YastnError(f"{boundary=} not recognized; should be 'obc', 'infinite', or 'cylinder'")
@@ -109,7 +110,7 @@ class SquareLattice():
         ----------
         dirn: None | str
             return horizontal followed by vertical bonds if None;
-            'v' and 'h' are for vertical and horizontal bonds only, respectively.
+            'v' and 'h' are, respectively, for vertical and horizontal bonds only.
 
         reverse: bool
             whether to reverse the order of bonds.
@@ -126,7 +127,7 @@ class SquareLattice():
 
         For infinite lattices, this function simply shifts the ``site`` by provided vector ``d``.
         For finite lattices with open/periodic boundary it handles corner cases where ``d`` is too large and the
-        resulting Site either doesn't exist or it wraps around periodic boundary.
+        resulting site either doesn't exist or it wraps around periodic boundary.
 
         Return ``None`` if there is no neighboring site in a given direction.
 
@@ -171,9 +172,10 @@ class SquareLattice():
             return 'v', False
         raise YastnError(f"{bond} is not a nearest-neighbor bond.")
 
-    def f_ordered(self, bond) -> bool:
-        """ Check if bond sites appear in fermionic order. """
-        s0, s1 = bond
+    def f_ordered(self, s0, s1) -> bool:
+        """
+        Check if sites s0, s1 are fermionicaly ordered (or identical).
+        """
         return s0[1] < s1[1] or (s0[1] == s1[1] and s0[0] <= s1[0])
 
     def site2index(self, site):
@@ -215,48 +217,76 @@ class RectangularUnitcell(SquareLattice):
 
     def __init__(self, pattern, boundary='infinite'):
         r"""
-        Rectangular unit cells supporting patterns characterized by a single momentum ``Q=(q_x,q_y)``.
+        Rectangular unit cells supporting patterns characterized by a single momentum ``Q=(q_x, q_y)``.
 
         Inspired by https://github.com/b1592/ad-peps by B. Ponsioen.
 
         Parameters
         ----------
-        pattern: Sequence[Sequence[int]] | dict[tuple[int,int],int]
+        pattern: Sequence[Sequence[int]] | dict[tuple[int, int], int]
             Definition of a rectangular unit cell that tiles the square lattice.
             Integers are labels of unique tensors populating the sites within the unit cell.
 
             Examples of such patterns can be:
 
                 * [[0,],] : 1x1 unit cell, Q=0
-                * [[0,1],] : 1x2 unit cell, Q=(\pi, 0)
-                * [[0,1],[1,0]] : 2x2 unit cell with bipartite pattern, Q=(\pi, \pi)
-                * [[0,1,2],[1,2,0],[2,0,1]] : 3x3 unit cell with diagonal stripe order, Q=(2\pi/3, 2\pi/3)
+                * {(0, 0): 0} : 1x1 unit cell, Q=0
+                * [[0, 1],] : 1x2 unit cell, Q=(0, \pi)
+                * {(0, 0): 0, (0, 1): 1} : 1x2 unit cell, Q=(0, \pi)
+                * [[0, 1], [1, 0]] : 2x2 unit cell with bipartite pattern, Q=(\pi, \pi). Equivalent to :class:`yastn.tn.fpeps.CheckerboardLattice`.
+                * [[0, 1, 2], [1, 2, 0], [2, 0, 1]] : 3x3 unit cell with diagonal stripe order, Q=(2\pi/3, 2\pi/3)
+
 
         Warning
         -------
         It is assumed that the neighborhood of each unique tensor is identical.
-        This excludes cases as ``[[0, 1], [1, 1]]``.
+        This excludes cases such as ``[[0, 1], [1, 1]]``.
         """
-        # TODO validation
-        #   pattern should be len > 0, all rows should be of the same length
-        #   the set of integers in pattern should be equal to set of keys of tensors
         if isinstance(pattern, dict):
-            # validate ranges
             min_row, min_col = map(min, zip(*pattern.keys()))
             max_row, max_col = map(max, zip(*pattern.keys()))
-            assert min_row == 0 and min_col == 0, "Invalid pattern specification"
-            pattern = [[pattern[(r, c)] for c in range(max_col + 1)] for r in range(max_row + 1)]
-        super().__init__(dims=(len(pattern), len(pattern[0])), boundary='infinite')
+            if (min_row, min_col) != (0, 0):
+                raise YastnError("RectangularUnitcell: pattern keys should cover a rectangle index (0, 0) to (Nx - 1, Ny - 1).")
+            try:
+                pattern = [[pattern[(r, c)] for c in range(max_col + 1)] for r in range(max_row + 1)]
+            except KeyError:
+                raise YastnError("RectangularUnitcell: pattern keys should cover a rectangle index (0, 0) to (Nx - 1, Ny - 1).")
+
+        try:
+            Nx = len(pattern)
+            Ny = len(pattern[0])
+        except TypeError:
+            raise YastnError("RectangularUnitcell: pattern should form a two-dimensional square matrix of labels.")
+        if any(len(row) != Ny for row in pattern):
+            raise YastnError("RectangularUnitcell: pattern should form a two-dimensional square matrix of labels.")
+
+        super().__init__(dims=(Nx, Ny), boundary='infinite')
         #
-        self._site2index = {(row, col): t for row, row_elems in enumerate(pattern) for col, t in enumerate(row_elems)}
+        self._site2index = {(nx, ny): label for nx, row in enumerate(pattern) for ny, label in enumerate(row)}
+        #
+        try:
+            label_sites, label_envs = {}, {}
+            for nx in range(Nx):
+                for ny in range(Ny):
+                    label = self._site2index[nx, ny]
+                    env = (self.site2index((nx - 1, ny)), self.site2index((nx, ny - 1)), self.site2index((nx + 1, ny)), self.site2index((nx, ny + 1)))
+                    if label in label_sites:
+                        label_sites[label].append((nx, ny))
+                        label_envs[label].append(env)
+                    else:
+                        label_sites[label] = [(nx, ny)]
+                        label_envs[label] = [env]
+        except TypeError:
+            raise YastnError("RectangularUnitcell: pattern labels should be hashable.")
+        if any(len(set(envs)) > 1 for envs in label_envs.values()):
+            raise YastnError("RectangularUnitcell: each unique label should have the same neighbors.")
         #
         # unique sites
-        tmp = {b: a for a, b in sorted(self._site2index.items(), reverse=True)}
-        self._sites = tuple(sorted(tmp.values()))
+        self._sites = tuple(sorted(min(sites) for sites in label_sites.values()))
         #
         # unique bonds
-        self._bonds_h = tuple(Bond( s,self.nn_site(s, 'r')) for s in self._sites)
-        self._bonds_v = tuple(Bond( s,self.nn_site(s, 'b')) for s in self._sites)
+        self._bonds_h = tuple(Bond(s, self.nn_site(s, 'r')) for s in self._sites)
+        self._bonds_v = tuple(Bond(s, self.nn_site(s, 'b')) for s in self._sites)
 
     def site2index(self, site) -> int:
         """ Tensor index depending on site. """

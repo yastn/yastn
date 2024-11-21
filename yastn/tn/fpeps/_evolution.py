@@ -37,17 +37,17 @@ class Evolution_out(NamedTuple):
 def evolution_step_(env, gates, opts_svd, symmetrize=True,
                     fix_metric=0,
                     pinv_cutoffs=(1e-12, 1e-11, 1e-10, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4),
-                    max_iter=100, tol_iter=1e-15, initialization="EAT_SVD"):
+                    max_iter=100, tol_iter=1e-13, initialization="EAT_SVD"):
     r"""
     Perform a single step of PEPS evolution by applying a list of gates.
     Truncate bond dimension after each application of a two-site gate.
 
     Parameters
     ----------
-    env: EnvNTU | ...
+    env: EnvNTU | EnvCTM | EnvApproximate
         Environment class containing PEPS state (updated in place),
         and a method to calculate bond metric tensors employed during truncation.
-    gates: Gates
+    gates: yastn.tn.fpeps.Gates
         The gates to be applied to PEPS.
     opts_svd: dict | Sequence[dict]
         Options passed to :meth:`yastn.linalg.svd_with_truncation` which are used
@@ -57,13 +57,13 @@ def evolution_step_(env, gates, opts_svd, symmetrize=True,
         in which case the truncation is done gradually in a few steps.
     symmetrize: bool
         Whether to iterate through provided gates forward and then backward, resulting in a 2nd order method.
-        In that case, each gate should correspond to half of the desired timestep.
+        In that case, each gate should correspond to half of the desired timestep. The default is ``True``.
     fix_metric: int | None
-        Error measure of the metric tensor is a sum of: the norm of its non-hermitian part,
+        Error measure of the metric tensor is a sum of: the norm of its non-hermitian part
         and absolute value of the most negative eigenvalue (if present).
-        If fix_metric is not None, replace eigenvalues smaller than the error_measure by fix_metric * error_measure.
-        Sensible values of fix_metric are 0 and 1. The default is 0.
-        If None, do not perform eigh to test for negative eigenvalues and do not fix metric.
+        If ``fix_metric`` is a number, replace eigenvalues smaller than the error_measure with fix_metric * error_measure.
+        Sensible values of ``fix_metric`` are :math:`0` and :math:`1`. The default is :math:`0`.
+        If ``None``, do not perform eigh to test for negative eigenvalues and do not fix metric.
     pinv_cutoffs: Sequence[float] | float
         List of pseudo-inverse cutoffs.
         The one that gives the smallest truncation error is used during iterative optimizations and EAT initialization.
@@ -79,16 +79,16 @@ def evolution_step_(env, gates, opts_svd, symmetrize=True,
     -------
     Evolution_out(NamedTuple)
         Namedtuple containing fields:
-            * :code:`bond` bond where the gate is applied.
-            * :code:`truncation_error` relative norm of the difference between untruncated and truncated bonds, calculated in metric specified by env.
-            * :code:`best_method` initialization/optimization method giving the best truncation_error. Possible values are 'eat', 'eat_opt', 'svd', 'svd_opt'.
-            * :code:`nonhermitian_part` norm of the non-hermitian part of the bond metric, normalized by the bond metric norm. Estimator of metric error.
-            * :code:`min_eigenvalue` the smallest bond metric eigenvalue, normalized by the bond metric norm. Can be negative which gives an estimate of metric error.
-            * :code:`wrong_eigenvalues` a fraction of bond metrics eigenvalues that were below the error threshold; and were modified according to :code:`fix_metric` argument.
-            * :code:`eat_metric_error` error of approximating metric tensor by a product via SVD-1 in EAT initialization.
-            * :code:`truncation_errors` dict with truncation_error-s for all tested initializations/optimizations.
-            * :code:`iterations` dict with number of iterations to converge iterative optimization.
-            * :code:`pinv_cutoffs` dict with optimal pinv_cutoffs for methods where pinv appears.
+            * ``bond`` bond where the gate is applied.
+            * ``truncation_error`` relative norm of the difference between untruncated and truncated bonds, calculated in metric specified by env.
+            * ``best_method`` initialization/optimization method giving the best truncation_error. Possible values are 'eat', 'eat_opt', 'svd', 'svd_opt'.
+            * ``nonhermitian_part`` norm of the non-hermitian part of the bond metric, normalized by the bond metric norm. Estimator of metric error.
+            * ``min_eigenvalue`` the smallest bond metric eigenvalue, normalized by the bond metric norm. Can be negative which gives an estimate of metric error.
+            * ``wrong_eigenvalues`` a fraction of bond metrics eigenvalues that were below the error threshold; and were modified according to ``fix_metric`` argument.
+            * ``eat_metric_error`` error of approximating metric tensor by a product via SVD-1 in EAT initialization.
+            * ``truncation_errors`` dict with truncation_error-s for all tested initializations/optimizations.
+            * ``iterations`` dict with number of iterations to converge iterative optimization.
+            * ``pinv_cutoffs`` dict with optimal pinv_cutoffs for methods where pinv appears.
     """
     psi = env.psi
     if isinstance(psi, Peps2Layers):
@@ -120,7 +120,7 @@ def apply_nn_truncate_optimize_(env, psi, gate, opts_svd,
     info = {'bond': gate.bond}
 
     dirn, l_ordered = psi.nn_bond_type(gate.bond)
-    f_ordered = psi.f_ordered(gate.bond)
+    f_ordered = psi.f_ordered(*gate.bond)
     s0, s1 = gate.bond if l_ordered else gate.bond[::-1]
 
     G0, G1 = gate_fix_order(gate.G0, gate.G1, l_ordered, f_ordered)
@@ -186,9 +186,11 @@ def apply_nn_truncate_optimize_(env, psi, gate, opts_svd,
 
 def accumulated_truncation_error(infoss, statistics='mean'):
     r"""
-    Return accumulated truncation error :code:`Delta` calcuated from evolution output statistics.
+    Return accumulated truncation error :math:`\Delta` calcuated from evolution output statistics.
 
-    Delta = sum_steps{statistics(sum_bond truncation_error(bond, step))}
+    :math:`\Delta = \sum_{steps} statistics_{bond} [\sum_{gate \in bond} truncation\_error(gate, step)]`,
+    where statistics is mean or max.
+
     Gives an estimate of errors accumulated during time evolution.
 
     Parameters
@@ -196,7 +198,7 @@ def accumulated_truncation_error(infoss, statistics='mean'):
     infoss: Sequence[Sequence[Evolution_out]]
         list of outputs of :meth:`evolution_step_`.
     statistics: str
-        'max' or 'mean', whether to take the maximal value of a mean over the lattice.
+        'max' or 'mean', whether to take the maximal value or a mean over the bonds in the lattice.
 
     Example
     -------

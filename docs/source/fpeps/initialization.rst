@@ -4,8 +4,8 @@ Creating PEPS
 Initializing empty PEPS
 -----------------------
 
-PEPS is an instance of a class :class:`yastn.tn.fpeps.Peps`, utilizing a lattice geometry setup 
-(e.g., SquareLattice or CheckerboardLattice). Each unique lattice site is associated with a tensor, 
+PEPS is an instance of a class :class:`yastn.tn.fpeps.Peps`, utilizing a lattice geometry setup
+(e.g., SquareLattice or CheckerboardLattice). Each unique lattice site is associated with a tensor,
 following the layout specified by the lattice geometry.
 
 ::
@@ -14,17 +14,17 @@ following the layout specified by the lattice geometry.
       # top, left, bottom, right, physical
 
                   top `0th`
-                     \
-                   ___\_____
-                  |         |
-      left `1st`--| A_{x,y} |-- right `3rd`
-                  |_________|
-                     |      \
-                     |       \
-                 phys `4th`  bottom `2nd`
+                     ╲
+                      ╲
+                  ┌────┴────┐
+    left `1st` ───┤ A_{x,y} ├─── right `3rd`
+                  └──┬────┬─┘
+                     |     ╲
+                     |      ╲
+                phys `4th`  bottom `2nd`
 
 .. autoclass:: yastn.tn.fpeps.Peps
-    :members: copy, clone, save_to_dict, transfer_mpo
+    :members: copy, clone, shallow_copy, save_to_dict, transfer_mpo
 
 
 Initializing product PEPS
@@ -32,7 +32,7 @@ Initializing product PEPS
 
 .. autofunction:: yastn.tn.fpeps.product_peps
 
-Examples are given in :ref:`quickstart<yastn.quickstart:QUICKSTART>`.
+See examples at :ref:`quickstart/kibble_zurek:Kibble-Zurek quench in 2D transverse-field Ising model`.
 
 
 Import and export PEPS
@@ -64,26 +64,24 @@ Double PEPS Tensor
 The auxiliary class allows treating top and bottom PEPS tensors---to be contracted along
 physical dimensions---as a single tensor of rank-4 for various operations.
 It provides a dispatching mechanism for efficient contraction in construction of enlarge corners in CTMRG or boundary MPS algorithms.
-Equivalent operations in :code:`yastn.Tensor` are :ref:`here<tensor/dispatch:Dispatching contractions>`.
 
 ::
 
-                      t' t
-                       \ \
-                        | \
-                       /  _\_____
-                      /  |       |                            t' t
-                   /--|--|   A   |-------\                     \ \
-                  /   |  |_______|        \                   __\_\__
-             l --/    |    |      \        \-- r         l --|       |-- r
-                      |    |    __ \               ===       |   a   |
-             l'--\    |   _|___/_ \ \      /-- r'        l'--|_______|-- r'
-                  \   |  |       | \ \    /                      \ \
-                   \--|--|   A'  |--\-\--/                        \ \
-                      \  |_______|   \ \                          b' b
-                       \   /          \ \
-                        \_/            \ \
-                                       b' b
+                        t't
+                         ╲╲
+                         ╱ ╲
+                        ╱   ╲                                   t't
+                       ╱ ┌───┴───┐                               ╲╲
+                   /──┼──┤   A   ├─────\                          ╲╲
+                  ╱   |  └─┬────┬┘      ╲                       ┌──┴┴───┐
+            l ───/    |    |     ╲       \─── r    ════    l ───┤   a   ├─── r
+            l'───\    |    |   ___╲      /─── r'   ════    l'───┤       ├─── r'
+                  ╲   |  ┌─┴──┴──┐╲╲    ╱                       └──┬┬───┘
+                   \──┼──┤   A'  ├─╲╲──/                            ╲╲
+                      ╲  └─┬─────┘  ╲╲                               ╲╲
+                       ╲  ╱          ╲╲                              b'b
+                        ‾‾            ╲╲
+                                      b'b
 
 
 Note that in the following diagram the virtual legs of the peps tensor are labelled by

@@ -13,13 +13,9 @@
 # limitations under the License.
 # ==============================================================================
 """ yastn.linalg.eigh() """
-import pytest
 from itertools import product
+import pytest
 import yastn
-try:
-    from .configs import config_dense, config_U1, config_Z2xU1, config_Z3
-except ImportError:
-    from configs import config_dense, config_U1, config_Z2xU1, config_Z3
 
 tol = 1e-10  #pylint: disable=invalid-name
 
@@ -43,13 +39,15 @@ def eigh_combine(a):
     assert S.is_consistent()
 
 
-def test_eigh_basic():
+def test_eigh_basic(config_kwargs):
     """ test eigh decomposition for various symmetries """
     # dense
+    config_dense = yastn.make_config(sym='none', **config_kwargs)
     a = yastn.rand(config=config_dense, s=(-1, 1, -1, 1), D=[11, 12, 13, 21])
     eigh_combine(a)
 
     # U1
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     legs = [yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(2, 3, 4)),
             yastn.Leg(config_U1, s=-1, t=(-2, 0, 2), D=(5, 6, 7)),
             yastn.Leg(config_U1, s=1, t=(-2, -1, 0, 1, 2), D=(6, 5, 4, 3, 2)),
@@ -58,6 +56,7 @@ def test_eigh_basic():
     eigh_combine(a)
 
     # Z2xU1
+    config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
     legs = [yastn.Leg(config_Z2xU1, s=-1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(2, 3, 4, 5)),
             yastn.Leg(config_Z2xU1, s=-1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(5, 4, 3, 2)),
             yastn.Leg(config_Z2xU1, s=1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(3, 4, 5, 6)),
@@ -66,8 +65,9 @@ def test_eigh_basic():
     eigh_combine(a)
 
 
-def test_eigh_Z3():
+def test_eigh_Z3(config_kwargs):
     # Z3
+    config_Z3 = yastn.make_config(sym='Z3', **config_kwargs)
     s0set = (-1, 1)
     sUset = (-1, 1)
     for s, sU in product(s0set, sUset):
@@ -80,7 +80,8 @@ def test_eigh_Z3():
         assert S.is_consistent()
 
 
-def test_eigh_exceptions():
+def test_eigh_exceptions(config_kwargs):
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     legs = [yastn.Leg(config_U1, s=-1, t=(-1, 0), D=(2, 3)),
             yastn.Leg(config_U1, s=-1, t=(-1, 0), D=(5, 6))]
     with pytest.raises(yastn.YastnError):
@@ -94,6 +95,4 @@ def test_eigh_exceptions():
 
 
 if __name__ == '__main__':
-    test_eigh_basic()
-    test_eigh_Z3()
-    test_eigh_exceptions()
+    pytest.main([__file__, "-vs", "--durations=0"])

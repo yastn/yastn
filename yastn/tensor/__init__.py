@@ -66,7 +66,7 @@ class Tensor:
             config : module | _config(NamedTuple)
                 :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
             s : Sequence[int]
-                a signature of tensor. Also determines the number of legs. 
+                a signature of tensor. Also determines the number of legs.
             n : int | Sequence[int]
                 total charge of the tensor. In case of direct product of several
                 abelian symmetries, `n` is a tuple with total charge for each individual
@@ -193,7 +193,7 @@ class Tensor:
         r"""
         Native rank of the tensor.
 
-        This includes legs (spaces) which have been fused together
+        It distinguishes legs (spaces) which were fused
         by :meth:`yastn.fuse_legs` using ``mode='meta'``.
         """
         return len(self.struct.s)
@@ -235,7 +235,7 @@ class Tensor:
 
     @property
     def T(self) -> yastn.Tensor:
-        r""" Same as :meth:`self.transpose()<yastn.Tensor.transpose>`. """
+        r""" Same as :meth:`self.transpose()<yastn.transpose>`. """
         return self.transpose()
 
     @property

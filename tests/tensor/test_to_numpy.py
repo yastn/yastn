@@ -12,20 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-""" to_nonsymmetric()  to_dense()  to_numpy() """
+""" yastn.to_nonsymmetric() yastn.to_dense() yastn.to_numpy() """
 import numpy as np
 import pytest
 import yastn
-try:
-    from .configs import config_dense, config_U1, config_Z2xU1
-except ImportError:
-    from configs import config_dense, config_U1, config_Z2xU1
 
 tol = 1e-12  #pylint: disable=invalid-name
 
 
-def test_dense_basic():
+def test_dense_basic(config_kwargs):
     """ a.to_numpy() is equivalent to np.array(a.to_dense())"""
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     norms = []
     tens = [yastn.rand(config=config_U1, s=(-1, -1, 1),
                       t=((-1, 1, 2), (-1, 1, 2), (1, 2)),
@@ -82,9 +79,10 @@ def test_dense_basic():
         assert np.allclose(fad.to_numpy(legs=lsad), nad)
 
 
-def test_to_raw_tensor():
+def test_to_raw_tensor(config_kwargs):
     """ test to_raw_tensor and getting single block """
     # leg with a single charge sector
+    config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
     leg = yastn.Leg(config_Z2xU1, s=1, t=[(0, 0)], D=[2])
     a = yastn.ones(config=config_Z2xU1, legs=[leg, leg, leg])
     assert pytest.approx(a.norm().item() ** 2) == 8.
@@ -105,7 +103,9 @@ def test_to_raw_tensor():
         _ = a.to_raw_tensor()
         # Only tensor with a single block can be converted to raw tensor.
 
-def test_dense_diag():
+
+def test_to_nonsymmetric_diag(config_kwargs):
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.rand(config=config_U1, t=(-1, 0, 1), D=(2, 3, 4), isdiag=True)
     an = a.to_nonsymmetric()
     assert an.isdiag == True
@@ -117,9 +117,10 @@ def test_dense_diag():
     assert pytest.approx(an.trace().item(), rel=tol) == np.trace(da)
 
 
-def test_to_nonsymmetric_basic():
+def test_to_nonsymmetric_basic(config_kwargs):
     """ test to_nonsymmetric() """
     # dense to dense (trivial)
+    config_dense = yastn.make_config(sym='dense', **config_kwargs)
     a = yastn.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
     an = a.to_nonsymmetric()
     # for dense, to_nonsymetric() should result in the same config
@@ -128,6 +129,7 @@ def test_to_nonsymmetric_basic():
     assert an.is_consistent()
 
     # U1 to dense
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     legs = [yastn.Leg(config_U1, s=-1, t=(-1, 1, 0), D=(1, 2, 3)),
             yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6)),
             yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9)),
@@ -174,7 +176,4 @@ def _test_dense_v1(tens, shapes, common_shape):
 
 
 if __name__ == '__main__':
-    test_dense_basic()
-    test_dense_diag()
-    test_to_nonsymmetric_basic()
-    test_to_raw_tensor()
+    pytest.main([__file__, "-vs", "--durations=0"])

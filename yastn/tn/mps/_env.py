@@ -14,6 +14,7 @@
 # ==============================================================================
 """ Environments for the <mps| mpo |mps> and <mps|mps>  contractions. """
 from __future__ import annotations
+from numbers import Number
 from ... import eye, tensordot, ncon, vdot, YastnError, qr, svd
 from . import MpsMpoOBC, MpoPBC
 import abc
@@ -23,7 +24,7 @@ import copy
 def Env(bra, target):
     r"""
     Initialize a proper environment supporting contraction of MPS/MPO's:
-    :math:`\langle \textrm{bra} | \textrm{target} \rangle`, where
+    :math:`\langle \textrm{bra} | \textrm{target} \rangle` where
     :math:`|\textrm{target} \rangle` can be an MPS/MPO, an operator acting on MPS/MPO, or a sum of thereof.
 
     Parameters
@@ -32,14 +33,15 @@ def Env(bra, target):
         Can be an MPS or an MPO -- the target should be of the matching form.
 
     target : Sequence | yastn.tn.mps.MpsMpoOBC
-        Dispatch over a set of supported targets
+        Dispatch over a set of supported targets:
 
-            * ket or [ket] for :math:`\langle \textrm{bra} | \textrm{ket} \rangle`.
-            * [mpo, ket]  for :math:`\langle \textrm{bra} | \textrm{mpo} | \textrm{ket} \rangle`.
-            * [[mpo_1, mpo_2, ...], ket] for :math:`\langle \textrm{bra} | \sum_i \textrm{mpo}_i | \textrm{ket} \rangle`.
-            * [[ket_1], [mpo_2, ket_2], [[mpo_3, mpo_4], ket_3]] for a sum of any combination of the above.
-    Notes
-    -----
+        * ket or [ket] for :math:`\langle \textrm{bra} | \textrm{ket} \rangle`.
+        * [mpo, ket]  for :math:`\langle \textrm{bra} | \textrm{mpo} | \textrm{ket} \rangle`.
+        * [[mpo_1, mpo_2, ...], ket] for :math:`\langle \textrm{bra} | \sum_i \textrm{mpo}_i | \textrm{ket} \rangle`.
+        * [[ket_1], [mpo_2, ket_2], [[mpo_3, mpo_4], ket_3]] for a sum of any combination of the above.
+
+    Note
+    ----
     :meth:`compression_<yastn.tn.mps.compression_>` directly calls :code:`Env(psi, target)`.
     :meth:`dmrg_<yastn.tn.mps.dmrg_>` and :meth:`tdvp_<yastn.tn.mps.tdvp_>` call :code:`Env(psi, target=[H, psi])`.
     """
@@ -117,13 +119,13 @@ class EnvParent(metaclass=abc.ABCMeta):
             self.F.pop((n, n + 1), None)
 
     @abc.abstractmethod
-    def factor(self) -> number:
+    def factor(self) -> Number:
         r"""
         Collect factors from constituent MPSs and MPOs.
         """
 
     @abc.abstractmethod
-    def measure(self, bd=None) -> number:
+    def measure(self, bd=None) -> Number:
         r"""
         Calculate overlap between environments at :code:`bd` bond.
 
@@ -244,7 +246,7 @@ class EnvParent(metaclass=abc.ABCMeta):
 
     def shallow_copy(self):
         r"""
-        A copy of environment class, that cleates new copy of dictionary storing env tensors.
+        A shallow copy of environment class, that creates a new copy of dictionary storing env tensors.
         """
         env = copy.copy(self)
         env.F = dict(self.F)
@@ -342,7 +344,7 @@ class Env2(EnvParent):
             self.F[(n, n + 1)] = tensordot(self.bra[n].conj(), temp, axes=axes)
 
     def Heff0(self, C, bd):
-        raise YastnError("Should not be triggered by current higher-level functions.")  # pragma: no cover
+        raise YastnError("Should not be triggered by current higher-level functions.")
         # bd, ibd = (bd[::-1], bd) if bd[1] < bd[0] else (bd, bd[::-1])
         # C = self.op.factor * C
         # return self.F[bd] @ C @ self.F[ibd]
@@ -386,7 +388,7 @@ class Env2(EnvParent):
             self.F[(n, n + 1)] = tensordot(temp, self.ket[n], axes=axes)
 
     def charges_missing(self, n):
-        raise YastnError("Should not be triggered by current higher-level functions.")  # pragma: no cover
+        raise YastnError("Should not be triggered by current higher-level functions.")
 
 
 class Env_project(Env2):
@@ -436,13 +438,13 @@ class EnvParent_3_obc(EnvParent_3):
         # init boundaries
         legs = [self.bra.virtual_leg('first'), self.ket.virtual_leg('first').conj()]
         legv=op.virtual_leg('first').conj()
-        n_left = ket.config.sym.add_charges(legv.t[0], s=(legv.s,), new_s=-1)
+        n_left = ket.config.sym.add_charges(legv.t[0], signatures=(legv.s,), new_signature=-1)
         tmp = eye(self.config, legs=legs, isdiag=False, n=n_left)
         self.F[(-1, 0)] = tmp.add_leg(axis=1, leg=legv)
 
         legs = [self.ket.virtual_leg('last').conj(), self.bra.virtual_leg('last')]
         legv=op.virtual_leg('last').conj()
-        n_right = ket.config.sym.add_charges(legv.t[0], s=(legv.s,), new_s=-1)
+        n_right = ket.config.sym.add_charges(legv.t[0], signatures=(legv.s,), new_signature=-1)
         tmp = eye(self.config, legs=legs, isdiag=False, n=n_right)
         self.F[(self.N, self.N - 1)] = tmp.add_leg(axis=1, leg=legv)
 

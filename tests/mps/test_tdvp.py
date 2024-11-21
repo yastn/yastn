@@ -13,34 +13,16 @@
 # limitations under the License.
 # ==============================================================================
 """ test tdvp """
-import pytest
 import numpy as np
-import time
-import yastn.tn.mps as mps
+import pytest
 import yastn
-try:
-    from .configs import config_dense as cfg
-    from .test_generate_mpo import build_mpo_hopping_Hterm
-except ImportError:
-    from configs import config_dense as cfg
-    from test_generate_mpo import build_mpo_hopping_Hterm
-# pytest modifies cfg to inject different backends and devices during tests
+import yastn.tn.mps as mps
+
+from tests.mps.test_generate_mpo import mpo_hopping_Hterm
 
 
-@pytest.mark.parametrize('kwargs', [{'config': cfg, 'sym': 'U1'},
-                                    {'config': cfg, 'sym': 'Z2'}])
-def test_tdvp_sudden_quench(kwargs):
-    tdvp_sudden_quench(**kwargs, tol=1e-10)
-
-@pytest.mark.parametrize('kwargs', [{'config': cfg, 'sym': 'U1'},])
-def test_tdvp_sudden_quench_mpo_sum(kwargs):
-    tdvp_sudden_quench_mpo_sum(**kwargs, tol=1e-10)
-
-@pytest.mark.parametrize('kwargs', [{'config': cfg, 'sym': 'Z2'},])
-def test_tdvp_sudden_quench_Heisenberg(kwargs):
-    tdvp_sudden_quench_Heisenberg(**kwargs, tol=1e-5)
-
-def tdvp_sudden_quench(sym='U1', config=None, tol=1e-10):
+@pytest.mark.parametrize('sym', ['U1', 'Z2'])
+def test_tdvp_sudden_quench(config_kwargs, sym, tol=1e-10):
     """
     Simulate a sudden quench of a free-fermionic (hopping) model.
     Compare observables versus known reference results.
@@ -49,11 +31,7 @@ def tdvp_sudden_quench(sym='U1', config=None, tol=1e-10):
     #
     # Load operators
     #
-    opts_config = {} if config is None else \
-                  {'backend': config.backend,
-                   'default_device': config.default_device}
-    # pytest uses config to inject various backends and devices for testing
-    ops = yastn.operators.SpinlessFermions(sym=sym, **opts_config)
+    ops = yastn.operators.SpinlessFermions(sym=sym, **config_kwargs)
     ops.random_seed(seed=0)
     #
     # Hopping matrix, functions consuming it use only upper-triangular part.
@@ -67,7 +45,7 @@ def tdvp_sudden_quench(sym='U1', config=None, tol=1e-10):
     #
     # Generate corresponding MPO using the function from previous examples
     #
-    H0 = build_mpo_hopping_Hterm(J0, sym=sym, config=config)
+    H0 = mpo_hopping_Hterm(config_kwargs, sym, J0)
     #
     # Find the ground state using DMRG
     # Bond dimension Dmax = 8 for N = 6 is large enough
@@ -105,7 +83,7 @@ def tdvp_sudden_quench(sym='U1', config=None, tol=1e-10):
           [ 0,   0  ,   0,   1,   0.5, 0  ],
           [ 0,   0  ,   0,   0,  -1,   0.5],
           [ 0,   0  ,   0,   0,   0,   1  ]]
-    H1 = build_mpo_hopping_Hterm(J1, sym=sym, config=config)
+    H1 = mpo_hopping_Hterm(config_kwargs, sym, J1)
     #
     # Run time evolution and calculate correlation matrix at two snapshots
     #
@@ -172,16 +150,14 @@ def evolve_correlation_matrix_exact(Ci, J, t):
     return Cf
 
 
-def tdvp_sudden_quench_mpo_sum(sym='U1', config=None, tol=1e-10):
+@pytest.mark.parametrize('sym', ['U1'])
+def test_tdvp_sudden_quench_mpo_sum(config_kwargs, sym, tol=1e-10):
     """
     Simulate a sudden quench of a free-fermionic (hopping) model.
     Compare observables versus known reference results.
     """
     N, n = 6, 3
-    opts_config = {} if config is None else \
-                  {'backend': config.backend,
-                   'default_device': config.default_device}
-    ops = yastn.operators.SpinlessFermions(sym=sym, **opts_config)
+    ops = yastn.operators.SpinlessFermions(sym=sym, **config_kwargs)
     ops.random_seed(seed=0)
 
     J0 = [[1,   0.5j, 0,    0.3,  0.1,  0   ],
@@ -190,7 +166,7 @@ def tdvp_sudden_quench_mpo_sum(sym='U1', config=None, tol=1e-10):
           [0,   0,    0,   -1,    0.5j, 0   ],
           [0,   0,    0,    0,    1,    0.5j],
           [0,   0,    0,    0,    0,   -1   ]]
-    H0 = build_mpo_hopping_Hterm(J0, sym=sym, config=config)
+    H0 = mpo_hopping_Hterm(config_kwargs, sym, J0)
 
     Dmax = 8
     opts_svd = {'tol': 1e-15, 'D_total': Dmax}
@@ -221,7 +197,7 @@ def tdvp_sudden_quench_mpo_sum(sym='U1', config=None, tol=1e-10):
     J1s = [np.zeros_like(J1) for _ in range(J1.shape[0])]
     for i in range(len(J1s)):
         J1s[i][:, i]= J1[:, i]
-    H1 = [build_mpo_hopping_Hterm(col, sym=sym, config=config) for col in J1s]
+    H1 = [mpo_hopping_Hterm(config_kwargs, sym, col) for col in J1s]
     #
     # Run time evolution and calculate correlation matrix at two snapshots
     #
@@ -249,8 +225,8 @@ def tdvp_sudden_quench_mpo_sum(sym='U1', config=None, tol=1e-10):
             #
             assert np.allclose(Cref, Cphi, rtol=tol)
 
-
-def tdvp_sudden_quench_Heisenberg(sym='U1', config=cfg, tol=1e-5):
+@pytest.mark.parametrize('sym', ['Z2'])
+def test_tdvp_sudden_quench_Heisenberg(config_kwargs, sym, tol=1e-5):
     """
     Simulate a sudden quench of a free-fermionic (hopping) model.
     Compare observables versus known reference results.
@@ -262,11 +238,7 @@ def tdvp_sudden_quench_Heisenberg(sym='U1', config=cfg, tol=1e-5):
     #
     # Load operators
     #
-    opts_config = {} if config is None else \
-                  {'backend': config.backend,
-                   'default_device': config.default_device}
-    # pytest uses config to inject various backends and devices for testing
-    ops = yastn.operators.SpinlessFermions(sym=sym, **opts_config)
+    ops = yastn.operators.SpinlessFermions(sym=sym, **config_kwargs)
     ops.random_seed(seed=0)
     #
     # Hopping matrix, it is hermitized inside functions consuming it.
@@ -277,7 +249,7 @@ def tdvp_sudden_quench_Heisenberg(sym='U1', config=cfg, tol=1e-5):
           [0,   0,    0,   -1,    0.5j, 0   ],
           [0,   0,    0,    0,    1,    0.5j],
           [0,   0,    0,    0,    0,   -1   ]]
-    H0 = build_mpo_hopping_Hterm(J0, sym=sym, config=config)
+    H0 = mpo_hopping_Hterm(config_kwargs, sym, J0)
     # assert (H0 - H0.H).norm() < tol * H0.norm()  # flip signature of virtual legs?
     #
     Dmax = 8
@@ -301,7 +273,7 @@ def tdvp_sudden_quench_Heisenberg(sym='U1', config=cfg, tol=1e-5):
           [ 0,   0  ,   0,   1,   0.5, 0  ],
           [ 0,   0  ,   0,   0,  -1,   0.5],
           [ 0,   0  ,   0,   0,   0,   1  ]]
-    H1 = build_mpo_hopping_Hterm(J1, sym=sym, config=config)
+    H1 = mpo_hopping_Hterm(config_kwargs, sym, J1)
     #
     # C[m, n] = <c_n^dag c_m>
     pps = [(0, 1), (0, 2), (0, 3), (0, 4), (0, 5), (1, 2), (1, 3), (1, 4), (1, 5), (2, 3), (2, 4), (2, 5), (3, 4), (3, 5), (4, 5)]  # (m, n)
@@ -334,12 +306,8 @@ def tdvp_sudden_quench_Heisenberg(sym='U1', config=cfg, tol=1e-5):
         assert abs(e1 - e1ref) < tol * abs(e1ref)
 
 
-@pytest.mark.parametrize('kwargs', [#{'config': cfg, 'sym': 'Z2'},
-                                    {'config': cfg, 'sym': 'dense'}])
-def test_tdvp_KZ_quench(kwargs):
-    tdvp_KZ_quench(**kwargs)
-
-def tdvp_KZ_quench(sym='Z2', config=None):
+@pytest.mark.parametrize('sym', ['Z2', 'dense'])
+def test_tdvp_KZ_quench(config_kwargs, sym):
     """
     Simulate a slow quench across a quantum critical point in
     a small transverse field Ising chain with periodic boundary conditions.
@@ -350,12 +318,7 @@ def tdvp_KZ_quench(sym='Z2', config=None):
     #
     # Load spin-1/2 operators
     #
-    opts_config = {} if config is None else \
-                  {'backend': config.backend,
-                   'default_device': config.default_device}
-    # pytest uses config to inject various backends and devices for testing
-    #
-    ops = yastn.operators.Spin12(sym=sym, **opts_config)
+    ops = yastn.operators.Spin12(sym=sym, **config_kwargs)
     ops.random_seed(seed=0)
     #
     # Hterm-s to generate H = -sum_i X_i X_{i+1} - g * Z_i
@@ -363,7 +326,7 @@ def tdvp_KZ_quench(sym='Z2', config=None):
     I = mps.product_mpo(ops.I(), N)  # identity MPO
     termsXX = [mps.Hterm(-1, [i, (i + 1) % N], [ops.x(), ops.x()]) for i in range(N)]
     HXX = mps.generate_mpo(I, termsXX)
-    termsZ = [mps.Hterm(-1, [i], [ops.z()]) for i in range(N)]
+    termsZ = [mps.Hterm(-1, i, ops.z()) for i in range(N)]
     HZ = mps.generate_mpo(I, termsZ)
     #
     # Kibble-Zurek quench across a critical point at gc = 1
@@ -424,10 +387,8 @@ def tdvp_KZ_quench(sym='Z2', config=None):
         assert psi.get_bond_dimensions() == bd_ref
 
 
-def test_tdvp_raise(config=cfg):
-    opts_config = {} if config is None else \
-        {'backend': config.backend, 'default_device': config.default_device}
-    ops = yastn.operators.Spin12(sym='dense', **opts_config)
+def test_tdvp_raise(config_kwargs):
+    ops = yastn.operators.Spin12(sym='dense', **config_kwargs)
     ops.random_seed(seed=0)
     I = mps.product_mpo(ops.I(), N=3)
     H = mps.random_mpo(I, D_total=3)
@@ -454,19 +415,5 @@ def test_tdvp_raise(config=cfg):
     assert out.ti == 0 and out.tf == 0.1 and out.steps == 1
 
 
-if __name__ == "__main__":
-    test_tdvp_raise(config=cfg)
-    for sym in ['Z2', 'U1']:
-        t0 = time.time()
-        tdvp_sudden_quench(sym=sym)
-        print(f"Symmetry={sym}; time={time.time()-t0:1.2f}s.")
-        t0 = time.time()
-        tdvp_sudden_quench_mpo_sum(sym=sym)
-        print(f"Symmetry={sym}; time={time.time()-t0:1.2f}s.")
-        t0 = time.time()
-        tdvp_sudden_quench_Heisenberg(sym=sym)
-        print(f"Symmetry={sym}; time={time.time()-t0:1.2f}s.")
-    for sym in ['dense', 'Z2']:
-        t0 = time.time()
-        tdvp_KZ_quench(sym=sym)
-        print(f"Symmetry={sym}; time={time.time()-t0:1.2f}s.")
+if __name__ == '__main__':
+    pytest.main([__file__, "-vs", "--durations=0"])

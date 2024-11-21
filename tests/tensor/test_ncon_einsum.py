@@ -15,16 +15,13 @@
 """ Test yastn.ncon() """
 import pytest
 import yastn
-try:
-    from .configs import config_dense, config_U1
-except ImportError:
-    from configs import config_dense, config_U1
 
 tol = 1e-12  # pylint: disable=invalid-name
 
 
-def test_ncon_einsum_syntax():
+def test_ncon_einsum_syntax(config_kwargs):
     # create a set of U1-symmetric tensors
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.rand(config=config_U1, s=[-1, 1, -1], n=0,
                   D=((20, 10), (3, 3), (1, 1)), t=((1, 0), (1, 0), (1, 0)))
     b = yastn.rand(config=config_U1, s=[1, 1, 1], n=1,
@@ -46,7 +43,7 @@ def test_ncon_einsum_syntax():
 
     # The same can be obtained using einsum function, which tries to mimic the syntax of np.einsum
     e1 = yastn.einsum('xbd,acx->abcd', a, b)
-    assert yastn.norm(e1 - e) < tol
+    assert yastn.norm(e1 - e) < 1e-12
 
     # Network composed of several tensors can be contracted by a single ncon call,
     # including traces and conjugations
@@ -70,11 +67,12 @@ def test_ncon_einsum_syntax():
     # character '*' can be used in einsum subscripts to conjugate respective tensor
     # spaces in subscripts are ignored
     f1 = yastn.einsum('nCA, *DBo, nmkk, *mlol -> ABCD', a, b, c, d, order='klmno')
-    assert yastn.norm(f1 - f) < tol
+    assert yastn.norm(f1 - f) < 1e-12
 
 
-def test_ncon_einsum_basic():
+def test_ncon_einsum_basic(config_kwargs):
     """ tests of ncon executing a series of tensor contractions. """
+    config_dense = yastn.make_config(sym='none', **config_kwargs)
     a = yastn.rand(s=(1, 1, 1), D=(20, 3, 1), config=config_dense, dtype='complex128')
     b = yastn.rand(s=(1, 1, -1), D=(4, 2, 20), config=config_dense, dtype='complex128')
     c = yastn.rand(s=(-1, 1, 1, -1), D=(20, 30, 10, 10), config=config_dense, dtype='complex128')
@@ -121,7 +119,9 @@ def test_ncon_einsum_basic():
     assert isinstance(y5.item(), complex)
     assert yastn.norm(y4 - y5) / yastn.norm(y4) < tol
     assert pytest.approx((a.norm().item() ** 2) * (b.norm().item() ** 2), rel=tol) == y4.item()
-
+    #
+    # U1
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.rand(config=config_U1, s=[-1, 1, -1], n=0,
                   D=((20, 10), (3, 3), (1, 1)), t=((1, 0), (1, 0), (1, 0)))
     b = yastn.rand(config=config_U1, s=[1, 1, 1], n=1,
@@ -152,8 +152,9 @@ def test_ncon_einsum_basic():
     assert abs(yastn.ncon([a], [(1, 2, 2, 1)], conjs=[0]).item() - 1j) < tol
 
 
-def test_ncon_einsum_exceptions():
+def test_ncon_einsum_exceptions(config_kwargs):
     """ capturing some exception by ncon. """
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     t, D = (0, 1), (2, 3)
     a = yastn.rand(config=config_U1, s=[-1, 1, -1], n=0,
                   t=(t, t, t), D=(D, D, D))
@@ -204,6 +205,4 @@ def test_ncon_einsum_exceptions():
 
 
 if __name__ == '__main__':
-    test_ncon_einsum_syntax()
-    test_ncon_einsum_basic()
-    test_ncon_einsum_exceptions()
+    pytest.main([__file__, "-vs", "--durations=0"])

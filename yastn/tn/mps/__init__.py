@@ -20,5 +20,5 @@ from ._dmrg import dmrg_
 from ._tdvp import tdvp_
 from ._compression import compression_, zipper
 from ._initialize import product_mps, product_mpo, random_mps, random_mpo, random_dense_mps, random_dense_mpo, load_from_dict, load_from_hdf5
-from ._generate_mpo import Hterm, generate_mpo, generate_mpo_preprocessing, generate_mpo_fast
+from ._generate_mpo import Hterm, generate_mpo
 from ._generator_class import Generator

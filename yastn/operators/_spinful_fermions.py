@@ -41,7 +41,7 @@ class SpinfulFermions(meta_operators):
 
             * For :code:`'Z2'`, :code:`'U1'` and :code:`'U1xU1xZ2'`, the two species (spin-up and spin-down)
               are treated as indistinguishable. In that case, creation and annihilation operators
-              of the two species anti-commute (fermionic statistics is encoded in the Z2 channel).
+              of the two species anti-commute (fermionic statistics is encoded in the Z2 channel of U1xU1xZ2).
             * For :code:`'U1xU1'` the two species (spin-up and spin-down) are treated as distinguishable.
               In that case, creation and annihilation operators of the two species commute.
         """

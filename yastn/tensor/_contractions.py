@@ -16,6 +16,7 @@
 from __future__ import annotations
 from functools import lru_cache
 from itertools import groupby, accumulate
+from numbers import Number
 import numpy as np
 from ._auxliary import _struct, _slc, _clear_axes, _unpack_axes, _flatten
 from ._tests import YastnError, _test_can_be_combined, _test_axes_match
@@ -28,8 +29,8 @@ __all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon', 'einsum', 'broadca
 
 def __matmul__(a, b) -> yastn.Tensor:
     """
-    The operation ``A @ B`` uses ``@`` operator to compute tensor dot product. 
-    The operation contracts the last axis of :code:`self`, i.e., :code:`a`, 
+    The operation ``A @ B`` uses ``@`` operator to compute tensor dot product.
+    The operation contracts the last axis of :code:`self`, i.e., :code:`a`,
     with the first axis of :code:`b`.
 
     It is equivalent to :code:`yastn.tensordot(a, b, axes=(a.ndim - 1, 0))`.
@@ -42,8 +43,8 @@ def tensordot(a, b, axes, conj=(0, 0)) -> yastn.Tensor:
     Compute tensor dot product of two tensors along specified axes.
 
     Outgoing legs are ordered such that first ones are the remaining legs
-    of the first tensor in the original order, and than those
-    of the second tensor.
+    of the first tensor in the original order, followed by the remaining legs
+    of the second tensor in the original order.
 
     Parameters
     ----------
@@ -57,7 +58,7 @@ def tensordot(a, b, axes, conj=(0, 0)) -> yastn.Tensor:
 
     conj: tuple[int, int]
         specify tensors to conjugate by: ``(0, 0)``, ``(0, 1)``, ``(1, 0)``, or ``(1, 1)``.
-        Default is ``(0, 0)``, i.e. neither tensor is conjugated.
+        The default is ``(0, 0)``, i.e., neither tensor is conjugated.
     """
     if conj[0]:
         a = a.conj()
@@ -157,6 +158,8 @@ def broadcast(a, *args, axes=0) -> yastn.Tensor | iterable[yastn.Tensor]:
 
     Produce diagonal tensor if both are diagonal.
     Legs of the resulting tensors are ordered in the same way as those of tensors in :code:`args`.
+    It is used (in combination with :meth:`yastn.transpose`) as a subrutine of
+    :meth:`yastn.tensordot` for contractions involving diagonal tensor.
 
     Parameters
     ----------
@@ -231,8 +234,8 @@ def _meta_broadcast(b_struct, b_slices, a_struct, a_slices, axis):
 def apply_mask(a, *args, axes=0) -> yastn.Tensor | iterable[yastn.Tensor]:
     r"""
     Apply mask given by nonzero elements of diagonal tensor :code:`a` on specified axes of tensors in args.
-    Number of tensors in :code:`args` is not restricted. 
-    The length of the list :code:`axes` has to be mathing with :code:`args`. 
+    Number of tensors in :code:`args` is not restricted.
+    The length of the list :code:`axes` has to be mathing with :code:`args`.
 
     Legs of resulting tensor are ordered in the same way as those of tensors in :code:`args`.
     Bond dimensions of specified :code:`axes` of :code:`args` are truncated according to the mask `a`.
@@ -298,7 +301,7 @@ def _meta_mask(a_struct, a_slices, a_isdiag, b_struct, b_slices, Dbnew, axis):
     return meta, c_struct, c_slices
 
 
-def vdot(a, b, conj=(1, 0)) -> number:
+def vdot(a, b, conj=(1, 0)) -> Number:
     r"""
     Compute scalar product :math:`\langle a|b \rangle` between two tensors.
 
@@ -309,7 +312,7 @@ def vdot(a, b, conj=(1, 0)) -> number:
 
     conj: tuple[int, int]
         shows which tensor to conjugate: ``(0, 0)``, ``(0, 1)``, ``(1, 0)``, or ``(1, 1)``.
-        Default is ``(1, 0)``, i.e. tensor ``a`` is conjugated.
+        The default is ``(1, 0)``, i.e., tensor ``a`` is conjugated.
     """
     _test_can_be_combined(a, b)
     if conj[0] == 1:
@@ -322,7 +325,7 @@ def vdot(a, b, conj=(1, 0)) -> number:
         struct_a, slices_a = a.struct, a.slices
         struct_b, slices_b = b.struct, b.slices
     else:
-        ia, ib, ta, Da, Dpa, inter_sla,  tb, Db, Dpb, inter_slb,  = 0, 0, [], [], [], [], [], [], [], []
+        ia, ib, ta, Da, Dpa, inter_sla,  tb, Db, Dpb, inter_slb = 0, 0, [], [], [], [], [], [], [], []
         while ia < len(a.struct.t) and ib < len(b.struct.t):
             if a.struct.t[ia] == b.struct.t[ib]:
                 ta.append(a.struct.t[ia])
@@ -367,7 +370,7 @@ def trace(a, axes=(0, 1)) -> yastn.Tensor:
     Parameters
     ----------
     axes: tuple[int, int] | tuple[Sequence[int], Sequence[int]]
-        Legs to be traced out, e.g :code:`axes=(0, 1)`; or :code:`axes=((2, 3, 4), (0, 1, 5))`.
+        Legs to be traced out, e.g., :code:`axes=(0, 1)`; or :code:`axes=((2, 3, 4), (0, 1, 5))`.
     """
     lin1, lin2 = _clear_axes(*axes)  # contracted legs
     if len(set(lin1) & set(lin2)) > 0:
@@ -455,7 +458,13 @@ def swap_gate(a, axes, charge=None) -> yastn.Tensor:
     """
     Return tensor after application of a swap gate.
 
-    Multiply blocks with odd charges on swapped legs by -1.
+    The function's action is controlled by the ``fermionic`` flag in the tensor :ref:`config <tensor/configuration:YASTN configuration>`.
+    Multiply blocks with odd charges on swapped legs by :math:`-1`.
+    The ``fermionic`` flag selects which individual charges (in case of a direct product of a few symmetries) are tested for oddity,
+    where the contributions from each selected charge get multiplied.
+    See :class:`yastn.operators.SpinfulFermions` for an example.
+    For ``fermionic=True``, all charges are considered.
+    For ``fermionic=False``,  swap_gate returns ``a``.
 
     Parameters
     ----------

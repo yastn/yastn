@@ -1,11 +1,18 @@
 Algebra
 =======
 
+.. code-block:: python
+
+    import numpy as np
+    import yastn
+    import yastn.tn.mps as mps
+    config_kwargs = {"backend": "np"}
+
 Canonical form by QR
 --------------------
 
 There are different algorithms, which can bring MPS/MPO into a canonical form.
-The cheapest way is by application of :meth:`QR decomposition<yastn.linalg.qr>`.
+The cheapest way is by application of :meth:`QR <yastn.linalg.qr>` decomposition.
 
 ::
 
@@ -90,4 +97,4 @@ We can test the multiplication of MPO and MPS using an example of a ground state
 obtained with :ref:`DMRG<mps/algorithms_dmrg:Density matrix renormalization group (DMRG)>`.
 
 .. literalinclude:: /../../tests/mps/test_algebra.py
-        :pyobject: multiplication_example_gs
+        :pyobject: test_multiplication_example_gs

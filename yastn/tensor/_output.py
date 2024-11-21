@@ -16,6 +16,7 @@
 from __future__ import annotations
 import numpy as np
 from functools import reduce
+from numbers import Number
 from operator import mul
 from ._auxliary import _clear_axes, _unpack_axes, _struct, _slc, _flatten
 from ._tests import YastnError, _test_configs_match
@@ -40,7 +41,7 @@ def save_to_dict(a) -> dict:
     a: yastn.Tensor
         tensor to export.
     """
-    _d = a.config.backend.to_numpy(a._data)
+    _d = a.config.backend.to_numpy(a._data).copy()
     hfs = [hf._asdict() for hf in a.hfs]
     return {'_d': _d, 's': a.struct.s, 'n': a.struct.n,
             't': a.struct.t, 'D': a.struct.D, 'isdiag': a.isdiag,
@@ -82,7 +83,7 @@ def compress_to_1d(a, meta=None) -> tuple[numpy.array | torch.tensor, dict]:
             Specifies tensor to export.
         meta: dict
             There is an option to provide meta-data obtained from earlier application of :meth:`yastn.Tensor.compress_to_1d`.
-            Extra zero blocks (missing in tensor) are then included in the returned 1D array 
+            Extra zero blocks (missing in tensor) are then included in the returned 1D array
             to make it consistent with structure given in :code:`meta`.
             Raises error if tensor has some blocks which are not included in :code:`meta` or otherwise
             :code:`meta` does not match the tensor.
@@ -90,13 +91,14 @@ def compress_to_1d(a, meta=None) -> tuple[numpy.array | torch.tensor, dict]:
     .. note::
         :meth:`yastn.Tensor.compress_to_1d` and :meth:`yastn.decompress_from_1d`
         provide mechanism that allows using external matrix-free methods, such as :func:`eigs` implemented in SciPy.
+        See example at :ref:`examples/tensor/decomposition:combining with scipy.sparse.linalg.eigs`.
 
     Returns
     -------
     tensor (type derived from backend)
         1D array with tensor data.
     dict
-        metadata with structure of the symmetric tensor needed to encode the 1D array into blocks. 
+        metadata with structure of the symmetric tensor needed to encode the 1D array into blocks.
     """
     if meta is None:
         meta = {'config': a.config, 'struct': a.struct, 'slices': a.slices,
@@ -145,7 +147,8 @@ def compress_to_1d(a, meta=None) -> tuple[numpy.array | torch.tensor, dict]:
 
 def print_properties(a, file=None) -> Never:
     """
-    Print basic properties of the tensor:
+    Print a number of properties of the tensor:
+
         * symmetry,
         * signature,
         * total charge,
@@ -191,12 +194,12 @@ def requires_grad(a) -> bool:
     return a.config.backend.requires_grad(a._data)
 
 
-def print_blocks_shape(a) -> str:
+def print_blocks_shape(a, file=None) -> str:
     """
     Print shapes of blocks as a sequence of block's charge followed by its shape.
     """
     for t, D in zip(a.struct.t, a.struct.D):
-        print(f"{t} {D}")
+        print(f"{t} {D}", file=file)
 
 
 def is_complex(a) -> bool:
@@ -217,7 +220,7 @@ def get_signature(a, native=False) -> Sequence[int]:
     """
     Return tensor signature, equivalent to :attr:`yastn.Tensor.s`.
 
-    If native, returns the signature of tensors's native legs, see :attr:`yastn.Tensor.s_n`.
+    If ``native=True``, ignore fusion with ``mode=meta`` and return the signature of tensors's native legs, see :attr:`yastn.Tensor.s_n`.
     """
     return a.s_n if native else a.s
 
@@ -226,7 +229,7 @@ def get_rank(a, native=False) -> int:
     """
     Return tensor rank equivalent to :attr:`yastn.Tensor.ndim`.
 
-    If ``native``, the native rank of the tensor is returned, see :attr:`yastn.Tensor.ndim_n`.
+    If ``native=True``, ignore fusion with ``mode=meta`` and count native legs, see :attr:`yastn.Tensor.ndim_n`.
     """
     return a.ndim_n if native else a.ndim
 
@@ -235,7 +238,7 @@ def get_blocks_charge(a) -> Sequence[Sequence[int]]:
     """
     Return charges of all native blocks.
 
-    In case of product of abelian symmetries, for each block the individual symmetry 
+    In case of product of abelian symmetries, for each block the individual symmetry
     charges are flattened into a single tuple.
     """
     return a.struct.t
@@ -255,7 +258,7 @@ def get_shape(a, axes=None, native=False) ->  int | Sequence[int]:
     Parameters
     ----------
     axes : int | Sequence[int]
-        indices of legs; If ``axes=None`` returns shape for all legs. Default is ``axes=None``.
+        indices of legs; If ``axes=None`` returns shape for all legs. The default is ``axes=None``.
     """
     if axes is None:
         axes = tuple(n for n in range(a.ndim_n if native else a.ndim))
@@ -276,7 +279,7 @@ def __getitem__(a, key) -> numpy.ndarray | torch.tensor:
     Block corresponding to a given charge combination.
 
     The type of the returned tensor corresponds to specified backend, e.g.,
-    :class:`numpy.ndarray` or :class:`torch.Tensor` for *NumPy* and *PyTorch* respectively. 
+    :class:`numpy.ndarray` or :class:`torch.Tensor` for *NumPy* and *PyTorch* respectively.
     In case of diagonal tensor, the output is a 1D array.
 
     Parameters
@@ -312,10 +315,12 @@ def get_legs(a, axes=None, native=False) -> yastn.Leg | Sequence[yastn.Leg]:
     Parameters
     ----------
     axes : int | Sequence[int] | None
-        indices of legs to retrieve. If ``None`` returns list with all legs.
+        Indices of legs to retrieve. If ``None`` returns list with all legs.
 
     native : bool
-        if ``True`` considers native legs; otherwise returns fused legs. Default is ``native=False``.
+        If ``True``, ignore fusion with ``mode=meta`` and return native legs.
+        Otherwise returns meta-fused legs (if such leg fusion was performed).
+        The default is ``False``.
     """
     legs = []
     tset = np.array(a.struct.t, dtype=np.int64).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
@@ -360,8 +365,8 @@ def to_dense(a, legs=None, native=False, reverse=False) -> numpy.ndarray | torch
 
     The type of the returned tensor depends on the backend, i.e. ``numpy.ndarray`` or ``torch.tensor``.
     Blocks are ordered according to increasing charges on each leg.
-    It is possible to supply a list of additional charge sectors to be included by 
-    explictly specifying ``legs``. 
+    It is possible to supply a list of additional charge sectors to be included by
+    explictly specifying ``legs``.
     Specified ``legs`` should be consistent with current structure of the tensor.
     This allows to fill in extra zero blocks.
 
@@ -490,7 +495,7 @@ def zero_of_dtype(a):
     return a.config.backend.zeros((), dtype=a.yast_dtype, device=a.device)
 
 
-def to_number(a, part=None) -> number:
+def to_number(a) -> Number:
     r"""
     Assuming the symmetric tensor has just a single non-empty block of total dimension one,
     return this element as a scalar.
@@ -500,11 +505,6 @@ def to_number(a, part=None) -> number:
 
     .. note::
         This operation preserves autograd.
-
-    Parameters
-    ----------
-    part : str
-        if :code:`'real'`, returns real part only.
     """
     size = a.size
     if size == 1:
@@ -513,7 +513,7 @@ def to_number(a, part=None) -> number:
         x = a.zero_of_dtype()
     else:
         raise YastnError('Only single-element (symmetric) Tensor can be converted to scalar')
-    return a.config.backend.real(x) if part == 'real' else x
+    return x
 
 
 def item(a) -> float:

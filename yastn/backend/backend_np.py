@@ -25,9 +25,13 @@ except ModuleNotFoundError:  # pragma: no cover
 
 # non-deterministic initialization of random number generator
 rng = {'rng': np.random.default_rng(None)}  # initialize random number generator
-BACKEND_ID = "numpy"
+BACKEND_ID = "np"
 DTYPE = {'float64': np.float64,
          'complex128': np.complex128}
+
+
+def cuda_is_available():
+    return False
 
 
 def get_dtype(t):
@@ -573,4 +577,4 @@ def is_independent(x, y):
     """
     check if two arrays are identical, or share the same view.
     """
-    return not ((x is y) or (x.base is y) or (x is y.base))
+    return (x is not y) and (x.base is not y) and (x is not y.base)

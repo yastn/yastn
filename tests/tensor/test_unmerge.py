@@ -12,15 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-""" Test elements of fuse_legs(... mode='hard') """
+""" Test elements of yastn.fuse_legs(... mode='hard') """
+from itertools import groupby
 import numpy as np
 import pytest
 import yastn
-from itertools import groupby
-try:
-    from .configs import config_U1
-except ImportError:
-    from configs import config_U1
 
 tol = 1e-10  #pylint: disable=invalid-name
 
@@ -43,8 +39,10 @@ def unmerge2(data, meta2):
     return newdata
 
 
-@pytest.mark.skipif(config_U1.backend.BACKEND_ID=="torch", reason="this test explicitly uses numpy array; will become obsolate after introducing views")
-def test_hard_unmerge():
+@pytest.mark.skipif("'np' not in config.getoption('--backend')",
+                    reason="this test explicitly uses numpy array; will become obsolate after introducing views")
+def test_hard_unmerge(config_kwargs):
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
                   t=[(0, 1, 2), (0, 1, 2), (0, 1, 2), (0, 1, 2), (0, 1, 2), (0, 1, 2)],
                   D=[(1, 2, 3), (2, 3, 4), (3, 4, 5), (4, 5, 6), (5, 6, 7), (6, 7, 8)])
@@ -67,6 +65,5 @@ def test_hard_unmerge():
     assert max(abs(cc - dd)) < 1e-12
 
 
-
 if __name__ == '__main__':
-    test_hard_unmerge()
+    pytest.main([__file__, "-vs", "--durations=0"])

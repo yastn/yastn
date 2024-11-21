@@ -13,29 +13,20 @@
 # limitations under the License.
 # ==============================================================================
 """ Predefined spinful fermion operators operators. """
-import pytest
 import numpy as np
+import pytest
 import yastn
-try:
-    from .configs import config_dense
-except ImportError:
-    from configs import config_dense
-
 
 tol = 1e-12  #pylint: disable=invalid-name
 
 
-def test_spinful_fermions():
+def test_spinful_fermions(config_kwargs):
     """ Generate standard operators in two-dimensional Hilbert space for various symmetries. """
-    # pytest switches backends and default_device in config files for testing
-    backend = config_dense.backend
-    default_device = config_dense.default_device
-
-    ops_Z2 = yastn.operators.SpinfulFermions(sym='Z2', backend=backend, default_device=default_device)
-    ops_U1xU1_ind = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', backend=backend, default_device=default_device)
-    ops_U1xU1_dis = yastn.operators.SpinfulFermions(sym='U1xU1', backend=backend, default_device=default_device)
+    ops_Z2 = yastn.operators.SpinfulFermions(sym='Z2', **config_kwargs)
+    ops_U1xU1_ind = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', **config_kwargs)
+    ops_U1xU1_dis = yastn.operators.SpinfulFermions(sym='U1xU1', **config_kwargs)
     # other way to initialize
-    config_U1 = yastn.make_config(fermionic=True, sym="U1", backend=backend, default_device=default_device)
+    config_U1 = yastn.make_config(fermionic=True, sym="U1", **config_kwargs)
     ops_U1 = yastn.operators.SpinfulFermions(**config_U1._asdict())
 
     Is = [ops_Z2.I(), ops_U1.I(), ops_U1xU1_ind.I(), ops_U1xU1_dis.I()]
@@ -43,7 +34,6 @@ def test_spinful_fermions():
 
     assert all(leg == I.get_legs(axes=0) for (leg, I) in zip(legs, Is))
     assert all(np.allclose(I.to_numpy(), np.eye(4)) for I in Is)
-    assert all(default_device in I.device for I in Is)  # accept 'cuda' in 'cuda:0'
 
     assert all(ops.config.fermionic == fs for ops, fs in zip((ops_Z2, ops_U1, ops_U1xU1_ind, ops_U1xU1_dis), (True, True, (False, False, True), True)))
 
@@ -128,4 +118,4 @@ def test_spinful_fermions():
 
 
 if __name__ == '__main__':
-    test_spinful_fermions()
+    pytest.main([__file__, "-vs", "--durations=0"])

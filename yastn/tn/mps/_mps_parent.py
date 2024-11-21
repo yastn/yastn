@@ -14,7 +14,7 @@
 # ==============================================================================
 """ MpsMpoParent structure and basic methods common for OBC and PBC. """
 from __future__ import annotations
-import numbers
+from numbers import Number, Integral
 from ... import YastnError
 
 
@@ -25,7 +25,7 @@ class _MpsMpoParent:
         r"""
         Parent class extracting common elements of periodic and open boundary MpsMpo
         """
-        if not isinstance(N, numbers.Integral) or N <= 0:
+        if not isinstance(N, Integral) or N <= 0:
             raise YastnError('Number of Mps sites N should be a positive integer.')
         if nr_phys not in (1, 2):
             raise YastnError('Number of physical legs, nr_phys, should be 1 or 2.')
@@ -92,7 +92,7 @@ class _MpsMpoParent:
 
         Assigning central block is not supported.
         """
-        if not isinstance(n, numbers.Integral) or n < self.first or n > self.last:
+        if not isinstance(n, Integral) or n < self.first or n > self.last:
             raise YastnError("MpsMpoOBC: n should be an integer in 0, 1, ..., N-1")
         if tensor.ndim != self.nr_phys + 2:
             raise YastnError(f"MpsMpoOBC: Tensor rank should be {self.nr_phys + 2}")
@@ -114,11 +114,11 @@ class _MpsMpoParent:
 
     def on_bra(self) -> yastn.tn.mps.MpsMpoOBC:
         r"""
-        A shallow copy of the tensor with an added 'on_bra' flag.
+        A shallow copy of the tensor with an added ``on_bra`` flag.
 
-        The flag is only relevant in functions using Env.
+        The flag is only relevant in functions using :meth:`Env()<yastn.tn.mps.Env>`.
         It makes the Mpo operator acting on an Mpo state to be applied on the bra legs (or auxiliary legs),
-        instead of a default application on 'ket' legs.
+        instead of a default application on ket legs.
         For instance, :code:`Heff = [-H, H.on_bra()]` can be used to evolve an operator in the Heisenberg picture.
 
         This flag gets propagated by __mul__, conj, transpose, and other functions employing shallow_copy.
@@ -184,7 +184,7 @@ class _MpsMpoParent:
     def H(self) -> yastn.tn.mps.MpsMpo:
         r""" Transpose and conjugate of MPO. For MPS, return self.conj().
 
-        Same as :meth:`self.transpose()<yastn.tn.mps.MpsMpo.conjugate_transpose>` """
+        Same as :meth:`self.conjugate_transpose()<yastn.tn.mps.MpsMpo.conjugate_transpose>` """
         return self.conjugate_transpose()
 
     def reverse_sites(self) -> yastn.tn.mps.MpsMpo:
@@ -241,7 +241,7 @@ class _MpsMpoParent:
     def get_bond_dimensions(self) -> Sequence[int]:
         r"""
         Returns total bond dimensions of all virtual spaces along MPS/MPO from
-        the first to the last site, including "trivial" leftmost and rightmost virtual spaces.
+        the first to the last site, including trivial leftmost and rightmost virtual spaces.
         This gives a tuple with N+1 elements.
         """
         Ds = [self.A[n].get_shape(axes=0) for n in self.sweep(to='last')]
@@ -251,7 +251,7 @@ class _MpsMpoParent:
     def get_bond_charges_dimensions(self) -> Sequence[dict[Sequence[int], int]]:
         r"""
         Returns list of charge sectors and their dimensions for all virtual spaces along MPS/MPO
-        from the first to the last site, including "trivial" leftmost and rightmost virtual spaces.
+        from the first to the last site, including trivial leftmost and rightmost virtual spaces.
         Each element of the list is a dictionary {charge: sectorial bond dimension}.
         This gives a list with N+1 elements.
         """
@@ -285,7 +285,7 @@ class _MpsMpoParent:
         return [self.A[n].get_legs(axes=1) for n in self.sweep(to='last')]
 
 
-    def save_to_dict(self) -> dict[str, dict | number]:
+    def save_to_dict(self) -> dict[str, dict | Number]:
         r"""
         Serialize MPS/MPO into a dictionary.
 

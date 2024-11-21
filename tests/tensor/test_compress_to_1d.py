@@ -12,14 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-""" fill_tensor (which is called in: rand, zeros, ones), yastn.to_numpy """
-import numpy as np
+""" fill_tensor (which is called in: rand, zeros, ones), yastn.to_numpy() """
 import pytest
 import yastn
-try:
-    from .configs import config_dense, config_U1, config_Z2xU1
-except ImportError:
-    from configs import config_dense, config_U1, config_Z2xU1
 
 tol = 1e-12  #pylint: disable=invalid-name
 
@@ -37,14 +32,19 @@ def run_compress_wit_meta(a, a_reference) :
     assert yastn.norm(a - c) < tol
 
 
-def test_compress_to_1d_basic():
+def test_compress_to_1d_basic(config_kwargs):
     # 3d dense
+    config_dense = yastn.make_config(sym='none', **config_kwargs)
     a = yastn.rand(config=config_dense, s=(-1, 1, 1), D=(1, 2, 3))
     run_simple_compress(a)
+
     # 0d U1
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.ones(config=config_U1) # s=() # t=(), D=()
     run_simple_compress(a)
+
     # diagonal Z2xU1
+    config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
     leg = yastn.Leg(config_Z2xU1, s=1, t=((0, -1), (1, 0), (0, 1)), D=(2, 3, 4))
     a = yastn.rand(config=config_Z2xU1, isdiag=True, legs=leg)
     run_simple_compress(a)
@@ -52,8 +52,9 @@ def test_compress_to_1d_basic():
 
 
 
-def test_compress_to_1d_embed():
+def test_compress_to_1d_embed(config_kwargs):
     """ test embedding zeros to match another tensor """
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.Tensor(config=config_U1, s=(-1, 1, 1, 1))
     a.set_block(ts=(2, 0, 1, 1), Ds=(1, 2, 3, 4))
     a.set_block(ts=(0, 1, 0, -1), Ds=(5, 6, 7, 8))
@@ -68,7 +69,8 @@ def test_compress_to_1d_embed():
     run_compress_wit_meta(af, af_reference)
 
 
-def test_compress_to_1d_exceptions():
+def test_compress_to_1d_exceptions(config_kwargs):
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.Tensor(config=config_U1, s=(-1, 1, 1, 1))
     a.set_block(ts=(2, 0, 1, 1), Ds=(1, 2, 3, 4))
     _, a_meta = a.compress_to_1d()
@@ -109,6 +111,4 @@ def test_compress_to_1d_exceptions():
 
 
 if __name__ == '__main__':
-    test_compress_to_1d_basic()
-    test_compress_to_1d_embed()
-    test_compress_to_1d_exceptions()
+    pytest.main([__file__, "-vs", "--durations=0"])

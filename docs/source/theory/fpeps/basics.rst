@@ -19,14 +19,14 @@ with sites labeled by coordinates :math:`(x,y)` as shown below:
 
 ::
 
-       # coordinates of the underlying 2D lattice
+       # Coordinates of the underlying 2D lattice
 
-        ----------->
-       |
-       |   (0,0)     (0,1)   ...     (0,Ly-1)
-       |
-       |   (1,0)     (1,1)   ...     (1,Ly-1)
-      \|/
+       ┌──────────ᐳ
+       │
+       │   (0,0)     (0,1)   ...     (0,Ly-1)
+       │
+       │   (1,0)     (1,1)   ...     (1,Ly-1)
+       ᐯ
              .         .               .
              .                         .
              .                .        .
@@ -37,16 +37,16 @@ with sites labeled by coordinates :math:`(x,y)` as shown below:
 Each tensor :math:`A_{(x,y)}` in PEPS is a rank-:math:`5` tensor defined as follows:
 
 - **Four virtual bond dimensions** connecting neighboring tensors:
-    - :math:`D_{(x-1,y),(x,y)}`: bond dimension connecting to the left neighbor,
-    - :math:`D_{(x,y-1),(x,y)}`: bond dimension connecting below,
-    - :math:`D_{(x,y),(x+1,y)}`: bond dimension connecting to the right,
-    - :math:`D_{(x,y),(x,y+1)}`: bond dimension connecting above.
+    - :math:`D_{(x-1,y),(x,y)}`: bond dimension connecting to the top neighbor
+    - :math:`D_{(x,y-1),(x,y)}`: bond dimension connecting to the left neighbor
+    - :math:`D_{(x,y),(x+1,y)}`: bond dimension connecting to the bottom neighbor
+    - :math:`D_{(x,y),(x,y+1)}`: bond dimension connecting to the right neighbor
 
 - **One physical dimension** :math:`d_{(x,y)}`, associated with the lattice site's local degree of freedom.
 
 ::
 
-      # individual tensor of the PEPS lattice
+      # Individual tensor of the PEPS lattice
 
                                  D_(x-1,y),(x,y)
                                          \
@@ -60,12 +60,11 @@ Each tensor :math:`A_{(x,y)}` in PEPS is a rank-:math:`5` tensor defined as foll
 
 
 The hermitian conjugate of the above tensor :math:`A_{x,y}^{\dagger}` is represented as its mirror image of the tensor structure,
-with **element-wise complex conjugation** of each entry in :math:`A_{(x,y)}`. This means that each element 
-:math:`a_{ijkl} \rightarrow \overline{a_{ijkl}}` while the bond dimensions remain the same.
+with element-wise complex conjugation of each entry in :math:`A_{(x,y)}`.
 
 ::
 
-      #   # Conjugate tensor in PEPS with element-wise complex conjugation
+      # Conjugate tensor in PEPS with element-wise complex conjugation
 
                                         d_(x,y)  D_(x,y),(x+1,y)
                                            |      /
@@ -79,7 +78,7 @@ with **element-wise complex conjugation** of each entry in :math:`A_{(x,y)}`. Th
 
 
 The module :code:`yastn.tn.fpeps` supports PEPS ansatz both for
-a finite system with open boundary conditions (OBC) and in the thermodynamic limit.
+a finite system with open boundary conditions (OBC) and an infinite system in the thermodynamic limit.
 A schematic diagram of PEPS with OBC is given below.
 
 ::
@@ -110,55 +109,57 @@ Fermionic anticommutation rules in PEPS
 ---------------------------------------
 
 We follow the recipe introduced by Corboz et al. in Ref. :ref:`[4] <ref4>`.
-This approach relies on two main techniques:
+This approach relies on two ingredients:
 (a) using parity-preserving tensors, which ensure that each tensor respects fermion parity, and
-(b) adding fermionic swap gates through :meth:`yastn.swap_gate` at line (leg) crossings in a 
+(b) adding fermionic swap gates through :meth:`yastn.swap_gate` at line (leg) crossings in a
 planar projection of the network.
 
 In PEPS, the ordering of fermionic operators impacts their anticommutation properties, which are essential for accurate
-simulations of fermionic systems. We establish a **fermionic order** to guide the application of swap gates, with each 
-swap gate ensuring correct anticommutation for fermionic crossings. These crossings in the 2D plane project the 3D fermionic
-ordering onto a 2D layout, where fermionic swap gates manage the antisymmetry. 
+simulations of fermionic systems. We establish a **fermionic order** to guide the application of swap gates, with each
+swap gate ensuring correct anticommutation for fermionic crossings. These crossings in the 2D plane project the 3D diagram
+encoding fermionic ordering onto a 2D layout, where swap gates manage the antisymmetry.
 
-In terms of numerical cost, contracting fermionic and bosonic (or spin) PEPS networks is comparable. The swap gates introduce 
+In terms of the numerical cost, contracting fermionic and bosonic (or spin) PEPS networks is comparable. The swap gates introduce
 only a subleading overhead, making this approach efficient. The module :code:`yastn.tn.fpeps` handles both fermionic and bosonic
-statistics, controlled by the :code:`fermionic` flag in the :ref:`tensor configuration <tensor/configuration:yastn configuration>`. 
+statistics, controlled by the :code:`fermionic` flag in the :ref:`tensor configuration <tensor/configuration:yastn configuration>`.
 We use the name :code:`fpeps` to emphasize the incorporation of fermionic statistics in the module.
 
-Below, we illustrate the fermionic order in a :math:`3{\times}3` PEPS example. Using parity-preserving tensors allows flexibility in 
+Below, we illustrate the fermionic order in a :math:`3{\times}3` PEPS example. Using parity-preserving tensors allows flexibility in
 the placement of swap gates, as tensor parity invariance permits line crossings over or under the tensors without changing the physical results.
 
 ::
 
-              ____         ____         ____
-             |____|-------|____|-------|____|
-               |  \         |  \         |  \
-               |  _\__      |  _\__      |  _\__
-               | |____|-----|-|____|-----|-|____|
-      |Psi> =  |   |  \     |   |  \     |   |  \
-               |   |  _\__  |   |  _\__  |   |  _\__
-               |   | |____|-|---|-|____|-|---|-|____|
+             ┌────┐       ┌────┐       ┌────┐
+             │    ├───────┤    ├───────┤    │
+             └─┬─┬┘       └─┬─┬┘       └─┬─┬┘
+               |  ╲         |  ╲         |  ╲
+               | ┌─┴──┐     | ┌─┴──┐     | ┌─┴──┐
+               | │    ├─────┼─┤    ├─────┼─┤    │
+               | └─┬─┬┘     | └─┬─┬┘     | └─┬─┬┘
+      |Psi> =  |   |  ╲     |   |  ╲     |   |  ╲
+               |   | ┌─┴──┐ |   | ┌─┴──┐ |   | ┌─┴──┐
+               |   | │    ├─┼───┼─┤    ├─┼───┼─┤    │
+               |   | └─┬──┘ |   | └─┬──┘ |   | └─┬──┘
                |   |   |    |   |   |    |   |   |
                |   |   |    |   |   |    |   |   |
 
-               ---------------------------------->
+               ───────────────────────────────────ᐳ
                                  fermionic order
 
-In this 2D representation, physical lines are placed on one edge of each tensor, allowing for a consistent and 
+In this 2D representation, physical lines are placed on one edge of each tensor, allowing for a consistent and
 localized application of swap gates to uphold fermionic anticommutation, supporting efficient network contraction.
-
 
 
 Infinite PEPS (iPEPS)
 ---------------------
 
-While finite PEPS is widely used, infinite PEPS (iPEPS) :ref:`[5] <ref5>` has shown strong performance, especially 
+While finite PEPS is widely used, infinite PEPS (iPEPS) :ref:`[5] <ref5>` has shown strong performance, especially
 in capturing properties directly in the thermodynamic limit with translational invariance. In iPEPS, a unit
 cell of tensors is repeated over an infinite lattice.
 
-A common setup is a **checkerboard lattice** with a :math:`2{\times}2` unit cell, containing two tensors, :math:`A` and :math:`B`, 
-which alternate across the lattice. Each tensor represents local degrees of freedom. The **bond dimension** :math:`D` (typically same for all bonds) 
-controls the maximum entanglement between neighboring tensors, defining the parameter for the computational cost.
+A common setup is a **checkerboard lattice** with a :math:`2{\times}2` unit cell, containing two tensors, :math:`A` and :math:`B`,
+which alternate across the lattice. Each tensor represents local degrees of freedom. The **bond dimension** :math:`D` (typically same for all bonds)
+controls the maximum entanglement between neighboring tensors and determines dominant computational cost.
 
 ::
 
@@ -191,8 +192,8 @@ for a small time step :math:`d\beta`, here in the imaginary time,
 is approximated by a product of local two-site gates.
 
 For a Hamiltonian with nearest-neighbor interactions, we define :math:`H` in terms of bond Hamiltonians
-:math:`H_{\langle i,j \rangle}`, where :math:`\langle i,j \rangle` refers to a bond between neighboring 
-sites (or tensors) :math:`A_i` and :math:`A_j`. On a :math:`2{\times}2` lattice with sites labeled :math:`1, 2, 3,` 
+:math:`H_{\langle i,j \rangle}`, where :math:`\langle i,j \rangle` refers to a bond between neighboring
+sites (or tensors) :math:`A_i` and :math:`A_j`. On a :math:`2{\times}2` lattice with sites labeled :math:`1, 2, 3,`
 and :math:`4`, there are four disjoint bonds:
 
 - Two horizontal bonds, :math:`H_{\langle 1,2 \rangle}` and :math:`H_{\langle 3,4 \rangle}`
@@ -229,15 +230,13 @@ Each gate application increases the virtual bond dimension of the PEPS tensors b
 To keep the PEPS representation compact, each application of the gate has to be followed by
 a truncation procedure to reduce the virtual bond dimension back to :math:`D`.
 
-In 1D systems, Matrix Product States (MPS) benefit from a **canonical form**, which enables
-optimal truncation of bond dimensions using Singular Value Decomposition (SVD).
-This truncation is globally optimal in the Frobenius norm because the canonical form
-decouples sections of the MPS, allowing each bond to be truncated independently without 
-impacting the global accuracy of the state. However, in PEPS, the two-dimensional structure
-introduces loops, which hinder the use of canonical forms and make simple SVD-based truncation suboptimal.
+In 1D systems, Matrix Product States (MPS) benefit from a **canonical forms**, which enables
+globally optimal truncation of a bond dimension using Singular Value Decomposition (SVD).
+However, in PEPS, the two-dimensional structure introduces loops,
+which hinder the use of canonical forms and make simple SVD-based truncation suboptimal.
 A successful algorithm requires using optimization techniques on top of SVD to manage truncation effectively.
-The aim is to minimize the Frobenius norm of: (a) PEPS after the application of the Trotter gate
-whose virtual bond dimension is now increased to :math:`r{\times}D`,
+The aim is to minimize the Frobenius norm of the difference between:
+(a) PEPS after the application of the Trotter gate whose virtual bond dimension is now increased to :math:`r{\times}D`,
 and (b) a new PEPS with the bond dimension truncated back to :math:`D`.
 
 ::
@@ -317,7 +316,7 @@ uses only the sites directly surrounding the updated bond to calculate the metri
                             |     \       |     \
 
 
-By construction, the metric tensor for the bond is always Hermitian and non-negative, ensuring numerical stability. A 
+By construction, the metric tensor for the bond is always Hermitian and non-negative, ensuring numerical stability. A
 family of such environments is supported by :class:`yastn.tn.fpeps.EnvNTU`.
 
 
@@ -338,30 +337,29 @@ with a set of environmental tensors, where the approximation quality is controll
 which limits the size of these tensors. These environment tensors undergo a renormalization group procedure, iteratively converging towards their fixed-point forms.
 The renormalization procedure involves:
 
-- **Iterative Absorption and Truncation**: Initial corner and transfer tensors define the environment. During each iteration, tensors are contracted, decomposed and truncated to the bond dimension :math:`\chi\)`, balancing accuracy with efficiency.
+- **Iterative Absorption and Truncation**: Initial corner and transfer tensors define the environment. During each iteration, environment tensors are enlarge by conraction with PEPS tensors, decomposed and truncated back to the bond dimension :math:`\chi`.
 
 - **Fixed-Point Convergence**: Over successive iterations, the environment tensors converge towards a stable fixed-point form, capturing the lattice environment accurately while maintaining computational feasibility.
 
 In a 2D square lattice, the environment is represented by a combination of four corner :math:`C_{nw},C_{sw},C_{ne},C_{se}`
-and four transfer :math:`T_{n},T_{w},T_{e},T_{s}` tensors of finite size, as depicted in the following figure. Tensor :math:`a` in the diagram 
+and four transfer :math:`T_{n},T_{w},T_{e},T_{s}` tensors of finite size, as depicted in the following figure. Tensor :math:`a` in the diagram
 below results from contracting a single-site PEPS tensor :math:`A` and its conjugate :math:`A^\dagger` over the physical dimension.
 
 ::
 
-     _______     _______     _______
-    |       |   |       |chi|       |
-    |  C_nw |---|  T_n  |---|  C_ne |
-    |_______|   |_______|   |_______|
-        |           |           |
-     ___|___     ___|___     ___|___
-    |       |   |       |D^2|       |
-    |  T_w  |---|   a   |---|  T_e  |
-    |_______|   |_______|   |_______|
-        |chi        |           |
-     ___|___     ___|___     ___|___
-    |       |   |       |   |       |
-    |  C_sw |---|  T_s  |---|  C_se |
-    |_______|   |_______|   |_______|
+    ┌──────┐    ┌─────┐    ┌──────┐
+    | C_tl ├────┤ T_t ├────┤ C_tr |
+    └──┬───┘    └──┬──┘    └───┬──┘
+       |           |           |
+       │           |           |
+    ┌──┴──┐     ┌──┴──┐     ┌──┴──┐
+    | T_l ├─────┤  a  ├─────┤ T_r |
+    └──┬──┘     └──┬──┘     └──┬──┘
+       |           |           |
+       |           |           |
+    ┌──┴───┐    ┌──┴──┐    ┌───┴──┐
+    | C_bl ├────┤ T_b ├────┤ C_br |
+    └──────┘    └─────┘    └──────┘
 
 
 They are used to calculate expectation values by contracting PEPS site tensors and their environments.
@@ -402,13 +400,13 @@ the trace over the ancillary degrees of freedom of the total density matrix:
 where :math:`Z = \text{Tr}(\exp(-\beta H))` ensures normalization.
 
 In YASTN, legs corresponding to system space and ancilla space are always fused to
-form one physical PEPS leg. During numerical simulations, the Hamiltonian acting on the system degrees of 
-freedom is augmented with an identity operator acting on the ancillas. This means the Hamiltonian acts 
+form one physical PEPS leg. During numerical simulations, the Hamiltonian acting on the system degrees of
+freedom is augmented with an identity operator acting on the ancillas. This means the Hamiltonian acts
 only on the system space, represented as:
 
 :math:`H_{\text{total}} = H \otimes I_{\text{ancilla}},`
 
-where :math:`H` is the Hamiltonian on the system Hilbert space, and :math:`I_{\text{ancilla}}` is the identity on the ancilla space. 
+where :math:`H` is the Hamiltonian on the system Hilbert space, and :math:`I_{\text{ancilla}}` is the identity on the ancilla space.
 This setup ensures that evolution in imaginary time affects only the system's degrees of freedom.
 
 

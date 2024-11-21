@@ -18,7 +18,7 @@ from ... import mps
 from ._env_auxlliary import identity_tm_boundary
 
 
-class EnvBoundaryMps:
+class EnvBoundaryMPS:
     r"""
     Boundary MPS class for finite PEPS contraction.
     """
@@ -82,21 +82,23 @@ class EnvBoundaryMps:
         return self._env[dirn, n]
 
 
-    def measure_1site(peps_env, op):
+    def measure_1site(peps_env, O):
         """
-        Calculate all 1-point expectation values <o> in a finite peps.
+        Calculate all 1-point expectation values <O_j> in a finite PEPS.
 
         Takes CTM environments and operators.
 
-        o1 are given as dict[tuple[int, int], dict[int, operators]],
-        mapping sites with list of operators at each site.
+        Parameters
+        ----------
+        O: dict[tuple[int, int], dict[int, operators]]
+            mapping sites with list of operators at each site.
         """
         out = {}
 
         psi = peps_env.psi
         Nx, Ny = psi.Nx, psi.Ny
         sites = [(nx, ny) for ny in range(Ny-1, -1, -1) for nx in range(Nx)]
-        opdict = _clear_operator_input(op, sites)
+        opdict = _clear_operator_input(O, sites)
 
         for ny in range(Ny-1, -1, -1):
             vR = peps_env.boundary_mps(n=ny, dirn='r')
@@ -113,14 +115,16 @@ class EnvBoundaryMps:
         return out
 
 
-    def measure_2site(peps_env, op1, op2, opts_svd, opts_var=None):
+    def measure_2site(peps_env, O, P, opts_svd, opts_var=None):
         """
-        Calculate all 2-point correlations <op1 op2> in a finite peps.
+        Calculate all 2-point correlations <O_i P_j> in a finite PEPS.
 
         Takes CTM environments and operators.
 
-        o1 and o2 are given as dict[tuple[int, int], dict[int, operators]],
-        mapping sites with list of operators at each site.
+        Parameters
+        ----------
+        O, P: dict[tuple[int, int], dict[int, operators]],
+            mapping sites with list of operators at each site.
         """
         out = {}
         if opts_var is None:
@@ -129,8 +133,8 @@ class EnvBoundaryMps:
         psi = peps_env.psi
         Nx, Ny = psi.Nx, psi.Ny
         sites = [(nx, ny) for ny in range(Ny-1, -1, -1) for nx in range(Nx)]
-        op1dict = _clear_operator_input(op1, sites)
-        op2dict = _clear_operator_input(op2, sites)
+        op1dict = _clear_operator_input(O, sites)
+        op2dict = _clear_operator_input(P, sites)
 
         for nx1, ny1 in sites:
             # print( f"Correlations from {nx1} {ny1} ... ")

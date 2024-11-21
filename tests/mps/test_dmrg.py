@@ -15,13 +15,8 @@
 """ test dmrg """
 import numpy as np
 import pytest
-import yastn.tn.mps as mps
 import yastn
-try:
-    from .configs import config_dense as cfg
-except ImportError:
-    from configs import config_dense as cfg
-# pytest modifies cfg to inject different backends and devices during tests
+import yastn.tn.mps as mps
 
 
 def run_dmrg(phi, H, O_occ, E_target, occ_target, opts_svd, tol):
@@ -59,7 +54,7 @@ def run_dmrg(phi, H, O_occ, E_target, occ_target, opts_svd, tol):
         # Occupation number has to be calcuted using measure_mpo.
         #
         eng = out.energy
-        occ  = mps.measure_mpo(psi, O_occ, psi)
+        occ = mps.measure_mpo(psi, O_occ, psi)
         #
         # Print the result:
         #
@@ -92,14 +87,7 @@ def run_dmrg(phi, H, O_occ, E_target, occ_target, opts_svd, tol):
     return states
 
 
-@pytest.mark.parametrize("kwargs", [{'config': cfg}])
-def test_dmrg(kwargs):
-    dmrg_XX_model_dense(**kwargs, tol=1e-6)
-    dmrg_XX_model_Z2(**kwargs, tol=1e-6)
-    dmrg_XX_model_U1(**kwargs, tol=1e-6)
-
-
-def dmrg_XX_model_dense(config=None, tol=1e-6):
+def test_dmrg_XX_model_dense(config_kwargs, tol=1e-6):
     """
     Initialize random MPS of dense tensors and
     runs a few sweeps of DMRG with the Hamiltonian of XX model.
@@ -114,11 +102,7 @@ def dmrg_XX_model_dense(config=None, tol=1e-6):
     #
     N = 7
     #
-    opts_config = {} if config is None else \
-                {'backend': config.backend,
-                 'default_device': config.default_device}
-    # pytest uses config to inject various backends and devices for testing
-    ops = yastn.operators.Spin12(sym='dense', **opts_config)
+    ops = yastn.operators.Spin12(sym='dense', **config_kwargs)
     generate = mps.Generator(N=N, operators=ops)
     parameters = {"t": 1.0, "mu": 0.2,
                   "rN": range(N),
@@ -175,18 +159,14 @@ def dmrg_XX_model_dense(config=None, tol=1e-6):
     # Here, dmrg stopped based on convergence, not on max_sweeps.
 
 
-def dmrg_XX_model_Z2(config=None, tol=1e-6):
+def test_dmrg_XX_model_Z2(config_kwargs, tol=1e-6):
     """
     Initialize random MPS of Z2 tensors and tests mps.dmrg_ vs known results.
     """
-    opts_config = {} if config is None else \
-            {'backend': config.backend,
-            'default_device': config.default_device}
-    # pytest uses config to inject various backends and devices for testing
-    ops = yastn.operators.SpinlessFermions(sym='Z2', **opts_config)
+    ops = yastn.operators.SpinlessFermions(sym='Z2', **config_kwargs)
     generate = mps.Generator(N=7, operators=ops)
     generate.random_seed(seed=0)
-    N, Dmax  = 7, 8
+    N, Dmax = 7, 8
     opts_svd = {'tol': 1e-8, 'D_total': Dmax}
 
     Eng_occ_target = {
@@ -207,15 +187,11 @@ def dmrg_XX_model_Z2(config=None, tol=1e-6):
         run_dmrg(psi, H, O_occ, E_target, occ_target, opts_svd, tol)
 
 
-def dmrg_XX_model_U1(config=None, tol=1e-6):
+def test_dmrg_XX_model_U1(config_kwargs, tol=1e-6):
     """
     Initialize random MPS of U1 tensors and tests _dmrg vs known results.
     """
-    opts_config = {} if config is None else \
-        {'backend': config.backend,
-        'default_device': config.default_device}
-    # pytest uses config to inject various backends and devices for testing
-    ops = yastn.operators.SpinlessFermions(sym='U1', **opts_config)
+    ops = yastn.operators.SpinlessFermions(sym='U1', **config_kwargs)
     generate = mps.Generator(N=7, operators=ops)
     generate.random_seed(seed=0)
 
@@ -243,15 +219,11 @@ def dmrg_XX_model_U1(config=None, tol=1e-6):
         run_dmrg(psi, H, O_occ, E_target, occ_target, opts_svd, tol)
 
 
-def test_dmrg_XX_model_U1_sum_of_Mpos(config=cfg, tol=1e-6):
+def test_dmrg_XX_model_U1_sum_of_Mpos(config_kwargs, tol=1e-6):
     """
     Initialize random MPS of U1 tensors and tests _dmrg vs known results.
     """
-    opts_config = {} if config is None else \
-        {'backend': config.backend,
-        'default_device': config.default_device}
-    # pytest uses config to inject various backends and devices for testing
-    ops = yastn.operators.SpinlessFermions(sym='U1', **opts_config)
+    ops = yastn.operators.SpinlessFermions(sym='U1', **config_kwargs)
     generate = mps.Generator(N=7, operators=ops)
     generate.random_seed(seed=0)
 
@@ -282,15 +254,11 @@ def test_dmrg_XX_model_U1_sum_of_Mpos(config=cfg, tol=1e-6):
         run_dmrg(psi, H, O_occ, E_target, occ_target, opts_svd, tol)
 
 
-def test_dmrg_Ising_PBC_Z2(config=cfg, tol=1e-4):
+def test_dmrg_Ising_PBC_Z2(config_kwargs, tol=1e-4):
     """
     Initialize random MPS of U1 tensors and tests _dmrg vs known results.
     """
-    opts_config = {} if config is None else \
-        {'backend': config.backend,
-        'default_device': config.default_device}
-    # pytest uses config to inject various backends and devices for testing
-    ops = yastn.operators.Spin12(sym='Z2', **opts_config)
+    ops = yastn.operators.Spin12(sym='Z2', **config_kwargs)
     N = 8
     I = mps.product_mpo(ops.I(), N)
 
@@ -336,11 +304,8 @@ def test_dmrg_Ising_PBC_Z2(config=cfg, tol=1e-4):
                 assert (EE * psi * (np.exp(-1j * EE * tf)) - psi1).norm() < tol
 
 
-def test_dmrg_raise(config=cfg):
-    opts_config = {} if config is None else \
-        {'backend': config.backend,
-        'default_device': config.default_device}
-    ops = yastn.operators.Spin12(sym='dense', **opts_config)
+def test_dmrg_raise(config_kwargs):
+    ops = yastn.operators.Spin12(sym='dense', **config_kwargs)
     I = mps.product_mpo(ops.I(), N=7)
     H = mps.random_mpo(I, D_total=5)
     psi = mps.random_mpo(I, D_total=4)
@@ -359,8 +324,5 @@ def test_dmrg_raise(config=cfg):
         # DMRG: provide opts_svd for 2site method.
 
 
-if __name__ == "__main__":
-    test_dmrg_raise()
-    test_dmrg({'config': cfg})
-    test_dmrg_XX_model_U1_sum_of_Mpos()
-    test_dmrg_Ising_PBC_Z2()
+if __name__ == '__main__':
+    pytest.main([__file__, "-vs", "--durations=0"])
