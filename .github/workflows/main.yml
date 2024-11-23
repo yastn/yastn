@@ -62,11 +62,7 @@ jobs:
       # Run tests
       - name: tests
         run: |
-          cd tests/;
-          pytest --backend ${{ matrix.backend }} -v ./tensor;
-          pytest --backend ${{ matrix.backend }} -v ./operators;
-          pytest --backend ${{ matrix.backend }} -v ./mps;
-          pytest --backend ${{ matrix.backend }} -v ./peps;
+          pytest --backend ${{ matrix.backend }} -v;
 
   deploy-docs:
     if: contains(fromJson('["refs/heads/master","refs/heads/docs"]'), github.ref)
@@ -77,57 +73,6 @@ jobs:
     uses: ./.github/workflows/docs.yml
     with:
       python-version: '3.9'
-
-  test-full-coverage:
-    needs: test-basic
-    if: contains(fromJson('["refs/heads/master", "refs/heads/tests"]'), github.ref)
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        backend: [ torch ]
-        python_v: ['3.9']
-        pytorch_v: ['2.0']
-      fail-fast: true
-
-    steps:
-      - run: CI=false
-      - uses: actions/checkout@v2.7.0
-
-      - name: setup python
-        uses: actions/setup-python@v3.1.3
-        with:
-          python-version: ${{ matrix.python_v }}
-
-      - name: setup deps
-        run: pip install flake8 pylint pytest pytest-cov numpy scipy h5py tqdm fbpca;
-
-      - name: setup pytorch
-        if: matrix.backend == 'torch'
-        run: |
-          if [[ "${{ matrix.pytorch_v }}" == "1.13.1" ]];
-          then
-            pip install torch==${{ matrix.pytorch_v }}+cpu --extra-index-url https://download.pytorch.org/whl/cpu
-          else
-            pip install torch --index-url https://download.pytorch.org/whl/cpu
-          fi
-
-      # Run tests
-      - name: tests
-        run: |
-          cd tests/;
-          pytest --cov=yastn --cov-report html --backend ${{ matrix.backend }} -v ./tensor;
-          pytest --cov=yastn --cov-report html --backend ${{ matrix.backend }} -v ./operators --cov-append;
-          pytest --cov=yastn --cov-report html --backend ${{ matrix.backend }} -v ./mps --cov-append;
-          pytest --cov=yastn --cov-report html --backend ${{ matrix.backend }} -v ./peps --cov-append;
-          pytest --cov=yastn --cov-report html --backend np -v ./tensor --cov-append;
-
-      - name: upload coverage
-        if: success()
-        uses: actions/upload-artifact@v3.1.2
-        with:
-          name: coverage-report
-          path: ./tests/htmlcov/index.html
-
 
   # run matrix of tests for python and torch versions
   test-full:
@@ -197,8 +142,48 @@ jobs:
       # Run tests
       - name: tests
         run: |
+          pytest --backend ${{ matrix.backend }} -v
+
+  test-full-coverage:
+    needs: [test-basic, test-full]
+    if: contains(fromJson('["refs/heads/master", "refs/heads/tests"]'), github.ref)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        backend: [ torch ]
+        python_v: ['3.9']
+        pytorch_v: ['2.0']
+      fail-fast: true
+
+    steps:
+      - run: CI=false
+      - uses: actions/checkout@v2.7.0
+
+      - name: setup python
+        uses: actions/setup-python@v3.1.3
+        with:
+          python-version: ${{ matrix.python_v }}
+
+      - name: setup deps
+        run: pip install flake8 pylint pytest pytest-cov numpy scipy h5py tqdm fbpca;
+
+      - name: setup pytorch
+        if: matrix.backend == 'torch'
+        run: |
+          if [[ "${{ matrix.pytorch_v }}" == "1.13.1" ]];
+          then
+            pip install torch==${{ matrix.pytorch_v }}+cpu --extra-index-url https://download.pytorch.org/whl/cpu
+          else
+            pip install torch --index-url https://download.pytorch.org/whl/cpu
+          fi
+
+      - name: Run tests and collect coverage
+        run: |
           cd tests/;
-          pytest --backend ${{ matrix.backend }} -v ./tensor;
-          pytest --backend ${{ matrix.backend }} -v ./operators;
-          pytest --backend ${{ matrix.backend }} -v ./mps;
-          pytest --backend ${{ matrix.backend }} -v ./peps;
+          pytest --cov=yastn --cov-report=xml --backend np -v;
+          pytest --cov=yastn --cov-report=xml --backend ${{ matrix.backend }} -v --cov-append ./tensor;
+
+      - name: Upload coverage reports to Codecov with GitHub Action
+        uses: codecov/codecov-action@v4.2.0
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
