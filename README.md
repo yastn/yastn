@@ -1,6 +1,17 @@
 # YASTN - Yet Another Symmetric Tensor Network
-![Test status](https://github.com/yastn/yastn/actions/workflows/main.yml/badge.svg?branch=master)
-![Docs status](https://github.com/yastn/yastn/actions/workflows/docs.yml/badge.svg?branch=master)
+
+| **Documentation** | **Build status** | **Coverage** |
+|:-----------------:|:----------------:|:------------:|
+| [![][docs-img]][docs-url] | [![][CI-img]][ci-url] | [![][cov-img]][cov-url] |
+
+[docs-img]: https://img.shields.io/badge/doc-master-blue.svg
+[docs-url]: https://yastn.github.io/yastn/
+
+[ci-img]: https://github.com/yastn/yastn/actions/workflows/main.yml/badge.svg?branch=master
+[ci-url]: https://github.com/yastn/yastn/actions/workflows/main.yml
+
+[cov-img]: https://codecov.io/gh/yastn/yastn/branch/master/graph/badge.svg?token=J548JFRTCZ
+[cov-url]: https://codecov.io/gh/yastn/yastn
 
 <br />
 

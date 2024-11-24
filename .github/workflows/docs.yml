@@ -33,17 +33,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Setup Pages
-        uses: actions/configure-pages@v3
+        uses: actions/configure-pages@v4
 
       - name: setup python
-        uses: actions/setup-python@v3.1.3
-        with: 
+        uses: actions/setup-python@v4
+        with:
           python-version: ${{ inputs.python-version }}
 
       - name: setup deps
-        run: pip install numpy==1.26 scipy h5py tqdm sphinx pydata-sphinx-theme;
+        run: pip install numpy==1.26 scipy h5py tqdm fbpca sphinx pydata-sphinx-theme;
 
       - name: build docs
         run: |
@@ -52,10 +52,10 @@ jobs:
           # make html SPHINXOPTS="-W --keep-going -n";
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v1
+        uses: actions/upload-pages-artifact@v4
         with:
           # Upload entire repository
           path: './docs/build/html'
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v2
+        uses: actions/deploy-pages@v4
