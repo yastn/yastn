@@ -151,6 +151,8 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     policy: str
         ``"fullrank"`` or ``"lowrank"`` are allowed. Use standard full (but reduced) SVD for ``"fullrank"``.
         For ``"lowrank"``, uses randomized/truncated SVD and requires providing ``D_block`` in ``kwargs``.
+        This employs ``scipy.sparse.linalg.svds`` for numpy backend; and ``torch.svd_lowrank`` for torch backend.
+        kwargs will be passed to those functions for non-default settings.
 
     fix_signs: bool
         Whether or not to fix phases in `U` and `V`,
@@ -200,7 +202,8 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     elif not compute_uv and policy == 'fullrank':
         Sdata = a.config.backend.svdvals(data, meta, sizes[1])
     elif compute_uv and policy == 'lowrank':
-        Udata, Sdata, Vdata = a.config.backend.svd_lowrank(data, meta, sizes, **kwargs)
+        kwargs2 = {k: v for k, v in kwargs.items() if k not in ["D_block", "diagnostics"]}
+        Udata, Sdata, Vdata = a.config.backend.svd_lowrank(data, meta, sizes, **kwargs2)
     else:
         raise YastnError('svd() policy should in (`lowrank`, `fullrank`). compute_uv == False only works with `fullrank`')
 

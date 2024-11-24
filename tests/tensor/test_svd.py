@@ -231,8 +231,6 @@ def test_svd_truncate(config_kwargs):
 
 
 def test_svd_truncate_lowrank(config_kwargs):
-    if "np" in config_kwargs["backend"]:
-        pytest.importorskip("fbpca")
 
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     legs = [yastn.Leg(config_U1, s=1, t=(0, 1), D=(5, 6)),

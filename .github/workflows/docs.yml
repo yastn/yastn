@@ -43,7 +43,7 @@ jobs:
           python-version: ${{ inputs.python-version }}
 
       - name: setup deps
-        run: pip install numpy==1.26 scipy h5py tqdm fbpca sphinx pydata-sphinx-theme;
+        run: pip install numpy==1.26 scipy h5py tqdm sphinx pydata-sphinx-theme;
 
       - name: build docs
         run: |
@@ -52,7 +52,7 @@ jobs:
           # make html SPHINXOPTS="-W --keep-going -n";
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v4
+        uses: actions/upload-pages-artifact@v3
         with:
           # Upload entire repository
           path: './docs/build/html'

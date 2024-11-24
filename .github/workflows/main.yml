@@ -48,7 +48,7 @@ jobs:
           python-version: ${{ matrix.python_v }}
 
       - name: setup deps
-        run: pip install flake8 pylint pytest pytest-cov numpy scipy h5py tqdm fbpca;
+        run: pip install flake8 pylint pytest pytest-cov numpy scipy h5py tqdm;
 
       - name: static analysis flake8
         run: |
@@ -127,7 +127,7 @@ jobs:
       - name: setup deps
         run: |
           pip install numpy==${{ matrix.numpy_v }};
-          pip install flake8 pylint pytest pytest-cov scipy h5py tqdm fbpca;
+          pip install flake8 pylint pytest pytest-cov scipy h5py tqdm;
 
       - name: setup pytorch
         if: matrix.backend == 'torch'
@@ -165,7 +165,7 @@ jobs:
           python-version: ${{ matrix.python_v }}
 
       - name: setup deps
-        run: pip install flake8 pylint pytest pytest-cov numpy scipy h5py tqdm fbpca;
+        run: pip install flake8 pylint pytest pytest-cov numpy scipy h5py tqdm;
 
       - name: setup pytorch
         if: matrix.backend == 'torch'
