@@ -20,8 +20,7 @@ classifiers = [
 ]
 dependencies = [
     "numpy>=1.19.0",
-    "scipy>=1.5.0",
-    "tqdm",
+    "scipy>=1.5.0"
 ]
 dynamic = ["version"]
 
@@ -30,9 +29,10 @@ include = ["yastn*"]
 exclude = ["docs*", "tests*", "experimental*"]
 
 [project.optional-dependencies]
-io = ["h5py"]
-test = ["pytest", "pytest-cov"]
+full = ["h5py", "tqdm"]
+test = ["pytest", "pytest-cov", "pytest-randomly"]
 docbuild = ["sphinx", "sphinxcontrib-napoleon", "sphinx_rtd_theme"]
+torch = ["torch>=1.13"]
 
 [tool.setuptools.dynamic]
 version = {attr = "yastn._version.__version__"}

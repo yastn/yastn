@@ -389,8 +389,8 @@ def test_syntax_noDocs(config_kwargs):
     U, S, V = a.svd(axes=((0, 1), (2, 3)))
     U, S, V = yastn.svd_with_truncation(a, axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block=2)  # here with truncation
     try:
-        U, S, V = yastn.svd(a, axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block=2, n_iter=5, k_fac=2, policy='lowrank')
-        U, S, V = a.svd(axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block=2, n_iter=5, k_fac=2, policy='lowrank')
+        U, S, V = yastn.svd(a, axes=((0, 1), (2, 3)), D_block=2, policy='lowrank')
+        U, S, V = a.svd(axes=((0, 1), (2, 3)), D_block=2, policy='lowrank')
     except NameError:
         pass
 
