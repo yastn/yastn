@@ -202,8 +202,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     elif not compute_uv and policy == 'fullrank':
         Sdata = a.config.backend.svdvals(data, meta, sizes[1])
     elif compute_uv and policy == 'lowrank':
-        kwargs2 = {k: v for k, v in kwargs.items() if k not in ["D_block", "diagnostics"]}
-        Udata, Sdata, Vdata = a.config.backend.svd_lowrank(data, meta, sizes, **kwargs2)
+        Udata, Sdata, Vdata = a.config.backend.svd_lowrank(data, meta, sizes, **kwargs)
     else:
         raise YastnError('svd() policy should in (`lowrank`, `fullrank`). compute_uv == False only works with `fullrank`')
 

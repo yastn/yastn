@@ -15,12 +15,14 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
-    "Topic :: Scientific/Engineering",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Physics",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-    "numpy>=1.19.0",
-    "scipy>=1.5.0"
+    "numpy>=1.21.6",
+    "scipy>=1.11.4",
+    "tqdm"
 ]
 dynamic = ["version"]
 
@@ -29,7 +31,7 @@ include = ["yastn*"]
 exclude = ["docs*", "tests*", "experimental*"]
 
 [project.optional-dependencies]
-full = ["h5py", "tqdm"]
+io = ["h5py"]
 test = ["pytest", "pytest-cov", "pytest-randomly"]
 docbuild = ["sphinx", "sphinxcontrib-napoleon", "sphinx_rtd_theme"]
 torch = ["torch>=1.13"]

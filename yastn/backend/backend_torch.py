@@ -359,7 +359,7 @@ def svd_lowrank(data, meta, sizes, niter=60, **kwargs):
     Vdata = torch.zeros((sizes[2],), dtype=data.dtype, device=data.device)
     for (sl, D, slU, DU, slS, slV, DV) in meta:
         q = slS[1] - slS[0]
-        U, S, V = torch.svd_lowrank(data[slice(*sl)].view(D), q=q, niter=niter, **kwargs)
+        U, S, V = torch.svd_lowrank(data[slice(*sl)].view(D), q=q, niter=niter)
         Udata[slice(*slU)].reshape(DU)[:] = U
         Sdata[slice(*slS)] = S
         Vdata[slice(*slV)].reshape(DV)[:] = V.t().conj()

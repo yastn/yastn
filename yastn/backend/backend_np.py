@@ -284,14 +284,15 @@ def safe_svd(a):
     return U, S, V
 
 
-def svd_lowrank(data, meta, sizes, **kwargs):
+def svd_lowrank(data, meta, sizes, ncv=None, which='LM', maxiter=None, solver='arpack', **kwargs):
     Udata = np.empty((sizes[0],), dtype=data.dtype)
     Sdata = np.empty((sizes[1],), dtype=DTYPE['float64'])
     Vdata = np.empty((sizes[2],), dtype=data.dtype)
     for (sl, D, slU, DU, slS, slV, DV) in meta:
         k = slS[1] - slS[0]
         if k < min(D):
-            U, S, V = scipy.sparse.linalg.svds(data[slice(*sl)].reshape(D), k=k, **kwargs)
+            U, S, V = scipy.sparse.linalg.svds(data[slice(*sl)].reshape(D), k=k, ncv=ncv,
+                                               which=which, maxiter=maxiter, solver=solver)
         else:
             U, S, V = safe_svd(data[slice(*sl)].reshape(D))
         Udata[slice(*slU)].reshape(DU)[:] = U
