@@ -48,15 +48,15 @@ Each tensor :math:`A_{(x,y)}` in PEPS is a rank-:math:`5` tensor defined as foll
 
       # Individual tensor of the PEPS lattice
 
-                                 D_(x-1,y),(x,y)
-                                         \
-                                       ___\_____
-                                      |         |
-         A_(x,y)  =  D_(x,y-1),(x,y)--|  (x,y)  |--D_(x,y),(x,y+1)
-                                      |_________|
-                                        |      \
-                                        |       \
-                                     d_(x,y)  D_(x,y),(x+1,y)
+                                  D_(x-1,y),(x,y)
+                                         ╲
+                                          ╲
+                                       ┌───┴───┐
+         A_(x,y)  =  D_(x,y-1),(x,y) ──┤ (x,y) ├── D_(x,y),(x,y+1)
+                                       └─┬───┬─┘
+                                         |    ╲
+                                         |     ╲
+                                     d_(x,y)   D_(x,y),(x+1,y)
 
 
 The hermitian conjugate of the above tensor :math:`A_{x,y}^{\dagger}` is represented as its mirror image of the tensor structure,
@@ -66,15 +66,15 @@ with element-wise complex conjugation of each entry in :math:`A_{(x,y)}`.
 
       # Conjugate tensor in PEPS with element-wise complex conjugation
 
-                                        d_(x,y)  D_(x,y),(x+1,y)
-                                           |      /
-                                          _|_____/_
-                                         |         |
-      A_(x,y)^\dagger = D_(x,y-1),(x,y)--|  (x,y)  |--D_(x,y),(x,y+1)
-                                         |_________|
-                                             /
-                                            /
-                                        D_(x-1,y),(x,y)
+                                        d_(x,y)   D_(x,y),(x+1,y)
+                                            |     ╱
+                                            |    ╱
+                                          ┌─┴───┴─┐
+      A_(x,y)^\dagger = D_(x,y-1),(x,y) ──┤ (x,y) ├── D_(x,y),(x,y+1)
+                                          └───┬───┘
+                                             ╱
+                                            ╱
+                                     D_(x-1,y),(x,y)
 
 
 The module :code:`yastn.tn.fpeps` supports PEPS ansatz both for
@@ -86,23 +86,23 @@ A schematic diagram of PEPS with OBC is given below.
       # PEPS for 6 sites arranged in a (Lx, Ly) = (2, 3) lattice with OBC.
       # For OBC, dimensions of virtual legs on the edge of the lattice are one.
 
-           1                         1                         1
-            \                         \                         \
-          ___\_____                 ___\_____                 ___\_____
-         |         |               |         |               |         |
-      1--|  (0,0)  |-D_(0,0),(0,1)-|  (0,1)  |-D_(0,1),(0,2)-|  (0,2)  |--1
-         |_________|               |_________|               |_________|
-           |     \                   |     \                   |     \
-           |      \                  |      \                  |      \
-       d_(0,0)  D_(0,0),(1,0)    d_(0,1)  D_(0,1),(1,1)    d_(0,2)  D_(0,2),(1,2)
-                    \                         \                         \
-                  ___\_____                 ___\_____                 ___\_____
-                 |         |               |         |               |         |
-              1--|  (1,0)  |-D_(1,0),(1,1)-|  (1,1)  |-D_(1,1),(1,2)-|  (1,2)  |--1
-                 |_________|               |_________|               |_________|
-                   |     \                   |     \                   |    \
-                   |      \                  |      \                  |     \
-                d_(1,0)    1              d_(1,1)    1              d_(1,2)   1
+           1                           1                           1
+            ╲                           ╲                           ╲
+             ╲                           ╲                           ╲
+          ┌───┴───┐                   ┌───┴───┐                   ┌───┴───┐
+      1 ──┤ (0,0) ├── D_(0,0),(0,1) ──┤ (0,1) ├── D_(0,1),(0,2) ──┤ (0,2) ├── 1
+          └─┬───┬─┘                   └─┬───┬─┘                   └─┬───┬─┘
+            |    ╲                      |    ╲                      |    ╲
+            |     ╲                     |     ╲                     |     ╲
+        d_(0,0)  D_(0,0),(1,0)      d_(0,1)  D_(0,1),(1,1)      d_(0,2)  D_(0,2),(1,2)
+                    ╲                           ╲                           ╲
+                     ╲                           ╲                           ╲
+                  ┌───┴───┐                   ┌───┴───┐                   ┌───┴───┐
+              1 ──┤ (1,0) ├── D_(1,0),(1,1) ──┤ (1,1) ├── D_(1,1),(1,2) ──┤ (1,2) ├── 1
+                  └─┬───┬─┘                   └─┬───┬─┘                   └─┬───┬─┘
+                    |    ╲                      |    ╲                      |    ╲
+                    |     ╲                     |     ╲                     |     ╲
+                 d_(1,0)   1                d_(1,1)    1                d_(1,2)    1
 
 
 Fermionic anticommutation rules in PEPS
@@ -129,21 +129,21 @@ the placement of swap gates, as tensor parity invariance permits line crossings 
 
 ::
 
-             ┌────┐       ┌────┐       ┌────┐
-             │    ├───────┤    ├───────┤    │
-             └─┬─┬┘       └─┬─┬┘       └─┬─┬┘
-               |  ╲         |  ╲         |  ╲
-               | ┌─┴──┐     | ┌─┴──┐     | ┌─┴──┐
-               | │    ├─────┼─┤    ├─────┼─┤    │
-               | └─┬─┬┘     | └─┬─┬┘     | └─┬─┬┘
-      |Psi> =  |   |  ╲     |   |  ╲     |   |  ╲
-               |   | ┌─┴──┐ |   | ┌─┴──┐ |   | ┌─┴──┐
-               |   | │    ├─┼───┼─┤    ├─┼───┼─┤    │
-               |   | └─┬──┘ |   | └─┬──┘ |   | └─┬──┘
-               |   |   |    |   |   |    |   |   |
-               |   |   |    |   |   |    |   |   |
+             ┌─────┐       ┌─────┐       ┌─────┐
+             │     ├───────┤     ├───────┤     │
+             └─┬──┬┘       └─┬──┬┘       └─┬──┬┘
+               |   ╲         |   ╲         |   ╲
+               | ┌──┴──┐     | ┌──┴──┐     | ┌──┴──┐
+               | │     ├─────┼─┤     ├─────┼─┤     │
+               | └─┬──┬┘     | └─┬──┬┘     | └─┬──┬┘
+      |Psi> =  |   |   ╲     |   |   ╲     |   |   ╲
+               |   | ┌──┴──┐ |   | ┌──┴──┐ |   | ┌──┴──┐
+               |   | │     ├─┼───┼─┤     ├─┼───┼─┤     │
+               |   | └─┬───┘ |   | └─┬───┘ |   | └─┬───┘
+               |   |   |     |   |   |     |   |   |
+               |   |   |     |   |   |     |   |   |
 
-               ───────────────────────────────────ᐳ
+               ────────────────────────────────────ᐳ
                                  fermionic order
 
 In this 2D representation, physical lines are placed on one edge of each tensor, allowing for a consistent and
@@ -166,17 +166,17 @@ controls the maximum entanglement between neighboring tensors and determines dom
       # Checkerboard ansatz for iPEPS
              .               .
               .               .
-             __\____         __\____
-            |       |       |       |
-      ... --|   A   |-- D --|   B   |-- ...
-            |_______|       |_______|
-               |   \          |    \
-               |    D         |     D
-                   __\____         __\____
-                  |       |       |       |
-            ... --|   B   |-- D --|   A   |-- ...
-                  |_______|       |_______|
-                    |    \          |    \
+               ╲               ╲
+            ┌───┴───┐       ┌───┴───┐
+      ... ──┤   A   ├── D ──┤   B   ├── ...
+            └─┬───┬─┘       └─┬───┬─┘
+              |    ╲          |    ╲
+              |     D         |     D
+                     ╲               ╲
+                  ┌───┴───┐       ┌───┴───┐
+            ... ──┤   B   ├── D ──┤   A   ├── ...
+                  └─┬───┬─┘       └─┬───┬─┘
+                    |    ╲          |    ╲
                     |     .         |     .
                            .               .
 
@@ -210,21 +210,21 @@ Each gate application increases the virtual bond dimension of the PEPS tensors b
 
       # Action of a two-site gate on horizontal 1-2 bond in the PEPS.
       # Line crossing indicates application of a swap gate.
-             _______         _______
-            |       |       |       |
-            |  A_1  |-- D --|  A_2  |
-            |_______|       |_______|
-              |    \          |    \
-              |\    D        /|     D
-              ||\____\__r___/||      \
-              ||/     \     \||       \
-              |/       \     \|        \
-              |     ____\__   |     ____\__
-                   |       |       |       |
-                   |  A_3  |-- D --|  A_4  |
-                   |_______|       |_______|
-                     |               |
-                     |               |
+
+            ┌───────┐         ┌───────┐
+            |  A_1  ├─── D ───┤  A_2  |
+            └─┬───┬─┘         └─┬───┬─┘
+              |╲   ╲           ╱|    ╲
+              |╲╲   ╲         ╱╱|     ╲
+              |||├───╲── r ──┤|||      D
+              |╱╱     ╲       ╲╲|       ╲
+              |╱       D       ╲|        ╲
+              |         ╲       |         ╲
+                    ┌────┴──┐         ┌────┴──┐
+                    |  A_3  ├─── D ───┤  A_4  |
+                    └─┬─────┘         └─┬─────┘
+                      |                 |
+                      |                 |
 
 
 To keep the PEPS representation compact, each application of the gate has to be followed by
@@ -241,19 +241,18 @@ and (b) a new PEPS with the bond dimension truncated back to :math:`D`.
 
 ::
 
-      (a)                                  (b)
-       _______         _______              _______         _______
-      |       |       |       |            |       |       |       |
-      |  A_1' |-r x D-|  A_2' |            |  A_1''|-- D --|  A_2''|
-      |_______|       |_______|            |_______|       |_______|
-         |   \          |    \       ~~~     |   \           |   \
-         |    D         |     D      ~~~     |    D          |    D
-             __\____         __\____             __\____         __\____
-            |       |       |       |           |       |       |       |
-            |  A_3  |-- D --|  A_4  |           |  A_3  |-- D --|  A_4  |
-            |_______|       |_______|           |_______|       |_______|
-              |               |                    |               |
-              |               |                    |               |
+   (a)                                   (b)
+      ┌───────┐       ┌───────┐             ┌───────┐       ┌───────┐
+      |  A_1' ├─r x D─┤  A_2' |             | A_1'' ├── D ──┤ A_2'' |
+      └─┬───┬─┘       └─┬───┬─┘             └─┬───┬─┘       └─┬───┬─┘
+        |    ╲          |    ╲                |    ╲          |    ╲
+        |     D         |     D      ~~~~~    |     D         |     D
+               ╲               ╲     ─────           ╲               ╲
+           ┌────┴──┐       ┌────┴──┐             ┌────┴──┐       ┌────┴──┐
+           |  A_3  ├── D ──┤  A_4  |             |  A_3  ├── D ──┤  A_4  |
+           └─┬─────┘       └─┬─────┘             └─┬─────┘       └─┬─────┘
+             |               |                     |               |
+             |               |                     |               |
 
 
 We denote the wavefunction in (a) by :math:`\Psi(A_1',A_2')` and in (b) as :math:`\Psi(A_1'',A_2'')`.
@@ -297,23 +296,21 @@ uses only the sites directly surrounding the updated bond to calculate the metri
 
 ::
 
-                  \             \
-                  _\_____       _\_____
-                 |       |     |       |
-              ---|   B   |--D--|   A   |---
-                 |_______|     |_______|
-          \         |   \         |   \             \
-         __\____    |  __\____    |  __\____       __\____
-        |       |     ||     ||     ||     ||     |       |
-     ---|   B   |--D--||  A' ||=   =||  B' ||--D--|   A   |---
-        |_______|     ||_____||     ||_____||     |_______|
-           |   \        |   \         |   \         |   \
-           |    \       |  __\____    |  __\____    |    \
-                          |       |     |       |
-                       ---|   A   |--D--|   B   |---
-                          |_______|     |_______|
-                            |    \        |    \
-                            |     \       |     \
+                     ╲                ╲
+                  ┌───┴───┐        ┌───┴───┐
+                ──┤   B   ├────────┤   A   ├──
+                  └─┬───┬─┘        └─┬───┬─┘
+                    |    ╲           |    ╲
+            ╲             ╲                ╲             ╲
+         ┌───┴───┐     ╔═══╧═══╗        ╔═══╧═══╗     ┌───┴───┐
+       ──┤   B   ├─────╢   A'  ╠==    ==╣   B'  ╟─────┤   A   ├──
+         └─┬───┬─┘     ╚═╤═══╤═╝        ╚═╤═══╤═╝     └─┬───┬─┘
+           |    ╲        |    ╲           |    ╲        |    ╲
+                               ╲                ╲
+                            ┌───┴───┐        ┌───┴───┐
+                          ──┤   A   ├────────┤   B   ├──
+                            └─┬───┬─┘        └─┬───┬─┘
+                              |    ╲           |    ╲
 
 
 By construction, the metric tensor for the bond is always Hermitian and non-negative, ensuring numerical stability. A
