@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 """ Parent class for defining symmetry rules. """
-
+from __future__ import annotations
 import numpy as np
 
 class sym_meta(type):

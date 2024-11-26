@@ -76,11 +76,6 @@ def test_ctmrg_Ising(config_kwargs):
     Use CTMRG to calculate some expectation values in classical 2D Ising model.
     Compare with analytical results.
 
-    We enforce the Z2 symmetry of the model,
-    which prevents spontaneous symmetry breaking in the ordered phase.
-    To that end, we consider Hamiltonian :math:`H = - \sum_{\langle i, j \rangle} X_i X_j`,
-    where :math:`X_i` is the first Pauli matrix operating at the site :math:`i`, and the sum
-    is over the nearest neighbor sites :math:`\langle i, j \rangle` on a square lattice.
     """
     #
     # We start by representing the partition function

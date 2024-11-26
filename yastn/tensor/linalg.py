@@ -151,6 +151,8 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     policy: str
         ``"fullrank"`` or ``"lowrank"`` are allowed. Use standard full (but reduced) SVD for ``"fullrank"``.
         For ``"lowrank"``, uses randomized/truncated SVD and requires providing ``D_block`` in ``kwargs``.
+        This employs ``scipy.sparse.linalg.svds`` for numpy backend; and ``torch.svd_lowrank`` for torch backend.
+        kwargs will be passed to those functions for non-default settings.
 
     fix_signs: bool
         Whether or not to fix phases in `U` and `V`,

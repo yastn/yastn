@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "yastn"
+description = "YASTN - Yet Another Symmetric Tensor Network"
+authors = [{name = "The YASTN Authors"},]
+maintainers = [{name = "Marek Rams", email = "marek.rams@uj.edu.pl"},
+               {name = "Juraj Hasik", email = "juraj.hasik.sk@gmail.com"},]
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "Apache License 2.0"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "numpy>=1.21.6",
+    "scipy>=1.11.4",
+    "tqdm"
+]
+dynamic = ["version"]
+
+[tool.setuptools.packages.find]
+include = ["yastn*"]
+exclude = ["docs*", "tests*", "experimental*"]
+
+[project.optional-dependencies]
+io = ["h5py"]
+test = ["pytest", "pytest-cov", "pytest-randomly"]
+docbuild = ["sphinx", "sphinxcontrib-napoleon", "sphinx_rtd_theme"]
+torch = ["torch>=1.13"]
+
+[tool.setuptools.dynamic]
+version = {attr = "yastn._version.__version__"}
+
+[project.urls]
+Homepage = "https://github.com/yastn/yastn"
+Documentation = "https://yastn.github.io/yastn/"
+Repository = "https://github.com/yastn/yastn"
+Issues = "https://github.com/yastn/yastn/issues"

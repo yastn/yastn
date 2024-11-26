@@ -18,7 +18,10 @@ import pytest
 import yastn
 import yastn.tn.mps as mps
 
-from tests.mps.test_generate_mpo import mpo_hopping_Hterm
+try:
+    from test_generate_mpo import mpo_hopping_Hterm
+except ModuleNotFoundError:
+    from .test_generate_mpo import mpo_hopping_Hterm
 
 
 @pytest.mark.parametrize('sym', ['U1', 'Z2'])

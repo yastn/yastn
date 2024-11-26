@@ -350,7 +350,7 @@ def bitwise_not(data):
     return torch.bitwise_not(data)
 
 
-def svd_lowrank(data, meta, sizes, n_iter=60, k_fac=6, **kwargs):
+def svd_lowrank(data, meta, sizes, niter=60, **kwargs):
     # torch.svd_lowrank decomposes A = USV^T and return U,S,V
     # complex A is not supported
     real_dtype = data.real.dtype if data.is_complex() else data.dtype
@@ -359,7 +359,7 @@ def svd_lowrank(data, meta, sizes, n_iter=60, k_fac=6, **kwargs):
     Vdata = torch.zeros((sizes[2],), dtype=data.dtype, device=data.device)
     for (sl, D, slU, DU, slS, slV, DV) in meta:
         q = slS[1] - slS[0]
-        U, S, V = torch.svd_lowrank(data[slice(*sl)].view(D), q=q, niter=n_iter)
+        U, S, V = torch.svd_lowrank(data[slice(*sl)].view(D), q=q, niter=niter)
         Udata[slice(*slU)].reshape(DU)[:] = U
         Sdata[slice(*slS)] = S
         Vdata[slice(*slV)].reshape(DV)[:] = V.t().conj()

@@ -33,26 +33,25 @@ jobs:
   test-basic:
     runs-on: ubuntu-latest
     strategy:
-      matrix:
-        backend: [ np ]
-        python_v: ['3.9']
       fail-fast: true
 
     steps:
       - run: CI=false
-      - uses: actions/checkout@v2.7.0
+      - uses: actions/checkout@v4
 
       - name: setup python
-        uses: actions/setup-python@v3.1.3
+        uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python_v }}
+          python-version: "3.12"
 
       - name: setup deps
-        run: pip install flake8 pylint pytest pytest-cov numpy scipy h5py tqdm fbpca;
+        run: |
+            pip install .[test];
+            pip install flake8 pylint;
 
       - name: static analysis flake8
         run: |
-            flake8 . --count --select=E9,F63,F7,F82 --ignore=F821  --show-source --statistics;
+            flake8 . --count --select=E9,F63,F7,F82 --ignore=F821 --show-source --statistics;
             flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics;
 
       - name: static analysis py_lint
@@ -62,7 +61,7 @@ jobs:
       # Run tests
       - name: tests
         run: |
-          pytest --backend ${{ matrix.backend }} -v;
+          pytest -v;
 
   deploy-docs:
     if: contains(fromJson('["refs/heads/master","refs/heads/docs"]'), github.ref)
@@ -72,7 +71,7 @@ jobs:
       id-token: write
     uses: ./.github/workflows/docs.yml
     with:
-      python-version: '3.9'
+      python-version: '3.12'
 
   # run matrix of tests for python and torch versions
   test-full:
@@ -85,26 +84,27 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        backend: [ np, torch ]
-        python_v: ['3.9', '3.11']
-        pytorch_v: [ 'none', '1.13.1', '2.0' ]
-        numpy_v: [ '1.26', '2.0' ]
-        exclude:
+        include:
           - backend: np
             python_v: '3.9'
-            numpy_v: '2.0'
-          - backend: np
-            pytorch_v: '1.13.1'
-          - backend: np
-            pytorch_v: '2.0'
-          - backend: torch
-            pytorch_v: 'none'
+            numpy_v: '1.21.6'
+            scipy_v: '1.11.4'
+            torch_v: 'none'
           - backend: torch
             python_v: '3.9'
-            pytorch_v: '1.13.1'
+            numpy_v: '1.26.4'
+            scipy_v: '1.13.1'
+            torch_v: '1.13.1'
           - backend: torch
-            pytorch_v: '1.13.1'
-            numpy_v: '2.0'
+            python_v: '3.11'
+            numpy_v: '1.26'
+            scipy_v: '1.14'
+            torch_v: '2.1'
+          - backend: torch
+            python_v: '3.12'
+            numpy_v: '2.0.1'
+            scipy_v: '1.14.1'
+            torch_v: '2.4'
       fail-fast: false
 
     # Steps represent a sequence of tasks that will be executed as part of the job
@@ -112,7 +112,7 @@ jobs:
       - run: CI=false
 
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v2.7.0
+      - uses: actions/checkout@v4
 
       # Runs a single command using the runners shell
       # - name: Run a one-line script
@@ -120,23 +120,24 @@ jobs:
 
       # Runs a set of commands using the runners shell
       - name: setup python
-        uses: actions/setup-python@v3.1.3
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python_v }}
 
       - name: setup deps
         run: |
           pip install numpy==${{ matrix.numpy_v }};
-          pip install flake8 pylint pytest pytest-cov scipy h5py tqdm fbpca;
+          pip install scipy==${{ matrix.scipy_v }};
+          pip install .[io,test]
 
       - name: setup pytorch
         if: matrix.backend == 'torch'
         run: |
-          if [[ "${{ matrix.pytorch_v }}" == "1.13.1" ]];
+          if [[ "${{ matrix.torch_v }}" == "1.13.1" ]];
           then
-            pip install torch==${{ matrix.pytorch_v }}+cpu --extra-index-url https://download.pytorch.org/whl/cpu
+            pip install torch==${{ matrix.torch_v }}+cpu --extra-index-url https://download.pytorch.org/whl/cpu
           else
-            pip install torch --index-url https://download.pytorch.org/whl/cpu
+            pip install torch==${{ matrix.torch_v }} --index-url https://download.pytorch.org/whl/cpu
           fi
 
       # Run tests
@@ -150,38 +151,33 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        backend: [ torch ]
-        python_v: ['3.9']
-        pytorch_v: ['2.0']
+        include:
+          - python_v: '3.12'
+            numpy_v: '1.26'
+            scipy_v: '1.14'
+            torch_v: '2.4'
       fail-fast: true
 
     steps:
       - run: CI=false
-      - uses: actions/checkout@v2.7.0
+      - uses: actions/checkout@v4
 
       - name: setup python
-        uses: actions/setup-python@v3.1.3
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python_v }}
 
       - name: setup deps
-        run: pip install flake8 pylint pytest pytest-cov numpy scipy h5py tqdm fbpca;
-
-      - name: setup pytorch
-        if: matrix.backend == 'torch'
         run: |
-          if [[ "${{ matrix.pytorch_v }}" == "1.13.1" ]];
-          then
-            pip install torch==${{ matrix.pytorch_v }}+cpu --extra-index-url https://download.pytorch.org/whl/cpu
-          else
-            pip install torch --index-url https://download.pytorch.org/whl/cpu
-          fi
+          pip install numpy==${{ matrix.numpy_v }};
+          pip install scipy==${{ matrix.scipy_v }};
+          pip install torch==${{ matrix.torch_v }}$ --index-url https://download.pytorch.org/whl/cpu
+          pip install .[io,test]
 
       - name: Run tests and collect coverage
         run: |
-          cd tests/;
           pytest --cov=yastn --cov-report=xml --backend np -v;
-          pytest --cov=yastn --cov-report=xml --backend ${{ matrix.backend }} -v --cov-append ./tensor;
+          pytest --cov=yastn --cov-report=xml --backend torch -v --cov-append ./tests/tensor;
 
       - name: Upload coverage reports to Codecov with GitHub Action
         uses: codecov/codecov-action@v4.2.0

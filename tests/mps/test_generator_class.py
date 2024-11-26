@@ -19,8 +19,12 @@ import yastn.tn.mps as mps
 
 from yastn.tn.mps._latex2term import splitt, interpret, string2list, latex2term, single_term
 
-from tests.mps.test_build_mpo_manually import mpo_nn_hopping_manually
-from tests.mps.test_generate_mpo import mpo_hopping_Hterm
+try:
+    from test_build_mpo_manually import mpo_nn_hopping_manually
+    from test_generate_mpo import mpo_hopping_Hterm
+except ModuleNotFoundError:
+    from .test_build_mpo_manually import mpo_nn_hopping_manually
+    from .test_generate_mpo import mpo_hopping_Hterm
 
 
 def mpo_nn_hopping_latex(config_kwargs, sym='U1', N=9, t=1, mu=1):

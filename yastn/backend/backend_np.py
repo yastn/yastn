@@ -18,10 +18,7 @@ from functools import reduce
 import warnings
 import numpy as np
 import scipy.linalg
-try:
-    import fbpca
-except ModuleNotFoundError:  # pragma: no cover
-    warnings.warn("fbpca not available", Warning)
+import scipy.sparse.linalg
 
 # non-deterministic initialization of random number generator
 rng = {'rng': np.random.default_rng(None)}  # initialize random number generator
@@ -279,13 +276,25 @@ def bitwise_not(data):
     return np.bitwise_not(data)
 
 
-def svd_lowrank(data, meta, sizes, n_iter=60, k_fac=6, **kwargs):
+def safe_svd(a):
+    try:
+        U, S, V = scipy.linalg.svd(a, full_matrices=False)
+    except scipy.linalg.LinAlgError:  # pragma: no cover
+        U, S, V = scipy.linalg.svd(a, full_matrices=False, lapack_driver='gesvd')
+    return U, S, V
+
+
+def svd_lowrank(data, meta, sizes, ncv=None, which='LM', maxiter=None, solver='arpack', **kwargs):
     Udata = np.empty((sizes[0],), dtype=data.dtype)
     Sdata = np.empty((sizes[1],), dtype=DTYPE['float64'])
     Vdata = np.empty((sizes[2],), dtype=data.dtype)
     for (sl, D, slU, DU, slS, slV, DV) in meta:
         k = slS[1] - slS[0]
-        U, S, V = fbpca.pca(data[slice(*sl)].reshape(D), k=k, raw=True, n_iter=n_iter, l=k_fac * k)
+        if k < min(D):
+            U, S, V = scipy.sparse.linalg.svds(data[slice(*sl)].reshape(D), k=k, ncv=ncv,
+                                               which=which, maxiter=maxiter, solver=solver)
+        else:
+            U, S, V = safe_svd(data[slice(*sl)].reshape(D))
         Udata[slice(*slU)].reshape(DU)[:] = U
         Sdata[slice(*slS)] = S
         Vdata[slice(*slV)].reshape(DV)[:] = V
@@ -297,10 +306,7 @@ def svd(data, meta, sizes, **kwargs):
     Sdata = np.empty((sizes[1],), dtype=DTYPE['float64'])
     Vdata = np.empty((sizes[2],), dtype=data.dtype)
     for (sl, D, slU, DU, slS, slV, DV) in meta:
-        try:
-            U, S, V = scipy.linalg.svd(data[slice(*sl)].reshape(D), full_matrices=False)
-        except scipy.linalg.LinAlgError:  # pragma: no cover
-            U, S, V = scipy.linalg.svd(data[slice(*sl)].reshape(D), full_matrices=False, lapack_driver='gesvd')
+        U, S, V = safe_svd(data[slice(*sl)].reshape(D))
         Udata[slice(*slU)].reshape(DU)[:] = U
         Sdata[slice(*slS)] = S
         Vdata[slice(*slV)].reshape(DV)[:] = V
