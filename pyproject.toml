@@ -33,7 +33,7 @@ exclude = ["docs*", "tests*", "experimental*"]
 [project.optional-dependencies]
 io = ["h5py"]
 test = ["pytest", "pytest-cov", "pytest-randomly"]
-docbuild = ["sphinx", "sphinxcontrib-napoleon", "sphinx_rtd_theme"]
+docbuild = ["sphinx", "sphinxcontrib-napoleon", "pydata-sphinx-theme"]
 torch = ["torch>=1.13"]
 
 [tool.setuptools.dynamic]

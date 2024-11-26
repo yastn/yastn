@@ -171,7 +171,7 @@ jobs:
         run: |
           pip install numpy==${{ matrix.numpy_v }};
           pip install scipy==${{ matrix.scipy_v }};
-          pip install torch==${{ matrix.torch_v }}$ --index-url https://download.pytorch.org/whl/cpu
+          pip install torch==${{ matrix.torch_v }} --index-url https://download.pytorch.org/whl/cpu;
           pip install .[io,test]
 
       - name: Run tests and collect coverage
