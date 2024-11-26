@@ -33,9 +33,6 @@ jobs:
   test-basic:
     runs-on: ubuntu-latest
     strategy:
-      matrix:
-        backend: [ np ]
-        python_v: ['3.12']
       fail-fast: true
 
     steps:
@@ -45,13 +42,11 @@ jobs:
       - name: setup python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python_v }}
+          python-version: "3.12"
 
       - name: setup deps
         run: |
-            pip install numpy==1.26.4;
-            pip install scipy==1.14.1;
-            pip install .[test,io];
+            pip install .[test];
             pip install flake8 pylint;
 
       - name: static analysis flake8
@@ -66,7 +61,7 @@ jobs:
       # Run tests
       - name: tests
         run: |
-          pytest --backend ${{ matrix.backend }} -v;
+          pytest -v;
 
   deploy-docs:
     if: contains(fromJson('["refs/heads/master","refs/heads/docs"]'), github.ref)
@@ -76,7 +71,7 @@ jobs:
       id-token: write
     uses: ./.github/workflows/docs.yml
     with:
-      python-version: '3.9'
+      python-version: '3.12'
 
   # run matrix of tests for python and torch versions
   test-full:
@@ -95,15 +90,10 @@ jobs:
             numpy_v: '1.21.6'
             scipy_v: '1.11.4'
             torch_v: 'none'
-          - backend: np
-            python_v: '3.13'
-            numpy_v: '2.1'
-            scipy_v: '1.14'
-            torch_v: 'none'
           - backend: torch
             python_v: '3.9'
-            numpy_v: '1.26'
-            scipy_v: '1.14'
+            numpy_v: '1.26.4'
+            scipy_v: '1.13.1'
             torch_v: '1.13.1'
           - backend: torch
             python_v: '3.11'
@@ -111,10 +101,10 @@ jobs:
             scipy_v: '1.14'
             torch_v: '2.1'
           - backend: torch
-            python_v: '3.13'
-            numpy_v: '2.1'
-            scipy_v: '1.14'
-            torch_v: '2.5'
+            python_v: '3.12'
+            numpy_v: '2.0.1'
+            scipy_v: '1.14.1'
+            torch_v: '2.4'
       fail-fast: false
 
     # Steps represent a sequence of tasks that will be executed as part of the job
@@ -147,7 +137,7 @@ jobs:
           then
             pip install torch==${{ matrix.torch_v }}+cpu --extra-index-url https://download.pytorch.org/whl/cpu
           else
-            pip install torch --index-url https://download.pytorch.org/whl/cpu
+            pip install torch==${{ matrix.torch_v }} --index-url https://download.pytorch.org/whl/cpu
           fi
 
       # Run tests
@@ -181,16 +171,8 @@ jobs:
         run: |
           pip install numpy==${{ matrix.numpy_v }};
           pip install scipy==${{ matrix.scipy_v }};
+          pip install torch==${{ matrix.torch_v }}$ --index-url https://download.pytorch.org/whl/cpu
           pip install .[io,test]
-
-      - name: setup pytorch
-        run: |
-          if [[ "${{ matrix.torch_v }}" == "1.13.1" ]];
-          then
-            pip install torch==${{ matrix.torch_v }}+cpu --extra-index-url https://download.pytorch.org/whl/cpu
-          else
-            pip install torch --index-url https://download.pytorch.org/whl/cpu
-          fi
 
       - name: Run tests and collect coverage
         run: |
