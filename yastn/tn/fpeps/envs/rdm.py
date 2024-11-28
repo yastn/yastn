@@ -1,6 +1,7 @@
 from .... import ncon
 from .. import Site, Peps, Peps2Layers, EnvCTM
 from .... import Tensor
+import numpy as np
 from typing import Sequence, Union, TypeVar
 import logging
 log = logging.getLogger(__name__)
@@ -563,32 +564,30 @@ def measure_rdm_2x2(s0 : Site, psi : Peps, env : EnvCTM, op : Union[Sequence[Ten
     return [ _eval_op(*tuple(_op)) for _op in op ]
 
 
-def test_1site(psi, env, op):
+def _test_1site(psi, env, op, rtol=1e-8, atol=1e-8):
     for s0 in psi.sites():
         val0 = measure_rdm_1site(s0, psi, env, op)
         val1 = env.measure_1site(op, s0)
         print(s0, val0.item(), val1.item())
-        assert np.isclose(val0, val1)
+        assert np.isclose(val0, val1, rtol=rtol, atol=atol)
 
-
-def test_nn(psi, env, op0, op1):
+def _test_nn(psi, env, op0, op1, rtol=1e-8, atol=1e-8):
     for s0 in psi.sites():
         val0 = measure_rdm_nn(s0, "h", psi, env, op0, op1)
         s1 = psi.nn_site(s0, "r")
         bond = (s0, s1)
         val1 = env.measure_nn(op0, op1, bond)
         print(s0, val0.item(), val1.item())
-        assert torch.isclose(val0, val1)
+        assert np.isclose(val0, val1, rtol=rtol, atol=atol)
 
         val0 = measure_rdm_nn(s0, "v", psi, env, op0, op1)
         s1 = psi.nn_site(s0, "b")
         bond = (s0, s1)
         val1 = env.measure_nn(op0, op1, bond)
         print(s0, val0.item(), val1.item())
-        assert torch.isclose(val0, val1)
+        assert np.isclose(val0, val1, rtol=rtol, atol=atol)
 
-
-def test_2x2(psi, env, op_list):
+def _test_2x2(psi, env, op_list, rtol=1e-8, atol=1e-8):
     for s0 in psi.sites():
         val0 = measure_rdm_2x2(s0, psi, env, op_list)
 
@@ -597,4 +596,4 @@ def test_2x2(psi, env, op_list):
         s3 = psi.nn_site(s2, "r")
         sites = [s0, s1, s2, s3]
         val1 = env.measure_2x2(*op_list, sites=sites)
-        assert torch.isclose(val0, val1)
+        assert np.isclose(val0, val1, rtol=rtol, atol=atol)
