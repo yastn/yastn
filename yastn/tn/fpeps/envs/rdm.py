@@ -197,17 +197,24 @@ def op_order(Oi, Oj, ordered, fermionic=True):
     """
 
     if not ordered:
+        # if fermionic:
+        #     Oi, Oj = -Oj, Oi
+        # else:
+        #     Oi, Oj = Oj, Oi
+
         if fermionic:
-            Oi, Oj = -Oj, Oi
-        else:
-            Oi, Oj = Oj, Oi
+            Oi, Oj = -Oi, Oj
 
     # Add an auxiliary leg such that the total charges of Oi and Oj are zero, respectively
     Oi = Oi.add_leg(s=1)
     Oj = Oj.add_leg(s=-1)
 
     Oi = Oi.swap_gate(axes=(1, 2))
-    # Oi = Oi.swap_gate(axes=(0, 2))
+     #    |        
+     #  --+-----   |
+     # |  |    |   |
+     # |--Oi   ---Oj
+     #    |       |
 
     return Oi, Oj
 
@@ -239,11 +246,7 @@ def rdm1x1(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scala
 
     rdm = res.unfuse_legs(axes=(0,))  # s s'
 
-    # check if a dummy leg is fused with the physical leg
-    # i) physical leg is fused and ii) its fusion of two legs and iii) the second leg has dimension 1
-    if rdm.get_legs(0).is_fused() and len(rdm.get_legs(0).unfuse_leg())==2 and sum(rdm.get_legs(0).unfuse_leg()[-1].D)==1:
-        rdm = rdm.unfuse_legs(axes=(0, 1))  # p d p' d'
-        rdm = rdm.trace(axes=(1, 3))  # p p'
+    rdm = trace_aux(rdm, 0, swap=False)
 
     # assert rdm.ndim == 2
     rdm, rdm_norm = _normalize_and_regularize_rdm(rdm, who=rdm1x1.__name__)
@@ -375,8 +378,8 @@ def rdm2x2(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scala
     with `s0` the upper-left Site, to reduced density matrix::
         
         C T  T  C
-        T s0 s1 T 
-        T s2 s3 T    
+        T s0 s2 T 
+        T s1 s3 T    
         C T  T  C
         
     The index convention for reduced density matrix is `[s0, s0', ..., s3, s3']`,
@@ -440,18 +443,20 @@ def rdm2x2(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scala
 
     res = tmp0.tensordot(
         tmp1, axes=((2, 3), (0, 1))
-    )  # x0 [b0 b0'] [s0 s0'] y1 [b1 b1'] [s1 s1']
+    )  # x0 [b0 b0'] [s0 s0'] y1 [b1 b1'] [s2 s2']
     res = res.tensordot(
         tmp2, axes=((0, 1), (2, 3))
-    )  # [s0 s0'] y1 [b1 b1'] [s1 s1'] x2 [r2 r2'] [s2 s2']
+    )  # [s0 s0'] y1 [b1 b1'] [s2 s2'] x2 [r2 r2'] [s1 s1']
     res = res.tensordot(
         tmp3, axes=((1, 2, 4, 5), (0, 1, 2, 3))
-    )  # [s0 s0'] [s1 s1'] [s2 s2'] [s3 s3']
-    rdm = res.unfuse_legs(axes=(0, 1, 2, 3))  # s0 s0' s1 s1' s2 s2' s3 s3'
+    )  # [s0 s0'] [s2 s2'] [s1 s1'] [s3 s3']
+    rdm = res.unfuse_legs(axes=(0, 1, 2, 3))  # s0 s0' s2 s2' s1 s1' s3 s3'
     rdm = trace_aux(rdm, 0, swap=True)
     rdm = trace_aux(rdm, 2, swap=False)
     rdm = trace_aux(rdm, 4, swap=True)
     rdm = trace_aux(rdm, 6, swap=False)
+
+    rdm = rdm.transpose(axes=(0, 1, 4, 5, 2, 3, 6, 7)) # s0 s0' s1 s1' s2 s2' s3 s3'
     rdm, rdm_norm= _normalize_and_regularize_rdm(rdm, who=rdm2x2.__name__)
 
     return rdm, rdm_norm
@@ -537,8 +542,8 @@ def rdm2x2_anti_diagonal(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple
     with `s0` the upper-left Site, to reduced density matrix::
         
         C T  T  C
-        T x  s1 T 
-        T s2 x  T    
+        T x  s2 T 
+        T s1 x  T    
         C T  T  C
         
     The index convention for reduced density matrix is `[s1, s1', s2, s2']`,
@@ -577,29 +582,31 @@ def rdm2x2_anti_diagonal(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple
     tmp1 = tmp1.swap_gate(axes=(2, (6, 7)))  # l' X s s'
     tmp1 = tmp1.fuse_legs(
         axes=(0, (1, 2), 3, (4, 5), (6, 7))
-    )  # x [l l'] y [b b'] [s1 s1']
+    )  # x [l l'] y [b b'] [s2 s2']
 
     tmp2 = _append_vec_bl_open(ten2.bra, ten2.ket, vecbl)  # x [r r'] y [t t'] [s s']
     tmp2 = tmp2.unfuse_legs(axes=(1, 3, 4))  # x r r' y t t' s s'
     tmp2 = tmp2.swap_gate(axes=(1, (6, 7)))  # r X s s'
     tmp2 = tmp2.fuse_legs(
         axes=(0, (1, 2), 3, (4, 5), (6, 7))
-    )  # x [r r'] y [t t'] [s2 s2']
+    )  # x [r r'] y [t t'] [s1 s1']
 
     tmp3 = append_vec_br(ten3.bra, ten3.ket, vecbr)  # x [t t'] y [l l']
 
     res1 = tmp0.tensordot(
         tmp1, axes=((2, 3), (0, 1))
-    )  # x0 [b0 b0'] y1 [b1 b1'] [s1 s1']
+    )  # x0 [b0 b0'] y1 [b1 b1'] [s2 s2']
     res2 = tmp2.tensordot(
         tmp3, axes=((0, 1), (2, 3))
-        ) # y2 [t t'] [s2 s2'] x3 [t t']
+        ) # y2 [t t'] [s1 s1'] x3 [t t']
 
-    res = res1.tensordot(res2, axes=((0, 1, 2, 3), (0, 1, 3, 4))) # [s1 s1'] [s2 s2']
+    res = res1.tensordot(res2, axes=((0, 1, 2, 3), (0, 1, 3, 4))) # [s2 s2'] [s1 s1']
 
-    rdm = res.unfuse_legs(axes=(0, 1))  # s1 s1' s2 s2'
+    rdm = res.unfuse_legs(axes=(0, 1))  # s2 s2' s1 s1'
     rdm = trace_aux(rdm, 0, swap=False)
     rdm = trace_aux(rdm, 2, swap=True)
+
+    rdm = rdm.transpose(axes=(2, 3, 0, 1)) # s1 s1' s2 s2'
     rdm, rdm_norm= _normalize_and_regularize_rdm(rdm, who=rdm2x2_anti_diagonal.__name__)
 
     return rdm, rdm_norm
