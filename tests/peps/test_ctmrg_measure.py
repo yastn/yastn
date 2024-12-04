@@ -61,7 +61,7 @@ def test_ctmrg_measure_product(boundary):
             assert abs( val - ezz[(s0, psi.nn_site(s0, "r" if dirn=="h" else "b"))] )<tol
 
     s_list= [ [((0, 1), (1, 0)), ((0,0),(I, sz, sz, I))], 
-        [((2, 1), (2, 2)), ((2,1),(sz,sz,I,I))], [((1, 1), (2, 1)), ((1,1),(sz,I,sz,I)) ],
+        [((2, 1), (2, 2)), ((2,1),(sz,I,sz,I))], [((1, 1), (2, 1)), ((1,1),(sz,sz,I,I)) ],
     ]
     for s_elem in s_list:
         s1,s2= s_elem[0]
