@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools>=64", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -36,8 +36,8 @@ test = ["pytest", "pytest-cov", "pytest-randomly"]
 docbuild = ["sphinx", "sphinxcontrib-napoleon", "pydata-sphinx-theme"]
 torch = ["torch>=1.13"]
 
-[tool.setuptools.dynamic]
-version = {attr = "yastn._version.__version__"}
+[tool.setuptools_scm]
+write_to = "yastn/_version.py"
 
 [project.urls]
 Homepage = "https://github.com/yastn/yastn"
