@@ -39,7 +39,7 @@ class DMRG_out(NamedTuple):
 
 def dmrg_(psi, H, project=None, method='1site',
         energy_tol=None, Schmidt_tol=None, max_sweeps=1, iterator_step=None,
-        opts_eigs=None, opts_svd=None):
+        opts_eigs=None, opts_svd=None, precompute=True):
     r"""
     Perform DMRG sweeps until convergence, starting from MPS :code:`psi`.
 
@@ -111,13 +111,13 @@ def dmrg_(psi, H, project=None, method='1site',
     """
     tmp = _dmrg_(psi, H, project, method,
                 energy_tol, Schmidt_tol, max_sweeps, iterator_step,
-                opts_eigs, opts_svd)
+                opts_eigs, opts_svd, precompute)
     return tmp if iterator_step else next(tmp)
 
 
 def _dmrg_(psi, H : MpsMpoOBC | Sequence[tuple[MpsMpoOBC, float]], project, method,
         energy_tol, Schmidt_tol, max_sweeps, iterator_step,
-        opts_eigs, opts_svd):
+        opts_eigs, opts_svd, precompute):
     """ Generator for dmrg_(). """
 
     if not psi.is_canonical(to='first'):
@@ -157,10 +157,10 @@ def _dmrg_(psi, H : MpsMpoOBC | Sequence[tuple[MpsMpoOBC, float]], project, meth
 
     for sweep in range(1, max_sweeps + 1):
         if method == '1site':
-            _dmrg_sweep_1site_(env, opts_eigs=opts_eigs, Schmidt=Schmidt)
+            _dmrg_sweep_1site_(env, opts_eigs=opts_eigs, Schmidt=Schmidt, precompute=precompute)
         else: # method == '2site':
             max_dw = _dmrg_sweep_2site_(env, opts_eigs=opts_eigs,
-                                        opts_svd=opts_svd, Schmidt=Schmidt)
+                                        opts_svd=opts_svd, Schmidt=Schmidt, precompute=precompute)
 
         E = env.measure().item().real
         dE, E_old = abs(E_old - E), E
@@ -183,7 +183,7 @@ def _dmrg_(psi, H : MpsMpoOBC | Sequence[tuple[MpsMpoOBC, float]], project, meth
     yield DMRG_out(sweep, E, dE, max_dS, max_dw)
 
 
-def _dmrg_sweep_1site_(env, opts_eigs=None, Schmidt=None):
+def _dmrg_sweep_1site_(env, opts_eigs=None, Schmidt=None, precompute=True):
     r"""
     Perform sweep with 1-site DMRG, see :meth:`dmrg` for description.
 
@@ -195,7 +195,11 @@ def _dmrg_sweep_1site_(env, opts_eigs=None, Schmidt=None):
     psi = env.bra
     for to in ('last', 'first'):
         for n in psi.sweep(to=to):
-            _, (psi.A[n],) = eigs(lambda x: env.Heff1(x, n), psi.A[n], k=1, **opts_eigs)
+            if precompute:
+                pass
+            _, (A,) = eigs(lambda x: env.Heff1(x, n), psi.A[n], k=1, **opts_eigs)
+
+            psi.A[n] = A
             psi.orthogonalize_site_(n, to=to, normalize=True)
             if Schmidt is not None and to == 'first' and n != psi.first:
                 Schmidt[psi.pC] = psi[psi.pC].svd(sU=1, compute_uv=False)
@@ -204,7 +208,7 @@ def _dmrg_sweep_1site_(env, opts_eigs=None, Schmidt=None):
             env.update_env_(n, to=to)
 
 
-def _dmrg_sweep_2site_(env, opts_eigs=None, opts_svd=None, Schmidt=None):
+def _dmrg_sweep_2site_(env, opts_eigs=None, opts_svd=None, Schmidt=None, precompute=True):
     r"""
     Perform sweep with 2-site DMRG, see :meth:`dmrg` for description.
 
@@ -220,7 +224,14 @@ def _dmrg_sweep_2site_(env, opts_eigs=None, opts_svd=None, Schmidt=None):
         for n in psi.sweep(to=to, dl=1):
             bd = (n, n + 1)
             AA = psi.merge_two_sites(bd)
-            _, (AA,) = eigs(lambda v: env.Heff2(v, bd), AA, k=1, **opts_eigs)
+            if precompute:
+                env.precompute_temp(n, to='last')
+                env.precompute_temp(n + 1, to='first')
+                AA = AA.fuse_legs(axes=((0, 1), (2, 3)))
+            _, (AA,) = eigs(lambda v: env.Heff2(v, bd, precompute=precompute), AA, k=1, **opts_eigs)
+            if precompute:
+                AA = AA.unfuse_legs(axes=(0, 1))
+                env.clear_temp()
             _disc_weight_bd = psi.unmerge_two_sites_(AA, bd, opts_svd)
             max_disc_weight = max(max_disc_weight, _disc_weight_bd)
             if Schmidt is not None and to == 'first':

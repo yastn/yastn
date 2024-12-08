@@ -183,7 +183,7 @@ class EnvParent(metaclass=abc.ABCMeta):
         return self.Heff1(self.ket[n], n) * self.ket.factor
 
     @abc.abstractmethod
-    def Heff2(self, AA, bd) -> yastn.Tensor:
+    def Heff2(self, AA, bd, **kwargs) -> yastn.Tensor:
         r"""
         Action of Heff on central block :code:`Heff2 @ AA`.
 
@@ -291,10 +291,10 @@ class Env_sum(EnvParent):
             tmp = tmp + env.project_ket_on_bra_1(n)
         return tmp
 
-    def Heff2(self, AA, bd):
-        tmp = self.envs[0].Heff2(AA, bd)
+    def Heff2(self, AA, bd, **kwargs):
+        tmp = self.envs[0].Heff2(AA, bd, **kwargs)
         for env in self.envs[1:]:
-            tmp = tmp + env.Heff2(AA, bd)
+            tmp = tmp + env.Heff2(AA, bd, **kwargs)
         return tmp
 
     def project_ket_on_bra_2(self, bd):
@@ -305,6 +305,14 @@ class Env_sum(EnvParent):
 
     def charges_missing(self, n):
         return any(env.charges_missing(n) for env in self.envs)
+
+    def precompute_temp(self, n, to):
+        for env in self.envs:
+            env.precompute_temp(n, to)
+
+    def clear_temp(self):
+        for env in self.envs:
+            env.clear_temp()
 
 
 class Env2(EnvParent):
@@ -353,7 +361,7 @@ class Env2(EnvParent):
         inds = ((-0, 1), (1, -1, 2), (2, -2)) if self.nr_phys == 1 else ((-0, 1), (1, -1, 2, -3), (2, -2))
         return ncon([self.F[(n - 1, n)], x, self.F[(n + 1, n)]], inds)
 
-    def Heff2(self, AA, bd):
+    def Heff2(self, AA, bd, **kwargs):
         """ Heff2 @ AA """
         n1, n2 = bd
         axes = (0, (1, 2), 3) if AA.ndim == 4 else (0, (1, 2, 3, 5), 4)
@@ -400,11 +408,20 @@ class Env_project(Env2):
         pp = super().Heff1(self.ket[n], n)
         return  pp * (self.penalty * vdot(pp, x))
 
-    def Heff2(self, AA, bd):
+    def Heff2(self, AA, bd, precompute=False):
         """ Heff2 @ AA """
         pp = self.ket.merge_two_sites(bd)
         pp = super().Heff2(pp, bd)
+        if precompute:
+            pp = pp.fuse_legs(axes=((0, 1), (2, 3)))
         return pp * (self.penalty * vdot(pp, AA))
+
+    def precompute_temp(self, n, to):
+        pass
+
+    def clear_temp(self):
+        pass
+
 
 class EnvParent_3(EnvParent):
 
@@ -428,6 +445,11 @@ class EnvParent_3(EnvParent):
         psi_t = self.bra[n].get_legs(axes=1).t
         return any(tt not in psi_t for tt in op_t)
 
+    def clear_temp(self):
+        if hasattr(self, 'tempL'):
+            del self.tempL
+        if hasattr(self, 'tempR'):
+            del self.tempR
 
 
 class EnvParent_3_obc(EnvParent_3):
@@ -458,6 +480,18 @@ class EnvParent_3_obc(EnvParent_3):
         tmp = self.F[bd].tensordot(C, axes=(2, 0))
         return tmp.tensordot(self.F[ibd], axes=((1, 2), (1, 0)))
 
+    def precompute_temp(self, n, to='last'):
+        if to == 'last':
+            tmp = tensordot(self.F[(n - 1, n)], self.op[n], axes=(1, 0))
+            tmp = tmp.fuse_legs(axes=((0, 2), (1, 4), 3))
+            self.tempL = tmp.fuse_legs(axes=(0, (1, 2)))
+        elif to == 'first':
+            tmp = tensordot(self.op[n], self.F[(n + 1, n)], axes=(2, 1))
+            tmp = tmp.fuse_legs(axes=((2, 3), 0, (1, 4)))
+            self.tempR = tmp.fuse_legs(axes=(0, (1, 2)))
+
+
+
 class Env_mps_mpo_mps(EnvParent_3_obc):
 
     def update_env_(self, n, to='last'):
@@ -477,9 +511,14 @@ class Env_mps_mpo_mps(EnvParent_3_obc):
         tmp = ncon([self.F[(nl, n)], tmp], ((-0, 1, 2), (2, 1, -2, -1)))
         return tmp * self.op.factor
 
-    def Heff2(self, AA, bd):
+    def Heff2(self, AA, bd, precompute=False):
         n1, n2 = bd if bd[0] < bd[1] else bd[::-1]
         bd, nl, nr = (n1, n2), n1 - 1, n2 + 1
+        if precompute:
+            tmp = AA @ self.tempR
+            tmp = tmp.unfuse_legs(axes=1)
+            tmp = tmp.fuse_legs(axes=((0, 1), 2))
+            return self.op.factor * (self.tempL @ tmp)
         tmp = AA.fuse_legs(axes=((0, 1), 2, 3))
         tmp = tmp @ self.F[(nr, n2)]
         tmp = self.op[n2]._attach_23(tmp)
@@ -524,7 +563,7 @@ class Env_mpo_mpo_mpo(EnvParent_3_obc):
         tmp = ncon([self.F[(nl, n)], tmp], ((-0, 1, 2), (2, -3, 1, -2, -1)))
         return tmp * self.op.factor
 
-    def Heff2(self, AA, bd):
+    def Heff2(self, AA, bd, precompute=False):
         n1, n2 = bd if bd[0] < bd[1] else bd[::-1]
         bd, nl, nr = (n1, n2), n1 - 1, n2 + 1
         tmp = AA.fuse_legs(axes=((0, 2, 5), 1, 3, 4))
@@ -564,7 +603,7 @@ class Env_mpo_mpobra_mpo(EnvParent_3_obc):
         tmp = ncon([tmp, self.F[(nr, n)]], ((-1, 1, 2, -0, -3), (1, 2, -2)))
         return tmp * self.op.factor
 
-    def Heff2(self, AA, bd):
+    def Heff2(self, AA, bd, precompute=False):
         n1, n2 = bd if bd[0] < bd[1] else bd[::-1]
         bd, nl, nr = (n1, n2), n1 - 1, n2 + 1
         tmp = AA.fuse_legs(axes=(0, 2, (1, 3, 4), 5))
@@ -630,6 +669,9 @@ class EnvParent_3_pbc(EnvParent_3):
         axes = ((0, 1, 2, 3), (3, 1, 2, 0))
         return self.factor() * self.F[bd].tensordot(self.F[bd[::-1]], axes=axes).to_number()
 
+    def precompute_temp(self, n, to):
+        pass
+
 
 class Env_mps_mpopbc_mps(EnvParent_3_pbc):
 
@@ -646,7 +688,9 @@ class Env_mps_mpopbc_mps(EnvParent_3_pbc):
         tmp = tmp.transpose(axes=(0, 2, 1))
         return tmp * self.op.factor
 
-    def Heff2(self, AA, bd):
+    def Heff2(self, AA, bd, precompute=False):
+        if precompute:
+            AA = AA.unfuse_legs(axes=(0, 1))
         n1, n2 = bd if bd[0] < bd[1] else bd[::-1]
         bd, nl, nr = (n1, n2), n1 - 1, n2 + 1
         Fr = self.F[(nr, n2)].fuse_legs(axes=(0, 1, (2, 3)))
@@ -660,6 +704,8 @@ class Env_mps_mpopbc_mps(EnvParent_3_pbc):
         tmp = tmp.unfuse_legs(axes=2)
         tmp = self.F[(nl, n1)].tensordot(tmp, axes=((3, 1, 2), (0, 1, 2)))
         tmp = tmp.transpose(axes=(0, 3, 2, 1))
+        if precompute:
+            tmp = tmp.fuse_legs(axes=((0, 1), (2, 3)))
         return tmp * self.op.factor
 
     def hole(self, n):
