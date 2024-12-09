@@ -74,7 +74,7 @@ def dmrg_(psi, H, project=None, method='1site',
 
     method: str | yastn.Method
         DMRG variant to use; options are '1site' or '2site'.
-        Auxlliary class :ref:`yastn.Method` can be used to change the method in between sweeps while the yield gets called after every `iterator_step` sweeps.
+        Auxlliary class :class:`yastn.Method` can be used to change the method in between sweeps while the yield gets called after every `iterator_step` sweeps.
 
     energy_tol: float
         Convergence tolerance for the change of energy in a single sweep.

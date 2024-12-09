@@ -343,6 +343,4 @@ def test_dmrg_raise(config_kwargs):
 
 
 if __name__ == '__main__':
-
-    test_dmrg_method_change({})
-#    pytest.main([__file__, "-vs", "--durations=0"])
+    pytest.main([__file__, "-vs", "--durations=0"])

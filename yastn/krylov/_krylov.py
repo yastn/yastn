@@ -164,7 +164,7 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
 def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=False, **kwargs) -> tuple[array, Sequence[vectors]]:
     r"""
     Search for dominant eigenvalues of linear operator ``f`` using Arnoldi algorithm.
-    Economic implementation (without restart) for internal use within :meth:`yastn.tn.dmrg_`.
+    Economic implementation (without restart) for internal use within :meth:`yastn.tn.mps.dmrg_`.
 
     Parameters
     ----------

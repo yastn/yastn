@@ -23,20 +23,21 @@ from dataclasses import dataclass
 class Method():
     """
     Auxiliary mutable method class.
-    It is introduced to allow changing the method used in :ref:`yastn.tn.mps.dmrg_`, :ref:`yastn.tn.mps.tdvp_`,
+    It introduces the mechanism to change the method used in :meth:`yastn.tn.mps.dmrg_`, :meth:`yastn.tn.mps.tdvp_`,
     and other generator functions in between consecutive sweeps.
+    Updating the value in place will inject the new value back into the generator.
     """
     string: str = ''
 
-    def __eq__(self, val):
-        return val == self.string
+    def __eq__(self, string):
+        return string == self.string
 
     def __str__(self):
         return self.string
 
-    def update_(self, val):
+    def update_(self, string):
         """ Update the method name in place. """
-        self.string = str(val)
+        self.string = str(string)
 
 
 class _struct(NamedTuple):
