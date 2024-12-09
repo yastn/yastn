@@ -494,18 +494,19 @@ class MpsMpoOBC(_MpsMpoParent):
         nl, nr = bd
         self.pC = bd
 
-        if AA.ndim > 2:
-            if self.nr_phys == 1:
-                AA = AA.fuse_legs(axes=((0, 1), (2, 3)))
-            else:
-                AA = AA.fuse_legs(axes=((0, 1, 2), (3, 4, 5)))
+        if self.nr_phys == 1 and AA.ndim == 4:
+            AA = AA.fuse_legs(axes=((0, 1), (2, 3)))
+        if self.nr_phys == 2 and AA.ndim == 6:
+            AA = AA.fuse_legs(axes=((0, 1, 2), (3, 4, 5)))
 
         U, S, V = tensor.svd(AA, axes=(0, 1), sU=1, **opts_svd)
         mask = tensor.truncation_mask(S, **opts_svd)
         U, self.A[bd], V = mask.apply_mask(U, S, V, axes=(1, 0, 0))
-        self.A[nl] = U.unfuse_legs(axes=0)
-        V = V.unfuse_legs(axes=1)
-        self.A[nr] = V if self.nr_phys == 1 else V.transpose(axes=(0, 1, 3, 2))
+        if self.nr_phys == 1:
+            self.A[nl] = U.unfuse_legs(axes=0)
+        else:
+            self.A[nl] = U.unfuse_legs(axes=0).transpose(axes=(0, 1, 3, 2))
+        self.A[nr] = V.unfuse_legs(axes=1)
 
         return tensor.bitwise_not(mask).apply_mask(S, axes=0).norm() / S.norm()  # discarded weight
 

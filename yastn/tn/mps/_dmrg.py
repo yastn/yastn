@@ -40,7 +40,7 @@ class DMRG_out(NamedTuple):
 
 def dmrg_(psi, H, project=None, method='1site',
         energy_tol=None, Schmidt_tol=None, max_sweeps=1, iterator_step=None,
-        opts_eigs=None, opts_svd=None, precompute=True):
+        opts_eigs=None, opts_svd=None, precompute=False):
     r"""
     Perform DMRG sweeps until convergence, starting from MPS :code:`psi`.
 
@@ -126,7 +126,7 @@ def _dmrg_(psi, H : MpsMpoOBC | Sequence[tuple[MpsMpoOBC, float]], project, meth
     if not psi.is_canonical(to='first'):
         psi.canonize_(to='first')
 
-    env = Env(psi, [H, psi])
+    env = Env(psi, [H, psi], precompute=precompute)
     if project:
         if not isinstance(env, Env_sum):
             env = Env_sum([env])
@@ -187,7 +187,7 @@ def _dmrg_(psi, H : MpsMpoOBC | Sequence[tuple[MpsMpoOBC, float]], project, meth
     yield DMRG_out(sweep, str(method), E, dE, max_dS, max_dw)
 
 
-def _dmrg_sweep_1site_(env, opts_eigs=None, Schmidt=None, precompute=True):
+def _dmrg_sweep_1site_(env, opts_eigs=None, Schmidt=None, precompute=False):
     r"""
     Perform sweep with 1-site DMRG, see :meth:`dmrg` for description.
 
@@ -212,7 +212,7 @@ def _dmrg_sweep_1site_(env, opts_eigs=None, Schmidt=None, precompute=True):
             env.update_env_(n, to=to)
 
 
-def _dmrg_sweep_2site_(env, opts_eigs=None, opts_svd=None, Schmidt=None, precompute=True):
+def _dmrg_sweep_2site_(env, opts_eigs=None, opts_svd=None, Schmidt=None, precompute=False):
     r"""
     Perform sweep with 2-site DMRG, see :meth:`dmrg` for description.
 
@@ -229,10 +229,8 @@ def _dmrg_sweep_2site_(env, opts_eigs=None, opts_svd=None, Schmidt=None, precomp
             bd = (n, n + 1)
             AA = psi.merge_two_sites(bd)
             if precompute:
-                env.precompute_temp(n, to='last')
-                env.precompute_temp(n + 1, to='first')
                 AA = AA.fuse_legs(axes=((0, 1), (2, 3)))
-            _, (AA,) = eigs(lambda v: env.Heff2(v, bd, precompute=precompute), AA, k=1, **opts_eigs)
+            _, (AA,) = eigs(lambda v: env.Heff2(v, bd), AA, k=1, **opts_eigs)
             _disc_weight_bd = psi.unmerge_two_sites_(AA, bd, opts_svd)
             max_disc_weight = max(max_disc_weight, _disc_weight_bd)
             if Schmidt is not None and to == 'first':
@@ -240,7 +238,5 @@ def _dmrg_sweep_2site_(env, opts_eigs=None, opts_svd=None, Schmidt=None, precomp
             psi.absorb_central_(to=to)
             env.clear_site_(n, n + 1)
             env.update_env_(n + dn, to=to)
-            if precompute:
-                env.clear_temp()
     env.update_env_(psi.first, to='first')
     return max_disc_weight
