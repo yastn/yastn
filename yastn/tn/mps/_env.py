@@ -400,6 +400,11 @@ class Env_project(Env2):
 
     def Heff1(self, x, n):
         pp = super().Heff1(self.ket[n], n)
+        if (x.ndim == 2):
+            if x.hfs[0].is_fused():
+                pp = pp.fuse_legs(axes=((0, 1), 2))
+            else:
+                pp = pp.fuse_legs(axes=(0, (1, 2)))
         return  pp * (self.penalty * vdot(pp, x))
 
     def Heff2(self, AA, bd):
@@ -526,8 +531,9 @@ class Env_mps_mpo_mps_precompute(EnvParent_3_obc):
         r"""
         Clear environments pointing from sites whose indices are provided in args.
         """
-        super().clear_site_(self, *args)
         for n in args:
+            self.F.pop((n, n - 1), None)
+            self.F.pop((n, n + 1), None)
             self.F.pop((n, n - 1, n - 1), None)
             self.F.pop((n, n + 1, n + 1), None)
 
@@ -548,17 +554,18 @@ class Env_mps_mpo_mps_precompute(EnvParent_3_obc):
 
     def Heff1(self, A, n):
         nl, nr = n - 1, n + 1
-        tmp = A @ self.F[(nr, n)]
-        tmp = self.op[n]._attach_23(tmp)
-        tmp = ncon([self.F[(nl, n)], tmp], ((-0, 1, 2), (2, 1, -2, -1)))
+        if A.hfs[0].is_fused():
+            tmp = self.F[(nl, n, n)] @ A
+            tmp = tensordot(tmp, self.F[(nr, n)], axes=((1, 2), (1, 0)))
+        else:
+            tmp = A @ self.F[(nr, n, n)]
+            tmp = tensordot(self.F[(nl, n)], tmp, axes=((2, 1), (0, 1)))
         return tmp * self.op.factor
 
     def Heff2(self, AA, bd):
         n1, n2 = bd if bd[0] < bd[1] else bd[::-1]
         bd, nl, nr = (n1, n2), n1 - 1, n2 + 1
         tmp = AA @ self.F[(nr, n2, n2)]
-        # tmp = tmp.unfuse_legs(axes=1)
-        # tmp = tmp.fuse_legs(axes=((0, 1), 2))
         tmp = tensordot(self.F[(nl, n1, n1)], tmp, axes=((1, 2), (1, 0)))
         return self.op.factor * tmp
 
@@ -702,12 +709,22 @@ class Env_mps_mpopbc_mps(EnvParent_3_pbc):
 
     def Heff1(self, A, n):
         nl, nr = n - 1, n + 1
+        p1 = A.hfs[0].is_fused() + 2 * A.hfs[-1].is_fused()
+        if p1 == 1:
+            A = A.unfuse_legs(axes=0)
+        if p1 == 2:
+            A = A.unfuse_legs(axes=1)
+
         Fr = self.F[(nr, n)].fuse_legs(axes=(0, 1, (2, 3)))
         tmp = A.tensordot(Fr, axes=(2, 0))
         tmp = self.op[n]._attach_23(tmp)
         tmp = tmp.unfuse_legs(axes=2)
         tmp = self.F[(nl, n)].tensordot(tmp, axes=((3, 1, 2), (0, 1, 2)))
         tmp = tmp.transpose(axes=(0, 2, 1))
+        if p1 == 1:
+            tmp = tmp.fuse_legs(axes=((0, 1), 2))
+        if p1 == 2:
+            tmp = tmp.fuse_legs(axes=(0, (1, 2)))
         return tmp * self.op.factor
 
     def Heff2(self, AA, bd):
