@@ -233,9 +233,6 @@ def _dmrg_sweep_2site_(env, opts_eigs=None, opts_svd=None, Schmidt=None, precomp
                 env.precompute_temp(n + 1, to='first')
                 AA = AA.fuse_legs(axes=((0, 1), (2, 3)))
             _, (AA,) = eigs(lambda v: env.Heff2(v, bd, precompute=precompute), AA, k=1, **opts_eigs)
-            if precompute:
-                AA = AA.unfuse_legs(axes=(0, 1))
-                env.clear_temp()
             _disc_weight_bd = psi.unmerge_two_sites_(AA, bd, opts_svd)
             max_disc_weight = max(max_disc_weight, _disc_weight_bd)
             if Schmidt is not None and to == 'first':
@@ -243,5 +240,7 @@ def _dmrg_sweep_2site_(env, opts_eigs=None, opts_svd=None, Schmidt=None, precomp
             psi.absorb_central_(to=to)
             env.clear_site_(n, n + 1)
             env.update_env_(n + dn, to=to)
+            if precompute:
+                env.clear_temp()
     env.update_env_(psi.first, to='first')
     return max_disc_weight

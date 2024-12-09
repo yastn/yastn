@@ -492,11 +492,21 @@ class MpsMpoOBC(_MpsMpoParent):
         where :math:`\lambda_i` are singular values across the bond.
         """
         nl, nr = bd
-        axes = ((0, 1), (2, 3)) if self.nr_phys == 1 else ((0, 1, 2), (3, 4, 5))
         self.pC = bd
-        U, S, V = tensor.svd(AA, axes=axes, sU=1, Uaxis=2, **opts_svd)
+
+        if AA.ndim > 2:
+            if self.nr_phys == 1:
+                AA = AA.fuse_legs(axes=((0, 1), (2, 3)))
+            else:
+                AA = AA.fuse_legs(axes=((0, 1, 2), (3, 4, 5)))
+
+        U, S, V = tensor.svd(AA, axes=(0, 1), sU=1, **opts_svd)
         mask = tensor.truncation_mask(S, **opts_svd)
-        self.A[nl], self.A[bd], self.A[nr] = mask.apply_mask(U, S, V, axes=(2, 0, 0))
+        U, self.A[bd], V = mask.apply_mask(U, S, V, axes=(1, 0, 0))
+        self.A[nl] = U.unfuse_legs(axes=0)
+        V = V.unfuse_legs(axes=1)
+        self.A[nr] = V if self.nr_phys == 1 else V.transpose(axes=(0, 1, 3, 2))
+
         return tensor.bitwise_not(mask).apply_mask(S, axes=0).norm() / S.norm()  # discarded weight
 
 

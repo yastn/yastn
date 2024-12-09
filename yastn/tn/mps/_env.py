@@ -21,7 +21,7 @@ import abc
 import copy
 
 
-def Env(bra, target):
+def Env(bra, target, **kwargs):
     r"""
     Initialize a proper environment supporting contraction of MPS/MPO's:
     :math:`\langle \textrm{bra} | \textrm{target} \rangle` where
@@ -55,6 +55,8 @@ def Env(bra, target):
             op = target[0]
             if isinstance(op, MpsMpoOBC):
                 if ket.nr_phys == 1:
+                    if 'precompute' in kwargs and kwargs['precompute']:
+                        return Env_mps_mpo_mps_precompute(bra, op, ket)
                     return Env_mps_mpo_mps(bra, op, ket)
                 elif ket.nr_phys == 2 and hasattr(op, 'flag') and op.flag == 'on_bra':
                     return Env_mpo_mpobra_mpo(bra, op, ket)
@@ -65,7 +67,7 @@ def Env(bra, target):
                     raise YastnError("Env: Application of MpoPBC on Mpo is not supported. Contact developers to add this functionality.")
                 return Env_mps_mpopbc_mps(bra, op, ket)
             elif hasattr(op, '__iter__'):
-                return Env_sum([Env(bra, [o, ket]) for o in op])
+                return Env_sum([Env(bra, [o, ket], **kwargs) for o in op])
             else:
                 raise YastnError("Env: Input cannot be parsed.")
         if len(target) > 2:
@@ -77,7 +79,7 @@ def Env(bra, target):
     for tmp in target:
         if not hasattr(tmp, '__iter__'):
             raise YastnError("Env: Input cannot be parsed.")
-        env = Env(bra, tmp)
+        env = Env(bra, tmp, **kwargs)
         if isinstance(env, Env_sum):
             envs.extend(env.envs)
         else:
@@ -136,7 +138,7 @@ class EnvParent(metaclass=abc.ABCMeta):
         """
 
     @abc.abstractmethod
-    def update_env_(self, n, to='last'):
+    def update_env_(self, n, to='last', **kwargs):
         r"""
         Update environment including site :code:`n`, in the direction given by :code:`to`.
 
@@ -266,9 +268,9 @@ class Env_sum(EnvParent):
     def factor(self):
         return 1
 
-    def update_env_(self, n, to='last'):
+    def update_env_(self, n, to='last', **kwargs):
         for env in self.envs:
-            env.update_env_(n, to)
+            env.update_env_(n, to, **kwargs)
 
     def measure(self, bd=(-1, 0)):
         return sum(env.measure(bd) for env in self.envs)
@@ -339,7 +341,7 @@ class Env2(EnvParent):
         tmp = tensordot(self.F[bd], self.F[bd[::-1]], axes=((0, 1), (1, 0)))
         return self.factor() * tmp.to_number()
 
-    def update_env_(self, n, to='last'):
+    def update_env_(self, n, to='last', **kwargs):
         if to == 'first':
             temp = tensordot(self.ket[n], self.F[(n + 1, n)], axes=(2, 0))
             temp = temp.swap_gate(axes=1, charge=self.F[(n + 1, n)].n)
@@ -483,7 +485,7 @@ class EnvParent_3_obc(EnvParent_3):
     def precompute_temp(self, n, to='last'):
         if to == 'last':
             tmp = tensordot(self.F[(n - 1, n)], self.op[n], axes=(1, 0))
-            tmp = tmp.fuse_legs(axes=((0, 2), (1, 4), 3))
+            tmp = tmp.fuse_legs(axes=((0, 2), 3, (1, 4)))
             self.tempL = tmp # .fuse_legs(axes=(0, (1, 2)))
         elif to == 'first':
             tmp = tensordot(self.op[n], self.F[(n + 1, n)], axes=(2, 1))
@@ -518,7 +520,7 @@ class Env_mps_mpo_mps(EnvParent_3_obc):
             tmp = AA @ self.tempR
             # tmp = tmp.unfuse_legs(axes=1)
             # tmp = tmp.fuse_legs(axes=((0, 1), 2))
-            return self.op.factor * tensordot(self.tempL, tmp, axes=((1, 2), (0, 1)))
+            return self.op.factor * tensordot(self.tempL, tmp, axes=((1, 2), (1, 0)))
         tmp = AA.fuse_legs(axes=((0, 1), 2, 3))
         tmp = tmp @ self.F[(nr, n2)]
         tmp = self.op[n2]._attach_23(tmp)
@@ -538,9 +540,20 @@ class Env_mps_mpo_mps(EnvParent_3_obc):
         return tmp.transpose(axes=(0, 3, 2, 1)).fuse_legs(axes=((0, 1), (2, 3)))
 
 
-class Env_mpo_mpo_mpo(EnvParent_3_obc):
+class Env_mps_mpo_mps_precompute(EnvParent_3_obc):
 
     def update_env_(self, n, to='last'):
+        if to == 'last':
+            A = self.ket[n].fuse_legs(axes=((0, 1), 2))
+            self.F[(n, n + 1)] = ncon([A.conj(), self.tempL, A], [(1, -0), [1, -1, 2], [2, -2]])
+        elif to == 'first':
+            A = self.ket[n].fuse_legs(axes=(0, (1, 2)))
+            self.F[(n, n - 1)] = ncon([A, self.tempR, A.conj()], [(-0, 1), [1, -1, 2], [-2, 2]])
+
+
+class Env_mpo_mpo_mpo(EnvParent_3_obc):
+
+    def update_env_(self, n, to='last', precompute=False):
         if to == 'last':
             bA = self.bra[n].fuse_legs(axes=(0, 1, (2, 3)))
             tmp = ncon([bA.conj(), self.F[(n - 1, n)]], ((1, -1, -0), (1, -2, -3)))
@@ -580,7 +593,7 @@ class Env_mpo_mpo_mpo(EnvParent_3_obc):
 
 
 class Env_mpo_mpobra_mpo(EnvParent_3_obc):
-    def update_env_(self, n, to='last'):
+    def update_env_(self, n, to='last', precompute=False):
         if to == 'last':
             tmp = ncon([self.ket[n], self.F[(n - 1, n)]], ((1, -4, -0, -1), (-3, -2, 1)))
             tmp = tmp.fuse_legs(axes=(0, 1, 2, (3, 4)))
@@ -716,7 +729,7 @@ class Env_mps_mpopbc_mps(EnvParent_3_pbc):
         tmp = tmp.tensordot(self.bra[n].conj(), axes=((0, 4), (0, 2)))
         return tmp.transpose(axes=(0, 3, 2, 1)).fuse_legs(axes=((0, 1), (2, 3)))
 
-    def update_env_(self, n, to='last'):
+    def update_env_(self, n, to='last', precompute=False):
         if to == 'last':
             bran = self.bra[n].transpose(axes=(2, 1, 0)).conj()
             tmp = self.F[(n - 1, n)].fuse_legs(axes=(0, 1, (2, 3)))
@@ -779,7 +792,7 @@ class Env_mps_mpopbc_mps(EnvParent_3_pbc):
         #     tmp = ncon([tmp, self.F[(nr, n2)]], ((-1, -2, 1, 2, -0, -4), (1, 2, -3)))
         #     tmp = tmp.unfuse_legs(axes=0).transpose(axes=(0, 2, 1, 3, 4, 5))
 
-    # def update_env_(self, n, to='last'):
+    # def update_env_(self, n, to='last', precompute=False):
         # if nr_phys == 2 and not on_aux and to == 'last':
         #     bran = bra[n].fuse_legs(axes=((2, 3), 1, 0)).conj()
         #     tmp = F[(n - 1, n)].fuse_legs(axes=(0, 1, (2, 3)))
