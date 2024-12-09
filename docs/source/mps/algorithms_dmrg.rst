@@ -76,3 +76,10 @@ from some MPSs are projected out. An alternative approach that we utilize
 is adding penalty terms in the directions of those MPSs.
 This allows one to search for a few excited states of the Hamiltonian.
 The list of MPS to project out is given as :code:`project=[lower_E_MPS, ...]`.
+
+
+Auxilliary mutable Method class
+-------------------------------
+
+.. autoclass:: yastn.Method
+    :members: update_

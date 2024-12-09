@@ -31,6 +31,7 @@ logger = logging.Logger('dmrg')
 
 class DMRG_out(NamedTuple):
     sweeps: int = 0
+    method: str = ''
     energy: float = None
     denergy: float = None
     max_dSchmidt: float = None
@@ -71,8 +72,9 @@ def dmrg_(psi, H, project=None, method='1site',
         each MPS by hand as a list of tuples :code:`(penalty, MPS)`, where :code:`penalty` is a number and :code:`MPS` is an MPS bject.
         If input is a list of MPSs, i.e., :code:`[mps, ...]`, the option uses default :code:`penalty=100`.
 
-    method: str
+    method: str | yastn.Method
         DMRG variant to use; options are '1site' or '2site'.
+        Auxlliary class :ref:`yastn.Method` can be used to change the method in between sweeps while the yield gets called after every `iterator_step` sweeps.
 
     energy_tol: float
         Convergence tolerance for the change of energy in a single sweep.
@@ -104,6 +106,7 @@ def dmrg_(psi, H, project=None, method='1site',
         NamedTuple including fields:
 
             * :code:`sweeps` number of performed dmrg sweeps.
+            * :code:`method` method used in the last sweep.
             * :code:`energy` energy after the last sweep.
             * :code:`denergy` absolut value of energy change in the last sweep.
             * :code:`max_dSchmidt` norm of Schmidt values change on the worst cut in the last sweep.
@@ -143,7 +146,7 @@ def _dmrg_(psi, H : MpsMpoOBC | Sequence[tuple[MpsMpoOBC, float]], project, meth
         Schmidt_old = psi.get_Schmidt_values()
         Schmidt_old = {(n-1, n): sv for n, sv in enumerate(Schmidt_old)}
 
-    max_dS, max_dw = None, None
+    max_dS = None
     Schmidt = None if Schmidt_tol is None else {}
 
     if energy_tol is not None and not energy_tol > 0:
@@ -158,6 +161,7 @@ def _dmrg_(psi, H : MpsMpoOBC | Sequence[tuple[MpsMpoOBC, float]], project, meth
     for sweep in range(1, max_sweeps + 1):
         if method == '1site':
             _dmrg_sweep_1site_(env, opts_eigs=opts_eigs, Schmidt=Schmidt, precompute=precompute)
+            max_dw = None
         else: # method == '2site':
             max_dw = _dmrg_sweep_2site_(env, opts_eigs=opts_eigs,
                                         opts_svd=opts_svd, Schmidt=Schmidt, precompute=precompute)
@@ -179,8 +183,8 @@ def _dmrg_(psi, H : MpsMpoOBC | Sequence[tuple[MpsMpoOBC, float]], project, meth
         if len(converged) > 0 and all(converged):
             break
         if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
-            yield DMRG_out(sweep, E, dE, max_dS, max_dw)
-    yield DMRG_out(sweep, E, dE, max_dS, max_dw)
+            yield DMRG_out(sweep, str(method), E, dE, max_dS, max_dw)
+    yield DMRG_out(sweep, str(method), E, dE, max_dS, max_dw)
 
 
 def _dmrg_sweep_1site_(env, opts_eigs=None, Schmidt=None, precompute=True):

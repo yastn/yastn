@@ -304,6 +304,24 @@ def test_dmrg_Ising_PBC_Z2(config_kwargs, tol=1e-4):
                 assert (EE * psi * (np.exp(-1j * EE * tf)) - psi1).norm() < tol
 
 
+def test_dmrg_method_change(config_kwargs):
+    N = 10  # Consider a system of 10 sites
+    ops = yastn.operators.Spin12(sym='Z2', **config_kwargs)
+    I = mps.product_mpo(ops.I(), N)  # identity MPO
+    termsXX = [mps.Hterm(-1, [i, (i + 1) % N], [ops.x(), ops.x()]) for i in range(N)]
+    HXX = mps.generate_mpo(I, termsXX)
+    termsZ = [mps.Hterm(-1, i, ops.z()) for i in range(N)]
+    HZ = mps.generate_mpo(I, termsZ)
+
+    psi = mps.random_mps(I, n=0, D_total=8)
+    method = yastn.Method('2site')
+    opts_svd = {"D_total": 16}
+    for out in mps.dmrg_(psi, [HXX, HZ], method=method, max_sweeps=10, iterator_step=1, opts_svd=opts_svd, energy_tol=1e-10, Schmidt_tol=1e-10):
+        if out.sweeps == 2:
+            method.update_('1site')
+        assert out.method == '2site' if out.sweeps <= 2 else '1site'
+
+
 def test_dmrg_raise(config_kwargs):
     ops = yastn.operators.Spin12(sym='dense', **config_kwargs)
     I = mps.product_mpo(ops.I(), N=7)
@@ -325,4 +343,6 @@ def test_dmrg_raise(config_kwargs):
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0"])
+
+    test_dmrg_method_change({})
+#    pytest.main([__file__, "-vs", "--durations=0"])

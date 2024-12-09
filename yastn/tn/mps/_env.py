@@ -484,11 +484,11 @@ class EnvParent_3_obc(EnvParent_3):
         if to == 'last':
             tmp = tensordot(self.F[(n - 1, n)], self.op[n], axes=(1, 0))
             tmp = tmp.fuse_legs(axes=((0, 2), (1, 4), 3))
-            self.tempL = tmp.fuse_legs(axes=(0, (1, 2)))
+            self.tempL = tmp # .fuse_legs(axes=(0, (1, 2)))
         elif to == 'first':
             tmp = tensordot(self.op[n], self.F[(n + 1, n)], axes=(2, 1))
             tmp = tmp.fuse_legs(axes=((2, 3), 0, (1, 4)))
-            self.tempR = tmp.fuse_legs(axes=(0, (1, 2)))
+            self.tempR = tmp #.fuse_legs(axes=(0, (1, 2)))
 
 
 
@@ -516,9 +516,9 @@ class Env_mps_mpo_mps(EnvParent_3_obc):
         bd, nl, nr = (n1, n2), n1 - 1, n2 + 1
         if precompute:
             tmp = AA @ self.tempR
-            tmp = tmp.unfuse_legs(axes=1)
-            tmp = tmp.fuse_legs(axes=((0, 1), 2))
-            return self.op.factor * (self.tempL @ tmp)
+            # tmp = tmp.unfuse_legs(axes=1)
+            # tmp = tmp.fuse_legs(axes=((0, 1), 2))
+            return self.op.factor * tensordot(self.tempL, tmp, axes=((1, 2), (0, 1)))
         tmp = AA.fuse_legs(axes=((0, 1), 2, 3))
         tmp = tmp @ self.F[(nr, n2)]
         tmp = self.op[n2]._attach_23(tmp)
