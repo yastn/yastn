@@ -230,7 +230,7 @@ class MpsMpoOBC(_MpsMpoParent):
 
             normalize: bool
                 Whether to keep track of the norm by accumulating it in self.factor;
-                default is ``True``, i.e., sets the norm to :math:`1`.
+                The default is ``True``, i.e., sets the norm to :math:`1`.
                 The central blocks at the end of the procedure is normalized to unity.
         """
         if self.pC is not None:
@@ -273,8 +273,8 @@ class MpsMpoOBC(_MpsMpoParent):
             It includes information on how to truncate the Schmidt values.
 
         normalize: bool
-            Whether to keep track of the norm of retained Schmidt values
-            by accumulating it in self.factor; default is ``True``, i.e., sets the norm to :math:`1`.
+            Whether to keep track of the norm of retained Schmidt values by accumulating it in self.factor.
+            The default is ``True``, i.e., sets the norm to :math:`1`.
             The truncated Schmidt values (central block) at the end of the procedure are normalized to unity.
         """
         # if self.pC is None:  does not happen now
@@ -364,7 +364,7 @@ class MpsMpoOBC(_MpsMpoParent):
 
         normalize: bool
             Whether to keep track of the norm of the state by accumulating it in self.factor;
-            default is ``True``, i.e., sets the norm to :math:`1`.
+            The default is ``True``, i.e., sets the norm to :math:`1`.
             The individual tensors at the end of the procedure are in a proper canonical form.
         """
         self.absorb_central_(to=to)
@@ -433,8 +433,8 @@ class MpsMpoOBC(_MpsMpoParent):
             :code:`'last'` (the default) or :code:`'first'`.
 
         normalize: bool
-            Whether to keep in self.factor the norm of the initial state projected on
-            the direction of the truncated state; default is ``True``, i.e., sets the norm to :math:`1`.
+            Whether to keep in self.factor the norm of the initial state projected on the direction of the truncated state.
+            The default is ``True``, i.e., sets the norm to :math:`1`.
             The individual tensors at the end of the procedure are in a proper canonical form.
 
         opts_svd: dict

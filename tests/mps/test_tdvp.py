@@ -216,7 +216,8 @@ def test_tdvp_sudden_quench_mpo_sum(config_kwargs, sym, tol=1e-10):
         # shallow_copy is sufficient to retain the initial state
         phi = psi.shallow_copy()
         for step in mps.tdvp_(phi, H1, times=times, method=method, dt=0.125,
-                              opts_svd=opts_svd, opts_expmv=opts_expmv):
+                              opts_svd=opts_svd, opts_expmv=opts_expmv,
+                              order='4th', yield_initial=True):
             #
             # Calculate correlation matrix from mps
             # and exact reference
@@ -369,8 +370,9 @@ def test_tdvp_KZ_quench(config_kwargs, sym):
     opts_svd = {'tol': 1e-6, 'D_total': Dmax}
     #
     for step in mps.tdvp_(psi, H, times=(ti, 0, tf),
-                          method='12site',dt=0.04, order='2nd',
-                          opts_svd=opts_svd, opts_expmv=opts_expmv):
+                          method='12site', dt=0.04, order='2nd',
+                          opts_svd=opts_svd, opts_expmv=opts_expmv,
+                          precompute=True):
         #
         # tdvp_() always gives an iterator
         # Calculate expectation values at snapshots

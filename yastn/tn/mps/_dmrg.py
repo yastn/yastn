@@ -40,24 +40,24 @@ class DMRG_out(NamedTuple):
 
 def dmrg_(psi, H, project=None, method='1site',
         energy_tol=None, Schmidt_tol=None, max_sweeps=1, iterator_step=None,
-        opts_eigs=None, opts_svd=None, precompute=True):
+        opts_eigs=None, opts_svd=None, precompute=False):
     r"""
-    Perform DMRG sweeps until convergence, starting from MPS :code:`psi`.
+    Perform DMRG sweeps until convergence, starting from MPS ``psi``.
 
     The inner loop sweeps over MPS updating sites from the first site to the last and back, constituting a single iteration.
     Convergence can be controlled based on energy and/or Schmidt values (which is a more sensitive measure of convergence).
-    The DMRG algorithm sweeps through the lattice at most :code:`max_sweeps` times
+    The DMRG algorithm sweeps through the lattice at most ``max_sweeps`` times
     or until all convergence measures (with provided tolerance other than the default ``None``) change by less than the provided tolerance during a single sweep.
 
-    Outputs iterator if :code:`iterator_step` is given, which allows
-    inspecting :code:`psi` outside of :code:`dmrg_` function after every :code:`iterator_step` sweeps.
+    Outputs iterator if ``iterator_step`` is given, which allows
+    inspecting ``psi`` outside of ``dmrg_`` function after every ``iterator_step`` sweeps.
 
     Parameters
     ----------
     psi: yastn.tn.mps.MpsMpoOBC
         Initial state. It is updated during execution.
         If ``psi`` is not already canonized to the first site, it will be canonized at the start of the algorithm.
-        The output state from :code:`dmrg_` is canonized to the first site.
+        The output state from ``dmrg_`` is canonized to the first site.
 
     H: yastn.tn.mps.MpsMpoOBC | Sequence
         MPO (or a sum of MPOs) to minimize against, see :meth:`Env()<yastn.tn.mps.Env>`.
@@ -68,13 +68,13 @@ def dmrg_(psi, H, project=None, method='1site',
         As a result, the energy of said MPS rizes and another lowest-energy is targeted by energy minimization.
         It can be used to find a few low-energy states of the Hamiltonian
         if the penalty is larger than the energy gap from the ground state.
-        Use :code:`[(penalty, MPS), ...]` to provide individual penalty for
-        each MPS by hand as a list of tuples :code:`(penalty, MPS)`, where :code:`penalty` is a number and :code:`MPS` is an MPS bject.
-        If input is a list of MPSs, i.e., :code:`[mps, ...]`, the option uses default :code:`penalty=100`.
+        Use ``[(penalty, MPS), ...]`` to provide individual penalty for
+        each MPS by hand as a list of tuples ``(penalty, MPS)``, where ``penalty`` is a number and ``MPS`` is an MPS object.
+        If input is a list of MPSs, i.e., ``[mps, ...]``, the option uses default ``penalty=100``.
 
     method: str | yastn.Method
-        DMRG variant to use; options are '1site' or '2site'.
-        Auxlliary class :class:`yastn.Method` can be used to change the method in between sweeps while the yield gets called after every `iterator_step` sweeps.
+        DMRG variant to use; options are ``'1site'`` or ``'2site'``.
+        Auxlliary class :class:`yastn.Method` can be used to change the method in between sweeps while the yield gets called after every ``iterator_step`` sweeps.
 
     energy_tol: float
         Convergence tolerance for the change of energy in a single sweep.
@@ -88,15 +88,23 @@ def dmrg_(psi, H, project=None, method='1site',
         Maximal number of sweeps.
 
     iterator_step: int
-        If int, :code:`dmrg_` returns a generator that would yield output after every iterator_step sweeps.
-        The default is None, in which case  :code:`dmrg_` sweeps are performed immediately.
+        If int, ``dmrg_`` returns a generator that would yield output after every iterator_step sweeps.
+        The default is None, in which case  ``dmrg_`` sweeps are performed immediately.
 
     opts_eigs: dict
         options passed to :meth:`yastn.eigs`.
         If None, use default {'hermitian': True, 'ncv': 3, 'which': 'SR'}
 
     opts_svd: dict
-        Options passed to :meth:`yastn.linalg.svd_with_truncation` used to truncate virtual spaces (virtual bond dimension of tensors) in :code:`method='2site'`.
+        Options passed to :meth:`yastn.linalg.svd_with_truncation` used to truncate virtual spaces (virtual bond dimension of tensors) in ``method='2site'``.
+
+    precompute: bool
+        Controls MPS-MPO-MPS contraction order.
+        If ``False``, use an approach optimal for a single matrix-vector product calculation during iterative Krylov-space building,
+        scaling as O(D^3 M d + D^2 M^2 d^2).
+        If ``True``, uses less optimal contraction order, scaling as O(D^3 M d^2 + D^2 M^2 d^2).
+        However, the latter allows precomputing and reusing part of the diagram during consecutive iterations.
+        Which one is more efficient depends on the parameters. The default is ``False``.
 
     Returns
     -------
@@ -105,12 +113,12 @@ def dmrg_(psi, H, project=None, method='1site',
     DMRG_out(NamedTuple)
         NamedTuple including fields:
 
-            * :code:`sweeps` number of performed dmrg sweeps.
-            * :code:`method` method used in the last sweep.
-            * :code:`energy` energy after the last sweep.
-            * :code:`denergy` absolut value of energy change in the last sweep.
-            * :code:`max_dSchmidt` norm of Schmidt values change on the worst cut in the last sweep.
-            * :code:`max_discarded_weight` norm of discarded_weights on the worst cut in '2site' procedure.
+            * ``sweeps`` number of performed dmrg sweeps.
+            * ``method`` method used in the last sweep.
+            * ``energy`` energy after the last sweep.
+            * ``denergy`` absolut value of energy change in the last sweep.
+            * ``max_dSchmidt`` norm of Schmidt values change on the worst cut in the last sweep.
+            * ``max_discarded_weight`` norm of discarded_weights on the worst cut in '2site' procedure.
     """
     tmp = _dmrg_(psi, H, project, method,
                 energy_tol, Schmidt_tol, max_sweeps, iterator_step,
@@ -200,10 +208,10 @@ def _dmrg_sweep_1site_(env, opts_eigs=None, Schmidt=None, precompute=False):
     for to in ('last', 'first'):
         for n in psi.sweep(to=to):
             A = psi.A[n]
-            if precompute:
+            if precompute and env.nr_phys == 1:
                 A = A.fuse_legs(axes=(0, (1, 2)))
             _, (A,) = eigs(lambda x: env.Heff1(x, n), A, k=1, **opts_eigs)
-            if precompute:
+            if precompute and env.nr_phys == 1:
                 A = A.unfuse_legs(axes=1)
             psi.A[n] = A
             psi.orthogonalize_site_(n, to=to, normalize=True)
@@ -230,7 +238,7 @@ def _dmrg_sweep_2site_(env, opts_eigs=None, opts_svd=None, Schmidt=None, precomp
         for n in psi.sweep(to=to, dl=1):
             bd = (n, n + 1)
             AA = psi.merge_two_sites(bd)
-            if precompute:
+            if precompute and env.nr_phys == 1:
                 AA = AA.fuse_legs(axes=((0, 1), (2, 3)))
             _, (AA,) = eigs(lambda v: env.Heff2(v, bd), AA, k=1, **opts_eigs)
             _disc_weight_bd = psi.unmerge_two_sites_(AA, bd, opts_svd)
