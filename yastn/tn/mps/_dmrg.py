@@ -40,7 +40,7 @@ class DMRG_out(NamedTuple):
 
 def dmrg_(psi, H, project=None, method='1site',
         energy_tol=None, Schmidt_tol=None, max_sweeps=1, iterator_step=None,
-        opts_eigs=None, opts_svd=None, precompute=False):
+        opts_eigs=None, opts_svd=None, precompute=True):
     r"""
     Perform DMRG sweeps until convergence, starting from MPS :code:`psi`.
 
