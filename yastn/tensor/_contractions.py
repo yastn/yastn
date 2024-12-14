@@ -38,7 +38,7 @@ def __matmul__(a, b) -> yastn.Tensor:
     return tensordot(a, b, axes=(a.ndim - 1, 0))
 
 
-def tensordot(a, b, axes, conj=(0, 0)) -> yastn.Tensor:
+def tensordot(a, b, axes, conj=(0, 0), policy="m2m") -> yastn.Tensor:
     r"""
     Compute tensor dot product of two tensors along specified axes.
 
@@ -73,6 +73,7 @@ def tensordot(a, b, axes, conj=(0, 0)) -> yastn.Tensor:
         return _tensordot_diag(b, a, in_a, destination=(-1,))
 
     _test_can_be_combined(a, b)
+
     nout_a = tuple(ii for ii in range(a.ndim_n) if ii not in nin_a)  # outgoing native legs
     nout_b = tuple(ii for ii in range(b.ndim_n) if ii not in nin_b)  # outgoing native legs
 
@@ -80,8 +81,15 @@ def tensordot(a, b, axes, conj=(0, 0)) -> yastn.Tensor:
     mfs_c = tuple(a.mfs[ii] for ii in range(a.ndim) if ii not in in_a) + tuple(b.mfs[ii] for ii in range(b.ndim) if ii not in in_b)
     hfs_c = tuple(a.hfs[ii] for ii in nout_a) + tuple(b.hfs[ii] for ii in nout_b)
 
-    ind_a, ind_b = _common_inds(a.struct.t, b.struct.t, nin_a, nin_b, a.ndim_n, b.ndim_n, a.config.sym.NSYM)
+    if policy == 'm2m':
+        data, struct_c, slices_c = _tensordot_m2m(a, b, nout_a, nin_a, nin_b, nout_b, needs_mask, s_c)
 
+    return a._replace(data=data, struct=struct_c, slices=slices_c, mfs=mfs_c, hfs=hfs_c)
+
+
+def _tensordot_m2m(a, b, nout_a, nin_a, nin_b, nout_b, needs_mask, s_c):
+    """ Perform tensordot, by: merging tensors to matrices; executing dot; unmerging outgoing indices. """
+    ind_a, ind_b = _common_inds(a.struct.t, b.struct.t, nin_a, nin_b, a.ndim_n, b.ndim_n, a.config.sym.NSYM)
     data_a, struct_a, slices_a, ls_l, ls_ac = _merge_to_matrix(a, (nout_a, nin_a), ind_a)
     data_b, struct_b, slices_b, ls_bc, ls_r = _merge_to_matrix(b, (nin_b, nout_b), ind_b)
 
@@ -97,7 +105,7 @@ def tensordot(a, b, axes, conj=(0, 0)) -> yastn.Tensor:
 
     meta_unmerge, struct_c, slices_c = _meta_unmerge_matrix(a.config, struct_c, slices_c, ls_l, ls_r, s_c)
     data = _unmerge(a.config, data, meta_unmerge)
-    return a._replace(data=data, struct=struct_c, slices=slices_c, mfs=mfs_c, hfs=hfs_c)
+    return data, struct_c, slices_c
 
 
 @lru_cache(maxsize=1024)
@@ -689,7 +697,6 @@ def _meta_ncon(inds, conjs, order):
             raise YastnError("Positive ints in ins and order should match.")
         reorder = {o: k for k, o in enumerate(order, start=1)}
         inds = [[reorder[o] if o > 0 else o for o in xx] for xx in inds]
-        print(inds)
 
     edges = [[order, leg, ten] if order > 0 else [-order + 1024, leg, ten]
              for ten, el in enumerate(inds) for leg, order in enumerate(el)]
