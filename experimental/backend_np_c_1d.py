@@ -22,7 +22,7 @@ os.environ["OMP_NUM_THREADS"]  is set in backend_np_1d
 """
 
 import os
-_NUM_THREADS="1"
+_NUM_THREADS="2"
 os.environ["OMP_NUM_THREADS"] = _NUM_THREADS        # this has to be set before importing numpy,scipy
 os.environ["OPENBLAS_NUM_THREADS"] = _NUM_THREADS
 os.environ["MKL_NUM_THREADS"] = _NUM_THREADS
