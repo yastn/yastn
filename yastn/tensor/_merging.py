@@ -85,7 +85,7 @@ def _no_change_in_transpose_and_merge(meta_mrg, meta_new, Dsize):
         low = slo[1]
     if low != Dsize:
         return False
-    for (_, Dn, _), (_, gr) in zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])):
+    for (_, Dn, _), (_, gr) in zip(meta_new, groupby(meta_mrg, key=itemgetter(0))):
         low = 0
         for _, _, _, Dslc, _ in gr:
             if Dslc[0][0] != low:
@@ -148,7 +148,7 @@ def _meta_merge_to_matrix(config, struct, slices, axes, inds):
                 for tel, ter, tl, tr, slo, Do in zip(teff[0], teff[1], t[0], t[1], sl_old, D_old))
 
     meta_mrg, t_new, D_new, slices_new, Dlow = [], [], [], [], 0
-    for (tel, ter), gr in groupby(smeta, key=lambda x: x[:2]):
+    for (tel, ter), gr in groupby(smeta, key=itemgetter(0, 1)):
         ind0 = ls[0].t.index(tel)
         ind1 = ls[1].t.index(ter)
         tn = tel + ter
@@ -244,7 +244,7 @@ def fuse_legs(a, axes, mode=None) -> yastn.Tensor:
     _test_axes_all(a, order)
     axes = tuple(_clear_axes(*axes))
     if any(len(x) == 0 for x in axes):
-        raise YastnError(f'Empty axis in {axes=}.')
+        raise YastnError(f'Empty axis in {axes=}. To add a new dim-1 leg, use add_leg().')
 
     if mode == 'meta':
         mfs = []
@@ -337,7 +337,7 @@ def _meta_fuse_hard(config, struct, slices, axes, inds):
                 in zip(teff_split, teff, told_split, sl_old, D_old))
 
     meta_mrg, t_new, D_new = [], [], []
-    for (tes, tn), gr in groupby(smeta, key=lambda x: x[:2]):
+    for (tes, tn), gr in groupby(smeta, key=itemgetter(0, 1)):
         ind = tuple(ls.t.index(te) for ls, te in zip(lls, tes))
         decs = tuple(ls.dec[ii] for ls, ii in zip(lls, ind))
         t_new.append(tn)
@@ -480,7 +480,7 @@ def _meta_unfuse_hard(config, struct, slices, axes, hfs):
             Dsln = tuple(x.Dprod for x in tt)
             meta.append((tn, Dn, Dsln, slo.slcs[0], Do, sub_slc))
 
-    meta = sorted(meta, key=lambda x: x[0])
+    meta = sorted(meta, key=itemgetter(0))
     tnew = tuple(x[0] for x in meta)
     Dnew = tuple(x[1] for x in meta)
     Dpnew = np.prod(np.array(Dnew, dtype=np.int64).reshape(len(Dnew), len(snew)), axis=1, dtype=np.int64).tolist()
@@ -504,7 +504,7 @@ def _meta_unmerge_matrix(config, struct, slices, ls0, ls1, snew):
             Dp = d0.Dprod * d1.Dprod
             meta.append((tn, Dn, Dp, Dsln, slo.slcs[0], Do, sub_slc))
 
-    meta = sorted(meta, key=lambda x: x[0])
+    meta = sorted(meta, key=itemgetter(0))
     tnew = tuple(x[0] for x in meta)
     Dnew = tuple(x[1] for x in meta)
     Dpnew = tuple(x[2] for x in meta)
@@ -627,7 +627,6 @@ def _merge_masks_embed(config, struct, slices, ms):  # TODO
     struct_new = struct._replace(D=Dnew, size=sum(Dp))
     msk = np.hstack(msk) if len(msk) > 0 else np.zeros((0,), dtype=bool)
     return msk, struct_new, slices_new
-
 
 
 def _masks_for_add(config, structa, slicesa, hfa, structb, slicesb, hfb):

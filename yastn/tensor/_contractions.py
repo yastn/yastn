@@ -17,6 +17,7 @@ from __future__ import annotations
 from functools import lru_cache
 from itertools import groupby, accumulate, product
 from numbers import Number
+from operator import itemgetter
 import numpy as np
 from ._auxliary import _struct, _slc, _clear_axes, _unpack_axes, _flatten
 from ._tests import YastnError, _test_can_be_combined, _test_axes_match
@@ -38,7 +39,7 @@ def __matmul__(a, b) -> yastn.Tensor:
     return tensordot(a, b, axes=(a.ndim - 1, 0))
 
 
-def tensordot(a, b, axes, conj=(0, 0), policy="mc") -> yastn.Tensor:
+def tensordot(a, b, axes, conj=(0, 0), policy="m2m") -> yastn.Tensor:
     r"""
     Compute tensor dot product of two tensors along specified axes.
 
@@ -115,29 +116,27 @@ def _tensordot_mc(a, b, nout_a, nin_a, nin_b, nout_b, needs_mask, s_c):
     Perform tensordot by merge_contracted: merging contracted legs, and executing dot.
     Outgoing legs are not merged so unmerge is not needed.
     """
+    if needs_mask:
+        pass
+
     ind_a, ind_b = _common_inds(a.struct.t, b.struct.t, nin_a, nin_b, a.ndim_n, b.ndim_n, a.config.sym.NSYM)
 
     axes_a = tuple((x,) for x in nout_a) + (nin_a,)
     order_a = nout_a + nin_a
-    struct_a, slices_a, meta_mrg_a, t_in, D_in = _meta_fuse_hard(a.config, a.struct, a.slices, axes_a, ind_a)
+    struct_a, slices_a, meta_mrg_a, t_a, D_a = _meta_fuse_hard(a.config, a.struct, a.slices, axes_a, ind_a)
     data_a = _transpose_and_merge(a.config, a._data, order_a, struct_a, slices_a, meta_mrg_a)
 
     axes_b =  (nin_b,) + tuple((x,) for x in nout_b)
     order_b = nin_b + nout_b
-    struct_b, slices_b, meta_mrg_b, t_in, D_in = _meta_fuse_hard(b.config, b.struct, b.slices, axes_b, ind_b)
+    struct_b, slices_b, meta_mrg_b, t_b, D_b = _meta_fuse_hard(b.config, b.struct, b.slices, axes_b, ind_b)
     data_b = _transpose_and_merge(b.config, b._data, order_b, struct_b, slices_b, meta_mrg_b)
 
+    if not all(D_a[ia] == D_b[ib] for ia, ib in zip(nin_a, nin_b)):
+        raise YastnError('Bond dimensions do not match.')
+    assert all(t_a[ia] == t_b[ib] for ia, ib in zip(nin_a, nin_b)), "Sanity check."
+
     meta_dot, struct_c, slices_c = _meta_tensordot_mc(a.config, struct_a, slices_a, struct_b, slices_b)
-
     data = a.config.backend.dot(data_a, data_b, meta_dot, struct_c.size)
-    # if needs_mask:
-    #     msk_a, msk_b = _masks_for_tensordot(a.config, a.struct, a.hfs, nin_a, ls_ac, b.struct, b.hfs, nin_b, ls_bc)
-    #     data = a.config.backend.dot_with_mask(data_a, data_b, meta_dot, struct_c.size, msk_a, msk_b)
-    # else:
-    #     if ls_ac != ls_bc:
-    #         raise YastnError('Bond dimensions do not match.')
-    #     data = a.config.backend.dot(data_a, data_b, meta_dot, struct_c.size)
-
     return data, struct_c, slices_c
 
 
@@ -210,8 +209,8 @@ def _meta_tensordot_mc(config, struct_a, slices_a, struct_b, slices_b):
     Dbc = Db[:, 0].tolist()
     struct_b_resorted = [(tuple(tc), tuple(to), Dc, Dop, tuple(Do), sl.slcs[0]) for tc, to, Dc, Dop, Do, sl in zip(tbc, tbo, Dbc, Dbop, Dbo, slices_b)]
 
-    struct_a_resorted = groupby(struct_a_resorted, key=lambda x: x[0])
-    struct_b_resorted = groupby(struct_b_resorted, key=lambda x: x[0])
+    struct_a_resorted = groupby(struct_a_resorted, key=itemgetter(0))
+    struct_b_resorted = groupby(struct_b_resorted, key=itemgetter(0))
 
     meta = []
     for (tar, group_ta), (tbl, group_tb) in zip(struct_a_resorted, struct_b_resorted):
@@ -519,11 +518,11 @@ def _meta_trace(struct, slices, in1, in2, out):
     Do = tuple(struct.D[n] for n in ind)
     Drsh = tuple(map(tuple, Drsh[ind].tolist()))
 
-    meta = tuple(sorted(zip(tn, Dn, Dnp, t12, slo, Do, Drsh), key=lambda x: x[0]))
+    meta = tuple(sorted(zip(tn, Dn, Dnp, t12, slo, Do, Drsh), key=itemgetter(0)))
 
     low, high = 0, 0
     c_t, c_D, c_slices, meta2, tcon = [], [], [], [], []
-    for t, group in groupby(meta, key=lambda x: x[0]):
+    for t, group in groupby(meta, key=itemgetter(0)):
         c_t.append(t)
         mt = next(group)
         c_D.append(mt[1])
@@ -785,7 +784,7 @@ def _meta_ncon(inds, conjs, order):
     conjs = [0] * len(inds) if conjs is None else list(conjs)
 
     # order of contraction with info on tensor and axis
-    edges = sorted(edges, reverse=True, key=lambda x: x[0])
+    edges = sorted(edges, reverse=True, key=itemgetter(0))
     return _consume_edges(edges, conjs)
 
 

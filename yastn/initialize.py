@@ -19,6 +19,7 @@ importing tensors from different formats such as 1D + metadata or dictionary rep
 from __future__ import annotations
 from ast import literal_eval
 from itertools import groupby, accumulate
+from operator import itemgetter
 import numpy as np
 from .tensor import Tensor, YastnError
 from .tensor._auxliary import _struct, _config, _slc, _clear_axes, _unpack_legs
@@ -467,7 +468,7 @@ def block(tensors, common_legs=None) -> yastn.Tensor:
         tpD = sorted((t, p, D) for p, leg in legs_n.items() for t, D in zip(leg.t, leg.D))
         ltDtot.append({})
         ltDslc.append({})
-        for t, gr in groupby(tpD, key=lambda x: x[0]):
+        for t, gr in groupby(tpD, key=itemgetter(0)):
             Dlow, tpDslc = 0, {}
             for _, p, D in gr:
                 Dhigh = Dlow + D
@@ -493,7 +494,7 @@ def block(tensors, common_legs=None) -> yastn.Tensor:
             if tind not in meta_new:
                 meta_new[tind] = tuple(tDtot[tind[n * nsym : n * nsym + nsym]] for n, tDtot in enumerate(ltDtot))
 
-    meta_block = tuple(sorted(meta_block, key=lambda x: x[0]))
+    meta_block = tuple(sorted(meta_block, key=itemgetter(0)))
     meta_new = tuple(sorted(meta_new.items()))
     c_t = tuple(t for t, _ in meta_new)
     c_D = tuple(D for _, D in meta_new)

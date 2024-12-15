@@ -116,9 +116,10 @@ def test_hard_corner_cases(config_kwargs):
     assert (k - m).norm() < tol
     assert (k - l).norm() < tol
 
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match="Empty axis in axes="):
         a.fuse_legs(axes=((0, 1), (2, 3), ()))
-        # Empty axis in axes=((0, 1), (2, 3), ())
+        # Empty axis in axes=((0, 1), (2, 3), ()). To add a new dim-1 leg, use add_leg().
 
 
 def test_hard_empty_axis(config_kwargs):
@@ -517,6 +518,5 @@ def test_initialize_eye(config_kwargs):
 
 
 if __name__ == '__main__':
-    test_hard_empty_axis({})
     # pytest.main([__file__, "-vs", "--durations=0"])
-    #pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])

@@ -16,6 +16,7 @@
 import numpy as np
 import pytest
 import yastn
+import re
 
 tol = 1e-12  #pylint: disable=invalid-name
 
@@ -99,7 +100,7 @@ def test_dot_basic(config_kwargs):
     b = yastn.rand(config=config_U1, s=(-1, 1, 1),
                   t=((-2, 2), (-1, 1, -3), (-1, 1, -3)),
                   D=((1, 2), (3, 2, 1), (1, 2, 2)))
-    #
+    # some charges are missing
     assert a.size > 0 and b.size > 0
     tensordot_vs_numpy(b, a, axes=((2,), (0,)), conj=(0, 0))
     #
@@ -219,47 +220,49 @@ def test_tensordot_exceptions(config_kwargs):
                     t=(t1, t1, t1, t1), D=(D1, D1, D1, D1))
     b = yastn.rand(config=config_U1, s=(-1, -1, 1, -1),
                     t=(t1, t1, t2, t1), D=(D1, D1, D1, D2))
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match="Signatures do not match."):
         _ = yastn.tensordot(a, b, axes=((0, 1, 2), (0, 1, 2)), conj=(0, 1))
-        # Signatures do not match.
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match="indicate different number of legs."):
         _ = yastn.tensordot(a, b, axes=((0, 1, 2), (0, 1)), conj=(1, 0))
         # axes[0] and axes[1] indicated different number of legs.
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match="Repeated axis in"):
         _ = yastn.tensordot(a, b, axes=((0, 1), (0, 0)), conj=(1, 0))
         # Repeated axis in axes[0] or axes[1].
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match="Bond dimensions do not match."):
         _ = yastn.tensordot(a, b, axes=((2, 3), (2, 3)), conj=(1, 0))
-        # Bond dimensions do not match.
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match="Indicated axes of two tensors have different number of meta-fused legs or sub-fusions order."):
         af = a.fuse_legs(axes=((0, 1), (2, 3)), mode='meta')
         bf = b.fuse_legs(axes=(0, (1, 2, 3)), mode='meta')
         _ = yastn.tensordot(af, bf, axes=(0, 0), conj=(1, 0))
-        # Indicated axes of two tensors have different number of meta-fused legs or sub-fusions order.
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match="Indicated axes of two tensors have different number of hard-fused legs or sub-fusions order."):
         af = a.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
         bf = b.fuse_legs(axes=(0, (1, 2, 3)), mode='hard')
         _ = yastn.tensordot(af, bf, axes=(0, 0), conj=(1, 0))
-        # Indicated axes of two tensors have different number of meta-fused legs or sub-fusions order.
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match="Signatures of hard-fused legs do not match."):
         af = a.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
         bf = b.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
         _ = yastn.tensordot(af, bf, axes=(0, 0), conj=(1, 0))
-        # Signatures of hard-fused legs do not match
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match="Bond dimensions of fused legs do not match."):
         af = a.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
         bf = b.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
         _ = yastn.tensordot(af, bf, axes=(1, 1), conj=(1, 0))
-        # Bond dimensions of fused legs do not match.
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match="Bond dimensions do not match."):
         af = a.fuse_legs(axes=(1, 3, (0, 2)), mode='hard')
         bf = b.fuse_legs(axes=(1, 3, (0, 2)), mode='hard')
         _ = yastn.tensordot(af, bf, axes=((1, 2), (1, 2)), conj=(1, 0))
-        # Bond dimensions do not match.
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match=re.escape("Outer product with diagonal tensor not supported. Use yastn.diag() first.")):
         c = yastn.rand(config=config_U1, isdiag=True, t=(-1, 0, 1), D=(1, 2, 3))
         _ = yastn.tensordot(c, a, axes=((),()))
-        # Outer product with diagonal tensor not supported. Use yastn.diag() first.
 
 
 @torch_test
@@ -319,5 +322,6 @@ def test_tensordot_backward(config_kwargs):
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0"])
+    test_tensordot_exceptions({})
+    # pytest.main([__file__, "-vs", "--durations=0"])
     # pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])

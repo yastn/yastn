@@ -69,7 +69,7 @@ def _test_axes_match(a, b, sgn=1, axes=None):
         uaxes = (tuple(range(a.ndim_n)), tuple(range(b.ndim_n)))
     else:
         if axes is not None and len(axes[0]) != len(axes[1]):
-            raise YastnError('axes[0] and axes[1] indicated different number of legs.')
+            raise YastnError('axes[0] and axes[1] indicate different number of legs.')
         if len(set(axes[0])) != len(axes[0]) or (len(set(axes[1])) != len(axes[1])):
             raise YastnError('Repeated axis in axes[0] or axes[1].')
         if len(set(axes[0]) - set(range(a.ndim))) > 0 or len(set(axes[1]) - set(range(b.ndim))) > 0:

@@ -16,6 +16,7 @@
 from __future__ import annotations
 from dataclasses import dataclass, replace
 from itertools import product, groupby
+from operator import itemgetter
 import numpy as np
 from ._auxliary import _flatten
 from ._tests import YastnError
@@ -289,7 +290,7 @@ def leg_product(*legs, t_allowed=None) -> yastn.Leg:
     tDs = sorted((tuple(x), y) for x, y in zip(teff, Deff))
     #
     tnew, Dnew = [], []
-    for t, group in groupby(tDs, key = lambda x: x[0]):
+    for t, group in groupby(tDs, key=itemgetter(0)):
         if t_allowed is None or t in t_allowed:
             tnew.append(t)
             Dnew.append(sum(tD[1] for tD in group))
