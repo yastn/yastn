@@ -49,7 +49,7 @@ def tensordot_vs_numpy(a, b, axes, conj):
     nc = c.to_numpy(legs={**legs_a_out, **legs_b_out})
     assert c.is_consistent()
     assert a.are_independent(c)
-    assert c.are_independent(b)
+    assert b.are_independent(c)
     assert np.linalg.norm(nc - nab) < tol  # == 0.0
     return c
 
@@ -63,6 +63,8 @@ def test_dot_basic(config_kwargs):
     c1 = tensordot_vs_numpy(a, b, axes=((0, 3), (0, 2)), conj=(0, 0))
     c2 = tensordot_vs_numpy(b, a, axes=((2, 0), (3, 0)), conj=(1, 1))
     assert yastn.norm(c1.conj() - c2.transpose(axes=(1, 2, 0)))
+    # outer product
+    tensordot_vs_numpy(a, b, axes=((), ()), conj=(0, 0))
 
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
@@ -103,6 +105,18 @@ def test_dot_basic(config_kwargs):
 
     tensordot_vs_numpy(a, b, axes=((0, 1), (0, 1)), conj=(0, 0))
     tensordot_vs_numpy(b, a, axes=((1, 0), (1, 0)), conj=(0, 0))
+
+    # corner cases;
+    a = yastn.rand(config=config_Z2xU1, s=(-1, 1),
+                  t=(t1, t1), D=((1, 2, 3, 4), (2, 3, 4, 5)))
+    b = yastn.rand(config=config_Z2xU1, s=(-1, 1),
+                  t=(t2, t2), D=((1, 2, 3, 4), (2, 3, 4, 5)))
+    # outer product
+    # tensordot_vs_numpy(a, b, axes=((), ()), conj=(0, 0))
+    # no matching charges
+    c = tensordot_vs_numpy(a, b, axes=((1,), (0,)), conj=(0, 0))
+    assert c.size == 0
+    assert c.norm() < tol
 
 
 def test_tensordot_diag(config_kwargs):
@@ -284,5 +298,6 @@ def test_tensordot_backward(config_kwargs):
 
 
 if __name__ == '__main__':
+    test_dot_basic({})
     # pytest.main([__file__, "-vs", "--durations=0"])
-    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])
+    # pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])
