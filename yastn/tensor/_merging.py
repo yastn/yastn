@@ -244,7 +244,7 @@ def fuse_legs(a, axes, mode=None) -> yastn.Tensor:
     _test_axes_all(a, order)
     axes = tuple(_clear_axes(*axes))
     if any(len(x) == 0 for x in axes):
-        raise YastnError(f'Empty axis in {axes=}')
+        raise YastnError(f'Empty axis in {axes=}.')
 
     if mode == 'meta':
         mfs = []
@@ -270,8 +270,14 @@ def _fuse_legs_hard(a, axes, order):
     struct, slices, meta_mrg, t_in, D_in = _meta_fuse_hard(a.config, a.struct, a.slices, axes, inds=None)
     data = _transpose_and_merge(a.config, a._data, order, struct, slices, meta_mrg)
     mfs = ((1,),) * len(struct.s)
-    hfs = tuple(_fuse_hfs(a.hfs, t_in, D_in, struct.s[n], axis) if len(axis) > 1 else a.hfs[axis[0]]
-                for n, axis in enumerate(axes))
+    hfs = []
+    for n, axis in enumerate(axes):
+        if len(axis) > 1:
+            hfs.append(_fuse_hfs(a.hfs, t_in, D_in, struct.s[n], axis))
+        elif len(axis) == 1:
+            hfs.append(a.hfs[axis[0]])
+        else:  # len(axis) == 0
+            hfs.append(_Fusion(tree=(1,), op='o', s=(struct.s[n],), t=(), D=()))
     return a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, data=data)
 
 
