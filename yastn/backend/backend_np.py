@@ -24,7 +24,8 @@ import scipy.sparse.linalg
 rng = {'rng': np.random.default_rng(None)}  # initialize random number generator
 BACKEND_ID = "np"
 DTYPE = {'float64': np.float64,
-         'complex128': np.complex128}
+         'complex128': np.complex128,
+         'bool': bool}
 
 
 def cuda_is_available():

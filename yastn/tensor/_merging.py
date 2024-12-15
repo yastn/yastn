@@ -19,7 +19,7 @@ from itertools import groupby, product, accumulate
 from operator import itemgetter
 from typing import NamedTuple
 import numpy as np
-from ._auxliary import _slc, _flatten, _clear_axes, _ntree_to_mf, _mf_to_ntree, _unpack_legs
+from ._auxliary import _slc, _struct, _flatten, _clear_axes, _ntree_to_mf, _mf_to_ntree, _unpack_legs
 from ._tests import YastnError, _test_axes_all, _get_tD_legs
 
 
@@ -530,8 +530,37 @@ def _meta_unmerge_matrix(config, struct, slices, ls0, ls1, snew):
 #     mbm = {t: config.backend.to_mask(_outer_masks(t, msk_b, nsym)) for t in tcon}
 #     return mam, mbm
 
+def _mask_tensor(a, ma):
+    if all(all(v) for v in ma.values()):
+        return None
+    tset = tuple(t + t for t in ma.keys())
+    Dp = tuple(len(v) for v in ma.values())
+    Dset = tuple((d, d) for d in Dp)
+    slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dp), Dp, Dset))
+    size = sum(Dp)
+    struct = _struct(s=(1, -1), n=a.config.sym.zero(), diag=True, t=tset, D=Dset, size=size)
+    mfs = ((1,), (1,))
+    hfs = (_Fusion(s=(1,)), _Fusion(s=(-1,)))
+    data = np.empty(size, dtype=bool)
+    for sla, v in zip(slices, ma.values()):
+        data[slice(*sla.slcs[0])] = v
+    data = a.config.backend.to_tensor(data, dtype='bool', device=a.device)
+    return a._replace(struct=struct, slices=slices, data=data, mfs=mfs, hfs=hfs)
 
-def _masks_for_tensordot(config, structa, hfa, axa, lsa, structb, hfb, axb, lsb):
+
+def _mask_tensor_intersect_legs(a, b, axa, axb):
+    """ masks to get the intersecting parts of legs from two tensors as single masks """
+    msk_a, msk_b = [], []
+    tla, Dla, _= _get_tD_legs(a.struct)
+    tlb, Dlb, _= _get_tD_legs(b.struct)
+    for i1, i2 in zip(axa, axb):
+        ma, mb = _intersect_hfs(a.config, (tla[i1], tlb[i2]), (Dla[i1], Dlb[i2]), (a.hfs[i1], b.hfs[i2]))
+        msk_a.append(_mask_tensor(a, ma))
+        msk_b.append(_mask_tensor(b, mb))
+    return msk_a, msk_b
+
+
+def _masks_for_tensordot_m2m(config, structa, hfa, axa, lsa, structb, hfb, axb, lsb):
     """ masks to get the intersecting parts of legs from two tensors as single masks """
     msk_a, msk_b = [], []
     tla, Dla, _= _get_tD_legs(structa)

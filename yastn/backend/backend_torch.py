@@ -63,7 +63,8 @@ from .linalg.torch_eig_sym import SYMEIG
 torch.random.seed()
 BACKEND_ID = "torch"
 DTYPE = {'float64': torch.float64,
-         'complex128': torch.complex128}
+         'complex128': torch.complex128,
+         'bool': torch.bool}
 
 
 def cuda_is_available():

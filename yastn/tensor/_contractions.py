@@ -22,8 +22,8 @@ import numpy as np
 from ._auxliary import _struct, _slc, _clear_axes, _unpack_axes, _flatten
 from ._tests import YastnError, _test_can_be_combined, _test_axes_match
 from ._merging import _merge_to_matrix, _unmerge, _meta_unmerge_matrix
-from ._merging import _masks_for_tensordot, _masks_for_vdot, _masks_for_trace
-from. _merging import _meta_fuse_hard, _transpose_and_merge
+from ._merging import _masks_for_tensordot_m2m, _masks_for_vdot, _masks_for_trace
+from. _merging import _meta_fuse_hard, _transpose_and_merge, _mask_tensor_intersect_legs
 
 __all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon', 'einsum', 'broadcast', 'apply_mask']
 
@@ -39,7 +39,7 @@ def __matmul__(a, b) -> yastn.Tensor:
     return tensordot(a, b, axes=(a.ndim - 1, 0))
 
 
-def tensordot(a, b, axes, conj=(0, 0), policy="m2m") -> yastn.Tensor:
+def tensordot(a, b, axes, conj=(0, 0), policy="mc") -> yastn.Tensor:
     r"""
     Compute tensor dot product of two tensors along specified axes.
 
@@ -85,7 +85,7 @@ def tensordot(a, b, axes, conj=(0, 0), policy="m2m") -> yastn.Tensor:
     if policy == 'm2m':
         data, struct_c, slices_c = _tensordot_m2m(a, b, nout_a, nin_a, nin_b, nout_b, needs_mask, s_c)
     elif policy == 'mc':
-        data, struct_c, slices_c = _tensordot_mc(a, b, nout_a, nin_a, nin_b, nout_b, needs_mask, s_c)
+        data, struct_c, slices_c = _tensordot_mc(a, b, nout_a, nin_a, nin_b, nout_b, needs_mask)
 
     return a._replace(data=data, struct=struct_c, slices=slices_c, mfs=mfs_c, hfs=hfs_c)
 
@@ -99,7 +99,7 @@ def _tensordot_m2m(a, b, nout_a, nin_a, nin_b, nout_b, needs_mask, s_c):
     meta_dot, struct_c, slices_c = _meta_tensordot_m2m(a.config, struct_a, slices_a, struct_b, slices_b)
 
     if needs_mask:
-        msk_a, msk_b = _masks_for_tensordot(a.config, a.struct, a.hfs, nin_a, ls_ac, b.struct, b.hfs, nin_b, ls_bc)
+        msk_a, msk_b = _masks_for_tensordot_m2m(a.config, a.struct, a.hfs, nin_a, ls_ac, b.struct, b.hfs, nin_b, ls_bc)
         data = a.config.backend.dot_with_mask(data_a, data_b, meta_dot, struct_c.size, msk_a, msk_b)
     else:
         if ls_ac != ls_bc:
@@ -111,13 +111,26 @@ def _tensordot_m2m(a, b, nout_a, nin_a, nin_b, nout_b, needs_mask, s_c):
     return data, struct_c, slices_c
 
 
-def _tensordot_mc(a, b, nout_a, nin_a, nin_b, nout_b, needs_mask, s_c):
+def _apply_mask_to_axes(a, naxes, masks):
+    """ Auxlliary function applying mask tensors to native legs. """
+    for ax, msk in zip(naxes, masks):
+        if msk is not None:
+            Dbnew = tuple(a.config.backend.count_nonzero(msk._data[slice(*sl.slcs[0])]) for sl in msk.slices)
+            meta, struct, slices = _meta_mask(a.struct, a.slices, a.isdiag, msk.struct, msk.slices, Dbnew, ax)
+            data = a.config.backend.mask_diag(a._data, msk._data, meta, struct.size, ax, a.ndim_n)
+            a = a._replace(struct=struct, slices=slices, data=data)
+    return a
+
+
+def _tensordot_mc(a, b, nout_a, nin_a, nin_b, nout_b, needs_mask):
     """
     Perform tensordot by merge_contracted: merging contracted legs, and executing dot.
     Outgoing legs are not merged so unmerge is not needed.
     """
     if needs_mask:
-        pass
+        msk_a, msk_b = _mask_tensor_intersect_legs(a, b, nin_a, nin_b)
+        a = _apply_mask_to_axes(a, nin_a, msk_a)
+        b = _apply_mask_to_axes(b, nin_b, msk_b)
 
     ind_a, ind_b = _common_inds(a.struct.t, b.struct.t, nin_a, nin_b, a.ndim_n, b.ndim_n, a.config.sym.NSYM)
 

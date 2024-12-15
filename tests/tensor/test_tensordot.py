@@ -322,6 +322,6 @@ def test_tensordot_backward(config_kwargs):
 
 
 if __name__ == '__main__':
-    test_tensordot_exceptions({})
+    test_tensordot_fuse_hard({})
     # pytest.main([__file__, "-vs", "--durations=0"])
     # pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])
