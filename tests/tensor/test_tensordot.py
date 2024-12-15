@@ -62,7 +62,7 @@ def test_dot_basic(config_kwargs):
     b = yastn.rand(config=config_dense, s=(1, -1, 1), D=(2, 3, 5), dtype='complex128')
     c1 = tensordot_vs_numpy(a, b, axes=((0, 3), (0, 2)), conj=(0, 0))
     c2 = tensordot_vs_numpy(b, a, axes=((2, 0), (3, 0)), conj=(1, 1))
-    assert yastn.norm(c1.conj() - c2.transpose(axes=(1, 2, 0)))
+    assert yastn.norm(c1.conj() - c2.transpose(axes=(1, 2, 0))) < tol
     # outer product
     tensordot_vs_numpy(a, b, axes=((), ()), conj=(0, 0))
 
@@ -91,6 +91,27 @@ def test_dot_basic(config_kwargs):
     b.set_block(ts=(3, 3, 2, 1), Ds=(3, 3, 2, 1), val='rand')
     tensordot_vs_numpy(a, b, axes=((0, 1), (0, 1)), conj=(0, 1))
     tensordot_vs_numpy(a, b, axes=((0, 3, 1), (1, 2, 0)), conj=(0, 0))
+    #
+    # corner cases
+    a = yastn.rand(config=config_U1, s=(-1, 1, 1),
+                  t=((-1, 1, 0), (-1, 1, 0), (-1, 1, 0)),
+                  D=((1, 2, 3), (3, 2, 1), (1, 2, 2)))
+    b = yastn.rand(config=config_U1, s=(-1, 1, 1),
+                  t=((-2, 2), (-1, 1, -3), (-1, 1, -3)),
+                  D=((1, 2), (3, 2, 1), (1, 2, 2)))
+    #
+    assert a.size > 0 and b.size > 0
+    tensordot_vs_numpy(b, a, axes=((2,), (0,)), conj=(0, 0))
+    #
+    # no matching charges
+    c = tensordot_vs_numpy(a, b, axes=((2,), (0,)), conj=(0, 0))
+    assert c.size == 0
+    assert c.norm() < tol
+    #
+    # outer product
+    c1 = tensordot_vs_numpy(a, b, axes=((), ()), conj=(0, 0))
+    c2 = tensordot_vs_numpy(b, a, axes=((), ()), conj=(1, 1))
+    assert yastn.norm(c1.conj() - c2.transpose(axes=(3, 4, 5, 0, 1, 2))) < tol
 
     # Z2xU1
     config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
@@ -298,6 +319,5 @@ def test_tensordot_backward(config_kwargs):
 
 
 if __name__ == '__main__':
-    test_dot_basic({})
-    # pytest.main([__file__, "-vs", "--durations=0"])
+    pytest.main([__file__, "-vs", "--durations=0"])
     # pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])

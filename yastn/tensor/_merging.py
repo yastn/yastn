@@ -289,7 +289,7 @@ def _meta_fuse_hard(config, struct, slices, axes, inds):
         sl_old = [slices[ii] for ii in inds]
         struct = struct._replace(t=t_old, D=D_old)
 
-    lt, ndim_n, nsym = len(t_old), len(struct.s), len(struct.n)
+    lt, ndim_n, nsym = len(t_old), len(struct.s), config.sym.NSYM
     t_in, D_in, tD_dict = _get_tD_legs(struct)
     slegs = tuple(tuple(struct.s[n] for n in axis) for axis in axes)
     s_eff = [struct.s[axis[0]] if axis else -1 for axis in axes]
@@ -299,7 +299,7 @@ def _meta_fuse_hard(config, struct, slices, axes, inds):
     tset = np.array(t_old, dtype=np.int64).reshape(lt, ndim_n, nsym)
     teff = np.zeros((lt, len(s_eff), nsym), dtype=np.int64)
     for n, a in enumerate(axes):
-        teff[:, n, :] = config.sym.fuse(tset[:, a, :], slegs[n], s_eff[n])
+        teff[:, n, :] = config.sym.fuse(tset[:, a, :], slegs[n], s_eff[n]) if a else config.sym.zero()
 
     lls = []
     for n, a in enumerate(axes):
@@ -316,16 +316,16 @@ def _meta_fuse_hard(config, struct, slices, axes, inds):
         else:  # len(a) == 0
             t = (config.sym.zero(),)
             D = (1,)
-            dec = ((_DecRecord(config.sym.zero(), (0, 1), 1, (1,)),),)
+            dec = ((_DecRecord((), (0, 1), 1, (1,)),),)
             lls.append(_LegSlices(t, D, dec))
 
-    teff_split = (tuple(map(tuple, x)) for x in teff.tolist())
+    teff_split = list(tuple(map(tuple, x)) for x in teff.tolist())
     if len(axes) > 0:
-        told_split = zip(*[tset[:, a, :].reshape(lt, len(a) * nsym).tolist() for a in axes])
-        told_split = (tuple(map(tuple, x)) for x in told_split)
+        told_split = list(zip(*[tset[:, a, :].reshape(lt, len(a) * nsym).tolist() for a in axes]))
+        told_split = list((tuple(map(tuple, x)) for x in told_split))
     else:
         told_split = t_old
-    teff = map(tuple, teff.reshape(lt, len(axes) * nsym).tolist())
+    teff = list(map(tuple, teff.reshape(lt, len(axes) * nsym).tolist()))
 
     smeta = sorted((tes, tn, tos, slo.slcs[0], Do) for tes, tn, tos, slo, Do
                 in zip(teff_split, teff, told_split, sl_old, D_old))
