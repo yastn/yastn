@@ -94,17 +94,12 @@ jobs:
             python_v: '3.9'
             numpy_v: '1.26.4'
             scipy_v: '1.13.1'
-            torch_v: '1.13.1'
-          - backend: torch
-            python_v: '3.11'
-            numpy_v: '1.26'
-            scipy_v: '1.14'
             torch_v: '2.1'
           - backend: torch
             python_v: '3.12'
             numpy_v: '2.0.1'
             scipy_v: '1.14.1'
-            torch_v: '2.4'
+            torch_v: '2.5'
       fail-fast: false
 
     # Steps represent a sequence of tasks that will be executed as part of the job
@@ -133,12 +128,7 @@ jobs:
       - name: setup pytorch
         if: matrix.backend == 'torch'
         run: |
-          if [[ "${{ matrix.torch_v }}" == "1.13.1" ]];
-          then
-            pip install torch==${{ matrix.torch_v }}+cpu --extra-index-url https://download.pytorch.org/whl/cpu
-          else
             pip install torch==${{ matrix.torch_v }} --index-url https://download.pytorch.org/whl/cpu
-          fi
 
       # Run tests
       - name: tests
