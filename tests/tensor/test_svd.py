@@ -14,6 +14,7 @@
 # ==============================================================================
 """ yastn.linalg.svd() and truncation of its singular values """
 from itertools import product
+import numpy as np
 import pytest
 import yastn
 
@@ -125,6 +126,10 @@ def test_svd_sparse(config_kwargs):
 
 
 def test_svd_fix_signs(config_kwargs):
+    """
+    Check fixing phases of columns in U.
+    Make largest-magnitude element in each column real and positive
+    """
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     U = yastn.Tensor(config=config_U1, s=(-1, 1), dtype='complex128')
     S = yastn.Tensor(config=config_U1, s=(-1, 1), isdiag=True)
@@ -230,8 +235,40 @@ def test_svd_truncate(config_kwargs):
     assert S2.norm() < 1e-12 and S2.size == 0
 
 
-def test_svd_truncate_lowrank(config_kwargs):
+def test_svd_lowrank_basic(config_kwargs):
+    """ check lowrank svd vs full-rank svd with truncation. """
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    leg = yastn.Leg(config_U1, s=1, t=(0, 1, 2, 3, 4, 5), D=(1, 2, 4, 8, 64, 128))
+    config_U1.backend.random_seed(seed=0)  # fix seed for testing
+    for dtype in ['float64', 'complex128']:
+        a = yastn.rand(config=config_U1, legs=[leg.conj(), leg], dtype=dtype)
+        #
+        # fixing singular values for testing;
+        # svd_lowrank might be unstable for random matrices!
+        U, S, V = yastn.linalg.svd(a)
+        S = yastn.exp(-S)
+        a = U @ (S / S.norm()) @ V
+        #
+        # actual test
+        U1, S1, V1 = yastn.linalg.svd_with_truncation(a, D_block=3, fix_signs=True)
+        U2, S2, V2 = yastn.linalg.svd(a, D_block=3, policy='lowrank', fix_signs=True)
+        assert (S1 - S2).norm() < tol
+        assert (U1 @ S1 @ V1 - U2 @ S2 @ V2).norm() < tol
+        l1 = S1.get_legs(axes=0)
+        l2 = S2.get_legs(axes=0)
+        assert l1 == l2
+        assert l1.t == ((0,), (1,), (2,), (3,), (4,), (5,))
+        assert l1.D == (1, 2, 3, 3, 3, 3)
+        assert U1.yast_dtype == dtype
+        assert S1.yast_dtype == 'float64'
+        assert V1.yast_dtype == dtype
+        assert U2.yast_dtype == dtype
+        assert S2.yast_dtype == 'float64'
+        assert V2.yast_dtype == dtype
 
+
+def test_svd_truncate_lowrank(config_kwargs):
+    """ check lowrank combined with truncation. """
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     legs = [yastn.Leg(config_U1, s=1, t=(0, 1), D=(5, 6)),
             yastn.Leg(config_U1, s=1, t=(-1, 0), D=(5, 6)),
