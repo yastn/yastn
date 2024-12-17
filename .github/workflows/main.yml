@@ -94,12 +94,12 @@ jobs:
             python_v: '3.9'
             numpy_v: '1.26.4'
             scipy_v: '1.13.1'
-            torch_v: '2.2'
+            torch_v: '2.4'
           - backend: torch
             python_v: '3.12'
             numpy_v: '2.0.1'
             scipy_v: '1.14.1'
-            torch_v: '2.5'
+            torch_v: '2.5.1'
       fail-fast: false
 
     # Steps represent a sequence of tasks that will be executed as part of the job
