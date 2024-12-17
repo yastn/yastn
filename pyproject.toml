@@ -34,7 +34,7 @@ exclude = ["docs*", "tests*", "experimental*"]
 io = ["h5py"]
 test = ["pytest", "pytest-cov", "pytest-randomly"]
 docbuild = ["sphinx", "sphinxcontrib-napoleon", "pydata-sphinx-theme"]
-torch = ["torch>=2.1"]
+torch = ["torch>=2.2"]
 
 [tool.setuptools_scm]
 write_to = "yastn/_version.py"
