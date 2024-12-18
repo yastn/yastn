@@ -14,7 +14,8 @@
 [cov-url]: https://codecov.io/gh/yastn/yastn
 
 
-### Python library for differentiable linear algebra with block-sparse tensors, supporting abelian symmetries. It supports a range of Projected Entangled Pair States (PEPS) and Matrix Product States (MPS) algorithms employing the core Tensor class.
+Python library for differentiable linear algebra with block-sparse tensors, supporting abelian symmetries.
+It supports a range of Projected Entangled Pair States (PEPS) and Matrix Product States (MPS) algorithms employing the core symmetric Tensor class.
 
 ##### YASTN tensors can be defined with both discrete and continuous abelian groups
 
@@ -31,9 +32,9 @@ It allows automatic differentiation (autograd) on backends which support it.
 
 ##### To see YASTN in action, see
 
-- [Quickstarts](https://yastn.github.io/yastn/yastn.quickstart.html)
-- [Full documentation](https://yastn.github.io/yastn/index.html) includes further examples
-
+- [Quickstarts](https://yastn.github.io/yastn/yastn.quickstart.html) for a few end-to-end examples of PEPS calculations.
+- [Benchmarks](https://github.com/yastn/yastn_benchmarks), including basic DMRG example.
+- [Full documentation](https://yastn.github.io/yastn/index.html) for multiple further examples.
 - Two-dimensional tensor networks library [peps-torch](https://github.com/jurajHasik/peps-torch). It includes variational optimization of iPEPS with abelian symmetries for spin models powered by YASTN tensor.
 
 
@@ -72,7 +73,8 @@ pytest -v --backend torch --device cuda
 
 ### Citing YASTN
 
-You could use the following BibTex entry
+If you find this package useful for a project published in an academic journal, you can consider citing the [release paper](https://arxiv.org/abs/2405.12196),
+with the following BibTex entry
 ```
 @misc{yastn,
       title={YASTN: Yet another symmetric tensor networks;

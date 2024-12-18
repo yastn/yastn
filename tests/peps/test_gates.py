@@ -118,50 +118,6 @@ def check_hopping_gate(ops, t, ds):
 
     assert ((O - O2).norm()) < (ds * t) ** 5
 
-# def test_heisenberg_gates(config_kwargs):
-#     ops = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', **config_kwargs)
-#     check_heisenberg_gates(ops, Jz=2, J=1, Jn = 0.5, ds=0.005)
-
-#     ops = yastn.operators.SpinfulFermions_tJ(sym='U1xU1xZ2', **config_kwargs)
-#     check_heisenberg_gates(ops, Jz=1, J=1, Jn = 1, ds=0.005)
-
-#     ops = yastn.operators.SpinfulFermions(sym='Z2', **config_kwargs)
-#     check_heisenberg_gates(ops, Jz=2, J=1, Jn = 0.5, ds=0.005)
-
-#     ops = yastn.operators.SpinfulFermions_tJ(sym='Z2', **config_kwargs)
-#     check_heisenberg_gates(ops, Jz=1, J=1, Jn = 1, ds=0.005)
-
-#     ops = yastn.operators.SpinfulFermions(sym='U1xU1', **config_kwargs)
-#     check_heisenberg_gates(ops, Jz=1, J=2, Jn = 0.5, ds=0.005)
-
-#     ops = yastn.operators.SpinfulFermions_tJ(sym='U1xU1', **config_kwargs)
-#     check_heisenberg_gates(ops, Jz=1, J=1, Jn = 1, ds=0.005)
-
-# def check_heisenberg_gates(ops, Jz, J, Jn, ds):
-
-#     [I, Sz, Sm, Sp] = [ops.I(), ops.Sz(), ops.Sm(), ops.Sp()]
-#     nu, nd = ops.n(spin='u'), ops.n(spin='d')
-
-#     n = nu + nd
-
-#     g_heisenberg = fpeps.gates.gates_Heisenberg_spinful(ds, Jz, J, Jn, Sz, Sp, Sm, n, I)
-#     O = yastn.ncon([g_heisenberg.G0, g_heisenberg.G1], [(-0, -2, 1) , (-1, -3, 1)])
-#     O = O.fuse_legs(axes=((0, 1), (2, 3)))
-
-#     H = fkron(I, I, sites=(0, 1))
-#     H = H + J / 2 * (fkron(Sp, Sm, sites=(0, 1)) + fkron(Sp, Sm, sites=(1, 0))) + \
-#             Jz * fkron(Sz, Sz, sites=(0, 1)) - 0.25 * Jn * fkron(n, n, sites=(0, 1))
-
-
-#     H = H.fuse_legs(axes=((0, 1), (2, 3)))
-#     II = yastn.ncon([I, I], [(-0, -2) , (-1, -3)])
-#     II = II.fuse_legs(axes=((0, 1), (2, 3)))
-
-#     O2 = II + (-ds) * H + (ds ** 2 / 2) * H @ H + (-ds ** 3 / 6) * H @ H @ H + (ds ** 4 / 24) * H @ H @ H @ H
-
-#     assert ((O - O2).norm()) < (ds * max(abs(Jz), abs(J), abs(Jn))) ** 4
-
-
 
 def test_gate_raises(config_kwargs):
     ops = yastn.operators.SpinlessFermions(sym='U1', **config_kwargs)

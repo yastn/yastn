@@ -19,7 +19,7 @@ import yastn
 import yastn.tn.mps as mps
 
 
-def run_dmrg(phi, H, O_occ, E_target, occ_target, opts_svd, tol):
+def run_dmrg(phi, H, O_occ, E_target, occ_target, opts_svd, tol, precompute=False):
     r"""
     Run mps.dmrg_ to find the ground state and
     a few low-energy states of the Hamiltonian H.
@@ -45,9 +45,11 @@ def run_dmrg(phi, H, O_occ, E_target, occ_target, opts_svd, tol):
         #
         # We set up dmrg_ to terminate iterations
         # when energy is converged within some tolerance.
+        # precompute bool argument controls contraction order, see dmrg_ docs.
         #
         out = mps.dmrg_(psi, H, project=project, method='2site',
-                        energy_tol=tol / 10, max_sweeps=20, opts_svd=opts_svd)
+                        energy_tol=tol / 10, max_sweeps=20, opts_svd=opts_svd,
+                        precompute=precompute)
         #
         # Output of _dmrg is a nametuple with information about the run,
         # including the final energy.
@@ -67,7 +69,7 @@ def run_dmrg(phi, H, O_occ, E_target, occ_target, opts_svd, tol):
         # and stricter convergence criterion.
         #
         out = mps.dmrg_(psi, H, project=project, method='1site',
-                        Schmidt_tol=tol / 10, max_sweeps=20)
+                        Schmidt_tol=tol / 10, max_sweeps=20, precompute=precompute)
 
         eng = mps.measure_mpo(psi, H, psi)
         occ = mps.measure_mpo(psi, O_occ, psi)
@@ -251,7 +253,7 @@ def test_dmrg_XX_model_U1_sum_of_Mpos(config_kwargs, tol=1e-6):
     for occ_sector, E_target in Eng_sectors.items():
         psi = generate.random_mps(D_total=Dmax, n=occ_sector)
         occ_target = [occ_sector] * len(E_target)
-        run_dmrg(psi, H, O_occ, E_target, occ_target, opts_svd, tol)
+        run_dmrg(psi, H, O_occ, E_target, occ_target, opts_svd, tol, precompute=True)
 
 
 def test_dmrg_Ising_PBC_Z2(config_kwargs, tol=1e-4):
@@ -290,7 +292,7 @@ def test_dmrg_Ising_PBC_Z2(config_kwargs, tol=1e-4):
         for parity, E_target in Eng_sectors.items():
             psi = mps.random_mps(I, D_total=Dmax, n=(parity,)).canonize_(to='first')
             parity_target = [(-1) ** parity] * len(E_target)
-            psis = run_dmrg(psi, H, P, E_target, parity_target, opts_svd, tol / 100)
+            psis = run_dmrg(psi, H, P, E_target, parity_target, opts_svd, tol / 100, precompute=True)
             for EE, psi in zip(E_target, psis):
                 psi1 = mps.zipper(H, psi, opts_svd=opts_svd, normalize=False)
                 mps.compression_(psi1, [H, psi], method='2site', max_sweeps=4, opts_svd=opts_svd, normalize=False)
@@ -299,9 +301,27 @@ def test_dmrg_Ising_PBC_Z2(config_kwargs, tol=1e-4):
                 #
                 # evolve in real time  # test Heff0 in PBC
                 tf = 0.1
-                next(mps.tdvp_(psi1, H, method='1site', times=(0, tf), dt=0.05, normalize=False))
+                next(mps.tdvp_(psi1, H, method='1site', times=(0, tf), dt=0.05, normalize=False, precompute=True))
                 print((EE * psi * (np.exp(-1j * EE * tf)) - psi1).norm())
                 assert (EE * psi * (np.exp(-1j * EE * tf)) - psi1).norm() < tol
+
+
+def test_dmrg_method_change(config_kwargs):
+    N = 10  # Consider a system of 10 sites
+    ops = yastn.operators.Spin12(sym='Z2', **config_kwargs)
+    I = mps.product_mpo(ops.I(), N)  # identity MPO
+    termsXX = [mps.Hterm(-1, [i, (i + 1) % N], [ops.x(), ops.x()]) for i in range(N)]
+    HXX = mps.generate_mpo(I, termsXX)
+    termsZ = [mps.Hterm(-1, i, ops.z()) for i in range(N)]
+    HZ = mps.generate_mpo(I, termsZ)
+
+    psi = mps.random_mps(I, n=0, D_total=8)
+    method = yastn.Method('2site')
+    opts_svd = {"D_total": 16}
+    for out in mps.dmrg_(psi, [HXX, HZ], method=method, max_sweeps=10, iterator_step=1, opts_svd=opts_svd, energy_tol=1e-10, Schmidt_tol=1e-10):
+        if out.sweeps == 2:
+            method.update_('1site')
+        assert out.method == '2site' if out.sweeps <= 2 else '1site'
 
 
 def test_dmrg_raise(config_kwargs):

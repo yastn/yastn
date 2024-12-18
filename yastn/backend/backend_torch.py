@@ -350,9 +350,11 @@ def bitwise_not(data):
     return torch.bitwise_not(data)
 
 
-def svd_lowrank(data, meta, sizes, niter=60, **kwargs):
+def svd_lowrank(data, meta, sizes, niter=512, **kwargs):
     # torch.svd_lowrank decomposes A = USV^T and return U,S,V
     # complex A is not supported
+    if 'maxiter' in kwargs:
+        niter = kwargs['maxiter']  # maxiter is argument used in scipy; make notation uniform
     real_dtype = data.real.dtype if data.is_complex() else data.dtype
     Udata = torch.zeros((sizes[0],), dtype=data.dtype, device=data.device)
     Sdata = torch.zeros((sizes[1],), dtype=real_dtype, device=data.device)

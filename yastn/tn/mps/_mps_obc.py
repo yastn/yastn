@@ -230,7 +230,7 @@ class MpsMpoOBC(_MpsMpoParent):
 
             normalize: bool
                 Whether to keep track of the norm by accumulating it in self.factor;
-                default is ``True``, i.e., sets the norm to :math:`1`.
+                The default is ``True``, i.e., sets the norm to :math:`1`.
                 The central blocks at the end of the procedure is normalized to unity.
         """
         if self.pC is not None:
@@ -273,8 +273,8 @@ class MpsMpoOBC(_MpsMpoParent):
             It includes information on how to truncate the Schmidt values.
 
         normalize: bool
-            Whether to keep track of the norm of retained Schmidt values
-            by accumulating it in self.factor; default is ``True``, i.e., sets the norm to :math:`1`.
+            Whether to keep track of the norm of retained Schmidt values by accumulating it in self.factor.
+            The default is ``True``, i.e., sets the norm to :math:`1`.
             The truncated Schmidt values (central block) at the end of the procedure are normalized to unity.
         """
         # if self.pC is None:  does not happen now
@@ -364,7 +364,7 @@ class MpsMpoOBC(_MpsMpoParent):
 
         normalize: bool
             Whether to keep track of the norm of the state by accumulating it in self.factor;
-            default is ``True``, i.e., sets the norm to :math:`1`.
+            The default is ``True``, i.e., sets the norm to :math:`1`.
             The individual tensors at the end of the procedure are in a proper canonical form.
         """
         self.absorb_central_(to=to)
@@ -433,8 +433,8 @@ class MpsMpoOBC(_MpsMpoParent):
             :code:`'last'` (the default) or :code:`'first'`.
 
         normalize: bool
-            Whether to keep in self.factor the norm of the initial state projected on
-            the direction of the truncated state; default is ``True``, i.e., sets the norm to :math:`1`.
+            Whether to keep in self.factor the norm of the initial state projected on the direction of the truncated state.
+            The default is ``True``, i.e., sets the norm to :math:`1`.
             The individual tensors at the end of the procedure are in a proper canonical form.
 
         opts_svd: dict
@@ -492,11 +492,22 @@ class MpsMpoOBC(_MpsMpoParent):
         where :math:`\lambda_i` are singular values across the bond.
         """
         nl, nr = bd
-        axes = ((0, 1), (2, 3)) if self.nr_phys == 1 else ((0, 1, 2), (3, 4, 5))
         self.pC = bd
-        U, S, V = tensor.svd(AA, axes=axes, sU=1, Uaxis=2, **opts_svd)
+
+        if self.nr_phys == 1 and AA.ndim == 4:
+            AA = AA.fuse_legs(axes=((0, 1), (2, 3)))
+        if self.nr_phys == 2 and AA.ndim == 6:
+            AA = AA.fuse_legs(axes=((0, 1, 2), (3, 4, 5)))
+
+        U, S, V = tensor.svd(AA, axes=(0, 1), sU=1, **opts_svd)
         mask = tensor.truncation_mask(S, **opts_svd)
-        self.A[nl], self.A[bd], self.A[nr] = mask.apply_mask(U, S, V, axes=(2, 0, 0))
+        U, self.A[bd], V = mask.apply_mask(U, S, V, axes=(1, 0, 0))
+        if self.nr_phys == 1:
+            self.A[nl] = U.unfuse_legs(axes=0)
+        else:
+            self.A[nl] = U.unfuse_legs(axes=0).transpose(axes=(0, 1, 3, 2))
+        self.A[nr] = V.unfuse_legs(axes=1)
+
         return tensor.bitwise_not(mask).apply_mask(S, axes=0).norm() / S.norm()  # discarded weight
 
 

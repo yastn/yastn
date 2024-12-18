@@ -30,10 +30,10 @@ __all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon', 'einsum', 'broadca
 def __matmul__(a, b) -> yastn.Tensor:
     """
     The operation ``A @ B`` uses ``@`` operator to compute tensor dot product.
-    The operation contracts the last axis of :code:`self`, i.e., :code:`a`,
-    with the first axis of :code:`b`.
+    The operation contracts the last axis of ``self``, i.e., ``a``,
+    with the first axis of ``b``.
 
-    It is equivalent to :code:`yastn.tensordot(a, b, axes=(a.ndim - 1, 0))`.
+    It is equivalent to ``yastn.tensordot(a, b, axes=(a.ndim - 1, 0))``.
     """
     return tensordot(a, b, axes=(a.ndim - 1, 0))
 
@@ -53,8 +53,8 @@ def tensordot(a, b, axes, conj=(0, 0)) -> yastn.Tensor:
 
     axes: tuple[int, int] | tuple[Sequence[int], Sequence[int]]
         legs of both tensors to be contracted (for each, they are specified by int or tuple of ints)
-        e.g. :code:`axes=(0, 3)` to contract 0th leg of :code:`a` with 3rd leg of :code:`b`;
-        :code:`axes=((0, 3), (1, 2))` to contract legs 0 and 3 of :code:`a` with 1 and 2 of :code:`b`, respectively.
+        e.g. ``axes=(0, 3)`` to contract 0th leg of ``a`` with 3rd leg of ``b``;
+        ``axes=((0, 3), (1, 2))`` to contract legs 0 and 3 of ``a`` with 1 and 2 of ``b``, respectively.
 
     conj: tuple[int, int]
         specify tensors to conjugate by: ``(0, 0)``, ``(0, 1)``, ``(1, 0)``, or ``(1, 1)``.
@@ -102,7 +102,7 @@ def tensordot(a, b, axes, conj=(0, 0)) -> yastn.Tensor:
 
 @lru_cache(maxsize=1024)
 def _common_inds(t_a, t_b, nin_a, nin_b, ndimn_a, ndimn_b, nsym):
-    """ Return row indices of nparray ``a`` that are in ``b``, and vice versa.  Outputs tuples."""
+    """ Return row indices of nparray ``a`` that are in ``b``, and vice versa. Outputs tuples."""
     t_a = np.array(t_a, dtype=np.int64).reshape((len(t_a), ndimn_a, nsym))
     t_b = np.array(t_b, dtype=np.int64).reshape((len(t_b), ndimn_b, nsym))
     t_a = t_a[:, nin_a, :].reshape(len(t_a), len(nin_a) * nsym).tolist()
@@ -154,21 +154,21 @@ def _tensordot_diag(a, b, in_b, destination):
 
 def broadcast(a, *args, axes=0) -> yastn.Tensor | iterable[yastn.Tensor]:
     r"""
-    Compute tensordot product of diagonal tensor :code:`a` with tensors in :code:`args`.
+    Compute tensordot product of diagonal tensor ``a`` with tensors in ``args``.
 
     Produce diagonal tensor if both are diagonal.
-    Legs of the resulting tensors are ordered in the same way as those of tensors in :code:`args`.
+    Legs of the resulting tensors are ordered in the same way as those of tensors in ``args``.
     It is used (in combination with :meth:`yastn.transpose`) as a subrutine of
     :meth:`yastn.tensordot` for contractions involving diagonal tensor.
 
     Parameters
     ----------
     a, args: yastn.Tensor
-        :code:`a` is diagonal tensor to be broadcasted.
+        ``a`` is diagonal tensor to be broadcasted.
 
     axes: int | Sequence[int]
-        legs of tensors in :code:`args` to be multiplied by diagonal tensor :code:`a`.
-        Number of tensors provided in :code:`args` should match the length of :code:`axes`.
+        legs of tensors in ``args`` to be multiplied by diagonal tensor ``a``.
+        Number of tensors provided in ``args`` should match the length of ``axes``.
     """
     multiple_axes = hasattr(axes, '__iter__')
     axes = (axes,) if not multiple_axes else axes
@@ -233,21 +233,21 @@ def _meta_broadcast(b_struct, b_slices, a_struct, a_slices, axis):
 
 def apply_mask(a, *args, axes=0) -> yastn.Tensor | iterable[yastn.Tensor]:
     r"""
-    Apply mask given by nonzero elements of diagonal tensor :code:`a` on specified axes of tensors in args.
-    Number of tensors in :code:`args` is not restricted.
-    The length of the list :code:`axes` has to be mathing with :code:`args`.
+    Apply mask given by nonzero elements of diagonal tensor ``a`` on specified axes of tensors in args.
+    Number of tensors in ``args`` is not restricted.
+    The length of the list ``axes`` has to be mathing with ``args``.
 
-    Legs of resulting tensor are ordered in the same way as those of tensors in :code:`args`.
-    Bond dimensions of specified :code:`axes` of :code:`args` are truncated according to the mask `a`.
+    Legs of resulting tensor are ordered in the same way as those of tensors in ``args``.
+    Bond dimensions of specified ``axes`` of ``args`` are truncated according to the mask ``a``.
     Produce diagonal tensor if both are diagonal.
 
     Parameters
     ----------
     a, args: yastn.Tensor
-        :code:`a` is a diagonal tensor
+        ``a`` is a diagonal tensor
 
     axes: int | Sequence[int]
-        leg of tensors in :code:`args` where the mask is applied.
+        leg of tensors in ``args`` where the mask is applied.
     """
     multiple_axes = hasattr(axes, '__iter__')
     axes = (axes,) if not multiple_axes else axes
@@ -370,7 +370,7 @@ def trace(a, axes=(0, 1)) -> yastn.Tensor:
     Parameters
     ----------
     axes: tuple[int, int] | tuple[Sequence[int], Sequence[int]]
-        Legs to be traced out, e.g., :code:`axes=(0, 1)`; or :code:`axes=((2, 3, 4), (0, 1, 5))`.
+        Legs to be traced out, e.g., ``axes=(0, 1)``; or ``axes=((2, 3, 4), (0, 1, 5))``.
     """
     lin1, lin2 = _clear_axes(*axes)  # contracted legs
     if len(set(lin1) & set(lin2)) > 0:
@@ -401,7 +401,6 @@ def trace(a, axes=(0, 1)) -> yastn.Tensor:
             raise YastnError('Bond dimensions do not match.')
         data = a.config.backend.trace(a._data, order, meta, struct.size)
     return a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, data=data)
-
 
 
 @lru_cache(maxsize=1024)
@@ -470,8 +469,8 @@ def swap_gate(a, axes, charge=None) -> yastn.Tensor:
     ----------
     axes: Sequence[int | Sequence[int]]
         Tuple with groups of legs. Consecutive pairs of grouped legs that are to be swapped.
-        For instance, :code:`axes = (0, 1)` apply swap gate between 0th and 1st leg.
-        :code:`axes = ((0, 1), (2, 3), 4, 5)` swaps :code:`(0, 1)` with :code:`(2, 3)`, and :code:`4` with :code:`5`.
+        For instance, ``axes = (0, 1)`` apply swap gate between 0th and 1st leg.
+        ``axes = ((0, 1), (2, 3), 4, 5)`` swaps ``(0, 1)`` with ``(2, 3)``, and ``4`` with ``5``.
 
     charge: Optional[Sequence[int]]
         If provided, the swap gate is applied between a virtual one-dimensional leg
@@ -528,7 +527,7 @@ def _meta_swap_gate_charge(t, charge, mf, ndim, nsym, axes, fss):
     return tuple(fp.tolist())
 
 
-def einsum(subscripts, *operands, order='Alphabetic') -> yastn.Tensor:
+def einsum(subscripts, *operands, order=None) -> yastn.Tensor:
     """
     Execute series of tensor contractions.
 
@@ -590,7 +589,7 @@ def einsum(subscripts, *operands, order='Alphabetic') -> yastn.Tensor:
     elif len(sout) != len(set(sout)):
         raise YastnError('Repeated index after ->')
 
-    if order in ('Alphabetic', 'alphabetic'):
+    if order is None:
         order = []
         for v in sin.replace(',', ''):
             if sin.count(v) > 1:
@@ -606,10 +605,10 @@ def einsum(subscripts, *operands, order='Alphabetic') -> yastn.Tensor:
         raise YastnError('Order does not cover all contracted indices.')
     inds = [tuple(d[v] for v in ss) for ss in sin.split(',')]
     ts = list(operands)
-    return ncon(ts, inds, conjs)
+    return ncon(ts, inds, conjs=conjs)
 
 
-def ncon(ts, inds, conjs=None) -> yastn.Tensor:
+def ncon(ts, inds, conjs=None, order=None) -> yastn.Tensor:
     """
     Execute series of tensor contractions.
 
@@ -622,12 +621,16 @@ def ncon(ts, inds, conjs=None) -> yastn.Tensor:
         each inner tuple labels legs of respective tensor with integers.
         Positive values label legs to be contracted,
         with pairs of legs to be contracted denoted by the same integer label.
-        Legs are contracted in the order of ascending integer value.
         Non-positive numbers label legs of the resulting tensor, in reversed order.
 
     conjs: Sequence[int]
-        For each tensor in :code:`ts` contains either ``0`` or ``1``.
+        For each tensor in ``ts`` contains either ``0`` or ``1``.
         If the value is ``1``, the tensor is conjugated.
+
+    order: Sequence[int]
+        Order in which legs, marked by positive indices in inds, are contracted.
+        If None, the legs are contracted following an ascending indices order.
+        The default is None.
 
     Note
     ----
@@ -655,8 +658,10 @@ def ncon(ts, inds, conjs=None) -> yastn.Tensor:
     inds = tuple(_clear_axes(*inds))
     if conjs is not None:
         conjs = tuple(conjs)
+    if order is not None:
+        order = tuple(order)
 
-    meta_tr, meta_dot, meta_transpose = _meta_ncon(inds, conjs)
+    meta_tr, meta_dot, meta_transpose = _meta_ncon(inds, conjs, order)
     ts = dict(enumerate(ts))
     for command in meta_tr:
         t, axes = command
@@ -672,10 +677,19 @@ def ncon(ts, inds, conjs=None) -> yastn.Tensor:
 
 
 @lru_cache(maxsize=1024)
-def _meta_ncon(inds, conjs):
-    """ Turning information in ``inds`` and ``conjs`` into list of contraction commands """
+def _meta_ncon(inds, conjs, order):
+    """ Turning information in ``inds`` and ``conjs`` into list of contraction commands. """
     if not all(-256 < x < 256 for x in _flatten(inds)):
-        raise YastnError('ncon requires indices to be between -256 and 256.')
+        raise YastnError('Ncon requires indices to be between -256 and 256.')
+
+    if order is not None:
+        if len(order) != len(set(order)) or not all(o > 0 for o in order):
+            raise YastnError("Order should be a list of positive ints with no repetitions.")
+        if not set(o for o in _flatten(inds) if o > 0) == set(order):
+            raise YastnError("Positive ints in ins and order should match.")
+        reorder = {o: k for k, o in enumerate(order, start=1)}
+        inds = [[reorder[o] if o > 0 else o for o in xx] for xx in inds]
+        print(inds)
 
     edges = [[order, leg, ten] if order > 0 else [-order + 1024, leg, ten]
              for ten, el in enumerate(inds) for leg, order in enumerate(el)]

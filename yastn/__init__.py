@@ -16,4 +16,10 @@ from .tensor import *
 from .initialize import *
 from .krylov import *
 from . import operators
-from ._version import __version__
+from .tensor._auxliary import Method
+try:
+    from ._version import version as __version__
+    from ._version import version_tuple
+except ImportError:
+    __version__ = "unknown version"
+    version_tuple = (0, 0, "unknown version")
