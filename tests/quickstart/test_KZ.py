@@ -152,7 +152,7 @@ def test_quickstart_KZ(config_kwargs):
     #
     # run evolution
     # evol is a generator with one (final) snapshot to reach
-    next(evol)
+    next(evol)  # execute time evolution
     #
     # calculate expectation values
     Ez_mps = mps.measure_1site(psi, ops.z(), psi)
