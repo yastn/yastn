@@ -475,6 +475,20 @@ def dot(Adata, Bdata, meta_dot, Dsize):
     return newdata
 
 
+def dot_with_sum(Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border, Dsize):
+    dtype = np.promote_types(Adata.dtype, Bdata.dtype)
+    newdata = np.empty((Dsize,), dtype=dtype)
+    Ad = {t: Adata[slice(*sl)].reshape(Di).transpose(Aorder).reshape(Df) for (t, sl, Di, Df) in Areshape}
+    Bd = {t: Bdata[slice(*sl)].reshape(Di).transpose(Border).reshape(Df) for (t, sl, Di, Df) in Breshape}
+    for (sl, Dslc, list_tab) in meta_dot:
+        tmp = newdata[slice(*sl)].reshape(Dslc)
+        ta, tb = list_tab[0]
+        np.matmul(Ad[ta], Bd[tb], out=tmp)
+        for ta, tb in list_tab[1:]:
+            tmp += np.matmul(Ad[ta], Bd[tb])
+    return newdata
+
+
 def dot_with_mask(Adata, Bdata, meta_dot, Dsize, msk_a, msk_b):
     dtype = np.promote_types(Adata.dtype, Bdata.dtype)
     newdata = np.empty((Dsize,), dtype=dtype)

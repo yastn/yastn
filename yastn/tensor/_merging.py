@@ -560,7 +560,7 @@ def _mask_tensor_intersect_legs(a, b, axa, axb):
     return msk_a, msk_b
 
 
-def _masks_for_tensordot_m2m(config, structa, hfa, axa, lsa, structb, hfb, axb, lsb):
+def _masks_for_tensordot_f2m(config, structa, hfa, axa, lsa, structb, hfb, axb, lsb):
     """ masks to get the intersecting parts of legs from two tensors as single masks """
     msk_a, msk_b = [], []
     tla, Dla, _= _get_tD_legs(structa)

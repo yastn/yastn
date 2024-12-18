@@ -23,7 +23,9 @@ __all__ = ['set_cache_maxsize', 'get_cache_info', 'clear_cache']
 def set_cache_maxsize(maxsize=0):
     """Change maxsize of lru_cache to reuses some metadata."""
     _contractions._meta_broadcast = lru_cache(maxsize)(_contractions._meta_broadcast.__wrapped__)
-    _contractions._meta_tensordot_m2m = lru_cache(maxsize)(_contractions._meta_tensordot_m2m.__wrapped__)
+    _contractions._meta_tensordot_f2m = lru_cache(maxsize)(_contractions._meta_tensordot_f2m.__wrapped__)
+    _contractions._meta_tensordot_fc = lru_cache(maxsize)(_contractions._meta_tensordot_fc.__wrapped__)
+    _contractions._meta_tensordot_direct = lru_cache(maxsize)(_contractions._meta_tensordot_direct.__wrapped__)
     _contractions._meta_mask = lru_cache(maxsize)(_contractions._meta_mask.__wrapped__)
     _contractions._common_inds = lru_cache(maxsize)(_contractions._common_inds.__wrapped__)
     _contractions._meta_swap_gate = lru_cache(maxsize)(_contractions._meta_swap_gate.__wrapped__)
@@ -41,7 +43,9 @@ def set_cache_maxsize(maxsize=0):
 def clear_cache():
     """Change maxsize of lru_cache to reuses some metadata."""
     _contractions._meta_broadcast.cache_clear()
-    _contractions._meta_tensordot_m2m.cache_clear()
+    _contractions._meta_tensordot_f2m.cache_clear()
+    _contractions._meta_tensordot_fc.cache_clear()
+    _contractions._meta_tensordot_direct.cache_clear()
     _contractions._meta_mask.cache_clear()
     _contractions._common_inds.cache_clear()
     _contractions._meta_swap_gate.cache_clear()
@@ -64,8 +68,10 @@ def get_cache_info():
             "unfuse_hard": _merging._meta_unfuse_hard.cache_info(),
             "intersect_hfs": _merging._intersect_hfs.cache_info(),
             "combine_leg_structure": _merging._leg_structure_combine_charges_prod.cache_info(),
-            "tensordot_1": _contractions._meta_tensordot_m2m.cache_info(),
-            "tensordot_2": _contractions._common_inds.cache_info(),
+            "tensordot_f2m": _contractions._meta_tensordot_f2m.cache_info(),
+            "tensordot_fc": _contractions._meta_tensordot_fc.cache_info(),
+            "tensordot_direct": _contractions._meta_tensordot_direct.cache_info(),
+            "tensordot_common_inds": _contractions._common_inds.cache_info(),
             "broadcast": _contractions._meta_broadcast.cache_info(),
             "mask": _contractions._meta_mask.cache_info(),
             "trace": _contractions._meta_trace.cache_info(),
