@@ -484,8 +484,10 @@ def dot_with_sum(Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border, Dsi
         tmp = newdata[slice(*sl)].reshape(Dslc)
         ta, tb = list_tab[0]
         np.matmul(Ad[ta], Bd[tb], out=tmp)
-        for ta, tb in list_tab[1:]:
-            tmp += np.matmul(Ad[ta], Bd[tb])
+        if len(list_tab) > 1:
+            t0 = np.empty(Dslc, dtype=dtype)
+            for ta, tb in list_tab[1:]:
+                tmp += np.matmul(Ad[ta], Bd[tb], out=t0)
     return newdata
 
 

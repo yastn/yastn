@@ -783,6 +783,24 @@ def mask_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
     return newdata
 
 
+def dot_with_sum(Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border, Dsize):
+    dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
+    if dtype != Adata.dtype:
+        Adata = Adata.to(dtype=dtype)
+    if dtype != Bdata.dtype:
+        Bdata = Bdata.to(dtype=dtype)
+    Cdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
+    Ad = {t: Adata[slice(*sl)].view(Di).permute(Aorder).reshape(Df) for (t, sl, Di, Df) in Areshape}
+    Bd = {t: Bdata[slice(*sl)].view(Di).permute(Border).reshape(Df) for (t, sl, Di, Df) in Breshape}
+
+    for (sl, Dslc, list_tab) in meta_dot:
+        tmp = Cdata[slice(*sl)].view(Dslc)
+        for ta, tb in list_tab:
+            tmp[:] += Ad[ta] @ Bd[tb]
+
+    return Cdata
+
+
 # dot_dict = {(0, 0): lambda x, y: x @ y,
 #             (0, 1): lambda x, y: x @ y.conj(),
 #             (1, 0): lambda x, y: x.conj() @ y,

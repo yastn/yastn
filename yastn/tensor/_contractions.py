@@ -86,10 +86,10 @@ def tensordot(a, b, axes, conj=(0, 0)) -> yastn.Tensor:
         data, struct_c, slices_c = _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b, needs_mask, s_c)
     elif a.config.tensordot_policy == 'fuse_contracted':
         data, struct_c, slices_c = _tensordot_fc(a, b, nout_a, nin_a, nin_b, nout_b, needs_mask)
-    elif a.config.tensordot_policy == 'direct':
-        data, struct_c, slices_c = _tensordot_direct(a, b, nout_a, nin_a, nin_b, nout_b, needs_mask)
+    elif a.config.tensordot_policy == 'no_fusion':
+        data, struct_c, slices_c = _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b, needs_mask)
     else:
-        raise YastnError(f"Tensordot policy not recognized. It should be 'fuse_to_matrix', 'fuse_to_matrix', or 'direct'.")
+        raise YastnError(f"Tensordot policy not recognized. It should be 'fuse_to_matrix', 'fuse_to_matrix', or 'no_fusion'.")
     return a._replace(data=data, struct=struct_c, slices=slices_c, mfs=mfs_c, hfs=hfs_c)
 
 
@@ -156,7 +156,7 @@ def _tensordot_fc(a, b, nout_a, nin_a, nin_b, nout_b, needs_mask):
     return data, struct_c, slices_c
 
 
-def _tensordot_direct(a, b, nout_a, nin_a, nin_b, nout_b, needs_mask):
+def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b, needs_mask):
     """
     Perform tensordot directly: permute blocks and execute dot accumulaing results into result blocks.
     """
@@ -167,7 +167,7 @@ def _tensordot_direct(a, b, nout_a, nin_a, nin_b, nout_b, needs_mask):
 
     ind_a, ind_b = _common_inds(a.struct.t, b.struct.t, nin_a, nin_b, a.ndim_n, b.ndim_n, a.config.sym.NSYM)
 
-    meta_dot, reshape_a, reshape_b, struct_c, slices_c = _meta_tensordot_direct(a.config, a.struct, a.slices, b.struct, b.slices, ind_a, ind_b, nout_a, nin_a, nin_b, nout_b)
+    meta_dot, reshape_a, reshape_b, struct_c, slices_c = _meta_tensordot_nf(a.config, a.struct, a.slices, b.struct, b.slices, ind_a, ind_b, nout_a, nin_a, nin_b, nout_b)
     order_a = nout_a + nin_a
     order_b = nin_b + nout_b
     data = a.config.backend.dot_with_sum(a.data, b.data, meta_dot, reshape_a, reshape_b, order_a, order_b, struct_c.size)
@@ -264,7 +264,7 @@ def _meta_tensordot_fc(config, struct_a, slices_a, struct_b, slices_b):
 
 
 @lru_cache(maxsize=1024)
-def _meta_tensordot_direct(config, struct_a, slices_a, struct_b, slices_b, ind_a, ind_b, nout_a, nin_a, nin_b, nout_b):
+def _meta_tensordot_nf(config, struct_a, slices_a, struct_b, slices_b, ind_a, ind_b, nout_a, nin_a, nin_b, nout_b):
 
     nsym = config.sym.NSYM
     n_c = config.sym.add_charges(struct_a.n, struct_b.n)

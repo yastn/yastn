@@ -180,6 +180,7 @@ def tensordot_hf(a, b, hf_axes1):
 def test_tensordot_fuse_hard(config_kwargs):
     """ test tensordot combined with hard-fusion."""
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    # will have some leg-structure mismatches after fusion to resolve.
     t1, t2, t3 = (-1, 0, 1), (-2, 0, 2), (-3, 0, 3)
     D1, D2, D3 = (1, 3, 2), (3, 3, 4), (5, 3, 6)
     a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1, 1),
@@ -188,6 +189,21 @@ def test_tensordot_fuse_hard(config_kwargs):
                 t=(t2, t2, t3, t3, t1, t1), D=(D2, D3, D1, D3, D1, D2))
     tensordot_hf(a, b, hf_axes1=(0, (4, 3, 1), (5, 2)))
     tensordot_hf(a, b, hf_axes1=(0, (4, 3, 1, 5), 2))
+    #
+    # other corner case; no matching charges
+    a = yastn.rand(config=config_U1, s=(1, 1, 1),
+                  t=((-1, 1, 0), (-1, 1, 0), (-1, 1, 0)),
+                  D=((1, 2, 3), (1, 2, 3), (1, 2, 3)))
+    b = yastn.rand(config=config_U1, s=(-1, -1, -1),
+                  t=((-2, 2), (-1, 1), (-1, 1, -3)),
+                  D=((4, 4), (1, 2), (1, 2, 5)))
+    c = tensordot_vs_numpy(a, b, axes=((1, 2), (0, 1)), conj=(0, 0))
+    af = a.fuse_legs(axes=(0, (1, 2)), mode='hard')
+    bf = b.fuse_legs(axes=((0, 1), 2), mode='hard')
+    cf = tensordot_vs_numpy(af, bf, axes=((1,), (0,)), conj=(0, 0))
+    assert (cf - c).norm() < tol
+    # assert cf.size == 0
+    assert cf.norm() < tol
 
 
 def test_tensordot_fuse_meta(config_kwargs):
@@ -279,7 +295,7 @@ def test_tensordot_fuse_hard_backward(config_kwargs):
     fb = yastn.fuse_legs(b, axes=(0, (4, 3, 1), (5, 2)), mode='hard')
     ffb = yastn.fuse_legs(fb, axes=(0, (2, 1)), mode='hard')
 
-    target_block = (0,0,0,0,0,0)
+    target_block = (0, 0, 0, 0, 0, 0)
     target_block_size = a[target_block].size()
 
     def test_f(block):
@@ -300,28 +316,38 @@ def test_tensordot_backward(config_kwargs):
     import torch
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
-    a = yastn.rand(config=config_U1, s=(-1, -1, 1, 1),
-                  t=[(0, 1), (0, 1), (0, 1), (0, 1)],
-                  D=[(2, 3), (4, 5), (4, 3), (2, 1)], dtype='complex128')
-    b = yastn.rand(config=config_U1, s=(1, 1, -1, -1),
-                  t=[(0, 1), (0, 1), (0, 1), (0, 1)],
-                  D=[(2, 3), (4, 5), (4, 3), (2, 1)], dtype='complex128')
-    # b = a.clone()
-    target_block = (0, 1, 1, 0)
-    target_block_size = a[target_block].size()
+    dtypes = ("float64", "complex128")
 
-    def test_f(block):
-        a.set_block(ts=target_block, val=block)
-        ab = yastn.tensordot(a, b, axes=((1, 2), (1, 2)))
-        ab = ab.norm()
-        return ab
+    for dtype in dtypes:
+        a = yastn.rand(config=config_U1, s=(-1, -1, 1, 1),
+                    t=[(0, 1), (0, 1), (0, 1), (0, 1)],
+                    D=[(2, 3), (4, 5), (4, 3), (2, 1)], dtype=dtype)
 
-    op_args = (torch.randn(target_block_size, dtype=a.get_dtype(), requires_grad=True),)
-    test = torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4)
-    assert test
+        b1 = yastn.rand(config=config_U1, s=(1, 1, -1, -1),  # charges match exactly
+                    t=[(0, 1), (0, 1), (0, 1), (0, 1)],
+                    D=[(2, 3), (4, 5), (4, 3), (2, 1)], dtype=dtype)
+        b2 = yastn.rand(config=config_U1, s=(1, 1, -1, -1),  # some mismatches
+                    t=[(0, 2), (1, 2), (0, 1, 2), (0, 1, 2)],
+                    D=[(2, 3), (5, 6), (4, 3, 4), (2, 1, 3)], dtype=dtype)
+        b3 = yastn.rand(config=config_U1, s=(1, 1, -1, -1),  # no matching blocks with a
+                    t=[(0, 2), (-1, 2), (-1,  2), (0, 1, 2)],
+                    D=[(2, 3), (5, 6), (4, 4), (2, 1, 3)], dtype=dtype)
+
+        for b in [b1, b2, b3]:
+            target_block = (0, 1, 1, 0)
+            target_block_size = a[target_block].size()
+
+            def test_f(block):
+                a.set_block(ts=target_block, val=block)
+                ab = yastn.tensordot(a, b, axes=((1, 2), (1, 2)))
+                ab = ab.norm()
+                return ab
+
+            op_args = (torch.randn(target_block_size, dtype=a.get_dtype(), requires_grad=True),)
+            test = torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4)
+            assert test
 
 
 if __name__ == '__main__':
-    test_tensordot_fuse_hard({})
     # pytest.main([__file__, "-vs", "--durations=0"])
-    # pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--tensordot_policy", "fuse_contracted"])
