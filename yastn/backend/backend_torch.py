@@ -619,6 +619,15 @@ def diag_2dto1d(data, meta, Dsize):
 
 def dot(Adata, Bdata, meta_dot, Dsize):
     return kernel_dot.apply(Adata, Bdata, meta_dot, Dsize)
+    # dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
+    # if dtype != Adata.dtype:
+    #     Adata = Adata.to(dtype=dtype)
+    # if dtype != Bdata.dtype:
+    #     Bdata = Bdata.to(dtype=dtype)
+    # newdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
+    # for (slc, Dc, sla, Da, slb, Db, ia, ib) in meta_dot:
+    #     newdata[slice(*slc)].view(Dc)[:] = Adata[slice(*sla)].view(Da) @ Bdata[slice(*slb)].view(Db)
+    # return newdata
 
 
 if _torch_version_check("2.0"):

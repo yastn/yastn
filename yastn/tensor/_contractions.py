@@ -95,19 +95,26 @@ def tensordot(a, b, axes, conj=(0, 0)) -> yastn.Tensor:
 
 def _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b, needs_mask, s_c):
     """ Perform tensordot by fuse_to_matrix: merging tensors to matrices, executing dot, and unmerging outgoing legs. """
+
+    if needs_mask:
+        msk_a, msk_b = _mask_tensor_intersect_legs(a, b, nin_a, nin_b)
+        a = _apply_mask_to_axes(a, nin_a, msk_a)
+        b = _apply_mask_to_axes(b, nin_b, msk_b)
+
     ind_a, ind_b = _common_inds(a.struct.t, b.struct.t, nin_a, nin_b, a.ndim_n, b.ndim_n, a.config.sym.NSYM)
     data_a, struct_a, slices_a, ls_l, ls_ac = _merge_to_matrix(a, (nout_a, nin_a), ind_a)
     data_b, struct_b, slices_b, ls_bc, ls_r = _merge_to_matrix(b, (nin_b, nout_b), ind_b)
 
+    if ls_ac != ls_bc:
+        raise YastnError('Bond dimensions do not match.')
+
     meta_dot, struct_c, slices_c = _meta_tensordot_f2m(a.config, struct_a, slices_a, struct_b, slices_b)
 
-    if needs_mask:
-        msk_a, msk_b = _masks_for_tensordot_f2m(a.config, a.struct, a.hfs, nin_a, ls_ac, b.struct, b.hfs, nin_b, ls_bc)
-        data = a.config.backend.dot_with_mask(data_a, data_b, meta_dot, struct_c.size, msk_a, msk_b)
-    else:
-        if ls_ac != ls_bc:
-            raise YastnError('Bond dimensions do not match.')
-        data = a.config.backend.dot(data_a, data_b, meta_dot, struct_c.size)
+    # if needs_mask:
+    #     msk_a, msk_b = _masks_for_tensordot_f2m(a.config, a.struct, a.hfs, nin_a, ls_ac, b.struct, b.hfs, nin_b, ls_bc)
+    #     data = a.config.backend.dot_with_mask(data_a, data_b, meta_dot, struct_c.size, msk_a, msk_b)
+    # else:
+    data = a.config.backend.dot(data_a, data_b, meta_dot, struct_c.size)
 
     meta_unmerge, struct_c, slices_c = _meta_unmerge_matrix(a.config, struct_c, slices_c, ls_l, ls_r, s_c)
     data = _unmerge(a.config, data, meta_unmerge)

@@ -8,8 +8,8 @@ def pytest_addoption(parser):
     parser.addoption("--tensordot_policy", help='fuse_to_matrix or fuse_contracted or direct', default='fuse_to_matrix', action='store')
     parser.addoption("--bug_pytorch110", help='test complex conjugation bug in PyTorch 1.10',\
         action='store_true', dest="bug_pytorch110", default=False)
-    parser.addoption("--quickstarts", help='execute quickstarts',\
-        action='store_true', dest="quickstarts", default=False)
+    parser.addoption("--quickstart", help='execute quickstarts',\
+        action='store_true', dest="quickstart", default=False)
 
 
 @pytest.fixture

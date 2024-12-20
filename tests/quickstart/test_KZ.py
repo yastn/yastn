@@ -15,7 +15,7 @@
 """ Test quickstart example Kibble-Zurek. """
 import pytest
 
-@pytest.mark.skipif("not config.getoption('quickstarts')")
+@pytest.mark.skipif("not config.getoption('quickstart')")
 def test_quickstart_KZ(config_kwargs):
     """ test quickstart Kibble-Zurek example"""
 
@@ -199,4 +199,4 @@ def test_quickstart_KZ(config_kwargs):
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0", "--quickstarts"])
+    pytest.main([__file__, "-vs", "--durations=0", "--quickstart"])
