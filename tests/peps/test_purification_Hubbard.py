@@ -16,6 +16,10 @@
 import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
+from joblib import Parallel
+
+Pool = Parallel(n_jobs=4)
+# Pool = None
 
 def mean(xs):
     return sum(xs) / len(xs)
@@ -65,7 +69,7 @@ def test_NTU_spinful_finite(config_kwargs):
     infos = []
     for step in range(1, steps + 1):
         print(f"beta = {step * dbeta:0.3f}" )
-        info = fpeps.evolution_step_(env, gates, opts_svd=opts_svd, fix_metric=None)
+        info = fpeps.evolution_step_(env, gates, opts_svd=opts_svd, fix_metric=None, pool=Pool)
         infos.append(info)
 
     # convergence criteria for CTM based on total energy
@@ -75,7 +79,7 @@ def test_NTU_spinful_finite(config_kwargs):
     env = fpeps.EnvCTM(psi)
 
     for _ in range(50):
-        env.update_(opts_svd=opts_svd_ctm)  # single CMTRG sweep
+        env.update_(opts_svd=opts_svd_ctm, pool=Pool)  # single CMTRG sweep
 
         # calculate expectation values
         d_oc = env.measure_1site(n_int)
@@ -163,7 +167,7 @@ def test_NTU_spinful_infinite(config_kwargs):
     env = fpeps.EnvNTU(psi, which='NN+')
     for step in range(init_steps):
         print(f"beta = {(step + 1) * dbeta:0.3f}" )
-        info = fpeps.evolution_step_(env, gates, opts_svd=opts_svd_evol)
+        info = fpeps.evolution_step_(env, gates, opts_svd=opts_svd_evol, pool=Pool)
         infos.append(info)
 
     # after that we switch to fast Full Update
@@ -171,13 +175,13 @@ def test_NTU_spinful_infinite(config_kwargs):
     print("Switching to full update")
     env = fpeps.EnvCTM(psi, init='eye')
     for _ in range(4):  # few CTM iterations to converge
-        env.update_(opts_svd=opts_svd_ctm)
+        env.update_(opts_svd=opts_svd_ctm, pool=Pool)
 
     for step in range(init_steps, steps):
         print(f"beta = {(step + 1) * dbeta:0.3f}" )
         info = fpeps.evolution_step_(env, gates, opts_svd=opts_svd_evol)
         infos.append(info)
-        env.update_(opts_svd=opts_svd_ctm)  # update CTM tensors after a full evolution step.
+        env.update_(opts_svd=opts_svd_ctm, pool=Pool)  # update CTM tensors after a full evolution step.
         for inf in info:
             print(inf)
 
@@ -192,7 +196,7 @@ def test_NTU_spinful_infinite(config_kwargs):
 
     # env = fpeps.EnvCTM(psi)
     for _ in range(10):  # we double-check convergence of CTM tensors
-        env.update_(opts_svd=opts_svd_ctm)  # method='2site',
+        env.update_(opts_svd=opts_svd_ctm, pool=Pool)  # method='2site',
         cdagc_up = env.measure_nn(cdag_up, c_up)
         cdagc_dn = env.measure_nn(cdag_dn, c_dn)
         energy = -2 * mean([*cdagc_up.values(), *cdagc_dn.values()])
@@ -210,4 +214,4 @@ def test_NTU_spinful_infinite(config_kwargs):
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0"])
+    pytest.main([__file__, "-vv", "--durations=0"])

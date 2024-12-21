@@ -496,7 +496,7 @@ class EnvCTM(Peps):
         return env_win.sample(projectors, number, opts_svd, opts_var, progressbar, return_info)
 
 
-    def update_(env, opts_svd, method='2site'):
+    def update_(env, opts_svd, method='2site', pool=None):
         r"""
         Perform one step of CTMRG update. Environment tensors are updated in place.
 
@@ -535,7 +535,7 @@ class EnvCTM(Peps):
         #
         # horizontal projectors
         for site in env.sites():
-            update_proj_(proj, site, 'lr', env, opts_svd)
+            update_proj_(proj, site, 'lr', env, opts_svd, pool=pool)
         trivial_projectors_(proj, 'lr', env)  # fill None's
         #
         # horizontal move
@@ -742,7 +742,7 @@ def calculate_corner_svd(env):
     return corner_sv
 
 
-def update_2site_projectors_(proj, site, dirn, env, opts_svd):
+def update_2site_projectors_(proj, site, dirn, env, opts_svd, pool=None):
     r"""
     Calculate new projectors for CTM moves from 4x4 extended corners.
     """
@@ -769,12 +769,12 @@ def update_2site_projectors_(proj, site, dirn, env, opts_svd):
     if 'r' in dirn:
         _, r_t = qr(cor_tt, axes=(0, 1))
         _, r_b = qr(cor_bb, axes=(1, 0))
-        proj[tr].hrb, proj[br].hrt = proj_corners(r_t, r_b, opts_svd=opts_svd)
+        proj[tr].hrb, proj[br].hrt = proj_corners(r_t, r_b, opts_svd=opts_svd, pool=pool)
 
     if 'l' in dirn:
         _, r_t = qr(cor_tt, axes=(1, 0))
         _, r_b = qr(cor_bb, axes=(0, 1))
-        proj[tl].hlb, proj[bl].hlt = proj_corners(r_t, r_b, opts_svd=opts_svd)
+        proj[tl].hlb, proj[bl].hlt = proj_corners(r_t, r_b, opts_svd=opts_svd, pool=pool)
 
     if ('t' in dirn) or ('b' in dirn):
         cor_ll = cor_bl @ cor_tl
@@ -783,15 +783,15 @@ def update_2site_projectors_(proj, site, dirn, env, opts_svd):
     if 't' in dirn:
         _, r_l = qr(cor_ll, axes=(0, 1))
         _, r_r = qr(cor_rr, axes=(1, 0))
-        proj[tl].vtr, proj[tr].vtl = proj_corners(r_l, r_r, opts_svd=opts_svd)
+        proj[tl].vtr, proj[tr].vtl = proj_corners(r_l, r_r, opts_svd=opts_svd, pool=pool)
 
     if 'b' in dirn:
         _, r_l = qr(cor_ll, axes=(1, 0))
         _, r_r = qr(cor_rr, axes=(0, 1))
-        proj[bl].vbr, proj[br].vbl = proj_corners(r_l, r_r, opts_svd=opts_svd)
+        proj[bl].vbr, proj[br].vbl = proj_corners(r_l, r_r, opts_svd=opts_svd, pool=pool)
 
 
-def update_1site_projectors_(proj, site, dirn, env, opts_svd):
+def update_1site_projectors_(proj, site, dirn, env, opts_svd, pool=None):
     r"""
     Calculate new projectors for CTM moves from 4x2 extended corners.
     """
@@ -811,10 +811,10 @@ def update_1site_projectors_(proj, site, dirn, env, opts_svd):
         r_br, r_bl = regularize_1site_corners(cor_br, cor_bl)
 
     if 'r' in dirn:
-        proj[tr].hrb, proj[br].hrt = proj_corners(r_tr, r_br, opts_svd=opts_svd)
+        proj[tr].hrb, proj[br].hrt = proj_corners(r_tr, r_br, opts_svd=opts_svd, pool=pool)
 
     if 'l' in dirn:
-        proj[tl].hlb, proj[bl].hlt = proj_corners(r_tl, r_bl, opts_svd=opts_svd)
+        proj[tl].hlb, proj[bl].hlt = proj_corners(r_tl, r_bl, opts_svd=opts_svd, pool=pool)
 
     if ('t' in dirn) or ('b' in dirn):
         cor_bl = (env[br].bl @ env[br].l).fuse_legs(axes=((0, 1), 2))
@@ -825,10 +825,10 @@ def update_1site_projectors_(proj, site, dirn, env, opts_svd):
         r_tr, r_br = regularize_1site_corners(cor_tr, cor_br)
 
     if 't' in dirn:
-        proj[tl].vtr, proj[tr].vtl = proj_corners(r_tl, r_tr, opts_svd=opts_svd)
+        proj[tl].vtr, proj[tr].vtl = proj_corners(r_tl, r_tr, opts_svd=opts_svd, pool=pool)
 
     if 'b' in dirn:
-        proj[bl].vbr, proj[br].vbl = proj_corners(r_bl, r_br, opts_svd=opts_svd)
+        proj[bl].vbr, proj[br].vbl = proj_corners(r_bl, r_br, opts_svd=opts_svd, pool=pool)
 
 
 def regularize_1site_corners(cor_0, cor_1):
@@ -841,10 +841,10 @@ def regularize_1site_corners(cor_0, cor_1):
     r_1 = tensordot((S @ U_1), Q_1, axes=(1, 1))
     return r_0, r_1
 
-def proj_corners(r0, r1, opts_svd):
+def proj_corners(r0, r1, opts_svd, pool=None):
     r""" Projectors in between r0 @ r1.T corners. """
     rr = tensordot(r0, r1, axes=(1, 1))
-    u, s, v = rr.svd(axes=(0, 1), sU=r0.s[1], fix_signs=True)
+    u, s, v = rr.svd(axes=(0, 1), sU=r0.s[1], fix_signs=True, pool=pool)
 
     Smask = truncation_mask(s, **opts_svd)
     u, s, v = Smask.apply_mask(u, s, v, axes=(-1, 0, 0))

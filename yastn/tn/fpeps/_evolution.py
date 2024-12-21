@@ -37,7 +37,7 @@ class Evolution_out(NamedTuple):
 def evolution_step_(env, gates, opts_svd, symmetrize=True,
                     fix_metric=0,
                     pinv_cutoffs=(1e-12, 1e-11, 1e-10, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4),
-                    max_iter=100, tol_iter=1e-13, initialization="EAT_SVD"):
+                    max_iter=100, tol_iter=1e-13, initialization="EAT_SVD", pool=None):
     r"""
     Perform a single step of PEPS evolution by applying a list of gates.
     Truncate bond dimension after each application of a two-site gate.
@@ -98,11 +98,11 @@ def evolution_step_(env, gates, opts_svd, symmetrize=True,
     for gate in gates.local:
         psi[gate.site] = apply_gate_onsite(psi[gate.site], gate.G)
     for gate in gates.nn:
-        info = apply_nn_truncate_optimize_(env, psi, gate, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization=initialization)
+        info = apply_nn_truncate_optimize_(env, psi, gate, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization=initialization, pool=pool)
         infos.append(info)
     if symmetrize:
         for gate in gates.nn[::-1]:
-            info = apply_nn_truncate_optimize_(env, psi, gate, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization=initialization)
+            info = apply_nn_truncate_optimize_(env, psi, gate, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization=initialization, pool=pool)
             infos.append(info)
         for gate in gates.local[::-1]:
             psi[gate.site] = apply_gate_onsite(psi[gate.site], gate.G)
@@ -112,7 +112,7 @@ def evolution_step_(env, gates, opts_svd, symmetrize=True,
 def apply_nn_truncate_optimize_(env, psi, gate, opts_svd,
                     fix_metric=0,
                     pinv_cutoffs=(1e-12, 1e-11, 1e-10, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4),
-                    max_iter=100, tol_iter=1e-15, initialization="EAT_SVD"):
+                    max_iter=100, tol_iter=1e-15, initialization="EAT_SVD", pool=None):
     r"""
     Applies a nearest-neighbor gate to a PEPS tensor, truncate, and
     optimize the resulting tensors using alternate least squares.
@@ -158,12 +158,12 @@ def apply_nn_truncate_optimize_(env, psi, gate, opts_svd,
 
         if 'EAT' in initialization:
             key = 'eat'
-            Ms[key], error2s[key], pinvs[key], info["eat_metric_error"] = initial_truncation_EAT(M0, M1, fgf, fRR, RRgRR, opts, pinv_cutoffs)
+            Ms[key], error2s[key], pinvs[key], info["eat_metric_error"] = initial_truncation_EAT(M0, M1, fgf, fRR, RRgRR, opts, pinv_cutoffs, pool=pool)
             key = 'eat_opt'
             Ms[key], error2s[key], pinvs[key], iters[key] = optimize_truncation(*Ms['eat'], error2s['eat'], fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter)
         if 'SVD' in initialization:
             key = 'svd'
-            Ms[key] = symmetrized_svd(M0, M1, opts, normalize=False)
+            Ms[key] = symmetrized_svd(M0, M1, opts, normalize=False, pool=pool)
             error2s[key] = calculate_truncation_error2(Ms[key][0] @ Ms[key][1], fgf, fRR, RRgRR)
             key = 'svd_opt'
             Ms[key], error2s[key], pinvs[key], iters[key] = optimize_truncation(*Ms['svd'], error2s['svd'], fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter)
@@ -229,11 +229,11 @@ def accumulated_truncation_error(infoss, statistics='mean'):
     return Delta
 
 
-def symmetrized_svd(R0, R1, opts_svd, normalize=False):
+def symmetrized_svd(R0, R1, opts_svd, normalize=False, pool=None):
     """ SVD truncation of central tensor; divide singular values symmetrically between tensors. """
     Q0, R0 = R0.qr(axes=(0, 1))
     Q1, R1 = R1.qr(axes=(1, 0), Qaxis=0, Raxis=1)
-    U, S, V = svd_with_truncation(R0 @ R1, sU=R0.s[1], **opts_svd)
+    U, S, V = svd_with_truncation(R0 @ R1, sU=R0.s[1], pool=pool, **opts_svd)
     if normalize:
         S = S / S.norm(p='inf')
     S = S.sqrt()
@@ -249,7 +249,7 @@ def calculate_truncation_error2(fMM, fgf, fRR, RRgRR):
     return abs(vdot(delta, fgf @ delta).item()) / RRgRR
 
 
-def initial_truncation_EAT(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs):
+def initial_truncation_EAT(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs, pool=None):
     """
     Truncate R0 @ R1 to bond dimension specified in opts_svd
     including information from a product approximation of bond metric.
@@ -280,7 +280,7 @@ def initial_truncation_EAT(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs):
     S0, U0 = G0.eigh_with_truncation(axes=(0, 1), tol=min(pinv_cutoffs))
     S1, U1 = G1.eigh_with_truncation(axes=(0, 1), tol=min(pinv_cutoffs))
     #
-    W0, W1 = symmetrized_svd(S0.sqrt() @ U0.H, U1 @ S1.sqrt(), opts_svd, normalize=False)
+    W0, W1 = symmetrized_svd(S0.sqrt() @ U0.H, U1 @ S1.sqrt(), opts_svd, normalize=False, pool=pool)
     p0, p1 = R0 @ U0, U1.H @ R1
     #
     error2, s0max, s1max = 100, max(S0._data), max(S1._data)

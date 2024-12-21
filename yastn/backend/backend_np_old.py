@@ -19,7 +19,6 @@ import warnings
 import numpy as np
 import scipy.linalg
 import scipy.sparse.linalg
-from joblib import Parallel, delayed
 
 # non-deterministic initialization of random number generator
 rng = {'rng': np.random.default_rng(None)}  # initialize random number generator
@@ -286,29 +285,11 @@ def safe_svd(a):
     return U, S, V
 
 
-
-def svd_lowrank(data, meta, sizes, ncv=None, which='LM', maxiter=None, solver='arpack', pool=None, **kwargs):
+def svd_lowrank(data, meta, sizes, ncv=None, which='LM', maxiter=None, solver='arpack', **kwargs):
     Udata = np.empty((sizes[0],), dtype=data.dtype)
     Sdata = np.empty((sizes[1],), dtype=DTYPE['float64'])
     Vdata = np.empty((sizes[2],), dtype=data.dtype)
-
-    if pool is None:
-        for (sl, D, slU, DU, slS, slV, DV) in meta:
-            k = slS[1] - slS[0]
-            if k < min(D) - 1 and min(D) * max(D) > 4000:  # the second condition is  heuristic estimate when performing dense svd should be faster.
-                U, S, V = scipy.sparse.linalg.svds(data[slice(*sl)].reshape(D), k=k, ncv=ncv,
-                                                which=which, maxiter=maxiter, solver=solver)
-                ord = np.argsort(-S)
-                U, S, V = U[:, ord], S[ord], V[ord, :]
-            else:
-                U, S, V = safe_svd(data[slice(*sl)].reshape(D))
-            Udata[slice(*slU)].reshape(DU)[:] = U[:, :k]
-            Sdata[slice(*slS)] = S[:k]
-            Vdata[slice(*slV)].reshape(DV)[:] = V[:k, :]
-        return Udata, Sdata, Vdata
-    @delayed
-    def svd_lowrank_(which_one):
-        sl, D, slU, DU, slS, slV, DV = meta[which_one]
+    for (sl, D, slU, DU, slS, slV, DV) in meta:
         k = slS[1] - slS[0]
         if k < min(D) - 1 and min(D) * max(D) > 4000:  # the second condition is  heuristic estimate when performing dense svd should be faster.
             U, S, V = scipy.sparse.linalg.svds(data[slice(*sl)].reshape(D), k=k, ncv=ncv,
@@ -317,82 +298,32 @@ def svd_lowrank(data, meta, sizes, ncv=None, which='LM', maxiter=None, solver='a
             U, S, V = U[:, ord], S[ord], V[ord, :]
         else:
             U, S, V = safe_svd(data[slice(*sl)].reshape(D))
-        return [U[:, :k], S[:k], V[:k, :]]
-
-    with pool as parallel:
-        gathered_result = parallel(svd_lowrank_(which_one) for which_one in range(len(meta)))
-
-    for ii in range(len(meta)):
-        sl, D, slU, DU, slS, slV, DV = meta[ii]
-        U, S, V = gathered_result[ii]
-        Udata[slice(*slU)].reshape(DU)[:] = U
-        Sdata[slice(*slS)] = S
-        Vdata[slice(*slV)].reshape(DV)[:] = V
+        Udata[slice(*slU)].reshape(DU)[:] = U[:, :k]
+        Sdata[slice(*slS)] = S[:k]
+        Vdata[slice(*slV)].reshape(DV)[:] = V[:k, :]
     return Udata, Sdata, Vdata
 
 
-
-def svd(data, meta, sizes, pool=None, **kwargs):
-
+def svd(data, meta, sizes, **kwargs):
     Udata = np.empty((sizes[0],), dtype=data.dtype)
     Sdata = np.empty((sizes[1],), dtype=DTYPE['float64'])
     Vdata = np.empty((sizes[2],), dtype=data.dtype)
-
-    if pool is None:
-        for (sl, D, slU, DU, slS, slV, DV) in meta:
-            U, S, V = safe_svd(data[slice(*sl)].reshape(D))
-            Udata[slice(*slU)].reshape(DU)[:] = U
-            Sdata[slice(*slS)] = S
-            Vdata[slice(*slV)].reshape(DV)[:] = V
-        return Udata, Sdata, Vdata
-
-    @delayed
-    def svd_(which_one):
-        sl, D, slU, DU, slS, slV, DV = meta[which_one]
+    for (sl, D, slU, DU, slS, slV, DV) in meta:
         U, S, V = safe_svd(data[slice(*sl)].reshape(D))
-        return [U, S, V]
-
-    with pool as parallel:
-        gathered_result = parallel(svd_(which_one) for which_one in range(len(meta)))
-
-    for ii in range(len(meta)):
-        sl, D, slU, DU, slS, slV, DV = meta[ii]
-        U, S, V = gathered_result[ii]
         Udata[slice(*slU)].reshape(DU)[:] = U
         Sdata[slice(*slS)] = S
         Vdata[slice(*slV)].reshape(DV)[:] = V
     return Udata, Sdata, Vdata
 
 
-
-def svdvals(data, meta, sizeS, pool=None, **kwargs):
-
+def svdvals(data, meta, sizeS, **kwargs):
     Sdata = np.empty((sizeS,), dtype=DTYPE['float64'])
-
-    if pool is None:
-        for (sl, D, _, _, slS, _, _) in meta:
-            try:
-                S = scipy.linalg.svd(data[slice(*sl)].reshape(D), full_matrices=False, compute_uv=False)
-            except scipy.linalg.LinAlgError:  # pragma: no cover
-                S = scipy.linalg.svd(data[slice(*sl)].reshape(D), full_matrices=False, compute_uv=False, lapack_driver='gesvd')
-            Sdata[slice(*slS)] = S
-        return Sdata
-
-    @delayed
-    def svdvals_(which_one):
-        sl, D, _, _, slS, _, _ = meta[which_one]
+    for (sl, D, _, _, slS, _, _) in meta:
         try:
             S = scipy.linalg.svd(data[slice(*sl)].reshape(D), full_matrices=False, compute_uv=False)
         except scipy.linalg.LinAlgError:  # pragma: no cover
             S = scipy.linalg.svd(data[slice(*sl)].reshape(D), full_matrices=False, compute_uv=False, lapack_driver='gesvd')
-        return S
-
-    with pool as parallel:
-        gathered_result = parallel(svdvals_(which_one) for which_one in range(len(meta)))
-
-    for ii in range(len(meta)):
-        sl, D, _, _, slS, _, _ = meta[ii]
-        Sdata[slice(*slS)] = gathered_result[ii]
+        Sdata[slice(*slS)] = S
     return Sdata
 
 
