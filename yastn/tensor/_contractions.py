@@ -89,7 +89,7 @@ def tensordot(a, b, axes, conj=(0, 0)) -> yastn.Tensor:
     elif a.config.tensordot_policy == 'no_fusion':
         data, struct_c, slices_c = _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b, needs_mask)
     else:
-        raise YastnError(f"Tensordot policy not recognized. It should be 'fuse_to_matrix', 'fuse_to_matrix', or 'no_fusion'.")
+        raise YastnError(f"Tensordot policy not recognized. It should be 'fuse_to_matrix', 'fuse_contracted', or 'no_fusion'.")
     return a._replace(data=data, struct=struct_c, slices=slices_c, mfs=mfs_c, hfs=hfs_c)
 
 

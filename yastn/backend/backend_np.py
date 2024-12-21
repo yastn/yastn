@@ -279,7 +279,7 @@ def bitwise_not(data):
 
 def safe_svd(a):
     try:
-        U, S, V = scipy.linalg.svd(a, full_matrices=False)
+        U, S, V = scipy.linalg.svd(a, full_matrices=False)  # , lapack_driver='gesdd'
     except scipy.linalg.LinAlgError:  # pragma: no cover
         U, S, V = scipy.linalg.svd(a, full_matrices=False, lapack_driver='gesvd')
     return U, S, V
@@ -469,9 +469,9 @@ def dot(Adata, Bdata, meta_dot, Dsize):
     dtype = np.promote_types(Adata.dtype, Bdata.dtype)
     newdata = np.empty((Dsize,), dtype=dtype)
     for (slc, Dc, sla, Da, slb, Db, ia, ib) in meta_dot:
-        np.matmul(Adata[slice(*sla)].reshape(Da), \
-                  Bdata[slice(*slb)].reshape(Db), \
-                  out=newdata[slice(*slc)].reshape(Dc))
+        np.dot(Adata[slice(*sla)].reshape(Da),
+               Bdata[slice(*slb)].reshape(Db),
+               out=newdata[slice(*slc)].reshape(Dc))
     return newdata
 
 
@@ -483,11 +483,9 @@ def dot_with_sum(Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border, Dsi
     for (sl, Dslc, list_tab) in meta_dot:
         tmp = newdata[slice(*sl)].reshape(Dslc)
         ta, tb = list_tab[0]
-        np.matmul(Ad[ta], Bd[tb], out=tmp)
-        if len(list_tab) > 1:
-            t0 = np.empty(Dslc, dtype=dtype)
-            for ta, tb in list_tab[1:]:
-                tmp += np.matmul(Ad[ta], Bd[tb], out=t0)
+        np.dot(Ad[ta], Bd[tb], out=tmp)
+        for ta, tb in list_tab[1:]:
+            tmp += np.dot(Ad[ta], Bd[tb])
     return newdata
 
 

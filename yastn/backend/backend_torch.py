@@ -619,15 +619,6 @@ def diag_2dto1d(data, meta, Dsize):
 
 def dot(Adata, Bdata, meta_dot, Dsize):
     return kernel_dot.apply(Adata, Bdata, meta_dot, Dsize)
-    # dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
-    # if dtype != Adata.dtype:
-    #     Adata = Adata.to(dtype=dtype)
-    # if dtype != Bdata.dtype:
-    #     Bdata = Bdata.to(dtype=dtype)
-    # newdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
-    # for (slc, Dc, sla, Da, slb, Db, ia, ib) in meta_dot:
-    #     newdata[slice(*slc)].view(Dc)[:] = Adata[slice(*sla)].view(Da) @ Bdata[slice(*slb)].view(Db)
-    # return newdata
 
 
 if _torch_version_check("2.0"):
@@ -662,8 +653,13 @@ if _torch_version_check("2.0"):
             Adata_b = torch.zeros_like(Adata)
             Bdata_b = torch.zeros_like(Bdata)
             for (slc, Dc, sla, Da, slb, Db, ia, ib) in meta_dot:
-                Adata_b[slice(*sla)].view(Da)[:]= Cdata_b[slice(*slc)].view(Dc) @ Bdata[slice(*slb)].view(Db).adjoint()
-                Bdata_b[slice(*slb)].view(Db)[:]= Adata[slice(*sla)].view(Da).adjoint() @ Cdata_b[slice(*slc)].view(Dc)
+                Ab = Adata_b[slice(*sla)].view(Da)
+                Bb = Bdata_b[slice(*slb)].view(Db)
+                Cb = Cdata_b[slice(*slc)].view(Dc)
+                B = Bdata[slice(*slb)].view(Db)
+                A = Adata[slice(*sla)].view(Da)
+                Ab += Cb @ B.adjoint()  #  += is for fuse_contracted
+                Bb += A.adjoint() @ Cb
             return Adata_b, Bdata_b, None, None
 else:
     class kernel_dot(torch.autograd.Function):

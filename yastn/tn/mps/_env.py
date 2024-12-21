@@ -485,6 +485,13 @@ class Env_mps_mpo_mps(EnvParent_3_obc):
         tmp = ncon([self.F[nl, n], tmp], ((-0, 1, 2), (2, 1, -2, -1)))
         return tmp * self.op.factor
 
+    # def Heff2(self, AA, bd):
+    #     n1, n2 = bd if bd[0] < bd[1] else bd[::-1]
+    #     bd, nl, nr = (n1, n2), n1 - 1, n2 + 1
+    #     tmp = ncon([self.F[nl, n1], self.op[n1], self.op[n2], AA, self.F[nr, n2]],
+    #                ((-0, 7, 6), (7, -1, 5, 4), (5, -2, 3, 2), (6, 4, 2, 1), (1, 3, -3)))
+    #     return tmp * self.op.factor
+
     def Heff2(self, AA, bd):
         n1, n2 = bd if bd[0] < bd[1] else bd[::-1]
         bd, nl, nr = (n1, n2), n1 - 1, n2 + 1

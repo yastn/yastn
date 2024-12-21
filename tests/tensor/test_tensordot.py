@@ -285,6 +285,8 @@ def test_tensordot_fuse_hard_backward(config_kwargs):
     import torch
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+
+    config_U1.backend.random_seed(seed=0)
     t1, t2, t3 = (-1, 0, 1), (-2, 0, 2), (-3, 0, 3)
     D1, D2, D3 = (1, 2, 2), (2, 2, 2), (2, 2, 2)
     #
@@ -323,22 +325,22 @@ def test_tensordot_fuse_hard_backward(config_kwargs):
 @torch_test
 def test_tensordot_backward(config_kwargs):
     import torch
-    # U1
+
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    config_U1.backend.random_seed(seed=0)
     dtypes = ("float64", "complex128")
 
-    for dtype in dtypes:
+    for dtype in dtypes:  # mixing types does not work torch=2.4
         a = yastn.rand(config=config_U1, s=(-1, -1, 1, 1),
                     t=[(0, 1), (0, 1), (0, 1), (0, 1)],
                     D=[(2, 3), (4, 5), (4, 3), (2, 1)], dtype=dtype)
-
         b1 = yastn.rand(config=config_U1, s=(1, 1, -1, -1),  # charges match exactly
                     t=[(0, 1), (0, 1), (0, 1), (0, 1)],
                     D=[(2, 3), (4, 5), (4, 3), (2, 1)], dtype=dtype)
-        b2 = yastn.rand(config=config_U1, s=(1, 1, -1, -1),  # some mismatches
+        b2 = yastn.rand(config=config_U1, s=(1, 1, -1, -1),  # some block mismatches
                     t=[(0, 2), (1, 2), (0, 1, 2), (0, 1, 2)],
                     D=[(2, 3), (5, 6), (4, 3, 4), (2, 1, 3)], dtype=dtype)
-        b3 = yastn.rand(config=config_U1, s=(1, 1, -1, -1),  # no matching blocks with a
+        b3 = yastn.rand(config=config_U1, s=(1, 1, -1, -1),  # no matching blocks in a @ b
                     t=[(0, 2), (-1, 2), (-1,  2), (0, 1, 2)],
                     D=[(2, 3), (5, 6), (4, 4), (2, 1, 3)], dtype=dtype)
 
@@ -348,7 +350,7 @@ def test_tensordot_backward(config_kwargs):
 
             def test_f(block):
                 a.set_block(ts=target_block, val=block)
-                ab = yastn.tensordot(a, b, axes=((1, 2), (1, 2)))
+                ab = yastn.tensordot(a, b, axes=((1, 2), (1, 2)))  # 2 outgoing legs are a problem
                 ab = ab.norm()
                 return ab
 
@@ -357,5 +359,9 @@ def test_tensordot_backward(config_kwargs):
 
 
 if __name__ == '__main__':
-    # pytest.main([__file__, "-vs", "--durations=0"])
-    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])  # "--tensordot_policy", "no_fusion", "fuse_contracted", "merge_to_matrix" (default)
+    pytest.main([__file__, "-vs", "--durations=0", "--tensordot_policy", "fuse_to_matrix"])
+    pytest.main([__file__, "-vs", "--durations=0", "--tensordot_policy", "fuse_contracted"])
+    pytest.main([__file__, "-vs", "--durations=0", "--tensordot_policy", "no_fusion"])
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--tensordot_policy", "fuse_to_matrix"])
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--tensordot_policy", "fuse_contracted"])
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--tensordot_policy", "no_fusion"])
