@@ -788,7 +788,7 @@ def mask_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
     return newdata
 
 
-def dot_with_sum(Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border, Dsize):
+def transpose_dot_sum(Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border, Dsize):
     dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
     if dtype != Adata.dtype:
         Adata = Adata.to(dtype=dtype)

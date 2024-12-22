@@ -22,7 +22,7 @@ import numpy as np
 from ._auxliary import _struct, _slc, _clear_axes, _unpack_axes, _flatten
 from ._tests import YastnError, _test_can_be_combined, _test_axes_match
 from ._merging import _merge_to_matrix, _unmerge, _meta_unmerge_matrix
-from ._merging import _masks_for_tensordot_f2m, _masks_for_vdot, _masks_for_trace
+from ._merging import _masks_for_vdot, _masks_for_trace
 from. _merging import _meta_fuse_hard, _transpose_and_merge, _mask_tensor_intersect_legs
 
 __all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon', 'einsum', 'broadcast', 'apply_mask']
@@ -82,24 +82,28 @@ def tensordot(a, b, axes, conj=(0, 0)) -> yastn.Tensor:
     mfs_c = tuple(a.mfs[ii] for ii in range(a.ndim) if ii not in in_a) + tuple(b.mfs[ii] for ii in range(b.ndim) if ii not in in_b)
     hfs_c = tuple(a.hfs[ii] for ii in nout_a) + tuple(b.hfs[ii] for ii in nout_b)
 
-    if a.config.tensordot_policy == 'fuse_to_matrix':
-        data, struct_c, slices_c = _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b, needs_mask, s_c)
-    elif a.config.tensordot_policy == 'fuse_contracted':
-        data, struct_c, slices_c = _tensordot_fc(a, b, nout_a, nin_a, nin_b, nout_b, needs_mask)
-    elif a.config.tensordot_policy == 'no_fusion':
-        data, struct_c, slices_c = _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b, needs_mask)
-    else:
-        raise YastnError(f"Tensordot policy not recognized. It should be 'fuse_to_matrix', 'fuse_contracted', or 'no_fusion'.")
-    return a._replace(data=data, struct=struct_c, slices=slices_c, mfs=mfs_c, hfs=hfs_c)
-
-
-def _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b, needs_mask, s_c):
-    """ Perform tensordot by fuse_to_matrix: merging tensors to matrices, executing dot, and unmerging outgoing legs. """
+    n_c = a.config.sym.add_charges(a.struct.n, b.struct.n)
 
     if needs_mask:
         msk_a, msk_b = _mask_tensor_intersect_legs(a, b, nin_a, nin_b)
         a = _apply_mask_to_axes(a, nin_a, msk_a)
         b = _apply_mask_to_axes(b, nin_b, msk_b)
+
+    if a.config.tensordot_policy == 'fuse_to_matrix':
+        data, struct_c, slices_c = _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b, s_c)
+    elif a.config.tensordot_policy == 'fuse_contracted':
+        data, struct_c, slices_c = _tensordot_fc(a, b, nout_a, nin_a, nin_b, nout_b)
+    elif a.config.tensordot_policy == 'no_fusion':
+        data, struct_c, slices_c = _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b)
+    else:
+        raise YastnError(f"Tensordot policy not recognized. It should be 'fuse_to_matrix', 'fuse_contracted', or 'no_fusion'.")
+
+    struct_c = struct_c._replace(n=n_c)
+    return a._replace(data=data, struct=struct_c, slices=slices_c, mfs=mfs_c, hfs=hfs_c)
+
+
+def _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b, s_c):
+    """ Perform tensordot by fuse_to_matrix: merging tensors to matrices, executing dot, and unmerging outgoing legs. """
 
     ind_a, ind_b = _common_inds(a.struct.t, b.struct.t, nin_a, nin_b, a.ndim_n, b.ndim_n, a.config.sym.NSYM)
     data_a, struct_a, slices_a, ls_l, ls_ac = _merge_to_matrix(a, (nout_a, nin_a), ind_a)
@@ -108,12 +112,7 @@ def _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b, needs_mask, s_c):
     if ls_ac != ls_bc:
         raise YastnError('Bond dimensions do not match.')
 
-    meta_dot, struct_c, slices_c = _meta_tensordot_f2m(a.config, struct_a, slices_a, struct_b, slices_b)
-
-    # if needs_mask:
-    #     msk_a, msk_b = _masks_for_tensordot_f2m(a.config, a.struct, a.hfs, nin_a, ls_ac, b.struct, b.hfs, nin_b, ls_bc)
-    #     data = a.config.backend.dot_with_mask(data_a, data_b, meta_dot, struct_c.size, msk_a, msk_b)
-    # else:
+    meta_dot, struct_c, slices_c = _meta_tensordot_f2m(struct_a, slices_a, struct_b, slices_b)
     data = a.config.backend.dot(data_a, data_b, meta_dot, struct_c.size)
 
     meta_unmerge, struct_c, slices_c = _meta_unmerge_matrix(a.config, struct_c, slices_c, ls_l, ls_r, s_c)
@@ -132,15 +131,11 @@ def _apply_mask_to_axes(a, naxes, masks):
     return a
 
 
-def _tensordot_fc(a, b, nout_a, nin_a, nin_b, nout_b, needs_mask):
+def _tensordot_fc(a, b, nout_a, nin_a, nin_b, nout_b):
     """
     Perform tensordot by fuse_contracted: merging contracted legs, and executing dot.
     Outgoing legs are not merged so unmerge is not needed.
     """
-    if needs_mask:
-        msk_a, msk_b = _mask_tensor_intersect_legs(a, b, nin_a, nin_b)
-        a = _apply_mask_to_axes(a, nin_a, msk_a)
-        b = _apply_mask_to_axes(b, nin_b, msk_b)
 
     ind_a, ind_b = _common_inds(a.struct.t, b.struct.t, nin_a, nin_b, a.ndim_n, b.ndim_n, a.config.sym.NSYM)
 
@@ -158,26 +153,20 @@ def _tensordot_fc(a, b, nout_a, nin_a, nin_b, nout_b, needs_mask):
         raise YastnError('Bond dimensions do not match.')
     assert all(t_a[ia] == t_b[ib] for ia, ib in zip(nin_a, nin_b)), "Sanity check."
 
-    meta_dot, struct_c, slices_c = _meta_tensordot_fc(a.config, struct_a, slices_a, struct_b, slices_b)
+    meta_dot, struct_c, slices_c = _meta_tensordot_fc(struct_a, slices_a, struct_b, slices_b)
     data = a.config.backend.dot(data_a, data_b, meta_dot, struct_c.size)
     return data, struct_c, slices_c
 
 
-def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b, needs_mask):
+def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
     """
     Perform tensordot directly: permute blocks and execute dot accumulaing results into result blocks.
     """
-    if needs_mask:
-        msk_a, msk_b = _mask_tensor_intersect_legs(a, b, nin_a, nin_b)
-        a = _apply_mask_to_axes(a, nin_a, msk_a)
-        b = _apply_mask_to_axes(b, nin_b, msk_b)
-
     ind_a, ind_b = _common_inds(a.struct.t, b.struct.t, nin_a, nin_b, a.ndim_n, b.ndim_n, a.config.sym.NSYM)
-
-    meta_dot, reshape_a, reshape_b, struct_c, slices_c = _meta_tensordot_nf(a.config, a.struct, a.slices, b.struct, b.slices, ind_a, ind_b, nout_a, nin_a, nin_b, nout_b)
+    meta_dot, reshape_a, reshape_b, struct_c, slices_c = _meta_tensordot_nf(a.struct, a.slices, b.struct, b.slices, ind_a, ind_b, nout_a, nin_a, nin_b, nout_b)
     order_a = nout_a + nin_a
     order_b = nin_b + nout_b
-    data = a.config.backend.dot_with_sum(a.data, b.data, meta_dot, reshape_a, reshape_b, order_a, order_b, struct_c.size)
+    data = a.config.backend.transpose_dot_sum(a.data, b.data, meta_dot, reshape_a, reshape_b, order_a, order_b, struct_c.size)
     return data, struct_c, slices_c
 
 
@@ -202,13 +191,12 @@ def _common_inds(t_a, t_b, nin_a, nin_b, ndimn_a, ndimn_b, nsym):
 
 
 @lru_cache(maxsize=1024)
-def _meta_tensordot_f2m(config, struct_a, slices_a, struct_b, slices_b):
+def _meta_tensordot_f2m(struct_a, slices_a, struct_b, slices_b):
     nsym = len(struct_a.n)
-    n_c = config.sym.add_charges(struct_a.n, struct_b.n)
     struct_a_resorted = sorted(((t[nsym:], t, D, sl.slcs[0]) for t, D, sl in zip(struct_a.t, struct_a.D, slices_a)))
     struct_b_resorted = ((t[:nsym], t, D, sl.slcs[0]) for t, D, sl in zip(struct_b.t, struct_b.D, slices_b))
     meta = []
-    for (tar, ta, Da, sla), (tbl, tb, Db, slb) in zip( struct_a_resorted, struct_b_resorted):
+    for (tar, ta, Da, sla), (tbl, tb, Db, slb) in zip(struct_a_resorted, struct_b_resorted):
         assert tar == tbl, "Sanity check."
         meta.append((ta[:nsym] + tb[nsym:], (Da[0], Db[1]), sla, Da, slb, Db, tar, tbl))
     meta = sorted(meta)
@@ -218,15 +206,13 @@ def _meta_tensordot_f2m(config, struct_a, slices_a, struct_b, slices_b):
     slices_c = tuple( _slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dp_c), Dp_c, D_c))
     meta = tuple((sl.slcs[0], *mt[1:]) for sl, mt in zip(slices_c, meta))
     s_c = (struct_a.s[0], struct_b.s[1])
-    struct_c = _struct(s=s_c, n=n_c, t=t_c, D=D_c, size=sum(Dp_c))
+    struct_c = _struct(s=s_c, t=t_c, D=D_c, size=sum(Dp_c))
     return meta, struct_c, slices_c
 
 
 @lru_cache(maxsize=1024)
-def _meta_tensordot_fc(config, struct_a, slices_a, struct_b, slices_b):
-    nsym = config.sym.NSYM
-    n_c = config.sym.add_charges(struct_a.n, struct_b.n)
-
+def _meta_tensordot_fc(struct_a, slices_a, struct_b, slices_b):
+    nsym = len(struct_a.n)
     lta, ndima = len(struct_a.t), len(struct_a.s)
     ta = np.array(struct_a.t, dtype=np.int64).reshape((lta, ndima, nsym))
     Da = np.array(struct_a.D, dtype=np.int64).reshape((lta, ndima))
@@ -266,15 +252,14 @@ def _meta_tensordot_fc(config, struct_a, slices_a, struct_b, slices_b):
     slices_c = tuple( _slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dp_c), Dp_c, D_c))
     meta = tuple((sl.slcs[0], *mt[3:]) for sl, mt in zip(slices_c, meta))
     s_c = struct_a.s[:-1] + struct_b.s[1:]
-    struct_c = _struct(s=s_c, n=n_c, t=t_c, D=D_c, size=sum(Dp_c))
+    struct_c = _struct(s=s_c, t=t_c, D=D_c, size=sum(Dp_c))
     return meta, struct_c, slices_c
 
 
 @lru_cache(maxsize=1024)
-def _meta_tensordot_nf(config, struct_a, slices_a, struct_b, slices_b, ind_a, ind_b, nout_a, nin_a, nin_b, nout_b):
+def _meta_tensordot_nf(struct_a, slices_a, struct_b, slices_b, ind_a, ind_b, nout_a, nin_a, nin_b, nout_b):
 
-    nsym = config.sym.NSYM
-    n_c = config.sym.add_charges(struct_a.n, struct_b.n)
+    nsym = len(struct_a.n)
 
     if ind_a is None:
         ta = struct_a.t
@@ -347,7 +332,7 @@ def _meta_tensordot_nf(config, struct_a, slices_a, struct_b, slices_b, ind_a, in
     D_c = tuple(D_c)
     slices_c = tuple(slices_c)
     s_c = tuple(struct_a.s[i] for i in nout_a) + tuple(struct_b.s[i] for i in nout_b)
-    struct_c = _struct(s=s_c, n=n_c, t=t_c, D=D_c, size=start)
+    struct_c = _struct(s=s_c, t=t_c, D=D_c, size=start)
     return meta_dot, reshape_a, reshape_b, struct_c, slices_c
 
 

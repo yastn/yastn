@@ -560,23 +560,6 @@ def _mask_tensor_intersect_legs(a, b, axa, axb):
     return msk_a, msk_b
 
 
-def _masks_for_tensordot_f2m(config, structa, hfa, axa, lsa, structb, hfb, axb, lsb):
-    """ masks to get the intersecting parts of legs from two tensors as single masks """
-    msk_a, msk_b = [], []
-    tla, Dla, _= _get_tD_legs(structa)
-    tlb, Dlb, _= _get_tD_legs(structb)
-    for i1, i2 in zip(axa, axb):
-        ma, mb = _intersect_hfs(config, (tla[i1], tlb[i2]), (Dla[i1], Dlb[i2]), (hfa[i1], hfb[i2]))
-        msk_a.append(ma)
-        msk_b.append(mb)
-    msk_a = _merge_masks_outer(config, lsa, msk_a)
-    msk_b = _merge_masks_outer(config, lsb, msk_b)
-    for t, x in msk_a.items():
-        msk_a[t] = config.backend.to_mask(x)
-    for t, x in msk_b.items():
-        msk_b[t] = config.backend.to_mask(x)
-    return msk_a, msk_b
-
 def _merge_masks_intersect(config, struct, slices, ms):
     """ combine masks using information from struct"""
     msk = np.ones((struct.size,), dtype=bool)
