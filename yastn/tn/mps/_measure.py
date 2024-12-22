@@ -14,10 +14,11 @@
 # ==============================================================================
 """ Environments for the <mps| mpo |mps> and <mps|mps>  contractions. """
 from __future__ import annotations
-from itertools import groupby
+from itertools import groupby, accumulate
 from numbers import Number
 from typing import Sequence
-from ... import YastnError
+import numpy as np
+from ... import YastnError, Tensor, ones
 from . import MpsMpoOBC
 from ._env import Env, Env2
 from ...operators import swap_charges
@@ -275,3 +276,77 @@ def _parse_2site_bonds(bonds, N):
             else:
                 pairs += [(i, (i + r)) for i in range(N) if 0 <= i + r < N]
     return sorted(set(pairs))
+
+
+def sample(psi, projectors, number=1, return_probabilities=False) -> np.ndarray | tuple[np.ndarray, Sequence[float]]:
+    r"""
+    Sample random configurations from MPS.
+
+    Output samples, a numpy array of ints, where samples[k, n] gives a projector index in k-th sample on n-th MPS site.
+
+    It does not check whether projectors sum up to identity -- probabilities of provided projectors get normalized to one.
+
+    Parameters
+    ----------
+    projectors: Dict[Any, yast.Tensor] | Sequence[yast.Tensor] | Dict[Site, Dict[Any, yast.Tensor]]
+        Projectors to sample from.
+        We can provide a dict(key: projector), where the same set of projectors is used at each site.
+        Here, the keys should be integers, to fit into output samples array.
+        For a list of projectors, the keys follow from enumeration.
+        Finally, we can provide a dictionary between each site and sets of projectors.
+
+    number: int
+        Number of drawn samples.
+
+    return_probabilities: bool
+        Whether to also return probability to find each sample in the state.
+        If ``True``, return: samples, probabilities.
+        If ``False``, return: samples.
+    """
+    if not psi.is_canonical(to='first'):
+        psi = psi.shallow_copy()
+        psi.canonize_(to='first')
+
+    sites = list(range(psi.N))
+    if not isinstance(projectors, dict) or all(isinstance(x, Tensor) for x in projectors.values()):
+        projectors = {site: projectors for site in sites}  # spread projectors over sites
+    if set(sites) != set(projectors.keys()):
+        raise YastnError(f"projectors not defined for some sites.")
+
+    # change each list of projectors into keys and projectors
+    projs_sites = {}
+    for k, v in projectors.items():
+        if isinstance(v, dict):
+            projs_sites[k, 'k'] = list(v.keys())
+            projs_sites[k, 'p'] = list(v.values())
+        else:
+            projs_sites[k, 'k'] = list(range(len(v)))
+            projs_sites[k, 'p'] = v
+
+    samples = np.zeros((number, psi.N), dtype=np.int64)
+    probabilities = np.ones(number, dtype=np.float64)
+
+    leg = psi.virtual_leg('first')
+    tmp = ones(psi.config, legs=[leg.conj()], n=leg.t[0])
+    bdrs = [tmp for _ in range(number)]
+
+    for n in sites:
+        rands = (psi.config.backend.rand(number) + 1) / 2  # in [0, 1]
+        for k, (bdr, cut) in enumerate(zip(bdrs, rands)):
+            state = bdr @ psi[n]
+
+            prob, pstates = [], []
+            for proj in projs_sites[n, 'p']:
+                pst = proj.conj() @ state
+                pstates.append(pst)
+                prob.append(pst.vdot(pst).item())
+            norm_prob = sum(prob)
+            prob = [x / norm_prob for x in prob]
+            ind = sum(apr < cut for apr in accumulate(prob))
+            proj = projs_sites[n, 'p'][ind]
+            samples[k, n] = projs_sites[n, 'k'][ind]
+            probabilities[k] *= prob[ind]
+            bdrs[k] = pstates[ind] / pstates[ind].norm()
+    if return_probabilities:
+        return samples, probabilities
+    return samples
