@@ -199,7 +199,7 @@ class EnvWindow:
         if not isinstance(projectors, dict) or all(isinstance(x, Tensor) for x in projectors.values()):
             projectors = {site: projectors for site in sites}  # spread projectors over sites
         if set(sites) != set(projectors.keys()):
-            raise YastnError(f"projectors not defined for some sites in xrange={self.xrange}, yrange={self.yrange}.")
+            raise YastnError(f"Projectors not defined for some sites in xrange={self.xrange}, yrange={self.yrange}.")
 
         # change each list of projectors into keys and projectors
         projs_sites = {}

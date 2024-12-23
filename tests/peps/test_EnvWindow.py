@@ -121,7 +121,7 @@ def test_window_measure(config_kwargs):
     #
     with pytest.raises(yastn.YastnError):
         env_win.sample(projectors={(0, 0): projs, (1, 0): projs})
-        # projectors not defined for some sites in xrange=(0, 4), yrange=(0, 3).
+        # Projectors not defined for some sites in xrange=(0, 4), yrange=(0, 3).
     #
     # test measure_2site
     #

@@ -18,7 +18,7 @@ from itertools import groupby, accumulate
 from numbers import Number
 from typing import Sequence
 import numpy as np
-from ... import YastnError, Tensor, ones
+from ... import YastnError, Tensor, eye, tensordot, qr
 from . import MpsMpoOBC
 from ._env import Env, Env2
 from ...operators import swap_charges
@@ -278,20 +278,23 @@ def _parse_2site_bonds(bonds, N):
     return sorted(set(pairs))
 
 
-def sample(psi, projectors, number=1, return_probabilities=False) -> np.ndarray | tuple[np.ndarray, Sequence[float]]:
+def sample(psi, projectors, number=1, return_probabilities=False) -> np.ndarray[int] | tuple[np.ndarray[int], Sequence[float]]:
     r"""
-    Sample random configurations from MPS.
+    Sample random configurations from an MPS psi.
 
-    Output samples, a numpy array of ints, where samples[k, n] gives a projector index in k-th sample on n-th MPS site.
+    Probabilities follow from |psi><psi| (works also for purification).
+    Output samples as numpy array of integers, where samples[k, n] give a projector's index in the k-th sample on the n-th MPS site.
 
-    It does not check whether projectors sum up to identity -- probabilities of provided projectors get normalized to one.
+    It does not check whether projectors sum up to identity; calculated probabilities of provided projectors are normalized to one.
 
     Parameters
     ----------
     projectors: Dict[Any, yast.Tensor] | Sequence[yast.Tensor] | Dict[Site, Dict[Any, yast.Tensor]]
-        Projectors to sample from.
+        Local projectors or vector states to sample from.
+        It is not checked if they provide a complete local basis,
+        or if matrix projectors are indeed projectors (which is assumed in the calculation).
         We can provide a dict(key: projector), where the same set of projectors is used at each site.
-        Here, the keys should be integers, to fit into output samples array.
+        Here, the keys should be integers, to fit into the output samples array.
         For a list of projectors, the keys follow from enumeration.
         Finally, we can provide a dictionary between each site and sets of projectors.
 
@@ -301,7 +304,27 @@ def sample(psi, projectors, number=1, return_probabilities=False) -> np.ndarray 
     return_probabilities: bool
         Whether to also return probability to find each sample in the state.
         If ``True``, return: samples, probabilities.
-        If ``False``, return: samples.
+        If ``False`` (the default), return: samples.
+
+    Note
+    ----
+    Depending on the basis, sampling might break the symmetry of the state psi.
+    In this case, psi and local states/projectors should first be cast down to dense representation.
+    It is important to make sure that the local basis ordering between state sites and projectors/vectors is maintained
+
+    Example
+    -------
+
+    ::
+
+        ops = yastn.operators.SpinlessFermions(sym='U1')
+        v0, v1 = ops.vec_n(0), ops.vec_n(1)
+        v1101 = mps.product_mps([v1, v1, v0, v1])
+        v0111 = mps.product_mps([v0, v1, v1, v1])
+        psi = v1101 + v0111  # state to sample from
+
+        samples = mps.sample(psi, projectors=[v0, v1], number=10)
+
     """
     if not psi.is_canonical(to='first'):
         psi = psi.shallow_copy()
@@ -311,33 +334,42 @@ def sample(psi, projectors, number=1, return_probabilities=False) -> np.ndarray 
     if not isinstance(projectors, dict) or all(isinstance(x, Tensor) for x in projectors.values()):
         projectors = {site: projectors for site in sites}  # spread projectors over sites
     if set(sites) != set(projectors.keys()):
-        raise YastnError(f"projectors not defined for some sites.")
+        raise YastnError(f"Projectors not defined for some sites.")
 
     # change each list of projectors into keys and projectors
     projs_sites = {}
     for k, v in projectors.items():
         if isinstance(v, dict):
             projs_sites[k, 'k'] = list(v.keys())
+            if not all(isinstance(k, int) for k in projs_sites[k, 'k']):
+                raise YastnError("Use integer numbers for projector keys.")
             projs_sites[k, 'p'] = list(v.values())
         else:
             projs_sites[k, 'k'] = list(range(len(v)))
-            projs_sites[k, 'p'] = v
+            projs_sites[k, 'p'] = list(v)
+
+        for j, pr in enumerate(projs_sites[k, 'p']):
+            if pr.ndim == 1:  # vectors need conjugation
+                projs_sites[k, 'p'][j] = pr.conj()
+            elif pr.ndim > 2:
+                raise YastnError("Projectors should consist of vectors (ndim=1) or matrices (ndim=2).")
 
     samples = np.zeros((number, psi.N), dtype=np.int64)
     probabilities = np.ones(number, dtype=np.float64)
 
     leg = psi.virtual_leg('first')
-    tmp = ones(psi.config, legs=[leg.conj()], n=leg.t[0])
+    tmp = eye(psi.config, legs=[leg, leg.conj()])
     bdrs = [tmp for _ in range(number)]
 
     for n in sites:
         rands = (psi.config.backend.rand(number) + 1) / 2  # in [0, 1]
+        An = psi[n] if psi.nr_phys == 1 else psi[n].fuse_legs(axes=(0, 1, (2, 3)))
         for k, (bdr, cut) in enumerate(zip(bdrs, rands)):
-            state = bdr @ psi[n]
-
+            state = bdr @ An
+            state = state.fuse_legs(axes=(1, (0, 2)))
             prob, pstates = [], []
             for proj in projs_sites[n, 'p']:
-                pst = proj.conj() @ state
+                pst = proj @ state
                 pstates.append(pst)
                 prob.append(pst.vdot(pst).item())
             norm_prob = sum(prob)
@@ -346,7 +378,14 @@ def sample(psi, projectors, number=1, return_probabilities=False) -> np.ndarray 
             proj = projs_sites[n, 'p'][ind]
             samples[k, n] = projs_sites[n, 'k'][ind]
             probabilities[k] *= prob[ind]
-            bdrs[k] = pstates[ind] / pstates[ind].norm()
+            tmp = pstates[ind] / pstates[ind].norm()
+            tmp = tmp.unfuse_legs(axes=tmp.ndim-1)
+            if psi.nr_phys == 1:
+                axes = (0, 1) if tmp.ndim == 2 else ((0, 1), 2)
+            else:  # psi.nr_phys == 1
+                tmp = tmp.unfuse_legs(axes=tmp.ndim-1)
+                axes = ((0, 2), 1) if tmp.ndim == 3 else ((0, 1, 3), 2)
+            _, bdrs[k] = qr(tmp, axes=axes)
     if return_probabilities:
         return samples, probabilities
     return samples
