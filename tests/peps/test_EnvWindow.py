@@ -97,10 +97,9 @@ def test_window_measure(config_kwargs):
     #
     ops = yastn.operators.Spin12(sym='dense', **config_kwargs)
     vecs = [ops.vec_z(val=v) for v in [-1, 1]]
-    projs = [yastn.tensordot(vec, vec.conj(), axes=((), ())) for vec in vecs]
     #
     number = 4
-    out = env_win.sample(projs, number=number, return_info=True, progressbar=True)
+    out = env_win.sample(vecs, number=number, return_info=True, progressbar=True)
     info = out.pop('info')
     assert info['opts_svd']['D_total'] == D_total
     assert len(out) == 12
@@ -109,8 +108,8 @@ def test_window_measure(config_kwargs):
             assert len(out[nx, ny]) == number
             assert all(x in [0, 1] for x in out[nx, ny])
 
-    projs = {k: v for k, v in zip('tb', projs)}
-    out = env_win.sample(projs, number=number, return_info=True)
+    vecs = {k: v for k, v in zip('tb', vecs)}
+    out = env_win.sample(vecs, number=number, return_info=True)
     info = out.pop('info')
     assert info['opts_svd']['D_total'] == D_total
     assert len(out) == 12
@@ -120,7 +119,7 @@ def test_window_measure(config_kwargs):
             assert all(x in 'tb' for x in out[nx, ny])
     #
     with pytest.raises(yastn.YastnError):
-        env_win.sample(projectors={(0, 0): projs, (1, 0): projs})
+        env_win.sample(projectors={(0, 0): vecs, (1, 0): vecs})
         # Projectors not defined for some sites in xrange=(0, 4), yrange=(0, 3).
     #
     # test measure_2site

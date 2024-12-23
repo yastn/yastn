@@ -110,12 +110,11 @@ def test_ctmrg_measure_product(config_kwargs, boundary):
     #  sample
     #
     vecs = {v: ops.vec_z(val=v) for v in [-1, 0, 1]}
-    projs = {k: yastn.ncon([vec, vec.conj()], [[-0], [-1]]) for k, vec in vecs.items()}
-    out = env.sample(xrange=(1, 4), yrange=(1, 3), number=8, projectors=projs)
+    out = env.sample(xrange=(1, 4), yrange=(1, 3), number=8, projectors=vecs)
     assert all(all(x == vals[k] for x in v) for k, v in out.items())
 
     if boundary != 'obc':
-        out = env.sample(xrange=(3, 7), yrange=(-1, 2), number=5, projectors=projs)
+        out = env.sample(xrange=(3, 7), yrange=(-1, 2), number=5, projectors=vecs)
         assert all(all(x == vals[g.site2index(k)] for x in v) for k, v in out.items())
     #
     #  measure_2site

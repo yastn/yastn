@@ -144,6 +144,21 @@ def test_sample_mps_raises(config_kwargs):
                        match="Use integer numbers for projector keys."):
         vecs = {'n0': ops.vec_n(val=0), 'n1': ops.vec_n(val=1)}
         mps.sample(psi, projectors=vecs)
+    #
+    with pytest.raises(yastn.YastnError,
+                       match="Local states to project on should be normalized."):
+        vecs = [2 * ops.vec_n(val=0)]
+        mps.sample(psi, projectors=vecs)
+    #
+    with pytest.raises(yastn.YastnError,
+                       match="Matrix projectors should be projectors, P @ P == P."):
+        vecs = [ops.c()]
+        mps.sample(psi, projectors=vecs)
+    #
+    with pytest.raises(yastn.YastnError,
+                       match="Matrix projectors should be projectors, P @ P == P."):
+        vecs = [2 * ops.n()]
+        mps.sample(psi, projectors=vecs)
 
 
 if __name__ == '__main__':

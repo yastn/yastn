@@ -16,7 +16,7 @@ from __future__ import annotations
 from itertools import accumulate
 from tqdm import tqdm
 from ... import mps
-from .... import YastnError, Tensor
+from .... import YastnError, Tensor, tensordot
 from .._geometry import Site
 from ._env_boundary_mps import _clear_operator_input
 
@@ -210,6 +210,17 @@ class EnvWindow:
             else:
                 projs_sites[k, 'k'] = list(range(len(v)))
                 projs_sites[k, 'p'] = v
+
+            for j, pr in enumerate(projs_sites[k, 'p']):
+                if pr.ndim == 1:  # vectors need conjugation
+                    if abs(pr.norm() - 1) > 1e-10:
+                        raise YastnError("Local states to project on should be normalized.")
+                    projs_sites[k, 'p'][j] = tensordot(pr, pr.conj(), axes=((), ()))
+                elif pr.ndim == 2:
+                    if (pr.n != pr.config.sym.zero()) or abs(pr @ pr - pr).norm() > 1e-10:
+                        raise YastnError("Matrix projectors should be projectors, P @ P == P.")
+                else:
+                    raise YastnError("Projectors should consist of vectors (ndim=1) or matrices (ndim=2).")
 
         out = {site: [] for site in sites}
         rands = (self.psi.config.backend.rand(self.Nx * self.Ny * number) + 1) / 2  # in [0, 1]

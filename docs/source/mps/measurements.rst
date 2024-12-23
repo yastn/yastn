@@ -36,7 +36,6 @@ One- and two-point expectation values
 .. autofunction:: yastn.tn.mps.measure_1site
 .. autofunction:: yastn.tn.mps.measure_2site
 
-
 Schmidt values and entropy profile
 ----------------------------------
 
@@ -55,3 +54,8 @@ For :math:`\alpha=1` we get *von Neumann entropy*, :math:`S_1(\rho)=-Tr(\rho \lo
 The entropy is counted in bits, i.e., using base-2 logarithm.
 
 .. automethod:: yastn.tn.mps.MpsMpoOBC.get_entropy
+
+Sampling
+--------
+
+.. automethod:: yastn.tn.mps.sample

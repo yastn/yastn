@@ -18,7 +18,7 @@ from itertools import groupby, accumulate
 from numbers import Number
 from typing import Sequence
 import numpy as np
-from ... import YastnError, Tensor, eye, tensordot, qr
+from ... import YastnError, Tensor, eye, qr
 from . import MpsMpoOBC
 from ._env import Env, Env2
 from ...operators import swap_charges
@@ -282,7 +282,7 @@ def sample(psi, projectors, number=1, return_probabilities=False) -> np.ndarray[
     r"""
     Sample random configurations from an MPS psi.
 
-    Probabilities follow from |psi><psi| (works also for purification).
+    Probabilities follow from :math:`|psi \rangle\langle psi|`. Works also for purification.
     Output samples as numpy array of integers, where samples[k, n] give a projector's index in the k-th sample on the n-th MPS site.
 
     It does not check whether projectors sum up to identity; calculated probabilities of provided projectors are normalized to one.
@@ -290,13 +290,12 @@ def sample(psi, projectors, number=1, return_probabilities=False) -> np.ndarray[
     Parameters
     ----------
     projectors: Dict[Any, yast.Tensor] | Sequence[yast.Tensor] | Dict[Site, Dict[Any, yast.Tensor]]
-        Local projectors or vector states to sample from.
-        It is not checked if they provide a complete local basis,
-        or if matrix projectors are indeed projectors (which is assumed in the calculation).
+        Local vector states (or projectors) to sample from.
+        Their orthogonality or local basis completeness is not checked (normalization is checked).
         We can provide a dict(key: projector), where the same set of projectors is used at each site.
-        Here, the keys should be integers, to fit into the output samples array.
-        For a list of projectors, the keys follow from enumeration.
-        Finally, we can provide a dictionary between each site and sets of projectors.
+        The keys should be integers, to fit into the output samples array.
+        Projectors can also be provided as a list, and then the keys follow from enumeration.
+        Finally, we can provide a dictionary between each site and sets of projectors (to have different projections at various sites).
 
     number: int
         Number of drawn samples.
@@ -318,12 +317,12 @@ def sample(psi, projectors, number=1, return_probabilities=False) -> np.ndarray[
     ::
 
         ops = yastn.operators.SpinlessFermions(sym='U1')
-        v0, v1 = ops.vec_n(0), ops.vec_n(1)
-        v1101 = mps.product_mps([v1, v1, v0, v1])
-        v0111 = mps.product_mps([v0, v1, v1, v1])
-        psi = v1101 + v0111  # state to sample from
+        I = mps.product_mpo(ops.I(), N=8)
+        psi = mps.random_mps(I, n=4, D_total=8)
+        # random state with 8 sites and 4 particles.
 
-        samples = mps.sample(psi, projectors=[v0, v1], number=10)
+        projectors = [ops.vec_n(0), ops.vec_n(1)]  # empty and full local states
+        samples = mps.sample(psi, projectors, number=15)
 
     """
     if not psi.is_canonical(to='first'):
@@ -350,8 +349,13 @@ def sample(psi, projectors, number=1, return_probabilities=False) -> np.ndarray[
 
         for j, pr in enumerate(projs_sites[k, 'p']):
             if pr.ndim == 1:  # vectors need conjugation
+                if abs(pr.norm() - 1) > 1e-10:
+                    raise YastnError("Local states to project on should be normalized.")
                 projs_sites[k, 'p'][j] = pr.conj()
-            elif pr.ndim > 2:
+            elif pr.ndim == 2:
+                if (pr.n != pr.config.sym.zero()) or abs(pr @ pr - pr).norm() > 1e-10:
+                    raise YastnError("Matrix projectors should be projectors, P @ P == P.")
+            else:
                 raise YastnError("Projectors should consist of vectors (ndim=1) or matrices (ndim=2).")
 
     samples = np.zeros((number, psi.N), dtype=np.int64)
