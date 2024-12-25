@@ -470,10 +470,16 @@ class Env_mps_mpo_mps(EnvParent_3_obc):
 
     def update_env_(self, n, to='last'):
         if to == 'last':
+            # tmp = tensordot(self.bra[n].conj(), self.F[n - 1, n], axes=(0, 0))
+            # tmp = tensordot(tmp, self.op[n], axes=((2, 0), (0, 1)))
+            # self.F[n, n + 1] = tensordot(tmp, self.ket[n], axes=((1, 3), (0, 1)))
             tmp = ncon([self.bra[n].conj(), self.F[n - 1, n]], ((1, -1, -0), (1, -2, -3)))
             tmp = self.op[n]._attach_01(tmp)
             self.F[n, n + 1] = ncon([tmp, self.ket[n]], ((-0, -1, 1, 2), (1, 2, -2)))
         elif to == 'first':
+            # tmp = self.ket[n] @ self.F[n + 1, n]
+            # tmp = tensordot(tmp, self.op[n], axes=((2, 1), (2, 3)))
+            # self.F[n, n - 1] = tensordot(tmp, self.bra[n].conj(), axes=((3, 1), (1, 2)))
             tmp = self.ket[n] @ self.F[n + 1, n]
             tmp = self.op[n]._attach_23(tmp)
             self.F[n, n - 1] = ncon([tmp, self.bra[n].conj()], ((-0, -1, 1, 2), (-2, 2, 1)))
@@ -485,11 +491,18 @@ class Env_mps_mpo_mps(EnvParent_3_obc):
         tmp = ncon([self.F[nl, n], tmp], ((-0, 1, 2), (2, 1, -2, -1)))
         return tmp * self.op.factor
 
+    # def Heff1(self, A, n):
+    #     tmp = A @ self.F[n + 1, n]
+    #     tmp = tensordot(self.op[n], tmp, axes=((2, 3), (2, 1)))
+    #     tmp = tensordot(self.F[n - 1, n], tmp, axes=((1, 2), (0, 2)))
+    #     return tmp * self.op.factor
+
     # def Heff2(self, AA, bd):
     #     n1, n2 = bd if bd[0] < bd[1] else bd[::-1]
-    #     bd, nl, nr = (n1, n2), n1 - 1, n2 + 1
-    #     tmp = ncon([self.F[nl, n1], self.op[n1], self.op[n2], AA, self.F[nr, n2]],
-    #                ((-0, 7, 6), (7, -1, 5, 4), (5, -2, 3, 2), (6, 4, 2, 1), (1, 3, -3)))
+    #     tmp = AA @ self.F[n2 + 1, n2]
+    #     tmp = tensordot(self.op[n2], tmp, axes=((2, 3), (3, 2)))
+    #     tmp = tensordot(self.op[n1], tmp, axes=((2, 3), (0, 3)))
+    #     tmp = tensordot(self.F[n1 - 1, n1], tmp, axes=((1, 2), (0, 3)))
     #     return tmp * self.op.factor
 
     def Heff2(self, AA, bd):
