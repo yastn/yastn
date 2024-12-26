@@ -607,40 +607,28 @@ class Env_mpo_mpo_mpo(EnvParent_3_obc):
 class Env_mpo_mpobra_mpo(EnvParent_3_obc):
     def update_env_(self, n, to='last'):
         if to == 'last':
-            tmp = ncon([self.ket[n], self.F[n - 1, n]], ((1, -4, -0, -1), (-3, -2, 1)))
-            tmp = tmp.fuse_legs(axes=(0, 1, 2, (3, 4)))
-            tmp = self.op[n]._attach_01(tmp)
-            bA = self.bra[n].fuse_legs(axes=((0, 1), 2, 3))
-            self.F[n, n + 1] = ncon([bA.conj(), tmp], ((1, -0, 2), (-2, -1, 1, 2)))
+            tmp = self.F[n - 1, n] @ self.ket[n]
+            tmp = tensordot(self.op[n], tmp, axes=((0, 1), (1, 4)))
+            self.F[n, n + 1] = tensordot(self.bra[n].conj(), tmp, axes=((3, 0, 1), (1, 2, 3)))
         elif to == 'first':
-            bA = self.bra[n].fuse_legs(axes=((0, 1), 2, 3))
-            tmp = ncon([bA.conj(), self.F[n + 1, n]], ((-0, 1, -1), (-3, -2, 1)))
-            tmp = self.op[n]._attach_23(tmp)
-            tmp = tmp.unfuse_legs(axes=0)
-            self.F[n, n - 1] = ncon([self.ket[n], tmp], ((-0, 1, 2, 3), (-2, 1, -1, 2, 3)))
+            tmp = tensordot(self.F[n + 1, n], self.bra[n].conj(), axes=(2, 2))
+            tmp = tensordot(self.op[n], tmp, axes=((2, 3), (1, 4)))
+            self.F[n, n - 1] = tensordot(self.ket[n], tmp, axes=((1, 2, 3), (4, 2, 1)))
 
     def Heff1(self, A, n):
-        nl, nr = n - 1, n + 1
-        tmp = A.fuse_legs(axes=(0, (1, 2), 3))
-        tmp = ncon([tmp, self.F[nl, n]], ((1, -0, -1), (-3, -2, 1)))
-        tmp = self.op[n]._attach_01(tmp)
-        tmp = tmp.unfuse_legs(axes=0)
-        tmp = ncon([tmp, self.F[nr, n]], ((-1, 1, 2, -0, -3), (1, 2, -2)))
+        tmp = self.F[n - 1, n] @ A
+        tmp = tensordot(tmp, self.op[n], axes=((1, 4), (0, 1)))
+        tmp = tensordot(tmp, self.F[n + 1, n], axes=((2, 3), (0, 1)))
+        tmp = tmp.transpose(axes=(0, 1, 3, 2))
         return tmp * self.op.factor
 
     def Heff2(self, AA, bd):
         n1, n2 = bd if bd[0] < bd[1] else bd[::-1]
-        bd, nl, nr = (n1, n2), n1 - 1, n2 + 1
-        tmp = AA.fuse_legs(axes=(0, 2, (1, 3, 4), 5))
-        tmp = tmp.fuse_legs(axes=(0, 1, (2, 3)))
-        tmp = ncon([tmp, self.F[nl, n1]], ((1, -1, -0), (-3, -2, 1)))
-        tmp = self.op[n1]._attach_01(tmp)
-        tmp = tmp.fuse_legs(axes=(0, 1, (2, 3)))
-        tmp = tmp.unfuse_legs(axes=0)
-        tmp = self.op[n2]._attach_01(tmp)
-        tmp = tmp.unfuse_legs(axes=0)
-        tmp = ncon([tmp, self.F[nr, n2]], ((-1, -2, 1, 2, -0, -4), (1, 2, -3)))
-        tmp = tmp.unfuse_legs(axes=0).transpose(axes=(0, 2, 1, 3, 4, 5))
+        tmp = self.F[n1 - 1, n1] @ AA
+        tmp = tensordot(tmp, self.op[n1], axes=((1, 3), (0, 1)))
+        tmp = tensordot(tmp, self.op[n2], axes=((5, 4), (0, 1)))
+        tmp = tensordot(tmp, self.F[n2 + 1, n2], axes=((3, 5), (0, 1)))
+        tmp = tmp.transpose(axes=(0, 1, 3, 2, 5, 4))
         return tmp * self.op.factor
 
     def charges_missing(self, n):
