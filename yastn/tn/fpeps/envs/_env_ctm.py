@@ -892,14 +892,20 @@ def regularize_1site_corners(cor_0, cor_1):
     r_1 = tensordot((S @ U_1), Q_1, axes=(1, 1))
     return r_0, r_1
 
-def proj_corners(r0, r1, opts_svd, **kwargs):
+def proj_corners(r0, r1, opts_svd, svd_method='full', D_block=None, **kwargs):
     r""" Projectors in between r0 @ r1.T corners. """
     rr = tensordot(r0, r1, axes=(1, 1))
 
     fix_signs= opts_svd.get('fix_signs',True)
     truncation_f= kwargs.get('truncation_f',None)
     if truncation_f is None:
-        u, s, v = rr.svd(axes=(0, 1), sU=r0.s[1], fix_signs=fix_signs)
+        if svd_method == 'full':
+            u, s, v = rr.svd(axes=(0, 1), sU=r0.s[1], fix_signs=fix_signs)
+        elif svd_method == 'arnoldi':
+            if D_block is not None:
+                u, s, v = rr.svd_arnoldi(axes=(0, 1), sU=r0.s[1], fix_signs=fix_signs, D_block=D_block)
+            else:
+                raise YastnError(f"D_block is not specified for svd_arnoldi.")
         Smask = truncation_mask(s, **opts_svd)
         u, s, v = Smask.apply_mask(u, s, v, axes=(-1, 0, 0))
     else:

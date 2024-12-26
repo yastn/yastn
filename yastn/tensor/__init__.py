@@ -119,7 +119,7 @@ class Tensor:
 
     # pylint: disable=C0415
     from ._initialize import set_block, _fill_tensor, __setitem__
-    from .linalg import norm, svd, svd_with_truncation, eigh, eigh_with_truncation, qr
+    from .linalg import norm, svd, svd_with_truncation, svd_arnoldi, eigh, eigh_with_truncation, qr
     from ._contractions import tensordot, __matmul__, vdot, trace, swap_gate, broadcast, apply_mask
     from ._algebra import __add__, __sub__, __mul__, __rmul__, __array_ufunc__, __neg__, apxb
     from ._algebra import __lt__, __gt__, __le__, __ge__, __truediv__, __pow__
