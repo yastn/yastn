@@ -16,7 +16,7 @@ from .tensor import *
 from .initialize import *
 from .krylov import *
 from . import operators
-from .tensor._auxliary import Method
+from .tensor._auxliary import Method, SpecialTensor
 try:
     from ._version import version as __version__
     from ._version import version_tuple
