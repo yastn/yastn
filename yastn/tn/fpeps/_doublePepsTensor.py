@@ -134,12 +134,13 @@ class DoublePepsTensor(SpecialTensor):
         in_a, in_b = _clear_axes(*axes)  # contracted meta legs
         if len(in_a) != 2 or len(in_b) != 2:
             raise YastnError('DoublePepTensor.tensordot only supports contraction of exactly 2 legs.')
-        if abs(in_b[0] - in_b[1]) != 1:
-            raise YastnError('DoublePepTensor.tensordot 2 axes of b should be neighbouring.')
-        try:
-            in_a = tuple(self._t[ax] for ax in in_a)
-        except IndexError:
-            raise YastnError('DoublePepTensor.tensordot axis outside of tensor ndim.')
+        sa0, sa1 = set(in_a), set(in_b)
+        if len(sa0) != len(in_a) or len(sa1) != len(in_b):
+            raise YastnError('DoublePepTensor.tensordot repeated axis in axes[0] or axes[1].')
+        if sa0 - set(range(self.ndim)) or sa1 - set(range(b.ndim)):
+            raise YastnError('DoublePepTensor.tensordot axes outside of tensor ndim.')
+
+        in_a = tuple(self._t[ax] for ax in in_a)
         out_a = tuple(ax for ax in self._t if ax not in in_a)
 
         if in_a[0] > in_a[1]:  # reference order is (t, l, b, r)

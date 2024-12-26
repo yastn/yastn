@@ -136,10 +136,10 @@ def test_double_peps_tensor_raises(config_kwargs):
                        match="DoublePepTensor.tensordot only supports contraction of exactly 2 legs"):
         T0.tensordot(t01, axes=(1, 1))
     with pytest.raises(yastn.YastnError,
-                       match="DoublePepTensor.tensordot 2 axes of b should be neighbouring"):
-        T0.tensordot(t01, axes=((1, 2), (1, 3)))
+                       match="DoublePepTensor.tensordot repeated axis in axes"):
+        T0.tensordot(t01, axes=((2, 2), (1, 1)))
     with pytest.raises(yastn.YastnError,
-                       match="DoublePepTensor.tensordot axis outside of tensor ndim"):
+                       match="DoublePepTensor.tensordot axes outside of tensor ndim"):
         T0.tensordot(t01, axes=((3, 4), (1, 2)))
     with pytest.raises(yastn.YastnError,
                        match="DoublePepTensor.tensordot, 2 axes of self should be neighbouring"):
