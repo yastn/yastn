@@ -670,40 +670,43 @@ class EnvParent_3_pbc(EnvParent_3):
 
 class Env_mps_mpopbc_mps(EnvParent_3_pbc):
 
-    def Heff1(self, A, n):
-        nl, nr = n - 1, n + 1
+    def update_env_(self, n, to='last'):
+        if to == 'last':
+            tmp = tensordot(self.bra[n].conj(), self.F[n - 1, n], axes=(0, 0))
+            tmp = tensordot(tmp, self.op[n], axes=((2, 0), (0, 1)))
+            tmp = tensordot(tmp, self.ket[n], axes=((2, 4), (0, 1)))
+            self.F[n, n + 1] = tmp.transpose(axes=(0, 2, 1, 3))
+        elif to == 'first':
+            tmp = self.ket[n] @ self.F[n + 1, n]
+            tmp = tensordot(tmp, self.op[n], axes=((2, 1), (2, 3)))
+            tmp = tensordot(tmp, self.bra[n].conj(), axes=((4, 2), (1, 2)))
+            self.F[n, n - 1] = tmp.transpose(axes=(0, 2, 1, 3))
 
+    def Heff1(self, A, n):
         precompute = (A.ndim == 2)
         if precompute:
             A = A.unfuse_legs(axes=1)
 
-        Fr = self.F[nr, n].fuse_legs(axes=(0, 1, (2, 3)))
-        tmp = tensordot(A, Fr, axes=(2, 0))
-        tmp = self.op[n]._attach_23(tmp)
-        tmp = tmp.unfuse_legs(axes=2)
-        tmp = tensordot(self.F[nl, n], tmp, axes=((3, 1, 2), (0, 1, 2)))
-        tmp = tmp.transpose(axes=(0, 2, 1))
+        tmp = A @ self.F[n + 1, n]
+        tmp = tensordot(self.op[n], tmp, axes=((2, 3), (2, 1)))
+        tmp = tensordot(self.F[n - 1, n], tmp, axes=((1, 2, 3), (0, 3, 2)))
+
         if precompute:
             tmp = tmp.fuse_legs(axes=(0, (1, 2)))
         return tmp * self.op.factor
+
 
     def Heff2(self, AA, bd):
         precompute = (AA.ndim == 2)
         if precompute:
             AA = AA.unfuse_legs(axes=(0, 1))
+
         n1, n2 = bd if bd[0] < bd[1] else bd[::-1]
-        bd, nl, nr = (n1, n2), n1 - 1, n2 + 1
-        Fr = self.F[nr, n2].fuse_legs(axes=(0, 1, (2, 3)))
-        tmp = AA.fuse_legs(axes=((0, 1), 2, 3))
-        tmp = tensordot(tmp, Fr, axes=(2, 0))
-        tmp = self.op[n2]._attach_23(tmp)
-        tmp = tmp.fuse_legs(axes=(0, 1, (2, 3)))
-        tmp = tmp.unfuse_legs(axes=0)
-        tmp = self.op[n1]._attach_23(tmp)
-        tmp = tmp.unfuse_legs(axes=2)
-        tmp = tmp.unfuse_legs(axes=2)
-        tmp = tensordot(self.F[nl, n1], tmp, axes=((3, 1, 2), (0, 1, 2)))
-        tmp = tmp.transpose(axes=(0, 3, 2, 1))
+        tmp = AA @ self.F[n2 + 1, n2]
+        tmp = tensordot(self.op[n2], tmp, axes=((2, 3), (3, 2)))
+        tmp = tensordot(self.op[n1], tmp, axes=((2, 3), (0, 3)))
+        tmp = tensordot(self.F[n1 - 1, n1], tmp, axes=((1, 2, 3), (0, 4, 3)))
+
         if precompute:
             tmp = tmp.fuse_legs(axes=((0, 1), (2, 3)))
         return tmp * self.op.factor
@@ -715,18 +718,3 @@ class Env_mps_mpopbc_mps(EnvParent_3_pbc):
         tmp = tensordot(tmp, self.F[nr, n], axes=((2, 4), (2, 0)))
         tmp = tensordot(tmp, self.bra[n].conj(), axes=((0, 4), (0, 2)))
         return tmp.fuse_legs(axes=((0, 3), (2, 1)))
-
-    def update_env_(self, n, to='last'):
-        if to == 'last':
-            bran = self.bra[n].transpose(axes=(2, 1, 0)).conj()
-            tmp = self.F[n - 1, n].fuse_legs(axes=(0, 1, (2, 3)))
-            tmp = tensordot(bran, tmp, axes=(2, 0))
-            tmp = self.op[n]._attach_01(tmp)
-            tmp = tmp.unfuse_legs(axes=2)
-            self.F[n, n + 1] = tensordot(tmp, self.ket[n], axes=((3, 4), (0, 1)))
-        elif to == 'first':
-            tmp = self.F[n + 1, n].fuse_legs(axes=(0, 1, (2, 3)))
-            tmp = tensordot(self.ket[n], tmp, axes=(2, 0))
-            tmp = self.op[n]._attach_23(tmp)
-            tmp = tmp.unfuse_legs(axes=2)
-            self.F[n, n - 1] = tensordot(tmp, self.bra[n].conj(), axes=((3, 4), (2, 1)))
