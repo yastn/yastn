@@ -127,7 +127,7 @@ class EnvApproximate:
         for n in range(Nl):
             env.update_env_(n, to='last')
             env.update_env_(2 * Nl - n - 1, to='first')
-        g = tensordot(env.F[Nl-1, Nl], env.F[Nl, Nl-1], axes=((0, 2), (2, 0)))
+        g = tensordot(env.F[Nl-1, Nl], env.F[Nl, Nl-1], axes=((0, 2), (0, 2)))
         return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
 
     def initialize_env(self, bd):
