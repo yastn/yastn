@@ -565,7 +565,7 @@ class Env_mpo_mpo_mpo(EnvParent_3_obc):
         if to == 'last':
             tmp = self.F[n - 1, n] @ self.bra[n].conj()
             tmp = tensordot(self.op[n], tmp, axes=((0, 1), (1, 2)))
-            self.F[n, n + 1] = tensordot(self.ket[n], tmp, axes=((3, 0, 1), (4, 2, 1)))
+            self.F[n, n + 1] = tensordot(self.ket[n], tmp, axes=((1, 0, 3), (1, 2, 4)))
         elif to == 'first':
             tmp = tensordot(self.ket[n], self.F[n + 1, n], axes=(2, 0))
             tmp = tensordot(tmp, self.op[n], axes=((3, 1), (2, 3)))
@@ -580,11 +580,19 @@ class Env_mpo_mpo_mpo(EnvParent_3_obc):
 
     def Heff2(self, AA, bd):
         n1, n2 = bd if bd[0] < bd[1] else bd[::-1]
-        tmp = tensordot(AA, self.F[n2 + 1, n2], axes=(4, 0))
-        tmp = tensordot(self.op[n2], tmp, axes=((2, 3), (5, 3)))
-        tmp = tensordot(self.op[n1], tmp, axes=((2, 3), (0, 3)))
-        tmp = tmp.transpose(axes=(3, 0, 1, 4, 2, 6, 5))
-        tmp = tensordot(self.F[n1 - 1, n1], tmp, axes=((0, 1), (0, 1)))
+        tmp = AA.fuse_legs(axes=((1, 0, 2), 3, 5, 4))
+        tmp = tmp @ self.F[n2 + 1, n2]
+        tmp = tensordot(self.op[n2], tmp, axes=((2, 3), (3, 1)))
+        tmp = tmp.fuse_legs(axes=(0, 2, (1, 4, 3)))
+        tmp = tmp.unfuse_legs(axes=1)
+        tmp = tensordot(self.op[n1], tmp, axes=((2, 3), (0, 1)))
+        tmp = tensordot(self.F[n1 - 1, n1], tmp, axes=((0, 1), (2, 0)))
+        tmp = tmp.unfuse_legs(axes=3)
+        # tmp = tensordot(AA, self.F[n2 + 1, n2], axes=(4, 0))
+        # tmp = tensordot(self.op[n2], tmp, axes=((2, 3), (5, 3)))
+        # tmp = tensordot(self.op[n1], tmp, axes=((2, 3), (0, 3)))
+        # tmp = tmp.transpose(axes=(3, 0, 1, 4, 2, 6, 5))
+        # tmp = tensordot(self.F[n1 - 1, n1], tmp, axes=((0, 1), (0, 1)))
         return tmp * self.op.factor
 
 
@@ -608,11 +616,20 @@ class Env_mpo_mpobra_mpo(EnvParent_3_obc):
 
     def Heff2(self, AA, bd):
         n1, n2 = bd if bd[0] < bd[1] else bd[::-1]
-        tmp = tensordot(AA, self.F[n2 + 1, n2], axes=(4, 0))
-        tmp = tensordot(tmp, self.op[n2], axes=((4, 5), (1, 2)))
-        tmp = tensordot(tmp, self.op[n1], axes=((2, 5), (1, 2)))
-        tmp = tmp.transpose(axes=(0, 5, 1, 6, 2, 3, 4))
-        tmp = tensordot(self.F[n1 - 1, n1], tmp, axes=((0, 1), (0, 1)))
+        tmp = AA.fuse_legs(axes=(0, 1, 2, (3, 4, 5)))
+        tmp = tensordot(self.F[n1 - 1, n1], tmp, axes=(0, 0))
+        tmp = tensordot(self.op[n1], tmp, axes=((0, 1), (0, 3)))
+        tmp = tmp.fuse_legs(axes=((2, 3, 1), 4, 0))
+        tmp = tmp.unfuse_legs(axes=1)
+        tmp = tensordot(tmp, self.op[n2], axes=((3, 4), (1, 0)))
+        tmp = tensordot(tmp, self.F[n2 + 1, n2], axes=((2, 3), (0, 1)))
+        tmp = tmp.transpose(axes=(0, 1, 3, 2))
+        tmp = tmp.unfuse_legs(axes=0)
+        # tmp = tensordot(AA, self.F[n2 + 1, n2], axes=(4, 0))
+        # tmp = tensordot(tmp, self.op[n2], axes=((4, 5), (1, 2)))
+        # tmp = tensordot(tmp, self.op[n1], axes=((2, 5), (1, 2)))
+        # tmp = tmp.transpose(axes=(0, 5, 1, 6, 2, 3, 4))
+        # tmp = tensordot(self.F[n1 - 1, n1], tmp, axes=((0, 1), (0, 1)))
         return tmp * self.op.factor
 
     def charges_missing(self, n):
