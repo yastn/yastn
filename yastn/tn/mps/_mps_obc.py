@@ -454,7 +454,7 @@ class MpsMpoOBC(_MpsMpoParent):
             self.absorb_central_(to=to)
         return self.config.backend.sqrt(discarded2_total)
 
-    def pre_2site(self, bd) -> tensor.Tensor:
+    def pre_2site(self, bd, precompute=False) -> tensor.Tensor:
         r"""
         Merge two neighbouring MPS sites and return the resulting tensor,
         Consistent with functions in env_
@@ -466,15 +466,19 @@ class MpsMpoOBC(_MpsMpoParent):
         """
         nl, nr = bd
         if self.nr_phys == 1:
-            return self.A[nl] @ self.A[nr]
+            AA = self.A[nl] @ self.A[nr]
+            if precompute:
+                AA = AA.fuse_legs(axes=((0, 1), (2, 3)))
+            return AA
         # else:  # self.nr_phys == 2
         Al = self.A[nl].transpose(axes=(0, 1, 3, 2))
         Ar = self.A[nr].transpose(axes=(0, 1, 3, 2))
-        return (Al @ Ar).fuse_legs(axes=(0, (1, 3), (2, 4), 5))
+        AA = Al @ Ar
+        return AA.fuse_legs(axes=(0, (1, 3), (2, 4), 5))
 
     def post_2site_(self, AA, bd, opts_svd) -> Number:
         r"""
-        Unmerge rank-4 tensor into two neighbouring MPS sites and a central block
+        Unmerge AA tensor into two neighbouring MPS sites and a central block
         using :meth:`yastn.linalg.svd_with_truncation` to trunctate the bond dimension.
         Return normalized discarded weight :math:`\sum_{i\in\textrm{discarded}}\lambda_i/\sum_i\lambda_i`,
         where :math:`\lambda_i` are singular values across the bond.
@@ -492,7 +496,7 @@ class MpsMpoOBC(_MpsMpoParent):
         nl, nr = self.pC = bd
         if self.nr_phys == 1 and AA.ndim == 4:
             AA = AA.fuse_legs(axes=((0, 1), (2, 3)))
-        if self.nr_phys == 2:  # and AA.ndim == 6
+        if self.nr_phys == 2:
             AA = AA.unfuse_legs(axes=(1, 2))
             AA = AA.fuse_legs(axes=((0, 1, 3), (2, 5, 4)))
 
@@ -507,6 +511,23 @@ class MpsMpoOBC(_MpsMpoParent):
 
         return tensor.bitwise_not(mask).apply_mask(S, axes=0).norm() / S.norm()  # discarded weight
 
+
+    def pre_1site(self, n, precompute=False) -> tensor.Tensor:
+        """ Preper 1-site tensor for environment Heff`s. """
+        A = self.A[n]
+        if self.nr_phys == 1 and precompute:
+            A = A.fuse_legs(axes=(0, (1, 2)))
+        elif self.nr_phys == 2:
+            A = A.transpose(axes=(0, 1, 3, 2))
+        return A
+
+    def post_1site_(self, A, n) -> Number:
+        """ Assign 1-site tensor to MPS site, undoing changes from :meth:`pre_1site`.s """
+        if self.nr_phys == 1 and A.ndim == 2:
+            A = A.unfuse_legs(axes=1)
+        elif self.nr_phys == 2:
+            A = A.transpose(axes=(0, 1, 3, 2))
+        self.A[n] = A
 
     def get_entropy(self, alpha=1) -> Sequence[Number]:
         r"""

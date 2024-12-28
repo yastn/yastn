@@ -210,7 +210,8 @@ def _compression_1site_sweep_(env, Schmidt=None):
     for to in ('last', 'first'):
         for n in bra.sweep(to=to):
             bra.remove_central_()
-            bra.A[n] = env.project_ket_on_bra_1(n)
+            A = env.project_ket_on_bra_1(n)
+            bra.post_1site_(A, n)
             bra.orthogonalize_site_(n, to=to, normalize=True)
             if Schmidt is not None and to == 'first' and n != bra.first:
                 Schmidt[bra.pC] = bra[bra.pC].svd(sU=1, compute_uv=False)
