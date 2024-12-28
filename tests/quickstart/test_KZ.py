@@ -15,7 +15,7 @@
 """ Test quickstart example Kibble-Zurek. """
 import pytest
 
-@pytest.mark.skipif("not config.getoption('quickstarts')")
+@pytest.mark.skipif("not config.getoption('quickstart')")
 def test_quickstart_KZ(config_kwargs):
     """ test quickstart Kibble-Zurek example"""
 
@@ -152,7 +152,7 @@ def test_quickstart_KZ(config_kwargs):
     #
     # run evolution
     # evol is a generator with one (final) snapshot to reach
-    next(evol)
+    next(evol)  # execute time evolution
     #
     # calculate expectation values
     Ez_mps = mps.measure_1site(psi, ops.z(), psi)
@@ -199,4 +199,4 @@ def test_quickstart_KZ(config_kwargs):
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0", "--quickstarts"])
+    pytest.main([__file__, "-vs", "--durations=0", "--quickstart"])

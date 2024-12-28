@@ -63,7 +63,8 @@ from .linalg.torch_eig_sym import SYMEIG
 torch.random.seed()
 BACKEND_ID = "torch"
 DTYPE = {'float64': torch.float64,
-         'complex128': torch.complex128}
+         'complex128': torch.complex128,
+         'bool': torch.bool}
 
 
 def cuda_is_available():
@@ -652,8 +653,13 @@ if _torch_version_check("2.0"):
             Adata_b = torch.zeros_like(Adata)
             Bdata_b = torch.zeros_like(Bdata)
             for (slc, Dc, sla, Da, slb, Db, ia, ib) in meta_dot:
-                Adata_b[slice(*sla)].view(Da)[:]= Cdata_b[slice(*slc)].view(Dc) @ Bdata[slice(*slb)].view(Db).adjoint()
-                Bdata_b[slice(*slb)].view(Db)[:]= Adata[slice(*sla)].view(Da).adjoint() @ Cdata_b[slice(*slc)].view(Dc)
+                Ab = Adata_b[slice(*sla)].view(Da)
+                Bb = Bdata_b[slice(*slb)].view(Db)
+                Cb = Cdata_b[slice(*slc)].view(Dc)
+                B = Bdata[slice(*slb)].view(Db)
+                A = Adata[slice(*sla)].view(Da)
+                Ab += Cb @ B.adjoint()  #  += is for fuse_contracted
+                Bb += A.adjoint() @ Cb
             return Adata_b, Bdata_b, None, None
 else:
     class kernel_dot(torch.autograd.Function):
@@ -780,6 +786,24 @@ def mask_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
         cut = (Bdata[slice(*slb)].nonzero(),)
         newdata[slice(*sln)] = Adata[slice(*sla)].reshape(Da)[slc1 + cut + slc2].ravel()
     return newdata
+
+
+def transpose_dot_sum(Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border, Dsize):
+    dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
+    if dtype != Adata.dtype:
+        Adata = Adata.to(dtype=dtype)
+    if dtype != Bdata.dtype:
+        Bdata = Bdata.to(dtype=dtype)
+    Cdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
+    Ad = {t: Adata[slice(*sl)].view(Di).permute(Aorder).reshape(Df) for (t, sl, Di, Df) in Areshape}
+    Bd = {t: Bdata[slice(*sl)].view(Di).permute(Border).reshape(Df) for (t, sl, Di, Df) in Breshape}
+
+    for (sl, Dslc, list_tab) in meta_dot:
+        tmp = Cdata[slice(*sl)].view(Dslc)
+        for ta, tb in list_tab:
+            tmp[:] += Ad[ta] @ Bd[tb]
+
+    return Cdata
 
 
 # dot_dict = {(0, 0): lambda x, y: x @ y,

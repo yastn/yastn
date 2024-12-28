@@ -21,6 +21,8 @@ where:
     - :math:`n_{i, \sigma} = c_{i, \sigma}^\dagger c_{i, \sigma}` is the number operator for electrons at site :math:`i` with spin :math:`\sigma`.
 
 
+This example can be also run from `tests/quickstart/test_Hubbard.py <https://github.com/yastn/yastn/blob/master/tests/quickstart/test_Hubbard.py>`
+
 1. *Initialization of Model Parameters*:
     We set our model parameters keeping in mind that in the purification, there is no clear way to fix particle number
     and it is controlled by changing chemical potential :math:`\mu`.
