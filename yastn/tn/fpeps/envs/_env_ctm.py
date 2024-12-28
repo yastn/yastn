@@ -347,7 +347,7 @@ class EnvCTM(Peps):
         cor_bl = tensordot(vec_bl, ten_bl, axes=((2, 1), (1, 2)))
         cor_bl = cor_bl.fuse_legs(axes=((0, 3), (1, 2)))
 
-        val_no = vdot(cor_tl @ cor_tr @ cor_br, cor_bl.T, conj=(0, 0))
+        val_no = vdot(cor_tl @ cor_tr, tensordot(cor_bl, cor_br, axes=(0, 1)), conj=(0, 0))
 
         if tl in ops:
             ten_tl.set_operator_(ops[tl])
@@ -366,7 +366,7 @@ class EnvCTM(Peps):
             cor_bl = tensordot(vec_bl, ten_bl, axes=((2, 1), (1, 2)))
             cor_bl = cor_bl.fuse_legs(axes=((0, 3), (1, 2)))
 
-        val_op = vdot(cor_tl @ cor_tr @ cor_br, cor_bl.T, conj=(0, 0))
+        val_op = vdot(cor_tl @ cor_tr, tensordot(cor_bl, cor_br, axes=(0, 1)), conj=(0, 0))
 
         return val_op / val_no
 
