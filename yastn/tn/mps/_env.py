@@ -14,11 +14,11 @@
 # ==============================================================================
 """ Environments for the <mps| mpo |mps> and <mps|mps>  contractions. """
 from __future__ import annotations
+import abc
+import copy
 from numbers import Number
 from ... import eye, tensordot, ncon, vdot, YastnError, qr, svd
 from . import MpsMpoOBC, MpoPBC
-import abc
-import copy
 
 
 def Env(bra, target, **kwargs):
@@ -326,6 +326,14 @@ class Env2(EnvParent):
         legs = [self.ket.virtual_leg('last').conj(), self.bra.virtual_leg('last')]
         self.F[self.N, self.N - 1] = eye(self.config, legs=legs, isdiag=False)
 
+    def shallow_copy(self):
+        r"""
+        A shallow copy of environment class, that creates a new copy of dictionary storing env tensors.
+        """
+        env = copy.copy(self)
+        env.F = dict(self.F)
+        return env
+
     def factor(self):
         return self.bra.factor * self.ket.factor
 
@@ -580,14 +588,29 @@ class Env_mpo_mpo_mpo(EnvParent_3_obc):
 
     def Heff2(self, AA, bd):
         n1, n2 = bd if bd[0] < bd[1] else bd[::-1]
-        tmp = AA.fuse_legs(axes=((1, 0, 2), 3, 5, 4))
+
+        # fuse 2 + 2 + 2
+        tmp = AA.fuse_legs(axes=((1, 0), (2, 5), 3, 4))
         tmp = tmp @ self.F[n2 + 1, n2]
-        tmp = tensordot(self.op[n2], tmp, axes=((2, 3), (3, 1)))
-        tmp = tmp.fuse_legs(axes=(0, 2, (1, 4, 3)))
+        tmp = tensordot(self.op[n2], tmp, axes=((2, 3), (3, 2)))
+        tmp = tmp.fuse_legs(axes=(0, 2, 3, (1, 4)))
         tmp = tmp.unfuse_legs(axes=1)
         tmp = tensordot(self.op[n1], tmp, axes=((2, 3), (0, 1)))
         tmp = tensordot(self.F[n1 - 1, n1], tmp, axes=((0, 1), (2, 0)))
-        tmp = tmp.unfuse_legs(axes=3)
+        tmp = tmp.unfuse_legs(axes=(2, 3))
+        tmp = tmp.transpose(axes=(0, 1, 2, 4, 5, 3))
+
+        # fuse 3 + 3
+        # tmp = AA.fuse_legs(axes=((1, 0, 2), 3, 5, 4))
+        # tmp = tmp @ self.F[n2 + 1, n2]
+        # tmp = tensordot(self.op[n2], tmp, axes=((2, 3), (3, 1)))
+        # tmp = tmp.fuse_legs(axes=(0, 2, (1, 4, 3)))
+        # tmp = tmp.unfuse_legs(axes=1)
+        # tmp = tensordot(self.op[n1], tmp, axes=((2, 3), (0, 1)))
+        # tmp = tensordot(self.F[n1 - 1, n1], tmp, axes=((0, 1), (2, 0)))
+        # tmp = tmp.unfuse_legs(axes=3)
+
+        # version with no fusion
         # tmp = tensordot(AA, self.F[n2 + 1, n2], axes=(4, 0))
         # tmp = tensordot(self.op[n2], tmp, axes=((2, 3), (5, 3)))
         # tmp = tensordot(self.op[n1], tmp, axes=((2, 3), (0, 3)))
@@ -616,15 +639,29 @@ class Env_mpo_mpobra_mpo(EnvParent_3_obc):
 
     def Heff2(self, AA, bd):
         n1, n2 = bd if bd[0] < bd[1] else bd[::-1]
-        tmp = AA.fuse_legs(axes=(0, 1, 2, (3, 4, 5)))
-        tmp = tensordot(self.F[n1 - 1, n1], tmp, axes=(0, 0))
-        tmp = tensordot(self.op[n1], tmp, axes=((0, 1), (0, 3)))
-        tmp = tmp.fuse_legs(axes=((2, 3, 1), 4, 0))
+
+        tmp = AA.fuse_legs(axes=((0, 1), (2, 5), 3, 4))
+        tmp = tmp @ self.F[n2 + 1, n2]
         tmp = tmp.unfuse_legs(axes=1)
-        tmp = tensordot(tmp, self.op[n2], axes=((3, 4), (1, 0)))
-        tmp = tensordot(tmp, self.F[n2 + 1, n2], axes=((2, 3), (0, 1)))
-        tmp = tmp.transpose(axes=(0, 1, 3, 2))
-        tmp = tmp.unfuse_legs(axes=0)
+        tmp = tmp.fuse_legs(axes=(2, 4, 1, 0, (3, 5)))
+        tmp = tensordot(self.op[n2], tmp, axes=((1, 2), (0, 1)))
+        tmp = tensordot(self.op[n1], tmp, axes=((1, 2), (2, 0)))
+        tmp = tmp.fuse_legs(axes=(0, 3, (1, 2), 4))
+        tmp = tmp.unfuse_legs(axes=1)
+        tmp = tensordot(self.F[n1 - 1, n1], tmp, axes=((1, 0), (0, 1)))
+        tmp = tmp.unfuse_legs(axes=(2, 3))
+        tmp = tmp.transpose(axes=(0, 1, 2, 4, 5, 3))
+
+        # tmp = AA.fuse_legs(axes=(0, 1, 2, (3, 4, 5)))
+        # tmp = tensordot(self.F[n1 - 1, n1], tmp, axes=(0, 0))
+        # tmp = tensordot(self.op[n1], tmp, axes=((0, 1), (0, 3)))
+        # tmp = tmp.fuse_legs(axes=((2, 3, 1), 4, 0))
+        # tmp = tmp.unfuse_legs(axes=1)
+        # tmp = tensordot(tmp, self.op[n2], axes=((3, 4), (1, 0)))
+        # tmp = tensordot(tmp, self.F[n2 + 1, n2], axes=((2, 3), (0, 1)))
+        # tmp = tmp.transpose(axes=(0, 1, 3, 2))
+        # tmp = tmp.unfuse_legs(axes=0)
+
         # tmp = tensordot(AA, self.F[n2 + 1, n2], axes=(4, 0))
         # tmp = tensordot(tmp, self.op[n2], axes=((4, 5), (1, 2)))
         # tmp = tensordot(tmp, self.op[n1], axes=((2, 5), (1, 2)))
