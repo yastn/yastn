@@ -157,65 +157,6 @@ class DoublePepsTensor(SpecialTensor):
             return append_vec_bl(self.bra, self.ket, b, op=self.op, mode=mode, in_b=in_b, out_a=out_a)
         raise YastnError('DoublePepTensor.tensordot, 2 axes of self should be neighbouring.')
 
-
-    def _attach_01(self, tt):
-        """
-        Attach a tensor to the top-left enlarged corner `tt`.
-        """
-        if self._t == (0, 1, 2, 3):
-            return append_vec_tl(self.bra, self.ket, tt, op=self.op)
-        if self._t == (1, 2, 3, 0):
-            return append_vec_bl(self.bra, self.ket, tt, op=self.op)
-        if self._t == (2, 3, 0, 1):
-            return append_vec_br(self.bra, self.ket, tt, op=self.op)
-        if self._t == (3, 0, 1, 2):
-            return append_vec_tr(self.bra, self.ket, tt, op=self.op)
-        if self._t == (0, 3, 2, 1):
-            return append_vec_tr(self.bra, self.ket, tt.transpose((0, 2, 1, 3)), op=self.op).transpose((0, 3, 2, 1))
-        if self._t == (3, 2, 1, 0):
-            return append_vec_br(self.bra, self.ket, tt.transpose((0, 2, 1, 3)), op=self.op).transpose((0, 3, 2, 1))
-        if self._t == (2, 1, 0, 3):
-            return append_vec_bl(self.bra, self.ket, tt.transpose((0, 2, 1, 3)), op=self.op).transpose((0, 3, 2, 1))
-        if self._t == (1, 0, 3, 2):
-            return append_vec_tl(self.bra, self.ket, tt.transpose((0, 2, 1, 3)), op=self.op).transpose((0, 3, 2, 1))
-
-    def _attach_23(self, tt):
-        """
-        Attach a tensor to the bottom-right enlarged corner `tt`.
-        """
-        if self._t == (0, 1, 2, 3):
-            return append_vec_br(self.bra, self.ket, tt, op=self.op)
-        if self._t == (1, 2, 3, 0):
-            return append_vec_tr(self.bra, self.ket, tt, op=self.op)
-        if self._t == (2, 3, 0, 1):
-            return append_vec_tl(self.bra, self.ket, tt, op=self.op)
-        if self._t == (3, 0, 1, 2):
-            return append_vec_bl(self.bra, self.ket, tt, op=self.op)
-        if self._t == (0, 3, 2, 1):
-            return append_vec_bl(self.bra, self.ket, tt.transpose((0, 2, 1, 3)), op=self.op).transpose((0, 3, 2, 1))
-        if self._t == (3, 2, 1, 0):
-            return append_vec_tl(self.bra, self.ket, tt.transpose((0, 2, 1, 3)), op=self.op).transpose((0, 3, 2, 1))
-        if self._t == (2, 1, 0, 3):
-            return append_vec_tr(self.bra, self.ket, tt.transpose((0, 2, 1, 3)), op=self.op).transpose((0, 3, 2, 1))
-        if self._t == (1, 0, 3, 2):
-            return append_vec_br(self.bra, self.ket, tt.transpose((0, 2, 1, 3)), op=self.op).transpose((0, 3, 2, 1))
-
-    def _attach_30(self, tt):
-        """
-        Attach a tensor to the top-right enlarged corner `tt`.
-        """
-        if self._t == (0, 1, 2, 3):
-            return append_vec_tr(self.bra, self.ket, tt, op=self.op)
-        raise YastnError(f'Transpositions not supported by _attach_30')
-
-    def _attach_12(self, tt):
-        """
-        Attach a tensor to the bottom-left enlarged corner `tt`.
-        """
-        if self._t == (0, 1, 2, 3):
-            return append_vec_bl(self.bra, self.ket, tt, op=self.op)
-        raise YastnError(f'Transpositions not supported by _attach_12')
-
     def fuse_layers(self):
         """
         Fuse the top and bottom tensors into a single :class:`yastn.Tensor`.
