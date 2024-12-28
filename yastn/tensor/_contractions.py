@@ -19,7 +19,7 @@ from itertools import groupby, accumulate, product
 from numbers import Number
 from operator import itemgetter
 import numpy as np
-from ._auxliary import _struct, _slc, _clear_axes, _unpack_axes, _flatten
+from ._auxliary import _struct, _slc, _clear_axes, _unpack_axes, _flatten, SpecialTensor
 from ._tests import YastnError, _test_can_be_combined, _test_axes_match
 from ._merging import _merge_to_matrix, _unmerge, _meta_unmerge_matrix
 from ._merging import _masks_for_vdot, _masks_for_trace
@@ -65,6 +65,11 @@ def tensordot(a, b, axes, conj=(0, 0)) -> yastn.Tensor:
         a = a.conj()
     if conj[1]:
         b = b.conj()
+
+    if isinstance(a, SpecialTensor):
+        return a.tensordot(b, axes=axes)
+    if isinstance(b, SpecialTensor):
+        return b.tensordot(a, axes=axes, reverse=True)
 
     in_a, in_b = _clear_axes(*axes)  # contracted meta legs
     needs_mask, (nin_a, nin_b) = _test_axes_match(a, b, sgn=-1, axes=(in_a, in_b))

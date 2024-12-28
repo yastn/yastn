@@ -91,4 +91,4 @@ Swap gates are placed where the legs cross. This gives a simple structure for th
 the :math:`2D` lattice, respecting the global fermionic order.
 
 .. autoclass:: yastn.tn.fpeps.DoublePepsTensor
-    :members: ndim, get_shape, get_legs, transpose, conj, clone, copy, _attach_01, _attach_12, _attach_23, _attach_30, fuse_layers
+    :members: ndim, get_shape, get_legs, transpose, conj, clone, copy, fuse_layers, tensordot

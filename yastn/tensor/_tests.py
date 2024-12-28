@@ -68,11 +68,12 @@ def _test_axes_match(a, b, sgn=1, axes=None):
         axes = (tuple(range(a.ndim)), tuple(range(b.ndim)))
         uaxes = (tuple(range(a.ndim_n)), tuple(range(b.ndim_n)))
     else:
-        if axes is not None and len(axes[0]) != len(axes[1]):
+        if len(axes[0]) != len(axes[1]):
             raise YastnError('axes[0] and axes[1] indicate different number of legs.')
-        if len(set(axes[0])) != len(axes[0]) or (len(set(axes[1])) != len(axes[1])):
+        sa0, sa1 = set(axes[0]), set(axes[1])
+        if len(sa0) != len(axes[0]) or len(sa1) != len(axes[1]):
             raise YastnError('Repeated axis in axes[0] or axes[1].')
-        if len(set(axes[0]) - set(range(a.ndim))) > 0 or len(set(axes[1]) - set(range(b.ndim))) > 0:
+        if sa0 - set(range(a.ndim)) or sa1 - set(range(b.ndim)):
             raise YastnError('Axis outside of tensor ndim.')
         ua, = _unpack_axes(a.mfs, axes[0])
         ub, = _unpack_axes(b.mfs, axes[1])

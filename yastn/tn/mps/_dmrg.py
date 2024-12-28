@@ -237,11 +237,11 @@ def _dmrg_sweep_2site_(env, opts_eigs=None, opts_svd=None, Schmidt=None, precomp
     for to, dn in (('last', 0), ('first', 1)):
         for n in psi.sweep(to=to, dl=1):
             bd = (n, n + 1)
-            AA = psi.merge_two_sites(bd)
+            AA = psi.pre_2site(bd)
             if precompute and env.nr_phys == 1:
                 AA = AA.fuse_legs(axes=((0, 1), (2, 3)))
             _, (AA,) = eigs(lambda v: env.Heff2(v, bd), AA, k=1, **opts_eigs)
-            _disc_weight_bd = psi.unmerge_two_sites_(AA, bd, opts_svd)
+            _disc_weight_bd = psi.post_2site_(AA, bd, opts_svd)
             max_disc_weight = max(max_disc_weight, _disc_weight_bd)
             if Schmidt is not None and to == 'first':
                 Schmidt[psi.pC] = psi[psi.pC]

@@ -263,11 +263,14 @@ def edge_b(A, hb=None):  # A = [t l] [b r] s;  hb = b' b
     return egb  # [r r'] [t t'] [l l']
 
 
-def append_vec_tl(Ac, A, vectl, op=None):  # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s;  vectl = x [l l'] [t t'] y
+def append_vec_tl(Ac, A, vectl, op=None, mode='old', in_b=(2, 1), out_a=(2, 3)):
+    # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s;  vectl = x [l l'] [t t'] y
     """ Append the A and Ac tensors to the top-left vector """
     if op is not None:
         A = tensordot(A, op, axes=(2, 1))
-    vectl = vectl.fuse_legs(axes=(2, (0, 3), 1))  # [t t'] [x y] [l l']
+    axes0 = tuple(ax for ax in range(vectl.ndim) if ax not in in_b)
+    axes0 = (in_b[0], axes0, in_b[1])  # (2, (0, 3), 1), in_b == (t, l)
+    vectl = vectl.fuse_legs(axes=axes0)  # [t t'] [x y] [l l']
     vectl = vectl.unfuse_legs(axes=(0, 2))  # t t' [x y] l l'
     vectl = vectl.swap_gate(axes=(1, (3, 4)))  # t' X l l'
     vectl = vectl.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [t l] [x y] [t' l']
@@ -275,17 +278,32 @@ def append_vec_tl(Ac, A, vectl, op=None):  # A = [t l] [b r] s;  Ac = [t' l'] [b
     vectl = A.tensordot(vectl, axes=((0, 2), (0, 3)))  # [b r] [x y] [b' r']
     vectl = vectl.unfuse_legs(axes=(0, 2))  # b r [x y] b' r'
     vectl = vectl.swap_gate(axes=((0, 3), 4))  # b b' X r'
-    vectl = vectl.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [b b'] [x y] [r r']
-    vectl = vectl.unfuse_legs(axes=1)  # [b b'] x y [r r']
-    vectl = vectl.transpose(axes=(1, 0, 2, 3))  # x [b b'] y [r r']
-    return vectl
+
+    if mode == 'old':
+        vectl = vectl.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [b b'] [x y] [r r']
+        vectl = vectl.unfuse_legs(axes=1)  # [b b'] x y [r r']
+        return vectl.transpose(axes=(1, 0, 2, 3))  # x [b b'] y [r r']
+
+    if out_a == (2, 3):
+        axes1 = ((0, 3), (1, 4))  # [b b'] [r r']
+    elif out_a == (3, 2):
+        axes1 = ((1, 4), (0, 3))  # [r r'] [b b']
+    if mode == 'self-b':
+        axes1, axes2 = axes1 + (2,), 2  # [] [] [x y] -> [] [] x y
+    elif mode == 'b-self':
+        axes1, axes2 = (2,) + axes1, 0  # [x y] [] [] -> x y [] []
+    vectl = vectl.fuse_legs(axes=axes1)
+    return vectl.unfuse_legs(axes=axes2)
 
 
-def append_vec_br(Ac, A, vecbr, op=None):  # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s;  vecbr = x [r r'] [b b'] y
+def append_vec_br(Ac, A, vecbr, op=None, mode='old', in_b=(2, 1), out_a=(0, 1)):
+    # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s;  vecbr = x [r r'] [b b'] y
     """ Append the A and Ac tensors to the bottom-right vector. """
     if op is not None:
         A = tensordot(A, op, axes=(2, 1))
-    vecbr = vecbr.fuse_legs(axes=(2, (0, 3), 1))  # [b b'] [x y] [r r']
+    axes0 = tuple(ax for ax in range(vecbr.ndim) if ax not in in_b)
+    axes0 = (in_b[0], axes0, in_b[1])  # (2, (0, 3), 1), in_b == (b, r)
+    vecbr = vecbr.fuse_legs(axes=axes0)  # [b b'] [x y] [r r']
     vecbr = vecbr.unfuse_legs(axes=(0, 2))  # b b' [x y] r r'
     vecbr = vecbr.swap_gate(axes=((0, 1), 4))  # b b' X r'
     vecbr = vecbr.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [b r] [x y] [b' r']
@@ -293,17 +311,32 @@ def append_vec_br(Ac, A, vecbr, op=None):  # A = [t l] [b r] s;  Ac = [t' l'] [b
     vecbr = A.tensordot(vecbr, axes=((1, 2), (0, 3)))  # [t l] [x y] [t' l']
     vecbr = vecbr.unfuse_legs(axes=(0, 2))  # t l [x y] t' l'
     vecbr = vecbr.swap_gate(axes=((1, 4), 3))  # l l' X t'
-    vecbr = vecbr.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [t t'] [x y] [l l']
-    vecbr = vecbr.unfuse_legs(axes=1)  # [t t'] x y [l l']
-    vecbr = vecbr.transpose(axes=(1, 0, 2, 3))  # x [t t'] y [l l']
-    return vecbr
+
+    if mode == 'old':
+        vecbr = vecbr.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [t t'] [x y] [l l']
+        vecbr = vecbr.unfuse_legs(axes=1)  # [t t'] x y [l l']
+        return vecbr.transpose(axes=(1, 0, 2, 3))  # x [t t'] y [l l']
+
+    if out_a == (0, 1):
+        axes1 = ((0, 3), (1, 4))  # [t t'] [l l']
+    elif out_a == (1, 0):
+        axes1 = ((1, 4), (0, 3))  # [l l'] [t t']
+    if mode == 'self-b':
+        axes1, axes2 = axes1 + (2,), 2  # [] [] [x y] -> [] [] x y
+    elif mode == 'b-self':
+        axes1, axes2 = (2,) + axes1, 0  # [x y] [] [] -> x y [] []
+    vecbr = vecbr.fuse_legs(axes=axes1)
+    return vecbr.unfuse_legs(axes=axes2)
 
 
-def append_vec_tr(Ac, A, vectr, op=None):  # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s;  vectr = x [t t'] [r r'] y
+def append_vec_tr(Ac, A, vectr, op=None, mode='old', in_b=(1, 2), out_a=(1, 2)):
+    # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s;  vectr = x [t t'] [r r'] y
     """ Append the A and Ac tensors to the top-left vector """
     if op is not None:
         A = tensordot(A, op, axes=(2, 1))
-    vectr = vectr.fuse_legs(axes=(1, (0, 3), 2))  # [t t'] [x y] [r r']
+    axes0 = tuple(ax for ax in range(vectr.ndim) if ax not in in_b)
+    axes0 = (in_b[0], axes0, in_b[1])  # (1, (0, 3), 2), in_b == (t, r)
+    vectr = vectr.fuse_legs(axes=axes0)  # [t t'] [x y] [r r']
     vectr = vectr.unfuse_legs(axes=(0, 2))  # t t' [x y] r r'
     vectr = vectr.swap_gate(axes=(1, 2))  # t' X x y
     vectr = vectr.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [t r] [x y] [t' r']
@@ -317,17 +350,32 @@ def append_vec_tr(Ac, A, vectr, op=None):  # A = [t l] [b r] s;  Ac = [t' l'] [b
     vectr = A.tensordot(vectr, axes=((0, 2), (0, 3)))  # [l b] [x y] [l' b']
     vectr = vectr.unfuse_legs(axes=(0, 2))  # l b [x y] l' b'
     vectr = vectr.swap_gate(axes=(1, (3, 4)))  # b X l' b'
-    vectr = vectr.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [l l'] [x y] [b b']
-    vectr = vectr.unfuse_legs(axes=1)  # [l l'] x y [b b']
-    vectr = vectr.transpose(axes=(1, 0, 2, 3))  # x [l l'] y [b b']
-    return vectr
+
+    if mode == 'old':
+        vectr = vectr.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [l l'] [x y] [b b']
+        vectr = vectr.unfuse_legs(axes=1)  # [l l'] x y [b b']
+        return vectr.transpose(axes=(1, 0, 2, 3))  # x [l l'] y [b b']
+
+    if out_a == (1, 2):
+        axes1 = ((0, 3), (1, 4))  # [l l'] [b b']
+    elif out_a == (2, 1):
+        axes1 = ((1, 4), (0, 3))  # [b b'] [l l']
+    if mode == 'self-b':
+        axes1, axes2 = axes1 + (2,), 2  # [] [] [x y] -> [] [] x y
+    elif mode == 'b-self':
+        axes1, axes2 = (2,) + axes1, 0  # [x y] [] [] -> x y [] []
+    vectr = vectr.fuse_legs(axes=axes1)
+    return vectr.unfuse_legs(axes=axes2)
 
 
-def append_vec_bl(Ac, A, vecbl, op=None):  # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s;  vecbl = x [b b'] [l l'] y
+def append_vec_bl(Ac, A, vecbl, op=None, mode='old', in_b=(2, 1), out_a=(0, 3)):
+    # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s;  vecbl = x [b b'] [l l'] y
     """ Append the A and Ac tensors to the top-left vector """
     if op is not None:
         A = tensordot(A, op, axes=(2, 1))
-    vecbl = vecbl.fuse_legs(axes=(1, (0, 3), 2))  # [b b'] [x y] [l l']
+    axes0 = tuple(ax for ax in range(vecbl.ndim) if ax not in in_b)
+    axes0 = (in_b[1], axes0, in_b[0])  # (1, (0, 3), 2), in_b == (l, b)
+    vecbl = vecbl.fuse_legs(axes=axes0)  # [b b'] [x y] [l l']
     vecbl = vecbl.unfuse_legs(axes=(0, 2))  # b b' [x y] l l'
     vecbl = vecbl.swap_gate(axes=(0, (1, 4)))  # b X b' l'
     vecbl = vecbl.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [b l] [x y] [b' l']
@@ -341,7 +389,19 @@ def append_vec_bl(Ac, A, vecbl, op=None):  # A = [t l] [b r] s;  Ac = [t' l'] [b
     vecbl = A.tensordot(vecbl, axes=((0, 2), (0, 3)))  # [r t] [x y] [r' t']
     vecbl = vecbl.unfuse_legs(axes=(0, 2))  # r t [x y] r' t'
     vecbl = vecbl.swap_gate(axes=(2, 4))  #  [x y] X t'
-    vecbl = vecbl.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [r r'] [x y] [t t']
-    vecbl = vecbl.unfuse_legs(axes=1)  # [r r'] x y [t t']
-    vecbl = vecbl.transpose(axes=(1, 0, 2, 3))  # x [r r'] y [t t']
-    return vecbl
+
+    if mode == 'old':
+        vecbl = vecbl.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [r r'] [x y] [t t']
+        vecbl = vecbl.unfuse_legs(axes=1)  # [r r'] x y [t t']
+        return vecbl.transpose(axes=(1, 0, 2, 3))  # x [r r'] y [t t']
+
+    if out_a == (3, 0):
+        axes1 = ((0, 3), (1, 4))  # [r r'] [t t']
+    elif out_a == (0, 3):
+        axes1 = ((1, 4), (0, 3))  # [t t'] [r r']
+    if mode == 'self-b':
+        axes1, axes2 = axes1 + (2,), 2  # [] [] [x y] -> [] [] x y
+    elif mode == 'b-self':
+        axes1, axes2 = (2,) + axes1, 0  # [x y] [] [] -> x y [] []
+    vecbl = vecbl.fuse_legs(axes=axes1)
+    return vecbl.unfuse_legs(axes=axes2)
