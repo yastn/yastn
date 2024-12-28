@@ -15,6 +15,7 @@
 """ Mps structure and its basic manipulations. """
 from __future__ import annotations
 from numbers import Number
+from typing import Sequence
 from ... import tensor, initialize, YastnError
 from ._mps_parent import _MpsMpoParent
 
@@ -22,16 +23,16 @@ from ._mps_parent import _MpsMpoParent
 #   auxiliary for basic algebra   #
 ###################################
 
-def Mps(N) -> yastn.tn.mps.MpsMpoOBC:
-    r""" Generate empty MPS for system of `N` sites, fixing :code:`nr_phys=1`. """
+def Mps(N) -> MpsMpoOBC:
+    r""" Generate empty MPS for system of `N` sites, fixing ``nr_phys=1``. """
     return MpsMpoOBC(N, nr_phys=1)
 
 
-def Mpo(N, periodic=False) -> yastn.tn.mps.MpsMpoOBC | yastn.tn.mps.MpoPBC:
+def Mpo(N, periodic=False) -> MpsMpoOBC | MpoPBC:
     r"""
-    Generate empty MPO for system of `N` sites, fixing :code:`nr_phys=2`.
+    Generate empty MPO for system of `N` sites, fixing ``nr_phys=2``.
 
-    A flag :code:`periodic` allows initializing periodic MPO,
+    A flag ``periodic`` allows initializing periodic MPO,
     which is a special class supported as an operator in MPS :ref:`environments<mps/environment:Environments>`.
     """
     if periodic:
@@ -39,7 +40,7 @@ def Mpo(N, periodic=False) -> yastn.tn.mps.MpsMpoOBC | yastn.tn.mps.MpoPBC:
     return MpsMpoOBC(N, nr_phys=2)
 
 
-def add(*states, amplitudes=None) -> yastn.tn.mps.MpsMpoOBC:
+def add(*states, amplitudes=None) -> MpsMpoOBC:
     r"""
     Linear superposition of several MPS/MPOs with specific amplitudes, i.e., :math:`\sum_j \textrm{amplitudes[j]}{\times}\textrm{states[j]}`.
 
@@ -94,7 +95,7 @@ def add(*states, amplitudes=None) -> yastn.tn.mps.MpsMpoOBC:
     return phi
 
 
-def multiply(a, b, mode=None) -> yastn.tn.mps.MpsMpoOBC:
+def multiply(a, b, mode=None) -> MpsMpoOBC:
     r"""
     Performs MPO-MPS product resulting in a new MPS, or
     MPO-MPO product resulting in a new MPO.
@@ -113,7 +114,7 @@ def multiply(a, b, mode=None) -> yastn.tn.mps.MpsMpoOBC:
     where the charge sectors :math:`V^{\textrm{result},c}` are computed during fusion.
 
     .. note::
-        One can equivalently call :code:`a @ b`.
+        One can equivalently call ``a @ b``.
 
     Parameters
     ----------
@@ -168,7 +169,7 @@ class MpsMpoOBC(_MpsMpoParent):
 
     def __init__(self, N=1, nr_phys=1):
         r"""
-        Initialize empty MPS (:code:`nr_phys=1`) or MPO (:code:`nr_phys=2`)
+        Initialize empty MPS (``nr_phys=1``) or MPO (``nr_phys=2``)
         for system of `N` sites. Empty MPS/MPO has no tensors assigned.
 
         MpsMpoOBC tensors (sites) are indexed by integers :math:`0,1,2,\ldots,N-1`,
@@ -187,26 +188,26 @@ class MpsMpoOBC(_MpsMpoParent):
         super().__init__(N=N, nr_phys=nr_phys)
         self.pC = None  # index of the central block, None if it does not exist
 
-    def __add__(self, phi) -> yastn.tn.mps.MpsMpoOBC:
+    def __add__(self, phi) -> MpsMpoOBC:
         """ Sum of two Mps's or two Mpo's. """
         return add(self, phi)
 
-    def __sub__(self, phi) -> yastn.tn.mps.MpsMpoOBC:
+    def __sub__(self, phi) -> MpsMpoOBC:
         """ Subtraction of two Mps's or two Mpo's. """
         return add(self, phi, amplitudes=(1, -1))
 
-    def __matmul__(self, phi) -> yastn.tn.mps.MpsMpoOBC:
+    def __matmul__(self, phi) -> MpsMpoOBC:
         """ Multiply Mpo by Mpo or Mps. """
         return multiply(self, phi)
 
     def orthogonalize_site_(self, n, to='first', normalize=True) -> None:
         r"""
-        Performs QR (or RQ) decomposition of on-site tensor at :code:`n`-th site.
+        Performs QR (or RQ) decomposition of on-site tensor at ``n``-th site.
         Two modes of usage are:
 
             * ``to='last'`` - Advance left canonical form: Assuming first `n-1` sites are already
               in the left canonical form, brings n-th site to left canonical form,
-              i.e., extends left canonical form by one site towards the :code:`'last'` site::
+              i.e., extends left canonical form by one site towards the ``'last'`` site::
 
                  --A---            --
                 |  |    = Identity|
@@ -214,7 +215,7 @@ class MpsMpoOBC(_MpsMpoParent):
 
             * ``to='first'`` - Advance right canonical form: Assuming all `m > n` sites are already
               in right canonical form, brings n-th site to right canonical form, i.e.,
-              extends right canonical form by one site towards the :code:`'first'` site::
+              extends right canonical form by one site towards the ``'first'`` site::
 
                 --A---    --
                   |   | =   |Identity
@@ -226,7 +227,7 @@ class MpsMpoOBC(_MpsMpoParent):
                 index of site to be orthogonalized
 
             to: str
-                a choice of canonical form: :code:`'last'` or :code:`'first'`.
+                a choice of canonical form: ``'last'`` or ``'first'``.
 
             normalize: bool
                 Whether to keep track of the norm by accumulating it in self.factor;
@@ -324,7 +325,7 @@ class MpsMpoOBC(_MpsMpoParent):
         Parameters
         ----------
         to: str
-            :code:`'last'` (the default) or :code:`'first'`.
+            ``'last'`` (the default) or ``'first'``.
         """
         if self.pC is not None:
             C = self.A.pop(self.pC)
@@ -344,13 +345,13 @@ class MpsMpoOBC(_MpsMpoParent):
         phi.canonize_(to='first', normalize=False)
         return phi.factor
 
-    def canonize_(self, to='first', normalize=True) -> yastn.tn.mps.MpsMpoOBC:
+    def canonize_(self, to='first', normalize=True) -> MpsMpoOBC:
         r"""
         Sweep through the MPS/MPO and put it in right/left canonical form
-        (:code:`to='first'` or :code:`to='last'`, respectively)
+        (``to='first'`` or ``to='last'``, respectively)
         using :meth:`QR <yastn.linalg.qr>` decomposition.
         It is assumed that tensors are enumerated
-        by index increasing from 0 (:code:`first`) to N-1 (:code:`last`).
+        by index increasing from 0 (``'first'``) to N-1 (``'last'``).
 
         Finally, the trivial central block of dimension :math:`1` obtained for terminal sites
         is attached at the end of the chain.
@@ -360,7 +361,7 @@ class MpsMpoOBC(_MpsMpoParent):
         Parameters
         ----------
         to: str
-            :code:`'first'` (the default) or :code:`'last'`.
+            ``'first'`` (the default) or ``'last'``.
 
         normalize: bool
             Whether to keep track of the norm of the state by accumulating it in self.factor;
@@ -380,7 +381,7 @@ class MpsMpoOBC(_MpsMpoParent):
         Parameters
         ----------
         to: str
-            :code:`'first'` (the default) or code:`'last'`.
+            ``'first'`` (the default) or ``'last'``.
 
         n: int
             Can check a single site if int provided. If None, check all sites.
@@ -410,18 +411,18 @@ class MpsMpoOBC(_MpsMpoParent):
     def truncate_(self, to='last', opts_svd=None, normalize=True) -> Number:
         r"""
         Sweep through the MPS/MPO and put it in right/left canonical form
-        (:code:`to='first'` or :code:`to='last'`, respectively)
+        (``to='first'`` or ``to='last'``, respectively)
         using :meth:`yastn.linalg.svd_with_truncation`.
         It is assumed that tensors are enumerated
-        by index increasing from 0 (:code:`first`) to N-1 (:code:`last`).
+        by index increasing from 0 (``'first'``) to N-1 (``'last'``).
 
         Access to singular values during the sweep allows truncation of virtual spaces.
 
         The truncation is effective when it is done in the canonical form.
         The canonical form has to be ensured prior to truncation by setting it
-        opposite to the direction of the sweep in :code:`truncate_`. I.e., prepare MPS/MPO in
-        the right canonical form (:code:`to='first'`) for truncation using :code:`to='last'` and
-        the left canonical form (:code:`to='last'`) for truncation using :code:`to='first'`.
+        opposite to the direction of the sweep in ``truncate_``. I.e., prepare MPS/MPO in
+        the right canonical form (``to='first'``) for truncation using ``to='last'`` and
+        the left canonical form (``to='last'``) for truncation using ``to='first'``.
 
         The MPS/MPO is updated in place.
 
@@ -430,7 +431,7 @@ class MpsMpoOBC(_MpsMpoParent):
         Parameters
         ----------
         to: str
-            :code:`'last'` (the default) or :code:`'first'`.
+            ``'last'`` (the default) or ``'first'``.
 
         normalize: bool
             Whether to keep in self.factor the norm of the initial state projected on the direction of the truncated state.
@@ -453,30 +454,32 @@ class MpsMpoOBC(_MpsMpoParent):
             self.absorb_central_(to=to)
         return self.config.backend.sqrt(discarded2_total)
 
-    def merge_two_sites(self, bd) -> yastn.Tensor:
+    def pre_2site(self, bd) -> tensor.Tensor:
         r"""
-        Merge two neighbouring mps sites and return the resulting tensor.
-
-        Fuse physical indices.
+        Merge two neighbouring MPS sites and return the resulting tensor,
+        Consistent with functions in env_
 
         Parameters
         ----------
         bd: tuple
             (n, n + 1), index of two sites to merge.
-
-        Returns
-        -------
-        tensor formed from A[n] and A[n + 1]
         """
         nl, nr = bd
-        return tensor.tensordot(self.A[nl], self.A[nr], axes=(2, 0))
+        if self.nr_phys == 1:
+            return self.A[nl] @ self.A[nr]
+        # else:  # self.nr_phys == 2
+        Al = self.A[nl].transpose(axes=(0, 1, 3, 2))
+        Ar = self.A[nr].transpose(axes=(0, 1, 3, 2))
+        return (Al @ Ar).fuse_legs(axes=(0, (1, 3), (2, 4), 5))
 
-    def unmerge_two_sites_(self, AA, bd, opts_svd) -> Number:
+    def post_2site_(self, AA, bd, opts_svd) -> Number:
         r"""
         Unmerge rank-4 tensor into two neighbouring MPS sites and a central block
         using :meth:`yastn.linalg.svd_with_truncation` to trunctate the bond dimension.
+        Return normalized discarded weight :math:`\sum_{i\in\textrm{discarded}}\lambda_i/\sum_i\lambda_i`,
+        where :math:`\lambda_i` are singular values across the bond.
 
-        Input tensor should be a result of :meth:`merge_two_sites` (or fused consistently).
+        Input tensor should be a result of :meth:`pre_2site` (or fused consistently).
 
         Parameters
         ----------
@@ -485,33 +488,27 @@ class MpsMpoOBC(_MpsMpoParent):
 
         bd: tuple
             (n, n + 1), index of two sites to merge.
-
-        Returns
-        -------
-        normalized discarded weight :math:`\sum_{i\in\textrm{discarded}}\lambda_i/\sum_i\lambda_i`,
-        where :math:`\lambda_i` are singular values across the bond.
         """
-        nl, nr = bd
-        self.pC = bd
-
+        nl, nr = self.pC = bd
         if self.nr_phys == 1 and AA.ndim == 4:
             AA = AA.fuse_legs(axes=((0, 1), (2, 3)))
-        if self.nr_phys == 2 and AA.ndim == 6:
-            AA = AA.fuse_legs(axes=((0, 1, 2), (3, 4, 5)))
+        if self.nr_phys == 2:  # and AA.ndim == 6
+            AA = AA.unfuse_legs(axes=(1, 2))
+            AA = AA.fuse_legs(axes=((0, 1, 3), (2, 5, 4)))
 
         U, S, V = tensor.svd(AA, axes=(0, 1), sU=1, **opts_svd)
         mask = tensor.truncation_mask(S, **opts_svd)
         U, self.A[bd], V = mask.apply_mask(U, S, V, axes=(1, 0, 0))
         if self.nr_phys == 1:
             self.A[nl] = U.unfuse_legs(axes=0)
-        else:
+        else:  # self.nr_phys == 2:
             self.A[nl] = U.unfuse_legs(axes=0).transpose(axes=(0, 1, 3, 2))
         self.A[nr] = V.unfuse_legs(axes=1)
 
         return tensor.bitwise_not(mask).apply_mask(S, axes=0).norm() / S.norm()  # discarded weight
 
 
-    def get_entropy(self, alpha=1) -> Sequence[number]:
+    def get_entropy(self, alpha=1) -> Sequence[Number]:
         r"""
         Entropy of bipartition across each bond, along MPS/MPO from the first to the last site,
         including trivial leftmost and rightmost cuts.  This gives a list with N+1 elements.
@@ -527,7 +524,7 @@ class MpsMpoOBC(_MpsMpoParent):
         schmidt_spectra = self.get_Schmidt_values()
         return [tensor.entropy(spectrum ** 2, alpha=alpha) for spectrum in schmidt_spectra]
 
-    def get_Schmidt_values(self) -> Sequence[yastn.Tensor]:
+    def get_Schmidt_values(self) -> Sequence[tensor.Tensor]:
         r"""
         Schmidt values for bipartition across all bonds along MPS/MPO from the first to the last site,
         including trivial leftmost and rightmost cuts. This gives a list with N+1 elements.

@@ -17,7 +17,7 @@ from __future__ import annotations
 import abc
 import copy
 from numbers import Number
-from ... import eye, tensordot, ncon, vdot, YastnError, qr, svd
+from ... import eye, tensordot, ncon, vdot, qr, svd, Tensor, YastnError
 from . import MpsMpoOBC, MpoPBC
 
 
@@ -42,8 +42,8 @@ def Env(bra, target, **kwargs):
 
     Note
     ----
-    :meth:`compression_<yastn.tn.mps.compression_>` directly calls :code:`Env(psi, target)`.
-    :meth:`dmrg_<yastn.tn.mps.dmrg_>` and :meth:`tdvp_<yastn.tn.mps.tdvp_>` call :code:`Env(psi, target=[H, psi])`.
+    :meth:`compression_<yastn.tn.mps.compression_>` directly calls ``Env(psi, target)``.
+    :meth:`dmrg_<yastn.tn.mps.dmrg_>` and :meth:`tdvp_<yastn.tn.mps.tdvp_>` call ``Env(psi, target=[H, psi])``.
     """
     if isinstance(target, MpsMpoOBC):
         return Env2(bra=bra, ket=target)  # ket
@@ -97,7 +97,7 @@ class EnvParent(metaclass=abc.ABCMeta):
         self.bra = bra
         self.N = self.bra.N
         self.nr_phys = bra.nr_phys
-        self.F = {}  # dict of envs dict[tuple[int, int], yastn.Tensor]
+        self.F = {}  # dict of envs dict[tuple[int, int], Tensor]
 
     def setup_(self, to='last'):
         r"""
@@ -106,7 +106,7 @@ class EnvParent(metaclass=abc.ABCMeta):
         Parameters
         ----------
         to: str
-            :code:`first` or :code:`last`.
+            ``first`` or ``last``.
         """
         for n in self.bra.sweep(to=to):
             self.update_env_(n, to=to)
@@ -129,7 +129,7 @@ class EnvParent(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def measure(self, bd=None) -> Number:
         r"""
-        Calculate overlap between environments at :code:`bd` bond.
+        Calculate overlap between environments at ``bd`` bond.
 
         Parameters
         ----------
@@ -140,7 +140,7 @@ class EnvParent(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def update_env_(self, n, to='last'):
         r"""
-        Update environment including site :code:`n`, in the direction given by :code:`to`.
+        Update environment including site ``n``, in the direction given by ``to``.
 
         Parameters
         ----------
@@ -148,13 +148,13 @@ class EnvParent(metaclass=abc.ABCMeta):
             index of site to include to the environment
 
         to: str
-            :code:`first` or :code:`last`.
+            ``first`` or ``last``.
         """
 
     @abc.abstractmethod
-    def Heff0(self, C, bd) -> yastn.Tensor:
+    def Heff0(self, C, bd) -> Tensor:
         r"""
-        Action of Heff on central block :code:`Heff0 @ C`.
+        Action of Heff on central block ``Heff0 @ C``.
 
         Parameters
         ----------
@@ -165,9 +165,9 @@ class EnvParent(metaclass=abc.ABCMeta):
         """
 
     @abc.abstractmethod
-    def Heff1(self, A, n) -> yastn.Tensor:
+    def Heff1(self, A, n) -> Tensor:
         r"""
-        Action of Heff on a single site MPS tensor :code:`Heff1 @ A`.
+        Action of Heff on a single site MPS tensor ``Heff1 @ A``.
 
         Parameters
         ----------
@@ -178,16 +178,16 @@ class EnvParent(metaclass=abc.ABCMeta):
             index of corresponding site
         """
 
-    def project_ket_on_bra_1(self, n) -> yastn.Tensor:
+    def project_ket_on_bra_1(self, n) -> Tensor:
         r"""
-        Action of Heff1 on :code:`n`-th ket MPS tensor :code:`Heff1 @ ket[n]`.
+        Action of Heff1 on ``n``-th ket MPS tensor ``Heff1 @ ket[n]``.
         """
         return self.Heff1(self.ket[n], n) * self.ket.factor
 
     @abc.abstractmethod
-    def Heff2(self, AA, bd) -> yastn.Tensor:
+    def Heff2(self, AA, bd) -> Tensor:
         r"""
-        Action of Heff on central block :code:`Heff2 @ AA`.
+        Action of Heff on central block ``Heff2 @ AA``.
 
         Parameters
         ----------
@@ -198,11 +198,11 @@ class EnvParent(metaclass=abc.ABCMeta):
             index of bond on which it acts, e.g. (1, 2) [or (2, 1) as it gets ordered]
         """
 
-    def project_ket_on_bra_2(self, bd) -> yastn.Tensor:
+    def project_ket_on_bra_2(self, bd) -> Tensor:
         r"""
-        Action of Heff2 on :code:`bd=(n, n+1)` ket MPS tensors :code:`Heff2 @ AA`.
+        Action of Heff2 on ``bd=(n, n+1)`` ket MPS tensors ``Heff2 @ AA``.
         """
-        return self.Heff2(self.ket.merge_two_sites(bd), bd) * self.ket.factor
+        return self.Heff2(self.ket.pre_2site(bd), bd) * self.ket.factor
 
     @abc.abstractmethod
     def charges_missing(self, n):
@@ -363,13 +363,7 @@ class Env2(EnvParent):
     def Heff2(self, AA, bd):
         """ Heff2 @ AA """
         n1, n2 = bd
-        axes = (0, (1, 2), 3) if AA.ndim == 4 else (0, (1, 2, 3, 5), 4)
-        tmp = AA.fuse_legs(axes=axes)
-        tmp = self.F[n1 - 1, n1] @ tmp @ self.F[n2 + 1, n2]
-        tmp = tmp.unfuse_legs(axes=1)
-        if tmp.ndim == 6:
-            tmp = tmp.transpose(axes=(0, 1, 2, 3, 5, 4))
-        return tmp
+        return self.F[n1 - 1, n1] @ AA @ self.F[n2 + 1, n2]
 
     def update_env_op_(self, n, op, to='first'):
         """
@@ -589,17 +583,6 @@ class Env_mpo_mpo_mpo(EnvParent_3_obc):
     def Heff2(self, AA, bd):
         n1, n2 = bd if bd[0] < bd[1] else bd[::-1]
 
-        # fuse 2 + 2 + 2
-        tmp = AA.fuse_legs(axes=((1, 0), (2, 5), 3, 4))
-        tmp = tmp @ self.F[n2 + 1, n2]
-        tmp = tensordot(self.op[n2], tmp, axes=((2, 3), (3, 2)))
-        tmp = tmp.fuse_legs(axes=(0, 2, 3, (1, 4)))
-        tmp = tmp.unfuse_legs(axes=1)
-        tmp = tensordot(self.op[n1], tmp, axes=((2, 3), (0, 1)))
-        tmp = tensordot(self.F[n1 - 1, n1], tmp, axes=((0, 1), (2, 0)))
-        tmp = tmp.unfuse_legs(axes=(2, 3))
-        tmp = tmp.transpose(axes=(0, 1, 2, 4, 5, 3))
-
         # fuse 3 + 3
         # tmp = AA.fuse_legs(axes=((1, 0, 2), 3, 5, 4))
         # tmp = tmp @ self.F[n2 + 1, n2]
@@ -610,11 +593,19 @@ class Env_mpo_mpo_mpo(EnvParent_3_obc):
         # tmp = tensordot(self.F[n1 - 1, n1], tmp, axes=((0, 1), (2, 0)))
         # tmp = tmp.unfuse_legs(axes=3)
 
+        # fuse AA as [l, (b,b), (t,t), r]
+        tmp = AA @ self.F[n2 + 1, n2]
+        tmp = tmp.unfuse_legs(axes=1)
+        tmp = tensordot(self.op[n2], tmp, axes=((2, 3), (4, 2)))
+        tmp = tensordot(self.op[n1], tmp, axes=((2, 3), (0, 3)))
+        tmp = tmp.fuse_legs(axes=(3, 0, (1, 2), 4, 5))
+        tmp = tensordot(self.F[n1 - 1, n1], tmp, axes=((0, 1), (0, 1)))
+
         # version with no fusion
-        # tmp = tensordot(AA, self.F[n2 + 1, n2], axes=(4, 0))
+        # tmp = AA @ self.F[n2 + 1, n2]
         # tmp = tensordot(self.op[n2], tmp, axes=((2, 3), (5, 3)))
         # tmp = tensordot(self.op[n1], tmp, axes=((2, 3), (0, 3)))
-        # tmp = tmp.transpose(axes=(3, 0, 1, 4, 2, 6, 5))
+        # tmp = tmp.transpose(axes=(3, 0, 1, 4, 2, 5, 6))
         # tmp = tensordot(self.F[n1 - 1, n1], tmp, axes=((0, 1), (0, 1)))
         return tmp * self.op.factor
 
@@ -640,18 +631,6 @@ class Env_mpo_mpobra_mpo(EnvParent_3_obc):
     def Heff2(self, AA, bd):
         n1, n2 = bd if bd[0] < bd[1] else bd[::-1]
 
-        tmp = AA.fuse_legs(axes=((0, 1), (2, 5), 3, 4))
-        tmp = tmp @ self.F[n2 + 1, n2]
-        tmp = tmp.unfuse_legs(axes=1)
-        tmp = tmp.fuse_legs(axes=(2, 4, 1, 0, (3, 5)))
-        tmp = tensordot(self.op[n2], tmp, axes=((1, 2), (0, 1)))
-        tmp = tensordot(self.op[n1], tmp, axes=((1, 2), (2, 0)))
-        tmp = tmp.fuse_legs(axes=(0, 3, (1, 2), 4))
-        tmp = tmp.unfuse_legs(axes=1)
-        tmp = tensordot(self.F[n1 - 1, n1], tmp, axes=((1, 0), (0, 1)))
-        tmp = tmp.unfuse_legs(axes=(2, 3))
-        tmp = tmp.transpose(axes=(0, 1, 2, 4, 5, 3))
-
         # tmp = AA.fuse_legs(axes=(0, 1, 2, (3, 4, 5)))
         # tmp = tensordot(self.F[n1 - 1, n1], tmp, axes=(0, 0))
         # tmp = tensordot(self.op[n1], tmp, axes=((0, 1), (0, 3)))
@@ -662,11 +641,20 @@ class Env_mpo_mpobra_mpo(EnvParent_3_obc):
         # tmp = tmp.transpose(axes=(0, 1, 3, 2))
         # tmp = tmp.unfuse_legs(axes=0)
 
-        # tmp = tensordot(AA, self.F[n2 + 1, n2], axes=(4, 0))
-        # tmp = tensordot(tmp, self.op[n2], axes=((4, 5), (1, 2)))
-        # tmp = tensordot(tmp, self.op[n1], axes=((2, 5), (1, 2)))
-        # tmp = tmp.transpose(axes=(0, 5, 1, 6, 2, 3, 4))
-        # tmp = tensordot(self.F[n1 - 1, n1], tmp, axes=((0, 1), (0, 1)))
+        # fuse AA as [l, (t,t), (b,b), r]
+        tmp = tensordot(self.F[n1 - 1, n1], AA, axes=(0, 0))
+        tmp = tmp.unfuse_legs(axes=3)
+        tmp = tensordot(tmp, self.op[n1], axes=((0, 3), (0, 1)))
+        tmp = tensordot(tmp, self.op[n2], axes=((4, 2), (0, 1)))
+        tmp = tmp.fuse_legs(axes=(0, 1, (3, 5), 2, 4))
+        tmp = tensordot(tmp, self.F[n2 + 1, n2], axes=((3, 4), (0, 1)))
+
+        # no fusion in AA
+        # tmp = tensordot(self.F[n1 - 1, n1], AA, axes=(0, 0))
+        # tmp = tensordot(tmp, self.op[n1], axes=((0, 3), (0, 1)))
+        # tmp = tensordot(tmp, self.op[n2], axes=((5, 3), (0, 1)))
+        # tmp = tmp.transpose(axes=(0, 1, 4, 2, 6, 3, 5))
+        # tmp = tensordot(tmp, self.F[n2 + 1, n2], axes=((5, 6), (0, 1)))
         return tmp * self.op.factor
 
     def charges_missing(self, n):

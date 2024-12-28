@@ -276,10 +276,10 @@ def _update_AA(env, bd, du, opts, opts_svd, normalize=True, precompute=False):
     ibd = bd[::-1]
     if ibd in env._temp['expmv_ncv']:
         opts['ncv'] = env._temp['expmv_ncv'][ibd]
-    AA = env.bra.merge_two_sites(bd)
+    AA = env.bra.pre_2site(bd)
     if precompute and env.nr_phys == 1:
         AA = AA.fuse_legs(axes=((0, 1), (2, 3)))
     f = lambda x: env.Heff2(x, bd)
     AA, info = expmv(f, AA, du, **opts, normalize=normalize, return_info=True)
     env._temp['expmv_ncv'][ibd] = info['ncv']
-    env.bra.unmerge_two_sites_(AA, bd, opts_svd)
+    env.bra.post_2site_(AA, bd, opts_svd)
