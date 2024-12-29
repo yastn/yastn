@@ -467,21 +467,31 @@ def apply_mask(a, *args, axes=0) -> yastn.Tensor | iterable[yastn.Tensor]:
     if len(axes) != len(args):
         raise YastnError("There should be exactly one axis for each tensor to be projected.")
     results = []
+
+    nsym = a.config.sym.NSYM
+    mask = {t[:nsym]: a.config.backend.to_mask(a._data[slice(*sl.slcs[0])]) for t, sl in zip(a.struct.t, a.slices)}
+    mask_t = tuple(mask.keys())
+    mask_D = tuple(len(v) for v in mask.values())
+
     for b, ax in zip(args, axes):
         _test_can_be_combined(a, b)
         ax = _broadcast_input(ax, b.mfs, a.isdiag)
         if b.hfs[ax].tree != (1,):
             raise YastnError('Second tensor`s leg specified by axes cannot be fused.')
 
-        Dbnew = tuple(a.config.backend.count_nonzero(a._data[slice(*sl.slcs[0])]) for sl in a.slices)
-        meta, struct, slices = _meta_mask(b.struct, b.slices, b.isdiag, a.struct, a.slices, Dbnew, ax)
+        meta, struct, slices, ax, ndim = _meta_mask2(b.struct, b.slices, b.isdiag, mask_t, mask_D, ax)
+        data = a.config.backend.apply_mask(b._data, mask, meta, struct.size, ax, ndim)
 
-        if b.isdiag:
-            b_ndim, ax = (1, 0)
-            meta = tuple((sln, sla, Da[0], slb) for sln, sla, Da, slb in meta)
-        else:
-            b_ndim = b.ndim_n
-        data = b.config.backend.mask_diag(b._data, a._data, meta, struct.size, ax, b_ndim)
+        # Dbnew = tuple(a.config.backend.count_nonzero(a._data[slice(*sl.slcs[0])]) for sl in a.slices)
+        # meta, struct, slices = _meta_mask(b.struct, b.slices, b.isdiag, a.struct, a.slices, Dbnew, ax)
+
+        # if b.isdiag:
+        #     b_ndim, ax = (1, 0)
+        #     meta = tuple((sln, sla, Da[0], slb) for sln, sla, Da, slb in meta)
+        # else:
+        #     b_ndim = b.ndim_n
+        # data = b.config.backend.mask_diag(b._data, a._data, meta, struct.size, ax, b_ndim)
+
         results.append(b._replace(struct=struct, slices=slices, data=data))
     return results.pop() if len(results) == 1 else results
 
@@ -536,7 +546,7 @@ def _meta_mask2(a_struct, a_slices, a_isdiag, mask_t, mask_D, axis):
     c_struct = a_struct._replace(t=c_t, D=c_D, size=sum(c_Dp))
 
     if a_isdiag:
-        meta = tuple((sln.slcs[0], Dn, sla, Da, tm) for sln, Dn, (_, sla, Da, tm, _) in zip(c_slices, c_Dp, meta))
+        meta = tuple((sln.slcs[0], Dn[0], sla, Da[0], tm) for sln, Dn, (_, sla, Da, tm, _) in zip(c_slices, c_D, meta))
         ndim, axis = 1, 0
     else:
         meta = tuple((sln.slcs[0], Dn, sla, Da, tm) for sln, Dn, (_, sla, Da, tm, _) in zip(c_slices, c_D, meta))

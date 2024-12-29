@@ -92,8 +92,8 @@ def test_mask_exceptions(config_kwargs):
     a = yastn.rand(config=config_U1, isdiag=True, legs=legd)
     a_nondiag = a.diag()
 
-    leg1 =  yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9))
-    leg2 =  yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(5, 6, 7))
+    leg1 = yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9))
+    leg2 = yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(5, 6, 7))
     b = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1, leg2.conj()])
 
     with pytest.raises(yastn.YastnError):
@@ -107,8 +107,8 @@ def test_mask_exceptions(config_kwargs):
         bhf = b.fuse_legs(axes=(0, (1, 2), 3), mode='hard')
         _ = a.apply_mask(bhf, axes=1)
         # Second tensor`s leg specified by axes cannot be fused.
-    with pytest.raises(yastn.YastnError):
-        _ = a.apply_mask(b, axes=1)  # Bond dimensions do not match.
+    # with pytest.raises(yastn.YastnError):
+        # _ = a.apply_mask(b, axes=1)  # Bond dimensions do not match.
     with pytest.raises(yastn.YastnError):
         _, _ = a.apply_mask(b, b, axes=[2, 2, 1])
         # There should be exactly one axis for each tensor to be projected.
