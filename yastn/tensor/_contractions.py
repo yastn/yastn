@@ -91,8 +91,8 @@ def tensordot(a, b, axes, conj=(0, 0)) -> yastn.Tensor:
 
     if needs_mask:
         msk_a, msk_b = _mask_tensor_intersect_legs(a, b, nin_a, nin_b)
-        a = _apply_mask_to_axes(a, nin_a, msk_a)
-        b = _apply_mask_to_axes(b, nin_b, msk_b)
+        a = _apply_mask_to_axes2(a, nin_a, msk_a)
+        b = _apply_mask_to_axes2(b, nin_b, msk_b)
 
     if a.config.tensordot_policy == 'fuse_to_matrix':
         data, struct_c, slices_c = _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b, s_c)
@@ -132,6 +132,19 @@ def _apply_mask_to_axes(a, naxes, masks):
             Dbnew = tuple(a.config.backend.count_nonzero(msk._data[slice(*sl.slcs[0])]) for sl in msk.slices)
             meta, struct, slices = _meta_mask(a.struct, a.slices, a.isdiag, msk.struct, msk.slices, Dbnew, ax)
             data = a.config.backend.mask_diag(a._data, msk._data, meta, struct.size, ax, a.ndim_n)
+            a = a._replace(struct=struct, slices=slices, data=data)
+    return a
+
+
+def _apply_mask_to_axes2(a, naxes, masks):
+    """ Auxlliary function applying mask tensors to native legs. """
+    for axis, mask in zip(naxes, masks):
+        if mask is not None:
+            mask_tD = {k: len(v) for k, v in mask.items() if len(v) > 0}
+            mask_t = tuple(mask_tD.keys())
+            mask_D = tuple(mask_tD.values())
+            meta, struct, slices, axis, ndim = _meta_mask2(a.struct, a.slices, a.isdiag, mask_t, mask_D, axis)
+            data = a.config.backend.apply_mask(a._data, mask, meta, struct.size, axis, ndim)
             a = a._replace(struct=struct, slices=slices, data=data)
     return a
 
@@ -499,6 +512,38 @@ def _meta_mask(a_struct, a_slices, a_isdiag, b_struct, b_slices, Dbnew, axis):
     c_struct = a_struct._replace(t=c_t, D=c_D, size=sum(c_Dp))
     meta = tuple((sln.slcs[0], sla, Da, slb) for (_, sla, Da, slb, _), sln in zip(meta, c_slices))
     return meta, c_struct, c_slices
+
+
+def _meta_mask2(a_struct, a_slices, a_isdiag, mask_t, mask_D, axis):
+    """ meta information for backend, and new tensor structure for mask."""
+
+    mask_tD = {t: D for t, D in zip(mask_t, mask_D) if D > 0}
+    nsym = len(a_struct.n)
+    ind_ta = tuple(x[axis * nsym: (axis + 1) * nsym] for x in a_struct.t)
+    meta = tuple((ta, sla.slcs[0], Da, tm, mask_tD[tm]) for ta, sla, Da, tm in \
+                zip(a_struct.t, a_slices, a_struct.D, ind_ta) if tm in mask_tD)
+    # mt = (ta, sla, Da, tm, Dm)
+
+    c_t = tuple(mt[0] for mt in meta)
+    if a_isdiag:
+        c_D = tuple((mt[4], mt[4]) for mt in meta)
+        c_Dp = tuple(mt[4] for mt in meta)
+    else:
+        c_D = tuple(mt[2][:axis] + (mt[4],) + mt[2][axis + 1:] for mt in meta)
+        c_Dp = np.prod(c_D, axis=1, dtype=np.int64).tolist() if len(c_D) > 0 else ()
+
+    c_slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(c_Dp), c_Dp, c_D))
+    c_struct = a_struct._replace(t=c_t, D=c_D, size=sum(c_Dp))
+
+    if a_isdiag:
+        meta = tuple((sln.slcs[0], Dn, sla, Da, tm) for sln, Dn, (_, sla, Da, tm, _) in zip(c_slices, c_Dp, meta))
+        ndim, axis = 1, 0
+    else:
+        meta = tuple((sln.slcs[0], Dn, sla, Da, tm) for sln, Dn, (_, sla, Da, tm, _) in zip(c_slices, c_D, meta))
+        ndim = len(a_struct.s)
+
+    return meta, c_struct, c_slices, axis, ndim
+
 
 
 def vdot(a, b, conj=(1, 0)) -> Number:

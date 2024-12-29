@@ -519,6 +519,15 @@ def mask_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
     return newdata
 
 
+def apply_mask(Adata, mask, meta, Dsize, axis, a_ndim):
+    slc1 = (slice(None),) * axis
+    slc2 = (slice(None),) * (a_ndim - (axis + 1))
+    newdata = np.empty((Dsize,), dtype=Adata.dtype)
+    for sln, Dn, sla, Da, tm in meta:
+        newdata[slice(*sln)].reshape(Dn)[:] = Adata[slice(*sla)].reshape(Da)[slc1 + (mask[tm],) + slc2]
+    return newdata
+
+
 # dot_dict = {(0, 0): lambda x, y, out: np.matmul(x, y, out=out),
 #             (0, 1): lambda x, y, out: np.matmul(x, y.conj(), out=out),
 #             (1, 0): lambda x, y, out: np.matmul(x.conj(), y, out=out),

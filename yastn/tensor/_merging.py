@@ -548,6 +548,14 @@ def _mask_tensor(a, ma):
     return a._replace(struct=struct, slices=slices, data=data, mfs=mfs, hfs=hfs)
 
 
+def _mask_nonzero(mask):
+    if all(all(v) for v in mask.values()):
+        return None
+    mask = {k: v.nonzero()[0] for k, v in mask.items()}
+    mask = {k: v for k, v in sorted(mask.items()) if len(v) > 0}
+    return mask
+
+
 def _mask_tensor_intersect_legs(a, b, axa, axb):
     """ masks to get the intersecting parts of legs from two tensors as single masks """
     msk_a, msk_b = [], []
@@ -555,8 +563,10 @@ def _mask_tensor_intersect_legs(a, b, axa, axb):
     tlb, Dlb, _= _get_tD_legs(b.struct)
     for i1, i2 in zip(axa, axb):
         ma, mb = _intersect_hfs(a.config, (tla[i1], tlb[i2]), (Dla[i1], Dlb[i2]), (a.hfs[i1], b.hfs[i2]))
-        msk_a.append(_mask_tensor(a, ma))
-        msk_b.append(_mask_tensor(b, mb))
+        msk_a.append(_mask_nonzero(ma))
+        msk_b.append(_mask_nonzero(mb))
+        # msk_a.append(_mask_tensor(a, ma))
+        # msk_b.append(_mask_tensor(b, mb))
     return msk_a, msk_b
 
 

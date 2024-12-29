@@ -788,6 +788,15 @@ def mask_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
     return newdata
 
 
+def apply_mask(Adata, mask, meta, Dsize, axis, a_ndim):
+    slc1 = (slice(None),) * axis
+    slc2 = (slice(None),) * (a_ndim - (axis + 1))
+    newdata = torch.zeros((Dsize,), dtype=Adata.dtype, device=Adata.device)
+    for sln, Dn, sla, Da, tm in meta:
+        newdata[slice(*sln)].view(Dn)[:] = Adata[slice(*sla)].reshape(Da)[slc1 + (mask[tm],) + slc2]
+    return newdata
+
+
 def transpose_dot_sum(Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border, Dsize):
     return kernel_transpose_dot_sum.apply(Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border, Dsize)
 
