@@ -789,47 +789,76 @@ def mask_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
 
 
 def transpose_dot_sum(Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border, Dsize):
-    dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
-    if dtype != Adata.dtype:
-        Adata = Adata.to(dtype=dtype)
-    if dtype != Bdata.dtype:
-        Bdata = Bdata.to(dtype=dtype)
-    Cdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
-    Ad = {t: Adata[slice(*sl)].view(Di).permute(Aorder).reshape(Df) for (t, sl, Di, Df) in Areshape}
-    Bd = {t: Bdata[slice(*sl)].view(Di).permute(Border).reshape(Df) for (t, sl, Di, Df) in Breshape}
-
-    for (sl, Dslc, list_tab) in meta_dot:
-        tmp = Cdata[slice(*sl)].view(Dslc)
-        for ta, tb in list_tab:
-            tmp[:] += Ad[ta] @ Bd[tb]
-
-    return Cdata
+    return kernel_transpose_dot_sum.apply(Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border, Dsize)
 
 
-# dot_dict = {(0, 0): lambda x, y: x @ y,
-#             (0, 1): lambda x, y: x @ y.conj(),
-#             (1, 0): lambda x, y: x.conj() @ y,
-#             (1, 1): lambda x, y: x.conj() @ y.conj()}
+class kernel_transpose_dot_sum(torch.autograd.Function):
+    @staticmethod
+    def forward(Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border, Dsize):
+        dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
+        if dtype != Adata.dtype:
+            Adata = Adata.to(dtype=dtype)
+        if dtype != Bdata.dtype:
+            Bdata = Bdata.to(dtype=dtype)
+        Cdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
+        At = {t: Adata[slice(*sl)].view(Di).permute(Aorder).reshape(Df) for (t, sl, Di, Df) in Areshape}
+        Bt = {t: Bdata[slice(*sl)].view(Di).permute(Border).reshape(Df) for (t, sl, Di, Df) in Breshape}
 
+        for (sl, Dslc, list_tab) in meta_dot:
+            tmp = Cdata[slice(*sl)].view(Dslc)
+            for ta, tb in list_tab:
+                tmp[:] += At[ta] @ Bt[tb]
+        return Cdata
 
-# def dot_nomerge(Adata, Bdata, cc, oA, oB, meta, Dsize):
-#     f = dot_dict[cc]  # proper conjugations
-#     dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
-#     newdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
-#     for (sln, sla, Dao, Dan, slb, Dbo, Dbn) in meta:
-#         newdata[slice(*sln)] += f(Adata[slice(*sla)].reshape(Dao).permute(oA).reshape(Dan), \
-#                                   Bdata[slice(*slb)].reshape(Dbo).permute(oB).reshape(Dbn)).ravel()
-#     return newdata
+    @staticmethod
+    # inputs is a Tuple of all of the inputs passed to forward.
+    # output is the output of the forward().
+    def setup_context(ctx, inputs, output):
+        Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border, Dsize = inputs
+        ctx.save_for_backward(Adata, Bdata)
+        ctx.meta_dot = meta_dot
+        ctx.Areshape = Areshape
+        ctx.Breshape = Breshape
+        ctx.Aorder = Aorder
+        ctx.Border = Border
 
+    @staticmethod
+    def backward(ctx, Cdata_b):
+        # adjoint of block-sparse matrix-matrix multiplication A . B = C
+        #
+        # A_b = C_b . B^T ; B_b = A^T . C_b
+        Adata, Bdata = ctx.saved_tensors
+        meta_dot = ctx.meta_dot
+        Areshape = ctx.Areshape
+        Breshape = ctx.Breshape
+        Aorder = ctx.Aorder
+        Border = ctx.Border
+        inv_Aorder = tuple(np.argsort(Aorder))
+        inv_Border = tuple(np.argsort(Border))
 
-# def dot_nomerge_masks(Adata, Bdata, cc, oA, oB, meta, Dsize, tcon, ma, mb):
-#     f = dot_dict[cc]  # proper conjugations
-#     dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
-#     newdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
-#     for (sln, sla, Dao, Dan, slb, Dbo, Dbn), tt in zip(meta, tcon):
-#         newdata[slice(*sln)] += f(Adata[slice(*sla)].reshape(Dao).permute(oA).reshape(Dan)[:, ma[tt]], \
-#                                   Bdata[slice(*slb)].reshape(Dbo).permute(oB).reshape(Dbn)[mb[tt], :]).ravel()
-#     return newdata
+        At = {t: Adata[slice(*sl)].view(Di).permute(Aorder).reshape(Df) for (t, sl, Di, Df) in Areshape}
+        Bt = {t: Bdata[slice(*sl)].view(Di).permute(Border).reshape(Df) for (t, sl, Di, Df) in Breshape}
+        At_b = {t: torch.zeros_like(v) for t, v in At.items()}
+        Bt_b = {t: torch.zeros_like(v) for t, v in Bt.items()}
+
+        for (sl, Dslc, list_tab) in meta_dot:
+            tmp = Cdata_b[slice(*sl)].view(Dslc)
+            for ta, tb in list_tab:
+                At_b[ta] += tmp @ Bt[tb].adjoint()
+                Bt_b[tb] += At[ta].adjoint() @ tmp
+
+        Adata_b = torch.zeros_like(Adata)
+        for (t, sl, Di, _) in Areshape:
+            inv_Di = tuple(Di[n] for n in Aorder)
+            Adata_b[slice(*sl)].reshape(Di)[:] = At_b[t].reshape(inv_Di).permute(inv_Aorder)
+
+        Bdata_b = torch.zeros_like(Bdata)
+        for (t, sl, Di, _) in Breshape:
+            inv_Di = tuple(Di[n] for n in Border)
+            Bdata_b[slice(*sl)].reshape(Di)[:] = Bt_b[t].reshape(inv_Di).permute(inv_Border)
+
+        return Adata_b, Bdata_b, None, None, None, None, None, None
+
 
 #####################################################
 #     block merging, truncations and un-merging     #
