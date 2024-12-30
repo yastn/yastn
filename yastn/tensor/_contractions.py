@@ -581,85 +581,79 @@ def trace(a, axes=(0, 1)) -> yastn.Tensor:
     axes: tuple[int, int] | tuple[Sequence[int], Sequence[int]]
         Legs to be traced out, e.g., ``axes=(0, 1)``; or ``axes=((2, 3, 4), (0, 1, 5))``.
     """
-    lin1, lin2 = _clear_axes(*axes)  # contracted legs
-    if len(set(lin1) & set(lin2)) > 0:
+    in_0, in_1 = _clear_axes(*axes)  # contracted legs
+    if set(in_0) & set(in_1):
         raise YastnError('The same axis in axes[0] and axes[1].')
-    needs_mask, (in1, in2) = _test_axes_match(a, a, sgn=-1, axes=(lin1, lin2))
+    needs_mask, (nin_0, nin_1) = _test_axes_match(a, a, sgn=-1, axes=(in_0, in_1))
 
-    if len(in1) == 0:
+    if len(nin_0) == 0:
         return a
 
-    order = in1 + in2
+    order = nin_0 + nin_1
     out = tuple(i for i in range(a.ndim_n) if i not in order)
     order = order + out
-    mfs = tuple(a.mfs[i] for i in range(a.ndim) if i not in lin1 + lin2)
+    mfs = tuple(a.mfs[i] for i in range(a.ndim) if i not in in_0 + in_1)
     hfs = tuple(a.hfs[ii] for ii in out)
 
     if a.isdiag:
-        # if needs_mask: raise YastnError('Should not have happend')
         struct = a.struct._replace(s=(), diag=False, t=((),), D=((),), size=1)
         data = a.config.backend.sum_elements(a._data)
         return a._replace(struct=struct, slices=(_slc(((0, 1),), (), 1),), mfs=mfs, hfs=hfs, isdiag=False, data=data)
 
-    meta, struct, slices, tcon, D1, D2 = _meta_trace(a.struct, a.slices, in1, in2, out)
     if needs_mask:
-        msk12 = _masks_for_trace(a.config, tcon, D1, D2, a.hfs, in1, in2)
-        data = a.config.backend.trace_with_mask(a._data, order, meta, struct.size, tcon, msk12)
-    else:
-        if D1 != D2:
-            raise YastnError('Bond dimensions do not match.')
-        data = a.config.backend.trace(a._data, order, meta, struct.size)
+        msk_0, msk_1 = _mask_tensor_intersect_legs(a, a, nin_0, nin_1)
+        a = _apply_mask_to_axes(a, nin_0 + nin_1, msk_0 + msk_1)
+
+    meta, struct, slices = _meta_trace(a.struct, a.slices, nin_0, nin_1, out)
+    data = a.config.backend.trace(a._data, order, meta, struct.size)
     return a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, data=data)
 
 
 @lru_cache(maxsize=1024)
-def _meta_trace(struct, slices, in1, in2, out):
+def _meta_trace(struct, slices, nin_0, nin_1, out):
     """ meta-information for backend and struct of traced tensor. """
     lt, nsym = len(struct.t), len(struct.n)
     tset = np.array(struct.t, dtype=np.int64).reshape((lt, len(struct.s), nsym))
     Dset = np.array(struct.D, dtype=np.int64).reshape((lt, len(struct.s)))
-    t1 = tset[:, in1, :].reshape(lt, len(in1) * nsym)
-    t2 = tset[:, in2, :].reshape(lt, len(in2) * nsym)
+    t0 = tset[:, nin_0, :].reshape(lt, len(nin_0) * nsym)
+    t1 = tset[:, nin_1, :].reshape(lt, len(nin_1) * nsym)
     tn = tset[:, out, :].reshape(lt, len(out) * nsym)
-    D1 = Dset[:, in1]
-    D2 = Dset[:, in2]
+    D0 = Dset[:, nin_0]
+    D1 = Dset[:, nin_1]
     Dn = Dset[:, out]
     Dnp = np.prod(Dn, axis=1, dtype=np.int64)
-    pD1 = np.prod(D1, axis=1, dtype=np.int64).reshape(lt, 1)
-    pD2 = np.prod(D2, axis=1, dtype=np.int64).reshape(lt, 1)
-    ind = (np.all(t1 == t2, axis=1)).nonzero()[0]
-    Drsh = np.hstack([pD1, pD2, Dn])
-    t12 = tuple(map(tuple, t1[ind].tolist()))
+    pD0 = np.prod(D0, axis=1, dtype=np.int64)
+    pD1 = np.prod(D1, axis=1, dtype=np.int64)
+    Drsh = np.column_stack([pD0, pD1, Dnp])
+
+    ind = (np.all(t0 == t1, axis=1)).nonzero()[0]
+    if not np.all(D0[ind] == D1[ind]):
+        raise YastnError('Bond dimensions do not match.')
     tn = tuple(map(tuple, tn[ind].tolist()))
-    D1 = tuple(map(tuple, D1[ind].tolist()))
-    D2 = tuple(map(tuple, D2[ind].tolist()))
     Dn = tuple(map(tuple, Dn[ind].tolist()))
     Dnp = Dnp[ind].tolist()
     slo = tuple(slices[n].slcs[0] for n in ind)
     Do = tuple(struct.D[n] for n in ind)
     Drsh = tuple(map(tuple, Drsh[ind].tolist()))
 
-    meta = tuple(sorted(zip(tn, Dn, Dnp, t12, slo, Do, Drsh), key=itemgetter(0)))
+    pre_meta = sorted(zip(tn, Dn, Dnp, slo, Do, Drsh), key=itemgetter(0))
 
     low, high = 0, 0
-    c_t, c_D, c_slices, meta2, tcon = [], [], [], [], []
-    for t, group in groupby(meta, key=itemgetter(0)):
-        c_t.append(t)
-        mt = next(group)
-        c_D.append(mt[1])
-        Dp = mt[2]
-        high = low + Dp
-        sl = (low, high)
+    c_t, c_D, c_slices, meta = [], [], [], []
+    for tn, group in groupby(pre_meta, key=itemgetter(0)):
+        c_t.append(tn)
+        tn, Dn, Dnp, slo, Do, Drsh = next(group)
+        c_D.append(Dn)
+        high = low + Dnp
+        sln = (low, high)
         low = high
-        c_slices.append(_slc((sl,), c_D[-1], Dp))
-        tcon.append(mt[3])
-        meta2.append((sl, *mt[4:]))
-        for mt in group:
-            tcon.append(mt[3])
-            meta2.append((sl, *mt[4:]))
+        c_slices.append(_slc((sln,), Dn, Dnp))
+        meta.append((sln, slo, Do, Drsh))
+        for _, _, _, slo, Do, Drsh in group:
+            meta.append((sln, slo, Do, Drsh))
     c_s = tuple(struct.s[i] for i in out)
     c_struct = _struct(s=c_s, n=struct.n, t=tuple(c_t), D=tuple(c_D), size=high)
-    return tuple(meta2), c_struct, tuple(c_slices), tuple(tcon), D1, D2
+    return tuple(meta), c_struct, tuple(c_slices)
 
 
 def swap_gate(a, axes, charge=None) -> yastn.Tensor:

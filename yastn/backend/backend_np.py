@@ -229,21 +229,9 @@ def conj(data):
 
 
 def trace(data, order, meta, Dsize):
-    """ Trace dict of tensors according to meta = [(tnew, told, Dreshape), ...].
-        Repeating tnew are added."""
     newdata = np.zeros((Dsize,), dtype=data.dtype)
     for (sln, slo, Do, Drsh) in meta:
-        newdata[slice(*sln)] += np.trace(data[slice(*slo)].reshape(Do).transpose(order).reshape(Drsh)).ravel()
-    return newdata
-
-
-def trace_with_mask(data, order, meta, Dsize, tcon, msk12):
-    """ Trace dict of tensors according to meta = [(tnew, told, Dreshape), ...].
-        Repeating tnew are added."""
-    newdata = np.zeros((Dsize,), dtype=data.dtype)
-    for (sln, slo, Do, Drsh), tt in zip(meta, tcon):
-        temp = data[slice(*slo)].reshape(Do).transpose(order).reshape(Drsh)
-        newdata[slice(*sln)] += np.sum(temp[msk12[tt][0], msk12[tt][1]], axis=0).ravel()
+        newdata[slice(*sln)] += np.trace(data[slice(*slo)].reshape(Do).transpose(order).reshape(Drsh))
     return newdata
 
 

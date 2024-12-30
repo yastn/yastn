@@ -275,23 +275,12 @@ else:
     def conj(data):
         return data.conj()
 
+
 def trace(data, order, meta, Dsize):
-    """ Trace dict of tensors according to meta = [(tnew, told, Dreshape), ...].
-        Repeating tnew are added."""
     newdata = torch.zeros((Dsize,), dtype=data.dtype, device=data.device)
     for (sln, slo, Do, Drsh) in meta:
         temp = data[slice(*slo)].reshape(Do).permute(order).reshape(Drsh)
-        newdata[slice(*sln)] += torch.sum(torch.diagonal(temp, dim1=0, dim2=1), dim=-1).ravel()
-    return newdata
-
-
-def trace_with_mask(data, order, meta, Dsize, tcon, msk12):
-    """ Trace dict of tensors according to meta = [(tnew, told, Dreshape), ...].
-        Repeating tnew are added."""
-    newdata = torch.zeros((Dsize,), dtype=data.dtype, device=data.device)
-    for (sln, slo, Do, Drsh), tt in zip(meta, tcon):
-        temp = data[slice(*slo)].reshape(Do).permute(order).reshape(Drsh)
-        newdata[slice(*sln)] += torch.sum(temp[msk12[tt][0], msk12[tt][1]], axis=0).ravel()
+        newdata[slice(*sln)] += torch.sum(torch.diagonal(temp, dim1=0, dim2=1), dim=-1)
     return newdata
 
 
