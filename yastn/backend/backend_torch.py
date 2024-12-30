@@ -32,8 +32,8 @@ __all__= [
     'trace', 'trace_with_mask', 'rsqrt', 'reciprocal', 'exp', 'sqrt', 'absolute',
     'svd_lowrank', 'svd', 'eigh', 'qr',
     'argsort', 'eigs_which', 'embed_msk', 'embed_slc', 'allclose',
-    'add', 'sub', 'apxb', 'apply_slice', 'vdot', 'diag_1dto2d', 'diag_2dto1d',
-    'dot', 'dot_with_mask', 'dot_diag', 'mask_diag',
+    'add', 'sub', 'apxb', 'apply_slice', 'apply_mask', 'vdot', 'diag_1dto2d', 'diag_2dto1d',
+    'dot', 'dot_diag', 'transpose_dot_sum',
     'merge_to_dense', 'merge_super_blocks', 'is_independent'
 ]
 #['transpose', 'transpose_and_merge', 'unmerge']
