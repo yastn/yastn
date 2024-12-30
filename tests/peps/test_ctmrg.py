@@ -36,7 +36,6 @@ def test_ctmrg_Ising_dense(config_kwargs):
     config = yastn.make_config(sym='none', **config_kwargs)
     config.backend.random_seed(seed=0)
 
-
     leg = yastn.Leg(config, s=1, D=[2])
     TI = yastn.zeros(config, legs=[leg, leg, leg.conj(), leg.conj()])
     TI[()][0, 0, 0, 0] = 1
@@ -58,7 +57,7 @@ def test_ctmrg_Ising_dense(config_kwargs):
 
     env = fpeps.EnvCTM(psi, init='rand')
     opts_svd = {"D_total": chi}
-    info = env.ctmrg_(opts_svd=opts_svd, max_sweeps=100, corner_tol=1e-8)
+    info = env.ctmrg_(opts_svd=opts_svd, max_sweeps=200, corner_tol=1e-8)
     print(info)
 
     ev_XX = env.measure_nn(TX, TX)
@@ -68,7 +67,6 @@ def test_ctmrg_Ising_dense(config_kwargs):
 
     ev_X = env.measure_1site(TX)
     assert abs(abs(ev_X[(0 ,0)]) - local_exact[beta]) < 1e-5
-
 
 
 def test_ctmrg_Ising(config_kwargs):
@@ -158,4 +156,5 @@ def test_ctmrg_Ising(config_kwargs):
 
 
 if __name__ == '__main__':
+    test_ctmrg_Ising_dense({"backend": "torch", "device": "cuda"})
     pytest.main([__file__, "-vs", "--durations=0"])

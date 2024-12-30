@@ -116,9 +116,42 @@ def test_hard_corner_cases(config_kwargs):
     assert (k - m).norm() < tol
     assert (k - l).norm() < tol
 
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match="Empty axis in axes="):
         a.fuse_legs(axes=((0, 1), (2, 3), ()))
-        # Empty axis in axes=((0, 1), (2, 3), ())
+        # Empty axis in axes=((0, 1), (2, 3), ()). To add a new dim-1 leg, use add_leg().
+
+
+def test_hard_empty_axis(config_kwargs):
+    """ testing fuse_hard with restriction of empty-axis lifted. """
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    a = yastn.rand(config=config_U1, s=(1, 1, -1, -1),
+                    t=((0, 1), (0, 1), (0, 1), (0, 1)),
+                    D=((1, 2), (3, 4), (5, 6), (7, 8)))
+    #
+    af1 = yastn.tensor._merging._fuse_legs_hard(a, axes=((0,), (1,), (2,), (3,), ()), order=(0, 1, 2, 3))
+    al1 = a.add_leg(s=-1, t=(0,))
+    assert af1.norm() > 1
+    assert (af1 - al1).norm() < tol  # empty tuple in axes is equivalent to adding a new dim-1 leg.
+    assert af1.s == (1, 1, -1, -1, -1)  # signature of a new leg is -1 if not first leg
+
+    af1u = af1.unfuse_legs(axes=4)
+    assert af1u.ndim == af1.ndim  # unfuse_leg does not remove a new dim-1 leg
+    assert (af1u - af1).norm() < tol
+
+    af2 = yastn.tensor._merging._fuse_legs_hard(af1, axes=((), (0,), (1,), (2,), (3,), (4,)), order=(0, 1, 2, 3, 4))
+    assert af2.s == (1, 1, 1, -1, -1, -1)   # signature of a new leg is 1 for first leg
+    al2 = al1.add_leg(axis=0, s=1, t=(0,))
+    assert af2.norm() > 1
+    assert (af2 - al2).norm() < tol
+
+    af3 = yastn.tensor._merging._fuse_legs_hard(a, axes=((), (0, 1), (), (2, 3), ()), order=(0, 1, 2, 3))
+    assert af3.s == (1, 1, -1, -1, -1)
+    al3 = al2.add_leg(axis=3, s=-1, t=(0,))
+    al3f = al3.fuse_legs(axes=(0, (1, 2), 3, (4, 5), 6))
+    assert (af3 - al3f).norm() < tol
+    af3u = af3.unfuse_legs(axes=(1, 3))
+    assert (af3u - al3).norm() < tol
 
 
 def test_hard_split(config_kwargs):

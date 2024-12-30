@@ -24,7 +24,8 @@ import scipy.sparse.linalg
 rng = {'rng': np.random.default_rng(None)}  # initialize random number generator
 BACKEND_ID = "np"
 DTYPE = {'float64': np.float64,
-         'complex128': np.complex128}
+         'complex128': np.complex128,
+         'bool': bool}
 
 
 def cuda_is_available():
@@ -278,7 +279,7 @@ def bitwise_not(data):
 
 def safe_svd(a):
     try:
-        U, S, V = scipy.linalg.svd(a, full_matrices=False)
+        U, S, V = scipy.linalg.svd(a, full_matrices=False)  # , lapack_driver='gesdd'
     except scipy.linalg.LinAlgError:  # pragma: no cover
         U, S, V = scipy.linalg.svd(a, full_matrices=False, lapack_driver='gesvd')
     return U, S, V
@@ -468,19 +469,23 @@ def dot(Adata, Bdata, meta_dot, Dsize):
     dtype = np.promote_types(Adata.dtype, Bdata.dtype)
     newdata = np.empty((Dsize,), dtype=dtype)
     for (slc, Dc, sla, Da, slb, Db, ia, ib) in meta_dot:
-        np.matmul(Adata[slice(*sla)].reshape(Da), \
-                  Bdata[slice(*slb)].reshape(Db), \
-                  out=newdata[slice(*slc)].reshape(Dc))
+        np.dot(Adata[slice(*sla)].reshape(Da),
+               Bdata[slice(*slb)].reshape(Db),
+               out=newdata[slice(*slc)].reshape(Dc))
     return newdata
 
 
-def dot_with_mask(Adata, Bdata, meta_dot, Dsize, msk_a, msk_b):
+def transpose_dot_sum(Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border, Dsize):
     dtype = np.promote_types(Adata.dtype, Bdata.dtype)
     newdata = np.empty((Dsize,), dtype=dtype)
-    for (slc, Dc, sla, Da, slb, Db, ia, ib) in meta_dot:
-        np.matmul(Adata[slice(*sla)].reshape(Da)[:, msk_a[ia]], \
-                  Bdata[slice(*slb)].reshape(Db)[msk_b[ib], :], \
-                  out=newdata[slice(*slc)].reshape(Dc))
+    Ad = {t: Adata[slice(*sl)].reshape(Di).transpose(Aorder).reshape(Df) for (t, sl, Di, Df) in Areshape}
+    Bd = {t: Bdata[slice(*sl)].reshape(Di).transpose(Border).reshape(Df) for (t, sl, Di, Df) in Breshape}
+    for (sl, Dslc, list_tab) in meta_dot:
+        tmp = newdata[slice(*sl)].reshape(Dslc)
+        ta, tb = list_tab[0]
+        np.dot(Ad[ta], Bd[tb], out=tmp)
+        for ta, tb in list_tab[1:]:
+            tmp += np.dot(Ad[ta], Bd[tb])
     return newdata
 
 
@@ -494,40 +499,14 @@ def dot_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
     return newdata
 
 
-def mask_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
+def apply_mask(Adata, mask, meta, Dsize, axis, a_ndim):
     slc1 = (slice(None),) * axis
     slc2 = (slice(None),) * (a_ndim - (axis + 1))
-    newdata = np.zeros((Dsize,), dtype=Adata.dtype)
-    for sln, sla, Da, slb in meta:
-        cut = Bdata[slice(*slb)].nonzero()
-        newdata[slice(*sln)] = Adata[slice(*sla)].reshape(Da)[slc1 + cut + slc2].ravel()
+    newdata = np.empty((Dsize,), dtype=Adata.dtype)
+    for sln, Dn, sla, Da, tm in meta:
+        newdata[slice(*sln)].reshape(Dn)[:] = Adata[slice(*sla)].reshape(Da)[slc1 + (mask[tm],) + slc2]
     return newdata
 
-
-# dot_dict = {(0, 0): lambda x, y, out: np.matmul(x, y, out=out),
-#             (0, 1): lambda x, y, out: np.matmul(x, y.conj(), out=out),
-#             (1, 0): lambda x, y, out: np.matmul(x.conj(), y, out=out),
-#             (1, 1): lambda x, y, out: np.matmul(x.conj(), y.conj(), out=out)}
-#
-#
-# def dot_nomerge(Adata, Bdata, cc, oA, oB, meta, Dsize):
-#     f = dot_dict[cc]  # proper conjugations
-#     dtype = np.promote_types(Adata.dtype, Bdata.dtype)
-#     newdata = np.zeros((Dsize,), dtype=dtype)
-#     for (sln, sla, Dao, Dan, slb, Dbo, Dbn) in meta:
-#         newdata[slice(*sln)] += f(Adata[slice(*sla)].reshape(Dao).transpose(oA).reshape(Dan), \
-#                                   Bdata[slice(*slb)].reshape(Dbo).transpose(oB).reshape(Dbn), None).ravel()
-#     return newdata
-
-
-# def dot_nomerge_masks(Adata, Bdata, cc, oA, oB, meta, Dsize, tcon, ma, mb):
-#     f = dot_dict[cc]  # proper conjugations
-#     dtype = np.promote_types(Adata.dtype, Bdata.dtype)
-#     newdata = np.zeros((Dsize,), dtype=dtype)
-#     for (sln, sla, Dao, Dan, slb, Dbo, Dbn), tt in zip(meta, tcon):
-#         newdata[slice(*sln)] += f(Adata[slice(*sla)].reshape(Dao).transpose(oA).reshape(Dan)[:, ma[tt]], \
-#                                   Bdata[slice(*slb)].reshape(Dbo).transpose(oB).reshape(Dbn)[mb[tt], :], None).ravel()
-#     return newdata
 
 #####################################################
 #     block merging, truncations and un-merging     #

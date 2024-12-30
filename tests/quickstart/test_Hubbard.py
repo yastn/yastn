@@ -50,7 +50,7 @@ metts_values = {("energy", 2.0): (-2.8040, 0.0026),
 # SzSz_NN    -0.0848   -0.0842
 #
 #
-@pytest.mark.skipif("not config.getoption('quickstarts')")
+@pytest.mark.skipif("not config.getoption('quickstart')")
 @pytest.mark.parametrize('D, betas', [(12, [0.5])])
 def test_quickstart_hubbard(config_kwargs, D, betas):
 
@@ -152,4 +152,4 @@ def test_quickstart_hubbard(config_kwargs, D, betas):
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0", "--quickstarts"])
+    pytest.main([__file__, "-vs", "--durations=0", "--quickstart"])

@@ -92,8 +92,8 @@ def test_mask_exceptions(config_kwargs):
     a = yastn.rand(config=config_U1, isdiag=True, legs=legd)
     a_nondiag = a.diag()
 
-    leg1 =  yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9))
-    leg2 =  yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(5, 6, 7))
+    leg1 = yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9))
+    leg2 = yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(5, 6, 7))
     b = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1, leg2.conj()])
 
     with pytest.raises(yastn.YastnError):
@@ -107,12 +107,41 @@ def test_mask_exceptions(config_kwargs):
         bhf = b.fuse_legs(axes=(0, (1, 2), 3), mode='hard')
         _ = a.apply_mask(bhf, axes=1)
         # Second tensor`s leg specified by axes cannot be fused.
-    with pytest.raises(yastn.YastnError):
-        _ = a.apply_mask(b, axes=1)  # Bond dimensions do not match.
+    # with pytest.raises(yastn.YastnError):
+        # _ = a.apply_mask(b, axes=1)  # Bond dimensions do not match.
     with pytest.raises(yastn.YastnError):
         _, _ = a.apply_mask(b, b, axes=[2, 2, 1])
         # There should be exactly one axis for each tensor to be projected.
 
 
+@pytest.mark.skipif("'torch' not in config.getoption('--backend')", reason="Uses torch.autograd.gradcheck().")
+def test_mask_backward(config_kwargs):
+    import torch
+
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    config_U1.backend.random_seed(seed=0)
+
+    leg0 =  yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(5, 6, 7))
+    leg1 =  yastn.Leg(config_U1, s=1, t=(-2, -1, 0), D=(4, 5, 6))
+
+    a = yastn.rand(config=config_U1, legs=[leg0, leg0, leg0.conj(), leg0.conj()])
+    m0 = yastn.rand(config=config_U1, isdiag=True, legs=leg0) > 0
+    m1 = yastn.rand(config=config_U1, isdiag=True, legs=leg1) > 0
+
+    target_block = (0, 0, 0, 0)
+    target_block_size = a[target_block].size()
+
+    def test_f(block):
+        a[target_block] = block
+        b = yastn.apply_mask(m0, a, axes=0)
+        c = yastn.apply_mask(m1, b, axes=2)
+        res = c.norm()
+        return res
+
+    op_args = (torch.randn(target_block_size, dtype=a.get_dtype(), requires_grad=True),)
+    assert torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4, check_undefined_grad=False)
+
+
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0"])
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])
+    #pytest.main([__file__, "-vs", "--durations=0"])

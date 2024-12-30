@@ -197,15 +197,15 @@ class EnvCTM(Peps):
         vect = (lenv.l @ lenv.tl) @ (lenv.t @ lenv.tr)
         vecb = (lenv.r @ lenv.br) @ (lenv.b @ lenv.bl)
 
-        tmp = ten._attach_01(vect)
-        val_no = tensordot(vecb, tmp, axes=((0, 1, 2, 3), (2, 3, 1, 0))).to_number()
+        tmp = tensordot(vect, ten, axes=((2, 1), (0, 1)))
+        val_no = tensordot(vecb, tmp, axes=((0, 1, 2, 3), (1, 3, 2, 0))).to_number()
 
         if O.ndim == 2:
             ten.set_operator_(O)
         else:  # for a single-layer Peps, replace with new peps tensor
             ten = O
-        tmp = ten._attach_01(vect)
-        val_op = tensordot(vecb, tmp, axes=((0, 1, 2, 3), (2, 3, 1, 0))).to_number()
+        tmp = tensordot(vect, ten, axes=((2, 1), (0, 1)))
+        val_op = tensordot(vecb, tmp, axes=((0, 1, 2, 3), (1, 3, 2, 0))).to_number()
 
         return val_op / val_no
 
@@ -247,11 +247,11 @@ class EnvCTM(Peps):
             vecl = (env0.bl @ env0.l) @ (env0.tl @ env0.t)
             vecr = (env1.tr @ env1.r) @ (env1.br @ env1.b)
 
-            tmp0 = ten0._attach_01(vecl)
-            tmp0 = tensordot(env0.b, tmp0, axes=((2, 1), (0, 1)))
-            tmp1 = ten1._attach_23(vecr)
-            tmp1 = tensordot(env1.t, tmp1, axes=((2, 1), (0, 1)))
-            val_no = tensordot(tmp0, tmp1, axes=((0, 1, 2), (1, 0, 2))).to_number()
+            tmp0 = tensordot(ten0, vecl, axes=((0, 1), (2, 1)))
+            tmp0 = tensordot(env0.b, tmp0, axes=((1, 2), (0, 2)))
+            tmp1 = tensordot(vecr, ten1, axes=((2, 1), (2, 3)))
+            tmp1 = tensordot(tmp1, env1.t, axes=((2, 0), (1, 2)))
+            val_no = vdot(tmp0, tmp1, conj=(0, 0))
 
             if O.ndim <= 3:
                 ten0.ket = apply_gate_onsite(ten0.ket, G0, dirn='l')
@@ -262,20 +262,20 @@ class EnvCTM(Peps):
             else:
                 ten1 = P
 
-            tmp0 = ten0._attach_01(vecl)
-            tmp0 = tensordot(env0.b, tmp0, axes=((2, 1), (0, 1)))
-            tmp1 = ten1._attach_23(vecr)
-            tmp1 = tensordot(env1.t, tmp1, axes=((2, 1), (0, 1)))
-            val_op = tensordot(tmp0, tmp1, axes=((0, 1, 2), (1, 0, 2))).to_number()
+            tmp0 = tensordot(ten0, vecl, axes=((0, 1), (2, 1)))
+            tmp0 = tensordot(env0.b, tmp0, axes=((1, 2), (0, 2)))
+            tmp1 = tensordot(vecr, ten1, axes=((2, 1), (2, 3)))
+            tmp1 = tensordot(tmp1, env1.t, axes=((2, 0), (1, 2)))
+            val_op = vdot(tmp0, tmp1, conj=(0, 0))
         else:  # dirn == 'v':
             vect = (env0.l @ env0.tl) @ (env0.t @ env0.tr)
             vecb = (env1.r @ env1.br) @ (env1.b @ env1.bl)
 
-            tmp0 = ten0._attach_01(vect)
-            tmp0 = tensordot(tmp0, env0.r, axes=((2, 3), (0, 1)))
-            tmp1 = ten1._attach_23(vecb)
-            tmp1 = tensordot(tmp1, env1.l, axes=((2, 3), (0, 1)))
-            val_no = tensordot(tmp0, tmp1, axes=((0, 1, 2), (2, 1, 0))).to_number()
+            tmp0 = tensordot(vect, ten0, axes=((2, 1), (0, 1)))
+            tmp0 = tensordot(tmp0, env0.r, axes=((1, 3), (0, 1)))
+            tmp1 = tensordot(ten1, vecb, axes=((2, 3), (2, 1)))
+            tmp1 = tensordot(env1.l, tmp1, axes=((0, 1), (3, 1)))
+            val_no = vdot(tmp0, tmp1, conj=(0, 0))
 
             if O.ndim <= 3:
                 ten0.ket = apply_gate_onsite(ten0.ket, G0, dirn='t')
@@ -287,11 +287,11 @@ class EnvCTM(Peps):
             else:
                 ten1 = P
 
-            tmp0 = ten0._attach_01(vect)
-            tmp0 = tensordot(tmp0, env0.r, axes=((2, 3), (0, 1)))
-            tmp1 = ten1._attach_23(vecb)
-            tmp1 = tensordot(tmp1, env1.l, axes=((2, 3), (0, 1)))
-            val_op = tensordot(tmp0, tmp1, axes=((0, 1, 2), (2, 1, 0))).to_number()
+            tmp0 = tensordot(vect, ten0, axes=((2, 1), (0, 1)))
+            tmp0 = tensordot(tmp0, env0.r, axes=((1, 3), (0, 1)))
+            tmp1 = tensordot(ten1, vecb, axes=((2, 3), (2, 1)))
+            tmp1 = tensordot(env1.l, tmp1, axes=((0, 1), (3, 1)))
+            val_op = vdot(tmp0, tmp1, conj=(0, 0))
 
         return val_op / val_no
 
@@ -338,35 +338,35 @@ class EnvCTM(Peps):
         vec_br = self[br].r @ (self[br].br @ self[br].b)
         vec_bl = self[bl].b @ (self[bl].bl @ self[bl].l)
 
-        cor_tl = ten_tl._attach_01(vec_tl)
-        cor_tl = cor_tl.fuse_legs(axes=((0, 1), (2, 3)))
-        cor_tr = ten_tr._attach_30(vec_tr)
-        cor_tr = cor_tr.fuse_legs(axes=((0, 1), (2, 3)))
-        cor_br = ten_br._attach_23(vec_br)
-        cor_br = cor_br.fuse_legs(axes=((0, 1), (2, 3)))
-        cor_bl = ten_bl._attach_12(vec_bl)
-        cor_bl = cor_bl.fuse_legs(axes=((0, 1), (2, 3)))
+        cor_tl = tensordot(vec_tl, ten_tl, axes=((2, 1), (0, 1)))
+        cor_tl = cor_tl.fuse_legs(axes=((0, 2), (1, 3)))
+        cor_tr = tensordot(vec_tr, ten_tr, axes=((1, 2), (0, 3)))
+        cor_tr = cor_tr.fuse_legs(axes=((0, 2), (1, 3)))
+        cor_br = tensordot(vec_br, ten_br, axes=((2, 1), (2, 3)))
+        cor_br = cor_br.fuse_legs(axes=((0, 2), (1, 3)))
+        cor_bl = tensordot(vec_bl, ten_bl, axes=((2, 1), (1, 2)))
+        cor_bl = cor_bl.fuse_legs(axes=((0, 3), (1, 2)))
 
-        val_no = vdot(cor_tl @ cor_tr @ cor_br, cor_bl.T, conj=(0, 0))
+        val_no = vdot(cor_tl @ cor_tr, tensordot(cor_bl, cor_br, axes=(0, 1)), conj=(0, 0))
 
         if tl in ops:
             ten_tl.set_operator_(ops[tl])
-            cor_tl = ten_tl._attach_01(vec_tl)
-            cor_tl = cor_tl.fuse_legs(axes=((0, 1), (2, 3)))
+            cor_tl = tensordot(vec_tl, ten_tl, axes=((2, 1), (0, 1)))
+            cor_tl = cor_tl.fuse_legs(axes=((0, 2), (1, 3)))
         if tr in ops:
             ten_tr.set_operator_(ops[tr])
-            cor_tr = ten_tr._attach_30(vec_tr)
-            cor_tr = cor_tr.fuse_legs(axes=((0, 1), (2, 3)))
+            cor_tr = tensordot(vec_tr, ten_tr, axes=((1, 2), (0, 3)))
+            cor_tr = cor_tr.fuse_legs(axes=((0, 2), (1, 3)))
         if br in ops:
             ten_br.set_operator_(ops[br])
-            cor_br = ten_br._attach_23(vec_br)
-            cor_br = cor_br.fuse_legs(axes=((0, 1), (2, 3)))
+            cor_br = tensordot(vec_br, ten_br, axes=((2, 1), (2, 3)))
+            cor_br = cor_br.fuse_legs(axes=((0, 2), (1, 3)))
         if bl in ops:
             ten_bl.set_operator_(ops[bl])
-            cor_bl = ten_bl._attach_12(vec_bl)
-            cor_bl = cor_bl.fuse_legs(axes=((0, 1), (2, 3)))
+            cor_bl = tensordot(vec_bl, ten_bl, axes=((2, 1), (1, 2)))
+            cor_bl = cor_bl.fuse_legs(axes=((0, 3), (1, 2)))
 
-        val_op = vdot(cor_tl @ cor_tr @ cor_br, cor_bl.T, conj=(0, 0))
+        val_op = vdot(cor_tl @ cor_tr, tensordot(cor_bl, cor_br, axes=(0, 1)), conj=(0, 0))
 
         return val_op / val_no
 
@@ -753,14 +753,21 @@ def update_2site_projectors_(proj, site, dirn, env, opts_svd):
 
     tl, tr, bl, br = sites
 
-    cor_tl = psi[tl]._attach_01(env[tl].l @ env[tl].tl @ env[tl].t)
-    cor_tl = cor_tl.fuse_legs(axes=((0, 1), (2, 3)))
-    cor_bl = psi[bl]._attach_12(env[bl].b @ env[bl].bl @ env[bl].l)
-    cor_bl = cor_bl.fuse_legs(axes=((0, 1), (2, 3)))
-    cor_tr = psi[tr]._attach_30(env[tr].t @ env[tr].tr @ env[tr].r)
-    cor_tr = cor_tr.fuse_legs(axes=((0, 1), (2, 3)))
-    cor_br = psi[br]._attach_23(env[br].r @ env[br].br @ env[br].b)
-    cor_br = cor_br.fuse_legs(axes=((0, 1), (2, 3)))
+    cor_tl = env[tl].l @ env[tl].tl @ env[tl].t
+    cor_tl = tensordot(cor_tl, psi[tl], axes=((2, 1), (0, 1)))
+    cor_tl = cor_tl.fuse_legs(axes=((0, 2), (1, 3)))
+
+    cor_bl = env[bl].b @ env[bl].bl @ env[bl].l
+    cor_bl = tensordot(cor_bl, psi[bl], axes=((2, 1), (1, 2)))
+    cor_bl = cor_bl.fuse_legs(axes=((0, 3), (1, 2)))
+
+    cor_tr = env[tr].t @ env[tr].tr @ env[tr].r
+    cor_tr = tensordot(cor_tr, psi[tr], axes=((1, 2), (0, 3)))
+    cor_tr = cor_tr.fuse_legs(axes=((0, 2), (1, 3)))
+
+    cor_br = env[br].r @ env[br].br @ env[br].b
+    cor_br = tensordot(cor_br, psi[br], axes=((2, 1), (2, 3)))
+    cor_br = cor_br.fuse_legs(axes=((0, 2), (1, 3)))
 
     if ('l' in dirn) or ('r' in dirn):
         cor_tt = cor_tl @ cor_tr
@@ -889,15 +896,15 @@ def update_env_horizontal_(env_tmp, site, env, proj):
     l = psi.nn_site(site, d='l')
     if l is not None:
         tmp = env[l].l @ proj[l].hlt
-        tmp = psi[l]._attach_01(tmp)
-        tmp = tensordot(proj[l].hlb, tmp, axes=((0, 1), (0, 1))).transpose(axes=(0, 2, 1))
+        tmp = tensordot(psi[l], tmp, axes=((0, 1), (2, 1)))
+        tmp = tensordot(proj[l].hlb, tmp, axes=((0, 1), (2, 0)))
         env_tmp[site].l = tmp / tmp.norm(p='inf')
 
     r = psi.nn_site(site, d='r')
     if r is not None:
         tmp = env[r].r @ proj[r].hrb
-        tmp = psi[r]._attach_23(tmp)
-        tmp = tensordot(proj[r].hrt, tmp, axes=((0, 1), (0, 1))).transpose(axes=(0, 2, 1))
+        tmp = tensordot(psi[r], tmp, axes=((2, 3), (2, 1)))
+        tmp = tensordot(proj[r].hrt, tmp, axes=((0, 1), (2, 0)))
         env_tmp[site].r = tmp / tmp.norm(p='inf')
 
     tl = psi.nn_site(site, d='tl')
@@ -929,16 +936,17 @@ def update_env_vertical_(env_tmp, site, env, proj):
 
     t = psi.nn_site(site, d='t')
     if t is not None:
-        tmp = proj[t].vtl.transpose(axes=(2, 1, 0)) @ env[t].t
-        tmp = psi[t]._attach_01(tmp)
-        tmp = tensordot(tmp, proj[t].vtr, axes=((2, 3), (0, 1)))
+        tmp = tensordot(proj[t].vtl, env[t].t, axes=(0, 0))
+        tmp = tensordot(tmp, psi[t], axes=((2, 0), (0, 1)))
+        tmp = tensordot(tmp, proj[t].vtr, axes=((1, 3), (0, 1)))
+
         env_tmp[site].t = tmp / tmp.norm(p='inf')
 
     b = psi.nn_site(site, d='b')
     if b is not None:
-        tmp = proj[b].vbr.transpose(axes=(2, 1, 0)) @ env[b].b
-        tmp = psi[b]._attach_23(tmp)
-        tmp = tensordot(tmp, proj[b].vbl, axes=((2, 3), (0, 1)))
+        tmp = tensordot(proj[b].vbr, env[b].b, axes=(0, 0))
+        tmp = tensordot(tmp, psi[b], axes=((2, 0), (2, 3)))
+        tmp = tensordot(tmp, proj[b].vbl, axes=((1, 3), (0, 1)))
         env_tmp[site].b = tmp / tmp.norm(p='inf')
 
     tl = psi.nn_site(site, d='tl')

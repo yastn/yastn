@@ -15,6 +15,7 @@
 """ Linear operations and operations on a single yastn.Tensor. """
 from __future__ import annotations
 from itertools import accumulate
+from operator import itemgetter
 import numpy as np
 from ._auxliary import _slc, _clear_axes, _unpack_axes
 from ._merging import _Fusion
@@ -250,7 +251,7 @@ def transpose(a, axes=None) -> yastn.Tensor:
     newt = tuple(map(tuple, tset[:, order, :].reshape(lt, ndim_n * nsym).tolist()))
     newD = tuple(map(tuple, Dset[:, order].tolist()))
 
-    meta = sorted(zip(newt, newD, a.slices), key=lambda x: x[0])
+    meta = sorted(zip(newt, newD, a.slices), key=itemgetter(0))
 
     c_t = tuple(mt[0] for mt in meta)
     c_D = tuple(mt[1] for mt in meta)

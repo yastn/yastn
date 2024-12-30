@@ -21,7 +21,7 @@ tol = 1e-12  #pylint: disable=invalid-name
 
 
 def test_propuct_peps(config_kwargs):
-    """ Generate a few lattices veryfing expected output of some functions. """
+    """ Generate a product peps on few lattices. Check exceptions. """
     ops = yastn.operators.SpinlessFermions(sym='U1', **config_kwargs)
 
     geometry = fpeps.CheckerboardLattice()

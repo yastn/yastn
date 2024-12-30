@@ -26,8 +26,8 @@ The system gets excited while passing the quantum critical point between
 paramagnetic and spin-glass phases in finite annealing time :math:`t_a`.
 This provides a minimal example of a class of problems considered in https://arxiv.org/abs/2403.00910
 
-
 We compare the results obtained using MPS and PEPS routines.
+This example can be also run from `tests/quickstart/test_KZ.py <https://github.com/yastn/yastn/blob/master/tests/quickstart/test_KZ.py>`
 
 1. *Initialization of Model Parameters*:
     .. code-block:: python
@@ -144,10 +144,10 @@ We compare the results obtained using MPS and PEPS routines.
                              positions=[s2i[s1], s2i[s2]],
                              operators=[ops.x(), ops.x()]) \
                     for (s1, s2), J in Jij.items()]
-        HXX = mps.generate_mpo(I, termsXX)
+        HXX = mps.generate_mpo(HI, termsXX)
         #
         termsZ = [mps.Hterm(-1, i, ops.z()) for i in range(Lx * Ly)]
-        HZ = mps.generate_mpo(I, termsZ)
+        HZ = mps.generate_mpo(HI, termsZ)
         #
         # MPO contributions in H(t) will be added up.
         H = lambda t: [HXX * fXX(t / ta), HZ * fZ(t / ta)]
@@ -169,7 +169,7 @@ We compare the results obtained using MPS and PEPS routines.
         #
         # run evolution
         # evol is a generator with one (final) snapshot to reach
-        next(evol)
+        next(evol)  # execute time evolution
         #
         # calculate expectation values
         Ez_mps = mps.measure_1site(psi, ops.z(), psi)

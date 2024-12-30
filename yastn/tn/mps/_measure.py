@@ -14,10 +14,11 @@
 # ==============================================================================
 """ Environments for the <mps| mpo |mps> and <mps|mps>  contractions. """
 from __future__ import annotations
-from itertools import groupby
+from itertools import groupby, accumulate
 from numbers import Number
 from typing import Sequence
-from ... import YastnError
+import numpy as np
+from ... import YastnError, Tensor, eye, qr
 from . import MpsMpoOBC
 from ._env import Env, Env2
 from ...operators import swap_charges
@@ -275,3 +276,120 @@ def _parse_2site_bonds(bonds, N):
             else:
                 pairs += [(i, (i + r)) for i in range(N) if 0 <= i + r < N]
     return sorted(set(pairs))
+
+
+def sample(psi, projectors, number=1, return_probabilities=False) -> np.ndarray[int] | tuple[np.ndarray[int], Sequence[float]]:
+    r"""
+    Sample random configurations from an MPS psi.
+
+    Probabilities follow from :math:`|psi \rangle\langle psi|`. Works also for purification.
+    Output samples as numpy array of integers, where samples[k, n] give a projector's index in the k-th sample on the n-th MPS site.
+
+    It does not check whether projectors sum up to identity; calculated probabilities of provided projectors are normalized to one.
+
+    Parameters
+    ----------
+    projectors: Dict[Any, yast.Tensor] | Sequence[yast.Tensor] | Dict[Site, Dict[Any, yast.Tensor]]
+        Local vector states (or projectors) to sample from.
+        Their orthogonality or local basis completeness is not checked (normalization is checked).
+        We can provide a dict(key: projector), where the same set of projectors is used at each site.
+        The keys should be integers, to fit into the output samples array.
+        Projectors can also be provided as a list, and then the keys follow from enumeration.
+        Finally, we can provide a dictionary between each site and sets of projectors (to have different projections at various sites).
+
+    number: int
+        Number of drawn samples.
+
+    return_probabilities: bool
+        Whether to also return probability to find each sample in the state.
+        If ``True``, return: samples, probabilities.
+        If ``False`` (the default), return: samples.
+
+    Note
+    ----
+    Depending on the basis, sampling might break the symmetry of the state psi.
+    In this case, psi and local states/projectors should first be cast down to dense representation.
+    It is important to make sure that the local basis ordering between state sites and projectors/vectors is maintained
+
+    Example
+    -------
+
+    ::
+
+        ops = yastn.operators.SpinlessFermions(sym='U1')
+        I = mps.product_mpo(ops.I(), N=8)
+        psi = mps.random_mps(I, n=4, D_total=8)
+        # random state with 8 sites and 4 particles.
+
+        projectors = [ops.vec_n(0), ops.vec_n(1)]  # empty and full local states
+        samples = mps.sample(psi, projectors, number=15)
+
+    """
+    if not psi.is_canonical(to='first'):
+        psi = psi.shallow_copy()
+        psi.canonize_(to='first')
+
+    sites = list(range(psi.N))
+    if not isinstance(projectors, dict) or all(isinstance(x, Tensor) for x in projectors.values()):
+        projectors = {site: projectors for site in sites}  # spread projectors over sites
+    if set(sites) != set(projectors.keys()):
+        raise YastnError(f"Projectors not defined for some sites.")
+
+    # change each list of projectors into keys and projectors
+    projs_sites = {}
+    for k, v in projectors.items():
+        if isinstance(v, dict):
+            projs_sites[k, 'k'] = list(v.keys())
+            if not all(isinstance(k, int) for k in projs_sites[k, 'k']):
+                raise YastnError("Use integer numbers for projector keys.")
+            projs_sites[k, 'p'] = list(v.values())
+        else:
+            projs_sites[k, 'k'] = list(range(len(v)))
+            projs_sites[k, 'p'] = list(v)
+
+        for j, pr in enumerate(projs_sites[k, 'p']):
+            if pr.ndim == 1:  # vectors need conjugation
+                if abs(pr.norm() - 1) > 1e-10:
+                    raise YastnError("Local states to project on should be normalized.")
+                projs_sites[k, 'p'][j] = pr.conj()
+            elif pr.ndim == 2:
+                if (pr.n != pr.config.sym.zero()) or abs(pr @ pr - pr).norm() > 1e-10:
+                    raise YastnError("Matrix projectors should be projectors, P @ P == P.")
+            else:
+                raise YastnError("Projectors should consist of vectors (ndim=1) or matrices (ndim=2).")
+
+    samples = np.zeros((number, psi.N), dtype=np.int64)
+    probabilities = np.ones(number, dtype=np.float64)
+
+    leg = psi.virtual_leg('first')
+    tmp = eye(psi.config, legs=[leg, leg.conj()])
+    bdrs = [tmp for _ in range(number)]
+
+    for n in sites:
+        rands = (psi.config.backend.rand(number) + 1) / 2  # in [0, 1]
+        An = psi[n] if psi.nr_phys == 1 else psi[n].fuse_legs(axes=(0, 1, (2, 3)))
+        for k, (bdr, cut) in enumerate(zip(bdrs, rands)):
+            state = bdr @ An
+            state = state.fuse_legs(axes=(1, (0, 2)))
+            prob, pstates = [], []
+            for proj in projs_sites[n, 'p']:
+                pst = proj @ state
+                pstates.append(pst)
+                prob.append(pst.vdot(pst).item())
+            norm_prob = sum(prob)
+            prob = [x / norm_prob for x in prob]
+            ind = sum(apr < cut for apr in accumulate(prob))
+            proj = projs_sites[n, 'p'][ind]
+            samples[k, n] = projs_sites[n, 'k'][ind]
+            probabilities[k] *= prob[ind]
+            tmp = pstates[ind] / pstates[ind].norm()
+            tmp = tmp.unfuse_legs(axes=tmp.ndim-1)
+            if psi.nr_phys == 1:
+                axes = (0, 1) if tmp.ndim == 2 else ((0, 1), 2)
+            else:  # psi.nr_phys == 1
+                tmp = tmp.unfuse_legs(axes=tmp.ndim-1)
+                axes = ((0, 2), 1) if tmp.ndim == 3 else ((0, 1, 3), 2)
+            _, bdrs[k] = qr(tmp, axes=axes)
+    if return_probabilities:
+        return samples, probabilities
+    return samples

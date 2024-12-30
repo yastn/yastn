@@ -61,7 +61,7 @@ def run_dmrg(phi, H, O_occ, E_target, occ_target, opts_svd, tol, precompute=Fals
         # Print the result:
         #
         print(f"2site DMRG; energy: {eng:{1}.{8}} / {ref_eng:{1}.{8}}; "
-              + f"occupation: {occ:{1}.{8}} / {ref_occ}")
+              + f"charge: {occ:{1}.{8}} / {ref_occ}")
         assert abs(eng - ref_eng) < tol * 100
         assert abs(occ - ref_occ) < tol
         #

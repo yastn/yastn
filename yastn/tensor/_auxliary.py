@@ -13,10 +13,11 @@
 # limitations under the License.
 # ==============================================================================
 """ Auxliary functions used by yastn.Tensor. """
-from typing import NamedTuple
-from itertools import accumulate, chain
-from ..sym import sym_none
+import abc
 from dataclasses import dataclass
+from itertools import accumulate, chain
+from typing import NamedTuple
+from ..sym import sym_none
 
 
 @dataclass
@@ -38,6 +39,19 @@ class Method():
     def update_(self, string):
         """ Update the method name in place. """
         self.string = str(string)
+
+
+class SpecialTensor(metaclass=abc.ABCMeta):
+    """
+    A parent class to create a special tensor-like object.
+
+    ``yastn.tensordot(a, b, axes)`` check if ``a`` or ``b`` is an instance of SpecialTensor
+    and calls ``a.tensordo(b, axes)`` or ``b.tensordo(a, axes, reverse=True)``
+    """
+
+    @abc.abstractmethod
+    def tensordot(self, b, axes, reverse=False):
+        pass
 
 
 class _struct(NamedTuple):
@@ -63,6 +77,7 @@ class _config(NamedTuple):
     default_dtype: str = 'float64'
     default_fusion: str = 'hard'
     force_fusion: str = None
+    tensordot_policy: str = 'fuse_to_matrix'
 
 
 def _flatten(nested_iterator):

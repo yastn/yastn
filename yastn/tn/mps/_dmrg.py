@@ -207,13 +207,9 @@ def _dmrg_sweep_1site_(env, opts_eigs=None, Schmidt=None, precompute=False):
     psi = env.bra
     for to in ('last', 'first'):
         for n in psi.sweep(to=to):
-            A = psi.A[n]
-            if precompute and env.nr_phys == 1:
-                A = A.fuse_legs(axes=(0, (1, 2)))
+            A = psi.pre_1site(n, precompute=precompute)
             _, (A,) = eigs(lambda x: env.Heff1(x, n), A, k=1, **opts_eigs)
-            if precompute and env.nr_phys == 1:
-                A = A.unfuse_legs(axes=1)
-            psi.A[n] = A
+            psi.post_1site_(A, n)
             psi.orthogonalize_site_(n, to=to, normalize=True)
             if Schmidt is not None and to == 'first' and n != psi.first:
                 Schmidt[psi.pC] = psi[psi.pC].svd(sU=1, compute_uv=False)
@@ -237,11 +233,9 @@ def _dmrg_sweep_2site_(env, opts_eigs=None, opts_svd=None, Schmidt=None, precomp
     for to, dn in (('last', 0), ('first', 1)):
         for n in psi.sweep(to=to, dl=1):
             bd = (n, n + 1)
-            AA = psi.merge_two_sites(bd)
-            if precompute and env.nr_phys == 1:
-                AA = AA.fuse_legs(axes=((0, 1), (2, 3)))
+            AA = psi.pre_2site(bd, precompute=precompute)
             _, (AA,) = eigs(lambda v: env.Heff2(v, bd), AA, k=1, **opts_eigs)
-            _disc_weight_bd = psi.unmerge_two_sites_(AA, bd, opts_svd)
+            _disc_weight_bd = psi.post_2site_(AA, bd, opts_svd)
             max_disc_weight = max(max_disc_weight, _disc_weight_bd)
             if Schmidt is not None and to == 'first':
                 Schmidt[psi.pC] = psi[psi.pC]
