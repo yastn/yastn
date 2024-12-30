@@ -91,8 +91,8 @@ def tensordot(a, b, axes, conj=(0, 0)) -> yastn.Tensor:
 
     if needs_mask:
         msk_a, msk_b = _mask_tensor_intersect_legs(a, b, nin_a, nin_b)
-        a = _apply_mask_to_axes2(a, nin_a, msk_a)
-        b = _apply_mask_to_axes2(b, nin_b, msk_b)
+        a = _apply_mask_to_axes(a, nin_a, msk_a)
+        b = _apply_mask_to_axes(b, nin_b, msk_b)
 
     if a.config.tensordot_policy == 'fuse_to_matrix':
         data, struct_c, slices_c = _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b, s_c)
@@ -127,23 +127,12 @@ def _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b, s_c):
 
 def _apply_mask_to_axes(a, naxes, masks):
     """ Auxlliary function applying mask tensors to native legs. """
-    for ax, msk in zip(naxes, masks):
-        if msk is not None:
-            Dbnew = tuple(a.config.backend.count_nonzero(msk._data[slice(*sl.slcs[0])]) for sl in msk.slices)
-            meta, struct, slices = _meta_mask(a.struct, a.slices, a.isdiag, msk.struct, msk.slices, Dbnew, ax)
-            data = a.config.backend.mask_diag(a._data, msk._data, meta, struct.size, ax, a.ndim_n)
-            a = a._replace(struct=struct, slices=slices, data=data)
-    return a
-
-
-def _apply_mask_to_axes2(a, naxes, masks):
-    """ Auxlliary function applying mask tensors to native legs. """
     for axis, mask in zip(naxes, masks):
         if mask is not None:
             mask_tD = {k: len(v) for k, v in mask.items() if len(v) > 0}
             mask_t = tuple(mask_tD.keys())
             mask_D = tuple(mask_tD.values())
-            meta, struct, slices, axis, ndim = _meta_mask2(a.struct, a.slices, a.isdiag, mask_t, mask_D, axis)
+            meta, struct, slices, axis, ndim = _meta_mask(a.struct, a.slices, a.isdiag, mask_t, mask_D, axis)
             data = a.config.backend.apply_mask(a._data, mask, meta, struct.size, axis, ndim)
             a = a._replace(struct=struct, slices=slices, data=data)
     return a
@@ -468,8 +457,11 @@ def apply_mask(a, *args, axes=0) -> yastn.Tensor | iterable[yastn.Tensor]:
         raise YastnError("There should be exactly one axis for each tensor to be projected.")
     results = []
 
-    nsym = a.config.sym.NSYM
-    mask = {t[:nsym]: a.config.backend.to_mask(a._data[slice(*sl.slcs[0])]) for t, sl in zip(a.struct.t, a.slices)}
+    if not isinstance(a, dict):
+        nsym = a.config.sym.NSYM
+        mask = {t[:nsym]: a.config.backend.to_mask(a._data[slice(*sl.slcs[0])]) for t, sl in zip(a.struct.t, a.slices)}
+    else:
+        mask = a
     mask_t = tuple(mask.keys())
     mask_D = tuple(len(v) for v in mask.values())
 
@@ -479,52 +471,14 @@ def apply_mask(a, *args, axes=0) -> yastn.Tensor | iterable[yastn.Tensor]:
         if b.hfs[ax].tree != (1,):
             raise YastnError('Second tensor`s leg specified by axes cannot be fused.')
 
-        meta, struct, slices, ax, ndim = _meta_mask2(b.struct, b.slices, b.isdiag, mask_t, mask_D, ax)
+        meta, struct, slices, ax, ndim = _meta_mask(b.struct, b.slices, b.isdiag, mask_t, mask_D, ax)
         data = a.config.backend.apply_mask(b._data, mask, meta, struct.size, ax, ndim)
-
-        # Dbnew = tuple(a.config.backend.count_nonzero(a._data[slice(*sl.slcs[0])]) for sl in a.slices)
-        # meta, struct, slices = _meta_mask(b.struct, b.slices, b.isdiag, a.struct, a.slices, Dbnew, ax)
-
-        # if b.isdiag:
-        #     b_ndim, ax = (1, 0)
-        #     meta = tuple((sln, sla, Da[0], slb) for sln, sla, Da, slb in meta)
-        # else:
-        #     b_ndim = b.ndim_n
-        # data = b.config.backend.mask_diag(b._data, a._data, meta, struct.size, ax, b_ndim)
-
         results.append(b._replace(struct=struct, slices=slices, data=data))
     return results.pop() if len(results) == 1 else results
 
 
 @lru_cache(maxsize=1024)
-def _meta_mask(a_struct, a_slices, a_isdiag, b_struct, b_slices, Dbnew, axis):
-    """ meta information for backend, and new tensor structure for mask."""
-    nsym = len(a_struct.n)
-    ind_tb = {x[:nsym]: (sl.slcs[0], d) for x, d, sl in zip(b_struct.t, Dbnew, b_slices) if d > 0}
-    ind_ta = tuple(x[axis * nsym: (axis + 1) * nsym] for x in a_struct.t)
-
-    meta = tuple((ta, sla.slcs[0], Da, *ind_tb[ia]) for ta, sla, Da, ia in \
-                zip(a_struct.t, a_slices, a_struct.D, ind_ta) if ia in ind_tb)
-
-    if any(Da[axis] != slb[1] - slb[0] for _, _, Da, slb, _ in meta):
-        raise YastnError("Bond dimensions do not match.")
-
-    # mt = (ta, sla, Da, slb, Db)
-    c_t = tuple(mt[0] for mt in meta)
-    if a_isdiag:
-        c_D = tuple((mt[4], mt[4]) for mt in meta)
-        c_Dp = tuple(x[0] for x in c_D)
-    else:
-        c_D = tuple(mt[2][:axis] + (mt[4],) + mt[2][axis + 1:] for mt in meta)
-        c_Dp = np.prod(c_D, axis=1, dtype=np.int64).tolist() if len(c_D) > 0 else ()
-
-    c_slices = tuple(_slc(((stop - dp, stop),), ds, dp)  for stop, dp, ds in zip(accumulate(c_Dp), c_Dp, c_D))
-    c_struct = a_struct._replace(t=c_t, D=c_D, size=sum(c_Dp))
-    meta = tuple((sln.slcs[0], sla, Da, slb) for (_, sla, Da, slb, _), sln in zip(meta, c_slices))
-    return meta, c_struct, c_slices
-
-
-def _meta_mask2(a_struct, a_slices, a_isdiag, mask_t, mask_D, axis):
+def _meta_mask(a_struct, a_slices, a_isdiag, mask_t, mask_D, axis):
     """ meta information for backend, and new tensor structure for mask."""
 
     mask_tD = {t: D for t, D in zip(mask_t, mask_D) if D > 0}

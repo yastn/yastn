@@ -530,23 +530,6 @@ def _meta_unmerge_matrix(config, struct, slices, ls0, ls1, snew):
 #     mbm = {t: config.backend.to_mask(_outer_masks(t, msk_b, nsym)) for t in tcon}
 #     return mam, mbm
 
-def _mask_tensor(a, ma):
-    if all(all(v) for v in ma.values()):
-        return None
-    tset = tuple(t + t for t in ma.keys())
-    Dp = tuple(len(v) for v in ma.values())
-    Dset = tuple((d, d) for d in Dp)
-    slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dp), Dp, Dset))
-    size = sum(Dp)
-    struct = _struct(s=(1, -1), n=a.config.sym.zero(), diag=True, t=tset, D=Dset, size=size)
-    mfs = ((1,), (1,))
-    hfs = (_Fusion(s=(1,)), _Fusion(s=(-1,)))
-    data = np.empty(size, dtype=bool)
-    for sla, v in zip(slices, ma.values()):
-        data[slice(*sla.slcs[0])] = v
-    data = a.config.backend.to_tensor(data, dtype='bool', device=a.device)
-    return a._replace(struct=struct, slices=slices, data=data, mfs=mfs, hfs=hfs)
-
 
 def _mask_nonzero(mask):
     if all(all(v) for v in mask.values()):
@@ -565,8 +548,6 @@ def _mask_tensor_intersect_legs(a, b, axa, axb):
         ma, mb = _intersect_hfs(a.config, (tla[i1], tlb[i2]), (Dla[i1], Dlb[i2]), (a.hfs[i1], b.hfs[i2]))
         msk_a.append(_mask_nonzero(ma))
         msk_b.append(_mask_nonzero(mb))
-        # msk_a.append(_mask_tensor(a, ma))
-        # msk_b.append(_mask_tensor(b, mb))
     return msk_a, msk_b
 
 

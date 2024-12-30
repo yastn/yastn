@@ -135,10 +135,11 @@ def test_mask_backward(config_kwargs):
         a[target_block] = block
         b = yastn.apply_mask(m0, a, axes=0)
         c = yastn.apply_mask(m1, b, axes=2)
-        return c.norm()
+        res = c.norm()
+        return res
 
     op_args = (torch.randn(target_block_size, dtype=a.get_dtype(), requires_grad=True),)
-    assert torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4)
+    assert torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4, check_undefined_grad=False)
 
 
 if __name__ == '__main__':

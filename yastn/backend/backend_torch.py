@@ -692,81 +692,6 @@ else:
                 Bdata_b[slice(*slb)].view(Db)[:]= Adata[slice(*sla)].view(Da).adjoint() @ Cdata_b[slice(*slc)].view(Dc)
             return Adata_b, Bdata_b, None, None
 
-def dot_with_mask(Adata, Bdata, meta_dot, Dsize, msk_a, msk_b):
-    return kernel_dot_with_mask.apply(Adata, Bdata, meta_dot, Dsize, msk_a, msk_b)
-
-if _torch_version_check("2.0"):
-    class kernel_dot_with_mask(torch.autograd.Function):
-        @staticmethod
-        def forward(Adata, Bdata, meta_dot, Dsize, msk_a, msk_b):
-            # block-sparse matrix-matrix multiplication A.B = C
-            dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
-            if dtype != Adata.dtype:
-                Adata = Adata.to(dtype=dtype)
-            if dtype != Bdata.dtype:
-                Bdata = Bdata.to(dtype=dtype)
-            Cdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
-            for (slc, Dc, sla, Da, slb, Db, ia, ib) in meta_dot:
-                Cdata[slice(*slc)].view(Dc)[:] = Adata[slice(*sla)].view(Da)[:, msk_a[ia]] @ Bdata[slice(*slb)].view(Db)[msk_b[ib], :]
-            return Cdata
-
-
-        @staticmethod
-        # inputs is a Tuple of all of the inputs passed to forward.
-        # output is the output of the forward().
-        def setup_context(ctx, inputs, output):
-            Adata, Bdata, meta_dot, Dsize, msk_a, msk_b = inputs
-            ctx.save_for_backward(Adata, Bdata)
-            ctx.meta_dot= meta_dot
-            ctx.msk_a= msk_a
-            ctx.msk_b= msk_b
-
-        @staticmethod
-        def backward(ctx, Cdata_b):
-            # adjoint of block-sparse matrix-matrix multiplication A.B = C
-            #
-            # A_b = C_b.B^T ; B_b = A^T . C_b
-            Adata, Bdata= ctx.saved_tensors
-            meta_dot, msk_a, msk_b= ctx.meta_dot, ctx.msk_a, ctx.msk_b
-            Adata_b = torch.zeros_like(Adata)
-            Bdata_b = torch.zeros_like(Bdata)
-            for (slc, Dc, sla, Da, slb, Db, ia, ib) in meta_dot:
-                Adata_b[slice(*sla)].view(Da)[:, msk_a[ia]]= Cdata_b[slice(*slc)].view(Dc) @ Bdata[slice(*slb)].view(Db)[msk_b[ib],:].adjoint()
-                Bdata_b[slice(*slb)].view(Db)[msk_b[ib],:]= Adata[slice(*sla)].view(Da)[:,msk_a[ia]].adjoint() @ Cdata_b[slice(*slc)].view(Dc)
-            return Adata_b, Bdata_b, None, None, None, None
-else:
-    class kernel_dot_with_mask(torch.autograd.Function):
-        @staticmethod
-        def forward(ctx, Adata, Bdata, meta_dot, Dsize, msk_a, msk_b):
-            ctx.save_for_backward(Adata, Bdata)
-            ctx.meta_dot= meta_dot
-            ctx.msk_a= msk_a
-            ctx.msk_b= msk_b
-
-            # block-sparse matrix-matrix multiplication A.B = C
-            dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
-            if dtype != Adata.dtype:
-                Adata = Adata.to(dtype=dtype)
-            if dtype != Bdata.dtype:
-                Bdata = Bdata.to(dtype=dtype)
-            Cdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
-            for (slc, Dc, sla, Da, slb, Db, ia, ib) in meta_dot:
-                Cdata[slice(*slc)].view(Dc)[:] = Adata[slice(*sla)].view(Da)[:, msk_a[ia]] @ Bdata[slice(*slb)].view(Db)[msk_b[ib], :]
-            return Cdata
-
-        @staticmethod
-        def backward(ctx, Cdata_b):
-            # adjoint of block-sparse matrix-matrix multiplication A.B = C
-            #
-            # A_b = C_b.B^T ; B_b = A^T . C_b
-            Adata, Bdata= ctx.saved_tensors
-            meta_dot, msk_a, msk_b= ctx.meta_dot, ctx.msk_a, ctx.msk_b
-            Adata_b = torch.zeros_like(Adata)
-            Bdata_b = torch.zeros_like(Bdata)
-            for (slc, Dc, sla, Da, slb, Db, ia, ib) in meta_dot:
-                Adata_b[slice(*sla)].view(Da)[:, msk_a[ia]]= Cdata_b[slice(*slc)].view(Dc) @ Bdata[slice(*slb)].view(Db)[msk_b[ib],:].adjoint()
-                Bdata_b[slice(*slb)].view(Db)[msk_b[ib],:]= Adata[slice(*sla)].view(Da)[:,msk_a[ia]].adjoint() @ Cdata_b[slice(*slc)].view(Dc)
-            return Adata_b, Bdata_b, None, None, None, None
 
 def dot_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
     dim = [1] * a_ndim
@@ -778,23 +703,39 @@ def dot_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
     return newdata
 
 
-def mask_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
-    slc1 = (slice(None),) * axis
-    slc2 = (slice(None),) * (a_ndim - (axis + 1))
-    newdata = torch.zeros((Dsize,), dtype=Adata.dtype, device=Adata.device)
-    for sln, sla, Da, slb in meta:
-        cut = (Bdata[slice(*slb)].nonzero(),)
-        newdata[slice(*sln)] = Adata[slice(*sla)].reshape(Da)[slc1 + cut + slc2].ravel()
-    return newdata
-
 
 def apply_mask(Adata, mask, meta, Dsize, axis, a_ndim):
-    slc1 = (slice(None),) * axis
-    slc2 = (slice(None),) * (a_ndim - (axis + 1))
-    newdata = torch.zeros((Dsize,), dtype=Adata.dtype, device=Adata.device)
-    for sln, Dn, sla, Da, tm in meta:
-        newdata[slice(*sln)].view(Dn)[:] = Adata[slice(*sla)].reshape(Da)[slc1 + (mask[tm],) + slc2]
-    return newdata
+    return kernel_apply_mask.apply(Adata, mask, meta, Dsize, axis, a_ndim)
+
+
+class kernel_apply_mask(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, Adata, mask, meta, Dsize, axis, ndim):
+        ctx.mask = mask
+        ctx.meta = meta
+        ctx.axis = axis
+        ctx.ndim = ndim
+        ctx.size_Adata = Adata.numel()
+
+        slc0 = (slice(None),) * axis
+        slc2 = (slice(None),) * (ndim - (axis + 1))
+        Cdata = torch.empty(Dsize, dtype=Adata.dtype, device=Adata.device)
+        for sln, Dn, sla, Da, tm in meta:
+            slcs = slc0 + (mask[tm],) + slc2
+            Cdata[slice(*sln)].view(Dn)[:] = Adata[slice(*sla)].view(Da)[slcs]
+        return Cdata
+
+    @staticmethod
+    def backward(ctx, Cdata_b):
+        mask = ctx.mask
+        slc0 = (slice(None),) * ctx.axis
+        slc2 = (slice(None),) * (ctx.ndim - (ctx.axis + 1))
+        Adata_b = torch.zeros(ctx.size_Adata, dtype=Cdata_b.dtype, device=Cdata_b.device)
+        for sln, Dn, sla, Da, tm in ctx.meta:
+            slcs = slc0 + (mask[tm],) + slc2
+            Adata_b[slice(*sla)].view(Da)[slcs] = Cdata_b[slice(*sln)].view(Dn)
+        return Adata_b, None, None, None, None, None, None
+
 
 
 def transpose_dot_sum(Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border, Dsize):
