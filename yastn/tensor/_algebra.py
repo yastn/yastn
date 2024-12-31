@@ -68,8 +68,8 @@ def _addition_meta(a, b):
     if a.isdiag != b.isdiag:
         raise YastnError('Cannot add diagonal tensor to non-diagonal one.')
 
-    needs_mask, _ = _test_axes_match(a, b, sgn=1)
-    if needs_mask:  # TODO
+    mask_needed, _ = _test_axes_match(a, b, sgn=1)
+    if mask_needed:  # TODO
         msk_a, msk_b, struct_a, slices_a, struct_b, slices_b, hfs = _masks_for_add(a.config, a.struct, a.slices, a.hfs, b.struct, b.slices, b.hfs)
         Adata = a.config.backend.embed_msk(a._data, msk_a, struct_a.size)
         Bdata = a.config.backend.embed_msk(b._data, msk_b, struct_b.size)

@@ -32,8 +32,8 @@ __all__= [
     'trace', 'trace_with_mask', 'rsqrt', 'reciprocal', 'exp', 'sqrt', 'absolute',
     'svd_lowrank', 'svd', 'eigh', 'qr',
     'argsort', 'eigs_which', 'embed_msk', 'embed_slc', 'allclose',
-    'add', 'sub', 'apxb', 'apply_slice', 'apply_mask', 'vdot', 'diag_1dto2d', 'diag_2dto1d',
-    'dot', 'dot_diag', 'transpose_dot_sum',
+    'add', 'sub', 'apxb', 'apply_mask', 'vdot', 'diag_1dto2d', 'diag_2dto1d',
+    'matmul', 'matmul_diag', 'transpose_matmul_sum',
     'merge_to_dense', 'merge_super_blocks', 'is_independent'
 ]
 #['transpose', 'transpose_and_merge', 'unmerge']
@@ -277,7 +277,7 @@ else:
 
 
 def trace(data, order, meta, Dsize):
-    newdata = torch.zeros((Dsize,), dtype=data.dtype, device=data.device)
+    newdata = torch.zeros(Dsize, dtype=data.dtype, device=data.device)
     for (sln, list_sln) in meta:
         tmp = newdata[slice(*sln)]
         for slo, Do, Drsh in list_sln:
@@ -525,13 +525,13 @@ def eigs_which(val, which):
 
 
 def embed_msk(data, msk, Dsize):
-    newdata = torch.zeros((Dsize,), dtype=data.dtype, device=data.device)
+    newdata = torch.zeros(Dsize, dtype=data.dtype, device=data.device)
     newdata[msk] = data
     return newdata
 
 
 def embed_slc(data, meta, Dsize):
-    newdata = torch.zeros((Dsize,), dtype=data.dtype, device=data.device)
+    newdata = torch.zeros(Dsize, dtype=data.dtype, device=data.device)
     for sln, slo in meta:
         newdata[slice(*sln)] = data[slice(*slo)]
     return newdata
@@ -548,7 +548,7 @@ def allclose(Adata, Bdata, rtol, atol):
 
 def add(Adata, Bdata, meta, Dsize):
     dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
-    newdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
+    newdata = torch.zeros(Dsize, dtype=dtype, device=Adata.device)
     for sl_c, sl_a in meta[0]:
         newdata[slice(*sl_c)] += Adata[slice(*sl_a)]
     for sl_c, sl_b in meta[1]:
@@ -558,7 +558,7 @@ def add(Adata, Bdata, meta, Dsize):
 
 def sub(Adata, Bdata, meta, Dsize):
     dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
-    newdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
+    newdata = torch.zeros(Dsize, dtype=dtype, device=Adata.device)
     for sl_c, sl_a in meta[0]:
         newdata[slice(*sl_c)] += Adata[slice(*sl_a)]
     for sl_c, sl_b in meta[1]:
@@ -568,7 +568,7 @@ def sub(Adata, Bdata, meta, Dsize):
 
 def apxb(Adata, Bdata, x, meta, Dsize):
     dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
-    newdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
+    newdata = torch.zeros(Dsize, dtype=dtype, device=Adata.device)
     for sl_c, sl_a in meta[0]:
         newdata[slice(*sl_c)] += Adata[slice(*sl_a)]
     for sl_c, sl_b in meta[1]:
@@ -576,39 +576,34 @@ def apxb(Adata, Bdata, x, meta, Dsize):
     return newdata
 
 
-def apply_slice(data, slcn, slco):
-    Dsize = slcn[-1][1] if len(slcn) > 0 else 0
-    newdata = torch.zeros((Dsize,), dtype=data.dtype, device=data.device)
-    for sn, so in zip(slcn, slco):
-        newdata[slice(*sn)] = data[slice(*so)]
-    return newdata
-
-
-def vdot(Adata, Bdata):
+def vdot(Adata, Bdata, meta):
     dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
     if dtype != Adata.dtype:
         Adata = Adata.to(dtype=dtype)
     if dtype != Bdata.dtype:
         Bdata = Bdata.to(dtype=dtype)
-    return Adata @ Bdata
+    tmp = torch.empty(len(meta), dtype=dtype)
+    for ii, (sla, slb) in enumerate(meta):
+        tmp[ii] = torch.dot(Adata[slice(*sla)], Bdata[slice(*slb)])
+    return torch.sum(tmp)
 
 
 def diag_1dto2d(data, meta, Dsize):
-    newdata = torch.zeros((Dsize,), dtype=data.dtype, device=data.device)
+    newdata = torch.zeros(Dsize, dtype=data.dtype, device=data.device)
     for sln, slo in meta:
         newdata[slice(*sln)] = torch.diag(data[slice(*slo)]).ravel()
     return newdata
 
 
 def diag_2dto1d(data, meta, Dsize):
-    newdata = torch.zeros((Dsize,), dtype=data.dtype, device=data.device)
+    newdata = torch.zeros(Dsize, dtype=data.dtype, device=data.device)
     for sln, slo, Do in meta:
         #newdata[slice(*sln)] = torch.diag(data[slice(*slo)].reshape(Do))
         torch.diag(data[slice(*slo)].reshape(Do), out=newdata[slice(*sln)])
     return newdata
 
 
-def dot(Adata, Bdata, meta_dot, Dsize):
+def matmul(Adata, Bdata, meta_dot, Dsize):
     return kernel_dot.apply(Adata, Bdata, meta_dot, Dsize)
 
 
@@ -621,7 +616,7 @@ if _torch_version_check("2.0"):
                 Adata = Adata.to(dtype=dtype)
             if dtype != Bdata.dtype:
                 Bdata = Bdata.to(dtype=dtype)
-            newdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
+            newdata = torch.zeros(Dsize, dtype=dtype, device=Adata.device)
             for (slc, Dc, sla, Da, slb, Db, ia, ib) in meta_dot:
                 newdata[slice(*slc)].view(Dc)[:] = Adata[slice(*sla)].view(Da) @ Bdata[slice(*slb)].view(Db)
             return newdata
@@ -664,7 +659,7 @@ else:
                 Adata = Adata.to(dtype=dtype)
             if dtype != Bdata.dtype:
                 Bdata = Bdata.to(dtype=dtype)
-            newdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
+            newdata = torch.zeros(Dsize, dtype=dtype, device=Adata.device)
             for (slc, Dc, sla, Da, slb, Db, ia, ib) in meta_dot:
                 newdata[slice(*slc)].view(Dc)[:] = Adata[slice(*sla)].view(Da) @ Bdata[slice(*slb)].view(Db)
             return newdata
@@ -684,11 +679,11 @@ else:
             return Adata_b, Bdata_b, None, None
 
 
-def dot_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
+def matmul_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
     dim = [1] * a_ndim
     dim[axis] = -1
     dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
-    newdata = torch.empty((Dsize,), dtype=dtype, device=Adata.device)
+    newdata = torch.empty(Dsize, dtype=dtype, device=Adata.device)
     for sln, slb, Db, sla in meta:
         newdata[slice(*sln)].reshape(Db)[:] = Adata[slice(*sla)].reshape(dim) * Bdata[slice(*slb)].reshape(Db)
     return newdata
@@ -729,11 +724,11 @@ class kernel_apply_mask(torch.autograd.Function):
 
 
 
-def transpose_dot_sum(Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border, Dsize):
-    return kernel_transpose_dot_sum.apply(Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border, Dsize)
+def transpose_matmul_sum(Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border, Dsize):
+    return kernel_transpose_matmul_sum.apply(Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border, Dsize)
 
 
-class kernel_transpose_dot_sum(torch.autograd.Function):
+class kernel_transpose_matmul_sum(torch.autograd.Function):
     @staticmethod
     def forward(Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border, Dsize):
         dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
@@ -741,7 +736,7 @@ class kernel_transpose_dot_sum(torch.autograd.Function):
             Adata = Adata.to(dtype=dtype)
         if dtype != Bdata.dtype:
             Bdata = Bdata.to(dtype=dtype)
-        Cdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
+        Cdata = torch.zeros(Dsize, dtype=dtype, device=Adata.device)
         At = {t: Adata[slice(*sl)].view(Di).permute(Aorder).reshape(Df) for (t, sl, Di, Df) in Areshape}
         Bt = {t: Bdata[slice(*sl)].view(Di).permute(Border).reshape(Df) for (t, sl, Di, Df) in Breshape}
 
@@ -819,7 +814,7 @@ class kernel_transpose_and_merge(torch.autograd.Function):
         ctx.D_source = data.numel()
 
         # Dsize - total size of fused representation (might include some zero-blocks)
-        newdata = torch.zeros((Dsize,), dtype=data.dtype, device=data.device)
+        newdata = torch.zeros(Dsize, dtype=data.dtype, device=data.device)
 
         # meta_new -> list of [(tn, Dn, sln), ...] where
         #             tn -> effective charge for block in fused tensor
@@ -872,7 +867,7 @@ def merge_to_dense(data, Dtot, meta):
 def merge_super_blocks(pos_tens, meta_new, meta_block, Dsize):
     dtype = reduce(torch.promote_types, (a._data.dtype for a in pos_tens.values()))
     device = next(iter(pos_tens.values()))._data.device
-    newdata = torch.zeros((Dsize,), dtype=dtype, device=device)
+    newdata = torch.zeros(Dsize, dtype=dtype, device=device)
     for (tn, Dn, sln), (t1, gr) in zip(meta_new, groupby(meta_block, key=lambda x: x[0])):
         assert tn == t1
         for (_, slo, Do, pos, Dslc) in gr:

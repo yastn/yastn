@@ -72,7 +72,7 @@ def tensordot(a, b, axes, conj=(0, 0)) -> yastn.Tensor:
         return b.tensordot(a, axes=axes, reverse=True)
 
     in_a, in_b = _clear_axes(*axes)  # contracted meta legs
-    needs_mask, (nin_a, nin_b) = _test_axes_match(a, b, sgn=-1, axes=(in_a, in_b))
+    mask_needed, (nin_a, nin_b) = _test_axes_match(a, b, sgn=-1, axes=(in_a, in_b))
     if a.isdiag:
         return _tensordot_diag(a, b, in_b, destination=(0,))
     if b.isdiag:
@@ -89,7 +89,7 @@ def tensordot(a, b, axes, conj=(0, 0)) -> yastn.Tensor:
 
     n_c = a.config.sym.add_charges(a.struct.n, b.struct.n)
 
-    if needs_mask:
+    if mask_needed:
         msk_a, msk_b = _mask_tensor_intersect_legs(a, b, nin_a, nin_b)
         a = _apply_mask_to_axes(a, nin_a, msk_a)
         b = _apply_mask_to_axes(b, nin_b, msk_b)
@@ -118,7 +118,7 @@ def _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b, s_c):
         raise YastnError('Bond dimensions do not match.')
 
     meta_dot, struct_c, slices_c = _meta_tensordot_f2m(struct_a, slices_a, struct_b, slices_b)
-    data = a.config.backend.dot(data_a, data_b, meta_dot, struct_c.size)
+    data = a.config.backend.matmul(data_a, data_b, meta_dot, struct_c.size)
 
     meta_unmerge, struct_c, slices_c = _meta_unmerge_matrix(a.config, struct_c, slices_c, ls_l, ls_r, s_c)
     data = _unmerge(a.config, data, meta_unmerge)
@@ -161,7 +161,7 @@ def _tensordot_fc(a, b, nout_a, nin_a, nin_b, nout_b):
     assert all(t_a[ia] == t_b[ib] for ia, ib in zip(nin_a, nin_b)), "Sanity check."
 
     meta_dot, struct_c, slices_c = _meta_tensordot_fc(struct_a, slices_a, struct_b, slices_b)
-    data = a.config.backend.dot(data_a, data_b, meta_dot, struct_c.size)
+    data = a.config.backend.matmul(data_a, data_b, meta_dot, struct_c.size)
     return data, struct_c, slices_c
 
 
@@ -173,7 +173,7 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
     meta_dot, reshape_a, reshape_b, struct_c, slices_c = _meta_tensordot_nf(a.struct, a.slices, b.struct, b.slices, ind_a, ind_b, nout_a, nin_a, nin_b, nout_b)
     order_a = nout_a + nin_a
     order_b = nin_b + nout_b
-    data = a.config.backend.transpose_dot_sum(a.data, b.data, meta_dot, reshape_a, reshape_b, order_a, order_b, struct_c.size)
+    data = a.config.backend.transpose_matmul_sum(a.data, b.data, meta_dot, reshape_a, reshape_b, order_a, order_b, struct_c.size)
     return data, struct_c, slices_c
 
 
@@ -390,7 +390,7 @@ def broadcast(a, *args, axes=0) -> yastn.Tensor | iterable[yastn.Tensor]:
             meta = tuple((sln, slb, Db[0], sla) for sln, slb, Db, sla in meta)
         else:
             b_ndim = b.ndim_n
-        data = b.config.backend.dot_diag(a._data, b._data, meta, struct.size, ax, b_ndim)
+        data = b.config.backend.matmul_diag(a._data, b._data, meta, struct.size, ax, b_ndim)
         results.append(b._replace(struct=struct, slices=slices, data=data))
     return results if multiple_axes else results.pop()
 
@@ -517,10 +517,10 @@ def vdot(a, b, conj=(1, 0)) -> Number:
     Parameters
     ----------
     a, b: yastn.Tensor
-        Two tensors for operation.
+        Tensors to contract.
 
     conj: tuple[int, int]
-        shows which tensor to conjugate: ``(0, 0)``, ``(0, 1)``, ``(1, 0)``, or ``(1, 1)``.
+        indicate which tensors to conjugate: ``(0, 0)``, ``(0, 1)``, ``(1, 0)``, or ``(1, 1)``.
         The default is ``(1, 0)``, i.e., tensor ``a`` is conjugated.
     """
     _test_can_be_combined(a, b)
@@ -528,48 +528,38 @@ def vdot(a, b, conj=(1, 0)) -> Number:
         a = a.conj()
     if conj[1] == 1:
         b = b.conj()
-    needs_mask, _ = _test_axes_match(a, b, sgn=-1)
-    if a.struct.t == b.struct.t and a.slices == b.slices:
-        Adata, Bdata = a._data, b._data
-        struct_a, slices_a = a.struct, a.slices
-        struct_b, slices_b = b.struct, b.slices
-    else:
-        ia, ib, ta, Da, Dpa, inter_sla,  tb, Db, Dpb, inter_slb = 0, 0, [], [], [], [], [], [], [], []
-        while ia < len(a.struct.t) and ib < len(b.struct.t):
-            if a.struct.t[ia] == b.struct.t[ib]:
-                ta.append(a.struct.t[ia])
-                tb.append(b.struct.t[ib])
-                Da.append(a.struct.D[ia])
-                Db.append(b.struct.D[ib])
-                Dpa.append(a.slices[ia].Dp)
-                Dpb.append(b.slices[ib].Dp)
-                inter_sla.append(a.slices[ia].slcs[0])
-                inter_slb.append(b.slices[ib].slcs[0])
-                ia += 1
-                ib += 1
-            elif a.struct.t[ia] < b.struct.t[ib]:
-                ia += 1
-            else:
-                ib += 1
-        sla = tuple((stop - dp, stop) for stop, dp in zip(accumulate(Dpa), Dpa))
-        slb = tuple((stop - dp, stop) for stop, dp in zip(accumulate(Dpb), Dpb))
-        struct_a = a.struct._replace(t=tuple(ta), D=tuple(Da), size=sum(Dpa))
-        struct_b = b.struct._replace(t=tuple(tb), D=tuple(Db), size=sum(Dpb))
-        slices_a = tuple(_slc((x,), y, z) for x, y, z in zip(sla, Da, Dpa))
-        slices_b = tuple(_slc((x,), y, z) for x, y, z in zip(slb, Db, Dpb))
-        Adata = a.config.backend.apply_slice(a._data, sla, inter_sla)
-        Bdata = b.config.backend.apply_slice(b._data, slb, inter_slb)
-    if needs_mask:
-        msk_a, msk_b, struct_a, slices_a, struct_b, slices_b = _masks_for_vdot(a.config, struct_a, slices_a, a.hfs, struct_b, slices_b, b.hfs)
-        Adata = Adata[msk_a]
-        Bdata = Bdata[msk_b]
-    if struct_a.D != struct_b.D:
-        raise YastnError('Bond dimensions do not match.')
+
+    mask_needed, (nin_a, nin_b) = _test_axes_match(a, b, sgn=-1)
 
     n_c = a.config.sym.add_charges(a.struct.n, b.struct.n)
-    if len(struct_a.D) > 0 and n_c == a.config.sym.zero():
-        return a.config.backend.vdot(Adata, Bdata)
-    return a.zero_of_dtype()
+    if n_c == a.config.sym.zero():
+        if mask_needed:
+            msk_a, msk_b = _mask_tensor_intersect_legs(a, b, nin_a, nin_b)
+            a = _apply_mask_to_axes(a, nin_a, msk_a)
+            b = _apply_mask_to_axes(b, nin_b, msk_b)
+        meta_vdot = _meta_vdot(a.struct, a.slices, b.struct, b.slices)
+    else:
+        meta_vdot = ()
+
+    return a.config.backend.vdot(a.data, b.data, meta_vdot)
+
+
+def _meta_vdot(struct_a, slices_a, struct_b, slices_b):
+    ia, ib, slcs_a, slcs_b = 0, 0, [], []
+    while ia < len(struct_a.t) and ib < len(struct_b.t):
+        if struct_a.t[ia] == struct_b.t[ib]:
+            if struct_a.D[ia] != struct_b.D[ib]:
+                raise YastnError('Bond dimensions do not match.')
+            slcs_a.append(slices_a[ia].slcs[0])
+            slcs_b.append(slices_b[ib].slcs[0])
+            ia += 1
+            ib += 1
+        elif struct_a.t[ia] < struct_b.t[ib]:
+            ia += 1
+        else:
+            ib += 1
+    meta_vdot = tuple(zip(slcs_a, slcs_b))
+    return meta_vdot
 
 
 def trace(a, axes=(0, 1)) -> yastn.Tensor:
@@ -584,7 +574,7 @@ def trace(a, axes=(0, 1)) -> yastn.Tensor:
     in_0, in_1 = _clear_axes(*axes)  # contracted legs
     if set(in_0) & set(in_1):
         raise YastnError('The same axis in axes[0] and axes[1].')
-    needs_mask, (nin_0, nin_1) = _test_axes_match(a, a, sgn=-1, axes=(in_0, in_1))
+    mask_needed, (nin_0, nin_1) = _test_axes_match(a, a, sgn=-1, axes=(in_0, in_1))
 
     if len(nin_0) == 0:
         return a
@@ -600,7 +590,7 @@ def trace(a, axes=(0, 1)) -> yastn.Tensor:
         data = a.config.backend.sum_elements(a._data)
         return a._replace(struct=struct, slices=(_slc(((0, 1),), (), 1),), mfs=mfs, hfs=hfs, isdiag=False, data=data)
 
-    if needs_mask:
+    if mask_needed:
         msk_0, msk_1 = _mask_tensor_intersect_legs(a, a, nin_0, nin_1)
         a = _apply_mask_to_axes(a, nin_0 + nin_1, msk_0 + msk_1)
 

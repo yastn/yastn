@@ -464,6 +464,9 @@ def remove_zero_blocks(a, rtol=1e-12, atol=0) -> yastn.Tensor:
     old_sl = tuple(x.slcs[0] for x in old_sl)
     slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(c_Dp), c_Dp, c_D))
     c_sl = tuple(x.slcs[0] for x in slices)
-    struct = a.struct._replace(t=c_t, D=c_D, size=sum(c_Dp))
-    data = a.config.backend.apply_slice(a._data, c_sl, old_sl)
+    size = sum(c_Dp)
+    struct = a.struct._replace(t=c_t, D=c_D, size=size)
+    mask = {0: slice(None)}
+    meta = [(sln, sln[1] - sln[0], slo, slo[1] - slo[0], 0) for sln, slo in zip(c_sl, old_sl)]
+    data = a.config.backend.apply_mask(a._data, mask, meta, size, 0, 0)
     return a._replace(struct=struct, slices=slices, data=data)

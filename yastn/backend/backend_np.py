@@ -229,7 +229,7 @@ def conj(data):
 
 
 def trace(data, order, meta, Dsize):
-    newdata = np.zeros((Dsize,), dtype=data.dtype)
+    newdata = np.zeros(Dsize, dtype=data.dtype)
     for (sln, list_sln) in meta:
         tmp = newdata[slice(*sln)]
         for slo, Do, Drsh in list_sln:
@@ -378,13 +378,13 @@ def eigs_which(val, which):
 
 
 def embed_msk(data, msk, Dsize):
-    newdata = np.zeros((Dsize,), dtype=data.dtype)
+    newdata = np.zeros(Dsize, dtype=data.dtype)
     newdata[msk] = data
     return newdata
 
 
 def embed_slc(data, meta, Dsize):
-    newdata = np.zeros((Dsize,), dtype=data.dtype)
+    newdata = np.zeros(Dsize, dtype=data.dtype)
     for sln, slo in meta:
         newdata[slice(*sln)] = data[slice(*slo)]
     return newdata
@@ -401,7 +401,7 @@ def allclose(Adata, Bdata, rtol, atol):
 
 def add(Adata, Bdata, meta, Dsize):
     dtype = np.promote_types(Adata.dtype, Bdata.dtype)
-    newdata = np.zeros((Dsize,), dtype=dtype)
+    newdata = np.zeros(Dsize, dtype=dtype)
     for sl_c, sl_a in meta[0]:
         newdata[slice(*sl_c)] += Adata[slice(*sl_a)]
     for sl_c, sl_b in meta[1]:
@@ -411,7 +411,7 @@ def add(Adata, Bdata, meta, Dsize):
 
 def sub(Adata, Bdata, meta, Dsize):
     dtype = np.promote_types(Adata.dtype, Bdata.dtype)
-    newdata = np.zeros((Dsize,), dtype=dtype)
+    newdata = np.zeros(Dsize, dtype=dtype)
     for sl_c, sl_a in meta[0]:
         newdata[slice(*sl_c)] += Adata[slice(*sl_a)]
     for sl_c, sl_b in meta[1]:
@@ -421,7 +421,7 @@ def sub(Adata, Bdata, meta, Dsize):
 
 def apxb(Adata, Bdata, x, meta, Dsize):
     dtype = np.promote_types(Adata.dtype, Bdata.dtype)
-    newdata = np.zeros((Dsize,), dtype=dtype)
+    newdata = np.zeros(Dsize, dtype=dtype)
     for sl_c, sl_a in meta[0]:
         newdata[slice(*sl_c)] += Adata[slice(*sl_a)]
     for sl_c, sl_b in meta[1]:
@@ -429,61 +429,57 @@ def apxb(Adata, Bdata, x, meta, Dsize):
     return newdata
 
 
-def apply_slice(data, slcn, slco):
-    Dsize = slcn[-1][1] if len(slcn) > 0 else 0
-    newdata = np.zeros((Dsize,), dtype=data.dtype)
-    for sn, so in zip(slcn, slco):
-        newdata[slice(*sn)] = data[slice(*so)]
-    return newdata
-
-
-def vdot(Adata, Bdata):
-    return Adata @ Bdata
+def vdot(Adata, Bdata, meta):
+    dtype = np.promote_types(Adata.dtype, Bdata.dtype)
+    tmp = np.empty(len(meta), dtype=dtype)
+    for ii, (sla, slb) in enumerate(meta):
+        tmp[ii] = np.dot(Adata[slice(*sla)], Bdata[slice(*slb)])
+    return np.sum(tmp)
 
 
 def diag_1dto2d(Adata, meta, Dsize):
-    newdata = np.zeros((Dsize,), dtype=Adata.dtype)
+    newdata = np.zeros(Dsize, dtype=Adata.dtype)
     for sln, slo in meta:
         newdata[slice(*sln)] = np.diag(Adata[slice(*slo)]).ravel()
     return newdata
 
 
 def diag_2dto1d(Adata, meta, Dsize):
-    newdata = np.zeros((Dsize,), dtype=Adata.dtype)
+    newdata = np.zeros(Dsize, dtype=Adata.dtype)
     for sln, slo, Do in meta:
         newdata[slice(*sln)] = np.diag(Adata[slice(*slo)].reshape(Do))
     return newdata
 
 
-def dot(Adata, Bdata, meta_dot, Dsize):
+def matmul(Adata, Bdata, meta_dot, Dsize):
     dtype = np.promote_types(Adata.dtype, Bdata.dtype)
-    newdata = np.empty((Dsize,), dtype=dtype)
+    newdata = np.empty(Dsize, dtype=dtype)
     for (slc, Dc, sla, Da, slb, Db, ia, ib) in meta_dot:
-        np.dot(Adata[slice(*sla)].reshape(Da),
+        np.matmul(Adata[slice(*sla)].reshape(Da),
                Bdata[slice(*slb)].reshape(Db),
                out=newdata[slice(*slc)].reshape(Dc))
     return newdata
 
 
-def transpose_dot_sum(Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border, Dsize):
+def transpose_matmul_sum(Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border, Dsize):
     dtype = np.promote_types(Adata.dtype, Bdata.dtype)
-    newdata = np.empty((Dsize,), dtype=dtype)
+    newdata = np.empty(Dsize, dtype=dtype)
     Ad = {t: Adata[slice(*sl)].reshape(Di).transpose(Aorder).reshape(Df) for (t, sl, Di, Df) in Areshape}
     Bd = {t: Bdata[slice(*sl)].reshape(Di).transpose(Border).reshape(Df) for (t, sl, Di, Df) in Breshape}
     for (sl, Dslc, list_tab) in meta_dot:
         tmp = newdata[slice(*sl)].reshape(Dslc)
         ta, tb = list_tab[0]
-        np.dot(Ad[ta], Bd[tb], out=tmp)
+        np.matmul(Ad[ta], Bd[tb], out=tmp)
         for ta, tb in list_tab[1:]:
-            tmp += np.dot(Ad[ta], Bd[tb])
+            tmp += np.matmul(Ad[ta], Bd[tb])
     return newdata
 
 
-def dot_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
+def matmul_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
     dim = [1] * a_ndim
     dim[axis] = -1
     dtype = np.promote_types(Adata.dtype, Bdata.dtype)
-    newdata = np.empty((Dsize,), dtype=dtype)
+    newdata = np.empty(Dsize, dtype=dtype)
     for sln, slb, Db, sla in meta:
         newdata[slice(*sln)].reshape(Db)[:] = Adata[slice(*sla)].reshape(dim) * Bdata[slice(*slb)].reshape(Db)
     return newdata
@@ -492,7 +488,7 @@ def dot_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
 def apply_mask(Adata, mask, meta, Dsize, axis, a_ndim):
     slc1 = (slice(None),) * axis
     slc2 = (slice(None),) * (a_ndim - (axis + 1))
-    newdata = np.empty((Dsize,), dtype=Adata.dtype)
+    newdata = np.empty(Dsize, dtype=Adata.dtype)
     for sln, Dn, sla, Da, tm in meta:
         newdata[slice(*sln)].reshape(Dn)[:] = Adata[slice(*sla)].reshape(Da)[slc1 + (mask[tm],) + slc2]
     return newdata
@@ -510,7 +506,7 @@ def transpose(data, axes, meta_transpose):
 
 
 def transpose_and_merge(data, order, meta_new, meta_mrg, Dsize):
-    newdata = np.zeros((Dsize,), dtype=data.dtype)
+    newdata = np.zeros(Dsize, dtype=data.dtype)
     for (tn, Dn, sln), (t1, gr) in zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])):
         assert tn == t1
         temp = newdata[slice(*sln)].reshape(Dn)
@@ -537,7 +533,7 @@ def merge_to_dense(data, Dtot, meta):
 
 def merge_super_blocks(pos_tens, meta_new, meta_block, Dsize):
     dtype = reduce(np.promote_types, (a._data.dtype for a in pos_tens.values()))
-    newdata = np.zeros((Dsize,), dtype=dtype)
+    newdata = np.zeros(Dsize, dtype=dtype)
     for (tn, Dn, sln), (t1, gr) in zip(meta_new, groupby(meta_block, key=lambda x: x[0])):
         assert tn == t1
         for (_, slo, Do, pos, Dslc) in gr:
