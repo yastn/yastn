@@ -278,9 +278,11 @@ else:
 
 def trace(data, order, meta, Dsize):
     newdata = torch.zeros((Dsize,), dtype=data.dtype, device=data.device)
-    for (sln, slo, Do, Drsh) in meta:
-        temp = data[slice(*slo)].reshape(Do).permute(order).reshape(Drsh)
-        newdata[slice(*sln)] += torch.sum(torch.diagonal(temp, dim1=0, dim2=1), dim=-1)
+    for (sln, list_sln) in meta:
+        tmp = newdata[slice(*sln)]
+        for slo, Do, Drsh in list_sln:
+            tmp_sln = data[slice(*slo)].reshape(Do).permute(order).reshape(Drsh)
+            tmp += torch.sum(torch.diagonal(tmp_sln, dim1=0, dim2=1), dim=-1)
     return newdata
 
 

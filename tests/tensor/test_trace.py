@@ -217,5 +217,26 @@ def test_trace_exceptions(config_kwargs):
         b.trace(axes=(1, 2))
 
 
+@pytest.mark.skipif("'torch' not in config.getoption('--backend')", reason="Uses torch.autograd.gradcheck().")
+def test_trace_backward(config_kwargs):
+    import torch
+
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    leg0 =  yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(5, 6, 7))
+    a = yastn.rand(config=config_U1, legs=[leg0, leg0, leg0.conj(), leg0.conj()])
+
+    target_block = (0, 0, 0, 0)
+    target_block_size = a[target_block].size()
+
+    def test_f(block):
+        a[target_block] = block
+        b = yastn.trace(a, axes=(1, 2))
+        return b.norm()
+
+    op_args = (torch.randn(target_block_size, dtype=a.get_dtype(), requires_grad=True),)
+    assert torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4) #, check_undefined_grad=False)
+
+
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0"])
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])
+    # pytest.main([__file__, "-vs", "--durations=0"])

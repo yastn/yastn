@@ -638,22 +638,17 @@ def _meta_trace(struct, slices, nin_0, nin_1, out):
 
     pre_meta = sorted(zip(tn, Dn, Dnp, slo, Do, Drsh), key=itemgetter(0))
 
-    low, high = 0, 0
-    c_t, c_D, c_slices, meta = [], [], [], []
-    for tn, group in groupby(pre_meta, key=itemgetter(0)):
+    start, c_t, c_D, c_slices, meta_trace = 0, [], [], [], []
+    for (tn, Dn, Dnp), group in groupby(pre_meta, key=itemgetter(0, 1, 2)):
         c_t.append(tn)
-        tn, Dn, Dnp, slo, Do, Drsh = next(group)
         c_D.append(Dn)
-        high = low + Dnp
-        sln = (low, high)
-        low = high
-        c_slices.append(_slc((sln,), Dn, Dnp))
-        meta.append((sln, slo, Do, Drsh))
-        for _, _, _, slo, Do, Drsh in group:
-            meta.append((sln, slo, Do, Drsh))
+        stop = start + Dnp
+        c_slices.append(_slc(((start, stop),), Dn, Dnp))
+        meta_trace.append(((start, stop), tuple(mt[3:] for mt in group)))
+        start = stop
     c_s = tuple(struct.s[i] for i in out)
-    c_struct = _struct(s=c_s, n=struct.n, t=tuple(c_t), D=tuple(c_D), size=high)
-    return tuple(meta), c_struct, tuple(c_slices)
+    c_struct = _struct(s=c_s, n=struct.n, t=tuple(c_t), D=tuple(c_D), size=start)
+    return tuple(meta_trace), c_struct, tuple(c_slices)
 
 
 def swap_gate(a, axes, charge=None) -> yastn.Tensor:

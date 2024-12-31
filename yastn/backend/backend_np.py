@@ -230,8 +230,10 @@ def conj(data):
 
 def trace(data, order, meta, Dsize):
     newdata = np.zeros((Dsize,), dtype=data.dtype)
-    for (sln, slo, Do, Drsh) in meta:
-        newdata[slice(*sln)] += np.trace(data[slice(*slo)].reshape(Do).transpose(order).reshape(Drsh))
+    for (sln, list_sln) in meta:
+        tmp = newdata[slice(*sln)]
+        for slo, Do, Drsh in list_sln:
+            tmp += np.trace(data[slice(*slo)].reshape(Do).transpose(order).reshape(Drsh))
     return newdata
 
 
