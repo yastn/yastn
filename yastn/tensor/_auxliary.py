@@ -134,3 +134,21 @@ def _unpack_legs(legs):
             ulegs.append(leg)
             mfs.append((1,))
     return tuple(ulegs), tuple(mfs)
+
+
+def _join_contiguous_slices(slcs_a, slcs_b):
+    if not slcs_a:
+        return ()
+    meta = []
+    tmp_a = slcs_a[0]
+    tmp_b = slcs_b[0]
+    for sl_a, sl_b in zip(slcs_a[1:], slcs_b[1:]):
+        if tmp_a[1] + 1 == sl_a[0] and tmp_b[1] + 1 == sl_b[0]:
+            tmp_a = (tmp_a[0], sl_a[1])
+            tmp_b = (tmp_b[0], sl_b[1])
+        else:
+            meta.append((tmp_a, tmp_b))
+            tmp_a = sl_a
+            tmp_b = sl_b
+    meta.append((tmp_a, tmp_b))
+    return tuple(meta)

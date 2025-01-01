@@ -29,7 +29,7 @@ __all__= [
     'expm', 'first_element', 'item', 'sum_elements', 'norm', 'entropy',
     'zeros', 'ones', 'rand', 'to_tensor', 'to_mask', 'square_matrix_from_dict',
     'requires_grad_', 'requires_grad', 'move_to', 'conj',
-    'trace', 'trace_with_mask', 'rsqrt', 'reciprocal', 'exp', 'sqrt', 'absolute',
+    'trace', 'rsqrt', 'reciprocal', 'exp', 'sqrt', 'absolute',
     'svd_lowrank', 'svd', 'eigh', 'qr',
     'argsort', 'eigs_which', 'embed_msk', 'embed_slc', 'allclose',
     'add', 'sub', 'apxb', 'apply_mask', 'vdot', 'diag_1dto2d', 'diag_2dto1d',

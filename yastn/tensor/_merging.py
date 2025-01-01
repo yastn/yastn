@@ -19,7 +19,7 @@ from itertools import groupby, product, accumulate
 from operator import itemgetter
 from typing import NamedTuple
 import numpy as np
-from ._auxliary import _slc, _struct, _flatten, _clear_axes, _ntree_to_mf, _mf_to_ntree, _unpack_legs
+from ._auxliary import _slc, _flatten, _clear_axes, _ntree_to_mf, _mf_to_ntree, _unpack_legs
 from ._tests import YastnError, _test_axes_all, _get_tD_legs
 
 
@@ -516,20 +516,6 @@ def _meta_unmerge_matrix(config, struct, slices, ls0, ls1, snew):
 
 #  =========== masks ======================
 
-# def _masks_for_axes(config, structa, hfa, axa, structb, hfb, axb, tcon):
-#     """ masks to get the intersecting parts of single legs from two tensors. """
-#     msk_a, msk_b = [], []
-#     tla, Dla, _= _get_tD_legs(structa)
-#     tlb, Dlb, _= _get_tD_legs(structb)
-#     for i1, i2 in zip(axa, axb):
-#         ma, mb = _intersect_hfs(config, (tla[i1], tlb[i2]), (Dla[i1], Dlb[i2]), (hfa[i1], hfb[i2]))
-#         msk_a.append(ma)
-#         msk_b.append(mb)
-#     nsym = config.sym.NSYM
-#     mam = {t: config.backend.to_mask(_outer_masks(t, msk_a, nsym)) for t in tcon}
-#     mbm = {t: config.backend.to_mask(_outer_masks(t, msk_b, nsym)) for t in tcon}
-#     return mam, mbm
-
 
 def _mask_nonzero(mask):
     if all(all(v) for v in mask.values()):
@@ -549,68 +535,6 @@ def _mask_tensor_intersect_legs(a, b, axa, axb):
         msk_a.append(_mask_nonzero(ma))
         msk_b.append(_mask_nonzero(mb))
     return msk_a, msk_b
-
-
-def _merge_masks_intersect(config, struct, slices, ms):
-    """ combine masks using information from struct"""
-    msk = np.ones((struct.size,), dtype=bool)
-    Dnew = np.zeros((len(struct.t), len(ms)), dtype=np.int64)
-    nsym = config.sym.NSYM
-    for t, slo, Dt in zip(struct.t, slices, Dnew):
-        for i, msi in enumerate(ms):
-            xi = msi[t[i * nsym: (i + 1) * nsym]]
-            Dt[i] = np.sum(xi)
-            x = xi if i == 0 else np.outer(x, xi).ravel()
-        msk[slice(*slo.slcs[0])] = x
-    Dp = np.prod(Dnew, axis=1, dtype=np.int64).tolist()
-    Dnew = tuple(map(tuple, Dnew.tolist()))
-    slices_new = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dp), Dp, Dnew))
-    struct_new = struct._replace(D=Dnew, size=sum(Dp))
-    return msk, struct_new, slices_new
-
-
-def _masks_for_vdot(config, structa, slicesa, hfa, structb, slicesb, hfb):
-    """ masks to get the intersecting parts on all legs from two tensors """
-    msk_a, msk_b = [], []
-    tla, Dla, _= _get_tD_legs(structa)
-    tlb, Dlb, _= _get_tD_legs(structb)
-    ndim = len(tla)
-    for n in range(ndim):
-        ma, mb = _intersect_hfs(config, (tla[n], tlb[n]), (Dla[n], Dlb[n]), (hfa[n], hfb[n]))
-        msk_a.append(ma)
-        msk_b.append(mb)
-    msk_a, struct_a, slices_a = _merge_masks_intersect(config, structa, slicesa, msk_a)
-    msk_b, struct_b, slices_b = _merge_masks_intersect(config, structb, slicesb, msk_b)
-    msk_a = config.backend.to_mask(msk_a)
-    msk_b = config.backend.to_mask(msk_b)
-    return msk_a, msk_b, struct_a, slices_a, struct_b, slices_b
-
-
-def _masks_for_trace(config, t12, D1, D2, hfs, ax1, ax2):
-    """ masks to get the intersecting part of a combination of legs. """
-    nsym = config.sym.NSYM
-    msk1, msk2 = [], []
-
-    tDDset = set(zip(t12, D1, D2))
-    tset = set(t12)
-
-    for n, (i1, i2) in enumerate(zip(ax1, ax2)):
-        tdn = tuple(set((t[n * nsym: (n + 1) * nsym], d1[n], d2[n]) for t, d1, d2 in tDDset))
-        tn, D1n, D2n = zip(*tdn) if len(tdn) > 0 else ((), (), ())
-        m1, m2 = _intersect_hfs(config, (tn, tn), (D1n, D2n), (hfs[i1], hfs[i2]))
-        msk1.append(m1)
-        msk2.append(m2)
-
-    msk12 = {}
-    for t in tset:
-        m1 = msk1[0][t[:nsym]]
-        m2 = msk2[0][t[:nsym]]
-        for n in range(1, len(msk1)):
-            ind = t[n * nsym: (n + 1) * nsym]
-            m1 = np.outer(m1, msk1[n][ind]).ravel()
-            m2 = np.outer(m2, msk2[n][ind]).ravel()
-        msk12[t] = (config.backend.to_mask(m1), config.backend.to_mask(m2))
-    return msk12
 
 
 def _merge_masks_embed(config, struct, slices, ms):  # TODO

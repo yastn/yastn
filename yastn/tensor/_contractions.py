@@ -19,10 +19,9 @@ from itertools import groupby, accumulate, product
 from numbers import Number
 from operator import itemgetter
 import numpy as np
-from ._auxliary import _struct, _slc, _clear_axes, _unpack_axes, _flatten, SpecialTensor
+from ._auxliary import _struct, _slc, SpecialTensor, _clear_axes, _unpack_axes, _flatten, _join_contiguous_slices
 from ._tests import YastnError, _test_can_be_combined, _test_axes_match
 from ._merging import _merge_to_matrix, _unmerge, _meta_unmerge_matrix
-from ._merging import _masks_for_vdot, _masks_for_trace
 from. _merging import _meta_fuse_hard, _transpose_and_merge, _mask_tensor_intersect_legs
 
 __all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon', 'einsum', 'broadcast', 'apply_mask']
@@ -558,7 +557,7 @@ def _meta_vdot(struct_a, slices_a, struct_b, slices_b):
             ia += 1
         else:
             ib += 1
-    meta_vdot = tuple(zip(slcs_a, slcs_b))
+    meta_vdot = _join_contiguous_slices(slcs_a, slcs_b)
     return meta_vdot
 
 
