@@ -31,6 +31,7 @@ def set_cache_maxsize(maxsize=0):
     _contractions._meta_swap_gate = lru_cache(maxsize)(_contractions._meta_swap_gate.__wrapped__)
     _contractions._meta_swap_gate_charge = lru_cache(maxsize)(_contractions._meta_swap_gate_charge.__wrapped__)
     _contractions._meta_trace = lru_cache(maxsize)(_contractions._meta_trace.__wrapped__)
+    _contractions._meta_vdot = lru_cache(maxsize)(_contractions._meta_vdot.__wrapped__)
     _contractions._meta_ncon = lru_cache(maxsize)(_contractions._meta_ncon.__wrapped__)
     _merging._meta_merge_to_matrix = lru_cache(maxsize)(_merging._meta_merge_to_matrix.__wrapped__)
     _merging._meta_unmerge_matrix = lru_cache(maxsize)(_merging._meta_unmerge_matrix.__wrapped__)
@@ -51,6 +52,7 @@ def clear_cache():
     _contractions._meta_swap_gate.cache_clear()
     _contractions._meta_swap_gate_charge.cache_clear()
     _contractions._meta_trace.cache_clear()
+    _contractions._meta_vdot.cache_clear()
     _contractions._meta_ncon.cache_clear()
     _merging._meta_merge_to_matrix.cache_clear()
     _merging._meta_unmerge_matrix.cache_clear()
@@ -75,5 +77,7 @@ def get_cache_info():
             "broadcast": _contractions._meta_broadcast.cache_info(),
             "mask": _contractions._meta_mask.cache_info(),
             "trace": _contractions._meta_trace.cache_info(),
+            "vdot": _contractions._meta_vdot.cache_info(),
             "swap_gate": _contractions._meta_swap_gate.cache_info(),
+            "swap_gate_charge": _contractions._meta_swap_gate_charge.cache_info(),
             "ncon": _contractions._meta_ncon.cache_info()}

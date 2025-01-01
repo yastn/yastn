@@ -106,6 +106,17 @@ def tensordot(a, b, axes, conj=(0, 0)) -> yastn.Tensor:
     return a._replace(data=data, struct=struct_c, slices=slices_c, mfs=mfs_c, hfs=hfs_c)
 
 
+def _tensordot_diag(a, b, in_b, destination):
+    """ Executes broadcast and then transpose into order expected by tensordot. """
+    if len(in_b) == 1:
+        c = a.broadcast(b, axes=in_b[0])
+        return c.moveaxis(source=in_b, destination=destination)
+    if len(in_b) == 2:
+        c = a.broadcast(b, axes=in_b[0])
+        return c.trace(axes=in_b)
+    raise YastnError('Outer product with diagonal tensor not supported. Use yastn.diag() first.')  # len(in_a) == 0
+
+
 def _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b, s_c):
     """ Perform tensordot by fuse_to_matrix: merging tensors to matrices, executing dot, and unmerging outgoing legs. """
 
@@ -122,19 +133,6 @@ def _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b, s_c):
     meta_unmerge, struct_c, slices_c = _meta_unmerge_matrix(a.config, struct_c, slices_c, ls_l, ls_r, s_c)
     data = _unmerge(a.config, data, meta_unmerge)
     return data, struct_c, slices_c
-
-
-def _apply_mask_to_axes(a, naxes, masks):
-    """ Auxlliary function applying mask tensors to native legs. """
-    for axis, mask in zip(naxes, masks):
-        if mask is not None:
-            mask_tD = {k: len(v) for k, v in mask.items() if len(v) > 0}
-            mask_t = tuple(mask_tD.keys())
-            mask_D = tuple(mask_tD.values())
-            meta, struct, slices, axis, ndim = _meta_mask(a.struct, a.slices, a.isdiag, mask_t, mask_D, axis)
-            data = a.config.backend.apply_mask(a._data, mask, meta, struct.size, axis, ndim)
-            a = a._replace(struct=struct, slices=slices, data=data)
-    return a
 
 
 def _tensordot_fc(a, b, nout_a, nin_a, nin_b, nout_b):
@@ -264,9 +262,7 @@ def _meta_tensordot_fc(struct_a, slices_a, struct_b, slices_b):
 
 @lru_cache(maxsize=1024)
 def _meta_tensordot_nf(struct_a, slices_a, struct_b, slices_b, ind_a, ind_b, nout_a, nin_a, nin_b, nout_b):
-
     nsym = len(struct_a.n)
-
     if ind_a is None:
         ta = struct_a.t
         Da = struct_a.D
@@ -341,16 +337,6 @@ def _meta_tensordot_nf(struct_a, slices_a, struct_b, slices_b, ind_a, ind_b, nou
     struct_c = _struct(s=s_c, t=t_c, D=D_c, size=start)
     return meta_dot, reshape_a, reshape_b, struct_c, slices_c
 
-
-def _tensordot_diag(a, b, in_b, destination):
-    """ Executes broadcast and then transpose into order expected by tensordot. """
-    if len(in_b) == 1:
-        c = a.broadcast(b, axes=in_b[0])
-        return c.moveaxis(source=in_b, destination=destination)
-    if len(in_b) == 2:
-        c = a.broadcast(b, axes=in_b[0])
-        return c.trace(axes=in_b)
-    raise YastnError('Outer product with diagonal tensor not supported. Use yastn.diag() first.')  # len(in_a) == 0
 
 
 def broadcast(a, *args, axes=0) -> yastn.Tensor | iterable[yastn.Tensor]:
@@ -476,6 +462,19 @@ def apply_mask(a, *args, axes=0) -> yastn.Tensor | iterable[yastn.Tensor]:
     return results.pop() if len(results) == 1 else results
 
 
+def _apply_mask_to_axes(a, naxes, masks):
+    """ Auxlliary function applying mask tensors to native legs. """
+    for axis, mask in zip(naxes, masks):
+        if mask is not None:
+            mask_tD = {k: len(v) for k, v in mask.items() if len(v) > 0}
+            mask_t = tuple(mask_tD.keys())
+            mask_D = tuple(mask_tD.values())
+            meta, struct, slices, axis, ndim = _meta_mask(a.struct, a.slices, a.isdiag, mask_t, mask_D, axis)
+            data = a.config.backend.apply_mask(a._data, mask, meta, struct.size, axis, ndim)
+            a = a._replace(struct=struct, slices=slices, data=data)
+    return a
+
+
 @lru_cache(maxsize=1024)
 def _meta_mask(a_struct, a_slices, a_isdiag, mask_t, mask_D, axis):
     """ meta information for backend, and new tensor structure for mask."""
@@ -543,6 +542,7 @@ def vdot(a, b, conj=(1, 0)) -> Number:
     return a.config.backend.vdot(a.data, b.data, meta_vdot)
 
 
+@lru_cache(maxsize=1024)
 def _meta_vdot(struct_a, slices_a, struct_b, slices_b):
     ia, ib, slcs_a, slcs_b = 0, 0, [], []
     while ia < len(struct_a.t) and ib < len(struct_b.t):
