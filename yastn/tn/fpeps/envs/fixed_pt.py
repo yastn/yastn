@@ -4,7 +4,6 @@ import numpy as np
 from scipy.optimize import minimize
 from scipy.sparse.linalg import LinearOperator
 from scipy.sparse.linalg import bicgstab, lgmres
-from scipy.optimize import anderson
 from collections import namedtuple
 
 
@@ -38,14 +37,16 @@ def refill_env(env, data, slice_list):
 			getattr(env[site], dirn)._data = torch.narrow(data, 0, *slice_list[ind])
 			ind += 1
 
-def extract_dsv(t, history):
+def extract_dsv_t(t, history):
 	max_dsv = max((history[t][k] - history[t+1][k]).norm().item() for k in history[t]) if len(history)>t else float('Nan')
 	return max_dsv
 
+def extract_dsv(history):
+	max_dsv_history = [extract_dsv(t, history) for t in range(len(history) - 1)]
+	return max_dsv_history
+
 def running_ave(history, window_size=5):
-	max_dsv_ave = [extract_dsv(t, history) for t in range(len(history) - 1)]
-	cumsum = np.cumsum(np.insert(max_dsv_ave, 0, 0))
-	
+	cumsum = np.cumsum(np.insert(history, 0, 0))
 	return (cumsum[window_size:] - cumsum[:-window_size]) / window_size
 
 class NoFixedPointError(Exception):
@@ -481,8 +482,8 @@ class FixedPoint(torch.autograd.Function):
 			iterator_step=1,
 			opts_svd=opts_svd,
 			corner_tol=corner_tol,
-			svd_method='arnoldi',
-			# svd_method='full',
+			# svd_method='arnoldi',
+			svd_method='full',
 			D_block=chi,
 		)
 
@@ -541,7 +542,10 @@ class FixedPoint(torch.autograd.Function):
 		grads = grad_env[0]
 		dA = list(grad_env)
 		env_data = torch.utils.checkpoint.detach_variable(ctx.saved_tensors)[0] # only one element in the tuple
-		prev_tmp = None
+
+		prev_grad_tmp = None
+		diff_ave = None
+		alpha = 0.4
 		for step in range(ctx.ctm_args.ctm_max_iter):
 			# Compute vjp only
 			with torch.enable_grad():
@@ -552,15 +556,24 @@ class FixedPoint(torch.autograd.Function):
 				for i in range(len(grads)):
 					dA[i] = dA[i] + grads[i]
 
-			# for grad in grads:
-			# 	print(torch.norm(grad, p=torch.inf))
+			for grad in grads:
+				print(torch.norm(grad, p=torch.inf))
 
-			with torch.enable_grad():
-				tmp = torch.autograd.grad(FixedPoint.fixed_point_iter(ctx.env, ctx.sigma_dict, ctx.opts_svd, ctx.slices, env_data), ctx.env.psi.ket.get_parameters(), grad_outputs=dA)
-
-			if prev_tmp is not None:
-				print("full grad diff", torch.norm(tmp[0] - prev_tmp[0]))
-			prev_tmp = tmp
+			if step % 1 == 0:
+				with torch.enable_grad():
+					grad_tmp = torch.autograd.grad(FixedPoint.fixed_point_iter(ctx.env, ctx.sigma_dict, ctx.opts_svd, ctx.slices, env_data), ctx.env.psi.ket.get_parameters(), grad_outputs=dA)
+				if prev_grad_tmp is not None:
+					grad_diff = torch.norm(grad_tmp[0] - prev_grad_tmp[0])
+					print("full grad diff", grad_diff)
+					if diff_ave is not None:
+						if grad_diff > diff_ave:
+							print("grad diff is no longer decreasing!")
+							break
+						else:
+							diff_ave = alpha*grad_diff + (1-alpha)*diff_ave
+					else:
+						diff_ave = grad_diff
+				prev_grad_tmp = grad_tmp
 
 		with torch.enable_grad():
 			dA = torch.autograd.grad(FixedPoint.fixed_point_iter(ctx.env, ctx.sigma_dict, ctx.opts_svd, ctx.slices, env_data), ctx.env.psi.ket.get_parameters(), grad_outputs=dA)
@@ -576,8 +589,19 @@ class FixedPoint(torch.autograd.Function):
 		# 		res = torch.autograd.grad(FixedPoint.fixed_point_iter(ctx.env, ctx.sigma_dict, ctx.opts_svd, ctx.slices, env_data), env_data, grad_outputs=u)
 		# 	return (u - res[0]).numpy()
 
-		# A = LinearOperator(matvec=mat_vec_A, shape=(env_data.size(dim=0) , grads.size(dim=0)), dtype=np.complex128 if env_data.dtype==torch.complex128 else np.float64)
-		# u, info = lgmres(A, grads, M=None, rtol=1e-5, atol=0.0)
+		# def rmat_vec_A(u):
+		# 	u = torch.from_numpy(u)
+		# 	u = u.conj()
+		# 	f = lambda x: FixedPoint.fixed_point_iter(ctx.env, ctx.sigma_dict, ctx.opts_svd, ctx.slices, x)
+		# 	with torch.enable_grad():
+		# 		output, res = torch.autograd.functional.jvp(f, env_data, u)
+		# 	return (u - res).conj().numpy()
+
+		# A = LinearOperator(matvec=mat_vec_A, rmatvec=rmat_vec_A, shape=(env_data.size(dim=0) , grads.size(dim=0)), dtype=np.complex128 if env_data.dtype==torch.complex128 else np.float64)
+
+		# u, info = lgmres(A, grads, M=None, rtol=1e-7, atol=0.0)
+		# # res = lsqr(A, grads, atol=1e-7, btol=1e-7, show=True, x0=np.random.rand(*u.shape))
+		# # u = res[0]
 
 		# u = torch.from_numpy(u)
 		# with torch.enable_grad():
