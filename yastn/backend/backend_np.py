@@ -498,7 +498,7 @@ def apply_mask(Adata, mask, meta, Dsize, axis, a_ndim):
 def embed_mask(Adata, mask, meta, Dsize, axis, a_ndim):
     slc1 = (slice(None),) * axis
     slc2 = (slice(None),) * (a_ndim - (axis + 1))
-    newdata = np.zerosy(Dsize, dtype=Adata.dtype)
+    newdata = np.zeros(Dsize, dtype=Adata.dtype)
     for sln, Dn, sla, Da, tm in meta:
         slcs = slc1 + (mask[tm],) + slc2
         newdata[slice(*sln)].reshape(Dn)[slcs] = Adata[slice(*sla)].reshape(Da)

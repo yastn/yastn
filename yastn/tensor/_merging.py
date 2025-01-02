@@ -578,8 +578,8 @@ def _mask_tensors_leg_union(a, b):
     tlb, Dlb, _= _get_tD_legs(b.struct)
     for n in range(a.ndim_n):
         ma, mb, hf = _union_hfs(a.config, (tla[n], tlb[n]), (Dla[n], Dlb[n]), (a.hfs[n], b.hfs[n]))
-        msk_a_tD.append({k: len(v) for k, v in ma.items()})
-        msk_b_tD.append({k: len(v) for k, v in mb.items()})
+        msk_a_tD.append({k: len(v) for k, v in sorted(ma.items())})
+        msk_b_tD.append({k: len(v) for k, v in sorted(mb.items())})
         msk_a.append(_mask_nonzero(ma))
         msk_b.append(_mask_nonzero(mb))
         hfs.append(hf)
@@ -603,22 +603,6 @@ def _merge_masks_embed(config, struct, slices, ms):  # TODO
     struct_new = struct._replace(D=Dnew, size=sum(Dp))
     msk = np.hstack(msk) if len(msk) > 0 else np.zeros((0,), dtype=bool)
     return msk, struct_new, slices_new
-
-
-def _masks_for_add(config, structa, slicesa, hfa, structb, slicesb, hfb):
-    msk_a, msk_b, hfs = [], [], []
-    tla, Dla, _= _get_tD_legs(structa)
-    tlb, Dlb, _= _get_tD_legs(structb)
-    for n in range(len(structa.s)):
-        ma, mb, hf = _union_hfs(config, (tla[n], tlb[n]), (Dla[n], Dlb[n]), (hfa[n], hfb[n]))
-        msk_a.append(ma)
-        msk_b.append(mb)
-        hfs.append(hf)
-    msk_a, struct_a, slices_a = _merge_masks_embed(config, structa, slicesa, msk_a)
-    msk_b, struct_b, slices_b = _merge_masks_embed(config, structb, slicesb, msk_b)
-    msk_a = config.backend.to_mask(msk_a)
-    msk_b = config.backend.to_mask(msk_b)
-    return msk_a, msk_b, struct_a, slices_a, struct_b, slices_b, tuple(hfs)
 
 
 def _embed_tensor(a, legs, legs_new):
