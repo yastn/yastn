@@ -20,15 +20,15 @@ from numbers import Number
 from operator import itemgetter
 import numpy as np
 from ._auxliary import _struct, _slc, SpecialTensor, _clear_axes, _unpack_axes, _flatten, _join_contiguous_slices
+from ._merging import _merge_to_matrix, _unmerge, _meta_unmerge_matrix, _meta_fuse_hard
+from. _merging import _transpose_and_merge, _mask_tensors_leg_intersection, _meta_mask
 from ._tests import YastnError, _test_can_be_combined, _test_axes_match
-from ._merging import _merge_to_matrix, _unmerge, _meta_unmerge_matrix
-from. _merging import _meta_fuse_hard, _transpose_and_merge, _mask_tensor_intersect_legs
 
 __all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon', 'einsum', 'broadcast', 'apply_mask']
 
 
 def __matmul__(a, b) -> yastn.Tensor:
-    """
+    r"""
     The operation ``A @ B`` uses ``@`` operator to compute tensor dot product.
     The operation contracts the last axis of ``self``, i.e., ``a``,
     with the first axis of ``b``.
@@ -72,26 +72,25 @@ def tensordot(a, b, axes, conj=(0, 0)) -> yastn.Tensor:
 
     in_a, in_b = _clear_axes(*axes)  # contracted meta legs
     mask_needed, (nin_a, nin_b) = _test_axes_match(a, b, sgn=-1, axes=(in_a, in_b))
+
     if a.isdiag:
         return _tensordot_diag(a, b, in_b, destination=(0,))
     if b.isdiag:
         return _tensordot_diag(b, a, in_a, destination=(-1,))
 
     _test_can_be_combined(a, b)
-
     nout_a = tuple(ii for ii in range(a.ndim_n) if ii not in nin_a)  # outgoing native legs
     nout_b = tuple(ii for ii in range(b.ndim_n) if ii not in nin_b)  # outgoing native legs
 
+    n_c = a.config.sym.add_charges(a.struct.n, b.struct.n)
     s_c = tuple(a.struct.s[i1] for i1 in nout_a) + tuple(b.struct.s[i2] for i2 in nout_b)
     mfs_c = tuple(a.mfs[ii] for ii in range(a.ndim) if ii not in in_a) + tuple(b.mfs[ii] for ii in range(b.ndim) if ii not in in_b)
     hfs_c = tuple(a.hfs[ii] for ii in nout_a) + tuple(b.hfs[ii] for ii in nout_b)
 
-    n_c = a.config.sym.add_charges(a.struct.n, b.struct.n)
-
     if mask_needed:
-        msk_a, msk_b = _mask_tensor_intersect_legs(a, b, nin_a, nin_b)
-        a = _apply_mask_to_axes(a, nin_a, msk_a)
-        b = _apply_mask_to_axes(b, nin_b, msk_b)
+        msk_a, msk_b = _mask_tensors_leg_intersection(a, b, nin_a, nin_b)
+        a = _apply_mask_axes(a, nin_a, msk_a)
+        b = _apply_mask_axes(b, nin_b, msk_b)
 
     if a.config.tensordot_policy == 'fuse_to_matrix':
         data, struct_c, slices_c = _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b, s_c)
@@ -107,19 +106,21 @@ def tensordot(a, b, axes, conj=(0, 0)) -> yastn.Tensor:
 
 
 def _tensordot_diag(a, b, in_b, destination):
-    """ Executes broadcast and then transpose into order expected by tensordot. """
+    r""" Executes broadcast and then transpose into order expected by tensordot. """
     if len(in_b) == 1:
         c = a.broadcast(b, axes=in_b[0])
         return c.moveaxis(source=in_b, destination=destination)
     if len(in_b) == 2:
         c = a.broadcast(b, axes=in_b[0])
         return c.trace(axes=in_b)
-    raise YastnError('Outer product with diagonal tensor not supported. Use yastn.diag() first.')  # len(in_a) == 0
+    raise YastnError('Outer product with diagonal tensor not supported. Use yastn.diag() first.')  # if len(in_a) == 0
 
 
 def _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b, s_c):
-    """ Perform tensordot by fuse_to_matrix: merging tensors to matrices, executing dot, and unmerging outgoing legs. """
-
+    r"""
+    Perform tensordot by fuse_to_matrix:
+    merging tensors to matrices, executing dot, and unmerging outgoing legs.
+    """
     ind_a, ind_b = _common_inds(a.struct.t, b.struct.t, nin_a, nin_b, a.ndim_n, b.ndim_n, a.config.sym.NSYM)
     data_a, struct_a, slices_a, ls_l, ls_ac = _merge_to_matrix(a, (nout_a, nin_a), ind_a)
     data_b, struct_b, slices_b, ls_bc, ls_r = _merge_to_matrix(b, (nin_b, nout_b), ind_b)
@@ -136,11 +137,10 @@ def _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b, s_c):
 
 
 def _tensordot_fc(a, b, nout_a, nin_a, nin_b, nout_b):
-    """
+    r"""
     Perform tensordot by fuse_contracted: merging contracted legs, and executing dot.
     Outgoing legs are not merged so unmerge is not needed.
     """
-
     ind_a, ind_b = _common_inds(a.struct.t, b.struct.t, nin_a, nin_b, a.ndim_n, b.ndim_n, a.config.sym.NSYM)
 
     axes_a = tuple((x,) for x in nout_a) + (nin_a,)
@@ -163,20 +163,22 @@ def _tensordot_fc(a, b, nout_a, nin_a, nin_b, nout_b):
 
 
 def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
-    """
+    r"""
     Perform tensordot directly: permute blocks and execute dot accumulaing results into result blocks.
     """
     ind_a, ind_b = _common_inds(a.struct.t, b.struct.t, nin_a, nin_b, a.ndim_n, b.ndim_n, a.config.sym.NSYM)
-    meta_dot, reshape_a, reshape_b, struct_c, slices_c = _meta_tensordot_nf(a.struct, a.slices, b.struct, b.slices, ind_a, ind_b, nout_a, nin_a, nin_b, nout_b)
+    meta_dot, reshape_a, reshape_b, struct_c, slices_c = _meta_tensordot_nf(a.struct, a.slices, b.struct, b.slices,
+                                                                            ind_a, ind_b, nout_a, nin_a, nin_b, nout_b)
     order_a = nout_a + nin_a
     order_b = nin_b + nout_b
-    data = a.config.backend.transpose_matmul_sum(a.data, b.data, meta_dot, reshape_a, reshape_b, order_a, order_b, struct_c.size)
+    data = a.config.backend.transpose_matmul_sum(a.data, b.data, meta_dot,
+                                                 reshape_a, reshape_b, order_a, order_b, struct_c.size)
     return data, struct_c, slices_c
 
 
 @lru_cache(maxsize=1024)
 def _common_inds(t_a, t_b, nin_a, nin_b, ndimn_a, ndimn_b, nsym):
-    """ Return row indices of nparray ``a`` that are in ``b``, and vice versa. Outputs tuples."""
+    r""" Return row indices of nparray ``a`` that are in ``b``, and vice versa. Outputs tuples."""
     t_a = np.array(t_a, dtype=np.int64).reshape((len(t_a), ndimn_a, nsym))
     t_b = np.array(t_b, dtype=np.int64).reshape((len(t_b), ndimn_b, nsym))
     t_a = t_a[:, nin_a, :].reshape(len(t_a), len(nin_a) * nsym).tolist()
@@ -338,7 +340,6 @@ def _meta_tensordot_nf(struct_a, slices_a, struct_b, slices_b, ind_a, ind_b, nou
     return meta_dot, reshape_a, reshape_b, struct_c, slices_c
 
 
-
 def broadcast(a, *args, axes=0) -> yastn.Tensor | iterable[yastn.Tensor]:
     r"""
     Compute tensordot product of diagonal tensor ``a`` with tensors in ``args``.
@@ -392,7 +393,7 @@ def _broadcast_input(axis, mf, isdiag):
 
 @lru_cache(maxsize=1024)
 def _meta_broadcast(b_struct, b_slices, a_struct, a_slices, axis):
-    """ meta information for backend, and new tensor structure for brodcast. """
+    r""" meta information for backend, and new tensor structure for brodcast. """
     nsym = len(a_struct.n)
     ind_tb = tuple(x[axis * nsym: (axis + 1) * nsym] for x in b_struct.t)
     ind_ta = tuple(x[:nsym] for x in a_struct.t)
@@ -462,8 +463,8 @@ def apply_mask(a, *args, axes=0) -> yastn.Tensor | iterable[yastn.Tensor]:
     return results.pop() if len(results) == 1 else results
 
 
-def _apply_mask_to_axes(a, naxes, masks):
-    """ Auxlliary function applying mask tensors to native legs. """
+def _apply_mask_axes(a, naxes, masks):
+    r""" Auxlliary function applying mask tensors to native legs. """
     for axis, mask in zip(naxes, masks):
         if mask is not None:
             mask_tD = {k: len(v) for k, v in mask.items() if len(v) > 0}
@@ -474,37 +475,6 @@ def _apply_mask_to_axes(a, naxes, masks):
             a = a._replace(struct=struct, slices=slices, data=data)
     return a
 
-
-@lru_cache(maxsize=1024)
-def _meta_mask(a_struct, a_slices, a_isdiag, mask_t, mask_D, axis):
-    """ meta information for backend, and new tensor structure for mask."""
-
-    mask_tD = {t: D for t, D in zip(mask_t, mask_D) if D > 0}
-    nsym = len(a_struct.n)
-    ind_ta = tuple(x[axis * nsym: (axis + 1) * nsym] for x in a_struct.t)
-    meta = tuple((ta, sla.slcs[0], Da, tm, mask_tD[tm]) for ta, sla, Da, tm in \
-                zip(a_struct.t, a_slices, a_struct.D, ind_ta) if tm in mask_tD)
-    # mt = (ta, sla, Da, tm, Dm)
-
-    c_t = tuple(mt[0] for mt in meta)
-    if a_isdiag:
-        c_D = tuple((mt[4], mt[4]) for mt in meta)
-        c_Dp = tuple(mt[4] for mt in meta)
-    else:
-        c_D = tuple(mt[2][:axis] + (mt[4],) + mt[2][axis + 1:] for mt in meta)
-        c_Dp = np.prod(c_D, axis=1, dtype=np.int64).tolist() if len(c_D) > 0 else ()
-
-    c_slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(c_Dp), c_Dp, c_D))
-    c_struct = a_struct._replace(t=c_t, D=c_D, size=sum(c_Dp))
-
-    if a_isdiag:
-        meta = tuple((sln.slcs[0], Dn[0], sla, Da[0], tm) for sln, Dn, (_, sla, Da, tm, _) in zip(c_slices, c_D, meta))
-        ndim, axis = 1, 0
-    else:
-        meta = tuple((sln.slcs[0], Dn, sla, Da, tm) for sln, Dn, (_, sla, Da, tm, _) in zip(c_slices, c_D, meta))
-        ndim = len(a_struct.s)
-
-    return meta, c_struct, c_slices, axis, ndim
 
 
 
@@ -532,9 +502,9 @@ def vdot(a, b, conj=(1, 0)) -> Number:
     n_c = a.config.sym.add_charges(a.struct.n, b.struct.n)
     if n_c == a.config.sym.zero():
         if mask_needed:
-            msk_a, msk_b = _mask_tensor_intersect_legs(a, b, nin_a, nin_b)
-            a = _apply_mask_to_axes(a, nin_a, msk_a)
-            b = _apply_mask_to_axes(b, nin_b, msk_b)
+            msk_a, msk_b = _mask_tensors_leg_intersection(a, b, nin_a, nin_b)
+            a = _apply_mask_axes(a, nin_a, msk_a)
+            b = _apply_mask_axes(b, nin_b, msk_b)
         meta_vdot = _meta_vdot(a.struct, a.slices, b.struct, b.slices)
     else:
         meta_vdot = ()
@@ -562,7 +532,7 @@ def _meta_vdot(struct_a, slices_a, struct_b, slices_b):
 
 
 def trace(a, axes=(0, 1)) -> yastn.Tensor:
-    """
+    r"""
     Compute trace of legs specified by axes.
 
     Parameters
@@ -590,8 +560,8 @@ def trace(a, axes=(0, 1)) -> yastn.Tensor:
         return a._replace(struct=struct, slices=(_slc(((0, 1),), (), 1),), mfs=mfs, hfs=hfs, isdiag=False, data=data)
 
     if mask_needed:
-        msk_0, msk_1 = _mask_tensor_intersect_legs(a, a, nin_0, nin_1)
-        a = _apply_mask_to_axes(a, nin_0 + nin_1, msk_0 + msk_1)
+        msk_0, msk_1 = _mask_tensors_leg_intersection(a, a, nin_0, nin_1)
+        a = _apply_mask_axes(a, nin_0 + nin_1, msk_0 + msk_1)
 
     meta, struct, slices = _meta_trace(a.struct, a.slices, nin_0, nin_1, out)
     data = a.config.backend.trace(a._data, order, meta, struct.size)
@@ -600,7 +570,7 @@ def trace(a, axes=(0, 1)) -> yastn.Tensor:
 
 @lru_cache(maxsize=1024)
 def _meta_trace(struct, slices, nin_0, nin_1, out):
-    """ meta-information for backend and struct of traced tensor. """
+    r""" meta-information for backend and struct of traced tensor. """
     lt, nsym = len(struct.t), len(struct.n)
     tset = np.array(struct.t, dtype=np.int64).reshape((lt, len(struct.s), nsym))
     Dset = np.array(struct.D, dtype=np.int64).reshape((lt, len(struct.s)))
@@ -641,7 +611,7 @@ def _meta_trace(struct, slices, nin_0, nin_1, out):
 
 
 def swap_gate(a, axes, charge=None) -> yastn.Tensor:
-    """
+    r"""
     Return tensor after application of a swap gate.
 
     The function's action is controlled by the ``fermionic`` flag in the tensor :ref:`config <tensor/configuration:YASTN configuration>`.
@@ -683,7 +653,7 @@ def swap_gate(a, axes, charge=None) -> yastn.Tensor:
 
 @lru_cache(maxsize=1024)
 def _meta_swap_gate(t, mf, ndim, nsym, axes, fss):
-    """ Calculate which blocks to negate. """
+    r""" Calculate which blocks to negate. """
     axes = _unpack_axes(mf, *axes)
     tset = np.array(t, dtype=np.int64).reshape((len(t), ndim, nsym))
     iaxes = iter(axes)
@@ -702,7 +672,7 @@ def _meta_swap_gate(t, mf, ndim, nsym, axes, fss):
 
 @lru_cache(maxsize=1024)
 def _meta_swap_gate_charge(t, charge, mf, ndim, nsym, axes, fss):
-    """ Calculate which blocks to negate. """
+    r""" Calculate which blocks to negate. """
     axes, = _unpack_axes(mf, axes)
     tset = np.array(t, dtype=np.int64).reshape((len(t), ndim, nsym))
     if len(charge) != nsym:
@@ -715,7 +685,7 @@ def _meta_swap_gate_charge(t, charge, mf, ndim, nsym, axes, fss):
 
 
 def einsum(subscripts, *operands, order=None) -> yastn.Tensor:
-    """
+    r"""
     Execute series of tensor contractions.
 
     Covering trace, tensordot (including outer products), and transpose.
@@ -796,7 +766,7 @@ def einsum(subscripts, *operands, order=None) -> yastn.Tensor:
 
 
 def ncon(ts, inds, conjs=None, order=None) -> yastn.Tensor:
-    """
+    r"""
     Execute series of tensor contractions.
 
     Parameters
@@ -865,7 +835,7 @@ def ncon(ts, inds, conjs=None, order=None) -> yastn.Tensor:
 
 @lru_cache(maxsize=1024)
 def _meta_ncon(inds, conjs, order):
-    """ Turning information in ``inds`` and ``conjs`` into list of contraction commands. """
+    r""" Turning information in ``inds`` and ``conjs`` into list of contraction commands. """
     if not all(-256 < x < 256 for x in _flatten(inds)):
         raise YastnError('Ncon requires indices to be between -256 and 256.')
 
@@ -888,7 +858,7 @@ def _meta_ncon(inds, conjs, order):
 
 
 def _consume_edges(edges, conjs):
-    """ Consumes edges to generate order of contractions. """
+    r""" Consumes edges to generate order of contractions. """
     eliminated, ntensors = [], len(conjs)
     meta_tr, meta_dot = [], []
     order1, leg1, ten1 = edges.pop()

@@ -14,9 +14,10 @@
 # ==============================================================================
 """ Linear operations and operations on a single yastn.Tensor. """
 from __future__ import annotations
-from ._merging import _masks_for_add
+from ._auxliary import _slc, _join_contiguous_slices
 from ._tests import YastnError, _test_can_be_combined, _get_tD_legs, _test_axes_match
-from ._auxliary import _slc
+from ._merging import _mask_tensors_leg_union, _meta_mask
+from ._merging import _masks_for_add
 
 
 __all__ = ['apxb', 'real', 'imag', 'sqrt', 'rsqrt', 'reciprocal', 'exp', 'bitwise_not', 'allclose']
@@ -59,6 +60,39 @@ def apxb(a, b, x=1) -> yastn.Tensor:
     aA, bA, hfs, meta, struct, slices = _addition_meta(a, b)
     data = a.config.backend.apxb(aA, bA, x, meta, struct.size)
     return a._replace(hfs=hfs, struct=struct, slices=slices, data=data)
+
+
+def _pre_addition(a, b):
+    """
+    Test and prepare tensors before addition.
+    """
+    _test_can_be_combined(a, b)
+    if a.struct.n != b.struct.n:
+        raise YastnError('Tensor charges do not match.')
+    if a.isdiag != b.isdiag:
+        raise YastnError('Cannot add diagonal tensor to non-diagonal tensor.')
+
+    mask_needed, (nin_a, nin_b) = _test_axes_match(a, b, sgn=1)
+    if mask_needed:
+        msk_a, msk_a_tD, msk_b, msk_b_tD, hfs = _mask_tensors_leg_union(a, b)
+        a = _embed_mask_axes(a, nin_a, msk_a, msk_a_tD)
+        b = _embed_mask_axes(b, nin_b, msk_b, msk_b_tD)
+    else:
+        hfs = a.hfs
+
+    return a, b, hfs
+
+
+def _embed_mask_axes(a, naxes, masks, masks_tD):
+    r""" Auxlliary function applying mask tensors to native legs. """
+    for axis, mask, mask_tD in zip(naxes, masks, masks_tD):
+        if mask is not None:
+            mask_t = tuple(mask_tD.keys())
+            mask_D = tuple(mask_tD.values())
+            meta, struct, slices, axis, ndim = _meta_mask(a.struct, a.slices, a.isdiag, mask_t, mask_D, axis)
+            data = a.config.backend.embed_mask(a._data, mask, meta, struct.size, axis, ndim)
+            a = a._replace(struct=struct, slices=slices, data=data)
+    return a
 
 
 def _addition_meta(a, b):

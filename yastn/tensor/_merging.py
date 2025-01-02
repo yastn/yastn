@@ -517,6 +517,38 @@ def _meta_unmerge_matrix(config, struct, slices, ls0, ls1, snew):
 #  =========== masks ======================
 
 
+@lru_cache(maxsize=1024)
+def _meta_mask(a_struct, a_slices, a_isdiag, mask_t, mask_D, axis):
+    r""" meta information for backend, and new tensor structure for mask."""
+
+    mask_tD = {t: D for t, D in zip(mask_t, mask_D) if D > 0}
+    nsym = len(a_struct.n)
+    ind_ta = tuple(x[axis * nsym: (axis + 1) * nsym] for x in a_struct.t)
+    meta = tuple((ta, sla.slcs[0], Da, tm, mask_tD[tm]) for ta, sla, Da, tm in \
+                zip(a_struct.t, a_slices, a_struct.D, ind_ta) if tm in mask_tD)
+    # mt = (ta, sla, Da, tm, Dm)
+
+    c_t = tuple(mt[0] for mt in meta)
+    if a_isdiag:
+        c_D = tuple((mt[4], mt[4]) for mt in meta)
+        c_Dp = tuple(mt[4] for mt in meta)
+    else:
+        c_D = tuple(mt[2][:axis] + (mt[4],) + mt[2][axis + 1:] for mt in meta)
+        c_Dp = np.prod(c_D, axis=1, dtype=np.int64).tolist() if len(c_D) > 0 else ()
+
+    c_slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(c_Dp), c_Dp, c_D))
+    c_struct = a_struct._replace(t=c_t, D=c_D, size=sum(c_Dp))
+
+    if a_isdiag:
+        meta = tuple((sln.slcs[0], Dn[0], sla, Da[0], tm) for sln, Dn, (_, sla, Da, tm, _) in zip(c_slices, c_D, meta))
+        ndim, axis = 1, 0
+    else:
+        meta = tuple((sln.slcs[0], Dn, sla, Da, tm) for sln, Dn, (_, sla, Da, tm, _) in zip(c_slices, c_D, meta))
+        ndim = len(a_struct.s)
+
+    return meta, c_struct, c_slices, axis, ndim
+
+
 def _mask_nonzero(mask):
     if all(all(v) for v in mask.values()):
         return None
@@ -525,7 +557,7 @@ def _mask_nonzero(mask):
     return mask
 
 
-def _mask_tensor_intersect_legs(a, b, axa, axb):
+def _mask_tensors_leg_intersection(a, b, axa, axb):
     """ masks to get the intersecting parts of legs from two tensors as single masks """
     msk_a, msk_b = [], []
     tla, Dla, _= _get_tD_legs(a.struct)
@@ -535,6 +567,23 @@ def _mask_tensor_intersect_legs(a, b, axa, axb):
         msk_a.append(_mask_nonzero(ma))
         msk_b.append(_mask_nonzero(mb))
     return msk_a, msk_b
+
+
+def _mask_tensors_leg_union(a, b):
+    """ masks to get the intersecting parts of legs from two tensors as single masks """
+    msk_a, msk_a_tD = [], []
+    msk_b, msk_b_tD = [], []
+    hfs = []
+    tla, Dla, _= _get_tD_legs(a.struct)
+    tlb, Dlb, _= _get_tD_legs(b.struct)
+    for n in range(a.ndim_n):
+        ma, mb, hf = _union_hfs(a.config, (tla[n], tlb[n]), (Dla[n], Dlb[n]), (a.hfs[n], b.hfs[n]))
+        msk_a_tD.append({k: len(v) for k, v in ma.items()})
+        msk_b_tD.append({k: len(v) for k, v in mb.items()})
+        msk_a.append(_mask_nonzero(ma))
+        msk_b.append(_mask_nonzero(mb))
+        hfs.append(hf)
+    return msk_a, msk_a_tD, msk_b, msk_b_tD, hfs
 
 
 def _merge_masks_embed(config, struct, slices, ms):  # TODO
