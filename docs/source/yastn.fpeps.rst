@@ -2,7 +2,7 @@
 fPEPS
 #####
 
-Abelian-symmetric fermionic projected entangled-pairs states and related algorithms.
+Fermionic projected entangled-pairs states and related algorithms.
 Abelian-symmetric tensor algebra is provided by :doc:`YASTN<index>`.
 
 .. automodule:: yastn.tn.fpeps
@@ -32,7 +32,9 @@ API: yastn.tn.fpeps
    fpeps/lattice_geometry
    fpeps/initialization
    fpeps/evolution
-   fpeps/environments.rst
+   fpeps/environment_ntu
+   fpeps/environment_ctm
+   fpeps/environment_mps
 
 *************************
 Examples: basics of usage
@@ -45,3 +47,5 @@ Examples: basics of usage
 
    examples/fpeps/geometry
    examples/fpeps/ctmrg
+   quickstart/hubbard_purification
+   quickstart/kibble_zurek

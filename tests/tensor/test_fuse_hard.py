@@ -14,90 +14,88 @@
 # ==============================================================================
 """ Test elements of fuse_legs(... mode='hard') """
 import numpy as np
-import unittest
 import pytest
 import yastn
-try:
-    from .configs import config_U1, config_dense, config_Z2xU1
-except ImportError:
-    from configs import config_U1, config_Z2xU1, config_dense
 
 tol = 1e-10  #pylint: disable=invalid-name
 
-
-class FusionSyntax(unittest.TestCase):
-
-    def test_fuse_hard(self):
-        # define a rank-5 U1-symmetric tensor
-        a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1,),
-                      t=((0, 1), (0, 1), (0, 1), (0, 1), (0, 1)),
-                      D=((1, 2), (3, 4), (5, 6), (7, 8), (9, 10)))
-
-        # this tensor has 10 non-zero blocks, the largest one being
-        # of shape (2, 4, 6, 8, 9) with total number of 3456 elements
-        a.print_blocks_shape()
-        #
-        # charges         shape
-        # (0, 0, 0, 0, 0) (1, 3, 5, 7, 9)
-        # (0, 0, 0, 1, 1) (1, 3, 5, 8, 10)
-        # (0, 0, 1, 1, 0) (1, 3, 6, 8, 9)
-        # (0, 1, 0, 1, 0) (1, 4, 5, 8, 9)
-        # (1, 0, 0, 0, 1) (2, 3, 5, 7, 10)
-        # (1, 0, 1, 0, 0) (2, 3, 6, 7, 9)
-        # (1, 0, 1, 1, 1) (2, 3, 6, 8, 10)
-        # (1, 1, 0, 0, 0) (2, 4, 5, 7, 9)
-        # (1, 1, 0, 1, 1) (2, 4, 5, 8, 10)
-        # (1, 1, 1, 1, 0) (2, 4, 6, 8, 9)
-
-        # Lets fuse last three legs of the tensor a into a new leg
-        b = a.fuse_legs(axes=(0, 1, (2, 3, 4)), mode='hard')
-
-        # resulting tensor has just four non-zero blocks, with the largest
-        # one holding 9176 elements
-        b.print_blocks_shape()
-        #
-        # (0, 0, 0) (1, 3, 1147)
-        # (0, 1, -1) (1, 4, 360)
-        # (1, 0, 1) (2, 3, 1208)
-        # (1, 1, 0) (2, 4, 1147)
-
-        # We can also fuse more than a single group of indices.
-        # Their order can be permuted as well
-        c0 = a.fuse_legs(axes=(0, (3, 4), (2, 1)), mode='hard')
-
-        # Fusion can be applied successively - fusing fused spaces together.
-        # This results in a rank-2 tensor, equivalent to block-sparse matrix
-        c1 = c0.fuse_legs(axes=((0, 1), 2), mode='hard')
-
-        # Resulting matrix has three blocks and the largest block holds 13604 elements
-        assert c1.s == (-1, 1)
-        c1.print_blocks_shape()
-        #
-        # (0, 0) (283, 15)
-        # (1, 1) (358, 38)
-        # (2, 2) (144, 24)
-
-        # The fusion can be simply reverted, proceeding step-by-step in reverse
-        # order of the applied fusions.
-        # NOTE: Unfusing an index *does not* permute the resulting indices into
-        #       into their original order
-        #
-        # fusion step 1: 0 1 2 3 4 -> permute -> 0 3 4 2 1 -> fuse -> 0 (3 4) (2 1) = 0 1 2
-        # fusion step 2: 0 1 2 -> fuse -> (0 1) 2 = 0 1
-        #
-        # unfuse step 2: 0 1 -> unfuse -> (0 1) 1->2 = 0 1 2
-        c0_0 = c1.unfuse_legs(axes=0)
-        assert yastn.norm(c0_0 - c0) < tol
-
-        # unfuse step 1: 0 1 2 -> unfuse -> 0 (3->1 4->2) (2->3 1->4) = 0 1 2 3 4
-        #
-        # Hence, to retrieve original tensor, we have to permute its indices
-        a_0 = c0_0.unfuse_legs(axes=(1, 2))
-        a_0 = a_0.transpose(axes=(0, 4, 3, 1, 2))
-        assert yastn.norm(a - a_0) < tol
+torch_test = pytest.mark.skipif("'torch' not in config.getoption('--backend')",
+                                reason="Uses torch.autograd.gradcheck().")
 
 
-def test_hard_corner_cases():
+def test_fuse_hard(config_kwargs):
+    # define a rank-5 U1-symmetric tensor
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1,),
+                    t=((0, 1), (0, 1), (0, 1), (0, 1), (0, 1)),
+                    D=((1, 2), (3, 4), (5, 6), (7, 8), (9, 10)))
+
+    # this tensor has 10 non-zero blocks, the largest one being
+    # of shape (2, 4, 6, 8, 9) with total number of 3456 elements
+    a.print_blocks_shape()
+    #
+    # charges         shape
+    # (0, 0, 0, 0, 0) (1, 3, 5, 7, 9)
+    # (0, 0, 0, 1, 1) (1, 3, 5, 8, 10)
+    # (0, 0, 1, 1, 0) (1, 3, 6, 8, 9)
+    # (0, 1, 0, 1, 0) (1, 4, 5, 8, 9)
+    # (1, 0, 0, 0, 1) (2, 3, 5, 7, 10)
+    # (1, 0, 1, 0, 0) (2, 3, 6, 7, 9)
+    # (1, 0, 1, 1, 1) (2, 3, 6, 8, 10)
+    # (1, 1, 0, 0, 0) (2, 4, 5, 7, 9)
+    # (1, 1, 0, 1, 1) (2, 4, 5, 8, 10)
+    # (1, 1, 1, 1, 0) (2, 4, 6, 8, 9)
+
+    # Lets fuse last three legs of the tensor a into a new leg
+    b = a.fuse_legs(axes=(0, 1, (2, 3, 4)), mode='hard')
+
+    # Resulting tensor has just four non-zero blocks, with the largest
+    # one holding 9176 elements
+    b.print_blocks_shape()
+    #
+    # (0, 0, 0) (1, 3, 1147)
+    # (0, 1, -1) (1, 4, 360)
+    # (1, 0, 1) (2, 3, 1208)
+    # (1, 1, 0) (2, 4, 1147)
+
+    # We can also fuse more than a single group of indices.
+    # Their order can be permuted as well
+    c0 = a.fuse_legs(axes=(0, (3, 4), (2, 1)), mode='hard')
+
+    # Fusion can be applied successively - fusing fused spaces together.
+    # This results in a rank-2 tensor, equivalent to block-sparse matrix
+    c1 = c0.fuse_legs(axes=((0, 1), 2), mode='hard')
+
+    # Resulting matrix has three blocks and the largest block holds 13604 elements
+    assert c1.s == (-1, 1)
+    c1.print_blocks_shape()
+    #
+    # (0, 0) (283, 15)
+    # (1, 1) (358, 38)
+    # (2, 2) (144, 24)
+
+    # The fusion can be simply reverted, proceeding step-by-step in reverse
+    # order of the applied fusions.
+    # NOTE: Unfusing an index *does not* permute the resulting indices into
+    #       into their original order
+    #
+    # fusion step 1: 0 1 2 3 4 -> permute -> 0 3 4 2 1 -> fuse -> 0 (3 4) (2 1) = 0 1 2
+    # fusion step 2: 0 1 2 -> fuse -> (0 1) 2 = 0 1
+    #
+    # unfuse step 2: 0 1 -> unfuse -> (0 1) 1->2 = 0 1 2
+    c0_0 = c1.unfuse_legs(axes=0)
+    assert yastn.norm(c0_0 - c0) < 1e-12
+
+    # unfuse step 1: 0 1 2 -> unfuse -> 0 (3->1 4->2) (2->3 1->4) = 0 1 2 3 4
+    #
+    # Hence, to retrieve original tensor, we have to permute its indices
+    a_0 = c0_0.unfuse_legs(axes=(1, 2))
+    a_0 = a_0.transpose(axes=(0, 4, 3, 1, 2))
+    assert yastn.norm(a - a_0) < 1e-12
+
+
+def test_hard_corner_cases(config_kwargs):
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.Tensor(config=config_U1, s=(-1, 1, 1, -1))
     b = a.fuse_legs(axes=((0, 1, 2), 3), mode='hard')
     c = b.unfuse_legs(axes=0)
@@ -118,12 +116,46 @@ def test_hard_corner_cases():
     assert (k - m).norm() < tol
     assert (k - l).norm() < tol
 
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match="Empty axis in axes="):
         a.fuse_legs(axes=((0, 1), (2, 3), ()))
-        # Empty axis in axes=((0, 1), (2, 3), ())
+        # Empty axis in axes=((0, 1), (2, 3), ()). To add a new dim-1 leg, use add_leg().
 
 
-def test_hard_split():
+def test_hard_empty_axis(config_kwargs):
+    """ testing fuse_hard with restriction of empty-axis lifted. """
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    a = yastn.rand(config=config_U1, s=(1, 1, -1, -1),
+                    t=((0, 1), (0, 1), (0, 1), (0, 1)),
+                    D=((1, 2), (3, 4), (5, 6), (7, 8)))
+    #
+    af1 = yastn.tensor._merging._fuse_legs_hard(a, axes=((0,), (1,), (2,), (3,), ()), order=(0, 1, 2, 3))
+    al1 = a.add_leg(s=-1, t=(0,))
+    assert af1.norm() > 1
+    assert (af1 - al1).norm() < tol  # empty tuple in axes is equivalent to adding a new dim-1 leg.
+    assert af1.s == (1, 1, -1, -1, -1)  # signature of a new leg is -1 if not first leg
+
+    af1u = af1.unfuse_legs(axes=4)
+    assert af1u.ndim == af1.ndim  # unfuse_leg does not remove a new dim-1 leg
+    assert (af1u - af1).norm() < tol
+
+    af2 = yastn.tensor._merging._fuse_legs_hard(af1, axes=((), (0,), (1,), (2,), (3,), (4,)), order=(0, 1, 2, 3, 4))
+    assert af2.s == (1, 1, 1, -1, -1, -1)   # signature of a new leg is 1 for first leg
+    al2 = al1.add_leg(axis=0, s=1, t=(0,))
+    assert af2.norm() > 1
+    assert (af2 - al2).norm() < tol
+
+    af3 = yastn.tensor._merging._fuse_legs_hard(a, axes=((), (0, 1), (), (2, 3), ()), order=(0, 1, 2, 3))
+    assert af3.s == (1, 1, -1, -1, -1)
+    al3 = al2.add_leg(axis=3, s=-1, t=(0,))
+    al3f = al3.fuse_legs(axes=(0, (1, 2), 3, (4, 5), 6))
+    assert (af3 - al3f).norm() < tol
+    af3u = af3.unfuse_legs(axes=(1, 3))
+    assert (af3u - al3).norm() < tol
+
+
+def test_hard_split(config_kwargs):
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1),
                   t=((0, 1), (0, 1), (0, 1), (0, 1), (0, 1)),
                   D=((1, 2), (3, 4), (5, 6), (7, 8), (9, 10)))
@@ -144,7 +176,7 @@ def test_hard_split():
     a3 = yastn.tensordot(USf, Vf, axes=(1, 0))
     assert yastn.norm(af - a3) < tol  # == 0.0
     a3 = a3.unfuse_legs(axes=0)
-    a3 = a3.unfuse_legs(axes=(1, 2)).move_leg(source=2, destination=1)
+    a3 = a3.unfuse_legs(axes=(1, 2)).moveaxis(source=2, destination=1)
     assert yastn.norm(a - a3) < tol  # == 0.0
 
     Qf, Rf = yastn.linalg.qr(af, axes=(0, 1))
@@ -164,7 +196,8 @@ def test_hard_split():
     assert yastn.norm(aH2 - aH) < tol  # == 0.0
 
 
-def test_hard_transpose():
+def test_hard_transpose(config_kwargs):
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
                   t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
                   D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
@@ -179,16 +212,17 @@ def test_hard_transpose():
     c = c.unfuse_legs(axes=(1, 3))
     assert c.get_shape() == (13, 9, 11, 7, 3, 5)
 
-    c = b.move_leg(source=1, destination=2)
+    c = b.moveaxis(source=1, destination=2)
     assert c.get_shape() == (15, 99, 7, 13)
 
     c = c.unfuse_legs(axes=(1, 0))
     assert c.get_shape() == (3, 5, 9, 11, 7, 13)
 
 
-def test_hard_dot():
+def test_hard_dot(config_kwargs):
     """ integration of hard fusion with dot """
     # Z2 x U1
+    config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
     legs_a = [yastn.Leg(config_Z2xU1, s=-1, t=[(0, -1), (0, 1), (1, -1), (1, 1)], D=(1, 2, 2, 4)),
             yastn.Leg(config_Z2xU1, s=1, t=[(0, -1), (0, 1), (1, -1), (1, 1)], D= (9, 4, 3, 2)),
             yastn.Leg(config_Z2xU1, s=1, t=[(0, 0), (0, 2), (1, 0), (1, 2)], D=(7, 8, 9, 10)),
@@ -220,6 +254,7 @@ def test_hard_dot():
     assert yastn.norm(a - aaa) < tol
 
     # U1
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     legs_a = [yastn.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(1, 2, 3)),
               yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6)),
               yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9)),
@@ -245,7 +280,8 @@ def test_hard_dot():
     assert yastn.norm(b - bbb) < tol
 
 
-def test_hard_dot_sparse():
+def test_hard_dot_sparse(config_kwargs):
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.Tensor(config=config_U1, s=(-1, 1, 1, -1), n=-2)
     a.set_block(ts=(2, 1, 0, 1), Ds=(2, 1, 5, 3), val='rand')
     a.set_block(ts=(1, 1, -1, 1), Ds=(1, 1, 6, 3), val='rand')
@@ -305,7 +341,8 @@ def _test_fuse_mix(a):
     assert yastn.norm(fhha - hha) < tol
 
 
-def test_fuse_mix():
+def test_fuse_mix(config_kwargs):
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.randR(config=config_U1, s=(1, -1, 1, 1, -1, 1),
                     t=[(-3, -2), (-2, -1), (-1, 0), (0, 1), (1, 2), (2, 3)],
                     D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
@@ -317,7 +354,7 @@ def test_fuse_mix():
     _test_fuse_mix(a)
 
 
-def test_auxliary_merging_functions():
+def test_auxliary_merging_functions(config_kwargs):
     mf1 = (1,)
     nt = yastn.tensor._merging._mf_to_ntree(mf1)
     mfx = yastn.tensor._merging._ntree_to_mf(nt)
@@ -347,8 +384,9 @@ def test_auxliary_merging_functions():
     assert (new_mf1, new_mf2, new_mf3) == new_mfs
 
 
-def test_fuse_hard_dense():
+def test_fuse_hard_dense(config_kwargs):
     # for dense
+    config_dense = yastn.make_config(sym='none', **config_kwargs)
     a = yastn.rand(config=config_dense, s=(-1, 1, 1, -1), D=(6, 2, 6, 2), dtype='float64')
     af = yastn.fuse_legs(a, axes=((1, 2), (3, 0)), mode='hard')
     tra = yastn.trace(a, axes=((1, 2), (3, 0)))
@@ -356,10 +394,11 @@ def test_fuse_hard_dense():
     assert yastn.norm(tra - traf) < tol
 
 
-@pytest.mark.skipif(config_dense.backend.BACKEND_ID=="numpy", reason="numpy backend does not support autograd")
-def test_transpose_and_merge_backward():
+@torch_test
+def test_transpose_and_merge_backward(config_kwargs):
     import torch
     # U1
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     legs = [yastn.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(1, 2, 3)),
             yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6)),
             yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(3, 8, 9)),
@@ -382,10 +421,11 @@ def test_transpose_and_merge_backward():
     assert test
 
 
-@pytest.mark.skipif(config_dense.backend.BACKEND_ID=="numpy", reason="numpy backend does not support autograd")
-def test_unmerge_backward():
+@torch_test
+def test_unmerge_backward(config_kwargs):
     import torch
     # U1
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     legs = [yastn.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(1, 2, 3)),
             yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6)),
             yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(3, 8, 9)),
@@ -410,7 +450,8 @@ def test_unmerge_backward():
     assert test
 
 
-def test_leg_outer_product():
+def test_leg_product(config_kwargs):
+    config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
     l0 = yastn.Leg(config_Z2xU1, s=-1, t=[(0, -1), (0, 1), (1, -1), (1, 1)], D=(1, 2, 2, 4))
     l1 = yastn.Leg(config_Z2xU1, s=1, t=[(0, 0), (0, 2), (1, 0), (1, 2)], D=(7, 8, 9, 10))
     l2 = yastn.Leg(config_Z2xU1, s=1, t=[(0, -1), (0, 1), (1, -1), (1, 1)], D= (9, 4, 3, 2))
@@ -419,14 +460,14 @@ def test_leg_outer_product():
     a = yastn.rand(config=config_Z2xU1, legs=[l0, l1, l2, l3])
 
     fa = yastn.fuse_legs(a, axes=((0, 1), (2, 3)), mode='hard')
-    pfa0 = yastn.leg_outer_product(l0, l1)
+    pfa0 = yastn.leg_product(l0, l1)
     lfa0 = fa.get_legs(axes=0)
-    pfa1 = yastn.leg_outer_product(l2, l3)
+    pfa1 = yastn.leg_product(l2, l3)
     lfa1 = fa.get_legs(axes=1)
     assert (pfa0, pfa1) == (lfa0, lfa1)
 
     ffa = yastn.fuse_legs(fa, axes=[(0, 1)], mode='hard')
-    pffa = yastn.leg_outer_product(lfa0, lfa1, t_allowed=[(0, 0)])
+    pffa = yastn.leg_product(lfa0, lfa1, t_allowed=[(0, 0)])
     lffa = ffa.get_legs(axes=0)
     assert pffa == lffa
     assert pffa.is_fused()
@@ -439,7 +480,8 @@ def test_leg_outer_product():
     assert not ul0.is_fused()
 
 
-def test_initialize_eye():
+def test_initialize_eye(config_kwargs):
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     legs = [yastn.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(1, 2, 3)),
             yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6)),
             yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(3, 8, 9)),
@@ -476,16 +518,5 @@ def test_initialize_eye():
 
 
 if __name__ == '__main__':
-    unittest.main()
-    test_leg_outer_product()
-    test_fuse_hard_dense()
-    test_hard_split()
-    test_hard_transpose()
-    test_hard_dot()
-    test_hard_dot_sparse()
-    test_fuse_mix()
-    test_auxliary_merging_functions()
-    test_initialize_eye()
-    test_hard_corner_cases()
-    # test_transpose_and_merge_backward()
-    # test_unmerge_backward()
+    # pytest.main([__file__, "-vs", "--durations=0"])
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])

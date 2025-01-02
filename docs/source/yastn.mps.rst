@@ -51,4 +51,5 @@ Examples: basics of usage
    examples/mps/build
    examples/mps/measurement
    examples/mps/algebra
-   examples/mps/algorithms
+   examples/mps/algorithms_dmrg
+   examples/mps/algorithms_tdvp

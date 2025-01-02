@@ -16,16 +16,13 @@
 import numpy as np
 import pytest
 import yastn
-try:
-    from .configs import config_dense, config_U1, config_Z2xU1
-except ImportError:
-    from configs import config_dense, config_U1, config_Z2xU1
 
 tol = 1e-12  #pylint: disable=invalid-name
 
 
-def test_U1():
+def test_U1(config_kwargs):
     """ initialization of tensor with U1 symmetry """
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     # 3-dim tensor
     a = yastn.Tensor(config=config_U1, s=(-1, 1, 1))  # initialize empty tensor
     assert a.get_shape() == (0, 0, 0)
@@ -74,8 +71,9 @@ def test_U1():
     assert np.linalg.norm(np.diag(np.diag(npa)) - npa) < tol  # == 0.0
 
 
-def test_Z2xU1():
+def test_Z2xU1(config_kwargs):
     """ initialization of tensor with more complicated symmetry indexed by 2 numbers"""
+    config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
     # 3-dim tensor
     legs = [yastn.Leg(config_Z2xU1, s=-1, t=[(0, 0), (1, 0), (0, 2), (1, 2)], D=[1, 2, 2, 4]),
             yastn.Leg(config_Z2xU1, s=1, t=[(0, -2), (0, 2)], D=[1, 2]),
@@ -135,8 +133,9 @@ def test_Z2xU1():
     assert a.is_consistent()
 
 
-def test_dense():
+def test_dense(config_kwargs):
     """ initialization of dense tensor with no symmetry """
+    config_dense = yastn.make_config(sym='none', **config_kwargs)
     # 3-dim tensor
     a = yastn.Tensor(config=config_dense, s=(-1, 1, 1))  # initialize empty tensor
     a.set_block(Ds=(4, 5, 6), val='rand')  # add the only possible block for dense tensor
@@ -172,9 +171,10 @@ def test_dense():
     assert np.linalg.norm(np.diag(np.diag(npa)) - npa) < tol  # == 0.0
 
 
-def test_set_block_exceptions():
+def test_set_block_exceptions(config_kwargs):
     """ test raise YaseError by set_block()"""
     # 3-dim tensor
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     leg = yastn.Leg(config_U1, s=1, t=(0, 1), D=(2, 3))
     a = yastn.ones(config=config_U1, legs=[leg, leg, leg.conj()])
     b = a.copy()
@@ -218,7 +218,4 @@ def test_set_block_exceptions():
 
 
 if __name__ == '__main__':
-    test_U1()
-    test_Z2xU1()
-    test_dense()
-    test_set_block_exceptions()
+    pytest.main([__file__, "-vs", "--durations=0"])

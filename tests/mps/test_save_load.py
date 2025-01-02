@@ -14,40 +14,21 @@
 # ==============================================================================
 """ basic procedures of single Mps """
 import os
-import warnings
 import pytest
 import yastn
 import yastn.tn.mps as mps
 
-try:
-    import h5py
-except ImportError:
-    warnings.warn("h5py module not available", ImportWarning)
-try:
-    from .configs import config_dense as cfg
-except ImportError:
-    from configs import config_dense as cfg
-# pytest modifies cfg to inject different backends and devices during tests
 
-
-@pytest.mark.parametrize('kwargs', [{'sym': 'dense', 'config': cfg},
-                                    {'sym': 'Z3', 'config': cfg},
-                                    {'sym': 'U1', 'config': cfg}])
-def test_save_load_mps_hdf5(kwargs):
-    save_load_mps_hdf5(**kwargs)
-
-def save_load_mps_hdf5(sym='dense', config=None, tol=1e-12):
+@pytest.mark.parametrize('sym', ['dense', 'Z3', 'U1'])
+def test_save_load_mps_hdf5(config_kwargs, sym, tol=1e-12):
     """
     Initialize random MPS and checks saving/loading to/from HDF5 file.
     """
-    opts_config = {} if config is None else \
-                  {'backend': config.backend,
-                   'default_device': config.default_device}
-    # pytest uses config to inject various backends and devices for testing
+    h5py = pytest.importorskip('h5py')
     #
     # generate random mps with 3-dimensional local spaces
     #
-    ops = yastn.operators.Spin1(sym=sym, **opts_config)
+    ops = yastn.operators.Spin1(sym=sym, **config_kwargs)
     I = mps.product_mpo(ops.I(), N=31)
     psi = 2 * mps.random_mps(I, D_total=25)  # adding extra factor
     #
@@ -89,24 +70,15 @@ def save_load_mps_hdf5(sym='dense', config=None, tol=1e-12):
     assert (psi - phi).norm() < tol * psi.norm()
 
 
-@pytest.mark.parametrize('kwargs', [{'sym': 'dense', 'config': cfg},
-                                    {'sym': 'Z3', 'config': cfg},
-                                    {'sym': 'U1', 'config': cfg}])
-def test_save_load_mps_dict(kwargs):
-    save_load_mps_dict(**kwargs)
-
-def save_load_mps_dict(sym='dense', config=None, tol=1e-12):
+@pytest.mark.parametrize('sym', ['dense', 'Z3', 'U1'])
+def test_save_load_mps_dict(config_kwargs, sym, tol=1e-12):
     """
     Initialize random MPS and checks saving/loading to/from npy file.
     """
-    opts_config = {} if config is None else \
-                  {'backend': config.backend,
-                   'default_device': config.default_device}
-    # pytest uses config to inject various backends and devices for testing
     #
     # generate random mps with 3-dimensional local spaces
     #
-    ops = yastn.operators.Spin1(sym=sym, **opts_config)
+    ops = yastn.operators.Spin1(sym=sym, **config_kwargs)
     I = mps.product_mpo(ops.I(), N=31)
     psi = -0.5 * mps.random_mps(I, D_total=25, dtype='complex128')
     #
@@ -134,7 +106,5 @@ def save_load_mps_dict(sym='dense', config=None, tol=1e-12):
     assert (psi - phi).norm() < tol * psi.norm()
 
 
-if __name__ == "__main__":
-    for sym in ['dense', 'Z3', 'U1']:
-        save_load_mps_hdf5(sym=sym)
-        save_load_mps_dict(sym=sym)
+if __name__ == '__main__':
+    pytest.main([__file__, "-vs", "--durations=0"])

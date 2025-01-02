@@ -16,15 +16,12 @@
 import numpy as np
 import pytest
 import yastn
-try:
-    from .configs import config_U1
-except ImportError:
-    from configs import config_U1
 
 tol = 1e-10  #pylint: disable=invalid-name
 
 
-def test_fuse():
+def test_fuse(config_kwargs):
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1,),
                   t=((0, 1), (0, 1), (0, 1), (0, 1), (0, 1)),
                   D=((1, 2), (3, 4), (5, 6), (7, 8), (9, 10)))
@@ -32,11 +29,12 @@ def test_fuse():
     c = b.fuse_legs(axes=(1, (0, 2)), mode='meta')
     c = c.unfuse_legs(axes=1)
     c = c.unfuse_legs(axes=2)
-    d = c.move_leg(source=1, destination=0)
+    d = c.moveaxis(source=1, destination=0)
     assert yastn.norm(a - d) < tol  # == 0.0
 
 
-def test_fuse_split():
+def test_fuse_split(config_kwargs):
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1,),
                   t=((0, 1), (0, 1), (0, 1), (0, 1), (0, 1)),
                   D=((1, 2), (3, 4), (5, 6), (7, 8), (9, 10)))
@@ -57,7 +55,7 @@ def test_fuse_split():
     a3 = yastn.tensordot(USf, Vf, axes=(1, 0))
     assert yastn.norm(af - a3) < tol  # == 0.0
     a3 = a3.unfuse_legs(axes=0)
-    a3 = a3.unfuse_legs(axes=(1, 2)).move_leg(source=2, destination=1)
+    a3 = a3.unfuse_legs(axes=(1, 2)).moveaxis(source=2, destination=1)
     assert yastn.norm(a - a3) < tol  # == 0.0
 
     Qf, Rf = yastn.linalg.qr(af, axes=(0, 1))
@@ -77,7 +75,8 @@ def test_fuse_split():
     assert yastn.norm(aH2 - aH) < tol  # == 0.0
 
 
-def test_fuse_transpose():
+def test_fuse_transpose(config_kwargs):
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
                   t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
                   D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
@@ -92,14 +91,15 @@ def test_fuse_transpose():
     fc = fc.unfuse_legs(axes=(1, 3))
     assert fc.get_shape() == (13, 9, 11, 7, 3, 5)
 
-    fc = fa.move_leg(source=1, destination=2)
+    fc = fa.moveaxis(source=1, destination=2)
     assert fc.get_shape() == (15, 99, 7, 13)
 
     c = fc.unfuse_legs(axes=(1, 0))
     assert c.get_shape() == (3, 5, 9, 11, 7, 13)
 
 
-def test_get_shapes():
+def test_get_shapes(config_kwargs):
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
                   t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
                   D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
@@ -138,7 +138,8 @@ def test_get_shapes():
     assert b.get_shape() == (3, 5, 7, 9, 11, 13)
 
 
-def test_fuse_get_legs():
+def test_fuse_get_legs(config_kwargs):
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
                   t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
                   D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
@@ -165,7 +166,8 @@ def test_fuse_get_legs():
     assert yastn.norm(r1 - r2) < tol  # == 0.0
 
 
-def test_fuse_legs_exceptions():
+def test_fuse_legs_exceptions(config_kwargs):
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1,),
                   t=((0, 1), (0, 1), (0, 1), (0, 1), (0, 1)),
                   D=((1, 2), (3, 4), (5, 6), (7, 8), (9, 10)))
@@ -182,9 +184,4 @@ def test_fuse_legs_exceptions():
 
 
 if __name__ == '__main__':
-    test_fuse()
-    test_fuse_split()
-    test_fuse_transpose()
-    test_get_shapes()
-    test_fuse_get_legs()
-    test_fuse_legs_exceptions()
+    pytest.main([__file__, "-vs", "--durations=0"])

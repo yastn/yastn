@@ -26,7 +26,7 @@ def __add__(a, b) -> yastn.Tensor:
     """
     Add two tensors, use: :math:`a + b`.
 
-    Signatures and total charges should match.
+    Signatures and total charges of two tensors should match.
     """
     _test_can_be_combined(a, b)
     aA, bA, hfs, meta, struct, slices = _addition_meta(a, b)
@@ -38,7 +38,7 @@ def __sub__(a, b) -> yastn.Tensor:
     """
     Subtract two tensors, use: :math:`a - b`.
 
-    Both signatures and total charges should match.
+    Signatures and total charges of two tensors should match.
     """
     _test_can_be_combined(a, b)
     aA, bA, hfs, meta, struct, slices = _addition_meta(a, b)
@@ -138,21 +138,21 @@ def _addition_meta(a, b):
 
 def allclose(a, b, rtol=1e-13, atol=1e-13) -> bool:
     """
-    Check if a and b are identical within a desired tolerance.
-    To be True, all tensors' blocks and merge history have to be identical.
-    If this condition is satisfied, execute the allclose function
-    of the backend to compare tensors’ data.
+    Check if `a` and `b` are identical within a desired tolerance.
+    To be :code:`True`, all tensors' blocks and merge history have to be identical.
+    If this condition is satisfied, execute :code:`backend.allclose` function
+    to compare tensors’ data.
 
-
-    Note that if two tenors differ by zero blocks, this function returns False.
+    Note that if two tenors differ by zero blocks, the function returns :code:`False`.
     To resolve such differences, use :code:`(a - b).norm() < tol`
 
     Parameters
     ----------
     a, b: yastn.Tensor
+        Tensor for comparison.
 
     rtol, atol: float
-        desired relative and absolute precision.
+        Desired relative and absolute precision.
     """
     if a.struct != b.struct or a.slices != b.slices or a.hfs != b.hfs or a.mfs != b.mfs:
         return False
@@ -162,7 +162,7 @@ def allclose(a, b, rtol=1e-13, atol=1e-13) -> bool:
 def __lt__(a, number) -> yastn.Tensor[bool]:
     """
     Logical tensor with elements less-than a number (if it makes sense for backend data tensors),
-    use: `tensor < number`
+    use: `mask = tensor < number`
 
     Intended for diagonal tensor to be applied as a truncation mask.
     """
@@ -173,7 +173,7 @@ def __lt__(a, number) -> yastn.Tensor[bool]:
 def __gt__(a, number) -> yastn.Tensor[bool]:
     """
     Logical tensor with elements greater-than a number (if it makes sense for backend data tensors),
-    use: `tensor > number`
+    use: `mask = tensor > number`
 
     Intended for diagonal tensor to be applied as a truncation mask.
     """
@@ -184,7 +184,7 @@ def __gt__(a, number) -> yastn.Tensor[bool]:
 def __le__(a, number) -> yastn.Tensor[bool]:
     """
     Logical tensor with elements less-than-or-equal-to a number (if it makes sense for backend data tensors),
-    use: `tensor <= number`
+    use: `mask = tensor <= number`
 
     Intended for diagonal tensor to be applied as a truncation mask.
     """
@@ -195,7 +195,7 @@ def __le__(a, number) -> yastn.Tensor[bool]:
 def __ge__(a, number) -> yastn.Tensor[bool]:
     """
     Logical tensor with elements greater-than-or-equal-to a number (if it makes sense for backend data tensors),
-    use: `tensor >= number`
+    use: `mask = tensor >= number`
 
     Intended for diagonal tensor to be applied as a truncation mask.
     """
@@ -217,7 +217,7 @@ def __rmul__(a, number) -> yastn.Tensor:
 
 
 def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
-    """ This is to circumvent problems with np.float64 * Mps. """
+    """ This is to circumvent problems with `np.float64 * Mps`. """
     if ufunc.__name__ == 'multiply':
         lhs, rhs = inputs
         return rhs.__mul__(lhs)
@@ -261,8 +261,8 @@ def real(a) -> yastn.Tensor:
     Return tensor with imaginary part set to zero.
 
     .. note::
-        Follows the behavior of the backend.real()
-        when it comes to creating a new copy of the data or handling dtype.
+        Follows the behavior of the :meth:`backend.real()`
+        when it comes to creating a new copy of the data or handling datatype :code:`dtype`.
     """
     data = a.config.backend.real(a._data)
     return a._replace(data=data)
@@ -273,22 +273,22 @@ def imag(a) -> yastn.Tensor:
     Return tensor with real part set to zero.
 
     .. note::
-        Follows the behavior of the backend.imag()
-        when it comes to creating a new copy of the data or handling dtype.
+        Follows the behavior of the :meth:`backend.imag()`
+        when it comes to creating a new copy of the data or handling datatype :code:`dtype`.
     """
     data = a.config.backend.imag(a._data)
     return a._replace(data=data)
 
 
 def sqrt(a) -> yastn.Tensor:
-    """ Return element-wise sqrt(tensor). """
+    """ Return tensor after applying element-wise square root for each tensor element. """
     data = a.config.backend.sqrt(a._data)
     return a._replace(data=data)
 
 
 def rsqrt(a, cutoff=0) -> yastn.Tensor:
     """
-    Return element-wise 1/sqrt(tensor).
+    Return element-wise operation `1/sqrt(tensor)`.
 
     The tensor elements with absolute value below the cutoff are set to zero.
 
@@ -303,7 +303,7 @@ def rsqrt(a, cutoff=0) -> yastn.Tensor:
 
 def reciprocal(a, cutoff=0) -> yastn.Tensor:
     """
-    Return element-wise 1/tensor.
+    Return element-wise operation `1/tensor`.
 
     The tensor elements with absolute value below the cutoff are set to zero.
 
@@ -318,7 +318,7 @@ def reciprocal(a, cutoff=0) -> yastn.Tensor:
 
 def exp(a, step=1.) -> yastn.Tensor:
     r"""
-    Return element-wise `exp(step * tensor)`.
+    Return element-wise `\exp(step * tensor)`.
 
     .. note::
         This applies only to non-empty blocks of tensor
@@ -329,11 +329,11 @@ def exp(a, step=1.) -> yastn.Tensor:
 
 def bitwise_not(a) -> yastn.Tensor[bool]:
     r"""
-    Return element-wise bit-wise not.
+    Return tensor after applying bitwise not on each tensor element.
 
     .. note::
-        This applies only to non-empty blocks of tensor with tensor data dtype
-        allowing for bitwise operation, i.e. intended for
+        Operation applies only to non-empty blocks of tensor with tensor data dtype
+        that allows for bitwise operation, i.e. intended for
         masks used to truncate tensor legs.
     """
     data = a.config.backend.bitwise_not(a._data)

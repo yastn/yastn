@@ -12,26 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Test yastn.broadcast """
+""" yastn.broadcast() """
 import numpy as np
 import pytest
 import yastn
-try:
-    from .configs import config_dense, config_U1, config_Z2xU1
-except ImportError:
-    from configs import config_dense, config_U1, config_Z2xU1
 
 tol = 1e-12  #pylint: disable=invalid-name
 
 
-def test_broadcast_dense():
+def test_broadcast_dense(config_kwargs):
     """ test broadcast on dense tensors """
     # a is a diagonal tensor to be broadcasted
-    a = yastn.rand(config=config_dense, s=(1, -1), isdiag=True, D=5)
+
+    config = yastn.make_config(sym='dense', **config_kwargs)
+    a = yastn.rand(config=config, s=(1, -1), isdiag=True, D=5)
     a1 = a.diag()
 
     # broadcast on tensor b
-    b = yastn.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 5, 2, 5))
+    b = yastn.rand(config=config, s=(-1, 1, 1, -1), D=(2, 5, 2, 5))
 
     r1 = a.broadcast(b, axes=1)
     r2 = a1.tensordot(b, axes=(1, 1)).transpose((1, 0, 2, 3))
@@ -41,10 +39,10 @@ def test_broadcast_dense():
 
 
     # broadcast with conj
-    a = yastn.randC(config=config_dense, s=(-1, 1), D=(5, 5))
+    a = yastn.randC(config=config, s=(-1, 1), D=(5, 5))
     a = a.diag()  # 5x5 isdiag == True
     a1 = a.diag()  # 5x5 isdiag == False
-    b = yastn.randC(config=config_dense, s=(1, -1, 1, -1), D=(2, 5, 2, 5))
+    b = yastn.randC(config=config, s=(1, -1, 1, -1), D=(2, 5, 2, 5))
 
     r1 = a.conj().broadcast(b, axes=1)
     r2 = a.broadcast(b.conj(), axes=1).conj()
@@ -55,28 +53,30 @@ def test_broadcast_dense():
     assert all(x.is_consistent() for x in [r1, r2, r3, r4, r5])
 
     # broadcast and trace
-    a = yastn.rand(config=config_dense, isdiag=True, D=5)
+    a = yastn.rand(config=config, isdiag=True, D=5)
     a1 = a.diag()  # 5x5 isdiag=False
-    b = yastn.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 5, 3, 5))
+    b = yastn.rand(config=config, s=(-1, 1, 1, -1), D=(2, 5, 3, 5))
     r1 = a1.tensordot(b, axes=((1, 0), (1, 3)))
     r2 = a.tensordot(b, axes=((0, 1), (3, 1)))
     r3 = b.tensordot(a, axes=((1, 3), (1, 0)))
     assert all(yastn.norm(r1 - x) < tol for x in [r2, r3])
 
 
-def test_broadcast_U1():
+def test_broadcast_U1(config_kwargs):
     """ test broadcast on U1 tensors """
-    leg0 = yastn.Leg(config_U1, s=1, t=(-1, 1), D=(7, 8))
-    leg1 = yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(1, 2, 3))
-    leg2 = yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6))
-    leg3 = yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9))
-    leg4 = yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(10, 11, 12))
 
-    a = yastn.rand(config=config_U1, isdiag=True, legs=(leg0, leg0.conj()))
+    config = yastn.make_config(sym='U1', **config_kwargs)
+    leg0 = yastn.Leg(config, s=1, t=(-1, 1), D=(7, 8))
+    leg1 = yastn.Leg(config, s=1, t=(-1, 1, 2), D=(1, 2, 3))
+    leg2 = yastn.Leg(config, s=1, t=(-1, 1, 2), D=(4, 5, 6))
+    leg3 = yastn.Leg(config, s=1, t=(-1, 1, 2), D=(7, 8, 9))
+    leg4 = yastn.Leg(config, s=1, t=(-1, 1, 2), D=(10, 11, 12))
+
+    a = yastn.rand(config=config, isdiag=True, legs=(leg0, leg0.conj()))
     a1 = a.diag()
     assert a.get_shape() == a1.get_shape() == (15, 15)
 
-    b = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg3, leg4.conj()])
+    b = yastn.rand(config=config, legs=[leg1.conj(), leg2, leg3, leg4.conj()])
     assert b.get_shape() == (6, 15, 24, 33)
 
     # broadcast
@@ -87,7 +87,7 @@ def test_broadcast_U1():
     assert all(x.is_consistent() for x in [r1, r2, r3, r4])
     assert all(yastn.norm(r1 - x) < tol for x in [r2, r3, r4])
 
-    c = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg3, leg3.conj()])
+    c = yastn.rand(config=config, legs=[leg1.conj(), leg2, leg3, leg3.conj()])
 
     # broadcast with trace
     r1 = a1.tensordot(c, axes=((0, 1), (3, 2)))
@@ -97,18 +97,19 @@ def test_broadcast_U1():
     assert all(yastn.norm(r1 - x) < tol for x in [r2, r3])
 
 
-def test_broadcast_Z2xU1():
+def test_broadcast_Z2xU1(config_kwargs):
     """ test broadcast on Z2xU1 tensors """
-    leg0a = yastn.Leg(config_Z2xU1, s=1, t=[(0, 0), (0, 2), (1, 0), (1, 2)], D=[6, 3, 9, 6])
-    leg0b = yastn.Leg(config_Z2xU1, s=1, t=[(0, 0), (0, 2), (1, 0), (1, 2), (1, 3)], D=[6, 3, 9, 6, 5])
-    leg0c = yastn.Leg(config_Z2xU1, s=1, t=[(0, 2), (0, 3)], D=[3, 4])
-    leg1 = yastn.Leg(config_Z2xU1, s=1, t=[(0, 0), (0, 2)], D=[2, 3])
-    leg2 = yastn.Leg(config_Z2xU1, s=1, t=[(0, 1), (1, 0), (0, 0), (1, 1)], D=[4, 5, 6, 3])
-    leg3 = yastn.Leg(config_Z2xU1, s=1, t=[(0, 0), (0, 2)], D=[3, 2])
+    config = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
+    leg0a = yastn.Leg(config, s=1, t=[(0, 0), (0, 2), (1, 0), (1, 2)], D=[6, 3, 9, 6])
+    leg0b = yastn.Leg(config, s=1, t=[(0, 0), (0, 2), (1, 0), (1, 2), (1, 3)], D=[6, 3, 9, 6, 5])
+    leg0c = yastn.Leg(config, s=1, t=[(0, 2), (0, 3)], D=[3, 4])
+    leg1 = yastn.Leg(config, s=1, t=[(0, 0), (0, 2)], D=[2, 3])
+    leg2 = yastn.Leg(config, s=1, t=[(0, 1), (1, 0), (0, 0), (1, 1)], D=[4, 5, 6, 3])
+    leg3 = yastn.Leg(config, s=1, t=[(0, 0), (0, 2)], D=[3, 2])
 
-    a = yastn.rand(config=config_Z2xU1, legs=[leg0a.conj(), leg1.conj(), leg2, leg3])
-    b = yastn.eye(config=config_Z2xU1, legs=[leg0b, leg0b.conj()])
-    c = yastn.eye(config=config_Z2xU1, legs=[leg0c, leg0c.conj()])
+    a = yastn.rand(config=config, legs=[leg0a.conj(), leg1.conj(), leg2, leg3])
+    b = yastn.eye(config=config, legs=[leg0b, leg0b.conj()])
+    c = yastn.eye(config=config, legs=[leg0c, leg0c.conj()])
 
     # broadcast
     r1 = b.broadcast(a, axes=0)
@@ -134,11 +135,12 @@ def test_broadcast_Z2xU1():
     assert (r5 - r5p).norm() < tol
 
 
-def test_broadcast_exceptions():
+def test_broadcast_exceptions(config_kwargs):
     """ test broadcast raising errors """
-    a = yastn.rand(config=config_U1, isdiag=True, t=(-1, 1), D=(7, 8))
+    config = yastn.make_config(sym='U1', **config_kwargs)
+    a = yastn.rand(config=config, isdiag=True, t=(-1, 1), D=(7, 8))
     a_nondiag = a.diag()
-    b = yastn.rand(config=config_U1, s=(-1, 1, 1, -1),
+    b = yastn.rand(config=config, s=(-1, 1, 1, -1),
                     t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
                     D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
     with pytest.raises(yastn.YastnError):
@@ -160,7 +162,5 @@ def test_broadcast_exceptions():
 
 
 if __name__ == '__main__':
-    test_broadcast_dense()
-    test_broadcast_U1()
-    test_broadcast_Z2xU1()
-    test_broadcast_exceptions()
+    pytest.main([__file__, "-vs", "--durations=0"])
+

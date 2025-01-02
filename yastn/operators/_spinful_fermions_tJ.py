@@ -38,7 +38,7 @@ class SpinfulFermions_tJ(meta_operators):
         -----
         For 'U1xU1xZ2', the two species (spin-up and spin-down) are treated as indistinguishable.
         In that case, creation and annihilation operators of the two species anti-commute
-        (fermionic statistics is encoded in the Z2 channel).
+        (fermionic statistics is encoded in the Z2 channel of U1xU1xZ2).
         """
         if 'fermionic' not in kwargs and isinstance(kwargs['sym'], str):
             kwargs['fermionic'] = (False, False, True) if kwargs['sym'] == 'U1xU1xZ2' else True
@@ -56,7 +56,7 @@ class SpinfulFermions_tJ(meta_operators):
         self.operators = ('I', 'n', 'c', 'cp')
 
     def space(self) -> yastn.Leg:
-        r""" :class:`yastn.Leg` describing local Hilbert space. """
+        r""" :class:`yastn.Leg` object describing local Hilbert space. """
         if self._sym == 'Z2':  # charges: 0 = |00>; 1 = (|10>, |01>)  |occ_u, occ_d>
             return Leg(self.config, s=1, t=(0, 1), D=(1, 2))
         if self._sym == 'U1':  # charges: 0 = |00>; 1 = (|10>, |01>)
@@ -129,7 +129,7 @@ class SpinfulFermions_tJ(meta_operators):
         return I
 
     def n(self, spin='u'):
-        """ Particle number operator, with spin='u' for spin-up, and 'd' for spin-down. """
+        """ Particle number operator, with :code:`spin='u'` for spin-up, and :code:`spin='d'` for spin-down. """
         n = Tensor(config=self.config, s=self.s)
         if spin == 'u':
             if self._sym == 'Z2':  # charges: 0 = |00>; 1 = (|10>, |01>)  |occ_u, occ_d>
@@ -170,7 +170,7 @@ class SpinfulFermions_tJ(meta_operators):
         return h
 
     def cp(self, spin='u') -> yastn.Tensor:
-        r""" Creation operator, with spin='u' for spin-up, and 'd' for spin-down. """
+        r""" Creation operator, with :code:`spin='u'` for spin-up, and :code:`spin='d'` for spin-down. """
         if spin == 'u':
             if self._sym == 'Z2':  # charges: 0 = |00>; 1 = (|10>, |01>)  |occ_u, occ_d>
                 cp = Tensor(config=self.config, s=self.s, n=1)
@@ -202,7 +202,7 @@ class SpinfulFermions_tJ(meta_operators):
         return cp
 
     def c(self, spin='u') -> yastn.Tensor:
-        r""" Annihilation operator, with spin='u' for spin-up, and 'd' for spin-down. """
+        r""" Annihilation operator, with :code:`spin='u'` for spin-up, and :code:`spin='d'` for spin-down. """
         if spin == 'u':
             if self._sym == 'Z2': # charges: 0 <-> (|00>,); 1 <-> (|10>, |01>)
                 c = Tensor(config=self.config, s=self.s, n=1)

@@ -18,7 +18,7 @@ from typing import NamedTuple
 import logging
 from ._measure import Env
 from ._mps_obc import MpsMpoOBC, MpoPBC
-from ... import initialize, tensor, YastnError
+from ... import ones, eye, YastnError
 
 logger = logging.Logger('compression')
 
@@ -38,8 +38,9 @@ def compression_(psi, target, method='1site',
 
     The outer loop sweeps over ``psi`` updating sites from the first site to the last and back.
     Convergence can be controlled based on overlap and/or Schmidt values (which is a more sensitive measure of convergence).
-    The algorithm performs at most :code:`max_sweeps`. If tolerance measures are provided, it terminates earlier
-    if the convergence criteria are satisfied: change in overlap or Schmidt values is less than the provided tolerance during a single sweep.
+    The algorithm performs at most :code:`max_sweeps`. If tolerance measures are provided,
+    the calculation ends when the convergence criteria are satisfied, e.g., change in overlap or Schmidt values between sweeps
+    is less than the provided tolerance.
 
     Works for
 
@@ -47,7 +48,7 @@ def compression_(psi, target, method='1site',
         * against MPO acting on MPS: ``target`` is a list ``[MPO, MPS]``.
         * against sum of MPOs acting on MPS: ``target`` is a list ``[[MPO, MPO, ...], MPS]``.
         * sum of any of the three above: target is ``[[MPS], [MPO, MPS], [[MPO, MPO, ...], MPS], ...]``
-        * for psi being MPO, where all MPS's above should be replaced with MPO, e.g., ``[MPO, MPO]``
+        * for ``psi`` being itself an MPO, all MPS's above should be replaced with MPO, e.g., ``[MPO, MPO]``
 
     Outputs iterator if :code:`iterator_step` is given, which allows
     inspecting :code:`psi` outside of :code:`compression_` function after every :code:`iterator_step` sweeps.
@@ -60,28 +61,31 @@ def compression_(psi, target, method='1site',
         State resulting from :code:`compression_` is canonized to the first site.
 
     target: MPS or MPO
-        Defines target state. Can be an MPS (e.g. target = MPS or [MPS]),
-        or MPO acting on MPS (target = [MPO, MPS]), sum of MPOs acting on MPS.
-        (e.g, [[MPO, MPO], MPS]), of the sum of the above, e.g., [[MPS], [MPO, MPS], [[MPO, MPO], MPS]].
-        For psi and target being MPO, replace MPS above with MPO.
+        Defines target state. The target can be:
+
+        * an MPS, e.g. target = MPS or [MPS],
+        * an MPO acting on MPS (target = [MPO, MPS]),
+        * sum of MPOs acting on MPS, e.g, [[MPO, MPO], MPS],
+        * or the sum of the above, e.g., [[MPS], [MPO, MPS], [[MPO, MPO], MPS]].
+        * If ``psi`` and ``target`` are MPOs, the MPS in above list is replaced by MPO.
 
     method: str
-        Which optimization variant to use from :code:`'1site'`, :code:`'2site'`
+        Which optimization variant to use from `'1site'`, `'2site'`
 
     overlap_tol: float
         Convergence tolerance for the change of relative overlap in a single sweep.
-        By default is None, in which case overlap convergence is not checked.
+        By default is `None`, in which case overlap convergence is not checked.
 
     Schmidt_tol: float
         Convergence tolerance for the change of Schmidt values on the worst cut/bond in a single sweep.
-        By default is None, in which case Schmidt values convergence is not checked.
+        By default is `None`, in which case Schmidt values convergence is not checked.
 
     max_sweeps: int
         Maximal number of sweeps.
 
     iterator_step: int
         If int, :code:`compression_` returns a generator that would yield output after every iterator_step sweeps.
-        Default is None, in which case  :code:`compression_` sweeps are performed immediately.
+        The default is None, in which case  :code:`compression_` sweeps are performed immediately.
 
     opts_svd: dict
         Options passed to :meth:`yastn.linalg.svd` used to truncate virtual spaces in :code:`method='2site'`.
@@ -206,7 +210,8 @@ def _compression_1site_sweep_(env, Schmidt=None):
     for to in ('last', 'first'):
         for n in bra.sweep(to=to):
             bra.remove_central_()
-            bra.A[n] = env.project_ket_on_bra_1(n)
+            A = env.project_ket_on_bra_1(n)
+            bra.post_1site_(A, n)
             bra.orthogonalize_site_(n, to=to, normalize=True)
             if Schmidt is not None and to == 'first' and n != bra.first:
                 Schmidt[bra.pC] = bra[bra.pC].svd(sU=1, compute_uv=False)
@@ -224,7 +229,7 @@ def _compression_2site_sweep_(env, opts_svd=None, Schmidt=None):
         for n in bra.sweep(to=to, dl=1):
             bd = (n, n + 1)
             AA = env.project_ket_on_bra_2(bd)
-            _disc_weight_bd = bra.unmerge_two_sites_(AA, bd, opts_svd)
+            _disc_weight_bd = bra.post_2site_(AA, bd, opts_svd)
             bra.A[bra.pC] = bra.A[bra.pC] / bra.A[bra.pC].norm()
             max_disc_weight = max(max_disc_weight, _disc_weight_bd)
             if Schmidt is not None and to == 'first':
@@ -238,11 +243,11 @@ def _compression_2site_sweep_(env, opts_svd=None, Schmidt=None):
 
 def zipper(a, b, opts_svd=None, normalize=True, return_discarded=False) -> yastn.tn.mps.MpsMpoOBC:
     """
-    Apply MPO `a` on MPS/MPS `b`, performing svd compression during the sweep.
+    Apply MPO ``a`` on MPS/MPS ``b``, performing SVD compression during the sweep.
 
     Perform canonization of ``b`` to the last site.
-    Next, sweep back attaching elements of ``a`` one at a time
-    and truncating the resulting bond dimensions along the way.
+    Next, sweep back, attaching to it elements of ``a`` one at a time,
+    truncating the resulting bond dimensions along the way.
     The resulting state is canonized to the first site and normalized to unity.
 
     Parameters
@@ -254,12 +259,12 @@ def zipper(a, b, opts_svd=None, normalize=True, return_discarded=False) -> yastn
 
     normalize: bool
         Whether to keep track of the norm of the initial state projected on
-        the direction of the truncated state; default is True, i.e., sets the norm to unity.
+        the direction of the truncated state; default is ``True``, i.e., sets the norm to :math:`1`.
         The individual tensors at the end of the procedure are in a proper canonical form.
 
     return_discarded: bool
         Whether to return the approximation discarded weights together with the resulting MPS/MPO.
-        Default is False, i.e., returns only MPS/MPO.
+        The default is ``False``, i.e., returns only MPS/MPO.
         Discarded weight approximates norm of truncated elements normalized by the norm of the untruncated state.
     """
     if a.N != b.N:
@@ -290,22 +295,21 @@ def _zipper_MpoOBC(a, psi, opts_svd, normalize) -> yastn.tn.mps.MpsMpo:
 
     la, lpsi = a.virtual_leg('last'), psi.virtual_leg('last')
 
-    tmp = initialize.ones(psi.config, legs=[lpsi.conj(), la.conj(), lpsi, la])
+    tmp = ones(psi.config, legs=[lpsi.conj(), la.conj(), lpsi, la])
     tmp = tmp.fuse_legs(axes=(0, 1, (2, 3))).drop_leg_history(axes=2)
 
     discarded2_total = 0.
     for n in psi.sweep(to='first'):
-        tmp = tensor.tensordot(psi[n], tmp, axes=(2, 0))
-
+        tmp = psi[n].tensordot(tmp, axes=(2, 0))
         if psi.nr_phys == 2:
             tmp = tmp.fuse_legs(axes=(0, 1, 3, (4, 2)))
-        tmp = a[n]._attach_23(tmp)
+        tmp = a[n].tensordot(tmp, axes=((2, 3), (2, 1)))
 
-        U, S, V = tensor.svd(tmp, axes=((0, 1), (3, 2)), sU=1, nU=False)
+        U, S, V = tmp.svd(axes=((2, 0), (1, 3)), sU=1, nU=False)
         nSold = S.norm()
 
-        mask = tensor.truncation_mask(S, **opts_svd)
-        nSout = tensor.bitwise_not(mask).apply_mask(S, axes=0).norm()
+        mask = S.truncation_mask(**opts_svd)
+        nSout = mask.bitwise_not().apply_mask(S, axes=0).norm()
         discarded2_local = (nSout / nSold) ** 2
         discarded2_total = discarded2_total + discarded2_local - discarded2_total * discarded2_local
 
@@ -328,32 +332,30 @@ def _zipper_MpoPBC(a, psi, opts_svd, normalize) -> yastn.tn.mps.MpsMpo:
     """
     Special case of MpoPBC
     """
-
     lmpo, lpsi = a.virtual_leg('last'), psi.virtual_leg('last')
 
-    tmp = initialize.eye(psi.config, legs=lmpo, isdiag=False)
+    tmp = eye(psi.config, legs=lmpo, isdiag=False)
     tmp = tmp.add_leg(axis=0, s=-lpsi.s, t=lpsi.t[0])
     tmp = tmp.add_leg(axis=3, s=lpsi.s, t=lpsi.t[0])
 
-    connector = initialize.eye(psi.config, legs=lmpo, isdiag=False)
+    connector = eye(psi.config, legs=lmpo, isdiag=False)
 
     discarded2_total = 0.
     for n in psi.sweep(to='first'):
-        tmp = tensor.tensordot(psi[n], tmp, axes=(2, 0))
-
+        tmp = psi[n].tensordot(tmp, axes=(2, 0))
         #if psi.nr_phys == 1:
         tmp = tmp.fuse_legs(axes=((0, 2), 1, 3, 4))
         # else:  # psi.nr_phys == 2:
         #     tmp = tmp.swap_gate(axes=(2, 3))
         #     tmp = tmp.fuse_legs(axes=((0, 3), 1, 4, (5, 2)))
-        tmp = a[n]._attach_23(tmp)
+        tmp = a[n].tensordot(tmp, axes=((2, 3), (2, 1)))
 
         if n > psi.first:
-            U, S, V = tensor.svd(tmp, axes=((0, 1), (3, 2)), sU=1, nU=False)
+            U, S, V = tmp.svd(axes=((2, 0), (1, 3)), sU=1, nU=False)
             nSold = S.norm()
 
-            mask = tensor.truncation_mask(S, **opts_svd)
-            nSout = tensor.bitwise_not(mask).apply_mask(S, axes=0).norm()
+            mask = S.truncation_mask(**opts_svd)
+            nSout = mask.bitwise_not().apply_mask(S, axes=0).norm()
             discarded2_local = (nSout / nSold) ** 2
             discarded2_total = discarded2_total + discarded2_local - discarded2_total * discarded2_local
 
@@ -365,19 +367,19 @@ def _zipper_MpoPBC(a, psi, opts_svd, normalize) -> yastn.tn.mps.MpsMpo:
             tmp = tmp.unfuse_legs(axes=0)
 
             if a.tol is not None and a.tol > 0:
-                Uc, Sc, Vc = tensor.svd_with_truncation(tmp, axes=(1, (0, 2, 3)), tol=a.tol)
+                Uc, Sc, Vc = tmp.svd_with_truncation(axes=(1, (0, 2, 3)), tol=a.tol)
                 tmp = (Sc @ Vc).transpose(axes=(1, 0, 2, 3))
-                connector  = connector @ Uc
+                connector = connector @ Uc
 
             psi.factor = psi.factor * nS
         else:  # n == first
-            tmp = tmp.unfuse_legs(axes=0)
-            tmp = tensor.tensordot(connector, tmp, axes=(1, 1))
-            tmp = tmp.trace(axes=(0, 2))
+            tmp = tmp.unfuse_legs(axes=2)
+            tmp = connector.tensordot(tmp, axes=(1, 3))
+            tmp = tmp.trace(axes=(0, 1))
             ntmp = tmp.norm()
             psi.factor = 1 if normalize else psi.factor * ntmp
-            tmp = (tmp / ntmp).transpose(axes=(0, 2, 1))
-            psi[n] = tmp if psi.nr_phys == 1 else tmp.unfuse_legs(axes=2)
+            tmp = (tmp / ntmp).transpose(axes=(1, 0, 2))
+            psi[n] = tmp # if psi.nr_phys == 1 else tmp.unfuse_legs(axes=2)
 
     return psi, psi.config.backend.sqrt(discarded2_total)
 

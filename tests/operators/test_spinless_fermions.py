@@ -13,27 +13,18 @@
 # limitations under the License.
 # ==============================================================================
 """ Predefined spinless fermion operators. """
-import pytest
 import numpy as np
+import pytest
 import yastn
-try:
-    from .configs import config_dense
-except ImportError:
-    from configs import config_dense
-
 
 tol = 1e-12  #pylint: disable=invalid-name
 
 
-def test_spinless_fermions():
+def test_spinless_fermions(config_kwargs):
     """ Generate standard operators in two-dimensional Hilbert space for various symmetries. """
-    # pytest switches backends and default_device in config files for testing
-    backend = config_dense.backend
-    default_device = config_dense.default_device
-
-    ops_Z2 = yastn.operators.SpinlessFermions(sym='Z2', backend=backend, default_device=default_device)
+    ops_Z2 = yastn.operators.SpinlessFermions(sym='Z2', **config_kwargs)
     # other way to initialize
-    config_U1 = yastn.make_config(fermionic=True, sym="U1", backend=backend, default_device=default_device)
+    config_U1 = yastn.make_config(fermionic=True, sym="U1", **config_kwargs)
     ops_U1 = yastn.operators.SpinlessFermions(**config_U1._asdict())
 
     assert all(ops.config.fermionic == True for ops in (ops_Z2, ops_U1))
@@ -43,7 +34,6 @@ def test_spinless_fermions():
 
     assert all(leg == I.get_legs(axes=0) for (leg, I) in zip(legs, Is))
     assert all(np.allclose(I.to_numpy(), np.eye(2)) for I in Is)
-    assert all(default_device in I.device for I in Is)  # accept 'cuda' in 'cuda:0'
 
     lss = [{0: I.get_legs(0), 1: I.get_legs(1)} for I in Is]
 
@@ -83,6 +73,5 @@ def test_spinless_fermions():
     assert all(k in d for k in ('I', 'n', 'c', 'cp'))
 
 
-
 if __name__ == '__main__':
-    test_spinless_fermions()
+    pytest.main([__file__, "-vs", "--durations=0"])

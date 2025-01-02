@@ -16,10 +16,6 @@
 import numpy as np
 import pytest
 import yastn
-try:
-    from .configs import config_dense, config_U1, config_Z2xU1
-except ImportError:
-    from configs import config_dense, config_U1, config_Z2xU1
 
 tol = 1e-12  #pylint: disable=invalid-name
 
@@ -51,9 +47,10 @@ def trace_vs_numpy(a, axes):
     return c
 
 
-def test_trace_basic():
+def test_trace_basic(config_kwargs):
     """ test trace for different symmetries. """
     # dense
+    config_dense = yastn.make_config(sym='none', **config_kwargs)
     a = yastn.ones(config=config_dense, s=(-1, 1, 1, -1), D=(2, 5, 2, 5))
     b = trace_vs_numpy(a, axes=(0, 2))
     c = trace_vs_numpy(b, axes=(1, 0))
@@ -66,6 +63,7 @@ def test_trace_basic():
     assert pytest.approx(c.item(), rel=tol) == 5.
 
     # U1
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     leg1 = yastn.Leg(config_U1, s=1, t=(0, 1), D=(2, 3))
     leg2 = yastn.Leg(config_U1, s=1, t=(0, 1), D=(4, 5))
     leg3 = yastn.Leg(config_U1, s=1, t=(0, 1), D=(6, 7))
@@ -87,6 +85,7 @@ def test_trace_basic():
     assert b.norm() < tol  # == 0
 
     # Z2xU1
+    config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
     leg1 = yastn.Leg(config_Z2xU1, s=1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(6, 4, 9, 6))
     leg2 = yastn.Leg(config_Z2xU1, s=1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(20, 16, 25, 20))
     a = yastn.randC(config=config_Z2xU1, legs=[leg1.conj(), leg2.conj(), leg2, leg1])
@@ -103,8 +102,9 @@ def test_trace_basic():
     assert pytest.approx(b.item(), rel=tol) == 6
 
 
-def test_trace_fusions():
+def test_trace_fusions(config_kwargs):
     """ test trace of meta-fused and hard-fused tensors. """
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     leg1 = yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(1, 2, 3))
     leg2 = yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6))
 
@@ -169,8 +169,9 @@ def test_trace_fusions():
     assert yastn.norm(b2 - bf2) < tol
 
 
-def test_trace_exceptions():
+def test_trace_exceptions(config_kwargs):
     """ test trigerring some expections """
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     t1, D1, D2 = (0, 1), (2, 3), (4, 5)
     a = yastn.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
                 t=[t1, t1, t1, t1, t1, t1], D=[D1, D2, D2, D2, D2, D2])
@@ -201,6 +202,4 @@ def test_trace_exceptions():
 
 
 if __name__ == '__main__':
-    test_trace_basic()
-    test_trace_fusions()
-    test_trace_exceptions()
+    pytest.main([__file__, "-vs", "--durations=0"])

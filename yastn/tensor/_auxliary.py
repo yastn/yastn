@@ -13,9 +13,45 @@
 # limitations under the License.
 # ==============================================================================
 """ Auxliary functions used by yastn.Tensor. """
-from typing import NamedTuple
+import abc
+from dataclasses import dataclass
 from itertools import accumulate, chain
+from typing import NamedTuple
 from ..sym import sym_none
+
+
+@dataclass
+class Method():
+    """
+    Auxiliary mutable method class.
+    It introduces the mechanism to change the method used in :meth:`yastn.tn.mps.dmrg_`, :meth:`yastn.tn.mps.tdvp_`,
+    and other generator functions in between consecutive sweeps.
+    Updating the value in place will inject the new value back into the generator.
+    """
+    string: str = ''
+
+    def __eq__(self, string):
+        return string == self.string
+
+    def __str__(self):
+        return self.string
+
+    def update_(self, string):
+        """ Update the method name in place. """
+        self.string = str(string)
+
+
+class SpecialTensor(metaclass=abc.ABCMeta):
+    """
+    A parent class to create a special tensor-like object.
+
+    ``yastn.tensordot(a, b, axes)`` check if ``a`` or ``b`` is an instance of SpecialTensor
+    and calls ``a.tensordo(b, axes)`` or ``b.tensordo(a, axes, reverse=True)``
+    """
+
+    @abc.abstractmethod
+    def tensordot(self, b, axes, reverse=False):
+        pass
 
 
 class _struct(NamedTuple):
@@ -41,6 +77,7 @@ class _config(NamedTuple):
     default_dtype: str = 'float64'
     default_fusion: str = 'hard'
     force_fusion: str = None
+    tensordot_policy: str = 'fuse_to_matrix'
 
 
 def _flatten(nested_iterator):
@@ -52,7 +89,7 @@ def _flatten(nested_iterator):
 
 
 def _unpack_axes(mfs, *args):
-    """ Unpack meta axes into native axes based on a.mfs """
+    """ Unpack meta axes into native axes based on ``a.mfs``. """
     clegs = tuple(accumulate(x[0] for x in mfs))
     return tuple(tuple(chain(*(range(clegs[ii] - mfs[ii][0], clegs[ii]) for ii in axes))) for axes in args)
 

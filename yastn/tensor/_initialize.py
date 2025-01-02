@@ -16,7 +16,7 @@
 
 from functools import reduce
 from itertools import product, accumulate
-from operator import mul
+from operator import mul, itemgetter
 import numbers
 import numpy as np
 from ._auxliary import _flatten, _slc
@@ -125,7 +125,7 @@ def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
         tset = tset.reshape(len(tset), a.ndim_n * a.config.sym.NSYM).tolist()
         Dset = Dset.tolist()
         meta = [(tuple(ts), tuple(Ds), dp) for ts, Ds, dp in zip(tset, Dset, Dp)]
-        meta = sorted(meta, key=lambda x: x[0])
+        meta = sorted(meta, key=itemgetter(0))
         a_t, a_D, a_Dp = zip(*meta)
     else:
         a_t, a_D, a_Dp = (), (), ()

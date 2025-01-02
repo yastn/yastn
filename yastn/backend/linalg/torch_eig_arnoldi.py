@@ -1,10 +1,6 @@
 import torch
-try:
-    import scipy.sparse.linalg
-    from scipy.sparse.linalg import LinearOperator
-except ModuleNotFoundError:
-    import warnings
-    warnings.warn("fbpca not available", Warning)
+import scipy.sparse.linalg
+from scipy.sparse.linalg import LinearOperator
 
 
 class SYMARNOLDI(torch.autograd.Function):

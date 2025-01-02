@@ -31,7 +31,7 @@ class EnvCTM_local():
     r"""
     Dataclass for CTM environment tensors associated with Peps lattice site.
 
-    Contains fields 'tl', 't', 'tr', 'r', 'br', 'b', 'bl', 'l'
+    Contains fields ``tl``, ``t``, ``tr``, ``r``, ``br``, ``b``, ``bl``, ``l``
     """
     tl = None # top-left
     t = None  # top
@@ -65,7 +65,7 @@ class CTMRG_out(NamedTuple):
 class EnvCTM(Peps):
     def __init__(self, psi, init='rand', leg=None):
         r"""
-        Environment used in Corner Transfer Matrix Renormalization algorithm.
+        Environment used in Corner Transfer Matrix Renormalization Group algorithm.
 
         Note:
             Index convention for environment tensor
@@ -75,14 +75,14 @@ class EnvCTM(Peps):
         Parameters
         ----------
         psi: yastn.tn.Peps
-            Peps lattice to be contracted using CTM.
-            If :code:`psi` has physical legs, a double-layer PEPS with no physical legs is formed.
+            PEPS lattice to be contracted using CTM.
+            If ``psi`` has physical legs, a double-layer PEPS with no physical legs is formed.
 
         init: str
             None, 'eye' or 'rand'. Initialization scheme, see :meth:`yastn.tn.fpeps.EnvCTM.reset_`.
 
-        leg: yastn.Leg | None
-            Passed to :meth:`yastn.tn.fpeps.EnvCTM.reset_`.
+        leg: Optional[yastn.Leg]
+            Passed to :meth:`yastn.tn.fpeps.EnvCTM.reset_` to further customize initialization.
         """
         super().__init__(psi.geometry)
         self.psi = Peps2Layers(psi) if psi.has_physical() else psi
@@ -134,28 +134,33 @@ class EnvCTM(Peps):
                 getattr(self[site], dirn)._data.detach_()
 
 
-    def reset_(self, init='rand', leg=None, **kwargs):
+    def shallow_copy(self) -> EnvCTM:
+        env = EnvCTM(self.psi, init=None)
+        for site in env.sites():
+            for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
+                setattr(env[site], dirn, getattr(self[site], dirn))
+        return env
+
+    def reset_(self, init='rand', leg=None):
         r"""
-        Initialize random CTMRG environments of peps tensors.
+        Initialize CTMRG environments of PEPS tensors.
 
         Parameters
         ----------
         init: str
-            ['eye', 'rand', 'dl']
-            For 'eye' starts with identity environments of dimension 1.
-            For 'rand' sets environments randomly.
-            For 'dl' and Env of double-layer PEPS, trace on-site tensors to initialize environment.
+        'eye' or 'rand'.
+        - If ``eye``, it starts with identity environments of dimension 1.
+        - If ``rand``, environmental tensors are set randomly.
 
-        leg: None | yastn.Leg
-            If not provided, random initialization has CTMRG bond dimension set to 1.
-            Otherwise, the provided Leg is used to initialize CTMRG virtual legs.
+        leg : None | yastn.Leg
+            Specifies the leg structure for CTMRG virtual legs during initialization.
+            - If ``None``, sets the CTMRG bond dimension to 1 in random initialization.
+            - If ``yastn.Leg``, uses the provided leg for initializing CTMRG virtual legs.
         """
         config = self.psi.config
         leg0 = Leg(config, s=1, t=(config.sym.zero(),), D=(1,))
 
-        if init == 'dl':
-            self.init_env_from_onsite_(**kwargs)
-        elif init == 'nn':
+        if init == 'nn': #None?
             pass
         else:
             if leg is None:
@@ -236,114 +241,131 @@ class EnvCTM(Peps):
             H = H.conj()
         return H
 
-    def measure_1site(self, op, site=None) -> dict:
+    def measure_1site(self, O, site=None) -> dict:
         r"""
         Calculate local expectation values within CTM environment.
 
-        Return a number if site is provided.
-        If None, returns a dictionary {site: value} for all unique lattice sites.
+        Returns a number if ``site`` is provided.
+        If ``None``, returns a dictionary {site: value} for all unique lattice sites.
 
         Parameters
         ----------
-        env: class CtmEnv
-            class containing ctm environment tensors along with lattice structure data
+        env: EnvCtm
+            Class containing CTM environment tensors along with lattice structure data.
 
-        op: single site operator
+        O: Tensor
+            Single-site operator
         """
         if site is None:
-            return {site: self.measure_1site(op, site) for site in self.sites()}
+            return {site: self.measure_1site(O, site) for site in self.sites()}
 
         lenv = self[site]
         ten = self.psi[site]
         vect = (lenv.l @ lenv.tl) @ (lenv.t @ lenv.tr)
         vecb = (lenv.r @ lenv.br) @ (lenv.b @ lenv.bl)
 
-        tmp = ten._attach_01(vect)
-        val_no = tensordot(vecb, tmp, axes=((0, 1, 2, 3), (2, 3, 1, 0))).to_number()
+        tmp = tensordot(vect, ten, axes=((2, 1), (0, 1)))
+        val_no = tensordot(vecb, tmp, axes=((0, 1, 2, 3), (1, 3, 2, 0))).to_number()
 
-        ten.set_operator_(op)
-        tmp = ten._attach_01(vect)
-        val_op = tensordot(vecb, tmp, axes=((0, 1, 2, 3), (2, 3, 1, 0))).to_number()
+        if O.ndim == 2:
+            ten.set_operator_(O)
+        else:  # for a single-layer Peps, replace with new peps tensor
+            ten = O
+        tmp = tensordot(vect, ten, axes=((2, 1), (0, 1)))
+        val_op = tensordot(vecb, tmp, axes=((0, 1, 2, 3), (1, 3, 2, 0))).to_number()
 
         return val_op / val_no
 
-    def measure_nn(self, O0, O1, bond=None) -> dict:
+    def measure_nn(self, O, P, bond=None) -> dict:
         r"""
         Calculate nearest-neighbor expectation values within CTM environment.
 
-        Return a number if the nearest-neighbor bond is provided.
-        If None, returns a dictionary {bond: value} for all unique lattice bonds.
+        Return a number if the nearest-neighbor ``bond`` is provided.
+        If ``None``, returns a dictionary {bond: value} for all unique lattice bonds.
 
         Parameters
         ----------
-        O0, O1: yastn.Tensor
-            Calculate <O0_s0 O1_s1>.
-            O1 is applied first, which might matter for fermionic operators.
+        O, P: yastn.Tensor
+            Calculate <O_s0 P_s1>.
+            P is applied first, which might matter for fermionic operators.
 
         bond: yastn.tn.fpeps.Bond | tuple[tuple[int, int], tuple[int, int]]
             Bond of the form (s0, s1). Sites s0 and s1 should be nearest-neighbors on the lattice.
         """
 
         if bond is None:
-             return {bond: self.measure_nn(O0, O1, bond) for bond in self.bonds()}
+             return {bond: self.measure_nn(O, P, bond) for bond in self.bonds()}
 
         bond = Bond(*bond)
         dirn, l_ordered = self.nn_bond_type(bond)
-        f_ordered = self.f_ordered(bond)
+        f_ordered = self.f_ordered(*bond)
         s0, s1 = bond if l_ordered else bond[::-1]
         env0, env1 = self[s0], self[s1]
         ten0, ten1 = self.psi[s0], self.psi[s1]
 
-        if O0.ndim == 2 and O1.ndim == 2:
-            G0, G1 = gate_product_operator(O0, O1, l_ordered, f_ordered)
-        elif O0.ndim == 3 and O1.ndim == 3:
-            G0, G1 = gate_fix_order(O0, O1, l_ordered, f_ordered)
-        else:
-            raise YastnError("Both operators O0 and O1 should have the same ndim==2, or ndim=3.")
+        if O.ndim == 2 and P.ndim == 2:
+            G0, G1 = gate_product_operator(O, P, l_ordered, f_ordered)
+        elif O.ndim == 3 and P.ndim == 3:
+            G0, G1 = gate_fix_order(O, P, l_ordered, f_ordered)
+        # else:
+        #     raise YastnError("Both operators O and P should have the same ndim==2, or ndim=3.")
 
         if dirn == 'h':
             vecl = (env0.bl @ env0.l) @ (env0.tl @ env0.t)
             vecr = (env1.tr @ env1.r) @ (env1.br @ env1.b)
 
-            tmp0 = ten0._attach_01(vecl)
-            tmp0 = tensordot(env0.b, tmp0, axes=((2, 1), (0, 1)))
-            tmp1 = ten1._attach_23(vecr)
-            tmp1 = tensordot(env1.t, tmp1, axes=((2, 1), (0, 1)))
-            val_no = tensordot(tmp0, tmp1, axes=((0, 1, 2), (1, 0, 2))).to_number()
+            tmp0 = tensordot(ten0, vecl, axes=((0, 1), (2, 1)))
+            tmp0 = tensordot(env0.b, tmp0, axes=((1, 2), (0, 2)))
+            tmp1 = tensordot(vecr, ten1, axes=((2, 1), (2, 3)))
+            tmp1 = tensordot(tmp1, env1.t, axes=((2, 0), (1, 2)))
+            val_no = vdot(tmp0, tmp1, conj=(0, 0))
 
-            ten0.ket = apply_gate_onsite(ten0.ket, G0, dirn='l')
-            ten1.ket = apply_gate_onsite(ten1.ket, G1, dirn='r')
+            if O.ndim <= 3:
+                ten0.ket = apply_gate_onsite(ten0.ket, G0, dirn='l')
+            else:
+                ten0 = O
+            if P.ndim <= 3:
+                ten1.ket = apply_gate_onsite(ten1.ket, G1, dirn='r')
+            else:
+                ten1 = P
 
-            tmp0 = ten0._attach_01(vecl)
-            tmp0 = tensordot(env0.b, tmp0, axes=((2, 1), (0, 1)))
-            tmp1 = ten1._attach_23(vecr)
-            tmp1 = tensordot(env1.t, tmp1, axes=((2, 1), (0, 1)))
-            val_op = tensordot(tmp0, tmp1, axes=((0, 1, 2), (1, 0, 2))).to_number()
+            tmp0 = tensordot(ten0, vecl, axes=((0, 1), (2, 1)))
+            tmp0 = tensordot(env0.b, tmp0, axes=((1, 2), (0, 2)))
+            tmp1 = tensordot(vecr, ten1, axes=((2, 1), (2, 3)))
+            tmp1 = tensordot(tmp1, env1.t, axes=((2, 0), (1, 2)))
+            val_op = vdot(tmp0, tmp1, conj=(0, 0))
         else:  # dirn == 'v':
             vect = (env0.l @ env0.tl) @ (env0.t @ env0.tr)
             vecb = (env1.r @ env1.br) @ (env1.b @ env1.bl)
 
-            tmp0 = ten0._attach_01(vect)
-            tmp0 = tensordot(tmp0, env0.r, axes=((2, 3), (0, 1)))
-            tmp1 = ten1._attach_23(vecb)
-            tmp1 = tensordot(tmp1, env1.l, axes=((2, 3), (0, 1)))
-            val_no = tensordot(tmp0, tmp1, axes=((0, 1, 2), (2, 1, 0))).to_number()
+            tmp0 = tensordot(vect, ten0, axes=((2, 1), (0, 1)))
+            tmp0 = tensordot(tmp0, env0.r, axes=((1, 3), (0, 1)))
+            tmp1 = tensordot(ten1, vecb, axes=((2, 3), (2, 1)))
+            tmp1 = tensordot(env1.l, tmp1, axes=((0, 1), (3, 1)))
+            val_no = vdot(tmp0, tmp1, conj=(0, 0))
 
-            ten0.ket = apply_gate_onsite(ten0.ket, G0, dirn='t')
-            ten1.ket = apply_gate_onsite(ten1.ket, G1, dirn='b')
+            if O.ndim <= 3:
+                ten0.ket = apply_gate_onsite(ten0.ket, G0, dirn='t')
+            else:
+                ten0 = O
 
-            tmp0 = ten0._attach_01(vect)
-            tmp0 = tensordot(tmp0, env0.r, axes=((2, 3), (0, 1)))
-            tmp1 = ten1._attach_23(vecb)
-            tmp1 = tensordot(tmp1, env1.l, axes=((2, 3), (0, 1)))
-            val_op = tensordot(tmp0, tmp1, axes=((0, 1, 2), (2, 1, 0))).to_number()
+            if P.ndim <= 3:
+                ten1.ket = apply_gate_onsite(ten1.ket, G1, dirn='b')
+            else:
+                ten1 = P
+
+            tmp0 = tensordot(vect, ten0, axes=((2, 1), (0, 1)))
+            tmp0 = tensordot(tmp0, env0.r, axes=((1, 3), (0, 1)))
+            tmp1 = tensordot(ten1, vecb, axes=((2, 3), (2, 1)))
+            tmp1 = tensordot(env1.l, tmp1, axes=((0, 1), (3, 1)))
+            val_op = vdot(tmp0, tmp1, conj=(0, 0))
 
         return val_op / val_no
 
     def measure_2x2(self, *operators, sites=None):
-        """
+        r"""
         Calculate expectation value of a product of local operators
-        in a 2x2 window within the CTM environment.
+        in a :math:`2 \times 2` window within the CTM environment.
 
         At the moment, it works only for bosonic operators (fermionic are todo).
 
@@ -383,41 +405,41 @@ class EnvCTM(Peps):
         vec_br = self[br].r @ (self[br].br @ self[br].b)
         vec_bl = self[bl].b @ (self[bl].bl @ self[bl].l)
 
-        cor_tl = ten_tl._attach_01(vec_tl)
-        cor_tl = cor_tl.fuse_legs(axes=((0, 1), (2, 3)))
-        cor_tr = ten_tr._attach_30(vec_tr)
-        cor_tr = cor_tr.fuse_legs(axes=((0, 1), (2, 3)))
-        cor_br = ten_br._attach_23(vec_br)
-        cor_br = cor_br.fuse_legs(axes=((0, 1), (2, 3)))
-        cor_bl = ten_bl._attach_12(vec_bl)
-        cor_bl = cor_bl.fuse_legs(axes=((0, 1), (2, 3)))
+        cor_tl = tensordot(vec_tl, ten_tl, axes=((2, 1), (0, 1)))
+        cor_tl = cor_tl.fuse_legs(axes=((0, 2), (1, 3)))
+        cor_tr = tensordot(vec_tr, ten_tr, axes=((1, 2), (0, 3)))
+        cor_tr = cor_tr.fuse_legs(axes=((0, 2), (1, 3)))
+        cor_br = tensordot(vec_br, ten_br, axes=((2, 1), (2, 3)))
+        cor_br = cor_br.fuse_legs(axes=((0, 2), (1, 3)))
+        cor_bl = tensordot(vec_bl, ten_bl, axes=((2, 1), (1, 2)))
+        cor_bl = cor_bl.fuse_legs(axes=((0, 3), (1, 2)))
 
-        val_no = vdot(cor_tl @ cor_tr @ cor_br, cor_bl.T, conj=(0, 0))
+        val_no = vdot(cor_tl @ cor_tr, tensordot(cor_bl, cor_br, axes=(0, 1)), conj=(0, 0))
 
         if tl in ops:
             ten_tl.set_operator_(ops[tl])
-            cor_tl = ten_tl._attach_01(vec_tl)
-            cor_tl = cor_tl.fuse_legs(axes=((0, 1), (2, 3)))
+            cor_tl = tensordot(vec_tl, ten_tl, axes=((2, 1), (0, 1)))
+            cor_tl = cor_tl.fuse_legs(axes=((0, 2), (1, 3)))
         if tr in ops:
             ten_tr.set_operator_(ops[tr])
-            cor_tr = ten_tr._attach_30(vec_tr)
-            cor_tr = cor_tr.fuse_legs(axes=((0, 1), (2, 3)))
+            cor_tr = tensordot(vec_tr, ten_tr, axes=((1, 2), (0, 3)))
+            cor_tr = cor_tr.fuse_legs(axes=((0, 2), (1, 3)))
         if br in ops:
             ten_br.set_operator_(ops[br])
-            cor_br = ten_br._attach_23(vec_br)
-            cor_br = cor_br.fuse_legs(axes=((0, 1), (2, 3)))
+            cor_br = tensordot(vec_br, ten_br, axes=((2, 1), (2, 3)))
+            cor_br = cor_br.fuse_legs(axes=((0, 2), (1, 3)))
         if bl in ops:
             ten_bl.set_operator_(ops[bl])
-            cor_bl = ten_bl._attach_12(vec_bl)
-            cor_bl = cor_bl.fuse_legs(axes=((0, 1), (2, 3)))
+            cor_bl = tensordot(vec_bl, ten_bl, axes=((2, 1), (1, 2)))
+            cor_bl = cor_bl.fuse_legs(axes=((0, 3), (1, 2)))
 
-        val_op = vdot(cor_tl @ cor_tr @ cor_br, cor_bl.T, conj=(0, 0))
+        val_op = vdot(cor_tl @ cor_tr, tensordot(cor_bl, cor_br, axes=(0, 1)), conj=(0, 0))
 
         return val_op / val_no
 
 
     def measure_line(self, *operators, sites=None):
-        """
+        r"""
         Calculate expectation value of a product of local opertors
         along a horizontal or vertical line within CTM environment.
 
@@ -456,21 +478,27 @@ class EnvCTM(Peps):
 
         for site, op in ops.items():
             ind = site[0] - xs[0] + site[1] - ys[0] + 1
-            tm[ind].set_operator_(op)
+
+            if op.ndim == 2:
+                tm[ind].set_operator_(op)
+            elif len(xs) == 1:  # 'h'
+                tm[ind] = op.transpose(axes=(1, 2, 3, 0))
+            else:  # 'v'
+                tm[ind] = op.transpose(axes=(0, 3, 2, 1))
 
         val_op = mps.vdot(vl, tm, vr)
         return val_op / val_no
 
 
-    def measure_2site(self, O0, O1, xrange, yrange, opts_svd=None, opts_var=None) -> dict[Site, list]:
-        """
-        Calculate 2-point correlations <o1 o2> between top-left corner of the window, and all sites in the window.
+    def measure_2site(self, O, P, xrange, yrange, opts_svd=None, opts_var=None) -> dict[Site, list]:
+        r"""
+        Calculate 2-point correlations <O P> between top-left corner of the window, and all sites in the window.
 
         wip: other combinations of 2-sites and fermionically-nontrivial operators will be coverad latter.
 
         Parameters
         ----------
-        O1, O2: yastn.Tensor
+        O, P: yastn.Tensor
             one-site operators
 
         xrange: tuple[int, int]
@@ -481,22 +509,22 @@ class EnvCTM(Peps):
 
         opts_svd: dict
             Options passed to :meth:`yastn.linalg.svd` used to truncate virtual spaces of boundary MPSs used in sampling.
-            The default is None, in which case take :code:`D_total` as the largest dimension from CTM environment.
+            The default is ``None``, in which case take ``D_total`` as the largest dimension from CTM environment.
 
         opts_svd: dict
             Options passed to :meth:`yastn.tn.mps.compression_` used in the refining of boundary MPSs.
-            The default is None, in which case make 2 variational sweeps.
+            The default is ``None``, in which case make 2 variational sweeps.
         """
         env_win = EnvWindow(self, xrange, yrange)
-        return env_win.measure_2site(O0, O1, opts_svd=opts_svd, opts_var=opts_var)
+        return env_win.measure_2site(O, P, opts_svd=opts_svd, opts_var=opts_var)
 
 
     def sample(self, xrange, yrange, projectors, number=1, opts_svd=None, opts_var=None, progressbar=False, return_info=False) -> dict[Site, list]:
-        """
+        r"""
         Sample random configurations from PEPS. Output a dictionary linking sites with lists of sampled projectors` keys for each site.
 
         It does not check whether projectors sum up to identity -- probabilities of provided projectors get normalized to one.
-        If negative probabilities are observed (signaling contraction errors), error = max(abs(negatives)),
+        If negative probabilities are observed (signaling contraction errors), ``error = max(abs(negatives))``,
         and all probabilities below that error level are fixed to error (before consecutive renormalization of probabilities to one).
 
         Parameters
@@ -504,7 +532,7 @@ class EnvCTM(Peps):
         xrange: tuple[int, int]
             range of rows to sample from, [r0, r1); r0 included, r1 excluded.
 
-        trange: tuple[int, int]
+        yrange: tuple[int, int]
             range of columns to sample from.
 
         projectors: Dict[Any, yast.Tensor] | Sequence[yast.Tensor] | Dict[Site, Dict[Any, yast.Tensor]]
@@ -517,19 +545,19 @@ class EnvCTM(Peps):
 
         opts_svd: dict
             Options passed to :meth:`yastn.linalg.svd` used to truncate virtual spaces of boundary MPSs used in sampling.
-            The default is None, in which case take :code:`D_total` as the largest dimension from CTM environment.
+            The default is ``None``, in which case take ``D_total`` as the largest dimension from CTM environment.
 
-        opts_svd: dict
+        opts_var: dict
             Options passed to :meth:`yastn.tn.mps.compression_` used in the refining of boundary MPSs.
-            The default is None, in which case make 2 variational sweeps.
+            The default is ``None``, in which case make 2 variational sweeps.
 
         progressbar: bool
-            Whether to display progressbar. The default is False.
+            Whether to display progressbar. The default is ``False``.
 
         return_info: bool
-            Whether to include in the outputted dictionary a field :code:`info` with dictionary
+            Whether to include in the outputted dictionary a field ``info`` with dictionary
             that contains information about the amplitude of contraction errors
-            (largest negative probability), D_total, etc. The default is False.
+            (largest negative probability), D_total, etc. The default is ``False``.
         """
         env_win = EnvWindow(self, xrange, yrange)
         return env_win.sample(projectors, number, opts_svd, opts_var, progressbar, return_info)
@@ -548,7 +576,8 @@ class EnvCTM(Peps):
         Parameters
         ----------
         opts_svd: dict
-            A dictionary of options to pass to the SVD algorithm.
+            A dictionary of options to pass to SVD truncation algorithm.
+            This sets EnvCTM bond dimension.
 
         method: str
             '2site' or '1site'. The default is '2site'.
@@ -602,22 +631,24 @@ class EnvCTM(Peps):
         ::
 
             If dirn == 'h':
-                tl == tt  ==  tt == tr
-                |     |        |     |
-                ll == GA-+  +-GB == rr
-                |     |        |     |
-                bl == bb  ==  bb == br
+
+                tl═══t═══════t═══tr
+                ║    ║       ║    ║
+                l════Q0══  ══Q1═══r
+                ║    ║       ║    ║
+                bl═══b═══════b═══br
+
 
             If dirn == 'v':
-                tl == tt == tr
-                |     |      |
-                ll == GA == rr
-                |     ++     |
-                ll == GB == rr
-                |     |      |
-                bl == bb == br
-        """
 
+                tl═══t═══tr
+                ║    ║    ║
+                l═══0Q0═══r
+                ║    ╳    ║
+                l═══1Q1═══r
+                ║    ║    ║
+                bl═══b═══br
+        """
         env0, env1 = self[s0], self[s1]
         if dirn == "h":
             assert self.psi.nn_site(s0, (0, 1)) == s1
@@ -638,7 +669,7 @@ class EnvCTM(Peps):
         return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
 
     def save_to_dict(self) -> dict:
-        """
+        r"""
         Serialize EnvCTM into a dictionary.
         """
         psi = self.psi
@@ -695,16 +726,17 @@ class EnvCTM(Peps):
     def ctmrg_(env, opts_svd=None, method='2site', max_sweeps=1, iterator_step=None, corner_tol=None, truncation_f : Callable=None, **kwargs):
         r"""
         Perform CTMRG updates :meth:`yastn.tn.fpeps.EnvCTM.update_` until convergence.
-        Convergence is based on singular values of CTM environment corner tensors.
+        Convergence can be measured based on singular values of CTM environment corner tensors.
 
-        Outputs iterator if :code:`iterator_step` is given, which allows
-        inspecting :code:`env`, e.g., calculating expectation values,
-        outside of :code:`ctmrg_` function after every :code:`iterator_step` sweeps.
+        Outputs iterator if ``iterator_step`` is given, which allows
+        inspecting ``env``, e.g., calculating expectation values,
+        outside of ``ctmrg_`` function after every ``iterator_step`` sweeps.
 
         Parameters
         ----------
         opts_svd: dict
-            A dictionary of options to pass to the SVD algorithm.
+            A dictionary of options to pass to SVD truncation algorithm.
+            This sets EnvCTM bond dimension.
 
         method: str
             '2site' or '1site'. The default is '2site'.
@@ -716,8 +748,8 @@ class EnvCTM(Peps):
             Maximal number of sweeps.
 
         iterator_step: int
-            If int, :code:`ctmrg_` returns a generator that would yield output after every iterator_step sweeps.
-            Default is None, in which case  :code:`ctmrg_` sweeps are performed immediately.
+            If int, ``ctmrg_`` returns a generator that would yield output after every iterator_step sweeps.
+            The default is ``None``, in which case  ``ctmrg_`` sweeps are performed immediately.
 
         corner_tol: float
             Convergence tolerance for the change of singular values of all corners in a single update.
@@ -731,14 +763,14 @@ class EnvCTM(Peps):
 
         Returns
         -------
-        Generator if iterator_step is not None.
+        Generator if iterator_step is not ``None``.
 
         CTMRG_out(NamedTuple)
             NamedTuple including fields:
 
-                * :code:`sweeps` number of performed ctmrg updates.
-                * :code:`max_dsv` norm of singular values change in the worst corner in the last sweep.
-                * :code:`converged` whether convergence based on conrer_tol has been reached.
+                * ``sweeps`` number of performed ctmrg updates.
+                * ``max_dsv`` norm of singular values change in the worst corner in the last sweep.
+                * ``converged`` whether convergence based on ``corner_tol`` has been reached.
         """
         kwargs["truncation_f"]= truncation_f
         tmp = _ctmrg_(env, opts_svd, method, max_sweeps, iterator_step, corner_tol, **kwargs)
@@ -803,14 +835,21 @@ def update_2site_projectors_(proj, site, dirn, env, opts_svd, **kwargs):
 
     tl, tr, bl, br = sites
 
-    cor_tl = psi[tl]._attach_01(env[tl].l @ env[tl].tl @ env[tl].t)
-    cor_tl = cor_tl.fuse_legs(axes=((0, 1), (2, 3))) # b r
-    cor_bl = psi[bl]._attach_12(env[bl].b @ env[bl].bl @ env[bl].l)
-    cor_bl = cor_bl.fuse_legs(axes=((0, 1), (2, 3))) # t r
-    cor_tr = psi[tr]._attach_30(env[tr].t @ env[tr].tr @ env[tr].r)
-    cor_tr = cor_tr.fuse_legs(axes=((0, 1), (2, 3))) # l b
-    cor_br = psi[br]._attach_23(env[br].r @ env[br].br @ env[br].b)
-    cor_br = cor_br.fuse_legs(axes=((0, 1), (2, 3))) # t l
+    cor_tl = env[tl].l @ env[tl].tl @ env[tl].t
+    cor_tl = tensordot(cor_tl, psi[tl], axes=((2, 1), (0, 1)))
+    cor_tl = cor_tl.fuse_legs(axes=((0, 2), (1, 3)))
+
+    cor_bl = env[bl].b @ env[bl].bl @ env[bl].l
+    cor_bl = tensordot(cor_bl, psi[bl], axes=((2, 1), (1, 2)))
+    cor_bl = cor_bl.fuse_legs(axes=((0, 3), (1, 2)))
+
+    cor_tr = env[tr].t @ env[tr].tr @ env[tr].r
+    cor_tr = tensordot(cor_tr, psi[tr], axes=((1, 2), (0, 3)))
+    cor_tr = cor_tr.fuse_legs(axes=((0, 2), (1, 3)))
+
+    cor_br = env[br].r @ env[br].br @ env[br].b
+    cor_br = tensordot(cor_br, psi[br], axes=((2, 1), (2, 3)))
+    cor_br = cor_br.fuse_legs(axes=((0, 2), (1, 3)))
 
     if ('l' in dirn) or ('r' in dirn):
         cor_tt = cor_tl @ cor_tr # b(left) b(right)
@@ -951,15 +990,15 @@ def update_env_horizontal_(env_tmp, site, env, proj):
     l = psi.nn_site(site, d='l')
     if l is not None:
         tmp = env[l].l @ proj[l].hlt
-        tmp = psi[l]._attach_01(tmp)
-        tmp = tensordot(proj[l].hlb, tmp, axes=((0, 1), (0, 1))).transpose(axes=(0, 2, 1))
+        tmp = tensordot(psi[l], tmp, axes=((0, 1), (2, 1)))
+        tmp = tensordot(proj[l].hlb, tmp, axes=((0, 1), (2, 0)))
         env_tmp[site].l = tmp / tmp.norm(p='inf')
 
     r = psi.nn_site(site, d='r')
     if r is not None:
         tmp = env[r].r @ proj[r].hrb
-        tmp = psi[r]._attach_23(tmp)
-        tmp = tensordot(proj[r].hrt, tmp, axes=((0, 1), (0, 1))).transpose(axes=(0, 2, 1))
+        tmp = tensordot(psi[r], tmp, axes=((2, 3), (2, 1)))
+        tmp = tensordot(proj[r].hrt, tmp, axes=((0, 1), (2, 0)))
         env_tmp[site].r = tmp / tmp.norm(p='inf')
 
     tl = psi.nn_site(site, d='tl')
@@ -991,16 +1030,17 @@ def update_env_vertical_(env_tmp, site, env, proj):
 
     t = psi.nn_site(site, d='t')
     if t is not None:
-        tmp = proj[t].vtl.transpose(axes=(2, 1, 0)) @ env[t].t
-        tmp = psi[t]._attach_01(tmp)
-        tmp = tensordot(tmp, proj[t].vtr, axes=((2, 3), (0, 1)))
+        tmp = tensordot(proj[t].vtl, env[t].t, axes=(0, 0))
+        tmp = tensordot(tmp, psi[t], axes=((2, 0), (0, 1)))
+        tmp = tensordot(tmp, proj[t].vtr, axes=((1, 3), (0, 1)))
+
         env_tmp[site].t = tmp / tmp.norm(p='inf')
 
     b = psi.nn_site(site, d='b')
     if b is not None:
-        tmp = proj[b].vbr.transpose(axes=(2, 1, 0)) @ env[b].b
-        tmp = psi[b]._attach_23(tmp)
-        tmp = tensordot(tmp, proj[b].vbl, axes=((2, 3), (0, 1)))
+        tmp = tensordot(proj[b].vbr, env[b].b, axes=(0, 0))
+        tmp = tensordot(tmp, psi[b], axes=((2, 0), (2, 3)))
+        tmp = tensordot(tmp, proj[b].vbl, axes=((1, 3), (0, 1)))
         env_tmp[site].b = tmp / tmp.norm(p='inf')
 
     tl = psi.nn_site(site, d='tl')

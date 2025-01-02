@@ -12,15 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from ... import tensordot, leg_outer_product, YastnError
+from ... import tensordot, leg_product, YastnError, SpecialTensor
 from .envs._env_auxlliary import append_vec_tl, append_vec_br, append_vec_tr, append_vec_bl
 from ._gates_auxiliary import match_ancilla
+from ...tensor._auxliary import _clear_axes
 
 
 _allowed_transpose = ((0, 1, 2, 3), (1, 2, 3, 0), (2, 3, 0, 1), (3, 0, 1, 2),
                       (0, 3, 2, 1), (1, 0, 3, 2), (2, 1, 0, 3), (3, 2, 1, 0))
 
-class DoublePepsTensor:
+
+class DoublePepsTensor(SpecialTensor):
     def __init__(self, bra, ket, transpose=(0, 1, 2, 3), op=None, swaps=None):
         r"""
         Class that treats a pair of tensors forming a site of double-layer PEPS as a single tensor.
@@ -89,7 +91,7 @@ class DoublePepsTensor:
         lbs = [lbs[i] for i in axes]
         # lts = self.ket.get_legs(axes=axes)
         # lbs = self.bra.get_legs(axes=axes)
-        legs = tuple(leg_outer_product(lt, lb.conj()) for lt, lb in zip(lts, lbs))
+        legs = tuple(leg_product(lt, lb.conj()) for lt, lb in zip(lts, lbs))
         return legs if multiple_legs else legs[0]
 
     def transpose(self, axes):
@@ -117,67 +119,47 @@ class DoublePepsTensor:
         """
         return DoublePepsTensor(bra=self.bra.copy(), ket=self.ket.copy(), transpose=self._t)
 
-    def _attach_01(self, tt):
+    def tensordot(self, b, axes, reverse=False):
         """
-        Attach a tensor to the top-left enlarged corner `tt`.
+        tensordot(DublePepsTensor, b, axes) with tenor leg order conventions matching the default for tensordot.
+        tensordot(self, b, axes, reverse=True) corresponds to tensordot(b, self, axes).
         """
-        if self._t == (0, 1, 2, 3):
-            return append_vec_tl(self.bra, self.ket, tt, self.op)
-        if self._t == (1, 2, 3, 0):
-            return append_vec_bl(self.bra, self.ket, tt, self.op)
-        if self._t == (2, 3, 0, 1):
-            return append_vec_br(self.bra, self.ket, tt, self.op)
-        if self._t == (3, 0, 1, 2):
-            return append_vec_tr(self.bra, self.ket, tt, self.op)
-        if self._t == (0, 3, 2, 1):
-            return append_vec_tr(self.bra, self.ket, tt.transpose((0, 2, 1, 3)), self.op).transpose((0, 3, 2, 1))
-        if self._t == (3, 2, 1, 0):
-            return append_vec_br(self.bra, self.ket, tt.transpose((0, 2, 1, 3)), self.op).transpose((0, 3, 2, 1))
-        if self._t == (2, 1, 0, 3):
-            return append_vec_bl(self.bra, self.ket, tt.transpose((0, 2, 1, 3)), self.op).transpose((0, 3, 2, 1))
-        if self._t == (1, 0, 3, 2):
-            return append_vec_tl(self.bra, self.ket, tt.transpose((0, 2, 1, 3)), self.op).transpose((0, 3, 2, 1))
 
-    def _attach_23(self, tt):
-        """
-        Attach a tensor to the bottom-right enlarged corner `tt`.
-        """
-        if self._t == (0, 1, 2, 3):
-            return append_vec_br(self.bra, self.ket, tt, self.op)
-        if self._t == (1, 2, 3, 0):
-            return append_vec_tr(self.bra, self.ket, tt, self.op)
-        if self._t == (2, 3, 0, 1):
-            return append_vec_tl(self.bra, self.ket, tt, self.op)
-        if self._t == (3, 0, 1, 2):
-            return append_vec_bl(self.bra, self.ket, tt, self.op)
-        if self._t == (0, 3, 2, 1):
-            return append_vec_bl(self.bra, self.ket, tt.transpose((0, 2, 1, 3)), self.op).transpose((0, 3, 2, 1))
-        if self._t == (3, 2, 1, 0):
-            return append_vec_tl(self.bra, self.ket, tt.transpose((0, 2, 1, 3)), self.op).transpose((0, 3, 2, 1))
-        if self._t == (2, 1, 0, 3):
-            return append_vec_tr(self.bra, self.ket, tt.transpose((0, 2, 1, 3)), self.op).transpose((0, 3, 2, 1))
-        if self._t == (1, 0, 3, 2):
-            return append_vec_br(self.bra, self.ket, tt.transpose((0, 2, 1, 3)), self.op).transpose((0, 3, 2, 1))
+        if reverse:
+            axes = axes[::-1]
+            mode = "b-self"
+        else:
+            mode = "self-b"
 
-    def _attach_30(self, tt):
-        """
-        Attach a tensor to the top-right enlarged corner `tt`.
-        """
-        if self._t == (0, 1, 2, 3):
-            return append_vec_tr(self.bra, self.ket, tt, self.op)
-        raise YastnError(f'Transpositions not supported by _attach_30')
+        in_a, in_b = _clear_axes(*axes)  # contracted meta legs
+        if len(in_a) != 2 or len(in_b) != 2:
+            raise YastnError('DoublePepTensor.tensordot only supports contraction of exactly 2 legs.')
+        sa0, sa1 = set(in_a), set(in_b)
+        if len(sa0) != len(in_a) or len(sa1) != len(in_b):
+            raise YastnError('DoublePepTensor.tensordot repeated axis in axes[0] or axes[1].')
+        if sa0 - set(range(self.ndim)) or sa1 - set(range(b.ndim)):
+            raise YastnError('DoublePepTensor.tensordot axes outside of tensor ndim.')
 
-    def _attach_12(self, tt):
-        """
-        Attach a tensor to the bottom-left enlarged corner `tt`.
-        """
-        if self._t == (0, 1, 2, 3):
-            return append_vec_bl(self.bra, self.ket, tt, self.op)
-        raise YastnError(f'Transpositions not supported by _attach_12')
+        in_a = tuple(self._t[ax] for ax in in_a)
+        out_a = tuple(ax for ax in self._t if ax not in in_a)
+
+        if in_a[0] > in_a[1]:  # reference order is (t, l, b, r)
+            in_a = in_a[::-1]
+            in_b = in_b[::-1]
+
+        if in_a == (0, 1):
+            return append_vec_tl(self.bra, self.ket, b, op=self.op, mode=mode, in_b=in_b, out_a=out_a)
+        elif in_a == (2, 3):
+            return append_vec_br(self.bra, self.ket, b, op=self.op, mode=mode, in_b=in_b, out_a=out_a)
+        elif in_a == (0, 3):
+            return append_vec_tr(self.bra, self.ket, b, op=self.op, mode=mode, in_b=in_b, out_a=out_a)
+        elif in_a == (1, 2):
+            return append_vec_bl(self.bra, self.ket, b, op=self.op, mode=mode, in_b=in_b, out_a=out_a)
+        raise YastnError('DoublePepTensor.tensordot, 2 axes of self should be neighbouring.')
 
     def fuse_layers(self):
         """
-        Fuse the top and btm tensors into a single :class:`yastn.Tensor`.
+        Fuse the top and bottom tensors into a single :class:`yastn.Tensor`.
         """
         tt = tensordot(self.ket, self.bra, axes=(2, 2), conj=(0, 1))  # [t l] [b r] [t' l'] [b' r']
         tt = tt.fuse_legs(axes=(0, 2, (1, 3)))  # [t l] [t' l'] [[b r] [b' r']]
@@ -191,3 +173,10 @@ class DoublePepsTensor:
         tt = tt.fuse_legs(axes=(0, (1, 3), (2, 4)))  # [[t t'] [l l']] [b b'] [r r']
         tt = tt.unfuse_legs(axes=0) # [t t'] [l l'] [b b'] [r r']
         return tt.transpose(axes=self._t)
+
+    def print_properties(self, file=None):
+        """ Print basic properties of DoublePepsTensor. """
+        print("DoublePepsTensor", file=file)
+        print("shape   :", self.get_shape(), file=file)
+        st = {i: leg.history() for i, leg in enumerate(self.get_legs())}
+        print("legs fusions :", st, "\n", file=file)

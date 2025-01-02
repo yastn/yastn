@@ -13,37 +13,27 @@
 # limitations under the License.
 # ==============================================================================
 """ Predefined spinful fermion operators operators """
-import pytest
 import numpy as np
+import pytest
 import yastn
-try:
-    from .configs import config_dense
-except ImportError:
-    from configs import config_dense
-
 
 tol = 1e-12  #pylint: disable=invalid-name
 
 
-def test_spinful_fermions_tJ():
+def test_spinful_fermions_tJ(config_kwargs):
     """ Generate standard operators in two-dimensional Hilbert space for tJ model. """
-    # pytest switches backends and default_device in config files for testing
-    backend = config_dense.backend
-    default_device = config_dense.default_device
-
-    ops_U1xU1xZ2_tJ = yastn.operators.SpinfulFermions_tJ(sym='U1xU1xZ2', backend=backend, default_device=default_device)
-    ops_U1xU1_tJ = yastn.operators.SpinfulFermions_tJ(sym='U1xU1', backend=backend, default_device=default_device)
+    ops_U1xU1xZ2_tJ = yastn.operators.SpinfulFermions_tJ(sym='U1xU1xZ2', **config_kwargs)
+    ops_U1xU1_tJ = yastn.operators.SpinfulFermions_tJ(sym='U1xU1', **config_kwargs)
     # other way to initialize
-    config_Z2 = yastn.make_config(fermionic=True, sym="Z2", backend=backend, default_device=default_device)
+    config_Z2 = yastn.make_config(fermionic=True, sym="Z2", **config_kwargs)
     ops_Z2_tJ = yastn.operators.SpinfulFermions_tJ(**config_Z2._asdict())
-    ops_U1_tJ = yastn.operators.SpinfulFermions_tJ(sym='U1', backend=backend, default_device=default_device)
+    ops_U1_tJ = yastn.operators.SpinfulFermions_tJ(sym='U1', **config_kwargs)
 
     Is = [ops_Z2_tJ.I(), ops_U1_tJ.I(), ops_U1xU1xZ2_tJ.I(), ops_U1xU1_tJ.I(), ]
     legs = [ops_Z2_tJ.space(), ops_U1_tJ.space(), ops_U1xU1xZ2_tJ.space(), ops_U1xU1_tJ.space()]
 
     assert all(leg == I.get_legs(axes=0) for (leg, I) in zip(legs, Is))
     assert all(np.allclose(I.to_numpy(), np.eye(3)) for I in Is)
-    assert all(default_device in I.device for I in Is)  # accept 'cuda' in 'cuda:0'
     assert all(ops.config.fermionic == fs for ops, fs in zip((ops_Z2_tJ, ops_U1_tJ, ops_U1xU1_tJ, ops_U1xU1xZ2_tJ), (True, True, True, (False, False, True))))
 
     for ops in [ops_Z2_tJ, ops_U1_tJ, ops_U1xU1xZ2_tJ, ops_U1xU1_tJ]:
@@ -89,12 +79,6 @@ def test_spinful_fermions_tJ():
         assert yastn.norm(ops.cp('u') @ v00 - v10) < tol
         assert yastn.norm(ops.cp('d') @ v00 - v01) < tol
 
-
-    d = ops_Z2_tJ.to_dict()  # dict used in mps.Generator
-    (d["I"](3) - ops_Z2_tJ.I()).norm() < tol  # here 3 is a posible position in the mps
-    d.keys() == ops_Z2_tJ.operators
-    assert all(k in d for k in ('I', 'nu', 'cu', 'cpu', 'nd', 'cd', 'cpd', 'Sz', 'Sm', 'Sp', 'h'))
-
     with pytest.raises(yastn.YastnError):
         yastn.operators.SpinfulFermions_tJ(sym='dense')
         # For SpinfulFermions_tJ sym should be in ('Z2', 'U1xU1', 'U1xU1xZ2').
@@ -117,6 +101,10 @@ def test_spinful_fermions_tJ():
         ops_Z2_tJ.vec_n(1)
         # For SpinfulFermions_tJ val in vec_n should be (0, 0), (1, 0), or (0, 1).
 
+    d = ops_Z2_tJ.to_dict()  # dict used in mps.Generator
+    (d["I"](3) - ops_Z2_tJ.I()).norm() < tol  # here 3 is a posible position in the mps
+    d.keys() == ops_Z2_tJ.operators
+    assert all(k in d for k in ('I', 'nu', 'cu', 'cpu', 'nd', 'cd', 'cpd', 'Sz', 'Sm', 'Sp', 'h'))
 
 if __name__ == '__main__':
-    test_spinful_fermions_tJ()
+    pytest.main([__file__, "-vs", "--durations=0"])
