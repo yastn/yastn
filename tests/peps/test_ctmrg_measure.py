@@ -18,11 +18,6 @@ import yastn
 import yastn.tn.fpeps as fpeps
 from yastn.tn.fpeps.envs.rdm import measure_rdm_1site, measure_rdm_nn, measure_rdm_2x2
 import yastn.tn.mps as mps
-try:
-    from .configs import config as cfg
-    # cfg is used by pytest to inject different backends and divices
-except ImportError:
-    from configs import config as cfg
 
 tol = 1e-12  #pylint: disable=invalid-name
 

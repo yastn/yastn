@@ -21,17 +21,8 @@ import yastn
 import yastn.tn.fpeps as fpeps
 from yastn.tn.fpeps.envs.rdm import rdm1x1
 import yastn.tn.mps as mps
-try:
-    from .configs import config as cfg
-    # cfg is used by pytest to inject different backends and divices
-except ImportError:
-    from configs import config as cfg
-if cfg.backend.BACKEND_ID=="torch":
-    import torch
-    from torch.autograd import gradcheck
 
-
-def prepare_RVB():
+def prepare_RVB(config_kwargs):
     # peps-torch/examples/kagome/abelian/optim_kagome_spin_half_u1.py::TestOptim_RVB_r1x1
     #
     test_state_Kagome_RVB_D3_U1_sym= {'_d': np.array([ 0.782507  -0.17348611j, -0.75472251+0.04994474j,
@@ -93,7 +84,15 @@ def prepare_RVB():
             'SYM_ID': 'U1', 'fermionic': False}
 
 
-    yastn_config= yastn.make_config(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
+    if config_kwargs['backend']=="torch":
+        import torch
+        from torch.autograd import gradcheck
+        import yastn.backend.backend_torch as backend
+    elif config_kwargs['backend']=='np':
+        import yastn.backend.backend_numpy as backend
+
+    yastn_config= yastn.make_config(sym='U1', backend=backend, default_device=config_kwargs["default_device"])
+    # yastn_config= yastn.make_config(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
     # load on-site tensor stored in above dict
     #
     # physical, top, left, bottom, right -> t,l,b,r,p
@@ -146,7 +145,7 @@ def prepare_RVB():
             1.6676e-02-5.2631e-04j, -1.5570e-02+1.9329e-03j])
     A_grad_expected= A.clone().transpose(axes=(4,0,1,2,3))
     A_grad_expected._data= A_grad_expected.config.backend.to_tensor(grad_expected, dtype='complex128', 
-                                                                    device=cfg.default_device)
+                                                                    device=config_kwargs["default_device"])
     A_grad_expected= A_grad_expected.transpose(axes=(1,2,3,4,0))
 
 
@@ -173,8 +172,15 @@ def prepare_RVB():
     return A, A_grad_expected, cost_function_RVB 
 
 
-def prepare_3x3():
-    yastn_cfg_Z2= yastn.make_config(sym='Z2', fermionic=True, backend=cfg.backend, default_device=cfg.default_device)
+def prepare_3x3(config_kwargs):
+    if config_kwargs['backend']=="torch":
+        import torch
+        from torch.autograd import gradcheck
+        import yastn.backend.backend_torch as backend
+    elif config_kwargs['backend']=='np':
+        import yastn.backend.backend_numpy as backend
+
+    yastn_cfg_Z2= yastn.make_config(sym='Z2', fermionic=True, backend=backend, default_device=config_kwargs["default_device"])
 
     json_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'inputs', 'D1_3x3_Z2_spinlessf_honeycomb.json')
     with open(json_file_path,'r') as f:
@@ -215,13 +221,18 @@ def prepare_3x3():
     return A, None, cost_function_3x3 
 
 
-@pytest.mark.skipif(cfg.backend.BACKEND_ID!="torch",\
-    reason="torch backend is required")
 @pytest.mark.parametrize("ctm_init", ['dl', 'eye'])
 @pytest.mark.parametrize("fix_signs", [False, True])
 @pytest.mark.parametrize("truncate_multiplets_mode", ["truncate", "expand"])
-def test_Kagome_RVB_D3_U1_sym_ctmsteps1(ctm_init, fix_signs, truncate_multiplets_mode):
-    A, A_grad_expected, cost_function_RVB= prepare_RVB()
+def test_Kagome_RVB_D3_U1_sym_ctmsteps1(ctm_init, fix_signs, truncate_multiplets_mode, config_kwargs):
+    if config_kwargs["backend"] != "torch":
+        pytest.skip("torch backend is required")
+    else:
+        import torch
+        from torch.autograd import gradcheck
+        import yastn.backend.backend_torch as backend
+
+    A, A_grad_expected, cost_function_RVB= prepare_RVB(config_kwargs)
     test_elems= A._data[36:51].clone()
     test_elems.requires_grad_()
 
@@ -234,12 +245,16 @@ def test_Kagome_RVB_D3_U1_sym_ctmsteps1(ctm_init, fix_signs, truncate_multiplets
         check_backward_ad=True, fast_mode=False, masked=None)
 
 
-@pytest.mark.skipif(cfg.backend.BACKEND_ID!="torch",\
-    reason="torch backend is required")
 @pytest.mark.parametrize("ctm_init", ['dl', 'eye'])
 @pytest.mark.parametrize("truncate_multiplets_mode", ["truncate", "expand"])
-def test_Kagome_RVB_D3_U1_sym_vs_pepstorch(ctm_init, truncate_multiplets_mode):
-    A, A_grad_expected, cost_function_RVB= prepare_RVB()
+def test_Kagome_RVB_D3_U1_sym_vs_pepstorch(ctm_init, truncate_multiplets_mode, config_kwargs):
+    if config_kwargs["backend"] != "torch":
+        pytest.skip("torch backend is required")
+    else:
+        import torch
+        from torch.autograd import gradcheck
+        import yastn.backend.backend_torch as backend
+    A, A_grad_expected, cost_function_RVB= prepare_RVB(config_kwargs)
     test_elems= A._data.clone()
     test_elems.requires_grad_()
 
@@ -252,13 +267,17 @@ def test_Kagome_RVB_D3_U1_sym_vs_pepstorch(ctm_init, truncate_multiplets_mode):
     assert np.allclose(A_grad_expected._data.numpy(), test_elems.grad.numpy(), rtol=1e-03, atol=1e-05)
     
 
-@pytest.mark.skipif(cfg.backend.BACKEND_ID!="torch",\
-    reason="torch backend is required")
 @pytest.mark.skipif( "not config.getoption('long_tests')", reason="long duration tests are skipped" )
 @pytest.mark.parametrize("ctm_init", ['dl', 'eye'])
 @pytest.mark.parametrize("truncate_multiplets_mode", ["truncate", "expand"])
-def test_Kagome_RVB_D3_U1_sym_conv(ctm_init, truncate_multiplets_mode):
-    A, A_grad_expected, cost_function_RVB= prepare_RVB()
+def test_Kagome_RVB_D3_U1_sym_conv(ctm_init, truncate_multiplets_mode, config_kwargs):
+    if config_kwargs["backend"] != "torch":
+        pytest.skip("torch backend is required")
+    else:
+        import torch
+        from torch.autograd import gradcheck
+        import yastn.backend.backend_torch as backend
+    A, A_grad_expected, cost_function_RVB= prepare_RVB(config_kwargs)
     test_elems= A._data[36:36+5].clone()
     test_elems.requires_grad_()
 
@@ -271,13 +290,17 @@ def test_Kagome_RVB_D3_U1_sym_conv(ctm_init, truncate_multiplets_mode):
         check_backward_ad=True, fast_mode=False, masked=None)
 
 
-@pytest.mark.skipif(cfg.backend.BACKEND_ID!="torch",\
-    reason="torch backend is required")
 @pytest.mark.parametrize("ctm_init", ['dl', 'eye'])
 @pytest.mark.parametrize("fix_signs", [False, True])
 @pytest.mark.parametrize("truncate_multiplets_mode", ["truncate", "expand"])
-def test_3x3_D1_Z2_spinlessf_ctmsteps1(ctm_init, fix_signs, truncate_multiplets_mode):
-    A0, _, cost_function= prepare_3x3()
+def test_3x3_D1_Z2_spinlessf_ctmsteps1(ctm_init, fix_signs, truncate_multiplets_mode, config_kwargs):
+    if config_kwargs["backend"] != "torch":
+        pytest.skip("torch backend is required")
+    else:
+        import torch
+        from torch.autograd import gradcheck
+        import yastn.backend.backend_torch as backend
+    A0, _, cost_function= prepare_3x3(config_kwargs)
     slices= { k: (slice(3*i,3*(i+1)), slice(0,3)) for i,k in enumerate(A0.keys()) }
     test_elems= torch.cat( [A0[k]._data[slices[k][1]].clone() for i,k in enumerate(A0.keys())] )
     test_elems.requires_grad_()
@@ -291,12 +314,16 @@ def test_3x3_D1_Z2_spinlessf_ctmsteps1(ctm_init, fix_signs, truncate_multiplets_
         check_backward_ad=True, fast_mode=False, masked=None)
 
 
-@pytest.mark.skipif(cfg.backend.BACKEND_ID!="torch",\
-    reason="torch backend is required")
 @pytest.mark.parametrize("ctm_init", ['dl', 'eye'])
 @pytest.mark.parametrize("truncate_multiplets_mode", ["truncate", "expand"])
-def test_3x3_D1_Z2_spinlessf_conv(ctm_init, truncate_multiplets_mode):
-    A0, _, cost_function= prepare_3x3()
+def test_3x3_D1_Z2_spinlessf_conv(ctm_init, truncate_multiplets_mode, config_kwargs):
+    if config_kwargs["backend"] != "torch":
+        pytest.skip("torch backend is required")
+    else:
+        import torch
+        from torch.autograd import gradcheck
+        import yastn.backend.backend_torch as backend
+    A0, _, cost_function= prepare_3x3(config_kwargs)
     slices= { k: (slice(2*i,2*(i+1)), slice(0,2)) for i,k in enumerate(A0.keys()) }
     test_elems= torch.cat( [A0[k]._data[slices[k][1]].clone() for i,k in enumerate(A0.keys())] )
     test_elems.requires_grad_()
@@ -311,12 +338,16 @@ def test_3x3_D1_Z2_spinlessf_conv(ctm_init, truncate_multiplets_mode):
         check_backward_ad=True, fast_mode=False, masked=None)
 
 
-@pytest.mark.skipif(cfg.backend.BACKEND_ID!="torch",\
-    reason="torch backend is required")
 @pytest.mark.parametrize("ctm_init", ['dl', 'eye'])
 @pytest.mark.parametrize("truncate_multiplets_mode", ["truncate", "expand"])
-def test_3x3_D1_Z2_spinlessf_expected(ctm_init, truncate_multiplets_mode):
-    A0, _, cost_function= prepare_3x3()
+def test_3x3_D1_Z2_spinlessf_expected(ctm_init, truncate_multiplets_mode, config_kwargs):
+    if config_kwargs["backend"] != "torch":
+        pytest.skip("torch backend is required")
+    else:
+        import torch
+        from torch.autograd import gradcheck
+        import yastn.backend.backend_torch as backend
+    A0, _, cost_function= prepare_3x3(config_kwargs)
     slices= { k: (slice(i*A0[k]._data.shape[0], (i+1)*A0[k]._data.shape[0]), slice(0,A0[k]._data.shape[0])) for i,k in enumerate(A0.keys()) }
     test_elems= torch.cat( [A0[k]._data[slices[k][1]].clone() for i,k in enumerate(A0.keys())] )
     test_elems.requires_grad_()
@@ -331,8 +362,8 @@ def test_3x3_D1_Z2_spinlessf_expected(ctm_init, truncate_multiplets_mode):
     print(test_elems.grad)
 
 
-if __name__ == '__main__':
+# if __name__ == '__main__':
     # enforce torch backend
-    import yastn.backend.backend_torch as backend
-    cfg.backend= backend
+    # import yastn.backend.backend_torch as backend
+    # cfg.backend= backend
     # test_Kagome_RVB_D3_U1_sym()
