@@ -27,7 +27,6 @@ from ._merging import _embed_tensor
 
 __all__ = ['compress_to_1d', 'save_to_dict', 'save_to_hdf5', 'requires_grad']
 
-
 def save_to_dict(a) -> dict:
     r"""
     Export YASTN tensor to dictionary containing all the information needed to recreate the tensor.

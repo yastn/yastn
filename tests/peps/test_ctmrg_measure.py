@@ -17,6 +17,12 @@ import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
 from yastn.tn.fpeps.envs.rdm import measure_rdm_1site, measure_rdm_nn, measure_rdm_2x2
+import yastn.tn.mps as mps
+try:
+    from .configs import config as cfg
+    # cfg is used by pytest to inject different backends and divices
+except ImportError:
+    from configs import config as cfg
 
 tol = 1e-12  #pylint: disable=invalid-name
 
@@ -164,7 +170,8 @@ def test_ctmrg_measure_product(config_kwargs, boundary):
         env.measure_line(sz, sz, sites=((0, 0), (0, 0)))
         # Sites should not repeat.
 
-def test_ctmrg_measure_2x1(config_kwargs):
+@pytest.mark.parametrize("env_init", ["eye", "dl"])
+def test_ctmrg_measure_2x1(config_kwargs, env_init):
     """ Initialize a product PEPS of 1x2 cells and perform a set of measurment. """
 
     for dims in [(1, 2), (2, 1)]:

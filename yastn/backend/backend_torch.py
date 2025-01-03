@@ -691,9 +691,9 @@ if _torch_version_check("2.0"):
             # A_b = C_b.B^T ; B_b = A^T . C_b
             Adata, Bdata= ctx.saved_tensors
             meta_dot= ctx.meta_dot
-            Adata_b = torch.zeros_like(Adata)
-            Bdata_b = torch.zeros_like(Bdata)
             dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
+            Adata_b = torch.zeros_like(Adata, dtype=dtype)
+            Bdata_b = torch.zeros_like(Bdata, dtype=dtype)
             if dtype != Adata.dtype:
                 Adata = Adata.to(dtype=dtype)
             if dtype != Bdata.dtype:

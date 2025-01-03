@@ -10,6 +10,7 @@ def pytest_addoption(parser):
         action='store_true', dest="bug_pytorch110", default=False)
     parser.addoption("--quickstart", help='execute quickstarts',\
         action='store_true', dest="quickstart", default=False)
+    parser.addoption("--long_tests", help='run long duration tests', action='store_true', default=False)
 
 
 @pytest.fixture

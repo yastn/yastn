@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-""" Import methods of yastn Tensor. """
 from .tensor import *
 from .initialize import *
 from .krylov import *
