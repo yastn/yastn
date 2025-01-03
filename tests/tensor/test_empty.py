@@ -12,18 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-""" Test tensor operations on an empty tensor """
+""" Test tensor operations on an empty tensor. """
+import pytest
 import yastn
-try:
-    from .configs import config_U1
-except ImportError:
-    from configs import config_U1
 
 tol = 1e-12  #pylint: disable=invalid-name
 
 
-def test_empty_tensor():
+def test_empty_tensor(config_kwargs):
     """ Test some tensor operations on an empty tensor. """
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.Tensor(config=config_U1, s=(1, 1, -1, -1))
 
     assert a.norm() < tol
@@ -39,4 +37,4 @@ def test_empty_tensor():
 
 
 if __name__ == '__main__':
-    test_empty_tensor()
+    pytest.main([__file__, "-vs", "--durations=0"])

@@ -12,7 +12,7 @@ Get information about tensor's structure and properties
 .. autoproperty:: yastn.Tensor.isdiag
 .. autoproperty:: yastn.Tensor.requires_grad
 .. autoproperty:: yastn.Tensor.size
-.. automethod:: yastn.Tensor.show_properties
+.. automethod:: yastn.Tensor.print_properties
 .. automethod:: yastn.Tensor.print_blocks_shape
 .. automethod:: yastn.Tensor.is_complex
 .. automethod:: yastn.Tensor.get_rank

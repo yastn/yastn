@@ -15,32 +15,20 @@
 """ examples for addition of the Mps-s """
 import numpy as np
 import pytest
-import yastn.tn.mps as mps
 import yastn
-try:
-    from .configs import config_dense as cfg
-except ImportError:
-    from configs import config_dense as cfg
-# pytest modifies cfg to inject different backends and devices during tests
+import yastn.tn.mps as mps
 
 
-@pytest.mark.parametrize("kwargs", [{'config': cfg}])
-def test_add_example(kwargs):
-    addition_example(**kwargs)
-
-def addition_example(tol=1e-12, config=None):
+def test_addition_example(config_kwargs, tol=1e-12):
     # Define random MPS's without any symmetry
-    #
-    opts_config = {} if config is None else \
-                  {'backend': config.backend,
-                   'default_device': config.default_device}
-    # pytest uses config to inject various backends and devices for testing
-    ops = yastn.operators.Qdit(d=2, **opts_config)
+    ops = yastn.operators.Qdit(d=2, **config_kwargs)
     I = mps.product_mpo(ops.I(), N=8)
     psi0 = mps.random_mps(I, D_total=5)
     psi1 = mps.random_mps(I, D_total=3, dtype='complex128')
 
-    # We want to calculate: res = psi0 + 2 * psi1. There is a couple of ways:
+    # We want to calculate: res = psi0 + 2 * psi1.
+    # There is a couple of ways:
+
     # A/
     resA = mps.add(psi0, 2.0 * psi1)
 
@@ -57,11 +45,8 @@ def addition_example(tol=1e-12, config=None):
             for x in (resA, resB, resC))
 
 
-def test_add(config=cfg, tol=1e-8):
-    opts_config = {} if config is None else \
-                  {'backend': config.backend, 'default_device': config.default_device}
-
-    ops = yastn.operators.SpinfulFermions(sym='U1xU1', **opts_config)
+def test_add(config_kwargs, tol=1e-8):
+    ops = yastn.operators.SpinfulFermions(sym='U1xU1', **config_kwargs)
     generate = mps.Generator(N=9, operators=ops)
 
     psi0 = generate.random_mps(D_total=15, n=(3, 5))
@@ -90,15 +75,12 @@ def check_add(psi0, psi1, tol):
         assert abs(o1 - p0 - 4 * p1 - 2 * p01 - 2 * p10) < tol
 
 
-def test_multiply(config=cfg):
+def test_multiply(config_kwargs):
     # Define random MPS's without any symmetry
-    #
-    opts_config = {} if config is None else \
-                  {'backend': config.backend, 'default_device': config.default_device}
     N = 4
-    psi = mps.random_dense_mps(N=N, D=5, d=2, **opts_config)
-    H1 = mps.random_dense_mpo(N=N, D=3, d=2, **opts_config)
-    H2 = mps.random_dense_mpo(N=N, D=4, d=2, **opts_config)
+    psi = mps.random_dense_mps(N=N, D=5, d=2, **config_kwargs)
+    H1 = mps.random_dense_mpo(N=N, D=3, d=2, **config_kwargs)
+    H2 = mps.random_dense_mpo(N=N, D=4, d=2, **config_kwargs)
 
     H1psi = H1 @ psi
     assert H1psi.get_bond_dimensions() == (1, 15, 15, 15, 1)
@@ -110,11 +92,7 @@ def test_multiply(config=cfg):
     assert H1H2.nr_phys == 2
 
 
-@pytest.mark.parametrize("kwargs", [{'config': cfg}])
-def test_multiplication_example_gs(kwargs):
-    multiplication_example_gs(**kwargs)
-
-def multiplication_example_gs(config=None, tol=1e-12):
+def test_multiplication_example_gs(config_kwargs, tol=1e-12):
     """
     Calculate ground state and tests, within eigen-condition,
     functions mps.multiply, __mul__, mps.zipper and mps.add
@@ -127,11 +105,7 @@ def multiplication_example_gs(config=None, tol=1e-12):
     Eng = -3.427339492125
     t, mu = 1.0, 0.2
     #
-    opts_config = {} if config is None else \
-                  {'backend': config.backend,
-                   'default_device': config.default_device}
-    # pytest uses config to inject various backends and devices for testing
-    ops = yastn.operators.SpinlessFermions(sym='U1', **opts_config)
+    ops = yastn.operators.SpinlessFermions(sym='U1', **config_kwargs)
     #
     # The Hamiltonian is obtained using Hterm.
     #
@@ -204,13 +178,9 @@ def multiplication_example_gs(config=None, tol=1e-12):
     assert p0.norm() < tol
 
 
-def test_add_multiply_raise(config=cfg):
+def test_add_multiply_raise(config_kwargs):
     # Define random MPS's without any symmetry
-    #
-    opts_config = {} if config is None else \
-                  {'backend': config.backend,
-                   'default_device': config.default_device}
-    ops = yastn.operators.Qdit(d=2, **opts_config)
+    ops = yastn.operators.Qdit(d=2, **config_kwargs)
 
     I = ops.I()
     psi8 = mps.random_mps(mps.product_mpo(I, N=8), D_total=5)
@@ -256,9 +226,6 @@ def test_add_multiply_raise(config=cfg):
         psi8 @ H8
         # Multiplication by MPS from left is not supported.
 
-if __name__ == "__main__":
-    test_add()
-    addition_example()
-    test_multiply()
-    multiplication_example_gs()
-    test_add_multiply_raise()
+
+if __name__ == '__main__':
+    pytest.main([__file__, "-vs", "--durations=0"])

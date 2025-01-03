@@ -16,18 +16,12 @@
 import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
-try:
-    from .configs import config as cfg
-    # cfg is used by pytest to inject different backends and divices
-except ImportError:
-    from configs import config as cfg
-
 
 def mean(xs):
     return sum(xs) / len(xs)
 
 
-def test_NTU_spinful_finite():
+def test_NTU_spinful_finite(config_kwargs):
     """ Simulate purification of spinful fermions in a small finite system """
     print(" Simulating spinful fermions in a small finite system. ")
 
@@ -44,7 +38,7 @@ def test_NTU_spinful_finite():
     D = 8
 
     # prepare evolution gates
-    ops = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', backend=cfg.backend, default_device=cfg.default_device)
+    ops = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', **config_kwargs)
     I = ops.I()
     c_up, c_dn, cdag_up, cdag_dn = ops.c(spin='u'), ops.c(spin='d'), ops.cp(spin='u'), ops.cp(spin='d')
     n_up, n_dn =  ops.n(spin='u'), ops.n(spin='d')
@@ -129,7 +123,7 @@ def test_NTU_spinful_finite():
     assert abs(nn_CTM_bond_2r_dn - nn_bond_2_exact) < 1e-4
 
 
-def test_NTU_spinful_infinite():
+def test_NTU_spinful_infinite(config_kwargs):
     """ Simulate purification of spinful fermions in an infinite system.s """
     print("Simulating spinful fermions in an infinite system. """)
     geometry = fpeps.CheckerboardLattice()
@@ -142,7 +136,7 @@ def test_NTU_spinful_infinite():
     dbeta = 0.01
     D = 5
 
-    ops = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', backend=cfg.backend, default_device=cfg.default_device)
+    ops = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', **config_kwargs)
     I = ops.I()
     c_up, c_dn = ops.c(spin='u'), ops.c(spin='d')
     cdag_up, cdag_dn = ops.cp(spin='u'), ops.cp(spin='d')
@@ -216,5 +210,4 @@ def test_NTU_spinful_infinite():
 
 
 if __name__ == '__main__':
-    test_NTU_spinful_finite()
-    test_NTU_spinful_infinite()
+    pytest.main([__file__, "-vs", "--durations=0"])

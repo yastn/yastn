@@ -22,13 +22,13 @@ Conjugation and transpose
 Addition of MPS/MPO
 -------------------
 
-Two MPS's or two MPO's can be added up, provided that their length, physical dimensions, and symmetry agree.
-The sum of two such objects :code:`A` and :code:`B` results in new MPS/MPO :code:`C = A + B`, with tensor of :code:`C` given by the direct sum of :code:`A`'s
-and :code:`B`'s tensors along virtual dimension.
+Two MPS's or two MPO's can be added when their lengths, physical dimensions, and symmetries agree.
+The sum of two such objects, :code:`A` and :code:`B`, results in a new MPS/MPO, :code:`C = A + B`,
+with tensors forming :code:`C` given by a direct sum of :code:`A`'s and :code:`B`'s tensors along a virtual dimension.
 
 ::
 
-    # a product of two MPS's
+    # a sum of two MPS's
                ___     ___    ___    ___      ___      ___    ___    ___
       A       |___|-D-|___|--|___|--|___|    |   |    |   |  |   |  |   |
  C =  +  =  __ d|   ___ |  ___ |  ___ |   =  |   |-2D-|   |--|   |--|   |
@@ -48,11 +48,13 @@ Following example show an addition of two MPSs:
     import yastn.tn.mps as mps
 
 .. literalinclude:: /../../tests/mps/test_algebra.py
-        :pyobject: addition_example
+        :pyobject: test_addition_example
 
 
 Products of MPO and MPS
 -----------------------
+
+See examples at :ref:`examples/mps/algebra:Multiplication`.
 
 API supports *product* ``@`` of
 
@@ -83,7 +85,7 @@ operator product :math:`\hat{O}\hat{P} = \hat{C}` (matrix-matrix multiplication)
                |d         |           |
 
 One can either use call :code:`C = A @ B` or in a more verbose form
-:code:`C = mps.multiply(A, B)`. See examples here: :ref:`examples/mps/algebra:Multiplication`.
+:code:`C = mps.multiply(A, B)`.
 
 .. autofunction:: yastn.tn.mps.multiply
 
@@ -91,7 +93,9 @@ One can either use call :code:`C = A @ B` or in a more verbose form
 Multiplication with truncation
 ------------------------------
 
-A fast procedure to multiply MPO by MPO/MPS while performing truncation is a `zipper`.
-The result can be subsequently fine-tuned using :ref:`variational optimization<mps/algorithms_overlap:Variational overlap maximalization>`.
+See examples at :ref:`examples/mps/algebra:Multiplication`.
+
+A fast procedure to multiply MPO by MPO/MPS while performing truncation is a **zipper**.
+The result can be subsequently fine-tuned using :ref:`variational optimization<mps/algorithms_overlap:Variational overlap maximization>`.
 
 .. autofunction:: yastn.tn.mps.zipper

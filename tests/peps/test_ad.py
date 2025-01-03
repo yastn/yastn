@@ -98,7 +98,7 @@ def prepare_RVB():
     #
     # physical, top, left, bottom, right -> t,l,b,r,p
     A= yastn.load_from_dict(yastn_config, test_state_Kagome_RVB_D3_U1_sym).transpose(axes=(1,2,3,4,0))
-
+    A = A.drop_leg_history(axes=4)
 
     grad_expected= np.asarray([-5.2009e-02+1.1485e-02j,  4.2988e-02-2.8922e-03j,
         -1.6123e-03+7.3344e-05j, -4.9013e-04+1.7433e-05j,

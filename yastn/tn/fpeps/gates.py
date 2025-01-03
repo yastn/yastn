@@ -14,19 +14,18 @@
 # ==============================================================================
 import numpy as np
 from typing import NamedTuple
-from ...tensor._algebra import exp
-from ...tensor.linalg import eigh
-from ...tensor._contractions import ncon
+from ... import exp, ncon, eigh
 from ._gates_auxiliary import fkron
 
 class Gate_nn(NamedTuple):
     """
-    G0 should be before G1 in the fermionic and lattice orders.
-    The third legs of G0 and G1 are auxiliary legs connecting them into a two-site operator.
+    ``G0`` should be before ``G1`` in the fermionic and lattice orders
+    (``G0`` acts on the left/top site; ``G1`` acts on the right/bottom site from a pair of nearest-neighbor sites).
+    The third legs of ``G0`` and ``G1`` are auxiliary legs connecting them into a two-site operator.
 
-    If a bond is None, this is a general operator.
-    Otherwise, the bond can carry information where it should be applied
-    (potentially, after fixing the order mismatches).
+    If a ``bond`` is ``None``, this is a general operator.
+    Otherwise, ``bond`` carries information where it should be applied
+    (potentially, after fixing order mismatches).
     """
     G0 : tuple = None
     G1 : tuple = None
@@ -34,26 +33,26 @@ class Gate_nn(NamedTuple):
 
 
 class Gate_local(NamedTuple):
-    """
-    G is a local operator with ndim==2.
+    r"""
+    ``G`` is a local operator with ``ndim=2``.
 
-    If site is None, this is a general operator.
-    Otherwise, the site can carry information where it should be applied.
+    If ``site`` is ``None``, this is a general operator.
+    Otherwise, ``site`` carries information where it should be applied.
     """
     G : tuple = None
     site : tuple = None
 
 
 class Gates(NamedTuple):
-    """
-    List of nearest-neighbor and local operators to be applied to PEPS during evolution_step.
+    r"""
+    List of nearest-neighbor and local operators to be applied to PEPS by :meth:`yastn.tn.fpeps.evolution_step_`.
     """
     nn : list = ()   # list of NN gates
     local : list = ()   # list of local gates
 
 
 def decompose_nn_gate(Gnn, bond=None) -> Gate_nn:
-    """
+    r"""
     Auxiliary function cutting a two-site gate with SVD
     into two local operators with the connecting legs.
     """
@@ -63,11 +62,12 @@ def decompose_nn_gate(Gnn, bond=None) -> Gate_nn:
 
 
 def gate_nn_hopping(t, step, I, c, cdag, bond=None) -> Gate_nn:
-    """
-    Nearest-neighbor gate G = exp(-step * H)
-    for H = -t * (cdag_1 c_2 + cdag_2 c_1)
+    r"""
+    Nearest-neighbor gate :math:`G = \exp(-step \cdot H)` for
+    :math:`H = -t \cdot (cdag_1 c_2 + cdag_2 c_1)`
 
-    G = I + (cosh(x) - 1) * (n_1 h_2 + h_1 n_2) + sinh(x) * (cdag_1 c_2 + cdag_2 c_1)
+    :math:`G = I + (\cosh(x) - 1) (n_1 h_2 + h_1 n_2) + \sinh(x) (cdag_1 c_2 + cdag_2 c_1)`,
+    where :math:`x = t \cdot step`
     """
     n = cdag @ c
     h = c @ cdag
@@ -84,11 +84,13 @@ def gate_nn_hopping(t, step, I, c, cdag, bond=None) -> Gate_nn:
 
 
 def gate_nn_Ising(J, step, I, X, bond=None) -> Gate_nn:
-    """
-    Nearest-neighbor gate G = exp(-step * H)
-    for H = J X_1 X_2, where X is Pauli matrix
+    r"""
+    Nearest-neighbor gate :math:`G = \exp(-step \cdot H)` for
+    :math:`H = J X_1 X_2`,
+    where :math:`X` is a Pauli matrix.
 
-    G = cosh(x) I - sinh(x) X_1 X_2;  x = step * J
+    :math:`G = \cosh(x) I - \sinh(x) X_1 X_2`,
+    where :math:`x = step \cdot J`.
     """
     II = fkron(I, I, sites=(0, 1))
     XX = fkron(X, X, sites=(0, 1))
@@ -98,8 +100,8 @@ def gate_nn_Ising(J, step, I, X, bond=None) -> Gate_nn:
 
 
 def gate_nn_tJ(J, tu, td, muu0, muu1, mud0, mud1, step, I, cu, cpu, cd, cpd, bond=None) -> Gate_nn:
-    """
-    Gate exp(-step * H_tj)
+    r"""
+    Nearest-neighbor gate :math:`G = \exp(-step \cdot H_{tj})`
     """
     nu = cpu @ cu
     nd = cpd @ cd
@@ -129,11 +131,11 @@ def gate_nn_tJ(J, tu, td, muu0, muu1, mud0, mud1, step, I, cu, cpu, cd, cpd, bon
 
 
 def gate_local_Coulomb(mu_up, mu_dn, U, step, I, n_up, n_dn, site=None) -> Gate_local:
-    """
-    Local gate exp(-step * H)
-    for H = U * (n_up - I / 2) * (n_dn - I / 2) - mu_up * n_up - mu_dn * n_dn
+    r"""
+    Local gate :math:`\exp(-step \cdot H)` for
+    :math:`H = U \cdot (n_{up} - I / 2) \cdot (n_{dn} - I / 2) - mu_{up} \cdot n_{up} - mu_{dn} \cdot n_{dn}`
 
-    We ignore a constant U / 4 in the above Hamiltonian.
+    We ignore a constant :math:`U / 4` in the above Hamiltonian.
     """
     nn = n_up @ n_dn
     G_loc = I
@@ -144,32 +146,35 @@ def gate_local_Coulomb(mu_up, mu_dn, U, step, I, n_up, n_dn, site=None) -> Gate_
 
 
 def gate_local_occupation(mu, step, I, n, site=None) -> Gate_local:
-    """
-    Local gate G = exp(-step * H) for H = -mu * n
+    r"""
+    Local gate :math:`G = \exp(-step \cdot H)` for
+    :math:`H = -mu \cdot n`
 
-    G = I + n * (exp(mu * step) - 1)
+    :math:`G = I + n \cdot (\exp(mu \cdot step) - 1)`
     """
     G_loc = I + n * (np.exp(mu * step) - 1)
     return Gate_local(G_loc, site)
 
 
 def gate_local_field(h, step, I, X, site=None) -> Gate_local:
-    """
-    Local gate G = exp(-step * H) for H = -h * X
+    r"""
+    Local gate :math:`G = \exp(-step \cdot H)` for
+    :math:`H = -h \cdot X`
+    where :math:`X` is a Pauli matrix.
 
-    G = cosh(h * step) * I + np.sinh(h * step) * X
+    :math:`G = \cosh(h \cdot step) \cdot I + \sinh(h \cdot step) \cdot X`
     """
     G_loc = np.cosh(h * step) * I + np.sinh(h * step) * X
     return Gate_local(G_loc, site)
 
 
 def distribute(geometry, gates_nn=None, gates_local=None) -> Gates:
-    """
+    r"""
     Distributes gates homogeneous over the lattice.
 
     Parameters
     ----------
-    geomtry : yastn.tn.fpeps.SquareLattice | yastn.tn.fpeps.CheckerboardLattice | yast.tn.fpeps.Peps
+    geometry : yastn.tn.fpeps.SquareLattice | yastn.tn.fpeps.CheckerboardLattice | yast.tn.fpeps.Peps
         Geometry of PEPS lattice.
         Can be any structure that includes geometric information about the lattice, like the Peps class.
 

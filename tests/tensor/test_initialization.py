@@ -12,24 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""
-Test initialization with yastn.rand, yastn.zeros, yastn.ones, yastn.eye.
-
-Also creating a dense tensor with to_numpy()
-"""
+""" yastn.rand(), yastn.zeros(), yastn.ones(), yastn.eye()  yastn.to_numpy() """
 import numpy as np
 import pytest
 import yastn
-try:
-    from .configs import config_dense, config_U1, config_Z2xU1
-except ImportError:
-    from configs import config_dense, config_U1, config_Z2xU1
 
 tol = 1e-12  #pylint: disable=invalid-name
 
 
-def test_initialize_dense():
+def test_initialize_dense(config_kwargs):
     """ initialization of dense tensor with no symmetry """
+    config_dense = yastn.make_config(sym='none', **config_kwargs)
+    #
     # 3-dim tensor
     a = yastn.ones(config=config_dense, s=(-1, 1, 1), D=(1, 2, 3))
     npa = a.to_numpy()
@@ -72,8 +66,10 @@ def test_initialize_dense():
     assert np.linalg.norm(np.diag(np.diag(npa)) - npa) < tol  # == 0.0
 
 
-def test_initialize_U1():
+def test_initialize_U1(config_kwargs):
     """ initialization of tensor with U1 symmetry """
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    #
     # 4-dim tensor
     legs = [yastn.Leg(config_U1, s=-1, t=(-2, 0, 2), D=(1, 2, 3)),
             yastn.Leg(config_U1, s=1, t=(0, 2), D=(1, 2)),
@@ -159,8 +155,10 @@ def test_initialize_U1():
     assert a3.is_consistent()
 
 
-def test_initialize_Z2xU1():
+def test_initialize_Z2xU1(config_kwargs):
     """ initialization of tensor with more complicated symmetry indexed by 2 numbers"""
+    config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
+    #
     # 3-dim tensor
     legs = [yastn.Leg(config_Z2xU1, s=-1, t=[(0, 1), (1, 0)], D=[1, 2]),
             yastn.Leg(config_Z2xU1, s=1, t=[(0, 0)], D=[3]),
@@ -229,8 +227,10 @@ def test_initialize_Z2xU1():
     assert a1.is_consistent()
 
 
-def test_initialize_exceptions():
+def test_initialize_exceptions(config_kwargs):
     """ test raise YaseError by fill_tensor()"""
+    config_dense = yastn.make_config(sym='none', **config_kwargs)
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     with pytest.raises(yastn.YastnError):
         a = yastn.ones(config=config_dense, s=(1, 1), D=[(1,), (1,), (1,)])
         # Number of elements in D does not match tensor rank.
@@ -258,7 +258,4 @@ def test_initialize_exceptions():
 
 
 if __name__ == '__main__':
-    test_initialize_dense()
-    test_initialize_U1()
-    test_initialize_Z2xU1()
-    test_initialize_exceptions()
+    pytest.main([__file__, "-vs", "--durations=0"])

@@ -17,33 +17,30 @@ import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
 import yastn.tn.mps as mps
-try:
-    from .configs import config as cfg
-    # cfg is used by pytest to inject different backends and divices
-except ImportError:
-    from configs import config as cfg
 
-tol = 1e-12
+tol = 1e-12  #pylint: disable=invalid-name
 
-def init_peps(Dphys=(), boundary='infinite'):
+
+def init_peps(config_kwargs, Dphys=(), boundary='infinite'):
     """ initialized PEPS with mixed bond dimensions for testing. """
     geometry = fpeps.SquareLattice(dims=(2, 3), boundary=boundary)
     psi = fpeps.Peps(geometry)
     s = (-1, 1, 1, -1) + (1,) * len(Dphys)
-    cfg.backend.random_seed(seed=5)
-    psi[0, 0] = yastn.rand(cfg, s=s, D=(2, 3, 4, 5) + Dphys, dtype='complex128')
-    psi[1, 0] = yastn.rand(cfg, s=s, D=(4, 3, 2, 4) + Dphys, dtype='complex128')
-    psi[0, 1] = yastn.rand(cfg, s=s, D=(3, 5, 5, 2) + Dphys, dtype='complex128')
-    psi[1, 1] = yastn.rand(cfg, s=s, D=(5, 4, 3, 3) + Dphys, dtype='complex128')
-    psi[0, 2] = yastn.rand(cfg, s=s, D=(2, 2, 3, 3) + Dphys, dtype='complex128')
-    psi[1, 2] = yastn.rand(cfg, s=s, D=(3, 3, 2, 3) + Dphys, dtype='complex128')
+    config = yastn.make_config(sym='none', **config_kwargs)
+    config.backend.random_seed(seed=5)
+    psi[0, 0] = yastn.rand(config, s=s, D=(2, 3, 4, 5) + Dphys, dtype='complex128')
+    psi[1, 0] = yastn.rand(config, s=s, D=(4, 3, 2, 4) + Dphys, dtype='complex128')
+    psi[0, 1] = yastn.rand(config, s=s, D=(3, 5, 5, 2) + Dphys, dtype='complex128')
+    psi[1, 1] = yastn.rand(config, s=s, D=(5, 4, 3, 3) + Dphys, dtype='complex128')
+    psi[0, 2] = yastn.rand(config, s=s, D=(2, 2, 3, 3) + Dphys, dtype='complex128')
+    psi[1, 2] = yastn.rand(config, s=s, D=(3, 3, 2, 3) + Dphys, dtype='complex128')
     return psi
 
 
-def test_window_shapes():
+def test_window_shapes(config_kwargs):
     """ Initialize a product PEPS and perform a set of measurment. """
     for Dphys in [(), (2,)]:  # Dphys = () gives single-layer PEPS; (2,) gives double-layer PEPS
-        psi = init_peps(Dphys)
+        psi = init_peps(config_kwargs, Dphys)
         #
         env_ctm = fpeps.EnvCTM(psi, init='eye')
         #
@@ -77,16 +74,16 @@ def test_window_shapes():
         env_win[2, 'none']
         # dirn='none' not recognized. Should be 't', 'h' 'b', 'r', 'v', or 'l'.
     with pytest.raises(yastn.YastnError):
-        psi = init_peps(Dphys=(), boundary='obc')
+        psi = init_peps(config_kwargs, Dphys=(), boundary='obc')
         env_ctm = fpeps.EnvCTM(psi, init='eye')
         env_win = fpeps.EnvWindow(env_ctm, xrange=(1, 5), yrange=(1, 5))
         # Window range xrange=(1, 5), yrange=(1, 5) does not fit within the lattice.
 
 
-def test_window_measure():
+def test_window_measure(config_kwargs):
     """ checks syntax of sample and measure_2site"""
     # for Dphys = 2
-    psi = init_peps(Dphys=(2,))
+    psi = init_peps(config_kwargs, Dphys=(2,))
     D_total = 15
     opts_svd = {'D_total': D_total, 'tol': 1e-10}
     env_ctm = fpeps.EnvCTM(psi, init='eye')
@@ -98,12 +95,11 @@ def test_window_measure():
     #
     # test sample
     #
-    ops = yastn.operators.Spin12(sym='dense', backend=cfg.backend, default_device=cfg.default_device)
+    ops = yastn.operators.Spin12(sym='dense', **config_kwargs)
     vecs = [ops.vec_z(val=v) for v in [-1, 1]]
-    projs = [yastn.tensordot(vec, vec.conj(), axes=((), ())) for vec in vecs]
     #
     number = 4
-    out = env_win.sample(projs, number=number, return_info=True, progressbar=True)
+    out = env_win.sample(vecs, number=number, return_info=True, progressbar=True)
     info = out.pop('info')
     assert info['opts_svd']['D_total'] == D_total
     assert len(out) == 12
@@ -112,8 +108,8 @@ def test_window_measure():
             assert len(out[nx, ny]) == number
             assert all(x in [0, 1] for x in out[nx, ny])
 
-    projs = {k: v for k, v in zip('tb', projs)}
-    out = env_win.sample(projs, number=number, return_info=True)
+    vecs = {k: v for k, v in zip('tb', vecs)}
+    out = env_win.sample(vecs, number=number, return_info=True)
     info = out.pop('info')
     assert info['opts_svd']['D_total'] == D_total
     assert len(out) == 12
@@ -123,8 +119,8 @@ def test_window_measure():
             assert all(x in 'tb' for x in out[nx, ny])
     #
     with pytest.raises(yastn.YastnError):
-        env_win.sample(projectors={(0, 0): projs, (1, 0): projs})
-        # projectors not defined for some sites in xrange=(0, 4), yrange=(0, 3).
+        env_win.sample(projectors={(0, 0): vecs, (1, 0): vecs})
+        # Projectors not defined for some sites in xrange=(0, 4), yrange=(0, 3).
     #
     # test measure_2site
     #
@@ -147,5 +143,4 @@ def test_window_measure():
 
 
 if __name__ == '__main__':
-    test_window_shapes()
-    test_window_measure()
+    pytest.main([__file__, "-vs", "--durations=0"])

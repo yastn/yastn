@@ -14,6 +14,8 @@
 # ==============================================================================
 """ Mps structure and its basic manipulations. """
 from __future__ import annotations
+from numbers import Number
+from typing import Sequence
 from ... import tensor, initialize, YastnError
 from ._mps_parent import _MpsMpoParent
 
@@ -21,24 +23,24 @@ from ._mps_parent import _MpsMpoParent
 #   auxiliary for basic algebra   #
 ###################################
 
-def Mps(N) -> yastn.tn.mps.MpsMpoOBC:
-    r""" Generate empty MPS for system of `N` sites, fixing :code:`nr_phys=1`. """
+def Mps(N) -> MpsMpoOBC:
+    r""" Generate empty MPS for system of `N` sites, fixing ``nr_phys=1``. """
     return MpsMpoOBC(N, nr_phys=1)
 
 
-def Mpo(N, periodic=False) -> yastn.tn.mps.MpsMpoOBC | yastn.tn.mps.MpoPBC:
+def Mpo(N, periodic=False) -> MpsMpoOBC | MpoPBC:
     r"""
-    Generate empty MPO for system of `N` sites, fixing :code:`nr_phys=2`.
+    Generate empty MPO for system of `N` sites, fixing ``nr_phys=2``.
 
-    A flag :code:`periodic` allows initializing periodic MPO,
-    which is a special class supported as an operator in MPS environments.
+    A flag ``periodic`` allows initializing periodic MPO,
+    which is a special class supported as an operator in MPS :ref:`environments<mps/environment:Environments>`.
     """
     if periodic:
         return MpoPBC(N, nr_phys=2)
     return MpsMpoOBC(N, nr_phys=2)
 
 
-def add(*states, amplitudes=None) -> yastn.tn.mps.MpsMpoOBC:
+def add(*states, amplitudes=None) -> MpsMpoOBC:
     r"""
     Linear superposition of several MPS/MPOs with specific amplitudes, i.e., :math:`\sum_j \textrm{amplitudes[j]}{\times}\textrm{states[j]}`.
 
@@ -49,7 +51,7 @@ def add(*states, amplitudes=None) -> yastn.tn.mps.MpsMpoOBC:
     states: Sequence[yastn.tn.mps.MpsMpoOBC]
 
     amplitudes: Sequence[scalar]
-        If :code:`None`, all amplitudes are assumed to be 1.
+        If ``None``, all amplitudes are set to :math:`1`.
     """
     if amplitudes is None:
         amplitudes = [1] * len(states)
@@ -93,7 +95,7 @@ def add(*states, amplitudes=None) -> yastn.tn.mps.MpsMpoOBC:
     return phi
 
 
-def multiply(a, b, mode=None) -> yastn.tn.mps.MpsMpoOBC:
+def multiply(a, b, mode=None) -> MpsMpoOBC:
     r"""
     Performs MPO-MPS product resulting in a new MPS, or
     MPO-MPO product resulting in a new MPO.
@@ -112,16 +114,16 @@ def multiply(a, b, mode=None) -> yastn.tn.mps.MpsMpoOBC:
     where the charge sectors :math:`V^{\textrm{result},c}` are computed during fusion.
 
     .. note::
-        One can equivalently call :code:`a @ b`.
+        One can equivalently call ``a @ b``.
 
     Parameters
     ----------
         a, b: yastn.tn.mps.MpsMpoOBC, yastn.tn.mps.MpsMpoOBC
-            a pair of MPO and MPS or two MPO's to be multiplied
+            MPO and MPS, or two MPO's to be multiplied
 
         mode: str
-           mode for :meth:`Tensor.fuse_legs()<yastn.Tensor.fuse_legs>`; If :code:`None` (default)
-           use default setting from YASTN tensor's
+           mode for :meth:`Tensor.fuse_legs()<yastn.Tensor.fuse_legs>`;
+           If ``None`` (the default), use default setting from YASTN tensor's
            :ref:`configuration<tensor/configuration:yastn configuration>`.
     """
     if not isinstance(a, MpsMpoOBC) or not isinstance(b, MpsMpoOBC):
@@ -167,42 +169,45 @@ class MpsMpoOBC(_MpsMpoParent):
 
     def __init__(self, N=1, nr_phys=1):
         r"""
-        Initialize empty MPS (:code:`nr_phys=1`) or MPO (:code:`nr_phys=2`)
+        Initialize empty MPS (``nr_phys=1``) or MPO (``nr_phys=2``)
         for system of `N` sites. Empty MPS/MPO has no tensors assigned.
 
-        MpsMpoOBC tensors (sites) are indexed by integers :math:`0, 1, 2, \ldots, N-1`,
-        where :math:`0` corresponds to the `'first'` site.
+        MpsMpoOBC tensors (sites) are indexed by integers :math:`0,1,2,\ldots,N-1`,
+        where :math:`0` corresponds to the ``'first'`` site.
         They can be accessed with ``[]`` operator.
-        MPS/MPO can contain a central block associated with a bond and indexed by a tuple :math:`(n, n+1)`.
+        MPS/MPO can contain a central block associated with a bond and indexed by a tuple :math:`(n,n+1)`.
         At most one central block is allowed.
 
         :ref:`The legs' order <mps/properties:index convention>` of each tensor is:
         (0) virtual leg pointing towards the first site, (1) 1st physical leg, i.e., :math:`|\textrm{ket}\rangle`,
         (2) virtual leg pointing towards the last site, and, in case of MPO, (3) 2nd physical leg, i.e., :math:`\langle \textrm{bra}|`.
+
+        Parameter ``self.factor`` allows separating the norm of the object (potentially different from :math:`1`)
+        from the canonical form of MPS or MPO tensors.
         """
         super().__init__(N=N, nr_phys=nr_phys)
         self.pC = None  # index of the central block, None if it does not exist
 
-    def __add__(self, phi) -> yastn.tn.mps.MpsMpoOBC:
+    def __add__(self, phi) -> MpsMpoOBC:
         """ Sum of two Mps's or two Mpo's. """
         return add(self, phi)
 
-    def __sub__(self, phi) -> yastn.tn.mps.MpsMpoOBC:
+    def __sub__(self, phi) -> MpsMpoOBC:
         """ Subtraction of two Mps's or two Mpo's. """
         return add(self, phi, amplitudes=(1, -1))
 
-    def __matmul__(self, phi) -> yastn.tn.mps.MpsMpoOBC:
+    def __matmul__(self, phi) -> MpsMpoOBC:
         """ Multiply Mpo by Mpo or Mps. """
         return multiply(self, phi)
 
     def orthogonalize_site_(self, n, to='first', normalize=True) -> None:
         r"""
-        Performs QR (or RQ) decomposition of on-site tensor at :code:`n`-th position.
-        Two modes of usage are
+        Performs QR (or RQ) decomposition of on-site tensor at ``n``-th site.
+        Two modes of usage are:
 
-            * ``to='last'`` - Advance left canonical form: Assuming first `n - 1` sites are already
+            * ``to='last'`` - Advance left canonical form: Assuming first `n-1` sites are already
               in the left canonical form, brings n-th site to left canonical form,
-              i.e., extends left canonical form by one site towards :code:`'last'` site::
+              i.e., extends left canonical form by one site towards the ``'last'`` site::
 
                  --A---            --
                 |  |    = Identity|
@@ -210,7 +215,7 @@ class MpsMpoOBC(_MpsMpoParent):
 
             * ``to='first'`` - Advance right canonical form: Assuming all `m > n` sites are already
               in right canonical form, brings n-th site to right canonical form, i.e.,
-              extends right canonical form by one site towards :code:`'first'` site::
+              extends right canonical form by one site towards the ``'first'`` site::
 
                 --A---    --
                   |   | =   |Identity
@@ -222,11 +227,11 @@ class MpsMpoOBC(_MpsMpoParent):
                 index of site to be orthogonalized
 
             to: str
-                a choice of canonical form: :code:`'last'` or :code:`'first'`.
+                a choice of canonical form: ``'last'`` or ``'first'``.
 
             normalize: bool
                 Whether to keep track of the norm by accumulating it in self.factor;
-                default is True, i.e., sets the norm to unity.
+                The default is ``True``, i.e., sets the norm to :math:`1`.
                 The central blocks at the end of the procedure is normalized to unity.
         """
         if self.pC is not None:
@@ -252,9 +257,10 @@ class MpsMpoOBC(_MpsMpoParent):
         self.A[self.pC] = R / nR
         self.factor = 1 if normalize else self.factor * nR
 
-    def diagonalize_central_(self, opts_svd, normalize=True) -> number:
+    def diagonalize_central_(self, opts_svd, normalize=True) -> Number:
         r"""
-        Perform svd of the central block C = U @ S @ V. Truncation is done based on opts_svd.
+        Use svd() to perform SVD of the central block C = U @ S @ V, where S contains singular (Schmidt) values.
+        Truncation is done based on ``opts_svd``.
 
         Attach U and V respectively to the left and right sites
         (or to the central site at the edges when there are no left or right sites).
@@ -264,11 +270,12 @@ class MpsMpoOBC(_MpsMpoParent):
         Parameters
         ----------
         opts_svd: dict
-            Options passed to :meth:`yastn.linalg.truncation_mask`. It includes information on how to truncate the Schmidt values.
+            Options passed to :meth:`yastn.linalg.truncation_mask`.
+            It includes information on how to truncate the Schmidt values.
 
         normalize: bool
-            Whether to keep track of the norm of retained Schmidt values
-            by accumulating it in self.factor; default is True, i.e., sets the norm to unity.
+            Whether to keep track of the norm of retained Schmidt values by accumulating it in self.factor.
+            The default is ``True``, i.e., sets the norm to :math:`1`.
             The truncated Schmidt values (central block) at the end of the procedure are normalized to unity.
         """
         # if self.pC is None:  does not happen now
@@ -310,15 +317,15 @@ class MpsMpoOBC(_MpsMpoParent):
 
     def absorb_central_(self, to='last') -> None:
         r"""
-        Absorb central block towards the first or the last site.
+        Absorb central block towards the ``'first'`` or the ``'last'`` site.
 
-        If the central block is outside of the chain, it is goes in the one direction possible.
+        If the central block is outside of the chain, it goes in the one direction possible.
         Do nothing if central does not exist.
 
         Parameters
         ----------
         to: str
-            'last' or 'first'.
+            ``'last'`` (the default) or ``'first'``.
         """
         if self.pC is not None:
             C = self.A.pop(self.pC)
@@ -331,33 +338,34 @@ class MpsMpoOBC(_MpsMpoParent):
             else:  # (to == 'last' and n2 <= self.last) or n1 < self.first
                 self.A[n2] = C @ self.A[n2]
 
-    def norm(self) -> number:
+    def norm(self) -> Number:
         """ Calculate norm of MPS/MPO via canonization. """
         phi = self.shallow_copy()
         #if not phi.is_canonical(to='first'):
         phi.canonize_(to='first', normalize=False)
         return phi.factor
 
-    def canonize_(self, to='first', normalize=True) -> yastn.tn.mps.MpsMpoOBC:
+    def canonize_(self, to='first', normalize=True) -> MpsMpoOBC:
         r"""
         Sweep through the MPS/MPO and put it in right/left canonical form
-        (:code:`to='first'` or :code:`to='last'`, respectively)
-        using :meth:`QR decomposition<yastn.linalg.qr>`.
+        (``to='first'`` or ``to='last'``, respectively)
+        using :meth:`QR <yastn.linalg.qr>` decomposition.
         It is assumed that tensors are enumerated
-        by index increasing from 0 (:code:`first`) to N-1 (:code:`last`).
+        by index increasing from 0 (``'first'``) to N-1 (``'last'``).
 
-        Finally, the trivial central block is attached to the end of the chain.
+        Finally, the trivial central block of dimension :math:`1` obtained for terminal sites
+        is attached at the end of the chain.
 
         It updates MPS/MPO in place.
 
         Parameters
         ----------
         to: str
-            :code:`'first'` (default) or :code:`'last'`.
+            ``'first'`` (the default) or ``'last'``.
 
         normalize: bool
             Whether to keep track of the norm of the state by accumulating it in self.factor;
-            default is True, i.e., sets the norm to unity.
+            The default is ``True``, i.e., sets the norm to :math:`1`.
             The individual tensors at the end of the procedure are in a proper canonical form.
         """
         self.absorb_central_(to=to)
@@ -373,13 +381,13 @@ class MpsMpoOBC(_MpsMpoParent):
         Parameters
         ----------
         to: str
-            :code:`'first'` (default) or code:`'last'`.
+            ``'first'`` (the default) or ``'last'``.
 
         n: int
             Can check a single site if int provided. If None, check all sites.
 
         tol: float
-            Tolerance of the check. Default is 1e-12.
+            Tolerance of the check. The default is 1e-12.
         """
         if to == 'first':
             # 0--A*--
@@ -400,18 +408,21 @@ class MpsMpoOBC(_MpsMpoParent):
                 return False
         return self.pC is None  # True if no central block
 
-    def truncate_(self, to='last', opts_svd=None, normalize=True) -> number:
+    def truncate_(self, to='last', opts_svd=None, normalize=True) -> Number:
         r"""
         Sweep through the MPS/MPO and put it in right/left canonical form
-        (:code:`to='first'` or :code:`to='last'`, respectively)
-        using :meth:`yastn.linalg.svd_with_truncation` decomposition.
+        (``to='first'`` or ``to='last'``, respectively)
+        using :meth:`yastn.linalg.svd_with_truncation`.
         It is assumed that tensors are enumerated
-        by index increasing from 0 (:code:`first`) to N-1 (:code:`last`).
+        by index increasing from 0 (``'first'``) to N-1 (``'last'``).
 
-        Access to singular values during sweeping allows truncation of virtual spaces.
-        This truncation makes sense if MPS/MPO is already in the canonical form (not checked/enforced)
-        in the direction opposite to the current sweep, i.e., right canonical form for :code:`to='last'`
-        or left canonical form for :code:`to='first'`.
+        Access to singular values during the sweep allows truncation of virtual spaces.
+
+        The truncation is effective when it is done in the canonical form.
+        The canonical form has to be ensured prior to truncation by setting it
+        opposite to the direction of the sweep in ``truncate_``. I.e., prepare MPS/MPO in
+        the right canonical form (``to='first'``) for truncation using ``to='last'`` and
+        the left canonical form (``to='last'``) for truncation using ``to='first'``.
 
         The MPS/MPO is updated in place.
 
@@ -420,11 +431,11 @@ class MpsMpoOBC(_MpsMpoParent):
         Parameters
         ----------
         to: str
-            :code:`'last'` (default) or :code:`'first'`.
+            ``'last'`` (the default) or ``'first'``.
 
         normalize: bool
-            Whether to keep in self.factor the norm of the initial state projected on
-            the direction of the truncated state; default is True, i.e., sets the norm to unity.
+            Whether to keep in self.factor the norm of the initial state projected on the direction of the truncated state.
+            The default is ``True``, i.e., sets the norm to :math:`1`.
             The individual tensors at the end of the procedure are in a proper canonical form.
 
         opts_svd: dict
@@ -443,30 +454,36 @@ class MpsMpoOBC(_MpsMpoParent):
             self.absorb_central_(to=to)
         return self.config.backend.sqrt(discarded2_total)
 
-    def merge_two_sites(self, bd) -> yastn.Tensor:
+    def pre_2site(self, bd, precompute=False) -> tensor.Tensor:
         r"""
-        Merge two neighbouring mps sites and return the resulting tensor.
-
-        Fuse physical indices.
+        Merge two neighbouring MPS sites and return the resulting tensor,
+        Consistent with functions in env_
 
         Parameters
         ----------
         bd: tuple
             (n, n + 1), index of two sites to merge.
-
-        Returns
-        -------
-        tensor formed from A[n] and A[n + 1]
         """
         nl, nr = bd
-        return tensor.tensordot(self.A[nl], self.A[nr], axes=(2, 0))
+        if self.nr_phys == 1:
+            AA = self.A[nl] @ self.A[nr]
+            if precompute:
+                AA = AA.fuse_legs(axes=((0, 1), (2, 3)))
+            return AA
+        # else:  # self.nr_phys == 2
+        Al = self.A[nl].transpose(axes=(0, 1, 3, 2))
+        Ar = self.A[nr].transpose(axes=(0, 1, 3, 2))
+        AA = Al @ Ar
+        return AA.fuse_legs(axes=(0, (1, 3), (2, 4), 5))
 
-    def unmerge_two_sites_(self, AA, bd, opts_svd) -> number:
+    def post_2site_(self, AA, bd, opts_svd) -> Number:
         r"""
-        Unmerge rank-4 tensor into two neighbouring MPS sites and a central block
+        Unmerge AA tensor into two neighbouring MPS sites and a central block
         using :meth:`yastn.linalg.svd_with_truncation` to trunctate the bond dimension.
+        Return normalized discarded weight :math:`\sum_{i\in\textrm{discarded}}\lambda_i/\sum_i\lambda_i`,
+        where :math:`\lambda_i` are singular values across the bond.
 
-        Input tensor should be a result of :meth:`merge_two_sites` (or fused consistently).
+        Input tensor should be a result of :meth:`pre_2site` (or fused consistently).
 
         Parameters
         ----------
@@ -475,39 +492,63 @@ class MpsMpoOBC(_MpsMpoParent):
 
         bd: tuple
             (n, n + 1), index of two sites to merge.
-
-        Returns
-        -------
-        normalized discarded weight :math:`\sum_{i\in\textrm{discarded}}\lambda_i/\sum_i\lambda_i`,
-        where :math:`\lambda_i` are singular values across the bond.
         """
-        nl, nr = bd
-        axes = ((0, 1), (2, 3)) if self.nr_phys == 1 else ((0, 1, 2), (3, 4, 5))
-        self.pC = bd
-        U, S, V = tensor.svd(AA, axes=axes, sU=1, Uaxis=2)
+        nl, nr = self.pC = bd
+        if self.nr_phys == 1 and AA.ndim == 4:
+            AA = AA.fuse_legs(axes=((0, 1), (2, 3)))
+        if self.nr_phys == 2:
+            AA = AA.unfuse_legs(axes=(1, 2))
+            AA = AA.fuse_legs(axes=((0, 1, 3), (2, 5, 4)))
+
+        U, S, V = tensor.svd(AA, axes=(0, 1), sU=1, **opts_svd)
         mask = tensor.truncation_mask(S, **opts_svd)
-        self.A[nl], self.A[bd], self.A[nr] = mask.apply_mask(U, S, V, axes=(2, 0, 0))
+        U, self.A[bd], V = mask.apply_mask(U, S, V, axes=(1, 0, 0))
+        if self.nr_phys == 1:
+            self.A[nl] = U.unfuse_legs(axes=0)
+        else:  # self.nr_phys == 2:
+            self.A[nl] = U.unfuse_legs(axes=0).transpose(axes=(0, 1, 3, 2))
+        self.A[nr] = V.unfuse_legs(axes=1)
+
         return tensor.bitwise_not(mask).apply_mask(S, axes=0).norm() / S.norm()  # discarded weight
 
 
-    def get_entropy(self, alpha=1) -> Sequence[number]:
+    def pre_1site(self, n, precompute=False) -> tensor.Tensor:
+        """ Preper 1-site tensor for environment Heff`s. """
+        A = self.A[n]
+        if self.nr_phys == 1 and precompute:
+            A = A.fuse_legs(axes=(0, (1, 2)))
+        elif self.nr_phys == 2:
+            A = A.transpose(axes=(0, 1, 3, 2))
+        return A
+
+    def post_1site_(self, A, n) -> Number:
+        """ Assign 1-site tensor to MPS site, undoing changes from :meth:`pre_1site`.s """
+        if self.nr_phys == 1 and A.ndim == 2:
+            A = A.unfuse_legs(axes=1)
+        elif self.nr_phys == 2:
+            A = A.transpose(axes=(0, 1, 3, 2))
+        self.A[n] = A
+
+    def get_entropy(self, alpha=1) -> Sequence[Number]:
         r"""
         Entropy of bipartition across each bond, along MPS/MPO from the first to the last site,
-        including "trivial" leftmost and rightmost cuts.  This gives a list with N+1 elements.
+        including trivial leftmost and rightmost cuts.  This gives a list with N+1 elements.
 
         Parameters
         ----------
         alpha: int
             Order of Renyi entropy.
-            The default value is 1, which corresponds to the Von Neumann entropy.
+            ``alpha=1`` (the default) is von Neuman entropy: :math:`-{\rm Tr}(\rho \cdot {\rm log2}(\rho))`
+            otherwise: :math:`\frac{1}{1-alpha} {\rm log2}({\rm Tr}(\rho ^{alpha}))`
+
         """
         schmidt_spectra = self.get_Schmidt_values()
         return [tensor.entropy(spectrum ** 2, alpha=alpha) for spectrum in schmidt_spectra]
 
-    def get_Schmidt_values(self) -> Sequence[yastn.Tensor]:
+    def get_Schmidt_values(self) -> Sequence[tensor.Tensor]:
         r"""
         Schmidt values for bipartition across all bonds along MPS/MPO from the first to the last site,
-        including "trivial" leftmost and rightmost cuts. This gives a list with N+1 elements.
+        including trivial leftmost and rightmost cuts. This gives a list with N+1 elements.
         Schmidt values are stored as diagonal tensors and are normalized.
         """
         SV = []

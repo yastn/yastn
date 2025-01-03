@@ -31,36 +31,38 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
     Parameters
     ----------
         f: Callable[[vector], vector]
-            defines an action of a 'square matrix' on vector.
+            defines an action of a "square matrix" on vector.
 
         v: vector
+            input vector to apply exponential map onto.
 
         t: number
+            exponent amplitude.
 
         tol: number
            targeted tolerance; it is used to update the time-step and size of Krylov space.
            The returned result should have better tolerance, as correction is included.
 
         ncv: int
-            Initial guess for the size of the Krylov space
+            Initial guess for the size of the Krylov space.
 
         hermitian: bool
-            Assume that f is a hermitian operator, in which case Lanczos iterations are used.
+            Assume that ``f`` is a hermitian operator, in which case Lanczos iterations are used.
             Otherwise Arnoldi iterations are used to span the Krylov space.
 
         normalize: bool
-            The result is normalized to unity using 2-norm.
+            Whether to normalize the result to unity using 2-norm.
 
         return_info: bool
-            if True, returns (vector, info), where
+            if ``True``, returns ``(vector, info)``, where
 
-            * info.ncv : guess of the Krylov-space size,
-            * info.error : estimate of error (likely over-estimate)
-            * info.krylov_steps : number of execution of f(x),
-            * info.steps : number of steps to reach t,
+            * ``info.ncv`` : guess of the Krylov-space size,
+            * ``info.error`` : estimate of error (likely over-estimate)
+            * ``info.krylov_steps`` : number of execution of ``f(x)``,
+            * ``info.steps`` : number of steps to reach ``t``,
 
-        **kwargs: any
-            further parameters that are passed to expand_krylov_space and linear_combination
+        kwargs: any
+            Further parameters that are passed to :func:`expand_krylov_space` and :func:`linear_combination`.
     """
     backend = v.config.backend
     ncv, ncv_max = max(1, ncv), min([30, v.size])  # Krylov space parameters
@@ -76,7 +78,7 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
     normv = v.norm()
     if normv == 0:
         if normalize:
-            raise YastnError('expmv got zero vector that cannot be normalized')
+            raise YastnError('expmv() got zero vector that cannot be normalized')
         t_out = 0
     else:
         v = v / normv
@@ -161,37 +163,41 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
 
 def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=False, **kwargs) -> tuple[array, Sequence[vectors]]:
     r"""
-    Search for dominant eigenvalues of linear operator f using Arnoldi algorithm.
-    Economic implementation (without restart) for internal use within :meth:`yastn.tn.dmrg_`.
+    Search for dominant eigenvalues of linear operator ``f`` using Arnoldi algorithm.
+    Economic implementation (without restart) for internal use within :meth:`yastn.tn.mps.dmrg_`.
 
     Parameters
     ----------
         f: function
-            define an action of a 'square matrix' on the 'vector' `v0`.
-            f(v0) should preserve the signature of v0.
+            define an action of a 'square matrix' on the 'vector' ``v0``.
+            ``f(v0)`` should preserve the signature of ``v0``.
 
         v0: Tensor
             Initial guess, 'vector' to span the Krylov space.
 
         k: int
-            Number of desired eigenvalues and eigenvectors. default is 1.
+            Number of desired eigenvalues and eigenvectors. The default is 1.
 
         which: str
-            One of [‘LM’, ‘LR’, ‘SR’] specifying which k eigenvectors and eigenvalues to find:
-            ‘LM’ : largest magnitude, ‘SM’ : smallest magnitude, ‘LR’ : largest real part, ‘SR’ : smallest real part
+            One of [``‘LM’``, ``‘LR’``, ``‘SR’``] specifying which `k` eigenvectors and eigenvalues to find:
+            ``‘LM’`` : largest magnitude,
+            ``‘SM’`` : smallest magnitude,
+            ``‘LR’`` : largest real part,
+            ``‘SR’`` : smallest real part.
 
         ncv: int
-            Dimension of the employed Krylov space. Default is 10.
-            Must be greated than k.
+            Dimension of the employed Krylov space. The default is 10.
+            Must be greated than `k`.
 
         maxiter: int
             Maximal number of restarts; (not implemented for now)
 
         tol: float
-            Stopping criterion for Krylov subspace. Default is 1e-13. (not implemented for now)
+            Stopping criterion for an expansion of the Krylov subspace.
+            The default is ``1e-13``. (not implemented for now)
 
         hermitian: bool
-            Assume that f is a hermitian operator, in which case Lanczos iterations are used.
+            Assume that ``f`` is a hermitian operator, in which case Lanczos iterations are used.
             Otherwise Arnoldi iterations are used to span the Krylov space.
     """
     # Maximal number of restarts - NOT IMPLEMENTED FOR NOW.

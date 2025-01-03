@@ -13,21 +13,15 @@
 # limitations under the License.
 # ==============================================================================
 """ Predefined dense qdit operator. """
+import pytest
 import yastn
-try:
-    from .configs import config_dense
-except ImportError:
-    from configs import config_dense
 
 
-def test_meta_operators():
+def test_meta_operators(config_kwargs):
     """ Parent class for defining operator classes """
-    # pytest switches backends and default_device in config files for testing
-    backend = config_dense.backend
-    default_device = config_dense.default_device
 
     # allows initializing config
-    ops = yastn.operators.meta_operators(backend=backend, default_device=default_device)
+    ops = yastn.operators.meta_operators(**config_kwargs)
 
     # desired signature of matrix operators
     assert ops.s == (1, -1)
@@ -40,4 +34,4 @@ def test_meta_operators():
 
 
 if __name__ == '__main__':
-    test_meta_operators()
+    pytest.main([__file__, "-vs", "--durations=0"])

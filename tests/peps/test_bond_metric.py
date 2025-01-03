@@ -17,14 +17,8 @@ import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
 
-try:
-    from .configs import config as cfg
-    # cfg is used by pytest to inject different backends and divices
-except ImportError:
-    from configs import config as cfg
 
-
-def test_spinless_infinite_approx():
+def test_spinless_infinite_approx(config_kwargs):
     """ Simulate purification of free fermions in an infinite system.s """
     geometry = fpeps.SquareLattice(dims=(2, 3), boundary='infinite')
 
@@ -32,7 +26,7 @@ def test_spinless_infinite_approx():
     D = 4
     dbeta = 0.1
 
-    ops = yastn.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
+    ops = yastn.operators.SpinlessFermions(sym='U1', **config_kwargs)
     I, c, cdag = ops.I(), ops.c(), ops.cp()
     g_hop = fpeps.gates.gate_nn_hopping(t, dbeta / 2, I, c, cdag)  # nn gate for 2D fermi sea
     gates = fpeps.gates.distribute(geometry, gates_nn=g_hop)
@@ -54,7 +48,7 @@ def test_spinless_infinite_approx():
     for k in ['NN', 'NN+', 'NN++', 'NNN', 'NNN+', 'NNN++']:
         envs[k] = fpeps.EnvNTU(psi, which=k)
 
-    for k in ['43', '43h', '65', '65h', '87', '87h']:
+    for k in ['43', '43+', '65', '65+', '87', '87+']:
         envs[k] = fpeps.EnvApproximate(psi,
                                        which=k,
                                        opts_svd=opts_svd,
@@ -63,7 +57,6 @@ def test_spinless_infinite_approx():
     envs['FU'] = fpeps.EnvCTM(psi)
     for _ in range(4):
         envs['FU'].update_(opts_svd=opts_svd)  # single CMTRG sweep
-
 
     for s0, s1, dirn in [[(0, 0), (0, 1), 'h'], [(0, 1), (1, 1), 'v']]:
         QA, QB = psi[s0], psi[s1]
@@ -74,13 +67,13 @@ def test_spinless_infinite_approx():
         assert (Gs['NN+'] - Gs['NN++']).norm() < 1e-3
         assert (Gs['NN++'] - Gs['NNN++']).norm() < 1e-3
         assert (Gs['NNN'] - Gs['43']).norm() < 1e-5
-        assert (Gs['NNN+'] - Gs['43h']).norm() < 1e-5
-        assert (Gs['43'] - Gs['43h']).norm() < 1e-2
-        assert (Gs['43h'] - Gs['65']).norm() < 1e-3
-        assert (Gs['65'] - Gs['65h']).norm() < 1e-4
-        assert (Gs['65h'] - Gs['87']).norm() < 1e-5
-        assert (Gs['87'] - Gs['87h']).norm() < 1e-5
-        assert (Gs['87h'] - Gs['FU']).norm() < 1e-5
+        assert (Gs['NNN+'] - Gs['43+']).norm() < 1e-5
+        assert (Gs['43'] - Gs['43+']).norm() < 1e-2
+        assert (Gs['43+'] - Gs['65']).norm() < 1e-3
+        assert (Gs['65'] - Gs['65+']).norm() < 1e-4
+        assert (Gs['65+'] - Gs['87']).norm() < 1e-5
+        assert (Gs['87'] - Gs['87+']).norm() < 1e-5
+        assert (Gs['87+'] - Gs['FU']).norm() < 1e-5
 
     with pytest.raises(yastn.YastnError):
         fpeps.EnvNTU(psi, which="some")
@@ -92,4 +85,4 @@ def test_spinless_infinite_approx():
 
 
 if __name__ == '__main__':
-    test_spinless_infinite_approx()
+    pytest.main([__file__, "-vs", "--durations=0"])

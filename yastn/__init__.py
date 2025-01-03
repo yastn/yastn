@@ -12,9 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-""" Import methods of yastn Tensor. """
-__version__ = '1.0.2'
 from .tensor import *
 from .initialize import *
 from .krylov import *
 from . import operators
+from .tensor._auxliary import Method, SpecialTensor
+try:
+    from ._version import version as __version__
+    from ._version import version_tuple
+except ImportError:
+    __version__ = "unknown version"
+    version_tuple = (0, 0, "unknown version")

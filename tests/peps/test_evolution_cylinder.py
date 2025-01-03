@@ -14,14 +14,9 @@
 # ==============================================================================
 """ Real-time evolution of spinless fermions on a cylinder. """
 import numpy as np
+import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
-
-try:
-    from .configs import config as cfg
-    # cfg is used by pytest to inject different backends and divices
-except ImportError:
-    from configs import config as cfg
 
 
 def evolve_correlation_matrix(Js, mus, occs0, s2i, t):
@@ -51,7 +46,7 @@ def evolve_correlation_matrix(Js, mus, occs0, s2i, t):
     return Ci, Cf
 
 
-def atest_evol_cylinder():
+def test_evol_cylinder(config_kwargs):
     """ Simulate purification of spinful fermions in a small finite system """
     print(" Simulating spinful fermions in a small finite system. ")
 
@@ -82,7 +77,7 @@ def atest_evol_cylinder():
     dt = tf / steps
 
     # prepare evolution gates
-    ops = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', backend=cfg.backend, default_device=cfg.default_device)
+    ops = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', default_dtype='complex128', **config_kwargs)
     I = ops.I()
     gates_nn = []
     gates_local = []
@@ -106,7 +101,7 @@ def atest_evol_cylinder():
         fpeps.evolution_step_(env, gates, opts_svd=opts_svd)
 
     opts_svd_mps = {'D_total': D, 'tol': 1e-10}
-    env = fpeps.EnvBoundaryMps(psi, opts_svd=opts_svd_mps, setup='lr')
+    env = fpeps.EnvBoundaryMPS(psi, opts_svd=opts_svd_mps, setup='lr')
     for spin in 'ud':
         print(f"{spin=}")
         occf = env.measure_1site(ops.n(spin=spin))
@@ -115,5 +110,6 @@ def atest_evol_cylinder():
             # assert abs(v - Cf[spin][s2i[k], s2i[k]]) < 5e-4
 
 if __name__ == '__main__':
-    test_evol_cylinder()
-    # revise U1xU1
+    pytest.main([__file__, "-vs", "--durations=0"])
+
+    # TODO revise U1xU1
