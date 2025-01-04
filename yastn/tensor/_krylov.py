@@ -16,7 +16,7 @@
 
 def expand_krylov_space(self, f, tol, ncv, hermitian, V, H=None, **kwargs):
     """
-    Expand the Krylov base up to ``ncv`` states or until reaching desired tolerance ``tol``. 
+    Expand the Krylov base up to ``ncv`` states or until reaching desired tolerance ``tol``.
     Implementation for :class:`yastn.Tensor`.
     """
     if H is None:
@@ -42,10 +42,3 @@ def expand_krylov_space(self, f, tol, ncv, hermitian, V, H=None, **kwargs):
         V.append(w / H[(j + 1, j)])
     return V, H, happy
 
-
-def linear_combination(self, *vectors, amplitudes, **kwargs):
-    """ Linear combination of :meth:`yastn.Tensors` with given amplitudes. """
-    v = amplitudes[0] * vectors[0]
-    for x, b in zip(amplitudes[1:], vectors[1:]):
-        v = v.apxb(b, x=x)
-    return v

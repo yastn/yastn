@@ -689,9 +689,18 @@ def matmul_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
     return newdata
 
 
-
 def apply_mask(Adata, mask, meta, Dsize, axis, a_ndim):
     return kernel_apply_mask.apply(Adata, mask, meta, Dsize, axis, a_ndim)
+
+
+def embed_mask(Adata, mask, meta, Dsize, axis, a_ndim):
+    slc1 = (slice(None),) * axis
+    slc2 = (slice(None),) * (a_ndim - (axis + 1))
+    Cdata = torch.zeros(Dsize, dtype=Adata.dtype)
+    for sln, Dn, sla, Da, tm in meta:
+        slcs = slc1 + (mask[tm],) + slc2
+        Cdata[slice(*sln)].view(Dn)[slcs] = Adata[slice(*sla)].view(Da)
+    return Cdata
 
 
 class kernel_apply_mask(torch.autograd.Function):

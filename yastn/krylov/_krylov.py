@@ -144,7 +144,7 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
             normF = backend.norm_matrix(F)
             normv = normv * normF
             F = F / normF
-            v = v.linear_combination(*V, amplitudes=F, **kwargs)
+            v = V[0].linear_combination(*V[1:], amplitudes=F, **kwargs)
             t_now += tau
             info['steps'] += 1
             info['error'] += err
@@ -220,5 +220,5 @@ def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=Fals
     Y = []
     for it in range(k):
         sit = vr[:, it]
-        Y.append(v0.linear_combination(*V, amplitudes=sit, **kwargs))
+        Y.append(V[0].linear_combination(*V[1:], amplitudes=sit, **kwargs))
     return val[:k], Y

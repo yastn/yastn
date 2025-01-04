@@ -121,7 +121,7 @@ class Tensor:
     from ._initialize import set_block, _fill_tensor, __setitem__
     from .linalg import norm, svd, svd_with_truncation, eigh, eigh_with_truncation, qr, truncation_mask
     from ._contractions import tensordot, __matmul__, vdot, trace, swap_gate, broadcast, apply_mask
-    from ._algebra import __add__, __sub__, __mul__, __rmul__, __array_ufunc__, __neg__, apxb
+    from ._algebra import __add__, __sub__, __mul__, __rmul__, __array_ufunc__, __neg__, apxb, linear_combination
     from ._algebra import __lt__, __gt__, __le__, __ge__, __truediv__, __pow__
     from ._algebra import __abs__, real, imag, sqrt, rsqrt, reciprocal, exp, bitwise_not
     from ._single import conj, conj_blocks, flip_signature, flip_charges, transpose, moveaxis, move_leg, diag, grad
@@ -135,7 +135,7 @@ class Tensor:
     from ._output import save_to_hdf5, save_to_dict, compress_to_1d
     from ._tests import is_consistent, are_independent
     from ._merging import fuse_legs, unfuse_legs, fuse_meta_to_hard
-    from ._krylov import linear_combination, expand_krylov_space
+    from ._krylov import expand_krylov_space
 
     def _replace(self, **kwargs) -> yastn.Tensor:
         """ Creates a shallow copy replacing fields specified in kwargs. """

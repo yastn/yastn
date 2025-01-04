@@ -408,6 +408,15 @@ def add(Adata, Bdata, meta, Dsize):
         newdata[slice(*sl_c)] += Bdata[slice(*sl_b)]
     return newdata
 
+def addition(datas, metas, Dsize):
+    dtype = datas[0].dtype
+    for data in datas[1:]:
+        dtype = np.promote_types(dtype, data.dtype)
+    newdata = np.zeros(Dsize, dtype=dtype)
+    for data, meta in zip(datas, metas):
+        for sl_c, sl_a in meta:
+            newdata[slice(*sl_c)] += data[slice(*sl_a)]
+    return newdata
 
 def sub(Adata, Bdata, meta, Dsize):
     dtype = np.promote_types(Adata.dtype, Bdata.dtype)

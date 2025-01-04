@@ -586,6 +586,40 @@ def _mask_tensors_leg_union(a, b):
     return msk_a, msk_a_tD, msk_b, msk_b_tD, hfs
 
 
+def _mask_tensors_leg_union_new(*args):
+    """ masks to get the intersecting parts of legs from two tensors as single masks """
+    masks = [[] for _ in range(len(args))]
+    masks_tD = [[] for _ in range(len(args))]
+    hfs = []
+
+    tls, Dls = [], []
+    for a in args:
+        tl, Dl, _= _get_tD_legs(a.struct)
+        tls.append(tl)
+        Dls.append(Dl)
+
+    a = args[0]
+    for n in range(a.ndim_n):
+        if all(a.hfs[n] == b.hfs[n] for b in args):
+            for mask in masks:
+                mask.append(None)
+            for mask_tD, tl, Dl in zip(masks_tD, tls, Dls):
+                mask_tD.append(dict(sorted(zip(tl, Dl))))
+            hfs.append(a.hfs[n])
+        else:
+            tln = tuple(tl[n] for tl in tls)
+            hfn = tuple(b.hfs[n] for b in args)
+            tu, Du, hfu = _pure_hfs_union(a.config.sym, tln, hfn)
+            hfs.append(hfu)
+            for mask, mask_tD, b, tl, Dl in zip(masks, masks_tD, args, tls, Dls):
+                mb, mu, hfuu = _union_hfs(a.config, (tl[n], tu), (Dl[n], Du), (b.hfs[n], hfu))
+                assert all(all(v) for v in mu.values())
+                assert hfuu == hfu
+                mask_tD.append({k: len(v) for k, v in sorted(mb.items())})
+                mask.append(_mask_nonzero(mb))
+    return masks, masks_tD, hfs
+
+
 def _merge_masks_embed(config, struct, slices, ms):  # TODO
     """ combine masks using information from struct"""
     nsym = config.sym.NSYM
