@@ -129,7 +129,7 @@ def _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b, s_c):
         raise YastnError('Bond dimensions do not match.')
 
     meta_dot, struct_c, slices_c = _meta_tensordot_f2m(struct_a, slices_a, struct_b, slices_b)
-    data = a.config.backend.matmul(data_a, data_b, meta_dot, struct_c.size)
+    data = a.config.backend.dot(data_a, data_b, meta_dot, struct_c.size)
 
     meta_unmerge, struct_c, slices_c = _meta_unmerge_matrix(a.config, struct_c, slices_c, ls_l, ls_r, s_c)
     data = _unmerge(a.config, data, meta_unmerge)
@@ -158,7 +158,7 @@ def _tensordot_fc(a, b, nout_a, nin_a, nin_b, nout_b):
     assert all(t_a[ia] == t_b[ib] for ia, ib in zip(nin_a, nin_b)), "Sanity check."
 
     meta_dot, struct_c, slices_c = _meta_tensordot_fc(struct_a, slices_a, struct_b, slices_b)
-    data = a.config.backend.matmul(data_a, data_b, meta_dot, struct_c.size)
+    data = a.config.backend.dot(data_a, data_b, meta_dot, struct_c.size)
     return data, struct_c, slices_c
 
 
@@ -171,7 +171,7 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
                                                                             ind_a, ind_b, nout_a, nin_a, nin_b, nout_b)
     order_a = nout_a + nin_a
     order_b = nin_b + nout_b
-    data = a.config.backend.transpose_matmul_sum(a.data, b.data, meta_dot,
+    data = a.config.backend.transpose_dot_sum(a.data, b.data, meta_dot,
                                                  reshape_a, reshape_b, order_a, order_b, struct_c.size)
     return data, struct_c, slices_c
 
@@ -376,7 +376,7 @@ def broadcast(a, *args, axes=0) -> yastn.Tensor | iterable[yastn.Tensor]:
             meta = tuple((sln, slb, Db[0], sla) for sln, slb, Db, sla in meta)
         else:
             b_ndim = b.ndim_n
-        data = b.config.backend.matmul_diag(a._data, b._data, meta, struct.size, ax, b_ndim)
+        data = b.config.backend.dot_diag(a._data, b._data, meta, struct.size, ax, b_ndim)
         results.append(b._replace(struct=struct, slices=slices, data=data))
     return results if multiple_axes else results.pop()
 

@@ -399,16 +399,7 @@ def allclose(Adata, Bdata, rtol, atol):
     return np.allclose(Adata, Bdata, rtol=rtol, atol=atol)
 
 
-def add(Adata, Bdata, meta, Dsize):
-    dtype = np.promote_types(Adata.dtype, Bdata.dtype)
-    newdata = np.zeros(Dsize, dtype=dtype)
-    for sl_c, sl_a in meta[0]:
-        newdata[slice(*sl_c)] += Adata[slice(*sl_a)]
-    for sl_c, sl_b in meta[1]:
-        newdata[slice(*sl_c)] += Bdata[slice(*sl_b)]
-    return newdata
-
-def addition(datas, metas, Dsize):
+def add(datas, metas, Dsize):
     dtype = datas[0].dtype
     for data in datas[1:]:
         dtype = np.promote_types(dtype, data.dtype)
@@ -417,6 +408,7 @@ def addition(datas, metas, Dsize):
         for sl_c, sl_a in meta:
             newdata[slice(*sl_c)] += data[slice(*sl_a)]
     return newdata
+
 
 def sub(Adata, Bdata, meta, Dsize):
     dtype = np.promote_types(Adata.dtype, Bdata.dtype)
@@ -460,31 +452,31 @@ def diag_2dto1d(Adata, meta, Dsize):
     return newdata
 
 
-def matmul(Adata, Bdata, meta_dot, Dsize):
+def dot(Adata, Bdata, meta_dot, Dsize):
     dtype = np.promote_types(Adata.dtype, Bdata.dtype)
     newdata = np.empty(Dsize, dtype=dtype)
     for (slc, Dc, sla, Da, slb, Db, ia, ib) in meta_dot:
-        np.matmul(Adata[slice(*sla)].reshape(Da),
+        np.dot(Adata[slice(*sla)].reshape(Da),
                Bdata[slice(*slb)].reshape(Db),
                out=newdata[slice(*slc)].reshape(Dc))
     return newdata
 
 
-def transpose_matmul_sum(Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border, Dsize):
+def transpose_dot_sum(Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border, Dsize):
     dtype = np.promote_types(Adata.dtype, Bdata.dtype)
     newdata = np.empty(Dsize, dtype=dtype)
     Ad = {t: Adata[slice(*sl)].reshape(Di).transpose(Aorder).reshape(Df) for (t, sl, Di, Df) in Areshape}
     Bd = {t: Bdata[slice(*sl)].reshape(Di).transpose(Border).reshape(Df) for (t, sl, Di, Df) in Breshape}
     for (sl, Dslc, list_tab) in meta_dot:
-        tmp = newdata[slice(*sl)].reshape(Dslc)
+        block = newdata[slice(*sl)].reshape(Dslc)
         ta, tb = list_tab[0]
-        np.matmul(Ad[ta], Bd[tb], out=tmp)
+        np.dot(Ad[ta], Bd[tb], out=block)
         for ta, tb in list_tab[1:]:
-            tmp += np.matmul(Ad[ta], Bd[tb])
+            block += np.dot(Ad[ta], Bd[tb])
     return newdata
 
 
-def matmul_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
+def dot_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
     dim = [1] * a_ndim
     dim[axis] = -1
     dtype = np.promote_types(Adata.dtype, Bdata.dtype)

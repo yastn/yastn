@@ -31,8 +31,8 @@ def __add__(a, b) -> yastn.Tensor:
     Signatures and total charges of two tensors should match.
     """
     (a, b), hfs = _pre_addition(a, b)
-    meta, struct, slices = _meta_addition(((a.struct, a.slices), (b.struct, b.slices)), a.isdiag)
-    data = a.config.backend.add(a._data, b._data, meta, struct.size)
+    metas, struct, slices = _meta_addition(((a.struct, a.slices), (b.struct, b.slices)), a.isdiag)
+    data = a.config.backend.add((a._data, b._data), metas, struct.size)
     return a._replace(hfs=hfs, struct=struct, slices=slices, data=data)
 
 
@@ -73,13 +73,8 @@ def linear_combination(*tensors, amplitudes=None, **kwargs):
     a = tensors[0]
     metas, struct, slices = _meta_addition(datas, a.isdiag)
     datas = [v._data for v in tensors]
-    data = a.config.backend.addition(datas, metas, struct.size)
+    data = a.config.backend.add(datas, metas, struct.size)
     return a._replace(hfs=hfs, struct=struct, slices=slices, data=data)
-
-    # v = amplitudes[0] * vectors[0]
-    # for x, b in zip(amplitudes[1:], vectors[1:]):
-    #     v = v.apxb(b, x=x)
-    # return v
 
 
 def _pre_addition(*tensors):

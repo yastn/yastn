@@ -33,7 +33,7 @@ __all__= [
     'svd_lowrank', 'svd', 'eigh', 'qr',
     'argsort', 'eigs_which', 'embed_msk', 'embed_slc', 'allclose',
     'add', 'sub', 'apxb', 'apply_mask', 'vdot', 'diag_1dto2d', 'diag_2dto1d',
-    'matmul', 'matmul_diag', 'transpose_matmul_sum',
+    'matmul', 'dot_diag', 'transpose_dot_sum',
     'merge_to_dense', 'merge_super_blocks', 'is_independent'
 ]
 #['transpose', 'transpose_and_merge', 'unmerge']
@@ -546,22 +546,23 @@ def allclose(Adata, Bdata, rtol, atol):
     return torch.allclose(Adata, Bdata, rtol=rtol, atol=atol)
 
 
-def add(Adata, Bdata, meta, Dsize):
-    dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
-    newdata = torch.zeros(Dsize, dtype=dtype, device=Adata.device)
-    for sl_c, sl_a in meta[0]:
-        newdata[slice(*sl_c)] += Adata[slice(*sl_a)]
-    for sl_c, sl_b in meta[1]:
-        newdata[slice(*sl_c)] += Bdata[slice(*sl_b)]
+def add(datas, metas, Dsize):
+    dtype = datas[0].dtype
+    for data in datas[1:]:
+        dtype = torch.promote_types(dtype, data.dtype)
+    newdata = torch.zeros(Dsize, dtype=dtype, device=datas[0].device)
+    for data, meta in zip(datas, metas):
+        for sl_c, sl_a in meta:
+            newdata[slice(*sl_c)] += data[slice(*sl_a)]
     return newdata
 
 
-def sub(Adata, Bdata, meta, Dsize):
+def sub(Adata, Bdata, metas, Dsize):
     dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
     newdata = torch.zeros(Dsize, dtype=dtype, device=Adata.device)
-    for sl_c, sl_a in meta[0]:
+    for sl_c, sl_a in metas[0]:
         newdata[slice(*sl_c)] += Adata[slice(*sl_a)]
-    for sl_c, sl_b in meta[1]:
+    for sl_c, sl_b in metas[1]:
         newdata[slice(*sl_c)] -= Bdata[slice(*sl_b)]
     return newdata
 
@@ -603,7 +604,7 @@ def diag_2dto1d(data, meta, Dsize):
     return newdata
 
 
-def matmul(Adata, Bdata, meta_dot, Dsize):
+def dot(Adata, Bdata, meta_dot, Dsize):
     return kernel_dot.apply(Adata, Bdata, meta_dot, Dsize)
 
 
@@ -679,7 +680,7 @@ else:
             return Adata_b, Bdata_b, None, None
 
 
-def matmul_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
+def dot_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
     dim = [1] * a_ndim
     dim[axis] = -1
     dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
@@ -733,11 +734,11 @@ class kernel_apply_mask(torch.autograd.Function):
 
 
 
-def transpose_matmul_sum(Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border, Dsize):
-    return kernel_transpose_matmul_sum.apply(Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border, Dsize)
+def transpose_dot_sum(Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border, Dsize):
+    return kernel_transpose_dot_sum.apply(Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border, Dsize)
 
 
-class kernel_transpose_matmul_sum(torch.autograd.Function):
+class kernel_transpose_dot_sum(torch.autograd.Function):
     @staticmethod
     def forward(Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border, Dsize):
         dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
