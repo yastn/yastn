@@ -21,7 +21,7 @@ from ._tests import YastnError, _test_can_be_combined, _get_tD_legs, _test_axes_
 from ._merging import _mask_tensors_leg_union, _meta_mask, _mask_tensors_leg_union_new
 
 
-__all__ = ['apxb', 'real', 'imag', 'sqrt', 'rsqrt', 'reciprocal', 'exp', 'bitwise_not', 'allclose']
+__all__ = ['linear_combination', 'real', 'imag', 'sqrt', 'rsqrt', 'reciprocal', 'exp', 'bitwise_not', 'allclose']
 
 
 def __add__(a, b) -> yastn.Tensor:
@@ -48,24 +48,24 @@ def __sub__(a, b) -> yastn.Tensor:
     return a._replace(hfs=hfs, struct=struct, slices=slices, data=data)
 
 
-def apxb(a, b, x=1) -> yastn.Tensor:
+def linear_combination(*tensors, amplitudes=None, **kwargs):
     r"""
-    Directly compute the result of :math:`a + x b`.
+    Linear combination of tensors with given amplitudes, :math:`\sum_i amplitudes[i] tensors[i]`.
 
     Parameters
     ----------
-    a, b : yastn.Tensor
-    x : number
+    tensors: Sequence[yastn.Tensor]
+        Signatures and total charges of all tensors should match.
+
+    amplitudes: None | Sequence[Number]
+        If ``None``, all amplitudes are assumed to be one.
+        Otherwise, The number of tensors and amplitudes should be the same.
+        Individual amplitude can be ``None``, which gives the same result as ``1``
+        but without an extra multiplication.
     """
-    (a, b), hfs = _pre_addition(a, b)
-    meta, struct, slices = _meta_addition(((a.struct, a.slices), (b.struct, b.slices)), a.isdiag)
-    data = a.config.backend.apxb(a._data, b._data, x, meta, struct.size)
-    return a._replace(hfs=hfs, struct=struct, slices=slices, data=data)
-
-
-def linear_combination(*tensors, amplitudes=None, **kwargs):
-    """ Linear combination of :meth:`yastn.Tensors` with given amplitudes. """
     if amplitudes is not None:
+        if len(tensors) != len(amplitudes):
+            raise YastnError("Number of tensors and amplitudes do not match.")
         tensors = [v * amp if amp is not None else v for v, amp in zip(tensors, amplitudes)]
 
     tensors, hfs = _pre_addition(*tensors)
@@ -89,8 +89,8 @@ def _pre_addition(*tensors):
             raise YastnError('Tensor charges do not match.')
         if a.isdiag != b.isdiag:
             raise YastnError('Cannot add diagonal tensor to non-diagonal tensor.')
-        mn, _ = _test_axes_match(a, b, sgn=1)
-        mask_needed = mask_needed or mn
+        mask_needed_ab, _ = _test_axes_match(a, b, sgn=1)
+        mask_needed = mask_needed or mask_needed_ab
 
     if mask_needed:
         masks, masks_tD, hfs = _mask_tensors_leg_union_new(*tensors)

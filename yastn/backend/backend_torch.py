@@ -32,8 +32,8 @@ __all__= [
     'trace', 'rsqrt', 'reciprocal', 'exp', 'sqrt', 'absolute',
     'svd_lowrank', 'svd', 'eigh', 'qr',
     'argsort', 'eigs_which', 'embed_msk', 'embed_slc', 'allclose',
-    'add', 'sub', 'apxb', 'apply_mask', 'vdot', 'diag_1dto2d', 'diag_2dto1d',
-    'matmul', 'dot_diag', 'transpose_dot_sum',
+    'add', 'sub', 'apply_mask', 'vdot', 'diag_1dto2d', 'diag_2dto1d',
+    'dot', 'dot_diag', 'transpose_dot_sum',
     'merge_to_dense', 'merge_super_blocks', 'is_independent'
 ]
 #['transpose', 'transpose_and_merge', 'unmerge']
@@ -564,16 +564,6 @@ def sub(Adata, Bdata, metas, Dsize):
         newdata[slice(*sl_c)] += Adata[slice(*sl_a)]
     for sl_c, sl_b in metas[1]:
         newdata[slice(*sl_c)] -= Bdata[slice(*sl_b)]
-    return newdata
-
-
-def apxb(Adata, Bdata, x, meta, Dsize):
-    dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
-    newdata = torch.zeros(Dsize, dtype=dtype, device=Adata.device)
-    for sl_c, sl_a in meta[0]:
-        newdata[slice(*sl_c)] += Adata[slice(*sl_a)]
-    for sl_c, sl_b in meta[1]:
-        newdata[slice(*sl_c)] += x * Bdata[slice(*sl_b)]
     return newdata
 
 

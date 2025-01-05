@@ -36,7 +36,7 @@ def norm(a, p='fro') -> Number:
         ``'fro'`` for Frobenius norm;  ``'inf'`` for :math:`l^\infty` (or supremum) norm.
     """
     if p not in ('fro', 'inf'):
-        raise YastnError("Error in norm: p not in ('fro', 'inf'). ")
+        raise YastnError("p should be 'fro', or 'inf'.")
     return a.config.backend.norm(a._data, p)
 
 

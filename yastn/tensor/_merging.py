@@ -612,9 +612,9 @@ def _mask_tensors_leg_union_new(*args):
             tu, Du, hfu = _pure_hfs_union(a.config.sym, tln, hfn)
             hfs.append(hfu)
             for mask, mask_tD, b, tl, Dl in zip(masks, masks_tD, args, tls, Dls):
-                mb, mu, hfuu = _union_hfs(a.config, (tl[n], tu), (Dl[n], Du), (b.hfs[n], hfu))
+                mu, mb = _intersect_hfs(a.config, (tl[n], tu), (Dl[n], Du), (b.hfs[n], hfu))
                 assert all(all(v) for v in mu.values())
-                assert hfuu == hfu
+                # assert hfuu == hfu
                 mask_tD.append({k: len(v) for k, v in sorted(mb.items())})
                 mask.append(_mask_nonzero(mb))
     return masks, masks_tD, hfs

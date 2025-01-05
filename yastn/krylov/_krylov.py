@@ -141,6 +141,8 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
         if omega <= delta:  # Check error against target
             F[m, 0] = F[m - 1, m] * h
             F = F[:, 0]
+            if happy:
+                F = F[:-1]
             normF = backend.norm_matrix(F)
             normv = normv * normF
             F = F / normF
@@ -211,6 +213,7 @@ def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=Fals
     V = [v0 / normv]
     V, H, happy = v0.expand_krylov_space(f, 1e-13, ncv, hermitian, V, **kwargs)  # tol=1e-13
     m = len(V) if happy else len(V) - 1
+    V = V[:m]
 
     T = backend.square_matrix_from_dict(H, m, device=v0.device)
     val, vr = backend.eigh(T) if hermitian else backend.eig(T)

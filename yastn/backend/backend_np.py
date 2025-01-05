@@ -420,16 +420,6 @@ def sub(Adata, Bdata, meta, Dsize):
     return newdata
 
 
-def apxb(Adata, Bdata, x, meta, Dsize):
-    dtype = np.promote_types(Adata.dtype, Bdata.dtype)
-    newdata = np.zeros(Dsize, dtype=dtype)
-    for sl_c, sl_a in meta[0]:
-        newdata[slice(*sl_c)] += Adata[slice(*sl_a)]
-    for sl_c, sl_b in meta[1]:
-        newdata[slice(*sl_c)] += x * Bdata[slice(*sl_b)]
-    return newdata
-
-
 def vdot(Adata, Bdata, meta):
     dtype = np.promote_types(Adata.dtype, Bdata.dtype)
     tmp = np.empty(len(meta), dtype=dtype)
