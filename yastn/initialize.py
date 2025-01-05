@@ -324,6 +324,7 @@ def eye(config=None, legs=(), isdiag=True, **kwargs) -> yastn.Tensor:
             blk[i, i] = 1
     return tmp
 
+
 def load_from_dict(config=None, d=None) -> yastn.Tensor:
     """
     Create tensor from the dictionary :code:`d`.
@@ -343,7 +344,8 @@ def load_from_dict(config=None, d=None) -> yastn.Tensor:
         struct = _struct(s=d['s'], n=d['n'], diag=c_isdiag, t=d['t'], D=d['D'], size=sum(c_Dp))
         hfs = tuple(_Fusion(**hf) for hf in d['hfs'])
         c = Tensor(config=config, struct=struct, slices=slices, hfs=hfs, mfs=d['mfs'])
-        if 'SYM_ID' in d and c.config.sym.SYM_ID != d['SYM_ID'].replace('(','').replace(')',''):  # for backward compatibility matching U1 and U(1)
+        if 'SYM_ID' in d and c.config.sym.SYM_ID != d['SYM_ID'].replace('(', '').replace(')', ''):
+            # replace for backward compatibility matching U1 and U(1)
             raise YastnError("Symmetry rule in config do not match loaded one.")
         if 'fermionic' in d and c.config.fermionic != d['fermionic']:
             raise YastnError("Fermionic statistics in config do not match loaded one.")
@@ -483,7 +485,6 @@ def block(tensors, common_legs=None) -> yastn.Tensor:
             ltDtot[-1][t] = Dhigh
             ltDslc[-1][t] = tpDslc
 
-
     for pa in tensors.keys():
         if any(_leg_fusions_need_mask(ulegs[n][pa[n]], leg) for n, leg in enumerate(legs_tn[pa])):
             legs_new = {n: legs[pa[n]] for n, legs in enumerate(ulegs)}
@@ -495,10 +496,10 @@ def block(tensors, common_legs=None) -> yastn.Tensor:
     nsym = tn0.config.sym.NSYM
     for pa, a in tensors.items():
         for tind, slind, Dind in zip(a.struct.t, a.slices, a.struct.D):
-            Dslcs = tuple(tDslc[tind[n * nsym : n * nsym + nsym]][pa[n]] for n, tDslc in enumerate(ltDslc))
+            Dslcs = tuple(tDslc[tind[n * nsym: n * nsym + nsym]][pa[n]] for n, tDslc in enumerate(ltDslc))
             meta_block.append((tind, slind.slcs[0], Dind, pa, Dslcs))
             if tind not in meta_new:
-                meta_new[tind] = tuple(tDtot[tind[n * nsym : n * nsym + nsym]] for n, tDtot in enumerate(ltDtot))
+                meta_new[tind] = tuple(tDtot[tind[n * nsym: n * nsym + nsym]] for n, tDtot in enumerate(ltDtot))
 
     meta_block = tuple(sorted(meta_block, key=itemgetter(0)))
     meta_new = tuple(sorted(meta_new.items()))

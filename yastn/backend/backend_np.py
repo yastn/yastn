@@ -152,7 +152,7 @@ def norm(data, p):
     """ 'fro' for Frobenius; 'inf' for max(abs(A)) """
     if p == 'fro':
         return np.linalg.norm(data)
-    return max(np.abs(data)) if len(data) > 0  else np.float64(0.)
+    return max(np.abs(data)) if len(data) > 0 else np.float64(0.)
 
 
 def entropy(data, alpha, tol):
@@ -183,7 +183,7 @@ def ones(D, dtype='float64', **kwargs):
 def rand(D, dtype='float64', **kwargs):
     if dtype == 'float64':
         return 2 * rng['rng'].random(D) - 1
-    return 2 * (rng['rng'].random(D) + 1j *  rng['rng'].random(D)) - (1 + 1j)  # dtype == 'complex128
+    return 2 * (rng['rng'].random(D) + 1j * rng['rng'].random(D)) - (1 + 1j)  # dtype == 'complex128
 
 
 def randint(low, high):
@@ -281,7 +281,8 @@ def svd_lowrank(data, meta, sizes, ncv=None, which='LM', maxiter=None, solver='a
     Vdata = np.empty((sizes[2],), dtype=data.dtype)
     for (sl, D, slU, DU, slS, slV, DV) in meta:
         k = slS[1] - slS[0]
-        if k < min(D) - 1 and min(D) * max(D) > 4000:  # the second condition is  heuristic estimate when performing dense svd should be faster.
+        if k < min(D) - 1 and min(D) * max(D) > 4000:
+            # the second condition is heuristic estimate when performing dense svd should be faster.
             U, S, V = scipy.sparse.linalg.svds(data[slice(*sl)].reshape(D), k=k, ncv=ncv,
                                                which=which, maxiter=maxiter, solver=solver)
             ord = np.argsort(-S)
