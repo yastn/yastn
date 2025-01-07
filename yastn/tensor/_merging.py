@@ -42,7 +42,21 @@ class _DecRecord(NamedTuple):
 
 
 class _Fusion(NamedTuple):
-    """ Information identifying the structure of hard fusion"""
+    r"""
+    Information identifying the structure of hard fusion
+
+    tree gives linearized structure of the fusion tree.
+    E.g., tree = (6, 4, 1, 2, 1, 1, 1, 2, 1, 1) means that 6 original legs are fused
+    followed by information about the number of legs constituting each sub-branch,
+    where 1 corresponds to original legs.
+    The above example represents the fusion of ((o, (o, o), o), (o, o))
+    op gives the type of fusion:
+    'p' product of spaces, 's' direct sum, 'o' original space with no internal structure.
+
+    Charges t and dimensions D are given for fused spaces only.
+    Their indexing is shifted by one comparing to tree, op, s.
+    For the top level, charges and dimensions follow from existing blocks.
+    """
     tree: tuple = (1,)  # order of fusions
     op: str = 'o'  # type of node; 'o' original; 'p' product; 's' sum  len(node) = len(tree)
     s: tuple = (1,)  # signatures len(s) = len(tree)
@@ -273,7 +287,7 @@ def _fuse_legs_hard(a, axes, order):
     hfs = []
     for n, axis in enumerate(axes):
         if len(axis) > 1:
-            hfs.append(_fuse_hfs(a.hfs, t_in, D_in, struct.s[n], axis))
+            hfs.append(_combine_hfs_prod(a.hfs, t_in, D_in, struct.s[n], axis))
         elif len(axis) == 1:
             hfs.append(a.hfs[axis[0]])
         else:  # len(axis) == 0
@@ -710,8 +724,8 @@ def _leg_structure_merge(teff, tlegs, Deff, Dlegs):
     return _LegSlices(tuple(t), tuple(D), tuple(dec))
 
 
-def _fuse_hfs(hfs, t_in, D_in, s_out, axes=None):
-    """ Fuse _Fusion(s), including charges and dimensions present on the fused legs. """
+def _combine_hfs_prod(hfs, t_in, D_in, s_out, axes=None):
+    """ Combine _Fusion(s) forming product of space, adding charges and dimensions present on the fused legs. """
     if axes is None:
         axes = list(range(len(hfs)))
     tfl, Dfl, sfl = [], [], [s_out]
@@ -728,7 +742,7 @@ def _fuse_hfs(hfs, t_in, D_in, s_out, axes=None):
     return _Fusion(tree=tuple(treefl), op=opfl, s=tuple(sfl), t=tuple(tfl), D=tuple(Dfl))
 
 
-def _sum_hfs(hfs, t_in, D_in, s_out):
+def _combine_hfs_sum(hfs, t_in, D_in, s_out):
     if len(hfs) == 1:
         return hfs[0]
     tfl, Dfl, sfl = [], [], [s_out]
@@ -914,12 +928,12 @@ def _union_hfs(config, ts, Ds, hfs):
             ls = _leg_structure_combine_charges_prod(config.sym, t_in, D_in, s_in, t_out, s_out)
             ma1 = _merge_masks_outer(config, ls, ms1_in)
             ma2 = _merge_masks_outer(config, ls, ms2_in)
-            hfu.insert(leg - nlegs, _fuse_hfs(hh, t_in, D_in, s_out))
+            hfu.insert(leg - nlegs, _combine_hfs_prod(hh, t_in, D_in, s_out))
         else:  # op[ltree - nlegs] == 's':
             ls = _leg_structure_combine_charges_sum(t_in, D_in)
             ma1 = _merge_masks_sum(ls, ms1_in)
             ma2 = _merge_masks_sum(ls, ms2_in)
-            hfu.insert(leg - nlegs, _sum_hfs(hh, t_in, D_in, s_out))
+            hfu.insert(leg - nlegs, _combine_hfs_sum(hh, t_in, D_in, s_out))
         for ind in ma1.keys() - set(t1[ltree - nlegs]):
             ma1[ind] *= False
         for ind in ma2.keys() - set(t2[ltree - nlegs]):
@@ -933,64 +947,98 @@ def _union_hfs(config, ts, Ds, hfs):
 
 def _pure_hfs_union(sym, ts, hfs):
     """
-    Consumes fusion trees from the bottom, building the union.
-    """
-    tree = list(hfs[0].tree)
-    s = list(hfs[0].s)  # to be consumed during parsing of the tree
-    op = list(hfs[0].op) # to be consumed during parsing of the tree
+    Consumes fusion trees from the bottom, while building the union of fused spaces.
 
+    Parameters
+    ----------
+    sym: module
+        symmetry class
+    ts: Sequence[Sequence[tuple[int]]]
+        List of top-level changes in each fused space.
+    hfs: Sequence[_Fusion]
+        List of _Fusion characterizing each fused space.
+        They should have matching fusion tree, op and signatures.
+
+    Returns
+    -------
+    tu, Du, hfs
+        top-level charges in the union, their corresponding dimensions, _Fusion describing the union.
+    """
     if any(hfs[0].tree != hf.tree or hfs[0].op != hf.op for hf in hfs):
         raise YastnError("Inconsistent numbers of hard-fused legs or sub-fusions order.")
     if any(hfs[0].s != hf.s for hf in hfs):
         raise YastnError("Inconsistent signatures of fused legs.")
+
+    tree = list(hfs[0].tree)
+    s = list(hfs[0].s)  # to be consumed during parsing of the tree
+    op = list(hfs[0].op) # to be consumed during parsing of the tree
     ind_native = [i for i, l in enumerate(tree[1:]) if l == 1]
 
-    hfu, tu, Du = [], [], []
+    tu, Du, hfu = [], [], []
     for i in ind_native:
-        tDs = [dict(zip(hf.t[i], hf.D[i])) for hf in hfs]
-        alltD = {}
-        for tD in tDs:
-            alltD.update(tD)
-        if any(alltD[t] != D for tD in tDs for t, D in tD.items()):
+        tDs = [list(zip(hf.t[i], hf.D[i])) for hf in hfs]
+        alltD = {t: D for tD in tDs for t, D in tD}
+        if any(alltD[t] != D for tD in tDs for t, D in tD):
             raise YastnError('Bond dimensions of fused legs do not match.')
-        tu.append(tuple(sorted(alltD)))
-        Du.append(tuple(alltD[t] for t in tu[-1]))
+        alltD = dict(sorted(alltD.items()))
+        tu.append(tuple(alltD.keys()))
+        Du.append(tuple(alltD.values()))
         hfu.append(_Fusion(s=(s[i + 1],)))  # len(s) == 1 + len(t)
 
-    teff = tuple(sorted(set.union(*(set(x) for x in ts))))
-    tss = [[teff] + list(hf.t) for hf in hfs]
+    tss = [tuple(sorted({t for tl in ts for t in tl}))]  # len(tss) == len(tree)
+    tss += [tuple(sorted({t for hf in hfs for t in hf.t[i]})) for i in range(len(tree) - 1)]
+
     while len(tree) > 1:
-        leg, nlegs, count, parents, ltree = 0, 0, 1, [], -1
-        for cnt in tree:  # partisng tree to search for a group of legs to merge
-            ltree += 1
-            if cnt > 1:
-                nlegs, count = 0, cnt
-                parents.append(ltree)
-            else:
-                leg, nlegs, count = leg + 1, nlegs + 1, count - 1
-            if count == 0:
-                break
-        del op[ltree - nlegs + 1: ltree + 1]  # remove leafs
-        del tree[ltree - nlegs + 1: ltree + 1]
-        for ti in tss:
-            del ti[ltree - nlegs + 1: ltree + 1]
-        for i in parents:
-            tree[i] -= nlegs - 1
-        s_in = tuple(s.pop(ltree - nlegs + 1) for _ in range(nlegs))
-        t_in = tuple(tu.pop(leg - nlegs) for _ in range(nlegs))
-        D_in = tuple(Du.pop(leg - nlegs) for _ in range(nlegs))
-        t_out = tuple(sorted(set.union(*(set(x[ltree - nlegs]) for x in tss))))
-        s_out = s[ltree - nlegs]
-        hh = [hfu.pop(leg - nlegs) for _ in range(nlegs)]
-        if op[ltree - nlegs] == 'p':
+        it, io, no = _tree_cut_contiguous_leafs_(tree)
+        # Remove original leafs to be fused; collect info for fusion
+        del op[it: it + no]
+        del tss[it: it + no]
+        s_in = tuple(s.pop(it) for _ in range(no))
+        t_in = tuple(tu.pop(io) for _ in range(no))
+        D_in = tuple(Du.pop(io) for _ in range(no))
+        hf_in = [hfu.pop(io) for _ in range(no)]
+        # it - 1 is the index of new fused space in the tree
+        t_out = tss[it - 1]
+        s_out = s[it - 1]
+        assert op[it - 1] in 'sp', 'Sanity check'
+        # Perform fusion and collect results for new lowest leaf
+        if op[it - 1] == 'p':
             ls = _leg_structure_combine_charges_prod(sym, t_in, D_in, s_in, t_out, s_out)
-            hfu.insert(leg - nlegs, _fuse_hfs(hh, t_in, D_in, s_out))
-        else:  # op[ltree - nlegs] == 's':
+            hf = _combine_hfs_prod(hf_in, t_in, D_in, s_out)
+        else:  # op[it - 1] == 's':
             ls = _leg_structure_combine_charges_sum(t_in, D_in)
-            hfu.insert(leg - nlegs, _sum_hfs(hh, t_in, D_in, s_out))
-        tu.insert(leg - nlegs, ls.t)
-        Du.insert(leg - nlegs, ls.D)
+            hf = _combine_hfs_sum(hf_in, t_in, D_in, s_out)
+        tu.insert(io, ls.t)
+        Du.insert(io, ls.D)
+        hfu.insert(io, hf)
+    # Only the final leaf is left in tu, Du, and hfu
     return tu.pop(), Du.pop(), hfu.pop()
+
+
+def _tree_cut_contiguous_leafs_(tree):
+    # parse tree searching for the first group of contiguous legs/leafs to merge
+    fo, count, parents = 0, 1, []
+    for ind, nleafs in enumerate(tree):
+        if nleafs > 1:  # fused space
+            no = 0  # the number of elements in the grouop
+            count = nleafs
+            parents.append(ind)
+        else:  # original leg/leaf
+            fo += 1
+            no += 1
+            count -= 1
+        if count == 0:
+            break
+
+    it = ind - no + 1  # index of the first group element in the tree
+    io = fo - no  # first element of the gruop among original legs
+
+    # update tree; it should be a list
+    del tree[it: it + no]
+    for nn in parents:  # parent nodes are before deleted ones
+        tree[nn] -= (no - 1)
+
+    return it, io, no
 
 
 def _unfuse_Fusion(hf):

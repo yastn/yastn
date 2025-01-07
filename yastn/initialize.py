@@ -23,7 +23,7 @@ from operator import itemgetter
 import numpy as np
 from .tensor import Tensor, YastnError
 from .tensor._auxliary import _struct, _config, _slc, _clear_axes, _unpack_legs
-from .tensor._merging import _Fusion, _embed_tensor, _sum_hfs
+from .tensor._merging import _Fusion, _embed_tensor, _combine_hfs_sum
 from .tensor._legs import Leg, leg_union, _leg_fusions_need_mask
 from .tensor._tests import _test_can_be_combined
 from .backend import backend_np
@@ -519,4 +519,4 @@ def _sum_legs_hfs(legs):
     t_in = [leg.t for leg in legs]
     D_in = [leg.D for leg in legs]
     s_out = legs[0].s
-    return _sum_hfs(hfs, t_in, D_in, s_out)
+    return _combine_hfs_sum(hfs, t_in, D_in, s_out)

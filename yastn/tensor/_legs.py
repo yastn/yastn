@@ -21,7 +21,7 @@ import numpy as np
 from ._auxliary import _flatten
 from ._tests import YastnError
 from ..sym import sym_none
-from ._merging import _Fusion, _pure_hfs_union, _fuse_hfs, _unfuse_Fusion
+from ._merging import _Fusion, _pure_hfs_union, _combine_hfs_prod, _unfuse_Fusion
 
 __all__ = ['Leg', 'leg_union', 'random_leg', 'leg_product', 'leg_undo_product']
 
@@ -299,7 +299,7 @@ def leg_product(*legs, t_allowed=None) -> yastn.Leg:
     hfs = tuple(leg.legs[0] for leg in legs)  # here assumes that all legs are 'hard fused'
     ts = tuple(leg.t for leg in legs)
     Ds = tuple(leg.D for leg in legs)
-    hf = _fuse_hfs(hfs, ts, Ds, seff)
+    hf = _combine_hfs_prod(hfs, ts, Ds, seff)
     return Leg(sym=sym, s=seff, t=tnew, D=Dnew, legs=(hf,))
 
 
