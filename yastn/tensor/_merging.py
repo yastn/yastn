@@ -19,7 +19,7 @@ from itertools import groupby, product, accumulate
 from operator import itemgetter
 from typing import NamedTuple
 import numpy as np
-from ._auxliary import _slc, _flatten, _clear_axes, _ntree_to_mf, _mf_to_ntree, _unpack_legs
+from ._auxliary import _slc, _flatten, _clear_axes, _unpack_legs
 from ._tests import YastnError, _test_axes_all, _get_tD_legs
 
 
@@ -577,7 +577,7 @@ def _mask_tensors_leg_intersection(a, b, axa, axb):
     tla, Dla, _= _get_tD_legs(a.struct)
     tlb, Dlb, _= _get_tD_legs(b.struct)
     for i1, i2 in zip(axa, axb):
-        ma, mb = _intersect_hfs(a.config, (tla[i1], tlb[i2]), (Dla[i1], Dlb[i2]), (a.hfs[i1], b.hfs[i2]))
+        ma, mb = _intersect_hfs(a.config.sym, (tla[i1], tlb[i2]), (Dla[i1], Dlb[i2]), (a.hfs[i1], b.hfs[i2]))
         msk_a.append(_mask_nonzero(ma))
         msk_b.append(_mask_nonzero(mb))
     return msk_a, msk_b
@@ -626,7 +626,7 @@ def _mask_tensors_leg_union_new(*args):
             tu, Du, hfu = _pure_hfs_union(a.config.sym, tln, hfn)
             hfs.append(hfu)
             for mask, mask_tD, b, tl, Dl in zip(masks, masks_tD, args, tls, Dls):
-                mu, mb = _intersect_hfs(a.config, (tl[n], tu), (Dl[n], Du), (b.hfs[n], hfu))
+                mu, mb = _intersect_hfs(a.config.sym, (tl[n], tu), (Dl[n], Du), (b.hfs[n], hfu))
                 assert all(all(v) for v in mu.values())
                 # assert hfuu == hfu
                 mask_tD.append({k: len(v) for k, v in sorted(mb.items())})
@@ -763,13 +763,16 @@ def _combine_hfs_sum(hfs, t_in, D_in, s_out):
     return _Fusion(tree=tuple(treefl), op=opfl, s=tuple(sfl), t=tuple(tfl), D=tuple(Dfl))
 
 
-def _merge_masks_outer(config, ls, ms):
+def _merge_masks_prod(sym, ls, ms):
     """ combine masks using information from LegDec; perform product of spaces / leg fusion. """
     msk = {tt: np.ones(Dt, dtype=bool) for tt, Dt in zip(ls.t, ls.D)}
-    nsym = config.sym.NSYM
+    nsym = sym.NSYM
     for tt, dect in zip(ls.t, ls.dec):
         for rec in dect:
-            msk[tt][slice(*rec.Dslc)] = _outer_masks(rec.t, ms, nsym)
+            for i, msi in enumerate(ms):
+                tmp_i = msi[rec.t[i * nsym: (i + 1) * nsym]]
+                tmp = tmp_i if i == 0 else np.outer(tmp, tmp_i).ravel()
+            msk[tt][slice(*rec.Dslc)] = tmp
     return msk
 
 
@@ -782,15 +785,7 @@ def _merge_masks_sum(ls, ms):
     return msk
 
 
-def _outer_masks(t, ms, nsym):
-    """ Outer product of masks for different axes, mask of reshaped block. """
-    for i, msi in enumerate(ms):
-        xi = msi[t[i * nsym: (i + 1) * nsym]]
-        x = xi if i == 0 else np.outer(x, xi).ravel()
-    return x
-
-
-def _mask_falsify_mismatches(ms1, ms2):
+def _mask_falsify_mismatches_(ms1, ms2):
     """ Multiply masks by False for indices that are not in both dictionaries ms1 and ms2. """
     set1, set2 = set(ms1), set(ms2)
     for t in set1 - set2:
@@ -801,64 +796,56 @@ def _mask_falsify_mismatches(ms1, ms2):
 
 
 @lru_cache(maxsize=1024)
-def _intersect_hfs(config, ts, Ds, hfs):
+def _intersect_hfs(sym, ts, Ds, hfs):
     """
-    Returns mask1 and mask2, finding common leg indices for each teff.
+    Returns mask1 and mask2, finding common leg indices for each shared teff.
     Consumes fusion trees from the bottom, identifying common elements and building the masks.
     """
-    teff = tuple(sorted((set(ts[0]) & set(ts[1]))))
+    teff = tuple(sorted(set(ts[0]) & set(ts[1])))
     tree = list(hfs[0].tree)
 
     if len(tree) == 1:
-        msks = [[{t: np.ones(D, dtype=bool) for t, D in zip(ts[n], Ds[n]) if t in teff}] for n in (0, 1)]
-    else:
-        msks = [[{t: np.ones(D, dtype=bool) for t, D in zip(hf.t[i], hf.D[i])}
-                    for i, l in enumerate(tree[1:]) if l == 1] for hf in hfs]
+        ma0 = {t: np.ones(D, dtype=bool) for t, D in zip(ts[0], Ds[0]) if t in teff}
+        ma1 = {t: np.ones(D, dtype=bool) for t, D in zip(ts[1], Ds[1]) if t in teff}
+        if any(ma0[t].size != ma1[t].size for t in teff):
+            raise YastnError('Bond dimensions do not match.')
+        return ma0, ma1
 
-    for ms1, ms2 in zip(*msks):
-        for t in set(ms1) & set(ms2):
-            if ms1[t].size != ms2[t].size:
-                if len(tree) == 1:
-                    raise YastnError('Bond dimensions do not match.')
+    msks = [[{t: np.ones(D, dtype=bool) for t, D in zip(hf.t[i], hf.D[i])} for i, l in enumerate(tree[1:]) if l == 1]
+            for hf in hfs]
+    for ma0, ma1 in zip(*msks):
+        for t in set(ma0) & set(ma1):
+            if ma0[t].size != ma1[t].size:
                 raise YastnError('Bond dimensions of fused legs do not match.')
-        _mask_falsify_mismatches(ms1, ms2)
+        _mask_falsify_mismatches_(ma0, ma1)
 
-    if len(tree) == 1:
-        return msks[0].pop(), msks[1].pop()
+    # lists to be consumed during parsing of the tree
+    op = list(hfs[0].op)
+    s = [list(hf.s) for hf in hfs]
+    t = [[teff] + list(hf.t) for hf in hfs]
+    D = [[()] + list(hf.D) for hf in hfs]
 
-    op = list(hfs[0].op) # to be consumed during parsing of the tree
-    s = [list(hf.s) for hf in hfs]  # to be consumed during parsing of the tree
-    t = [[teff] + list(hf.t) for hf in hfs]  # to be consumed during parsing of the tree
-    D = [[()] + list(hf.D) for hf in hfs]  # to be consumed during parsing of the tree
+    # parse the tree, building masks
     while len(tree) > 1:
-        leg, nlegs, count, parents, ltree = 0, 0, 1, [], -1
-        for cnt in tree:  # partisng tree to search for a group of legs to merge
-            ltree += 1
-            if cnt > 1:
-                nlegs, count = 0, cnt
-                parents.append(ltree)
-            else:
-                leg, nlegs, count = leg + 1, nlegs + 1, count - 1
-            if count == 0:
-                break
-        del op[ltree - nlegs + 1: ltree + 1]  # remove leafs
-        del tree[ltree - nlegs + 1: ltree + 1]  # remove leafs
-        for i in parents:
-            tree[i] -= nlegs - 1
-        ss = [tuple(s1.pop(ltree - nlegs + 1) for _ in range(nlegs)) for s1 in s]
-        tt = [tuple(t1.pop(ltree - nlegs + 1) for _ in range(nlegs)) for t1 in t]
-        DD = [tuple(D1.pop(ltree - nlegs + 1) for _ in range(nlegs)) for D1 in D]
-        mss = [[msk.pop(leg - nlegs) for _ in range(nlegs)] for msk in msks]
-        if op[ltree - nlegs] == 'p':
-            lss = [_leg_structure_combine_charges_prod(config.sym, tt1, DD1, ss1, t1[ltree - nlegs], s1[ltree - nlegs])
+        it, io, no = _tree_cut_contiguous_leafs_(tree)
+        # Remove original leafs to be fused; collect info for fusion
+        del op[it: it + no]
+        ss = [tuple(s1.pop(it) for _ in range(no)) for s1 in s]
+        tt = [tuple(t1.pop(it) for _ in range(no)) for t1 in t]
+        DD = [tuple(D1.pop(it) for _ in range(no)) for D1 in D]
+        mss = [[msk.pop(io) for _ in range(no)] for msk in msks]
+        assert op[it - 1] in 'sp', 'Sanity check'
+        if op[it - 1] == 'p':
+            lss = [_leg_structure_combine_charges_prod(sym, tt1, DD1, ss1, t1[it - 1], s1[it - 1])
                    for tt1, DD1, ss1, t1, s1 in zip(tt, DD, ss, t, s)]
-            ma = [_merge_masks_outer(config, ls1, ms1) for ls1, ms1 in zip(lss, mss)]
-        else: # op[ltree - nlegs] == 's':
+            ma = [_merge_masks_prod(sym, ls1, ms1) for ls1, ms1 in zip(lss, mss)]
+        else: # op[it - 1] == 's':
             lss = [_leg_structure_combine_charges_sum(tt1, DD1) for tt1, DD1, in zip(tt, DD)]
             ma = [_merge_masks_sum(ls1, ms1) for ls1, ms1 in zip(lss, mss)]
-        _mask_falsify_mismatches(ma[0], ma[1])
-        msks[0].insert(leg - nlegs, ma[0])
-        msks[1].insert(leg - nlegs, ma[1])
+        _mask_falsify_mismatches_(ma[0], ma[1])
+        msks[0].insert(io, ma[0])
+        msks[1].insert(io, ma[1])
+     # Only the final leaf is left in msks[0] and msks[1]
     return msks[0].pop(), msks[1].pop()
 
 
@@ -926,8 +913,8 @@ def _union_hfs(config, ts, Ds, hfs):
 
         if op[ltree - nlegs] == 'p':
             ls = _leg_structure_combine_charges_prod(config.sym, t_in, D_in, s_in, t_out, s_out)
-            ma1 = _merge_masks_outer(config, ls, ms1_in)
-            ma2 = _merge_masks_outer(config, ls, ms2_in)
+            ma1 = _merge_masks_prod(config.sym, ls, ms1_in)
+            ma2 = _merge_masks_prod(config.sym, ls, ms2_in)
             hfu.insert(leg - nlegs, _combine_hfs_prod(hh, t_in, D_in, s_out))
         else:  # op[ltree - nlegs] == 's':
             ls = _leg_structure_combine_charges_sum(t_in, D_in)
@@ -1016,7 +1003,7 @@ def _pure_hfs_union(sym, ts, hfs):
 
 
 def _tree_cut_contiguous_leafs_(tree):
-    # parse tree searching for the first group of contiguous legs/leafs to merge
+    """ Parse tree searching for the first group of contiguous legs/leafs to merge. """
     fo, count, parents = 0, 1, []
     for ind, nleafs in enumerate(tree):
         if nleafs > 1:  # fused space
@@ -1101,3 +1088,28 @@ def _ntree_eliminate_lowest(ntree):
     else:
         for x in ntree:
             _ntree_eliminate_lowest(x)
+
+
+def _mf_to_ntree(mf):
+    """ Change linear fusion tree into nested lists. """
+    ntree = []
+    if mf[0] > 1:
+        pos_init, cum = 1, 0
+        for pos, nlegs in enumerate(mf[1:]):
+            if cum == 0:
+                cum = nlegs
+            if nlegs == 1:
+                cum = cum - 1
+                if cum == 0:
+                    ntree.append(_mf_to_ntree(mf[pos_init:pos + 2]))
+                    pos_init = pos + 2
+    return ntree
+
+
+def _ntree_to_mf(ntree):
+    """ Change nested lists into linear fusion tree. """
+    mf = ()
+    for subtree in ntree:
+        mf = mf + _ntree_to_mf(subtree)
+    nlegs = max(1, sum(x == 1 for x in mf))
+    return (nlegs,) + mf

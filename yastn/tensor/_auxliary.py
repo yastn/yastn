@@ -98,31 +98,6 @@ def _clear_axes(*args):
     return ((axis,) if isinstance(axis, int) else tuple(axis) for axis in args)
 
 
-def _ntree_to_mf(ntree):
-    """ Change nested lists into linear fusion tree. """
-    mf = ()
-    for subtree in ntree:
-        mf = mf + _ntree_to_mf(subtree)
-    nlegs = max(1, sum(x == 1 for x in mf))
-    return (nlegs,) + mf
-
-
-def _mf_to_ntree(mf):
-    """ Change linear fusion tree into nested lists. """
-    ntree = []
-    if mf[0] > 1:
-        pos_init, cum = 1, 0
-        for pos, nlegs in enumerate(mf[1:]):
-            if cum == 0:
-                cum = nlegs
-            if nlegs == 1:
-                cum = cum - 1
-                if cum == 0:
-                    ntree.append(_mf_to_ntree(mf[pos_init:pos + 2]))
-                    pos_init = pos + 2
-    return ntree
-
-
 def _unpack_legs(legs):
     """ Return native legs and mfs. """
     ulegs, mfs = [], []
