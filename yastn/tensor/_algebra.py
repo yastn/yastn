@@ -18,7 +18,7 @@ from functools import lru_cache
 from itertools import accumulate
 from ._auxliary import _slc, _join_contiguous_slices
 from ._tests import YastnError, _test_can_be_combined, _get_tD_legs, _test_axes_match
-from ._merging import _mask_tensors_leg_union, _meta_mask, _mask_tensors_leg_union_new
+from ._merging import _meta_mask, _mask_tensors_leg_union
 
 
 __all__ = ['linear_combination', 'real', 'imag', 'sqrt', 'rsqrt', 'reciprocal', 'exp', 'bitwise_not', 'allclose']
@@ -93,7 +93,7 @@ def _pre_addition(*tensors):
         mask_needed = mask_needed or mask_needed_ab
 
     if mask_needed:
-        masks, masks_tD, hfs = _mask_tensors_leg_union_new(*tensors)
+        masks, masks_tD, hfs = _mask_tensors_leg_union(*tensors)
         nin = tuple(range(a.ndim_n))
         tensors = tuple(_embed_mask_axes(b, nin, mask, mask_tD) for b, mask, mask_tD in zip(tensors, masks, masks_tD))
     else:

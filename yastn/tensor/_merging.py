@@ -567,7 +567,7 @@ def _mask_nonzero(mask):
     if all(all(v) for v in mask.values()):
         return None
     mask = {k: v.nonzero()[0] for k, v in mask.items()}
-    mask = {k: v for k, v in sorted(mask.items()) if len(v) > 0}
+    mask = {k: v for k, v in mask.items() if len(v) > 0}
     return mask
 
 
@@ -577,30 +577,13 @@ def _mask_tensors_leg_intersection(a, b, axa, axb):
     tla, Dla, _= _get_tD_legs(a.struct)
     tlb, Dlb, _= _get_tD_legs(b.struct)
     for i1, i2 in zip(axa, axb):
-        ma, mb = _intersect_hfs(a.config.sym, (tla[i1], tlb[i2]), (Dla[i1], Dlb[i2]), (a.hfs[i1], b.hfs[i2]))
+        ma, mb = _masks_intersect_hfs(a.config.sym, (tla[i1], tlb[i2]), (Dla[i1], Dlb[i2]), (a.hfs[i1], b.hfs[i2]))
         msk_a.append(_mask_nonzero(ma))
         msk_b.append(_mask_nonzero(mb))
     return msk_a, msk_b
 
 
-def _mask_tensors_leg_union(a, b):
-    """ masks to get the intersecting parts of legs from two tensors as single masks """
-    msk_a, msk_a_tD = [], []
-    msk_b, msk_b_tD = [], []
-    hfs = []
-    tla, Dla, _= _get_tD_legs(a.struct)
-    tlb, Dlb, _= _get_tD_legs(b.struct)
-    for n in range(a.ndim_n):
-        ma, mb, hf = _union_hfs(a.config, (tla[n], tlb[n]), (Dla[n], Dlb[n]), (a.hfs[n], b.hfs[n]))
-        msk_a_tD.append({k: len(v) for k, v in sorted(ma.items())})
-        msk_b_tD.append({k: len(v) for k, v in sorted(mb.items())})
-        msk_a.append(_mask_nonzero(ma))
-        msk_b.append(_mask_nonzero(mb))
-        hfs.append(hf)
-    return msk_a, msk_a_tD, msk_b, msk_b_tD, hfs
-
-
-def _mask_tensors_leg_union_new(*args):
+def _mask_tensors_leg_union(*args):
     """ masks to get the intersecting parts of legs from two tensors as single masks """
     masks = [[] for _ in range(len(args))]
     masks_tD = [[] for _ in range(len(args))]
@@ -618,7 +601,7 @@ def _mask_tensors_leg_union_new(*args):
             for mask in masks:
                 mask.append(None)
             for mask_tD, tl, Dl in zip(masks_tD, tls, Dls):
-                mask_tD.append(dict(sorted(zip(tl, Dl))))
+                mask_tD.append(dict(zip(tl, Dl)))
             hfs.append(a.hfs[n])
         else:
             tln = tuple(tl[n] for tl in tls)
@@ -626,10 +609,8 @@ def _mask_tensors_leg_union_new(*args):
             tu, Du, hfu = _pure_hfs_union(a.config.sym, tln, hfn)
             hfs.append(hfu)
             for mask, mask_tD, b, tl, Dl in zip(masks, masks_tD, args, tls, Dls):
-                mu, mb = _intersect_hfs(a.config.sym, (tl[n], tu), (Dl[n], Du), (b.hfs[n], hfu))
-                assert all(all(v) for v in mu.values())
-                # assert hfuu == hfu
-                mask_tD.append({k: len(v) for k, v in sorted(mb.items())})
+                mb = _mask_embed_in_union(a.config.sym, tl[n], b.hfs[n], hfu)
+                mask_tD.append({t: len(v) for t, v in mb.items()})
                 mask.append(_mask_nonzero(mb))
     return masks, masks_tD, hfs
 
@@ -796,7 +777,7 @@ def _mask_falsify_mismatches_(ms1, ms2):
 
 
 @lru_cache(maxsize=1024)
-def _intersect_hfs(sym, ts, Ds, hfs):
+def _masks_intersect_hfs(sym, ts, Ds, hfs):
     """
     Returns mask1 and mask2, finding common leg indices for each shared teff.
     Consumes fusion trees from the bottom, identifying common elements and building the masks.
@@ -845,8 +826,48 @@ def _intersect_hfs(sym, ts, Ds, hfs):
         _mask_falsify_mismatches_(ma[0], ma[1])
         msks[0].insert(io, ma[0])
         msks[1].insert(io, ma[1])
-     # Only the final leaf is left in msks[0] and msks[1]
+    # Only the final leaf is left in msks[0] and msks[1]
     return msks[0].pop(), msks[1].pop()
+
+
+def _mask_embed_in_union(sym, t0, hf0, hfu):
+    """ no tests are done """
+
+    # to be consumed during parsing of the tree
+    tree = list(hfu.tree)
+    ss = list(hfu.s)
+    op = list(hfu.op)
+    tus = [t0] + list(hfu.t)
+    Dus = [()] + list(hfu.D)
+    t0s = [t0] + list(hf0.t)
+
+    msk = [{t: np.ones(D, dtype=bool) * (t in t0s[i]) for t, D in zip(tus[i], Dus[i])}
+           for i, leafs in enumerate(tree) if leafs == 1]
+
+    # parse the tree, building mask
+    while len(tree) > 1:
+        it, io, no = _tree_cut_contiguous_leafs_(tree)
+        # Remove original leafs to be fused; collect info for fusion
+        del op[it: it + no]
+        del t0s[it: it + no]
+        s_in = tuple(ss.pop(it) for _ in range(no))
+        t_in = tuple(tus.pop(it) for _ in range(no))
+        D_in = tuple(Dus.pop(it) for _ in range(no))
+        ms_in = [msk.pop(io) for _ in range(no)]
+        assert op[it - 1] in 'sp', 'Sanity check'
+        if op[it - 1] == 'p':
+            ls = _leg_structure_combine_charges_prod(sym, t_in, D_in, s_in, tus[it - 1], ss[it - 1])
+            ma = _merge_masks_prod(sym, ls, ms_in)
+        else:  # op[it - 1] == 's':
+            ls = _leg_structure_combine_charges_sum(t_in, D_in)
+            ma = _merge_masks_sum(ls, ms_in)
+
+        for t in ma.keys():
+            if t not in t0s[it - 1]:
+                ma[t] *= False
+        msk.insert(io, ma)
+    # Only the final leaf is left in msk
+    return msk.pop()
 
 
 def _union_hfs(config, ts, Ds, hfs):

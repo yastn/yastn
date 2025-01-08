@@ -35,7 +35,7 @@ def set_cache_maxsize(maxsize=0):
     _contractions._meta_ncon = lru_cache(maxsize)(_contractions._meta_ncon.__wrapped__)
     _merging._meta_merge_to_matrix = lru_cache(maxsize)(_merging._meta_merge_to_matrix.__wrapped__)
     _merging._meta_unmerge_matrix = lru_cache(maxsize)(_merging._meta_unmerge_matrix.__wrapped__)
-    _merging._intersect_hfs = lru_cache(maxsize)(_merging._intersect_hfs.__wrapped__)
+    _merging._masks_intersect_hfs = lru_cache(maxsize)(_merging._masks_intersect_hfs.__wrapped__)
     _merging._leg_structure_combine_charges_prod = lru_cache(maxsize)(_merging._leg_structure_combine_charges_prod.__wrapped__)
     _merging._meta_fuse_hard = lru_cache(maxsize)(_merging._meta_fuse_hard.__wrapped__)
     _merging._meta_unfuse_hard = lru_cache(maxsize)(_merging._meta_unfuse_hard.__wrapped__)
@@ -57,7 +57,7 @@ def clear_cache():
     _contractions._meta_ncon.cache_clear()
     _merging._meta_merge_to_matrix.cache_clear()
     _merging._meta_unmerge_matrix.cache_clear()
-    _merging._intersect_hfs.cache_clear()
+    _merging._masks_intersect_hfs.cache_clear()
     _merging._leg_structure_combine_charges_prod.cache_clear()
     _merging._meta_fuse_hard.cache_clear()
     _merging._meta_unfuse_hard.cache_clear()
@@ -70,7 +70,7 @@ def get_cache_info():
             "unmerge_from_matrix": _merging._meta_unmerge_matrix.cache_info(),
             "fuse_hard": _merging._meta_fuse_hard.cache_info(),
             "unfuse_hard": _merging._meta_unfuse_hard.cache_info(),
-            "intersect_hfs": _merging._intersect_hfs.cache_info(),
+            "intersect_hfs": _merging._masks_intersect_hfs.cache_info(),
             "combine_leg_structure": _merging._leg_structure_combine_charges_prod.cache_info(),
             "tensordot_f2m": _contractions._meta_tensordot_f2m.cache_info(),
             "tensordot_fc": _contractions._meta_tensordot_fc.cache_info(),
