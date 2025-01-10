@@ -95,14 +95,14 @@ def _pre_addition(*tensors):
     if mask_needed:
         masks, masks_tD, hfs = _mask_tensors_leg_union(*tensors)
         nin = tuple(range(a.ndim_n))
-        tensors = tuple(_embed_mask_axes(b, nin, mask, mask_tD) for b, mask, mask_tD in zip(tensors, masks, masks_tD))
+        tensors = tuple(_embed_mask_axes(b, nin, mask, mask_tD, hfs) for b, mask, mask_tD in zip(tensors, masks, masks_tD))
     else:
         hfs = a.hfs
 
     return tensors, hfs
 
 
-def _embed_mask_axes(a, naxes, masks, masks_tD):
+def _embed_mask_axes(a, naxes, masks, masks_tD, hfs):
     r""" Auxlliary function applying mask tensors to native legs. """
     for axis, mask, mask_tD in zip(naxes, masks, masks_tD):
         if mask is not None:
@@ -110,7 +110,7 @@ def _embed_mask_axes(a, naxes, masks, masks_tD):
             mask_D = tuple(mask_tD.values())
             meta, struct, slices, axis, ndim = _meta_mask(a.struct, a.slices, a.isdiag, mask_t, mask_D, axis)
             data = a.config.backend.embed_mask(a._data, mask, meta, struct.size, axis, ndim)
-            a = a._replace(struct=struct, slices=slices, data=data)
+            a = a._replace(struct=struct, slices=slices, data=data, hfs=hfs)
     return a
 
 

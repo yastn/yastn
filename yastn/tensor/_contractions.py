@@ -476,8 +476,6 @@ def _apply_mask_axes(a, naxes, masks):
     return a
 
 
-
-
 def vdot(a, b, conj=(1, 0)) -> Number:
     r"""
     Compute scalar product :math:`\langle a|b \rangle` between two tensors.
