@@ -14,14 +14,14 @@
 # ==============================================================================
 """ Contractions of yastn tensors """
 from __future__ import annotations
+import numpy as np
 from functools import lru_cache
 from itertools import groupby, accumulate, product
 from numbers import Number
 from operator import itemgetter
-import numpy as np
 from ._auxliary import _struct, _slc, SpecialTensor, _clear_axes, _unpack_axes, _flatten, _join_contiguous_slices
 from ._merging import _merge_to_matrix, _unmerge, _meta_unmerge_matrix, _meta_fuse_hard
-from. _merging import _transpose_and_merge, _mask_tensors_leg_intersection, _meta_mask
+from ._merging import _transpose_and_merge, _mask_tensors_leg_intersection, _meta_mask
 from ._tests import YastnError, _test_can_be_combined, _test_axes_match
 
 __all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon', 'einsum', 'broadcast', 'apply_mask']
@@ -84,7 +84,8 @@ def tensordot(a, b, axes, conj=(0, 0)) -> yastn.Tensor:
 
     n_c = a.config.sym.add_charges(a.struct.n, b.struct.n)
     s_c = tuple(a.struct.s[i1] for i1 in nout_a) + tuple(b.struct.s[i2] for i2 in nout_b)
-    mfs_c = tuple(a.mfs[ii] for ii in range(a.ndim) if ii not in in_a) + tuple(b.mfs[ii] for ii in range(b.ndim) if ii not in in_b)
+    mfs_c = tuple(a.mfs[ii] for ii in range(a.ndim) if ii not in in_a)
+    mfs_c += tuple(b.mfs[ii] for ii in range(b.ndim) if ii not in in_b)
     hfs_c = tuple(a.hfs[ii] for ii in nout_a) + tuple(b.hfs[ii] for ii in nout_b)
 
     if mask_needed:
@@ -99,7 +100,7 @@ def tensordot(a, b, axes, conj=(0, 0)) -> yastn.Tensor:
     elif a.config.tensordot_policy == 'no_fusion':
         data, struct_c, slices_c = _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b)
     else:
-        raise YastnError(f"Tensordot policy not recognized. It should be 'fuse_to_matrix', 'fuse_contracted', or 'no_fusion'.")
+        raise YastnError("Tensordot policy not recognized. It should be 'fuse_to_matrix', 'fuse_contracted', or 'no_fusion'.")
 
     struct_c = struct_c._replace(n=n_c)
     return a._replace(data=data, struct=struct_c, slices=slices_c, mfs=mfs_c, hfs=hfs_c)
@@ -148,7 +149,7 @@ def _tensordot_fc(a, b, nout_a, nin_a, nin_b, nout_b):
     struct_a, slices_a, meta_mrg_a, t_a, D_a = _meta_fuse_hard(a.config, a.struct, a.slices, axes_a, ind_a)
     data_a = _transpose_and_merge(a.config, a._data, order_a, struct_a, slices_a, meta_mrg_a)
 
-    axes_b =  (nin_b,) + tuple((x,) for x in nout_b)
+    axes_b = (nin_b,) + tuple((x,) for x in nout_b)
     order_b = nin_b + nout_b
     struct_b, slices_b, meta_mrg_b, t_b, D_b = _meta_fuse_hard(b.config, b.struct, b.slices, axes_b, ind_b)
     data_b = _transpose_and_merge(b.config, b._data, order_b, struct_b, slices_b, meta_mrg_b)
@@ -172,7 +173,7 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
     order_a = nout_a + nin_a
     order_b = nin_b + nout_b
     data = a.config.backend.transpose_dot_sum(a.data, b.data, meta_dot,
-                                                 reshape_a, reshape_b, order_a, order_b, struct_c.size)
+                                              reshape_a, reshape_b, order_a, order_b, struct_c.size)
     return data, struct_c, slices_c
 
 
@@ -209,7 +210,7 @@ def _meta_tensordot_f2m(struct_a, slices_a, struct_b, slices_b):
     t_c = tuple(x[0] for x in meta)
     D_c = tuple(x[1] for x in meta)
     Dp_c = tuple(D[0] * D[1] for D in D_c)
-    slices_c = tuple( _slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dp_c), Dp_c, D_c))
+    slices_c = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dp_c), Dp_c, D_c))
     meta = tuple((sl.slcs[0], *mt[1:]) for sl, mt in zip(slices_c, meta))
     s_c = (struct_a.s[0], struct_b.s[1])
     struct_c = _struct(s=s_c, t=t_c, D=D_c, size=sum(Dp_c))
@@ -228,7 +229,8 @@ def _meta_tensordot_fc(struct_a, slices_a, struct_b, slices_b):
     Daop = np.prod(Dao, axis=1, dtype=np.int64).tolist()
     Dao = Dao.tolist()
     Dac = Da[:, -1].tolist()
-    struct_a_resorted = sorted(((tuple(tc), tuple(to), Dc, Dop, tuple(Do), sl.slcs[0]) for tc, to, Dc, Dop, Do, sl in zip(tac, tao, Dac, Daop, Dao, slices_a)))
+    struct_a_resorted = sorted(((tuple(tc), tuple(to), Dc, Dop, tuple(Do), sl.slcs[0])
+                                for tc, to, Dc, Dop, Do, sl in zip(tac, tao, Dac, Daop, Dao, slices_a)))
 
     ltb, ndimb = len(struct_b.t), len(struct_b.s)
     tb = np.array(struct_b.t, dtype=np.int64).reshape((ltb, ndimb, nsym))
@@ -240,7 +242,8 @@ def _meta_tensordot_fc(struct_a, slices_a, struct_b, slices_b):
     Dbop = np.prod(Dbo, axis=1, dtype=np.int64).tolist()
     Dbo = Dbo.tolist()
     Dbc = Db[:, 0].tolist()
-    struct_b_resorted = [(tuple(tc), tuple(to), Dc, Dop, tuple(Do), sl.slcs[0]) for tc, to, Dc, Dop, Do, sl in zip(tbc, tbo, Dbc, Dbop, Dbo, slices_b)]
+    struct_b_resorted = [(tuple(tc), tuple(to), Dc, Dop, tuple(Do), sl.slcs[0])
+                         for tc, to, Dc, Dop, Do, sl in zip(tbc, tbo, Dbc, Dbop, Dbo, slices_b)]
 
     struct_a_resorted = groupby(struct_a_resorted, key=itemgetter(0))
     struct_b_resorted = groupby(struct_b_resorted, key=itemgetter(0))
@@ -255,7 +258,7 @@ def _meta_tensordot_fc(struct_a, slices_a, struct_b, slices_b):
     t_c = tuple(x[0] for x in meta)
     D_c = tuple(x[1] for x in meta)
     Dp_c = tuple(x[2] for x in meta)
-    slices_c = tuple( _slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dp_c), Dp_c, D_c))
+    slices_c = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dp_c), Dp_c, D_c))
     meta = tuple((sl.slcs[0], *mt[3:]) for sl, mt in zip(slices_c, meta))
     s_c = struct_a.s[:-1] + struct_b.s[1:]
     struct_c = _struct(s=s_c, t=t_c, D=D_c, size=sum(Dp_c))
@@ -284,7 +287,8 @@ def _meta_tensordot_nf(struct_a, slices_a, struct_b, slices_b, ind_a, ind_b, nou
     Dao = Dao.tolist()
     Dacp = np.prod(Dac, axis=1, dtype=np.int64).tolist()
     Dac = Dac.tolist()
-    struct_a_resorted = sorted(((tuple(tc), tuple(Dc), tuple(to), taa, Dop, tuple(Do)) for tc, Dc, to, taa, Dop, Do in zip(tac, Dac, tao, ta, Daop, Dao)))
+    struct_a_resorted = sorted(((tuple(tc), tuple(Dc), tuple(to), taa, Dop, tuple(Do))
+                                for tc, Dc, to, taa, Dop, Do in zip(tac, Dac, tao, ta, Daop, Dao)))
     reshape_a = tuple((taa, sl.slcs[0], D, (Dop, Dcp)) for taa, sl, D, Dop, Dcp in zip(ta, slices_a, Da, Daop, Dacp))
 
     if ind_b is None:
@@ -305,7 +309,8 @@ def _meta_tensordot_nf(struct_a, slices_a, struct_b, slices_b, ind_a, ind_b, nou
     Dbo = Dbo.tolist()
     Dbcp = np.prod(Dbc, axis=1, dtype=np.int64).tolist()
     Dbc = Dbc.tolist()
-    struct_b_resorted = sorted((tuple(tc), tuple(Dc), tuple(to), tbb, Dop, tuple(Do)) for tc, Dc, to, tbb, Dop, Do in zip(tbc, Dbc, tbo, tb, Dbop, Dbo))
+    struct_b_resorted = sorted((tuple(tc), tuple(Dc), tuple(to), tbb, Dop, tuple(Do))
+                               for tc, Dc, to, tbb, Dop, Do in zip(tbc, Dbc, tbo, tb, Dbop, Dbo))
     reshape_b = tuple((t, sl.slcs[0], D, (Dcp, Dop)) for t, sl, D, Dcp, Dop in zip(tb, slices_b, Db, Dbcp, Dbop))
 
     struct_a_resorted = groupby(struct_a_resorted, key=itemgetter(0, 1))
@@ -340,7 +345,7 @@ def _meta_tensordot_nf(struct_a, slices_a, struct_b, slices_b, ind_a, ind_b, nou
     return meta_dot, reshape_a, reshape_b, struct_c, slices_c
 
 
-def broadcast(a, *args, axes=0) -> yastn.Tensor | iterable[yastn.Tensor]:
+def broadcast(a, *args, axes=0) -> yastn.Tensor | tuple[yastn.Tensor]:
     r"""
     Compute tensordot product of diagonal tensor ``a`` with tensors in ``args``.
 
@@ -399,8 +404,8 @@ def _meta_broadcast(b_struct, b_slices, a_struct, a_slices, axis):
     ind_ta = tuple(x[:nsym] for x in a_struct.t)
     sl_a = dict(zip(ind_ta, a_slices))
 
-    meta = tuple((tb, slb.slcs[0], Db, slb.Dp, sl_a[ib].slcs[0]) for tb, slb, Db, ib in \
-                 zip(b_struct.t, b_slices, b_struct.D, ind_tb) if ib in ind_ta)
+    meta = tuple((tb, slb.slcs[0], Db, slb.Dp, sl_a[ib].slcs[0])
+                 for tb, slb, Db, ib in zip(b_struct.t, b_slices, b_struct.D, ind_tb) if ib in ind_ta)
 
     if any(Db[axis] != sla[1] - sla[0] for _, _, Db, _, sla in meta):
         raise YastnError("Bond dimensions do not match.")
@@ -419,7 +424,7 @@ def _meta_broadcast(b_struct, b_slices, a_struct, a_slices, axis):
     return meta, c_struct, c_slices
 
 
-def apply_mask(a, *args, axes=0) -> yastn.Tensor | iterable[yastn.Tensor]:
+def apply_mask(a, *args, axes=0) -> yastn.Tensor | tuple[yastn.Tensor]:
     r"""
     Apply mask given by nonzero elements of diagonal tensor ``a`` on specified axes of tensors in args.
     Number of tensors in ``args`` is not restricted.
@@ -612,10 +617,11 @@ def swap_gate(a, axes, charge=None) -> yastn.Tensor:
     r"""
     Return tensor after application of a swap gate.
 
-    The function's action is controlled by the ``fermionic`` flag in the tensor :ref:`config <tensor/configuration:YASTN configuration>`.
+    The function's action is controlled by the ``fermionic`` flag
+    in the tensor :ref:`config <tensor/configuration:YASTN configuration>`.
     Multiply blocks with odd charges on swapped legs by :math:`-1`.
-    The ``fermionic`` flag selects which individual charges (in case of a direct product of a few symmetries) are tested for oddity,
-    where the contributions from each selected charge get multiplied.
+    The ``fermionic`` flag selects which individual charges (in case of a direct product of a few symmetries)
+    are tested for oddity, where the contributions from each selected charge get multiplied.
     See :class:`yastn.operators.SpinfulFermions` for an example.
     For ``fermionic=True``, all charges are considered.
     For ``fermionic=False``,  swap_gate returns ``a``.
@@ -873,7 +879,7 @@ def _consume_edges(edges, conjs):
             if t1 == t2:  # trace
                 if len(meta_dot) > 0:
                     raise YastnError("Likely inefficient order of contractions. Do all traces before tensordot. " +
-                        "Call all axes connecting two tensors one after another.")
+                                     "Call all axes connecting two tensors one after another.")
                 meta_tr.append((t1, (tuple(ax1), tuple(ax2))))
                 ax12 = ax1 + ax2
                 for edge in edges:  # edge = (order, leg, tensor)

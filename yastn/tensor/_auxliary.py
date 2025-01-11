@@ -105,7 +105,7 @@ def _unpack_legs(legs):
         if isinstance(leg.fusion, tuple):  # meta-fused
             ulegs.extend(leg.legs)
             mfs.append(leg.fusion)
-        else:  #_Leg
+        else:  # _Leg
             ulegs.append(leg)
             mfs.append((1,))
     return tuple(ulegs), tuple(mfs)

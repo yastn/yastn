@@ -21,7 +21,7 @@ import numpy as np
 from ._auxliary import _flatten
 from ._tests import YastnError
 from ..sym import sym_none
-from ._merging import _Fusion, _pure_hfs_union, _combine_hfs_prod, _unfuse_Fusion
+from ._merging import _Fusion, _hfs_union, _combine_hfs_prod, _unfuse_Fusion
 
 __all__ = ['Leg', 'leg_union', 'random_leg', 'leg_product', 'leg_undo_product']
 
@@ -67,7 +67,7 @@ class Leg:
     t: tuple = ()  # leg charges
     D: tuple = ()  # and their dimensions
     fusion: str = "hard"  # 'hard', 'meta' -- tuple of meta_fusions, (in the future also None, 'sum')
-    legs: tuple = () # sub-legs
+    legs: tuple = ()  # sub-legs
     _verified: bool = False
 
     def __post_init__(self):
@@ -156,11 +156,11 @@ class Leg:
         """
         if isinstance(self.fusion, tuple):  # meta fused
             tree = self.fusion
-            op=''.join('m' if x > 1 else 'X' for x in tree)
-            tmp  = _str_tree(tree, op).split('X')
+            op = ''.join('m' if x > 1 else 'X' for x in tree)
+            tmp = _str_tree(tree, op).split('X')
             st = tmp[0]
             for leg_native, sm in zip(self.legs, tmp[1:]):
-                st = st + leg_native.history()  + sm
+                st = st + leg_native.history() + sm
             return st
         hf = self.legs[0]  # hard fusion
         return _str_tree(hf.tree, hf.op)
@@ -209,7 +209,7 @@ def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, nonnegative=F
 
     an = np.array(n, dtype=np.int64)
     spanning_vectors = np.eye(len(n)) if not hasattr(config.sym, 'spanning_vectors') \
-                        else np.array(config.sym.spanning_vectors)
+        else np.array(config.sym.spanning_vectors)
 
     nvec = len(spanning_vectors)
     maxr = np.ceil(3 * sigma).astype(dtype=np.int64)
@@ -318,7 +318,7 @@ def leg_undo_product(leg) -> Sequence[yastn.Leg]:
     # else hst[0] == 'p':
     ts, Ds, ss, hfs = _unfuse_Fusion(leg.legs[0])
     return tuple(Leg(sym=leg.sym, s=s, t=t, D=D, legs=(hf,))
-                    for s, t, D, hf in zip(ss, ts, Ds, hfs))
+                 for s, t, D, hf in zip(ss, ts, Ds, hfs))
 
 
 def leg_union(*legs) -> yastn.Leg:
@@ -340,7 +340,7 @@ def leg_union(*legs) -> yastn.Leg:
         new_nlegs = tuple(_leg_union(*(mleg.legs[n] for mleg in legs)) for n in range(mf[0]))
         nsym = legs[0].sym.NSYM
         t = tuple(sorted(set.union(*(set(leg.t) for leg in legs))))
-        Dt = [tuple(leg[x[n * nsym : (n + 1) * nsym]] for n, leg in enumerate(new_nlegs)) for x in t]
+        Dt = [tuple(leg[x[n * nsym: (n + 1) * nsym]] for n, leg in enumerate(new_nlegs)) for x in t]
         D = tuple(np.prod(Dt, axis=1, dtype=np.int64).tolist())
         return replace(legs[0], t=t, D=D, legs=new_nlegs)
     raise YastnError('All arguments of leg_union should have consistent fusions.')
@@ -356,7 +356,7 @@ def _leg_union(*legs) -> yastn.Leg:
     if any(leg.s != legs[0].s for leg in legs):
         raise YastnError('Provided legs have different signatures.')
     if any(leg.legs != legs[0].legs for leg in legs):
-        t, D, hf = _pure_hfs_union(legs[0].sym, [leg.t for leg in legs] ,[leg.legs[0] for leg in legs])
+        t, D, hf = _hfs_union(legs[0].sym, [leg.t for leg in legs], [leg.legs[0] for leg in legs])
     else:
         tD = {}
         for leg in legs:
@@ -379,4 +379,4 @@ def _str_tree(tree, op) -> str:
         slc = [pos for pos, node in enumerate(tree) if node == 1][tree[0] - 1] + 1
         st = st + _str_tree(tree[:slc], op[:slc])
         tree, op = tree[slc:], op[slc:]
-    return st  + ')'
+    return st + ')'
