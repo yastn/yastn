@@ -21,7 +21,7 @@ from operator import mul
 from ._auxliary import _clear_axes, _unpack_axes, _struct, _slc, _flatten
 from ._tests import YastnError, _test_configs_match
 from ..sym import sym_none
-from ._legs import Leg, leg_union, _leg_fusions_need_mask
+from ._legs import Leg, legs_union, _leg_fusions_need_mask
 from ._merging import _embed_tensor
 
 
@@ -118,7 +118,7 @@ def compress_to_1d(a, meta=None) -> tuple[numpy.array | torch.tensor, dict]:
     meta_hfs =  tuple(leg.legs[0] for leg in meta['legs'])
     if a.hfs != meta_hfs:
         legs_a = a.get_legs()
-        legs_u = {n: leg_union(leg_a, leg) for n, (leg_a, leg) in enumerate(zip(legs_a, meta['legs']))}
+        legs_u = {n: legs_union(leg_a, leg) for n, (leg_a, leg) in enumerate(zip(legs_a, meta['legs']))}
         a = _embed_tensor(a, legs_a, legs_u)  # mask needed
         if a.hfs != meta_hfs:
             raise YastnError("Tensor fused legs do not match metadata.")
@@ -445,7 +445,7 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False) -> yastn.Tensor:
     if legs is not None:
         if any((n < 0) or (n >= ndim_a) for n in legs.keys()):
             raise YastnError('Specified leg out of ndim')
-        legs_new = {n: leg_union(legs_a[n], leg) for n, leg in legs.items()}
+        legs_new = {n: legs_union(legs_a[n], leg) for n, leg in legs.items()}
         if any(_leg_fusions_need_mask(leg, legs_a[n]) for n, leg in legs_new.items()):
             a = _embed_tensor(a, legs_a, legs_new)  # mask needed
         for n, leg in legs_new.items():

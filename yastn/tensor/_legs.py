@@ -23,7 +23,7 @@ from ._tests import YastnError
 from ..sym import sym_none
 from ._merging import _Fusion, _hfs_union, _combine_hfs_prod, _unfuse_Fusion
 
-__all__ = ['Leg', 'leg_union', 'random_leg', 'leg_product', 'leg_undo_product']
+__all__ = ['Leg', 'legs_union', 'random_leg', 'leg_product', 'leg_undo_product']
 
 
 @dataclass(frozen=True, repr=False)
@@ -321,7 +321,7 @@ def leg_undo_product(leg) -> Sequence[yastn.Leg]:
                  for s, t, D, hf in zip(ss, ts, Ds, hfs))
 
 
-def leg_union(*legs) -> yastn.Leg:
+def legs_union(*legs) -> yastn.Leg:
     """
     Output Leg that represent space being an union of spaces of a list of legs.
 
@@ -332,25 +332,24 @@ def leg_union(*legs) -> yastn.Leg:
     if len(legs) == 1:
         return legs.pop()
     if all(leg.fusion == 'hard' for leg in legs):
-        return _leg_union(*legs)
+        return _legs_union(*legs)
     if all(isinstance(leg.fusion, tuple) for leg in legs):
         mf = legs[0].fusion
         if any(mf != leg.fusion for leg in legs):
             raise YastnError('Meta-fusions do not match.')
-        new_nlegs = tuple(_leg_union(*(mleg.legs[n] for mleg in legs)) for n in range(mf[0]))
+        new_nlegs = tuple(_legs_union(*(mleg.legs[n] for mleg in legs)) for n in range(mf[0]))
         nsym = legs[0].sym.NSYM
         t = tuple(sorted(set.union(*(set(leg.t) for leg in legs))))
         Dt = [tuple(leg[x[n * nsym: (n + 1) * nsym]] for n, leg in enumerate(new_nlegs)) for x in t]
         D = tuple(np.prod(Dt, axis=1, dtype=np.int64).tolist())
         return replace(legs[0], t=t, D=D, legs=new_nlegs)
-    raise YastnError('All arguments of leg_union should have consistent fusions.')
+    raise YastnError('All arguments of legs_union should have consistent fusions.')
 
 
-def _leg_union(*legs) -> yastn.Leg:
+def _legs_union(*legs) -> yastn.Leg:
     """
     Output _Leg that represent space being an union of spaces of a list of legs.
     """
-    legs = list(legs)
     if any(leg.sym.SYM_ID != legs[0].sym.SYM_ID for leg in legs):
         raise YastnError('Provided legs have different symmetries.')
     if any(leg.s != legs[0].s for leg in legs):
@@ -358,12 +357,9 @@ def _leg_union(*legs) -> yastn.Leg:
     if any(leg.legs != legs[0].legs for leg in legs):
         t, D, hf = _hfs_union(legs[0].sym, [leg.t for leg in legs], [leg.legs[0] for leg in legs])
     else:
-        tD = {}
-        for leg in legs:
-            for t, D in zip(leg.t, leg.D):
-                if t in tD and tD[t] != D:
-                    raise YastnError('Legs have inconsistent dimensions.')
-                tD[t] = D
+        tD = {t: D for leg in legs for t, D in zip(leg.t, leg.D)}
+        if any(tD[t] != D for leg in legs for t, D in zip(leg.t, leg.D)):
+            raise YastnError('Legs have inconsistent dimensions.')
         tD = dict(sorted(tD.items()))
         t = tuple(tD.keys())
         D = tuple(tD.values())

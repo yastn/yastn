@@ -104,7 +104,7 @@ def test_eigs_mismatches(config_kwargs):
     wn, vn = eigs(tmn, k=5, which='LM')  # scipy
 
     ## initializing random tensor matching TM, with 3-rd leg extra carrying charges -1, 0, 1
-    leg02 = yastn.leg_union(leg0, leg2)
+    leg02 = yastn.legs_union(leg0, leg2)
     leg_aux = yastn.Leg(a.config, s=1, t=(-1, 0, 1), D=(1, 1, 1))
     vv = yastn.rand(config=a.config, legs=(leg02, leg02.conj(), leg_aux), dtype='float64')
     r1d, meta = yastn.compress_to_1d(vv)

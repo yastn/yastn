@@ -18,7 +18,8 @@ from functools import lru_cache
 from itertools import accumulate
 from ._auxliary import _slc, _join_contiguous_slices
 from ._tests import YastnError, _test_can_be_combined, _get_tD_legs, _test_axes_match
-from ._merging import _meta_mask, _mask_tensors_leg_union
+from ._merging import _embed_tensor
+from ._legs import legs_union
 
 
 __all__ = ['linear_combination', 'real', 'imag', 'sqrt', 'rsqrt', 'reciprocal', 'exp', 'bitwise_not', 'allclose']
@@ -68,6 +69,9 @@ def linear_combination(*tensors, amplitudes=None, **kwargs):
             raise YastnError("Number of tensors and amplitudes do not match.")
         tensors = [v * amp if amp is not None else v for v, amp in zip(tensors, amplitudes)]
 
+    if len(tensors) == 1:
+        return tensors[0]
+
     tensors, hfs = _pre_addition(*tensors)
     datas = tuple((a.struct, a.slices) for a in tensors)
     a = tensors[0]
@@ -93,25 +97,14 @@ def _pre_addition(*tensors):
         mask_needed = mask_needed or mask_needed_ab
 
     if mask_needed:
-        masks, masks_tD, hfs = _mask_tensors_leg_union(*tensors)
-        nin = tuple(range(a.ndim_n))
-        tensors = tuple(_embed_mask_axes(b, nin, mask, mask_tD, hfs) for b, mask, mask_tD in zip(tensors, masks, masks_tD))
+        legss = [tensor.get_legs(native=True) for tensor in tensors]
+        ulegs = {n: legs_union(*(legs[n] for legs in legss)) for n in range(a.ndim_n)}
+        hfs = tuple(ulegs[n].legs[0] for n in range(a.ndim_n))
+        tensors = [_embed_tensor(tensor, legs, ulegs) for tensor, legs in zip(tensors, legss)]
     else:
         hfs = a.hfs
 
     return tensors, hfs
-
-
-def _embed_mask_axes(a, naxes, masks, masks_tD, hfs):
-    r""" Auxlliary function applying mask tensors to native legs. """
-    for axis, mask, mask_tD in zip(naxes, masks, masks_tD):
-        if mask is not None:
-            mask_t = tuple(mask_tD.keys())
-            mask_D = tuple(mask_tD.values())
-            meta, struct, slices, axis, ndim = _meta_mask(a.struct, a.slices, a.isdiag, mask_t, mask_D, axis)
-            data = a.config.backend.embed_mask(a._data, mask, meta, struct.size, axis, ndim)
-            a = a._replace(struct=struct, slices=slices, data=data, hfs=hfs)
-    return a
 
 
 @lru_cache(maxsize=1024)

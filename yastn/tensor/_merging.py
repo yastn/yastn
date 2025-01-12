@@ -567,7 +567,7 @@ def _mask_nonzero(mask):
     Change boolen masks into masks of indices.
     Fow trivial mask with all true, return None.
     """
-    if all(all(v) for v in mask.values()):
+    if all(np.all(v) for v in mask.values()):
         return None
     mask = {k: v.nonzero()[0] for k, v in mask.items()}
     mask = {k: v for k, v in mask.items() if len(v) > 0}
@@ -586,42 +586,10 @@ def _mask_tensors_leg_intersection(a, b, axa, axb):
     return msk_a, msk_b
 
 
-def _mask_tensors_leg_union(*args):
-    r""" masks for all legs to embed in union. """
-    masks = [[] for _ in range(len(args))]
-    masks_tD = [[] for _ in range(len(args))]
-    hfs = []
-
-    tls, Dls = [], []
-    for a in args:
-        tl, Dl, _ = _get_tD_legs(a.struct)
-        tls.append(tl)
-        Dls.append(Dl)
-
-    a = args[0]
-    for n in range(a.ndim_n):
-        if all(a.hfs[n] == b.hfs[n] for b in args):
-            for mask in masks:
-                mask.append(None)
-            for mask_tD, tl, Dl in zip(masks_tD, tls, Dls):
-                mask_tD.append(dict(zip(tl, Dl)))
-            hfs.append(a.hfs[n])
-        else:
-            tln = tuple(tl[n] for tl in tls)
-            hfn = tuple(b.hfs[n] for b in args)
-            tu, Du, hfu = _hfs_union(a.config.sym, tln, hfn)
-            hfs.append(hfu)
-            for mask, mask_tD, b, tl, Dl in zip(masks, masks_tD, args, tls, Dls):
-                mb = _mask_embed_in_union(a.config.sym, tl[n], b.hfs[n], hfu)
-                mask_tD.append({t: len(v) for t, v in mb.items()})
-                mask.append(_mask_nonzero(mb))
-    return masks, masks_tD, hfs
-
-
 def _embed_tensor(a, legs, legs_new):
     r"""
     Embed tensor to fill in zero block in fusion mismatch.
-    here legs are contained in legs_new that result from leg_union
+    here legs are contained in legs_new that result from legs_union
     legs_new is a dict = {n: leg}
     """
 
@@ -629,24 +597,20 @@ def _embed_tensor(a, legs, legs_new):
     legs, _ = _unpack_legs(legs)
     legs_new, _ = _unpack_legs(legs_new)
 
-    masks = []
-    masks_tD = []
-    hfs = []
+    hfs = tuple(lb.legs[0] for lb in legs_new)
+    assert a.ndim_n == len(hfs), "Sanity check"
 
-    for la, lb in zip(legs, legs_new):
-        mb = _mask_embed_in_union(a.config.sym, la.t, la.legs[0], lb.legs[0])
-        masks_tD.append({t: len(v) for t, v in mb.items()})
-        masks.append(_mask_nonzero(mb))
-        hfs.append(lb.legs[0])
-    hfs = tuple(hfs)
-
-    for axis, (mask, mask_tD) in enumerate(zip(masks, masks_tD)):
-        if mask is not None:
-            mask_t = tuple(mask_tD.keys())
-            mask_D = tuple(mask_tD.values())
-            meta, struct, slices, axis, ndim = _meta_mask(a.struct, a.slices, a.isdiag, mask_t, mask_D, axis)
-            data = a.config.backend.embed_mask(a._data, mask, meta, struct.size, axis, ndim)
-            a = a._replace(struct=struct, slices=slices, data=data, hfs=hfs)
+    for axis, (la, lb) in enumerate(zip(legs, legs_new)):
+        if la.legs[0] != lb.legs[0]:  # mask needed
+            mb = _mask_embed_in_union(a.config.sym, la.t, la.legs[0], lb.legs[0])
+            mask_tD = {t: len(v) for t, v in mb.items()}
+            mask = _mask_nonzero(mb)
+            if mask is not None:
+                mask_t = tuple(mask_tD.keys())
+                mask_D = tuple(mask_tD.values())
+                meta, struct, slices, axis, ndim = _meta_mask(a.struct, a.slices, a.isdiag, mask_t, mask_D, axis)
+                data = a.config.backend.embed_mask(a._data, mask, meta, struct.size, axis, ndim)
+                a = a._replace(struct=struct, slices=slices, data=data, hfs=hfs)
     return a
 
 #  =========== auxliary functions handling fusion logic ======================

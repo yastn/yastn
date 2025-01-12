@@ -23,18 +23,21 @@ def expand_krylov_space(self, f, tol, ncv, hermitian, V, H=None, **kwargs):
     if H is None:
         H = {}
     happy = False
-    for j in range(len(V)-1, ncv):
+    for j in range(len(V) - 1, ncv):
         w = f(V[-1])
         if not hermitian:  # Arnoldi
+            amplitudes = [1]
             for i in range(j + 1):
                 H[(i, j)] = V[i].vdot(w)
-                w = w - V[i] * H[(i, j)]
+                amplitudes.append(-H[(i, j)])
+            w = w.linear_combination(*V, amplitudes=amplitudes, **kwargs)
         else:  # Lanczos
-            if j > 0:
-                H[(j - 1, j)] = H[(j, j - 1)]
-                w = w - V[j - 1] * H[(j - 1, j)]
             H[(j, j)] = V[j].vdot(w)
-            w = w - V[j] * H[(j, j)]
+            if j == 0:
+                w = w.linear_combination(V[j], amplitudes=[1, -H[(j, j)]], **kwargs)
+            else:
+                H[(j - 1, j)] = H[(j, j - 1)]
+                w = w.linear_combination(V[j - 1], V[j], amplitudes=[1, -H[(j - 1, j)], -H[(j, j)]], **kwargs)
         H[(j + 1, j)] = w.norm()
         if H[(j + 1, j)] < tol:
             happy = True

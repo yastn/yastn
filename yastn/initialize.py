@@ -24,7 +24,7 @@ import numpy as np
 from .tensor import Tensor, YastnError
 from .tensor._auxliary import _struct, _config, _slc, _clear_axes, _unpack_legs
 from .tensor._merging import _Fusion, _embed_tensor, _combine_hfs_sum
-from .tensor._legs import Leg, leg_union, _leg_fusions_need_mask
+from .tensor._legs import Leg, legs_union, _leg_fusions_need_mask
 from .tensor._tests import _test_can_be_combined
 from .backend import backend_np
 from .sym import sym_none, sym_U1, sym_Z2, sym_Z3, sym_U1xU1, sym_U1xU1xZ2
@@ -468,7 +468,7 @@ def block(tensors, common_legs=None) -> yastn.Tensor:
             else:
                 legs_n[pa[n]].append(ll[n])
         legs.append(legs_n)
-        legs_n = {p: leg_union(*plegs) for p, plegs in legs_n.items()}
+        legs_n = {p: legs_union(*plegs) for p, plegs in legs_n.items()}
         ulegs.append(legs_n)
         pn = sorted(legs_n.keys())
         hfs.append(_sum_legs_hfs([legs_n[p] for p in pn]))

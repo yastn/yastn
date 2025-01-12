@@ -45,7 +45,7 @@ def test_leg(config_kwargs):
     a = yastn.ones(config=config_U1, legs=legs)
     assert a.get_legs() == legs
 
-    assert yastn.leg_union(legs[1], legs[2]) == yastn.Leg(config_U1, s=1, t=(-2, 0, 2, 4), D=(1, 2, 3, 4))
+    assert yastn.legs_union(legs[1], legs[2]) == yastn.Leg(config_U1, s=1, t=(-2, 0, 2, 4), D=(1, 2, 3, 4))
 
     assert a.get_legs(-1) == a.get_legs(3)
 
@@ -115,9 +115,9 @@ def test_leg_meta_fusion(config_kwargs):
     legs = a.get_legs()
 
     a = a.fuse_legs(axes=((0, 1), (2, 3)), mode='meta')
-    umlegs = yastn.leg_union(*a.get_legs())
-    assert umlegs.legs[0] == yastn.leg_union(legs[0], legs[2])
-    assert umlegs.legs[0] == yastn.leg_union(legs[1], legs[3])
+    umlegs = yastn.legs_union(*a.get_legs())
+    assert umlegs.legs[0] == yastn.legs_union(legs[0], legs[2])
+    assert umlegs.legs[0] == yastn.legs_union(legs[1], legs[3])
 
 
 def test_leg_hard_fusion(config_kwargs):
@@ -184,7 +184,7 @@ def test_leg_exceptions(config_kwargs):
         _ = yastn.Leg(config_Z3, s=1, t=(4,), D=(2,))
         # Provided charges are outside of the natural range for specified symmetry.
 
-    # in leg_union
+    # in legs_union
     leg_Z3 = yastn.Leg(config_Z3, s=1, t=(0, 1, 2), D=(2, 2, 2))
     leg = yastn.Leg(config_U1, s=1, t=(-1, 1), D=(2, 2))
 
@@ -192,38 +192,38 @@ def test_leg_exceptions(config_kwargs):
     af1 = a.fuse_legs(axes=(0, (1, 2, 3)), mode='meta')
     af2 = a.fuse_legs(axes=((0, 1), (2, 3)), mode='meta')
     with pytest.raises(yastn.YastnError):
-        yastn.leg_union(af1.get_legs(1), a.get_legs(1))
-        # All arguments of leg_union should have consistent fusions.
+        yastn.legs_union(af1.get_legs(1), a.get_legs(1))
+        # All arguments of legs_union should have consistent fusions.
     with pytest.raises(yastn.YastnError):
-        yastn.leg_union(af1.get_legs(1), af2.get_legs(1))
+        yastn.legs_union(af1.get_legs(1), af2.get_legs(1))
         # Meta-fusions do not match.
     with pytest.raises(yastn.YastnError):
-        yastn.leg_union(leg, leg_Z3)
+        yastn.legs_union(leg, leg_Z3)
         #  Provided legs have different symmetries.
     with pytest.raises(yastn.YastnError):
-        yastn.leg_union(leg, leg.conj())
+        yastn.legs_union(leg, leg.conj())
         # Provided legs have different signatures.
     with pytest.raises(yastn.YastnError):
         af1 = a.fuse_legs(axes=(0, (1, 2, 3)), mode='hard')
         af2 = a.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
-        yastn.leg_union(af1.get_legs(1), af2.get_legs(1))
+        yastn.legs_union(af1.get_legs(1), af2.get_legs(1))
         # Inconsistent numbers of hard-fused legs or sub-fusions order.
     with pytest.raises(yastn.YastnError):
         leg2 = yastn.Leg(config_U1, s=1, t=(-1, 1), D=(2, 3))
-        yastn.leg_union(leg, leg2)
+        yastn.legs_union(leg, leg2)
         # Legs have inconsistent dimensions.
     with  pytest.raises(yastn.YastnError):
         b = yastn.rand(config_U1, legs=[leg, leg.conj(), leg, leg])
         af = a.fuse_legs(axes=((0, 1, 2), 3), mode='hard')
         bf = b.fuse_legs(axes=((0, 1, 2), 3), mode='hard')
-        yastn.leg_union(af.get_legs(0), bf.get_legs(0))
+        yastn.legs_union(af.get_legs(0), bf.get_legs(0))
         # Inconsistent signatures of fused legs.
     with  pytest.raises(yastn.YastnError):
         leg2 = yastn.Leg(config_U1, s=1, t=(-1, 1), D=(2, 3))
         b = yastn.rand(config_U1, legs=[leg, leg2, leg, leg])
         af = a.fuse_legs(axes=((0, 1, 2), 3), mode='hard')
         bf = b.fuse_legs(axes=((0, 1, 2), 3), mode='hard')
-        yastn.leg_union(af.get_legs(0), bf.get_legs(0))
+        yastn.legs_union(af.get_legs(0), bf.get_legs(0))
         # Bond dimensions of fused legs do not match.
 
 
