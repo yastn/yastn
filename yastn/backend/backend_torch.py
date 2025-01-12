@@ -31,7 +31,7 @@ __all__= [
     'requires_grad_', 'requires_grad', 'move_to', 'conj',
     'trace', 'rsqrt', 'reciprocal', 'exp', 'sqrt', 'absolute',
     'svd_lowrank', 'svd', 'eigh', 'qr',
-    'argsort', 'eigs_which', 'embed_msk', 'embed_slc', 'allclose',
+    'argsort', 'eigs_which', 'allclose',
     'add', 'sub', 'apply_mask', 'vdot', 'diag_1dto2d', 'diag_2dto1d',
     'dot', 'dot_diag', 'transpose_dot_sum',
     'merge_to_dense', 'merge_super_blocks', 'is_independent'
@@ -524,19 +524,6 @@ def eigs_which(val, which):
     return (real(val)).argsort()
 
 
-def embed_msk(data, msk, Dsize):
-    newdata = torch.zeros(Dsize, dtype=data.dtype, device=data.device)
-    newdata[msk] = data
-    return newdata
-
-
-def embed_slc(data, meta, Dsize):
-    newdata = torch.zeros(Dsize, dtype=data.dtype, device=data.device)
-    for sln, slo in meta:
-        newdata[slice(*sln)] = data[slice(*slo)]
-    return newdata
-
-
 ################################
 #     two dicts operations     #
 ################################
@@ -685,13 +672,7 @@ def apply_mask(Adata, mask, meta, Dsize, axis, a_ndim):
 
 
 def embed_mask(Adata, mask, meta, Dsize, axis, a_ndim):
-    slc1 = (slice(None),) * axis
-    slc2 = (slice(None),) * (a_ndim - (axis + 1))
-    Cdata = torch.zeros(Dsize, dtype=Adata.dtype, device=Adata.device)
-    for sln, Dn, sla, Da, tm in meta:
-        slcs = slc1 + (mask[tm],) + slc2
-        Cdata[slice(*sln)].view(Dn)[slcs] = Adata[slice(*sla)].view(Da)
-    return Cdata
+    return kernel_embed_mask.apply(Adata, mask, meta, Dsize, axis, a_ndim)
 
 
 class kernel_apply_mask(torch.autograd.Function):
@@ -722,6 +703,34 @@ class kernel_apply_mask(torch.autograd.Function):
             Adata_b[slice(*sla)].view(Da)[slcs] = Cdata_b[slice(*sln)].view(Dn)
         return Adata_b, None, None, None, None, None, None
 
+
+class kernel_embed_mask(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, Adata, mask, meta, Dsize, axis, ndim):
+        ctx.mask = mask
+        ctx.meta = meta
+        ctx.axis = axis
+        ctx.ndim = ndim
+        ctx.size_Adata = Adata.numel()
+
+        slc0 = (slice(None),) * axis
+        slc2 = (slice(None),) * (ndim - (axis + 1))
+        Cdata = torch.zeros(Dsize, dtype=Adata.dtype, device=Adata.device)
+        for sln, Dn, sla, Da, tm in meta:
+            slcs = slc0 + (mask[tm],) + slc2
+            Cdata[slice(*sln)].view(Dn)[slcs] = Adata[slice(*sla)].view(Da)
+        return Cdata
+
+    @staticmethod
+    def backward(ctx, Cdata_b):
+        mask = ctx.mask
+        slc0 = (slice(None),) * ctx.axis
+        slc2 = (slice(None),) * (ctx.ndim - (ctx.axis + 1))
+        Adata_b = torch.zeros(ctx.size_Adata, dtype=Cdata_b.dtype, device=Cdata_b.device)
+        for sln, Dn, sla, Da, tm in ctx.meta:
+            slcs = slc0 + (mask[tm],) + slc2
+            Adata_b[slice(*sla)].view(Da)[:] = Cdata_b[slice(*sln)].view(Dn)[slcs]
+        return Adata_b, None, None, None, None, None, None
 
 
 def transpose_dot_sum(Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border, Dsize):

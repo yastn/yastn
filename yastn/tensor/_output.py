@@ -18,7 +18,7 @@ import numpy as np
 from functools import reduce
 from numbers import Number
 from operator import mul
-from ._auxliary import _clear_axes, _unpack_axes, _struct, _slc, _flatten
+from ._auxliary import _clear_axes, _unpack_axes, _struct, _slc, _flatten, _join_contiguous_slices
 from ._tests import YastnError, _test_configs_match
 from ..sym import sym_none
 from ._legs import Leg, legs_union, _leg_fusions_need_mask
@@ -104,39 +104,49 @@ def compress_to_1d(a, meta=None) -> tuple[numpy.array | torch.tensor, dict]:
         meta = {'config': a.config, 'struct': a.struct, 'slices': a.slices,
                 'mfs': a.mfs, 'legs': a.get_legs(native=True)}
         return a._data, meta
-    # else:
+
     _test_configs_match(a.config, meta['config'])
     if a.struct.s != meta['struct'].s:
         raise YastnError("Tensor signature do not match meta.")
     if a.struct.n != meta['struct'].n:
-        raise YastnError("Tensor charge than do not match meta.")
+        raise YastnError("Tensor charge do not match meta.")
     if a.isdiag != meta['struct'].diag:
         raise YastnError("Tensor diagonality do not match meta.")
     if a.mfs != meta['mfs']:
         raise YastnError("Tensor meta-fusion structure do not match meta.")
 
-    meta_hfs =  tuple(leg.legs[0] for leg in meta['legs'])
-    if a.hfs != meta_hfs:
+    meta_hfs = tuple(leg.legs[0] for leg in meta['legs'])
+    if a.hfs != meta_hfs:  # mask needed
         legs_a = a.get_legs()
         legs_u = {n: legs_union(leg_a, leg) for n, (leg_a, leg) in enumerate(zip(legs_a, meta['legs']))}
-        a = _embed_tensor(a, legs_a, legs_u)  # mask needed
+        a = _embed_tensor(a, legs_a, legs_u)
         if a.hfs != meta_hfs:
-            raise YastnError("Tensor fused legs do not match metadata.")
+            raise YastnError("Tensor fused legs do not match meta.")
 
     if a.struct == meta['struct'] and a.slices == meta['slices']:
         return a._data, meta
-    # else: embed filling in missing zero blocks # TODO ?
-    ia, im, meta_merge = 0, 0, []
+
+    # filling in missing zero blocks
+    ia, im = 0, 0
+    slcs_a, slcs_m = [], []
     while ia < len(a.struct.t):
         if a.struct.t[ia] < meta['struct'].t[im] or im >= len(meta['struct'].t):
             raise YastnError("Tensor has blocks that do not appear in meta.")
         if a.struct.t[ia] == meta['struct'].t[im]:
-            meta_merge.append((meta['slices'][im].slcs[0], a.slices[ia].slcs[0]))
+            if a.struct.D[ia] != meta['struct'].D[im]:
+                raise YastnError("Bond dimensions do not match meta.")
+            slcs_a.append(a.slices[ia].slcs[0])
+            slcs_m.append(meta['slices'][im].slcs[0])
             ia += 1
             im += 1
         else: #a.struct.t[ia] > meta['struct'].t[im]:
             im += 1
-    data = a.config.backend.embed_slc(a._data, meta_merge, meta['struct'].size)
+    meta_embed = _join_contiguous_slices(slcs_m, slcs_a)
+    #
+    # add redundant information, to use a general backend function embed_mask
+    meta_embed = tuple((sl_m, sl_m[1] - sl_m[0], sl_a, sl_a[1] - sl_a[0], 0) for sl_m, sl_a in meta_embed)
+    mask = {0: slice(None)}
+    data = a.config.backend.embed_mask(a._data, mask, meta_embed, meta['struct'].size, 0, 0)
     return data, meta
 
 

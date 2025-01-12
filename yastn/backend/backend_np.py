@@ -378,17 +378,7 @@ def eigs_which(val, which):
     return (val.real).argsort()
 
 
-def embed_msk(data, msk, Dsize):
-    newdata = np.zeros(Dsize, dtype=data.dtype)
-    newdata[msk] = data
-    return newdata
 
-
-def embed_slc(data, meta, Dsize):
-    newdata = np.zeros(Dsize, dtype=data.dtype)
-    for sln, slo in meta:
-        newdata[slice(*sln)] = data[slice(*slo)]
-    return newdata
 
 
 ################################

@@ -17,7 +17,7 @@ from __future__ import annotations
 from itertools import accumulate
 from operator import itemgetter
 import numpy as np
-from ._auxliary import _slc, _clear_axes, _unpack_axes
+from ._auxliary import _slc, _clear_axes, _unpack_axes, _join_contiguous_slices
 from ._merging import _Fusion
 from ._tests import YastnError, _test_axes_all
 
@@ -192,8 +192,13 @@ def flip_charges(a, axes=None) -> yastn.Tensor:
 
     slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dpnew), Dpnew, Dnew))
     struct = a.struct._replace(s=snew, t=tnew, D=Dnew)
-    meta = tuple((x.slcs[0], y) for x, y in zip(slices, slold))
-    data = a.config.backend.embed_slc(a.data, meta, struct.size)
+
+    slnew = tuple(sl.slcs[0] for sl in slices)
+    meta_embed = _join_contiguous_slices(slnew, slold)
+    # add redundant information, to use a general backend function embed_mask
+    meta_embed = tuple((sl_n, sl_n[1] - sl_n[0], sl_o, sl_o[1] - sl_o[0], 0) for sl_n, sl_o in meta_embed)
+    mask = {0: slice(None)}
+    data = a.config.backend.embed_mask(a._data, mask, meta_embed, struct.size, 0, 0)
     return a._replace(struct=struct, slices=slices, data=data, hfs=hfs)
 
 
