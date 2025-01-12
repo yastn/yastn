@@ -573,7 +573,7 @@ def vdot(Adata, Bdata, meta):
         Adata = Adata.to(dtype=dtype)
     if dtype != Bdata.dtype:
         Bdata = Bdata.to(dtype=dtype)
-    tmp = torch.empty(len(meta), dtype=dtype)
+    tmp = torch.empty(len(meta), dtype=dtype, device=Adata.device)
     for ii, (sla, slb) in enumerate(meta):
         tmp[ii] = torch.dot(Adata[slice(*sla)], Bdata[slice(*slb)])
     return torch.sum(tmp)
@@ -687,7 +687,7 @@ def apply_mask(Adata, mask, meta, Dsize, axis, a_ndim):
 def embed_mask(Adata, mask, meta, Dsize, axis, a_ndim):
     slc1 = (slice(None),) * axis
     slc2 = (slice(None),) * (a_ndim - (axis + 1))
-    Cdata = torch.zeros(Dsize, dtype=Adata.dtype)
+    Cdata = torch.zeros(Dsize, dtype=Adata.dtype, device=Adata.device)
     for sln, Dn, sla, Da, tm in meta:
         slcs = slc1 + (mask[tm],) + slc2
         Cdata[slice(*sln)].view(Dn)[slcs] = Adata[slice(*sla)].view(Da)
