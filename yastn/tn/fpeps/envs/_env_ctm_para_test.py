@@ -24,6 +24,13 @@ from .._geometry import Bond, Site
 from ._env_auxlliary import *
 from ._env_window import EnvWindow
 
+from .._peps import Peps
+
+import numpy as np
+from time import time
+from joblib import delayed, Parallel
+
+
 logger = logging.Logger('ctmrg')
 
 @dataclass()
@@ -534,26 +541,34 @@ class EnvCTM(Peps):
             proj[site] = EnvCTM_projectors()
         #
         # horizontal projectors
+        print("start")
         for site in env.sites():
             update_proj_(proj, site, 'lr', env, opts_svd)
         trivial_projectors_(proj, 'lr', env)  # fill None's
+        print("hor. proj. built")
         #
         # horizontal move
+        print("start")
         env_tmp = EnvCTM(env.psi, init=None)  # empty environments
         for site in env.sites():
             update_env_horizontal_(env_tmp, site, env, proj)
         update_old_env_(env, env_tmp)
+        print("hor. env. updated")
         #
         # vertical projectors
+        print("start")
         for site in env.sites():
             update_proj_(proj, site, 'tb', env, opts_svd)
         trivial_projectors_(proj, 'tb', env)
+        print("ver. proj. built")
         #
         # vertical move
+        print("start")
         env_tmp = EnvCTM(env.psi, init=None)
         for site in env.sites():
             update_env_vertical_(env_tmp, site, env, proj)
         update_old_env_(env, env_tmp)
+        print("ver. env. updated")
         #
         return proj
 
@@ -753,18 +768,44 @@ def update_2site_projectors_(proj, site, dirn, env, opts_svd):
 
     tl, tr, bl, br = sites
 
-    cor_tl = psi[tl]._attach_01(env[tl].l @ env[tl].tl @ env[tl].t)
-    cor_tl = cor_tl.fuse_legs(axes=((0, 1), (2, 3)))
-    cor_bl = psi[bl]._attach_12(env[bl].b @ env[bl].bl @ env[bl].l)
-    cor_bl = cor_bl.fuse_legs(axes=((0, 1), (2, 3)))
-    cor_tr = psi[tr]._attach_30(env[tr].t @ env[tr].tr @ env[tr].r)
-    cor_tr = cor_tr.fuse_legs(axes=((0, 1), (2, 3)))
-    cor_br = psi[br]._attach_23(env[br].r @ env[br].br @ env[br].b)
-    cor_br = cor_br.fuse_legs(axes=((0, 1), (2, 3)))
+    start = time()
+    cor = [None, None, None, None]
+
+    @delayed
+    def fun_cor_(which_one):
+
+        if which_one == 0:
+            cor[0] = psi[tl]._attach_01(env[tl].l @ env[tl].tl @ env[tl].t)
+            cor[0] = cor[0].fuse_legs(axes=((0, 1), (2, 3)))
+
+        elif which_one == 1:
+            cor[1] = psi[bl]._attach_12(env[bl].b @ env[bl].bl @ env[bl].l)
+            cor[1] = cor[1].fuse_legs(axes=((0, 1), (2, 3)))
+
+        elif which_one == 2:
+            cor[2] = psi[tr]._attach_30(env[tr].t @ env[tr].tr @ env[tr].r)
+            cor[2] = cor[2].fuse_legs(axes=((0, 1), (2, 3)))
+
+        elif which_one == 3:
+            cor[3] = psi[br]._attach_23(env[br].r @ env[br].br @ env[br].b)
+            cor[3] = cor[3].fuse_legs(axes=((0, 1), (2, 3)))
+
+
+    result_gen = Parallel(n_jobs=4, require="sharedmem", return_as="generator")(fun_cor_(ii) for ii in [0, 1, 2, 3])
+
+    for _ in result_gen:
+        pass
+
+    end = time()
+
+    print("Build enlarged corner:", end - start, "s")
+
+    start = time()
+
 
     if ('l' in dirn) or ('r' in dirn):
-        cor_tt = cor_tl @ cor_tr
-        cor_bb = cor_br @ cor_bl
+        cor_tt = cor[0] @ cor[2]
+        cor_bb = cor[3] @ cor[1]
 
     if 'r' in dirn:
         _, r_t = qr(cor_tt, axes=(0, 1))
@@ -777,8 +818,8 @@ def update_2site_projectors_(proj, site, dirn, env, opts_svd):
         proj[tl].hlb, proj[bl].hlt = proj_corners(r_t, r_b, opts_svd=opts_svd)
 
     if ('t' in dirn) or ('b' in dirn):
-        cor_ll = cor_bl @ cor_tl
-        cor_rr = cor_tr @ cor_br
+        cor_ll = cor[1] @ cor[0]
+        cor_rr = cor[2] @ cor[3]
 
     if 't' in dirn:
         _, r_l = qr(cor_ll, axes=(0, 1))
@@ -789,6 +830,9 @@ def update_2site_projectors_(proj, site, dirn, env, opts_svd):
         _, r_l = qr(cor_ll, axes=(1, 0))
         _, r_r = qr(cor_rr, axes=(0, 1))
         proj[bl].vbr, proj[br].vbl = proj_corners(r_l, r_r, opts_svd=opts_svd)
+
+    end = time()
+    print("Build Projectors:", end - start, "s")
 
 
 def update_1site_projectors_(proj, site, dirn, env, opts_svd):
@@ -886,6 +930,8 @@ def update_env_horizontal_(env_tmp, site, env, proj):
     """
     psi = env.psi
 
+    start = time()
+
     l = psi.nn_site(site, d='l')
     if l is not None:
         tmp = env[l].l @ proj[l].hlt
@@ -919,6 +965,9 @@ def update_env_horizontal_(env_tmp, site, env, proj):
     if br is not None:
         tmp = tensordot(proj[br].hrt, env[r].br @ env[r].b, axes=((0, 1), (0, 1)))
         env_tmp[site].br = tmp / tmp.norm(p='inf')
+
+    end = time()
+    print("update time:", end - start, "s")
 
 
 def update_env_vertical_(env_tmp, site, env, proj):

@@ -26,7 +26,7 @@ from .tensor._auxliary import _struct, _config, _slc, _clear_axes, _unpack_legs
 from .tensor._merging import _Fusion, _embed_tensor, _sum_hfs
 from .tensor._legs import Leg, leg_union, _leg_fusions_need_mask
 from .tensor._tests import _test_can_be_combined
-from .backend import backend_np
+from .backend import backend_np_para
 from .sym import sym_none, sym_U1, sym_Z2, sym_Z3, sym_U1xU1, sym_U1xU1xZ2
 
 
@@ -104,7 +104,7 @@ def make_config(**kwargs) -> NamedTuple:
         config = yastn.make_config(backend='np', sym='U1')
     """
     if "backend" not in kwargs or kwargs["backend"] == 'np':
-        kwargs["backend"] = backend_np
+        kwargs["backend"] = backend_np_para
     elif kwargs["backend"] == 'torch':
         from .backend import backend_torch
         kwargs["backend"] = backend_torch

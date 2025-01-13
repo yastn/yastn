@@ -19,6 +19,9 @@ import warnings
 import numpy as np
 import scipy.linalg
 import scipy.sparse.linalg
+from joblib import Parallel, delayed
+
+from time import time
 
 # non-deterministic initialization of random number generator
 rng = {'rng': np.random.default_rng(None)}  # initialize random number generator
@@ -279,13 +282,15 @@ def bitwise_not(data):
 
 def safe_svd(a):
     try:
-        U, S, V = scipy.linalg.svd(a, full_matrices=False)
-    except scipy.linalg.LinAlgError:  # pragma: no cover
+        U, S, V = np.linalg.svd(a, full_matrices=False)
+    except np.linalg.LinAlgError:  # pragma: no cover
+        print("gesvdd not converged")
         U, S, V = scipy.linalg.svd(a, full_matrices=False, lapack_driver='gesvd')
     return U, S, V
 
 
 def svd_lowrank(data, meta, sizes, ncv=None, which='LM', maxiter=None, solver='arpack', **kwargs):
+    start = time()
     Udata = np.empty((sizes[0],), dtype=data.dtype)
     Sdata = np.empty((sizes[1],), dtype=DTYPE['float64'])
     Vdata = np.empty((sizes[2],), dtype=data.dtype)
@@ -301,31 +306,131 @@ def svd_lowrank(data, meta, sizes, ncv=None, which='LM', maxiter=None, solver='a
         Udata[slice(*slU)].reshape(DU)[:] = U[:, :k]
         Sdata[slice(*slS)] = S[:k]
         Vdata[slice(*slV)].reshape(DV)[:] = V[:k, :]
+    end = time()
+    print("svd_lowrank", end - start, 's')
     return Udata, Sdata, Vdata
 
-
-def svd(data, meta, sizes, **kwargs):
+def svd_lowrank(data, meta, sizes, ncv=None, which='LM', maxiter=None, solver='arpack', **kwargs):
+    start = time()
     Udata = np.empty((sizes[0],), dtype=data.dtype)
     Sdata = np.empty((sizes[1],), dtype=DTYPE['float64'])
     Vdata = np.empty((sizes[2],), dtype=data.dtype)
     for (sl, D, slU, DU, slS, slV, DV) in meta:
+        k = slS[1] - slS[0]
+        if k < min(D) - 1 and min(D) * max(D) > 4000:  # the second condition is  heuristic estimate when performing dense svd should be faster.
+            U, S, V = scipy.sparse.linalg.svds(data[slice(*sl)].reshape(D), k=k, ncv=ncv,
+                                               which=which, maxiter=maxiter, solver=solver)
+            ord = np.argsort(-S)
+            U, S, V = U[:, ord], S[ord], V[ord, :]
+        else:
+            U, S, V = safe_svd(data[slice(*sl)].reshape(D))
+        Udata[slice(*slU)].reshape(DU)[:] = U[:, :k]
+        Sdata[slice(*slS)] = S[:k]
+        Vdata[slice(*slV)].reshape(DV)[:] = V[:k, :]
+    end = time()
+    print("svd_lowrank", end - start, 's')
+    return Udata, Sdata, Vdata
+
+
+# def svd(data, meta, sizes, **kwargs):
+
+#     start = time()
+
+#     Udata = np.empty((sizes[0],), dtype=data.dtype)
+#     Sdata = np.empty((sizes[1],), dtype=DTYPE['float64'])
+#     Vdata = np.empty((sizes[2],), dtype=data.dtype)
+#     for (sl, D, slU, DU, slS, slV, DV) in meta:
+#         U, S, V = safe_svd(data[slice(*sl)].reshape(D))
+#         Udata[slice(*slU)].reshape(DU)[:] = U
+#         Sdata[slice(*slS)] = S
+#         Vdata[slice(*slV)].reshape(DV)[:] = V
+
+#     end = time()
+
+#     print("svd time:", end - start, "s")
+
+#     return Udata, Sdata, Vdata
+
+
+def svd(data, meta, sizes, **kwargs):
+
+    Udata = np.empty((sizes[0],), dtype=data.dtype)
+    Sdata = np.empty((sizes[1],), dtype=DTYPE['float64'])
+    Vdata = np.empty((sizes[2],), dtype=data.dtype)
+
+    def svd_(matrix):
+        U, S, V = safe_svd(matrix)
+        return [U, S, V]
+
+    complexity = np.array([D[0] * D[1] * min(D[0], D[1]) for _, D, _, _, _, _, _ in meta])
+    # complexity = np.array([max(D[0], D[1]) for _, D, _, _, _, _, _ in meta])
+    sorted_index = (np.argsort(complexity))[::-1]
+    to_be_paralleled = np.sum(complexity >= 500 ** 3)
+
+    if to_be_paralleled > 0:
+        para_result = Parallel(n_jobs=min(4, to_be_paralleled), verbose=10)(delayed(svd_)(matrix) for matrix in [data[slice(*meta[ii][0])].reshape(*meta[ii][1]) for ii in sorted_index[:to_be_paralleled]])
+
+        for i in range(to_be_paralleled):
+            ii = sorted_index[i]
+            sl, D, slU, DU, slS, slV, DV =  meta[ii]
+            U, S, V = para_result[0]
+            para_result.pop(0)
+            Udata[slice(*slU)].reshape(DU)[:] = U
+            Sdata[slice(*slS)] = S
+            Vdata[slice(*slV)].reshape(DV)[:] = V
+
+    for ii in sorted_index[to_be_paralleled:]:
+        sl, D, slU, DU, slS, slV, DV =  meta[ii]
         U, S, V = safe_svd(data[slice(*sl)].reshape(D))
         Udata[slice(*slU)].reshape(DU)[:] = U
         Sdata[slice(*slS)] = S
         Vdata[slice(*slV)].reshape(DV)[:] = V
+
+
     return Udata, Sdata, Vdata
+
+# def svdvals(data, meta, sizeS, **kwargs):
+#     Sdata = np.empty((sizeS,), dtype=DTYPE['float64'])
+#     for (sl, D, _, _, slS, _, _) in meta:
+#         try:
+#             S = scipy.linalg.svd(data[slice(*sl)].reshape(D), full_matrices=False, compute_uv=False)
+#         except scipy.linalg.LinAlgError:  # pragma: no cover
+#             S = scipy.linalg.svd(data[slice(*sl)].reshape(D), full_matrices=False, compute_uv=False, lapack_driver='gesvd')
+#         Sdata[slice(*slS)] = S
+#     return Sdata
 
 
 def svdvals(data, meta, sizeS, **kwargs):
-    Sdata = np.empty((sizeS,), dtype=DTYPE['float64'])
-    for (sl, D, _, _, slS, _, _) in meta:
-        try:
-            S = scipy.linalg.svd(data[slice(*sl)].reshape(D), full_matrices=False, compute_uv=False)
-        except scipy.linalg.LinAlgError:  # pragma: no cover
-            S = scipy.linalg.svd(data[slice(*sl)].reshape(D), full_matrices=False, compute_uv=False, lapack_driver='gesvd')
-        Sdata[slice(*slS)] = S
-    return Sdata
 
+    Sdata = np.empty((sizeS,), dtype=DTYPE['float64'])
+
+    def svdvals_(matrix):
+        try:
+            S = scipy.linalg.svd(matrix, full_matrices=False, compute_uv=False)
+        except scipy.linalg.LinAlgError:  # pragma: no cover
+            S = scipy.linalg.svd(matrix, full_matrices=False, compute_uv=False, lapack_driver='gesvd')
+        return S
+
+    complexity = np.array([D[0] * D[1] * min(D[0], D[1]) for _, D, _, _, _, _, _ in meta])
+    # complexity = np.array([max(D[0], D[1]) for _, D, _, _, _, _, _ in meta])
+    sorted_index = (np.argsort(complexity))[::-1]
+    to_be_paralleled = np.sum(complexity >= 500 ** 3)
+
+    if to_be_paralleled > 0:
+        para_result = Parallel(n_jobs=min(4, to_be_paralleled), verbose=10)(delayed(svdvals_)(matrix) for matrix in [data[slice(*meta[ii][0])].reshape(*meta[ii][1]) for ii in sorted_index[:to_be_paralleled]])
+
+        for i in range(to_be_paralleled):
+            ii = sorted_index[i]
+            sl, D, slU, DU, slS, slV, DV =  meta[ii]
+            S = para_result[0]
+            para_result.pop(0)
+            Sdata[slice(*slS)] = S
+
+    for ii in sorted_index[to_be_paralleled:]:
+        sl, D, slU, DU, slS, slV, DV =  meta[ii]
+        Sdata[slice(*slS)] = svdvals_(data[slice(*sl)].reshape(D))
+
+    return Sdata
 
 def fix_svd_signs(Udata, Vdata, meta):
     Uamp = (abs(Udata) * (2 ** 40)).astype(np.int64)
@@ -339,6 +444,7 @@ def fix_svd_signs(Udata, Vdata, meta):
         Utemp *= phase.conj().reshape(1, -1)
         Vtemp *= phase.reshape(-1, 1)
     return Udata, Vdata
+
 
 
 def eigh(data, meta=None, sizes=(1, 1)):
@@ -355,6 +461,47 @@ def eigh(data, meta=None, sizes=(1, 1)):
         return Sdata, Udata
     return np.linalg.eigh(data)  # S, U
 
+# def eigh(data, meta=None, sizes=(1, 1)):
+
+#     start = time()
+#     Sdata = np.zeros((sizes[0],), dtype=DTYPE['float64'])
+#     Udata = np.zeros((sizes[1],), dtype=data.dtype)
+
+#     def eigh_(matrix):
+#         try:
+#             S, U = scipy.linalg.eigh(matrix)
+#         except scipy.linalg.LinAlgError:  # pragma: no cover
+#             S, U = np.linalg.eigh(matrix)
+#         return [S, U]
+#     if meta is not None:
+
+#         complexity = np.array([D[0] for _, D, _, _, _ in meta])
+#         # complexity = np.array([max(D[0], D[1]) for _, D, _, _, _, _, _ in meta])
+#         sorted_index = (np.argsort(complexity))[::-1]
+#         to_be_paralleled = np.sum(complexity >= 500)
+
+#         if to_be_paralleled > 0:
+#             para_result = Parallel(n_jobs=min(8, to_be_paralleled), verbose=10)(delayed(eigh_)(matrix) for matrix in [data[slice(*meta[ii][0])].reshape(*meta[ii][1]) for ii in sorted_index[:to_be_paralleled]])
+
+#             for i in range(to_be_paralleled):
+#                 ii = sorted_index[i]
+#                 sl, D, slU, DU, slS =  meta[ii]
+#                 S, U = para_result[0]
+#                 para_result.pop(0)
+#                 Sdata[slice(*slS)] = S
+#                 Udata[slice(*slU)].reshape(DU)[:] = U
+
+#         for ii in sorted_index[to_be_paralleled:]:
+#             sl, D, slU, DU, slS =  meta[ii]
+#             S, U = eigh_(data[slice(*sl)].reshape(D))
+#             Sdata[slice(*slS)] = S
+#             Udata[slice(*slU)].reshape(DU)[:] = U
+
+#         end = time()
+#         print("svd: ", end - start, "s")
+#         return Sdata, Udata
+#     return np.linalg.eigh(data)  # S, U
+
 
 def eig(T):
     return np.linalg.eig(T)  # S, U
@@ -370,6 +517,39 @@ def qr(data, meta, sizes):
         Qdata[slice(*slQ)].reshape(DQ)[:] = Q * sR  # positive diag of R
         Rdata[slice(*slR)].reshape(DR)[:] = sR.reshape([-1, 1]) * R
     return Qdata, Rdata
+
+# def qr(data, meta, sizes):
+#     Qdata = np.empty((sizes[0],), dtype=data.dtype)
+#     Rdata = np.empty((sizes[1],), dtype=data.dtype)
+
+#     complexity = np.array([max(D[0], D[1]) * min(D[0], D[1]) ** 2 for _, D, _, _, _, _ in meta])
+#     # complexity = np.array([max(D[0], D[1]) for _, D, _, _, _, _, _ in meta])
+#     sorted_index = (np.argsort(complexity))[::-1]
+#     to_be_paralleled = np.sum(complexity >= 500 ** 3)
+
+#     def qr_(matrix):
+#         Q, R = scipy.linalg.qr(matrix, mode='economic')
+#         sR = np.sign(np.real(np.diag(R)))
+#         sR[sR == 0] = 1 # positive diag of R
+#         return [Q * sR, sR.reshape([-1, 1]) * R]
+
+#     if to_be_paralleled > 0:
+#         para_result = Parallel(n_jobs=4, verbose=10)(delayed(qr_)(matrix) for matrix in [data[slice(*meta[ii][0])].reshape(*meta[ii][1]) for ii in sorted_index[:to_be_paralleled]])
+
+#         for i in range(to_be_paralleled):
+#             ii = sorted_index[i]
+#             sl, D, slQ, DQ, slR, DR =  meta[ii]
+#             Q, R = para_result[0]
+#             para_result.pop(0)
+#             Qdata[slice(*slQ)].reshape(DQ)[:] = Q
+#             Rdata[slice(*slR)].reshape(DR)[:] = R
+
+#     for ii in sorted_index[to_be_paralleled:]:
+#         sl, D, slQ, DQ, slR, DR =  meta[ii]
+#         Q, R = qr_(data[slice(*sl)].reshape(D))
+#         Qdata[slice(*slQ)].reshape(DQ)[:] = Q
+#         Rdata[slice(*slR)].reshape(DR)[:] = R
+#     return Qdata, Rdata
 
 
 def argsort(data):
@@ -458,11 +638,11 @@ def diag_1dto2d(Adata, meta, Dsize):
     return newdata
 
 
-def diag_2dto1d(Adata, meta, Dsize):
-    newdata = np.zeros((Dsize,), dtype=Adata.dtype)
-    for sln, slo, Do in meta:
-        newdata[slice(*sln)] = np.diag(Adata[slice(*slo)].reshape(Do))
-    return newdata
+# def diag_2dto1d(Adata, meta, Dsize):
+#     newdata = np.zeros((Dsize,), dtype=Adata.dtype)
+#     for sln, slo, Do in meta:
+#         newdata[slice(*sln)] = np.diag(Adata[slice(*slo)].reshape(Do))
+#     return newdata
 
 
 def dot(Adata, Bdata, meta_dot, Dsize):
@@ -473,6 +653,32 @@ def dot(Adata, Bdata, meta_dot, Dsize):
                   Bdata[slice(*slb)].reshape(Db), \
                   out=newdata[slice(*slc)].reshape(Dc))
     return newdata
+
+# def dot(Adata, Bdata, meta_dot, Dsize):
+#     dtype = np.promote_types(Adata.dtype, Bdata.dtype)
+#     newdata = np.empty((Dsize,), dtype=dtype)
+
+#     start = time()
+
+#     def dot_(which_one):
+#         slc, Dc, sla, Da, slb, Db, _, _ = meta_dot[which_one]
+#         np.matmul(Adata[slice(*sla)].reshape(Da), \
+#                   Bdata[slice(*slb)].reshape(Db), \
+#                   out=newdata[slice(*slc)].reshape(Dc))
+
+#     complexity = np.array([Da[0] * Da[1] * Db[1] for _, _, _, Da, _, Db, _, _ in meta_dot])
+#     sorted_index = np.argsort(complexity)[::-1]
+#     to_be_paralleled = np.sum(complexity >= 1000 ** 3)
+
+#     if to_be_paralleled > 0:
+#         Parallel(n_jobs=4, require="sharedmem")(delayed(dot_)(which) for which in sorted_index[:to_be_paralleled])
+
+#     for which_one in sorted_index[to_be_paralleled:].tolist():
+#         dot_(which_one)
+
+#     end = time()
+#     print("tensordot", "paralleld", to_be_paralleled, "time", end - start, "s")
+#     return newdata
 
 
 def dot_with_sum(Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border, Dsize):
@@ -559,12 +765,22 @@ def transpose(data, axes, meta_transpose):
 
 def transpose_and_merge(data, order, meta_new, meta_mrg, Dsize):
     newdata = np.zeros((Dsize,), dtype=data.dtype)
+    # temp = None
+    # @delayed
+    # def transpose_and_merge_(tn_, Dn_, sln_, t1_, gr_):
+    #     assert tn_ == t1_
+    #     for (_, slo, Do, Dslc, Drsh) in gr_:
+    #         slcs = tuple(slice(*x) for x in Dslc)
+    #         newdata[slice(*sln_)].reshape(Dn_)[slcs] = data[slice(*slo)].reshape(Do).transpose(order).reshape(Drsh)
+
+    # Parallel(n_jobs=2, require="sharedmem")(transpose_and_merge_(*tn_Dn_sln, *t1_gr) for tn_Dn_sln, t1_gr in zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])))
+
     for (tn, Dn, sln), (t1, gr) in zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])):
         assert tn == t1
-        temp = newdata[slice(*sln)].reshape(Dn)
+        # temp =
         for (_, slo, Do, Dslc, Drsh) in gr:
             slcs = tuple(slice(*x) for x in Dslc)
-            temp[slcs] = data[slice(*slo)].reshape(Do).transpose(order).reshape(Drsh)
+            newdata[slice(*sln)].reshape(Dn)[slcs] = data[slice(*slo)].reshape(Do).transpose(order).reshape(Drsh)
     return newdata
 
 

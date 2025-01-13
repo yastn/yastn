@@ -43,7 +43,7 @@ def norm(a, p='fro') -> Number:
 def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
         Uaxis=-1, Vaxis=0, policy='fullrank', fix_signs=False, svd_on_cpu=False,
         tol=0, tol_block=0, D_block=float('inf'), D_total=float('inf'),
-        truncate_multiplets=False, mask_f=None, pool=None, **kwargs) -> tuple[yastn.Tensor, yastn.Tensor, yastn.Tensor]:
+        truncate_multiplets=False, mask_f=None, **kwargs) -> tuple[yastn.Tensor, yastn.Tensor, yastn.Tensor]:
     r"""
     Split tensor using exact singular value decomposition (SVD) into :math:`a = U S V`,
     where the columns of `U` and the rows of `V` form orthonormal bases
@@ -103,7 +103,7 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
     """
     diagnostics = kwargs['diagonostics'] if 'diagonostics' in kwargs else None
     U, S, V = svd(a, axes=axes, sU=sU, nU=nU, policy=policy, D_block=D_block,
-                  diagnostics=diagnostics, fix_signs=fix_signs, svd_on_cpu=svd_on_cpu, pool=pool)
+                  diagnostics=diagnostics, fix_signs=fix_signs, svd_on_cpu=svd_on_cpu)
 
     if mask_f:
         Smask = mask_f(S)
@@ -120,7 +120,7 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
 
 def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         Uaxis=-1, Vaxis=0, policy='fullrank',
-        fix_signs=False, svd_on_cpu=False, pool=None, **kwargs) -> tuple[yastn.Tensor, yastn.Tensor, yastn.Tensor] | yastn.Tensor:
+        fix_signs=False, svd_on_cpu=False, **kwargs) -> tuple[yastn.Tensor, yastn.Tensor, yastn.Tensor] | yastn.Tensor:
     r"""
     Split tensor into :math:`a = U S V` using exact singular value decomposition (SVD),
     where the columns of `U` and the rows of `V` form orthonormal bases
@@ -197,12 +197,12 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     sizes = tuple(x.size for x in (Ustruct, Sstruct, Vstruct))
 
     if compute_uv and policy == 'fullrank':
-        Udata, Sdata, Vdata = a.config.backend.svd(data, meta, sizes, pool=pool, \
+        Udata, Sdata, Vdata = a.config.backend.svd(data, meta, sizes, \
             diagnostics=kwargs['diagnostics'] if 'diagnostics' in kwargs else None)
     elif not compute_uv and policy == 'fullrank':
-        Sdata = a.config.backend.svdvals(data, meta, sizes[1], pool=pool)
+        Sdata = a.config.backend.svdvals(data, meta, sizes[1])
     elif compute_uv and policy == 'lowrank':
-        Udata, Sdata, Vdata = a.config.backend.svd_lowrank(data, meta, sizes, pool=pool, **kwargs)
+        Udata, Sdata, Vdata = a.config.backend.svd_lowrank(data, meta, sizes, **kwargs)
     else:
         raise YastnError('svd() policy should in (`lowrank`, `fullrank`). compute_uv == False only works with `fullrank`')
 
