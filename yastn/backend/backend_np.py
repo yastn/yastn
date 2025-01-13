@@ -20,12 +20,12 @@ import numpy as np
 import scipy.linalg
 import scipy.sparse.linalg
 
+
 # non-deterministic initialization of random number generator
 rng = {'rng': np.random.default_rng(None)}  # initialize random number generator
 BACKEND_ID = "np"
 DTYPE = {'float64': np.float64,
-         'complex128': np.complex128,
-         'bool': bool}
+         'complex128': np.complex128}
 
 
 def cuda_is_available():
@@ -56,6 +56,7 @@ def set_num_threads(num_threads):  # pragma: no cover
 def grad(x):  # pragma: no cover
     warnings.warn("backend_np does not support automatic differentiation.", Warning)
     return None
+
 
 ###################################
 #     single tensor operations    #
@@ -378,11 +379,8 @@ def eigs_which(val, which):
     return (val.real).argsort()
 
 
-
-
-
 ################################
-#     two dict-s operations    #
+#     two dicts operations     #
 ################################
 
 
@@ -391,9 +389,7 @@ def allclose(Adata, Bdata, rtol, atol):
 
 
 def add(datas, metas, Dsize):
-    dtype = datas[0].dtype
-    for data in datas[1:]:
-        dtype = np.promote_types(dtype, data.dtype)
+    dtype = reduce(np.promote_types, (data.dtype for data in datas))
     newdata = np.zeros(Dsize, dtype=dtype)
     for data, meta in zip(datas, metas):
         for sl_c, sl_a in meta:
@@ -417,20 +413,6 @@ def vdot(Adata, Bdata, meta):
     for ii, (sla, slb) in enumerate(meta):
         tmp[ii] = np.dot(Adata[slice(*sla)], Bdata[slice(*slb)])
     return np.sum(tmp)
-
-
-def diag_1dto2d(Adata, meta, Dsize):
-    newdata = np.zeros(Dsize, dtype=Adata.dtype)
-    for sln, slo in meta:
-        newdata[slice(*sln)] = np.diag(Adata[slice(*slo)]).ravel()
-    return newdata
-
-
-def diag_2dto1d(Adata, meta, Dsize):
-    newdata = np.zeros(Dsize, dtype=Adata.dtype)
-    for sln, slo, Do in meta:
-        newdata[slice(*sln)] = np.diag(Adata[slice(*slo)].reshape(Do))
-    return newdata
 
 
 def dot(Adata, Bdata, meta_dot, Dsize):
@@ -467,6 +449,11 @@ def dot_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
     return newdata
 
 
+#####################################################
+#     block merging, truncations and un-merging     #
+#####################################################
+
+
 def apply_mask(Adata, mask, meta, Dsize, axis, a_ndim):
     slc1 = (slice(None),) * axis
     slc2 = (slice(None),) * (a_ndim - (axis + 1))
@@ -486,10 +473,6 @@ def embed_mask(Adata, mask, meta, Dsize, axis, a_ndim):
         newdata[slice(*sln)].reshape(Dn)[slcs] = Adata[slice(*sla)].reshape(Da)
     return newdata
 
-
-#####################################################
-#     block merging, truncations and un-merging     #
-#####################################################
 
 def transpose(data, axes, meta_transpose):
     newdata = np.empty_like(data)
@@ -535,9 +518,24 @@ def merge_super_blocks(pos_tens, meta_new, meta_block, Dsize):
     return newdata
 
 
+def diag_1dto2d(Adata, meta, Dsize):
+    newdata = np.zeros(Dsize, dtype=Adata.dtype)
+    for sln, slo in meta:
+        newdata[slice(*sln)] = np.diag(Adata[slice(*slo)]).ravel()
+    return newdata
+
+
+def diag_2dto1d(Adata, meta, Dsize):
+    newdata = np.zeros(Dsize, dtype=Adata.dtype)
+    for sln, slo, Do in meta:
+        newdata[slice(*sln)] = np.diag(Adata[slice(*slo)].reshape(Do))
+    return newdata
+
+
 #############
 #   tests   #
 #############
+
 
 def is_independent(x, y):
     """

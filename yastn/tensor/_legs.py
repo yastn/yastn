@@ -23,7 +23,7 @@ from ._tests import YastnError
 from ..sym import sym_none
 from ._merging import _Fusion, _hfs_union, _combine_hfs_prod, _unfuse_Fusion
 
-__all__ = ['Leg', 'legs_union', 'random_leg', 'leg_product', 'leg_undo_product']
+__all__ = ['Leg', 'LegMeta', 'legs_union', 'random_leg', 'leg_product', 'leg_undo_product']
 
 
 @dataclass(frozen=True, repr=False)
@@ -171,6 +171,19 @@ class Leg:
 
     def unfuse_leg(self):
         return leg_undo_product(self)
+
+
+class LegMeta(Leg):
+    """
+    Auxilliary Leg class desctibing a meta-leg: a list of legs, where explicit hard-fusion was not performed.
+    """
+    sym: any = sym_none
+    s: int = 1
+    t: tuple = ()
+    D: tuple = ()
+    mf: tuple = (1,)
+    legs: tuple = ()
+    _verified: bool = False
 
 
 def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, nonnegative=False) -> yastn.Leg:

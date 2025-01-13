@@ -227,5 +227,17 @@ def test_leg_exceptions(config_kwargs):
         # Bond dimensions of fused legs do not match.
 
 
+
+def experiment():
+    config_U1 = yastn.make_config(sym='U1')
+    leg2 = yastn.Leg(config_U1, s=1, t=(-1, 1), D=(2, 3))
+    leg3 = yastn.LegMeta(config_U1, s=1, t=(-1, 1), D=(2, 3))
+
+
+    print(leg2)
+    print(leg3)
+    print(leg3._verified)
+
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0"])
+    experiment()
+    #pytest.main([__file__, "-vs", "--durations=0"])
