@@ -276,7 +276,7 @@ def safe_svd(a):
     return U, S, V
 
 
-def svd_lowrank(data, meta, sizes, ncv=None, which='LM', maxiter=None, solver='arpack', **kwargs):
+def svd_lowrank(data, meta, sizes, ncv=None, which='LM', maxiter=None, **kwargs):
     Udata = np.empty((sizes[0],), dtype=data.dtype)
     Sdata = np.empty((sizes[1],), dtype=DTYPE['float64'])
     Vdata = np.empty((sizes[2],), dtype=data.dtype)
@@ -284,8 +284,12 @@ def svd_lowrank(data, meta, sizes, ncv=None, which='LM', maxiter=None, solver='a
         k = slS[1] - slS[0]
         if k < min(D) - 1 and min(D) * max(D) > 4000:
             # the second condition is heuristic estimate when performing dense svd should be faster.
-            U, S, V = scipy.sparse.linalg.svds(data[slice(*sl)].reshape(D), k=k, ncv=ncv,
-                                               which=which, maxiter=maxiter, solver=solver)
+            try:
+                U, S, V = scipy.sparse.linalg.svds(data[slice(*sl)].reshape(D), k=k, ncv=ncv,
+                                                   which=which, maxiter=maxiter, solver='arpack')
+            except scipy.sparse.linalg.ArpackError:
+                U, S, V = scipy.sparse.linalg.svds(data[slice(*sl)].reshape(D), k=k, ncv=ncv,
+                                                   which=which, maxiter=maxiter, solver='propack')
             ord = np.argsort(-S)
             U, S, V = U[:, ord], S[ord], V[ord, :]
         else:
