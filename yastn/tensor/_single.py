@@ -350,7 +350,7 @@ def add_leg(a, axis=-1, s=-1, t=None, leg=None) -> yastn.Tensor:
             return a._replace(mfs=mfs)
         s = leg.s
         t = leg.t[0]
-        hfsa = leg.legs[0]
+        hfsa = leg.hf
     else:
         hfsa = _Fusion(s=(s,))
 

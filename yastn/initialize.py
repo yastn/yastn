@@ -24,7 +24,7 @@ import numpy as np
 from .tensor import Tensor, YastnError
 from .tensor._auxliary import _struct, _config, _slc, _clear_axes, _unpack_legs
 from .tensor._merging import _Fusion, _embed_tensor, _combine_hfs_sum
-from .tensor._legs import Leg, LegMeta, legs_union, _leg_fusions_need_mask
+from .tensor._legs import Leg, LegMeta, legs_union, _legs_mask_needed
 from .tensor._tests import _test_can_be_combined
 from .backend import backend_np
 from .sym import sym_none, sym_U1, sym_Z2, sym_Z3, sym_U1xU1, sym_U1xU1xZ2
@@ -129,7 +129,7 @@ def _fill(config=None, legs=(), n=None, isdiag=False, val='rand', **kwargs):
         D = kwargs.pop('D') if 'D' in kwargs else ()
         mfs, hfs = None, None
     else:  # use legs for initialization
-        if isinstance(legs, Leg):
+        if isinstance(legs, (Leg, LegMeta)):
             legs = (legs,)
         if isdiag and len(legs) == 1:
             legs = (legs[0], legs[0].conj())
@@ -137,7 +137,7 @@ def _fill(config=None, legs=(), n=None, isdiag=False, val='rand', **kwargs):
         s = tuple(leg.s for leg in ulegs)
         t = tuple(leg.t for leg in ulegs)
         D = tuple(leg.D for leg in ulegs)
-        hfs = tuple(leg.legs[0] for leg in ulegs)
+        hfs = tuple(leg.hf for leg in ulegs)
 
         if any(config.sym.SYM_ID != leg.sym.SYM_ID for leg in ulegs):
             raise YastnError('Different symmetry of initialized tensor and some of the legs.')
@@ -310,7 +310,7 @@ def eye(config=None, legs=(), isdiag=True, **kwargs) -> yastn.Tensor:
     """
     if isdiag:
         return _fill(config=config, legs=legs, isdiag=True, val='ones', **kwargs)
-    if isinstance(legs, Leg):
+    if isinstance(legs, (Leg, LegMeta)):
         legs = (legs,)
     if len(legs) == 1:
         legs = (legs[0], legs[0].conj())
@@ -407,7 +407,7 @@ def decompress_from_1d(r1d, meta) -> yastn.Tensor:
         Each such entry contains block's dimensions and the location of its data
         in rank-1 tensor :code:`r1d`.
     """
-    hfs = tuple(leg.legs[0] for leg in meta['legs'])
+    hfs = tuple(leg.hf for leg in meta['legs'])
     a = Tensor(config=meta['config'], hfs=hfs, mfs=meta['mfs'], struct=meta['struct'], slices=meta['slices'])
     a._data = r1d
     return a
@@ -486,7 +486,7 @@ def block(tensors, common_legs=None) -> yastn.Tensor:
             ltDslc[-1][t] = tpDslc
 
     for pa in tensors.keys():
-        if any(_leg_fusions_need_mask(ulegs[n][pa[n]], leg) for n, leg in enumerate(legs_tn[pa])):
+        if any(_legs_mask_needed(ulegs[n][pa[n]], leg) for n, leg in enumerate(legs_tn[pa])):
             legs_new = {n: legs[pa[n]] for n, legs in enumerate(ulegs)}
             tensors[pa] = _embed_tensor(tensors[pa], legs_tn[pa], legs_new)
 
@@ -515,7 +515,7 @@ def block(tensors, common_legs=None) -> yastn.Tensor:
 
 def _sum_legs_hfs(legs):
     """ sum hfs based on info in legs"""
-    hfs = [leg.legs[0] for leg in legs]
+    hfs = [leg.hf for leg in legs]
     t_in = [leg.t for leg in legs]
     D_in = [leg.D for leg in legs]
     s_out = legs[0].s

@@ -21,7 +21,7 @@ from operator import mul
 from ._auxliary import _clear_axes, _unpack_axes, _struct, _slc, _flatten, _join_contiguous_slices
 from ._tests import YastnError, _test_configs_match
 from ..sym import sym_none
-from ._legs import Leg, LegMeta, legs_union, _leg_fusions_need_mask
+from ._legs import Leg, LegMeta, legs_union, _legs_mask_needed
 from ._merging import _embed_tensor
 
 
@@ -115,7 +115,7 @@ def compress_to_1d(a, meta=None) -> tuple[numpy.array | torch.tensor, dict]:
     if a.mfs != meta['mfs']:
         raise YastnError("Tensor meta-fusion structure do not match meta.")
 
-    meta_hfs = tuple(leg.legs[0] for leg in meta['legs'])
+    meta_hfs = tuple(leg.hf for leg in meta['legs'])
     if a.hfs != meta_hfs:  # mask needed
         legs_a = a.get_legs()
         legs_u = {n: legs_union(leg_a, leg) for n, (leg_a, leg) in enumerate(zip(legs_a, meta['legs']))}
@@ -350,7 +350,7 @@ def get_legs(a, axes=None, native=False) -> yastn.Leg | Sequence[yastn.Leg]:
             Dseta = Dset[:, i].tolist()
             tDn = {tuple(tn): Dn for tn, Dn in zip(tseta, Dseta)}
             tDn = dict(sorted(tDn.items()))
-            leg = Leg(a.config, s=a.struct.s[i], t=tuple(tDn.keys()), D=tuple(tDn.values()), legs=(a.hfs[i],))
+            leg = Leg(a.config, s=a.struct.s[i], t=tuple(tDn.keys()), D=tuple(tDn.values()), hf=a.hfs[i])
             legs_ax.append(leg)
 
         if not native and a.mfs[ax][0] > 1:
@@ -359,7 +359,7 @@ def get_legs(a, axes=None, native=False) -> yastn.Leg | Sequence[yastn.Leg]:
             tDn = {tuple(tn): Dn for tn, Dn in zip(tseta, Dseta)}
             tDn = dict(sorted(tDn.items()))
             t, D = tuple(tDn.keys()), tuple(tDn.values())
-            leg = LegMeta(a.config.sym, s=legs_ax[0].s, t=t, D=D, mf=a.mfs[ax], legs=tuple(legs_ax), _verified=True)
+            leg = LegMeta(a.config.sym, s=legs_ax[0].s, t=t, D=D, mf=a.mfs[ax], legs=tuple(legs_ax))
             legs.append(leg)
         else:
             legs.append(legs_ax.pop())
@@ -453,12 +453,11 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False) -> yastn.Tensor:
     legs_a = list(a.get_legs(native=native))
     ndim_a = len(legs_a)  # ndim_n if native else ndim
 
-
     if legs is not None:
         if any((n < 0) or (n >= ndim_a) for n in legs.keys()):
             raise YastnError('Specified leg out of ndim')
         legs_new = {n: legs_union(legs_a[n], leg) for n, leg in legs.items()}
-        if any(_leg_fusions_need_mask(leg, legs_a[n]) for n, leg in legs_new.items()):
+        if any(_legs_mask_needed(leg, legs_a[n]) for n, leg in legs_new.items()):
             a = _embed_tensor(a, legs_a, legs_new)  # mask needed
         for n, leg in legs_new.items():
             legs_a[n] = leg

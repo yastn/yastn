@@ -12,6 +12,6 @@ The spaces of the :class:`yastn.Tensor` are characterized by a structure :class:
     :exclude-members: __init__, __new__
 
 .. autofunction:: yastn.leg_product
-.. autofunction:: yastn.leg_undo_product
+.. autofunction:: yastn.undo_leg_product
 .. autofunction:: yastn.random_leg
 .. autofunction:: yastn.legs_union

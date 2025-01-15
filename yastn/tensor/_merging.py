@@ -597,12 +597,12 @@ def _embed_tensor(a, legs, legs_new):
     legs, _ = _unpack_legs(legs)
     legs_new, _ = _unpack_legs(legs_new)
 
-    hfs = tuple(lb.legs[0] for lb in legs_new)
+    hfs = tuple(lb.hf for lb in legs_new)
     assert a.ndim_n == len(hfs), "Sanity check"
 
     for axis, (la, lb) in enumerate(zip(legs, legs_new)):
-        if la.legs[0] != lb.legs[0]:  # mask needed
-            mb = _mask_embed_in_union(a.config.sym, la.t, la.legs[0], lb.legs[0])
+        if la.hf != lb.hf:  # mask needed
+            mb = _mask_embed_in_union(a.config.sym, la.t, la.hf, lb.hf)
             mask_tD = {t: len(v) for t, v in mb.items()}
             mask = _mask_nonzero(mb)
             if mask is not None:

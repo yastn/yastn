@@ -99,7 +99,7 @@ def _pre_addition(*tensors):
     if mask_needed:
         legss = [tensor.get_legs(native=True) for tensor in tensors]
         ulegs = {n: legs_union(*(legs[n] for legs in legss)) for n in range(a.ndim_n)}
-        hfs = tuple(ulegs[n].legs[0] for n in range(a.ndim_n))
+        hfs = tuple(ulegs[n].hf for n in range(a.ndim_n))
         tensors = [_embed_tensor(tensor, legs, ulegs) for tensor, legs in zip(tensors, legss)]
     else:
         hfs = a.hfs

@@ -102,10 +102,11 @@ def _unpack_legs(legs):
     """ Return native legs and mfs. """
     ulegs, mfs = [], []
     for leg in legs:
-        mfs.append(leg.mf)
-        if leg.mf[0] > 1:  # meta-fused
+        if hasattr(leg, 'mf'):  # meta-fused
+            mfs.append(leg.mf)
             ulegs.extend(leg.legs)
         else:  # _Leg
+            mfs.append((1,))
             ulegs.append(leg)
     return tuple(ulegs), tuple(mfs)
 

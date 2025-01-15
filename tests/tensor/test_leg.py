@@ -46,8 +46,16 @@ def test_leg(config_kwargs):
     assert a.get_legs() == legs
 
     assert yastn.legs_union(legs[1], legs[2]) == yastn.Leg(config_U1, s=1, t=(-2, 0, 2, 4), D=(1, 2, 3, 4))
-
     assert a.get_legs(-1) == a.get_legs(3)
+
+    leg0 = yastn.Leg(config_U1, s=1, t=(0, 1), D=(2, 3))
+    leg1 = yastn.Leg(config_U1, s=1, t=(0, 1), D=(2, 4))
+    leg = yastn.leg_product(leg0, leg1)
+    assert str(leg) == 'Leg(sym=U1, s=1, t=((0,), (1,), (2,)), D=(4, 14, 12), hist=p(oo))'
+    assert leg.is_fused()
+    leg0u, leg1u = yastn.undo_leg_product(leg)
+    assert leg0u == leg0
+    assert leg1u == leg1
 
 
 def test_random_leg(config_kwargs):
@@ -79,13 +87,6 @@ def test_random_leg(config_kwargs):
     leg_dense = yastn.random_leg(yastn.make_config(), s=1, D_total=10)
     assert leg_dense.D == (10,) and leg_dense.t == ((),)
 
-    leg0 = yastn.Leg(config_U1, s=1, t=(0, 1), D=(2, 3))
-    leg1 = yastn.Leg(config_U1, s=1, t=(0, 1), D=(2, 4))
-
-    leg = yastn.leg_product(leg0, leg1)
-    print(leg)
-    assert leg.is_fused()
-
 
 def test_leg_meta_fusion(config_kwargs):
     """ test get_leg with meta-fused tensor"""
@@ -95,19 +96,22 @@ def test_leg_meta_fusion(config_kwargs):
     a = yastn.ones(config=config_U1, legs=[leg, leg, leg, leg.conj(), leg.conj()])
     assert a.get_legs([1, 3, 2, 4]) == (leg, leg.conj(), leg, leg.conj())
 
-    a = a.fuse_legs(axes=((0, 1), (2, 3), 4), mode='meta')
-    a = a.fuse_legs(axes=((0, 1), 2), mode='meta')
-    legm = a.get_legs(0)
-    assert legm.mf == a.mfs[0] and legm.legs == (leg, leg, leg, leg.conj())
-    assert legm.history() == 'm(m(oo)m(oo))'
-    assert legm.is_fused()
+    am = a.fuse_legs(axes=((0, 1), (2, 3), 4), mode='meta')
+    amm = am.fuse_legs(axes=((0, 1), 2), mode='meta')
+    legmm = amm.get_legs(0)
 
-    legt = a.get_legs((0, 1))
-    assert legt[0] == legm
+    assert legmm.mf == amm.mfs[0]
+    assert legmm.legs == (leg, leg, leg, leg.conj())
+    assert legmm.history() == 'm(m(oo)m(oo))'
+    assert legmm.is_fused()
+    assert 'LegMeta' in str(legmm)
+
+    legt = amm.get_legs((0, 1))
+    assert legt[0] == legmm
     assert legt[1] == leg.conj()
 
-    b = yastn.ones(config=config_U1, legs=a.get_legs())
-    assert yastn.norm(a - b) < tol
+    bmm = yastn.ones(config=config_U1, legs=amm.get_legs())
+    assert yastn.norm(amm - bmm) < tol
 
     a = yastn.ones(config=config_U1, s=(1, 1, 1, 1),
                   t=[(0, 1), (-1, 1), (-1, 0), (0,)],
@@ -128,16 +132,23 @@ def test_leg_hard_fusion(config_kwargs):
             yastn.Leg(config_U1, s=-1, t=(0, 2), D=(2, 3)),
             yastn.Leg(config_U1, s=1, t=(0,), D=(5,))]
     a = yastn.ones(config=config_U1, legs=legs)
-    af = a.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
-    laf = af.get_legs()
-    assert all(l.is_fused() for l in laf)
 
-    bf = yastn.ones(config=config_U1, legs=laf)
+    af = a.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
+    legsf = af.get_legs()
+    assert all(legf.is_fused() for legf in legsf)
+    assert str(legsf[1]) == 'Leg(sym=U1, s=-1, t=((0,), (2,)), D=(10, 15), hist=p(oo))'
+
+    l2, l3 = yastn.undo_leg_product(legsf[1])
+    assert l2 == legs[2]
+    assert l3 == legs[3]
+
+    bf = yastn.ones(config=config_U1, legs=legsf)
     b = bf.unfuse_legs(axes=(0, 1))
     assert yastn.norm(a - b) < tol
 
     cf =  af.fuse_legs(axes=[(0, 1)], mode='meta')
-    assert cf.get_legs(axes=0).history() == 'm(p(oo)p(oo))'
+    legmf = cf.get_legs(axes=0)
+    assert legmf.history() == 'm(p(oo)p(oo))'
 
 
 def test_leg_exceptions(config_kwargs):
@@ -146,43 +157,45 @@ def test_leg_exceptions(config_kwargs):
     # in initialization of new tensors with Leg
     legU1 = yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 4))
     a = yastn.ones(config=config_U1, legs=[legU1, legU1.conj()])
-    with pytest.raises(yastn.YastnError):
+
+    with pytest.raises(yastn.YastnError,
+                       match='Diagonal tensor cannot be initialized with fused legs.'):
         b = a.fuse_legs(axes=[(0, 1)], mode='meta')
         yastn.eye(config_U1, legs=[b.get_legs(0)])
-        # Diagonal tensor cannot be initialized with fused legs.
-    with pytest.raises(yastn.YastnError):
+
+    with pytest.raises(yastn.YastnError,
+                       match='Diagonal tensor cannot be initialized with fused legs.'):
         b = a.fuse_legs(axes=[(0, 1)], mode='hard')
         yastn.eye(config_U1, legs=[b.get_legs(0)])
-        # Diagonal tensor cannot be initialized with fused legs.
 
     config_Z3 = yastn.make_config(sym='Z3', **config_kwargs)
     legZ3 = yastn.Leg(config_Z3, s=1, t=(0, 1, 2), D=(2, 3, 4))
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match='Different symmetry of initialized tensor and some of the legs.'):
         a = yastn.ones(config=config_U1, legs=[legU1, legZ3])
-        # Different symmetry of initialized tensor and some of the legs.
 
     # in initialization of Leg
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match='Signature of Leg should be 1 or -1'):
         _ = yastn.Leg(config_U1, s=2, t=(), D=())
-        # Signature of Leg should be 1 or -1
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match='Number of provided charges and bond dimensions do not match sym.NSYM'):
         _ = yastn.Leg(config_U1, s=1, t=(1, 0), D=(1,))
-        # Number of provided charges and bond dimensions do not match sym.NSYM
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match='D should be a tuple of positive ints.'):
         _ = yastn.Leg(config_U1, s=1, t=(1,), D=(0,))
-        # D should be a tuple of positive ints
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match='D should be a tuple of positive ints.'):
         _ = yastn.Leg(config_U1, s=1, t=(1,), D=(1.5,))
-        # D should be a tuple of positive ints
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match='Charges should be tuples of ints.'):
         _ = yastn.Leg(config_U1, s=1, t=(1.5,), D=(2,))
-        # Charges should be ints
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match='Repeated charge index.'):
         _ = yastn.Leg(config_U1, s=1, t=(1, 1), D=(2, 2))
-        # Repeated charge index.
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match='Provided charges are outside of the natural range for specified symmetry.'):
         _ = yastn.Leg(config_Z3, s=1, t=(4,), D=(2,))
-        # Provided charges are outside of the natural range for specified symmetry.
 
     # in legs_union
     leg_Z3 = yastn.Leg(config_Z3, s=1, t=(0, 1, 2), D=(2, 2, 2))
@@ -191,53 +204,41 @@ def test_leg_exceptions(config_kwargs):
     a = yastn.rand(config_U1, legs=[leg, leg, leg, leg])
     af1 = a.fuse_legs(axes=(0, (1, 2, 3)), mode='meta')
     af2 = a.fuse_legs(axes=((0, 1), (2, 3)), mode='meta')
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match='All arguments of legs_union should have consistent fusions.'):
         yastn.legs_union(af1.get_legs(1), a.get_legs(1))
-        # All arguments of legs_union should have consistent fusions.
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match='Meta-fusions do not match.'):
         yastn.legs_union(af1.get_legs(1), af2.get_legs(1))
-        # Meta-fusions do not match.
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match='Provided legs have different symmetries.'):
         yastn.legs_union(leg, leg_Z3)
-        #  Provided legs have different symmetries.
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match='Provided legs have different signatures.'):
         yastn.legs_union(leg, leg.conj())
-        # Provided legs have different signatures.
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match='Inconsistent numbers of hard-fused legs or sub-fusions order.'):
         af1 = a.fuse_legs(axes=(0, (1, 2, 3)), mode='hard')
         af2 = a.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
         yastn.legs_union(af1.get_legs(1), af2.get_legs(1))
-        # Inconsistent numbers of hard-fused legs or sub-fusions order.
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match='Legs have inconsistent dimensions.'):
         leg2 = yastn.Leg(config_U1, s=1, t=(-1, 1), D=(2, 3))
         yastn.legs_union(leg, leg2)
-        # Legs have inconsistent dimensions.
-    with  pytest.raises(yastn.YastnError):
+    with  pytest.raises(yastn.YastnError,
+                        match='Inconsistent signatures of fused legs.'):
         b = yastn.rand(config_U1, legs=[leg, leg.conj(), leg, leg])
         af = a.fuse_legs(axes=((0, 1, 2), 3), mode='hard')
         bf = b.fuse_legs(axes=((0, 1, 2), 3), mode='hard')
         yastn.legs_union(af.get_legs(0), bf.get_legs(0))
-        # Inconsistent signatures of fused legs.
-    with  pytest.raises(yastn.YastnError):
+    with  pytest.raises(yastn.YastnError,
+                        match='Bond dimensions of fused legs do not match.'):
         leg2 = yastn.Leg(config_U1, s=1, t=(-1, 1), D=(2, 3))
         b = yastn.rand(config_U1, legs=[leg, leg2, leg, leg])
         af = a.fuse_legs(axes=((0, 1, 2), 3), mode='hard')
         bf = b.fuse_legs(axes=((0, 1, 2), 3), mode='hard')
         yastn.legs_union(af.get_legs(0), bf.get_legs(0))
-        # Bond dimensions of fused legs do not match.
 
-
-
-def experiment():
-    config_U1 = yastn.make_config(sym='U1')
-    leg2 = yastn.Leg(config_U1, s=1, t=(-1, 1), D=(2, 3))
-    # leg3 = yastn.LegMeta(config_U1, s=1, t=(-1, 1), D=(2, 3))
-
-
-    print(leg2)
-    #print(leg3)
-    # print(leg3._verified)
 
 if __name__ == '__main__':
-    experiment()
-    pytest.main([__file__, "-vs", "--durations=0"])
+   pytest.main([__file__, "-vs", "--durations=0"])
