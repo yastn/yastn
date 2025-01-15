@@ -317,7 +317,7 @@ def bitwise_not(data):
     return torch.bitwise_not(data)
 
 
-def svd_lowrank(data, meta, sizes, niter=512, **kwargs):
+def svd_lowrank(data, meta, sizes, niter=512):
     # torch.svd_lowrank decomposes A = USV^T and return U,S,V
     # complex A is not supported
     if 'maxiter' in kwargs:
