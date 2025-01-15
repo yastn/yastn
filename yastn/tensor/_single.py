@@ -20,6 +20,7 @@ import numpy as np
 from ._auxliary import _slc, _clear_axes, _unpack_axes, _join_contiguous_slices
 from ._merging import _Fusion
 from ._tests import YastnError, _test_axes_all
+from ._legs import LegMeta
 
 
 __all__ = ['conj', 'conj_blocks', 'flip_signature', 'flip_charges',
@@ -342,10 +343,10 @@ def add_leg(a, axis=-1, s=-1, t=None, leg=None) -> yastn.Tensor:
     if leg is not None:
         if len(leg.t) != 1 or leg.D[0] != 1:
             raise YastnError("Only the leg of dimension one can be added to the tensor.")
-        if isinstance(leg.fusion, tuple):  # meta fused leg
+        if isinstance(leg, LegMeta):  # meta fused leg
             for ll in leg.legs[::-1]:
                 a = a.add_leg(axis=axis, leg=ll)
-            mfs = a.mfs[:axis] + (leg.fusion,) + a.mfs[axis + len(leg.legs):]
+            mfs = a.mfs[:axis] + (leg.mf,) + a.mfs[axis + len(leg.legs):]
             return a._replace(mfs=mfs)
         s = leg.s
         t = leg.t[0]

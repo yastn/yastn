@@ -98,7 +98,7 @@ def test_leg_meta_fusion(config_kwargs):
     a = a.fuse_legs(axes=((0, 1), (2, 3), 4), mode='meta')
     a = a.fuse_legs(axes=((0, 1), 2), mode='meta')
     legm = a.get_legs(0)
-    assert legm.fusion == a.mfs[0] and legm.legs == (leg, leg, leg, leg.conj())
+    assert legm.mf == a.mfs[0] and legm.legs == (leg, leg, leg, leg.conj())
     assert legm.history() == 'm(m(oo)m(oo))'
     assert legm.is_fused()
 
@@ -231,13 +231,13 @@ def test_leg_exceptions(config_kwargs):
 def experiment():
     config_U1 = yastn.make_config(sym='U1')
     leg2 = yastn.Leg(config_U1, s=1, t=(-1, 1), D=(2, 3))
-    leg3 = yastn.LegMeta(config_U1, s=1, t=(-1, 1), D=(2, 3))
+    # leg3 = yastn.LegMeta(config_U1, s=1, t=(-1, 1), D=(2, 3))
 
 
     print(leg2)
-    print(leg3)
-    print(leg3._verified)
+    #print(leg3)
+    # print(leg3._verified)
 
 if __name__ == '__main__':
     experiment()
-    #pytest.main([__file__, "-vs", "--durations=0"])
+    pytest.main([__file__, "-vs", "--durations=0"])

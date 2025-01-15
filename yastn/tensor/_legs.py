@@ -66,8 +66,9 @@ class Leg:
     s: int = 1  # leg signature in (1, -1)
     t: tuple = ()  # leg charges
     D: tuple = ()  # and their dimensions
-    fusion: str = "hard"  # 'hard', 'meta' -- tuple of meta_fusions, (in the future also None, 'sum')
-    legs: tuple = ()  # sub-legs
+    mf: tuple = (1,)  # (1,) indicates hard-fusion
+    legs: tuple = ()
+    # hf: tuple = _Fusion(s=(1,))  # sub-legs
     _verified: bool = False
 
     def __post_init__(self):
@@ -154,15 +155,7 @@ class Leg:
         'p(p(oo)p(oo))' corresponds to 4 original spaces.
         Two pairs are fused first, then the result gets fused.
         """
-        if isinstance(self.fusion, tuple):  # meta fused
-            tree = self.fusion
-            op = ''.join('m' if x > 1 else 'X' for x in tree)
-            tmp = _str_tree(tree, op).split('X')
-            st = tmp[0]
-            for leg_native, sm in zip(self.legs, tmp[1:]):
-                st = st + leg_native.history() + sm
-            return st
-        hf = self.legs[0]  # hard fusion
+        hf = self.legs[0]
         return _str_tree(hf.tree, hf.op)
 
     def is_fused(self) -> bool:
@@ -181,9 +174,20 @@ class LegMeta(Leg):
     s: int = 1
     t: tuple = ()
     D: tuple = ()
-    mf: tuple = (1,)
+    mf: tuple = (2, 1, 1)
     legs: tuple = ()
     _verified: bool = False
+
+
+    def history(self) -> str:
+        """ history for MetaLeg. """
+        tree = self.mf
+        op = ''.join('m' if x > 1 else 'X' for x in tree)
+        tmp = _str_tree(tree, op).split('X')
+        st = tmp[0]
+        for leg_native, sm in zip(self.legs, tmp[1:]):
+            st = st + leg_native.history() + sm
+        return st
 
 
 def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, nonnegative=False) -> yastn.Leg:
@@ -267,13 +271,12 @@ def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, nonnegative=F
 
 
 def _leg_fusions_need_mask(*legs):
-    legs = list(legs)
-    if all(leg.fusion == 'hard' for leg in legs):
-        return any(legs[0].legs[0] != leg.legs[0] for leg in legs)
-    if all(isinstance(leg.fusion, tuple) for leg in legs):
-        mf = legs[0].fusion
+    if all(isinstance(leg, LegMeta) for leg in legs):
+        mf = legs[0].mf
         return any(_leg_fusions_need_mask(*(mleg.legs[n] for mleg in legs)) for n in range(mf[0]))
-    raise YastnError("Mixing meta- and hard-fused legs")
+    if any(isinstance(leg, LegMeta) for leg in legs):
+        raise YastnError("Mixing meta- and hard-fused legs")
+    return any(legs[0].legs[0] != leg.legs[0] for leg in legs)
 
 
 def leg_product(*legs, t_allowed=None) -> yastn.Leg:
@@ -344,11 +347,9 @@ def legs_union(*legs) -> yastn.Leg:
     legs = list(legs)
     if len(legs) == 1:
         return legs.pop()
-    if all(leg.fusion == 'hard' for leg in legs):
-        return _legs_union(*legs)
-    if all(isinstance(leg.fusion, tuple) for leg in legs):
-        mf = legs[0].fusion
-        if any(mf != leg.fusion for leg in legs):
+    if all(isinstance(leg, LegMeta) for leg in legs):
+        mf = legs[0].mf
+        if any(mf != leg.mf for leg in legs):
             raise YastnError('Meta-fusions do not match.')
         new_nlegs = tuple(_legs_union(*(mleg.legs[n] for mleg in legs)) for n in range(mf[0]))
         nsym = legs[0].sym.NSYM
@@ -356,7 +357,10 @@ def legs_union(*legs) -> yastn.Leg:
         Dt = [tuple(leg[x[n * nsym: (n + 1) * nsym]] for n, leg in enumerate(new_nlegs)) for x in t]
         D = tuple(np.prod(Dt, axis=1, dtype=np.int64).tolist())
         return replace(legs[0], t=t, D=D, legs=new_nlegs)
-    raise YastnError('All arguments of legs_union should have consistent fusions.')
+    if any(isinstance(leg, LegMeta) for leg in legs):
+        raise YastnError('All arguments of legs_union should have consistent fusions.')
+    return _legs_union(*legs)
+
 
 
 def _legs_union(*legs) -> yastn.Leg:

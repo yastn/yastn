@@ -24,7 +24,7 @@ import numpy as np
 from .tensor import Tensor, YastnError
 from .tensor._auxliary import _struct, _config, _slc, _clear_axes, _unpack_legs
 from .tensor._merging import _Fusion, _embed_tensor, _combine_hfs_sum
-from .tensor._legs import Leg, legs_union, _leg_fusions_need_mask
+from .tensor._legs import Leg, LegMeta, legs_union, _leg_fusions_need_mask
 from .tensor._tests import _test_can_be_combined
 from .backend import backend_np
 from .sym import sym_none, sym_U1, sym_Z2, sym_Z3, sym_U1xU1, sym_U1xU1xZ2
@@ -315,7 +315,7 @@ def eye(config=None, legs=(), isdiag=True, **kwargs) -> yastn.Tensor:
     if len(legs) == 1:
         legs = (legs[0], legs[0].conj())
     legs = legs[:2]  # in case more then 2 legs are provided
-    if any(leg.fusion != 'hard' for leg in legs):
+    if any(isinstance(leg, LegMeta) for leg in legs):
         raise YastnError("eye() does not support 'meta'-fused legs")
     tmp = _fill(config=config, legs=legs, val='zeros', **kwargs)
     for t, D in zip(tmp.struct.t, tmp.struct.D):

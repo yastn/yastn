@@ -102,12 +102,11 @@ def _unpack_legs(legs):
     """ Return native legs and mfs. """
     ulegs, mfs = [], []
     for leg in legs:
-        if isinstance(leg.fusion, tuple):  # meta-fused
+        mfs.append(leg.mf)
+        if leg.mf[0] > 1:  # meta-fused
             ulegs.extend(leg.legs)
-            mfs.append(leg.fusion)
         else:  # _Leg
             ulegs.append(leg)
-            mfs.append((1,))
     return tuple(ulegs), tuple(mfs)
 
 
