@@ -23,7 +23,7 @@ from ._merging import _merge_to_matrix, _meta_unmerge_matrix, _unmerge
 from ._merging import _Fusion, _leg_struct_trivial
 
 __all__ = ['qr', 'norm', 'entropy', 'truncation_mask', 'truncation_mask_multiplets',
-           'svd', 'svd_with_truncation', 'svd_arnoldi', 'eigh', 'eigh_with_truncation']
+           'svd', 'svd_with_truncation', 'eigh', 'eigh_with_truncation']
 
 
 def norm(a, p='fro') -> Number:
@@ -182,9 +182,9 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         data = a.config.backend.move_to(data, device='cpu')
 
     minD = tuple(min(ds) for ds in struct.D)
-    if policy == 'lowrank':
+    if policy == 'lowrank' or policy == 'arnoldi':
         if 'D_block' not in kwargs:
-            raise YastnError("lowrank policy in svd requires passing argument D_block.")
+            raise YastnError(policy + " policy in svd requires passing argument D_block.")
         D_block = kwargs['D_block']
         if not isinstance(D_block, dict):
             minD = tuple(min(D_block, d) for d in minD)
@@ -203,8 +203,10 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         Sdata = a.config.backend.svdvals(data, meta, sizes[1])
     elif compute_uv and policy == 'lowrank':
         Udata, Sdata, Vdata = a.config.backend.svd_lowrank(data, meta, sizes, **kwargs)
+    elif compute_uv and policy == 'arnoldi':
+        Udata, Sdata, Vdata = a.config.backend.svd_arnoldi(data, meta, sizes)
     else:
-        raise YastnError('svd() policy should in (`lowrank`, `fullrank`). compute_uv == False only works with `fullrank`')
+        raise YastnError('svd() policy should in (`arnoldi`, `lowrank`, `fullrank`). compute_uv == False only works with `fullrank`')
 
     if svd_on_cpu:
         Sdata = a.config.backend.move_to(Sdata, device=device)
@@ -240,92 +242,6 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
 
     U = U.moveaxis(source=-1, destination=Uaxis)
     V = V.moveaxis(source=0, destination=Vaxis)
-    return U, S, V
-
-def svd_arnoldi(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, fix_signs=False, **kwargs) -> tuple[yastn.Tensor, yastn.Tensor, yastn.Tensor] | yastn.Tensor:
-    r"""
-    Split tensor into :math:`a = U S V` using exact singular value decomposition (SVD),
-    where the columns of `U` and the rows of `V` form orthonormal bases
-    and `S` is a positive and diagonal matrix.
-
-    Parameters
-    ----------
-    axes: tuple[int, int] | tuple[Sequence[int], Sequence[int]]
-        Specify two groups of legs between which to perform SVD, as well as
-        their final order.
-
-    sU: int
-        Signature of the new leg in U; equal to 1 or -1. The default is 1.
-        V is going to have the opposite signature on the connecting leg.
-
-    nU: bool
-        Whether or not to attach the charge of  `a` to `U`.
-        Otherwise it is attached to `V`. The default is True.
-
-    Uaxis, Vaxis: int
-        Specify which leg of U and V tensors are connecting with S. By default,
-        it is the last leg of U and the first of V, in which case a = U @ S @ V.
-
-    fix_signs: bool
-        Whether or not to fix phases in `U` and `V`,
-        so that the largest element in each column of `U` is positive.
-        Provide uniqueness of decomposition for non-degenerate cases.
-        The default is False.
-
-    kwargs: 
-        `D_block': dict or int
-
-    Returns
-    -------
-    U, S, V or S
-    """
-    _test_axes_all(a, axes)
-    lout_l, lout_r = _clear_axes(*axes)
-    axes = _unpack_axes(a.mfs, lout_l, lout_r)
-
-    data, struct, slices, ls_l, ls_r = _merge_to_matrix(a, axes)
-
-    minD = tuple(min(ds) for ds in struct.D)
-    if 'D_block' not in kwargs:
-        raise YastnError("svd arnoldi requires passing argument D_block.")
-    D_block = kwargs['D_block']
-    if not isinstance(D_block, dict):
-        minD = tuple(min(D_block, d) for d in minD)
-    else:
-        nsym = a.config.sym.NSYM
-        st = [x[nsym:] for x in struct.t] if nU else [x[:nsym] for x in struct.t]
-        minD = tuple(min(D_block.get(t, 0), d) for t, d in zip(st, minD))
-
-    meta, Ustruct, Uslices, Sstruct, Sslices, Vstruct, Vslices = _meta_svd(a.config, struct, slices, minD, sU, nU)
-    sizes = tuple(x.size for x in (Ustruct, Sstruct, Vstruct))
-
-    Udata, Sdata, Vdata = a.config.backend.svd_arnoldi(data, meta, sizes)
-
-    if fix_signs:
-        Udata, Vdata = a.config.backend.fix_svd_signs(Udata, Vdata, meta)
-
-    ls_s = _leg_struct_trivial(Sstruct, axis=0)
-
-    Smfs = ((1,), (1,))
-    Shfs = (_Fusion(s=(-sU,)), _Fusion(s=(sU,)))
-    S = a._replace(struct=Sstruct, slices=Sslices, data=Sdata, mfs=Smfs, hfs=Shfs)
-
-    Us = tuple(a.struct.s[ii] for ii in axes[0]) + (sU,)
-    Umeta_unmerge, Ustruct, Uslices = _meta_unmerge_matrix(a.config, Ustruct, Uslices, ls_l, ls_s, Us)
-    Udata = _unmerge(a.config, Udata, Umeta_unmerge)
-    Umfs = tuple(a.mfs[ii] for ii in lout_l) + ((1,),)
-    Uhfs = tuple(a.hfs[ii] for ii in axes[0]) + (_Fusion(s=(sU,)),)
-    U = a._replace(struct=Ustruct, slices=Uslices, data=Udata, mfs=Umfs, hfs=Uhfs)
-
-    Vs = (-sU,) + tuple(a.struct.s[ii] for ii in axes[1])
-    Vmeta_unmerge, Vstruct, Vslices = _meta_unmerge_matrix(a.config, Vstruct, Vslices, ls_s, ls_r, Vs)
-    Vdata = _unmerge(a.config, Vdata, Vmeta_unmerge)
-    Vmfs = ((1,),) + tuple(a.mfs[ii] for ii in lout_r)
-    Vhfs = (_Fusion(s=(-sU,)),) + tuple(a.hfs[ii] for ii in axes[1])
-    V = a._replace(struct=Vstruct, slices=Vslices, data=Vdata, mfs=Vmfs, hfs=Vhfs)
-
-    U = U.move_leg(source=-1, destination=Uaxis)
-    V = V.move_leg(source=0, destination=Vaxis)
     return U, S, V
 
 def _meta_svd(config, struct, slices, minD, sU, nU):
