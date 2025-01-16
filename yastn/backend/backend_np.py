@@ -291,9 +291,14 @@ def svd_lowrank(data, meta, sizes, ncv=None, which='LM', maxiter=None, solver='a
     Vdata = np.empty((sizes[2],), dtype=data.dtype)
     for (sl, D, slU, DU, slS, slV, DV) in meta:
         k = slS[1] - slS[0]
-        if k < min(D) - 1 and min(D) * max(D) > 4000:  # the second condition is  heuristic estimate when performing dense svd should be faster.
-            U, S, V = scipy.sparse.linalg.svds(data[slice(*sl)].reshape(D), k=k, ncv=ncv,
-                                               which=which, maxiter=maxiter, solver=solver)
+        if k < min(D) - 1 and D[0] * D[1] > 5000:
+            # the second condition is heuristic estimate when performing dense svd should be faster.
+            try:
+                U, S, V = scipy.sparse.linalg.svds(data[slice(*sl)].reshape(D), k=k, ncv=min(5 * k, min(D) - 1),
+                                                   which='LM', maxiter=20 * min(D), solver='arpack')
+            except scipy.sparse.linalg.ArpackError:
+                U, S, V = scipy.sparse.linalg.svds(data[slice(*sl)].reshape(D), k=k,
+                                                   which='LM', maxiter=20 * k, solver='propack')
             ord = np.argsort(-S)
             U, S, V = U[:, ord], S[ord], V[ord, :]
         else:

@@ -52,7 +52,7 @@ def running_ave(history, window_size=5):
 class NoFixedPointError(Exception):
     def __init__(self, code):
         super().__init__("No FixedPoint found")  # Pass message to the base class
-        self.code = code                         # Add a custom attribute for error codes
+        self.code = code          				 # Add a custom attribute for error codes
 
 # -----------simulataneous optim ---------
 def env_T_gauge(config, T_old, T_new):
@@ -107,12 +107,12 @@ def env_T_gauge(config, T_old, T_new):
             zero_modes.append(zero_mode)
     return zero_modes
     # if len(zero_modes) == 0:
-    #   return None
+    # 	return None
 
     # cs = find_coeff(zero_modes, zero_modes[0].dtype)
     # zero_mode = zeros(zero_modes[0].config, legs=zero_modes[0].get_legs(), dtype=zero_modes[0].dtype)
     # for i in range(len(cs)):
-    #   zero_mode += cs[i] * zero_modes[i]
+    # 	zero_mode += cs[i] * zero_modes[i]
     # return zero_mode
 
 def real_to_complex(z):      # real vector of length 2n -> complex of length n
@@ -149,9 +149,9 @@ def find_coeff(env_old_local, env_local, zero_modes_dict, dtype=torch.complex128
                 unitaries[0] = unitaries[0]/phase
 
                 # fixed_C = tensordot(
-                #   tensordot(unitaries[1], C_new, axes=(0, 0), conj=(1, 0)),
-                #   unitaries[0],
-                #   axes=(1, 0),
+                # 	tensordot(unitaries[1], C_new, axes=(0, 0), conj=(1, 0)),
+                # 	unitaries[0],
+                # 	axes=(1, 0),
                 # )
 
             if dirn == "bl":
@@ -169,9 +169,9 @@ def find_coeff(env_old_local, env_local, zero_modes_dict, dtype=torch.complex128
                 unitaries[2] = unitaries[2]*phase
 
                 # fixed_C = tensordot(
-                #   tensordot(unitaries[2], C_new, axes=(0, 0), conj=(1, 0)),
-                #   unitaries[1],
-                #   axes=(1, 0),
+                # 	tensordot(unitaries[2], C_new, axes=(0, 0), conj=(1, 0)),
+                # 	unitaries[1],
+                # 	axes=(1, 0),
                 # )
 
             if dirn == "br":
@@ -189,9 +189,9 @@ def find_coeff(env_old_local, env_local, zero_modes_dict, dtype=torch.complex128
                 unitaries[3] = unitaries[3]*phase
 
                 # fixed_C = tensordot(
-                #   tensordot(unitaries[3], C_new, axes=(0, 0), conj=(1, 0)),
-                #   unitaries[2],
-                #   axes=(1, 0),
+                # 	tensordot(unitaries[3], C_new, axes=(0, 0), conj=(1, 0)),
+                # 	unitaries[2],
+                # 	axes=(1, 0),
                 # )
 
             if dirn == "tr":

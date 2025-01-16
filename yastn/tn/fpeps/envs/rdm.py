@@ -111,9 +111,9 @@ def _append_vec_bl_open(
 def _normalize_and_regularize_rdm(rdm, order : str="interleaved", pos_def=False, who=None, verbosity=0, **kwargs):
     r"""
     Regularize reduced density matrix (RDM).
-    
+
     Args:
-        order: Index convention of RDM. `"interleaved"` for `[s0, s0', s1, s1', ...]` 
+        order: Index convention of RDM. `"interleaved"` for `[s0, s0', s1, s1', ...]`
         where s_i,s_i' is bra,ket pair. `"braket"` for `[s0,s1,...,s0',s1',...]` with all "bra" indices first
         followed by "ket" indices.
     """
@@ -134,7 +134,7 @@ def _normalize_and_regularize_rdm(rdm, order : str="interleaved", pos_def=False,
     # turn RDM into a matrix
     rdm_asym = 0.5 * (rdm - rdm.conj().transpose(axes=conj_order))
     rdm = 0.5 * (rdm + rdm.conj().transpose(axes=conj_order))
-    
+
     # given enforced symmetry of rdm, the trace has to be real
     rdm_norm= rdm.trace(axes=trace_order).to_number().real
 
@@ -179,7 +179,7 @@ def trace_aux(rdm : Tensor, axis : int, swap : bool = False) -> Tensor:
         rdm = rdm.trace(axes=(axis + 1, axis + 3))  # ... p p' ...
     return rdm
 
-  
+
 # def f_ordered(s0, s1) -> bool:
 #     """Check if (s0, s1) appear in fermionic order.
 #     The convention is consistent with the PEPS diagrams in https://arxiv.org/abs/0912.0646.
@@ -210,7 +210,7 @@ def op_order(Oi, Oj, ordered, fermionic=True):
     Oj = Oj.add_leg(s=-1)
 
     Oi = Oi.swap_gate(axes=(1, 2))
-     #    |        
+     #    |
      #  --+-----   |
      # |  |    |   |
      # |--Oi   ---Oj
@@ -258,11 +258,11 @@ def rdm1x2(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scala
     r"""
     Contract environment and on-site tensors of 1x2 (horizontal) patch,
     with `s0` the leftmost Site, to reduced density matrix::
-        
+
         C T  T  C
-        T s0 s1 T    
+        T s0 s1 T
         C T  T  C
-        
+
     The index convention for reduced density matrix is `[s0, s0', s1, s1']`,
     where s_i,s_i' is bra,ket pair.
 
@@ -315,12 +315,12 @@ def rdm2x1(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scala
     r"""
     Contract environment and on-site tensors of 2x1 (vertical) patch,
     with `s0` the top-most Site, to reduced density matrix::
-        
+
         C T  C
-        T s0 T 
-        T s1 T    
+        T s0 T
+        T s1 T
         C T  C
-        
+
     The index convention for reduced density matrix is `[s0, s0', s1, s1']`,
     where s_i,s_i' is bra,ket pair.
 
@@ -376,12 +376,12 @@ def rdm2x2(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scala
     r"""
     Contract environment and on-site tensors of 2x2 patch,
     with `s0` the upper-left Site, to reduced density matrix::
-        
+
         C T  T  C
-        T s0 s2 T 
-        T s1 s3 T    
+        T s0 s2 T
+        T s1 s3 T
         C T  T  C
-        
+
     The index convention for reduced density matrix is `[s0, s0', ..., s3, s3']`,
     where s_i,s_i' is bra,ket pair.
 
@@ -465,12 +465,12 @@ def rdm2x2_diagonal(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tens
     r"""
     Contract environment and on-site tensors of 2x2 patch,
     with `s0` the upper-left Site, to reduced density matrix::
-        
+
         C T  T  C
-        T s0 x  T 
-        T x  s3 T    
+        T s0 x  T
+        T x  s3 T
         C T  T  C
-        
+
     The index convention for reduced density matrix is `[s0, s0', s3, s3']`,
     where s_i,s_i' is bra,ket pair.
 
@@ -540,12 +540,12 @@ def rdm2x2_anti_diagonal(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple
     r"""
     Contract environment and on-site tensors of 2x2 patch,
     with `s0` the upper-left Site, to reduced density matrix::
-        
+
         C T  T  C
-        T x  s2 T 
-        T s1 x  T    
+        T x  s2 T
+        T s1 x  T
         C T  T  C
-        
+
     The index convention for reduced density matrix is `[s1, s1', s2, s2']`,
     where s_i,s_i' is bra,ket pair.
 
@@ -620,7 +620,7 @@ def measure_rdm_1site(s0 : Site, psi : Peps, env : EnvCTM, op : Union[Tensor, Se
         s0: site
         psi: PEPS wavefunction
         env: CTM environment
-        op: one or more observables 
+        op: one or more observables
 
     Returns:
         expectation value or a list of expectations values of provided `op`.
@@ -635,18 +635,18 @@ def measure_rdm_1site(s0 : Site, psi : Peps, env : EnvCTM, op : Union[Tensor, Se
 
 def measure_rdm_nn(s0 : Site, dirn : str, psi : Peps, env : EnvCTM, op : Union[Sequence[Tensor], Sequence[Sequence[Tensor]]])->Union[Scalar, Sequence[Scalar]]:
     """
-    Measure one or more observables on 1x2 or 2x1 patch with site `s0` 
+    Measure one or more observables on 1x2 or 2x1 patch with site `s0`
     being leftmost or topmost respectively.
 
     Observables are expected to be one or more pairs of operators/Tensors, i.e.::
 
-        op = (Tensor, Tensor) 
+        op = (Tensor, Tensor)
 
-        or 
+        or
 
         op = [(Tensor,Tensor), (Tensor,Tensor), ...]
 
-    with first operator acting always on site `s0`. Operators are applied from "right-to-left", 
+    with first operator acting always on site `s0`. Operators are applied from "right-to-left",
     i.e. the second operator `op[1]` is applied first, which might matter for fermionic operators.
 
     Args:
@@ -654,7 +654,7 @@ def measure_rdm_nn(s0 : Site, dirn : str, psi : Peps, env : EnvCTM, op : Union[S
         dirn: 'h' for horizontal 1x2 patch (see :func:`rdm1x2`) and 'v' for vertical 2x1 patch (see :func:`rdm2x1`)
         psi: PEPS wavefunction
         env: CTM environment
-        op: one or more observables 
+        op: one or more observables
 
     Returns:
         Expectation value or a list of expectations values of provided `op`.
@@ -673,7 +673,7 @@ def measure_rdm_nn(s0 : Site, dirn : str, psi : Peps, env : EnvCTM, op : Union[S
         fermionic = True if (O0.n[0] and O1.n[0]) else False
         O0, O1 = op_order(O0, O1, ordered, fermionic)
         return ncon([O0, O1, rdm], ncon_order).to_number()
-    
+
     if isinstance(op[0],Tensor) and isinstance(op[1],Tensor):
         return _eval_op(op[0],op[1])
     return [ _eval_op(_op[0],_op[1]) for _op in op ]
@@ -685,22 +685,22 @@ def measure_rdm_2x2(s0 : Site, psi : Peps, env : EnvCTM, op : Union[Sequence[Ten
 
     Observables are expected to be one or more quadruples of operators/Tensors, i.e.::
 
-        op = (Tensor, Tensor, Tensor, Tensor) 
+        op = (Tensor, Tensor, Tensor, Tensor)
 
-        or 
+        or
 
         op = [(Tensor, Tensor, Tensor, Tensor), (Tensor, Tensor, Tensor, Tensor), ...]
 
     with first operator acting on site `s0`, second on site `s1`, etc. according to :func:`rdm2x2`
     index ordering convention.
-    
+
     NOTE: currently support only bosonic operators, i.e. with even parity.
 
     Args:
         s0: site
         psi: PEPS wavefunction
         env: CTM environment
-        op: one or more observables 
+        op: one or more observables
 
     Returns:
         Expectation value or a list of expectations values of provided `op`.
@@ -713,7 +713,7 @@ def measure_rdm_2x2(s0 : Site, psi : Peps, env : EnvCTM, op : Union[Sequence[Ten
     ncon_order = ((1, 2), (3, 4), (5, 6), (7, 8), (2, 1, 4, 3, 6, 5, 8, 7))
     def _eval_op(O0, O1, O2, O3):
         return ncon([O0, O1, O2, O3, rdm], ncon_order).to_number()
-    
+
     if len(op)==4 and all([isinstance(_op,Tensor) for _op in op]):
         return _eval_op(*tuple(op))
     return [ _eval_op(*tuple(_op)) for _op in op ]

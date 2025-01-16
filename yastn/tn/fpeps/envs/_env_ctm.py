@@ -590,7 +590,6 @@ class EnvCTM(Peps):
         -------
         proj: Peps structure loaded with CTM projectors related to all lattice site.
         """
-
         if all(s not in opts_svd for s in ('tol', 'tol_block')):
             opts_svd['tol'] = 1e-14
         if method not in ('1site', '2site'):
@@ -834,6 +833,8 @@ def update_2site_projectors_(proj, site, dirn, env, opts_svd, **kwargs):
     if None in sites:
         return
 
+    use_qr = kwargs.get("use_qr", True)
+
     tl, tr, bl, br = sites
 
     cor_tl = env[tl].l @ env[tl].tl @ env[tl].t
@@ -853,32 +854,31 @@ def update_2site_projectors_(proj, site, dirn, env, opts_svd, **kwargs):
     cor_br = cor_br.fuse_legs(axes=((0, 2), (1, 3)))
 
     if ('l' in dirn) or ('r' in dirn):
-        cor_tt = cor_tl @ cor_tr # b(left) b(right)
-        cor_bb = cor_br @ cor_bl # t(right) t(left)
+        cor_tt = cor_tl @ cor_tr  # b(left) b(right)
+        cor_bb = cor_br @ cor_bl  # t(right) t(left)
 
-    use_qr= kwargs.get("use_qr",True)
     if 'r' in dirn:
-        _, r_t = qr(cor_tt, axes=(0, 1)) if use_qr else None, cor_tt
-        _, r_b = qr(cor_bb, axes=(1, 0)) if use_qr else None, cor_bb.T
+        _, r_t = qr(cor_tt, axes=(0, 1)) if use_qr else (None, cor_tt)
+        _, r_b = qr(cor_bb, axes=(1, 0)) if use_qr else (None, cor_bb.T)
         proj[tr].hrb, proj[br].hrt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
 
     if 'l' in dirn:
-        _, r_t = qr(cor_tt, axes=(1, 0)) if use_qr else None, cor_tt.T
-        _, r_b = qr(cor_bb, axes=(0, 1)) if use_qr else None, cor_bb
+        _, r_t = qr(cor_tt, axes=(1, 0)) if use_qr else (None, cor_tt.T)
+        _, r_b = qr(cor_bb, axes=(0, 1)) if use_qr else (None, cor_bb)
         proj[tl].hlb, proj[bl].hlt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
 
     if ('t' in dirn) or ('b' in dirn):
-        cor_ll = cor_bl @ cor_tl # l(bottom) l(top)
-        cor_rr = cor_tr @ cor_br # r(top) r(bottom)
+        cor_ll = cor_bl @ cor_tl  # l(bottom) l(top)
+        cor_rr = cor_tr @ cor_br  # r(top) r(bottom)
 
     if 't' in dirn:
-        _, r_l = qr(cor_ll, axes=(0, 1)) if use_qr else None, cor_ll
-        _, r_r = qr(cor_rr, axes=(1, 0)) if use_qr else None, cor_rr.T
+        _, r_l = qr(cor_ll, axes=(0, 1)) if use_qr else (None, cor_ll)
+        _, r_r = qr(cor_rr, axes=(1, 0)) if use_qr else (None, cor_rr.T)
         proj[tl].vtr, proj[tr].vtl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
 
     if 'b' in dirn:
-        _, r_l = qr(cor_ll, axes=(1, 0)) if use_qr else None, cor_ll.T
-        _, r_r = qr(cor_rr, axes=(0, 1)) if use_qr else None, cor_rr
+        _, r_l = qr(cor_ll, axes=(1, 0)) if use_qr else (None, cor_ll.T)
+        _, r_r = qr(cor_rr, axes=(0, 1)) if use_qr else (None, cor_rr)
         proj[bl].vbr, proj[br].vbl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
 
 
