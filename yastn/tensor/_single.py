@@ -92,7 +92,7 @@ def detach(a) -> yastn.Tensor:
 
 def grad(a) -> yastn.Tensor:
     """
-    TODO ADD description
+    Calculate the gradient of tensor elements after .backward() is called on the scalar result.
     """
     data = a.config.backend.grad(a._data)
     return a._replace(data=data)

@@ -303,8 +303,6 @@ def __getitem__(a, key) -> numpy.ndarray | torch.tensor:
     except ValueError as exc:
         raise YastnError('Tensor does not have block specify by key.') from exc
     x = a._data[slice(*a.slices[ind].slcs[0])]
-
-    # TODO this should be reshape called from backend ?
     return x if a.isdiag else x.reshape(a.struct.D[ind])
 
 def __contains__(a, key) -> bool:
