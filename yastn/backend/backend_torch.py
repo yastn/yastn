@@ -625,8 +625,8 @@ class kernel_transpose_dot_sum(torch.autograd.Function):
         if dtype != Bdata.dtype:
             Bdata = Bdata.to(dtype=dtype)
         Cdata = torch.zeros(Dsize, dtype=dtype, device=Adata.device)
-        At = {t: Adata[slice(*sl)].view(Di).permute(Aorder).reshape(Df) for (t, sl, Di, Df) in Areshape}
-        Bt = {t: Bdata[slice(*sl)].view(Di).permute(Border).reshape(Df) for (t, sl, Di, Df) in Breshape}
+        At = tuple(Adata[slice(*sl)].view(Di).permute(Aorder).reshape(Dl, Dr) for sl, Di, Dl, Dr in Areshape)
+        Bt = tuple(Bdata[slice(*sl)].view(Di).permute(Border).reshape(Dl, Dr) for sl, Di, Dl, Dr in Breshape)
 
         for (sl, Dslc, list_tab) in meta_dot:
             tmp = Cdata[slice(*sl)].view(Dslc)
@@ -660,10 +660,10 @@ class kernel_transpose_dot_sum(torch.autograd.Function):
         inv_Aorder = tuple(np.argsort(Aorder))
         inv_Border = tuple(np.argsort(Border))
 
-        At = {t: Adata[slice(*sl)].view(Di).permute(Aorder).reshape(Df) for (t, sl, Di, Df) in Areshape}
-        Bt = {t: Bdata[slice(*sl)].view(Di).permute(Border).reshape(Df) for (t, sl, Di, Df) in Breshape}
-        At_b = {t: torch.zeros_like(v) for t, v in At.items()}
-        Bt_b = {t: torch.zeros_like(v) for t, v in Bt.items()}
+        At = tuple(Adata[slice(*sl)].view(Di).permute(Aorder).reshape(Dl, Dr) for sl, Di, Dl, Dr in Areshape)
+        Bt = tuple(Bdata[slice(*sl)].view(Di).permute(Border).reshape(Dl, Dr) for sl, Di, Dl, Dr in Breshape)
+        At_b = [torch.zeros_like(v) for v in At]
+        Bt_b = [torch.zeros_like(v) for v in Bt]
 
         for (sl, Dslc, list_tab) in meta_dot:
             tmp = Cdata_b[slice(*sl)].view(Dslc)
@@ -672,14 +672,14 @@ class kernel_transpose_dot_sum(torch.autograd.Function):
                 Bt_b[tb] += At[ta].adjoint() @ tmp
 
         Adata_b = torch.zeros_like(Adata)
-        for (t, sl, Di, _) in Areshape:
+        for v, (sl, Di, _, _) in zip(At_b, Areshape):
             inv_Di = tuple(Di[n] for n in Aorder)
-            Adata_b[slice(*sl)].reshape(Di)[:] = At_b[t].reshape(inv_Di).permute(inv_Aorder)
+            Adata_b[slice(*sl)].reshape(Di)[:] = v.reshape(inv_Di).permute(inv_Aorder)
 
         Bdata_b = torch.zeros_like(Bdata)
-        for (t, sl, Di, _) in Breshape:
+        for v, (sl, Di, _, _) in zip(Bt_b, Breshape):
             inv_Di = tuple(Di[n] for n in Border)
-            Bdata_b[slice(*sl)].reshape(Di)[:] = Bt_b[t].reshape(inv_Di).permute(inv_Border)
+            Bdata_b[slice(*sl)].reshape(Di)[:] = v.reshape(inv_Di).permute(inv_Border)
 
         return Adata_b, Bdata_b, None, None, None, None, None, None
 
