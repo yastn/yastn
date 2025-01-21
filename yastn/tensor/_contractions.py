@@ -265,83 +265,169 @@ def _meta_tensordot_fc(struct_a, slices_a, struct_b, slices_b):
     return meta, struct_c, slices_c
 
 
+# @lru_cache(maxsize=1024)
+# def _meta_tensordot_nf(struct_a, slices_a, struct_b, slices_b, ind_a, ind_b, nout_a, nin_a, nin_b, nout_b):
+#     nsym = len(struct_a.n)
+#     if ind_a is None:
+#         ta = struct_a.t
+#         Da = struct_a.D
+#     else:
+#         ta = [struct_a.t[ii] for ii in ind_a]
+#         Da = [struct_a.D[ii] for ii in ind_a]
+#         slices_a = [slices_a[ii] for ii in ind_a]
+
+#     lta, ndima = len(ta), len(struct_a.s)
+#     ata = np.array(ta, dtype=np.int64).reshape((lta, ndima, nsym))
+#     aDa = np.array(Da, dtype=np.int64).reshape((lta, ndima))
+#     tao = ata[:, nout_a, :].reshape(lta, len(nout_a) * nsym).tolist()
+#     tac = ata[:, nin_a, :].reshape(lta, len(nin_a) * nsym).tolist()
+#     Dao = aDa[:, nout_a]
+#     Dac = aDa[:, nin_a]
+#     Daop = np.prod(Dao, axis=1, dtype=np.int64).tolist()
+#     Dao = Dao.tolist()
+#     Dacp = np.prod(Dac, axis=1, dtype=np.int64).tolist()
+#     Dac = Dac.tolist()
+#     struct_a_resorted = sorted(((tuple(tc), tuple(Dc), tuple(to), taa, Dop, tuple(Do))
+#                                 for tc, Dc, to, taa, Dop, Do in zip(tac, Dac, tao, ta, Daop, Dao)))
+#     reshape_a = tuple((taa, sl.slcs[0], D, (Dop, Dcp)) for taa, sl, D, Dop, Dcp in zip(ta, slices_a, Da, Daop, Dacp))
+
+#     if ind_b is None:
+#         tb = struct_b.t
+#         Db = struct_b.D
+#     else:
+#         tb = [struct_b.t[ii] for ii in ind_b]
+#         Db = [struct_b.D[ii] for ii in ind_b]
+#         slices_b = [slices_b[ii] for ii in ind_b]
+#     ltb, ndimb = len(tb), len(struct_b.s)
+#     atb = np.array(tb, dtype=np.int64).reshape((ltb, ndimb, nsym))
+#     aDb = np.array(Db, dtype=np.int64).reshape((ltb, ndimb))
+#     tbo = atb[:, nout_b, :].reshape(ltb, len(nout_b) * nsym).tolist()
+#     tbc = atb[:, nin_b, :].reshape(ltb, len(nin_b) * nsym).tolist()
+#     Dbo = aDb[:, nout_b]
+#     Dbc = aDb[:, nin_b]
+#     Dbop = np.prod(Dbo, axis=1, dtype=np.int64).tolist()
+#     Dbo = Dbo.tolist()
+#     Dbcp = np.prod(Dbc, axis=1, dtype=np.int64).tolist()
+#     Dbc = Dbc.tolist()
+#     struct_b_resorted = sorted((tuple(tc), tuple(Dc), tuple(to), tbb, Dop, tuple(Do))
+#                                for tc, Dc, to, tbb, Dop, Do in zip(tbc, Dbc, tbo, tb, Dbop, Dbo))
+#     reshape_b = tuple((t, sl.slcs[0], D, (Dcp, Dop)) for t, sl, D, Dcp, Dop in zip(tb, slices_b, Db, Dbcp, Dbop))
+
+#     struct_a_resorted = groupby(struct_a_resorted, key=itemgetter(0, 1))
+#     struct_b_resorted = groupby(struct_b_resorted, key=itemgetter(0, 1))
+
+#     meta = []
+#     last_tc = None
+#     for ((tca, Dca), group_ta), ((tcb, Dcb), group_tb) in zip(struct_a_resorted, struct_b_resorted):
+#         assert tca == tcb, "Sanity check."
+#         assert last_tc != tcb, "Sanity check."
+#         last_tc = tcb
+#         if Dca != Dcb:
+#             raise YastnError('Bond dimensions do not match.')
+#         for (tca, Dca, toa, taa, Dopa, Doa), (tcb, Dcb, tob, tbb, Dopb, Dob) in product(group_ta, group_tb):
+#             meta.append((toa + tob, Doa + Dob, Dopa * Dopb, (Dopa, Dopb), taa, tbb))
+
+#     meta = sorted(meta)
+#     t_c, D_c, slices_c, meta_dot = [], [], [], []
+#     start = 0
+#     for (t, D, Dp, Dslc), group in groupby(meta, key=itemgetter(0, 1, 2, 3)):
+#         t_c.append(t)
+#         D_c.append(D)
+#         stop = start + Dp
+#         slices_c.append(_slc(((start, stop),), D, Dp))
+#         meta_dot.append(((start, stop), Dslc, [mt[4:] for mt in group]))
+#         start = stop
+#     t_c = tuple(t_c)
+#     D_c = tuple(D_c)
+#     slices_c = tuple(slices_c)
+#     s_c = tuple(struct_a.s[i] for i in nout_a) + tuple(struct_b.s[i] for i in nout_b)
+#     struct_c = _struct(s=s_c, t=t_c, D=D_c, size=start)
+#     return meta_dot, reshape_a, reshape_b, struct_c, slices_c
+
+
 @lru_cache(maxsize=1024)
 def _meta_tensordot_nf(struct_a, slices_a, struct_b, slices_b, ind_a, ind_b, nout_a, nin_a, nin_b, nout_b):
     nsym = len(struct_a.n)
-    if ind_a is None:
-        ta = struct_a.t
-        Da = struct_a.D
-    else:
-        ta = [struct_a.t[ii] for ii in ind_a]
-        Da = [struct_a.D[ii] for ii in ind_a]
-        slices_a = [slices_a[ii] for ii in ind_a]
+
+    ta = struct_a.t if ind_a is None else [struct_a.t[ii] for ii in ind_a]
+    Da = struct_a.D if ind_a is None else [struct_a.D[ii] for ii in ind_a]
+    slices_a = [sl.slcs[0] for sl in slices_a] if ind_a is None else [slices_a[ii].slcs[0] for ii in ind_a]
 
     lta, ndima = len(ta), len(struct_a.s)
     ata = np.array(ta, dtype=np.int64).reshape((lta, ndima, nsym))
     aDa = np.array(Da, dtype=np.int64).reshape((lta, ndima))
-    tao = ata[:, nout_a, :].reshape(lta, len(nout_a) * nsym).tolist()
-    tac = ata[:, nin_a, :].reshape(lta, len(nin_a) * nsym).tolist()
+    tao = ata[:, nout_a, :].reshape(lta, len(nout_a) * nsym)
+    tac = ata[:, nin_a, :].reshape(lta, len(nin_a) * nsym)
     Dao = aDa[:, nout_a]
     Dac = aDa[:, nin_a]
-    Daop = np.prod(Dao, axis=1, dtype=np.int64).tolist()
-    Dao = Dao.tolist()
-    Dacp = np.prod(Dac, axis=1, dtype=np.int64).tolist()
-    Dac = Dac.tolist()
-    struct_a_resorted = sorted(((tuple(tc), tuple(Dc), tuple(to), taa, Dop, tuple(Do))
-                                for tc, Dc, to, taa, Dop, Do in zip(tac, Dac, tao, ta, Daop, Dao)))
-    reshape_a = tuple((taa, sl.slcs[0], D, (Dop, Dcp)) for taa, sl, D, Dop, Dcp in zip(ta, slices_a, Da, Daop, Dacp))
+    Daop = np.prod(Dao, axis=1, dtype=np.int64)
+    Dacp = np.prod(Dac, axis=1, dtype=np.int64)
 
-    if ind_b is None:
-        tb = struct_b.t
-        Db = struct_b.D
-    else:
-        tb = [struct_b.t[ii] for ii in ind_b]
-        Db = [struct_b.D[ii] for ii in ind_b]
-        slices_b = [slices_b[ii] for ii in ind_b]
+    tDac = np.hstack([tac, Dac])
+    unique_tDac, inv_tDac, count_tDac = np.unique(tDac, return_inverse=True, return_counts=True, axis=0)
+    arg_tDac = np.argsort(inv_tDac)
+
+    tb = struct_b.t if ind_b is None else [struct_b.t[ii] for ii in ind_b]
+    Db = struct_b.D if ind_b is None else [struct_b.D[ii] for ii in ind_b]
+    slices_b = [sl.slcs[0] for sl in slices_b] if ind_b is None else [slices_b[ii].slcs[0] for ii in ind_b]
+
     ltb, ndimb = len(tb), len(struct_b.s)
     atb = np.array(tb, dtype=np.int64).reshape((ltb, ndimb, nsym))
     aDb = np.array(Db, dtype=np.int64).reshape((ltb, ndimb))
-    tbo = atb[:, nout_b, :].reshape(ltb, len(nout_b) * nsym).tolist()
-    tbc = atb[:, nin_b, :].reshape(ltb, len(nin_b) * nsym).tolist()
+    tbo = atb[:, nout_b, :].reshape(ltb, len(nout_b) * nsym)
+    tbc = atb[:, nin_b, :].reshape(ltb, len(nin_b) * nsym)
     Dbo = aDb[:, nout_b]
     Dbc = aDb[:, nin_b]
-    Dbop = np.prod(Dbo, axis=1, dtype=np.int64).tolist()
-    Dbo = Dbo.tolist()
-    Dbcp = np.prod(Dbc, axis=1, dtype=np.int64).tolist()
-    Dbc = Dbc.tolist()
-    struct_b_resorted = sorted((tuple(tc), tuple(Dc), tuple(to), tbb, Dop, tuple(Do))
-                               for tc, Dc, to, tbb, Dop, Do in zip(tbc, Dbc, tbo, tb, Dbop, Dbo))
-    reshape_b = tuple((t, sl.slcs[0], D, (Dcp, Dop)) for t, sl, D, Dcp, Dop in zip(tb, slices_b, Db, Dbcp, Dbop))
+    Dbop = np.prod(Dbo, axis=1, dtype=np.int64)
+    Dbcp = np.prod(Dbc, axis=1, dtype=np.int64)
 
-    struct_a_resorted = groupby(struct_a_resorted, key=itemgetter(0, 1))
-    struct_b_resorted = groupby(struct_b_resorted, key=itemgetter(0, 1))
+    tDbc = np.hstack([tbc, Dbc])
+    unique_tDbc, inv_tDbc, count_tDbc = np.unique(tDbc, return_inverse=True, return_counts=True, axis=0)
+    arg_tDbc = np.argsort(inv_tDbc)
 
-    meta = []
-    last_tc = None
-    for ((tca, Dca), group_ta), ((tcb, Dcb), group_tb) in zip(struct_a_resorted, struct_b_resorted):
-        assert tca == tcb, "Sanity check."
-        assert last_tc != tcb, "Sanity check."
-        last_tc = tcb
-        if Dca != Dcb:
-            raise YastnError('Bond dimensions do not match.')
-        for (tca, Dca, toa, taa, Dopa, Doa), (tcb, Dcb, tob, tbb, Dopb, Dob) in product(group_ta, group_tb):
-            meta.append((toa + tob, Doa + Dob, Dopa * Dopb, (Dopa, Dopb), taa, tbb))
+    if not np.array_equal(unique_tDac, unique_tDbc):
+        raise YastnError('Bond dimensions do not match.')
 
-    meta = sorted(meta)
-    t_c, D_c, slices_c, meta_dot = [], [], [], []
-    start = 0
-    for (t, D, Dp, Dslc), group in groupby(meta, key=itemgetter(0, 1, 2, 3)):
-        t_c.append(t)
-        D_c.append(D)
-        stop = start + Dp
-        slices_c.append(_slc(((start, stop),), D, Dp))
-        meta_dot.append(((start, stop), Dslc, [mt[4:] for mt in group]))
-        start = stop
-    t_c = tuple(t_c)
-    D_c = tuple(D_c)
-    slices_c = tuple(slices_c)
+    reshape_a = tuple((t, sl, D, (Dop, Dcp)) for t, sl, D, Dop, Dcp in zip(ta, slices_a, Da, Daop, Dacp))
+    reshape_b = tuple((t, sl, D, (Dcp, Dop)) for t, sl, D, Dcp, Dop in zip(tb, slices_b, Db, Dbcp, Dbop))
+
+    count_ab = count_tDac * count_tDbc
+    sum_count_ab = sum(count_ab)
+    ind_a = np.zeros(sum_count_ab, dtype=np.int64)
+    ind_b = np.zeros(sum_count_ab, dtype=np.int64)
+    start_a, start_b, start_ab = 0, 0, 0
+    for da, db, dab in zip(count_tDac, count_tDbc, count_ab):
+        stop_a, stop_b, stop_ab = start_a + da, start_b + db, start_ab + dab
+        ind_a[start_ab: stop_ab].reshape(da, db)[:, :] = arg_tDac[start_a: stop_a].reshape(da, 1)
+        ind_b[start_ab: stop_ab].reshape(da, db)[:, :] = arg_tDbc[start_b: stop_b].reshape(1, db)
+        start_a, start_b, start_ab = stop_a, stop_b, stop_ab
+
+    tc = np.hstack([tao[ind_a], tbo[ind_b]])
+    utc, uind, invs, cnts = np.unique(tc, return_index=True, return_inverse=True, return_counts=True, axis=0)
+
+    uind_a, uind_b = ind_a[uind], ind_b[uind]
+    uDc = np.hstack([Dao[uind_a], Dbo[uind_b]])
+    uDcp2 = np.column_stack([Daop[uind_a], Dbop[uind_b]])
+
+    c_Dp = np.prod(uDcp2, axis=1, dtype=np.int64).tolist()
+    c_t = tuple(map(tuple, utc.tolist()))
+    c_D = tuple(map(tuple, uDc.tolist()))
+    c_Dp2 = tuple(map(tuple, uDcp2.tolist()))
+    slices_c = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(c_Dp), c_Dp, c_D))
+
+    ind_ab = np.column_stack([ind_a, ind_b])
+    ind_ab = ind_ab[np.argsort(invs)].tolist()
+
+    meta_dot = []
+    start_sl, start_arg = 0, 0
+    for d_sl, D_sl, d_arg in zip(c_Dp, c_Dp2, cnts):
+        stop_sl, stop_arg = start_sl + d_sl, start_arg + d_arg
+        group_tab = [(ta[ia], tb[ib]) for ia, ib in ind_ab[start_arg: stop_arg]]
+        meta_dot.append(((start_sl, stop_sl), D_sl, group_tab))
+        start_sl, start_arg = stop_sl, stop_arg
+
     s_c = tuple(struct_a.s[i] for i in nout_a) + tuple(struct_b.s[i] for i in nout_b)
-    struct_c = _struct(s=s_c, t=t_c, D=D_c, size=start)
+    struct_c = _struct(s=s_c, t=c_t, D=c_D, size=start_sl)
     return meta_dot, reshape_a, reshape_b, struct_c, slices_c
 
 
