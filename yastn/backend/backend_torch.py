@@ -550,7 +550,7 @@ if _torch_version_check("2.0"):
             if dtype != Bdata.dtype:
                 Bdata = Bdata.to(dtype=dtype)
             newdata = torch.zeros(Dsize, dtype=dtype, device=Adata.device)
-            for (slc, Dc, sla, Da, slb, Db, ia, ib) in meta_dot:
+            for (slc, Dc, sla, Da, slb, Db) in meta_dot:
                 newdata[slice(*slc)].view(Dc)[:] = Adata[slice(*sla)].view(Da) @ Bdata[slice(*slb)].view(Db)
             return newdata
 
@@ -558,7 +558,7 @@ if _torch_version_check("2.0"):
         # inputs is a Tuple of all of the inputs passed to forward.
         # output is the output of the forward().
         def setup_context(ctx, inputs, output):
-            Adata, Bdata, meta_dot, Dsize= inputs
+            Adata, Bdata, meta_dot, Dsize = inputs
             ctx.save_for_backward(Adata, Bdata)
             ctx.meta_dot= meta_dot
 
@@ -571,7 +571,7 @@ if _torch_version_check("2.0"):
             meta_dot= ctx.meta_dot
             Adata_b = torch.zeros_like(Adata)
             Bdata_b = torch.zeros_like(Bdata)
-            for (slc, Dc, sla, Da, slb, Db, ia, ib) in meta_dot:
+            for (slc, Dc, sla, Da, slb, Db) in meta_dot:
                 Ab = Adata_b[slice(*sla)].view(Da)
                 Bb = Bdata_b[slice(*slb)].view(Db)
                 Cb = Cdata_b[slice(*slc)].view(Dc)

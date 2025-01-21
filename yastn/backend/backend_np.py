@@ -422,7 +422,7 @@ def vdot(Adata, Bdata, meta):
 def dot(Adata, Bdata, meta_dot, Dsize):
     dtype = np.promote_types(Adata.dtype, Bdata.dtype)
     newdata = np.empty(Dsize, dtype=dtype)
-    for (slc, Dc, sla, Da, slb, Db, ia, ib) in meta_dot:
+    for (slc, Dc, sla, Da, slb, Db) in meta_dot:
         np.dot(Adata[slice(*sla)].reshape(Da),
                Bdata[slice(*slb)].reshape(Db),
                out=newdata[slice(*slc)].reshape(Dc))

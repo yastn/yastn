@@ -205,16 +205,16 @@ def _meta_tensordot_f2m(struct_a, slices_a, struct_b, slices_b):
     meta = []
     for (tar, ta, Da, sla), (tbl, tb, Db, slb) in zip(struct_a_resorted, struct_b_resorted):
         assert tar == tbl, "Sanity check."
-        meta.append((ta[:nsym] + tb[nsym:], (Da[0], Db[1]), sla, Da, slb, Db, tar, tbl))
+        meta.append((ta[:nsym] + tb[nsym:], (Da[0], Db[1]), sla, Da, slb, Db))
     meta = sorted(meta)
     t_c = tuple(x[0] for x in meta)
     D_c = tuple(x[1] for x in meta)
     Dp_c = tuple(D[0] * D[1] for D in D_c)
     slices_c = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dp_c), Dp_c, D_c))
-    meta = tuple((sl.slcs[0], *mt[1:]) for sl, mt in zip(slices_c, meta))
+    meta_dot = tuple((sl.slcs[0], *mt[1:]) for sl, mt in zip(slices_c, meta))
     s_c = (struct_a.s[0], struct_b.s[1])
     struct_c = _struct(s=s_c, t=t_c, D=D_c, size=sum(Dp_c))
-    return meta, struct_c, slices_c
+    return meta_dot, struct_c, slices_c
 
 
 @lru_cache(maxsize=1024)
@@ -251,18 +251,18 @@ def _meta_tensordot_fc(struct_a, slices_a, struct_b, slices_b):
     meta = []
     for (tar, group_ta), (tbl, group_tb) in zip(struct_a_resorted, struct_b_resorted):
         assert tar == tbl, "Sanity check."
-        for (tca, toa, Dca, Dopa, Doa, sla), (tcb, tob, Dcb, Dopb, Dob, slb) in product(group_ta, group_tb):
-            meta.append((toa + tob, Doa + Dob, Dopa * Dopb, (Dopa, Dopb), sla, (Dopa, Dca), slb, (Dcb, Dopb), tca, tcb))
+        for (_, toa, Dca, Dopa, Doa, sla), (_, tob, Dcb, Dopb, Dob, slb) in product(group_ta, group_tb):
+            meta.append((toa + tob, Doa + Dob, Dopa * Dopb, (Dopa, Dopb), sla, (Dopa, Dca), slb, (Dcb, Dopb)))
 
     meta = sorted(meta)
     t_c = tuple(x[0] for x in meta)
     D_c = tuple(x[1] for x in meta)
     Dp_c = tuple(x[2] for x in meta)
     slices_c = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dp_c), Dp_c, D_c))
-    meta = tuple((sl.slcs[0], *mt[3:]) for sl, mt in zip(slices_c, meta))
+    meta_dot = tuple((sl.slcs[0], *mt[3:]) for sl, mt in zip(slices_c, meta))
     s_c = struct_a.s[:-1] + struct_b.s[1:]
     struct_c = _struct(s=s_c, t=t_c, D=D_c, size=sum(Dp_c))
-    return meta, struct_c, slices_c
+    return meta_dot, struct_c, slices_c
 
 
 # @lru_cache(maxsize=1024)
