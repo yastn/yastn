@@ -18,19 +18,45 @@ import yastn
 import yastn.tn.fpeps as fpeps
 from yastn.tn.fpeps.envs.rdm import measure_rdm_1site, measure_rdm_nn, measure_rdm_2x2
 import yastn.tn.mps as mps
-try:
-    from .configs import config as cfg
-    # cfg is used by pytest to inject different backends and divices
-except ImportError:
-    from configs import config as cfg
 
-tol = 1e-12
+tol = 1e-12  #pylint: disable=invalid-name
+
+
+def run_ctm_save_load_copy(env):
+    # test save, load, copy, clone,
+
+    config = env.psi.config
+    d = env.save_to_dict()
+
+    env_save = fpeps.load_from_dict(config, d)
+    env_copy = env.copy()
+    env_clone = env.clone()
+    env_shallow = env.shallow_copy()
+
+
+    for site in env.sites():
+        for dirn in  ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
+            ten0 = getattr(env[site], dirn)
+            ten1 = getattr(env_save[site], dirn)
+            ten2 = getattr(env_copy[site], dirn)
+            ten3 = getattr(env_clone[site], dirn)
+            ten4 = getattr(env_shallow[site], dirn)
+
+            assert yastn.are_independent(ten0, ten1)
+            assert yastn.are_independent(ten0, ten2)
+            assert yastn.are_independent(ten0, ten3)
+            assert ten0 is ten4
+
+            assert (ten0 - ten1).norm() < 1e-14
+            assert (ten0 - ten2).norm() < 1e-14
+            assert (ten0 - ten3).norm() < 1e-14
+            assert (ten0 - ten4).norm() < 1e-14
+
 
 @pytest.mark.parametrize("boundary", ["obc", "infinite"])
-def test_ctmrg_measure_product(boundary):
+def test_ctmrg_measure_product(config_kwargs, boundary):
     """ Initialize a product PEPS and perform a set of measurment. """
-
-    ops = yastn.operators.Spin1(sym='Z3', backend=cfg.backend, default_device=cfg.default_device)
+    ops = yastn.operators.Spin1(sym='Z3', **config_kwargs)
 
     # initialized PEPS in a product state
     g = fpeps.SquareLattice(dims=(4, 3), boundary=boundary)
@@ -61,7 +87,7 @@ def test_ctmrg_measure_product(boundary):
             assert abs( val - ezz[(s0, psi.nn_site(s0, "r" if dirn=="h" else "b"))] )<tol
 
     s_list= [ [((0, 1), (1, 0)), ((0,0),(I, sz, sz, I))], 
-        [((2, 1), (2, 2)), ((2,1),(sz,sz,I,I))], [((1, 1), (2, 1)), ((1,1),(sz,I,sz,I)) ],
+        [((2, 1), (2, 2)), ((2,1),(sz,I,sz,I))], [((1, 1), (2, 1)), ((1,1),(sz,sz,I,I)) ],
     ]
     for s_elem in s_list:
         s1,s2= s_elem[0]
@@ -99,12 +125,11 @@ def test_ctmrg_measure_product(boundary):
     #  sample
     #
     vecs = {v: ops.vec_z(val=v) for v in [-1, 0, 1]}
-    projs = {k: yastn.ncon([vec, vec.conj()], [[-0], [-1]]) for k, vec in vecs.items()}
-    out = env.sample(xrange=(1, 4), yrange=(1, 3), number=8, projectors=projs)
+    out = env.sample(xrange=(1, 4), yrange=(1, 3), number=8, projectors=vecs)
     assert all(all(x == vals[k] for x in v) for k, v in out.items())
 
     if boundary != 'obc':
-        out = env.sample(xrange=(3, 7), yrange=(-1, 2), number=5, projectors=projs)
+        out = env.sample(xrange=(3, 7), yrange=(-1, 2), number=5, projectors=vecs)
         assert all(all(x == vals[g.site2index(k)] for x in v) for k, v in out.items())
     
     #
@@ -116,6 +141,10 @@ def test_ctmrg_measure_product(boundary):
     if boundary != 'obc':
         out = env.measure_2site(sz, sz, xrange=(3, 7), yrange=(-1, 2))
         assert all(abs(vals[g.site2index(s0)] * vals[g.site2index(s1)] - v) < tol for (s0, s1), v in out.items())
+    #
+    # save, copy, ...
+    #
+    run_ctm_save_load_copy(env)
 
     with pytest.raises(yastn.YastnError):
         env.measure_2x2(sz, sz, sz, sites=((0, 0), (1, 1)))
@@ -137,14 +166,14 @@ def test_ctmrg_measure_product(boundary):
         # Sites should not repeat.
 
 @pytest.mark.parametrize("env_init", ["eye", "dl"])
-def test_ctmrg_measure_2x1(env_init):
+def test_ctmrg_measure_2x1(config_kwargs, env_init):
     """ Initialize a product PEPS of 1x2 cells and perform a set of measurment. """
 
     for dims in [(1, 2), (2, 1)]:
         g = fpeps.SquareLattice(dims=dims, boundary='infinite')
 
         for sym in ['Z2', 'U1', 'U1xU1xZ2']:
-            ops = yastn.operators.SpinfulFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
+            ops = yastn.operators.SpinfulFermions(sym=sym, **config_kwargs)
             v0110 = yastn.ncon([ops.vec_n((0, 1)), ops.vec_n((1, 0))], [[-0], [-1]])
             v1100 = yastn.ncon([ops.vec_n((1, 1)), ops.vec_n((0, 0))], [[-0], [-1]])
             v0011 = yastn.ncon([ops.vec_n((0, 0)), ops.vec_n((1, 1))], [[-0], [-1]])
@@ -230,6 +259,4 @@ def test_ctmrg_measure_2x1(env_init):
 
 
 if __name__ == '__main__':
-    test_ctmrg_measure_product(boundary='obc')
-    test_ctmrg_measure_product(boundary='infinite')
-    test_ctmrg_measure_2x1()
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])

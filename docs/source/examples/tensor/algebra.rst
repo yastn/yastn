@@ -1,20 +1,26 @@
 Linear algebra with symmetric tensors
 =====================================
 
+.. code-block:: python
+
+   import yastn
+   import pytest
+   config_kwargs = {"backend": "np"}
+
 Basic algebra operations
 ------------------------
 
 .. literalinclude:: /../../tests/tensor/test_syntax.py
-   :pyobject: TestSyntaxBasicAlgebra.test_syntax_basic_algebra
+   :pyobject: test_syntax_basic_algebra
 
 
 Tensor contractions
 -------------------
 
-Basic contractions with :meth:`yastn.tensordot`,  matrix-multiplication operator ``@``, tracing with :meth:`yastn.trace`
+Basic contractions with :meth:`yastn.tensordot`, matrix-multiplication operator ``@``, tracing with :meth:`yastn.trace`
 
 .. literalinclude:: /../../tests/tensor/test_syntax.py
-   :pyobject: TestSyntaxContractions.test_syntax_contraction
+   :pyobject: test_syntax_contraction
 
 Higher-level interface ``ncon`` (or equivalently ``einsum``) composing simple contractions
 
@@ -26,21 +32,21 @@ Transposition
 -------------
 
 .. literalinclude:: /../../tests/tensor/test_transpose.py
-   :pyobject: TestSyntaxTranspose.test_transpose_syntax
+   :pyobject: test_transpose_syntax
 
 
 Fusion (reshaping)
 ------------------
 
-Following example showcases fusion, in particular its `hard` mode.
+Following example showcases fusion, in particular its ``'hard'`` mode (the default).
 In this case, the tensor data is reshuffled/resized in memory.
 
 .. literalinclude:: /../../tests/tensor/test_fuse_hard.py
-   :pyobject: FusionSyntax.test_fuse_hard
+   :pyobject: test_fuse_hard
 
 
 Conjugation of symmetric tensors
 --------------------------------
 
 .. literalinclude:: /../../tests/tensor/test_conj.py
-   :pyobject: TestConj_Z2xU1.test_conj_Z2xU1
+   :pyobject: test_conj_Z2xU1

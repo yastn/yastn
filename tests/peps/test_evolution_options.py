@@ -16,14 +16,8 @@ import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
 
-try:
-    from .configs import config as cfg
-    # cfg is used by pytest to inject different backends and divices
-except ImportError:
-    from configs import config as cfg
 
-
-def test_evolution():
+def test_evolution(config_kwargs):
     """ Simulate purification of a small finite system to test evolution options and outputed info. """
     #
     Nx, Ny = 2, 2
@@ -31,7 +25,7 @@ def test_evolution():
     #
     # prepare evolution gates
     #
-    ops = yastn.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
+    ops = yastn.operators.SpinlessFermions(sym='U1', **config_kwargs)
     I = ops.I()
     t, dbeta = 1.0, 0.1
     g_hop = fpeps.gates.gate_nn_hopping(t, dbeta / 2, I, ops.c(), ops.cp())
@@ -82,5 +76,6 @@ def test_evolution():
         fpeps.evolution_step_(env, gates, opts_svd=opts_svd, initialization='none')
         # initialization='none' not recognized. Should contain 'SVD' or 'EAT'.
 
+
 if __name__ == '__main__':
-    test_evolution()
+    pytest.main([__file__, "-vs", "--durations=0"])

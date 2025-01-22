@@ -59,20 +59,20 @@ class Tensor:
 
     def __init__(self, config=None, s=(), n=None, isdiag=False, **kwargs):
         r"""
-        Initialize empty (no allocated blocks) YASTN tensor
+        Initialize empty (without any blocks allocated) YASTN tensor.
 
         Parameters
         ----------
             config : module | _config(NamedTuple)
                 :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
             s : Sequence[int]
-                a signature of tensor. Also determines the number of legs
+                a signature of tensor. Also determines the number of legs.
             n : int | Sequence[int]
                 total charge of the tensor. In case of direct product of several
                 abelian symmetries, `n` is a tuple with total charge for each individual
-                symmetry
+                symmetry.
             isdiag : bool
-                distinguish diagonal tensor as a special case of a tensor
+                distinguish diagonal tensor as a special case of a tensor.
         """
         self.config = config if isinstance(config, _config) else _config(**{a: getattr(config, a) for a in _config._fields if hasattr(config, a)})
 
@@ -95,14 +95,14 @@ class Tensor:
             except TypeError:
                 n = self.config.sym.zero() if n is None else (n,)
             if len(n) != self.config.sym.NSYM:
-                raise YastnError("n does not match the number of symmetry sectors")
+                raise YastnError("n does not match the number of symmetry sectors.")
             if isdiag:
                 if len(s) == 0:
                     s = (1, -1)  # default
                 if s not in ((-1, 1), (1, -1)):
-                    raise YastnError("Diagonal tensor should have s equal (1, -1) or (-1, 1)")
+                    raise YastnError("Diagonal tensor should have s equal (1, -1) or (-1, 1).")
                 if any(x != 0 for x in n):
-                    raise YastnError("Tensor charge of a diagonal tensor should be 0")
+                    raise YastnError("Tensor charge of a diagonal tensor should be 0.")
             self.struct = _struct(s=s, n=n, diag=bool(isdiag))
 
         self.slices = kwargs['slices'] if 'slices' in kwargs else ()
@@ -119,14 +119,14 @@ class Tensor:
 
     # pylint: disable=C0415
     from ._initialize import set_block, _fill_tensor, __setitem__
-    from .linalg import norm, svd, svd_with_truncation, eigh, eigh_with_truncation, qr
+    from .linalg import norm, svd, svd_with_truncation, eigh, eigh_with_truncation, qr, truncation_mask
     from ._contractions import tensordot, __matmul__, vdot, trace, swap_gate, broadcast, apply_mask
     from ._algebra import __add__, __sub__, __mul__, __rmul__, __array_ufunc__, __neg__, apxb
     from ._algebra import __lt__, __gt__, __le__, __ge__, __truediv__, __pow__
     from ._algebra import __abs__, real, imag, sqrt, rsqrt, reciprocal, exp, bitwise_not
     from ._single import conj, conj_blocks, flip_signature, flip_charges, transpose, moveaxis, move_leg, diag, grad
     from ._single import copy, clone, detach, to, requires_grad_, remove_zero_blocks, add_leg, remove_leg, drop_leg_history
-    from ._output import show_properties, __str__, print_blocks_shape, is_complex
+    from ._output import print_properties, __str__, print_blocks_shape, is_complex
     from ._output import get_blocks_charge, get_blocks_shape, get_legs
     from ._output import zero_of_dtype, item, __getitem__, __contains__
     from ._output import get_shape, get_signature, get_dtype
@@ -135,11 +135,10 @@ class Tensor:
     from ._output import save_to_hdf5, save_to_dict, compress_to_1d
     from ._tests import is_consistent, are_independent
     from ._merging import fuse_legs, unfuse_legs, fuse_meta_to_hard
-    from ._special import _attach_01, _attach_23, _attach_12, _attach_30
     from ._krylov import linear_combination, expand_krylov_space
 
     def _replace(self, **kwargs) -> yastn.Tensor:
-        """ Creates a shallow copy replacing fields specified in kwargs """
+        """ Creates a shallow copy replacing fields specified in kwargs. """
         for arg in ('config', 'struct', 'mfs', 'hfs', 'data', 'slices'):
             if arg not in kwargs:
                 kwargs[arg] = getattr(self, arg)
@@ -150,7 +149,7 @@ class Tensor:
         r"""
         Signature of tensor's effective legs.
 
-        Legs (spaces) fused together by :meth:`yastn.Tensor.fuse` are treated as single leg.
+        Legs (spaces) fused together by :meth:`yastn.Tensor.fuse` are treated as a single leg.
         The signature of each fused leg is given by the first native leg in the fused space.
         """
         inds, n = [], 0
@@ -165,7 +164,7 @@ class Tensor:
         Signature of tensor's native legs.
 
         This includes legs (spaces) which have been fused together
-        by :meth:`yastn.fuse_legs` using mode=`meta`.
+        by :meth:`yastn.fuse_legs` using ``mode='meta'``.
         """
         return self.struct.s
 
@@ -193,8 +192,8 @@ class Tensor:
         r"""
         Native rank of the tensor.
 
-        This includes legs (spaces) which have been fused together
-        by :meth:`yastn.fuse_legs` using mode=`meta`.
+        It distinguishes legs (spaces) which were fused
+        by :meth:`yastn.fuse_legs` using ``mode='meta'``.
         """
         return len(self.struct.s)
 
@@ -220,12 +219,12 @@ class Tensor:
 
     @property
     def dtype(self) -> numpy.dtype | torch.dtype:
-        """ dtype of tensor data used by the backend. """
+        """ Datatype ``dtype`` of tensor data used by the ``backend``. """
         return self.config.backend.get_dtype(self._data)
 
     @property
     def yast_dtype(self) -> str:
-        """ Return 'complex128' if tensor data are complex else 'float64.' """
+        """ Return :code:`'complex128'` if tensor data are complex else :code:`'float64'`. """
         return 'complex128' if self.config.backend.is_complex(self._data) else 'float64'
 
     @property
@@ -235,10 +234,10 @@ class Tensor:
 
     @property
     def T(self) -> yastn.Tensor:
-        r""" Same as :meth:`self.transpose()<yastn.Tensor.transpose>` """
+        r""" Same as :meth:`self.transpose()<yastn.transpose>`. """
         return self.transpose()
 
     @property
     def H(self) -> yastn.Tensor:
-        r""" Same as self.T.conj() """
+        r""" Same as :meth:`self.T.conj()`, i.e., transpose and conjugate. """
         return self.transpose().conj()

@@ -16,10 +16,6 @@
 import numpy as np
 import pytest
 import yastn
-try:
-    from .configs import config_dense, config_U1, config_Z2, config_Z2xU1
-except ImportError:
-    from configs import config_dense, config_U1, config_Z2, config_Z2xU1
 
 tol = 1e-12  #pylint: disable=invalid-name
 
@@ -53,9 +49,10 @@ def combine_tests(a, b):
     # additionally tests norm
 
 
-def test_algebra_basic():
+def test_algebra_basic(config_kwargs):
     """ test basic algebra for various symmetries """
     # dense
+    config_dense = yastn.make_config(sym='none', **config_kwargs)
     a = yastn.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5), dtype='float64')
     b = yastn.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5), dtype='float64')
     combine_tests(a, b)
@@ -69,6 +66,7 @@ def test_algebra_basic():
     assert all(yastn.are_independent(c, x) for x in (d, e))
 
     # U1
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     leg0a = yastn.Leg(config_U1, s=-1, t=(-1, 1, 0), D=(1, 2, 3))
     leg0b = yastn.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(1, 2, 3))
     leg1 = yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6))
@@ -94,6 +92,7 @@ def test_algebra_basic():
     assert pytest.approx(r7.norm(p='inf').item(), rel=tol) == 2
 
     # Z2xU1
+    config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
     leg0a = yastn.Leg(config_Z2xU1, s=-1, t=[(0, 0), (0, 2), (1, 2)], D=[1, 2, 4])
     leg0b = yastn.Leg(config_Z2xU1, s=-1, t=[(0, 0), (0, 1), (1, 2)], D=[1, 3, 4])
     leg1 = yastn.Leg(config_Z2xU1, s=1, t=[(0, -2), (0, 2)], D=[2, 3])
@@ -107,11 +106,12 @@ def test_algebra_basic():
     combine_tests(a, b)
 
 
-def test_add_diagonal():
+def test_add_diagonal(config_kwargs):
     """
     Addition of diagonal tensors matches sectorial bond dimensions,
     filling in missing zeros at the end of each sector.
     """
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     leg0 = yastn.Leg(config_U1, s=-1, t=(-1, 0, 1, 3), D=(2, 2, 3, 2))
     leg1 = yastn.Leg(config_U1, s=-1, t=(-1, 0, 1, 2), D=(1, 5, 3, 2))
     a = yastn.eye(config_U1, legs=leg0)
@@ -125,7 +125,8 @@ def test_add_diagonal():
     assert all(x.get_legs(axes=0).D == (2, 5, 3, 2, 2) for x in [c1, c2, c3])
 
 
-def test_algebra_functions():
+def test_algebra_functions(config_kwargs):
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.Tensor(config=config_U1, isdiag=True)
     a.set_block(ts=1, Ds=3, val=[1, 0.01, 0.0001])
     a.set_block(ts=-1, Ds=3, val=[1, 0.01, 0.0001])
@@ -144,8 +145,9 @@ def test_algebra_functions():
     assert yastn.norm(abs(c) - 5 * a) < tol
 
 
-def test_algebra_fuse_meta():
+def test_algebra_fuse_meta(config_kwargs):
     """ test basic algebra on meta-fused tensor. """
+    config_Z2 = yastn.make_config(sym='Z2', **config_kwargs)
     a = yastn.rand(config=config_Z2, s=(-1, 1, 1, -1),
                   t=((0, 1), (0,), (0, 1), (1,)), D=((1, 2), (3,), (4, 5), (7,)))
     b = yastn.rand(config=config_Z2, s=(-1, 1, 1, -1),
@@ -188,9 +190,10 @@ def algebra_hf(f, a, b, hf_axes1=(0, (1, 2), 3)):
     assert all(x.is_consistent() for x in (fc, fcf, ffc, ffcf, fffc, uffc, uufc, uuuc))
 
 
-def test_algebra_fuse_hard():
+def test_algebra_fuse_hard(config_kwargs):
     """ execute tests of additions after hard fusion for several tensors. """
     # U1 with 4 legs
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1),
                 t=((0,), (0,), (-1, 0, 1), (-1, 0, 1)),
                 D=((2,), (5,), (7, 8, 9), (10, 11, 12)))
@@ -218,6 +221,7 @@ def test_algebra_fuse_hard():
     algebra_hf(lambda x, y: x - 3 * y, a, b, hf_axes1=((0, 1), (2, 3), (4, 5)))
 
     # Z2xU1 with 4 legs
+    config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
     leg1 = yastn.Leg(config_Z2xU1, s=1, t=[(0, -1), (0, 1), (1, -1), (1, 1)], D=[1, 2, 3, 4])
     leg2 = yastn.Leg(config_Z2xU1, s=1, t=[(0, 0), (0, 1), (1, 1)], D=[5, 2, 4])
     a = yastn.rand(config=config_Z2xU1, legs=[leg2.conj(), leg2, leg1, leg1.conj()])
@@ -230,8 +234,9 @@ def test_algebra_fuse_hard():
     algebra_hf(lambda x, y: x - y ** 3, a.conj(), b)
 
 
-def test_algebra_allclose():
+def test_algebra_allclose(config_kwargs):
     # U1 with 4 legs
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1),
                 t=((0,), (0,), (-1, 0, 1), (-1, 0, 1)),
                 D=((2,), (5,), (7, 8, 9), (10, 11, 12)))
@@ -247,8 +252,9 @@ def test_algebra_allclose():
     assert (a - c).norm() < 1e-13
 
 
-def test_algebra_exceptions():
+def test_algebra_exceptions(config_kwargs):
     """ test handling exceptions """
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     leg1 = yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 4))
     leg2 = yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 5))
     leg3 = yastn.Leg(config_U1, s=1, t=(-1, 0), D=(2, 4))
@@ -296,8 +302,9 @@ def test_algebra_exceptions():
         # Error in norm: p not in ('fro', 'inf').
 
 
-def test_hf_union_exceptions():
+def test_hf_union_exceptions(config_kwargs):
     """ exceptions happening in resolving hard-fusion mismatches. """
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     leg1 = yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 2))
     leg2 = yastn.Leg(config_U1, s=1, t=(-2, 0, 2), D=(2, 3, 5))
     leg3 = yastn.Leg(config_U1, s=1, t=(-2, 0, 2), D=(2, 5, 2))
@@ -356,11 +363,4 @@ def test_hf_union_exceptions():
 
 
 if __name__ == '__main__':
-    test_algebra_basic()
-    test_add_diagonal()
-    test_algebra_functions()
-    test_algebra_fuse_meta()
-    test_algebra_fuse_hard()
-    test_algebra_exceptions()
-    test_hf_union_exceptions()
-    test_algebra_allclose()
+    pytest.main([__file__, "-vs", "--durations=0"])

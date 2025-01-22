@@ -24,7 +24,7 @@ def product_peps(geometry, vectors) -> Peps:
     """
     Initialize PEPS in a product state composed of provided vectors for all lattice sites.
 
-    Vectors can have ndim=1 for (pure) state and ndim=2 for purification/operator.
+    Vectors can have effective rank ndim=1 for (pure) state and ndim=2 for purification/operator.
     In the latter case, two legs will be fused into one physical PEPS leg.
     Virtual legs of dimension one with zero charge are added automatically.
     For vectors, their possibly non-zero charge is incorporated by

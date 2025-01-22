@@ -2,7 +2,7 @@
 Expectation values
 ==================
 
-Examples can be found :ref:`here <examples/mps/measurement:Expectation values>`.
+See examples at :ref:`examples/mps/measurement:Expectation values`.
 
 Overlaps and MPO expectation values
 -----------------------------------
@@ -36,7 +36,6 @@ One- and two-point expectation values
 .. autofunction:: yastn.tn.mps.measure_1site
 .. autofunction:: yastn.tn.mps.measure_2site
 
-
 Schmidt values and entropy profile
 ----------------------------------
 
@@ -46,4 +45,17 @@ where all sites to the left are in :ref:`left-canonical form<theory/mps/basics:c
 are in :ref:`right-canonical form<theory/mps/basics:canonical form>`.
 
 .. automethod:: yastn.tn.mps.MpsMpoOBC.get_Schmidt_values
+
+The SVD is used to calculate the entropy at each bond.
+For :math:`\alpha \neq 1`, this gives the *Renyi entropy*,
+:math:`S_\alpha(\rho)=\frac{1}{1-\alpha}\log_2 Tr(\rho^\alpha)`,
+where :math:`\rho` indicates a reduced density matrix of the system with all sites to the right of the cut traced out.
+For :math:`\alpha=1` we get *von Neumann entropy*, :math:`S_1(\rho)=-Tr(\rho \log_2 \rho)`.
+The entropy is counted in bits, i.e., using base-2 logarithm.
+
 .. automethod:: yastn.tn.mps.MpsMpoOBC.get_entropy
+
+Sampling
+--------
+
+.. automethod:: yastn.tn.mps.sample

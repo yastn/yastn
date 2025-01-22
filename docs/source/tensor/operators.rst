@@ -1,6 +1,9 @@
 Predefined YASTN tensors
 ========================
 
+In YASTN, we predefined several classes containing sets of standard operators,
+which can be employed in simulations of many typical physical models.
+
 Spin-1/2 and Pauli matrices
 ---------------------------
 

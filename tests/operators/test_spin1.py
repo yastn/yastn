@@ -14,28 +14,19 @@
 # ==============================================================================
 """ Predefined spin-1 operators. """
 from itertools import chain
-import pytest
 import numpy as np
+import pytest
 import yastn
-try:
-    from .configs import config_dense
-except ImportError:
-    from configs import config_dense
-
 
 tol = 1e-12  #pylint: disable=invalid-name
 
 
-def test_spin1():
+def test_spin1(config_kwargs):
     """ Generate standard operators in 3-dimensional Hilbert space for various symmetries. """
-    # pytest switches backends and default_device in config files for testing
-    backend = config_dense.backend
-    default_device = config_dense.default_device
-
-    ops_dense = yastn.operators.Spin1(sym='dense', backend=backend, default_device=default_device)
-    ops_Z3 = yastn.operators.Spin1(sym='Z3', backend=backend, default_device=default_device)
+    ops_dense = yastn.operators.Spin1(sym='dense', **config_kwargs)
+    ops_Z3 = yastn.operators.Spin1(sym='Z3', **config_kwargs)
     # other way to initialize
-    config_U1 = yastn.make_config(sym='U1', backend=backend, default_device=default_device)
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     ops_U1 = yastn.operators.Spin1(**config_U1._asdict())
 
     rs = (False, False, True) # reverse option for to_numpy/to_dense/to_nonsymmetric
@@ -47,7 +38,6 @@ def test_spin1():
 
     assert all(leg == I.get_legs(axes=0) for (leg, I) in zip(legs, Is))
     assert all(np.allclose(I.to_numpy(reverse=r), np.eye(3)) for (I, r) in zip(Is, rs))
-    assert all(default_device in I.device for I in Is)  # accept 'cuda' in 'cuda:0'
 
     Szs = [ops_dense.sz(), ops_Z3.sz(), ops_U1.sz()]
     assert all(np.allclose(Sz.to_numpy(reverse=r), np.array([[1, 0, 0], [0, 0, 0], [0, 0, -1]])) for (Sz, r) in zip(Szs, rs))
@@ -138,7 +128,6 @@ def test_spin1():
         ops_Z3.vec_y(val=1)
         # Eigenvalues val should be in (-1, 0, 1) and eigenvectors of Sy are well defined only for dense tensors.
 
-
     # used in mps Generator
     d = ops_dense.to_dict()
     (d["I"](3) - ops_dense.I()).norm() < tol  # here 3 is a posible position in the mps
@@ -146,4 +135,4 @@ def test_spin1():
 
 
 if __name__ == '__main__':
-    test_spin1()
+    pytest.main([__file__, "-vs", "--durations=0"])

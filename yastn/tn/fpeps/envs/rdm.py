@@ -1,7 +1,7 @@
 from .... import ncon
 from .. import Site, Peps, Peps2Layers, EnvCTM
 from .... import Tensor
-import numpy as np
+from ._env_auxlliary import append_vec_tl, append_vec_br, append_vec_tr, append_vec_bl
 from typing import Sequence, Union, TypeVar
 import logging
 log = logging.getLogger(__name__)
@@ -111,9 +111,9 @@ def _append_vec_bl_open(
 def _normalize_and_regularize_rdm(rdm, order : str="interleaved", pos_def=False, who=None, verbosity=0, **kwargs):
     r"""
     Regularize reduced density matrix (RDM).
-    
+
     Args:
-        order: Index convention of RDM. `"interleaved"` for `[s0, s0', s1, s1', ...]` 
+        order: Index convention of RDM. `"interleaved"` for `[s0, s0', s1, s1', ...]`
         where s_i,s_i' is bra,ket pair. `"braket"` for `[s0,s1,...,s0',s1',...]` with all "bra" indices first
         followed by "ket" indices.
     """
@@ -134,7 +134,7 @@ def _normalize_and_regularize_rdm(rdm, order : str="interleaved", pos_def=False,
     # turn RDM into a matrix
     rdm_asym = 0.5 * (rdm - rdm.conj().transpose(axes=conj_order))
     rdm = 0.5 * (rdm + rdm.conj().transpose(axes=conj_order))
-    
+
     # given enforced symmetry of rdm, the trace has to be real
     rdm_norm= rdm.trace(axes=trace_order).to_number().real
 
@@ -179,7 +179,7 @@ def trace_aux(rdm : Tensor, axis : int, swap : bool = False) -> Tensor:
         rdm = rdm.trace(axes=(axis + 1, axis + 3))  # ... p p' ...
     return rdm
 
-  
+
 # def f_ordered(s0, s1) -> bool:
 #     """Check if (s0, s1) appear in fermionic order.
 #     The convention is consistent with the PEPS diagrams in https://arxiv.org/abs/0912.0646.
@@ -197,17 +197,24 @@ def op_order(Oi, Oj, ordered, fermionic=True):
     """
 
     if not ordered:
+        # if fermionic:
+        #     Oi, Oj = -Oj, Oi
+        # else:
+        #     Oi, Oj = Oj, Oi
+
         if fermionic:
-            Oi, Oj = -Oj, Oi
-        else:
-            Oi, Oj = Oj, Oi
+            Oi, Oj = -Oi, Oj
 
     # Add an auxiliary leg such that the total charges of Oi and Oj are zero, respectively
     Oi = Oi.add_leg(s=1)
     Oj = Oj.add_leg(s=-1)
 
     Oi = Oi.swap_gate(axes=(1, 2))
-    # Oi = Oi.swap_gate(axes=(0, 2))
+     #    |
+     #  --+-----   |
+     # |  |    |   |
+     # |--Oi   ---Oj
+     #    |       |
 
     return Oi, Oj
 
@@ -239,11 +246,7 @@ def rdm1x1(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scala
 
     rdm = res.unfuse_legs(axes=(0,))  # s s'
 
-    # check if a dummy leg is fused with the physical leg
-    # i) physical leg is fused and ii) its fusion of two legs and iii) the second leg has dimension 1
-    if rdm.get_legs(0).is_fused() and len(rdm.get_legs(0).unfuse_leg())==2 and sum(rdm.get_legs(0).unfuse_leg()[-1].D)==1:
-        rdm = rdm.unfuse_legs(axes=(0, 1))  # p d p' d'
-        rdm = rdm.trace(axes=(1, 3))  # p p'
+    rdm = trace_aux(rdm, 0, swap=False)
 
     # assert rdm.ndim == 2
     rdm, rdm_norm = _normalize_and_regularize_rdm(rdm, who=rdm1x1.__name__)
@@ -255,11 +258,11 @@ def rdm1x2(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scala
     r"""
     Contract environment and on-site tensors of 1x2 (horizontal) patch,
     with `s0` the leftmost Site, to reduced density matrix::
-        
+
         C T  T  C
-        T s0 s1 T    
+        T s0 s1 T
         C T  T  C
-        
+
     The index convention for reduced density matrix is `[s0, s0', s1, s1']`,
     where s_i,s_i' is bra,ket pair.
 
@@ -312,12 +315,12 @@ def rdm2x1(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scala
     r"""
     Contract environment and on-site tensors of 2x1 (vertical) patch,
     with `s0` the top-most Site, to reduced density matrix::
-        
+
         C T  C
-        T s0 T 
-        T s1 T    
+        T s0 T
+        T s1 T
         C T  C
-        
+
     The index convention for reduced density matrix is `[s0, s0', s1, s1']`,
     where s_i,s_i' is bra,ket pair.
 
@@ -373,12 +376,12 @@ def rdm2x2(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scala
     r"""
     Contract environment and on-site tensors of 2x2 patch,
     with `s0` the upper-left Site, to reduced density matrix::
-        
+
         C T  T  C
-        T s0 s1 T 
-        T s2 s3 T    
+        T s0 s2 T
+        T s1 s3 T
         C T  T  C
-        
+
     The index convention for reduced density matrix is `[s0, s0', ..., s3, s3']`,
     where s_i,s_i' is bra,ket pair.
 
@@ -440,19 +443,171 @@ def rdm2x2(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scala
 
     res = tmp0.tensordot(
         tmp1, axes=((2, 3), (0, 1))
-    )  # x0 [b0 b0'] [s0 s0'] y1 [b1 b1'] [s1 s1']
+    )  # x0 [b0 b0'] [s0 s0'] y1 [b1 b1'] [s2 s2']
     res = res.tensordot(
         tmp2, axes=((0, 1), (2, 3))
-    )  # [s0 s0'] y1 [b1 b1'] [s1 s1'] x2 [r2 r2'] [s2 s2']
+    )  # [s0 s0'] y1 [b1 b1'] [s2 s2'] x2 [r2 r2'] [s1 s1']
     res = res.tensordot(
         tmp3, axes=((1, 2, 4, 5), (0, 1, 2, 3))
-    )  # [s0 s0'] [s1 s1'] [s2 s2'] [s3 s3']
-    rdm = res.unfuse_legs(axes=(0, 1, 2, 3))  # s0 s0' s1 s1' s2 s2' s3 s3'
+    )  # [s0 s0'] [s2 s2'] [s1 s1'] [s3 s3']
+    rdm = res.unfuse_legs(axes=(0, 1, 2, 3))  # s0 s0' s2 s2' s1 s1' s3 s3'
     rdm = trace_aux(rdm, 0, swap=True)
     rdm = trace_aux(rdm, 2, swap=False)
     rdm = trace_aux(rdm, 4, swap=True)
     rdm = trace_aux(rdm, 6, swap=False)
-    rdm, rdm_norm= _normalize_and_regularize_rdm(rdm, who=rdm2x1.__name__)
+
+    rdm = rdm.transpose(axes=(0, 1, 4, 5, 2, 3, 6, 7)) # s0 s0' s1 s1' s2 s2' s3 s3'
+    rdm, rdm_norm= _normalize_and_regularize_rdm(rdm, who=rdm2x2.__name__)
+
+    return rdm, rdm_norm
+
+def rdm2x2_diagonal(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scalar]:
+    r"""
+    Contract environment and on-site tensors of 2x2 patch,
+    with `s0` the upper-left Site, to reduced density matrix::
+
+        C T  T  C
+        T s0 x  T
+        T x  s3 T
+        C T  T  C
+
+    The index convention for reduced density matrix is `[s0, s0', s3, s3']`,
+    where s_i,s_i' is bra,ket pair.
+
+    TODO: Optionally symmetrize and make non-negative
+
+    Args:
+        s0: The site of the 2x2 reduced density matrix
+        psi: Peps
+        env: environment
+
+    Returns:
+        Reduced density matrix and its unnormalized trace
+    """
+    s1, s2, s3 = psi.nn_site(s0, "r"), psi.nn_site(s0, "b"), psi.nn_site(s0, "br")
+    env0, env1, env2, env3 = env[s0], env[s1], env[s2], env[s3]
+
+    psi_dl = Peps2Layers(psi)
+    ten0, ten1, ten2, ten3 = (
+        psi_dl[s0],
+        psi_dl[s1],
+        psi_dl[s2],
+        psi_dl[s3],
+    )  # DoublePepsTensor
+
+    vectl = (env0.l @ env0.tl) @ env0.t
+    vectr = (env1.t @ env1.tr) @ env1.r
+    vecbl = (env2.b @ env2.bl) @ env2.l
+    vecbr = (env3.r @ env3.br) @ env3.b
+
+    tmp0 = _append_vec_tl_open(ten0.bra, ten0.ket, vectl)  # x [b b'] y [r r'] [s s']
+    tmp0 = tmp0.unfuse_legs(axes=(1, 3, 4))  # x b b' y r r' s s'
+    tmp0 = tmp0.swap_gate(axes=(1, (6, 7)))  # b X s s'
+    tmp0 = tmp0.swap_gate(axes=(5, (6, 7)))  # r' X s s'
+    tmp0 = tmp0.fuse_legs(
+        axes=(0, (1, 2), 3, (4, 5), (6, 7))
+    )  # x [b b'] y [r r'] [s0 s0']
+
+    tmp1 = append_vec_tr(ten1.bra, ten1.ket, vectr) # x [l l'] y [b b']
+    tmp2 = append_vec_bl(ten2.bra, ten2.ket, vecbl)  # x [r r'] y [t t']
+
+    tmp3 = _append_vec_br_open(ten3.bra, ten3.ket, vecbr)  # x [t t'] y [l l'] [s s']
+    tmp3 = tmp3.unfuse_legs(axes=(1, 3, 4))  # x t t' y l l' s s'
+    tmp3 = tmp3.swap_gate(axes=(2, (6, 7)))  # t' X s s'
+    tmp3 = tmp3.swap_gate(axes=(4, (6, 7)))  # l X s s'
+    tmp3 = tmp3.fuse_legs(
+        axes=(0, (1, 2), 3, (4, 5), (6, 7))
+    )  # x [t t'] y [l l'] [s3 s3']
+
+    res = tmp0.tensordot(
+        tmp1, axes=((2, 3), (0, 1))
+    )  # x0 [b0 b0'] [s0 s0'] y1 [b1 b1']
+    res = res.tensordot(
+        tmp2, axes=((0, 1), (2, 3))
+    )  # [s0 s0'] y1 [b1 b1'] x2 [r2 r2']
+    res = res.tensordot(
+        tmp3, axes=((1, 2, 3, 4), (0, 1, 2, 3))
+    )  # [s0 s0'] [s3 s3']
+
+    rdm = res.unfuse_legs(axes=(0, 1))  # s0 s0' s3 s3'
+    rdm = trace_aux(rdm, 0, swap=True)
+    rdm = trace_aux(rdm, 2, swap=False)
+    rdm, rdm_norm= _normalize_and_regularize_rdm(rdm, who=rdm2x2_diagonal.__name__)
+
+    return rdm, rdm_norm
+
+def rdm2x2_anti_diagonal(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scalar]:
+    r"""
+    Contract environment and on-site tensors of 2x2 patch,
+    with `s0` the upper-left Site, to reduced density matrix::
+
+        C T  T  C
+        T x  s2 T
+        T s1 x  T
+        C T  T  C
+
+    The index convention for reduced density matrix is `[s1, s1', s2, s2']`,
+    where s_i,s_i' is bra,ket pair.
+
+    TODO: Optionally symmetrize and make non-negative
+
+    Args:
+        s0: The site of the 2x2 reduced density matrix
+        psi: Peps
+        env: environment
+
+    Returns:
+        Reduced density matrix and its unnormalized trace
+    """
+    s1, s2, s3 = psi.nn_site(s0, "r"), psi.nn_site(s0, "b"), psi.nn_site(s0, "br")
+    env0, env1, env2, env3 = env[s0], env[s1], env[s2], env[s3]
+
+    psi_dl = Peps2Layers(psi)
+    ten0, ten1, ten2, ten3 = (
+        psi_dl[s0],
+        psi_dl[s1],
+        psi_dl[s2],
+        psi_dl[s3],
+    )  # DoublePepsTensor
+
+    vectl = (env0.l @ env0.tl) @ env0.t
+    vectr = (env1.t @ env1.tr) @ env1.r
+    vecbl = (env2.b @ env2.bl) @ env2.l
+    vecbr = (env3.r @ env3.br) @ env3.b
+
+    tmp0 = append_vec_tl(ten0.bra, ten0.ket, vectl)  # x [b b'] y [r r']
+
+    tmp1 = _append_vec_tr_open(ten1.bra, ten1.ket, vectr)  # x [l l'] y [b b'] [s s']
+    tmp1 = tmp1.unfuse_legs(axes=(1, 3, 4))  # x l l' y b b' s s'
+    tmp1 = tmp1.swap_gate(axes=(2, (6, 7)))  # l' X s s'
+    tmp1 = tmp1.fuse_legs(
+        axes=(0, (1, 2), 3, (4, 5), (6, 7))
+    )  # x [l l'] y [b b'] [s2 s2']
+
+    tmp2 = _append_vec_bl_open(ten2.bra, ten2.ket, vecbl)  # x [r r'] y [t t'] [s s']
+    tmp2 = tmp2.unfuse_legs(axes=(1, 3, 4))  # x r r' y t t' s s'
+    tmp2 = tmp2.swap_gate(axes=(1, (6, 7)))  # r X s s'
+    tmp2 = tmp2.fuse_legs(
+        axes=(0, (1, 2), 3, (4, 5), (6, 7))
+    )  # x [r r'] y [t t'] [s1 s1']
+
+    tmp3 = append_vec_br(ten3.bra, ten3.ket, vecbr)  # x [t t'] y [l l']
+
+    res1 = tmp0.tensordot(
+        tmp1, axes=((2, 3), (0, 1))
+    )  # x0 [b0 b0'] y1 [b1 b1'] [s2 s2']
+    res2 = tmp2.tensordot(
+        tmp3, axes=((0, 1), (2, 3))
+        ) # y2 [t t'] [s1 s1'] x3 [t t']
+
+    res = res1.tensordot(res2, axes=((0, 1, 2, 3), (0, 1, 3, 4))) # [s2 s2'] [s1 s1']
+
+    rdm = res.unfuse_legs(axes=(0, 1))  # s2 s2' s1 s1'
+    rdm = trace_aux(rdm, 0, swap=False)
+    rdm = trace_aux(rdm, 2, swap=True)
+
+    rdm = rdm.transpose(axes=(2, 3, 0, 1)) # s1 s1' s2 s2'
+    rdm, rdm_norm= _normalize_and_regularize_rdm(rdm, who=rdm2x2_anti_diagonal.__name__)
 
     return rdm, rdm_norm
 
@@ -465,7 +620,7 @@ def measure_rdm_1site(s0 : Site, psi : Peps, env : EnvCTM, op : Union[Tensor, Se
         s0: site
         psi: PEPS wavefunction
         env: CTM environment
-        op: one or more observables 
+        op: one or more observables
 
     Returns:
         expectation value or a list of expectations values of provided `op`.
@@ -480,18 +635,18 @@ def measure_rdm_1site(s0 : Site, psi : Peps, env : EnvCTM, op : Union[Tensor, Se
 
 def measure_rdm_nn(s0 : Site, dirn : str, psi : Peps, env : EnvCTM, op : Union[Sequence[Tensor], Sequence[Sequence[Tensor]]])->Union[Scalar, Sequence[Scalar]]:
     """
-    Measure one or more observables on 1x2 or 2x1 patch with site `s0` 
+    Measure one or more observables on 1x2 or 2x1 patch with site `s0`
     being leftmost or topmost respectively.
 
     Observables are expected to be one or more pairs of operators/Tensors, i.e.::
 
-        op = (Tensor, Tensor) 
+        op = (Tensor, Tensor)
 
-        or 
+        or
 
         op = [(Tensor,Tensor), (Tensor,Tensor), ...]
 
-    with first operator acting always on site `s0`. Operators are applied from "right-to-left", 
+    with first operator acting always on site `s0`. Operators are applied from "right-to-left",
     i.e. the second operator `op[1]` is applied first, which might matter for fermionic operators.
 
     Args:
@@ -499,7 +654,7 @@ def measure_rdm_nn(s0 : Site, dirn : str, psi : Peps, env : EnvCTM, op : Union[S
         dirn: 'h' for horizontal 1x2 patch (see :func:`rdm1x2`) and 'v' for vertical 2x1 patch (see :func:`rdm2x1`)
         psi: PEPS wavefunction
         env: CTM environment
-        op: one or more observables 
+        op: one or more observables
 
     Returns:
         Expectation value or a list of expectations values of provided `op`.
@@ -518,7 +673,7 @@ def measure_rdm_nn(s0 : Site, dirn : str, psi : Peps, env : EnvCTM, op : Union[S
         fermionic = True if (O0.n[0] and O1.n[0]) else False
         O0, O1 = op_order(O0, O1, ordered, fermionic)
         return ncon([O0, O1, rdm], ncon_order).to_number()
-    
+
     if isinstance(op[0],Tensor) and isinstance(op[1],Tensor):
         return _eval_op(op[0],op[1])
     return [ _eval_op(_op[0],_op[1]) for _op in op ]
@@ -530,22 +685,22 @@ def measure_rdm_2x2(s0 : Site, psi : Peps, env : EnvCTM, op : Union[Sequence[Ten
 
     Observables are expected to be one or more quadruples of operators/Tensors, i.e.::
 
-        op = (Tensor, Tensor, Tensor, Tensor) 
+        op = (Tensor, Tensor, Tensor, Tensor)
 
-        or 
+        or
 
         op = [(Tensor, Tensor, Tensor, Tensor), (Tensor, Tensor, Tensor, Tensor), ...]
 
     with first operator acting on site `s0`, second on site `s1`, etc. according to :func:`rdm2x2`
     index ordering convention.
-    
+
     NOTE: currently support only bosonic operators, i.e. with even parity.
 
     Args:
         s0: site
         psi: PEPS wavefunction
         env: CTM environment
-        op: one or more observables 
+        op: one or more observables
 
     Returns:
         Expectation value or a list of expectations values of provided `op`.
@@ -558,7 +713,7 @@ def measure_rdm_2x2(s0 : Site, psi : Peps, env : EnvCTM, op : Union[Sequence[Ten
     ncon_order = ((1, 2), (3, 4), (5, 6), (7, 8), (2, 1, 4, 3, 6, 5, 8, 7))
     def _eval_op(O0, O1, O2, O3):
         return ncon([O0, O1, O2, O3, rdm], ncon_order).to_number()
-    
+
     if len(op)==4 and all([isinstance(_op,Tensor) for _op in op]):
         return _eval_op(*tuple(op))
     return [ _eval_op(*tuple(_op)) for _op in op ]

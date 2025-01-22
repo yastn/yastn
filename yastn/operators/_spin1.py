@@ -31,7 +31,7 @@ class Spin1(meta_operators):
         Parameters
         ----------
         sym : str
-            Explicit symmetry to used. Allowed options are :code:`'dense'`, ``'Z3'``, or ``'U1'``.
+            Explicit symmetry to be used. Allowed options are :code:`'dense'`, ``'Z3'``, or ``'U1'``.
 
         kwargs
             Other YASTN configuration parameters can be provided, see :meth:`yastn.make_config`.
@@ -41,8 +41,8 @@ class Spin1(meta_operators):
         The following basis ordering and charge conventions are assumed
 
             * For :code:`sym='dense'`, the basis order is (sz=+1, sz=0, sz=-1).
-            * For :code:`sym='Z3'`, charge t=0 -> sz=+1, t=1 -> sz=0; t=2 -> sz=-1.
-            * For :code:`sym='U1'`, charge t=-1 -> sz=-1, t=0 -> sz=0, t=1 -> sz=1; i.e., sz = t.
+            * For :code:`sym='Z3'`, charge t=0 :math:`\rightarrow` sz=+1, t=1 :math:`\rightarrow` sz=0; t=2 :math:`\rightarrow` sz=-1.
+            * For :code:`sym='U1'`, charge t=-1 :math:`\rightarrow` sz=-1, t=0 :math:`\rightarrow` sz=0, t=1 :math:`\rightarrow` sz=1; i.e., sz = t.
 
         When using :meth:`yastn.to_numpy` to recover usual dense representation of the algebra
         for :code:`sym='U1'` symmetry, :code:`reverse=True` is required
@@ -58,7 +58,7 @@ class Spin1(meta_operators):
         self.operators = ('I', 'sx', 'sy', 'isy', 'sz', 'sp', 'sm')
 
     def space(self) -> yastn.Leg:
-        r""" :class:`yastn.Leg` describing local Hilbert space. """
+        r""" :class:`yastn.Leg` object describing local Hilbert space. """
         if self._sym == 'dense':
             leg = Leg(self.config, s=1, D=(3,))
         if self._sym == 'Z3':

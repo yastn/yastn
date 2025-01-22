@@ -13,19 +13,10 @@
 # limitations under the License.
 # ==============================================================================
 """ yastn.save_to_dict() yastn.load_from_dict() yastn.save_to_hdf5() yastn.load_from_hdf5(). """
-import warnings
 import os
-import pytest
 import numpy as np
-try:
-    import h5py
-except ImportError:
-    warnings.warn("h5py module not available", ImportWarning)
+import pytest
 import yastn
-try:
-    from .configs import config_dense, config_U1, config_Z2xU1, config_Z2, config_Z2_fermionic
-except ImportError:
-    from configs import config_dense, config_U1, config_Z2xU1, config_Z2, config_Z2_fermionic
 
 tol = 1e-12  #pylint: disable=invalid-name
 
@@ -51,6 +42,7 @@ def check_to_numpy(a1, config):
 def check_to_hdf5(a, *args):
     """ Test if two Tensor-s have the same values. """
     # os.remove("tmp.h5") remove if exists .. perhaps 'w' in the line below
+    h5py = pytest.importorskip("h5py")
     try:
         os.remove("tmp.h5")
     except OSError:
@@ -66,14 +58,15 @@ def check_to_hdf5(a, *args):
 
 
 @pytest.mark.parametrize("test_f", [check_to_numpy, check_to_hdf5])
-def test_dict(test_f):
-    if test_f==check_to_hdf5: pytest.importorskip("h5py")
+def test_dict(config_kwargs, test_f):
     """ test exporting tensor to native python data-structure,
         that allows robust saving/loading with np.save/load."""
+    config_dense = yastn.make_config(sym='none', **config_kwargs)
     a = yastn.rand(config=config_dense)  # s=() i.e. a scalar
     assert a.size == 1
     test_f(a, config_dense)
 
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     legs = [yastn.Leg(config_U1, s=1, t=(0, 1, 2), D= (3, 5, 2)),
             yastn.Leg(config_U1, s=-1, t=(0, 1, 3), D= (1, 2, 3)),
             yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D= (2, 3, 4))]
@@ -87,7 +80,7 @@ def test_dict(test_f):
     a = yastn.rand(config=config_U1, isdiag=True, legs=legs[0])
     test_f(a, config_U1)
 
-
+    config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
     legs = [yastn.Leg(config_Z2xU1, s=-1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(1, 2, 3, 4)),
             yastn.Leg(config_Z2xU1, s=1, t=((0, -2), (0, 2)), D=(2, 1)),
             yastn.Leg(config_Z2xU1, s=1, t=((0, -2), (0, 0), (0, 2), (1, -2), (1, 0), (1, 2)), D=(2, 3, 5, 4, 1, 6))]
@@ -104,22 +97,24 @@ def test_dict(test_f):
 
 
 
-def test_load_exceptions():
+def test_load_exceptions(config_kwargs):
     """ handling exceptions """
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     with pytest.raises(yastn.YastnError):
         _ = yastn.load_from_dict(config=config_U1)  # Dictionary d is required
 
+    config_Z2 = yastn.make_config(sym='Z2', **config_kwargs)
     leg = yastn.Leg(config_Z2, s=1, t=(0, 1), D=(2, 3))
     a = yastn.randC(config=config_Z2, n=1, legs=[leg, leg, leg.conj()])
     check_to_numpy(a, config_Z2)  # OK
 
     with pytest.raises(yastn.YastnError):
         check_to_numpy(a, config_U1)  # Symmetry rule in config do not match loaded one.
+
+    config_Z2_fermionic = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
     with pytest.raises(yastn.YastnError):
         check_to_numpy(a, config_Z2_fermionic)  # Fermionic statistics in config do not match loaded one.
 
 
 if __name__ == '__main__':
-    test_dict(check_to_numpy)
-    test_dict(check_to_hdf5)
-    test_load_exceptions()
+    pytest.main([__file__, "-vs", "--durations=0"])

@@ -17,20 +17,13 @@ import numpy as np
 import pytest
 import yastn
 import yastn.tn.mps as mps
-try:
-    from .configs import config_dense as cfg
-except ImportError:
-    from configs import config_dense as cfg
-# pytest modifies cfg to inject different backends and divices during tests
 
 
-def test_env2_update(config=cfg, tol=1e-12):
+def test_env2_update(config_kwargs, tol=1e-12):
     """ Initialize random mps' and check if overlaps are calculated consistently. """
-    opts_config = {} if config is None else \
-            {'backend': config.backend, 'default_device': config.default_device}
     N = 12
     for sym, n in [('U1', 0), ('Z2', 1), ('Z2', 0)]:
-        ops = yastn.operators.Spin12(sym=sym, **opts_config)
+        ops = yastn.operators.Spin12(sym=sym, **config_kwargs)
         ops.random_seed(seed=0)
         I = mps.product_mpo(ops.I(), N)
         psi1 = mps.random_mps(I, D_total=15, n=n)
@@ -68,11 +61,9 @@ def check_env2_measure(psi1, psi2, tol):
     assert np.std(results) / abs(np.mean(results)) < tol
 
 
-def test_env3_update(config=cfg, tol=1e-12):
+def test_env3_update(config_kwargs, tol=1e-12):
     """ Initialize random mps' and check if overlaps are calculated consistently. """
-    opts_config = {} if config is None else \
-            {'backend': config.backend, 'default_device': config.default_device}
-    ops = yastn.operators.SpinfulFermions(sym='U1xU1', **opts_config)
+    ops = yastn.operators.SpinfulFermions(sym='U1xU1', **config_kwargs)
     ops.random_seed(seed=0)
     N = 7
     I = mps.product_mpo(ops.I(), N=N)
@@ -110,10 +101,8 @@ def check_env3_measure(psi1, op, psi2, tol):
     assert np.std(results) / abs(np.mean(results)) < tol
 
 
-def test_env_raise(config=cfg):
-    opts_config = {} if config is None else \
-            {'backend': config.backend, 'default_device': config.default_device}
-    ops = yastn.operators.SpinfulFermions(sym='Z2', **opts_config)
+def test_env_raise(config_kwargs):
+    ops = yastn.operators.SpinfulFermions(sym='Z2', **config_kwargs)
     I12 = mps.product_mpo(ops.I(), 12)
     H12 = mps.random_mpo(I12, D_total=10)
     psi12 = mps.random_mps(I12, D_total=15)
@@ -155,7 +144,5 @@ def test_env_raise(config=cfg):
         # Env: Application of MpoPBC on Mpo is not supported. Contact developers to add this functionality.
 
 
-if __name__ == "__main__":
-    test_env2_update()
-    test_env3_update()
-    test_env_raise()
+if __name__ == '__main__':
+    pytest.main([__file__, "-vs", "--durations=0"])

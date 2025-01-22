@@ -280,31 +280,14 @@ def edge_b(A_bra, hb=None, A_ket=None):  # A = [t l] [b r] s;  hb = b' b
     return egb  # [r r'] [t t'] [l l']
 
 
-def append_vec_tl(Ac : Tensor, A : Tensor, vectl : Tensor, op : Union[None,Tensor] = None)->Tensor:
-    """ 
-    Append tensors of double-layer PEPS to the top-left environment (vector)
-    
-        C--T-----      |vectl___|---
-        |  |       <=> |  |   |
-        T--Ac*A--      |__|--Ac*A---
-        |  |            |     |
-
-    with assumed index convention on arguments and resulting tensor::
-
-        A( [t l] [b r] s ) * (Ac [t' l'] [b' r'] s ) * ( vectl x [l l'] [t t'] y ) -> ( x [b b'] y [r r'] )
-
-    Args:
-        A: on-site tensor of "ket" layer
-        Ac: on-site tensor of "bra" layer. Note: complex conjugation of ``Ac`` is done within the function.
-        vectl: top-left part of the environment
-        op: optional on-site operator 
-
-    Returns:
-        top-left enlarged corner
-    """
+def append_vec_tl(Ac, A, vectl, op=None, mode='old', in_b=(2, 1), out_a=(2, 3)):
+    # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s;  vectl = x [l l'] [t t'] y
+    """ Append the A and Ac tensors to the top-left vector """
     if op is not None:
         A = tensordot(A, op, axes=(2, 1))
-    vectl = vectl.fuse_legs(axes=(2, (0, 3), 1))  # [t t'] [x y] [l l']
+    axes0 = tuple(ax for ax in range(vectl.ndim) if ax not in in_b)
+    axes0 = (in_b[0], axes0, in_b[1])  # (2, (0, 3), 1), in_b == (t, l)
+    vectl = vectl.fuse_legs(axes=axes0)  # [t t'] [x y] [l l']
     vectl = vectl.unfuse_legs(axes=(0, 2))  # t t' [x y] l l'
     vectl = vectl.swap_gate(axes=(1, (3, 4)))  # t' X l l'
     vectl = vectl.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [t l] [x y] [t' l']
@@ -312,37 +295,32 @@ def append_vec_tl(Ac : Tensor, A : Tensor, vectl : Tensor, op : Union[None,Tenso
     vectl = A.tensordot(vectl, axes=((0, 2), (0, 3)))  # [b r] [x y] [b' r']
     vectl = vectl.unfuse_legs(axes=(0, 2))  # b r [x y] b' r'
     vectl = vectl.swap_gate(axes=((0, 3), 4))  # b b' X r'
-    vectl = vectl.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [b b'] [x y] [r r']
-    vectl = vectl.unfuse_legs(axes=1)  # [b b'] x y [r r']
-    vectl = vectl.transpose(axes=(1, 0, 2, 3))  # x [b b'] y [r r']
-    return vectl
+
+    if mode == 'old':
+        vectl = vectl.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [b b'] [x y] [r r']
+        vectl = vectl.unfuse_legs(axes=1)  # [b b'] x y [r r']
+        return vectl.transpose(axes=(1, 0, 2, 3))  # x [b b'] y [r r']
+
+    if out_a == (2, 3):
+        axes1 = ((0, 3), (1, 4))  # [b b'] [r r']
+    elif out_a == (3, 2):
+        axes1 = ((1, 4), (0, 3))  # [r r'] [b b']
+    if mode == 'self-b':
+        axes1, axes2 = axes1 + (2,), 2  # [] [] [x y] -> [] [] x y
+    elif mode == 'b-self':
+        axes1, axes2 = (2,) + axes1, 0  # [x y] [] [] -> x y [] []
+    vectl = vectl.fuse_legs(axes=axes1)
+    return vectl.unfuse_legs(axes=axes2)
 
 
-def append_vec_br(Ac : Tensor, A : Tensor, vecbr : Tensor, op : Union[None,Tensor] = None)->Tensor:  # 
-    """ 
-    Append tensors of double-layer PEPS to the bottom-right environment (vector) 
-
-             |  |        |     |
-        --Ac*A--T <=> --Ac*A--| |
-             |  |        |    | |
-         ----T--C     --|vecbr__|
-
-    with assumed index convention on arguments and resulting tensor::
-
-       (A [t l] [b r] s) * (Ac [t' l'] [b' r'] s) * ( vecbr x [r r'] [b b'] y ) -> ( x [t t'] y [l l'] )
-
-    Args:
-        A: on-site tensor of "ket" layer
-        Ac: on-site tensor of "bra" layer. Note: complex conjugation of ``Ac`` is done within the function.
-        vecbr: bottom-right part of the environment
-        op: optional on-site operator 
-
-    Returns:
-        bottom-right enlarged corner
-    """
+def append_vec_br(Ac, A, vecbr, op=None, mode='old', in_b=(2, 1), out_a=(0, 1)):
+    # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s;  vecbr = x [r r'] [b b'] y
+    """ Append the A and Ac tensors to the bottom-right vector. """
     if op is not None:
         A = tensordot(A, op, axes=(2, 1))
-    vecbr = vecbr.fuse_legs(axes=(2, (0, 3), 1))  # [b b'] [x y] [r r']
+    axes0 = tuple(ax for ax in range(vecbr.ndim) if ax not in in_b)
+    axes0 = (in_b[0], axes0, in_b[1])  # (2, (0, 3), 1), in_b == (b, r)
+    vecbr = vecbr.fuse_legs(axes=axes0)  # [b b'] [x y] [r r']
     vecbr = vecbr.unfuse_legs(axes=(0, 2))  # b b' [x y] r r'
     vecbr = vecbr.swap_gate(axes=((0, 1), 4))  # b b' X r'
     vecbr = vecbr.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [b r] [x y] [b' r']
@@ -350,37 +328,32 @@ def append_vec_br(Ac : Tensor, A : Tensor, vecbr : Tensor, op : Union[None,Tenso
     vecbr = A.tensordot(vecbr, axes=((1, 2), (0, 3)))  # [t l] [x y] [t' l']
     vecbr = vecbr.unfuse_legs(axes=(0, 2))  # t l [x y] t' l'
     vecbr = vecbr.swap_gate(axes=((1, 4), 3))  # l l' X t'
-    vecbr = vecbr.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [t t'] [x y] [l l']
-    vecbr = vecbr.unfuse_legs(axes=1)  # [t t'] x y [l l']
-    vecbr = vecbr.transpose(axes=(1, 0, 2, 3))  # x [t t'] y [l l']
-    return vecbr
+
+    if mode == 'old':
+        vecbr = vecbr.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [t t'] [x y] [l l']
+        vecbr = vecbr.unfuse_legs(axes=1)  # [t t'] x y [l l']
+        return vecbr.transpose(axes=(1, 0, 2, 3))  # x [t t'] y [l l']
+
+    if out_a == (0, 1):
+        axes1 = ((0, 3), (1, 4))  # [t t'] [l l']
+    elif out_a == (1, 0):
+        axes1 = ((1, 4), (0, 3))  # [l l'] [t t']
+    if mode == 'self-b':
+        axes1, axes2 = axes1 + (2,), 2  # [] [] [x y] -> [] [] x y
+    elif mode == 'b-self':
+        axes1, axes2 = (2,) + axes1, 0  # [x y] [] [] -> x y [] []
+    vecbr = vecbr.fuse_legs(axes=axes1)
+    return vecbr.unfuse_legs(axes=axes2)
 
 
-def append_vec_tr(Ac : Tensor, A : Tensor, vectr : Tensor, op : Union[None,Tensor] = None)->Tensor:  
-    """ 
-    Append tensors of double-layer PEPS to the top-right environment (vector)
-    
-        ----T---C      --|__vectr|
-            |   |  <=>    |    | |
-        --Ac*A--T      --Ac*A--|_|
-            |   |         |     |
-
-    with assumed index convention on arguments and resulting tensor::
-
-        ( A [t l] [b r] s ) * ( Ac [t' l'] [b' r'] s ) * ( vectr x [t t'] [r r'] y ) -> ( x [l l'] y [b b'] )
-
-    Args:
-        A: on-site tensor of "ket" layer
-        Ac: on-site tensor of "bra" layer. Note: complex conjugation of ``Ac`` is done within the function.
-        vectr: top-left part of the environment
-        op: optional on-site operator 
-
-    Returns:
-        top-right enlarged corner
-    """
+def append_vec_tr(Ac, A, vectr, op=None, mode='old', in_b=(1, 2), out_a=(1, 2)):
+    # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s;  vectr = x [t t'] [r r'] y
+    """ Append the A and Ac tensors to the top-left vector """
     if op is not None:
         A = tensordot(A, op, axes=(2, 1))
-    vectr = vectr.fuse_legs(axes=(1, (0, 3), 2))  # [t t'] [x y] [r r']
+    axes0 = tuple(ax for ax in range(vectr.ndim) if ax not in in_b)
+    axes0 = (in_b[0], axes0, in_b[1])  # (1, (0, 3), 2), in_b == (t, r)
+    vectr = vectr.fuse_legs(axes=axes0)  # [t t'] [x y] [r r']
     vectr = vectr.unfuse_legs(axes=(0, 2))  # t t' [x y] r r'
     vectr = vectr.swap_gate(axes=(1, 2))  # t' X x y
     vectr = vectr.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [t r] [x y] [t' r']
@@ -394,37 +367,32 @@ def append_vec_tr(Ac : Tensor, A : Tensor, vectr : Tensor, op : Union[None,Tenso
     vectr = A.tensordot(vectr, axes=((0, 2), (0, 3)))  # [l b] [x y] [l' b']
     vectr = vectr.unfuse_legs(axes=(0, 2))  # l b [x y] l' b'
     vectr = vectr.swap_gate(axes=(1, (3, 4)))  # b X l' b'
-    vectr = vectr.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [l l'] [x y] [b b']
-    vectr = vectr.unfuse_legs(axes=1)  # [l l'] x y [b b']
-    vectr = vectr.transpose(axes=(1, 0, 2, 3))  # x [l l'] y [b b']
-    return vectr
+
+    if mode == 'old':
+        vectr = vectr.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [l l'] [x y] [b b']
+        vectr = vectr.unfuse_legs(axes=1)  # [l l'] x y [b b']
+        return vectr.transpose(axes=(1, 0, 2, 3))  # x [l l'] y [b b']
+
+    if out_a == (1, 2):
+        axes1 = ((0, 3), (1, 4))  # [l l'] [b b']
+    elif out_a == (2, 1):
+        axes1 = ((1, 4), (0, 3))  # [b b'] [l l']
+    if mode == 'self-b':
+        axes1, axes2 = axes1 + (2,), 2  # [] [] [x y] -> [] [] x y
+    elif mode == 'b-self':
+        axes1, axes2 = (2,) + axes1, 0  # [x y] [] [] -> x y [] []
+    vectr = vectr.fuse_legs(axes=axes1)
+    return vectr.unfuse_legs(axes=axes2)
 
 
-def append_vec_bl(Ac : Tensor, A : Tensor, vecbl : Tensor, op : Union[None,Tensor]=None)->Tensor:
-    """ 
-    Append tensors of double-layer PEPS to the bottom-left environment (vector) 
-
-        |  |           |   |
-        T--Ac*A-- <=> | |--Ac*A--
-        |  |          | |__|__
-        C--T-----     |vecbl__|--
-
-    with assumed index convention on arguments and resulting tensor::
-
-       (A [t l] [b r] s ) * ( Ac [t' l'] [b' r'] s ) * ( vecbl x [b b'] [l l'] y ) -> ( x [r r'] y [t t'] )
-
-    Args:
-        A: on-site tensor of "ket" layer
-        Ac: on-site tensor of "bra" layer. Note: complex conjugation of ``Ac`` is done within the function.
-        vecbl: bottom-left part of the environment
-        op: optional on-site operator 
-
-    Returns:
-        bottom-left enlarged corner
-    """
+def append_vec_bl(Ac, A, vecbl, op=None, mode='old', in_b=(2, 1), out_a=(0, 3)):
+    # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s;  vecbl = x [b b'] [l l'] y
+    """ Append the A and Ac tensors to the top-left vector """
     if op is not None:
         A = tensordot(A, op, axes=(2, 1))
-    vecbl = vecbl.fuse_legs(axes=(1, (0, 3), 2))  # [b b'] [x y] [l l']
+    axes0 = tuple(ax for ax in range(vecbl.ndim) if ax not in in_b)
+    axes0 = (in_b[1], axes0, in_b[0])  # (1, (0, 3), 2), in_b == (l, b)
+    vecbl = vecbl.fuse_legs(axes=axes0)  # [b b'] [x y] [l l']
     vecbl = vecbl.unfuse_legs(axes=(0, 2))  # b b' [x y] l l'
     vecbl = vecbl.swap_gate(axes=(0, (1, 4)))  # b X b' l'
     vecbl = vecbl.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [b l] [x y] [b' l']
@@ -438,7 +406,19 @@ def append_vec_bl(Ac : Tensor, A : Tensor, vecbl : Tensor, op : Union[None,Tenso
     vecbl = A.tensordot(vecbl, axes=((0, 2), (0, 3)))  # [r t] [x y] [r' t']
     vecbl = vecbl.unfuse_legs(axes=(0, 2))  # r t [x y] r' t'
     vecbl = vecbl.swap_gate(axes=(2, 4))  #  [x y] X t'
-    vecbl = vecbl.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [r r'] [x y] [t t']
-    vecbl = vecbl.unfuse_legs(axes=1)  # [r r'] x y [t t']
-    vecbl = vecbl.transpose(axes=(1, 0, 2, 3))  # x [r r'] y [t t']
-    return vecbl
+
+    if mode == 'old':
+        vecbl = vecbl.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [r r'] [x y] [t t']
+        vecbl = vecbl.unfuse_legs(axes=1)  # [r r'] x y [t t']
+        return vecbl.transpose(axes=(1, 0, 2, 3))  # x [r r'] y [t t']
+
+    if out_a == (3, 0):
+        axes1 = ((0, 3), (1, 4))  # [r r'] [t t']
+    elif out_a == (0, 3):
+        axes1 = ((1, 4), (0, 3))  # [t t'] [r r']
+    if mode == 'self-b':
+        axes1, axes2 = axes1 + (2,), 2  # [] [] [x y] -> [] [] x y
+    elif mode == 'b-self':
+        axes1, axes2 = (2,) + axes1, 0  # [x y] [] [] -> x y [] []
+    vecbl = vecbl.fuse_legs(axes=axes1)
+    return vecbl.unfuse_legs(axes=axes2)
