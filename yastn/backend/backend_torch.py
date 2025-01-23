@@ -57,6 +57,7 @@ def _torch_version_check(version):
 
 from .linalg.torch_svd_gesdd import SVDGESDD
 from .linalg.torch_eig_sym import SYMEIG
+from .linalg.torch_svd_arnoldi import SVDARNOLDI
 # from .linalg.torch_eig_arnoldi import SYMARNOLDI, SYMARNOLDI_2C
 
 
@@ -428,6 +429,46 @@ def svdvals(data, meta, sizeS, **kwargss):
         torch.linalg.svdvals(data[slice(*sl)].view(D), out=Sdata[slice(*slS)])
     return Sdata
 
+def svd_arnoldi(data, meta, sizes):
+    return kernel_svd_arnoldi.apply(data,meta,sizes)
+
+class kernel_svd_arnoldi(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, data, meta, sizes):
+        # SVDGESDD decomposes A = USV^\dag and return U,S,V^\dag
+        #
+        # NOTE: switch device to cpu as svd on cuda seems to be very slow.
+        # device = data.device
+        # data = data.to(device='cpu')
+        real_dtype = data.real.dtype if data.is_complex() else data.dtype
+        Udata = torch.empty((sizes[0],), dtype=data.dtype, device=data.device)
+        Sdata = torch.empty((sizes[1],), dtype=real_dtype, device=data.device)
+        Vhdata = torch.empty((sizes[2],), dtype=data.dtype, device=data.device)
+        for (sl, D, slU, DU, slS, slV, DV) in meta:
+            # is_zero_block = torch.linalg.vector_norm(data[slice(*sl)]) == 0. if _torch_version_check("1.7.0") \
+            #     else data[slice(*sl)].norm() == 0.
+            # if is_zero_block: continue
+            k = slS[1] - slS[0]
+            U, S, V = SVDARNOLDI.apply(data[slice(*sl)].view(D), k)
+            Udata[slice(*slU)].reshape(DU)[:] = U
+            Sdata[slice(*slS)] = S
+            # Vhdata[slice(*slV)].reshape(DV)[:] = V.t().conj()
+            Vhdata[slice(*slV)].reshape(DV)[:] = V
+        #
+        # Udata.to(device=device), Sdata.to(device=device), Vhdata.to(device=device)
+        ctx.save_for_backward(Udata, Sdata, Vhdata)
+        ctx.meta_svd= meta
+        ctx.data_size= data.numel()
+        return Udata, Sdata, Vhdata
+
+    @staticmethod
+    def backward(ctx, Udata_b, Sdata_b, Vhdata_b):
+        raise Exception("backward not implemented")
+        Udata, Sdata, Vhdata = ctx.saved_tensors
+        meta= ctx.meta_svd
+        data_size= ctx.data_size
+        data_b= torch.zeros(data_size, dtype=Udata.dtype, device=Udata.device)
+        return None,None,None,None,None,None
 
 def fix_svd_signs(Udata, Vhdata, meta):
     Ud = torch.empty_like(Udata)
@@ -439,7 +480,7 @@ def fix_svd_signs(Udata, Vhdata, meta):
         Utemp_amp = Uamp[slice(*slU)].reshape(DU)
         ii = torch.argmax(Utemp_amp, dim=0, keepdims=True)
         phase = torch.take_along_dim(Utemp, ii, dim=0)
-        phase /= abs(phase)
+        phase = phase / abs(phase)
         Ud[slice(*slU)].reshape(DU)[:] = Utemp * phase.conj().reshape(1, -1)
         Vhd[slice(*slV)].reshape(DV)[:] = Vtemp * phase.reshape(-1, 1)
     return Ud, Vhd # Utemp, Vtemp
@@ -569,8 +610,13 @@ if _torch_version_check("2.0"):
             # A_b = C_b.B^T ; B_b = A^T . C_b
             Adata, Bdata= ctx.saved_tensors
             meta_dot= ctx.meta_dot
-            Adata_b = torch.zeros_like(Adata)
-            Bdata_b = torch.zeros_like(Bdata)
+            dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
+            Adata_b = torch.zeros_like(Adata, dtype=dtype)
+            Bdata_b = torch.zeros_like(Bdata, dtype=dtype)
+            if dtype != Adata.dtype:
+                Adata = Adata.to(dtype=dtype)
+            if dtype != Bdata.dtype:
+                Bdata = Bdata.to(dtype=dtype)
             for (slc, Dc, sla, Da, slb, Db) in meta_dot:
                 Ab = Adata_b[slice(*sla)].view(Da)
                 Bb = Bdata_b[slice(*slb)].view(Db)
@@ -606,6 +652,11 @@ else:
             meta_dot= ctx.meta_dot
             Adata_b = torch.zeros_like(Adata)
             Bdata_b = torch.zeros_like(Bdata)
+            dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
+            if dtype != Adata.dtype:
+                Adata = Adata.to(dtype=dtype)
+            if dtype != Bdata.dtype:
+                Bdata = Bdata.to(dtype=dtype)
             for (slc, Dc, sla, Da, slb, Db, ia, ib) in meta_dot:
                 Adata_b[slice(*sla)].view(Da)[:]= Cdata_b[slice(*slc)].view(Dc) @ Bdata[slice(*slb)].view(Db).adjoint()
                 Bdata_b[slice(*slb)].view(Db)[:]= Adata[slice(*sla)].view(Da).adjoint() @ Cdata_b[slice(*slc)].view(Dc)

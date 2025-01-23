@@ -303,5 +303,13 @@ class RectangularUnitcell(SquareLattice):
         return f"RectangularUnitcell(pattern={self._site2index})"
 
     def __dict__(self):
-        """Return a dictionary representation of the object."""
-        return {'site2index': self._site2index}
+        """
+        Return a dictionary representation of the object.
+
+        ..Note ::
+
+            For serialiation to JSON, dict keys must be str/int/... Hence, we store pattern
+            in format Sequence[Sequence[int]].
+
+        """
+        return {'pattern': [[self.site2index((row,col)) for col in range(self.Ny)] for row in range(self.Nx)], 'boundary': self.boundary }

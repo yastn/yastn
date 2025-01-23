@@ -46,10 +46,7 @@ jobs:
 
       - name: setup deps
         run: |
-            pip install mkl;
-            pip install numpy;
-            pip install scipy;
-            pip install .[test];
+            pip install ".[test]";
             pip install flake8 pylint;
 
       - name: static analysis flake8
