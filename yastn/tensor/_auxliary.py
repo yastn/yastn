@@ -118,7 +118,7 @@ def _join_contiguous_slices(slcs_a, slcs_b):
     tmp_a = slcs_a[0]
     tmp_b = slcs_b[0]
     for sl_a, sl_b in zip(slcs_a[1:], slcs_b[1:]):
-        if tmp_a[1] + 1 == sl_a[0] and tmp_b[1] + 1 == sl_b[0]:
+        if tmp_a[1] == sl_a[0] and tmp_b[1] == sl_b[0]:
             tmp_a = (tmp_a[0], sl_a[1])
             tmp_b = (tmp_b[0], sl_b[1])
         else:

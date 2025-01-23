@@ -115,10 +115,6 @@ def norm_matrix(x):
     return np.linalg.norm(x)
 
 
-def count_nonzero(x):
-    return np.count_nonzero(x)
-
-
 def delete(x, sl):
     return np.delete(x, slice(*sl))
 
@@ -450,6 +446,13 @@ def dot_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
     newdata = np.empty(Dsize, dtype=dtype)
     for sln, slb, Db, sla in meta:
         newdata[slice(*sln)].reshape(Db)[:] = Adata[slice(*sla)].reshape(dim) * Bdata[slice(*slb)].reshape(Db)
+    return newdata
+
+
+def negate_blocks(Adata, slices):
+    newdata = Adata.copy()
+    for slc in slices:
+        newdata[slice(*slc)] *= -1
     return newdata
 
 

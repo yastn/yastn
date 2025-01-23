@@ -25,7 +25,7 @@ __all__= [
     'get_dtype', 'is_complex', 'get_device', 'random_seed', 'set_num_threads', 'grad',
     'detach', 'detach_', 'clone', 'copy',
     'to_numpy', 'get_shape', 'get_size', 'diag_create', 'diag_get', 'real',
-    'imag', 'max_abs', 'norm_matrix', 'count_nonzero', 'delete', 'insert',
+    'imag', 'max_abs', 'norm_matrix', 'delete', 'insert',
     'expm', 'first_element', 'item', 'sum_elements', 'norm', 'entropy',
     'zeros', 'ones', 'rand', 'to_tensor', 'to_mask', 'square_matrix_from_dict',
     'requires_grad_', 'requires_grad', 'move_to', 'conj',
@@ -150,10 +150,6 @@ def max_abs(x):
 
 def norm_matrix(x):
     return torch.linalg.norm(x)
-
-
-def count_nonzero(x):
-    return torch.count_nonzero(x).item()
 
 
 def delete(x, sl):
@@ -743,6 +739,28 @@ def dot_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
     for sln, slb, Db, sla in meta:
         newdata[slice(*sln)].reshape(Db)[:] = Adata[slice(*sla)].reshape(dim) * Bdata[slice(*slb)].reshape(Db)
     return newdata
+
+
+def negate_blocks(Adata, slices):
+    return kernel_negate_blocks.apply(Adata, slices)
+
+
+class kernel_negate_blocks(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, Adata, slices):
+        ctx.slices = slices
+        newdata = Adata.clone()
+        for slc in slices:
+            newdata[slice(*slc)] *= -1
+        return newdata
+
+    @staticmethod
+    def backward(ctx, Cdata_b):
+        slices = ctx.slices
+        Adata_b = Cdata_b.clone()
+        for slc in slices:
+            Adata_b[slice(*slc)] *= -1
+        return Adata_b, None
 
 
 #####################################################

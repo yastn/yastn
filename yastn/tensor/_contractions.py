@@ -651,48 +651,64 @@ def swap_gate(a, axes, charge=None) -> yastn.Tensor:
     fss = (True,) * nsym if a.config.fermionic is True else a.config.fermionic
     if charge is None:
         axes = tuple(_clear_axes(*axes))  # swapped groups of legs
-        tp = _meta_swap_gate(a.struct.t, a.mfs, a.ndim_n, nsym, axes, fss)
+        negate_slices = _meta_swap_gate(a.struct.t, a.slices, a.mfs, a.ndim_n, nsym, axes, fss)
     else:
         axes, = _clear_axes(axes)  # swapped groups of legs
-        tp = _meta_swap_gate_charge(a.struct.t, charge, a.mfs, a.ndim_n, nsym, axes, fss)
-    c = a.clone()
-    for sl, odd in zip(c.slices, tp):
-        if odd:
-            c._data[slice(*sl.slcs[0])] *= -1
-    return c
+        negate_slices = _meta_swap_gate_charge(a.struct.t, a.slices, charge, a.mfs, a.ndim_n, nsym, axes, fss)
+
+    newdata = a.config.backend.negate_blocks(a._data, negate_slices)
+    return a._replace(data=newdata)
 
 
 @lru_cache(maxsize=1024)
-def _meta_swap_gate(t, mf, ndim, nsym, axes, fss):
+def _meta_swap_gate(tset, slices, mf, ndim, nsym, axes, fss):
     r""" Calculate which blocks to negate. """
     axes = _unpack_axes(mf, *axes)
-    tset = np.array(t, dtype=np.int64).reshape((len(t), ndim, nsym))
+    lt = len(tset)
+    tset = np.array(tset, dtype=np.int64).reshape((lt, ndim, nsym))
     iaxes = iter(axes)
-    tp = np.zeros(len(t), dtype=np.int64)
+    tp = np.zeros(lt, dtype=np.int64)
 
     if len(axes) % 2 == 1:
         raise YastnError('Odd number of elements in axes. Elements of axes should come in pairs.')
     for l1, l2 in zip(*(iaxes, iaxes)):
-        # if len(set(l1) & set(l2)) > 0:
-        #     raise YastnError('Cannot swap the same index.')
         t1 = np.sum(tset[:, l1, :], axis=1, dtype=np.int64) % 2
         t2 = np.sum(tset[:, l2, :], axis=1, dtype=np.int64) % 2
         tp += np.sum(t1[:, fss] * t2[:, fss], axis=1, dtype=np.int64)
-    return tuple((tp % 2).tolist())
+    tp = tp % 2
+    return _slices_to_negate(tp, slices)
 
 
 @lru_cache(maxsize=1024)
-def _meta_swap_gate_charge(t, charge, mf, ndim, nsym, axes, fss):
+def _meta_swap_gate_charge(tset, slices, charge, mf, ndim, nsym, axes, fss):
     r""" Calculate which blocks to negate. """
     axes, = _unpack_axes(mf, axes)
-    tset = np.array(t, dtype=np.int64).reshape((len(t), ndim, nsym))
+    tset = np.array(tset, dtype=np.int64).reshape((len(tset), ndim, nsym))
+
     if len(charge) != nsym:
         raise YastnError(f'Length of charge {charge} does not match sym.NSYM = {nsym}.')
 
     charge = np.array(charge, dtype=np.int64).reshape(1, nsym) % 2
     tp = np.sum(tset[:, axes, :], axis=1, dtype=np.int64) % 2
-    fp = np.sum(tp[:, fss] * charge[:, fss], axis=1, dtype=np.int64) % 2
-    return tuple(fp.tolist())
+    tp = np.sum(tp[:, fss] * charge[:, fss], axis=1, dtype=np.int64) % 2
+    return _slices_to_negate(tp, slices)
+
+
+def _slices_to_negate(tp, slices):
+    negate = tuple(slc.slcs[0] for slc, negate in zip(slices, tp) if negate)
+    if not negate:
+        return negate
+
+    joined_negate = []
+    start, stop = negate[0]
+    for next_start, next_stop in negate[1:]:
+        if stop == next_start:
+            stop = next_stop
+        else:
+            joined_negate.append((start, stop))
+            start, stop = next_start, next_stop
+    joined_negate.append((start, stop))
+    return tuple(joined_negate)
 
 
 def einsum(subscripts, *operands, order=None) -> yastn.Tensor:

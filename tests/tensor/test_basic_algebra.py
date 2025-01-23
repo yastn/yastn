@@ -376,5 +376,32 @@ def test_hf_union_exceptions(config_kwargs):
         # Operation requires two yastn.Tensor-s
 
 
+def test_auxiliary():
+    """ test some auxiliary functions that join slices. """
+    # _join_contiguous_slices
+    slc1 = ((0, 10), (10, 20), (30, 40), (40, 50))
+    slc2 = ((0, 10), (10, 20), (20, 30), (40, 50))
+    meta = yastn.tensor._auxliary._join_contiguous_slices(slc1, slc2)
+    assert meta == (((0, 20), (0, 20)), ((30, 40), (20, 30)), ((40, 50), (40, 50)))
+
+    slc1 = ((0, 10), (10, 20), (20, 30), (40, 50))
+    slc2 = ((10, 20), (20, 30), (30, 40), (40, 50))
+    meta = yastn.tensor._auxliary._join_contiguous_slices(slc1, slc2)
+    assert meta == (((0, 30), (10, 40)), ((40, 50), (40, 50)))
+
+    # _slices_to_negate
+    slices = (yastn.tensor._auxliary._slc(((0, 10),)),
+              yastn.tensor._auxliary._slc(((10, 20),)),
+              yastn.tensor._auxliary._slc(((20, 30),)),
+              yastn.tensor._auxliary._slc(((30, 40),)))
+
+    negate_slices = yastn.tensor._contractions._slices_to_negate([0, 0, 0, 0], slices)
+    assert negate_slices == ()
+    negate_slices = yastn.tensor._contractions._slices_to_negate([0, 1, 1, 0], slices)
+    assert negate_slices == ((10, 30),)
+    negate_slices = yastn.tensor._contractions._slices_to_negate([1, 0, 1, 1], slices)
+    assert negate_slices == ((0, 10), (20, 40))
+
+
 if __name__ == '__main__':
     pytest.main([__file__, "-vs", "--durations=0"])
