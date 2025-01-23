@@ -310,6 +310,7 @@ def test_tdvp_sudden_quench_Heisenberg(config_kwargs, sym, tol=1e-5):
         assert abs(e1 - e1ref) < tol * abs(e1ref)
 
 
+@pytest.mark.skipif( "not config.getoption('long_tests')", reason="long duration tests are skipped" )
 @pytest.mark.parametrize('sym', ['Z2', 'dense'])
 def test_tdvp_KZ_quench(config_kwargs, sym):
     """

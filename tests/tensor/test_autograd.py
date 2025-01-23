@@ -81,7 +81,7 @@ def test_clone_copy(config_kwargs):
 
 
 @no_numpy_test
-def test_trace_0(config_kwargs):
+def test_grad_dense(config_kwargs):
     config = yastn.make_config(sym='none', **config_kwargs)
     H = yastn.Tensor(config=config, s=(-1, -1, 1, 1))
     H.set_block(Ds=(2, 2, 2, 2), val='zeros')
@@ -117,7 +117,7 @@ def test_trace_0(config_kwargs):
 
 
 @no_numpy_test
-def test_trace_1(config_kwargs):
+def test_grad_U1(config_kwargs):
     config = yastn.make_config(sym='U1', **config_kwargs)
     H = yastn.Tensor(config=config, s=(-1, -1, 1, 1))
     ta = [(-1, -1, -1, -1), (-1, 1, -1, 1), (-1, 1, 1, -1), (1, -1, -1, 1), (1, -1, 1, -1), (1, 1, 1, 1)]

@@ -211,6 +211,7 @@ def test_compression(config_kwargs, tol=1e-12):
         assert 0.6 < vca / vaa  < 1
 
 
+@pytest.mark.skipif( "not config.getoption('long_tests')", reason="long duration tests are skipped" )
 def test_compression_sum(config_kwargs, tol=1e-6):
     """ Test various combinations of targets and environments. """
     ops = yastn.operators.SpinlessFermions(sym='Z2', **config_kwargs)

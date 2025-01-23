@@ -97,7 +97,8 @@ def purification_tJ(config_kwargs, mu):
     return energy, density, cdagc_up, cdagc_dn, SpSm, SzSz, nn, nu, nd
 
 
-@pytest.mark.parametrize('mu', [2.0])  # [0.0, 2.0, 4.0]
+@pytest.mark.skipif( "not config.getoption('long_tests')", reason="long duration tests are skipped" )
+@pytest.mark.parametrize('mu', [0.0, 2.0, 4.0])
 def test_purification_tJ(config_kwargs, mu):
     #
     # key are mu's
