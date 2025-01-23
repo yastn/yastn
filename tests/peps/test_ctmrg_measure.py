@@ -16,6 +16,8 @@
 import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
+from yastn.tn.fpeps.envs.rdm import measure_rdm_1site, measure_rdm_nn, measure_rdm_2x2
+import yastn.tn.mps as mps
 
 tol = 1e-12  #pylint: disable=invalid-name
 
@@ -69,25 +71,38 @@ def test_ctmrg_measure_product(config_kwargs, boundary):
     #  measure_1site
     #
     sz = ops.sz()
+    I= ops.I()
     ez = env.measure_1site(sz)
     assert all(abs(v - ez[s]) < tol for s, v in vals.items())
-    #
-    #  measure_nn
-    #
+    ez_rdm1x1= {s: measure_rdm_1site(s, psi, env, sz) for s in sites}
+    assert all(abs(v - ez[s]) < tol for s, v in ez_rdm1x1.items())
+
     ezz = env.measure_nn(sz, sz)
     for (s1, s2), v in ezz.items():
         s1, s2 = map(g.site2index, (s1, s2))
         assert abs(vals[s1] * vals[s2] - v) < tol
-    #
-    #  measure_2x2
-    #
-    for s1, s2 in [((0, 1), (1, 0)), ((2, 1), (2, 2)), ((1, 1), (2, 1))]:
+    for s0 in [(0,0), (1,0), (0,1), (1,1)]:
+        for dirn in ['h', 'v']:
+            val= measure_rdm_nn(s0,dirn,psi,env, (sz, sz))
+            assert abs( val - ezz[(s0, psi.nn_site(s0, "r" if dirn=="h" else "b"))] )<tol
+
+    s_list= [ [((0, 1), (1, 0)), ((0,0),(I, sz, sz, I))], 
+        [((2, 1), (2, 2)), ((2,1),(sz,I,sz,I))], [((1, 1), (2, 1)), ((1,1),(sz,sz,I,I)) ],
+    ]
+    for s_elem in s_list:
+        s1,s2= s_elem[0]
         v = env.measure_2x2(sz, sz, sites=(s1, s2))
         assert abs(vals[s1] * vals[s2] - v) < tol
+        s0, op= s_elem[1]
+        v_rdm = measure_rdm_2x2(s0,psi,env,op)
+        assert abs(v - v_rdm) < tol
+
 
     s1, s2, s3 = (1, 2), (2, 1), (2, 2)
     v = env.measure_2x2(sz, sz, sz, sites=(s1, s2, s3))
     assert abs(vals[s1] * vals[s2] * vals[s3] - v) < tol
+    v_rdm= measure_rdm_2x2((1,1),psi,env,(I,sz,sz,sz))
+    assert abs(v - v_rdm) < tol
 
     if boundary != 'obc':
         s1, s2, s3 = (3, 2), (4, 1), (4, 2)
@@ -116,6 +131,7 @@ def test_ctmrg_measure_product(config_kwargs, boundary):
     if boundary != 'obc':
         out = env.sample(xrange=(3, 7), yrange=(-1, 2), number=5, projectors=vecs)
         assert all(all(x == vals[g.site2index(k)] for x in v) for k, v in out.items())
+    
     #
     #  measure_2site
     #
@@ -149,8 +165,8 @@ def test_ctmrg_measure_product(config_kwargs, boundary):
         env.measure_line(sz, sz, sites=((0, 0), (0, 0)))
         # Sites should not repeat.
 
-
-def test_ctmrg_measure_2x1(config_kwargs):
+@pytest.mark.parametrize("env_init", ["eye", "dl"])
+def test_ctmrg_measure_2x1(config_kwargs, env_init):
     """ Initialize a product PEPS of 1x2 cells and perform a set of measurment. """
 
     for dims in [(1, 2), (2, 1)]:
@@ -181,7 +197,7 @@ def test_ctmrg_measure_2x1(config_kwargs):
 
             psi = fpeps.Peps(g, tensors=dict(zip(g.sites(), [r0, r1])))
 
-            env = fpeps.EnvCTM(psi, init='eye')
+            env = fpeps.EnvCTM(psi, init=env_init)
             # no need to converge ctmrg_ in this example
             env.ctmrg_(opts_svd = {"D_total": 3}, max_sweeps=2)
 
@@ -192,9 +208,14 @@ def test_ctmrg_measure_2x1(config_kwargs):
                 assert abs(env.measure_nn(ops.c(s), ops.cp(s), bond=bond[::-1]) - (-val)) < tol
                 assert abs(env.measure_nn(ops.c(s), ops.cp(s), bond=bond) - (-val.conjugate())) < tol
                 assert abs(env.measure_nn(ops.cp(s), ops.c(s), bond=bond[::-1]) - (val.conjugate())) < tol
+                dirn, l_ordered= g.nn_bond_type(bond)
+                if l_ordered:
+                    assert abs(measure_rdm_nn(bond[0],dirn,psi,env,(ops.cp(s), ops.c(s))) - val) < tol
+                    assert abs(measure_rdm_nn(bond[0],dirn,psi,env,(ops.c(s), ops.cp(s))) - (-val.conjugate())) < tol
 
 
             # example that is testing auxlliary leg swap-gate in the initialization
+            # it has non-trivial charge carried by auxlliary leg
             v0111 = yastn.ncon([ops.vec_n((0, 1)), ops.vec_n((1, 1))], [[-0], [-1]])
             v1101 = yastn.ncon([ops.vec_n((1, 1)), ops.vec_n((0, 1))], [[-0], [-1]])
 
@@ -223,7 +244,7 @@ def test_ctmrg_measure_2x1(config_kwargs):
 
                     psi = fpeps.Peps(g, tensors=dict(zip(g.sites(), [r0, r1])))
 
-                    env = fpeps.EnvCTM(psi, init='eye')
+                    env = fpeps.EnvCTM(psi, init=env_init)
                     # no need to converge ctmrg_ in this example, but we can do it anyway
                     # env.ctmrg_(opts_svd = {"D_total": 2}, max_sweeps=2)
                     bond = [*g.sites()]
@@ -231,6 +252,10 @@ def test_ctmrg_measure_2x1(config_kwargs):
                     assert abs(env.measure_nn(ops.c('u'), ops.cp('u'), bond=bond[::-1]) - (-val)) < tol
                     assert abs(env.measure_nn(ops.c('u'), ops.cp('u'), bond=bond) - (-val.conjugate())) < tol
                     assert abs(env.measure_nn(ops.cp('u'), ops.c('u'), bond=bond[::-1]) - (val.conjugate())) < tol
+                    dirn, l_ordered= g.nn_bond_type(bond)
+                    if l_ordered:
+                        assert abs(measure_rdm_nn(bond[0],dirn,psi,env,(ops.cp('u'), ops.c('u'))) - val) < tol
+                        assert abs(measure_rdm_nn(bond[0],dirn,psi,env,(ops.c('u'), ops.cp('u'))) - (-val.conjugate())) < tol
 
 
 if __name__ == '__main__':

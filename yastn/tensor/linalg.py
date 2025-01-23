@@ -105,12 +105,11 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
     U, S, V = svd(a, axes=axes, sU=sU, nU=nU, policy=policy, D_block=D_block,
                   diagnostics=diagnostics, fix_signs=fix_signs, svd_on_cpu=svd_on_cpu)
 
-    if mask_f:
-        Smask = mask_f(S)
-    else:
-        Smask = truncation_mask(S, tol=tol, tol_block=tol_block,
-                                D_block=D_block, D_total=D_total,
-                                truncate_multiplets=truncate_multiplets)
+    Smask = truncation_mask(S, tol=tol, tol_block=tol_block,
+                            D_block=D_block, D_total=D_total,
+                            truncate_multiplets=truncate_multiplets,
+                            mask_f=mask_f)
+
     U, S, V = Smask.apply_mask(U, S, V, axes=(-1, 0, 0))
 
     U = U.moveaxis(source=-1, destination=Uaxis)
@@ -182,9 +181,9 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         data = a.config.backend.move_to(data, device='cpu')
 
     minD = tuple(min(ds) for ds in struct.D)
-    if policy == 'lowrank':
+    if policy == 'lowrank' or policy == 'arnoldi':
         if 'D_block' not in kwargs:
-            raise YastnError("lowrank policy in svd requires passing argument D_block.")
+            raise YastnError(policy + " policy in svd requires passing argument D_block.")
         D_block = kwargs['D_block']
         if not isinstance(D_block, dict):
             minD = tuple(min(D_block, d) for d in minD)
@@ -203,8 +202,10 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         Sdata = a.config.backend.svdvals(data, meta, sizes[1])
     elif compute_uv and policy == 'lowrank':
         Udata, Sdata, Vdata = a.config.backend.svd_lowrank(data, meta, sizes, **kwargs)
+    elif compute_uv and policy == 'arnoldi':
+        Udata, Sdata, Vdata = a.config.backend.svd_arnoldi(data, meta, sizes)
     else:
-        raise YastnError('svd() policy should in (`lowrank`, `fullrank`). compute_uv == False only works with `fullrank`')
+        raise YastnError('svd() policy should in (`arnoldi`, `lowrank`, `fullrank`). compute_uv == False only works with `fullrank`')
 
     if svd_on_cpu:
         Sdata = a.config.backend.move_to(Sdata, device=device)
@@ -241,7 +242,6 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     U = U.moveaxis(source=-1, destination=Uaxis)
     V = V.moveaxis(source=0, destination=Vaxis)
     return U, S, V
-
 
 def _meta_svd(config, struct, slices, minD, sU, nU):
     """
@@ -384,7 +384,8 @@ def truncation_mask_multiplets(S, tol=0, D_total=float('inf'),
 
 def truncation_mask(S, tol=0, tol_block=0,
                     D_block=float('inf'), D_total=float('inf'),
-                    truncate_multiplets=False, **kwargs) -> yastn.Tensor[bool]:
+                    truncate_multiplets=False,
+                    mask_f=None, **kwargs) -> yastn.Tensor[bool]:
     """
     Generate mask tensor based on diagonal and real tensor ``S``.
     It can be then used for truncation.
@@ -415,7 +416,14 @@ def truncation_mask(S, tol=0, tol_block=0,
         It provides a heuristic mechanism to avoid truncating part of a multiplet.
         If ``True``, ``tol_block`` and ``D_block`` are ignored, as ``truncate_multiplets`` is a global condition.
         The default is ``False``.
+
+    mask_f: None | function[yastn.Tensor] -> yastn.Tensor
+        Custom mask function. The default is None.
+        If provided, it overrides the default function and all other parameters are ignored.
     """
+    if mask_f is not None:
+        return mask_f(S)
+
     if not (S.isdiag and S.yast_dtype == "float64"):
         raise YastnError("truncation_mask() requires S to be real and diagonal.")
 

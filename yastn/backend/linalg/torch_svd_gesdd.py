@@ -371,7 +371,8 @@ class SVDGESDD(torch.autograd.Function):
             return sigma_term, None, None, None
 
         # sigma_inv= safe_inverse_2(sigma.clone(), sigma_scale*eps)
-        sigma_inv= safe_inverse(sigma.clone(), eps_abs=eps)
+        # sigma_inv= safe_inverse(sigma.clone(), eps_abs=sigma_scale*eps)
+        sigma_inv= safe_inverse(sigma.clone(), eps)
 
         F = sigma.unsqueeze(-2) - sigma.unsqueeze(-1)
         F = safe_inverse(F, sigma_scale*eps)
