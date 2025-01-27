@@ -23,8 +23,8 @@ import yastn
 import yastn.tn.fpeps as fpeps
 
 
-
-def test_ctmrg_Ising_dense(config_kwargs):
+@pytest.mark.parametrize("checkpoint_move",[True, False])
+def test_ctmrg_Ising_dense(checkpoint_move, config_kwargs):
     r"""
     Calculate magnetization for classical 2D Ising model and compares with the analytical result.
     """
@@ -57,7 +57,7 @@ def test_ctmrg_Ising_dense(config_kwargs):
 
     env = fpeps.EnvCTM(psi, init='rand')
     opts_svd = {"D_total": chi}
-    info = env.ctmrg_(opts_svd=opts_svd, max_sweeps=200, corner_tol=1e-8)
+    info = env.ctmrg_(opts_svd=opts_svd, max_sweeps=200, corner_tol=1e-8, checkpoint_move=checkpoint_move)
     print(info)
 
     ev_XX = env.measure_nn(TX, TX)
@@ -68,8 +68,8 @@ def test_ctmrg_Ising_dense(config_kwargs):
     ev_X = env.measure_1site(TX)
     assert abs(abs(ev_X[(0 ,0)]) - local_exact[beta]) < 1e-5
 
-
-def test_ctmrg_Ising(config_kwargs):
+@pytest.mark.parametrize("checkpoint_move", [True, False])
+def test_ctmrg_Ising(checkpoint_move, config_kwargs):
     r"""
     Use CTMRG to calculate some expectation values in classical 2D Ising model.
     Compare with analytical results.
@@ -124,7 +124,7 @@ def test_ctmrg_Ising(config_kwargs):
     chi = 24
     env = fpeps.EnvCTM(psi, init='eye')
     opts_svd = {"D_total": chi}
-    info = env.ctmrg_(opts_svd=opts_svd, max_sweeps=200, corner_tol=1e-12)
+    info = env.ctmrg_(opts_svd=opts_svd, max_sweeps=200, corner_tol=1e-12, checkpoint_move=checkpoint_move)
     assert info.max_dsv < 1e-12
     assert info.converged == True
     #

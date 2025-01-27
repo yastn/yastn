@@ -133,7 +133,11 @@ class EnvCTM(Peps):
         """
         for site in self.sites():
             for dirn in ["tl", "tr", "bl", "br", "t", "l", "b", "r"]:
-                getattr(self[site], dirn)._data.detach_()
+                try:
+                    getattr(self[site], dirn)._data.detach_()
+                except RuntimeError:
+                    setattr(self[site], dirn, getattr(self[site], dirn).detach())
+
 
     def shallow_copy(self) -> EnvCTM:
         env = EnvCTM(self.psi, init=None)
@@ -588,6 +592,9 @@ class EnvCTM(Peps):
             '1site' uses smaller 4x2 corners. It is significantly faster, but is less stable and
             does not allow to grow EnvCTM bond dimension.
 
+        checkpoint_move: bool
+            Whether to use (reentrant) checkpointing for the move. The default is ``False``
+
         Returns
         -------
         proj: Peps structure loaded with CTM projectors related to all lattice site.
@@ -601,75 +608,78 @@ class EnvCTM(Peps):
         #
         # Empty structure for projectors
         proj = Peps(env.geometry)
-        for site in proj.sites():
-            proj[site] = EnvCTM_projectors()
+        for site in proj.sites(): proj[site] = EnvCTM_projectors()
         
+        def _compress_env(env):
+            shallow_unrolled= {
+                'psi': {site: env.psi.bra[site].compress_to_1d() for site in env.sites()} if isinstance(env.psi,Peps2Layers) \
+                    else {site: env.psi[site].compress_to_1d() for site in env.sites()},
+                'env': tuple( env_t.compress_to_1d() for site in env.sites() for k,env_t in env[site].__dict__.items() )}
+            meta= {'psi': {site: t_and_meta[1] for site,t_and_meta in shallow_unrolled['psi'].items()}, 'env': tuple(meta for t,meta in shallow_unrolled['env'])}
+            data= tuple( t for t,m in shallow_unrolled['psi'].values())+tuple( t for t,m in shallow_unrolled['env'])
+            return data, meta
+        
+        def _compress_proj(proj, empty_proj):
+            data, meta= tuple(zip( *(t.compress_to_1d() if not (t is None) else empty_proj.compress_to_1d() \
+                for site in proj.sites() for t in proj[site].__dict__.values()) ))
+            return data, meta
+
+        def _decompress_env(data,meta):
+            loc_bra= Peps(env.geometry, {site: decompress_from_1d(t,t_meta) for site,t,t_meta in zip(env.sites(),data[:len(env.sites())],meta['psi'].values())})
+            loc_env = EnvCTM( Peps2Layers(loc_bra) if isinstance(env.psi,Peps2Layers) else loc_bra, init=None)
+            
+            # assign backend tensors
+            #
+            data_env= data[len(env.sites()):]
+            for i,site in enumerate(loc_env.sites()): 
+                for env_t,t,t_meta in zip(loc_env[site].__dict__.keys(),data_env[i*8:(i+1)*8],meta['env'][i*8:(i+1)*8]): 
+                    setattr(loc_env[site],env_t,decompress_from_1d(t,t_meta))
+            return loc_env
+
         # 
         # get projectors and compute updated env tensors
         # TODO currently supports only <psi|psi> for double-layer peps
+        # inputs_meta= {}
         for d in ['lr', 'tb']:
+
             if checkpoint_move:
-                inputs= {'psi': tuple((env.psi.ket[site]._data for site in env.psi.ket.sites()) if isinstance(env.psi,Peps2Layers) \
-                                 else tuple(env.psi[site]._data for site in env.psi.sites())),
-                        'env': tuple( env_t._data  for site in env.sites() for k,env_t in env[site].__dict__.items() )
-                }
                 outputs_meta= {}
                 
-                def f_update_core_2dir(inputs):
-                    # assign backend tensors
-                    #
-                    if isinstance(env.psi,Peps2Layers):
-                        for site,t in zip(env.psi.ket.sites(),inputs[:len(env.psi.ket.sites())]): env.psi.ket[site]._data=t
-                    else:
-                        for site,t in zip(env.psi.sites(),inputs[:len(env.psi.ket.sites())]): env.psi[site]._data=t
-                    inputs_env= inputs[len(env.psi.ket.sites()):]
-                    for i,site in enumerate(env.sites()): 
-                        for env_t,t in zip(env[site].__dict__.values(),inputs_env[i*8:(i+1)*8]): 
-                            env_t._data= t
-                    
-                    # execute update
-                    #
-                    env_tmp, proj_tmp= _update_core_2dir(env, d, opts_svd, method=method, **kwargs)
-                    # update_old_env_(env, env_tmp)
-                    # store_projectors_(proj, proj_tmp)
+                # extract raw parametric tensors as a tuple
+                inputs_t, inputs_meta= _compress_env(env)
+                
+                def f_update_core_2dir(move_d,loc_im,*inputs_t):
+                    loc_env= _decompress_env(inputs_t,loc_im)
+                    env_tmp, proj_tmp= _update_core_2dir(loc_env, move_d, opts_svd, method=method, **kwargs)
+
+                    update_old_env_(loc_env, env_tmp)
 
                     # return backend tensors - only environment and projectors
                     #
-                    outputs= {'env': tuple( t.compress_to_1d() if not (t is None) else (None,None) for site in env_tmp.sites() for t in env_tmp[site].__dict__.values() ) ,
-                              'proj':  tuple( t.compress_to_1d() if not (t is None) else (None,None) for site in proj_tmp.sites() for t in proj_tmp[site].__dict__.values() ) }
-                    
-                    # 
-                    # for i,(site,k) in enumerate( ((site,k) for site in env.sites() for k in env[site].__dict__.keys()) ):
-                    #     print(f"{k} {inputs_env[i].shape} {outputs['env'][i][0].shape if not (outputs['env'][i][0] is None) else None}")
-                    # print("")
+                    out_env_data, out_env_meta= _compress_env(loc_env)
+                    out_proj_data, out_proj_meta= _compress_proj(proj_tmp, Tensor(config=next(iter(out_env_meta['psi'].values()))['config']))
 
-                    outputs_meta['env']= tuple(meta for t,meta in outputs['env'])
-                    outputs_meta['proj']= tuple(meta for t,meta in outputs['proj'])
-                    return tuple(t for t,meta in outputs['env']) + tuple(t for t,meta in outputs['proj'])
+                    outputs_meta['env']= out_env_meta['env']
+                    outputs_meta['proj']= out_proj_meta
 
+                    return out_env_data[len(loc_env.sites()):] + out_proj_data
+                
                 checkpoint_F= env[env.sites()[0]].tl.config.backend.checkpoint
-                outputs= checkpoint_F(f_update_core_2dir,inputs['psi']+inputs['env'],**{'use_reentrant': True, 'debug': False})
+                outputs= checkpoint_F(f_update_core_2dir,d,inputs_meta,*inputs_t,**{'use_reentrant': True, 'debug': False})
 
-                # set backend tensors back into objects
-                for (site,env_t),t,meta_t in zip( ((site,env_t) for site in env.sites() for env_t in env[site].__dict__.keys()), outputs[:8*len(env.sites())], outputs_meta['env'][:8*len(env.sites())]): 
-                    if not (t is None): setattr(env[site],env_t,decompress_from_1d(t,meta_t)) #env_t._data= t
-                for (site,proj_t),t,meta_t in zip( ((site,proj_t) for site in proj.sites() for proj_t in proj[site].__dict__.keys()), outputs[8*len(proj.sites()):], outputs_meta['proj'][:8*len(proj.sites())]): 
-                    if not (t is None): setattr(proj[site],proj_t,decompress_from_1d(t,meta_t)) #proj_t._data= t
+                # update tensors of env and proj
+                for i,site in enumerate(env.sites()): 
+                    for env_t,t,t_meta in zip(env[site].__dict__.keys(),outputs[i*8:(i+1)*8],outputs_meta['env'][i*8:(i+1)*8]): 
+                        setattr(env[site],env_t,decompress_from_1d(t,t_meta))
 
-                # for site,env_l in outputs['env'].items():
-                #     for k,env_t in env_l.items():
-                #         if not (env_t is None):
-                #             getattr(env[site],k)._data= env_t
-                # for site,proj_l in outputs['proj'].items():
-                #     for k,proj_t in proj_l.items():
-                #         if not (proj_t is None):
-                #             getattr(proj[site],k)._data= proj_t
+                for i,site in enumerate(proj.sites()): 
+                    for proj_t,t,t_meta in zip(proj[site].__dict__.keys(),outputs[8*len(env.sites()):][i*8:(i+1)*8],outputs_meta['proj'][i*8:(i+1)*8]): 
+                        setattr(proj[site],proj_t, decompress_from_1d(t,t_meta) if t_meta['struct'].size>0 else None)
+
             else:
                 env_tmp, proj_tmp= _update_core_2dir(env, d, opts_svd, method=method, **kwargs)
                 update_old_env_(env, env_tmp)
                 store_projectors_(proj, proj_tmp)
-
-        #
         return proj
 
 
@@ -810,6 +820,9 @@ class EnvCTM(Peps):
             rank-1 tensor with singular values. If provided, truncation parameters passed to SVD decomposition
             are ignored.
 
+        checkpoint_move: bool
+            Whether to use (reentrant) checkpointing for the move. The default is ``False``
+
         Returns
         -------
         Generator if iterator_step is not ``None``.
@@ -895,11 +908,6 @@ def _update_core_2dir(env, dir : str, opts_svd : dict, **kwargs):
         env_tmp = EnvCTM(env.psi, init=None)  # empty environments
         for site in env.sites():
             update_env_(env_tmp, site, env, proj, dir)
-        
-        # for site in env.sites():
-        #     for k,env_t in env[site].__dict__.items():
-        #         print(f"{k} {getattr(env[site],k)._data.shape} {getattr(env_tmp[site],k)._data.shape if not (getattr(env_tmp[site],k) is None) else None}")
-        # print("")
 
         return env_tmp, proj
 

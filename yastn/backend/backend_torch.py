@@ -18,6 +18,7 @@ from types import SimpleNamespace
 from functools import reduce
 import numpy as np
 import torch
+from torch.utils.checkpoint import checkpoint as _checkpoint
               
 __all__= [
     '_torch_version_check', 'DTYPE', 'cuda_is_available',
@@ -976,7 +977,8 @@ class kernel_unmerge(torch.autograd.Function):
 # functionals
 def checkpoint(f,*args,**kwargs):
     # context_fn=kwargs.pop('context_fn',None)
-    return torch.utils.checkpoint.checkpoint(f, *args, use_reentrant=kwargs.pop('use_reentrant',None), 
+    # torch.utils.checkpoint.checkpoint
+    return _checkpoint(f, *args, use_reentrant=kwargs.pop('use_reentrant',None), 
                                              determinism_check=kwargs.pop('determinism_check','default'), 
                                              debug=kwargs.pop('debug',False), **kwargs)
 

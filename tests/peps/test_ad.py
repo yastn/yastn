@@ -153,7 +153,8 @@ def prepare_RVB(additional_imports):
     A_grad_expected= A_grad_expected.transpose(axes=(1,2,3,4,0))
 
 
-    def cost_function_RVB(elems, slice, max_sweeps, ctm_init='dl', fix_signs=False, truncate_multiplets_mode='truncate'):
+    def cost_function_RVB(elems, slice, max_sweeps, ctm_init='dl', fix_signs=False, truncate_multiplets_mode='truncate', 
+                          checkpoint_move=False):
         A0= A.clone()
         A0._data[slice]= elems
 
@@ -169,14 +170,15 @@ def prepare_RVB(additional_imports):
 
         env = fpeps.EnvCTM(psi, init=ctm_init)
         info = env.ctmrg_(opts_svd = {"D_total": 64, 'fix_signs': fix_signs}, max_sweeps=max_sweeps, 
-                            truncation_f=truncation_f, use_qr=False)
+                            truncation_f=truncation_f, use_qr=False, checkpoint_move=checkpoint_move)
         r1x1, r1x1_norm= rdm1x1( (0,0), psi, env)
         return r1x1[(-1,-1)].trace().real
 
     return A, A_grad_expected, cost_function_RVB 
 
 
-def cost_function_f(yastn_cfg, g, A, elems, slices : dict[tuple[int],tuple[slice,slice]], max_sweeps, ctm_init='dl', fix_signs=False, truncate_multiplets_mode='truncate'):
+def cost_function_f(yastn_cfg, g, A, elems, slices : dict[tuple[int],tuple[slice,slice]], max_sweeps, ctm_init='dl', fix_signs=False, 
+                    truncate_multiplets_mode='truncate', checkpoint_move=False):
     # For each on-site tensor, corresponding element in slices is a pair,
     # where first entry specified slice in elems 1D-array while second entry specifies slice in target on-site tensor
     # 
@@ -198,7 +200,7 @@ def cost_function_f(yastn_cfg, g, A, elems, slices : dict[tuple[int],tuple[slice
     env = fpeps.EnvCTM(psi, init=ctm_init, leg=env_leg)
 
     info = env.ctmrg_(opts_svd = {"D_total": chi, 'fix_signs': fix_signs}, max_sweeps=max_sweeps, 
-                        corner_tol=1.0e-8, truncation_f=truncation_f, use_qr=False)
+                        corner_tol=1.0e-8, truncation_f=truncation_f, use_qr=False, checkpoint_move=checkpoint_move)
     print(f"CTM {info}")
 
     # sum of traces of even sectors across 1x1 RDMs
@@ -238,6 +240,8 @@ def prepare_3x3(additional_imports):
     return A, None, cost_function_3x3 
 
 
+##### U(1) RVB Kagome #####
+
 @pytest.mark.parametrize("ctm_init", ['dl', 'eye'])
 @pytest.mark.parametrize("fix_signs", [False, True])
 @pytest.mark.parametrize("truncate_multiplets_mode", ["truncate", "expand"])
@@ -261,14 +265,15 @@ def test_Kagome_RVB_D3_U1_sym_ctmsteps1(ctm_init, fix_signs, truncate_multiplets
 @pytest.mark.skipif( "not config.getoption('long_tests')", reason="long duration tests are skipped" )
 @pytest.mark.parametrize("ctm_init", ['dl', 'eye'])
 @pytest.mark.parametrize("truncate_multiplets_mode", ["truncate", "expand"])
-def test_Kagome_RVB_D3_U1_sym_vs_pepstorch(ctm_init, truncate_multiplets_mode, config_kwargs, additional_imports):
+@pytest.mark.parametrize("checkpoint_move", [True, False])
+def test_Kagome_RVB_D3_U1_sym_vs_pepstorch(ctm_init, truncate_multiplets_mode, checkpoint_move, additional_imports):
     config_kwargs, torch, gradcheck = additional_imports
     A, A_grad_expected, cost_function_RVB= prepare_RVB(additional_imports)
     test_elems= A._data.clone()
     test_elems.requires_grad_()
 
     loc_cost_f= lambda x : cost_function_RVB(x, slice(0,len(test_elems)), 20, ctm_init=ctm_init, \
-            fix_signs=False, truncate_multiplets_mode=truncate_multiplets_mode)
+            fix_signs=False, truncate_multiplets_mode=truncate_multiplets_mode, checkpoint_move=checkpoint_move)
 
     R= loc_cost_f(test_elems)
     R.backward()
@@ -279,7 +284,7 @@ def test_Kagome_RVB_D3_U1_sym_vs_pepstorch(ctm_init, truncate_multiplets_mode, c
 @pytest.mark.skipif( "not config.getoption('long_tests')", reason="long duration tests are skipped" )
 @pytest.mark.parametrize("ctm_init", ['dl', 'eye'])
 @pytest.mark.parametrize("truncate_multiplets_mode", ["truncate", "expand"])
-def test_Kagome_RVB_D3_U1_sym_conv(ctm_init, truncate_multiplets_mode, config_kwargs, additional_imports):
+def test_Kagome_RVB_D3_U1_sym_conv(ctm_init, truncate_multiplets_mode, additional_imports):
     config_kwargs, torch, gradcheck = additional_imports
     A, A_grad_expected, cost_function_RVB= prepare_RVB(additional_imports)
     test_elems= A._data[36:36+5].clone()
@@ -293,6 +298,7 @@ def test_Kagome_RVB_D3_U1_sym_conv(ctm_init, truncate_multiplets_mode, config_kw
         check_batched_grad=False, check_batched_forward_grad=False, check_forward_ad=False, 
         check_backward_ad=True, fast_mode=False, masked=None)
 
+##### Z_2 1x1 Spinless fermions honeycomb #####
 
 @pytest.mark.parametrize("ctm_init", ['dl', 'eye'])
 @pytest.mark.parametrize("fix_signs", [False, True])
@@ -331,12 +337,18 @@ def test_1x1_D1_Z2_spinlessf_conv(ctm_init, truncate_multiplets_mode, tol, addit
     # It should take 35 steps to converge
     loc_cost_f= lambda x : cost_function(x, slices, 35, ctm_init=ctm_init, fix_signs=True, 
                                          truncate_multiplets_mode=truncate_multiplets_mode)
+    
+    x0= test_elems.clone()
+    x0.requires_grad_(False)
+    loss0= loc_cost_f(x0)
+    assert np.allclose([0.22923524,], [loss0,], rtol=1e-06, atol=1e-06)
 
     gradcheck(loc_cost_f, test_elems, eps=1e-06, atol=tol*1e-2, rtol=tol, 
         raise_exception=True, nondet_tol=0.0, check_undefined_grad=True, check_grad_dtypes=False, 
         check_batched_grad=False, check_batched_forward_grad=False, check_forward_ad=False, 
         check_backward_ad=True, fast_mode=False, masked=None)
 
+##### Z_2 3x3 Spinless fermions honeycomb #####
 
 @pytest.mark.parametrize("ctm_init", ['dl', 'eye'])
 @pytest.mark.parametrize("fix_signs", [False, True])
