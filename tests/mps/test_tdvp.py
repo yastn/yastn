@@ -217,7 +217,7 @@ def test_tdvp_sudden_quench_mpo_sum(config_kwargs, sym, tol=1e-10):
         phi = psi.shallow_copy()
         for step in mps.tdvp_(phi, H1, times=times, method=method, dt=0.125,
                               opts_svd=opts_svd, opts_expmv=opts_expmv,
-                              order='4th', yield_initial=True):
+                              order='4th', yield_initial=True, shift_E=True):
             #
             # Calculate correlation matrix from mps
             # and exact reference
