@@ -19,9 +19,13 @@ from functools import reduce
 import numpy as np
 import torch
 
+from .linalg.torch_svd_gesdd import SVDGESDD
+from .linalg.torch_eig_sym import SYMEIG
+from .linalg.torch_svd_arnoldi import SVDARNOLDI
+# from .linalg.torch_eig_arnoldi import SYMARNOLDI, SYMARNOLDI_2C
+
 __all__= [
-    '_torch_version_check', 'DTYPE', 'cuda_is_available',
-    'SVDGESDD','SYMEIG',
+    'DTYPE', 'cuda_is_available',
     'get_dtype', 'is_complex', 'get_device', 'random_seed', 'set_num_threads', 'grad',
     'detach', 'detach_', 'clone', 'copy',
     'to_numpy', 'get_shape', 'get_size', 'diag_create', 'diag_get', 'real',
@@ -34,31 +38,8 @@ __all__= [
     'argsort', 'eigs_which', 'allclose',
     'add', 'sub', 'apply_mask', 'vdot', 'diag_1dto2d', 'diag_2dto1d',
     'dot', 'dot_diag', 'transpose_dot_sum',
-    'merge_to_dense', 'merge_super_blocks', 'is_independent'
-]
-#['transpose', 'transpose_and_merge', 'unmerge']
-
-def _torch_version_check(version):
-    # for version="X.Y.Z" checks if current version is higher or equal to X.Y
-    assert version.count('.')>0 and version.replace('.','').isdigit(),"Invalid version string"
-    try:
-        import pkg_resources
-        return pkg_resources.parse_version(torch.__version__) >= pkg_resources.parse_version(version)
-    except ModuleNotFoundError:  # pragma: no cover
-        try:
-            from packaging import version
-            return version.parse(torch.__version__) >= version.parse(version)
-        except ModuleNotFoundError:
-            tokens= torch.__version__.split('.')
-            tokens_v= version.split('.')
-            return int(tokens[0]) > int(tokens_v[0]) or \
-                (int(tokens[0])==int(tokens_v[0]) and int(tokens[1]) >= int(tokens_v[1]))
-
-
-from .linalg.torch_svd_gesdd import SVDGESDD
-from .linalg.torch_eig_sym import SYMEIG
-from .linalg.torch_svd_arnoldi import SVDARNOLDI
-# from .linalg.torch_eig_arnoldi import SYMARNOLDI, SYMARNOLDI_2C
+    'merge_to_dense', 'merge_super_blocks', 'is_independent',
+    'transpose', 'transpose_and_merge', 'unmerge']
 
 
 torch.random.seed()
@@ -262,16 +243,9 @@ def move_to(data, *args, **kwargs):
             kwargs["dtype"] = DTYPE[kwargs["dtype"]]
     return data.to(*args, **kwargs)
 
-if _torch_version_check("1.11.0"):
-    def conj(data):
-        return data.conj()
-elif _torch_version_check("1.10.0"):
-    def conj(data):
-        return data.conj_physical()
-        # return data.conj()
-else:
-    def conj(data):
-        return data.conj()
+
+def conj(data):
+    return data.conj()
 
 
 def trace(data, order, meta, Dsize):
@@ -336,72 +310,32 @@ def svd(data, meta, sizes, fullrank_uv=False, ad_decomp_reg=1.0e-12,\
 
 
 class kernel_svd(torch.autograd.Function):
-    if _torch_version_check("2.0"):
-        @staticmethod
-        def forward(data, meta, sizes, fullrank_uv=False, ad_decomp_reg=1.0e-12,\
-                diagnostics=None):
-            # SVDGESDD decomposes A = USV^\dag and return U,S,V^\dag
-            #
-            # NOTE: switch device to cpu as svd on cuda seems to be very slow.
-            # device = data.device
-            # data = data.to(device='cpu')
-            real_dtype = data.real.dtype if data.is_complex() else data.dtype
-            Udata = torch.empty((sizes[0],), dtype=data.dtype, device=data.device)
-            Sdata = torch.empty((sizes[1],), dtype=real_dtype, device=data.device)
-            Vhdata = torch.empty((sizes[2],), dtype=data.dtype, device=data.device)
-            reg = torch.as_tensor(ad_decomp_reg, dtype=real_dtype, device=data.device)
-            for (sl, D, slU, DU, slS, slV, DV) in meta:
-                # is_zero_block = torch.linalg.vector_norm(data[slice(*sl)]) == 0. if _torch_version_check("1.7.0") \
-                #     else data[slice(*sl)].norm() == 0.
-                # if is_zero_block: continue
-                U, S, Vh = SVDGESDD.forward(data[slice(*sl)].view(D), reg, fullrank_uv, diagnostics)
-                Udata[slice(*slU)].reshape(DU)[:] = U
-                Sdata[slice(*slS)] = S
-                Vhdata[slice(*slV)].reshape(DV)[:] = Vh
-            #
-            # Udata.to(device=device), Sdata.to(device=device), Vhdata.to(device=device)
-            return Udata, Sdata, Vhdata
 
-        @staticmethod
-        # inputs is a Tuple of all of the inputs passed to forward.
-        # output is the output of the forward().
-        def setup_context(ctx, inputs, output):
-            data, meta, sizes, _, ad_decomp_reg,diagnostics= inputs
-            reg= torch.as_tensor(ad_decomp_reg, dtype=data.real.dtype, device=data.device)
-            Udata, Sdata, Vhdata= output
-            ctx.save_for_backward(Udata, Sdata, Vhdata, reg)
-            ctx.meta_svd= meta
-            ctx.data_size= data.numel()
-            ctx.diagnostics= diagnostics
-    else:
-        @staticmethod
-        def forward(ctx, data, meta, sizes, fullrank_uv=False, ad_decomp_reg=1.0e-12,\
-                diagnostics=None):
-            # SVDGESDD decomposes A = USV^\dag and return U,S,V^\dag
-            #
-            # NOTE: switch device to cpu as svd on cuda seems to be very slow.
-            # device = data.device
-            # data = data.to(device='cpu')
-            real_dtype = data.real.dtype if data.is_complex() else data.dtype
-            Udata = torch.empty((sizes[0],), dtype=data.dtype, device=data.device)
-            Sdata = torch.empty((sizes[1],), dtype=real_dtype, device=data.device)
-            Vhdata = torch.empty((sizes[2],), dtype=data.dtype, device=data.device)
-            reg= torch.as_tensor(ad_decomp_reg, dtype=data.real.dtype, device=data.device)
-            for (sl, D, slU, DU, slS, slV, DV) in meta:
-                # is_zero_block = torch.linalg.vector_norm(data[slice(*sl)]) == 0. if _torch_version_check("1.7.0") \
-                #     else data[slice(*sl)].norm() == 0.
-                # if is_zero_block: continue
-                U, S, Vh = SVDGESDD.forward(data[slice(*sl)].view(D), reg, fullrank_uv, diagnostics)
-                Udata[slice(*slU)].reshape(DU)[:] = U
-                Sdata[slice(*slS)] = S
-                Vhdata[slice(*slV)].reshape(DV)[:] = Vh
-            #
-            # Udata.to(device=device), Sdata.to(device=device), Vhdata.to(device=device)
-            ctx.save_for_backward(Udata, Sdata, Vhdata, reg)
-            ctx.meta_svd= meta
-            ctx.data_size= data.numel()
-            ctx.diagnostics= diagnostics
-            return Udata, Sdata, Vhdata
+    @staticmethod
+    def forward(data, meta, sizes, fullrank_uv=False, ad_decomp_reg=1.0e-12, diagnostics=None):
+        real_dtype = data.real.dtype if data.is_complex() else data.dtype
+        Udata = torch.empty((sizes[0],), dtype=data.dtype, device=data.device)
+        Sdata = torch.empty((sizes[1],), dtype=real_dtype, device=data.device)
+        Vhdata = torch.empty((sizes[2],), dtype=data.dtype, device=data.device)
+        reg = torch.as_tensor(ad_decomp_reg, dtype=real_dtype, device=data.device)
+        for (sl, D, slU, DU, slS, slV, DV) in meta:
+            U, S, Vh = SVDGESDD.forward(data[slice(*sl)].view(D), reg, fullrank_uv, diagnostics)
+            Udata[slice(*slU)].reshape(DU)[:] = U
+            Sdata[slice(*slS)] = S
+            Vhdata[slice(*slV)].reshape(DV)[:] = Vh
+        return Udata, Sdata, Vhdata
+
+    @staticmethod
+    # inputs is a Tuple of all of the inputs passed to forward.
+    # output is the output of the forward().
+    def setup_context(ctx, inputs, output):
+        data, meta, sizes, _, ad_decomp_reg,diagnostics= inputs
+        reg= torch.as_tensor(ad_decomp_reg, dtype=data.real.dtype, device=data.device)
+        Udata, Sdata, Vhdata= output
+        ctx.save_for_backward(Udata, Sdata, Vhdata, reg)
+        ctx.meta_svd= meta
+        ctx.data_size= data.numel()
+        ctx.diagnostics= diagnostics
 
     @staticmethod
     def backward(ctx, Udata_b, Sdata_b, Vhdata_b):
@@ -431,27 +365,17 @@ def svd_arnoldi(data, meta, sizes):
 class kernel_svd_arnoldi(torch.autograd.Function):
     @staticmethod
     def forward(ctx, data, meta, sizes):
-        # SVDGESDD decomposes A = USV^\dag and return U,S,V^\dag
-        #
-        # NOTE: switch device to cpu as svd on cuda seems to be very slow.
-        # device = data.device
-        # data = data.to(device='cpu')
         real_dtype = data.real.dtype if data.is_complex() else data.dtype
         Udata = torch.empty((sizes[0],), dtype=data.dtype, device=data.device)
         Sdata = torch.empty((sizes[1],), dtype=real_dtype, device=data.device)
         Vhdata = torch.empty((sizes[2],), dtype=data.dtype, device=data.device)
         for (sl, D, slU, DU, slS, slV, DV) in meta:
-            # is_zero_block = torch.linalg.vector_norm(data[slice(*sl)]) == 0. if _torch_version_check("1.7.0") \
-            #     else data[slice(*sl)].norm() == 0.
-            # if is_zero_block: continue
             k = slS[1] - slS[0]
             U, S, V = SVDARNOLDI.apply(data[slice(*sl)].view(D), k)
             Udata[slice(*slU)].reshape(DU)[:] = U
             Sdata[slice(*slS)] = S
-            # Vhdata[slice(*slV)].reshape(DV)[:] = V.t().conj()
             Vhdata[slice(*slV)].reshape(DV)[:] = V
-        #
-        # Udata.to(device=device), Sdata.to(device=device), Vhdata.to(device=device)
+
         ctx.save_for_backward(Udata, Sdata, Vhdata)
         ctx.meta_svd= meta
         ctx.data_size= data.numel()
@@ -466,6 +390,7 @@ class kernel_svd_arnoldi(torch.autograd.Function):
         data_b= torch.zeros(data_size, dtype=Udata.dtype, device=Udata.device)
         return None,None,None,None,None,None
 
+
 def fix_svd_signs(Udata, Vhdata, meta):
     Ud = torch.empty_like(Udata)
     Vhd = torch.empty_like(Vhdata)
@@ -479,7 +404,7 @@ def fix_svd_signs(Udata, Vhdata, meta):
         phase = phase / abs(phase)
         Ud[slice(*slU)].reshape(DU)[:] = Utemp * phase.conj().reshape(1, -1)
         Vhd[slice(*slV)].reshape(DV)[:] = Vtemp * phase.reshape(-1, 1)
-    return Ud, Vhd # Utemp, Vtemp
+    return Ud, Vhd
 
 
 def eigh(data, meta=None, sizes=(1, 1), order_by_magnitude=False, ad_decomp_reg=1.0e-12):
@@ -577,86 +502,50 @@ def dot(Adata, Bdata, meta_dot, Dsize):
     return kernel_dot.apply(Adata, Bdata, meta_dot, Dsize)
 
 
-if _torch_version_check("2.0"):
-    class kernel_dot(torch.autograd.Function):
-        @staticmethod
-        def forward(Adata, Bdata, meta_dot, Dsize):
-            dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
-            if dtype != Adata.dtype:
-                Adata = Adata.to(dtype=dtype)
-            if dtype != Bdata.dtype:
-                Bdata = Bdata.to(dtype=dtype)
-            newdata = torch.zeros(Dsize, dtype=dtype, device=Adata.device)
-            for (slc, Dc, sla, Da, slb, Db) in meta_dot:
-                newdata[slice(*slc)].view(Dc)[:] = Adata[slice(*sla)].view(Da) @ Bdata[slice(*slb)].view(Db)
-            return newdata
+class kernel_dot(torch.autograd.Function):
+    @staticmethod
+    def forward(Adata, Bdata, meta_dot, Dsize):
+        dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
+        if dtype != Adata.dtype:
+            Adata = Adata.to(dtype=dtype)
+        if dtype != Bdata.dtype:
+            Bdata = Bdata.to(dtype=dtype)
+        newdata = torch.zeros(Dsize, dtype=dtype, device=Adata.device)
+        for (slc, Dc, sla, Da, slb, Db) in meta_dot:
+            newdata[slice(*slc)].view(Dc)[:] = Adata[slice(*sla)].view(Da) @ Bdata[slice(*slb)].view(Db)
+        return newdata
 
-        @staticmethod
-        # inputs is a Tuple of all of the inputs passed to forward.
-        # output is the output of the forward().
-        def setup_context(ctx, inputs, output):
-            Adata, Bdata, meta_dot, Dsize = inputs
-            ctx.save_for_backward(Adata, Bdata)
-            ctx.meta_dot= meta_dot
+    @staticmethod
+    # inputs is a Tuple of all of the inputs passed to forward.
+    # output is the output of the forward().
+    def setup_context(ctx, inputs, output):
+        Adata, Bdata, meta_dot, Dsize = inputs
+        ctx.save_for_backward(Adata, Bdata)
+        ctx.meta_dot= meta_dot
 
-        @staticmethod
-        def backward(ctx, Cdata_b):
-            # adjoint of block-sparse matrix-matrix multiplication A.B = C
-            #
-            # A_b = C_b.B^T ; B_b = A^T . C_b
-            Adata, Bdata= ctx.saved_tensors
-            meta_dot= ctx.meta_dot
-            dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
-            Adata_b = torch.zeros_like(Adata, dtype=dtype)
-            Bdata_b = torch.zeros_like(Bdata, dtype=dtype)
-            if dtype != Adata.dtype:
-                Adata = Adata.to(dtype=dtype)
-            if dtype != Bdata.dtype:
-                Bdata = Bdata.to(dtype=dtype)
-            for (slc, Dc, sla, Da, slb, Db) in meta_dot:
-                Ab = Adata_b[slice(*sla)].view(Da)
-                Bb = Bdata_b[slice(*slb)].view(Db)
-                Cb = Cdata_b[slice(*slc)].view(Dc)
-                B = Bdata[slice(*slb)].view(Db)
-                A = Adata[slice(*sla)].view(Da)
-                Ab += Cb @ B.adjoint()  #  += is for fuse_contracted
-                Bb += A.adjoint() @ Cb
-            return Adata_b, Bdata_b, None, None
-else:
-    class kernel_dot(torch.autograd.Function):
-        @staticmethod
-        def forward(ctx, Adata, Bdata, meta_dot, Dsize):
-            ctx.save_for_backward(Adata, Bdata)
-            ctx.meta_dot= meta_dot
-
-            dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
-            if dtype != Adata.dtype:
-                Adata = Adata.to(dtype=dtype)
-            if dtype != Bdata.dtype:
-                Bdata = Bdata.to(dtype=dtype)
-            newdata = torch.zeros(Dsize, dtype=dtype, device=Adata.device)
-            for (slc, Dc, sla, Da, slb, Db, ia, ib) in meta_dot:
-                newdata[slice(*slc)].view(Dc)[:] = Adata[slice(*sla)].view(Da) @ Bdata[slice(*slb)].view(Db)
-            return newdata
-
-        @staticmethod
-        def backward(ctx, Cdata_b):
-            # adjoint of block-sparse matrix-matrix multiplication A.B = C
-            #
-            # A_b = C_b.B^T ; B_b = A^T . C_b
-            Adata, Bdata= ctx.saved_tensors
-            meta_dot= ctx.meta_dot
-            Adata_b = torch.zeros_like(Adata)
-            Bdata_b = torch.zeros_like(Bdata)
-            dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
-            if dtype != Adata.dtype:
-                Adata = Adata.to(dtype=dtype)
-            if dtype != Bdata.dtype:
-                Bdata = Bdata.to(dtype=dtype)
-            for (slc, Dc, sla, Da, slb, Db, ia, ib) in meta_dot:
-                Adata_b[slice(*sla)].view(Da)[:]= Cdata_b[slice(*slc)].view(Dc) @ Bdata[slice(*slb)].view(Db).adjoint()
-                Bdata_b[slice(*slb)].view(Db)[:]= Adata[slice(*sla)].view(Da).adjoint() @ Cdata_b[slice(*slc)].view(Dc)
-            return Adata_b, Bdata_b, None, None
+    @staticmethod
+    def backward(ctx, Cdata_b):
+        # adjoint of block-sparse matrix-matrix multiplication A.B = C
+        #
+        # A_b = C_b.B^T ; B_b = A^T . C_b
+        Adata, Bdata= ctx.saved_tensors
+        meta_dot= ctx.meta_dot
+        dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
+        Adata_b = torch.zeros_like(Adata, dtype=dtype)
+        Bdata_b = torch.zeros_like(Bdata, dtype=dtype)
+        if dtype != Adata.dtype:
+            Adata = Adata.to(dtype=dtype)
+        if dtype != Bdata.dtype:
+            Bdata = Bdata.to(dtype=dtype)
+        for (slc, Dc, sla, Da, slb, Db) in meta_dot:
+            Ab = Adata_b[slice(*sla)].view(Da)
+            Bb = Bdata_b[slice(*slb)].view(Db)
+            Cb = Cdata_b[slice(*slc)].view(Dc)
+            B = Bdata[slice(*slb)].view(Db)
+            A = Adata[slice(*sla)].view(Da)
+            Ab += Cb @ B.adjoint()  #  += is for fuse_contracted
+            Bb += A.adjoint() @ Cb
+        return Adata_b, Bdata_b, None, None
 
 
 def transpose_dot_sum(Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border, Dsize):
@@ -993,7 +882,4 @@ def is_independent(x, y):
     """
     check if two arrays are identical, or share the same view.
     """
-    if _torch_version_check("2.0"):
-        return (x is not y) and (x.numel() == 0 or x.untyped_storage().data_ptr() != y.untyped_storage().data_ptr())
-    else:
-        return (x is not y) and (x.numel() == 0 or x.storage().data_ptr() != y.storage().data_ptr())
+    return (x is not y) and (x.numel() == 0 or x.untyped_storage().data_ptr() != y.untyped_storage().data_ptr())

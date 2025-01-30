@@ -1,40 +1,30 @@
 import torch
 import warnings
-from ..backend_torch import _torch_version_check
 
 def safe_inverse(x, eps_rel=1.0e-12, eps_abs=1.0e-12):
-    return x / (x**2 + eps_abs)
+    return x / (x ** 2 + eps_abs)
+
 
 def safe_inverse_2(x, epsilon):
     x[abs(x) < epsilon] = float('inf')
     return x.pow(-1)
 
 class SVDGESDD(torch.autograd.Function):
-    if _torch_version_check("1.8.1"):
-        @staticmethod
-        def forward(A, ad_decomp_reg, fullrank_uv, diagnostics):
-            U, S, Vh = torch.linalg.svd(A, full_matrices=fullrank_uv)
-            # A = U @ diag(S) @ Vh
-            return U, S, Vh
-        
-        @staticmethod
-        # inputs is a Tuple of all of the inputs passed to forward.
-        # output is the output of the forward().
-        def setup_context(ctx, inputs, output):
-            _, ad_decomp_reg, _, diagnostics= inputs
-            U, S, Vh= output
-            ctx.save_for_backward(U, S, Vh, ad_decomp_reg)
-            ctx.diagnostics= diagnostics
-            
-    else:
-        @staticmethod
-        def forward(self, A, ad_decomp_reg, fullrank_uv, diagnostics):
-            U, S, V = torch.svd(A, some=not fullrank_uv)
-            # A = U @ diag(S) @ V.transpose(-2, -1).conj()
-            Vh = V.transpose(-2, -1).conj()
-            self.save_for_backward(U, S, Vh, ad_decomp_reg)
-            self.diagnostics= diagnostics
-            return U, S, Vh
+
+    @staticmethod
+    def forward(A, ad_decomp_reg, fullrank_uv, diagnostics):
+        U, S, Vh = torch.linalg.svd(A, full_matrices=fullrank_uv)
+        # A = U @ diag(S) @ Vh
+        return U, S, Vh
+
+    @staticmethod
+    # inputs is a Tuple of all of the inputs passed to forward.
+    # output is the output of the forward().
+    def setup_context(ctx, inputs, output):
+        _, ad_decomp_reg, _, diagnostics= inputs
+        U, S, Vh= output
+        ctx.save_for_backward(U, S, Vh, ad_decomp_reg)
+        ctx.diagnostics= diagnostics
 
     # From https://github.com/pytorch/pytorch/blob/master/torch/csrc/autograd/FunctionsManual.cpp
     # commit 5375b2e
@@ -254,7 +244,7 @@ class SVDGESDD(torch.autograd.Function):
         S2= S*S
         E= S2.unsqueeze(-2) - S2.unsqueeze(-1) # S^2_i-S^2_j
         E.diagonal(0,-2,-1).fill_(1)
-        
+
         gA= (UhgU * S.unsqueeze(-2) + S.unsqueeze(-1) * VhgV) * (1./reg_preinv(E)) + gS.diag_embed()
         if is_complex:
             gA = gA + (UhgU.diagonal(0, -2, -1) * (1./(2. * reg_preinv(S))) ).diag_embed()
@@ -311,38 +301,38 @@ class SVDGESDD(torch.autograd.Function):
         :return: gradient
         :rtype: torch.Tensor
 
-        Computes backward gradient for SVD, adopted from 
+        Computes backward gradient for SVD, adopted from
         https://github.com/pytorch/pytorch/blob/v1.10.2/torch/csrc/autograd/FunctionsManual.cpp
-        
+
         For complex-valued input there is an additional term, see
 
             * https://giggleliu.github.io/2019/04/02/einsumbp.html
             * https://arxiv.org/abs/1909.02659
 
         The backward is regularized following
-        
+
             * https://github.com/wangleiphy/tensorgrad/blob/master/tensornets/adlib/svd.py
             * https://arxiv.org/abs/1903.09650
 
-        using 
+        using
 
-        .. math:: 
+        .. math::
             S_i/(S^2_i-S^2_j) = (F_{ij}+G_{ij})/2\ \ \textrm{and}\ \ S_j/(S^2_i-S^2_j) = (F_{ij}-G_{ij})/2
-        
-        where 
-        
-        .. math:: 
+
+        where
+
+        .. math::
             F_{ij}=1/(S_i-S_j),\ G_{ij}=1/(S_i+S_j)
         """
-        # 
+        #
         # TORCH_CHECK(compute_uv,
         #    "svd_backward: Setting compute_uv to false in torch.svd doesn't compute singular matrices, ",
         #    "and hence we cannot compute backward. Please use torch.svd(compute_uv=True)");
 
-        
+
         diagnostics= self.diagnostics
         u, sigma, vh, eps= self.saved_tensors
-        m= u.size(0) # first dim of original tensor A = u sigma v^\dag 
+        m= u.size(0) # first dim of original tensor A = u sigma v^\dag
         n= vh.size(1) # second dim of A
         k= sigma.size(0)
         sigma_scale= sigma[0]
@@ -390,11 +380,11 @@ class SVDGESDD(torch.autograd.Function):
                 # projection operator onto subspace orthogonal to span(U) defined as I - UU^H
                 proj_on_ortho_u = -u @ uh
                 proj_on_ortho_u.diagonal(0, -2, -1).add_(1);
-                u_term = u_term + proj_on_ortho_u @ (gu * sigma_inv.unsqueeze(-2)) 
+                u_term = u_term + proj_on_ortho_u @ (gu * sigma_inv.unsqueeze(-2))
             u_term = u_term @ vh
         else:
             u_term = torch.zeros(m,n,dtype=u.dtype,device=u.device)
-        
+
         v= vh.conj().transpose(-2,-1)
         if not (gvh is None):
             gv = gvh.conj().transpose(-2, -1);
@@ -407,7 +397,7 @@ class SVDGESDD(torch.autograd.Function):
             v_term = u @ v_term
         else:
             v_term = torch.zeros(m,n,dtype=u.dtype,device=u.device)
-        
+
         # TODO enable check
         # if (u.is_complex() or vh.is_complex()) and not (gvh is None) and not (gu is None):
         #     imdiag_UhgU= UhgU.diagonal(0, -2, -1).imag

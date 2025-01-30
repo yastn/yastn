@@ -3,59 +3,35 @@ Implementation taken from https://arxiv.org/abs/1903.09650
 which follows derivation given in https://people.maths.ox.ac.uk/gilesm/files/NA-08-01.pdf
 '''
 import torch
-from ..backend_torch import _torch_version_check
+
 
 def safe_inverse(x, epsilon=1e-12):
-    return x / (x**2 + epsilon)
+    return x / (x ** 2 + epsilon)
 
 
 class SYMEIG(torch.autograd.Function):
-    if _torch_version_check("1.8.1"):
-        @staticmethod
-        def forward(self, A, ad_decomp_reg):
-            r"""
-            :param A: square symmetric matrix
-            :type A: torch.tensor
-            :return: eigenvalues values D, eigenvectors vectors U
-            :rtype: torch.tensor, torch.tensor
+    @staticmethod
+    def forward(self, A, ad_decomp_reg):
+        r"""
+        :param A: square symmetric matrix
+        :type A: torch.tensor
+        :return: eigenvalues values D, eigenvectors vectors U
+        :rtype: torch.tensor, torch.tensor
 
-            Computes symmetric decomposition :math:`M= UDU^T`.
-            """
-            # input validation (A is square and symmetric) is provided by torch.symeig
+        Computes symmetric decomposition :math:`M= UDU^T`.
+        """
+        # input validation (A is square and symmetric) is provided by torch.symeig
 
-            D, U = torch.linalg.eigh(A, eigenvectors=True)
-            # torch.symeig returns eigenpairs ordered in the ascending order with
-            # respect to eigenvalues. Reorder the eigenpairs by abs value of the eigenvalues
-            # abs(D)
-            absD, p = torch.sort(torch.abs(D), descending=True)
-            D = D[p]
-            U = U[:, p]
+        D, U = torch.linalg.eigh(A, eigenvectors=True)
+        # torch.symeig returns eigenpairs ordered in the ascending order with
+        # respect to eigenvalues. Reorder the eigenpairs by abs value of the eigenvalues
+        # abs(D)
+        absD, p = torch.sort(torch.abs(D), descending=True)
+        D = D[p]
+        U = U[:, p]
 
-            self.save_for_backward(D, U, ad_decomp_reg)
-            return D, U
-    else:
-        @staticmethod
-        def forward(self, A, ad_decomp_reg):
-            r"""
-            :param A: square symmetric matrix
-            :type A: torch.tensor
-            :return: eigenvalues values D, eigenvectors vectors U
-            :rtype: torch.tensor, torch.tensor
-
-            Computes symmetric decomposition :math:`M= UDU^T`.
-            """
-            # input validation (A is square and symmetric) is provided by torch.symeig
-
-            D, U = torch.symeig(A, eigenvectors=True)
-            # torch.symeig returns eigenpairs ordered in the ascending order with
-            # respect to eigenvalues. Reorder the eigenpairs by abs value of the eigenvalues
-            # abs(D)
-            absD, p = torch.sort(torch.abs(D), descending=True)
-            D = D[p]
-            U = U[:, p]
-
-            self.save_for_backward(D, U, ad_decomp_reg)
-            return D, U
+        self.save_for_backward(D, U, ad_decomp_reg)
+        return D, U
 
     @staticmethod
     def backward(self, dD, dU):

@@ -1,6 +1,4 @@
-import numpy as np
 import torch
-import torch.nn.functional as Functional
 try:
     import scipy.sparse.linalg
     from scipy.sparse.linalg import LinearOperator
@@ -15,26 +13,26 @@ class SVDSYMARNOLDI(torch.autograd.Function):
         :param k: desired rank (must be smaller than :math:`N`)
         :type M: torch.tensor
         :type k: int
-        :return: leading k left eigenvectors U, singular values S, and right 
+        :return: leading k left eigenvectors U, singular values S, and right
                  eigenvectors V
         :rtype: torch.tensor, torch.tensor, torch.tensor
 
         **Note:** `depends on scipy`
 
-        Return leading k-singular triples of a matrix M, where M is symmetric 
-        :math:`M=M^T`, by computing the symmetric decomposition :math:`M= UDU^T` 
+        Return leading k-singular triples of a matrix M, where M is symmetric
+        :math:`M=M^T`, by computing the symmetric decomposition :math:`M= UDU^T`
         up to rank k. Partial eigendecomposition is done through Arnoldi method.
         """
-        # input validation (M is square and symmetric) is provided by 
+        # input validation (M is square and symmetric) is provided by
         # the scipy.sparse.linalg.eigsh
-        
+
         # get M as numpy ndarray and wrap back to torch
         # allow for mat-vec ops to be carried out on GPU
         def mv(v):
             V= torch.as_tensor(v,dtype=M.dtype,device=M.device)
             V= torch.mv(M,V)
             return V.detach().cpu().numpy()
-        
+
         # M_nograd = M.clone().detach().cpu().numpy()
         M_nograd= LinearOperator(M.size(), matvec=mv)
 
@@ -46,7 +44,7 @@ class SVDSYMARNOLDI(torch.autograd.Function):
         # reorder the eigenpairs by the largest magnitude of eigenvalues
         S,p= torch.sort(torch.abs(D),descending=True)
         U= U[:,p]
-        
+
         # 1) M = UDU^t = US(sgn)U^t = U S (sgn)U^t = U S V^t
         # (sgn) is a diagonal matrix with signs of the eigenvales D
         V= U@torch.diag(torch.sign(D[p]))
@@ -76,9 +74,9 @@ def test_SVDSYMARNOLDI_random():
     S0,p= torch.sort(torch.abs(D0),descending=True)
 
     U,S,V= SVDSYMARNOLDI.apply(M,k)
-    # |M|=\sqrt{Tr(MM^t)}=\sqrt{Tr(D^2)} => 
+    # |M|=\sqrt{Tr(MM^t)}=\sqrt{Tr(D^2)} =>
     # |M-US_kV^t|=\sqrt{Tr(D^2)-Tr(S^2)}=\sqrt{\sum_i>k D^2_i}
-    assert( torch.norm(M-U@torch.diag(S)@V.t())-torch.sqrt(torch.sum(S0[k:]**2)) 
+    assert( torch.norm(M-U@torch.diag(S)@V.t())-torch.sqrt(torch.sum(S0[k:]**2))
         < S0[0]*(m**2)*1e-14 )
 
 class SVDARNOLDI(torch.autograd.Function):
@@ -89,23 +87,23 @@ class SVDARNOLDI(torch.autograd.Function):
         :param k: desired rank (must be smaller than :math:`N`)
         :type M: torch.Tensor
         :type k: int
-        :return: leading k left eigenvectors U, singular values S, and right 
+        :return: leading k left eigenvectors U, singular values S, and right
                  eigenvectors V
         :rtype: torch.Tensor, torch.Tensor, torch.Tensor
 
         **Note:** `depends on scipy`
 
-        Return leading k-singular triples of a matrix M, by computing 
-        the symmetric decomposition of :math:`H=MM^\dagger` as :math:`H= UDU^\dagger` 
+        Return leading k-singular triples of a matrix M, by computing
+        the symmetric decomposition of :math:`H=MM^\dagger` as :math:`H= UDU^\dagger`
         up to rank k. Partial eigendecomposition is done through Arnoldi method.
         """
-        # input validation is provided by the scipy.sparse.linalg.eigsh / 
+        # input validation is provided by the scipy.sparse.linalg.eigsh /
         # scipy.sparse.linalg.svds
-        
+
         # ----- Option 0
         # M_nograd = M.clone().detach()
         # MMt= M_nograd@M_nograd.t().conj()
-        
+
         # def mv(v):
         #     B= torch.as_tensor(v,dtype=M.dtype,device=M.device)
         #     B= torch.mv(MMt,B)
@@ -137,7 +135,7 @@ class SVDARNOLDI(torch.autograd.Function):
             return B.detach().cpu().numpy()
         def vm(v):
             B= torch.as_tensor(v,dtype=M.dtype,device=M.device)
-            B= torch.matmul(M.t().conj(),B)           
+            B= torch.matmul(M.t().conj(),B)
             return B.detach().cpu().numpy()
 
         if M.size(dim=0) <= k or M.size(dim=1) <= k:
@@ -171,9 +169,9 @@ def test_SVDARNOLDI_random():
     U0, S0, V0= torch.svd(M)
 
     U,S,V= SVDARNOLDI.apply(M,k)
-    # |M|=\sqrt{Tr(MM^t)}=\sqrt{Tr(D^2)} => 
+    # |M|=\sqrt{Tr(MM^t)}=\sqrt{Tr(D^2)} =>
     # |M-US_kV^t|=\sqrt{Tr(D^2)-Tr(S^2)}=\sqrt{\sum_i>k D^2_i}
-    assert( torch.norm(M-U@torch.diag(S)@V.t())-torch.sqrt(torch.sum(S0[k:]**2)) 
+    assert( torch.norm(M-U@torch.diag(S)@V.t())-torch.sqrt(torch.sum(S0[k:]**2))
         < S0[0]*(m**2)*1e-14 )
 
 def test_SVDARNOLDI_rank_deficient():
@@ -186,7 +184,7 @@ def test_SVDARNOLDI_rank_deficient():
         M= U@torch.diag(S0)@V.t()
 
         U, S, V= SVDARNOLDI.apply(M, k)
-        assert( torch.norm(M-U@torch.diag(S)@V.t())-torch.sqrt(torch.sum(S0[k:]**2)) 
+        assert( torch.norm(M-U@torch.diag(S)@V.t())-torch.sqrt(torch.sum(S0[k:]**2))
             < S0[0]*(m**2)*1e-14 )
 
 if __name__=='__main__':
