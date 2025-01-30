@@ -101,7 +101,7 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
     -------
     `U`, `S`, `V`
     """
-    diagnostics = kwargs['diagonostics'] if 'diagonostics' in kwargs else None
+    diagnostics = kwargs.get('diagonostics', None)
     U, S, V = svd(a, axes=axes, sU=sU, nU=nU, policy=policy, D_block=D_block,
                   diagnostics=diagnostics, fix_signs=fix_signs, svd_on_cpu=svd_on_cpu)
 
@@ -196,8 +196,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     sizes = tuple(x.size for x in (Ustruct, Sstruct, Vstruct))
 
     if compute_uv and policy == 'fullrank':
-        Udata, Sdata, Vdata = a.config.backend.svd(data, meta, sizes, \
-            diagnostics=kwargs['diagnostics'] if 'diagnostics' in kwargs else None)
+        Udata, Sdata, Vdata = a.config.backend.svd(data, meta, sizes, diagnostics=kwargs.get('diagnostics', None))
     elif not compute_uv and policy == 'fullrank':
         Sdata = a.config.backend.svdvals(data, meta, sizes[1])
     elif compute_uv and policy == 'lowrank':

@@ -24,7 +24,6 @@ from .linalg.torch_svd_arnoldi import SVDARNOLDI
 
 
 class kernel_svd(torch.autograd.Function):
-
     @staticmethod
     def forward(data, meta, sizes, fullrank_uv=False, ad_decomp_reg=1.0e-12, diagnostics=None):
         real_dtype = data.real.dtype if data.is_complex() else data.dtype

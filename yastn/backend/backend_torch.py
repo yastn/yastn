@@ -294,9 +294,8 @@ def svd_lowrank(data, meta, sizes):
     return Udata, Sdata, Vdata
 
 
-def svd(data, meta, sizes, fullrank_uv=False, ad_decomp_reg=1.0e-12,\
-    diagnostics=None, **kwargs):
-    return kernel_svd.apply(data,meta,sizes,fullrank_uv,ad_decomp_reg,diagnostics)
+def svd(data, meta, sizes, fullrank_uv=False, ad_decomp_reg=1.0e-12, diagnostics=None, **kwargs):
+    return kernel_svd.apply(data, meta, sizes, fullrank_uv, ad_decomp_reg, diagnostics)
 
 
 def svdvals(data, meta, sizeS, **kwargss):
@@ -458,7 +457,6 @@ def transpose(data, axes, meta_transpose):
 
 def transpose_and_merge(data, order, meta_new, meta_mrg, Dsize):
     return kernel_transpose_and_merge.apply(data, order, meta_new, meta_mrg, Dsize)
-
 
 
 def unmerge(data, meta):

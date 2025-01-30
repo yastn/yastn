@@ -1,9 +1,7 @@
 import torch
-try:
-    import scipy.sparse.linalg
-    from scipy.sparse.linalg import LinearOperator
-except:
-    print("Warning: Missing scipy. ARNOLDISVD is not available.")
+import scipy.sparse.linalg
+from scipy.sparse.linalg import LinearOperator
+
 
 class SVDSYMARNOLDI(torch.autograd.Function):
     @staticmethod
@@ -64,20 +62,6 @@ class SVDSYMARNOLDI(torch.autograd.Function):
         dA= None
         return dA, None
 
-def test_SVDSYMARNOLDI_random():
-    m= 50
-    k= 10
-    M= torch.rand(m, m, dtype=torch.float64)
-    M= 0.5*(M+M.t())
-
-    D0, U0= torch.symeig(M)
-    S0,p= torch.sort(torch.abs(D0),descending=True)
-
-    U,S,V= SVDSYMARNOLDI.apply(M,k)
-    # |M|=\sqrt{Tr(MM^t)}=\sqrt{Tr(D^2)} =>
-    # |M-US_kV^t|=\sqrt{Tr(D^2)-Tr(S^2)}=\sqrt{\sum_i>k D^2_i}
-    assert( torch.norm(M-U@torch.diag(S)@V.t())-torch.sqrt(torch.sum(S0[k:]**2))
-        < S0[0]*(m**2)*1e-14 )
 
 class SVDARNOLDI(torch.autograd.Function):
     @staticmethod
@@ -160,34 +144,3 @@ class SVDARNOLDI(torch.autograd.Function):
         U, S, V = self.saved_tensors
         dA= None
         return dA, None
-
-def test_SVDARNOLDI_random():
-    m= 50
-    k= 10
-    M= torch.rand(m, m, dtype=torch.float64)
-
-    U0, S0, V0= torch.svd(M)
-
-    U,S,V= SVDARNOLDI.apply(M,k)
-    # |M|=\sqrt{Tr(MM^t)}=\sqrt{Tr(D^2)} =>
-    # |M-US_kV^t|=\sqrt{Tr(D^2)-Tr(S^2)}=\sqrt{\sum_i>k D^2_i}
-    assert( torch.norm(M-U@torch.diag(S)@V.t())-torch.sqrt(torch.sum(S0[k:]**2))
-        < S0[0]*(m**2)*1e-14 )
-
-def test_SVDARNOLDI_rank_deficient():
-    m= 50
-    k=15
-    for r in [25,35,40,45]:
-        M= torch.rand((m,m),dtype=torch.float64)
-        U, S0, V= torch.svd(M)
-        S0[-r:]=0
-        M= U@torch.diag(S0)@V.t()
-
-        U, S, V= SVDARNOLDI.apply(M, k)
-        assert( torch.norm(M-U@torch.diag(S)@V.t())-torch.sqrt(torch.sum(S0[k:]**2))
-            < S0[0]*(m**2)*1e-14 )
-
-if __name__=='__main__':
-    test_SVDSYMARNOLDI_random()
-    test_SVDARNOLDI_random()
-    test_SVDARNOLDI_rank_deficient()

@@ -18,7 +18,6 @@ import numpy as np
 import torch
 
 from .backend_torch import *
-from .backend_torch import transpose
 
 import fused_transpose_merge_1d
 
