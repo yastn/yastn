@@ -48,11 +48,6 @@ def random_seed(seed):
     rng['rng'] = np.random.default_rng(seed)
 
 
-def set_num_threads(num_threads):  # pragma: no cover
-    warnings.warn("backend_np does not support set_num_threads.", Warning)
-    pass
-
-
 def grad(x):  # pragma: no cover
     warnings.warn("backend_np does not support automatic differentiation.", Warning)
     return None
@@ -188,10 +183,7 @@ def randint(low, high):
 
 
 def to_tensor(val, Ds=None, dtype='float64', **kwargs):
-    # try:
     T = np.array(val, dtype=DTYPE[dtype])
-    # except TypeError:
-    #     T = np.array(val, dtype=DTYPE['complex128'])
     return T if Ds is None else T.reshape(Ds)
 
 
@@ -209,7 +201,6 @@ def square_matrix_from_dict(H, D=None, **kwargs):
 
 
 def requires_grad_(data, requires_grad=True):  # pragma: no cover
-    warnings.warn("backend_np does not support autograd.", Warning)
     pass
 
 
