@@ -95,9 +95,9 @@ def test_Z2xU1(config_kwargs):
     b = a.fuse_legs(axes=((0, 1), 2), mode='hard')  # if tensor is hard-fused, have to refer to fused blocks
     assert ((0, 0), (0, 0)) in b
 
-    a = a.fuse_legs(axes=((0, 1), 2), mode='meta')  # if tensor is meta-fused, have to refer to unfused blocks
+    a = a.fuse_legs(axes=((0, 1), 2), mode='meta')
+    # if tensor is meta-fused, have to refer to unfused blocks
     assert ((0, 0), (0, 0), (0, 0)) in a
-    #TODO assert (0, 0, 0, 0) in a
     a.set_block(ts=((0, 0), (0, 0), (0, 0)), Ds=(1, 5, 4), val=np.sqrt(np.arange(20)))
     assert pytest.approx(a.norm().item() ** 2, rel=tol) == 294  # sum(range(20)) == 190
     assert a.get_shape() == (26, 30)

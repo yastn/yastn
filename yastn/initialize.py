@@ -23,8 +23,8 @@ from operator import itemgetter
 import numpy as np
 from .tensor import Tensor, YastnError
 from .tensor._auxliary import _struct, _config, _slc, _clear_axes, _unpack_legs
-from .tensor._merging import _Fusion, _embed_tensor, _sum_hfs
-from .tensor._legs import Leg, leg_union, _leg_fusions_need_mask
+from .tensor._merging import _Fusion, _embed_tensor, _combine_hfs_sum
+from .tensor._legs import Leg, LegMeta, legs_union, _legs_mask_needed
 from .tensor._tests import _test_can_be_combined
 from .backend import backend_np
 from .sym import sym_none, sym_U1, sym_Z2, sym_Z3, sym_U1xU1, sym_U1xU1xZ2
@@ -129,7 +129,7 @@ def _fill(config=None, legs=(), n=None, isdiag=False, val='rand', **kwargs):
         D = kwargs.pop('D') if 'D' in kwargs else ()
         mfs, hfs = None, None
     else:  # use legs for initialization
-        if isinstance(legs, Leg):
+        if isinstance(legs, (Leg, LegMeta)):
             legs = (legs,)
         if isdiag and len(legs) == 1:
             legs = (legs[0], legs[0].conj())
@@ -137,7 +137,7 @@ def _fill(config=None, legs=(), n=None, isdiag=False, val='rand', **kwargs):
         s = tuple(leg.s for leg in ulegs)
         t = tuple(leg.t for leg in ulegs)
         D = tuple(leg.D for leg in ulegs)
-        hfs = tuple(leg.legs[0] for leg in ulegs)
+        hfs = tuple(leg.hf for leg in ulegs)
 
         if any(config.sym.SYM_ID != leg.sym.SYM_ID for leg in ulegs):
             raise YastnError('Different symmetry of initialized tensor and some of the legs.')
@@ -320,12 +320,12 @@ def eye(config=None, legs=(), isdiag=True, **kwargs) -> yastn.Tensor:
     """
     if isdiag:
         return _fill(config=config, legs=legs, isdiag=True, val='ones', **kwargs)
-    if isinstance(legs, Leg):
+    if isinstance(legs, (Leg, LegMeta)):
         legs = (legs,)
     if len(legs) == 1:
         legs = (legs[0], legs[0].conj())
     legs = legs[:2]  # in case more then 2 legs are provided
-    if any(leg.fusion != 'hard' for leg in legs):
+    if any(isinstance(leg, LegMeta) for leg in legs):
         raise YastnError("eye() does not support 'meta'-fused legs")
     tmp = _fill(config=config, legs=legs, val='zeros', **kwargs)
     for t, D in zip(tmp.struct.t, tmp.struct.D):
@@ -354,7 +354,7 @@ def load_from_dict(config=None, d=None) -> yastn.Tensor:
         # When parsing Tensor serialized to JSON, tuples get converted to lists. For valid _struct, the lists
         # have to be remapped back to tuples [requirement for hashing]
         def _convert_lists_to_tuples(nested_iterable):
-            if isinstance(nested_iterable, list): 
+            if isinstance(nested_iterable, list):
                 return tuple( _convert_lists_to_tuples(v) if isinstance(v,(list,tuple,set,dict)) else v for v in nested_iterable )
             elif isinstance(nested_iterable, dict):
                 return { k: (_convert_lists_to_tuples(v) if isinstance(v,(list,tuple,set,dict)) else v) for k,v in nested_iterable.items() }
@@ -363,7 +363,7 @@ def load_from_dict(config=None, d=None) -> yastn.Tensor:
             else:
                 return nested_iterable
         cd= _convert_lists_to_tuples({'s': d['s'], 'n': d['n'], 't': d['t'], 'D': d['D'], 'hfs': d['hfs'], 'mfs': d['mfs']})
-        
+
         slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(c_Dp), c_Dp, cd['D']))
         struct = _struct(s=cd['s'], n=cd['n'], diag=c_isdiag, t=cd['t'], D=cd['D'], size=sum(c_Dp))
         hfs = tuple(_Fusion(**hf) for hf in cd['hfs'])
@@ -433,7 +433,7 @@ def decompress_from_1d(r1d, meta) -> yastn.Tensor:
         Each such entry contains block's dimensions and the location of its data
         in rank-1 tensor :code:`r1d`.
     """
-    hfs = tuple(leg.legs[0] for leg in meta['legs'])
+    hfs = tuple(leg.hf for leg in meta['legs'])
     a = Tensor(config=meta['config'], hfs=hfs, mfs=meta['mfs'], struct=meta['struct'], slices=meta['slices'])
     a._data = r1d
     return a
@@ -494,7 +494,7 @@ def block(tensors, common_legs=None) -> yastn.Tensor:
             else:
                 legs_n[pa[n]].append(ll[n])
         legs.append(legs_n)
-        legs_n = {p: leg_union(*plegs) for p, plegs in legs_n.items()}
+        legs_n = {p: legs_union(*plegs) for p, plegs in legs_n.items()}
         ulegs.append(legs_n)
         pn = sorted(legs_n.keys())
         hfs.append(_sum_legs_hfs([legs_n[p] for p in pn]))
@@ -511,9 +511,8 @@ def block(tensors, common_legs=None) -> yastn.Tensor:
             ltDtot[-1][t] = Dhigh
             ltDslc[-1][t] = tpDslc
 
-
     for pa in tensors.keys():
-        if any(_leg_fusions_need_mask(ulegs[n][pa[n]], leg) for n, leg in enumerate(legs_tn[pa])):
+        if any(_legs_mask_needed(ulegs[n][pa[n]], leg) for n, leg in enumerate(legs_tn[pa])):
             legs_new = {n: legs[pa[n]] for n, legs in enumerate(ulegs)}
             tensors[pa] = _embed_tensor(tensors[pa], legs_tn[pa], legs_new)
 
@@ -523,10 +522,10 @@ def block(tensors, common_legs=None) -> yastn.Tensor:
     nsym = tn0.config.sym.NSYM
     for pa, a in tensors.items():
         for tind, slind, Dind in zip(a.struct.t, a.slices, a.struct.D):
-            Dslcs = tuple(tDslc[tind[n * nsym : n * nsym + nsym]][pa[n]] for n, tDslc in enumerate(ltDslc))
+            Dslcs = tuple(tDslc[tind[n * nsym: n * nsym + nsym]][pa[n]] for n, tDslc in enumerate(ltDslc))
             meta_block.append((tind, slind.slcs[0], Dind, pa, Dslcs))
             if tind not in meta_new:
-                meta_new[tind] = tuple(tDtot[tind[n * nsym : n * nsym + nsym]] for n, tDtot in enumerate(ltDtot))
+                meta_new[tind] = tuple(tDtot[tind[n * nsym: n * nsym + nsym]] for n, tDtot in enumerate(ltDtot))
 
     meta_block = tuple(sorted(meta_block, key=itemgetter(0)))
     meta_new = tuple(sorted(meta_new.items()))
@@ -542,8 +541,8 @@ def block(tensors, common_legs=None) -> yastn.Tensor:
 
 def _sum_legs_hfs(legs):
     """ sum hfs based on info in legs"""
-    hfs = [leg.legs[0] for leg in legs]
+    hfs = [leg.hf for leg in legs]
     t_in = [leg.t for leg in legs]
     D_in = [leg.D for leg in legs]
     s_out = legs[0].s
-    return _sum_hfs(hfs, t_in, D_in, s_out)
+    return _combine_hfs_sum(hfs, t_in, D_in, s_out)

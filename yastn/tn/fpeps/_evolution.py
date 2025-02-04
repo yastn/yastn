@@ -264,7 +264,8 @@ def initial_truncation_EAT(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs):
     G = G.unfuse_legs(axes=2)
     #
     # rank-1 approximation
-    G0, S, G1 = svd_with_truncation(G, axes=((0, 2), (3, 1)), policy='lowrank', D_block=1, D_total=1)
+    Gremove = G.remove_zero_blocks()
+    G0, S, G1 = svd_with_truncation(Gremove, axes=((0, 2), (3, 1)), policy='lowrank', D_block=1, D_total=1)
     fid = (S.norm() / G.norm()).item()
     eat_metric_error = (max(0., 1 - fid ** 2)) ** 0.5
     #

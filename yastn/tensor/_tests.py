@@ -85,15 +85,15 @@ def _test_axes_match(a, b, sgn=1, axes=None):
     if any(a.mfs[i1] != b.mfs[i2] for i1, i2 in zip(*axes)):
         raise YastnError('Indicated axes of two tensors have different number of meta-fused legs or sub-fusions order.')
 
-    needs_mask = False  # for hard-fused legs
+    mask_needed = False  # for hard-fused legs
     for i1, i2 in zip(*uaxes):
         if a.hfs[i1].tree != b.hfs[i2].tree or a.hfs[i1].op != b.hfs[i2].op:
             raise YastnError('Indicated axes of two tensors have different number of hard-fused legs or sub-fusions order.')
         if any(s1 != sgn * s2 for s1, s2 in zip(a.hfs[i1].s, b.hfs[i2].s)):
             raise YastnError('Signatures of hard-fused legs do not match.')
         if a.hfs[i1].t != b.hfs[i2].t or a.hfs[i1].D != b.hfs[i2].D:
-            needs_mask = True
-    return needs_mask, uaxes
+            mask_needed = True
+    return mask_needed, uaxes
 
 
 def _test_axes_all(a, axes, native=False):

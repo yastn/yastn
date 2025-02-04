@@ -27,7 +27,7 @@ Simple element-wise operations
 
 .. autofunction:: yastn.Tensor.__add__
 .. autofunction:: yastn.Tensor.__sub__
-.. autofunction:: yastn.apxb
+.. autofunction:: yastn.linear_combination
 
 .. autofunction:: yastn.Tensor.__lt__
 .. autofunction:: yastn.Tensor.__gt__

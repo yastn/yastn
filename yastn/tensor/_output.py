@@ -18,10 +18,10 @@ import numpy as np
 from functools import reduce
 from numbers import Number
 from operator import mul
-from ._auxliary import _clear_axes, _unpack_axes, _struct, _slc, _flatten
+from ._auxliary import _clear_axes, _unpack_axes, _struct, _slc, _flatten, _join_contiguous_slices
 from ._tests import YastnError, _test_configs_match
 from ..sym import sym_none
-from ._legs import Leg, leg_union, _leg_fusions_need_mask
+from ._legs import Leg, LegMeta, legs_union, _legs_mask_needed
 from ._merging import _embed_tensor
 
 
@@ -104,39 +104,49 @@ def compress_to_1d(a, meta=None) -> tuple[numpy.array | torch.tensor, dict]:
         meta = {'config': a.config, 'struct': a.struct, 'slices': a.slices,
                 'mfs': a.mfs, 'legs': a.get_legs(native=True)}
         return a._data, meta
-    # else:
+
     _test_configs_match(a.config, meta['config'])
     if a.struct.s != meta['struct'].s:
         raise YastnError("Tensor signature do not match meta.")
     if a.struct.n != meta['struct'].n:
-        raise YastnError("Tensor charge than do not match meta.")
+        raise YastnError("Tensor charge do not match meta.")
     if a.isdiag != meta['struct'].diag:
         raise YastnError("Tensor diagonality do not match meta.")
     if a.mfs != meta['mfs']:
         raise YastnError("Tensor meta-fusion structure do not match meta.")
 
-    meta_hfs =  tuple(leg.legs[0] for leg in meta['legs'])
-    if a.hfs != meta_hfs:
+    meta_hfs = tuple(leg.hf for leg in meta['legs'])
+    if a.hfs != meta_hfs:  # mask needed
         legs_a = a.get_legs()
-        legs_u = {n: leg_union(leg_a, leg) for n, (leg_a, leg) in enumerate(zip(legs_a, meta['legs']))}
-        a = _embed_tensor(a, legs_a, legs_u)  # mask needed
+        legs_u = {n: legs_union(leg_a, leg) for n, (leg_a, leg) in enumerate(zip(legs_a, meta['legs']))}
+        a = _embed_tensor(a, legs_a, legs_u)
         if a.hfs != meta_hfs:
-            raise YastnError("Tensor fused legs do not match metadata.")
+            raise YastnError("Tensor fused legs do not match meta.")
 
     if a.struct == meta['struct'] and a.slices == meta['slices']:
         return a._data, meta
-    # else: embed filling in missing zero blocks # TODO ?
-    ia, im, meta_merge = 0, 0, []
+
+    # filling in missing zero blocks
+    ia, im = 0, 0
+    slcs_a, slcs_m = [], []
     while ia < len(a.struct.t):
         if a.struct.t[ia] < meta['struct'].t[im] or im >= len(meta['struct'].t):
             raise YastnError("Tensor has blocks that do not appear in meta.")
         if a.struct.t[ia] == meta['struct'].t[im]:
-            meta_merge.append((meta['slices'][im].slcs[0], a.slices[ia].slcs[0]))
+            if a.struct.D[ia] != meta['struct'].D[im]:
+                raise YastnError("Bond dimensions do not match meta.")
+            slcs_a.append(a.slices[ia].slcs[0])
+            slcs_m.append(meta['slices'][im].slcs[0])
             ia += 1
             im += 1
         else: #a.struct.t[ia] > meta['struct'].t[im]:
             im += 1
-    data = a.config.backend.embed_slc(a._data, meta_merge, meta['struct'].size)
+    meta_embed = _join_contiguous_slices(slcs_m, slcs_a)
+    #
+    # add redundant information, to use a general backend function embed_mask
+    meta_embed = tuple((sl_m, sl_m[1] - sl_m[0], sl_a, sl_a[1] - sl_a[0], 0) for sl_m, sl_a in meta_embed)
+    mask = {0: slice(None)}
+    data = a.config.backend.embed_mask(a._data, mask, meta_embed, meta['struct'].size, 0, 0)
     return data, meta
 
 
@@ -293,8 +303,6 @@ def __getitem__(a, key) -> numpy.ndarray | torch.tensor:
     except ValueError as exc:
         raise YastnError('Tensor does not have block specify by key.') from exc
     x = a._data[slice(*a.slices[ind].slcs[0])]
-
-    # TODO this should be reshape called from backend ?
     return x if a.isdiag else x.reshape(a.struct.D[ind])
 
 def __contains__(a, key) -> bool:
@@ -330,28 +338,30 @@ def get_legs(a, axes=None, native=False) -> yastn.Leg | Sequence[yastn.Leg]:
     multiple_legs = hasattr(axes, '__iter__')
     axes, = _clear_axes(axes)
     for ax in axes:
-        legs_ax = []
+        nax = (ax,)
         if not native:
-            mf = a.mfs[ax]
             nax, = _unpack_axes(a.mfs, (ax,))
-        else:
-            nax = (ax,)
+
+        legs_ax = []
         for i in nax:
             tseta = tset[:, i, :].reshape(len(tset), a.config.sym.NSYM).tolist()
             Dseta = Dset[:, i].tolist()
             tDn = {tuple(tn): Dn for tn, Dn in zip(tseta, Dseta)}
             tDn = dict(sorted(tDn.items()))
-            t, D = tuple(tDn.keys()), tuple(tDn.values())
-            legs_ax.append(Leg(a.config, s=a.struct.s[i], t=t, D=D, legs=(a.hfs[i],)))
-        if not native and mf[0] > 1:
+            leg = Leg(a.config, s=a.struct.s[i], t=tuple(tDn.keys()), D=tuple(tDn.values()), hf=a.hfs[i])
+            legs_ax.append(leg)
+
+        if not native and a.mfs[ax][0] > 1:
             tseta = tset[:, nax, :].reshape(len(tset), len(nax) * a.config.sym.NSYM).tolist()
             Dseta = np.prod(Dset[:, nax], axis=1, dtype=np.int64).tolist()
             tDn = {tuple(tn): Dn for tn, Dn in zip(tseta, Dseta)}
             tDn = dict(sorted(tDn.items()))
             t, D = tuple(tDn.keys()), tuple(tDn.values())
-            legs.append(Leg(a.config.sym, s=legs_ax[0].s, t=t, D=D, fusion=mf, legs=tuple(legs_ax), _verified=True))
+            leg = LegMeta(a.config.sym, s=legs_ax[0].s, t=t, D=D, mf=a.mfs[ax], legs=tuple(legs_ax))
+            legs.append(leg)
         else:
             legs.append(legs_ax.pop())
+
     return tuple(legs) if multiple_legs else legs.pop()
 
 
@@ -441,12 +451,11 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False) -> yastn.Tensor:
     legs_a = list(a.get_legs(native=native))
     ndim_a = len(legs_a)  # ndim_n if native else ndim
 
-
     if legs is not None:
         if any((n < 0) or (n >= ndim_a) for n in legs.keys()):
             raise YastnError('Specified leg out of ndim')
-        legs_new = {n: leg_union(legs_a[n], leg) for n, leg in legs.items()}
-        if any(_leg_fusions_need_mask(leg, legs_a[n]) for n, leg in legs_new.items()):
+        legs_new = {n: legs_union(legs_a[n], leg) for n, leg in legs.items()}
+        if any(_legs_mask_needed(leg, legs_a[n]) for n, leg in legs_new.items()):
             a = _embed_tensor(a, legs_a, legs_new)  # mask needed
         for n, leg in legs_new.items():
             legs_a[n] = leg
