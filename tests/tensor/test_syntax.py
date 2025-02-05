@@ -124,6 +124,13 @@ def test_syntax_basic_algebra(config_kwargs):
         tensor = a + c
 
     #
+    # Sometimes, a composite operation is faster than the serial execution of
+    # individual operations. This happens for linear combination of multiple tensors
+    #
+    tensor = yastn.linear_combination(a, b, a, b, amplitudes=(1, -1, 2, 1))
+    tensor = yastn.linear_combination(a, b, a, b)  # all amplitudes equall to one.
+
+    #
     # element-wise exponentiation, absolute value, reciprocal i.e. x -> 1/x,
     # square root and its reciprocal x -> 1/sqrt(x)
     #
@@ -140,15 +147,6 @@ def test_syntax_basic_algebra(config_kwargs):
 
     tensor = abs(a).rsqrt(cutoff=1e-12)
     tensor = yastn.rsqrt(abs(a), cutoff=1e-12)
-
-
-    #
-    # Sometimes a composite operation is faster than serial execution of individual
-    # operations. For example, multiplication by scalar and addition, a + x*b,
-    # are handled by specialized function
-    #
-    tensor = a.apxb(b, x=1)
-    tensor = yastn.apxb(a, b, x=1)
 
 
 def test_syntax_tensor_export_import_operations(config_kwargs):

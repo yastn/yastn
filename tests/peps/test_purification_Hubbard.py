@@ -20,7 +20,7 @@ import yastn.tn.fpeps as fpeps
 def mean(xs):
     return sum(xs) / len(xs)
 
-
+@pytest.mark.skipif("not config.getoption('long_tests')", reason="long duration tests are skipped")
 def test_NTU_spinful_finite(config_kwargs):
     """ Simulate purification of spinful fermions in a small finite system """
     print(" Simulating spinful fermions in a small finite system. ")
@@ -123,6 +123,7 @@ def test_NTU_spinful_finite(config_kwargs):
     assert abs(nn_CTM_bond_2r_dn - nn_bond_2_exact) < 1e-4
 
 
+@pytest.mark.skipif("not config.getoption('long_tests')", reason="long duration tests are skipped")
 def test_NTU_spinful_infinite(config_kwargs):
     """ Simulate purification of spinful fermions in an infinite system.s """
     print("Simulating spinful fermions in an infinite system. """)

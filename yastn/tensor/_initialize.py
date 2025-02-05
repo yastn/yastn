@@ -159,8 +159,6 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
         Otherwise any tensor-like format such as nested list, numpy.ndarray, etc.,
         can be used provided it is supported by :doc:`tensor's backend </tensor/configuration>`.
     """
-
-
     ts = np.array(ts, dtype=np.int64).ravel()
     if a.isdiag and len(ts) == a.config.sym.NSYM:
         ts = np.hstack([ts, ts])

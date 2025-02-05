@@ -163,7 +163,7 @@ def _test_dense_v1(tens, shapes, common_shape):
     ndim = tens[0].ndim
 
     # all dense tensors will have matching shapes
-    lss = {ii: yastn.leg_union(*(a_legs[ii] for a_legs in legs)) for ii in range(ndim)}
+    lss = {ii: yastn.legs_union(*(a_legs[ii] for a_legs in legs)) for ii in range(ndim)}
     ntens = [a.to_numpy(legs=lss) for a in tens]
     assert all(na.shape == common_shape for na in ntens)
     sum_tens = tens[0]

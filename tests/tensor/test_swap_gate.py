@@ -171,16 +171,33 @@ def test_swap_gate_exceptions(config_kwargs):
     t1, D1 = (0, 1, 2, 3), (2, 2, 2, 2)
     config_Z2_fermionic = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
     a = yastn.rand(config=config_Z2_fermionic, s=(1, -1, 1, -1), t=(t1, t1, t1, t1), D=(D1, D1, D1, D1))
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match='Odd number of elements in axes. Elements of axes should come in pairs.'):
         a.swap_gate(axes=(0, 1, 2))
-        # Odd number of elements in axes. Elements of axes should come in pairs.
-    # with pytest.raises(yastn.YastnError):
-    #     a.swap_gate(axes=((0, 1), 0))
-    #     # Cannot swap the same index
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match=r'Length of charge \(1, 1\) does not match sym.NSYM = 1.'):
         a.swap_gate(axes=(0,), charge=(1, 1))
-        # Len of charge (1, 1) does not match sym.NSYM = 1.
+
+
+@pytest.mark.skipif("'torch' not in config.getoption('--backend')", reason="Uses torch.autograd.gradcheck().")
+def test_swap_gate_backward(config_kwargs):
+    import torch
+
+    config_U1 = yastn.make_config(sym='U1', fermionic=True, **config_kwargs)
+    leg0 =  yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(5, 6, 7))
+    a = yastn.rand(config=config_U1, legs=[leg0, leg0, leg0.conj(), leg0.conj()])
+
+    for target_block in [(1, 1, 1, 1), (0, 0, 0, 0)]:
+
+        def test_f(block):
+            a[target_block] = block
+            b = yastn.swap_gate(a, axes=(1, 2))
+            return b.norm()
+
+        target_block_size = a[target_block].size()
+        op_args = (torch.randn(target_block_size, dtype=a.get_dtype(), requires_grad=True),)
+        assert torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4, check_undefined_grad=False)
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0"])
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])

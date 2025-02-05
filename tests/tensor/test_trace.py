@@ -51,6 +51,10 @@ def test_trace_basic(config_kwargs):
     """ test trace for different symmetries. """
     # dense
     config_dense = yastn.make_config(sym='none', **config_kwargs)
+
+    empty = yastn.Tensor(config_dense, s=(1, -1))
+    assert yastn.trace(empty).item() == 0
+
     a = yastn.ones(config=config_dense, s=(-1, 1, 1, -1), D=(2, 5, 2, 5))
     b = trace_vs_numpy(a, axes=(0, 2))
     c = trace_vs_numpy(b, axes=(1, 0))
@@ -72,6 +76,9 @@ def test_trace_basic(config_kwargs):
     b = trace_vs_numpy(b, axes=((), ())) # no trace
     b = trace_vs_numpy(b, axes=(3, 0))
     b = trace_vs_numpy(b, axes=(0, 1))
+    assert pytest.approx(b.item(), rel=tol) == 5 * 9 * 13
+    b = trace_vs_numpy(a, axes=((1, 5), (4, 0)))
+    b = trace_vs_numpy(b, axes=(1, 0))
     assert pytest.approx(b.item(), rel=tol) == 5 * 9 * 13
 
     leg = yastn.Leg(config_U1, s=1, t=(1, 2, 3), D=(3, 4, 5))
@@ -124,7 +131,6 @@ def test_trace_fusions(config_kwargs):
     bf = trace_vs_numpy(af, axes=(0, 1)).unfuse_legs(axes=0)
     assert yastn.norm(bf - b) < tol
 
-
     legs = [yastn.Leg(config_U1, s=-1, t=(-1, 1), D=(1, 2)),
             yastn.Leg(config_U1, s=1, t=(-1, 2), D=(4, 6)),
             yastn.Leg(config_U1, s=1, t=(-1, 1), D=(1, 2)),
@@ -175,31 +181,62 @@ def test_trace_exceptions(config_kwargs):
     t1, D1, D2 = (0, 1), (2, 3), (4, 5)
     a = yastn.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
                 t=[t1, t1, t1, t1, t1, t1], D=[D1, D2, D2, D2, D2, D2])
-    with pytest.raises(yastn.YastnError):
-        a.trace(axes=(0, 6))  # Error in trace: axis outside of tensor ndim
-    with pytest.raises(yastn.YastnError):
-        a.trace(axes=((0, 1, 2), (2, 3, 4)))  # Error in trace: repeated axis in axes
-    with pytest.raises(yastn.YastnError):
-        a.trace(axes=((0, 1, 2), (2, 3, 3)))  # Error in trace: repeated axis in axes
-    with pytest.raises(yastn.YastnError):
-        a.trace(axes=((0, 1, 2), (3, 4)))  # Error in trace: unmatching number of axes to trace.
-    with pytest.raises(yastn.YastnError):
-        a.trace(axes=((1, 3), (2, 4)))  # Error in trace: signatures do not match.
-    with pytest.raises(yastn.YastnError):
-        a.trace(axes=((0, 1, 2), (3, 4, 5)))  # Error in trace: bond dimensions of traced legs do not match.
-    b = a.fuse_legs(axes=((0, 1, 2), (3, 4), 5), mode='meta')
-    with pytest.raises(yastn.YastnError):
-        b.trace(axes=(0, 1))  # Error in trace: meta-fusions of traced axes do not match.
-    b = a.fuse_legs(axes=(0, (1, 3), (2, 4), 5), mode='meta')
-    with pytest.raises(yastn.YastnError):
-        b.trace(axes=(1, 2))  # Error in trace: signatures do not match.
-    b = a.fuse_legs(axes=((0, 1, 2), (3, 4), 5), mode='hard')
-    with pytest.raises(yastn.YastnError):
-        b.trace(axes=(0, 1))  # Error in trace: hard fusions of legs 0 and 1 are not compatible.
-    b = a.fuse_legs(axes=(0, (1, 3), (4, 5), 2), mode='hard')
-    with pytest.raises(yastn.YastnError):
-        b.trace(axes=(1, 2))  # Error in trace: hard fusions of legs 1 and 2 are not compatible.
+    with pytest.raises(yastn.YastnError,
+                       match='Axis outside of tensor ndim.'):
+        a.trace(axes=(0, 6))
+    with pytest.raises(yastn.YastnError,
+                       match="The same axis in axes"):
+        a.trace(axes=((0, 1, 2), (2, 3, 4)))  # The same axis in axes[0] and axes[1]
+    with pytest.raises(yastn.YastnError,
+                       match="Repeated axis in axes"):
+        a.trace(axes=((1, 2), (3, 3)))  # Repeated axis in axes[0] or axes[1].
+    with pytest.raises(yastn.YastnError,
+                       match="indicate different number of legs."):
+        a.trace(axes=((0, 1, 2), (3, 4)))  # axes[0] and axes[1] indicate different number of legs.
+    with pytest.raises(yastn.YastnError,
+                       match="Signatures do not match."):
+        a.trace(axes=((1, 3), (2, 4)))
+    with pytest.raises(yastn.YastnError,
+                       match="Bond dimensions do not match."):
+        a.trace(axes=((0, 1, 2), (3, 4, 5)))
+    with pytest.raises(yastn.YastnError,
+                       match="Indicated axes of two tensors have different number of meta-fused legs or sub-fusions order."):
+        b = a.fuse_legs(axes=((0, 1, 2), (3, 4), 5), mode='meta')
+        b.trace(axes=(0, 1))
+    with pytest.raises(yastn.YastnError,
+                       match="Signatures do not match."):
+        b = a.fuse_legs(axes=(0, (1, 3), (2, 4), 5), mode='meta')
+        b.trace(axes=(1, 2))
+    with pytest.raises(yastn.YastnError,
+                       match="Indicated axes of two tensors have different number of hard-fused legs or sub-fusions order."):
+        b = a.fuse_legs(axes=((0, 1, 2), (3, 4), 5), mode='hard')
+        b.trace(axes=(0, 1))
+    with pytest.raises(yastn.YastnError,
+                       match="Signatures of hard-fused legs do not match."):
+        b = a.fuse_legs(axes=(0, (1, 3), (4, 5), 2), mode='hard')
+        b.trace(axes=(1, 2))
+
+
+@pytest.mark.skipif("'torch' not in config.getoption('--backend')", reason="Uses torch.autograd.gradcheck().")
+def test_trace_backward(config_kwargs):
+    import torch
+
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    leg0 =  yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(5, 6, 7))
+    a = yastn.rand(config=config_U1, legs=[leg0, leg0, leg0.conj(), leg0.conj()])
+
+    target_block = (0, 0, 0, 0)
+    target_block_size = a[target_block].size()
+
+    def test_f(block):
+        a[target_block] = block
+        b = yastn.trace(a, axes=(1, 2))
+        return b.norm()
+
+    op_args = (torch.randn(target_block_size, dtype=a.get_dtype(), requires_grad=True),)
+    assert torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4) #, check_undefined_grad=False)
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0"])
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])
+    # pytest.main([__file__, "-vs", "--durations=0"])

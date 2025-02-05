@@ -425,6 +425,24 @@ def test_svd_backward_truncate(config_kwargs):
         assert test
 
 
+@torch_test
+def test_svd_arnoldi(config_kwargs):
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    for dtype in ["float64", "complex128"]:
+        a = yastn.rand(config=config_U1, s=(-1, -1, 1, 1),
+                       t=[(0, 1), (0, 1), (0, 1), (0, 1)],
+                       D=[(2, 3), (4, 5), (4, 3), (2, 1)], dtype=dtype)
+        U0, S0, V0 = yastn.svd(a, policy='arnoldi', D_block=1, axes=((0, 1), (2, 3)), fix_signs=True)
+        U1, S1, V1 = yastn.svd_with_truncation(a, D_block=1, axes=((0, 1), (2, 3)), fix_signs=True)
+        assert (S0 - S1).norm() < tol
+        assert (U0 - U1).norm() < tol
+        assert (V0 - V1).norm() < tol
+
+    # add backwards when available in svd(policy='arnoldi')
+    # import torch
+
+
+
 def test_svd_exceptions(config_kwargs):
     """ raising exceptions by svd(), and some corner cases. """
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
@@ -450,4 +468,5 @@ def test_svd_exceptions(config_kwargs):
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])
+    test_svd_arnoldi({"backend": "torch"})
+    #pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])

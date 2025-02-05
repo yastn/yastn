@@ -95,8 +95,8 @@ def prepare_RVB(additional_imports):
                     ], 
             'SYM_ID': 'U1', 'fermionic': False}
 
+    config_kwargs['default_dtype']='complex128'
     yastn_config= yastn.make_config(sym='U1', **config_kwargs)
-    # yastn_config= yastn.make_config(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
     # load on-site tensor stored in above dict
     #
     # physical, top, left, bottom, right -> t,l,b,r,p
@@ -338,8 +338,8 @@ def test_1x1_D1_Z2_spinlessf_conv(ctm_init, truncate_multiplets_mode, tol, addit
     loc_cost_f= lambda x : cost_function(x, slices, 35, ctm_init=ctm_init, fix_signs=True, 
                                          truncate_multiplets_mode=truncate_multiplets_mode)
     
-    x0= test_elems.clone()
-    x0.requires_grad_(False)
+    x0= test_elems.clone().detach()
+    # x0.requires_grad_(False)
     loss0= loc_cost_f(x0)
     assert np.allclose([0.22923524,], [loss0,], rtol=1e-06, atol=1e-06)
 

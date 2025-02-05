@@ -17,9 +17,10 @@ from __future__ import annotations
 from itertools import accumulate
 from operator import itemgetter
 import numpy as np
-from ._auxliary import _slc, _clear_axes, _unpack_axes
+from ._auxliary import _slc, _clear_axes, _unpack_axes, _join_contiguous_slices
 from ._merging import _Fusion
 from ._tests import YastnError, _test_axes_all
+from ._legs import LegMeta
 
 
 __all__ = ['conj', 'conj_blocks', 'flip_signature', 'flip_charges',
@@ -91,7 +92,7 @@ def detach(a) -> yastn.Tensor:
 
 def grad(a) -> yastn.Tensor:
     """
-    TODO ADD description
+    Calculate the gradient of tensor elements after .backward() is called on the scalar result.
     """
     data = a.config.backend.grad(a._data)
     return a._replace(data=data)
@@ -192,8 +193,13 @@ def flip_charges(a, axes=None) -> yastn.Tensor:
 
     slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dpnew), Dpnew, Dnew))
     struct = a.struct._replace(s=snew, t=tnew, D=Dnew)
-    meta = tuple((x.slcs[0], y) for x, y in zip(slices, slold))
-    data = a.config.backend.embed_slc(a.data, meta, struct.size)
+
+    slnew = tuple(sl.slcs[0] for sl in slices)
+    meta_embed = _join_contiguous_slices(slnew, slold)
+    # add redundant information, to use a general backend function embed_mask
+    meta_embed = tuple((sl_n, sl_n[1] - sl_n[0], sl_o, sl_o[1] - sl_o[0], 0) for sl_n, sl_o in meta_embed)
+    mask = {0: slice(None)}
+    data = a.config.backend.embed_mask(a._data, mask, meta_embed, struct.size, 0, 0)
     return a._replace(struct=struct, slices=slices, data=data, hfs=hfs)
 
 
@@ -337,14 +343,14 @@ def add_leg(a, axis=-1, s=-1, t=None, leg=None) -> yastn.Tensor:
     if leg is not None:
         if len(leg.t) != 1 or leg.D[0] != 1:
             raise YastnError("Only the leg of dimension one can be added to the tensor.")
-        if isinstance(leg.fusion, tuple):  # meta fused leg
+        if isinstance(leg, LegMeta):  # meta fused leg
             for ll in leg.legs[::-1]:
                 a = a.add_leg(axis=axis, leg=ll)
-            mfs = a.mfs[:axis] + (leg.fusion,) + a.mfs[axis + len(leg.legs):]
+            mfs = a.mfs[:axis] + (leg.mf,) + a.mfs[axis + len(leg.legs):]
             return a._replace(mfs=mfs)
         s = leg.s
         t = leg.t[0]
-        hfsa = leg.legs[0]
+        hfsa = leg.hf
     else:
         hfsa = _Fusion(s=(s,))
 
@@ -464,6 +470,9 @@ def remove_zero_blocks(a, rtol=1e-12, atol=0) -> yastn.Tensor:
     old_sl = tuple(x.slcs[0] for x in old_sl)
     slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(c_Dp), c_Dp, c_D))
     c_sl = tuple(x.slcs[0] for x in slices)
-    struct = a.struct._replace(t=c_t, D=c_D, size=sum(c_Dp))
-    data = a.config.backend.apply_slice(a._data, c_sl, old_sl)
+    size = sum(c_Dp)
+    struct = a.struct._replace(t=c_t, D=c_D, size=size)
+    mask = {0: slice(None)}
+    meta = [(sln, sln[1] - sln[0], slo, slo[1] - slo[0], 0) for sln, slo in zip(c_sl, old_sl)]
+    data = a.config.backend.apply_mask(a._data, mask, meta, size, 0, 0)
     return a._replace(struct=struct, slices=slices, data=data)

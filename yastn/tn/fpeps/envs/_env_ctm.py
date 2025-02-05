@@ -93,6 +93,10 @@ class EnvCTM(Peps):
         if init is not None:
             self.reset_(init=init, leg=leg)
 
+    @property
+    def config(self):
+        return self.psi.config
+
     # Cloning/Copying/Detaching(view) 
     # 
     def copy(self) -> EnvCTM:
@@ -611,12 +615,16 @@ class EnvCTM(Peps):
         for site in proj.sites(): proj[site] = EnvCTM_projectors()
         
         def _compress_env(env):
-            shallow_unrolled= {
-                'psi': {site: env.psi.bra[site].compress_to_1d() for site in env.sites()} if isinstance(env.psi,Peps2Layers) \
-                    else {site: env.psi[site].compress_to_1d() for site in env.sites()},
-                'env': tuple( env_t.compress_to_1d() for site in env.sites() for k,env_t in env[site].__dict__.items() )}
-            meta= {'psi': {site: t_and_meta[1] for site,t_and_meta in shallow_unrolled['psi'].items()}, 'env': tuple(meta for t,meta in shallow_unrolled['env'])}
-            data= tuple( t for t,m in shallow_unrolled['psi'].values())+tuple( t for t,m in shallow_unrolled['env'])
+            shallow= {
+                'psi': {site: env.psi.bra[site] for site in env.sites()} if isinstance(env.psi,Peps2Layers) \
+                    else {site: env.psi[site] for site in env.sites()},
+                'env': tuple( env_t for site in env.sites() for k,env_t in env[site].__dict__.items() )}
+            dtypes= set(tuple( t.yast_dtype for t in shallow['psi'].values()) + tuple(t.yast_dtype for t in shallow['env']))
+            assert len(dtypes)<2, f"CTM update: all tensors of state and environment should have the same dtype, got {dtypes}"
+            unrolled= {'psi': {site: t.compress_to_1d() for site,t in shallow['psi'].items()},
+                'env': tuple(t.compress_to_1d() for t in shallow['env'])}
+            meta= {'psi': {site: t_and_meta[1] for site,t_and_meta in unrolled['psi'].items()}, 'env': tuple(meta for t,meta in unrolled['env'])}
+            data= tuple( t for t,m in unrolled['psi'].values())+tuple( t for t,m in unrolled['env'])
             return data, meta
         
         def _compress_proj(proj, empty_proj):
@@ -647,7 +655,7 @@ class EnvCTM(Peps):
                 
                 # extract raw parametric tensors as a tuple
                 inputs_t, inputs_meta= _compress_env(env)
-                
+
                 def f_update_core_2dir(move_d,loc_im,*inputs_t):
                     loc_env= _decompress_env(inputs_t,loc_im)
                     env_tmp, proj_tmp= _update_core_2dir(loc_env, move_d, opts_svd, method=method, **kwargs)
@@ -664,7 +672,7 @@ class EnvCTM(Peps):
 
                     return out_env_data[len(loc_env.sites()):] + out_proj_data
                 
-                checkpoint_F= env[env.sites()[0]].tl.config.backend.checkpoint
+                checkpoint_F= env.config.backend.checkpoint
                 outputs= checkpoint_F(f_update_core_2dir,d,inputs_meta,*inputs_t,**{'use_reentrant': True, 'debug': False})
 
                 # update tensors of env and proj

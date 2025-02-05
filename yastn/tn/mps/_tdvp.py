@@ -17,7 +17,7 @@ from __future__ import annotations
 from typing import NamedTuple
 from tqdm import tqdm
 from ._measure import Env
-from ... import YastnError, expmv
+from ... import YastnError, expmv, vdot
 
 #################################
 #           tdvp                #
@@ -33,7 +33,8 @@ class TDVP_out(NamedTuple):
 
 def tdvp_(psi, H,
           times=(0, 0.1), dt=0.1, u=1j, method='1site', order='2nd',
-          opts_expmv=None, opts_svd=None, normalize=True, precompute=False,
+          opts_expmv=None, opts_svd=None, normalize=True,
+          subtract_E=False, precompute=False,
           progressbar=False, yield_initial=False):
     r"""
     Iterator performing TDVP sweeps to solve :math:`\frac{d}{dt} |\psi(t)\rangle = -uH|\psi(t)\rangle`,
@@ -82,6 +83,10 @@ def tdvp_(psi, H,
         Whether to normalize the result to unity using 2-norm. If ``False``, keeps track of the norm.
         The default is ``True``.
 
+    subtract_E: bool
+        Whether to subtract the instantaneous energy from the Hamiltonian while performing local updates.
+        The default is ``False``.
+
     precompute: bool
         Controls MPS-MPO-MPS contraction order.
         If ``False``, use an approach optimal for a single matrix-vector product calculation during iterative Krylov-space building,
@@ -126,11 +131,11 @@ def tdvp_(psi, H,
         et = lambda e: None
 
     if method == '1site':
-        routine = lambda t, dt0, env: _tdvp_sweep_1site_(psi, Ht(t), dt0, u, et(env), opts_expmv, normalize, precompute)
+        routine = lambda t, dt0, env: _tdvp_sweep_1site_(psi, Ht(t), dt0, u, et(env), opts_expmv, normalize, subtract_E, precompute)
     elif method == '2site':
-        routine = lambda t, dt0, env: _tdvp_sweep_2site_(psi, Ht(t), dt0, u, et(env), opts_expmv, opts_svd, normalize, precompute)
+        routine = lambda t, dt0, env: _tdvp_sweep_2site_(psi, Ht(t), dt0, u, et(env), opts_expmv, opts_svd, normalize, subtract_E, precompute)
     elif method == '12site':
-        routine = lambda t, dt0, env: _tdvp_sweep_12site_(psi, Ht(t), dt0, u, et(env), opts_expmv, opts_svd, normalize, precompute)
+        routine = lambda t, dt0, env: _tdvp_sweep_12site_(psi, Ht(t), dt0, u, et(env), opts_expmv, opts_svd, normalize, subtract_E, precompute)
     else:
         raise YastnError('TDVP: tdvp method %s not recognized' % method)
 
@@ -158,44 +163,44 @@ def tdvp_(psi, H,
         yield TDVP_out(t0, t, time_independent, ds, steps)
 
 
-def _tdvp_sweep_1site_(psi, H, dt=0.1, u=1j, env=None, opts_expmv=None, normalize=True, precompute=False):
+def _tdvp_sweep_1site_(psi, H, dt=0.1, u=1j, env=None, opts_expmv=None, normalize=True, subtract_E=False, precompute=False):
     r""" Perform sweep with 1-site TDVP update, see :meth:`tdvp` for description. """
 
     env, opts = _init_tdvp(psi, H, env, opts_expmv, precompute)
 
     for to in ('last', 'first'):
         for n in psi.sweep(to=to):
-            _update_A(env, n, -u * 0.5 * dt, opts, normalize=normalize, precompute=precompute)
+            _update_A(env, n, -u * 0.5 * dt, opts, normalize=normalize, subtract_E=subtract_E, precompute=precompute)
             psi.orthogonalize_site_(n, to=to, normalize=normalize)
             env.clear_site_(n)
             env.update_env_(n, to=to)
-            _update_C(env, u * 0.5 * dt, opts, normalize=normalize)
+            _update_C(env, u * 0.5 * dt, opts, normalize=normalize, subtract_E=subtract_E)
             psi.absorb_central_(to=to)
 
     env.update_env_(psi.first, to='first')
     return env
 
 
-def _tdvp_sweep_2site_(psi, H, dt=0.1, u=1j, env=None, opts_expmv=None, opts_svd=None, normalize=True, precompute=False):
+def _tdvp_sweep_2site_(psi, H, dt=0.1, u=1j, env=None, opts_expmv=None, opts_svd=None, normalize=True, subtract_E=False, precompute=False):
     r""" Perform sweep with 2-site TDVP update, see :meth:`tdvp` for description. """
 
     env, opts = _init_tdvp(psi, H, env, opts_expmv, precompute)
 
     for to, dn in (('last', 1), ('first', 0)):
         for n in psi.sweep(to=to, dl=1):
-            _update_AA(env, (n, n + 1), -u * 0.5 * dt, opts, opts_svd, normalize=normalize, precompute=precompute)
+            _update_AA(env, (n, n + 1), -u * 0.5 * dt, opts, opts_svd, normalize=normalize, subtract_E=subtract_E, precompute=precompute)
             psi.absorb_central_(to=to)
             env.clear_site_(n, n + 1)
             env.update_env_(n + 1 - dn, to=to)
             if n + dn != getattr(psi, to):
-                _update_A(env, n + dn, u * 0.5 * dt, opts, normalize=normalize, precompute=precompute)
+                _update_A(env, n + dn, u * 0.5 * dt, opts, normalize=normalize, subtract_E=subtract_E, precompute=precompute)
 
     env.clear_site_(psi.first)
     env.update_env_(psi.first, to='first')
     return env
 
 
-def _tdvp_sweep_12site_(psi, H, dt=0.1, u=1j, env=None, opts_expmv=None, opts_svd=None, normalize=True, precompute=False):
+def _tdvp_sweep_12site_(psi, H, dt=0.1, u=1j, env=None, opts_expmv=None, opts_svd=None, normalize=True, subtract_E=False, precompute=False):
     r"""
     Perform sweep with mixed TDVP update, see :meth:`tdvp` for description.
 
@@ -211,23 +216,23 @@ def _tdvp_sweep_12site_(psi, H, dt=0.1, u=1j, env=None, opts_expmv=None, opts_sv
                 if env.enlarge_bond((n - 1 + dn, n + dn), opts_svd):
                     update_two = True
                 else:
-                    _update_A(env, n, -u * 0.5 * dt, opts, normalize=normalize, precompute=precompute)
+                    _update_A(env, n, -u * 0.5 * dt, opts, normalize=normalize, subtract_E=subtract_E, precompute=precompute)
                     psi.orthogonalize_site_(n, to=to, normalize=normalize)
                     env.clear_site_(n)
                     env.update_env_(n, to=to)
-                    _update_C(env, u * 0.5 * dt, opts, normalize=normalize)
+                    _update_C(env, u * 0.5 * dt, opts, normalize=normalize, subtract_E=subtract_E)
                     psi.absorb_central_(to=to)
             else:
-                _update_AA(env, (n - dn , n - dn + 1), - u * 0.5 * dt, opts, opts_svd, normalize=normalize, precompute=precompute)
+                _update_AA(env, (n - dn , n - dn + 1), - u * 0.5 * dt, opts, opts_svd, normalize=normalize, subtract_E=subtract_E, precompute=precompute)
                 psi.absorb_central_(to=to)
                 env.clear_site_(n - dn, n - dn + 1)
                 env.update_env_(n + 1 - 2 * dn, to=to)
                 if env.enlarge_bond((n - 1 + dn, n + dn), opts_svd):
-                    _update_A(env, n, u * 0.5 * dt, opts, normalize=normalize, precompute=precompute)
+                    _update_A(env, n, u * 0.5 * dt, opts, normalize=normalize, subtract_E=subtract_E, precompute=precompute)
                 else:
                     psi.orthogonalize_site_(n, to=to, normalize=normalize)
                     env.update_env_(n, to=to)
-                    _update_C(env, u * 0.5 * dt, opts, normalize=normalize)
+                    _update_C(env, u * 0.5 * dt, opts, normalize=normalize, subtract_E=subtract_E)
                     psi.absorb_central_(to=to)
                     update_two = False
 
@@ -245,35 +250,47 @@ def _init_tdvp(psi, H, env, opts_expmv, precompute):
     return env, opts
 
 
-def _update_A(env, n, du, opts, normalize=True, precompute=False):
+def _update_A(env, n, du, opts, normalize=True, subtract_E=False, precompute=False):
     """ Updates env.bra[n] by exp(du Heff1). """
     if n in env._temp['expmv_ncv']:
         opts['ncv'] = env._temp['expmv_ncv'][n]
-    f = lambda x: env.Heff1(x, n)
     A = env.bra.pre_1site(n, precompute=precompute)
+    if subtract_E:
+        E0 = vdot(A, env.Heff1(A, n))
+        f = lambda x: env.Heff1(x, n) - E0 * x
+    else:
+        f = lambda x: env.Heff1(x, n)
     A, info = expmv(f, A, du, **opts, normalize=normalize, return_info=True)
     env.bra.post_1site_(A, n)
     env._temp['expmv_ncv'][n] = info['ncv']
 
 
-def _update_C(env, du, opts, normalize=True):
+def _update_C(env, du, opts, normalize=True, subtract_E=False):
     """ Updates env.bra[bd] by exp(du Heff0). """
     bd = env.bra.pC
     if bd[0] != -1 and bd[1] != env.N:  # do not update central block outsite of the chain
         if bd in env._temp['expmv_ncv']:
             opts['ncv'] = env._temp['expmv_ncv'][bd]
-        f = lambda x: env.Heff0(x, bd)
+        if subtract_E:
+            E0 = vdot(env.bra[bd], env.Heff0(env.bra[bd], bd))
+            f = lambda x: env.Heff0(x, bd) - E0 * x
+        else:
+            f = lambda x: env.Heff0(x, bd)
         env.bra.A[bd], info = expmv(f, env.bra[bd], du, **opts, normalize=normalize, return_info=True)
         env._temp['expmv_ncv'][bd] = info['ncv']
 
 
-def _update_AA(env, bd, du, opts, opts_svd, normalize=True, precompute=False):
+def _update_AA(env, bd, du, opts, opts_svd, normalize=True, subtract_E=False, precompute=False):
     """ Merge two sites given in bd into AA, updates AA by exp(du Heff2) and unmerge the sites. """
     ibd = bd[::-1]
     if ibd in env._temp['expmv_ncv']:
         opts['ncv'] = env._temp['expmv_ncv'][ibd]
     AA = env.bra.pre_2site(bd, precompute=precompute)
-    f = lambda x: env.Heff2(x, bd)
+    if subtract_E:
+        E0 = vdot(AA, env.Heff2(AA, bd))
+        f = lambda x: env.Heff2(x, bd) - E0 * x
+    else:
+        f = lambda x: env.Heff2(x, bd)
     AA, info = expmv(f, AA, du, **opts, normalize=normalize, return_info=True)
     env._temp['expmv_ncv'][ibd] = info['ncv']
     env.bra.post_2site_(AA, bd, opts_svd)
