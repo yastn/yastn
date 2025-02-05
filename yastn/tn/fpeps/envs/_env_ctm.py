@@ -647,7 +647,6 @@ class EnvCTM(Peps):
         # 
         # get projectors and compute updated env tensors
         # TODO currently supports only <psi|psi> for double-layer peps
-        # inputs_meta= {}
         for d in ['lr', 'tb']:
 
             if checkpoint_move:
@@ -672,8 +671,16 @@ class EnvCTM(Peps):
 
                     return out_env_data[len(loc_env.sites()):] + out_proj_data
                 
-                checkpoint_F= env.config.backend.checkpoint
-                outputs= checkpoint_F(f_update_core_2dir,d,inputs_meta,*inputs_t,**{'use_reentrant': True, 'debug': False})
+                if env.config.backend.BACKEND_ID == "torch":
+                    if checkpoint_move=='reentrant':
+                        use_reentrant= True
+                    elif checkpoint_move=='nonreentrant':
+                        use_reentrant= False
+                    checkpoint_F= env.config.backend.checkpoint
+                    outputs= checkpoint_F(f_update_core_2dir,d,inputs_meta,*inputs_t,\
+                                      **{'use_reentrant': use_reentrant, 'debug': False})
+                else:
+                    raise RuntimeError(f"CTM update: checkpointing not supported for backend {env.config.BACKEND_ID}")
 
                 # update tensors of env and proj
                 for i,site in enumerate(env.sites()): 
@@ -828,8 +835,10 @@ class EnvCTM(Peps):
             rank-1 tensor with singular values. If provided, truncation parameters passed to SVD decomposition
             are ignored.
 
-        checkpoint_move: bool
-            Whether to use (reentrant) checkpointing for the move. The default is ``False``
+        checkpoint_move: Union[str, bool]
+            Whether to use checkpointing for the CTM updates. The default is ``False``.
+            Otherwise, in case of PyTorch backend it can be set to 'reentrant' for reentrant checkpointing
+            or 'nonreentrant' for non-reentrant checkpointing, see https://pytorch.org/docs/stable/checkpoint.html.
 
         Returns
         -------
@@ -842,6 +851,9 @@ class EnvCTM(Peps):
                 * ``max_dsv`` norm of singular values change in the worst corner in the last sweep.
                 * ``converged`` whether convergence based on ``corner_tol`` has been reached.
         """
+        if "checkpoint_move" in kwargs:
+            if env.config.backend.BACKEND_ID == "torch":
+                assert kwargs["checkpoint_move"] in ['reentrant','nonreentrant',False], f"Invalid choice for {kwargs['checkpoint_move']}"
         kwargs["truncation_f"]= truncation_f
         tmp = _ctmrg_(env, opts_svd, method, max_sweeps, iterator_step, corner_tol, **kwargs)
         return tmp if iterator_step else next(tmp)
