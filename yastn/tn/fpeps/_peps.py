@@ -112,8 +112,8 @@ class Peps():
 
     @property
     def config(self):
-        site0 = self.sites()[0]
-        return self[site0].config
+        assert all(self[site].config == self[self.sites()[0]].config for site in self.sites())
+        return self[self.sites()[0]].config
 
     def has_physical(self) -> bool:
         """ Whether PEPS has phyical leg"""

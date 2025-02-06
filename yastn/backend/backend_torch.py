@@ -16,7 +16,7 @@
 from itertools import groupby
 from functools import reduce
 import torch
-
+from torch.utils.checkpoint import checkpoint as _checkpoint
 from .linalg.torch_eig_sym import SYMEIG
 from ._backend_torch_backwards import kernel_svd, kernel_svd_arnoldi
 from ._backend_torch_backwards import kernel_dot, kernel_transpose_dot_sum, kernel_negate_blocks
@@ -495,6 +495,16 @@ def diag_2dto1d(data, meta, Dsize):
         torch.diag(data[slice(*slo)].reshape(Do), out=newdata[slice(*sln)])
     return newdata
 
+
+# functionals
+def checkpoint(f,*args,**kwargs):
+    # context_fn=kwargs.pop('context_fn',None)
+    # torch.utils.checkpoint.checkpoint
+    return _checkpoint(f, *args, use_reentrant=kwargs.pop('use_reentrant',None), 
+                                             determinism_check=kwargs.pop('determinism_check','default'), 
+                                             debug=kwargs.pop('debug',False), **kwargs)
+
+  
 
 #############
 #   tests   #
