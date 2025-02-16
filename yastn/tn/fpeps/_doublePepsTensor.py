@@ -44,6 +44,7 @@ class DoublePepsTensor(SpecialTensor):
         if transpose not in _allowed_transpose:
             raise YastnError("DoublePEPSTensor only supports permutations that retain legs' ordering.")
         self._t = transpose
+        self._charges = {}
 
     @property
     def config(self):
@@ -66,6 +67,29 @@ class DoublePepsTensor(SpecialTensor):
     def del_operator_(self):
         """ Remove operator. """
         self.op = None
+
+    def add_charge_swap(self, charge, axes):
+        """
+        Supplement DoublePepsTensor with charges to be swapped with some internal legs during contraction.
+
+        Parameters
+        ----------
+        charge: tuple[int]
+
+        axes: Sequence[str] | str
+            identfy axes: 'bt', 'bl', 'bb', 'br', 'bs', 'kt', 'kl', 'kb', 'kr', 'ks'
+            k/b is for ket/bra; t/l/b/r/s is for top/left/bottom/right/system
+        """
+        if isinstance(axes, str):
+            axes = [axes]
+        for axis in axes:
+            if axis not in ['bt', 'bl', 'bb', 'br', 'bs', 'kt', 'kl', 'kb', 'kr', 'ks']:
+                raise YastnError("elements of axes should be 'bt', 'bl', 'bb', 'br', 'bs', 'kt', 'kl', 'kb', 'kr', 'ks'.")
+            if axis in self._charges:
+                self._charges[axis] = self.config.sym.add_charges(self._charges[axis], charge)
+            else:
+                self._charges[axis] = charge
+
 
     def get_shape(self, axes=None):
         """ Returns the shape of the DoublePepsTensor along specified axes. """
