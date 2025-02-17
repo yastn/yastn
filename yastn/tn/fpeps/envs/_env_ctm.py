@@ -437,12 +437,12 @@ class EnvCTM(Peps):
         if tr in ops:
             ten_tr.set_operator_(ops[tr])
             ten_tr.add_charge_swaps_(ops[tr].n, axes='b0')
-            ten_tl.add_charge_swaps_(ops[tr].n, axes=['b2', 'k4'])
+            ten_tl.add_charge_swaps_(ops[tr].n, axes=['k2', 'k4'])
         if br in ops:
             ten_br.set_operator_(ops[br])
             ten_br.add_charge_swaps_(ops[br].n, axes='k1')
             ten_tr.add_charge_swaps_(ops[br].n, axes=['b3', 'b0', 'k4'])
-            ten_tl.add_charge_swaps_(ops[br].n, axes=['b2', 'k4'])
+            ten_tl.add_charge_swaps_(ops[br].n, axes=['k2', 'k4'])
 
         if ten_tl.has_operator_or_swap():
             cor_tl = tensordot(vec_tl, ten_tl, axes=((2, 1), (0, 1)))
