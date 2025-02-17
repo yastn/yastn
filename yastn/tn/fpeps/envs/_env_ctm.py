@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import NamedTuple, Union, Callable, Sequence
 import logging
 from .... import Tensor, rand, ones, eye, YastnError, Leg, tensordot, qr, truncation_mask, vdot, decompress_from_1d
+from ....operators import sign_canonical_order
 from ... import mps
 from .._peps import Peps, Peps2Layers
 from .._gates_auxiliary import apply_gate_onsite, gate_product_operator, gate_fix_order
@@ -97,8 +98,8 @@ class EnvCTM(Peps):
     def config(self):
         return self.psi.config
 
-    # Cloning/Copying/Detaching(view) 
-    # 
+    # Cloning/Copying/Detaching(view)
+    #
     def copy(self) -> EnvCTM:
         env = EnvCTM(self.psi, init=None)
         for site in env.sites():
@@ -429,24 +430,37 @@ class EnvCTM(Peps):
 
         if tl in ops:
             ten_tl.set_operator_(ops[tl])
-            cor_tl = tensordot(vec_tl, ten_tl, axes=((2, 1), (0, 1)))
-            cor_tl = cor_tl.fuse_legs(axes=((0, 2), (1, 3)))
-        if tr in ops:
-            ten_tr.set_operator_(ops[tr])
-            cor_tr = tensordot(vec_tr, ten_tr, axes=((1, 2), (0, 3)))
-            cor_tr = cor_tr.fuse_legs(axes=((0, 2), (1, 3)))
-        if br in ops:
-            ten_br.set_operator_(ops[br])
-            cor_br = tensordot(vec_br, ten_br, axes=((2, 1), (2, 3)))
-            cor_br = cor_br.fuse_legs(axes=((0, 2), (1, 3)))
         if bl in ops:
             ten_bl.set_operator_(ops[bl])
+            ten_bl.add_charge_swaps_(ops[bl].n, axes='k1')
+            ten_tl.add_charge_swaps_(ops[bl].n, axes=['b3', 'k4'])
+        if tr in ops:
+            ten_tr.set_operator_(ops[tr])
+            ten_tr.add_charge_swaps_(ops[tr].n, axes='b0')
+            ten_tl.add_charge_swaps_(ops[tr].n, axes=['b2', 'k4'])
+        if br in ops:
+            ten_br.set_operator_(ops[br])
+            ten_br.add_charge_swaps_(ops[br].n, axes='k1')
+            ten_tr.add_charge_swaps_(ops[br].n, axes=['b3', 'b0', 'k4'])
+            ten_tl.add_charge_swaps_(ops[br].n, axes=['b2', 'k4'])
+
+        if ten_tl.has_operator_or_swap():
+            cor_tl = tensordot(vec_tl, ten_tl, axes=((2, 1), (0, 1)))
+            cor_tl = cor_tl.fuse_legs(axes=((0, 2), (1, 3)))
+        if ten_bl.has_operator_or_swap():
             cor_bl = tensordot(vec_bl, ten_bl, axes=((2, 1), (1, 2)))
             cor_bl = cor_bl.fuse_legs(axes=((0, 3), (1, 2)))
+        if ten_tr.has_operator_or_swap():
+            cor_tr = tensordot(vec_tr, ten_tr, axes=((1, 2), (0, 3)))
+            cor_tr = cor_tr.fuse_legs(axes=((0, 2), (1, 3)))
+        if ten_br.has_operator_or_swap():
+            cor_br = tensordot(vec_br, ten_br, axes=((2, 1), (2, 3)))
+            cor_br = cor_br.fuse_legs(axes=((0, 2), (1, 3)))
 
+        sign = sign_canonical_order(*operators, sites, f_ordered=self.f_ordered)
         val_op = vdot(cor_tl @ cor_tr, tensordot(cor_bl, cor_br, axes=(0, 1)), conj=(0, 0))
 
-        return val_op / val_no
+        return sign * val_op / val_no
 
 
     def measure_line(self, *operators, sites=None):
@@ -613,7 +627,7 @@ class EnvCTM(Peps):
         # Empty structure for projectors
         proj = Peps(env.geometry)
         for site in proj.sites(): proj[site] = EnvCTM_projectors()
-        
+
         def _compress_env(env):
             shallow= {
                 'psi': {site: env.psi.bra[site] for site in env.sites()} if isinstance(env.psi,Peps2Layers) \
@@ -626,7 +640,7 @@ class EnvCTM(Peps):
             meta= {'psi': {site: t_and_meta[1] for site,t_and_meta in unrolled['psi'].items()}, 'env': tuple(meta for t,meta in unrolled['env'])}
             data= tuple( t for t,m in unrolled['psi'].values())+tuple( t for t,m in unrolled['env'])
             return data, meta
-        
+
         def _compress_proj(proj, empty_proj):
             data, meta= tuple(zip( *(t.compress_to_1d() if not (t is None) else empty_proj.compress_to_1d() \
                 for site in proj.sites() for t in proj[site].__dict__.values()) ))
@@ -635,23 +649,23 @@ class EnvCTM(Peps):
         def _decompress_env(data,meta):
             loc_bra= Peps(env.geometry, {site: decompress_from_1d(t,t_meta) for site,t,t_meta in zip(env.sites(),data[:len(env.sites())],meta['psi'].values())})
             loc_env = EnvCTM( Peps2Layers(loc_bra) if isinstance(env.psi,Peps2Layers) else loc_bra, init=None)
-            
+
             # assign backend tensors
             #
             data_env= data[len(env.sites()):]
-            for i,site in enumerate(loc_env.sites()): 
-                for env_t,t,t_meta in zip(loc_env[site].__dict__.keys(),data_env[i*8:(i+1)*8],meta['env'][i*8:(i+1)*8]): 
+            for i,site in enumerate(loc_env.sites()):
+                for env_t,t,t_meta in zip(loc_env[site].__dict__.keys(),data_env[i*8:(i+1)*8],meta['env'][i*8:(i+1)*8]):
                     setattr(loc_env[site],env_t,decompress_from_1d(t,t_meta))
             return loc_env
 
-        # 
+        #
         # get projectors and compute updated env tensors
         # TODO currently supports only <psi|psi> for double-layer peps
         for d in ['lr', 'tb']:
 
             if checkpoint_move:
                 outputs_meta= {}
-                
+
                 # extract raw parametric tensors as a tuple
                 inputs_t, inputs_meta= _compress_env(env)
 
@@ -670,7 +684,7 @@ class EnvCTM(Peps):
                     outputs_meta['proj']= out_proj_meta
 
                     return out_env_data[len(loc_env.sites()):] + out_proj_data
-                
+
                 if env.config.backend.BACKEND_ID == "torch":
                     if checkpoint_move=='reentrant':
                         use_reentrant= True
@@ -683,12 +697,12 @@ class EnvCTM(Peps):
                     raise RuntimeError(f"CTM update: checkpointing not supported for backend {env.config.BACKEND_ID}")
 
                 # update tensors of env and proj
-                for i,site in enumerate(env.sites()): 
-                    for env_t,t,t_meta in zip(env[site].__dict__.keys(),outputs[i*8:(i+1)*8],outputs_meta['env'][i*8:(i+1)*8]): 
+                for i,site in enumerate(env.sites()):
+                    for env_t,t,t_meta in zip(env[site].__dict__.keys(),outputs[i*8:(i+1)*8],outputs_meta['env'][i*8:(i+1)*8]):
                         setattr(env[site],env_t,decompress_from_1d(t,t_meta))
 
-                for i,site in enumerate(proj.sites()): 
-                    for proj_t,t,t_meta in zip(proj[site].__dict__.keys(),outputs[8*len(env.sites()):][i*8:(i+1)*8],outputs_meta['proj'][i*8:(i+1)*8]): 
+                for i,site in enumerate(proj.sites()):
+                    for proj_t,t,t_meta in zip(proj[site].__dict__.keys(),outputs[8*len(env.sites()):][i*8:(i+1)*8],outputs_meta['proj'][i*8:(i+1)*8]):
                         setattr(proj[site],proj_t, decompress_from_1d(t,t_meta) if t_meta['struct'].size>0 else None)
 
             else:
@@ -916,13 +930,13 @@ def _update_core_2dir(env, dir : str, opts_svd : dict, **kwargs):
         proj = Peps(env.geometry)
         for site in proj.sites():
             proj[site] = EnvCTM_projectors()
-        
+
         #
         # projectors
         for site in env.sites():
             update_proj_(proj, site, dir, env, opts_svd, **kwargs)
         trivial_projectors_(proj, dir, env)  # fill (trivial) projectors on edges
-        
+
         #
         # update move
         env_tmp = EnvCTM(env.psi, init=None)  # empty environments
@@ -932,7 +946,7 @@ def _update_core_2dir(env, dir : str, opts_svd : dict, **kwargs):
         return env_tmp, proj
 
 
-    # TODO 
+    # TODO
     # executes single directional, including comp. of the projectors
     # def _update_core_1dir():
 
@@ -1088,7 +1102,7 @@ def trivial_projectors_(proj, dirn, env):
                     setattr(proj[site], s0, ones(config, legs=(l0, l1, l2)))
 
 # Given projectors, compress enlarged corners and half-row/column tensors to obtain updated environment tensors
-# 
+#
 def update_env_directional_(env_tmp : EnvCTM, env : EnvCTM, site : Site, proj : EnvCTM_projectors, dir : str):
     r"""
     Peform single directional update of CTMRG for environment tensors of``site`` in direction ``dir`` using provided projectors.
@@ -1103,7 +1117,7 @@ def update_env_directional_(env_tmp : EnvCTM, env : EnvCTM, site : Site, proj : 
 
 def update_env_horizontal_(env_tmp, site, env, proj, dir : str = 'lr'):
     r"""
-    Horizontal move of CTM step. Compute updated environment tensors given projectors for ``site`` 
+    Horizontal move of CTM step. Compute updated environment tensors given projectors for ``site``
     in left (``dir='l'``), right ``dir='r'``, or both directions (``dir='lr'``).
     Updated environment tensors are stored in ``env_tmp``.
     """
@@ -1134,7 +1148,7 @@ def update_env_horizontal_(env_tmp, site, env, proj, dir : str = 'lr'):
             tmp = env[r].r @ proj[r].hrb
             tmp = tensordot(psi[r], tmp, axes=((2, 3), (2, 1)))
             tmp = tensordot(proj[r].hrt, tmp, axes=((0, 1), (2, 0)))
-            env_tmp[site].r = tmp / tmp.norm(p='inf')  
+            env_tmp[site].r = tmp / tmp.norm(p='inf')
 
         tr = psi.nn_site(site, d='tr')
         if tr is not None:
@@ -1149,13 +1163,13 @@ def update_env_horizontal_(env_tmp, site, env, proj, dir : str = 'lr'):
 
 def update_env_vertical_(env_tmp, site, env, proj, dir : str = 'tb'):
     r"""
-    Vertical move of CTM step. Compute updated environment tensors given projectors for ``site`` 
+    Vertical move of CTM step. Compute updated environment tensors given projectors for ``site``
     in top (``dir='t'``), bottom ``dir='b'``, or both directions (``dir='tb'``).
     Updated environment tensors are stored in ``env_tmp``.
     """
     assert 't' in dir or 'b' in dir, "Invalid directions"
     psi = env.psi
-    
+
     if 't' in dir:
         t = psi.nn_site(site, d='t')
         if t is not None:

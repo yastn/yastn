@@ -90,6 +90,9 @@ class DoublePepsTensor(SpecialTensor):
             if t != self.config.sym.zero():
                 self._swaps[ax] = t
 
+    def has_operator_or_swap(self):
+        return self.op is not None or (self.config.fermionic and self._swaps)
+
     def Ab_Ak_with_charge_swap(self):
         if not self._swaps:
             return self.bra, self.ket
