@@ -15,9 +15,11 @@
 """ Building Krylov space. """
 from __future__ import annotations
 import numpy as np
-from ..tensor import YastnError
+import scipy.sparse.linalg as spla
+from ..tensor import YastnError, Leg, einsum
+from .. import zeros, decompress_from_1d, Tensor
 
-__all__ = ['expmv', 'eigs']
+__all__ = ['expmv', 'eigs', 'svds']
 
 
 # Krylov based methods, handled by anonymous function decribing action of matrix on a vector
@@ -225,3 +227,119 @@ def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=Fals
         sit = vr[:, it]
         Y.append(V[0].linear_combination(*V[1:], amplitudes=sit, **kwargs))
     return val[:k], Y
+
+
+def svds(A, k=1, sU=1, nU=True, ncv=None, tol=0, which='LM', v0=None, maxiter=None, return_singular_vectors=True, \
+         solver='arpack', rng=None, options=None) -> tuple[Sequence[vectors], array, Sequence[vectors]]:
+    r"""
+    Search for dominant singular values of linear operator ``f`` using Arnoldi algorithm.
+    Economic implementation (without restart) for internal use within :meth:`yastn.tn.mps.dmrg_`.
+
+    Parameters
+    ----------
+        A: function
+            define an action of a 'square matrix' on the 'vector' ``v0``.
+            ``f(v0)`` should preserve the signature of ``v0``.
+
+        sU: int
+            Signature of the new leg in `U`; equal to 1 or -1. The default is 1.
+            `V` is going to have the opposite signature on the connecting leg.
+
+        nU: bool
+            Whether or not to attach the charge of ``a`` to `U`.
+            If ``False``, it is attached to `V`. The default is ``True``.
+
+        v0: Tensor
+            Initial guess, 'vector' to span the Krylov space.
+
+        k: int
+            Number of desired singular values and singular vectors. The default is 1.
+
+        which: str
+            One of [``‘LM’``, ``‘LR’``, ``‘SR’``] specifying which `k` singular vectors and singular values to find:
+            ``‘LM’`` : largest magnitude,
+            ``‘SM’`` : smallest magnitude,
+            ``‘LR’`` : largest real part,
+            ``‘SR’`` : smallest real part.
+    """
+    assert len(A.get_legs()) == 2, "A has to be of rank 2"
+    rows, cols= A.get_legs()
+
+    # 
+    v0_row= zeros(config=A.config, legs=(rows.conj(), Leg(sym=rows.sym, s= rows.s, t=rows.t, D= (1,)*len(rows.t))))
+    _, row_meta= v0_row.compress_to_1d(meta=None)
+    v0_col= zeros(config=A.config, legs=(cols.conj(), Leg(sym=cols.sym, s= cols.s, t=cols.t, D= (1,)*len(cols.t))))
+    _, col_meta= v0_col.compress_to_1d(meta=None)
+
+    def mv(v):
+        col= decompress_from_1d(v, col_meta)
+        Mcol= einsum('ij,jx->ix',A,col)
+        row, Mcol_meta= Mcol.compress_to_1d(meta=None)
+        return row
+    
+    def vm(v):
+        row= decompress_from_1d(v, row_meta)
+        rowM= einsum('ix,ij->jx',row,A)
+        col, rowM_meta= rowM.compress_to_1d(meta=None)
+        return col
+
+    # step 2: invoke dense svds
+    lop_A= spla.LinearOperator((v0_row.size, v0_col.size), matvec=mv, rmatvec=vm)
+    U, S, Vh= spla.svds(lop_A, k=k, ncv=ncv, tol=tol, which=which, v0=None, maxiter=maxiter, \
+                                    return_singular_vectors=return_singular_vectors, solver=solver, options=options,) #rng=None)
+    
+    # Individual singular vectors are ordered by magnitude in ascending manner [scipy], across all charge sectors. 
+    # Instead, we want to have them ordered by charge sectors, and then by magnitude within each sector.
+    # Locate the charge sectors of the singular vector by position of the largest element in the vector.
+    #
+    # A = U S Vh , while vA = v0_row A with vA having a structure of rows a
+    #              and A v0_col = Av with Av having s structure of cols
+    #
+    rowA= v0_row.conj()
+    colA= v0_col.conj()
+    U_sorted= {}
+
+    # ISSUE: in case of degeneracy, the singular vectors can be mixed-up across sectors
+    #        null-space is completely degenerate
+    # TODO: check if degeneracy, else post-process to separate sectors
+    index_to_charge= []
+    for c_block,slc in zip(rowA.get_blocks_charge(), rowA.slices):
+        c_sector= (c_block[:rows.sym.NSYM],)
+        index_to_charge += [c_sector]*slc.Dp
+        U_sorted[c_sector]= []
+
+    for i in range(len(S)):
+        pos = np.argmax(np.abs(U[:, i]))
+        c= index_to_charge[pos]
+        U_sorted[c].append(i)
+
+    # Step X: construct internal leg
+    t_row, D_i= zip(*((c, len(U_sorted[c])) for c in U_sorted if len(U_sorted[c]) > 0))
+    n_i= tuple( (A.n,)*len(t_row) if nU else (rows.sym.zero(),)*len(t_row) )
+    t_i_nU= rows.sym.fuse(np.concatenate((
+            np.array(t_row, dtype=np.int64).reshape((len(t_row), 1, rows.sym.NSYM)),
+            np.array(n_i, dtype=np.int64).reshape((len(t_row), 1, rows.sym.NSYM))), axis=1), 
+            (rows.s, -1), -sU)
+    t_i_nU= tuple(map(tuple, t_i_nU.tolist()))
+    
+    leg_internal= Leg(sym=rows.sym, s= sU, t=t_i_nU, D= D_i)
+
+    symU= zeros(config=A.config, legs=(rows, leg_internal), n=(A.n if nU else None))
+    symS= zeros(config=A.config, legs=(leg_internal.conj(), leg_internal), isdiag=True)
+    symVh= zeros(config=A.config, legs=(leg_internal.conj(), cols), n=(A.n if not nU else None))
+    
+    # embed singular triples into blocks of symmetric tensors in descending order of magnitude
+    U_sectors= dict(zip(( (c[:rows.sym.NSYM],) for c in rowA.get_blocks_charge()),rowA.slices))
+    Vh_sectors= dict(zip(( (c[:rows.sym.NSYM],) for c in colA.get_blocks_charge()),colA.slices))
+    row_to_col_sector= { (c[:rows.sym.NSYM],): (c[cols.sym.NSYM:],) for c in A.get_blocks_charge() }
+    for c in symU.get_blocks_charge():
+        row_sector, i_sector, col_sector= (c[:rows.sym.NSYM],), (c[rows.sym.NSYM:],), \
+            row_to_col_sector[(c[:rows.sym.NSYM],)]
+        if len(U_sorted[row_sector])<1:
+            continue
+        inds= U_sorted[row_sector]
+        symU[c]= U[slice(*U_sectors[row_sector].slcs[0]),inds[::-1]]
+        symS[(i_sector,i_sector)]= S[inds[::-1]]
+        symVh[(i_sector,col_sector)]= Vh[inds[::-1],slice(*Vh_sectors[col_sector].slcs[0])]
+
+    return symU, symS, symVh
