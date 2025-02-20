@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 from typing import Union
-from .... import fuse_legs, tensordot, swap_gate, ones, Leg, eye, Tensor
+from .... import fuse_legs, tensordot, swap_gate, ones, Leg, eye
 from ... import mps
 
 __all__ = ['hair_t', 'hair_l', 'hair_b', 'hair_r',
@@ -22,16 +22,20 @@ __all__ = ['hair_t', 'hair_l', 'hair_b', 'hair_r',
            'append_vec_tl', 'append_vec_tr',
            'append_vec_bl', 'append_vec_br',
            'tensors_from_psi', 'cut_into_hairs',
-           'identity_tm_boundary', 'identity_boundary']
+           'identity_tm_boundary', 'identity_boundary',
+           'trivial_peps_tensor']
+
+
+def trivial_peps_tensor(config):
+    triv = ones(config, legs=[Leg(config, t=(config.sym.zero(),), D=(1,))])
+    for s in (-1, 1, 1, -1):
+        triv = triv.add_leg(axis=0, s=s)
+    return triv.fuse_legs(axes=((0, 1), (2, 3), 4))
 
 
 def tensors_from_psi(d, psi):
     if any(v is None for v in d.values()):
-        cfg = psi[(0, 0)].config
-        triv = ones(cfg, legs=[Leg(cfg, t=(cfg.sym.zero(),), D=(1,))])
-        for s in (-1, 1, 1, -1):
-            triv = triv.add_leg(axis=0, s=s)
-        triv = triv.fuse_legs(axes=((0, 1), (2, 3), 4))
+        triv = trivial_peps_tensor(psi.config)
     for k, v in d.items():
         d[k] = triv if v is None else psi[v]
 

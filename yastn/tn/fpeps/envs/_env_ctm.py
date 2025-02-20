@@ -61,6 +61,7 @@ class CTMRG_out(NamedTuple):
     sweeps : int = 0
     max_dsv : float = None
     converged : bool = False
+    max_D : int = 1
 
 
 class EnvCTM(Peps):
@@ -97,6 +98,10 @@ class EnvCTM(Peps):
     @property
     def config(self):
         return self.psi.config
+
+    def max_D(self):
+        return max(max(max(getattr(self[site], dirn).get_shape()) for dirn in ['tl', 'tr', 'bl', 'br'])
+                   for site in self.sites())
 
     # Cloning/Copying/Detaching(view)
     #
@@ -172,8 +177,6 @@ class EnvCTM(Peps):
 
         if init == 'dl':
             self.init_env_from_onsite_(**kwargs)
-        elif init == 'nn':
-            pass
         else:
             if leg is None:
                 leg = leg0
@@ -196,7 +199,7 @@ class EnvCTM(Peps):
                     else:
                         setattr(self[site], dirn, rand(config, legs=[leg, legs[ind].conj(), leg.conj()]))
 
-    def init_env_from_onsite_(self, normalize : Union[str,Callable]='inf'):
+    def init_env_from_onsite_(self, normalize: Union[str,Callable]='inf'):
         r"""
         Initialize CTMRG environment by tracing on-site double-layer tensors A.
 
@@ -218,16 +221,17 @@ class EnvCTM(Peps):
         """
         assert isinstance(self.psi, Peps2Layers), "Initialization by traced double-layer on-site tensors requires double-layer PEPS"
         for site in self.sites():
-            for dirn, cor_f in ( ('tl', cor_tl), ('tr', cor_tr), ('bl', cor_bl), ('br', cor_br)):
-                shifted_site= self.nn_site(site,dirn)
-                C= cor_f(self.psi.bra[shifted_site], A_ket=self.psi.ket[shifted_site])
-                C= C/C.norm(p=normalize) if isinstance(normalize,str) else normalize(C)
-                setattr(self[site], dirn, C)
+            for dirn, edge_f in (('t', edge_t), ('l', edge_l), ('b', edge_b), ('r', edge_r),
+                                 ('tl', cor_tl), ('tr', cor_tr), ('bl', cor_bl), ('br', cor_br)):
+                shifted_site = self.nn_site(site, dirn)
 
-            for dirn, edge_f in ( ('t',edge_t), ('l',edge_l), ('b',edge_b), ('r',edge_r) ):
-                shifted_site= self.nn_site(site,dirn)
-                T= edge_f(self.psi.bra[shifted_site], A_ket=self.psi.ket[shifted_site])
-                T= T/T.norm(p=normalize) if isinstance(normalize,str) else normalize(T)
+                if shifted_site is not None:
+                    A_bra = self.psi.bra[shifted_site]
+                    A_ket = self.psi.ket[shifted_site]
+                else:
+                    A_bra = A_ket = trivial_peps_tensor(self.config)
+                T = edge_f(A_bra=A_bra, A_ket=A_ket)
+                T = T / T.norm(p=normalize) if isinstance(normalize, str) else normalize(T)
                 setattr(self[site], dirn, T)
 
 
@@ -457,7 +461,7 @@ class EnvCTM(Peps):
             cor_br = tensordot(vec_br, ten_br, axes=((2, 1), (2, 3)))
             cor_br = cor_br.fuse_legs(axes=((0, 2), (1, 3)))
 
-        sign = sign_canonical_order(*operators, sites, f_ordered=self.f_ordered)
+        sign = sign_canonical_order(*operators, sites=sites, f_ordered=self.f_ordered)
         val_op = vdot(cor_tl @ cor_tr, tensordot(cor_bl, cor_br, axes=(0, 1)), conj=(0, 0))
 
         return sign * val_op / val_no
@@ -885,22 +889,22 @@ def ctm_conv_corner_spec(env : EnvCTM, history : Sequence[dict[tuple[Site,str],T
 
 def _ctmrg_(env, opts_svd, method, max_sweeps, iterator_step, corner_tol, **kwargs):
     """ Generator for ctmrg_(). """
-    max_dsv, converged= None, False
+    max_dsv, converged = None, False
     for sweep in range(1, max_sweeps + 1):
         env.update_(opts_svd=opts_svd, method=method, **kwargs)
 
         # use default CTM convergence check
         if corner_tol is not None:
-            if sweep==1: history=[]
+            if sweep==1: history = []
             converged, max_dsv, history= ctm_conv_corner_spec(env.detach(), history, corner_tol)
-            logging.info(f'Sweep = {sweep:03d};  max_diff_corner_singular_values = {max_dsv:0.2e}')
+            logging.info(f'Sweep = {sweep:03d}; max_diff_corner_singular_values = {max_dsv:0.2e}')
 
             if converged:
                 break
 
         if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
-            yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, converged=converged)
-    yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, converged=converged)
+            yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
+    yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
 
 
 def calculate_corner_svd(env : dict[tuple[Site,str],Tensor]):
