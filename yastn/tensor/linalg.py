@@ -140,7 +140,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         If ``False``, it is attached to `V`. The default is ``True``.
 
     compute_uv: bool
-        If ``True``, compute and return `U`, `S`, `V`.  If ``False``, compute and return onlys `S`.
+        If ``True``, compute and return `U`, `S`, `V`.  If ``False``, compute and return only `S`.
         The default is ``True``.
 
     Uaxis, Vaxis: int
@@ -249,6 +249,10 @@ def _meta_svd(config, struct, slices, minD, sU, nU):
     S has signature = (-sU, sU)
     V has signature = (-sU, struct.s[1])
     if nU than U carries struct.n, otherwise V.
+
+    Returns
+    -------
+        tuple[tuple[ slice, shape, slice in U, shape in U, slice in S, slice in V, shape in V ]]
     """
     n0 = config.sym.zero()
     nsym = config.sym.NSYM
@@ -296,6 +300,63 @@ def _meta_svd(config, struct, slices, minD, sU, nU):
     Sstruct = _struct(s=(-sU, sU), n=n0, diag=True, t=St, D=SD, size=sum(SDp))
     Vstruct = _struct(s=(-sU, struct.s[1]), n=Vn, diag=False, t=Vt, D=VD, size=sum(VDp))
     return meta, Ustruct, Usl, Sstruct, Ssl, Vstruct, Vsl
+
+
+def _find_gaps(S, tol=0, eps_multiplet=1e-13, which='LM'):
+    """
+    Computes gaps between values of S ordered according to `which` as abs(S[i]-S[i+1]). 
+    Each gap is normalized by max(abs(S[i:i+2]).
+
+    Parameters
+    ----------
+    S: yastn.Tensor
+        rank-1 array, Diagonal rank-2 tensor, or rank-1 tensor.
+
+    tol: float
+        relative tolerance.
+
+    eps_multiplet: float
+        relative tolerance on multiplet splitting. If relative difference between
+        two consecutive elements of ``S`` is larger than ``eps_multiplet``, these
+        elements are not considered as part of the same multiplet.
+
+    which: str
+        One of [``‘LM’``, ``‘LR’``, ``‘SR’``] specifying how to order S:
+        ``‘LM’`` : largest magnitude,
+        ``‘SM’`` : smallest magnitude,
+        ``‘LR’`` : largest real part,
+        ``‘SR’`` : smallest real part.
+
+    Return
+    ------
+        gaps: nd.array
+            gaps[i] gives normalized gap as absolute value of difference between i-th and i+1
+            element of S wrt. to order 'which', normalized by largest overall gap.
+    """
+    # if isinstance(S, yastn.Tensor):
+    if hasattr(S, 'is_diag') and hasattr(S, 'ndim'):
+        assert (S.is_diag and S.ndim == 2) or S.ndim==1, "S should be rank-2 and diagonal or rank-1 tensor."
+        s = S.config.backend.to_numpy(S.data)
+    else:
+        assert isinstance(S, np.ndarray), "S should be numpy array."
+        s = S
+
+    # 0) convert to plain dense numpy vector and sort in order 'which'    
+    if which=='LM':
+        inds = np.argsort(np.abs(s))[::-1]
+    elif which=='SM':
+        inds = np.argsort(np.abs(s))
+    elif which=='LR':
+        inds = np.argsort(np.real(s))[::-1]
+    elif which=='SR':
+        inds = np.argsort(np.real(s))
+    s = s[inds]
+    
+    # TODO: treatment of null space
+    maxgap = np.maximum(np.abs(s[:len(s) - 1]), np.abs(s[1:len(s)])) + 1.0e-16
+    gaps = np.abs(s[:len(s) - 1] - s[1:len(s)]) / maxgap
+
+    return gaps
 
 
 def truncation_mask_multiplets(S, tol=0, D_total=float('inf'),
