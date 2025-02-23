@@ -383,8 +383,6 @@ class EnvCTM(Peps):
         Calculate expectation value of a product of local operators
         in a :math:`2 \times 2` window within the CTM environment.
 
-        At the moment, it works only for bosonic operators (fermionic are todo).
-
         Parameters
         ----------
         operators: Sequence[yastn.Tensor]
@@ -457,19 +455,15 @@ class EnvCTM(Peps):
             ten_tl.add_charge_swaps_(ops[br].n, axes=['k2', 'k4'])
 
         if ten_tl.has_operator_or_swap():
-            ten_tl = ten_tl.fuse_layers()
             cor_tl = tensordot(vec_tl, ten_tl, axes=((2, 1), (0, 1)))
             cor_tl = cor_tl.fuse_legs(axes=((0, 2), (1, 3)))
         if ten_bl.has_operator_or_swap():
-            ten_bl = ten_bl.fuse_layers()
             cor_bl = tensordot(vec_bl, ten_bl, axes=((2, 1), (1, 2)))
             cor_bl = cor_bl.fuse_legs(axes=((0, 3), (1, 2)))
         if ten_tr.has_operator_or_swap():
-            ten_tr = ten_tr.fuse_layers()
             cor_tr = tensordot(vec_tr, ten_tr, axes=((1, 2), (0, 3)))
             cor_tr = cor_tr.fuse_legs(axes=((0, 2), (1, 3)))
         if ten_br.has_operator_or_swap():
-            ten_br = ten_br.fuse_layers()
             cor_br = tensordot(vec_br, ten_br, axes=((2, 1), (2, 3)))
             cor_br = cor_br.fuse_legs(axes=((0, 2), (1, 3)))
 
@@ -483,8 +477,6 @@ class EnvCTM(Peps):
         r"""
         Calculate expectation value of a product of local opertors
         along a horizontal or vertical line within CTM environment.
-
-        At the moment works only for bosonic operators (fermionic are to do).
 
         Parameters
         ----------
@@ -533,9 +525,6 @@ class EnvCTM(Peps):
             else:
                 axes = (1, 2, 3, 0) if horizontal else (0, 3, 2, 1)
                 tm[ind] = op.transpose(axes=axes)
-
-        for ii in range(1, tm.N - 1):
-            tm[ii] = tm[ii].fuse_layers()
 
         sign = sign_canonical_order(*operators, sites=sites, f_ordered=self.f_ordered)
         val_op = mps.vdot(vl, tm, vr)
@@ -881,6 +870,10 @@ class EnvCTM(Peps):
             Whether to use checkpointing for the CTM updates. The default is ``False``.
             Otherwise, in case of PyTorch backend it can be set to 'reentrant' for reentrant checkpointing
             or 'nonreentrant' for non-reentrant checkpointing, see https://pytorch.org/docs/stable/checkpoint.html.
+
+        use_qr: bool
+            Whether to include intermediate QR decomposition while calculating projectors.
+            The default is True.
 
         Returns
         -------

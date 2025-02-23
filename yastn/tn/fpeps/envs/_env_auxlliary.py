@@ -286,6 +286,8 @@ def edge_b(A_bra, hb=None, A_ket=None):  # A = [t l] [b r] s;  hb = b' b
 def append_vec_tl(Ac, A, vectl, op=None, mode='old', in_b=(2, 1), out_a=(2, 3)):
     # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s;  vectl = x [l l'] [t t'] y
     """ Append the A and Ac tensors to the top-left vector """
+    if A.config.fermionic:
+        assert A.n == Ac.n == A.config.sym.zero(), "Sanity check; A, Ac should nor carry charge. "
     if op is not None:
         A = tensordot(A, op, axes=(2, 1))
     axes0 = tuple(ax for ax in range(vectl.ndim) if ax not in in_b)
@@ -319,6 +321,8 @@ def append_vec_tl(Ac, A, vectl, op=None, mode='old', in_b=(2, 1), out_a=(2, 3)):
 def append_vec_br(Ac, A, vecbr, op=None, mode='old', in_b=(2, 1), out_a=(0, 1)):
     # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s;  vecbr = x [r r'] [b b'] y
     """ Append the A and Ac tensors to the bottom-right vector. """
+    if A.config.fermionic:
+        assert A.n == Ac.n == A.config.sym.zero(), "Sanity check; A, Ac should nor carry charge. "
     if op is not None:
         A = tensordot(A, op, axes=(2, 1))
     axes0 = tuple(ax for ax in range(vecbr.ndim) if ax not in in_b)
@@ -352,8 +356,16 @@ def append_vec_br(Ac, A, vecbr, op=None, mode='old', in_b=(2, 1), out_a=(0, 1)):
 def append_vec_tr(Ac, A, vectr, op=None, mode='old', in_b=(1, 2), out_a=(1, 2)):
     # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s;  vectr = x [t t'] [r r'] y
     """ Append the A and Ac tensors to the top-left vector """
+    if A.config.fermionic:
+        assert A.n == Ac.n == A.config.sym.zero(), "Sanity check; A, Ac should nor carry charge. "
+
     if op is not None:
         A = tensordot(A, op, axes=(2, 1))
+        n_vec = A.config.sym.add_charges(vectr.n, op.n)
+    else:
+        n_vec = vectr.n
+    # We have to assume that vactr can carry explicit charge;
+    # We will swap with it for optimal swap placement.
 
     A = A.unfuse_legs(axes=(0, 1))  # t l b r s
     A = A.swap_gate(axes=(2, 4))  # b X s
@@ -368,9 +380,7 @@ def append_vec_tr(Ac, A, vectr, op=None, mode='old', in_b=(1, 2), out_a=(1, 2)):
     vectr = vectr.fuse_legs(axes=axes0)  # [t t'] [x y] [r r']
     vectr = vectr.unfuse_legs(axes=(0, 2))  # t t' [x y] r r'
     vectr = vectr.swap_gate(axes=(1, 2))  # t' X [x y]
-
-    nn = A.config.sym.add_charges(vectr.n, A.n)
-    vectr = vectr.swap_gate(axes=1, charge=nn)  # t' X [charge_vectr A]  # Ac is assumed to be charge-less
+    vectr = vectr.swap_gate(axes=1, charge=n_vec)  # t' X [charge_vectr op.n]
 
     vectr = vectr.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [t r] [x y] [t' r']
     vectr = vectr.tensordot(Ac.conj(), axes=(2, 0))  # [t r] [x y] [l' b'] s
@@ -397,9 +407,14 @@ def append_vec_tr(Ac, A, vectr, op=None, mode='old', in_b=(1, 2), out_a=(1, 2)):
 
 def append_vec_bl(Ac, A, vecbl, op=None, mode='old', in_b=(2, 1), out_a=(0, 3)):
     # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s;  vecbl = x [b b'] [l l'] y
-    """ Append the A and Ac tensors to the top-left vector """
+    """ Append the A and Ac tensors to the top-left vector. """
+    if A.config.fermionic:
+        assert A.n == Ac.n == A.config.sym.zero(), "Sanity check; A, Ac should nor carry charge. "
+
     if op is not None:
         A = tensordot(A, op, axes=(2, 1))
+    n_vec = vecbl.n  # We have to assume that vacbl can carry explicit charge;
+    # We will swap with it for optimal swap placement.
 
     A = A.unfuse_legs(axes=(0, 1))  # t l b r s
     A = A.swap_gate(axes=(2, 4))  # b X s
@@ -419,6 +434,7 @@ def append_vec_bl(Ac, A, vecbl, op=None, mode='old', in_b=(2, 1), out_a=(0, 3)):
     vecbl = A.tensordot(vecbl, axes=((0, 2), (0, 3)))  # [r t] [x y] [r' t']
     vecbl = vecbl.unfuse_legs(axes=(0, 2))  # r t [x y] r' t'
     vecbl = vecbl.swap_gate(axes=(2, 4))  #  [x y] X t'
+    vecbl = vecbl.swap_gate(axes=4, charge=n_vec)  # t' X [charge_vec A]
 
     if mode == 'old':
         vecbl = vecbl.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [r r'] [x y] [t t']

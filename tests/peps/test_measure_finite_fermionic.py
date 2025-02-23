@@ -1,4 +1,4 @@
-# Copyright 2024 The YASTN Authors. All Rights Reserved.
+# Copyright 2025 The YASTN Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,12 +16,11 @@
 import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
-# from yastn.tn.fpeps.envs.rdm import measure_rdm_1site, measure_rdm_nn, measure_rdm_2x2
 import yastn.tn.mps as mps
 import math
 from itertools import product
 
-tol = 1e-3  #pylint: disable=invalid-name
+tol = 1e-2  # CTMRG has problem in this finite peps, being stuck at small bond dimension
 
 
 def generate_peps(g, ops, occs_init, angles):
@@ -140,7 +139,8 @@ def test_measure(config_kwargs, L=3):
     #
     # converge ctm
     env_ctm = fpeps.EnvCTM(psi, init='dl')
-    opts_svd = {'D_total': 32, 'tol': 1e-14}
+    opts_svd = {'D_total': 32, 'tol': 1e-12}
+    # CTMRG is not precise here, and cannot rise D_max above 4.
     if L > 2:
         info = env_ctm.ctmrg_(max_sweeps=100, opts_svd=opts_svd, corner_tol=1e-10)
         print(info)
@@ -194,33 +194,17 @@ def test_measure(config_kwargs, L=3):
             error = abs(cpc_mps[s2i[s0], s2i[s1]] - v)
             if error > tol:
                 print(s0, s1, v, cpc_mps[s2i[s0], s2i[s1]], error)
-
-    # xx = env_ctm.measure_nn(ops.cp(), ops.c(), bond=((1, 0), (1, 1)))
-    # print(xx)
-
-    # yy = env_ctm.measure_line(ops.cp(), ops.c(), sites=((1, 0), (1, 1)))
-    # print(yy)
-
-    s0, s1 = (0, 0), (1, 0)
-    print(cpc_mps[s2i[s0], s2i[s1]])
-    xx = env_ctm.measure_nn(ops.cp(), ops.c(), bond=(s0, s1))
-    print(xx)
-    yy = env_ctm.measure_line(ops.cp(), ops.c(), sites=(s0, s1))
-    print(yy)
-    zz = env_ctm.measure_2x2(ops.cp(), ops.c(), sites=(s0, s1))
-    print(zz)
-
-    # for (s0, s1), v in cpc_nn.items():
-    #     assert abs(cpc_mps[s2i[s0], s2i[s1]] - v) < tol
     #
-    # cpc_2x2 = measure_2x2(ops.cp(), ops.c(), env=env_ctm)
-    # for (s0, s1), v in cpc_2x2.items():
-    #     print(s0, s1, cpc_mps[s2i[s0], s2i[s1]], v)
-    #     if (s0, s1) in cpc_nn:
-    #         print(cpc_nn[s0, s1], cpc_mps[s2i[s0], s2i[s1]])
-    #     assert abs(cpc_mps[s2i[s0], s2i[s1]] - v) < tol
-    #
-    # check 2-point correlators
+    # check 4-point correlator
+    sites=[(0, 0), (0, 1), (1, 0), (1, 1)]
+    positions = [s2i[site] for site in sites]
+    operators = [ops.cp(), ops.c(), ops.cp(), ops.c()]
+    v1 = env_ctm.measure_2x2(*operators, sites=sites)
+    I = mps.product_mpo(ops.I(), N=phi.N)
+    O = mps.generate_mpo(I, terms=[mps.Hterm(positions=positions, operators=operators)])
+    v2 = mps.vdot(phi, O, phi)
+    assert abs(v1 - v2) < tol
+
 
 if __name__ == '__main__':
     pytest.main([__file__, "-vs"])
