@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from typing import Union
 from .... import fuse_legs, tensordot, swap_gate, ones, Leg, eye
 from ... import mps
 
@@ -355,18 +354,25 @@ def append_vec_tr(Ac, A, vectr, op=None, mode='old', in_b=(1, 2), out_a=(1, 2)):
     """ Append the A and Ac tensors to the top-left vector """
     if op is not None:
         A = tensordot(A, op, axes=(2, 1))
+
+    A = A.unfuse_legs(axes=(0, 1))  # t l b r s
+    A = A.swap_gate(axes=(2, 4))  # b X s
+    A = A.fuse_legs(axes=((0, 3), (1, 2), 4))  # [t r] [l b] s
+
+    Ac = Ac.unfuse_legs(axes=(0, 1))  # t' l' b' r' s
+    Ac = Ac.swap_gate(axes=(2, (0, 3)))  # b' X t' r'
+    Ac = Ac.fuse_legs(axes=((0, 3), (1, 2), 4))  # [t' r'] [l' b'] s
+
     axes0 = tuple(ax for ax in range(vectr.ndim) if ax not in in_b)
     axes0 = (in_b[0], axes0, in_b[1])  # (1, (0, 3), 2), in_b == (t, r)
     vectr = vectr.fuse_legs(axes=axes0)  # [t t'] [x y] [r r']
     vectr = vectr.unfuse_legs(axes=(0, 2))  # t t' [x y] r r'
-    vectr = vectr.swap_gate(axes=(1, 2))  # t' X x y
+    vectr = vectr.swap_gate(axes=(1, 2))  # t' X [x y]
+
+    nn = A.config.sym.add_charges(vectr.n, A.n)
+    vectr = vectr.swap_gate(axes=1, charge=nn)  # t' X [charge_vectr A]  # Ac is assumed to be charge-less
+
     vectr = vectr.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [t r] [x y] [t' r']
-    A = A.unfuse_legs(axes=(0, 1))  # t l b r s
-    Ac = Ac.unfuse_legs(axes=(0, 1))  # t' l' b' r' s
-    A = A.swap_gate(axes=(2, 4))  # b X s
-    Ac = Ac.swap_gate(axes=(2, (0, 3)))  # b' X t' r'
-    A = A.fuse_legs(axes=((0, 3), (1, 2), 4))  # [t r] [l b] s
-    Ac = Ac.fuse_legs(axes=((0, 3), (1, 2), 4))  # [t' r'] [l' b'] s
     vectr = vectr.tensordot(Ac.conj(), axes=(2, 0))  # [t r] [x y] [l' b'] s
     vectr = A.tensordot(vectr, axes=((0, 2), (0, 3)))  # [l b] [x y] [l' b']
     vectr = vectr.unfuse_legs(axes=(0, 2))  # l b [x y] l' b'
@@ -394,18 +400,21 @@ def append_vec_bl(Ac, A, vecbl, op=None, mode='old', in_b=(2, 1), out_a=(0, 3)):
     """ Append the A and Ac tensors to the top-left vector """
     if op is not None:
         A = tensordot(A, op, axes=(2, 1))
+
+    A = A.unfuse_legs(axes=(0, 1))  # t l b r s
+    A = A.swap_gate(axes=(2, 4))  # b X s
+    A = A.fuse_legs(axes=((2, 1), (3, 0), 4))  # [b l] [r t] s
+
+    Ac = Ac.unfuse_legs(axes=(0, 1))  # t' l' b' r' s
+    Ac = Ac.swap_gate(axes=(2, (0, 3)))  # b' X t' r'
+    Ac = Ac.fuse_legs(axes=((2, 1), (3, 0), 4))  # [b' l'] [r' t'] s
+
     axes0 = tuple(ax for ax in range(vecbl.ndim) if ax not in in_b)
     axes0 = (in_b[1], axes0, in_b[0])  # (1, (0, 3), 2), in_b == (l, b)
     vecbl = vecbl.fuse_legs(axes=axes0)  # [b b'] [x y] [l l']
     vecbl = vecbl.unfuse_legs(axes=(0, 2))  # b b' [x y] l l'
     vecbl = vecbl.swap_gate(axes=(0, (1, 4)))  # b X b' l'
     vecbl = vecbl.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [b l] [x y] [b' l']
-    A = A.unfuse_legs(axes=(0, 1))  # t l b r s
-    Ac = Ac.unfuse_legs(axes=(0, 1))  # t' l' b' r' s
-    A = A.swap_gate(axes=(2, 4))  # b X s
-    Ac = Ac.swap_gate(axes=(2, (0, 3)))  # b' X t' r'
-    A = A.fuse_legs(axes=((2, 1), (3, 0), 4))  # [b l] [r t] s
-    Ac = Ac.fuse_legs(axes=((2, 1), (3, 0), 4))  # [b' l'] [r' t'] s
     vecbl = vecbl.tensordot(Ac.conj(), axes=(2, 0))  # [b l] [x y] [r' t'] s
     vecbl = A.tensordot(vecbl, axes=((0, 2), (0, 3)))  # [r t] [x y] [r' t']
     vecbl = vecbl.unfuse_legs(axes=(0, 2))  # r t [x y] r' t'

@@ -216,6 +216,8 @@ class DoublePepsTensor(SpecialTensor):
         Fuse the top and bottom tensors into a single :class:`yastn.Tensor`.
         """
         Ab, Ak = self.Ab_Ak_with_charge_swap()
+        if self.op is not None:
+            Ak = tensordot(Ak, self.op, axes=(2, 1))
         tt = tensordot(Ak, Ab, axes=(2, 2), conj=(0, 1))  # [t l] [b r] [t' l'] [b' r']
         tt = tt.fuse_legs(axes=(0, 2, (1, 3)))  # [t l] [t' l'] [[b r] [b' r']]
         tt = tt.unfuse_legs(axes=(0, 1))  # t l t' l' [[b r] [b' r']]

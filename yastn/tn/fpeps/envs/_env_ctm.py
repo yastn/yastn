@@ -399,10 +399,18 @@ class EnvCTM(Peps):
         if len(sites) != len(ops):
             raise YastnError("Sites should not repeat.")
 
-        mx = min(site[0] for site in sites)  # tl corner
-        my = min(site[1] for site in sites)
+        minx = min(site[0] for site in sites)  # tl corner
+        miny = min(site[1] for site in sites)
 
-        tl = Site(mx, my)
+        maxx = max(site[0] for site in sites)  # tl corner
+        maxy = max(site[1] for site in sites)
+
+        if minx == maxx and self.nn_site((minx, miny), 'b') is None:
+            minx -= 1  # for a finite system
+        if miny == maxy and self.nn_site((minx, miny), 'r') is None:
+            miny -= 1  # for a finite system
+
+        tl = Site(minx, miny)
         tr = self.nn_site(tl, 'r')
         br = self.nn_site(tl, 'br')
         bl = self.nn_site(tl, 'b')
@@ -449,15 +457,19 @@ class EnvCTM(Peps):
             ten_tl.add_charge_swaps_(ops[br].n, axes=['k2', 'k4'])
 
         if ten_tl.has_operator_or_swap():
+            ten_tl = ten_tl.fuse_layers()
             cor_tl = tensordot(vec_tl, ten_tl, axes=((2, 1), (0, 1)))
             cor_tl = cor_tl.fuse_legs(axes=((0, 2), (1, 3)))
         if ten_bl.has_operator_or_swap():
+            ten_bl = ten_bl.fuse_layers()
             cor_bl = tensordot(vec_bl, ten_bl, axes=((2, 1), (1, 2)))
             cor_bl = cor_bl.fuse_legs(axes=((0, 3), (1, 2)))
         if ten_tr.has_operator_or_swap():
+            ten_tr = ten_tr.fuse_layers()
             cor_tr = tensordot(vec_tr, ten_tr, axes=((1, 2), (0, 3)))
             cor_tr = cor_tr.fuse_legs(axes=((0, 2), (1, 3)))
         if ten_br.has_operator_or_swap():
+            ten_br = ten_br.fuse_layers()
             cor_br = tensordot(vec_br, ten_br, axes=((2, 1), (2, 3)))
             cor_br = cor_br.fuse_legs(axes=((0, 2), (1, 3)))
 
@@ -494,29 +506,41 @@ class EnvCTM(Peps):
             raise YastnError("Sites should form a horizontal or vertical line.")
 
         env_win = EnvWindow(self, (xs[0], xs[-1] + 1), (ys[0], ys[-1] + 1))
-        if len(xs) == 1: # horizontal
+        horizontal = (len(xs) == 1)
+        if horizontal:
             vr = env_win[xs[0], 't']
             tm = env_win[xs[0], 'h']
             vl = env_win[xs[0], 'b']
-        else:  # len(ys) == 1:  # vertical
+            axes_op = 'b0'
+            axes_string = ('b0', 'k2', 'k4')
+
+        else:  # vertical
             vr = env_win[ys[0], 'l']
             tm = env_win[ys[0], 'v']
             vl = env_win[ys[0], 'r']
+            axes_op = 'k1'
+            axes_string = ('k1', 'k4', 'b3')
 
         val_no = mps.vdot(vl, tm, vr)
 
         for site, op in ops.items():
             ind = site[0] - xs[0] + site[1] - ys[0] + 1
-
             if op.ndim == 2:
                 tm[ind].set_operator_(op)
-            elif len(xs) == 1:  # 'h'
-                tm[ind] = op.transpose(axes=(1, 2, 3, 0))
-            else:  # 'v'
-                tm[ind] = op.transpose(axes=(0, 3, 2, 1))
+                tm[ind].add_charge_swaps_(op.n, axes=axes_op)
+                for ii in range(1, ind):
+                    tm[ii].add_charge_swaps_(op.n, axes=axes_string)
+            else:
+                axes = (1, 2, 3, 0) if horizontal else (0, 3, 2, 1)
+                tm[ind] = op.transpose(axes=axes)
 
+        for ii in range(1, tm.N - 1):
+            tm[ii] = tm[ii].fuse_layers()
+
+        sign = sign_canonical_order(*operators, sites=sites, f_ordered=self.f_ordered)
         val_op = mps.vdot(vl, tm, vr)
-        return val_op / val_no
+
+        return sign * val_op / val_no
 
 
     def measure_2site(self, O, P, xrange, yrange, opts_svd=None, opts_var=None) -> dict[Site, list]:
