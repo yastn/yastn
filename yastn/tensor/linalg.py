@@ -360,7 +360,7 @@ def _find_gaps(S, tol=0, eps_multiplet=1e-13, which='LM'):
 
 
 def truncation_mask_multiplets(S, tol=0, D_total=float('inf'),
-                               eps_multiplet=1e-13, **kwargs) -> yastn.Tensor[bool]:
+                               eps_multiplet=1e-13, hermitian=False, **kwargs) -> yastn.Tensor[bool]:
     """
     Generate a mask tensor from real positive spectrum ``S``, while preserving
     degenerate multiplets. This is achieved by truncating the spectrum
@@ -381,6 +381,9 @@ def truncation_mask_multiplets(S, tol=0, D_total=float('inf'),
         relative tolerance on multiplet splitting. If relative difference between
         two consecutive elements of ``S`` is larger than ``eps_multiplet``, these
         elements are not considered as part of the same multiplet.
+
+    hermitian: bool = False
+        If true, blocks related by hermitian conjugation are truncated equally.
     """
     if not (S.isdiag and S.yast_dtype == "float64"):
         raise YastnError("Truncation_mask requires S to be real and diagonal.")
@@ -418,7 +421,9 @@ def truncation_mask_multiplets(S, tol=0, D_total=float('inf'),
 
     Smask._data[inds[:D_trunc]] = True
 
-    # check symmetry related blocks and truncate to equal length
+    # check blocks related by Hermitian symmetry and truncate to equal length
+    if not hermitian:
+        return Smask
     active_sectors = filter(lambda x: any(Smask[x]), Smask.struct.t)
     for t in active_sectors:
         tn = np.array(t, dtype=np.int64).reshape((1, 1, -1))

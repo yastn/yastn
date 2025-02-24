@@ -14,6 +14,7 @@
 # ==============================================================================
 """ Building Krylov space. """
 from __future__ import annotations
+from itertools import islice
 import numpy as np
 import scipy.sparse.linalg as spla
 from ..tensor import YastnError, Leg, LegMeta, einsum, truncation_mask
@@ -338,17 +339,21 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
     v0_col= zeros(config=A.config, legs=(cols.conj(), make_dummy_leg(cols)) )
     _, col_meta= v0_col.compress_to_1d(meta=None)
 
+    # take care of negative strides
+    to_tensor= lambda x: A_mat.config.backend.to_tensor(x if np.sum(np.array(x.strides)<0)==0 else x.copy() , dtype=A_mat.yast_dtype, device=A_mat.device)
+    to_numpy= lambda x: A_mat.config.backend.to_numpy(x)
+
     def mv(v): # Av
-        col= decompress_from_1d(v, col_meta)
+        col= decompress_from_1d(to_tensor(v), col_meta)
         res= einsum('ij,jx->ix',A_mat,col)
         row, res_meta= res.compress_to_1d(meta=None)
-        return row
+        return to_numpy(row)
     
     def vm(v): # A^\dag v  vs  (v* A)^\dag = A^\dag v
-        row= decompress_from_1d(v.conj(), row_meta)
+        row= decompress_from_1d(to_tensor(v).conj(), row_meta)
         res= einsum('ix,ij->jx',row,A_mat)
         col, res_meta= res.compress_to_1d(meta=None)
-        return col.conj()
+        return to_numpy(col.conj())
 
     # step 2: invoke dense svds
     lop_A= spla.LinearOperator((v0_row.size, v0_col.size), matvec=mv, rmatvec=vm)
@@ -369,9 +374,9 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
     # ISSUE: in case of degeneracy, the singular vectors can be mixed-up across sectors
     #        null-space is completely degenerate
     # TODO: check if degeneracy, else post-process to separate sectors
-    gaps= _find_gaps(S, tol=kwargs.get('reltol',0), eps_multiplet=eps_multiplet, which=which)
-    if sum(gaps<eps_multiplet)>0:
-        raise NotImplemented('Resolving degeneracies in svds not implemented yet')
+    # gaps= _find_gaps(S, tol=kwargs.get('reltol',0), eps_multiplet=eps_multiplet, which=which)
+    # if sum(gaps<eps_multiplet)>0:
+    #     raise NotImplemented('Resolving degeneracies in svds not implemented yet')
 
     index_to_charge= []
     for c_block,slc in zip(rowA.get_blocks_charge(), rowA.slices):
@@ -379,11 +384,79 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
         index_to_charge += [c_sector]*slc.Dp
         U_sorted[c_sector]= []
 
-    # relate dense singular vectors to charge sectors
-    for i in range(len(S)):
-        pos = np.argmax(np.abs(U[:, i]))
-        c= index_to_charge[pos]
-        U_sorted[c].append(i)
+    # charge density per sector for multiplet of dim d located at i-d+1:i+1
+    n_occ= lambda i,d : np.asarray([[np.linalg.norm(U[slice(*slc.slcs[0]),i-m])**2 \
+                 for c,slc in zip(rowA.get_blocks_charge(), rowA.slices)] for m in range(d)])
+    
+    # overlap matrix for single non-zero charge sector, iterate over subspace 
+    # with ascending index (compatible with sliciing of U below)
+    def overlaps_per_sector(c_sec,d):
+        ic_slc= dict(zip(rowA.get_blocks_charge(), rowA.slices))[c_sec]
+        overlaps= np.asarray([[ U[slice(*ic_slc.slcs[0]),i+1-d+m_row].conj() @ U[slice(*ic_slc.slcs[0]),i+1-d+m_col] \
+                               for m_col in range(d)] for m_row in range(d)])
+        return overlaps
+    
+    def get_sharp_sectors(overlap_diag):
+                assert np.all(np.isclose(overlap_diag, 0, atol=1e-12) | np.isclose(overlap_diag, 1, atol=1e-12)), \
+                    "The degeneracy within the sector is not resolved"
+                return np.rint(overlap_diag)
+
+    # Relate dense singular vectors to charge sectors. Traverse singular vectors in descending order of magnitude.
+    isvals= iter(range(len(S)-1,-1,-1))
+    for i in isvals:
+        if S[i]<kwargs.get('reltol',0)*S[-1]:
+            break # For finite reltol, this eliminates the kernel of A and its degeneracy
+        # look-ahead at the dimension d of the degenerate subspace
+        d= sum(S[i]-S[:i+1] < eps_multiplet)
+        # print(f"{i} {S[i]} {d} {S[i-d:i+1]}")
+        if d>1: # Treat degenerate subspace
+
+            # 1) find components of degen. subspace and compute charge density per charge sector C_secs
+            C= n_occ(i,d)
+            C_secs= np.asarray([[c for c,slc in zip(rowA.get_blocks_charge(), rowA.slices)] for m in range(d)])
+            assert np.allclose(np.sum(C, axis=1), 1, rtol=1.0e-14,  atol=1.0e-14), 'Degenerate subspace not properly separated'
+  
+            # 2) identify charge sectors that contain the degenerate subspace
+            mask= C > 1.0e-14
+            C0= C[np.ix_(np.any(mask, axis=1), np.any(mask, axis=0))]
+
+            # non-zero C_sectors. In each row, there are nzC_secs.shape[1] sectors, with charges in last dimension of nzC_secs 
+            nzC_secs= C_secs[np.ix_(np.any(mask, axis=1), np.any(mask, axis=0))]
+            if nzC_secs.shape[0]<nzC_secs.shape[1]: # more non-empty charge sectors than degenerate singular triples
+                raise YastnError('Singular triples i-d+1:i+1 are a part of incomplete multiplet. Charge cannot be well-defined.')
+
+            # 3) find basis in which singular triples are charge density operator eigenstates
+            nv= nzC_secs.shape[0]
+            full_overlap= np.zeros((nv*nzC_secs.shape[1],)*2, dtype=U.dtype)
+            for nz_sec in range(nzC_secs.shape[1]):
+                full_overlap[*(slice(nz_sec*nv,(nz_sec+1)*nv),)*2]= overlaps_per_sector(tuple(nzC_secs[0,nz_sec,:]),d)
+
+            D_0, B_0 = np.linalg.eigh(full_overlap) # o1 = B @ np.diag(D) @ B.
+            sec_mask= get_sharp_sectors(D_0)
+            assert sum(sec_mask)==nv, f"We should resolve multiplet of size {nv}, instead {sum(sec_mask)}"
+
+            # build unitary from non-zero sections of B_0 corresponding to sharp sectors (D_0=1)
+            UB= np.asarray([ B_0[:,-u][abs(B_0[:,-u])>1.0e-14] for u in range(nv,0,-1) ]).T
+            U[:,i-d+1:i+1]= U[:,i-d+1:i+1] @ UB
+            Vh[i-d+1:i+1,:]= UB.conj().T @ Vh[i-d+1:i+1,:]         
+
+            for x in range(d):
+                U_sorted[ index_to_charge[ np.argmax(np.abs(U[:, i-d+1+x])) ] ].append(i-d+1+x)
+
+            next(islice(isvals, d-1, d-1), None) # skip ahead
+            continue
+        if i==0:
+            # special case of last singular triple being a part of a multiplet
+            # 1) find components of degen. subspace and compute charge density per charge sector C_secs
+            C= n_occ(i,1)
+            assert np.allclose(np.sum(C, axis=1), 1, rtol=1.0e-14,  atol=1.0e-14), 'Degenerate subspace not properly separated'
+  
+            # 2) identify charge sectors that contain the degenerate subspace
+            mask= C > 1.0e-14
+            if np.sum(mask)>1: # its a part of a multiplet
+                if kwargs.get('truncate_multiplets',False): continue
+                YastnError('Last singular triple is part of a multiplet without well-defined charge')
+        U_sorted[ index_to_charge[ np.argmax(np.abs(U[:, i])) ] ].append(i)
 
     # Step X: construct internal leg
     t_row, D_i= zip(*((c, len(U_sorted[c])) for c in U_sorted if len(U_sorted[c]) > 0))
@@ -396,6 +469,7 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
     
     leg_internal= Leg(sym=rows.sym, s= sU, t=t_i_nU, D= D_i)
 
+    U, S, Vh= to_tensor(U), to_tensor(S), to_tensor(Vh)
     symU= zeros(config=A.config, legs=(rows, leg_internal), n=(A_mat.n if nU else None), dtype=A_mat.yast_dtype)
     symS= zeros(config=A.config, legs=(leg_internal.conj(), leg_internal), isdiag=True,)
     symVh= zeros(config=A.config, legs=(leg_internal.conj(), cols), n=(A_mat.n if not nU else None), dtype=A_mat.yast_dtype)
@@ -410,9 +484,9 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
         if len(U_sorted[row_sector])<1:
             continue
         inds= U_sorted[row_sector]
-        symU[c]= U[slice(*U_sectors[row_sector].slcs[0]),inds[::-1]]
-        symS[(i_sector,i_sector)]= S[inds[::-1]]
-        symVh[(i_sector,col_sector)]= Vh[inds[::-1],slice(*Vh_sectors[col_sector].slcs[0])]
+        symU[c]= U[slice(*U_sectors[row_sector].slcs[0]),inds]
+        symS[(i_sector,i_sector)]= S[inds]
+        symVh[(i_sector,col_sector)]= Vh[inds,slice(*Vh_sectors[col_sector].slcs[0])]
 
     # fix relative phases of singular vectors
     if fix_signs:
