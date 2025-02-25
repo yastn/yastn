@@ -391,7 +391,7 @@ class EnvCTM(Peps):
         sites: Sequence[tuple[int, int]]
             A list of sites [s0, s1, ...] matching corresponding operators.
         """
-        if len(operators) != len(sites):
+        if sites is None or len(operators) != len(sites):
             raise YastnError("Number of operators and sites should match.")
         ops = dict(zip(sites, operators))
         if len(sites) != len(ops):
@@ -486,7 +486,7 @@ class EnvCTM(Peps):
         sites: Sequence[tuple[int, int]]
             List of sites that should match operators.
         """
-        if len(operators) != len(sites):
+        if sites is None or len(operators) != len(sites):
             raise YastnError("Number of operators and sites should match.")
         ops = dict(zip(sites, operators))
         if len(sites) != len(ops):
@@ -505,7 +505,6 @@ class EnvCTM(Peps):
             vl = env_win[xs[0], 'b']
             axes_op = 'b0'
             axes_string = ('b0', 'k2', 'k4')
-
         else:  # vertical
             vr = env_win[ys[0], 'l']
             tm = env_win[ys[0], 'v']
@@ -532,7 +531,7 @@ class EnvCTM(Peps):
         return sign * val_op / val_no
 
 
-    def measure_2site(self, O, P, xrange, yrange, opts_svd=None, opts_var=None) -> dict[Site, list]:
+    def measure_2site(self, O, P, xrange, yrange, opts_svd=None, opts_var=None, bonds='<') -> dict[Site, list]:
         r"""
         Calculate 2-point correlations <O P> between top-left corner of the window, and all sites in the window.
 
@@ -556,6 +555,18 @@ class EnvCTM(Peps):
         opts_svd: dict
             Options passed to :meth:`yastn.tn.mps.compression_` used in the refining of boundary MPSs.
             The default is ``None``, in which case make 2 variational sweeps.
+
+        bonds: tuple[int, int] | Sequence[tuple[int, int]] | str
+            Which 2-site correlators to calculate.
+            For a single bond, tuple[int, int], return float. Otherwise, return dict[bond, float].
+            It is possible to provide a string to build a list of bonds as:
+
+            * '<' for all i < j.
+            * '=' for all i == j.
+            * '>' for all i > j.
+            * 'a' for all i, j; equivalent to "<=>".
+
+            The default is '<'.
         """
         env_win = EnvWindow(self, xrange, yrange)
         return env_win.measure_2site(O, P, opts_svd=opts_svd, opts_var=opts_var)

@@ -135,6 +135,8 @@ class EnvWindow:
         O0dict = _clear_operator_input(O0, sites)
         O1dict = _clear_operator_input(O1, sites)
         out = {}
+        O1n = [*O1dict[sites[0]].values()][0].n  # All O1 should have the same charge
+        # All O0 should have the same charge  # TODO
 
         (nx0, ny0), ix0 = sites[0], 1
         vecc, tm, vec = self[ny0, 'r'], self[ny0, 'v'], self[ny0, 'l']
