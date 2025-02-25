@@ -429,7 +429,7 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
             nv= nzC_secs.shape[0]
             full_overlap= np.zeros((nv*nzC_secs.shape[1],)*2, dtype=U.dtype)
             for nz_sec in range(nzC_secs.shape[1]):
-                full_overlap[*(slice(nz_sec*nv,(nz_sec+1)*nv),)*2]= overlaps_per_sector(tuple(nzC_secs[0,nz_sec,:]),d)
+                full_overlap[nz_sec*nv:(nz_sec+1)*nv,nz_sec*nv:(nz_sec+1)*nv]= overlaps_per_sector(tuple(nzC_secs[0,nz_sec,:]),d)
 
             D_0, B_0 = np.linalg.eigh(full_overlap) # o1 = B @ np.diag(D) @ B.
             sec_mask= get_sharp_sectors(D_0)
