@@ -331,11 +331,11 @@ class SVDGESDD(torch.autograd.Function):
 
 
         diagnostics= self.diagnostics
-        u, sigma, vh, eps= self.saved_tensors
+        u, sigma, vh, eps, global_sigma_scale= self.saved_tensors
         m= u.size(0) # first dim of original tensor A = u sigma v^\dag
         n= vh.size(1) # second dim of A
         k= sigma.size(0)
-        sigma_scale= sigma[0]
+        sigma_scale= global_sigma_scale
 
         # ? some
         if (u.size(-2)!=u.size(-1)) or (vh.size(-2)!=vh.size(-1)):
@@ -362,14 +362,14 @@ class SVDGESDD(torch.autograd.Function):
 
         # sigma_inv= safe_inverse_2(sigma.clone(), sigma_scale*eps)
         # sigma_inv= safe_inverse(sigma.clone(), eps_abs=sigma_scale*eps)
-        sigma_inv= safe_inverse(sigma.clone(), eps)
+        sigma_inv= safe_inverse(sigma.clone(), eps_abs= sigma_scale**2*eps)
 
         F = sigma.unsqueeze(-2) - sigma.unsqueeze(-1)
-        F = safe_inverse(F, sigma_scale*eps)
+        F = safe_inverse(F, eps_abs= sigma_scale**2*eps)
         F.diagonal(0,-2,-1).fill_(0)
 
         G = sigma.unsqueeze(-2) + sigma.unsqueeze(-1)
-        G = safe_inverse(G, sigma_scale*eps)
+        G = safe_inverse(G, eps_abs= sigma_scale**2*eps)
         G.diagonal(0,-2,-1).fill_(0)
 
         uh= u.conj().transpose(-2,-1)
