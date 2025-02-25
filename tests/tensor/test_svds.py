@@ -27,7 +27,7 @@ def test_svds_U1_matrix(config_kwargs, dtype):
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     leg = yastn.Leg(config_U1, s=1, t=(0, 1, 2, 3, 4, 5), D=(1, 2, 4, 8, 64, 128))
     config_U1.backend.random_seed(seed=0)  # fix seed for testing
-    
+
     a = yastn.rand(config=config_U1, legs=[leg.conj(), leg], dtype=dtype)
     #
     # fixing singular values for testing;
@@ -43,12 +43,12 @@ def test_svds_U1_matrix(config_kwargs, dtype):
     l1 = S1.get_legs(axes=0)
     l2 = S2.get_legs(axes=0)
     assert l1 == l2
-    assert U1.yast_dtype == dtype
-    assert S1.yast_dtype == 'float64'
-    assert V1.yast_dtype == dtype
-    assert U2.yast_dtype == dtype
-    assert S2.yast_dtype == 'float64'
-    assert V2.yast_dtype == dtype
+    assert U1.yastn_dtype == dtype
+    assert S1.yastn_dtype == 'float64'
+    assert V1.yastn_dtype == dtype
+    assert U2.yastn_dtype == dtype
+    assert S2.yastn_dtype == 'float64'
+    assert V2.yastn_dtype == dtype
 
 
 @pytest.mark.parametrize('dtype', ['float64', 'complex128'])
@@ -58,7 +58,7 @@ def test_svds_U1_rank4(config_kwargs, dtype):
     leg0 = yastn.Leg(config_U1, s=1, t=(0, 1, 2,), D=(1, 2, 8))
     leg1 = yastn.Leg(config_U1, s=1, t=(0, 1, 2,), D=(1, 2, 8))
     config_U1.backend.random_seed(seed=0)  # fix seed for testing
-    
+
     a = yastn.rand(config=config_U1, legs=[leg0.conj(), leg1.conj(), leg0, leg1], dtype=dtype)
     #
     # fixing singular values for testing;
@@ -85,7 +85,7 @@ def test_svds_U1_kernel(config_kwargs, dtype, reltol):
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     leg = yastn.Leg(config_U1, s=1, t=(0, 1, 2, 3, 4, 5), D=(1, 2, 4, 8, 64, 128))
     config_U1.backend.random_seed(seed=0)  # fix seed for testing
-    
+
     a = yastn.rand(config=config_U1, legs=[leg.conj(), leg], dtype=dtype)
     #
     # fixing singular values for testing;
@@ -102,12 +102,12 @@ def test_svds_U1_kernel(config_kwargs, dtype, reltol):
     l1, l2= S1.get_legs(0), S2.get_legs(0)
     assert set(l1.t) >= set(l2.t)
     assert ( 0  for t in set(l1.t) & set(l2.t) )
-    assert U1.yast_dtype == dtype
-    assert S1.yast_dtype == 'float64'
-    assert V1.yast_dtype == dtype
-    assert U2.yast_dtype == dtype
-    assert S2.yast_dtype == 'float64'
-    assert V2.yast_dtype == dtype
+    assert U1.yastn_dtype == dtype
+    assert S1.yastn_dtype == 'float64'
+    assert V1.yastn_dtype == dtype
+    assert U2.yastn_dtype == dtype
+    assert S2.yastn_dtype == 'float64'
+    assert V2.yastn_dtype == dtype
 
 @pytest.mark.parametrize('dtype', ['float64', 'complex128'])
 def test_svds_U1_multiplets(config_kwargs, dtype):
@@ -197,7 +197,7 @@ def test_svds_U1_truncate_multiplets(config_kwargs,part_of_multiplet):
     """
     Test truncation, when explicit preservation of multiplets is requested
     """
-    if part_of_multiplet==2: 
+    if part_of_multiplet==2:
         pytest.xfail("Will fail to resolve degeneracies due to partial multiplet.")
     #
     # Start with random tensor with 4 legs.
@@ -241,7 +241,7 @@ def test_svds_Z2xU1_matrix(config_kwargs, dtype):
     config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
     l0 = yastn.Leg(config_Z2xU1, s=1, t=[(0, 0), (0, 2), (1, 0), (1, 2)], D=(7, 8, 9, 10))
     config_Z2xU1.backend.random_seed(seed=0)  # fix seed for testing
-    
+
     a = yastn.rand(config=config_Z2xU1, legs=[l0, l0.conj()], dtype=dtype)
     #
     # fixing singular values for testing;

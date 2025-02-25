@@ -236,7 +236,7 @@ def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=Fals
 def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, maxiter=None, return_singular_vectors=True, \
          solver='arpack', rng=None, options=None, **kwargs) -> tuple[Tensor, Tensor, Tensor]:
     r"""
-    Search for dominant singular values of tensor A using Arnoldi algorithm. 
+    Search for dominant singular values of tensor A using Arnoldi algorithm.
 
     Parameters
     ----------
@@ -248,9 +248,9 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
             Initial guess, 'vector' to span the Krylov space.
 
         k: int = float('inf')
-            Number of singular values and singular vectors to compute. Must satisfy 1 <= k <= kmax, 
+            Number of singular values and singular vectors to compute. Must satisfy 1 <= k <= kmax,
             where kmax=min(M, N) for solver='propack' and kmax=min(M, N) - 1 otherwise.
-        
+
         tol: float, optional
             Tolerance for singular values. Zero (default) means machine precision.
 
@@ -262,7 +262,7 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
             ``‘SR’`` : smallest real part.
 
         Additional kwargs:
-            
+
             sU: int = 1
                 Signature of the new leg in `U`; equal to 1 or -1. The default is 1.
                 `V` is going to have the opposite signature on the connecting leg.
@@ -322,7 +322,7 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
     _test_axes_all(A, axes)
     lout_l, lout_r = _clear_axes(*axes)
     axes = _unpack_axes(A.mfs, lout_l, lout_r)
-    
+
     A_mat= A.fuse_legs(axes=axes, mode='hard')
     rows, cols= A_mat.get_legs()
 
@@ -340,7 +340,7 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
     _, col_meta= v0_col.compress_to_1d(meta=None)
 
     # take care of negative strides
-    to_tensor= lambda x: A_mat.config.backend.to_tensor(x if np.sum(np.array(x.strides)<0)==0 else x.copy() , dtype=A_mat.yast_dtype, device=A_mat.device)
+    to_tensor= lambda x: A_mat.config.backend.to_tensor(x if np.sum(np.array(x.strides)<0)==0 else x.copy() , dtype=A_mat.yastn_dtype, device=A_mat.device)
     to_numpy= lambda x: A_mat.config.backend.to_numpy(x)
 
     def mv(v): # Av
@@ -348,7 +348,7 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
         res= einsum('ij,jx->ix',A_mat,col)
         row, res_meta= res.compress_to_1d(meta=None)
         return to_numpy(row)
-    
+
     def vm(v): # A^\dag v  vs  (v* A)^\dag = A^\dag v
         row= decompress_from_1d(to_tensor(v).conj(), row_meta)
         res= einsum('ix,ij->jx',row,A_mat)
@@ -360,7 +360,7 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
     U, S, Vh= spla.svds(lop_A, k=k, ncv=ncv, tol=tol, which=which, v0=None, maxiter=maxiter, \
                                     return_singular_vectors=return_singular_vectors, solver=solver, options=options,) #rng=None)
 
-    # Individual singular vectors are ordered by magnitude in ascending manner [scipy], across all charge sectors. 
+    # Individual singular vectors are ordered by magnitude in ascending manner [scipy], across all charge sectors.
     # Instead, we want to have them ordered by charge sectors, and then by magnitude within each sector.
     # Locate the charge sectors of the singular vector by position of the largest element in the vector.
     #
@@ -387,15 +387,15 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
     # charge density per sector for multiplet of dim d located at i-d+1:i+1
     n_occ= lambda i,d : np.asarray([[np.linalg.norm(U[slice(*slc.slcs[0]),i-m])**2 \
                  for c,slc in zip(rowA.get_blocks_charge(), rowA.slices)] for m in range(d)])
-    
-    # overlap matrix for single non-zero charge sector, iterate over subspace 
+
+    # overlap matrix for single non-zero charge sector, iterate over subspace
     # with ascending index (compatible with sliciing of U below)
     def overlaps_per_sector(c_sec,d):
         ic_slc= dict(zip(rowA.get_blocks_charge(), rowA.slices))[c_sec]
         overlaps= np.asarray([[ U[slice(*ic_slc.slcs[0]),i+1-d+m_row].conj() @ U[slice(*ic_slc.slcs[0]),i+1-d+m_col] \
                                for m_col in range(d)] for m_row in range(d)])
         return overlaps
-    
+
     def get_sharp_sectors(overlap_diag):
                 assert np.all(np.isclose(overlap_diag, 0, atol=1e-12) | np.isclose(overlap_diag, 1, atol=1e-12)), \
                     "The degeneracy within the sector is not resolved"
@@ -415,12 +415,12 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
             C= n_occ(i,d)
             C_secs= np.asarray([[c for c,slc in zip(rowA.get_blocks_charge(), rowA.slices)] for m in range(d)])
             assert np.allclose(np.sum(C, axis=1), 1, rtol=1.0e-14,  atol=1.0e-14), 'Degenerate subspace not properly separated'
-  
+
             # 2) identify charge sectors that contain the degenerate subspace
             mask= C > 1.0e-14
             C0= C[np.ix_(np.any(mask, axis=1), np.any(mask, axis=0))]
 
-            # non-zero C_sectors. In each row, there are nzC_secs.shape[1] sectors, with charges in last dimension of nzC_secs 
+            # non-zero C_sectors. In each row, there are nzC_secs.shape[1] sectors, with charges in last dimension of nzC_secs
             nzC_secs= C_secs[np.ix_(np.any(mask, axis=1), np.any(mask, axis=0))]
             if nzC_secs.shape[0]<nzC_secs.shape[1]: # more non-empty charge sectors than degenerate singular triples
                 raise YastnError('Singular triples i-d+1:i+1 are a part of incomplete multiplet. Charge cannot be well-defined.')
@@ -438,7 +438,7 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
             # build unitary from non-zero sections of B_0 corresponding to sharp sectors (D_0=1)
             UB= np.asarray([ B_0[:,-u][abs(B_0[:,-u])>1.0e-14] for u in range(nv,0,-1) ]).T
             U[:,i-d+1:i+1]= U[:,i-d+1:i+1] @ UB
-            Vh[i-d+1:i+1,:]= UB.conj().T @ Vh[i-d+1:i+1,:]         
+            Vh[i-d+1:i+1,:]= UB.conj().T @ Vh[i-d+1:i+1,:]
 
             for x in range(d):
                 U_sorted[ index_to_charge[ np.argmax(np.abs(U[:, i-d+1+x])) ] ].append(i-d+1+x)
@@ -450,7 +450,7 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
             # 1) find components of degen. subspace and compute charge density per charge sector C_secs
             C= n_occ(i,1)
             assert np.allclose(np.sum(C, axis=1), 1, rtol=1.0e-14,  atol=1.0e-14), 'Degenerate subspace not properly separated'
-  
+
             # 2) identify charge sectors that contain the degenerate subspace
             mask= C > 1.0e-14
             if np.sum(mask)>1: # its a part of a multiplet
@@ -463,16 +463,16 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
     n_i= tuple( (A_mat.n,)*len(t_row) if nU else (rows.sym.zero(),)*len(t_row) )
     t_i_nU= rows.sym.fuse(np.concatenate((
             np.array(t_row, dtype=np.int64).reshape((len(t_row), 1, rows.sym.NSYM)),
-            np.array(n_i, dtype=np.int64).reshape((len(t_row), 1, rows.sym.NSYM))), axis=1), 
+            np.array(n_i, dtype=np.int64).reshape((len(t_row), 1, rows.sym.NSYM))), axis=1),
             (rows.s, -1), -sU)
     t_i_nU= tuple(map(tuple, t_i_nU.tolist()))
-    
+
     leg_internal= Leg(sym=rows.sym, s= sU, t=t_i_nU, D= D_i)
 
     U, S, Vh= to_tensor(U), to_tensor(S), to_tensor(Vh)
-    symU= zeros(config=A.config, legs=(rows, leg_internal), n=(A_mat.n if nU else None), dtype=A_mat.yast_dtype)
+    symU= zeros(config=A.config, legs=(rows, leg_internal), n=(A_mat.n if nU else None), dtype=A_mat.yastn_dtype)
     symS= zeros(config=A.config, legs=(leg_internal.conj(), leg_internal), isdiag=True,)
-    symVh= zeros(config=A.config, legs=(leg_internal.conj(), cols), n=(A_mat.n if not nU else None), dtype=A_mat.yast_dtype)
+    symVh= zeros(config=A.config, legs=(leg_internal.conj(), cols), n=(A_mat.n if not nU else None), dtype=A_mat.yastn_dtype)
 
     # embed singular triples into blocks of symmetric tensors in descending order of magnitude
     U_sectors= dict(zip(( (c[:rows.sym.NSYM],) for c in rowA.get_blocks_charge()),rowA.slices))
