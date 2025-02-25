@@ -661,7 +661,7 @@ class EnvCTM(Peps):
                 'psi': {site: env.psi.bra[site] for site in env.sites()} if isinstance(env.psi,Peps2Layers) \
                     else {site: env.psi[site] for site in env.sites()},
                 'env': tuple( env_t for site in env.sites() for k,env_t in env[site].__dict__.items() )}
-            dtypes= set(tuple( t.yast_dtype for t in shallow['psi'].values()) + tuple(t.yast_dtype for t in shallow['env']))
+            dtypes= set(tuple( t.yastn_dtype for t in shallow['psi'].values()) + tuple(t.yastn_dtype for t in shallow['env']))
             assert len(dtypes)<2, f"CTM update: all tensors of state and environment should have the same dtype, got {dtypes}"
             unrolled= {'psi': {site: t.compress_to_1d() for site,t in shallow['psi'].items()},
                 'env': tuple(t.compress_to_1d() for t in shallow['env'])}

@@ -97,7 +97,7 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
         else:
             m = len(V) - 1
             h = H.pop((m, m - 1))
-        H[(0, m)] = backend.ones((), dtype=v.yast_dtype, device=v.device)
+        H[(0, m)] = backend.ones((), dtype=v.yastn_dtype, device=v.device)
         T = backend.square_matrix_from_dict(H, m + 1, device=v.device)
         F = backend.expm((sgn * tau) * T)
         err = abs(h * F[m - 1, m]).item()

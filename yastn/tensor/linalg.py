@@ -321,7 +321,7 @@ def truncation_mask_multiplets(S, tol=0, D_total=float('inf'),
         two consecutive elements of ``S`` is larger than ``eps_multiplet``, these
         elements are not considered as part of the same multiplet.
     """
-    if not (S.isdiag and S.yast_dtype == "float64"):
+    if not (S.isdiag and S.yastn_dtype == "float64"):
         raise YastnError("Truncation_mask requires S to be real and diagonal.")
 
     # makes a copy for partial truncations; also detaches from autograd computation graph
@@ -423,7 +423,7 @@ def truncation_mask(S, tol=0, tol_block=0,
     if mask_f is not None:
         return mask_f(S)
 
-    if not (S.isdiag and S.yast_dtype == "float64"):
+    if not (S.isdiag and S.yastn_dtype == "float64"):
         raise YastnError("truncation_mask() requires S to be real and diagonal.")
 
     # makes a copy for partial truncations; also detaches from autograd computation graph
