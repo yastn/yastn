@@ -531,6 +531,46 @@ class EnvCTM(Peps):
         return sign * val_op / val_no
 
 
+    def measure_nsite(self, *operators, sites=None) -> float:
+        r"""
+        Calculate expectation value of a product of local operators.
+
+        Conjugate of MPS :code:`bra` is computed internally.
+        Fermionic strings are incorporated for fermionic operators by employing :meth:`yastn.swap_gate`.
+
+        Parameters
+        ----------
+        bra: yastn.tn.mps.MpsMpoOBC
+            An MPS which will be conjugated.
+
+        operators: Sequence[yastn.Tensor]
+            List of local operators to calculate <O0_s0 O1_s1 ...>.
+
+        ket: yastn.tn.mps.MpsMpoOBC
+            Should be provided as **kwargs, as operators are given as *args.
+
+        sites: Sequence[int]
+            A list of sites [s0, s1, ...] matching corresponding operators.
+        """
+        if sites is None or len(operators) != len(sites):
+            raise YastnError("Number of operators and sites should match.")
+        sign = sign_canonical_order(*operators, sites=sites, f_ordered=lambda s0, s1: s0 <= s1)
+        n_left = self.config.sym.add_charges(*(op.n for op in operators), new_signature=-1)
+
+        ops = {}
+        for n, op in zip(sites, operators):
+            ops[n] = ops[n] @ op if n in ops else op
+
+        env = Env2(bra, ket, n_left=n_left)
+
+        for n in bra.sweep(to='last'):
+            if n in ops:
+                env.update_env_op_(n, ops[n], to='last')
+            else:
+                env.update_env_(n, to='last')
+        return sign * env.measure(bd=(bra.N - 1, bra.N))
+
+
     def measure_2site(self, O, P, xrange, yrange, opts_svd=None, opts_var=None, bonds='<') -> dict[Site, list]:
         r"""
         Calculate 2-point correlations <O P> between top-left corner of the window, and all sites in the window.
