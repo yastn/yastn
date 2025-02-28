@@ -1,7 +1,8 @@
 import torch
 import warnings
 
-def safe_inverse(x, eps_rel=1.0e-12, eps_abs=1.0e-12):
+def safe_inverse(x, eps_abs=1.0e-12):
+    eps_abs=1.0e-12
     return x / (x ** 2 + eps_abs)
 
 
