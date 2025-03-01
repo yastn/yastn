@@ -20,7 +20,7 @@ import yastn.tn.mps as mps
 import math
 from itertools import product
 
-tol = 1e-2  # CTMRG has problem in this finite peps, being stuck at small bond dimension
+tol = 1e-12  # CTMRG has problem in this finite peps, being stuck at small bond dimension
 
 
 def generate_peps(g, ops, occs_init, angles):
@@ -138,13 +138,28 @@ def test_measure(config_kwargs, L=3):
     psi = generate_peps(g, ops, occs_init[L], angles)
     #
     # converge ctm
-    env_ctm = fpeps.EnvCTM(psi, init='dl')
-    opts_svd = {'D_total': 32, 'tol': 1e-12}
-    # CTMRG is not precise here, and cannot rise D_max above 4.
+    # env_ctm = fpeps.EnvCTM(psi, init='dl')
+
+    env_ctm = fpeps.EnvCTM(psi, init='eye')
+    env_ctm.expand_outward_()
+
+    # for site in env_ctm2.sites():
+    #     e1 = env_ctm[site]
+    #     e2 = env_ctm2[site]
+
+    #     xx = getattr(e1, 'bl')
+    #     yy = getattr(e2, 'bl')
+
+    #     xx = xx.drop_leg_history()  / xx.norm()
+    #     yy = yy.drop_leg_history()  / yy.norm()
+    #     print(site, (xx - yy).norm())
+
+
+    opts_svd = {'D_total': 16, 'tol': 1e-12}
+    # CTMRG is not precise in this example; we use expand_outward_ with no truncation instead.
     if L > 2:
-        info = env_ctm.ctmrg_(max_sweeps=100, opts_svd=opts_svd, corner_tol=1e-10)
-        print(info)
-        assert info.converged
+        env_ctm.expand_outward_()
+
     #
     env_bd = fpeps.EnvBoundaryMPS(psi, opts_svd=opts_svd, setup='lr')
     #
