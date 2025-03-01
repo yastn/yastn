@@ -231,7 +231,7 @@ def test_measure(config_kwargs, sym, L=3):
 
             if tr in site_op and bl in site_op:
                 sign = sign_canonical_order(*operators, sites=sites, f_ordered=env.f_ordered)
-                assert abs(res[sites] == sign*measure_rdm_diag(tl, "anti_diag", env.psi.ket, env, [site_op[bl], site_op[tr]])) < 1e-9
+                assert abs(res[sites] - sign*measure_rdm_diag(tl, "anti_diag", env.psi.ket, env, [site_op[bl], site_op[tr]])) < 1e-9
 
             sign = sign_canonical_order(*operators, sites=sites, f_ordered=env.f_ordered)
             assert abs(res[sites]-sign * measure_rdm_2x2(tl, env.psi.ket, env, sorted_ops)) < 1e-9
