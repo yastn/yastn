@@ -137,7 +137,7 @@ def _normalize_and_regularize_rdm(rdm, order : str="interleaved", pos_def=False,
     # rdm_asym = 0.5 * (rdm - rdm.conj().transpose(axes=conj_order))
     # rdm = 0.5 * (rdm + rdm.conj().transpose(axes=conj_order))
 
-    # given enforced symmetry of rdm, the trace has to be real
+    # # given enforced symmetry of rdm, the trace has to be real
     # rdm_norm= rdm.trace(axes=trace_order).to_number().real
     # if verbosity > 0:
     #     log.info(f"{who} trace(rdm_sym) {rdm_norm} 2-norm(rdm_sym) {rdm.norm()} 2-norm(rdm_asym) {rdm_asym.norm()}")
@@ -767,6 +767,51 @@ def measure_rdm_nn(s0 : Site, dirn : str, psi : Peps, env : EnvCTM, op : Union[S
         return _eval_op(op[0],op[1])
     return [ _eval_op(_op[0],_op[1]) for _op in op ]
 
+def measure_rdm_diag(s0 : Site, dirn : str, psi : Peps, env : EnvCTM, op : Union[Sequence[Tensor], Sequence[Sequence[Tensor]]])->Union[Scalar, Sequence[Scalar]]:
+    """
+    Measure one or more observables on 2x2 diag or 2x2 anti_diag patch with site `s0`
+    being topleft.
+
+    Observables are expected to be one or more pairs of operators/Tensors, i.e.::
+
+        op = (Tensor, Tensor)
+
+        or
+
+        op = [(Tensor,Tensor), (Tensor,Tensor), ...]
+
+    with first operator acting always on site `s0`. Operators are applied from "right-to-left",
+    i.e. the second operator `op[1]` is applied first, which might matter for fermionic operators.
+
+    Args:
+        s0: topleft site
+        dirn: 'diag' for diagonal patch (see :func:`rdm2x2_diagonal`) and 'anti_diag' for anti_diagonal patch (see :func:`rdm2x2_anti_diagonal`)
+        psi: PEPS wavefunction
+        env: CTM environment
+        op: one or more observables
+
+    Returns:
+        Expectation value or a list of expectations values of provided `op`.
+    """
+    if dirn == "diag":
+        rdm, norm = rdm2x2_diagonal(s0, psi, env)  # s0 s0' s3 s3'
+        s1 = psi.nn_site(s0, "br")
+    elif dirn == "anti_diag":
+        rdm, norm = rdm2x2_anti_diagonal(s0, psi, env)  # s1 s1' s2 s2'
+        s0 = psi.nn_site(s0, "b")
+        s1 = psi.nn_site(s0, "tr")
+    # norm = rdm.trace(axes=((0, 2), (1, 3))).to_number()
+
+    ncon_order = ((1, 2, 5), (3, 4, 5), (2, 1, 4, 3))
+    def _eval_op(O0, O1):
+        ordered = env.f_ordered(s0, s1)
+        fermionic = True if (O0.n[0] and O1.n[0]) else False
+        O0, O1 = op_order(O0, O1, ordered, fermionic)
+        return ncon([O0, O1, rdm], ncon_order).to_number()
+
+    if isinstance(op[0],Tensor) and isinstance(op[1],Tensor):
+        return _eval_op(op[0],op[1])
+    return [ _eval_op(_op[0],_op[1]) for _op in op ]
 
 def measure_rdm_2x2(s0 : Site, psi : Peps, env : EnvCTM, op : Union[Sequence[Tensor], Sequence[Sequence[Tensor]]])->Union[Scalar, Sequence[Scalar]]:
     r"""

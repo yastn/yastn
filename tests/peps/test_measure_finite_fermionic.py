@@ -21,7 +21,7 @@ import math
 from itertools import product
 
 from yastn.tn.fpeps._geometry import Site
-from yastn.tn.fpeps.envs.rdm import measure_rdm_1site, measure_rdm_nn, measure_rdm_2x2
+from yastn.tn.fpeps.envs.rdm import measure_rdm_1site, measure_rdm_nn, measure_rdm_2x2, measure_rdm_diag
 from yastn.operators._auxliary import sign_canonical_order
 
 tol = 1e-2  # CTMRG has problem in this finite peps, being stuck at small bond dimension
@@ -225,9 +225,17 @@ def test_measure(config_kwargs, sym, L=3):
             for site in window:
                 sorted_ops.append(site_op[site] if site in site_op else ops.I())
 
+            if tl in site_op and br in site_op:
+                sign = sign_canonical_order(*operators, sites=sites, f_ordered=env.f_ordered)
+                assert abs(res[sites] - sign*measure_rdm_diag(tl, "diag", env.psi.ket, env, [site_op[tl], site_op[br]])) < 1e-9
+
+            if tr in site_op and bl in site_op:
+                sign = sign_canonical_order(*operators, sites=sites, f_ordered=env.f_ordered)
+                assert abs(res[sites] == sign*measure_rdm_diag(tl, "anti_diag", env.psi.ket, env, [site_op[bl], site_op[tr]])) < 1e-9
+
             sign = sign_canonical_order(*operators, sites=sites, f_ordered=env.f_ordered)
-            # print(res[sites], sign * measure_rdm_2x2(tl, env.psi.ket, env, sorted_ops))
             assert abs(res[sites]-sign * measure_rdm_2x2(tl, env.psi.ket, env, sorted_ops)) < 1e-9
+
 
     #
     # check 2-point correlators; hopping
