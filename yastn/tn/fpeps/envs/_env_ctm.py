@@ -24,6 +24,7 @@ from .._gates_auxiliary import apply_gate_onsite, gate_product_operator, gate_fi
 from .._geometry import Bond, Site
 from ._env_auxlliary import *
 from ._env_window import EnvWindow
+from ._env_measure import _measure_nsite
 
 logger = logging.Logger('ctmrg')
 
@@ -553,14 +554,16 @@ class EnvCTM(Peps):
         """
         if sites is None or len(operators) != len(sites):
             raise YastnError("Number of operators and sites should match.")
-        ops = dict(zip(sites, operators))
-        if len(sites) != len(ops):
-            raise YastnError("Sites should not repeat.")
+
+        sign = sign_canonical_order(*operators, sites=sites, f_ordered=self.f_ordered)
+        ops = {}
+        for n, op in zip(sites, operators):
+            ops[n] = ops[n] @ op if n in ops else op
 
         minx = min(site[0] for site in sites)  # tl corner
         miny = min(site[1] for site in sites)
 
-        maxx = max(site[0] for site in sites)  # tl corner
+        maxx = max(site[0] for site in sites)  # br corner
         maxy = max(site[1] for site in sites)
 
         if minx == maxx and self.nn_site((minx, miny), 'b') is None:
@@ -627,9 +630,7 @@ class EnvCTM(Peps):
             cor_br = tensordot(vec_br, ten_br, axes=((2, 1), (2, 3)))
             cor_br = cor_br.fuse_legs(axes=((0, 2), (1, 3)))
 
-        sign = sign_canonical_order(*operators, sites=sites, f_ordered=self.f_ordered)
         val_op = vdot(cor_tl @ cor_tr, tensordot(cor_bl, cor_br, axes=(0, 1)), conj=(0, 0))
-
         return sign * val_op / val_no
 
 
@@ -648,9 +649,11 @@ class EnvCTM(Peps):
         """
         if sites is None or len(operators) != len(sites):
             raise YastnError("Number of operators and sites should match.")
-        ops = dict(zip(sites, operators))
-        if len(sites) != len(ops):
-            raise YastnError("Sites should not repeat.")
+
+        sign = sign_canonical_order(*operators, sites=sites, f_ordered=self.f_ordered)
+        ops = {}
+        for n, op in zip(sites, operators):
+            ops[n] = ops[n] @ op if n in ops else op
 
         xs = sorted(set(site[0] for site in sites))
         ys = sorted(set(site[1] for site in sites))
@@ -685,9 +688,7 @@ class EnvCTM(Peps):
                 axes = (1, 2, 3, 0) if horizontal else (0, 3, 2, 1)
                 tm[ind] = op.transpose(axes=axes)
 
-        sign = sign_canonical_order(*operators, sites=sites, f_ordered=self.f_ordered)
         val_op = mps.vdot(vl, tm, vr)
-
         return sign * val_op / val_no
 
 
@@ -695,27 +696,21 @@ class EnvCTM(Peps):
         r"""
         Calculate expectation value of a product of local operators.
 
-        Conjugate of MPS :code:`bra` is computed internally.
         Fermionic strings are incorporated for fermionic operators by employing :meth:`yastn.swap_gate`.
 
         Parameters
         ----------
-        bra: yastn.tn.mps.MpsMpoOBC
-            An MPS which will be conjugated.
-
         operators: Sequence[yastn.Tensor]
             List of local operators to calculate <O0_s0 O1_s1 ...>.
-
-        ket: yastn.tn.mps.MpsMpoOBC
-            Should be provided as **kwargs, as operators are given as *args.
 
         sites: Sequence[int]
             A list of sites [s0, s1, ...] matching corresponding operators.
         """
-        if sites is None or len(operators) != len(sites):
-            raise YastnError("Number of operators and sites should match.")
-        sign = sign_canonical_order(*operators, sites=sites, f_ordered=lambda s0, s1: s0 <= s1)
-        n_left = self.config.sym.add_charges(*(op.n for op in operators), new_signature=-1)
+        xrange = (min(site[0] for site in sites), max(site[0] for site in sites) + 1)
+        yrange = (min(site[1] for site in sites), max(site[1] for site in sites) + 1)
+        env_win = EnvWindow(self, xrange, yrange)
+        dirn = 'lr' if (xrange[1] - xrange[0]) >= (yrange[1] - yrange[0]) else 'tb'
+        return _measure_nsite(env_win, *operators, sites=sites, dirn=dirn)
 
 
     def measure_2site(self, O, P, xrange, yrange, opts_svd=None, opts_var=None, bonds='<') -> dict[Site, list]:

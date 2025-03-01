@@ -19,7 +19,6 @@ from ... import mps
 from .... import YastnError, Tensor, tensordot
 from .._geometry import Site
 from ._env_boundary_mps import _clear_operator_input
-from ....operators import sign_canonical_order
 
 
 class EnvWindow:
@@ -32,6 +31,7 @@ class EnvWindow:
         self.yrange = yrange
         self.Nx = self.xrange[1] - self.xrange[0]
         self.Ny = self.yrange[1] - self.yrange[0]
+        self.offset = 1  #  for mpo tensor position; extra tensor in the bounary
 
         if env_ctm.nn_site((xrange[0], yrange[0]), (0, 0)) is None or \
            env_ctm.nn_site((xrange[1] - 1, yrange[1] - 1), (0, 0)) is None:
@@ -117,56 +117,6 @@ class EnvWindow:
             return psi
 
         raise YastnError(f"{dirn=} not recognized. Should be 't', 'h' 'b', 'r', 'v', or 'l'.")
-
-
-    def measure_nsite(self, *operators, sites=None, opts_svd=None, opts_var=None) -> float:
-        r"""
-        Calculate expectation value of a product of local operators.
-
-        Conjugate of MPS :code:`bra` is computed internally.
-        Fermionic strings are incorporated for fermionic operators by employing :meth:`yastn.swap_gate`.
-
-        Parameters
-        ----------
-        bra: yastn.tn.mps.MpsMpoOBC
-            An MPS which will be conjugated.
-
-        operators: Sequence[yastn.Tensor]
-            List of local operators to calculate <O0_s0 O1_s1 ...>.
-
-        ket: yastn.tn.mps.MpsMpoOBC
-            Should be provided as **kwargs, as operators are given as *args.
-
-        sites: Sequence[int]
-            A list of sites [s0, s1, ...] matching corresponding operators.
-        """
-        if sites is None or len(operators) != len(sites):
-            raise YastnError("Number of operators and sites should match.")
-        sign = sign_canonical_order(*operators, sites=sites, f_ordered=lambda s0, s1: s0 <= s1)
-
-        if opts_var is None:
-            opts_var = {'max_sweeps': 2}
-        if opts_svd is None:
-            D_total = max(max(self[ny, dirn].get_bond_dimensions()) for ny in range(*self.yrange) for dirn in 'lr')
-            opts_svd = {'D_total': D_total}
-
-
-        ny = self.yrange[0]
-        vec = self[ny, 'l']
-        for ny in range(self.yrange[0], self.yrange[1] - 1):
-            tm = self[ny, 'v']
-            vec_next = mps.zipper(tm, vec, opts_svd=opts_svd)
-            mps.compression_(vec_next, (tm, vec), method='1site', normalize=False, **opts_var)
-            vec = vec_next
-        ny += 1
-        tm = self[ny, 'v']
-        vecr = self[ny, 'r']
-        val_no = mps.vdot(vec, tm, vecr)
-
-
-
-
-        return sign / val_no
 
 
     def measure_2site(self, O0, O1, opts_svd=None, opts_var=None):

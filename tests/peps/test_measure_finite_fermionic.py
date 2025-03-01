@@ -73,34 +73,22 @@ def generate_mps(ops, occs_init, angles, s2i):
     return phi
 
 
-def measure_2x2(*operators, env=None):
-    """
-    Test all possible combination of sites; skip those where measure_2x2 cannot be applied
-    """
-    res = {}
-    lo = len(operators)
-    for sites in product(*([env.sites()] * lo)):
-        try:
-            res[sites] = env.measure_2x2(*operators, sites=sites)
-        except:
-            pass
-    return res
-
-
-def measure_line(*operators, env=None):
+def measure_combinations(*operators, env=None, fun=None):
     """
     Test all possible combination of sites; skip those where measure_line cannot be applied
     """
     res = {}
     lo = len(operators)
+    f = getattr(env, fun)
     for sites in product(*([env.sites()] * lo)):
         try:
-            res[sites] = env.measure_line(*operators, sites=sites)
+            res[sites] = f(*operators, sites=sites)
         except:
             pass
     return res
 
-@pytest.mark.parametrize('L', [2, 3])
+
+@pytest.mark.parametrize('L', [3, ])
 def test_measure(config_kwargs, L):
     """
     Test calculation of fermionic exceptation values with CTM
@@ -143,6 +131,9 @@ def test_measure(config_kwargs, L):
     #
     opts_svd = {'D_total': 16, 'tol': 1e-12}
     env_bd = fpeps.EnvBoundaryMPS(psi, opts_svd=opts_svd, setup='lr')
+
+    # env_bd.measure_nsite(ops.n(), ops.n(), sites=((0, 0), (1, 1)))
+
     #
     # check occupations
     occ_mps = mps.measure_1site(phi, ops.n(), phi)
@@ -166,9 +157,16 @@ def test_measure(config_kwargs, L):
     nn_peps['mps'] = env_bd.measure_2site(ops.n(), ops.n(), opts_svd=opts_svd)
     nn_peps['nn'] = env_ctm.measure_nn(ops.n(), ops.n())
     nn_peps['2s'] = env_ctm.measure_2site(ops.n(), ops.n(), xrange=[0, L], yrange=[0, L], opts_svd=opts_svd)
-    nn_peps['2x2'] = measure_2x2(ops.n(), ops.n(), env=env_ctm)
-    nn_peps['line'] = measure_line(ops.n(), ops.n(), env=env_ctm)
-    #
+    nn_peps['2x2'] = measure_combinations(ops.n(), ops.n(), env=env_ctm, fun='measure_2x2')
+    nn_peps['line'] = measure_combinations(ops.n(), ops.n(), env=env_ctm, fun='measure_line')
+    nn_peps['nsite'] = measure_combinations(ops.n(), ops.n(), env=env_ctm, fun='measure_nsite')
+
+    nn_peps['nsite_mps'] = measure_combinations(ops.n(), ops.n(), env=env_bd, fun='measure_nsite')
+    print(nn_peps['nsite_mps'])
+
+    assert(len(nn_peps['line'])) == 2 * L ** 3 - L ** 2
+    assert(len(nn_peps['nsite'])) == L ** 4
+
     for method, res in nn_peps.items():
         print('Density-density', method)
         for (s0, s1), v in res.items():
@@ -181,8 +179,8 @@ def test_measure(config_kwargs, L):
     cpc_mps = mps.measure_2site(phi, ops.cp(), ops.c(), phi, bonds='a')
     cpc_peps = {}
     cpc_peps['nn'] = env_ctm.measure_nn(ops.cp(), ops.c())
-    cpc_peps['2x2'] = measure_2x2(ops.cp(), ops.c(), env=env_ctm)
-    cpc_peps['line'] = measure_line(ops.cp(), ops.c(), env=env_ctm)
+    cpc_peps['2x2'] = measure_combinations(ops.cp(), ops.c(), env=env_ctm, fun='measure_2x2')
+    cpc_peps['line'] = measure_combinations(ops.cp(), ops.c(), env=env_ctm, fun='measure_line')
     #
     for method, res in cpc_peps.items():
         print('Hopping', method)
