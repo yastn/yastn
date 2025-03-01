@@ -16,6 +16,7 @@
 import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
+from yastn.tn.fpeps.envs._env_auxlliary import *
 
 tol = 1e-12  #pylint: disable=invalid-name
 
@@ -149,6 +150,79 @@ def test_double_peps_tensor_raises(config_kwargs):
     with pytest.raises(yastn.YastnError,
                        match="DoublePepTensor.tensordot, 2 axes of self should be neighbouring"):
         T0.tensordot(t01, axes=((1, 3), (1, 2)))
+
+
+def test_auxlliary_contractions(config_kwargs):
+    T0 = create_double_peps_tensor(config_kwargs, dtype='complex128')
+    assert T0.config.fermionic is True
+    #
+    legs = T0.get_legs()
+    bd = [identity_boundary(T0.config, leg.conj()) for leg in legs]
+    f0 = T0.fuse_layers()
+    #
+    ctl_0 = cor_tl(A_bra=T0.bra, A_ket=T0.ket)  # [b b'] [r r']
+    ctl_1 = yastn.ncon([f0, bd[0], bd[1]], [(1, 2, -0, -1), (1,), (2,)])
+    ctl_2 = yastn.ncon([f0.unfuse_legs(axes=(0, 1))], [(1, 1, 2, 2, -0, -1)])
+    assert (ctl_0 - ctl_1).norm() < tol
+    assert (ctl_0 - ctl_2).norm() < tol
+    #
+    ctr_0 = cor_tr(A_bra=T0.bra, A_ket=T0.ket)  # [l l'] [b b']
+    ctr_1 = yastn.ncon([f0, bd[0], bd[3]], [(1, -0, -1, 2), (1,), (2,)])
+    ctr_2 = yastn.ncon([f0.unfuse_legs(axes=(0, 3))], [(1, 1, -0, -1, 2, 2)])
+    assert (ctr_0 - ctr_1).norm() < tol
+    assert (ctr_0 - ctr_2).norm() < tol
+    #
+    cbl_0 = cor_bl(A_bra=T0.bra, A_ket=T0.ket)  # [r r'] [t t']
+    cbl_1 = yastn.ncon([f0, bd[1], bd[2]], [(-1, 1, 2, -0), (1,), (2,)])
+    cbl_2 = yastn.ncon([f0.unfuse_legs(axes=(1, 2))], [(-1, 1, 1, 2, 2, -0)])
+    assert (cbl_0 - cbl_1).norm() < tol
+    assert (cbl_0 - cbl_2).norm() < tol
+    #
+    cbr_0 = cor_br(A_bra=T0.bra, A_ket=T0.ket)  # [t t'] [l l']
+    cbr_1 = yastn.ncon([f0, bd[2], bd[3]], [(-0, -1, 1, 2), (1,), (2,)])
+    cbr_2 = yastn.ncon([f0.unfuse_legs(axes=(2, 3))], [(-0, -1, 1, 1, 2, 2)])
+    assert (cbr_0 - cbr_1).norm() < tol
+    assert (cbr_0 - cbr_2).norm() < tol
+    #
+    el_0 = edge_l(A_bra=T0.bra, A_ket=T0.ket)  # [b b'] [r r'] [t t']
+    el_1 = yastn.ncon([f0, bd[1]], [(-2, 1, -0, -1), (1,),])
+    el_2 = yastn.ncon([f0.unfuse_legs(axes=1)], [(-2, 1, 1, -0, -1)])
+    assert (el_0 - el_1).norm() < tol
+    assert (el_0 - el_2).norm() < tol
+    #
+    et_0 = edge_t(A_bra=T0.bra, A_ket=T0.ket)  # [l l'] [b b'] [r r']
+    et_1 = yastn.ncon([f0, bd[0]], [(1, -0, -1, -2), (1,),])
+    et_2 = yastn.ncon([f0.unfuse_legs(axes=0)], [(1, 1, -0, -1, -2)])
+    assert (et_0 - et_1).norm() < tol
+    assert (et_0 - et_2).norm() < tol
+    #
+    er_0 = edge_r(A_bra=T0.bra, A_ket=T0.ket)  # [t t'] [l l'] [b b']
+    er_1 = yastn.ncon([f0, bd[3]], [(-0, -1, -2, 1), (1,),])
+    er_2 = yastn.ncon([f0.unfuse_legs(axes=3)], [(-0, -1, -2, 1, 1)])
+    assert (er_0 - er_1).norm() < tol
+    assert (er_0 - er_2).norm() < tol
+    #
+    eb_0 = edge_b(A_bra=T0.bra, A_ket=T0.ket)  # [r r'] [t t'] [l l']
+    eb_1 = yastn.ncon([f0, bd[2]], [(-1, -2, 1, -0), (1,),])
+    eb_2 = yastn.ncon([f0.unfuse_legs(axes=2)], [(-1, -2, 1, 1, -0)])
+    assert (eb_0 - eb_1).norm() < tol
+    assert (eb_0 - eb_2).norm() < tol
+    #
+    ht_0 = hair_t(T0.ket)  # b' b
+    ht_1 = yastn.ncon([f0.unfuse_legs(axes=(0, 1, 2, 3))], [(1, 1, 2, 2, -1, -0, 3, 3)])
+    assert (ht_0 - ht_1).norm() < tol
+    #
+    hb_0 = hair_b(T0.ket)  # t' t
+    hb_1 = yastn.ncon([f0.unfuse_legs(axes=(0, 1, 2, 3))], [(-1, -0, 1, 1, 2, 2, 3, 3)])
+    assert (hb_0 - hb_1).norm() < tol
+    #
+    hl_0 = hair_l(T0.ket)  # r' r
+    hl_1 = yastn.ncon([f0.unfuse_legs(axes=(0, 1, 2, 3))], [(1, 1, 2, 2, 3, 3, -1, -0)])
+    assert (hl_0 - hl_1).norm() < tol
+    #
+    hr_0 = hair_r(T0.ket)  # l' l
+    hr_1 = yastn.ncon([f0.unfuse_legs(axes=(0, 1, 2, 3))], [(1, 1, -1, -0, 2, 2, 3, 3)])
+    assert (hr_0 - hr_1).norm() < tol
 
 
 if __name__ == '__main__':

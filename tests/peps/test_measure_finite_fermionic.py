@@ -20,7 +20,7 @@ import yastn.tn.mps as mps
 import math
 from itertools import product
 
-tol = 1e-12  # CTMRG has problem in this finite peps, being stuck at small bond dimension
+tol = 1e-12
 
 
 def generate_peps(g, ops, occs_init, angles):
@@ -62,17 +62,14 @@ def mpo_from_gate(N, ops, gate, bond, s2i):
 
 
 def generate_mps(ops, occs_init, angles, s2i):
-
     vectors = [ops.vec_n(occs_init[site]) for site in s2i]
     phi = mps.product_mps(vectors)
-
     for bond, angle in angles:
         gate = fpeps.gates.gate_nn_hopping(1, angle, ops.I(), ops.c(), ops.cp())
         H = mpo_from_gate(phi.N, ops, gate, bond, s2i)
         phi = H @ phi
         phi.canonize_(to='last')
         phi.canonize_(to='first')
-    print(phi.get_bond_dimensions())
     return phi
 
 
@@ -92,7 +89,7 @@ def measure_2x2(*operators, env=None):
 
 def measure_line(*operators, env=None):
     """
-    Test all possible combination of sites; skip those where measure_2x2 cannot be applied
+    Test all possible combination of sites; skip those where measure_line cannot be applied
     """
     res = {}
     lo = len(operators)
@@ -103,7 +100,8 @@ def measure_line(*operators, env=None):
             pass
     return res
 
-def test_measure(config_kwargs, L=3):
+@pytest.mark.parametrize('L', [2, 3])
+def test_measure(config_kwargs, L):
     """
     Test calculation of fermionic exceptation values with CTM
     using finite PEPS and shallow circuit.
@@ -130,37 +128,20 @@ def test_measure(config_kwargs, L=3):
     ops.random_seed(seed=0)
     angles  = [(bond, 0.1 + 1j * ops.config.backend.rand(1) * math.pi / 2) for bond in g.bonds(dirn='v')]
     angles += [(bond, 0.1 + 1j * ops.config.backend.rand(1) * math.pi / 2) for bond in g.bonds(dirn='h')]
-    #
     # 1j * pi / 4 is half of oscillation; adds phase 1j to transfered particle
     # 1j * pi / 2 fully transfer particle between sites adding phase 1j
     #
     phi = generate_mps(ops, occs_init[L], angles, s2i)
     psi = generate_peps(g, ops, occs_init[L], angles)
     #
-    # converge ctm
-    # env_ctm = fpeps.EnvCTM(psi, init='dl')
-
-    env_ctm = fpeps.EnvCTM(psi, init='eye')
-    env_ctm.expand_outward_()
-
-    # for site in env_ctm2.sites():
-    #     e1 = env_ctm[site]
-    #     e2 = env_ctm2[site]
-
-    #     xx = getattr(e1, 'bl')
-    #     yy = getattr(e2, 'bl')
-
-    #     xx = xx.drop_leg_history()  / xx.norm()
-    #     yy = yy.drop_leg_history()  / yy.norm()
-    #     print(site, (xx - yy).norm())
-
-
-    opts_svd = {'D_total': 16, 'tol': 1e-12}
-    # CTMRG is not precise in this example; we use expand_outward_ with no truncation instead.
+    #
+    env_ctm = fpeps.EnvCTM(psi, init='dl')
+    # CTMRG has problem in this finite peps, being stuck at small bond dimension
+    # we use expand_outward_ with no truncation instead FOR L=3
     if L > 2:
         env_ctm.expand_outward_()
-
     #
+    opts_svd = {'D_total': 16, 'tol': 1e-12}
     env_bd = fpeps.EnvBoundaryMPS(psi, opts_svd=opts_svd, setup='lr')
     #
     # check occupations
@@ -177,7 +158,7 @@ def test_measure(config_kwargs, L=3):
             error = abs(occ_mps[s2i[site]] - res[site])
             if error > tol:
                 print(site, occ_mps[s2i[site]], error)
-            # assert error < tol
+            assert error < tol
     #
     # check 2-point correlators density-density
     nn_mps = mps.measure_2site(phi, ops.n(), ops.n(), phi, bonds='a')
@@ -194,7 +175,7 @@ def test_measure(config_kwargs, L=3):
             error = abs(nn_mps[s2i[s0], s2i[s1]] - v)
             if error > tol:
                 print(s0, s1, v, error)
-            # assert  error < tol
+            assert error < tol
     #
     # check 2-point correlators; hopping
     cpc_mps = mps.measure_2site(phi, ops.cp(), ops.c(), phi, bonds='a')
@@ -202,13 +183,14 @@ def test_measure(config_kwargs, L=3):
     cpc_peps['nn'] = env_ctm.measure_nn(ops.cp(), ops.c())
     cpc_peps['2x2'] = measure_2x2(ops.cp(), ops.c(), env=env_ctm)
     cpc_peps['line'] = measure_line(ops.cp(), ops.c(), env=env_ctm)
-
+    #
     for method, res in cpc_peps.items():
         print('Hopping', method)
         for (s0, s1), v in res.items():
             error = abs(cpc_mps[s2i[s0], s2i[s1]] - v)
             if error > tol:
                 print(s0, s1, v, cpc_mps[s2i[s0], s2i[s1]], error)
+            assert error < tol
     #
     # check 4-point correlator
     sites=[(0, 0), (0, 1), (1, 0), (1, 1)]
