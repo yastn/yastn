@@ -41,10 +41,19 @@ def _measure_nsite(env, *operators, sites=None, dirn='tb', opts_svd=None, opts_v
         tens = {(nx, ny): tm[ny - dy] for nx, tm in tms.items() for ny in range(*env.yrange)}
 
     val_no = contract_window(bra, tms, ket, i0, i1, opts_svd, opts_var)
-    for site, op in ops.items():
-        tens[site].set_operator_(op)
-    val_op = contract_window(bra, tms, ket, i0, i1, opts_svd, opts_var)
 
+    nx0, ny0 = env.xrange[0], env.yrange[0]
+    for (nx, ny), op in ops.items():
+        tens[nx, ny].set_operator_(op)
+        tens[nx, ny].add_charge_swaps_(op.n, axes=('b0' if nx == nx0 else 'k1'))
+        for ii in range(nx0 + 1, nx):
+            tens[ii, ny].add_charge_swaps_(op.n, axes=['k1', 'k4', 'b3'])
+        if nx > nx0:
+            tens[nx0, ny].add_charge_swaps_(op.n, axes=['b0', 'k4', 'b3'])
+        for jj in range(ny0, ny):
+            tens[nx0, jj].add_charge_swaps_(op.n, axes=['b0', 'k2', 'k4'])
+
+    val_op = contract_window(bra, tms, ket, i0, i1, opts_svd, opts_var)
     return sign * val_op / val_no
 
 

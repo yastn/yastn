@@ -139,7 +139,8 @@ class EnvBoundaryMPS(Peps):
         self.xrange = (0, self.psi.Nx) # (min(site[0] for site in sites), max(site[0] for site in sites) + 1)
         self.yrange = (min(site[1] for site in sites), max(site[1] for site in sites) + 1)
         dirn = 'lr'
-        return _measure_nsite(self, *operators, sites=sites, dirn=dirn)
+        ops = [op.conj() for op in operators]
+        return _measure_nsite(self, *ops, sites=sites, dirn=dirn).conj()
 
 
     def measure_2site(peps_env, O, P, opts_svd, opts_var=None):
