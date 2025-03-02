@@ -543,6 +543,7 @@ class EnvCTM(Peps):
         r"""
         Calculate expectation value of a product of local operators
         in a :math:`2 \times 2` window within the CTM environment.
+        Perform exact contraction of the window.
 
         Parameters
         ----------
@@ -638,6 +639,7 @@ class EnvCTM(Peps):
         r"""
         Calculate expectation value of a product of local opertors
         along a horizontal or vertical line within CTM environment.
+        Perform exact contraction of a width-one window.
 
         Parameters
         ----------
@@ -695,8 +697,9 @@ class EnvCTM(Peps):
     def measure_nsite(self, *operators, sites=None) -> float:
         r"""
         Calculate expectation value of a product of local operators.
-
-        Fermionic strings are incorporated for fermionic operators by employing :meth:`yastn.swap_gate`.
+        Perform approximate contraction of a windows of PEPS sites
+        within CTM environment using boundary MPS.
+        The size of the window is taken to include provided sites.
 
         Parameters
         ----------
