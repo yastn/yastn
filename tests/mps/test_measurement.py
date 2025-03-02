@@ -267,7 +267,7 @@ def test_measure_fermions_and_unbalanced(config_kwargs, sym, tol=1e-12):
     npsi3 = mps.vdot(psi3, psi3)
     assert abs(npsi3 - 2.0) < tol
     #
-    # psi3 is not normalized;  measure_2site, measure_1site do not normalise the state.
+    # psi3 is not normalized;  measure_2site, measure_1site, measure_nsite do not normalise the state.
     #
     psi3_cp_c_psi3 = np.array([[ 1.0, 0.0, -1.0, 0.0],
                                [ 0.0, 2.0,  0.0, 0.0],
@@ -286,6 +286,7 @@ def test_measure_fermions_and_unbalanced(config_kwargs, sym, tol=1e-12):
         assert abs(eccp33[k] - mps.vdot(psi3, OP, psi3)) < tol
         assert abs(eccp33[k] - npsi3 * (k[0] == k[1]) + psi3_cp_c_psi3[k].conjugate()) < tol
         assert abs(ecpc33[k] - psi3_cp_c_psi3[k]) < tol
+        assert abs(psi3_cp_c_psi3[k] - mps.measure_nsite(psi3, ops.cp(), ops.c(), ket=psi3, sites=k)) < tol
     #
     # transitions between states with different partice number
     #
@@ -324,8 +325,20 @@ def test_measure_fermions_and_unbalanced(config_kwargs, sym, tol=1e-12):
         if k[0] != k[1]:  # here exclude diagonal, as there is problem with resolving zero operator
             OP = mps.generate_mpo(I, [mps.Hterm(1, k, [ops.c(), ops.c()])])
             assert abs(ecc13[k] - mps.vdot(psi1, OP, psi3)) < tol
+            tmp = mps.measure_nsite(psi1, ops.c(), ops.c(), ket=psi3, sites=k)
+            assert abs(ecc13[k] - tmp) < tol
+
         assert abs(ecc13[k] - psi1_c_c_psi3[k]) < tol
         assert abs(ecpcp31[k] + psi1_c_c_psi3[k].conjugate()) < tol
+    #
+    #  measure multi-site operator
+    #
+    operators = [ops.c(), ops.c(), ops.cp(), ops.n(), ops.c()]
+    sites = [2, 1, 3, 1, 3]
+    OP = mps.generate_mpo(I, [mps.Hterm(1, sites, operators)])
+    val1 = mps.measure_nsite(psi1, *operators, ket=psi3, sites=sites)
+    val2 = mps.vdot(psi1, OP, psi3)
+    assert abs(val1 - val2) < tol
 
 
 def test_measure_syntax_raises(config_kwargs):
@@ -381,15 +394,18 @@ def test_measure_syntax_raises(config_kwargs):
     #
     #  measure_1site measure_2site raises
     #
-    with pytest.raises(yastn.YastnError):
-        out = mps.measure_1site(psi3, {1: ops.n(), 2: ops.c()}, psi3)
-        # In mps.measure_1site, all operators in O should have the same charge.
-    with pytest.raises(yastn.YastnError):
-        out = mps.measure_2site(psi3, {1: ops.n(), 2: ops.c()}, ops.cp(), psi3)
-        # In mps.measure_2site, all operators in O should have the same charge.
-    with pytest.raises(yastn.YastnError):
-        out = mps.measure_2site(psi3, ops.cp(), {1: ops.n(), 2: ops.c()}, psi3)
-        # In mps.measure_2site, all operators in P should have the same charge.
+    with pytest.raises(yastn.YastnError,
+                       match="In mps.measure_1site, all operators in O should have the same charge."):
+        mps.measure_1site(psi3, {1: ops.n(), 2: ops.c()}, psi3)
+    with pytest.raises(yastn.YastnError,
+                       match="In mps.measure_2site, all operators in O should have the same charge."):
+        mps.measure_2site(psi3, {1: ops.n(), 2: ops.c()}, ops.cp(), psi3)
+    with pytest.raises(yastn.YastnError,
+                       match="In mps.measure_2site, all operators in P should have the same charge."):
+        mps.measure_2site(psi3, ops.cp(), {1: ops.n(), 2: ops.c()}, psi3)
+    with pytest.raises(yastn.YastnError,
+                       match="Number of operators and sites should match."):
+        mps.measure_nsite(psi3, ops.cp(), ket=psi3, sites=(1, 2))
 
 
 if __name__ == '__main__':

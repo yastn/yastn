@@ -56,10 +56,11 @@ class kernel_svd(torch.autograd.Function):
         meta= ctx.meta_svd
         diagnostics= ctx.diagnostics
         data_size= ctx.data_size
+        Smax= Sdata.max()
         data_b= torch.zeros(data_size, dtype=Udata.dtype, device=Udata.device)
         for (sl, D, slU, DU, slS, slV, DV) in meta:
             loc_ctx= SimpleNamespace(diagnostics=diagnostics,
-                saved_tensors=(Udata[slice(*slU)].view(DU),Sdata[slice(*slS)],Vhdata[slice(*slV)].view(DV),reg))
+                saved_tensors=(Udata[slice(*slU)].view(DU),Sdata[slice(*slS)],Vhdata[slice(*slV)].view(DV),reg,Smax))
             data_b[slice(*sl)].view(D)[:],_,_,_ = SVDGESDD.backward(loc_ctx,\
                 Udata_b[slice(*slU)].view(DU),Sdata_b[slice(*slS)],Vhdata_b[slice(*slV)].view(DV))
         return data_b, None, None, None, None, None

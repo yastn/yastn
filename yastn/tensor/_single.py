@@ -70,7 +70,7 @@ def to(a, device=None, dtype=None) -> yastn.Tensor:
     dtype: str
         desired dtype
     """
-    if dtype in (None, a.yast_dtype) and device in (None, a.device):
+    if dtype in (None, a.yastn_dtype) and device in (None, a.device):
         return a._replace()
     data = a.config.backend.move_to(a._data, dtype=dtype, device=device)
     return a._replace(data=data)

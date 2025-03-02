@@ -40,10 +40,11 @@ class DoublePepsTensor(SpecialTensor):
         self.op = op
         self.ket = ket
         transpose = tuple(transpose)
-        self.swaps = swaps
         if transpose not in _allowed_transpose:
             raise YastnError("DoublePEPSTensor only supports permutations that retain legs' ordering.")
         self._t = transpose
+        self.swaps = {} if swaps is None else dict(swaps)
+
 
     @property
     def config(self):
@@ -66,6 +67,57 @@ class DoublePepsTensor(SpecialTensor):
     def del_operator_(self):
         """ Remove operator. """
         self.op = None
+
+    def add_charge_swaps_(self, charge, axes):
+        """
+        Supplement DoublePepsTensor with charges to be swapped with some internal legs during contraction.
+
+        Parameters
+        ----------
+        charge: tuple[int]
+
+        axes: Sequence[str] | str
+            identfy axes: 'bt', 'bl', 'bb', 'br', 'bs', 'kt', 'kl', 'kb', 'kr', 'ks'
+            k/b is for ket/bra; t/l/b/r/s is for top/left/bottom/right/system
+        """
+        if isinstance(axes, str):
+            axes = [axes]
+        for ax in axes:
+            if ax not in ['b0', 'b1', 'b2', 'b3', 'b4', 'k0', 'k1', 'k2', 'k3', 'k4']:
+                raise YastnError("Elements of axes should be 'b0', 'b1', 'b2', 'b3', 'b4', 'k0', 'k1', 'k2', 'k3', 'k4'.")
+            t = self.swaps.pop(ax, None)
+            t = self.config.sym.add_charges(t, charge) if t is not None else charge
+            if t != self.config.sym.zero():
+                self.swaps[ax] = t
+
+    def has_operator_or_swap(self):
+        return self.op is not None or (self.config.fermionic and self.swaps)
+
+    def Ab_Ak_with_charge_swap(self):
+        if not self.swaps:
+            return self.bra, self.ket
+        Ab = self.bra
+        axes, charges = [], []
+        for ax, n in self.swaps.items():
+            if ax[0] == 'b':
+                axes.append(int(ax[1]))
+                charges.append(n)
+        if axes:
+            Ab = Ab.unfuse_legs(axes=(0, 1))  # TODO: remove this after switching to Peps tensor with 5 legs
+            Ab = Ab.swap_gate(axes, charge=charges)
+            Ab = Ab.fuse_legs(axes=((0, 1), (2, 3), 4))
+
+        Ak = self.ket
+        axes, charges = [], []
+        for ax, n in self.swaps.items():
+            if ax[0] == 'k':
+                axes.append(int(ax[1]))
+                charges.append(n)
+        if axes:
+            Ak = Ak.unfuse_legs(axes=(0, 1))  # TODO: remove this after switching to Peps tensor with 5 legs
+            Ak = Ak.swap_gate(axes, charge=charges)
+            Ak = Ak.fuse_legs(axes=((0, 1), (2, 3), 4))
+        return Ab, Ak
 
     def get_shape(self, axes=None):
         """ Returns the shape of the DoublePepsTensor along specified axes. """
@@ -99,25 +151,25 @@ class DoublePepsTensor(SpecialTensor):
         axes = tuple(self._t[ax] for ax in axes)
         if axes not in _allowed_transpose:
             raise YastnError("DoublePEPSTensor only supports permutations that retain legs' ordering.")
-        return DoublePepsTensor(bra=self.bra, ket=self.ket, transpose=axes)
+        return DoublePepsTensor(bra=self.bra, ket=self.ket, transpose=axes, op=self.op, swaps=self.swaps)
 
     def conj(self):
         r""" Conjugate DoublePepsTensor. """
-        return DoublePepsTensor(bra=self.bra.conj(), ket=self.ket.conj(), transpose=self._t)
+        return DoublePepsTensor(bra=self.bra.conj(), ket=self.ket.conj(), transpose=self._t, op=self.op, swaps=self.swaps)
 
     def clone(self):
         r"""
         Makes a clone of yastn.tn.fpeps.DoublePepsTensor by :meth:`cloning<yastn.Tensor.clone>`-ing
         all constituent tensors forming a new instance of DoublePepsTensor.
         """
-        return DoublePepsTensor(bra=self.bra.clone(), ket=self.ket.clone(), transpose=self._t)
+        return DoublePepsTensor(bra=self.bra.clone(), ket=self.ket.clone(), transpose=self._t, op=self.op, swaps=self.swaps)
 
     def copy(self):
         r"""
         Makes a copy of yastn.tn.fpeps.DoublePepsTensor by :meth:`copying<yastn.Tensor.copy>`-ing
         all constituent tensors forming a new instance of DoublePepsTensor.
         """
-        return DoublePepsTensor(bra=self.bra.copy(), ket=self.ket.copy(), transpose=self._t)
+        return DoublePepsTensor(bra=self.bra.copy(), ket=self.ket.copy(), transpose=self._t, op=self.op, swaps=self.swaps)
 
     def tensordot(self, b, axes, reverse=False):
         """
@@ -147,21 +199,26 @@ class DoublePepsTensor(SpecialTensor):
             in_a = in_a[::-1]
             in_b = in_b[::-1]
 
+        Ab, Ak = self.Ab_Ak_with_charge_swap()
+
         if in_a == (0, 1):
-            return append_vec_tl(self.bra, self.ket, b, op=self.op, mode=mode, in_b=in_b, out_a=out_a)
+            return append_vec_tl(Ab, Ak, b, op=self.op, mode=mode, in_b=in_b, out_a=out_a)
         elif in_a == (2, 3):
-            return append_vec_br(self.bra, self.ket, b, op=self.op, mode=mode, in_b=in_b, out_a=out_a)
+            return append_vec_br(Ab, Ak, b, op=self.op, mode=mode, in_b=in_b, out_a=out_a)
         elif in_a == (0, 3):
-            return append_vec_tr(self.bra, self.ket, b, op=self.op, mode=mode, in_b=in_b, out_a=out_a)
+            return append_vec_tr(Ab, Ak, b, op=self.op, mode=mode, in_b=in_b, out_a=out_a)
         elif in_a == (1, 2):
-            return append_vec_bl(self.bra, self.ket, b, op=self.op, mode=mode, in_b=in_b, out_a=out_a)
+            return append_vec_bl(Ab, Ak, b, op=self.op, mode=mode, in_b=in_b, out_a=out_a)
         raise YastnError('DoublePepTensor.tensordot, 2 axes of self should be neighbouring.')
 
     def fuse_layers(self):
         """
         Fuse the top and bottom tensors into a single :class:`yastn.Tensor`.
         """
-        tt = tensordot(self.ket, self.bra, axes=(2, 2), conj=(0, 1))  # [t l] [b r] [t' l'] [b' r']
+        Ab, Ak = self.Ab_Ak_with_charge_swap()
+        if self.op is not None:
+            Ak = tensordot(Ak, self.op, axes=(2, 1))
+        tt = tensordot(Ak, Ab.conj(), axes=(2, 2))  # [t l] [b r] [t' l'] [b' r']
         tt = tt.fuse_legs(axes=(0, 2, (1, 3)))  # [t l] [t' l'] [[b r] [b' r']]
         tt = tt.unfuse_legs(axes=(0, 1))  # t l t' l' [[b r] [b' r']]
         tt = tt.swap_gate(axes=((1, 3), 2))  # l l' X t'
@@ -171,7 +228,7 @@ class DoublePepsTensor(SpecialTensor):
         tt = tt.unfuse_legs(axes=(1, 2))  # [[t t'] [l l']] b r b' r'
         tt = tt.swap_gate(axes=((1, 3), 4))  # b b' X r'
         tt = tt.fuse_legs(axes=(0, (1, 3), (2, 4)))  # [[t t'] [l l']] [b b'] [r r']
-        tt = tt.unfuse_legs(axes=0) # [t t'] [l l'] [b b'] [r r']
+        tt = tt.unfuse_legs(axes=0)  # [t t'] [l l'] [b b'] [r r']
         return tt.transpose(axes=self._t)
 
     def print_properties(self, file=None):

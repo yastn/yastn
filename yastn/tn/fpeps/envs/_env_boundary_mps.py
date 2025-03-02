@@ -16,16 +16,20 @@ from itertools import accumulate
 from .... import Tensor, YastnError
 from ... import mps
 from ._env_auxlliary import identity_tm_boundary
+from ._env_measure import _measure_nsite
+from .._peps import Peps
 
 
-class EnvBoundaryMPS:
+class EnvBoundaryMPS(Peps):
     r"""
     Boundary MPS class for finite PEPS contraction.
     """
 
     def __init__(self, psi, opts_svd, setup='l', opts_var=None):
+        super().__init__(psi.geometry)
         self.psi = psi
         self._env = {}
+        self.offset = 0
 
         li, ri = 0, psi.Ny-1
         ti, bi = 0, psi.Nx-1
@@ -81,6 +85,10 @@ class EnvBoundaryMPS:
     def boundary_mps(self, n, dirn):
         return self._env[dirn, n]
 
+    def __getitem__(self, ind):
+        if ind[1] == 'v':
+            return self.psi.transfer_mpo(n=ind[0], dirn='v').H
+        return self._env[ind[::-1]]
 
     def measure_1site(peps_env, O):
         """
@@ -113,6 +121,26 @@ class EnvBoundaryMPS:
                         env.update_env_(nx, to='first')
                         out[(nx, ny) + nz] = env.measure(bd=(nx-1, nx)) / norm_env
         return out
+
+    def measure_nsite(self, *operators, sites=None) -> float:
+        r"""
+        Calculate expectation value of a product of local operators.
+
+        Fermionic strings are incorporated for fermionic operators by employing :meth:`yastn.swap_gate`.
+
+        Parameters
+        ----------
+        operators: Sequence[yastn.Tensor]
+            List of local operators to calculate <O0_s0 O1_s1 ...>.
+
+        sites: Sequence[int]
+            A list of sites [s0, s1, ...] matching corresponding operators.
+        """
+        self.xrange = (0, self.psi.Nx) # (min(site[0] for site in sites), max(site[0] for site in sites) + 1)
+        self.yrange = (min(site[1] for site in sites), max(site[1] for site in sites) + 1)
+        dirn = 'lr'
+        ops = [op.conj() for op in operators]
+        return _measure_nsite(self, *ops, sites=sites, dirn=dirn).conj()
 
 
     def measure_2site(peps_env, O, P, opts_svd, opts_var=None):

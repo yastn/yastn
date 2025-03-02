@@ -35,6 +35,7 @@ One- and two-point expectation values
 
 .. autofunction:: yastn.tn.mps.measure_1site
 .. autofunction:: yastn.tn.mps.measure_2site
+.. autofunction:: yastn.tn.mps.measure_nsite
 
 Schmidt values and entropy profile
 ----------------------------------

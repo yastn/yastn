@@ -374,8 +374,8 @@ class Env2(EnvParent):
         In to='last', the charge of the environment is propagated with a proper swap gate,
         so that in measure_2site, a combination of to='last' and 'first'
         corresponds to the situation where the latter operator is applied first.
-        Conventions are adapted to application in measure_1site and measure_2site,
-        consistently with fermionic order.
+        Conventions are adapted to application in measure_1site, measure_2site,
+        and measure_nsite, consistently with fermionic order.
         """
         if to == 'first':
             tmp = tensordot(self.ket.A[n], self.F[n + 1, n], axes=(2, 0))
