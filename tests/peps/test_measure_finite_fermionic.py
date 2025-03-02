@@ -19,6 +19,10 @@ import yastn.tn.fpeps as fpeps
 import yastn.tn.mps as mps
 import math
 from itertools import product
+#
+from yastn.tn.fpeps import Site
+from yastn.tn.fpeps.envs.rdm import measure_rdm_1site, measure_rdm_nn, measure_rdm_2x2, measure_rdm_diag
+from yastn.operators._auxliary import sign_canonical_order
 
 tol = 1e-12
 
@@ -40,7 +44,7 @@ def generate_peps(g, ops, occs_init, angles):
         assert l_ordered
         s0, s1 = bond
         _, _, R0, R1, Q0f, Q1f = fpeps._evolution.apply_gate_nn(psi[s0], psi[s1], gate.G0, gate.G1, dirn)
-        M0, M1 = R0, R1  # fpeps._evolution.symmetrized_svd(R0, R1, opts_svd={}, normalize=True)
+        M0, M1 = fpeps._evolution.symmetrized_svd(R0, R1, opts_svd={'tol': 1e-12}, normalize=True)
         psi[s0], psi[s1] = fpeps._evolution.apply_bond_tensors(Q0f, Q1f, M0, M1, dirn)
     return psi
 
@@ -88,14 +92,66 @@ def measure_combinations(*operators, env=None, fun=None):
     return res
 
 
-@pytest.mark.parametrize('L', [2, 3])
-def test_measure(config_kwargs, L):
+def do_test_rdm_measure_nn(ops, res, *operators, env=None):
+    """
+    Test all possible combination of sites; skip those where measure_2x2 cannot be applied
+    """
+    for bond in res:
+        dirn, _= env.nn_bond_type(bond)
+        assert abs(measure_rdm_nn(bond[0], dirn, env.psi.ket, env,operators) - res[bond]) < tol
+
+
+def do_test_rdm_measure_2x2(ops, res, *operators, env=None):
+    """
+    Test all possible combination of sites; skip those where measure_2x2 cannot be applied
+    """
+    for sites in res:
+
+        site_op = {}
+        for n, op in zip(sites, operators):
+            site_op[n] = site_op[n] @ op if n in site_op else op
+
+        minx = min(site[0] for site in sites)  # tl corner
+        miny = min(site[1] for site in sites)
+
+        maxx = max(site[0] for site in sites)  # tl corner
+        maxy = max(site[1] for site in sites)
+
+        if minx == maxx and env.nn_site((minx, miny), 'b') is None:
+            minx -= 1  # for a finite system
+        if miny == maxy and env.nn_site((minx, miny), 'r') is None:
+            miny -= 1  # for a finite system
+
+        tl = Site(minx, miny)
+        tr = env.nn_site(tl, 'r')
+        br = env.nn_site(tl, 'br')
+        bl = env.nn_site(tl, 'b')
+        window = [tl, bl, tr, br]
+        sorted_ops = []
+
+        for site in window:
+            sorted_ops.append(site_op[site] if site in site_op else ops.I())
+
+        if tl in site_op and br in site_op:
+            sign = sign_canonical_order(*operators, sites=sites, f_ordered=env.f_ordered)
+            assert abs(res[sites] - sign * measure_rdm_diag(tl, "diag", env.psi.ket, env, [site_op[tl], site_op[br]])) < tol
+
+        if tr in site_op and bl in site_op:
+            sign = sign_canonical_order(*operators, sites=sites, f_ordered=env.f_ordered)
+            assert abs(res[sites] - sign * measure_rdm_diag(tl, "anti_diag", env.psi.ket, env, [site_op[bl], site_op[tr]])) < tol
+
+        sign = sign_canonical_order(*operators, sites=sites, f_ordered=env.f_ordered)
+        assert abs(res[sites] - sign * measure_rdm_2x2(tl, env.psi.ket, env, sorted_ops)) < tol
+
+
+@pytest.mark.parametrize("sym, L", [("U1", 3), ("Z2", 2)])
+def test_measure(config_kwargs, sym, L):
     """
     Test calculation of fermionic exceptation values with CTM
     using finite PEPS and shallow circuit.
     """
     # work with spinless fermions
-    ops = yastn.operators.SpinlessFermions(sym='U1', **config_kwargs)
+    ops = yastn.operators.SpinlessFermions(sym=sym, **config_kwargs)
     # and L x L system
     g = fpeps.SquareLattice(dims=(L, L), boundary='obc')
     s2i = {site: i for i, site in enumerate(g.sites())}  # linear mps order
@@ -108,7 +164,7 @@ def test_measure(config_kwargs, L):
     occs_init[2] = {(0, 0): 1, (0, 1): 1,
                     (1, 0): 0, (1, 1): 0}
     #
-    # and apply a single layer of hopping gates with large random angls
+    # and apply a single layer of hopping gates with large random angles
     ops.random_seed(seed=0)
     angles  = [(bond, 0.1 + 1j * ops.config.backend.rand(1) * math.pi / 2) for bond in g.bonds(dirn='v')]
     angles += [(bond, 0.1 + 1j * ops.config.backend.rand(1) * math.pi / 2) for bond in g.bonds(dirn='h')]
@@ -188,15 +244,30 @@ def test_measure(config_kwargs, L):
                 print(s0, s1, v, cpc_mps[s2i[s0], s2i[s1]], error)
             assert error < tol
     #
+    #-------test rdm measurement function-------
+    do_test_rdm_measure_nn(ops, nn_peps['nn'], ops.n(), ops.n(), env=env_ctm)
+    do_test_rdm_measure_nn(ops, cpc_peps['nn'], ops.cp(), ops.c(), env=env_ctm)
+    do_test_rdm_measure_2x2(ops, nn_peps['2x2'], ops.n(), ops.n(), env=env_ctm)
+    do_test_rdm_measure_2x2(ops, cpc_peps['2x2'], ops.cp(), ops.c(), env=env_ctm)
+    #-------------------------------------------
+    #
     # check 4-point correlator
-    sites=[(0, 0), (0, 1), (1, 0), (1, 1)]
-    positions = [s2i[site] for site in sites]
-    operators = [ops.cp(), ops.c(), ops.cp(), ops.c()]
-    v1 = env_ctm.measure_2x2(*operators, sites=sites)
-    I = mps.product_mpo(ops.I(), N=phi.N)
-    O = mps.generate_mpo(I, terms=[mps.Hterm(positions=positions, operators=operators)])
-    v2 = mps.vdot(phi, O, phi)
-    assert abs(v1 - v2) < tol
+    sitess = [[(0, 0), (1, 0), (0, 1), (1, 1)], [(0, 0), (1, 0), (0, 1), (1, 1)]]
+    operatorss = [[ops.cp(), ops.c(), ops.cp(), ops.c()]] #, [ops.cp(), ops.cp(), ops.c(), ops.c()]]
+
+    for sites, operators in zip(sitess, operatorss):
+        positions = [s2i[site] for site in sites]
+        v1 = env_ctm.measure_2x2(*operators, sites=sites)
+        v2 = env_ctm.measure_nsite(*operators, sites=sites)
+        I = mps.product_mpo(ops.I(), N=phi.N)
+        O = mps.generate_mpo(I, terms=[mps.Hterm(positions=positions, operators=operators)])
+        v0 = mps.vdot(phi, O, phi)
+        assert abs(v1 - v0) < tol
+        assert abs(v2 - v0) < tol
+        #
+        # TODO: the below has problem when sites not in the canonical order
+        sign = sign_canonical_order(*operators, sites=sites, f_ordered=env_ctm.f_ordered)
+        assert abs(v1 - sign * measure_rdm_2x2(Site(0, 0), env_ctm.psi.ket, env_ctm, operators)) < tol
 
 
 if __name__ == '__main__':
