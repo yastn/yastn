@@ -813,7 +813,7 @@ def measure_rdm_diag(s0 : Site, dirn : str, psi : Peps, env : EnvCTM, op : Union
         return _eval_op(op[0],op[1])
     return [ _eval_op(_op[0],_op[1]) for _op in op ]
 
-def measure_rdm_2x2(s0 : Site, psi : Peps, env : EnvCTM, op : Union[Sequence[Tensor], Sequence[Sequence[Tensor]]])->Union[Scalar, Sequence[Scalar]]:
+def measure_rdm_2x2(s0 : Site, psi : Peps, env : EnvCTM, op : Union[Sequence[Tensor], Sequence[Sequence[Tensor]]]) -> Union[Scalar, Sequence[Scalar]]:
     r"""
     Measure one or more observables on 2x2 patch with site `s0` being upper-left site.
 
@@ -924,6 +924,6 @@ def measure_rdm_2x2(s0 : Site, psi : Peps, env : EnvCTM, op : Union[Sequence[Ten
 
 
 
-    if len(op)==4 and all([isinstance(_op,Tensor) for _op in op]):
+    if len(op)==4 and all([isinstance(_op, Tensor) for _op in op]):
         return _eval_op(*tuple(op))
-    return [ _eval_op(*tuple(_op)) for _op in op ]
+    return [_eval_op(*tuple(_op)) for _op in op]

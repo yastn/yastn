@@ -24,6 +24,7 @@ from .._gates_auxiliary import apply_gate_onsite, gate_product_operator, gate_fi
 from .._geometry import Bond, Site
 from ._env_auxlliary import *
 from ._env_window import EnvWindow
+from ._env_measure import _measure_nsite
 
 logger = logging.Logger('ctmrg')
 
@@ -234,6 +235,166 @@ class EnvCTM(Peps):
                 T = T / T.norm(p=normalize) if isinstance(normalize, str) else normalize(T)
                 setattr(self[site], dirn, T)
 
+    def expand_outward_(self):
+        """
+        Enlarges the environment by one layer of PEPS tensors. No truncation is performed.
+
+        It can be used to build initial "dl" (or "nn") environment from initial "eye" environment.
+        """
+        env_tmp = EnvCTM(self.psi, init=None)  # empty environments
+        #
+        for site in self.sites():
+            tl = self.nn_site(site, d='tl')
+            if tl is not None:
+                tmp = self[tl].l @ self[tl].tl @ self[tl].t
+                tmp = tensordot(tmp, self.psi[tl], axes=((2, 1), (0, 1)))
+                tmp = tmp.fuse_legs(axes=((0, 2), (1, 3)))
+                env_tmp[site].tl = tmp / tmp.norm(p='inf')
+            else:
+                env_tmp[site].tl = self[site].tl
+            #
+            bl = self.nn_site(site, d='bl')
+            if bl is not None:
+                tmp = self[bl].b @ self[bl].bl @ self[bl].l
+                tmp = tensordot(tmp, self.psi[bl], axes=((2, 1), (1, 2)))
+                tmp = tmp.fuse_legs(axes=((0, 3), (1, 2)))
+                env_tmp[site].bl = tmp / tmp.norm(p='inf')
+            else:
+                env_tmp[site].bl = self[site].bl
+            #
+            tr = self.nn_site(site, d='tr')
+            if tr is not None:
+                tmp = self[tr].t @ self[tr].tr @ self[tr].r
+                tmp = tensordot(tmp, self.psi[tr], axes=((1, 2), (0, 3)))
+                tmp = tmp.fuse_legs(axes=((0, 2), (1, 3)))
+                env_tmp[site].tr = tmp / tmp.norm(p='inf')
+            else:
+                env_tmp[site].tr = self[site].tr
+            #
+            br = self.nn_site(site, d='br')
+            if br is not None:
+                tmp = self[br].r @ self[br].br @ self[br].b
+                tmp = tensordot(tmp, self.psi[br], axes=((2, 1), (2, 3)))
+                tmp = tmp.fuse_legs(axes=((0, 2), (1, 3)))
+                env_tmp[site].br = tmp / tmp.norm(p='inf')
+            else:
+                env_tmp[site].br = self[site].br
+            #
+            # trivial_projectors_(proj, dir, env)
+            #
+            l = self.nn_site(site, d='l')
+            if l is not None:
+                l0, _, l2 = self[l].l.get_legs()
+                l_t, _, l_b, _ = self.psi[l].get_legs()
+                c_tl = env_tmp[site].tl.get_legs(axes=0)
+                c_bl = env_tmp[site].bl.get_legs(axes=1)
+
+                if tl:
+                    proj_hlt = eye(self.config, legs=[c_tl, c_tl.conj()], isdiag=False)  # proj[l].hlt
+                    proj_hlt = proj_hlt.unfuse_legs(axes=0)
+                else:
+                    proj_hlt = eye(self.config, legs=[l_t.conj(), c_tl.conj()], isdiag=False)  # proj[l].hlt
+                    proj_hlt = proj_hlt.add_leg(axis=0, leg=l2.conj())
+                if bl:
+                    proj_hlb = eye(self.config, legs=[c_bl, c_bl.conj()], isdiag=False)  # proj[l].hlb
+                    proj_hlb = proj_hlb.unfuse_legs(axes=0)
+                else:
+                    proj_hlb = eye(self.config, legs=[l_b.conj(), c_bl.conj()], isdiag=False)  # proj[l].hlb
+                    proj_hlb = proj_hlb.add_leg(axis=0, leg=l0.conj())
+
+                tmp = self[l].l @ proj_hlt
+                tmp = tensordot(self.psi[l], tmp, axes=((0, 1), (2, 1)))
+                tmp = tensordot(proj_hlb, tmp, axes=((0, 1), (2, 0)))
+                env_tmp[site].l = tmp / tmp.norm(p='inf')
+            else:
+                env_tmp[site].l = self[site].l
+            #
+            r = self.nn_site(site, d='r')
+            if r is not None:
+                l0, _, l2 = self[r].r.get_legs()
+                r_t, _, r_b, _ = self.psi[r].get_legs()
+                c_br = env_tmp[site].br.get_legs(axes=0)
+                c_tr = env_tmp[site].tr.get_legs(axes=1)
+
+                if br:
+                    proj_hrb = eye(self.config, legs=(c_br, c_br.conj()), isdiag=False)  # proj[r].hrb
+                    proj_hrb = proj_hrb.unfuse_legs(axes=0)
+                else:
+                    proj_hrb = eye(self.config, legs=(r_b.conj(), c_br.conj()), isdiag=False)  # proj[r].hrb
+                    proj_hrb = proj_hrb.add_leg(axis=0, leg=l2.conj())
+                if tr:
+                    proj_hrt = eye(self.config, legs=(c_tr, c_tr.conj()), isdiag=False)  # proj[r].hrt
+                    proj_hrt = proj_hrt.unfuse_legs(axes=0)
+                else:
+                    proj_hrt = eye(self.config, legs=(r_t.conj(), c_tr.conj()), isdiag=False)  # proj[r].hrt
+                    proj_hrt = proj_hrt.add_leg(axis=0, leg=l0.conj())
+
+                tmp = self[r].r @ proj_hrb
+                tmp = tensordot(self.psi[r], tmp, axes=((2, 3), (2, 1)))
+                tmp = tensordot(proj_hrt, tmp, axes=((0, 1), (2, 0)))
+                env_tmp[site].r = tmp / tmp.norm(p='inf')
+            else:
+                env_tmp[site].r = self[site].r
+            #
+            t = self.nn_site(site, d='t')
+            if t is not None:
+                l0, _, l2 = self[t].t.get_legs()
+                _, t_l, _, t_r = self.psi[t].get_legs()
+                c_tr = env_tmp[site].tr.get_legs(axes=0)
+                c_tl = env_tmp[site].tl.get_legs(axes=1)
+
+                if tr:
+                    proj_vtr = eye(self.config, legs=[c_tr, c_tr.conj()], isdiag=False)  # proj[t].vtr
+                    proj_vtr = proj_vtr.unfuse_legs(axes=0)
+                else:
+                    proj_vtr = eye(self.config, legs=[t_r.conj(), c_tr.conj()], isdiag=False)  # proj[t].vtr
+                    proj_vtr = proj_vtr.add_leg(axis=0, leg=l2.conj())
+
+                if tl:
+                    proj_vtl = eye(self.config, legs=[c_tl, c_tl.conj()], isdiag=False)  # proj[t].vtl
+                    proj_vtl = proj_vtl.unfuse_legs(axes=0)
+                else:
+                    proj_vtl = eye(self.config, legs=[t_l.conj(), c_tl.conj()], isdiag=False)  # proj[t].vtl
+                    proj_vtl = proj_vtl.add_leg(axis=0, leg=l0.conj())
+
+                tmp = tensordot(proj_vtl, self[t].t, axes=(0, 0))
+                tmp = tensordot(tmp, self.psi[t], axes=((2, 0), (0, 1)))
+                tmp = tensordot(tmp, proj_vtr, axes=((1, 3), (0, 1)))
+                env_tmp[site].t = tmp / tmp.norm(p='inf')
+            else:
+                env_tmp[site].t = self[site].t
+            #
+            b = self.nn_site(site, d='b')
+            if b is not None:
+                l0, _, l2 = self[b].b.get_legs()
+                _, b_l, _, b_r = self.psi[b].get_legs()
+                c_bl = env_tmp[site].bl.get_legs(axes=0)
+                c_br = env_tmp[site].br.get_legs(axes=1)
+
+                if bl:
+                    proj_vbl = eye(self.config, legs=[c_bl, c_bl.conj()], isdiag=False)  # proj[b].vbl
+                    proj_vbl = proj_vbl.unfuse_legs(axes=0)
+                else:
+                    proj_vbl = eye(self.config, legs=[b_l.conj(), c_bl.conj()], isdiag=False)  # proj[b].vbl
+                    proj_vbl = proj_vbl.add_leg(axis=0, leg=l2.conj())
+
+                if br:
+                    proj_vbr = eye(self.config, legs=[c_br, c_br.conj()], isdiag=False)  # proj[b].vbr
+                    proj_vbr = proj_vbr.unfuse_legs(axes=0)
+                else:
+                    proj_vbr = eye(self.config, legs=[b_r.conj(), c_br.conj()], isdiag=False)  # proj[b].vbr
+                    proj_vbr = proj_vbr.add_leg(axis=0, leg=l0.conj())
+
+                tmp = tensordot(proj_vbr, self[b].b, axes=(0, 0))
+                tmp = tensordot(tmp, self.psi[b], axes=((2, 0), (2, 3)))
+                tmp = tensordot(tmp, proj_vbl, axes=((1, 3), (0, 1)))
+                env_tmp[site].b = tmp / tmp.norm(p='inf')
+            else:
+                env_tmp[site].b = self[site].b
+        #
+        # modify existing environment in place
+        update_old_env_(self, env_tmp)
+
 
     def boundary_mps(self, n, dirn):
         r""" Convert environmental tensors of Ctm to an MPS """
@@ -382,6 +543,7 @@ class EnvCTM(Peps):
         r"""
         Calculate expectation value of a product of local operators
         in a :math:`2 \times 2` window within the CTM environment.
+        Perform exact contraction of the window.
 
         Parameters
         ----------
@@ -393,14 +555,16 @@ class EnvCTM(Peps):
         """
         if sites is None or len(operators) != len(sites):
             raise YastnError("Number of operators and sites should match.")
-        ops = dict(zip(sites, operators))
-        if len(sites) != len(ops):
-            raise YastnError("Sites should not repeat.")
+
+        sign = sign_canonical_order(*operators, sites=sites, f_ordered=self.f_ordered)
+        ops = {}
+        for n, op in zip(sites, operators):
+            ops[n] = ops[n] @ op if n in ops else op
 
         minx = min(site[0] for site in sites)  # tl corner
         miny = min(site[1] for site in sites)
 
-        maxx = max(site[0] for site in sites)  # tl corner
+        maxx = max(site[0] for site in sites)  # br corner
         maxy = max(site[1] for site in sites)
 
         if minx == maxx and self.nn_site((minx, miny), 'b') is None:
@@ -467,9 +631,7 @@ class EnvCTM(Peps):
             cor_br = tensordot(vec_br, ten_br, axes=((2, 1), (2, 3)))
             cor_br = cor_br.fuse_legs(axes=((0, 2), (1, 3)))
 
-        sign = sign_canonical_order(*operators, sites=sites, f_ordered=self.f_ordered)
         val_op = vdot(cor_tl @ cor_tr, tensordot(cor_bl, cor_br, axes=(0, 1)), conj=(0, 0))
-
         return sign * val_op / val_no
 
 
@@ -477,6 +639,7 @@ class EnvCTM(Peps):
         r"""
         Calculate expectation value of a product of local opertors
         along a horizontal or vertical line within CTM environment.
+        Perform exact contraction of a width-one window.
 
         Parameters
         ----------
@@ -488,9 +651,11 @@ class EnvCTM(Peps):
         """
         if sites is None or len(operators) != len(sites):
             raise YastnError("Number of operators and sites should match.")
-        ops = dict(zip(sites, operators))
-        if len(sites) != len(ops):
-            raise YastnError("Sites should not repeat.")
+
+        sign = sign_canonical_order(*operators, sites=sites, f_ordered=self.f_ordered)
+        ops = {}
+        for n, op in zip(sites, operators):
+            ops[n] = ops[n] @ op if n in ops else op
 
         xs = sorted(set(site[0] for site in sites))
         ys = sorted(set(site[1] for site in sites))
@@ -525,10 +690,30 @@ class EnvCTM(Peps):
                 axes = (1, 2, 3, 0) if horizontal else (0, 3, 2, 1)
                 tm[ind] = op.transpose(axes=axes)
 
-        sign = sign_canonical_order(*operators, sites=sites, f_ordered=self.f_ordered)
         val_op = mps.vdot(vl, tm, vr)
-
         return sign * val_op / val_no
+
+
+    def measure_nsite(self, *operators, sites=None) -> float:
+        r"""
+        Calculate expectation value of a product of local operators.
+        Perform approximate contraction of a windows of PEPS sites
+        within CTM environment using boundary MPS.
+        The size of the window is taken to include provided sites.
+
+        Parameters
+        ----------
+        operators: Sequence[yastn.Tensor]
+            List of local operators to calculate <O0_s0 O1_s1 ...>.
+
+        sites: Sequence[int]
+            A list of sites [s0, s1, ...] matching corresponding operators.
+        """
+        xrange = (min(site[0] for site in sites), max(site[0] for site in sites) + 1)
+        yrange = (min(site[1] for site in sites), max(site[1] for site in sites) + 1)
+        env_win = EnvWindow(self, xrange, yrange)
+        dirn = 'lr' if (xrange[1] - xrange[0]) >= (yrange[1] - yrange[0]) else 'tb'
+        return _measure_nsite(env_win, *operators, sites=sites, dirn=dirn)
 
 
     def measure_2site(self, O, P, xrange, yrange, opts_svd=None, opts_var=None, bonds='<') -> dict[Site, list]:
