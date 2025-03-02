@@ -1,40 +1,31 @@
 import torch
 import warnings
-from ..backend_torch import _torch_version_check
 
-def safe_inverse(x, eps_rel=1.0e-12, eps_abs=1.0e-12):
-    return x / (x**2 + eps_abs)
+def safe_inverse(x, eps_abs=1.0e-12):
+    eps_abs=1.0e-12
+    return x / (x ** 2 + eps_abs)
 
-def safe_inverse_2(x, epsilon):
-    x[abs(x) < epsilon] = float('inf')
-    return x.pow(-1)
+
+# def safe_inverse_2(x, epsilon):
+#     x[abs(x) < epsilon] = float('inf')
+#     return x.pow(-1)
+
 
 class SVDGESDD(torch.autograd.Function):
-    if _torch_version_check("1.8.1"):
-        @staticmethod
-        def forward(A, ad_decomp_reg, fullrank_uv, diagnostics):
-            U, S, Vh = torch.linalg.svd(A, full_matrices=fullrank_uv)
-            # A = U @ diag(S) @ Vh
-            return U, S, Vh
-        
-        @staticmethod
-        # inputs is a Tuple of all of the inputs passed to forward.
-        # output is the output of the forward().
-        def setup_context(ctx, inputs, output):
-            _, ad_decomp_reg, _, diagnostics= inputs
-            U, S, Vh= output
-            ctx.save_for_backward(U, S, Vh, ad_decomp_reg)
-            ctx.diagnostics= diagnostics
-            
-    else:
-        @staticmethod
-        def forward(self, A, ad_decomp_reg, fullrank_uv, diagnostics):
-            U, S, V = torch.svd(A, some=not fullrank_uv)
-            # A = U @ diag(S) @ V.transpose(-2, -1).conj()
-            Vh = V.transpose(-2, -1).conj()
-            self.save_for_backward(U, S, Vh, ad_decomp_reg)
-            self.diagnostics= diagnostics
-            return U, S, Vh
+    @staticmethod
+    def forward(A, ad_decomp_reg, fullrank_uv, diagnostics):
+        U, S, Vh = torch.linalg.svd(A, full_matrices=fullrank_uv)
+        # A = U @ diag(S) @ Vh
+        return U, S, Vh
+
+    @staticmethod
+    # inputs is a Tuple of all of the inputs passed to forward.
+    # output is the output of the forward().
+    def setup_context(ctx, inputs, output):
+        _, ad_decomp_reg, _, diagnostics= inputs
+        U, S, Vh= output
+        ctx.save_for_backward(U, S, Vh, ad_decomp_reg)
+        ctx.diagnostics= diagnostics
 
     # From https://github.com/pytorch/pytorch/blob/master/torch/csrc/autograd/FunctionsManual.cpp
     # commit 5375b2e
@@ -45,259 +36,259 @@ class SVDGESDD(torch.autograd.Function):
     #                     const Tensor& S,
     #                     const Tensor& Vh) {
     #   at::NoTF32Guard disable_tf32;
-    @staticmethod
-    def v1_11_backward(self, gU, gS, gVh):
-        U, S, Vh, ad_decomp_reg = self.saved_tensors
-        diagnostics = self.diagnostics
-        #   // Throughout both the real and complex case we assume A has distinct singular values.
-        #   // Furthermore, if A is rectangular or complex, we assume it's full-rank.
-        #   //
-        #   //
-        #   // The real case (A \in R)
-        #   // See e.g. https://j-towns.github.io/papers/svd-derivative.pdf
-        #   //
-        #   // Denote by skew(X) = X - X^T, and by A o B the coordinatewise product, then
-        #   // if m == n
-        #   //   gA = U [(skew(U^T gU) / E)S + S(skew(V^T gV) / E) + I o gS ]V^T
-        #   // where E_{jk} = S_k^2 - S_j^2 if j != k and 1 otherwise
-        #   //
-        #   // if m > n
-        #   //   gA = [term in m == n] + (I_m - UU^T)gU S^{-1} V^T
-        #   // if m < n
-        #   //   gA = [term in m == n] + U S^{-1} (gV)^T (I_n - VV^T)
-        #   //
-        #   //
-        #   // The complex case (A \in C)
-        #   // This one is trickier because the svd is not locally unique.
-        #   // Denote L = diag(e^{i\theta_k}), then we have that if A = USV^H, then (UL, S, VL) is
-        #   // another valid SVD decomposition of A as
-        #   // A = ULS(VL)^H = ULSL^{-1}V^H = USV^H,
-        #   // since L, S and L^{-1} commute, since they are all diagonal.
-        #   //
-        #   // Assume wlog that n >= k in what follows, as otherwise we could reason about A^H.
-        #   // Denote by St_k(C^n) = {A \in C^{n,k} | A^H A = I_k} the complex Stiefel manifold.
-        #   // What this invariance means is that the svd decomposition is not a map
-        #   // svd: C^{n x k} -> St_k(C^n) x R^n x St_k(C^k)
-        #   // (where St_k(C^k) is simply the unitary group U(k)) but a map
-        #   // svd: C^{n x k} -> M x R^n
-        #   // where M is the manifold given by quotienting St_k(C^n) x U(n) by the action (U, V) -> (UL, VL)
-        #   // with L as above.
-        #   // Note that M is a manifold, because the action is free and proper (as U(1)^k \iso (S^1)^k is compact).
-        #   // For this reason, pi : St_k(C^n) x U(n) -> M forms a principal bundle.
-        #   //
-        #   // To think about M, consider the case case k = 1. The, we have the bundle
-        #   // pi : St_1(C^n) x U(1) -> M
-        #   // now, St_1(C^n) are just vectors of norm 1 in C^n. That's exactly the sphere of dimension 2n-1 in C^n \iso R^{2n}
-        #   // S^{2n-1} = { z \in C^n | z^H z = 1}.
-        #   // Then, in this case, we're quotienting out U(1) completely, so we get that
-        #   // pi : S^{2n-1} x U(1) -> CP(n-1)
-        #   // where CP(n-1) is the complex projective space of dimension n-1.
-        #   // In other words, M is just the complex projective space, and pi is (pretty similar to)
-        #   // the usual principal bundle from S^{2n-1} to CP(n-1).
-        #   // The case k > 1 is the same, but requiring a linear inependence condition between the
-        #   // vectors from the different S^{2n-1} or CP(n-1).
-        #   //
-        #   // Note that this is a U(1)^k-bundle. In plain words, this means that the fibres of this bundle,
-        #   // i.e. pi^{-1}(x) for x \in M are isomorphic to U(1) x ... x U(1).
-        #   // This is obvious as, if pi(U,V) = x,
-        #   // pi^{-1}(x) = {(U diag(e^{i\theta}), V diag(e^{i\theta})) | \theta \in R^k}
-        #   //            = {(U diag(z), V diag(z)) | z \in U(1)^k}
-        #   // since U(1) = {z \in C | |z| = 1}.
-        #   //
-        #   // The big issue here is that M with its induced metric is not locally isometric to St_k(C^n) x U(k).
-        #   // [The why is rather technical, but you can see that the horizontal distribution is not involutive,
-        #   // and hence integrable due to Frobenius' theorem]
-        #   // What this means in plain words is that, no matter how we choose to return the U and V from the
-        #   // SVD, we won't be able to simply differentiate wrt. U and V and call it a day.
-        #   // An example of a case where we can do this is when performing an eigendecomposition on a real
-        #   // matrix that happens to have real eigendecomposition. In this case, even though you can rescale
-        #   // the eigenvectors by any real number, you can choose them of norm 1 and call it a day.
-        #   // In the eigenvector case, we are using that you can isometrically embed S^{n-1} into R^n.
-        #   // In the svd case, we need to work with the "quotient manifold" M explicitly, which is
-        #   // slightly more technically challenging.
-        #   //
-        #   // Since the columns of U and V are not uniquely defined, but are representatives of certain
-        #   // classes of equivalence which represent elements M, the user may not depend on the particular
-        #   // representative that we return from the SVD. In particular, if the loss function depends on U
-        #   // or V, it must be invariant under the transformation (U, V) -> (UL, VL) with
-        #   // L = diag(e^{i\theta})), for every \theta \in R^k.
-        #   // In more geometrical terms, this means that the loss function should be constant on the fibres,
-        #   // or, in other words, the gradient along the fibres should be zero.
-        #   // We may see this by checking that the gradients as element in the tangent space
-        #   // T_{(U, V)}(St(n,k) x U(k)) are normal to the fibres. Differentiating the map
-        #   // (U, V) -> (UL, VL), we see that the space tangent to the fibres is given by
-        #   // Vert_{(U, V)}(St(n,k) x U(k)) = { i[U, V]diag(\theta) | \theta in R^k}
-        #   // where [U, V] denotes the vertical concatenation of U and V to form an (n+k, k) matrix.
-        #   // Then, solving
-        #   // <i[U,V]diag(\theta), [S, T]> = 0 for two matrices S, T \in T_{(U, V)}(St(n,k) x U(k))
-        #   // where <A, B> = Re tr(A^H B) is the canonical (real) inner product in C^{n x k}
-        #   // we get that the function is invariant under action of U(1)^k iff
-        #   // Im(diag(U^H gU + V^H gV)) = 0
-        #   //
-        #   // Using this in the derviaton for the forward AD, one sees that, with the notation from those notes
-        #   // Using this and writing sym(X) = X + X^H, we get that the forward AD for SVD in the complex
-        #   // case is given by
-        #   // dU = U (sym(dX S) / E + i Im(diag(dX)) / (2S))
-        #   // if m > n
-        #   //   dU = [dU for m == n] + (I_m - UU^H) dA V S^{-1}
-        #   // dS = Re(diag(dP))
-        #   // dV = V (sym(S dX) / E - i Im(diag(dX)) / (2S))
-        #   // if m < n
-        #   //   dV = [dV for m == n] + (I_n - VV^H) (dA)^H U S^{-1}
-        #   // dVh = dV^H
-        #   // with dP = U^H dA V
-        #   //      dX = dP - dS
-        #   //      E_{jk} = S_k^2 - S_j^2 if j != k
-        #   //               1             otherwise
-        #   //
-        #   // Similarly, writing skew(X) = X - X^H
-        #   // the adjoint wrt. the canonical metric is given by
-        #   // if m == n
-        #   //   gA = U [((skew(U^H gU) / E) S + i Im(diag(U^H gU)) / S + S ((skew(V^H gV) / E)) + I o gS] V^H
-        #   // if m > n
-        #   //   gA = [term in m == n] + (I_m - UU^H)gU S^{-1} V^H
-        #   // if m < n
-        #   //   gA = [term in m == n] + U S^{-1} (gV)^H (I_n - VV^H)
-        #   // where we have used that Im(diag(U^H gU)) = - Im(diag(V^h gV)) to group the diagonal imaginary terms into one
-        #   // that just depends on U^H gU.
+    # @staticmethod
+    # def v1_11_backward(self, gU, gS, gVh):
+    #     U, S, Vh, ad_decomp_reg = self.saved_tensors
+    #     diagnostics = self.diagnostics
+    #     #   // Throughout both the real and complex case we assume A has distinct singular values.
+    #     #   // Furthermore, if A is rectangular or complex, we assume it's full-rank.
+    #     #   //
+    #     #   //
+    #     #   // The real case (A \in R)
+    #     #   // See e.g. https://j-towns.github.io/papers/svd-derivative.pdf
+    #     #   //
+    #     #   // Denote by skew(X) = X - X^T, and by A o B the coordinatewise product, then
+    #     #   // if m == n
+    #     #   //   gA = U [(skew(U^T gU) / E)S + S(skew(V^T gV) / E) + I o gS ]V^T
+    #     #   // where E_{jk} = S_k^2 - S_j^2 if j != k and 1 otherwise
+    #     #   //
+    #     #   // if m > n
+    #     #   //   gA = [term in m == n] + (I_m - UU^T)gU S^{-1} V^T
+    #     #   // if m < n
+    #     #   //   gA = [term in m == n] + U S^{-1} (gV)^T (I_n - VV^T)
+    #     #   //
+    #     #   //
+    #     #   // The complex case (A \in C)
+    #     #   // This one is trickier because the svd is not locally unique.
+    #     #   // Denote L = diag(e^{i\theta_k}), then we have that if A = USV^H, then (UL, S, VL) is
+    #     #   // another valid SVD decomposition of A as
+    #     #   // A = ULS(VL)^H = ULSL^{-1}V^H = USV^H,
+    #     #   // since L, S and L^{-1} commute, since they are all diagonal.
+    #     #   //
+    #     #   // Assume wlog that n >= k in what follows, as otherwise we could reason about A^H.
+    #     #   // Denote by St_k(C^n) = {A \in C^{n,k} | A^H A = I_k} the complex Stiefel manifold.
+    #     #   // What this invariance means is that the svd decomposition is not a map
+    #     #   // svd: C^{n x k} -> St_k(C^n) x R^n x St_k(C^k)
+    #     #   // (where St_k(C^k) is simply the unitary group U(k)) but a map
+    #     #   // svd: C^{n x k} -> M x R^n
+    #     #   // where M is the manifold given by quotienting St_k(C^n) x U(n) by the action (U, V) -> (UL, VL)
+    #     #   // with L as above.
+    #     #   // Note that M is a manifold, because the action is free and proper (as U(1)^k \iso (S^1)^k is compact).
+    #     #   // For this reason, pi : St_k(C^n) x U(n) -> M forms a principal bundle.
+    #     #   //
+    #     #   // To think about M, consider the case case k = 1. The, we have the bundle
+    #     #   // pi : St_1(C^n) x U(1) -> M
+    #     #   // now, St_1(C^n) are just vectors of norm 1 in C^n. That's exactly the sphere of dimension 2n-1 in C^n \iso R^{2n}
+    #     #   // S^{2n-1} = { z \in C^n | z^H z = 1}.
+    #     #   // Then, in this case, we're quotienting out U(1) completely, so we get that
+    #     #   // pi : S^{2n-1} x U(1) -> CP(n-1)
+    #     #   // where CP(n-1) is the complex projective space of dimension n-1.
+    #     #   // In other words, M is just the complex projective space, and pi is (pretty similar to)
+    #     #   // the usual principal bundle from S^{2n-1} to CP(n-1).
+    #     #   // The case k > 1 is the same, but requiring a linear inependence condition between the
+    #     #   // vectors from the different S^{2n-1} or CP(n-1).
+    #     #   //
+    #     #   // Note that this is a U(1)^k-bundle. In plain words, this means that the fibres of this bundle,
+    #     #   // i.e. pi^{-1}(x) for x \in M are isomorphic to U(1) x ... x U(1).
+    #     #   // This is obvious as, if pi(U,V) = x,
+    #     #   // pi^{-1}(x) = {(U diag(e^{i\theta}), V diag(e^{i\theta})) | \theta \in R^k}
+    #     #   //            = {(U diag(z), V diag(z)) | z \in U(1)^k}
+    #     #   // since U(1) = {z \in C | |z| = 1}.
+    #     #   //
+    #     #   // The big issue here is that M with its induced metric is not locally isometric to St_k(C^n) x U(k).
+    #     #   // [The why is rather technical, but you can see that the horizontal distribution is not involutive,
+    #     #   // and hence integrable due to Frobenius' theorem]
+    #     #   // What this means in plain words is that, no matter how we choose to return the U and V from the
+    #     #   // SVD, we won't be able to simply differentiate wrt. U and V and call it a day.
+    #     #   // An example of a case where we can do this is when performing an eigendecomposition on a real
+    #     #   // matrix that happens to have real eigendecomposition. In this case, even though you can rescale
+    #     #   // the eigenvectors by any real number, you can choose them of norm 1 and call it a day.
+    #     #   // In the eigenvector case, we are using that you can isometrically embed S^{n-1} into R^n.
+    #     #   // In the svd case, we need to work with the "quotient manifold" M explicitly, which is
+    #     #   // slightly more technically challenging.
+    #     #   //
+    #     #   // Since the columns of U and V are not uniquely defined, but are representatives of certain
+    #     #   // classes of equivalence which represent elements M, the user may not depend on the particular
+    #     #   // representative that we return from the SVD. In particular, if the loss function depends on U
+    #     #   // or V, it must be invariant under the transformation (U, V) -> (UL, VL) with
+    #     #   // L = diag(e^{i\theta})), for every \theta \in R^k.
+    #     #   // In more geometrical terms, this means that the loss function should be constant on the fibres,
+    #     #   // or, in other words, the gradient along the fibres should be zero.
+    #     #   // We may see this by checking that the gradients as element in the tangent space
+    #     #   // T_{(U, V)}(St(n,k) x U(k)) are normal to the fibres. Differentiating the map
+    #     #   // (U, V) -> (UL, VL), we see that the space tangent to the fibres is given by
+    #     #   // Vert_{(U, V)}(St(n,k) x U(k)) = { i[U, V]diag(\theta) | \theta in R^k}
+    #     #   // where [U, V] denotes the vertical concatenation of U and V to form an (n+k, k) matrix.
+    #     #   // Then, solving
+    #     #   // <i[U,V]diag(\theta), [S, T]> = 0 for two matrices S, T \in T_{(U, V)}(St(n,k) x U(k))
+    #     #   // where <A, B> = Re tr(A^H B) is the canonical (real) inner product in C^{n x k}
+    #     #   // we get that the function is invariant under action of U(1)^k iff
+    #     #   // Im(diag(U^H gU + V^H gV)) = 0
+    #     #   //
+    #     #   // Using this in the derviaton for the forward AD, one sees that, with the notation from those notes
+    #     #   // Using this and writing sym(X) = X + X^H, we get that the forward AD for SVD in the complex
+    #     #   // case is given by
+    #     #   // dU = U (sym(dX S) / E + i Im(diag(dX)) / (2S))
+    #     #   // if m > n
+    #     #   //   dU = [dU for m == n] + (I_m - UU^H) dA V S^{-1}
+    #     #   // dS = Re(diag(dP))
+    #     #   // dV = V (sym(S dX) / E - i Im(diag(dX)) / (2S))
+    #     #   // if m < n
+    #     #   //   dV = [dV for m == n] + (I_n - VV^H) (dA)^H U S^{-1}
+    #     #   // dVh = dV^H
+    #     #   // with dP = U^H dA V
+    #     #   //      dX = dP - dS
+    #     #   //      E_{jk} = S_k^2 - S_j^2 if j != k
+    #     #   //               1             otherwise
+    #     #   //
+    #     #   // Similarly, writing skew(X) = X - X^H
+    #     #   // the adjoint wrt. the canonical metric is given by
+    #     #   // if m == n
+    #     #   //   gA = U [((skew(U^H gU) / E) S + i Im(diag(U^H gU)) / S + S ((skew(V^H gV) / E)) + I o gS] V^H
+    #     #   // if m > n
+    #     #   //   gA = [term in m == n] + (I_m - UU^H)gU S^{-1} V^H
+    #     #   // if m < n
+    #     #   //   gA = [term in m == n] + U S^{-1} (gV)^H (I_n - VV^H)
+    #     #   // where we have used that Im(diag(U^H gU)) = - Im(diag(V^h gV)) to group the diagonal imaginary terms into one
+    #     #   // that just depends on U^H gU.
 
-        #   // Checks compute_uv=true
-        #   TORCH_INTERNAL_ASSERT(U.dim() >= 2 && Vh.dim() >= 2);
+    #     #   // Checks compute_uv=true
+    #     #   TORCH_INTERNAL_ASSERT(U.dim() >= 2 && Vh.dim() >= 2);
 
-        #   // Trivial case
-        #   if (!gS.defined() && !gU.defined() && !gVh.defined()) {
-        #     return {};
-        #   }
+    #     #   // Trivial case
+    #     #   if (!gS.defined() && !gU.defined() && !gVh.defined()) {
+    #     #     return {};
+    #     #   }
 
-        m = U.size(-2)
-        n = Vh.size(-1)
+    #     m = U.size(-2)
+    #     n = Vh.size(-1)
 
-        #   // Optimisation for svdvals: gA = U @ diag(gS) @ Vh
-        #   if (!gU.defined() && !gVh.defined()) {
-        #     return m >= n ? at::matmul(U, gS.unsqueeze(-1) * Vh)
-        #                   : at::matmul(U * gS.unsqueeze(-2), Vh);
-        #   }
-        #   // At this point, at least one of gU, gVh is defined
+    #     #   // Optimisation for svdvals: gA = U @ diag(gS) @ Vh
+    #     #   if (!gU.defined() && !gVh.defined()) {
+    #     #     return m >= n ? at::matmul(U, gS.unsqueeze(-1) * Vh)
+    #     #                   : at::matmul(U * gS.unsqueeze(-2), Vh);
+    #     #   }
+    #     #   // At this point, at least one of gU, gVh is defined
 
-        is_complex = U.is_complex()
-        def skew(A): return A - A.transpose(-2, -1).conj()
-        #   const auto UhgU = gU.defined() ? skew(at::matmul(U.mH(), gU)) : Tensor{};
-        #   const auto VhgV = gVh.defined() ? skew(at::matmul(Vh, gVh.mH())) : Tensor{};
-        UhgU= skew( U.transpose(-2, -1).conj()@gU )
-        VhgV= skew( Vh@gVh.transpose(-2, -1).conj() )
+    #     is_complex = U.is_complex()
+    #     def skew(A): return A - A.transpose(-2, -1).conj()
+    #     #   const auto UhgU = gU.defined() ? skew(at::matmul(U.mH(), gU)) : Tensor{};
+    #     #   const auto VhgV = gVh.defined() ? skew(at::matmul(Vh, gVh.mH())) : Tensor{};
+    #     UhgU= skew( U.transpose(-2, -1).conj()@gU )
+    #     VhgV= skew( Vh@gVh.transpose(-2, -1).conj() )
 
-        #   // Check for the invariance of the loss function, i.e.
-        #   // Im(diag(U^H gU)) + Im(diag(V^H gV)) = 0
-        #   if (is_complex) {
-        #     const auto imdiag_UhgU = gU.defined() ? at::imag(UhgU.diagonal(0, -2, -1))
-        #                                           : at::zeros_like(S);
-        #     const auto imdiag_VhgV = gVh.defined() ? at::imag(VhgV.diagonal(0, -2, -1))
-        #                                            : at::zeros_like(S);
-        #     // Rather lax atol and rtol, as we don't want false positives
-        #     TORCH_CHECK(at::allclose(imdiag_UhgU, -imdiag_VhgV, /*rtol=*/1e-2, /*atol=*/1e-2),
-        #                 "svd_backward: The singular vectors in the complex case are specified up to multiplication "
-        #                 "by e^{i phi}. The specified loss function depends on this phase term, making "
-        #                 "it ill-defined.");
-        #   }
-        if is_complex:
-            imdiag_UhgU= UhgU.diagonal(0, -2, -1).imag
-            imdiag_VhgV= VhgV.diagonal(0, -2, -1).imag
-            if (imdiag_UhgU+imdiag_VhgV).norm()>1.0e-5:
-                print(f"{imdiag_UhgU.norm()} {imdiag_VhgV.norm()} {(imdiag_UhgU+imdiag_VhgV).norm()}")
-            if not torch.allclose( imdiag_UhgU, -imdiag_VhgV, 1e-2, 1e-2 ):
-                warnings.warn("svd_backward: The singular vectors in the complex case are "\
-                +"specified up to multiplication by e^{i phi}. The specified loss function depends on "\
-                +"this phase term, making it ill-defined.",RuntimeWarning)
-                import pdb; pdb.set_trace()
-                print(f"cost-f not invariant")
+    #     #   // Check for the invariance of the loss function, i.e.
+    #     #   // Im(diag(U^H gU)) + Im(diag(V^H gV)) = 0
+    #     #   if (is_complex) {
+    #     #     const auto imdiag_UhgU = gU.defined() ? at::imag(UhgU.diagonal(0, -2, -1))
+    #     #                                           : at::zeros_like(S);
+    #     #     const auto imdiag_VhgV = gVh.defined() ? at::imag(VhgV.diagonal(0, -2, -1))
+    #     #                                            : at::zeros_like(S);
+    #     #     // Rather lax atol and rtol, as we don't want false positives
+    #     #     TORCH_CHECK(at::allclose(imdiag_UhgU, -imdiag_VhgV, /*rtol=*/1e-2, /*atol=*/1e-2),
+    #     #                 "svd_backward: The singular vectors in the complex case are specified up to multiplication "
+    #     #                 "by e^{i phi}. The specified loss function depends on this phase term, making "
+    #     #                 "it ill-defined.");
+    #     #   }
+    #     if is_complex:
+    #         imdiag_UhgU= UhgU.diagonal(0, -2, -1).imag
+    #         imdiag_VhgV= VhgV.diagonal(0, -2, -1).imag
+    #         if (imdiag_UhgU+imdiag_VhgV).norm()>1.0e-5:
+    #             print(f"{imdiag_UhgU.norm()} {imdiag_VhgV.norm()} {(imdiag_UhgU+imdiag_VhgV).norm()}")
+    #         if not torch.allclose( imdiag_UhgU, -imdiag_VhgV, 1e-2, 1e-2 ):
+    #             warnings.warn("svd_backward: The singular vectors in the complex case are "\
+    #             +"specified up to multiplication by e^{i phi}. The specified loss function depends on "\
+    #             +"this phase term, making it ill-defined.",RuntimeWarning)
+    #             import pdb; pdb.set_trace()
+    #             print(f"cost-f not invariant")
 
-        #   // gA = ((U^H gU) / E) S +  S (((V^H gV) / E) + I o (gS + diag(U^H gU) / (2 * S))
-        #   Tensor gA = [&] {
-        #     // ret holds everything but the diagonal of gA
-        #     auto ret = [&] {
-        #       const auto E = [&S]{
-        #         const auto S2 = S * S;
-        #         auto ret = S2.unsqueeze(-2) - S2.unsqueeze(-1);
-        #         // Any number a != 0 would, as we are just going to use it to compute 0 / a later on
-        #         ret.diagonal(0, -2, -1).fill_(1);
-        #         return ret;
-        #       }();
+    #     #   // gA = ((U^H gU) / E) S +  S (((V^H gV) / E) + I o (gS + diag(U^H gU) / (2 * S))
+    #     #   Tensor gA = [&] {
+    #     #     // ret holds everything but the diagonal of gA
+    #     #     auto ret = [&] {
+    #     #       const auto E = [&S]{
+    #     #         const auto S2 = S * S;
+    #     #         auto ret = S2.unsqueeze(-2) - S2.unsqueeze(-1);
+    #     #         // Any number a != 0 would, as we are just going to use it to compute 0 / a later on
+    #     #         ret.diagonal(0, -2, -1).fill_(1);
+    #     #         return ret;
+    #     #       }();
 
-        #       if (gU.defined()) {
-        #         if (gVh.defined()) {
-        #           return (UhgU * S.unsqueeze(-2) + S.unsqueeze(-1) * VhgV) / E;
-        #         } else {
-        #           return (UhgU / E) * S.unsqueeze(-2);
-        #         }
-        #       } else { // gVh.defined();
-        #         return S.unsqueeze(-1) * (VhgV / E);
-        #       }
-        #     }();
-        #     // Fill the diagonal
-        #     if (gS.defined()) {
-        #       ret = ret + gS.diag_embed();
-        #     }
-        #     if (is_complex && gU.defined() && gVh.defined()) {
-        #       ret = ret + (UhgU.diagonal(0, -2, -1) / (2. * S)).diag_embed();
-        #     }
-        #     return ret;
-        #   }();
-        def reg_preinv(x):
-            x_reg= x.clone()
-            x_scale= x.abs().max()
-            if x_scale<ad_decomp_reg:
-                x_reg= float('inf')
-            else:
-                x_reg[abs(x_reg/x_scale) < ad_decomp_reg] = float('inf')
-            return x_reg
+    #     #       if (gU.defined()) {
+    #     #         if (gVh.defined()) {
+    #     #           return (UhgU * S.unsqueeze(-2) + S.unsqueeze(-1) * VhgV) / E;
+    #     #         } else {
+    #     #           return (UhgU / E) * S.unsqueeze(-2);
+    #     #         }
+    #     #       } else { // gVh.defined();
+    #     #         return S.unsqueeze(-1) * (VhgV / E);
+    #     #       }
+    #     #     }();
+    #     #     // Fill the diagonal
+    #     #     if (gS.defined()) {
+    #     #       ret = ret + gS.diag_embed();
+    #     #     }
+    #     #     if (is_complex && gU.defined() && gVh.defined()) {
+    #     #       ret = ret + (UhgU.diagonal(0, -2, -1) / (2. * S)).diag_embed();
+    #     #     }
+    #     #     return ret;
+    #     #   }();
+    #     def reg_preinv(x):
+    #         x_reg= x.clone()
+    #         x_scale= x.abs().max()
+    #         if x_scale<ad_decomp_reg:
+    #             x_reg= float('inf')
+    #         else:
+    #             x_reg[abs(x_reg/x_scale) < ad_decomp_reg] = float('inf')
+    #         return x_reg
 
-        S2= S*S
-        E= S2.unsqueeze(-2) - S2.unsqueeze(-1) # S^2_i-S^2_j
-        E.diagonal(0,-2,-1).fill_(1)
-        
-        gA= (UhgU * S.unsqueeze(-2) + S.unsqueeze(-1) * VhgV) * (1./reg_preinv(E)) + gS.diag_embed()
-        if is_complex:
-            gA = gA + (UhgU.diagonal(0, -2, -1) * (1./(2. * reg_preinv(S))) ).diag_embed()
+    #     S2= S*S
+    #     E= S2.unsqueeze(-2) - S2.unsqueeze(-1) # S^2_i-S^2_j
+    #     E.diagonal(0,-2,-1).fill_(1)
 
-        #   if (m > n && gU.defined()) {
-        #     // gA = [UgA + (I_m - UU^H)gU S^{-1}]V^H
-        #     gA  = at::matmul(U, gA);
-        #     const auto gUSinv = gU / S.unsqueeze(-2);
-        #     gA = gA + gUSinv - at::matmul(U, at::matmul(U.mH(), gUSinv));
-        #     gA = at::matmul(gA, Vh);
-        #   } else if (m < n && gVh.defined()) {
-        #     //   gA = U[gA V^H + S^{-1} (gV)^H (I_n - VV^H)]
-        #     gA = at::matmul(gA, Vh);
-        #     const auto SinvgVh = gVh / S.unsqueeze(-1);
-        #     gA = gA + SinvgVh - at::matmul(at::matmul(SinvgVh, Vh.mH()), Vh);
-        #     gA = at::matmul(U, gA);
-        #   } else {
-        #     // gA = U gA V^H
-        #     gA = m >= n ? at::matmul(U, at::matmul(gA, Vh))
-        #                 : at::matmul(at::matmul(U, gA), Vh);
-        #   }
+    #     gA= (UhgU * S.unsqueeze(-2) + S.unsqueeze(-1) * VhgV) * (1./reg_preinv(E)) + gS.diag_embed()
+    #     if is_complex:
+    #         gA = gA + (UhgU.diagonal(0, -2, -1) * (1./(2. * reg_preinv(S))) ).diag_embed()
 
-        # TODO regularize 1/S
-        if m>n:
-            gA = U @ gA
-            gUSinv = gU / S.unsqueeze(-2)
-            gA = gA + gUSinv - U @ (U.transpose(-2, -1).conj() @ gUSinv)
-            gA = gA @ Vh
-        elif m<n:
-            gA = gA @ Vh
-            SinvgVh = gVh / S.unsqueeze(-1)
-            gA = gA + SinvgVh - (SinvgVh @ Vh.transpose(-2, -1).conj()) @ Vh
-            gA = U @ gA
-        else:
-            gA = U @ (gA @ Vh) if m>=n else (U @ gA) @ Vh
+    #     #   if (m > n && gU.defined()) {
+    #     #     // gA = [UgA + (I_m - UU^H)gU S^{-1}]V^H
+    #     #     gA  = at::matmul(U, gA);
+    #     #     const auto gUSinv = gU / S.unsqueeze(-2);
+    #     #     gA = gA + gUSinv - at::matmul(U, at::matmul(U.mH(), gUSinv));
+    #     #     gA = at::matmul(gA, Vh);
+    #     #   } else if (m < n && gVh.defined()) {
+    #     #     //   gA = U[gA V^H + S^{-1} (gV)^H (I_n - VV^H)]
+    #     #     gA = at::matmul(gA, Vh);
+    #     #     const auto SinvgVh = gVh / S.unsqueeze(-1);
+    #     #     gA = gA + SinvgVh - at::matmul(at::matmul(SinvgVh, Vh.mH()), Vh);
+    #     #     gA = at::matmul(U, gA);
+    #     #   } else {
+    #     #     // gA = U gA V^H
+    #     #     gA = m >= n ? at::matmul(U, at::matmul(gA, Vh))
+    #     #                 : at::matmul(at::matmul(U, gA), Vh);
+    #     #   }
 
-        #   return gA;
-        # }
-        if not (diagnostics is None):
-            print(f"{diagnostics} {gA.size()} {gA.abs().max()} {S.max()}")
-        if torch.any(torch.isnan(gA)):
-            import pdb; pdb.set_trace()
-        return gA, None, None, None
+    #     # TODO regularize 1/S
+    #     if m>n:
+    #         gA = U @ gA
+    #         gUSinv = gU / S.unsqueeze(-2)
+    #         gA = gA + gUSinv - U @ (U.transpose(-2, -1).conj() @ gUSinv)
+    #         gA = gA @ Vh
+    #     elif m<n:
+    #         gA = gA @ Vh
+    #         SinvgVh = gVh / S.unsqueeze(-1)
+    #         gA = gA + SinvgVh - (SinvgVh @ Vh.transpose(-2, -1).conj()) @ Vh
+    #         gA = U @ gA
+    #     else:
+    #         gA = U @ (gA @ Vh) if m>=n else (U @ gA) @ Vh
+
+    #     #   return gA;
+    #     # }
+    #     if not (diagnostics is None):
+    #         print(f"{diagnostics} {gA.size()} {gA.abs().max()} {S.max()}")
+    #     if torch.any(torch.isnan(gA)):
+    #         import pdb; pdb.set_trace()
+    #     return gA, None, None, None
 
     @staticmethod
     def backward(self, gu, gsigma, gvh):
@@ -311,41 +302,41 @@ class SVDGESDD(torch.autograd.Function):
         :return: gradient
         :rtype: torch.Tensor
 
-        Computes backward gradient for SVD, adopted from 
+        Computes backward gradient for SVD, adopted from
         https://github.com/pytorch/pytorch/blob/v1.10.2/torch/csrc/autograd/FunctionsManual.cpp
-        
+
         For complex-valued input there is an additional term, see
 
             * https://giggleliu.github.io/2019/04/02/einsumbp.html
             * https://arxiv.org/abs/1909.02659
 
         The backward is regularized following
-        
+
             * https://github.com/wangleiphy/tensorgrad/blob/master/tensornets/adlib/svd.py
             * https://arxiv.org/abs/1903.09650
 
-        using 
+        using
 
-        .. math:: 
+        .. math::
             S_i/(S^2_i-S^2_j) = (F_{ij}+G_{ij})/2\ \ \textrm{and}\ \ S_j/(S^2_i-S^2_j) = (F_{ij}-G_{ij})/2
-        
-        where 
-        
-        .. math:: 
+
+        where
+
+        .. math::
             F_{ij}=1/(S_i-S_j),\ G_{ij}=1/(S_i+S_j)
         """
-        # 
+        #
         # TORCH_CHECK(compute_uv,
         #    "svd_backward: Setting compute_uv to false in torch.svd doesn't compute singular matrices, ",
         #    "and hence we cannot compute backward. Please use torch.svd(compute_uv=True)");
 
-        
+
         diagnostics= self.diagnostics
-        u, sigma, vh, eps= self.saved_tensors
-        m= u.size(0) # first dim of original tensor A = u sigma v^\dag 
+        u, sigma, vh, eps, global_sigma_scale= self.saved_tensors
+        m= u.size(0) # first dim of original tensor A = u sigma v^\dag
         n= vh.size(1) # second dim of A
         k= sigma.size(0)
-        sigma_scale= sigma[0]
+        sigma_scale= global_sigma_scale
 
         # ? some
         if (u.size(-2)!=u.size(-1)) or (vh.size(-2)!=vh.size(-1)):
@@ -372,14 +363,14 @@ class SVDGESDD(torch.autograd.Function):
 
         # sigma_inv= safe_inverse_2(sigma.clone(), sigma_scale*eps)
         # sigma_inv= safe_inverse(sigma.clone(), eps_abs=sigma_scale*eps)
-        sigma_inv= safe_inverse(sigma.clone(), eps)
+        sigma_inv= safe_inverse(sigma.clone(), eps_abs= sigma_scale**2*eps)
 
         F = sigma.unsqueeze(-2) - sigma.unsqueeze(-1)
-        F = safe_inverse(F, sigma_scale*eps)
+        F = safe_inverse(F, eps_abs= sigma_scale**2*eps)
         F.diagonal(0,-2,-1).fill_(0)
 
         G = sigma.unsqueeze(-2) + sigma.unsqueeze(-1)
-        G = safe_inverse(G, sigma_scale*eps)
+        G = safe_inverse(G, eps_abs= sigma_scale**2*eps)
         G.diagonal(0,-2,-1).fill_(0)
 
         uh= u.conj().transpose(-2,-1)
@@ -390,11 +381,11 @@ class SVDGESDD(torch.autograd.Function):
                 # projection operator onto subspace orthogonal to span(U) defined as I - UU^H
                 proj_on_ortho_u = -u @ uh
                 proj_on_ortho_u.diagonal(0, -2, -1).add_(1);
-                u_term = u_term + proj_on_ortho_u @ (gu * sigma_inv.unsqueeze(-2)) 
+                u_term = u_term + proj_on_ortho_u @ (gu * sigma_inv.unsqueeze(-2))
             u_term = u_term @ vh
         else:
             u_term = torch.zeros(m,n,dtype=u.dtype,device=u.device)
-        
+
         v= vh.conj().transpose(-2,-1)
         if not (gvh is None):
             gv = gvh.conj().transpose(-2, -1);
@@ -407,7 +398,7 @@ class SVDGESDD(torch.autograd.Function):
             v_term = u @ v_term
         else:
             v_term = torch.zeros(m,n,dtype=u.dtype,device=u.device)
-        
+
         # TODO enable check
         # if (u.is_complex() or vh.is_complex()) and not (gvh is None) and not (gu is None):
         #     imdiag_UhgU= UhgU.diagonal(0, -2, -1).imag
@@ -428,6 +419,7 @@ class SVDGESDD(torch.autograd.Function):
             imag_term= (u * L.unsqueeze(-2)) @ vh
             dA= dA + imag_term
 
-        if not (diagnostics is None):
+        if diagnostics is not None:
             print(f"{diagnostics} {dA.abs().max()} {sigma.max()}")
+
         return dA, None, None, None

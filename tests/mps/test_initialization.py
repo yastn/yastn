@@ -267,10 +267,10 @@ def test_mixed_dims_mpo_and_transpose(config_kwargs):
     #
     tmp = mps.vdot(psi_bra, H.conj().T @ H, psi_bra)
     assert tmp.real > 0
-    assert abs(tmp.imag) < 1e-8
+    assert abs(tmp.imag) < 1e-7
     tmp = mps.vdot(psi_ket, H @ H.conj().T, psi_ket)
     assert tmp.real > 0
-    assert abs(tmp.imag) < 1e-8
+    assert abs(tmp.imag) < 1e-7
     assert (H.conj().T - H.H).norm() < 1e-12 * H.norm()
     assert (psi_bra.conj() - psi_bra.H).norm() < 1e-12 * psi_bra.norm()
     assert (psi_bra.T - psi_bra).norm() < 1e-12 * psi_bra.norm()

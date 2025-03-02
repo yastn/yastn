@@ -132,7 +132,7 @@ def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
 
     a.slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(a_Dp), a_Dp, a_D))
     a.struct = a.struct._replace(t=a_t, D=a_D, size=Dsize)
-    a._data = _init_block(a.config, Dsize, val, dtype=a.yast_dtype, device=a.device)
+    a._data = _init_block(a.config, Dsize, val, dtype=a.yastn_dtype, device=a.device)
     _test_tD_consistency(a.struct)
     _test_struct_types(a.struct)
 
@@ -159,8 +159,6 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
         Otherwise any tensor-like format such as nested list, numpy.ndarray, etc.,
         can be used provided it is supported by :doc:`tensor's backend </tensor/configuration>`.
     """
-
-
     ts = np.array(ts, dtype=np.int64).ravel()
     if a.isdiag and len(ts) == a.config.sym.NSYM:
         ts = np.hstack([ts, ts])
@@ -199,7 +197,7 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
         a._data = a.config.backend.delete(a._data, a.slices[ind].slcs[0])
 
     pos = sum(x.Dp for x in a.slices[:ind])
-    new_block = _init_block(a.config, Dsize, val, dtype=a.yast_dtype, device=a.device)
+    new_block = _init_block(a.config, Dsize, val, dtype=a.yastn_dtype, device=a.device)
     a._data = a.config.backend.insert(a._data, pos, new_block)
     a_t = a.struct.t[:ind] + (ts,) + a.struct.t[ind2:]
     a_D = a.struct.D[:ind] + (Ds,) + a.struct.D[ind2:]

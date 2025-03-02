@@ -148,7 +148,7 @@ v0.9
 - Transition to 1d data structure
 - dtype and device removed from config
 - `unique_dtype` replaced by `get_dtype`
-- properties `tensor.dtype`, `tensor.yast_dtype`, `tensor.device`
+- properties `tensor.dtype`, `tensor.yastn_dtype`, `tensor.device`
 - new function '__setitem__()' that gives direct access to change existing blocks
 - in rsqrt(x, cutoff) cutoff is done with respect to x, not sqrt(x)
 - new function `grad()` that generates gradient yastntensor
@@ -172,7 +172,7 @@ v0.9
 30-05-2022
 - function `Leg` generates `_Leg` object describing linear space of a single tensor leg.
   It takes, signature `s`, list of charges `t` and corresponding dimensions `D`, as well as symmetry (or config).
-- function `yastn.leg_union(*legs)` creates a leg that describes a space being an union of provided spaces/legs.
+- function `yastn.legs_union(*legs)` creates a leg that describes a space being an union of provided spaces/legs.
 - tensor has method `.get_legs(axes=None)` outputing `_Leg` (or list of specified legs, of list of all tensor legs for axis=None). It also carries information about fusions.
 - Initializing tensor with `yastn.ones`, `yastn.zeors`, `yastn.rand`, `yastn.eye` takes list of a list of legs,(argument `legs`). Old input with `s`, `t`, `D` is supported and providing any of those parameters overrides argument `legs`
 - methods `to_numpy`, `to_dense`, `to_nonsymmetric` take dict `legs` specifying how to fill-in zeros to make output consistent with provided `legs` (for now does not work for mismatch in hard fusions). This replaces old argument `leg_structures`.
@@ -219,4 +219,4 @@ v0.9
 07-2024  (v1.01)
 - fix engine type consistency for numpy2.0
 - consistently use 'U1' for U(1)-symmetry
-- allow using **config._asdict() while initializing operator classes 
+- allow using **config._asdict() while initializing operator classes

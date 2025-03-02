@@ -1,9 +1,10 @@
 from .... import ncon
 from .. import Site, Peps, Peps2Layers, EnvCTM
-from .... import Tensor
+from .... import Tensor, YastnError
 from ._env_auxlliary import append_vec_tl, append_vec_br, append_vec_tr, append_vec_bl
 from typing import Sequence, Union, TypeVar
 import logging
+from functools import reduce
 log = logging.getLogger(__name__)
 
 Scalar = TypeVar('Scalar')
@@ -131,18 +132,18 @@ def _normalize_and_regularize_rdm(rdm, order : str="interleaved", pos_def=False,
     else:
         raise ValueError(f"order {order} not implemented.")
 
+    rdm_norm= rdm.trace(axes=trace_order).to_number()
     # turn RDM into a matrix
-    rdm_asym = 0.5 * (rdm - rdm.conj().transpose(axes=conj_order))
-    rdm = 0.5 * (rdm + rdm.conj().transpose(axes=conj_order))
+    # rdm_asym = 0.5 * (rdm - rdm.conj().transpose(axes=conj_order))
+    # rdm = 0.5 * (rdm + rdm.conj().transpose(axes=conj_order))
 
-    # given enforced symmetry of rdm, the trace has to be real
-    rdm_norm= rdm.trace(axes=trace_order).to_number().real
-
-    if verbosity > 0:
-        log.info(f"{who} trace(rdm_sym) {rdm_norm} 2-norm(rdm_sym) {rdm.norm()} 2-norm(rdm_asym) {rdm_asym.norm()}")
-    if pos_def:
-        # shift spectrum such that RDM is non-negative
-        raise NotImplementedError()
+    # # given enforced symmetry of rdm, the trace has to be real
+    # rdm_norm= rdm.trace(axes=trace_order).to_number().real
+    # if verbosity > 0:
+    #     log.info(f"{who} trace(rdm_sym) {rdm_norm} 2-norm(rdm_sym) {rdm.norm()} 2-norm(rdm_asym) {rdm_asym.norm()}")
+    # if pos_def:
+    #     # shift spectrum such that RDM is non-negative
+    #     raise NotImplementedError()
 
     rdm = rdm/rdm_norm
     return rdm, rdm_norm
@@ -372,6 +373,95 @@ def rdm2x1(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scala
     return rdm, rdm_norm
 
 
+# def rdm2x2(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scalar]:
+#     r"""
+#     Contract environment and on-site tensors of 2x2 patch,
+#     with `s0` the upper-left Site, to reduced density matrix::
+
+#         C T  T  C
+#         T s0 s1 T
+#         T s2 s3 T
+#         C T  T  C
+
+#     The index convention for reduced density matrix is `[s0, s0', ..., s3, s3']`,
+#     where s_i,s_i' is bra,ket pair.
+
+#     TODO: Optionally symmetrize and make non-negative
+
+#     Args:
+#         s0: The site of the 2x2 reduced density matrix
+#         psi: Peps
+#         env: environment
+
+#     Returns:
+#         Reduced density matrix and its unnormalized trace
+#     """
+#     s1, s2, s3 = psi.nn_site(s0, "r"), psi.nn_site(s0, "b"), psi.nn_site(s0, "br")
+#     env0, env1, env2, env3 = env[s0], env[s1], env[s2], env[s3]
+
+#     psi_dl = Peps2Layers(psi)
+#     ten0, ten1, ten2, ten3 = (
+#         psi_dl[s0],
+#         psi_dl[s1],
+#         psi_dl[s2],
+#         psi_dl[s3],
+#     )  # DoublePepsTensor
+
+#     vectl = (env0.l @ env0.tl) @ env0.t
+#     vectr = (env1.t @ env1.tr) @ env1.r
+#     vecbl = (env2.b @ env2.bl) @ env2.l
+#     vecbr = (env3.r @ env3.br) @ env3.b
+
+#     tmp0 = _append_vec_tl_open(ten0.bra, ten0.ket, vectl)  # x [b b'] y [r r'] [s s']
+#     tmp0 = tmp0.unfuse_legs(axes=(1, 3, 4))  # x b b' y r r' s s'
+#     tmp0 = tmp0.swap_gate(axes=(1, (6, 7)))  # b X s s'
+#     tmp0 = tmp0.swap_gate(axes=(5, (6, 7)))  # r' X s s'
+#     tmp0 = tmp0.fuse_legs(
+#         axes=(0, (1, 2), 3, (4, 5), (6, 7))
+#     )  # x [b b'] y [r r'] [s0 s0']
+
+#     tmp1 = _append_vec_tr_open(ten1.bra, ten1.ket, vectr)  # x [l l'] y [b b'] [s s']
+#     tmp1 = tmp1.unfuse_legs(axes=(1, 3, 4))  # x l l' y b b' s s'
+#     tmp1 = tmp1.swap_gate(axes=(2, (6, 7)))  # l' X s s'
+#     tmp1 = tmp1.fuse_legs(
+#         axes=(0, (1, 2), 3, (4, 5), (6, 7))
+#     )  # x [l l'] y [b b'] [s1 s1']
+
+#     tmp2 = _append_vec_bl_open(ten2.bra, ten2.ket, vecbl)  # x [r r'] y [t t'] [s s']
+#     tmp2 = tmp2.unfuse_legs(axes=(1, 3, 4))  # x r r' y t t' s s'
+#     tmp2 = tmp2.swap_gate(axes=(1, (6, 7)))  # r X s s'
+#     tmp2 = tmp2.fuse_legs(
+#         axes=(0, (1, 2), 3, (4, 5), (6, 7))
+#     )  # x [r r'] y [t t'] [s2 s2']
+
+#     tmp3 = _append_vec_br_open(ten3.bra, ten3.ket, vecbr)  # x [t t'] y [l l'] [s s']
+#     tmp3 = tmp3.unfuse_legs(axes=(1, 3, 4))  # x t t' y l l' s s'
+#     tmp3 = tmp3.swap_gate(axes=(2, (6, 7)))  # t' X s s'
+#     tmp3 = tmp3.swap_gate(axes=(4, (6, 7)))  # l X s s'
+#     tmp3 = tmp3.fuse_legs(
+#         axes=(0, (1, 2), 3, (4, 5), (6, 7))
+#     )  # x [t t'] y [l l'] [s3 s3']
+
+#     res = tmp0.tensordot(
+#         tmp1, axes=((2, 3), (0, 1))
+#     )  # x0 [b0 b0'] [s0 s0'] y1 [b1 b1'] [s2 s2']
+#     res = res.tensordot(
+#         tmp2, axes=((0, 1), (2, 3))
+#     )  # [s0 s0'] y1 [b1 b1'] [s2 s2'] x2 [r2 r2'] [s1 s1']
+#     res = res.tensordot(
+#         tmp3, axes=((1, 2, 4, 5), (0, 1, 2, 3))
+#     )  # [s0 s0'] [s2 s2'] [s1 s1'] [s3 s3']
+#     rdm = res.unfuse_legs(axes=(0, 1, 2, 3))  # s0 s0' s2 s2' s1 s1' s3 s3'
+#     rdm = trace_aux(rdm, 0, swap=True)
+#     rdm = trace_aux(rdm, 2, swap=False)
+#     rdm = trace_aux(rdm, 4, swap=True)
+#     rdm = trace_aux(rdm, 6, swap=False)
+
+#     rdm = rdm.transpose(axes=(0, 1, 4, 5, 2, 3, 6, 7)) # s0 s0' s1 s1' s2 s2' s3 s3'
+#     rdm, rdm_norm= _normalize_and_regularize_rdm(rdm, who=rdm2x2.__name__)
+
+#     return rdm, rdm_norm
+
 def rdm2x2(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scalar]:
     r"""
     Contract environment and on-site tensors of 2x2 patch,
@@ -395,7 +485,7 @@ def rdm2x2(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scala
     Returns:
         Reduced density matrix and its unnormalized trace
     """
-    s1, s2, s3 = psi.nn_site(s0, "r"), psi.nn_site(s0, "b"), psi.nn_site(s0, "br")
+    s1, s2, s3 = psi.nn_site(s0, "b"), psi.nn_site(s0, "r"), psi.nn_site(s0, "br")
     env0, env1, env2, env3 = env[s0], env[s1], env[s2], env[s3]
 
     psi_dl = Peps2Layers(psi)
@@ -407,8 +497,8 @@ def rdm2x2(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scala
     )  # DoublePepsTensor
 
     vectl = (env0.l @ env0.tl) @ env0.t
-    vectr = (env1.t @ env1.tr) @ env1.r
-    vecbl = (env2.b @ env2.bl) @ env2.l
+    vectr = (env2.t @ env2.tr) @ env2.r
+    vecbl = (env1.b @ env1.bl) @ env1.l
     vecbr = (env3.r @ env3.br) @ env3.b
 
     tmp0 = _append_vec_tl_open(ten0.bra, ten0.ket, vectl)  # x [b b'] y [r r'] [s s']
@@ -419,17 +509,17 @@ def rdm2x2(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scala
         axes=(0, (1, 2), 3, (4, 5), (6, 7))
     )  # x [b b'] y [r r'] [s0 s0']
 
-    tmp1 = _append_vec_tr_open(ten1.bra, ten1.ket, vectr)  # x [l l'] y [b b'] [s s']
-    tmp1 = tmp1.unfuse_legs(axes=(1, 3, 4))  # x l l' y b b' s s'
-    tmp1 = tmp1.swap_gate(axes=(2, (6, 7)))  # l' X s s'
-    tmp1 = tmp1.fuse_legs(
+    tmp2 = _append_vec_tr_open(ten2.bra, ten2.ket, vectr)  # x [l l'] y [b b'] [s s']
+    tmp2 = tmp2.unfuse_legs(axes=(1, 3, 4))  # x l l' y b b' s s'
+    tmp2 = tmp2.swap_gate(axes=(2, (6, 7)))  # l' X s s'
+    tmp2 = tmp2.fuse_legs(
         axes=(0, (1, 2), 3, (4, 5), (6, 7))
     )  # x [l l'] y [b b'] [s1 s1']
 
-    tmp2 = _append_vec_bl_open(ten2.bra, ten2.ket, vecbl)  # x [r r'] y [t t'] [s s']
-    tmp2 = tmp2.unfuse_legs(axes=(1, 3, 4))  # x r r' y t t' s s'
-    tmp2 = tmp2.swap_gate(axes=(1, (6, 7)))  # r X s s'
-    tmp2 = tmp2.fuse_legs(
+    tmp1 = _append_vec_bl_open(ten1.bra, ten1.ket, vecbl)  # x [r r'] y [t t'] [s s']
+    tmp1 = tmp1.unfuse_legs(axes=(1, 3, 4))  # x r r' y t t' s s'
+    tmp1 = tmp1.swap_gate(axes=(1, (6, 7)))  # r X s s'
+    tmp1 = tmp1.fuse_legs(
         axes=(0, (1, 2), 3, (4, 5), (6, 7))
     )  # x [r r'] y [t t'] [s2 s2']
 
@@ -442,10 +532,10 @@ def rdm2x2(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scala
     )  # x [t t'] y [l l'] [s3 s3']
 
     res = tmp0.tensordot(
-        tmp1, axes=((2, 3), (0, 1))
+        tmp2, axes=((2, 3), (0, 1))
     )  # x0 [b0 b0'] [s0 s0'] y1 [b1 b1'] [s2 s2']
     res = res.tensordot(
-        tmp2, axes=((0, 1), (2, 3))
+        tmp1, axes=((0, 1), (2, 3))
     )  # [s0 s0'] y1 [b1 b1'] [s2 s2'] x2 [r2 r2'] [s1 s1']
     res = res.tensordot(
         tmp3, axes=((1, 2, 4, 5), (0, 1, 2, 3))
@@ -458,7 +548,6 @@ def rdm2x2(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scala
 
     rdm = rdm.transpose(axes=(0, 1, 4, 5, 2, 3, 6, 7)) # s0 s0' s1 s1' s2 s2' s3 s3'
     rdm, rdm_norm= _normalize_and_regularize_rdm(rdm, who=rdm2x2.__name__)
-
     return rdm, rdm_norm
 
 def rdm2x2_diagonal(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scalar]:
@@ -678,6 +767,51 @@ def measure_rdm_nn(s0 : Site, dirn : str, psi : Peps, env : EnvCTM, op : Union[S
         return _eval_op(op[0],op[1])
     return [ _eval_op(_op[0],_op[1]) for _op in op ]
 
+def measure_rdm_diag(s0 : Site, dirn : str, psi : Peps, env : EnvCTM, op : Union[Sequence[Tensor], Sequence[Sequence[Tensor]]])->Union[Scalar, Sequence[Scalar]]:
+    """
+    Measure one or more observables on 2x2 diag or 2x2 anti_diag patch with site `s0`
+    being topleft.
+
+    Observables are expected to be one or more pairs of operators/Tensors, i.e.::
+
+        op = (Tensor, Tensor)
+
+        or
+
+        op = [(Tensor,Tensor), (Tensor,Tensor), ...]
+
+    with first operator acting always on site `s0`. Operators are applied from "right-to-left",
+    i.e. the second operator `op[1]` is applied first, which might matter for fermionic operators.
+
+    Args:
+        s0: topleft site
+        dirn: 'diag' for diagonal patch (see :func:`rdm2x2_diagonal`) and 'anti_diag' for anti_diagonal patch (see :func:`rdm2x2_anti_diagonal`)
+        psi: PEPS wavefunction
+        env: CTM environment
+        op: one or more observables
+
+    Returns:
+        Expectation value or a list of expectations values of provided `op`.
+    """
+    if dirn == "diag":
+        rdm, norm = rdm2x2_diagonal(s0, psi, env)  # s0 s0' s3 s3'
+        s1 = psi.nn_site(s0, "br")
+    elif dirn == "anti_diag":
+        rdm, norm = rdm2x2_anti_diagonal(s0, psi, env)  # s1 s1' s2 s2'
+        s0 = psi.nn_site(s0, "b")
+        s1 = psi.nn_site(s0, "tr")
+    # norm = rdm.trace(axes=((0, 2), (1, 3))).to_number()
+
+    ncon_order = ((1, 2, 5), (3, 4, 5), (2, 1, 4, 3))
+    def _eval_op(O0, O1):
+        ordered = env.f_ordered(s0, s1)
+        fermionic = True if (O0.n[0] and O1.n[0]) else False
+        O0, O1 = op_order(O0, O1, ordered, fermionic)
+        return ncon([O0, O1, rdm], ncon_order).to_number()
+
+    if isinstance(op[0],Tensor) and isinstance(op[1],Tensor):
+        return _eval_op(op[0],op[1])
+    return [ _eval_op(_op[0],_op[1]) for _op in op ]
 
 def measure_rdm_2x2(s0 : Site, psi : Peps, env : EnvCTM, op : Union[Sequence[Tensor], Sequence[Sequence[Tensor]]])->Union[Scalar, Sequence[Scalar]]:
     r"""
@@ -694,8 +828,6 @@ def measure_rdm_2x2(s0 : Site, psi : Peps, env : EnvCTM, op : Union[Sequence[Ten
     with first operator acting on site `s0`, second on site `s1`, etc. according to :func:`rdm2x2`
     index ordering convention.
 
-    NOTE: currently support only bosonic operators, i.e. with even parity.
-
     Args:
         s0: site
         psi: PEPS wavefunction
@@ -705,50 +837,93 @@ def measure_rdm_2x2(s0 : Site, psi : Peps, env : EnvCTM, op : Union[Sequence[Ten
     Returns:
         Expectation value or a list of expectations values of provided `op`.
     """
-    rdm, norm = rdm2x2(s0, psi, env)  # s0 s0' s1 s1'
+    rdm, norm = rdm2x2(s0, psi, env)  # s0 s0' s1 s1' s2 s2' s3 s3'
     s1 = psi.nn_site(s0, "r")
     s2 = psi.nn_site(s0, "b")
     s3 = psi.nn_site(s2, "r")
+    sym = psi.config.sym
 
-    ncon_order = ((1, 2), (3, 4), (5, 6), (7, 8), (2, 1, 4, 3, 6, 5, 8, 7))
+    # def _eval_op(O0, O1, O2, O3):
+    #     return ncon([O0, O1, O2, O3, rdm], ncon_order).to_number()
+
     def _eval_op(O0, O1, O2, O3):
-        return ncon([O0, O1, O2, O3, rdm], ncon_order).to_number()
+        Os = [O0, O1, O2, O3]
+        charges = [O.n for O in Os]
+        charge_sum = reduce(sym.add_charges, charges)
+        if charge_sum != sym.zero():
+            raise YastnError("Non-zero parity charges within the 2x2 measument window!")
+        non_zero_charges = 0
+        for c in charges:
+            non_zero_charges += int(c != sym.zero())
+
+        if non_zero_charges == 0:
+            # no auxiliary leg presented
+            ncon_order = ((1, 2), (3, 4), (5, 6), (7, 8), (2, 1, 4, 3, 6, 5, 8, 7))
+            return ncon([O0, O1, O2, O3, rdm], ncon_order).to_number()
+
+        elif non_zero_charges == 2:
+            # one auxiliary leg connecting two ops with non-zero charges
+            if O0.n != sym.zero() and O1.n != sym.zero():
+                O0, O1 = op_order(O0, O1, True, True)
+                O1 = O1.swap_gate(axes=(1,2))
+
+                ncon_order = ((1, 2, -1), (3, 4, -2), (5, 6), (7, 8), (2, 1, 4, 3, 6, 5, 8, 7))
+                res = ncon([O0, O1, O2, O3, rdm], ncon_order)
+                return res.trace(axes=(0,1)).to_number()
+
+            elif O0.n != sym.zero() and O2.n != sym.zero():
+                O0, O2 = op_order(O0, O2, True, True)
+
+                ncon_order = ((1, 2, -1), (3, 4), (5, 6, -2), (7, 8), (2, 1, 4, 3, 6, 5, 8, 7))
+                res = ncon([O0, O1, O2, O3, rdm], ncon_order)
+                return res.trace(axes=(0,1)).to_number()
+
+            elif O0.n != sym.zero() and O3.n[0] != sym.zero():
+                O0, O3 = op_order(O0, O3, True, True)
+                ncon_order = ((1, 2, -1), (3, 4), (5, 6), (7, 8, -2), (2, 1, 4, 3, 6, 5, 8, 7))
+                res = ncon([O0, O1, O2, O3, rdm], ncon_order)
+                return res.trace(axes=(0,1)).to_number()
+
+            elif O1.n != sym.zero() and O2.n != sym.zero():
+                O1, O2 = op_order(O1, O2, True, True)
+                ncon_order = ((1, 2), (3, 4, -1), (5, 6, -2), (7, 8), (2, 1, 4, 3, 6, 5, 8, 7))
+                res = ncon([O0, O1, O2, O3, rdm], ncon_order)
+                return res.trace(axes=(0,1)).to_number()
+
+            elif O1.n != sym.zero() and O3.n != sym.zero():
+                O1, O3 = op_order(O1, O3, True, True)
+                ncon_order = ((1, 2), (3, 4, -1), (5, 6), (7, 8, -2), (2, 1, 4, 3, 6, 5, 8, 7))
+                res = ncon([O0, O1, O2, O3, rdm], ncon_order)
+                return res.trace(axes=(0,1)).to_number()
+
+            elif O2.n != sym.zero() and O3.n != sym.zero():
+                O2, O3 = op_order(O2, O3, True, True)
+                O2 = O2.swap_gate(axes=(0, 2))
+                ncon_order = ((1, 2), (3, 4), (5, 6, -1), (7, 8, -2), (2, 1, 4, 3, 6, 5, 8, 7))
+                res = ncon([O0, O1, O2, O3, rdm], ncon_order)
+                return res.trace(axes=(0,1)).to_number()
+
+        elif non_zero_charges == 4:
+            # either O0 + O1 == 0 or O0 + O4==0
+            if sym.add_charges(O0.n, O1.n) == sym.zero():
+                # connecting O0 with O1
+                O0, O1 = op_order(O0, O1, True, True)
+                O2, O3 = op_order(O2, O3, True, True)
+                O1 = O1.swap_gate(axes=(1, 2))
+                O2 = O2.swap_gate(axes=(0, 2))
+                ncon_order = ((1, 2, -1), (3, 4, -2), (5, 6, -3), (7, 8, -4), (2, 1, 4, 3, 6, 5, 8, 7))
+                res = ncon([O0, O1, O2, O3, rdm], ncon_order)
+            elif sym.add_charges(O0.n, O3.n) == sym.zero():
+                O0, O3 = op_order(O0, O3, True, True)
+                O1, O2 = op_order(O1, O2, True, True)
+                ncon_order = ((1, 2, -1), (3, 4, -3), (5, 6, -4), (7, 8, -2), (2, 1, 4, 3, 6, 5, 8, 7))
+                res = ncon([O0, O1, O2, O3, rdm], ncon_order)
+                res = res.swap_gate(axes=(0, 2))
+
+            return res.trace(axes=((0, 2), (1, 3))).to_number()
+
+
 
     if len(op)==4 and all([isinstance(_op,Tensor) for _op in op]):
         return _eval_op(*tuple(op))
     return [ _eval_op(*tuple(_op)) for _op in op ]
-
-
-def _test_1site(psi, env, op, rtol=1e-8, atol=1e-8):
-    for s0 in psi.sites():
-        val0 = measure_rdm_1site(s0, psi, env, op)
-        val1 = env.measure_1site(op, s0)
-        print(s0, val0.item(), val1.item())
-        assert np.isclose(val0, val1, rtol=rtol, atol=atol)
-
-def _test_nn(psi, env, op0, op1, rtol=1e-8, atol=1e-8):
-    for s0 in psi.sites():
-        val0 = measure_rdm_nn(s0, "h", psi, env, op0, op1)
-        s1 = psi.nn_site(s0, "r")
-        bond = (s0, s1)
-        val1 = env.measure_nn(op0, op1, bond)
-        print(s0, val0.item(), val1.item())
-        assert np.isclose(val0, val1, rtol=rtol, atol=atol)
-
-        val0 = measure_rdm_nn(s0, "v", psi, env, op0, op1)
-        s1 = psi.nn_site(s0, "b")
-        bond = (s0, s1)
-        val1 = env.measure_nn(op0, op1, bond)
-        print(s0, val0.item(), val1.item())
-        assert np.isclose(val0, val1, rtol=rtol, atol=atol)
-
-def _test_2x2(psi, env, op_list, rtol=1e-8, atol=1e-8):
-    for s0 in psi.sites():
-        val0 = measure_rdm_2x2(s0, psi, env, op_list)
-
-        s1 = psi.nn_site(s0, "r")
-        s2 = psi.nn_site(s0, "b")
-        s3 = psi.nn_site(s2, "r")
-        sites = [s0, s1, s2, s3]
-        val1 = env.measure_2x2(*op_list, sites=sites)
-        assert np.isclose(val0, val1, rtol=rtol, atol=atol)

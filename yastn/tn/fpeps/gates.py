@@ -76,8 +76,7 @@ def gate_nn_hopping(t, step, I, c, cdag, bond=None) -> Gate_nn:
     nh = fkron(n, h, sites=(0, 1))
     hn = fkron(h, n, sites=(0, 1))
 
-    cc = fkron(cdag, c, sites=(0, 1)) \
-       + fkron(cdag, c, sites=(1, 0))
+    cc = fkron(cdag, c, sites=(0, 1)) + fkron(cdag, c, sites=(1, 0))
 
     G =  II + (np.cosh(t * step) - 1) * (nh + hn) + np.sinh(t * step) * cc
     return decompose_nn_gate(G, bond)
