@@ -294,7 +294,7 @@ def lin_solver(f, b, v0, ncv=10, tol=1e-13, pinv_tol=1e-13, hermitian=False, **k
     be1 = beta * e1
     
     u, s, vh = np.linalg.svd(T, full_matrices = False)
-    sp = np.linalg.pinv(np.diag(s), rtol = pinv_tol)
+    sp = np.linalg.pinv(np.diag(s), rcond = pinv_tol)
     y = vh.conj().T @ sp @ u.conj().T @ be1
 
     vf = v0.linear_combination(*Q, amplitudes = [1,*y], **kwargs)
