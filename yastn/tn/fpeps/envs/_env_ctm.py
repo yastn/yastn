@@ -35,27 +35,27 @@ class EnvCTM_local():
 
     Contains fields ``tl``, ``t``, ``tr``, ``r``, ``br``, ``b``, ``bl``, ``l``
     """
-    tl : Union[Tensor,None] = None # top-left
-    t : Union[Tensor,None] = None  # top
-    tr : Union[Tensor,None] = None # top-right
-    r : Union[Tensor,None] = None  # right
-    br : Union[Tensor,None] = None # bottom-right
-    b : Union[Tensor,None] = None  # bottom
-    bl : Union[Tensor,None] = None # bottom-left
-    l : Union[Tensor,None] = None  # left
+    tl : Union[Tensor, None] = None  # top-left
+    t  : Union[Tensor, None] = None  # top
+    tr : Union[Tensor, None] = None  # top-right
+    r  : Union[Tensor, None] = None  # right
+    br : Union[Tensor, None] = None  # bottom-right
+    b  : Union[Tensor, None] = None  # bottom
+    bl : Union[Tensor, None] = None  # bottom-left
+    l  : Union[Tensor, None] = None  # left
 
 
 @dataclass()
 class EnvCTM_projectors():
     r""" Dataclass for CTM projectors associated with Peps lattice site. """
-    hlt : Union[Tensor,None] = None  # horizontal left top
-    hlb : Union[Tensor,None] = None  # horizontal left bottom
-    hrt : Union[Tensor,None] = None  # horizontal right top
-    hrb : Union[Tensor,None] = None  # horizontal right bottom
-    vtl : Union[Tensor,None] = None  # vertical top left
-    vtr : Union[Tensor,None] = None  # vertical top right
-    vbl : Union[Tensor,None] = None  # vertical bottom left
-    vbr : Union[Tensor,None] = None  # vertical bottom right
+    hlt : Union[Tensor, None] = None  # horizontal left top
+    hlb : Union[Tensor, None] = None  # horizontal left bottom
+    hrt : Union[Tensor, None] = None  # horizontal right top
+    hrb : Union[Tensor, None] = None  # horizontal right bottom
+    vtl : Union[Tensor, None] = None  # vertical top left
+    vtr : Union[Tensor, None] = None  # vertical top right
+    vbl : Union[Tensor, None] = None  # vertical bottom left
+    vbr : Union[Tensor, None] = None  # vertical bottom right
 
 
 class CTMRG_out(NamedTuple):

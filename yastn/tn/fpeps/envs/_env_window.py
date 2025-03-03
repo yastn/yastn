@@ -31,7 +31,7 @@ class EnvWindow:
         self.yrange = yrange
         self.Nx = self.xrange[1] - self.xrange[0]
         self.Ny = self.yrange[1] - self.yrange[0]
-        self.offset = 1  #  for mpo tensor position; extra tensor in the bounary
+        self.offset = 1  #  for mpo tensor position; extra tensor in the boundary
 
         if env_ctm.nn_site((xrange[0], yrange[0]), (0, 0)) is None or \
            env_ctm.nn_site((xrange[1] - 1, yrange[1] - 1), (0, 0)) is None:
