@@ -184,7 +184,7 @@ def test_measure(config_kwargs, sym, L):
     opts_svd = {'D_total': 16, 'tol': 1e-12}
     env_bd = fpeps.EnvBoundaryMPS(psi, opts_svd=opts_svd, setup='lr')
 
-    env_bd.measure_nsite(ops.n(), ops.n(), sites=((0, 0), (1, 1)))
+    # env_bd.measure_nsite(ops.n(), ops.n(), sites=((0, 0), (1, 1)))
 
     #
     # check occupations

@@ -667,13 +667,13 @@ class EnvCTM(Peps):
         if horizontal:
             vr = env_win[xs[0], 't']
             tm = env_win[xs[0], 'h']
-            vl = env_win[xs[0], 'b']
+            vl = env_win[xs[0], 'b'].conj()
             axes_op = 'b0'
             axes_string = ('b0', 'k2', 'k4')
         else:  # vertical
             vr = env_win[ys[0], 'l']
             tm = env_win[ys[0], 'v']
-            vl = env_win[ys[0], 'r']
+            vl = env_win[ys[0], 'r'].conj()
             axes_op = 'k1'
             axes_string = ('k1', 'k4', 'b3')
 
