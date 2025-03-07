@@ -402,7 +402,6 @@ class EnvCTM(Peps):
             H = mps.Mps(N=self.Ny)
             for ny in range(self.Ny):
                 H.A[ny] = self[n, ny].b.transpose(axes=(2, 1, 0))
-            H = H.conj()
         elif dirn == 'r':
             H = mps.Mps(N=self.Nx)
             for nx in range(self.Nx):
@@ -415,7 +414,6 @@ class EnvCTM(Peps):
             H = mps.Mps(N=self.Nx)
             for nx in range(self.Nx):
                 H.A[nx] = self[nx, n].l.transpose(axes=(2, 1, 0))
-            H = H.conj()
         return H
 
     def measure_1site(self, O, site=None) -> dict:

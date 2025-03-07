@@ -229,8 +229,8 @@ class Peps():
             for nx in range(self.Nx):
                 site = (nx, n)
                 psi = self[site]
-                op.A[nx] = psi if psi.ndim == 4 else \
-                           DoublePepsTensor(bra=psi, ket=psi)
+                op.A[nx] = psi.transpose(axes=(0, 3, 2, 1)) if psi.ndim == 4 else \
+                           DoublePepsTensor(bra=psi, ket=psi).transpose(axes=(0, 3, 2, 1))
         return op
 
 
