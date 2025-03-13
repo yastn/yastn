@@ -687,9 +687,14 @@ class FixedPoint(torch.autograd.Function):
                 if prev_grad_tmp is not None:
                     grad_diff = torch.norm(grad_tmp[0] - prev_grad_tmp[0])
                     print("full grad diff", grad_diff)
+                    if grad_diff < 1e-10:
+                        print("The norm of the full grad diff is below 1e-10.")
+                        log.log(logging.INFO, f"Fixed_pt: The norm of the full grad diff is below 1e-10.")
+                        break
                     if diff_ave is not None:
                         if grad_diff > diff_ave:
-                            print("grad diff is no longer decreasing!")
+                            print("Full grad diff is no longer decreasing!")
+                            log.log(logging.INFO, f"Fixed_pt: Full grad diff is no longer decreasing.")
                             break
                         else:
                             diff_ave = alpha*grad_diff + (1-alpha)*diff_ave
