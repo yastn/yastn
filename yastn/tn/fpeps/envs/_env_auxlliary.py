@@ -68,60 +68,68 @@ def cut_into_hairs(A):
     return hl, hr
 
 
-def hair_t(A, ht=None, hl=None, hr=None):
+def hair_t(Abra, ht=None, hl=None, hr=None, Aket=None):
     """ top hair tensor """
-    A = A.unfuse_legs(axes=1)  # [t l] b r s
+    Abra = Abra.unfuse_legs(axes=1)  # [t l] b r s
+    Aket = Abra if Aket is None else Aket.unfuse_legs(axes=1)  # [t l] b r s
+
     if ht is None and hl is None and hr is None:
-        A = A.fuse_legs(axes=((0, 2, 3), 1))  # [[t l] r s] b
-        return tensordot(A.conj(), A, axes=(0, 0))  # b' b
-    Af = A.transpose(axes=(2, 0, 1, 3)) if hr is None else tensordot(hr, A, axes=(1, 2))  # r' [t l] b s
+        return tensordot(Abra.conj(), Aket, axes=((0, 2, 3), (0, 2, 3)))  # b' b
+
+    Af = Aket.transpose(axes=(2, 0, 1, 3)) if hr is None else tensordot(hr, Aket, axes=(1, 2))  # r' [t l] b s
     Af = Af.unfuse_legs(axes=1)  # r' t l b s
     Af = Af.transpose(axes=(2, 0, 1, 3, 4)) if hl is None else tensordot(hl, Af, axes=(1, 2))  # l' r' t  b s
     Af = Af.transpose(axes=(2, 0, 1, 3, 4)) if ht is None else tensordot(ht, Af, axes=(1, 2))  # t' l' r' b s
     Af = Af.fuse_legs(axes=((0, 1), 2, 4, 3))  # [t' l'] r' s b
-    return tensordot(A.conj(), Af, axes=((0, 2, 3), (0, 1, 2)))  # b' b
+    return tensordot(Abra.conj(), Af, axes=((0, 2, 3), (0, 1, 2)))  # b' b
 
 
-def hair_l(A, ht=None, hl=None, hb=None):  # A = [t l] [b r] s
+def hair_l(Abra, ht=None, hl=None, hb=None, Aket=None):  # A = [t l] [b r] s
     """ left hair tensor """
-    A = A.unfuse_legs(axes=1)  # [t l] b r s
+    Abra = Abra.unfuse_legs(axes=1)  # [t' l'] b' r' s'
+    Aket = Abra if Aket is None else Aket.unfuse_legs(axes=1)  # [t l] b r s
+
     if ht is None and hl is None and hb is None:
-        A = A.fuse_legs(axes=((0, 1, 3), 2))  # [[t l] b s] r
-        return tensordot(A.conj(), A, axes=(0, 0))  # r' r
-    Af = A.transpose(axes=(1, 0, 2, 3)) if hb is None else tensordot(hb, A, axes=(1, 1))  # b' [t l] r s
+        return tensordot(Abra.conj(), Aket, axes=((0, 1, 3), (0, 1, 3)))  # r' r
+
+    Af = Aket.transpose(axes=(1, 0, 2, 3)) if hb is None else tensordot(hb, Aket, axes=(1, 1))  # b' [t l] r s
     Af = Af.unfuse_legs(axes=1)  # b' t l r s
     Af = Af.transpose(axes=(2, 0, 1, 3, 4)) if hl is None else tensordot(hl, Af, axes=(1, 2))  # l' b' t  r s
     Af = Af.transpose(axes=(2, 0, 1, 3, 4)) if ht is None else tensordot(ht, Af, axes=(1, 2))  # t' l' b' r s
     Af = Af.fuse_legs(axes=((0, 1), 2, 4, 3))  # [t' l'] b' s r
-    return tensordot(A.conj(), Af, axes=((0, 1, 3), (0, 1, 2)))  # r' r
+    return tensordot(Abra.conj(), Af, axes=((0, 1, 3), (0, 1, 2)))  # r' r
 
 
-def hair_b(A, hl=None, hb=None, hr=None):  # A = [t l] [b r] s
+def hair_b(Abra, hl=None, hb=None, hr=None, Aket=None):  # A = [t l] [b r] s
     """ bottom hair tensor """
-    A = A.unfuse_legs(axes=0)  # t l [b r] s
+    Abra = Abra.unfuse_legs(axes=0)  # t l [b r] s
+    Aket = Abra if Aket is None else Aket.unfuse_legs(axes=0)  # t l [b r] s
+
     if hl is None and hb is None and hr is None:
-        A = A.fuse_legs(axes=(0, (1, 2, 3)))  # t [l [b r] s]
-        return tensordot(A.conj(), A, axes=(1, 1))  # t' t
-    Af = A.transpose(axes=(0, 2, 3, 1)) if hl is None else tensordot(A, hl, axes=(1, 1))  # t [b r] s l'
+        return tensordot(Abra.conj(), Aket, axes=((1, 2, 3), (1, 2, 3)))  # t' t
+
+    Af = Aket.transpose(axes=(0, 2, 3, 1)) if hl is None else tensordot(Aket, hl, axes=(1, 1))  # t [b r] s l'
     Af = Af.unfuse_legs(axes=1)  # t b r s l'
     Af = Af.transpose(axes=(0, 2, 3, 4, 1)) if hb is None else tensordot(Af, hb, axes=(1, 1))  # t r s l' b'
     Af = Af.transpose(axes=(0, 2, 3, 4, 1)) if hr is None else tensordot(Af, hr, axes=(1, 1))  # t s l' b' r'
     Af = Af.fuse_legs(axes=(2, (3, 4), 1, 0))  # l' [b' r'] s t
-    return tensordot(A.conj(), Af, axes=((1, 2, 3), (0, 1, 2)))  # t' t
+    return tensordot(Abra.conj(), Af, axes=((1, 2, 3), (0, 1, 2)))  # t' t
 
 
-def hair_r(A, ht=None, hb=None, hr=None):  # A = [t l] [b r] s
+def hair_r(Abra, ht=None, hb=None, hr=None, Aket=None):  # A = [t l] [b r] s
     """ right hair tensor """
-    A = A.unfuse_legs(axes=0)  # t l [b r] s
+    Abra = Abra.unfuse_legs(axes=0)  # t l [b r] s
+    Aket = Abra if Aket is None else Aket.unfuse_legs(axes=0)  # t l [b r] s
+
     if ht is None and hb is None and hr is None:
-        A = A.fuse_legs(axes=(1, (0, 2, 3)))  # l [t [b r] s]
-        return tensordot(A.conj(), A, axes=(1, 1))  # l' l
-    Af = A if ht is None else tensordot(ht, A, axes=(1, 0))  # t' l [b r] s
+        return tensordot(Abra.conj(), Aket, axes=((0, 2, 3), (0, 2, 3)))  # l' l
+
+    Af = Aket if ht is None else tensordot(ht, Aket, axes=(1, 0))  # t' l [b r] s
     Af = Af.unfuse_legs(axes=2)  # t' l b r s
     Af = Af.transpose(axes=(3, 0, 1, 2, 4)) if hr is None else tensordot(hr, Af, axes=(1, 3))  # r' t' l b s
     Af = Af.transpose(axes=(3, 0, 1, 2, 4)) if hb is None else tensordot(hb, Af, axes=(1, 3))  # b' r' t' l s
     Af = Af.fuse_legs(axes=((0, 1), 2, 4, 3))  # [b' r'] t' s t
-    return tensordot(A.conj(), Af, axes=((2, 0, 3), (0, 1, 2)))  # l' l
+    return tensordot(Abra.conj(), Af, axes=((2, 0, 3), (0, 1, 2)))  # l' l
 
 
 def cor_tl(A_bra, ht=None, hl=None, A_ket=None):  # A -> [t l] [b r] s
