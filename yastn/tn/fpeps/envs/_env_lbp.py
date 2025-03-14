@@ -211,7 +211,9 @@ class EnvLBP(Peps):
         """
         #
         env_tmp = EnvLBP(self.psi, init=None)  # empty environments
-        diffs = [self.update_bond(bond, env_tmp=env_tmp) for bond in self.bonds()]
+        diffs  = [self.update_bond(bond, env_tmp=env_tmp) for bond in self.bonds()]
+        diffs += [self.update_bond(bond[::-1], env_tmp=env_tmp) for bond in self.bonds()]
+
         update_old_env_(self, env_tmp)
         return max(diffs)
 
@@ -222,32 +224,30 @@ class EnvLBP(Peps):
 
         bond = Bond(*bond)
         dirn, l_ordered = env.nn_bond_type(bond)
-
-
-        s0, s1 = bond if l_ordered else bond[::-1]
-        ten0, ten1 = env.psi[s0], env.psi[s1]
-        env0, env1 = env[s0], env[s1]
+        s0, s1 = bond
+        ten0 = env.psi[s0]
+        env0 = env[s0]
 
         if dirn == 'h' and l_ordered:
             new_l = hair_l(ten0.bra, ht=env0.t, hl=env0.l, hb=env0.b, Aket=ten0.ket)
             new_l = new_l / new_l.norm()
+            diff = (env[s1].l - new_l).norm()
             env_tmp[s1].l = new_l
-            diff = (env1.l - new_l).norm()
-
-            new_r = hair_r(ten1.bra, ht=env1.t, hr=env1.r, hb=env1.b, Aket=ten1.ket)
+        elif dirn == 'h' and not l_ordered:
+            new_r = hair_r(ten0.bra, ht=env0.t, hb=env0.b, hr=env0.r, Aket=ten0.ket)
             new_r = new_r / new_r.norm()
-            env_tmp[s0].r = new_r
-            diff = (env0.r - new_r).norm()
-        else:  # dirn == 'v':
+            diff = (env[s1].r - new_r).norm()
+            env_tmp[s1].r = new_r
+        elif dirn == 'v' and l_ordered:
             new_t = hair_t(ten0.bra, ht=env0.t, hl=env0.l, hr=env0.r, Aket=ten0.ket)
             new_t = new_t / new_t.norm()
+            diff = (env[s1].t - new_t).norm()
             env_tmp[s1].t = new_t
-            diff = (env1.t - new_t).norm()
-
-            new_b = hair_b(ten1.bra, hl=env1.l, hr=env1.r, hb=env1.b, Aket=ten1.ket)
+        else: # dirn == 'v' and not l_ordered:
+            new_b = hair_b(ten0.bra, hl=env0.l, hb=env0.b, hr=env0.r, Aket=ten0.ket)
             new_b = new_b / new_b.norm()
-            diff = (env0.b - new_b).norm()
-            env_tmp[s0].b = new_b
+            diff = (env[s1].b - new_b).norm()
+            env_tmp[s1].b = new_b
         return diff
 
 

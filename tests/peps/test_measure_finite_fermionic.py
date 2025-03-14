@@ -270,5 +270,73 @@ def test_measure(config_kwargs, sym, L):
         assert abs(v1 - sign * measure_rdm_2x2(Site(0, 0), env_ctm.psi.ket, env_ctm, operators)) < tol
 
 
+@pytest.mark.parametrize("sym", ["U1"])
+def test_measure_lbp(config_kwargs, sym, L=3):
+    """
+    Test calculation of fermionic exceptation values with CTM
+    using finite PEPS and shallow circuit.
+    """
+    # work with spinless fermions
+    ops = yastn.operators.SpinlessFermions(sym=sym, **config_kwargs)
+    # and L x L system
+    g = fpeps.SquareLattice(dims=(L, L), boundary='obc')
+    s2i = {site: i for i, site in enumerate(g.sites())}  # linear mps order
+    #
+    # we will initialize product state near/at half-filling
+    occs_init = {}  # predefine occupation for a few L's
+    occs_init[3] = {(0, 0): 1, (0, 1): 1, (0, 2): 1,
+                    (1, 0): 0, (1, 1): 0, (1, 2): 1,
+                    (2, 0): 1, (2, 1): 0, (2, 2): 0}
+    #
+    # and apply a single layer of hopping gates with large random angles
+    ops.random_seed(seed=0)
+    angles  = [(((0, 0), (1, 0)), 0.1 + 1j * ops.config.backend.rand(1) * math.pi / 2),
+               (((1, 0), (2, 0)), 0.1 + 1j * ops.config.backend.rand(1) * math.pi / 2),
+               (((1, 0), (1, 1)), 0.1 + 1j * ops.config.backend.rand(1) * math.pi / 2),
+               (((1, 1), (1, 2)), 0.1 + 1j * ops.config.backend.rand(1) * math.pi / 2),
+               (((0, 2), (1, 2)), 0.1 + 1j * ops.config.backend.rand(1) * math.pi / 2),
+               (((1, 2), (2, 2)), 0.1 + 1j * ops.config.backend.rand(1) * math.pi / 2)]
+    #
+    phi = generate_mps(ops, occs_init[L], angles, s2i)
+    psi = generate_peps(g, ops, occs_init[L], angles)
+    #
+    env_lbp = fpeps.EnvLBP(psi)
+    info = env_lbp.lbp_(max_sweeps=10, diff_tol=1e-10)
+    assert info.converged and info.sweeps == 5
+    #
+    # check occupations
+    occ_mps = mps.measure_1site(phi, ops.n(), phi)
+    assert abs(sum(occ_mps.values()) - sum(occs_init[L].values())) < tol
+    #
+    occ_lbp = env_lbp.measure_1site(ops.n())
+    print("Occupations:")
+    for site in g.sites():
+        error = abs(occ_mps[s2i[site]] - occ_lbp[site])
+        if error > tol:
+            print(site, occ_mps[s2i[site]], error)
+        assert error < tol
+    #
+    # check 2-point correlators density-density
+    nn_mps = mps.measure_2site(phi, ops.n(), ops.n(), phi, bonds='a')
+    nn_lbp = env_lbp.measure_nn(ops.n(), ops.n())
+    print('Density-density:')
+    for (s0, s1), v in nn_lbp.items():
+        error = abs(nn_mps[s2i[s0], s2i[s1]] - v)
+        if error > tol:
+            print(s0, s1, v, error)
+        assert error < tol
+    #
+    # # check 2-point correlators; hopping
+    cpc_mps = mps.measure_2site(phi, ops.cp(), ops.c(), phi, bonds='a')
+    cpc_lbp = env_lbp.measure_nn(ops.cp(), ops.c())
+    #
+    print('Hopping:')
+    for (s0, s1), v in cpc_lbp.items():
+        error = abs(cpc_mps[s2i[s0], s2i[s1]] - v)
+        if error > tol:
+            print(s0, s1, v, cpc_mps[s2i[s0], s2i[s1]], error)
+        assert error < tol
+
+
 if __name__ == '__main__':
     pytest.main([__file__, "-vs"])

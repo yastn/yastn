@@ -70,8 +70,8 @@ def cut_into_hairs(A):
 
 def hair_t(Abra, ht=None, hl=None, hr=None, Aket=None):
     """ top hair tensor """
-    Abra = Abra.unfuse_legs(axes=1).swap_gate(axes=(1, 2))  # [t l] b r s
-    Aket = Abra if Aket is None else Aket.unfuse_legs(axes=1).swap_gate(axes=(1, 2))  # [t l] b r s
+    Abra = Abra.unfuse_legs(axes=1)#.swap_gate(axes=(1, 2))  # [t l] b r s
+    Aket = Abra if Aket is None else Aket.unfuse_legs(axes=1)#.swap_gate(axes=(1, 2))  # [t l] b r s
 
     if ht is None and hl is None and hr is None:
         return tensordot(Abra.conj(), Aket, axes=((0, 2, 3), (0, 2, 3)))  # b' b
@@ -118,8 +118,8 @@ def hair_b(Abra, hl=None, hb=None, hr=None, Aket=None):  # A = [t l] [b r] s
 
 def hair_r(Abra, ht=None, hb=None, hr=None, Aket=None):  # A = [t l] [b r] s
     """ right hair tensor """
-    Abra = Abra.unfuse_legs(axes=0).swap_gate(axes=(0, 1))  # t l [b r] s
-    Aket = Abra if Aket is None else Aket.unfuse_legs(axes=0).swap_gate(axes=(0, 1))  # t l [b r] s
+    Abra = Abra.unfuse_legs(axes=0)#.swap_gate(axes=(0, 1))  # t l [b r] s
+    Aket = Abra if Aket is None else Aket.unfuse_legs(axes=0)#.swap_gate(axes=(0, 1))  # t l [b r] s
 
     if ht is None and hb is None and hr is None:
         return tensordot(Abra.conj(), Aket, axes=((0, 2, 3), (0, 2, 3)))  # l' l
