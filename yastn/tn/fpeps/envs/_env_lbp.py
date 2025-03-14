@@ -153,6 +153,8 @@ class EnvLBP(Peps):
 
         if O.ndim == 2 and P.ndim == 2:
             G0, G1 = gate_product_operator(O, P, l_ordered, f_ordered)
+        elif O.ndim == 3 and P.ndim == 3:
+            G0, G1 = gate_fix_order(O, P, l_ordered, f_ordered)
 
         if dirn == 'h':
             tmp0 = hair_l(ten0.bra, ht=env0.t, hl=env0.l, hb=env0.b, Aket=ten0.ket)
@@ -160,34 +162,34 @@ class EnvLBP(Peps):
             val_no = vdot(tmp0, tmp1, conj=(0, 0))
 
             if O.ndim <= 3:
-                ten0.ket = apply_gate_onsite(ten0.ket, G0, dirn='l')
-            else:
-                ten0 = O
+                Aket0 = apply_gate_onsite(ten0.ket, G0, dirn='l')
+            # else:
+            #     ten0 = O
             if P.ndim <= 3:
-                ten1.ket = apply_gate_onsite(ten1.ket, G1, dirn='r')
-            else:
-                ten1 = P
+                Aket1 = apply_gate_onsite(ten1.ket, G1, dirn='r')
+            # else:
+            #     ten1 = P
 
-            tmp0 = hair_l(ten0.bra, ht=env0.t, hl=env0.l, hb=env0.b, Aket=ten0.ket)
-            tmp1 = hair_r(ten1.bra, ht=env1.t, hr=env1.r, hb=env1.b, Aket=ten1.ket)
+            tmp0 = hair_l(ten0.bra, ht=env0.t, hl=env0.l, hb=env0.b, Aket=Aket0)
+            tmp1 = hair_r(ten1.bra, ht=env1.t, hr=env1.r, hb=env1.b, Aket=Aket1)
             val_op = vdot(tmp0, tmp1, conj=(0, 0))
         else:  # dirn == 'v':
-            tmp0 = hair_t(ten0.ket, ht=env0.t, hl=env0.l, hr=env0.r)
-            tmp1 = hair_b(ten1.ket, hl=env1.l, hr=env1.r, hb=env1.b)
+            tmp0 = hair_t(ten0.bra, ht=env0.t, hl=env0.l, hr=env0.r, Aket=ten0.ket)
+            tmp1 = hair_b(ten1.bra, hl=env1.l, hr=env1.r, hb=env1.b, Aket=ten1.ket)
             val_no = vdot(tmp0, tmp1, conj=(0, 0))
 
             if O.ndim <= 3:
-                ten0.ket = apply_gate_onsite(ten0.ket, G0, dirn='t')
-            else:
-                ten0 = O
+                Aket0 = apply_gate_onsite(ten0.ket, G0, dirn='t')
+            # else:
+            #     ten0 = O
 
             if P.ndim <= 3:
-                ten1.ket = apply_gate_onsite(ten1.ket, G1, dirn='b')
-            else:
-                ten1 = P
+                Aket1 = apply_gate_onsite(ten1.ket, G1, dirn='b')
+            # else:
+            #     ten1 = P
 
-            tmp0 = hair_t(ten0.ket, ht=env0.t, hl=env0.l, hr=env0.r)
-            tmp1 = hair_b(ten1.ket, hl=env1.l, hr=env1.r, hb=env1.b)
+            tmp0 = hair_t(ten0.bra, ht=env0.t, hl=env0.l, hr=env0.r, Aket=Aket0)
+            tmp1 = hair_b(ten1.bra, hl=env1.l, hr=env1.r, hb=env1.b, Aket=Aket1)
             val_op = vdot(tmp0, tmp1, conj=(0, 0))
 
         return val_op / val_no
@@ -220,26 +222,32 @@ class EnvLBP(Peps):
 
         bond = Bond(*bond)
         dirn, l_ordered = env.nn_bond_type(bond)
+
+
         s0, s1 = bond if l_ordered else bond[::-1]
         ten0, ten1 = env.psi[s0], env.psi[s1]
         env0, env1 = env[s0], env[s1]
 
-        if dirn == 'h':
+        if dirn == 'h' and l_ordered:
             new_l = hair_l(ten0.bra, ht=env0.t, hl=env0.l, hb=env0.b, Aket=ten0.ket)
-            new_r = hair_r(ten1.bra, ht=env1.t, hr=env1.r, hb=env1.b, Aket=ten1.ket)
             new_l = new_l / new_l.norm()
-            new_r = new_r / new_r.norm()
-            diff = max((env1.l - new_l).norm(), (env0.r - new_r).norm())
-            env_tmp[s0].r = new_r
             env_tmp[s1].l = new_l
+            diff = (env1.l - new_l).norm()
+
+            new_r = hair_r(ten1.bra, ht=env1.t, hr=env1.r, hb=env1.b, Aket=ten1.ket)
+            new_r = new_r / new_r.norm()
+            env_tmp[s0].r = new_r
+            diff = (env0.r - new_r).norm()
         else:  # dirn == 'v':
             new_t = hair_t(ten0.bra, ht=env0.t, hl=env0.l, hr=env0.r, Aket=ten0.ket)
-            new_b = hair_b(ten1.bra, hl=env1.l, hr=env1.r, hb=env1.b, Aket=ten1.ket)
             new_t = new_t / new_t.norm()
-            new_b = new_b / new_b.norm()
-            diff = max((env1.t - new_t).norm(), (env0.b - new_b).norm())
-            env_tmp[s0].b = new_b
             env_tmp[s1].t = new_t
+            diff = (env1.t - new_t).norm()
+
+            new_b = hair_b(ten1.bra, hl=env1.l, hr=env1.r, hb=env1.b, Aket=ten1.ket)
+            new_b = new_b / new_b.norm()
+            diff = (env0.b - new_b).norm()
+            env_tmp[s0].b = new_b
         return diff
 
 
@@ -251,41 +259,35 @@ class EnvLBP(Peps):
 
             If dirn == 'h':
 
-                tl═══t═══════t═══tr
-                ║    ║       ║    ║
+                     t       t
+                     ║       ║
                 l════Q0══  ══Q1═══r
-                ║    ║       ║    ║
-                bl═══b═══════b═══br
+                     ║       ║
+                     b       b
 
 
             If dirn == 'v':
 
-                tl═══t═══tr
-                ║    ║    ║
+                     t
+                     ║
                 l═══0Q0═══r
-                ║    ╳    ║
+                     ╳
                 l═══1Q1═══r
-                ║    ║    ║
-                bl═══b═══br
+                     ║
+                     b
         """
         env0, env1 = self[s0], self[s1]
         if dirn == "h":
             assert self.psi.nn_site(s0, (0, 1)) == s1
-            vecl = append_vec_tl(Q0, Q0, env0.l @ (env0.tl @ env0.t))
-            vecl = tensordot(env0.b @ env0.bl, vecl, axes=((2, 1), (0, 1)))
-            vecr = append_vec_br(Q1, Q1, env1.r  @ (env1.br @ env1.b))
-            vecr = tensordot(env1.t @ env1.tr, vecr, axes=((2, 1), (0, 1)))
-            g = tensordot(vecl, vecr, axes=((0, 1), (1, 0)))  # [rr rr'] [ll ll']
+            vecl = hair_l(Q0, hl=env0.l, ht=env0.t, hb=env0.b).T
+            vecr = hair_r(Q1, hr=env1.r, ht=env1.t, hb=env1.b).T
+            g = (vecl, vecr)  # ([ll ll'] [rr rr'])
         else: # dirn == "v":
             assert self.psi.nn_site(s0, (1, 0)) == s1
-            vect = append_vec_tl(Q0, Q0, env0.l @ (env0.tl @ env0.t))
-            vect = tensordot(vect, env0.tr @ env0.r, axes=((2, 3), (0, 1)))
-            vecb = append_vec_br(Q1, Q1, env1.r @ (env1.br @ env1.b))
-            vecb = tensordot(vecb, env1.bl @ env1.l, axes=((2, 3), (0, 1)))
-            g = tensordot(vect, vecb, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
-
-        g = g / g.trace(axes=(0, 1)).to_number()
-        return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
+            vect = hair_t(Q0, hl=env0.l, ht=env0.t, hr=env0.r).T
+            vecb = hair_r(Q1, hr=env1.r, hb=env1.b, hl=env1.l).T
+            g = (vecb, vect)   # ([bb bb'] [tt tt'])
+        return g
 
 
     def lbp_(env, max_sweeps=1, iterator_step=None, diff_tol=None):

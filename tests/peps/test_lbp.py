@@ -83,12 +83,16 @@ def test_lbp_measure_2x1(config_kwargs):
             val = -1 / 3  #  result of <psi | cs_0+ cs_1 | psi>
             for s in ['u', 'd']:
                 bond = [*g.sites()]
-                print(env.measure_nn(ops.cp(s), ops.c(s), bond=bond), val)
-                # assert abs(env.measure_nn(ops.cp(s), ops.c(s), bond=bond) - val) < tol
-                # assert abs(env.measure_nn(ops.c(s), ops.cp(s), bond=bond[::-1]) - (-val)) < tol
-                # assert abs(env.measure_nn(ops.c(s), ops.cp(s), bond=bond) - (-val.conjugate())) < tol
-                # assert abs(env.measure_nn(ops.cp(s), ops.c(s), bond=bond[::-1]) - (val.conjugate())) < tol
+                assert abs(env.measure_nn(ops.cp(s), ops.c(s), bond=bond) - val) < tol
+                assert abs(env.measure_nn(ops.c(s), ops.cp(s), bond=bond[::-1]) - (-val)) < tol
+                assert abs(env.measure_nn(ops.c(s), ops.cp(s), bond=bond) - (-val.conjugate())) < tol
+                assert abs(env.measure_nn(ops.cp(s), ops.c(s), bond=bond[::-1]) - (val.conjugate())) < tol
 
+            s0, s1 = g.sites()
+            assert abs(env.measure_1site(ops.n('u'), site=s0) - 1 / 3) < tol
+            assert abs(env.measure_1site(ops.n('d'), site=s0) - 2 / 3) < tol
+            assert abs(env.measure_1site(ops.n('u'), site=s1) - 2 / 3) < tol
+            assert abs(env.measure_1site(ops.n('d'), site=s1) - 1 / 3) < tol
 
             # example that is testing auxlliary leg swap-gate in the initialization
             # it has non-trivial charge carried by auxlliary leg
@@ -124,11 +128,13 @@ def test_lbp_measure_2x1(config_kwargs):
                     # no need to converge ctmrg_ in this example, but we can do it anyway
                     env.lbp_(max_sweeps=2)
                     bond = [*g.sites()]
-                    print(env.measure_nn(ops.cp('u'), ops.c('u'), bond=bond), val)
-                    # assert abs(env.measure_nn(ops.cp('u'), ops.c('u'), bond=bond) - val) < tol
-                    # assert abs(env.measure_nn(ops.c('u'), ops.cp('u'), bond=bond[::-1]) - (-val)) < tol
-                    # assert abs(env.measure_nn(ops.c('u'), ops.cp('u'), bond=bond) - (-val.conjugate())) < tol
-                    # assert abs(env.measure_nn(ops.cp('u'), ops.c('u'), bond=bond[::-1]) - (val.conjugate())) < tol
+                    assert abs(env.measure_nn(ops.cp('u'), ops.c('u'), bond=bond) - val) < tol
+                    assert abs(env.measure_nn(ops.c('u'), ops.cp('u'), bond=bond[::-1]) - (-val)) < tol
+                    assert abs(env.measure_nn(ops.c('u'), ops.cp('u'), bond=bond) - (-val.conjugate())) < tol
+                    assert abs(env.measure_nn(ops.cp('u'), ops.c('u'), bond=bond[::-1]) - (val.conjugate())) < tol
+
+                    assert abs(env.measure_1site(ops.n('u'), site=(0, 0)) - 0.5) < tol
+                    assert abs(env.measure_1site(ops.n('d'), site=(0, 0)) - 1.0) < tol
 
 
 if __name__ == '__main__':
