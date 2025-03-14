@@ -798,6 +798,8 @@ class EnvCTM(Peps):
         env_win = EnvWindow(self, xrange, yrange)
         return env_win.sample(projectors, number, opts_svd, opts_var, progressbar, return_info)
 
+    def update_bond_(env, bond):
+        pass
 
     def update_(env, opts_svd, method='2site', **kwargs):
         r"""

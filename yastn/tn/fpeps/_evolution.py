@@ -128,14 +128,26 @@ def apply_nn_truncate_optimize_(env, psi, gate, opts_svd,
 
     fgf = env.bond_metric(Q0, Q1, s0, s1, dirn)
 
+    if isinstance(fgf, tuple):  # bipartite bond metric
+        M0, M1, info = truncate_bipartite_(*fgf, R0, R1, opts_svd, pinv_cutoffs, info)
+    else:  # rank-4 bond metric
+        M0, M1, info = truncate_optimize_(fgf, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization, info)
+
+    psi[s0], psi[s1] = apply_bond_tensors(Q0f, Q1f, M0, M1, dirn)
+
+    env.update_bond_(gate.bond)
+    return Evolution_out(**info)
+
+
+def truncate_optimize_(fgf, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization, info):
     # enforce hermiticity
     fgfH = fgf.H
     nonhermitian = (fgf - fgfH).norm() / 2
     fgf = (fgf + fgfH) / 2
-
+    #
     fgf_norm = fgf.norm()
     info['nonhermitian_part'] = (nonhermitian / fgf_norm).item()
-
+    #
     # check metric tensor eigenvalues
     if fix_metric is not None:
         S, U = fgf.eigh(axes=(0, 1))
@@ -145,11 +157,11 @@ def apply_nn_truncate_optimize_(env, psi, gate, opts_svd,
         info['wrong_eigenvalues'] = sum(S._data < g_error).item() / len(S._data)
         S._data[S._data < g_error] = g_error * fix_metric
         fgf = U @ S @ U.H
-
+    #
     fRR = (R0 @ R1).fuse_legs(axes=[(0, 1)])
     fgRR = fgf @ fRR
     RRgRR = abs(vdot(fRR, fgRR).item())
-
+    #
     pinv_cutoffs = sorted(pinv_cutoffs)
     M0, M1 = R0, R1
     for opts in [opts_svd] if isinstance(opts_svd, dict) else opts_svd:
@@ -180,8 +192,46 @@ def apply_nn_truncate_optimize_(env, psi, gate, opts_svd,
         M0, M1 = Ms[key]
 
     M0, M1 = symmetrized_svd(M0, M1, opts, normalize=True)
-    psi[s0], psi[s1] = apply_bond_tensors(Q0f, Q1f, M0, M1, dirn)
-    return Evolution_out(**info)
+    return M0, M1, info
+
+
+def truncate_bipartite_(E0, E1, R0, R1, opts_svd, pinv_cutoffs, info):
+    #
+    E0 = (E0 + E0.H) / 2
+    E1 = (E1 + E1.H) / 2
+    #
+    RR = (R0 @ R1)
+    gRR = E0 @ RR @ E1
+    RRgRR = abs(vdot(RR, gRR).item())
+    #
+    F0 = R0.H @ E0 @ R0
+    F1 = R1 @ E1 @ R1.H
+    #
+    S0, U0 = F0.eigh_with_truncation(axes=(0, 1), tol=min(pinv_cutoffs))
+    S1, U1 = F1.eigh_with_truncation(axes=(0, 1), tol=min(pinv_cutoffs))
+    #
+    W0, W1 = symmetrized_svd(S0.sqrt() @ U0.H, U1 @ S1.sqrt(), opts_svd, normalize=False)
+    p0, p1 = R0 @ U0, U1.H @ R1
+    #
+    error2, s0max, s1max = 100, max(S0._data), max(S1._data)
+    vs0o, vs1o = len(S0._data) + 1, len(S1._data) + 1
+    for c_off in sorted(pinv_cutoffs):
+        vs0 = sum(S0._data > c_off * s0max).item()
+        vs1 = sum(S1._data > c_off * s1max).item()
+        if vs0 < vs0o or vs1 < vs1o:
+            vs0o, vs1o = vs0, vs1
+            M0_tmp = p0 @ S0.reciprocal(cutoff=c_off * s0max).sqrt() @ W0
+            M1_tmp = W1 @ S1.reciprocal(cutoff=c_off * s1max).sqrt() @ p1
+            delta = RR - M0_tmp @ M1_tmp
+            error2_tmp = abs(vdot(delta, E0 @ delta @ E1).item()) / RRgRR
+            if error2_tmp < error2:
+                M0, M1, error2, pinv_c = M0_tmp, M1_tmp, error2_tmp, c_off
+
+    info['best_method'] = 'bipartite'
+    info['truncation_errors'] = (error2,)
+    info['truncation_error'] = error2
+    info['pinv_cutoffs'] = pinv_c
+    return M0, M1, info
 
 
 def accumulated_truncation_error(infoss, statistics='mean'):

@@ -43,8 +43,6 @@ def test_lbp_measure_product(config_kwargs):
     assert all(abs(v - ez[s]) < tol for s, v in vals.items())
 
 
-
-
 def test_lbp_measure_2x1(config_kwargs):
     """ Initialize a product PEPS of 1x2 cells and perform a set of measurment. """
 

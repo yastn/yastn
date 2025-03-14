@@ -31,7 +31,6 @@ def test_evolution(config_kwargs):
     g_hop = fpeps.gates.gate_nn_hopping(t, dbeta / 2, I, ops.c(), ops.cp())
     gates = fpeps.gates.distribute(geometry, gates_nn=g_hop)
     #
-    #
     # time-evolve initial state
     #
     opts_svd = {"D_total": 4, 'tol': 1e-14}
@@ -71,10 +70,25 @@ def test_evolution(config_kwargs):
             assert info.min_eigenvalue is None
             assert info.wrong_eigenvalues is None
             assert 0. <= info.nonhermitian_part
-
+    #
     with pytest.raises(yastn.YastnError):
         fpeps.evolution_step_(env, gates, opts_svd=opts_svd, initialization='none')
         # initialization='none' not recognized. Should contain 'SVD' or 'EAT'.
+    #
+    # for bipartite environment
+    #
+    psi = fpeps.product_peps(geometry, ops.I())
+    env = fpeps.EnvLBP(psi)
+    infoss = []
+    for _ in range(steps):
+        infos = fpeps.evolution_step_(env, gates, opts_svd=opts_svd, initialization=initialization)
+        infoss.append(infos)
+
+    for infos in infoss:
+        assert len(infos) == 2 * ((Nx - 1) * Ny + (Ny - 1) * Nx)
+        for info, bond in zip(infos, psi.bonds() + psi.bonds(reverse=True)):
+            assert info.bond == bond
+            assert 0. <= info.truncation_error
 
 
 if __name__ == '__main__':

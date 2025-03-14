@@ -211,14 +211,18 @@ class EnvLBP(Peps):
         """
         #
         env_tmp = EnvLBP(self.psi, init=None)  # empty environments
-        diffs  = [self.update_bond(bond, env_tmp=env_tmp) for bond in self.bonds()]
-        diffs += [self.update_bond(bond[::-1], env_tmp=env_tmp) for bond in self.bonds()]
-
+        diffs  = [self.update_bond_(bond, env_tmp=env_tmp) for bond in self.bonds()]
         update_old_env_(self, env_tmp)
         return max(diffs)
 
 
-    def update_bond(env, bond, env_tmp=None):
+    def update_bond_(env, bond, env_tmp=None, two_ways=True):
+
+        if two_ways:
+            diffs = [env.update_bond_(bond, env_tmp=env_tmp, two_ways=False),
+                     env.update_bond_(bond[::-1], env_tmp=env_tmp, two_ways=False)]
+            return max(diffs)
+
         if env_tmp is None:
             env_tmp = env
 
@@ -231,22 +235,22 @@ class EnvLBP(Peps):
         if dirn == 'h' and l_ordered:
             new_l = hair_l(ten0.bra, ht=env0.t, hl=env0.l, hb=env0.b, Aket=ten0.ket)
             new_l = new_l / new_l.norm()
-            diff = (env[s1].l - new_l).norm()
+            diff = diff_beliefs(env[s1].l, new_l)
             env_tmp[s1].l = new_l
-        elif dirn == 'h' and not l_ordered:
+        if dirn == 'h' and not l_ordered:
             new_r = hair_r(ten0.bra, ht=env0.t, hb=env0.b, hr=env0.r, Aket=ten0.ket)
             new_r = new_r / new_r.norm()
-            diff = (env[s1].r - new_r).norm()
+            diff = diff_beliefs(env[s1].r, new_r)
             env_tmp[s1].r = new_r
-        elif dirn == 'v' and l_ordered:
+        if dirn == 'v' and l_ordered:
             new_t = hair_t(ten0.bra, ht=env0.t, hl=env0.l, hr=env0.r, Aket=ten0.ket)
             new_t = new_t / new_t.norm()
-            diff = (env[s1].t - new_t).norm()
+            diff = diff_beliefs(env[s1].t, new_t)
             env_tmp[s1].t = new_t
-        else: # dirn == 'v' and not l_ordered:
+        if dirn == 'v' and not l_ordered:
             new_b = hair_b(ten0.bra, hl=env0.l, hb=env0.b, hr=env0.r, Aket=ten0.ket)
             new_b = new_b / new_b.norm()
-            diff = (env[s1].b - new_b).norm()
+            diff = diff_beliefs(env[s1].b, new_b)
             env_tmp[s1].b = new_b
         return diff
 
@@ -279,14 +283,14 @@ class EnvLBP(Peps):
         env0, env1 = self[s0], self[s1]
         if dirn == "h":
             assert self.psi.nn_site(s0, (0, 1)) == s1
-            vecl = hair_l(Q0, hl=env0.l, ht=env0.t, hb=env0.b).T
+            vecl = hair_l(Q0, hl=env0.l, ht=env0.t, hb=env0.b)
             vecr = hair_r(Q1, hr=env1.r, ht=env1.t, hb=env1.b).T
-            g = (vecl, vecr)  # ([ll ll'] [rr rr'])
+            g = (vecl, vecr)  # (rr' rr,  ll ll')
         else: # dirn == "v":
             assert self.psi.nn_site(s0, (1, 0)) == s1
-            vect = hair_t(Q0, hl=env0.l, ht=env0.t, hr=env0.r).T
-            vecb = hair_r(Q1, hr=env1.r, hb=env1.b, hl=env1.l).T
-            g = (vecb, vect)   # ([bb bb'] [tt tt'])
+            vect = hair_t(Q0, hl=env0.l, ht=env0.t, hr=env0.r)
+            vecb = hair_b(Q1, hr=env1.r, hb=env1.b, hl=env1.l).T
+            g = (vect, vecb)  # (bb' bb,  tt tt')
         return g
 
 
@@ -341,3 +345,10 @@ def _lbp_(env, max_sweeps, iterator_step, diff_tol):
         if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
             yield LBP_out(sweeps=sweep, max_diff=max_diff, converged=converged)
     yield LBP_out(sweeps=sweep, max_diff=max_diff, converged=converged)
+
+
+def diff_beliefs(old, new):
+    try:
+        return (old - new).norm()
+    except YastnError:
+        return 1

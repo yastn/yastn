@@ -45,6 +45,8 @@ class EnvNTU:
                          'NNN++': self._g_NNNpp
                         }
 
+    def update_bond_(env, bond):
+        pass
 
     def bond_metric(self, Q0, Q1, s0, s1, dirn):
         r"""
