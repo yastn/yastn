@@ -290,7 +290,7 @@ class EnvLBP(Peps):
             m = {d: self.psi.nn_site(s0, d=d) for d in [(-1,0), (0,-1), (1,0), (1,1), (0,2), (-1,1)]}
             mm = dict(m)  # for testing for None
             tensors_from_psi(m, self.psi)
-            m = {k: v.ket if isinstance(v, DoublePepsTensor) else v for k, v in m.items()}
+            m = {k: (v.ket if isinstance(v, DoublePepsTensor) else v) for k, v in m.items()}
 
             sm = mm[0, -1]
             env_hl = hair_l(m[0, -1]) if sm is None else hair_l(m[0, -1], ht=self[sm].t, hl=self[sm].l, hb=self[sm].b)
@@ -316,14 +316,14 @@ class EnvLBP(Peps):
             m = {d: self.psi.nn_site(s0, d=d) for d in [(-1,0), (0,-1), (1,-1), (2,0), (1,1), (0,1)]}
             mm = dict(m)  # for testing for None
             tensors_from_psi(m, self.psi)
-            m = {k: v.ket if isinstance(v, DoublePepsTensor) else v for k, v in m.items()}
+            m = {k: (v.ket if isinstance(v, DoublePepsTensor) else v) for k, v in m.items()}
 
             sm = mm[-1, 0]
             env_ht = hair_t(m[-1, 0]) if sm is None else hair_t(m[-1, 0], ht=self[sm].t, hl=self[sm].l, hr=self[sm].r)
             sm = mm[2, 0]
             env_hb = hair_b(m[ 2, 0]) if sm is None else hair_b(m[ 2, 0], hl=self[sm].l, hb=self[sm].b, hr=self[sm].r)
-            env_t = edge_t(Q0, hair_t(m[-1, 0], ht=env_ht))  # [lt lt'] [bb bb'] [rt rt']
-            env_b = edge_b(Q1, hair_b(m[ 2, 0], hb=env_hb))  # [rb rb'] [tt tt'] [lb lb']
+            env_t = edge_t(Q0, ht=env_ht)  # [lt lt'] [bb bb'] [rt rt']
+            env_b = edge_b(Q1, hb=env_hb)  # [rb rb'] [tt tt'] [lb lb']
 
             sm = mm[1, -1]
             cbl = cor_bl(m[1, -1]) if sm is None else cor_bl(m[1, -1], hb=self[sm].b, hl=self[sm].l)
