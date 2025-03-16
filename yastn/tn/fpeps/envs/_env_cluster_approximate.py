@@ -72,6 +72,9 @@ class EnvApproximate:
     def __setitem__(self, key, value):
         self._envs[key] = value
 
+    def post_evolution_(env, bond, *kwargs):
+        pass
+
     def bond_metric(self, Q0, Q1, s0, s1, dirn):
         """
         Calculates bond metric. The environment size is controlled by ``which``.

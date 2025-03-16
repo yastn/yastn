@@ -302,7 +302,7 @@ def test_measure_lbp(config_kwargs, sym, L=3):
     #
     env_lbp = fpeps.EnvLBP(psi)
     info = env_lbp.lbp_(max_sweeps=10, diff_tol=1e-10)
-    assert info.converged and info.sweeps == 5
+    assert info.converged and info.sweeps < 10
     #
     # check occupations
     occ_mps = mps.measure_1site(phi, ops.n(), phi)

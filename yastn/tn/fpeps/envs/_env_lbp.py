@@ -14,22 +14,21 @@
 # ==============================================================================
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import NamedTuple, Union, Callable
-import logging
+from typing import NamedTuple, Union
 from .... import Tensor, ones, eye, YastnError, tensordot, vdot, ncon
 from .._peps import Peps, Peps2Layers, DoublePepsTensor
 from .._gates_auxiliary import apply_gate_onsite, gate_product_operator, gate_fix_order, match_ancilla
 from .._geometry import Bond
 from ._env_auxlliary import *
-from ._env_ctm import update_old_env_
+# from ._env_ctm import update_old_env_
 
 
 @dataclass()
 class EnvLBP_local():
     r"""
-    Dataclass for CTM environment tensors associated with Peps lattice site.
+    Dataclass for LBP environment tensors at a single Peps site on square lattice.
 
-    Contains fields ``tl``, ``t``, ``tr``, ``r``, ``br``, ``b``, ``bl``, ``l``
+    Contains fields ``t``,  ``l``, ``b``, ``r``
     """
     t  : Union[Tensor, None] = None  # top
     l  : Union[Tensor, None] = None  # left
@@ -44,22 +43,23 @@ class LBP_out(NamedTuple):
 
 
 class EnvLBP(Peps):
-    def __init__(self, psi, init='eye'):
+
+    def __init__(self, psi, init='eye', tol_positive=1e-12):
         r"""
         Environment used in LBP
 
         Parameters
         ----------
         psi: yastn.tn.Peps
-            PEPS lattice to be contracted using CTM.
+            PEPS lattice to be contracted using LBP.
             If ``psi`` has physical legs, a double-layer PEPS with no physical legs is formed.
 
         init: str
-            None, 'eye'. Initialization scheme, see :meth:`yastn.tn.fpeps.EnvCTM.reset_`.
-
+            None, 'eye'. Initialization scheme, see :meth:`yastn.tn.fpeps.EnvLBP.reset_`.
         """
         super().__init__(psi.geometry)
         self.psi = Peps2Layers(psi) if psi.has_physical() else psi
+        self.tol_positive = tol_positive
         if init not in (None, 'eye'):
             raise YastnError(f"EnvCTM {init=} not recognized. Should be 'eye' or None.")
         for site in self.sites():
@@ -70,7 +70,6 @@ class EnvLBP(Peps):
     @property
     def config(self):
         return self.psi.config
-
 
     def reset_(self, init='eye'):
         r"""
@@ -90,7 +89,6 @@ class EnvLBP(Peps):
                 tmp = tmp / tmp.norm()
                 setattr(self[site], dirn, tmp)
 
-
     def measure_1site(self, O, site=None) -> dict:
         r"""
         Calculate local expectation values within CTM environment.
@@ -101,7 +99,7 @@ class EnvLBP(Peps):
         Parameters
         ----------
         env: EnvCtm
-            Class containing CTM environment tensors along with lattice structure data.
+            Class containing LBP environment tensors along with lattice structure data.
 
         O: Tensor
             Single-site operator
@@ -126,7 +124,7 @@ class EnvLBP(Peps):
 
     def measure_nn(self, O, P, bond=None) -> dict:
         r"""
-        Calculate nearest-neighbor expectation values within CTM environment.
+        Calculate nearest-neighbor expectation values within LBP environment.
 
         Return a number if the nearest-neighbor ``bond`` is provided.
         If ``None``, returns a dictionary {bond: value} for all unique lattice bonds.
@@ -194,66 +192,55 @@ class EnvLBP(Peps):
 
         return val_op / val_no
 
-
-    def update_(self):
+    def update_(self) -> float:
         r"""
-        Perform one step of CTMRG update. Environment tensors are updated in place.
-
-        The function performs a CTMRG update for a square lattice using the corner transfer matrix
-        renormalization group (CTMRG) algorithm. The update is performed in two steps: a horizontal move
-        and a vertical move. The projectors for each move are calculated first, and then the tensors in
-        the CTM environment are updated using the projectors. The boundary conditions of the lattice
-        determine whether trivial projectors are needed for the move.
+        Perform one step of LBP update. Environment tensors are updated in place.
 
         Returns
         -------
-        proj: Peps structure loaded with CTM projectors related to all lattice site.
+        diff: maximal difference between belief tensors befor and after the update.
         """
         #
-        env_tmp = EnvLBP(self.psi, init=None)  # empty environments
-        diffs  = [self.update_bond_(bond, env_tmp=env_tmp) for bond in self.bonds()]
-        update_old_env_(self, env_tmp)
+        env_tmp = None  # EnvLBP(self.psi, init=None)  # empty environments
+        diffs  = [self.update_bond_(bond, env_tmp=env_tmp) for bond in self.bonds('h')]
+        diffs += [self.update_bond_(bond[::-1], env_tmp=env_tmp) for bond in self.bonds('h')[::-1]]
+        diffs += [self.update_bond_(bond, env_tmp=env_tmp) for bond in self.bonds('v')]
+        diffs += [self.update_bond_(bond[::-1], env_tmp=env_tmp) for bond in self.bonds('v')[::-1]]
+        #
+        # update_old_env_(self, env_tmp)
         return max(diffs)
 
-
-    def update_bond_(env, bond, env_tmp=None, two_ways=True):
-
-        if two_ways:
-            diffs = [env.update_bond_(bond, env_tmp=env_tmp, two_ways=False),
-                     env.update_bond_(bond[::-1], env_tmp=env_tmp, two_ways=False)]
-            return max(diffs)
-
+    def update_bond_(env, bond, env_tmp=None):
+        #
         if env_tmp is None:
-            env_tmp = env
+            env_tmp = env  # update env in-place
 
         bond = Bond(*bond)
         dirn, l_ordered = env.nn_bond_type(bond)
         s0, s1 = bond
-        ten0 = env.psi[s0]
-        env0 = env[s0]
+        ten0, env0 = env.psi[s0], env[s0]
 
         if dirn == 'h' and l_ordered:
             new_l = hair_l(ten0.bra, ht=env0.t, hl=env0.l, hb=env0.b, Aket=ten0.ket)
-            new_l = new_l / new_l.norm()
+            new_l = regularize_belief(new_l, env.tol_positive)
             diff = diff_beliefs(env[s1].l, new_l)
             env_tmp[s1].l = new_l
         if dirn == 'h' and not l_ordered:
             new_r = hair_r(ten0.bra, ht=env0.t, hb=env0.b, hr=env0.r, Aket=ten0.ket)
-            new_r = new_r / new_r.norm()
+            new_r = regularize_belief(new_r, env.tol_positive)
             diff = diff_beliefs(env[s1].r, new_r)
             env_tmp[s1].r = new_r
         if dirn == 'v' and l_ordered:
             new_t = hair_t(ten0.bra, ht=env0.t, hl=env0.l, hr=env0.r, Aket=ten0.ket)
-            new_t = new_t / new_t.norm()
+            new_t = regularize_belief(new_t, env.tol_positive)
             diff = diff_beliefs(env[s1].t, new_t)
             env_tmp[s1].t = new_t
         if dirn == 'v' and not l_ordered:
             new_b = hair_b(ten0.bra, hl=env0.l, hb=env0.b, hr=env0.r, Aket=ten0.ket)
-            new_b = new_b / new_b.norm()
+            new_b = regularize_belief(new_b, env.tol_positive)
             diff = diff_beliefs(env[s1].b, new_b)
             env_tmp[s1].b = new_b
         return diff
-
 
     def bond_metric(self, Q0, Q1, s0, s1, dirn):
         r"""
@@ -285,23 +272,30 @@ class EnvLBP(Peps):
             assert self.psi.nn_site(s0, (0, 1)) == s1
             vecl = hair_l(Q0, hl=env0.l, ht=env0.t, hb=env0.b)
             vecr = hair_r(Q1, hr=env1.r, ht=env1.t, hb=env1.b).T
+            # g = tensordot(vecl, vecr, axes=((), ()))
+            # g = g.fuse_legs(axes=((0, 3), (1, 2)))
             g = (vecl, vecr)  # (rr' rr,  ll ll')
         else: # dirn == "v":
             assert self.psi.nn_site(s0, (1, 0)) == s1
             vect = hair_t(Q0, hl=env0.l, ht=env0.t, hr=env0.r)
             vecb = hair_b(Q1, hr=env1.r, hb=env1.b, hl=env1.l).T
+            # g = tensordot(vect, vecb, axes=((), ()))
+            # g = g.fuse_legs(axes=((0, 3), (1, 2)))
             g = (vect, vecb)  # (bb' bb,  tt tt')
         return g
 
+    def post_evolution_(env, bond, **kwargs):
+        env.update_bond_(bond)
+        env.update_bond_(bond[::-1])
 
     def lbp_(env, max_sweeps=1, iterator_step=None, diff_tol=None):
         r"""
-        Perform CTMRG updates :meth:`yastn.tn.fpeps.EnvCTM.update_` until convergence.
-        Convergence can be measured based on singular values of CTM environment corner tensors.
+        Perform LBP updates :meth:`yastn.tn.fpeps.EnvLBP.update_` until convergence.
+        Convergence can be measured based on maximal difference between old and new tensors.
 
         Outputs iterator if ``iterator_step`` is given, which allows
         inspecting ``env``, e.g., calculating expectation values,
-        outside of ``ctmrg_`` function after every ``iterator_step`` sweeps.
+        outside of ``lbp_`` function after every ``iterator_step`` sweeps.
 
         Parameters
         ----------
@@ -313,7 +307,7 @@ class EnvLBP(Peps):
             The default is ``None``, in which case  ``ctmrg_`` sweeps are performed immediately.
 
         diff_tol: float
-            Convergence tolerance for the change of singular values of all corners in a single update.
+            Convergence tolerance for the change of belief tensors in one iteration.
             The default is None, in which case convergence is not checked and it is up to user to implement
             convergence check.
 
@@ -324,9 +318,9 @@ class EnvLBP(Peps):
         LBP_out(NamedTuple)
             NamedTuple including fields:
 
-                * ``sweeps`` number of performed ctmrg updates.
-                * ``max_dsv`` norm of singular values change in the worst corner in the last sweep.
-                * ``converged`` whether convergence based on ``corner_tol`` has been reached.
+                * ``sweeps`` number of performed lbp updates.
+                * ``max_diff`` maximal difference between old and new belief tensors.
+                * ``converged`` whether convergence based on ``diff_tol`` has been reached.
         """
         tmp = _lbp_(env, max_sweeps, iterator_step, diff_tol)
         return tmp if iterator_step else next(tmp)
@@ -347,8 +341,16 @@ def _lbp_(env, max_sweeps, iterator_step, diff_tol):
     yield LBP_out(sweeps=sweep, max_diff=max_diff, converged=converged)
 
 
+def regularize_belief(mat, tol):
+    """ Make matrix mat hermitian and positive, truncating eigenvalues at a given relative tolerance. """
+    mat = mat + mat.H
+    S, U = mat.eigh_with_truncation(axes=(0, 1), tol=tol)
+    S = S / S.norm()
+    return U @ S @ U.H
+
+
 def diff_beliefs(old, new):
     try:
         return (old - new).norm()
     except YastnError:
-        return 1
+        return 1.

@@ -135,7 +135,7 @@ def apply_nn_truncate_optimize_(env, psi, gate, opts_svd,
 
     psi[s0], psi[s1] = apply_bond_tensors(Q0f, Q1f, M0, M1, dirn)
 
-    env.update_bond_(gate.bond)
+    env.post_evolution_(gate.bond)
     return Evolution_out(**info)
 
 
@@ -228,8 +228,8 @@ def truncate_bipartite_(E0, E1, R0, R1, opts_svd, pinv_cutoffs, info):
                 M0, M1, error2, pinv_c = M0_tmp, M1_tmp, error2_tmp, c_off
 
     info['best_method'] = 'bipartite'
-    info['truncation_errors'] = (error2,)
-    info['truncation_error'] = error2
+    info['truncation_errors'] = {'bipartite': error2 ** 0.5}
+    info['truncation_error'] = error2 ** 0.5
     info['pinv_cutoffs'] = pinv_c
     return M0, M1, info
 
