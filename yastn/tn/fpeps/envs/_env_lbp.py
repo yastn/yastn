@@ -44,7 +44,7 @@ class LBP_out(NamedTuple):
 
 class EnvLBP(Peps):
 
-    def __init__(self, psi, init='eye', tol_positive=1e-12):
+    def __init__(self, psi, init='eye', tol_positive=1e-12, which="LBP"):
         r"""
         Environment used in LBP
 
@@ -60,6 +60,11 @@ class EnvLBP(Peps):
         super().__init__(psi.geometry)
         self.psi = Peps2Layers(psi) if psi.has_physical() else psi
         self.tol_positive = tol_positive
+
+        if which not in ('NN+LBP', 'LBP'):
+            raise YastnError(f" Type of EnvLBP bond_metric {which=} not recognized.")
+
+        self.which = which
         if init not in (None, 'eye'):
             raise YastnError(f"EnvCTM {init=} not recognized. Should be 'eye' or None.")
         for site in self.sites():
@@ -267,22 +272,70 @@ class EnvLBP(Peps):
                      ║
                      b
         """
-        env0, env1 = self[s0], self[s1]
-        if dirn == "h":
+        if dirn == "h" and self.which == "LBP":
             assert self.psi.nn_site(s0, (0, 1)) == s1
-            vecl = hair_l(Q0, hl=env0.l, ht=env0.t, hb=env0.b)
-            vecr = hair_r(Q1, hr=env1.r, ht=env1.t, hb=env1.b).T
-            # g = tensordot(vecl, vecr, axes=((), ()))
-            # g = g.fuse_legs(axes=((0, 3), (1, 2)))
-            g = (vecl, vecr)  # (rr' rr,  ll ll')
-        else: # dirn == "v":
+            vecl = hair_l(Q0, hl=self[s0].l, ht=self[s0].t, hb=self[s0].b)
+            vecr = hair_r(Q1, hr=self[s1].r, ht=self[s1].t, hb=self[s1].b).T
+            return (vecl, vecr)  # (rr' rr,  ll ll')
+
+        if dirn == "v" and self.which == "LBP":
             assert self.psi.nn_site(s0, (1, 0)) == s1
-            vect = hair_t(Q0, hl=env0.l, ht=env0.t, hr=env0.r)
-            vecb = hair_b(Q1, hr=env1.r, hb=env1.b, hl=env1.l).T
-            # g = tensordot(vect, vecb, axes=((), ()))
-            # g = g.fuse_legs(axes=((0, 3), (1, 2)))
-            g = (vect, vecb)  # (bb' bb,  tt tt')
-        return g
+            vect = hair_t(Q0, hl=self[s0].l, ht=self[s0].t, hr=self[s0].r)
+            vecb = hair_b(Q1, hr=self[s1].r, hb=self[s1].b, hl=self[s1].l).T
+            return (vect, vecb)  # (bb' bb,  tt tt')
+
+        if dirn == "h" and self.which == "NN+LBP":
+            assert self.psi.nn_site(s0, (0, 1)) == s1
+
+            m = {d: self.psi.nn_site(s0, d=d) for d in [(-1,0), (0,-1), (1,0), (1,1), (0,2), (-1,1)]}
+            mm = dict(m)  # for testing for None
+            tensors_from_psi(m, self.psi)
+            m = {k: v.ket if isinstance(v, DoublePepsTensor) else v for k, v in m.items()}
+
+            sm = mm[0, -1]
+            env_hl = hair_l(m[0, -1]) if sm is None else hair_l(m[0, -1], ht=self[sm].t, hl=self[sm].l, hb=self[sm].b)
+            sm = mm[0, 2]
+            env_hr = hair_r(m[0,  2]) if sm is None else hair_r(m[0,  2], ht=self[sm].t, hb=self[sm].b, hr=self[sm].r)
+            env_l = edge_l(Q0, hl=env_hl)  # [bl bl'] [rr rr'] [tl tl']
+            env_r = edge_r(Q1, hr=env_hr)  # [tr tr'] [ll ll'] [br br']
+
+            sm = mm[-1, 0]
+            ctl = cor_tl(m[-1, 0]) if sm is None else cor_tl(m[-1, 0], ht=self[sm].t, hl=self[sm].l)
+            sm = mm[-1, 1]
+            ctr = cor_tr(m[-1, 1]) if sm is None else cor_tr(m[-1, 1], ht=self[sm].t, hr=self[sm].r)
+            sm = mm[ 1, 1]
+            cbr = cor_br(m[ 1, 1]) if sm is None else cor_br(m[ 1, 1], hb=self[sm].b, hr=self[sm].r)
+            sm = mm[ 1, 0]
+            cbl = cor_bl(m[ 1, 0]) if sm is None else cor_bl(m[ 1, 0], hb=self[sm].b, hl=self[sm].l)
+
+            g = tensordot((cbr @ cbl) @ env_l, (ctl @ ctr) @ env_r, axes=((0, 2), (2, 0)))  # [rr rr'] [ll ll']
+            return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
+
+        if dirn == "v" and self.which == "NN+LBP":
+            assert self.psi.nn_site(s0, (1, 0)) == s1
+            m = {d: self.psi.nn_site(s0, d=d) for d in [(-1,0), (0,-1), (1,-1), (2,0), (1,1), (0,1)]}
+            mm = dict(m)  # for testing for None
+            tensors_from_psi(m, self.psi)
+            m = {k: v.ket if isinstance(v, DoublePepsTensor) else v for k, v in m.items()}
+
+            sm = mm[-1, 0]
+            env_ht = hair_t(m[-1, 0]) if sm is None else hair_t(m[-1, 0], ht=self[sm].t, hl=self[sm].l, hr=self[sm].r)
+            sm = mm[2, 0]
+            env_hb = hair_b(m[ 2, 0]) if sm is None else hair_b(m[ 2, 0], hl=self[sm].l, hb=self[sm].b, hr=self[sm].r)
+            env_t = edge_t(Q0, hair_t(m[-1, 0], ht=env_ht))  # [lt lt'] [bb bb'] [rt rt']
+            env_b = edge_b(Q1, hair_b(m[ 2, 0], hb=env_hb))  # [rb rb'] [tt tt'] [lb lb']
+
+            sm = mm[1, -1]
+            cbl = cor_bl(m[1, -1]) if sm is None else cor_bl(m[1, -1], hb=self[sm].b, hl=self[sm].l)
+            sm = mm[0, -1]
+            ctl = cor_tl(m[0, -1]) if sm is None else cor_tl(m[0, -1], ht=self[sm].t, hl=self[sm].l)
+            sm = mm[0,  1]
+            ctr = cor_tr(m[0,  1]) if sm is None else cor_tr(m[0,  1], ht=self[sm].t, hr=self[sm].r)
+            sm = mm[1,  1]
+            cbr = cor_br(m[1,  1]) if sm is None else cor_br(m[1,  1], hb=self[sm].b, hr=self[sm].r)
+
+            g = tensordot((cbl @ ctl) @ env_t, (ctr @ cbr) @ env_b, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
+            return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
 
     def post_evolution_(env, bond, **kwargs):
         env.update_bond_(bond)

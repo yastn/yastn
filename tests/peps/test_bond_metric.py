@@ -54,9 +54,13 @@ def test_spinless_infinite_approx(config_kwargs):
                                        opts_svd=opts_svd,
                                        update_sweeps=1)
 
-    envs['FU'] = fpeps.EnvCTM(psi)
-    for _ in range(4):
-        envs['FU'].update_(opts_svd=opts_svd)  # single CMTRG sweep
+    envs['FU'] = fpeps.EnvCTM(psi, init='eye')
+    info = envs['FU'].ctmrg_(opts_svd=opts_svd, max_sweeps=20, corner_tol=1e-8)
+    print(info)
+
+    envs['LBP'] = fpeps.EnvLBP(psi, which='NN+LBP')
+    info = envs['LBP'].lbp_(max_sweeps=10, diff_tol=1e-10)
+    print(info)
 
     for s0, s1, dirn in [[(0, 0), (0, 1), 'h'], [(0, 1), (1, 1), 'v']]:
         QA, QB = psi[s0], psi[s1]
@@ -75,6 +79,9 @@ def test_spinless_infinite_approx(config_kwargs):
         assert (Gs['87'] - Gs['87+']).norm() < 1e-5
         assert (Gs['87+'] - Gs['FU']).norm() < 1e-5
 
+        assert (Gs['LBP'] - Gs['FU']).norm() < 1e-3
+        assert (Gs['LBP'] - Gs['NN+']).norm() < 1e-2
+
     with pytest.raises(yastn.YastnError):
         fpeps.EnvNTU(psi, which="some")
         #  Type of EnvNTU which='some' not recognized.
@@ -82,6 +89,10 @@ def test_spinless_infinite_approx(config_kwargs):
     with pytest.raises(yastn.YastnError):
         fpeps.EnvApproximate(psi, which="some")
         # Type of EnvApprox which='some' not recognized.
+
+    with pytest.raises(yastn.YastnError):
+        fpeps.EnvLBP(psi, which="some")
+        # Type of EnvLBP bond_metric which='some' not recognized.
 
 
 if __name__ == '__main__':

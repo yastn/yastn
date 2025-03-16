@@ -77,18 +77,19 @@ def test_evolution(config_kwargs):
     #
     # for bipartite environment
     #
-    psi = fpeps.product_peps(geometry, ops.I())
-    env = fpeps.EnvLBP(psi)
-    infoss = []
-    for _ in range(steps):
-        infos = fpeps.evolution_step_(env, gates, opts_svd=opts_svd, initialization=initialization)
-        infoss.append(infos)
+    for which in ['LBP', 'NN+LBP']:
+        psi = fpeps.product_peps(geometry, ops.I())
+        env = fpeps.EnvLBP(psi, which=which)
+        infoss = []
+        for _ in range(steps):
+            infos = fpeps.evolution_step_(env, gates, opts_svd=opts_svd, initialization=initialization)
+            infoss.append(infos)
 
-    for infos in infoss:
-        assert len(infos) == 2 * ((Nx - 1) * Ny + (Ny - 1) * Nx)
-        for info, bond in zip(infos, psi.bonds() + psi.bonds(reverse=True)):
-            assert info.bond == bond
-            assert 0. <= info.truncation_error
+        for infos in infoss:
+            assert len(infos) == 2 * ((Nx - 1) * Ny + (Ny - 1) * Nx)
+            for info, bond in zip(infos, psi.bonds() + psi.bonds(reverse=True)):
+                assert info.bond == bond
+                assert 0. <= info.truncation_error
 
 
 if __name__ == '__main__':

@@ -33,7 +33,7 @@ class EnvNTU:
             Type of environment from 'NN', 'NN+', 'NN++', 'NNN', 'NNN+', 'NNN++'
         """
 
-        if which not in ('NN', 'NN+', 'NN++', 'NNN', 'NNN+', 'NNN++'):  # 'SU+'
+        if which not in ('NN', 'NN+', 'NN++', 'NNN', 'NNN+', 'NNN++'):
             raise YastnError(f" Type of EnvNTU {which=} not recognized.")
         self.psi = psi
         self._which = which
@@ -154,7 +154,7 @@ class EnvNTU:
 
         For dirn == 'v':
 
-                 -1 +0)
+                (-1 +0)
                    ║
         (+0 -1)═══0Q0═══(+0 +1)
            ║       ╳       ║
