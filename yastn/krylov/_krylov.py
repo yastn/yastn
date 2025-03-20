@@ -274,29 +274,25 @@ def lin_solver(f, b, v0, ncv=10, tol=1e-13, pinv_tol=1e-13, hermitian=False, **k
             norm of the resudual vector r = f(vf) - b.
     """
     backend = v0.config.backend
-    tol = 1e-13
 
     q0 = b - f(v0)
     normv = q0.norm()
     if normv == 0:
         raise YastnError('Initial vector v0 of lin_solver should be nonzero.')
     Q = [q0 / normv]
-    Q, H, happy = q0.expand_krylov_space(f, tol, ncv, hermitian, Q, **kwargs) # tol=1e-13
+    Q, H, happy = q0.expand_krylov_space(f, tol, ncv, hermitian, Q, **kwargs)
     m = len(Q) if happy else len(Q) - 1
     H[(m,m-1)] = H[(0,0)] * 0 + tol if happy else H[(m,m-1)]
     Q = Q[:m]
-    
+
     T = backend.square_matrix_from_dict(H, m+1, device = v0.device)
     T = T[:(m+1),:m]
-    
-    e1 = backend.to_tensor([1]+[0]*(m))
-    beta = normv
-    be1 = beta * e1
-    
-    u, s, vh = np.linalg.svd(T, full_matrices = False)
-    sp = np.linalg.pinv(np.diag(s), rcond = pinv_tol)
-    y = vh.conj().T @ sp @ u.conj().T @ be1
 
+    be1 = backend.to_tensor([normv]+[0]*(m))
+    
+    Tpinv = np.linalg.pinv(T, rcond = pinv_tol)
+    y = Tpinv @ be1
+    
     vf = v0.linear_combination(*Q, amplitudes = [1,*y], **kwargs)
     res = f(vf) - b
     return vf, res.norm()
