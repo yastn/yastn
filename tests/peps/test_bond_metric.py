@@ -58,9 +58,15 @@ def test_spinless_infinite_approx(config_kwargs):
     info = envs['FU'].ctmrg_(opts_svd=opts_svd, max_sweeps=20, corner_tol=1e-8)
     print(info)
 
-    envs['LBP'] = fpeps.EnvLBP(psi, which='NN+LBP')
-    info = envs['LBP'].lbp_(max_sweeps=10, diff_tol=1e-10)
+    envs['NN+LBP'] = fpeps.EnvLBP(psi, which='NN+LBP')
+    info = envs['NN+LBP'].lbp_(max_sweeps=10, diff_tol=1e-10)
     print(info)
+    #
+    envs['NNN+LBP'] = fpeps.EnvLBP(psi, which='NNN+LBP')
+    info = envs['NNN+LBP'].lbp_(max_sweeps=10, diff_tol=1e-10)
+    #
+    envs['NN1+LBP'] = fpeps.EnvLBP(psi, which='NN1+LBP')
+    info = envs['NN1+LBP'].lbp_(max_sweeps=10, diff_tol=1e-10)
 
     for s0, s1, dirn in [[(0, 0), (0, 1), 'h'], [(0, 1), (1, 1), 'v']]:
         QA, QB = psi[s0], psi[s1]
@@ -78,9 +84,11 @@ def test_spinless_infinite_approx(config_kwargs):
         assert (Gs['65+'] - Gs['87']).norm() < 1e-5
         assert (Gs['87'] - Gs['87+']).norm() < 1e-5
         assert (Gs['87+'] - Gs['FU']).norm() < 1e-5
+        assert (Gs['NN+LBP'] - Gs['FU']).norm() < 1e-3
+        assert (Gs['NN+LBP'] - Gs['NN+']).norm() < 1e-2
+        assert (Gs['NNN+LBP'] - Gs['NNN+']).norm() < 1e-3
+        assert (Gs['NN1+LBP'] - Gs['NN+']).norm() < 1e-3
 
-        assert (Gs['LBP'] - Gs['FU']).norm() < 1e-3
-        assert (Gs['LBP'] - Gs['NN+']).norm() < 1e-2
 
     with pytest.raises(yastn.YastnError):
         fpeps.EnvNTU(psi, which="some")

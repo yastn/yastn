@@ -25,6 +25,7 @@ from .._geometry import Bond, Site
 from ._env_auxlliary import *
 from ._env_window import EnvWindow
 from ._env_measure import _measure_nsite
+from ._env_boundary_mps import _clear_operator_input
 
 logger = logging.Logger('ctmrg')
 
@@ -431,25 +432,39 @@ class EnvCTM(Peps):
         O: Tensor
             Single-site operator
         """
+
+        # if site is None:
+        #     return {site: self.measure_1site(O, site) for site in self.sites()}
+
         if site is None:
-            return {site: self.measure_1site(O, site) for site in self.sites()}
+            opdict = _clear_operator_input(O, self.sites())
+            return_one = False
+        else:
+            return_one = True
+            opdict = {site: {(): O}}
 
-        lenv = self[site]
-        ten = self.psi[site]
-        vect = (lenv.l @ lenv.tl) @ (lenv.t @ lenv.tr)
-        vecb = (lenv.r @ lenv.br) @ (lenv.b @ lenv.bl)
+        out = {}
+        for site, ops in opdict.items():
+            lenv = self[site]
+            ten = self.psi[site]
+            vect = (lenv.l @ lenv.tl) @ (lenv.t @ lenv.tr)
+            vecb = (lenv.r @ lenv.br) @ (lenv.b @ lenv.bl)
 
-        tmp = tensordot(vect, ten, axes=((2, 1), (0, 1)))
-        val_no = tensordot(vecb, tmp, axes=((0, 1, 2, 3), (1, 3, 2, 0))).to_number()
+            tmp = tensordot(vect, ten, axes=((2, 1), (0, 1)))
+            val_no = tensordot(vecb, tmp, axes=((0, 1, 2, 3), (1, 3, 2, 0))).to_number()
 
-        if O.ndim == 2:
-            ten.set_operator_(O)
-        else:  # for a single-layer Peps, replace with new peps tensor
-            ten = O
-        tmp = tensordot(vect, ten, axes=((2, 1), (0, 1)))
-        val_op = tensordot(vecb, tmp, axes=((0, 1, 2, 3), (1, 3, 2, 0))).to_number()
+            for nz, op in ops.items():
+                if op.ndim == 2:
+                    ten.set_operator_(op)
+                else:  # for a single-layer Peps, replace with new peps tensor
+                    ten = op
+                tmp = tensordot(vect, ten, axes=((2, 1), (0, 1)))
+                val_op = tensordot(vecb, tmp, axes=((0, 1, 2, 3), (1, 3, 2, 0))).to_number()
+                out[site + nz] = val_op / val_no
 
-        return val_op / val_no
+        if return_one and not isinstance(O, dict):
+            return out[site + nz]
+        return out
 
     def measure_nn(self, O, P, bond=None) -> dict:
         r"""
@@ -468,8 +483,22 @@ class EnvCTM(Peps):
             Bond of the form (s0, s1). Sites s0 and s1 should be nearest-neighbors on the lattice.
         """
 
+
         if bond is None:
-             return {bond: self.measure_nn(O, P, bond) for bond in self.bonds()}
+            if isinstance(O, dict):
+                Odict = _clear_operator_input(O, self.sites())
+                Pdict = _clear_operator_input(P, self.sites())
+                out = {}
+                for (s0, s1) in self.bonds():
+                    for nz0, op0 in Odict[s0].items():
+                        for nz1, op1 in Pdict[s1].items():
+                            out[s0 + nz0, s1 + nz1] = self.measure_nn(op0, op1, bond=(s0, s1))
+                return out
+            else:
+                return {bond: self.measure_nn(O, P, bond) for bond in self.bonds()}
+
+        # if bond is None:
+        #      return {bond: self.measure_nn(O, P, bond) for bond in self.bonds()}
 
         bond = Bond(*bond)
         dirn, l_ordered = self.nn_bond_type(bond)

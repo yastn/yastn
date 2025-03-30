@@ -122,6 +122,72 @@ class EnvBoundaryMPS(Peps):
                         out[(nx, ny) + nz] = env.measure(bd=(nx - 1, nx)) / norm_env
         return out
 
+
+    def measure_nn(peps_env, OP):
+        """
+        Calculate 2-point expectation values on <O_i P_j> in a finite on NN bonds.
+
+        ----------
+        OP: dict[Bond, dict[int, operators]]
+            mapping bond with list of two-point operators.
+        """
+        out = {}
+
+        psi = peps_env.psi
+
+        OPv, OPh = {}, {}
+        for bond, ops in OP.items():
+            dirn, l_ordered = peps_env.nn_bond_type(bond)
+            assert l_ordered
+            if dirn == 'h':
+                nx = bond[0][0]
+                if nx not in OPh:
+                    OPh[nx] = {}
+                OPh[nx][bond] = ops
+            else:
+                ny = bond[0][1]
+                if ny not in OPv:
+                    OPv[ny] = {}
+                OPv[ny][bond] = ops
+
+        for ny, bond_ops in OPv.items():
+            bra = peps_env.boundary_mps(n=ny, dirn='r')
+            tm = psi.transfer_mpo(n=ny, dirn='v')
+            ket = peps_env.boundary_mps(n=ny, dirn='l')
+            env = mps.Env(bra.conj(), [tm, ket]).setup_(to='first').setup_(to='last')
+            norm_env = env.measure()
+            for bond, ops in sorted(bond_ops.items()):
+                s0, s1 = bond
+                nx = s0[0]
+                for nz, (op1, op2) in ops.items():
+                    tm[nx].set_operator_(op1)
+                    tm[nx+1].set_operator_(op2)
+                    env.update_env_(nx+1, to='first')
+                    env.update_env_(nx, to='first')
+                    tm[nx].del_operator_()
+                    tm[nx+1].del_operator_()
+                    out[s0, s1, nz] = env.measure(bd=(nx - 1, nx)) / norm_env
+
+        for nx, bond_ops in OPh.items():
+            bra = peps_env.boundary_mps(n=nx, dirn='b')
+            tm = psi.transfer_mpo(n=nx, dirn='h')
+            ket = peps_env.boundary_mps(n=nx, dirn='t')
+            env = mps.Env(bra.conj(), [tm, ket]).setup_(to='first').setup_(to='last')
+            norm_env = env.measure()
+            for bond, ops in sorted(bond_ops.items()):
+                s0, s1 = bond
+                ny = s0[1]
+                for nz, (op1, op2) in ops.items():
+                    tm[ny].set_operator_(op1)
+                    tm[ny+1].set_operator_(op2)
+                    env.update_env_(ny+1, to='first')
+                    env.update_env_(ny, to='first')
+                    tm[ny].del_operator_()
+                    tm[ny+1].del_operator_()
+                    out[s0, s1, nz] = env.measure(bd=(ny - 1, ny)) / norm_env
+
+        return out
+
     def measure_nsite(self, *operators, sites=None) -> float:
         r"""
         Calculate expectation value of a product of local operators.

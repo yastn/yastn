@@ -20,6 +20,7 @@ from .._peps import Peps, Peps2Layers, DoublePepsTensor
 from .._gates_auxiliary import apply_gate_onsite, gate_product_operator, gate_fix_order, match_ancilla
 from .._geometry import Bond
 from ._env_auxlliary import *
+from ._env_boundary_mps import _clear_operator_input
 # from ._env_ctm import update_old_env_
 
 
@@ -61,7 +62,7 @@ class EnvLBP(Peps):
         self.psi = Peps2Layers(psi) if psi.has_physical() else psi
         self.tol_positive = tol_positive
 
-        if which not in ('NN+LBP', 'LBP'):
+        if which not in ('NN1+LBP', 'NNN+LBP', 'NN+LBP', 'LBP'):
             raise YastnError(f" Type of EnvLBP bond_metric {which=} not recognized.")
 
         self.which = which
@@ -109,23 +110,35 @@ class EnvLBP(Peps):
         O: Tensor
             Single-site operator
         """
+
         if site is None:
-            return {site: self.measure_1site(O, site) for site in self.sites()}
-
-        lenv = self[site]
-        ten = self.psi[site]
-
-        if isinstance(ten, DoublePepsTensor):
-            Aket = ten.ket.unfuse_legs(axes=(0, 1))  # t l b r s
-            Abra = ten.bra.unfuse_legs(axes=(0, 1))  # t l b r s
-            Aket = ncon([Aket, lenv.t, lenv.l, lenv.b, lenv.r], [(1, 2, 3, 4, -4), (-0, 1), (-1, 2), (-2, 3), (-3, 4)])
-            val_no = vdot(Abra, Aket)
-            op = match_ancilla(ten.ket, O)
-            Aket = tensordot(Aket, op, axes=(4, 1))
-            val_op = vdot(Abra, Aket)
+            opdict = _clear_operator_input(O, self.sites())
         else:
-            pass
-        return val_op / val_no
+            opdict = {site: {(): O}}
+
+        out = {}
+        for site, ops in opdict.items():
+
+            lenv = self[site]
+            ten = self.psi[site]
+
+            if isinstance(ten, DoublePepsTensor):
+                Aket = ten.ket.unfuse_legs(axes=(0, 1))  # t l b r s
+                Abra = ten.bra.unfuse_legs(axes=(0, 1))  # t l b r s
+                Aket = ncon([Aket, lenv.t, lenv.l, lenv.b, lenv.r], [(1, 2, 3, 4, -4), (-0, 1), (-1, 2), (-2, 3), (-3, 4)])
+                val_no = vdot(Abra, Aket)
+
+                for nz, op in ops.items():
+                    op = match_ancilla(ten.ket, op)
+                    Aket = tensordot(Aket, op, axes=(4, 1))
+                    val_op = vdot(Abra, Aket)
+                    out[site + nz] = val_op / val_no
+            else:
+                pass
+
+        if len(out) == 1:
+            return out[site + nz]
+        return out
 
     def measure_nn(self, O, P, bond=None) -> dict:
         r"""
@@ -145,7 +158,17 @@ class EnvLBP(Peps):
         """
 
         if bond is None:
-             return {bond: self.measure_nn(O, P, bond) for bond in self.bonds()}
+            if isinstance(O, dict):
+                Odict = _clear_operator_input(O, self.sites())
+                Pdict = _clear_operator_input(P, self.sites())
+                out = {}
+                for (s0, s1) in self.bonds():
+                    for nz0, op0 in Odict[s0].items():
+                        for nz1, op1 in Pdict[s1].items():
+                            out[s0 + nz0, s1 + nz1] = self.measure_nn(op0, op1, bond=(s0, s1))
+                return out
+            else:
+                return {bond: self.measure_nn(O, P, bond) for bond in self.bonds()}
 
         bond = Bond(*bond)
         dirn, l_ordered = self.nn_bond_type(bond)
@@ -336,6 +359,163 @@ class EnvLBP(Peps):
 
             g = tensordot((cbl @ ctl) @ env_t, (ctr @ cbr) @ env_b, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
             return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
+
+        if dirn == "h" and self.which == "NNN+LBP":
+            assert self.psi.nn_site(s0, (0, 1)) == s1
+            sts = [(-1,-1), (0,-1), (1,-1), (1,0), (1,1), (1,2), (0,2), (-1,2), (-1,1), (-1,0)]
+            m = {d: self.psi.nn_site(s0, d=d) for d in sts}
+            mm = dict(m)  # for testing for None
+            tensors_from_psi(m, self.psi)
+            m = {k: (v.ket if isinstance(v, DoublePepsTensor) else v) for k, v in m.items()}
+
+            sm = mm[0, -1]
+            ell = edge_l(m[0, -1]) if sm is None else edge_l(m[0, -1], hl=self[sm].l)
+            sm = mm[-1, -1]
+            clt = cor_tl(m[-1, -1]) if sm is None else cor_tl(m[-1, -1], ht=self[sm].t, hl=self[sm].l)
+            sm = mm[-1, 0]
+            elt = edge_t(m[-1, 0]) if sm is None else edge_t(m[-1, 0], ht=self[sm].t)
+            sm = mm[1, 0]
+            elb = edge_b(m[1, 0]) if sm is None else edge_b(m[1, 0], hb=self[sm].b)
+            sm = mm[1, -1]
+            clb = cor_bl(m[1, -1]) if sm is None else cor_bl(m[1, -1], hb=self[sm].b, hl=self[sm].l)
+            vecl = append_vec_tl(Q0, Q0, ell @ (clt @ elt))
+            vecl = tensordot(elb @ clb, vecl, axes=((2, 1), (0, 1)))
+
+            sm = mm[0, 2]
+            err = edge_r(m[0, 2]) if sm is None else edge_r(m[0, 2], hr=self[sm].r)
+            sm = mm[1, 2]
+            crb = cor_br(m[1, 2]) if sm is None else cor_br(m[1, 2], hb=self[sm].b, hr=self[sm].r)
+            sm = mm[1, 1]
+            erb = edge_b(m[1, 1]) if sm is None else edge_b(m[1, 1], hb=self[sm].b)
+            sm = mm[-1, 1]
+            ert = edge_t(m[-1, 1]) if sm is None else edge_t(m[-1, 1], ht=self[sm].t)
+            sm = mm[-1, 2]
+            crt = cor_tr(m[-1, 2]) if sm is None else cor_tr(m[-1, 2], hr=self[sm].r, ht=self[sm].t)
+            vecr = append_vec_br(Q1, Q1, err @ (crb @ erb))
+            vecr = tensordot(ert @ crt, vecr, axes=((2, 1), (0, 1)))
+            g = tensordot(vecl, vecr, axes=((0, 1), (1, 0)))  # [rr rr'] [ll ll']
+            return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
+
+        if dirn == "v" and self.which == "NNN+LBP":
+            assert self.psi.nn_site(s0, (1, 0)) == s1
+            sts = [(-1,-1), (0,-1), (1,-1), (2,-1), (2,0), (2,1), (1,1), (0,1), (-1,1), (-1,0)]
+            m = {d: self.psi.nn_site(s0, d=d) for d in sts}
+            mm = dict(m)  # for testing for None
+            tensors_from_psi(m, self.psi)
+            m = {k: (v.ket if isinstance(v, DoublePepsTensor) else v) for k, v in m.items()}
+
+            sm = mm[0, -1]
+            etl = edge_l(m[0, -1]) if sm is None else edge_l(m[0, -1], hl=self[sm].l)
+            sm = mm[-1, -1]
+            ctl = cor_tl(m[-1, -1]) if sm is None else cor_tl(m[-1, -1], hl=self[sm].l, ht=self[sm].t)
+            sm = mm[-1, 0]
+            ett = edge_t(m[-1, 0]) if sm is None else edge_t(m[-1, 0], ht=self[sm].t)
+            sm = mm[-1, 1]
+            ctr = cor_tr(m[-1, 1]) if sm is None else cor_tr(m[-1, 1], hr=self[sm].r, ht=self[sm].t)
+            sm = mm[0, 1]
+            etr = edge_r(m[0, 1]) if sm is None else edge_r(m[0, 1], hr=self[sm].r)
+            vect = append_vec_tl(Q0, Q0, etl @ (ctl @ ett))
+            vect = tensordot(vect, ctr @ etr, axes=((2, 3), (0, 1)))
+
+            sm = mm[1, 1]
+            ebr = edge_r(m[1, 1]) if sm is None else edge_r(m[1, 1], hr=self[sm].r)
+            sm = mm[2, 1]
+            cbr = cor_br(m[2, 1]) if sm is None else cor_br(m[2, 1], hr=self[sm].r, hb=self[sm].b)
+            sm = mm[2, 0]
+            ebb = edge_b(m[2, 0]) if sm is None else edge_b(m[2, 0], hb=self[sm].b)
+            sm = mm[2, -1]
+            cbl = cor_bl(m[2, -1]) if sm is None else cor_bl(m[2, -1], hb=self[sm].b, hl=self[sm].l)
+            sm = mm[1, -1]
+            ebl = edge_l(m[1, -1]) if sm is None else edge_l(m[1, -1], hl=self[sm].l)
+            vecb = append_vec_br(Q1, Q1, ebr @ (cbr @ ebb))
+            vecb = tensordot(vecb, cbl @ ebl, axes=((2, 3), (0, 1)))
+            g = tensordot(vect, vecb, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
+            return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
+
+
+        if dirn == "h" and self.which == "NN1+LBP":
+            assert self.psi.nn_site(s0, (0, 1)) == s1
+            sts = [(-1,-1), (0,-1), (1,-1), (1,0), (1,1), (1,2), (0,2), (-1,2), (-1,1), (-1,0)]
+            m = {d: self.psi.nn_site(s0, d=d) for d in sts}
+            mm = dict(m)  # for testing for None
+            tensors_from_psi(m, self.psi)
+            m = {k: (v.ket if isinstance(v, DoublePepsTensor) else v) for k, v in m.items()}
+
+            sm = mm[-1, -1]
+            clt = cor_tl(m[-1, -1]) if sm is None else cor_tl(m[-1, -1], ht=self[sm].t, hl=self[sm].l)
+            sm = mm[1, -1]
+            clb = cor_bl(m[1, -1]) if sm is None else cor_bl(m[1, -1], hb=self[sm].b, hl=self[sm].l)
+            sm = mm[1, 2]
+            crb = cor_br(m[1, 2]) if sm is None else cor_br(m[1, 2], hb=self[sm].b, hr=self[sm].r)
+            sm = mm[-1, 2]
+            crt = cor_tr(m[-1, 2]) if sm is None else cor_tr(m[-1, 2], hr=self[sm].r, ht=self[sm].t)
+
+            htl_t, htl_l = cut_into_hairs(clt)
+            htr_r, htr_t = cut_into_hairs(crt)
+            hbr_b, hbr_r = cut_into_hairs(crb)
+            hbl_l, hbl_b = cut_into_hairs(clb)
+
+            sm = mm[0, -1]
+            env_hl = hair_l(m[0, -1]) if sm is None else hair_l(m[0, -1], ht=htl_t, hl=self[sm].l, hb=hbl_b)
+            sm = mm[0, 2]
+            env_hr = hair_r(m[0,  2]) if sm is None else hair_r(m[0,  2], ht=htr_t, hb=hbr_b, hr=self[sm].r)
+            env_l = edge_l(Q0, hl=env_hl)  # [bl bl'] [rr rr'] [tl tl']
+            env_r = edge_r(Q1, hr=env_hr)  # [tr tr'] [ll ll'] [br br']
+
+            sm = mm[-1, 0]
+            ctl = cor_tl(m[-1, 0]) if sm is None else cor_tl(m[-1, 0], ht=self[sm].t, hl=htl_l)
+            sm = mm[-1, 1]
+            ctr = cor_tr(m[-1, 1]) if sm is None else cor_tr(m[-1, 1], ht=self[sm].t, hr=htr_r)
+            sm = mm[ 1, 1]
+            cbr = cor_br(m[ 1, 1]) if sm is None else cor_br(m[ 1, 1], hb=self[sm].b, hr=hbr_r)
+            sm = mm[ 1, 0]
+            cbl = cor_bl(m[ 1, 0]) if sm is None else cor_bl(m[ 1, 0], hb=self[sm].b, hl=hbl_l)
+
+            g = tensordot((cbr @ cbl) @ env_l, (ctl @ ctr) @ env_r, axes=((0, 2), (2, 0)))  # [rr rr'] [ll ll']
+            return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
+
+        if dirn == "v" and self.which == "NN1+LBP":
+            assert self.psi.nn_site(s0, (1, 0)) == s1
+            sts = [(-1,-1), (0,-1), (1,-1), (2,-1), (2,0), (2,1), (1,1), (0,1), (-1,1), (-1,0)]
+            m = {d: self.psi.nn_site(s0, d=d) for d in sts}
+            mm = dict(m)  # for testing for None
+            tensors_from_psi(m, self.psi)
+            m = {k: (v.ket if isinstance(v, DoublePepsTensor) else v) for k, v in m.items()}
+
+            sm = mm[-1, -1]
+            ctl = cor_tl(m[-1, -1]) if sm is None else cor_tl(m[-1, -1], hl=self[sm].l, ht=self[sm].t)
+            sm = mm[-1, 1]
+            ctr = cor_tr(m[-1, 1]) if sm is None else cor_tr(m[-1, 1], hr=self[sm].r, ht=self[sm].t)
+            sm = mm[2, 1]
+            cbr = cor_br(m[2, 1]) if sm is None else cor_br(m[2, 1], hr=self[sm].r, hb=self[sm].b)
+            sm = mm[2, -1]
+            cbl = cor_bl(m[2, -1]) if sm is None else cor_bl(m[2, -1], hb=self[sm].b, hl=self[sm].l)
+
+            htl_t, htl_l = cut_into_hairs(ctl)
+            htr_r, htr_t = cut_into_hairs(ctr)
+            hbr_b, hbr_r = cut_into_hairs(cbr)
+            hbl_l, hbl_b = cut_into_hairs(cbl)
+
+            sm = mm[-1, 0]
+            env_ht = hair_t(m[-1, 0]) if sm is None else hair_t(m[-1, 0], ht=self[sm].t, hl=htl_l, hr=htr_r)
+            sm = mm[2, 0]
+            env_hb = hair_b(m[ 2, 0]) if sm is None else hair_b(m[ 2, 0], hl=hbl_l, hb=self[sm].b, hr=hbr_r)
+            env_t = edge_t(Q0, ht=env_ht)  # [lt lt'] [bb bb'] [rt rt']
+            env_b = edge_b(Q1, hb=env_hb)  # [rb rb'] [tt tt'] [lb lb']
+
+            sm = mm[1, -1]
+            cbl = cor_bl(m[1, -1]) if sm is None else cor_bl(m[1, -1], hb=hbl_b, hl=self[sm].l)
+            sm = mm[0, -1]
+            ctl = cor_tl(m[0, -1]) if sm is None else cor_tl(m[0, -1], ht=htl_t, hl=self[sm].l)
+            sm = mm[0,  1]
+            ctr = cor_tr(m[0,  1]) if sm is None else cor_tr(m[0,  1], ht=htr_t, hr=self[sm].r)
+            sm = mm[1,  1]
+            cbr = cor_br(m[1,  1]) if sm is None else cor_br(m[1,  1], hb=hbr_b, hr=self[sm].r)
+
+            g = tensordot((cbl @ ctl) @ env_t, (ctr @ cbr) @ env_b, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
+            return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
+
+
 
     def post_evolution_(env, bond, **kwargs):
         env.update_bond_(bond)
