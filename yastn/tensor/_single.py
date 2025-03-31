@@ -205,17 +205,25 @@ def flip_charges(a, axes=None) -> yastn.Tensor:
     return a._replace(struct=struct, slices=slices, data=data, hfs=hfs)
 
 
-def switch_signature(a, axes: Union[Sequence[int],int]) -> yastn.Tensor:
+def switch_signature(a, axes: Union[Sequence[int],int,str] = ()) -> yastn.Tensor:
     r"""
     Flip signature (and hence also charges) on specified legs.
     This function supports flipping signature of hard-fused legs.
 
     Parameters
     ----------
-    axes: int | Sequence[int]
-        index of the leg, or a group of legs.
+    axes: int | Sequence[int] | str
+        index of the leg, or a group of legs. 
+        If ``axes="all"``, all signatures are flipped.	
     """
     from .. import eye
+    if a.isdiag:
+        raise YastnError('Cannot flip charges of a diagonal tensor. Use diag() first.')
+    if type(axes) is str:
+        if axes == "all":
+            axes = tuple(range(a.ndim))
+        else:
+            raise YastnError("Invalid axes")
     if type(axes)==int: axes=[axes]
     if len(axes)==0: return a
     assert all([type(x)==int for x in axes]) and len(set(axes))==len(axes), "Invalid axes" # no repeating axes
