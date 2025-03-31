@@ -2,6 +2,7 @@ import torch
 import warnings
 
 def safe_inverse(x, eps_abs=1.0e-12):
+    eps_abs=1.0e-12
     return x / (x ** 2 + eps_abs)
 
 
@@ -359,7 +360,7 @@ class SVDGESDD(torch.autograd.Function):
                 print(f"{diagnostics} {sigma_term.abs().max()} {sigma.max()}")
             return sigma_term, None, None, None
 
-        
+
         # sigma_inv= safe_inverse_2(sigma.clone(), sigma_scale*eps)
         # sigma_inv= safe_inverse(sigma.clone(), eps_abs=sigma_scale*eps)
         sigma_inv= safe_inverse(sigma.clone(), eps_abs= scaled_eps)
