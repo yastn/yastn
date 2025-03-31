@@ -223,7 +223,7 @@ class Tensor:
         return self.config.backend.get_dtype(self._data)
 
     @property
-    def yast_dtype(self) -> str:
+    def yastn_dtype(self) -> str:
         """ Return :code:`'complex128'` if tensor data are complex else :code:`'float64'`. """
         return 'complex128' if self.config.backend.is_complex(self._data) else 'float64'
 

@@ -73,16 +73,17 @@ pytest -v --backend torch --device cuda
 
 ### Citing YASTN
 
-If you find this package useful for a project published in an academic journal, you can consider citing the [release paper](https://arxiv.org/abs/2405.12196),
+If you find this package useful for a project published in an academic journal, you can consider citing the [release paper](https://scipost.org/SciPostPhysCodeb.52),
 with the following BibTex entry
 ```
-@misc{yastn,
-      title={YASTN: Yet another symmetric tensor networks;
-               A Python library for abelian symmetric tensor network calculations},
-      author={Marek M. Rams and Gabriela W\'{o}jtowicz and Aritra Sinha and Juraj Hasik},
-      year={2024},
-      eprint={2405.12196},
-      archivePrefix={arXiv},
-      url={https://arxiv.org/abs/2405.12196},
+@Article{YASTN,
+      title={{YASTN: Yet another symmetric tensor networks; A Python library for Abelian symmetric tensor network calculations}},
+      author={Marek M. Rams and Gabriela Wójtowicz and Aritra Sinha and Juraj Hasik},
+      journal={SciPost Phys. Codebases},
+      pages={52},
+      year={2025},
+      publisher={SciPost},
+      doi={10.21468/SciPostPhysCodeb.52},
+      url={https://scipost.org/10.21468/SciPostPhysCodeb.52},
 }
 ```

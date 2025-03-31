@@ -148,7 +148,7 @@ v0.9
 - Transition to 1d data structure
 - dtype and device removed from config
 - `unique_dtype` replaced by `get_dtype`
-- properties `tensor.dtype`, `tensor.yast_dtype`, `tensor.device`
+- properties `tensor.dtype`, `tensor.yastn_dtype`, `tensor.device`
 - new function '__setitem__()' that gives direct access to change existing blocks
 - in rsqrt(x, cutoff) cutoff is done with respect to x, not sqrt(x)
 - new function `grad()` that generates gradient yastntensor

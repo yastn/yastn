@@ -31,6 +31,7 @@ class EnvWindow:
         self.yrange = yrange
         self.Nx = self.xrange[1] - self.xrange[0]
         self.Ny = self.yrange[1] - self.yrange[0]
+        self.offset = 1  #  for mpo tensor position; extra tensor in the bounary
 
         if env_ctm.nn_site((xrange[0], yrange[0]), (0, 0)) is None or \
            env_ctm.nn_site((xrange[1] - 1, yrange[1] - 1), (0, 0)) is None:
@@ -111,8 +112,8 @@ class EnvWindow:
             psi = mps.Mps(self.Ny + 2)
             for ind, ny in enumerate(range(*self.yrange), start=1):
                 psi[ind] =self.env_ctm[n, ny].b.transpose(axes=(2, 1, 0)).conj()
-            psi[0] =self.env_ctm[n, self.yrange[0]].bl.add_leg(axis=2).transpose(axes=(2, 1, 0)).conj()
-            psi[self.Ny + 1] =self.env_ctm[n, self.yrange[1]-1].br.add_leg(axis=0).transpose(axes=(2, 1, 0)).conj()
+            psi[0] = self.env_ctm[n, self.yrange[0]].bl.add_leg(axis=2).transpose(axes=(2, 1, 0)).conj()
+            psi[self.Ny + 1] = self.env_ctm[n, self.yrange[1]-1].br.add_leg(axis=0).transpose(axes=(2, 1, 0)).conj()
             return psi
 
         raise YastnError(f"{dirn=} not recognized. Should be 't', 'h' 'b', 'r', 'v', or 'l'.")
@@ -135,6 +136,8 @@ class EnvWindow:
         O0dict = _clear_operator_input(O0, sites)
         O1dict = _clear_operator_input(O1, sites)
         out = {}
+        O1n = [*O1dict[sites[0]].values()][0].n  # All O1 should have the same charge
+        # All O0 should have the same charge  # TODO
 
         (nx0, ny0), ix0 = sites[0], 1
         vecc, tm, vec = self[ny0, 'r'], self[ny0, 'v'], self[ny0, 'l']
