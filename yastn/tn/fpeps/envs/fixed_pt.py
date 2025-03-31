@@ -180,7 +180,7 @@ def real_to_complex(z):      # real vector of length 2n -> complex of length n
 def complex_to_real(z):      # complex vector of length n -> real of length 2n
     return np.concatenate((np.real(z), np.imag(z)))
 
-def find_coeff_multi_sites(env_old, env, zero_modes_dict, dtype=torch.complex128):
+def find_coeff_multi_sites(env_old, env, zero_modes_dict, dtype=torch.complex128, verbose=False):
     Gauge = namedtuple("Gauge", "t l b r")
 
     phases_ind = {}
@@ -379,8 +379,9 @@ def find_coeff_multi_sites(env_old, env, zero_modes_dict, dtype=torch.complex128
     res = minimize(fun=phase_loss, x0=phases, args=(cs_dict,), method='cg', tol=1e-14)
     phases = res.x
     end = time.time()
-    print(f"scipy takes {end-start:.1f}s with loss fn ", res.fun)
-    print("phases: ", phases)
+    if verbose:
+        print(f"scipy takes {end-start:.1f}s with loss fn ", res.fun)
+        print("phases: ", phases)
 
     # assemble the coefficients dict
     if isinstance(phases, torch.Tensor):
@@ -402,7 +403,7 @@ def find_coeff_multi_sites(env_old, env, zero_modes_dict, dtype=torch.complex128
         cs_dict[site_ind] = torch.utils.checkpoint.detach_variable(tuple(cs_dict[site_ind]))
     return cs_dict
 
-def find_gauge_multi_sites(env_old, env):
+def find_gauge_multi_sites(env_old, env, verbose=False):
     Gauge = namedtuple("Gauge", "t l b r")
     zero_modes_dict = {}
     sigma_dict = {}
@@ -461,7 +462,8 @@ def find_gauge_multi_sites(env_old, env):
                 axes=(2, 0),
             )
             T_old = getattr(env_old[site], dirn)
-            print("T diff:", (fixed_t - T_old).norm() / T_old.norm())
+            if verbose:
+                print("T diff:", (fixed_t - T_old).norm() / T_old.norm())
 
         sigma1_t, sigma1_l, sigma1_b, sigma1_r = sigma_dict[site_ind].t, sigma_dict[site_ind].l, sigma_dict[site_ind].b, sigma_dict[site_ind].r
         sigma2_l, sigma2_b, sigma2_r, sigma2_t = sigma_dict[site_t].l, sigma_dict[site_l].b, sigma_dict[site_b].r, sigma_dict[site_r].t
@@ -493,7 +495,8 @@ def find_gauge_multi_sites(env_old, env):
                 )
 
             C_old = getattr(env_old[site], dirn)
-            print("C diff:", (fixed_C - C_old).norm() / C_old.norm())
+            if verbose:
+                print("C diff:", (fixed_C - C_old).norm() / C_old.norm())
     return sigma_dict
 
 
@@ -677,8 +680,8 @@ class FixedPoint(torch.autograd.Function):
                 break
             else:
                 dA = tuple(dA[i] + grads[i] for i in range(len(grads)))
-            for grad in grads:
-                print(torch.norm(grad, p=torch.inf))
+            # for grad in grads:
+            #     print(torch.norm(grad, p=torch.inf))
 
             if step % 10 == 0:
                 # with torch.enable_grad():
@@ -686,14 +689,14 @@ class FixedPoint(torch.autograd.Function):
                 grad_tmp = torch.cat(dfdA_vjp(dA)[0])
                 if prev_grad_tmp is not None:
                     grad_diff = torch.norm(grad_tmp[0] - prev_grad_tmp[0])
-                    print("full grad diff", grad_diff)
+                    # print("full grad diff", grad_diff)
                     if grad_diff < 1e-10:
-                        print("The norm of the full grad diff is below 1e-10.")
+                        # print("The norm of the full grad diff is below 1e-10.")
                         log.log(logging.INFO, f"Fixed_pt: The norm of the full grad diff is below 1e-10.")
                         break
                     if diff_ave is not None:
                         if grad_diff > diff_ave:
-                            print("Full grad diff is no longer decreasing!")
+                            # print("Full grad diff is no longer decreasing!")
                             log.log(logging.INFO, f"Fixed_pt: Full grad diff is no longer decreasing.")
                             break
                         else:
