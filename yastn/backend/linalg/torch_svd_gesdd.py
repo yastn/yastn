@@ -6,9 +6,8 @@ def safe_inverse(x, eps_abs=1.0e-12):
     return x / (x ** 2 + eps_abs)
 
 
-# def safe_inverse_2(x, epsilon):
-#     x[abs(x) < epsilon] = float('inf')
-#     return x.pow(-1)
+def safe_inverse_2(x, eps):
+    return x.clamp_min(eps).reciprocal()
 
 
 class SVDGESDD(torch.autograd.Function):
@@ -336,7 +335,7 @@ class SVDGESDD(torch.autograd.Function):
         m= u.size(0) # first dim of original tensor A = u sigma v^\dag
         n= vh.size(1) # second dim of A
         k= sigma.size(0)
-        sigma_scale= global_sigma_scale
+        scaled_eps= global_sigma_scale**2 * eps
 
         # ? some
         if (u.size(-2)!=u.size(-1)) or (vh.size(-2)!=vh.size(-1)):
@@ -361,16 +360,17 @@ class SVDGESDD(torch.autograd.Function):
                 print(f"{diagnostics} {sigma_term.abs().max()} {sigma.max()}")
             return sigma_term, None, None, None
 
+
         # sigma_inv= safe_inverse_2(sigma.clone(), sigma_scale*eps)
         # sigma_inv= safe_inverse(sigma.clone(), eps_abs=sigma_scale*eps)
-        sigma_inv= safe_inverse(sigma.clone(), eps_abs= sigma_scale**2*eps)
+        sigma_inv= safe_inverse(sigma.clone(), eps_abs= scaled_eps)
 
         F = sigma.unsqueeze(-2) - sigma.unsqueeze(-1)
-        F = safe_inverse(F, eps_abs= sigma_scale**2*eps)
+        F = safe_inverse(F, eps_abs= scaled_eps)
         F.diagonal(0,-2,-1).fill_(0)
 
         G = sigma.unsqueeze(-2) + sigma.unsqueeze(-1)
-        G = safe_inverse(G, eps_abs= sigma_scale**2*eps)
+        G = safe_inverse(G, eps_abs= scaled_eps)
         G.diagonal(0,-2,-1).fill_(0)
 
         uh= u.conj().transpose(-2,-1)
