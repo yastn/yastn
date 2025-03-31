@@ -14,16 +14,18 @@
 # ==============================================================================
 """ Linear operations and operations on a single yastn.Tensor. """
 from __future__ import annotations
+from typing import Sequence, Union
 from itertools import accumulate
 from operator import itemgetter
 import numpy as np
+from ._contractions import ncon
 from ._auxliary import _slc, _clear_axes, _unpack_axes, _join_contiguous_slices
 from ._merging import _Fusion
 from ._tests import YastnError, _test_axes_all
 from ._legs import LegMeta
 
 
-__all__ = ['conj', 'conj_blocks', 'flip_signature', 'flip_charges',
+__all__ = ['conj', 'conj_blocks', 'flip_signature', 'flip_charges', 'switch_signature',
            'transpose', 'moveaxis', 'move_leg', 'diag', 'remove_zero_blocks',
            'add_leg', 'remove_leg', 'copy', 'clone', 'detach', 'to',
            'requires_grad_', 'grad', 'drop_leg_history']
@@ -201,6 +203,35 @@ def flip_charges(a, axes=None) -> yastn.Tensor:
     mask = {0: slice(None)}
     data = a.config.backend.embed_mask(a._data, mask, meta_embed, struct.size, 0, 0)
     return a._replace(struct=struct, slices=slices, data=data, hfs=hfs)
+
+
+def switch_signature(a, axes: Union[Sequence[int],int,str] = ()) -> yastn.Tensor:
+    r"""
+    Flip signature (and hence also charges) on specified legs.
+    This function supports flipping signature of hard-fused legs.
+
+    Parameters
+    ----------
+    axes: int | Sequence[int] | str
+        index of the leg, or a group of legs. 
+        If ``axes="all"``, all signatures are flipped.	
+    """
+    from .. import eye
+    if a.isdiag:
+        raise YastnError('Cannot flip charges of a diagonal tensor. Use diag() first.')
+    if type(axes) is str:
+        if axes == "all":
+            axes = tuple(range(a.ndim))
+        else:
+            raise YastnError("Invalid axes")
+    if type(axes)==int: axes=[axes]
+    if len(axes)==0: return a
+    if not (all([type(x)==int for x in axes]) and len(set(axes))==len(axes)):
+        raise YastnError("Invalid axes: all elements must be integers and no repeating axes are allowed.")
+    symbols_1j= tuple(eye(a.config, legs=(a.get_legs(x).conj(),a.get_legs(x).conj()), isdiag=False) for x in axes)
+    outi_a= [i+1 if i in axes else -(i+1) for i in range(len(a.get_legs()))] # shift by 1 to avoid 0,0 ambiguity
+    contractedi= [[x+1,-(x+1)] for x in axes ]
+    return ncon( (a,)+symbols_1j, [outi_a,]+contractedi )
 
 
 def drop_leg_history(a, axes=None) -> yastn.Tensor:
