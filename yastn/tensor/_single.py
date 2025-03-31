@@ -226,7 +226,8 @@ def switch_signature(a, axes: Union[Sequence[int],int,str] = ()) -> yastn.Tensor
             raise YastnError("Invalid axes")
     if type(axes)==int: axes=[axes]
     if len(axes)==0: return a
-    assert all([type(x)==int for x in axes]) and len(set(axes))==len(axes), "Invalid axes" # no repeating axes
+    if not (all([type(x)==int for x in axes]) and len(set(axes))==len(axes)):
+        raise YastnError("Invalid axes: all elements must be integers and no repeating axes are allowed.")
     symbols_1j= tuple(eye(a.config, legs=(a.get_legs(x).conj(),a.get_legs(x).conj()), isdiag=False) for x in axes)
     outi_a= [i+1 if i in axes else -(i+1) for i in range(len(a.get_legs()))] # shift by 1 to avoid 0,0 ambiguity
     contractedi= [[x+1,-(x+1)] for x in axes ]
