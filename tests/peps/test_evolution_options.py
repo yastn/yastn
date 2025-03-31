@@ -70,6 +70,14 @@ def test_evolution(config_kwargs):
             assert info.min_eigenvalue is None
             assert info.wrong_eigenvalues is None
             assert 0. <= info.nonhermitian_part
+
+        bd0 = psi.get_bond_dimensions()
+        assert all(v in (1, 4) for v in bd0.values())
+        opts_svd_truncate = {"D_total": 3, 'tol': 1e-14}
+        infos = fpeps.truncate_(env, opts_svd=opts_svd_truncate, initialization=initialization)
+        bd1 = psi.get_bond_dimensions()
+        for k, v in bd1.items():
+            assert v == min(3, bd0[k])
     #
     with pytest.raises(yastn.YastnError):
         fpeps.evolution_step_(env, gates, opts_svd=opts_svd, initialization='none')
@@ -90,6 +98,15 @@ def test_evolution(config_kwargs):
             for info, bond in zip(infos, psi.bonds() + psi.bonds(reverse=True)):
                 assert info.bond == bond
                 assert 0. <= info.truncation_error
+
+        bd0 = psi.get_bond_dimensions()
+        assert all(v in (1, 4) for v in bd0.values())
+        opts_svd_truncate = {"D_total": 3, 'tol': 1e-14}
+        infos = fpeps.truncate_(env, opts_svd=opts_svd_truncate, initialization=initialization)
+        bd1 = psi.get_bond_dimensions()
+        for k, v in bd1.items():
+            assert v == min(3, bd0[k])
+
 
 
 if __name__ == '__main__':

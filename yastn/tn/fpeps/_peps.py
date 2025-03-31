@@ -233,6 +233,19 @@ class Peps():
                            DoublePepsTensor(bra=psi, ket=psi).transpose(axes=(0, 3, 2, 1))
         return op
 
+    def get_bond_dimensions(self):
+        out = {}
+        for bond in self.bonds():
+            dirn, l_ordered = self.nn_bond_type(bond)
+            s0 = bond[0] if l_ordered else bond[1]
+            leg = self[s0].get_legs(axes=1)
+            l0, l1 = leg.unfuse_leg()
+            out[bond] = sum(l0.D) if dirn == 'h' else sum(l1.D)
+            # axes = 3 if dirn == 'h' else 2  # if dirn == 'v'
+            # out[bond] = self[s0].get_shape(axes=axes)
+        return out
+
+
 
 class Peps2Layers():
 
