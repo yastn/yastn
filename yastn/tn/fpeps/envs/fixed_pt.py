@@ -10,11 +10,11 @@ import torch.utils.checkpoint
 
 
 from .... import Tensor, ones, zeros, eye, YastnError, Leg, tensordot, einsum, diag
-from ._env_ctm import ctm_conv_corner_spec
+from ._env_ctm import ctm_conv_corner_spec, decompress_env_1d
 from .rdm import *
 
 
-log = logging.getLogger("ctmrg")
+log = logging.getLogger("FixedPoint")
 
 
 def env_raw_data(env):
@@ -40,22 +40,25 @@ def refill_env(env, data, slice_list):
             ind += 1
 
 def refill_state(state, data):
-    def unflatten(flattened_list, nested_iterable):
-        def unflatten_helper(flattened_iter, nested_iterable):
-            if isinstance(nested_iterable, dict):
-                for k, v in nested_iterable.items():
-                    unflatten_helper(flattened_iter, v)
-            elif isinstance(nested_iterable, (list, tuple, set)):
-                for v in nested_iterable:
-                    unflatten_helper(flattened_iter, v)
-            else:
-                nested_iterable._data = next(flattened_iter)
+    # def unflatten(flattened_list, nested_iterable):
+    #     def unflatten_helper(flattened_iter, nested_iterable):
+    #         if isinstance(nested_iterable, dict):
+    #             for k, v in nested_iterable.items():
+    #                 unflatten_helper(flattened_iter, v)
+    #         elif isinstance(nested_iterable, (list, tuple, set)):
+    #             for v in nested_iterable:
+    #                 unflatten_helper(flattened_iter, v)
+    #         else:
+    #             nested_iterable._data = next(flattened_iter)
 
-        flattened_iter = iter(flattened_list)
-        unflatten_helper(flattened_iter, nested_iterable)
+    #     flattened_iter = iter(flattened_list)
+    #     unflatten_helper(flattened_iter, nested_iterable)
 
-    unflatten(data, state.parameters)
-    state.sync_()
+    # unflatten(data, state.parameters)
+    # state.sync_()
+    assert len(state.sites()) == len(data), "Number of sites in state and data do not match"	
+    for site,d in zip(state.sites(), data):
+        state[site]._data = d
     return state
 
 def extract_dsv_t(t, history):
@@ -499,9 +502,30 @@ def find_gauge_multi_sites(env_old, env, verbose=False):
                 print("C diff:", (fixed_C - C_old).norm() / C_old.norm())
     return sigma_dict
 
+def fp_ctmrg(env: EnvCTM, \
+            ctm_opts_fwd : dict= {'opts_svd': {}, 'corner_tol': 1e-8, 'max_sweeps': 100, 
+                'method': "2site", 'use_qr': False, 'svd_policy': 'fullrank', 'D_block': None}, \
+            ctm_opts_fp: dict= {'svd_policy': 'fullrank'}):
+    r"""
+    Compute the fixed-point environment for the given state using CTMRG. 
+    First, run CTMRG until convergence then find the gauge transformation guaranteeing element-wise
+    convergence of the environment tensors.
+
+    Args:
+        env (EnvCTM): CTM environment
+        ctm_opts_fwd (dict): Options for forward CTMRG convergence.
+        ctm_opts_fp (dict): Options for fixing the gauge transformation.
+
+    Returns:
+        EnvCTM: Environment at fixed point.
+        Sequence[Tensor]: raw environment data for the backward pass.
+    """
+    raw_peps_params= tuple( env.psi.ket[s]._data for s in env.psi.ket.sites() )
+    return FixedPoint.apply(env, ctm_opts_fwd, ctm_opts_fp, *raw_peps_params)
+
 
 class FixedPoint(torch.autograd.Function):
-    ctm_env_out, ctm_log, t_ctm, t_check = None, None, None, None
+    ctm_log, t_ctm, t_check = None, None, None
 
     @staticmethod
     def compute_rdms(env):
@@ -520,11 +544,11 @@ class FixedPoint(torch.autograd.Function):
         return rdms
 
     @staticmethod
-    def fixed_point_iter(env_in, sigma_dict, opts_svd, slices, env_data, psi_data):
+    def fixed_point_iter(env_in, sigma_dict, ctm_opts_fp, slices, env_data, psi_data):
         refill_env(env_in, env_data, slices)
         refill_state(env_in.psi.ket, psi_data)
         env_in.update_(
-            opts_svd=opts_svd, method="2site", use_qr=False, checkpoint_move=False, svd_policy='fullrank',
+            **ctm_opts_fp
         )
 
         for site in env_in.sites():
@@ -597,6 +621,7 @@ class FixedPoint(torch.autograd.Function):
         max_sweeps=100,
         opts_svd=None,
         corner_tol=1e-8,
+        **kwargs
     ):
         t_ctm, t_check = 0.0, 0.0
         t_ctm_prev = time.perf_counter()
@@ -618,61 +643,73 @@ class FixedPoint(torch.autograd.Function):
         return env, converged, conv_history, t_ctm, t_check
 
     @staticmethod
-    def forward(
-        ctx, env_params, slices, yastn_config, env, opts_svd, chi, corner_tol, ctm_args, *state_params
-    ):
-        refill_env(env, env_params, slices)
+    def forward(ctx, env: EnvCTM, ctm_opts_fwd : dict, ctm_opts_fp: dict, *state_params):
+        r"""
+        Compute the fixed-point environment for the given state using CTMRG. 
+        First, run CTMRG until convergence then find the gauge transformation guaranteeing element-wise
+        convergence of the environment tensors.
+
+        Args:
+            env (EnvCTM): Current environment to converge.
+            ctm_opts_fwd (dict): Options for forward CTMRG convergence.
+            ctm_opts_fp (dict): Options for fixing the gauge transformation.
+            state_params (Sequence[Tensor]): tensors of underlying Peps state
+
+        Returns:
+            EnvCTM: Environment at fixed point.
+            Sequence[Tensor]: raw environment data for the backward pass.
+        """
+        
         ctm_env_out, converged, *FixedPoint.ctm_log, FixedPoint.t_ctm, FixedPoint.t_check = FixedPoint.get_converged_env(
             env,
-            max_sweeps=ctm_args.ctm_max_iter,
-            opts_svd=opts_svd,
-            corner_tol=corner_tol,
-            # svd_policy='arnoldi',
-            svd_policy='fullrank',
-            D_block=chi,
+            **ctm_opts_fwd,
         )
-
-        env_old = ctm_env_out.copy()
-        FixedPoint.ctm_env_out = env_old
+        
         # note that we need to find the gauge transformation that connects two set of environment tensors
         # obtained from CTMRG with the 'full' svd, because the backward uses the full svd backward.
-        ctx.proj = ctm_env_out.update_(
-            opts_svd=opts_svd, method="2site", use_qr=False, checkpoint_move=False, svd_policy='fullrank',
-        )
-        sigma_dict = find_gauge_multi_sites(env_old, ctm_env_out)
+        _ctm_opts_fp = dict(ctm_opts_fwd)
+        if ctm_opts_fp is not None:
+            _ctm_opts_fp.update(ctm_opts_fp)
+        env_converged = ctm_env_out.copy()
+        ctx.proj = ctm_env_out.update_(**_ctm_opts_fp)
+        
+        sigma_dict = find_gauge_multi_sites(env_converged, ctm_env_out)
         if sigma_dict is None:
             raise NoFixedPointError(code=1)
 
-        env_out_data, slices = env_raw_data(env_old)
-        ctx.save_for_backward(env_out_data)
-        ctx.yastn_config = yastn_config
-        ctx.ctm_args = ctm_args
-        ctx.opts_svd = opts_svd
-        ctx.ctm_args = ctm_args
-        ctx.slices = slices
-        FixedPoint.slices = slices
+        env_data, env_meta = env_converged.compress_env_1d()
+        ctx.save_for_backward(*env_data)
+        ctx.env_meta = env_meta
+        ctx.ctm_opts_fp = _ctm_opts_fp
 
-        ctx.env = env_old
+        # TODO: use save_for_backward
         ctx.sigma_dict = sigma_dict
-        return env_out_data
+        env_1d, env_slices= env_raw_data(env_converged)
+
+        return env_converged, env_slices, env_1d
 
     @staticmethod
-    def backward(ctx, *grad_env):
-        print("Backward called")
+    def backward(ctx, none0, none1, *grad_env):
         grads = grad_env
         dA = grad_env
-        env_data = torch.utils.checkpoint.detach_variable(ctx.saved_tensors)[0] # only one element in the tuple
-        psi_data = ctx.env.psi.ket.get_parameters()
+
+        # env_data = torch.utils.checkpoint.detach_variable(ctx.saved_tensors)[0] # only one element in the tuple
+        env_data = ctx.saved_tensors
+        env= decompress_env_1d(env_data, ctx.env_meta)
+        psi_data = tuple(env.psi.ket[s]._data for s in env.psi.ket.sites())
+        _env_ts, _env_slices= env_raw_data(env)
+
         prev_grad_tmp = None
         diff_ave = None
         # Compute vjp only
         with torch.enable_grad():
-            _, dfdC_vjp = torch.func.vjp(lambda x: FixedPoint.fixed_point_iter(ctx.env, ctx.sigma_dict, ctx.opts_svd, ctx.slices, x, psi_data), env_data)
-            _, dfdA_vjp = torch.func.vjp(lambda x: FixedPoint.fixed_point_iter(ctx.env, ctx.sigma_dict, ctx.opts_svd, ctx.slices, env_data, x), psi_data)
+            _, dfdC_vjp = torch.func.vjp(lambda x: FixedPoint.fixed_point_iter(env, ctx.sigma_dict, ctx.ctm_opts_fp, _env_slices, x, psi_data), _env_ts)
+            _, dfdA_vjp = torch.func.vjp(lambda x: FixedPoint.fixed_point_iter(env, ctx.sigma_dict, ctx.ctm_opts_fp, _env_slices, _env_ts, x), psi_data)
         # fixed_point_iter changes the data of psi, so we need to refill the state to recover the previous state
-        refill_state(ctx.env.psi.ket, psi_data)
+        refill_state(env.psi.ket, psi_data)
+        
         alpha = 0.4
-        for step in range(ctx.ctm_args.ctm_max_iter):
+        for step in range(ctx.ctm_opts_fp['max_sweeps']):
             grads = dfdC_vjp(grads)
             # with torch.enable_grad():
             #     grads = torch.autograd.grad(FixedPoint.fixed_point_iter(ctx.env, ctx.sigma_dict, ctx.opts_svd, ctx.slices, env_data, psi_data), env_data, grad_outputs=grads)
@@ -683,13 +720,13 @@ class FixedPoint(torch.autograd.Function):
             # for grad in grads:
             #     print(torch.norm(grad, p=torch.inf))
 
-            if step % 10 == 0:
+            if step % 1 == 0:
                 # with torch.enable_grad():
                 #     grad_tmp = torch.autograd.grad(FixedPoint.fixed_point_iter(ctx.env, ctx.sigma_dict, ctx.opts_svd, ctx.slices, env_data, psi_data), psi_data, grad_outputs=dA)
                 grad_tmp = torch.cat(dfdA_vjp(dA)[0])
                 if prev_grad_tmp is not None:
                     grad_diff = torch.norm(grad_tmp[0] - prev_grad_tmp[0])
-                    # print("full grad diff", grad_diff)
+                    print("full grad diff", grad_diff)
                     if grad_diff < 1e-10:
                         # print("The norm of the full grad diff is below 1e-10.")
                         log.log(logging.INFO, f"Fixed_pt: The norm of the full grad diff is below 1e-10.")
@@ -738,4 +775,4 @@ class FixedPoint(torch.autograd.Function):
         # with torch.enable_grad():
         #   dA = torch.autograd.grad(FixedPoint.fixed_point_iter(ctx.env, ctx.sigma_dict, ctx.opts_svd, ctx.slices, env_data), ctx.env.psi.ket.get_parameters(), grad_outputs=u)
 
-        return None, None, None, None, None, None, None, None, *dA
+        return None, None, None, *dA
