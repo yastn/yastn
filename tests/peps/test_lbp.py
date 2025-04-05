@@ -20,7 +20,7 @@ import yastn.tn.fpeps as fpeps
 tol = 1e-12  #pylint: disable=invalid-name
 
 
-def test_lbp_measure_product(config_kwargs):
+def test_iterate_measure_product(config_kwargs):
     """ Initialize a product PEPS and perform a set of measurment. """
     ops = yastn.operators.Spin1(sym='Z3', **config_kwargs)
 
@@ -32,8 +32,8 @@ def test_lbp_measure_product(config_kwargs):
     vectors = {s: ops.vec_z(val=v) for s, v in vals.items()}
     psi = fpeps.product_peps(g, vectors)
 
-    env = fpeps.EnvLBP(psi, init='eye')
-    info = env.lbp_(max_sweeps=5, diff_tol=1e-10)
+    env = fpeps.EnvBP(psi, init='eye')
+    info = env.iterate_(max_sweeps=5, diff_tol=1e-10)
     assert info.converged
     #
     #  measure_1site
@@ -43,7 +43,7 @@ def test_lbp_measure_product(config_kwargs):
     assert all(abs(v - ez[s]) < tol for s, v in vals.items())
 
 
-def test_lbp_measure_2x1(config_kwargs):
+def test_iterate_measure_2x1(config_kwargs):
     """ Initialize a product PEPS of 1x2 cells and perform a set of measurment. """
 
     for dims in [(1, 2), (2, 1)]:
@@ -74,9 +74,9 @@ def test_lbp_measure_2x1(config_kwargs):
 
             psi = fpeps.Peps(g, tensors=dict(zip(g.sites(), [r0, r1])))
 
-            env = fpeps.EnvLBP(psi, init='eye')
+            env = fpeps.EnvBP(psi, init='eye')
             # no need to converge ctmrg_ in this example
-            env.lbp_(max_sweeps=5)
+            env.iterate_(max_sweeps=5)
 
             val = -1 / 3  #  result of <psi | cs_0+ cs_1 | psi>
             for s in ['u', 'd']:
@@ -122,9 +122,9 @@ def test_lbp_measure_2x1(config_kwargs):
 
                     psi = fpeps.Peps(g, tensors=dict(zip(g.sites(), [r0, r1])))
 
-                    env = fpeps.EnvLBP(psi)
+                    env = fpeps.EnvBP(psi)
                     # no need to converge ctmrg_ in this example, but we can do it anyway
-                    env.lbp_(max_sweeps=2)
+                    env.iterate_(max_sweeps=2)
                     bond = [*g.sites()]
                     assert abs(env.measure_nn(ops.cp('u'), ops.c('u'), bond=bond) - val) < tol
                     assert abs(env.measure_nn(ops.c('u'), ops.cp('u'), bond=bond[::-1]) - (-val)) < tol

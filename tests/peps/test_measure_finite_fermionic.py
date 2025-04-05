@@ -300,8 +300,8 @@ def test_measure_lbp(config_kwargs, sym, L=3):
     phi = generate_mps(ops, occs_init[L], angles, s2i)
     psi = generate_peps(g, ops, occs_init[L], angles)
     #
-    env_lbp = fpeps.EnvLBP(psi)
-    info = env_lbp.lbp_(max_sweeps=10, diff_tol=1e-10)
+    env_lbp = fpeps.EnvBP(psi)
+    info = env_lbp.iterate_(max_sweeps=10, diff_tol=1e-10)
     assert info.converged and info.sweeps < 10
     #
     # check occupations

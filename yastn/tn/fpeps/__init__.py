@@ -24,4 +24,4 @@ from .envs._env_ntu import EnvNTU
 from .envs._env_boundary_mps import EnvBoundaryMPS
 from .envs._env_window import EnvWindow
 from .envs._env_cluster_approximate import EnvApproximate
-from .envs._env_lbp import EnvLBP
+from .envs._env_lbp import EnvBP

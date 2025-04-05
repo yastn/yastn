@@ -25,9 +25,9 @@ from ._env_boundary_mps import _clear_operator_input
 
 
 @dataclass()
-class EnvLBP_local():
+class EnvBP_local():
     r"""
-    Dataclass for LBP environment tensors at a single Peps site on square lattice.
+    Dataclass for BP environment tensors at a single Peps site on square lattice.
 
     Contains fields ``t``,  ``l``, ``b``, ``r``
     """
@@ -37,39 +37,39 @@ class EnvLBP_local():
     r  : Union[Tensor, None] = None  # right
 
 
-class LBP_out(NamedTuple):
+class BP_out(NamedTuple):
     sweeps : int = 0
     max_diff : float = None
     converged : bool = False
 
 
-class EnvLBP(Peps):
+class EnvBP(Peps):
 
-    def __init__(self, psi, init='eye', tol_positive=1e-12, which="LBP"):
+    def __init__(self, psi, init='eye', tol_positive=1e-12, which="BP"):
         r"""
-        Environment used in LBP
+        Environment used in BP
 
         Parameters
         ----------
         psi: yastn.tn.Peps
-            PEPS lattice to be contracted using LBP.
+            PEPS lattice to be contracted using BP.
             If ``psi`` has physical legs, a double-layer PEPS with no physical legs is formed.
 
         init: str
-            None, 'eye'. Initialization scheme, see :meth:`yastn.tn.fpeps.EnvLBP.reset_`.
+            None, 'eye'. Initialization scheme, see :meth:`yastn.tn.fpeps.EnvBP.reset_`.
         """
         super().__init__(psi.geometry)
         self.psi = Peps2Layers(psi) if psi.has_physical() else psi
         self.tol_positive = tol_positive
 
-        if which not in ('NN1+LBP', 'NNN+LBP', 'NN+LBP', 'LBP'):
-            raise YastnError(f" Type of EnvLBP bond_metric {which=} not recognized.")
+        if which not in ('NN1+BP', 'NNN+BP', 'NN+BP', 'BP'):
+            raise YastnError(f" Type of EnvBP bond_metric {which=} not recognized.")
 
         self.which = which
         if init not in (None, 'eye'):
             raise YastnError(f"EnvCTM {init=} not recognized. Should be 'eye' or None.")
         for site in self.sites():
-            self[site] = EnvLBP_local()
+            self[site] = EnvBP_local()
         if init is not None:
             self.reset_(init=init)
 
@@ -79,7 +79,7 @@ class EnvLBP(Peps):
 
     def reset_(self, init='eye'):
         r"""
-        Initialize LBP environment.
+        Initialize BP environment.
 
         Parameters
         ----------
@@ -105,7 +105,7 @@ class EnvLBP(Peps):
         Parameters
         ----------
         env: EnvCtm
-            Class containing LBP environment tensors along with lattice structure data.
+            Class containing BP environment tensors along with lattice structure data.
 
         O: Tensor
             Single-site operator
@@ -142,7 +142,7 @@ class EnvLBP(Peps):
 
     def measure_nn(self, O, P, bond=None) -> dict:
         r"""
-        Calculate nearest-neighbor expectation values within LBP environment.
+        Calculate nearest-neighbor expectation values within BP environment.
 
         Return a number if the nearest-neighbor ``bond`` is provided.
         If ``None``, returns a dictionary {bond: value} for all unique lattice bonds.
@@ -222,14 +222,14 @@ class EnvLBP(Peps):
 
     def update_(self) -> float:
         r"""
-        Perform one step of LBP update. Environment tensors are updated in place.
+        Perform one step of BP update. Environment tensors are updated in place.
 
         Returns
         -------
         diff: maximal difference between belief tensors befor and after the update.
         """
         #
-        env_tmp = None  # EnvLBP(self.psi, init=None)  # empty environments
+        env_tmp = None  # EnvBP(self.psi, init=None)  # empty environments
         diffs  = [self.update_bond_(bond, env_tmp=env_tmp) for bond in self.bonds('h')]
         diffs += [self.update_bond_(bond[::-1], env_tmp=env_tmp) for bond in self.bonds('h')[::-1]]
         diffs += [self.update_bond_(bond, env_tmp=env_tmp) for bond in self.bonds('v')]
@@ -295,19 +295,19 @@ class EnvLBP(Peps):
                      ║
                      b
         """
-        if dirn == "h" and self.which == "LBP":
+        if dirn == "h" and self.which == "BP":
             assert self.psi.nn_site(s0, (0, 1)) == s1
             vecl = hair_l(Q0, hl=self[s0].l, ht=self[s0].t, hb=self[s0].b)
             vecr = hair_r(Q1, hr=self[s1].r, ht=self[s1].t, hb=self[s1].b).T
             return (vecl, vecr)  # (rr' rr,  ll ll')
 
-        if dirn == "v" and self.which == "LBP":
+        if dirn == "v" and self.which == "BP":
             assert self.psi.nn_site(s0, (1, 0)) == s1
             vect = hair_t(Q0, hl=self[s0].l, ht=self[s0].t, hr=self[s0].r)
             vecb = hair_b(Q1, hr=self[s1].r, hb=self[s1].b, hl=self[s1].l).T
             return (vect, vecb)  # (bb' bb,  tt tt')
 
-        if dirn == "h" and self.which == "NN+LBP":
+        if dirn == "h" and self.which == "NN+BP":
             assert self.psi.nn_site(s0, (0, 1)) == s1
 
             m = {d: self.psi.nn_site(s0, d=d) for d in [(-1,0), (0,-1), (1,0), (1,1), (0,2), (-1,1)]}
@@ -334,7 +334,7 @@ class EnvLBP(Peps):
             g = tensordot((cbr @ cbl) @ env_l, (ctl @ ctr) @ env_r, axes=((0, 2), (2, 0)))  # [rr rr'] [ll ll']
             return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
 
-        if dirn == "v" and self.which == "NN+LBP":
+        if dirn == "v" and self.which == "NN+BP":
             assert self.psi.nn_site(s0, (1, 0)) == s1
             m = {d: self.psi.nn_site(s0, d=d) for d in [(-1,0), (0,-1), (1,-1), (2,0), (1,1), (0,1)]}
             mm = dict(m)  # for testing for None
@@ -360,7 +360,7 @@ class EnvLBP(Peps):
             g = tensordot((cbl @ ctl) @ env_t, (ctr @ cbr) @ env_b, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
             return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
 
-        if dirn == "h" and self.which == "NNN+LBP":
+        if dirn == "h" and self.which == "NNN+BP":
             assert self.psi.nn_site(s0, (0, 1)) == s1
             sts = [(-1,-1), (0,-1), (1,-1), (1,0), (1,1), (1,2), (0,2), (-1,2), (-1,1), (-1,0)]
             m = {d: self.psi.nn_site(s0, d=d) for d in sts}
@@ -396,7 +396,7 @@ class EnvLBP(Peps):
             g = tensordot(vecl, vecr, axes=((0, 1), (1, 0)))  # [rr rr'] [ll ll']
             return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
 
-        if dirn == "v" and self.which == "NNN+LBP":
+        if dirn == "v" and self.which == "NNN+BP":
             assert self.psi.nn_site(s0, (1, 0)) == s1
             sts = [(-1,-1), (0,-1), (1,-1), (2,-1), (2,0), (2,1), (1,1), (0,1), (-1,1), (-1,0)]
             m = {d: self.psi.nn_site(s0, d=d) for d in sts}
@@ -433,7 +433,7 @@ class EnvLBP(Peps):
             return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
 
 
-        if dirn == "h" and self.which == "NN1+LBP":
+        if dirn == "h" and self.which == "NN1+BP":
             assert self.psi.nn_site(s0, (0, 1)) == s1
             sts = [(-1,-1), (0,-1), (1,-1), (1,0), (1,1), (1,2), (0,2), (-1,2), (-1,1), (-1,0)]
             m = {d: self.psi.nn_site(s0, d=d) for d in sts}
@@ -474,7 +474,7 @@ class EnvLBP(Peps):
             g = tensordot((cbr @ cbl) @ env_l, (ctl @ ctr) @ env_r, axes=((0, 2), (2, 0)))  # [rr rr'] [ll ll']
             return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
 
-        if dirn == "v" and self.which == "NN1+LBP":
+        if dirn == "v" and self.which == "NN1+BP":
             assert self.psi.nn_site(s0, (1, 0)) == s1
             sts = [(-1,-1), (0,-1), (1,-1), (2,-1), (2,0), (2,1), (1,1), (0,1), (-1,1), (-1,0)]
             m = {d: self.psi.nn_site(s0, d=d) for d in sts}
@@ -516,19 +516,21 @@ class EnvLBP(Peps):
             return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
 
 
-
-    def post_evolution_(env, bond, **kwargs):
+    def post_evolution_(env, bond, max_sweeps=1):
         env.update_bond_(bond)
         env.update_bond_(bond[::-1])
+        if max_sweeps > 0:
+            env.iterate_(max_sweeps=max_sweeps)
 
-    def lbp_(env, max_sweeps=1, iterator_step=None, diff_tol=None):
+
+    def iterate_(env, max_sweeps=1, iterator_step=None, diff_tol=None):
         r"""
-        Perform LBP updates :meth:`yastn.tn.fpeps.EnvLBP.update_` until convergence.
+        Perform BP updates :meth:`yastn.tn.fpeps.EnvBP.update_` until convergence.
         Convergence can be measured based on maximal difference between old and new tensors.
 
         Outputs iterator if ``iterator_step`` is given, which allows
         inspecting ``env``, e.g., calculating expectation values,
-        outside of ``lbp_`` function after every ``iterator_step`` sweeps.
+        outside of ``iterate_`` function after every ``iterator_step`` sweeps.
 
         Parameters
         ----------
@@ -548,18 +550,18 @@ class EnvLBP(Peps):
         -------
         Generator if iterator_step is not ``None``.
 
-        LBP_out(NamedTuple)
+        BP_out(NamedTuple)
             NamedTuple including fields:
 
                 * ``sweeps`` number of performed lbp updates.
                 * ``max_diff`` maximal difference between old and new belief tensors.
                 * ``converged`` whether convergence based on ``diff_tol`` has been reached.
         """
-        tmp = _lbp_(env, max_sweeps, iterator_step, diff_tol)
+        tmp = _iterate_(env, max_sweeps, iterator_step, diff_tol)
         return tmp if iterator_step else next(tmp)
 
 
-def _lbp_(env, max_sweeps, iterator_step, diff_tol):
+def _iterate_(env, max_sweeps, iterator_step, diff_tol):
     """ Generator for ctmrg_(). """
     converged = None
     for sweep in range(1, max_sweeps + 1):
@@ -570,8 +572,8 @@ def _lbp_(env, max_sweeps, iterator_step, diff_tol):
             break
 
         if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
-            yield LBP_out(sweeps=sweep, max_diff=max_diff, converged=converged)
-    yield LBP_out(sweeps=sweep, max_diff=max_diff, converged=converged)
+            yield BP_out(sweeps=sweep, max_diff=max_diff, converged=converged)
+    yield BP_out(sweeps=sweep, max_diff=max_diff, converged=converged)
 
 
 def regularize_belief(mat, tol):

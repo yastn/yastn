@@ -1115,8 +1115,11 @@ class EnvCTM(Peps):
             if env.config.backend.BACKEND_ID == "torch":
                 assert kwargs["checkpoint_move"] in ['reentrant','nonreentrant',False], f"Invalid choice for {kwargs['checkpoint_move']}"
         kwargs["truncation_f"]= truncation_f
-        tmp = _ctmrg_(env, opts_svd, method, max_sweeps, iterator_step, corner_tol, **kwargs)
+        tmp = _iterate_ctmrg_(env, opts_svd, method, max_sweeps, iterator_step, corner_tol, **kwargs)
         return tmp if iterator_step else next(tmp)
+
+    iterate_ = ctmrg_
+
 
 def ctm_conv_corner_spec(env : EnvCTM, history : Sequence[dict[tuple[Site,str],Tensor]]=[],
                          corner_tol : Union[None,float]=1.0e-8)->tuple[bool,float,Sequence[dict[tuple[Site,str],Tensor]]]:
@@ -1129,7 +1132,7 @@ def ctm_conv_corner_spec(env : EnvCTM, history : Sequence[dict[tuple[Site,str],T
     return (corner_tol is not None and max_dsv < corner_tol), max_dsv, history
 
 
-def _ctmrg_(env, opts_svd, method, max_sweeps, iterator_step, corner_tol, **kwargs):
+def _iterate_ctmrg_(env, opts_svd, method, max_sweeps, iterator_step, corner_tol, **kwargs):
     """ Generator for ctmrg_(). """
     max_dsv, converged = None, False
     for sweep in range(1, max_sweeps + 1):

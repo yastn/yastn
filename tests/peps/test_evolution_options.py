@@ -85,9 +85,9 @@ def test_evolution(config_kwargs):
     #
     # for bipartite environment
     #
-    for which in ['LBP', 'NN+LBP']:
+    for which in ['BP', 'NN+BP']:
         psi = fpeps.product_peps(geometry, ops.I())
-        env = fpeps.EnvLBP(psi, which=which)
+        env = fpeps.EnvBP(psi, which=which)
         infoss = []
         for _ in range(steps):
             infos = fpeps.evolution_step_(env, gates, opts_svd=opts_svd, initialization=initialization)
