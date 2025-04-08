@@ -197,6 +197,13 @@ def __str__(a) -> str:
     return s
 
 
+def __repr__(a) -> str:
+    """
+    Return string representation of the tensor.
+    """
+    return __str__(a)
+
+
 def requires_grad(a) -> bool:
     """
     Return ``True`` if tensor data have autograd enabled.

@@ -1139,7 +1139,14 @@ def ctm_conv_corner_spec(env : EnvCTM, history : Sequence[dict[tuple[Site,str],T
     Evaluate convergence of CTM by computing the difference of environment corner spectra between consecutive CTM steps.
     """
     history.append(calculate_corner_svd(env))
-    max_dsv = max((history[-1][k] - history[-2][k]).norm().item() for k in history[-1]) if len(history)>1 else float('Nan')
+    def spec_diff(x,y): 
+        if x is not None and y is not None:
+            return (x - y).norm().item()
+        elif x is None and y is None:
+            return 0
+        else:
+            return float('Inf')
+    max_dsv = max(spec_diff(history[-1][k], history[-2][k]) for k in history[-1]) if len(history)>1 else float('Nan')
 
     return (corner_tol is not None and max_dsv < corner_tol), max_dsv, history
 
@@ -1169,14 +1176,16 @@ def calculate_corner_svd(env : dict[tuple[Site,str],Tensor]):
     Return normalized SVD spectra, with largest singular value set to unity, of all corner tensors of environment.
     The corners are indexed by pair of Site and corner identifier.
     """
+    _get_spec= lambda x: x.svd(compute_uv=False) if not (x is None) and not x.isdiag else x
     corner_sv = {}
     for site in env.sites():
-        corner_sv[site, 'tl'] = env[site].tl.svd(compute_uv=False)
-        corner_sv[site, 'tr'] = env[site].tr.svd(compute_uv=False)
-        corner_sv[site, 'bl'] = env[site].bl.svd(compute_uv=False)
-        corner_sv[site, 'br'] = env[site].br.svd(compute_uv=False)
+        corner_sv[site, 'tl'] = _get_spec(env[site].tl)
+        corner_sv[site, 'tr'] = _get_spec(env[site].tr)
+        corner_sv[site, 'bl'] = _get_spec(env[site].bl)
+        corner_sv[site, 'br'] = _get_spec(env[site].br)
     for k, v in corner_sv.items():
-        corner_sv[k] = v / v.norm(p='inf')
+        if not corner_sv[k] is None:
+            corner_sv[k] = v / v.norm(p='inf')
     return corner_sv
 
 

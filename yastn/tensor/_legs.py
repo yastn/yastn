@@ -105,6 +105,9 @@ class Leg:
     def __str__(self):
         return ("Leg(sym={}, s={}, t={}, D={}, hist={})".format(self.sym, self.s, self.t, self.D, self.history()))
 
+    def __repr__(self):
+        return self.__str__()
+
     def conj(self) -> yastn.Leg:
         r""" New :class:`yastn.Leg` with switched signature. """
         return Leg(sym=self.sym, s=-self.s, t=self.t, D=self.D, hf=self.hf.conj(), _verified=True)
