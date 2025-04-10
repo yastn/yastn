@@ -72,9 +72,21 @@ class EnvCTM(Peps):
         Environment used in Corner Transfer Matrix Renormalization Group algorithm.
 
         Note:
-            Index convention for environment tensor
+            Index convention for environment tensors::
 
-                * enlarged corners: anti-clockwise
+                C--1 0--T--2 0--C
+                |       |       |
+                0       1       1
+                2               0
+                |               |
+                T--1         1--T
+                |               |
+                0               2
+                1       1       0
+                |       |       |
+                C--0 2--T--0 1--C
+
+            * enlarged corners: anti-clockwise
 
         Parameters
         ----------
@@ -1118,7 +1130,7 @@ class EnvCTM(Peps):
         tmp = _iterate_ctmrg_(env, opts_svd, method, max_sweeps, iterator_step, corner_tol, **kwargs)
         return tmp if iterator_step else next(tmp)
 
-    iterate_ = ctmrg_
+    iterate_ = ctmrg_  #  allow using EnvCtm.iterate_() instead of allow using EnvCtm.ctmrg_()
 
 
 def ctm_conv_corner_spec(env : EnvCTM, history : Sequence[dict[tuple[Site,str],Tensor]]=[],
@@ -1464,6 +1476,7 @@ def update_old_env_(env, env_tmp):
         for k, v in env_tmp[site].__dict__.items():
             if v is not None:
                 setattr(env[site], k, v)
+
 
 def store_projectors_(proj : Peps, proj_other : Peps):
     r"""
