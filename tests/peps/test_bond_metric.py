@@ -65,9 +65,6 @@ def test_spinless_infinite_approx(config_kwargs):
     envs['NNN+BP'] = fpeps.EnvBP(psi, which='NNN+BP')
     info = envs['NNN+BP'].iterate_(max_sweeps=10, diff_tol=1e-10)
     #
-    envs['NN1+BP'] = fpeps.EnvBP(psi, which='NN1+BP')
-    info = envs['NN1+BP'].iterate_(max_sweeps=10, diff_tol=1e-10)
-
     for s0, s1, dirn in [[(0, 0), (0, 1), 'h'], [(0, 1), (1, 1), 'v']]:
         QA, QB = psi[s0], psi[s1]
         Gs = {k: env.bond_metric(QA, QB, s0, s1, dirn) for k, env in envs.items()}
@@ -87,7 +84,6 @@ def test_spinless_infinite_approx(config_kwargs):
         assert (Gs['NN+BP'] - Gs['FU']).norm() < 1e-3
         assert (Gs['NN+BP'] - Gs['NN+']).norm() < 1e-2
         assert (Gs['NNN+BP'] - Gs['NNN+']).norm() < 1e-3
-        assert (Gs['NN1+BP'] - Gs['NN+']).norm() < 1e-3
 
 
     with pytest.raises(yastn.YastnError):

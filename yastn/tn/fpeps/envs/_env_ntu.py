@@ -30,7 +30,7 @@ class EnvNTU:
             Peps state being evolved.
 
         which: str
-            Type of environment from 'NN', 'NN+', 'NN++', 'NNN', 'NNN+', 'NNN++'
+            Type of bond environment from 'NN', 'NN+', 'NN++', 'NNN', 'NNN+', 'NNN++'
         """
 
         if which not in ('NN', 'NN+', 'NN++', 'NNN', 'NNN+', 'NNN++'):

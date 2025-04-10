@@ -47,7 +47,7 @@ class EnvBP(Peps):
 
     def __init__(self, psi, init='eye', tol_positive=1e-12, which="BP"):
         r"""
-        Environment used in BP
+        Environment used in belief propagation contraction scheme.
 
         Parameters
         ----------
@@ -57,17 +57,20 @@ class EnvBP(Peps):
 
         init: str
             None, 'eye'. Initialization scheme, see :meth:`yastn.tn.fpeps.EnvBP.reset_`.
+
+        which: str
+            Type of environment from 'BP', 'NN+BP', 'NBN+BP'
         """
         super().__init__(psi.geometry)
         self.psi = Peps2Layers(psi) if psi.has_physical() else psi
         self.tol_positive = tol_positive
 
-        if which not in ('NN1+BP', 'NNN+BP', 'NN+BP', 'BP'):
+        if which not in ('NNN+BP', 'NN+BP', 'BP'):
             raise YastnError(f" Type of EnvBP bond_metric {which=} not recognized.")
 
         self.which = which
         if init not in (None, 'eye'):
-            raise YastnError(f"EnvCTM {init=} not recognized. Should be 'eye' or None.")
+            raise YastnError(f"EnvBP {init=} not recognized. Should be 'eye' or None.")
         for site in self.sites():
             self[site] = EnvBP_local()
         if init is not None:
@@ -97,14 +100,14 @@ class EnvBP(Peps):
 
     def measure_1site(self, O, site=None) -> dict:
         r"""
-        Calculate local expectation values within CTM environment.
+        Calculate local expectation values within BP environment.
 
         Returns a number if ``site`` is provided.
         If ``None``, returns a dictionary {site: value} for all unique lattice sites.
 
         Parameters
         ----------
-        env: EnvCtm
+        env: EnvBP
             Class containing BP environment tensors along with lattice structure data.
 
         O: Tensor
@@ -272,7 +275,7 @@ class EnvBP(Peps):
 
     def bond_metric(self, Q0, Q1, s0, s1, dirn):
         r"""
-        Calculates Full-Update metric tensor.
+        Calculates bond metric within BP environment.
 
         ::
 
@@ -433,87 +436,87 @@ class EnvBP(Peps):
             return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
 
 
-        if dirn == "h" and self.which == "NN1+BP":
-            assert self.psi.nn_site(s0, (0, 1)) == s1
-            sts = [(-1,-1), (0,-1), (1,-1), (1,0), (1,1), (1,2), (0,2), (-1,2), (-1,1), (-1,0)]
-            m = {d: self.psi.nn_site(s0, d=d) for d in sts}
-            mm = dict(m)  # for testing for None
-            tensors_from_psi(m, self.psi)
-            m = {k: (v.ket if isinstance(v, DoublePepsTensor) else v) for k, v in m.items()}
+        # if dirn == "h" and self.which == "NN1+BP":
+        #     assert self.psi.nn_site(s0, (0, 1)) == s1
+        #     sts = [(-1,-1), (0,-1), (1,-1), (1,0), (1,1), (1,2), (0,2), (-1,2), (-1,1), (-1,0)]
+        #     m = {d: self.psi.nn_site(s0, d=d) for d in sts}
+        #     mm = dict(m)  # for testing for None
+        #     tensors_from_psi(m, self.psi)
+        #     m = {k: (v.ket if isinstance(v, DoublePepsTensor) else v) for k, v in m.items()}
 
-            sm = mm[-1, -1]
-            clt = cor_tl(m[-1, -1]) if sm is None else cor_tl(m[-1, -1], ht=self[sm].t, hl=self[sm].l)
-            sm = mm[1, -1]
-            clb = cor_bl(m[1, -1]) if sm is None else cor_bl(m[1, -1], hb=self[sm].b, hl=self[sm].l)
-            sm = mm[1, 2]
-            crb = cor_br(m[1, 2]) if sm is None else cor_br(m[1, 2], hb=self[sm].b, hr=self[sm].r)
-            sm = mm[-1, 2]
-            crt = cor_tr(m[-1, 2]) if sm is None else cor_tr(m[-1, 2], hr=self[sm].r, ht=self[sm].t)
+        #     sm = mm[-1, -1]
+        #     clt = cor_tl(m[-1, -1]) if sm is None else cor_tl(m[-1, -1], ht=self[sm].t, hl=self[sm].l)
+        #     sm = mm[1, -1]
+        #     clb = cor_bl(m[1, -1]) if sm is None else cor_bl(m[1, -1], hb=self[sm].b, hl=self[sm].l)
+        #     sm = mm[1, 2]
+        #     crb = cor_br(m[1, 2]) if sm is None else cor_br(m[1, 2], hb=self[sm].b, hr=self[sm].r)
+        #     sm = mm[-1, 2]
+        #     crt = cor_tr(m[-1, 2]) if sm is None else cor_tr(m[-1, 2], hr=self[sm].r, ht=self[sm].t)
 
-            htl_t, htl_l = cut_into_hairs(clt)
-            htr_r, htr_t = cut_into_hairs(crt)
-            hbr_b, hbr_r = cut_into_hairs(crb)
-            hbl_l, hbl_b = cut_into_hairs(clb)
+        #     htl_t, htl_l = cut_into_hairs(clt)
+        #     htr_r, htr_t = cut_into_hairs(crt)
+        #     hbr_b, hbr_r = cut_into_hairs(crb)
+        #     hbl_l, hbl_b = cut_into_hairs(clb)
 
-            sm = mm[0, -1]
-            env_hl = hair_l(m[0, -1]) if sm is None else hair_l(m[0, -1], ht=htl_t, hl=self[sm].l, hb=hbl_b)
-            sm = mm[0, 2]
-            env_hr = hair_r(m[0,  2]) if sm is None else hair_r(m[0,  2], ht=htr_t, hb=hbr_b, hr=self[sm].r)
-            env_l = edge_l(Q0, hl=env_hl)  # [bl bl'] [rr rr'] [tl tl']
-            env_r = edge_r(Q1, hr=env_hr)  # [tr tr'] [ll ll'] [br br']
+        #     sm = mm[0, -1]
+        #     env_hl = hair_l(m[0, -1]) if sm is None else hair_l(m[0, -1], ht=htl_t, hl=self[sm].l, hb=hbl_b)
+        #     sm = mm[0, 2]
+        #     env_hr = hair_r(m[0,  2]) if sm is None else hair_r(m[0,  2], ht=htr_t, hb=hbr_b, hr=self[sm].r)
+        #     env_l = edge_l(Q0, hl=env_hl)  # [bl bl'] [rr rr'] [tl tl']
+        #     env_r = edge_r(Q1, hr=env_hr)  # [tr tr'] [ll ll'] [br br']
 
-            sm = mm[-1, 0]
-            ctl = cor_tl(m[-1, 0]) if sm is None else cor_tl(m[-1, 0], ht=self[sm].t, hl=htl_l)
-            sm = mm[-1, 1]
-            ctr = cor_tr(m[-1, 1]) if sm is None else cor_tr(m[-1, 1], ht=self[sm].t, hr=htr_r)
-            sm = mm[ 1, 1]
-            cbr = cor_br(m[ 1, 1]) if sm is None else cor_br(m[ 1, 1], hb=self[sm].b, hr=hbr_r)
-            sm = mm[ 1, 0]
-            cbl = cor_bl(m[ 1, 0]) if sm is None else cor_bl(m[ 1, 0], hb=self[sm].b, hl=hbl_l)
+        #     sm = mm[-1, 0]
+        #     ctl = cor_tl(m[-1, 0]) if sm is None else cor_tl(m[-1, 0], ht=self[sm].t, hl=htl_l)
+        #     sm = mm[-1, 1]
+        #     ctr = cor_tr(m[-1, 1]) if sm is None else cor_tr(m[-1, 1], ht=self[sm].t, hr=htr_r)
+        #     sm = mm[ 1, 1]
+        #     cbr = cor_br(m[ 1, 1]) if sm is None else cor_br(m[ 1, 1], hb=self[sm].b, hr=hbr_r)
+        #     sm = mm[ 1, 0]
+        #     cbl = cor_bl(m[ 1, 0]) if sm is None else cor_bl(m[ 1, 0], hb=self[sm].b, hl=hbl_l)
 
-            g = tensordot((cbr @ cbl) @ env_l, (ctl @ ctr) @ env_r, axes=((0, 2), (2, 0)))  # [rr rr'] [ll ll']
-            return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
+        #     g = tensordot((cbr @ cbl) @ env_l, (ctl @ ctr) @ env_r, axes=((0, 2), (2, 0)))  # [rr rr'] [ll ll']
+        #     return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
 
-        if dirn == "v" and self.which == "NN1+BP":
-            assert self.psi.nn_site(s0, (1, 0)) == s1
-            sts = [(-1,-1), (0,-1), (1,-1), (2,-1), (2,0), (2,1), (1,1), (0,1), (-1,1), (-1,0)]
-            m = {d: self.psi.nn_site(s0, d=d) for d in sts}
-            mm = dict(m)  # for testing for None
-            tensors_from_psi(m, self.psi)
-            m = {k: (v.ket if isinstance(v, DoublePepsTensor) else v) for k, v in m.items()}
+        # if dirn == "v" and self.which == "NN1+BP":
+        #     assert self.psi.nn_site(s0, (1, 0)) == s1
+        #     sts = [(-1,-1), (0,-1), (1,-1), (2,-1), (2,0), (2,1), (1,1), (0,1), (-1,1), (-1,0)]
+        #     m = {d: self.psi.nn_site(s0, d=d) for d in sts}
+        #     mm = dict(m)  # for testing for None
+        #     tensors_from_psi(m, self.psi)
+        #     m = {k: (v.ket if isinstance(v, DoublePepsTensor) else v) for k, v in m.items()}
 
-            sm = mm[-1, -1]
-            ctl = cor_tl(m[-1, -1]) if sm is None else cor_tl(m[-1, -1], hl=self[sm].l, ht=self[sm].t)
-            sm = mm[-1, 1]
-            ctr = cor_tr(m[-1, 1]) if sm is None else cor_tr(m[-1, 1], hr=self[sm].r, ht=self[sm].t)
-            sm = mm[2, 1]
-            cbr = cor_br(m[2, 1]) if sm is None else cor_br(m[2, 1], hr=self[sm].r, hb=self[sm].b)
-            sm = mm[2, -1]
-            cbl = cor_bl(m[2, -1]) if sm is None else cor_bl(m[2, -1], hb=self[sm].b, hl=self[sm].l)
+        #     sm = mm[-1, -1]
+        #     ctl = cor_tl(m[-1, -1]) if sm is None else cor_tl(m[-1, -1], hl=self[sm].l, ht=self[sm].t)
+        #     sm = mm[-1, 1]
+        #     ctr = cor_tr(m[-1, 1]) if sm is None else cor_tr(m[-1, 1], hr=self[sm].r, ht=self[sm].t)
+        #     sm = mm[2, 1]
+        #     cbr = cor_br(m[2, 1]) if sm is None else cor_br(m[2, 1], hr=self[sm].r, hb=self[sm].b)
+        #     sm = mm[2, -1]
+        #     cbl = cor_bl(m[2, -1]) if sm is None else cor_bl(m[2, -1], hb=self[sm].b, hl=self[sm].l)
 
-            htl_t, htl_l = cut_into_hairs(ctl)
-            htr_r, htr_t = cut_into_hairs(ctr)
-            hbr_b, hbr_r = cut_into_hairs(cbr)
-            hbl_l, hbl_b = cut_into_hairs(cbl)
+        #     htl_t, htl_l = cut_into_hairs(ctl)
+        #     htr_r, htr_t = cut_into_hairs(ctr)
+        #     hbr_b, hbr_r = cut_into_hairs(cbr)
+        #     hbl_l, hbl_b = cut_into_hairs(cbl)
 
-            sm = mm[-1, 0]
-            env_ht = hair_t(m[-1, 0]) if sm is None else hair_t(m[-1, 0], ht=self[sm].t, hl=htl_l, hr=htr_r)
-            sm = mm[2, 0]
-            env_hb = hair_b(m[ 2, 0]) if sm is None else hair_b(m[ 2, 0], hl=hbl_l, hb=self[sm].b, hr=hbr_r)
-            env_t = edge_t(Q0, ht=env_ht)  # [lt lt'] [bb bb'] [rt rt']
-            env_b = edge_b(Q1, hb=env_hb)  # [rb rb'] [tt tt'] [lb lb']
+        #     sm = mm[-1, 0]
+        #     env_ht = hair_t(m[-1, 0]) if sm is None else hair_t(m[-1, 0], ht=self[sm].t, hl=htl_l, hr=htr_r)
+        #     sm = mm[2, 0]
+        #     env_hb = hair_b(m[ 2, 0]) if sm is None else hair_b(m[ 2, 0], hl=hbl_l, hb=self[sm].b, hr=hbr_r)
+        #     env_t = edge_t(Q0, ht=env_ht)  # [lt lt'] [bb bb'] [rt rt']
+        #     env_b = edge_b(Q1, hb=env_hb)  # [rb rb'] [tt tt'] [lb lb']
 
-            sm = mm[1, -1]
-            cbl = cor_bl(m[1, -1]) if sm is None else cor_bl(m[1, -1], hb=hbl_b, hl=self[sm].l)
-            sm = mm[0, -1]
-            ctl = cor_tl(m[0, -1]) if sm is None else cor_tl(m[0, -1], ht=htl_t, hl=self[sm].l)
-            sm = mm[0,  1]
-            ctr = cor_tr(m[0,  1]) if sm is None else cor_tr(m[0,  1], ht=htr_t, hr=self[sm].r)
-            sm = mm[1,  1]
-            cbr = cor_br(m[1,  1]) if sm is None else cor_br(m[1,  1], hb=hbr_b, hr=self[sm].r)
+        #     sm = mm[1, -1]
+        #     cbl = cor_bl(m[1, -1]) if sm is None else cor_bl(m[1, -1], hb=hbl_b, hl=self[sm].l)
+        #     sm = mm[0, -1]
+        #     ctl = cor_tl(m[0, -1]) if sm is None else cor_tl(m[0, -1], ht=htl_t, hl=self[sm].l)
+        #     sm = mm[0,  1]
+        #     ctr = cor_tr(m[0,  1]) if sm is None else cor_tr(m[0,  1], ht=htr_t, hr=self[sm].r)
+        #     sm = mm[1,  1]
+        #     cbr = cor_br(m[1,  1]) if sm is None else cor_br(m[1,  1], hb=hbr_b, hr=self[sm].r)
 
-            g = tensordot((cbl @ ctl) @ env_t, (ctr @ cbr) @ env_b, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
-            return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
+        #     g = tensordot((cbl @ ctl) @ env_t, (ctr @ cbr) @ env_b, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
+        #     return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
 
 
     def post_evolution_(env, bond, max_sweeps=1):
@@ -538,8 +541,8 @@ class EnvBP(Peps):
             Maximal number of sweeps.
 
         iterator_step: int
-            If int, ``ctmrg_`` returns a generator that would yield output after every iterator_step sweeps.
-            The default is ``None``, in which case  ``ctmrg_`` sweeps are performed immediately.
+            If int, ``iterate_`` returns a generator that would yield output after every iterator_step sweeps.
+            The default is ``None``, in which case  ``iterate_`` sweeps are performed immediately.
 
         diff_tol: float
             Convergence tolerance for the change of belief tensors in one iteration.
