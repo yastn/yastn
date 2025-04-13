@@ -26,6 +26,7 @@ from .tensor._auxliary import _struct, _config, _slc, _clear_axes, _unpack_legs
 from .tensor._merging import _Fusion, _embed_tensor, _combine_hfs_sum
 from .tensor._legs import Leg, LegMeta, legs_union, _legs_mask_needed
 from .tensor._tests import _test_can_be_combined
+from .tensor._contractions import ncon
 from .backend import backend_np
 from .sym import sym_none, sym_U1, sym_Z2, sym_Z3, sym_U1xU1, sym_U1xU1xZ2
 
@@ -39,7 +40,8 @@ _syms = {"dense": sym_none,
          "U1xU1xZ2": sym_U1xU1xZ2}
 
 __all__ = ['rand', 'rand_like', 'randR', 'randC', 'zeros', 'ones', 'eye', 'block',
-           'make_config', 'load_from_dict', 'load_from_hdf5', 'decompress_from_1d']
+           'make_config', 'load_from_dict', 'load_from_hdf5', 'decompress_from_1d',
+           'eye_nodiag']
 
 
 # def make_config(backend=backend_np, sym=sym_none, default_device='cpu',
@@ -333,6 +335,36 @@ def eye(config=None, legs=(), isdiag=True, **kwargs) -> yastn.Tensor:
         for i in range(min(D)):
             blk[i, i] = 1
     return tmp
+
+
+def eye_nodiag(config=None, legs=(), **kwargs):
+    if isinstance(legs, (Leg, LegMeta)):
+        legs = (legs,)
+    if len(legs) == 1:
+        legs = (legs[0], legs[0].conj())
+    legs = legs[:2]  # in case more then 2 legs are provided
+    if any(isinstance(leg, LegMeta) for leg in legs):
+        raise YastnError("eye() does not support 'meta'-fused legs")    
+
+    if legs[0].is_fused():
+        ulegs0 = legs[0].unfuse_leg()
+        ulegs1 = legs[1].unfuse_leg()
+        tens = [eye_nodiag(config=config, legs=(l0, l1), **kwargs)
+                    for l0, l1 in zip(ulegs0, ulegs1)]
+        lt = len(tens)
+        inds = [[-2 * i for i in range(lt)],
+                [-2 * i - 1 for i in range(lt)]]
+        tmp = ncon(tens, inds)
+        axes = (tuple(range(lt)), tuple(range(lt, 2 * lt)))
+        return tmp.fuse_legs(axes=axes)
+    else:
+        tmp = _fill(config=config, legs=legs, val='zeros', **kwargs)
+        for t, D in zip(tmp.struct.t, tmp.struct.D):
+            blk = tmp[t]
+            for i in range(min(D)):
+                blk[i, i] = 1
+        return tmp
+
 
 
 def load_from_dict(config=None, d=None) -> yastn.Tensor:

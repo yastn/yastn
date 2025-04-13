@@ -491,12 +491,16 @@ def test_initialize_eye(config_kwargs):
     c = b.fuse_legs(axes=(0, (1, 2)), mode='hard')
 
     leg = c.get_legs(axes=1)
-    e = yastn.eye(a.config, legs=leg.conj(), isdiag=False)
-    assert e.isdiag is False
-    cc = c @ e
-    assert (c - cc).norm() < tol
+    e0 = yastn.eye(a.config, legs=leg.conj(), isdiag=False)
+    e1 = yastn.eye_nodiag(a.config, legs=leg.conj())
 
-    e = e.unfuse_legs(axes=(0, 1))
+    assert all(x.isdiag is False for x in [e0, e1])
+    assert all((c - c @ x).norm() < tol for x in [e0, e1])
+
+    ff0 = yastn.eye(a.config, legs=[leg, leg], isdiag=False)
+    ff1 = yastn.eye_nodiag(a.config, legs=[leg, leg])
+
+    e = e0.unfuse_legs(axes=(0, 1))
     e = e.unfuse_legs(axes=(0, 2))
     legse = e.get_legs()
     assert legse[0].conj() == legs[1] == legse[3]
@@ -517,6 +521,8 @@ def test_initialize_eye(config_kwargs):
         # eye does not support 'meta'-fused legs
 
 
+
 if __name__ == '__main__':
+    test_initialize_eye({})
     # pytest.main([__file__, "-vs", "--durations=0"])
-    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])
+    # pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])
