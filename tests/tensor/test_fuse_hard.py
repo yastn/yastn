@@ -521,8 +521,30 @@ def test_initialize_eye(config_kwargs):
         # eye does not support 'meta'-fused legs
 
 
+def test_initialize_eye_nodiag(config_kwargs):
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    legs = [yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(1, 2, 1)),
+            yastn.Leg(config_U1, s=1,  t=(-1, 0, 1), D=(2, 3, 2)),
+            yastn.Leg(config_U1, s=1,  t=(-1, 0, 1), D=(2, 3, 2)),
+            yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(2, 3, 2))]
+    a = yastn.rand(config=config_U1, legs=legs)
+    b = a.fuse_legs(axes=(0, (1, 2), 3), mode='hard')
+    c = b.fuse_legs(axes=(0, (1, 2)), mode='hard')
+
+    leg = c.get_legs(axes=1).conj()
+    d = yastn.eye_nodiag(a.config, legs=[leg, leg])
+    e = c @ d
+
+    af = a.flip_charges(axes=(1, 2, 3))
+    bf = af.fuse_legs(axes=(0, (1, 2), 3), mode='hard')
+    ef = bf.fuse_legs(axes=(0, (1, 2)), mode='hard')
+
+    assert (e - ef).norm() < tol
+
+
+
 
 if __name__ == '__main__':
-    test_initialize_eye({})
+    test_initialize_eye_nodiag({})
     # pytest.main([__file__, "-vs", "--durations=0"])
     # pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])
