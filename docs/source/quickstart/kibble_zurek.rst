@@ -27,7 +27,7 @@ paramagnetic and spin-glass phases in finite annealing time :math:`t_a`.
 This provides a minimal example of a class of problems considered in https://arxiv.org/abs/2403.00910
 
 We compare the results obtained using MPS and PEPS routines.
-This example can be also run from `tests/quickstart/test_KZ.py <https://github.com/yastn/yastn/blob/master/tests/quickstart/test_KZ.py>`
+This example can be also run from `tests/quickstart/test_KZ.py <https://github.com/yastn/yastn/blob/master/tests/quickstart/test_KZ.py>`_
 
 1. *Initialization of Model Parameters*:
     .. code-block:: python

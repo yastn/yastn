@@ -109,6 +109,108 @@ def evolution_step_(env, gates, opts_svd, symmetrize=True,
     return infos
 
 
+def truncate_(env, opts_svd, bond=None,
+              fix_metric=0,
+              pinv_cutoffs=(1e-12, 1e-11, 1e-10, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4),
+              max_iter=100, tol_iter=1e-13, initialization="EAT_SVD"):
+    r"""
+    Perform a single step of PEPS evolution by applying a list of gates.
+    Truncate bond dimension after each application of a two-site gate.
+
+    Parameters
+    ----------
+    env: EnvNTU | EnvCTM | EnvApproximate
+        Environment class containing PEPS state (updated in place),
+        and a method to calculate bond metric tensors employed during truncation.
+    opts_svd: dict | Sequence[dict]
+        Options passed to :meth:`yastn.linalg.svd_with_truncation` which are used
+        to initially truncate the bond dimension before it is further optimized iteratively.
+        In particular, it fixes bond dimensions (potentially, sectorial).
+        It is possible to provide a list of dicts (with decreasing bond dimensions),
+        in which case the truncation is done gradually in a few steps.
+    fix_metric: int | None
+        Error measure of the metric tensor is a sum of: the norm of its non-hermitian part
+        and absolute value of the most negative eigenvalue (if present).
+        If ``fix_metric`` is a number, replace eigenvalues smaller than the error_measure with fix_metric * error_measure.
+        Sensible values of ``fix_metric`` are :math:`0` and :math:`1`. The default is :math:`0`.
+        If ``None``, do not perform eigh to test for negative eigenvalues and do not fix metric.
+    pinv_cutoffs: Sequence[float] | float
+        List of pseudo-inverse cutoffs.
+        The one that gives the smallest truncation error is used during iterative optimizations and EAT initialization.
+    max_iter: int
+        The maximal number of iterative steps for each truncation optimization.
+    tol_iter: int
+        Tolerance of truncation_error to stop iterative optimization.
+    initialization: str
+        Tested initializations of iterative optimization. The one resulting in the smallest error is selected.
+        Possible options are 'SVD' (svd initialization only), 'EAT' (EAT optimization only), 'SVD_EAT' (tries both).
+
+    Returns
+    -------
+    Evolution_out(NamedTuple)
+        Namedtuple containing fields:
+            * ``bond`` bond where the gate is applied.
+            * ``truncation_error`` relative norm of the difference between untruncated and truncated bonds, calculated in metric specified by env.
+            * ``best_method`` initialization/optimization method giving the best truncation_error. Possible values are 'eat', 'eat_opt', 'svd', 'svd_opt'.
+            * ``nonhermitian_part`` norm of the non-hermitian part of the bond metric, normalized by the bond metric norm. Estimator of metric error.
+            * ``min_eigenvalue`` the smallest bond metric eigenvalue, normalized by the bond metric norm. Can be negative which gives an estimate of metric error.
+            * ``wrong_eigenvalues`` a fraction of bond metrics eigenvalues that were below the error threshold; and were modified according to ``fix_metric`` argument.
+            * ``eat_metric_error`` error of approximating metric tensor by a product via SVD-1 in EAT initialization.
+            * ``truncation_errors`` dict with truncation_error-s for all tested initializations/optimizations.
+            * ``iterations`` dict with number of iterations to converge iterative optimization.
+            * ``pinv_cutoffs`` dict with optimal pinv_cutoffs for methods where pinv appears.
+    """
+    psi = env.psi
+    if isinstance(psi, Peps2Layers):
+        psi = psi.ket  # to make it work with CtmEnv
+
+    if bond is None:
+        bonds = psi.bonds()
+    else:
+        bonds = [bond]
+
+    infos = []
+    for bond in bonds:
+        info = {'bond': bond}
+        dirn, l_ordered = psi.nn_bond_type(bond)
+        s0, s1 = bond if l_ordered else bond[::-1]
+
+        if dirn == 'h':  # Horizontal gate, "lr" ordered
+            tmp0 = psi[s0].fuse_legs(axes=((0, 2), 1))  # [[t l] sa] [b r]
+            tmp0 = tmp0.unfuse_legs(axes=1)  # [[t l] sa] b r
+            tmp0 = tmp0.fuse_legs(axes=((0, 1), 2))  # [[[t l] sa] b] r
+            Q0f, R0 = tmp0.qr(axes=(0, 1), sQ=-1)  # [[[t l] sa] b] rr @ rr r
+
+            tmp1 = psi[s1].fuse_legs(axes=(0, (1, 2)))  # [t l] [[b r] sa]
+            tmp1 = tmp1.unfuse_legs(axes=0)  # t l [[b r] sa]
+            tmp1 = tmp1.fuse_legs(axes=((0, 2), 1))  # [t [[b r] sa]] l
+            Q1f, R1 = tmp1.qr(axes=(0, 1), sQ=1, Qaxis=0, Raxis=-1)  # ll [t [[b r] sa]] @ l ll
+
+        else: # dirn == 'v':  # Vertical gate, "tb" ordered
+            tmp0 = psi[s0].fuse_legs(axes=((0, 2), 1))  # [[t l] sa] [b r]
+            tmp0 = tmp0.unfuse_legs(axes=1)  # [[t l] sa] b r
+            tmp0 = tmp0.fuse_legs(axes=((0, 2), 1))  # [[[t l] sa] r] b
+            Q0f, R0 = tmp0.qr(axes=(0, 1), sQ=1)  # [[[t l] sa] r] bb @ bb b
+
+            tmp1 = psi[s1].fuse_legs(axes=(0, (1, 2)))  # [t l] [[b r] sa]
+            tmp1 = tmp1.unfuse_legs(axes=0)  # t l [[b r] sa]
+            tmp1 = tmp1.fuse_legs(axes=((1, 2), 0))  # [l [[b r] sa]] t
+            Q1f, R1 = tmp1.qr(axes=(0, 1), sQ=-1, Qaxis=0, Raxis=-1)  # tt [l [[b r] sa]] @ t tt
+
+        fgf = env.bond_metric(psi[s0], psi[s1], s0, s1, dirn)
+
+        if isinstance(fgf, tuple):  # bipartite bond metric
+            M0, M1, info = truncate_bipartite_(*fgf, R0, R1, opts_svd, pinv_cutoffs, info)
+        else:  # rank-4 bond metric
+            M0, M1, info = truncate_optimize_(fgf, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization, info)
+
+        psi[s0], psi[s1] = apply_bond_tensors(Q0f, Q1f, M0, M1, dirn)
+
+        env.post_evolution_(bond)
+        infos.append(Evolution_out(**info))
+    return infos
+
+
 def apply_nn_truncate_optimize_(env, psi, gate, opts_svd,
                     fix_metric=0,
                     pinv_cutoffs=(1e-12, 1e-11, 1e-10, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4),
@@ -128,14 +230,26 @@ def apply_nn_truncate_optimize_(env, psi, gate, opts_svd,
 
     fgf = env.bond_metric(Q0, Q1, s0, s1, dirn)
 
+    if isinstance(fgf, tuple):  # bipartite bond metric
+        M0, M1, info = truncate_bipartite_(*fgf, R0, R1, opts_svd, pinv_cutoffs, info)
+    else:  # rank-4 bond metric
+        M0, M1, info = truncate_optimize_(fgf, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization, info)
+
+    psi[s0], psi[s1] = apply_bond_tensors(Q0f, Q1f, M0, M1, dirn)
+
+    env.post_evolution_(gate.bond)
+    return Evolution_out(**info)
+
+
+def truncate_optimize_(fgf, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization, info):
     # enforce hermiticity
     fgfH = fgf.H
     nonhermitian = (fgf - fgfH).norm() / 2
     fgf = (fgf + fgfH) / 2
-
+    #
     fgf_norm = fgf.norm()
     info['nonhermitian_part'] = (nonhermitian / fgf_norm).item()
-
+    #
     # check metric tensor eigenvalues
     if fix_metric is not None:
         S, U = fgf.eigh(axes=(0, 1))
@@ -145,11 +259,11 @@ def apply_nn_truncate_optimize_(env, psi, gate, opts_svd,
         info['wrong_eigenvalues'] = sum(S._data < g_error).item() / len(S._data)
         S._data[S._data < g_error] = g_error * fix_metric
         fgf = U @ S @ U.H
-
+    #
     fRR = (R0 @ R1).fuse_legs(axes=[(0, 1)])
     fgRR = fgf @ fRR
     RRgRR = abs(vdot(fRR, fgRR).item())
-
+    #
     pinv_cutoffs = sorted(pinv_cutoffs)
     M0, M1 = R0, R1
     for opts in [opts_svd] if isinstance(opts_svd, dict) else opts_svd:
@@ -180,8 +294,46 @@ def apply_nn_truncate_optimize_(env, psi, gate, opts_svd,
         M0, M1 = Ms[key]
 
     M0, M1 = symmetrized_svd(M0, M1, opts, normalize=True)
-    psi[s0], psi[s1] = apply_bond_tensors(Q0f, Q1f, M0, M1, dirn)
-    return Evolution_out(**info)
+    return M0, M1, info
+
+
+def truncate_bipartite_(E0, E1, R0, R1, opts_svd, pinv_cutoffs, info):
+    #
+    E0 = (E0 + E0.H) / 2
+    E1 = (E1 + E1.H) / 2
+    #
+    RR = (R0 @ R1)
+    gRR = E0 @ RR @ E1
+    RRgRR = abs(vdot(RR, gRR).item())
+    #
+    F0 = R0.H @ E0 @ R0
+    F1 = R1 @ E1 @ R1.H
+    #
+    S0, U0 = F0.eigh_with_truncation(axes=(0, 1), tol=min(pinv_cutoffs))
+    S1, U1 = F1.eigh_with_truncation(axes=(0, 1), tol=min(pinv_cutoffs))
+    #
+    W0, W1 = symmetrized_svd(S0.sqrt() @ U0.H, U1 @ S1.sqrt(), opts_svd, normalize=False)
+    p0, p1 = R0 @ U0, U1.H @ R1
+    #
+    error2, s0max, s1max = 100, max(S0._data), max(S1._data)
+    vs0o, vs1o = len(S0._data) + 1, len(S1._data) + 1
+    for c_off in sorted(pinv_cutoffs):
+        vs0 = sum(S0._data > c_off * s0max).item()
+        vs1 = sum(S1._data > c_off * s1max).item()
+        if vs0 < vs0o or vs1 < vs1o:
+            vs0o, vs1o = vs0, vs1
+            M0_tmp = p0 @ S0.reciprocal(cutoff=c_off * s0max).sqrt() @ W0
+            M1_tmp = W1 @ S1.reciprocal(cutoff=c_off * s1max).sqrt() @ p1
+            delta = RR - M0_tmp @ M1_tmp
+            error2_tmp = abs(vdot(delta, E0 @ delta @ E1).item()) / RRgRR
+            if error2_tmp < error2:
+                M0, M1, error2, pinv_c = M0_tmp, M1_tmp, error2_tmp, c_off
+
+    info['best_method'] = 'bipartite'
+    info['truncation_errors'] = {'bipartite': error2 ** 0.5}
+    info['truncation_error'] = error2 ** 0.5
+    info['pinv_cutoffs'] = pinv_c
+    return M0, M1, info
 
 
 def accumulated_truncation_error(infoss, statistics='mean'):

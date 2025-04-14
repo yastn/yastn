@@ -35,6 +35,7 @@ API: yastn.tn.fpeps
    fpeps/environment_ntu
    fpeps/environment_ctm
    fpeps/environment_mps
+   fpeps/environment_bp
 
 *************************
 Examples: basics of usage

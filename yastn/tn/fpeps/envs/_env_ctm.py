@@ -25,6 +25,7 @@ from .._geometry import Bond, Site
 from ._env_auxlliary import *
 from ._env_window import EnvWindow
 from ._env_measure import _measure_nsite
+from ._env_boundary_mps import _clear_operator_input
 
 logger = logging.Logger('ctmrg')
 
@@ -35,27 +36,27 @@ class EnvCTM_local():
 
     Contains fields ``tl``, ``t``, ``tr``, ``r``, ``br``, ``b``, ``bl``, ``l``
     """
-    tl : Union[Tensor,None] = None # top-left
-    t : Union[Tensor,None] = None  # top
-    tr : Union[Tensor,None] = None # top-right
-    r : Union[Tensor,None] = None  # right
-    br : Union[Tensor,None] = None # bottom-right
-    b : Union[Tensor,None] = None  # bottom
-    bl : Union[Tensor,None] = None # bottom-left
-    l : Union[Tensor,None] = None  # left
+    tl : Union[Tensor, None] = None  # top-left
+    t  : Union[Tensor, None] = None  # top
+    tr : Union[Tensor, None] = None  # top-right
+    r  : Union[Tensor, None] = None  # right
+    br : Union[Tensor, None] = None  # bottom-right
+    b  : Union[Tensor, None] = None  # bottom
+    bl : Union[Tensor, None] = None  # bottom-left
+    l  : Union[Tensor, None] = None  # left
 
 
 @dataclass()
 class EnvCTM_projectors():
     r""" Dataclass for CTM projectors associated with Peps lattice site. """
-    hlt : Union[Tensor,None] = None  # horizontal left top
-    hlb : Union[Tensor,None] = None  # horizontal left bottom
-    hrt : Union[Tensor,None] = None  # horizontal right top
-    hrb : Union[Tensor,None] = None  # horizontal right bottom
-    vtl : Union[Tensor,None] = None  # vertical top left
-    vtr : Union[Tensor,None] = None  # vertical top right
-    vbl : Union[Tensor,None] = None  # vertical bottom left
-    vbr : Union[Tensor,None] = None  # vertical bottom right
+    hlt : Union[Tensor, None] = None  # horizontal left top
+    hlb : Union[Tensor, None] = None  # horizontal left bottom
+    hrt : Union[Tensor, None] = None  # horizontal right top
+    hrb : Union[Tensor, None] = None  # horizontal right bottom
+    vtl : Union[Tensor, None] = None  # vertical top left
+    vtr : Union[Tensor, None] = None  # vertical top right
+    vbl : Union[Tensor, None] = None  # vertical bottom left
+    vbr : Union[Tensor, None] = None  # vertical bottom right
 
 
 class CTMRG_out(NamedTuple):
@@ -442,7 +443,6 @@ class EnvCTM(Peps):
             H = mps.Mps(N=self.Ny)
             for ny in range(self.Ny):
                 H.A[ny] = self[n, ny].b.transpose(axes=(2, 1, 0))
-            H = H.conj()
         elif dirn == 'r':
             H = mps.Mps(N=self.Nx)
             for nx in range(self.Nx):
@@ -455,7 +455,6 @@ class EnvCTM(Peps):
             H = mps.Mps(N=self.Nx)
             for nx in range(self.Nx):
                 H.A[nx] = self[nx, n].l.transpose(axes=(2, 1, 0))
-            H = H.conj()
         return H
 
     def measure_1site(self, O, site=None) -> dict:
@@ -473,25 +472,39 @@ class EnvCTM(Peps):
         O: Tensor
             Single-site operator
         """
+
+        # if site is None:
+        #     return {site: self.measure_1site(O, site) for site in self.sites()}
+
         if site is None:
-            return {site: self.measure_1site(O, site) for site in self.sites()}
+            opdict = _clear_operator_input(O, self.sites())
+            return_one = False
+        else:
+            return_one = True
+            opdict = {site: {(): O}}
 
-        lenv = self[site]
-        ten = self.psi[site]
-        vect = (lenv.l @ lenv.tl) @ (lenv.t @ lenv.tr)
-        vecb = (lenv.r @ lenv.br) @ (lenv.b @ lenv.bl)
+        out = {}
+        for site, ops in opdict.items():
+            lenv = self[site]
+            ten = self.psi[site]
+            vect = (lenv.l @ lenv.tl) @ (lenv.t @ lenv.tr)
+            vecb = (lenv.r @ lenv.br) @ (lenv.b @ lenv.bl)
 
-        tmp = tensordot(vect, ten, axes=((2, 1), (0, 1)))
-        val_no = tensordot(vecb, tmp, axes=((0, 1, 2, 3), (1, 3, 2, 0))).to_number()
+            tmp = tensordot(vect, ten, axes=((2, 1), (0, 1)))
+            val_no = tensordot(vecb, tmp, axes=((0, 1, 2, 3), (1, 3, 2, 0))).to_number()
 
-        if O.ndim == 2:
-            ten.set_operator_(O)
-        else:  # for a single-layer Peps, replace with new peps tensor
-            ten = O
-        tmp = tensordot(vect, ten, axes=((2, 1), (0, 1)))
-        val_op = tensordot(vecb, tmp, axes=((0, 1, 2, 3), (1, 3, 2, 0))).to_number()
+            for nz, op in ops.items():
+                if op.ndim == 2:
+                    ten.set_operator_(op)
+                else:  # for a single-layer Peps, replace with new peps tensor
+                    ten = op
+                tmp = tensordot(vect, ten, axes=((2, 1), (0, 1)))
+                val_op = tensordot(vecb, tmp, axes=((0, 1, 2, 3), (1, 3, 2, 0))).to_number()
+                out[site + nz] = val_op / val_no
 
-        return val_op / val_no
+        if return_one and not isinstance(O, dict):
+            return out[site + nz]
+        return out
 
     def measure_nn(self, O, P, bond=None) -> dict:
         r"""
@@ -510,8 +523,22 @@ class EnvCTM(Peps):
             Bond of the form (s0, s1). Sites s0 and s1 should be nearest-neighbors on the lattice.
         """
 
+
         if bond is None:
-             return {bond: self.measure_nn(O, P, bond) for bond in self.bonds()}
+            if isinstance(O, dict):
+                Odict = _clear_operator_input(O, self.sites())
+                Pdict = _clear_operator_input(P, self.sites())
+                out = {}
+                for (s0, s1) in self.bonds():
+                    for nz0, op0 in Odict[s0].items():
+                        for nz1, op1 in Pdict[s1].items():
+                            out[s0 + nz0, s1 + nz1] = self.measure_nn(op0, op1, bond=(s0, s1))
+                return out
+            else:
+                return {bond: self.measure_nn(O, P, bond) for bond in self.bonds()}
+
+        # if bond is None:
+        #      return {bond: self.measure_nn(O, P, bond) for bond in self.bonds()}
 
         bond = Bond(*bond)
         dirn, l_ordered = self.nn_bond_type(bond)
@@ -707,13 +734,13 @@ class EnvCTM(Peps):
         if horizontal:
             vr = env_win[xs[0], 't']
             tm = env_win[xs[0], 'h']
-            vl = env_win[xs[0], 'b']
+            vl = env_win[xs[0], 'b'].conj()
             axes_op = 'b0'
             axes_string = ('b0', 'k2', 'k4')
         else:  # vertical
             vr = env_win[ys[0], 'l']
             tm = env_win[ys[0], 'v']
-            vl = env_win[ys[0], 'r']
+            vl = env_win[ys[0], 'r'].conj()
             axes_op = 'k1'
             axes_string = ('k1', 'k4', 'b3')
 
@@ -840,6 +867,8 @@ class EnvCTM(Peps):
         env_win = EnvWindow(self, xrange, yrange)
         return env_win.sample(projectors, number, opts_svd, opts_var, progressbar, return_info)
 
+    def post_evolution_(env, bond, **kwargs):
+        pass
 
     def update_(env, opts_svd, method='2site', **kwargs):
         r"""
@@ -1101,8 +1130,10 @@ class EnvCTM(Peps):
             if env.config.backend.BACKEND_ID == "torch":
                 assert kwargs["checkpoint_move"] in ['reentrant','nonreentrant',False], f"Invalid choice for {kwargs['checkpoint_move']}"
         kwargs["truncation_f"]= truncation_f
-        tmp = _ctmrg_(env, opts_svd, method, max_sweeps, iterator_step, corner_tol, **kwargs)
+        tmp = _iterate_ctmrg_(env, opts_svd, method, max_sweeps, iterator_step, corner_tol, **kwargs)
         return tmp if iterator_step else next(tmp)
+
+    iterate_ = ctmrg_  #  allow using EnvCtm.iterate_() instead of allow using EnvCtm.ctmrg_()
 
 
 def decompress_env_1d(data,meta):
@@ -1151,7 +1182,7 @@ def ctm_conv_corner_spec(env : EnvCTM, history : Sequence[dict[tuple[Site,str],T
     return (corner_tol is not None and max_dsv < corner_tol), max_dsv, history
 
 
-def _ctmrg_(env, opts_svd, method, max_sweeps, iterator_step, corner_tol, **kwargs):
+def _iterate_ctmrg_(env, opts_svd, method, max_sweeps, iterator_step, corner_tol, **kwargs):
     """ Generator for ctmrg_(). """
     max_dsv, converged = None, False
     for sweep in range(1, max_sweeps + 1):
