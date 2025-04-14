@@ -27,14 +27,14 @@ def _measure_nsite(env, *operators, sites=None, dirn='tb', opts_svd=None, opts_v
 
     if dirn == 'lr':
         i0, i1 = env.yrange[0], env.yrange[1] - 1
-        bra = env[i1, 'r']
+        bra = env[i1, 'r'].conj()
         tms = {ny: env[ny, 'v'] for ny in range(*env.yrange)}
         ket = env[i0, 'l']
         dx = env.xrange[0] - env.offset
         tens = {(nx, ny): tm[nx - dx] for ny, tm in tms.items() for nx in range(*env.xrange)}
     else:
         i0, i1 = env.xrange[0], env.xrange[1] - 1
-        bra = env[i1, 'b']
+        bra = env[i1, 'b'].conj()
         tms = {nx: env[nx, 'h'] for nx in range(*env.xrange)}
         ket = env[i0, 't']
         dy = env.yrange[0] - env.offset

@@ -31,7 +31,7 @@ class EnvWindow:
         self.yrange = yrange
         self.Nx = self.xrange[1] - self.xrange[0]
         self.Ny = self.yrange[1] - self.yrange[0]
-        self.offset = 1  #  for mpo tensor position; extra tensor in the bounary
+        self.offset = 1  #  for mpo tensor position; corresponds to extra CTM boundary tensor
 
         if env_ctm.nn_site((xrange[0], yrange[0]), (0, 0)) is None or \
            env_ctm.nn_site((xrange[1] - 1, yrange[1] - 1), (0, 0)) is None:
@@ -40,11 +40,12 @@ class EnvWindow:
     def sites(self):
         return [Site(nx, ny) for ny in range(*self.yrange) for nx in range(*self.xrange)]
 
-    def __getitem__(self, ind) -> yastn.tn.mps.MpsMpoOBC:
+    def __getitem__(self, ind) -> mps.MpsMpoOBC:
         """
         Boundary MPS build of CTM tensors, or a transfer matrix MPO.
 
         CTM corner and edge tensors are included at the ends of MPS and MPO, respectively.
+        Leg convention is consistent with mps.vdot(b.conj(), h, t) and mps.vdot(r.conj(), v, l).
 
         Parameters
         ----------
@@ -58,7 +59,6 @@ class EnvWindow:
             'h' is a horizontal/row MPO transfer matrix; 't' and 'b' are top and bottom boundary MPSs.
             'v', 'l', and 'r' refer to a vertical direction (n specifies a column).
             'v' is a vertical/column MPO transfer matrix; 'r' and 'l' are right and left boundary MPSs.
-            Leg convention is consistent with vdot(t, h, b) and vdot(r, v, l).
         """
         n, dirn = ind
 
@@ -68,9 +68,9 @@ class EnvWindow:
         if dirn == 'r':
             psi = mps.Mps(self.Nx + 2)
             for ind, nx in enumerate(range(*self.xrange), start=1):
-                psi[ind] =self.env_ctm[nx, n].r.conj()
-            psi[0] =self.env_ctm[self.xrange[0], n].tr.add_leg(axis=0).conj()
-            psi[self.Nx + 1] =self.env_ctm[self.xrange[1]-1, n].br.add_leg(axis=2).conj()
+                psi[ind] = self.env_ctm[nx, n].r
+            psi[0] = self.env_ctm[self.xrange[0], n].tr.add_leg(axis=0)
+            psi[self.Nx + 1] = self.env_ctm[self.xrange[1] - 1, n].br.add_leg(axis=2)
             return psi
 
         if dirn == 'v':
@@ -86,7 +86,7 @@ class EnvWindow:
             for ind, nx in enumerate(range(*self.xrange), start=1):
                 psi[ind] = self.env_ctm[nx, n].l.transpose(axes=(2, 1, 0))
             psi[0] = self.env_ctm[self.xrange[0], n].tl.add_leg(axis=2).transpose(axes=(2, 1, 0))
-            psi[self.Nx + 1] = self.env_ctm[self.xrange[1]-1, n].bl.add_leg(axis=0).transpose(axes=(2, 1, 0))
+            psi[self.Nx + 1] = self.env_ctm[self.xrange[1] - 1, n].bl.add_leg(axis=0).transpose(axes=(2, 1, 0))
             return psi
 
         if dirn in 'thb' and not self.xrange[0] <= n < self.xrange[1]:
@@ -95,9 +95,9 @@ class EnvWindow:
         if dirn == 't':
             psi = mps.Mps(self.Ny + 2)
             for ind, ny in enumerate(range(*self.yrange), start=1):
-                psi[ind] =self.env_ctm[n, ny].t
-            psi[0] =self.env_ctm[n, self.yrange[0]].tl.add_leg(axis=0)
-            psi[self.Ny + 1] =self.env_ctm[n, self.yrange[1]-1].tr.add_leg(axis=2)
+                psi[ind] = self.env_ctm[n, ny].t
+            psi[0] = self.env_ctm[n, self.yrange[0]].tl.add_leg(axis=0)
+            psi[self.Ny + 1] = self.env_ctm[n, self.yrange[1] - 1].tr.add_leg(axis=2)
             return psi
 
         if dirn == 'h':
@@ -111,9 +111,9 @@ class EnvWindow:
         if dirn == 'b':
             psi = mps.Mps(self.Ny + 2)
             for ind, ny in enumerate(range(*self.yrange), start=1):
-                psi[ind] =self.env_ctm[n, ny].b.transpose(axes=(2, 1, 0)).conj()
-            psi[0] = self.env_ctm[n, self.yrange[0]].bl.add_leg(axis=2).transpose(axes=(2, 1, 0)).conj()
-            psi[self.Ny + 1] = self.env_ctm[n, self.yrange[1]-1].br.add_leg(axis=0).transpose(axes=(2, 1, 0)).conj()
+                psi[ind] = self.env_ctm[n, ny].b.transpose(axes=(2, 1, 0))
+            psi[0] = self.env_ctm[n, self.yrange[0]].bl.add_leg(axis=2).transpose(axes=(2, 1, 0))
+            psi[self.Ny + 1] = self.env_ctm[n, self.yrange[1] - 1].br.add_leg(axis=0).transpose(axes=(2, 1, 0))
             return psi
 
         raise YastnError(f"{dirn=} not recognized. Should be 't', 'h' 'b', 'r', 'v', or 'l'.")
@@ -140,7 +140,7 @@ class EnvWindow:
         # All O0 should have the same charge  # TODO
 
         (nx0, ny0), ix0 = sites[0], 1
-        vecc, tm, vec = self[ny0, 'r'], self[ny0, 'v'], self[ny0, 'l']
+        vecc, tm, vec = self[ny0, 'r'].conj(), self[ny0, 'v'], self[ny0, 'l']
 
         if ny0 < self.yrange[1] - 1:
             vec_next = mps.zipper(tm, vec, opts_svd=opts_svd)
@@ -169,7 +169,7 @@ class EnvWindow:
 
         # all subsequent rows
         for ny1 in range(self.yrange[0]+1, self.yrange[1]):
-            vecc, tm, vec_O0, vec = self[ny1, 'r'], self[ny1, 'v'], vec_O0_next, vec_next
+            vecc, tm, vec_O0, vec = self[ny1, 'r'].conj(), self[ny1, 'v'], vec_O0_next, vec_next
             norm_env = mps.vdot(vecc, tm, vec)
 
             if ny1 < self.yrange[1] - 1:
@@ -235,7 +235,7 @@ class EnvWindow:
         for _ in tqdm(range(number), desc="Sample...", disable=not progressbar):
             vec = self[self.yrange[0], 'l']
             for ny in range(*self.yrange):
-                vecc = self[ny, 'r']
+                vecc = self[ny, 'r'].conj()
                 tm = self[ny, 'v']
                 env = mps.Env(vecc, [tm, vec]).setup_(to='first')
                 for ix, nx in enumerate(range(*self.xrange), start=1):

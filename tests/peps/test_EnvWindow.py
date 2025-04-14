@@ -53,7 +53,7 @@ def test_window_shapes(config_kwargs):
                     top = env_win[ix, 't']
                     TMh = env_win[ix, 'h']
                     btm = env_win[ix, 'b']
-                    mps.vdot(btm, TMh, top)
+                    mps.vdot(btm.conj(), TMh, top)
         #
         for yrange in [(0, 1), (1, 2), (2, 3), (1, 4)]:
             for xrange in [(0, 5), (1, 3), (2, 6)]:
@@ -62,7 +62,7 @@ def test_window_shapes(config_kwargs):
                     rht = env_win[iy, 'r']
                     TMv = env_win[iy, 'v']
                     lft = env_win[iy, 'l']
-                    mps.vdot(rht, TMv, lft)
+                    mps.vdot(rht.conj(), TMv, lft)
 
     with pytest.raises(yastn.YastnError):
         env_win[10, 'l']

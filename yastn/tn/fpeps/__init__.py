@@ -15,7 +15,7 @@
 from ._geometry import Site, Bond, SquareLattice, CheckerboardLattice, RectangularUnitcell
 from ._peps import Peps, Peps2Layers
 from ._initialize import product_peps, load_from_dict
-from ._evolution import evolution_step_, accumulated_truncation_error
+from ._evolution import evolution_step_, truncate_, accumulated_truncation_error
 from ._doublePepsTensor import DoublePepsTensor
 from .gates import Gates, Gate_local, Gate_nn
 from ._gates_auxiliary import fkron
@@ -24,3 +24,4 @@ from .envs._env_ntu import EnvNTU
 from .envs._env_boundary_mps import EnvBoundaryMPS
 from .envs._env_window import EnvWindow
 from .envs._env_cluster_approximate import EnvApproximate
+from .envs._env_bp import EnvBP

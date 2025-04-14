@@ -30,10 +30,10 @@ class EnvNTU:
             Peps state being evolved.
 
         which: str
-            Type of environment from 'NN', 'NN+', 'NN++', 'NNN', 'NNN+', 'NNN++'
+            Type of bond environment from 'NN', 'NN+', 'NN++', 'NNN', 'NNN+', 'NNN++'
         """
 
-        if which not in ('NN', 'NN+', 'NN++', 'NNN', 'NNN+', 'NNN++'):  # 'SU+'
+        if which not in ('NN', 'NN+', 'NN++', 'NNN', 'NNN+', 'NNN++'):
             raise YastnError(f" Type of EnvNTU {which=} not recognized.")
         self.psi = psi
         self._which = which
@@ -45,6 +45,8 @@ class EnvNTU:
                          'NNN++': self._g_NNNpp
                         }
 
+    def post_evolution_(env, bond, *kwargs):
+        pass
 
     def bond_metric(self, Q0, Q1, s0, s1, dirn):
         r"""
@@ -152,7 +154,7 @@ class EnvNTU:
 
         For dirn == 'v':
 
-                 -1 +0)
+                (-1 +0)
                    ║
         (+0 -1)═══0Q0═══(+0 +1)
            ║       ╳       ║
