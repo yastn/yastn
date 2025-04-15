@@ -228,25 +228,9 @@ def switch_signature(a, axes: Union[Sequence[int],int,str] = ()) -> yastn.Tensor
     if len(axes)==0: return a
     if not (all([type(x)==int for x in axes]) and len(set(axes))==len(axes)):
         raise YastnError("Invalid axes: all elements must be integers and no repeating axes are allowed.")
-
-    def _conj_completion(leg):
-        # new leg with sectors from both leg and leg.conj()
-        # case leg is not fused:
-        if not leg.is_fused():
-            tDconj= np.array(leg.t, dtype=np.int64)
-            tDconj= a.config.sym.fuse(tDconj.reshape(-1,1,leg.sym.NSYM), (leg.s,), -leg.s)
-            tDconj= tuple(map(tuple, tDconj))
-            # ts= tuple( set(tDconj) | set(leg.t))
-            # tDs= dict(zip(leg.t,leg.D))
-            tDs= dict()
-            tDs.update(dict(zip(tDconj, leg.D)))
-            return Leg(a.config.sym, -leg.s, t= tuple(tDs.keys()), D= tuple(tDs.values()))
-        else:
-            return leg_product(*tuple(_conj_completion(x) for x in leg.unfuse_leg()))
-    symbols_1j= tuple(eye(a.config, legs=(a.get_legs(x).conj(), _conj_completion(a.get_legs(x))), isdiag=False) for x in axes)
+    symbols_1j= tuple(eye(a.config, legs=(a.get_legs(x).conj(), a.get_legs(x).conj()), isdiag=False) for x in axes)
     outi_a= [i+1 if i in axes else -(i+1) for i in range(len(a.get_legs()))] # shift by 1 to avoid 0,0 ambiguity
     contractedi= [[x+1,-(x+1)] for x in axes ]
-    print([outi_a,]+contractedi)
     return ncon( (a,)+symbols_1j, [outi_a,]+contractedi )
 
 

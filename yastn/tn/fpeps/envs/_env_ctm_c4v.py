@@ -13,17 +13,13 @@
 # limitations under the License.
 # ==============================================================================
 from __future__ import annotations
-from dataclasses import dataclass
-from typing import NamedTuple, Union, Callable, Sequence
 import logging
-from .... import Tensor, rand, ones, eye, YastnError, Leg, tensordot, qr, truncation_mask, vdot, decompress_from_1d, \
+from .... import Tensor, YastnError, tensordot, truncation_mask, decompress_from_1d, \
     truncation_mask_multiplets
-from ....operators import sign_canonical_order
-from ... import mps
-from .._peps import Peps, Peps2Layers
-from .._geometry import Bond, Site, RectangularUnitcell
+from .._peps import Peps, Peps2Layers, DoublePepsTensor
+from .._geometry import RectangularUnitcell
 from ._env_auxlliary import *
-from ._env_ctm import EnvCTM, _ctmrg_, decompress_env_1d, EnvCTM_projectors, store_projectors_, trivial_projectors_
+from ._env_ctm import EnvCTM, decompress_env_1d, EnvCTM_projectors, store_projectors_, update_old_env_
 
 logger = logging.Logger('ctmrg')
 
@@ -45,13 +41,13 @@ class EnvCTM_c4v(EnvCTM):
             (-)--B--(-) (+)--A--(+)
                 (-)         (+)
 
-        The tensor B is a function of tensor A as B = A.swith_signatures(axes=(0,1,2,3)). 
+        The tensor B is a function of tensor A as B = A.flip_signature() 
 
         There is just one unique C and one unique T tensor making up the environment, the 
         C,T tensors for A- and B-sublattices are related by same signature transformation.
         Here, we chose top-left corner and top transfer tensor of sublattice A.
         
-        Index convention for environment tensors is identical to general environments
+        Index convention for environment tensors follows from on-site tensors.
 
         Parameters
         ----------
@@ -60,7 +56,7 @@ class EnvCTM_c4v(EnvCTM):
             If ``psi`` has physical legs, a double-layer PEPS with no physical legs is formed.
 
         init: str
-            None, 'eye' or 'rand'. Initialization scheme, see :meth:`yastn.tn.fpeps.EnvCTM.reset_`.
+            None, 'eye' or 'dl'. Initialization scheme, see :meth:`yastn.tn.fpeps.EnvCTM.reset_`.
 
         leg: Optional[yastn.Leg]
             Passed to :meth:`yastn.tn.fpeps.EnvCTM.reset_` to further customize initialization.
@@ -118,6 +114,8 @@ class EnvCTM_c4v(EnvCTM):
         """
         for site in self.sites():
             for dirn in ["tl", "tr", "bl", "br", "t", "l", "b", "r"]:
+                if getattr(self[site], dirn) is None:
+                    continue
                 try:
                     getattr(self[site], dirn)._data.detach_()
                 except RuntimeError:
@@ -126,7 +124,16 @@ class EnvCTM_c4v(EnvCTM):
 
     def reset_(self, init='eye', leg=None, **kwargs):
         r"""
-        Initialize CTMRG environment.
+        Initialize C4v-symmetric CTMRG environment::
+
+            C--T--C => C---T--T'--T--C => C--T-- & --T'--
+            T--A--T    T---A--B---A--T    T--A--   --B--- 
+            C--T--C    T'--B--A---B--T    |  |       |
+                       T---A--B---A--T
+                       C---T--T'--T--C
+
+        Ther are two different T tensors - one for A-sublattice and one for B-sublattice.
+        They are related by adjoint * complex conjugation (i.e. :meth:`flip_signature`)
 
         Parameters
         ----------
@@ -140,20 +147,22 @@ class EnvCTM_c4v(EnvCTM):
             Otherwise, the provided Leg is used to initialize CTMRG virtual legs.
         """
         assert init in ['eye', 'dl'], "Invalid initialization type. Should be 'eye' or 'dl'."
-        
+
         if init == 'eye':
             super().reset_(init='eye', leg=leg, **kwargs)
+            self[0,0].tl= self[0,0].tl.flip_charges(axes=1)
+            self[0,0].t= self[0,0].t.flip_charges(axes=0)
         elif init == 'dl':
             # create underlying two-site bipartite PEPS
             g= RectangularUnitcell(pattern=[[0,1],[1,0]])
             bp= Peps(geometry=g, \
-                     tensors={ g.sites()[0]: self.psi.ket[0,0], g.sites()[1]: self.psi.ket[0,0].conj() }, )
+                    tensors={ g.sites()[0]: self.psi.ket[0,0], g.sites()[1]: self.psi.ket[0,0].conj() }, )
             env_bp= EnvCTM(bp, init='eye', leg=leg)
-            env_bp.expand_outward_()
-            self[0,0].t= env_bp[0,0].t.drop_leg_history(axes=(0,2))
-            self[0,0].tl= env_bp[0,0].tl.drop_leg_history(axes=(0,1))
-        self[0,0].t= self[0,0].t.switch_signature(axes=0)
-        self[0,0].tl= self[0,0].tl.switch_signature(axes=1)
+            env_bp.expand_outward_() 
+            # env_bp.init_env_from_onsite_()
+
+            self[0,0].t= env_bp[0,0].t.drop_leg_history(axes=(0,2)).switch_signature(axes=0)
+            self[0,0].tl= env_bp[0,0].tl.drop_leg_history(axes=(0,1)).switch_signature(axes=1)
 
 
     def update_(env, opts_svd, method='default', **kwargs):
@@ -252,21 +261,19 @@ class EnvCTM_c4v(EnvCTM):
         return proj
 
 
-    def get_env_bp(self):
+    def get_env_bipartite(self):
         g= RectangularUnitcell(pattern=[[0,1],[1,0]])
         bp= Peps(geometry=g, \
             tensors={ g.sites()[0]: self.psi.ket[0,0], g.sites()[1]: self.psi.ket[0,0].conj() }, )
         env_bp= EnvCTM(bp, init=None)
         s0= g.sites()[0]
-        # env_bp[s0].tr= env_bp[s0].br= env_bp[s0].bl= env_bp[s0].tl= self[0,0].tl
-        # env_bp[s0].l= env_bp[s0].b= env_bp[s0].r= env_bp[s0].t= self[0,0].t
         env_bp[s0].tr= env_bp[s0].br= env_bp[s0].bl= env_bp[s0].tl= self[0,0].tl
         env_bp[s0].l= env_bp[s0].b= env_bp[s0].r= env_bp[s0].t= self[0,0].t
         s1= g.sites()[1]
         env_bp[s1].tr= env_bp[s1].br= env_bp[s1].bl= env_bp[s1].tl= self[0,0].tl.conj()
         env_bp[s1].l= env_bp[s1].b= env_bp[s1].r= env_bp[s1].t= self[0,0].t.conj()
-        import pdb; pdb.set_trace()
         return env_bp
+
 
     def save_to_dict(self) -> dict:
         r"""
@@ -289,7 +296,7 @@ class EnvCTM_c4v(EnvCTM):
 def _update_core_dir(env, dir : str, opts_svd : dict, **kwargs):
         assert dir in ['default'], "Invalid directions"
         method= kwargs.get('method','default')
-        policy= opts_svd.get('policy','symeig')
+        policy= opts_svd.get('policy','fullrank')
         
         #
         # Empty structure for projectors
@@ -298,7 +305,7 @@ def _update_core_dir(env, dir : str, opts_svd : dict, **kwargs):
             proj[site] = EnvCTM_projectors()
         s0 = env.psi.sites()[0]
 
-        # 1) get tl enlarged corner and projector from ED/SVD (t is identical to l)
+        # 1) get tl enlarged corner and projector from ED/SVD
         # 0--t--2 0--tl--1 0--t--2->3
         #    1                1->2
         cor_tl = env[s0].t @ env[s0].tl @ env[s0].t
@@ -310,42 +317,36 @@ def _update_core_dir(env, dir : str, opts_svd : dict, **kwargs):
 
         # Note: U(1)-symm corner is not hermitian. Instead blocks related by conj of charges are hermitian conjugates,
         #       i.e. (2,-2) and (-2,2) blocks are hermitian conjugates.
-        proj[s0].vtl, s, proj[s0].vtr= proj_sym_corner(cor_tl, opts_svd, **kwargs)
+        proj[s0].vtl, s, proj[s0].vtr= proj_sym_corner(cor_tl, opts_svd, sU=1, **kwargs)
 
-        # 2) update move
+        # 2) update move corner
         P= proj[s0].vtl
         env_tmp = EnvCTM(env.psi, init=None)  # empty environments
         if policy in ['symeig']:
+            assert (cor_tl-cor_tl.H)<1e-12,"enlarged corner is not hermitian"
             env_tmp[s0].tl = s/s.norm(p='inf')
         else:
-            s= (proj[s0].vtr.conj() @ P) @ s
-            env_tmp[s0].tl= (s/s.norm(p='inf'))
+            S= ((proj[s0].vtr.conj() @ P) @ s)
+            env_tmp[s0].tl= (S/S.norm(p='inf'))
 
-        # C--T--C => C---T--T'--T--C => C--T-- & --T'--
-        # T--A--T    T---A--B---A--T    T--A--   --B--- 
-        # C--T--C    T'--B--A---B--T    |  |       |
-        #            T---A--B---A--T
-        #            C---T--T'--T--C
-        #
-        P= P.unfuse_legs(axes=0).conj()
+        # 3) update move half-row/-column tensor. Here, P is to act on B-sublattice T tensor.
+        # 
+        P= P.unfuse_legs(axes=0)
         # 1<-2--P--0    0--T--2->3
         #        --1->0    1->2
-        tmp = tensordot(P, env[s0].t, axes=(0, 0))
-        #  0<-1--P-----T--3->1
-        #     |        2
-        #     |        0
-        #      --0  1--A--3
-        #              2
-        tmp = tensordot(tmp, env.psi[s0], axes=((0, 2), (1, 0)))
+        tmp = tensordot(P, env[s0].t.flip_signature(), axes=(0, 0))
+        #  0<-1--P-----T--3->1  0--P--2
+        #        |     2           |
+        #        |      0          |
+        #         --0 1--A--3   1--  
+        #                2=>1
+        _b_sublattice= env.psi.bra[s0].flip_signature()
+        tmp = tensordot(tmp, DoublePepsTensor(bra=_b_sublattice, ket=_b_sublattice), axes=((0, 2), (1, 0)))
         tmp = tensordot(tmp, P, axes=((1, 3), (0, 1)))
-        tmp = tmp.switch_signature(axes=1)
+        tmp = tmp.flip_charges(axes=(0,2)) #tmp.switch_signature(axes=(0,2))
+        
+        tmp= 0.5*(tmp + tmp.transpose(axes=(2,1,0)))
         env_tmp[s0].t = tmp / tmp.norm(p='inf')
-
-        # 4) symmetrize ?, normalize and assign new C,T
-        # C2X2= 0.5*( C2X2 + C2X2.transpose((1,0)).conj_blocks() )
-        # nT= 0.5*(nT + nT.transpose((1,0,2,3)).conj_blocks() )
-        # C2X2= C2X2/S.norm(p='inf')
-        # nT= nT/nT.norm(p='inf')
 
         return env_tmp, proj
 
@@ -354,17 +355,16 @@ def proj_sym_corner(rr, opts_svd, **kwargs):
     r""" Projector on largest (by magnitude) eigenvalues of (hermitian) symmetric corner. """
     policy = opts_svd.get('policy', 'symeig')
     fix_signs= opts_svd.get('fix_signs',True)
-    truncation_f= kwargs.get('truncation_f',None)
-    
+    truncation_f= kwargs.get('truncation_f',\
+        lambda x : truncation_mask_multiplets(x,keep_multiplets=True, \
+            D_total=opts_svd['D_total'], tol=opts_svd['tol'], \
+            eps_multiplet=opts_svd['eps_multiplet'], hermitian=True, ) )
+
     if policy in ['symeig']:
         # TODO fix_signs ?
         _kwargs= dict(kwargs)
         for k in ["method", "use_qr",]: del _kwargs[k]
-        def _truncation_f(x):
-            return truncation_mask_multiplets(x,keep_multiplets=True, \
-                D_total=opts_svd['D_total'], tol=opts_svd['tol'], \
-                eps_multiplet=opts_svd['eps_multiplet'])
-        s,u= rr.eigh_with_truncation(axes=(0,1), sU=rr.s[1], which='LM', mask_f= _truncation_f, **opts_svd, **_kwargs)
+        s,u= rr.eigh_with_truncation(axes=(0,1), sU=rr.s[1], which='LM', mask_f= truncation_f, **opts_svd, **_kwargs)
         v= None
         import pdb; pdb.set_trace()
     elif policy in ['fullrank', 'lowrank', 'arnoldi']:
@@ -377,13 +377,3 @@ def proj_sym_corner(rr, opts_svd, **kwargs):
             u, s, v = rr.svd_with_truncation(axes=(0, 1), mask_f=truncation_f, **kwargs)
 
     return u, s, v
-
-
-def update_old_env_(env, env_tmp):
-    r"""
-    Update tensors in env with the ones from env_tmp that are not None.
-    """
-    for site in env.sites():
-        for k, v in env_tmp[site].__dict__.items():
-            if v is not None:
-                setattr(env[site], k, v)
