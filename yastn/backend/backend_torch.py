@@ -124,6 +124,8 @@ def imag(x):
 def max_abs(x):
     return x.abs().max()
 
+def maximum(input, output):
+    return torch.maximum(input, output)
 
 def norm_matrix(x):
     return torch.linalg.norm(x)

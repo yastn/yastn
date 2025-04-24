@@ -358,6 +358,8 @@ def qr(data, meta, sizes):
 def argsort(data):
     return np.argsort(data)
 
+def maximum(x1, x2):
+    return np.maximum(x1, x2)
 
 def eigs_which(val, which):
     if which == 'LM':

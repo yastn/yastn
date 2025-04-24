@@ -17,7 +17,6 @@ from __future__ import annotations
 from itertools import accumulate
 from numbers import Number
 import numpy as np
-import torch
 from ._auxliary import _struct, _slc, _clear_axes, _unpack_axes
 from ._tests import YastnError, _test_axes_all
 from ._merging import _merge_to_matrix, _meta_unmerge_matrix, _unmerge
@@ -397,11 +396,13 @@ def truncation_mask_multiplets(S, tol=0, D_total=float('inf'),
     # s = S.config.backend.to_numpy(S.data)
     # inds = np.argsort(s)[::-1].copy() # make descending
     # s = s[inds]
-    s, inds = torch.sort(S.data.detach(), descending=True)
+    # s, inds = torch.sort(S.data.detach(), descending=True)
+    backend = S.config.backend
+    inds = backend.argsort(-S.copy().data)
+    s = S.data[inds]
 
     S_global_max = s[0]
-    # D_trunc = min(sum(s > (S_global_max * tol)), D_total)
-    D_trunc = min((s > (S_global_max * tol)).sum().item(), D_total)
+    D_trunc = min(sum(s > (S_global_max * tol)), D_total)
     if D_trunc >= len(s):
         # no truncation
         Smask._data = S.data > -float('inf') # all True ?
@@ -409,10 +410,8 @@ def truncation_mask_multiplets(S, tol=0, D_total=float('inf'),
 
     # compute gaps and normalize by magnitude of (abs) larger value.
     # value of gaps[i] gives gap between i-th and i+1 the element of s
-    # maxgap = np.maximum(np.abs(s[:len(s) - 1]), np.abs(s[1:len(s)])) + 1.0e-16
-    # gaps = np.abs(s[:len(s) - 1] - s[1:len(s)]) / maxgap
-    maxgap = torch.maximum(s[:-1].abs(), s[1:].abs()) + 1.0e-16
-    gaps = (s[:-1] - s[1:]).abs() / maxgap
+    maxgap = backend.maximum(backend.absolute(s[:-1]), backend.absolute(s[1:])) + 1.0e-16
+    gaps = backend.absolute(s[:-1] - s[1:]) / maxgap
 
     # find nearest multiplet boundary, keeping at most D_trunc elements
     # i-th element of gaps gives gap between i-th and (i+1)-th element of s

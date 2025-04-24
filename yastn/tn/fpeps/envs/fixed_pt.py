@@ -56,7 +56,7 @@ def refill_state(state, data):
 
     # unflatten(data, state.parameters)
     # state.sync_()
-    assert len(state.sites()) == len(data), "Number of sites in state and data do not match"	
+    assert len(state.sites()) == len(data), "Number of sites in state and data do not match"
     for site,d in zip(state.sites(), data):
         state[site]._data = d
     return state
@@ -191,7 +191,7 @@ def find_coeff_multi_sites(env_old, env, zero_modes_dict, dtype=torch.complex128
     phase_loss_precomputed = False
 
     def phase_loss(phases, cs_dict):
-        nonlocal phase_loss_precomputed, fixed_env, phases_ind
+        nonlocal phase_loss_precomputed
         sigma_dict = {}
         ind = 0
         exp_phases = np.exp(1j*phases)
@@ -503,11 +503,11 @@ def find_gauge_multi_sites(env_old, env, verbose=False):
     return sigma_dict
 
 def fp_ctmrg(env: EnvCTM, \
-            ctm_opts_fwd : dict= {'opts_svd': {}, 'corner_tol': 1e-8, 'max_sweeps': 100, 
+            ctm_opts_fwd : dict= {'opts_svd': {}, 'corner_tol': 1e-8, 'max_sweeps': 100,
                 'method': "2site", 'use_qr': False, 'svd_policy': 'fullrank', 'D_block': None}, \
             ctm_opts_fp: dict= {'svd_policy': 'fullrank'}):
     r"""
-    Compute the fixed-point environment for the given state using CTMRG. 
+    Compute the fixed-point environment for the given state using CTMRG.
     First, run CTMRG until convergence then find the gauge transformation guaranteeing element-wise
     convergence of the environment tensors.
 
@@ -645,7 +645,7 @@ class FixedPoint(torch.autograd.Function):
     @staticmethod
     def forward(ctx, env: EnvCTM, ctm_opts_fwd : dict, ctm_opts_fp: dict, *state_params):
         r"""
-        Compute the fixed-point environment for the given state using CTMRG. 
+        Compute the fixed-point environment for the given state using CTMRG.
         First, run CTMRG until convergence then find the gauge transformation guaranteeing element-wise
         convergence of the environment tensors.
 
@@ -659,12 +659,12 @@ class FixedPoint(torch.autograd.Function):
             EnvCTM: Environment at fixed point.
             Sequence[Tensor]: raw environment data for the backward pass.
         """
-        
+
         ctm_env_out, converged, *FixedPoint.ctm_log, FixedPoint.t_ctm, FixedPoint.t_check = FixedPoint.get_converged_env(
             env,
             **ctm_opts_fwd,
         )
-        
+
         # note that we need to find the gauge transformation that connects two set of environment tensors
         # obtained from CTMRG with the 'full' svd, because the backward uses the full svd backward.
         _ctm_opts_fp = dict(ctm_opts_fwd)
@@ -672,7 +672,7 @@ class FixedPoint(torch.autograd.Function):
             _ctm_opts_fp.update(ctm_opts_fp)
         env_converged = ctm_env_out.copy()
         ctx.proj = ctm_env_out.update_(**_ctm_opts_fp)
-        
+
         sigma_dict = find_gauge_multi_sites(env_converged, ctm_env_out)
         if sigma_dict is None:
             raise NoFixedPointError(code=1)
@@ -707,7 +707,7 @@ class FixedPoint(torch.autograd.Function):
             _, dfdA_vjp = torch.func.vjp(lambda x: FixedPoint.fixed_point_iter(env, ctx.sigma_dict, ctx.ctm_opts_fp, _env_slices, _env_ts, x), psi_data)
         # fixed_point_iter changes the data of psi, so we need to refill the state to recover the previous state
         refill_state(env.psi.ket, psi_data)
-        
+
         alpha = 0.4
         for step in range(ctx.ctm_opts_fp['max_sweeps']):
             grads = dfdC_vjp(grads)
