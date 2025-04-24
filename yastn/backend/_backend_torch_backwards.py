@@ -258,13 +258,7 @@ class kernel_apply_mask(torch.autograd.Function):
 
 class kernel_embed_mask(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, Adata, mask, meta, Dsize, axis, ndim):
-        ctx.mask = mask
-        ctx.meta = meta
-        ctx.axis = axis
-        ctx.ndim = ndim
-        ctx.size_Adata = Adata.numel()
-
+    def forward(Adata, mask, meta, Dsize, axis, ndim):
         slc0 = (slice(None),) * axis
         slc2 = (slice(None),) * (ndim - (axis + 1))
         Cdata = torch.zeros(Dsize, dtype=Adata.dtype, device=Adata.device)
@@ -272,6 +266,14 @@ class kernel_embed_mask(torch.autograd.Function):
             slcs = slc0 + (mask[tm],) + slc2
             Cdata[slice(*sln)].view(Dn)[slcs] = Adata[slice(*sla)].view(Da)
         return Cdata
+
+    def setup_context(ctx, inputs, output):
+        Adata, mask, meta, Dsize, axis, ndim = inputs
+        ctx.mask = mask
+        ctx.meta = meta
+        ctx.axis = axis
+        ctx.ndim = ndim
+        ctx.size_Adata = Adata.numel()
 
     @staticmethod
     def backward(ctx, Cdata_b):

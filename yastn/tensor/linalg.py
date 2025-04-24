@@ -17,6 +17,7 @@ from __future__ import annotations
 from itertools import accumulate
 from numbers import Number
 import numpy as np
+import torch
 from ._auxliary import _struct, _slc, _clear_axes, _unpack_axes
 from ._tests import YastnError, _test_axes_all
 from ._merging import _merge_to_matrix, _meta_unmerge_matrix, _unmerge
@@ -104,7 +105,6 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
     diagnostics = kwargs.get('diagonostics', None)
     U, S, V = svd(a, axes=axes, sU=sU, nU=nU, policy=policy, D_block=D_block,
                   diagnostics=diagnostics, fix_signs=fix_signs, svd_on_cpu=svd_on_cpu)
-
     Smask = truncation_mask(S, tol=tol, tol_block=tol_block,
                             D_block=D_block, D_total=D_total,
                             truncate_multiplets=truncate_multiplets,
@@ -304,7 +304,7 @@ def _meta_svd(config, struct, slices, minD, sU, nU):
 
 def _find_gaps(S, tol=0, eps_multiplet=1e-13, which='LM'):
     """
-    Computes gaps between values of S ordered according to `which` as abs(S[i]-S[i+1]). 
+    Computes gaps between values of S ordered according to `which` as abs(S[i]-S[i+1]).
     Each gap is normalized by max(abs(S[i:i+2]).
 
     Parameters
@@ -341,7 +341,7 @@ def _find_gaps(S, tol=0, eps_multiplet=1e-13, which='LM'):
         assert isinstance(S, np.ndarray), "S should be numpy array."
         s = S
 
-    # 0) convert to plain dense numpy vector and sort in order 'which'    
+    # 0) convert to plain dense numpy vector and sort in order 'which'
     if which=='LM':
         inds = np.argsort(np.abs(s))[::-1]
     elif which=='SM':
@@ -351,13 +351,12 @@ def _find_gaps(S, tol=0, eps_multiplet=1e-13, which='LM'):
     elif which=='SR':
         inds = np.argsort(np.real(s))
     s = s[inds]
-    
+
     # TODO: treatment of null space
     maxgap = np.maximum(np.abs(s[:len(s) - 1]), np.abs(s[1:len(s)])) + 1.0e-16
     gaps = np.abs(s[:len(s) - 1] - s[1:len(s)]) / maxgap
 
     return gaps
-
 
 def truncation_mask_multiplets(S, tol=0, D_total=float('inf'),
                                eps_multiplet=1e-13, hermitian=False, **kwargs) -> yastn.Tensor[bool]:
@@ -395,12 +394,14 @@ def truncation_mask_multiplets(S, tol=0, D_total=float('inf'),
 
     # find all multiplets in the spectrum
     # 0) convert to plain dense numpy vector and sort in descending order
-    s = S.config.backend.to_numpy(S.data)
-    inds = np.argsort(s)[::-1].copy() # make descending
-    s = s[inds]
+    # s = S.config.backend.to_numpy(S.data)
+    # inds = np.argsort(s)[::-1].copy() # make descending
+    # s = s[inds]
+    s, inds = torch.sort(S.data.detach(), descending=True)
 
     S_global_max = s[0]
-    D_trunc = min(sum(s > (S_global_max * tol)), D_total)
+    # D_trunc = min(sum(s > (S_global_max * tol)), D_total)
+    D_trunc = min((s > (S_global_max * tol)).sum().item(), D_total)
     if D_trunc >= len(s):
         # no truncation
         Smask._data = S.data > -float('inf') # all True ?
@@ -408,8 +409,10 @@ def truncation_mask_multiplets(S, tol=0, D_total=float('inf'),
 
     # compute gaps and normalize by magnitude of (abs) larger value.
     # value of gaps[i] gives gap between i-th and i+1 the element of s
-    maxgap = np.maximum(np.abs(s[:len(s) - 1]), np.abs(s[1:len(s)])) + 1.0e-16
-    gaps = np.abs(s[:len(s) - 1] - s[1:len(s)]) / maxgap
+    # maxgap = np.maximum(np.abs(s[:len(s) - 1]), np.abs(s[1:len(s)])) + 1.0e-16
+    # gaps = np.abs(s[:len(s) - 1] - s[1:len(s)]) / maxgap
+    maxgap = torch.maximum(s[:-1].abs(), s[1:].abs()) + 1.0e-16
+    gaps = (s[:-1] - s[1:]).abs() / maxgap
 
     # find nearest multiplet boundary, keeping at most D_trunc elements
     # i-th element of gaps gives gap between i-th and (i+1)-th element of s

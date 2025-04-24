@@ -41,12 +41,12 @@ class EnvCTM_c4v(EnvCTM):
             (-)--B--(-) (+)--A--(+)
                 (-)         (+)
 
-        The tensor B is a function of tensor A as B = A.flip_signature() 
+        The tensor B is a function of tensor A as B = A.flip_signature()
 
-        There is just one unique C and one unique T tensor making up the environment, the 
+        There is just one unique C and one unique T tensor making up the environment, the
         C,T tensors for A- and B-sublattices are related by same signature transformation.
         Here, we chose top-left corner and top transfer tensor of sublattice A.
-        
+
         Index convention for environment tensors follows from on-site tensors.
 
         Parameters
@@ -70,40 +70,44 @@ class EnvCTM_c4v(EnvCTM):
     # Cloning/Copying/Detaching(view)
     #
     def copy(self) -> EnvCTM:
-        env = EnvCTM(self.psi, init=None)
+        env = EnvCTM_c4v(self.psi, init=None)
         for site in env.sites():
-            for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
+            # for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
+            for dirn in ['tl', 't']:
                 setattr(env[site], dirn, getattr(self[site], dirn).copy())
         return env
 
-    def shallow_copy(self) -> EnvCTM:
-        env = EnvCTM(self.psi, init=None)
+    def shallow_copy(self) -> EnvCTM_c4v:
+        env = EnvCTM_c4v(self.psi, init=None)
         for site in env.sites():
-            for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
+            # for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
+            for dirn in ['tl', 't']:
                 setattr(env[site], dirn, getattr(self[site], dirn))
         return env
 
-    def clone(self) -> EnvCTM:
+    def clone(self) -> EnvCTM_c4v:
         r"""
         Return a clone of the environment preserving the autograd - resulting clone is a part
         of the computational graph. Data of cloned environment tensors is indepedent
         from the originals.
         """
-        env = EnvCTM(self.psi, init=None)
+        env = EnvCTM_c4v(self.psi, init=None)
         for site in env.sites():
-            for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
+            # for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
+            for dirn in ['tl', 't']:
                 setattr(env[site], dirn, getattr(self[site], dirn).clone())
         return env
 
-    def detach(self) -> EnvCTM:
+    def detach(self) -> EnvCTM_c4v:
         r"""
         Return a detached view of the environment - resulting environment is **not** a part
         of the computational graph. Data of detached environment tensors is shared
         with the originals.
         """
-        env = EnvCTM(self.psi, init=None)
+        env = EnvCTM_c4v(self.psi, init=None)
         for site in env.sites():
-            for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
+            # for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
+            for dirn in ['tl', 't']:
                 setattr(env[site], dirn, getattr(self[site], dirn).detach())
         return env
 
@@ -113,7 +117,8 @@ class EnvCTM_c4v(EnvCTM):
         Data of environment tensors in detached environment is a `view` of the original data.
         """
         for site in self.sites():
-            for dirn in ["tl", "tr", "bl", "br", "t", "l", "b", "r"]:
+            # for dirn in ["tl", "tr", "bl", "br", "t", "l", "b", "r"]:
+            for dirn in ['tl', 't']:
                 if getattr(self[site], dirn) is None:
                     continue
                 try:
@@ -121,13 +126,40 @@ class EnvCTM_c4v(EnvCTM):
                 except RuntimeError:
                     setattr(self[site], dirn, getattr(self[site], dirn).detach())
 
+    def compress_env_c4v_1d(env):
+        r"""
+        Compress environment to data tensors and (hashable) metadata, see :func:`yastn.tensor.compress_to_1d`.
+
+        Parameters
+        ----------
+        env : EnvCTM_c4v
+            Environment instance to be transformed.
+
+        Returns
+        -------
+        (tuple[Tensor] , dict)
+            A pair where the first element is a tuple of raw data tensors (of type derived from backend)
+            and the second is a dict with corresponding metadata.
+        """
+        shallow= {
+            'psi': {site: env.psi.bra[site] for site in env.sites()} if isinstance(env.psi,Peps2Layers) \
+                else {site: env.psi[site] for site in env.sites()},
+            'env': tuple( env_t for site in env.sites() for k,env_t in env[site].__dict__.items() if env_t is not None)}
+        dtypes= set(tuple( t.yastn_dtype for t in shallow['psi'].values()) + tuple(t.yastn_dtype for t in shallow['env']))
+        assert len(dtypes)<2, f"CTM update: all tensors of state and environment should have the same dtype, got {dtypes}"
+        unrolled= {'psi': {site: t.compress_to_1d() for site,t in shallow['psi'].items()},
+            'env': tuple(t.compress_to_1d() for t in shallow['env'])}
+        meta= {'psi': {site: t_and_meta[1] for site,t_and_meta in unrolled['psi'].items()}, 'env': tuple(meta for t,meta in unrolled['env']),
+               '2layer': isinstance(env.psi, Peps2Layers), 'geometry': env.geometry, 'sites': env.sites()}
+        data= tuple( t for t,m in unrolled['psi'].values())+tuple( t for t,m in unrolled['env'])
+        return data, meta
 
     def reset_(self, init='eye', leg=None, **kwargs):
         r"""
         Initialize C4v-symmetric CTMRG environment::
 
             C--T--C => C---T--T'--T--C => C--T-- & --T'--
-            T--A--T    T---A--B---A--T    T--A--   --B--- 
+            T--A--T    T---A--B---A--T    T--A--   --B---
             C--T--C    T'--B--A---B--T    |  |       |
                        T---A--B---A--T
                        C---T--T'--T--C
@@ -158,7 +190,7 @@ class EnvCTM_c4v(EnvCTM):
             bp= Peps(geometry=g, \
                     tensors={ g.sites()[0]: self.psi.ket[0,0], g.sites()[1]: self.psi.ket[0,0].conj() }, )
             env_bp= EnvCTM(bp, init='eye', leg=leg)
-            env_bp.expand_outward_() 
+            env_bp.expand_outward_()
             # env_bp.init_env_from_onsite_()
 
             self[0,0].t= env_bp[0,0].t.drop_leg_history(axes=(0,2)).switch_signature(axes=0)
@@ -210,7 +242,7 @@ class EnvCTM_c4v(EnvCTM):
         #
         # get projectors and compute updated env tensors
         # TODO currently supports only <psi|psi> for double-layer peps
-        
+
 
         if checkpoint_move:
             outputs_meta= {}
@@ -220,7 +252,7 @@ class EnvCTM_c4v(EnvCTM):
 
             def f_update_core_2dir(move_d,loc_im,*inputs_t):
                 loc_env= decompress_env_1d(inputs_t,loc_im)
-                
+
                 env_tmp, proj_tmp= _update_core_dir(loc_env, "default", opts_svd, method=method, **kwargs)
                 update_old_env_(loc_env, env_tmp)
 
@@ -292,12 +324,38 @@ class EnvCTM_c4v(EnvCTM):
             d['data'][site] = d_local
         return d
 
+def decompress_env_c4v_1d(data,meta):
+    """
+    Reconstruct the environment from its compressed form.
+
+    Parameters
+    ----------
+    data : Sequence[Tensor]
+        Collection of 1D data tensors for both environment and underlying PEPS.
+    meta : dict
+        Holds metadata of original environment (and PEPS).
+
+    Returns
+    -------
+    EnvCTM
+    """
+    sites= meta['sites']
+    loc_bra= Peps(meta['geometry'], {site: decompress_from_1d(t,t_meta) for site,t,t_meta in zip(sites,data[:len(sites)],meta['psi'].values())})
+    loc_env = EnvCTM_c4v( Peps2Layers(loc_bra) if meta['2layer'] else loc_bra, init=None)
+
+    # assign backend tensors
+    #
+    data_env= data[len(sites):]
+    site = loc_env.sites()[0]
+    for env_t,t,t_meta in zip(loc_env[site].__dict__.keys(),data_env,meta['env']):
+        setattr(loc_env[site],env_t,decompress_from_1d(t,t_meta))
+    return loc_env
 
 def _update_core_dir(env, dir : str, opts_svd : dict, **kwargs):
         assert dir in ['default'], "Invalid directions"
         method= kwargs.get('method','default')
         policy= opts_svd.get('policy','fullrank')
-        
+
         #
         # Empty structure for projectors
         proj = Peps(env.geometry)
@@ -330,7 +388,7 @@ def _update_core_dir(env, dir : str, opts_svd : dict, **kwargs):
             env_tmp[s0].tl= (S/S.norm(p='inf'))
 
         # 3) update move half-row/-column tensor. Here, P is to act on B-sublattice T tensor.
-        # 
+        #
         P= P.unfuse_legs(axes=0)
         # 1<-2--P--0    0--T--2->3
         #        --1->0    1->2
@@ -338,13 +396,13 @@ def _update_core_dir(env, dir : str, opts_svd : dict, **kwargs):
         #  0<-1--P-----T--3->1  0--P--2
         #        |     2           |
         #        |      0          |
-        #         --0 1--A--3   1--  
+        #         --0 1--A--3   1--
         #                2=>1
         _b_sublattice= env.psi.bra[s0].flip_signature()
         tmp = tensordot(tmp, DoublePepsTensor(bra=_b_sublattice, ket=_b_sublattice), axes=((0, 2), (1, 0)))
         tmp = tensordot(tmp, P, axes=((1, 3), (0, 1)))
         tmp = tmp.flip_charges(axes=(0,2)) #tmp.switch_signature(axes=(0,2))
-        
+
         tmp= 0.5*(tmp + tmp.transpose(axes=(2,1,0)))
         env_tmp[s0].t = tmp / tmp.norm(p='inf')
 
@@ -355,6 +413,7 @@ def proj_sym_corner(rr, opts_svd, **kwargs):
     r""" Projector on largest (by magnitude) eigenvalues of (hermitian) symmetric corner. """
     policy = opts_svd.get('policy', 'symeig')
     fix_signs= opts_svd.get('fix_signs',True)
+    # truncation_f= kwargs.get('truncation_f',None)
     truncation_f= kwargs.get('truncation_f',\
         lambda x : truncation_mask_multiplets(x,keep_multiplets=True, \
             D_total=opts_svd['D_total'], tol=opts_svd['tol'], \
