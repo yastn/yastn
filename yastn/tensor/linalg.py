@@ -21,6 +21,7 @@ from ._auxliary import _struct, _slc, _clear_axes, _unpack_axes
 from ._tests import YastnError, _test_axes_all
 from ._merging import _merge_to_matrix, _meta_unmerge_matrix, _unmerge
 from ._merging import _Fusion, _leg_struct_trivial
+# from ..krylov._krylov import svds
 
 __all__ = ['qr', 'norm', 'entropy', 'truncation_mask', 'truncation_mask_multiplets',
            'svd', 'svd_with_truncation', 'eigh', 'eigh_with_truncation']
@@ -169,6 +170,17 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     -------
     `U`, `S`, `V` (when ``compute_uv=True``) or `S` (when ``compute_uv=False``)
     """
+    if policy == "krylov":
+        from ..krylov._krylov import svds
+        if 'D_block' not in kwargs:
+            raise YastnError(policy + " policy in svd requires passing argument D_block.")
+        else:
+            # WIP: BUG for SVDS
+            D_block = min(kwargs['D_block'], min(a.get_shape(axes=0), a.get_shape(axes=1)))
+            U, S, Vh = svds(a, axes=axes, sU=sU, nU=nU, k=D_block, ncv=None, tol=0, which='LM', solver='arpack')
+            return U, S, Vh
+
+
     _test_axes_all(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
     axes = _unpack_axes(a.mfs, lout_l, lout_r)

@@ -227,6 +227,7 @@ class EnvCTM_c4v(EnvCTM):
             opts_svd['tol'] = 1e-14
         if method not in ('default',):
             raise YastnError(f"CTM update {method=} not recognized. Should be 'default' or ...")
+        opts_svd['policy'] = kwargs.get('policy', "fullrank")
         checkpoint_move= kwargs.pop('checkpoint_move',False)
 
         #
@@ -426,7 +427,7 @@ def proj_sym_corner(rr, opts_svd, **kwargs):
         s,u= rr.eigh_with_truncation(axes=(0,1), sU=rr.s[1], which='LM', mask_f= truncation_f, **opts_svd, **_kwargs)
         v= None
         import pdb; pdb.set_trace()
-    elif policy in ['fullrank', 'lowrank', 'arnoldi']:
+    elif policy in ['fullrank', 'lowrank', 'arnoldi', 'krylov']:
         # sU = ? r0.s[1]
         if truncation_f is None:
             u, s, v = rr.svd(axes=(0, 1), fix_signs=fix_signs, **kwargs)

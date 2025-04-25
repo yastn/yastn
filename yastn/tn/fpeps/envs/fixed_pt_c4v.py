@@ -59,18 +59,31 @@ def find_coeff(zero_modes, dtype=torch.complex128):
 
     if dtype == torch.complex128:
         cs = np.ones(len(zero_modes), dtype=np.float64)
-        res = minimize(fun=lambda z: unitary_loss(real_to_complex(z)), x0=complex_to_real(cs), method='SLSQP', tol=1e-12)
+        res = minimize(fun=lambda z: unitary_loss(real_to_complex(z)), x0=complex_to_real(cs), method='SLSQP', options={"eps":1e-9, "ftol":1e-14})
         # print(res.message)
         res = real_to_complex(res.x)
     else:
         cs = np.zeros(len(zero_modes), dtype=np.float64)
         cs += np.random.rand(*cs.shape)*0.5
-        res = minimize(fun=unitary_loss, x0=cs, method='SLSQP', tol=1e-12)
+        res = minimize(fun=unitary_loss, x0=cs, method='SLSQP', jac='3-point', options={"eps": 1e-9, "ftol":1e-14})
         # print(res.message)
         res = res.x
     return res
 
 def find_gauge_c4v(env_old, env, verbose=False):
+    r"""
+    Find the gauge transformation matrix sigma that connects env and env_old.
+    T: environment tensor for A; T': environment tensor for B
+    #   --[leg1]--T_new-----T_new^'--[leg2]--sigma--- == ---sigma--[leg3]---T_old---T_old_L^' ---[leg4]---
+    #               |          |                                              |         |
+    #               A          B                                              A         B
+    Args:
+        env_old (EnvCTM_c4v): CTM_c4v environment
+        env (EnvCTM_c4v): CTM_c4v environment after a single CTMRG step
+
+    Returns:
+        Tensor: gauge transformation matrix sigma.
+    """
     site = env.sites()[0]
     T_olds, T_news = [env_old[site].t, env_old[site].t.flip_signature()], [env[site].t, env[site].t.flip_signature()]
     zero_modes = env_T_gauge_multi_sites(env.psi.config, T_olds, T_news)
@@ -86,6 +99,7 @@ def find_gauge_c4v(env_old, env, verbose=False):
         sigma += c * zero_modes[i]
     sigma._data.detach_()
 
+    # Note: The sigma matrix for T_new^' can be obtained by flipping signatures of sigma matrix
     site = env.sites()[0]
     sigma_p = sigma.flip_signature() # flip signatures but keep the same charge sectors
     fixed_t = tensordot(
@@ -180,7 +194,7 @@ class FixedPoint_c4v(torch.autograd.Function):
     @torch.no_grad()
     def ctm_conv_check(env, history, corner_tol):
         converged, max_dsv, history = ctm_conv_corner_spec(env, history, corner_tol)
-        print("max_dsv:", max_dsv)
+        # print("max_dsv:", max_dsv)
         log.log(logging.INFO, f"CTM iter {len(history)} |delta_C| {max_dsv}")
         return converged, history
 
@@ -197,7 +211,6 @@ class FixedPoint_c4v(torch.autograd.Function):
         t_ctm, t_check = 0.0, 0.0
         t_ctm_prev = time.perf_counter()
         converged, conv_history = False, []
-
         for sweep in range(max_sweeps):
             env.update_(
                 opts_svd=opts_svd, method=method, use_qr=False, checkpoint_move=False, policy=svd_policy, D_block=D_block,
@@ -214,20 +227,20 @@ class FixedPoint_c4v(torch.autograd.Function):
         return env, converged, conv_history, t_ctm, t_check
 
     @staticmethod
-    def forward(ctx, env: EnvCTM, ctm_opts_fwd : dict, ctm_opts_fp: dict, *state_params):
+    def forward(ctx, env: EnvCTM_c4v, ctm_opts_fwd : dict, ctm_opts_fp: dict, *state_params):
         r"""
         Compute the fixed-point environment for the given state using CTMRG.
         First, run CTMRG until convergence then find the gauge transformation guaranteeing element-wise
         convergence of the environment tensors.
 
         Args:
-            env (EnvCTM): Current environment to converge.
+            env (EnvCTM_c4v): Current environment to converge.
             ctm_opts_fwd (dict): Options for forward CTMRG convergence.
             ctm_opts_fp (dict): Options for fixing the gauge transformation.
             state_params (Sequence[Tensor]): tensors of underlying Peps state
 
         Returns:
-            EnvCTM: Environment at fixed point.
+            EnvCTM_c4v: Environment at fixed point.
             Sequence[Tensor]: raw environment data for the backward pass.
         """
 
@@ -244,7 +257,7 @@ class FixedPoint_c4v(torch.autograd.Function):
         env_converged = ctm_env_out.copy()
         ctx.proj = ctm_env_out.update_(**_ctm_opts_fp)
 
-        sigma = find_gauge_c4v(env_converged, ctm_env_out, verbose=True)
+        sigma = find_gauge_c4v(env_converged, ctm_env_out, verbose=False)
         if sigma is None:
             raise NoFixedPointError(code=1)
 
@@ -297,7 +310,7 @@ class FixedPoint_c4v(torch.autograd.Function):
                 grad_tmp = torch.cat(dfdA_vjp(dA)[0])
                 if prev_grad_tmp is not None:
                     grad_diff = torch.norm(grad_tmp[0] - prev_grad_tmp[0])
-                    print("full grad diff", grad_diff)
+                    # print("full grad diff", grad_diff)
                     if grad_diff < 1e-10:
                         # print("The norm of the full grad diff is below 1e-10.")
                         log.log(logging.INFO, f"Fixed_pt: The norm of the full grad diff is below 1e-10.")
