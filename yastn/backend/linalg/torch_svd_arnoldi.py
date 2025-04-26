@@ -113,20 +113,14 @@ class SVDARNOLDI(torch.autograd.Function):
         # V = Functional.normalize(V, p=2, dim=0)
 
         # ----- Option 1
-        def mv(v):
-            B= torch.as_tensor(v,dtype=M.dtype,device=M.device)
-            B= torch.matmul(M,B)
-            return B.detach().cpu().numpy()
-        def vm(v):
-            B= torch.as_tensor(v,dtype=M.dtype,device=M.device)
-            B= torch.matmul(M.t().conj(),B)
-            return B.detach().cpu().numpy()
-
-        if M.size(dim=0) <= k or M.size(dim=1) <= k:
+        portion=0.3
+        if M.size(dim=0)*portion <= k or M.size(dim=1)*portion <= k:
             U, S, Vh = scipy.linalg.svd(M.detach().cpu().numpy())
+            U, S, Vh = U[:, :k], S[:k], Vh[:k, :]
         else:
-            M_nograd= LinearOperator(M.size(), matvec=mv, rmatvec=vm)
-            U, S, Vh= scipy.sparse.linalg.svds(M_nograd, k=k, solver='arpack')
+            M_numpy = M.detach().cpu().numpy()
+            solver='arpack'
+            U, S, Vh= scipy.sparse.linalg.svds(M_numpy, k=k, solver=solver, maxiter=k*10)
 
         S= torch.as_tensor(S.copy())
         U= torch.as_tensor(U.copy())
