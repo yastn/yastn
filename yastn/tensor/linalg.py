@@ -732,9 +732,9 @@ def _meta_eigh(config, struct, slices, sU):
     return meta, Sstruct, Ssl, Ustruct, slices
 
 
-def eigh_with_truncation(a, axes, sU=1, Uaxis=-1,
+def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, which='SR', policy='fullrank',
                          tol=0, tol_block=0, D_block=float('inf'), D_total=float('inf'),
-                         truncate_multiplets=False) -> tuple[yastn.Tensor, yastn.Tensor]:
+                         truncate_multiplets=False, mask_f=None, **kwargs) -> tuple[yastn.Tensor, yastn.Tensor]:
     r"""
     Split symmetric tensor using exact eigenvalue decomposition, :math:`a= USU^{\dagger}`.
     Optionally, truncate the resulting decomposition.
@@ -755,6 +755,17 @@ def eigh_with_truncation(a, axes, sU=1, Uaxis=-1,
     Uaxis: int
         specify which leg of `U` is the new connecting leg. By default, it is the last leg.
 
+    which: str
+        One of [``‘SR’``, ``‘LR``, ``‘SM’``, ``‘LM’``] specifying how to order S:
+        ``‘LM’`` : sort by absolute value, largest first,
+        ``‘SM’`` : sort by absolute value, smallest first,
+        ``‘SR’`` : (default) sort by real part, smallest first,
+        ``‘LR’`` : sort by real part, largest first. 
+
+    policy: str
+        * ``"fullrank"`` : Use standard full ED for ``"fullrank"`` and then truncate.
+        kwargs will be passed to those functions for non-default settings.
+
     tol: float
         relative tolerance of eigen-values below which to truncate across all blocks.
 
@@ -767,17 +778,31 @@ def eigh_with_truncation(a, axes, sU=1, Uaxis=-1,
     D_total: int
         largest total number of eigen-values to keep.
 
+    mask_f: function[yastn.Tensor] -> yastn.Tensor
+        custom truncation-mask function.
+        If provided, it overrides all other truncation-related arguments.
+
     Returns
     -------
     `S`, `U`
     """
     S, U = eigh(a, axes=axes, sU=sU)
 
-    Smask = truncation_mask(S, tol=tol, tol_block=tol_block,
-                            D_block=D_block, D_total=D_total,
-                            truncate_multiplets=truncate_multiplets)
+    # sort
+    nsym = S.config.sym.NSYM
+    for b in S.get_blocks_charge():
+        arg_b = a.config.backend.eigs_which(S[b], which)
+        S[b]= S[b][arg_b]
+        U[b[nsym:]+b[:nsym]] = U[b[nsym:]+b[:nsym]][arg_b]
 
+    _S= S
+    if which in ["SM", "LM"]:
+        _S= abs(S)
+    Smask = truncation_mask(_S, tol=tol, tol_block=tol_block,
+                        D_block=D_block, D_total=D_total,
+                        truncate_multiplets=truncate_multiplets, mask_f=mask_f)
     S, U = Smask.apply_mask(S, U, axes=(0, -1))
+
     U = U.moveaxis(source=-1, destination=Uaxis)
     return S, U
 
