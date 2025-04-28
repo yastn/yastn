@@ -102,9 +102,8 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
     -------
     `U`, `S`, `V`
     """
-    diagnostics = kwargs.get('diagonostics', None)
     U, S, V = svd(a, axes=axes, sU=sU, nU=nU, policy=policy, D_block=D_block,
-                  diagnostics=diagnostics, fix_signs=fix_signs, svd_on_cpu=svd_on_cpu, **kwargs)
+                  fix_signs=fix_signs, svd_on_cpu=svd_on_cpu, **kwargs)
     Smask = truncation_mask(S, tol=tol, tol_block=tol_block,
                             D_block=D_block, D_total=D_total,
                             truncate_multiplets=truncate_multiplets,
