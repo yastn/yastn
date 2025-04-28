@@ -642,7 +642,7 @@ def _meta_qr(config, struct, slices, sQ):
     return meta, Qstruct, Qsl, Rstruct, Rsl
 
 
-def eigh(a, axes, sU=1, Uaxis=-1) -> tuple[yastn.Tensor, yastn.Tensor]:
+def eigh(a, axes, sU=1, Uaxis=-1, which='SR') -> tuple[yastn.Tensor, yastn.Tensor]:
     r"""
     Split symmetric tensor using exact eigenvalue decomposition, :math:`a= USU^{\dagger}`.
 
@@ -658,6 +658,13 @@ def eigh(a, axes, sU=1, Uaxis=-1) -> tuple[yastn.Tensor, yastn.Tensor]:
 
     Uaxis: int
         specify which leg of `U` is the new connecting leg. By default, it is the last leg.
+
+    which: str
+        One of [``‘SR’``, ``‘LR``, ``‘SM’``, ``‘LM’``] specifying how to order S:
+        ``‘LM’`` : sort by absolute value, largest first,
+        ``‘SM’`` : sort by absolute value, smallest first,
+        ``‘SR’`` : (default) sort by real part, smallest first,
+        ``‘LR’`` : sort by real part, largest first. 
 
     Returns
     -------
@@ -692,6 +699,20 @@ def eigh(a, axes, sU=1, Uaxis=-1) -> tuple[yastn.Tensor, yastn.Tensor]:
     Smfs = ((1,), (1,))
     Shfs = (_Fusion(s=(-sU,)), _Fusion(s=(sU,)))
     S = a._replace(struct=Sstruct, slices=Sslices, data=Sdata, mfs=Smfs, hfs=Shfs)
+
+    # sort in case of non-default order
+    if which != 'SR':
+        nsym = a.config.sym.NSYM
+        blocks_U = U.get_blocks_charge()
+        for b in S.get_blocks_charge():
+            arg_b = a.config.backend.eigs_which(S[b], which)
+            S[b]= S[b][arg_b]
+            slice_U = tuple([slice(None),]*(U.ndim-1)+[arg_b,])
+            for b_U in blocks_U: # suboptimal since U may have more blocks
+                if b_U[-nsym:] == b[:nsym]: 
+                    # blocks_U.remove(b_U)
+                    U[b_U] = U[b_U][slice_U]
+
 
     U = U.moveaxis(source=-1, destination=Uaxis)
     return S, U
@@ -786,14 +807,7 @@ def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, which='SR', policy='fullrank',
     -------
     `S`, `U`
     """
-    S, U = eigh(a, axes=axes, sU=sU)
-
-    # sort
-    nsym = S.config.sym.NSYM
-    for b in S.get_blocks_charge():
-        arg_b = a.config.backend.eigs_which(S[b], which)
-        S[b]= S[b][arg_b]
-        U[b[nsym:]+b[:nsym]] = U[b[nsym:]+b[:nsym]][arg_b]
+    S, U = eigh(a, axes=axes, sU=sU, Uaxis=Uaxis, which=which)
 
     _S= S
     if which in ["SM", "LM"]:
@@ -801,9 +815,8 @@ def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, which='SR', policy='fullrank',
     Smask = truncation_mask(_S, tol=tol, tol_block=tol_block,
                         D_block=D_block, D_total=D_total,
                         truncate_multiplets=truncate_multiplets, mask_f=mask_f)
-    S, U = Smask.apply_mask(S, U, axes=(0, -1))
+    S, U = Smask.apply_mask(S, U, axes=(0, Uaxis))
 
-    U = U.moveaxis(source=-1, destination=Uaxis)
     return S, U
 
 
