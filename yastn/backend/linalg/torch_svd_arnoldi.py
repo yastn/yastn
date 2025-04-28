@@ -65,12 +65,16 @@ class SVDSYMARNOLDI(torch.autograd.Function):
 
 class SVDARNOLDI(torch.autograd.Function):
     @staticmethod
-    def forward(self, M, k):
+    def forward(self, M, k, thresh, solver):
         r"""
         :param M: square matrix :math:`N \times N`
         :param k: desired rank (must be smaller than :math:`N`)
+        :param thresh: threshold for applying SVDARNOLDI instead of full SVD
+        :param solver: solver for scipy.sparse.linalg.svds
         :type M: torch.Tensor
         :type k: int
+        :type thresh: float
+        :type solver: str
         :return: leading k left eigenvectors U, singular values S, and right
                  eigenvectors V
         :rtype: torch.Tensor, torch.Tensor, torch.Tensor
@@ -113,13 +117,11 @@ class SVDARNOLDI(torch.autograd.Function):
         # V = Functional.normalize(V, p=2, dim=0)
 
         # ----- Option 1
-        portion=0.3
-        if M.size(dim=0)*portion <= k or M.size(dim=1)*portion <= k:
-            U, S, Vh = scipy.linalg.svd(M.detach().cpu().numpy())
+        M_numpy = M.detach().cpu().numpy()
+        if M.size(dim=0)*thresh <= k or M.size(dim=1)*thresh <= k:
+            U, S, Vh = scipy.linalg.svd(M_numpy)
             U, S, Vh = U[:, :k], S[:k], Vh[:k, :]
         else:
-            M_numpy = M.detach().cpu().numpy()
-            solver='arpack'
             U, S, Vh= scipy.sparse.linalg.svds(M_numpy, k=k, solver=solver, maxiter=k*10)
 
         S= torch.as_tensor(S.copy())

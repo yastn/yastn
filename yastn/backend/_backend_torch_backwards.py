@@ -68,14 +68,14 @@ class kernel_svd(torch.autograd.Function):
 
 class kernel_svd_arnoldi(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, data, meta, sizes):
+    def forward(ctx, data, meta, sizes, thresh, solver):
         real_dtype = data.real.dtype if data.is_complex() else data.dtype
         Udata = torch.empty((sizes[0],), dtype=data.dtype, device=data.device)
         Sdata = torch.empty((sizes[1],), dtype=real_dtype, device=data.device)
         Vhdata = torch.empty((sizes[2],), dtype=data.dtype, device=data.device)
         for (sl, D, slU, DU, slS, slV, DV) in meta:
             k = slS[1] - slS[0]
-            U, S, V = SVDARNOLDI.apply(data[slice(*sl)].view(D), k)
+            U, S, V = SVDARNOLDI.apply(data[slice(*sl)].view(D), k, thresh, solver)
             Udata[slice(*slU)].reshape(DU)[:] = U
             Sdata[slice(*slS)] = S
             Vhdata[slice(*slV)].reshape(DV)[:] = V

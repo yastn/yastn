@@ -41,12 +41,12 @@ class EnvCTM_c4v(EnvCTM):
             (-)--B--(-) (+)--A--(+)
                 (-)         (+)
 
-        The tensor B is a function of tensor A as B = A.flip_signature() 
+        The tensor B is a function of tensor A as B = A.flip_signature()
 
-        There is just one unique C and one unique T tensor making up the environment, the 
+        There is just one unique C and one unique T tensor making up the environment, the
         C,T tensors for A- and B-sublattices are related by same signature transformation.
         Here, we chose top-left corner and top transfer tensor of sublattice A.
-        
+
         Index convention for environment tensors follows from on-site tensors::
 
             C_A--(+),  (-)--T_A--(-)
@@ -163,7 +163,7 @@ class EnvCTM_c4v(EnvCTM):
         Initialize C4v-symmetric CTMRG environment::
 
             C--T--C => C---T--T'--T--C => C--T-- & --T'--
-            T--A--T    T---A--B---A--T    T--A--   --B--- 
+            T--A--T    T---A--B---A--T    T--A--   --B---
             C--T--C    T'--B--A---B--T    |  |       |
                        T---A--B---A--T
                        C---T--T'--T--C
@@ -194,7 +194,7 @@ class EnvCTM_c4v(EnvCTM):
             bp= Peps(geometry=g, \
                     tensors={ g.sites()[0]: self.psi.ket[0,0], g.sites()[1]: self.psi.ket[0,0].conj() }, )
             env_bp= EnvCTM(bp, init='eye', leg=leg)
-            env_bp.expand_outward_() 
+            env_bp.expand_outward_()
             # env_bp.init_env_from_onsite_()
 
             self[0,0].t= env_bp[0,0].t.drop_leg_history(axes=(0,2)).switch_signature(axes=0)
@@ -257,7 +257,7 @@ class EnvCTM_c4v(EnvCTM):
 
             def f_update_core_2dir(move_d,loc_im,*inputs_t):
                 loc_env= decompress_env_1d(inputs_t,loc_im)
-                
+
                 env_tmp, proj_tmp= _update_core_dir(loc_env, "default", opts_svd, method=method, **kwargs)
                 update_old_env_(loc_env, env_tmp)
 
@@ -393,11 +393,11 @@ def _update_core_dir(env, dir : str, opts_svd : dict, **kwargs):
             env_tmp[s0].tl= (S/S.norm(p='inf'))
 
         # 3) update move half-row/-column tensor. Here, P is to act on B-sublattice T tensor
-        # 
+        #
         #   Note:
         #   flip_signature() is equivalent to conj().conj_blocks(), which changes the total charge from +n to -n
         #   flip_charges(axes) is equivalent to switch_signature(axes), which leaves the total charge unchanged
-        # 
+        #
         P= P.unfuse_legs(axes=0)
         # 1<-2--P--0    0--T--2->3
         #        --1->0    1->2
@@ -405,13 +405,13 @@ def _update_core_dir(env, dir : str, opts_svd : dict, **kwargs):
         #  0<-1--P-----T--3->1  0--P--2
         #        |     2           |
         #        |      0          |
-        #         --0 1--A--3   1--  
+        #         --0 1--A--3   1--
         #                2=>1
         _b_sublattice= env.psi.bra[s0].flip_signature() # transform A with signature [1,1,1,1,1] into B with [-1,-1,-1,-1,-1]
         tmp = tensordot(tmp, DoublePepsTensor(bra=_b_sublattice, ket=_b_sublattice), axes=((0, 2), (1, 0)))
         tmp = tensordot(tmp, P, axes=((1, 3), (0, 1)))
         tmp = tmp.flip_charges(axes=(0,2)) #tmp.switch_signature(axes=(0,2))
-        
+
         # tmp= 0.5*(tmp + tmp.transpose(axes=(2,1,0)))
         env_tmp[s0].t = tmp / tmp.norm(p='inf')
 

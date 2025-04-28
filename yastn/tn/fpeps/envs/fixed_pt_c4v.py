@@ -74,7 +74,7 @@ def find_gauge_c4v(env_old, env, verbose=False):
     r"""
     Find the gauge transformation matrix sigma that connects env and env_old.
     T: environment tensor for A; T': environment tensor for B
-    #   --[leg1]--T_new-----T_new^'--[leg2]--sigma--- == ---sigma--[leg3]---T_old---T_old_L^' ---[leg4]---
+    #   --[leg1]--T_new-----T_new^'--[leg2]--sigma--- == ---sigma--[leg3]---T_old---T_old^' ---[leg4]---
     #               |          |                                              |         |
     #               A          B                                              A         B
     Args:
@@ -140,7 +140,8 @@ def fp_ctmrg_c4v(env: EnvCTM_c4v, \
         Sequence[Tensor]: raw environment data for the backward pass.
     """
     raw_peps_params= tuple( env.psi.ket[s]._data for s in env.psi.ket.sites() )
-    return FixedPoint_c4v.apply(env, ctm_opts_fwd, ctm_opts_fp, *raw_peps_params)
+    env_converged, env_slices, env_1d = FixedPoint_c4v.apply(env, ctm_opts_fwd, ctm_opts_fp, *raw_peps_params)
+    return env_converged, env_slices, env_1d, FixedPoint_c4v.t_ctm
 
 
 class FixedPoint_c4v(torch.autograd.Function):
@@ -213,7 +214,7 @@ class FixedPoint_c4v(torch.autograd.Function):
         converged, conv_history = False, []
         for sweep in range(max_sweeps):
             env.update_(
-                opts_svd=opts_svd, method=method, use_qr=False, checkpoint_move=False, policy=svd_policy, D_block=D_block,
+                opts_svd=opts_svd, method=method, checkpoint_move=False, policy=svd_policy, D_block=D_block, **kwargs
             )
             t_ctm_after = time.perf_counter()
             t_ctm += t_ctm_after - t_ctm_prev
@@ -222,7 +223,6 @@ class FixedPoint_c4v(torch.autograd.Function):
             converged, conv_history = FixedPoint_c4v.ctm_conv_check(env, conv_history, corner_tol)
             if converged:
                 break
-        print(f"t_ctm: {t_ctm:.1f}s")
 
         return env, converged, conv_history, t_ctm, t_check
 
@@ -265,8 +265,6 @@ class FixedPoint_c4v(torch.autograd.Function):
         ctx.save_for_backward(*env_data)
         ctx.env_meta = env_meta
         ctx.ctm_opts_fp = _ctm_opts_fp
-
-        # TODO: use save_for_backward
         ctx.sigma = sigma
         env_1d, env_slices= env_raw_data_c4v(env_converged)
 

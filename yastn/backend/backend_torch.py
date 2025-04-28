@@ -307,8 +307,8 @@ def svdvals(data, meta, sizeS, **kwargss):
         torch.linalg.svdvals(data[slice(*sl)].view(D), out=Sdata[slice(*slS)])
     return Sdata
 
-def svd_arnoldi(data, meta, sizes):
-    return kernel_svd_arnoldi.apply(data,meta,sizes)
+def svd_arnoldi(data, meta, sizes, thresh=0.2, solver='arpack'):
+    return kernel_svd_arnoldi.apply(data,meta,sizes, thresh, solver)
 
 
 def fix_svd_signs(Udata, Vhdata, meta):

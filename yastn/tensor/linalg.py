@@ -104,7 +104,7 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
     """
     diagnostics = kwargs.get('diagonostics', None)
     U, S, V = svd(a, axes=axes, sU=sU, nU=nU, policy=policy, D_block=D_block,
-                  diagnostics=diagnostics, fix_signs=fix_signs, svd_on_cpu=svd_on_cpu)
+                  diagnostics=diagnostics, fix_signs=fix_signs, svd_on_cpu=svd_on_cpu, **kwargs)
     Smask = truncation_mask(S, tol=tol, tol_block=tol_block,
                             D_block=D_block, D_total=D_total,
                             truncate_multiplets=truncate_multiplets,
@@ -213,7 +213,9 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     elif compute_uv and policy == 'lowrank':
         Udata, Sdata, Vdata = a.config.backend.svd_lowrank(data, meta, sizes)
     elif compute_uv and policy == 'arnoldi':
-        Udata, Sdata, Vdata = a.config.backend.svd_arnoldi(data, meta, sizes)
+        thresh = kwargs.get('svds_thresh', 0.2)
+        solver = kwargs.get('svds_solver', 'arpack')
+        Udata, Sdata, Vdata = a.config.backend.svd_arnoldi(data, meta, sizes, thresh, solver)
     else:
         raise YastnError('svd() policy should in (`arnoldi`, `lowrank`, `fullrank`). compute_uv == False only works with `fullrank`')
 
@@ -664,7 +666,7 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='SR') -> tuple[yastn.Tensor, yastn.Tenso
         ``‘LM’`` : sort by absolute value, largest first,
         ``‘SM’`` : sort by absolute value, smallest first,
         ``‘SR’`` : (default) sort by real part, smallest first,
-        ``‘LR’`` : sort by real part, largest first. 
+        ``‘LR’`` : sort by real part, largest first.
 
     Returns
     -------
@@ -709,7 +711,7 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='SR') -> tuple[yastn.Tensor, yastn.Tenso
             S[b]= S[b][arg_b]
             slice_U = tuple([slice(None),]*(U.ndim-1)+[arg_b,])
             for b_U in blocks_U: # suboptimal since U may have more blocks
-                if b_U[-nsym:] == b[:nsym]: 
+                if b_U[-nsym:] == b[:nsym]:
                     # blocks_U.remove(b_U)
                     U[b_U] = U[b_U][slice_U]
 
@@ -781,7 +783,7 @@ def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, which='SR', policy='fullrank',
         ``‘LM’`` : sort by absolute value, largest first,
         ``‘SM’`` : sort by absolute value, smallest first,
         ``‘SR’`` : (default) sort by real part, smallest first,
-        ``‘LR’`` : sort by real part, largest first. 
+        ``‘LR’`` : sort by real part, largest first.
 
     policy: str
         * ``"fullrank"`` : Use standard full ED for ``"fullrank"`` and then truncate.
