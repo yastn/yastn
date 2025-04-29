@@ -261,7 +261,7 @@ class FixedPoint_c4v(torch.autograd.Function):
         if sigma is None:
             raise NoFixedPointError(code=1)
 
-        env_data, env_meta = env_converged.compress_env_c4v_1d()
+        env_data, env_meta = env_converged.compress_env_1d()
         ctx.save_for_backward(*env_data)
         ctx.env_meta = env_meta
         ctx.ctm_opts_fp = _ctm_opts_fp

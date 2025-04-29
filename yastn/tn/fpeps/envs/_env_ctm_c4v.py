@@ -67,7 +67,7 @@ class EnvCTM_c4v(EnvCTM):
         """
         super().__init__(psi, init=None)
         if init not in (None, 'rand', 'eye', 'dl'):
-            raise YastnError(f"EnvCTM {init=} not recognized. Should be 'rand', 'eye', 'dl', None.")
+            raise YastnError(f"EnvCTM_c4v {init=} not recognized. Should be 'rand', 'eye', 'dl', None.")
         if init is not None:
             self.reset_(init=init, leg=leg)
 
@@ -76,7 +76,6 @@ class EnvCTM_c4v(EnvCTM):
     def copy(self) -> EnvCTM:
         env = EnvCTM_c4v(self.psi, init=None)
         for site in env.sites():
-            # for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
             for dirn in ['tl', 't']:
                 setattr(env[site], dirn, getattr(self[site], dirn).copy())
         return env
@@ -84,7 +83,6 @@ class EnvCTM_c4v(EnvCTM):
     def shallow_copy(self) -> EnvCTM_c4v:
         env = EnvCTM_c4v(self.psi, init=None)
         for site in env.sites():
-            # for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
             for dirn in ['tl', 't']:
                 setattr(env[site], dirn, getattr(self[site], dirn))
         return env
@@ -97,7 +95,6 @@ class EnvCTM_c4v(EnvCTM):
         """
         env = EnvCTM_c4v(self.psi, init=None)
         for site in env.sites():
-            # for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
             for dirn in ['tl', 't']:
                 setattr(env[site], dirn, getattr(self[site], dirn).clone())
         return env
@@ -110,7 +107,6 @@ class EnvCTM_c4v(EnvCTM):
         """
         env = EnvCTM_c4v(self.psi, init=None)
         for site in env.sites():
-            # for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
             for dirn in ['tl', 't']:
                 setattr(env[site], dirn, getattr(self[site], dirn).detach())
         return env
@@ -121,7 +117,6 @@ class EnvCTM_c4v(EnvCTM):
         Data of environment tensors in detached environment is a `view` of the original data.
         """
         for site in self.sites():
-            # for dirn in ["tl", "tr", "bl", "br", "t", "l", "b", "r"]:
             for dirn in ['tl', 't']:
                 if getattr(self[site], dirn) is None:
                     continue
@@ -130,33 +125,33 @@ class EnvCTM_c4v(EnvCTM):
                 except RuntimeError:
                     setattr(self[site], dirn, getattr(self[site], dirn).detach())
 
-    def compress_env_c4v_1d(env):
-        r"""
-        Compress environment to data tensors and (hashable) metadata, see :func:`yastn.tensor.compress_to_1d`.
+    # def compress_env_c4v_1d(env):
+    #     r"""
+    #     Compress environment to data tensors and (hashable) metadata, see :func:`yastn.tensor.compress_to_1d`.
 
-        Parameters
-        ----------
-        env : EnvCTM_c4v
-            Environment instance to be transformed.
+    #     Parameters
+    #     ----------
+    #     env : EnvCTM_c4v
+    #         Environment instance to be transformed.
 
-        Returns
-        -------
-        (tuple[Tensor] , dict)
-            A pair where the first element is a tuple of raw data tensors (of type derived from backend)
-            and the second is a dict with corresponding metadata.
-        """
-        shallow= {
-            'psi': {site: env.psi.bra[site] for site in env.sites()} if isinstance(env.psi,Peps2Layers) \
-                else {site: env.psi[site] for site in env.sites()},
-            'env': tuple( env_t for site in env.sites() for k,env_t in env[site].__dict__.items() if env_t is not None)}
-        dtypes= set(tuple( t.yastn_dtype for t in shallow['psi'].values()) + tuple(t.yastn_dtype for t in shallow['env']))
-        assert len(dtypes)<2, f"CTM update: all tensors of state and environment should have the same dtype, got {dtypes}"
-        unrolled= {'psi': {site: t.compress_to_1d() for site,t in shallow['psi'].items()},
-            'env': tuple(t.compress_to_1d() for t in shallow['env'])}
-        meta= {'psi': {site: t_and_meta[1] for site,t_and_meta in unrolled['psi'].items()}, 'env': tuple(meta for t,meta in unrolled['env']),
-               '2layer': isinstance(env.psi, Peps2Layers), 'geometry': env.geometry, 'sites': env.sites()}
-        data= tuple( t for t,m in unrolled['psi'].values())+tuple( t for t,m in unrolled['env'])
-        return data, meta
+    #     Returns
+    #     -------
+    #     (tuple[Tensor] , dict)
+    #         A pair where the first element is a tuple of raw data tensors (of type derived from backend)
+    #         and the second is a dict with corresponding metadata.
+    #     """
+    #     shallow= {
+    #         'psi': {site: env.psi.bra[site] for site in env.sites()} if isinstance(env.psi,Peps2Layers) \
+    #             else {site: env.psi[site] for site in env.sites()},
+    #         'env': tuple( env_t for site in env.sites() for k,env_t in env[site].__dict__.items() if env_t is not None)}
+    #     dtypes= set(tuple( t.yastn_dtype for t in shallow['psi'].values()) + tuple(t.yastn_dtype for t in shallow['env']))
+    #     assert len(dtypes)<2, f"CTM update: all tensors of state and environment should have the same dtype, got {dtypes}"
+    #     unrolled= {'psi': {site: t.compress_to_1d() for site,t in shallow['psi'].items()},
+    #         'env': tuple(t.compress_to_1d() for t in shallow['env'])}
+    #     meta= {'psi': {site: t_and_meta[1] for site,t_and_meta in unrolled['psi'].items()}, 'env': tuple(meta for t,meta in unrolled['env']),
+    #            '2layer': isinstance(env.psi, Peps2Layers), 'geometry': env.geometry, 'sites': env.sites()}
+    #     data= tuple( t for t,m in unrolled['psi'].values())+tuple( t for t,m in unrolled['env'])
+    #     return data, meta
 
     def reset_(self, init='eye', leg=None, **kwargs):
         r"""
@@ -256,8 +251,8 @@ class EnvCTM_c4v(EnvCTM):
             inputs_t, inputs_meta= env.compress_env_1d()
 
             def f_update_core_2dir(move_d,loc_im,*inputs_t):
-                loc_env= decompress_env_1d(inputs_t,loc_im)
-
+                loc_env= decompress_env_c4v_1d(inputs_t,loc_im)
+                
                 env_tmp, proj_tmp= _update_core_dir(loc_env, "default", opts_svd, method=method, **kwargs)
                 update_old_env_(loc_env, env_tmp)
 
@@ -277,7 +272,7 @@ class EnvCTM_c4v(EnvCTM):
                 elif checkpoint_move=='nonreentrant':
                     use_reentrant= False
                 checkpoint_F= env.config.backend.checkpoint
-                outputs= checkpoint_F(f_update_core_2dir,d,inputs_meta,*inputs_t,\
+                outputs= checkpoint_F(f_update_core_2dir,None,inputs_meta,*inputs_t,\
                                     **{'use_reentrant': use_reentrant, 'debug': False})
             else:
                 raise RuntimeError(f"CTM update: checkpointing not supported for backend {env.config.BACKEND_ID}")
@@ -285,7 +280,7 @@ class EnvCTM_c4v(EnvCTM):
             # update tensors of env and proj
             for i,site in enumerate(env.sites()):
                 for env_t,t,t_meta in zip(env[site].__dict__.keys(),outputs[i*8:(i+1)*8],outputs_meta['env'][i*8:(i+1)*8]):
-                    setattr(env[site],env_t,decompress_from_1d(t,t_meta))
+                    setattr(env[site],env_t,decompress_from_1d(t,t_meta) if t is not None else None)
 
             for i,site in enumerate(proj.sites()):
                 for proj_t,t,t_meta in zip(proj[site].__dict__.keys(),outputs[8*len(env.sites()):][i*8:(i+1)*8],outputs_meta['proj'][i*8:(i+1)*8]):
@@ -329,7 +324,8 @@ class EnvCTM_c4v(EnvCTM):
             d['data'][site] = d_local
         return d
 
-def decompress_env_c4v_1d(data,meta):
+
+def decompress_env_c4v_1d(data,meta)->EnvCTM_c4v:
     """
     Reconstruct the environment from its compressed form.
 
@@ -344,17 +340,14 @@ def decompress_env_c4v_1d(data,meta):
     -------
     EnvCTM
     """
-    sites= meta['sites']
-    loc_bra= Peps(meta['geometry'], {site: decompress_from_1d(t,t_meta) for site,t,t_meta in zip(sites,data[:len(sites)],meta['psi'].values())})
-    loc_env = EnvCTM_c4v( Peps2Layers(loc_bra) if meta['2layer'] else loc_bra, init=None)
+    loc_env= decompress_env_1d(data,meta)
+    res= EnvCTM_c4v(psi=loc_env.psi, init=None)
+    for site in loc_env.sites():
+        for dirn in ['tl','t']:
+            if getattr(loc_env[site], dirn) is not None:
+                setattr(res[site], dirn, getattr(loc_env[site], dirn))
+    return res
 
-    # assign backend tensors
-    #
-    data_env= data[len(sites):]
-    site = loc_env.sites()[0]
-    for env_t,t,t_meta in zip(loc_env[site].__dict__.keys(),data_env,meta['env']):
-        setattr(loc_env[site],env_t,decompress_from_1d(t,t_meta))
-    return loc_env
 
 def _update_core_dir(env, dir : str, opts_svd : dict, **kwargs):
         assert dir in ['default'], "Invalid directions"

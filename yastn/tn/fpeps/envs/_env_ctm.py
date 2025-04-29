@@ -188,10 +188,10 @@ class EnvCTM(Peps):
             'psi': {site: env.psi.bra[site] for site in env.sites()} if isinstance(env.psi,Peps2Layers) \
                 else {site: env.psi[site] for site in env.sites()},
             'env': tuple( env_t for site in env.sites() for k,env_t in env[site].__dict__.items() )}
-        dtypes= set(tuple( t.yastn_dtype for t in shallow['psi'].values()) + tuple(t.yastn_dtype for t in shallow['env']))
-        assert len(dtypes)<2, f"CTM update: all tensors of state and environment should have the same dtype, got {dtypes}"
+        dtypes= set(tuple( t.yastn_dtype for t in shallow['psi'].values()) + tuple(t.yastn_dtype if t is not None else None for t in shallow['env']))
+        assert len(dtypes - set((None,)) )<2, f"CTM update: all tensors of state and environment should have the same dtype, got {dtypes}"
         unrolled= {'psi': {site: t.compress_to_1d() for site,t in shallow['psi'].items()},
-            'env': tuple(t.compress_to_1d() for t in shallow['env'])}
+            'env': tuple(t.compress_to_1d() if t else (None,None) for t in shallow['env'])}
         meta= {'psi': {site: t_and_meta[1] for site,t_and_meta in unrolled['psi'].items()}, 'env': tuple(meta for t,meta in unrolled['env']),
                '2layer': isinstance(env.psi, Peps2Layers), 'geometry': env.geometry, 'sites': env.sites()}
         data= tuple( t for t,m in unrolled['psi'].values())+tuple( t for t,m in unrolled['env'])
@@ -956,7 +956,7 @@ class EnvCTM(Peps):
                 # update tensors of env and proj
                 for i,site in enumerate(env.sites()):
                     for env_t,t,t_meta in zip(env[site].__dict__.keys(),outputs[i*8:(i+1)*8],outputs_meta['env'][i*8:(i+1)*8]):
-                        setattr(env[site],env_t,decompress_from_1d(t,t_meta))
+                        setattr(env[site],env_t,decompress_from_1d(t,t_meta) if t is not None else None)
 
                 for i,site in enumerate(proj.sites()):
                     for proj_t,t,t_meta in zip(proj[site].__dict__.keys(),outputs[8*len(env.sites()):][i*8:(i+1)*8],outputs_meta['proj'][i*8:(i+1)*8]):
@@ -1160,7 +1160,7 @@ def decompress_env_1d(data,meta):
     data_env= data[len(sites):]
     for i,site in enumerate(sites):
         for env_t,t,t_meta in zip(loc_env[site].__dict__.keys(),data_env[i*8:(i+1)*8],meta['env'][i*8:(i+1)*8]):
-            setattr(loc_env[site],env_t,decompress_from_1d(t,t_meta))
+            setattr(loc_env[site],env_t,decompress_from_1d(t,t_meta) if t is not None else None) 
     return loc_env
 
 
