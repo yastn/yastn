@@ -4,6 +4,7 @@ import numpy as np
 from scipy.optimize import minimize
 from scipy.sparse.linalg import LinearOperator
 from scipy.sparse.linalg import bicgstab, lgmres
+import scipy.sparse.linalg as spla
 from collections import namedtuple
 
 import torch.utils.checkpoint
@@ -11,6 +12,7 @@ import torch.utils.checkpoint
 
 from .... import Tensor, ones, zeros, eye, YastnError, Leg, tensordot, einsum, diag
 from ._env_ctm import ctm_conv_corner_spec, decompress_env_1d
+from .... import zeros, decompress_from_1d
 from .rdm import *
 
 
@@ -84,20 +86,114 @@ def env_T_gauge_multi_sites(config, T_olds, T_news):
     #               |          |                                              |         |
     #               |          |                                              |         |
 
-    leg1 = T_news[0].get_legs(axes=0)
-    leg2 = T_news[-1].get_legs(axes=2)
-    leg3 = T_olds[0].get_legs(axes=0)
-    leg4 = T_olds[-1].get_legs(axes=2)
-    # T_old = T_old.transpose(axes=(2, 1, 0)) # exchange the left and right indices
+    # ========full-matrix impl===========
+    # leg1 = T_news[0].get_legs(axes=0)
+    # leg2 = T_news[-1].get_legs(axes=2)
+    # leg3 = T_olds[0].get_legs(axes=0)
+    # leg4 = T_olds[-1].get_legs(axes=2)
+    # # T_old = T_old.transpose(axes=(2, 1, 0)) # exchange the left and right indices
 
-    identity1 = diag(eye(config=config, legs=(leg1, leg1.conj())))
-    identity2 = diag(eye(config=config, legs=(leg2, leg2.conj())))
-    identity3 = diag(eye(config=config, legs=(leg3, leg3.conj())))
-    identity4 = diag(eye(config=config, legs=(leg4, leg4.conj())))
+    # identity1 = diag(eye(config=config, legs=(leg1, leg1.conj())))
+    # identity2 = diag(eye(config=config, legs=(leg2, leg2.conj())))
+    # identity3 = diag(eye(config=config, legs=(leg3, leg3.conj())))
+    # identity4 = diag(eye(config=config, legs=(leg4, leg4.conj())))
 
-    M1, M2 = identity1, identity4
-    M3, M4 = einsum("ji, kl -> ikjl", identity1, identity3), einsum("ij, lk -> ikjl", identity2, identity4)
+    # M1, M2 = identity1, identity4
+    # M3, M4 = einsum("ji, kl -> ikjl", identity1, identity3), einsum("ij, lk -> ikjl", identity2, identity4)
 
+    # for i in range(len(T_olds)):
+    #     #     2    0
+    #     #     |    |
+    #     #    M1    |
+    #     #     |    |
+    #     #     \-- T_new_i^*----1
+    #     tmp = tensordot(T_news[i], M1, axes=(0, 0), conj=(1, 0))
+    #     #     /-- T_new_i------1---
+    #     #     |    |
+    #     #    M1    |
+    #     #     |    |
+    #     #     \-- T_new_i^*----0---
+    #     M1 = tensordot(tmp, T_news[i], axes=([0, 2], [1, 0]))
+
+    #     #          1           2
+    #     #          |           |
+    #     #          |           M2
+    #     #          |           |
+    #     #      0-- T_old_i^*----
+    #     tmp = tensordot(T_olds[-1-i], M2, axes=(2, 0), conj=(1, 0))
+    #     #      1-- T_old_i------
+    #     #          |           |
+    #     #          |           M2
+    #     #          |           |
+    #     #      0-- T_old_i^*----
+    #     M2 = tensordot(tmp, T_olds[-1-i], axes=([1, 2], [1, 2]))
+
+    #     #   1---        --- 2
+    #     #       \------/
+    #     #       |  M3  |      3
+    #     #       /------\      |
+    #     #  0---/       \-- T_new_i^*----4
+    #     tmp = tensordot(M3, T_news[i], axes=(2, 0), conj=(0, 1))
+    #     #   1---        --- T_old_i-----3
+    #     #       \------/      |
+    #     #       |  M3  |      |
+    #     #       /------\      |
+    #     #  0---/       \-- T_new_i^*----2
+    #     M3 = tensordot(tmp, T_olds[i], axes=([2, 3], [0, 1]))
+
+    #     #   3---T_new_i---        -----0
+    #     #         |       \------/
+    #     #         |       |  M4  |
+    #     #         4       /------\
+    #     #            2---/       \-----1
+    #     tmp = tensordot(M4, T_news[-1-i], axes=(2, 2))
+    #     #  2----T_new_i---        -----0
+    #     #         |       \------/
+    #     #         |       |  M4  |
+    #     #         |       /------\
+    #     #  3--T_old_i^*--/       \-----1
+    #     M4 = tensordot(tmp, T_olds[-1-i], axes=([2, 4], [2, 1]), conj=(0, 1))
+
+    # M = einsum("ij, kl -> ikjl", M1.transpose(), identity3) + einsum("ij, kl -> ikjl", identity2, M2.transpose()) - M3 - M4
+    # M = M.fuse_legs(axes=((2, 3), (0, 1)))
+    # s, u = M.eigh(axes=(0, 1))
+    # u = u.unfuse_legs(axes=(0,))
+    # s_zeros = s <= 1e-10
+    # # s_zeros = s <= 1e-14
+    # # s_dense = s.to_dense().diag()
+    # # print(s_dense[s_dense < 1e-6])
+    # modes = u @ s_zeros  # set eigenvectors with non-zero eigenvalues to zero
+    # zero_modes = []
+    # # collect zero eigenvectors
+    # for i in range(modes.get_legs(axes=2).tD[(0,)]):
+    #     zero_mode = zeros(
+    #         config=config, legs=(leg2.conj(), leg3.conj())
+    #     )  # 1 ---sigma--- 2
+    #     non_zero = False
+    #     for charge_sector in modes.get_blocks_charge():
+    #         if charge_sector[-1] == 0:  # the total charge of sigma should be zero
+    #             block = modes[charge_sector]
+    #             if torch.norm(block[:, :, i]) > 1e-8:
+    #                 non_zero = True
+    #                 zero_mode.set_block(ts=charge_sector[:-1], val=block[:, :, i])
+    #     if non_zero:
+    #         zero_modes.append(zero_mode)
+    # =======================================
+
+    # ========linear-operator impl===========
+    # leg1 = T_news[0].get_legs(axes=0)
+    # leg4 = T_olds[-1].get_legs(axes=2)
+    leg2 = T_news[-1].get_legs(axes=2) # leg1 = leg2.conj()
+    leg3 = T_olds[0].get_legs(axes=0) # leg3 = leg4.conj()
+
+    v0= zeros(config=T_news[0].config, legs=(leg2.conj(), leg3.conj()), n=0)
+    _, meta= v0.compress_to_1d(meta=None)
+
+
+    M1 = diag(eye(config=config, legs=(leg2.conj(), leg2)))
+    M2 = diag(eye(config=config, legs=(leg3.conj(), leg3)))
+
+    # The matrices M1 and M2 can be precomputed explicitly with a cost of O(chi^3 D^2)
     for i in range(len(T_olds)):
         #     2    0
         #     |    |
@@ -125,56 +221,56 @@ def env_T_gauge_multi_sites(config, T_olds, T_news):
         #      0-- T_old_i^*----
         M2 = tensordot(tmp, T_olds[-1-i], axes=([1, 2], [1, 2]))
 
-        #   1---        --- 2
-        #       \------/
-        #       |  M3  |      3
-        #       /------\      |
-        #  0---/       \-- T_new_i^*----4
-        tmp = tensordot(M3, T_news[i], axes=(2, 0), conj=(0, 1))
-        #   1---        --- T_old_i-----3
-        #       \------/      |
-        #       |  M3  |      |
-        #       /------\      |
-        #  0---/       \-- T_new_i^*----2
-        M3 = tensordot(tmp, T_olds[i], axes=([2, 3], [0, 1]))
+    M1 = M1.transpose()
+    M2 = M2.transpose()
 
-        #   3---T_new_i---        -----0
-        #         |       \------/
-        #         |       |  M4  |
-        #         4       /------\
-        #            2---/       \-----1
-        tmp = tensordot(M4, T_news[-1-i], axes=(2, 2))
-        #  2----T_new_i---        -----0
-        #         |       \------/
-        #         |       |  M4  |
-        #         |       /------\
-        #  3--T_old_i^*--/       \-----1
-        M4 = tensordot(tmp, T_olds[-1-i], axes=([2, 4], [2, 1]), conj=(0, 1))
+    # take care of negative strides
+    to_tensor= lambda x: T_news[0].config.backend.to_tensor(x if np.sum(np.array(x.strides)<0)==0 else x.copy() , dtype=T_news[0].yastn_dtype, device=T_news[0].device)
+    to_numpy= lambda x: T_news[0].config.backend.to_numpy(x)
 
-    M = einsum("ij, kl -> ikjl", M1.transpose(), identity3) + einsum("ij, kl -> ikjl", identity2, M2.transpose()) - M3 - M4
-    M = M.fuse_legs(axes=((2, 3), (0, 1)))
-    s, u = M.eigh(axes=(0, 1))
-    u = u.unfuse_legs(axes=(0,))
-    s_zeros = s <= 1e-10
-    # s_zeros = s <= 1e-14
-    # s_dense = s.to_dense().diag()
-    # print(s_dense[s_dense < 1e-6])
-    modes = u @ s_zeros  # set eigenvectors with non-zero eigenvalues to zero
-    zero_modes = []
-    # collect zero eigenvectors
-    for i in range(modes.get_legs(axes=2).tD[(0,)]):
-        zero_mode = zeros(
-            config=config, legs=(leg2.conj(), leg3.conj())
-        )  # 1 ---sigma--- 2
-        non_zero = False
-        for charge_sector in modes.get_blocks_charge():
-            if charge_sector[-1] == 0:  # the total charge of sigma should be zero
-                block = modes[charge_sector]
-                if torch.norm(block[:, :, i]) > 1e-8:
-                    non_zero = True
-                    zero_mode.set_block(ts=charge_sector[:-1], val=block[:, :, i])
-        if non_zero:
-            zero_modes.append(zero_mode)
+    def mv(v): # Av
+        sigma = decompress_from_1d(to_tensor(v), meta)
+        sigma3, sigma4 = sigma, sigma
+
+        # Cost: O(chi^3 D^2)
+        for i in range(len(T_olds)):
+            #           ---[1]-> 0
+            #   ------/
+            #  sigma3 |      1
+            #   ------\      |
+            #          [0]-- T_new_i^*----2
+            sigma3 = tensordot(sigma3, T_news[i], axes=(0, 0), conj=(0, 1))
+
+            #           -- T_old_i-----1
+            #   ------/      |
+            #  sigma3 |      |
+            #   ------\      |
+            #          -- T_new_i^*----0
+            sigma3 = tensordot(sigma3, T_olds[i], axes=([0, 1], [0, 1]))
+
+            #   1---T_new_i---
+            #         |       \------
+            #         |       | sigma4
+            #         2       /------
+            #            0---/
+            sigma4 = tensordot(sigma4, T_news[-1-i], axes=(0, 2))
+            #  0----T_new_i---
+            #         |       \------
+            #         |       | sigma4
+            #         |       /------
+            #  1--T_old_i^*--/
+            sigma4 = tensordot(sigma4, T_olds[-1-i], axes=([0, 2], [2, 1]), conj=(0, 1))
+
+        res = tensordot(M1, sigma, axes=(0, 0)) + tensordot(sigma, M2, axes=(1, 0)) -sigma3 - sigma4
+        res_data, res_meta= res.compress_to_1d(meta=meta)
+        return to_numpy(res_data)
+
+    A = spla.LinearOperator((v0.size, v0.size), matvec=mv)
+    w, vs= spla.eigsh(A, k=10, which='SM', v0=None)
+    zero_v = vs[:, w<1e-8]
+    zero_modes = [decompress_from_1d(to_tensor(v), meta) for v in zero_v.T]
+    # =======================================
+
     return zero_modes
 
 def real_to_complex(z):      # real vector of length 2n -> complex of length n
