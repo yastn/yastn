@@ -117,13 +117,13 @@ class SVDARNOLDI(torch.autograd.Function):
         # V = Functional.normalize(V, p=2, dim=0)
 
         # ----- Option 1
-        if min(M.shape)*thresh < k: # k / matrix size is too large for speed-up by iterative solver 
+        if min(M.shape)*thresh < k: # k / matrix size is too large for speed-up by iterative solver
             U, S, Vh = scipy.linalg.svd(M.detach().cpu().numpy())
             U, S, Vh = U[:, :k], S[:k], Vh[:k, :]
 
-        if M.device != torch.device('cpu'): # assume accelerator for matrix-vector products
+        elif M.device != torch.device('cpu'): # assume accelerator for matrix-vector products
             # TODO consider circulant matrix [[0,M],[M^\dag,0]] and solve via eigsh
-            
+
             def mv(v):
                 B= torch.as_tensor(v,dtype=M.dtype,device=M.device)
                 B= torch.matmul(M,B)

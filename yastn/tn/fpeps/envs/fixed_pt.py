@@ -186,7 +186,7 @@ def env_T_gauge_multi_sites(config, T_olds, T_news):
     leg2 = T_news[-1].get_legs(axes=2) # leg1 = leg2.conj()
     leg3 = T_olds[0].get_legs(axes=0) # leg3 = leg4.conj()
 
-    v0= zeros(config=T_news[0].config, legs=(leg2.conj(), leg3.conj()), n=0)
+    v0= zeros(config=T_news[0].config, legs=(leg2.conj(), leg3.conj()), n=T_news[0].config.sym.zero())
     _, meta= v0.compress_to_1d(meta=None)
 
 
@@ -440,9 +440,8 @@ def find_coeff_multi_sites(env_old, env, zero_modes_dict, dtype=torch.complex128
             ind2row[site_ind] = slice(start, start+num)
             start += num
         cs_data = np.concatenate(cs_data)
-
-        res = minimize(fun=lambda z: unitary_loss(real_to_complex(z)), x0=complex_to_real(cs_data), method='cg', tol=1e-12)
-        print(res.message)
+        res = minimize(fun=lambda z: unitary_loss(real_to_complex(z)), x0=complex_to_real(cs_data),
+                       jac='3-point', method='SLSQP', options={"eps":1e-9, "ftol":1e-14})
         res = real_to_complex(res.x)
     else:
         cs_data = []
@@ -458,8 +457,8 @@ def find_coeff_multi_sites(env_old, env, zero_modes_dict, dtype=torch.complex128
             start += num
         cs_data = np.concatenate(cs_data)
         cs_data += np.random.rand(*cs_data.shape)*0.1
-        res = minimize(fun=unitary_loss, x0=cs_data, method='cg', tol=1e-12)
-        print(res.message)
+        res = minimize(fun=unitary_loss, x0=cs_data,
+                       jac='3-point', method='SLSQP', options={"eps":1e-9, "ftol":1e-14})
         res = res.x
 
     cs_dict = {}
@@ -521,7 +520,7 @@ def find_gauge_multi_sites(env_old, env, verbose=False):
                 return None
             zero_modes_dict[(site_ind, k)] = zero_modes
 
-    cs_dict = find_coeff_multi_sites(env_old, env, zero_modes_dict, dtype=zero_modes_dict[(0, "t")][0].dtype)
+    cs_dict = find_coeff_multi_sites(env_old, env, zero_modes_dict, dtype=zero_modes_dict[(0, "t")][0].dtype, verbose=True)
     def is_diagonal(matrix, tol=1e-6):
         print(torch.diag(matrix))
         off_diag = matrix - torch.diag(torch.diag(matrix))  # Remove diagonal elements
@@ -769,7 +768,7 @@ class FixedPoint(torch.autograd.Function):
         env_converged = ctm_env_out.copy()
         ctx.proj = ctm_env_out.update_(**_ctm_opts_fp)
 
-        sigma_dict = find_gauge_multi_sites(env_converged, ctm_env_out)
+        sigma_dict = find_gauge_multi_sites(env_converged, ctm_env_out, verbose=True)
         if sigma_dict is None:
             raise NoFixedPointError(code=1)
 
