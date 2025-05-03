@@ -3,8 +3,8 @@ import torch
 import numpy as np
 from scipy.optimize import minimize
 from scipy.sparse.linalg import LinearOperator
-from scipy.sparse.linalg import bicgstab, lgmres
-import scipy.sparse.linalg as spla
+from scipy.sparse.linalg import eigsh, ArpackNoConvergence
+
 from collections import namedtuple
 
 import torch.utils.checkpoint
@@ -74,6 +74,27 @@ def extract_dsv(history):
 def running_ave(history, window_size=5):
     cumsum = np.cumsum(np.insert(history, 0, 0))
     return (cumsum[window_size:] - cumsum[:-window_size]) / window_size
+
+def robust_eigsh(A, k=3, sigma=None, initial_maxiter=1000, retry_factor=3, **kwargs):
+    """
+    Run eigsh with retries on non-convergence.
+
+    Parameters:
+    - A: sparse matrix (symmetric)
+    - k: number of eigenvalues
+    - sigma: shift for shift-invert
+    - initial_maxiter: starting maxiter value
+    - retry_factor: multiplier to increase maxiter on retry
+    - kwargs: other args passed to eigsh
+
+    Returns:
+    - eigenvalues, eigenvectors
+    """
+    try:
+        return eigsh(A, k=k, sigma=sigma, maxiter=initial_maxiter, **kwargs)
+    except ArpackNoConvergence as e:
+        log.log(logging.INFO, f"Warning: No convergence after {initial_maxiter} iterations. Retrying with more iterations...")
+        return eigsh(A, k=k, sigma=sigma, maxiter=initial_maxiter * retry_factor, **kwargs)
 
 class NoFixedPointError(Exception):
     def __init__(self, code):
@@ -265,8 +286,8 @@ def env_T_gauge_multi_sites(config, T_olds, T_news):
         res_data, res_meta= res.compress_to_1d(meta=meta)
         return to_numpy(res_data)
 
-    A = spla.LinearOperator((v0.size, v0.size), matvec=mv)
-    w, vs= spla.eigsh(A, k=10, which='SM', v0=None)
+    A = LinearOperator((v0.size, v0.size), matvec=mv)
+    w, vs= robust_eigsh(A, k=10, which='SA', v0=None, initial_maxiter=1000)
     zero_v = vs[:, w<1e-8]
     zero_modes = [decompress_from_1d(to_tensor(v), meta) for v in zero_v.T]
     # =======================================
