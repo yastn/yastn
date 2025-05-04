@@ -75,16 +75,17 @@ def running_ave(history, window_size=5):
     cumsum = np.cumsum(np.insert(history, 0, 0))
     return (cumsum[window_size:] - cumsum[:-window_size]) / window_size
 
-def robust_eigsh(A, k=3, sigma=None, initial_maxiter=1000, retry_factor=3, **kwargs):
+def robust_eigsh(A, initial_maxiter, max_maxiter, k=3, retry_factor=3, sigma=None, **kwargs):
     """
     Run eigsh with retries on non-convergence.
 
     Parameters:
     - A: sparse matrix (symmetric)
+    - initial_maxiter: starting maxiter value [typical value: A.shape[0] * 10]
+    - max_maxiter: maximum maxiter value
+    - retry_factor: multiplier to increase maxiter on retry
     - k: number of eigenvalues
     - sigma: shift for shift-invert
-    - initial_maxiter: starting maxiter value
-    - retry_factor: multiplier to increase maxiter on retry
     - kwargs: other args passed to eigsh
 
     Returns:
@@ -93,8 +94,14 @@ def robust_eigsh(A, k=3, sigma=None, initial_maxiter=1000, retry_factor=3, **kwa
     try:
         return eigsh(A, k=k, sigma=sigma, maxiter=initial_maxiter, **kwargs)
     except ArpackNoConvergence as e:
-        log.log(logging.INFO, f"Warning: No convergence after {initial_maxiter} iterations. Retrying with more iterations...")
-        return eigsh(A, k=k, sigma=sigma, maxiter=initial_maxiter * retry_factor, **kwargs)
+        # if all zero eigenvalues converge already, no need to retry
+        if len(e.eigenvalues [e.eigenvalues < 1e-8]) < len(e.eigenvalues):
+            return e.eigenvalues, e.eigenvectors
+        elif initial_maxiter > max_maxiter:
+            raise e
+        else:
+            log.log(logging.INFO, f"Eigsh Warning: No convergence after {initial_maxiter} iterations. Retrying with more iterations...")
+            return robust_eigsh(A, initial_maxiter * retry_factor, max_maxiter, k=k, retry_factor=retry_factor, sigma=sigma, **kwargs)
 
 class NoFixedPointError(Exception):
     def __init__(self, code):
@@ -287,7 +294,7 @@ def env_T_gauge_multi_sites(config, T_olds, T_news):
         return to_numpy(res_data)
 
     A = LinearOperator((v0.size, v0.size), matvec=mv)
-    w, vs= robust_eigsh(A, k=10, which='SA', v0=None, initial_maxiter=1000)
+    w, vs= robust_eigsh(A, k=6, which='SA', v0=None, initial_maxiter=v0.size*10, max_maxiter=v0.size*90)
     zero_v = vs[:, w<1e-8]
     zero_modes = [decompress_from_1d(to_tensor(v), meta) for v in zero_v.T]
     # =======================================
