@@ -157,9 +157,9 @@ class EnvCTM_c4v(EnvCTM):
         r"""
         Initialize C4v-symmetric CTMRG environment::
 
-            C--T--C => C---T--T'--T--C => C--T-- & --T'--
-            T--A--T    T---A--B---A--T    T--A--   --B---
-            C--T--C    T'--B--A---B--T    |  |       |
+            C--T--C => C---T--T'--T--C => C--T-- & --T'-- <=> 
+            T--A--T    T---A--B---A--T    T--A--   --B---     C--T'--
+            C--T--C    T'--B--A---B--T    |  |       |        |  |
                        T---A--B---A--T
                        C---T--T'--T--C
 
@@ -226,7 +226,8 @@ class EnvCTM_c4v(EnvCTM):
             opts_svd['tol'] = 1e-14
         if method not in ('default',):
             raise YastnError(f"CTM update {method=} not recognized. Should be 'default' or ...")
-        opts_svd['policy'] = kwargs.get('policy', "fullrank")
+        if 'policy' in kwargs:
+            opts_svd['policy'] = kwargs.get('policy')
         checkpoint_move= kwargs.pop('checkpoint_move',False)
 
         #
@@ -362,9 +363,12 @@ def _update_core_dir(env, dir : str, opts_svd : dict, **kwargs):
         s0 = env.psi.sites()[0]
 
         # 1) get tl enlarged corner and projector from ED/SVD
+        # (+) 0--tl--1 0--t--2 (-)
+        #                 1
+        cor_tl_2x1 = env[s0].tl @ env[s0].t
         # (-) 0--t--2 0--tl--1 0--t--2->3(-)
         #        1                1->2
-        cor_tl = env[s0].t @ env[s0].tl @ env[s0].t
+        cor_tl = env[s0].t @ cor_tl_2x1
         # tl--t---1 (-)
         # t---A--3 (fusion of + and -)
         # 0   2
@@ -373,7 +377,8 @@ def _update_core_dir(env, dir : str, opts_svd : dict, **kwargs):
 
         # Note: U(1)-symm corner is not hermitian. Instead blocks related by conj of charges are hermitian conjugates,
         #       i.e. (2,-2) and (-2,2) blocks are hermitian conjugates.
-        proj[s0].vtl, s, proj[s0].vtr= proj_sym_corner(cor_tl, opts_svd, sU=1, **kwargs)
+        R= cor_tl_2x1.flip_signature().fuse_legs(axes=((0, 1), 2)) if policy in ['qr'] else cor_tl
+        proj[s0].vtl, s, proj[s0].vtr= proj_sym_corner(R, opts_svd, sU=1, **kwargs)
 
         # 2) update move corner
         P= proj[s0].vtl
@@ -381,6 +386,9 @@ def _update_core_dir(env, dir : str, opts_svd : dict, **kwargs):
         if policy in ['symeig']:
             assert (cor_tl-cor_tl.H)<1e-12,"enlarged corner is not hermitian"
             env_tmp[s0].tl = s/s.norm(p='inf')
+        elif policy in ["qr"]:
+            S= P.tensordot( cor_tl.flip_signature() @ P, (0, 0))
+            env_tmp[s0].tl= (S/S.norm(p='inf'))
         else:
             S= ((proj[s0].vtr.conj() @ P) @ s)
             env_tmp[s0].tl= (S/S.norm(p='inf'))
@@ -420,13 +428,13 @@ def proj_sym_corner(rr, opts_svd, **kwargs):
             D_total=opts_svd['D_total'], tol=opts_svd['tol'], \
             eps_multiplet=opts_svd['eps_multiplet'], hermitian=True, ) )
 
+    print(f"{policy}")
     if policy in ['symeig']:
         # TODO fix_signs ?
         _kwargs= dict(kwargs)
         for k in ["method", "use_qr",]: del _kwargs[k]
         s,u= rr.eigh_with_truncation(axes=(0,1), sU=rr.s[1], which='LM', mask_f= truncation_f, **opts_svd, **_kwargs)
         v= None
-        import pdb; pdb.set_trace()
     elif policy in ['fullrank', 'lowrank', 'arnoldi', 'krylov']:
         # sU = ? r0.s[1]
         if truncation_f is None:
@@ -435,5 +443,8 @@ def proj_sym_corner(rr, opts_svd, **kwargs):
             u, s, v = Smask.apply_mask(u, s, v, axes=(-1, 0, 0))
         else:
             u, s, v = rr.svd_with_truncation(axes=(0, 1), mask_f=truncation_f, **kwargs)
+    elif policy in ['qr']:
+        u, s= rr.qr(axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0)
+        v= None
 
     return u, s, v
