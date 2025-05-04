@@ -158,8 +158,8 @@ class EnvCTM_c4v(EnvCTM):
         Initialize C4v-symmetric CTMRG environment::
 
             C--T--C => C---T--T'--T--C => C--T-- & --T'-- <=> 
-            T--A--T    T---A--B---A--T    T--A--   --B---     C--T'--
-            C--T--C    T'--B--A---B--T    |  |       |        |  |
+            T--A--T    T---A--B---A--T    T--A--   --B---     C'--T'--
+            C--T--C    T'--B--A---B--T    |  |       |        |   |
                        T---A--B---A--T
                        C---T--T'--T--C
 
@@ -297,14 +297,14 @@ class EnvCTM_c4v(EnvCTM):
     def get_env_bipartite(self):
         g= RectangularUnitcell(pattern=[[0,1],[1,0]])
         bp= Peps(geometry=g, \
-            tensors={ g.sites()[0]: self.psi.ket[0,0], g.sites()[1]: self.psi.ket[0,0].conj() }, )
+            tensors={ g.sites()[0]: self.psi.ket[0,0], g.sites()[1]: self.psi.ket[0,0].flip_signature() }, )
         env_bp= EnvCTM(bp, init=None)
         s0= g.sites()[0]
         env_bp[s0].tr= env_bp[s0].br= env_bp[s0].bl= env_bp[s0].tl= self[0,0].tl
         env_bp[s0].l= env_bp[s0].b= env_bp[s0].r= env_bp[s0].t= self[0,0].t
         s1= g.sites()[1]
-        env_bp[s1].tr= env_bp[s1].br= env_bp[s1].bl= env_bp[s1].tl= self[0,0].tl.conj()
-        env_bp[s1].l= env_bp[s1].b= env_bp[s1].r= env_bp[s1].t= self[0,0].t.conj()
+        env_bp[s1].tr= env_bp[s1].br= env_bp[s1].bl= env_bp[s1].tl= self[0,0].tl.flip_signature()
+        env_bp[s1].l= env_bp[s1].b= env_bp[s1].r= env_bp[s1].t= self[0,0].t.flip_signature()
         return env_bp
 
 
@@ -387,7 +387,8 @@ def _update_core_dir(env, dir : str, opts_svd : dict, **kwargs):
             assert (cor_tl-cor_tl.H)<1e-12,"enlarged corner is not hermitian"
             env_tmp[s0].tl = s/s.norm(p='inf')
         elif policy in ["qr"]:
-            S= P.tensordot( cor_tl.flip_signature() @ P, (0, 0))
+            S= P.flip_signature().tensordot( cor_tl @ P.flip_signature(), (0, 0))
+            S= S.flip_charges()
             env_tmp[s0].tl= (S/S.norm(p='inf'))
         else:
             S= ((proj[s0].vtr.conj() @ P) @ s)
@@ -428,7 +429,6 @@ def proj_sym_corner(rr, opts_svd, **kwargs):
             D_total=opts_svd['D_total'], tol=opts_svd['tol'], \
             eps_multiplet=opts_svd['eps_multiplet'], hermitian=True, ) )
 
-    print(f"{policy}")
     if policy in ['symeig']:
         # TODO fix_signs ?
         _kwargs= dict(kwargs)
