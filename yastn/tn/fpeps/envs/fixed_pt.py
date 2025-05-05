@@ -4,6 +4,7 @@ import numpy as np
 from scipy.optimize import minimize
 from scipy.sparse.linalg import LinearOperator
 from scipy.sparse.linalg import eigsh, ArpackNoConvergence
+import primme
 
 from collections import namedtuple
 
@@ -74,6 +75,30 @@ def extract_dsv(history):
 def running_ave(history, window_size=5):
     cumsum = np.cumsum(np.insert(history, 0, 0))
     return (cumsum[window_size:] - cumsum[:-window_size]) / window_size
+
+def null_space(A, batch_k=2, maxiter=None, ncv=None):
+    '''
+    Run primme.eigsh sequentially to find the null space of A.
+
+    Parameters:
+    - A: sparse matrix (hermitian)
+    - batch_k: number of eigenvalues to compute in each run of primme.eigsh
+    - maxiter: maxiter in primme.eigsh
+    - ncv: ncv in primme.eigsh
+
+    returns:
+    - zero_vs: null space of A
+    '''
+    maxiter = maxiter if maxiter is not None else A.shape[0] * 10
+    zero_vs = np.empty((A.shape[0], 0), dtype=A.dtype)
+    while True:
+        # find eigenvectors that are orthogonal to the current zero_vs
+        w, vs = primme.eigsh(A, k=batch_k, which='SA', v0=None, maxiter=maxiter, ncv=ncv, lock=zero_vs, method="PRIMME_DYNAMIC")
+        zero_vs = np.hstack((zero_vs, vs[:, w < 1e-8]))
+        if len(w[w<1e-8]) < len(w): # if non-zero eigenvalues are found, stop
+            break
+    return zero_vs
+
 
 def robust_eigsh(A, initial_maxiter, max_maxiter, k=3, retry_factor=3, sigma=None, **kwargs):
     """
@@ -294,8 +319,9 @@ def env_T_gauge_multi_sites(config, T_olds, T_news):
         return to_numpy(res_data)
 
     A = LinearOperator((v0.size, v0.size), matvec=mv)
-    w, vs= robust_eigsh(A, k=6, which='SA', v0=None, initial_maxiter=v0.size*10, max_maxiter=v0.size*90)
-    zero_v = vs[:, w<1e-8]
+    # w, vs= robust_eigsh(A, k=6, which='SA', v0=None, initial_maxiter=v0.size*10, max_maxiter=v0.size*90, ncv=60)
+    # zero_v = vs[:, w<1e-8]
+    zero_v = null_space(A, batch_k=2, maxiter=v0.size*10, ncv=60)
     zero_modes = [decompress_from_1d(to_tensor(v), meta) for v in zero_v.T]
     # =======================================
 

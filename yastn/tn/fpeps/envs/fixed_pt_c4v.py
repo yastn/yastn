@@ -257,9 +257,12 @@ class FixedPoint_c4v(torch.autograd.Function):
         env_converged = ctm_env_out.copy()
         ctx.proj = ctm_env_out.update_(**_ctm_opts_fp)
 
+        t_gauge_prev = time.perf_counter()
         sigma = find_gauge_c4v(env_converged, ctm_env_out, verbose=False)
+        t_gauge_after = time.perf_counter()
         if sigma is None:
             raise NoFixedPointError(code=1)
+        log.log(logging.INFO, f"t_gauge: {t_gauge_after - t_gauge_prev:.1f}s")
 
         env_data, env_meta = env_converged.compress_env_1d()
         ctx.save_for_backward(*env_data)
