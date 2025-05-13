@@ -33,7 +33,6 @@ def run_ctm_save_load_copy(env):
     env_clone = env.clone()
     env_shallow = env.shallow_copy()
 
-
     for site in env.sites():
         for dirn in  ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
             ten0 = getattr(env[site], dirn)

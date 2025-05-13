@@ -80,6 +80,25 @@ class EnvBP(Peps):
     def config(self):
         return self.psi.config
 
+
+    def save_to_dict(self) -> dict:
+        r"""
+        Serialize EnvBP into a dictionary.
+        """
+        psi = self.psi
+        if isinstance(psi, Peps2Layers):
+            psi = psi.ket
+
+        d = {'class': 'EnvBP',
+             'psi': psi.save_to_dict(),
+             'data': {}}
+        for site in self.sites():
+            d_local = {dirn: getattr(self[site], dirn).save_to_dict()
+                       for dirn in ['t', 'l', 'b', 'r']}
+            d['data'][site] = d_local
+        return d
+
+
     def reset_(self, init='eye'):
         r"""
         Initialize BP environment.
