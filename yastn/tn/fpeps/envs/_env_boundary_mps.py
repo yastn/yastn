@@ -17,7 +17,7 @@ from .... import Tensor, YastnError
 from ... import mps
 from ._env_auxlliary import identity_tm_boundary
 from ._env_measure import _measure_nsite
-from .._peps import Peps
+from .._peps import Peps, Peps2Layers
 
 
 class EnvBoundaryMPS(Peps):
@@ -81,6 +81,19 @@ class EnvBoundaryMPS(Peps):
                 self._env[nx, 'b'], discarded = mps.zipper(tmpo, phi0, opts_svd, return_discarded=True)
                 mps.compression_(self._env[nx, 'b'], (tmpo, phi0), **opts_var)
                 self.info[nx, 'b'] = {'discarded': discarded}
+
+    def save_to_dict(self) -> dict:
+        r"""
+        Serialize EnvBoundaryMPS into a dictionary.
+        """
+        psi = self.psi
+        if isinstance(psi, Peps2Layers):
+            psi = psi.ket
+
+        d = {'class': 'EnvBoundaryMPS', 'psi': psi.save_to_dict()}
+        d['env'] = {k: v.save_to_dict() for k, v in self._env.items()}
+        d['info'] = {k: v.copy() for k, v in self.info.items()}
+        return d
 
     def boundary_mps(self, n, dirn):
         return self._env[n, dirn]

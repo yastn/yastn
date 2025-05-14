@@ -17,7 +17,9 @@ from ._geometry import SquareLattice, CheckerboardLattice
 from ._peps import Peps
 from .envs._env_ctm import EnvCTM
 from .envs._env_bp import EnvBP
+from .envs._env_boundary_mps import EnvBoundaryMPS
 from ...initialize import load_from_dict as load_tensor_from_dict
+from ..mps import load_from_dict as load_mps_from_dict
 from ... import YastnError, Tensor
 
 
@@ -90,6 +92,15 @@ def load_from_dict(config, d) -> Peps:
         for site in env.sites():
             for dirn, v in d['data'][site].items():
                 setattr(env[site], dirn, load_tensor_from_dict(config, v))
+        return env
+
+    if 'class' in d and d['class'] == 'EnvBoundaryMPS':
+        psi = load_from_dict(config, d['psi'])
+        env = EnvBoundaryMPS(psi, opts_svd={}, setup='')
+        for k, v in d['env'].items():
+            env._env[k] = load_mps_from_dict(config, v)
+        for k, v in d['info'].items():
+            env.info[k] = v.copy()
         return env
 
     # otherwise assume class == 'Peps'

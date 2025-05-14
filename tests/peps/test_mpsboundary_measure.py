@@ -24,6 +24,20 @@ def mean(xs):
     return sum(xs) / len(xs)
 
 
+def run_save_load(env):
+    # test save, load
+
+    config = env.psi.config
+    d = env.save_to_dict()
+
+    env_save = fpeps.load_from_dict(config, d)
+
+    for k in env._env:
+        assert (env_save[k] - env[k]).norm() < 1e-12    
+    for k in env.info:
+        assert env_save.info[k] == env.info[k]
+
+
 @pytest.mark.parametrize("boundary", ["obc", "cylinder"])
 def test_mpsboundary_measure(config_kwargs, boundary):
     """ Initialize a product PEPS and perform a set of measurment. """
@@ -130,6 +144,8 @@ def test_finite_spinless_boundary_mps_ctmrg(config_kwargs):
         energy_old = energy
 
     mpsenv = fpeps.EnvBoundaryMPS(psi, opts_svd=opts_svd_ctm, setup='tlbr')
+
+    run_save_load(mpsenv)
 
     for ny in range(psi.Ny):
         vR0 = env.boundary_mps(n=ny, dirn='r')

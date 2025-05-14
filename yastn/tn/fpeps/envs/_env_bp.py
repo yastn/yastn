@@ -92,6 +92,7 @@ class EnvBP(Peps):
         d = {'class': 'EnvBP',
              'psi': psi.save_to_dict(),
              'data': {}}
+        
         for site in self.sites():
             d_local = {dirn: getattr(self[site], dirn).save_to_dict()
                        for dirn in ['t', 'l', 'b', 'r']}
