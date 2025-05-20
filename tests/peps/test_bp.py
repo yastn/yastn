@@ -61,7 +61,6 @@ def run_save_load(env):
             assert (ten0 - ten1).norm() < 1e-14
 
 
-
 def test_iterate_measure_2x1(config_kwargs):
     """ Initialize a product PEPS of 1x2 cells and perform a set of measurment. """
 

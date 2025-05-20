@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 from itertools import accumulate
-from .... import Tensor, YastnError
+from .... import Tensor, YastnError, tensordot
 from ... import mps
 from ._env_auxlliary import identity_tm_boundary
 from ._env_measure import _measure_nsite
@@ -308,7 +308,29 @@ class EnvBoundaryMPS(Peps):
         config = psi[0, 0].config
         rands = (config.backend.rand(psi.Nx * psi.Ny) + 1) / 2
 
+        # change each list of projectors into keys and projectors
+        projs_sites = {}
+        for k, v in projectors.items():
+            if isinstance(v, dict):
+                projs_sites[k, 'k'] = list(v.keys())
+                projs_sites[k, 'p'] = list(v.values())
+            else:
+                projs_sites[k, 'k'] = list(range(len(v)))
+                projs_sites[k, 'p'] = v
+
+            for j, pr in enumerate(projs_sites[k, 'p']):
+                if pr.ndim == 1:  # vectors need conjugation
+                    if abs(pr.norm() - 1) > 1e-10:
+                        raise YastnError("Local states to project on should be normalized.")
+                    projs_sites[k, 'p'][j] = tensordot(pr, pr.conj(), axes=((), ()))
+                elif pr.ndim == 2:
+                    if (pr.n != pr.config.sym.zero()) or abs(pr @ pr - pr).norm() > 1e-10:
+                        raise YastnError("Matrix projectors should be projectors, P @ P == P.")
+                else:
+                    raise YastnError("Projectors should consist of vectors (ndim=1) or matrices (ndim=2).")
+
         out = {}
+        probability = 1.0
         count = 0
         vR = peps_env.boundary_mps(n=psi.Ny-1, dirn='r') # right boundary of indexed column through CTM environment tensors
 
@@ -320,19 +342,19 @@ class EnvBoundaryMPS(Peps):
             env = mps.Env(vL.conj(), [Os, vR]).setup_(to = 'first')
 
             for nx in range(0, psi.Nx):
-                loc_projectors = projectors[nx, ny]
                 prob = []
-                norm_prob = env.measure(bd=(nx - 1, nx))
-                for proj in loc_projectors:
-                    Os[nx].set_operator_(proj)
+                norm_prob = env.measure(bd=(nx - 1, nx)).real
+                for pr in projs_sites[(nx, ny), 'p']:
+                    Os[nx].set_operator_(pr)
                     env.update_env_(nx, to='last')
-                    prob.append(env.measure(bd=(nx, nx+1)) / norm_prob)
+                    prob.append(env.measure(bd=(nx, nx+1)).real / norm_prob)
 
                 assert abs(sum(prob) - 1) < 1e-12
                 rand = rands[count]
                 ind = sum(apr < rand for apr in accumulate(prob))
-                out[nx, ny] = ind
-                Os[nx].set_operator_(loc_projectors[ind]) # updated with the new collapse
+                out[nx, ny] = projs_sites[(nx, ny), 'k'][ind]
+                probability *= prob[ind]
+                Os[nx].set_operator_(projs_sites[(nx, ny), 'p'][ind] / prob[ind]) # updated with the new collapse
                 env.update_env_(nx, to='last')
                 count += 1
 
@@ -345,6 +367,8 @@ class EnvBoundaryMPS(Peps):
 
             mps.compression_(vRnew, (Os, vR), method='1site', **opts_var)
             vR = vRnew
+        
+        out['probability'] = probability
         return out
 
     def sample_MC_(proj_env, st0, st1, st2, psi, projectors, opts_svd, opts_var, trial="local"):
