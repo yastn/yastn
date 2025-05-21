@@ -1287,134 +1287,134 @@ def update_extended_2site_projectors_(proj, site, dirn, env, opts_svd, **kwargs)
 
     tl, tr, bl, br = sites
 
+    cor_tl = env[tl].l @ env[tl].tl @ env[tl].t
+    cor_tl = tensordot(cor_tl, psi[tl], axes=((2, 1), (0, 1)))
+    cor_tl = cor_tl.fuse_legs(axes=((0, 2), (1, 3)))
+
+    cor_bl = env[bl].b @ env[bl].bl @ env[bl].l
+    cor_bl = tensordot(cor_bl, psi[bl], axes=((2, 1), (1, 2)))
+    cor_bl = cor_bl.fuse_legs(axes=((0, 3), (1, 2)))
+
+    cor_tr = env[tr].t @ env[tr].tr @ env[tr].r
+    cor_tr = tensordot(cor_tr, psi[tr], axes=((1, 2), (0, 3)))
+    cor_tr = cor_tr.fuse_legs(axes=((0, 2), (1, 3)))
+
+    cor_br = env[br].r @ env[br].br @ env[br].b
+    cor_br = tensordot(cor_br, psi[br], axes=((2, 1), (2, 3)))
+    cor_br = cor_br.fuse_legs(axes=((0, 2), (1, 3)))
+
     if ('l' in dirn) or ('r' in dirn):
+        cor_tt = cor_tl @ cor_tr  # b(left) b(right)
+        cor_bb = cor_br @ cor_bl  # t(right) t(left)
+
+    if 'r' in dirn:
         sl = psi[tl].get_shape(axes=2)
         ltl = env.nn_site(tl, d='l')
         lbl = env.nn_site(bl, d='l')
         if sl == 1 and ltl and lbl:
             cor_ltl = env[ltl].l @ env[ltl].tl @ env[ltl].t
             cor_ltl = tensordot(cor_ltl, psi[ltl], axes=((2, 1), (0, 1)))
-            cor_tl = tensordot(cor_ltl, env[tl].t, axes=(1, 0)) 
-            cor_tl = tensordot(cor_tl, psi[tl], axes=((3, 2), (0, 1)))
-            cor_tl = cor_tl.fuse_legs(axes=((0, 1, 3), (2, 4)))
+            cor_ltl = tensordot(cor_ltl, env[tl].t, axes=(1, 0)) 
+            cor_ltl = tensordot(cor_ltl, psi[tl], axes=((3, 2), (0, 1)))
+            cor_ltl = cor_ltl.fuse_legs(axes=((0, 1, 3), (2, 4)))
 
             cor_lbl = env[lbl].b @ env[lbl].bl @ env[lbl].l
             cor_lbl = tensordot(cor_lbl, psi[lbl], axes=((2, 1), (1, 2)))
-            cor_bl = env[bl].b @ cor_lbl
-            cor_bl = tensordot(cor_bl, psi[bl], axes=((4, 1), (1, 2)))
-            cor_bl = cor_bl.fuse_legs(axes=((0, 4), (1, 2, 3)))
+            cor_lbl = env[bl].b @ cor_lbl
+            cor_lbl = tensordot(cor_lbl, psi[bl], axes=((4, 1), (1, 2)))
+            cor_lbl = cor_lbl.fuse_legs(axes=((0, 4), (1, 2, 3)))
+
+            cor_ltt = cor_ltl @ cor_tr  # b(left) b(right)
+            cor_lbb = cor_br @ cor_lbl  # t(right) t(left)
+            _, r_t = qr(cor_ltt, axes=(0, 1)) if use_qr else (None, cor_ltt)
+            _, r_b = qr(cor_lbb, axes=(1, 0)) if use_qr else (None, cor_lbb.T)
         else:
-            cor_tl = env[tl].l @ env[tl].tl @ env[tl].t
-            cor_tl = tensordot(cor_tl, psi[tl], axes=((2, 1), (0, 1)))
-            cor_tl = cor_tl.fuse_legs(axes=((0, 2), (1, 3)))
+            _, r_t = qr(cor_tt, axes=(0, 1)) if use_qr else (None, cor_tt)
+            _, r_b = qr(cor_bb, axes=(1, 0)) if use_qr else (None, cor_bb.T)
+        proj[tr].hrb, proj[br].hrt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
 
-            cor_bl = env[bl].b @ env[bl].bl @ env[bl].l
-            cor_bl = tensordot(cor_bl, psi[bl], axes=((2, 1), (1, 2)))
-            cor_bl = cor_bl.fuse_legs(axes=((0, 3), (1, 2)))
-
-
+    if 'l' in dirn:
         sr = psi[tr].get_shape(axes=2)
         rtr = env.nn_site(tr, d='r')
         rbr = env.nn_site(br, d='r')
         if sr == 1 and rtr and rbr:
             cor_rtr = env[rtr].t @ env[rtr].tr @ env[rtr].r
             cor_rtr = tensordot(cor_rtr, psi[rtr], axes=((1, 2), (0, 3)))
-            cor_tr = env[tr].t @ cor_rtr
-            cor_tr = tensordot(cor_tr, psi[tr], axes=((1, 3), (0, 3)))
-            cor_tr = cor_tr.fuse_legs(axes=((0, 3), (1, 2, 4)))
+            cor_rtr = env[tr].t @ cor_rtr
+            cor_rtr = tensordot(cor_rtr, psi[tr], axes=((1, 3), (0, 3)))
+            cor_rtr = cor_rtr.fuse_legs(axes=((0, 3), (1, 2, 4)))
 
             cor_rbr = env[rbr].r @ env[rbr].br @ env[rbr].b
             cor_rbr = tensordot(cor_rbr, psi[rbr], axes=((2, 1), (2, 3)))
-            cor_br = tensordot(cor_rbr, env[br].b, axes=(1, 0))
-            cor_br = tensordot(cor_br, psi[br], axes=((3, 2), (2, 3)))
-            cor_br = cor_br.fuse_legs(axes=((0, 1, 3), (2, 4)))
+            cor_rbr = tensordot(cor_rbr, env[br].b, axes=(1, 0))
+            cor_rbr = tensordot(cor_rbr, psi[br], axes=((3, 2), (2, 3)))
+            cor_rbr = cor_rbr.fuse_legs(axes=((0, 1, 3), (2, 4)))
+        
+            cor_rtt = cor_tl @ cor_rtr  # b(left) b(right)
+            cor_rbb = cor_rbr @ cor_bl  # t(right) t(left)
+            _, r_t = qr(cor_rtt, axes=(1, 0)) if use_qr else (None, cor_rtt.T)
+            _, r_b = qr(cor_rbb, axes=(0, 1)) if use_qr else (None, cor_rbb)
         else:
-            cor_tr = env[tr].t @ env[tr].tr @ env[tr].r
-            cor_tr = tensordot(cor_tr, psi[tr], axes=((1, 2), (0, 3)))
-            cor_tr = cor_tr.fuse_legs(axes=((0, 2), (1, 3)))
-
-            cor_br = env[br].r @ env[br].br @ env[br].b
-            cor_br = tensordot(cor_br, psi[br], axes=((2, 1), (2, 3)))
-            cor_br = cor_br.fuse_legs(axes=((0, 2), (1, 3)))
-
-        cor_tt = cor_tl @ cor_tr  # b(left) b(right)
-        cor_bb = cor_br @ cor_bl  # t(right) t(left)
-
-    if 'r' in dirn:
-        _, r_t = qr(cor_tt, axes=(0, 1)) if use_qr else (None, cor_tt)
-        _, r_b = qr(cor_bb, axes=(1, 0)) if use_qr else (None, cor_bb.T)
-        proj[tr].hrb, proj[br].hrt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
-
-    if 'l' in dirn:
-        _, r_t = qr(cor_tt, axes=(1, 0)) if use_qr else (None, cor_tt.T)
-        _, r_b = qr(cor_bb, axes=(0, 1)) if use_qr else (None, cor_bb)
+            _, r_t = qr(cor_tt, axes=(1, 0)) if use_qr else (None, cor_tt.T)
+            _, r_b = qr(cor_bb, axes=(0, 1)) if use_qr else (None, cor_bb)
+        
         proj[tl].hlb, proj[bl].hlt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
 
+
     if ('t' in dirn) or ('b' in dirn):
+        cor_ll = cor_bl @ cor_tl  # l(bottom) l(top)
+        cor_rr = cor_tr @ cor_br  # r(top) r(bottom)
 
-        st = psi[tl].get_shape(axes=3)
-        ttl = env.nn_site(tl, d='t')
-        ttr = env.nn_site(tr, d='t')
-        
-        if st == 1 and ttl and ttr:
-            cor_ttl = env[ttl].l @ env[ttl].tl @ env[ttl].t
-            cor_ttl = tensordot(cor_ttl, psi[ttl], axes=((2, 1), (0, 1)))
-            cor_tl = env[tl].l @ cor_ttl
-            cor_tl = tensordot(cor_tl, psi[tl], axes=((3, 1), (0, 1)))
-            cor_tl = cor_ltl.fuse_legs(axes=((0, 3), (1, 2, 4)))
-
-            cor_ttr = env[ttr].t @ env[ttr].tr @ env[ttr].r
-            cor_ttr = tensordot(cor_ttr, psi[ttr], axes=((1, 2), (0, 3)))
-            cor_tr = tensordot(cor_ttr, env[tr].r, axes=(1, 0))
-            cor_tr = tensordot(cor_tr, psi[tr], axes=((2, 3), (0, 3)))
-            cor_tr = cor_tr.fuse_legs(axes=((0, 1, 3), (2, 4)))
-        else:
-            cor_tl = env[tl].l @ env[tl].tl @ env[tl].t
-            cor_tl = tensordot(cor_tl, psi[tl], axes=((2, 1), (0, 1)))
-            cor_tl = cor_tl.fuse_legs(axes=((0, 2), (1, 3)))
-
-            cor_tr = env[tr].t @ env[tr].tr @ env[tr].r
-            cor_tr = tensordot(cor_tr, psi[tr], axes=((1, 2), (0, 3)))
-            cor_tr = cor_tr.fuse_legs(axes=((0, 2), (1, 3)))
-
+    if 't' in dirn:
         sb = psi[bl].get_shape(axes=3)
         bbl = env.nn_site(bl, d='b')
         bbr = env.nn_site(br, d='b')
         if sb == 1 and bbl and bbr:
             cor_bbl = env[bbl].b @ env[bbl].bl @ env[bbl].l
             cor_bbl = tensordot(cor_bbl, psi[bbl], axes=((2, 1), (1, 2)))
-            cor_bl = tensordot(cor_bbl, env[bl].l, axes=(1, 0))
-            cor_bl = tensordot(cor_bl, psi[bl], axes=((3, 1), (1, 2))) 
-            cor_bl = cor_bl.fuse_legs(axes=((0, 1, 4), (2, 3)))
+            cor_bbl = tensordot(cor_bbl, env[bl].l, axes=(1, 0))
+            cor_bbl = tensordot(cor_bbl, psi[bl], axes=((3, 1), (1, 2))) 
+            cor_bbl = cor_bbl.fuse_legs(axes=((0, 1, 4), (2, 3)))
 
             cor_bbr = env[bbr].r @ env[bbr].br @ env[bbr].b
             cor_bbr = tensordot(cor_bbr, psi[bbr], axes=((2, 1), (2, 3)))
-            cor_br = env[br].r @ cor_bbr 
-            cor_br = tensordot(cor_br, psi[br], axes=((3, 1), (2, 3)))
-            cor_br = cor_br.fuse_legs(axes=((0, 3), (1, 2, 4)))
+            cor_bbr = env[br].r @ cor_bbr 
+            cor_bbr = tensordot(cor_bbr, psi[br], axes=((3, 1), (2, 3)))
+            cor_bbr = cor_bbr.fuse_legs(axes=((0, 3), (1, 2, 4)))
+
+            cor_bll = cor_bbl @ cor_tl  # l(bottom) l(top)
+            cor_brr = cor_tr @ cor_bbr  # r(top) r(bottom)
+            _, r_l = qr(cor_bll, axes=(0, 1)) if use_qr else (None, cor_bll)
+            _, r_r = qr(cor_brr, axes=(1, 0)) if use_qr else (None, cor_brr.T)
         else:
-            cor_bl = env[bl].b @ env[bl].bl @ env[bl].l
-            cor_bl = tensordot(cor_bl, psi[bl], axes=((2, 1), (1, 2)))
-            cor_bl = cor_bl.fuse_legs(axes=((0, 3), (1, 2)))
-
-            cor_br = env[br].r @ env[br].br @ env[br].b
-            cor_br = tensordot(cor_br, psi[br], axes=((2, 1), (2, 3)))
-            cor_br = cor_br.fuse_legs(axes=((0, 2), (1, 3)))
-
-        cor_tt = cor_tl @ cor_tr  # b(left) b(right)
-        cor_bb = cor_br @ cor_bl  # t(right) t(left)
-
-        cor_ll = cor_bl @ cor_tl  # l(bottom) l(top)
-        cor_rr = cor_tr @ cor_br  # r(top) r(bottom)
-
-    if 't' in dirn:
-        _, r_l = qr(cor_ll, axes=(0, 1)) if use_qr else (None, cor_ll)
-        _, r_r = qr(cor_rr, axes=(1, 0)) if use_qr else (None, cor_rr.T)
+            _, r_l = qr(cor_ll, axes=(0, 1)) if use_qr else (None, cor_ll)
+            _, r_r = qr(cor_rr, axes=(1, 0)) if use_qr else (None, cor_rr.T)
         proj[tl].vtr, proj[tr].vtl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
 
     if 'b' in dirn:
-        _, r_l = qr(cor_ll, axes=(1, 0)) if use_qr else (None, cor_ll.T)
-        _, r_r = qr(cor_rr, axes=(0, 1)) if use_qr else (None, cor_rr)
+        st = psi[tl].get_shape(axes=3)
+        ttl = env.nn_site(tl, d='t')
+        ttr = env.nn_site(tr, d='t')
+        if st == 1 and ttl and ttr:
+            cor_ttl = env[ttl].l @ env[ttl].tl @ env[ttl].t
+            cor_ttl = tensordot(cor_ttl, psi[ttl], axes=((2, 1), (0, 1)))
+            cor_ttl = env[tl].l @ cor_ttl
+            cor_ttl = tensordot(cor_ttl, psi[tl], axes=((3, 1), (0, 1)))
+            cor_ttl = cor_ttl.fuse_legs(axes=((0, 3), (1, 2, 4)))
+
+            cor_ttr = env[ttr].t @ env[ttr].tr @ env[ttr].r
+            cor_ttr = tensordot(cor_ttr, psi[ttr], axes=((1, 2), (0, 3)))
+            cor_ttr = tensordot(cor_ttr, env[tr].r, axes=(1, 0))
+            cor_ttr = tensordot(cor_ttr, psi[tr], axes=((2, 3), (0, 3)))
+            cor_ttr = cor_ttr.fuse_legs(axes=((0, 1, 3), (2, 4)))
+            
+            cor_tll = cor_bl @ cor_ttl  # l(bottom) l(top)
+            cor_trr = cor_ttr @ cor_br  # r(top) r(bottom)
+            _, r_l = qr(cor_tll, axes=(1, 0)) if use_qr else (None, cor_tll.T)
+            _, r_r = qr(cor_trr, axes=(0, 1)) if use_qr else (None, cor_trr)
+        else:
+            _, r_l = qr(cor_ll, axes=(1, 0)) if use_qr else (None, cor_ll.T)
+            _, r_r = qr(cor_rr, axes=(0, 1)) if use_qr else (None, cor_rr)
         proj[bl].vbr, proj[br].vbl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
 
 
