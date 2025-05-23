@@ -104,7 +104,7 @@ class EnvBoundaryMPS(Peps):
             return self.psi.transfer_mpo(n=ind[0], dirn=ind[1])
         return self._env[ind]
 
-    def measure_1site(peps_env, O):
+    def measure_1site(peps_env, O, site=None):
         """
         Calculate all 1-point expectation values <O_j> in a finite PEPS.
 
@@ -115,27 +115,37 @@ class EnvBoundaryMPS(Peps):
         O: dict[tuple[int, int], dict[int, operators]]
             mapping sites with list of operators at each site.
         """
-        out = {}
-
+        #
         psi = peps_env.psi
-        Nx, Ny = psi.Nx, psi.Ny
-        sites = [(nx, ny) for ny in range(Ny-1, -1, -1) for nx in range(Nx)]
-        opdict = _clear_operator_input(O, sites)
+        if site is None:
+            out = {}
+            Nx, Ny = psi.Nx, psi.Ny
+            sites = [(nx, ny) for ny in range(Ny-1, -1, -1) for nx in range(Nx)]
+            opdict = _clear_operator_input(O, sites)
 
-        for ny in range(Ny):
-            bra = peps_env.boundary_mps(n=ny, dirn='r')
-            tm = psi.transfer_mpo(n=ny, dirn='v')
-            ket = peps_env.boundary_mps(n=ny, dirn='l')
-            env = mps.Env(bra.conj(), [tm, ket]).setup_(to='first').setup_(to='last')
-            norm_env = env.measure()
-            for nx in range(Nx):
-                if (nx, ny) in opdict:
-                    for nz, op in opdict[nx, ny].items():
-                        tm[nx].set_operator_(op)
-                        env.update_env_(nx, to='first')
-                        out[(nx, ny) + nz] = env.measure(bd=(nx - 1, nx)) / norm_env
-        return out
-
+            for ny in range(Ny):
+                bra = peps_env.boundary_mps(n=ny, dirn='r')
+                tm = psi.transfer_mpo(n=ny, dirn='v')
+                ket = peps_env.boundary_mps(n=ny, dirn='l')
+                env = mps.Env(bra.conj(), [tm, ket]).setup_(to='first').setup_(to='last')
+                norm_env = env.measure()
+                for nx in range(Nx):
+                    if (nx, ny) in opdict:
+                        for nz, op in opdict[nx, ny].items():
+                            tm[nx].set_operator_(op)
+                            env.update_env_(nx, to='first')
+                            out[(nx, ny) + nz] = env.measure(bd=(nx - 1, nx)) / norm_env
+            return out
+        # else:
+        nx, ny = site
+        bra = peps_env.boundary_mps(n=ny, dirn='r')
+        tm = psi.transfer_mpo(n=ny, dirn='v')
+        ket = peps_env.boundary_mps(n=ny, dirn='l')
+        env = mps.Env(bra.conj(), [tm, ket]).setup_(to='first').setup_(to='last')
+        norm_env = env.measure()
+        tm[nx].set_operator_(O)
+        env.update_env_(nx, to='first')
+        return env.measure(bd=(nx - 1, nx)) / norm_env
 
     def measure_nn(peps_env, OP):
         """
