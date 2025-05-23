@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 from itertools import accumulate
+from tqdm import tqdm
 from .... import Tensor, YastnError, tensordot
 from ... import mps
 from ._env_auxlliary import identity_tm_boundary
@@ -298,7 +299,7 @@ class EnvBoundaryMPS(Peps):
                             out[(nx1, ny1) + nz1, (nx2, ny2) + nz2] = env.measure(bd=(nx2-1, nx2)) / norm_env
         return out
 
-    def sample(peps_env, projectors, opts_svd=None, opts_var=None):
+    def sample(peps_env, projectors, number=1, opts_svd=None, opts_var=None, progressbar=False, return_probabilities=False):
         """
         Sample a random configuration from a finite PEPS.
 
@@ -306,7 +307,7 @@ class EnvBoundaryMPS(Peps):
         """
         psi = peps_env.psi
         config = psi[0, 0].config
-        rands = (config.backend.rand(psi.Nx * psi.Ny) + 1) / 2
+        rands = (config.backend.rand(psi.Nx * psi.Ny * number) + 1) / 2
 
         # change each list of projectors into keys and projectors
         projs_sites = {}
@@ -323,42 +324,47 @@ class EnvBoundaryMPS(Peps):
                 else:
                     raise YastnError("Projectors should consist of vectors (ndim=1) or matrices (ndim=2).")
 
-        out = {}
-        probability = 1.0
+        out = {site: [] for site in peps_env.sites()}
+        probabilities = []
         count = 0
-        vR = peps_env.boundary_mps(n=psi.Ny-1, dirn='r') # right boundary of indexed column through CTM environment tensors
 
-        for ny in range(psi.Ny - 1, -1, -1):
-            Os = psi.transfer_mpo(n=ny, dirn='v').T  # converts ny column of PEPS to MPO
-            vL = peps_env.boundary_mps(n=ny, dirn='l')  # left boundary of indexed column through CTM environment tensors
-            env = mps.Env(vL.conj(), [Os, vR]).setup_(to = 'first')
-            for nx in range(0, psi.Nx):
-                acc_prob = 0
-                norm_prob = env.measure(bd=(nx - 1, nx)).real
-                for k, pr in projs_sites[(nx, ny)].items():
-                    Os[nx].set_operator_(pr)
+        for _ in tqdm(range(number), desc="Sample...", disable=not progressbar):
+            probability = 1.
+
+            vR = peps_env.boundary_mps(n=psi.Ny-1, dirn='r') # right boundary of indexed column through CTM environment tensors
+            for ny in range(psi.Ny - 1, -1, -1):
+                Os = psi.transfer_mpo(n=ny, dirn='v').T  # converts ny column of PEPS to MPO
+                vL = peps_env.boundary_mps(n=ny, dirn='l')  # left boundary of indexed column through CTM environment tensors
+                env = mps.Env(vL.conj(), [Os, vR]).setup_(to = 'first')
+                for nx in range(0, psi.Nx):
+                    acc_prob = 0
+                    norm_prob = env.measure(bd=(nx - 1, nx)).real
+                    for k, pr in projs_sites[(nx, ny)].items():
+                        Os[nx].set_operator_(pr)
+                        env.update_env_(nx, to='last')
+                        prob = env.measure(bd=(nx, nx+1)).real / norm_prob
+                        acc_prob += prob 
+                        if rands[count] < acc_prob:
+                            probability *= prob
+                            out[nx, ny] = k
+                            Os[nx].set_operator_(pr / prob)
+                            break
                     env.update_env_(nx, to='last')
-                    prob = env.measure(bd=(nx, nx+1)).real / norm_prob
-                    acc_prob += prob 
-                    if rands[count] < acc_prob:
-                        probability *= prob
-                        out[nx, ny] = k
-                        Os[nx].set_operator_(pr / prob)
-                        break
-                env.update_env_(nx, to='last')
-                count += 1
+                    count += 1
 
-            if opts_svd is None:
-                opts_svd = {'D_total': max(vL.get_bond_dimensions())}
+                if opts_svd is None:
+                    opts_svd = {'D_total': max(vL.get_bond_dimensions())}
 
-            vRnew = mps.zipper(Os, vR, opts_svd=opts_svd)
-            if opts_var is None:
-                opts_var = {}
+                vRnew = mps.zipper(Os, vR, opts_svd=opts_svd)
+                if opts_var is None:
+                    opts_var = {}
 
-            mps.compression_(vRnew, (Os, vR), method='1site', **opts_var)
-            vR = vRnew
-        
-        out['probability'] = probability
+                mps.compression_(vRnew, (Os, vR), method='1site', **opts_var)
+                vR = vRnew
+            probabilities.append(probability)
+
+        if return_probabilities:
+            return out, probabilities
         return out
 
 

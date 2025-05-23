@@ -796,7 +796,7 @@ class EnvCTM(Peps):
         return env_win.measure_2site(O, P, opts_svd=opts_svd, opts_var=opts_var)
 
 
-    def sample(self, projectors, number=1, xrange=None, yrange=None, opts_svd=None, opts_var=None, progressbar=False, return_info=False) -> dict[Site, list]:
+    def sample(self, projectors, number=1, xrange=None, yrange=None, opts_svd=None, opts_var=None, progressbar=False, return_probabilities=False) -> dict[Site, list]:
         r"""
         Sample random configurations from PEPS. Output a dictionary linking sites with lists of sampled projectors` keys for each site.
 
@@ -816,9 +816,6 @@ class EnvCTM(Peps):
             Projectors to sample from. We can provide a dict(key: projector), where the sampled results will be given as keys,
             and the same set of projectors is used at each site. For a list of projectors, the keys follow from enumeration.
             Finally, we can provide a dictionary between each site and sets of projectors.
-
-        number: int
-            Number of drawn samples.
 
         opts_svd: dict
             Options passed to :meth:`yastn.linalg.svd` used to truncate virtual spaces of boundary MPSs used in sampling.
@@ -841,7 +838,7 @@ class EnvCTM(Peps):
         if yrange is None:
             yrange = [0, self.Ny]
         env_win = EnvWindow(self, xrange, yrange)
-        return env_win.sample(projectors, number, opts_svd, opts_var, progressbar, return_info)
+        return env_win.sample(projectors, number, opts_svd, opts_var, progressbar, return_probabilities)
 
     def post_evolution_(env, bond, **kwargs):
         pass

@@ -187,7 +187,7 @@ class EnvWindow:
         return out
 
 
-    def sample(self, projectors, number=1, opts_svd=None, opts_var=None, progressbar=False, return_info=False) -> dict[Site, list]:
+    def sample(self, projectors, number=1, opts_svd=None, opts_var=None, progressbar=False, return_probabilities=False) -> dict[Site, list]:
         """
         Sample random configurations from PEPS.
         See :meth:`yastn.tn.fpeps.EnvCTM.sample` for description.
@@ -228,11 +228,10 @@ class EnvWindow:
         out = {site: [] for site in sites}
         rands = (self.psi.config.backend.rand(self.Nx * self.Ny * number) + 1) / 2  # in [0, 1]
         count = 0
-
-        info = {'opts_svd': opts_svd,
-                'error': 0.}
+        probabilities = []
 
         for _ in tqdm(range(number), desc="Sample...", disable=not progressbar):
+            probability = 1.
             vec = self[self.yrange[0], 'l']
             for ny in range(*self.yrange):
                 vecc = self[ny, 'r'].conj()
@@ -250,15 +249,17 @@ class EnvWindow:
                         if rands[count] < acc_prob:
                             out[nx, ny].append(iii)
                             tm[ix].set_operator_(proj / prob)
+                            probability *= prob
                             break
-                    info['error'] = 0
                     count += 1
                 if ny + 1 < self.yrange[1]:
                     vec_new = mps.zipper(tm, vec, opts_svd=opts_svd)
                     mps.compression_(vec_new, (tm, vec), method='1site', **opts_var)
                     vec = vec_new
-        if return_info:
-            out['info'] = info
+            probabilities.append(probability)
+
+        if return_probabilities:
+            return out, probabilities
         return out
 
 
