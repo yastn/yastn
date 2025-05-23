@@ -796,7 +796,7 @@ class EnvCTM(Peps):
         return env_win.measure_2site(O, P, opts_svd=opts_svd, opts_var=opts_var)
 
 
-    def sample(self, xrange, yrange, projectors, number=1, opts_svd=None, opts_var=None, progressbar=False, return_info=False) -> dict[Site, list]:
+    def sample(self, projectors, number=1, xrange=None, yrange=None, opts_svd=None, opts_var=None, progressbar=False, return_info=False) -> dict[Site, list]:
         r"""
         Sample random configurations from PEPS. Output a dictionary linking sites with lists of sampled projectors` keys for each site.
 
@@ -836,6 +836,10 @@ class EnvCTM(Peps):
             that contains information about the amplitude of contraction errors
             (largest negative probability), D_total, etc. The default is ``False``.
         """
+        if xrange is None:
+            xrange = [0, self.Nx]
+        if yrange is None:
+            yrange = [0, self.Ny]
         env_win = EnvWindow(self, xrange, yrange)
         return env_win.sample(projectors, number, opts_svd, opts_var, progressbar, return_info)
 
