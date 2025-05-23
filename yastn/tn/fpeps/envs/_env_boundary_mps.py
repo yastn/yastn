@@ -143,9 +143,17 @@ class EnvBoundaryMPS(Peps):
         ket = peps_env.boundary_mps(n=ny, dirn='l')
         env = mps.Env(bra.conj(), [tm, ket]).setup_(to='first').setup_(to='last')
         norm_env = env.measure()
+        if isinstance(O, dict):
+            out = {}
+            for k, op in O.items():
+                tm[nx].set_operator_(op)
+                env.update_env_(nx, to='first')
+                out[k] = env.measure(bd=(nx - 1, nx)) / norm_env
+            return out
         tm[nx].set_operator_(O)
         env.update_env_(nx, to='first')
         return env.measure(bd=(nx - 1, nx)) / norm_env
+  
 
     def measure_nn(peps_env, OP):
         """
