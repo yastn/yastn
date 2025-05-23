@@ -311,6 +311,70 @@ class EnvBoundaryMPS(Peps):
         # change each list of projectors into keys and projectors
         projs_sites = {}
         for k, v in projectors.items():
+            projs_sites[k] = dict(v) if isinstance(v, dict) else dict(enumerate(v))
+            for k, pr in projs_sites[k].items():
+                if pr.ndim == 1:  # vectors need conjugation
+                    if abs(pr.norm() - 1) > 1e-10:
+                        raise YastnError("Local states to project on should be normalized.")
+                    projs_sites[k] = tensordot(pr, pr.conj(), axes=((), ()))
+                elif pr.ndim == 2:
+                    if (pr.n != pr.config.sym.zero()) or abs(pr @ pr - pr).norm() > 1e-10:
+                        raise YastnError("Matrix projectors should be projectors, P @ P == P.")
+                else:
+                    raise YastnError("Projectors should consist of vectors (ndim=1) or matrices (ndim=2).")
+
+        out = {}
+        probability = 1.0
+        count = 0
+        vR = peps_env.boundary_mps(n=psi.Ny-1, dirn='r') # right boundary of indexed column through CTM environment tensors
+
+        for ny in range(psi.Ny - 1, -1, -1):
+            Os = psi.transfer_mpo(n=ny, dirn='v').T  # converts ny column of PEPS to MPO
+            vL = peps_env.boundary_mps(n=ny, dirn='l')  # left boundary of indexed column through CTM environment tensors
+            env = mps.Env(vL.conj(), [Os, vR]).setup_(to = 'first')
+            for nx in range(0, psi.Nx):
+                acc_prob = 0
+                norm_prob = env.measure(bd=(nx - 1, nx)).real
+                for k, pr in projs_sites[(nx, ny)].items():
+                    Os[nx].set_operator_(pr)
+                    env.update_env_(nx, to='last')
+                    prob = env.measure(bd=(nx, nx+1)).real / norm_prob
+                    acc_prob += prob 
+                    if rands[count] < acc_prob:
+                        probability *= prob
+                        out[nx, ny] = k
+                        Os[nx].set_operator_(pr / prob)
+                        break
+                env.update_env_(nx, to='last')
+                count += 1
+
+            if opts_svd is None:
+                opts_svd = {'D_total': max(vL.get_bond_dimensions())}
+
+            vRnew = mps.zipper(Os, vR, opts_svd=opts_svd)
+            if opts_var is None:
+                opts_var = {}
+
+            mps.compression_(vRnew, (Os, vR), method='1site', **opts_var)
+            vR = vRnew
+        
+        out['probability'] = probability
+        return out
+
+
+    def sample2(peps_env, projectors, opts_svd=None, opts_var=None):
+        """
+        Sample a random configuration from a finite PEPS.
+
+        Takes  CTM environments and a complete list of projectors to sample from.
+        """
+        psi = peps_env.psi
+        config = psi[0, 0].config
+        rands = (config.backend.rand(psi.Nx * psi.Ny) + 1) / 2
+
+        # change each list of projectors into keys and projectors
+        projs_sites = {}
+        for k, v in projectors.items():
             if isinstance(v, dict):
                 projs_sites[k, 'k'] = list(v.keys())
                 projs_sites[k, 'p'] = list(v.values())

@@ -873,8 +873,8 @@ class EnvCTM(Peps):
         """
         if all(s not in opts_svd for s in ('tol', 'tol_block')):
             opts_svd['tol'] = 1e-14
-        if method not in ('1site', '2site', '2site+'):
-            raise YastnError(f"CTM update {method=} not recognized. Should be '1site', '2site' or '2site+')")
+        if method not in ('1site', '2site', 'hex'):
+            raise YastnError(f"CTM update {method=} not recognized. Should be '1site', '2site' or 'hex')")
         checkpoint_move= kwargs.get('checkpoint_move',False)
 
         #
@@ -1188,7 +1188,7 @@ def _update_core_2dir(env, dir : str, opts_svd : dict, **kwargs):
             update_proj_ = update_2site_projectors_ 
         elif method == '1site': 
             update_proj_ = update_1site_projectors_ 
-        elif method == '2site+': 
+        elif method == 'hex': 
             update_proj_ = update_extended_2site_projectors_ 
         #
         # Empty structure for projectors
