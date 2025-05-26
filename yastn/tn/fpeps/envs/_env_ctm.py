@@ -796,26 +796,28 @@ class EnvCTM(Peps):
         return env_win.measure_2site(O, P, opts_svd=opts_svd, opts_var=opts_var)
 
 
-    def sample(self, projectors, number=1, xrange=None, yrange=None, opts_svd=None, opts_var=None, progressbar=False, return_probabilities=False) -> dict[Site, list]:
+    def sample(self, projectors, number=1, xrange=None, yrange=None, opts_svd=None, opts_var=None, progressbar=False, return_probabilities=False, flatten_one=True) -> dict[Site, list]:
         r"""
-        Sample random configurations from PEPS. Output a dictionary linking sites with lists of sampled projectors` keys for each site.
+        Sample random configurations from PEPS. 
+        Output a dictionary linking sites with lists of sampled projectors` keys for each site.
 
         It does not check whether projectors sum up to identity -- probabilities of provided projectors get normalized to one.
-        If negative probabilities are observed (signaling contraction errors), ``error = max(abs(negatives))``,
-        and all probabilities below that error level are fixed to error (before consecutive renormalization of probabilities to one).
 
         Parameters
         ----------
+        projectors: Dict[Any, yast.Tensor] | Sequence[yast.Tensor] | Dict[Site, Dict[Any, yast.Tensor]]
+            Projectors to sample from. We can provide a dict(key: projector), where the sampled results will be given as keys,
+            and the same set of projectors is used at each site. For a list of projectors, the keys follow from enumeration.
+            Finally, we can provide a dictionary between each site and sets of projectors.
+
+        number: int
+            Number of independent samples.
+            
         xrange: tuple[int, int]
             range of rows to sample from, [r0, r1); r0 included, r1 excluded.
 
         yrange: tuple[int, int]
             range of columns to sample from.
-
-        projectors: Dict[Any, yast.Tensor] | Sequence[yast.Tensor] | Dict[Site, Dict[Any, yast.Tensor]]
-            Projectors to sample from. We can provide a dict(key: projector), where the sampled results will be given as keys,
-            and the same set of projectors is used at each site. For a list of projectors, the keys follow from enumeration.
-            Finally, we can provide a dictionary between each site and sets of projectors.
 
         opts_svd: dict
             Options passed to :meth:`yastn.linalg.svd` used to truncate virtual spaces of boundary MPSs used in sampling.
@@ -828,17 +830,21 @@ class EnvCTM(Peps):
         progressbar: bool
             Whether to display progressbar. The default is ``False``.
 
-        return_info: bool
-            Whether to include in the outputted dictionary a field ``info`` with dictionary
-            that contains information about the amplitude of contraction errors
-            (largest negative probability), D_total, etc. The default is ``False``.
+        return_probabilities: bool
+            Whether to return a tuple (samples, probabilities). The default is ``False``, where a dict samples is returned.
+
+        flatten_one: bool
+            Whether, for number==1, pop one-element lists for each lattice site to return samples={site: ind, } instead of {site: [ind]}.
+            The default is ``True``.
         """
         if xrange is None:
             xrange = [0, self.Nx]
         if yrange is None:
             yrange = [0, self.Ny]
         env_win = EnvWindow(self, xrange, yrange)
-        return env_win.sample(projectors, number, opts_svd, opts_var, progressbar, return_probabilities)
+        return env_win.sample(projectors, number=number, 
+                              opts_svd=opts_svd, opts_var=opts_var, 
+                              progressbar=progressbar, return_probabilities=return_probabilities, flatten_one=flatten_one)
 
     def post_evolution_(env, bond, **kwargs):
         pass

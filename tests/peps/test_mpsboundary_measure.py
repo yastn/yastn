@@ -74,7 +74,6 @@ def test_mpsboundary_measure(config_kwargs, boundary):
     smpl = env.sample(pr2s)
     assert all(vloc[smpl[s]] == vals[s] for s in sites)
 
-
     prs = {s: pr[:] for s in sites}
 
     proj_psi = psi.copy()
