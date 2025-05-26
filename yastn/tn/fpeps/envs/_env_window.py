@@ -239,12 +239,12 @@ class EnvWindow:
                 env = mps.Env(vecc, [tm, vec]).setup_(to='first')
                 for ix, nx in enumerate(range(*self.xrange), start=1):
                     env.update_env_(ix - 1, to='last')
-                    norm_prob = env.measure(bd=(ix - 1, ix)).item()
+                    norm_prob = env.measure(bd=(ix - 1, ix)).real
                     acc_prob = 0
                     for proj, iii in zip(projs_sites[(nx, ny), 'p'], projs_sites[(nx, ny), 'k']):
                         tm[ix].set_operator_(proj)
                         env.update_env_(ix, to='first')
-                        prob = env.measure(bd=(ix-1, ix)).item() / norm_prob
+                        prob = env.measure(bd=(ix-1, ix)).real / norm_prob
                         acc_prob += prob 
                         if rands[count] < acc_prob:
                             out[nx, ny].append(iii)

@@ -364,7 +364,7 @@ class EnvBoundaryMPS(Peps):
                         acc_prob += prob 
                         if rands[count] < acc_prob:
                             probability *= prob
-                            out[nx, ny] = k
+                            out[nx, ny].append(k)
                             Os[nx].set_operator_(pr / prob)
                             break
                     env.update_env_(nx, to='last')
