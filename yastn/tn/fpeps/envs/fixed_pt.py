@@ -896,6 +896,8 @@ class FixedPoint(torch.autograd.Function):
             env,
             **ctm_opts_fwd,
         )
+        if not converged:
+            raise NoFixedPointError(code=1)
 
         # note that we need to find the gauge transformation that connects two set of environment tensors
         # obtained from CTMRG with the 'full' svd, because the backward uses the full svd backward.
