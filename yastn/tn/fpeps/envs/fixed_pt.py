@@ -3,7 +3,7 @@ import torch
 import numpy as np
 from scipy.optimize import minimize
 from scipy.sparse.linalg import LinearOperator
-from scipy.sparse.linalg import eigsh, ArpackNoConvergence
+from scipy.sparse.linalg import eigsh, eigs, ArpackNoConvergence
 import primme
 
 from collections import namedtuple
@@ -11,11 +11,11 @@ from collections import namedtuple
 import torch.utils.checkpoint
 
 
-from .... import Tensor, ones, zeros, eye, YastnError, Leg, tensordot, einsum, diag
+from .... import Tensor, zeros, eye, YastnError, tensordot, einsum, diag, rand, qr
 from ._env_ctm import ctm_conv_corner_spec, decompress_env_1d
 from .... import zeros, decompress_from_1d
+from ....tensor._tests import _test_axes_match
 from .rdm import *
-
 
 log = logging.getLogger("FixedPoint")
 
@@ -134,6 +134,7 @@ class NoFixedPointError(Exception):
         self.code = code          				 # Add a custom attribute for error codes
 
 def env_T_gauge_multi_sites(config, T_olds, T_news):
+    #  Robust gauge-fixing from https://arxiv.org/abs/2311.11894
     #
     #   --[leg1]--T_new_1...T_new_L--[leg2]--sigma--- == ---sigma--[leg3]---T_old_1...T_old_L ---[leg4]---
     #               |          |                                              |         |
@@ -321,11 +322,92 @@ def env_T_gauge_multi_sites(config, T_olds, T_news):
     A = LinearOperator((v0.size, v0.size), matvec=mv)
     # w, vs= robust_eigsh(A, k=6, which='SA', v0=None, initial_maxiter=v0.size*10, max_maxiter=v0.size*90, ncv=60)
     # zero_v = vs[:, w<1e-8]
-    zero_v = null_space(A, batch_k=2, maxiter=v0.size*10, ncv=60)
+    zero_v = null_space(A, batch_k=2, maxiter=v0.size*10, ncv=20)
     zero_modes = [decompress_from_1d(to_tensor(v), meta) for v in zero_v.T]
     # =======================================
 
     return zero_modes
+
+def fast_env_T_gauge_multi_sites(config, T_olds, T_news):
+    #  Generic gauge-fixing from https://arxiv.org/abs/2311.11894
+    #
+    #   ----T_new_1...T_new_L----sigma--- == ---sigma--T_old_1...T_old_L ----
+    #          |          |                               |         |
+    #          |          |                               |         |
+
+    # TODO check if T_olds and T_news are compatible
+    for To, Tn in zip(T_olds, T_news):
+        try:
+            mask_needed, _ = _test_axes_match(To, Tn)
+        except YastnError:
+            raise NoFixedPointError(code=1)
+        if mask_needed: # charge sectors missing
+            raise NoFixedPointError(code=1)
+
+    leg = T_news[0].get_legs(axes=0)
+    def left_leading_eig(Ts, Ms):
+        # Compute the leading left eigenvector of the operator
+        #   --[leg1]---T_1--... --T_L--[leg2]--
+        #               |          |
+        #               |          |
+        #        ------M_1---...--M_L-------
+        v0= zeros(config=Ts[0].config, legs=(leg.conj(), leg), n=Ts[0].config.sym.zero())
+        _, meta= v0.compress_to_1d(meta=None)
+
+        to_tensor= lambda x: Ts[0].config.backend.to_tensor(x if np.sum(np.array(x.strides)<0)==0 else x.copy() , dtype=Ts[0].yastn_dtype, device=Ts[0].device)
+        to_numpy= lambda x: Ts[0].config.backend.to_numpy(x)
+
+        def mv(v):
+            rho = decompress_from_1d(to_tensor(v), meta)
+
+            # Cost: O(chi^3 D^2)
+            for i in range(len(T_olds)):
+                #           ---[0]-> 0
+                #   ------/
+                #   rho   |      1
+                #   ------\      |
+                #          [1]-- M_i-----2
+                rho = tensordot(rho, Ms[i], axes=(1, 0), conj=(0, 1))
+                #           -- T_i-----0
+                #   ------/      |
+                #    rho  |      |
+                #   ------\      |
+                #          -----M_i----1
+                rho = tensordot(Ts[i], rho, axes=([0, 1], [0, 1]))
+
+            rho_data, rho_meta= rho.compress_to_1d(meta=meta)
+            return to_numpy(rho_data)
+        A = LinearOperator((v0.size, v0.size), matvec=mv)
+        w, vs = eigs(A, k=1, which='LM')
+        return w, decompress_from_1d(to_tensor(vs[:, 0]), meta)
+
+    def normalize_QR(Q, R):
+        # make the diagonal entries of R matrix positive
+        R_sign = R.diag()
+        R_sign._data = R_sign._data/abs(R_sign._data)
+        return Q@R_sign.H, R_sign@R
+
+
+    while True:
+        # initialize Ms with random tensors
+        Ms = []
+        for i in range(len(T_news)):
+            Ms.append(rand(config=config, legs=T_news[i].get_legs(), n=T_news[i].n))
+
+        w_old, v_old = left_leading_eig(T_olds, Ms)
+        w_new, v_new = left_leading_eig(T_news, Ms)
+        Q_old, R_old = qr(v_old, axes=(0, 1), sQ=-v_old.get_signature()[0]) # one in one out R
+        Q_new, R_new = qr(v_new, axes=(0, 1), sQ=-v_new.get_signature()[0]) # one in one out R
+        Q_old, R_old = normalize_QR(Q_old, R_old)
+        Q_new, R_new = normalize_QR(Q_new, R_new)
+        sigma = Q_old @ Q_new.H
+
+        # Rerun the procedure with a different random MPS if the leading eigenvalue is not unique
+        if (sigma@v_new - v_old).norm(p='inf') < 1e-8:
+            break
+
+    return [sigma.T]
+
 
 def real_to_complex(z):      # real vector of length 2n -> complex of length n
     return z[:len(z)//2] + 1j * z[len(z)//2:]
@@ -569,7 +651,8 @@ def find_gauge_multi_sites(env_old, env, verbose=False):
                 T_news.append(getattr(env[tmp_site], k))
                 tmp_site = env.nn_site(tmp_site, d)
 
-            zero_modes = env_T_gauge_multi_sites(env.psi.config, T_olds, T_news)
+            # zero_modes = env_T_gauge_multi_sites(env.psi.config, T_olds, T_news)
+            zero_modes = fast_env_T_gauge_multi_sites(env.psi.config, T_olds, T_news)
             if len(zero_modes) == 0:
                 return None
             zero_modes_dict[(site_ind, k)] = zero_modes
