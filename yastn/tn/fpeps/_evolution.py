@@ -16,7 +16,8 @@
 
 from ... import tensordot, vdot, svd_with_truncation, truncation_mask, YastnError
 from ._peps import Peps2Layers
-from ._gates_auxiliary import apply_gate_onsite, apply_gate_nn, gate_fix_order, apply_bond_tensors
+from ._gates_auxiliary import apply_gate_onsite, apply_gate_nn, apply_gate_nnn, gate_fix_order, apply_bond_tensors, apply_bond_tensors_nnn
+from ._geometry import Bond
 from typing import NamedTuple
 
 
@@ -100,7 +101,13 @@ def evolution_step_(env, gates, opts_svd, symmetrize=True,
     for gate in gates.nn:
         info = apply_nn_truncate_optimize_(env, psi, gate, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization=initialization)
         infos.append(info)
+    for gate in gates.nnn:
+        info = apply_nnn_truncate_optimize_(env, psi, gate, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization=initialization)
+        infos.append(info)
     if symmetrize:
+        for gate in gates.nnn[::-1]:
+            info = apply_nnn_truncate_optimize_(env, psi, gate, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization=initialization)
+            infos.append(info)
         for gate in gates.nn[::-1]:
             info = apply_nn_truncate_optimize_(env, psi, gate, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization=initialization)
             infos.append(info)
@@ -240,6 +247,48 @@ def apply_nn_truncate_optimize_(env, psi, gate, opts_svd,
     env.post_evolution_(gate.bond)
     return Evolution_out(**info)
 
+def apply_nnn_truncate_optimize_(env, psi, gate, opts_svd,
+                    fix_metric=0,
+                    pinv_cutoffs=(1e-12, 1e-11, 1e-10, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4),
+                    max_iter=100, tol_iter=1e-15, initialization="EAT_SVD"):
+    r"""
+    Applies a next-nearest-neighbor gate, which acts on three site, to a PEPS patch, truncate, and
+    optimize the resulting tensors.
+    """
+    # TODO: NTU update
+    info = {'bond': (gate.site0, gate.site1, gate.site2)}
+
+    # sites and gates are in fermionic order
+    dirn, corner = psi.nnn_bond_type(gate.site0, gate.site1, gate.site2)
+    G0, G1, G2 = gate.G0, gate.G1, gate.G2
+
+    s0, s1, s2 = gate.site0, gate.site1, gate.site2
+    Q0, Q1, Q2, R0, R1, R2, Q0f, Q1f, Q2f = apply_gate_nnn(psi[s0], psi[s1], psi[s2], G0, G1, G2, dirn, corner)
+
+    fgf = env.bond_metric_nnn(Q0, Q1, Q2, s0, s1, s2, dirn, corner) # bond metric for R0, R1, R2
+
+    if isinstance(fgf, tuple): # bond metric tensor can be decomposed into product of three tensors
+        if dirn == "br":
+            M0, M1, M2, info = truncate_tripartite_(*fgf, R0, R1, R2, opts_svd, pinv_cutoffs, info)
+            psi[s0], psi[s1], psi[s2] = apply_bond_tensors_nnn(Q0f, Q1f, Q2f, M0, M1, M2, dirn, corner)
+            bond1, bond2 = Bond(s0, s1), Bond(s1, s2)
+        elif dirn == "tr":
+            if corner == "tl":
+                M1, M0, M2, info = truncate_tripartite_(*fgf, R1, R0, R2, opts_svd, pinv_cutoffs, info)
+                psi[s0], psi[s1], psi[s2] = apply_bond_tensors_nnn(Q0f, Q1f, Q2f, M0, M1, M2, dirn, corner)
+                bond1, bond2 = Bond(s1, s0), Bond(s0, s2)
+            elif corner == "br":
+                M0, M2, M1, info = truncate_tripartite_(*fgf, R0, R2, R1, opts_svd, pinv_cutoffs, info)
+                psi[s0], psi[s1], psi[s2] = apply_bond_tensors_nnn(Q0f, Q1f, Q2f, M0, M1, M2, dirn, corner)
+                bond1, bond2 = Bond(s0, s2), Bond(s2, s1)
+
+        # post-evolution (the bond-update order matters)
+        env.update_bond_(bond1)
+        env.update_bond_(bond2[::-1])
+        env.update_bond_(bond2)
+        env.update_bond_(bond1[::-1])
+
+    return Evolution_out(**info)
 
 def truncate_optimize_(fgf, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization, info):
     # enforce hermiticity
@@ -335,6 +384,74 @@ def truncate_bipartite_(E0, E1, R0, R1, opts_svd, pinv_cutoffs, info):
     info['pinv_cutoffs'] = pinv_c
     return M0, M1, info
 
+def truncate_tripartite_(E0, E1, E2, R0, R1, R2, opts_svd, pinv_cutoffs, info):
+    #                   /-------(0)--------
+    #   ----- R0----(1)-R1-(2)--R2*---     |
+    #  |(1)                          |(0)  |(0)
+    #  E0                           E2     E1
+    #  |(0)                          |(1)  |(1)
+    #   ----- R0*------R1*-----R2*---      |
+    #                   \--------(0)-------
+    E0 = (E0 + E0.H) / 2 # bot top
+    E1 = (E1 + E1.H) / 2 # top bot
+    E2 = (E2 + E2.H) / 2 # top bot
+    #
+    def _truncate_bond(Ea, Eb, Ra, Rb):
+        Fa = Ra.H @ Ea @ Ra
+        Fb = Rb @ Eb @ Rb.H
+        RR = (Ra @ Rb)
+        gRR = Ea @ RR @ Eb
+        RRgRR = abs(vdot(RR, gRR).item())
+        S0, U0 = Fa.eigh_with_truncation(axes=(0, 1), tol=min(pinv_cutoffs))
+        S1, U1 = Fb.eigh_with_truncation(axes=(0, 1), tol=min(pinv_cutoffs))
+        #
+        W0, W1 = symmetrized_svd(S0.sqrt() @ U0.H, U1 @ S1.sqrt(), opts_svd, normalize=False)
+        p0, p1 = Ra @ U0, U1.H @ Rb
+        #
+        error2, s0max, s1max = 100, max(S0._data), max(S1._data)
+        vs0o, vs1o = len(S0._data) + 1, len(S1._data) + 1
+        for c_off in sorted(pinv_cutoffs):
+            vs0 = sum(S0._data > c_off * s0max).item()
+            vs1 = sum(S1._data > c_off * s1max).item()
+            if vs0 < vs0o or vs1 < vs1o:
+                vs0o, vs1o = vs0, vs1
+                Ma_tmp = p0 @ S0.reciprocal(cutoff=c_off * s0max).sqrt() @ W0
+                Mb_tmp = W1 @ S1.reciprocal(cutoff=c_off * s1max).sqrt() @ p1
+                delta = RR - Ma_tmp @ Mb_tmp
+                error2_tmp = abs(vdot(delta, Ea @ delta @ Eb).item()) / RRgRR
+                if error2_tmp < error2:
+                    Ma, Mb, error2, pinv_c = Ma_tmp, Mb_tmp, error2_tmp, c_off
+
+        return Ma, Mb, error2, pinv_c
+
+    tot_error2 = 0.0
+    tot_pinv_c = 1
+    # truncate left bond
+    Rb = R1.fuse_legs(axes=(1, (0, 2)))
+    Eb_tmp = R2@E2@R2.H
+    Eb = tensordot(E1, Eb_tmp, axes=((), ())).fuse_legs(axes=((0, 2), (1, 3)))
+    R0, R1, error2, pinv_c = _truncate_bond(E0, Eb, R0, Rb)
+    tot_error2 += error2
+    tot_pinv_c = min(tot_pinv_c, pinv_c)
+    R1 = R1.unfuse_legs(axes=1)
+    R1 = R1.transpose(axes=(1, 0, 2))
+
+    # truncate right bond
+    Ra = R1.fuse_legs(axes=((0, 1), 2))
+    Ea_tmp = R0.H@E0@R0
+    Ea = tensordot(E1.T, Ea_tmp, axes=((), ())).fuse_legs(axes=((0, 2), (1, 3)))
+    R1, R2, error2, pinv_c = _truncate_bond(Ea, E2, Ra, R2)
+    tot_error2 += error2
+    tot_pinv_c = min(tot_pinv_c, pinv_c)
+    R1 = R1.unfuse_legs(axes=0)
+
+
+    info['best_method'] = 'tripartite'
+    info['truncation_errors'] = {'tripartite': tot_error2 ** 0.5}
+    info['truncation_error'] = tot_error2 ** 0.5
+    info['pinv_cutoffs'] = tot_pinv_c
+
+    return R0, R1, R2, info
 
 def accumulated_truncation_error(infoss, statistics='mean'):
     r"""

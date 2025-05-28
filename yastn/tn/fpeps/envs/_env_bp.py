@@ -80,6 +80,13 @@ class EnvBP(Peps):
     def config(self):
         return self.psi.config
 
+    def copy(self):
+        env = EnvBP(self.psi, init=None)
+        for site in env.sites():
+            for dirn in ['t', 'l', 'b', 'r']:
+                setattr(env[site], dirn, getattr(self[site], dirn).copy())
+        return env
+
     def reset_(self, init='eye'):
         r"""
         Initialize BP environment.
@@ -518,6 +525,89 @@ class EnvBP(Peps):
         #     g = tensordot((cbl @ ctl) @ env_t, (ctr @ cbr) @ env_b, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
         #     return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
 
+    def bond_metric_nnn(self, Q0, Q1, Q2, s0, s1, s2, dirn, corner):
+        r"""
+        Calculates bond metric for NNN term within BP environment.
+        ::
+
+            If dirn == 'br', corner='tr':
+                                  t
+                                  ║
+                     t            Q1══r
+                     ║          //
+                l════Q0══
+                     ║            ║
+                     b        l═══Q2═══r
+                                  ║
+                                  b
+
+            If dirn == 'br', corner='bl':
+                   t
+                   ║
+                l══Q0══r
+                   ║              t
+                                  ║
+                      //      ═══Q2═══r
+                 l══Q1            ║
+                    ║             b
+                    b
+
+            If dirn == 'tr', corner='tl':
+                   t
+                   ║           t
+                l══Q0          ║
+                    \\      ═══Q2═══r
+                               ║
+                   ║           b
+                l══Q1══r
+                   ║
+                   b
+
+            If dirn == 'tr', corner='br':
+
+                               t
+                               ║
+                            ═══Q1═══r
+                               ║
+                   ║           b
+                l══Q0══r    \\
+                   ║          Q2═══r
+                   b           ║
+                               b
+        """
+        if dirn == "br" and corner == 'tr' and self.which == "BP":
+            assert self.psi.nn_site(s0, (0, 1)) == s1
+            assert self.psi.nn_site(s0, (1, 1)) == s2
+            vectl = hair_l(Q0, hl=self[s0].l, ht=self[s0].t, hb=self[s0].b)
+            vecbr = hair_b(Q2, hr=self[s2].r, hb=self[s2].b, hl=self[s2].l).T
+            vectr = cor_tr_Q(Q1, ht=self[s1].t, hr=self[s1].r)
+            return (vectl, vectr, vecbr)  # (rr' rr,  bl bl',  tt tt')
+
+        elif dirn == "br" and corner == 'bl' and self.which == "BP":
+            assert self.psi.nn_site(s0, (1, 0)) == s1
+            assert self.psi.nn_site(s0, (1, 1)) == s2
+            vectl = hair_t(Q0, hl=self[s0].l, ht=self[s0].t, hr=self[s0].r)
+            vecbr = hair_r(Q2, hr=self[s2].r, ht=self[s2].t, hb=self[s2].b).T
+            vecbl = cor_bl_Q(Q1, hl=self[s1].l, hb=self[s1].b)
+            return (vectl, vecbl, vecbr)  # (bb' bb,  tr tr',  ll ll')
+
+        elif dirn == "tr" and corner == 'tl' and self.which == "BP":
+            assert self.psi.nn_site(s0, (1, 0)) == s1
+            assert self.psi.nn_site(s0, (0, 1)) == s2
+            vecbl = hair_b(Q1, hr=self[s1].r, hb=self[s1].b, hl=self[s1].l)
+            vectr = hair_r(Q2, hr=self[s2].r, ht=self[s2].t, hb=self[s2].b).T
+            vectl = cor_tl_Q(Q0, hl=self[s0].l, ht=self[s0].t)
+            return (vecbl, vectl, vectr)  # (tt' tt,  br br',  ll ll')
+
+        elif dirn == "tr" and corner == 'br' and self.which == "BP":
+            assert self.psi.nn_site(s0, (-1, 1)) == s1
+            assert self.psi.nn_site(s0, (0, 1)) == s2
+            vecbl = hair_l(Q0, hl=self[s0].l, ht=self[s0].t, hb=self[s0].b)
+            vectr = hair_t(Q1, hl=self[s1].l, ht=self[s1].t, hr=self[s1].r).T
+            vecbr = cor_br_Q(Q2, hb=self[s2].b, hr=self[s2].r)
+            return (vecbl, vecbr, vectr)  # (rr' rr,  tl tl',  bb bb')
+        else:
+            raise YastnError(f" EnvBP bond_metric dirn-{dirn} corner-{corner} {self.which} not recognized.")
 
     def post_evolution_(env, bond, max_sweeps=1):
         env.update_bond_(bond)

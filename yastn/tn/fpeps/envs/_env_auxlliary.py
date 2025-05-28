@@ -17,6 +17,7 @@ from ... import mps
 
 __all__ = ['hair_t', 'hair_l', 'hair_b', 'hair_r',
            'cor_tl', 'cor_bl', 'cor_br', 'cor_tr',
+           'cor_tl_Q', 'cor_bl_Q', 'cor_br_Q', 'cor_tr_Q',
            'edge_t', 'edge_l', 'edge_b', 'edge_r',
            'append_vec_tl', 'append_vec_tr',
            'append_vec_bl', 'append_vec_br',
@@ -208,6 +209,69 @@ def cor_tr(A_bra, ht=None, hr=None, A_ket=None):  # A = [t l] [b r] s
     ctr = ctr.fuse_legs(axes=((0, 2), (1, 3)))  # [l l'] [b b']
     return ctr  # [l l'] [b b']
 
+def cor_tr_Q(Q_bra, ht=None, hr=None, Q_ket=None):  # Q = [t r] s bl
+    """ top-right corner tensor of Q"""
+    Q = Q_bra.unfuse_legs(axes=(0,))  # t r s bl
+    if ht is None and hr is None:
+        Q = fuse_legs(Q, axes=(3, (0, 1, 2)))  # bl [t r s]
+        Q_ket = Q if Q_ket is None else Q_ket.unfuse_legs(axes=(0,)).fuse_legs(axes=(3, (0, 1, 2)))
+        ctr = tensordot(Q, Q_ket.conj(), axes=(1, 1))  # bl bl'
+    else:
+        Q = Q.transpose(axes=(0, 3, 2, 1))  # t bl s r
+        Qf = Q if ht is None else ht @ Q
+        if hr is not None:
+            Qf = Qf @ hr.T
+        Q_ket= Q if Q_ket is None else Q_ket.unfuse_legs(axes=(0,)).transpose(axes=(0, 3, 2, 1))
+        ctr = tensordot(Qf, Q_ket.conj(), axes=((0, 2, 3), (0, 2, 3)))  # bl bl'
+    return ctr  # bl bl'
+
+def cor_bl_Q(Q_bra, hb=None, hl=None, Q_ket=None):  # A = [l b] s tr
+    """ bottom-left corner tensor of Q"""
+    Q = Q_bra.unfuse_legs(axes=(0,))  # l b s tr
+    if hb is None and hl is None:
+        Q = fuse_legs(Q, axes=(3, (0, 1, 2)))  # tr [l b s]
+        Q_ket= Q if Q_ket is None else Q_ket.unfuse_legs(axes=(0,)).fuse_legs(axes=(3, (0, 1, 2)))
+        cbl = tensordot(Q, Q_ket.conj(), axes=(1, 1))  # tr tr'
+    else:
+        Q = Q.transpose(axes=(0, 3, 2, 1))  # l tr s b
+        Qf = Q if hl is None else hl @ Q
+        if hb is not None:
+            Qf = Qf @ hb.T
+        Q_ket= Q if Q_ket is None else Q_ket.unfuse_legs(axes=(0,)).transpose(axes=(0, 3, 2, 1))
+        cbl = tensordot(Qf, Q_ket.conj(), axes=((0, 2, 3), (0, 2, 3)))  # tr tr'
+    return cbl  # tr tr'
+
+def cor_tl_Q(Q_bra, ht=None, hl=None, Q_ket=None):  # Q = [t l] s br
+    """ top-left corner tensor of Q"""
+    Q = Q_bra.unfuse_legs(axes=(0,))  # t l s br
+    if ht is None and hl is None:
+        Q = fuse_legs(Q, axes=(3, (0, 1, 2)))  # br [t l s]
+        Q_ket = Q if Q_ket is None else Q_ket.unfuse_legs(axes=(0,)).fuse_legs(axes=(3, (0, 1, 2)))
+        ctl = tensordot(Q, Q_ket.conj(), axes=(1, 1))  # br br'
+    else:
+        Q = Q.transpose(axes=(0, 3, 2, 1))  # t br s l
+        Qf = Q if ht is None else ht @ Q
+        if hl is not None:
+            Qf = Qf @ hl.T
+        Q_ket= Q if Q_ket is None else Q_ket.unfuse_legs(axes=(0,)).transpose(axes=(0, 3, 2, 1))
+        ctl = tensordot(Qf, Q_ket.conj(), axes=((0, 2, 3), (0, 2, 3)))  # br br'
+    return ctl  # br br'
+
+def cor_br_Q(Q_bra, hb=None, hr=None, Q_ket=None):  # Q = [b r] s tl
+    """ bottom-right corner tensor of Q"""
+    Q = Q_bra.unfuse_legs(axes=(0,))  # b r s tl
+    if hb is None and hr is None:
+        Q = fuse_legs(Q, axes=(3, (0, 1, 2)))  # tl [b r s]
+        Q_ket = Q if Q_ket is None else Q_ket.unfuse_legs(axes=(0,)).fuse_legs(axes=(3, (0, 1, 2)))
+        ctl = tensordot(Q, Q_ket.conj(), axes=(1, 1))  # tl tl'
+    else:
+        Q = Q.transpose(axes=(0, 3, 2, 1))  # b tl s r
+        Qf = Q if hb is None else hb @ Q
+        if hr is not None:
+            Qf = Qf @ hr.T
+        Q_ket= Q if Q_ket is None else Q_ket.unfuse_legs(axes=(0,)).transpose(axes=(0, 3, 2, 1))
+        cbr = tensordot(Qf, Q_ket.conj(), axes=((0, 2, 3), (0, 2, 3)))  # tl tl'
+    return cbr  # tl tl'
 
 def edge_l(A_bra, hl=None, A_ket=None):  # A = [t l] [b r] s
     """ left edge tensor where left legs of double-layer A tensors can be contracted with hl """
