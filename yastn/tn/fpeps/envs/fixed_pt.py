@@ -3,7 +3,7 @@ import torch
 import numpy as np
 from scipy.optimize import minimize
 from scipy.sparse.linalg import LinearOperator
-from scipy.sparse.linalg import eigsh, eigs, ArpackNoConvergence
+from scipy.sparse.linalg import eigsh, eigs, svds, ArpackNoConvergence
 import primme
 
 from collections import namedtuple
@@ -345,23 +345,26 @@ def fast_env_T_gauge_multi_sites(config, T_olds, T_news):
             raise NoFixedPointError(code=1)
 
     leg = T_news[0].get_legs(axes=0)
-    def left_leading_eig(Ts, Ms):
+    def right_leading_eig(Ts, Ms):
         # Compute the leading left eigenvector of the operator
         #   --[leg1]---T_1--... --T_L--[leg2]--
         #               |          |
         #               |          |
         #        ------M_1---...--M_L-------
         v0= zeros(config=Ts[0].config, legs=(leg.conj(), leg), n=Ts[0].config.sym.zero())
-        _, meta= v0.compress_to_1d(meta=None)
+        _, meta_L= v0.compress_to_1d(meta=None)
+
+        v1= zeros(config=Ts[0].config, legs=(leg, leg.conj()), n=Ts[0].config.sym.zero())
+        _, meta_R= v1.compress_to_1d(meta=None)
 
         to_tensor= lambda x: Ts[0].config.backend.to_tensor(x if np.sum(np.array(x.strides)<0)==0 else x.copy() , dtype=Ts[0].yastn_dtype, device=Ts[0].device)
         to_numpy= lambda x: Ts[0].config.backend.to_numpy(x)
 
-        def mv(v):
-            rho = decompress_from_1d(to_tensor(v), meta)
+        def vm(v):
+            rho = decompress_from_1d(to_tensor(v.conj()), meta_L)
 
             # Cost: O(chi^3 D^2)
-            for i in range(len(T_olds)):
+            for i in range(len(Ts)):
                 #           ---[0]-> 0
                 #   ------/
                 #   rho   |      1
@@ -375,16 +378,41 @@ def fast_env_T_gauge_multi_sites(config, T_olds, T_news):
                 #          -----M_i----1
                 rho = tensordot(Ts[i], rho, axes=([0, 1], [0, 1]))
 
-            rho_data, rho_meta= rho.compress_to_1d(meta=meta)
+            rho_data, rho_meta= rho.compress_to_1d(meta=meta_L)
+            return to_numpy(rho_data).conj()
+
+        def mv(v):
+            rho = decompress_from_1d(to_tensor(v), meta_R)
+            # Cost: O(chi^3 D^2)
+            for i in range(len(Ts)):
+                #     1---T_i-----
+                #         |       \------
+                #         |       | rho
+                #         2       /------
+                #            0---/
+                rho = tensordot(rho, Ts[-1-i], axes=(0, 2))
+                #    0----T_i-----
+                #         |       \------
+                #         |       | rho
+                #         |       /------
+                #    1----M_i^*--/
+                rho = tensordot(rho, Ms[-1-i], axes=([0, 2], [2, 1]), conj=(0, 1))
+
+            rho_data, rho_meta= rho.compress_to_1d(meta=meta_R)
             return to_numpy(rho_data)
-        A = LinearOperator((v0.size, v0.size), matvec=mv)
+
+        A = LinearOperator((v0.size, v0.size), matvec=mv, rmatvec=vm)
         w, vs = eigs(A, k=1, which='LM')
-        return w, decompress_from_1d(to_tensor(vs[:, 0]), meta)
+        return w, decompress_from_1d(to_tensor(vs[:, 0]), meta_R)
+
+        # svds is slightly worse in precision compared to eigs
+        # u, s, vh = svds(A, k=1, which='LM')
+        # return s, decompress_from_1d(to_tensor(vh[0, :].conj()), meta_R)
 
     def normalize_QR(Q, R):
         # make the diagonal entries of R matrix positive
         R_sign = R.diag()
-        R_sign._data = R_sign._data/abs(R_sign._data)
+        R_sign._data = R_sign._data.conj()/abs(R_sign._data)
         return Q@R_sign.H, R_sign@R
 
 
@@ -393,20 +421,23 @@ def fast_env_T_gauge_multi_sites(config, T_olds, T_news):
         Ms = []
         for i in range(len(T_news)):
             Ms.append(rand(config=config, legs=T_news[i].get_legs(), n=T_news[i].n))
+        try:
+            w_old, v_old = right_leading_eig(T_olds, Ms)
+            w_new, v_new = right_leading_eig(T_news, Ms)
+        except ArpackNoConvergence:
+            continue
 
-        w_old, v_old = left_leading_eig(T_olds, Ms)
-        w_new, v_new = left_leading_eig(T_news, Ms)
         Q_old, R_old = qr(v_old, axes=(0, 1), sQ=-v_old.get_signature()[0]) # one in one out R
         Q_new, R_new = qr(v_new, axes=(0, 1), sQ=-v_new.get_signature()[0]) # one in one out R
         Q_old, R_old = normalize_QR(Q_old, R_old)
         Q_new, R_new = normalize_QR(Q_new, R_new)
-        sigma = Q_old @ Q_new.H
+        sigma = Q_new @ Q_old.H
 
         # Rerun the procedure with a different random MPS if the leading eigenvalue is not unique
-        if (sigma@v_new - v_old).norm(p='inf') < 1e-8:
+        if (sigma@v_old - v_new).norm(p='inf') < 1e-7:
             break
 
-    return [sigma.T]
+    return [sigma]
 
 
 def real_to_complex(z):      # real vector of length 2n -> complex of length n
