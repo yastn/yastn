@@ -13,7 +13,7 @@ def safe_inverse_2(x, eps):
 class SVDGESDD(torch.autograd.Function):
     @staticmethod
     def forward(A, ad_decomp_reg, fullrank_uv, diagnostics):
-        U, S, Vh = torch.linalg.svd(A, full_matrices=fullrank_uv)
+        U, S, Vh = torch.linalg.svd(A, full_matrices=fullrank_uv, driver=gesvd)
         # A = U @ diag(S) @ Vh
         return U, S, Vh
 
