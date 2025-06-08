@@ -1005,7 +1005,7 @@ class FixedPoint(torch.autograd.Function):
                     print("full grad diff", grad_diff)
                     if grad_diff < ctx.ctm_opts_fp["corner_tol"]:
                         # print("The norm of the full grad diff is below 1e-10.")
-                        log.log(logging.INFO, f"Fixed_pt: The norm of the full grad diff is below {ctx.ctm_opts_fp["corner_tol"]}.")
+                        log.log(logging.INFO, f"Fixed_pt: The norm of the full grad diff is below {ctx.ctm_opts_fp['corner_tol']}.")
                         break
                     if diff_ave is not None:
                         if grad_diff > diff_ave:
