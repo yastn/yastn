@@ -10,7 +10,7 @@ import torch.utils.checkpoint
 from .... import zeros, eye, tensordot, einsum, diag
 from ._env_ctm import ctm_conv_corner_spec
 from ._env_ctm_c4v import EnvCTM_c4v, decompress_env_c4v_1d
-from .fixed_pt import env_T_gauge_multi_sites, NoFixedPointError, real_to_complex, complex_to_real
+from .fixed_pt import env_T_gauge_multi_sites, fast_env_T_gauge_multi_sites, NoFixedPointError, real_to_complex, complex_to_real
 from .rdm import *
 
 
@@ -86,7 +86,9 @@ def find_gauge_c4v(env_old, env, verbose=False):
     """
     site = env.sites()[0]
     T_olds, T_news = [env_old[site].t, env_old[site].t.flip_signature()], [env[site].t, env[site].t.flip_signature()]
-    zero_modes = env_T_gauge_multi_sites(env.psi.config, T_olds, T_news)
+    zero_modes = fast_env_T_gauge_multi_sites(env.psi.config, T_olds, T_news)
+    # if len(zero_modes) == 0: # fast method fails
+    #     zero_modes = env_T_gauge_multi_sites(env.psi.config, T_olds, T_news)
     if len(zero_modes) == 0:
         return None
 
@@ -248,6 +250,8 @@ class FixedPoint_c4v(torch.autograd.Function):
             env,
             **ctm_opts_fwd,
         )
+        if not converged:
+            raise NoFixedPointError(code=1, message="No fixed point found: CTM forward does not converge!")
 
         # note that we need to find the gauge transformation that connects two set of environment tensors
         # obtained from CTMRG with the 'full' svd, because the backward uses the full svd backward.
@@ -261,7 +265,7 @@ class FixedPoint_c4v(torch.autograd.Function):
         sigma = find_gauge_c4v(env_converged, ctm_env_out, verbose=False)
         t_gauge_after = time.perf_counter()
         if sigma is None:
-            raise NoFixedPointError(code=1)
+            raise NoFixedPointError(code=1, message="No fixed point found: fail to find the gauge matrix!")
         log.log(logging.INFO, f"t_gauge: {t_gauge_after - t_gauge_prev:.1f}s")
 
         env_data, env_meta = env_converged.compress_env_1d()

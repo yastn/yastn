@@ -3,7 +3,7 @@ import torch
 import numpy as np
 from scipy.optimize import minimize
 from scipy.sparse.linalg import LinearOperator
-from scipy.sparse.linalg import eigsh, eigs, ArpackNoConvergence
+from scipy.sparse.linalg import eigsh, eigs, svds, ArpackNoConvergence
 import primme
 
 from collections import namedtuple
@@ -129,8 +129,11 @@ def robust_eigsh(A, initial_maxiter, max_maxiter, k=3, retry_factor=3, sigma=Non
             return robust_eigsh(A, initial_maxiter * retry_factor, max_maxiter, k=k, retry_factor=retry_factor, sigma=sigma, **kwargs)
 
 class NoFixedPointError(Exception):
-    def __init__(self, code):
-        super().__init__("No FixedPoint found")  # Pass message to the base class
+    def __init__(self, code, message=None):
+        if message is None:
+            message = "No fixed point found"
+        self.message = message
+        super().__init__(self.message)  # Pass message to the base class
         self.code = code          				 # Add a custom attribute for error codes
 
 def env_T_gauge_multi_sites(config, T_olds, T_news):
@@ -340,28 +343,32 @@ def fast_env_T_gauge_multi_sites(config, T_olds, T_news):
         try:
             mask_needed, _ = _test_axes_match(To, Tn)
         except YastnError:
-            raise NoFixedPointError(code=1)
+            raise NoFixedPointError(code=1, message="No fixed point found: T tensors' symmetry sectors change after a CTM step!")
         if mask_needed: # charge sectors missing
-            raise NoFixedPointError(code=1)
+            raise NoFixedPointError(code=1, message="No fixed point found: T tensors' symmetry sectors change after a CTM step!")
 
     leg = T_news[0].get_legs(axes=0)
-    def left_leading_eig(Ts, Ms):
+    eigs_maxiter, ncv = 1000, 40
+    def right_leading_eig(Ts, Ms, ncv=40):
         # Compute the leading left eigenvector of the operator
         #   --[leg1]---T_1--... --T_L--[leg2]--
         #               |          |
         #               |          |
         #        ------M_1---...--M_L-------
         v0= zeros(config=Ts[0].config, legs=(leg.conj(), leg), n=Ts[0].config.sym.zero())
-        _, meta= v0.compress_to_1d(meta=None)
+        _, meta_L= v0.compress_to_1d(meta=None)
+
+        v1= zeros(config=Ts[0].config, legs=(leg, leg.conj()), n=Ts[0].config.sym.zero())
+        _, meta_R= v1.compress_to_1d(meta=None)
 
         to_tensor= lambda x: Ts[0].config.backend.to_tensor(x if np.sum(np.array(x.strides)<0)==0 else x.copy() , dtype=Ts[0].yastn_dtype, device=Ts[0].device)
         to_numpy= lambda x: Ts[0].config.backend.to_numpy(x)
 
-        def mv(v):
-            rho = decompress_from_1d(to_tensor(v), meta)
+        def vm(v):
+            rho = decompress_from_1d(to_tensor(v.conj()), meta_L)
 
             # Cost: O(chi^3 D^2)
-            for i in range(len(T_olds)):
+            for i in range(len(Ts)):
                 #           ---[0]-> 0
                 #   ------/
                 #   rho   |      1
@@ -375,38 +382,74 @@ def fast_env_T_gauge_multi_sites(config, T_olds, T_news):
                 #          -----M_i----1
                 rho = tensordot(Ts[i], rho, axes=([0, 1], [0, 1]))
 
-            rho_data, rho_meta= rho.compress_to_1d(meta=meta)
+            rho_data, rho_meta= rho.compress_to_1d(meta=meta_L)
+            return to_numpy(rho_data).conj()
+
+        def mv(v):
+            rho = decompress_from_1d(to_tensor(v), meta_R)
+            # Cost: O(chi^3 D^2)
+            for i in range(len(Ts)):
+                #     1---T_i-----
+                #         |       \------
+                #         |       | rho
+                #         2       /------
+                #            0---/
+                rho = tensordot(rho, Ts[-1-i], axes=(0, 2))
+                #    0----T_i-----
+                #         |       \------
+                #         |       | rho
+                #         |       /------
+                #    1----M_i^*--/
+                rho = tensordot(rho, Ms[-1-i], axes=([0, 2], [2, 1]), conj=(0, 1))
+
+            rho_data, rho_meta= rho.compress_to_1d(meta=meta_R)
             return to_numpy(rho_data)
-        A = LinearOperator((v0.size, v0.size), matvec=mv)
-        w, vs = eigs(A, k=1, which='LM')
-        return w, decompress_from_1d(to_tensor(vs[:, 0]), meta)
+
+        A = LinearOperator((v0.size, v0.size), matvec=mv, rmatvec=vm)
+        w, vs = eigs(A, k=1, which='LM', ncv=ncv, maxiter=eigs_maxiter)
+        return w, decompress_from_1d(to_tensor(vs[:, 0]), meta_R)
+
+        # svds is slightly worse in precision compared to eigs
+        # u, s, vh = svds(A, k=1, which='LM')
+        # return s, decompress_from_1d(to_tensor(vh[0, :].conj()), meta_R)
 
     def normalize_QR(Q, R):
         # make the diagonal entries of R matrix positive
         R_sign = R.diag()
-        R_sign._data = R_sign._data/abs(R_sign._data)
+        R_sign._data = R_sign._data.conj()/abs(R_sign._data)
         return Q@R_sign.H, R_sign@R
 
 
+    retry_cnt, retry_limit = 0, 20
     while True:
+        if retry_cnt > retry_limit:
+            return []
         # initialize Ms with random tensors
         Ms = []
         for i in range(len(T_news)):
             Ms.append(rand(config=config, legs=T_news[i].get_legs(), n=T_news[i].n))
+        try:
+            w_old, v_old = right_leading_eig(T_olds, Ms, ncv=ncv)
+            w_new, v_new = right_leading_eig(T_news, Ms, ncv=ncv)
+        except ArpackNoConvergence:
+            ncv = ncv + 20
+            eigs_maxiter += 1000
+            retry_cnt += 1
+            log.log(logging.INFO, f"Eigs Warning: No convergence after {eigs_maxiter} iterations with ncv={ncv:d}. Retrying with a differet M...")
+            continue
 
-        w_old, v_old = left_leading_eig(T_olds, Ms)
-        w_new, v_new = left_leading_eig(T_news, Ms)
         Q_old, R_old = qr(v_old, axes=(0, 1), sQ=-v_old.get_signature()[0]) # one in one out R
         Q_new, R_new = qr(v_new, axes=(0, 1), sQ=-v_new.get_signature()[0]) # one in one out R
         Q_old, R_old = normalize_QR(Q_old, R_old)
         Q_new, R_new = normalize_QR(Q_new, R_new)
-        sigma = Q_old @ Q_new.H
+        sigma = Q_new @ Q_old.H
 
         # Rerun the procedure with a different random MPS if the leading eigenvalue is not unique
-        if (sigma@v_new - v_old).norm(p='inf') < 1e-8:
+        if (sigma@v_old - v_new).norm(p='inf') < 1e-5:
             break
+        retry_cnt += 1
 
-    return [sigma.T]
+    return [sigma]
 
 
 def real_to_complex(z):      # real vector of length 2n -> complex of length n
@@ -651,8 +694,9 @@ def find_gauge_multi_sites(env_old, env, verbose=False):
                 T_news.append(getattr(env[tmp_site], k))
                 tmp_site = env.nn_site(tmp_site, d)
 
-            # zero_modes = env_T_gauge_multi_sites(env.psi.config, T_olds, T_news)
             zero_modes = fast_env_T_gauge_multi_sites(env.psi.config, T_olds, T_news)
+            # if len(zero_modes) == 0: # fast method fails
+            #     zero_modes = env_T_gauge_multi_sites(env.psi.config, T_olds, T_news)
             if len(zero_modes) == 0:
                 return None
             zero_modes_dict[(site_ind, k)] = zero_modes
@@ -870,8 +914,6 @@ class FixedPoint(torch.autograd.Function):
             converged, conv_history = FixedPoint.ctm_conv_check(env, conv_history, corner_tol)
             if converged:
                 break
-        print(f"t_ctm: {t_ctm:.1f}s")
-
         return env, converged, conv_history, t_ctm, t_check
 
     @staticmethod
@@ -897,7 +939,7 @@ class FixedPoint(torch.autograd.Function):
             **ctm_opts_fwd,
         )
         if not converged:
-            raise NoFixedPointError(code=1)
+            raise NoFixedPointError(code=1, message="No fixed point found: CTM forward does not converge!")
 
         # note that we need to find the gauge transformation that connects two set of environment tensors
         # obtained from CTMRG with the 'full' svd, because the backward uses the full svd backward.
@@ -909,7 +951,7 @@ class FixedPoint(torch.autograd.Function):
 
         sigma_dict = find_gauge_multi_sites(env_converged, ctm_env_out, verbose=True)
         if sigma_dict is None:
-            raise NoFixedPointError(code=1)
+            raise NoFixedPointError(code=1, message="No fixed point found: fail to find the gauge matrix!")
 
         env_data, env_meta = env_converged.compress_env_1d()
         ctx.save_for_backward(*env_data)
