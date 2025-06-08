@@ -989,7 +989,7 @@ class FixedPoint(torch.autograd.Function):
             grads = dfdC_vjp(grads)
             # with torch.enable_grad():
             #     grads = torch.autograd.grad(FixedPoint.fixed_point_iter(ctx.env, ctx.sigma_dict, ctx.opts_svd, ctx.slices, env_data, psi_data), env_data, grad_outputs=grads)
-            if all([torch.norm(grad, p=torch.inf) < 1e-8 for grad in grads]):
+            if all([torch.norm(grad, p=torch.inf) < ctx.ctm_opts_fp["corner_tol"] for grad in grads]):
                 break
             else:
                 dA = tuple(dA[i] + grads[i] for i in range(len(grads)))
@@ -1003,9 +1003,9 @@ class FixedPoint(torch.autograd.Function):
                 if prev_grad_tmp is not None:
                     grad_diff = torch.norm(grad_tmp[0] - prev_grad_tmp[0])
                     print("full grad diff", grad_diff)
-                    if grad_diff < 1e-10:
+                    if grad_diff < ctx.ctm_opts_fp["corner_tol"]:
                         # print("The norm of the full grad diff is below 1e-10.")
-                        log.log(logging.INFO, f"Fixed_pt: The norm of the full grad diff is below 1e-10.")
+                        log.log(logging.INFO, f"Fixed_pt: The norm of the full grad diff is below {ctx.ctm_opts_fp["corner_tol"]}.")
                         break
                     if diff_ave is not None:
                         if grad_diff > diff_ave:
