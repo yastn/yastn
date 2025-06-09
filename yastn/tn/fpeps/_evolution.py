@@ -14,10 +14,13 @@
 # ==============================================================================
 """ Routines for time evolution with nn gates on a 2D lattice. """
 
-from ... import tensordot, vdot, svd_with_truncation, truncation_mask, YastnError
+from ... import tensordot, vdot, svd_with_truncation, truncation_mask, YastnError, eigh, svd, qr
 from ._peps import Peps2Layers
 from ._gates_auxiliary import apply_gate_onsite, apply_gate_nn, gate_fix_order, apply_bond_tensors
 from typing import NamedTuple
+import yastn
+import numpy as np
+from sklearn.linear_model import OrthogonalMatchingPursuit
 
 
 class Evolution_out(NamedTuple):
@@ -263,6 +266,8 @@ def truncate_optimize_(fgf, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter
     fRR = (R0 @ R1).fuse_legs(axes=[(0, 1)])
     fgRR = fgf @ fRR
     RRgRR = abs(vdot(fRR, fgRR).item())
+    # for test
+    print("test: sqrt(RRgRR)", RRgRR ** .5)
     #
     pinv_cutoffs = sorted(pinv_cutoffs)
     M0, M1 = R0, R1
@@ -270,6 +275,9 @@ def truncate_optimize_(fgf, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter
 
         Ms, error2s, pinvs, iters = {}, {}, {}, {}
 
+        if 'Loop' in initialization:
+            key = "loop"
+            initial_truncation_Loop(M0, M1, fgf, fRR, RRgRR, opts, pinv_cutoffs)
         if 'EAT' in initialization:
             key = 'eat'
             Ms[key], error2s[key], pinvs[key], info["eat_metric_error"] = initial_truncation_EAT(M0, M1, fgf, fRR, RRgRR, opts, pinv_cutoffs)
@@ -399,6 +407,248 @@ def calculate_truncation_error2(fMM, fgf, fRR, RRgRR):
         fMM = fMM.fuse_legs(axes=[(0, 1)])
     delta = fRR - fMM
     return abs(vdot(delta, fgf @ delta).item()) / RRgRR
+
+
+
+
+def build_g(orthbasis_slices, data_r0, R0, R1, shape_slices, len_t, G0):
+    g = []
+    for key1 in orthbasis_slices.keys():
+        for ii in range(orthbasis_slices[key1].shape[1]):
+            g.append([])
+            tensor_q1 = yastn.Tensor(config=data_r0[1]['config'], s=(R0.get_signature()[0], R1.get_signature()[1]))
+            tensor_q1.set_block(ts=(key1[:len_t], key1[len_t:]),
+                                val=orthbasis_slices[key1][:,ii].reshape(shape_slices[key1][0], shape_slices[key1][1]),
+                                Ds=[shape_slices[key1][0], shape_slices[key1][1]])
+            for key2 in orthbasis_slices.keys():
+                for jj in range(orthbasis_slices[key2].shape[1]):
+                    tensor_q2 = yastn.Tensor(config=data_r0[1]['config'], s=(R0.get_signature()[0], R1.get_signature()[1]))
+                    tensor_q2.set_block(ts=(key2[:len_t], key2[len_t:]),
+                                        val=orthbasis_slices[key2][:,jj].reshape(shape_slices[key2][0], shape_slices[key2][1]),
+                                        Ds=[shape_slices[key2][0], shape_slices[key2][1]])
+                    g[len(g) - 1].append(yastn.tensordot(tensor_q2, yastn.tensordot(tensor_q1, G0, axes=((0, 1), (2, 3))), axes=((0, 1), (0, 1)), conj=(1, 0)).to_numpy().flatten()[0])
+    g = np.array(g)
+    return g
+
+def initial_truncation_Loop(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs, epsilon_lr=1e-6, epsilon_sqrtm=1e-6):
+
+    R0, S, R1 = svd(R0 @ R1, sU=R0.s[1])
+    S = S.sqrt()
+    R0, R1 = S.broadcast(R0, R1, axes=(1, 0))
+
+    G0 = fgf.unfuse_legs(axes=(0, 1))
+
+    data_r0 = R0.T.compress_to_1d()
+    accumulated = 0
+    r0_slices = {}
+
+    len_t = len(data_r0[1]['struct'].t[0]) // 2
+
+    for ii in range(len(data_r0[1]['struct'].D)):
+        r0_slices[data_r0[1]['struct'].t[ii]] = []
+        Ds = data_r0[1]['struct'].D[ii]
+        for _ in range(Ds[0]):
+            data = data_r0[0][accumulated:(accumulated + Ds[1])]
+            tensor = yastn.Tensor(config=data_r0[1]['config'], s=R0.T.get_signature())
+            tensor.set_block(ts=(data_r0[1]['struct'].t[ii][0:len_t], data_r0[1]['struct'].t[ii][len_t:]), val=data, Ds=[1, Ds[1]])
+            r0_slices[data_r0[1]['struct'].t[ii]].append(tensor.T)
+            accumulated = accumulated + Ds[1]
+
+    data_r1 = R1.compress_to_1d()
+    accumulated = 0
+    r1_slices = {}
+    for ii in range(len(data_r1[1]['struct'].D)):
+        r1_slices[data_r1[1]['struct'].t[ii]] = []
+        Ds = data_r1[1]['struct'].D[ii]
+        for _ in range(Ds[0]):
+            data = data_r1[0][accumulated:(accumulated + Ds[1])]
+            tensor = yastn.Tensor(config=data_r1[1]['config'], s=R1.get_signature())
+            tensor.set_block(ts=(data_r1[1]['struct'].t[ii][0:len_t], data_r1[1]['struct'].t[ii][:len_t]), val=data, Ds=[1, Ds[1]])
+            r1_slices[data_r1[1]['struct'].t[ii]].append(tensor)
+            accumulated = accumulated + Ds[1]
+
+    block_stop = {}
+    accumulated = 0
+    for ii in range(len(data_r1[1]['struct'].D)):
+        accumulated = accumulated + data_r1[1]['struct'].D[ii][0]
+        block_stop[data_r1[1]['struct'].t[ii]] = accumulated
+
+    orthbasis_slices = {}
+    coef_slices = {}
+    r_slices = {}
+    shape_slices = {}
+
+    # Find the minimum basis supporting rj
+
+    for ii in range(len(data_r0[1]['struct'].D)):
+        r0s = r0_slices[data_r0[1]['struct'].t[ii]]
+        r1s = r1_slices.get(data_r0[1]['struct'].t[ii])
+        r_slices[data_r0[1]['struct'].t[ii]] = []
+        if r1s is not None:
+            for kk in range(len(r0s)):
+                r0 = r0s[kk]
+                r1 = r1s[kk]
+                temp = (r0 @ r1).to_numpy()
+                shape_slices[data_r0[1]['struct'].t[ii]] = temp.shape
+                r_slices[data_r0[1]['struct'].t[ii]].append(temp.flatten())
+
+            r_slices[data_r0[1]['struct'].t[ii]] = np.array(r_slices[data_r0[1]['struct'].t[ii]]).T
+            orthbasis_slices[data_r0[1]['struct'].t[ii]], coef_slices[data_r0[1]['struct'].t[ii]] = np.linalg.qr(r_slices[data_r0[1]['struct'].t[ii]], "reduced")
+
+
+    for key in orthbasis_slices.keys():
+        [u, s, vh] = np.linalg.svd(coef_slices[key], full_matrices=False)
+        truncate = sum((s / s[0]) > epsilon_lr)
+        reduced_basis = orthbasis_slices[key] @ u[:, :truncate]
+        reduced_coef = np.diag(s[:truncate]) @ vh[:truncate, :]
+        orthbasis_slices[key] = reduced_basis
+        coef_slices[key] = reduced_coef
+
+    # Build g in this basis:
+    g = build_g(orthbasis_slices, data_r0, R0, R1, shape_slices, len_t, G0)
+
+    S, W = np.linalg.eigh(g)
+    truncation = sum((S / S[0]) > epsilon_sqrtm)
+    S = S[:truncation]
+    W = W[:, :truncation]
+    g_sqrt = np.diag(np.sqrt(S)) @ W.conj().T
+
+    # direct sum of symmetric sectors
+
+    coef_direct_sum = []
+    ii = 0
+    for k1 in coef_slices.keys():
+        for jj in range(coef_slices[k1].shape[1]):
+            coef_direct_sum.append([])
+            for k2 in coef_slices.keys():
+                if k2 == k1:
+                    coef_direct_sum[ii] = coef_direct_sum[ii] + coef_slices[k1][:, jj].tolist()
+                else:
+                    coef_direct_sum[ii] = coef_direct_sum[ii] + [0 for _ in range(coef_slices[k2].shape[0])]
+            ii = ii + 1
+    coef_direct_sum = np.array(coef_direct_sum).T
+    # print(coef_direct_sum[:, 2])
+
+
+    # Target vector
+    vec_target = np.sum(coef_direct_sum, axis=(1, ))
+    vec_target = g_sqrt @ vec_target
+
+    print(np.linalg.norm(vec_target))
+    # xcc
+
+    # normalized_overlap = []
+    g_sqrt_coef_direct_sum = g_sqrt @ coef_direct_sum
+    omp = OrthogonalMatchingPursuit(n_nonzero_coefs=min(opts_svd['D_total'], g_sqrt_coef_direct_sum.shape[1]))
+    omp.fit(g_sqrt_coef_direct_sum, vec_target)
+    coef = omp.coef_
+
+
+    approx_vec = g_sqrt_coef_direct_sum @ coef
+    residual = np.linalg.norm(approx_vec - vec_target) / np.linalg.norm(vec_target)
+    picked_vec = np.where(coef != 0)[0]
+    print(residual, coef, picked_vec)
+
+
+    additional_basis = {}
+    for vec in picked_vec:
+        previous = 0
+        for key in block_stop.keys():
+            if block_stop[key] > vec:
+                if additional_basis.get(key) is None:
+                    additional_basis[key] = [vec - previous]
+                else:
+                    additional_basis[key].append(vec - previous)
+                break
+            previous = block_stop[key]
+
+
+    orthbasis_slices = {}
+    coef_slices = {}
+    r_slices = {}
+    shape_slices = {}
+
+
+    num_of_vecs = 0
+    target_vecs = []
+    basis_vecs = []
+    for ii in range(len(data_r0[1]['struct'].D)):
+        r0s = r0_slices[data_r0[1]['struct'].t[ii]]
+        r1s = r1_slices.get(data_r0[1]['struct'].t[ii])
+        r_slices[data_r0[1]['struct'].t[ii]] = []
+        if r1s is not None:
+            for kk in range(len(r0s)):
+                r0 = r0s[kk]
+                if additional_basis.get(data_r0[1]['struct'].t[ii]) is None:
+                    r1 = r1s[kk]
+                    temp = (r0 @ r1).to_numpy()
+                    shape_slices[data_r0[1]['struct'].t[ii]] = temp.shape
+                    r_slices[data_r0[1]['struct'].t[ii]].append(temp.flatten())
+                    target_vecs.append(num_of_vecs)
+                    num_of_vecs = num_of_vecs + 1
+                else:
+                    if kk in additional_basis[data_r0[1]['struct'].t[ii]]:
+                        for ll in additional_basis[data_r0[1]['struct'].t[ii]]:
+                            r1 = r1s[ll]
+                            temp = (r0 @ r1).to_numpy()
+                            shape_slices[data_r0[1]['struct'].t[ii]] = temp.shape
+                            r_slices[data_r0[1]['struct'].t[ii]].append(temp.flatten())
+                            basis_vecs.append(num_of_vecs)
+                            if ll == kk:
+                                target_vecs.append(num_of_vecs)
+                            num_of_vecs = num_of_vecs + 1
+                    else:
+                        r1 = r1s[kk]
+                        temp = (r0 @ r1).to_numpy()
+                        shape_slices[data_r0[1]['struct'].t[ii]] = temp.shape
+                        r_slices[data_r0[1]['struct'].t[ii]].append(temp.flatten())
+                        target_vecs.append(num_of_vecs)
+                        num_of_vecs = num_of_vecs + 1
+
+
+            r_slices[data_r0[1]['struct'].t[ii]] = np.array(r_slices[data_r0[1]['struct'].t[ii]]).T
+            orthbasis_slices[data_r0[1]['struct'].t[ii]], coef_slices[data_r0[1]['struct'].t[ii]] = np.linalg.qr(r_slices[data_r0[1]['struct'].t[ii]], "reduced")
+
+    for key in orthbasis_slices.keys():
+        [u, s, vh] = np.linalg.svd(coef_slices[key], full_matrices=False)
+        truncate = sum((s / s[0]) > epsilon_lr)
+        reduced_basis = orthbasis_slices[key] @ u[:, :truncate]
+        reduced_coef = np.diag(s[:truncate]) @ vh[:truncate, :]
+        orthbasis_slices[key] = reduced_basis
+        coef_slices[key] = reduced_coef
+
+    coef_direct_sum = []
+    ii = 0
+    for k1 in coef_slices.keys():
+        for jj in range(coef_slices[k1].shape[1]):
+            coef_direct_sum.append([])
+            for k2 in coef_slices.keys():
+                if k2 == k1:
+                    coef_direct_sum[ii] = coef_direct_sum[ii] + coef_slices[k1][:, jj].tolist()
+                else:
+                    coef_direct_sum[ii] = coef_direct_sum[ii] + [0 for _ in range(coef_slices[k2].shape[0])]
+            ii = ii + 1
+    coef_direct_sum = np.array(coef_direct_sum).T
+
+    basis_vecs = np.array(basis_vecs)
+    target_vecs = np.array(target_vecs)
+
+    g = build_g(orthbasis_slices, data_r0, R0, R1, shape_slices, len_t, G0)
+
+    S, W = np.linalg.eigh(g)
+    truncation = sum((S / S[0]) > epsilon_sqrtm)
+    S = S[:truncation]
+    W = W[:, :truncation]
+    g_sqrt = np.diag(np.sqrt(S)) @ W.conj().T
+
+    vec_target = np.sum(coef_direct_sum[:, target_vecs], axis=(1, ))
+    vec_target = g_sqrt @ vec_target
+
+    g_sqrt_coef_direct_sum = g_sqrt @ coef_direct_sum
+    coef_optimized, residual, _, _ = np.linalg.lstsq(g_sqrt_coef_direct_sum[:, basis_vecs], vec_target)
+    print(np.sqrt(residual) / np.linalg.norm(vec_target), coef_optimized)
+
+
 
 
 def initial_truncation_EAT(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs):
