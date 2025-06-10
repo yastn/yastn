@@ -277,7 +277,7 @@ def truncate_optimize_(fgf, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter
 
         if 'Loop' in initialization:
             key = "loop"
-            initial_truncation_Loop(M0, M1, fgf, fRR, RRgRR, opts, pinv_cutoffs)
+            initial_truncation_sklearn(M0, M1, fgf, fRR, RRgRR, opts, pinv_cutoffs)
         if 'EAT' in initialization:
             key = 'eat'
             Ms[key], error2s[key], pinvs[key], info["eat_metric_error"] = initial_truncation_EAT(M0, M1, fgf, fRR, RRgRR, opts, pinv_cutoffs)
@@ -408,29 +408,181 @@ def calculate_truncation_error2(fMM, fgf, fRR, RRgRR):
     delta = fRR - fMM
     return abs(vdot(delta, fgf @ delta).item()) / RRgRR
 
-
-
-
-def build_g(orthbasis_slices, data_r0, R0, R1, shape_slices, len_t, G0):
+def build_g(basis_slices, data_r0, R0, R1, shape_slices, len_t, G0):
     g = []
-    for key1 in orthbasis_slices.keys():
-        for ii in range(orthbasis_slices[key1].shape[1]):
+    for key1 in basis_slices.keys():
+        for ii in range(basis_slices[key1].shape[1]):
             g.append([])
             tensor_q1 = yastn.Tensor(config=data_r0[1]['config'], s=(R0.get_signature()[0], R1.get_signature()[1]))
             tensor_q1.set_block(ts=(key1[:len_t], key1[len_t:]),
-                                val=orthbasis_slices[key1][:,ii].reshape(shape_slices[key1][0], shape_slices[key1][1]),
+                                val=basis_slices[key1][:,ii].reshape(shape_slices[key1][0], shape_slices[key1][1]),
                                 Ds=[shape_slices[key1][0], shape_slices[key1][1]])
-            for key2 in orthbasis_slices.keys():
-                for jj in range(orthbasis_slices[key2].shape[1]):
+            for key2 in basis_slices.keys():
+                for jj in range(basis_slices[key2].shape[1]):
                     tensor_q2 = yastn.Tensor(config=data_r0[1]['config'], s=(R0.get_signature()[0], R1.get_signature()[1]))
                     tensor_q2.set_block(ts=(key2[:len_t], key2[len_t:]),
-                                        val=orthbasis_slices[key2][:,jj].reshape(shape_slices[key2][0], shape_slices[key2][1]),
+                                        val=basis_slices[key2][:,jj].reshape(shape_slices[key2][0], shape_slices[key2][1]),
                                         Ds=[shape_slices[key2][0], shape_slices[key2][1]])
                     g[len(g) - 1].append(yastn.tensordot(tensor_q2, yastn.tensordot(tensor_q1, G0, axes=((0, 1), (2, 3))), axes=((0, 1), (0, 1)), conj=(1, 0)).to_numpy().flatten()[0])
     g = np.array(g)
     return g
 
-def initial_truncation_Loop(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs, epsilon_lr=1e-6, epsilon_sqrtm=1e-6):
+def build_g_rj(r_slices:dict, G0:yastn.Tensor, weight:dict):
+
+    g = []
+    for key1 in r_slices.keys():
+        for ii in range(len(r_slices[key1])):
+            g.append([])
+            for key2 in r_slices.keys():
+                for jj in range(len(r_slices[key2])):
+                    temp = yastn.tensordot(r_slices[key1][ii], G0, axes=((0, 1), (2, 3)))
+                    temp = yastn.tensordot(r_slices[key2][jj], temp, axes=((0, 1), (0, 1)), conj=(1, 0))
+                    g[len(g) - 1].append(yastn.tensordot(r_slices[key2][jj],
+                                                         yastn.tensordot(r_slices[key1][ii],
+                                                                         G0, axes=((0, 1), (2, 3))), axes=((0, 1), (0, 1)), conj=(1, 0)).to_numpy().flatten()[0] * weight[key2][jj] * weight[key1][ii])
+    return np.array(g)
+
+
+def initial_truncation_ZMT1(R0, R1, fgf, opts_svd, epsilon_g, epsilon_zero):
+
+    R0, S, R1 = svd(R0 @ R1, sU=R0.s[1])
+    S = S.sqrt()
+    R0, R1 = S.broadcast(R0, R1, axes=(1, 0))
+
+    G0 = fgf.unfuse_legs(axes=(0, 1))
+
+    Gremove = G0.fuse_legs(axes=((0, 2), (1, 3)))
+    Gremove.remove_zero_blocks()
+    _, S, _ = svd_with_truncation(Gremove, axes=(0, 1), policy='lowrank', D_block=2, D_total=2)
+    S = np.diag(S.to_numpy())
+    print("LOOP:", np.min(S) / np.max(S))
+
+    # slice RA to column vectors
+    data_r0 = R0.T.compress_to_1d()
+    accumulated = 0
+    r0_slices = {}
+    weight = {}
+    D_total = 0
+    len_t = len(data_r0[1]['struct'].t[0]) // 2
+    for ii in range(len(data_r0[1]['struct'].D)):
+        r0_slices[data_r0[1]['struct'].t[ii]] = []
+        Ds = data_r0[1]['struct'].D[ii]
+        weight[data_r0[1]['struct'].t[ii]] = [1 for _ in range (Ds[0])]
+        D_total = D_total + Ds[0]
+        for _ in range(Ds[0]):
+            data = data_r0[0][accumulated:(accumulated + Ds[1])]
+            tensor = yastn.Tensor(config=data_r0[1]['config'], s=R0.T.get_signature())
+            tensor.set_block(ts=(data_r0[1]['struct'].t[ii][0:len_t], data_r0[1]['struct'].t[ii][len_t:]), val=data, Ds=[1, Ds[1]])
+            r0_slices[data_r0[1]['struct'].t[ii]].append(tensor.T)
+            accumulated = accumulated + Ds[1]
+
+    # slice RB to row vectors
+    data_r1 = R1.compress_to_1d()
+    accumulated = 0
+    r1_slices = {}
+    for ii in range(len(data_r1[1]['struct'].D)):
+        r1_slices[data_r1[1]['struct'].t[ii]] = []
+        Ds = data_r1[1]['struct'].D[ii]
+        for _ in range(Ds[0]):
+            data = data_r1[0][accumulated:(accumulated + Ds[1])]
+            tensor = yastn.Tensor(config=data_r1[1]['config'], s=R1.get_signature())
+            tensor.set_block(ts=(data_r1[1]['struct'].t[ii][0:len_t], data_r1[1]['struct'].t[ii][:len_t]), val=data, Ds=[1, Ds[1]])
+            r1_slices[data_r1[1]['struct'].t[ii]].append(tensor)
+            accumulated = accumulated + Ds[1]
+
+    # build Rj=RAj * RBj
+    r_slices = {}
+    for ii in range(len(data_r0[1]['struct'].D)):
+        r0s = r0_slices[data_r0[1]['struct'].t[ii]]
+        r1s = r1_slices.get(data_r0[1]['struct'].t[ii])
+        r_slices[data_r0[1]['struct'].t[ii]] = []
+        if r1s is not None:
+            for kk in range(len(r0s)):
+                r0 = r0s[kk]
+                r1 = r1s[kk]
+                r_slices[data_r0[1]['struct'].t[ii]].append(r0 @ r1)
+
+    # build g_ij
+    removed = 0
+    while True:
+        g = build_g_rj(r_slices, G0, weight)
+        S, W = np.linalg.eigh(g)
+
+
+        if ((abs(S[0]) / abs(S[-1])) > epsilon_zero) and ((D_total - removed) <= opts_svd['D_total']):
+            break
+
+        to_be_eliminated = np.argmax(np.abs(W[:, 0].T))
+        s = 0
+
+        # update weight kick dropped index
+        max_weight = -1
+        for key in r_slices.keys():
+            eliminate_ii = None
+            for ii in range(len(r_slices[key])):
+                if s == to_be_eliminated:
+                    eliminate_ii = ii
+                else:
+                    weight[key][ii] = weight[key][ii] * (1 - W[s,0] / W[to_be_eliminated,0])
+                    if weight[key][ii] > max_weight:
+                        max_weight = weight[key][ii]
+                s = s + 1
+            if eliminate_ii is not None:
+                weight[key].pop(eliminate_ii)
+                r_slices[key].pop(eliminate_ii)
+                r0_slices[key].pop(eliminate_ii)
+                r1_slices[key].pop(eliminate_ii)
+
+        for key in r_slices.keys():
+            eliminate_ii = -1
+            for ii in range(len(r_slices[key])):
+                weight[key][ii] = weight[key][ii] / max_weight
+
+        removed = removed + 1
+        # break
+
+    # Build MA and MB
+    MA = yastn.Tensor(config=R0.config, s=R0.get_signature())
+    for key in r0_slices.keys():
+        temp_block = []
+        for ii in range(len(r0_slices[key])):
+            temp_block.append(r0_slices[key][ii]._data)
+        temp_block = np.array(temp_block).T
+        if len(temp_block) != 0:
+            MA.set_block(ts=(r0_slices[key][ii].get_legs()[0].t[0], r0_slices[key][ii].get_legs()[1].t[0]),
+                         Ds=temp_block.shape,
+                         val=temp_block)
+
+    MB = yastn.Tensor(config=R1.config, s=R1.get_signature())
+    for key in r1_slices.keys():
+        temp_block = []
+        for ii in range(len(r1_slices[key])):
+            temp_block.append(r1_slices[key][ii]._data)
+        temp_block = np.array(temp_block)
+        if len(temp_block) != 0:
+            MB.set_block(ts=(r1_slices[key][ii].get_legs()[0].t[0], r1_slices[key][ii].get_legs()[1].t[0]),
+                         Ds=temp_block.shape,
+                         val=temp_block)
+
+
+    MAMB = MA @ MB
+    RARB = R0 @ R1
+
+    diff = lambda x: yastn.tensordot((x * MAMB-RARB),
+                          yastn.tensordot((x * MAMB-RARB),
+                          G0, axes=((0, 1), (2, 3))), axes=((0, 1), (0, 1)), conj=(1, 0)).to_numpy().flatten()[0] ** 0.5
+    from scipy.optimize import minimize
+    res = minimize(diff, 1)
+    norm_diff = yastn.tensordot(RARB,
+                          yastn.tensordot(RARB,
+                          G0, axes=((0, 1), (2, 3))), axes=((0, 1), (0, 1)), conj=(1, 0)).to_numpy().flatten()[0] ** 0.5
+    print(res.fun / norm_diff)
+
+
+
+def initial_truncation_sklearn(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs, epsilon_lr=1e-6, epsilon_sqrtm=1e-6):
+
+    initial_truncation_ZMT1(R0, R1, fgf, opts_svd, 1e-6, 1e-10)
 
     R0, S, R1 = svd(R0 @ R1, sU=R0.s[1])
     S = S.sqrt()
@@ -534,7 +686,6 @@ def initial_truncation_Loop(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs, eps
     vec_target = np.sum(coef_direct_sum, axis=(1, ))
     vec_target = g_sqrt @ vec_target
 
-    print(np.linalg.norm(vec_target))
     # xcc
 
     # normalized_overlap = []
