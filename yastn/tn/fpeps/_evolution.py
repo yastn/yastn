@@ -20,6 +20,7 @@ from ._gates_auxiliary import apply_gate_onsite, apply_gate_nn, gate_fix_order, 
 from typing import NamedTuple
 import yastn
 import numpy as np
+from scipy.optimize import minimize
 
 
 class Evolution_out(NamedTuple):
@@ -571,11 +572,10 @@ def initial_truncation_ZMT1(R0, R1, fgf, opts_svd, fRR, RRgRR, epsilon_zero, pin
     MAMB = (MA @ MB)
 
     diff = lambda x: calculate_truncation_error2(x * MAMB, fgf, fRR, RRgRR)
-    from scipy.optimize import minimize
     res = minimize(diff, 1)
     MA = res.x ** 0.5 * MA
     MB = res.x ** 0.5 * MB
-    return (MA, MB), calculate_truncation_error2(res.x * MAMB, fgf, fRR, RRgRR)
+    return (MA, MB), res.fun
     # return (MA, MB), calculate_truncation_error2(MAMB, fgf, fRR, RRgRR)
 
 
