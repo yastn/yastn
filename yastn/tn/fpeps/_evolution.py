@@ -266,18 +266,23 @@ def truncate_optimize_(fgf, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter
     fRR = (R0 @ R1).fuse_legs(axes=[(0, 1)])
     fgRR = fgf @ fRR
     RRgRR = abs(vdot(fRR, fgRR).item())
-    # for test
-    print("test: sqrt(RRgRR)", RRgRR ** .5)
-    #
+
     pinv_cutoffs = sorted(pinv_cutoffs)
     M0, M1 = R0, R1
     for opts in [opts_svd] if isinstance(opts_svd, dict) else opts_svd:
 
         Ms, error2s, pinvs, iters = {}, {}, {}, {}
 
-        if 'Loop' in initialization:
-            key = "loop"
-            initial_truncation_sklearn(M0, M1, fgf, fRR, RRgRR, opts, pinv_cutoffs)
+        if 'SCIKIT' in initialization:
+            key = "scikit"
+            Ms[key], error2s[key] = initial_truncation_sklearn(M0, M1, fgf, fRR, RRgRR, opts, pinv_cutoffs)
+            key = "scikit_opt"
+            Ms[key], error2s[key], pinvs[key], iters[key] = optimize_truncation(*Ms['scikit'], error2s['scikit'], fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter)
+        if 'ZMT1' in initialization:
+            key = "ZMT1"
+            Ms[key], error2s[key] = initial_truncation_ZMT1(M0, M1, fgf, opts_svd, fRR, RRgRR, 1e-10, pinv_cutoffs)
+            key = "ZMT1_opt"
+            Ms[key], error2s[key], pinvs[key], iters[key] = optimize_truncation(*Ms['ZMT1'], error2s['ZMT1'], fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter)
         if 'EAT' in initialization:
             key = 'eat'
             Ms[key], error2s[key], pinvs[key], info["eat_metric_error"] = initial_truncation_EAT(M0, M1, fgf, fRR, RRgRR, opts, pinv_cutoffs)
@@ -290,7 +295,7 @@ def truncate_optimize_(fgf, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter
             key = 'svd_opt'
             Ms[key], error2s[key], pinvs[key], iters[key] = optimize_truncation(*Ms['svd'], error2s['svd'], fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter)
         if len(Ms) == 0:
-            raise YastnError(f"{initialization=} not recognized. Should contain 'SVD' or 'EAT'.")
+            raise YastnError(f"{initialization=} not recognized. Should contain 'SVD', 'EAT', 'SCIKIT' or 'ZMT1'.")
 
         error2s = {k: v ** 0.5 for k, v in error2s.items()}
         key = min(error2s, key=error2s.get)
@@ -443,11 +448,11 @@ def build_g_rj(r_slices:dict, G0:yastn.Tensor, weight:dict):
     return np.array(g)
 
 
-def initial_truncation_ZMT1(R0, R1, fgf, opts_svd, epsilon_g, epsilon_zero):
+def initial_truncation_ZMT1(R0, R1, fgf, opts_svd, fRR, RRgRR, epsilon_zero, pinv_cutoffs):
 
-    R0, S, R1 = svd(R0 @ R1, sU=R0.s[1])
-    S = S.sqrt()
-    R0, R1 = S.broadcast(R0, R1, axes=(1, 0))
+    initial_truncation_sklearn(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs, epsilon_lr=1e-10, epsilon_sqrtm=1e-10)
+
+    (R0, R1), _, _, _= initial_truncation_EAT(R0, R1, fgf, fRR, RRgRR, {"D_total": R0.to_numpy().shape[1], 'tol_block': -1}, pinv_cutoffs)
 
     G0 = fgf.unfuse_legs(axes=(0, 1))
 
@@ -568,25 +573,22 @@ def initial_truncation_ZMT1(R0, R1, fgf, opts_svd, epsilon_g, epsilon_zero):
     MAMB = MA @ MB
     RARB = R0 @ R1
 
-    diff = lambda x: yastn.tensordot((x * MAMB-RARB),
-                          yastn.tensordot((x * MAMB-RARB),
-                          G0, axes=((0, 1), (2, 3))), axes=((0, 1), (0, 1)), conj=(1, 0)).to_numpy().flatten()[0] ** 0.5
+    diff = lambda x: calculate_truncation_error2(x * MAMB, fgf, fRR, RRgRR)
     from scipy.optimize import minimize
     res = minimize(diff, 1)
-    norm_diff = yastn.tensordot(RARB,
-                          yastn.tensordot(RARB,
-                          G0, axes=((0, 1), (2, 3))), axes=((0, 1), (0, 1)), conj=(1, 0)).to_numpy().flatten()[0] ** 0.5
-    print(res.fun / norm_diff)
+    MA = res.x ** 0.5 * MA
+    MB = res.x ** 0.5 * MB
+    return (MA, MB), res.fun
 
 
 
-def initial_truncation_sklearn(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs, epsilon_lr=1e-6, epsilon_sqrtm=1e-6):
+def initial_truncation_sklearn(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs, epsilon_lr=1e-10, epsilon_sqrtm=1e-10):
 
-    initial_truncation_ZMT1(R0, R1, fgf, opts_svd, 1e-6, 1e-10)
+    # R0, S, R1 = svd(R0 @ R1, sU=R0.s[1])
+    # S = S.sqrt()
+    # R0, R1 = S.broadcast(R0, R1, axes=(1, 0))
 
-    R0, S, R1 = svd(R0 @ R1, sU=R0.s[1])
-    S = S.sqrt()
-    R0, R1 = S.broadcast(R0, R1, axes=(1, 0))
+    (R0, R1), _, _, _= initial_truncation_EAT(R0, R1, fgf, fRR, RRgRR, {"D_total": R0.to_numpy().shape[1], 'tol_block': -1}, pinv_cutoffs)
 
     G0 = fgf.unfuse_legs(axes=(0, 1))
 
@@ -698,7 +700,6 @@ def initial_truncation_sklearn(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs, 
     approx_vec = g_sqrt_coef_direct_sum @ coef
     residual = np.linalg.norm(approx_vec - vec_target) / np.linalg.norm(vec_target)
     picked_vec = np.where(coef != 0)[0]
-    print(residual, coef, picked_vec)
 
 
     additional_basis = {}
@@ -797,7 +798,56 @@ def initial_truncation_sklearn(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs, 
 
     g_sqrt_coef_direct_sum = g_sqrt @ coef_direct_sum
     coef_optimized, residual, _, _ = np.linalg.lstsq(g_sqrt_coef_direct_sum[:, basis_vecs], vec_target)
-    print(np.sqrt(residual) / np.linalg.norm(vec_target), coef_optimized)
+
+    MA = yastn.Tensor(config=R0.config, s=R0.get_signature())
+    accumulated = 0
+    for key in r0_slices.keys():
+        temp_block = []
+        for ii in range(len(r0_slices[key])):
+            if coef[accumulated] != 0:
+                temp_block.append(r0_slices[key][ii]._data)
+            accumulated = accumulated + 1
+        temp_block = np.array(temp_block).T
+        if len(temp_block) != 0:
+            MA.set_block(ts=(r0_slices[key][ii].get_legs()[0].t[0], r0_slices[key][ii].get_legs()[1].t[0]),
+                         Ds=temp_block.shape,
+                         val=temp_block)
+
+    MB = yastn.Tensor(config=R1.config, s=R1.get_signature())
+    accumulated = 0
+    for key in r1_slices.keys():
+        temp_block = []
+        for ii in range(len(r1_slices[key])):
+            if coef[accumulated] != 0:
+                temp_block.append(r1_slices[key][ii]._data)
+            accumulated = accumulated + 1
+        temp_block = np.array(temp_block)
+        if len(temp_block) != 0:
+            MB.set_block(ts=(r1_slices[key][ii].get_legs()[0].t[0], r1_slices[key][ii].get_legs()[1].t[0]),
+                         Ds=temp_block.shape,
+                         val=temp_block)
+
+    # Build the weight matrix
+    accumulated = 0
+    W = yastn.Tensor(config=R0.config, s=(MB.get_signature()[0], -MB.get_signature()[0]))
+    for key in additional_basis.keys():
+        temp_block = np.array(coef_optimized[accumulated: (accumulated + len(additional_basis[key]) * len(additional_basis[key]))]).reshape(len(additional_basis[key]), len(additional_basis[key]))
+        W.set_block(ts=(key[:len_t], key[len_t:]),
+                         Ds=temp_block.shape,
+                         val=temp_block)
+        accumulated = accumulated + len(additional_basis[key]) * len(additional_basis[key])
+
+
+    U, S, V = svd(W, sU=MA.s[1])
+    S = S.sqrt()
+    U, V = S.broadcast(U, V, axes=(1, 0))
+
+    MA = MA @ U
+    MB = V @ MB
+    error2 = calculate_truncation_error2(MA @ MB, fgf, fRR, RRgRR)
+
+    return (MA, MB), error2
+
 
 
 
