@@ -799,12 +799,6 @@ def fp_ctmrg(env: EnvCTM, \
     raw_peps_params= tuple( env.psi.ket[s]._data for s in env.psi.ket.sites() )
     return FixedPoint.apply(env, ctm_opts_fwd, ctm_opts_fp, *raw_peps_params)
 
-@torch.no_grad()
-def fp_ctm_conv_check(env, history, corner_tol, verbosity=0):
-    converged, max_dsv, history = ctm_conv_corner_spec(env, history, corner_tol)
-    if verbosity>2:
-        log.log(logging.INFO, f"CTM iter {len(history)} |delta_C| {max_dsv}")
-    return converged, history
 
 class FixedPoint(torch.autograd.Function):
     ctm_log, t_ctm, t_check = None, None, None
@@ -908,15 +902,18 @@ class FixedPoint(torch.autograd.Function):
         for sweep in range(max_sweeps):
             t0 = time.perf_counter()
             ctm_out_info= next(ctm_itr)
-            t_ctm += time.perf_counter()-t0
+            t1 = time.perf_counter()
+            t_ctm += t1-t0
 
-            t0 = time.perf_counter()
-            converged, conv_history = fp_ctm_conv_check(env, conv_history, corner_tol, \
-                                                        verbosity= kwargs.get('verbosity',0))
-            t_check += time.perf_counter()-t0
-
+            t2 = time.perf_counter()
+            converged, max_dsv, conv_history = ctm_conv_corner_spec(env, conv_history, corner_tol)
+            t_check += time.perf_counter()-t2
+            if kwargs.get('verbosity',0)>2:
+                log.log(logging.INFO, f"CTM iter {len(conv_history)} |delta_C| {max_dsv} t {t1-t0} [s]")
+            
             if converged: 
-                log.info(f"CTM converged sweeps {sweep+1} history {[r['max_dsv'] for r in conv_history]}.")
+                log.info(f"CTM converged: sweeps {sweep+1} t_ctm {t_ctm} [s] t_check {t_check} [s]"
+                         +f" history {[r['max_dsv'] for r in conv_history]}.")
                 break
 
         return env, converged, conv_history, t_ctm, t_check
