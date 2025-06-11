@@ -12,12 +12,20 @@ import torch.utils.checkpoint
 
 
 from .... import Tensor, zeros, eye, YastnError, tensordot, einsum, diag, rand, qr
-from ._env_ctm import ctm_conv_corner_spec, decompress_env_1d
+from ._env_ctm import ctm_conv_corner_spec, decompress_env_1d, EnvCTM_projectors
 from .... import zeros, decompress_from_1d
 from ....tensor._tests import _test_axes_match
 from .rdm import *
+log = logging.getLogger(__name__)
 
-log = logging.getLogger("FixedPoint")
+
+class NoFixedPointError(Exception):
+    def __init__(self, code, message=None):
+        if message is None:
+            message = "No fixed point found"
+        self.message = message
+        super().__init__(self.message)  # Pass message to the base class
+        self.code = code          				 # Add a custom attribute for error codes
 
 
 def env_raw_data(env):
@@ -127,14 +135,6 @@ def robust_eigsh(A, initial_maxiter, max_maxiter, k=3, retry_factor=3, sigma=Non
         else:
             log.log(logging.INFO, f"Eigsh Warning: No convergence after {initial_maxiter} iterations. Retrying with more iterations...")
             return robust_eigsh(A, initial_maxiter * retry_factor, max_maxiter, k=k, retry_factor=retry_factor, sigma=sigma, **kwargs)
-
-class NoFixedPointError(Exception):
-    def __init__(self, code, message=None):
-        if message is None:
-            message = "No fixed point found"
-        self.message = message
-        super().__init__(self.message)  # Pass message to the base class
-        self.code = code          				 # Add a custom attribute for error codes
 
 def env_T_gauge_multi_sites(config, T_olds, T_news):
     #  Robust gauge-fixing from https://arxiv.org/abs/2311.11894
@@ -779,8 +779,8 @@ def find_gauge_multi_sites(env_old, env, verbose=False):
     return sigma_dict
 
 def fp_ctmrg(env: EnvCTM, \
-            ctm_opts_fwd : dict= {'opts_svd': {}, 'corner_tol': 1e-8, 'max_sweeps': 100,
-                'method': "2site", 'use_qr': False, 'svd_policy': 'fullrank', 'D_block': None}, \
+            ctm_opts_fwd : dict= {'method': "2site", 'use_qr': False, 'corner_tol': 1e-8, 'max_sweeps': 100, 
+                'svd_policy': 'fullrank', 'opts_svd': {}, 'D_block': None, 'verbosity': 0}, \
             ctm_opts_fp: dict= {'svd_policy': 'fullrank'}):
     r"""
     Compute the fixed-point environment for the given state using CTMRG.
@@ -799,6 +799,12 @@ def fp_ctmrg(env: EnvCTM, \
     raw_peps_params= tuple( env.psi.ket[s]._data for s in env.psi.ket.sites() )
     return FixedPoint.apply(env, ctm_opts_fwd, ctm_opts_fp, *raw_peps_params)
 
+@torch.no_grad()
+def fp_ctm_conv_check(env, history, corner_tol, verbosity=0):
+    converged, max_dsv, history = ctm_conv_corner_spec(env, history, corner_tol)
+    if verbosity>2:
+        log.log(logging.INFO, f"CTM iter {len(history)} |delta_C| {max_dsv}")
+    return converged, history
 
 class FixedPoint(torch.autograd.Function):
     ctm_log, t_ctm, t_check = None, None, None
@@ -882,13 +888,6 @@ class FixedPoint(torch.autograd.Function):
         env_out_data, slices = env_raw_data(env_in)
         return (env_out_data, )
 
-    @torch.no_grad()
-    def ctm_conv_check(env, history, corner_tol):
-        converged, max_dsv, history = ctm_conv_corner_spec(env, history, corner_tol)
-        print("max_dsv:", max_dsv)
-        log.log(logging.INFO, f"CTM iter {len(history)} |delta_C| {max_dsv}")
-        return converged, history
-
     def get_converged_env(
         env,
         method="2site",
@@ -900,20 +899,26 @@ class FixedPoint(torch.autograd.Function):
         **kwargs
     ):
         t_ctm, t_check = 0.0, 0.0
-        t_ctm_prev = time.perf_counter()
         converged, conv_history = False, []
+        
+        ctm_itr= env.ctmrg_(iterator_step=1, method=method,  max_sweeps=max_sweeps, 
+                   svd_policy=svd_policy, opts_svd=opts_svd, D_block=D_block,
+                   corner_tol=None, **kwargs)
 
         for sweep in range(max_sweeps):
-            env.update_(
-                opts_svd=opts_svd, method=method, use_qr=False, checkpoint_move=False, policy=svd_policy, D_block=D_block,
-            )
-            t_ctm_after = time.perf_counter()
-            t_ctm += t_ctm_after - t_ctm_prev
-            t_ctm_prev = t_ctm_after
+            t0 = time.perf_counter()
+            ctm_out_info= next(ctm_itr)
+            t_ctm += time.perf_counter()-t0
 
-            converged, conv_history = FixedPoint.ctm_conv_check(env, conv_history, corner_tol)
-            if converged:
+            t0 = time.perf_counter()
+            converged, conv_history = fp_ctm_conv_check(env, conv_history, corner_tol, \
+                                                        verbosity= kwargs.get('verbosity',0))
+            t_check += time.perf_counter()-t0
+
+            if converged: 
+                log.info(f"CTM converged sweeps {sweep+1} history {[r['max_dsv'] for r in conv_history]}.")
                 break
+
         return env, converged, conv_history, t_ctm, t_check
 
     @staticmethod

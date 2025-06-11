@@ -1199,6 +1199,7 @@ def ctm_conv_corner_spec(env : EnvCTM, history : Sequence[dict[tuple[Site,str],T
         else:
             return float('Inf')
     max_dsv = max(spec_diff(history[-1][k], history[-2][k]) for k in history[-1]) if len(history)>1 else float('Nan')
+    history[-1]['max_dsv'] = max_dsv
 
     return (corner_tol is not None and max_dsv < corner_tol), max_dsv, history
 
@@ -1206,17 +1207,33 @@ def ctm_conv_corner_spec(env : EnvCTM, history : Sequence[dict[tuple[Site,str],T
 def _iterate_ctmrg_(env, opts_svd, method, max_sweeps, iterator_step, corner_tol, **kwargs):
     """ Generator for ctmrg_(). """
     max_dsv, converged = None, False
-    for sweep in range(1, max_sweeps + 1):
-        env.update_(opts_svd=opts_svd, method=method, **kwargs)
+    proj_history = None # { site: {'hlt': {t0: D0, t1: D1, ...}, ..., 'vbr': ... } for site in env.sites() }
 
-        # use default CTM convergence check
+    for sweep in range(1, max_sweeps + 1):
+        current_proj= env.update_(opts_svd=opts_svd, method=method, proj_history= proj_history, **kwargs)
+
+        # Here, we have access to all projectors obtained in the previous CTM step
+        # For partial SVD solvers, we need 
+        # 1. estimate of how many singular triples to solve for in each block, both blocks kept in truncation
+        #    and blocks discarded in truncation
+        # 2. perform truncation, typically restricting only total number of singular triples
+        #
+        # For 1., 
+        if proj_history is None:
+            # Empty structure for projectors
+            proj_history = Peps(env.geometry)
+            for site in proj_history.sites(): proj_history[site] = EnvCTM_projectors()
+        for site in current_proj.sites():
+            for k, v in current_proj[site].__dict__.items():
+                if v is not None:
+                    setattr(proj_history[site], k, getattr(current_proj[site],k).get_legs(-1))
+
+        # Default CTM convergence check
         if corner_tol is not None:
             if sweep==1: history = []
             converged, max_dsv, history= ctm_conv_corner_spec(env.detach(), history, corner_tol)
             logging.info(f'Sweep = {sweep:03d}; max_diff_corner_singular_values = {max_dsv:0.2e}')
-
-            if converged:
-                break
+            if converged: break
 
         if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
             yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
