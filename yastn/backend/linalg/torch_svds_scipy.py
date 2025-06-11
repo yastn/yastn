@@ -63,14 +63,16 @@ class SVDSYMARNOLDI(torch.autograd.Function):
         return dA, None
 
 
-class SVDARNOLDI(torch.autograd.Function):
+class SVDS_SCIPY(torch.autograd.Function):
     @staticmethod
-    def forward(self, M, k, thresh=0.1, solver='arpack'):
+    def forward(self, M, k, thresh=0.1, solver='arpack', **kwargs):
+        # TODO should threshold be handled here or at call site ?
         r"""
         :param M: square matrix :math:`N \times N`
         :param k: desired rank (must be smaller than :math:`N`)
-        :param thresh: threshold for applying SVDARNOLDI instead of full SVD
+        :param thresh: threshold for applying partial SVD (svds) instead of full SVD
         :param solver: solver for scipy.sparse.linalg.svds
+        :param kwargs: additional keyword arguments for the scipy.sparse.linalg.svds
         :type M: torch.Tensor
         :type k: int
         :type thresh: float
@@ -81,9 +83,9 @@ class SVDARNOLDI(torch.autograd.Function):
 
         **Note:** `depends on scipy`
 
-        Return leading k-singular triples of a matrix M, by computing
-        the symmetric decomposition of :math:`H=MM^\dagger` as :math:`H= UDU^\dagger`
-        up to rank k. Partial eigendecomposition is done through Arnoldi method.
+        Return leading k-singular triples of a matrix M via SciPy. See  
+        https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.svds.html
+        for details on solver and solver options.
         """
         # input validation is provided by the scipy.sparse.linalg.eigsh /
         # scipy.sparse.linalg.svds
@@ -114,15 +116,16 @@ class SVDARNOLDI(torch.autograd.Function):
         #     V = M_nograd.t().conj() @ U * (1/S.to(dtype=torch.complex128))
         # else:
         #     V = M_nograd.t().conj() @ U * (1/S)
-        # V = Functional.normalize(V, p=2, dim=0)
+        # V = Functional.normalize(V, p=2, dim=0)        
 
+        # k is already passed as an argument
+        # propack default 10*k, arpack default min(M.size) * 10 as per scipy docs
+        kwargs.pop('k', None)
+        maxiter= kwargs.pop('maxiter', k*10 if solver == 'propack' else 10 * min(M.shape)) 
+        
         # ----- Option 1
         if min(M.shape)*thresh < k: # k / matrix size is too large for speed-up by iterative solver
-            # U, S, Vh = scipy.linalg.svd(M.detach().cpu().numpy())
-            if M.is_cuda:
-                U, S, Vh = torch.linalg.svd(M, full_matrices=True, driver='gesvd')
-            else:
-                U, S, Vh = torch.linalg.svd(M, full_matrices=True)
+            U, S, Vh = torch.linalg.svd(M, driver='gesvd' if M.is_cuda else None)
             U, S, Vh = U[:, :k], S[:k], Vh[:k, :]
             self.save_for_backward(U, S, Vh)
             return U, S, Vh
@@ -140,12 +143,10 @@ class SVDARNOLDI(torch.autograd.Function):
                 return B.detach().cpu().numpy()
 
             M_nograd= LinearOperator(M.size(), matvec=mv, rmatvec=vm)
-            maxiter= k*10 if solver == 'propack' else 10 * min(M.shape) # propack default 10*k, arpack default min(M.size) * 10 as per scipy docs
-            U, S, Vh= scipy.sparse.linalg.svds(M_nograd, k=k, solver=solver, maxiter=maxiter)
+            U, S, Vh= scipy.sparse.linalg.svds(M_nograd, k=k, solver=solver, maxiter=maxiter, **kwargs)
 
         else: # solve in numpy
-            maxiter= k*10 if solver == 'propack' else 10 * min(M.shape) # propack default 10*k, arpack default min(M.size) * 10 as per scipy docs
-            U, S, Vh= scipy.sparse.linalg.svds(M.detach().cpu().numpy(), k=k, solver=solver, maxiter=maxiter)
+            U, S, Vh= scipy.sparse.linalg.svds(M.detach().cpu().numpy(), k=k, solver=solver, maxiter=maxiter, **kwargs)
 
         neg_strides= lambda x: any([s for s in x.strides if s < 0])
         S= torch.as_tensor(S.copy() if neg_strides(S) else S).to(device=M.device)

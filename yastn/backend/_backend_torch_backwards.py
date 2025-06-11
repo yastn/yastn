@@ -19,7 +19,7 @@ import numpy as np
 import torch
 
 from .linalg.torch_svd_gesdd import SVDGESDD
-from .linalg.torch_svd_arnoldi import SVDARNOLDI
+from .linalg.torch_svds_scipy import SVDS_SCIPY
 # from .linalg.torch_eig_arnoldi import SYMARNOLDI, SYMARNOLDI_2C
 
 
@@ -66,16 +66,16 @@ class kernel_svd(torch.autograd.Function):
         return data_b, None, None, None, None, None
 
 
-class kernel_svd_arnoldi(torch.autograd.Function):
+class kernel_svds_scipy(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, data, meta, sizes, thresh, solver):
+    def forward(ctx, data, meta, sizes, thresh, solver, **kwargs):
         real_dtype = data.real.dtype if data.is_complex() else data.dtype
         Udata = torch.empty((sizes[0],), dtype=data.dtype, device=data.device)
         Sdata = torch.empty((sizes[1],), dtype=real_dtype, device=data.device)
         Vhdata = torch.empty((sizes[2],), dtype=data.dtype, device=data.device)
         for (sl, D, slU, DU, slS, slV, DV) in meta:
             k = slS[1] - slS[0]
-            U, S, V = SVDARNOLDI.apply(data[slice(*sl)].view(D), k, thresh, solver)
+            U, S, V = SVDS_SCIPY.apply(data[slice(*sl)].view(D), k, thresh, solver, **kwargs)
             Udata[slice(*slU)].reshape(DU)[:] = U
             Sdata[slice(*slS)] = S
             Vhdata[slice(*slV)].reshape(DV)[:] = V
