@@ -273,16 +273,36 @@ def truncate_optimize_(fgf, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter
 
         Ms, error2s, pinvs, iters = {}, {}, {}, {}
 
-        if 'OMP' in initialization:
+        if 'OMPeat' in initialization:
+            key = "OMPeat"
+            Ms[key], error2s[key] = initial_truncation_OMP(M0, M1, fgf, fRR, RRgRR, opts, pinv_cutoffs, pre_initial="EAT")
+            key = "OMPeat_opt"
+            Ms[key], error2s[key], pinvs[key], iters[key] = optimize_truncation(*Ms['OMPeat'], error2s['OMPeat'], fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter)
+        if 'OMPsvd' in initialization:
+            key = "OMPsvd"
+            Ms[key], error2s[key] = initial_truncation_OMP(M0, M1, fgf, fRR, RRgRR, opts, pinv_cutoffs, pre_initial="SVD")
+            key = "OMPsvd_opt"
+            Ms[key], error2s[key], pinvs[key], iters[key] = optimize_truncation(*Ms['OMPsvd'], error2s['OMPsvd'], fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter)
+        if 'OMP0' in initialization:
             key = "OMP"
             Ms[key], error2s[key] = initial_truncation_OMP(M0, M1, fgf, fRR, RRgRR, opts, pinv_cutoffs)
             key = "OMP_opt"
             Ms[key], error2s[key], pinvs[key], iters[key] = optimize_truncation(*Ms['OMP'], error2s['OMP'], fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter)
-        if 'ZMT1' in initialization:
+        if 'ZMT10' in initialization:
             key = "ZMT1"
-            Ms[key], error2s[key] = initial_truncation_ZMT1(M0, M1, fgf, opts_svd, fRR, RRgRR, 1e-16, pinv_cutoffs)
+            Ms[key], error2s[key] = initial_truncation_ZMT1(M0, M1, fgf, opts_svd, fRR, RRgRR, pinv_cutoffs)
             key = "ZMT1_opt"
             Ms[key], error2s[key], pinvs[key], iters[key] = optimize_truncation(*Ms['ZMT1'], error2s['ZMT1'], fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter)
+        if 'ZMT1svd' in initialization:
+            key = "ZMT1svd"
+            Ms[key], error2s[key] = initial_truncation_ZMT1(M0, M1, fgf, opts_svd, fRR, RRgRR, pinv_cutoffs, pre_initial="SVD")
+            key = "ZMT1svd_opt"
+            Ms[key], error2s[key], pinvs[key], iters[key] = optimize_truncation(*Ms['ZMT1svd'], error2s['ZMT1svd'], fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter)
+        if 'ZMT1eat' in initialization:
+            key = "ZMT1eat"
+            Ms[key], error2s[key] = initial_truncation_ZMT1(M0, M1, fgf, opts_svd, fRR, RRgRR, pinv_cutoffs, pre_initial="EAT")
+            key = "ZMT1eat_opt"
+            Ms[key], error2s[key], pinvs[key], iters[key] = optimize_truncation(*Ms['ZMT1eat'], error2s['ZMT1eat'], fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter)
         if 'EAT' in initialization:
             key = 'eat'
             Ms[key], error2s[key], pinvs[key], info["eat_metric_error"] = initial_truncation_EAT(M0, M1, fgf, fRR, RRgRR, opts, pinv_cutoffs)
@@ -448,22 +468,22 @@ def build_g_rj(r_slices:dict, G0:yastn.Tensor, weight:dict):
     return np.array(g)
 
 
-def initial_truncation_ZMT1(R0, R1, fgf, opts_svd, fRR, RRgRR, epsilon_zero, pinv_cutoffs):
+def initial_truncation_ZMT1(R0, R1, fgf, opts_svd, fRR, RRgRR, pinv_cutoffs, pre_initial=None):
 
-    # (R0, R1), _, _, _= initial_truncation_EAT(R0, R1, fgf, fRR, RRgRR, {"D_total": R0.to_numpy().shape[1], 'tol_block': -1}, pinv_cutoffs)
-    # (R0, R1), _, _, _= initial_truncation_EAT(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs)
-
-    # R0, S, R1 = svd(R0 @ R1, sU=R0.s[1])
-    # S = S.sqrt()
-    # R0, R1 = S.broadcast(R0, R1, axes=(1, 0))
+    if pre_initial == "EAT":
+        (R0, R1), _, _, _= initial_truncation_EAT(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs)
+    elif pre_initial == "SVD":
+        R0, S, R1 = svd(R0 @ R1, sU=R0.s[1])
+        S = S.sqrt()
+        R0, R1 = S.broadcast(R0, R1, axes=(1, 0))
 
     G0 = fgf.unfuse_legs(axes=(0, 1))
 
-    Gremove = G0.fuse_legs(axes=((0, 2), (1, 3)))
-    Gremove.remove_zero_blocks()
-    _, S, _ = svd_with_truncation(Gremove, axes=(0, 1), policy='lowrank', D_block=2, D_total=2)
-    S = np.diag(S.to_numpy())
-    print("LOOP:", np.min(S) / np.max(S))
+    # Gremove = G0.fuse_legs(axes=((0, 2), (1, 3)))
+    # Gremove.remove_zero_blocks()
+    # _, S, _ = svd_with_truncation(Gremove, axes=(0, 1), policy='lowrank', D_block=2, D_total=2)
+    # S = np.diag(S.to_numpy())
+    # loopiness = np.min(S) / np.max(S)
 
     # slice RA to column vectors
     data_r0 = R0.T.compress_to_1d()
@@ -575,7 +595,7 @@ def initial_truncation_ZMT1(R0, R1, fgf, opts_svd, fRR, RRgRR, epsilon_zero, pin
     res = minimize(diff, 1)
     MA = res.x ** 0.5 * MA
     MB = res.x ** 0.5 * MB
-    return (MA, MB), res.fun
+    return (MA, MB), res.fun, loopiness
     # return (MA, MB), calculate_truncation_error2(MAMB, fgf, fRR, RRgRR)
 
 
@@ -604,13 +624,13 @@ def complex_omp(A, y, k, tol=1e-8):
 
     return x_recon, indices
 
-def initial_truncation_OMP(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs, epsilon_lr=1e-10, epsilon_sqrtm=1e-10):
-
-    # R0, S, R1 = svd(R0 @ R1, sU=R0.s[1])
-    # S = S.sqrt()
-    # R0, R1 = S.broadcast(R0, R1, axes=(1, 0))
-
-    (R0, R1), _, _, _= initial_truncation_EAT(R0, R1, fgf, fRR, RRgRR, {"D_total": R0.to_numpy().shape[1], 'tol_block': -1}, pinv_cutoffs)
+def initial_truncation_OMP(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs, epsilon_lr=1e-10, epsilon_sqrtm=1e-10, pre_initial=None):
+    if pre_initial == "EAT":
+        (R0, R1), _, _, _= initial_truncation_EAT(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs)
+    elif pre_initial == "SVD":
+        R0, S, R1 = svd(R0 @ R1, sU=R0.s[1])
+        S = S.sqrt()
+        R0, R1 = S.broadcast(R0, R1, axes=(1, 0))
 
     G0 = fgf.unfuse_legs(axes=(0, 1))
 
@@ -719,7 +739,6 @@ def initial_truncation_OMP(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs, epsi
 
     approx_vec = g_sqrt_coef_direct_sum @ coef
     residual = np.linalg.norm(approx_vec - vec_target) / np.linalg.norm(vec_target)
-    print(residual)
     picked_vec = np.where(coef != 0)[0]
 
 
