@@ -737,8 +737,8 @@ def initial_truncation_OMP(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs, epsi
     coef, _ = complex_omp(g_sqrt_coef_direct_sum, vec_target, min(opts_svd['D_total'], g_sqrt_coef_direct_sum.shape[1]), tol=epsilon_lr)
     # print(coef)
 
-    approx_vec = g_sqrt_coef_direct_sum @ coef
-    residual = np.linalg.norm(approx_vec - vec_target) / np.linalg.norm(vec_target)
+    # approx_vec = g_sqrt_coef_direct_sum @ coef
+    # residual = np.linalg.norm(approx_vec - vec_target) / np.linalg.norm(vec_target)
     picked_vec = np.where(coef != 0)[0]
 
 
