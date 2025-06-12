@@ -16,14 +16,17 @@
 from __future__ import annotations
 from itertools import islice
 import numpy as np
+import scipy as spy
 import scipy.sparse.linalg as spla
+from scipy.linalg import solve_triangular as slv_tri
+import yastn
 from ..tensor import YastnError, Leg, LegMeta, einsum, truncation_mask
 from ..tensor._tests import _test_axes_all
 from ..tensor.linalg import _find_gaps
 from ..tensor._auxliary import _struct, _slc, _clear_axes, _unpack_axes, _flatten
 from .. import zeros, decompress_from_1d, Tensor
 
-__all__ = ['expmv', 'eigs', 'svds']
+__all__ = ['expmv', 'eigs', 'lin_solver', 'svds']
 
 
 # Krylov based methods, handled by anonymous function decribing action of matrix on a vector
@@ -231,6 +234,73 @@ def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=Fals
         sit = vr[:, it]
         Y.append(V[0].linear_combination(*V[1:], amplitudes=sit, **kwargs))
     return val[:k], Y
+
+
+def lin_solver(f, b, v0, ncv=10, tol=1e-13, pinv_tol=1e-13, hermitian=False, **kwargs) -> tuple[array, Sequence[vectors]]:
+    r"""
+    Search for solution of the linear equation ``f(x) = b``, where ``x`` is estimated vector and ``f(x)`` is matrix-vector operation. 
+    Implementation based on pseudoinverse of Krylov expansion [1]. 
+
+    Ref.[1] https://www.math.iit.edu/~fass/577_ch4_app.pdf
+    
+    Parameters
+    ----------
+        f: function
+            define an action of a 'square matrix' on the 'vector' ``v0``.
+            ``f(v0)`` should preserve the signature of ``v0``.
+
+        b: Tensor
+            free term for the linear equation.
+
+        v0: Tensor
+            Initial guess span the Krylov space.
+
+        ncv: int
+            Dimension of the employed Krylov space. The default is 10.
+
+        tol: float
+            Stopping criterion for an expansion of the Krylov subspace.
+            The default is ``1e-13``. TODO Not implemented yet. 
+
+        pinv_tol: float
+            Cutoff for pseudoinverve. Sets lower bound on inverted Schmidt values. 
+            The default is ``1e-13``. 
+
+        hermitian: bool
+            Assume that ``f`` is a hermitian operator, in which case Lanczos iterations are used.
+            Otherwise Arnoldi iterations are used to span the Krylov space.
+
+    Results
+    ----------
+        vf: Tensor
+            Approximation of ``v`` in ``f(v) = b`` problem.
+
+        res: float
+            norm of the resudual vector ``r = norm(f(vf) - b)``.
+    """
+    backend = v0.config.backend
+
+    q0 = b - f(v0)
+    normv = q0.norm()
+    if normv == 0:
+        raise YastnError('Initial vector v0 of lin_solver should be nonzero.')
+    Q = [q0 / normv]
+    Q, H, happy = q0.expand_krylov_space(f, tol, ncv, hermitian, Q, **kwargs)
+    m = len(Q) if happy else len(Q) - 1
+    H[(m,m-1)] = H[(0,0)] * 0 + tol if happy else H[(m,m-1)]
+    Q = Q[:m]
+
+    T = backend.square_matrix_from_dict(H, m+1, device = v0.device)
+    T = T[:(m+1),:m]
+
+    be1 = backend.to_tensor([normv]+[0]*(m))
+    
+    Tpinv = backend.pinv(T, rcond = pinv_tol)
+    y = Tpinv @ be1
+    
+    vf = v0.linear_combination(*Q, amplitudes = [1,*y], **kwargs)
+    res = f(vf) - b
+    return vf, res.norm()
 
 
 def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, maxiter=None, return_singular_vectors=True, \
