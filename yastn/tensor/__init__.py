@@ -124,7 +124,7 @@ class Tensor:
     from ._algebra import __add__, __sub__, __mul__, __rmul__, __array_ufunc__, __neg__, linear_combination
     from ._algebra import __lt__, __gt__, __le__, __ge__, __truediv__, __pow__
     from ._algebra import __abs__, real, imag, sqrt, rsqrt, reciprocal, exp, bitwise_not
-    from ._single import conj, conj_blocks, flip_signature, flip_charges, transpose, moveaxis, move_leg, diag, grad
+    from ._single import conj, conj_blocks, flip_signature, flip_charges, switch_signature, transpose, moveaxis, move_leg, diag, grad
     from ._single import copy, clone, detach, to, requires_grad_, remove_zero_blocks, add_leg, remove_leg, drop_leg_history
     from ._output import print_properties, __str__, print_blocks_shape, is_complex
     from ._output import get_blocks_charge, get_blocks_shape, get_legs
@@ -223,7 +223,7 @@ class Tensor:
         return self.config.backend.get_dtype(self._data)
 
     @property
-    def yast_dtype(self) -> str:
+    def yastn_dtype(self) -> str:
         """ Return :code:`'complex128'` if tensor data are complex else :code:`'float64'`. """
         return 'complex128' if self.config.backend.is_complex(self._data) else 'float64'
 

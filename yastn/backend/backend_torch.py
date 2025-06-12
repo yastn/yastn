@@ -94,7 +94,7 @@ def copy(x):
 
 
 def to_numpy(x):
-    return x.detach().cpu().numpy()
+    return x.resolve_conj().detach().cpu().numpy()
 
 
 def get_shape(x):

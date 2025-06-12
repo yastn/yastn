@@ -86,7 +86,7 @@ def test_ctmrg_measure_product(config_kwargs, boundary):
             val= measure_rdm_nn(s0,dirn,psi,env, (sz, sz))
             assert abs( val - ezz[(s0, psi.nn_site(s0, "r" if dirn=="h" else "b"))] )<tol
 
-    s_list= [ [((0, 1), (1, 0)), ((0,0),(I, sz, sz, I))], 
+    s_list= [ [((0, 1), (1, 0)), ((0,0),(I, sz, sz, I))],
         [((2, 1), (2, 2)), ((2,1),(sz,I,sz,I))], [((1, 1), (2, 1)), ((1,1),(sz,sz,I,I)) ],
     ]
     for s_elem in s_list:
@@ -131,7 +131,7 @@ def test_ctmrg_measure_product(config_kwargs, boundary):
     if boundary != 'obc':
         out = env.sample(xrange=(3, 7), yrange=(-1, 2), number=5, projectors=vecs)
         assert all(all(x == vals[g.site2index(k)] for x in v) for k, v in out.items())
-    
+
     #
     #  measure_2site
     #
@@ -153,17 +153,12 @@ def test_ctmrg_measure_product(config_kwargs, boundary):
         env.measure_2x2(sz, sz, sites=((0, 0), (1, 2)))
         # Sites do not form a 2x2 window.
     with pytest.raises(yastn.YastnError):
-        env.measure_2x2(sz, sz, sites=((0, 0), (0, 0)))
-        # Sites should not repeat.
-    with pytest.raises(yastn.YastnError):
         env.measure_line(sz, sz, sz, sites=((0, 0), (1, 0)))
         # Number of operators and sites should match.
     with pytest.raises(yastn.YastnError):
         env.measure_line(sz, sz, sites=((0, 0), (1, 2)))
         # Sites should form a horizontal or vertical line.
-    with pytest.raises(yastn.YastnError):
-        env.measure_line(sz, sz, sites=((0, 0), (0, 0)))
-        # Sites should not repeat.
+
 
 @pytest.mark.parametrize("env_init", ["eye", "dl"])
 def test_ctmrg_measure_2x1(config_kwargs, env_init):

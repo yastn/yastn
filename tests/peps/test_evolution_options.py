@@ -31,7 +31,6 @@ def test_evolution(config_kwargs):
     g_hop = fpeps.gates.gate_nn_hopping(t, dbeta / 2, I, ops.c(), ops.cp())
     gates = fpeps.gates.distribute(geometry, gates_nn=g_hop)
     #
-    #
     # time-evolve initial state
     #
     opts_svd = {"D_total": 4, 'tol': 1e-14}
@@ -72,9 +71,42 @@ def test_evolution(config_kwargs):
             assert info.wrong_eigenvalues is None
             assert 0. <= info.nonhermitian_part
 
+        bd0 = psi.get_bond_dimensions()
+        assert all(v in (1, 4) for v in bd0.values())
+        opts_svd_truncate = {"D_total": 3, 'tol': 1e-14}
+        infos = fpeps.truncate_(env, opts_svd=opts_svd_truncate, initialization=initialization)
+        bd1 = psi.get_bond_dimensions()
+        for k, v in bd1.items():
+            assert v == min(3, bd0[k])
+    #
     with pytest.raises(yastn.YastnError):
         fpeps.evolution_step_(env, gates, opts_svd=opts_svd, initialization='none')
         # initialization='none' not recognized. Should contain 'SVD' or 'EAT'.
+    #
+    # for bipartite environment
+    #
+    for which in ['BP', 'NN+BP']:
+        psi = fpeps.product_peps(geometry, ops.I())
+        env = fpeps.EnvBP(psi, which=which)
+        infoss = []
+        for _ in range(steps):
+            infos = fpeps.evolution_step_(env, gates, opts_svd=opts_svd, initialization=initialization)
+            infoss.append(infos)
+
+        for infos in infoss:
+            assert len(infos) == 2 * ((Nx - 1) * Ny + (Ny - 1) * Nx)
+            for info, bond in zip(infos, psi.bonds() + psi.bonds(reverse=True)):
+                assert info.bond == bond
+                assert 0. <= info.truncation_error
+
+        bd0 = psi.get_bond_dimensions()
+        assert all(v in (1, 4) for v in bd0.values())
+        opts_svd_truncate = {"D_total": 3, 'tol': 1e-14}
+        infos = fpeps.truncate_(env, opts_svd=opts_svd_truncate, initialization=initialization)
+        bd1 = psi.get_bond_dimensions()
+        for k, v in bd1.items():
+            assert v == min(3, bd0[k])
+
 
 
 if __name__ == '__main__':

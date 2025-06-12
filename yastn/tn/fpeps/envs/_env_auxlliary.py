@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from typing import Union
-from .... import fuse_legs, tensordot, swap_gate, ones, Leg, eye, Tensor
+from .... import fuse_legs, tensordot, swap_gate, ones, Leg, eye
 from ... import mps
 
 __all__ = ['hair_t', 'hair_l', 'hair_b', 'hair_r',
@@ -22,16 +21,20 @@ __all__ = ['hair_t', 'hair_l', 'hair_b', 'hair_r',
            'append_vec_tl', 'append_vec_tr',
            'append_vec_bl', 'append_vec_br',
            'tensors_from_psi', 'cut_into_hairs',
-           'identity_tm_boundary', 'identity_boundary']
+           'identity_tm_boundary', 'identity_boundary',
+           'trivial_peps_tensor']
+
+
+def trivial_peps_tensor(config):
+    triv = ones(config, legs=[Leg(config, t=(config.sym.zero(),), D=(1,))])
+    for s in (-1, 1, 1, -1):
+        triv = triv.add_leg(axis=0, s=s)
+    return triv.fuse_legs(axes=((0, 1), (2, 3), 4))
 
 
 def tensors_from_psi(d, psi):
     if any(v is None for v in d.values()):
-        cfg = psi[(0, 0)].config
-        triv = ones(cfg, legs=[Leg(cfg, t=(cfg.sym.zero(),), D=(1,))])
-        for s in (-1, 1, 1, -1):
-            triv = triv.add_leg(axis=0, s=s)
-        triv = triv.fuse_legs(axes=((0, 1), (2, 3), 4))
+        triv = trivial_peps_tensor(psi.config)
     for k, v in d.items():
         d[k] = triv if v is None else psi[v]
 
@@ -65,60 +68,68 @@ def cut_into_hairs(A):
     return hl, hr
 
 
-def hair_t(A, ht=None, hl=None, hr=None):
+def hair_t(Abra, ht=None, hl=None, hr=None, Aket=None):
     """ top hair tensor """
-    A = A.unfuse_legs(axes=1)  # [t l] b r s
+    Abra = Abra.unfuse_legs(axes=1)#.swap_gate(axes=(1, 2))  # [t l] b r s
+    Aket = Abra if Aket is None else Aket.unfuse_legs(axes=1)#.swap_gate(axes=(1, 2))  # [t l] b r s
+
     if ht is None and hl is None and hr is None:
-        A = A.fuse_legs(axes=((0, 2, 3), 1))  # [[t l] r s] b
-        return tensordot(A.conj(), A, axes=(0, 0))  # b' b
-    Af = A.transpose(axes=(2, 0, 1, 3)) if hr is None else tensordot(hr, A, axes=(1, 2))  # r' [t l] b s
+        return tensordot(Abra.conj(), Aket, axes=((0, 2, 3), (0, 2, 3)))  # b' b
+
+    Af = Aket.transpose(axes=(2, 0, 1, 3)) if hr is None else tensordot(hr, Aket, axes=(1, 2))  # r' [t l] b s
     Af = Af.unfuse_legs(axes=1)  # r' t l b s
     Af = Af.transpose(axes=(2, 0, 1, 3, 4)) if hl is None else tensordot(hl, Af, axes=(1, 2))  # l' r' t  b s
     Af = Af.transpose(axes=(2, 0, 1, 3, 4)) if ht is None else tensordot(ht, Af, axes=(1, 2))  # t' l' r' b s
     Af = Af.fuse_legs(axes=((0, 1), 2, 4, 3))  # [t' l'] r' s b
-    return tensordot(A.conj(), Af, axes=((0, 2, 3), (0, 1, 2)))  # b' b
+    return tensordot(Abra.conj(), Af, axes=((0, 2, 3), (0, 1, 2)))  # b' b
 
 
-def hair_l(A, ht=None, hl=None, hb=None):  # A = [t l] [b r] s
+def hair_l(Abra, ht=None, hl=None, hb=None, Aket=None):  # A = [t l] [b r] s
     """ left hair tensor """
-    A = A.unfuse_legs(axes=1)  # [t l] b r s
+    Abra = Abra.unfuse_legs(axes=1)  # [t' l'] b' r' s'
+    Aket = Abra if Aket is None else Aket.unfuse_legs(axes=1)  # [t l] b r s
+
     if ht is None and hl is None and hb is None:
-        A = A.fuse_legs(axes=((0, 1, 3), 2))  # [[t l] b s] r
-        return tensordot(A.conj(), A, axes=(0, 0))  # r' r
-    Af = A.transpose(axes=(1, 0, 2, 3)) if hb is None else tensordot(hb, A, axes=(1, 1))  # b' [t l] r s
+        return tensordot(Abra.conj(), Aket, axes=((0, 1, 3), (0, 1, 3)))  # r' r
+
+    Af = Aket.transpose(axes=(1, 0, 2, 3)) if hb is None else tensordot(hb, Aket, axes=(1, 1))  # b' [t l] r s
     Af = Af.unfuse_legs(axes=1)  # b' t l r s
     Af = Af.transpose(axes=(2, 0, 1, 3, 4)) if hl is None else tensordot(hl, Af, axes=(1, 2))  # l' b' t  r s
     Af = Af.transpose(axes=(2, 0, 1, 3, 4)) if ht is None else tensordot(ht, Af, axes=(1, 2))  # t' l' b' r s
     Af = Af.fuse_legs(axes=((0, 1), 2, 4, 3))  # [t' l'] b' s r
-    return tensordot(A.conj(), Af, axes=((0, 1, 3), (0, 1, 2)))  # r' r
+    return tensordot(Abra.conj(), Af, axes=((0, 1, 3), (0, 1, 2)))  # r' r
 
 
-def hair_b(A, hl=None, hb=None, hr=None):  # A = [t l] [b r] s
+def hair_b(Abra, hl=None, hb=None, hr=None, Aket=None):  # A = [t l] [b r] s
     """ bottom hair tensor """
-    A = A.unfuse_legs(axes=0)  # t l [b r] s
+    Abra = Abra.unfuse_legs(axes=0)  # t l [b r] s
+    Aket = Abra if Aket is None else Aket.unfuse_legs(axes=0)  # t l [b r] s
+
     if hl is None and hb is None and hr is None:
-        A = A.fuse_legs(axes=(0, (1, 2, 3)))  # t [l [b r] s]
-        return tensordot(A.conj(), A, axes=(1, 1))  # t' t
-    Af = A.transpose(axes=(0, 2, 3, 1)) if hl is None else tensordot(A, hl, axes=(1, 1))  # t [b r] s l'
+        return tensordot(Abra.conj(), Aket, axes=((1, 2, 3), (1, 2, 3)))  # t' t
+
+    Af = Aket.transpose(axes=(0, 2, 3, 1)) if hl is None else tensordot(Aket, hl, axes=(1, 1))  # t [b r] s l'
     Af = Af.unfuse_legs(axes=1)  # t b r s l'
     Af = Af.transpose(axes=(0, 2, 3, 4, 1)) if hb is None else tensordot(Af, hb, axes=(1, 1))  # t r s l' b'
     Af = Af.transpose(axes=(0, 2, 3, 4, 1)) if hr is None else tensordot(Af, hr, axes=(1, 1))  # t s l' b' r'
     Af = Af.fuse_legs(axes=(2, (3, 4), 1, 0))  # l' [b' r'] s t
-    return tensordot(A.conj(), Af, axes=((1, 2, 3), (0, 1, 2)))  # t' t
+    return tensordot(Abra.conj(), Af, axes=((1, 2, 3), (0, 1, 2)))  # t' t
 
 
-def hair_r(A, ht=None, hb=None, hr=None):  # A = [t l] [b r] s
+def hair_r(Abra, ht=None, hb=None, hr=None, Aket=None):  # A = [t l] [b r] s
     """ right hair tensor """
-    A = A.unfuse_legs(axes=0)  # t l [b r] s
+    Abra = Abra.unfuse_legs(axes=0)#.swap_gate(axes=(0, 1))  # t l [b r] s
+    Aket = Abra if Aket is None else Aket.unfuse_legs(axes=0)#.swap_gate(axes=(0, 1))  # t l [b r] s
+
     if ht is None and hb is None and hr is None:
-        A = A.fuse_legs(axes=(1, (0, 2, 3)))  # l [t [b r] s]
-        return tensordot(A.conj(), A, axes=(1, 1))  # l' l
-    Af = A if ht is None else tensordot(ht, A, axes=(1, 0))  # t' l [b r] s
+        return tensordot(Abra.conj(), Aket, axes=((0, 2, 3), (0, 2, 3)))  # l' l
+
+    Af = Aket if ht is None else tensordot(ht, Aket, axes=(1, 0))  # t' l [b r] s
     Af = Af.unfuse_legs(axes=2)  # t' l b r s
     Af = Af.transpose(axes=(3, 0, 1, 2, 4)) if hr is None else tensordot(hr, Af, axes=(1, 3))  # r' t' l b s
     Af = Af.transpose(axes=(3, 0, 1, 2, 4)) if hb is None else tensordot(hb, Af, axes=(1, 3))  # b' r' t' l s
     Af = Af.fuse_legs(axes=((0, 1), 2, 4, 3))  # [b' r'] t' s t
-    return tensordot(A.conj(), Af, axes=((2, 0, 3), (0, 1, 2)))  # l' l
+    return tensordot(Abra.conj(), Af, axes=((2, 0, 3), (0, 1, 2)))  # l' l
 
 
 def cor_tl(A_bra, ht=None, hl=None, A_ket=None):  # A -> [t l] [b r] s
@@ -283,6 +294,8 @@ def edge_b(A_bra, hb=None, A_ket=None):  # A = [t l] [b r] s;  hb = b' b
 def append_vec_tl(Ac, A, vectl, op=None, mode='old', in_b=(2, 1), out_a=(2, 3)):
     # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s;  vectl = x [l l'] [t t'] y
     """ Append the A and Ac tensors to the top-left vector """
+    if A.config.fermionic:
+        assert A.n == Ac.n == A.config.sym.zero(), "Sanity check; A, Ac should nor carry charge. "
     if op is not None:
         A = tensordot(A, op, axes=(2, 1))
     axes0 = tuple(ax for ax in range(vectl.ndim) if ax not in in_b)
@@ -316,6 +329,8 @@ def append_vec_tl(Ac, A, vectl, op=None, mode='old', in_b=(2, 1), out_a=(2, 3)):
 def append_vec_br(Ac, A, vecbr, op=None, mode='old', in_b=(2, 1), out_a=(0, 1)):
     # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s;  vecbr = x [r r'] [b b'] y
     """ Append the A and Ac tensors to the bottom-right vector. """
+    if A.config.fermionic:
+        assert A.n == Ac.n == A.config.sym.zero(), "Sanity check; A, Ac should nor carry charge. "
     if op is not None:
         A = tensordot(A, op, axes=(2, 1))
     axes0 = tuple(ax for ax in range(vecbr.ndim) if ax not in in_b)
@@ -349,20 +364,33 @@ def append_vec_br(Ac, A, vecbr, op=None, mode='old', in_b=(2, 1), out_a=(0, 1)):
 def append_vec_tr(Ac, A, vectr, op=None, mode='old', in_b=(1, 2), out_a=(1, 2)):
     # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s;  vectr = x [t t'] [r r'] y
     """ Append the A and Ac tensors to the top-left vector """
+    if A.config.fermionic:
+        assert A.n == Ac.n == A.config.sym.zero(), "Sanity check; A, Ac should nor carry charge. "
+
     if op is not None:
         A = tensordot(A, op, axes=(2, 1))
+        n_vec = A.config.sym.add_charges(vectr.n, op.n)
+    else:
+        n_vec = vectr.n
+    # We have to assume that vactr can carry explicit charge;
+    # We will swap with it for optimal swap placement.
+
+    A = A.unfuse_legs(axes=(0, 1))  # t l b r s
+    A = A.swap_gate(axes=(2, 4))  # b X s
+    A = A.fuse_legs(axes=((0, 3), (1, 2), 4))  # [t r] [l b] s
+
+    Ac = Ac.unfuse_legs(axes=(0, 1))  # t' l' b' r' s
+    Ac = Ac.swap_gate(axes=(2, (0, 3)))  # b' X t' r'
+    Ac = Ac.fuse_legs(axes=((0, 3), (1, 2), 4))  # [t' r'] [l' b'] s
+
     axes0 = tuple(ax for ax in range(vectr.ndim) if ax not in in_b)
     axes0 = (in_b[0], axes0, in_b[1])  # (1, (0, 3), 2), in_b == (t, r)
     vectr = vectr.fuse_legs(axes=axes0)  # [t t'] [x y] [r r']
     vectr = vectr.unfuse_legs(axes=(0, 2))  # t t' [x y] r r'
-    vectr = vectr.swap_gate(axes=(1, 2))  # t' X x y
+    vectr = vectr.swap_gate(axes=(1, 2))  # t' X [x y]
+    vectr = vectr.swap_gate(axes=1, charge=n_vec)  # t' X [charge_vectr op.n]
+
     vectr = vectr.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [t r] [x y] [t' r']
-    A = A.unfuse_legs(axes=(0, 1))  # t l b r s
-    Ac = Ac.unfuse_legs(axes=(0, 1))  # t' l' b' r' s
-    A = A.swap_gate(axes=(2, 4))  # b X s
-    Ac = Ac.swap_gate(axes=(2, (0, 3)))  # b' X t' r'
-    A = A.fuse_legs(axes=((0, 3), (1, 2), 4))  # [t r] [l b] s
-    Ac = Ac.fuse_legs(axes=((0, 3), (1, 2), 4))  # [t' r'] [l' b'] s
     vectr = vectr.tensordot(Ac.conj(), axes=(2, 0))  # [t r] [x y] [l' b'] s
     vectr = A.tensordot(vectr, axes=((0, 2), (0, 3)))  # [l b] [x y] [l' b']
     vectr = vectr.unfuse_legs(axes=(0, 2))  # l b [x y] l' b'
@@ -387,25 +415,34 @@ def append_vec_tr(Ac, A, vectr, op=None, mode='old', in_b=(1, 2), out_a=(1, 2)):
 
 def append_vec_bl(Ac, A, vecbl, op=None, mode='old', in_b=(2, 1), out_a=(0, 3)):
     # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s;  vecbl = x [b b'] [l l'] y
-    """ Append the A and Ac tensors to the top-left vector """
+    """ Append the A and Ac tensors to the top-left vector. """
+    if A.config.fermionic:
+        assert A.n == Ac.n == A.config.sym.zero(), "Sanity check; A, Ac should nor carry charge. "
+
     if op is not None:
         A = tensordot(A, op, axes=(2, 1))
+    n_vec = vecbl.n  # We have to assume that vacbl can carry explicit charge;
+    # We will swap with it for optimal swap placement.
+
+    A = A.unfuse_legs(axes=(0, 1))  # t l b r s
+    A = A.swap_gate(axes=(2, 4))  # b X s
+    A = A.fuse_legs(axes=((2, 1), (3, 0), 4))  # [b l] [r t] s
+
+    Ac = Ac.unfuse_legs(axes=(0, 1))  # t' l' b' r' s
+    Ac = Ac.swap_gate(axes=(2, (0, 3)))  # b' X t' r'
+    Ac = Ac.fuse_legs(axes=((2, 1), (3, 0), 4))  # [b' l'] [r' t'] s
+
     axes0 = tuple(ax for ax in range(vecbl.ndim) if ax not in in_b)
     axes0 = (in_b[1], axes0, in_b[0])  # (1, (0, 3), 2), in_b == (l, b)
     vecbl = vecbl.fuse_legs(axes=axes0)  # [b b'] [x y] [l l']
     vecbl = vecbl.unfuse_legs(axes=(0, 2))  # b b' [x y] l l'
     vecbl = vecbl.swap_gate(axes=(0, (1, 4)))  # b X b' l'
     vecbl = vecbl.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [b l] [x y] [b' l']
-    A = A.unfuse_legs(axes=(0, 1))  # t l b r s
-    Ac = Ac.unfuse_legs(axes=(0, 1))  # t' l' b' r' s
-    A = A.swap_gate(axes=(2, 4))  # b X s
-    Ac = Ac.swap_gate(axes=(2, (0, 3)))  # b' X t' r'
-    A = A.fuse_legs(axes=((2, 1), (3, 0), 4))  # [b l] [r t] s
-    Ac = Ac.fuse_legs(axes=((2, 1), (3, 0), 4))  # [b' l'] [r' t'] s
     vecbl = vecbl.tensordot(Ac.conj(), axes=(2, 0))  # [b l] [x y] [r' t'] s
     vecbl = A.tensordot(vecbl, axes=((0, 2), (0, 3)))  # [r t] [x y] [r' t']
     vecbl = vecbl.unfuse_legs(axes=(0, 2))  # r t [x y] r' t'
     vecbl = vecbl.swap_gate(axes=(2, 4))  #  [x y] X t'
+    vecbl = vecbl.swap_gate(axes=4, charge=n_vec)  # t' X [charge_vec A]
 
     if mode == 'old':
         vecbl = vecbl.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [r r'] [x y] [t t']

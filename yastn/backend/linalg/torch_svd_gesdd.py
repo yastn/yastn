@@ -1,19 +1,22 @@
 import torch
 import warnings
 
-def safe_inverse(x, eps_rel=1.0e-12, eps_abs=1.0e-12):
+def safe_inverse(x, eps_abs=1.0e-12):
+    eps_abs=1.0e-12
     return x / (x ** 2 + eps_abs)
 
 
-# def safe_inverse_2(x, epsilon):
-#     x[abs(x) < epsilon] = float('inf')
-#     return x.pow(-1)
+def safe_inverse_2(x, eps):
+    return x.clamp_min(eps).reciprocal()
 
 
 class SVDGESDD(torch.autograd.Function):
     @staticmethod
     def forward(A, ad_decomp_reg, fullrank_uv, diagnostics):
-        U, S, Vh = torch.linalg.svd(A, full_matrices=fullrank_uv)
+        if A.is_cuda:
+            U, S, Vh = torch.linalg.svd(A, full_matrices=fullrank_uv, driver='gesvd')
+        else:
+            U, S, Vh = torch.linalg.svd(A, full_matrices=fullrank_uv)
         # A = U @ diag(S) @ Vh
         return U, S, Vh
 
@@ -331,11 +334,11 @@ class SVDGESDD(torch.autograd.Function):
 
 
         diagnostics= self.diagnostics
-        u, sigma, vh, eps= self.saved_tensors
+        u, sigma, vh, eps, global_sigma_scale= self.saved_tensors
         m= u.size(0) # first dim of original tensor A = u sigma v^\dag
         n= vh.size(1) # second dim of A
         k= sigma.size(0)
-        sigma_scale= sigma[0]
+        scaled_eps= global_sigma_scale**2 * eps
 
         # ? some
         if (u.size(-2)!=u.size(-1)) or (vh.size(-2)!=vh.size(-1)):
@@ -360,16 +363,17 @@ class SVDGESDD(torch.autograd.Function):
                 print(f"{diagnostics} {sigma_term.abs().max()} {sigma.max()}")
             return sigma_term, None, None, None
 
+
         # sigma_inv= safe_inverse_2(sigma.clone(), sigma_scale*eps)
         # sigma_inv= safe_inverse(sigma.clone(), eps_abs=sigma_scale*eps)
-        sigma_inv= safe_inverse(sigma.clone(), eps)
+        sigma_inv= safe_inverse(sigma.clone(), eps_abs= scaled_eps)
 
         F = sigma.unsqueeze(-2) - sigma.unsqueeze(-1)
-        F = safe_inverse(F, sigma_scale*eps)
+        F = safe_inverse(F, eps_abs= scaled_eps)
         F.diagonal(0,-2,-1).fill_(0)
 
         G = sigma.unsqueeze(-2) + sigma.unsqueeze(-1)
-        G = safe_inverse(G, sigma_scale*eps)
+        G = safe_inverse(G, eps_abs= scaled_eps)
         G.diagonal(0,-2,-1).fill_(0)
 
         uh= u.conj().transpose(-2,-1)

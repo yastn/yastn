@@ -94,15 +94,15 @@ def test_svd_complex(config_kwargs):
     config_dense = yastn.make_config(sym='none', **config_kwargs)
     a = yastn.rand(config=config_dense, s=(-1, 1, -1, 1), D=[11, 12, 13, 21], dtype='complex128')
     U, S, V = yastn.linalg.svd(a, axes=((0, 1), (2, 3)), sU=-1)
-    assert U.yast_dtype == 'complex128'
-    assert S.yast_dtype == 'float64'
+    assert U.yastn_dtype == 'complex128'
+    assert S.yastn_dtype == 'float64'
 
     US = yastn.tensordot(U, S, axes=(2, 0))  # here tensordot goes though broadcasting
     USV = yastn.tensordot(US, V, axes=(2, 0))
     assert yastn.norm(a - USV) < tol  # == 0.0
 
     SS = yastn.diag(S)
-    assert SS.yast_dtype == 'float64'
+    assert SS.yastn_dtype == 'float64'
     US = yastn.tensordot(U, SS, axes=(2, 0))
     USV = yastn.tensordot(US, V, axes=(2, 0))
     assert yastn.norm(a - USV) < tol  # == 0.0
@@ -259,12 +259,12 @@ def test_svd_lowrank_basic(config_kwargs):
         assert l1 == l2
         assert l1.t == ((0,), (1,), (2,), (3,), (4,), (5,))
         assert l1.D == (1, 2, 3, 3, 3, 3)
-        assert U1.yast_dtype == dtype
-        assert S1.yast_dtype == 'float64'
-        assert V1.yast_dtype == dtype
-        assert U2.yast_dtype == dtype
-        assert S2.yast_dtype == 'float64'
-        assert V2.yast_dtype == dtype
+        assert U1.yastn_dtype == dtype
+        assert S1.yastn_dtype == 'float64'
+        assert V1.yastn_dtype == dtype
+        assert U2.yastn_dtype == dtype
+        assert S2.yastn_dtype == 'float64'
+        assert V2.yastn_dtype == dtype
 
 
 def test_svd_truncate_lowrank(config_kwargs):

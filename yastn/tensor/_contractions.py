@@ -640,10 +640,11 @@ def swap_gate(a, axes, charge=None) -> yastn.Tensor:
         For instance, ``axes = (0, 1)`` apply swap gate between 0th and 1st leg.
         ``axes = ((0, 1), (2, 3), 4, 5)`` swaps ``(0, 1)`` with ``(2, 3)``, and ``4`` with ``5``.
 
-    charge: Optional[Sequence[int]]
+    charge: Optional[Sequence[int] | Sequence[Sequence[int]]]
         If provided, the swap gate is applied between a virtual one-dimensional leg
         of specified charge, e.g., a fermionic string, and tensor legs specified in axes.
         In this case, there is no application of a swap gates between legs specified in axes.
+        One can provide list of charges corresponding to each axes, of a single charge to be applied to all axes.
     """
     if not a.config.fermionic:
         return a
@@ -654,7 +655,7 @@ def swap_gate(a, axes, charge=None) -> yastn.Tensor:
         negate_slices = _meta_swap_gate(a.struct.t, a.slices, a.mfs, a.ndim_n, nsym, axes, fss)
     else:
         axes, = _clear_axes(axes)  # swapped groups of legs
-        negate_slices = _meta_swap_gate_charge(a.struct.t, a.slices, charge, a.mfs, a.ndim_n, nsym, axes, fss)
+        negate_slices = _meta_swap_gate_charge(a.struct.t, a.slices, tuple(charge), a.mfs, a.ndim_n, nsym, axes, fss)
 
     newdata = a.config.backend.negate_blocks(a._data, negate_slices)
     return a._replace(data=newdata)
@@ -682,15 +683,23 @@ def _meta_swap_gate(tset, slices, mf, ndim, nsym, axes, fss):
 @lru_cache(maxsize=1024)
 def _meta_swap_gate_charge(tset, slices, charge, mf, ndim, nsym, axes, fss):
     r""" Calculate which blocks to negate. """
+    if isinstance(charge[0], int):
+        charge = (charge,) * len(axes)
+
+    charges = ()
+    for t, ax in zip(charge, axes):
+        charges += t * mf[ax][0]
+
     axes, = _unpack_axes(mf, axes)
     tset = np.array(tset, dtype=np.int64).reshape((len(tset), ndim, nsym))
+    tp = tset[:, axes, :]
 
-    if len(charge) != nsym:
-        raise YastnError(f'Length of charge {charge} does not match sym.NSYM = {nsym}.')
+    try:
+        charges = np.array(charges, dtype=np.int64).reshape(1, len(axes), nsym) % 2
+    except ValueError:
+        raise YastnError(f'Length or number of charges does not match sym.NSYM or axes.')
 
-    charge = np.array(charge, dtype=np.int64).reshape(1, nsym) % 2
-    tp = np.sum(tset[:, axes, :], axis=1, dtype=np.int64) % 2
-    tp = np.sum(tp[:, fss] * charge[:, fss], axis=1, dtype=np.int64) % 2
+    tp = np.sum(tp[:, :, fss] * charges[:, :, fss], axis=(1, 2), dtype=np.int64) % 2
     return _slices_to_negate(tp, slices)
 
 

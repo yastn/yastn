@@ -110,6 +110,39 @@ def test_flip_charges(config_kwargs):
         # Cannot flip charges of a diagonal tensor. Use diag() first.
 
 
+def test_switch_signature(config_kwargs):
+    config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
+    leg = yastn.Leg(config_Z2xU1, s=1, t=((0, 1), (1, 0), (0, -1)), D=(2, 3, 2))
+    a = yastn.rand(config=config_Z2xU1, legs=[leg, leg, leg.conj(), leg.conj()])
+    b = a.switch_signature(axes='all')
+    c = a.switch_signature(axes=(1, 2))
+
+    assert a.s == (1, 1, -1, -1)
+    assert b.s == (-1, -1, 1, 1)
+    assert c.s == (1, -1, 1, -1)
+    assert b.get_legs() == (leg.conj(), leg.conj(), leg, leg)
+    assert c.get_legs() == (leg, leg.conj(), leg, leg.conj())
+    assert all(x.is_consistent() for x in (a, b, c))
+    assert all(yastn.are_independent(a, x) for x in (b, c))
+    assert (a - b.conj()).norm() > tol
+    assert (a - b.switch_signature(axes='all')).norm() < tol
+    assert (a - c.switch_signature(axes=(2, 1))).norm() < tol
+
+    d = a.fuse_legs(axes=(0, (1, 2), 3), mode='hard')
+    e= d.switch_signature(axes=1)
+    d0= e.switch_signature(axes=1)
+    assert d0.get_legs() == d.get_legs()
+    a0= d0.unfuse_legs(axes=1)
+    assert a0.get_legs() == a.get_legs()
+    # switch_signature supports hard-fused legs.
+    
+    with pytest.raises(yastn.YastnError):
+        f = yastn.rand(config_Z2xU1, legs=leg, isdiag=True)
+        f.switch_signature(axes='all')
+        # Cannot flip charges of a diagonal tensor. Use diag() first.
+
+
+
 def test_conj_Z2xU1(config_kwargs):
     #
     # create random complex-valued symmetric tensor with symmetry Z2 x U1

@@ -25,20 +25,20 @@ def test_to(config_kwargs):
     ta = yastn.rand(config=config_U1, legs=[leg, leg, leg.conj()], dtype='float64', device='cpu')
 
     tb = ta.to(dtype='complex128')
-    assert tb.yast_dtype == 'complex128'
+    assert tb.yastn_dtype == 'complex128'
     assert tb.dtype == config_U1.backend.DTYPE['complex128']
     assert tb.is_consistent()
 
     if config_U1.backend.cuda_is_available():
         tc = ta.to(device='cuda:0')
         assert tc.device == 'cuda:0'
-        assert tc.yast_dtype == 'float64'
+        assert tc.yastn_dtype == 'float64'
         assert tc.dtype == config_U1.backend.DTYPE['float64']
         assert tc.is_consistent()
 
         td = ta.to(device='cuda:0', dtype='complex128')
         assert td.device == 'cuda:0'
-        assert td.yast_dtype == 'complex128'
+        assert td.yastn_dtype == 'complex128'
         assert td.dtype == config_U1.backend.DTYPE['complex128']
         assert td.is_consistent()
 
