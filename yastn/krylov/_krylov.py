@@ -295,7 +295,7 @@ def lin_solver(f, b, v0, ncv=10, tol=1e-13, pinv_tol=1e-13, hermitian=False, **k
 
     be1 = backend.to_tensor([normv]+[0]*(m))
     
-    Tpinv = np.linalg.pinv(T, rcond = pinv_tol)
+    Tpinv = backend.pinv(T, rcond = pinv_tol)
     y = Tpinv @ be1
     
     vf = v0.linear_combination(*Q, amplitudes = [1,*y], **kwargs)

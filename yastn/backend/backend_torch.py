@@ -34,7 +34,7 @@ __all__= [
     'zeros', 'ones', 'rand', 'to_tensor', 'to_mask', 'square_matrix_from_dict',
     'requires_grad_', 'requires_grad', 'move_to', 'conj',
     'trace', 'rsqrt', 'reciprocal', 'exp', 'sqrt', 'absolute',
-    'svd_lowrank', 'svd', 'eigh', 'qr',
+    'svd_lowrank', 'svd', 'eigh', 'qr', 'pinv',
     'argsort', 'eigs_which', 'allclose',
     'add', 'sub', 'apply_mask', 'vdot', 'diag_1dto2d', 'diag_2dto1d',
     'dot', 'dot_diag', 'transpose_dot_sum',
@@ -357,6 +357,10 @@ def qr(data, meta, sizes):
         Qdata[slice(*slQ)].view(DQ)[:] = Q * sR  # positive diag of R
         Rdata[slice(*slR)].view(DR)[:] = sR.reshape([-1, 1]) * R
     return Qdata, Rdata
+
+
+def pinv(A, rcond=None, hermitian=False, out=None, atol=None, rtol=None):
+    return torch.linalg.pinv(A, atol=atol, rtol=rtol if not rtol is None else rcond, hermitian=hermitian, out=out)
 
 
 @torch.no_grad()
