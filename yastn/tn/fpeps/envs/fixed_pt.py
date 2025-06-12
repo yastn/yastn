@@ -1,4 +1,5 @@
 import time, logging
+from typing import Mapping
 import torch
 import numpy as np
 from scipy.optimize import minimize
@@ -12,7 +13,7 @@ import torch.utils.checkpoint
 
 
 from .... import Tensor, zeros, eye, YastnError, tensordot, einsum, diag, rand, qr
-from ._env_ctm import ctm_conv_corner_spec, decompress_env_1d, EnvCTM_projectors
+from ._env_ctm import ctm_conv_corner_spec, decompress_env_1d, decompress_proj_1d, EnvCTM_projectors
 from .... import zeros, decompress_from_1d
 from ....tensor._tests import _test_axes_match
 from .rdm import *
@@ -458,8 +459,21 @@ def real_to_complex(z):      # real vector of length 2n -> complex of length n
 def complex_to_real(z):      # complex vector of length n -> real of length 2n
     return np.concatenate((np.real(z), np.imag(z)))
 
+Gauge = namedtuple("Gauge", "t l b r")
+
+def _compress_gauges_1d(gauges : Mapping[Site,Gauge]):
+    data_t, meta_t= tuple(zip( *(getattr(gauges[site],dirn).compress_to_1d() for site in gauges.keys() \
+        for dirn in "tlbr") ))
+    meta= {'gauges': meta_t, 'sites': tuple(gauges.keys())}
+    return data_t, meta
+            
+def _decompress_gauges_1d(data_t, meta) -> Mapping[Site,Gauge]:
+    return {site: Gauge(*[decompress_from_1d(data_t[i], meta['gauges'][i]) for i in range(j, j+4)]) \
+        for j, site in enumerate(meta['sites'])}
+
+
 def find_coeff_multi_sites(env_old, env, zero_modes_dict, dtype=torch.complex128, verbose=False):
-    Gauge = namedtuple("Gauge", "t l b r")
+    # Gauge = namedtuple("Gauge", "t l b r")
 
     phases_ind = {}
     fixed_env = env.copy()
@@ -681,7 +695,6 @@ def find_coeff_multi_sites(env_old, env, zero_modes_dict, dtype=torch.complex128
     return cs_dict
 
 def find_gauge_multi_sites(env_old, env, verbose=False):
-    Gauge = namedtuple("Gauge", "t l b r")
     zero_modes_dict = {}
     sigma_dict = {}
     for site in env.sites():
@@ -777,6 +790,7 @@ def find_gauge_multi_sites(env_old, env, verbose=False):
             if verbose:
                 print("C diff:", (fixed_C - C_old).norm() / C_old.norm())
     return sigma_dict
+
 
 def fp_ctmrg(env: EnvCTM, \
             ctm_opts_fwd : dict= {'method': "2site", 'use_qr': False, 'corner_tol': 1e-8, 'max_sweeps': 100, 
@@ -936,6 +950,7 @@ class FixedPoint(torch.autograd.Function):
             Sequence[Tensor]: raw environment data for the backward pass.
         """
 
+        # 1. Converge the environment using CTMRG
         ctm_env_out, converged, *FixedPoint.ctm_log, FixedPoint.t_ctm, FixedPoint.t_check = FixedPoint.get_converged_env(
             env,
             **ctm_opts_fwd,
@@ -943,27 +958,37 @@ class FixedPoint(torch.autograd.Function):
         if not converged:
             raise NoFixedPointError(code=1, message="No fixed point found: CTM forward does not converge!")
 
-        # note that we need to find the gauge transformation that connects two set of environment tensors
+        # 2. Perform 1 extra CTM step to find the gauge transformation under which we have element-wise convergence
+        #
+        # NOTE We need to find the gauge transformation that connects two set of environment tensors
         # obtained from CTMRG with the 'full' svd, because the backward uses the full svd backward.
+        # TODO Use partial SVDs with appropriate backward
         _ctm_opts_fp = dict(ctm_opts_fwd)
         if ctm_opts_fp is not None:
             _ctm_opts_fp.update(ctm_opts_fp)
         env_converged = ctm_env_out.copy()
-        ctx.proj = ctm_env_out.update_(**_ctm_opts_fp)
+        t0= time.perf_counter()
+        fp_proj = ctm_env_out.update_(**_ctm_opts_fp)
+        t1= time.perf_counter()
+        log.info(f"{type(ctx).__name__}.forward FP CTM step t {t0-t1} [s]")
 
+        # 3. Find the gauge transformation
+        t0 = time.perf_counter()
         sigma_dict = find_gauge_multi_sites(env_converged, ctm_env_out, verbose=True)
         if sigma_dict is None:
             raise NoFixedPointError(code=1, message="No fixed point found: fail to find the gauge matrix!")
+        t1 = time.perf_counter()
+        log.info(f"{type(ctx).__name__}.forward FP gauge-fixing t {t0-t1} [s]")
+        import pdb; pdb.set_trace()
 
         env_data, env_meta = env_converged.compress_env_1d()
-        ctx.save_for_backward(*env_data)
-        ctx.env_meta = env_meta
+        fp_proj_data, fp_proj_meta = env_converged.compress_proj_1d(fp_proj)
+        g_data, g_meta= _compress_gauges_1d(sigma_dict)
+        ctx.save_for_backward(*env_data, *fp_proj_data, *g_data)
+        ctx.env_meta, ctx.fp_proj_meta, ctx.g_meta = env_meta, fp_proj_meta, g_meta
         ctx.ctm_opts_fp = _ctm_opts_fp
 
-        # TODO: use save_for_backward
-        ctx.sigma_dict = sigma_dict
         env_1d, env_slices= env_raw_data(env_converged)
-
         return env_converged, env_slices, env_1d
 
     @staticmethod
@@ -972,8 +997,13 @@ class FixedPoint(torch.autograd.Function):
         dA = grad_env
 
         # env_data = torch.utils.checkpoint.detach_variable(ctx.saved_tensors)[0] # only one element in the tuple
-        env_data = ctx.saved_tensors
+        env_data= ctx.saved_tensors[:len(ctx.env_meta['psi'])+len(ctx.env_meta['env'])] 
+        fp_proj_data= ctx.saved_tensors[len(env_data):len(env_data)+len(ctx.fp_proj_meta['proj'])] 
+        g_data= ctx.saved_tensors[-len(ctx.g_meta['gauges']):]
         env= decompress_env_1d(env_data, ctx.env_meta)
+        fp_proj= decompress_proj_1d(fp_proj_data, ctx.fp_proj_meta)
+        sigma_dict= _decompress_gauges_1d(g_data, ctx.g_meta)
+
         psi_data = tuple(env.psi.ket[s]._data for s in env.psi.ket.sites())
         _env_ts, _env_slices= env_raw_data(env)
 
@@ -981,8 +1011,8 @@ class FixedPoint(torch.autograd.Function):
         diff_ave = None
         # Compute vjp only
         with torch.enable_grad():
-            _, dfdC_vjp = torch.func.vjp(lambda x: FixedPoint.fixed_point_iter(env, ctx.sigma_dict, ctx.ctm_opts_fp, _env_slices, x, psi_data), _env_ts)
-            _, dfdA_vjp = torch.func.vjp(lambda x: FixedPoint.fixed_point_iter(env, ctx.sigma_dict, ctx.ctm_opts_fp, _env_slices, _env_ts, x), psi_data)
+            _, dfdC_vjp = torch.func.vjp(lambda x: FixedPoint.fixed_point_iter(env, sigma_dict, ctx.ctm_opts_fp, _env_slices, x, psi_data), _env_ts)
+            _, dfdA_vjp = torch.func.vjp(lambda x: FixedPoint.fixed_point_iter(env, sigma_dict, ctx.ctm_opts_fp, _env_slices, _env_ts, x), psi_data)
         # fixed_point_iter changes the data of psi, so we need to refill the state to recover the previous state
         refill_state(env.psi.ket, psi_data)
 

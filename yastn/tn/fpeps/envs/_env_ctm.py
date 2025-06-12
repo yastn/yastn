@@ -198,6 +198,13 @@ class EnvCTM(Peps):
         data= tuple( t for t,m in unrolled['psi'].values())+tuple( t for t,m in unrolled['env'])
         return data, meta
 
+    def compress_proj_1d(env, proj):
+            empty_proj= Tensor(config=env.config) # placeholder instead of None
+            data_t, meta_t= tuple(zip( *(t.compress_to_1d() if not (t is None) else empty_proj.compress_to_1d() \
+                for site in proj.sites() for t in proj[site].__dict__.values()) ))
+            meta= {'geometry': proj.geometry, 'proj': meta_t}
+            return data_t, meta
+
     def save_to_dict(self) -> dict:
         r"""
         Serialize EnvCTM into a dictionary.
@@ -928,11 +935,6 @@ class EnvCTM(Peps):
         proj = Peps(env.geometry)
         for site in proj.sites(): proj[site] = EnvCTM_projectors()
 
-        def _compress_proj(proj, empty_proj):
-            data, meta= tuple(zip( *(t.compress_to_1d() if not (t is None) else empty_proj.compress_to_1d() \
-                for site in proj.sites() for t in proj[site].__dict__.values()) ))
-            return data, meta
-
         #
         # get projectors and compute updated env tensors
         # TODO currently supports only <psi|psi> for double-layer peps
@@ -953,7 +955,7 @@ class EnvCTM(Peps):
                     # return backend tensors - only environment and projectors
                     #
                     out_env_data, out_env_meta= loc_env.compress_env_1d()
-                    out_proj_data, out_proj_meta= _compress_proj(proj_tmp, Tensor(config=next(iter(out_env_meta['psi'].values()))['config']))
+                    out_proj_data, out_proj_meta= loc_env.compress_proj_1d(proj_tmp)
 
                     outputs_meta['env']= out_env_meta['env']
                     outputs_meta['proj']= out_proj_meta
@@ -1157,6 +1159,7 @@ class EnvCTM(Peps):
         l= leg0 if sU == leg0.s else leg1
         return { t: max(d+10,d*1.1) for t,d in zip(l.t, l.D) }
 
+
 def decompress_env_1d(data,meta):
     """
     Reconstruct the environment from its compressed form.
@@ -1183,6 +1186,33 @@ def decompress_env_1d(data,meta):
         for env_t,t,t_meta in zip(loc_env[site].__dict__.keys(),data_env[i*8:(i+1)*8],meta['env'][i*8:(i+1)*8]):
             setattr(loc_env[site],env_t,decompress_from_1d(t,t_meta) if t is not None else None) 
     return loc_env
+
+
+def decompress_proj_1d(data,meta):
+    """
+    Reconstruct the projectors from their compressed form.
+
+    Parameters
+    ----------
+    data : Sequence[Tensor]
+        Collection of 1D data tensors for both environment and underlying PEPS.
+    meta : dict
+        Holds metadata of original projectors (and PEPS geometry).
+
+    Returns
+    -------
+    Peps of EnvCTM_projectors
+        Projectors for the CTM environment.
+    """
+    proj = Peps(meta['geometry'])
+    for site in proj.sites(): proj[site] = EnvCTM_projectors()
+
+    # assign backend tensors
+    #
+    for i,site in enumerate(proj.sites()):
+        for env_t,t,t_meta in zip(proj[site].__dict__.keys(),data[i*8:(i+1)*8],meta['proj'][i*8:(i+1)*8]):
+            setattr(proj[site],env_t,decompress_from_1d(t,t_meta) if t is not None else None) 
+    return proj
 
 
 def ctm_conv_corner_spec(env : EnvCTM, history : Sequence[dict[tuple[Site,str],Tensor]]=[],
