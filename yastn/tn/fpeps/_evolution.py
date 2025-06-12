@@ -570,7 +570,7 @@ def initial_truncation_ZMT1(R0, R1, fgf, opts_svd, fRR, RRgRR, pinv_cutoffs, pre
             to_be_removed_w = -1
             max_value = -1
             for ii in range(len(S)):
-                if (np.abs(S[ii] / S[-1])) > 1e-6:
+                if (np.abs(S[ii] / S[-1])) >= np.sum(np.abs(S)) / len(S):
                     break
                 if np.max(np.abs(W[eliminate_range[0]:eliminate_range[1], ii])) > max_value:
                     max_value = np.max(np.abs(W[eliminate_range[0]:eliminate_range[1], ii]))
@@ -642,7 +642,8 @@ def initial_truncation_ZMT3(R0, R1, fgf, opts_svd:dict, fRR, RRgRR, pinv_cutoffs
         preD = opts_svd["D_total"] + 5
     else:
         preD = opts_svd["preD"]
-    (MA, MB), error2 = initial_truncation_OMP(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs, pre_initial="EAT")
+    (MA, MB), error2 = initial_truncation_OMP(R0, R1, fgf, fRR, RRgRR, {"D_total":preD, "tol_block":opts_svd["tol_block"]}, pinv_cutoffs, pre_initial="SVD")
+    # (MA, MB), error2, _, _ = initial_truncation_EAT(R0, R1, fgf, fRR, RRgRR, {"D_total":preD, "tol_block":opts_svd["tol_block"]}, pinv_cutoffs)
     # (MA, MB), error2 = initial_truncation_ZMT1(R0, R1, fgf, {"D_total":preD, "tol_block":opts_svd["tol_block"]}, fRR, RRgRR, pinv_cutoffs, pre_initial=None)
 
     G0 = fgf.unfuse_legs(axes=(0, 1))
@@ -696,12 +697,18 @@ def initial_truncation_ZMT3(R0, R1, fgf, opts_svd:dict, fRR, RRgRR, pinv_cutoffs
             largest_ii = None
             largest_d = None
             normalization = 0
+            num_of_element = 0
+
             for ii in range(len(data_r1[1]['struct'].D)):
                 Ds = data_r1[1]['struct'].D[ii]
                 mat = np.array(W[accumulated:(accumulated + Ds[0] * Ds[0]),jj]).reshape(Ds[0], Ds[0])
                 mat = (mat.T.conjugate()) @ mat
+                num_of_element = num_of_element + Ds[0] * Ds[0]
                 normalization = normalization + mat.trace()
+                accumulated = accumulated + Ds[0] * Ds[0]
             normalization = normalization ** 0.5
+
+            accumulated = 0
             for ii in range(len(data_r1[1]['struct'].D)):
                 Ds = data_r1[1]['struct'].D[ii]
                 mat = np.array(W[accumulated:(accumulated + Ds[0] * Ds[0]),jj]).reshape(Ds[0], Ds[0]) / normalization
@@ -713,7 +720,8 @@ def initial_truncation_ZMT3(R0, R1, fgf, opts_svd:dict, fRR, RRgRR, pinv_cutoffs
                     largest_ii = ii
                     largest_d = d[np.argmax(np.abs(d))]
                 accumulated = accumulated + Ds[0] * Ds[0]
-            if np.abs(largest_d) > 1e-6:
+
+            if np.abs(largest_d) >= 1 / num_of_element:
                 eliminate_start = 0
                 eliminate_end = 0
                 for kk in range(largest_ii + 1):
@@ -743,7 +751,7 @@ def initial_truncation_ZMT3(R0, R1, fgf, opts_svd:dict, fRR, RRgRR, pinv_cutoffs
 
         AZB = MA @ test_ZM @ MB
         temp_zero = np.abs(yastn.tensordot(yastn.tensordot(G0, AZB, axes=((2, 3), (0, 1))), AZB, axes=((0, 1), (0, 1)), conj=(0, 1)).to_numpy())
-        # print(temp_zero)
+        print(temp_zero)
         U, S, Vh = svd(R, sU=R.s[1])
         S = S.sqrt()
         U, Vh = S.broadcast(U, Vh, axes=(1, 0))
