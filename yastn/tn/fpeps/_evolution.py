@@ -595,8 +595,19 @@ def initial_truncation_ZMT1(R0, R1, fgf, opts_svd, fRR, RRgRR, pinv_cutoffs, pre
     res = minimize(diff, 1)
     MA = res.x ** 0.5 * MA
     MB = res.x ** 0.5 * MB
-    return (MA, MB), res.fun, loopiness
+    return (MA, MB), res.fun
     # return (MA, MB), calculate_truncation_error2(MAMB, fgf, fRR, RRgRR)
+
+def initial_truncation_ZMT3(R0, R1, fgf, opts_svd_fRR, RRgRR, pinv_cutoffs, pre_initial=None):
+    if pre_initial == "EAT":
+        (R0, R1), _, _, _= initial_truncation_EAT(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs)
+    elif pre_initial == "SVD":
+        R0, S, R1 = svd(R0 @ R1, sU=R0.s[1])
+        S = S.sqrt()
+        R0, R1 = S.broadcast(R0, R1, axes=(1, 0))
+
+    G0 = fgf.unfuse_legs(axes=(0, 1))
+
 
 
 
