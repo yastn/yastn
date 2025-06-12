@@ -232,7 +232,7 @@ def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=Fals
 
 def lin_solver(f, b, v0, ncv=10, tol=1e-13, pinv_tol=1e-13, hermitian=False, **kwargs) -> tuple[array, Sequence[vectors]]:
     r"""
-    Search for solution of the linear equation f(x) = b, where x is estimated vector and f(x) is matrix-vector operation. 
+    Search for solution of the linear equation ``f(x) = b``, where ``x`` is estimated vector and ``f(x)`` is matrix-vector operation. 
     Implementation based on pseudoinverse of Krylov expansion [1]. 
 
     Ref.[1] https://www.math.iit.edu/~fass/577_ch4_app.pdf
@@ -243,15 +243,14 @@ def lin_solver(f, b, v0, ncv=10, tol=1e-13, pinv_tol=1e-13, hermitian=False, **k
             define an action of a 'square matrix' on the 'vector' ``v0``.
             ``f(v0)`` should preserve the signature of ``v0``.
 
-        v0: Tensor
-            Initial guess, 'vector' to span the Krylov space.
+        b: Tensor
+            free term for the linear equation.
 
-        k: int
-            Number of desired eigenvalues and eigenvectors. The default is 1.
+        v0: Tensor
+            Initial guess span the Krylov space.
 
         ncv: int
             Dimension of the employed Krylov space. The default is 10.
-            Must be greated than `k`.
 
         tol: float
             Stopping criterion for an expansion of the Krylov subspace.
@@ -268,10 +267,10 @@ def lin_solver(f, b, v0, ncv=10, tol=1e-13, pinv_tol=1e-13, hermitian=False, **k
     Results
     ----------
         vf: Tensor
-            Approximation of v in f(v) = b problem.
+            Approximation of ``v`` in ``f(v) = b`` problem.
 
         res: float
-            norm of the resudual vector r = f(vf) - b.
+            norm of the resudual vector ``r = norm(f(vf) - b)``.
     """
     backend = v0.config.backend
 
