@@ -987,7 +987,7 @@ class FixedPoint(torch.autograd.Function):
         t0= time.perf_counter()
         fp_proj = ctm_env_out.update_(**_ctm_opts_fp)
         t1= time.perf_counter()
-        log.info(f"{type(ctx).__name__}.forward FP CTM step t {t0-t1} [s]")
+        log.info(f"{type(ctx).__name__}.forward FP CTM step t {t1-t0} [s]")
 
         # 3. Find the gauge transformation
         t0 = time.perf_counter()
@@ -995,7 +995,7 @@ class FixedPoint(torch.autograd.Function):
         if sigma_dict is None:
             raise NoFixedPointError(code=1, message="No fixed point found: fail to find the gauge matrix!")
         t1 = time.perf_counter()
-        log.info(f"{type(ctx).__name__}.forward FP gauge-fixing t {t0-t1} [s]")
+        log.info(f"{type(ctx).__name__}.forward FP gauge-fixing t {t1-t0} [s]")
 
         env_data, env_meta = env_converged.compress_env_1d()
         fp_proj_data, fp_proj_meta = env_converged.compress_proj_1d(fp_proj)

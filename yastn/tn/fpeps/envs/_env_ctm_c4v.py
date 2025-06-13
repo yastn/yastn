@@ -14,12 +14,13 @@
 # ==============================================================================
 from __future__ import annotations
 import logging
+from typing import Callable
 from .... import Tensor, YastnError, tensordot, truncation_mask, decompress_from_1d, \
     truncation_mask_multiplets
 from .._peps import Peps, Peps2Layers, DoublePepsTensor
 from .._geometry import RectangularUnitcell
 from ._env_auxlliary import *
-from ._env_ctm import EnvCTM, decompress_env_1d, EnvCTM_projectors, store_projectors_, update_old_env_
+from ._env_ctm import EnvCTM, decompress_env_1d, EnvCTM_projectors, store_projectors_, update_old_env_, ctm_conv_corner_spec, CTMRG_out
 
 logger = logging.Logger('ctmrg')
 
@@ -157,7 +158,7 @@ class EnvCTM_c4v(EnvCTM):
         r"""
         Initialize C4v-symmetric CTMRG environment::
 
-            C--T--C => C---T--T'--T--C => C--T-- & --T'-- <=> 
+            C--T--C => C---T--T'--T--C => C--T-- & --T'-- <=>
             T--A--T    T---A--B---A--T    T--A--   --B---     C'--T'--
             C--T--C    T'--B--A---B--T    |  |       |        |   |
                        T---A--B---A--T
@@ -253,7 +254,7 @@ class EnvCTM_c4v(EnvCTM):
 
             def f_update_core_2dir(move_d,loc_im,*inputs_t):
                 loc_env= decompress_env_c4v_1d(inputs_t,loc_im)
-                
+
                 env_tmp, proj_tmp= _update_core_dir(loc_env, "default", opts_svd, method=method, **kwargs)
                 update_old_env_(loc_env, env_tmp)
 
@@ -325,6 +326,50 @@ class EnvCTM_c4v(EnvCTM):
             d['data'][site] = d_local
         return d
 
+    def ctmrg_(env, opts_svd, method='default', max_sweeps=1, iterator_step=1, corner_tol=None, truncation_f: Callable=None,  **kwargs):
+        if "checkpoint_move" in kwargs:
+            if env.config.backend.BACKEND_ID == "torch":
+                assert kwargs["checkpoint_move"] in ['reentrant','nonreentrant',False], f"Invalid choice for {kwargs['checkpoint_move']}"
+        # BUG: fails when uncomment the following line
+        # kwargs["truncation_f"]= truncation_f
+        tmp = _iterate_ctmrg_(env, opts_svd, method, max_sweeps, iterator_step, corner_tol, **kwargs)
+        return tmp if iterator_step else next(tmp)
+
+def _iterate_ctmrg_(env, opts_svd, method, max_sweeps, iterator_step, corner_tol, **kwargs):
+    """ Generator for ctmrg_(). """
+    max_dsv, converged = None, False
+    proj_history = None
+    for sweep in range(1, max_sweeps + 1):
+        current_proj= env.update_(opts_svd=opts_svd, method=method, proj_history=proj_history, **kwargs)
+        # Here, we have access to all projectors obtained in the previous CTM step
+        # For partial SVD solvers, we need
+        # 1. estimate of how many singular triples to solve for in each block, both blocks kept in truncation
+        #    and blocks discarded in truncation
+        # 2. perform truncation, typically restricting only total number of singular triples
+        #
+        policy= opts_svd.get('policy','fullrank')
+        if policy not in ['fullrank', "qr"]:
+            if proj_history is None:
+                # Empty structure for projectors
+                proj_history = Peps(env.geometry)
+                for site in proj_history.sites(): proj_history[site] = EnvCTM_projectors()
+            for site in current_proj.sites():
+                if current_proj[site].vtl is not None:
+                    proj_history[site].vtl = current_proj[site].vtl.get_legs(-1)
+                if current_proj[site].vtr is not None:
+                    proj_history[site].vtr = current_proj[site].vtr.get_legs(0)
+
+        # Default CTM convergence check
+        if corner_tol is not None:
+            if sweep==1: history = []
+            converged, max_dsv, history= ctm_conv_corner_spec(env.detach(), history, corner_tol)
+            logging.info(f'Sweep = {sweep:03d}; max_diff_corner_singular_values = {max_dsv}')
+            if converged: break
+
+        if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
+            yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
+    yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
+
 
 def decompress_env_c4v_1d(data,meta)->EnvCTM_c4v:
     """
@@ -351,73 +396,78 @@ def decompress_env_c4v_1d(data,meta)->EnvCTM_c4v:
 
 
 def _update_core_dir(env, dir : str, opts_svd : dict, **kwargs):
-        assert dir in ['default'], "Invalid directions"
-        method= kwargs.get('method','default')
-        policy= opts_svd.get('policy','fullrank')
+    assert dir in ['default'], "Invalid directions"
+    method= kwargs.get('method','default')
+    policy= opts_svd.get('policy','fullrank')
+    psh = kwargs.pop("proj_history", None)
+    # Inherit _partial_svd_predict_spec from EnvCTM
+    svd_predict_spec= lambda s0,p0,s1,p1: kwargs.get('D_block', None) if psh is None else \
+        env._partial_svd_predict_spec(getattr(psh[s0],p0), getattr(psh[s1],p1), opts_svd.get('sU', 1))
 
-        #
-        # Empty structure for projectors
-        proj = Peps(env.geometry)
-        for site in proj.sites():
-            proj[site] = EnvCTM_projectors()
-        s0 = env.psi.sites()[0]
+    #
+    # Empty structure for projectors
+    proj = Peps(env.geometry)
+    for site in proj.sites():
+        proj[site] = EnvCTM_projectors()
+    s0 = env.psi.sites()[0]
 
-        # 1) get tl enlarged corner and projector from ED/SVD
-        # (+) 0--tl--1 0--t--2 (-)
-        #                 1
-        cor_tl_2x1 = env[s0].tl @ env[s0].t
-        # (-) 0--t--2 0--tl--1 0--t--2->3(-)
-        #        1                1->2
-        cor_tl = env[s0].t @ cor_tl_2x1
-        # tl--t---1 (-)
-        # t---A--3 (fusion of + and -)
-        # 0   2
-        cor_tl = tensordot(cor_tl, env.psi[s0], axes=((2, 1), (0, 1)))
-        cor_tl = cor_tl.fuse_legs(axes=((0, 2), (1, 3)))
+    # 1) get tl enlarged corner and projector from ED/SVD
+    # (+) 0--tl--1 0--t--2 (-)
+    #                 1
+    cor_tl_2x1 = env[s0].tl @ env[s0].t
+    # (-) 0--t--2 0--tl--1 0--t--2->3(-)
+    #        1                1->2
+    cor_tl = env[s0].t @ cor_tl_2x1
+    # tl--t---1 (-)
+    # t---A--3 (fusion of + and -)
+    # 0   2
+    cor_tl = tensordot(cor_tl, env.psi[s0], axes=((2, 1), (0, 1)))
+    cor_tl = cor_tl.fuse_legs(axes=((0, 2), (1, 3)))
 
-        # Note: U(1)-symm corner is not hermitian. Instead blocks related by conj of charges are hermitian conjugates,
-        #       i.e. (2,-2) and (-2,2) blocks are hermitian conjugates.
-        R= cor_tl_2x1.flip_signature().fuse_legs(axes=((0, 1), 2)) if policy in ['qr'] else cor_tl
-        proj[s0].vtl, s, proj[s0].vtr= proj_sym_corner(R, opts_svd, sU=1, **kwargs)
+    # Note: U(1)-symm corner is not hermitian. Instead blocks related by conj of charges are hermitian conjugates,
+    #       i.e. (2,-2) and (-2,2) blocks are hermitian conjugates.
+    R= cor_tl_2x1.flip_signature().fuse_legs(axes=((0, 1), 2)) if policy in ['qr'] else cor_tl
+    kwargs["D_block"]= svd_predict_spec(s0, "vtl", s0, "vtr")
+    proj[s0].vtl, s, proj[s0].vtr= proj_sym_corner(R, opts_svd, sU=1, **kwargs)
 
-        # 2) update move corner
-        P= proj[s0].vtl
-        env_tmp = EnvCTM(env.psi, init=None)  # empty environments
-        if policy in ['symeig']:
-            assert (cor_tl-cor_tl.H)<1e-12,"enlarged corner is not hermitian"
-            env_tmp[s0].tl = s/s.norm(p='inf')
-        elif policy in ["qr"]:
-            S= P.flip_signature().tensordot( cor_tl @ P.flip_signature(), (0, 0))
-            S= S.flip_charges()
-            env_tmp[s0].tl= (S/S.norm(p='inf'))
-        else:
-            S= ((proj[s0].vtr.conj() @ P) @ s)
-            env_tmp[s0].tl= (S/S.norm(p='inf'))
+    # 2) update move corner
+    P= proj[s0].vtl
+    env_tmp = EnvCTM(env.psi, init=None)  # empty environments
+    if policy in ['symeig']:
+        assert (cor_tl-cor_tl.H)<1e-12,"enlarged corner is not hermitian"
+        env_tmp[s0].tl = s/s.norm(p='inf')
+    elif policy in ["qr"]:
+        S= P.flip_signature().tensordot( cor_tl @ P.flip_signature(), (0, 0))
+        S= S.flip_charges()
+        env_tmp[s0].tl= (S/S.norm(p='inf'))
+    else:
+        S= ((proj[s0].vtr.conj() @ P) @ s)
+        env_tmp[s0].tl= (S/S.norm(p='inf'))
 
-        # 3) update move half-row/-column tensor. Here, P is to act on B-sublattice T tensor
-        #
-        #   Note:
-        #   flip_signature() is equivalent to conj().conj_blocks(), which changes the total charge from +n to -n
-        #   flip_charges(axes) is equivalent to switch_signature(axes), which leaves the total charge unchanged
-        #
-        P= P.unfuse_legs(axes=0)
-        # 1<-2--P--0    0--T--2->3
-        #        --1->0    1->2
-        tmp = tensordot(P, env[s0].t.flip_signature(), axes=(0, 0)) # Pass from T_A to T_B
-        #  0<-1--P-----T--3->1  0--P--2
-        #        |     2           |
-        #        |      0          |
-        #         --0 1--A--3   1--
-        #                2=>1
-        _b_sublattice= env.psi.bra[s0].flip_signature() # transform A with signature [1,1,1,1,1] into B with [-1,-1,-1,-1,-1]
-        tmp = tensordot(tmp, DoublePepsTensor(bra=_b_sublattice, ket=_b_sublattice), axes=((0, 2), (1, 0)))
-        tmp = tensordot(tmp, P, axes=((1, 3), (0, 1)))
-        tmp = tmp.flip_charges(axes=(0,2)) #tmp.switch_signature(axes=(0,2))
+    # 3) update move half-row/-column tensor. Here, P is to act on B-sublattice T tensor
+    #
+    #   Note:
+    #   flip_signature() is equivalent to conj().conj_blocks(), which changes the total charge from +n to -n
+    #   flip_charges(axes) is equivalent to switch_signature(axes), which leaves the total charge unchanged
+    #
+    P= P.unfuse_legs(axes=0)
+    # 1<-2--P--0    0--T--2->3
+    #        --1->0    1->2
+    tmp = tensordot(P, env[s0].t.flip_signature(), axes=(0, 0)) # Pass from T_A to T_B
+    #  0<-1--P-----T--3->1  0--P--2
+    #        |     2           |
+    #        |      0          |
+    #         --0 1--A--3   1--
+    #                2=>1
+    _b_sublattice= env.psi.bra[s0].flip_signature() # transform A with signature [1,1,1,1,1] into B with [-1,-1,-1,-1,-1]
+    tmp = tensordot(tmp, DoublePepsTensor(bra=_b_sublattice, ket=_b_sublattice), axes=((0, 2), (1, 0)))
+    tmp = tensordot(tmp, P, axes=((1, 3), (0, 1)))
+    tmp = tmp.flip_charges(axes=(0,2)) #tmp.switch_signature(axes=(0,2))
 
-        # tmp= 0.5*(tmp + tmp.transpose(axes=(2,1,0)))
-        env_tmp[s0].t = tmp / tmp.norm(p='inf')
+    # tmp= 0.5*(tmp + tmp.transpose(axes=(2,1,0)))
+    env_tmp[s0].t = tmp / tmp.norm(p='inf')
 
-        return env_tmp, proj
+    return env_tmp, proj
 
 
 def proj_sym_corner(rr, opts_svd, **kwargs):
@@ -435,7 +485,7 @@ def proj_sym_corner(rr, opts_svd, **kwargs):
         for k in ["method", "use_qr",]: del _kwargs[k]
         s,u= rr.eigh_with_truncation(axes=(0,1), sU=rr.s[1], which='LM', mask_f= truncation_f, **opts_svd, **_kwargs)
         v= None
-    elif policy in ['fullrank', 'lowrank', 'arnoldi', 'krylov']:
+    elif policy in ['fullrank', 'randomized', 'block_arnoldi', 'block_propack']:
         # sU = ? r0.s[1]
         if truncation_f is None:
             u, s, v = rr.svd(axes=(0, 1), fix_signs=fix_signs, **kwargs)

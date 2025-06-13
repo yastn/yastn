@@ -115,8 +115,12 @@ class EnvCTM(Peps):
         return self.psi.config
 
     def max_D(self):
-        return max(max(max(getattr(self[site], dirn).get_shape()) for dirn in ['tl', 'tr', 'bl', 'br'])
-                   for site in self.sites())
+        m_D = 0
+        for site in self.sites():
+            for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
+                if getattr(self[site], dirn) is not None:
+                    m_D = max(max(getattr(self[site], dirn).get_shape()), m_D)
+        return m_D
 
     # Cloning/Copying/Detaching(view)
     #
@@ -1249,14 +1253,16 @@ def _iterate_ctmrg_(env, opts_svd, method, max_sweeps, iterator_step, corner_tol
         # 2. perform truncation, typically restricting only total number of singular triples
         #
         # For 1.,
-        if proj_history is None:
-            # Empty structure for projectors
-            proj_history = Peps(env.geometry)
-            for site in proj_history.sites(): proj_history[site] = EnvCTM_projectors()
-        for site in current_proj.sites():
-            for k, v in current_proj[site].__dict__.items():
-                if v is not None:
-                    setattr(proj_history[site], k, getattr(current_proj[site],k).get_legs(-1))
+        policy = opts_svd.get("policy", "fullrank")
+        if policy not in ["fullrank"]:
+            if proj_history is None:
+                # Empty structure for projectors
+                proj_history = Peps(env.geometry)
+                for site in proj_history.sites(): proj_history[site] = EnvCTM_projectors()
+            for site in current_proj.sites():
+                for k, v in current_proj[site].__dict__.items():
+                    if v is not None:
+                        setattr(proj_history[site], k, getattr(current_proj[site],k).get_legs(-1))
 
         # Default CTM convergence check
         if corner_tol is not None:
@@ -1289,30 +1295,30 @@ def calculate_corner_svd(env : dict[tuple[Site,str],Tensor]):
 
 
 def _update_core_2dir(env, dir : str, opts_svd : dict, **kwargs):
-        assert dir in ['lr', 'rl', 'tb', 'bt'], "Invalid directions"
-        update_env_= update_env_horizontal_ if dir in ['lr','rl'] else update_env_vertical_
-        method= kwargs.get('method','2site')
-        update_proj_ = update_2site_projectors_ if method == '2site' else update_1site_projectors_
+    assert dir in ['lr', 'rl', 'tb', 'bt'], "Invalid directions"
+    update_env_= update_env_horizontal_ if dir in ['lr','rl'] else update_env_vertical_
+    method= kwargs.get('method','2site')
+    update_proj_ = update_2site_projectors_ if method == '2site' else update_1site_projectors_
 
-        #
-        # Empty structure for projectors
-        proj = Peps(env.geometry)
-        for site in proj.sites():
-            proj[site] = EnvCTM_projectors()
+    #
+    # Empty structure for projectors
+    proj = Peps(env.geometry)
+    for site in proj.sites():
+        proj[site] = EnvCTM_projectors()
 
-        #
-        # projectors
-        for site in env.sites():
-            update_proj_(proj, site, dir, env, opts_svd, **kwargs)
-        trivial_projectors_(proj, dir, env)  # fill (trivial) projectors on edges
+    #
+    # projectors
+    for site in env.sites():
+        update_proj_(proj, site, dir, env, opts_svd, **kwargs)
+    trivial_projectors_(proj, dir, env)  # fill (trivial) projectors on edges
 
-        #
-        # update move
-        env_tmp = EnvCTM(env.psi, init=None)  # empty environments
-        for site in env.sites():
-            update_env_(env_tmp, site, env, proj, dir)
+    #
+    # update move
+    env_tmp = EnvCTM(env.psi, init=None)  # empty environments
+    for site in env.sites():
+        update_env_(env_tmp, site, env, proj, dir)
 
-        return env_tmp, proj
+    return env_tmp, proj
 
 
     # TODO
