@@ -751,7 +751,6 @@ def initial_truncation_ZMT3(R0, R1, fgf, opts_svd:dict, fRR, RRgRR, pinv_cutoffs
 
         AZB = MA @ test_ZM @ MB
         temp_zero = np.abs(yastn.tensordot(yastn.tensordot(G0, AZB, axes=((2, 3), (0, 1))), AZB, axes=((0, 1), (0, 1)), conj=(0, 1)).to_numpy())
-        print(temp_zero)
         U, S, Vh = svd(R, sU=R.s[1])
         S = S.sqrt()
         U, Vh = S.broadcast(U, Vh, axes=(1, 0))
