@@ -639,11 +639,11 @@ def initial_truncation_ZMT1(R0, R1, fgf, opts_svd, fRR, RRgRR, pinv_cutoffs, pre
 def initial_truncation_ZMT3(R0, R1, fgf, opts_svd:dict, fRR, RRgRR, pinv_cutoffs):
 
     if opts_svd.get("preD") is None:
-        preD = opts_svd["D_total"] + 5
+        preD = opts_svd["D_total"] * 2
     else:
         preD = opts_svd["preD"]
-    (MA, MB), error2 = initial_truncation_OMP(R0, R1, fgf, fRR, RRgRR, {"D_total":preD, "tol_block":opts_svd["tol_block"]}, pinv_cutoffs, pre_initial="SVD")
-    # (MA, MB), error2, _, _ = initial_truncation_EAT(R0, R1, fgf, fRR, RRgRR, {"D_total":preD, "tol_block":opts_svd["tol_block"]}, pinv_cutoffs)
+    # (MA, MB), error2 = initial_truncation_OMP(R0, R1, fgf, fRR, RRgRR, {"D_total":preD, "tol_block":opts_svd["tol_block"]}, pinv_cutoffs, pre_initial="SVD")
+    (MA, MB), error2, _, _ = initial_truncation_EAT(R0, R1, fgf, fRR, RRgRR, {"D_total":preD, "tol_block":opts_svd["tol_block"]}, pinv_cutoffs)
     # (MA, MB), error2 = initial_truncation_ZMT1(R0, R1, fgf, {"D_total":preD, "tol_block":opts_svd["tol_block"]}, fRR, RRgRR, pinv_cutoffs, pre_initial=None)
 
     G0 = fgf.unfuse_legs(axes=(0, 1))
