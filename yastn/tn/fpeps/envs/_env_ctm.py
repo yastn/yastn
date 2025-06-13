@@ -183,7 +183,7 @@ class EnvCTM(Peps):
         -------
         (tuple[Tensor] , dict)
             A pair where the first element is a tuple of raw data tensors (of type derived from backend)
-            and the second is a dict with corresponding metadata. 
+            and the second is a dict with corresponding metadata.
         """
         shallow= {
             'psi': {site: env.psi.bra[site] for site in env.sites()} if isinstance(env.psi,Peps2Layers) \
@@ -979,7 +979,7 @@ class EnvCTM(Peps):
                         setattr(env[site],env_t,decompress_from_1d(t,t_meta) if t is not None else None)
 
                 for i,site in enumerate(proj.sites()):
-                    for proj_t,t,t_meta in zip(proj[site].__dict__.keys(),outputs[8*len(env.sites()):][i*8:(i+1)*8],outputs_meta['proj'][i*8:(i+1)*8]):
+                    for proj_t,t,t_meta in zip(proj[site].__dict__.keys(),outputs[8*len(env.sites()):][i*8:(i+1)*8],outputs_meta['proj']['proj'][i*8:(i+1)*8]):
                         setattr(proj[site],proj_t, decompress_from_1d(t,t_meta) if t_meta['struct'].size>0 else None)
 
             else:
@@ -1143,17 +1143,17 @@ class EnvCTM(Peps):
         """
         Used in block-wise partial SVD solvers.
 
-        Based on the projector spectra leg0, leg1, from (previous) projector pair, 
+        Based on the projector spectra leg0, leg1, from (previous) projector pair,
         suggest number of singular value triples to solve for in each of the blocks.
 
         Parameters
         ----------
         leg0, leg1: yastn.Tensor
             Projector spectra for the previous projector pair.
-        sU: int 
+        sU: int
             Signature of U in SVD decomposition. See :func:`proj_corners` and :func:`linalg.svd`.
         """
-        # the projector spectra for projector pair are related by charge conjugation 
+        # the projector spectra for projector pair are related by charge conjugation
         assert leg0 == leg1.conj(), f"Projector spectrum history mismatch between leg0={leg0} and leg1={leg1}"
         #
         l= leg0 if sU == leg0.s else leg1
@@ -1184,7 +1184,7 @@ def decompress_env_1d(data,meta):
     data_env= data[len(sites):]
     for i,site in enumerate(sites):
         for env_t,t,t_meta in zip(loc_env[site].__dict__.keys(),data_env[i*8:(i+1)*8],meta['env'][i*8:(i+1)*8]):
-            setattr(loc_env[site],env_t,decompress_from_1d(t,t_meta) if t is not None else None) 
+            setattr(loc_env[site],env_t,decompress_from_1d(t,t_meta) if t is not None else None)
     return loc_env
 
 
@@ -1211,7 +1211,7 @@ def decompress_proj_1d(data,meta):
     #
     for i,site in enumerate(proj.sites()):
         for env_t,t,t_meta in zip(proj[site].__dict__.keys(),data[i*8:(i+1)*8],meta['proj'][i*8:(i+1)*8]):
-            setattr(proj[site],env_t,decompress_from_1d(t,t_meta) if t is not None else None) 
+            setattr(proj[site],env_t,decompress_from_1d(t,t_meta) if t is not None else None)
     return proj
 
 
@@ -1221,7 +1221,7 @@ def ctm_conv_corner_spec(env : EnvCTM, history : Sequence[dict[tuple[Site,str],T
     Evaluate convergence of CTM by computing the difference of environment corner spectra between consecutive CTM steps.
     """
     history.append(calculate_corner_svd(env))
-    def spec_diff(x,y): 
+    def spec_diff(x,y):
         if x is not None and y is not None:
             return (x - y).norm().item()
         elif x is None and y is None:
@@ -1243,12 +1243,12 @@ def _iterate_ctmrg_(env, opts_svd, method, max_sweeps, iterator_step, corner_tol
         current_proj= env.update_(opts_svd=opts_svd, method=method, proj_history= proj_history, **kwargs)
 
         # Here, we have access to all projectors obtained in the previous CTM step
-        # For partial SVD solvers, we need 
+        # For partial SVD solvers, we need
         # 1. estimate of how many singular triples to solve for in each block, both blocks kept in truncation
         #    and blocks discarded in truncation
         # 2. perform truncation, typically restricting only total number of singular triples
         #
-        # For 1., 
+        # For 1.,
         if proj_history is None:
             # Empty structure for projectors
             proj_history = Peps(env.geometry)
@@ -1392,7 +1392,7 @@ def update_1site_projectors_(proj, site, dirn, env, opts_svd, **kwargs):
     psh= kwargs.pop("proj_history", None)
     svd_predict_spec= lambda s0,p0,s1,p1: kwargs.get('D_block', None) if psh is None else \
         env._partial_svd_predict_spec(getattr(psh[s0],p0), getattr(psh[s1],p1), opts_svd.get('sU', 1))
-    
+
     psi = env.psi
     sites = [psi.nn_site(site, d=d) for d in ((0, 0), (0, 1), (1, 0), (1, 1))]
     if None in sites:
@@ -1449,7 +1449,7 @@ def proj_corners(r0, r1, opts_svd, **kwargs):
     rr = tensordot(r0, r1, axes=(1, 1))
     fix_signs= opts_svd.get('fix_signs',True)
     truncation_f= kwargs.get('truncation_f',None)
-    
+
     verbosity = opts_svd.get('verbosity', 0)
     kwargs['verbosity'] = verbosity
 
@@ -1459,7 +1459,7 @@ def proj_corners(r0, r1, opts_svd, **kwargs):
         u, s, v = Smask.apply_mask(u, s, v, axes=(-1, 0, 0))
     else:
         u, s, v = rr.svd_with_truncation(axes=(0, 1), sU=r0.s[1], mask_f=truncation_f, **kwargs)
-    
+
     if verbosity>2:
         fname = sys._getframe().f_code.co_name
         logger.info(f"{fname} S {s.get_legs(0)}")

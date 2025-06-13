@@ -468,7 +468,7 @@ def _compress_gauges_1d(gauges : Mapping[Site,Gauge]):
     return data_t, meta
 
 def _decompress_gauges_1d(data_t, meta) -> Mapping[Site,Gauge]:
-    return {site: Gauge(*[decompress_from_1d(data_t[i], meta['gauges'][i]) for i in range(j, j+4)]) \
+    return {site: Gauge(*[decompress_from_1d(data_t[i], meta['gauges'][i]) for i in range(4*j, 4*j+4)]) \
         for j, site in enumerate(meta['sites'])}
 
 def compute_env_gauge_product(env, zero_modes_dict, cs_dict):
@@ -872,7 +872,6 @@ class FixedPoint(torch.autograd.Function):
                     sigma2 = getattr(sigma_dict[site_l], dirn)
                 elif dirn == "l":
                     sigma2 = getattr(sigma_dict[site_t], dirn)
-
                 fixed_t = tensordot(
                     tensordot(sigma1, getattr(env_in[site], dirn), axes=(0, 0), conj=(1, 0)),
                     sigma2,
