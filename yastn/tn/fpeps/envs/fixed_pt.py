@@ -1,4 +1,5 @@
 import time, logging
+from typing import Mapping
 import torch
 import numpy as np
 from scipy.optimize import minimize
@@ -12,12 +13,20 @@ import torch.utils.checkpoint
 
 
 from .... import Tensor, zeros, eye, YastnError, tensordot, einsum, diag, rand, qr
-from ._env_ctm import ctm_conv_corner_spec, decompress_env_1d
+from ._env_ctm import ctm_conv_corner_spec, decompress_env_1d, decompress_proj_1d, EnvCTM_projectors
 from .... import zeros, decompress_from_1d
 from ....tensor._tests import _test_axes_match
 from .rdm import *
+log = logging.getLogger(__name__)
 
-log = logging.getLogger("FixedPoint")
+
+class NoFixedPointError(Exception):
+    def __init__(self, code, message=None):
+        if message is None:
+            message = "No fixed point found"
+        self.message = message
+        super().__init__(self.message)  # Pass message to the base class
+        self.code = code          				 # Add a custom attribute for error codes
 
 
 def env_raw_data(env):
@@ -127,14 +136,6 @@ def robust_eigsh(A, initial_maxiter, max_maxiter, k=3, retry_factor=3, sigma=Non
         else:
             log.log(logging.INFO, f"Eigsh Warning: No convergence after {initial_maxiter} iterations. Retrying with more iterations...")
             return robust_eigsh(A, initial_maxiter * retry_factor, max_maxiter, k=k, retry_factor=retry_factor, sigma=sigma, **kwargs)
-
-class NoFixedPointError(Exception):
-    def __init__(self, code, message=None):
-        if message is None:
-            message = "No fixed point found"
-        self.message = message
-        super().__init__(self.message)  # Pass message to the base class
-        self.code = code          				 # Add a custom attribute for error codes
 
 def env_T_gauge_multi_sites(config, T_olds, T_news):
     #  Robust gauge-fixing from https://arxiv.org/abs/2311.11894
@@ -458,9 +459,20 @@ def real_to_complex(z):      # real vector of length 2n -> complex of length n
 def complex_to_real(z):      # complex vector of length n -> real of length 2n
     return np.concatenate((np.real(z), np.imag(z)))
 
+Gauge = namedtuple("Gauge", "t l b r")
+
+def _compress_gauges_1d(gauges : Mapping[Site,Gauge]):
+    data_t, meta_t= tuple(zip( *(getattr(gauges[site],dirn).compress_to_1d() for site in gauges.keys() \
+        for dirn in "tlbr") ))
+    meta= {'gauges': meta_t, 'sites': tuple(gauges.keys())}
+    return data_t, meta
+
+def _decompress_gauges_1d(data_t, meta) -> Mapping[Site,Gauge]:
+    return {site: Gauge(*[decompress_from_1d(data_t[i], meta['gauges'][i]) for i in range(j, j+4)]) \
+        for j, site in enumerate(meta['sites'])}
+
 def compute_env_gauge_product(env, zero_modes_dict, cs_dict):
     # Given sigma matrices formed by cs_dict and zero_modes_dict, compute sigma-conjugated env tensors.
-    Gauge = namedtuple("Gauge", "t l b r")
     sigma_dict, phases_ind = {}, {}
     ind = 0
     fixed_env = env.copy()
@@ -797,9 +809,10 @@ def find_gauge_multi_sites(env_old, env, verbose=False):
 
     return sigma_dict
 
+
 def fp_ctmrg(env: EnvCTM, \
-            ctm_opts_fwd : dict= {'opts_svd': {}, 'corner_tol': 1e-8, 'max_sweeps': 100,
-                'method': "2site", 'use_qr': False, 'svd_policy': 'fullrank', 'D_block': None}, \
+            ctm_opts_fwd : dict= {'method': "2site", 'use_qr': False, 'corner_tol': 1e-8, 'max_sweeps': 100,
+                'svd_policy': 'fullrank', 'opts_svd': {}, 'D_block': None, 'verbosity': 0}, \
             ctm_opts_fp: dict= {'svd_policy': 'fullrank'}):
     r"""
     Compute the fixed-point environment for the given state using CTMRG.
@@ -901,13 +914,6 @@ class FixedPoint(torch.autograd.Function):
         env_out_data, slices = env_raw_data(env_in)
         return (env_out_data, )
 
-    @torch.no_grad()
-    def ctm_conv_check(env, history, corner_tol):
-        converged, max_dsv, history = ctm_conv_corner_spec(env, history, corner_tol)
-        print("max_dsv:", max_dsv)
-        log.log(logging.INFO, f"CTM iter {len(history)} |delta_C| {max_dsv}")
-        return converged, history
-
     def get_converged_env(
         env,
         method="2site",
@@ -919,20 +925,29 @@ class FixedPoint(torch.autograd.Function):
         **kwargs
     ):
         t_ctm, t_check = 0.0, 0.0
-        t_ctm_prev = time.perf_counter()
         converged, conv_history = False, []
 
-        for sweep in range(max_sweeps):
-            env.update_(
-                opts_svd=opts_svd, method=method, use_qr=False, checkpoint_move=False, policy=svd_policy, D_block=D_block,
-            )
-            t_ctm_after = time.perf_counter()
-            t_ctm += t_ctm_after - t_ctm_prev
-            t_ctm_prev = t_ctm_after
+        ctm_itr= env.ctmrg_(iterator_step=1, method=method,  max_sweeps=max_sweeps,
+                   svd_policy=svd_policy, opts_svd=opts_svd, D_block=D_block,
+                   corner_tol=None, **kwargs)
 
-            converged, conv_history = FixedPoint.ctm_conv_check(env, conv_history, corner_tol)
+        for sweep in range(max_sweeps):
+            t0 = time.perf_counter()
+            ctm_out_info= next(ctm_itr)
+            t1 = time.perf_counter()
+            t_ctm += t1-t0
+
+            t2 = time.perf_counter()
+            converged, max_dsv, conv_history = ctm_conv_corner_spec(env, conv_history, corner_tol)
+            t_check += time.perf_counter()-t2
+            if kwargs.get('verbosity',0)>2:
+                log.log(logging.INFO, f"CTM iter {len(conv_history)} |delta_C| {max_dsv} t {t1-t0} [s]")
+
             if converged:
+                log.info(f"CTM converged: sweeps {sweep+1} t_ctm {t_ctm} [s] t_check {t_check} [s]"
+                         +f" history {[r['max_dsv'] for r in conv_history]}.")
                 break
+
         return env, converged, conv_history, t_ctm, t_check
 
     @staticmethod
@@ -953,6 +968,7 @@ class FixedPoint(torch.autograd.Function):
             Sequence[Tensor]: raw environment data for the backward pass.
         """
 
+        # 1. Converge the environment using CTMRG
         ctm_env_out, converged, *FixedPoint.ctm_log, FixedPoint.t_ctm, FixedPoint.t_check = FixedPoint.get_converged_env(
             env,
             **ctm_opts_fwd,
@@ -960,27 +976,36 @@ class FixedPoint(torch.autograd.Function):
         if not converged:
             raise NoFixedPointError(code=1, message="No fixed point found: CTM forward does not converge!")
 
-        # note that we need to find the gauge transformation that connects two set of environment tensors
+        # 2. Perform 1 extra CTM step to find the gauge transformation under which we have element-wise convergence
+        #
+        # NOTE We need to find the gauge transformation that connects two set of environment tensors
         # obtained from CTMRG with the 'full' svd, because the backward uses the full svd backward.
+        # TODO Use partial SVDs with appropriate backward
         _ctm_opts_fp = dict(ctm_opts_fwd)
         if ctm_opts_fp is not None:
             _ctm_opts_fp.update(ctm_opts_fp)
         env_converged = ctm_env_out.copy()
-        ctx.proj = ctm_env_out.update_(**_ctm_opts_fp)
+        t0= time.perf_counter()
+        fp_proj = ctm_env_out.update_(**_ctm_opts_fp)
+        t1= time.perf_counter()
+        log.info(f"{type(ctx).__name__}.forward FP CTM step t {t0-t1} [s]")
 
+        # 3. Find the gauge transformation
+        t0 = time.perf_counter()
         sigma_dict = find_gauge_multi_sites(env_converged, ctm_env_out, verbose=True)
         if sigma_dict is None:
             raise NoFixedPointError(code=1, message="No fixed point found: fail to find the gauge matrix!")
+        t1 = time.perf_counter()
+        log.info(f"{type(ctx).__name__}.forward FP gauge-fixing t {t0-t1} [s]")
 
         env_data, env_meta = env_converged.compress_env_1d()
-        ctx.save_for_backward(*env_data)
-        ctx.env_meta = env_meta
+        fp_proj_data, fp_proj_meta = env_converged.compress_proj_1d(fp_proj)
+        g_data, g_meta= _compress_gauges_1d(sigma_dict)
+        ctx.save_for_backward(*env_data, *fp_proj_data, *g_data)
+        ctx.env_meta, ctx.fp_proj_meta, ctx.g_meta = env_meta, fp_proj_meta, g_meta
         ctx.ctm_opts_fp = _ctm_opts_fp
 
-        # TODO: use save_for_backward
-        ctx.sigma_dict = sigma_dict
         env_1d, env_slices= env_raw_data(env_converged)
-
         return env_converged, env_slices, env_1d
 
     @staticmethod
@@ -989,8 +1014,13 @@ class FixedPoint(torch.autograd.Function):
         dA = grad_env
 
         # env_data = torch.utils.checkpoint.detach_variable(ctx.saved_tensors)[0] # only one element in the tuple
-        env_data = ctx.saved_tensors
+        env_data= ctx.saved_tensors[:len(ctx.env_meta['psi'])+len(ctx.env_meta['env'])]
+        fp_proj_data= ctx.saved_tensors[len(env_data):len(env_data)+len(ctx.fp_proj_meta['proj'])]
+        g_data= ctx.saved_tensors[-len(ctx.g_meta['gauges']):]
         env= decompress_env_1d(env_data, ctx.env_meta)
+        fp_proj= decompress_proj_1d(fp_proj_data, ctx.fp_proj_meta)
+        sigma_dict= _decompress_gauges_1d(g_data, ctx.g_meta)
+
         psi_data = tuple(env.psi.ket[s]._data for s in env.psi.ket.sites())
         _env_ts, _env_slices= env_raw_data(env)
 
@@ -998,8 +1028,8 @@ class FixedPoint(torch.autograd.Function):
         diff_ave = None
         # Compute vjp only
         with torch.enable_grad():
-            _, dfdC_vjp = torch.func.vjp(lambda x: FixedPoint.fixed_point_iter(env, ctx.sigma_dict, ctx.ctm_opts_fp, _env_slices, x, psi_data), _env_ts)
-            _, dfdA_vjp = torch.func.vjp(lambda x: FixedPoint.fixed_point_iter(env, ctx.sigma_dict, ctx.ctm_opts_fp, _env_slices, _env_ts, x), psi_data)
+            _, dfdC_vjp = torch.func.vjp(lambda x: FixedPoint.fixed_point_iter(env, sigma_dict, ctx.ctm_opts_fp, _env_slices, x, psi_data), _env_ts)
+            _, dfdA_vjp = torch.func.vjp(lambda x: FixedPoint.fixed_point_iter(env, sigma_dict, ctx.ctm_opts_fp, _env_slices, _env_ts, x), psi_data)
         # fixed_point_iter changes the data of psi, so we need to refill the state to recover the previous state
         refill_state(env.psi.ket, psi_data)
 
