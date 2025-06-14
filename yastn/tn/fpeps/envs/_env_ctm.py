@@ -1075,7 +1075,7 @@ class EnvCTM(Peps):
             env[site].b = env_old[site].b
             env[site].t = env_old[site].t
 
-    def ctmrg_(env, opts_svd=None, method='2site', max_sweeps=1, iterator_step=None, corner_tol=None, truncation_f : Callable=None, **kwargs):
+    def ctmrg_(env, opts_svd={}, method='2site', max_sweeps=1, iterator_step=None, corner_tol=None, truncation_f : Callable=None, **kwargs):
         r"""
         Perform CTMRG updates :meth:`yastn.tn.fpeps.EnvCTM.update_` until convergence.
         Convergence can be measured based on singular values of CTM environment corner tensors.
@@ -1253,7 +1253,7 @@ def _iterate_ctmrg_(env, opts_svd, method, max_sweeps, iterator_step, corner_tol
         # 2. perform truncation, typically restricting only total number of singular triples
         #
         # For 1.,
-        policy = opts_svd.get("policy", "fullrank")
+        policy = kwargs.get("policy", "fullrank")
         if policy not in ["fullrank"]:
             if proj_history is None:
                 # Empty structure for projectors
