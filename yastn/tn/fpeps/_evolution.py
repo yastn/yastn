@@ -684,7 +684,6 @@ def initial_truncation_ZMT3(R0, R1, fgf, opts_svd:dict, fRR, RRgRR, pinv_cutoffs
         old_R = None
         for jj in range(len(D)):
             accumulated = 0
-            largest_d = None
             normalization = 0
 
 
@@ -698,6 +697,7 @@ def initial_truncation_ZMT3(R0, R1, fgf, opts_svd:dict, fRR, RRgRR, pinv_cutoffs
             normalization = normalization ** 0.5
 
             accumulated = 0
+            largest_d = None
             for ii in range(len(MB.get_legs()[0].D)):
                 Ds = MB.get_legs()[0].D[ii]
                 mat = np.array(W[accumulated:(accumulated + Ds * Ds),jj]).reshape(Ds, Ds) / normalization
@@ -732,12 +732,13 @@ def initial_truncation_ZMT3(R0, R1, fgf, opts_svd:dict, fRR, RRgRR, pinv_cutoffs
 
         D_total = D_total - 1
 
+
         U, S, Vh = svd(old_R, sU=R.s[1])
         S = S.sqrt()
         U, Vh = S.broadcast(U, Vh, axes=(1, 0))
         MA = MA @ U
         MB = Vh @ MB
-        (MA, MB), error2 = initial_truncation_ZMT1(MA, MB, fgf, {"D_total":max(opts_svd["D_total"],D_total - 1), "tol_block":old_zero ** 0.5}, fRR, RRgRR, pinv_cutoffs, pre_initial="EAT")
+        (MA, MB), error2 = initial_truncation_ZMT1(MA, MB, fgf, {"D_total":max(opts_svd["D_total"], D_total), "tol_block":-1}, fRR, RRgRR, pinv_cutoffs, pre_initial="EAT")
 
     error2 = calculate_truncation_error2(MA @ MB, fgf, fRR, RRgRR)
     return (MA, MB), error2
