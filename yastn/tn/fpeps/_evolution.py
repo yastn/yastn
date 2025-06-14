@@ -681,6 +681,7 @@ def initial_truncation_ZMT3(R0, R1, fgf, opts_svd:dict, fRR, RRgRR, pinv_cutoffs
 
         # identity = yastn.Tensor(config=R0.config, s=R1.get_signature(), dtype="complex128")
         old_zero = 32767
+        old_R = None
         for jj in range(len(D)):
             accumulated = 0
             largest_d = None
@@ -727,17 +728,16 @@ def initial_truncation_ZMT3(R0, R1, fgf, opts_svd:dict, fRR, RRgRR, pinv_cutoffs
                 break
             else:
                 old_zero = temp_zero
+                old_R = R
 
         D_total = D_total - 1
 
-        U, S, Vh = svd(R, sU=R.s[1])
+        U, S, Vh = svd(old_R, sU=R.s[1])
         S = S.sqrt()
         U, Vh = S.broadcast(U, Vh, axes=(1, 0))
-        MA_temp = MA @ U
-        MB_temp = Vh @ MB
-        # FOR TEST
-        #
-        (MA_temp, MB_temp), error2 = initial_truncation_ZMT1(MA_temp, MB_temp, fgf, {"D_total":max(opts_svd["D_total"],D_total - 1), "tol_block":temp_zero ** 0.5}, fRR, RRgRR, pinv_cutoffs, pre_initial="EAT")
+        MA = MA @ U
+        MB = Vh @ MB
+        (MA, MB), error2 = initial_truncation_ZMT1(MA, MB, fgf, {"D_total":max(opts_svd["D_total"],D_total - 1), "tol_block":old_zero ** 0.5}, fRR, RRgRR, pinv_cutoffs, pre_initial="EAT")
 
     error2 = calculate_truncation_error2(MA @ MB, fgf, fRR, RRgRR)
     return (MA, MB), error2
