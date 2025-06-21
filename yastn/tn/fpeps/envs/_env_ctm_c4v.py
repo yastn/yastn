@@ -375,7 +375,7 @@ def _iterate_ctmrg_(env, opts_svd, method, max_sweeps, iterator_step, corner_tol
 def leg_charge_conv_check(env : EnvCTM_c4v, history : Sequence[Leg] = None, conv_len=3):
     r"""
     CTM convergence check targeting distribution of charges only (ignoring corner spectra).
-    
+
     Returns
     -------
         converged : bool
@@ -503,11 +503,11 @@ def proj_sym_corner(rr, opts_svd, **kwargs):
     policy = opts_svd.get('policy', 'symeig')
     truncation_f= kwargs.get('truncation_f',\
         lambda x : truncation_mask_multiplets(x,keep_multiplets=True, \
-            D_total=opts_svd['D_total'], D_block=['D_block'], tol=opts_svd['tol'], \
+            D_total=opts_svd['D_total'], D_block=opts_svd['D_block'], tol=opts_svd['tol'], \
             eps_multiplet=opts_svd['eps_multiplet'], hermitian=True, ) )
 
     if policy in ['symeig']:
-        # TODO U1-c4v-symmetric corner is not Hermitian 
+        # TODO U1-c4v-symmetric corner is not Hermitian
         raise YastnError("Policy 'symeig' is not supported for c4v-symmetric corner projector.")
         # TODO fix_signs ?
         # _kwargs= dict(kwargs)

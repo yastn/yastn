@@ -718,12 +718,11 @@ def find_coeff_multi_sites(env_old, env, zero_modes_dict, dtype=torch.complex128
             site_ind = env.site2index(site)
             num = 0
             for dirn in ("t", "l", "b", "r"):
-                cs_data.append(np.zeros(len(zero_modes_dict[(site_ind, dirn)]), dtype=np.float64))
+                cs_data.append(np.ones(len(zero_modes_dict[(site_ind, dirn)]), dtype=np.float64))
                 num += len(zero_modes_dict[(site_ind, dirn)])
             ind2row[site_ind] = slice(start, start+num)
             start += num
         cs_data = np.concatenate(cs_data)
-        cs_data += np.random.rand(*cs_data.shape)*0.1 # random factor required for tests_fp_c4v
         res = minimize(fun=unitary_loss, x0=cs_data,
                        args=(env, zero_modes_dict, dtype), jac='3-point', method='SLSQP', options={"eps":1e-9, "ftol":1e-14})
         res = res.x
@@ -737,7 +736,6 @@ def find_coeff_multi_sites(env_old, env, zero_modes_dict, dtype=torch.complex128
             cs.append(np.array(res[ind:ind+len(zero_modes_dict[(site_ind, dirn)])]))
             ind += len(zero_modes_dict[(site_ind, dirn)])
         cs_dict[env.site2index(site)] = cs
-
     start = time.time()
     _, phases_ind, fixed_env = compute_env_gauge_product(env, zero_modes_dict, cs_dict)
     init_phases = np.zeros(4*len(cs_dict)-1)
@@ -960,7 +958,7 @@ class FixedPoint(torch.autograd.Function):
             ctm_opts_fwd (dict): Options for forward CTMRG convergence. The options should include:
                 - opts_svd (dict): SVD options for the CTMRG step.
             ctm_opts_fp (dict): Options for fixed-point CTMRG step and for fixing the gauge transformation.
-                - opts_svd (dict): SVD options for the fixed-point CTMRG step. 
+                - opts_svd (dict): SVD options for the fixed-point CTMRG step.
                                    Currently only 'policy': 'fullrank' is supported.
             state_params (Sequence[Tensor]): tensors of underlying Peps state
 
