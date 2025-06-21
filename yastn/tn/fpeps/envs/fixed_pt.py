@@ -611,7 +611,7 @@ def phase_loss(phases, env_old, fixed_env, phases_ind):
     fixed_C_1D, C_old_1D = torch.cat([C._data for C in fixed_C]), torch.cat([C._data for C in C_old])
     lengths = torch.tensor([len(C._data) for C in fixed_C], dtype=torch.long, device=phases.device)
     phase1_c_1D, phase2_c_1D = torch.repeat_interleave(torch.flatten(phase1_c), lengths), torch.repeat_interleave(torch.flatten(phase2_c), lengths)
-    loss_C= (fixed_C_1D * phase1_c_1D.conj() * phase2_c_1D - C_old_1D).norm(p='fro')**2
+    loss_C= (fixed_C_1D * phase2_c_1D.conj() * phase1_c_1D - C_old_1D).norm(p='fro')**2
 
     return loss_T + loss_C
 
@@ -707,8 +707,8 @@ def find_coeff_multi_sites(env_old, env, zero_modes_dict, dtype=torch.complex128
             ind2row[site_ind] = slice(start, start+num)
             start += num
         cs_data = np.concatenate(cs_data)
-        res = minimize(fun=lambda z: unitary_loss(real_to_complex(z)), x0=complex_to_real(cs_data),
-                       args=(env, zero_modes_dict, dtype), jac='3-point', method='SLSQP', options={"eps":1e-9, "ftol":1e-14})
+        res = minimize(fun=lambda z: unitary_loss(real_to_complex(z), env, zero_modes_dict, dtype), x0=complex_to_real(cs_data),\
+                       jac='3-point', method='SLSQP', options={"eps":1e-9, "ftol":1e-14})
         res = real_to_complex(res.x)
     else:
         cs_data = []
@@ -723,7 +723,7 @@ def find_coeff_multi_sites(env_old, env, zero_modes_dict, dtype=torch.complex128
             ind2row[site_ind] = slice(start, start+num)
             start += num
         cs_data = np.concatenate(cs_data)
-        cs_data += np.random.rand(*cs_data.shape)*0.1
+        cs_data += np.random.rand(*cs_data.shape)*0.1 # random factor required for tests_fp_c4v
         res = minimize(fun=unitary_loss, x0=cs_data,
                        args=(env, zero_modes_dict, dtype), jac='3-point', method='SLSQP', options={"eps":1e-9, "ftol":1e-14})
         res = res.x
@@ -771,7 +771,6 @@ def find_coeff_multi_sites(env_old, env, zero_modes_dict, dtype=torch.complex128
     return cs_dict
 
 def find_gauge_multi_sites(env_old, env, verbose=False):
-    Gauge = namedtuple("Gauge", "t l b r")
     zero_modes_dict = {}
     sigma_dict = {}
     for site in env.sites():
@@ -942,9 +941,10 @@ class FixedPoint(torch.autograd.Function):
                 log.log(logging.INFO, f"CTM iter {len(conv_history)} |delta_C| {max_dsv} t {t1-t0} [s]")
 
             if converged:
-                log.info(f"CTM converged: sweeps {sweep+1} t_ctm {t_ctm} [s] t_check {t_check} [s]"
-                         +f" history {[r['max_dsv'] for r in conv_history]}.")
                 break
+
+        log.info(f"CTM: convergence: {converged}, sweeps {sweep+1}, t_ctm {t_ctm} [s], t_check {t_check} [s]\n"
+                +f"history {[r['max_dsv'] for r in conv_history]}.")
 
         return env, converged, conv_history, t_ctm, t_check
 

@@ -83,7 +83,7 @@ class SVDS_SCIPY(torch.autograd.Function):
 
         **Note:** `depends on scipy`
 
-        Return leading k-singular triples of a matrix M via SciPy. See  
+        Return leading k-singular triples of a matrix M via SciPy. See
         https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.svds.html
         for details on solver and solver options.
         """
@@ -116,13 +116,13 @@ class SVDS_SCIPY(torch.autograd.Function):
         #     V = M_nograd.t().conj() @ U * (1/S.to(dtype=torch.complex128))
         # else:
         #     V = M_nograd.t().conj() @ U * (1/S)
-        # V = Functional.normalize(V, p=2, dim=0)        
+        # V = Functional.normalize(V, p=2, dim=0)
 
         # k is already passed as an argument
         # propack default 10*k, arpack default min(M.size) * 10 as per scipy docs
         kwargs.pop('k', None)
-        maxiter= kwargs.pop('maxiter', k*10 if solver == 'propack' else 10 * min(M.shape)) 
-        
+        maxiter= kwargs.pop('maxiter', k*10 if solver == 'propack' else 10 * min(M.shape))
+
         # ----- Option 1
         if min(M.shape)*thresh < k: # k / matrix size is too large for speed-up by iterative solver
             U, S, Vh = torch.linalg.svd(M, driver='gesvd' if M.is_cuda else None)
