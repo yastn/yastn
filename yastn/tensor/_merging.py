@@ -579,11 +579,14 @@ def _mask_tensors_leg_intersection(a, b, axa, axb):
     msk_a, msk_b = [], []
     tla, Dla, _ = _get_tD_legs(a.struct)
     tlb, Dlb, _ = _get_tD_legs(b.struct)
+    a_hfs, b_hfs = list(a.hfs), list(b.hfs)
     for i1, i2 in zip(axa, axb):
-        ma, mb = _masks_hfs_intersection(a.config.sym, (tla[i1], tlb[i2]), (Dla[i1], Dlb[i2]), (a.hfs[i1], b.hfs[i2]))
+        ma, mb, axes_hfs = _masks_hfs_intersection(a.config.sym, (tla[i1], tlb[i2]), (Dla[i1], Dlb[i2]), (a.hfs[i1], b.hfs[i2]))
         msk_a.append(_mask_nonzero(ma))
         msk_b.append(_mask_nonzero(mb))
-    return msk_a, msk_b
+        a_hfs[i1], b_hfs[i2] = axes_hfs[0], axes_hfs[1]
+
+    return msk_a, msk_b, tuple(a_hfs), tuple(b_hfs)
 
 
 def _embed_tensor(a, legs, legs_new):
@@ -758,14 +761,21 @@ def _masks_hfs_intersection(sym, ts, Ds, hfs):
         ma1 = {t: np.ones(D, dtype=bool) for t, D in zip(ts[1], Ds[1]) if t in teff}
         if any(ma0[t].size != ma1[t].size for t in teff):
             raise YastnError('Bond dimensions do not match.')
-        return ma0, ma1
+        return ma0, ma1, hfs
 
     msks = [[{t: np.ones(D, dtype=bool) for t, D in zip(hf.t[i], hf.D[i])} for i, l in enumerate(tree[1:]) if l == 1]
             for hf in hfs]
+
+    keeped_ts, keeped_Ds = [], []
     for ma0, ma1 in zip(*msks):
+        keeped_t, keeped_D = [], []
         for t in set(ma0) & set(ma1):
             if ma0[t].size != ma1[t].size:
                 raise YastnError('Bond dimensions of fused legs do not match.')
+            keeped_t.append(t)
+            keeped_D.append(ma0[t].size)
+        keeped_ts.append(tuple(keeped_t))
+        keeped_Ds.append(tuple(keeped_D))
         _mask_falsify_mismatches_(ma0, ma1)
 
     # lists to be consumed during parsing of the tree
@@ -788,14 +798,20 @@ def _masks_hfs_intersection(sym, ts, Ds, hfs):
             lss = [_leg_structure_combine_charges_prod(sym, tt1, DD1, ss1, t1[it - 1], s1[it - 1])
                    for tt1, DD1, ss1, t1, s1 in zip(tt, DD, ss, t, s)]
             ma = [_merge_masks_prod(sym, ls1, ms1) for ls1, ms1 in zip(lss, mss)]
+            reduced_ls = _leg_structure_combine_charges_prod(sym, tuple(keeped_ts[:no]), tuple(keeped_Ds[:no]), ss[0], t[0][it - 1], s[0][it - 1])
         else:  # op[it - 1] == 's':
             lss = [_leg_structure_combine_charges_sum(tt1, DD1) for tt1, DD1, in zip(tt, DD)]
             ma = [_merge_masks_sum(ls1, ms1) for ls1, ms1 in zip(lss, mss)]
+            reduced_ls = _leg_structure_combine_charges_sum(tuple(keeped_ts[:no]), tuple(keeped_Ds[:no]))
         _mask_falsify_mismatches_(ma[0], ma[1])
         msks[0].insert(io, ma[0])
         msks[1].insert(io, ma[1])
+
+        keeped_ts.insert(0, reduced_ls.t)
+        keeped_Ds.insert(0, reduced_ls.D)
     # Only the final leaf is left in msks[0] and msks[1]
-    return msks[0].pop(), msks[1].pop()
+    new_hfs = [_Fusion(hf.tree, hf.op, hf.s, tuple(keeped_ts[1:]), tuple(keeped_Ds[1:])) for hf in hfs]
+    return msks[0].pop(), msks[1].pop(), new_hfs
 
 
 def _mask_embed_in_union(sym, t0, hf0, hfu):
