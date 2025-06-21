@@ -1337,7 +1337,7 @@ def update_2site_projectors_(proj, site, dirn, env, opts_svd, **kwargs):
 
     use_qr = kwargs.get("use_qr", True)
     psh= kwargs.pop("proj_history", None)
-    svd_predict_spec= lambda s0,p0,s1,p1: kwargs.get('D_block', None) if psh is None else \
+    svd_predict_spec= lambda s0,p0,s1,p1: opts_svd.get('D_block', float('inf')) if psh is None else \
         env._partial_svd_predict_spec(getattr(psh[s0],p0), getattr(psh[s1],p1), opts_svd.get('sU', 1))
 
     tl, tr, bl, br = sites
@@ -1362,17 +1362,18 @@ def update_2site_projectors_(proj, site, dirn, env, opts_svd, **kwargs):
         cor_tt = cor_tl @ cor_tr  # b(left) b(right)
         cor_bb = cor_br @ cor_bl  # t(right) t(left)
 
+    _opts_loc= dict(**opts_svd)
     if 'r' in dirn:
         _, r_t = qr(cor_tt, axes=(0, 1)) if use_qr else (None, cor_tt)
         _, r_b = qr(cor_bb, axes=(1, 0)) if use_qr else (None, cor_bb.T)
-        kwargs['D_block'] = svd_predict_spec(tr, 'hrb', br, 'hrt')
-        proj[tr].hrb, proj[br].hrt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
+        _opts_loc['D_block'] = svd_predict_spec(tr, 'hrb', br, 'hrt')
+        proj[tr].hrb, proj[br].hrt = proj_corners(r_t, r_b, opts_svd=_opts_loc, **kwargs)
 
     if 'l' in dirn:
         _, r_t = qr(cor_tt, axes=(1, 0)) if use_qr else (None, cor_tt.T)
         _, r_b = qr(cor_bb, axes=(0, 1)) if use_qr else (None, cor_bb)
-        kwargs['D_block'] = svd_predict_spec(tl, 'hlb', bl, 'hlt')
-        proj[tl].hlb, proj[bl].hlt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
+        _opts_loc['D_block'] = svd_predict_spec(tl, 'hlb', bl, 'hlt')
+        proj[tl].hlb, proj[bl].hlt = proj_corners(r_t, r_b, opts_svd=_opts_loc, **kwargs)
 
     if ('t' in dirn) or ('b' in dirn):
         cor_ll = cor_bl @ cor_tl  # l(bottom) l(top)
@@ -1381,14 +1382,14 @@ def update_2site_projectors_(proj, site, dirn, env, opts_svd, **kwargs):
     if 't' in dirn:
         _, r_l = qr(cor_ll, axes=(0, 1)) if use_qr else (None, cor_ll)
         _, r_r = qr(cor_rr, axes=(1, 0)) if use_qr else (None, cor_rr.T)
-        kwargs['D_block'] = svd_predict_spec(tl, 'vtr', tr, 'vtl')
-        proj[tl].vtr, proj[tr].vtl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
+        _opts_loc['D_block'] = svd_predict_spec(tl, 'vtr', tr, 'vtl')
+        proj[tl].vtr, proj[tr].vtl = proj_corners(r_l, r_r, opts_svd=_opts_loc, **kwargs)
 
     if 'b' in dirn:
         _, r_l = qr(cor_ll, axes=(1, 0)) if use_qr else (None, cor_ll.T)
         _, r_r = qr(cor_rr, axes=(0, 1)) if use_qr else (None, cor_rr)
-        kwargs['D_block'] = svd_predict_spec(bl, 'vbr', br, 'vbl')
-        proj[bl].vbr, proj[br].vbl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
+        _opts_loc['D_block'] = svd_predict_spec(bl, 'vbr', br, 'vbl')
+        proj[bl].vbr, proj[br].vbl = proj_corners(r_l, r_r, opts_svd=_opts_loc, **kwargs)
 
 
 def update_1site_projectors_(proj, site, dirn, env, opts_svd, **kwargs):
@@ -1396,7 +1397,7 @@ def update_1site_projectors_(proj, site, dirn, env, opts_svd, **kwargs):
     Calculate new projectors for CTM moves from 4x2 extended corners.
     """
     psh= kwargs.pop("proj_history", None)
-    svd_predict_spec= lambda s0,p0,s1,p1: kwargs.get('D_block', None) if psh is None else \
+    svd_predict_spec= lambda s0,p0,s1,p1: opts_svd.get('D_block', float('inf')) if psh is None else \
         env._partial_svd_predict_spec(getattr(psh[s0],p0), getattr(psh[s1],p1), opts_svd.get('sU', 1))
 
     psi = env.psi
@@ -1405,6 +1406,7 @@ def update_1site_projectors_(proj, site, dirn, env, opts_svd, **kwargs):
         return
 
     tl, tr, bl, br = sites
+    _opts_loc= dict(**opts_svd)
 
     if ('l' in dirn) or ('r' in dirn):
         cor_tl = (env[bl].tl @ env[bl].t).fuse_legs(axes=((0, 1), 2))
@@ -1415,12 +1417,12 @@ def update_1site_projectors_(proj, site, dirn, env, opts_svd, **kwargs):
         r_br, r_bl = regularize_1site_corners(cor_br, cor_bl)
 
     if 'r' in dirn:
-        kwargs['D_block'] = svd_predict_spec(tr, 'hrb', br, 'hrt')
-        proj[tr].hrb, proj[br].hrt = proj_corners(r_tr, r_br, opts_svd=opts_svd, **kwargs)
+        _opts_loc['D_block'] = svd_predict_spec(tr, 'hrb', br, 'hrt')
+        proj[tr].hrb, proj[br].hrt = proj_corners(r_tr, r_br, opts_svd=_opts_loc, **kwargs)
 
     if 'l' in dirn:
-        kwargs['D_block'] = svd_predict_spec(tl, 'hlb', bl, 'hlt')
-        proj[tl].hlb, proj[bl].hlt = proj_corners(r_tl, r_bl, opts_svd=opts_svd, **kwargs)
+        _opts_loc['D_block'] = svd_predict_spec(tl, 'hlb', bl, 'hlt')
+        proj[tl].hlb, proj[bl].hlt = proj_corners(r_tl, r_bl, opts_svd=_opts_loc, **kwargs)
 
     if ('t' in dirn) or ('b' in dirn):
         cor_bl = (env[br].bl @ env[br].l).fuse_legs(axes=((0, 1), 2))
@@ -1431,12 +1433,12 @@ def update_1site_projectors_(proj, site, dirn, env, opts_svd, **kwargs):
         r_tr, r_br = regularize_1site_corners(cor_tr, cor_br)
 
     if 't' in dirn:
-        kwargs['D_block'] = svd_predict_spec(tl, 'vtr', tr, 'vtl')
-        proj[tl].vtr, proj[tr].vtl = proj_corners(r_tl, r_tr, opts_svd=opts_svd, **kwargs)
+        _opts_loc['D_block'] = svd_predict_spec(tl, 'vtr', tr, 'vtl')
+        proj[tl].vtr, proj[tr].vtl = proj_corners(r_tl, r_tr, opts_svd=_opts_loc, **kwargs)
 
     if 'b' in dirn:
-        kwargs['D_block'] = svd_predict_spec(bl, 'vbr', br, 'vbl')
-        proj[bl].vbr, proj[br].vbl = proj_corners(r_bl, r_br, opts_svd=opts_svd, **kwargs)
+        _opts_loc['D_block'] = svd_predict_spec(bl, 'vbr', br, 'vbl')
+        proj[bl].vbr, proj[br].vbl = proj_corners(r_bl, r_br, opts_svd=_opts_loc, **kwargs)
 
 
 def regularize_1site_corners(cor_0, cor_1):
@@ -1453,18 +1455,17 @@ def regularize_1site_corners(cor_0, cor_1):
 def proj_corners(r0, r1, opts_svd, **kwargs):
     r""" Projectors in between r0 @ r1.T corners. """
     rr = tensordot(r0, r1, axes=(1, 1))
-    fix_signs= opts_svd.get('fix_signs',True)
-    truncation_f= kwargs.get('truncation_f',None)
+    truncation_f= kwargs.pop('truncation_f',None)
 
     verbosity = opts_svd.get('verbosity', 0)
     kwargs['verbosity'] = verbosity
 
     if truncation_f is None:
-        u, s, v = rr.svd(axes=(0, 1), sU=r0.s[1], fix_signs=fix_signs, **kwargs)
+        u, s, v = rr.svd(axes=(0, 1), sU=r0.s[1], **opts_svd)
         Smask = truncation_mask(s, **opts_svd)
         u, s, v = Smask.apply_mask(u, s, v, axes=(-1, 0, 0))
     else:
-        u, s, v = rr.svd_with_truncation(axes=(0, 1), sU=r0.s[1], mask_f=truncation_f, **kwargs)
+        u, s, v = rr.svd_with_truncation(axes=(0, 1), sU=r0.s[1], mask_f=truncation_f, **opts_svd)
 
     if verbosity>2:
         fname = sys._getframe().f_code.co_name
