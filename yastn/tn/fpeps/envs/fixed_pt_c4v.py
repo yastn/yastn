@@ -1,3 +1,4 @@
+import copy
 import time, logging
 import torch
 import numpy as np
@@ -125,8 +126,8 @@ def find_gauge_c4v(env_old, env, verbose=False):
 
 def fp_ctmrg_c4v(env: EnvCTM_c4v, \
             ctm_opts_fwd : dict= {'opts_svd': {}, 'corner_tol': 1e-8, 'max_sweeps': 100,
-                'method': "2site", 'use_qr': False, 'svd_policy': 'fullrank', 'D_block': None}, \
-            ctm_opts_fp: dict= {'svd_policy': 'fullrank'}):
+                'method': "2site", 'use_qr': False}, \
+            ctm_opts_fp: dict=  {'opts_svd': {'policy': 'fullrank'}}):
     r"""
     Compute the fixed-point environment for the given state using CTMRG.
     First, run CTMRG until convergence then find the gauge transformation guaranteeing element-wise
@@ -204,8 +205,6 @@ class FixedPoint_c4v(torch.autograd.Function):
     def get_converged_env(
         env,
         method="2site",
-        svd_policy='fullrank',
-        D_block=None,
         max_sweeps=100,
         opts_svd=None,
         corner_tol=1e-8,
@@ -227,8 +226,7 @@ class FixedPoint_c4v(torch.autograd.Function):
         #         break
 
         ctm_itr= env.ctmrg_(iterator_step=1, method=method,  max_sweeps=max_sweeps,
-            policy=svd_policy, opts_svd=opts_svd, D_block=D_block,
-            corner_tol=None, **kwargs)
+            opts_svd=opts_svd, corner_tol=None, **kwargs)
 
         for sweep in range(max_sweeps):
             t0 = time.perf_counter()
@@ -258,8 +256,11 @@ class FixedPoint_c4v(torch.autograd.Function):
 
         Args:
             env (EnvCTM_c4v): Current environment to converge.
-            ctm_opts_fwd (dict): Options for forward CTMRG convergence.
-            ctm_opts_fp (dict): Options for fixing the gauge transformation.
+            ctm_opts_fwd (dict): Options for forward CTMRG convergence. The options should include:
+                - opts_svd (dict): SVD options for the CTMRG step.
+            ctm_opts_fp (dict): Options for fixed-point CTMRG step and for fixing the gauge transformation.
+                - opts_svd (dict): SVD options for the fixed-point CTMRG step. 
+                                   Currently only 'policy': 'fullrank' is supported.
             state_params (Sequence[Tensor]): tensors of underlying Peps state
 
         Returns:
@@ -274,11 +275,16 @@ class FixedPoint_c4v(torch.autograd.Function):
         if not converged:
             raise NoFixedPointError(code=1, message="No fixed point found: CTM forward does not converge!")
 
-        # note that we need to find the gauge transformation that connects two set of environment tensors
-        # obtained from CTMRG with the 'full' svd, because the backward uses the full svd backward.
-        _ctm_opts_fp = dict(ctm_opts_fwd)
+        # NOTE we need to find the gauge transformation that connects two set of environment tensors
+        # obtained from CTMRG with the desired svd policy chosen for CTMRG fixed-point (differentiated) step
+        
+        _ctm_opts_fp = copy.deepcopy(ctm_opts_fwd)
         if ctm_opts_fp is not None:
-            _ctm_opts_fp.update(ctm_opts_fp)
+            # NOTE svd is governed solely by opts_svd, expected under 'opts_svd' key in ctm_opts_fwd and ctm_opts_fp
+            #      If ctm_opts_fp['opts_svd'] is set, we update ctm_opts_fwd['opts_svd'] with it.
+            _ctm_opts_fp['opts_svd'].update(ctm_opts_fp.get('opts_svd', {}))
+            _ctm_opts_fp.update({k:v for k,v in ctm_opts_fp.items() if k not in ['opts_svd']})
+        
         env_converged = ctm_env_out.copy()
         t0= time.perf_counter()
         fp_proj = ctm_env_out.update_(**_ctm_opts_fp)

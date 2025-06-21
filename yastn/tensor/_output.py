@@ -308,7 +308,7 @@ def __getitem__(a, key) -> numpy.ndarray | torch.tensor:
     try:
         ind = a.struct.t.index(key)
     except ValueError as exc:
-        raise YastnError('Tensor does not have block specify by key.') from exc
+        raise YastnError('Tensor does not have the block specified by key.') from exc
     x = a._data[slice(*a.slices[ind].slcs[0])]
     return x if a.isdiag else x.reshape(a.struct.D[ind])
 
