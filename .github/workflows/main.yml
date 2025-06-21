@@ -67,6 +67,54 @@ jobs:
           pytest -v;
           pytest -v --tensordot_policy fuse_contracted ./tests/tensor;
           pytest -v --tensordot_policy no_fusion ./tests/tensor;
+  
+  # runs basic tests on torch backend. 
+  test-basic-torch-peps:
+    if: |
+      contains(fromJson('["refs/heads/tests", "refs/heads/feat_fp_refactor", "refs/heads/feat_fp_tests2"]'), github.ref) ||
+      ( github.event_name == 'pull_request' && contains(fromJson('["master",]'), github.base_ref) )
+    
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+
+    steps:
+      - run: CI=false
+      - uses: actions/checkout@v4
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libblas-dev liblapack-dev gfortran
+      - name: setup python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      
+      - name: setup deps
+        run: |
+          pip install flake8 pylint;
+          pip install numpy scipy primme
+          pip install .[io,test]
+
+      - name: setup pytorch
+        run: |
+            pip install torch==2.7 --index-url https://download.pytorch.org/whl/cpu
+      
+      - name: static analysis flake8
+        run: |
+            flake8 . --count --select=E9,F63,F7,F82 --ignore=F821 --show-source --statistics;
+            flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics;
+
+      - name: static analysis py_lint
+        continue-on-error: true
+        run: pylint -d C0301,C0103,W0212 ./yastn/
+
+      # Run tests
+      - name: tests
+        run: |
+          pytest -v --tensordot_policy fuse_contracted ./tests/tensor;
+          pytest -v --tensordot_policy no_fusion ./tests/tensor;
+          pytest -v ./tests/peps
 
   deploy-docs:
     if: contains(fromJson('["refs/heads/master","refs/heads/docs"]'), github.ref)

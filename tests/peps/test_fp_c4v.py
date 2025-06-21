@@ -21,12 +21,17 @@ import numpy as np
 import yastn
 import yastn.tn.fpeps as fpeps
 from yastn.tn.fpeps.envs.rdm import rdm1x1
+from yastn.tn.fpeps.envs._env_ctm_c4v import leg_charge_conv_check
 import yastn.tn.mps as mps
 import logging
+import warnings
 
-from yastn.tn.fpeps.envs._env_ctm_c4v import leg_charge_conv_check
-from yastn.tn.fpeps.envs.fixed_pt_c4v import fp_ctmrg_c4v, refill_env_c4v
-from yastn.tn.fpeps.envs.fixed_pt import fp_ctmrg, refill_env
+try:
+    from yastn.tn.fpeps.envs.fixed_pt_c4v import fp_ctmrg_c4v, refill_env_c4v
+    from yastn.tn.fpeps.envs.fixed_pt import fp_ctmrg, refill_env
+except ImportError:
+    warnings.warn("This test requires torch")
+
 log= logging.getLogger(__name__)
 
 @pytest.fixture
