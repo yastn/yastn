@@ -281,6 +281,7 @@ class FixedPoint_c4v(torch.autograd.Function):
         if ctm_opts_fp is not None:
             # NOTE svd is governed solely by opts_svd, expected under 'opts_svd' key in ctm_opts_fwd and ctm_opts_fp
             #      If ctm_opts_fp['opts_svd'] is set, we update ctm_opts_fwd['opts_svd'] with it.
+            ctx.verbosity = ctm_opts_fp.pop('verbosity', 0)
             _ctm_opts_fp['opts_svd'].update(ctm_opts_fp.get('opts_svd', {}))
             _ctm_opts_fp.update({k:v for k,v in ctm_opts_fp.items() if k not in ['opts_svd']})
 
@@ -309,6 +310,7 @@ class FixedPoint_c4v(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, none0, none1, *grad_env):
+        verbosity = ctx.verbosity
         grads = grad_env
         dA = grad_env
 
@@ -327,8 +329,15 @@ class FixedPoint_c4v(torch.autograd.Function):
         diff_ave = None
         # Compute vjp only
         with torch.enable_grad():
-            _, dfdC_vjp = torch.func.vjp(lambda x: FixedPoint_c4v.fixed_point_iter(env, sigma, ctx.ctm_opts_fp, _env_slices, x, psi_data), _env_ts)
-            _, dfdA_vjp = torch.func.vjp(lambda x: FixedPoint_c4v.fixed_point_iter(env, sigma, ctx.ctm_opts_fp, _env_slices, _env_ts, x), psi_data)
+            if verbosity > 2 and _env_ts.is_cuda:
+                torch.cuda.memory._dump_snapshot(f"{type(ctx).__name__}_backward_prevjp_CUDAMEM.pickle")
+            # _, dfdC_vjp = torch.func.vjp(lambda x: FixedPoint_c4v.fixed_point_iter(env, sigma, ctx.ctm_opts_fp, _env_slices, x, psi_data), _env_ts)
+            # _, dfdA_vjp = torch.func.vjp(lambda x: FixedPoint_c4v.fixed_point_iter(env, sigma, ctx.ctm_opts_fp, _env_slices, _env_ts, x), psi_data)
+            _, df_vjp = torch.func.vjp(lambda x,y: FixedPoint_c4v.fixed_point_iter(env, sigma, ctx.ctm_opts_fp, _env_slices, x, y), _env_ts, psi_data)
+            dfdC_vjp= lambda x: (df_vjp(x)[0],)
+            dfdA_vjp= lambda x: (df_vjp(x)[1],)
+            if verbosity > 2 and _env_ts.is_cuda:
+                torch.cuda.memory._dump_snapshot(f"{type(ctx).__name__}_backward_postvjp_CUDAMEM.pickle")
         # fixed_point_iter changes the data of psi, so we need to refill the state to recover the previous state
         refill_state_c4v(env.psi.ket, psi_data)
 

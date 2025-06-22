@@ -810,7 +810,7 @@ def find_gauge_multi_sites(env_old, env, verbose=False):
 
 def fp_ctmrg(env: EnvCTM, \
             ctm_opts_fwd : dict= {'method': "2site", 'corner_tol': 1e-8, 'max_sweeps': 100, 'opts_svd': {}, 'verbosity': 0},
-            ctm_opts_fp: dict= {'opts_svd': {'policy':'fullrank'}}):
+            ctm_opts_fp: dict= {'opts_svd': {'policy':'fullrank'}, "verbosity": 0})->tuple[EnvCTM,Sequence[torch.Tensor],Sequence[slice]]:
     r"""
     Compute the fixed-point environment for the given state using CTMRG.
     First, run CTMRG until convergence then find the gauge transformation guaranteeing element-wise
@@ -852,6 +852,7 @@ class FixedPoint(torch.autograd.Function):
     def fixed_point_iter(env_in, sigma_dict, ctm_opts_fp, slices, env_data, psi_data):
         refill_env(env_in, env_data, slices)
         refill_state(env_in.psi.ket, psi_data)
+        # refill_state_v2(env_in.psi.ket, psi_data)
         env_in.update_(
             **ctm_opts_fp
         )
@@ -981,6 +982,7 @@ class FixedPoint(torch.autograd.Function):
         if ctm_opts_fp is not None:
             # NOTE svd is governed solely by opts_svd, expected under 'opts_svd' key in ctm_opts_fwd and ctm_opts_fp
             #      If ctm_opts_fp['opts_svd'] is set, we update ctm_opts_fwd['opts_svd'] with it.
+            ctx.verbosity = ctm_opts_fp.get('verbosity', 0)
             _ctm_opts_fp['opts_svd'].update(ctm_opts_fp.get('opts_svd', {}))
             _ctm_opts_fp.update({k:v for k,v in ctm_opts_fp.items() if k not in ['opts_svd']})
 
@@ -1010,6 +1012,7 @@ class FixedPoint(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, none0, none1, *grad_env):
+        verbosity= ctx.verbosity
         grads = grad_env
         dA = grad_env
 
@@ -1026,10 +1029,18 @@ class FixedPoint(torch.autograd.Function):
 
         prev_grad_tmp = None
         diff_ave = None
+
         # Compute vjp only
         with torch.enable_grad():
-            _, dfdC_vjp = torch.func.vjp(lambda x: FixedPoint.fixed_point_iter(env, sigma_dict, ctx.ctm_opts_fp, _env_slices, x, psi_data), _env_ts)
-            _, dfdA_vjp = torch.func.vjp(lambda x: FixedPoint.fixed_point_iter(env, sigma_dict, ctx.ctm_opts_fp, _env_slices, _env_ts, x), psi_data)
+            if verbosity > 2 and _env_ts.is_cuda:
+                torch.cuda.memory._dump_snapshot(f"{type(ctx).__name__}_backward_prevjp_CUDAMEM.pickle")
+            #_, dfdC_vjp = torch.func.vjp(lambda x: FixedPoint.fixed_point_iter(env, sigma_dict, ctx.ctm_opts_fp, _env_slices, x, psi_data), _env_ts)
+            #_, dfdA_vjp = torch.func.vjp(lambda x: FixedPoint.fixed_point_iter(env, sigma_dict, ctx.ctm_opts_fp, _env_slices, _env_ts, x), psi_data) 
+            _, df_vjp = torch.func.vjp(lambda x,y: FixedPoint.fixed_point_iter(env, sigma_dict, ctx.ctm_opts_fp, _env_slices, x, y), _env_ts, psi_data)
+            dfdC_vjp= lambda x: (df_vjp(x)[0],)
+            dfdA_vjp= lambda x: (df_vjp(x)[1],)
+            if verbosity > 2 and _env_ts.is_cuda:
+                torch.cuda.memory._dump_snapshot(f"{type(ctx).__name__}_backward_postvjp_CUDAMEM.pickle")
         # fixed_point_iter changes the data of psi, so we need to refill the state to recover the previous state
         refill_state(env.psi.ket, psi_data)
 
