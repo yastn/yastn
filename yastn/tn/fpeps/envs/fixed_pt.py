@@ -1,3 +1,4 @@
+import copy
 import time, logging
 from typing import Mapping
 import torch
@@ -717,7 +718,7 @@ def find_coeff_multi_sites(env_old, env, zero_modes_dict, dtype=torch.complex128
             site_ind = env.site2index(site)
             num = 0
             for dirn in ("t", "l", "b", "r"):
-                cs_data.append(np.zeros(len(zero_modes_dict[(site_ind, dirn)]), dtype=np.float64))
+                cs_data.append(np.ones(len(zero_modes_dict[(site_ind, dirn)]), dtype=np.float64))
                 num += len(zero_modes_dict[(site_ind, dirn)])
             ind2row[site_ind] = slice(start, start+num)
             start += num
@@ -735,7 +736,6 @@ def find_coeff_multi_sites(env_old, env, zero_modes_dict, dtype=torch.complex128
             cs.append(np.array(res[ind:ind+len(zero_modes_dict[(site_ind, dirn)])]))
             ind += len(zero_modes_dict[(site_ind, dirn)])
         cs_dict[env.site2index(site)] = cs
-
     start = time.time()
     _, phases_ind, fixed_env = compute_env_gauge_product(env, zero_modes_dict, cs_dict)
     init_phases = np.zeros(4*len(cs_dict)-1)
@@ -788,7 +788,7 @@ def find_gauge_multi_sites(env_old, env, verbose=False):
                 return None
             zero_modes_dict[(site_ind, k)] = zero_modes
 
-    cs_dict = find_coeff_multi_sites(env_old, env, zero_modes_dict, dtype=zero_modes_dict[(0, "t")][0].dtype, verbose=True)
+    cs_dict = find_coeff_multi_sites(env_old, env, zero_modes_dict, dtype=zero_modes_dict[(0, "t")][0].dtype, verbose=verbose)
 
     def is_diagonal(matrix, tol=1e-6):
         print(torch.diag(matrix))
@@ -914,8 +914,6 @@ class FixedPoint(torch.autograd.Function):
     def get_converged_env(
         env,
         method="2site",
-        svd_policy='fullrank',
-        D_block=None,
         max_sweeps=100,
         opts_svd=None,
         corner_tol=1e-8,
@@ -925,7 +923,7 @@ class FixedPoint(torch.autograd.Function):
         converged, conv_history = False, []
 
         ctm_itr= env.ctmrg_(iterator_step=1, method=method,  max_sweeps=max_sweeps,
-                   policy=svd_policy, opts_svd=opts_svd, D_block=D_block,
+                   opts_svd=opts_svd,
                    corner_tol=None, **kwargs)
 
         for sweep in range(max_sweeps):
@@ -957,8 +955,11 @@ class FixedPoint(torch.autograd.Function):
 
         Args:
             env (EnvCTM): Current environment to converge.
-            ctm_opts_fwd (dict): Options for forward CTMRG convergence.
-            ctm_opts_fp (dict): Options for fixing the gauge transformation.
+            ctm_opts_fwd (dict): Options for forward CTMRG convergence. The options should include:
+                - opts_svd (dict): SVD options for the CTMRG step.
+            ctm_opts_fp (dict): Options for fixed-point CTMRG step and for fixing the gauge transformation.
+                - opts_svd (dict): SVD options for the fixed-point CTMRG step.
+                                   Currently only 'policy': 'fullrank' is supported.
             state_params (Sequence[Tensor]): tensors of underlying Peps state
 
         Returns:
@@ -976,12 +977,14 @@ class FixedPoint(torch.autograd.Function):
 
         # 2. Perform 1 extra CTM step to find the gauge transformation under which we have element-wise convergence
         #
-        # NOTE We need to find the gauge transformation that connects two set of environment tensors
-        # obtained from CTMRG with the 'full' svd, because the backward uses the full svd backward.
         # TODO Use partial SVDs with appropriate backward
-        _ctm_opts_fp = dict(ctm_opts_fwd)
+        _ctm_opts_fp = copy.deepcopy(ctm_opts_fwd)
         if ctm_opts_fp is not None:
-            _ctm_opts_fp.update(ctm_opts_fp)
+            # NOTE svd is governed solely by opts_svd, expected under 'opts_svd' key in ctm_opts_fwd and ctm_opts_fp
+            #      If ctm_opts_fp['opts_svd'] is set, we update ctm_opts_fwd['opts_svd'] with it.
+            _ctm_opts_fp['opts_svd'].update(ctm_opts_fp.get('opts_svd', {}))
+            _ctm_opts_fp.update({k:v for k,v in ctm_opts_fp.items() if k not in ['opts_svd']})
+
         env_converged = ctm_env_out.copy()
         t0= time.perf_counter()
         fp_proj = ctm_env_out.update_(**_ctm_opts_fp)

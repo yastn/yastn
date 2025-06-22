@@ -14,8 +14,9 @@
 # ==============================================================================
 from __future__ import annotations
 import logging
-from typing import Callable
-from .... import Tensor, YastnError, tensordot, truncation_mask, decompress_from_1d, \
+from typing import Callable, Sequence
+
+from .... import Tensor, Leg, YastnError, tensordot, truncation_mask, decompress_from_1d, \
     truncation_mask_multiplets
 from .._peps import Peps, Peps2Layers, DoublePepsTensor
 from .._geometry import RectangularUnitcell
@@ -227,8 +228,8 @@ class EnvCTM_c4v(EnvCTM):
             opts_svd['tol'] = 1e-14
         if method not in ('default',):
             raise YastnError(f"CTM update {method=} not recognized. Should be 'default' or ...")
-        if 'policy' in kwargs:
-            opts_svd['policy'] = kwargs.get('policy')
+        # if 'policy' in kwargs:
+        #     opts_svd['policy'] = kwargs.get('policy')
         checkpoint_move= kwargs.pop('checkpoint_move',False)
 
         #
@@ -371,6 +372,32 @@ def _iterate_ctmrg_(env, opts_svd, method, max_sweeps, iterator_step, corner_tol
     yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
 
 
+def leg_charge_conv_check(env : EnvCTM_c4v, history : Sequence[Leg] = None, conv_len=3):
+    r"""
+    CTM convergence check targeting distribution of charges only (ignoring corner spectra).
+
+    Returns
+    -------
+        converged : bool
+            If charge sectors stay constant for more than ``conv_len`` CTM steps, return ``True``.
+        history : Sequence[Leg]
+            Past charge sectors of corner tensor
+    """
+    tD = env[(0,0)].tl.get_legs(axes=0).tD
+    converged = True
+    # number of past env interations to check against
+    # TODO make adjustable
+    conv_len = 3
+    history.append(tD)
+    if len(history) < conv_len:
+        return False, history
+    for i in range(1, conv_len+1):
+        if tD != history[-i]:
+            converged = False
+            break
+    return converged, history
+
+
 def decompress_env_c4v_1d(data,meta)->EnvCTM_c4v:
     """
     Reconstruct the environment from its compressed form.
@@ -401,7 +428,7 @@ def _update_core_dir(env, dir : str, opts_svd : dict, **kwargs):
     policy= opts_svd.get('policy','fullrank')
     psh = kwargs.pop("proj_history", None)
     # Inherit _partial_svd_predict_spec from EnvCTM
-    svd_predict_spec= lambda s0,p0,s1,p1: kwargs.get('D_block', None) if psh is None else \
+    svd_predict_spec= lambda s0,p0,s1,p1: opts_svd.get('D_block', float('inf')) if psh is None else \
         env._partial_svd_predict_spec(getattr(psh[s0],p0), getattr(psh[s1],p1), opts_svd.get('sU', 1))
 
     #
@@ -427,8 +454,9 @@ def _update_core_dir(env, dir : str, opts_svd : dict, **kwargs):
     # Note: U(1)-symm corner is not hermitian. Instead blocks related by conj of charges are hermitian conjugates,
     #       i.e. (2,-2) and (-2,2) blocks are hermitian conjugates.
     R= cor_tl_2x1.flip_signature().fuse_legs(axes=((0, 1), 2)) if policy in ['qr'] else cor_tl
-    kwargs["D_block"]= svd_predict_spec(s0, "vtl", s0, "vtr")
-    proj[s0].vtl, s, proj[s0].vtr= proj_sym_corner(R, opts_svd, sU=1, **kwargs)
+    opts_svd["D_block"]= svd_predict_spec(s0, "vtl", s0, "vtr")
+    opts_svd["sU"]= 1
+    proj[s0].vtl, s, proj[s0].vtr= proj_sym_corner(R, opts_svd, **kwargs)
 
     # 2) update move corner
     P= proj[s0].vtl
@@ -473,28 +501,31 @@ def _update_core_dir(env, dir : str, opts_svd : dict, **kwargs):
 def proj_sym_corner(rr, opts_svd, **kwargs):
     r""" Projector on largest (by magnitude) eigenvalues of (hermitian) symmetric corner. """
     policy = opts_svd.get('policy', 'symeig')
-    fix_signs= opts_svd.get('fix_signs',True)
     truncation_f= kwargs.get('truncation_f',\
         lambda x : truncation_mask_multiplets(x,keep_multiplets=True, \
-            D_total=opts_svd['D_total'], tol=opts_svd['tol'], \
+            D_total=opts_svd['D_total'], D_block=opts_svd['D_block'], tol=opts_svd['tol'], \
             eps_multiplet=opts_svd['eps_multiplet'], hermitian=True, ) )
 
     if policy in ['symeig']:
+        # TODO U1-c4v-symmetric corner is not Hermitian
+        raise YastnError("Policy 'symeig' is not supported for c4v-symmetric corner projector.")
         # TODO fix_signs ?
-        _kwargs= dict(kwargs)
-        for k in ["method", "use_qr",]: del _kwargs[k]
-        s,u= rr.eigh_with_truncation(axes=(0,1), sU=rr.s[1], which='LM', mask_f= truncation_f, **opts_svd, **_kwargs)
-        v= None
+        # _kwargs= dict(kwargs)
+        # for k in ["method", "use_qr",]: del _kwargs[k]
+        # s,u= rr.eigh_with_truncation(axes=(0,1), sU=rr.s[1], which='LM', mask_f= truncation_f, **opts_svd, **_kwargs)
+        # v= None
     elif policy in ['fullrank', 'randomized', 'block_arnoldi', 'block_propack']:
         # sU = ? r0.s[1]
         if truncation_f is None:
-            u, s, v = rr.svd(axes=(0, 1), fix_signs=fix_signs, **kwargs)
+            u, s, v = rr.svd(axes=(0, 1), **opts_svd)
             Smask = truncation_mask(s, **opts_svd)
             u, s, v = Smask.apply_mask(u, s, v, axes=(-1, 0, 0))
         else:
-            u, s, v = rr.svd_with_truncation(axes=(0, 1), mask_f=truncation_f, **kwargs)
+            u, s, v = rr.svd_with_truncation(axes=(0, 1), mask_f=truncation_f, **opts_svd)
     elif policy in ['qr']:
         u, s= rr.qr(axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0)
         v= None
+    else:
+        raise YastnError(f"Unsupported policy {policy} for c4v-symmetric corner projector.")
 
     return u, s, v
