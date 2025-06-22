@@ -788,7 +788,7 @@ def find_gauge_multi_sites(env_old, env, verbose=False):
                 return None
             zero_modes_dict[(site_ind, k)] = zero_modes
 
-    cs_dict = find_coeff_multi_sites(env_old, env, zero_modes_dict, dtype=zero_modes_dict[(0, "t")][0].dtype, verbose=True)
+    cs_dict = find_coeff_multi_sites(env_old, env, zero_modes_dict, dtype=zero_modes_dict[(0, "t")][0].dtype, verbose=verbose)
 
     def is_diagonal(matrix, tol=1e-6):
         print(torch.diag(matrix))
