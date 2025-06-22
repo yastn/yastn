@@ -113,7 +113,7 @@ jobs:
       - name: tests
         run: |
           pytest -v --backend torch --tensordot_policy fuse_contracted ./tests/tensor;
-          pytest -v --backend torch tensordot_policy no_fusion ./tests/tensor;
+          pytest -v --backend torch --tensordot_policy no_fusion ./tests/tensor;
           pytest -v --backend torch ./tests/peps
 
   deploy-docs:
