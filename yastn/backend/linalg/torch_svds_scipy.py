@@ -148,6 +148,11 @@ class SVDS_SCIPY(torch.autograd.Function):
         else: # solve in numpy
             U, S, Vh= scipy.sparse.linalg.svds(M.detach().cpu().numpy(), k=k, solver=solver, maxiter=maxiter, **kwargs)
 
+        # the order of singular values is not guaranteed to be descending (assumme its either ascending or descending)
+        if S[0]<S[-1]:
+            # reorder the singular values and vectors
+            U, S, Vh= U[:,::-1], S[::-1], Vh[::-1,:]
+
         neg_strides= lambda x: any([s for s in x.strides if s < 0])
         S= torch.as_tensor(S.copy() if neg_strides(S) else S).to(device=M.device)
         U= torch.as_tensor(U.copy() if neg_strides(U) else U).to(device=M.device)
