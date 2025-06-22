@@ -125,8 +125,7 @@ def find_gauge_c4v(env_old, env, verbose=False):
     return sigma
 
 def fp_ctmrg_c4v(env: EnvCTM_c4v, \
-            ctm_opts_fwd : dict= {'opts_svd': {}, 'corner_tol': 1e-8, 'max_sweeps': 100,
-                'method': "2site", 'use_qr': False}, \
+            ctm_opts_fwd : dict= {'opts_svd': {}, 'corner_tol': 1e-8, 'max_sweeps': 100, 'method': "2site",},
             ctm_opts_fp: dict=  {'opts_svd': {'policy': 'fullrank'}}):
     r"""
     Compute the fixed-point environment for the given state using CTMRG.
@@ -259,7 +258,7 @@ class FixedPoint_c4v(torch.autograd.Function):
             ctm_opts_fwd (dict): Options for forward CTMRG convergence. The options should include:
                 - opts_svd (dict): SVD options for the CTMRG step.
             ctm_opts_fp (dict): Options for fixed-point CTMRG step and for fixing the gauge transformation.
-                - opts_svd (dict): SVD options for the fixed-point CTMRG step. 
+                - opts_svd (dict): SVD options for the fixed-point CTMRG step.
                                    Currently only 'policy': 'fullrank' is supported.
             state_params (Sequence[Tensor]): tensors of underlying Peps state
 
@@ -277,14 +276,14 @@ class FixedPoint_c4v(torch.autograd.Function):
 
         # NOTE we need to find the gauge transformation that connects two set of environment tensors
         # obtained from CTMRG with the desired svd policy chosen for CTMRG fixed-point (differentiated) step
-        
+
         _ctm_opts_fp = copy.deepcopy(ctm_opts_fwd)
         if ctm_opts_fp is not None:
             # NOTE svd is governed solely by opts_svd, expected under 'opts_svd' key in ctm_opts_fwd and ctm_opts_fp
             #      If ctm_opts_fp['opts_svd'] is set, we update ctm_opts_fwd['opts_svd'] with it.
             _ctm_opts_fp['opts_svd'].update(ctm_opts_fp.get('opts_svd', {}))
             _ctm_opts_fp.update({k:v for k,v in ctm_opts_fp.items() if k not in ['opts_svd']})
-        
+
         env_converged = ctm_env_out.copy()
         t0= time.perf_counter()
         fp_proj = ctm_env_out.update_(**_ctm_opts_fp)

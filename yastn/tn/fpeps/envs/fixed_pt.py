@@ -809,9 +809,8 @@ def find_gauge_multi_sites(env_old, env, verbose=False):
 
 
 def fp_ctmrg(env: EnvCTM, \
-            ctm_opts_fwd : dict= {'method': "2site", 'use_qr': False, 'corner_tol': 1e-8, 'max_sweeps': 100,
-                'svd_policy': 'fullrank', 'opts_svd': {}, 'D_block': None, 'verbosity': 0}, \
-            ctm_opts_fp: dict= {'svd_policy': 'fullrank'}):
+            ctm_opts_fwd : dict= {'method': "2site", 'corner_tol': 1e-8, 'max_sweeps': 100, 'opts_svd': {}, 'verbosity': 0},
+            ctm_opts_fp: dict= {'opts_svd': {'policy':'fullrank'}}):
     r"""
     Compute the fixed-point environment for the given state using CTMRG.
     First, run CTMRG until convergence then find the gauge transformation guaranteeing element-wise
