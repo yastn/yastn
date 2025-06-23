@@ -891,7 +891,7 @@ def initial_truncation_ZMT3(R0, R1, fgf, opts_svd:dict, fRR, RRgRR, pinv_cutoffs
         U, Vh = S.broadcast(U, Vh, axes=(1, 0))
         MA = MA @ U
         MB = Vh @ MB
-        (MA, MB), error2 = initial_truncation_ZMT1(MA, MB, fgf, {"D_total":max(opts_svd["D_total"], D_total), "tol_block":-1}, fRR, RRgRR, pinv_cutoffs, pre_initial="EAT")
+        (MA, MB), error2 = initial_truncation_ZMT1(MA, MB, fgf, {"D_total":D_total, "tol_block":-1}, fRR, RRgRR, pinv_cutoffs, pre_initial="EAT")
 
     error2 = calculate_truncation_error2(MA @ MB, fgf, fRR, RRgRR)
     return (MA, MB), error2
