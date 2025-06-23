@@ -886,12 +886,12 @@ def initial_truncation_ZMT3(R0, R1, fgf, opts_svd:dict, fRR, RRgRR, pinv_cutoffs
         D_total = D_total - 1
 
 
-        U, S, Vh = svd_with_truncation(old_R, sU=R.s[1], D_total=D_total)
+        U, S, Vh = svd(old_R, sU=R.s[1])
         S = S.sqrt()
         U, Vh = S.broadcast(U, Vh, axes=(1, 0))
         MA = MA @ U
         MB = Vh @ MB
-        (MA, MB), error2 = initial_truncation_ZMT1(MA, MB, fgf, {"D_total":max(opts_svd["D_total"], D_total), "tol_block":-1}, fRR, RRgRR, pinv_cutoffs, pre_initial="EAT")
+        (MA, MB), error2 = initial_truncation_ZMT1(MA, MB, fgf, {"D_total":D_total, "tol_block":-1}, fRR, RRgRR, pinv_cutoffs, pre_initial="EAT")
 
     error2 = calculate_truncation_error2(MA @ MB, fgf, fRR, RRgRR)
     return (MA, MB), error2
