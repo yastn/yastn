@@ -36,6 +36,7 @@ class Evolution_out(NamedTuple):
     truncation_errors: dict[str, float] = ()
     iterations: dict[str, int] = ()
     pinv_cutoffs: dict[str, float] = ()
+    loopiness:float=None
 
 
 def evolution_step_(env, gates, opts_svd, symmetrize=True,
@@ -270,6 +271,7 @@ def truncate_optimize_(fgf, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter
 
     pinv_cutoffs = sorted(pinv_cutoffs)
     M0, M1 = R0, R1
+    loopiness = None
     for opts in [opts_svd] if isinstance(opts_svd, dict) else opts_svd:
 
         Ms, error2s, pinvs, iters = {}, {}, {}, {}
@@ -291,17 +293,17 @@ def truncate_optimize_(fgf, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter
             Ms[key], error2s[key], pinvs[key], iters[key] = optimize_truncation(*Ms['OMP'], error2s['OMP'], fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter)
         if 'ZMT10' in initialization:
             key = "ZMT1"
-            Ms[key], error2s[key] = initial_truncation_ZMT1(M0, M1, fgf, opts_svd, fRR, RRgRR, pinv_cutoffs)
+            Ms[key], error2s[key], loopiness = initial_truncation_ZMT1(M0, M1, fgf, opts_svd, fRR, RRgRR, pinv_cutoffs)
             key = "ZMT1_opt"
             Ms[key], error2s[key], pinvs[key], iters[key] = optimize_truncation(*Ms['ZMT1'], error2s['ZMT1'], fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter)
         if 'ZMT1svd' in initialization:
             key = "ZMT1svd"
-            Ms[key], error2s[key] = initial_truncation_ZMT1(M0, M1, fgf, opts_svd, fRR, RRgRR, pinv_cutoffs, pre_initial="SVD")
+            Ms[key], error2s[key], loopiness = initial_truncation_ZMT1(M0, M1, fgf, opts_svd, fRR, RRgRR, pinv_cutoffs, pre_initial="SVD")
             key = "ZMT1svd_opt"
             Ms[key], error2s[key], pinvs[key], iters[key] = optimize_truncation(*Ms['ZMT1svd'], error2s['ZMT1svd'], fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter)
         if 'ZMT1eat' in initialization:
             key = "ZMT1eat"
-            Ms[key], error2s[key] = initial_truncation_ZMT1(M0, M1, fgf, opts_svd, fRR, RRgRR, pinv_cutoffs, pre_initial="EAT")
+            Ms[key], error2s[key], loopiness = initial_truncation_ZMT1(M0, M1, fgf, opts_svd, fRR, RRgRR, pinv_cutoffs, pre_initial="EAT")
             key = "ZMT1eat_opt"
             Ms[key], error2s[key], pinvs[key], iters[key] = optimize_truncation(*Ms['ZMT1eat'], error2s['ZMT1eat'], fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter)
         if 'ZMT3' in initialization:
@@ -330,6 +332,7 @@ def truncate_optimize_(fgf, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter
         info['truncation_error'] = error2s[key]
         info['pinv_cutoffs'] = pinvs
         info['iterations'] = iters
+        info['loopiness'] = loopiness
         M0, M1 = Ms[key]
 
     M0, M1 = symmetrized_svd(M0, M1, opts, normalize=True)
@@ -524,11 +527,11 @@ def initial_truncation_ZMT1(R0, R1, fgf, opts_svd, fRR, RRgRR, pinv_cutoffs, pre
 
     G0 = fgf.unfuse_legs(axes=(0, 1))
 
-    # Gremove = G0.fuse_legs(axes=((0, 2), (1, 3)))
-    # Gremove.remove_zero_blocks()
-    # _, S, _ = svd_with_truncation(Gremove, axes=(0, 1), policy='lowrank', D_block=2, D_total=2)
-    # S = np.diag(S.to_numpy())
-    # loopiness = np.min(S) / np.max(S)
+    Gremove = G0.fuse_legs(axes=((0, 2), (1, 3)))
+    Gremove.remove_zero_blocks()
+    _, S, _ = svd_with_truncation(Gremove, axes=(0, 1), policy='lowrank', D_block=2, D_total=2)
+    S = np.diag(S.to_numpy())
+    loopiness = np.min(S) / np.max(S)
 
     # slice RA to column vectors
     data_r0 = R0.T.compress_to_1d()
@@ -655,7 +658,7 @@ def initial_truncation_ZMT1(R0, R1, fgf, opts_svd, fRR, RRgRR, pinv_cutoffs, pre
     MA = x ** 0.5 * MA
     MB = x ** 0.5 * MB
 
-    return (MA, MB), abs(calculate_truncation_error2(MAMB * x, fgf, fRR, RRgRR))
+    return (MA, MB), abs(calculate_truncation_error2(MAMB * x, fgf, fRR, RRgRR)), loopiness
 
 # def initial_truncation_ZMT1(R0, R1, fgf, opts_svd, fRR, RRgRR, pinv_cutoffs, pre_initial=None):
 
@@ -892,7 +895,7 @@ def initial_truncation_ZMT3(R0, R1, fgf, opts_svd:dict, fRR, RRgRR, pinv_cutoffs
         U, Vh = S.broadcast(U, Vh, axes=(1, 0))
         MA = MA @ U
         MB = Vh @ MB
-        (MA, MB), error2 = initial_truncation_ZMT1(MA, MB, fgf, {"D_total":D_total, "tol_block":-1}, fRR, RRgRR, pinv_cutoffs, pre_initial="EAT")
+        (MA, MB), error2, _ = initial_truncation_ZMT1(MA, MB, fgf, {"D_total":D_total, "tol_block":-1}, fRR, RRgRR, pinv_cutoffs, pre_initial="EAT")
 
         D_total = 0
         for new_d in MA.get_legs()[1].D:
