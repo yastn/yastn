@@ -323,7 +323,7 @@ class EnvCTM_c4v(EnvCTM):
              'data': {}}
         for site in self.sites():
             d_local = {dirn: getattr(self[site], dirn).save_to_dict()
-                       for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']}
+                       for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r'] if getattr(self[site], dirn)}
             d['data'][site] = d_local
         return d
 
