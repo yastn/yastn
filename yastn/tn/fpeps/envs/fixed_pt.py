@@ -342,11 +342,7 @@ def fast_env_T_gauge_multi_sites(config, T_olds, T_news):
 
     # TODO check if T_olds and T_news are compatible
     for To, Tn in zip(T_olds, T_news):
-        try:
-            mask_needed, _ = _test_axes_match(To, Tn)
-        except YastnError:
-            raise NoFixedPointError(code=1, message="No fixed point found: T tensors' symmetry sectors change after a CTM step!")
-        if mask_needed: # charge sectors missing
+        if [l.tD for l in To.get_legs(axes=(0, 2))] != [l.tD for l in Tn.get_legs(axes=(0, 2))]:
             raise NoFixedPointError(code=1, message="No fixed point found: T tensors' symmetry sectors change after a CTM step!")
 
     leg = T_news[0].get_legs(axes=0)
@@ -1035,7 +1031,7 @@ class FixedPoint(torch.autograd.Function):
             if verbosity > 2 and _env_ts.is_cuda:
                 torch.cuda.memory._dump_snapshot(f"{type(ctx).__name__}_backward_prevjp_CUDAMEM.pickle")
             #_, dfdC_vjp = torch.func.vjp(lambda x: FixedPoint.fixed_point_iter(env, sigma_dict, ctx.ctm_opts_fp, _env_slices, x, psi_data), _env_ts)
-            #_, dfdA_vjp = torch.func.vjp(lambda x: FixedPoint.fixed_point_iter(env, sigma_dict, ctx.ctm_opts_fp, _env_slices, _env_ts, x), psi_data) 
+            #_, dfdA_vjp = torch.func.vjp(lambda x: FixedPoint.fixed_point_iter(env, sigma_dict, ctx.ctm_opts_fp, _env_slices, _env_ts, x), psi_data)
             _, df_vjp = torch.func.vjp(lambda x,y: FixedPoint.fixed_point_iter(env, sigma_dict, ctx.ctm_opts_fp, _env_slices, x, y), _env_ts, psi_data)
             dfdC_vjp= lambda x: (df_vjp(x)[0],)
             dfdA_vjp= lambda x: (df_vjp(x)[1],)

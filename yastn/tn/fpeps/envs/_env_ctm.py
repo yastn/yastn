@@ -1161,7 +1161,7 @@ class EnvCTM(Peps):
         assert leg0 == leg1.conj(), f"Projector spectrum history mismatch between leg0={leg0} and leg1={leg1}"
         #
         l= leg0 if sU == leg0.s else leg1
-        return { t: max(d+10,d*1.1) for t,d in zip(l.t, l.D) }
+        return { t: max(d+10,int(d*1.1)) for t,d in zip(l.t, l.D) }
 
 
 def decompress_env_1d(data,meta):
