@@ -55,18 +55,60 @@ def tensordot_vs_numpy(a, b, axes, conj):
     return c
 
 
-def test_dot_basic(config_kwargs):
+def test_dot_basic_dense(config_kwargs):
     """ test tensordot for different symmetries. """
     # dense
     config_dense = yastn.make_config(sym='none', **config_kwargs)
-    a = yastn.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5), dtype='complex128')
-    b = yastn.rand(config=config_dense, s=(1, -1, 1), D=(2, 3, 5), dtype='complex128')
+    config_dense.backend.random_seed(1)
+    a = yastn.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5), dtype='float64')
+    b = yastn.rand(config=config_dense, s=(1, -1, 1), D=(2, 3, 5), dtype='float64')
     c1 = tensordot_vs_numpy(a, b, axes=((0, 3), (0, 2)), conj=(0, 0))
     c2 = tensordot_vs_numpy(b, a, axes=((2, 0), (3, 0)), conj=(1, 1))
     assert yastn.norm(c1.conj() - c2.transpose(axes=(1, 2, 0))) < tol
     # outer product
     tensordot_vs_numpy(a, b, axes=((), ()), conj=(0, 0))
 
+
+def test_dot_basic_dense2(config_kwargs):
+    """ test tensordot for different symmetries. """
+    # dense
+    config_dense = yastn.make_config(sym='none', **config_kwargs)
+    config_dense.backend.random_seed(1)
+    a = yastn.rand(config=config_dense, s=(-1, 1), D=(2, 3), dtype='float64')
+    b = yastn.rand(config=config_dense, s=(1, -1), D=(2, 3), dtype='float64')
+    c1 = tensordot_vs_numpy(a, b, axes=((0,), (0,)), conj=(0, 0))
+    c2 = tensordot_vs_numpy(b, a, axes=((0,), (0,)), conj=(1, 1))
+    assert yastn.norm(c1.conj() - c2.transpose(axes=(1,0))) < tol
+    # outer product
+    tensordot_vs_numpy(a, b, axes=((), ()), conj=(0, 0))
+
+def test_dot_basic_U1_2(config_kwargs):
+    """ test tensordot for different symmetries. """
+    # U1
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    _cfg_args= dict(**config_kwargs)
+    from yastn.backend import backend_np
+    _cfg_args["backend"]= backend_np
+    config_U1_np = yastn.make_config(sym='U1', **_cfg_args)
+    a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1),
+                  t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
+                  D=((1, 2, 2), (2, 2, 2), (2, 2, 2), (2, 2, 2)))
+    a_np = yastn.rand(config=config_U1_np, s=(-1, 1, 1, -1),
+                  t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
+                  D=((1, 2, 2), (2, 2, 2), (2, 2, 2), (2, 2, 2)))
+    b = yastn.rand(config=config_U1, s=(1, -1, 1),
+                  t=((-1, 1, 2), (-1, 1, 2), (-1, 0, 1)),
+                  D=((1, 2, 2), (2, 2, 2), (2, 2, 2)))
+    b_np = yastn.rand(config=config_U1_np, s=(1, -1, 1),
+                  t=((-1, 1, 2), (-1, 1, 2), (-1, 0, 1)),
+                  D=((1, 2, 2), (2, 2, 2), (2, 2, 2)))
+    tensordot_vs_numpy(a, b, axes=((0, 1), (0, 1)), conj=(0, 0))
+    import pdb; pdb.set_trace()
+    tensordot_vs_numpy(a, b, axes=((1, 3), (1, 2)), conj=(0, 0))
+
+
+def test_dot_basic_U1(config_kwargs):
+    """ test tensordot for different symmetries. """
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1),
@@ -76,6 +118,7 @@ def test_dot_basic(config_kwargs):
                   t=((-1, 1, 2), (-1, 1, 2), (-1, 0, 1)),
                   D=((1, 2, 3), (4, 5, 6), (10, 7, 11)))
     tensordot_vs_numpy(a, b, axes=((0, 1), (0, 1)), conj=(0, 0))
+    import pdb; pdb.set_trace()
     tensordot_vs_numpy(a, b, axes=((1, 3), (1, 2)), conj=(0, 0))
 
     a = yastn.Tensor(config=config_U1, s=(-1, 1, 1, -1), n=-2)
@@ -114,6 +157,9 @@ def test_dot_basic(config_kwargs):
     c2 = tensordot_vs_numpy(b, a, axes=((), ()), conj=(1, 1))
     assert yastn.norm(c1.conj() - c2.transpose(axes=(3, 4, 5, 0, 1, 2))) < tol
 
+
+def test_dot_basic_Z2xU1(config_kwargs):
+    """ test tensordot for different symmetries. """
     # Z2xU1
     config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
     t1 = [(0, -1), (0, 1), (1, -1), (1, 1)]
