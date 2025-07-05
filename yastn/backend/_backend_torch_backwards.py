@@ -27,9 +27,9 @@ class kernel_svd(torch.autograd.Function):
     @staticmethod
     def forward(data, meta, sizes, fullrank_uv=False, ad_decomp_reg=1.0e-12, diagnostics=None):
         real_dtype = data.real.dtype if data.is_complex() else data.dtype
-        Udata = torch.empty((sizes[0],), dtype=data.dtype, device=data.device)
-        Sdata = torch.empty((sizes[1],), dtype=real_dtype, device=data.device)
-        Vhdata = torch.empty((sizes[2],), dtype=data.dtype, device=data.device)
+        Udata = torch.empty(sizes[0], dtype=data.dtype, device=data.device)
+        Sdata = torch.empty(sizes[1], dtype=real_dtype, device=data.device)
+        Vhdata = torch.empty(sizes[2], dtype=data.dtype, device=data.device)
         reg = torch.as_tensor(ad_decomp_reg, dtype=real_dtype, device=data.device)
         for (sl, D, slU, DU, slS, slV, DV) in meta:
             U, S, Vh = SVDGESDD.forward(data[slice(*sl)].view(D), reg, fullrank_uv, diagnostics)
@@ -70,9 +70,9 @@ class kernel_svds_scipy(torch.autograd.Function):
     @staticmethod
     def forward(ctx, data, meta, sizes, thresh, solver, **kwargs):
         real_dtype = data.real.dtype if data.is_complex() else data.dtype
-        Udata = torch.empty((sizes[0],), dtype=data.dtype, device=data.device)
-        Sdata = torch.empty((sizes[1],), dtype=real_dtype, device=data.device)
-        Vhdata = torch.empty((sizes[2],), dtype=data.dtype, device=data.device)
+        Udata = torch.empty(sizes[0], dtype=data.dtype, device=data.device)
+        Sdata = torch.empty(sizes[1], dtype=real_dtype, device=data.device)
+        Vhdata = torch.empty(sizes[2], dtype=data.dtype, device=data.device)
         for (sl, D, slU, DU, slS, slV, DV) in meta:
             k = slS[1] - slS[0]
             U, S, V = SVDS_SCIPY.apply(data[slice(*sl)].view(D), k, thresh, solver, **kwargs)
