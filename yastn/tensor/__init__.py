@@ -122,7 +122,7 @@ class Tensor:
     from .linalg import norm, svd, svd_with_truncation, eigh, eigh_with_truncation, qr, truncation_mask
     from ._contractions import tensordot, __matmul__, vdot, trace, swap_gate, broadcast, apply_mask
     from ._algebra import __add__, __sub__, __mul__, __rmul__, __array_ufunc__, __neg__, linear_combination
-    from ._algebra import __lt__, __gt__, __le__, __ge__, __truediv__, __pow__
+    from ._algebra import __lt__, __gt__, __le__, __ge__, __truediv__, __pow__, allclose
     from ._algebra import __abs__, real, imag, sqrt, rsqrt, reciprocal, exp, bitwise_not
     from ._single import conj, conj_blocks, flip_signature, flip_charges, switch_signature, transpose, moveaxis, move_leg, diag, grad
     from ._single import copy, clone, detach, to, requires_grad_, remove_zero_blocks, add_leg, remove_leg, drop_leg_history

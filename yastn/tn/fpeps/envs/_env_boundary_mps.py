@@ -135,7 +135,7 @@ class EnvBoundaryMPS(Peps):
                             if op.ndim == 2:
                                 tm[nx].set_operator_(op)
                             else:  # for a single-layer Peps, replace with new peps tensor
-                                tm[nx] = op
+                                tm[nx] = op.transpose(axes=(0, 3, 2, 1))
                             env.update_env_(nx, to='first')
                             out[(nx, ny) + nz] = env.measure(bd=(nx - 1, nx)) / norm_env
             return out
@@ -149,11 +149,17 @@ class EnvBoundaryMPS(Peps):
         if isinstance(O, dict):
             out = {}
             for k, op in O.items():
-                tm[nx].set_operator_(op)
+                if op.ndim == 2:
+                    tm[nx].set_operator_(op)
+                else:  # for a single-layer Peps, replace with new peps tensor
+                    tm[nx] = op.transpose(axes=(0, 3, 2, 1))
                 env.update_env_(nx, to='first')
                 out[k] = env.measure(bd=(nx - 1, nx)) / norm_env
             return out
-        tm[nx].set_operator_(O)
+        if O.ndim == 2:
+            tm[nx].set_operator_(O)
+        else:  # for a single-layer Peps, replace with new peps tensor
+            tm[nx] = O.transpose(axes=(0, 3, 2, 1))
         env.update_env_(nx, to='first')
         return env.measure(bd=(nx - 1, nx)) / norm_env
   
