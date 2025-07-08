@@ -132,7 +132,10 @@ class EnvBoundaryMPS(Peps):
                 for nx in range(Nx):
                     if (nx, ny) in opdict:
                         for nz, op in opdict[nx, ny].items():
-                            tm[nx].set_operator_(op)
+                            if op.ndim == 2:
+                                tm[nx].set_operator_(op)
+                            else:  # for a single-layer Peps, replace with new peps tensor
+                                tm[nx] = op
                             env.update_env_(nx, to='first')
                             out[(nx, ny) + nz] = env.measure(bd=(nx - 1, nx)) / norm_env
             return out
