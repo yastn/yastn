@@ -42,6 +42,12 @@ def test_iterate_measure_product(config_kwargs):
     sz = ops.sz()
     ez = env.measure_1site(sz)
     assert all(abs(v - ez[s]) < tol for s, v in vals.items())
+    #
+    #  sample
+    #
+    vecs = {v: ops.vec_z(val=v) for v in [-1, 0, 1]}
+    out = env.sample(xrange=(1, 4), yrange=(1, 3), number=8, projectors=vecs)
+    assert all(all(x == vals[k] for x in v) for k, v in out.items())
 
 
 def run_save_load(env):

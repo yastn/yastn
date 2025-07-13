@@ -14,14 +14,14 @@
 # ==============================================================================
 from __future__ import annotations
 from dataclasses import dataclass
+from tqdm import tqdm
 from typing import NamedTuple, Union
-from .... import Tensor, ones, eye, YastnError, tensordot, vdot, ncon
+from .... import Tensor, eye, YastnError, tensordot, vdot, ncon
 from .._peps import Peps, Peps2Layers, DoublePepsTensor
 from .._gates_auxiliary import apply_gate_onsite, gate_product_operator, gate_fix_order, match_ancilla
-from .._geometry import Bond
+from .._geometry import Bond, Site
 from ._env_auxlliary import *
 from ._env_boundary_mps import _clear_operator_input
-# from ._env_ctm import update_old_env_
 
 
 @dataclass()
@@ -79,6 +79,19 @@ class EnvBP(Peps):
     @property
     def config(self):
         return self.psi.config
+
+
+    def copy(self):
+        psi = self.psi
+        if isinstance(psi, Peps2Layers):
+            psi = psi.ket
+        env = EnvBP(psi, init=None)
+        for site in self.sites():
+            env[site].t = self[site].t.copy()
+            env[site].l = self[site].l.copy()
+            env[site].b = self[site].b.copy()
+            env[site].r = self[site].r.copy()
+        return env
 
 
     def save_to_dict(self) -> dict:
@@ -584,6 +597,101 @@ class EnvBP(Peps):
         return tmp if iterator_step else next(tmp)
 
 
+    def sample(self, projectors, number=1, xrange=None, yrange=None, progressbar=False, return_probabilities=False, flatten_one=True) -> dict[Site, list]:
+        """
+        Sample random configurations from PEPS using BP environment.
+        """
+        if xrange is None:
+            xrange = [0, self.Nx]
+        if yrange is None:
+            yrange = [0, self.Ny]
+
+        if self.nn_site((xrange[0], yrange[0]), (0, 0)) is None or \
+           self.nn_site((xrange[1] - 1, yrange[1] - 1), (0, 0)) is None:
+           raise YastnError(f"Window range {xrange=}, {yrange=} does not fit within the lattice.")
+
+        sites = [Site(nx, ny) for ny in range(*yrange) for nx in range(*xrange)]
+        if not isinstance(projectors, dict) or all(isinstance(x, Tensor) for x in projectors.values()):
+            projectors = {site: projectors for site in sites}  # spread projectors over sites
+        if set(sites) != set(projectors.keys()):
+            raise YastnError(f"Projectors not defined for some sites in xrange={xrange}, yrange={yrange}.")
+
+        # change each list of projectors into keys and projectors
+        projs_sites = {}
+        for k, v in projectors.items():
+            if isinstance(v, dict):
+                projs_sites[k, 'k'] = list(v.keys())
+                projs_sites[k, 'p'] = list(v.values())
+            else:
+                projs_sites[k, 'k'] = list(range(len(v)))
+                projs_sites[k, 'p'] = v
+
+            for j, pr in enumerate(projs_sites[k, 'p']):
+                if pr.ndim == 1:  # vectors need conjugation
+                    if abs(pr.norm() - 1) > 1e-10:
+                        raise YastnError("Local states to project on should be normalized.")
+                    projs_sites[k, 'p'][j] = tensordot(pr, pr.conj(), axes=((), ()))
+                elif pr.ndim == 2:
+                    if (pr.n != pr.config.sym.zero()) or abs(pr @ pr - pr).norm() > 1e-10:
+                        raise YastnError("Matrix projectors should be projectors, P @ P == P.")
+                else:
+                    raise YastnError("Projectors should consist of vectors (ndim=1) or matrices (ndim=2).")
+
+        out = {site: [] for site in sites}
+        rands = (self.psi.config.backend.rand(self.Nx * self.Ny * number) + 1) / 2  # in [0, 1]
+        count = 0
+        probabilities = []
+
+        for _ in tqdm(range(number), desc="Sample...", disable=not progressbar):
+            probability = 1.
+            env = {site: EnvBP_local() for site in sites}
+            for (nx, ny) in sites:
+                nx0, ny0 = nx % self.Nx, ny % self.Ny
+                env[nx, ny].t = self[nx0, ny0].t.copy()
+                env[nx, ny].l = self[nx0, ny0].l.copy()
+                env[nx, ny].b = self[nx0, ny0].b.copy()
+                env[nx, ny].r = self[nx0, ny0].r.copy()
+
+            for ny in range(*yrange):
+                for nx in range(*xrange):
+                    nx0, ny0 = nx % self.Nx, ny % self.Ny
+                    lenv = env[nx, ny]
+                    ten = self.psi[nx0, ny0]
+                    Aket = ten.ket.unfuse_legs(axes=(0, 1))  # t l b r s
+                    Abra = ten.bra.unfuse_legs(axes=(0, 1))  # t l b r s
+                    Aket = ncon([Aket, lenv.t, lenv.l, lenv.b, lenv.r], [(1, 2, 3, 4, -4), (-0, 1), (-1, 2), (-2, 3), (-3, 4)])
+                    norm_prob = vdot(Abra, Aket)
+                    acc_prob = 0
+                    for proj, iii in zip(projs_sites[(nx, ny), 'p'], projs_sites[(nx, ny), 'k']):
+                        proj = match_ancilla(ten.ket, proj)
+                        Aketp = tensordot(Aket, proj, axes=(4, 1))
+                        prob = vdot(Abra, Aketp) / norm_prob
+                        acc_prob += prob 
+                        if rands[count] < acc_prob:
+                            out[nx, ny].append(iii)
+                            Aketp = tensordot(Aket, proj, axes=(4, 1)) / prob
+
+                            if nx + 1 < xrange[0]:
+                                new_l = hair_l(Abra, ht=lenv.t, hl=lenv.l, hb=lenv.b, Aket=Aketp)
+                                new_l = regularize_belief(new_l, self.tol_positive)
+                                env[nx + 1, ny].l = new_l
+                            if ny + 1 < yrange[0]:
+                                new_t = hair_t(Abra, ht=lenv.t, hl=lenv.l, hr=lenv.r, Aket=Aketp)
+                                new_t = regularize_belief(new_t, self.tol_positive)
+                                env[nx, ny + 1].t = new_t
+                            probability *= prob
+                            break
+                    count += 1
+            probabilities.append(probability)
+
+        if number == 1 and flatten_one:
+            out = {site: smp.pop() for site, smp in out.items()}
+
+        if return_probabilities:
+            return out, probabilities
+        return out
+
+
 def _iterate_(env, max_sweeps, iterator_step, diff_tol):
     """ Generator for ctmrg_(). """
     converged = None
@@ -597,6 +705,8 @@ def _iterate_(env, max_sweeps, iterator_step, diff_tol):
         if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
             yield BP_out(sweeps=sweep, max_diff=max_diff, converged=converged)
     yield BP_out(sweeps=sweep, max_diff=max_diff, converged=converged)
+
+
 
 
 def regularize_belief(mat, tol):

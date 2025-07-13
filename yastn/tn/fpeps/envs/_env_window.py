@@ -13,7 +13,6 @@
 # limitations under the License.
 # ==============================================================================
 from __future__ import annotations
-from itertools import accumulate
 from tqdm import tqdm
 from ... import mps
 from .... import YastnError, Tensor, tensordot
