@@ -593,9 +593,37 @@ class EnvBP(Peps):
         tmp = _iterate_(env, max_sweeps, iterator_step, diff_tol)
         return tmp if iterator_step else next(tmp)
 
-    def sample(self, projectors, number=1, xrange=None, yrange=None, progressbar=False, return_probabilities=False, flatten_one=True) -> dict[Site, list]:
-        """
-        Sample random configurations from PEPS using BP environment.
+    def sample(self, projectors, number=1, xrange=None, yrange=None, progressbar=False, return_probabilities=False, flatten_one=True, **kwargs) -> dict[Site, list]:
+        r"""
+        Sample random configurations from PEPS. 
+        Output a dictionary linking sites with lists of sampled projectors` keys for each site.
+        Projectors should be summing up to identity -- this is not checked.
+
+        Parameters
+        ----------
+        projectors: Dict[Any, yast.Tensor] | Sequence[yast.Tensor] | Dict[Site, Dict[Any, yast.Tensor]]
+            Projectors to sample from. We can provide a dict(key: projector), where the sampled results will be given as keys,
+            and the same set of projectors is used at each site. For a list of projectors, the keys follow from enumeration.
+            Finally, we can provide a dictionary between each site and sets of projectors.
+
+        number: int
+            Number of independent samples.
+            
+        xrange: tuple[int, int]
+            range of rows to sample from, [r0, r1); r0 included, r1 excluded.
+
+        yrange: tuple[int, int]
+            range of columns to sample from.
+
+        progressbar: bool
+            Whether to display progressbar. The default is ``False``.
+
+        return_probabilities: bool
+            Whether to return a tuple (samples, probabilities). The default is ``False``, where a dict samples is returned.
+
+        flatten_one: bool
+            Whether, for number==1, pop one-element lists for each lattice site to return samples={site: ind, } instead of {site: [ind]}.
+            The default is ``True``.
         """
         if xrange is None:
             xrange = [0, self.Nx]

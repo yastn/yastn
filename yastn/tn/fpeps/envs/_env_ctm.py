@@ -796,12 +796,11 @@ class EnvCTM(Peps):
         return env_win.measure_2site(O, P, opts_svd=opts_svd, opts_var=opts_var)
 
 
-    def sample(self, projectors, number=1, xrange=None, yrange=None, opts_svd=None, opts_var=None, progressbar=False, return_probabilities=False, flatten_one=True) -> dict[Site, list]:
+    def sample(self, projectors, number=1, xrange=None, yrange=None, opts_svd=None, opts_var=None, progressbar=False, return_probabilities=False, flatten_one=True, **kwargs) -> dict[Site, list]:
         r"""
         Sample random configurations from PEPS. 
         Output a dictionary linking sites with lists of sampled projectors` keys for each site.
-
-        It does not check whether projectors sum up to identity -- probabilities of provided projectors get normalized to one.
+        Projectors should be summing up to identity -- this is not checked.
 
         Parameters
         ----------

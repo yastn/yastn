@@ -324,11 +324,31 @@ class EnvBoundaryMPS(Peps):
                             out[(nx1, ny1) + nz1, (nx2, ny2) + nz2] = env.measure(bd=(nx2-1, nx2)) / norm_env
         return out
 
-    def sample(peps_env, projectors, number=1, opts_svd=None, opts_var=None, progressbar=False, return_probabilities=False, flatten_one=True):
-        """
-        Sample a random configuration from a finite PEPS.
+    def sample(peps_env, projectors, number=1, opts_svd=None, opts_var=None, progressbar=False, return_probabilities=False, flatten_one=True, **kwargs):
+        r"""
+        Sample random configurations from PEPS. 
+        Output a dictionary linking sites with lists of sampled projectors` keys for each site.
+        Projectors should be summing up to identity -- this is not checked.
 
-        Takes CTM environments and a complete list of projectors to sample from.
+        Parameters
+        ----------
+        projectors: Dict[Any, yast.Tensor] | Sequence[yast.Tensor] | Dict[Site, Dict[Any, yast.Tensor]]
+            Projectors to sample from. We can provide a dict(key: projector), where the sampled results will be given as keys,
+            and the same set of projectors is used at each site. For a list of projectors, the keys follow from enumeration.
+            Finally, we can provide a dictionary between each site and sets of projectors.
+
+        number: int
+            Number of independent samples.
+
+        progressbar: bool
+            Whether to display progressbar. The default is ``False``.
+
+        return_probabilities: bool
+            Whether to return a tuple (samples, probabilities). The default is ``False``, where a dict samples is returned.
+
+        flatten_one: bool
+            Whether, for number==1, pop one-element lists for each lattice site to return samples={site: ind, } instead of {site: [ind]}.
+            The default is ``True``.
         """
         psi = peps_env.psi
         config = psi[0, 0].config
