@@ -163,7 +163,6 @@ class EnvBoundaryMPS(Peps):
         env.update_env_(nx, to='first')
         return env.measure(bd=(nx - 1, nx)) / norm_env
   
-
     def measure_nn(peps_env, OP):
         """
         Calculate 2-point expectation values on <O_i P_j> in a finite on NN bonds.
@@ -247,7 +246,6 @@ class EnvBoundaryMPS(Peps):
         self.yrange = (min(site[1] for site in sites), max(site[1] for site in sites) + 1)
         dirn = 'lr'
         return _measure_nsite(self, *operators, sites=sites, dirn=dirn)
-
 
     def measure_2site(peps_env, O, P, opts_svd, opts_var=None):
         """
@@ -334,13 +332,15 @@ class EnvBoundaryMPS(Peps):
         """
         psi = peps_env.psi
         config = psi[0, 0].config
-        rands = (config.backend.rand(psi.Nx * psi.Ny * number) + 1) / 2
 
         xrange = [0, peps_env.Nx]
         yrange = [0, peps_env.Ny]
-        projs_sites = clear_projectors(peps_env.sites(), projectors, xrange, yrange)
+        sites = peps_env.sites()
+        projs_sites = clear_projectors(sites, projectors, xrange, yrange)
+
         out = {site: [] for site in peps_env.sites()}
         probabilities = []
+        rands = (config.backend.rand(psi.Nx * psi.Ny * number) + 1) / 2
         count = 0
 
         for _ in tqdm(range(number), desc="Sample...", disable=not progressbar):
@@ -384,7 +384,6 @@ class EnvBoundaryMPS(Peps):
         if return_probabilities:
             return out, probabilities
         return out
-
 
     def sample_MC_(proj_env, st0, st1, st2, psi, projectors, opts_svd, opts_var, trial="local"):
         """

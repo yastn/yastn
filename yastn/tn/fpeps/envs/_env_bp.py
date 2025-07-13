@@ -81,7 +81,6 @@ class EnvBP(Peps):
     def config(self):
         return self.psi.config
 
-
     def copy(self):
         psi = self.psi
         if isinstance(psi, Peps2Layers):
@@ -93,7 +92,6 @@ class EnvBP(Peps):
             env[site].b = self[site].b.copy()
             env[site].r = self[site].r.copy()
         return env
-
 
     def save_to_dict(self) -> dict:
         r"""
@@ -112,7 +110,6 @@ class EnvBP(Peps):
                        for dirn in ['t', 'l', 'b', 'r']}
             d['data'][site] = d_local
         return d
-
 
     def reset_(self, init='eye'):
         r"""
@@ -559,7 +556,6 @@ class EnvBP(Peps):
         if max_sweeps > 0:
             env.iterate_(max_sweeps=max_sweeps)
 
-
     def iterate_(env, max_sweeps=1, iterator_step=None, diff_tol=None):
         r"""
         Perform BP updates :meth:`yastn.tn.fpeps.EnvBP.update_` until convergence.
@@ -597,7 +593,6 @@ class EnvBP(Peps):
         tmp = _iterate_(env, max_sweeps, iterator_step, diff_tol)
         return tmp if iterator_step else next(tmp)
 
-
     def sample(self, projectors, number=1, xrange=None, yrange=None, progressbar=False, return_probabilities=False, flatten_one=True) -> dict[Site, list]:
         """
         Sample random configurations from PEPS using BP environment.
@@ -613,10 +608,11 @@ class EnvBP(Peps):
 
         sites = [Site(nx, ny) for ny in range(*yrange) for nx in range(*xrange)]
         projs_sites = clear_projectors(sites, projectors, xrange, yrange)
+
         out = {site: [] for site in sites}
+        probabilities = []
         rands = (self.psi.config.backend.rand(self.Nx * self.Ny * number) + 1) / 2  # in [0, 1]
         count = 0
-        probabilities = []
 
         for _ in tqdm(range(number), desc="Sample...", disable=not progressbar):
             probability = 1.
@@ -680,8 +676,6 @@ def _iterate_(env, max_sweeps, iterator_step, diff_tol):
         if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
             yield BP_out(sweeps=sweep, max_diff=max_diff, converged=converged)
     yield BP_out(sweeps=sweep, max_diff=max_diff, converged=converged)
-
-
 
 
 def regularize_belief(mat, tol):
