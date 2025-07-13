@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from .... import fuse_legs, tensordot, swap_gate, ones, Leg, eye
+from .... import fuse_legs, tensordot, swap_gate, ones, Leg, eye, Tensor, YastnError
 from ... import mps
 
 __all__ = ['hair_t', 'hair_l', 'hair_b', 'hair_r',
@@ -459,3 +459,28 @@ def append_vec_bl(Ac, A, vecbl, op=None, mode='old', in_b=(2, 1), out_a=(0, 3)):
         axes1, axes2 = (2,) + axes1, 0  # [x y] [] [] -> x y [] []
     vecbl = vecbl.fuse_legs(axes=axes1)
     return vecbl.unfuse_legs(axes=axes2)
+
+
+def clear_projectors(sites, projectors, xrange, yrange):
+    """ prepare projectors for sampling functions. """
+    if not isinstance(projectors, dict) or all(isinstance(x, Tensor) for x in projectors.values()):
+        projectors = {site: projectors for site in sites}  # spread projectors over sites
+    if set(sites) != set(projectors.keys()):
+        raise YastnError(f"Projectors not defined for some sites in xrange={xrange}, yrange={yrange}.")
+
+    # change each list of projectors into keys and projectors
+    projs_sites = {}
+    for k, v in projectors.items():
+        projs_sites[k] = dict(v) if isinstance(v, dict) else dict(enumerate(v))
+        for l, pr in projs_sites[k].items():
+            if pr.ndim == 1:  # vectors need conjugation
+                if abs(pr.norm() - 1) > 1e-10:
+                    raise YastnError("Local states to project on should be normalized.")
+                projs_sites[k][l] = tensordot(pr, pr.conj(), axes=((), ()))
+            elif pr.ndim == 2:
+                if (pr.n != pr.config.sym.zero()) or abs(pr @ pr - pr).norm() > 1e-10:
+                    raise YastnError("Matrix projectors should be projectors, P @ P == P.")
+            else:
+                raise YastnError("Projectors should consist of vectors (ndim=1) or matrices (ndim=2).")
+    
+    return projs_sites

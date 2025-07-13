@@ -21,6 +21,7 @@ from .._peps import Peps, Peps2Layers, DoublePepsTensor
 from .._gates_auxiliary import apply_gate_onsite, gate_product_operator, gate_fix_order, match_ancilla
 from .._geometry import Bond, Site
 from ._env_auxlliary import *
+from ._env_auxlliary import clear_projectors
 from ._env_boundary_mps import _clear_operator_input
 
 
@@ -611,32 +612,7 @@ class EnvBP(Peps):
            raise YastnError(f"Window range {xrange=}, {yrange=} does not fit within the lattice.")
 
         sites = [Site(nx, ny) for ny in range(*yrange) for nx in range(*xrange)]
-        if not isinstance(projectors, dict) or all(isinstance(x, Tensor) for x in projectors.values()):
-            projectors = {site: projectors for site in sites}  # spread projectors over sites
-        if set(sites) != set(projectors.keys()):
-            raise YastnError(f"Projectors not defined for some sites in xrange={xrange}, yrange={yrange}.")
-
-        # change each list of projectors into keys and projectors
-        projs_sites = {}
-        for k, v in projectors.items():
-            if isinstance(v, dict):
-                projs_sites[k, 'k'] = list(v.keys())
-                projs_sites[k, 'p'] = list(v.values())
-            else:
-                projs_sites[k, 'k'] = list(range(len(v)))
-                projs_sites[k, 'p'] = v
-
-            for j, pr in enumerate(projs_sites[k, 'p']):
-                if pr.ndim == 1:  # vectors need conjugation
-                    if abs(pr.norm() - 1) > 1e-10:
-                        raise YastnError("Local states to project on should be normalized.")
-                    projs_sites[k, 'p'][j] = tensordot(pr, pr.conj(), axes=((), ()))
-                elif pr.ndim == 2:
-                    if (pr.n != pr.config.sym.zero()) or abs(pr @ pr - pr).norm() > 1e-10:
-                        raise YastnError("Matrix projectors should be projectors, P @ P == P.")
-                else:
-                    raise YastnError("Projectors should consist of vectors (ndim=1) or matrices (ndim=2).")
-
+        projs_sites = clear_projectors(sites, projectors, xrange, yrange)
         out = {site: [] for site in sites}
         rands = (self.psi.config.backend.rand(self.Nx * self.Ny * number) + 1) / 2  # in [0, 1]
         count = 0
@@ -662,15 +638,14 @@ class EnvBP(Peps):
                     Aket = ncon([Aket, lenv.t, lenv.l, lenv.b, lenv.r], [(1, 2, 3, 4, -4), (-0, 1), (-1, 2), (-2, 3), (-3, 4)])
                     norm_prob = vdot(Abra, Aket)
                     acc_prob = 0
-                    for proj, iii in zip(projs_sites[(nx, ny), 'p'], projs_sites[(nx, ny), 'k']):
+                    for k, proj in projs_sites[(nx, ny)].items():
                         proj = match_ancilla(ten.ket, proj)
                         Aketp = tensordot(Aket, proj, axes=(4, 1))
                         prob = vdot(Abra, Aketp) / norm_prob
                         acc_prob += prob 
                         if rands[count] < acc_prob:
-                            out[nx, ny].append(iii)
+                            out[nx, ny].append(k)
                             Aketp = tensordot(Aket, proj, axes=(4, 1)) / prob
-
                             if nx + 1 < xrange[0]:
                                 new_l = hair_l(Abra, ht=lenv.t, hl=lenv.l, hb=lenv.b, Aket=Aketp)
                                 new_l = regularize_belief(new_l, self.tol_positive)

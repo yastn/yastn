@@ -16,7 +16,7 @@ from itertools import accumulate
 from tqdm import tqdm
 from .... import Tensor, YastnError, tensordot
 from ... import mps
-from ._env_auxlliary import identity_tm_boundary
+from ._env_auxlliary import identity_tm_boundary, clear_projectors
 from ._env_measure import _measure_nsite
 from .._peps import Peps, Peps2Layers
 
@@ -330,27 +330,15 @@ class EnvBoundaryMPS(Peps):
         """
         Sample a random configuration from a finite PEPS.
 
-        Takes  CTM environments and a complete list of projectors to sample from.
+        Takes CTM environments and a complete list of projectors to sample from.
         """
         psi = peps_env.psi
         config = psi[0, 0].config
         rands = (config.backend.rand(psi.Nx * psi.Ny * number) + 1) / 2
 
-        # change each list of projectors into keys and projectors
-        projs_sites = {}
-        for k, v in projectors.items():
-            projs_sites[k] = dict(v) if isinstance(v, dict) else dict(enumerate(v))
-            for k, pr in projs_sites[k].items():
-                if pr.ndim == 1:  # vectors need conjugation
-                    if abs(pr.norm() - 1) > 1e-10:
-                        raise YastnError("Local states to project on should be normalized.")
-                    projs_sites[k] = tensordot(pr, pr.conj(), axes=((), ()))
-                elif pr.ndim == 2:
-                    if (pr.n != pr.config.sym.zero()) or abs(pr @ pr - pr).norm() > 1e-10:
-                        raise YastnError("Matrix projectors should be projectors, P @ P == P.")
-                else:
-                    raise YastnError("Projectors should consist of vectors (ndim=1) or matrices (ndim=2).")
-
+        xrange = [0, peps_env.Nx]
+        yrange = [0, peps_env.Ny]
+        projs_sites = clear_projectors(peps_env.sites(), projectors, xrange, yrange)
         out = {site: [] for site in peps_env.sites()}
         probabilities = []
         count = 0
