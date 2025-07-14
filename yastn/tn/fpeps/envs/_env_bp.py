@@ -669,13 +669,13 @@ class EnvBP(Peps):
                         acc_prob += prob 
                         if rands[count] < acc_prob:
                             out[nx, ny].append(k)
-                            Aketp = tensordot(Aket, proj, axes=(4, 1)) / prob
-                            if nx + 1 < xrange[0]:
-                                new_l = hair_l(Abra, ht=lenv.t, hl=lenv.l, hb=lenv.b, Aket=Aketp)
+                            Aketp = tensordot(ten.ket, proj, axes=(2, 1)) / prob
+                            if nx + 1 < xrange[1]:
+                                new_l = hair_l(ten.bra, ht=lenv.t, hl=lenv.l, hb=lenv.b, Aket=Aketp)
                                 new_l = regularize_belief(new_l, self.tol_positive)
                                 env[nx + 1, ny].l = new_l
-                            if ny + 1 < yrange[0]:
-                                new_t = hair_t(Abra, ht=lenv.t, hl=lenv.l, hr=lenv.r, Aket=Aketp)
+                            if ny + 1 < yrange[1]:
+                                new_t = hair_t(ten.bra, ht=lenv.t, hl=lenv.l, hr=lenv.r, Aket=Aketp)
                                 new_t = regularize_belief(new_t, self.tol_positive)
                                 env[nx, ny + 1].t = new_t
                             probability *= prob
