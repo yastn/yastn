@@ -15,8 +15,11 @@
 """ Initialization of peps tensors for real or imaginary time evolution """
 from ._geometry import SquareLattice, CheckerboardLattice
 from ._peps import Peps
-from .envs._env_ctm import EnvCTM, EnvCTM_local
+from .envs._env_ctm import EnvCTM
+from .envs._env_bp import EnvBP
+from .envs._env_boundary_mps import EnvBoundaryMPS
 from ...initialize import load_from_dict as load_tensor_from_dict
+from ..mps import load_from_dict as load_mps_from_dict
 from ... import YastnError, Tensor
 
 
@@ -67,7 +70,7 @@ def product_peps(geometry, vectors) -> Peps:
 def load_from_dict(config, d) -> Peps:
     r"""
     Create PEPS-related object from dictionary.
-    Works for :class:`yastn.tn.fpeps.Peps`, :class:`yastn.tn.fpeps.EnvCTM`.
+    Works for :class:`yastn.tn.fpeps.Peps`, :class:`yastn.tn.fpeps.EnvCTM`, :class:`yastn.tn.fpeps.EnvBP`.
 
     Parameters
     ----------
@@ -80,12 +83,24 @@ def load_from_dict(config, d) -> Peps:
         :meth:`yastn.tn.fpeps.EnvCTM.save_to_dict`.
     """
 
-    if 'class' in d and d['class'] == 'EnvCTM':  # load EnvCTM
+    if 'class' in d and d['class'] in ('EnvCTM', 'EnvBP'):
         psi = load_from_dict(config, d['psi'])
-        env = EnvCTM(psi, init=None)
+        if d['class'] == 'EnvCTM':
+            env = EnvCTM(psi, init=None)
+        elif d['class'] == 'EnvBP':
+            env = EnvBP(psi, init=None)
         for site in env.sites():
             for dirn, v in d['data'][site].items():
                 setattr(env[site], dirn, load_tensor_from_dict(config, v))
+        return env
+
+    if 'class' in d and d['class'] == 'EnvBoundaryMPS':
+        psi = load_from_dict(config, d['psi'])
+        env = EnvBoundaryMPS(psi, opts_svd={}, setup='')
+        for k, v in d['env'].items():
+            env._env[k] = load_mps_from_dict(config, v)
+        for k, v in d['info'].items():
+            env.info[k] = v.copy()
         return env
 
     # otherwise assume class == 'Peps'

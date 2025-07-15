@@ -14,14 +14,15 @@
 # ==============================================================================
 from __future__ import annotations
 from dataclasses import dataclass
+from tqdm import tqdm
 from typing import NamedTuple, Union
-from .... import Tensor, ones, eye, YastnError, tensordot, vdot, ncon
+from .... import Tensor, eye, YastnError, tensordot, vdot, ncon
 from .._peps import Peps, Peps2Layers, DoublePepsTensor
 from .._gates_auxiliary import apply_gate_onsite, gate_product_operator, gate_fix_order, match_ancilla
-from .._geometry import Bond
+from .._geometry import Bond, Site
 from ._env_auxlliary import *
+from ._env_auxlliary import clear_projectors
 from ._env_boundary_mps import _clear_operator_input
-# from ._env_ctm import update_old_env_
 
 
 @dataclass()
@@ -79,6 +80,36 @@ class EnvBP(Peps):
     @property
     def config(self):
         return self.psi.config
+
+    def copy(self):
+        psi = self.psi
+        if isinstance(psi, Peps2Layers):
+            psi = psi.ket
+        env = EnvBP(psi, init=None)
+        for site in self.sites():
+            env[site].t = self[site].t.copy()
+            env[site].l = self[site].l.copy()
+            env[site].b = self[site].b.copy()
+            env[site].r = self[site].r.copy()
+        return env
+
+    def save_to_dict(self) -> dict:
+        r"""
+        Serialize EnvBP into a dictionary.
+        """
+        psi = self.psi
+        if isinstance(psi, Peps2Layers):
+            psi = psi.ket
+
+        d = {'class': 'EnvBP',
+             'psi': psi.save_to_dict(),
+             'data': {}}
+        
+        for site in self.sites():
+            d_local = {dirn: getattr(self[site], dirn).save_to_dict()
+                       for dirn in ['t', 'l', 'b', 'r']}
+            d['data'][site] = d_local
+        return d
 
     def reset_(self, init='eye'):
         r"""
@@ -525,7 +556,6 @@ class EnvBP(Peps):
         if max_sweeps > 0:
             env.iterate_(max_sweeps=max_sweeps)
 
-
     def iterate_(env, max_sweeps=1, iterator_step=None, diff_tol=None):
         r"""
         Perform BP updates :meth:`yastn.tn.fpeps.EnvBP.update_` until convergence.
@@ -562,6 +592,103 @@ class EnvBP(Peps):
         """
         tmp = _iterate_(env, max_sweeps, iterator_step, diff_tol)
         return tmp if iterator_step else next(tmp)
+
+    def sample(self, projectors, number=1, xrange=None, yrange=None, progressbar=False, return_probabilities=False, flatten_one=True, **kwargs) -> dict[Site, list]:
+        r"""
+        Sample random configurations from PEPS. 
+        Output a dictionary linking sites with lists of sampled projectors` keys for each site.
+        Projectors should be summing up to identity -- this is not checked.
+
+        Parameters
+        ----------
+        projectors: Dict[Any, yast.Tensor] | Sequence[yast.Tensor] | Dict[Site, Dict[Any, yast.Tensor]]
+            Projectors to sample from. We can provide a dict(key: projector), where the sampled results will be given as keys,
+            and the same set of projectors is used at each site. For a list of projectors, the keys follow from enumeration.
+            Finally, we can provide a dictionary between each site and sets of projectors.
+
+        number: int
+            Number of independent samples.
+            
+        xrange: tuple[int, int]
+            range of rows to sample from, [r0, r1); r0 included, r1 excluded.
+
+        yrange: tuple[int, int]
+            range of columns to sample from.
+
+        progressbar: bool
+            Whether to display progressbar. The default is ``False``.
+
+        return_probabilities: bool
+            Whether to return a tuple (samples, probabilities). The default is ``False``, where a dict samples is returned.
+
+        flatten_one: bool
+            Whether, for number==1, pop one-element lists for each lattice site to return samples={site: ind, } instead of {site: [ind]}.
+            The default is ``True``.
+        """
+        if xrange is None:
+            xrange = [0, self.Nx]
+        if yrange is None:
+            yrange = [0, self.Ny]
+
+        if self.nn_site((xrange[0], yrange[0]), (0, 0)) is None or \
+           self.nn_site((xrange[1] - 1, yrange[1] - 1), (0, 0)) is None:
+           raise YastnError(f"Window range {xrange=}, {yrange=} does not fit within the lattice.")
+
+        sites = [Site(nx, ny) for ny in range(*yrange) for nx in range(*xrange)]
+        projs_sites = clear_projectors(sites, projectors, xrange, yrange)
+
+        out = {site: [] for site in sites}
+        probabilities = []
+        rands = (self.psi.config.backend.rand(self.Nx * self.Ny * number) + 1) / 2  # in [0, 1]
+        count = 0
+
+        for _ in tqdm(range(number), desc="Sample...", disable=not progressbar):
+            probability = 1.
+            env = {site: EnvBP_local() for site in sites}
+            for (nx, ny) in sites:
+                nx0, ny0 = nx % self.Nx, ny % self.Ny
+                env[nx, ny].t = self[nx0, ny0].t.copy()
+                env[nx, ny].l = self[nx0, ny0].l.copy()
+                env[nx, ny].b = self[nx0, ny0].b.copy()
+                env[nx, ny].r = self[nx0, ny0].r.copy()
+
+            for ny in range(*yrange):
+                for nx in range(*xrange):
+                    nx0, ny0 = nx % self.Nx, ny % self.Ny
+                    lenv = env[nx, ny]
+                    ten = self.psi[nx0, ny0]
+                    Aket = ten.ket.unfuse_legs(axes=(0, 1))  # t l b r s
+                    Abra = ten.bra.unfuse_legs(axes=(0, 1))  # t l b r s
+                    Aket = ncon([Aket, lenv.t, lenv.l, lenv.b, lenv.r], [(1, 2, 3, 4, -4), (-0, 1), (-1, 2), (-2, 3), (-3, 4)])
+                    norm_prob = vdot(Abra, Aket)
+                    acc_prob = 0
+                    for k, proj in projs_sites[(nx, ny)].items():
+                        proj = match_ancilla(ten.ket, proj)
+                        Aketp = tensordot(Aket, proj, axes=(4, 1))
+                        prob = vdot(Abra, Aketp) / norm_prob
+                        acc_prob += prob 
+                        if rands[count] < acc_prob:
+                            out[nx, ny].append(k)
+                            ketp = tensordot(ten.ket, proj, axes=(2, 1)) / prob
+                            if nx + 1 < xrange[1]:
+                                new_t = hair_t(ten.bra, ht=lenv.t, hl=lenv.l, hr=lenv.r, Aket=ketp)
+                                new_t = regularize_belief(new_t, self.tol_positive)
+                                env[nx + 1, ny].t = new_t
+                            if ny + 1 < yrange[1]:
+                                new_l = hair_l(ten.bra, ht=lenv.t, hl=lenv.l, hb=lenv.b, Aket=ketp)
+                                new_l = regularize_belief(new_l, self.tol_positive)
+                                env[nx, ny + 1].l = new_l
+                            probability *= prob
+                            break
+                    count += 1
+            probabilities.append(probability)
+
+        if number == 1 and flatten_one:
+            out = {site: smp.pop() for site, smp in out.items()}
+
+        if return_probabilities:
+            return out, probabilities
+        return out
 
 
 def _iterate_(env, max_sweeps, iterator_step, diff_tol):

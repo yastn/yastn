@@ -406,14 +406,15 @@ def initial_truncation_EAT(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs):
     Truncate R0 @ R1 to bond dimension specified in opts_svd
     including information from a product approximation of bond metric.
     """
-    G = fgf.unfuse_legs(axes=1)
-    G = tensordot(G, R0, axes=(1, 0))
-    G = tensordot(G, R1, axes=(1, 1))
-    G = G.fuse_legs(axes=((0, (1, 2))))
-    G = G.unfuse_legs(axes=0)
-    G = tensordot(R1.conj(), G, axes=(1, 1))
-    G = tensordot(R0.conj(), G, axes=(0, 1))
-    G = G.unfuse_legs(axes=2)
+    # G = fgf.unfuse_legs(axes=1)
+    # G = tensordot(G, R0, axes=(1, 0))
+    # G = tensordot(G, R1, axes=(1, 1))
+    # G = G.fuse_legs(axes=((0, (1, 2))))
+    # G = G.unfuse_legs(axes=0)
+    # G = tensordot(R1.conj(), G, axes=(1, 1))
+    # G = tensordot(R0.conj(), G, axes=(0, 1))
+    # G = G.unfuse_legs(axes=2)
+    G = fgf.unfuse_legs(axes=(0, 1))
     #
     # rank-1 approximation
     Gremove = G.remove_zero_blocks()
@@ -430,8 +431,11 @@ def initial_truncation_EAT(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs):
     G0 = (G0 + G0.H) / 2
     G1 = (G1 + G1.H) / 2
     #
-    S0, U0 = G0.eigh_with_truncation(axes=(0, 1), tol=min(pinv_cutoffs))
-    S1, U1 = G1.eigh_with_truncation(axes=(0, 1), tol=min(pinv_cutoffs))
+    F0 = R0.H @ G0 @ R0
+    F1 = R1 @ G1 @ R1.H
+    #
+    S0, U0 = F0.eigh_with_truncation(axes=(0, 1), tol=min(pinv_cutoffs))
+    S1, U1 = F1.eigh_with_truncation(axes=(0, 1), tol=min(pinv_cutoffs))
     #
     W0, W1 = symmetrized_svd(S0.sqrt() @ U0.H, U1 @ S1.sqrt(), opts_svd, normalize=False)
     p0, p1 = R0 @ U0, U1.H @ R1

@@ -51,7 +51,7 @@ class Hterm(NamedTuple):
 
 def ind_list_tensors(op: Tensor, unique: list) -> int:
     """ Return index of op in unique. If not present, append op to unique. """
-    ind = next((ind for ind, v in enumerate(unique) if v is op or (v.s == op.s and v.n == op.n and (v - op).norm() < 1e-13)), None)
+    ind = next((ind for ind, v in enumerate(unique) if v is op or (v.s == op.s and v.n == op.n and v.allclose(op))), None)
     if ind is None:
         ind = len(unique)
         unique.append(op)

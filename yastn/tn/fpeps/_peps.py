@@ -109,7 +109,6 @@ class Peps():
             if any(tensor is None for tensor in self._data.values()):
                 raise YastnError("Peps: Not all unique lattice sites got assigned with a tensor.")
 
-
     @property
     def config(self):
         assert all(self[site].config == self[self.sites()[0]].config for site in self.sites())

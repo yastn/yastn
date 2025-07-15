@@ -125,7 +125,7 @@ jobs:
         run: |
           pip install numpy==${{ matrix.numpy_v }};
           pip install scipy==${{ matrix.scipy_v }};
-          pip install .[io,test]
+          pip install .[test]
 
       - name: setup pytorch
         if: matrix.backend == 'torch'
@@ -167,7 +167,7 @@ jobs:
           pip install numpy==${{ matrix.numpy_v }};
           pip install scipy==${{ matrix.scipy_v }};
           pip install torch==${{ matrix.torch_v }} --index-url https://download.pytorch.org/whl/cpu;
-          pip install .[io,test]
+          pip install .[test]
 
       - name: Run tests and collect coverage
         run: |

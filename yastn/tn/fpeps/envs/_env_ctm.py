@@ -796,29 +796,27 @@ class EnvCTM(Peps):
         return env_win.measure_2site(O, P, opts_svd=opts_svd, opts_var=opts_var)
 
 
-    def sample(self, xrange, yrange, projectors, number=1, opts_svd=None, opts_var=None, progressbar=False, return_info=False) -> dict[Site, list]:
+    def sample(self, projectors, number=1, xrange=None, yrange=None, opts_svd=None, opts_var=None, progressbar=False, return_probabilities=False, flatten_one=True, **kwargs) -> dict[Site, list]:
         r"""
-        Sample random configurations from PEPS. Output a dictionary linking sites with lists of sampled projectors` keys for each site.
-
-        It does not check whether projectors sum up to identity -- probabilities of provided projectors get normalized to one.
-        If negative probabilities are observed (signaling contraction errors), ``error = max(abs(negatives))``,
-        and all probabilities below that error level are fixed to error (before consecutive renormalization of probabilities to one).
+        Sample random configurations from PEPS. 
+        Output a dictionary linking sites with lists of sampled projectors` keys for each site.
+        Projectors should be summing up to identity -- this is not checked.
 
         Parameters
         ----------
-        xrange: tuple[int, int]
-            range of rows to sample from, [r0, r1); r0 included, r1 excluded.
-
-        yrange: tuple[int, int]
-            range of columns to sample from.
-
         projectors: Dict[Any, yast.Tensor] | Sequence[yast.Tensor] | Dict[Site, Dict[Any, yast.Tensor]]
             Projectors to sample from. We can provide a dict(key: projector), where the sampled results will be given as keys,
             and the same set of projectors is used at each site. For a list of projectors, the keys follow from enumeration.
             Finally, we can provide a dictionary between each site and sets of projectors.
 
         number: int
-            Number of drawn samples.
+            Number of independent samples.
+            
+        xrange: tuple[int, int]
+            range of rows to sample from, [r0, r1); r0 included, r1 excluded.
+
+        yrange: tuple[int, int]
+            range of columns to sample from.
 
         opts_svd: dict
             Options passed to :meth:`yastn.linalg.svd` used to truncate virtual spaces of boundary MPSs used in sampling.
@@ -831,13 +829,21 @@ class EnvCTM(Peps):
         progressbar: bool
             Whether to display progressbar. The default is ``False``.
 
-        return_info: bool
-            Whether to include in the outputted dictionary a field ``info`` with dictionary
-            that contains information about the amplitude of contraction errors
-            (largest negative probability), D_total, etc. The default is ``False``.
+        return_probabilities: bool
+            Whether to return a tuple (samples, probabilities). The default is ``False``, where a dict samples is returned.
+
+        flatten_one: bool
+            Whether, for number==1, pop one-element lists for each lattice site to return samples={site: ind, } instead of {site: [ind]}.
+            The default is ``True``.
         """
+        if xrange is None:
+            xrange = [0, self.Nx]
+        if yrange is None:
+            yrange = [0, self.Ny]
         env_win = EnvWindow(self, xrange, yrange)
-        return env_win.sample(projectors, number, opts_svd, opts_var, progressbar, return_info)
+        return env_win.sample(projectors, number=number, 
+                              opts_svd=opts_svd, opts_var=opts_var, 
+                              progressbar=progressbar, return_probabilities=return_probabilities, flatten_one=flatten_one)
 
     def post_evolution_(env, bond, **kwargs):
         pass
@@ -873,8 +879,8 @@ class EnvCTM(Peps):
         """
         if all(s not in opts_svd for s in ('tol', 'tol_block')):
             opts_svd['tol'] = 1e-14
-        if method not in ('1site', '2site'):
-            raise YastnError(f"CTM update {method=} not recognized. Should be '1site' or '2site'")
+        if method not in ('1site', '2site', 'hex'):
+            raise YastnError(f"CTM update {method=} not recognized. Should be '1site', '2site' or 'hex')")
         checkpoint_move= kwargs.get('checkpoint_move',False)
 
         #
@@ -1182,22 +1188,24 @@ def calculate_corner_svd(env : dict[tuple[Site,str],Tensor]):
 
 def _update_core_2dir(env, dir : str, opts_svd : dict, **kwargs):
         assert dir in ['lr', 'rl', 'tb', 'bt'], "Invalid directions"
-        update_env_= update_env_horizontal_ if dir in ['lr','rl'] else update_env_vertical_
-        method= kwargs.get('method','2site')
-        update_proj_ = update_2site_projectors_ if method == '2site' else update_1site_projectors_
-
+        update_env_= update_env_horizontal_ if dir in ['lr', 'rl'] else update_env_vertical_
+        method= kwargs.get('method', '2site')
+        if method == '2site':
+            update_proj_ = update_2site_projectors_ 
+        elif method == '1site': 
+            update_proj_ = update_1site_projectors_ 
+        elif method == 'hex': 
+            update_proj_ = update_extended_2site_projectors_ 
         #
         # Empty structure for projectors
         proj = Peps(env.geometry)
         for site in proj.sites():
             proj[site] = EnvCTM_projectors()
-
         #
         # projectors
         for site in env.sites():
             update_proj_(proj, site, dir, env, opts_svd, **kwargs)
         trivial_projectors_(proj, dir, env)  # fill (trivial) projectors on edges
-
         #
         # update move
         env_tmp = EnvCTM(env.psi, init=None)  # empty environments
@@ -1267,6 +1275,152 @@ def update_2site_projectors_(proj, site, dirn, env, opts_svd, **kwargs):
     if 'b' in dirn:
         _, r_l = qr(cor_ll, axes=(1, 0)) if use_qr else (None, cor_ll.T)
         _, r_r = qr(cor_rr, axes=(0, 1)) if use_qr else (None, cor_rr)
+        proj[bl].vbr, proj[br].vbl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
+
+
+
+
+def update_extended_2site_projectors_(proj, site, dirn, env, opts_svd, **kwargs):
+    r"""
+    Calculate new projectors for CTM moves from 4x4 extended corners.
+    """
+    psi = env.psi
+    sites = [psi.nn_site(site, d=d) for d in ((0, 0), (0, 1), (1, 0), (1, 1))]
+    if None in sites:
+        return
+
+    use_qr = kwargs.get("use_qr", True)
+
+    tl, tr, bl, br = sites
+
+    cor_tl = env[tl].l @ env[tl].tl @ env[tl].t
+    cor_tl = tensordot(cor_tl, psi[tl], axes=((2, 1), (0, 1)))
+    cor_tl = cor_tl.fuse_legs(axes=((0, 2), (1, 3)))
+
+    cor_bl = env[bl].b @ env[bl].bl @ env[bl].l
+    cor_bl = tensordot(cor_bl, psi[bl], axes=((2, 1), (1, 2)))
+    cor_bl = cor_bl.fuse_legs(axes=((0, 3), (1, 2)))
+
+    cor_tr = env[tr].t @ env[tr].tr @ env[tr].r
+    cor_tr = tensordot(cor_tr, psi[tr], axes=((1, 2), (0, 3)))
+    cor_tr = cor_tr.fuse_legs(axes=((0, 2), (1, 3)))
+
+    cor_br = env[br].r @ env[br].br @ env[br].b
+    cor_br = tensordot(cor_br, psi[br], axes=((2, 1), (2, 3)))
+    cor_br = cor_br.fuse_legs(axes=((0, 2), (1, 3)))
+
+    if ('l' in dirn) or ('r' in dirn):
+        cor_tt = cor_tl @ cor_tr  # b(left) b(right)
+        cor_bb = cor_br @ cor_bl  # t(right) t(left)
+
+    if 'r' in dirn:
+        sl = psi[tl].get_shape(axes=2)
+        ltl = env.nn_site(tl, d='l')
+        lbl = env.nn_site(bl, d='l')
+        if sl == 1 and ltl and lbl:
+            cor_ltl = env[ltl].l @ env[ltl].tl @ env[ltl].t
+            cor_ltl = tensordot(cor_ltl, psi[ltl], axes=((2, 1), (0, 1)))
+            cor_ltl = tensordot(cor_ltl, env[tl].t, axes=(1, 0)) 
+            cor_ltl = tensordot(cor_ltl, psi[tl], axes=((3, 2), (0, 1)))
+            cor_ltl = cor_ltl.fuse_legs(axes=((0, 1, 3), (2, 4)))
+
+            cor_lbl = env[lbl].b @ env[lbl].bl @ env[lbl].l
+            cor_lbl = tensordot(cor_lbl, psi[lbl], axes=((2, 1), (1, 2)))
+            cor_lbl = env[bl].b @ cor_lbl
+            cor_lbl = tensordot(cor_lbl, psi[bl], axes=((4, 1), (1, 2)))
+            cor_lbl = cor_lbl.fuse_legs(axes=((0, 4), (1, 2, 3)))
+
+            cor_ltt = cor_ltl @ cor_tr  # b(left) b(right)
+            cor_lbb = cor_br @ cor_lbl  # t(right) t(left)
+            _, r_t = qr(cor_ltt, axes=(0, 1)) if use_qr else (None, cor_ltt)
+            _, r_b = qr(cor_lbb, axes=(1, 0)) if use_qr else (None, cor_lbb.T)
+        else:
+            _, r_t = qr(cor_tt, axes=(0, 1)) if use_qr else (None, cor_tt)
+            _, r_b = qr(cor_bb, axes=(1, 0)) if use_qr else (None, cor_bb.T)
+        proj[tr].hrb, proj[br].hrt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
+
+    if 'l' in dirn:
+        sr = psi[tr].get_shape(axes=2)
+        rtr = env.nn_site(tr, d='r')
+        rbr = env.nn_site(br, d='r')
+        if sr == 1 and rtr and rbr:
+            cor_rtr = env[rtr].t @ env[rtr].tr @ env[rtr].r
+            cor_rtr = tensordot(cor_rtr, psi[rtr], axes=((1, 2), (0, 3)))
+            cor_rtr = env[tr].t @ cor_rtr
+            cor_rtr = tensordot(cor_rtr, psi[tr], axes=((1, 3), (0, 3)))
+            cor_rtr = cor_rtr.fuse_legs(axes=((0, 3), (1, 2, 4)))
+
+            cor_rbr = env[rbr].r @ env[rbr].br @ env[rbr].b
+            cor_rbr = tensordot(cor_rbr, psi[rbr], axes=((2, 1), (2, 3)))
+            cor_rbr = tensordot(cor_rbr, env[br].b, axes=(1, 0))
+            cor_rbr = tensordot(cor_rbr, psi[br], axes=((3, 2), (2, 3)))
+            cor_rbr = cor_rbr.fuse_legs(axes=((0, 1, 3), (2, 4)))
+        
+            cor_rtt = cor_tl @ cor_rtr  # b(left) b(right)
+            cor_rbb = cor_rbr @ cor_bl  # t(right) t(left)
+            _, r_t = qr(cor_rtt, axes=(1, 0)) if use_qr else (None, cor_rtt.T)
+            _, r_b = qr(cor_rbb, axes=(0, 1)) if use_qr else (None, cor_rbb)
+        else:
+            _, r_t = qr(cor_tt, axes=(1, 0)) if use_qr else (None, cor_tt.T)
+            _, r_b = qr(cor_bb, axes=(0, 1)) if use_qr else (None, cor_bb)
+        
+        proj[tl].hlb, proj[bl].hlt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
+
+
+    if ('t' in dirn) or ('b' in dirn):
+        cor_ll = cor_bl @ cor_tl  # l(bottom) l(top)
+        cor_rr = cor_tr @ cor_br  # r(top) r(bottom)
+
+    if 't' in dirn:
+        sb = psi[bl].get_shape(axes=3)
+        bbl = env.nn_site(bl, d='b')
+        bbr = env.nn_site(br, d='b')
+        if sb == 1 and bbl and bbr:
+            cor_bbl = env[bbl].b @ env[bbl].bl @ env[bbl].l
+            cor_bbl = tensordot(cor_bbl, psi[bbl], axes=((2, 1), (1, 2)))
+            cor_bbl = tensordot(cor_bbl, env[bl].l, axes=(1, 0))
+            cor_bbl = tensordot(cor_bbl, psi[bl], axes=((3, 1), (1, 2))) 
+            cor_bbl = cor_bbl.fuse_legs(axes=((0, 1, 4), (2, 3)))
+
+            cor_bbr = env[bbr].r @ env[bbr].br @ env[bbr].b
+            cor_bbr = tensordot(cor_bbr, psi[bbr], axes=((2, 1), (2, 3)))
+            cor_bbr = env[br].r @ cor_bbr 
+            cor_bbr = tensordot(cor_bbr, psi[br], axes=((3, 1), (2, 3)))
+            cor_bbr = cor_bbr.fuse_legs(axes=((0, 3), (1, 2, 4)))
+
+            cor_bll = cor_bbl @ cor_tl  # l(bottom) l(top)
+            cor_brr = cor_tr @ cor_bbr  # r(top) r(bottom)
+            _, r_l = qr(cor_bll, axes=(0, 1)) if use_qr else (None, cor_bll)
+            _, r_r = qr(cor_brr, axes=(1, 0)) if use_qr else (None, cor_brr.T)
+        else:
+            _, r_l = qr(cor_ll, axes=(0, 1)) if use_qr else (None, cor_ll)
+            _, r_r = qr(cor_rr, axes=(1, 0)) if use_qr else (None, cor_rr.T)
+        proj[tl].vtr, proj[tr].vtl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
+
+    if 'b' in dirn:
+        st = psi[tl].get_shape(axes=3)
+        ttl = env.nn_site(tl, d='t')
+        ttr = env.nn_site(tr, d='t')
+        if st == 1 and ttl and ttr:
+            cor_ttl = env[ttl].l @ env[ttl].tl @ env[ttl].t
+            cor_ttl = tensordot(cor_ttl, psi[ttl], axes=((2, 1), (0, 1)))
+            cor_ttl = env[tl].l @ cor_ttl
+            cor_ttl = tensordot(cor_ttl, psi[tl], axes=((3, 1), (0, 1)))
+            cor_ttl = cor_ttl.fuse_legs(axes=((0, 3), (1, 2, 4)))
+
+            cor_ttr = env[ttr].t @ env[ttr].tr @ env[ttr].r
+            cor_ttr = tensordot(cor_ttr, psi[ttr], axes=((1, 2), (0, 3)))
+            cor_ttr = tensordot(cor_ttr, env[tr].r, axes=(1, 0))
+            cor_ttr = tensordot(cor_ttr, psi[tr], axes=((2, 3), (0, 3)))
+            cor_ttr = cor_ttr.fuse_legs(axes=((0, 1, 3), (2, 4)))
+            
+            cor_tll = cor_bl @ cor_ttl  # l(bottom) l(top)
+            cor_trr = cor_ttr @ cor_br  # r(top) r(bottom)
+            _, r_l = qr(cor_tll, axes=(1, 0)) if use_qr else (None, cor_tll.T)
+            _, r_r = qr(cor_trr, axes=(0, 1)) if use_qr else (None, cor_trr)
+        else:
+            _, r_l = qr(cor_ll, axes=(1, 0)) if use_qr else (None, cor_ll.T)
+            _, r_r = qr(cor_rr, axes=(0, 1)) if use_qr else (None, cor_rr)
         proj[bl].vbr, proj[br].vbl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
 
 

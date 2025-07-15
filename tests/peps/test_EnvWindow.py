@@ -99,9 +99,7 @@ def test_window_measure(config_kwargs):
     vecs = [ops.vec_z(val=v) for v in [-1, 1]]
     #
     number = 4
-    out = env_win.sample(vecs, number=number, return_info=True, progressbar=True)
-    info = out.pop('info')
-    assert info['opts_svd']['D_total'] == D_total
+    out, probs = env_win.sample(vecs, number=number, return_probabilities=True, progressbar=True)
     assert len(out) == 12
     for ny in range(0, 3):
         for nx in range(0, 4):
@@ -109,9 +107,7 @@ def test_window_measure(config_kwargs):
             assert all(x in [0, 1] for x in out[nx, ny])
 
     vecs = {k: v for k, v in zip('tb', vecs)}
-    out = env_win.sample(vecs, number=number, return_info=True)
-    info = out.pop('info')
-    assert info['opts_svd']['D_total'] == D_total
+    out = env_win.sample(vecs, number=number)
     assert len(out) == 12
     for ny in range(0, 3):
         for nx in range(0, 4):

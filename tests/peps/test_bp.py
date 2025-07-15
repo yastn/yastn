@@ -35,12 +35,36 @@ def test_iterate_measure_product(config_kwargs):
     env = fpeps.EnvBP(psi, init='eye')
     info = env.iterate_(max_sweeps=5, diff_tol=1e-10)
     assert info.converged
+    run_save_load(env)
     #
     #  measure_1site
     #
     sz = ops.sz()
     ez = env.measure_1site(sz)
     assert all(abs(v - ez[s]) < tol for s, v in vals.items())
+    #
+    #  sample
+    #
+    vecs = {v: ops.vec_z(val=v) for v in [-1, 0, 1]}
+    out = env.sample(xrange=(1, 4), yrange=(1, 3), number=8, projectors=vecs)
+    assert all(all(x == vals[k] for x in v) for k, v in out.items())
+
+
+def run_save_load(env):
+    # test save, load
+
+    config = env.psi.config
+    d = env.save_to_dict()
+
+    env_save = fpeps.load_from_dict(config, d)
+
+    for site in env.sites():
+        for dirn in  ['t', 'l', 'b', 'r']:
+            ten0 = getattr(env[site], dirn)
+            ten1 = getattr(env_save[site], dirn)
+
+            assert yastn.are_independent(ten0, ten1)
+            assert (ten0 - ten1).norm() < 1e-14
 
 
 def test_iterate_measure_2x1(config_kwargs):

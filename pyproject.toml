@@ -22,7 +22,8 @@ classifiers = [
 dependencies = [
     "numpy>=1.21.6",
     "scipy>=1.11.4",
-    "tqdm"
+    "tqdm",
+    "h5py"
 ]
 dynamic = ["version"]
 
@@ -31,7 +32,6 @@ include = ["yastn*"]
 exclude = ["docs*", "tests*", "experimental*"]
 
 [project.optional-dependencies]
-io = ["h5py"]
 test = ["pytest", "pytest-cov", "pytest-randomly"]
 docbuild = ["sphinx", "sphinxcontrib-napoleon", "pydata-sphinx-theme"]
 torch = ["torch>=2.4"]
