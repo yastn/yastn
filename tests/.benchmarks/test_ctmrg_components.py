@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 import numpy as np
+import time
 import pytest
 import math
 import copy
@@ -88,20 +89,18 @@ def compute_halfs_2site_(proj, site, dirn, env, opts_svd, **kwargs):
     
     return None, None
 
-   
 
 @torch_test
 def test_enlarged_corner_U1(config_kwargs):
     """ test tensordot for different symmetries. """
     config = yastn.make_config(sym='U1', **config_kwargs)
     _cfg= copy.deepcopy(config_kwargs)
-    _cfg["backend"]= backend_torch
-    _cfg["device"]= 'cpu'
+    _cfg["backend"]= backend_torch 
     config_torch = yastn.make_config(sym='U1', **_cfg)
     config.backend.random_seed(1)
 
     # make on-site tensor
-    D=3
+    D=9
     aux_ts,aux_Ds= tuple(zip(*distributeU1_exponential(D)))
     nsteps= 2
     X= nsteps*(D**2)
@@ -136,7 +135,7 @@ def test_enlarged_corner_U1(config_kwargs):
     for t in "tl", "tr", "bl", "br", "t", "l", "r", "b":
         setattr(getattr(env2[0,0],t),"config",config)
     # import pdb; pdb.set_trace()
-    
+      
     h1l,h2l= compute_halfs_2site_(None, (0,0), 'l', env2, None)
 
     # import pdb; pdb.set_trace()

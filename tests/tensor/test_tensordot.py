@@ -82,6 +82,21 @@ def test_dot_basic_dense2(config_kwargs):
     # outer product
     tensordot_vs_numpy(a, b, axes=((), ()), conj=(0, 0))
 
+
+def test_dot_basic_dense3(config_kwargs):
+    """ test tensordot for different symmetries. """
+    # dense
+    config_dense = yastn.make_config(sym='none', **config_kwargs)
+    config_dense.backend.random_seed(1)
+    a = yastn.rand(config=config_dense, s=(-1, 1, -1), D=(2, 4, 5), dtype='float64')
+    b = yastn.rand(config=config_dense, s=(1, -1, 1, 1), D=(2, 3, 1, 5), dtype='float64')
+    c1 = tensordot_vs_numpy(a, b, axes=((0, 2), (0, 3)), conj=(0, 0)) # a1 b1 b2
+    c2 = tensordot_vs_numpy(b, a, axes=((3, 0), (2, 0)), conj=(1, 1)) # b1* b2* a1*
+    assert yastn.norm(c1.conj() - c2.transpose(axes=(2, 0, 1))) < tol
+    # outer product
+    tensordot_vs_numpy(a, b, axes=((), ()), conj=(0, 0))
+
+
 def test_dot_basic_U1_2(config_kwargs):
     """ test tensordot for different symmetries. """
     # U1

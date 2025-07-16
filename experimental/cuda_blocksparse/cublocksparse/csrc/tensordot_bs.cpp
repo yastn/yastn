@@ -40,9 +40,9 @@ TORCH_LIBRARY(cublocksparse, m) {
 //     "int c_size, int[int[]] c_blocks, int[int[]] c_D_per_mode) -> Tensor"
 // );
   m.def("tensordot_bs(Tensor a, Tensor b, "
-    "int[] a_blocks, Tensor a_D_per_mode, int[] nout_a, int[] nin_a, "
-    "int[] b_blocks, Tensor b_D_per_mode, int[] nout_b, int[] nin_b, "
-    "int c_size, int[] c_blocks, Tensor c_D_per_mode) -> Tensor"
+    "int[] a_blocks, int[] a_offsets, int[] a_strides, Tensor a_D_per_mode, int[] nout_a, int[] nin_a, "
+    "int[] b_blocks, int[] b_offsets, int[] b_strides, Tensor b_D_per_mode, int[] nout_b, int[] nin_b, "
+    "int c_size, int[] c_blocks, int[] c_offsets, int[] c_strides, Tensor c_D_per_mode) -> Tensor"
   );
 //   m.def("tensordot_bs(Tensor a, Tensor b, "
 //     "int[] a_blocks, int[] a_D_per_mode, int[] nout_a, int[] nin_a, "

@@ -178,7 +178,6 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
     if a.config.backend.BACKEND_ID == 'torch_cpp':
         # NOTE nout_a, nin_a, nout_b, nin_b use ndim_n or ndim ? 
         #      *) when default_fusion='meta', they are wrt. native legs. The charges of non-zero blocks are also wrt. to native legs.
-        # TODO backend expects column-major order for dense tensor
         def _rm_to_cm_order(t, t_slices, reverse=False):
             t_cm= t.clone()
             for slc in t_slices:
@@ -187,26 +186,35 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
             return t_cm
         
         a_blocks_t, b_blocks_t= a.struct.t, b.struct.t
+        a_slices, b_slices = a.slices, b.slices
         if a.config.sym.NSYM == 0 and a.config.sym.NSYM == 0:
+            # if no symmetry, create single block for each tensor for syntax compatibility
             a_blocks_t, b_blocks_t= ((0,)*a.ndim_n,), ((0,)*b.ndim_n,)
-        # else:
-        #     if ind_a:
-        #         a_blocks_t= tuple(a.struct.t[i] for i in ind_a)
-        #     if ind_b:
-        #         b_blocks_t= tuple(b.struct.t[i] for i in ind_b)
-        data_cm = a.config.backend.kernel_tensordot_bs(
-            _rm_to_cm_order(a.data, a.slices), _rm_to_cm_order(b.data, b.slices), 
+        else: # take only subset of blocks that are involved in the contraction
+            if ind_a:  # ind_a and/or ind_b is None if all blocks of a are involved
+                a_blocks_t= tuple(a.struct.t[i] for i in ind_a)
+                a_slices= tuple(a.slices[i] for i in ind_a)
+            if ind_b:
+                b_blocks_t= tuple(b.struct.t[i] for i in ind_b)
+                b_slices= tuple(b.slices[i] for i in ind_b)
+
+        # import pdb; pdb.set_trace()  # DEBUG
+        data = a.config.backend.kernel_tensordot_bs(
+            a.data, b.data, 
             a_blocks_t, 
-            [l.t for l in a.get_legs( native=(a.config.default_fusion=='meta') )] if a.config.sym.NSYM > 0 else [[(0,),]]*a.ndim_n,
+            a_slices,
+            [l.t for l in a.get_legs( native=(a.config.default_fusion=='meta') )] if a.config.sym.NSYM > 0 else [[(0,),]]*a.ndim_n, #
             [l.D for l in a.get_legs( native=(a.config.default_fusion=='meta') )],
             nout_a, nin_a,
             b_blocks_t,
+            b_slices,
             [l.t for l in b.get_legs( native=(b.config.default_fusion=='meta') )] if b.config.sym.NSYM > 0 else [[(0,),]]*b.ndim_n,
             [l.D for l in b.get_legs( native=(b.config.default_fusion=='meta') )], 
             nout_b, nin_b,
             struct_c.size, struct_c.t if a.config.sym.NSYM > 0 else ((0,),)*(len(nout_a)+len(nout_b)),
+            slices_c
         )
-        data= _rm_to_cm_order(data_cm, slices_c, reverse=True)  # convert back to row-major order
+        # data= _rm_to_cm_order(data_cm, slices_c, reverse=True)  # convert back to row-major order
     else:
         data = a.config.backend.transpose_dot_sum(a.data, b.data, meta_dot,
                                               reshape_a, reshape_b, order_a, order_b, struct_c.size)

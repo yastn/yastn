@@ -72,20 +72,26 @@ using StrideType = int64_t;
 
 int tensordot_bs_cuda_impl(
     const double* a_ptr,
-    const std::vector<ModeType> &modeA,                   // Modes of the tensor, which in turn also define the "rank/dim" of the tensor
-    const std::vector<ExtentType> nonZeroCoordinatesA,   // Coordinates of the non-zero blocks in the tensor, which are specified as a vector of indices
+    const std::vector<ModeType> &modeA,                  // Modes of the tensor, which in turn also define the "rank/dim" of the tensor
+    const std::vector<ModeType> nonZeroCoordinatesA,   // Coordinates of the non-zero blocks in the tensor, which are specified as a vector of indices
                                                          // with respect to sectionExtents already serialized into 1D, i.e.
                                                          // { { x0_0, x0_1, ..., x0_#modes-1 },
                                                          //   { x1_0,       ..., x1_#modes-1 },
                                                          //   ...                               } is given as 
                                                          // { x0_0, x0_1, ..., x0_#modes-1, x1_0, ..., x1_#modes-1, ... }
                                                          //    const std::vector<ModeType> modeB,
+    const std::vector<StrideType> &offsetsA,
+    const std::vector<StrideType> &stridesA,
     const double* b_ptr,
     const std::vector<ModeType> &modeB,
-    const std::vector<ExtentType> nonZeroCoordinatesB,
+    const std::vector<ModeType> nonZeroCoordinatesB,
+    const std::vector<StrideType> &offsetsB,
+    const std::vector<StrideType> &stridesB,
     double* c_ptr,
     const std::vector<ModeType> &modeC,
-    const std::vector<ExtentType> nonZeroCoordinatesC,
+    const std::vector<ModeType> nonZeroCoordinatesC,
+    const std::vector<StrideType> &offsetsC,
+    const std::vector<StrideType> &stridesC,
     const std::unordered_map<ModeType, std::vector<ExtentType>> sectionExtents
 )
 try
@@ -136,7 +142,9 @@ try
     auto initTensor = [&handle,&sectionExtents,&printTensor,&yastn_log_level,dataType]
     (
       const std::vector<ModeType>   &modes,              
-      const std::vector<ExtentType> &nonZeroCoordinates, 
+      const std::vector<ModeType> &nonZeroCoordinates, 
+      const std::vector<StrideType> &offsets,
+      const std::vector<StrideType> &strides, 
       cutensorBlockSparseTensorDescriptor_t &desc, 
       Guard<cutensorBlockSparseTensorDescriptor_t> &guard,
       const double * buf, // Buffer to holding the non-zero blocks of the tensor
@@ -167,48 +175,46 @@ try
         if (yastn_log_level > 3) {
             std::cout << "extents: ";
             for (auto e : extents) { std::cout << e << " "; }
+            std::cout << std::endl << "strides: ";
+            for (auto e : strides) { std::cout << e << " "; }
             std::cout << std::endl;
         }
 
         // We assume packed contiguous storage, column-major order.
         // This means that we may pass nullptr for the strides array later.
         // The offets are used to set the pointers in the dev vector.
-        std::vector<StrideType> offsets;
-        offsets.reserve(numNonZeroBlocks+1);
-        offsets.push_back(0); // start with 0 offset
-        for ( uint64_t i = 0; i < numNonZeroBlocks; ++i ) // compute offset for the location of each non-zero block in the tensor
-        {
-           if (yastn_log_level > 3) { std::cout << "block " << i << ": "; }
-           StrideType size = 1;
-           for ( uint32_t j = 0; j < numModes; ++j ) // mode
-              {
-                size *= sectionExtents.at( modes[j] ).at( nonZeroCoordinates[i*numModes+j] ); 
-                if (yastn_log_level > 3) { std::cout << nonZeroCoordinates[i*numModes+j] << " -> " << sectionExtents.at( modes[j] ).at( nonZeroCoordinates[i*numModes+j] ) << " x "; }
-              } 
-           offsets.push_back(size + offsets.back());
-           if (yastn_log_level > 3) { std::cout << std::endl; }
-        }
-        // const StrideType totalSize { offsets[numNonZeroBlocks] };
         if (yastn_log_level > 3) {
             std::cout << "offsets: ";
             for (auto v : offsets) { std::cout << v << " "; }
             std::cout << std::endl;
         }
-
         dev.resize(numNonZeroBlocks);
         for ( uint64_t i = 0; i < numNonZeroBlocks; ++i ) {
             dev[i] = (void*)(buf + offsets[i]);
             if (yastn_log_level > 3) {
-                std::cout<< "block "<< i << " : " << offsets[i] <<"-"<< offsets[i+1] << std::endl; 
-                printTensor(dev[i],offsets[i+1]-offsets[i]);
+                ExtentType block_size = 1;
+                for (size_t j = 0; j < numModes; ++j) {
+                    block_size *= sectionExtents.at(modes[j])[nonZeroCoordinates[j + i * numModes]];
+                }
+                std::cout<< "block "<< i << " at " << offsets[i] << " size " << block_size << std::endl; 
+                printTensor(dev[i], block_size);
             }
         }
 
+        // Print contents of nonZeroCoordinates from its pointer
+        if (yastn_log_level > 3) {
+            std::cout << "nonZeroCoordinates (from pointer): ";
+            const ModeType* ptr = nonZeroCoordinates.data();
+            for (size_t i = 0; i < nonZeroCoordinates.size(); ++i) {
+            std::cout << ptr[i] << " ";
+            }
+            std::cout << std::endl;
+        }
         HANDLE_ERROR(cutensorCreateBlockSparseTensorDescriptor
         (
             handle, &desc,
             numModes, numNonZeroBlocks, numSections.data(), extents.data(),
-            nonZeroCoordinates.data(), nullptr, dataType
+            nonZeroCoordinates.data(), strides.data(), dataType
         ));
         guard.p = desc;
         guard.destroy = &cutensorDestroyBlockSparseTensorDescriptor;
@@ -222,7 +228,7 @@ try
     std::vector<void*> devA;
     cutensorBlockSparseTensorDescriptor_t descA;
     Guard<cutensorBlockSparseTensorDescriptor_t> guardDescA;
-    initTensor(modeA,nonZeroCoordinatesA,descA,guardDescA,bufA,devA);
+    initTensor(modeA,nonZeroCoordinatesA,offsetsA,stridesA,descA,guardDescA,bufA,devA);
 
     //////////////
     // Tensor B //
@@ -231,7 +237,7 @@ try
     std::vector<void*> devB;
     cutensorBlockSparseTensorDescriptor_t descB;
     Guard<cutensorBlockSparseTensorDescriptor_t> guardDescB;
-    initTensor(modeB,nonZeroCoordinatesB,descB,guardDescB,bufB,devB);
+    initTensor(modeB,nonZeroCoordinatesB,offsetsB,stridesB,descB,guardDescB,bufB,devB);
 
     //////////////
     // Tensor C //
@@ -240,33 +246,40 @@ try
     std::vector<void*> devC;
     cutensorBlockSparseTensorDescriptor_t descC;
     Guard<cutensorBlockSparseTensorDescriptor_t> guardDescC;
-    initTensor(modeC,nonZeroCoordinatesC,descC,guardDescC,bufC,devC);
+    initTensor(modeC,nonZeroCoordinatesC,offsetsC,stridesC,descC,guardDescC,bufC,devC);
 
     /*******************************
      * Block-sparse Contraction.   *
      *******************************/
 
-    cutensorBlockSparseOperationDescriptor_t desc;
+    cutensorOperationDescriptor_t desc;
     HANDLE_ERROR(cutensorCreateBlockSparseContraction(handle, &desc,
                 descA, modeA.data(), CUTENSOR_OP_IDENTITY,
                 descB, modeB.data(), CUTENSOR_OP_IDENTITY,
                 descC, modeC.data(), CUTENSOR_OP_IDENTITY,
                 descC, modeC.data(),
                 CUTENSOR_COMPUTE_DESC_64F));
-    Guard<cutensorBlockSparseOperationDescriptor_t> guardOpDesc { desc, &cutensorDestroyBlockSparseOperationDescriptor };
+    Guard<cutensorOperationDescriptor_t> guardOpDesc { desc, &cutensorDestroyOperationDescriptor };
+
+    // Plan preference
+    cutensorPlanPreference_t planPref = nullptr;
+    // const cutensorAlgo_t algo = CUTENSOR_ALGO_DEFAULT;
+    // const cutensorJitMode_t jitMode = CUTENSOR_JIT_MODE_NONE;
+    // HANDLE_ERROR(cutensorCreatePlanPreference(handle,&planPref,algo,jitMode));
+    // Guard<cutensorPlanPreference_t> guardPlanPref { planPref, &cutensorDestroyPlanPreference };
 
     // Query workspace estimate
     uint64_t workspaceSize = 0;
     const cutensorWorksizePreference_t workspacePref = CUTENSOR_WORKSPACE_DEFAULT;
-    HANDLE_ERROR(cutensorBlockSparseEstimateWorkspaceSize(handle,desc,workspacePref,&workspaceSize));
+    HANDLE_ERROR(cutensorEstimateWorkspaceSize(handle,desc,planPref,workspacePref,&workspaceSize));
 
     cuda_ptr<char> work = cuda_alloc<char>(workspaceSize);
     if ( uintptr_t(work.get()) % 128 != 0 ) throw std::bad_alloc {};
 
     // Create Contraction Plan
-    cutensorBlockSparsePlan_t plan;
-    HANDLE_ERROR(cutensorCreateBlockSparsePlan(handle,&plan,desc,workspaceSize));
-    Guard<cutensorBlockSparsePlan_t> guardPlan { plan, &cutensorDestroyBlockSparsePlan };
+    cutensorPlan_t plan;
+    HANDLE_ERROR(cutensorCreatePlan(handle,&plan,desc,planPref,workspaceSize));
+    Guard<cutensorPlan_t> guardPlan { plan, &cutensorDestroyPlan };
 
     // Execute
     cudaStream_t stream;
@@ -299,15 +312,21 @@ at::Tensor tensordot_bs_cuda(
     const at::Tensor& a, 
     const at::Tensor& b,
     const std::vector<int64_t>& a_blocks, 
+    const std::vector<int64_t>& a_offsets,
+    const std::vector<int64_t>& a_strides,
     const at::Tensor& a_D_per_mode, 
     const std::vector<int64_t>& nout_a, 
     const std::vector<int64_t>& nin_a,
     const std::vector<int64_t>& b_blocks, 
+    const std::vector<int64_t>& b_offsets,
+    const std::vector<int64_t>& b_strides,
     const at::Tensor& b_D_per_mode, 
     const std::vector<int64_t>& nout_b, 
     const std::vector<int64_t>& nin_b,
     int64_t c_size,
     const std::vector<int64_t>& c_blocks, 
+    const std::vector<int64_t>& c_offsets,
+    const std::vector<int64_t>& c_strides,
     const at::Tensor& c_D_per_mode
 ) {
   const char* env = std::getenv("YASTN_LOG_LEVEL");
@@ -419,17 +438,34 @@ if (yastn_log_level > 3) {
     std::cout << std::endl;
   }
 
+  // non-zero block coord are expected to be int32_t instead of int64_t
+  std::vector<int32_t> a_blocks32(a_blocks.size());
+  std::vector<int32_t> b_blocks32(b_blocks.size());
+  std::vector<int32_t> c_blocks32(c_blocks.size());
+  std::transform(a_blocks.begin(), a_blocks.end(), a_blocks32.begin(),
+               [](int64_t x) { return static_cast<int32_t>(x); });
+  std::transform(b_blocks.begin(), b_blocks.end(), b_blocks32.begin(),
+               [](int64_t x) { return static_cast<int32_t>(x); });
+  std::transform(c_blocks.begin(), c_blocks.end(), c_blocks32.begin(),
+               [](int64_t x) { return static_cast<int32_t>(x); });
+
   // Call the CUDA implementation.  
   tensordot_bs_cuda_impl(
     a_ptr,
     a_modes, 
-    a_blocks,
+    a_blocks32,
+    a_offsets,
+    a_strides,
     b_ptr,
-    b_modes, 
-    b_blocks,
+    b_modes,
+    b_blocks32,
+    b_offsets,
+    b_strides,
     result_ptr,
     c_modes, 
-    c_blocks,
+    c_blocks32,
+    c_offsets,
+    c_strides,
     sectionExtents
   );
 

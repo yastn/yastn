@@ -21,7 +21,7 @@ from torch.utils.cpp_extension import (
 library_name = "cublocksparse"
 
 if torch.__version__ >= "2.6.0":
-    py_limited_api = True
+    py_limited_api = False
 else:
     py_limited_api = False
 
@@ -34,20 +34,20 @@ def get_extensions():
 
     use_cuda = use_cuda and torch.cuda.is_available() and CUDA_HOME is not None
     extension = CUDAExtension if use_cuda else CppExtension
+    print(f"Using {'CUDA' if use_cuda else 'C++'} extension")
 
     this_dir = os.path.dirname(os.path.curdir)
     abs_dir = os.path.abspath(os.path.dirname(__file__))
 
     extra_link_args = [
-      f"-L{os.path.join(abs_dir, '../libcutensor_nda_blocksparse/libcutensor/lib/12')}", 
+    #   f"-L{os.path.join(abs_dir, '../libcutensor_nda_blocksparse/libcutensor/lib/12')}", 
+    #   "-lcutensor",
+      f"-L{os.path.join(abs_dir, '../libcutensor-linux-x86_64-2.3.0.2/lib/12')}", 
       "-lcutensor",
-      # "-Wl,-rpath," + os.path.join(abs_dir, "../libcutensor_nda_blocksparse/libcutensor/lib/12"),
-      # "-Wl,-rpath," + os.path.join(abs_dir, "../libcutensor_nda_blocksparse/libcutensor/lib/12/"),
-      # "-Wl,-rpath," + os.path.join(abs_dir, "../libcutensor_nda_blocksparse/libcutensor/lib/12/libcutensor.so"),
     ]
     # additional include dirs, IMPORTANT to be searched first
     include_dirs = [
-        f"{os.path.join(abs_dir, '../libcutensor_nda_blocksparse/libcutensor/include')}",
+        f"{os.path.join(abs_dir, '../libcutensor-linux-x86_64-2.3.0.2/include')}",
     ]
     extra_compile_args = {
         "cxx": [
@@ -92,7 +92,7 @@ def get_extensions():
 
 setup(
     name=library_name,
-    version="0.0.1",
+    version="0.0.2",
     packages=find_packages(),
     ext_modules=get_extensions(),
     install_requires=["torch"],
