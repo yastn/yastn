@@ -528,6 +528,8 @@ class EnvBP(Peps):
     def bond_metric_nnn(self, Q0, Q1, Q2, s0, s1, s2, dirn, corner):
         r"""
         Calculates bond metric for NNN term within BP environment.
+        Q0, Q1, Q2 represent the three-tensor-patch specified by dirn and corner.
+        Q0, Q1, Q2 should be arranged in accordance with the fermionic and lattice order.
         ::
 
             If dirn == 'br', corner='tr':

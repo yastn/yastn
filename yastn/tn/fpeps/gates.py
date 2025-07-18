@@ -75,7 +75,8 @@ def decompose_nn_gate(Gnn, bond=None) -> Gate_nn:
 def decompose_nnn_gate(Gnnn, s0, s1, s2) -> Gate_nnn:
     r"""
     Auxiliary function cutting a three-site gate with SVD
-    into two local operators with the connecting legs.
+    into two local operators with the connecting legs, assuming
+    sites (s0, s1, s2) are in lattice and fermionic order.
     """
     U1, S1, V1 = Gnnn.svd_with_truncation(axes=((0, 3), (1, 4, 2, 5)), sU=-1, tol=1e-14, Vaxis=0)
     S1 = S1.sqrt()

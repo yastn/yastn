@@ -136,7 +136,7 @@ def apply_gate_nnn(ten0, ten1, ten2, G0, G1, G2, dirn, corner):
     """
     Apply the next-nearest-neighbor gate to ket PEPS tensors.
 
-    The sites (s0, s1, s2) involved in nnn-gate should be oriented in accordance with fermionic and lattice order.
+    The gates (G0, G1, G2) acting on the three-site-patch should be in accordance with fermionic and lattice order.
     """
 
     G0 = match_ancilla(ten0, G0, swap=True)
