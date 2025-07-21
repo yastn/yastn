@@ -128,13 +128,17 @@ def test_switch_signature(config_kwargs):
     assert (a - b.switch_signature(axes='all')).norm() < tol
     assert (a - c.switch_signature(axes=(2, 1))).norm() < tol
 
+    # switch_signature supports hard-fused legs.
     d = a.fuse_legs(axes=(0, (1, 2), 3), mode='hard')
     e= d.switch_signature(axes=1)
     d0= e.switch_signature(axes=1)
     assert d0.get_legs() == d.get_legs()
+    assert (d0 - d).norm() < tol
     a0= d0.unfuse_legs(axes=1)
     assert a0.get_legs() == a.get_legs()
-    # switch_signature supports hard-fused legs.
+    assert (d0 - d).norm() < tol
+    assert a.switch_signature(axes=(1,2)).get_legs() == e.unfuse_legs(axes=1).get_legs()
+    assert (a.switch_signature(axes=(1,2)) - e.unfuse_legs(axes=1)).norm() < tol
     
     with pytest.raises(yastn.YastnError):
         f = yastn.rand(config_Z2xU1, legs=leg, isdiag=True)

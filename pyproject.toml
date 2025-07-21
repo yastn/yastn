@@ -23,7 +23,8 @@ dependencies = [
     "numpy>=1.21.6",
     "scipy>=1.11.4",
     "tqdm",
-    "h5py"
+    "h5py",
+    "primme>=0.4.0"
 ]
 dynamic = ["version"]
 

@@ -172,6 +172,28 @@ class SquareLattice():
             return 'v', False
         raise YastnError(f"{bond} is not a nearest-neighbor bond.")
 
+    def nnn_bond_type(self, s0, s1, s2) -> tuple[str, str]:
+        """
+        (s0, s1, s2) should represent three sites in a 2x2 patch.
+        Return bond orientation in 2D grid as a tuple: dirn, corner
+        dirn is 'br' or 'tr' (bottom-right, top-right).
+        corner is the middle site (s1) connecting the two nnn sites.
+        """
+        if self.nn_site(s0, (1, 1)) == s2:
+            dirn = "br"
+            if self.nn_site(s0, (0, 1)) == s1:
+                corner = "tr"
+            elif self.nn_site(s0, (1, 0)) == s1:
+                corner = "bl"
+        elif self.nn_site(s1, (-1, 1)) == s2 and self.nn_site(s0, (1, 0)) == s1:
+            dirn, corner = "tr", "tl"
+        elif self.nn_site(s0, (-1, 1)) == s1 and self.nn_site(s0, (0, 1)) == s2:
+            dirn, corner = "tr", "br"
+        else:
+            raise YastnError(f"SquareLattice.nnn_bond_type: ({s0}, {s1}, {s2}) doesn't form a valid L-shape patch.")
+        return dirn, corner
+
+
     def f_ordered(self, s0, s1) -> bool:
         """
         Check if sites s0, s1 are fermionicaly ordered (or identical).

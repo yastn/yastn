@@ -20,10 +20,10 @@ import yastn
 tol = 1e-10  #pylint: disable=invalid-name
 
 
-def eigh_combine(a):
+def eigh_combine(a,which='SR'):
     """ decompose and contracts Hermitian tensor using eigh decomposition """
     a2 = yastn.tensordot(a, a, axes=((0, 1), (0, 1)), conj=(0, 1))  # makes Hermitian matrix from a
-    S, U = yastn.linalg.eigh(a2, axes=((0, 1), (2, 3)))
+    S, U = yastn.linalg.eigh(a2, axes=((0, 1), (2, 3)), which=which)
     US = yastn.tensordot(U, S, axes=(2, 0))
     USU = yastn.tensordot(US, U, axes=(2, 2), conj=(0, 1))
     assert yastn.norm(a2 - USU) < tol  # == 0.0
@@ -31,7 +31,7 @@ def eigh_combine(a):
     assert S.is_consistent()
 
     # changes signature of new leg; and position of new leg
-    S, U = yastn.eigh(a2, axes=((0, 1), (2, 3)), Uaxis=0, sU=-1)
+    S, U = yastn.eigh(a2, axes=((0, 1), (2, 3)), Uaxis=0, sU=-1, which=which)
     US = yastn.tensordot(S, U, axes=(0, 0))
     USU = yastn.tensordot(US, U, axes=(0, 0), conj=(0, 1))
     assert yastn.norm(a2 - USU) < tol  # == 0.0
@@ -39,12 +39,13 @@ def eigh_combine(a):
     assert S.is_consistent()
 
 
-def test_eigh_basic(config_kwargs):
+@pytest.mark.parametrize("which", ['SR', 'LR', 'LM', 'SM'])
+def test_eigh_basic(config_kwargs,which):
     """ test eigh decomposition for various symmetries """
     # dense
     config_dense = yastn.make_config(sym='none', **config_kwargs)
     a = yastn.rand(config=config_dense, s=(-1, 1, -1, 1), D=[11, 12, 13, 21])
-    eigh_combine(a)
+    eigh_combine(a,which=which)
 
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
@@ -53,7 +54,7 @@ def test_eigh_basic(config_kwargs):
             yastn.Leg(config_U1, s=1, t=(-2, -1, 0, 1, 2), D=(6, 5, 4, 3, 2)),
             yastn.Leg(config_U1, s=1, t=(0, 1), D=(2, 3))]
     a = yastn.rand(config=config_U1, n=1, legs=legs)
-    eigh_combine(a)
+    eigh_combine(a,which=which)
 
     # Z2xU1
     config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
@@ -62,10 +63,11 @@ def test_eigh_basic(config_kwargs):
             yastn.Leg(config_Z2xU1, s=1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(3, 4, 5, 6)),
             yastn.Leg(config_Z2xU1, s=1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(1, 2, 3, 4))]
     a = yastn.ones(config=config_Z2xU1, legs=legs)
-    eigh_combine(a)
+    eigh_combine(a,which=which)
 
 
-def test_eigh_Z3(config_kwargs):
+@pytest.mark.parametrize("which", ['SR', 'LR', 'LM', 'SM'])
+def test_eigh_Z3(config_kwargs,which):
     # Z3
     config_Z3 = yastn.make_config(sym='Z3', **config_kwargs)
     s0set = (-1, 1)
@@ -74,7 +76,7 @@ def test_eigh_Z3(config_kwargs):
         leg = yastn.Leg(config_Z3, s=s, t=(0, 1, 2), D=(2, 5, 3))
         a = yastn.rand(config=config_Z3,legs=[leg, leg.conj()], dtype='complex128')
         a = a + a.transpose(axes=(1, 0)).conj()
-        S, U = yastn.linalg.eigh(a, axes=(0, 1), sU=sU)
+        S, U = yastn.linalg.eigh(a, axes=(0, 1), sU=sU, which=which)
         assert yastn.norm(a - U @ S @ U.transpose(axes=(1, 0)).conj()) < tol  # == 0.0
         assert U.is_consistent()
         assert S.is_consistent()

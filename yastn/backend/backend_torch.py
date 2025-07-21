@@ -124,6 +124,8 @@ def imag(x):
 def max_abs(x):
     return x.abs().max()
 
+def maximum(input, output):
+    return torch.maximum(input, output)
 
 def norm_matrix(x):
     return torch.linalg.norm(x)
@@ -305,8 +307,8 @@ def svdvals(data, meta, sizeS, **kwargss):
         torch.linalg.svdvals(data[slice(*sl)].view(D), out=Sdata[slice(*slS)])
     return Sdata
 
-def svd_arnoldi(data, meta, sizes):
-    return kernel_svd_arnoldi.apply(data,meta,sizes)
+def svd_arnoldi(data, meta, sizes, thresh=0.2, solver='arpack'):
+    return kernel_svd_arnoldi.apply(data,meta,sizes, thresh, solver)
 
 
 def fix_svd_signs(Udata, Vhdata, meta):
@@ -504,11 +506,11 @@ def diag_2dto1d(data, meta, Dsize):
 def checkpoint(f,*args,**kwargs):
     # context_fn=kwargs.pop('context_fn',None)
     # torch.utils.checkpoint.checkpoint
-    return _checkpoint(f, *args, use_reentrant=kwargs.pop('use_reentrant',None), 
-                                             determinism_check=kwargs.pop('determinism_check','default'), 
+    return _checkpoint(f, *args, use_reentrant=kwargs.pop('use_reentrant',None),
+                                             determinism_check=kwargs.pop('determinism_check','default'),
                                              debug=kwargs.pop('debug',False), **kwargs)
 
-  
+
 
 #############
 #   tests   #

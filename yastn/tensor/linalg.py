@@ -21,6 +21,7 @@ from ._auxliary import _struct, _slc, _clear_axes, _unpack_axes
 from ._tests import YastnError, _test_axes_all
 from ._merging import _merge_to_matrix, _meta_unmerge_matrix, _unmerge
 from ._merging import _Fusion, _leg_struct_trivial
+# from ..krylov._krylov import svds
 
 __all__ = ['qr', 'norm', 'entropy', 'truncation_mask', 'truncation_mask_multiplets',
            'svd', 'svd_with_truncation', 'eigh', 'eigh_with_truncation']
@@ -101,10 +102,8 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
     -------
     `U`, `S`, `V`
     """
-    diagnostics = kwargs.get('diagonostics', None)
     U, S, V = svd(a, axes=axes, sU=sU, nU=nU, policy=policy, D_block=D_block,
-                  diagnostics=diagnostics, fix_signs=fix_signs, svd_on_cpu=svd_on_cpu)
-
+                  fix_signs=fix_signs, svd_on_cpu=svd_on_cpu, **kwargs)
     Smask = truncation_mask(S, tol=tol, tol_block=tol_block,
                             D_block=D_block, D_total=D_total,
                             truncate_multiplets=truncate_multiplets,
@@ -170,6 +169,17 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     -------
     `U`, `S`, `V` (when ``compute_uv=True``) or `S` (when ``compute_uv=False``)
     """
+    if policy == "krylov":
+        from ..krylov._krylov import svds
+        if 'D_block' not in kwargs:
+            raise YastnError(policy + " policy in svd requires passing argument D_block.")
+        else:
+            # WIP: BUG for SVDS
+            D_block = min(kwargs['D_block'], min(a.get_shape(axes=0), a.get_shape(axes=1)))
+            U, S, Vh = svds(a, axes=axes, sU=sU, nU=nU, k=D_block, ncv=None, tol=0, which='LM', solver='arpack')
+            return U, S, Vh
+
+
     _test_axes_all(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
     axes = _unpack_axes(a.mfs, lout_l, lout_r)
@@ -202,7 +212,9 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     elif compute_uv and policy == 'lowrank':
         Udata, Sdata, Vdata = a.config.backend.svd_lowrank(data, meta, sizes)
     elif compute_uv and policy == 'arnoldi':
-        Udata, Sdata, Vdata = a.config.backend.svd_arnoldi(data, meta, sizes)
+        thresh = kwargs.get('svds_thresh', 0.2)
+        solver = kwargs.get('svds_solver', 'arpack')
+        Udata, Sdata, Vdata = a.config.backend.svd_arnoldi(data, meta, sizes, thresh, solver)
     else:
         raise YastnError('svd() policy should in (`arnoldi`, `lowrank`, `fullrank`). compute_uv == False only works with `fullrank`')
 
@@ -304,7 +316,7 @@ def _meta_svd(config, struct, slices, minD, sU, nU):
 
 def _find_gaps(S, tol=0, eps_multiplet=1e-13, which='LM'):
     """
-    Computes gaps between values of S ordered according to `which` as abs(S[i]-S[i+1]). 
+    Computes gaps between values of S ordered according to `which` as abs(S[i]-S[i+1]).
     Each gap is normalized by max(abs(S[i:i+2]).
 
     Parameters
@@ -341,7 +353,7 @@ def _find_gaps(S, tol=0, eps_multiplet=1e-13, which='LM'):
         assert isinstance(S, np.ndarray), "S should be numpy array."
         s = S
 
-    # 0) convert to plain dense numpy vector and sort in order 'which'    
+    # 0) convert to plain dense numpy vector and sort in order 'which'
     if which=='LM':
         inds = np.argsort(np.abs(s))[::-1]
     elif which=='SM':
@@ -351,13 +363,12 @@ def _find_gaps(S, tol=0, eps_multiplet=1e-13, which='LM'):
     elif which=='SR':
         inds = np.argsort(np.real(s))
     s = s[inds]
-    
+
     # TODO: treatment of null space
     maxgap = np.maximum(np.abs(s[:len(s) - 1]), np.abs(s[1:len(s)])) + 1.0e-16
     gaps = np.abs(s[:len(s) - 1] - s[1:len(s)]) / maxgap
 
     return gaps
-
 
 def truncation_mask_multiplets(S, tol=0, D_total=float('inf'),
                                eps_multiplet=1e-13, hermitian=False, **kwargs) -> yastn.Tensor[bool]:
@@ -395,9 +406,13 @@ def truncation_mask_multiplets(S, tol=0, D_total=float('inf'),
 
     # find all multiplets in the spectrum
     # 0) convert to plain dense numpy vector and sort in descending order
-    s = S.config.backend.to_numpy(S.data)
-    inds = np.argsort(s)[::-1].copy() # make descending
-    s = s[inds]
+    # s = S.config.backend.to_numpy(S.data)
+    # inds = np.argsort(s)[::-1].copy() # make descending
+    # s = s[inds]
+    # s, inds = torch.sort(S.data.detach(), descending=True)
+    backend = S.config.backend
+    inds = backend.argsort(-S.copy().data)
+    s = S.data[inds]
 
     S_global_max = s[0]
     D_trunc = min(sum(s > (S_global_max * tol)), D_total)
@@ -408,8 +423,8 @@ def truncation_mask_multiplets(S, tol=0, D_total=float('inf'),
 
     # compute gaps and normalize by magnitude of (abs) larger value.
     # value of gaps[i] gives gap between i-th and i+1 the element of s
-    maxgap = np.maximum(np.abs(s[:len(s) - 1]), np.abs(s[1:len(s)])) + 1.0e-16
-    gaps = np.abs(s[:len(s) - 1] - s[1:len(s)]) / maxgap
+    maxgap = backend.maximum(backend.absolute(s[:-1]), backend.absolute(s[1:])) + 1.0e-16
+    gaps = backend.absolute(s[:-1] - s[1:]) / maxgap
 
     # find nearest multiplet boundary, keeping at most D_trunc elements
     # i-th element of gaps gives gap between i-th and (i+1)-th element of s
@@ -628,7 +643,7 @@ def _meta_qr(config, struct, slices, sQ):
     return meta, Qstruct, Qsl, Rstruct, Rsl
 
 
-def eigh(a, axes, sU=1, Uaxis=-1) -> tuple[yastn.Tensor, yastn.Tensor]:
+def eigh(a, axes, sU=1, Uaxis=-1, which='SR') -> tuple[yastn.Tensor, yastn.Tensor]:
     r"""
     Split symmetric tensor using exact eigenvalue decomposition, :math:`a= USU^{\dagger}`.
 
@@ -644,6 +659,13 @@ def eigh(a, axes, sU=1, Uaxis=-1) -> tuple[yastn.Tensor, yastn.Tensor]:
 
     Uaxis: int
         specify which leg of `U` is the new connecting leg. By default, it is the last leg.
+
+    which: str
+        One of [``‘SR’``, ``‘LR``, ``‘SM’``, ``‘LM’``] specifying how to order S:
+        ``‘LM’`` : sort by absolute value, largest first,
+        ``‘SM’`` : sort by absolute value, smallest first,
+        ``‘SR’`` : (default) sort by real part, smallest first,
+        ``‘LR’`` : sort by real part, largest first.
 
     Returns
     -------
@@ -678,6 +700,20 @@ def eigh(a, axes, sU=1, Uaxis=-1) -> tuple[yastn.Tensor, yastn.Tensor]:
     Smfs = ((1,), (1,))
     Shfs = (_Fusion(s=(-sU,)), _Fusion(s=(sU,)))
     S = a._replace(struct=Sstruct, slices=Sslices, data=Sdata, mfs=Smfs, hfs=Shfs)
+
+    # sort in case of non-default order
+    if which != 'SR':
+        nsym = a.config.sym.NSYM
+        blocks_U = U.get_blocks_charge()
+        for b in S.get_blocks_charge():
+            arg_b = a.config.backend.eigs_which(S[b], which)
+            S[b]= S[b][arg_b]
+            slice_U = tuple([slice(None),]*(U.ndim-1)+[arg_b,])
+            for b_U in blocks_U: # suboptimal since U may have more blocks
+                if b_U[-nsym:] == b[:nsym]:
+                    # blocks_U.remove(b_U)
+                    U[b_U] = U[b_U][slice_U]
+
 
     U = U.moveaxis(source=-1, destination=Uaxis)
     return S, U
@@ -718,9 +754,9 @@ def _meta_eigh(config, struct, slices, sU):
     return meta, Sstruct, Ssl, Ustruct, slices
 
 
-def eigh_with_truncation(a, axes, sU=1, Uaxis=-1,
+def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, which='SR', policy='fullrank',
                          tol=0, tol_block=0, D_block=float('inf'), D_total=float('inf'),
-                         truncate_multiplets=False) -> tuple[yastn.Tensor, yastn.Tensor]:
+                         truncate_multiplets=False, mask_f=None, **kwargs) -> tuple[yastn.Tensor, yastn.Tensor]:
     r"""
     Split symmetric tensor using exact eigenvalue decomposition, :math:`a= USU^{\dagger}`.
     Optionally, truncate the resulting decomposition.
@@ -741,6 +777,17 @@ def eigh_with_truncation(a, axes, sU=1, Uaxis=-1,
     Uaxis: int
         specify which leg of `U` is the new connecting leg. By default, it is the last leg.
 
+    which: str
+        One of [``‘SR’``, ``‘LR``, ``‘SM’``, ``‘LM’``] specifying how to order S:
+        ``‘LM’`` : sort by absolute value, largest first,
+        ``‘SM’`` : sort by absolute value, smallest first,
+        ``‘SR’`` : (default) sort by real part, smallest first,
+        ``‘LR’`` : sort by real part, largest first.
+
+    policy: str
+        * ``"fullrank"`` : Use standard full ED for ``"fullrank"`` and then truncate.
+        kwargs will be passed to those functions for non-default settings.
+
     tol: float
         relative tolerance of eigen-values below which to truncate across all blocks.
 
@@ -753,18 +800,24 @@ def eigh_with_truncation(a, axes, sU=1, Uaxis=-1,
     D_total: int
         largest total number of eigen-values to keep.
 
+    mask_f: function[yastn.Tensor] -> yastn.Tensor
+        custom truncation-mask function.
+        If provided, it overrides all other truncation-related arguments.
+
     Returns
     -------
     `S`, `U`
     """
-    S, U = eigh(a, axes=axes, sU=sU)
+    S, U = eigh(a, axes=axes, sU=sU, Uaxis=Uaxis, which=which)
 
-    Smask = truncation_mask(S, tol=tol, tol_block=tol_block,
-                            D_block=D_block, D_total=D_total,
-                            truncate_multiplets=truncate_multiplets)
+    _S= S
+    if which in ["SM", "LM"]:
+        _S= abs(S)
+    Smask = truncation_mask(_S, tol=tol, tol_block=tol_block,
+                        D_block=D_block, D_total=D_total,
+                        truncate_multiplets=truncate_multiplets, mask_f=mask_f)
+    S, U = Smask.apply_mask(S, U, axes=(0, Uaxis))
 
-    S, U = Smask.apply_mask(S, U, axes=(0, -1))
-    U = U.moveaxis(source=-1, destination=Uaxis)
     return S, U
 
 

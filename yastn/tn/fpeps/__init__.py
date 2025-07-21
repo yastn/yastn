@@ -20,6 +20,7 @@ from ._doublePepsTensor import DoublePepsTensor
 from .gates import Gates, Gate_local, Gate_nn
 from ._gates_auxiliary import fkron
 from .envs._env_ctm import EnvCTM, EnvCTM_local
+from .envs._env_ctm_c4v import EnvCTM_c4v
 from .envs._env_ntu import EnvNTU
 from .envs._env_boundary_mps import EnvBoundaryMPS
 from .envs._env_window import EnvWindow

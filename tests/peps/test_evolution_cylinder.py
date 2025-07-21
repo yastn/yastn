@@ -88,7 +88,7 @@ def test_evol_cylinder(config_kwargs):
         for site, mu in ms.items():
             gt = fpeps.gates.gate_local_occupation(mu, 1j * dt / 2, I, ops.n(spin=spin))
             gates_local.append(gt._replace(site=site))
-    gates = fpeps.Gates(gates_nn, gates_local)
+    gates = fpeps.Gates(nn=gates_nn, local=gates_local)
     #
     # initialized product state
     psi = fpeps.product_peps(geometry, {s: ops.vec_n(val=(occs['u'][s], occs['d'][s])) for s in sites})

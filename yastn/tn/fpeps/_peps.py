@@ -85,7 +85,7 @@ class Peps():
 
         """
         self.geometry = geometry
-        for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "nn_bond_type", "f_ordered"]:
+        for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "nn_bond_type", "nnn_bond_type", "f_ordered"]:
             setattr(self, name, getattr(geometry, name))
         self._data = {self.site2index(site): None for site in self.sites()}
 

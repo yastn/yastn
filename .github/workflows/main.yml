@@ -38,7 +38,10 @@ jobs:
     steps:
       - run: CI=false
       - uses: actions/checkout@v4
-
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libblas-dev liblapack-dev gfortran
       - name: setup python
         uses: actions/setup-python@v5
         with:
@@ -92,16 +95,19 @@ jobs:
             numpy_v: '1.21.6'
             scipy_v: '1.11.4'
             torch_v: 'none'
+            primme_v: '3.2.3'
           - backend: torch
             python_v: '3.9'
             numpy_v: '1.26.4'
             scipy_v: '1.13.1'
             torch_v: '2.4'
+            primme_v: '3.2.3'
           - backend: torch
             python_v: '3.12'
             numpy_v: '2.0.1'
             scipy_v: '1.14.1'
             torch_v: '2.5.1'
+            primme_v: '3.2.3'
       fail-fast: false
 
     # Steps represent a sequence of tasks that will be executed as part of the job
@@ -116,6 +122,11 @@ jobs:
       # run: echo Hello, world!
 
       # Runs a set of commands using the runners shell
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libblas-dev liblapack-dev gfortran
+
       - name: setup python
         uses: actions/setup-python@v5
         with:
@@ -125,6 +136,7 @@ jobs:
         run: |
           pip install numpy==${{ matrix.numpy_v }};
           pip install scipy==${{ matrix.scipy_v }};
+          pip install primme==${{ matrix.primme_v }};
           pip install .[test]
 
       - name: setup pytorch
@@ -151,11 +163,17 @@ jobs:
             numpy_v: '1.26'
             scipy_v: '1.14'
             torch_v: '2.4'
+            primme_v: '3.2.3'
       fail-fast: true
 
     steps:
       - run: CI=false
       - uses: actions/checkout@v4
+
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libblas-dev liblapack-dev gfortran
 
       - name: setup python
         uses: actions/setup-python@v5
@@ -167,6 +185,7 @@ jobs:
           pip install numpy==${{ matrix.numpy_v }};
           pip install scipy==${{ matrix.scipy_v }};
           pip install torch==${{ matrix.torch_v }} --index-url https://download.pytorch.org/whl/cpu;
+          pip install primme==${{ matrix.primme_v }};
           pip install .[test]
 
       - name: Run tests and collect coverage

@@ -252,7 +252,7 @@ def test_measure(config_kwargs, sym, L):
     #-------------------------------------------
     #
     # check 4-point correlator
-    sitess = [[(0, 0), (1, 0), (0, 1), (1, 1)], [(0, 0), (1, 0), (0, 1), (1, 1)]]
+    sitess = [[(0, 0), (1, 0), (0, 1), (1, 1)], [(0, 0), (1, 0), (0, 1), (1, 1)], [(1,1), (0,0), (0,1), (1, 0)]]
     operatorss = [[ops.cp(), ops.c(), ops.cp(), ops.c()]] #, [ops.cp(), ops.cp(), ops.c(), ops.c()]]
 
     for sites, operators in zip(sitess, operatorss):
@@ -264,8 +264,11 @@ def test_measure(config_kwargs, sym, L):
         v0 = mps.vdot(phi, O, phi)
         assert abs(v1 - v0) < tol
         assert abs(v2 - v0) < tol
-        #
-        # TODO: the below has problem when sites not in the canonical order
+
+        sorted_ops = [None]*4
+        site_op = {(0, 0):0, (1, 0): 1, (0, 1): 2, (1, 1):3}
+        for op, site in zip(operators, sites):
+            sorted_ops[site_op[site]] = op
         sign = sign_canonical_order(*operators, sites=sites, f_ordered=env_ctm.f_ordered)
         assert abs(v1 - sign * measure_rdm_2x2(Site(0, 0), env_ctm.psi.ket, env_ctm, operators)) < tol
 

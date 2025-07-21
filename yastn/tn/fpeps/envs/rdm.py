@@ -573,7 +573,7 @@ def rdm2x2_diagonal(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tens
     Returns:
         Reduced density matrix and its unnormalized trace
     """
-    s1, s2, s3 = psi.nn_site(s0, "r"), psi.nn_site(s0, "b"), psi.nn_site(s0, "br")
+    s1, s2, s3 = psi.nn_site(s0, "b"), psi.nn_site(s0, "r"), psi.nn_site(s0, "br")
     env0, env1, env2, env3 = env[s0], env[s1], env[s2], env[s3]
 
     psi_dl = Peps2Layers(psi)
@@ -585,8 +585,8 @@ def rdm2x2_diagonal(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tens
     )  # DoublePepsTensor
 
     vectl = (env0.l @ env0.tl) @ env0.t
-    vectr = (env1.t @ env1.tr) @ env1.r
-    vecbl = (env2.b @ env2.bl) @ env2.l
+    vecbl = (env1.b @ env1.bl) @ env1.l
+    vectr = (env2.t @ env2.tr) @ env2.r
     vecbr = (env3.r @ env3.br) @ env3.b
 
     tmp0 = _append_vec_tl_open(ten0.bra, ten0.ket, vectl)  # x [b b'] y [r r'] [s s']
@@ -597,8 +597,8 @@ def rdm2x2_diagonal(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tens
         axes=(0, (1, 2), 3, (4, 5), (6, 7))
     )  # x [b b'] y [r r'] [s0 s0']
 
-    tmp1 = append_vec_tr(ten1.bra, ten1.ket, vectr) # x [l l'] y [b b']
-    tmp2 = append_vec_bl(ten2.bra, ten2.ket, vecbl)  # x [r r'] y [t t']
+    tmp1 = append_vec_tr(ten2.bra, ten2.ket, vectr) # x [l l'] y [b b']
+    tmp2 = append_vec_bl(ten1.bra, ten1.ket, vecbl)  # x [r r'] y [t t']
 
     tmp3 = _append_vec_br_open(ten3.bra, ten3.ket, vecbr)  # x [t t'] y [l l'] [s s']
     tmp3 = tmp3.unfuse_legs(axes=(1, 3, 4))  # x t t' y l l' s s'
@@ -648,7 +648,7 @@ def rdm2x2_anti_diagonal(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple
     Returns:
         Reduced density matrix and its unnormalized trace
     """
-    s1, s2, s3 = psi.nn_site(s0, "r"), psi.nn_site(s0, "b"), psi.nn_site(s0, "br")
+    s1, s2, s3 = psi.nn_site(s0, "b"), psi.nn_site(s0, "r"), psi.nn_site(s0, "br")
     env0, env1, env2, env3 = env[s0], env[s1], env[s2], env[s3]
 
     psi_dl = Peps2Layers(psi)
@@ -660,20 +660,20 @@ def rdm2x2_anti_diagonal(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple
     )  # DoublePepsTensor
 
     vectl = (env0.l @ env0.tl) @ env0.t
-    vectr = (env1.t @ env1.tr) @ env1.r
-    vecbl = (env2.b @ env2.bl) @ env2.l
+    vecbl = (env1.b @ env1.bl) @ env1.l
+    vectr = (env2.t @ env2.tr) @ env2.r
     vecbr = (env3.r @ env3.br) @ env3.b
 
     tmp0 = append_vec_tl(ten0.bra, ten0.ket, vectl)  # x [b b'] y [r r']
 
-    tmp1 = _append_vec_tr_open(ten1.bra, ten1.ket, vectr)  # x [l l'] y [b b'] [s s']
+    tmp1 = _append_vec_tr_open(ten2.bra, ten2.ket, vectr)  # x [l l'] y [b b'] [s s']
     tmp1 = tmp1.unfuse_legs(axes=(1, 3, 4))  # x l l' y b b' s s'
     tmp1 = tmp1.swap_gate(axes=(2, (6, 7)))  # l' X s s'
     tmp1 = tmp1.fuse_legs(
         axes=(0, (1, 2), 3, (4, 5), (6, 7))
     )  # x [l l'] y [b b'] [s2 s2']
 
-    tmp2 = _append_vec_bl_open(ten2.bra, ten2.ket, vecbl)  # x [r r'] y [t t'] [s s']
+    tmp2 = _append_vec_bl_open(ten1.bra, ten1.ket, vecbl)  # x [r r'] y [t t'] [s s']
     tmp2 = tmp2.unfuse_legs(axes=(1, 3, 4))  # x r r' y t t' s s'
     tmp2 = tmp2.swap_gate(axes=(1, (6, 7)))  # r X s s'
     tmp2 = tmp2.fuse_legs(
@@ -838,9 +838,9 @@ def measure_rdm_2x2(s0 : Site, psi : Peps, env : EnvCTM, op : Union[Sequence[Ten
         Expectation value or a list of expectations values of provided `op`.
     """
     rdm, norm = rdm2x2(s0, psi, env)  # s0 s0' s1 s1' s2 s2' s3 s3'
-    s1 = psi.nn_site(s0, "r")
-    s2 = psi.nn_site(s0, "b")
-    s3 = psi.nn_site(s2, "r")
+    s1 = psi.nn_site(s0, "b")
+    s2 = psi.nn_site(s0, "r")
+    s3 = psi.nn_site(s2, "b")
     sym = psi.config.sym
 
     # def _eval_op(O0, O1, O2, O3):
