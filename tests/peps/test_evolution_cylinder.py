@@ -84,10 +84,10 @@ def test_evol_cylinder(config_kwargs):
     for spin in 'ud':
         for bond, t in Js.items():
             gt = fpeps.gates.gate_nn_hopping(t, 1j * dt / 2, I, ops.c(spin=spin), ops.cp(spin=spin))
-            gates_nn.append(gt._replace(bond=bond))
+            gates_nn.append(gt._replace(sites=bond))
         for site, mu in ms.items():
             gt = fpeps.gates.gate_local_occupation(mu, 1j * dt / 2, I, ops.n(spin=spin))
-            gates_local.append(gt._replace(site=site))
+            gates_local.append(gt._replace(sites=(site,)))
     gates = fpeps.Gates(nn=gates_nn, local=gates_local)
     #
     # initialized product state

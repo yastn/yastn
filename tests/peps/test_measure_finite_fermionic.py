@@ -43,7 +43,7 @@ def generate_peps(g, ops, occs_init, angles):
         dirn, l_ordered = psi.nn_bond_type(bond)
         assert l_ordered
         s0, s1 = bond
-        _, _, R0, R1, Q0f, Q1f = fpeps._evolution.apply_gate_nn(psi[s0], psi[s1], gate.G0, gate.G1, dirn)
+        _, _, R0, R1, Q0f, Q1f = fpeps._evolution.apply_gate_nn(psi[s0], psi[s1], gate.G[0], gate.G[1], dirn)
         M0, M1 = fpeps._evolution.symmetrized_svd(R0, R1, opts_svd={'tol': 1e-12}, normalize=True)
         psi[s0], psi[s1] = fpeps._evolution.apply_bond_tensors(Q0f, Q1f, M0, M1, dirn)
     return psi
@@ -54,9 +54,9 @@ def mpo_from_gate(N, ops, gate, bond, s2i):
     s0, s1 = bond
     i0, i1 = s2i[s0], s2i[s1]
     assert i0 < i1
-    H[i0] = gate.G0.add_leg(axis=0, s=-1).transpose(axes=(0, 1, 3, 2))
-    H[i1] = gate.G1.add_leg(axis=3, s=1).transpose(axes=(2, 0, 3, 1))
-    leg = gate.G0.get_legs(axes=2).conj()
+    H[i0] = gate.G[0].add_leg(axis=0, s=-1).transpose(axes=(0, 1, 3, 2))
+    H[i1] = gate.G[1].add_leg(axis=3, s=1).transpose(axes=(2, 0, 3, 1))
+    leg = gate.G[0].get_legs(axes=2).conj()
     conn = yastn.eye(ops.config, leg, isdiag=False, device=H[i0].device)
     conn = yastn.ncon([conn, ops.I()], [(-0, -2), (-1, -3)])
     conn = conn.swap_gate(axes=(0, 1))  # add string

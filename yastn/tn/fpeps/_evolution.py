@@ -97,7 +97,7 @@ def evolution_step_(env, gates, opts_svd, symmetrize=True,
 
     infos = []
     for gate in gates.local:
-        psi[gate.site] = apply_gate_onsite(psi[gate.site], gate.G)
+        psi[gate.sites[0]] = apply_gate_onsite(psi[gate.sites[0]], gate.G[0])
     for gate in gates.nn:
         info = apply_nn_truncate_optimize_(env, psi, gate, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization=initialization)
         infos.append(info)
@@ -112,7 +112,7 @@ def evolution_step_(env, gates, opts_svd, symmetrize=True,
             info = apply_nn_truncate_optimize_(env, psi, gate, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization=initialization)
             infos.append(info)
         for gate in gates.local[::-1]:
-            psi[gate.site] = apply_gate_onsite(psi[gate.site], gate.G)
+            psi[gate.sites[0]] = apply_gate_onsite(psi[gate.sites[0]], gate.G[0])
     return infos
 
 
@@ -226,13 +226,15 @@ def apply_nn_truncate_optimize_(env, psi, gate, opts_svd,
     Applies a nearest-neighbor gate to a PEPS tensor, truncate, and
     optimize the resulting tensors using alternate least squares.
     """
-    info = {'bond': gate.bond}
+    info = {'bond': gate.sites}
 
-    dirn, l_ordered = psi.nn_bond_type(gate.bond)
-    f_ordered = psi.f_ordered(*gate.bond)
-    s0, s1 = gate.bond if l_ordered else gate.bond[::-1]
+    dirn, l_ordered = psi.nn_bond_type(gate.sites)
+    f_ordered = psi.f_ordered(*gate.sites)
+    s0, s1 = gate.sites if l_ordered else gate.sites[::-1]
 
-    G0, G1 = gate_fix_order(gate.G0, gate.G1, l_ordered, f_ordered)
+
+    G0, G1 = gate_fix_order(gate.G[0], gate.G[1], l_ordered, f_ordered)
+
     Q0, Q1, R0, R1, Q0f, Q1f = apply_gate_nn(psi[s0], psi[s1], G0, G1, dirn)
 
     fgf = env.bond_metric(Q0, Q1, s0, s1, dirn)
@@ -244,7 +246,7 @@ def apply_nn_truncate_optimize_(env, psi, gate, opts_svd,
 
     psi[s0], psi[s1] = apply_bond_tensors(Q0f, Q1f, M0, M1, dirn)
 
-    env.post_evolution_(gate.bond)
+    env.post_evolution_(gate.sites)
     return Evolution_out(**info)
 
 def apply_nnn_truncate_optimize_(env, psi, gate, opts_svd,

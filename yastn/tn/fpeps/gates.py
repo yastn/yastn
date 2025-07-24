@@ -17,19 +17,27 @@ from typing import NamedTuple
 from ... import exp, ncon, eigh
 from ._gates_auxiliary import fkron
 
-class Gate_nn(NamedTuple):
-    """
-    ``G0`` should be before ``G1`` in the fermionic and lattice orders
-    (``G0`` acts on the left/top site; ``G1`` acts on the right/bottom site from a pair of nearest-neighbor sites).
-    The third legs of ``G0`` and ``G1`` are auxiliary legs connecting them into a two-site operator.
+# class Gate_nn(NamedTuple):
+#     """
+#     ``G0`` should be before ``G1`` in the fermionic and lattice orders
+#     (``G0`` acts on the left/top site; ``G1`` acts on the right/bottom site from a pair of nearest-neighbor sites).
+#     The third legs of ``G0`` and ``G1`` are auxiliary legs connecting them into a two-site operator.
 
-    If a ``bond`` is ``None``, this is a general operator.
-    Otherwise, ``bond`` carries information where it should be applied
-    (potentially, after fixing order mismatches).
-    """
-    G0 : tuple = None
-    G1 : tuple = None
-    bond : tuple = None
+#     If a ``bond`` is ``None``, this is a general operator.
+#     Otherwise, ``bond`` carries information where it should be applied
+#     (potentially, after fixing order mismatches).
+#     """
+#     G0 : tuple = None
+#     G1 : tuple = None
+#     bond : tuple = None
+
+
+def Gate_nn(G0, G1, bond):
+    return Gate(G=(G0, G1), sites=bond)
+
+
+def Gate_nnn(G0, G1, G2, site0, site1, site2):
+    return Gate(G=(G0, G1, G2), sites=(site0, site1, site2))
 
 class Gate_nnn(NamedTuple):
     """
@@ -43,16 +51,23 @@ class Gate_nnn(NamedTuple):
     site1 : tuple = None
     site2 : tuple = None
 
-class Gate_local(NamedTuple):
-    r"""
-    ``G`` is a local operator with ``ndim=2``.
+# class Gate_local(NamedTuple):
+#     r"""
+#     ``G`` is a local operator with ``ndim=2``.
 
-    If ``site`` is ``None``, this is a general operator.
-    Otherwise, ``site`` carries information where it should be applied.
-    """
+#     If ``site`` is ``None``, this is a general operator.
+#     Otherwise, ``site`` carries information where it should be applied.
+#     """
+#     G : tuple = None
+#     site : tuple = None
+
+
+def Gate_local(G, site):
+    return Gate(G=(G,), sites=(site,))
+
+class Gate(NamedTuple):
     G : tuple = None
-    site : tuple = None
-
+    sites : tuple = None
 
 class Gates(NamedTuple):
     r"""
@@ -210,22 +225,22 @@ def distribute(geometry, gates_nn=None, gates_local=None) -> Gates:
     local : Gate_local | Sequence[Gate_local]
         Local gate, or a list of local gates, to be distributed over all unique lattice sites.
     """
-    if isinstance(gates_nn, Gate_nn):
+    if isinstance(gates_nn, Gate):
         gates_nn = [gates_nn]
 
     nn = []
     if gates_nn is not None:
         for bond in geometry.bonds():
             for Gnn in gates_nn:
-                nn.append(Gnn._replace(bond=bond))
+                nn.append(Gnn._replace(sites=bond))
 
-    if isinstance(gates_local, Gate_local):
+    if isinstance(gates_local, Gate):
         gates_local = [gates_local]
 
     local = []
     if gates_local is not None:
         for site in geometry.sites():
             for Gloc in gates_local:
-                local.append(Gloc._replace(site=site))
+                local.append(Gloc._replace(sites=(site,)))
 
     return Gates(nn=nn, local=local)
