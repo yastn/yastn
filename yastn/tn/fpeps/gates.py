@@ -43,6 +43,18 @@ class Gate_nnn(NamedTuple):
     site1 : tuple = None
     site2 : tuple = None
 
+class Gate_nn_trgl(NamedTuple):
+    """
+    NN gates for triangular lattice, which incorporates all Gate_nn's and partial Gate_nnn's.
+    """
+    G0 : tuple = None
+    G1 : tuple = None
+    G2 : tuple = None
+    bond: tuple = None
+    site0 : tuple = None
+    site1 : tuple = None
+    site2 : tuple = None
+
 class Gate_local(NamedTuple):
     r"""
     ``G`` is a local operator with ``ndim=2``.
@@ -87,6 +99,35 @@ def decompose_nnn_gate(Gnnn, s0, s1, s2) -> Gate_nnn:
     G1 = S2.broadcast(U2, axes=3)
     G2 = S2.broadcast(V2, axes=2)
     return Gate_nnn(G0, G1, G2, site0=s0, site1=s1, site2=s2)
+
+def decompose_nn_gate_trgl(Gnn, bond=None, s0=None, s1=None, s2=None) -> Gate_nn_trgl:
+    r"""
+    Auxiliary function cutting a three-site gate with SVD
+    into two local operators with the connecting legs, assuming
+    sites (s0, s1, s2) are in lattice and fermionic order.
+    """
+    if bond is not None:
+        if s0 is not None:
+            U1, S1, V1 = Gnn.svd_with_truncation(axes=((0, 3), (1, 4, 2, 5)), sU=-1, tol=1e-14, Vaxis=0)
+            S1 = S1.sqrt()
+            G0 = S1.broadcast(U1, axes=2)
+            V1 = S1.broadcast(V1, axes=0)
+            U2, S2, V2 = V1.svd_with_truncation(axes=((0, 1, 2), (3, 4)), sU=-1, tol=1e-14, Vaxis=2)
+            S2 = S2.sqrt()
+            G1 = S2.broadcast(U2, axes=3)
+            G2 = S2.broadcast(V2, axes=2)
+            return Gate_nn_trgl(G0, G1, G2, bond, site0=s0, site1=s1, site2=s2)
+        else:
+            G2 = None
+            U, S, V = Gnn.svd_with_truncation(axes=((0, 2), (1, 3)), sU=-1, tol=1e-14, Vaxis=2)
+            S = S.sqrt()
+            return Gate_nn_trgl(S.broadcast(U, axes=2), S.broadcast(V, axes=2), G2=G2, bond=bond)    
+    else:
+        G2 = None
+        U, S, V = Gnn.svd_with_truncation(axes=((0, 2), (1, 3)), sU=-1, tol=1e-14, Vaxis=2)
+        S = S.sqrt()
+        return Gate_nn_trgl(S.broadcast(U, axes=2), S.broadcast(V, axes=2), G2=G2, bond=bond)
+
 
 def gate_nn_hopping(t, step, I, c, cdag, bond=None) -> Gate_nn:
     r"""

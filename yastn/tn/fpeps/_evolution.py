@@ -17,7 +17,7 @@
 from ... import tensordot, vdot, svd_with_truncation, truncation_mask, YastnError
 from ._peps import Peps2Layers
 from ._gates_auxiliary import apply_gate_onsite, apply_gate_nn, apply_gate_nnn, gate_fix_order, apply_bond_tensors, apply_bond_tensors_nnn
-from ._geometry import Bond
+from ._geometry import Bond, TriangularLattice
 from typing import NamedTuple
 
 
@@ -99,6 +99,10 @@ def evolution_step_(env, gates, opts_svd, symmetrize=True,
     for gate in gates.local:
         psi[gate.site] = apply_gate_onsite(psi[gate.site], gate.G)
     for gate in gates.nn:
+        if isinstance(env.geometry, TriangularLattice):
+            info = apply_nn_truncate_optimize_trgl_(env, psi, gate, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization=initialization)
+            infos.append(info)
+            continue
         info = apply_nn_truncate_optimize_(env, psi, gate, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization=initialization)
         infos.append(info)
     for gate in gates.nnn:
@@ -109,6 +113,10 @@ def evolution_step_(env, gates, opts_svd, symmetrize=True,
             info = apply_nnn_truncate_optimize_(env, psi, gate, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization=initialization)
             infos.append(info)
         for gate in gates.nn[::-1]:
+            if isinstance(env.geometry, TriangularLattice):
+                info = apply_nn_truncate_optimize_trgl_(env, psi, gate, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization=initialization)
+                infos.append(info)
+                continue
             info = apply_nn_truncate_optimize_(env, psi, gate, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization=initialization)
             infos.append(info)
         for gate in gates.local[::-1]:
@@ -289,6 +297,73 @@ def apply_nnn_truncate_optimize_(env, psi, gate, opts_svd,
         env.update_bond_(bond1[::-1])
 
     return Evolution_out(**info)
+
+
+def apply_nn_truncate_optimize_trgl_(env, psi, gate, opts_svd,
+                    fix_metric=0,
+                    pinv_cutoffs=(1e-12, 1e-11, 1e-10, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4),
+                    max_iter=100, tol_iter=1e-15, initialization="EAT_SVD"):
+    r"""
+    Applies a nearest-neighbor gate to a PEPS tensor, truncate, and
+    optimize the resulting tensors using alternate least squares.
+    """
+    if getattr(gate, "G2", None) is None:
+        info = {'bond': gate.bond}
+
+        dirn, l_ordered = psi.nn_bond_type(gate.bond)
+        f_ordered = psi.f_ordered(*gate.bond)
+        s0, s1 = gate.bond if l_ordered else gate.bond[::-1]
+
+        G0, G1 = gate_fix_order(gate.G0, gate.G1, l_ordered, f_ordered)
+        Q0, Q1, R0, R1, Q0f, Q1f = apply_gate_nn(psi[s0], psi[s1], G0, G1, dirn)
+
+        fgf = env.bond_metric(Q0, Q1, s0, s1, dirn)
+
+        if isinstance(fgf, tuple):  # bipartite bond metric
+            M0, M1, info = truncate_bipartite_(*fgf, R0, R1, opts_svd, pinv_cutoffs, info)
+        else:  # rank-4 bond metric
+            M0, M1, info = truncate_optimize_(fgf, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization, info)
+
+        psi[s0], psi[s1] = apply_bond_tensors(Q0f, Q1f, M0, M1, dirn)
+
+        env.post_evolution_(gate.bond)
+
+    else:
+        info = {'bond': (gate.site0, gate.site1, gate.site2)}
+
+        # sites and gates are in fermionic order
+        dirn, corner = psi.nnn_bond_type(gate.site0, gate.site1, gate.site2)
+
+        G0, G1, G2 = gate.G0, gate.G1, gate.G2
+
+        s0, s1, s2 = gate.site0, gate.site1, gate.site2
+        Q0, Q1, Q2, R0, R1, R2, Q0f, Q1f, Q2f = apply_gate_nnn(psi[s0], psi[s1], psi[s2], G0, G1, G2, dirn, corner)
+
+        fgf = env.bond_metric_nnn(Q0, Q1, Q2, s0, s1, s2, dirn, corner) # bond metric for R0, R1, R2
+
+        if isinstance(fgf, tuple): # bond metric tensor can be decomposed into product of three tensors
+            if dirn == "br":
+                M0, M1, M2, info = truncate_tripartite_(*fgf, R0, R1, R2, opts_svd, pinv_cutoffs, info)
+                psi[s0], psi[s1], psi[s2] = apply_bond_tensors_nnn(Q0f, Q1f, Q2f, M0, M1, M2, dirn, corner)
+                bond1, bond2 = Bond(s0, s1), Bond(s1, s2)
+            elif dirn == "tr":
+                if corner == "tl":
+                    M1, M0, M2, info = truncate_tripartite_(*fgf, R1, R0, R2, opts_svd, pinv_cutoffs, info)
+                    psi[s0], psi[s1], psi[s2] = apply_bond_tensors_nnn(Q0f, Q1f, Q2f, M0, M1, M2, dirn, corner)
+                    bond1, bond2 = Bond(s1, s0), Bond(s0, s2)
+                elif corner == "br":
+                    M0, M2, M1, info = truncate_tripartite_(*fgf, R0, R2, R1, opts_svd, pinv_cutoffs, info)
+                    psi[s0], psi[s1], psi[s2] = apply_bond_tensors_nnn(Q0f, Q1f, Q2f, M0, M1, M2, dirn, corner)
+                    bond1, bond2 = Bond(s0, s2), Bond(s2, s1)
+
+        # post-evolution (the bond-update order matters)
+        env.update_bond_(bond1)
+        env.update_bond_(bond2[::-1])
+        env.update_bond_(bond2)
+        env.update_bond_(bond1[::-1])
+
+    return Evolution_out(**info)
+
 
 def truncate_optimize_(fgf, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization, info):
     # enforce hermiticity

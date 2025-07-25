@@ -335,3 +335,106 @@ class RectangularUnitcell(SquareLattice):
 
         """
         return {'pattern': [[self.site2index((row,col)) for col in range(self.Ny)] for row in range(self.Nx)], 'boundary': self.boundary }
+
+
+class TriangularLattice(SquareLattice):
+
+    def __init__(self):
+        r"""
+        Geometric information about infinite triangular lattice, which
+        is an infinite lattice with :math:`3{\times}3` unit cell and three unique tensors.
+        """
+        super().__init__(dims=(3, 3), boundary='infinite')
+        self._sites = (Site(0, 0), Site(0, 1), Site(0, 2))
+        self._bonds_h = (Bond(Site(0, 0), Site(0, 1)), Bond(Site(0, 1), Site(0, 2)), Bond(Site(0, 2), Site(0, 3)))
+        self._bonds_v = (Bond(Site(0, 0), Site(1, 0)), Bond(Site(0, 1), Site(1, 1)), Bond(Site(0, 2), Site(1, 2)))
+        self._bonds_d = (Bond(Site(1, 0), Site(0, 1)), Bond(Site(1, 1), Site(0, 2)), Bond(Site(1, 2), Site(0, 3)))
+
+    def site2index(self, site):
+        """ Tensor index depending on site. """
+        return (site[1] - site[0]) % 3
+
+    def bonds(self, dirn=None, reverse=False) -> Sequence[Bond]:
+        """
+        Sequence of unique nearest neighbor bonds between lattice sites.
+
+        Parameters
+        ----------
+        dirn: None | str
+            return horizontal followed by vertical and diagonal bonds if None;
+            'v', 'h' and 'd' are, respectively, for vertical, horizontal and diagonal bonds only.
+
+        reverse: bool
+            whether to reverse the order of bonds.
+        """
+        if dirn == 'd':
+            return self._bonds_d[::-1] if reverse else self._bonds_d        
+        if dirn == 'v':
+            return self._bonds_v[::-1] if reverse else self._bonds_v
+        if dirn == 'h':
+            return self._bonds_h[::-1] if reverse else self._bonds_h
+        return self._bonds_d[::-1] + self._bonds_v[::-1] + self._bonds_h[::-1] if reverse else self._bonds_h + self._bonds_v + self._bonds_d
+
+    def nn_bond_type(self, bond) -> tuple[str, bool]:
+        """
+        Raise YastnError if a bond does not connect nearest-neighbor lattice sites.
+        Return bond orientation in 2D grid as a tuple: dirn, l_ordered
+        dirn is 'h' or 'v' or 'd' (horizontal, vertical, diagonal).
+        l_ordered is True for bond directed as 'lr' or 'tb', and False for 'rl' or 'bt'.
+        """
+        s0, s1 = bond
+        if self.nn_site(s0, 'r') == s1 and self.nn_site(s1, 'l') == s0:
+            return 'h', True  # dirn, l_ordered
+        if self.nn_site(s0, 'b') == s1 and self.nn_site(s1, 't') == s0:
+            return 'v', True
+        if self.nn_site(s0, 'tr') == s1 and self.nn_site(s1, 'bl') == s0:
+            return 'd', True
+        if self.nn_site(s0, 'l') == s1 and self.nn_site(s1, 'r') == s0:
+            return 'h', False
+        if self.nn_site(s0, 't') == s1 and self.nn_site(s1, 'b') == s0:
+            return 'v', False
+        if self.nn_site(s0, 'bl') == s1 and self.nn_site(s1, 'tr') == s0:
+            return 'd', False
+        raise YastnError(f"{bond} is not a nearest-neighbor bond.")
+
+    def nnn_bond_type(self, s0, s1, s2) -> tuple[str, str]:
+        """
+        (s0, s1, s2) should represent three sites in a 2x2 patch.
+        Return bond orientation in 2D grid as a tuple: dirn, corner
+        dirn is 'br' or 'tr' (bottom-right, top-right).
+        corner is the middle site (s1) connecting the two nnn sites.
+        """
+        if self.nn_site(s0, (1, 1)) == s2:
+            dirn = "br"
+            if self.nn_site(s0, (0, 1)) == s1:
+                corner = "tr"
+            elif self.nn_site(s0, (1, 0)) == s1:
+                corner = "bl"
+        elif self.nn_site(s1, (-1, 1)) == s2 and self.nn_site(s0, (1, 0)) == s1:
+            dirn, corner = "tr", "tl"
+        elif self.nn_site(s0, (-1, 1)) == s1 and self.nn_site(s0, (0, 1)) == s2:
+            dirn, corner = "tr", "br"
+        else:
+            raise YastnError(f"TriangularLattice.nnn_bond_type: ({s0}, {s1}, {s2}) doesn't form a valid L-shape patch.")
+        return dirn, corner
+
+    def f_ordered(self, s0, s1) -> bool:
+        """
+        Check if sites s0, s1 are fermionicaly ordered (or identical).
+        """
+        return s0[1] < s1[1] or (s0[1] == s1[1] and s0[0] <= s1[0])
+    
+
+    def __dict__(self):
+        """
+        Return a dictionary representation of the object.
+
+        ..Note ::
+
+            For serialiation to JSON, dict keys must be str/int/... Hence, we store pattern
+            in format Sequence[Sequence[int]].
+
+        """
+        return {'pattern': [[self.site2index((row,col)) for col in range(self.Ny)] for row in range(self.Nx)], 'boundary': self.boundary}
+                # 'sites': self.sites(),
+                # }
