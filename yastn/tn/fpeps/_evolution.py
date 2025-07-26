@@ -258,13 +258,13 @@ def apply_nnn_truncate_optimize_(env, psi, gate, opts_svd,
     optimize the resulting tensors.
     """
     # TODO: NTU update
-    info = {'bond': (gate.site0, gate.site1, gate.site2)}
+    info = {'bond': gate.sites}
 
     # sites and gates are in fermionic order
-    dirn, corner = psi.nnn_bond_type(gate.site0, gate.site1, gate.site2)
-    G0, G1, G2 = gate.G0, gate.G1, gate.G2
+    dirn, corner = psi.nnn_bond_type(*gate.sites)
+    G0, G1, G2 = gate.G
 
-    s0, s1, s2 = gate.site0, gate.site1, gate.site2
+    s0, s1, s2 = gate.sites
     Q0, Q1, Q2, R0, R1, R2, Q0f, Q1f, Q2f = apply_gate_nnn(psi[s0], psi[s1], psi[s2], G0, G1, G2, dirn, corner)
 
     fgf = env.bond_metric_nnn(Q0, Q1, Q2, s0, s1, s2, dirn, corner) # bond metric for R0, R1, R2

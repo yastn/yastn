@@ -31,25 +31,17 @@ from ._gates_auxiliary import fkron
 #     G1 : tuple = None
 #     bond : tuple = None
 
-
-def Gate_nn(G0, G1, bond):
-    return Gate(G=(G0, G1), sites=bond)
-
-
-def Gate_nnn(G0, G1, G2, site0, site1, site2):
-    return Gate(G=(G0, G1, G2), sites=(site0, site1, site2))
-
-class Gate_nnn(NamedTuple):
-    """
-    ``G0``, ``G1`` and ``G2`` should be ordered in the fermionic and lattice orders.
-    ``s0``, ``s1`` and ``s2`` correspond to the sites of ``G0``, ``G1`` and ``G2``, respectively.
-    """
-    G0 : tuple = None
-    G1 : tuple = None
-    G2 : tuple = None
-    site0 : tuple = None
-    site1 : tuple = None
-    site2 : tuple = None
+# class Gate_nnn(NamedTuple):
+#     """
+#     ``G0``, ``G1`` and ``G2`` should be ordered in the fermionic and lattice orders.
+#     ``s0``, ``s1`` and ``s2`` correspond to the sites of ``G0``, ``G1`` and ``G2``, respectively.
+#     """
+#     G0 : tuple = None
+#     G1 : tuple = None
+#     G2 : tuple = None
+#     site0 : tuple = None
+#     site1 : tuple = None
+#     site2 : tuple = None
 
 # class Gate_local(NamedTuple):
 #     r"""
@@ -65,9 +57,19 @@ class Gate_nnn(NamedTuple):
 def Gate_local(G, site):
     return Gate(G=(G,), sites=(site,))
 
+
+def Gate_nn(G0, G1, bond):
+    return Gate(G=(G0, G1), sites=bond)
+
+
+def Gate_nnn(G0, G1, G2, site0, site1, site2):
+    return Gate(G=(G0, G1, G2), sites=(site0, site1, site2))
+
+
 class Gate(NamedTuple):
     G : tuple = None
     sites : tuple = None
+
 
 class Gates(NamedTuple):
     r"""
