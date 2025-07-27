@@ -17,67 +17,67 @@ from typing import NamedTuple
 from ... import exp, ncon, eigh
 from ._gates_auxiliary import fkron
 
-# class Gate_nn(NamedTuple):
-#     """
-#     ``G0`` should be before ``G1`` in the fermionic and lattice orders
-#     (``G0`` acts on the left/top site; ``G1`` acts on the right/bottom site from a pair of nearest-neighbor sites).
-#     The third legs of ``G0`` and ``G1`` are auxiliary legs connecting them into a two-site operator.
-
-#     If a ``bond`` is ``None``, this is a general operator.
-#     Otherwise, ``bond`` carries information where it should be applied
-#     (potentially, after fixing order mismatches).
-#     """
-#     G0 : tuple = None
-#     G1 : tuple = None
-#     bond : tuple = None
-
-# class Gate_nnn(NamedTuple):
-#     """
-#     ``G0``, ``G1`` and ``G2`` should be ordered in the fermionic and lattice orders.
-#     ``s0``, ``s1`` and ``s2`` correspond to the sites of ``G0``, ``G1`` and ``G2``, respectively.
-#     """
-#     G0 : tuple = None
-#     G1 : tuple = None
-#     G2 : tuple = None
-#     site0 : tuple = None
-#     site1 : tuple = None
-#     site2 : tuple = None
-
-# class Gate_local(NamedTuple):
-#     r"""
-#     ``G`` is a local operator with ``ndim=2``.
-
-#     If ``site`` is ``None``, this is a general operator.
-#     Otherwise, ``site`` carries information where it should be applied.
-#     """
-#     G : tuple = None
-#     site : tuple = None
-
-
-def Gate_local(G, site):
-    return Gate(G=(G,), sites=(site,))
-
-
-def Gate_nn(G0, G1, bond):
-    return Gate(G=(G0, G1), sites=bond)
-
-
-def Gate_nnn(G0, G1, G2, site0, site1, site2):
-    return Gate(G=(G0, G1, G2), sites=(site0, site1, site2))
-
-
 class Gate(NamedTuple):
+    r"""
+    Gate to be applied on Peps state.
+
+    `G` contains operators to be applied on respective `sites`. 
+    Operators have virtual legs connecting them, forming MPO.
+    """
     G : tuple = None
     sites : tuple = None
 
 
-class Gates(NamedTuple):
-    r"""
-    List of nearest-neighbor and local operators to be applied to PEPS by :meth:`yastn.tn.fpeps.evolution_step_`.
+def Gate_local(G, site):
     """
-    nn : list = ()   # list of NN gates
+    Legacy function, generating :class:`Gate` instance.
+    """
+    return Gate(G=(G,), sites=(site,))
+
+
+def Gate_nn(G0, G1, bond):
+    """
+    Legacy function, generating :class:`Gate` instance.
+    
+    ``G0`` should be before ``G1`` in the fermionic and lattice orders
+    (``G0`` acts on the left/top site; ``G1`` acts on the right/bottom site from a pair of nearest-neighbor sites).
+    The third legs of ``G0`` and ``G1`` are auxiliary legs connecting them into a two-site operator.
+    """
+    return Gate(G=(G0, G1), sites=bond)
+
+
+def Gate_nnn(G0, G1, G2, site0, site1, site2):
+    """
+    Legacy function, generating :class:`Gate` instance.
+
+    ``G0``, ``G1`` and ``G2`` should be ordered in the fermionic and lattice orders.
+    ``s0``, ``s1`` and ``s2`` correspond to the sites of ``G0``, ``G1`` and ``G2``, respectively.
+    """
+    return Gate(G=(G0, G1, G2), sites=(site0, site1, site2))
+
+
+def Gates(local=(), nn=(), nnn=()):
+    r"""
+    Legacy function, generating list of gates for :meth:`fpeps.evolution_step_`.
+
     local : list = ()   # list of local gates
+    nn : list = ()   # list of NN gates
     nnn: list = ()   # list of NNN gates
+    """
+    gates = []
+    try: 
+        gates.extend(local)
+    except TypeError:
+        gates.append(local)
+    try: 
+        gates.extend(nn)
+    except TypeError:
+        gates.append(nn)
+    try: 
+        gates.extend(nnn)
+    except TypeError:
+        gates.append(nnn)
+    return gates
 
 
 def decompose_nn_gate(Gnn, bond=None) -> Gate_nn:
@@ -88,6 +88,7 @@ def decompose_nn_gate(Gnn, bond=None) -> Gate_nn:
     U, S, V = Gnn.svd_with_truncation(axes=((0, 2), (1, 3)), sU=-1, tol=1e-14, Vaxis=2)
     S = S.sqrt()
     return Gate_nn(S.broadcast(U, axes=2), S.broadcast(V, axes=2), bond=bond)
+
 
 def decompose_nnn_gate(Gnnn, s0, s1, s2) -> Gate_nnn:
     r"""
@@ -104,6 +105,7 @@ def decompose_nnn_gate(Gnnn, s0, s1, s2) -> Gate_nnn:
     G1 = S2.broadcast(U2, axes=3)
     G2 = S2.broadcast(V2, axes=2)
     return Gate_nnn(G0, G1, G2, site0=s0, site1=s1, site2=s2)
+
 
 def gate_nn_hopping(t, step, I, c, cdag, bond=None) -> Gate_nn:
     r"""
@@ -227,20 +229,18 @@ def distribute(geometry, gates_nn=None, gates_local=None) -> Gates:
     local : Gate_local | Sequence[Gate_local]
         Local gate, or a list of local gates, to be distributed over all unique lattice sites.
     """
-    if isinstance(gates_nn, Gate):
-        gates_nn = [gates_nn]
-
     nn = []
     if gates_nn is not None:
+        if isinstance(gates_nn, Gate):
+            gates_nn = [gates_nn]
         for bond in geometry.bonds():
             for Gnn in gates_nn:
                 nn.append(Gnn._replace(sites=bond))
 
-    if isinstance(gates_local, Gate):
-        gates_local = [gates_local]
-
     local = []
     if gates_local is not None:
+        if isinstance(gates_local, Gate):
+            gates_local = [gates_local]
         for site in geometry.sites():
             for Gloc in gates_local:
                 local.append(Gloc._replace(sites=(site,)))

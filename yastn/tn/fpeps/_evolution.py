@@ -78,8 +78,8 @@ def evolution_step_(env, gates, opts_svd, symmetrize=True,
 
     Returns
     -------
-    Evolution_out(NamedTuple)
-        Namedtuple containing fields:
+    list[Evolution_out(NamedTuple)]
+        List of Namedtuple containing fields:
             * ``bond`` bond where the gate is applied.
             * ``truncation_error`` relative norm of the difference between untruncated and truncated bonds, calculated in metric specified by env.
             * ``best_method`` initialization/optimization method giving the best truncation_error. Possible values are 'eat', 'eat_opt', 'svd', 'svd_opt'.
@@ -96,23 +96,18 @@ def evolution_step_(env, gates, opts_svd, symmetrize=True,
         psi = psi.ket  # to make it work with CtmEnv
 
     infos = []
-    for gate in gates.local:
-        psi[gate.sites[0]] = apply_gate_onsite(psi[gate.sites[0]], gate.G[0])
-    for gate in gates.nn:
-        info = apply_nn_truncate_optimize_(env, psi, gate, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization=initialization)
-        infos.append(info)
-    for gate in gates.nnn:
-        info = apply_nnn_truncate_optimize_(env, psi, gate, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization=initialization)
-        infos.append(info)
     if symmetrize:
-        for gate in gates.nnn[::-1]:
-            info = apply_nnn_truncate_optimize_(env, psi, gate, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization=initialization)
-            infos.append(info)
-        for gate in gates.nn[::-1]:
+        gates = gates + gates[::-1] 
+
+    for gate in gates:
+        if len(gate.sites) == 1:
+            psi[gate.sites[0]] = apply_gate_onsite(psi[gate.sites[0]], gate.G[0])
+        if len(gate.sites) == 2:
             info = apply_nn_truncate_optimize_(env, psi, gate, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization=initialization)
             infos.append(info)
-        for gate in gates.local[::-1]:
-            psi[gate.sites[0]] = apply_gate_onsite(psi[gate.sites[0]], gate.G[0])
+        if len(gate.sites) == 3:
+            info = apply_nnn_truncate_optimize_(env, psi, gate, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization=initialization)
+            infos.append(info)
     return infos
 
 
