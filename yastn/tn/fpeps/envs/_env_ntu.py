@@ -14,6 +14,7 @@
 # ==============================================================================
 from .... import tensordot, YastnError
 from ._env_auxlliary import *
+from .._evolution import BondMetric
 
 
 class EnvNTU:
@@ -184,7 +185,7 @@ class EnvNTU:
             ctr = cor_tr(m[0, 1])
             cbr = cor_br(m[1, 1])
             g = tensordot((cbl @ ctl) @ env_t, (ctr @ cbr) @ env_b, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
-        return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
+        return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
 
     def _g_NNp(self, Q0, Q1, s0, s1, dirn):
@@ -262,7 +263,7 @@ class EnvNTU:
             ctr = cor_tr(m[0, 1], hr=hp0p1_r, ht=htr_t)
             cbr = cor_br(m[1, 1], hr=hp1p1_r, hb=hbr_b)
             g = tensordot((cbl @ ctl) @ env_t, (ctr @ cbr) @ env_b, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
-        return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
+        return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
 
     def _g_NNpp(self, Q0, Q1, s0, s1, dirn):
@@ -394,7 +395,7 @@ class EnvNTU:
             cbr = cor_br(m[1, 1], hb=hp1p1_b, hr=hp1p1_r)
 
             g = tensordot((cbl @ ctl) @ env_t, (ctr @ cbr) @ env_b, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
-        return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
+        return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
 
     def _g_NNN(self, Q0, Q1, s0, s1, dirn):
@@ -463,7 +464,7 @@ class EnvNTU:
             ebl = edge_l(m[1, -1])
             vecb = tensordot(vecb, cbl @ ebl, axes=((2, 3), (0, 1)))
             g = tensordot(vect, vecb, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
-        return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
+        return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
 
     def _g_NNNp(self, Q0, Q1, s0, s1, dirn):
@@ -548,7 +549,7 @@ class EnvNTU:
             vecb = tensordot(vecb, cbl @ ebl, axes=((2, 3), (0, 1)))
 
             g = tensordot(vect, vecb, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
-        return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
+        return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
 
     def _g_NNNpp(self, Q0, Q1, s0, s1, dirn):
@@ -732,4 +733,4 @@ class EnvNTU:
             vecb = tensordot(vecb, cbl @ ebl, axes=((2, 3), (0, 1)))
 
             g = tensordot(vect, vecb, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
-        return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
+        return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))

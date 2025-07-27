@@ -22,6 +22,7 @@ from ... import mps
 from .._peps import Peps, Peps2Layers
 from .._gates_auxiliary import apply_gate_onsite, gate_product_operator, gate_fix_order
 from .._geometry import Bond, Site
+from .._evolution import BondMetric
 from ._env_auxlliary import *
 from ._env_window import EnvWindow
 from ._env_measure import _measure_nsite
@@ -1017,7 +1018,7 @@ class EnvCTM(Peps):
             g = tensordot(vect, vecb, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
 
         g = g / g.trace(axes=(0, 1)).to_number()
-        return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
+        return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
     def save_to_dict(self) -> dict:
         r"""

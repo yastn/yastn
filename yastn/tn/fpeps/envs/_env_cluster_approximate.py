@@ -16,7 +16,7 @@ from .... import YastnError, tensordot, eye
 from ...import mps
 from .. import DoublePepsTensor
 from ._env_auxlliary import *
-
+from .._evolution import BondMetric
 
 
 _hair_dirn = {'t': hair_t, 'l': hair_l, 'b': hair_b, 'r': hair_r}
@@ -131,7 +131,7 @@ class EnvApproximate:
             env.update_env_(n, to='last')
             env.update_env_(2 * Nl - n - 1, to='first')
         g = tensordot(env.F[Nl-1, Nl], env.F[Nl, Nl-1], axes=((0, 2), (0, 2)))
-        return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
+        return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
     def initialize_env(self, bd):
         if bd[2] == "h":

@@ -20,6 +20,7 @@ from .... import Tensor, eye, YastnError, tensordot, vdot, ncon
 from .._peps import Peps, Peps2Layers, DoublePepsTensor
 from .._gates_auxiliary import apply_gate_onsite, gate_product_operator, gate_fix_order, match_ancilla
 from .._geometry import Bond, Site
+from .._evolution import BipartiteBondMetric, BondMetric
 from ._env_auxlliary import *
 from ._env_auxlliary import clear_projectors
 from ._env_boundary_mps import _clear_operator_input
@@ -331,13 +332,13 @@ class EnvBP(Peps):
             assert self.psi.nn_site(s0, (0, 1)) == s1
             vecl = hair_l(Q0, hl=self[s0].l, ht=self[s0].t, hb=self[s0].b)
             vecr = hair_r(Q1, hr=self[s1].r, ht=self[s1].t, hb=self[s1].b).T
-            return (vecl, vecr)  # (rr' rr,  ll ll')
+            return BipartiteBondMetric(gL=vecl, gR=vecr)  # (rr' rr,  ll ll')
 
         if dirn == "v" and self.which == "BP":
             assert self.psi.nn_site(s0, (1, 0)) == s1
             vect = hair_t(Q0, hl=self[s0].l, ht=self[s0].t, hr=self[s0].r)
             vecb = hair_b(Q1, hr=self[s1].r, hb=self[s1].b, hl=self[s1].l).T
-            return (vect, vecb)  # (bb' bb,  tt tt')
+            return BipartiteBondMetric(gL=vect, gR=vecb)  # (bb' bb,  tt tt')
 
         if dirn == "h" and self.which == "NN+BP":
             assert self.psi.nn_site(s0, (0, 1)) == s1
@@ -364,7 +365,7 @@ class EnvBP(Peps):
             cbl = cor_bl(m[ 1, 0]) if sm is None else cor_bl(m[ 1, 0], hb=self[sm].b, hl=self[sm].l)
 
             g = tensordot((cbr @ cbl) @ env_l, (ctl @ ctr) @ env_r, axes=((0, 2), (2, 0)))  # [rr rr'] [ll ll']
-            return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
+            return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
         if dirn == "v" and self.which == "NN+BP":
             assert self.psi.nn_site(s0, (1, 0)) == s1
@@ -390,7 +391,7 @@ class EnvBP(Peps):
             cbr = cor_br(m[1,  1]) if sm is None else cor_br(m[1,  1], hb=self[sm].b, hr=self[sm].r)
 
             g = tensordot((cbl @ ctl) @ env_t, (ctr @ cbr) @ env_b, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
-            return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
+            return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
         if dirn == "h" and self.which == "NNN+BP":
             assert self.psi.nn_site(s0, (0, 1)) == s1
@@ -426,7 +427,7 @@ class EnvBP(Peps):
             vecr = append_vec_br(Q1, Q1, err @ (crb @ erb))
             vecr = tensordot(ert @ crt, vecr, axes=((2, 1), (0, 1)))
             g = tensordot(vecl, vecr, axes=((0, 1), (1, 0)))  # [rr rr'] [ll ll']
-            return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
+            return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
         if dirn == "v" and self.which == "NNN+BP":
             assert self.psi.nn_site(s0, (1, 0)) == s1
@@ -462,7 +463,7 @@ class EnvBP(Peps):
             vecb = append_vec_br(Q1, Q1, ebr @ (cbr @ ebb))
             vecb = tensordot(vecb, cbl @ ebl, axes=((2, 3), (0, 1)))
             g = tensordot(vect, vecb, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
-            return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
+            return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
 
         # if dirn == "h" and self.which == "NN1+BP":

@@ -14,11 +14,20 @@
 # ==============================================================================
 """ Routines for time evolution with nn gates on a 2D lattice. """
 
-from ... import tensordot, vdot, svd_with_truncation, truncation_mask, YastnError
+from ... import tensordot, vdot, svd_with_truncation, YastnError, Tensor
 from ._peps import Peps2Layers
 from ._gates_auxiliary import apply_gate_onsite, apply_gate_nn, apply_gate_nnn, gate_fix_order, apply_bond_tensors, apply_bond_tensors_nnn
 from ._geometry import Bond
 from typing import NamedTuple
+
+
+class BondMetric(NamedTuple):
+    g: Tensor = None
+
+
+class BipartiteBondMetric(NamedTuple):
+    gL: Tensor = None
+    gR: Tensor = None
 
 
 class Evolution_out(NamedTuple):
@@ -201,9 +210,9 @@ def truncate_(env, opts_svd, bond=None,
 
         fgf = env.bond_metric(psi[s0], psi[s1], s0, s1, dirn)
 
-        if isinstance(fgf, tuple):  # bipartite bond metric
-            M0, M1, info = truncate_bipartite_(*fgf, R0, R1, opts_svd, pinv_cutoffs, info)
-        else:  # rank-4 bond metric
+        if isinstance(fgf, BipartiteBondMetric):  # bipartite bond metric
+            M0, M1, info = truncate_bipartite_(fgf, R0, R1, opts_svd, pinv_cutoffs, info)
+        elif isinstance(fgf, BondMetric):  # bipartite bond metric
             M0, M1, info = truncate_optimize_(fgf, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization, info)
 
         psi[s0], psi[s1] = apply_bond_tensors(Q0f, Q1f, M0, M1, dirn)
@@ -234,9 +243,9 @@ def apply_nn_truncate_optimize_(env, psi, gate, opts_svd,
 
     fgf = env.bond_metric(Q0, Q1, s0, s1, dirn)
 
-    if isinstance(fgf, tuple):  # bipartite bond metric
-        M0, M1, info = truncate_bipartite_(*fgf, R0, R1, opts_svd, pinv_cutoffs, info)
-    else:  # rank-4 bond metric
+    if isinstance(fgf, BipartiteBondMetric):  # bipartite bond metric
+        M0, M1, info = truncate_bipartite_(fgf, R0, R1, opts_svd, pinv_cutoffs, info)
+    elif isinstance(fgf, BondMetric):  # rank-4 bond metric
         M0, M1, info = truncate_optimize_(fgf, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization, info)
 
     psi[s0], psi[s1] = apply_bond_tensors(Q0f, Q1f, M0, M1, dirn)
@@ -287,8 +296,9 @@ def apply_nnn_truncate_optimize_(env, psi, gate, opts_svd,
 
     return Evolution_out(**info)
 
-def truncate_optimize_(fgf, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization, info):
+def truncate_optimize_(g, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization, info):
     # enforce hermiticity
+    fgf = g.g
     fgfH = fgf.H
     nonhermitian = (fgf - fgfH).norm() / 2
     fgf = (fgf + fgfH) / 2
@@ -343,8 +353,9 @@ def truncate_optimize_(fgf, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter
     return M0, M1, info
 
 
-def truncate_bipartite_(E0, E1, R0, R1, opts_svd, pinv_cutoffs, info):
+def truncate_bipartite_(g, R0, R1, opts_svd, pinv_cutoffs, info):
     #
+    E0, E1 = g.gL, g.gR
     E0 = (E0 + E0.H) / 2
     E1 = (E1 + E1.H) / 2
     #
