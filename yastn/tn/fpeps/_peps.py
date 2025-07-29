@@ -17,7 +17,7 @@ from typing import Sequence, Union
 from ... import Tensor, YastnError
 from ...tn.mps import Mpo
 from ._doublePepsTensor import DoublePepsTensor
-from ._geometry import SquareLattice, CheckerboardLattice, RectangularUnitcell
+from ._geometry import SquareLattice, CheckerboardLattice, RectangularUnitcell, TriangularLattice
 
 
 class Peps():
@@ -161,6 +161,8 @@ class Peps():
             d['lattice'] = "square"
         elif isinstance(self.geometry, RectangularUnitcell):
             d['lattice'] = "rectangularunitcell"
+        elif isinstance(self.geometry, TriangularLattice):
+            d['lattice'] = "triangular"
         return d
 
     def __repr__(self) -> str:

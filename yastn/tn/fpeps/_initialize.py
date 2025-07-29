@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 """ Initialization of peps tensors for real or imaginary time evolution """
-from ._geometry import SquareLattice, CheckerboardLattice
+from ._geometry import SquareLattice, CheckerboardLattice, TriangularLattice
 from ._peps import Peps
 from .envs._env_ctm import EnvCTM
 from .envs._env_bp import EnvBP
@@ -42,8 +42,8 @@ def product_peps(geometry, vectors) -> Peps:
         If dict is provided, it should specify a map between
         each unique lattice site and the corresponding vector.
     """
-    if not isinstance(geometry, (SquareLattice, CheckerboardLattice)):
-        raise YastnError("Geometry should be an instance of SquareLattice or CheckerboardLattice")
+    if not isinstance(geometry, (SquareLattice, CheckerboardLattice, TriangularLattice)):
+        raise YastnError("Geometry should be an instance of SquareLattice or CheckerboardLattice or TriangularLattice")
 
     if isinstance(vectors, Tensor):
         vectors = {site: vectors.copy() for site in geometry.sites()}
@@ -108,6 +108,8 @@ def load_from_dict(config, d) -> Peps:
         net = SquareLattice(dims=d['dims'], boundary=d['boundary'])
     elif d['lattice'] == "checkerboard":
         net = CheckerboardLattice()
+    elif d['lattice'] == "triangular":
+        net = TriangularLattice()
 
     psi = Peps(net)
     for site in psi.sites():

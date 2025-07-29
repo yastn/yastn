@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from ._geometry import Site, Bond, SquareLattice, CheckerboardLattice, RectangularUnitcell
+from ._geometry import Site, Bond, SquareLattice, CheckerboardLattice, RectangularUnitcell, TriangularLattice
 from ._peps import Peps, Peps2Layers
 from ._initialize import product_peps, load_from_dict
 from ._evolution import evolution_step_, truncate_, accumulated_truncation_error
