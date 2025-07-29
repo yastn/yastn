@@ -14,11 +14,20 @@
 # ==============================================================================
 """ Routines for time evolution with nn gates on a 2D lattice. """
 
-from ... import tensordot, vdot, svd_with_truncation, truncation_mask, YastnError
+from ... import tensordot, vdot, svd_with_truncation, YastnError, Tensor
 from ._peps import Peps2Layers
 from ._gates_auxiliary import apply_gate_onsite, apply_gate_nn, apply_gate_nnn, gate_fix_order, apply_bond_tensors, apply_bond_tensors_nnn
 from ._geometry import Bond, TriangularLattice
 from typing import NamedTuple
+
+
+class BondMetric(NamedTuple):
+    g: Tensor = None
+
+
+class BipartiteBondMetric(NamedTuple):
+    gL: Tensor = None
+    gR: Tensor = None
 
 
 class Evolution_out(NamedTuple):
