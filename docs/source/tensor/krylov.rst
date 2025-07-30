@@ -11,7 +11,7 @@ Examples of such a vector include :class:`yastn.Tensor` (see :ref:`methods<tenso
 
 .. autofunction:: yastn.expmv
 .. autofunction:: yastn.eigs
-.. autofunction:: yastn.lin_solve
+.. autofunction:: yastn.lin_solver
 
 Other libraries
 ---------------

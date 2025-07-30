@@ -96,7 +96,7 @@ class EnvCTM(Peps):
             If ``psi`` has physical legs, a double-layer PEPS with no physical legs is formed.
 
         init: str
-            None, 'eye' or 'rand'. Initialization scheme, see :meth:`yastn.tn.fpeps.EnvCTM.reset_`.
+            ``None``, 'eye' or 'rand'. Initialization scheme, see :meth:`yastn.tn.fpeps.EnvCTM.reset_`.
 
         leg: Optional[yastn.Leg]
             Passed to :meth:`yastn.tn.fpeps.EnvCTM.reset_` to further customize initialization.
@@ -1075,7 +1075,7 @@ class EnvCTM(Peps):
             env[site].b = env_old[site].b
             env[site].t = env_old[site].t
 
-    def ctmrg_(env, opts_svd=None, method='2site', max_sweeps=1, iterator_step=None, corner_tol=None, truncation_f : Callable=None, **kwargs):
+    def iterate_(env, opts_svd=None, method='2site', max_sweeps=1, iterator_step=None, corner_tol=None, truncation_f : Callable=None, **kwargs):
         r"""
         Perform CTMRG updates :meth:`yastn.tn.fpeps.EnvCTM.update_` until convergence.
         Convergence can be measured based on singular values of CTM environment corner tensors.
@@ -1091,13 +1091,14 @@ class EnvCTM(Peps):
             This sets EnvCTM bond dimension.
 
         method: str
-            '2site' or '1site'. The default is '2site'.
-            '2site' uses the standard 4x4 enlarged corners, allowing to enlarge EnvCTM bond dimension.
-            '1site' uses smaller 4x2 corners. It is significantly faster, but is less stable and
-            does not allow to grow EnvCTM bond dimension.
+            '2site', '1site', or 'hex'. The default is '2site'.
+            
+                * '2site' uses the standard 4x4 enlarged corners, enabling enlargement of EnvCTM bond dimensions.
+                * '1site' uses smaller 4x2 corners. It is significantly faster, but is less stable and  does not allow for EnvCTM bond dimension growth.
+                * 'hex' is an extenstion of '2site' for hexagonal lattice embeded in a square lattice, where some PEPS bonds are rank-1. It recognizes such rank-1 bonds, using 5x4 corners to prevent artificial collapse of EnvCTM bond dimensions to 1.
 
         max_sweeps: int
-            Maximal number of sweeps.
+            The maximal number of sweeps.
 
         iterator_step: int
             If int, ``ctmrg_`` returns a generator that would yield output after every iterator_step sweeps.
@@ -1105,7 +1106,7 @@ class EnvCTM(Peps):
 
         corner_tol: float
             Convergence tolerance for the change of singular values of all corners in a single update.
-            The default is None, in which case convergence is not checked and it is up to user to implement
+            The default is ``None``, in which case convergence is not checked and it is up to user to implement
             convergence check.
 
         truncation_f:
@@ -1120,7 +1121,7 @@ class EnvCTM(Peps):
 
         use_qr: bool
             Whether to include intermediate QR decomposition while calculating projectors.
-            The default is True.
+            The default is ``True``.
 
         Returns
         -------
@@ -1140,7 +1141,7 @@ class EnvCTM(Peps):
         tmp = _iterate_ctmrg_(env, opts_svd, method, max_sweeps, iterator_step, corner_tol, **kwargs)
         return tmp if iterator_step else next(tmp)
 
-    iterate_ = ctmrg_  #  allow using EnvCtm.iterate_() instead of allow using EnvCtm.ctmrg_()
+    ctmrg_ = iterate_   #  For backward compatibility, allow using EnvCtm.ctmrg_() instead of EnvCtm.iterate_().
 
 
 def decompress_env_1d(data,meta):
