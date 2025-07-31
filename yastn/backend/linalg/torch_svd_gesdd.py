@@ -2,7 +2,7 @@ import torch
 import warnings
 
 def safe_inverse(x, eps_abs=1.0e-12):
-    eps_abs=1.0e-12
+    #eps_abs=1.0e-12   #the eps_abs should not be fixed. Instead, it should be depedent on a global scale determined outside.
     return x / (x ** 2 + eps_abs)
 
 
