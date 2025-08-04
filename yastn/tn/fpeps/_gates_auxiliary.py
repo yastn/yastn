@@ -15,7 +15,7 @@
 from ... import eye, tensordot, qr, YastnError
 
 
-def match_ancilla(ten, G, swap=False):
+def match_ancilla(ten, G, dirn=None):
     """
     Kronecker product and fusion of local gate with identity for ancilla.
 
@@ -31,14 +31,20 @@ def match_ancilla(ten, G, swap=False):
     one = eye(config=ten.config, legs=[leg, leg.conj()], isdiag=False)
     Gnew = tensordot(G, one, axes=((), ()))
 
+    swap = dirn and dirn in 'tl'
+
     if G.ndim == 2:
         return Gnew.fuse_legs(axes=((0, 2), (1, 3)))
     elif G.ndim == 3:
-        if swap: Gnew = Gnew.swap_gate(axes=(2, 3))
+        if dirn and dirn in 'tl': 
+            Gnew = Gnew.swap_gate(axes=(2, 3))
         return Gnew.fuse_legs(axes=((0, 3), (1, 4), 2))
     elif G.ndim == 4:
-        if swap: Gnew = Gnew.swap_gate(axes=(3, 4))
-        return Gnew.fuse_legs(axes=(0, (1, 4), (2, 5), 3))
+        if dirn and dirn[0] in 'tl': 
+            Gnew = Gnew.swap_gate(axes=(2, 4))
+        if dirn and dirn[1] in 'tl': 
+            Gnew = Gnew.swap_gate(axes=(3, 4))
+        return Gnew.fuse_legs(axes=((0, 4), (1, 5), 2, 3))
 
 
 
@@ -51,28 +57,38 @@ def apply_gate_onsite(ten, G, dirn=None):
     application of a proper swap gate.
     For a local operator with no auxiliary index, dirn should be None.
     """
-    swap = dirn and dirn in 'tl'
-    G = match_ancilla(ten, G, swap=swap)
+    G = match_ancilla(ten, G, dirn=dirn)
     tmp = tensordot(ten, G, axes=(2, 1)) # [t l] [b r] [s a] c
+    if not dirn:
+        return tmp
 
-    if dirn == 't':
-        tmp = tmp.unfuse_legs(axes=1)  # [t l] b r [s a] c
-        tmp = tmp.fuse_legs(axes=(0, (1, 4), 2, 3))  # [t l] [b c] r [s a]
-        tmp = tmp.fuse_legs(axes=(0, (1, 2), 3))  # [t l] [[b c] r] [s a]
-    if dirn == 'b':
-        tmp = tmp.unfuse_legs(axes=0)  # t l [b r] [s a] c
-        tmp = tmp.swap_gate(axes=(1, 4))
-        tmp = tmp.fuse_legs(axes=((0, 4), 1, 2, 3))  # [t c] l [b r] [s a]
-        tmp = tmp.fuse_legs(axes=((0, 1), 2, 3))  # [[t c] l] [b r] [s a]
-    if dirn == 'l':
-        tmp = tmp.unfuse_legs(axes=1)  # [t l] b r [s a] c
-        tmp = tmp.swap_gate(axes=(1, 4))
-        tmp = tmp.fuse_legs(axes=(0, 1, (2, 4), 3))  # [t l] b [r c] [s a]
-        tmp = tmp.fuse_legs(axes=(0, (1, 2), 3))  # [t l] [b [r c]] [s a]
-    if dirn == 'r':
-        tmp = tmp.unfuse_legs(axes=0)  # t l [b r] [s a] c
-        tmp = tmp.fuse_legs(axes=(0, (1, 4), 2, 3))  # t [l c] [b r] [s a]
-        tmp = tmp.fuse_legs(axes=((0, 1), 2, 3))  # [t [l c]] [b r] [s a]
+    fuse_one = False
+    if len(dirn) == 2:
+        tmp = tmp.fuse_legs(axes=(0, 1, (2, 3), 4), mode='meta') 
+        fuse_one = True
+
+    for dd in dirn[::-1]:
+        if dd == 't':
+            tmp = tmp.unfuse_legs(axes=1)  # [t l] b r [s a] c
+            tmp = tmp.fuse_legs(axes=(0, (1, 4), 2, 3))  # [t l] [b c] r [s a]
+            tmp = tmp.fuse_legs(axes=(0, (1, 2), 3))  # [t l] [[b c] r] [s a]
+        if dd == 'b':
+            tmp = tmp.unfuse_legs(axes=0)  # t l [b r] [s a] c
+            tmp = tmp.swap_gate(axes=(1, 4))
+            tmp = tmp.fuse_legs(axes=((0, 4), 1, 2, 3))  # [t c] l [b r] [s a]
+            tmp = tmp.fuse_legs(axes=((0, 1), 2, 3))  # [[t c] l] [b r] [s a]
+        if dd == 'l':
+            tmp = tmp.unfuse_legs(axes=1)  # [t l] b r [s a] c
+            tmp = tmp.swap_gate(axes=(1, 4))
+            tmp = tmp.fuse_legs(axes=(0, 1, (2, 4), 3))  # [t l] b [r c] [s a]
+            tmp = tmp.fuse_legs(axes=(0, (1, 2), 3))  # [t l] [b [r c]] [s a]
+        if dd == 'r':
+            tmp = tmp.unfuse_legs(axes=0)  # t l [b r] [s a] c
+            tmp = tmp.fuse_legs(axes=(0, (1, 4), 2, 3))  # t [l c] [b r] [s a]
+            tmp = tmp.fuse_legs(axes=((0, 1), 2, 3))  # [t [l c]] [b r] [s a]
+        if fuse_one:
+            fuse_one = False
+            tmp = tmp.unfuse_legs(axes=2) 
     return tmp
     # raise YastnError("dirn should be equal to 'l', 'r', 't', 'b', or None")
 

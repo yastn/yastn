@@ -22,7 +22,14 @@ class Gate(NamedTuple):
     Gate to be applied on Peps state.
 
     `G` contains operators to be applied on respective `sites`. 
-    Operators have virtual legs connecting them, forming MPO.
+    Operators have virtual legs connecting them, forming an MPO.
+        
+    The convention of legs is (ket, bra, virtual_0, virtual_1) -- i.e., the first two legs are always physical (operator) legs.
+    For one site, there are no virtual legs.
+    For two or more sites, the first and last elements of G have one virtual leg (3 in total).
+    For three sites or more, the middle elements of `G` have two virtual legs connecting, respectively, to preceding and following gates.   
+    
+    Note that this is a different convention than `yastn.mps.MPO`.
     """
     G : tuple = None
     sites : tuple = None

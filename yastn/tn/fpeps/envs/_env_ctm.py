@@ -874,7 +874,10 @@ class EnvCTM(Peps):
                               opts_svd=opts_svd, opts_var=opts_var, 
                               progressbar=progressbar, return_probabilities=return_probabilities, flatten_one=flatten_one)
 
-    def post_evolution_(env, bond, **kwargs):
+    def pre_truncation_(env, bond):
+        pass
+
+    def post_truncation_(env, bond, **kwargs):
         pass
 
     def update_(env, opts_svd, method='2site', **kwargs):

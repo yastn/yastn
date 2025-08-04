@@ -634,7 +634,11 @@ class EnvBP(Peps):
         else:
             raise YastnError(f" EnvBP bond_metric dirn-{dirn} corner-{corner} {self.which} not recognized.")
 
-    def post_evolution_(env, bond, max_sweeps=1):
+    def pre_truncation_(env, bond):
+        env.update_bond_(bond)
+
+
+    def post_truncation_(env, bond, max_sweeps=1):
         env.update_bond_(bond)
         env.update_bond_(bond[::-1])
         if max_sweeps > 0:
