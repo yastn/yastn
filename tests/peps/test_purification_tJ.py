@@ -48,7 +48,7 @@ def purification_tJ(config_kwargs, mu):
              fpeps.gates.gate_local_occupation(mu/2, dbeta * coef, I, n, site=(1, 0)),
              fpeps.gates.gate_local_occupation(mu/4, dbeta * coef, I, n, site=(1, 1)),
              fpeps.gates.gate_local_occupation(mu/2, dbeta * coef, I, n, site=(1, 2))]
-    gates = gates._replace(local=local)
+    gates.extend(local)
 
     env_evolution = fpeps.EnvNTU(psi, which=ntu_environment)
 
@@ -148,4 +148,4 @@ def test_purification_tJ(config_kwargs, mu):
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0"])
+    pytest.main([__file__, "-vs", "--durations=0", '--long_tests'])

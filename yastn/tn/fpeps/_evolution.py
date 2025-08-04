@@ -16,7 +16,7 @@
 
 from ... import tensordot, vdot, svd_with_truncation, YastnError, Tensor
 from ._peps import Peps2Layers
-from ._gates_auxiliary import apply_gate_onsite, apply_gate_nn, apply_gate_nnn, gate_fix_order, apply_bond_tensors, apply_bond_tensors_nnn
+from ._gates_auxiliary import apply_gate_onsite, apply_gate_nn, apply_gate_nnn, gate_fix_order, apply_bond_tensors, apply_bond_tensors_nnn, apply_gate_
 from ._geometry import Bond
 from typing import NamedTuple
 
@@ -109,11 +109,12 @@ def evolution_step_(env, gates, opts_svd, symmetrize=True,
         gates = gates + gates[::-1] 
 
     for gate in gates:
-        if len(gate.sites) == 1:
-            psi[gate.sites[0]] = apply_gate_onsite(psi[gate.sites[0]], gate.G[0])
-        if len(gate.sites) == 2:
-            info = apply_nn_truncate_optimize_(env, psi, gate, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization=initialization)
-            infos.append(info)
+        if len(gate.sites) <= 2:
+            apply_gate_(psi, gate)
+            for s0, s1 in zip(gate.sites[:-1], gate.sites[1:]):
+                info = truncate_(env, opts_svd, (s0, s1), fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization)
+                infos.append(info)
+
         if len(gate.sites) == 3:
             info = apply_nnn_truncate_optimize_(env, psi, gate, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization=initialization)
             infos.append(info)
@@ -125,8 +126,7 @@ def truncate_(env, opts_svd, bond=None,
               pinv_cutoffs=(1e-12, 1e-11, 1e-10, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4),
               max_iter=100, tol_iter=1e-13, initialization="EAT_SVD"):
     r"""
-    Perform a single step of PEPS evolution by applying a list of gates.
-    Truncate bond dimension after each application of a two-site gate.
+    Truncate virtual bond dimensions of PEPS.
 
     Parameters
     ----------
@@ -191,24 +191,38 @@ def truncate_(env, opts_svd, bond=None,
             tmp0 = tmp0.unfuse_legs(axes=1)  # [[t l] sa] b r
             tmp0 = tmp0.fuse_legs(axes=((0, 1), 2))  # [[[t l] sa] b] r
             Q0f, R0 = tmp0.qr(axes=(0, 1), sQ=-1)  # [[[t l] sa] b] rr @ rr r
+            Q0 = Q0f.unfuse_legs(axes=0)  # [[t l] sa] b rr
+            Q0 = Q0.fuse_legs(axes=(0, (1, 2)))  # [[t l] sa] [b rr]
+            Q0 = Q0.unfuse_legs(axes=0)  # [t l] sa [b rr]
+            Q0 = Q0.transpose(axes=(0, 2, 1))  # [t l] [b rr] sa
 
             tmp1 = psi[s1].fuse_legs(axes=(0, (1, 2)))  # [t l] [[b r] sa]
             tmp1 = tmp1.unfuse_legs(axes=0)  # t l [[b r] sa]
             tmp1 = tmp1.fuse_legs(axes=((0, 2), 1))  # [t [[b r] sa]] l
             Q1f, R1 = tmp1.qr(axes=(0, 1), sQ=1, Qaxis=0, Raxis=-1)  # ll [t [[b r] sa]] @ l ll
+            Q1 = Q1f.unfuse_legs(axes=1)  # ll t [[b r] sa]
+            Q1 = Q1.fuse_legs(axes=((1, 0), 2))  # [t ll] [[b r] sa]
+            Q1 = Q1.unfuse_legs(axes=1)  # [t ll] [b r] sa
 
         else: # dirn == 'v':  # Vertical gate, "tb" ordered
             tmp0 = psi[s0].fuse_legs(axes=((0, 2), 1))  # [[t l] sa] [b r]
             tmp0 = tmp0.unfuse_legs(axes=1)  # [[t l] sa] b r
             tmp0 = tmp0.fuse_legs(axes=((0, 2), 1))  # [[[t l] sa] r] b
             Q0f, R0 = tmp0.qr(axes=(0, 1), sQ=1)  # [[[t l] sa] r] bb @ bb b
+            Q0 = Q0f.unfuse_legs(axes=0)  # [[t l] sa] r bb
+            Q0 = Q0.fuse_legs(axes=(0, (2, 1)))  # [[t l] sa] [bb r]
+            Q0 = Q0.unfuse_legs(axes=0)  # [t l] sa [bb r]
+            Q0 = Q0.transpose(axes=(0, 2, 1))  # [t l] [bb r] sa
 
             tmp1 = psi[s1].fuse_legs(axes=(0, (1, 2)))  # [t l] [[b r] sa]
             tmp1 = tmp1.unfuse_legs(axes=0)  # t l [[b r] sa]
             tmp1 = tmp1.fuse_legs(axes=((1, 2), 0))  # [l [[b r] sa]] t
             Q1f, R1 = tmp1.qr(axes=(0, 1), sQ=-1, Qaxis=0, Raxis=-1)  # tt [l [[b r] sa]] @ t tt
+            Q1 = Q1f.unfuse_legs(axes=1)  # t l [[b r] sa]
+            Q1 = Q1.fuse_legs(axes=((0, 1), 2))  # [t l] [[b r] sa]
+            Q1 = Q1.unfuse_legs(axes=1)  # [t l] [b r] sa
 
-        fgf = env.bond_metric(psi[s0], psi[s1], s0, s1, dirn)
+        fgf = env.bond_metric(Q0, Q1, s0, s1, dirn)
 
         if isinstance(fgf, BipartiteBondMetric):  # bipartite bond metric
             M0, M1, info = truncate_bipartite_(fgf, R0, R1, opts_svd, pinv_cutoffs, info)
@@ -219,39 +233,8 @@ def truncate_(env, opts_svd, bond=None,
 
         env.post_evolution_(bond)
         infos.append(Evolution_out(**info))
-    return infos
+    return infos[0] if len(bonds) == 1 else infos 
 
-
-def apply_nn_truncate_optimize_(env, psi, gate, opts_svd,
-                    fix_metric=0,
-                    pinv_cutoffs=(1e-12, 1e-11, 1e-10, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4),
-                    max_iter=100, tol_iter=1e-15, initialization="EAT_SVD"):
-    r"""
-    Applies a nearest-neighbor gate to a PEPS tensor, truncate, and
-    optimize the resulting tensors using alternate least squares.
-    """
-    info = {'bond': gate.sites}
-
-    dirn, l_ordered = psi.nn_bond_type(gate.sites)
-    f_ordered = psi.f_ordered(*gate.sites)
-    s0, s1 = gate.sites if l_ordered else gate.sites[::-1]
-
-
-    G0, G1 = gate_fix_order(gate.G[0], gate.G[1], l_ordered, f_ordered)
-
-    Q0, Q1, R0, R1, Q0f, Q1f = apply_gate_nn(psi[s0], psi[s1], G0, G1, dirn)
-
-    fgf = env.bond_metric(Q0, Q1, s0, s1, dirn)
-
-    if isinstance(fgf, BipartiteBondMetric):  # bipartite bond metric
-        M0, M1, info = truncate_bipartite_(fgf, R0, R1, opts_svd, pinv_cutoffs, info)
-    elif isinstance(fgf, BondMetric):  # rank-4 bond metric
-        M0, M1, info = truncate_optimize_(fgf, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization, info)
-
-    psi[s0], psi[s1] = apply_bond_tensors(Q0f, Q1f, M0, M1, dirn)
-
-    env.post_evolution_(gate.sites)
-    return Evolution_out(**info)
 
 def apply_nnn_truncate_optimize_(env, psi, gate, opts_svd,
                     fix_metric=0,
