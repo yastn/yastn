@@ -39,13 +39,8 @@ def generate_peps(g, ops, occs_init, angles):
     #
     # apply a list of gates on nn bonds
     for bond, angle in angles:
-        gate = fpeps.gates.gate_nn_hopping(1, angle, ops.I(), ops.c(), ops.cp())
-        dirn, l_ordered = psi.nn_bond_type(bond)
-        assert l_ordered
-        s0, s1 = bond
-        _, _, R0, R1, Q0f, Q1f = fpeps._evolution.apply_gate_nn(psi[s0], psi[s1], gate.G[0], gate.G[1], dirn)
-        M0, M1 = fpeps._evolution.symmetrized_svd(R0, R1, opts_svd={'tol': 1e-12}, normalize=True)
-        psi[s0], psi[s1] = fpeps._evolution.apply_bond_tensors(Q0f, Q1f, M0, M1, dirn)
+        gate = fpeps.gates.gate_nn_hopping(1, angle, ops.I(), ops.c(), ops.cp(), bond=bond)
+        fpeps.apply_gate_(psi, gate)
     return psi
 
 

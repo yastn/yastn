@@ -51,31 +51,48 @@ def apply_gate_onsite(ten, G, dirn=None):
     application of a proper swap gate.
     For a local operator with no auxiliary index, dirn should be None.
     """
-    swap = dirn is not None and dirn in 'tl'
+    swap = dirn and dirn in 'tl'
     G = match_ancilla(ten, G, swap=swap)
     tmp = tensordot(ten, G, axes=(2, 1)) # [t l] [b r] [s a] c
 
-    if dirn is None:
-        return tmp
     if dirn == 't':
         tmp = tmp.unfuse_legs(axes=1)  # [t l] b r [s a] c
         tmp = tmp.fuse_legs(axes=(0, (1, 4), 2, 3))  # [t l] [b c] r [s a]
-        return tmp.fuse_legs(axes=(0, (1, 2), 3))  # [t l] [[b c] r] [s a]
+        tmp = tmp.fuse_legs(axes=(0, (1, 2), 3))  # [t l] [[b c] r] [s a]
     if dirn == 'b':
         tmp = tmp.unfuse_legs(axes=0)  # t l [b r] [s a] c
         tmp = tmp.swap_gate(axes=(1, 4))
         tmp = tmp.fuse_legs(axes=((0, 4), 1, 2, 3))  # [t c] l [b r] [s a]
-        return tmp.fuse_legs(axes=((0, 1), 2, 3))  # [[t c] l] [b r] [s a]
+        tmp = tmp.fuse_legs(axes=((0, 1), 2, 3))  # [[t c] l] [b r] [s a]
     if dirn == 'l':
         tmp = tmp.unfuse_legs(axes=1)  # [t l] b r [s a] c
         tmp = tmp.swap_gate(axes=(1, 4))
         tmp = tmp.fuse_legs(axes=(0, 1, (2, 4), 3))  # [t l] b [r c] [s a]
-        return tmp.fuse_legs(axes=(0, (1, 2), 3))  # [t l] [b [r c]] [s a]
+        tmp = tmp.fuse_legs(axes=(0, (1, 2), 3))  # [t l] [b [r c]] [s a]
     if dirn == 'r':
         tmp = tmp.unfuse_legs(axes=0)  # t l [b r] [s a] c
         tmp = tmp.fuse_legs(axes=(0, (1, 4), 2, 3))  # t [l c] [b r] [s a]
-        return tmp.fuse_legs(axes=((0, 1), 2, 3))  # [t [l c]] [b r] [s a]
+        tmp = tmp.fuse_legs(axes=((0, 1), 2, 3))  # [t [l c]] [b r] [s a]
+    return tmp
     # raise YastnError("dirn should be equal to 'l', 'r', 't', 'b', or None")
+
+
+def apply_gate_(psi, gate):
+    """ 
+    Apply gate to PEPS state psi, changing respective tensors in place.
+    For now, assumes that gate and its path are both in fermionic order
+    TODO: automatize fermionic order.
+    """
+    dirn = ''
+    g0, s0 = gate.G[0], gate.sites[0]
+
+    for g1, s1 in zip(gate.G[1:], gate.sites[1:]):
+        dirn += psi.nn_bond_dirn(s0, s1)
+        psi[s0] = apply_gate_onsite(psi[s0], g0, dirn=dirn[:-1])
+        dirn = dirn[-1]
+        g0, s0 = g1, s1
+
+    psi[s0] = apply_gate_onsite(psi[s0], g0, dirn=dirn)
 
 
 def apply_gate_nn(ten0, ten1, G0, G1, dirn):
