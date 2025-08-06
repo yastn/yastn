@@ -117,11 +117,16 @@ class Generator:
         -----------
         H_str: str
             The definition of the MPO given as latex expression. The definition uses string names of the operators given in. The assignment of the location is
-            given e.g. for 'cp' operator as 'cp_{j}' (always with {}-brackets!) for 'cp' operator acting on site 'j'.
-            The space and * are interpreted as multiplication by a number of by an operator. E.g., to multiply by a number use 'g * cp_j c_{j+1}' where 'g' has to be defines in 'parameters' or writen directly as a number,
-            You can define automatic summation with expression '\sum_{j \in A}', where A has to be iterable, one-dimensional object with specified values of 'j'.
+            given e.g. for ``cp`` operator as ``cp_{j}`` (always with ``{}``-brackets!) for ``cp`` operator acting on site ``j``.
+            The space and * are interpreted as multiplication by a number of by an operator. E.g., to multiply by a number use ``g * cp_j c_{j+1}`` where ``g`` has to be defines in ``parameters`` or writen directly as a number,
+            You can define automatic summation with expression ``\sum_{j \in A}``, where ``A`` has to be iterable, one-dimensional object with specified values of ``j``.
+        
         parameters: dict
-            Keys for the dict define the expressions that occur in H_str
+            Keys for the dict define the expressions that occur in ``H_str``.
+        
+        opts: dict
+            Options passed to :meth:`yastn.linalg.truncation_mask`.
+            It includes information on how to truncate the Schmidt values.
         """
         parameters = {**self.parameters, **parameters}
         c2 = latex2term(H_str, parameters)
