@@ -139,6 +139,8 @@ def truncate_(env, opts_svd, bond=None,
         In particular, it fixes bond dimensions (potentially, sectorial).
         It is possible to provide a list of dicts (with decreasing bond dimensions),
         in which case the truncation is done gradually in a few steps.
+    bond: tuple[Site, Site] | None
+        Specify single bond to be truncated. If None, truncate all bonds. The default is None.
     fix_metric: int | None
         Error measure of the metric tensor is a sum of: the norm of its non-hermitian part
         and absolute value of the most negative eigenvalue (if present).

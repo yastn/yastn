@@ -27,6 +27,29 @@ class EnvBoundaryMPS(Peps):
     """
 
     def __init__(self, psi, opts_svd, setup='l', opts_var=None):
+        r"""
+        Calculate boundary MPSs for finite PEPS.  
+        
+        Consequative MPS follows from contracting transfer matrix with previous MPS.
+        This employs :meth:`yastn.tn.mps.zipper` followed by :meth:`yastn.tn.mps.compression_` for refinment.
+
+        Parameters
+        ----------
+        psi: fpeps.Peps
+            Finite PEPS to be contracted.
+
+        opts_svd: dict
+            Passed to :meth:`yastn.tn.mps.zipper` and :meth:`yastn.tn.mps.compression_` (if ``method="2site"`` is used in ``opts_var``)
+            Controls bond dimensions of boundary MPSs.
+
+        setup: str
+            String containing directions from which the square lattice is contracted, consisting of characters "l", "r", "t", "b".
+            E.g., setup="lr" would calculate boundary MPSs from the left and from the right sites of the lattice. The default is "l".  
+         
+        opts_var: dict
+            Options passed to mps.compression_. The default is ``None`` which sets opts_var={max_sweeps: 2, normalization: False}.
+        """
+        
         super().__init__(psi.geometry)
         self.psi = psi
         self._env = {}
@@ -56,7 +79,7 @@ class EnvBoundaryMPS(Peps):
                 tmpo = psi.transfer_mpo(n=ny+1, dirn='v').T
                 phi0 = self._env[ny+1, 'r']
                 self._env[ny, 'r'], discarded = mps.zipper(tmpo, phi0, opts_svd, return_discarded=True)
-                mps.compression_(self._env[ny, 'r'], (tmpo, phi0), **opts_var)
+                mps.compression_(self._env[ny, 'r'], (tmpo, phi0), **opts_var, opts_svd=opts_svd)
                 self.info[ny, 'r'] = {'discarded': discarded}
 
         if 'l' in setup:
@@ -64,7 +87,7 @@ class EnvBoundaryMPS(Peps):
                 tmpo = psi.transfer_mpo(n=ny-1, dirn='v')
                 phi0 = self._env[ny-1, 'l']
                 self._env[ny, 'l'], discarded = mps.zipper(tmpo, phi0, opts_svd, return_discarded=True)
-                mps.compression_(self._env[ny, 'l'], (tmpo, phi0), **opts_var)
+                mps.compression_(self._env[ny, 'l'], (tmpo, phi0), **opts_var, opts_svd=opts_svd)
                 self.info[ny, 'l'] = {'discarded': discarded}
 
         if 't' in setup:
@@ -72,7 +95,7 @@ class EnvBoundaryMPS(Peps):
                 tmpo = psi.transfer_mpo(n=nx-1, dirn='h')
                 phi0 = self._env[nx-1, 't']
                 self._env[nx, 't'], discarded = mps.zipper(tmpo, phi0, opts_svd, return_discarded=True)
-                mps.compression_(self._env[nx, 't'], (tmpo, phi0), **opts_var)
+                mps.compression_(self._env[nx, 't'], (tmpo, phi0), **opts_var, opts_svd=opts_svd)
                 self.info[nx, 't'] = {'discarded': discarded}
 
         if 'b' in setup:
@@ -80,7 +103,7 @@ class EnvBoundaryMPS(Peps):
                 tmpo = psi.transfer_mpo(n=nx+1, dirn='h').T
                 phi0 = self._env[nx+1, 'b']
                 self._env[nx, 'b'], discarded = mps.zipper(tmpo, phi0, opts_svd, return_discarded=True)
-                mps.compression_(self._env[nx, 'b'], (tmpo, phi0), **opts_var)
+                mps.compression_(self._env[nx, 'b'], (tmpo, phi0), **opts_var, opts_svd=opts_svd)
                 self.info[nx, 'b'] = {'discarded': discarded}
 
     def save_to_dict(self) -> dict:
