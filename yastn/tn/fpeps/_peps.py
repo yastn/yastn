@@ -156,11 +156,11 @@ class Peps():
         Serialize PEPS into a dictionary.
         """
         d= self.__dict__()
-        if isinstance(self.geometry, CheckerboardLattice):
+        if type(self.geometry) == CheckerboardLattice:
             d['lattice'] = "checkerboard"
-        elif isinstance(self.geometry, SquareLattice):
+        elif type(self.geometry) == SquareLattice:
             d['lattice'] = "square"
-        elif isinstance(self.geometry, RectangularUnitcell):
+        elif type(self.geometry) == RectangularUnitcell:
             d['lattice'] = "rectangularunitcell"
         return d
 

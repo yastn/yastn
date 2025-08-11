@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 """ Initialization of peps tensors for real or imaginary time evolution """
-from ._geometry import SquareLattice, CheckerboardLattice
+from ._geometry import SquareLattice, CheckerboardLattice, RectangularUnitcell
 from ._peps import Peps
 from .envs._env_ctm import EnvCTM, EnvCTM_local
 from ...initialize import load_from_dict as load_tensor_from_dict
@@ -93,6 +93,8 @@ def load_from_dict(config, d) -> Peps:
         net = SquareLattice(dims=d['dims'], boundary=d['boundary'])
     elif d['lattice'] == "checkerboard":
         net = CheckerboardLattice()
+    elif d['lattice'] == "rectangularunitcell":
+        net = RectangularUnitcell(pattern=d['pattern']['pattern'], boundary=d['pattern']['boundary'])
 
     psi = Peps(net)
     for site in psi.sites():
