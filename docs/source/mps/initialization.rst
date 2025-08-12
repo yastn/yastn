@@ -126,3 +126,13 @@ or :meth:`yastn.tn.mps.MpsMpoOBC.save_to_hdf5` can be again deserialized into MP
 .. automethod:: yastn.tn.mps.MpsMpoOBC.save_to_hdf5
 .. automethod:: yastn.tn.mps.load_from_dict
 .. automethod:: yastn.tn.mps.load_from_hdf5
+
+
+Initializing MPS/MPO from tensor
+--------------------------------
+
+For very small systems, it is possible to turn MPS/MPO into a single tensor and back.
+
+.. automethod:: yastn.tn.mps.MpsMpoOBC.to_tensor
+.. autofunction:: yastn.tn.mps.mps_from_tensor
+.. autofunction:: yastn.tn.mps.mpo_from_tensor

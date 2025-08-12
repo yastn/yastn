@@ -346,5 +346,28 @@ def test_MpsMpoOBC_copy(config_kwargs):
     assert all(psi[n] is phi[n] for n in psi.A)
 
 
+def test_mps_to_tensor(config_kwargs):
+    """ Test turning MPS/MPO into a single tensor and back. """
+    N = 6
+    ops = yastn.operators.Spin12(sym='Z2', **config_kwargs)
+    
+    generate = mps.Generator(N=N, operators=ops)
+    psi = generate.random_mps(n=(1,), D_total=8)
+    tpsi = psi.to_tensor()
+    assert tpsi.get_shape() == (2,) * N
+
+    op = generate.random_mpo(D_total=8)
+    top = op.to_tensor()
+    assert top.get_shape() == (2,) * (N * 2)
+
+    psi2 = mps.mps_from_tensor(tpsi)
+    assert (psi - psi2).norm() < 1e-12
+    assert psi2.is_canonical(to='last')
+
+    op2 = mps.mpo_from_tensor(top)
+    assert (op - op2).norm() < 1e-12
+    assert op2.is_canonical(to='last')
+
+
 if __name__ == '__main__':
     pytest.main([__file__, "-vs", "--durations=0"])
