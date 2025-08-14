@@ -594,4 +594,4 @@ class MpsMpoOBC(_MpsMpoParent):
         for n in self.sweep(to='last', df=1):
             ind = n if self.nr_phys == 1 else 2 * n - 1
             ten = tensor.tensordot(ten, self.A[n], axes=(ind, 0))
-        return ten.remove_leg(axis=-self.nr_phys)
+        return self.factor * ten.remove_leg(axis=-self.nr_phys)

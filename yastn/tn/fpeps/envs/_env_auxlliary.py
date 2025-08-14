@@ -544,6 +544,8 @@ def clear_projectors(sites, projectors, xrange, yrange):
             elif pr.ndim == 2:
                 if (pr.n != pr.config.sym.zero()) or abs(pr @ pr - pr).norm() > 1e-10:
                     raise YastnError("Matrix projectors should be projectors, P @ P == P.")
+            elif pr.ndim == 4:
+                pass
             else:
                 raise YastnError("Projectors should consist of vectors (ndim=1) or matrices (ndim=2).")
     

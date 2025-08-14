@@ -637,7 +637,6 @@ class EnvBP(Peps):
     def pre_truncation_(env, bond):
         env.update_bond_(bond)
 
-
     def post_truncation_(env, bond, max_sweeps=1):
         env.update_bond_(bond)
         env.update_bond_(bond[::-1])

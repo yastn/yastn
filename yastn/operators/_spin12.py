@@ -22,8 +22,10 @@ class Spin12(meta_operators):
     # Predefined set of Pauli operators and spin-1/2 operators.
     def __init__(self, **kwargs):
         r"""
-        A set of standard operators for 2-dimensional Hilbert space. Defines identity, :math:`S^z,\ S^x,\ S^y` operators and :math:`S^+,\ S^-` raising and lowering operators,
-        and Pauli matrices (if allowed by symmetry).
+        A set of standard operators for 2-dimensional Hilbert space. 
+        Defines identity :math:`I` , spin-1/2 operators :math:`S^x,\ S^y,\ S^z`, 
+        raising and lowering operators :math:`S^+,\ S^-`,
+        Pauli matrices :math:`X,\ Y,\ Z` (if allowed by symmetry).
         Class contains also eigenvectors of :math:`S^z`, :math:`S^x`, :math:`S^y`, 
         and local Hilbert space that is :class:`yastn.Leg`.
 

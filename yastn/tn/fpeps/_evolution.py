@@ -19,6 +19,7 @@ from ._peps import Peps2Layers
 from ._gates_auxiliary import apply_gate_onsite, apply_gate_nnn, gate_fix_order, apply_bond_tensors, apply_bond_tensors_nnn, apply_gate_
 from ._geometry import Bond
 from typing import NamedTuple
+from itertools import pairwise
 
 
 class BondMetric(NamedTuple):
@@ -110,14 +111,17 @@ def evolution_step_(env, gates, opts_svd, symmetrize=True,
 
     for gate in gates:
         apply_gate_(psi, gate)
-        for s0, s1 in zip(gate.sites[-1:1:-1], gate.sites[-2::-1]):
+
+        for s0, s1 in pairwise(gate.sites[-1::-1]):
             env.pre_truncation_((s0, s1))
-        for s0, s1 in zip(gate.sites[:-1], gate.sites[1:]):
+        if len(gate.sites) > 2:
+            for s0, s1 in pairwise(gate.sites):
+                env.pre_truncation_((s0, s1))
+
+        for s0, s1 in pairwise(gate.sites):                
             info = truncate_(env, opts_svd, (s0, s1), fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization)
             infos.append(info)
-        # if len(gate.sites) == 3:
-        #     info = apply_nnn_truncate_optimize_(env, psi, gate, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization=initialization)
-        #     infos.append(info)
+
     return infos
 
 

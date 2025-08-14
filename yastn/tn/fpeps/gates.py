@@ -87,6 +87,15 @@ def Gates(local=(), nn=(), nnn=()):
     return gates
 
 
+def gate_from_mpo(op, sites):
+    G = []
+    G.append(op[op.first].remove_leg(axis=0).transpose(axes=(0, 2, 1)))
+    for n in op.sweep(to='last', df=1):
+        G.append(op[n].transpose(axes=(1, 3, 0, 2)))
+    G[-1] = G[-1].remove_leg(axis=-1)
+    return Gate(G=tuple(G), sites=tuple(sites))
+
+
 def decompose_nn_gate(Gnn, bond=None) -> Gate_nn:
     r"""
     Auxiliary function cutting a two-site gate with SVD
