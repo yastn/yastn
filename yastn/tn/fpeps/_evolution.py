@@ -18,6 +18,7 @@ from ... import tensordot, vdot, svd_with_truncation, YastnError, Tensor
 from ._peps import Peps2Layers
 from ._gates_auxiliary import apply_gate_onsite, apply_gate_nnn, gate_fix_order, apply_bond_tensors, apply_bond_tensors_nnn, apply_gate_
 from ._geometry import Bond
+from .gates import Gate
 from typing import NamedTuple
 from itertools import pairwise
 
@@ -45,10 +46,11 @@ class Evolution_out(NamedTuple):
     pinv_cutoffs: dict[str, float] = ()
 
 
-def evolution_step_(env, gates, opts_svd, symmetrize=True,
+def evolution_step_(env, gates, opts_svd, symmetrize=True, method='mpo',
                     fix_metric=0,
                     pinv_cutoffs=(1e-12, 1e-11, 1e-10, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4),
-                    max_iter=100, tol_iter=1e-13, initialization="EAT_SVD"):
+                    max_iter=100, tol_iter=1e-13, initialization="EAT_SVD",
+                    ):
     r"""
     Perform a single step of PEPS evolution by applying a list of gates.
     Truncate bond dimension after each application of a two-site gate.
@@ -69,6 +71,9 @@ def evolution_step_(env, gates, opts_svd, symmetrize=True,
     symmetrize: bool
         Whether to iterate through provided gates forward and then backward, resulting in a 2nd order method.
         In that case, each gate should correspond to half of the desired timestep. The default is ``True``.
+    method: str
+        For ``'NN'``, split multi-site gates into a series of nearest-neighbor gates.
+        Otherwise, apply mpo-gate first, and then sequentially truncate enlarged bonds (the default).    
     fix_metric: int | None
         Error measure of the metric tensor is a sum of: the norm of its non-hermitian part
         and absolute value of the most negative eigenvalue (if present).
@@ -109,6 +114,11 @@ def evolution_step_(env, gates, opts_svd, symmetrize=True,
     if symmetrize:
         gates = gates + gates[::-1] 
 
+    if 'NN' in method:
+        new_gates = []
+        for gate in gates:
+            new_gates.extend(split_gate_2site(gate))
+
     for gate in gates:
         apply_gate_(psi, gate)
 
@@ -123,6 +133,24 @@ def evolution_step_(env, gates, opts_svd, symmetrize=True,
             infos.append(info)
 
     return infos
+
+
+def split_gate_2site(gate):
+    """
+    Split gate-mpo into a series of 2-site gates.
+    """
+    if len(gate.G) < 3:
+        return [gate]
+    new_gates = []
+    g0, s0 = gate.G[0], gate.sites[0]
+    for g1, s1 in zip(gate.G[1:-1], gate.sites[1:-1]):
+        U, S, V = g1.svd_with_truncation(axes=((1, 2), (0, 3)), Uaxis=0, Vaxis=1, tol=1e-14)
+        S = S.sqrt()
+        U, V = S.broadcast(U, V, axes=(0, 1))
+        new_gates.append(Gate(G=(g0, U), sites=(s0, s1)))
+        g0, s0 = V, s1
+    new_gates.append(Gate(G=(g0, gate.G[-1]), sites=(s0, gate.sites[-1])))
+    return new_gates
 
 
 def truncate_(env, opts_svd, bond=None,
