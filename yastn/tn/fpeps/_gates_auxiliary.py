@@ -36,13 +36,13 @@ def match_ancilla(ten, G, dirn=None):
     if G.ndim == 2:
         return Gnew.fuse_legs(axes=((0, 2), (1, 3)))
     elif G.ndim == 3:
-        if dirn and dirn in 'tl': 
+        if dirn and dirn in 'tl':
             Gnew = Gnew.swap_gate(axes=(2, 3))
         return Gnew.fuse_legs(axes=((0, 3), (1, 4), 2))
     elif G.ndim == 4:
-        if dirn and dirn[0] in 'tl': 
+        if dirn and dirn[0] in 'tl':
             Gnew = Gnew.swap_gate(axes=(2, 4))
-        if dirn and dirn[1] in 'tl': 
+        if dirn and dirn[1] in 'tl':
             Gnew = Gnew.swap_gate(axes=(3, 4))
         return Gnew.fuse_legs(axes=((0, 4), (1, 5), 2, 3))
 
@@ -64,7 +64,7 @@ def apply_gate_onsite(ten, G, dirn=None):
 
     fuse_one = False
     if len(dirn) == 2:
-        tmp = tmp.fuse_legs(axes=(0, 1, (2, 3), 4), mode='meta') 
+        tmp = tmp.fuse_legs(axes=(0, 1, (2, 3), 4), mode='meta')
         fuse_one = True
 
     for dd in dirn[::-1]:
@@ -88,13 +88,13 @@ def apply_gate_onsite(ten, G, dirn=None):
             tmp = tmp.fuse_legs(axes=((0, 1), 2, 3))  # [t [l c]] [b r] [s a]
         if fuse_one:
             fuse_one = False
-            tmp = tmp.unfuse_legs(axes=2) 
+            tmp = tmp.unfuse_legs(axes=2)
     return tmp
     # raise YastnError("dirn should be equal to 'l', 'r', 't', 'b', or None")
 
 
 def apply_gate_(psi, gate):
-    """ 
+    """
     Apply gate to PEPS state psi, changing respective tensors in place.
     For now, assumes that gate and its path are both in fermionic order
     TODO: automatize fermionic order.

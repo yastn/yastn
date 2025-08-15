@@ -21,14 +21,14 @@ class Gate(NamedTuple):
     r"""
     Gate to be applied on Peps state.
 
-    `G` contains operators to be applied on respective `sites`. 
+    `G` contains operators to be applied on respective `sites`.
     Operators have virtual legs connecting them, forming an MPO.
-        
+
     The convention of legs is (ket, bra, virtual_0, virtual_1) -- i.e., the first two legs are always physical (operator) legs.
     For one site, there are no virtual legs.
     For two or more sites, the first and last elements of G have one virtual leg (3 in total).
-    For three sites or more, the middle elements of `G` have two virtual legs connecting, respectively, to preceding and following gates.   
-    
+    For three sites or more, the middle elements of `G` have two virtual legs connecting, respectively, to preceding and following gates.
+
     Note that this is a different convention than `yastn.mps.MPO`.
     """
     G : tuple = None
@@ -45,7 +45,7 @@ def Gate_local(G, site):
 def Gate_nn(G0, G1, bond):
     """
     Legacy function, generating :class:`Gate` instance.
-    
+
     ``G0`` should be before ``G1`` in the fermionic and lattice orders
     (``G0`` acts on the left/top site; ``G1`` acts on the right/bottom site from a pair of nearest-neighbor sites).
     The third legs of ``G0`` and ``G1`` are auxiliary legs connecting them into a two-site operator.
@@ -72,15 +72,15 @@ def Gates(local=(), nn=(), nnn=()):
     nnn: list = ()   # list of NNN gates
     """
     gates = []
-    try: 
+    try:
         gates.extend(local)
     except TypeError:
         gates.append(local)
-    try: 
+    try:
         gates.extend(nn)
     except TypeError:
         gates.append(nn)
-    try: 
+    try:
         gates.extend(nnn)
     except TypeError:
         gates.append(nnn)
@@ -96,21 +96,21 @@ def gate_from_mpo(op, sites):
     return Gate(G=tuple(G), sites=tuple(sites))
 
 
-def decompose_nn_gate(Gnn, bond=None) -> Gate_nn:
+def decompose_nn_gate(Gnn, s0, s1) -> Gate_nn:
     r"""
     Auxiliary function cutting a two-site gate with SVD
     into two local operators with the connecting legs.
     """
     U, S, V = Gnn.svd_with_truncation(axes=((0, 2), (1, 3)), sU=-1, tol=1e-14, Vaxis=2)
     S = S.sqrt()
-    return Gate_nn(S.broadcast(U, axes=2), S.broadcast(V, axes=2), bond=bond)
+    return Gate(G=(S.broadcast(U, axes=2), S.broadcast(V, axes=2)), sites=(s0, s1))
 
 
 def decompose_nnn_gate(Gnnn, s0, s1, s2) -> Gate_nnn:
     r"""
     Auxiliary function cutting a three-site gate with SVD
-    into two local operators with the connecting legs, assuming
-    sites (s0, s1, s2) are in lattice and fermionic order.
+    into two local operators with the connecting legs.
+    (s0, s1) and (s1, s2) should be directly connected by lattice bonds.
     """
     U1, S1, V1 = Gnnn.svd_with_truncation(axes=((0, 3), (1, 4, 2, 5)), sU=-1, tol=1e-14, Vaxis=0)
     S1 = S1.sqrt()
@@ -120,7 +120,7 @@ def decompose_nnn_gate(Gnnn, s0, s1, s2) -> Gate_nnn:
     S2 = S2.sqrt()
     G1 = S2.broadcast(U2, axes=3)
     G2 = S2.broadcast(V2, axes=2)
-    return Gate_nnn(G0, G1, G2, site0=s0, site1=s1, site2=s2)
+    return Gate(G=(G0, G1.transpose(axes=(1, 2, 0, 3)), G2), sites=(s0, s1, s2))
 
 
 def gate_nn_hopping(t, step, I, c, cdag, bond=None) -> Gate_nn:
