@@ -71,7 +71,7 @@ def test_save_load_copy(config_kwargs):
         psi3 = psi.copy()
         psi4 = psi.clone()
         psi5 = psi.shallow_copy()
-        
+
         for site in psi.sites():
             for phi in [psi2, psi3, psi4, psi5]:
                 phi.geometry == psi.geometry

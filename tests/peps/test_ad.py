@@ -81,19 +81,19 @@ def prepare_RVB(additional_imports):
             0.74552471-0.01333218j,  0.        +0.j        ,
         -0.95422304+0.04629357j, -0.76605802+0.00388958j,
             0.        +0.j        ,  0.        +0.j        ,
-            0.79800778-0.02948396j, -0.79963062+0.09466636j]), 
-            's': (-1, -1, -1, 1, 1), 
-            'n': (0,), 
-            't': ((-3, 0, 1, -1, -1), (-3, 1, 0, -1, -1), (-1, -1, 0, -1, -1), (-1, -1, 1, -1, 0), (-1, -1, 1, 0, -1), (-1, 0, -1, -1, -1), (-1, 0, 0, -1, 0), (-1, 0, 0, 0, -1), (-1, 0, 1, -1, 1), (-1, 0, 1, 0, 0), (-1, 0, 1, 1, -1), (-1, 1, -1, -1, 0), (-1, 1, -1, 0, -1), (-1, 1, 0, -1, 1), (-1, 1, 0, 0, 0), (-1, 1, 0, 1, -1), (1, -1, 0, -1, 1), (1, -1, 0, 0, 0), (1, -1, 0, 1, -1), (1, -1, 1, 0, 1), (1, -1, 1, 1, 0), (1, 0, -1, -1, 1), (1, 0, -1, 0, 0), (1, 0, -1, 1, -1), (1, 0, 0, 0, 1), (1, 0, 0, 1, 0), (1, 0, 1, 1, 1), (1, 1, -1, 0, 1), (1, 1, -1, 1, 0), (1, 1, 0, 1, 1), (3, -1, 0, 1, 1), (3, 0, -1, 1, 1)), 'D': ((1, 1, 1, 1, 1), (1, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (1, 1, 1, 1, 1), (1, 1, 1, 1, 1)), 
-            'isdiag': False, 
-            'mfs': ((1,), (1,), (1,), (1,), (1,)), 
+            0.79800778-0.02948396j, -0.79963062+0.09466636j]),
+            's': (-1, -1, -1, 1, 1),
+            'n': (0,),
+            't': ((-3, 0, 1, -1, -1), (-3, 1, 0, -1, -1), (-1, -1, 0, -1, -1), (-1, -1, 1, -1, 0), (-1, -1, 1, 0, -1), (-1, 0, -1, -1, -1), (-1, 0, 0, -1, 0), (-1, 0, 0, 0, -1), (-1, 0, 1, -1, 1), (-1, 0, 1, 0, 0), (-1, 0, 1, 1, -1), (-1, 1, -1, -1, 0), (-1, 1, -1, 0, -1), (-1, 1, 0, -1, 1), (-1, 1, 0, 0, 0), (-1, 1, 0, 1, -1), (1, -1, 0, -1, 1), (1, -1, 0, 0, 0), (1, -1, 0, 1, -1), (1, -1, 1, 0, 1), (1, -1, 1, 1, 0), (1, 0, -1, -1, 1), (1, 0, -1, 0, 0), (1, 0, -1, 1, -1), (1, 0, 0, 0, 1), (1, 0, 0, 1, 0), (1, 0, 1, 1, 1), (1, 1, -1, 0, 1), (1, 1, -1, 1, 0), (1, 1, 0, 1, 1), (3, -1, 0, 1, 1), (3, 0, -1, 1, 1)), 'D': ((1, 1, 1, 1, 1), (1, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (3, 1, 1, 1, 1), (1, 1, 1, 1, 1), (1, 1, 1, 1, 1)),
+            'isdiag': False,
+            'mfs': ((1,), (1,), (1,), (1,), (1,)),
             'hfs': [
-                    {'tree': (3, 1, 1, 1), 'op': 'pooo', 's': (-1, -1, -1, -1), 't': (((-1,), (1,)), ((-1,), (1,)), ((-1,), (1,))), 'D': ((1, 1), (1, 1), (1, 1))}, 
-                    {'tree': (1,), 'op': 'o', 's': (-1,), 't': (), 'D': ()}, 
-                    {'tree': (1,), 'op': 'o', 's': (-1,), 't': (), 'D': ()}, 
-                    {'tree': (1,), 'op': 'o', 's': (1,), 't': (), 'D': ()}, 
+                    {'tree': (3, 1, 1, 1), 'op': 'pooo', 's': (-1, -1, -1, -1), 't': (((-1,), (1,)), ((-1,), (1,)), ((-1,), (1,))), 'D': ((1, 1), (1, 1), (1, 1))},
+                    {'tree': (1,), 'op': 'o', 's': (-1,), 't': (), 'D': ()},
+                    {'tree': (1,), 'op': 'o', 's': (-1,), 't': (), 'D': ()},
+                    {'tree': (1,), 'op': 'o', 's': (1,), 't': (), 'D': ()},
                     {'tree': (1,), 'op': 'o', 's': (1,), 't': (), 'D': ()}
-                    ], 
+                    ],
             'SYM_ID': 'U1', 'fermionic': False}
 
     config_kwargs['default_dtype']='complex128'
@@ -149,12 +149,12 @@ def prepare_RVB(additional_imports):
             2.4093e-04-7.7295e-05j, -5.8018e-04-4.7404e-05j,
             1.6676e-02-5.2631e-04j, -1.5570e-02+1.9329e-03j])
     A_grad_expected= A.clone().transpose(axes=(4,0,1,2,3))
-    A_grad_expected._data= A_grad_expected.config.backend.to_tensor(grad_expected, dtype='complex128', 
+    A_grad_expected._data= A_grad_expected.config.backend.to_tensor(grad_expected, dtype='complex128',
                                                                     device=config_kwargs["default_device"])
     A_grad_expected= A_grad_expected.transpose(axes=(1,2,3,4,0))
 
 
-    def cost_function_RVB(elems, slice, max_sweeps, ctm_init='dl', fix_signs=False, truncate_multiplets_mode='truncate', 
+    def cost_function_RVB(elems, slice, max_sweeps, ctm_init='dl', fix_signs=False, truncate_multiplets_mode='truncate',
                           checkpoint_move=False):
         A0= A.clone()
         A0._data[slice]= elems
@@ -170,19 +170,19 @@ def prepare_RVB(additional_imports):
                     tol=1.0e-8, tol_block=0.0, eps_multiplet=1.0e-8)
 
         env = fpeps.EnvCTM(psi, init=ctm_init)
-        info = env.ctmrg_(opts_svd = {"D_total": 64, 'fix_signs': fix_signs}, max_sweeps=max_sweeps, 
+        info = env.ctmrg_(opts_svd = {"D_total": 64, 'fix_signs': fix_signs}, max_sweeps=max_sweeps,
                             truncation_f=truncation_f, use_qr=False, checkpoint_move=checkpoint_move)
         r1x1, r1x1_norm= rdm1x1( (0,0), psi, env)
         return r1x1[(-1,-1)].trace().real
 
-    return A, A_grad_expected, cost_function_RVB 
+    return A, A_grad_expected, cost_function_RVB
 
 
-def cost_function_f(yastn_cfg, g, A, elems, slices : dict[tuple[int],tuple[slice,slice]], max_sweeps, ctm_init='dl', fix_signs=False, 
+def cost_function_f(yastn_cfg, g, A, elems, slices : dict[tuple[int],tuple[slice,slice]], max_sweeps, ctm_init='dl', fix_signs=False,
                     truncate_multiplets_mode='truncate', checkpoint_move=False):
     # For each on-site tensor, corresponding element in slices is a pair,
     # where first entry specified slice in elems 1D-array while second entry specifies slice in target on-site tensor
-    # 
+    #
     tensors_loc= { k:v.clone() for k,v in A.items() }
     for k in tensors_loc.keys():
         tensors_loc[k]._data[slices[k][1]]= elems[slices[k][0]]
@@ -200,7 +200,7 @@ def cost_function_f(yastn_cfg, g, A, elems, slices : dict[tuple[int],tuple[slice
     env_leg = yastn.Leg(yastn_cfg, s=1, t=(0, 1), D=(chi//2, chi//2))
     env = fpeps.EnvCTM(psi, init=ctm_init, leg=env_leg)
 
-    info = env.ctmrg_(opts_svd = {"D_total": chi, 'fix_signs': fix_signs}, max_sweeps=max_sweeps, 
+    info = env.ctmrg_(opts_svd = {"D_total": chi, 'fix_signs': fix_signs}, max_sweeps=max_sweeps,
                         corner_tol=1.0e-8, truncation_f=truncation_f, use_qr=False, checkpoint_move=checkpoint_move)
     print(f"CTM {info}")
 
@@ -218,12 +218,12 @@ def prepare_1x1(additional_imports):
         d = json.load(f)
 
     g= fpeps.RectangularUnitcell(**d['geometry'])
-    A= { tuple(d['parameters_key_to_id'][coord]): yastn.load_from_dict(yastn_cfg_Z2, d_ten) 
-                                 for coord,d_ten in d['parameters'].items() }   
+    A= { tuple(d['parameters_key_to_id'][coord]): yastn.load_from_dict(yastn_cfg_Z2, d_ten)
+                                 for coord,d_ten in d['parameters'].items() }
 
     cost_function_1x1= lambda *args, **kwargs : cost_function_f(yastn_cfg_Z2,g,A, *args, **kwargs)
 
-    return A, None, cost_function_1x1 
+    return A, None, cost_function_1x1
 
 
 def prepare_3x3(additional_imports):
@@ -234,12 +234,12 @@ def prepare_3x3(additional_imports):
         d = json.load(f)
 
     g= fpeps.RectangularUnitcell(**d['geometry'])
-    A= { tuple(d['parameters_key_to_id'][coord]): yastn.load_from_dict(yastn_cfg_Z2, d_ten) 
-                                 for coord,d_ten in d['parameters'].items() }   
+    A= { tuple(d['parameters_key_to_id'][coord]): yastn.load_from_dict(yastn_cfg_Z2, d_ten)
+                                 for coord,d_ten in d['parameters'].items() }
 
     cost_function_3x3= lambda *args, **kwargs : cost_function_f(yastn_cfg_Z2,g,A, *args, **kwargs)
 
-    return A, None, cost_function_3x3 
+    return A, None, cost_function_3x3
 
 
 ##### U(1) RVB Kagome #####
@@ -256,12 +256,12 @@ def test_Kagome_RVB_D3_U1_sym_ctmsteps1(ctm_init, fix_signs, truncate_multiplets
     test_elems= A._data[36:51].clone()
     test_elems.requires_grad_()
 
-    loc_cost_f= lambda x : cost_function_RVB(x, slice(36,51), 1, ctm_init=ctm_init, fix_signs=fix_signs, 
+    loc_cost_f= lambda x : cost_function_RVB(x, slice(36,51), 1, ctm_init=ctm_init, fix_signs=fix_signs,
                                          truncate_multiplets_mode=truncate_multiplets_mode, checkpoint_move=checkpoint_move)
 
-    gradcheck(loc_cost_f, test_elems, eps=1e-06, atol=1e-05, rtol=0.001, 
-        raise_exception=True, nondet_tol=0.0, check_undefined_grad=True, check_grad_dtypes=False, 
-        check_batched_grad=False, check_batched_forward_grad=False, check_forward_ad=False, 
+    gradcheck(loc_cost_f, test_elems, eps=1e-06, atol=1e-05, rtol=0.001,
+        raise_exception=True, nondet_tol=0.0, check_undefined_grad=True, check_grad_dtypes=False,
+        check_batched_grad=False, check_batched_forward_grad=False, check_forward_ad=False,
         check_backward_ad=True, fast_mode=False, masked=None)
 
 
@@ -282,7 +282,7 @@ def test_Kagome_RVB_D3_U1_sym_vs_pepstorch(ctm_init, truncate_multiplets_mode, c
     R.backward()
 
     assert np.allclose(A_grad_expected._data.numpy(), test_elems.grad.numpy(), rtol=1e-03, atol=1e-05)
-    
+
 
 @pytest.mark.skipif( "not config.getoption('long_tests')", reason="long duration tests are skipped" )
 @pytest.mark.parametrize("ctm_init", ['dl', 'eye'])
@@ -296,9 +296,9 @@ def test_Kagome_RVB_D3_U1_sym_conv(ctm_init, truncate_multiplets_mode, additiona
     loc_cost_f= lambda x : cost_function_RVB(x, slice(36,36+5), 20, ctm_init=ctm_init, \
         fix_signs=True, truncate_multiplets_mode=truncate_multiplets_mode)
 
-    gradcheck(loc_cost_f, test_elems, eps=1e-06, atol=1e-05, rtol=0.001, 
-        raise_exception=True, nondet_tol=0.0, check_undefined_grad=True, check_grad_dtypes=False, 
-        check_batched_grad=False, check_batched_forward_grad=False, check_forward_ad=False, 
+    gradcheck(loc_cost_f, test_elems, eps=1e-06, atol=1e-05, rtol=0.001,
+        raise_exception=True, nondet_tol=0.0, check_undefined_grad=True, check_grad_dtypes=False,
+        check_batched_grad=False, check_batched_forward_grad=False, check_forward_ad=False,
         check_backward_ad=True, fast_mode=False, masked=None)
 
 ##### Z_2 1x1 Spinless fermions honeycomb #####
@@ -316,12 +316,12 @@ def test_1x1_D1_Z2_spinlessf_ctmsteps1(ctm_init, fix_signs, truncate_multiplets_
     test_elems= torch.cat( [A0[k]._data[slices[k][1]].clone() for i,k in enumerate(A0.keys())] )
     test_elems.requires_grad_()
 
-    loc_cost_f= lambda x : cost_function(x, slices, 1, ctm_init=ctm_init, fix_signs=fix_signs, 
+    loc_cost_f= lambda x : cost_function(x, slices, 1, ctm_init=ctm_init, fix_signs=fix_signs,
                                          truncate_multiplets_mode=truncate_multiplets_mode, checkpoint_move=checkpoint_move)
 
-    gradcheck(loc_cost_f, test_elems, eps=1e-06, atol=1e-05, rtol=0.001, 
-        raise_exception=True, nondet_tol=0.0, check_undefined_grad=True, check_grad_dtypes=False, 
-        check_batched_grad=False, check_batched_forward_grad=False, check_forward_ad=False, 
+    gradcheck(loc_cost_f, test_elems, eps=1e-06, atol=1e-05, rtol=0.001,
+        raise_exception=True, nondet_tol=0.0, check_undefined_grad=True, check_grad_dtypes=False,
+        check_batched_grad=False, check_batched_forward_grad=False, check_forward_ad=False,
         check_backward_ad=True, fast_mode=False, masked=None)
 
 
@@ -340,13 +340,13 @@ def test_1x1_D1_Z2_spinlessf_conv(ctm_init, truncate_multiplets_mode, tol, check
     test_elems.requires_grad_()
 
     # It should take 35 steps to converge
-    loc_cost_f= lambda x : cost_function(x, slices, 35, ctm_init=ctm_init, fix_signs=True, 
-                                         truncate_multiplets_mode=truncate_multiplets_mode, 
+    loc_cost_f= lambda x : cost_function(x, slices, 35, ctm_init=ctm_init, fix_signs=True,
+                                         truncate_multiplets_mode=truncate_multiplets_mode,
                                          checkpoint_move=checkpoint_move)
 
-    gradcheck(loc_cost_f, test_elems, eps=1e-06, atol=tol*1e-2, rtol=tol, 
-        raise_exception=True, nondet_tol=0.0, check_undefined_grad=True, check_grad_dtypes=False, 
-        check_batched_grad=False, check_batched_forward_grad=False, check_forward_ad=False, 
+    gradcheck(loc_cost_f, test_elems, eps=1e-06, atol=tol*1e-2, rtol=tol,
+        raise_exception=True, nondet_tol=0.0, check_undefined_grad=True, check_grad_dtypes=False,
+        check_batched_grad=False, check_batched_forward_grad=False, check_forward_ad=False,
         check_backward_ad=True, fast_mode=False, masked=None)
 
 # TODO: check against known gradient for 1x1 unit cell case using reentrant checkpointing
@@ -366,12 +366,12 @@ def test_3x3_D1_Z2_spinlessf_ctmsteps1(ctm_init, fix_signs, truncate_multiplets_
     test_elems= torch.cat( [A0[k]._data[slices[k][1]].clone() for i,k in enumerate(A0.keys())] )
     test_elems.requires_grad_()
 
-    loc_cost_f= lambda x : cost_function(x, slices, 1, ctm_init=ctm_init, fix_signs=fix_signs, 
+    loc_cost_f= lambda x : cost_function(x, slices, 1, ctm_init=ctm_init, fix_signs=fix_signs,
                                          truncate_multiplets_mode=truncate_multiplets_mode, checkpoint_move=checkpoint_move)
 
-    gradcheck(loc_cost_f, test_elems, eps=1e-06, atol=1e-05, rtol=0.001, 
-        raise_exception=True, nondet_tol=0.0, check_undefined_grad=True, check_grad_dtypes=False, 
-        check_batched_grad=False, check_batched_forward_grad=False, check_forward_ad=False, 
+    gradcheck(loc_cost_f, test_elems, eps=1e-06, atol=1e-05, rtol=0.001,
+        raise_exception=True, nondet_tol=0.0, check_undefined_grad=True, check_grad_dtypes=False,
+        check_batched_grad=False, check_batched_forward_grad=False, check_forward_ad=False,
         check_backward_ad=True, fast_mode=False, masked=None)
 
 
@@ -387,12 +387,12 @@ def test_3x3_D1_Z2_spinlessf_conv(ctm_init, truncate_multiplets_mode, checkpoint
     test_elems.requires_grad_()
 
     # It should take 35 steps to converge
-    loc_cost_f= lambda x : cost_function(x, slices, 35, ctm_init=ctm_init, fix_signs=True, 
+    loc_cost_f= lambda x : cost_function(x, slices, 35, ctm_init=ctm_init, fix_signs=True,
                                          truncate_multiplets_mode=truncate_multiplets_mode, checkpoint_move=checkpoint_move)
 
-    gradcheck(loc_cost_f, test_elems, eps=1e-06, atol=1e-05, rtol=0.001, 
-        raise_exception=True, nondet_tol=0.0, check_undefined_grad=True, check_grad_dtypes=False, 
-        check_batched_grad=False, check_batched_forward_grad=False, check_forward_ad=False, 
+    gradcheck(loc_cost_f, test_elems, eps=1e-06, atol=1e-05, rtol=0.001,
+        raise_exception=True, nondet_tol=0.0, check_undefined_grad=True, check_grad_dtypes=False,
+        check_batched_grad=False, check_batched_forward_grad=False, check_forward_ad=False,
         check_backward_ad=True, fast_mode=False, masked=None)
 
 # TODO: test against known result for 3x3 unit cell
@@ -410,7 +410,7 @@ def test_3x3_D1_Z2_spinlessf_conv(ctm_init, truncate_multiplets_mode, checkpoint
 #     test_elems.requires_grad_()
 
 #     # It should take 35 steps to converge
-#     loc_cost_f= lambda x : cost_function(x, slices, 35, ctm_init=ctm_init, fix_signs=True, 
+#     loc_cost_f= lambda x : cost_function(x, slices, 35, ctm_init=ctm_init, fix_signs=True,
 #                                          truncate_multiplets_mode=truncate_multiplets_mode)
 
 #     R= loc_cost_f(test_elems)

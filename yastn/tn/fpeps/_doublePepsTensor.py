@@ -125,7 +125,7 @@ class DoublePepsTensor(SpecialTensor):
         if isinstance(axes, int):
             return sum(self.get_legs(axes).D)
         return tuple(sum(leg.D) for leg in self.get_legs(axes))
-    
+
     @property
     def shape(self):
         return self.get_shape()

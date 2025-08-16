@@ -213,8 +213,8 @@ def switch_signature(a, axes: Union[Sequence[int],int,str] = ()) -> yastn.Tensor
     Parameters
     ----------
     axes: int | Sequence[int] | str
-        index of the leg, or a group of legs. 
-        If ``axes="all"``, all signatures are flipped.	
+        index of the leg, or a group of legs.
+        If ``axes="all"``, all signatures are flipped.
     """
     from .. import eye
     if a.isdiag:

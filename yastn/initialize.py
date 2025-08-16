@@ -328,7 +328,7 @@ def eye(config=None, legs=(), isdiag=True, **kwargs) -> yastn.Tensor:
     legs = legs[:2]  # in case more then 2 legs are provided
     if any(isinstance(leg, LegMeta) for leg in legs):
         raise YastnError("eye() does not support 'meta'-fused legs")
-    
+
     if legs[0].is_fused():
         ulegs0 = legs[0].unfuse_leg()
         ulegs1 = legs[1].unfuse_leg()

@@ -104,7 +104,7 @@ class SquareLattice():
                self._periodic == other._periodic and \
                self._dims == other._dims and \
                self._sites == other._sites and \
-               all(self.site2index((nx, ny)) == other.site2index((nx, ny)) 
+               all(self.site2index((nx, ny)) == other.site2index((nx, ny))
                    for ny in range(self.Ny) for nx in range(self.Nx))
 
     def sites(self, reverse=False) -> Sequence[Site]:
@@ -237,7 +237,7 @@ class CheckerboardLattice(SquareLattice):
     def site2index(self, site):
         """ Tensor index depending on site. """
         return (site[0] + site[1]) % 2
-    
+
     def __dict__(self):
         """Return a dictionary representation of the object."""
         return {'lattice': type(self).__name__}
@@ -377,7 +377,7 @@ class TriangularLattice(SquareLattice):
             whether to reverse the order of bonds.
         """
         if dirn == 'd':
-            return self._bonds_d[::-1] if reverse else self._bonds_d        
+            return self._bonds_d[::-1] if reverse else self._bonds_d
         if dirn == 'v':
             return self._bonds_v[::-1] if reverse else self._bonds_v
         if dirn == 'h':

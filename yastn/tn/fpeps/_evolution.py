@@ -73,7 +73,7 @@ def evolution_step_(env, gates, opts_svd, symmetrize=True, method='mpo',
         In that case, each gate should correspond to half of the desired timestep. The default is ``True``.
     method: str
         For ``'NN'``, split multi-site gates into a series of nearest-neighbor gates.
-        Otherwise, apply mpo-gate first, and then sequentially truncate enlarged bonds (the default).    
+        Otherwise, apply mpo-gate first, and then sequentially truncate enlarged bonds (the default).
     fix_metric: int | None
         Error measure of the metric tensor is a sum of: the norm of its non-hermitian part
         and absolute value of the most negative eigenvalue (if present).
@@ -112,7 +112,7 @@ def evolution_step_(env, gates, opts_svd, symmetrize=True, method='mpo',
 
     infos = []
     if symmetrize:
-        gates = gates + gates[::-1] 
+        gates = gates + gates[::-1]
 
     if 'NN' in method:
         new_gates = []
@@ -128,7 +128,7 @@ def evolution_step_(env, gates, opts_svd, symmetrize=True, method='mpo',
             for s0, s1 in pairwise(gate.sites):
                 env.pre_truncation_((s0, s1))
 
-        for s0, s1 in pairwise(gate.sites):                
+        for s0, s1 in pairwise(gate.sites):
             info = truncate_(env, opts_svd, (s0, s1), fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization)
             infos.append(info)
 
@@ -267,7 +267,7 @@ def truncate_(env, opts_svd, bond=None,
 
         env.post_truncation_(bond)
         infos.append(Evolution_out(**info))
-    return infos[0] if len(bonds) == 1 else infos 
+    return infos[0] if len(bonds) == 1 else infos
 
 
 def truncate_optimize_(g, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization, info):

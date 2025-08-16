@@ -484,5 +484,5 @@ def clear_projectors(sites, projectors, xrange, yrange):
                 pass
             else:
                 raise YastnError("Projectors should consist of vectors (ndim=1) or matrices (ndim=2).")
-    
+
     return projs_sites

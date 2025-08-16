@@ -21,14 +21,14 @@ class Gate(NamedTuple):
     r"""
     Gate to be applied on Peps state.
 
-    `G` contains operators to be applied on respective `sites`. 
+    `G` contains operators to be applied on respective `sites`.
     Operators have virtual legs connecting them, forming an MPO.
-        
+
     The convention of legs is (ket, bra, virtual_0, virtual_1) -- i.e., the first two legs are always physical (operator) legs.
     For one site, there are no virtual legs.
     For two or more sites, the first and last elements of G have one virtual leg (3 in total).
-    For three sites or more, the middle elements of `G` have two virtual legs connecting, respectively, to preceding and following gates.   
-    
+    For three sites or more, the middle elements of `G` have two virtual legs connecting, respectively, to preceding and following gates.
+
     Note that this is a different convention than `yastn.mps.MPO`.
     """
     G : tuple = None
@@ -45,7 +45,7 @@ def Gate_local(G, site):
 def Gate_nn(G0, G1, bond):
     """
     Legacy function, generating :class:`Gate` instance.
-    
+
     ``G0`` should be before ``G1`` in the fermionic and lattice orders
     (``G0`` acts on the left/top site; ``G1`` acts on the right/bottom site from a pair of nearest-neighbor sites).
     The third legs of ``G0`` and ``G1`` are auxiliary legs connecting them into a two-site operator.
@@ -72,15 +72,15 @@ def Gates(local=(), nn=(), nnn=()):
     nnn: list = ()   # list of NNN gates
     """
     gates = []
-    try: 
+    try:
         gates.extend(local)
     except TypeError:
         gates.append(local)
-    try: 
+    try:
         gates.extend(nn)
     except TypeError:
         gates.append(nn)
-    try: 
+    try:
         gates.extend(nnn)
     except TypeError:
         gates.append(nnn)

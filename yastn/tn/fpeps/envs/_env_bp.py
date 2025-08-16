@@ -91,7 +91,7 @@ class EnvBP(Peps):
             for dirn in ['t', 'l', 'b', 'r']:
                 setattr(env[site], dirn, getattr(self[site], dirn).copy())
         return env
-    
+
     def save_to_dict(self) -> dict:
         r"""
         Serialize EnvBP into a dictionary.
@@ -103,7 +103,7 @@ class EnvBP(Peps):
         d = {'class': 'EnvBP',
              'psi': psi.save_to_dict(),
              'data': {}}
-        
+
         for site in self.sites():
             d_local = {dirn: getattr(self[site], dirn).save_to_dict()
                        for dirn in ['t', 'l', 'b', 'r']}
@@ -513,7 +513,7 @@ class EnvBP(Peps):
 
     def sample(self, projectors, number=1, xrange=None, yrange=None, progressbar=False, return_probabilities=False, flatten_one=True, **kwargs) -> dict[Site, list]:
         r"""
-        Sample random configurations from PEPS. 
+        Sample random configurations from PEPS.
         Output a dictionary linking sites with lists of sampled projectors` keys for each site.
         Projectors should be summing up to identity -- this is not checked.
 
@@ -526,7 +526,7 @@ class EnvBP(Peps):
 
         number: int
             Number of independent samples.
-            
+
         xrange: tuple[int, int]
             range of rows to sample from, [r0, r1); r0 included, r1 excluded.
 
@@ -584,7 +584,7 @@ class EnvBP(Peps):
                         proj = match_ancilla(ten.ket, proj)
                         Aketp = tensordot(Aket, proj, axes=(4, 1))
                         prob = vdot(Abra, Aketp) / norm_prob
-                        acc_prob += prob 
+                        acc_prob += prob
                         if rands[count] < acc_prob:
                             out[nx, ny].append(k)
                             ketp = tensordot(ten.ket, proj, axes=(2, 1)) / prob

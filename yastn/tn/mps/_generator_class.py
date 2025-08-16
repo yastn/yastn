@@ -245,4 +245,3 @@ class Generator:
     #     parameters = {**self.parameters, **parameters}
     #     c3 = self._term2Hterm(templete, vectors, parameters)
     #     return generate_mps(c3, self.N)
-

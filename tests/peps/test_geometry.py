@@ -276,10 +276,10 @@ def test_geometry_equal():
           fpeps.CheckerboardLattice(),
           fpeps.SquareLattice(dims=(2, 2), boundary='infinite'),
           fpeps.SquareLattice(dims=(2, 2), boundary='obc')]
-    
+
     assert gs[0] != None
     assert all(g == g for g in gs)
-    assert all(g0 != g1 for n, g0 in enumerate(gs) for g1 in gs[n+1:])  
+    assert all(g0 != g1 for n, g0 in enumerate(gs) for g1 in gs[n+1:])
 
 
 def test_RectangularUnitCell_raises():

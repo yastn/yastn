@@ -238,11 +238,11 @@ def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=Fals
 
 def lin_solver(f, b, v0, ncv=10, tol=1e-13, pinv_tol=1e-13, hermitian=False, **kwargs) -> tuple[array, Sequence[vectors]]:
     r"""
-    Search for solution of the linear equation ``f(x) = b``, where ``x`` is estimated vector and ``f(x)`` is matrix-vector operation. 
-    Implementation based on pseudoinverse of Krylov expansion [1]. 
+    Search for solution of the linear equation ``f(x) = b``, where ``x`` is estimated vector and ``f(x)`` is matrix-vector operation.
+    Implementation based on pseudoinverse of Krylov expansion [1].
 
     Ref.[1] https://www.math.iit.edu/~fass/577_ch4_app.pdf
-    
+
     Parameters
     ----------
         f: function
@@ -260,11 +260,11 @@ def lin_solver(f, b, v0, ncv=10, tol=1e-13, pinv_tol=1e-13, hermitian=False, **k
 
         tol: float
             Stopping criterion for an expansion of the Krylov subspace.
-            The default is ``1e-13``. TODO Not implemented yet. 
+            The default is ``1e-13``. TODO Not implemented yet.
 
         pinv_tol: float
-            Cutoff for pseudoinverve. Sets lower bound on inverted Schmidt values. 
-            The default is ``1e-13``. 
+            Cutoff for pseudoinverve. Sets lower bound on inverted Schmidt values.
+            The default is ``1e-13``.
 
         hermitian: bool
             Assume that ``f`` is a hermitian operator, in which case Lanczos iterations are used.
@@ -294,10 +294,10 @@ def lin_solver(f, b, v0, ncv=10, tol=1e-13, pinv_tol=1e-13, hermitian=False, **k
     T = T[:(m+1),:m]
 
     be1 = backend.to_tensor([normv]+[0]*(m))
-    
+
     Tpinv = backend.pinv(T, rcond = pinv_tol)
     y = Tpinv @ be1
-    
+
     vf = v0.linear_combination(*Q, amplitudes = [1,*y], **kwargs)
     res = f(vf) - b
     return vf, res.norm()

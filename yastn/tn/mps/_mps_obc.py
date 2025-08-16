@@ -568,7 +568,7 @@ class MpsMpoOBC(_MpsMpoParent):
 
     def to_tensor(self) -> tensor.Tensor:
         r"""
-        Contract MPS/MPO to a single tensor. 
+        Contract MPS/MPO to a single tensor.
         Should only be used for a system with a very few sites.
 
         ::
