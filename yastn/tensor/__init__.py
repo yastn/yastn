@@ -241,3 +241,7 @@ class Tensor:
     def H(self) -> yastn.Tensor:
         r""" Same as :meth:`self.T.conj()`, i.e., transpose and conjugate. """
         return self.transpose().conj()
+    
+    @property
+    def shape(self) -> tuple[int]:
+        return self.get_shape()

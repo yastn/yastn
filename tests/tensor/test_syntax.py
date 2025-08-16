@@ -356,6 +356,7 @@ def test_syntax_noDocs(config_kwargs):
     a.get_blocks_charge()
     a.get_blocks_shape()
     a.get_shape()
+    a.shape
     a.get_shape(axes=2)
     a.get_dtype()
     a.dtype
