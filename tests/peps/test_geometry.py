@@ -270,6 +270,22 @@ def test_RectangularUnitCell_3x3_Q_1o3_1o3():
     assert all(g.sites()[g.site2index(s)] == (0, 2) for s in [(0, 2), (0, 5), (0, -1), (1, 1), (-2, 4)])
 
 
+def test_geometry_equal():
+    g0 = fpeps.RectangularUnitcell(pattern=[[0, 1, 2], [1, 2, 0], [2, 0, 1]])
+    g0p = fpeps.TriangularLattice()
+    g1 = fpeps.RectangularUnitcell(pattern={(0, 0): 0, (1, 1): 0, (0, 1): 1, (1, 0): 1})
+    g1p = fpeps.CheckerboardLattice()
+    g2 = fpeps.SquareLattice(dims=(2, 2), boundary='infinite')    
+    g3 = fpeps.SquareLattice(dims=(2, 2), boundary='obc')
+    
+    assert g0 != None
+    assert g0 == g0p
+    assert g1 == g1p
+    assert all(g0 != g for g in [g1, g1p, g2, g3])  
+    assert all(g1 != g for g in [g0, g0p, g2, g3])  
+    assert g2 != g3
+
+
 def test_RectangularUnitCell_raises():
     with pytest.raises(yastn.YastnError):
         fpeps.RectangularUnitcell(pattern={(-1, -1): 1, (0, 0): 1, (0, -1): 2, (-1, 0): 2})

@@ -14,7 +14,7 @@
 # ==============================================================================
 from __future__ import annotations
 from typing import Sequence, Union
-from ... import Tensor, YastnError
+from ... import Tensor, YastnError, block
 from ...tn.mps import Mpo
 from ._doublePepsTensor import DoublePepsTensor
 from ._geometry import SquareLattice, CheckerboardLattice, RectangularUnitcell, TriangularLattice
@@ -246,6 +246,47 @@ class Peps():
             # out[bond] = self[s0].get_shape(axes=axes)
         return out
 
+    def __add__(self, other):
+        return add(self, other)
+
+
+def add(*states, amplitudes=None) -> MpsMpoOBC:
+    r"""
+    Linear superposition of several PEPSs with specific amplitudes, i.e., :math:`\sum_j \textrm{amplitudes[j]}{\times}\textrm{states[j]}`.
+
+    Compression (truncation of bond dimensions) is not performed.
+
+    Parameters
+    ----------
+    states: Sequence[yastn.tn.mps.Peps]
+
+    amplitudes: Sequence[scalar]
+        If ``None``, all amplitudes are set to :math:`1`.
+    """
+    if amplitudes is not None and len(states) != len(amplitudes):
+        raise YastnError('Number of Peps-s to add must be equal to the number of coefficients in amplitudes.')
+
+    if any(not isinstance(state, Peps) for state in states):
+        raise YastnError('All added states should be Peps-s.')
+
+    geometry = states[0].geometry
+    if any(geometry != state.geometry for state in states):
+        raise YastnError('All added states should have the same geometry.')
+
+    phi = Peps(geometry)
+    for site in geometry.sites():
+        tens = {}
+        t = geometry.nn_site(site, 't') is not None
+        l = geometry.nn_site(site, 'l') is not None
+        b = geometry.nn_site(site, 'b') is not None
+        r = geometry.nn_site(site, 'r') is not None
+        for n, state in enumerate(states):
+            ten = state[site].unfuse_legs(axes=(0, 1))
+            if site == (0, 0) and amplitudes is not None:
+                ten = amplitudes[n] * ten
+            tens[n * t, n * l, n * b, n * r] = ten
+        phi[site] = block(tens, common_legs=4)
+    return phi
 
 
 class Peps2Layers():

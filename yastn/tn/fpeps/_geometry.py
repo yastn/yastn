@@ -98,6 +98,15 @@ class SquareLattice():
         """ Size of the unit cell as (rows, columns). """
         return self._dims
 
+    def __eq__(self, other):
+        return isinstance(other, SquareLattice) and \
+               self._periodic == other._periodic and \
+               self._dims == other._dims and \
+               all(self.site2index(site) == other.site2index(site) for site in self.sites())
+
+    def __neq__(self, other):
+        return not self.__eq__(other)
+
     def sites(self, reverse=False) -> Sequence[Site]:
         """ Sequence of unique lattice sites. """
         return self._sites[::-1] if reverse else self._sites
