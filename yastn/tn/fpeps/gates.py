@@ -106,23 +106,6 @@ def decompose_nn_gate(Gnn, bond=None) -> Gate_nn:
     return Gate_nn(S.broadcast(U, axes=2), S.broadcast(V, axes=2), bond=bond)
 
 
-def decompose_nnn_gate(Gnnn, s0, s1, s2) -> Gate_nnn:
-    r"""
-    Auxiliary function cutting a three-site gate with SVD
-    into two local operators with the connecting legs, assuming
-    sites (s0, s1, s2) are in lattice and fermionic order.
-    """
-    U1, S1, V1 = Gnnn.svd_with_truncation(axes=((0, 3), (1, 4, 2, 5)), sU=-1, tol=1e-14, Vaxis=0)
-    S1 = S1.sqrt()
-    G0 = S1.broadcast(U1, axes=2)
-    V1 = S1.broadcast(V1, axes=0)
-    U2, S2, V2 = V1.svd_with_truncation(axes=((0, 1, 2), (3, 4)), sU=-1, tol=1e-14, Vaxis=2)
-    S2 = S2.sqrt()
-    G1 = S2.broadcast(U2, axes=3)
-    G2 = S2.broadcast(V2, axes=2)
-    return Gate_nnn(G0, G1, G2, site0=s0, site1=s1, site2=s2)
-
-
 def gate_nn_hopping(t, step, I, c, cdag, bond=None) -> Gate_nn:
     r"""
     Nearest-neighbor gate :math:`G = \exp(-step \cdot H)` for
