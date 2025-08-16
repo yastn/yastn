@@ -20,7 +20,7 @@ import yastn.tn.fpeps as fpeps
 tol = 1e-12  #pylint: disable=invalid-name
 
 
-def test_propuct_peps(config_kwargs):
+def test_product_peps(config_kwargs):
     """ Generate a product peps on few lattices. Check exceptions. """
     ops = yastn.operators.SpinlessFermions(sym='U1', **config_kwargs)
 
@@ -57,7 +57,9 @@ def test_propuct_peps(config_kwargs):
 
 def test_save_load_copy(config_kwargs):
     geometries = [fpeps.SquareLattice(dims=(3, 2), boundary='obc'),
-                  fpeps.CheckerboardLattice()]
+                  fpeps.CheckerboardLattice(),
+                  fpeps.TriangularLattice(),
+                  fpeps.RectangularUnitcell(pattern=[[0, 1]])]
 
     config = yastn.make_config(sym='none', **config_kwargs)
     for geometry in geometries:
@@ -68,9 +70,11 @@ def test_save_load_copy(config_kwargs):
         psi2 = fpeps.load_from_dict(config, d)
         psi3 = psi.copy()
         psi4 = psi.clone()
-
+        psi5 = psi.shallow_copy()
+        
         for site in psi.sites():
-            for phi in [psi2, psi3, psi4]:
+            for phi in [psi2, psi3, psi4, psi5]:
+                phi.geometry == psi.geometry
                 assert (phi[site] - psi[site]).norm() < tol
 
 

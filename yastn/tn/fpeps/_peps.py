@@ -17,7 +17,6 @@ from typing import Sequence, Union
 from ... import Tensor, YastnError, block
 from ...tn.mps import Mpo
 from ._doublePepsTensor import DoublePepsTensor
-from ._geometry import SquareLattice, CheckerboardLattice, RectangularUnitcell, TriangularLattice
 
 
 class Peps():
@@ -139,31 +138,17 @@ class Peps():
         """
         Serialize PEPS into a dictionary.
         """
-        d = {'lattice': type(self.geometry).__name__,
-             'dims': self.dims,
-             'boundary': self.boundary,
-             'pattern': self.geometry.__dict__(),
+        d = {**self.geometry.__dict__(),
              'data': {}}
-
         for site in self.sites():
             d['data'][site] = self[site].save_to_dict()
-
         return d
 
     def save_to_dict(self) -> dict:
         """
         Serialize PEPS into a dictionary.
         """
-        d= self.__dict__()
-        if isinstance(self.geometry, CheckerboardLattice):
-            d['lattice'] = "checkerboard"
-        elif isinstance(self.geometry, SquareLattice):
-            d['lattice'] = "square"
-        elif isinstance(self.geometry, RectangularUnitcell):
-            d['lattice'] = "rectangularunitcell"
-        elif isinstance(self.geometry, TriangularLattice):
-            d['lattice'] = "triangular"
-        return d
+        return self.__dict__()
 
     def __repr__(self) -> str:
         return f"Peps(geometry={self.geometry.__repr__()}, tensors={ self._data })"
