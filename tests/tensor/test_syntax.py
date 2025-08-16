@@ -127,8 +127,8 @@ def test_syntax_basic_algebra(config_kwargs):
     # Sometimes, a composite operation is faster than the serial execution of
     # individual operations. This happens for linear combination of multiple tensors
     #
-    tensor = yastn.linear_combination(a, b, a, b, amplitudes=(1, -1, 2, 1))
-    tensor = yastn.linear_combination(a, b, a, b)  # all amplitudes equall to one.
+    tensor = yastn.add(a, b, a, b, amplitudes=(1, -1, 2, 1))
+    tensor = yastn.add(a, b, a, b)  # all amplitudes equall to one.
 
     #
     # element-wise exponentiation, absolute value, reciprocal i.e. x -> 1/x,

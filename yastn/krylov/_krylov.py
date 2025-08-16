@@ -71,7 +71,7 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
             * ``info.steps`` : number of steps to reach ``t``,
 
         kwargs: any
-            Further parameters that are passed to :func:`expand_krylov_space` and :func:`linear_combination`.
+            Further parameters that are passed to :func:`expand_krylov_space` and :func:`add`.
     """
     backend = v.config.backend
     ncv, ncv_max = max(1, ncv), min([30, v.size])  # Krylov space parameters
@@ -155,7 +155,7 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
             normF = backend.norm_matrix(F)
             normv = normv * normF
             F = F / normF
-            v = V[0].linear_combination(*V[1:], amplitudes=F, **kwargs)
+            v = V[0].add(*V[1:], amplitudes=F, **kwargs)
             t_now += tau
             info['steps'] += 1
             info['error'] += err
@@ -232,7 +232,7 @@ def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=Fals
     Y = []
     for it in range(k):
         sit = vr[:, it]
-        Y.append(V[0].linear_combination(*V[1:], amplitudes=sit, **kwargs))
+        Y.append(V[0].add(*V[1:], amplitudes=sit, **kwargs))
     return val[:k], Y
 
 
@@ -298,7 +298,7 @@ def lin_solver(f, b, v0, ncv=10, tol=1e-13, pinv_tol=1e-13, hermitian=False, **k
     Tpinv = backend.pinv(T, rcond = pinv_tol)
     y = Tpinv @ be1
 
-    vf = v0.linear_combination(*Q, amplitudes = [1,*y], **kwargs)
+    vf = v0.add(*Q, amplitudes = [1,*y], **kwargs)
     res = f(vf) - b
     return vf, res.norm()
 

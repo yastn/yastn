@@ -6,7 +6,7 @@ Implemented in yastn
 
 We provide a high-level, backend-agnostic implementation of some Krylov-based algorithms used in :class:`yastn.tn.mps`.
 They assume a linear operation acting on a generalized vector, with the vector being an instance of a class that includes methods
-``norm``, ``vdot``, ``linear_combination``, ``expand_krylov_space``, among others.
+``norm``, ``vdot``, ``add``, ``expand_krylov_space``, among others.
 Examples of such a vector include :class:`yastn.Tensor` (see :ref:`methods<tensor-aux>`).
 
 .. autofunction:: yastn.expmv

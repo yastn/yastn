@@ -41,7 +41,7 @@ def Mpo(N, periodic=False) -> MpsMpoOBC | MpoPBC:
     return MpsMpoOBC(N, nr_phys=2)
 
 
-def add(*states, amplitudes=None) -> MpsMpoOBC:
+def add(*states, amplitudes=None, **kwargs) -> MpsMpoOBC:
     r"""
     Linear superposition of several MPS/MPOs with specific amplitudes, i.e., :math:`\sum_j \textrm{amplitudes[j]}{\times}\textrm{states[j]}`.
 

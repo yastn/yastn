@@ -235,7 +235,7 @@ class Peps():
         return add(self, other)
 
 
-def add(*states, amplitudes=None) -> MpsMpoOBC:
+def add(*states, amplitudes=None, **kwargs) -> MpsMpoOBC:
     r"""
     Linear superposition of several PEPSs with specific amplitudes, i.e., :math:`\sum_j \textrm{amplitudes[j]}{\times}\textrm{states[j]}`.
 
