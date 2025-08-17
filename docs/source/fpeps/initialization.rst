@@ -45,6 +45,10 @@ deserialized back using :meth:`yastn.tn.fpeps.load_from_dict`.
 
 .. autofunction:: yastn.tn.fpeps.load_from_dict
 
+Finite (small) PEPS can be contracted into a tensor.
+
+.. automethod:: yastn.tn.fpeps.Peps.to_tensor
+
 
 Double-layer PEPS
 -----------------

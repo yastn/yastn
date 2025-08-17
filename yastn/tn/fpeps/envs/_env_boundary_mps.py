@@ -47,7 +47,7 @@ class EnvBoundaryMPS(Peps):
             E.g., setup="lr" would calculate boundary MPSs from the left and from the right sites of the lattice. The default is "l".
 
         opts_var: dict
-            Options passed to mps.compression_. The default is ``None`` which sets opts_var={max_sweeps: 2, normalization: False}.
+            Options passed to :meth:`yastn.tn.mps.compression_`. The default is ``None`` which sets opts_var={max_sweeps: 2, normalization: False}.
         """
 
         super().__init__(psi.geometry)

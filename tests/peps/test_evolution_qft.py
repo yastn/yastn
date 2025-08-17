@@ -130,26 +130,6 @@ def test_qft_mpo(config_kwargs, N=6):
     #     swap = swap @ op
 
 
-def peps23_to_tensor(psi):
-    """
-    Turn PEPS 2x3 into a single tensor.
-    """
-    A00 = psi[0, 0].unfuse_legs(axes=(0, 1)).remove_leg(axis=1).remove_leg(axis=0)
-    A10 = psi[1, 0].unfuse_legs(axes=(0, 1)).remove_leg(axis=2).remove_leg(axis=1)
-    A01 = psi[0, 1].unfuse_legs(axes=(0, 1)).remove_leg(axis=0)
-    A11 = psi[1, 1].unfuse_legs(axes=(0, 1)).remove_leg(axis=2)
-    A02 = psi[0, 2].unfuse_legs(axes=(0, 1)).remove_leg(axis=3).remove_leg(axis=0)
-    A12 = psi[1, 2].unfuse_legs(axes=(0, 1)).remove_leg(axis=3).remove_leg(axis=2)
-
-    psit = yastn.ncon([A00, A10, A01, A11, A02, A12],
-                      [[1, 2, -0], [1, 3, -1], [2, 4, 5, -2], [4, 3, 6, -3], [5, 7, -4], [7, 6, -5]])
-
-    if psit.get_legs(axes=0).is_fused():
-        psit = psit.unfuse_legs(axes=(0, 1, 2, 3, 4, 5))
-
-    return psit
-
-
 def test_peps_evolution_qft(config_kwargs):
     """
     Generate PEPS encoding QFT of 6 sites by application of few MPO gates.
@@ -188,7 +168,7 @@ def test_peps_evolution_qft(config_kwargs):
     psi = fpeps.product_peps(geometry, ops.I())
     for gate in gates:
         fpeps.apply_gate_(psi, gate)
-    psit = swap_fuse_numpy(peps23_to_tensor(psi))
+    psit = swap_fuse_numpy(psi.to_tensor())
     assert np.allclose(qft_ref, psit)
     #
     # test evolution with EnvNTU
@@ -196,7 +176,7 @@ def test_peps_evolution_qft(config_kwargs):
         psi = fpeps.product_peps(geometry, ops.I())
         env = fpeps.EnvNTU(psi, which='NN')
         fpeps.evolution_step_(env, gates, symmetrize=False, opts_svd={'D_total': 16}, method=method)
-        psit = swap_fuse_numpy(peps23_to_tensor(psi))
+        psit = swap_fuse_numpy(psi.to_tensor())
         psit = psit * qft_ref[0, 0] / psit[0, 0]  # evolution_step_ does not keep the norm
         assert np.allclose(qft_ref, psit)
         #
@@ -205,7 +185,7 @@ def test_peps_evolution_qft(config_kwargs):
         env = fpeps.EnvBP(psi, which='BP')
         env.iterate_(max_sweeps=5)
         fpeps.evolution_step_(env, gates, symmetrize=False, opts_svd={'D_total': 16}, method=method)
-        psit = swap_fuse_numpy(peps23_to_tensor(psi))
+        psit = swap_fuse_numpy(psi.to_tensor())
         psit = psit * qft_ref[0, 0] / psit[0, 0]  # evolution_step_ does not keep the norm
         assert np.allclose(qft_ref, psit)
 

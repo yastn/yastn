@@ -131,7 +131,8 @@ or :meth:`yastn.tn.mps.MpsMpoOBC.save_to_hdf5` can be again deserialized into MP
 Initializing MPS/MPO from tensor
 --------------------------------
 
-For very small systems, it is possible to turn MPS/MPO into a single tensor and back.
+For very small systems, it is possible to turn MPS/MPO into a single tensor and
+generate MPS/MPO from a tensor.
 
 .. automethod:: yastn.tn.mps.MpsMpoOBC.to_tensor
 .. autofunction:: yastn.tn.mps.mps_from_tensor

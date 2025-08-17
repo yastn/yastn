@@ -14,7 +14,7 @@
 # ==============================================================================
 from __future__ import annotations
 from typing import Sequence, Union
-from ... import Tensor, YastnError, block
+from ... import Tensor, YastnError, block, ncon
 from ...tn.mps import Mpo
 from ._doublePepsTensor import DoublePepsTensor
 
@@ -230,6 +230,41 @@ class Peps():
             # axes = 3 if dirn == 'h' else 2  # if dirn == 'v'
             # out[bond] = self[s0].get_shape(axes=axes)
         return out
+
+    def to_tensor(self):
+        r"""
+        It should only be used for a system with a very few sites.
+
+        It works only for a finite system.
+        The order of legs is consistent with the PEPS fermionic order.
+        System and ancilla legs are unfused.
+
+        Note that ancillas might carry charges offsetting the particle number of resulting tensor to zero.
+        This might give unexpected behavior when adding two states with different structure of offsets,
+        which is set in:meth:`yastn.tn.fpeps.product_peps`.
+        """
+        if 'i' in self.geometry._periodic:
+            raise YastnError("to_tensor() works only for a finite Peps.")
+        tens, inds, out, Nx, Ny = [], [], 0, self.Nx, self.Ny
+        for ny in range(self.Ny):
+            for nx in range(self.Nx):
+                ten = self[nx, ny].unfuse_legs(axes=(0, 1))
+                ind = [(2 * nx - 1) % (2 * Nx) + 2 * ny * Nx + 1,
+                        2 * nx + 2 * ny * Nx + 1,
+                        2 * nx + 2 * ny * Nx + 2,
+                        2 * nx + ((2 * ny + 2) % (2 * Ny)) * Nx + 1,
+                        out]
+                out -= 1
+                for i, dirn in enumerate('rblt'):
+                    if self.nn_site((nx, ny), dirn) is None:
+                        ten = ten.remove_leg(axis=3 - i)
+                        ind.pop(3 - i)
+                tens.append(ten)
+                inds.append(ind)
+        ten = ncon(tens, inds)
+        if ten.get_legs(axes=0).is_fused():
+            ten = ten.unfuse_legs(axes=list(range(ten.ndim)))
+        return ten
 
     def __add__(self, other):
         return add(self, other)
