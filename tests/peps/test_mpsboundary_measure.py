@@ -33,7 +33,7 @@ def run_save_load(env):
     env_save = fpeps.load_from_dict(config, d)
 
     for k in env._env:
-        assert (env_save[k] - env[k]).norm() < 1e-12    
+        assert (env_save[k] - env[k]).norm() < 1e-12
     for k in env.info:
         assert env_save.info[k] == env.info[k]
 
@@ -61,7 +61,7 @@ def test_mpsboundary_measure(config_kwargs, boundary):
     assert abs(env.measure_1site(ops.sz(), site=site) - vals[site]) < tol
     out = env.measure_1site({'x': ops.sz()}, site=site)
     assert abs(out['x'] - vals[site]) < tol
-    
+
 
     eszz = env.measure_2site(ops.sz(), ops.sz(), opts_svd=opts_svd)
     assert all(abs(vals[s1] * vals[s2] - v) < tol for (s1, s2), v in eszz.items())

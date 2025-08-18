@@ -91,7 +91,7 @@ class EnvBP(Peps):
             for dirn in ['t', 'l', 'b', 'r']:
                 setattr(env[site], dirn, getattr(self[site], dirn).copy())
         return env
-    
+
     def save_to_dict(self) -> dict:
         r"""
         Serialize EnvBP into a dictionary.
@@ -103,7 +103,7 @@ class EnvBP(Peps):
         d = {'class': 'EnvBP',
              'psi': psi.save_to_dict(),
              'data': {}}
-        
+
         for site in self.sites():
             d_local = {dirn: getattr(self[site], dirn).save_to_dict()
                        for dirn in ['t', 'l', 'b', 'r']}
@@ -465,175 +465,6 @@ class EnvBP(Peps):
             g = tensordot(vect, vecb, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
             return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
-
-        # if dirn == "h" and self.which == "NN1+BP":
-        #     assert self.psi.nn_site(s0, (0, 1)) == s1
-        #     sts = [(-1,-1), (0,-1), (1,-1), (1,0), (1,1), (1,2), (0,2), (-1,2), (-1,1), (-1,0)]
-        #     m = {d: self.psi.nn_site(s0, d=d) for d in sts}
-        #     mm = dict(m)  # for testing for None
-        #     tensors_from_psi(m, self.psi)
-        #     m = {k: (v.ket if isinstance(v, DoublePepsTensor) else v) for k, v in m.items()}
-
-        #     sm = mm[-1, -1]
-        #     clt = cor_tl(m[-1, -1]) if sm is None else cor_tl(m[-1, -1], ht=self[sm].t, hl=self[sm].l)
-        #     sm = mm[1, -1]
-        #     clb = cor_bl(m[1, -1]) if sm is None else cor_bl(m[1, -1], hb=self[sm].b, hl=self[sm].l)
-        #     sm = mm[1, 2]
-        #     crb = cor_br(m[1, 2]) if sm is None else cor_br(m[1, 2], hb=self[sm].b, hr=self[sm].r)
-        #     sm = mm[-1, 2]
-        #     crt = cor_tr(m[-1, 2]) if sm is None else cor_tr(m[-1, 2], hr=self[sm].r, ht=self[sm].t)
-
-        #     htl_t, htl_l = cut_into_hairs(clt)
-        #     htr_r, htr_t = cut_into_hairs(crt)
-        #     hbr_b, hbr_r = cut_into_hairs(crb)
-        #     hbl_l, hbl_b = cut_into_hairs(clb)
-
-        #     sm = mm[0, -1]
-        #     env_hl = hair_l(m[0, -1]) if sm is None else hair_l(m[0, -1], ht=htl_t, hl=self[sm].l, hb=hbl_b)
-        #     sm = mm[0, 2]
-        #     env_hr = hair_r(m[0,  2]) if sm is None else hair_r(m[0,  2], ht=htr_t, hb=hbr_b, hr=self[sm].r)
-        #     env_l = edge_l(Q0, hl=env_hl)  # [bl bl'] [rr rr'] [tl tl']
-        #     env_r = edge_r(Q1, hr=env_hr)  # [tr tr'] [ll ll'] [br br']
-
-        #     sm = mm[-1, 0]
-        #     ctl = cor_tl(m[-1, 0]) if sm is None else cor_tl(m[-1, 0], ht=self[sm].t, hl=htl_l)
-        #     sm = mm[-1, 1]
-        #     ctr = cor_tr(m[-1, 1]) if sm is None else cor_tr(m[-1, 1], ht=self[sm].t, hr=htr_r)
-        #     sm = mm[ 1, 1]
-        #     cbr = cor_br(m[ 1, 1]) if sm is None else cor_br(m[ 1, 1], hb=self[sm].b, hr=hbr_r)
-        #     sm = mm[ 1, 0]
-        #     cbl = cor_bl(m[ 1, 0]) if sm is None else cor_bl(m[ 1, 0], hb=self[sm].b, hl=hbl_l)
-
-        #     g = tensordot((cbr @ cbl) @ env_l, (ctl @ ctr) @ env_r, axes=((0, 2), (2, 0)))  # [rr rr'] [ll ll']
-        #     return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
-
-        # if dirn == "v" and self.which == "NN1+BP":
-        #     assert self.psi.nn_site(s0, (1, 0)) == s1
-        #     sts = [(-1,-1), (0,-1), (1,-1), (2,-1), (2,0), (2,1), (1,1), (0,1), (-1,1), (-1,0)]
-        #     m = {d: self.psi.nn_site(s0, d=d) for d in sts}
-        #     mm = dict(m)  # for testing for None
-        #     tensors_from_psi(m, self.psi)
-        #     m = {k: (v.ket if isinstance(v, DoublePepsTensor) else v) for k, v in m.items()}
-
-        #     sm = mm[-1, -1]
-        #     ctl = cor_tl(m[-1, -1]) if sm is None else cor_tl(m[-1, -1], hl=self[sm].l, ht=self[sm].t)
-        #     sm = mm[-1, 1]
-        #     ctr = cor_tr(m[-1, 1]) if sm is None else cor_tr(m[-1, 1], hr=self[sm].r, ht=self[sm].t)
-        #     sm = mm[2, 1]
-        #     cbr = cor_br(m[2, 1]) if sm is None else cor_br(m[2, 1], hr=self[sm].r, hb=self[sm].b)
-        #     sm = mm[2, -1]
-        #     cbl = cor_bl(m[2, -1]) if sm is None else cor_bl(m[2, -1], hb=self[sm].b, hl=self[sm].l)
-
-        #     htl_t, htl_l = cut_into_hairs(ctl)
-        #     htr_r, htr_t = cut_into_hairs(ctr)
-        #     hbr_b, hbr_r = cut_into_hairs(cbr)
-        #     hbl_l, hbl_b = cut_into_hairs(cbl)
-
-        #     sm = mm[-1, 0]
-        #     env_ht = hair_t(m[-1, 0]) if sm is None else hair_t(m[-1, 0], ht=self[sm].t, hl=htl_l, hr=htr_r)
-        #     sm = mm[2, 0]
-        #     env_hb = hair_b(m[ 2, 0]) if sm is None else hair_b(m[ 2, 0], hl=hbl_l, hb=self[sm].b, hr=hbr_r)
-        #     env_t = edge_t(Q0, ht=env_ht)  # [lt lt'] [bb bb'] [rt rt']
-        #     env_b = edge_b(Q1, hb=env_hb)  # [rb rb'] [tt tt'] [lb lb']
-
-        #     sm = mm[1, -1]
-        #     cbl = cor_bl(m[1, -1]) if sm is None else cor_bl(m[1, -1], hb=hbl_b, hl=self[sm].l)
-        #     sm = mm[0, -1]
-        #     ctl = cor_tl(m[0, -1]) if sm is None else cor_tl(m[0, -1], ht=htl_t, hl=self[sm].l)
-        #     sm = mm[0,  1]
-        #     ctr = cor_tr(m[0,  1]) if sm is None else cor_tr(m[0,  1], ht=htr_t, hr=self[sm].r)
-        #     sm = mm[1,  1]
-        #     cbr = cor_br(m[1,  1]) if sm is None else cor_br(m[1,  1], hb=hbr_b, hr=self[sm].r)
-
-        #     g = tensordot((cbl @ ctl) @ env_t, (ctr @ cbr) @ env_b, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
-        #     return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
-
-    def bond_metric_nnn(self, Q0, Q1, Q2, s0, s1, s2, dirn, corner):
-        r"""
-        Calculates bond metric for NNN term within BP environment.
-        Q0, Q1, Q2 represent the three-tensor-patch specified by dirn and corner.
-        Q0, Q1, Q2 should be arranged in accordance with the fermionic and lattice order.
-        ::
-
-            If dirn == 'br', corner='tr':
-                                  t
-                                  ║
-                     t            Q1══r
-                     ║          //
-                l════Q0══
-                     ║            ║
-                     b        l═══Q2═══r
-                                  ║
-                                  b
-
-            If dirn == 'br', corner='bl':
-                   t
-                   ║
-                l══Q0══r
-                   ║              t
-                                  ║
-                      //      ═══Q2═══r
-                 l══Q1            ║
-                    ║             b
-                    b
-
-            If dirn == 'tr', corner='tl':
-                   t
-                   ║           t
-                l══Q0          ║
-                    \\      ═══Q2═══r
-                               ║
-                   ║           b
-                l══Q1══r
-                   ║
-                   b
-
-            If dirn == 'tr', corner='br':
-
-                               t
-                               ║
-                            ═══Q1═══r
-                               ║
-                   ║           b
-                l══Q0══r    \\
-                   ║          Q2═══r
-                   b           ║
-                               b
-        """
-        if dirn == "br" and corner == 'tr' and self.which == "BP":
-            assert self.psi.nn_site(s0, (0, 1)) == s1
-            assert self.psi.nn_site(s0, (1, 1)) == s2
-            vectl = hair_l(Q0, hl=self[s0].l, ht=self[s0].t, hb=self[s0].b)
-            vecbr = hair_b(Q2, hr=self[s2].r, hb=self[s2].b, hl=self[s2].l).T
-            vectr = cor_tr_Q(Q1, ht=self[s1].t, hr=self[s1].r)
-            return (vectl, vectr, vecbr)  # (rr' rr,  bl bl',  tt tt')
-
-        elif dirn == "br" and corner == 'bl' and self.which == "BP":
-            assert self.psi.nn_site(s0, (1, 0)) == s1
-            assert self.psi.nn_site(s0, (1, 1)) == s2
-            vectl = hair_t(Q0, hl=self[s0].l, ht=self[s0].t, hr=self[s0].r)
-            vecbr = hair_r(Q2, hr=self[s2].r, ht=self[s2].t, hb=self[s2].b).T
-            vecbl = cor_bl_Q(Q1, hl=self[s1].l, hb=self[s1].b)
-            return (vectl, vecbl, vecbr)  # (bb' bb,  tr tr',  ll ll')
-
-        elif dirn == "tr" and corner == 'tl' and self.which == "BP":
-            assert self.psi.nn_site(s0, (1, 0)) == s1
-            assert self.psi.nn_site(s0, (0, 1)) == s2
-            vecbl = hair_b(Q1, hr=self[s1].r, hb=self[s1].b, hl=self[s1].l)
-            vectr = hair_r(Q2, hr=self[s2].r, ht=self[s2].t, hb=self[s2].b).T
-            vectl = cor_tl_Q(Q0, hl=self[s0].l, ht=self[s0].t)
-            return (vecbl, vectl, vectr)  # (tt' tt,  br br',  ll ll')
-
-        elif dirn == "tr" and corner == 'br' and self.which == "BP":
-            assert self.psi.nn_site(s0, (-1, 1)) == s1
-            assert self.psi.nn_site(s0, (0, 1)) == s2
-            vecbl = hair_l(Q0, hl=self[s0].l, ht=self[s0].t, hb=self[s0].b)
-            vectr = hair_t(Q1, hl=self[s1].l, ht=self[s1].t, hr=self[s1].r).T
-            vecbr = cor_br_Q(Q2, hb=self[s2].b, hr=self[s2].r)
-            return (vecbl, vecbr, vectr)  # (rr' rr,  tl tl',  bb bb')
-        else:
-            raise YastnError(f" EnvBP bond_metric dirn-{dirn} corner-{corner} {self.which} not recognized.")
-
     def pre_truncation_(env, bond):
         env.update_bond_(bond)
 
@@ -682,7 +513,7 @@ class EnvBP(Peps):
 
     def sample(self, projectors, number=1, xrange=None, yrange=None, progressbar=False, return_probabilities=False, flatten_one=True, **kwargs) -> dict[Site, list]:
         r"""
-        Sample random configurations from PEPS. 
+        Sample random configurations from PEPS.
         Output a dictionary linking sites with lists of sampled projectors` keys for each site.
         Projectors should be summing up to identity -- this is not checked.
 
@@ -695,7 +526,7 @@ class EnvBP(Peps):
 
         number: int
             Number of independent samples.
-            
+
         xrange: tuple[int, int]
             range of rows to sample from, [r0, r1); r0 included, r1 excluded.
 
@@ -753,7 +584,7 @@ class EnvBP(Peps):
                         proj = match_ancilla(ten.ket, proj)
                         Aketp = tensordot(Aket, proj, axes=(4, 1))
                         prob = vdot(Abra, Aketp) / norm_prob
-                        acc_prob += prob 
+                        acc_prob += prob
                         if rands[count] < acc_prob:
                             out[nx, ny].append(k)
                             ketp = tensordot(ten.ket, proj, axes=(2, 1)) / prob

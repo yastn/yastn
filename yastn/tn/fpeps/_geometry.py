@@ -67,7 +67,7 @@ class SquareLattice():
         self.boundary = boundary
         self._periodic = _periodic_dict[boundary]
         self._dims = (dims[0], dims[1])
-        self._sites = tuple(Site(nx, ny) for ny in range(self._dims[1]) for nx in range(self._dims[0]))
+        self._sites = tuple(Site(nx, ny) for ny in range(self.Ny) for nx in range(self.Nx))
         self._dir = {'tl': (-1, -1), 't': (-1, 0), 'tr': (-1,  1),
                       'l': ( 0, -1),                'r': ( 0,  1),
                      'bl': ( 1, -1), 'b': ( 1, 0), 'br': ( 1,  1)}
@@ -97,6 +97,15 @@ class SquareLattice():
     def dims(self) -> tuple[int, int]:
         """ Size of the unit cell as (rows, columns). """
         return self._dims
+
+    def __eq__(self, other):
+        return isinstance(other, SquareLattice) and \
+               type(self) == type(other) and \
+               self._periodic == other._periodic and \
+               self._dims == other._dims and \
+               self._sites == other._sites and \
+               all(self.site2index((nx, ny)) == other.site2index((nx, ny))
+                   for ny in range(self.Ny) for nx in range(self.Nx))
 
     def sites(self, reverse=False) -> Sequence[Site]:
         """ Sequence of unique lattice sites. """
@@ -190,28 +199,6 @@ class SquareLattice():
             return 'v', False
         raise YastnError(f"{bond} is not a nearest-neighbor bond.")
 
-    def nnn_bond_type(self, s0, s1, s2) -> tuple[str, str]:
-        """
-        (s0, s1, s2) should represent three sites in a 2x2 patch.
-        Return bond orientation in 2D grid as a tuple: dirn, corner
-        dirn is 'br' or 'tr' (bottom-right, top-right).
-        corner is the middle site (s1) connecting the two nnn sites.
-        """
-        if self.nn_site(s0, (1, 1)) == s2:
-            dirn = "br"
-            if self.nn_site(s0, (0, 1)) == s1:
-                corner = "tr"
-            elif self.nn_site(s0, (1, 0)) == s1:
-                corner = "bl"
-        elif self.nn_site(s1, (-1, 1)) == s2 and self.nn_site(s0, (1, 0)) == s1:
-            dirn, corner = "tr", "tl"
-        elif self.nn_site(s0, (-1, 1)) == s1 and self.nn_site(s0, (0, 1)) == s2:
-            dirn, corner = "tr", "br"
-        else:
-            raise YastnError(f"SquareLattice.nnn_bond_type: ({s0}, {s1}, {s2}) doesn't form a valid L-shape patch.")
-        return dirn, corner
-
-
     def f_ordered(self, s0, s1) -> bool:
         """
         Check if sites s0, s1 are fermionicaly ordered (or identical).
@@ -231,7 +218,8 @@ class SquareLattice():
 
     def __dict__(self):
         """Return a dictionary representation of the object."""
-        return {'dims': self.dims, 'boundary': self.boundary, 'sites': self.sites()}
+        return {'lattice': type(self).__name__,
+                'dims': self.dims, 'boundary': self.boundary}
 
 
 class CheckerboardLattice(SquareLattice):
@@ -250,12 +238,14 @@ class CheckerboardLattice(SquareLattice):
         """ Tensor index depending on site. """
         return (site[0] + site[1]) % 2
 
+    def __dict__(self):
+        """Return a dictionary representation of the object."""
+        return {'lattice': type(self).__name__}
+
 
 class RectangularUnitcell(SquareLattice):
-    # TODO Optionally numpy.array(dtype=int) ?
-    #      Drop integer ? Can be anything, i.e. even string label for tensors
 
-    def __init__(self, pattern, boundary='infinite'):
+    def __init__(self, pattern):
         r"""
         Rectangular unit cells supporting patterns characterized by a single momentum ``Q=(q_x, q_y)``.
 
@@ -352,7 +342,8 @@ class RectangularUnitcell(SquareLattice):
             in format Sequence[Sequence[int]].
 
         """
-        return {'pattern': [[self.site2index((row,col)) for col in range(self.Ny)] for row in range(self.Nx)], 'boundary': self.boundary }
+        return {'lattice': type(self).__name__,
+                'pattern': [[self.site2index((row, col)) for col in range(self.Ny)] for row in range(self.Nx)]}
 
 
 class TriangularLattice(SquareLattice):
@@ -386,7 +377,7 @@ class TriangularLattice(SquareLattice):
             whether to reverse the order of bonds.
         """
         if dirn == 'd':
-            return self._bonds_d[::-1] if reverse else self._bonds_d        
+            return self._bonds_d[::-1] if reverse else self._bonds_d
         if dirn == 'v':
             return self._bonds_v[::-1] if reverse else self._bonds_v
         if dirn == 'h':
@@ -415,34 +406,6 @@ class TriangularLattice(SquareLattice):
             return 'd', False
         raise YastnError(f"{bond} is not a nearest-neighbor bond.")
 
-    def nnn_bond_type(self, s0, s1, s2) -> tuple[str, str]:
-        """
-        (s0, s1, s2) should represent three sites in a 2x2 patch.
-        Return bond orientation in 2D grid as a tuple: dirn, corner
-        dirn is 'br' or 'tr' (bottom-right, top-right).
-        corner is the middle site (s1) connecting the two nnn sites.
-        """
-        if self.nn_site(s0, (1, 1)) == s2:
-            dirn = "br"
-            if self.nn_site(s0, (0, 1)) == s1:
-                corner = "tr"
-            elif self.nn_site(s0, (1, 0)) == s1:
-                corner = "bl"
-        elif self.nn_site(s1, (-1, 1)) == s2 and self.nn_site(s0, (1, 0)) == s1:
-            dirn, corner = "tr", "tl"
-        elif self.nn_site(s0, (-1, 1)) == s1 and self.nn_site(s0, (0, 1)) == s2:
-            dirn, corner = "tr", "br"
-        else:
-            raise YastnError(f"TriangularLattice.nnn_bond_type: ({s0}, {s1}, {s2}) doesn't form a valid L-shape patch.")
-        return dirn, corner
-
-    def f_ordered(self, s0, s1) -> bool:
-        """
-        Check if sites s0, s1 are fermionicaly ordered (or identical).
-        """
-        return s0[1] < s1[1] or (s0[1] == s1[1] and s0[0] <= s1[0])
-    
-
     def __dict__(self):
         """
         Return a dictionary representation of the object.
@@ -453,6 +416,5 @@ class TriangularLattice(SquareLattice):
             in format Sequence[Sequence[int]].
 
         """
-        return {'pattern': [[self.site2index((row,col)) for col in range(self.Ny)] for row in range(self.Nx)], 'boundary': self.boundary}
-                # 'sites': self.sites(),
-                # }
+        return {'lattice': type(self).__name__,
+                'pattern': [[self.site2index((row,col)) for col in range(self.Ny)] for row in range(self.Nx)]}

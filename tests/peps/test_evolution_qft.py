@@ -23,7 +23,7 @@ tol = 1e-12  #pylint: disable=invalid-name
 
 
 def mpo_controlled_Rns(ops, N, pc, *args):
-    r""" 
+    r"""
     Rank-2 MPO, controlled by site pc, building QFT.
 
     N is the number of sites, pc is control qbit, and *args lists (position, n) of Rn gates.
@@ -40,7 +40,7 @@ def mpo_controlled_Rns(ops, N, pc, *args):
 
 
 def mpo_Hadamard(ops, N, p):
-    """ 
+    """
     MPO for Hadamard gate at site p.
     """
     I, Z, X = ops.I(), ops.z(), ops.x()
@@ -50,7 +50,7 @@ def mpo_Hadamard(ops, N, p):
 
 
 def mpo_swap(ops, N, p0, p1):
-    """ 
+    """
     MPO for swap gate between sites p0 and p1.
     """
     I, Z, Sp, Sm = ops.I(), ops.z(), ops.sp(), ops.sm()
@@ -62,10 +62,10 @@ def mpo_swap(ops, N, p0, p1):
              mps.Hterm(1, [p0, p1], [P1, P1])]
 
     return mps.generate_mpo(I, terms, N=N)
-    
+
 
 def qft_matrix(N):
-    """ 
+    """
     Generate MPO of swap gate between sites p0 and p1.
     """
     NN = 2 ** N
@@ -79,9 +79,9 @@ def qft_matrix(N):
 
 
 def swap_fuse_numpy(ten):
-    """ 
+    """
     Bit reversal on legs 1,3,...2N-1 and fuse into matrix
-    
+
               1     3        2N-1
               |     |          |
            ┌──┴─────┴── ... ───┴──┐
@@ -96,7 +96,7 @@ def swap_fuse_numpy(ten):
 
 
 def test_qft_mpo(config_kwargs, N=6):
-    """ 
+    """
     Test that MPO representation of QFT is correct.
     """
     ops = yastn.operators.Spin12(sym='dense', **config_kwargs)
@@ -109,7 +109,7 @@ def test_qft_mpo(config_kwargs, N=6):
     HNm1 = mpo_Hadamard(ops, N, N-1)
     #
     # produce QFT = H(N-1) @ R(N-2) @ .. @ R(1) @ R(0) (up to bit reversal)
-    qft = HNm1  
+    qft = HNm1
     for Rn in Rns[::-1]:
         qft = qft @ Rn
     #
@@ -120,7 +120,7 @@ def test_qft_mpo(config_kwargs, N=6):
     # dense representation, doing bit reversal
     qftt = swap_fuse_numpy(qft.to_tensor())
     #
-    # exact reference    
+    # exact reference
     qft_ref = qft_matrix(N)
     assert np.allclose(qft_ref, qftt)
     #
@@ -130,28 +130,8 @@ def test_qft_mpo(config_kwargs, N=6):
     #     swap = swap @ op
 
 
-def peps23_to_tensor(psi):
-    """ 
-    Turn PEPS 2x3 into a single tensor.
-    """    
-    A00 = psi[0, 0].unfuse_legs(axes=(0, 1)).remove_leg(axis=1).remove_leg(axis=0)
-    A10 = psi[1, 0].unfuse_legs(axes=(0, 1)).remove_leg(axis=2).remove_leg(axis=1)
-    A01 = psi[0, 1].unfuse_legs(axes=(0, 1)).remove_leg(axis=0)
-    A11 = psi[1, 1].unfuse_legs(axes=(0, 1)).remove_leg(axis=2)
-    A02 = psi[0, 2].unfuse_legs(axes=(0, 1)).remove_leg(axis=3).remove_leg(axis=0)
-    A12 = psi[1, 2].unfuse_legs(axes=(0, 1)).remove_leg(axis=3).remove_leg(axis=2)
-
-    psit = yastn.ncon([A00, A10, A01, A11, A02, A12], 
-                      [[1, 2, -0], [1, 3, -1], [2, 4, 5, -2], [4, 3, 6, -3], [5, 7, -4], [7, 6, -5]])
-
-    if psit.get_legs(axes=0).is_fused():
-        psit = psit.unfuse_legs(axes=(0, 1, 2, 3, 4, 5))
-    
-    return psit
-
-
 def test_peps_evolution_qft(config_kwargs):
-    """  
+    """
     Generate PEPS encoding QFT of 6 sites by application of few MPO gates.
     """
     #
@@ -162,7 +142,7 @@ def test_peps_evolution_qft(config_kwargs):
     sites = geometry.sites()
     N = len(sites)
     #
-    # gates that will span peps sites   
+    # gates that will span peps sites
     gates = []
     Rn0 = mpo_controlled_Rns(ops, 6, 0, (1, 3), (2, 5), (3, 6), (4, 4), (5, 2))
     gates.append(fpeps.gates.gate_from_mpo(Rn0, [(0, 0), (0, 1), (0, 2), (1, 2), (1, 1), (1, 0)]))
@@ -188,7 +168,7 @@ def test_peps_evolution_qft(config_kwargs):
     psi = fpeps.product_peps(geometry, ops.I())
     for gate in gates:
         fpeps.apply_gate_(psi, gate)
-    psit = swap_fuse_numpy(peps23_to_tensor(psi))
+    psit = swap_fuse_numpy(psi.to_tensor())
     assert np.allclose(qft_ref, psit)
     #
     # test evolution with EnvNTU
@@ -196,7 +176,7 @@ def test_peps_evolution_qft(config_kwargs):
         psi = fpeps.product_peps(geometry, ops.I())
         env = fpeps.EnvNTU(psi, which='NN')
         fpeps.evolution_step_(env, gates, symmetrize=False, opts_svd={'D_total': 16}, method=method)
-        psit = swap_fuse_numpy(peps23_to_tensor(psi))
+        psit = swap_fuse_numpy(psi.to_tensor())
         psit = psit * qft_ref[0, 0] / psit[0, 0]  # evolution_step_ does not keep the norm
         assert np.allclose(qft_ref, psit)
         #
@@ -205,7 +185,7 @@ def test_peps_evolution_qft(config_kwargs):
         env = fpeps.EnvBP(psi, which='BP')
         env.iterate_(max_sweeps=5)
         fpeps.evolution_step_(env, gates, symmetrize=False, opts_svd={'D_total': 16}, method=method)
-        psit = swap_fuse_numpy(peps23_to_tensor(psi))
+        psit = swap_fuse_numpy(psi.to_tensor())
         psit = psit * qft_ref[0, 0] / psit[0, 0]  # evolution_step_ does not keep the norm
         assert np.allclose(qft_ref, psit)
 

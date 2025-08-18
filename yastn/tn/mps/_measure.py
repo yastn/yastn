@@ -283,7 +283,7 @@ def measure_nsite(bra, *operators, ket, sites=None) -> float:
     r"""
     Calculate expectation value of a product of local operators.
 
-    Conjugate of MPS :code:`bra` is computed internally.
+    Conjugate of MPS ``bra`` is computed internally.
     Fermionic strings are incorporated for fermionic operators by employing :meth:`yastn.swap_gate`.
 
     Parameters
@@ -295,7 +295,7 @@ def measure_nsite(bra, *operators, ket, sites=None) -> float:
         List of local operators to calculate <O0_s0 O1_s1 ...>.
 
     ket: yastn.tn.mps.MpsMpoOBC
-        Should be provided as **kwargs, as operators are given as *args.
+        Should be provided as \*\*kwargs, as operators are given as \*args.
 
     sites: Sequence[int]
         A list of sites [s0, s1, ...] matching corresponding operators.

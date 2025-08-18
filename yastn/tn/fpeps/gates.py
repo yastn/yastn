@@ -96,17 +96,16 @@ def gate_from_mpo(op, sites):
     return Gate(G=tuple(G), sites=tuple(sites))
 
 
-def decompose_nn_gate(Gnn, s0, s1) -> Gate_nn:
+def decompose_nn_gate(Gnn, bond=None) -> Gate_nn:
     r"""
     Auxiliary function cutting a two-site gate with SVD
     into two local operators with the connecting legs.
     """
     U, S, V = Gnn.svd_with_truncation(axes=((0, 2), (1, 3)), sU=-1, tol=1e-14, Vaxis=2)
     S = S.sqrt()
-    return Gate(G=(S.broadcast(U, axes=2), S.broadcast(V, axes=2)), sites=(s0, s1))
+    return Gate_nn(S.broadcast(U, axes=2), S.broadcast(V, axes=2), bond=bond)
 
-
-def decompose_nnn_gate(Gnnn, s0, s1, s2) -> Gate_nnn:
+def decompose_nnn_gate(Gnnn, s0, s1, s2) -> Gate:
     r"""
     Auxiliary function cutting a three-site gate with SVD
     into two local operators with the connecting legs.

@@ -292,7 +292,7 @@ def mps_from_tensor(ten, nr_phys=1) -> yastn.tn.mps.MpsMpo:
            0     1         N-1
 
            1     3        2N-1
-           |     |          |                              
+           |     |          |
         ┌──┴─────┴── ... ───┴──┐
         |                      |  ==>  MPO of N sites
         └──┬─────┬── ... ───┬──┘
@@ -315,7 +315,7 @@ def mps_from_tensor(ten, nr_phys=1) -> yastn.tn.mps.MpsMpo:
 
 def mpo_from_tensor(ten) -> yastn.tn.mps.MpsMpo:
     r"""
-    Generate MPO from a tensor.  
+    Generate MPO from a tensor.
     Shortcut for :meth:`yastn.tn.mps.mps_from_tensor` with nr_phys=2.
     """
     return mps_from_tensor(ten, nr_phys=2)

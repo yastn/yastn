@@ -382,7 +382,3 @@ def _zipper_MpoPBC(a, psi, opts_svd, normalize) -> yastn.tn.mps.MpsMpo:
             psi[n] = tmp # if psi.nr_phys == 1 else tmp.unfuse_legs(axes=2)
 
     return psi, psi.config.backend.sqrt(discarded2_total)
-
-
-# def linear_combination(self):
-#     pass

@@ -45,7 +45,6 @@ class DoublePepsTensor(SpecialTensor):
         self._t = transpose
         self.swaps = {} if swaps is None else dict(swaps)
 
-
     @property
     def config(self):
         return self.ket.config
@@ -126,6 +125,10 @@ class DoublePepsTensor(SpecialTensor):
         if isinstance(axes, int):
             return sum(self.get_legs(axes).D)
         return tuple(sum(leg.D) for leg in self.get_legs(axes))
+
+    @property
+    def shape(self):
+        return self.get_shape()
 
     def get_legs(self, axes=None):
         """ Returns the legs of the DoublePepsTensor along specified axes. """

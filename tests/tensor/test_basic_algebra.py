@@ -43,8 +43,8 @@ def algebra_vs_numpy(f, a, b):
 def combine_tests(a, b):
     """ some standard set of tests """
     r1 = algebra_vs_numpy(lambda x, y: x + 2 * y, a, b)
-    r2 = yastn.linear_combination(a, b, amplitudes=(None, 2))
-    r3 = yastn.linear_combination(a, b, b)
+    r2 = yastn.add(a, b, amplitudes=(None, 2))
+    r3 = yastn.add(a, b, b)
     r4 = algebra_vs_numpy(lambda x, y: 2 * x + y, b, a)
     assert all(yastn.norm(r1 - x, p=p) < tol for x in (r2, r3, r4) for p in ('fro', 'inf'))  # == 0.0
     # additionally tests norm
@@ -308,7 +308,7 @@ def test_algebra_exceptions(config_kwargs):
     with pytest.raises(yastn.YastnError,
                        match="Number of tensors and amplitudes do not match."):
         a = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1], n=0)
-        yastn.linear_combination(a, a, a, amplitudes=(1, 1))
+        yastn.add(a, a, a, amplitudes=(1, 1))
     with pytest.raises(yastn.YastnError,
                        match="p should be 'fro', or 'inf'."):
         a = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1], n=0)

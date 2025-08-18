@@ -41,7 +41,7 @@ def Mpo(N, periodic=False) -> MpsMpoOBC | MpoPBC:
     return MpsMpoOBC(N, nr_phys=2)
 
 
-def add(*states, amplitudes=None) -> MpsMpoOBC:
+def add(*states, amplitudes=None, **kwargs) -> MpsMpoOBC:
     r"""
     Linear superposition of several MPS/MPOs with specific amplitudes, i.e., :math:`\sum_j \textrm{amplitudes[j]}{\times}\textrm{states[j]}`.
 
@@ -568,7 +568,7 @@ class MpsMpoOBC(_MpsMpoParent):
 
     def to_tensor(self) -> tensor.Tensor:
         r"""
-        Contract MPS/MPO to a single tensor. 
+        Contract MPS/MPO to a single tensor.
         Should only be used for a system with a very few sites.
 
         ::

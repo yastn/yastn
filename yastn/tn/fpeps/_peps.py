@@ -14,10 +14,9 @@
 # ==============================================================================
 from __future__ import annotations
 from typing import Sequence, Union
-from ... import Tensor, YastnError
+from ... import Tensor, YastnError, block, ncon
 from ...tn.mps import Mpo
 from ._doublePepsTensor import DoublePepsTensor
-from ._geometry import SquareLattice, CheckerboardLattice, RectangularUnitcell, TriangularLattice
 
 
 class Peps():
@@ -85,7 +84,7 @@ class Peps():
 
         """
         self.geometry = geometry
-        for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "nn_bond_type", "nnn_bond_type", "f_ordered", "nn_bond_dirn"]:
+        for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "nn_bond_type", "f_ordered", "nn_bond_dirn"]:
             setattr(self, name, getattr(geometry, name))
         self._data = {self.site2index(site): None for site in self.sites()}
 
@@ -139,31 +138,17 @@ class Peps():
         """
         Serialize PEPS into a dictionary.
         """
-        d = {'lattice': type(self.geometry).__name__,
-             'dims': self.dims,
-             'boundary': self.boundary,
-             'pattern': self.geometry.__dict__(),
+        d = {**self.geometry.__dict__(),
              'data': {}}
-
         for site in self.sites():
             d['data'][site] = self[site].save_to_dict()
-
         return d
 
     def save_to_dict(self) -> dict:
         """
         Serialize PEPS into a dictionary.
         """
-        d= self.__dict__()
-        if isinstance(self.geometry, CheckerboardLattice):
-            d['lattice'] = "checkerboard"
-        elif isinstance(self.geometry, SquareLattice):
-            d['lattice'] = "square"
-        elif isinstance(self.geometry, RectangularUnitcell):
-            d['lattice'] = "rectangularunitcell"
-        elif isinstance(self.geometry, TriangularLattice):
-            d['lattice'] = "triangular"
-        return d
+        return self.__dict__()
 
     def __repr__(self) -> str:
         return f"Peps(geometry={self.geometry.__repr__()}, tensors={ self._data })"
@@ -246,6 +231,82 @@ class Peps():
             # out[bond] = self[s0].get_shape(axes=axes)
         return out
 
+    def to_tensor(self):
+        r"""
+        It should only be used for a system with a very few sites.
+
+        It works only for a finite system.
+        The order of legs is consistent with the PEPS fermionic order.
+        System and ancilla legs are unfused.
+
+        Note that ancillas might carry charges offsetting the particle number of resulting tensor to zero.
+        This might give unexpected behavior when adding two states with different structure of offsets,
+        which is set in:meth:`yastn.tn.fpeps.product_peps`.
+        """
+        if 'i' in self.geometry._periodic:
+            raise YastnError("to_tensor() works only for a finite Peps.")
+        tens, inds, out, Nx, Ny = [], [], 0, self.Nx, self.Ny
+        for ny in range(self.Ny):
+            for nx in range(self.Nx):
+                ten = self[nx, ny].unfuse_legs(axes=(0, 1))
+                ind = [(2 * nx - 1) % (2 * Nx) + 2 * ny * Nx + 1,
+                        2 * nx + 2 * ny * Nx + 1,
+                        2 * nx + 2 * ny * Nx + 2,
+                        2 * nx + ((2 * ny + 2) % (2 * Ny)) * Nx + 1,
+                        out]
+                out -= 1
+                for i, dirn in enumerate('rblt'):
+                    if self.nn_site((nx, ny), dirn) is None:
+                        ten = ten.remove_leg(axis=3 - i)
+                        ind.pop(3 - i)
+                tens.append(ten)
+                inds.append(ind)
+        ten = ncon(tens, inds)
+        if ten.get_legs(axes=0).is_fused():
+            ten = ten.unfuse_legs(axes=list(range(ten.ndim)))
+        return ten
+
+    def __add__(self, other):
+        return add(self, other)
+
+
+def add(*states, amplitudes=None, **kwargs) -> MpsMpoOBC:
+    r"""
+    Linear superposition of several PEPSs with specific amplitudes, i.e., :math:`\sum_j \textrm{amplitudes[j]}{\times}\textrm{states[j]}`.
+
+    Compression (truncation of bond dimensions) is not performed.
+
+    Parameters
+    ----------
+    states: Sequence[yastn.tn.mps.Peps]
+
+    amplitudes: Sequence[scalar]
+        If ``None``, all amplitudes are set to :math:`1`.
+    """
+    if amplitudes is not None and len(states) != len(amplitudes):
+        raise YastnError('Number of Peps-s to add must be equal to the number of coefficients in amplitudes.')
+
+    if any(not isinstance(state, Peps) for state in states):
+        raise YastnError('All added states should be Peps-s.')
+
+    geometry = states[0].geometry
+    if any(geometry != state.geometry for state in states):
+        raise YastnError('All added states should have the same geometry.')
+
+    phi = Peps(geometry)
+    for site in geometry.sites():
+        tens = {}
+        t = geometry.nn_site(site, 't') is not None
+        l = geometry.nn_site(site, 'l') is not None
+        b = geometry.nn_site(site, 'b') is not None
+        r = geometry.nn_site(site, 'r') is not None
+        for n, state in enumerate(states):
+            ten = state[site].unfuse_legs(axes=(0, 1))
+            if site == (0, 0) and amplitudes is not None:
+                ten = amplitudes[n] * ten
+            tens[n * t, n * l, n * b, n * r] = ten
+        phi[site] = block(tens, common_legs=4)
+    return phi
 
 
 class Peps2Layers():

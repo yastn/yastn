@@ -785,7 +785,7 @@ def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, which='SR', policy='fullrank',
         ``‘LR’`` : sort by real part, largest first.
 
     policy: str
-        * ``"fullrank"`` : Use standard full ED for ``"fullrank"`` and then truncate.
+        ``"fullrank"`` : Use standard full ED for ``"fullrank"`` and then truncate.
         kwargs will be passed to those functions for non-default settings.
 
     tol: float

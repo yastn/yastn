@@ -47,6 +47,8 @@ def test_double_peps_tensor_basic(config_kwargs):
     f0 = T0.fuse_layers()
     assert T0.get_shape() == (16, 25, 36, 49)
     assert f0.get_shape() == (16, 25, 36, 49)
+    assert T0.shape == (16, 25, 36, 49)
+    assert f0.shape == (16, 25, 36, 49)
     assert T0.ndim == 4
 
     for tmp in  [T0.copy(), T0.clone()]:

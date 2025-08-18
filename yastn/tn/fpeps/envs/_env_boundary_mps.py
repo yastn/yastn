@@ -28,8 +28,8 @@ class EnvBoundaryMPS(Peps):
 
     def __init__(self, psi, opts_svd, setup='l', opts_var=None):
         r"""
-        Calculate boundary MPSs for finite PEPS.  
-        
+        Calculate boundary MPSs for finite PEPS.
+
         Consequative MPS follows from contracting transfer matrix with previous MPS.
         This employs :meth:`yastn.tn.mps.zipper` followed by :meth:`yastn.tn.mps.compression_` for refinment.
 
@@ -44,12 +44,12 @@ class EnvBoundaryMPS(Peps):
 
         setup: str
             String containing directions from which the square lattice is contracted, consisting of characters "l", "r", "t", "b".
-            E.g., setup="lr" would calculate boundary MPSs from the left and from the right sites of the lattice. The default is "l".  
-         
+            E.g., setup="lr" would calculate boundary MPSs from the left and from the right sites of the lattice. The default is "l".
+
         opts_var: dict
-            Options passed to mps.compression_. The default is ``None`` which sets opts_var={max_sweeps: 2, normalization: False}.
+            Options passed to :meth:`yastn.tn.mps.compression_`. The default is ``None`` which sets opts_var={max_sweeps: 2, normalization: False}.
         """
-        
+
         super().__init__(psi.geometry)
         self.psi = psi
         self._env = {}
@@ -185,7 +185,7 @@ class EnvBoundaryMPS(Peps):
             tm[nx] = O.transpose(axes=(0, 3, 2, 1))
         env.update_env_(nx, to='first')
         return env.measure(bd=(nx - 1, nx)) / norm_env
-  
+
     def measure_nn(peps_env, OP):
         """
         Calculate 2-point expectation values on <O_i P_j> in a finite on NN bonds.
@@ -349,7 +349,7 @@ class EnvBoundaryMPS(Peps):
 
     def sample(peps_env, projectors, number=1, opts_svd=None, opts_var=None, progressbar=False, return_probabilities=False, flatten_one=True, **kwargs):
         r"""
-        Sample random configurations from PEPS. 
+        Sample random configurations from PEPS.
         Output a dictionary linking sites with lists of sampled projectors` keys for each site.
         Projectors should be summing up to identity -- this is not checked.
 
@@ -401,7 +401,7 @@ class EnvBoundaryMPS(Peps):
                         Os[nx].set_operator_(pr)
                         env.update_env_(nx, to='last')
                         prob = env.measure(bd=(nx, nx+1)).real / norm_prob
-                        acc_prob += prob 
+                        acc_prob += prob
                         if rands[count] < acc_prob:
                             probability *= prob
                             out[nx, ny].append(k)

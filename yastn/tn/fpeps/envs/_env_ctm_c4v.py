@@ -157,7 +157,7 @@ class EnvCTM_c4v(EnvCTM):
         r"""
         Initialize C4v-symmetric CTMRG environment::
 
-            C--T--C => C---T--T'--T--C => C--T-- & --T'-- <=> 
+            C--T--C => C---T--T'--T--C => C--T-- & --T'-- <=>
             T--A--T    T---A--B---A--T    T--A--   --B---     C'--T'--
             C--T--C    T'--B--A---B--T    |  |       |        |   |
                        T---A--B---A--T
@@ -253,7 +253,7 @@ class EnvCTM_c4v(EnvCTM):
 
             def f_update_core_2dir(move_d,loc_im,*inputs_t):
                 loc_env= decompress_env_c4v_1d(inputs_t,loc_im)
-                
+
                 env_tmp, proj_tmp= _update_core_dir(loc_env, "default", opts_svd, method=method, **kwargs)
                 update_old_env_(loc_env, env_tmp)
 

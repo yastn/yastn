@@ -183,7 +183,7 @@ class EnvCTM(Peps):
         -------
         (tuple[Tensor] , dict)
             A pair where the first element is a tuple of raw data tensors (of type derived from backend)
-            and the second is a dict with corresponding metadata. 
+            and the second is a dict with corresponding metadata.
         """
         shallow= {
             'psi': {site: env.psi.bra[site] for site in env.sites()} if isinstance(env.psi,Peps2Layers) \
@@ -827,7 +827,7 @@ class EnvCTM(Peps):
 
     def sample(self, projectors, number=1, xrange=None, yrange=None, opts_svd=None, opts_var=None, progressbar=False, return_probabilities=False, flatten_one=True, **kwargs) -> dict[Site, list]:
         r"""
-        Sample random configurations from PEPS. 
+        Sample random configurations from PEPS.
         Output a dictionary linking sites with lists of sampled projectors` keys for each site.
         Projectors should be summing up to identity -- this is not checked.
 
@@ -840,7 +840,7 @@ class EnvCTM(Peps):
 
         number: int
             Number of independent samples.
-            
+
         xrange: tuple[int, int]
             range of rows to sample from, [r0, r1); r0 included, r1 excluded.
 
@@ -870,8 +870,8 @@ class EnvCTM(Peps):
         if yrange is None:
             yrange = [0, self.Ny]
         env_win = EnvWindow(self, xrange, yrange)
-        return env_win.sample(projectors, number=number, 
-                              opts_svd=opts_svd, opts_var=opts_var, 
+        return env_win.sample(projectors, number=number,
+                              opts_svd=opts_svd, opts_var=opts_var,
                               progressbar=progressbar, return_probabilities=return_probabilities, flatten_one=flatten_one)
 
     def pre_truncation_(env, bond):
@@ -1095,7 +1095,7 @@ class EnvCTM(Peps):
 
         method: str
             '2site', '1site', or 'hex'. The default is '2site'.
-            
+
                 * '2site' uses the standard 4x4 enlarged corners, enabling enlargement of EnvCTM bond dimensions.
                 * '1site' uses smaller 4x2 corners. It is significantly faster, but is less stable and  does not allow for EnvCTM bond dimension growth.
                 * 'hex' is an extenstion of '2site' for hexagonal lattice embeded in a square lattice, where some PEPS bonds are rank-1. It recognizes such rank-1 bonds, using 5x4 corners to prevent artificial collapse of EnvCTM bond dimensions to 1.
@@ -1171,7 +1171,7 @@ def decompress_env_1d(data,meta):
     data_env= data[len(sites):]
     for i,site in enumerate(sites):
         for env_t,t,t_meta in zip(loc_env[site].__dict__.keys(),data_env[i*8:(i+1)*8],meta['env'][i*8:(i+1)*8]):
-            setattr(loc_env[site],env_t,decompress_from_1d(t,t_meta) if t is not None else None) 
+            setattr(loc_env[site],env_t,decompress_from_1d(t,t_meta) if t is not None else None)
     return loc_env
 
 
@@ -1181,7 +1181,7 @@ def ctm_conv_corner_spec(env : EnvCTM, history : Sequence[dict[tuple[Site,str],T
     Evaluate convergence of CTM by computing the difference of environment corner spectra between consecutive CTM steps.
     """
     history.append(calculate_corner_svd(env))
-    def spec_diff(x,y): 
+    def spec_diff(x,y):
         if x is not None and y is not None:
             return (x - y).norm().item()
         elif x is None and y is None:
@@ -1236,11 +1236,11 @@ def _update_core_2dir(env, dir : str, opts_svd : dict, **kwargs):
         update_env_= update_env_horizontal_ if dir in ['lr', 'rl'] else update_env_vertical_
         method= kwargs.get('method', '2site')
         if method == '2site':
-            update_proj_ = update_2site_projectors_ 
-        elif method == '1site': 
-            update_proj_ = update_1site_projectors_ 
-        elif method == 'hex': 
-            update_proj_ = update_extended_2site_projectors_ 
+            update_proj_ = update_2site_projectors_
+        elif method == '1site':
+            update_proj_ = update_1site_projectors_
+        elif method == 'hex':
+            update_proj_ = update_extended_2site_projectors_
         #
         # Empty structure for projectors
         proj = Peps(env.geometry)
@@ -1365,7 +1365,7 @@ def update_extended_2site_projectors_(proj, site, dirn, env, opts_svd, **kwargs)
         if sl == 1 and ltl and lbl:
             cor_ltl = env[ltl].l @ env[ltl].tl @ env[ltl].t
             cor_ltl = tensordot(cor_ltl, psi[ltl], axes=((2, 1), (0, 1)))
-            cor_ltl = tensordot(cor_ltl, env[tl].t, axes=(1, 0)) 
+            cor_ltl = tensordot(cor_ltl, env[tl].t, axes=(1, 0))
             cor_ltl = tensordot(cor_ltl, psi[tl], axes=((3, 2), (0, 1)))
             cor_ltl = cor_ltl.fuse_legs(axes=((0, 1, 3), (2, 4)))
 
@@ -1400,7 +1400,7 @@ def update_extended_2site_projectors_(proj, site, dirn, env, opts_svd, **kwargs)
             cor_rbr = tensordot(cor_rbr, env[br].b, axes=(1, 0))
             cor_rbr = tensordot(cor_rbr, psi[br], axes=((3, 2), (2, 3)))
             cor_rbr = cor_rbr.fuse_legs(axes=((0, 1, 3), (2, 4)))
-        
+
             cor_rtt = cor_tl @ cor_rtr  # b(left) b(right)
             cor_rbb = cor_rbr @ cor_bl  # t(right) t(left)
             _, r_t = qr(cor_rtt, axes=(1, 0)) if use_qr else (None, cor_rtt.T)
@@ -1408,7 +1408,7 @@ def update_extended_2site_projectors_(proj, site, dirn, env, opts_svd, **kwargs)
         else:
             _, r_t = qr(cor_tt, axes=(1, 0)) if use_qr else (None, cor_tt.T)
             _, r_b = qr(cor_bb, axes=(0, 1)) if use_qr else (None, cor_bb)
-        
+
         proj[tl].hlb, proj[bl].hlt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
 
 
@@ -1424,12 +1424,12 @@ def update_extended_2site_projectors_(proj, site, dirn, env, opts_svd, **kwargs)
             cor_bbl = env[bbl].b @ env[bbl].bl @ env[bbl].l
             cor_bbl = tensordot(cor_bbl, psi[bbl], axes=((2, 1), (1, 2)))
             cor_bbl = tensordot(cor_bbl, env[bl].l, axes=(1, 0))
-            cor_bbl = tensordot(cor_bbl, psi[bl], axes=((3, 1), (1, 2))) 
+            cor_bbl = tensordot(cor_bbl, psi[bl], axes=((3, 1), (1, 2)))
             cor_bbl = cor_bbl.fuse_legs(axes=((0, 1, 4), (2, 3)))
 
             cor_bbr = env[bbr].r @ env[bbr].br @ env[bbr].b
             cor_bbr = tensordot(cor_bbr, psi[bbr], axes=((2, 1), (2, 3)))
-            cor_bbr = env[br].r @ cor_bbr 
+            cor_bbr = env[br].r @ cor_bbr
             cor_bbr = tensordot(cor_bbr, psi[br], axes=((3, 1), (2, 3)))
             cor_bbr = cor_bbr.fuse_legs(axes=((0, 3), (1, 2, 4)))
 
@@ -1458,7 +1458,7 @@ def update_extended_2site_projectors_(proj, site, dirn, env, opts_svd, **kwargs)
             cor_ttr = tensordot(cor_ttr, env[tr].r, axes=(1, 0))
             cor_ttr = tensordot(cor_ttr, psi[tr], axes=((2, 3), (0, 3)))
             cor_ttr = cor_ttr.fuse_legs(axes=((0, 1, 3), (2, 4)))
-            
+
             cor_tll = cor_bl @ cor_ttl  # l(bottom) l(top)
             cor_trr = cor_ttr @ cor_br  # r(top) r(bottom)
             _, r_l = qr(cor_tll, axes=(1, 0)) if use_qr else (None, cor_tll.T)
