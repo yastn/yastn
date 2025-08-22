@@ -75,12 +75,9 @@ def test_to_tensor(config_kwargs):
     occ1 = {(0, 0): 0, (0, 1): 1, (0, 2): 1, (1, 0): 1, (1, 1): 0, (1, 2): 0}
     #
     psi0 = fpeps.product_peps(geometry, {k: vec[v] for k, v in occ0.items()})
-    gates = [fpeps.gates.Gate([((-1) ** occ0[(1, 0)]) * ops.cp().add_leg(axis=2, s=-1), ops.c().add_leg(axis=2, s=1)], [(1, 0), (1, 1)]),
-             fpeps.gates.Gate([((-1) ** occ0[(0, 1)]) * ops.cp().add_leg(axis=2, s=-1), ops.c().add_leg(axis=2, s=1)], [(0, 1), (0, 2)]),
-             fpeps.gates.Gate([((-1) ** occ0[(0, 2)]) * ops.cp().add_leg(axis=2, s=-1), ops.c().add_leg(axis=2, s=1)], [(0, 2), (1, 2)])]
-    # moving charges is done to retain original auxiliary legs for subsequent addition
-    # there are swap-gates with auxiliary charges (if there was originally charge 1 on left site)
-    # that is why there is "-" in the last gate to ofset it
+    gates = [fpeps.gates.Gate([ops.cp().add_leg(axis=2, s=-1), ops.c().add_leg(axis=2, s=1)], [(1, 0), (1, 1)]),
+             fpeps.gates.Gate([ops.cp().add_leg(axis=2, s=-1), ops.c().add_leg(axis=2, s=1)], [(0, 1), (0, 2)]),
+             fpeps.gates.Gate([ops.cp().add_leg(axis=2, s=-1), ops.c().add_leg(axis=2, s=1)], [(0, 2), (1, 2)])]
     #
     psi1 = psi0.shallow_copy()
     for gate in gates:
@@ -94,7 +91,8 @@ def test_to_tensor(config_kwargs):
     psi = (psi0 + psi1).to_tensor()
     # remove auxiliary legs
     for k in [11, 9, 7, 5, 3, 1]:
-         psi = psi.remove_leg(axis=k)
+        psi = psi.swap_gate(axes=(list(range(0, k, 2)), k))
+        psi = psi.remove_leg(axis=k)
     #
     phi0 = mps.product_mps([vec[occ0[k]] for k in geometry.sites()])
     phi1 = mps.product_mps([vec[occ1[k]] for k in geometry.sites()])
@@ -107,7 +105,7 @@ def test_to_tensor(config_kwargs):
     geometry = fpeps.SquareLattice(dims=(2, 3), boundary='infinite')
     psi = fpeps.product_peps(geometry, {k: vec[v] for k, v in occ0.items()})
     with pytest.raises(yastn.YastnError,
-                       match='to_tensor\(\) works only for a finite Peps.'):
+                       match='to_tensor\(\) works only for a finite obc Peps.'):
         psi = psi.to_tensor()
 
 

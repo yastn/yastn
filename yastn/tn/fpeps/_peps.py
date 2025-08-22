@@ -243,28 +243,41 @@ class Peps():
         This might give unexpected behavior when adding two states with different structure of offsets,
         which is set in:meth:`yastn.tn.fpeps.product_peps`.
         """
-        if 'i' in self.geometry._periodic:
-            raise YastnError("to_tensor() works only for a finite Peps.")
-        tens, inds, out, Nx, Ny = [], [], 0, self.Nx, self.Ny
-        for ny in range(self.Ny):
-            for nx in range(self.Nx):
+        if 'ii' == self.geometry._periodic:
+            raise YastnError("to_tensor() works only for a finite obc Peps.")
+        Nx, Ny = self.Nx, self.Ny
+        psi = self[0, 0].unfuse_legs(axes=(0, 1)).remove_leg(axis=1)
+        for nx in range(1, Nx):
+            ten = self[nx, 0].unfuse_legs(axes=(0, 1)).remove_leg(axis=1)
+            psi = psi.tensordot(ten, axes=(2 * nx - 1, 0))
+        axs = list(range(1, 2 * Nx, 2))
+        axs[-1] += 1
+        psi = psi.swap_gate(axes=(axs, 0))
+        psi = psi.trace(axes=(0, 2 * Nx - 1))
+
+        for ny in range(1, Ny):
+            ten = self[0, ny].unfuse_legs(axes=(0, 1))
+            dny = (ny - 1) * Nx
+            psi = psi.tensordot(ten, axes=(dny, 1))
+            for nx in range(1, Nx):
+                axs = list(range(dny + nx, dny + 2 * Nx - nx - 1, 2))
+                psi = psi.swap_gate(axes=(dny + 2 * Nx + nx + 1, axs))
                 ten = self[nx, ny].unfuse_legs(axes=(0, 1))
-                ind = [(2 * nx - 1) % (2 * Nx) + 2 * ny * Nx + 1,
-                        2 * nx + 2 * ny * Nx + 1,
-                        2 * nx + 2 * ny * Nx + 2,
-                        2 * nx + ((2 * ny + 2) % (2 * Ny)) * Nx + 1,
-                        out]
-                out -= 1
-                for i, dirn in enumerate('rblt'):
-                    if self.nn_site((nx, ny), dirn) is None:
-                        ten = ten.remove_leg(axis=3 - i)
-                        ind.pop(3 - i)
-                tens.append(ten)
-                inds.append(ind)
-        ten = ncon(tens, inds)
-        if ten.get_legs(axes=0).is_fused():
-            ten = ten.unfuse_legs(axes=list(range(ten.ndim)))
-        return ten
+                psi = psi.tensordot(ten, axes=((dny + 2 * Nx + nx - 1, dny + nx), (0, 1)))
+
+            dny = ny * Nx
+            axs = list(range(1 + dny, 2 * Nx + dny, 2))
+            axs[-1] += 1
+            psi = psi.swap_gate(axes=(axs, dny))
+            psi = psi.trace(axes=(dny, dny + 2 * Nx - 1))
+
+        dny = (Ny - 1) * Nx
+        for nx in range(Nx):
+            psi = psi.remove_leg(axis=dny + nx)
+
+        if psi.get_legs(axes=0).is_fused():
+            psi = psi.unfuse_legs(axes=list(range(psi.ndim)))
+        return psi
 
     def __add__(self, other):
         return add(self, other)
