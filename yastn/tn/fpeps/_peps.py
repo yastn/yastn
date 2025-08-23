@@ -233,26 +233,26 @@ class Peps():
 
     def to_tensor(self):
         r"""
-        It should only be used for a system with a very few sites.
+        Contract PEPS into a single tensor.
 
+        It should only be used for a system with a very few sites.
         It works only for a finite system.
         The order of legs is consistent with the PEPS fermionic order.
         System and ancilla legs are unfused.
 
-        Note that ancillas might carry charges offsetting the particle number of resulting tensor to zero.
+        Note that ancilla legs might carry charges offsetting the particle number of resulting tensor to zero.
         This might give unexpected behavior when adding two states with different structure of offsets,
-        which is set in:meth:`yastn.tn.fpeps.product_peps`.
+        which is set in :meth:`yastn.tn.fpeps.product_peps`.
         """
         if 'ii' == self.geometry._periodic:
-            raise YastnError("to_tensor() works only for a finite obc Peps.")
+            raise YastnError("to_tensor() works only for a finite PEPS.")
         Nx, Ny = self.Nx, self.Ny
         psi = self[0, 0].unfuse_legs(axes=(0, 1)).remove_leg(axis=1)
         for nx in range(1, Nx):
             ten = self[nx, 0].unfuse_legs(axes=(0, 1)).remove_leg(axis=1)
             psi = psi.tensordot(ten, axes=(2 * nx - 1, 0))
-        axs = list(range(1, 2 * Nx, 2))
-        axs[-1] += 1
-        psi = psi.swap_gate(axes=(axs, 0))
+        axs = list(range(1, 2 * Nx - 2, 2)) + [2 * Nx]
+        psi = psi.swap_gate(axes=(0, axs))
         psi = psi.trace(axes=(0, 2 * Nx - 1))
 
         for ny in range(1, Ny):
@@ -260,15 +260,14 @@ class Peps():
             dny = (ny - 1) * Nx
             psi = psi.tensordot(ten, axes=(dny, 1))
             for nx in range(1, Nx):
-                axs = list(range(dny + nx, dny + 2 * Nx - nx - 1, 2))
+                axs = list(range(dny + nx, dny + 2 * Nx - nx, 2))
                 psi = psi.swap_gate(axes=(dny + 2 * Nx + nx + 1, axs))
                 ten = self[nx, ny].unfuse_legs(axes=(0, 1))
                 psi = psi.tensordot(ten, axes=((dny + 2 * Nx + nx - 1, dny + nx), (0, 1)))
 
             dny = ny * Nx
-            axs = list(range(1 + dny, 2 * Nx + dny, 2))
-            axs[-1] += 1
-            psi = psi.swap_gate(axes=(axs, dny))
+            axs = list(range(dny + 1, dny + 2 * Nx - 2, 2)) + [dny + 2 * Nx]
+            psi = psi.swap_gate(axes=(dny, axs))
             psi = psi.trace(axes=(dny, dny + 2 * Nx - 1))
 
         dny = (Ny - 1) * Nx
@@ -277,6 +276,10 @@ class Peps():
 
         if psi.get_legs(axes=0).is_fused():
             psi = psi.unfuse_legs(axes=list(range(psi.ndim)))
+            N = psi.ndim
+            for n in range(1, N, 2):
+                axs = list(range(n + 1, N))
+                psi = psi.swap_gate(axes=(n, axs))
         return psi
 
     def __add__(self, other):
