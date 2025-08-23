@@ -22,35 +22,50 @@ import yastn.tn.mps as mps
 tol = 1e-12  #pylint: disable=invalid-name
 
 
+def mpo_hopping(ops, N, p0, p1, angle):
+    r"""
+    :math:`G = I + (\cosh(x) - 1) (n_0 h_1 + h_0 n_1) + \sinh(x) (cdag_0 c_1 + cdag_1 c_0)`,
+    """
+    I, cp, c = ops.I(), ops.cp(), ops.c()
+    n, h = cp @ c, c @ cp
+    terms = [mps.Hterm(1, [p0, p1], [I, I]),
+             mps.Hterm(np.cosh(angle) - 1, [p0, p1], [n, h]),
+             mps.Hterm(np.cosh(angle) - 1, [p0, p1], [h, n]),
+             mps.Hterm(np.sinh(angle), [p0, p1], [cp, c]),
+             mps.Hterm(np.sinh(angle), [p1, p0], [cp, c])]
+    return mps.generate_mpo(I, terms, N=N)
+
+
 def test_peps_evolution_hopping(config_kwargs):
     """ Simulate spinless fermions hopping on a small finite system. """
     #
-    geometry = fpeps.SquareLattice(dims=(3, 4), boundary='obc')
-    bonds = geometry.bonds()
+    Nx, Ny = 3, 2
+    geometry = fpeps.SquareLattice(dims=(Nx, Ny), boundary='obc')
+    #geometry = fpeps.SquareLattice(dims=(Nx, Ny), boundary='cylinder')
+
     sites = geometry.sites()
-    #
+    bonds = geometry.bonds()
+    bonds = [(s0, s1) if geometry.f_ordered(s0, s1) else (s1, s0) for s0, s1 in bonds]
+    angles = {bond: np.random.rand() + 1j * np.random.rand() - 0.5 - 0.5j for bond in bonds}
     ops = yastn.operators.SpinlessFermions(sym='U1', default_dtype='complex128', **config_kwargs)
-    vec = {0: ops.vec_n(val=0), 1: ops.vec_n(val=1)}
-    occ0 = dict(zip(sites, [1, 0, 1, 0, 1, 1, 1, 0, 0, 0, 1, 1]))
-    occ1 = dict(zip(sites, [1, 1, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1]))
     #
-    psi0 = fpeps.product_peps(geometry, {k: vec[v] for k, v in occ0.items()})
-    psi1 = fpeps.product_peps(geometry, {k: vec[v] for k, v in occ1.items()})
-    psi = psi0 + psi1
+    psi = fpeps.product_peps(geometry, ops.I())
+    gates = [fpeps.gates.gate_from_mpo(mpo_hopping(ops, 2, 0, 1, angles[bond]), sites=bond) for bond in bonds]
+    for gate in gates:
+        fpeps.apply_gate_(psi, gate)
+    psi = psi.to_tensor()
     #
     i2s = dict(enumerate(sites))
     s2i = {s: i for i, s in i2s.items()}  # 1d order of sites for mps
     #
-    gates_nn = []
-    gates_local = []
-    mu = 0.1
-    D, dt = 8, 0.05
-    # gt = fpeps.gates.gate_nn_hopping(t, 1j * dt / 2, I, ops.c(spin=spin), ops.cp(spin=spin))
-    # gates_nn.append(gt._replace(sites=bond))
-    # gt = fpeps.gates.gate_local_occupation(mu, 1j * dt / 2, I, ops.n(spin=spin))
-    # gates = fpeps.Gates(nn=gates_nn, local=gates_local)
-    # #
-    # initialized product state
+    phi = mps.product_mpo(ops.I(), N=Nx * Ny)
+    gates = [mpo_hopping(ops, Nx * Ny, s2i[s0], s2i[s1], angles[s0, s1])  for s0, s1 in bonds]
+    for gate in gates:
+        phi = gate @ phi
+    phi = phi.to_tensor()
+
+    assert (psi - phi).norm() < tol
+
 
 
 
