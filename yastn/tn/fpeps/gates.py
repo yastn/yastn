@@ -13,26 +13,8 @@
 # limitations under the License.
 # ==============================================================================
 import numpy as np
-from typing import NamedTuple
 from ... import exp, ncon, eigh
-from ._gates_auxiliary import fkron
-
-class Gate(NamedTuple):
-    r"""
-    Gate to be applied on Peps state.
-
-    `G` contains operators to be applied on respective `sites`.
-    Operators have virtual legs connecting them, forming an MPO.
-
-    The convention of legs is (ket, bra, virtual_0, virtual_1) -- i.e., the first two legs are always physical (operator) legs.
-    For one site, there are no virtual legs.
-    For two or more sites, the first and last elements of G have one virtual leg (3 in total).
-    For three sites or more, the middle elements of `G` have two virtual legs connecting, respectively, to preceding and following gates.
-
-    Note that this is a different convention than `yastn.mps.MPO`.
-    """
-    G : tuple = None
-    sites : tuple = None
+from ._gates_auxiliary import fkron, Gate
 
 
 def Gate_local(G, site):
@@ -85,15 +67,6 @@ def Gates(local=(), nn=(), nnn=()):
     except TypeError:
         gates.append(nnn)
     return gates
-
-
-def gate_from_mpo(op, sites):
-    G = []
-    G.append(op[op.first].remove_leg(axis=0).transpose(axes=(0, 2, 1)))
-    for n in op.sweep(to='last', df=1):
-        G.append(op[n].transpose(axes=(1, 3, 0, 2)))
-    G[-1] = G[-1].remove_leg(axis=-1)
-    return Gate(G=tuple(G), sites=tuple(sites))
 
 
 def decompose_nn_gate(Gnn, bond=None) -> Gate_nn:

@@ -84,11 +84,10 @@ def test_to_tensor(config_kwargs):
     #
     # psi1 will have the same ancilas as psi0
     sitess = [((1, 0), (1, 1)), ((0, 1), (0, 2)), ((0, 2), (1, 2))]
-    gates = [fpeps.gates.gate_from_mpo(mpo_cpc(ops, 2, 0, 1), sites)
-             for sites in sitess]
+    gates = [fpeps.Gate(mpo_cpc(ops, 2, 0, 1), sites) for sites in sitess]
     psi1 = psi0.shallow_copy()
     for gate in gates:
-        fpeps.apply_gate_(psi1, gate)
+        psi1.apply_gate_(gate)
     #
     # test occupancy in psi1
     env = fpeps.EnvBP(psi1)

@@ -138,42 +138,42 @@ def test_peps_evolution_qft(config_kwargs):
     ops = yastn.operators.Spin12(sym='dense', **config_kwargs)
     #
     # initialized PEPS in a product state
-    geometry = fpeps.SquareLattice(dims=(2, 3), boundary='obc')
-    sites = geometry.sites()
+    g = fpeps.SquareLattice(dims=(2, 3), boundary='obc')
+    sites = g.sites()
     N = len(sites)
     #
     # gates that will span peps sites
     gates = []
     Rn0 = mpo_controlled_Rns(ops, 6, 0, (1, 3), (2, 5), (3, 6), (4, 4), (5, 2))
-    gates.append(fpeps.gates.gate_from_mpo(Rn0, [(0, 0), (0, 1), (0, 2), (1, 2), (1, 1), (1, 0)]))
+    gates.append(fpeps.Gate(Rn0, [(0, 0), (0, 1), (0, 2), (1, 2), (1, 1), (1, 0)]))
     #
     Rn1 = mpo_controlled_Rns(ops, 6, 3, (0, 4), (1, 2), (4, 3), (5, 5))
-    gates.append(fpeps.gates.gate_from_mpo(Rn1, [(0, 2), (0, 1), (0, 0), (1, 0), (1, 1), (1, 2)]))
+    gates.append(fpeps.Gate(Rn1, [(0, 2), (0, 1), (0, 0), (1, 0), (1, 1), (1, 2)]))
     #
     Rn2 = mpo_controlled_Rns(ops, 4, 1, (0, 2), (2, 3), (3, 4))
-    gates.append(fpeps.gates.gate_from_mpo(Rn2, [(1, 1), (0, 1), (0, 2), (1, 2)]))
+    gates.append(fpeps.Gate(Rn2, [(1, 1), (0, 1), (0, 2), (1, 2)]))
     #
     Rn3 = mpo_controlled_Rns(ops, 3, 0, (1, 3), (2, 2))
-    gates.append(fpeps.gates.gate_from_mpo(Rn3, [(1, 1), (1, 2), (0, 2)]))
+    gates.append(fpeps.Gate(Rn3, [(1, 1), (1, 2), (0, 2)]))
     #
     Rn4 = mpo_controlled_Rns(ops, 2, 1, (0, 2))
-    gates.append(fpeps.gates.gate_from_mpo(Rn4, [(1, 2), (0, 2)]))
+    gates.append(fpeps.Gate(Rn4, [(1, 2), (0, 2)]))
     #
     H5 = mpo_Hadamard(ops, 1, 0)
-    gates.append(fpeps.gates.gate_from_mpo(H5, [(1, 2)]))
+    gates.append(fpeps.Gate(H5, [(1, 2)]))
     #
     qft_ref = qft_matrix(N)
     #
     # test application of gate without performing truncation
-    psi = fpeps.product_peps(geometry, ops.I())
+    psi = fpeps.product_peps(g, ops.I())
     for gate in gates:
-        fpeps.apply_gate_(psi, gate)
+        psi.apply_gate_(gate)
     psit = swap_fuse_numpy(psi.to_tensor())
     assert np.allclose(qft_ref, psit)
     #
     # test evolution with EnvNTU
     for method in ['NN', 'mpo']:
-        psi = fpeps.product_peps(geometry, ops.I())
+        psi = fpeps.product_peps(g, ops.I())
         env = fpeps.EnvNTU(psi, which='NN')
         fpeps.evolution_step_(env, gates, symmetrize=False, opts_svd={'D_total': 16}, method=method)
         psit = swap_fuse_numpy(psi.to_tensor())
@@ -181,7 +181,7 @@ def test_peps_evolution_qft(config_kwargs):
         assert np.allclose(qft_ref, psit)
         #
         # test evolution with EnvBP
-        psi = fpeps.product_peps(geometry, ops.I())
+        psi = fpeps.product_peps(g, ops.I())
         env = fpeps.EnvBP(psi, which='BP')
         env.iterate_(max_sweeps=5)
         fpeps.evolution_step_(env, gates, symmetrize=False, opts_svd={'D_total': 16}, method=method)

@@ -40,7 +40,7 @@ def generate_peps(g, ops, occs_init, angles):
     # apply a list of gates on nn bonds
     for bond, angle in angles:
         gate = fpeps.gates.gate_nn_hopping(1, angle, ops.I(), ops.c(), ops.cp(), bond=bond)
-        fpeps.apply_gate_(psi, gate)
+        psi.apply_gate_(gate)
     return psi
 
 

@@ -192,7 +192,7 @@ def generate_mpo(I, terms=None, opts_svd=None, N=None, f_map=None) -> yastn.tn.m
                 site, tl = sites[ii], acc_n_pattern[ii]
             else:
                 f_charge = tl if f_map is None else sym.add_charges(*[nn for st, nn in zip(sites, n_pattern) if f_map[n] < f_map[st]])
-                mH[n] = ind_list((tl, Iind[n], tl, tl), charges_ops)
+                mH[n] = ind_list((tl, Iind[n], tl, f_charge), charges_ops)
 
     # turn 2-leg local operators into 4-legs local operators that will build MPO
     dressed_ops = []

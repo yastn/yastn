@@ -12,7 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+from itertools import pairwise
+from typing import NamedTuple
 from ... import eye, tensordot, YastnError
+
+
+class Gate(NamedTuple):
+    r"""
+    Gate to be applied on Peps state.
+
+    `G` contains operators to be applied on respective `sites`.
+    Operators have virtual legs connecting them, forming an MPO.
+
+    The convention of legs is (ket, bra, virtual_0, virtual_1) -- i.e., the first two legs are always physical (operator) legs.
+    For one site, there are no virtual legs.
+    For two or more sites, the first and last elements of G have one virtual leg (3 in total).
+    For three sites or more, the middle elements of `G` have two virtual legs connecting, respectively, to preceding and following gates.
+
+    Note that this is a different convention than `yastn.mps.MPO`.
+    """
+    G : tuple = None
+    sites : tuple = None
 
 
 def match_ancilla(ten, G, dirn=None):
@@ -45,7 +65,6 @@ def match_ancilla(ten, G, dirn=None):
         if dirn and dirn[1] in 'tl':
             Gnew = Gnew.swap_gate(axes=(3, 4))
         return Gnew.fuse_legs(axes=((0, 4), (1, 5), 2, 3))
-
 
 
 def apply_gate_onsite(ten, G, dirn=None):
@@ -91,24 +110,6 @@ def apply_gate_onsite(ten, G, dirn=None):
             tmp = tmp.unfuse_legs(axes=2)
     return tmp
     # raise YastnError("dirn should be equal to 'l', 'r', 't', 'b', or None")
-
-
-def apply_gate_(psi, gate):
-    """
-    Apply gate to PEPS state psi, changing respective tensors in place.
-    For now, assumes that gate and its path are both in fermionic order
-    TODO: automatize fermionic order.
-    """
-    dirn = ''
-    g0, s0 = gate.G[0], gate.sites[0]
-
-    for g1, s1 in zip(gate.G[1:], gate.sites[1:]):
-        dirn += psi.nn_bond_dirn(s0, s1)
-        psi[s0] = apply_gate_onsite(psi[s0], g0, dirn=dirn[:-1])
-        dirn = dirn[-1]
-        g0, s0 = g1, s1
-
-    psi[s0] = apply_gate_onsite(psi[s0], g0, dirn=dirn)
 
 
 def apply_bond_tensors(Q0f, Q1f, M0, M1, dirn):
@@ -203,3 +204,19 @@ def gate_fix_order(G0, G1, l_ordered=True, f_ordered=True):
     if not l_ordered:
         G0, G1 = G1, G0
     return G0, G1
+
+
+def gate_from_mpo(op, geometry, sites):
+
+    op = op.shallow_copy()
+    for n, bond in enumerate(pairwise(sites)):
+        if not geometry.nn_bond_type(bond)[1]:
+            op[n] = op[n].swap_gate(axes=(2, 3))
+            op[n+1] = op[n+1].swap_gate(axes=(0, 1))
+
+    G = []
+    G.append(op[op.first].remove_leg(axis=0).transpose(axes=(0, 2, 1)))
+    for n in op.sweep(to='last', df=1):
+        G.append(op[n].transpose(axes=(1, 3, 0, 2)))
+    G[-1] = G[-1].remove_leg(axis=-1)
+    return G

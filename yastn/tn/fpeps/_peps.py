@@ -14,10 +14,10 @@
 # ==============================================================================
 from __future__ import annotations
 from typing import Sequence, Union
-from ... import Tensor, YastnError, block, ncon
-from ...tn.mps import Mpo
+from ... import Tensor, YastnError, block
+from ...tn.mps import Mpo, MpsMpoOBC
 from ._doublePepsTensor import DoublePepsTensor
-
+from ._gates_auxiliary import apply_gate_onsite, gate_from_mpo
 
 class Peps():
 
@@ -281,6 +281,23 @@ class Peps():
                 axs = list(range(n + 1, N))
                 psi = psi.swap_gate(axes=(n, axs))
         return psi
+
+    def apply_gate_(self, gate):
+        """
+        Apply gate to PEPS state psi, changing respective tensors in place.
+        """
+        G = gate_from_mpo(gate.G, self.geometry, gate.sites) if isinstance(gate.G, MpsMpoOBC) else gate.G
+
+        dirn = ''
+        g0, s0 = G[0], gate.sites[0]
+
+        for g1, s1 in zip(G[1:], gate.sites[1:]):
+            dirn += self.nn_bond_dirn(s0, s1)
+            self[s0] = apply_gate_onsite(self[s0], g0, dirn=dirn[:-1])
+            dirn = dirn[-1]
+            g0, s0 = g1, s1
+
+        self[s0] = apply_gate_onsite(self[s0], g0, dirn=dirn)
 
     def __add__(self, other):
         return add(self, other)

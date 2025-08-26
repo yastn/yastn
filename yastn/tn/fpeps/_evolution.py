@@ -16,9 +16,10 @@
 
 from ... import tensordot, vdot, svd_with_truncation, YastnError, Tensor
 from ._peps import Peps2Layers
-from ._gates_auxiliary import apply_gate_onsite, gate_fix_order, apply_bond_tensors, apply_gate_
+from ._gates_auxiliary import apply_bond_tensors
 from ._geometry import Bond
-from .gates import Gate
+from ._gates_auxiliary import Gate, gate_from_mpo
+from ..mps import MpsMpoOBC
 from typing import NamedTuple
 from itertools import pairwise
 
@@ -115,10 +116,11 @@ def evolution_step_(env, gates, opts_svd, symmetrize=True, method='mpo',
         gates = gates + gates[::-1]
 
     if 'nn' in method.lower():
+        gates = [Gate(gate_from_mpo(gate.G, env.psi.geometry, gate.sites), gate.sites) if isinstance(gate.G, MpsMpoOBC) else gate  for gate in gates]
         gates = [ng for og in gates for ng in split_gate_2site(og)]
 
     for gate in gates:
-        apply_gate_(psi, gate)
+        psi.apply_gate_(gate)
 
         for s0, s1 in pairwise(gate.sites[-1::-1]):
             env.pre_truncation_((s0, s1))
