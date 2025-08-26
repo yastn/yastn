@@ -77,7 +77,7 @@ def test_evol_cylinder(config_kwargs):
     dt = tf / steps
 
     # prepare evolution gates
-    ops = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', default_dtype='complex128', **config_kwargs)
+    ops = yastn.operators.SpinfulFermions(sym='U1xU1', default_dtype='complex128', **config_kwargs)
     I = ops.I()
     gates_nn = []
     gates_local = []
@@ -88,7 +88,7 @@ def test_evol_cylinder(config_kwargs):
         for site, mu in ms.items():
             gt = fpeps.gates.gate_local_occupation(mu, 1j * dt / 2, I, ops.n(spin=spin))
             gates_local.append(gt._replace(sites=(site,)))
-    gates = fpeps.Gates(nn=gates_nn, local=gates_local)
+    gates = gates_nn + gates_local
     #
     # initialized product state
     psi = fpeps.product_peps(geometry, {s: ops.vec_n(val=(occs['u'][s], occs['d'][s])) for s in sites})

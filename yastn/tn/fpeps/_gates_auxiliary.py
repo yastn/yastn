@@ -206,14 +206,7 @@ def gate_fix_order(G0, G1, l_ordered=True, f_ordered=True):
     return G0, G1
 
 
-def gate_from_mpo(op, geometry, sites):
-
-    op = op.shallow_copy()
-    for n, bond in enumerate(pairwise(sites)):
-        if not geometry.nn_bond_type(bond)[1]:
-            op[n] = op[n].swap_gate(axes=(2, 3))
-            op[n+1] = op[n+1].swap_gate(axes=(0, 1))
-
+def gate_from_mpo(op):
     G = []
     G.append(op[op.first].remove_leg(axis=0).transpose(axes=(0, 2, 1)))
     for n in op.sweep(to='last', df=1):

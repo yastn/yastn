@@ -14,7 +14,7 @@
 # ==============================================================================
 from __future__ import annotations
 from typing import Sequence, Union
-from ... import Tensor, YastnError, block
+from ... import Tensor, YastnError, block, eye
 from ...tn.mps import Mpo, MpsMpoOBC
 from ._doublePepsTensor import DoublePepsTensor
 from ._gates_auxiliary import apply_gate_onsite, gate_from_mpo
@@ -286,13 +286,34 @@ class Peps():
         """
         Apply gate to PEPS state psi, changing respective tensors in place.
         """
-        G = gate_from_mpo(gate.G, self.geometry, gate.sites) if isinstance(gate.G, MpsMpoOBC) else gate.G
+        G = gate_from_mpo(gate.G) if isinstance(gate.G, MpsMpoOBC) else gate.G
+
+        if len(G) == 2 and len(gate.sites) > 2:  # fill-in identities
+            g0, g1 = G
+            G = [g0]
+            leg = g0.get_legs(axes=2)
+            vb = eye(g0.config, legs=(leg.conj(), leg), isdiag=False)
+            for site in gate.sites[1:-1]:
+                leg = self[site].get_legs(axes=2)
+                if leg.is_fused():  # unfuse to get system leg
+                    leg, _ = leg.unfuse_leg()
+                vp = eye(g0.config, legs=(leg, leg.conj()), isdiag=False)
+                ten = vp.tensordot(vb, axes=((), ()))
+                ten = ten.swap_gate(axes=(1, 2))
+                G.append(ten)
+            G.append(g1)
 
         dirn = ''
         g0, s0 = G[0], gate.sites[0]
 
         for g1, s1 in zip(G[1:], gate.sites[1:]):
-            dirn += self.nn_bond_dirn(s0, s1)
+            bd = self.nn_bond_dirn(s0, s1)
+            if bd in ['rl', 'bt']:
+                g0 = g0.swap_gate(axes=(1, g0.ndim-1))
+                g1 = g1.swap_gate(axes=(0, 2))
+            if (bd in ['lr', 'tb']) ^ self.f_ordered(s0, s1):  # for cylinder
+                g1 = g1.swap_gate(axes=(2, 2))
+            dirn += bd
             self[s0] = apply_gate_onsite(self[s0], g0, dirn=dirn[:-1])
             dirn = dirn[-1]
             g0, s0 = g1, s1

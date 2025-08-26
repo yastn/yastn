@@ -116,7 +116,7 @@ def evolution_step_(env, gates, opts_svd, symmetrize=True, method='mpo',
         gates = gates + gates[::-1]
 
     if 'nn' in method.lower():
-        gates = [Gate(gate_from_mpo(gate.G, env.psi.geometry, gate.sites), gate.sites) if isinstance(gate.G, MpsMpoOBC) else gate  for gate in gates]
+        gates = [Gate(gate_from_mpo(gate.G), gate.sites) if isinstance(gate.G, MpsMpoOBC) else gate  for gate in gates]
         gates = [ng for og in gates for ng in split_gate_2site(og)]
 
     for gate in gates:

@@ -30,79 +30,48 @@ def mpo_hopping(ops, N, p0, p1, angle, f_map=None):
     n, h = cp @ c, c @ cp
     terms = [mps.Hterm(1, [p0, p1], [I, I]),
              mps.Hterm(np.cosh(angle) - 1, [p0, p1], [n, h]),
-             # mps.Hterm(np.cosh(angle) - 1, [p0, p1], [h, n]),
-             # mps.Hterm(-np.sinh(angle), [p0, p1], [cp, c]),
+             mps.Hterm(np.cosh(angle) - 1, [p0, p1], [h, n]),
+             mps.Hterm(np.sinh(angle), [p0, p1], [cp, c]),
              mps.Hterm(np.sinh(angle), [p1, p0], [cp, c])]
     return mps.generate_mpo(I, terms, N=N, f_map=f_map)
 
-
-def gate_hopping(ops, sites, angle):
-    G = mpo_hopping(ops, len(sites), 0, len(sites) - 1, angle)
-
-    # G[0] = G[0].swap_gate(axes=(2, 2))
-    #G1 = mpo_hopping(ops, len(sites), 0, len(sites) - 1, angle, f_map= [1, 0])
-
-    # G0 = G.shallow_copy()
-    # G0[0] = G0[0].swap_gate(axes=(2, 3))
-    # G0[len(sites) - 1] = G0[len(sites) - 1].swap_gate(axes=(0, 1))
-
-    # print((G - G0).norm())
-    #print((G - G1).norm())
-
-    return fpeps.Gate(G=G, sites=sites)
-
-
-def test_peps_evolution_hopping(config_kwargs):
+@pytest.mark.parametrize('boundary', ['obc', 'cylinder'])
+def test_peps_evolution_hopping(config_kwargs, boundary):
     """ Simulate spinless fermions hopping on a small finite system. """
     #
-    Nx, Ny = 3, 2
-    geometry = fpeps.SquareLattice(dims=(Nx, Ny), boundary='obc')
-    #geometry = fpeps.SquareLattice(dims=(Nx, Ny), boundary='cylinder')
-
-    sites = geometry.sites()
-    bonds = list(geometry.bonds())
-    #bonds = []
-
-    #bonds = bonds + [((2, 0), (0, 0))]
-
-    # bonds = bonds + [((0, 0), (1, 0), (1, 1), (2, 1))]
-    # bonds = bonds + [((2, 0), (1, 0), (1, 1), (0, 1))]
-    # # # bonds = bonds + [((0, 0), (1, 0), (2, 0))]
-    # bonds = bonds + [((2, 0), (1, 0), (0, 0))]
-
-    # bonds = bonds + [((1, 0), (0, 0), (0, 1), (1, 1))]
-
-    # bonds = bonds + [((0, 0), (1, 0), (1, 1))]
-    # bonds = bonds + [((0, 0), (0, 1), (1, 1))]
-    # bonds = bonds + [((0, 1), (0, 0), (1, 0))]
-    # bonds = bonds + [((1, 0), (1, 1), (0, 1))]
-    #bonds = bonds + [((1, 0), (0, 0), (0, 1))]
-    #bonds = bonds + [((2, 0), (1, 0), (1, 1), (0, 1))]
-
-    #bonds = bonds + [((2, 0), (1, 0), (1, 1), (0, 1))[::-1]]
-
-
-    np.random.seed(seed=0)
-    angles = {bond: np.random.rand() + 1j * np.random.rand() - 0.5 - 0.5j for bond in bonds}
     ops = yastn.operators.SpinlessFermions(sym='U1', default_dtype='complex128', **config_kwargs)
     #
-    psi = fpeps.product_peps(geometry, ops.I())
-    gates = [gate_hopping(ops, sites, angle) for sites, angle in angles.items()]
-
-    for gate in gates:
-        psi.apply_gate_(gate)
-    psi = psi.to_tensor()
+    Nx, Ny = 3, 2
+    geometry = fpeps.SquareLattice(dims=(Nx, Ny), boundary=boundary)
     #
-    i2s = dict(enumerate(sites))
-    s2i = {s: i for i, s in i2s.items()}  # 1d order of sites for mps
-    #
-    phi = mps.product_mpo(ops.I(), N=Nx * Ny)
-    gates = [mpo_hopping(ops, Nx * Ny, s2i[bond[0]], s2i[bond[-1]], angle) for bond, angle in angles.items()]
-    for gate in gates:
-        phi = gate @ phi
-    phi = phi.to_tensor()
+    paths_list = [geometry.bonds(),
+                  [((0, 0), (1, 0), (1, 1), (2, 1)), ((2, 0), (1, 0), (1, 1), (0, 1))],
+                  [((2, 0), (1, 0), (1, 1), (2, 1)), ((2, 1), (2, 0), (1, 0), (1, 1), (0, 1), (0, 0))]
+                  ]
+    if boundary == 'cylinder':
+        paths_list.append([((0, 0), (2, 0), (1, 0), (1, 1)), ((2, 1), (0, 1), (0, 0))])
 
-    assert (psi - phi).norm() < tol
+    for paths in paths_list:
+        angles = {path: np.random.rand() + 1j * np.random.rand() - 0.5 - 0.5j for path in paths}
+        #
+        psi = fpeps.product_peps(geometry, ops.I())
+        gates = [fpeps.gates.gate_nn_hopping(angle, 1, ops.I(), ops.c(), ops.cp(), path)
+                  for path, angle in angles.items()]
+        # gates = [fpeps.Gate(mpo_hopping(ops, len(path), 0, len(path) - 1, angle), path)
+        #          for path, angle in angles.items()]
+        for gate in gates:
+            psi.apply_gate_(gate)
+        psi = psi.to_tensor()
+        #
+        s2i = {s: i for i, s in enumerate(geometry.sites())}  # 1d order of fermionically-ordered sites for mps
+        #
+        phi = mps.product_mpo(ops.I(), N=Nx * Ny)
+        gates = [mpo_hopping(ops, Nx * Ny, s2i[path[0]], s2i[path[-1]], angle) for path, angle in angles.items()]
+        for gate in gates:
+            phi = gate @ phi
+        phi = phi.to_tensor()
+
+        assert (psi - phi).norm() < tol
 
 
 if __name__ == '__main__':
