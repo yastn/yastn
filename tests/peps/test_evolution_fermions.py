@@ -22,7 +22,7 @@ import yastn.tn.mps as mps
 tol = 1e-12  #pylint: disable=invalid-name
 
 
-def mpo_hopping(ops, N, p0, p1, angle, f_map=None):
+def mpo_hopping(ops, N, p0, p1, angle):
     r"""
     :math:`G = I + (\cosh(x) - 1) (n_0 h_1 + h_0 n_1) + \sinh(x) (cdag_0 c_1 + cdag_1 c_0)`,
     """
@@ -33,7 +33,8 @@ def mpo_hopping(ops, N, p0, p1, angle, f_map=None):
              mps.Hterm(np.cosh(angle) - 1, [p0, p1], [h, n]),
              mps.Hterm(np.sinh(angle), [p0, p1], [cp, c]),
              mps.Hterm(np.sinh(angle), [p1, p0], [cp, c])]
-    return mps.generate_mpo(I, terms, N=N, f_map=f_map)
+    return mps.generate_mpo(I, terms, N=N)
+
 
 @pytest.mark.parametrize('boundary', ['obc', 'cylinder'])
 def test_peps_evolution_hopping(config_kwargs, boundary):
@@ -56,9 +57,9 @@ def test_peps_evolution_hopping(config_kwargs, boundary):
         #
         psi = fpeps.product_peps(geometry, ops.I())
         gates = [fpeps.gates.gate_nn_hopping(angle, 1, ops.I(), ops.c(), ops.cp(), path)
-                  for path, angle in angles.items()]
-        # gates = [fpeps.Gate(mpo_hopping(ops, len(path), 0, len(path) - 1, angle), path)
-        #          for path, angle in angles.items()]
+                  for path, angle in angles.items()]  # those are 2-site gates
+        # gates = [fpeps.Gate(mpo_hopping(ops, 2, 0, 1, angle), path)
+        #           for path, angle in angles.items()]  # 2-site mpo also works
         for gate in gates:
             psi.apply_gate_(gate)
         psi = psi.to_tensor()
