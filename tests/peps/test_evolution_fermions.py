@@ -37,7 +37,8 @@ def mpo_hopping(ops, N, p0, p1, angle):
 
 
 @pytest.mark.parametrize('boundary', ['obc', 'cylinder'])
-def test_peps_evolution_hopping(config_kwargs, boundary):
+@pytest.mark.parametrize('method', ['NN', 'mpo'])
+def test_peps_evolution_hopping(config_kwargs, boundary, method):
     """ Simulate spinless fermions hopping on a small finite system. """
     #
     ops = yastn.operators.SpinlessFermions(sym='U1', default_dtype='complex128', **config_kwargs)
@@ -55,25 +56,46 @@ def test_peps_evolution_hopping(config_kwargs, boundary):
     for paths in paths_list:
         angles = {path: np.random.rand() + 1j * np.random.rand() - 0.5 - 0.5j for path in paths}
         #
-        psi = fpeps.product_peps(geometry, ops.I())
+        # reference solution
+        s2i = {s: i for i, s in enumerate(geometry.sites())}  # 1d order of fermionically-ordered sites for mps
+        phi = mps.product_mpo(ops.I(), N=Nx * Ny)
+        gates_mps = [mpo_hopping(ops, Nx * Ny, s2i[path[0]], s2i[path[-1]], angle) for path, angle in angles.items()]
+        for gate in gates_mps:
+            phi = gate @ phi
+        phi = phi.to_tensor()
+        phin = phi.to_numpy()
+        #
         gates = [fpeps.gates.gate_nn_hopping(angle, 1, ops.I(), ops.c(), ops.cp(), path)
                   for path, angle in angles.items()]  # those are 2-site gates
         # gates = [fpeps.Gate(mpo_hopping(ops, 2, 0, 1, angle), path)
         #           for path, angle in angles.items()]  # 2-site mpo also works
+        #
+        # testing apply_gate_  with no truncation
+        psi = fpeps.product_peps(geometry, ops.I())
         for gate in gates:
             psi.apply_gate_(gate)
         psi = psi.to_tensor()
-        #
-        s2i = {s: i for i, s in enumerate(geometry.sites())}  # 1d order of fermionically-ordered sites for mps
-        #
-        phi = mps.product_mpo(ops.I(), N=Nx * Ny)
-        gates = [mpo_hopping(ops, Nx * Ny, s2i[path[0]], s2i[path[-1]], angle) for path, angle in angles.items()]
-        for gate in gates:
-            phi = gate @ phi
-        phi = phi.to_tensor()
-
         assert (psi - phi).norm() < tol
-
+        #
+        # and for completness, executing truncating function but with large D and no truncation
+        #
+        psi = fpeps.product_peps(geometry, ops.I())
+        env = fpeps.EnvNTU(psi, which='NN')
+        fpeps.evolution_step_(env, gates, symmetrize=False, opts_svd={'D_total': 16}, method=method)
+        psi = psi.to_tensor()
+        psin = psi.to_numpy()
+        psin = psin * phin.ravel()[0] / psin.ravel()[0]  # evolution_step_ does not keep the norm
+        assert np.allclose(phin, psin)
+        #
+        # test evolution with EnvBP
+        psi = fpeps.product_peps(geometry, ops.I())
+        env = fpeps.EnvBP(psi, which='BP')
+        env.iterate_(max_sweeps=5)
+        fpeps.evolution_step_(env, gates, symmetrize=False, opts_svd={'D_total': 16}, method=method)
+        psi = psi.to_tensor()
+        psin = psi.to_numpy()
+        psin = psin * phin.ravel()[0] / psin.ravel()[0]  # evolution_step_ does not keep the norm
+        assert np.allclose(phin, psin)
 
 if __name__ == '__main__':
     pytest.main([__file__, "-vs", "--durations=0"])
