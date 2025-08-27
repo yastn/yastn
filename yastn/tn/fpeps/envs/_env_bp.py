@@ -18,7 +18,7 @@ from tqdm import tqdm
 from typing import NamedTuple, Union
 from .... import Tensor, eye, YastnError, tensordot, vdot, ncon
 from .._peps import Peps, Peps2Layers, DoublePepsTensor
-from .._gates_auxiliary import apply_gate_onsite, gate_product_operator, gate_fix_order, match_ancilla
+from .._gates_auxiliary import apply_gate_onsite, gate_product_operator, gate_fix_swap_gate, match_ancilla
 from .._geometry import Bond, Site
 from .._evolution import BipartiteBondMetric, BondMetric
 from ._env_auxlliary import *
@@ -203,52 +203,39 @@ class EnvBP(Peps):
             else:
                 return {bond: self.measure_nn(O, P, bond) for bond in self.bonds()}
 
-        bond = Bond(*bond)
-        dirn, l_ordered = self.nn_bond_type(bond)
-        f_ordered = self.f_ordered(*bond)
-        s0, s1 = bond if l_ordered else bond[::-1]
+        if O.ndim == 2 and P.ndim == 2:
+            O, P = gate_product_operator(O, P)
+
+        dirn = self.nn_bond_dirn(*bond)
+        if O.ndim == 3 and P.ndim == 3:
+            O, P = gate_fix_swap_gate(O, P, dirn, self.f_ordered(*bond))
+
+        s0, s1 = bond if dirn in ('lr', 'tb') else bond[::-1]
+        G0, G1 = (O, P) if dirn in ('lr', 'tb') else (P, O)
         env0, env1 = self[s0], self[s1]
         ten0, ten1 = self.psi[s0], self.psi[s1]
 
-        if O.ndim == 2 and P.ndim == 2:
-            G0, G1 = gate_product_operator(O, P, l_ordered, f_ordered)
-        elif O.ndim == 3 and P.ndim == 3:
-            G0, G1 = gate_fix_order(O, P, l_ordered, f_ordered)
-
-        if dirn == 'h':
+        if dirn in ('lr', 'rl'):
             tmp0 = hair_l(ten0.bra, ht=env0.t, hl=env0.l, hb=env0.b, Aket=ten0.ket)
             tmp1 = hair_r(ten1.bra, ht=env1.t, hr=env1.r, hb=env1.b, Aket=ten1.ket)
             val_no = vdot(tmp0, tmp1, conj=(0, 0))
 
-            if O.ndim <= 3:
-                Aket0 = apply_gate_onsite(ten0.ket, G0, dirn='l')
-            # else:
-            #     ten0 = O
-            if P.ndim <= 3:
-                Aket1 = apply_gate_onsite(ten1.ket, G1, dirn='r')
-            # else:
-            #     ten1 = P
+            ten0 = ten0.apply_gate_on_ket(G0, dirn='l')  # if G0.ndim <= 3 else G0
+            ten1 = ten1.apply_gate_on_ket(G1, dirn='r')  # if G1.ndim <= 3 else G1
 
-            tmp0 = hair_l(ten0.bra, ht=env0.t, hl=env0.l, hb=env0.b, Aket=Aket0)
-            tmp1 = hair_r(ten1.bra, ht=env1.t, hr=env1.r, hb=env1.b, Aket=Aket1)
+            tmp0 = hair_l(ten0.bra, ht=env0.t, hl=env0.l, hb=env0.b, Aket=ten0.ket)
+            tmp1 = hair_r(ten1.bra, ht=env1.t, hr=env1.r, hb=env1.b, Aket=ten1.ket)
             val_op = vdot(tmp0, tmp1, conj=(0, 0))
-        else:  # dirn == 'v':
+        else:  # dirn in ('tb', 'bt'):
             tmp0 = hair_t(ten0.bra, ht=env0.t, hl=env0.l, hr=env0.r, Aket=ten0.ket)
             tmp1 = hair_b(ten1.bra, hl=env1.l, hr=env1.r, hb=env1.b, Aket=ten1.ket)
             val_no = vdot(tmp0, tmp1, conj=(0, 0))
 
-            if O.ndim <= 3:
-                Aket0 = apply_gate_onsite(ten0.ket, G0, dirn='t')
-            # else:
-            #     ten0 = O
+            ten0 = ten0.apply_gate_on_ket(G0, dirn='t')  # if G0.ndim <= 3 else G0
+            ten1 = ten1.apply_gate_on_ket(G1, dirn='b')  # if G1.ndim <= 3 else G1
 
-            if P.ndim <= 3:
-                Aket1 = apply_gate_onsite(ten1.ket, G1, dirn='b')
-            # else:
-            #     ten1 = P
-
-            tmp0 = hair_t(ten0.bra, ht=env0.t, hl=env0.l, hr=env0.r, Aket=Aket0)
-            tmp1 = hair_b(ten1.bra, hl=env1.l, hr=env1.r, hb=env1.b, Aket=Aket1)
+            tmp0 = hair_t(ten0.bra, ht=env0.t, hl=env0.l, hr=env0.r, Aket=ten0.ket)
+            tmp1 = hair_b(ten1.bra, hl=env1.l, hr=env1.r, hb=env1.b, Aket=ten1.ket)
             val_op = vdot(tmp0, tmp1, conj=(0, 0))
 
         return val_op / val_no

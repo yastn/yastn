@@ -46,14 +46,19 @@ def test_peps_evolution_hopping(config_kwargs, boundary, method):
     Nx, Ny = 3, 2
     geometry = fpeps.SquareLattice(dims=(Nx, Ny), boundary=boundary)
     #
-    paths_list = [geometry.bonds(),
-                  [((0, 0), (1, 0), (1, 1), (2, 1)), ((2, 0), (1, 0), (1, 1), (0, 1))],
-                  [((2, 0), (1, 0), (1, 1), (2, 1)), ((2, 1), (2, 0), (1, 0), (1, 1), (0, 1), (0, 0))]
-                  ]
-    if boundary == 'cylinder':
-        paths_list.append([((0, 0), (2, 0), (1, 0), (1, 1)), ((2, 1), (0, 1), (0, 0))])
+    if boundary == 'obc':
+        paths_list = [geometry.bonds(),
+                      list(geometry.bonds()) + [((1, 0), (0, 0), (0, 1)), ((2, 0), (2, 1), (1, 1))],
+                      [((0, 0), (1, 0), (1, 1), (2, 1)), ((2, 0), (1, 0), (1, 1), (0, 1))],
+                      [((2, 0), (1, 0), (1, 1), (2, 1)), ((2, 1), (2, 0), (1, 0), (1, 1), (0, 1), (0, 0))],
+                      ]
+    elif boundary == 'cylinder':
+            paths_list = [geometry.bonds(),
+                          list(geometry.bonds()) + [((2, 0), (0, 0), (0, 1))],
+                          [((0, 0), (2, 0), (1, 0), (1, 1)), ((2, 1), (0, 1), (0, 0))],
+                          ]
 
-    for paths in paths_list:
+    for paths in paths_list:  # try a few combinations of operators
         angles = {path: np.random.rand() + 1j * np.random.rand() - 0.5 - 0.5j for path in paths}
         #
         # reference solution
@@ -71,14 +76,15 @@ def test_peps_evolution_hopping(config_kwargs, boundary, method):
         #           for path, angle in angles.items()]  # 2-site mpo also works
         #
         # testing apply_gate_  with no truncation
+        #
         psi = fpeps.product_peps(geometry, ops.I())
         for gate in gates:
             psi.apply_gate_(gate)
         psi = psi.to_tensor()
         assert (psi - phi).norm() < tol
         #
-        # and for completness, executing truncating function but with large D and no truncation
-        #
+        # execute truncating functions -- but with large D and no actuall truncation
+        # test evolution with EnvNTU
         psi = fpeps.product_peps(geometry, ops.I())
         env = fpeps.EnvNTU(psi, which='NN')
         fpeps.evolution_step_(env, gates, symmetrize=False, opts_svd={'D_total': 16}, method=method)
@@ -96,6 +102,7 @@ def test_peps_evolution_hopping(config_kwargs, boundary, method):
         psin = psi.to_numpy()
         psin = psin * phin.ravel()[0] / psin.ravel()[0]  # evolution_step_ does not keep the norm
         assert np.allclose(phin, psin)
+
 
 if __name__ == '__main__':
     pytest.main([__file__, "-vs", "--durations=0"])

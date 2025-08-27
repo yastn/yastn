@@ -17,7 +17,7 @@ from typing import Sequence, Union
 from ... import Tensor, YastnError, block, eye
 from ...tn.mps import Mpo, MpsMpoOBC
 from ._doublePepsTensor import DoublePepsTensor
-from ._gates_auxiliary import apply_gate_onsite, gate_from_mpo
+from ._gates_auxiliary import apply_gate_onsite, gate_from_mpo, gate_fix_swap_gate
 
 class Peps():
 
@@ -303,22 +303,15 @@ class Peps():
                 G.append(ten)
             G.append(g1)
 
-        dirn = ''
-        g0, s0 = G[0], gate.sites[0]
-
+        dirns, g0, s0 = '', G[0], gate.sites[0]
         for g1, s1 in zip(G[1:], gate.sites[1:]):
-            bd = self.nn_bond_dirn(s0, s1)
-            if bd in ['rl', 'bt']:
-                g0 = g0.swap_gate(axes=(1, g0.ndim-1))
-                g1 = g1.swap_gate(axes=(0, 2))
-            if (bd in ['lr', 'tb']) ^ self.f_ordered(s0, s1):  # for cylinder
-                g1 = g1.swap_gate(axes=(2, 2))
-            dirn += bd
-            self[s0] = apply_gate_onsite(self[s0], g0, dirn=dirn[:-1])
-            dirn = dirn[-1]
+            dirn = self.nn_bond_dirn(s0, s1)
+            g0, g1 = gate_fix_swap_gate(g0, g1, dirn, self.f_ordered(s0, s1))
+            dirns += dirn
+            self[s0] = apply_gate_onsite(self[s0], g0, dirn=dirns[:-1])
+            dirns = dirns[-1]
             g0, s0 = g1, s1
-
-        self[s0] = apply_gate_onsite(self[s0], g0, dirn=dirn)
+        self[s0] = apply_gate_onsite(self[s0], g0, dirn=dirns)
 
     def __add__(self, other):
         return add(self, other)

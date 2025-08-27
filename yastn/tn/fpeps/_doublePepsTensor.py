@@ -14,7 +14,7 @@
 # ==============================================================================
 from ... import tensordot, leg_product, YastnError, SpecialTensor
 from .envs._env_auxlliary import append_vec_tl, append_vec_br, append_vec_tr, append_vec_bl
-from ._gates_auxiliary import match_ancilla
+from ._gates_auxiliary import match_ancilla, apply_gate_onsite
 from ...tensor._auxliary import _clear_axes
 
 
@@ -66,6 +66,12 @@ class DoublePepsTensor(SpecialTensor):
     def del_operator_(self):
         """ Remove operator. """
         self.op = None
+
+    def apply_gate_on_ket(self, op, dirn):
+        """ Returns a shallow copy with ket tensor modified by application of gate. """
+        ket = apply_gate_onsite(self.ket, op, dirn=dirn)
+        return DoublePepsTensor(bra=self.bra, ket=ket, transpose=self._t, op=self.op, swaps=self.swaps)
+
 
     def add_charge_swaps_(self, charge, axes):
         """

@@ -163,7 +163,7 @@ class SquareLattice():
         #     y = y % self._dims[1]
         return Site(x, y)
 
-    def nn_bond_dirn(self, s0, s1) -> tuple[str, bool]:
+    def nn_bond_dirn(self, s0, s1) -> str:
         """
         Raise YastnError if a bond does not connect nearest-neighbor lattice sites.
         Return bond orientation in 2D grid as a tuple: dirn, l_ordered
@@ -179,7 +179,6 @@ class SquareLattice():
         if self.nn_site(s0, 't') == s1 and self.nn_site(s1, 'b') == s0:
             return 'bt'
         raise YastnError(f"{s0}, {s1} are not nearest-neighbor sites.")
-
 
     def nn_bond_type(self, bond) -> tuple[str, bool]:
         """

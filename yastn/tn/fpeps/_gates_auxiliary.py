@@ -188,21 +188,19 @@ def fkron(A, B, sites=(0, 1), merge=True):
     return gate_product_operator(A, B, order, order, merge)
 
 
-def gate_fix_order(G0, G1, l_ordered=True, f_ordered=True):
+def gate_fix_swap_gate(G0, G1, dirn, f_ordered):
     """
-    Modifies two gate tensors,
-    that were generated consistently with lattice and fermionic orders,
-    making them consistent with provided orders.
+    Modifies two gate tensors, that were generated consistently with fermionic order 0->1.
+    Apply swap_gates to make them consistent with provided orders.
 
-    l_ordered and f_ordered typically coincide;
-    they do not coincide in a special case of
-    cylindric lattice geometry across the periodic boundary.
+    Lattice order (dirn=='lr' or 'tb') and f_ordered typically coincide.
+    They do not coincide in a special case of cylindric geometry across the periodic boundary.
     """
-    if not f_ordered:
-        G0 = G0.swap_gate(axes=(1, 2))
+    if dirn in ['rl', 'bt']:
+        G0 = G0.swap_gate(axes=(1, -1))
         G1 = G1.swap_gate(axes=(0, 2))
-    if not l_ordered:
-        G0, G1 = G1, G0
+    if f_ordered ^ (dirn in ['lr', 'tb']):  # for cylinder
+        G1 = G1.swap_gate(axes=(2, 2))
     return G0, G1
 
 

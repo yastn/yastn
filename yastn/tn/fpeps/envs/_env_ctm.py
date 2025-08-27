@@ -20,8 +20,8 @@ from .... import Tensor, rand, ones, eye, YastnError, Leg, tensordot, qr, trunca
 from ....operators import sign_canonical_order
 from ... import mps
 from .._peps import Peps, Peps2Layers
-from .._gates_auxiliary import apply_gate_onsite, gate_product_operator, gate_fix_order
-from .._geometry import Bond, Site
+from .._gates_auxiliary import gate_product_operator, gate_fix_swap_gate
+from .._geometry import Site
 from .._evolution import BondMetric
 from ._env_auxlliary import *
 from ._env_window import EnvWindow
@@ -523,8 +523,6 @@ class EnvCTM(Peps):
         bond: yastn.tn.fpeps.Bond | tuple[tuple[int, int], tuple[int, int]]
             Bond of the form (s0, s1). Sites s0 and s1 should be nearest-neighbors on the lattice.
         """
-
-
         if bond is None:
             if isinstance(O, dict):
                 Odict = _clear_operator_input(O, self.sites())
@@ -538,24 +536,19 @@ class EnvCTM(Peps):
             else:
                 return {bond: self.measure_nn(O, P, bond) for bond in self.bonds()}
 
-        # if bond is None:
-        #      return {bond: self.measure_nn(O, P, bond) for bond in self.bonds()}
+        if O.ndim == 2 and P.ndim == 2:
+            O, P = gate_product_operator(O, P)
 
-        bond = Bond(*bond)
-        dirn, l_ordered = self.nn_bond_type(bond)
-        f_ordered = self.f_ordered(*bond)
-        s0, s1 = bond if l_ordered else bond[::-1]
+        dirn = self.nn_bond_dirn(*bond)
+        if O.ndim == 3 and P.ndim == 3:
+            O, P = gate_fix_swap_gate(O, P, dirn, self.f_ordered(*bond))
+
+        s0, s1 = bond if dirn in ('lr', 'tb') else bond[::-1]
+        G0, G1 = (O, P) if dirn in ('lr', 'tb') else (P, O)
         env0, env1 = self[s0], self[s1]
         ten0, ten1 = self.psi[s0], self.psi[s1]
 
-        if O.ndim == 2 and P.ndim == 2:
-            G0, G1 = gate_product_operator(O, P, l_ordered, f_ordered)
-        elif O.ndim == 3 and P.ndim == 3:
-            G0, G1 = gate_fix_order(O, P, l_ordered, f_ordered)
-        # else:
-        #     raise YastnError("Both operators O and P should have the same ndim==2, or ndim=3.")
-
-        if dirn == 'h':
+        if dirn in ('lr', 'rl'):
             vecl = (env0.bl @ env0.l) @ (env0.tl @ env0.t)
             vecr = (env1.tr @ env1.r) @ (env1.br @ env1.b)
 
@@ -565,21 +558,15 @@ class EnvCTM(Peps):
             tmp1 = tensordot(tmp1, env1.t, axes=((2, 0), (1, 2)))
             val_no = vdot(tmp0, tmp1, conj=(0, 0))
 
-            if O.ndim <= 3:
-                ten0.ket = apply_gate_onsite(ten0.ket, G0, dirn='l')
-            else:
-                ten0 = O
-            if P.ndim <= 3:
-                ten1.ket = apply_gate_onsite(ten1.ket, G1, dirn='r')
-            else:
-                ten1 = P
+            ten0 = ten0.apply_gate_on_ket(G0, dirn='l') if G0.ndim <= 3 else G0
+            ten1 = ten1.apply_gate_on_ket(G1, dirn='r') if G1.ndim <= 3 else G1
 
             tmp0 = tensordot(ten0, vecl, axes=((0, 1), (2, 1)))
             tmp0 = tensordot(env0.b, tmp0, axes=((1, 2), (0, 2)))
             tmp1 = tensordot(vecr, ten1, axes=((2, 1), (2, 3)))
             tmp1 = tensordot(tmp1, env1.t, axes=((2, 0), (1, 2)))
             val_op = vdot(tmp0, tmp1, conj=(0, 0))
-        else:  # dirn == 'v':
+        else:  # dirn in ('tb', 'bt'):
             vect = (env0.l @ env0.tl) @ (env0.t @ env0.tr)
             vecb = (env1.r @ env1.br) @ (env1.b @ env1.bl)
 
@@ -589,15 +576,8 @@ class EnvCTM(Peps):
             tmp1 = tensordot(env1.l, tmp1, axes=((0, 1), (3, 1)))
             val_no = vdot(tmp0, tmp1, conj=(0, 0))
 
-            if O.ndim <= 3:
-                ten0.ket = apply_gate_onsite(ten0.ket, G0, dirn='t')
-            else:
-                ten0 = O
-
-            if P.ndim <= 3:
-                ten1.ket = apply_gate_onsite(ten1.ket, G1, dirn='b')
-            else:
-                ten1 = P
+            ten0 = ten0.apply_gate_on_ket(G0, dirn='t') if G0.ndim <= 3 else G0
+            ten1 = ten1.apply_gate_on_ket(G1, dirn='b') if G1.ndim <= 3 else G1
 
             tmp0 = tensordot(vect, ten0, axes=((2, 1), (0, 1)))
             tmp0 = tensordot(tmp0, env0.r, axes=((1, 3), (0, 1)))
