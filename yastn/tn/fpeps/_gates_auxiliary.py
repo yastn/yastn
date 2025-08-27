@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from itertools import pairwise
 from typing import NamedTuple
 from ... import eye, tensordot, YastnError
 
@@ -50,8 +49,6 @@ def match_ancilla(ten, G, dirn=None):
     _, leg = leg.unfuse_leg()  # unfuse to get ancilla leg
     one = eye(config=ten.config, legs=[leg, leg.conj()], isdiag=False)
     Gnew = tensordot(G, one, axes=((), ()))
-
-    swap = dirn and dirn in 'tl'
 
     if G.ndim == 2:
         return Gnew.fuse_legs(axes=((0, 2), (1, 3)))
@@ -210,4 +207,21 @@ def gate_from_mpo(op):
     for n in op.sweep(to='last', df=1):
         G.append(op[n].transpose(axes=(1, 3, 0, 2)))
     G[-1] = G[-1].remove_leg(axis=-1)
+    return G
+
+
+def fill_eye_in_gate(peps, G, sites):
+    g0, g1 = G
+    G = [g0]
+    leg = g0.get_legs(axes=2)
+    vb = eye(g0.config, legs=(leg.conj(), leg), isdiag=False)
+    for site in sites[1:-1]:
+        leg = peps[site].get_legs(axes=2)
+        if leg.is_fused():  # unfuse to get system leg
+            leg, _ = leg.unfuse_leg()
+        vp = eye(g0.config, legs=(leg, leg.conj()), isdiag=False)
+        ten = vp.tensordot(vb, axes=((), ()))
+        ten = ten.swap_gate(axes=(1, 2))
+        G.append(ten)
+    G.append(g1)
     return G

@@ -15,9 +15,9 @@
 from __future__ import annotations
 from typing import Sequence, Union
 from ... import Tensor, YastnError, block, eye
-from ...tn.mps import Mpo, MpsMpoOBC
+from ...tn.mps import Mpo, MpsMpoOBC, MpoPBC
 from ._doublePepsTensor import DoublePepsTensor
-from ._gates_auxiliary import apply_gate_onsite, gate_from_mpo, gate_fix_swap_gate
+from ._gates_auxiliary import apply_gate_onsite, gate_from_mpo, gate_fix_swap_gate, fill_eye_in_gate
 
 class Peps():
 
@@ -118,7 +118,7 @@ class Peps():
         site0 = self.sites()[0]
         return self[site0].ndim in (3, 5)
 
-    def __getitem__(self, site):
+    def __getitem__(self, site) -> Tensor:
         """ Get tensor for site. """
         return self._data[self.site2index(site)]
 
@@ -153,7 +153,7 @@ class Peps():
     def __repr__(self) -> str:
         return f"Peps(geometry={self.geometry.__repr__()}, tensors={ self._data })"
 
-    def clone(self) -> yastn.tn.fpeps.Peps:
+    def clone(self) -> Peps:
         r"""
         Returns a deep clone of the PEPS instance by :meth:`cloning<yastn.Tensor.clone>` each tensor in
         the network. Each tensor in the cloned PEPS will contain its own independent data blocks.
@@ -163,7 +163,7 @@ class Peps():
             psi._data[ind] = self._data[ind].clone()
         return psi
 
-    def copy(self) -> yastn.tn.fpeps.Peps:
+    def copy(self) -> Peps:
         r"""
         Returns a deep copy of the PEPS instance by :meth:`copy<yastn.Tensor.copy>` each tensor in
         the network. Each tensor in the copied PEPS will contain its own independent data blocks.
@@ -173,7 +173,7 @@ class Peps():
             psi._data[ind] = self._data[ind].copy()
         return psi
 
-    def shallow_copy(self) -> yastn.tn.fpeps.Peps:
+    def shallow_copy(self) -> Peps:
         r"""
         New instance of :class:`yastn.tn.mps.Peps` pointing to the same tensors as the old one.
 
@@ -184,7 +184,7 @@ class Peps():
             psi._data[ind] = self._data[ind]
         return psi
 
-    def transfer_mpo(self, n=0, dirn='v') -> yastn.tn.mps.MpsMpo:
+    def transfer_mpo(self, n=0, dirn='v') -> MpsMpoOBC | MpoPBC:
         """
         Converts a specified row or column of the PEPS into a Matrix Product Operator (MPO) representation,
         facilitating boundary or contraction calculations along that direction.
@@ -231,7 +231,7 @@ class Peps():
             # out[bond] = self[s0].get_shape(axes=axes)
         return out
 
-    def to_tensor(self):
+    def to_tensor(self) -> Tensor:
         r"""
         Contract PEPS into a single tensor.
 
@@ -289,19 +289,7 @@ class Peps():
         G = gate_from_mpo(gate.G) if isinstance(gate.G, MpsMpoOBC) else gate.G
 
         if len(G) == 2 and len(gate.sites) > 2:  # fill-in identities
-            g0, g1 = G
-            G = [g0]
-            leg = g0.get_legs(axes=2)
-            vb = eye(g0.config, legs=(leg.conj(), leg), isdiag=False)
-            for site in gate.sites[1:-1]:
-                leg = self[site].get_legs(axes=2)
-                if leg.is_fused():  # unfuse to get system leg
-                    leg, _ = leg.unfuse_leg()
-                vp = eye(g0.config, legs=(leg, leg.conj()), isdiag=False)
-                ten = vp.tensordot(vb, axes=((), ()))
-                ten = ten.swap_gate(axes=(1, 2))
-                G.append(ten)
-            G.append(g1)
+            G = fill_eye_in_gate(self, G, gate.sites)
 
         dirns, g0, s0 = '', G[0], gate.sites[0]
         for g1, s1 in zip(G[1:], gate.sites[1:]):
@@ -313,7 +301,7 @@ class Peps():
             g0, s0 = g1, s1
         self[s0] = apply_gate_onsite(self[s0], g0, dirn=dirns)
 
-    def __add__(self, other):
+    def __add__(self, other) -> Peps:
         return add(self, other)
 
 
@@ -379,6 +367,6 @@ class Peps2Layers():
     def has_physical(self) -> bool:
         return False
 
-    def __getitem__(self, site) -> yastn.tn.fpeps.DoublePepsTensor:
+    def __getitem__(self, site) -> DoublePepsTensor:
         """ Get tensor for site. """
         return DoublePepsTensor(bra=self.bra[site], ket=self.ket[site])
