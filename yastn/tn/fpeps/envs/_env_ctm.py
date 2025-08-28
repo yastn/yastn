@@ -856,12 +856,6 @@ class EnvCTM(Peps):
                               opts_svd=opts_svd, opts_var=opts_var,
                               progressbar=progressbar, return_probabilities=return_probabilities, flatten_one=flatten_one)
 
-    def pre_truncation_(env, bond):
-        pass
-
-    def post_truncation_(env, bond, **kwargs):
-        pass
-
     def calculate_corner_svd(self):
         """
         Return normalized SVD spectra, with largest singular value set to unity, of all corner tensors of environment.
@@ -982,7 +976,35 @@ class EnvCTM(Peps):
                 update_storage_(proj, proj_tmp)
         return proj
 
-    def post_evolution_(env, bond, **kwargs):
+    def update_bond_(env, bond: tuple, opts_svd: dict | None = None, **kwargs):
+        r"""
+        Update EnvCTM tensors related to a specific nearest-neighbor bond.
+        """
+        if opts_svd is None:
+            opts_svd = env.opts_svd
+
+        dirn = env.nn_bond_dirn(*bond)
+        s0, s1 = bond if dirn in 'lr tb' else bond[::-1]
+
+        proj = Peps(env.geometry)
+        for site in env.sites():
+            proj[site] = EnvCTM_projectors()
+
+        move, m0, m1, d = 'hrlt' if dirn in 'lrl' else 'vbtl'
+        update_projectors_(proj, s0, move, env, opts_svd, **kwargs)
+        update_projectors_(proj, env.nn_site(s0, d=d), move, env, opts_svd, **kwargs)
+        trivial_projectors_(proj, m0, env, sites=[s1])
+        trivial_projectors_(proj, m1, env, sites=[s0])
+        env_tmp = EnvCTM(env.psi, init=None)  # empty environments
+        update_env_(env_tmp, s0, env, proj, move=m0)
+        update_env_(env, s1, env, proj, move=m1)
+        update_storage_(env, env_tmp)
+
+
+    def pre_truncation_(env, bond):
+        pass
+
+    def post_truncation_(env, bond, **kwargs):
         pass
 
     def bond_metric(self, Q0, Q1, s0, s1, dirn) -> Tensor:

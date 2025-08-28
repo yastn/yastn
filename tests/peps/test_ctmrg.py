@@ -110,31 +110,51 @@ def test_ctmrg_Ising(config_kwargs):
         assert abs(MX2 - ev_XXlong) < 1e-10
 
 
-@pytest.mark.parametrize("moves", ["hv", "lrtb"])
-def test_ctmrg_Ising_3x4(moves, config_kwargs):
+def test_ctmrg_Ising_4x5(config_kwargs):
     r"""
     Test if convergence is reached using various moves in a finite system.
+    Also tests bond_update_ after enlarging some bonds in Peps.
     """
-    beta = 0.5
     config = yastn.make_config(sym='Z2', **config_kwargs)
     leg = yastn.Leg(config, s=1, t=(0, 1), D=(1, 1))
+    leg2 = yastn.Leg(config, s=1, t=(0, 1), D=(2, 2))
+
     T = yastn.ones(config, legs=[leg, leg, leg.conj(), leg.conj()], n=0)
-    X = yastn.ones(config, legs=[leg, leg, leg.conj(), leg.conj()], n=1)
-    B = yastn.zeros(config, legs=[leg, leg.conj()])
-    B.set_block(ts=(0, 0), val=np.cosh(beta))
-    B.set_block(ts=(1, 1), val=np.sinh(beta))
-    TB = yastn.ncon([T, B, B], [(-0, -1, 2, 3), [2, -2], [3, -3]])
+    XL = yastn.ones(config, legs=[leg, leg, leg.conj(), leg2.conj()], n=0)
+    XR = yastn.ones(config, legs=[leg, leg2, leg.conj(), leg.conj()], n=0)
+    XT = yastn.ones(config, legs=[leg, leg, leg2.conj(), leg.conj()], n=0)
+    XB = yastn.ones(config, legs=[leg2, leg, leg.conj(), leg.conj()], n=0)
     #
-    geometry = fpeps.SquareLattice(dims=(3, 4), boundary='obc')
-    psi = fpeps.Peps(geometry=geometry, tensors=[[TB, TB, TB, TB],
-                                                 [TB, TB, TB, TB],
-                                                 [TB, TB, TB, TB]])
+    geometry = fpeps.SquareLattice(dims=(4, 5), boundary='obc')
+    psi = fpeps.Peps(geometry=geometry, tensors=[[T, T, T, T, T],
+                                                 [T, T, T, T, T],
+                                                 [T, T, T, T, T],
+                                                 [T, T, T, T, T]])
     #
     chi = 4
     env = fpeps.EnvCTM(psi, init='eye')
     opts_svd = {"D_total": chi}
-    info = env.ctmrg_(opts_svd=opts_svd, moves=moves, max_sweeps=100, corner_tol=1e-12)
+    info = env.ctmrg_(opts_svd=opts_svd, moves='lrtb', max_sweeps=10, corner_tol=1e-12)
     assert info.converged
+    #
+    # enlarge some bonds
+    psi[(1, 1)] = XL
+    psi[(1, 2)] = XR
+    env.update_bond_(((1, 1), (1, 2)), opts_svd=opts_svd)
+    psi[(1, 3)] = XT
+    psi[(2, 3)] = XB
+    env.opts_svd = opts_svd
+    env.update_bond_(((1, 3), (2, 3)))
+    #
+    # now full sweep of ctmrg can be executed
+    info = env.ctmrg_(opts_svd=opts_svd, moves='hv', max_sweeps=10, corner_tol=1e-12)
+    assert info.converged
+    #
+    # checks if properly updated on a boundary
+    bonds = [((0, 0), (0, 1)), ((3, 4), (3, 3)),
+             ((0, 0), (1, 0)), ((3, 4), (2, 4))]
+    for bond in bonds:
+        env.update_bond_(bond, opts_svd=opts_svd)
 
 
 @pytest.mark.parametrize("checkpoint_move", ['reentrant', 'nonreentrant', False])
