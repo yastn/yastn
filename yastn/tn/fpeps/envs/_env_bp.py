@@ -15,7 +15,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from tqdm import tqdm
-from typing import NamedTuple, Union
+from typing import NamedTuple
 from .... import Tensor, eye, YastnError, tensordot, vdot, ncon
 from .._peps import Peps, Peps2Layers, DoublePepsTensor
 from .._gates_auxiliary import apply_gate_onsite, gate_product_operator, gate_fix_order, match_ancilla
@@ -32,16 +32,16 @@ class EnvBP_local():
 
     Contains fields ``t``,  ``l``, ``b``, ``r``
     """
-    t  : Union[Tensor, None] = None  # top
-    l  : Union[Tensor, None] = None  # left
-    b  : Union[Tensor, None] = None  # bottom
-    r  : Union[Tensor, None] = None  # right
+    t: Tensor | None = None  # top
+    l: Tensor | None = None  # left
+    b: Tensor | None = None  # bottom
+    r: Tensor | None = None  # right
 
 
 class BP_out(NamedTuple):
-    sweeps : int = 0
-    max_diff : float = None
-    converged : bool = False
+    sweeps: int = 0
+    max_diff: float = None
+    converged: bool = False
 
 
 class EnvBP(Peps):
@@ -104,7 +104,7 @@ class EnvBP(Peps):
         d = {'class': 'EnvBP',
              'psi': psi.save_to_dict(),
              'data': {}}
-        
+
         for site in self.sites():
             d_local = {dirn: getattr(self[site], dirn).save_to_dict()
                        for dirn in ['t', 'l', 'b', 'r']}
@@ -595,7 +595,7 @@ class EnvBP(Peps):
 
     def sample(self, projectors, number=1, xrange=None, yrange=None, progressbar=False, return_probabilities=False, flatten_one=True, **kwargs) -> dict[Site, list]:
         r"""
-        Sample random configurations from PEPS. 
+        Sample random configurations from PEPS.
         Output a dictionary linking sites with lists of sampled projectors` keys for each site.
         Projectors should be summing up to identity -- this is not checked.
 
@@ -608,7 +608,7 @@ class EnvBP(Peps):
 
         number: int
             Number of independent samples.
-            
+
         xrange: tuple[int, int]
             range of rows to sample from, [r0, r1); r0 included, r1 excluded.
 
@@ -666,7 +666,7 @@ class EnvBP(Peps):
                         proj = match_ancilla(ten.ket, proj)
                         Aketp = tensordot(Aket, proj, axes=(4, 1))
                         prob = vdot(Abra, Aketp) / norm_prob
-                        acc_prob += prob 
+                        acc_prob += prob
                         if rands[count] < acc_prob:
                             out[nx, ny].append(k)
                             ketp = tensordot(ten.ket, proj, axes=(2, 1)) / prob

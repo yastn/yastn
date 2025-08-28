@@ -14,11 +14,12 @@
 # ==============================================================================
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import NamedTuple, Union, Callable, Sequence
+from typing import NamedTuple, Callable, Sequence
 import logging
 from .... import Tensor, rand, ones, eye, YastnError, Leg, tensordot, qr, truncation_mask, vdot, decompress_from_1d
 from ....operators import sign_canonical_order
 from ... import mps
+from ...mps import MpsMpoOBC
 from .._peps import Peps, Peps2Layers
 from .._gates_auxiliary import apply_gate_onsite, gate_product_operator, gate_fix_order
 from .._geometry import Bond, Site
@@ -36,34 +37,34 @@ class EnvCTM_local():
 
     Contains fields ``tl``, ``t``, ``tr``, ``r``, ``br``, ``b``, ``bl``, ``l``
     """
-    tl : Union[Tensor, None] = None  # top-left
-    t  : Union[Tensor, None] = None  # top
-    tr : Union[Tensor, None] = None  # top-right
-    r  : Union[Tensor, None] = None  # right
-    br : Union[Tensor, None] = None  # bottom-right
-    b  : Union[Tensor, None] = None  # bottom
-    bl : Union[Tensor, None] = None  # bottom-left
-    l  : Union[Tensor, None] = None  # left
+    tl: Tensor | None = None  # top-left
+    t:  Tensor | None = None  # top
+    tr: Tensor | None = None  # top-right
+    r:  Tensor | None = None  # right
+    br: Tensor | None = None  # bottom-right
+    b:  Tensor | None = None  # bottom
+    bl: Tensor | None = None  # bottom-left
+    l:  Tensor | None = None  # left
 
 
 @dataclass()
 class EnvCTM_projectors():
     r""" Dataclass for CTM projectors associated with Peps lattice site. """
-    hlt : Union[Tensor, None] = None  # horizontal left top
-    hlb : Union[Tensor, None] = None  # horizontal left bottom
-    hrt : Union[Tensor, None] = None  # horizontal right top
-    hrb : Union[Tensor, None] = None  # horizontal right bottom
-    vtl : Union[Tensor, None] = None  # vertical top left
-    vtr : Union[Tensor, None] = None  # vertical top right
-    vbl : Union[Tensor, None] = None  # vertical bottom left
-    vbr : Union[Tensor, None] = None  # vertical bottom right
+    hlt: Tensor | None = None  # horizontal left top
+    hlb: Tensor | None = None  # horizontal left bottom
+    hrt: Tensor | None = None  # horizontal right top
+    hrb: Tensor | None = None  # horizontal right bottom
+    vtl: Tensor | None = None  # vertical top left
+    vtr: Tensor | None = None  # vertical top right
+    vbl: Tensor | None = None  # vertical bottom left
+    vbr: Tensor | None = None  # vertical bottom right
 
 
 class CTMRG_out(NamedTuple):
-    sweeps : int = 0
-    max_dsv : float = None
-    converged : bool = False
-    max_D : int = 1
+    sweeps: int = 0
+    max_dsv: float = None
+    converged: bool = False
+    max_D: int = 1
 
 
 class EnvCTM(Peps):
@@ -162,7 +163,6 @@ class EnvCTM(Peps):
                 except RuntimeError:
                     setattr(self[site], dirn, getattr(self[site], dirn).detach())
 
-
     def shallow_copy(self) -> EnvCTM:
         env = EnvCTM(self.psi, init=None)
         for site in env.sites():
@@ -213,7 +213,7 @@ class EnvCTM(Peps):
                     else:
                         setattr(self[site], dirn, rand(config, legs=[leg, legs[ind].conj(), leg.conj()]))
 
-    def init_env_from_onsite_(self, normalize: Union[str,Callable]='inf'):
+    def init_env_from_onsite_(self, normalize: str | Callable = 'inf'):
         r"""
         Initialize CTMRG environment by tracing on-site double-layer tensors A.
 
@@ -409,7 +409,7 @@ class EnvCTM(Peps):
         update_old_env_(self, env_tmp)
 
 
-    def boundary_mps(self, n, dirn):
+    def boundary_mps(self, n, dirn) -> MpsMpoOBC:
         r""" Convert environmental tensors of Ctm to an MPS """
         if dirn == 'b':
             H = mps.Mps(N=self.Ny)
@@ -578,7 +578,7 @@ class EnvCTM(Peps):
 
         return val_op / val_no
 
-    def measure_2x2(self, *operators, sites=None):
+    def measure_2x2(self, *operators, sites=None) -> float:
         r"""
         Calculate expectation value of a product of local operators
         in a :math:`2 \times 2` window within the CTM environment.
@@ -674,7 +674,7 @@ class EnvCTM(Peps):
         return sign * val_op / val_no
 
 
-    def measure_line(self, *operators, sites=None):
+    def measure_line(self, *operators, sites=None) -> float:
         r"""
         Calculate expectation value of a product of local opertors
         along a horizontal or vertical line within CTM environment.
@@ -755,7 +755,7 @@ class EnvCTM(Peps):
         return _measure_nsite(env_win, *operators, sites=sites, dirn=dirn)
 
 
-    def measure_2site(self, O, P, xrange, yrange, opts_svd=None, opts_var=None, bonds='<') -> dict[Site, list]:
+    def measure_2site(self, O, P, xrange, yrange, opts_svd=None, opts_var=None, bonds='<') -> dict[Site, float]:
         r"""
         Calculate 2-point correlations <O P> between top-left corner of the window, and all sites in the window.
 
@@ -798,7 +798,7 @@ class EnvCTM(Peps):
 
     def sample(self, projectors, number=1, xrange=None, yrange=None, opts_svd=None, opts_var=None, progressbar=False, return_probabilities=False, flatten_one=True, **kwargs) -> dict[Site, list]:
         r"""
-        Sample random configurations from PEPS. 
+        Sample random configurations from PEPS.
         Output a dictionary linking sites with lists of sampled projectors` keys for each site.
         Projectors should be summing up to identity -- this is not checked.
 
@@ -811,7 +811,7 @@ class EnvCTM(Peps):
 
         number: int
             Number of independent samples.
-            
+
         xrange: tuple[int, int]
             range of rows to sample from, [r0, r1); r0 included, r1 excluded.
 
@@ -841,14 +841,14 @@ class EnvCTM(Peps):
         if yrange is None:
             yrange = [0, self.Ny]
         env_win = EnvWindow(self, xrange, yrange)
-        return env_win.sample(projectors, number=number, 
-                              opts_svd=opts_svd, opts_var=opts_var, 
+        return env_win.sample(projectors, number=number,
+                              opts_svd=opts_svd, opts_var=opts_var,
                               progressbar=progressbar, return_probabilities=return_probabilities, flatten_one=flatten_one)
 
     def post_evolution_(env, bond, **kwargs):
         pass
 
-    def update_(env, opts_svd, method='2site', **kwargs):
+    def update_(env, opts_svd, method='2site', moves='hv', **kwargs):
         r"""
         Perform one step of CTMRG update. Environment tensors are updated in place.
 
@@ -886,7 +886,8 @@ class EnvCTM(Peps):
         #
         # Empty structure for projectors
         proj = Peps(env.geometry)
-        for site in proj.sites(): proj[site] = EnvCTM_projectors()
+        for site in proj.sites():
+            proj[site] = EnvCTM_projectors()
 
         def _compress_env(env):
             shallow= {
@@ -921,7 +922,7 @@ class EnvCTM(Peps):
         #
         # get projectors and compute updated env tensors
         # TODO currently supports only <psi|psi> for double-layer peps
-        for d in ['lr', 'tb']:
+        for d in moves:
 
             if checkpoint_move:
                 outputs_meta= {}
@@ -972,7 +973,7 @@ class EnvCTM(Peps):
         return proj
 
 
-    def bond_metric(self, Q0, Q1, s0, s1, dirn):
+    def bond_metric(self, Q0, Q1, s0, s1, dirn) -> Tensor:
         r"""
         Calculates Full-Update metric tensor.
 
@@ -1071,7 +1072,7 @@ class EnvCTM(Peps):
             env[site].b = env_old[site].b
             env[site].t = env_old[site].t
 
-    def ctmrg_(env, opts_svd=None, method='2site', max_sweeps=1, iterator_step=None, corner_tol=None, truncation_f : Callable=None, **kwargs):
+    def ctmrg_(env, opts_svd=None, method='2site', moves='hv', max_sweeps=1, iterator_step=None, corner_tol=None, truncation_f: Callable = None, **kwargs):
         r"""
         Perform CTMRG updates :meth:`yastn.tn.fpeps.EnvCTM.update_` until convergence.
         Convergence can be measured based on singular values of CTM environment corner tensors.
@@ -1109,7 +1110,7 @@ class EnvCTM(Peps):
             rank-1 tensor with singular values. If provided, truncation parameters passed to SVD decomposition
             are ignored.
 
-        checkpoint_move: Union[str, bool]
+        checkpoint_move: str | bool
             Whether to use checkpointing for the CTM updates. The default is ``False``.
             Otherwise, in case of PyTorch backend it can be set to 'reentrant' for reentrant checkpointing
             or 'nonreentrant' for non-reentrant checkpointing, see https://pytorch.org/docs/stable/checkpoint.html.
@@ -1133,14 +1134,14 @@ class EnvCTM(Peps):
             if env.config.backend.BACKEND_ID == "torch":
                 assert kwargs["checkpoint_move"] in ['reentrant','nonreentrant',False], f"Invalid choice for {kwargs['checkpoint_move']}"
         kwargs["truncation_f"]= truncation_f
-        tmp = _iterate_ctmrg_(env, opts_svd, method, max_sweeps, iterator_step, corner_tol, **kwargs)
+        tmp = _iterate_ctmrg_(env, opts_svd, method, moves, max_sweeps, iterator_step, corner_tol, **kwargs)
         return tmp if iterator_step else next(tmp)
 
     iterate_ = ctmrg_  #  allow using EnvCtm.iterate_() instead of allow using EnvCtm.ctmrg_()
 
 
-def ctm_conv_corner_spec(env : EnvCTM, history : Sequence[dict[tuple[Site,str],Tensor]]=[],
-                         corner_tol : Union[None,float]=1.0e-8)->tuple[bool,float,Sequence[dict[tuple[Site,str],Tensor]]]:
+def ctm_conv_corner_spec(env: EnvCTM, history: Sequence[dict[tuple[Site, str], Tensor]] = [],
+                         corner_tol: float | None = 1.0e-8) -> tuple[bool, float, Sequence[dict[tuple[Site, str], Tensor]]]:
     """
     Evaluate convergence of CTM by computing the difference of environment corner spectra between consecutive CTM steps.
     """
@@ -1150,11 +1151,11 @@ def ctm_conv_corner_spec(env : EnvCTM, history : Sequence[dict[tuple[Site,str],T
     return (corner_tol is not None and max_dsv < corner_tol), max_dsv, history
 
 
-def _iterate_ctmrg_(env, opts_svd, method, max_sweeps, iterator_step, corner_tol, **kwargs):
+def _iterate_ctmrg_(env, opts_svd, method, moves, max_sweeps, iterator_step, corner_tol, **kwargs):
     """ Generator for ctmrg_(). """
     max_dsv, converged = None, False
     for sweep in range(1, max_sweeps + 1):
-        env.update_(opts_svd=opts_svd, method=method, **kwargs)
+        env.update_(opts_svd=opts_svd, method=method, moves=moves, **kwargs)
 
         # use default CTM convergence check
         if corner_tol is not None:
@@ -1170,7 +1171,7 @@ def _iterate_ctmrg_(env, opts_svd, method, max_sweeps, iterator_step, corner_tol
     yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
 
 
-def calculate_corner_svd(env : dict[tuple[Site,str],Tensor]):
+def calculate_corner_svd(env: dict[tuple[Site, str], Tensor]):
     """
     Return normalized SVD spectra, with largest singular value set to unity, of all corner tensors of environment.
     The corners are indexed by pair of Site and corner identifier.
@@ -1186,31 +1187,54 @@ def calculate_corner_svd(env : dict[tuple[Site,str],Tensor]):
     return corner_sv
 
 
-def _update_core_2dir(env, dir : str, opts_svd : dict, **kwargs):
-        assert dir in ['lr', 'rl', 'tb', 'bt'], "Invalid directions"
-        update_env_= update_env_horizontal_ if dir in ['lr', 'rl'] else update_env_vertical_
-        method= kwargs.get('method', '2site')
+def _update_core_2dir(env, move: str, opts_svd: dict, **kwargs):
+        assert move in ['h', 'v', 'l', 'r', 't', 'b'], "Invalid directions"
+        method = kwargs.get('method', '2site')
         if method == '2site':
-            update_proj_ = update_2site_projectors_ 
-        elif method == '1site': 
-            update_proj_ = update_1site_projectors_ 
-        elif method == 'hex': 
-            update_proj_ = update_extended_2site_projectors_ 
-        #
-        # Empty structure for projectors
+            update_proj_ = update_2site_projectors_
+        elif method == '1site':
+            update_proj_ = update_1site_projectors_
+        elif method == 'hex':
+            update_proj_ = update_extended_2site_projectors_
+
+        # one-direction moves are executed causally, row after row or column after column
+        # two-direction moves have all sites updated simultaneously
+        if move in 'hv':
+            shift_proj = None
+            sitess = [env.sites()]
+        elif move == 'l':
+            shift_proj = 'l'
+            sitess = [[Site(nx, ny) for nx in range(env.Nx)] for ny in range(env.Ny)]
+        elif move == 'r':
+            shift_proj = None
+            sitess = [[Site(nx, ny) for nx in range(env.Nx)] for ny in range(env.Ny-1, -1, -1)]
+        elif move == 't':
+            shift_proj = 't'
+            sitess = [[Site(nx, ny) for ny in range(env.Ny)] for nx in range(env.Nx)]
+        elif move == 'b':
+            shift_proj = None
+            sitess = [[Site(nx, ny) for ny in range(env.Ny)] for nx in range(env.Nx-1, -1, -1)]
+
+
         proj = Peps(env.geometry)
-        for site in proj.sites():
+        for site in env.sites():
             proj[site] = EnvCTM_projectors()
-        #
-        # projectors
-        for site in env.sites():
-            update_proj_(proj, site, dir, env, opts_svd, **kwargs)
-        trivial_projectors_(proj, dir, env)  # fill (trivial) projectors on edges
-        #
-        # update move
-        env_tmp = EnvCTM(env.psi, init=None)  # empty environments
-        for site in env.sites():
-            update_env_(env_tmp, site, env, proj, dir)
+
+        for sites in sitess:
+            sites_proj = [env.nn_site(site, shift_proj) for site in sites] if shift_proj else sites
+            #
+            # Empty structure for projectors
+            #
+            # projectors
+            for site in sites_proj:
+                update_proj_(proj, site, move, env, opts_svd, **kwargs)
+
+            trivial_projectors_(proj, move, env, sites_proj)  # fill (trivial) projectors on edges
+            #
+            # update move
+            env_tmp = EnvCTM(env.psi, init=None)  # empty environments
+            for site in sites:
+                update_env_(env_tmp, site, env, proj, move)
 
         return env_tmp, proj
 
@@ -1220,7 +1244,7 @@ def _update_core_2dir(env, dir : str, opts_svd : dict, **kwargs):
     # def _update_core_1dir():
 
 
-def update_2site_projectors_(proj, site, dirn, env, opts_svd, **kwargs):
+def update_2site_projectors_(proj, site, move, env, opts_svd, **kwargs):
     r"""
     Calculate new projectors for CTM moves from 4x4 extended corners.
     """
@@ -1249,40 +1273,40 @@ def update_2site_projectors_(proj, site, dirn, env, opts_svd, **kwargs):
     cor_br = tensordot(cor_br, psi[br], axes=((2, 1), (2, 3)))
     cor_br = cor_br.fuse_legs(axes=((0, 2), (1, 3)))
 
-    if ('l' in dirn) or ('r' in dirn):
+    if move in 'lrh':
         cor_tt = cor_tl @ cor_tr  # b(left) b(right)
         cor_bb = cor_br @ cor_bl  # t(right) t(left)
 
-    if 'r' in dirn:
+    if move in 'rh':
         _, r_t = qr(cor_tt, axes=(0, 1)) if use_qr else (None, cor_tt)
         _, r_b = qr(cor_bb, axes=(1, 0)) if use_qr else (None, cor_bb.T)
         proj[tr].hrb, proj[br].hrt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
 
-    if 'l' in dirn:
+    if move in 'lh':
         _, r_t = qr(cor_tt, axes=(1, 0)) if use_qr else (None, cor_tt.T)
         _, r_b = qr(cor_bb, axes=(0, 1)) if use_qr else (None, cor_bb)
         proj[tl].hlb, proj[bl].hlt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
 
-    if ('t' in dirn) or ('b' in dirn):
+    if move in 'tbv':
         cor_ll = cor_bl @ cor_tl  # l(bottom) l(top)
         cor_rr = cor_tr @ cor_br  # r(top) r(bottom)
 
-    if 't' in dirn:
+    if move in 'tv':
         _, r_l = qr(cor_ll, axes=(0, 1)) if use_qr else (None, cor_ll)
         _, r_r = qr(cor_rr, axes=(1, 0)) if use_qr else (None, cor_rr.T)
         proj[tl].vtr, proj[tr].vtl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
 
-    if 'b' in dirn:
+    if move in 'bv':
         _, r_l = qr(cor_ll, axes=(1, 0)) if use_qr else (None, cor_ll.T)
         _, r_r = qr(cor_rr, axes=(0, 1)) if use_qr else (None, cor_rr)
         proj[bl].vbr, proj[br].vbl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
 
 
-
-
-def update_extended_2site_projectors_(proj, site, dirn, env, opts_svd, **kwargs):
+def update_extended_2site_projectors_(proj, site, move, env, opts_svd, **kwargs):
     r"""
-    Calculate new projectors for CTM moves from 4x4 extended corners.
+    Calculate new projectors for CTM moves from 4x4 extended corners
+    which are enlarged to 5x4 if some virtual bond is one.
+    Intended for a hexagonal lattice embedded on a square lattice.
     """
     psi = env.psi
     sites = [psi.nn_site(site, d=d) for d in ((0, 0), (0, 1), (1, 0), (1, 1))]
@@ -1309,18 +1333,18 @@ def update_extended_2site_projectors_(proj, site, dirn, env, opts_svd, **kwargs)
     cor_br = tensordot(cor_br, psi[br], axes=((2, 1), (2, 3)))
     cor_br = cor_br.fuse_legs(axes=((0, 2), (1, 3)))
 
-    if ('l' in dirn) or ('r' in dirn):
+    if move in 'lrh':
         cor_tt = cor_tl @ cor_tr  # b(left) b(right)
         cor_bb = cor_br @ cor_bl  # t(right) t(left)
 
-    if 'r' in dirn:
+    if move in 'rh':
         sl = psi[tl].get_shape(axes=2)
         ltl = env.nn_site(tl, d='l')
         lbl = env.nn_site(bl, d='l')
         if sl == 1 and ltl and lbl:
             cor_ltl = env[ltl].l @ env[ltl].tl @ env[ltl].t
             cor_ltl = tensordot(cor_ltl, psi[ltl], axes=((2, 1), (0, 1)))
-            cor_ltl = tensordot(cor_ltl, env[tl].t, axes=(1, 0)) 
+            cor_ltl = tensordot(cor_ltl, env[tl].t, axes=(1, 0))
             cor_ltl = tensordot(cor_ltl, psi[tl], axes=((3, 2), (0, 1)))
             cor_ltl = cor_ltl.fuse_legs(axes=((0, 1, 3), (2, 4)))
 
@@ -1339,7 +1363,7 @@ def update_extended_2site_projectors_(proj, site, dirn, env, opts_svd, **kwargs)
             _, r_b = qr(cor_bb, axes=(1, 0)) if use_qr else (None, cor_bb.T)
         proj[tr].hrb, proj[br].hrt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
 
-    if 'l' in dirn:
+    if move in 'lh':
         sr = psi[tr].get_shape(axes=2)
         rtr = env.nn_site(tr, d='r')
         rbr = env.nn_site(br, d='r')
@@ -1355,7 +1379,7 @@ def update_extended_2site_projectors_(proj, site, dirn, env, opts_svd, **kwargs)
             cor_rbr = tensordot(cor_rbr, env[br].b, axes=(1, 0))
             cor_rbr = tensordot(cor_rbr, psi[br], axes=((3, 2), (2, 3)))
             cor_rbr = cor_rbr.fuse_legs(axes=((0, 1, 3), (2, 4)))
-        
+
             cor_rtt = cor_tl @ cor_rtr  # b(left) b(right)
             cor_rbb = cor_rbr @ cor_bl  # t(right) t(left)
             _, r_t = qr(cor_rtt, axes=(1, 0)) if use_qr else (None, cor_rtt.T)
@@ -1363,15 +1387,14 @@ def update_extended_2site_projectors_(proj, site, dirn, env, opts_svd, **kwargs)
         else:
             _, r_t = qr(cor_tt, axes=(1, 0)) if use_qr else (None, cor_tt.T)
             _, r_b = qr(cor_bb, axes=(0, 1)) if use_qr else (None, cor_bb)
-        
+
         proj[tl].hlb, proj[bl].hlt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
 
-
-    if ('t' in dirn) or ('b' in dirn):
+    if move in 'tbv':
         cor_ll = cor_bl @ cor_tl  # l(bottom) l(top)
         cor_rr = cor_tr @ cor_br  # r(top) r(bottom)
 
-    if 't' in dirn:
+    if move in 'tv':
         sb = psi[bl].get_shape(axes=3)
         bbl = env.nn_site(bl, d='b')
         bbr = env.nn_site(br, d='b')
@@ -1379,12 +1402,12 @@ def update_extended_2site_projectors_(proj, site, dirn, env, opts_svd, **kwargs)
             cor_bbl = env[bbl].b @ env[bbl].bl @ env[bbl].l
             cor_bbl = tensordot(cor_bbl, psi[bbl], axes=((2, 1), (1, 2)))
             cor_bbl = tensordot(cor_bbl, env[bl].l, axes=(1, 0))
-            cor_bbl = tensordot(cor_bbl, psi[bl], axes=((3, 1), (1, 2))) 
+            cor_bbl = tensordot(cor_bbl, psi[bl], axes=((3, 1), (1, 2)))
             cor_bbl = cor_bbl.fuse_legs(axes=((0, 1, 4), (2, 3)))
 
             cor_bbr = env[bbr].r @ env[bbr].br @ env[bbr].b
             cor_bbr = tensordot(cor_bbr, psi[bbr], axes=((2, 1), (2, 3)))
-            cor_bbr = env[br].r @ cor_bbr 
+            cor_bbr = env[br].r @ cor_bbr
             cor_bbr = tensordot(cor_bbr, psi[br], axes=((3, 1), (2, 3)))
             cor_bbr = cor_bbr.fuse_legs(axes=((0, 3), (1, 2, 4)))
 
@@ -1397,7 +1420,7 @@ def update_extended_2site_projectors_(proj, site, dirn, env, opts_svd, **kwargs)
             _, r_r = qr(cor_rr, axes=(1, 0)) if use_qr else (None, cor_rr.T)
         proj[tl].vtr, proj[tr].vtl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
 
-    if 'b' in dirn:
+    if move in 'bv':
         st = psi[tl].get_shape(axes=3)
         ttl = env.nn_site(tl, d='t')
         ttr = env.nn_site(tr, d='t')
@@ -1413,7 +1436,7 @@ def update_extended_2site_projectors_(proj, site, dirn, env, opts_svd, **kwargs)
             cor_ttr = tensordot(cor_ttr, env[tr].r, axes=(1, 0))
             cor_ttr = tensordot(cor_ttr, psi[tr], axes=((2, 3), (0, 3)))
             cor_ttr = cor_ttr.fuse_legs(axes=((0, 1, 3), (2, 4)))
-            
+
             cor_tll = cor_bl @ cor_ttl  # l(bottom) l(top)
             cor_trr = cor_ttr @ cor_br  # r(top) r(bottom)
             _, r_l = qr(cor_tll, axes=(1, 0)) if use_qr else (None, cor_tll.T)
@@ -1424,7 +1447,7 @@ def update_extended_2site_projectors_(proj, site, dirn, env, opts_svd, **kwargs)
         proj[bl].vbr, proj[br].vbl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
 
 
-def update_1site_projectors_(proj, site, dirn, env, opts_svd, **kwargs):
+def update_1site_projectors_(proj, site, move, env, opts_svd, **kwargs):
     r"""
     Calculate new projectors for CTM moves from 4x2 extended corners.
     """
@@ -1435,7 +1458,7 @@ def update_1site_projectors_(proj, site, dirn, env, opts_svd, **kwargs):
 
     tl, tr, bl, br = sites
 
-    if ('l' in dirn) or ('r' in dirn):
+    if move in 'lrh':
         cor_tl = (env[bl].tl @ env[bl].t).fuse_legs(axes=((0, 1), 2))
         cor_tr = (env[br].t @ env[br].tr).fuse_legs(axes=(0, (2, 1)))
         cor_br = (env[tr].br @ env[tr].b).fuse_legs(axes=((0, 1), 2))
@@ -1443,13 +1466,13 @@ def update_1site_projectors_(proj, site, dirn, env, opts_svd, **kwargs):
         r_tl, r_tr = regularize_1site_corners(cor_tl, cor_tr)
         r_br, r_bl = regularize_1site_corners(cor_br, cor_bl)
 
-    if 'r' in dirn:
+    if move in 'lh':
         proj[tr].hrb, proj[br].hrt = proj_corners(r_tr, r_br, opts_svd=opts_svd, **kwargs)
 
-    if 'l' in dirn:
+    if move in 'rh':
         proj[tl].hlb, proj[bl].hlt = proj_corners(r_tl, r_bl, opts_svd=opts_svd, **kwargs)
 
-    if ('t' in dirn) or ('b' in dirn):
+    if move in 'tbv':
         cor_bl = (env[br].bl @ env[br].l).fuse_legs(axes=((0, 1), 2))
         cor_tl = (env[tr].l @ env[tr].tl).fuse_legs(axes=(0, (2, 1)))
         cor_tr = (env[tl].tr @ env[tl].r).fuse_legs(axes=((0, 1), 2))
@@ -1457,10 +1480,10 @@ def update_1site_projectors_(proj, site, dirn, env, opts_svd, **kwargs):
         r_bl, r_tl = regularize_1site_corners(cor_bl, cor_tl)
         r_tr, r_br = regularize_1site_corners(cor_tr, cor_br)
 
-    if 't' in dirn:
+    if move in 'tv':
         proj[tl].vtr, proj[tr].vtl = proj_corners(r_tl, r_tr, opts_svd=opts_svd, **kwargs)
 
-    if 'b' in dirn:
+    if move in 'bv':
         proj[bl].vbr, proj[br].vbl = proj_corners(r_bl, r_br, opts_svd=opts_svd, **kwargs)
 
 
@@ -1473,6 +1496,7 @@ def regularize_1site_corners(cor_0, cor_1):
     r_0 = tensordot((U_0 @ S), Q_0, axes=(0, 1))
     r_1 = tensordot((S @ U_1), Q_1, axes=(1, 1))
     return r_0, r_1
+
 
 def proj_corners(r0, r1, opts_svd, **kwargs):
     r""" Projectors in between r0 @ r1.T corners. """
@@ -1491,24 +1515,25 @@ def proj_corners(r0, r1, opts_svd, **kwargs):
     p1 = tensordot(r0, (u @ rs).conj(), axes=(0, 0)).unfuse_legs(axes=0)
     return p0, p1
 
-_trivial = (('hlt', 'r', 'l', 'tl', 2, 0, 0),
-            ('hlb', 'r', 'l', 'bl', 0, 2, 1),
-            ('hrt', 'l', 'r', 'tr', 0, 0, 1),
-            ('hrb', 'l', 'r', 'br', 2, 2, 0),
-            ('vtl', 'b', 't', 'tl', 0, 1, 1),
-            ('vtr', 'b', 't', 'tr', 2, 3, 0),
-            ('vbl', 't', 'b', 'bl', 2, 1, 0),
-            ('vbr', 't', 'b', 'br', 0, 3, 1))
+
+_for_trivial = (('hlt', 'r', 'lh', 'tl', 2, 0, 0),
+                ('hlb', 'r', 'lh', 'bl', 0, 2, 1),
+                ('hrt', 'l', 'rh', 'tr', 0, 0, 1),
+                ('hrb', 'l', 'rh', 'br', 2, 2, 0),
+                ('vtl', 'b', 'tv', 'tl', 0, 1, 1),
+                ('vtr', 'b', 'tv', 'tr', 2, 3, 0),
+                ('vbl', 't', 'bv', 'bl', 2, 1, 0),
+                ('vbr', 't', 'bv', 'br', 0, 3, 1))
 
 
-def trivial_projectors_(proj, dirn, env):
+def trivial_projectors_(proj, move, env, sites):
     r"""
     Adds trivial projectors if not present at the edges of the lattice with open boundary conditions.
     """
     config = env.psi.config
-    for site in env.sites():
-        for s0, s1, s2, s3, a0, a1, a2 in _trivial:
-            if s2 in dirn and getattr(proj[site], s0) is None:
+    for site in sites:
+        for s0, s1, s2, s3, a0, a1, a2 in _for_trivial:
+            if move in s2 and getattr(proj[site], s0) is None:
                 site_nn = env.nn_site(site, d=s1)
                 if site_nn is not None:
                     l0 = getattr(env[site], s2).get_legs(a0).conj()
@@ -1516,30 +1541,21 @@ def trivial_projectors_(proj, dirn, env):
                     l2 = getattr(env[site_nn], s3).get_legs(a2).conj()
                     setattr(proj[site], s0, ones(config, legs=(l0, l1, l2)))
 
-# Given projectors, compress enlarged corners and half-row/column tensors to obtain updated environment tensors
-#
-def update_env_directional_(env_tmp : EnvCTM, env : EnvCTM, site : Site, proj : EnvCTM_projectors, dir : str):
-    r"""
-    Peform single directional update of CTMRG for environment tensors of``site`` in direction ``dir`` using provided projectors.
-    The updated environment tensors are stored in ``env_tmp``.
-    """
-    assert dir in ['l','r','t','b'], "Invalid direction"
-    if dir in ['l','r']:
-        update_env_horizontal_(env_tmp, site, env, proj, dir)
-    else:
-        update_env_vertical_(env_tmp, site, env, proj, dir)
 
-
-def update_env_horizontal_(env_tmp, site, env, proj, dir : str = 'lr'):
+def update_env_(env_tmp, site, env, proj, move: str):
     r"""
     Horizontal move of CTM step. Compute updated environment tensors given projectors for ``site``
     in left (``dir='l'``), right ``dir='r'``, or both directions (``dir='lr'``).
     Updated environment tensors are stored in ``env_tmp``.
+    Vertical move of CTM step. Compute updated environment tensors given projectors for ``site``
+    in top (``dir='t'``), bottom ``dir='b'``, or both directions (``dir='tb'``).
+    Updated environment tensors are stored in ``env_tmp``.
+
     """
-    assert 'l' in dir or 'r' in dir, "Invalid directions"
+    assert move in 'l r t b h v', "Invalid directions"
     psi = env.psi
 
-    if 'l' in dir:
+    if move in 'lh':
         l = psi.nn_site(site, d='l')
         if l is not None:
             tmp = env[l].l @ proj[l].hlt
@@ -1557,7 +1573,7 @@ def update_env_horizontal_(env_tmp, site, env, proj, dir : str = 'lr'):
             tmp = tensordot(env[l].b, env[l].bl @ proj[bl].hlt, axes=((2, 1), (0, 1)))
             env_tmp[site].bl = tmp / tmp.norm(p='inf')
 
-    if 'r' in dir:
+    if move in 'rh':
         r = psi.nn_site(site, d='r')
         if r is not None:
             tmp = env[r].r @ proj[r].hrb
@@ -1575,17 +1591,7 @@ def update_env_horizontal_(env_tmp, site, env, proj, dir : str = 'lr'):
             tmp = tensordot(proj[br].hrt, env[r].br @ env[r].b, axes=((0, 1), (0, 1)))
             env_tmp[site].br = tmp / tmp.norm(p='inf')
 
-
-def update_env_vertical_(env_tmp, site, env, proj, dir : str = 'tb'):
-    r"""
-    Vertical move of CTM step. Compute updated environment tensors given projectors for ``site``
-    in top (``dir='t'``), bottom ``dir='b'``, or both directions (``dir='tb'``).
-    Updated environment tensors are stored in ``env_tmp``.
-    """
-    assert 't' in dir or 'b' in dir, "Invalid directions"
-    psi = env.psi
-
-    if 't' in dir:
+    if move in 'tv':
         t = psi.nn_site(site, d='t')
         if t is not None:
             tmp = tensordot(proj[t].vtl, env[t].t, axes=(0, 0))
@@ -1603,7 +1609,7 @@ def update_env_vertical_(env_tmp, site, env, proj, dir : str = 'tb'):
             tmp = tensordot(proj[tr].vtl, env[t].tr @ env[t].r, axes=((0, 1), (0, 1)))
             env_tmp[site].tr =  tmp / tmp.norm(p='inf')
 
-    if 'b' in dir:
+    if move in 'bv':
         b = psi.nn_site(site, d='b')
         if b is not None:
             tmp = tensordot(proj[b].vbr, env[b].b, axes=(0, 0))
@@ -1632,13 +1638,13 @@ def update_old_env_(env, env_tmp):
                 setattr(env[site], k, v)
 
 
-def store_projectors_(proj : Peps, proj_other : Peps):
+def store_projectors_(proj: Peps, proj_other: Peps):
     r"""
     Update projectors in ``proj`` with projectors stored in ``proj_other`` (ignoring unassigned projectors i.e. ``None``).
 
     Args:
-        proj : PEPS with set of projectors ``EnvCTM_projectors`` assigned to each site.
-        proj_other : PEPS with set of projectors ``EnvCTM_projectors`` assigned to each site.
+        proj: PEPS with set of projectors ``EnvCTM_projectors`` assigned to each site.
+        proj_other: PEPS with set of projectors ``EnvCTM_projectors`` assigned to each site.
     """
     for site in proj.sites():
         for k, v in proj_other[site].__dict__.items():
