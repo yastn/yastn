@@ -15,7 +15,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from tqdm import tqdm
-from typing import NamedTuple, Union
+from typing import NamedTuple
 from .... import Tensor, eye, YastnError, tensordot, vdot, ncon
 from .._peps import Peps, Peps2Layers, DoublePepsTensor
 from .._gates_auxiliary import apply_gate_onsite, gate_product_operator, gate_fix_swap_gate, match_ancilla
@@ -33,16 +33,16 @@ class EnvBP_local():
 
     Contains fields ``t``,  ``l``, ``b``, ``r``
     """
-    t  : Union[Tensor, None] = None  # top
-    l  : Union[Tensor, None] = None  # left
-    b  : Union[Tensor, None] = None  # bottom
-    r  : Union[Tensor, None] = None  # right
+    t: Tensor | None = None  # top
+    l: Tensor | None = None  # left
+    b: Tensor | None = None  # bottom
+    r: Tensor | None = None  # right
 
 
 class BP_out(NamedTuple):
-    sweeps : int = 0
-    max_diff : float = None
-    converged : bool = False
+    sweeps: int = 0
+    max_diff: float = None
+    converged: bool = False
 
 
 class EnvBP(Peps):
@@ -255,7 +255,7 @@ class EnvBP(Peps):
         diffs += [self.update_bond_(bond, env_tmp=env_tmp) for bond in self.bonds('v')]
         diffs += [self.update_bond_(bond[::-1], env_tmp=env_tmp) for bond in self.bonds('v')[::-1]]
         #
-        # update_old_env_(self, env_tmp)
+        # update_storage_(self, env_tmp)
         return max(diffs)
 
     def update_bond_(env, bond, env_tmp=None):

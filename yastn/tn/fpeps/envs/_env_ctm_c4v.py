@@ -19,7 +19,7 @@ from .... import Tensor, YastnError, tensordot, truncation_mask, decompress_from
 from .._peps import Peps, Peps2Layers, DoublePepsTensor
 from .._geometry import RectangularUnitcell
 from ._env_auxlliary import *
-from ._env_ctm import EnvCTM, decompress_env_1d, EnvCTM_projectors, store_projectors_, update_old_env_
+from ._env_ctm import EnvCTM, decompress_env_1d, EnvCTM_projectors, update_storage_
 
 logger = logging.Logger('ctmrg')
 
@@ -255,7 +255,7 @@ class EnvCTM_c4v(EnvCTM):
                 loc_env= decompress_env_c4v_1d(inputs_t,loc_im)
 
                 env_tmp, proj_tmp= _update_core_dir(loc_env, "default", opts_svd, method=method, **kwargs)
-                update_old_env_(loc_env, env_tmp)
+                update_storage_(loc_env, env_tmp)
 
                 # return backend tensors - only environment and projectors
                 #
@@ -289,8 +289,8 @@ class EnvCTM_c4v(EnvCTM):
 
         else:
             env_tmp, proj_tmp= _update_core_dir(env, "default", opts_svd, method=method, **kwargs)
-            update_old_env_(env, env_tmp)
-            store_projectors_(proj, proj_tmp)
+            update_storage_(env, env_tmp)
+            update_storage_(proj, proj_tmp)
         return proj
 
 
