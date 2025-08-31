@@ -92,8 +92,8 @@ def test_Peps_initialization(config_kwargs):
     psi[0, 0] = A00
     # Currently, 5-leg PEPS tensors are fused by __setitem__ as ((top-left)(bottom-right) physical).
     # This is done to work with object having smaller number of blocks.
-    assert psi[0, 0].ndim == 3
-    assert (psi[0, 0].unfuse_legs(axes=(0, 1)) - A00).norm() < 1e-13
+    assert psi[0, 0].ndim == 5
+    assert (psi[0, 0] - A00).norm() < 1e-13
 
     # PEPS with no physical legs is also possible.
     #
@@ -106,16 +106,16 @@ def test_Peps_initialization(config_kwargs):
     # PEPS with tensors assigned during initialization
     #
     psi = fpeps.Peps(geometry, tensors={(0, 0): A00, (0, 1): A01})
-    assert (psi[0, 0].unfuse_legs(axes=(0, 1)) - A00).norm() < 1e-13
-    assert (psi[1, 1].unfuse_legs(axes=(0, 1)) - A00).norm() < 1e-13
-    assert (psi[0, 1].unfuse_legs(axes=(0, 1)) - A01).norm() < 1e-13
-    assert (psi[1, 0].unfuse_legs(axes=(0, 1)) - A01).norm() < 1e-13
+    assert (psi[0, 0] - A00).norm() < 1e-13
+    assert (psi[1, 1] - A00).norm() < 1e-13
+    assert (psi[0, 1] - A01).norm() < 1e-13
+    assert (psi[1, 0] - A01).norm() < 1e-13
     #
     # or equivalently (with some provided tensors being redundant)
     #
     psi = fpeps.Peps(geometry, tensors=[[A00, A01], [A01, A00]])
-    assert (psi[0, 0].unfuse_legs(axes=(0, 1)) - A00).norm() < 1e-13
-    assert (psi[1, 0].unfuse_legs(axes=(0, 1)) - A01).norm() < 1e-13
+    assert (psi[0, 0] - A00).norm() < 1e-13
+    assert (psi[1, 0] - A01).norm() < 1e-13
     #
     # raising exceptions
     with pytest.raises(yastn.YastnError):

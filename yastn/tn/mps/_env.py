@@ -498,7 +498,7 @@ class Env_mps_mpo_mps(EnvParent_3_obc):
         tmp = self.F[n - 1, n] @ self.bra.A[n].conj()
         tmp = tensordot(tmp, self.F[n + 1, n], axes=(3, 2))
         tmp = tensordot(tmp, self.ket.A[n], axes=((3, 0), (2, 0)))
-        return tmp.fuse_legs(axes=((0, 1), (2, 3)))
+        return tmp
 
 
 class Env_mps_mpo_mps_precompute(EnvParent_3_obc):
@@ -714,4 +714,4 @@ class Env_mps_mpopbc_mps(EnvParent_3_pbc):
         tmp = self.F[n - 1, n] @ self.bra.A[n].conj()
         tmp = tensordot(tmp, self.F[n + 1, n], axes=((2, 4), (2, 3)))
         tmp = tensordot(tmp, self.ket.A[n], axes=((3, 0), (2, 0)))
-        return tmp.fuse_legs(axes=((0, 1), (2, 3)))
+        return tmp

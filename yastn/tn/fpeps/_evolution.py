@@ -221,7 +221,8 @@ def truncate_(env, opts_svd, bond=None,
         s0, s1 = bond if l_ordered else bond[::-1]
 
         if dirn == 'h':  # Horizontal gate, "lr" ordered
-            tmp0 = psi[s0].fuse_legs(axes=((0, 2), 1))  # [[t l] sa] [b r]
+
+            tmp0 = psi[s0].fuse_legs(axes=((0, 1), (2, 3), 4)).fuse_legs(axes=((0, 2), 1))  # [[t l] sa] [b r]
             tmp0 = tmp0.unfuse_legs(axes=1)  # [[t l] sa] b r
             tmp0 = tmp0.fuse_legs(axes=((0, 1), 2))  # [[[t l] sa] b] r
             Q0f, R0 = tmp0.qr(axes=(0, 1), sQ=-1)  # [[[t l] sa] b] rr @ rr r
@@ -229,17 +230,19 @@ def truncate_(env, opts_svd, bond=None,
             Q0 = Q0.fuse_legs(axes=(0, (1, 2)))  # [[t l] sa] [b rr]
             Q0 = Q0.unfuse_legs(axes=0)  # [t l] sa [b rr]
             Q0 = Q0.transpose(axes=(0, 2, 1))  # [t l] [b rr] sa
+            Q0 = Q0.unfuse_legs(axes=(0, 1))  # t l bb r sa
 
-            tmp1 = psi[s1].fuse_legs(axes=(0, (1, 2)))  # [t l] [[b r] sa]
+            tmp1 = psi[s1].fuse_legs(axes=((0, 1), (2, 3), 4)).fuse_legs(axes=(0, (1, 2)))  # [t l] [[b r] sa]
             tmp1 = tmp1.unfuse_legs(axes=0)  # t l [[b r] sa]
             tmp1 = tmp1.fuse_legs(axes=((0, 2), 1))  # [t [[b r] sa]] l
             Q1f, R1 = tmp1.qr(axes=(0, 1), sQ=1, Qaxis=0, Raxis=-1)  # ll [t [[b r] sa]] @ l ll
             Q1 = Q1f.unfuse_legs(axes=1)  # ll t [[b r] sa]
-            Q1 = Q1.fuse_legs(axes=((1, 0), 2))  # [t ll] [[b r] sa]
-            Q1 = Q1.unfuse_legs(axes=1)  # [t ll] [b r] sa
+            Q1 = Q1.transpose(axes=(1, 0, 2))  # t ll [[b r] sa]
+            Q1 = Q1.unfuse_legs(axes=2)  # ll t [b r] sa
+            Q1 = Q1.unfuse_legs(axes=2)  # ll t b r sa
 
         else: # dirn == 'v':  # Vertical gate, "tb" ordered
-            tmp0 = psi[s0].fuse_legs(axes=((0, 2), 1))  # [[t l] sa] [b r]
+            tmp0 = psi[s0].fuse_legs(axes=((0, 1), (2, 3), 4)).fuse_legs(axes=((0, 2), 1))  # [[t l] sa] [b r]
             tmp0 = tmp0.unfuse_legs(axes=1)  # [[t l] sa] b r
             tmp0 = tmp0.fuse_legs(axes=((0, 2), 1))  # [[[t l] sa] r] b
             Q0f, R0 = tmp0.qr(axes=(0, 1), sQ=1)  # [[[t l] sa] r] bb @ bb b
@@ -247,14 +250,15 @@ def truncate_(env, opts_svd, bond=None,
             Q0 = Q0.fuse_legs(axes=(0, (2, 1)))  # [[t l] sa] [bb r]
             Q0 = Q0.unfuse_legs(axes=0)  # [t l] sa [bb r]
             Q0 = Q0.transpose(axes=(0, 2, 1))  # [t l] [bb r] sa
+            Q0 = Q0.unfuse_legs(axes=(0, 1))  # t l bb r sa
 
-            tmp1 = psi[s1].fuse_legs(axes=(0, (1, 2)))  # [t l] [[b r] sa]
+            tmp1 = psi[s1].fuse_legs(axes=((0, 1), (2, 3), 4)).fuse_legs(axes=(0, (1, 2)))  # [t l] [[b r] sa]
             tmp1 = tmp1.unfuse_legs(axes=0)  # t l [[b r] sa]
             tmp1 = tmp1.fuse_legs(axes=((1, 2), 0))  # [l [[b r] sa]] t
             Q1f, R1 = tmp1.qr(axes=(0, 1), sQ=-1, Qaxis=0, Raxis=-1)  # tt [l [[b r] sa]] @ t tt
-            Q1 = Q1f.unfuse_legs(axes=1)  # t l [[b r] sa]
-            Q1 = Q1.fuse_legs(axes=((0, 1), 2))  # [t l] [[b r] sa]
-            Q1 = Q1.unfuse_legs(axes=1)  # [t l] [b r] sa
+            Q1 = Q1f.unfuse_legs(axes=1)  # tt l [[b r] sa]
+            Q1 = Q1.unfuse_legs(axes=2)  # tt l [b r] sa
+            Q1 = Q1.unfuse_legs(axes=2)  # tt l b r sa
 
         fgf = env.bond_metric(Q0, Q1, s0, s1, dirn)
 

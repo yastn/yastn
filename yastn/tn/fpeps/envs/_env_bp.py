@@ -156,15 +156,13 @@ class EnvBP(Peps):
             ten = self.psi[site]
 
             if isinstance(ten, DoublePepsTensor):
-                Aket = ten.ket.unfuse_legs(axes=(0, 1))  # t l b r s
-                Abra = ten.bra.unfuse_legs(axes=(0, 1))  # t l b r s
-                Aket = ncon([Aket, lenv.t, lenv.l, lenv.b, lenv.r], [(1, 2, 3, 4, -4), (-0, 1), (-1, 2), (-2, 3), (-3, 4)])
-                val_no = vdot(Abra, Aket)
+                Atlbr = ncon([ten.ket, lenv.t, lenv.l, lenv.b, lenv.r], [(1, 2, 3, 4, -4), (-0, 1), (-1, 2), (-2, 3), (-3, 4)])
+                val_no = vdot(ten.bra, Atlbr)
 
                 for nz, op in ops.items():
                     op = match_ancilla(ten.ket, op)
-                    Aket = tensordot(Aket, op, axes=(4, 1))
-                    val_op = vdot(Abra, Aket)
+                    Atmp = tensordot(Atlbr, op, axes=(4, 1))
+                    val_op = vdot(ten.bra, Atmp)
                     out[site + nz] = val_op / val_no
             else:
                 pass
@@ -562,19 +560,17 @@ class EnvBP(Peps):
                     nx0, ny0 = nx % self.Nx, ny % self.Ny
                     lenv = env[nx, ny]
                     ten = self.psi[nx0, ny0]
-                    Aket = ten.ket.unfuse_legs(axes=(0, 1))  # t l b r s
-                    Abra = ten.bra.unfuse_legs(axes=(0, 1))  # t l b r s
-                    Aket = ncon([Aket, lenv.t, lenv.l, lenv.b, lenv.r], [(1, 2, 3, 4, -4), (-0, 1), (-1, 2), (-2, 3), (-3, 4)])
-                    norm_prob = vdot(Abra, Aket)
+                    Atlbr = ncon([ten.ket, lenv.t, lenv.l, lenv.b, lenv.r], [(1, 2, 3, 4, -4), (-0, 1), (-1, 2), (-2, 3), (-3, 4)])
+                    norm_prob = vdot(ten.bra, Atlbr)
                     acc_prob = 0
                     for k, proj in projs_sites[(nx, ny)].items():
                         proj = match_ancilla(ten.ket, proj)
-                        Aketp = tensordot(Aket, proj, axes=(4, 1))
-                        prob = vdot(Abra, Aketp) / norm_prob
+                        Atmp = tensordot(Atlbr, proj, axes=(4, 1))
+                        prob = vdot(ten.bra, Atmp) / norm_prob
                         acc_prob += prob
                         if rands[count] < acc_prob:
                             out[nx, ny].append(k)
-                            ketp = tensordot(ten.ket, proj, axes=(2, 1)) / prob
+                            ketp = tensordot(ten.ket, proj, axes=(4, 1)) / prob
                             if nx + 1 < xrange[1]:
                                 new_t = hair_t(ten.bra, ht=lenv.t, hl=lenv.l, hr=lenv.r, Aket=ketp)
                                 new_t = regularize_belief(new_t, self.tol_positive)

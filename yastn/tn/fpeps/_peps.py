@@ -62,8 +62,8 @@ class Peps():
             #
             # Currently, 5-leg PEPS tensors are fused by __setitem__ as ((top-left)(bottom-right) physical).
             # This is done to work with objects having a smaller number of blocks.
-            assert psi[0, 0].ndim == 3
-            assert (psi[0, 0].unfuse_legs(axes=(0, 1)) - A00).norm() < 1e-13
+            assert psi[0, 0].ndim == 5
+            assert (psi[0, 0] - A00).norm() < 1e-13
 
             # PEPS with no physical legs is also possible.
             #
@@ -128,8 +128,6 @@ class Peps():
         5-leg tensors are fused to 3-leg: [t l] [b r] sa
         2-leg tensors are unfused to 4-leg: t l b r
         """
-        if hasattr(obj, 'ndim') and obj.ndim == 5 :
-            obj = obj.fuse_legs(axes=((0, 1), (2, 3), 4))
         if hasattr(obj, 'ndim') and obj.ndim == 2 :
             obj = obj.unfuse_legs(axes=(0, 1))
         self._data[self.site2index(site)] = obj
@@ -224,11 +222,8 @@ class Peps():
         for bond in self.bonds():
             dirn, l_ordered = self.nn_bond_type(bond)
             s0 = bond[0] if l_ordered else bond[1]
-            leg = self[s0].get_legs(axes=1)
-            l0, l1 = leg.unfuse_leg()
-            out[bond] = sum(l0.D) if dirn == 'h' else sum(l1.D)
-            # axes = 3 if dirn == 'h' else 2  # if dirn == 'v'
-            # out[bond] = self[s0].get_shape(axes=axes)
+            axes = 3 if dirn == 'h' else 2  # if dirn == 'v'
+            out[bond] = self[s0].get_shape(axes=axes)
         return out
 
     def to_tensor(self) -> Tensor:
@@ -247,22 +242,22 @@ class Peps():
         if 'ii' == self.geometry._periodic:
             raise YastnError("to_tensor() works only for a finite PEPS.")
         Nx, Ny = self.Nx, self.Ny
-        psi = self[0, 0].unfuse_legs(axes=(0, 1)).remove_leg(axis=1)
+        psi = self[0, 0].remove_leg(axis=1)
         for nx in range(1, Nx):
-            ten = self[nx, 0].unfuse_legs(axes=(0, 1)).remove_leg(axis=1)
+            ten = self[nx, 0].remove_leg(axis=1)
             psi = psi.tensordot(ten, axes=(2 * nx - 1, 0))
         axs = list(range(1, 2 * Nx - 2, 2)) + [2 * Nx]
         psi = psi.swap_gate(axes=(0, axs))
         psi = psi.trace(axes=(0, 2 * Nx - 1))
 
         for ny in range(1, Ny):
-            ten = self[0, ny].unfuse_legs(axes=(0, 1))
+            ten = self[0, ny]
             dny = (ny - 1) * Nx
             psi = psi.tensordot(ten, axes=(dny, 1))
             for nx in range(1, Nx):
                 axs = list(range(dny + nx, dny + 2 * Nx - nx, 2))
                 psi = psi.swap_gate(axes=(dny + 2 * Nx + nx + 1, axs))
-                ten = self[nx, ny].unfuse_legs(axes=(0, 1))
+                ten = self[nx, ny]
                 psi = psi.tensordot(ten, axes=((dny + 2 * Nx + nx - 1, dny + nx), (0, 1)))
 
             dny = ny * Nx
@@ -336,7 +331,7 @@ def add(*states, amplitudes=None, **kwargs) -> MpsMpoOBC:
         b = geometry.nn_site(site, 'b') is not None
         r = geometry.nn_site(site, 'r') is not None
         for n, state in enumerate(states):
-            ten = state[site].unfuse_legs(axes=(0, 1))
+            ten = state[site]
             if site == (0, 0) and amplitudes is not None:
                 ten = amplitudes[n] * ten
             tens[n * t, n * l, n * b, n * r] = ten

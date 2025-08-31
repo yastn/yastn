@@ -108,9 +108,7 @@ class DoublePepsTensor(SpecialTensor):
                 axes.append(int(ax[1]))
                 charges.append(n)
         if axes:
-            Ab = Ab.unfuse_legs(axes=(0, 1))  # TODO: remove this after switching to Peps tensor with 5 legs
             Ab = Ab.swap_gate(axes, charge=charges)
-            Ab = Ab.fuse_legs(axes=((0, 1), (2, 3), 4))
 
         Ak = self.ket
         axes, charges = [], []
@@ -119,9 +117,7 @@ class DoublePepsTensor(SpecialTensor):
                 axes.append(int(ax[1]))
                 charges.append(n)
         if axes:
-            Ak = Ak.unfuse_legs(axes=(0, 1))  # TODO: remove this after switching to Peps tensor with 5 legs
             Ak = Ak.swap_gate(axes, charge=charges)
-            Ak = Ak.fuse_legs(axes=((0, 1), (2, 3), 4))
         return Ab, Ak
 
     def get_shape(self, axes=None):
@@ -144,10 +140,8 @@ class DoublePepsTensor(SpecialTensor):
         axes = (axes,) if isinstance(axes, int) else tuple(axes)
         axes = tuple(self._t[ax] for ax in axes)
 
-        lts = self.ket.get_legs(axes=(0, 1))
-        lbs = self.bra.get_legs(axes=(0, 1))
-        lts = [*lts[0].unfuse_leg(), *lts[1].unfuse_leg()]
-        lbs = [*lbs[0].unfuse_leg(), *lbs[1].unfuse_leg()]
+        lts = self.ket.get_legs(axes=(0, 1, 2, 3))
+        lbs = self.bra.get_legs(axes=(0, 1, 2, 3))
         lts = [lts[i] for i in axes]
         lbs = [lbs[i] for i in axes]
         # lts = self.ket.get_legs(axes=axes)
@@ -225,6 +219,9 @@ class DoublePepsTensor(SpecialTensor):
         Fuse the top and bottom tensors into a single :class:`yastn.Tensor`.
         """
         Ab, Ak = self.Ab_Ak_with_charge_swap()
+        Ab = Ab.fuse_legs(axes=((0, 1), (2, 3), 4))  # A -> [t l] [b r] s
+        Ak = Ak.fuse_legs(axes=((0, 1), (2, 3), 4))
+
         if self.op is not None:
             Ak = tensordot(Ak, self.op, axes=(2, 1))
         tt = tensordot(Ak, Ab.conj(), axes=(2, 2))  # [t l] [b r] [t' l'] [b' r']

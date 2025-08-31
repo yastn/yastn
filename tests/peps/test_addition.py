@@ -37,8 +37,8 @@ def test_add_peps(config_kwargs):
     env = fpeps.EnvCTM(psi, init='rand')
     env.iterate_(opts_svd={"D_total": 2}, max_sweeps=5, corner_tol=1e-4)
     evs = env.measure_1site(ops.x())
-    assert psi[0, 0].unfuse_legs(axes=(0, 1)).shape == (1, 1, 2, 2, 2)
-    assert psi[1, 2].unfuse_legs(axes=(0, 1)).shape == (2, 2, 1, 1, 2)
+    assert psi[0, 0].shape == (1, 1, 2, 2, 2)
+    assert psi[1, 2].shape == (2, 2, 1, 1, 2)
     assert all(abs(v.item() - (0.5 * occ0[k] + 0.5 * occ1[k])) < tol for k, v in evs.items())
     #
     psi = fpeps.add(psi0, psi1, amplitudes=(3, 4))
@@ -51,8 +51,8 @@ def test_add_peps(config_kwargs):
     psi2 = fpeps.product_peps(geometry2, {k: vec[v] for k, v in occ0.items()})
     psi3 = fpeps.product_peps(geometry2, {k: vec[v] for k, v in occ1.items()})
     psi = psi2 + psi3
-    assert psi[0, 0].unfuse_legs(axes=(0, 1)).shape == (2, 2, 2, 2, 2)
-    assert psi[1, 2].unfuse_legs(axes=(0, 1)).shape == (2, 2, 2, 2, 2)
+    assert psi[0, 0].shape == (2, 2, 2, 2, 2)
+    assert psi[1, 2].shape == (2, 2, 2, 2, 2)
     #
     with pytest.raises(yastn.YastnError,
                        match='All added states should have the same geometry.'):
@@ -118,7 +118,7 @@ def test_to_tensor(config_kwargs):
     geometry = fpeps.SquareLattice(dims=(2, 3), boundary='infinite')
     psi = fpeps.product_peps(geometry, {k: vec[v] for k, v in occ0.items()})
     with pytest.raises(yastn.YastnError,
-                       match='to_tensor\(\) works only for a finite PEPS.'):
+                       match=r'to_tensor\(\) works only for a finite PEPS.'):
         psi = psi.to_tensor()
 
 

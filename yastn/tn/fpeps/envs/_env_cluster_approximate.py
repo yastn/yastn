@@ -20,8 +20,8 @@ from .._evolution import BondMetric
 
 
 _hair_dirn = {'t': hair_t, 'l': hair_l, 'b': hair_b, 'r': hair_r}
-#_axis_dirn ={'t': 2, 'l': 3, 'b': 0, 'r': 1}
-_axis_dirn = {'t': (1, 0), 'l': (1, 1), 'b': (0, 0), 'r': (0, 1)}
+_axis_dirn ={'t': 2, 'l': 3, 'b': 0, 'r': 1}
+#_axis_dirn = {'t': (1, 0), 'l': (1, 1), 'b': (0, 0), 'r': (0, 1)}
 
 class EnvApproximate:
     def __init__(self, psi, which='65', opts_svd=None, opts_var=None, update_sweeps=None):
@@ -203,7 +203,6 @@ class EnvApproximate:
             H.A[H.first] = edge_l(d[nx, ny], hl=hl).add_leg(s=-1, axis=0)
             for site in H.sweep(to='last', dl=1, df=1):
                 ny += 1
-                # d[nx, ny].unfuse_legs(axes=(0, 1)) if d[nx, ny].ndim == 3 else d[nx, ny]
                 H.A[site] = DoublePepsTensor(bra=d[nx, ny], ket=d[nx, ny], transpose=(1, 2, 3, 0))
             ny += 1
             hr = hair_r(d[nx, ny + 1]) if self._hairs else None
@@ -222,7 +221,6 @@ class EnvApproximate:
             H.A[H.first] = edge_t(d[nx, ny], ht=ht).add_leg(s=-1, axis=0)
             for site in H.sweep(to='last', dl=1, df=1):
                 nx += 1
-                #.unfuse_legs(axes=(0, 1)) if d[nx, ny].ndim == 3 else d[nx, ny]
                 H.A[site] = DoublePepsTensor(bra=d[nx, ny], ket=d[nx, ny])
             nx += 1
             hb = hair_b(d[nx + 1, ny]) if self._hairs else None
@@ -245,8 +243,6 @@ class EnvApproximate:
         vectors, config = [], self.psi.config
         axis = _axis_dirn[dirn]
         for nxy in nns:
-            leg = d[nxy].get_legs(axes=axis[0])  # peps tensor are now [t l] [b r] s
-            leg = leg.unfuse_leg()  # we need to unfuse
-            leg = leg[axis[1]]
+            leg = d[nxy].get_legs(axes=axis)  # peps tensor are now [t l] [b r] s  # TODO check directions
             vectors.append(eye(config, legs=[leg, leg.conj()], isdiag=False).fuse_legs(axes=[(0, 1)]))
         return mps.product_mps(vectors)

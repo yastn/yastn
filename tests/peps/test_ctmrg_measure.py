@@ -252,4 +252,4 @@ def test_ctmrg_measure_2x1(config_kwargs, env_init):
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])
+    pytest.main([__file__, "-vs", "--durations=0"]) #, "--backend", "torch"])

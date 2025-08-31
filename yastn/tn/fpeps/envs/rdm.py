@@ -13,10 +13,11 @@ Scalar = TypeVar('Scalar')
 # from yastn.tn.fpeps.envs._env_auxlliary import append_vec_tl, append_vec_tr, append_vec_bl, append_vec_br
 
 # utility functions for corner contractions, leaving the physical indices uncontracted.
-def _append_vec_tl_open(
-    A, Ac, vectl
-):  # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s';  vectl = x [l l'] [t t'] y
+def _append_vec_tl_open(A, Ac, vectl):
+    # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s';  vectl = x [l l'] [t t'] y
     """Append the A and Ac tensors to the top-left vector with open and unswapped physical indices [s s']"""
+    A = A.fuse_legs(axes=((0, 1), (2, 3), 4))
+    Ac = Ac.fuse_legs(axes=((0, 1), (2, 3), 4))
     vectl = vectl.fuse_legs(axes=(2, (0, 3), 1))  # [t t'] [x y] [l l']
     vectl = vectl.unfuse_legs(axes=(0, 2))  # t t' [x y] l l'
     vectl = vectl.swap_gate(axes=(1, (3, 4)))  # t' X l l'
@@ -36,6 +37,8 @@ def _append_vec_br_open(
     A, Ac, vecbr
 ):  # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s';  vecbr = x [r r'] [b b'] y
     """Append the A and Ac tensors to the bottom-right vector with open and unswapped physical indices [s s']."""
+    A = A.fuse_legs(axes=((0, 1), (2, 3), 4))
+    Ac = Ac.fuse_legs(axes=((0, 1), (2, 3), 4))
     vecbr = vecbr.fuse_legs(axes=(2, (0, 3), 1))  # [b b'] [x y] [r r']
     vecbr = vecbr.unfuse_legs(axes=(0, 2))  # b b' [x y] r r'
     vecbr = vecbr.swap_gate(axes=((0, 1), 4))  # b b' X r'
@@ -59,21 +62,17 @@ def _append_vec_tr_open(
     vectr = vectr.fuse_legs(axes=(1, (0, 3), 2))  # [t t'] [x y] [r r']
     vectr = vectr.unfuse_legs(axes=(0, 2))  # t t' [x y] r r'
     vectr = vectr.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [t r] [x y] [t' r']
-    A = A.unfuse_legs(axes=(0, 1))  # t l b r s
     A = A.fuse_legs(axes=((0, 3), (1, 2), 4))  # [t r] [l b] s
     vectr = vectr.tensordot(A, axes=(0, 0))  # [x y] [t' r'] [l b] s
     vectr = vectr.unfuse_legs(axes=(1, 2))  # [x y] t' r' l b s
     vectr = vectr.swap_gate(axes=(1, (3, 5), 2, 4))  # t' X l s and r' X b
     vectr = vectr.fuse_legs(axes=(0, (1, 2), (3, 4), 5))  # [x,y] [t' r'] [l b] s
 
-    Ac = Ac.unfuse_legs(axes=(0, 1))  # t' l' b' r' s'
     Ac = Ac.swap_gate(axes=(0, (1, 4), 2, 3))  # t' X l' s' and b' X r'
     Ac = Ac.fuse_legs(axes=((0, 3), (1, 2), 4))  # [t' r'] [l' b'] s'
     vectr = vectr.tensordot(Ac.conj(), axes=(1, 0))  # [x y] [l b] s [l' b'] s'
     vectr = vectr.unfuse_legs(axes=(0, 1, 3))  # x y l b s l' b' s'
-    vectr = vectr.fuse_legs(
-        axes=(0, (2, 5), 1, (3, 6), (4, 7))
-    )  # x [l l'] y [b b'] [s s']
+    vectr = vectr.fuse_legs(axes=(0, (2, 5), 1, (3, 6), (4, 7)))  # x [l l'] y [b b'] [s s']
 
     return vectr
 
@@ -87,7 +86,6 @@ def _append_vec_bl_open(
     vecbl = vecbl.unfuse_legs(axes=(0, 2))  # b b' [x y] l l'
     vecbl = vecbl.fuse_legs(axes=((3, 0), 2, (4, 1)))  # [l b] [x y] [l' b']
 
-    Ac = Ac.unfuse_legs(axes=(0, 1))  # t' l' b' r' s'
     Ac = Ac.swap_gate(axes=(0, 1, 2, 3))  # t' X l' and b' X r'
     Ac = Ac.fuse_legs(axes=((0, 3), (1, 2), 4))  # [t' r'] [l' b'] s'
 
@@ -96,15 +94,11 @@ def _append_vec_bl_open(
     vecbl = vecbl.swap_gate(axes=(0, 3, 1, (4, 5)))  # l X t' and b X r' s'
     vecbl = vecbl.fuse_legs(axes=((0, 1), 2, (3, 4), 5))  # [l b] [x y] [t' r'] s'
 
-    A = A.unfuse_legs(axes=(0, 1))  # t l b r s
     A = A.swap_gate(axes=(2, 4))  # b X s
     A = A.fuse_legs(axes=((0, 3), (1, 2), 4))  # [t r] [l b] s
     vecbl = vecbl.tensordot(A, axes=(0, 1))  # [x y] [t' r'] s' [t r] s
     vecbl = vecbl.unfuse_legs(axes=(0, 1, 3))  # x y t' r' s' t r s
-
-    vecbl = vecbl.fuse_legs(
-        axes=((0, (6, 3), 1, (5, 2), (7, 4)))
-    )  # x [r r'] y [t t'] [s s']
+    vecbl = vecbl.fuse_legs(axes=((0, (6, 3), 1, (5, 2), (7, 4))))  # x [r r'] y [t t'] [s s']
     return vecbl
 
 

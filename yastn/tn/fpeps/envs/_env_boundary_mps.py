@@ -492,7 +492,7 @@ def _sample_MC_column_local(ny, proj_env, st0, st1, psi, projectors, rands):
     vL = proj_env.boundary_mps(n=ny, dirn='l')
     env = mps.Env(vL.conj(), [Os, vR]).setup_(to='first')
     for nx in range(psi.Nx):
-        amp = env.hole(nx).tensordot(psi[nx, ny], axes=((0, 1), (0, 1)))
+        amp = env.hole(nx).tensordot(psi[nx, ny], axes=((0, 1, 2, 3), (0, 1, 2, 3)))
         prob = [abs(amp.vdot(pr, conj=(0, 0))) ** 2 for pr in projectors[nx, ny]]
         sumprob = sum(prob)
         prob = [x / sumprob for x in prob]
@@ -523,8 +523,8 @@ def _sample_MC_column_uniform(ny, proj_env, st0, st1, psi, projectors, rands):
         pr0 = projectors[nx, ny][ind0]
         pr1 = projectors[nx, ny][ind1]
 
-        A0 = (A @ pr0).unfuse_legs(axes=(0, 1))
-        A1 = (A @ pr1).unfuse_legs(axes=(0, 1))
+        A0 = (A @ pr0)
+        A1 = (A @ pr1)
 
         Os[nx] = A1
         env.update_env_(nx, to='last')

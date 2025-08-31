@@ -33,7 +33,6 @@ def create_double_peps_tensor(config_kwargs, dtype='float64'):
     leg3 = yastn.Leg(config, s=-1, t=(-1, 0, 1), D=(2, 2, 3))
     leg4 = yastn.Leg(config, s=1,  t=(0, 1), D=(1, 1))
     A = yastn.rand(config, legs=[leg0, leg1, leg2, leg3, leg4], dtype=dtype)
-    A = A.fuse_legs(axes=((0, 1), (2, 3), 4))
     return fpeps.DoublePepsTensor(bra=A, ket=A)
 
 
