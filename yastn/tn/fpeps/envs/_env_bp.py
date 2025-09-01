@@ -214,26 +214,26 @@ class EnvBP(Peps):
         ten0, ten1 = self.psi[s0], self.psi[s1]
 
         if dirn in ('lr', 'rl'):
-            tmp0 = hair_l(ten0.bra, ht=env0.t, hl=env0.l, hb=env0.b, Aket=ten0.ket)
-            tmp1 = hair_r(ten1.bra, ht=env1.t, hr=env1.r, hb=env1.b, Aket=ten1.ket)
+            tmp0 = hair_l(ten0.bra, ht=env0.t, hl=env0.l, hb=env0.b, A_ket=ten0.ket)
+            tmp1 = hair_r(ten1.bra, ht=env1.t, hr=env1.r, hb=env1.b, A_ket=ten1.ket)
             val_no = vdot(tmp0, tmp1, conj=(0, 0))
 
             ten0 = ten0.apply_gate_on_ket(G0, dirn='l')  # if G0.ndim <= 3 else G0
             ten1 = ten1.apply_gate_on_ket(G1, dirn='r')  # if G1.ndim <= 3 else G1
 
-            tmp0 = hair_l(ten0.bra, ht=env0.t, hl=env0.l, hb=env0.b, Aket=ten0.ket)
-            tmp1 = hair_r(ten1.bra, ht=env1.t, hr=env1.r, hb=env1.b, Aket=ten1.ket)
+            tmp0 = hair_l(ten0.bra, ht=env0.t, hl=env0.l, hb=env0.b, A_ket=ten0.ket)
+            tmp1 = hair_r(ten1.bra, ht=env1.t, hr=env1.r, hb=env1.b, A_ket=ten1.ket)
             val_op = vdot(tmp0, tmp1, conj=(0, 0))
         else:  # dirn in ('tb', 'bt'):
-            tmp0 = hair_t(ten0.bra, ht=env0.t, hl=env0.l, hr=env0.r, Aket=ten0.ket)
-            tmp1 = hair_b(ten1.bra, hl=env1.l, hr=env1.r, hb=env1.b, Aket=ten1.ket)
+            tmp0 = hair_t(ten0.bra, ht=env0.t, hl=env0.l, hr=env0.r, A_ket=ten0.ket)
+            tmp1 = hair_b(ten1.bra, hl=env1.l, hr=env1.r, hb=env1.b, A_ket=ten1.ket)
             val_no = vdot(tmp0, tmp1, conj=(0, 0))
 
             ten0 = ten0.apply_gate_on_ket(G0, dirn='t')  # if G0.ndim <= 3 else G0
             ten1 = ten1.apply_gate_on_ket(G1, dirn='b')  # if G1.ndim <= 3 else G1
 
-            tmp0 = hair_t(ten0.bra, ht=env0.t, hl=env0.l, hr=env0.r, Aket=ten0.ket)
-            tmp1 = hair_b(ten1.bra, hl=env1.l, hr=env1.r, hb=env1.b, Aket=ten1.ket)
+            tmp0 = hair_t(ten0.bra, ht=env0.t, hl=env0.l, hr=env0.r, A_ket=ten0.ket)
+            tmp1 = hair_b(ten1.bra, hl=env1.l, hr=env1.r, hb=env1.b, A_ket=ten1.ket)
             val_op = vdot(tmp0, tmp1, conj=(0, 0))
 
         return val_op / val_no
@@ -267,22 +267,22 @@ class EnvBP(Peps):
         ten0, env0 = env.psi[s0], env[s0]
 
         if dirn == 'h' and l_ordered:
-            new_l = hair_l(ten0.bra, ht=env0.t, hl=env0.l, hb=env0.b, Aket=ten0.ket)
+            new_l = hair_l(ten0.bra, ht=env0.t, hl=env0.l, hb=env0.b, A_ket=ten0.ket)
             new_l = regularize_belief(new_l, env.tol_positive)
             diff = diff_beliefs(env[s1].l, new_l)
             env_tmp[s1].l = new_l
         if dirn == 'h' and not l_ordered:
-            new_r = hair_r(ten0.bra, ht=env0.t, hb=env0.b, hr=env0.r, Aket=ten0.ket)
+            new_r = hair_r(ten0.bra, ht=env0.t, hb=env0.b, hr=env0.r, A_ket=ten0.ket)
             new_r = regularize_belief(new_r, env.tol_positive)
             diff = diff_beliefs(env[s1].r, new_r)
             env_tmp[s1].r = new_r
         if dirn == 'v' and l_ordered:
-            new_t = hair_t(ten0.bra, ht=env0.t, hl=env0.l, hr=env0.r, Aket=ten0.ket)
+            new_t = hair_t(ten0.bra, ht=env0.t, hl=env0.l, hr=env0.r, A_ket=ten0.ket)
             new_t = regularize_belief(new_t, env.tol_positive)
             diff = diff_beliefs(env[s1].t, new_t)
             env_tmp[s1].t = new_t
         if dirn == 'v' and not l_ordered:
-            new_b = hair_b(ten0.bra, hl=env0.l, hb=env0.b, hr=env0.r, Aket=ten0.ket)
+            new_b = hair_b(ten0.bra, hl=env0.l, hb=env0.b, hr=env0.r, A_ket=ten0.ket)
             new_b = regularize_belief(new_b, env.tol_positive)
             diff = diff_beliefs(env[s1].b, new_b)
             env_tmp[s1].b = new_b
@@ -572,11 +572,11 @@ class EnvBP(Peps):
                             out[nx, ny].append(k)
                             ketp = tensordot(ten.ket, proj, axes=(4, 1)) / prob
                             if nx + 1 < xrange[1]:
-                                new_t = hair_t(ten.bra, ht=lenv.t, hl=lenv.l, hr=lenv.r, Aket=ketp)
+                                new_t = hair_t(ten.bra, ht=lenv.t, hl=lenv.l, hr=lenv.r, A_ket=ketp)
                                 new_t = regularize_belief(new_t, self.tol_positive)
                                 env[nx + 1, ny].t = new_t
                             if ny + 1 < yrange[1]:
-                                new_l = hair_l(ten.bra, ht=lenv.t, hl=lenv.l, hb=lenv.b, Aket=ketp)
+                                new_l = hair_l(ten.bra, ht=lenv.t, hl=lenv.l, hb=lenv.b, A_ket=ketp)
                                 new_l = regularize_belief(new_l, self.tol_positive)
                                 env[nx, ny + 1].l = new_l
                             probability *= prob

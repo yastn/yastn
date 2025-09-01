@@ -16,8 +16,6 @@
 
 from ... import tensordot, vdot, svd_with_truncation, YastnError, Tensor
 from ._peps import Peps2Layers
-from ._gates_auxiliary import apply_bond_tensors
-from ._geometry import Bond
 from ._gates_auxiliary import Gate, gate_from_mpo
 from ..mps import MpsMpoOBC
 from typing import NamedTuple
@@ -216,58 +214,34 @@ def truncate_(env, opts_svd, bond=None,
 
     infos = []
     for bond in bonds:
+        dirn2, l_ordered = psi.nn_bond_type(bond)
+        dirn = psi.nn_bond_dirn(*bond)
+        if dirn in ('rl', 'bt'):
+            bond, dirn = bond[::-1], dirn[::-1]  # 'lr' or 'tb'
+
+        s0, s1 = bond
         info = {'bond': bond}
-        dirn, l_ordered = psi.nn_bond_type(bond)
-        s0, s1 = bond if l_ordered else bond[::-1]
 
-        if dirn == 'h':  # Horizontal gate, "lr" ordered
+        if dirn == 'lr':  # Horizontal gate, "lr" ordered
+            Q0, R0 = psi[s0].qr(axes=((0, 1, 2, 4), 3), sQ=-1, Qaxis=3)  # t l b rr sa @ rr r
+            Q1, R1 = psi[s1].qr(axes=((0, 2, 3, 4), 1), sQ=1, Qaxis=1, Raxis=-1)  # t ll b r sa @ l ll
+        else:  # dirn == 'tb':  Vertical gate, "tb" ordered
+            Q0, R0 = psi[s0].qr(axes=((0, 1, 3, 4), 2), sQ=1, Qaxis=2)  # t l bb r sa @ bb b
+            Q1, R1 = psi[s1].qr(axes=((1, 2, 3, 4), 0), sQ=-1, Qaxis=0, Raxis=-1)  # tt l b r sa @ t tt
 
-            tmp0 = psi[s0].fuse_legs(axes=((0, 1), (2, 3), 4)).fuse_legs(axes=((0, 2), 1))  # [[t l] sa] [b r]
-            tmp0 = tmp0.unfuse_legs(axes=1)  # [[t l] sa] b r
-            tmp0 = tmp0.fuse_legs(axes=((0, 1), 2))  # [[[t l] sa] b] r
-            Q0f, R0 = tmp0.qr(axes=(0, 1), sQ=-1)  # [[[t l] sa] b] rr @ rr r
-            Q0 = Q0f.unfuse_legs(axes=0)  # [[t l] sa] b rr
-            Q0 = Q0.fuse_legs(axes=(0, (1, 2)))  # [[t l] sa] [b rr]
-            Q0 = Q0.unfuse_legs(axes=0)  # [t l] sa [b rr]
-            Q0 = Q0.transpose(axes=(0, 2, 1))  # [t l] [b rr] sa
-            Q0 = Q0.unfuse_legs(axes=(0, 1))  # t l bb r sa
-
-            tmp1 = psi[s1].fuse_legs(axes=((0, 1), (2, 3), 4)).fuse_legs(axes=(0, (1, 2)))  # [t l] [[b r] sa]
-            tmp1 = tmp1.unfuse_legs(axes=0)  # t l [[b r] sa]
-            tmp1 = tmp1.fuse_legs(axes=((0, 2), 1))  # [t [[b r] sa]] l
-            Q1f, R1 = tmp1.qr(axes=(0, 1), sQ=1, Qaxis=0, Raxis=-1)  # ll [t [[b r] sa]] @ l ll
-            Q1 = Q1f.unfuse_legs(axes=1)  # ll t [[b r] sa]
-            Q1 = Q1.transpose(axes=(1, 0, 2))  # t ll [[b r] sa]
-            Q1 = Q1.unfuse_legs(axes=2)  # ll t [b r] sa
-            Q1 = Q1.unfuse_legs(axes=2)  # ll t b r sa
-
-        else: # dirn == 'v':  # Vertical gate, "tb" ordered
-            tmp0 = psi[s0].fuse_legs(axes=((0, 1), (2, 3), 4)).fuse_legs(axes=((0, 2), 1))  # [[t l] sa] [b r]
-            tmp0 = tmp0.unfuse_legs(axes=1)  # [[t l] sa] b r
-            tmp0 = tmp0.fuse_legs(axes=((0, 2), 1))  # [[[t l] sa] r] b
-            Q0f, R0 = tmp0.qr(axes=(0, 1), sQ=1)  # [[[t l] sa] r] bb @ bb b
-            Q0 = Q0f.unfuse_legs(axes=0)  # [[t l] sa] r bb
-            Q0 = Q0.fuse_legs(axes=(0, (2, 1)))  # [[t l] sa] [bb r]
-            Q0 = Q0.unfuse_legs(axes=0)  # [t l] sa [bb r]
-            Q0 = Q0.transpose(axes=(0, 2, 1))  # [t l] [bb r] sa
-            Q0 = Q0.unfuse_legs(axes=(0, 1))  # t l bb r sa
-
-            tmp1 = psi[s1].fuse_legs(axes=((0, 1), (2, 3), 4)).fuse_legs(axes=(0, (1, 2)))  # [t l] [[b r] sa]
-            tmp1 = tmp1.unfuse_legs(axes=0)  # t l [[b r] sa]
-            tmp1 = tmp1.fuse_legs(axes=((1, 2), 0))  # [l [[b r] sa]] t
-            Q1f, R1 = tmp1.qr(axes=(0, 1), sQ=-1, Qaxis=0, Raxis=-1)  # tt [l [[b r] sa]] @ t tt
-            Q1 = Q1f.unfuse_legs(axes=1)  # tt l [[b r] sa]
-            Q1 = Q1.unfuse_legs(axes=2)  # tt l [b r] sa
-            Q1 = Q1.unfuse_legs(axes=2)  # tt l b r sa
-
-        fgf = env.bond_metric(Q0, Q1, s0, s1, dirn)
+        fgf = env.bond_metric(Q0, Q1, s0, s1, dirn2)
 
         if isinstance(fgf, BipartiteBondMetric):  # bipartite bond metric
             M0, M1, info = truncate_bipartite_(fgf, R0, R1, opts_svd, pinv_cutoffs, info)
         elif isinstance(fgf, BondMetric):  # bipartite bond metric
             M0, M1, info = truncate_optimize_(fgf, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization, info)
 
-        psi[s0], psi[s1] = apply_bond_tensors(Q0f, Q1f, M0, M1, dirn)
+        if dirn == 'lr':
+            psi[s0] = tensordot(Q0, M0, axes=(3, 0)).transpose(axes=(0, 1, 2, 4, 3))  # t l b r sa
+            psi[s1] = tensordot(M1, Q1, axes=(1, 1)).transpose(axes=(1, 0, 2, 3, 4))  # t l b r sa
+        else:  # dirn == 'tb':
+            psi[s0] = tensordot(Q0, M0, axes=(2, 0)).transpose(axes=(0, 1, 4, 2, 3))  # t l b r sa
+            psi[s1] = tensordot(M1, Q1, axes=(1, 0)) # t l b r sa
 
         env.post_truncation_(bond)
         infos.append(Evolution_out(**info))

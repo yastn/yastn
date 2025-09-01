@@ -1,104 +1,80 @@
 from .... import ncon
 from .. import Site, Peps, Peps2Layers, EnvCTM
-from .... import Tensor, YastnError
+from .... import tensordot, Tensor, YastnError
 from ._env_auxlliary import append_vec_tl, append_vec_br, append_vec_tr, append_vec_bl
 from typing import Sequence, Union, TypeVar
 import logging
 from functools import reduce
 log = logging.getLogger(__name__)
-
 Scalar = TypeVar('Scalar')
 
-# from yastn import Tensor, tensordot
-# from yastn.tn.fpeps.envs._env_auxlliary import append_vec_tl, append_vec_tr, append_vec_bl, append_vec_br
 
 # utility functions for corner contractions, leaving the physical indices uncontracted.
 def _append_vec_tl_open(A, Ac, vectl):
-    # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s';  vectl = x [l l'] [t t'] y
-    """Append the A and Ac tensors to the top-left vector with open and unswapped physical indices [s s']"""
-    A = A.fuse_legs(axes=((0, 1), (2, 3), 4))
-    Ac = Ac.fuse_legs(axes=((0, 1), (2, 3), 4))
+    # A = t l b r s;  Ac = t' l' b' r' s';  vectl = x [l l'] [t t'] y
+    """
+    Append the A and Ac tensors to the top-left vector with open and unswapped physical indices [s s'].
+    """
     vectl = vectl.fuse_legs(axes=(2, (0, 3), 1))  # [t t'] [x y] [l l']
     vectl = vectl.unfuse_legs(axes=(0, 2))  # t t' [x y] l l'
     vectl = vectl.swap_gate(axes=(1, (3, 4)))  # t' X l l'
-    vectl = vectl.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [t l] [x y] [t' l']
-    vectl = vectl.tensordot(Ac.conj(), axes=(2, 0))  # [t l] [x y] [b' r'] s'
-    vectl = A.tensordot(vectl, axes=(0, 0))  # [b r] s [x y] [b' r'] s'
-    vectl = vectl.fuse_legs(axes=(0, 2, 3, (1, 4)))  # [b r] [x y] [b' r'] [s s']
-    vectl = vectl.unfuse_legs(axes=(0, 2))  # b r [x y] b' r' [s s']
-    vectl = vectl.swap_gate(axes=((0, 3), 4))  # b b' X r'
-    vectl = vectl.fuse_legs(axes=((0, 3), 2, (1, 4), 5))  # [b b'] [x y] [r r'] [s s']
+    vectl = tensordot(vectl, Ac.conj(), axes=((1, 4), (0, 1)))  # t [x y] l b' r' s'
+    vectl = tensordot(A, vectl, axes=((0, 1), (0, 2)))  # b r s [x y] b' r' s'
+    vectl = vectl.swap_gate(axes=((0, 4), 5))  # b b' X r'
+    vectl = vectl.fuse_legs(axes=((0, 4), 3, (1, 5), (2, 6)))  # [b b'] [x y] [r r'] [s s']
     vectl = vectl.unfuse_legs(axes=1)  # [b b'] x y [r r'] [s s']
     vectl = vectl.transpose(axes=(1, 0, 2, 3, 4))  # x [b b'] y [r r'] [s s']
     return vectl
 
 
-def _append_vec_br_open(
-    A, Ac, vecbr
-):  # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s';  vecbr = x [r r'] [b b'] y
-    """Append the A and Ac tensors to the bottom-right vector with open and unswapped physical indices [s s']."""
-    A = A.fuse_legs(axes=((0, 1), (2, 3), 4))
-    Ac = Ac.fuse_legs(axes=((0, 1), (2, 3), 4))
+def _append_vec_br_open(A, Ac, vecbr):  # A = t l b r s;  Ac = t' l' b' r' s';  vecbr = x [r r'] [b b'] y
+    """
+    Append the A and Ac tensors to the bottom-right vector with open and unswapped physical indices [s s'].
+    """
     vecbr = vecbr.fuse_legs(axes=(2, (0, 3), 1))  # [b b'] [x y] [r r']
     vecbr = vecbr.unfuse_legs(axes=(0, 2))  # b b' [x y] r r'
     vecbr = vecbr.swap_gate(axes=((0, 1), 4))  # b b' X r'
-    vecbr = vecbr.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [b r] [x y] [b' r']
-    vecbr = vecbr.tensordot(Ac.conj(), axes=(2, 1))  # [b r] [x y] [t' l'] s'
-    vecbr = A.tensordot(vecbr, axes=(1, 0))  # [t l] s [x y] [t' l'] s'
-    vecbr = vecbr.fuse_legs(axes=(0, 2, 3, (1, 4)))  # [t l] [x y] [t' l'] [s s']
-    vecbr = vecbr.unfuse_legs(axes=(0, 2))  # t l [x y] t' l' [s s']
-    vecbr = vecbr.swap_gate(axes=((1, 4), 3))  # l l' X t'
-    vecbr = vecbr.fuse_legs(axes=((0, 3), 2, (1, 4), 5))  # [t t'] [x y] [l l'] [s s']
+    vecbr = tensordot(vecbr, Ac.conj(), axes=((1, 4), (2, 3)))  # b [x y] r t' l' s'
+    vecbr = tensordot(A, vecbr, axes=((2, 3), (0, 2)))  # t l s [x y] t' l' s'
+    vecbr = vecbr.swap_gate(axes=((1, 5), 4))  # l l' X t'
+    vecbr = vecbr.fuse_legs(axes=((0, 4), 3, (1, 5), (2, 6)))  # [t t'] [x y] [l l'] [s s']
     vecbr = vecbr.unfuse_legs(axes=1)  # [t t'] x y [l l'] [s s']
     vecbr = vecbr.transpose(axes=(1, 0, 2, 3, 4))  # x [t t'] y [l l'] [s s']
     return vecbr
 
 
-def _append_vec_tr_open(
-    A, Ac, vectr
-):  # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s';  vectr = x [t t'] [r r'] y
-    """Append the A and Ac tensors to the top-right vector with open physical indices [s s'],
-    swapped with t'"""
+def _append_vec_tr_open(A, Ac, vectr):
+    # A = t l b r s;  Ac = t' l' b' r' s';  vectr = x [t t'] [r r'] y
+    """
+    Append the A and Ac tensors to the top-right vector with open physical indices [s s'], swapped with t'.
+    """
     vectr = vectr.fuse_legs(axes=(1, (0, 3), 2))  # [t t'] [x y] [r r']
     vectr = vectr.unfuse_legs(axes=(0, 2))  # t t' [x y] r r'
-    vectr = vectr.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [t r] [x y] [t' r']
-    A = A.fuse_legs(axes=((0, 3), (1, 2), 4))  # [t r] [l b] s
-    vectr = vectr.tensordot(A, axes=(0, 0))  # [x y] [t' r'] [l b] s
-    vectr = vectr.unfuse_legs(axes=(1, 2))  # [x y] t' r' l b s
-    vectr = vectr.swap_gate(axes=(1, (3, 5), 2, 4))  # t' X l s and r' X b
-    vectr = vectr.fuse_legs(axes=(0, (1, 2), (3, 4), 5))  # [x,y] [t' r'] [l b] s
-
+    vectr = tensordot(A, vectr, axes=((0, 3), (0, 3)))  # l b s t' [x y] r'
+    vectr = vectr.swap_gate(axes=(3, (0, 2), 1, 5))  # t' X l s and r' X b
     Ac = Ac.swap_gate(axes=(0, (1, 4), 2, 3))  # t' X l' s' and b' X r'
-    Ac = Ac.fuse_legs(axes=((0, 3), (1, 2), 4))  # [t' r'] [l' b'] s'
-    vectr = vectr.tensordot(Ac.conj(), axes=(1, 0))  # [x y] [l b] s [l' b'] s'
-    vectr = vectr.unfuse_legs(axes=(0, 1, 3))  # x y l b s l' b' s'
-    vectr = vectr.fuse_legs(axes=(0, (2, 5), 1, (3, 6), (4, 7)))  # x [l l'] y [b b'] [s s']
-
+    vectr = tensordot(vectr, Ac.conj(), axes=((3, 5), (0, 3)))  # l b s [x y] l' b' s'
+    vectr = vectr.fuse_legs(axes=(3, (0, 4), (1, 5), (2, 6)))  # [x y] [l l'] [b b'] [s s']
+    vectr = vectr.unfuse_legs(axes=0)  # x y [l l'] [b b'] [s s']
+    vectr = vectr.transpose(axes=(0, 2, 1, 3, 4))  # x [l l'] y [b b'] [s s']
     return vectr
 
 
-def _append_vec_bl_open(
-    A, Ac, vecbl
-):  # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s';  vecbl = x [b b'] [l l'] y
-    """Append the A and Ac tensors to the bottom-left vector with open physical indices,
-    swapped with b"""
+def _append_vec_bl_open(A, Ac, vecbl):
+    # A = t l b r s;  Ac = t' l' b' r' s';  vecbl = x [b b'] [l l'] y
+    """
+    Append the A and Ac tensors to the bottom-left vector with open physical indices, swapped with b.
+    """
     vecbl = vecbl.fuse_legs(axes=(1, (0, 3), 2))  # [b b'] [x y] [l l']
     vecbl = vecbl.unfuse_legs(axes=(0, 2))  # b b' [x y] l l'
-    vecbl = vecbl.fuse_legs(axes=((3, 0), 2, (4, 1)))  # [l b] [x y] [l' b']
-
     Ac = Ac.swap_gate(axes=(0, 1, 2, 3))  # t' X l' and b' X r'
-    Ac = Ac.fuse_legs(axes=((0, 3), (1, 2), 4))  # [t' r'] [l' b'] s'
-
-    vecbl = vecbl.tensordot(Ac.conj(), axes=(2, 1))  # [l b] [x y] [t' r'] s'
-    vecbl = vecbl.unfuse_legs(axes=(0, 2))  # l b [x y] t' r' s'
-    vecbl = vecbl.swap_gate(axes=(0, 3, 1, (4, 5)))  # l X t' and b X r' s'
-    vecbl = vecbl.fuse_legs(axes=((0, 1), 2, (3, 4), 5))  # [l b] [x y] [t' r'] s'
-
+    vecbl = tensordot(vecbl, Ac.conj(), axes=((1, 4), (2, 1)))  # b [x y] l t' r' s'
+    vecbl = vecbl.swap_gate(axes=(2, 3, 0, (4, 5)))  # l X t' and b X r' s'
     A = A.swap_gate(axes=(2, 4))  # b X s
-    A = A.fuse_legs(axes=((0, 3), (1, 2), 4))  # [t r] [l b] s
-    vecbl = vecbl.tensordot(A, axes=(0, 1))  # [x y] [t' r'] s' [t r] s
-    vecbl = vecbl.unfuse_legs(axes=(0, 1, 3))  # x y t' r' s' t r s
-    vecbl = vecbl.fuse_legs(axes=((0, (6, 3), 1, (5, 2), (7, 4))))  # x [r r'] y [t t'] [s s']
+    vecbl = tensordot(A, vecbl, axes=((2, 1), (0, 2)))  # t r s [x y] t' r' s'
+    vecbl = vecbl.fuse_legs(axes=((3, (1, 5), (0, 4), (2, 6))))  # [x y] [r r'] [t t'] [s s']
+    vecbl = vecbl.unfuse_legs(axes=0)  # x y [r r'] [t t'] [s s']
+    vecbl = vecbl.transpose(axes=(0, 2, 1, 3, 4))  # x [r r'] y [t t'] [s s']
     return vecbl
 
 

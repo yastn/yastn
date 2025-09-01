@@ -77,7 +77,7 @@ class _config(NamedTuple):
     default_dtype: str = 'float64'
     default_fusion: str = 'hard'
     force_fusion: str = None
-    tensordot_policy: str = 'fuse_to_matrix'
+    tensordot_policy: str = 'no_fusion'
 
 
 def _flatten(nested_iterator):

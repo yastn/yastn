@@ -73,74 +73,32 @@ def apply_gate_onsite(ten, G, dirn=None):
     application of a proper swap gate.
     For a local operator with no auxiliary index, dirn should be None.
     """
-    ten = ten.fuse_legs(axes=((0, 1), (2, 3), 4))
     G = match_ancilla(ten, G, dirn=dirn)
-    tmp = tensordot(ten, G, axes=(2, 1)) # [t l] [b r] [s a] c
+    tmp = tensordot(ten, G, axes=(4, 1))  # t l b r [s a] c
     if not dirn:
-        return tmp.unfuse_legs(axes=(0, 1))
+        return tmp
 
     fuse_one = False
     if len(dirn) == 2:
-        tmp = tmp.fuse_legs(axes=(0, 1, (2, 3), 4), mode='meta')
+        tmp = tmp.fuse_legs(axes=(0, 1, 2, 3, (4, 5), 6), mode='meta')
         fuse_one = True
 
     for dd in dirn[::-1]:
         if dd == 't':
-            tmp = tmp.unfuse_legs(axes=1)  # [t l] b r [s a] c
-            tmp = tmp.fuse_legs(axes=(0, (1, 4), 2, 3))  # [t l] [b c] r [s a]
-            tmp = tmp.fuse_legs(axes=(0, (1, 2), 3))  # [t l] [[b c] r] [s a]
+            tmp = tmp.fuse_legs(axes=(0, 1, (2, 5), 3, 4))  # t l [b c] r [s a]
         if dd == 'b':
-            tmp = tmp.unfuse_legs(axes=0)  # t l [b r] [s a] c
-            tmp = tmp.swap_gate(axes=(1, 4))
-            tmp = tmp.fuse_legs(axes=((0, 4), 1, 2, 3))  # [t c] l [b r] [s a]
-            tmp = tmp.fuse_legs(axes=((0, 1), 2, 3))  # [[t c] l] [b r] [s a]
+            tmp = tmp.swap_gate(axes=(1, 5))  # l X c
+            tmp = tmp.fuse_legs(axes=((0, 5), 1, 2, 3, 4))  # [t c] l b r [s a]
         if dd == 'l':
-            tmp = tmp.unfuse_legs(axes=1)  # [t l] b r [s a] c
-            tmp = tmp.swap_gate(axes=(1, 4))
-            tmp = tmp.fuse_legs(axes=(0, 1, (2, 4), 3))  # [t l] b [r c] [s a]
-            tmp = tmp.fuse_legs(axes=(0, (1, 2), 3))  # [t l] [b [r c]] [s a]
+            tmp = tmp.swap_gate(axes=(2, 5))  # b X c
+            tmp = tmp.fuse_legs(axes=(0, 1, 2, (3, 5), 4))  # t l b [r c] [s a]
         if dd == 'r':
-            tmp = tmp.unfuse_legs(axes=0)  # t l [b r] [s a] c
-            tmp = tmp.fuse_legs(axes=(0, (1, 4), 2, 3))  # t [l c] [b r] [s a]
-            tmp = tmp.fuse_legs(axes=((0, 1), 2, 3))  # [t [l c]] [b r] [s a]
+            tmp = tmp.fuse_legs(axes=(0, (1, 5), 2, 3, 4))  # t [l c] b r [s a]
         if fuse_one:
             fuse_one = False
-            tmp = tmp.unfuse_legs(axes=2)
-    return tmp.unfuse_legs(axes=(0, 1))
+            tmp = tmp.unfuse_legs(axes=4)
+    return tmp
     # raise YastnError("dirn should be equal to 'l', 'r', 't', 'b', or None")
-
-
-def apply_bond_tensors(Q0f, Q1f, M0, M1, dirn):
-    """
-    Combine unitaries in Q0f, Q1f with optimized M0, M1 to form new peps tensors.
-    """
-    if dirn == "h":
-        ten0 = Q0f @ M0  # [[[[t l] sa] b] r
-        ten0 = ten0.unfuse_legs(axes=0)  # [[t l] sa] b r
-        ten0 = ten0.fuse_legs(axes=(0, (1, 2)))  # [[t l] sa] [b r]
-        ten0 = ten0.unfuse_legs(axes=0)  # [t l] sa [b r]
-        ten0 = ten0.transpose(axes=(0, 2, 1))  # [t l] [b r] sa
-        ten0 = ten0.unfuse_legs(axes=(0, 1))  # t l b r sa
-
-        ten1 = M1 @ Q1f  # l [t [[b r] s]]
-        ten1 = ten1.unfuse_legs(axes=1)  # l t [[b r] sa]
-        ten1 = ten1.fuse_legs(axes=((1, 0), 2))  # [t l] [[b r] sa]
-        ten1 = ten1.unfuse_legs(axes=1)  # [t l] [b r] sa
-        ten1 = ten1.unfuse_legs(axes=(0, 1))  # t l b r sa
-    else:  # dirn == "v":
-        ten0 = Q0f @ M0  # [[[t l] sa] r] b
-        ten0 = ten0.unfuse_legs(axes=0)  # [[t l] sa] r b
-        ten0 = ten0.fuse_legs(axes=(0, (2, 1)))  # [[t l] sa] [b r]
-        ten0 = ten0.unfuse_legs(axes=0)  # [t l] sa [b r]
-        ten0 = ten0.transpose(axes=(0, 2, 1))  # [t l] [b r] sa
-        ten0 = ten0.unfuse_legs(axes=(0, 1))  # t l b r sa
-
-        ten1 = M1 @ Q1f  # t [l [[b r] sa]]
-        ten1 = ten1.unfuse_legs(axes=1)  # t l [[b r] sa]
-        ten1 = ten1.fuse_legs(axes=((0, 1), 2))  # [t l] [[b r] sa]
-        ten1 = ten1.unfuse_legs(axes=1)  # [t l] [b r] sa
-        ten1 = ten1.unfuse_legs(axes=(0, 1))  # t l b r sa
-    return ten0, ten1
 
 
 def gate_product_operator(O0, O1, l_ordered=True, f_ordered=True, merge=False):
@@ -221,7 +179,7 @@ def fill_eye_in_gate(peps, G, sites):
     leg = g0.get_legs(axes=2)
     vb = eye(g0.config, legs=(leg.conj(), leg), isdiag=False)
     for site in sites[1:-1]:
-        leg = peps[site].get_legs(axes=4)
+        leg = peps[site].get_legs(axes=-1)
         if leg.is_fused():  # unfuse to get system leg
             leg, _ = leg.unfuse_leg()
         vp = eye(g0.config, legs=(leg, leg.conj()), isdiag=False)
