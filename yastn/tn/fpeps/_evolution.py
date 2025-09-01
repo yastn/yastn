@@ -214,7 +214,6 @@ def truncate_(env, opts_svd, bond=None,
 
     infos = []
     for bond in bonds:
-        dirn2, l_ordered = psi.nn_bond_type(bond)
         dirn = psi.nn_bond_dirn(*bond)
         if dirn in ('rl', 'bt'):
             bond, dirn = bond[::-1], dirn[::-1]  # 'lr' or 'tb'
@@ -229,7 +228,7 @@ def truncate_(env, opts_svd, bond=None,
             Q0, R0 = psi[s0].qr(axes=((0, 1, 3, 4), 2), sQ=1, Qaxis=2)  # t l bb r sa @ bb b
             Q1, R1 = psi[s1].qr(axes=((1, 2, 3, 4), 0), sQ=-1, Qaxis=0, Raxis=-1)  # tt l b r sa @ t tt
 
-        fgf = env.bond_metric(Q0, Q1, s0, s1, dirn2)
+        fgf = env.bond_metric(Q0, Q1, s0, s1, dirn)
 
         if isinstance(fgf, BipartiteBondMetric):  # bipartite bond metric
             M0, M1, info = truncate_bipartite_(fgf, R0, R1, opts_svd, pinv_cutoffs, info)

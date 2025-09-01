@@ -200,9 +200,9 @@ class EnvBoundaryMPS(Peps):
 
         OPv, OPh = {}, {}
         for bond, ops in OP.items():
-            dirn, l_ordered = peps_env.nn_bond_type(bond)
-            assert l_ordered
-            if dirn == 'h':
+            dirn = peps_env.nn_bond_dirn(*bond)
+            assert dirn in ('lr', 'tb')
+            if dirn == 'lr':
                 nx = bond[0][0]
                 if nx not in OPh:
                     OPh[nx] = {}

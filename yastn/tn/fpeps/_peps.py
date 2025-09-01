@@ -220,9 +220,9 @@ class Peps():
     def get_bond_dimensions(self):
         out = {}
         for bond in self.bonds():
-            dirn, l_ordered = self.nn_bond_type(bond)
-            s0 = bond[0] if l_ordered else bond[1]
-            axes = 3 if dirn == 'h' else 2  # if dirn == 'v'
+            dirn = self.nn_bond_dirn(*bond)
+            s0 = bond[0] if dirn in ('lr', 'tb') else bond[1]
+            axes = 3 if dirn in 'lr rl' else 2
             out[bond] = self[s0].get_shape(axes=axes)
         return out
 

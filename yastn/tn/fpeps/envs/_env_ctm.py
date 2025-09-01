@@ -1033,7 +1033,7 @@ class EnvCTM(Peps):
                 bl═══b═══br
         """
         env0, env1 = self[s0], self[s1]
-        if dirn == "h":
+        if dirn in ("h", "lr"):
             assert self.psi.nn_site(s0, (0, 1)) == s1
             vecl = append_vec_tl(Q0, Q0, env0.l @ (env0.tl @ env0.t))
             vecl = tensordot(env0.b @ env0.bl, vecl, axes=((2, 1), (0, 1)))

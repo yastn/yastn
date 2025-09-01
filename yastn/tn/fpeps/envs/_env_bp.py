@@ -262,26 +262,26 @@ class EnvBP(Peps):
             env_tmp = env  # update env in-place
 
         bond = Bond(*bond)
-        dirn, l_ordered = env.nn_bond_type(bond)
+        dirn = env.nn_bond_dirn(*bond)
         s0, s1 = bond
         ten0, env0 = env.psi[s0], env[s0]
 
-        if dirn == 'h' and l_ordered:
+        if dirn == 'lr':
             new_l = hair_l(ten0.bra, ht=env0.t, hl=env0.l, hb=env0.b, A_ket=ten0.ket)
             new_l = regularize_belief(new_l, env.tol_positive)
             diff = diff_beliefs(env[s1].l, new_l)
             env_tmp[s1].l = new_l
-        if dirn == 'h' and not l_ordered:
+        if dirn == 'rl':
             new_r = hair_r(ten0.bra, ht=env0.t, hb=env0.b, hr=env0.r, A_ket=ten0.ket)
             new_r = regularize_belief(new_r, env.tol_positive)
             diff = diff_beliefs(env[s1].r, new_r)
             env_tmp[s1].r = new_r
-        if dirn == 'v' and l_ordered:
+        if dirn == 'tb':
             new_t = hair_t(ten0.bra, ht=env0.t, hl=env0.l, hr=env0.r, A_ket=ten0.ket)
             new_t = regularize_belief(new_t, env.tol_positive)
             diff = diff_beliefs(env[s1].t, new_t)
             env_tmp[s1].t = new_t
-        if dirn == 'v' and not l_ordered:
+        if dirn == 'bt':
             new_b = hair_b(ten0.bra, hl=env0.l, hb=env0.b, hr=env0.r, A_ket=ten0.ket)
             new_b = regularize_belief(new_b, env.tol_positive)
             diff = diff_beliefs(env[s1].b, new_b)
@@ -313,19 +313,19 @@ class EnvBP(Peps):
                      ║
                      b
         """
-        if dirn == "h" and self.which == "BP":
+        if dirn in ("h", "lr") and self.which == "BP":
             assert self.psi.nn_site(s0, (0, 1)) == s1
             vecl = hair_l(Q0, hl=self[s0].l, ht=self[s0].t, hb=self[s0].b)
             vecr = hair_r(Q1, hr=self[s1].r, ht=self[s1].t, hb=self[s1].b).T
             return BipartiteBondMetric(gL=vecl, gR=vecr)  # (rr' rr,  ll ll')
 
-        if dirn == "v" and self.which == "BP":
+        if dirn in ("v", "tb") and self.which == "BP":
             assert self.psi.nn_site(s0, (1, 0)) == s1
             vect = hair_t(Q0, hl=self[s0].l, ht=self[s0].t, hr=self[s0].r)
             vecb = hair_b(Q1, hr=self[s1].r, hb=self[s1].b, hl=self[s1].l).T
             return BipartiteBondMetric(gL=vect, gR=vecb)  # (bb' bb,  tt tt')
 
-        if dirn == "h" and self.which == "NN+BP":
+        if dirn in ("h", "lr") and self.which == "NN+BP":
             assert self.psi.nn_site(s0, (0, 1)) == s1
 
             m = {d: self.psi.nn_site(s0, d=d) for d in [(-1,0), (0,-1), (1,0), (1,1), (0,2), (-1,1)]}
@@ -352,7 +352,7 @@ class EnvBP(Peps):
             g = tensordot((cbr @ cbl) @ env_l, (ctl @ ctr) @ env_r, axes=((0, 2), (2, 0)))  # [rr rr'] [ll ll']
             return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
-        if dirn == "v" and self.which == "NN+BP":
+        if dirn in ("v", "tb") and self.which == "NN+BP":
             assert self.psi.nn_site(s0, (1, 0)) == s1
             m = {d: self.psi.nn_site(s0, d=d) for d in [(-1,0), (0,-1), (1,-1), (2,0), (1,1), (0,1)]}
             mm = dict(m)  # for testing for None
@@ -378,7 +378,7 @@ class EnvBP(Peps):
             g = tensordot((cbl @ ctl) @ env_t, (ctr @ cbr) @ env_b, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
             return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
-        if dirn == "h" and self.which == "NNN+BP":
+        if dirn in ("h", "lr") and self.which == "NNN+BP":
             assert self.psi.nn_site(s0, (0, 1)) == s1
             sts = [(-1,-1), (0,-1), (1,-1), (1,0), (1,1), (1,2), (0,2), (-1,2), (-1,1), (-1,0)]
             m = {d: self.psi.nn_site(s0, d=d) for d in sts}
@@ -414,7 +414,7 @@ class EnvBP(Peps):
             g = tensordot(vecl, vecr, axes=((0, 1), (1, 0)))  # [rr rr'] [ll ll']
             return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
-        if dirn == "v" and self.which == "NNN+BP":
+        if dirn in ("v", "tb") and self.which == "NNN+BP":
             assert self.psi.nn_site(s0, (1, 0)) == s1
             sts = [(-1,-1), (0,-1), (1,-1), (2,-1), (2,0), (2,1), (1,1), (0,1), (-1,1), (-1,0)]
             m = {d: self.psi.nn_site(s0, d=d) for d in sts}

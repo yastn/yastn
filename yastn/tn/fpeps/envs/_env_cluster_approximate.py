@@ -116,7 +116,7 @@ class EnvApproximate:
                         (+3 -2) (+3 -1) (+3 +0)  (+3 +1) (+3 +2)  (+3 +3)
 
         """
-        assert self.psi.nn_site(s0, (0, 1) if dirn == 'h' else (1, 0)) == s1
+        assert self.psi.nn_site(s0, (0, 1) if dirn in ('h', 'lr') else (1, 0)) == s1
         bd = (s0, s1, dirn)
 
         try:
@@ -137,7 +137,7 @@ class EnvApproximate:
         return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
     def initialize_env(self, bd):
-        if bd[2] == "h":
+        if bd[2] in ("h", "lr"):
             self[bd, self.Nw + 1] = self.boundary_mps(bd, 't')
             for nx in range(-self.Nw, 0):  # [bd, 1]
                 tmpo = self.transfer_mpo(bd, n=nx)
@@ -164,7 +164,7 @@ class EnvApproximate:
                 mps.compression_(self[bd, ny], (tmpo, self[bd, ny-1]), **self.opts_var)
 
     def update_env(self, bd):
-        if bd[2] == "h":  # dirn == "h":
+        if bd[2] in ("h", "lr"):
             self[bd, self.Nw + 1] = self.boundary_mps(bd, 't')
             for nx in range(-self.Nw, 0):  # [bd, 1]
                 tmpo = self.transfer_mpo(bd, n=nx)
@@ -190,7 +190,7 @@ class EnvApproximate:
         H = mps.Mpo(N = 2 * self.Nl)
         s0, s1, dirn = bd
 
-        if dirn == "h":
+        if dirn in ("h", "lr"):
             nx = n
             d = {(nx, ny): self.psi.nn_site(s0, d=(nx, ny))
                 for ny in range(-self.Nl + 1 - self._hairs, self.Nl + 1 + self._hairs)}
