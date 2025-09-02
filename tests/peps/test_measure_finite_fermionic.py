@@ -92,7 +92,7 @@ def do_test_rdm_measure_nn(ops, res, *operators, env=None):
     Test all possible combination of sites; skip those where measure_2x2 cannot be applied
     """
     for bond in res:
-        dirn, _= env.nn_bond_type(bond)
+        dirn = env.nn_bond_dirn(bond)
         assert abs(measure_rdm_nn(bond[0], dirn, env.psi.ket, env,operators) - res[bond]) < tol
 
 

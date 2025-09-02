@@ -163,13 +163,15 @@ class SquareLattice():
         #     y = y % self._dims[1]
         return Site(x, y)
 
-    def nn_bond_dirn(self, s0, s1) -> str:
+    def nn_bond_dirn(self, s0, s1=None) -> str:
         """
         Raise YastnError if a bond does not connect nearest-neighbor lattice sites.
         Return bond orientation in 2D grid as a tuple: dirn, l_ordered
         dirn is 'h' or 'v' (horizontal, vertical).
         l_ordered is True for bond directed as 'lr' or 'tb', and False for 'rl' or 'bt'.
         """
+        if s1 is None:
+            s0, s1 = s0   # allow syntax where s0 is a bond s0 = (s0, s1)
         if self.nn_site(s0, 'r') == s1 and self.nn_site(s1, 'l') == s0:
             return 'lr'  # dirn
         if self.nn_site(s0, 'b') == s1 and self.nn_site(s1, 't') == s0:
@@ -179,24 +181,6 @@ class SquareLattice():
         if self.nn_site(s0, 't') == s1 and self.nn_site(s1, 'b') == s0:
             return 'bt'
         raise YastnError(f"{s0}, {s1} are not nearest-neighbor sites.")
-
-    def nn_bond_type(self, bond) -> tuple[str, bool]:
-        """
-        Raise YastnError if a bond does not connect nearest-neighbor lattice sites.
-        Return bond orientation in 2D grid as a tuple: dirn, l_ordered
-        dirn is 'h' or 'v' (horizontal, vertical).
-        l_ordered is True for bond directed as 'lr' or 'tb', and False for 'rl' or 'bt'.
-        """
-        s0, s1 = bond
-        if self.nn_site(s0, 'r') == s1 and self.nn_site(s1, 'l') == s0:
-            return 'h', True  # dirn, l_ordered
-        if self.nn_site(s0, 'b') == s1 and self.nn_site(s1, 't') == s0:
-            return 'v', True
-        if self.nn_site(s0, 'l') == s1 and self.nn_site(s1, 'r') == s0:
-            return 'h', False
-        if self.nn_site(s0, 't') == s1 and self.nn_site(s1, 'b') == s0:
-            return 'v', False
-        raise YastnError(f"{bond} is not a nearest-neighbor bond.")
 
     def f_ordered(self, s0, s1) -> bool:
         """
@@ -382,28 +366,6 @@ class TriangularLattice(SquareLattice):
         if dirn == 'h':
             return self._bonds_h[::-1] if reverse else self._bonds_h
         return self._bonds_d[::-1] + self._bonds_v[::-1] + self._bonds_h[::-1] if reverse else self._bonds_h + self._bonds_v + self._bonds_d
-
-    def nn_bond_type(self, bond) -> tuple[str, bool]:
-        """
-        Raise YastnError if a bond does not connect nearest-neighbor lattice sites.
-        Return bond orientation in 2D grid as a tuple: dirn, l_ordered
-        dirn is 'h' or 'v' or 'd' (horizontal, vertical, diagonal).
-        l_ordered is True for bond directed as 'lr' or 'tb', and False for 'rl' or 'bt'.
-        """
-        s0, s1 = bond
-        if self.nn_site(s0, 'r') == s1 and self.nn_site(s1, 'l') == s0:
-            return 'h', True  # dirn, l_ordered
-        if self.nn_site(s0, 'b') == s1 and self.nn_site(s1, 't') == s0:
-            return 'v', True
-        if self.nn_site(s0, 'tr') == s1 and self.nn_site(s1, 'bl') == s0:
-            return 'd', True
-        if self.nn_site(s0, 'l') == s1 and self.nn_site(s1, 'r') == s0:
-            return 'h', False
-        if self.nn_site(s0, 't') == s1 and self.nn_site(s1, 'b') == s0:
-            return 'v', False
-        if self.nn_site(s0, 'bl') == s1 and self.nn_site(s1, 'tr') == s0:
-            return 'd', False
-        raise YastnError(f"{bond} is not a nearest-neighbor bond.")
 
     def __dict__(self):
         """

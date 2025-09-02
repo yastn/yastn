@@ -201,10 +201,10 @@ def test_ctmrg_measure_2x1(config_kwargs, env_init):
                 assert abs(env.measure_nn(ops.c(s), ops.cp(s), bond=bond[::-1]) - (-val)) < tol
                 assert abs(env.measure_nn(ops.c(s), ops.cp(s), bond=bond) - (-val.conjugate())) < tol
                 assert abs(env.measure_nn(ops.cp(s), ops.c(s), bond=bond[::-1]) - (val.conjugate())) < tol
-                dirn, l_ordered= g.nn_bond_type(bond)
-                if l_ordered:
-                    assert abs(measure_rdm_nn(bond[0],dirn,psi,env,(ops.cp(s), ops.c(s))) - val) < tol
-                    assert abs(measure_rdm_nn(bond[0],dirn,psi,env,(ops.c(s), ops.cp(s))) - (-val.conjugate())) < tol
+                dirn = g.nn_bond_dirn(*bond)
+                if dirn in ("lr", "tb"):
+                    assert abs(measure_rdm_nn(bond[0], dirn, psi, env,(ops.cp(s), ops.c(s))) - val) < tol
+                    assert abs(measure_rdm_nn(bond[0], dirn, psi, env,(ops.c(s), ops.cp(s))) - (-val.conjugate())) < tol
 
 
             # example that is testing auxlliary leg swap-gate in the initialization
@@ -245,10 +245,10 @@ def test_ctmrg_measure_2x1(config_kwargs, env_init):
                     assert abs(env.measure_nn(ops.c('u'), ops.cp('u'), bond=bond[::-1]) - (-val)) < tol
                     assert abs(env.measure_nn(ops.c('u'), ops.cp('u'), bond=bond) - (-val.conjugate())) < tol
                     assert abs(env.measure_nn(ops.cp('u'), ops.c('u'), bond=bond[::-1]) - (val.conjugate())) < tol
-                    dirn, l_ordered= g.nn_bond_type(bond)
-                    if l_ordered:
-                        assert abs(measure_rdm_nn(bond[0],dirn,psi,env,(ops.cp('u'), ops.c('u'))) - val) < tol
-                        assert abs(measure_rdm_nn(bond[0],dirn,psi,env,(ops.c('u'), ops.cp('u'))) - (-val.conjugate())) < tol
+                    dirn = g.nn_bond_dirn(*bond)
+                    if dirn in ("lr", "tb"):
+                        assert abs(measure_rdm_nn(bond[0], dirn, psi, env, (ops.cp('u'), ops.c('u'))) - val) < tol
+                        assert abs(measure_rdm_nn(bond[0], dirn, psi, env, (ops.c('u'), ops.cp('u'))) - (-val.conjugate())) < tol
 
 
 if __name__ == '__main__':

@@ -84,7 +84,7 @@ class Peps():
 
         """
         self.geometry = geometry
-        for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "nn_bond_type", "f_ordered", "nn_bond_dirn"]:
+        for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "f_ordered", "nn_bond_dirn"]:
             setattr(self, name, getattr(geometry, name))
         self._data = {self.site2index(site): None for site in self.sites()}
 
@@ -352,7 +352,7 @@ class Peps2Layers():
         assert self.ket.geometry == self.bra.geometry
         self.geometry = bra.geometry
 
-        for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "nn_bond_type", "f_ordered", "nn_bond_dirn"]:
+        for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "f_ordered", "nn_bond_dirn"]:
             setattr(self, name, getattr(bra.geometry, name))
 
     @property

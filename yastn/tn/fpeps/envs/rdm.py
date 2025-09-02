@@ -718,10 +718,10 @@ def measure_rdm_nn(s0 : Site, dirn : str, psi : Peps, env : EnvCTM, op : Union[S
     Returns:
         Expectation value or a list of expectations values of provided `op`.
     """
-    if dirn == "h":
+    if dirn in ("h", "lr"):
         rdm, norm = rdm1x2(s0, psi, env)  # s0 s0' s1 s1'
         s1 = psi.nn_site(s0, "r")
-    elif dirn == "v":
+    elif dirn in ("v", "tb"):
         rdm, norm = rdm2x1(s0, psi, env)  # s0 s0' s1 s1'
         s1 = psi.nn_site(s0, "b")
     # norm = rdm.trace(axes=((0, 2), (1, 3))).to_number()
