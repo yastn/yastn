@@ -18,7 +18,7 @@ over bond truncation via different ways to calculate **bond metric**. Four class
 - :class:`yastn.tn.fpeps.EnvBP`: Employ belief propagation, either to define a bipartite bond metric, or to gauge NTU-like clusters.
 - :class:`yastn.tn.fpeps.EnvCTM`: Employ CTMRG environment to calculate the bond metric, with information from the entire network, allowing for a fast full update approach.
 - :class:`yastn.tn.fpeps.EnvApproximate`: Employ local clusters of sizes beyond exact contraction, utilizing approximate boundary MPS to calculate the bond metric.
-q
+
 .. autofunction:: yastn.tn.fpeps.evolution_step_
 
 Auxiliary functions, such as :meth:`yastn.tn.fpeps.accumulated_truncation_error`, assist with tracking cumulative
