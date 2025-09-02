@@ -12,9 +12,10 @@ For a detailed explanation, please refer to the :ref:`Basic concepts/Time evolut
 
 The main method for performing a time evolution step is :meth:`yastn.tn.fpeps.evolution_step_`. This
 function requires an environment containing the PEPS state (updated in place) and provides control
-over bond truncation via different ways to calculate **bond metric**. Three classes which support this are:
+over bond truncation via different ways to calculate **bond metric**. Four classes which support this are:
 
 - :class:`yastn.tn.fpeps.EnvNTU`: Employ small local clusters, which can be contracted numerically exactly, resulting in a stable and positively defined bond metric.
+- :class:`yastn.tn.fpeps.EnvBP`: Employ belief propagation, either to define a bipartite bond metric, or to gauge NTU-like clusters.
 - :class:`yastn.tn.fpeps.EnvCTM`: Employ CTMRG environment to calculate the bond metric, with information from the entire network, allowing for a fast full update approach.
 - :class:`yastn.tn.fpeps.EnvApproximate`: Employ local clusters of sizes beyond exact contraction, utilizing approximate boundary MPS to calculate the bond metric.
 

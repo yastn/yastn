@@ -175,7 +175,7 @@ def test_peps_evolution_qft(config_kwargs):
     for method in ['NN', 'mpo']:
         psi = fpeps.product_peps(g, ops.I())
         env = fpeps.EnvNTU(psi, which='NN')
-        fpeps.evolution_step_(env, gates, symmetrize=False, opts_svd={'D_total': 16}, method=method)
+        fpeps.evolution_step_(env, gates, opts_svd={'D_total': 16}, method=method)
         psit = swap_fuse_numpy(psi.to_tensor())
         psit = psit * qft_ref[0, 0] / psit[0, 0]  # evolution_step_ does not keep the norm
         assert np.allclose(qft_ref, psit)
@@ -184,7 +184,7 @@ def test_peps_evolution_qft(config_kwargs):
         psi = fpeps.product_peps(g, ops.I())
         env = fpeps.EnvBP(psi, which='BP')
         env.iterate_(max_sweeps=5)
-        fpeps.evolution_step_(env, gates, symmetrize=False, opts_svd={'D_total': 16}, method=method)
+        fpeps.evolution_step_(env, gates, opts_svd={'D_total': 16}, method=method)
         psit = swap_fuse_numpy(psi.to_tensor())
         psit = psit * qft_ref[0, 0] / psit[0, 0]  # evolution_step_ does not keep the norm
         assert np.allclose(qft_ref, psit)

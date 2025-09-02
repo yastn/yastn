@@ -71,9 +71,12 @@ This example can be also run from `tests/quickstart/test_Hubbard.py <https://git
         g_hop_u = peps.gates.gate_nn_hopping(t, db/2, I, c_up, cdag_up)
         g_hop_d = peps.gates.gate_nn_hopping(t, db/2, I, c_dn, cdag_dn)
         g_loc = peps.gates.gate_local_Coulomb(mu, mu, U, db/2, I, n_up, n_dn)
+        # peps.gates.distribute by default symmetrize the list of gates to make them
+        # a second-order approximation. As such, each gate takes half time step.
         gates = peps.gates.distribute(geometry,
                                       gates_nn=[g_hop_u, g_hop_d],
                                       gates_local=g_loc)
+
 
 
 5. *Time Evolution*:

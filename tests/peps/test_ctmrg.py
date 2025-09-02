@@ -250,4 +250,4 @@ if __name__ == '__main__':
     # test_ctmrg_Ising_3x4({"backend": "np"})
 
     # test_ctmrg_Ising_dense({"backend": "torch", "device": "cuda"})
-    pytest.main([__file__, "-vs", "--durations=0"])
+    pytest.main([__file__, "-vs", "--durations=0", "--long_tests"])

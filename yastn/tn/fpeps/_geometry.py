@@ -228,7 +228,7 @@ class CheckerboardLattice(SquareLattice):
 
 class RectangularUnitcell(SquareLattice):
 
-    def __init__(self, pattern):
+    def __init__(self, pattern, **kwargs):
         r"""
         Rectangular unit cells supporting patterns characterized by a single momentum ``Q=(q_x, q_y)``.
 

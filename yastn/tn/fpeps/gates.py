@@ -201,7 +201,7 @@ def gate_local_field(h, step, I, X, site=None) -> Gate_local:
     return Gate_local(G_loc, site)
 
 
-def distribute(geometry, gates_nn=None, gates_local=None) -> Gates:
+def distribute(geometry, gates_nn=None, gates_local=None, symmetrize=True) -> Gates:
     r"""
     Distributes gates homogeneous over the lattice.
 
@@ -216,6 +216,10 @@ def distribute(geometry, gates_nn=None, gates_local=None) -> Gates:
 
     local : Gate_local | Sequence[Gate_local]
         Local gate, or a list of local gates, to be distributed over all unique lattice sites.
+
+    symmetrize: bool
+        Whether to iterate through provided gates forward and then backward, resulting in a 2nd order method.
+        In that case, each gate should correspond to half of the desired timestep. The default is ``True``.
     """
     nn = []
     if gates_nn is not None:
@@ -233,4 +237,7 @@ def distribute(geometry, gates_nn=None, gates_local=None) -> Gates:
             for Gloc in gates_local:
                 local.append(Gloc._replace(sites=(site,)))
 
-    return Gates(nn=nn, local=local)
+    gates = Gates(nn=nn, local=local)
+    if symmetrize:
+        gates = gates + gates[::-1]
+    return gates

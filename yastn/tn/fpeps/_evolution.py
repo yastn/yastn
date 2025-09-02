@@ -45,11 +45,9 @@ class Evolution_out(NamedTuple):
     pinv_cutoffs: dict[str, float] = ()
 
 
-def evolution_step_(env, gates, opts_svd, symmetrize=True, method='mpo',
-                    fix_metric=0,
+def evolution_step_(env, gates, opts_svd, method='mpo', fix_metric=0,
                     pinv_cutoffs=(1e-12, 1e-11, 1e-10, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4),
-                    max_iter=100, tol_iter=1e-13, initialization="EAT_SVD",
-                    ):
+                    max_iter=100, tol_iter=1e-13, initialization="EAT_SVD"):
     r"""
     Perform a single step of PEPS evolution by applying a list of gates.
     Truncate bond dimension after each application of a two-site gate.
@@ -67,9 +65,6 @@ def evolution_step_(env, gates, opts_svd, symmetrize=True, method='mpo',
         In particular, it fixes bond dimensions (potentially, sectorial).
         It is possible to provide a list of dicts (with decreasing bond dimensions),
         in which case the truncation is done gradually in a few steps.
-    symmetrize: bool
-        Whether to iterate through provided gates forward and then backward, resulting in a 2nd order method.
-        In that case, each gate should correspond to half of the desired timestep. The default is ``True``.
     method: str
         For ``'NN'``, split multi-site gates into a series of nearest-neighbor gates.
         Otherwise, apply mpo-gate first, and then sequentially truncate enlarged bonds (the default).
@@ -110,8 +105,6 @@ def evolution_step_(env, gates, opts_svd, symmetrize=True, method='mpo',
         psi = psi.ket  # to make it work with CtmEnv
 
     infos = []
-    if symmetrize:
-        gates = gates + gates[::-1]
 
     if 'nn' in method.lower():
         gates = [Gate(gate_from_mpo(gate.G), gate.sites) if isinstance(gate.G, MpsMpoOBC) else gate  for gate in gates]
