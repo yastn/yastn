@@ -20,15 +20,19 @@ class Gate(NamedTuple):
     r"""
     Gate to be applied on Peps state.
 
-    `G` contains operators to be applied on respective `sites`.
-    Operators have virtual legs connecting them, forming an MPO.
+    `G` contains operators for respective `sites`.
 
-    The convention of legs is (ket, bra, virtual_0, virtual_1) -- i.e., the first two legs are always physical (operator) legs.
+    Operato can be given in the form of an MPO (:class:`yastn.tn.mps.MpsMpoOBC`) of the same length as the number of provided `sites`.
+    Sites should form a continuous path in the two-dimensional PEPS lattice.
+    The fermionic order of MPO should be linear, with the first MPO site being first in the fermionic order, irrespective of the provided `sites`.
+
+    For a two-site operator acting on sites beyond nearest neighbor, it can be provided as `G` with two elements, and `sites` forming a path between the end sites where the provided elements of `G` will act.
+
+    It is also possible to provide `G` as a list of tensots.
+    In this case, the convention of legs is (ket, bra, virtual_0, virtual_1) -- i.e., the first two legs are always physical (operator) legs.
     For one site, there are no virtual legs.
     For two or more sites, the first and last elements of G have one virtual leg (3 in total).
-    For three sites or more, the middle elements of `G` have two virtual legs connecting, respectively, to preceding and following gates.
-
-    Note that this is a different convention than `yastn.mps.MPO`.
+    For three sites or more, the middle elements of `G` have two virtual legs connecting, respectively, to the preceding and following elements of `G`.
     """
     G : tuple = None
     sites : tuple = None
