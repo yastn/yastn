@@ -419,8 +419,5 @@ def test_3x3_D1_Z2_spinlessf_conv(ctm_init, truncate_multiplets_mode, checkpoint
 #     print(test_elems.grad)
 
 
-# if __name__ == '__main__':
-    # enforce torch backend
-    # import yastn.backend.backend_torch as backend
-    # cfg.backend= backend
-    # test_Kagome_RVB_D3_U1_sym()
+if __name__ == '__main__':
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])

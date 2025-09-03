@@ -304,7 +304,7 @@ def svdvals(data, meta, sizeS, **kwargss):
     real_dtype = data.real.dtype if data.is_complex() else data.dtype
     Sdata = torch.zeros((sizeS,), dtype=real_dtype, device=data.device)
     for (sl, D, _, _, slS, _, _) in meta:
-        torch.linalg.svdvals(data[slice(*sl)].view(D), out=Sdata[slice(*slS)])
+        Sdata[slice(*slS)] = torch.linalg.svdvals(data[slice(*sl)].view(D))
     return Sdata
 
 def svd_arnoldi(data, meta, sizes, thresh=0.2, solver='arpack'):
@@ -388,7 +388,8 @@ def eigs_which(val, which):
 
 
 def allclose(Adata, Bdata, rtol, atol):
-    return torch.allclose(Adata, Bdata, rtol=rtol, atol=atol)
+    dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
+    return torch.allclose(Adata.to(dtype=dtype), Bdata.to(dtype=dtype), rtol=rtol, atol=atol)
 
 
 def add(datas, metas, Dsize):

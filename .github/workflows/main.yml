@@ -91,22 +91,22 @@ jobs:
       matrix:
         include:
           - backend: np
-            python_v: '3.9'
+            python_v: '3.10'
             numpy_v: '1.21.6'
             scipy_v: '1.11.4'
             torch_v: 'none'
             primme_v: '3.2.3'
           - backend: torch
-            python_v: '3.9'
+            python_v: '3.10'
             numpy_v: '1.26.4'
             scipy_v: '1.13.1'
             torch_v: '2.4'
             primme_v: '3.2.3'
           - backend: torch
             python_v: '3.12'
-            numpy_v: '2.0.1'
-            scipy_v: '1.14.1'
-            torch_v: '2.5.1'
+            numpy_v: '2.2'
+            scipy_v: '1.15'
+            torch_v: '2.7'
             primme_v: '3.2.3'
       fail-fast: false
 

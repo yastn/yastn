@@ -282,3 +282,6 @@ def test_svds_Z2xU1_rank4(config_kwargs, dtype):
     l1 = S1.get_legs(axes=0)
     l2 = S2.get_legs(axes=0)
     assert l1 == l2
+
+if __name__ == '__main__':
+    pytest.main([__file__, "-vs", "--durations=0"])
