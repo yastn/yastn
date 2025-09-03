@@ -331,7 +331,7 @@ class RectangularUnitcell(SquareLattice):
 
 class TriangularLattice(SquareLattice):
 
-    def __init__(self):
+    def __init__(self, **kwargs):
         r"""
         Geometric information about infinite triangular lattice, which
         is an infinite lattice with :math:`3{\times}3` unit cell and three unique tensors.

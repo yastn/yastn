@@ -45,6 +45,7 @@ def test_double_peps_tensor_basic(config_kwargs):
 
     f0 = T0.fuse_layers()
     assert T0.get_shape() == (16, 25, 36, 49)
+    assert T0.get_shape(axes=1) == 25
     assert f0.get_shape() == (16, 25, 36, 49)
     assert T0.shape == (16, 25, 36, 49)
     assert f0.shape == (16, 25, 36, 49)
@@ -151,6 +152,9 @@ def test_double_peps_tensor_raises(config_kwargs):
     with pytest.raises(yastn.YastnError,
                        match="DoublePepTensor.tensordot, 2 axes of self should be neighbouring"):
         T0.tensordot(t01, axes=((1, 3), (1, 2)))
+    with pytest.raises(yastn.YastnError,
+                       match="Elements of axes should be 'b0', 'b1', 'b2', 'b3', 'b4', 'k0', 'k1', 'k2', 'k3', 'k4'."):
+        T0.add_charge_swaps_(charge=t01.n, axes='any')
 
 
 def test_auxlliary_contractions(config_kwargs):

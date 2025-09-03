@@ -51,7 +51,7 @@ class SpecialTensor(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def tensordot(self, b, axes, reverse=False):
-        pass
+        pass  # pragma: no cover
 
 
 class _struct(NamedTuple):

@@ -123,13 +123,7 @@ class Peps():
         return self._data[self.site2index(site)]
 
     def __setitem__(self, site, obj):
-        """
-        Set tensor at site.
-        5-leg tensors are fused to 3-leg: [t l] [b r] sa
-        2-leg tensors are unfused to 4-leg: t l b r
-        """
-        if hasattr(obj, 'ndim') and obj.ndim == 2 :
-            obj = obj.unfuse_legs(axes=(0, 1))
+        """ Set tensor at site. """
         self._data[self.site2index(site)] = obj
 
     def __dict__(self) -> dict:

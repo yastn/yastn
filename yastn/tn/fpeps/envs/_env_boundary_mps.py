@@ -186,17 +186,27 @@ class EnvBoundaryMPS(Peps):
         env.update_env_(nx, to='first')
         return env.measure(bd=(nx - 1, nx)) / norm_env
 
-    def measure_nn(peps_env, OP):
+    def measure_nn(peps_env, OP, P=None):
         """
         Calculate 2-point expectation values on <O_i P_j> in a finite on NN bonds.
 
         ----------
-        OP: dict[Bond, dict[int, operators]]
+        OP: dict[Bond, dict[int, Tensor]]
             mapping bond with list of two-point operators.
+
+        P: Tensor
+            For the same Tensor O and P on all bonds, can provide both as Tensors.
+            The default is None, where OP is a dict.
         """
         out = {}
-
         psi = peps_env.psi
+
+        if psi.boundary != "obc":
+            raise YastnError("EnvBoundaryMPS.measure_nn currently supports only open boundary conditions.")
+
+        if P is not None:
+            OP = {bond: (OP, P) for bond in psi.bonds()}
+        OP = {k: {(): v} if not isinstance(v, dict) else v for k, v in OP.items()}
 
         OPv, OPh = {}, {}
         for bond, ops in OP.items():
@@ -224,12 +234,12 @@ class EnvBoundaryMPS(Peps):
                 nx = s0[0]
                 for nz, (op1, op2) in ops.items():
                     tm[nx].set_operator_(op1)
-                    tm[nx+1].set_operator_(op2)
-                    env.update_env_(nx+1, to='first')
+                    tm[nx + 1].set_operator_(op2)
+                    env.update_env_(nx + 1, to='first')
                     env.update_env_(nx, to='first')
                     tm[nx].del_operator_()
-                    tm[nx+1].del_operator_()
-                    out[s0, s1, nz] = env.measure(bd=(nx - 1, nx)) / norm_env
+                    tm[nx + 1].del_operator_()
+                    out[(s0, s1) + nz] = env.measure(bd=(nx - 1, nx)) / norm_env
 
         for nx, bond_ops in OPh.items():
             bra = peps_env.boundary_mps(n=nx, dirn='b')
@@ -242,12 +252,12 @@ class EnvBoundaryMPS(Peps):
                 ny = s0[1]
                 for nz, (op1, op2) in ops.items():
                     tm[ny].set_operator_(op1)
-                    tm[ny+1].set_operator_(op2)
-                    env.update_env_(ny+1, to='first')
+                    tm[ny + 1].set_operator_(op2)
+                    env.update_env_(ny + 1, to='first')
                     env.update_env_(ny, to='first')
                     tm[ny].del_operator_()
-                    tm[ny+1].del_operator_()
-                    out[s0, s1, nz] = env.measure(bd=(ny - 1, ny)) / norm_env
+                    tm[ny + 1].del_operator_()
+                    out[(s0, s1) + nz] = env.measure(bd=(ny - 1, ny)) / norm_env
 
         return out
 

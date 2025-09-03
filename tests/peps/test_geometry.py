@@ -254,11 +254,10 @@ def test_RectangularUnitCell_2x2_bipartite():
 
 def test_RectangularUnitCell_3x3_Q_1o3_1o3():
     g = fpeps.RectangularUnitcell(pattern=[[0, 1, 2], [1, 2, 0], [2, 0, 1]])
+    print(g)
 
     assert g.dims == (3, 3)
     assert g.sites() == (Site(0, 0), Site(0, 1), Site(0, 2))
-
-    print(g)
 
     assert all(g.site2index(s) == 0 for s in [(0, 0), (0, 3), (0, -3), (1, -1), (-2, 2)])
     assert all(g.sites()[g.site2index(s)] == (0, 0) for s in [(0, 0), (0, 3), (0, -3), (1, -1), (-2, 2)])
@@ -268,18 +267,6 @@ def test_RectangularUnitCell_3x3_Q_1o3_1o3():
 
     assert all(g.site2index(s) == 2 for s in [(0, 2), (0, 5), (0, -1), (1, 1), (-2, 4)])
     assert all(g.sites()[g.site2index(s)] == (0, 2) for s in [(0, 2), (0, 5), (0, -1), (1, 1), (-2, 4)])
-
-
-def test_geometry_equal():
-    gs = [fpeps.TriangularLattice(),
-          fpeps.RectangularUnitcell(pattern={(0, 0): 0, (1, 1): 0, (0, 1): 1, (1, 0): 1}),
-          fpeps.CheckerboardLattice(),
-          fpeps.SquareLattice(dims=(2, 2), boundary='infinite'),
-          fpeps.SquareLattice(dims=(2, 2), boundary='obc')]
-
-    assert gs[0] != None
-    assert all(g == g for g in gs)
-    assert all(g0 != g1 for n, g0 in enumerate(gs) for g1 in gs[n+1:])
 
 
 def test_RectangularUnitCell_raises():
@@ -301,6 +288,31 @@ def test_RectangularUnitCell_raises():
     with pytest.raises(yastn.YastnError):
         fpeps.RectangularUnitcell(pattern=[[1, 0], [1, 1]])
         # RectangularUnitcell: each unique label should have the same neighbors.
+
+
+def test_TriangularLattice():
+    net = fpeps.TriangularLattice()
+    assert net.dims == (3,3)
+    assert net._periodic == 'ii'  # lattice is infinite in both directions.
+    assert net.sites() == (Site(0, 0), Site(0, 1), Site(0, 2))  # three unique sites
+    assert net.bonds(dirn='h') == (Bond(Site(0, 0), Site(0, 1)), Bond(Site(0, 1), Site(0, 2)), Bond(Site(0, 2), Site(0, 3)))
+    assert net.bonds(dirn='v') == (Bond(Site(0, 0), Site(1, 0)), Bond(Site(0, 1), Site(1, 1)), Bond(Site(0, 2), Site(1, 2)))
+    assert net.bonds(dirn='d') == (Bond(Site(1, 0), Site(0, 1)), Bond(Site(1, 1), Site(0, 2)), Bond(Site(1, 2), Site(0, 3)))
+    assert len(net.bonds()) == 9
+    assert net.bonds(reverse=True) == net.bonds()[::-1]
+
+
+def test_geometry_equal():
+    gs = [fpeps.TriangularLattice(),
+          fpeps.RectangularUnitcell(pattern={(0, 0): 0, (1, 1): 0, (0, 1): 1, (1, 0): 1}),
+          fpeps.CheckerboardLattice(),
+          fpeps.SquareLattice(dims=(2, 2), boundary='infinite'),
+          fpeps.SquareLattice(dims=(2, 2), boundary='obc')]
+
+    assert gs[0] != None
+    assert all(g == g for g in gs)
+    assert all(g0 != g1 for n, g0 in enumerate(gs) for g1 in gs[n+1:])
+
 
 
 def test_Peps_get_set():
@@ -354,7 +366,7 @@ def test_Peps_inheritance():
     assert psi.nn_site((0, 0), 'r') == (0, 1)
     assert psi.nn_bond_dirn(Bond((0, 0), (0, 1))) == 'lr'
     assert psi.f_ordered((0, 0), (0, 1))
-
+    assert repr(psi) == str(psi)
 
 if __name__ == '__main__':
     pytest.main([__file__, "-vs", "--durations=0"])
