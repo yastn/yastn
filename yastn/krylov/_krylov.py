@@ -293,7 +293,7 @@ def lin_solver(f, b, v0, ncv=10, tol=1e-13, pinv_tol=1e-13, hermitian=False, **k
     T = backend.square_matrix_from_dict(H, m+1, device = v0.device)
     T = T[:(m+1),:m]
 
-    be1 = backend.to_tensor([normv]+[0]*(m))
+    be1 = backend.to_tensor([normv]+[0]*(m), device = v0.device)
 
     Tpinv = backend.pinv(T, rcond = pinv_tol)
     y = Tpinv @ be1
@@ -555,7 +555,7 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
             continue
         inds= U_sorted[row_sector]
         symU[c]= U[slice(*U_sectors[row_sector].slcs[0]),inds]
-        symS[(i_sector,i_sector)]= S[inds]
+        symS[(i_sector,i_sector)]= S[inds].real
         symVh[(i_sector,col_sector)]= Vh[inds,slice(*Vh_sectors[col_sector].slcs[0])]
 
     # fix relative phases of singular vectors

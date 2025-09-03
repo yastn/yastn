@@ -18,10 +18,11 @@ import yastn
 import yastn.tn.fpeps as fpeps
 import yastn.tn.mps as mps
 import math
+import random
 from itertools import product
 #
 from yastn.tn.fpeps import Site
-from yastn.tn.fpeps.envs.rdm import measure_rdm_1site, measure_rdm_nn, measure_rdm_2x2, measure_rdm_diag
+from yastn.tn.fpeps.envs.rdm import measure_rdm_nn, measure_rdm_2x2, measure_rdm_diag
 from yastn.operators._auxliary import sign_canonical_order
 
 tol = 1e-12
@@ -160,9 +161,10 @@ def test_measure(config_kwargs, sym, L):
                     (1, 0): 0, (1, 1): 0}
     #
     # and apply a single layer of hopping gates with large random angles
-    ops.random_seed(seed=0)
-    angles  = [(bond, 0.1 + 1j * ops.config.backend.rand(1) * math.pi / 2) for bond in g.bonds(dirn='v')]
-    angles += [(bond, 0.1 + 1j * ops.config.backend.rand(1) * math.pi / 2) for bond in g.bonds(dirn='h')]
+
+    random.seed(0)
+    angles  = [(bond, 0.1 + 1j * random.random() * math.pi / 2) for bond in g.bonds(dirn='v')]
+    angles += [(bond, 0.1 + 1j * random.random() * math.pi / 2) for bond in g.bonds(dirn='h')]
     # 1j * pi / 4 is half of oscillation; adds phase 1j to transfered particle
     # 1j * pi / 2 fully transfer particle between sites adding phase 1j
     #
@@ -287,13 +289,13 @@ def test_measure_lbp(config_kwargs, sym, L=3):
                     (2, 0): 1, (2, 1): 0, (2, 2): 0}
     #
     # and apply a single layer of hopping gates with large random angles
-    ops.random_seed(seed=0)
-    angles  = [(((0, 0), (1, 0)), 0.1 + 1j * ops.config.backend.rand(1) * math.pi / 2),
-               (((1, 0), (2, 0)), 0.1 + 1j * ops.config.backend.rand(1) * math.pi / 2),
-               (((1, 0), (1, 1)), 0.1 + 1j * ops.config.backend.rand(1) * math.pi / 2),
-               (((1, 1), (1, 2)), 0.1 + 1j * ops.config.backend.rand(1) * math.pi / 2),
-               (((0, 2), (1, 2)), 0.1 + 1j * ops.config.backend.rand(1) * math.pi / 2),
-               (((1, 2), (2, 2)), 0.1 + 1j * ops.config.backend.rand(1) * math.pi / 2)]
+    random.seed(0)
+    angles  = [(((0, 0), (1, 0)), 0.1 + 1j * random.random() * math.pi / 2),
+               (((1, 0), (2, 0)), 0.1 + 1j * random.random() * math.pi / 2),
+               (((1, 0), (1, 1)), 0.1 + 1j * random.random() * math.pi / 2),
+               (((1, 1), (1, 2)), 0.1 + 1j * random.random() * math.pi / 2),
+               (((0, 2), (1, 2)), 0.1 + 1j * random.random() * math.pi / 2),
+               (((1, 2), (2, 2)), 0.1 + 1j * random.random() * math.pi / 2)]
     #
     phi = generate_mps(ops, occs_init[L], angles, s2i)
     psi = generate_peps(g, ops, occs_init[L], angles)
@@ -337,4 +339,4 @@ def test_measure_lbp(config_kwargs, sym, L=3):
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs"])
+    pytest.main([__file__, "-vs", "--backend", "torch", "--device", "cuda"])
