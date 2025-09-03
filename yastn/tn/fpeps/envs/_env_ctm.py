@@ -911,8 +911,8 @@ class EnvCTM(Peps):
         """
         if all(s not in opts_svd for s in ('tol', 'tol_block')):
             opts_svd['tol'] = 1e-14
-        if method not in ('1site', '2site', 'hex'):
-            raise YastnError(f"CTM update {method=} not recognized. Should be '1site', '2site' or 'hex')")
+        if method not in ('1site', '2site'):
+            raise YastnError(f"CTM update {method=} not recognized. Should be '1site', '2site')")
         checkpoint_move= kwargs.get('checkpoint_move',False)
 
         #
@@ -1120,11 +1120,11 @@ class EnvCTM(Peps):
             The default is 'hv'.
 
         method: str
-            '2site', '1site', or 'hex'. The default is '2site'.
+            '2site', '1site'. The default is '2site'.
 
                 * '2site' uses the standard 4x4 enlarged corners, enabling enlargement of EnvCTM bond dimensions.
+                When some PEPS bonds are rank-1, it recognizes it to use 5x4 corners to prevent artificial collapse of EnvCTM bond dimensions to 1, which is important for hexagonal lattice.
                 * '1site' uses smaller 4x2 corners. It is significantly faster, but is less stable and  does not allow for EnvCTM bond dimension growth.
-                * 'hex' is an extenstion of '2site' for hexagonal lattice embeded in a square lattice, where some PEPS bonds are rank-1. It recognizes such rank-1 bonds, using 5x4 corners to prevent artificial collapse of EnvCTM bond dimensions to 1.
 
         max_sweeps: int
             The maximal number of sweeps.
@@ -1253,64 +1253,64 @@ def update_projectors_(proj, site, move, env, opts_svd, **kwargs):
     if None in sites:
         return
     method = kwargs.get('method', '2site')
-    if method == '2site':
-        return update_2site_projectors_(proj, *sites, move, env, opts_svd, **kwargs)
-    elif method == '1site':
+    # if method == '2site':
+    #     return update_2site_projectors_(proj, *sites, move, env, opts_svd, **kwargs)
+    if method == '1site':
         return update_1site_projectors_(proj, *sites, move, env, opts_svd, **kwargs)
-    elif method == 'hex':
+    elif method == '2site':
         return update_extended_2site_projectors_(proj, *sites, move, env, opts_svd, **kwargs)
 
 
-def update_2site_projectors_(proj, tl, tr, bl, br, move, env, opts_svd, **kwargs):
-    r"""
-    Calculate new projectors for CTM moves from 4x4 extended corners.
-    """
-    psi = env.psi
-    use_qr = kwargs.get("use_qr", True)
+# def update_2site_projectors_(proj, tl, tr, bl, br, move, env, opts_svd, **kwargs):
+#     r"""
+#     Calculate new projectors for CTM moves from 4x4 extended corners.
+#     """
+#     psi = env.psi
+#     use_qr = kwargs.get("use_qr", True)
 
-    cor_tl = env[tl].l @ env[tl].tl @ env[tl].t
-    cor_tl = tensordot(cor_tl, psi[tl], axes=((2, 1), (0, 1)))
-    cor_tl = cor_tl.fuse_legs(axes=((0, 2), (1, 3)))
+#     cor_tl = env[tl].l @ env[tl].tl @ env[tl].t
+#     cor_tl = tensordot(cor_tl, psi[tl], axes=((2, 1), (0, 1)))
+#     cor_tl = cor_tl.fuse_legs(axes=((0, 2), (1, 3)))
 
-    cor_bl = env[bl].b @ env[bl].bl @ env[bl].l
-    cor_bl = tensordot(cor_bl, psi[bl], axes=((2, 1), (1, 2)))
-    cor_bl = cor_bl.fuse_legs(axes=((0, 3), (1, 2)))
+#     cor_bl = env[bl].b @ env[bl].bl @ env[bl].l
+#     cor_bl = tensordot(cor_bl, psi[bl], axes=((2, 1), (1, 2)))
+#     cor_bl = cor_bl.fuse_legs(axes=((0, 3), (1, 2)))
 
-    cor_tr = env[tr].t @ env[tr].tr @ env[tr].r
-    cor_tr = tensordot(cor_tr, psi[tr], axes=((1, 2), (0, 3)))
-    cor_tr = cor_tr.fuse_legs(axes=((0, 2), (1, 3)))
+#     cor_tr = env[tr].t @ env[tr].tr @ env[tr].r
+#     cor_tr = tensordot(cor_tr, psi[tr], axes=((1, 2), (0, 3)))
+#     cor_tr = cor_tr.fuse_legs(axes=((0, 2), (1, 3)))
 
-    cor_br = env[br].r @ env[br].br @ env[br].b
-    cor_br = tensordot(cor_br, psi[br], axes=((2, 1), (2, 3)))
-    cor_br = cor_br.fuse_legs(axes=((0, 2), (1, 3)))
+#     cor_br = env[br].r @ env[br].br @ env[br].b
+#     cor_br = tensordot(cor_br, psi[br], axes=((2, 1), (2, 3)))
+#     cor_br = cor_br.fuse_legs(axes=((0, 2), (1, 3)))
 
-    if move in 'lrh':
-        cor_tt = cor_tl @ cor_tr  # b(left) b(right)
-        cor_bb = cor_br @ cor_bl  # t(right) t(left)
+#     if move in 'lrh':
+#         cor_tt = cor_tl @ cor_tr  # b(left) b(right)
+#         cor_bb = cor_br @ cor_bl  # t(right) t(left)
 
-    if move in 'rh':
-        _, r_t = qr(cor_tt, axes=(0, 1)) if use_qr else (None, cor_tt)
-        _, r_b = qr(cor_bb, axes=(1, 0)) if use_qr else (None, cor_bb.T)
-        proj[tr].hrb, proj[br].hrt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
+#     if move in 'rh':
+#         _, r_t = qr(cor_tt, axes=(0, 1)) if use_qr else (None, cor_tt)
+#         _, r_b = qr(cor_bb, axes=(1, 0)) if use_qr else (None, cor_bb.T)
+#         proj[tr].hrb, proj[br].hrt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
 
-    if move in 'lh':
-        _, r_t = qr(cor_tt, axes=(1, 0)) if use_qr else (None, cor_tt.T)
-        _, r_b = qr(cor_bb, axes=(0, 1)) if use_qr else (None, cor_bb)
-        proj[tl].hlb, proj[bl].hlt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
+#     if move in 'lh':
+#         _, r_t = qr(cor_tt, axes=(1, 0)) if use_qr else (None, cor_tt.T)
+#         _, r_b = qr(cor_bb, axes=(0, 1)) if use_qr else (None, cor_bb)
+#         proj[tl].hlb, proj[bl].hlt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
 
-    if move in 'tbv':
-        cor_ll = cor_bl @ cor_tl  # l(bottom) l(top)
-        cor_rr = cor_tr @ cor_br  # r(top) r(bottom)
+#     if move in 'tbv':
+#         cor_ll = cor_bl @ cor_tl  # l(bottom) l(top)
+#         cor_rr = cor_tr @ cor_br  # r(top) r(bottom)
 
-    if move in 'tv':
-        _, r_l = qr(cor_ll, axes=(0, 1)) if use_qr else (None, cor_ll)
-        _, r_r = qr(cor_rr, axes=(1, 0)) if use_qr else (None, cor_rr.T)
-        proj[tl].vtr, proj[tr].vtl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
+#     if move in 'tv':
+#         _, r_l = qr(cor_ll, axes=(0, 1)) if use_qr else (None, cor_ll)
+#         _, r_r = qr(cor_rr, axes=(1, 0)) if use_qr else (None, cor_rr.T)
+#         proj[tl].vtr, proj[tr].vtl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
 
-    if move in 'bv':
-        _, r_l = qr(cor_ll, axes=(1, 0)) if use_qr else (None, cor_ll.T)
-        _, r_r = qr(cor_rr, axes=(0, 1)) if use_qr else (None, cor_rr)
-        proj[bl].vbr, proj[br].vbl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
+#     if move in 'bv':
+#         _, r_l = qr(cor_ll, axes=(1, 0)) if use_qr else (None, cor_ll.T)
+#         _, r_r = qr(cor_rr, axes=(0, 1)) if use_qr else (None, cor_rr)
+#         proj[bl].vbr, proj[br].vbl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
 
 
 def update_extended_2site_projectors_(proj, tl, tr, bl, br, move, env, opts_svd, **kwargs):

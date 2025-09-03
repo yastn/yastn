@@ -46,7 +46,7 @@ __all__ = ['rand', 'rand_like', 'randR', 'randC', 'zeros', 'ones', 'eye', 'block
 
 # def make_config(backend=backend_np, sym=sym_none, default_device='cpu',
 #                 default_dtype='float64', fermionic=False,
-#                 default_fusion='hard', force_fusion=None, tensordot_policy='no_fusion', **kwargs):
+#                 default_fusion='hard', force_fusion=None, tensordot_policy='fuse_contracted', **kwargs):
 def make_config(**kwargs) -> NamedTuple:
     r"""
     Create structure with YASTN configuration

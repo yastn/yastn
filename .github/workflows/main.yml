@@ -192,9 +192,11 @@ jobs:
       - name: Run tests and collect coverage
         run: |
           pytest -v --cov=yastn --cov-report=xml --backend np;
+          pytest -v --cov=yastn --cov-report=xml --backend np --tensordot_policy fno_fusion --cov-append ./tests/tensor;
           pytest -v --cov=yastn --cov-report=xml --backend np --tensordot_policy fuse_contracted --cov-append ./tests/tensor;
           pytest -v --cov=yastn --cov-report=xml --backend np --tensordot_policy fuse_to_matrix --cov-append ./tests/tensor;
           pytest -v --cov=yastn --cov-report=xml --backend torch --cov-append ./tests/tensor;
+          pytest -v --cov=yastn --cov-report=xml --backend torch --tensordot_policy no_fusion --cov-append ./tests/tensor;
           pytest -v --cov=yastn --cov-report=xml --backend torch --tensordot_policy fuse_contracted --cov-append ./tests/tensor;
           pytest -v --cov=yastn --cov-report=xml --backend torch --tensordot_policy fuse_to_matrix --cov-append ./tests/tensor;
 

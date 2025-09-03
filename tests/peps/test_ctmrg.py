@@ -117,17 +117,21 @@ def test_ctmrg_hexagonal(config_kwargs):
     config = yastn.make_config(sym='Z2', **config_kwargs)
     leg1 = yastn.Leg(config, s=1, t=(0, ), D=(1, ))
     leg2 = yastn.Leg(config, s=1, t=(0, 1), D=(1, 1))
-    T1 = yastn.ones(config, legs=[leg2, leg2, leg1.conj(), leg2.conj()])
-    T2 = yastn.ones(config, legs=[leg1, leg2, leg2.conj(), leg2.conj()])
+    T1a = yastn.ones(config, legs=[leg2, leg2, leg1.conj(), leg2.conj()])
+    T2a = yastn.ones(config, legs=[leg1, leg2, leg2.conj(), leg2.conj()])
 
-    geometry = fpeps.CheckerboardLattice()
-    psi = fpeps.Peps(geometry=geometry, tensors=[[T1, T2]])
+    T1b = yastn.ones(config, legs=[leg2, leg2, leg2.conj(), leg1.conj()])
+    T2b = yastn.ones(config, legs=[leg2, leg1, leg2.conj(), leg2.conj()])
 
-    chi = 2
-    env = fpeps.EnvCTM(psi, init='eye')
-    opts_svd = {"D_total": chi}
-    info = env.ctmrg_(opts_svd=opts_svd, moves='hv', max_sweeps=100, corner_tol=1e-5, method='hex')
-    assert info.max_D == chi
+    for T1, T2 in [(T1a, T2a), (T1b, T2b)]:
+        geometry = fpeps.CheckerboardLattice()
+        psi = fpeps.Peps(geometry=geometry, tensors=[[T1, T2]])
+
+        chi = 2
+        env = fpeps.EnvCTM(psi, init='eye')
+        opts_svd = {"D_total": chi}
+        info = env.ctmrg_(opts_svd=opts_svd, moves='hv', max_sweeps=100, corner_tol=1e-5)
+        assert info.max_D == chi
 
 
 def test_ctmrg_Ising_4x5(config_kwargs):
