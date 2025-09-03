@@ -51,7 +51,7 @@ class SpecialTensor(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def tensordot(self, b, axes, reverse=False):
-        pass
+        pass  # pragma: no cover
 
 
 class _struct(NamedTuple):
@@ -77,7 +77,7 @@ class _config(NamedTuple):
     default_dtype: str = 'float64'
     default_fusion: str = 'hard'
     force_fusion: str = None
-    tensordot_policy: str = 'fuse_to_matrix'
+    tensordot_policy: str = 'fuse_contracted'
 
 
 def _flatten(nested_iterator):

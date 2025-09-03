@@ -68,7 +68,7 @@ def ind_list(el, unique):
     return ind
 
 
-def generate_mpo(I, terms=None, opts_svd=None, N=None) -> yastn.tn.mps.MpsMpoOBC:
+def generate_mpo(I, terms=None, opts_svd=None, N=None, f_map=None) -> yastn.tn.mps.MpsMpoOBC:
     r"""
     Generate MPO provided a list of :class:`Hterm`\-s and identity operator ``I``.
 
@@ -100,6 +100,10 @@ def generate_mpo(I, terms=None, opts_svd=None, N=None) -> yastn.tn.mps.MpsMpoOBC
     N: int
         Number of MPO sites.
         If identity MPO is provided, it is overridden by ``I.N``.
+
+    f_map: Sequence[int] | None
+        A map between the site index and its position in the fermionic order.
+        The default is ``None``, in which case fermionic order coincides with the linear order of site indices.
     """
 
     if not terms:
@@ -141,7 +145,7 @@ def generate_mpo(I, terms=None, opts_svd=None, N=None) -> yastn.tn.mps.MpsMpoOBC
     M = len(terms)
     config = unique_ops[0].config
     sym = config.sym
-
+    #
     # generator will assume operators in each term to be in fermionic order,
     # i.e., operators at later sites in the chain are applied first
     # sign to permute to canonical order is calculated in signs
@@ -152,8 +156,9 @@ def generate_mpo(I, terms=None, opts_svd=None, N=None) -> yastn.tn.mps.MpsMpoOBC
             raise YastnError("Hterm: positions should be in 0, 1, ..., N-1.")
         if any(op.s != unique_ops[Iind[site]].s for op, site in zip(term.operators, term.positions)):
             raise YastnError("Hterm: operator should be a Tensor with ndim=2 and signature matching identity I at the corresponding site.")
-
-        signs.append(sign_canonical_order(*term.operators, sites=term.positions, f_ordered=f_ordered))
+        #
+        f_positions = term.positions if f_map is None else [f_map[site] for site in term.positions]
+        signs.append(sign_canonical_order(*term.operators, sites=f_positions, f_ordered=f_ordered))
         sites_ops = sorted(zip(term.positions, term.operators), key=itemgetter(0))
         sites, ops = [], []
         for site, group in groupby(sites_ops, key=itemgetter(0)):
@@ -167,30 +172,33 @@ def generate_mpo(I, terms=None, opts_svd=None, N=None) -> yastn.tn.mps.MpsMpoOBC
         opss.append(ind_list(ops, op_patterns))
 
     n_patterns = [[unique_ops[ind].n for ind in ops] for ops in op_patterns]
-    n_patterns = [[sym.add_charges(*ns[n:]) for n in range(len(ns) + 1)] for ns in n_patterns]
+    acc_n_patterns = [[sym.add_charges(*ns[n:]) for n in range(len(ns) + 1)] for ns in n_patterns]
 
     # encoding local operators for each term and each site in range(N)
     # include information about charges connecing local operators
     mapH = np.zeros((M, N), dtype=np.int64)
     charges_ops = []
     for mH, sites, ind in zip(mapH, sitess, opss):
-        ops, n_pattern = op_patterns[ind], n_patterns[ind]
+        ops, acc_n_pattern, n_pattern = op_patterns[ind], acc_n_patterns[ind], n_patterns[ind]
         ii = 0
-        site, tl = sites[ii], n_pattern[ii]
+        site, tl = sites[ii], acc_n_pattern[ii]
         for n in range(N):
             if n == site:
-                op, tr = ops[ii], n_pattern[ii + 1]
-                mH[n] = ind_list((tl, op, tr), charges_ops)
+                op, tr = ops[ii], acc_n_pattern[ii + 1]
+                f_charge = tr if f_map is None else sym.add_charges(*[nn for st, nn in zip(sites, n_pattern) if f_map[n] < f_map[st]])
+                # fermionic charge to swap
+                mH[n] = ind_list((tl, op, tr, f_charge), charges_ops)
                 ii += 1
-                site, tl = sites[ii], n_pattern[ii]
+                site, tl = sites[ii], acc_n_pattern[ii]
             else:
-                mH[n] = ind_list((tl, Iind[n], tl), charges_ops)
+                f_charge = tl if f_map is None else sym.add_charges(*[nn for st, nn in zip(sites, n_pattern) if f_map[n] < f_map[st]])
+                mH[n] = ind_list((tl, Iind[n], tl, f_charge), charges_ops)
 
     # turn 2-leg local operators into 4-legs local operators that will build MPO
     dressed_ops = []
-    for tl, ind, tr in charges_ops:
+    for tl, ind, tr, f_charge in charges_ops:
         op = unique_ops[ind]
-        op = op.swap_gate(axes=1, charge=tr)
+        op = op.swap_gate(axes=1, charge=f_charge)
         op = op.add_leg(axis=1, s=1, t=tr)
         op = op.add_leg(axis=0, s=-1, t=tl)
         dressed_ops.append(op)

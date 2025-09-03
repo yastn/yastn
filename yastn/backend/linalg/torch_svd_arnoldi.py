@@ -65,12 +65,16 @@ class SVDSYMARNOLDI(torch.autograd.Function):
 
 class SVDARNOLDI(torch.autograd.Function):
     @staticmethod
-    def forward(self, M, k):
+    def forward(self, M, k, thresh=0.1, solver='arpack'):
         r"""
         :param M: square matrix :math:`N \times N`
         :param k: desired rank (must be smaller than :math:`N`)
+        :param thresh: threshold for applying SVDARNOLDI instead of full SVD
+        :param solver: solver for scipy.sparse.linalg.svds
         :type M: torch.Tensor
         :type k: int
+        :type thresh: float
+        :type solver: str
         :return: leading k left eigenvectors U, singular values S, and right
                  eigenvectors V
         :rtype: torch.Tensor, torch.Tensor, torch.Tensor
@@ -113,24 +117,33 @@ class SVDARNOLDI(torch.autograd.Function):
         # V = Functional.normalize(V, p=2, dim=0)
 
         # ----- Option 1
-        def mv(v):
-            B= torch.as_tensor(v,dtype=M.dtype,device=M.device)
-            B= torch.matmul(M,B)
-            return B.detach().cpu().numpy()
-        def vm(v):
-            B= torch.as_tensor(v,dtype=M.dtype,device=M.device)
-            B= torch.matmul(M.t().conj(),B)
-            return B.detach().cpu().numpy()
-
-        if M.size(dim=0) <= k or M.size(dim=1) <= k:
+        if min(M.shape)*thresh < k: # k / matrix size is too large for speed-up by iterative solver
             U, S, Vh = scipy.linalg.svd(M.detach().cpu().numpy())
-        else:
-            M_nograd= LinearOperator(M.size(), matvec=mv, rmatvec=vm)
-            U, S, Vh= scipy.sparse.linalg.svds(M_nograd, k=k, solver='arpack')
+            U, S, Vh = U[:, :k], S[:k], Vh[:k, :]
 
-        S= torch.as_tensor(S.copy())
-        U= torch.as_tensor(U.copy())
-        Vh= torch.as_tensor(Vh.copy())
+        elif M.device != torch.device('cpu'): # assume accelerator for matrix-vector products
+            # TODO consider circulant matrix [[0,M],[M^\dag,0]] and solve via eigsh
+
+            def mv(v):
+                B= torch.as_tensor(v,dtype=M.dtype,device=M.device)
+                B= torch.matmul(M,B)
+                return B.detach().cpu().numpy()
+            def vm(v):
+                B= torch.as_tensor(v,dtype=M.dtype,device=M.device)
+                B= torch.matmul(M.t().conj(),B)
+                return B.detach().cpu().numpy()
+
+            M_nograd= LinearOperator(M.size(), matvec=mv, rmatvec=vm)
+            maxiter= k*10 if solver == 'propack' else 10 * min(M.shape) # propack default 10*k, arpack default min(M.size) * 10 as per scipy docs
+            U, S, Vh= scipy.sparse.linalg.svds(M_nograd, k=k, solver=solver, maxiter=maxiter)
+
+        else: # solve in numpy
+            U, S, Vh= scipy.sparse.linalg.svds(M.detach().cpu().numpy(), k=k, solver=solver, maxiter=k*10)
+
+        neg_strides= lambda x: any([s for s in x.strides if s < 0])
+        S= torch.as_tensor(S.copy() if neg_strides(S) else S).to(device=M.device)
+        U= torch.as_tensor(U.copy() if neg_strides(U) else U).to(device=M.device)
+        Vh= torch.as_tensor(Vh.copy() if neg_strides(Vh) else Vh).to(device=M.device)
 
         self.save_for_backward(U, S, Vh)
         return U, S, Vh
@@ -143,4 +156,4 @@ class SVDARNOLDI(torch.autograd.Function):
         raise Exception("backward not implemented")
         U, S, V = self.saved_tensors
         dA= None
-        return dA, None
+        return dA, None, None, None

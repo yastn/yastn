@@ -41,7 +41,7 @@ def Mpo(N, periodic=False) -> MpsMpoOBC | MpoPBC:
     return MpsMpoOBC(N, nr_phys=2)
 
 
-def add(*states, amplitudes=None) -> MpsMpoOBC:
+def add(*states, amplitudes=None, **kwargs) -> MpsMpoOBC:
     r"""
     Linear superposition of several MPS/MPOs with specific amplitudes, i.e., :math:`\sum_j \textrm{amplitudes[j]}{\times}\textrm{states[j]}`.
 
@@ -565,3 +565,33 @@ class MpsMpoOBC(_MpsMpoParent):
             SV.append(sv)
             psi.absorb_central_(to='last')
         return SV
+
+    def to_tensor(self) -> tensor.Tensor:
+        r"""
+        Contract MPS/MPO to a single tensor.
+        Should only be used for a system with a very few sites.
+
+        ::
+
+            Tensor leg order
+
+            ┌─────────── ... ──────┐
+            |         MPS          |
+            └──┬─────┬── ... ───┬──┘
+               |     |          |
+               0     1         N-1
+
+               1     3        2N-1
+               |     |          |
+            ┌──┴─────┴── ... ───┴──┐
+            |          MPO         |
+            └──┬─────┬── ... ───┬──┘
+               |     |          |
+               0     2        2N-2
+
+        """
+        ten = self.A[self.first].remove_leg(axis=0)
+        for n in self.sweep(to='last', df=1):
+            ind = n if self.nr_phys == 1 else 2 * n - 1
+            ten = tensor.tensordot(ten, self.A[n], axes=(ind, 0))
+        return self.factor * ten.remove_leg(axis=-self.nr_phys)

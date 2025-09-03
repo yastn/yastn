@@ -22,7 +22,7 @@ from ._merging import _embed_tensor
 from ._legs import legs_union
 
 
-__all__ = ['linear_combination', 'real', 'imag', 'sqrt', 'rsqrt', 'reciprocal', 'exp', 'bitwise_not', 'allclose']
+__all__ = ['add', 'real', 'imag', 'sqrt', 'rsqrt', 'reciprocal', 'exp', 'bitwise_not', 'allclose']
 
 
 def __add__(a, b) -> yastn.Tensor:
@@ -49,7 +49,7 @@ def __sub__(a, b) -> yastn.Tensor:
     return a._replace(hfs=hfs, struct=struct, slices=slices, data=data)
 
 
-def linear_combination(*tensors, amplitudes=None, **kwargs):
+def add(*tensors, amplitudes=None, **kwargs):
     r"""
     Linear combination of tensors with given amplitudes, :math:`\sum_i amplitudes[i] tensors[i]`.
 

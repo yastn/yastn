@@ -22,7 +22,7 @@ from ._contractions import ncon
 from ._auxliary import _slc, _clear_axes, _unpack_axes, _join_contiguous_slices
 from ._merging import _Fusion
 from ._tests import YastnError, _test_axes_all
-from ._legs import LegMeta
+from ._legs import LegMeta, Leg, leg_product
 
 
 __all__ = ['conj', 'conj_blocks', 'flip_signature', 'flip_charges', 'switch_signature',
@@ -213,8 +213,8 @@ def switch_signature(a, axes: Union[Sequence[int],int,str] = ()) -> yastn.Tensor
     Parameters
     ----------
     axes: int | Sequence[int] | str
-        index of the leg, or a group of legs. 
-        If ``axes="all"``, all signatures are flipped.	
+        index of the leg, or a group of legs.
+        If ``axes="all"``, all signatures are flipped.
     """
     from .. import eye
     if a.isdiag:
@@ -228,7 +228,18 @@ def switch_signature(a, axes: Union[Sequence[int],int,str] = ()) -> yastn.Tensor
     if len(axes)==0: return a
     if not (all([type(x)==int for x in axes]) and len(set(axes))==len(axes)):
         raise YastnError("Invalid axes: all elements must be integers and no repeating axes are allowed.")
-    symbols_1j= tuple(eye(a.config, legs=(a.get_legs(x).conj(),a.get_legs(x).conj()), isdiag=False) for x in axes)
+    def _conj_completion(leg):
+        # new leg with sectors from both leg and leg.conj()
+        # case leg is not fused:
+        if not leg.is_fused():
+            tDconj= np.array(leg.t, dtype=np.int64)
+            tDconj= a.config.sym.fuse(tDconj.reshape(-1,1,leg.sym.NSYM), (leg.s,), -leg.s)
+            tDconj= tuple(map(tuple, tDconj))
+            tDs= dict(zip(tDconj, leg.D))
+            return Leg(a.config.sym, -leg.s, t= tuple(tDs.keys()), D= tuple(tDs.values()))
+        else:
+            return leg_product(*tuple(_conj_completion(x) for x in leg.unfuse_leg()))
+    symbols_1j= tuple(eye(a.config, legs=(a.get_legs(x).conj(), _conj_completion(a.get_legs(x))), isdiag=False) for x in axes)
     outi_a= [i+1 if i in axes else -(i+1) for i in range(len(a.get_legs()))] # shift by 1 to avoid 0,0 ambiguity
     contractedi= [[x+1,-(x+1)] for x in axes ]
     return ncon( (a,)+symbols_1j, [outi_a,]+contractedi )

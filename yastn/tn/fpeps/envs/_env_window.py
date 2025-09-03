@@ -220,7 +220,7 @@ class EnvWindow:
                         tm[ix].set_operator_(proj)
                         env.update_env_(ix, to='first')
                         prob = env.measure(bd=(ix-1, ix)).real / norm_prob
-                        acc_prob += prob 
+                        acc_prob += prob
                         if rands[count] < acc_prob:
                             out[nx, ny].append(k)
                             tm[ix].set_operator_(proj / prob)

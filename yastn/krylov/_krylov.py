@@ -71,7 +71,7 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
             * ``info.steps`` : number of steps to reach ``t``,
 
         kwargs: any
-            Further parameters that are passed to :func:`expand_krylov_space` and :func:`linear_combination`.
+            Further parameters that are passed to :func:`expand_krylov_space` and :func:`add`.
     """
     backend = v.config.backend
     ncv, ncv_max = max(1, ncv), min([30, v.size])  # Krylov space parameters
@@ -155,7 +155,7 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
             normF = backend.norm_matrix(F)
             normv = normv * normF
             F = F / normF
-            v = V[0].linear_combination(*V[1:], amplitudes=F, **kwargs)
+            v = V[0].add(*V[1:], amplitudes=F, **kwargs)
             t_now += tau
             info['steps'] += 1
             info['error'] += err
@@ -232,17 +232,17 @@ def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=Fals
     Y = []
     for it in range(k):
         sit = vr[:, it]
-        Y.append(V[0].linear_combination(*V[1:], amplitudes=sit, **kwargs))
+        Y.append(V[0].add(*V[1:], amplitudes=sit, **kwargs))
     return val[:k], Y
 
 
 def lin_solver(f, b, v0, ncv=10, tol=1e-13, pinv_tol=1e-13, hermitian=False, **kwargs) -> tuple[array, Sequence[vectors]]:
     r"""
-    Search for solution of the linear equation ``f(x) = b``, where ``x`` is estimated vector and ``f(x)`` is matrix-vector operation. 
-    Implementation based on pseudoinverse of Krylov expansion [1]. 
+    Search for solution of the linear equation ``f(x) = b``, where ``x`` is estimated vector and ``f(x)`` is matrix-vector operation.
+    Implementation based on pseudoinverse of Krylov expansion [1].
 
     Ref.[1] https://www.math.iit.edu/~fass/577_ch4_app.pdf
-    
+
     Parameters
     ----------
         f: function
@@ -260,11 +260,11 @@ def lin_solver(f, b, v0, ncv=10, tol=1e-13, pinv_tol=1e-13, hermitian=False, **k
 
         tol: float
             Stopping criterion for an expansion of the Krylov subspace.
-            The default is ``1e-13``. TODO Not implemented yet. 
+            The default is ``1e-13``. TODO Not implemented yet.
 
         pinv_tol: float
-            Cutoff for pseudoinverve. Sets lower bound on inverted Schmidt values. 
-            The default is ``1e-13``. 
+            Cutoff for pseudoinverve. Sets lower bound on inverted Schmidt values.
+            The default is ``1e-13``.
 
         hermitian: bool
             Assume that ``f`` is a hermitian operator, in which case Lanczos iterations are used.
@@ -293,12 +293,12 @@ def lin_solver(f, b, v0, ncv=10, tol=1e-13, pinv_tol=1e-13, hermitian=False, **k
     T = backend.square_matrix_from_dict(H, m+1, device = v0.device)
     T = T[:(m+1),:m]
 
-    be1 = backend.to_tensor([normv]+[0]*(m))
-    
+    be1 = backend.to_tensor([normv]+[0]*(m), device = v0.device)
+
     Tpinv = backend.pinv(T, rcond = pinv_tol)
     y = Tpinv @ be1
-    
-    vf = v0.linear_combination(*Q, amplitudes = [1,*y], **kwargs)
+
+    vf = v0.add(*Q, amplitudes = [1,*y], **kwargs)
     res = f(vf) - b
     return vf, res.norm()
 
@@ -555,7 +555,7 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
             continue
         inds= U_sorted[row_sector]
         symU[c]= U[slice(*U_sectors[row_sector].slcs[0]),inds]
-        symS[(i_sector,i_sector)]= S[inds]
+        symS[(i_sector,i_sector)]= S[inds].real
         symVh[(i_sector,col_sector)]= Vh[inds,slice(*Vh_sectors[col_sector].slcs[0])]
 
     # fix relative phases of singular vectors

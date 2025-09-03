@@ -27,7 +27,7 @@ Simple element-wise operations
 
 .. autofunction:: yastn.Tensor.__add__
 .. autofunction:: yastn.Tensor.__sub__
-.. autofunction:: yastn.linear_combination
+.. autofunction:: yastn.add
 
 .. autofunction:: yastn.Tensor.__lt__
 .. autofunction:: yastn.Tensor.__gt__
@@ -134,4 +134,3 @@ Auxliary
 Methods called by :doc:`Krylov-based algorithms</tensor/krylov>`.
 
 .. automethod:: yastn.Tensor.expand_krylov_space
-.. automethod:: yastn.Tensor.linear_combination

@@ -67,7 +67,7 @@ def test_spinless_infinite_approx(config_kwargs):
     #
     for s0, s1, dirn in [[(0, 0), (0, 1), 'h'], [(0, 1), (1, 1), 'v']]:
         QA, QB = psi[s0], psi[s1]
-        Gs = {k: env.bond_metric(QA, QB, s0, s1, dirn) for k, env in envs.items()}
+        Gs = {k: env.bond_metric(QA, QB, s0, s1, dirn).g for k, env in envs.items()}
         Gs = {k: v / v.norm() for k, v in Gs.items()}
 
         assert (Gs['NN'] - Gs['NN+']).norm() < 1e-2

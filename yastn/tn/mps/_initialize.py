@@ -276,3 +276,46 @@ def load_from_hdf5(config, file, my_address) -> yastn.tn.mps.MpsMpo:
     for n in range(out_Mps.N):
         out_Mps.A[n] = load_from_hdf5_tensor(config, file, my_address+'/A/'+str(n))
     return out_Mps
+
+
+def mps_from_tensor(ten, nr_phys=1) -> yastn.tn.mps.MpsMpo:
+    r"""
+    Generate MPS from a tensor if nr_phys == 1 (the default)
+    and MPO for nr_phys == 2
+
+    ::
+
+        ┌─────────── ... ──────┐
+        |                      |  ==>  MPS of N sites
+        └──┬─────┬── ... ───┬──┘
+           |     |          |
+           0     1         N-1
+
+           1     3        2N-1
+           |     |          |
+        ┌──┴─────┴── ... ───┴──┐
+        |                      |  ==>  MPO of N sites
+        └──┬─────┬── ... ───┬──┘
+           |     |          |
+           0     2        2N-2
+
+    """
+    N = ten.ndim // nr_phys
+    psi = MpsMpoOBC(N, nr_phys=nr_phys)
+    ten = ten.add_leg(axis=0, s=-1).add_leg(axis=-nr_phys, s=1)
+
+    for n in psi.sweep(to='last', dl=1):
+        axes = (list(range(nr_phys + 1)), list(range(nr_phys + 1, ten.ndim)))
+        psi.A[n], ten = ten.qr(axes=axes, sQ=1, Qaxis=2)
+
+    psi.factor = ten.norm()
+    psi.A[psi.last] = ten / psi.factor
+    return psi
+
+
+def mpo_from_tensor(ten) -> yastn.tn.mps.MpsMpo:
+    r"""
+    Generate MPO from a tensor.
+    Shortcut for :meth:`yastn.tn.mps.mps_from_tensor` with nr_phys=2.
+    """
+    return mps_from_tensor(ten, nr_phys=2)

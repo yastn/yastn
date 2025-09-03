@@ -68,14 +68,14 @@ class kernel_svd(torch.autograd.Function):
 
 class kernel_svd_arnoldi(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, data, meta, sizes):
+    def forward(ctx, data, meta, sizes, thresh, solver):
         real_dtype = data.real.dtype if data.is_complex() else data.dtype
         Udata = torch.empty((sizes[0],), dtype=data.dtype, device=data.device)
         Sdata = torch.empty((sizes[1],), dtype=real_dtype, device=data.device)
         Vhdata = torch.empty((sizes[2],), dtype=data.dtype, device=data.device)
         for (sl, D, slU, DU, slS, slV, DV) in meta:
             k = slS[1] - slS[0]
-            U, S, V = SVDARNOLDI.apply(data[slice(*sl)].view(D), k)
+            U, S, V = SVDARNOLDI.apply(data[slice(*sl)].view(D), k, thresh, solver)
             Udata[slice(*slU)].reshape(DU)[:] = U
             Sdata[slice(*slS)] = S
             Vhdata[slice(*slV)].reshape(DV)[:] = V
@@ -205,12 +205,16 @@ class kernel_transpose_dot_sum(torch.autograd.Function):
 
 class kernel_negate_blocks(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, Adata, slices):
-        ctx.slices = slices
+    def forward(Adata, slices):
         newdata = Adata.clone()
         for slc in slices:
             newdata[slice(*slc)] *= -1
         return newdata
+
+    @staticmethod
+    def setup_context(ctx, inputs, output):
+        Adata, slices = inputs
+        ctx.slices = slices
 
     @staticmethod
     def backward(ctx, Cdata_b):
@@ -223,13 +227,7 @@ class kernel_negate_blocks(torch.autograd.Function):
 
 class kernel_apply_mask(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, Adata, mask, meta, Dsize, axis, ndim):
-        ctx.mask = mask
-        ctx.meta = meta
-        ctx.axis = axis
-        ctx.ndim = ndim
-        ctx.size_Adata = Adata.numel()
-
+    def forward(Adata, mask, meta, Dsize, axis, ndim):
         slc0 = (slice(None),) * axis
         slc2 = (slice(None),) * (ndim - (axis + 1))
         Cdata = torch.empty(Dsize, dtype=Adata.dtype, device=Adata.device)
@@ -237,6 +235,14 @@ class kernel_apply_mask(torch.autograd.Function):
             slcs = slc0 + (mask[tm],) + slc2
             Cdata[slice(*sln)].view(Dn)[:] = Adata[slice(*sla)].view(Da)[slcs]
         return Cdata
+
+    def setup_context(ctx, inputs, output):
+        Adata, mask, meta, Dsize, axis, ndim = inputs
+        ctx.mask = mask
+        ctx.meta = meta
+        ctx.axis = axis
+        ctx.ndim = ndim
+        ctx.size_Adata = Adata.numel()
 
     @staticmethod
     def backward(ctx, Cdata_b):
@@ -252,13 +258,7 @@ class kernel_apply_mask(torch.autograd.Function):
 
 class kernel_embed_mask(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, Adata, mask, meta, Dsize, axis, ndim):
-        ctx.mask = mask
-        ctx.meta = meta
-        ctx.axis = axis
-        ctx.ndim = ndim
-        ctx.size_Adata = Adata.numel()
-
+    def forward(Adata, mask, meta, Dsize, axis, ndim):
         slc0 = (slice(None),) * axis
         slc2 = (slice(None),) * (ndim - (axis + 1))
         Cdata = torch.zeros(Dsize, dtype=Adata.dtype, device=Adata.device)
@@ -266,6 +266,14 @@ class kernel_embed_mask(torch.autograd.Function):
             slcs = slc0 + (mask[tm],) + slc2
             Cdata[slice(*sln)].view(Dn)[slcs] = Adata[slice(*sla)].view(Da)
         return Cdata
+
+    def setup_context(ctx, inputs, output):
+        Adata, mask, meta, Dsize, axis, ndim = inputs
+        ctx.mask = mask
+        ctx.meta = meta
+        ctx.axis = axis
+        ctx.ndim = ndim
+        ctx.size_Adata = Adata.numel()
 
     @staticmethod
     def backward(ctx, Cdata_b):
@@ -281,14 +289,16 @@ class kernel_embed_mask(torch.autograd.Function):
 
 class kernel_transpose(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, data, axes, meta_transpose):
-        ctx.axes = axes
-        ctx.meta_transpose = meta_transpose
-
+    def forward(data, axes, meta_transpose):
         newdata = torch.zeros_like(data)
         for sln, Dn, slo, Do in meta_transpose:
             newdata[slice(*sln)].view(Dn)[:] = data[slice(*slo)].view(Do).permute(axes)
         return newdata
+
+    def setup_context(ctx, inputs, output):
+        data, axes, meta_transpose = inputs
+        ctx.axes = axes
+        ctx.meta_transpose = meta_transpose
 
     @staticmethod
     def backward(ctx, data_b):
@@ -304,13 +314,24 @@ class kernel_transpose(torch.autograd.Function):
 
 class kernel_transpose_and_merge(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, data, order, meta_new, meta_mrg, Dsize):
-        ctx.order = order
-        ctx.meta_new = meta_new
-        ctx.meta_mrg = meta_mrg
-        ctx.D_source = data.numel()
+    def forward(data, order, meta_new, meta_mrg, Dsize):
+        # Dsize - total size of fused representation (might include some zero-blocks)
+        newdata = torch.zeros((Dsize,), dtype=data.dtype, device=data.device)
 
-        newdata = torch.zeros(Dsize, dtype=data.dtype, device=data.device)
+        # meta_new -> list of [(tn, Dn, sln), ...] where
+        #             tn -> effective charge for block in fused tensor
+        #             Dn -> effective shape of block tn in fused tensor
+        #             sln -> slice specifying the location of serialized tn block in 1d data of fused tensor
+        #
+        # meta_mrg -> t1 is effective charge of source block after fusion. I.e. t1==tn, means, that
+        #             this source block will belong to destination block tn
+        #          -> gr: tuple holding description of source data
+        #                 slo -> specifies the location of source block in 1d data
+        #                 Do  -> shape of the source block
+        #                 Dscl-> list of slice data which specifies the location of the "transformed"
+        #                        source block in the destination block tn
+        #                 Drsh-> the shape of the "transformed" source block in the destination block tn
+        #
         for (tn, Dn, sln), (t1, gr) in zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])):
             assert tn == t1
             temp = newdata[slice(*sln)].reshape(Dn)
@@ -318,6 +339,16 @@ class kernel_transpose_and_merge(torch.autograd.Function):
                 slcs = tuple(slice(*x) for x in Dslc)
                 temp[slcs] = data[slice(*slo)].reshape(Do).permute(order).reshape(Drsh)
         return newdata
+
+    @staticmethod
+    # inputs is a Tuple of all of the inputs passed to forward.
+    # output is the output of the forward().
+    def setup_context(ctx, inputs, output):
+        data, order, meta_new, meta_mrg, Dsize = inputs
+        ctx.order = order
+        ctx.meta_new = meta_new
+        ctx.meta_mrg = meta_mrg
+        ctx.D_source = data.numel()
 
     @staticmethod
     def backward(ctx, data_b):
@@ -340,15 +371,25 @@ class kernel_transpose_and_merge(torch.autograd.Function):
 
 class kernel_unmerge(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, data, meta):
+    def forward(data, meta):
         Dsize = data.size()
-        ctx.meta = meta
-        ctx.fwd_data_size = Dsize
+        # slo -> slice in source tensor, specifying location of t_effective(fused) block
+        # Do  -> shape of the fused block with t_eff
+        # no zero blocks should be introduces here
         newdata = torch.empty(Dsize, dtype=data.dtype, device=data.device)
         for sln, Dn, slo, Do, sub_slc in meta:
+            #                                                     take a "subblock" of t_eff block
+            #                                                     specified by a list of slices sub_slc
             slcs = tuple(slice(*x) for x in sub_slc)
             newdata[slice(*sln)].view(Dn)[:] = data[slice(*slo)].view(Do)[slcs]
         return newdata
+
+    @staticmethod
+    def setup_context(ctx, inputs, output):
+        data, meta = inputs
+        Dsize = data.size()
+        ctx.meta = meta
+        ctx.fwd_data_size = Dsize
 
     @staticmethod
     def backward(ctx, data_b):

@@ -66,17 +66,18 @@ This example can be also run from `tests/quickstart/test_KZ.py <https://github.c
 
         def gates_Ising(Jij, fXX, fZ, s, dt, sites, ops):
             """ Trotter gates at time s. """
-            nn, local = [], []
-            # time-step is 1j * dt / 2, as trotterized evolution is
-            # completed by its adjoint for 2nd order time-evolution method.
+            gates = []
             dt2 = 1j * dt / 2
             for bond, J in Jij.items():
                 gt = gate_nn_Ising(J * fXX(s), dt2, ops.I(), ops.x(), bond)
-                nn.append(gt)
+                gates.append(gt)
             for site in sites:
                 gt = gate_local_field(fZ(s), dt2, ops.I(), ops.z(), site)
-                local.append(gt)
-            return peps.Gates(nn=nn, local=local)
+                gates.append(gt)
+            gates = gates + gates[::-1]
+            # time-step is 1j * dt / 2, as we complete trotterized evolution
+            # by its adjoint for 2nd order time-evolution method.
+            return gates
         #
         # Initialize system in the product ground state at s=0.
         psi = peps.product_peps(geometry=geometry, vectors=ops.vec_z(val=1))

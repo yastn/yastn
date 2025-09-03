@@ -14,7 +14,7 @@
 # ==============================================================================
 from ... import tensordot, leg_product, YastnError, SpecialTensor
 from .envs._env_auxlliary import append_vec_tl, append_vec_br, append_vec_tr, append_vec_bl
-from ._gates_auxiliary import match_ancilla
+from ._gates_auxiliary import match_ancilla, apply_gate_onsite
 from ...tensor._auxliary import _clear_axes
 
 
@@ -45,7 +45,6 @@ class DoublePepsTensor(SpecialTensor):
         self._t = transpose
         self.swaps = {} if swaps is None else dict(swaps)
 
-
     @property
     def config(self):
         return self.ket.config
@@ -67,6 +66,12 @@ class DoublePepsTensor(SpecialTensor):
     def del_operator_(self):
         """ Remove operator. """
         self.op = None
+
+    def apply_gate_on_ket(self, op, dirn):
+        """ Returns a shallow copy with ket tensor modified by application of gate. """
+        ket = apply_gate_onsite(self.ket, op, dirn=dirn)
+        return DoublePepsTensor(bra=self.bra, ket=ket, transpose=self._t, op=self.op, swaps=self.swaps)
+
 
     def add_charge_swaps_(self, charge, axes):
         """
@@ -103,9 +108,7 @@ class DoublePepsTensor(SpecialTensor):
                 axes.append(int(ax[1]))
                 charges.append(n)
         if axes:
-            Ab = Ab.unfuse_legs(axes=(0, 1))  # TODO: remove this after switching to Peps tensor with 5 legs
             Ab = Ab.swap_gate(axes, charge=charges)
-            Ab = Ab.fuse_legs(axes=((0, 1), (2, 3), 4))
 
         Ak = self.ket
         axes, charges = [], []
@@ -114,9 +117,7 @@ class DoublePepsTensor(SpecialTensor):
                 axes.append(int(ax[1]))
                 charges.append(n)
         if axes:
-            Ak = Ak.unfuse_legs(axes=(0, 1))  # TODO: remove this after switching to Peps tensor with 5 legs
             Ak = Ak.swap_gate(axes, charge=charges)
-            Ak = Ak.fuse_legs(axes=((0, 1), (2, 3), 4))
         return Ab, Ak
 
     def get_shape(self, axes=None):
@@ -127,6 +128,10 @@ class DoublePepsTensor(SpecialTensor):
             return sum(self.get_legs(axes).D)
         return tuple(sum(leg.D) for leg in self.get_legs(axes))
 
+    @property
+    def shape(self):
+        return self.get_shape()
+
     def get_legs(self, axes=None):
         """ Returns the legs of the DoublePepsTensor along specified axes. """
         if axes is None:
@@ -135,10 +140,8 @@ class DoublePepsTensor(SpecialTensor):
         axes = (axes,) if isinstance(axes, int) else tuple(axes)
         axes = tuple(self._t[ax] for ax in axes)
 
-        lts = self.ket.get_legs(axes=(0, 1))
-        lbs = self.bra.get_legs(axes=(0, 1))
-        lts = [*lts[0].unfuse_leg(), *lts[1].unfuse_leg()]
-        lbs = [*lbs[0].unfuse_leg(), *lbs[1].unfuse_leg()]
+        lts = self.ket.get_legs(axes=(0, 1, 2, 3))
+        lbs = self.bra.get_legs(axes=(0, 1, 2, 3))
         lts = [lts[i] for i in axes]
         lbs = [lbs[i] for i in axes]
         # lts = self.ket.get_legs(axes=axes)
@@ -214,21 +217,19 @@ class DoublePepsTensor(SpecialTensor):
     def fuse_layers(self):
         """
         Fuse the top and bottom tensors into a single :class:`yastn.Tensor`.
-        """
+        # """
         Ab, Ak = self.Ab_Ak_with_charge_swap()
+        Ab = Ab.fuse_legs(axes=((0, 1), (2, 3), 4))  # A -> [t l] [b r] s
+        Ak = Ak.fuse_legs(axes=((0, 1), (2, 3), 4))
         if self.op is not None:
             Ak = tensordot(Ak, self.op, axes=(2, 1))
         tt = tensordot(Ak, Ab.conj(), axes=(2, 2))  # [t l] [b r] [t' l'] [b' r']
-        tt = tt.fuse_legs(axes=(0, 2, (1, 3)))  # [t l] [t' l'] [[b r] [b' r']]
-        tt = tt.unfuse_legs(axes=(0, 1))  # t l t' l' [[b r] [b' r']]
-        tt = tt.swap_gate(axes=((1, 3), 2))  # l l' X t'
-        tt = tt.fuse_legs(axes=((0, 2), (1, 3), 4))  # [t t'] [l l'] [[b r] [b' r']]
-        tt = tt.fuse_legs(axes=((0, 1), 2))  # [[t t'] [l l']] [[b r] [b' r']]
-        tt = tt.unfuse_legs(axes=1)  # [[t t'] [l l']] [b r] [b' r']
-        tt = tt.unfuse_legs(axes=(1, 2))  # [[t t'] [l l']] b r b' r'
-        tt = tt.swap_gate(axes=((1, 3), 4))  # b b' X r'
-        tt = tt.fuse_legs(axes=(0, (1, 3), (2, 4)))  # [[t t'] [l l']] [b b'] [r r']
-        tt = tt.unfuse_legs(axes=0)  # [t t'] [l l'] [b b'] [r r']
+        tt = tt.unfuse_legs(axes=(0, 2))  # t l [b r] t' l' [b' r']
+        tt = tt.swap_gate(axes=((1, 4), 3))  # l l' X t'
+        tt = tt.fuse_legs(axes=((0, 3), (1, 4), 2, 5))  # [t t'] [l l'] [b r] [b' r']
+        tt = tt.unfuse_legs(axes=(2, 3))  # [t t'] [l l'] b r b' r'
+        tt = tt.swap_gate(axes=((2, 4), 5))  # b b' X r'
+        tt = tt.fuse_legs(axes=(0, 1, (2, 4), (3, 5)))  # [t t'] [l l'] [b b'] [r r']
         return tt.transpose(axes=self._t)
 
     def print_properties(self, file=None):

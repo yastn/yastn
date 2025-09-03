@@ -20,12 +20,14 @@ from __future__ import annotations
 from ast import literal_eval
 from itertools import groupby, accumulate
 from operator import itemgetter
+from typing import NamedTuple
 import numpy as np
 from .tensor import Tensor, YastnError
 from .tensor._auxliary import _struct, _config, _slc, _clear_axes, _unpack_legs
 from .tensor._merging import _Fusion, _embed_tensor, _combine_hfs_sum
 from .tensor._legs import Leg, LegMeta, legs_union, _legs_mask_needed
 from .tensor._tests import _test_can_be_combined
+from .tensor._contractions import ncon
 from .backend import backend_np
 from .sym import sym_none, sym_U1, sym_Z2, sym_Z3, sym_U1xU1, sym_U1xU1xZ2
 
@@ -44,7 +46,7 @@ __all__ = ['rand', 'rand_like', 'randR', 'randC', 'zeros', 'ones', 'eye', 'block
 
 # def make_config(backend=backend_np, sym=sym_none, default_device='cpu',
 #                 default_dtype='float64', fermionic=False,
-#                 default_fusion='meta', force_fusion=None, **kwargs):
+#                 default_fusion='hard', force_fusion=None, tensordot_policy='fuse_contracted', **kwargs):
 def make_config(**kwargs) -> NamedTuple:
     r"""
     Create structure with YASTN configuration
@@ -151,7 +153,7 @@ def _fill(config=None, legs=(), n=None, isdiag=False, val='rand', **kwargs):
     return a
 
 
-def rand(config=None, legs=(), n=None, isdiag=False, **kwargs) -> yastn.Tensor:
+def rand(config=None, legs=(), n=None, isdiag=False, **kwargs) -> Tensor:
     r"""
     Initialize tensor with all allowed blocks filled with random numbers.
 
@@ -188,7 +190,7 @@ def rand(config=None, legs=(), n=None, isdiag=False, **kwargs) -> yastn.Tensor:
     return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='rand', **kwargs)
 
 
-def rand_like(T: yastn.Tensor, **kwargs) -> yastn.Tensor:
+def rand_like(T: Tensor, **kwargs) -> Tensor:
     r"""
     Initialize tensor with same structure as ``T`` filled with random numbers.
 
@@ -198,7 +200,7 @@ def rand_like(T: yastn.Tensor, **kwargs) -> yastn.Tensor:
     return rand(config=T.config, legs=T.get_legs(), n=T.n, isdiag=T.isdiag, **kwargs)
 
 
-def randR(config=None, legs=(), n=None, isdiag=False, **kwargs) -> yastn.Tensor:
+def randR(config=None, legs=(), n=None, isdiag=False, **kwargs) -> Tensor:
     r"""
     Initialize tensor with all allowed blocks filled with real random numbers,
     see :meth:`yastn.rand`.
@@ -207,7 +209,7 @@ def randR(config=None, legs=(), n=None, isdiag=False, **kwargs) -> yastn.Tensor:
     return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='rand', **kwargs)
 
 
-def randC(config=None, legs=(), n=None, isdiag=False, **kwargs) -> yastn.Tensor:
+def randC(config=None, legs=(), n=None, isdiag=False, **kwargs) -> Tensor:
     r"""
     Initialize tensor with all allowed blocks filled with complex random numbers,
     see :meth:`yastn.rand`.
@@ -216,7 +218,7 @@ def randC(config=None, legs=(), n=None, isdiag=False, **kwargs) -> yastn.Tensor:
     return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='rand', **kwargs)
 
 
-def zeros(config=None, legs=(), n=None, isdiag=False, **kwargs) -> yastn.Tensor:
+def zeros(config=None, legs=(), n=None, isdiag=False, **kwargs) -> Tensor:
     r"""
     Initialize tensor with all allowed blocks filled with zeros.
 
@@ -250,7 +252,7 @@ def zeros(config=None, legs=(), n=None, isdiag=False, **kwargs) -> yastn.Tensor:
     return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='zeros', **kwargs)
 
 
-def ones(config=None, legs=(), n=None, isdiag=False, **kwargs) -> yastn.Tensor:
+def ones(config=None, legs=(), n=None, isdiag=False, **kwargs) -> Tensor:
     r"""
     Initialize tensor with all allowed blocks filled with ones.
 
@@ -284,7 +286,7 @@ def ones(config=None, legs=(), n=None, isdiag=False, **kwargs) -> yastn.Tensor:
     return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='ones', **kwargs)
 
 
-def eye(config=None, legs=(), isdiag=True, **kwargs) -> yastn.Tensor:
+def eye(config=None, legs=(), isdiag=True, **kwargs) -> Tensor:
     r"""
     Initialize diagonal tensor of identity matrix.
     In presence of symmetries, such matrix is block-diagonal with all allowed blocks filled with identity matrices.
@@ -327,15 +329,28 @@ def eye(config=None, legs=(), isdiag=True, **kwargs) -> yastn.Tensor:
     legs = legs[:2]  # in case more then 2 legs are provided
     if any(isinstance(leg, LegMeta) for leg in legs):
         raise YastnError("eye() does not support 'meta'-fused legs")
-    tmp = _fill(config=config, legs=legs, val='zeros', **kwargs)
-    for t, D in zip(tmp.struct.t, tmp.struct.D):
-        blk = tmp[t]
-        for i in range(min(D)):
-            blk[i, i] = 1
-    return tmp
+
+    if legs[0].is_fused():
+        ulegs0 = legs[0].unfuse_leg()
+        ulegs1 = legs[1].unfuse_leg()
+        tens = [eye(config=config, legs=(l0, l1), isdiag=False, **kwargs)
+                    for l0, l1 in zip(ulegs0, ulegs1)]
+        lt = len(tens)
+        inds = [[-2 * i for i in range(lt)],
+                [-2 * i - 1 for i in range(lt)]]
+        tmp = ncon(tens, inds)
+        axes = (tuple(range(lt)), tuple(range(lt, 2 * lt)))
+        return tmp.fuse_legs(axes=axes)
+    else:
+        tmp = _fill(config=config, legs=legs, val='zeros', **kwargs)
+        for t, D in zip(tmp.struct.t, tmp.struct.D):
+            blk = tmp[t]
+            for i in range(min(D)):
+                blk[i, i] = 1
+        return tmp
 
 
-def load_from_dict(config=None, d=None) -> yastn.Tensor:
+def load_from_dict(config=None, d=None) -> Tensor:
     """
     Create tensor from the dictionary :code:`d`.
 
@@ -381,7 +396,7 @@ def load_from_dict(config=None, d=None) -> yastn.Tensor:
     raise YastnError("Dictionary d is required.")
 
 
-def load_from_hdf5(config, file, path) -> yastn.Tensor:
+def load_from_hdf5(config, file, path) -> Tensor:
     """
     Create tensor from hdf5 file.
 
@@ -415,7 +430,7 @@ def load_from_hdf5(config, file, path) -> yastn.Tensor:
     return c
 
 
-def decompress_from_1d(r1d, meta) -> yastn.Tensor:
+def decompress_from_1d(r1d, meta) -> Tensor:
     """
     Generate tensor from dictionary :code:`meta` describing the structure of the tensor,
     charges and dimensions of its non-zero blocks, and 1-D array :code:`r1d` containing
@@ -439,7 +454,7 @@ def decompress_from_1d(r1d, meta) -> yastn.Tensor:
     return a
 
 
-def block(tensors, common_legs=None) -> yastn.Tensor:
+def block(tensors, common_legs=None) -> Tensor:
     """
     Assemble new tensor by blocking a group of tensors.
 
@@ -449,7 +464,7 @@ def block(tensors, common_legs=None) -> yastn.Tensor:
 
     Parameters
     ----------
-    tensors : dict[Sequence[int], yastn.Tensor]
+    tensors : dict[Sequence[int], Tensor]
         dictionary of tensors {(x,y,...): tensor at position x,y,.. in the new, blocked super-tensor}.
         Length of tuple should be equall to :code:`tensor.ndim - len(common_legs)`.
 

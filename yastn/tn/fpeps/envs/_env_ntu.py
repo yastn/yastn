@@ -14,6 +14,7 @@
 # ==============================================================================
 from .... import tensordot, YastnError
 from ._env_auxlliary import *
+from .._evolution import BondMetric
 
 
 class EnvNTU:
@@ -45,7 +46,10 @@ class EnvNTU:
                          'NNN++': self._g_NNNpp
                         }
 
-    def post_evolution_(env, bond, *kwargs):
+    def pre_truncation_(env, bond):
+        pass
+
+    def post_truncation_(env, bond, *kwargs):
         pass
 
     def bond_metric(self, Q0, Q1, s0, s1, dirn):
@@ -162,7 +166,7 @@ class EnvNTU:
                    ║
                 (+2 +0)
         """
-        if dirn == "h":
+        if dirn in ("h", "lr"):
             assert self.psi.nn_site(s0, (0, 1)) == s1
             m = {d: self.psi.nn_site(s0, d=d) for d in [(-1,0), (0,-1), (1,0), (1,1), (0,2), (-1,1)]}
             tensors_from_psi(m, self.psi)
@@ -184,7 +188,7 @@ class EnvNTU:
             ctr = cor_tr(m[0, 1])
             cbr = cor_br(m[1, 1])
             g = tensordot((cbl @ ctl) @ env_t, (ctr @ cbr) @ env_b, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
-        return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
+        return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
 
     def _g_NNp(self, Q0, Q1, s0, s1, dirn):
@@ -217,7 +221,7 @@ class EnvNTU:
                            ║
                         (+3 +0)
         """
-        if dirn == "h":
+        if dirn in ("h", "lr"):
             assert self.psi.nn_site(s0, (0, 1)) == s1
             sts = [(-1,-1), (0,-1), (1,-1), (1,0), (1,1), (1,2), (0,2), (-1,2),
                    (-1,1), (-1,0), (0,-2), (2,0), (2,1), (0,3), (-2,1), (-2,0)]
@@ -262,7 +266,7 @@ class EnvNTU:
             ctr = cor_tr(m[0, 1], hr=hp0p1_r, ht=htr_t)
             cbr = cor_br(m[1, 1], hr=hp1p1_r, hb=hbr_b)
             g = tensordot((cbl @ ctl) @ env_t, (ctr @ cbr) @ env_b, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
-        return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
+        return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
 
     def _g_NNpp(self, Q0, Q1, s0, s1, dirn):
@@ -303,7 +307,7 @@ class EnvNTU:
                                    ║
                                 (+4 +0)
         """
-        if dirn == "h":
+        if dirn in ("h", "lr"):
             assert self.psi.nn_site(s0, (0, 1)) == s1
             sts =  [(-3,0), (-3,1), (-2,-1), (-2,0), (-2,1), (-2,2),
                     (-1,-2), (-1,-1), (-1,0), (-1,1), (-1,2), (-1,3),
@@ -394,7 +398,7 @@ class EnvNTU:
             cbr = cor_br(m[1, 1], hb=hp1p1_b, hr=hp1p1_r)
 
             g = tensordot((cbl @ ctl) @ env_t, (ctr @ cbr) @ env_b, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
-        return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
+        return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
 
     def _g_NNN(self, Q0, Q1, s0, s1, dirn):
@@ -419,7 +423,7 @@ class EnvNTU:
            ║       ║       ║
         (+2 -1)=(+2 +0)=(+2 +1)
         """
-        if dirn == "h":
+        if dirn in ("h", "lr"):
             assert self.psi.nn_site(s0, (0, 1)) == s1
             sts = [(-1,-1), (0,-1), (1,-1), (1,0), (1,1), (1,2), (0,2), (-1,2), (-1,1), (-1,0)]
             m = {d: self.psi.nn_site(s0, d=d) for d in sts}
@@ -463,7 +467,7 @@ class EnvNTU:
             ebl = edge_l(m[1, -1])
             vecb = tensordot(vecb, cbl @ ebl, axes=((2, 3), (0, 1)))
             g = tensordot(vect, vecb, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
-        return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
+        return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
 
     def _g_NNNp(self, Q0, Q1, s0, s1, dirn):
@@ -496,7 +500,7 @@ class EnvNTU:
                    ║       ║       ║
                 (+3 -1) (+3 +0) (+3 +1)
         """
-        if dirn == "h":
+        if dirn in ("h", "lr"):
             assert self.psi.nn_site(s0, (0, 1)) == s1
             sts = [(-2,-1), (-2,0), (-2,1), (-2,2),
                    (-1,-2), (-1,-1), (-1,0), (-1,1), (-1,2), (-1,3),
@@ -548,7 +552,7 @@ class EnvNTU:
             vecb = tensordot(vecb, cbl @ ebl, axes=((2, 3), (0, 1)))
 
             g = tensordot(vect, vecb, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
-        return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
+        return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
 
     def _g_NNNpp(self, Q0, Q1, s0, s1, dirn):
@@ -589,7 +593,7 @@ class EnvNTU:
                    ┊       ┊       ║       ┊       ┊
                 (+4 -2)┈(+4 -1)┈(+4 +0)┈(+4 +1)┈(+4 +2)
         """
-        if dirn == "h":
+        if dirn in ("h", "lr"):
             assert self.psi.nn_site(s0, (0, 1)) == s1
             sts = [(-3,-2), (-3,-1), (-3,0), (-3,1), (-3,2), (-3,3),
                    (-2,-3), (-2,-2), (-2,-1), (-2,0), (-2,1), (-2,2), (-2,3), (-2,4),
@@ -732,4 +736,4 @@ class EnvNTU:
             vecb = tensordot(vecb, cbl @ ebl, axes=((2, 3), (0, 1)))
 
             g = tensordot(vect, vecb, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
-        return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
+        return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))

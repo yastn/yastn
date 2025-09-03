@@ -13,42 +13,60 @@
 # limitations under the License.
 # ==============================================================================
 import numpy as np
-from typing import NamedTuple
 from ... import exp, ncon, eigh
-from ._gates_auxiliary import fkron
+from ._gates_auxiliary import fkron, Gate
 
-class Gate_nn(NamedTuple):
+
+def Gate_local(G, site):
     """
+    Legacy function, generating :class:`Gate` instance.
+    """
+    return Gate(G=(G,), sites=(site,))
+
+
+def Gate_nn(G0, G1, bond):
+    """
+    Legacy function, generating :class:`Gate` instance.
+
     ``G0`` should be before ``G1`` in the fermionic and lattice orders
     (``G0`` acts on the left/top site; ``G1`` acts on the right/bottom site from a pair of nearest-neighbor sites).
     The third legs of ``G0`` and ``G1`` are auxiliary legs connecting them into a two-site operator.
-
-    If a ``bond`` is ``None``, this is a general operator.
-    Otherwise, ``bond`` carries information where it should be applied
-    (potentially, after fixing order mismatches).
     """
-    G0 : tuple = None
-    G1 : tuple = None
-    bond : tuple = None
+    return Gate(G=(G0, G1), sites=bond)
 
 
-class Gate_local(NamedTuple):
+def Gate_nnn(G0, G1, G2, site0, site1, site2):
+    """
+    Legacy function, generating :class:`Gate` instance.
+
+    ``G0``, ``G1`` and ``G2`` should be ordered in the fermionic and lattice orders.
+    ``s0``, ``s1`` and ``s2`` correspond to the sites of ``G0``, ``G1`` and ``G2``, respectively.
+    """
+    return Gate(G=(G0, G1, G2), sites=(site0, site1, site2))
+
+
+def Gates(local=(), nn=(), nnn=()):
     r"""
-    ``G`` is a local operator with ``ndim=2``.
+    Legacy function, generating list of gates for :meth:`fpeps.evolution_step_`.
 
-    If ``site`` is ``None``, this is a general operator.
-    Otherwise, ``site`` carries information where it should be applied.
-    """
-    G : tuple = None
-    site : tuple = None
-
-
-class Gates(NamedTuple):
-    r"""
-    List of nearest-neighbor and local operators to be applied to PEPS by :meth:`yastn.tn.fpeps.evolution_step_`.
-    """
-    nn : list = ()   # list of NN gates
     local : list = ()   # list of local gates
+    nn : list = ()   # list of NN gates
+    nnn: list = ()   # list of NNN gates
+    """
+    gates = []
+    try:
+        gates.extend(local)
+    except TypeError:
+        gates.append(local)
+    try:
+        gates.extend(nn)
+    except TypeError:
+        gates.append(nn)
+    try:
+        gates.extend(nnn)
+    except TypeError:
+        gates.append(nnn)
+    return gates
 
 
 def decompose_nn_gate(Gnn, bond=None) -> Gate_nn:
@@ -167,7 +185,7 @@ def gate_local_field(h, step, I, X, site=None) -> Gate_local:
     return Gate_local(G_loc, site)
 
 
-def distribute(geometry, gates_nn=None, gates_local=None) -> Gates:
+def distribute(geometry, gates_nn=None, gates_local=None, symmetrize=True) -> Gates:
     r"""
     Distributes gates homogeneous over the lattice.
 
@@ -182,23 +200,28 @@ def distribute(geometry, gates_nn=None, gates_local=None) -> Gates:
 
     local : Gate_local | Sequence[Gate_local]
         Local gate, or a list of local gates, to be distributed over all unique lattice sites.
-    """
-    if isinstance(gates_nn, Gate_nn):
-        gates_nn = [gates_nn]
 
+    symmetrize: bool
+        Whether to iterate through provided gates forward and then backward, resulting in a 2nd order method.
+        In that case, each gate should correspond to half of the desired timestep. The default is ``True``.
+    """
     nn = []
     if gates_nn is not None:
+        if isinstance(gates_nn, Gate):
+            gates_nn = [gates_nn]
         for bond in geometry.bonds():
             for Gnn in gates_nn:
-                nn.append(Gnn._replace(bond=bond))
-
-    if isinstance(gates_local, Gate_local):
-        gates_local = [gates_local]
+                nn.append(Gnn._replace(sites=bond))
 
     local = []
     if gates_local is not None:
+        if isinstance(gates_local, Gate):
+            gates_local = [gates_local]
         for site in geometry.sites():
             for Gloc in gates_local:
-                local.append(Gloc._replace(site=site))
+                local.append(Gloc._replace(sites=(site,)))
 
-    return Gates(nn=nn, local=local)
+    gates = Gates(nn=nn, local=local)
+    if symmetrize:
+        gates = gates + gates[::-1]
+    return gates

@@ -18,10 +18,11 @@ import yastn
 import yastn.tn.fpeps as fpeps
 import yastn.tn.mps as mps
 import math
+import random
 from itertools import product
 #
 from yastn.tn.fpeps import Site
-from yastn.tn.fpeps.envs.rdm import measure_rdm_1site, measure_rdm_nn, measure_rdm_2x2, measure_rdm_diag
+from yastn.tn.fpeps.envs.rdm import measure_rdm_nn, measure_rdm_2x2, measure_rdm_diag
 from yastn.operators._auxliary import sign_canonical_order
 
 tol = 1e-12
@@ -39,13 +40,8 @@ def generate_peps(g, ops, occs_init, angles):
     #
     # apply a list of gates on nn bonds
     for bond, angle in angles:
-        gate = fpeps.gates.gate_nn_hopping(1, angle, ops.I(), ops.c(), ops.cp())
-        dirn, l_ordered = psi.nn_bond_type(bond)
-        assert l_ordered
-        s0, s1 = bond
-        _, _, R0, R1, Q0f, Q1f = fpeps._evolution.apply_gate_nn(psi[s0], psi[s1], gate.G0, gate.G1, dirn)
-        M0, M1 = fpeps._evolution.symmetrized_svd(R0, R1, opts_svd={'tol': 1e-12}, normalize=True)
-        psi[s0], psi[s1] = fpeps._evolution.apply_bond_tensors(Q0f, Q1f, M0, M1, dirn)
+        gate = fpeps.gates.gate_nn_hopping(1, angle, ops.I(), ops.c(), ops.cp(), bond=bond)
+        psi.apply_gate_(gate)
     return psi
 
 
@@ -54,9 +50,9 @@ def mpo_from_gate(N, ops, gate, bond, s2i):
     s0, s1 = bond
     i0, i1 = s2i[s0], s2i[s1]
     assert i0 < i1
-    H[i0] = gate.G0.add_leg(axis=0, s=-1).transpose(axes=(0, 1, 3, 2))
-    H[i1] = gate.G1.add_leg(axis=3, s=1).transpose(axes=(2, 0, 3, 1))
-    leg = gate.G0.get_legs(axes=2).conj()
+    H[i0] = gate.G[0].add_leg(axis=0, s=-1).transpose(axes=(0, 1, 3, 2))
+    H[i1] = gate.G[1].add_leg(axis=3, s=1).transpose(axes=(2, 0, 3, 1))
+    leg = gate.G[0].get_legs(axes=2).conj()
     conn = yastn.eye(ops.config, leg, isdiag=False, device=H[i0].device)
     conn = yastn.ncon([conn, ops.I()], [(-0, -2), (-1, -3)])
     conn = conn.swap_gate(axes=(0, 1))  # add string
@@ -97,7 +93,7 @@ def do_test_rdm_measure_nn(ops, res, *operators, env=None):
     Test all possible combination of sites; skip those where measure_2x2 cannot be applied
     """
     for bond in res:
-        dirn, _= env.nn_bond_type(bond)
+        dirn = env.nn_bond_dirn(bond)
         assert abs(measure_rdm_nn(bond[0], dirn, env.psi.ket, env,operators) - res[bond]) < tol
 
 
@@ -165,9 +161,10 @@ def test_measure(config_kwargs, sym, L):
                     (1, 0): 0, (1, 1): 0}
     #
     # and apply a single layer of hopping gates with large random angles
-    ops.random_seed(seed=0)
-    angles  = [(bond, 0.1 + 1j * ops.config.backend.rand(1) * math.pi / 2) for bond in g.bonds(dirn='v')]
-    angles += [(bond, 0.1 + 1j * ops.config.backend.rand(1) * math.pi / 2) for bond in g.bonds(dirn='h')]
+
+    random.seed(0)
+    angles  = [(bond, 0.1 + 1j * random.random() * math.pi / 2) for bond in g.bonds(dirn='v')]
+    angles += [(bond, 0.1 + 1j * random.random() * math.pi / 2) for bond in g.bonds(dirn='h')]
     # 1j * pi / 4 is half of oscillation; adds phase 1j to transfered particle
     # 1j * pi / 2 fully transfer particle between sites adding phase 1j
     #
@@ -252,7 +249,7 @@ def test_measure(config_kwargs, sym, L):
     #-------------------------------------------
     #
     # check 4-point correlator
-    sitess = [[(0, 0), (1, 0), (0, 1), (1, 1)], [(0, 0), (1, 0), (0, 1), (1, 1)]]
+    sitess = [[(0, 0), (1, 0), (0, 1), (1, 1)], [(0, 0), (1, 0), (0, 1), (1, 1)], [(1,1), (0,0), (0,1), (1, 0)]]
     operatorss = [[ops.cp(), ops.c(), ops.cp(), ops.c()]] #, [ops.cp(), ops.cp(), ops.c(), ops.c()]]
 
     for sites, operators in zip(sitess, operatorss):
@@ -264,8 +261,11 @@ def test_measure(config_kwargs, sym, L):
         v0 = mps.vdot(phi, O, phi)
         assert abs(v1 - v0) < tol
         assert abs(v2 - v0) < tol
-        #
-        # TODO: the below has problem when sites not in the canonical order
+
+        sorted_ops = [None]*4
+        site_op = {(0, 0):0, (1, 0): 1, (0, 1): 2, (1, 1):3}
+        for op, site in zip(operators, sites):
+            sorted_ops[site_op[site]] = op
         sign = sign_canonical_order(*operators, sites=sites, f_ordered=env_ctm.f_ordered)
         assert abs(v1 - sign * measure_rdm_2x2(Site(0, 0), env_ctm.psi.ket, env_ctm, operators)) < tol
 
@@ -289,13 +289,13 @@ def test_measure_lbp(config_kwargs, sym, L=3):
                     (2, 0): 1, (2, 1): 0, (2, 2): 0}
     #
     # and apply a single layer of hopping gates with large random angles
-    ops.random_seed(seed=0)
-    angles  = [(((0, 0), (1, 0)), 0.1 + 1j * ops.config.backend.rand(1) * math.pi / 2),
-               (((1, 0), (2, 0)), 0.1 + 1j * ops.config.backend.rand(1) * math.pi / 2),
-               (((1, 0), (1, 1)), 0.1 + 1j * ops.config.backend.rand(1) * math.pi / 2),
-               (((1, 1), (1, 2)), 0.1 + 1j * ops.config.backend.rand(1) * math.pi / 2),
-               (((0, 2), (1, 2)), 0.1 + 1j * ops.config.backend.rand(1) * math.pi / 2),
-               (((1, 2), (2, 2)), 0.1 + 1j * ops.config.backend.rand(1) * math.pi / 2)]
+    random.seed(0)
+    angles  = [(((0, 0), (1, 0)), 0.1 + 1j * random.random() * math.pi / 2),
+               (((1, 0), (2, 0)), 0.1 + 1j * random.random() * math.pi / 2),
+               (((1, 0), (1, 1)), 0.1 + 1j * random.random() * math.pi / 2),
+               (((1, 1), (1, 2)), 0.1 + 1j * random.random() * math.pi / 2),
+               (((0, 2), (1, 2)), 0.1 + 1j * random.random() * math.pi / 2),
+               (((1, 2), (2, 2)), 0.1 + 1j * random.random() * math.pi / 2)]
     #
     phi = generate_mps(ops, occs_init[L], angles, s2i)
     psi = generate_peps(g, ops, occs_init[L], angles)
@@ -339,4 +339,4 @@ def test_measure_lbp(config_kwargs, sym, L=3):
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs"])
+    pytest.main([__file__, "-vs", "--backend", "torch", "--device", "cuda"])

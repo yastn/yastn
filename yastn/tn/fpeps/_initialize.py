@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 """ Initialization of peps tensors for real or imaginary time evolution """
-from ._geometry import SquareLattice, CheckerboardLattice
+from ._geometry import SquareLattice, CheckerboardLattice, RectangularUnitcell, TriangularLattice
 from ._peps import Peps
 from .envs._env_ctm import EnvCTM
 from .envs._env_bp import EnvBP
@@ -42,8 +42,8 @@ def product_peps(geometry, vectors) -> Peps:
         If dict is provided, it should specify a map between
         each unique lattice site and the corresponding vector.
     """
-    if not isinstance(geometry, (SquareLattice, CheckerboardLattice)):
-        raise YastnError("Geometry should be an instance of SquareLattice or CheckerboardLattice")
+    if not isinstance(geometry, (SquareLattice, CheckerboardLattice, TriangularLattice)):
+        raise YastnError("Geometry should be an instance of SquareLattice or CheckerboardLattice or TriangularLattice")
 
     if isinstance(vectors, Tensor):
         vectors = {site: vectors.copy() for site in geometry.sites()}
@@ -104,10 +104,14 @@ def load_from_dict(config, d) -> Peps:
         return env
 
     # otherwise assume class == 'Peps'
-    if d['lattice'] == "square":
+    if d['lattice'] in ["square", "SquareLattice"]:
         net = SquareLattice(dims=d['dims'], boundary=d['boundary'])
-    elif d['lattice'] == "checkerboard":
+    elif d['lattice'] in ["checkerboard", "CheckerboardLattice"]:
         net = CheckerboardLattice()
+    elif d['lattice'] in ["rectangularunitcell", "RectangularUnitcell"]:
+        net = RectangularUnitcell(pattern=d['pattern'])
+    elif d['lattice'] in ["triangular", "TriangularLattice"]:
+        net = TriangularLattice()
 
     psi = Peps(net)
     for site in psi.sites():

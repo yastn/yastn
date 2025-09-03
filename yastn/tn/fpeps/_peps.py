@@ -14,11 +14,10 @@
 # ==============================================================================
 from __future__ import annotations
 from typing import Sequence, Union
-from ... import Tensor, YastnError
-from ...tn.mps import Mpo
+from ... import Tensor, YastnError, block, eye
+from ...tn.mps import Mpo, MpsMpoOBC, MpoPBC
 from ._doublePepsTensor import DoublePepsTensor
-from ._geometry import SquareLattice, CheckerboardLattice, RectangularUnitcell
-
+from ._gates_auxiliary import apply_gate_onsite, gate_from_mpo, gate_fix_swap_gate, fill_eye_in_gate
 
 class Peps():
 
@@ -63,8 +62,8 @@ class Peps():
             #
             # Currently, 5-leg PEPS tensors are fused by __setitem__ as ((top-left)(bottom-right) physical).
             # This is done to work with objects having a smaller number of blocks.
-            assert psi[0, 0].ndim == 3
-            assert (psi[0, 0].unfuse_legs(axes=(0, 1)) - A00).norm() < 1e-13
+            assert psi[0, 0].ndim == 5
+            assert (psi[0, 0] - A00).norm() < 1e-13
 
             # PEPS with no physical legs is also possible.
             #
@@ -85,7 +84,7 @@ class Peps():
 
         """
         self.geometry = geometry
-        for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "nn_bond_type", "f_ordered"]:
+        for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "f_ordered", "nn_bond_dirn"]:
             setattr(self, name, getattr(geometry, name))
         self._data = {self.site2index(site): None for site in self.sites()}
 
@@ -119,54 +118,34 @@ class Peps():
         site0 = self.sites()[0]
         return self[site0].ndim in (3, 5)
 
-    def __getitem__(self, site):
+    def __getitem__(self, site) -> Tensor:
         """ Get tensor for site. """
         return self._data[self.site2index(site)]
 
     def __setitem__(self, site, obj):
-        """
-        Set tensor at site.
-        5-leg tensors are fused to 3-leg: [t l] [b r] sa
-        2-leg tensors are unfused to 4-leg: t l b r
-        """
-        if hasattr(obj, 'ndim') and obj.ndim == 5 :
-            obj = obj.fuse_legs(axes=((0, 1), (2, 3), 4))
-        if hasattr(obj, 'ndim') and obj.ndim == 2 :
-            obj = obj.unfuse_legs(axes=(0, 1))
+        """ Set tensor at site. """
         self._data[self.site2index(site)] = obj
 
     def __dict__(self) -> dict:
         """
         Serialize PEPS into a dictionary.
         """
-        d = {'lattice': type(self.geometry).__name__,
-             'dims': self.dims,
-             'boundary': self.boundary,
-             'pattern': self.geometry.__dict__(),
+        d = {**self.geometry.__dict__(),
              'data': {}}
-
         for site in self.sites():
             d['data'][site] = self[site].save_to_dict()
-
         return d
 
     def save_to_dict(self) -> dict:
         """
         Serialize PEPS into a dictionary.
         """
-        d= self.__dict__()
-        if isinstance(self.geometry, CheckerboardLattice):
-            d['lattice'] = "checkerboard"
-        elif isinstance(self.geometry, SquareLattice):
-            d['lattice'] = "square"
-        elif isinstance(self.geometry, RectangularUnitcell):
-            d['lattice'] = "rectangularunitcell"
-        return d
+        return self.__dict__()
 
     def __repr__(self) -> str:
         return f"Peps(geometry={self.geometry.__repr__()}, tensors={ self._data })"
 
-    def clone(self) -> yastn.tn.fpeps.Peps:
+    def clone(self) -> Peps:
         r"""
         Returns a deep clone of the PEPS instance by :meth:`cloning<yastn.Tensor.clone>` each tensor in
         the network. Each tensor in the cloned PEPS will contain its own independent data blocks.
@@ -176,7 +155,7 @@ class Peps():
             psi._data[ind] = self._data[ind].clone()
         return psi
 
-    def copy(self) -> yastn.tn.fpeps.Peps:
+    def copy(self) -> Peps:
         r"""
         Returns a deep copy of the PEPS instance by :meth:`copy<yastn.Tensor.copy>` each tensor in
         the network. Each tensor in the copied PEPS will contain its own independent data blocks.
@@ -186,7 +165,7 @@ class Peps():
             psi._data[ind] = self._data[ind].copy()
         return psi
 
-    def shallow_copy(self) -> yastn.tn.fpeps.Peps:
+    def shallow_copy(self) -> Peps:
         r"""
         New instance of :class:`yastn.tn.mps.Peps` pointing to the same tensors as the old one.
 
@@ -197,7 +176,7 @@ class Peps():
             psi._data[ind] = self._data[ind]
         return psi
 
-    def transfer_mpo(self, n=0, dirn='v') -> yastn.tn.mps.MpsMpo:
+    def transfer_mpo(self, n=0, dirn='v') -> MpsMpoOBC | MpoPBC:
         """
         Converts a specified row or column of the PEPS into a Matrix Product Operator (MPO) representation,
         facilitating boundary or contraction calculations along that direction.
@@ -235,15 +214,123 @@ class Peps():
     def get_bond_dimensions(self):
         out = {}
         for bond in self.bonds():
-            dirn, l_ordered = self.nn_bond_type(bond)
-            s0 = bond[0] if l_ordered else bond[1]
-            leg = self[s0].get_legs(axes=1)
-            l0, l1 = leg.unfuse_leg()
-            out[bond] = sum(l0.D) if dirn == 'h' else sum(l1.D)
-            # axes = 3 if dirn == 'h' else 2  # if dirn == 'v'
-            # out[bond] = self[s0].get_shape(axes=axes)
+            dirn = self.nn_bond_dirn(*bond)
+            s0 = bond[0] if dirn in ('lr', 'tb') else bond[1]
+            axes = 3 if dirn in 'lr rl' else 2
+            out[bond] = self[s0].get_shape(axes=axes)
         return out
 
+    def to_tensor(self) -> Tensor:
+        r"""
+        Contract PEPS into a single tensor.
+
+        It should only be used for a system with a very few sites.
+        It works only for a finite system.
+        The order of legs is consistent with the PEPS fermionic order.
+        System and ancilla legs are unfused.
+
+        Note that ancilla legs might carry charges offsetting the particle number of resulting tensor to zero.
+        This might give unexpected behavior when adding two states with different structure of offsets,
+        which is set in :meth:`yastn.tn.fpeps.product_peps`.
+        """
+        if 'ii' == self.geometry._periodic:
+            raise YastnError("to_tensor() works only for a finite PEPS.")
+        Nx, Ny = self.Nx, self.Ny
+        psi = self[0, 0].remove_leg(axis=1)
+        for nx in range(1, Nx):
+            ten = self[nx, 0].remove_leg(axis=1)
+            psi = psi.tensordot(ten, axes=(2 * nx - 1, 0))
+        axs = list(range(1, 2 * Nx - 2, 2)) + [2 * Nx]
+        psi = psi.swap_gate(axes=(0, axs))
+        psi = psi.trace(axes=(0, 2 * Nx - 1))
+
+        for ny in range(1, Ny):
+            ten = self[0, ny]
+            dny = (ny - 1) * Nx
+            psi = psi.tensordot(ten, axes=(dny, 1))
+            for nx in range(1, Nx):
+                axs = list(range(dny + nx, dny + 2 * Nx - nx, 2))
+                psi = psi.swap_gate(axes=(dny + 2 * Nx + nx + 1, axs))
+                ten = self[nx, ny]
+                psi = psi.tensordot(ten, axes=((dny + 2 * Nx + nx - 1, dny + nx), (0, 1)))
+
+            dny = ny * Nx
+            axs = list(range(dny + 1, dny + 2 * Nx - 2, 2)) + [dny + 2 * Nx]
+            psi = psi.swap_gate(axes=(dny, axs))
+            psi = psi.trace(axes=(dny, dny + 2 * Nx - 1))
+
+        dny = (Ny - 1) * Nx
+        for nx in range(Nx):
+            psi = psi.remove_leg(axis=dny + nx)
+
+        if psi.get_legs(axes=0).is_fused():
+            psi = psi.unfuse_legs(axes=list(range(psi.ndim)))
+            N = psi.ndim
+            for n in range(1, N, 2):
+                axs = list(range(n + 1, N))
+                psi = psi.swap_gate(axes=(n, axs))
+        return psi
+
+    def apply_gate_(self, gate):
+        """
+        Apply gate to PEPS state psi, changing respective tensors in place.
+        """
+        G = gate_from_mpo(gate.G) if isinstance(gate.G, MpsMpoOBC) else gate.G
+
+        if len(G) == 2 and len(gate.sites) > 2:  # fill-in identities
+            G = fill_eye_in_gate(self, G, gate.sites)
+
+        dirns, g0, s0 = '', G[0], gate.sites[0]
+        for g1, s1 in zip(G[1:], gate.sites[1:]):
+            dirn = self.nn_bond_dirn(s0, s1)
+            g0, g1 = gate_fix_swap_gate(g0, g1, dirn, self.f_ordered(s0, s1))
+            dirns += dirn
+            self[s0] = apply_gate_onsite(self[s0], g0, dirn=dirns[:-1])
+            dirns = dirns[-1]
+            g0, s0 = g1, s1
+        self[s0] = apply_gate_onsite(self[s0], g0, dirn=dirns)
+
+    def __add__(self, other) -> Peps:
+        return add(self, other)
+
+
+def add(*states, amplitudes=None, **kwargs) -> MpsMpoOBC:
+    r"""
+    Linear superposition of several PEPSs with specific amplitudes, i.e., :math:`\sum_j \textrm{amplitudes[j]}{\times}\textrm{states[j]}`.
+
+    Compression (truncation of bond dimensions) is not performed.
+
+    Parameters
+    ----------
+    states: Sequence[yastn.tn.mps.Peps]
+
+    amplitudes: Sequence[scalar]
+        If ``None``, all amplitudes are set to :math:`1`.
+    """
+    if amplitudes is not None and len(states) != len(amplitudes):
+        raise YastnError('Number of Peps-s to add must be equal to the number of coefficients in amplitudes.')
+
+    if any(not isinstance(state, Peps) for state in states):
+        raise YastnError('All added states should be Peps-s.')
+
+    geometry = states[0].geometry
+    if any(geometry != state.geometry for state in states):
+        raise YastnError('All added states should have the same geometry.')
+
+    phi = Peps(geometry)
+    for site in geometry.sites():
+        tens = {}
+        t = geometry.nn_site(site, 't') is not None
+        l = geometry.nn_site(site, 'l') is not None
+        b = geometry.nn_site(site, 'b') is not None
+        r = geometry.nn_site(site, 'r') is not None
+        for n, state in enumerate(states):
+            ten = state[site]
+            if site == (0, 0) and amplitudes is not None:
+                ten = amplitudes[n] * ten
+            tens[n * t, n * l, n * b, n * r] = ten
+        phi[site] = block(tens, common_legs=4)
+    return phi
 
 
 class Peps2Layers():
@@ -259,7 +346,7 @@ class Peps2Layers():
         assert self.ket.geometry == self.bra.geometry
         self.geometry = bra.geometry
 
-        for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "nn_bond_type", "f_ordered"]:
+        for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "f_ordered", "nn_bond_dirn"]:
             setattr(self, name, getattr(bra.geometry, name))
 
     @property
@@ -269,6 +356,6 @@ class Peps2Layers():
     def has_physical(self) -> bool:
         return False
 
-    def __getitem__(self, site) -> yastn.tn.fpeps.DoublePepsTensor:
+    def __getitem__(self, site) -> DoublePepsTensor:
         """ Get tensor for site. """
         return DoublePepsTensor(bra=self.bra[site], ket=self.ket[site])
