@@ -163,6 +163,38 @@ class MpoPBC(_MpsMpoParent):
         super().__init__(N=N, nr_phys=2)
         self.tol = None
 
+    def to_tensor(self) -> tensor.Tensor:
+        r"""
+        Contract MPS/MPO to a single tensor.
+        Should only be used for a system with a very few sites.
+
+        ::
+
+            Tensor leg order
+
+            ┌─────────── ... ──────┐
+            |         MPS          |
+            └──┬─────┬── ... ───┬──┘
+               |     |          |
+               0     1         N-1
+
+               1     3        2N-1
+               |     |          |
+            ┌──┴─────┴── ... ───┴──┐
+            |          MPO         |
+            └──┬─────┬── ... ───┬──┘
+               |     |          |
+               0     2        2N-2
+
+        """
+        ten = self.A[self.first]
+        for n in self.sweep(to='last', df=1):
+            ind = n if self.nr_phys == 1 else 2 * n - 1
+            if n == self.last:
+                ten = tensor.tensordot(ten, self.A[n], axes=((ind,0), (0,2)))
+            else:
+                ten = tensor.tensordot(ten, self.A[n], axes=(ind, 0))
+        return self.factor * ten
 
 
 class MpsMpoOBC(_MpsMpoParent):
