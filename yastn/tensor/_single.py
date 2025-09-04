@@ -408,7 +408,7 @@ def add_leg(a, axis=-1, s=-1, t=None, leg=None) -> yastn.Tensor:
     if t is None:
         t = a.config.sym.add_charges(a.struct.n, signatures=(-1,), new_signature=s)
     else:
-        if (isinstance(t, int) and nsym != 1) or len(t) != nsym:
+        if (isinstance(t, int) and nsym != 1) or (hasattr(t, '__len__') and len(t) != nsym):
             raise YastnError('len(t) does not match the number of symmetry charges.')
         t = a.config.sym.add_charges(t, signatures=(s,), new_signature=s)
 
