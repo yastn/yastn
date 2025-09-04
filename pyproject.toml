@@ -9,11 +9,11 @@ authors = [{name = "The YASTN Authors"},]
 maintainers = [{name = "Marek Rams", email = "marek.rams@uj.edu.pl"},
                {name = "Juraj Hasik", email = "juraj.hasik.sk@gmail.com"},]
 readme = "README.md"
-requires-python = ">=3.9"
-license = {text = "Apache License 2.0"}
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering :: Physics",
