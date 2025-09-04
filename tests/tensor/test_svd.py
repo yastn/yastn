@@ -334,9 +334,9 @@ def test_svd_multiplets(config_kwargs):
     mask_f = lambda x: yastn.truncation_mask_multiplets(x, tol=0.0001, D_total=30, eps_multiplet=0.001)
     _, S1, _ = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), mask_f=mask_f)
     # assert S1.get_shape() == (24, 24)
-    # CI gives an error (30, 30) != (24, 24)
+    # TODO: CI gives an error (30, 30) != (24, 24)
     # in test-full (torch, 3.9, 1.26.4, 1.13.1, 2.4); cannot reproduce it locally ...
-    # config_kwargs = {'backend': 'torch', 'default_device': 'cpu', 'tensordot_policy': 'fuse_contracted'}
+    # config_kwargs = {'backend': 'torch', 'default_device': 'cpu'}
 
     # below extend the cut to largest gap in singular values;
     # enforcing that multiplets are kept
@@ -468,5 +468,4 @@ def test_svd_exceptions(config_kwargs):
 
 
 if __name__ == '__main__':
-    test_svd_arnoldi({"backend": "torch"})
-    #pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])
