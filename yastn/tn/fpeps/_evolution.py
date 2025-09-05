@@ -861,7 +861,7 @@ def optimal_pinv(g, j, pinv_cutoffs, error_fun):
                 M_new, error2, pinv_c = M_tmp, error2_tmp, cutoff
     return M_new, error2, pinv_c
 
-def apply_predisentangler(env, bond, D_total, max_iter=400, pinv_tol=1e-10):
+def apply_predisentangler(env, bond, D_total, max_iter=400, tol=1e-7):
 
     diff = 0
     num_of_iter = 0
@@ -895,7 +895,7 @@ def apply_predisentangler(env, bond, D_total, max_iter=400, pinv_tol=1e-10):
             r1d = R1d.unfuse_legs(axes=1) # l s' a' ll
             r1d = r1d.swap_gate(axes=(2, 3)) # swap_gate a' and ll
 
-            r0d, r1d, diff, num_of_iter = predisentangler_iter(r0d, r1d, D_total, max_iter, pinv_tol)
+            r0d, r1d, diff, num_of_iter = predisentangler_iter(r0d, r1d, D_total, max_iter, tol)
 
             r0d = r0d.swap_gate(axes=(1, 3)) # swap_gate r and a
             R0d = r0d.fuse_legs(axes=(0, 1, (2, 3)))
@@ -920,7 +920,7 @@ def apply_predisentangler(env, bond, D_total, max_iter=400, pinv_tol=1e-10):
             r1d = R1d.unfuse_legs(axes=1) # t s' a' tt
             r1d = r1d.swap_gate(axes=(2, 3)) # swap_gate a' and tt
 
-            r0d, r1d, diff, num_of_iter = predisentangler_iter(r0d, r1d, D_total, max_iter, pinv_tol)
+            r0d, r1d, diff, num_of_iter = predisentangler_iter(r0d, r1d, D_total, max_iter, tol)
 
             r0d = r0d.swap_gate(axes=(1, 3)) # swap_gate r and a
             R0d = r0d.fuse_legs(axes=(0, 1, (2, 3)))
@@ -940,7 +940,7 @@ def apply_predisentangler(env, bond, D_total, max_iter=400, pinv_tol=1e-10):
 
     return diff, num_of_iter
 
-def predisentangler_iter(r0d, r1d, D_total, max_iter, pinv_tol=1e-10, tol=1e-4):
+def predisentangler_iter(r0d:yastn.Tensor, r1d:yastn.Tensor, D_total, max_iter, tol=1e-7):
 
     ii = 0
     diff = 32767
@@ -964,7 +964,7 @@ def predisentangler_iter(r0d, r1d, D_total, max_iter, pinv_tol=1e-10, tol=1e-4):
 
         r0dr1d = r0dr1d_new
 
-        if diff < 1e-7:
+        if diff < tol:
             u, s, v = yastn.svd_with_truncation(r0dr1d, axes=((0, 1, 2), (3, 4, 5)), sU=r0d.s[1], D_total=r0d.get_shape(axes=1))
             s = s.sqrt()
             r0d = s.broadcast(u, axes=3).transpose(axes=(0, 3, 1, 2))
@@ -973,7 +973,7 @@ def predisentangler_iter(r0d, r1d, D_total, max_iter, pinv_tol=1e-10, tol=1e-4):
 
     return r0d, r1d, diff, ii
 
-def build_predisentangler_g(r0dr1d, r0dr1d_conj):
+def build_predisentangler_g(r0dr1d:yastn.Tensor, r0dr1d_conj:yastn.Tensor):
     # r0dr1d xx s a s' a' yy
     Eg = yastn.tensordot(r0dr1d, r0dr1d_conj, axes=((0, 1, 3, 5), (0, 1, 3, 5))) # a a' a* a'*
     u, s, v = Eg.svd(axes=((0, 1), (2, 3)))
