@@ -115,5 +115,7 @@ def load_from_dict(config, d) -> Peps:
 
     psi = Peps(net)
     for site in psi.sites():
-        psi[site] = load_tensor_from_dict(config, d['data'][site])
+        obj = load_tensor_from_dict(config, d['data'][site])
+        if obj.ndim == 3:  obj = obj.unfuse_legs(axes=(0, 1))  # for backward compatibility
+        psi[site] = obj
     return psi

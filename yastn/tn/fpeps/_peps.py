@@ -14,7 +14,7 @@
 # ==============================================================================
 from __future__ import annotations
 from typing import Sequence, Union
-from ... import Tensor, YastnError, block, eye
+from ... import Tensor, YastnError, block
 from ...tn.mps import Mpo, MpsMpoOBC, MpoPBC
 from ._doublePepsTensor import DoublePepsTensor
 from ._gates_auxiliary import apply_gate_onsite, gate_from_mpo, gate_fix_swap_gate, fill_eye_in_gate
@@ -60,10 +60,7 @@ class Peps():
             A00 = yastn.rand(config, legs=[leg.conj(), leg, leg, leg.conj(), leg])
             psi[0, 0] = A00
             #
-            # Currently, 5-leg PEPS tensors are fused by __setitem__ as ((top-left)(bottom-right) physical).
-            # This is done to work with objects having a smaller number of blocks.
             assert psi[0, 0].ndim == 5
-            assert (psi[0, 0] - A00).norm() < 1e-13
 
             # PEPS with no physical legs is also possible.
             #

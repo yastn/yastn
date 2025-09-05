@@ -16,7 +16,7 @@
 from __future__ import annotations
 from numbers import Number
 from typing import Sequence
-from ... import tensor, initialize, YastnError
+from ... import tensor, initialize, YastnError, tensordot
 from ._mps_parent import _MpsMpoParent
 
 
@@ -145,7 +145,7 @@ def multiply(a, b, mode=None) -> MpsMpoOBC:
 
     axes_fuse = ((0, 3), 1, (2, 4)) if b.nr_phys == 1 else ((0, 3), 1, (2, 4), 5)
     for n in phi.sweep():
-        phi.A[n] = tensor.tensordot(a.A[n], b.A[n], axes=(3, 1)).fuse_legs(axes_fuse, mode)
+        phi.A[n] = tensordot(a.A[n], b.A[n], axes=(3, 1)).fuse_legs(axes_fuse, mode)
     phi.A[phi.first] = phi.A[phi.first].drop_leg_history(axes=0)
     phi.A[phi.last] = phi.A[phi.last].drop_leg_history(axes=2)
     phi.factor = a.factor * b.factor
@@ -189,11 +189,11 @@ class MpoPBC(_MpsMpoParent):
         """
         ten = self.A[self.first]
         for n in self.sweep(to='last', df=1):
-            ind = n if self.nr_phys == 1 else 2 * n - 1
+            ind = n + 1 if self.nr_phys == 1 else 2 * n
             if n == self.last:
-                ten = tensor.tensordot(ten, self.A[n], axes=((ind,0), (0,2)))
+                ten = tensordot(ten, self.A[n], axes=((ind, 0), (0, 2)))
             else:
-                ten = tensor.tensordot(ten, self.A[n], axes=(ind, 0))
+                ten = tensordot(ten, self.A[n], axes=(ind, 0))
         return self.factor * ten
 
 
@@ -434,7 +434,7 @@ class MpsMpoOBC(_MpsMpoParent):
             cl = (0, 1) if self.nr_phys == 1 else (0, 1, 3)
         it = self.sweep(to=to) if n is None else [n]
         for n in it:
-            x = tensor.tensordot(self.A[n], self.A[n].conj(), axes=(cl, cl))
+            x = tensordot(self.A[n], self.A[n].conj(), axes=(cl, cl))
             x = x.drop_leg_history()
             x0 = initialize.eye(config=x.config, legs=x.get_legs((0, 1)))
             if (x - x0.diag()).norm() > tol:  # == 0
@@ -625,5 +625,5 @@ class MpsMpoOBC(_MpsMpoParent):
         ten = self.A[self.first].remove_leg(axis=0)
         for n in self.sweep(to='last', df=1):
             ind = n if self.nr_phys == 1 else 2 * n - 1
-            ten = tensor.tensordot(ten, self.A[n], axes=(ind, 0))
+            ten = tensordot(ten, self.A[n], axes=(ind, 0))
         return self.factor * ten.remove_leg(axis=-self.nr_phys)
