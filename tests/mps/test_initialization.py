@@ -346,7 +346,7 @@ def test_MpsMpoOBC_copy(config_kwargs):
     assert all(psi[n] is phi[n] for n in psi.A)
 
 
-def test_mps_to_tensor(config_kwargs):
+def test_MpsMpoOBC_to_tensor(config_kwargs):
     """ Test turning MPS/MPO into a single tensor and back. """
     N = 6
     ops = yastn.operators.Spin12(sym='dense', **config_kwargs)
@@ -367,6 +367,17 @@ def test_mps_to_tensor(config_kwargs):
     op2 = mps.mpo_from_tensor(top)
     assert (op - op2).norm() < 1e-12
     assert op2.is_canonical(to='last')
+
+
+def test_MpoPBC_to_tensor(config_kwargs):
+    """ Test turning MPS/MPO into a single tensor and back. """
+    config = yastn.make_config(syn='dense', **config_kwargs)
+    op = mps.MpoPBC(N=3)
+    op[0] = yastn.rand(config, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
+    op[1] = yastn.rand(config, s=(-1, 1, 1, -1), D=(4, 6, 3, 7))
+    op[2] = yastn.rand(config, s=(-1, 1, 1, -1), D=(3, 8, 2, 9))
+    ten = op.to_tensor()
+    assert ten.shape == (3, 5, 6, 7, 8, 9)
 
 
 if __name__ == '__main__':
