@@ -78,6 +78,10 @@ def add(*states, amplitudes=None, **kwargs) -> MpsMpoOBC:
 
     amplitudes = [x * psi.factor for x, psi in zip(amplitudes, states)]
 
+    if phi.N == 1:
+        phi.A[0] = tensor.add(*(psi.A[0] for psi in states), amplitudes=amplitudes)
+        return phi
+
     n = phi.first
     d = {(j,): psi.A[n] * amplitudes[j] for j, psi in enumerate(states)}
     common_legs = (0, 1) if phi.nr_phys == 1 else (0, 1, 3)
@@ -187,26 +191,16 @@ class MpoPBC(_MpsMpoParent):
                0     2        2N-2
 
         """
-        ten = self.A[self.first]
+        ten = self.factor * self.A[self.first]
         if self.N == 1:
-            return self.factor * einsum('ibi->b' if self.nr_phys==1 else 'ibik->bk',ten) 
+            return ten.trace(axes=(0, 2))
         for n in self.sweep(to='last', df=1):
             ind = n + 1 if self.nr_phys == 1 else 2 * n
             if n == self.last:
                 ten = tensordot(ten, self.A[n], axes=((ind, 0), (0, 2)))
             else:
                 ten = tensordot(ten, self.A[n], axes=(ind, 0))
-        return self.factor * ten
-
-    def to_matrix(self) -> tensor.Tensor:
-        r"""
-        Contract MPS/MPO to a single tensor and then reshape to vector/matrix by fusing all physical legs into a single leg.
-        For MPOs also all dual(bra) legs are fused into a single leg.
-        """
-        if self.N==1:
-            return self.to_tensor()
-        return self.to_tensor().fuse_legs(axes= \
-            ([i for i in range(self.N)],) if self.nr_phys==1 else ([i for i in range(0,2*self.N,2)],[i for i in range(1,2*self.N,2)]))
+        return ten
 
 
 class MpsMpoOBC(_MpsMpoParent):
@@ -299,7 +293,7 @@ class MpsMpoOBC(_MpsMpoParent):
         else:
             raise YastnError('"to" should be in "first" or "last"')
         nR = R.norm()
-        self.A[self.pC] = R / nR
+        self.A[self.pC] = R / nR if nR > 0 else R
         self.factor = 1 if normalize else self.factor * nR
 
     def diagonalize_central_(self, opts_svd, normalize=True) -> Number:
@@ -639,13 +633,3 @@ class MpsMpoOBC(_MpsMpoParent):
             ind = n if self.nr_phys == 1 else 2 * n - 1
             ten = tensordot(ten, self.A[n], axes=(ind, 0))
         return self.factor * ten.remove_leg(axis=-self.nr_phys)
-
-    def to_matrix(self) -> tensor.Tensor:
-        r"""
-        Contract MPS/MPO to a single tensor and then reshape to vector/matrix by fusing all physical legs into a single leg.
-        For MPOs also all dual(bra) legs are fused into a single leg.
-        """
-        if self.N==1:
-            return self.to_tensor()
-        return self.to_tensor().fuse_legs(axes= \
-            ([i for i in range(self.N)],) if self.nr_phys==1 else ([i for i in range(0,2*self.N,2)],[i for i in range(1,2*self.N,2)]))
