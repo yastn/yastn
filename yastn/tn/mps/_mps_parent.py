@@ -15,7 +15,7 @@
 """ MpsMpoParent structure and basic methods common for OBC and PBC. """
 from __future__ import annotations
 from numbers import Number, Integral
-from ... import YastnError
+from ... import YastnError, Tensor
 
 
 class _MpsMpoParent:
@@ -328,3 +328,11 @@ class _MpsMpoParent:
         file.create_dataset(my_address+'/factor', data=factor)
         for n in self.sweep(to='last'):
             psi[n].save_to_hdf5(file, my_address+'/A/'+str(n))
+
+    def to_matrix(self) -> Tensor:
+        r"""
+        Contract MPS/MPO to a single tensor and then reshape to vector/matrix by fusing all physical legs into a single leg.
+        For MPOs also all dual(bra) legs are fused into a single leg.
+        """
+        axes = (tuple(range(self.N)),) if self.nr_phys == 1 else (tuple(range(0, 2 * self.N, 2)), tuple(range(1, 2 * self.N, 2)))
+        return self.to_tensor().fuse_legs(axes=axes)

@@ -16,7 +16,7 @@
 from __future__ import annotations
 from numbers import Number
 from typing import Sequence
-from ... import tensor, initialize, YastnError, tensordot
+from ... import tensor, initialize, YastnError, tensordot, einsum
 from ._mps_parent import _MpsMpoParent
 
 
@@ -77,6 +77,10 @@ def add(*states, amplitudes=None, **kwargs) -> MpsMpoOBC:
     #    raise YastnError('MPS: Addition')
 
     amplitudes = [x * psi.factor for x, psi in zip(amplitudes, states)]
+
+    if phi.N == 1:
+        phi.A[0] = tensor.add(*(psi.A[0] for psi in states), amplitudes=amplitudes)
+        return phi
 
     n = phi.first
     d = {(j,): psi.A[n] * amplitudes[j] for j, psi in enumerate(states)}
@@ -187,14 +191,16 @@ class MpoPBC(_MpsMpoParent):
                0     2        2N-2
 
         """
-        ten = self.A[self.first]
+        ten = self.factor * self.A[self.first]
+        if self.N == 1:
+            return ten.trace(axes=(0, 2))
         for n in self.sweep(to='last', df=1):
             ind = n + 1 if self.nr_phys == 1 else 2 * n
             if n == self.last:
                 ten = tensordot(ten, self.A[n], axes=((ind, 0), (0, 2)))
             else:
                 ten = tensordot(ten, self.A[n], axes=(ind, 0))
-        return self.factor * ten
+        return ten
 
 
 class MpsMpoOBC(_MpsMpoParent):
@@ -287,7 +293,7 @@ class MpsMpoOBC(_MpsMpoParent):
         else:
             raise YastnError('"to" should be in "first" or "last"')
         nR = R.norm()
-        self.A[self.pC] = R / nR
+        self.A[self.pC] = R / nR if nR > 0 else R
         self.factor = 1 if normalize else self.factor * nR
 
     def diagonalize_central_(self, opts_svd, normalize=True) -> Number:
