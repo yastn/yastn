@@ -16,7 +16,7 @@
 from __future__ import annotations
 from numbers import Number
 from typing import Sequence
-from ... import tensor, initialize, YastnError, tensordot
+from ... import tensor, initialize, YastnError, tensordot, einsum
 from ._mps_parent import _MpsMpoParent
 
 
@@ -188,6 +188,8 @@ class MpoPBC(_MpsMpoParent):
 
         """
         ten = self.A[self.first]
+        if self.N == 1:
+            return self.factor * einsum('ibi->b' if self.nr_phys==1 else 'ibik->bk',ten) 
         for n in self.sweep(to='last', df=1):
             ind = n + 1 if self.nr_phys == 1 else 2 * n
             if n == self.last:
@@ -195,6 +197,16 @@ class MpoPBC(_MpsMpoParent):
             else:
                 ten = tensordot(ten, self.A[n], axes=(ind, 0))
         return self.factor * ten
+
+    def to_matrix(self) -> tensor.Tensor:
+        r"""
+        Contract MPS/MPO to a single tensor and then reshape to vector/matrix by fusing all physical legs into a single leg.
+        For MPOs also all dual(bra) legs are fused into a single leg.
+        """
+        if self.N==1:
+            return self.to_tensor()
+        return self.to_tensor().fuse_legs(axes= \
+            ([i for i in range(self.N)],) if self.nr_phys==1 else ([i for i in range(0,2*self.N,2)],[i for i in range(1,2*self.N,2)]))
 
 
 class MpsMpoOBC(_MpsMpoParent):
@@ -627,3 +639,13 @@ class MpsMpoOBC(_MpsMpoParent):
             ind = n if self.nr_phys == 1 else 2 * n - 1
             ten = tensordot(ten, self.A[n], axes=(ind, 0))
         return self.factor * ten.remove_leg(axis=-self.nr_phys)
+
+    def to_matrix(self) -> tensor.Tensor:
+        r"""
+        Contract MPS/MPO to a single tensor and then reshape to vector/matrix by fusing all physical legs into a single leg.
+        For MPOs also all dual(bra) legs are fused into a single leg.
+        """
+        if self.N==1:
+            return self.to_tensor()
+        return self.to_tensor().fuse_legs(axes= \
+            ([i for i in range(self.N)],) if self.nr_phys==1 else ([i for i in range(0,2*self.N,2)],[i for i in range(1,2*self.N,2)]))

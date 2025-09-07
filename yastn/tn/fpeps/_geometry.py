@@ -20,7 +20,15 @@ from ... import YastnError
 
 
 class Site(NamedTuple):
-    """ Site coordinates `(nx, ny)` are consistent with matrix indexing with `(row, column)`. """
+    """ 
+    Site coordinates `(nx, ny)` are consistent with matrix indexing with `(row, column)`::
+
+         -- y(cols) -->
+        |
+        x(rows)  (0,0) (0,1) ...
+        |        (1,0) (1,1) ...
+        V        ...  
+    """
     nx : int = 0
     ny : int = 0
 
@@ -59,7 +67,16 @@ class SquareLattice():
         boundary: str
             'infinite' (the default) for an infinite lattice,
             'obc' for a finite lattice, or
-            'cylinder' for a finite cylinder periodic along rows.
+            'cylinder' for a finite cylinder periodic along rows, i.e. 
+
+                ::
+                        - - y(cols) -->
+                        |
+                        x(rows)  (0,0) (0,1) ... (0,Ny-1)
+                        |        (1,0) (1,1) ... (1,Ny-1)
+                        V        ...  
+                                 (Nx-1,0) ...     (Nx-1,Ny-1)
+                                 (0,0)   ...     (0,Ny-1)
         """
         if boundary not in ('obc', 'infinite', 'cylinder'):
             raise YastnError(f"{boundary=} not recognized; should be 'obc', 'infinite', or 'cylinder'")
