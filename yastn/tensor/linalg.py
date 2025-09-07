@@ -24,7 +24,7 @@ from ._merging import _Fusion, _leg_struct_trivial
 # from ..krylov._krylov import svds
 
 __all__ = ['qr', 'norm', 'entropy', 'truncation_mask', 'truncation_mask_multiplets',
-           'svd', 'svd_with_truncation', 'eigh', 'eigh_with_truncation']
+           'svd', 'svd_with_truncation', 'eig', 'eigh', 'eigh_with_truncation']
 
 
 def norm(a, p='fro') -> Number:
@@ -312,6 +312,102 @@ def _meta_svd(config, struct, slices, minD, sU, nU):
     Sstruct = _struct(s=(-sU, sU), n=n0, diag=True, t=St, D=SD, size=sum(SDp))
     Vstruct = _struct(s=(-sU, struct.s[1]), n=Vn, diag=False, t=Vt, D=VD, size=sum(VDp))
     return meta, Ustruct, Usl, Sstruct, Ssl, Vstruct, Vsl
+
+
+def eig(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
+        Uaxis=-1, Vaxis=0, policy='fullrank', which='LM', **kwargs) -> tuple[yastn.Tensor, yastn.Tensor, yastn.Tensor] | yastn.Tensor:
+    r"""
+    Split tensor into :math:`a = U S V` using exact eigenvalue decomposition (ED),
+    where the columns of `U` and the rows of `V` satisfy biorthogonality, i.e. `V @ U = I`,
+    and `S` is the diagonal matrix. Unlike for symmetric/Hermitian case, `U` and `V` are not necessarily related,
+    nor form orthonormal bases.
+
+    Parameters
+    ----------
+    axes: tuple[int, int] | tuple[Sequence[int], Sequence[int]]
+        Specify two groups of legs between which to perform ED, as well as
+        their final order.
+
+    sU: int
+        Signature of the new leg in `U`; equal to 1 or -1. The default is 1.
+        `V` is going to have the opposite signature on the connecting leg.
+
+    nU: bool
+        Whether or not to attach the charge of ``a`` to `U`.
+        If ``False``, it is attached to `V`. The default is ``True``.
+
+    compute_uv: bool
+        If ``True``, compute and return `U`, `S`, `V`.  If ``False``, compute and return only `S`.
+        The default is ``True``.
+
+    Uaxis, Vaxis: int
+        Specify which leg of `U` and `V` tensors are connecting with `S`. By default,
+        it is the last leg of `U` and the first of `V`, in which case ``a = U @ S @ V``.
+
+    policy: str
+        ``"fullrank"`` or ``"lowrank"`` are allowed. Use standard ED for ``"fullrank"``.
+        For ``"lowrank"``, uses dominant ED methods and requires providing ``D_block`` in ``kwargs``.
+        This employs ``scipy.sparse.linalg.eigs`` for numpy backend.
+        kwargs will be passed to those functions for non-default settings.
+
+    which: str
+        One of [``‘SR’``, ``‘LR``, ``‘SM’``, ``‘LM’``] specifying how to order S:
+        ``‘LM’`` : (default) sort by absolute value, largest first,
+        ``‘SM’`` : sort by absolute value, smallest first,
+        ``‘SR’`` : sort by real part, smallest first,
+        ``‘LR’`` : sort by real part, largest first.
+
+    Returns
+    -------
+    `U`, `S`, `V` (when ``compute_uv=True``) or `S` (when ``compute_uv=False``)
+    """
+
+    _test_axes_all(a, axes)
+    lout_l, lout_r = _clear_axes(*axes)
+    axes = _unpack_axes(a.mfs, lout_l, lout_r)
+
+    data, struct, slices, ls_l, ls_r = _merge_to_matrix(a, axes)
+    if ls_l != ls_r:
+        raise YastnError("Legs of effective square blocks do not match.")
+
+    minD = tuple(min(ds) for ds in struct.D)
+
+    meta, Ustruct, Uslices, Sstruct, Sslices, Vstruct, Vslices = _meta_svd(a.config, struct, slices, minD, sU, nU)
+    sizes = tuple(x.size for x in (Ustruct, Sstruct, Vstruct))
+
+    if compute_uv and policy == 'fullrank':
+        Udata, Sdata, Vdata = a.config.backend.eig(data, meta, sizes, which=which, diagnostics=kwargs.get('diagnostics', None))
+    elif not compute_uv and policy == 'fullrank':
+        Sdata = a.config.backend.eigvals(data, meta, sizes[1], which=which)
+    else:
+        raise YastnError('eig() policy should in (``fullrank`). compute_uv == False only works with `fullrank`')
+
+    ls_s = _leg_struct_trivial(Sstruct, axis=0)
+
+    Smfs = ((1,), (1,))
+    Shfs = (_Fusion(s=(-sU,)), _Fusion(s=(sU,)))
+    S = a._replace(struct=Sstruct, slices=Sslices, data=Sdata, mfs=Smfs, hfs=Shfs)
+
+    if not compute_uv:
+        return S
+
+    Us = tuple(a.struct.s[ii] for ii in axes[0]) + (sU,)
+    Umeta_unmerge, Ustruct, Uslices = _meta_unmerge_matrix(a.config, Ustruct, Uslices, ls_l, ls_s, Us)
+    Udata = _unmerge(a.config, Udata, Umeta_unmerge)
+    Umfs = tuple(a.mfs[ii] for ii in lout_l) + ((1,),)
+    Uhfs = tuple(a.hfs[ii] for ii in axes[0]) + (_Fusion(s=(sU,)),)
+    U = a._replace(struct=Ustruct, slices=Uslices, data=Udata, mfs=Umfs, hfs=Uhfs)
+
+    Vs = (-sU,) + tuple(a.struct.s[ii] for ii in axes[1])
+    Vmeta_unmerge, Vstruct, Vslices = _meta_unmerge_matrix(a.config, Vstruct, Vslices, ls_s, ls_r, Vs)
+    Vdata = _unmerge(a.config, Vdata, Vmeta_unmerge)
+    Vmfs = ((1,),) + tuple(a.mfs[ii] for ii in lout_r)
+    Vhfs = (_Fusion(s=(-sU,)),) + tuple(a.hfs[ii] for ii in axes[1])
+    V = a._replace(struct=Vstruct, slices=Vslices, data=Vdata, mfs=Vmfs, hfs=Vhfs)
+
+    U = U.moveaxis(source=-1, destination=Uaxis)
+    V = V.moveaxis(source=0, destination=Vaxis)
+    return U, S, V
 
 
 def _find_gaps(S, tol=0, eps_multiplet=1e-13, which='LM'):
