@@ -19,6 +19,7 @@ import pytest
 import yastn
 
 tol = 1e-10  #pylint: disable=invalid-name
+seed = 1
 
 torch_test = pytest.mark.skipif("'torch' not in config.getoption('--backend')",
                                 reason="Uses torch.autograd.gradcheck().")
@@ -51,6 +52,8 @@ def test_eig_basic(config_kwargs):
     """ test svd decomposition for various symmetries """
     # dense
     config_dense = yastn.make_config(sym='none', **config_kwargs)
+    config_dense.backend.random_seed(seed=seed)
+    
     a = yastn.rand(config=config_dense, s=(-1, 1, -1, 1), D=[11, 11, 13, 13])
     eig_combine(a)
 
@@ -81,6 +84,8 @@ def test_eig_complex(config_kwargs):
     """ test eig decomposition and dtype propagation """
     # dense
     config_dense = yastn.make_config(sym='none', **config_kwargs)
+    config_dense.backend.random_seed(seed=seed)
+
     a = yastn.rand(config=config_dense, s=(-1, 1, -1, 1), D=[11, 11, 11, 11], dtype='complex128')
     U, S, V = yastn.linalg.eig(a, axes=((0, 1), (2, 3)), sU=-1)
     assert U.yastn_dtype == 'complex128'
