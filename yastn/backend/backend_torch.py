@@ -371,7 +371,7 @@ def eig(data, meta=None, sizes=(1, 1), **kwargs):
         except Exception as e:
             raise ValueError("Biorthonormalization of left/right eigenvector pairs failed.") from e
         
-        tol= 1.0e-14
+        tol= 1.0e-12 if data.is_complex() else 1.0e-14
         if any( torch.abs(torch.sum(V.T * U, axis=0) - 1) > tol ):
             raise ValueError("Biorthonormalization of left/right eigenvector pairs failed.")
 

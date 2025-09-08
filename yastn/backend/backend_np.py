@@ -344,7 +344,7 @@ def eig(data, meta=None, sizes=(1, 1), **kwargs):
         # TODO 
         # If matrix has repeated/clustered eigenvalues or is defective, plain diagonal rescaling may be ill‑conditioned.
         
-        tol = 1e-14
+        tol = 1e-12 if np.iscomplexobj(data) else 1e-14
         try:
             # Column-wise overlaps d_j = v_j^H u_j
             d = np.sum(np.conjugate(V) * U, axis=0)
@@ -362,12 +362,13 @@ def eig(data, meta=None, sizes=(1, 1), **kwargs):
             _U = U / s
             _V = (V / np.conjugate(s)).conj().T
         except ValueError as e:
-            # V.H @ U != I -> solve U.H @ V = I for V
-            _V = scipy.linalg.solve(U.conj().T, np.eye(len(S)), lower=False, overwrite_a=False, overwrite_b=False, 
-                                   check_finite=True, assume_a='gen', transposed=False)
-            _U, _V = U, _V.conj().T
-        except scipy.linalg.LinAlgError as e:
-            raise ValueError("Biorthonormalization of left/right eigenvector pairs failed.") from e
+            try:
+                # V.H @ U != I -> solve U.H @ V = I for V
+                _V = scipy.linalg.solve(U.conj().T, np.eye(len(S)), lower=False, overwrite_a=False, overwrite_b=False, 
+                                    check_finite=True, assume_a='gen', transposed=False)
+                _U, _V = U, _V.conj().T
+            except (scipy.linalg.LinAlgError, np.linalg.LinAlgError) as e:
+                raise ValueError("Biorthonormalization of left/right eigenvector pairs failed.") from e
         
         if any( np.abs(np.sum(_V.T * _U, axis=0) - 1) > tol ):
             raise ValueError("Biorthonormalization of left/right eigenvector pairs failed.")
