@@ -280,8 +280,8 @@ def load_from_hdf5(config, file, my_address) -> yastn.tn.mps.MpsMpo:
 
 def mps_from_tensor(ten, nr_phys=1) -> yastn.tn.mps.MpsMpo:
     r"""
-    Generate MPS from a tensor if nr_phys == 1 (the default)
-    and MPO for nr_phys == 2
+    Generate MPS from a tensor if ``nr_phys=1`` (the default)
+    and MPO for ``nr_phys=2``
 
     ::
 
@@ -316,6 +316,6 @@ def mps_from_tensor(ten, nr_phys=1) -> yastn.tn.mps.MpsMpo:
 def mpo_from_tensor(ten) -> yastn.tn.mps.MpsMpo:
     r"""
     Generate MPO from a tensor.
-    Shortcut for :meth:`yastn.tn.mps.mps_from_tensor` with nr_phys=2.
+    Shortcut for :meth:`yastn.tn.mps.mps_from_tensor` with ``nr_phys=2``.
     """
     return mps_from_tensor(ten, nr_phys=2)

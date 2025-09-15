@@ -195,10 +195,10 @@ def distribute(geometry, gates_nn=None, gates_local=None, symmetrize=True) -> Ga
         Geometry of PEPS lattice.
         Can be any structure that includes geometric information about the lattice, like the Peps class.
 
-    nn : Gate_nn | Sequence[Gate_nn]
+    gates_nn : Gate_nn | Sequence[Gate_nn]
         Nearest-neighbor gate, or a list of gates, to be distributed over all unique lattice bonds.
 
-    local : Gate_local | Sequence[Gate_local]
+    gates_local : Gate_local | Sequence[Gate_local]
         Local gate, or a list of local gates, to be distributed over all unique lattice sites.
 
     symmetrize: bool

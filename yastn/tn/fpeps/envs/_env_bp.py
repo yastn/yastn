@@ -18,7 +18,7 @@ from tqdm import tqdm
 from typing import NamedTuple
 from .... import Tensor, eye, YastnError, tensordot, vdot, ncon
 from .._peps import Peps, Peps2Layers, DoublePepsTensor
-from .._gates_auxiliary import apply_gate_onsite, gate_product_operator, gate_fix_swap_gate, match_ancilla
+from .._gates_auxiliary import gate_product_operator, gate_fix_swap_gate, match_ancilla
 from .._geometry import Bond, Site
 from .._evolution import BipartiteBondMetric, BondMetric
 from ._env_auxlliary import *
@@ -61,22 +61,29 @@ class EnvBP(Peps):
             None, 'eye'. Initialization scheme, see :meth:`yastn.tn.fpeps.EnvBP.reset_`.
 
         which: str
-            Type of environment from 'BP', 'NN+BP', 'NBN+BP'
+            Type of environment from 'BP', 'NN+BP', 'NNN+BP'
         """
         super().__init__(psi.geometry)
         self.psi = Peps2Layers(psi) if psi.has_physical() else psi
         self.tol_positive = tol_positive
+        self._set_which(which)
 
-        if which not in ('NNN+BP', 'NN+BP', 'BP'):
-            raise YastnError(f" Type of EnvBP bond_metric {which=} not recognized.")
-
-        self.which = which
         if init not in (None, 'eye'):
             raise YastnError(f"EnvBP {init=} not recognized. Should be 'eye' or None.")
         for site in self.sites():
             self[site] = EnvBP_local()
         if init is not None:
             self.reset_(init=init)
+
+    def _get_which(self):
+        return self._which
+
+    def _set_which(self, which):
+        if which not in ('NNN+BP', 'NN+BP', 'BP'):
+            raise YastnError(f" Type of EnvBP bond_metric {which=} not recognized.")
+        self._which = which
+
+    which = property(fget=_get_which, fset=_set_which)
 
     @property
     def config(self):
@@ -294,7 +301,7 @@ class EnvBP(Peps):
 
         ::
 
-            If dirn == 'h':
+            If which == 'BP':
 
                      t       t
                      ║       ║
@@ -303,15 +310,31 @@ class EnvBP(Peps):
                      b       b
 
 
-            If dirn == 'v':
+            If which == 'NN+BP':
 
-                     t
-                     ║
-                l═══0Q0═══r
-                     ╳
-                l═══1Q1═══r
-                     ║
-                     b
+                      t        t
+                      ║        ║
+                l══(-1 +0)══(-1 +1)══r
+                      ║        ║
+                l═════Q0══   ══Q1════r
+                      ║        ║
+                l══(+1 +0)══(+1 +1)══l
+                      ║        ║
+                      b        b
+
+
+            If which == 'NNN+BP':
+
+                      t       t        t       t
+                      ║       ║        ║       ║
+                l══(-1 -1)=(-1 +0)══(-1 +1)=(-1 +2)══r
+                      ║       ║        ║       ║
+                l══(+0 -1)════Q0══   ══Q1═══(+0 +2)══r
+                      ║       ║        ║       ║
+                l══(+1 -1)=(+1 +0)══(+1 +1)=(+1 +2)══r
+                      ║       ║        ║       ║
+                      b       b        b       b
+
         """
         if dirn in ("h", "lr") and self.which == "BP":
             assert self.psi.nn_site(s0, (0, 1)) == s1

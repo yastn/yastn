@@ -22,7 +22,7 @@ class Gate(NamedTuple):
 
     `G` contains operators for respective `sites`.
 
-    Operato can be given in the form of an MPO (:class:`yastn.tn.mps.MpsMpoOBC`) of the same length as the number of provided `sites`.
+    Operator can be given in the form of an MPO (:class:`yastn.tn.mps.MpsMpoOBC`) of the same length as the number of provided `sites`.
     Sites should form a continuous path in the two-dimensional PEPS lattice.
     The fermionic order of MPO should be linear, with the first MPO site being first in the fermionic order, irrespective of the provided `sites`.
 

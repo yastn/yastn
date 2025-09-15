@@ -5,9 +5,10 @@ Evolution step
 --------------
 
 Time evolution in YASTN operates via the Trotterization of
-the evolution operator to a set of nearest-neighbor and local gates.
+the evolution operator to a set of gates. Each gate acts on a path of sites,
+single site for a local gate, nearest-neighbor sites for a two-site gate, etc.
 A single evolution step consists of the application of trotterized gates,
-together with truncation of the bond dimension after each application of a nearest-neighbor gate.
+together with truncation of the bond dimension after each application of a non-local gate.
 For a detailed explanation, please refer to the :ref:`Basic concepts/Time evolution <theory/fpeps/basics:Time evolution>`.
 
 The main method for performing a time evolution step is :meth:`yastn.tn.fpeps.evolution_step_`. This
@@ -25,6 +26,13 @@ Auxiliary functions, such as :meth:`yastn.tn.fpeps.accumulated_truncation_error`
 truncation error across multiple evolution steps, facilitating error analysis in time evolution simulations.
 
 .. autofunction:: yastn.tn.fpeps.accumulated_truncation_error
+
+To apply a gate to a PEPS, without truncating the bond dimension, one can use :meth:`yastn.tn.fpeps.Peps.apply_gate_`.
+Truncation of the bond dimension can be done later, e.g., via :meth:`yastn.tn.fpeps.truncate_`.
+Both operations modify the PEPS in place.
+
+.. automethod:: yastn.tn.fpeps.Peps.apply_gate_
+.. automethod:: yastn.tn.fpeps.truncate_
 
 
 Gates
