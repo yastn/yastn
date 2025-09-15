@@ -74,7 +74,7 @@ def decompose_nn_gate(Gnn, bond=None) -> Gate_nn:
     Auxiliary function cutting a two-site gate with SVD
     into two local operators with the connecting legs.
     """
-    U, S, V = Gnn.svd_with_truncation(axes=((0, 2), (1, 3)), sU=-1, tol=1e-14, Vaxis=2)
+    U, S, V = Gnn.svd_with_truncation(axes=((0, 1), (2, 3)), sU=-1, tol=1e-14, Vaxis=2)
     S = S.sqrt()
     return Gate_nn(S.broadcast(U, axes=2), S.broadcast(V, axes=2), bond=bond)
 

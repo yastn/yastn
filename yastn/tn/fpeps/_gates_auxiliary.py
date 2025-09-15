@@ -105,17 +105,28 @@ def apply_gate_onsite(ten, G, dirn=None):
     # raise YastnError("dirn should be equal to 'l', 'r', 't', 'b', or None")
 
 
-def gate_product_operator(O0, O1, l_ordered=True, f_ordered=True, merge=False):
+def gate_product_operator(O0, O1, f_ordered=True, merge=False):
     """
     Takes two ndim=2 local operators O0 O1 to be applied
     on two sites with O1 acting first (relevant for fermionic operators).
     Adds a connecting leg with a swap_gate consistent with fermionic order.
     Orders output to match lattice order (canonical l_order is 'lr' and 'tb').
 
-    If merge, returns equivalent of ncon([O0, O1], [(-0, -2), (-1, -3)]),
+    If merge, returns equivalent of ncon([O0, O1], [(-0, -1), (-2, -3)]),
     with proper operator order and swap gate applied.
+
+    ::
+
+           1     3
+           |     |
+        ┌──┴─────┴──┐
+        |           |
+        └──┬─────┬──┘
+           |     |
+           0     2
+
     """
-    s = -1 if l_ordered else 1
+    s = -1 if f_ordered else 1
     O0 = O0.add_leg(s=s, axis=2)
     O1 = O1.add_leg(s=-s, axis=2)
 
@@ -124,10 +135,10 @@ def gate_product_operator(O0, O1, l_ordered=True, f_ordered=True, merge=False):
     else:
         O1 = O1.swap_gate(axes=(0, 2))
 
-    G0, G1 = (O0, O1) if l_ordered else (O1, O0)
+    G0, G1 = (O0, O1) if f_ordered else (O1, O0)
 
     if merge:
-        return tensordot(G0, G1, axes=(2, 2)).transpose(axes=(0, 2, 1, 3))
+        return tensordot(G0, G1, axes=(2, 2))
     return G0, G1
 
 
@@ -149,7 +160,7 @@ def fkron(A, B, sites=(0, 1), merge=True):
     if sites not in ((0, 1), (1, 0)):
         raise YastnError("sites should be equal to (0, 1) or (1, 0)")
     order = (sites == (0, 1))
-    return gate_product_operator(A, B, order, order, merge)
+    return gate_product_operator(A, B, order, merge)
 
 
 def gate_fix_swap_gate(G0, G1, dirn, f_ordered):

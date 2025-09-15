@@ -48,40 +48,20 @@ def test_fkron(config_kwargs):
             # |1111> = cu+_0 cd+_0 cu+_1 cd+_1 |0000>, i.e.,
             # sites 0 is before 1 in fermionic order
             op = fkron(ops.cp(s), ops.c(s), sites=(0, 1))  # cs+_0 cs_1
-            phi = yastn.ncon([op, psi], [[-0, -1, 1, 2], [1, 2]])
+            phi = yastn.ncon([op, psi], [[-0, 1, -1, 2], [1, 2]])
             assert abs(yastn.vdot(phi, psi) / yastn.vdot(psi, psi) - sgn / 3) < tol
 
             op = fkron(ops.c(s), ops.cp(s), sites=(1, 0))  # cs_1 cs+_0
-            phi = yastn.ncon([op, psi], [[-0, -1, 1, 2], [1, 2]])
+            phi = yastn.ncon([op, psi], [[-0, 1, -1, 2], [1, 2]])
             assert abs(yastn.vdot(phi, psi) / yastn.vdot(psi, psi) + sgn / 3) < tol
 
             op = fkron(ops.c(s), ops.cp(s), sites=(0, 1))  # cs_0 cs+_1
-            phi = yastn.ncon([op, psi], [[-0, -1, 1, 2], [1, 2]])
+            phi = yastn.ncon([op, psi], [[-0, 1, -1, 2], [1, 2]])
             assert abs(yastn.vdot(phi, psi) / yastn.vdot(psi, psi) + sgn / 3) < tol
 
             op = fkron(ops.cp(s), ops.c(s), sites=(1, 0))  # cs+_1 cs_0
-            phi = yastn.ncon([op, psi], [[-0, -1, 1, 2], [1, 2]])
+            phi = yastn.ncon([op, psi], [[-0, 1, -1, 2], [1, 2]])
             assert abs(yastn.vdot(phi, psi) / yastn.vdot(psi, psi) - sgn / 3) < tol
-
-            # now we test reversed fermionic order between sites,
-            # effectively, this means |1111> = cu+_1 cd+_1 cu+_0 cd+_0 |0000>
-            # vector representation of psi is the same as above, i.e., it has positive amplitudes.
-
-            op = gate_product_operator(ops.cp(s), ops.c(s), l_ordered=True, f_ordered=False, merge=True)  # cs+_0 cs_1
-            phi = yastn.ncon([op, psi], [[-0, -1, 1, 2], [1, 2]])
-            assert abs(yastn.vdot(phi, psi) / yastn.vdot(psi, psi) - 1 / 3) < tol
-
-            op = gate_product_operator(ops.c(s), ops.cp(s), l_ordered=False, f_ordered=True, merge=True)  # cs_1 cs+_0
-            phi = yastn.ncon([op, psi], [[-0, -1, 1, 2], [1, 2]])
-            assert abs(yastn.vdot(phi, psi) / yastn.vdot(psi, psi) + 1 / 3) < tol
-
-            op = gate_product_operator(ops.c(s), ops.cp(s), l_ordered=True, f_ordered=False, merge=True)  # cs_0 cs+_1
-            phi = yastn.ncon([op, psi], [[-0, -1, 1, 2], [1, 2]])
-            assert abs(yastn.vdot(phi, psi) / yastn.vdot(psi, psi) + 1 / 3) < tol
-
-            op = gate_product_operator(ops.cp(s), ops.c(s), l_ordered=False, f_ordered=True, merge=True)  # cs+_1 cs_0
-            phi = yastn.ncon([op, psi], [[-0, -1, 1, 2], [1, 2]])
-            assert abs(yastn.vdot(phi, psi) / yastn.vdot(psi, psi) - 1 / 3) < tol
 
 
 def test_hopping_gate(config_kwargs):
@@ -107,10 +87,10 @@ def check_hopping_gate(ops, t, ds):
     # hopping Hamiltonian
     H = - t * fpeps.gates.fkron(cdag, c, sites=(0, 1), merge=True) \
         - t * fpeps.gates.fkron(cdag, c, sites=(1, 0), merge=True)
-    H = H.fuse_legs(axes=((0, 1), (2, 3)))
+    H = H.fuse_legs(axes=((0, 2), (1, 3)))
 
-    II = yastn.ncon([I, I], [(-0, -2) , (-1, -3)])
-    II = II.fuse_legs(axes=((0, 1), (2, 3)))
+    II = yastn.ncon([I, I], [(-0, -1), (-2, -3)])
+    II = II.fuse_legs(axes=((0, 2), (1, 3)))
 
     # Hamiltonian exponent from Taylor expansion
     O2 = II + (-ds) * H + (ds ** 2 / 2) * H @ H \
