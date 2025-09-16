@@ -1122,8 +1122,7 @@ class EnvCTM(Peps):
         method: str
             '2site', '1site'. The default is '2site'.
 
-                * '2site' uses the standard 4x4 enlarged corners, enabling enlargement of EnvCTM bond dimensions.
-                When some PEPS bonds are rank-1, it recognizes it to use 5x4 corners to prevent artificial collapse of EnvCTM bond dimensions to 1, which is important for hexagonal lattice.
+                * '2site' uses the standard 4x4 enlarged corners, enabling enlargement of EnvCTM bond dimensions. When some PEPS bonds are rank-1, it recognizes it to use 5x4 corners to prevent artificial collapse of EnvCTM bond dimensions to 1, which is important for hexagonal lattice.
                 * '1site' uses smaller 4x2 corners. It is significantly faster, but is less stable and  does not allow for EnvCTM bond dimension growth.
 
         max_sweeps: int

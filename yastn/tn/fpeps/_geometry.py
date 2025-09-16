@@ -14,8 +14,7 @@
 # ==============================================================================
 """ Basic structures forming PEPS network. """
 from __future__ import annotations
-from typing import Sequence
-from typing import NamedTuple
+from typing import NamedTuple, Sequence
 from ... import YastnError
 
 
@@ -23,11 +22,13 @@ class Site(NamedTuple):
     """
     Site coordinates `(nx, ny)` are consistent with matrix indexing with `(row, column)`::
 
-         -- y(cols) -->
-        |
+        ┌───── y(cols) ──────ᐳ
+        │
         x(rows)  (0,0) (0,1) ...
-        |        (1,0) (1,1) ...
-        V        ...
+        │        (1,0) (1,1) ...
+        │         ...
+        ᐯ
+
     """
     nx : int = 0
     ny : int = 0
@@ -65,19 +66,17 @@ class SquareLattice():
 
         boundary: str
             Type of boundary conditions:
+                * 'infinite' (the default) for an infinite lattice,
+                * 'obc' for a finite lattice, or
+                * 'cylinder' for a finite cylinder periodic along rows, i.e.::
 
-                - 'infinite' (the default) for an infinite lattice,
-                - 'obc' for a finite lattice, or
-                - 'cylinder' for a finite cylinder periodic along rows, i.e.
-                    ::
-
-                            - - y(cols) -->
-                            |
-                            x(rows) (0,0) (0,1) ... (0,Ny-1)
-                            |       (1,0) (1,1) ... (1,Ny-1)
-                            V        ...
-                                    (Nx-1,0) ...     (Nx-1,Ny-1)
-                                    (0,0)   ...     (0,Ny-1)
+                    ┌───── y(cols) ──────ᐳ
+                    │
+                    │        (0, 0) (0, 1) ... (0, Ny-1)
+                    x(rows)  (1, 0) (1, 1) ... (1, Ny-1)
+                    │         ...
+                    │        (Nx-1, 0)   ...   (Nx-1, Ny-1)
+                    ᐯ        (0, 0)      ...   (0, Ny-1)
 
         """
         if boundary not in ('obc', 'infinite', 'cylinder'):
