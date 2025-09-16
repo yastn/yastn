@@ -21,7 +21,7 @@ from ....operators import sign_canonical_order
 from ... import mps
 from ...mps import MpsMpoOBC
 from .._peps import Peps, Peps2Layers
-from .._gates_auxiliary import gate_product_operator, gate_fix_swap_gate
+from .._gates_auxiliary import fkron, gate_fix_swap_gate
 from .._geometry import Site
 from .._evolution import BondMetric
 from ._env_auxlliary import *
@@ -543,7 +543,7 @@ class EnvCTM(Peps):
                 return {bond: self.measure_nn(O, P, bond) for bond in self.bonds()}
 
         if O.ndim == 2 and P.ndim == 2:
-            O, P = gate_product_operator(O, P)
+            O, P = fkron(O, P, sites=(0, 1), merge=False)
 
         dirn = self.nn_bond_dirn(*bond)
         if O.ndim == 3 and P.ndim == 3:

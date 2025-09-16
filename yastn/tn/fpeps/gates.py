@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+from typing import Sequence
 import numpy as np
 from ... import exp, ncon, eigh
 from ._gates_auxiliary import fkron, Gate
@@ -35,51 +36,17 @@ def Gate_nn(G0, G1, bond):
     return Gate(G=(G0, G1), sites=bond)
 
 
-def Gate_nnn(G0, G1, G2, site0, site1, site2):
-    """
-    Legacy function, generating :class:`Gate` instance.
-
-    ``G0``, ``G1`` and ``G2`` should be ordered in the fermionic and lattice orders.
-    ``s0``, ``s1`` and ``s2`` correspond to the sites of ``G0``, ``G1`` and ``G2``, respectively.
-    """
-    return Gate(G=(G0, G1, G2), sites=(site0, site1, site2))
-
-
-def Gates(local=(), nn=(), nnn=()):
-    r"""
-    Legacy function, generating list of gates for :meth:`fpeps.evolution_step_`.
-
-    local : list = ()   # list of local gates
-    nn : list = ()   # list of NN gates
-    nnn: list = ()   # list of NNN gates
-    """
-    gates = []
-    try:
-        gates.extend(local)
-    except TypeError:
-        gates.append(local)
-    try:
-        gates.extend(nn)
-    except TypeError:
-        gates.append(nn)
-    try:
-        gates.extend(nnn)
-    except TypeError:
-        gates.append(nnn)
-    return gates
-
-
-def decompose_nn_gate(Gnn, bond=None) -> Gate_nn:
+def decompose_nn_gate(Gnn, bond=None) -> Gate:
     r"""
     Auxiliary function cutting a two-site gate with SVD
     into two local operators with the connecting legs.
     """
     U, S, V = Gnn.svd_with_truncation(axes=((0, 1), (2, 3)), sU=-1, tol=1e-14, Vaxis=2)
     S = S.sqrt()
-    return Gate_nn(S.broadcast(U, axes=2), S.broadcast(V, axes=2), bond=bond)
+    return Gate_nn(S.broadcast(U, axes=2), S.broadcast(V, axes=2), bond)
 
 
-def gate_nn_hopping(t, step, I, c, cdag, bond=None) -> Gate_nn:
+def gate_nn_hopping(t, step, I, c, cdag, bond=None) -> Gate:
     r"""
     Nearest-neighbor gate :math:`G = \exp(-step \cdot H)` for
     :math:`H = -t \cdot (cdag_1 c_2 + cdag_2 c_1)`
@@ -100,7 +67,7 @@ def gate_nn_hopping(t, step, I, c, cdag, bond=None) -> Gate_nn:
     return decompose_nn_gate(G, bond)
 
 
-def gate_nn_Ising(J, step, I, X, bond=None) -> Gate_nn:
+def gate_nn_Ising(J, step, I, X, bond=None) -> Gate:
     r"""
     Nearest-neighbor gate :math:`G = \exp(-step \cdot H)` for
     :math:`H = J X_1 X_2`,
@@ -116,7 +83,7 @@ def gate_nn_Ising(J, step, I, X, bond=None) -> Gate_nn:
     return decompose_nn_gate(G, bond)
 
 
-def gate_nn_tJ(J, tu, td, muu0, muu1, mud0, mud1, step, I, cu, cpu, cd, cpd, bond=None) -> Gate_nn:
+def gate_nn_tJ(J, tu, td, muu0, muu1, mud0, mud1, step, I, cu, cpu, cd, cpd, bond=None) -> Gate:
     r"""
     Nearest-neighbor gate :math:`G = \exp(-step \cdot H_{tj})`
     """
@@ -147,7 +114,7 @@ def gate_nn_tJ(J, tu, td, muu0, muu1, mud0, mud1, step, I, cu, cpu, cd, cpd, bon
     return decompose_nn_gate(G, bond)
 
 
-def gate_local_Coulomb(mu_up, mu_dn, U, step, I, n_up, n_dn, site=None) -> Gate_local:
+def gate_local_Coulomb(mu_up, mu_dn, U, step, I, n_up, n_dn, site=None) -> Gate:
     r"""
     Local gate :math:`\exp(-step \cdot H)` for
     :math:`H = U \cdot (n_{up} - I / 2) \cdot (n_{dn} - I / 2) - mu_{up} \cdot n_{up} - mu_{dn} \cdot n_{dn}`
@@ -162,7 +129,7 @@ def gate_local_Coulomb(mu_up, mu_dn, U, step, I, n_up, n_dn, site=None) -> Gate_
     return Gate_local(G_loc, site)
 
 
-def gate_local_occupation(mu, step, I, n, site=None) -> Gate_local:
+def gate_local_occupation(mu, step, I, n, site=None) -> Gate:
     r"""
     Local gate :math:`G = \exp(-step \cdot H)` for
     :math:`H = -mu \cdot n`
@@ -173,7 +140,7 @@ def gate_local_occupation(mu, step, I, n, site=None) -> Gate_local:
     return Gate_local(G_loc, site)
 
 
-def gate_local_field(h, step, I, X, site=None) -> Gate_local:
+def gate_local_field(h, step, I, X, site=None) -> Gate:
     r"""
     Local gate :math:`G = \exp(-step \cdot H)` for
     :math:`H = -h \cdot X`
@@ -185,7 +152,7 @@ def gate_local_field(h, step, I, X, site=None) -> Gate_local:
     return Gate_local(G_loc, site)
 
 
-def distribute(geometry, gates_nn=None, gates_local=None, symmetrize=True) -> Gates:
+def distribute(geometry, gates_nn=None, gates_local=None, symmetrize=True) -> Sequence[Gate]:
     r"""
     Distributes gates homogeneous over the lattice.
 
@@ -195,10 +162,10 @@ def distribute(geometry, gates_nn=None, gates_local=None, symmetrize=True) -> Ga
         Geometry of PEPS lattice.
         Can be any structure that includes geometric information about the lattice, like the Peps class.
 
-    gates_nn : Gate_nn | Sequence[Gate_nn]
+    gates_nn : Gate | Sequence[Gate]
         Nearest-neighbor gate, or a list of gates, to be distributed over all unique lattice bonds.
 
-    gates_local : Gate_local | Sequence[Gate_local]
+    gates_local : Gate | Sequence[Gate]
         Local gate, or a list of local gates, to be distributed over all unique lattice sites.
 
     symmetrize: bool
@@ -221,7 +188,7 @@ def distribute(geometry, gates_nn=None, gates_local=None, symmetrize=True) -> Ga
             for Gloc in gates_local:
                 local.append(Gloc._replace(sites=(site,)))
 
-    gates = Gates(nn=nn, local=local)
+    gates = nn + local
     if symmetrize:
         gates = gates + gates[::-1]
     return gates
