@@ -106,11 +106,11 @@ def gate_nn_tJ(J, tu, td, muu0, muu1, mud0, mud1, step, I, cu, cpu, cd, cpd, bon
     H = H - mud0 * fkron(cpd @ cd, I, sites=(0, 1))
     H = H - mud1 * fkron(I, cpd @ cd, sites=(0, 1))
 
-    H = H.fuse_legs(axes = ((0, 1), (2, 3)))
+    H = H.fuse_legs(axes = ((0, 2), (1, 3)))
     D, S = eigh(H, axes = (0, 1))
     D = exp(D, step=-step)
     G = ncon((S, D, S), ([-1, 1], [1, 2], [-3, 2]), conjs=(0, 0, 1))
-    G = G.unfuse_legs(axes=(0, 1))
+    G = G.unfuse_legs(axes=(0, 1)).transpose(axes=(0, 2, 1, 3))
     return decompose_nn_gate(G, bond)
 
 
