@@ -167,9 +167,12 @@ class EnvCTM(Peps):
         for site in self.sites():
             for dirn in ["tl", "tr", "bl", "br", "t", "l", "b", "r"]:
                 try:
-                    getattr(self[site], dirn)._data.detach_()
-                except RuntimeError:
-                    setattr(self[site], dirn, getattr(self[site], dirn).detach())
+                    try:
+                        getattr(self[site], dirn)._data.detach_()
+                    except RuntimeError:
+                        setattr(self[site], dirn, getattr(self[site], dirn).detach())
+                except AttributeError:
+                    pass
 
     def shallow_copy(self) -> EnvCTM:
         env = EnvCTM(self.psi, init=None)

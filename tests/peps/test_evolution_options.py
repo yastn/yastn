@@ -27,9 +27,10 @@ def test_evolution(config_kwargs):
     #
     ops = yastn.operators.SpinlessFermions(sym='U1', **config_kwargs)
     I = ops.I()
-    t, dbeta = 1.0, 0.1
+    t, mu, dbeta = 1.0, 0.2, 0.1
     g_hop = fpeps.gates.gate_nn_hopping(t, dbeta / 2, I, ops.c(), ops.cp())
-    gates = fpeps.gates.distribute(geometry, gates_nn=g_hop)
+    g_loc = fpeps.gates.gate_local_occupation(mu, dbeta / 2, I, ops.n())
+    gates = fpeps.gates.distribute(geometry, gates_nn=g_hop, gates_local=g_loc)
     #
     # time-evolve initial state
     #
@@ -111,7 +112,6 @@ def test_evolution(config_kwargs):
         bd1 = psi.get_bond_dimensions()
         for k, v in bd1.items():
             assert v == min(3, bd0[k])
-
 
 
 if __name__ == '__main__':

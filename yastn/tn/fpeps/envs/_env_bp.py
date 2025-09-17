@@ -89,7 +89,7 @@ class EnvBP(Peps):
     def config(self):
         return self.psi.config
 
-    def copy(self):
+    def copy(self) -> EnvBP:
         psi = self.psi
         if isinstance(psi, Peps2Layers):
             psi = psi.ket
@@ -97,6 +97,26 @@ class EnvBP(Peps):
         for site in env.sites():
             for dirn in ['t', 'l', 'b', 'r']:
                 setattr(env[site], dirn, getattr(self[site], dirn).copy())
+        return env
+
+    def clone(self) -> EnvBP:
+        psi = self.psi
+        if isinstance(psi, Peps2Layers):
+            psi = psi.ket
+        env = EnvBP(psi, init=None)
+        for site in env.sites():
+            for dirn in ['t', 'l', 'b', 'r']:
+                setattr(env[site], dirn, getattr(self[site], dirn).clone())
+        return env
+
+    def shallow_copy(self) -> EnvBP:
+        psi = self.psi
+        if isinstance(psi, Peps2Layers):
+            psi = psi.ket
+        env = EnvBP(self.psi, init=None)
+        for site in env.sites():
+            for dirn in ['t', 'l', 'b', 'r']:
+                setattr(env[site], dirn, getattr(self[site], dirn))
         return env
 
     def save_to_dict(self) -> dict:

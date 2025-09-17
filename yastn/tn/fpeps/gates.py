@@ -49,9 +49,9 @@ def decompose_nn_gate(Gnn, bond=None) -> Gate:
 def gate_nn_hopping(t, step, I, c, cdag, bond=None) -> Gate:
     r"""
     Nearest-neighbor gate :math:`G = \exp(-step \cdot H)` for
-    :math:`H = -t \cdot (cdag_1 c_2 + cdag_2 c_1)`
+    :math:`H = -t \cdot (c^\dagger_1 c_2 + c^\dagger_2 c_1)`
 
-    :math:`G = I + (\cosh(x) - 1) (n_1 h_2 + h_1 n_2) + \sinh(x) (cdag_1 c_2 + cdag_2 c_1)`,
+    :math:`G = I + (\cosh(x) - 1) (n_1 h_2 + h_1 n_2) + \sinh(x) (c^\dagger_1 c_2 + c^\dagger_2 c_1)`,
     where :math:`x = t \cdot step`
     """
     n = cdag @ c
@@ -85,7 +85,8 @@ def gate_nn_Ising(J, step, I, X, bond=None) -> Gate:
 
 def gate_nn_tJ(J, tu, td, muu0, muu1, mud0, mud1, step, I, cu, cpu, cd, cpd, bond=None) -> Gate:
     r"""
-    Nearest-neighbor gate :math:`G = \exp(-step \cdot H_{tj})`
+    Nearest-neighbor gate :math:`G = \exp(-step \cdot H)` for
+    :math:`H = -t \sum_{\sigma} (c_{0,\sigma}^\dagger c_{1,\sigma} + c_{1,\sigma}^\dagger c_{0,\sigma}) + J (S_i \cdot S_j - \frac{n_i n_j}{4}) - \sum_{i, \sigma} \mu_{i,\sigma} n_{i,\sigma}`
     """
     nu = cpu @ cu
     nd = cpd @ cd
@@ -117,7 +118,7 @@ def gate_nn_tJ(J, tu, td, muu0, muu1, mud0, mud1, step, I, cu, cpu, cd, cpd, bon
 def gate_local_Coulomb(mu_up, mu_dn, U, step, I, n_up, n_dn, site=None) -> Gate:
     r"""
     Local gate :math:`\exp(-step \cdot H)` for
-    :math:`H = U \cdot (n_{up} - I / 2) \cdot (n_{dn} - I / 2) - mu_{up} \cdot n_{up} - mu_{dn} \cdot n_{dn}`
+    :math:`H = U \cdot (n_{up} - I / 2) \cdot (n_{dn} - I / 2) - \mu_{up} \cdot n_{up} - \mu_{dn} \cdot n_{dn}`
 
     We ignore a constant :math:`U / 4` in the above Hamiltonian.
     """
@@ -132,9 +133,9 @@ def gate_local_Coulomb(mu_up, mu_dn, U, step, I, n_up, n_dn, site=None) -> Gate:
 def gate_local_occupation(mu, step, I, n, site=None) -> Gate:
     r"""
     Local gate :math:`G = \exp(-step \cdot H)` for
-    :math:`H = -mu \cdot n`
+    :math:`H = -\mu \cdot n`
 
-    :math:`G = I + n \cdot (\exp(mu \cdot step) - 1)`
+    :math:`G = I + n \cdot (\exp(\mu \cdot step) - 1)`
     """
     G_loc = I + n * (np.exp(mu * step) - 1)
     return Gate_local(G_loc, site)

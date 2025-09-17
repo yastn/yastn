@@ -132,7 +132,7 @@ def fkron(A, B, sites=(0, 1), merge=True):
     """
 
     if sites not in ((0, 1), (1, 0)):
-        raise YastnError("sites should be equal to (0, 1) or (1, 0)")
+        raise YastnError("Sites should be equal to (0, 1) or (1, 0).")
     ordered = (sites == (0, 1))
 
     s = -1 if ordered else 1
@@ -149,7 +149,6 @@ def fkron(A, B, sites=(0, 1), merge=True):
     if merge:
         return tensordot(G0, G1, axes=(2, 2))
     return G0, G1
-
 
 
 def gate_fix_swap_gate(G0, G1, dirn, f_ordered):
