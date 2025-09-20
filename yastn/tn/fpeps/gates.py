@@ -46,6 +46,21 @@ def decompose_nn_gate(Gnn, bond=None) -> Gate:
     return Gate_nn(S.broadcast(U, axes=2), S.broadcast(V, axes=2), bond)
 
 
+def exponent_nn_gate(step, I, H):
+    r"""
+    exp(-step * H) consistent with leg order of decompose_nn_gate.
+    Add 0 * I to the Hamiltonian to avoid situation,
+    where some blocks are missing during exponentiation
+    """
+    H = H + 0 * fkron(I, I)
+    H = H.fuse_legs(axes = ((0, 2), (1, 3)))
+    D, S = eigh(H, axes = (0, 1))
+    D = exp(D, step=-step)
+    G = ncon((S, D, S), ([-1, 1], [1, 2], [-3, 2]), conjs=(0, 0, 1))
+    G = G.unfuse_legs(axes=(0, 1)).transpose(axes=(0, 2, 1, 3))
+    return G
+
+
 def gate_nn_hopping(t, step, I, c, cdag, bond=None) -> Gate:
     r"""
     Nearest-neighbor gate :math:`G = \exp(-step \cdot H)` for
@@ -83,6 +98,19 @@ def gate_nn_Ising(J, step, I, X, bond=None) -> Gate:
     return decompose_nn_gate(G, bond)
 
 
+def gate_nn_Heisenberg(J, step, I, Sz, Sp, Sm, bond=None) -> Gate:
+    r"""
+    Nearest-neighbor gate :math:`G = \exp(-step \cdot H)` for
+    :math:`H = J (S_z S_z + 2 * S_+ S_- + 2 * S_- S_+)`,
+    for spin operators :math:`S_z, S_+, S_-`.
+    """
+    H = 0.5 * J * fkron(Sp, Sm) \
+      + 0.5 * J * fkron(Sm, Sp) \
+      + J * fkron(Sz, Sz)
+
+    G = exponent_nn_gate(step, I, H)
+    return decompose_nn_gate(G, bond)
+
 def gate_nn_tJ(J, tu, td, muu0, muu1, mud0, mud1, step, I, cu, cpu, cd, cpd, bond=None) -> Gate:
     r"""
     Nearest-neighbor gate :math:`G = \exp(-step \cdot H)` for
@@ -93,25 +121,20 @@ def gate_nn_tJ(J, tu, td, muu0, muu1, mud0, mud1, step, I, cu, cpu, cd, cpd, bon
     Sp = cpu @ cd
     Sm = cpd @ cu
 
-    H = 0 * fkron(I, I, sites=(0, 1))
-    H = H + 0.5 * J * fkron(Sp, Sm, sites=(0, 1))
-    H = H + 0.5 * J * fkron(Sm, Sp, sites=(0, 1))
-    H = H - 0.5 * J * fkron(nu, nd, sites=(0, 1))
-    H = H - 0.5 * J * fkron(nd, nu, sites=(0, 1))
-    H = H - tu * fkron(cpu, cu, sites=(0, 1))
-    H = H - tu * fkron(cpu, cu, sites=(1, 0))
-    H = H - td * fkron(cpd, cd, sites=(0, 1))
-    H = H - td * fkron(cpd, cd, sites=(1, 0))
-    H = H - muu0 * fkron(cpu @ cu, I, sites=(0, 1))
-    H = H - muu1 * fkron(I, cpu @ cu, sites=(0, 1))
-    H = H - mud0 * fkron(cpd @ cd, I, sites=(0, 1))
-    H = H - mud1 * fkron(I, cpd @ cd, sites=(0, 1))
+    H = 0.5 * J * fkron(Sp, Sm, sites=(0, 1)) \
+      + 0.5 * J * fkron(Sm, Sp, sites=(0, 1)) \
+      - 0.5 * J * fkron(nu, nd, sites=(0, 1)) \
+      - 0.5 * J * fkron(nd, nu, sites=(0, 1)) \
+      - tu * fkron(cpu, cu, sites=(0, 1)) \
+      - tu * fkron(cpu, cu, sites=(1, 0)) \
+      - td * fkron(cpd, cd, sites=(0, 1)) \
+      - td * fkron(cpd, cd, sites=(1, 0)) \
+      - muu0 * fkron(cpu @ cu, I, sites=(0, 1)) \
+      - muu1 * fkron(I, cpu @ cu, sites=(0, 1)) \
+      - mud0 * fkron(cpd @ cd, I, sites=(0, 1)) \
+      - mud1 * fkron(I, cpd @ cd, sites=(0, 1)) \
 
-    H = H.fuse_legs(axes = ((0, 2), (1, 3)))
-    D, S = eigh(H, axes = (0, 1))
-    D = exp(D, step=-step)
-    G = ncon((S, D, S), ([-1, 1], [1, 2], [-3, 2]), conjs=(0, 0, 1))
-    G = G.unfuse_legs(axes=(0, 1)).transpose(axes=(0, 2, 1, 3))
+    G = exponent_nn_gate(step, I, H)
     return decompose_nn_gate(G, bond)
 
 

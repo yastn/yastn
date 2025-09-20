@@ -58,6 +58,7 @@ Some predefined gates can be found in :code:`yastn.tn.fpeps.gates`, including
 
 .. autofunction:: yastn.tn.fpeps.gates.gate_nn_hopping
 .. autofunction:: yastn.tn.fpeps.gates.gate_nn_Ising
+.. autofunction:: yastn.tn.fpeps.gates.gate_nn_Heisenberg
 .. autofunction:: yastn.tn.fpeps.gates.gate_local_Coulomb
 .. autofunction:: yastn.tn.fpeps.gates.gate_local_occupation
 .. autofunction:: yastn.tn.fpeps.gates.gate_local_field

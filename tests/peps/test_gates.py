@@ -150,6 +150,24 @@ def test_Ising_gate(config_kwargs):
     check_Ising_gate(ops, J=-2, ds=0.05)
 
 
+def test_Heisenberg_gate(config_kwargs):
+    """ test fpeps.gates.gate_nn_Heisenberg. """
+    def check_Heisenberg_gate(ops, J, ds):
+        I, sp, sm = ops.I(), ops.sp(), ops.sm()
+        sx, sy, sz = ops.sx(), ops.sy(), ops.sz()
+        gate = fpeps.gates.gate_nn_Heisenberg(J, ds, I, sz, sp, sm)
+        H = J * fpeps.gates.fkron(sx, sx, sites=(0, 1)) \
+          + J * fpeps.gates.fkron(sy, sy, sites=(0, 1)) \
+          + J * fpeps.gates.fkron(sz, sz, sites=(0, 1))
+
+        check_2site_gate_taylor(gate, I, H, ds, ds * J)
+
+    ops = yastn.operators.Spin12(sym='Z2', **config_kwargs)
+    check_Heisenberg_gate(ops, J=1, ds=0.02)
+    ops = yastn.operators.Spin12(sym='dense', **config_kwargs)
+    check_Heisenberg_gate(ops, J=-2, ds=0.05)
+
+
 def test_occupation_gate(config_kwargs):
     """ test fpeps.gates.gate_local_occupation. """
     def check_occupation_gate(ops, mu, ds):
