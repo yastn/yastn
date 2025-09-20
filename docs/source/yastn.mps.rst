@@ -3,7 +3,7 @@ MPS
 ###
 
 Abelian-symmetric matrix product states/operators and related algorithms.
-Abelian-symmetric tensor algebra is provided by :doc:`YASTN<index>`.
+Abelian-symmetric tensor algebra is provided by :doc:`yastn.tensor`.
 
 .. automodule:: yastn.tn.mps
    :members:

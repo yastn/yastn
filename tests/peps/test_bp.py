@@ -35,7 +35,7 @@ def test_iterate_measure_product(config_kwargs):
     env = fpeps.EnvBP(psi, init='eye')
     info = env.iterate_(max_sweeps=5, diff_tol=1e-10)
     assert info.converged
-    run_save_load(env)
+    run_bp_save_load_copy(env)
     #
     #  measure_1site
     #
@@ -50,21 +50,35 @@ def test_iterate_measure_product(config_kwargs):
     assert all(all(x == vals[k] for x in v) for k, v in out.items())
 
 
-def run_save_load(env):
+def run_bp_save_load_copy(env):
     # test save, load
 
     config = env.psi.config
     d = env.save_to_dict()
 
     env_save = fpeps.load_from_dict(config, d)
+    env_copy = env.copy()
+    env_clone = env.clone()
+    env_shallow = env.shallow_copy()
 
     for site in env.sites():
         for dirn in  ['t', 'l', 'b', 'r']:
             ten0 = getattr(env[site], dirn)
             ten1 = getattr(env_save[site], dirn)
+            ten2 = getattr(env_copy[site], dirn)
+            ten3 = getattr(env_clone[site], dirn)
+            ten4 = getattr(env_shallow[site], dirn)
 
             assert yastn.are_independent(ten0, ten1)
+            assert yastn.are_independent(ten0, ten2)
+            assert yastn.are_independent(ten0, ten3)
+            assert ten0 is ten4
+
             assert (ten0 - ten1).norm() < 1e-14
+            assert (ten0 - ten2).norm() < 1e-14
+            assert (ten0 - ten3).norm() < 1e-14
+            assert (ten0 - ten4).norm() < 1e-14
+
 
 
 def test_iterate_measure_2x1(config_kwargs):

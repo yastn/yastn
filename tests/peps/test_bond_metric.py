@@ -32,7 +32,7 @@ def test_spinless_infinite_approx(config_kwargs):
     gates = fpeps.gates.distribute(geometry, gates_nn=g_hop)
 
     psi = fpeps.product_peps(geometry, I) # initialized at infinite temperature
-    env = fpeps.EnvNTU(psi, which='NN')
+    env = fpeps.EnvBP(psi, which='BP')
 
     opts_svd = {"D_total": D , 'tol_block': 1e-15}
     steps = round((beta / 2) / dbeta)
@@ -44,30 +44,41 @@ def test_spinless_infinite_approx(config_kwargs):
 
     opts_svd = {"D_total": 2 * D, 'tol_block': 1e-15}
 
-    envs = {}
-    for k in ['NN', 'NN+', 'NN++', 'NNN', 'NNN+', 'NNN++']:
-        envs[k] = fpeps.EnvNTU(psi, which=k)
+    env_NTU = fpeps.EnvNTU(psi, which='NN')
 
-    for k in ['43', '43+', '65', '65+', '87', '87+']:
-        envs[k] = fpeps.EnvApproximate(psi,
-                                       which=k,
-                                       opts_svd=opts_svd,
-                                       update_sweeps=1)
+    env_MPS = fpeps.EnvApproximate(psi,
+                                   which='43+',
+                                   opts_svd=opts_svd,
+                                   update_sweeps=1)
 
-    envs['FU'] = fpeps.EnvCTM(psi, init='eye')
-    info = envs['FU'].ctmrg_(opts_svd=opts_svd, max_sweeps=20, corner_tol=1e-8)
+    env_CTM = fpeps.EnvCTM(psi, init='eye')
+    info = env_CTM.iterate_(opts_svd=opts_svd, max_sweeps=20, corner_tol=1e-8)
     print(info)
 
-    envs['NN+BP'] = fpeps.EnvBP(psi, which='NN+BP')
-    info = envs['NN+BP'].iterate_(max_sweeps=10, diff_tol=1e-10)
+    env_BP = fpeps.EnvBP(psi, which='NN+BP')
+    info = env_BP.iterate_(max_sweeps=10, diff_tol=1e-10)
     print(info)
-    #
-    envs['NNN+BP'] = fpeps.EnvBP(psi, which='NNN+BP')
-    info = envs['NNN+BP'].iterate_(max_sweeps=10, diff_tol=1e-10)
     #
     for s0, s1, dirn in [[(0, 0), (0, 1), 'h'], [(0, 1), (1, 1), 'v']]:
         QA, QB = psi[s0], psi[s1]
-        Gs = {k: env.bond_metric(QA, QB, s0, s1, dirn).g for k, env in envs.items()}
+
+        Gs = {'FU': env_CTM.bond_metric(QA, QB, s0, s1, dirn).g}
+
+        for k in ['NN', 'NN+', 'NN++', 'NNN', 'NNN+', 'NNN++']:
+            env_NTU.which = k
+            assert env_NTU.which == k
+            Gs[k] = env_NTU.bond_metric(QA, QB, s0, s1, dirn).g
+
+        for k in ['43', '43+', '65', '65+', '87', '87+']:
+            env_MPS.which = k
+            assert env_MPS.which == k
+            Gs[k] = env_MPS.bond_metric(QA, QB, s0, s1, dirn).g
+
+        for k in ['NN+BP', 'NNN+BP']:
+            env_BP.which = k
+            assert env_BP.which == k
+            Gs[k] = env_BP.bond_metric(QA, QB, s0, s1, dirn).g
+
         Gs = {k: v / v.norm() for k, v in Gs.items()}
 
         assert (Gs['NN'] - Gs['NN+']).norm() < 1e-2
@@ -84,7 +95,6 @@ def test_spinless_infinite_approx(config_kwargs):
         assert (Gs['NN+BP'] - Gs['FU']).norm() < 1e-3
         assert (Gs['NN+BP'] - Gs['NN+']).norm() < 1e-2
         assert (Gs['NNN+BP'] - Gs['NNN+']).norm() < 1e-3
-
 
     with pytest.raises(yastn.YastnError):
         fpeps.EnvNTU(psi, which="some")

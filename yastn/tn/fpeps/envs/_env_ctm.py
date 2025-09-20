@@ -21,7 +21,7 @@ from ....operators import sign_canonical_order
 from ... import mps
 from ...mps import MpsMpoOBC
 from .._peps import Peps, Peps2Layers
-from .._gates_auxiliary import gate_product_operator, gate_fix_swap_gate
+from .._gates_auxiliary import fkron, gate_fix_swap_gate
 from .._geometry import Site
 from .._evolution import BondMetric
 from ._env_auxlliary import *
@@ -167,9 +167,12 @@ class EnvCTM(Peps):
         for site in self.sites():
             for dirn in ["tl", "tr", "bl", "br", "t", "l", "b", "r"]:
                 try:
-                    getattr(self[site], dirn)._data.detach_()
-                except RuntimeError:
-                    setattr(self[site], dirn, getattr(self[site], dirn).detach())
+                    try:
+                        getattr(self[site], dirn)._data.detach_()
+                    except RuntimeError:
+                        setattr(self[site], dirn, getattr(self[site], dirn).detach())
+                except AttributeError:
+                    pass
 
     def shallow_copy(self) -> EnvCTM:
         env = EnvCTM(self.psi, init=None)
@@ -543,7 +546,7 @@ class EnvCTM(Peps):
                 return {bond: self.measure_nn(O, P, bond) for bond in self.bonds()}
 
         if O.ndim == 2 and P.ndim == 2:
-            O, P = gate_product_operator(O, P)
+            O, P = fkron(O, P, sites=(0, 1), merge=False)
 
         dirn = self.nn_bond_dirn(*bond)
         if O.ndim == 3 and P.ndim == 3:
@@ -1122,8 +1125,7 @@ class EnvCTM(Peps):
         method: str
             '2site', '1site'. The default is '2site'.
 
-                * '2site' uses the standard 4x4 enlarged corners, enabling enlargement of EnvCTM bond dimensions.
-                When some PEPS bonds are rank-1, it recognizes it to use 5x4 corners to prevent artificial collapse of EnvCTM bond dimensions to 1, which is important for hexagonal lattice.
+                * '2site' uses the standard 4x4 enlarged corners, enabling enlargement of EnvCTM bond dimensions. When some PEPS bonds are rank-1, it recognizes it to use 5x4 corners to prevent artificial collapse of EnvCTM bond dimensions to 1, which is important for hexagonal lattice.
                 * '1site' uses smaller 4x2 corners. It is significantly faster, but is less stable and  does not allow for EnvCTM bond dimension growth.
 
         max_sweeps: int

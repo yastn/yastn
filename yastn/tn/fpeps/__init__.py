@@ -17,8 +17,8 @@ from ._peps import Peps, Peps2Layers, add
 from ._initialize import product_peps, load_from_dict
 from ._evolution import evolution_step_, truncate_, accumulated_truncation_error
 from ._doublePepsTensor import DoublePepsTensor
-from .gates import Gate_local, Gate_nn
 from ._gates_auxiliary import Gate, fkron
+from .gates import Gate_nn, Gate_local
 from .envs._env_ctm import EnvCTM, EnvCTM_local
 from .envs._env_ctm_c4v import EnvCTM_c4v
 from .envs._env_ntu import EnvNTU

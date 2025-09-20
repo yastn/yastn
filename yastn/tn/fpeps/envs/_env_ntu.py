@@ -33,11 +33,8 @@ class EnvNTU:
         which: str
             Type of bond environment from 'NN', 'NN+', 'NN++', 'NNN', 'NNN+', 'NNN++'
         """
-
-        if which not in ('NN', 'NN+', 'NN++', 'NNN', 'NNN+', 'NNN++'):
-            raise YastnError(f" Type of EnvNTU {which=} not recognized.")
         self.psi = psi
-        self._which = which
+        self._set_which(which)
         self._dict_gs = {'NN': self._g_NN,
                          'NN+': self._g_NNp,
                          'NN++': self._g_NNpp,
@@ -45,6 +42,16 @@ class EnvNTU:
                          'NNN+': self._g_NNNp,
                          'NNN++': self._g_NNNpp
                         }
+
+    def _get_which(self):
+        return self._which
+
+    def _set_which(self, which):
+        if which not in ('NN', 'NN+', 'NN++', 'NNN', 'NNN+', 'NNN++'):
+            raise YastnError(f" Type of EnvNTU {which=} not recognized.")
+        self._which = which
+
+    which = property(fget=_get_which, fset=_set_which)
 
     def pre_truncation_(env, bond):
         pass
@@ -141,7 +148,7 @@ class EnvNTU:
                     (+3 -2)┈(+3 -1)┈(+3 +0)┈┈(+3 +1)┈(+3 +2)┈(+3 +3)
 
         """
-        return self._dict_gs[self._which](Q0, Q1, s0, s1, dirn)
+        return self._dict_gs[self.which](Q0, Q1, s0, s1, dirn)
 
 
     def _g_NN(self, Q0, Q1, s0, s1, dirn):

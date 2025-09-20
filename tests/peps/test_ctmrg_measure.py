@@ -31,6 +31,7 @@ def run_ctm_save_load_copy(env):
     env_copy = env.copy()
     env_clone = env.clone()
     env_shallow = env.shallow_copy()
+    env_detach = env.detach()
 
     for site in env.sites():
         for dirn in  ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
@@ -39,6 +40,7 @@ def run_ctm_save_load_copy(env):
             ten2 = getattr(env_copy[site], dirn)
             ten3 = getattr(env_clone[site], dirn)
             ten4 = getattr(env_shallow[site], dirn)
+            ten5 = getattr(env_detach[site], dirn)
 
             assert yastn.are_independent(ten0, ten1)
             assert yastn.are_independent(ten0, ten2)
@@ -49,6 +51,8 @@ def run_ctm_save_load_copy(env):
             assert (ten0 - ten2).norm() < 1e-14
             assert (ten0 - ten3).norm() < 1e-14
             assert (ten0 - ten4).norm() < 1e-14
+            assert (ten0 - ten5).norm() < 1e-14
+    env.detach_()
 
 
 @pytest.mark.parametrize("boundary", ["obc", "infinite"])
@@ -205,7 +209,6 @@ def test_ctmrg_measure_2x1(config_kwargs, env_init):
                 if dirn in ("lr", "tb"):
                     assert abs(measure_rdm_nn(bond[0], dirn, psi, env,(ops.cp(s), ops.c(s))) - val) < tol
                     assert abs(measure_rdm_nn(bond[0], dirn, psi, env,(ops.c(s), ops.cp(s))) - (-val.conjugate())) < tol
-
 
             # example that is testing auxlliary leg swap-gate in the initialization
             # it has non-trivial charge carried by auxlliary leg
