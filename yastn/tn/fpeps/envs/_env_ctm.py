@@ -990,14 +990,40 @@ class EnvCTM(Peps):
         for site in env.sites():
             proj[site] = EnvCTM_projectors()
 
-        move, m0, m1, d = 'hrlt' if dirn in 'lrl' else 'vbtl'
-        update_projectors_(proj, s0, move, env, opts_svd, **kwargs)
-        update_projectors_(proj, env.nn_site(s0, d=d), move, env, opts_svd, **kwargs)
-        trivial_projectors_(proj, m0, env, sites=[s1])
-        trivial_projectors_(proj, m1, env, sites=[s0])
+        # move, m0, m1, d = 'hrlt' if dirn in 'lrl' else 'vbtl'
         env_tmp = EnvCTM(env.psi, init=None)  # empty environments
-        update_env_(env_tmp, s0, env, proj, move=m0)
-        update_env_(env, s1, env, proj, move=m1)
+        if dirn in 'lrl':
+            update_projectors_(proj, env.nn_site(s0, d='t'), 't', env, opts_svd, **kwargs)
+            update_projectors_(proj, s0, 'b', env, opts_svd, **kwargs)
+
+            trivial_projectors_(proj, 'v', env, sites=[env.nn_site(s0, d='tl')])
+            trivial_projectors_(proj, 'v', env, sites=[env.nn_site(s0, d='t')])
+            trivial_projectors_(proj, 'v', env, sites=[env.nn_site(s0, d='bl')])
+            trivial_projectors_(proj, 'v', env, sites=[env.nn_site(s0, d='b')])
+
+            trivial_projectors_(proj, 'v', env, sites=[env.nn_site(s1, d='t')])
+            trivial_projectors_(proj, 'v', env, sites=[env.nn_site(s1, d='tr')])
+            trivial_projectors_(proj, 'v', env, sites=[env.nn_site(s1, d='b')])
+            trivial_projectors_(proj, 'v', env, sites=[env.nn_site(s1, d='br')])
+
+            update_env_(env_tmp, s0, env, proj, move='v')
+            update_env_(env, s1, env, proj, move='v')
+        else:
+            update_projectors_(proj, env.nn_site(s0, d='l'), 'l', env, opts_svd, **kwargs)
+            update_projectors_(proj, s0, 'r', env, opts_svd, **kwargs)
+
+            trivial_projectors_(proj, 'h', env, sites=[env.nn_site(s0, d='tl')])
+            trivial_projectors_(proj, 'h', env, sites=[env.nn_site(s0, d='l')])
+            trivial_projectors_(proj, 'h', env, sites=[env.nn_site(s0, d='tr')])
+            trivial_projectors_(proj, 'h', env, sites=[env.nn_site(s0, d='r')])
+
+            trivial_projectors_(proj, 'h', env, sites=[env.nn_site(s1, d='l')])
+            trivial_projectors_(proj, 'h', env, sites=[env.nn_site(s1, d='bl')])
+            trivial_projectors_(proj, 'h', env, sites=[env.nn_site(s1, d='r')])
+            trivial_projectors_(proj, 'h', env, sites=[env.nn_site(s1, d='br')])
+
+            update_env_(env_tmp, s0, env, proj, move='h')
+            update_env_(env, s1, env, proj, move='h')
         update_storage_(env, env_tmp)
 
 
