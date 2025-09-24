@@ -14,6 +14,7 @@
 # ==============================================================================
 from __future__ import annotations
 from dataclasses import dataclass
+from itertools import pairwise
 from tqdm import tqdm
 from typing import NamedTuple
 from .... import Tensor, eye, YastnError, tensordot, vdot, ncon
@@ -493,8 +494,11 @@ class EnvBP(Peps):
             g = tensordot(vect, vecb, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
             return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
-    def pre_truncation_(env, bond):
-        env.update_bond_(bond)
+    def pre_truncation_(env, sites):
+        for s0, s1 in pairwise(sites[-1::-1]):
+            env.update_bond_((s0, s1))
+        for s0, s1 in pairwise(sites):
+            env.update_bond_((s0, s1))
 
     def post_truncation_(env, bond, max_sweeps=1):
         env.update_bond_(bond)
