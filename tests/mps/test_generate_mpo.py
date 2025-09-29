@@ -118,10 +118,12 @@ def test_generate_mpo_basic(config_kwargs):
     I2 = mps.generate_mpo([ops.I(), ops.I()], N=4)  # no terms provided; identity as a list
     I3 = mps.generate_mpo([ops.I(), ops.I(), ops.I(), ops.I()], terms=[])  # empty terms; identity as a list; N not provided
     I4 = mps.generate_mpo(ops.I(), terms=[mps.Hterm(amplitude=4)], N=4)  # single term with no operators
+    I5 = mps.generate_mpo([ops.I(), ops.I(), ops.I(), ops.I()], terms=[mps.Hterm(amplitude=4)])  # single term with no operators
 
     assert (I1 - I2).norm() < 1e-12
     assert (I1 - I3).norm() < 1e-12
     assert (4 * I1 - I4).norm() < 1e-12
+    assert (4 * I1 - I5).norm() < 1e-12
 
     # local operators and state for testing
     c, cp, n = ops.c(), ops.cp(), ops.n()

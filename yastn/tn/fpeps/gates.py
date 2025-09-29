@@ -38,27 +38,41 @@ def Gate_nn(G0, G1, bond):
 
 def decompose_nn_gate(Gnn, bond=None) -> Gate:
     r"""
-    Auxiliary function cutting a two-site gate with SVD
-    into two local operators with the connecting legs.
+    Auxiliary function to generate Gate by cutting a two-site operator,
+    using SVD, into two local operators with the connecting legs.
     """
     U, S, V = Gnn.svd_with_truncation(axes=((0, 1), (2, 3)), sU=-1, tol=1e-14, Vaxis=2)
     S = S.sqrt()
     return Gate_nn(S.broadcast(U, axes=2), S.broadcast(V, axes=2), bond)
 
 
-def exponent_nn_gate(step, I, H):
+def gate_nn_exp(step, I, H, bond=None) -> Gate:
     r"""
-    exp(-step * H) consistent with leg order of decompose_nn_gate.
+    Gate exp(-step * H) for a hermitian Hamiltonian H,
+    consistent with leg order of :meth:`yastn.tn.fpeps.gates.fkron`.
     Add 0 * I to the Hamiltonian to avoid situation,
-    where some blocks are missing during exponentiation
+    where some blocks are missing in the Hamiltonian.
     """
     H = H + 0 * fkron(I, I)
     H = H.fuse_legs(axes = ((0, 2), (1, 3)))
+    D, U = eigh(H, axes = (0, 1))
+    D = exp(D, step=-step)
+    G = ncon((U, D, U.conj()), ([-1, 1], [1, 2], [-3, 2]))
+    G = G.unfuse_legs(axes=(0, 1)).transpose(axes=(0, 2, 1, 3))
+    return decompose_nn_gate(G, bond)
+
+
+def gate_local_exp(step, I, H, site=None) -> Gate:
+    r"""
+    Gate exp(-step * H) for local Hamiltonian H.
+    Add 0 * I to the Hamiltonian to avoid situation,
+    where some blocks are missing in the Hamiltonian.
+    """
+    H = H + 0 * I
     D, S = eigh(H, axes = (0, 1))
     D = exp(D, step=-step)
     G = ncon((S, D, S), ([-1, 1], [1, 2], [-3, 2]), conjs=(0, 0, 1))
-    G = G.unfuse_legs(axes=(0, 1)).transpose(axes=(0, 2, 1, 3))
-    return G
+    return Gate_local(G, site)
 
 
 def gate_nn_hopping(t, step, I, c, cdag, bond=None) -> Gate:
@@ -108,8 +122,8 @@ def gate_nn_Heisenberg(J, step, I, Sz, Sp, Sm, bond=None) -> Gate:
       + 0.5 * J * fkron(Sm, Sp) \
       + J * fkron(Sz, Sz)
 
-    G = exponent_nn_gate(step, I, H)
-    return decompose_nn_gate(G, bond)
+    return gate_nn_exp(step, I, H, bond)
+
 
 def gate_nn_tJ(J, tu, td, muu0, muu1, mud0, mud1, step, I, cu, cpu, cd, cpd, bond=None) -> Gate:
     r"""
@@ -134,8 +148,7 @@ def gate_nn_tJ(J, tu, td, muu0, muu1, mud0, mud1, step, I, cu, cpu, cd, cpd, bon
       - mud0 * fkron(cpd @ cd, I, sites=(0, 1)) \
       - mud1 * fkron(I, cpd @ cd, sites=(0, 1)) \
 
-    G = exponent_nn_gate(step, I, H)
-    return decompose_nn_gate(G, bond)
+    return gate_nn_exp(step, I, H, bond)
 
 
 def gate_local_Coulomb(mu_up, mu_dn, U, step, I, n_up, n_dn, site=None) -> Gate:

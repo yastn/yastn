@@ -11,13 +11,13 @@ A single evolution step consists of the application of trotterized gates,
 together with truncation of the bond dimension after each application of a non-local gate.
 For a detailed explanation, please refer to the :ref:`Basic concepts/Time evolution <theory/fpeps/basics:Time evolution>`.
 
-The main method for performing a time evolution step is :meth:`yastn.tn.fpeps.evolution_step_`. This
-function requires an environment containing the PEPS state (updated in place) and provides control
-over bond truncation via different ways to calculate **bond metric**. Four classes which support this are:
+The main method for performing a time evolution step is :meth:`yastn.tn.fpeps.evolution_step_`.
+This function requires an environment containing the PEPS state (updated in place) and provides control
+over bond truncation via different ways to calculate **bond metric**. Classes which support this include:
 
 - :class:`yastn.tn.fpeps.EnvNTU`: Employ small local clusters, which can be contracted numerically exactly, resulting in a stable and positively defined bond metric.
-- :class:`yastn.tn.fpeps.EnvBP`: Employ belief propagation, either to define a bipartite bond metric, or to gauge NTU-like clusters.
-- :class:`yastn.tn.fpeps.EnvCTM`: Employ CTMRG environment to calculate the bond metric, with information from the entire network, allowing for a fast full update approach.
+- :class:`yastn.tn.fpeps.EnvBP`: Employ belief propagation, either to define a bipartite bond metric (equivalent to simple update), or to gauge NTU-like clusters.
+- :class:`yastn.tn.fpeps.EnvCTM`: Employ CTMRG environment to calculate the bond metric, with information from the entire network, allowing for a full update approach.
 - :class:`yastn.tn.fpeps.EnvApproximate`: Employ local clusters of sizes beyond exact contraction, utilizing approximate boundary MPS to calculate the bond metric.
 
 .. autofunction:: yastn.tn.fpeps.evolution_step_
@@ -45,8 +45,7 @@ Gates
 An auxiliary function :meth:`yastn.tn.fpeps.gates.distribute`
 distribute a set of gates homogeneously over the entire lattice.
 By default, it complements gates with their adjoint (gates repeated in reverse order),
-forming a 2nd order approximation for a small time step.
-Individual gates should then correspond to half of the timestep.
+forming a 2nd order approximation for a small time step -- this assumes that individual gates take half of the time step.
 
 .. autofunction:: yastn.tn.fpeps.gates.distribute
 
@@ -63,3 +62,15 @@ Some predefined gates can be found in :code:`yastn.tn.fpeps.gates`, including
 .. autofunction:: yastn.tn.fpeps.gates.gate_local_occupation
 .. autofunction:: yastn.tn.fpeps.gates.gate_local_field
 .. autofunction:: yastn.tn.fpeps.gates.gate_nn_tJ
+
+
+Custom gates
+------------
+
+Auxiliary functions help generate gates by exponentiating hermitian Hamiltonians,
+generate two-site Hamiltonian ensuring proper fermionic order, etc.
+
+.. autofunction:: yastn.tn.fpeps.fkron
+.. autofunction:: yastn.tn.fpeps.gates.gate_nn_exp
+.. autofunction:: yastn.tn.fpeps.gates.gate_local_exp
+.. autofunction:: yastn.tn.fpeps.gates.decompose_nn_gate

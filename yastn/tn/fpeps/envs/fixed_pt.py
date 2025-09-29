@@ -10,8 +10,7 @@ from collections import namedtuple
 
 import torch.utils.checkpoint
 
-
-from .... import Tensor, zeros, eye, YastnError, tensordot, einsum, diag, rand, qr
+from .... import Tensor, zeros, eye, YastnError, tensordot, diag, rand, qr
 from ._env_ctm import ctm_conv_corner_spec, decompress_env_1d
 from .... import zeros, decompress_from_1d
 from ....tensor._tests import _test_axes_match

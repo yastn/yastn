@@ -16,24 +16,23 @@
 import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
-from yastn.tn.fpeps._gates_auxiliary import fkron
 
 tol = 1e-12  #pylint: disable=invalid-name
 
 
-def test_fkron(config_kwargs):
+def test_peps_fkron(config_kwargs):
     for sym in ['Z2', 'U1', 'U1xU1xZ2', 'U1xU1']:
         for opsclass in [yastn.operators.SpinfulFermions,
                          yastn.operators.SpinfulFermions_tJ]:
             ops = opsclass(sym=sym, **config_kwargs)
 
-            Sm1Sp0 = fkron(ops.Sp(), ops.Sm(), sites=(0, 1))  # Sp_0 Sm_1
-            Sp0Sm1 = fkron(ops.Sm(), ops.Sp(), sites=(1, 0))  # Sm_1 Sp_0
+            Sm1Sp0 = fpeps.fkron(ops.Sp(), ops.Sm(), sites=(0, 1))  # Sp_0 Sm_1
+            Sp0Sm1 = fpeps.fkron(ops.Sm(), ops.Sp(), sites=(1, 0))  # Sm_1 Sp_0
             assert yastn.norm(Sm1Sp0 - Sp0Sm1) < tol  # [Sp_0, Sm_1] = 0
 
             for s in ['u', 'd']:
-                c1cp0 = fkron(ops.cp(s), ops.c(s), sites=(0, 1))  # c+_0 c_1
-                cp0c1 = fkron(ops.c(s), ops.cp(s), sites=(1, 0))  # c_1 c+_0
+                c1cp0 = fpeps.fkron(ops.cp(s), ops.c(s), sites=(0, 1))  # c+_0 c_1
+                cp0c1 = fpeps.fkron(ops.c(s), ops.cp(s), sites=(1, 0))  # c_1 c+_0
                 assert yastn.norm(cp0c1 + c1cp0) < tol  # {cp_0, c_1} = 0
 
     for sym, sgn in zip(['Z2', 'U1', 'U1xU1xZ2', 'U1xU1'], [-1, -1, -1, 1]):   # for U1xU1, cu and cd commute
@@ -47,19 +46,19 @@ def test_fkron(config_kwargs):
             # |nu_0 nd_0 nu_1, nd_1 >, where the convention is
             # |1111> = cu+_0 cd+_0 cu+_1 cd+_1 |0000>, i.e.,
             # sites 0 is before 1 in fermionic order
-            op = fkron(ops.cp(s), ops.c(s), sites=(0, 1))  # cs+_0 cs_1
+            op = fpeps.fkron(ops.cp(s), ops.c(s), sites=(0, 1))  # cs+_0 cs_1
             phi = yastn.ncon([op, psi], [[-0, 1, -1, 2], [1, 2]])
             assert abs(yastn.vdot(phi, psi) / yastn.vdot(psi, psi) - sgn / 3) < tol
 
-            op = fkron(ops.c(s), ops.cp(s), sites=(1, 0))  # cs_1 cs+_0
+            op = fpeps.fkron(ops.c(s), ops.cp(s), sites=(1, 0))  # cs_1 cs+_0
             phi = yastn.ncon([op, psi], [[-0, 1, -1, 2], [1, 2]])
             assert abs(yastn.vdot(phi, psi) / yastn.vdot(psi, psi) + sgn / 3) < tol
 
-            op = fkron(ops.c(s), ops.cp(s), sites=(0, 1))  # cs_0 cs+_1
+            op = fpeps.fkron(ops.c(s), ops.cp(s), sites=(0, 1))  # cs_0 cs+_1
             phi = yastn.ncon([op, psi], [[-0, 1, -1, 2], [1, 2]])
             assert abs(yastn.vdot(phi, psi) / yastn.vdot(psi, psi) + sgn / 3) < tol
 
-            op = fkron(ops.cp(s), ops.c(s), sites=(1, 0))  # cs+_1 cs_0
+            op = fpeps.fkron(ops.cp(s), ops.c(s), sites=(1, 0))  # cs+_1 cs_0
             phi = yastn.ncon([op, psi], [[-0, 1, -1, 2], [1, 2]])
             assert abs(yastn.vdot(phi, psi) / yastn.vdot(psi, psi) - sgn / 3) < tol
 
@@ -67,13 +66,19 @@ def test_fkron(config_kwargs):
 def check_1site_gate_taylor(gate, I, H, ds, eps):
     """ check gate vs Taylor expansion of the exp(-ds * H). """
     O = gate.G[0]
+
     O2 = I + (-ds) * H + (ds ** 2 / 2) * H @ H
     O2 = O2 + (-ds ** 3 / 6) * H @ H @ H + (ds ** 4 / 24) * H @ H @ H @ H
     assert ((O - O2).norm()) < abs(eps) ** 5
 
+    G3 = fpeps.gates.gate_local_exp(ds, I, H)
+    O3 = G3.G[0]
+    assert ((O - O3).norm()) < tol
+
 
 def check_2site_gate_taylor(gate, I, H, ds, eps):
     """ check gate vs Taylor expansion of the exp(-ds * H). """
+    G = fpeps.gates.gate_nn_exp(ds, I, H)
     O = yastn.ncon(gate.G, [(-0, -1, 1) , (-2, -3, 1)])
     O = O.fuse_legs(axes=((0, 2), (1, 3)))
 
@@ -85,14 +90,18 @@ def check_2site_gate_taylor(gate, I, H, ds, eps):
     O2 = O2 + (-ds ** 3 / 6) * H @ H @ H + (ds ** 4 / 24) * H @ H @ H @ H
     assert ((O - O2).norm()) < abs(eps) ** 5
 
+    O3 = yastn.ncon(G.G, [(-0, -1, 1) , (-2, -3, 1)])
+    O3 = O3.fuse_legs(axes=((0, 2), (1, 3)))
+    assert ((O - O3).norm()) < tol
+
 
 def test_hopping_gate(config_kwargs):
     """ test fpeps.gates.gate_nn_hopping. """
     def check_hopping_gate(ops, t, ds):
         I, c, cdag = ops.I(), ops.c(), ops.cp()
         gate = fpeps.gates.gate_nn_hopping(t, ds, I, c, cdag)
-        H = - t * fpeps.gates.fkron(cdag, c, sites=(0, 1)) \
-            - t * fpeps.gates.fkron(cdag, c, sites=(1, 0))
+        H = - t * fpeps.fkron(cdag, c, sites=(0, 1)) \
+            - t * fpeps.fkron(cdag, c, sites=(1, 0))
         check_2site_gate_taylor(gate, I, H, ds, ds * t)
 
     ops = yastn.operators.SpinlessFermions(sym='U1', **config_kwargs)
@@ -110,18 +119,18 @@ def test_tJ_gate(config_kwargs):
         Sz, Sp, Sm = ops.Sz(), ops.Sp(), ops.Sm()
         nu, nd = ops.n(spin='u'), ops.n(spin='d')
         gate = fpeps.gates.gate_nn_tJ(J, tu, td, muu0, muu1, mud0, mud1, ds, I, cu, cpu, cd, cpd)
-        H = - tu * fpeps.gates.fkron(cpu, cu, sites=(0, 1)) \
-            - tu * fpeps.gates.fkron(cpu, cu, sites=(1, 0)) \
-            - td * fpeps.gates.fkron(cpd, cd, sites=(0, 1)) \
-            - td * fpeps.gates.fkron(cpd, cd, sites=(1, 0)) \
-            + (J / 2) * fpeps.gates.fkron(Sp, Sm, sites=(0, 1)) \
-            + (J / 2) * fpeps.gates.fkron(Sm, Sp, sites=(0, 1)) \
-            + J * fpeps.gates.fkron(Sz, Sz, sites=(0, 1)) \
-            - (J / 4) * fpeps.gates.fkron((nu + nd), (nu + nd), sites=(0, 1)) \
-            - muu0 * fpeps.gates.fkron(nu, I, sites=(0, 1)) \
-            - muu1 * fpeps.gates.fkron(I, nu, sites=(0, 1)) \
-            - mud0 * fpeps.gates.fkron(nd, I, sites=(0, 1)) \
-            - mud1 * fpeps.gates.fkron(I, nd, sites=(0, 1))
+        H = - tu * fpeps.fkron(cpu, cu, sites=(0, 1)) \
+            - tu * fpeps.fkron(cpu, cu, sites=(1, 0)) \
+            - td * fpeps.fkron(cpd, cd, sites=(0, 1)) \
+            - td * fpeps.fkron(cpd, cd, sites=(1, 0)) \
+            + (J / 2) * fpeps.fkron(Sp, Sm, sites=(0, 1)) \
+            + (J / 2) * fpeps.fkron(Sm, Sp, sites=(0, 1)) \
+            + J * fpeps.fkron(Sz, Sz, sites=(0, 1)) \
+            - (J / 4) * fpeps.fkron((nu + nd), (nu + nd), sites=(0, 1)) \
+            - muu0 * fpeps.fkron(nu, I, sites=(0, 1)) \
+            - muu1 * fpeps.fkron(I, nu, sites=(0, 1)) \
+            - mud0 * fpeps.fkron(nd, I, sites=(0, 1)) \
+            - mud1 * fpeps.fkron(I, nd, sites=(0, 1))
         check_2site_gate_taylor(gate, I, H, ds, ds * max(map(abs, (J, tu, td, muu0, muu1, mud0, mud1))))
 
     ops = yastn.operators.SpinfulFermions_tJ(sym='U1', **config_kwargs)
@@ -141,7 +150,7 @@ def test_Ising_gate(config_kwargs):
         I, sp, sm = ops.I(), ops.sp(), ops.sm()
         X = sp + sm
         gate = fpeps.gates.gate_nn_Ising(J, ds, I, X)
-        H = J * fpeps.gates.fkron(X, X, sites=(0, 1))
+        H = J * fpeps.fkron(X, X, sites=(0, 1))
         check_2site_gate_taylor(gate, I, H, ds, ds * J)
 
     ops = yastn.operators.Spin12(sym='Z2', **config_kwargs)
@@ -156,9 +165,9 @@ def test_Heisenberg_gate(config_kwargs):
         I, sp, sm = ops.I(), ops.sp(), ops.sm()
         sx, sy, sz = ops.sx(), ops.sy(), ops.sz()
         gate = fpeps.gates.gate_nn_Heisenberg(J, ds, I, sz, sp, sm)
-        H = J * fpeps.gates.fkron(sx, sx, sites=(0, 1)) \
-          + J * fpeps.gates.fkron(sy, sy, sites=(0, 1)) \
-          + J * fpeps.gates.fkron(sz, sz, sites=(0, 1))
+        H = J * fpeps.fkron(sx, sx, sites=(0, 1)) \
+          + J * fpeps.fkron(sy, sy, sites=(0, 1)) \
+          + J * fpeps.fkron(sz, sz, sites=(0, 1))
 
         check_2site_gate_taylor(gate, I, H, ds, ds * J)
 
@@ -213,7 +222,7 @@ def test_gate_raises(config_kwargs):
     ops = yastn.operators.SpinlessFermions(sym='U1', **config_kwargs)
     c, cdag = ops.c(), ops.cp()
     with pytest.raises(yastn.YastnError):
-        fpeps.gates.fkron(c, cdag, sites=(0, 2))
+        fpeps.fkron(c, cdag, sites=(0, 2))
         # 'Sites should be equal to (0, 1) or (1, 0).'
 
 if __name__ == '__main__':

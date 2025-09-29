@@ -168,8 +168,7 @@ def gate_fix_swap_gate(G0, G1, dirn, f_ordered):
 
 
 def gate_from_mpo(op):
-    G = []
-    G.append(op[op.first].remove_leg(axis=0).transpose(axes=(0, 2, 1)))
+    G = [op.factor * op[op.first].remove_leg(axis=0).transpose(axes=(0, 2, 1))]
     for n in op.sweep(to='last', df=1):
         G.append(op[n].transpose(axes=(1, 3, 0, 2)))
     G[-1] = G[-1].remove_leg(axis=-1)

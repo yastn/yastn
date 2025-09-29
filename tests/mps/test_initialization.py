@@ -364,15 +364,20 @@ def test_MpsMpoOBC_to_tensor(config_kwargs, N):
     mop = op.to_matrix()
     assert mop.get_shape() == (2 ** N, 2 ** N)
 
-    psi2 = mps.mps_from_tensor(tpsi)
-    assert (psi - psi2).norm() < 1e-12
-    assert psi2.is_canonical(to='last')
+    for to in ['first', 'last']:
+        psi2 = mps.mps_from_tensor(tpsi, canonize=to)
+        assert (psi - psi2).norm() < 1e-10
+        assert psi2.is_canonical(to=to)
 
-    op2 = mps.mpo_from_tensor(top)
-    assert (op - op2).norm() < 1e-12
-    assert op2.is_canonical(to='last')
+    for to in ['first', 'last']:
+        op2 = mps.mpo_from_tensor(top, canonize=to)
+        assert (op - op2).norm() < 1e-10
+        assert op2.is_canonical(to=to)
 
-
+    op2 = mps.mpo_from_tensor(top)  # canonize = 'balance'
+    assert (op - op2).norm() < 1e-10
+    if N > 1:
+        assert all(not op2.is_canonical(to=to) for to in ['first', 'last'])
 
 
 

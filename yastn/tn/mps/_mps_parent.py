@@ -14,8 +14,9 @@
 # ==============================================================================
 """ MpsMpoParent structure and basic methods common for OBC and PBC. """
 from __future__ import annotations
+from typing import Iterator, Sequence
 from numbers import Number, Integral
-from ... import YastnError, Tensor
+from ... import YastnError, Tensor, Leg
 
 
 class _MpsMpoParent:
@@ -79,7 +80,7 @@ class _MpsMpoParent:
             return range(self.N - 1 - dl, df - 1, -1)
         raise YastnError('"to" in sweep should be in "first" or "last"')
 
-    def __getitem__(self, n) -> yastn.Tensor:
+    def __getitem__(self, n) -> Tensor:
         """ Return tensor corresponding to n-th site."""
         try:
             return self.A[n]
@@ -98,7 +99,7 @@ class _MpsMpoParent:
             raise YastnError(f"MpsMpoOBC: Tensor rank should be {self.nr_phys + 2}")
         self.A[n] = tensor
 
-    def shallow_copy(self) -> yastn.tn.mps.MpsMpoOBC:
+    def shallow_copy(self) -> _MpsMpoParent:
         r"""
         New instance of :class:`yastn.tn.mps.MpsMpoOBC` pointing to the same tensors as the old one.
 
@@ -112,7 +113,7 @@ class _MpsMpoParent:
             phi.flag = self.flag
         return phi
 
-    def on_bra(self) -> yastn.tn.mps.MpsMpoOBC:
+    def on_bra(self) -> _MpsMpoParent:
         r"""
         A shallow copy of the tensor with an added ``on_bra`` flag.
 
@@ -128,7 +129,7 @@ class _MpsMpoParent:
         phi.flag = 'on_bra'
         return phi
 
-    def clone(self) -> yastn.tn.mps.MpsMpoOBC:
+    def clone(self) -> _MpsMpoParent:
         r"""
         Makes a clone of MPS or MPO by :meth:`cloning<yastn.Tensor.clone>`
         all :class:`yastn.Tensor<yastn.Tensor>`'s into a new and independent :class:`yastn.tn.mps.MpsMpoOBC`.
@@ -138,7 +139,7 @@ class _MpsMpoParent:
             phi.A[ind] = ten.clone()  # TODO clone factor ?
         return phi
 
-    def copy(self) -> yastn.tn.mps.MpsMpoOBC:
+    def copy(self) -> _MpsMpoParent:
         r"""
         Makes a copy of MPS or MPO by :meth:`copying<yastn.Tensor.copy>` all :class:`yastn.Tensor<yastn.Tensor>`'s
         into a new and independent :class:`yastn.tn.mps.MpsMpoOBC`.
@@ -148,14 +149,14 @@ class _MpsMpoParent:
             phi.A[ind] = ten.copy()
         return phi
 
-    def conj(self) -> yastn.tn.mps.MpsMpoOBC:
+    def conj(self) -> _MpsMpoParent:
         """ Makes a conjugation of the object. """
         phi = self.shallow_copy()
         for ind, ten in phi.A.items():
             phi.A[ind] = ten.conj()
         return phi
 
-    def transpose(self) -> yastn.tn.mps.MpsMpoOBC:
+    def transpose(self) -> _MpsMpoParent:
         """ Transpose of MPO. For MPS, return self."""
         if self.nr_phys == 1:
             return self
@@ -164,7 +165,7 @@ class _MpsMpoParent:
             phi.A[n] = phi.A[n].transpose(axes=(0, 3, 2, 1))
         return phi
 
-    def conjugate_transpose(self) -> yastn.tn.mps.MpsMpo:
+    def conjugate_transpose(self) -> _MpsMpoParent:
         """ Transpose and conjugate MPO. For MPS, return self.conj()."""
         if self.nr_phys == 1:
             return self.conj()
@@ -174,20 +175,20 @@ class _MpsMpoParent:
         return phi
 
     @property
-    def T(self) -> yastn.tn.mps.MpsMpo:
+    def T(self) -> _MpsMpoParent:
         r""" Transpose of MPO. For MPS, return self.
 
-        Same as :meth:`self.transpose()<yastn.tn.mps.MpsMpo.transpose>` """
+        Same as :meth:`self.transpose()<yastn.tn.mps.MpsMpoOBC.transpose>` """
         return self.transpose()
 
     @property
-    def H(self) -> yastn.tn.mps.MpsMpo:
+    def H(self) -> _MpsMpoParent:
         r""" Transpose and conjugate of MPO. For MPS, return self.conj().
 
-        Same as :meth:`self.conjugate_transpose()<yastn.tn.mps.MpsMpo.conjugate_transpose>` """
+        Same as :meth:`self.conjugate_transpose()<yastn.tn.mps.MpsMpoOBC.conjugate_transpose>` """
         return self.conjugate_transpose()
 
-    def reverse_sites(self) -> yastn.tn.mps.MpsMpo:
+    def reverse_sites(self) -> _MpsMpoParent:
         r"""
         New MPS/MPO with reversed order of sites and respectively transposed virtual tensor legs.
         """
@@ -203,7 +204,7 @@ class _MpsMpoParent:
             phi.A[phi.pC] = self.A[self.pC].transpose(axes=(1, 0))
         return phi
 
-    def __mul__(self, number) -> yastn.tn.mps.MpsMpoOBC:
+    def __mul__(self, number) -> _MpsMpoParent:
         """ New MPS/MPO with the first tensor multiplied by a scalar. """
         phi = self.shallow_copy()
         am = abs(number)
@@ -214,7 +215,7 @@ class _MpsMpoParent:
             phi.factor = am * self.factor
         return phi
 
-    def __rmul__(self, number) -> yastn.tn.mps.MpsMpoOBC:
+    def __rmul__(self, number) -> _MpsMpoParent:
         """ New MPS/MPO with the first tensor multiplied by a scalar. """
         return self.__mul__(number)
 
@@ -228,7 +229,7 @@ class _MpsMpoParent:
     def __neg__(self):
         return self.__mul__(-1)
 
-    def __truediv__(self, number) -> yastn.tn.mps.MpsMpoOBC:
+    def __truediv__(self, number) -> _MpsMpoParent:
         """ Divide MPS/MPO by a scalar. """
         return self.__mul__(1 / number)
 
@@ -263,7 +264,7 @@ class _MpsMpoParent:
         tDs.append(leg.tD)
         return tDs
 
-    def get_virtual_legs(self) -> Sequence[yastn.Leg]:
+    def get_virtual_legs(self) -> Sequence[Leg]:
         r"""
         Returns :class:`yastn.Leg` of all virtual spaces along MPS/MPO from
         the first to the last site, in the form of the `0th` leg of each MPS/MPO tensor.
@@ -275,7 +276,7 @@ class _MpsMpoParent:
         legs.append(self.A[self.last].get_legs(axes=2).conj())
         return legs
 
-    def get_physical_legs(self) -> Sequence[yastn.Leg] | Sequence[tuple(yastn.Leg, yastn.Leg)]:
+    def get_physical_legs(self) -> Sequence[Leg] | Sequence[tuple[Leg, Leg]]:
         r"""
         Returns :class:`yastn.Leg` of all physical spaces along MPS/MPO from
         the first to the last site. For MPO return a tuple of ket and bra spaces for each site.
