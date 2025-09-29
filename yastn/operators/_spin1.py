@@ -57,7 +57,7 @@ class Spin1(meta_operators):
             raise YastnError("For Spin1 config.fermionic should be False.")
         self.operators = ('I', 'sx', 'sy', 'isy', 'sz', 'sp', 'sm')
 
-    def space(self) -> yastn.Leg:
+    def space(self) -> Leg:
         r""" :class:`yastn.Leg` object describing local Hilbert space. """
         if self._sym == 'dense':
             leg = Leg(self.config, s=1, D=(3,))
@@ -67,7 +67,7 @@ class Spin1(meta_operators):
             leg = Leg(self.config, s=1, t=(-1, 0, 1), D=(1, 1, 1))
         return leg
 
-    def I(self) -> yastn.Tensor:
+    def I(self) -> Tensor:
         r""" Identity operator. """
         if self._sym == 'dense':
             I = Tensor(config=self.config, s=self.s)
@@ -84,7 +84,7 @@ class Spin1(meta_operators):
             I.set_block(ts=(-1, -1), Ds=(1, 1), val=1)
         return I
 
-    def sx(self) -> yastn.Tensor:
+    def sx(self) -> Tensor:
         r""" Spin-1 :math:`S^x` operator. """
         isq2 = 1 / np.sqrt(2)
         if self._sym == 'dense':
@@ -94,7 +94,7 @@ class Spin1(meta_operators):
             raise YastnError('Cannot define sx operator for U1 or Z3 symmetry.')
         return sx
 
-    def sy(self) -> yastn.Tensor:
+    def sy(self) -> Tensor:
         r""" Spin-1 :math:`S^y` operator. """
         iisq2 = 1j / np.sqrt(2)
         if self._sym == 'dense':
@@ -104,7 +104,7 @@ class Spin1(meta_operators):
             raise YastnError('Cannot define sy operator for U1 or Z3 symmetry.')
         return sy
 
-    def isy(self) -> yastn.Tensor:
+    def isy(self) -> Tensor:
         r""" Spin-1 :math:`i \cdot S^y` operator with real representation. """
         isq2 = 1 / np.sqrt(2)
         if self._sym == 'dense':
@@ -114,7 +114,7 @@ class Spin1(meta_operators):
             raise YastnError('Cannot define sy operator for U1 or Z3 symmetry.')
         return sy
 
-    def sz(self) -> yastn.Tensor:
+    def sz(self) -> Tensor:
         r""" Spin-1 :math:`S^z` operator. """
         if self._sym == 'dense':
             sz = Tensor(config=self.config, s=self.s)
@@ -131,7 +131,7 @@ class Spin1(meta_operators):
             sz.set_block(ts=(-1, -1), Ds=(1, 1), val=-1)
         return sz
 
-    def vec_z(self, val=1) -> yastn.Tensor:
+    def vec_z(self, val=1) -> Tensor:
         r""" Normalized eigenvectors of :math:`S^z`. """
         if self._sym == 'dense' and val == 1:
             vec = Tensor(config=self.config, s=(1,))
@@ -164,7 +164,7 @@ class Spin1(meta_operators):
             raise YastnError('Eigenvalues val should be in (-1, 0, 1).')
         return vec
 
-    def vec_x(self, val=1) -> yastn.Tensor:
+    def vec_x(self, val=1) -> Tensor:
         r""" Normalized eigenvectors of :math:`S^x`. """
         isq2 = 1 / np.sqrt(2)
         if self._sym == 'dense' and val == 1:
@@ -180,7 +180,7 @@ class Spin1(meta_operators):
             raise YastnError('Eigenvalues val should be in (-1, 0, 1) and eigenvectors of Sx are well defined only for dense tensors.')
         return vec
 
-    def vec_y(self, val=1) -> yastn.Tensor:
+    def vec_y(self, val=1) -> Tensor:
         r""" Normalized eigenvectors of :math:`S^y`. """
         isq2 = 1 / np.sqrt(2)
         if self._sym == 'dense' and val == 1:
@@ -196,7 +196,7 @@ class Spin1(meta_operators):
             raise YastnError('Eigenvalues val should be in (-1, 0, 1) and eigenvectors of Sy are well defined only for dense tensors.')
         return vec
 
-    def sp(self) -> yastn.Tensor:
+    def sp(self) -> Tensor:
         r""" Spin-1 raising operator :math:`S^+=S^x + iS^y`. """
         sq2 = np.sqrt(2)
         if self._sym == 'dense':
@@ -212,7 +212,7 @@ class Spin1(meta_operators):
             sp.set_block(ts=(1, 0), Ds=(1, 1), val=sq2)
         return sp
 
-    def sm(self) -> yastn.Tensor:
+    def sm(self) -> Tensor:
         r""" Spin-1 lowering operator :math:`S^-=S^x - iS^y`. """
         sq2 = np.sqrt(2)
         if self._sym == 'dense':
@@ -228,7 +228,7 @@ class Spin1(meta_operators):
             sm.set_block(ts=(-1, 0), Ds=(1, 1), val=sq2)
         return sm
 
-    def vec_s(self) -> yastn.Tensor:
+    def vec_s(self) -> Tensor:
         r"""
         Returns vector of Spin-1 generators, in order: :math:`S^z, S^+, S^-`.
         The generators are indexed by first index of the resulting rank-3 tensors.
@@ -247,7 +247,7 @@ class Spin1(meta_operators):
         vec_s= vec_s.drop_leg_history(axes=0)
         return vec_s
 
-    def g(self) -> yastn.Tensor:
+    def g(self) -> Tensor:
         r"""
         Returns rank-2 metric tensor g, such that the quadratic Casimir in terms of basis
         :math:`\vec{S} = [S^z; S^+; S^-]` can be computed as :math:`\vec{S}^T g \vec{S}`. The signature of g is

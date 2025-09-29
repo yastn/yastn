@@ -278,6 +278,11 @@ def test_tensordot_exceptions(config_kwargs):
                        match=re.escape("Outer product with diagonal tensor not supported. Use yastn.diag() first.")):
         c = yastn.rand(config=config_U1, isdiag=True, t=(-1, 0, 1), D=(1, 2, 3))
         _ = yastn.tensordot(c, a, axes=((),()))
+    with pytest.raises(yastn.YastnError,
+                       match=re.escape("Tensordot policy not recognized. It should be 'fuse_to_matrix', 'fuse_contracted', or 'no_fusion'.")):
+        config = config_U1._replace(tensordot_policy='something')
+        c = a._replace(config=config)
+        _ = yastn.tensordot(c, b, axes=((1, 2), (0, 1)))
 
 
 @torch_test

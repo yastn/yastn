@@ -148,18 +148,24 @@ def test_ctmrg_measure_product(config_kwargs, boundary):
     #
     run_ctm_save_load_copy(env)
 
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match="Number of operators and sites should match."):
         env.measure_2x2(sz, sz, sz, sites=((0, 0), (1, 1)))
-        # Number of operators and sites should match.
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match="Sites do not form a 2x2 window."):
         env.measure_2x2(sz, sz, sites=((0, 0), (1, 2)))
-        # Sites do not form a 2x2 window.
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match="Number of operators and sites should match."):
         env.measure_line(sz, sz, sz, sites=((0, 0), (1, 0)))
-        # Number of operators and sites should match.
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match="Sites should form a horizontal or vertical line."):
         env.measure_line(sz, sz, sites=((0, 0), (1, 2)))
-        # Sites should form a horizontal or vertical line.
+    with pytest.raises(yastn.YastnError,
+                       match="Number of operators and sites should match."):
+        env.measure_nsite(sz, sz, sites=((0, 0),))
+    with pytest.raises(yastn.YastnError,
+                       match=r"EnvCTM init='something' not recognized. Should be 'rand', 'eye', 'dl', or None."):
+        fpeps.EnvCTM(psi, init='something')
 
 
 @pytest.mark.parametrize("env_init", ["eye", "dl"])

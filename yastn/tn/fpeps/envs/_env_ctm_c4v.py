@@ -67,7 +67,7 @@ class EnvCTM_c4v(EnvCTM):
         """
         super().__init__(psi, init=None)
         if init not in (None, 'rand', 'eye', 'dl'):
-            raise YastnError(f"EnvCTM_c4v {init=} not recognized. Should be 'rand', 'eye', 'dl', None.")
+            raise YastnError(f"EnvCTM_c4v {init=} not recognized. Should be 'rand', 'eye', 'dl', or None.")
         if init is not None:
             self.reset_(init=init, leg=leg)
 

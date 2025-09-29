@@ -105,7 +105,7 @@ class EnvCTM(Peps):
         super().__init__(psi.geometry)
         self.psi = Peps2Layers(psi) if psi.has_physical() else psi
         if init not in (None, 'rand', 'eye', 'dl'):
-            raise YastnError(f"EnvCTM {init=} not recognized. Should be 'rand', 'eye', 'dl', None.")
+            raise YastnError(f"EnvCTM {init=} not recognized. Should be 'rand', 'eye', 'dl', or None.")
         for site in self.sites():
             self[site] = EnvCTM_local()
         if init is not None:
@@ -173,13 +173,6 @@ class EnvCTM(Peps):
                         setattr(self[site], dirn, getattr(self[site], dirn).detach())
                 except AttributeError:
                     pass
-
-    def shallow_copy(self) -> EnvCTM:
-        env = EnvCTM(self.psi, init=None)
-        for site in env.sites():
-            for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
-                setattr(env[site], dirn, getattr(self[site], dirn))
-        return env
 
     def compress_env_1d(env):
         r"""
