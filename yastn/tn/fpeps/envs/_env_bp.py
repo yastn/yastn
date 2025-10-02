@@ -14,11 +14,12 @@
 # ==============================================================================
 from __future__ import annotations
 from dataclasses import dataclass
+from itertools import pairwise
 from tqdm import tqdm
 from typing import NamedTuple
 from .... import Tensor, eye, YastnError, tensordot, vdot, ncon
 from .._peps import Peps, Peps2Layers, DoublePepsTensor
-from .._gates_auxiliary import apply_gate_onsite, gate_product_operator, gate_fix_swap_gate, match_ancilla
+from .._gates_auxiliary import fkron, gate_fix_swap_gate, match_ancilla
 from .._geometry import Bond, Site
 from .._evolution import BipartiteBondMetric, BondMetric
 from ._env_auxlliary import *
@@ -61,16 +62,13 @@ class EnvBP(Peps):
             None, 'eye'. Initialization scheme, see :meth:`yastn.tn.fpeps.EnvBP.reset_`.
 
         which: str
-            Type of environment from 'BP', 'NN+BP', 'NBN+BP'
+            Type of environment from 'BP', 'NN+BP', 'NNN+BP'
         """
         super().__init__(psi.geometry)
         self.psi = Peps2Layers(psi) if psi.has_physical() else psi
         self.tol_positive = tol_positive
+        self._set_which(which)
 
-        if which not in ('NNN+BP', 'NN+BP', 'BP'):
-            raise YastnError(f" Type of EnvBP bond_metric {which=} not recognized.")
-
-        self.which = which
         if init not in (None, 'eye'):
             raise YastnError(f"EnvBP {init=} not recognized. Should be 'eye' or None.")
         for site in self.sites():
@@ -78,11 +76,21 @@ class EnvBP(Peps):
         if init is not None:
             self.reset_(init=init)
 
+    def _get_which(self):
+        return self._which
+
+    def _set_which(self, which):
+        if which not in ('NNN+BP', 'NN+BP', 'BP'):
+            raise YastnError(f" Type of EnvBP bond_metric {which=} not recognized.")
+        self._which = which
+
+    which = property(fget=_get_which, fset=_set_which)
+
     @property
     def config(self):
         return self.psi.config
 
-    def copy(self):
+    def copy(self) -> EnvBP:
         psi = self.psi
         if isinstance(psi, Peps2Layers):
             psi = psi.ket
@@ -90,6 +98,26 @@ class EnvBP(Peps):
         for site in env.sites():
             for dirn in ['t', 'l', 'b', 'r']:
                 setattr(env[site], dirn, getattr(self[site], dirn).copy())
+        return env
+
+    def clone(self) -> EnvBP:
+        psi = self.psi
+        if isinstance(psi, Peps2Layers):
+            psi = psi.ket
+        env = EnvBP(psi, init=None)
+        for site in env.sites():
+            for dirn in ['t', 'l', 'b', 'r']:
+                setattr(env[site], dirn, getattr(self[site], dirn).clone())
+        return env
+
+    def shallow_copy(self) -> EnvBP:
+        psi = self.psi
+        if isinstance(psi, Peps2Layers):
+            psi = psi.ket
+        env = EnvBP(self.psi, init=None)
+        for site in env.sites():
+            for dirn in ['t', 'l', 'b', 'r']:
+                setattr(env[site], dirn, getattr(self[site], dirn))
         return env
 
     def save_to_dict(self) -> dict:
@@ -202,7 +230,7 @@ class EnvBP(Peps):
                 return {bond: self.measure_nn(O, P, bond) for bond in self.bonds()}
 
         if O.ndim == 2 and P.ndim == 2:
-            O, P = gate_product_operator(O, P)
+            O, P = fkron(O, P, sites=(0, 1), merge=False)
 
         dirn = self.nn_bond_dirn(*bond)
         if O.ndim == 3 and P.ndim == 3:
@@ -294,7 +322,7 @@ class EnvBP(Peps):
 
         ::
 
-            If dirn == 'h':
+            If which == 'BP':
 
                      t       t
                      ║       ║
@@ -303,15 +331,31 @@ class EnvBP(Peps):
                      b       b
 
 
-            If dirn == 'v':
+            If which == 'NN+BP':
 
-                     t
-                     ║
-                l═══0Q0═══r
-                     ╳
-                l═══1Q1═══r
-                     ║
-                     b
+                      t        t
+                      ║        ║
+                l══(-1 +0)══(-1 +1)══r
+                      ║        ║
+                l═════Q0══   ══Q1════r
+                      ║        ║
+                l══(+1 +0)══(+1 +1)══l
+                      ║        ║
+                      b        b
+
+
+            If which == 'NNN+BP':
+
+                      t       t        t       t
+                      ║       ║        ║       ║
+                l══(-1 -1)=(-1 +0)══(-1 +1)=(-1 +2)══r
+                      ║       ║        ║       ║
+                l══(+0 -1)════Q0══   ══Q1═══(+0 +2)══r
+                      ║       ║        ║       ║
+                l══(+1 -1)=(+1 +0)══(+1 +1)=(+1 +2)══r
+                      ║       ║        ║       ║
+                      b       b        b       b
+
         """
         if dirn in ("h", "lr") and self.which == "BP":
             assert self.psi.nn_site(s0, (0, 1)) == s1
@@ -450,8 +494,11 @@ class EnvBP(Peps):
             g = tensordot(vect, vecb, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
             return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
-    def pre_truncation_(env, bond):
-        env.update_bond_(bond)
+    def pre_truncation_(env, sites):
+        for s0, s1 in pairwise(sites[-1::-1]):
+            env.update_bond_((s0, s1))
+        for s0, s1 in pairwise(sites):
+            env.update_bond_((s0, s1))
 
     def post_truncation_(env, bond, max_sweeps=1):
         env.update_bond_(bond)

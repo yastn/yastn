@@ -59,7 +59,7 @@ def measure_overlap(bra, ket) -> Number:
     return env.measure(bd=(-1, 0))
 
 
-def measure_mpo(bra, op: MpsMpoOBC | Sequence[tuple(MpsMpoOBC, number)], ket) -> Number:
+def measure_mpo(bra, op: MpsMpoOBC | Sequence[tuple[MpsMpoOBC, Number]], ket) -> Number:
     r"""
     Calculate expectation value :math:`\langle \textrm{bra}|\textrm{op}|\textrm{ket} \rangle`.
 
@@ -82,7 +82,7 @@ def measure_mpo(bra, op: MpsMpoOBC | Sequence[tuple(MpsMpoOBC, number)], ket) ->
     return env.measure(bd=(-1, 0))
 
 
-def measure_1site(bra, O, ket, sites=None) -> dict[int, number]:
+def measure_1site(bra, O, ket, sites=None) -> dict[int, Number]:
     r"""
     Calculate expectation values :math:`\langle \textrm{bra}|\textrm{O}_i|\textrm{ket} \rangle` for local operator :code:`O` at sites `i`.
 
@@ -397,7 +397,7 @@ def sample(psi, projectors, number=1, return_probabilities=False) -> np.ndarray[
                 if (pr.n != pr.config.sym.zero()) or abs(pr @ pr - pr).norm() > 1e-10:
                     raise YastnError("Matrix projectors should be projectors, P @ P == P.")
             else:
-                raise YastnError("Projectors should consist of vectors (ndim=1) or matrices (ndim=2).")
+                raise YastnError("Projectors should consist of vectors with ndim=1 or matrices with ndim=2.")
 
     samples = np.zeros((number, psi.N), dtype=np.int64)
     probabilities = np.ones(number, dtype=np.float64)

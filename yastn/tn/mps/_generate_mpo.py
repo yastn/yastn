@@ -68,7 +68,7 @@ def ind_list(el, unique):
     return ind
 
 
-def generate_mpo(I, terms=None, opts_svd=None, N=None, f_map=None) -> yastn.tn.mps.MpsMpoOBC:
+def generate_mpo(I, terms=None, opts_svd=None, N=None, f_map=None) -> MpsMpoOBC:
     r"""
     Generate MPO provided a list of :class:`Hterm`\-s and identity operator ``I``.
 

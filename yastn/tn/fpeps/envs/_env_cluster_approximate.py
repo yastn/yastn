@@ -46,10 +46,20 @@ class EnvApproximate:
         update_sweeps:
             Passed as max_sweeps to :meth:`yastn.tn.mps.compression_` for boundary MPS variational fine-tunning.
         """
+        self.psi = psi
+        self._set_which(which)
+        self.opts_var = {'max_sweeps': 2,} if opts_var is None else opts_var
+        self.opts_svd = opts_svd
+        self.update_sweeps = update_sweeps
+        self._envs = {}
+
+    def _get_which(self):
+        return self._which
+
+    def _set_which(self, which):
         if which not in ('43', '43+', '65', '65+', '87', '87+'):
             raise YastnError(f" Type of EnvApprox {which=} not recognized.")
         self._which = which
-        self.psi = psi
         if which in ('43', '43+'):
             self.Nl, self.Nw = 2, 1
         if which in ('65', '65+'):
@@ -57,14 +67,8 @@ class EnvApproximate:
         if which in ('87', '87+'):
             self.Nl, self.Nw = 4, 3
         self._hairs = '+' in which
-        self.opts_var = {'max_sweeps': 2, } if opts_var is None else opts_var
-        self.opts_svd = opts_svd
-        self.update_sweeps = update_sweeps
-        self._envs = {}
 
-    @property
-    def which(self):
-        return self._which
+    which = property(fget=_get_which, fset=_set_which)
 
     def __getitem__(self, key):
         return self._envs[key]

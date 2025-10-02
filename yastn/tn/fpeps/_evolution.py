@@ -113,12 +113,7 @@ def evolution_step_(env, gates, opts_svd, method='mpo', fix_metric=0,
     for gate in gates:
         psi.apply_gate_(gate)
 
-        for s0, s1 in pairwise(gate.sites[-1::-1]):
-            env.pre_truncation_((s0, s1))
-        if len(gate.sites) > 2:
-            for s0, s1 in pairwise(gate.sites):
-                env.pre_truncation_((s0, s1))
-
+        env.pre_truncation_(gate.sites)
         for s0, s1 in pairwise(gate.sites):
             info = truncate_(env, opts_svd, (s0, s1), fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization)
             infos.append(info)

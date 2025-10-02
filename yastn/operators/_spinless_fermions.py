@@ -46,25 +46,25 @@ class SpinlessFermions(meta_operators):
             raise YastnError("For SpinlessFermions config.fermionic should be True.")
         self.operators = ('I', 'n', 'c', 'cp')
 
-    def space(self) -> yastn.Leg:
+    def space(self) -> Leg:
         r""" :class:`yastn.Leg` object describing local Hilbert space. """
         return Leg(self.config, s=1, t=(0, 1), D=(1, 1))  # the same for U1 and Z2
 
-    def I(self) -> yastn.Tensor:
+    def I(self) -> Tensor:
         r""" Identity operator. """
         I = Tensor(config=self.config, s=self.s, n=0)
         I.set_block(ts=(0, 0), Ds=(1, 1), val=1)
         I.set_block(ts=(1, 1), Ds=(1, 1), val=1)
         return I
 
-    def n(self) -> yastn.Tensor:
+    def n(self) -> Tensor:
         r""" Particle number operator. """
         n = Tensor(config=self.config, s=self.s, n=0)
         # n.set_block(ts=(0, 0), Ds=(1, 1), val=0)
         n.set_block(ts=(1, 1), Ds=(1, 1), val=1)
         return n
 
-    def vec_n(self, val=0) -> yastn.Tensor:
+    def vec_n(self, val=0) -> Tensor:
         r""" State with occupation 0 or 1. """
         if val not in (0, 1):
             raise YastnError("Occupation val should be in (0, 1).")
@@ -72,13 +72,13 @@ class SpinlessFermions(meta_operators):
         vec.set_block(ts=(val,), Ds=(1,), val=1)
         return vec
 
-    def cp(self) -> yastn.Tensor:
+    def cp(self) -> Tensor:
         r""" Raising operator. """
         cp = Tensor(config=self.config, s=self.s, n=1)
         cp.set_block(ts=(1, 0), Ds=(1, 1), val=1)
         return cp
 
-    def c(self) -> yastn.Tensor:
+    def c(self) -> Tensor:
         r""" Lowering operator. """
         n = 1 if self._sym == 'Z2' else -1
         c = Tensor(config=self.config, s=self.s, n=n)

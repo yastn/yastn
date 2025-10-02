@@ -3,7 +3,7 @@ fPEPS
 #####
 
 Fermionic projected entangled-pairs states and related algorithms.
-Abelian-symmetric tensor algebra is provided by :doc:`YASTN<index>`.
+Abelian-symmetric tensor algebra is provided by :doc:`yastn.tensor`.
 
 .. automodule:: yastn.tn.fpeps
    :members:

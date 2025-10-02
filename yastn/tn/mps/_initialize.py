@@ -21,7 +21,7 @@ from ._mps_obc import Mpo, Mps, MpsMpoOBC
 from ...operators import Qdit
 
 
-def product_mps(vectors, N=None) -> yastn.tn.mps.MpsMpoOBC:
+def product_mps(vectors, N=None) -> MpsMpoOBC:
     r"""
     Generate an MPS with bond-dimension 1 from a list of vectors that get assigned to consecutive MPS sites.
 
@@ -40,7 +40,7 @@ def product_mps(vectors, N=None) -> yastn.tn.mps.MpsMpoOBC:
     return _product_MpsMpoOBC(vectors, N=N, nr_phys=1)
 
 
-def product_mpo(operators, N=None) -> yastn.tn.mps.MpsMpoOBC:
+def product_mpo(operators, N=None) -> MpsMpoOBC:
     r"""
     Generate an MPO with bond-dimension 1 from a list of operators that get assigned to consecutive MPO sites.
 
@@ -78,7 +78,7 @@ def product_mpo(operators, N=None) -> yastn.tn.mps.MpsMpoOBC:
     return _product_MpsMpoOBC(operators, N=N, nr_phys=2)
 
 
-def _product_MpsMpoOBC(vectors, N=None, nr_phys=1) -> yastn.tn.mps.MpsMpoOBC:
+def _product_MpsMpoOBC(vectors, N=None, nr_phys=1) -> MpsMpoOBC:
     """ handles product mpo and mps"""
     try:  # handle inputing single bare Tensor
         vectors = list(vectors)
@@ -107,7 +107,7 @@ def _product_MpsMpoOBC(vectors, N=None, nr_phys=1) -> yastn.tn.mps.MpsMpoOBC:
     return psi
 
 
-def random_mps(I, n=None, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.MpsMpoOBC:
+def random_mps(I, n=None, D_total=8, sigma=1, dtype='float64') -> MpsMpoOBC:
     r"""
     Generate a random MPS of total charge ``n`` and bond dimension ``D_total``.
 
@@ -117,7 +117,7 @@ def random_mps(I, n=None, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.M
 
     Parameters
     ----------
-    I: yastn.tn.mps.MpsMpoOBC
+    I: MpsMpoOBC
         MPS or MPO that defines local Hilbert spaces.
     n: int
         Total charge of MPS.
@@ -173,7 +173,7 @@ def random_mps(I, n=None, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.M
     raise YastnError("MPS: Random mps is a zero state. Check parameters, or try running again in this is due to randomness of the initialization. ")
 
 
-def random_mpo(I, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.MpsMpoOBC:
+def random_mpo(I, D_total=8, sigma=1, dtype='float64') -> MpsMpoOBC:
     r"""
     Generate a random MPO with bond dimension ``D_total``.
 
@@ -183,7 +183,7 @@ def random_mpo(I, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.MpsMpoOBC
 
     Parameters
     ----------
-    I: yastn.tn.mps.MpsMpoOBC
+    I: MpsMpoOBC
         MPS or MPO that defines local spaces.
     D_total: int
         Largest bond dimension. Note that due to the random and local nature of the procedure,
@@ -214,19 +214,19 @@ def random_mpo(I, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.MpsMpoOBC
     raise YastnError("Random mpo is a zero state. Check parameters, or try running again in this is due to randomness of the initialization.")
 
 
-def random_dense_mps(N, D, d, **kwargs) -> yastn.tn.mps.MpsMpoOBC:
+def random_dense_mps(N, D, d, **kwargs) -> MpsMpoOBC:
     r"""Generate random MPS with physical dimension d and virtual dimension D."""
     I = product_mpo(Qdit(d=d, **kwargs).I(), N)
     return random_mps(I, D_total=D)
 
 
-def random_dense_mpo(N, D, d, **kwargs) -> yastn.tn.mps.MpsMpoOBC:
+def random_dense_mpo(N, D, d, **kwargs) -> MpsMpoOBC:
     r"""Generate random MPO with physical dimension d and virtual dimension D."""
     I = product_mpo(Qdit(d=d, **kwargs).I(), N)
     return random_mpo(I, D_total=D)
 
 
-def load_from_dict(config, in_dict) -> yastn.tn.mps.MpsMpo:
+def load_from_dict(config, in_dict) -> MpsMpoOBC:
     r"""
     Create MPS/MPO from dictionary.
 
@@ -237,7 +237,7 @@ def load_from_dict(config, in_dict) -> yastn.tn.mps.MpsMpo:
 
     in_dict: dict
         dictionary containing serialized MPS/MPO, i.e.,
-        a result of :meth:`yastn.tn.mps.MpsMpo.save_to_dict`.
+        a result of :meth:`yastn.tn.mps.MpsMpoOBC.save_to_dict`.
     """
     nr_phys = in_dict['nr_phys']
     N = in_dict['N'] if 'N' in in_dict else len(in_dict['A'])  # backwards compability
@@ -249,7 +249,7 @@ def load_from_dict(config, in_dict) -> yastn.tn.mps.MpsMpo:
     return out_mps
 
 
-def load_from_hdf5(config, file, my_address) -> yastn.tn.mps.MpsMpo:
+def load_from_hdf5(config, file, my_address) -> MpsMpoOBC:
     r"""
     Create MPS/MPO from HDF5 file.
 
@@ -278,10 +278,10 @@ def load_from_hdf5(config, file, my_address) -> yastn.tn.mps.MpsMpo:
     return out_Mps
 
 
-def mps_from_tensor(ten, nr_phys=1) -> yastn.tn.mps.MpsMpo:
+def mps_from_tensor(ten, nr_phys=1, canonize='last', opts_svd=None) -> MpsMpoOBC:
     r"""
-    Generate MPS from a tensor if nr_phys == 1 (the default)
-    and MPO for nr_phys == 2
+    Generate MPS from a tensor if ``nr_phys=1`` (the default)
+    and MPO for ``nr_phys=2``
 
     ::
 
@@ -299,23 +299,51 @@ def mps_from_tensor(ten, nr_phys=1) -> yastn.tn.mps.MpsMpo:
            |     |          |
            0     2        2N-2
 
+    Parameters
+    ----------
+    canonize: str
+        'first', 'last', or 'balance'. The default is 'first'.
+        Canonize to 'first' or 'last' site.
+        For 'balance', square roots of singular values are attached symmetrically to left and right tensors.
+    opts_svd: dict | None
+        Truncate MPS/MPO by passing svd_opts to :meth:`yastn.linalg.truncation_mask`.
+        The default is None, which sets truncation tolerance to 1e-14.
     """
     N = ten.ndim // nr_phys
     psi = MpsMpoOBC(N, nr_phys=nr_phys)
     ten = ten.add_leg(axis=0, s=-1).add_leg(axis=-nr_phys, s=1)
 
+    if opts_svd is None:
+        opts_svd = {'tol': 1e-14}
+
     for n in psi.sweep(to='last', dl=1):
         axes = (list(range(nr_phys + 1)), list(range(nr_phys + 1, ten.ndim)))
-        psi.A[n], ten = ten.qr(axes=axes, sQ=1, Qaxis=2)
+        psi.A[n], S, V = ten.svd_with_truncation(axes=axes, sU=1, Uaxis=2, **opts_svd)
+        ten = S @ V
 
     psi.factor = ten.norm()
     psi.A[psi.last] = ten / psi.factor
+
+    if canonize == 'first':
+        psi.canonize_(to='first', normalize=False)
+    elif canonize == 'balance':
+        psi.absorb_central_(to='first')
+        for n in psi.sweep(to='first', df=1):
+            psi.orthogonalize_site_(n=n, to='first', normalize=False)
+            pC = psi.pC
+            U, S, V = psi[pC].svd(axes=(0, 1))
+            S2 = S.sqrt()
+            psi.A[pC] = S2 @ V
+            psi.absorb_central_(to='last')
+            psi.pC = pC
+            psi.A[pC] = U @ S2
+            psi.absorb_central_(to='first')
     return psi
 
 
-def mpo_from_tensor(ten) -> yastn.tn.mps.MpsMpo:
+def mpo_from_tensor(ten, canonize='balance', opts_svd=None) -> MpsMpoOBC:
     r"""
     Generate MPO from a tensor.
-    Shortcut for :meth:`yastn.tn.mps.mps_from_tensor` with nr_phys=2.
+    Shortcut for :meth:`yastn.tn.mps.mps_from_tensor` with ``nr_phys=2``.
     """
-    return mps_from_tensor(ten, nr_phys=2)
+    return mps_from_tensor(ten, nr_phys=2, canonize=canonize, opts_svd=opts_svd)

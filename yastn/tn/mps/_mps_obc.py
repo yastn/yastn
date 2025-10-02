@@ -16,7 +16,7 @@
 from __future__ import annotations
 from numbers import Number
 from typing import Sequence
-from ... import tensor, initialize, YastnError, tensordot, einsum
+from ... import tensor, initialize, YastnError, tensordot
 from ._mps_parent import _MpsMpoParent
 
 

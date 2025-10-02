@@ -6,8 +6,7 @@ from collections import namedtuple
 
 import torch.utils.checkpoint
 
-
-from .... import zeros, eye, tensordot, einsum, diag
+from .... import zeros, eye, tensordot, diag
 from ._env_ctm import ctm_conv_corner_spec
 from ._env_ctm_c4v import EnvCTM_c4v, decompress_env_c4v_1d
 from .fixed_pt import env_T_gauge_multi_sites, NoFixedPointError, real_to_complex, complex_to_real

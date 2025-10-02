@@ -241,7 +241,7 @@ def _compression_2site_sweep_(env, opts_svd=None, Schmidt=None):
     return max_disc_weight
 
 
-def zipper(a, b, opts_svd=None, normalize=True, return_discarded=False) -> yastn.tn.mps.MpsMpoOBC:
+def zipper(a, b, opts_svd=None, normalize=True, return_discarded=False) -> MpsMpoOBC:
     """
     Apply MPO ``a`` on MPS/MPS ``b``, performing SVD compression during the sweep.
 
@@ -288,7 +288,7 @@ def zipper(a, b, opts_svd=None, normalize=True, return_discarded=False) -> yastn
     return psi
 
 
-def _zipper_MpoOBC(a, psi, opts_svd, normalize) -> yastn.tn.mps.MpsMpo:
+def _zipper_MpoOBC(a, psi, opts_svd, normalize) -> MpsMpoOBC:
     """
     Special case of MpoOBC
     """
@@ -328,7 +328,7 @@ def _zipper_MpoOBC(a, psi, opts_svd, normalize) -> yastn.tn.mps.MpsMpo:
     return psi, psi.config.backend.sqrt(discarded2_total)
 
 
-def _zipper_MpoPBC(a, psi, opts_svd, normalize) -> yastn.tn.mps.MpsMpo:
+def _zipper_MpoPBC(a, psi, opts_svd, normalize) -> MpsMpoOBC:
     """
     Special case of MpoPBC
     """
