@@ -28,6 +28,7 @@ from ._env_auxlliary import *
 from ._env_window import EnvWindow
 from ._env_measure import _measure_nsite
 from ._env_boundary_mps import _clear_operator_input
+import yastn
 
 logger = logging.Logger('ctmrg')
 
@@ -976,9 +977,63 @@ class EnvCTM(Peps):
                 update_storage_(proj, proj_tmp)
         return proj
 
-    def update_bond_(env, bond: tuple, opts_svd: dict | None = None, **kwargs):
+    # def update_bond_(env, bond: tuple, opts_svd: dict | None = None, **kwargs):
+    #     r"""
+    #     Update EnvCTM tensors related to a specific nearest-neighbor bond.
+    #     """
+    #     if opts_svd is None:
+    #         opts_svd = env.opts_svd
+
+    #     dirn = env.nn_bond_dirn(*bond)
+    #     s0, s1 = bond if dirn in 'lr tb' else bond[::-1]
+
+    #     proj = Peps(env.geometry)
+    #     for site in env.sites():
+    #         proj[site] = EnvCTM_projectors()
+
+    #     # move, m0, m1, d = 'hrlt' if dirn in 'lrl' else 'vbtl'
+    #     env_tmp = EnvCTM(env.psi, init=None)  # empty environments
+    #     if dirn in 'lrl':
+    #         update_projectors_(proj, env.nn_site(s0, d='t'), 't', env, opts_svd, **kwargs)
+    #         update_projectors_(proj, s0, 'b', env, opts_svd, **kwargs)
+
+    #         trivial_projectors_(proj, 'v', env, sites=[env.nn_site(s0, d='tl')])
+    #         trivial_projectors_(proj, 'v', env, sites=[env.nn_site(s0, d='t')])
+    #         trivial_projectors_(proj, 'v', env, sites=[env.nn_site(s0, d='bl')])
+    #         trivial_projectors_(proj, 'v', env, sites=[env.nn_site(s0, d='b')])
+
+    #         trivial_projectors_(proj, 'v', env, sites=[env.nn_site(s1, d='t')])
+    #         trivial_projectors_(proj, 'v', env, sites=[env.nn_site(s1, d='tr')])
+    #         trivial_projectors_(proj, 'v', env, sites=[env.nn_site(s1, d='b')])
+    #         trivial_projectors_(proj, 'v', env, sites=[env.nn_site(s1, d='br')])
+
+    #         update_env_(env_tmp, s0, env, proj, move='v')
+    #         update_env_(env, s1, env, proj, move='v')
+    #     else:
+    #         update_projectors_(proj, env.nn_site(s0, d='l'), 'l', env, opts_svd, **kwargs)
+    #         update_projectors_(proj, s0, 'r', env, opts_svd, **kwargs)
+
+    #         trivial_projectors_(proj, 'h', env, sites=[env.nn_site(s0, d='tl')])
+    #         trivial_projectors_(proj, 'h', env, sites=[env.nn_site(s0, d='l')])
+    #         trivial_projectors_(proj, 'h', env, sites=[env.nn_site(s0, d='tr')])
+    #         trivial_projectors_(proj, 'h', env, sites=[env.nn_site(s0, d='r')])
+
+    #         trivial_projectors_(proj, 'h', env, sites=[env.nn_site(s1, d='l')])
+    #         trivial_projectors_(proj, 'h', env, sites=[env.nn_site(s1, d='bl')])
+    #         trivial_projectors_(proj, 'h', env, sites=[env.nn_site(s1, d='r')])
+    #         trivial_projectors_(proj, 'h', env, sites=[env.nn_site(s1, d='br')])
+
+    #         update_env_(env_tmp, s0, env, proj, move='h')
+    #         update_env_(env, s1, env, proj, move='h')
+    #     update_storage_(env, env_tmp)
+
+    def canonical_site(env, site):
+        site_c = Site(site.nx % env.psi.Nx, site.ny % env.psi.Ny)
+        return site_c
+
+    def build_bond_projectors_(env, bond: tuple, opts_svd: dict | None = None, **kwargs):
         r"""
-        Update EnvCTM tensors related to a specific nearest-neighbor bond.
+        Update EnvCTM projectors related to a specific nearest-neighbor bond.
         """
         if opts_svd is None:
             opts_svd = env.opts_svd
@@ -991,40 +1046,37 @@ class EnvCTM(Peps):
             proj[site] = EnvCTM_projectors()
 
         # move, m0, m1, d = 'hrlt' if dirn in 'lrl' else 'vbtl'
-        env_tmp = EnvCTM(env.psi, init=None)  # empty environments
+        # env_tmp = EnvCTM(env.psi, init=None)  # empty environments
         if dirn in 'lrl':
             update_projectors_(proj, env.nn_site(s0, d='t'), 't', env, opts_svd, **kwargs)
             update_projectors_(proj, s0, 'b', env, opts_svd, **kwargs)
 
-            trivial_projectors_(proj, 'v', env, sites=[env.nn_site(s0, d='tl')])
             trivial_projectors_(proj, 'v', env, sites=[env.nn_site(s0, d='t')])
-            trivial_projectors_(proj, 'v', env, sites=[env.nn_site(s0, d='bl')])
             trivial_projectors_(proj, 'v', env, sites=[env.nn_site(s0, d='b')])
 
             trivial_projectors_(proj, 'v', env, sites=[env.nn_site(s1, d='t')])
-            trivial_projectors_(proj, 'v', env, sites=[env.nn_site(s1, d='tr')])
             trivial_projectors_(proj, 'v', env, sites=[env.nn_site(s1, d='b')])
-            trivial_projectors_(proj, 'v', env, sites=[env.nn_site(s1, d='br')])
 
-            update_env_(env_tmp, s0, env, proj, move='v')
-            update_env_(env, s1, env, proj, move='v')
+            return {(env.canonical_site(env.nn_site(s0, d='t')), 'vtr'): yastn.save_to_dict(proj[env.nn_site(s0, d='t')].vtr),
+                    (env.canonical_site(env.nn_site(s0, d='tr')), 'vtl'): yastn.save_to_dict(proj[env.nn_site(s0, d='tr')].vtl),
+                    (env.canonical_site(env.nn_site(s0, d='b')), 'vbr'): yastn.save_to_dict(proj[env.nn_site(s0, d='b')].vbr),
+                    (env.canonical_site(env.nn_site(s0, d='br')), 'vbl'): yastn.save_to_dict(proj[env.nn_site(s0, d='br')].vbl),}
         else:
             update_projectors_(proj, env.nn_site(s0, d='l'), 'l', env, opts_svd, **kwargs)
             update_projectors_(proj, s0, 'r', env, opts_svd, **kwargs)
 
-            trivial_projectors_(proj, 'h', env, sites=[env.nn_site(s0, d='tl')])
             trivial_projectors_(proj, 'h', env, sites=[env.nn_site(s0, d='l')])
-            trivial_projectors_(proj, 'h', env, sites=[env.nn_site(s0, d='tr')])
             trivial_projectors_(proj, 'h', env, sites=[env.nn_site(s0, d='r')])
 
             trivial_projectors_(proj, 'h', env, sites=[env.nn_site(s1, d='l')])
-            trivial_projectors_(proj, 'h', env, sites=[env.nn_site(s1, d='bl')])
             trivial_projectors_(proj, 'h', env, sites=[env.nn_site(s1, d='r')])
-            trivial_projectors_(proj, 'h', env, sites=[env.nn_site(s1, d='br')])
 
-            update_env_(env_tmp, s0, env, proj, move='h')
-            update_env_(env, s1, env, proj, move='h')
-        update_storage_(env, env_tmp)
+            return {(env.canonical_site(env.nn_site(s0, d='l')), 'hlb'): yastn.save_to_dict(proj[env.nn_site(s0, d='l')].hlb),
+                    (env.canonical_site(env.nn_site(s0, d='bl')), 'hlt'): yastn.save_to_dict(proj[env.nn_site(s0, d='bl')].hlt),
+                    (env.canonical_site(env.nn_site(s0, d='r')), 'hrb'): yastn.save_to_dict(proj[env.nn_site(s0, d='r')].hrb),
+                    (env.canonical_site(env.nn_site(s0, d='br')), 'hrt'): yastn.save_to_dict(proj[env.nn_site(s0, d='br')].hrt),}
+
+
 
 
     def pre_truncation_(env, bond):
