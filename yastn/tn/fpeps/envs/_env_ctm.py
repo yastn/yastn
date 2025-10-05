@@ -1028,6 +1028,9 @@ class EnvCTM(Peps):
     #     update_storage_(env, env_tmp)
 
     def canonical_site(env, site):
+        '''
+        Turn the indices of the site nx and ny to the range [0, Wx-1] and [0, Wy-1] respectively.
+        '''
         site_c = Site(site.nx % env.psi.Nx, site.ny % env.psi.Ny)
         return site_c
 
