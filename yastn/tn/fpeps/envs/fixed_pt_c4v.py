@@ -10,7 +10,7 @@ from collections import namedtuple
 from .... import zeros, eye, tensordot, diag, decompress_from_1d
 from ._env_ctm import ctm_conv_corner_spec, decompress_proj_1d
 from ._env_ctm_c4v import EnvCTM_c4v, decompress_env_c4v_1d
-from .fixed_pt import env_T_gauge_multi_sites, fast_env_T_gauge_multi_sites, NoFixedPointError, real_to_complex, complex_to_real
+from .fixed_pt import fast_env_T_gauge_multi_sites, NoFixedPointError, real_to_complex, complex_to_real
 from .rdm import *
 
 
@@ -87,8 +87,6 @@ def find_gauge_c4v(env_old, env, verbose=False):
     site = env.sites()[0]
     T_olds, T_news = [env_old[site].t, env_old[site].t.flip_signature()], [env[site].t, env[site].t.flip_signature()]
     zero_modes = fast_env_T_gauge_multi_sites(env.psi.config, T_olds, T_news)
-    # if len(zero_modes) == 0: # fast method fails
-    #     zero_modes = env_T_gauge_multi_sites(env.psi.config, T_olds, T_news)
     if len(zero_modes) == 0:
         return None
 
