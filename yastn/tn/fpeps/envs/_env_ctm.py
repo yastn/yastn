@@ -14,7 +14,7 @@
 # ==============================================================================
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import NamedTuple, Callable
+from typing import NamedTuple, Union, Callable, Sequence
 import logging
 from .... import Tensor, rand, ones, eye, YastnError, Leg, tensordot, qr, truncation_mask, vdot, decompress_from_1d
 from ....operators import sign_canonical_order
@@ -29,7 +29,9 @@ from ._env_window import EnvWindow
 from ._env_measure import _measure_nsite
 from ._env_boundary_mps import _clear_operator_input
 
-logger = logging.Logger('ctmrg')
+import sys
+import logging
+logger= logging.getLogger(__name__)
 
 @dataclass()
 class EnvCTM_local():
@@ -116,8 +118,12 @@ class EnvCTM(Peps):
         return self.psi.config
 
     def max_D(self):
-        return max(max(max(getattr(self[site], dirn).get_shape()) for dirn in ['tl', 'tr', 'bl', 'br'])
-                   for site in self.sites())
+        m_D = 0
+        for site in self.sites():
+            for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
+                if getattr(self[site], dirn) is not None:
+                    m_D = max(max(getattr(self[site], dirn).get_shape()), m_D)
+        return m_D
 
     # Cloning/Copying/Detaching(view)
     #
@@ -201,6 +207,31 @@ class EnvCTM(Peps):
                '2layer': isinstance(env.psi, Peps2Layers), 'geometry': env.geometry, 'sites': env.sites()}
         data= tuple( t for t,m in unrolled['psi'].values())+tuple( t for t,m in unrolled['env'])
         return data, meta
+
+    def compress_proj_1d(env, proj):
+            empty_proj= Tensor(config=env.config) # placeholder instead of None
+            data_t, meta_t= tuple(zip( *(t.compress_to_1d() if not (t is None) else empty_proj.compress_to_1d() \
+                for site in proj.sites() for t in proj[site].__dict__.values()) ))
+            meta= {'geometry': proj.geometry, 'proj': meta_t}
+            return data_t, meta
+
+    def save_to_dict(self) -> dict:
+        r"""
+        Serialize EnvCTM into a dictionary.
+        """
+        psi = self.psi
+        if isinstance(psi, Peps2Layers):
+            psi = psi.ket
+
+        d = {'class': 'EnvCTM',
+             'psi': psi.save_to_dict(),
+             'data': {}}
+        for site in self.sites():
+            d_local = {dirn: getattr(self[site], dirn).save_to_dict()
+                       for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']}
+            d['data'][site] = d_local
+        return d
+
 
     def reset_(self, init='rand', leg=None, **kwargs):
         r"""
@@ -917,11 +948,6 @@ class EnvCTM(Peps):
         for site in proj.sites():
             proj[site] = EnvCTM_projectors()
 
-        def _compress_proj(proj, empty_proj):
-            data, meta= tuple(zip( *(t.compress_to_1d() if not (t is None) else empty_proj.compress_to_1d() \
-                for site in proj.sites() for t in proj[site].__dict__.values()) ))
-            return data, meta
-
         #
         # get projectors and compute updated env tensors
         # TODO currently supports only <psi|psi> for double-layer peps
@@ -939,8 +965,8 @@ class EnvCTM(Peps):
 
                     # return backend tensors - only environment and projectors
                     #
-                    out_env_data, out_env_meta = loc_env.compress_env_1d()
-                    out_proj_data, out_proj_meta = _compress_proj(proj_tmp, Tensor(config=next(iter(out_env_meta['psi'].values()))['config']))
+                    out_env_data, out_env_meta= loc_env.compress_env_1d()
+                    out_proj_data, out_proj_meta= loc_env.compress_proj_1d(proj_tmp)
 
                     outputs_meta['env']= out_env_meta['env']
                     outputs_meta['proj']= out_proj_meta
@@ -964,7 +990,7 @@ class EnvCTM(Peps):
                         setattr(env[site],env_t,decompress_from_1d(t,t_meta) if t is not None else None)
 
                 for i,site in enumerate(proj.sites()):
-                    for proj_t,t,t_meta in zip(proj[site].__dict__.keys(),outputs[8*len(env.sites()):][i*8:(i+1)*8],outputs_meta['proj'][i*8:(i+1)*8]):
+                    for proj_t,t,t_meta in zip(proj[site].__dict__.keys(),outputs[8*len(env.sites()):][i*8:(i+1)*8],outputs_meta['proj']['proj'][i*8:(i+1)*8]):
                         setattr(proj[site],proj_t, decompress_from_1d(t,t_meta) if t_meta['struct'].size>0 else None)
 
             else:
@@ -1046,23 +1072,6 @@ class EnvCTM(Peps):
 
         g = g / g.trace(axes=(0, 1)).to_number()
         return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
-
-    def save_to_dict(self) -> dict:
-        r"""
-        Serialize EnvCTM into a dictionary.
-        """
-        psi = self.psi
-        if isinstance(psi, Peps2Layers):
-            psi = psi.ket
-
-        d = {'class': 'EnvCTM',
-             'psi': psi.save_to_dict(),
-             'data': {}}
-        for site in self.sites():
-            d_local = {dirn: getattr(self[site], dirn).save_to_dict()
-                       for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']}
-            d['data'][site] = d_local
-        return d
 
     def check_corner_bond_dimension(env, disp=False):
 
@@ -1189,6 +1198,27 @@ class EnvCTM(Peps):
             if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
                 yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
         yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
+
+    def _partial_svd_predict_spec(env,leg0,leg1,sU):
+        # TODO externalize defaults for extending number of singular values to solve for
+        """
+        Used in block-wise partial SVD solvers.
+
+        Based on the projector spectra leg0, leg1, from (previous) projector pair,
+        suggest number of singular value triples to solve for in each of the blocks.
+
+        Parameters
+        ----------
+        leg0, leg1: yastn.Tensor
+            Projector spectra for the previous projector pair.
+        sU: int
+            Signature of U in SVD decomposition. See :func:`proj_corners` and :func:`linalg.svd`.
+        """
+        # the projector spectra for projector pair are related by charge conjugation
+        assert leg0 == leg1.conj(), f"Projector spectrum history mismatch between leg0={leg0} and leg1={leg1}"
+        #
+        l= leg0 if sU == leg0.s else leg1
+        return { t: max(d+10,int(d*1.1)) for t,d in zip(l.t, l.D) }
 
 
 def _update_core_(env, move: str, opts_svd: dict, **kwargs):
@@ -1480,16 +1510,6 @@ def update_1site_projectors_(proj, tl, tr, bl, br, move, env, opts_svd, **kwargs
         proj[bl].vbr, proj[br].vbl = proj_corners(r_bl, r_br, opts_svd=opts_svd, **kwargs)
 
 
-def regularize_1site_corners(cor_0, cor_1):
-    Q_0, R_0 = qr(cor_0, axes=(0, 1))
-    Q_1, R_1 = qr(cor_1, axes=(1, 0))
-    R01 = tensordot(R_0, R_1, axes=(1, 1))
-    U_0, S, U_1 = R01.svd(axes=(0, 1), fix_signs=True)
-    S = S.sqrt()
-    r_0 = tensordot((U_0 @ S), Q_0, axes=(0, 1))
-    r_1 = tensordot((S @ U_1), Q_1, axes=(1, 1))
-    return r_0, r_1
-
 
 def proj_corners(r0, r1, opts_svd, **kwargs):
     r""" Projectors in between r0 @ r1.T corners. """
@@ -1648,6 +1668,179 @@ def decompress_env_1d(data,meta):
         for env_t,t,t_meta in zip(loc_env[site].__dict__.keys(),data_env[i*8:(i+1)*8],meta['env'][i*8:(i+1)*8]):
             setattr(loc_env[site],env_t,decompress_from_1d(t,t_meta) if t is not None else None)
     return loc_env
+
+
+def decompress_proj_1d(data,meta):
+    """
+    Reconstruct the projectors from their compressed form.
+
+    Parameters
+    ----------
+    data : Sequence[Tensor]
+        Collection of 1D data tensors for both environment and underlying PEPS.
+    meta : dict
+        Holds metadata of original projectors (and PEPS geometry).
+
+    Returns
+    -------
+    Peps of EnvCTM_projectors
+        Projectors for the CTM environment.
+    """
+    proj = Peps(meta['geometry'])
+    for site in proj.sites(): proj[site] = EnvCTM_projectors()
+
+    # assign backend tensors
+    #
+    for i,site in enumerate(proj.sites()):
+        for env_t,t,t_meta in zip(proj[site].__dict__.keys(),data[i*8:(i+1)*8],meta['proj'][i*8:(i+1)*8]):
+            setattr(proj[site],env_t,decompress_from_1d(t,t_meta) if t is not None else None)
+    return proj
+
+
+def ctm_conv_corner_spec(env : EnvCTM, history : Sequence[dict[tuple[Site,str],Tensor]]=[],
+                         corner_tol : Union[None,float]=1.0e-8)->tuple[bool,float,Sequence[dict[tuple[Site,str],Tensor]]]:
+    """
+    Evaluate convergence of CTM by computing the difference of environment corner spectra between consecutive CTM steps.
+    """
+    history.append(calculate_corner_svd(env))
+    def spec_diff(x,y):
+        if x is not None and y is not None:
+            return (x - y).norm().item()
+        elif x is None and y is None:
+            return 0
+        else:
+            return float('Inf')
+    max_dsv = max(spec_diff(history[-1][k], history[-2][k]) for k in history[-1]) if len(history)>1 else float('Nan')
+    history[-1]['max_dsv'] = max_dsv
+
+    return (corner_tol is not None and max_dsv < corner_tol), max_dsv, history
+
+
+def calculate_corner_svd(env : dict[tuple[Site,str],Tensor]):
+    """
+    Return normalized SVD spectra, with largest singular value set to unity, of all corner tensors of environment.
+    The corners are indexed by pair of Site and corner identifier.
+    """
+    _get_spec= lambda x: x.svd(compute_uv=False) if not (x is None) and not x.isdiag else x
+    corner_sv = {}
+    for site in env.sites():
+        corner_sv[site, 'tl'] = _get_spec(env[site].tl)
+        corner_sv[site, 'tr'] = _get_spec(env[site].tr)
+        corner_sv[site, 'bl'] = _get_spec(env[site].bl)
+        corner_sv[site, 'br'] = _get_spec(env[site].br)
+    for k, v in corner_sv.items():
+        if not corner_sv[k] is None:
+            corner_sv[k] = v / v.norm(p='inf')
+    return corner_sv
+
+
+def update_2site_projectors_(proj, site, dirn, env, opts_svd, **kwargs):
+    r"""
+    Update projectors or environment tensor in ``old`` with the ones stored in ``new`` (ignoring unassigned projectors i.e. ``None``).
+
+    Parameters
+    ----------
+    old: Peps | EnvCTM
+        Has ``EnvCTM_projectors`` or ``EnvCTM_local`` assigned to each site
+    new: Peps | EnvCTM
+        Has ``EnvCTM_projectors`` or ``EnvCTM_local`` assigned to each site
+    """
+    psi = env.psi
+    sites = [psi.nn_site(site, d=d) for d in ((0, 0), (0, 1), (1, 0), (1, 1))]
+    if None in sites:
+        return
+
+    use_qr = kwargs.get("use_qr", True)
+    psh= kwargs.pop("proj_history", None)
+    svd_predict_spec= lambda s0,p0,s1,p1: opts_svd.get('D_block', float('inf')) if psh is None else \
+        env._partial_svd_predict_spec(getattr(psh[s0],p0), getattr(psh[s1],p1), opts_svd.get('sU', 1))
+
+    tl, tr, bl, br = sites
+
+    cor_tl = env[tl].l @ env[tl].tl @ env[tl].t
+    cor_tl = tensordot(cor_tl, psi[tl], axes=((2, 1), (0, 1)))
+    cor_tl = cor_tl.fuse_legs(axes=((0, 2), (1, 3)))
+
+    cor_bl = env[bl].b @ env[bl].bl @ env[bl].l
+    cor_bl = tensordot(cor_bl, psi[bl], axes=((2, 1), (1, 2)))
+    cor_bl = cor_bl.fuse_legs(axes=((0, 3), (1, 2)))
+
+    cor_tr = env[tr].t @ env[tr].tr @ env[tr].r
+    cor_tr = tensordot(cor_tr, psi[tr], axes=((1, 2), (0, 3)))
+    cor_tr = cor_tr.fuse_legs(axes=((0, 2), (1, 3)))
+
+    cor_br = env[br].r @ env[br].br @ env[br].b
+    cor_br = tensordot(cor_br, psi[br], axes=((2, 1), (2, 3)))
+    cor_br = cor_br.fuse_legs(axes=((0, 2), (1, 3)))
+
+    if ('l' in dirn) or ('r' in dirn):
+        cor_tt = cor_tl @ cor_tr  # b(left) b(right)
+        cor_bb = cor_br @ cor_bl  # t(right) t(left)
+
+    _opts_loc= dict(**opts_svd)
+    if 'r' in dirn:
+        _, r_t = qr(cor_tt, axes=(0, 1)) if use_qr else (None, cor_tt)
+        _, r_b = qr(cor_bb, axes=(1, 0)) if use_qr else (None, cor_bb.T)
+        _opts_loc['D_block'] = svd_predict_spec(tr, 'hrb', br, 'hrt')
+        proj[tr].hrb, proj[br].hrt = proj_corners(r_t, r_b, opts_svd=_opts_loc, **kwargs)
+
+    if 'l' in dirn:
+        _, r_t = qr(cor_tt, axes=(1, 0)) if use_qr else (None, cor_tt.T)
+        _, r_b = qr(cor_bb, axes=(0, 1)) if use_qr else (None, cor_bb)
+        _opts_loc['D_block'] = svd_predict_spec(tl, 'hlb', bl, 'hlt')
+        proj[tl].hlb, proj[bl].hlt = proj_corners(r_t, r_b, opts_svd=_opts_loc, **kwargs)
+
+    if ('t' in dirn) or ('b' in dirn):
+        cor_ll = cor_bl @ cor_tl  # l(bottom) l(top)
+        cor_rr = cor_tr @ cor_br  # r(top) r(bottom)
+
+    if 't' in dirn:
+        _, r_l = qr(cor_ll, axes=(0, 1)) if use_qr else (None, cor_ll)
+        _, r_r = qr(cor_rr, axes=(1, 0)) if use_qr else (None, cor_rr.T)
+        _opts_loc['D_block'] = svd_predict_spec(tl, 'vtr', tr, 'vtl')
+        proj[tl].vtr, proj[tr].vtl = proj_corners(r_l, r_r, opts_svd=_opts_loc, **kwargs)
+
+    if 'b' in dirn:
+        _, r_l = qr(cor_ll, axes=(1, 0)) if use_qr else (None, cor_ll.T)
+        _, r_r = qr(cor_rr, axes=(0, 1)) if use_qr else (None, cor_rr)
+        _opts_loc['D_block'] = svd_predict_spec(bl, 'vbr', br, 'vbl')
+        proj[bl].vbr, proj[br].vbl = proj_corners(r_l, r_r, opts_svd=_opts_loc, **kwargs)
+
+
+def regularize_1site_corners(cor_0, cor_1):
+    Q_0, R_0 = qr(cor_0, axes=(0, 1))
+    Q_1, R_1 = qr(cor_1, axes=(1, 0))
+    R01 = tensordot(R_0, R_1, axes=(1, 1))
+    U_0, S, U_1 = R01.svd(axes=(0, 1), fix_signs=True)
+    S = S.sqrt()
+    r_0 = tensordot((U_0 @ S), Q_0, axes=(0, 1))
+    r_1 = tensordot((S @ U_1), Q_1, axes=(1, 1))
+    return r_0, r_1
+
+
+def proj_corners(r0, r1, opts_svd, **kwargs):
+    r""" Projectors in between r0 @ r1.T corners. """
+    rr = tensordot(r0, r1, axes=(1, 1))
+    truncation_f= kwargs.pop('truncation_f',None)
+
+    verbosity = opts_svd.get('verbosity', 0)
+    kwargs['verbosity'] = verbosity
+
+    if truncation_f is None:
+        u, s, v = rr.svd(axes=(0, 1), sU=r0.s[1], **opts_svd)
+        Smask = truncation_mask(s, **opts_svd)
+        u, s, v = Smask.apply_mask(u, s, v, axes=(-1, 0, 0))
+    else:
+        u, s, v = rr.svd_with_truncation(axes=(0, 1), sU=r0.s[1], mask_f=truncation_f, **opts_svd)
+
+    if verbosity>2:
+        fname = sys._getframe().f_code.co_name
+        logger.info(f"{fname} S {s.get_legs(0)}")
+
+    rs = s.rsqrt()
+    p0 = tensordot(r1, (rs @ v).conj(), axes=(0, 1)).unfuse_legs(axes=0)
+    p1 = tensordot(r0, (u @ rs).conj(), axes=(0, 0)).unfuse_legs(axes=0)
+    return p0, p1
 
 
 def update_storage_(old, new):

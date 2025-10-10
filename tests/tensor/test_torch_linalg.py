@@ -21,7 +21,7 @@ torch_test = pytest.mark.skipif("'torch' not in config.getoption('--backend')",
 @torch_test
 def test_SVDSYMARNOLDI_random():
     import torch
-    from yastn.backend.linalg.torch_svd_arnoldi import SVDSYMARNOLDI
+    from yastn.backend.linalg.torch_svds_scipy import SVDSYMARNOLDI
 
     m = 50
     k = 10
@@ -40,14 +40,14 @@ def test_SVDSYMARNOLDI_random():
 @torch_test
 def test_SVDARNOLDI_random():
     import torch
-    from yastn.backend.linalg.torch_svd_arnoldi import SVDARNOLDI
+    from yastn.backend.linalg.torch_svds_scipy import SVDS_SCIPY
 
     m = 50
     k = 10
     M = torch.rand((m, m), dtype=torch.float64)
     U0, S0, V0 = torch.svd(M)
 
-    U , S, V = SVDARNOLDI.apply(M, k)
+    U , S, V = SVDS_SCIPY.apply(M, k)
     # |M|=\sqrt{Tr(MM^t)}=\sqrt{Tr(D^2)} =>
     # |M-US_kV^t|=\sqrt{Tr(D^2)-Tr(S^2)}=\sqrt{\sum_i>k D^2_i}
     assert abs(torch.norm(M - U @ torch.diag(S) @ V) - torch.sqrt(torch.sum(S0[k:] ** 2))) < S0[0] * m**2 * 1e-14
@@ -56,7 +56,7 @@ def test_SVDARNOLDI_random():
 @torch_test
 def test_SVDARNOLDI_rank_deficient():
     import torch
-    from yastn.backend.linalg.torch_svd_arnoldi import SVDARNOLDI
+    from yastn.backend.linalg.torch_svds_scipy import SVDS_SCIPY
 
     m = 50
     k = 15
@@ -66,7 +66,7 @@ def test_SVDARNOLDI_rank_deficient():
         S0[-r:] = 0
         M = U @ torch.diag(S0) @ V.t()
 
-        U, S, V = SVDARNOLDI.apply(M, k)
+        U, S, V = SVDS_SCIPY.apply(M, k)
         assert abs(torch.norm(M - U @ torch.diag(S) @ V) - torch.sqrt(torch.sum(S0[k:] ** 2))) < S0[0] * m**2 * 1e-14
 
 

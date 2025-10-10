@@ -198,7 +198,7 @@ def test_syntax_block_access(config_kwargs):
     # Cannot access non-existing block.
     #
     with pytest.raises(yastn.YastnError,
-                       match="Tensor does not have block specify by key."):
+                       match="Tensor does not have the block specified by key."):
         a[(0, 3, 3)]
 
 

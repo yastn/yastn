@@ -263,20 +263,29 @@ def safe_svd(a):
     return U, S, V
 
 
-def svd_lowrank(data, meta, sizes):
+def svd_lowrank(data, meta, sizes, **kwargs):
+    return svds_scipy(data, meta, sizes, None, 'arpack', **kwargs)
+
+def svds_scipy(data, meta, sizes, thresh=None, solver='arpack', **kwargs):
     Udata = np.empty((sizes[0],), dtype=data.dtype)
     Sdata = np.empty((sizes[1],), dtype=DTYPE['float64'])
     Vdata = np.empty((sizes[2],), dtype=data.dtype)
     for (sl, D, slU, DU, slS, slV, DV) in meta:
         k = slS[1] - slS[0]
-        if k < min(D) - 1 and D[0] * D[1] > 5000:
-            # the second condition is heuristic estimate when performing dense svd should be faster.
-            try:
-                U, S, V = scipy.sparse.linalg.svds(data[slice(*sl)].reshape(D), k=k, ncv=min(5 * k, min(D) - 1),
-                                                   which='LM', maxiter=20 * min(D), solver='arpack')
-            except scipy.sparse.linalg.ArpackError:
+        # Is block too small for iterative svd ?
+        # TODO user defined threshold
+        # the second condition is heuristic estimate when performing dense svd should be faster.
+        if (k < min(D) - 1 and D[0] * D[1] > 5000) or (not(thresh is None) and min(D)*thresh > k):
+            if solver == 'arpack':
+                try:
+                    U, S, V = scipy.sparse.linalg.svds(data[slice(*sl)].reshape(D), k=k, ncv=min(5 * k, min(D) - 1),
+                                                    which='LM', maxiter=20 * min(D), solver='arpack')
+                except scipy.sparse.linalg.ArpackError:
+                    U, S, V = scipy.sparse.linalg.svds(data[slice(*sl)].reshape(D), k=k,
+                                                    which='LM', maxiter=20 * k, solver='propack')
+            if solver == 'propack':
                 U, S, V = scipy.sparse.linalg.svds(data[slice(*sl)].reshape(D), k=k,
-                                                   which='LM', maxiter=20 * k, solver='propack')
+                                                    which='LM', maxiter=20 * k, solver='propack')
             ord = np.argsort(-S)
             U, S, V = U[:, ord], S[ord], V[ord, :]
         else:
