@@ -1,4 +1,4 @@
-# Copyright 2024 The YASTN Authors. All Rights Reserved.
+# Copyright 2025 The YASTN Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,10 +14,21 @@
 # ==============================================================================
 """ Routines for time evolution with nn gates on a 2D lattice. """
 
-from ... import tensordot, vdot, svd_with_truncation, truncation_mask, YastnError
+from ... import tensordot, vdot, svd_with_truncation, YastnError, Tensor
 from ._peps import Peps2Layers
-from ._gates_auxiliary import apply_gate_onsite, apply_gate_nn, gate_fix_order, apply_bond_tensors
+from ._gates_auxiliary import Gate, gate_from_mpo
+from ..mps import MpsMpoOBC
 from typing import NamedTuple
+from itertools import pairwise
+
+
+class BondMetric(NamedTuple):
+    g: Tensor = None
+
+
+class BipartiteBondMetric(NamedTuple):
+    gL: Tensor = None
+    gR: Tensor = None
 
 
 class Evolution_out(NamedTuple):
@@ -34,8 +45,7 @@ class Evolution_out(NamedTuple):
     pinv_cutoffs: dict[str, float] = ()
 
 
-def evolution_step_(env, gates, opts_svd, symmetrize=True,
-                    fix_metric=0,
+def evolution_step_(env, gates, opts_svd, method='mpo', fix_metric=0,
                     pinv_cutoffs=(1e-12, 1e-11, 1e-10, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4),
                     max_iter=100, tol_iter=1e-13, initialization="EAT_SVD"):
     r"""
@@ -55,9 +65,9 @@ def evolution_step_(env, gates, opts_svd, symmetrize=True,
         In particular, it fixes bond dimensions (potentially, sectorial).
         It is possible to provide a list of dicts (with decreasing bond dimensions),
         in which case the truncation is done gradually in a few steps.
-    symmetrize: bool
-        Whether to iterate through provided gates forward and then backward, resulting in a 2nd order method.
-        In that case, each gate should correspond to half of the desired timestep. The default is ``True``.
+    method: str
+        For ``'NN'``, split multi-site gates into a series of nearest-neighbor gates.
+        Otherwise, apply mpo-gate first, and then sequentially truncate enlarged bonds (the default).
     fix_metric: int | None
         Error measure of the metric tensor is a sum of: the norm of its non-hermitian part
         and absolute value of the most negative eigenvalue (if present).
@@ -77,8 +87,8 @@ def evolution_step_(env, gates, opts_svd, symmetrize=True,
 
     Returns
     -------
-    Evolution_out(NamedTuple)
-        Namedtuple containing fields:
+    list[Evolution_out(NamedTuple)]
+        List of Namedtuple containing fields:
             * ``bond`` bond where the gate is applied.
             * ``truncation_error`` relative norm of the difference between untruncated and truncated bonds, calculated in metric specified by env.
             * ``best_method`` initialization/optimization method giving the best truncation_error. Possible values are 'eat', 'eat_opt', 'svd', 'svd_opt'.
@@ -95,18 +105,38 @@ def evolution_step_(env, gates, opts_svd, symmetrize=True,
         psi = psi.ket  # to make it work with CtmEnv
 
     infos = []
-    for gate in gates.local:
-        psi[gate.site] = apply_gate_onsite(psi[gate.site], gate.G)
-    for gate in gates.nn:
-        info = apply_nn_truncate_optimize_(env, psi, gate, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization=initialization)
-        infos.append(info)
-    if symmetrize:
-        for gate in gates.nn[::-1]:
-            info = apply_nn_truncate_optimize_(env, psi, gate, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization=initialization)
+
+    if 'nn' in method.lower():
+        gates = [Gate(gate_from_mpo(gate.G), gate.sites) if isinstance(gate.G, MpsMpoOBC) else gate  for gate in gates]
+        gates = [ng for og in gates for ng in split_gate_2site(og)]
+
+    for gate in gates:
+        psi.apply_gate_(gate)
+
+        env.pre_truncation_(gate.sites)
+        for s0, s1 in pairwise(gate.sites):
+            info = truncate_(env, opts_svd, (s0, s1), fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization)
             infos.append(info)
-        for gate in gates.local[::-1]:
-            psi[gate.site] = apply_gate_onsite(psi[gate.site], gate.G)
+
     return infos
+
+
+def split_gate_2site(gate):
+    """
+    Split gate-mpo into a series of 2-site gates using SVD.
+    """
+    if len(gate.G) < 3:
+        return [gate]
+    new_gates = []
+    g0, s0 = gate.G[0], gate.sites[0]
+    for g1, s1 in zip(gate.G[1:-1], gate.sites[1:-1]):
+        U, S, V = g1.svd_with_truncation(axes=((1, 2), (0, 3)), Uaxis=0, Vaxis=1, tol=1e-14)
+        S = S.sqrt()
+        U, V = S.broadcast(U, V, axes=(0, 1))
+        new_gates.append(Gate(G=(g0, U), sites=(s0, s1)))
+        g0, s0 = V, s1
+    new_gates.append(Gate(G=(g0, gate.G[-1]), sites=(s0, gate.sites[-1])))
+    return new_gates
 
 
 def truncate_(env, opts_svd, bond=None,
@@ -114,8 +144,7 @@ def truncate_(env, opts_svd, bond=None,
               pinv_cutoffs=(1e-12, 1e-11, 1e-10, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4),
               max_iter=100, tol_iter=1e-13, initialization="EAT_SVD"):
     r"""
-    Perform a single step of PEPS evolution by applying a list of gates.
-    Truncate bond dimension after each application of a two-site gate.
+    Truncate virtual bond dimensions of PEPS.
 
     Parameters
     ----------
@@ -128,6 +157,8 @@ def truncate_(env, opts_svd, bond=None,
         In particular, it fixes bond dimensions (potentially, sectorial).
         It is possible to provide a list of dicts (with decreasing bond dimensions),
         in which case the truncation is done gradually in a few steps.
+    bond: tuple[Site, Site] | None
+        Specify single bond to be truncated. If None, truncate all bonds. The default is None.
     fix_metric: int | None
         Error measure of the metric tensor is a sum of: the norm of its non-hermitian part
         and absolute value of the most negative eigenvalue (if present).
@@ -171,78 +202,42 @@ def truncate_(env, opts_svd, bond=None,
 
     infos = []
     for bond in bonds:
+        dirn = psi.nn_bond_dirn(*bond)
+        if dirn in ('rl', 'bt'):
+            bond, dirn = bond[::-1], dirn[::-1]  # 'lr' or 'tb'
+
+        s0, s1 = bond
         info = {'bond': bond}
-        dirn, l_ordered = psi.nn_bond_type(bond)
-        s0, s1 = bond if l_ordered else bond[::-1]
 
-        if dirn == 'h':  # Horizontal gate, "lr" ordered
-            tmp0 = psi[s0].fuse_legs(axes=((0, 2), 1))  # [[t l] sa] [b r]
-            tmp0 = tmp0.unfuse_legs(axes=1)  # [[t l] sa] b r
-            tmp0 = tmp0.fuse_legs(axes=((0, 1), 2))  # [[[t l] sa] b] r
-            Q0f, R0 = tmp0.qr(axes=(0, 1), sQ=-1)  # [[[t l] sa] b] rr @ rr r
+        if dirn == 'lr':  # Horizontal gate, "lr" ordered
+            Q0, R0 = psi[s0].qr(axes=((0, 1, 2, 4), 3), sQ=-1, Qaxis=3)  # t l b rr sa @ rr r
+            Q1, R1 = psi[s1].qr(axes=((0, 2, 3, 4), 1), sQ=1, Qaxis=1, Raxis=-1)  # t ll b r sa @ l ll
+        else:  # dirn == 'tb':  Vertical gate, "tb" ordered
+            Q0, R0 = psi[s0].qr(axes=((0, 1, 3, 4), 2), sQ=1, Qaxis=2)  # t l bb r sa @ bb b
+            Q1, R1 = psi[s1].qr(axes=((1, 2, 3, 4), 0), sQ=-1, Qaxis=0, Raxis=-1)  # tt l b r sa @ t tt
 
-            tmp1 = psi[s1].fuse_legs(axes=(0, (1, 2)))  # [t l] [[b r] sa]
-            tmp1 = tmp1.unfuse_legs(axes=0)  # t l [[b r] sa]
-            tmp1 = tmp1.fuse_legs(axes=((0, 2), 1))  # [t [[b r] sa]] l
-            Q1f, R1 = tmp1.qr(axes=(0, 1), sQ=1, Qaxis=0, Raxis=-1)  # ll [t [[b r] sa]] @ l ll
+        fgf = env.bond_metric(Q0, Q1, s0, s1, dirn)
 
-        else: # dirn == 'v':  # Vertical gate, "tb" ordered
-            tmp0 = psi[s0].fuse_legs(axes=((0, 2), 1))  # [[t l] sa] [b r]
-            tmp0 = tmp0.unfuse_legs(axes=1)  # [[t l] sa] b r
-            tmp0 = tmp0.fuse_legs(axes=((0, 2), 1))  # [[[t l] sa] r] b
-            Q0f, R0 = tmp0.qr(axes=(0, 1), sQ=1)  # [[[t l] sa] r] bb @ bb b
-
-            tmp1 = psi[s1].fuse_legs(axes=(0, (1, 2)))  # [t l] [[b r] sa]
-            tmp1 = tmp1.unfuse_legs(axes=0)  # t l [[b r] sa]
-            tmp1 = tmp1.fuse_legs(axes=((1, 2), 0))  # [l [[b r] sa]] t
-            Q1f, R1 = tmp1.qr(axes=(0, 1), sQ=-1, Qaxis=0, Raxis=-1)  # tt [l [[b r] sa]] @ t tt
-
-        fgf = env.bond_metric(psi[s0], psi[s1], s0, s1, dirn)
-
-        if isinstance(fgf, tuple):  # bipartite bond metric
-            M0, M1, info = truncate_bipartite_(*fgf, R0, R1, opts_svd, pinv_cutoffs, info)
-        else:  # rank-4 bond metric
+        if isinstance(fgf, BipartiteBondMetric):  # bipartite bond metric
+            M0, M1, info = truncate_bipartite_(fgf, R0, R1, opts_svd, pinv_cutoffs, info)
+        elif isinstance(fgf, BondMetric):  # bipartite bond metric
             M0, M1, info = truncate_optimize_(fgf, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization, info)
 
-        psi[s0], psi[s1] = apply_bond_tensors(Q0f, Q1f, M0, M1, dirn)
+        if dirn == 'lr':
+            psi[s0] = tensordot(Q0, M0, axes=(3, 0)).transpose(axes=(0, 1, 2, 4, 3))  # t l b r sa
+            psi[s1] = tensordot(M1, Q1, axes=(1, 1)).transpose(axes=(1, 0, 2, 3, 4))  # t l b r sa
+        else:  # dirn == 'tb':
+            psi[s0] = tensordot(Q0, M0, axes=(2, 0)).transpose(axes=(0, 1, 4, 2, 3))  # t l b r sa
+            psi[s1] = tensordot(M1, Q1, axes=(1, 0)) # t l b r sa
 
-        env.post_evolution_(bond)
+        env.post_truncation_(bond)
         infos.append(Evolution_out(**info))
-    return infos
+    return infos[0] if len(bonds) == 1 else infos
 
 
-def apply_nn_truncate_optimize_(env, psi, gate, opts_svd,
-                    fix_metric=0,
-                    pinv_cutoffs=(1e-12, 1e-11, 1e-10, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4),
-                    max_iter=100, tol_iter=1e-15, initialization="EAT_SVD"):
-    r"""
-    Applies a nearest-neighbor gate to a PEPS tensor, truncate, and
-    optimize the resulting tensors using alternate least squares.
-    """
-    info = {'bond': gate.bond}
-
-    dirn, l_ordered = psi.nn_bond_type(gate.bond)
-    f_ordered = psi.f_ordered(*gate.bond)
-    s0, s1 = gate.bond if l_ordered else gate.bond[::-1]
-
-    G0, G1 = gate_fix_order(gate.G0, gate.G1, l_ordered, f_ordered)
-    Q0, Q1, R0, R1, Q0f, Q1f = apply_gate_nn(psi[s0], psi[s1], G0, G1, dirn)
-
-    fgf = env.bond_metric(Q0, Q1, s0, s1, dirn)
-
-    if isinstance(fgf, tuple):  # bipartite bond metric
-        M0, M1, info = truncate_bipartite_(*fgf, R0, R1, opts_svd, pinv_cutoffs, info)
-    else:  # rank-4 bond metric
-        M0, M1, info = truncate_optimize_(fgf, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization, info)
-
-    psi[s0], psi[s1] = apply_bond_tensors(Q0f, Q1f, M0, M1, dirn)
-
-    env.post_evolution_(gate.bond)
-    return Evolution_out(**info)
-
-
-def truncate_optimize_(fgf, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization, info):
+def truncate_optimize_(g, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization, info):
     # enforce hermiticity
+    fgf = g.g
     fgfH = fgf.H
     nonhermitian = (fgf - fgfH).norm() / 2
     fgf = (fgf + fgfH) / 2
@@ -297,8 +292,9 @@ def truncate_optimize_(fgf, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter
     return M0, M1, info
 
 
-def truncate_bipartite_(E0, E1, R0, R1, opts_svd, pinv_cutoffs, info):
+def truncate_bipartite_(g, R0, R1, opts_svd, pinv_cutoffs, info):
     #
+    E0, E1 = g.gL, g.gR
     E0 = (E0 + E0.H) / 2
     E1 = (E1 + E1.H) / 2
     #
@@ -406,14 +402,7 @@ def initial_truncation_EAT(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs):
     Truncate R0 @ R1 to bond dimension specified in opts_svd
     including information from a product approximation of bond metric.
     """
-    G = fgf.unfuse_legs(axes=1)
-    G = tensordot(G, R0, axes=(1, 0))
-    G = tensordot(G, R1, axes=(1, 1))
-    G = G.fuse_legs(axes=((0, (1, 2))))
-    G = G.unfuse_legs(axes=0)
-    G = tensordot(R1.conj(), G, axes=(1, 1))
-    G = tensordot(R0.conj(), G, axes=(0, 1))
-    G = G.unfuse_legs(axes=2)
+    G = fgf.unfuse_legs(axes=(0, 1))
     #
     # rank-1 approximation
     Gremove = G.remove_zero_blocks()
@@ -430,8 +419,11 @@ def initial_truncation_EAT(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs):
     G0 = (G0 + G0.H) / 2
     G1 = (G1 + G1.H) / 2
     #
-    S0, U0 = G0.eigh_with_truncation(axes=(0, 1), tol=min(pinv_cutoffs))
-    S1, U1 = G1.eigh_with_truncation(axes=(0, 1), tol=min(pinv_cutoffs))
+    F0 = R0.H @ G0 @ R0
+    F1 = R1 @ G1 @ R1.H
+    #
+    S0, U0 = F0.eigh_with_truncation(axes=(0, 1), tol=min(pinv_cutoffs))
+    S1, U1 = F1.eigh_with_truncation(axes=(0, 1), tol=min(pinv_cutoffs))
     #
     W0, W1 = symmetrized_svd(S0.sqrt() @ U0.H, U1 @ S1.sqrt(), opts_svd, normalize=False)
     p0, p1 = R0 @ U0, U1.H @ R1

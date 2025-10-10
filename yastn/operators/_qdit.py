@@ -15,7 +15,7 @@
 from __future__ import annotations
 from ..initialize import eye
 from .. import diag
-from ..tensor import YastnError, Leg
+from ..tensor import YastnError, Leg, Tensor
 from ._meta_operators import meta_operators
 
 class Qdit(meta_operators):
@@ -44,11 +44,11 @@ class Qdit(meta_operators):
         self._d = d
         self.operators = ('I',)
 
-    def space(self, d=None) -> yastn.Leg:
+    def space(self, d=None) -> Leg:
         r""" :class:`yastn.Leg` object describing local Hilbert space. Can override default dimension by providing d. """
         return Leg(self.config, s=1, D=(self._d if d is None else d,))
 
-    def I(self, d=None) -> yastn.Tensor:
+    def I(self, d=None) -> Tensor:
         """ Identity operator. Can override default dimension by providing d."""
         return diag(eye(config=self.config, s=self.s, D=self._d if d is None else d))
 

@@ -60,7 +60,7 @@ class SpinfulFermions(meta_operators):
             raise YastnError("For SpinfulFermions config.sym does not match config.fermionic.")
         self.operators = ('I', 'n', 'c', 'cp')
 
-    def space(self) -> yastn.Leg:
+    def space(self) -> Leg:
         r""" :class:`yastn.Leg` object describing local Hilbert space. """
         if self._sym == 'Z2':  # charges: 0 = (|00>, |11>); 1 = (|10>, |01>)  |occ_u occ_d>
             return Leg(self.config, s=1, t=(0, 1), D=(2, 2))
@@ -71,7 +71,7 @@ class SpinfulFermions(meta_operators):
         if self._sym == 'U1xU1':  # charges == (occ_u, occ_d)
             return Leg(self.config, s=1, t=((0, 0), (0, 1), (1, 0), (1, 1)), D=(1, 1, 1, 1))
 
-    def vec_n(self, val=(0, 0)) -> yastn.Tensor:
+    def vec_n(self, val=(0, 0)) -> Tensor:
         r""" State with occupation given by tuple (nu, nd). """
         if val == (0, 0):
             if self._sym == 'Z2':  # charges: 0 = (|00>, |11>); 1 = (|10>, |01>)  |occ_u occ_d>
@@ -129,7 +129,7 @@ class SpinfulFermions(meta_operators):
             raise YastnError('Occupations given by val should be (0, 0), (1, 0), (0, 1), or (1, 1).')
         return vec
 
-    def I(self) -> yastn.Tensor:
+    def I(self) -> Tensor:
         r""" Identity operator in 4-dimensional Hilbert space. """
         I = Tensor(config=self.config, s=self.s)
         if self._sym == 'Z2':  # charges: 0 = (|00>, |11>); 1 = (|10>, |01>)  |occ_u occ_d>
@@ -147,7 +147,7 @@ class SpinfulFermions(meta_operators):
                 I.set_block(ts=(t, t), Ds=(1, 1), val=1)
         return I
 
-    def n(self, spin='u') -> yastn.Tensor:
+    def n(self, spin='u') -> Tensor:
         r""" Particle number operator, with :code:`spin='u'` for spin-up, and :code:`spin='d'` for spin-down. """
         n = Tensor(config=self.config, s=self.s)
         if spin == 'u':
@@ -180,7 +180,7 @@ class SpinfulFermions(meta_operators):
             raise YastnError("spin should be equal 'u' or 'd'.")
         return n
 
-    def cp(self, spin='u') -> yastn.Tensor:
+    def cp(self, spin='u') -> Tensor:
         r""" Creation operator, with :code:`spin='u'` for spin-up, and :code:`spin='d'` for spin-down. """
         # |ud>; |11> = cu+ cd+ |00>;
         # cu |11> =  |01>; cu |10> = |00>
@@ -223,7 +223,7 @@ class SpinfulFermions(meta_operators):
             raise YastnError("spin should be equal 'u' or 'd'.")
         return cp
 
-    def c(self, spin='u') -> yastn.Tensor:
+    def c(self, spin='u') -> Tensor:
         r""" Annihilation operator, with :code:`spin='u'` for spin-up, and :code:`spin='d'` for spin-down. """
         # |ud>; |11> = cu+ cd+ |00>;
         # cu |11> =  |01>; cu |10> = |00>
@@ -266,15 +266,15 @@ class SpinfulFermions(meta_operators):
             raise YastnError("spin should be equal 'u' or 'd'.")
         return c
 
-    def Sz(self) -> yastn.Tensor:
+    def Sz(self) -> Tensor:
         """ Return Sz operator for spin-1/2 fermions. """
         return 0.5 * (self.n('u') - self.n('d'))
 
-    def Sp(self) -> yastn.Tensor:
+    def Sp(self) -> Tensor:
         """ Return Sp operator for spin-1/2 fermions. """
         return self.cp('u') @ self.c('d')
 
-    def Sm(self) -> yastn.Tensor:
+    def Sm(self) -> Tensor:
         """ Return Sm operator for spin-1/2 fermions. """
         return self.cp('d') @ self.c('u')
 

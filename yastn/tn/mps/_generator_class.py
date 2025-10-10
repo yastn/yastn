@@ -14,7 +14,7 @@
 # ==============================================================================
 from __future__ import annotations
 from ... import YastnError
-from ._mps_obc import Mpo
+from ._mps_obc import Mpo, MpsMpoOBC
 from ._latex2term import latex2term
 from ._initialize import random_mpo, random_mps
 from ._generate_mpo import Hterm, generate_mpo
@@ -89,11 +89,11 @@ class Generator:
         """
         self.config.backend.random_seed(seed)
 
-    def I(self) -> yastn.tn.mps.MpsMpoOBC:
+    def I(self) -> MpsMpoOBC:
         """ Identity MPO derived from identity in local operators class. """
         return self._I.shallow_copy()
 
-    def random_mps(self, n=None, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.MpsMpoOBC:
+    def random_mps(self, n=None, D_total=8, sigma=1, dtype='float64') -> MpsMpoOBC:
         r"""
         Generate a random MPS of total charge ``n`` and bond dimension ``D_total``.
 
@@ -101,7 +101,7 @@ class Generator:
         """
         return random_mps(self._I, n=n, D_total=D_total, sigma=sigma, dtype=dtype)
 
-    def random_mpo(self, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.MpsMpoOBC:
+    def random_mpo(self, D_total=8, sigma=1, dtype='float64') -> MpsMpoOBC:
         r"""
         Generate a random MPO with bond dimension ``D_total``.
 
@@ -109,7 +109,7 @@ class Generator:
         """
         return random_mpo(self._I, D_total=D_total, sigma=sigma, dtype=dtype)
 
-    def mpo_from_latex(self, H_str, parameters=None, opts=None) -> yastn.tn.mps.MpsMpoOBC:
+    def mpo_from_latex(self, H_str, parameters=None, opts=None) -> MpsMpoOBC:
         r"""
         Convert latex-like string to yastn.tn.mps MPO.
 
@@ -117,11 +117,16 @@ class Generator:
         -----------
         H_str: str
             The definition of the MPO given as latex expression. The definition uses string names of the operators given in. The assignment of the location is
-            given e.g. for 'cp' operator as 'cp_{j}' (always with {}-brackets!) for 'cp' operator acting on site 'j'.
-            The space and * are interpreted as multiplication by a number of by an operator. E.g., to multiply by a number use 'g * cp_j c_{j+1}' where 'g' has to be defines in 'parameters' or writen directly as a number,
-            You can define automatic summation with expression '\sum_{j \in A}', where A has to be iterable, one-dimensional object with specified values of 'j'.
+            given e.g. for ``cp`` operator as ``cp_{j}`` (always with ``{}``-brackets!) for ``cp`` operator acting on site ``j``.
+            The space and * are interpreted as multiplication by a number of by an operator. E.g., to multiply by a number use ``g * cp_j c_{j+1}`` where ``g`` has to be defines in ``parameters`` or writen directly as a number,
+            You can define automatic summation with expression ``\sum_{j \in A}``, where ``A`` has to be iterable, one-dimensional object with specified values of ``j``.
+
         parameters: dict
-            Keys for the dict define the expressions that occur in H_str
+            Keys for the dict define the expressions that occur in ``H_str``.
+
+        opts: dict
+            Options passed to :meth:`yastn.linalg.truncation_mask`.
+            It includes information on how to truncate the Schmidt values.
         """
         parameters = {**self.parameters, **parameters}
         c2 = latex2term(H_str, parameters)
@@ -245,4 +250,3 @@ class Generator:
     #     parameters = {**self.parameters, **parameters}
     #     c3 = self._term2Hterm(templete, vectors, parameters)
     #     return generate_mps(c3, self.N)
-

@@ -139,23 +139,20 @@ jobs:
       matrix:
         include:
           - backend: np
-            python_v: '3.9'
+            python_v: '3.10'
             numpy_v: '1.21.6'
             scipy_v: '1.11.4'
             torch_v: 'none'
-            primme_v: '3.2.3'
           - backend: torch
-            python_v: '3.9'
+            python_v: '3.10'
             numpy_v: '1.26.4'
             scipy_v: '1.13.1'
             torch_v: '2.4'
-            primme_v: '3.2.3'
           - backend: torch
             python_v: '3.12'
-            numpy_v: '2.0.1'
-            scipy_v: '1.14.1'
-            torch_v: '2.5.1'
-            primme_v: '3.2.3'
+            numpy_v: '2.2'
+            scipy_v: '1.15'
+            torch_v: '2.7'
       fail-fast: false
 
     # Steps represent a sequence of tasks that will be executed as part of the job
@@ -184,8 +181,7 @@ jobs:
         run: |
           pip install numpy==${{ matrix.numpy_v }};
           pip install scipy==${{ matrix.scipy_v }};
-          pip install primme==${{ matrix.primme_v }};
-          pip install .[io,test]
+          pip install .[test]
 
       - name: setup pytorch
         if: matrix.backend == 'torch'
@@ -197,6 +193,7 @@ jobs:
         run: |
           pytest -v --backend ${{ matrix.backend }};
           pytest -v --backend ${{ matrix.backend }} --tensordot_policy fuse_contracted ./tests/tensor;
+          pytest -v --backend ${{ matrix.backend }} --tensordot_policy fuse_to_matrix ./tests/tensor;
           pytest -v --backend ${{ matrix.backend }} --tensordot_policy no_fusion ./tests/tensor;
 
 
@@ -211,7 +208,6 @@ jobs:
             numpy_v: '1.26'
             scipy_v: '1.14'
             torch_v: '2.4'
-            primme_v: '3.2.3'
       fail-fast: true
 
     steps:
@@ -233,16 +229,18 @@ jobs:
           pip install numpy==${{ matrix.numpy_v }};
           pip install scipy==${{ matrix.scipy_v }};
           pip install torch==${{ matrix.torch_v }} --index-url https://download.pytorch.org/whl/cpu;
-          pip install primme==${{ matrix.primme_v }};
-          pip install .[io,test]
+          pip install .[test]
 
       - name: Run tests and collect coverage
         run: |
           pytest -v --cov=yastn --cov-report=xml --backend np;
-          pytest -v --cov=yastn --cov-report=xml --backend np --tensordot_policy fuse_contracted --cov-append ./tests/tensor;
           pytest -v --cov=yastn --cov-report=xml --backend np --tensordot_policy no_fusion --cov-append ./tests/tensor;
+          pytest -v --cov=yastn --cov-report=xml --backend np --tensordot_policy fuse_contracted --cov-append ./tests/tensor;
+          pytest -v --cov=yastn --cov-report=xml --backend np --tensordot_policy fuse_to_matrix --cov-append ./tests/tensor;
           pytest -v --cov=yastn --cov-report=xml --backend torch --cov-append ./tests/tensor;
           pytest -v --cov=yastn --cov-report=xml --backend torch --tensordot_policy no_fusion --cov-append ./tests/tensor;
+          pytest -v --cov=yastn --cov-report=xml --backend torch --tensordot_policy fuse_contracted --cov-append ./tests/tensor;
+          pytest -v --cov=yastn --cov-report=xml --backend torch --tensordot_policy fuse_to_matrix --cov-append ./tests/tensor;
 
       - name: Upload coverage reports to Codecov with GitHub Action
         uses: codecov/codecov-action@v4.2.0

@@ -39,16 +39,16 @@ def purification_tJ(config_kwargs, mu):
     # g_tj = fpeps.gates.gate_nn_tJ(J, t, t, 0, 0, 0, 0, dbeta * coef, I, c_up, cdag_up, c_dn, cdag_dn)
     # gates = fpeps.gates.distribute(net, gates_nn=g_tj, gates_local=g_loc)
 
-    g_tj_loc = fpeps.gates.gate_nn_tJ(J, t, t, mu/4, mu/4, mu/4, mu/4, dbeta * coef, I, c_up, cdag_up, c_dn, cdag_dn)
-    gates = fpeps.gates.distribute(net, gates_nn=g_tj_loc)
+    gates = [fpeps.gates.gate_nn_tJ(J, t, t, mu/4, mu/4, mu/4, mu/4, dbeta * coef, I, c_up, cdag_up, c_dn, cdag_dn, bond) for bond in net.bonds()]
     # correct boundary terms with local chemical potential
-    local = [fpeps.gates.gate_local_occupation(mu/2, dbeta * coef, I, n, site=(0, 0)),
-             fpeps.gates.gate_local_occupation(mu/4, dbeta * coef, I, n, site=(0, 1)),
-             fpeps.gates.gate_local_occupation(mu/2, dbeta * coef, I, n, site=(0, 2)),
-             fpeps.gates.gate_local_occupation(mu/2, dbeta * coef, I, n, site=(1, 0)),
-             fpeps.gates.gate_local_occupation(mu/4, dbeta * coef, I, n, site=(1, 1)),
-             fpeps.gates.gate_local_occupation(mu/2, dbeta * coef, I, n, site=(1, 2))]
-    gates = gates._replace(local=local)
+    gates += [fpeps.gates.gate_local_occupation(mu/2, dbeta * coef, I, n, site=(0, 0)),
+              fpeps.gates.gate_local_occupation(mu/4, dbeta * coef, I, n, site=(0, 1)),
+              fpeps.gates.gate_local_occupation(mu/2, dbeta * coef, I, n, site=(0, 2)),
+              fpeps.gates.gate_local_occupation(mu/2, dbeta * coef, I, n, site=(1, 0)),
+              fpeps.gates.gate_local_occupation(mu/4, dbeta * coef, I, n, site=(1, 1)),
+              fpeps.gates.gate_local_occupation(mu/2, dbeta * coef, I, n, site=(1, 2))]
+    # symmetrize
+    gates = gates + gates[::-1]
 
     env_evolution = fpeps.EnvNTU(psi, which=ntu_environment)
 
@@ -148,4 +148,4 @@ def test_purification_tJ(config_kwargs, mu):
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0"])
+    pytest.main([__file__, "-vs", "--durations=0", '--long_tests'])

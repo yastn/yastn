@@ -5,10 +5,9 @@ import numpy as np
 from scipy.optimize import minimize
 from collections import namedtuple
 
-import torch.utils.checkpoint
+# import torch.utils.checkpoint
 
-
-from .... import zeros, eye, tensordot, einsum, diag, decompress_from_1d
+from .... import zeros, eye, tensordot, diag, decompress_from_1d
 from ._env_ctm import ctm_conv_corner_spec, decompress_proj_1d
 from ._env_ctm_c4v import EnvCTM_c4v, decompress_env_c4v_1d
 from .fixed_pt import env_T_gauge_multi_sites, fast_env_T_gauge_multi_sites, NoFixedPointError, real_to_complex, complex_to_real

@@ -13,12 +13,11 @@
 # limitations under the License.
 # ==============================================================================
 from __future__ import annotations
-from itertools import accumulate
 from tqdm import tqdm
 from ... import mps
-from .... import YastnError, Tensor, tensordot
+from .... import YastnError
 from .._geometry import Site
-from ._env_boundary_mps import _clear_operator_input
+from ._env_boundary_mps import _clear_operator_input, clear_projectors
 
 
 class EnvWindow:
@@ -187,7 +186,7 @@ class EnvWindow:
         return out
 
 
-    def sample(self, projectors, number=1, opts_svd=None, opts_var=None, progressbar=False, return_info=False) -> dict[Site, list]:
+    def sample(self, projectors, number=1, opts_svd=None, opts_var=None, progressbar=False, return_probabilities=False, flatten_one=True) -> dict[Site, list]:
         """
         Sample random configurations from PEPS.
         See :meth:`yastn.tn.fpeps.EnvCTM.sample` for description.
@@ -199,40 +198,15 @@ class EnvWindow:
             opts_svd = {'D_total': D_total}
 
         sites = self.sites()
-        if not isinstance(projectors, dict) or all(isinstance(x, Tensor) for x in projectors.values()):
-            projectors = {site: projectors for site in sites}  # spread projectors over sites
-        if set(sites) != set(projectors.keys()):
-            raise YastnError(f"Projectors not defined for some sites in xrange={self.xrange}, yrange={self.yrange}.")
-
-        # change each list of projectors into keys and projectors
-        projs_sites = {}
-        for k, v in projectors.items():
-            if isinstance(v, dict):
-                projs_sites[k, 'k'] = list(v.keys())
-                projs_sites[k, 'p'] = list(v.values())
-            else:
-                projs_sites[k, 'k'] = list(range(len(v)))
-                projs_sites[k, 'p'] = v
-
-            for j, pr in enumerate(projs_sites[k, 'p']):
-                if pr.ndim == 1:  # vectors need conjugation
-                    if abs(pr.norm() - 1) > 1e-10:
-                        raise YastnError("Local states to project on should be normalized.")
-                    projs_sites[k, 'p'][j] = tensordot(pr, pr.conj(), axes=((), ()))
-                elif pr.ndim == 2:
-                    if (pr.n != pr.config.sym.zero()) or abs(pr @ pr - pr).norm() > 1e-10:
-                        raise YastnError("Matrix projectors should be projectors, P @ P == P.")
-                else:
-                    raise YastnError("Projectors should consist of vectors (ndim=1) or matrices (ndim=2).")
+        projs_sites = clear_projectors(sites, projectors, self.xrange, self.yrange)
 
         out = {site: [] for site in sites}
+        probabilities = []
         rands = (self.psi.config.backend.rand(self.Nx * self.Ny * number) + 1) / 2  # in [0, 1]
         count = 0
 
-        info = {'opts_svd': opts_svd,
-                'error': 0.}
-
         for _ in tqdm(range(number), desc="Sample...", disable=not progressbar):
+            probability = 1.
             vec = self[self.yrange[0], 'l']
             for ny in range(*self.yrange):
                 vecc = self[ny, 'r'].conj()
@@ -240,26 +214,28 @@ class EnvWindow:
                 env = mps.Env(vecc, [tm, vec]).setup_(to='first')
                 for ix, nx in enumerate(range(*self.xrange), start=1):
                     env.update_env_(ix - 1, to='last')
-                    norm_prob = env.measure(bd=(ix - 1, ix)).item()
-                    prob = []
-                    for proj in projs_sites[(nx, ny), 'p']:
+                    norm_prob = env.measure(bd=(ix - 1, ix)).real
+                    acc_prob = 0
+                    for k, proj in projs_sites[nx, ny].items():
                         tm[ix].set_operator_(proj)
                         env.update_env_(ix, to='first')
-                        prob.append(env.measure(bd=(ix-1, ix)).item() / norm_prob)
-                    error = abs(min(0., *(x.real for x in prob))) + max(abs(x.imag) for x in prob)
-                    if error > 0.:
-                        prob = [max(x.real, error) for x in prob]
-                        info['error'] = max(error, info['error'])
-                    norm_prob = sum(prob)
-                    prob = [x / norm_prob for x in prob]
-                    ind = sum(apr < rands[count] for apr in accumulate(prob))
+                        prob = env.measure(bd=(ix-1, ix)).real / norm_prob
+                        acc_prob += prob
+                        if rands[count] < acc_prob:
+                            out[nx, ny].append(k)
+                            tm[ix].set_operator_(proj / prob)
+                            probability *= prob
+                            break
                     count += 1
-                    out[nx, ny].append(projs_sites[(nx, ny), 'k'][ind])
-                    tm[ix].set_operator_(projs_sites[(nx, ny), 'p'][ind] / prob[ind])
                 if ny + 1 < self.yrange[1]:
                     vec_new = mps.zipper(tm, vec, opts_svd=opts_svd)
                     mps.compression_(vec_new, (tm, vec), method='1site', **opts_var)
                     vec = vec_new
-        if return_info:
-            out['info'] = info
+            probabilities.append(probability)
+
+        if number == 1 and flatten_one:
+            out = {site: smp.pop() for site, smp in out.items()}
+
+        if return_probabilities:
+            return out, probabilities
         return out

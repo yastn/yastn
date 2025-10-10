@@ -42,8 +42,8 @@ This example can be also run from `tests/quickstart/test_KZ.py <https://github.c
         from yastn.tn.fpeps.gates import gate_nn_Ising, gate_local_field
         #
         # Employ PEPS lattice geometry for sites and nearest-neighbor bonds
-        Lx, Ly = 4, 4  # lattice size
-        geometry = peps.SquareLattice(dims=(Lx, Ly), boundary='obc')
+        Nx, Ny = 4, 4  # lattice size
+        geometry = peps.SquareLattice(dims=(Nx, Ny), boundary='obc')
         sites = geometry.sites()  # list of lattice sites
         #
         # Draw random couplings from uniform distribution in [-1, 1].
@@ -66,17 +66,18 @@ This example can be also run from `tests/quickstart/test_KZ.py <https://github.c
 
         def gates_Ising(Jij, fXX, fZ, s, dt, sites, ops):
             """ Trotter gates at time s. """
-            nn, local = [], []
-            # time-step is 1j * dt / 2, as trotterized evolution is
-            # completed by its adjoint for 2nd order time-evolution method.
+            gates = []
             dt2 = 1j * dt / 2
             for bond, J in Jij.items():
                 gt = gate_nn_Ising(J * fXX(s), dt2, ops.I(), ops.x(), bond)
-                nn.append(gt)
+                gates.append(gt)
             for site in sites:
                 gt = gate_local_field(fZ(s), dt2, ops.I(), ops.z(), site)
-                local.append(gt)
-            return peps.Gates(nn=nn, local=local)
+                gates.append(gt)
+            gates = gates + gates[::-1]
+            # time-step is 1j * dt / 2, as we complete trotterized evolution
+            # by its adjoint for 2nd order time-evolution method.
+            return gates
         #
         # Initialize system in the product ground state at s=0.
         psi = peps.product_peps(geometry=geometry, vectors=ops.vec_z(val=1))
@@ -138,7 +139,7 @@ This example can be also run from `tests/quickstart/test_KZ.py <https://github.c
         b2i = lambda s1, s2: tuple(sorted([s2i[s1], s2i[s2]]))
         #
         # define Hamiltonian MPO
-        HI = mps.product_mpo(ops.I(), N=Lx*Ly)  # identity MPO
+        HI = mps.product_mpo(ops.I(), N=Nx*Ny)  # identity MPO
         #
         termsXX = [mps.Hterm(amplitude=J,
                              positions=[s2i[s1], s2i[s2]],
@@ -146,7 +147,7 @@ This example can be also run from `tests/quickstart/test_KZ.py <https://github.c
                     for (s1, s2), J in Jij.items()]
         HXX = mps.generate_mpo(HI, termsXX)
         #
-        termsZ = [mps.Hterm(-1, i, ops.z()) for i in range(Lx * Ly)]
+        termsZ = [mps.Hterm(-1, i, ops.z()) for i in range(Nx * Ny)]
         HZ = mps.generate_mpo(HI, termsZ)
         #
         # MPO contributions in H(t) will be added up.
@@ -213,7 +214,7 @@ This example can be also run from `tests/quickstart/test_KZ.py <https://github.c
         ax[1].set_xlabel(r"linear site index i")
         ax[1].set_ylabel(r"transverse magnetization $\langle Z_i \rangle$")
         ax[1].set_ylim([-1.05, 1.05])
-        fig.suptitle(f"{Lx}x{Ly} lattice; annealing_time = {ta:0.1f}")
+        fig.suptitle(f"{Nx}x{Ny} lattice; annealing_time = {ta:0.1f}")
         fig.show()
 
     .. image:: corr_4x4_ta=2.0.png

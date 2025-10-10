@@ -158,7 +158,7 @@ def test_NTU_spinful_infinite(config_kwargs):
     dbeta = (beta / 2) / steps
 
     infos = []
-    init_steps = 2
+    init_steps =2
     # first few steps are performed with NTU-NN+ to reach fixed peps bond dimensions.
     print("Evolve with NN+")
     env = fpeps.EnvNTU(psi, which='NN+')
@@ -174,6 +174,7 @@ def test_NTU_spinful_infinite(config_kwargs):
     for _ in range(4):  # few CTM iterations to converge
         env.update_(opts_svd=opts_svd_ctm)
 
+    env.opts_svd=opts_svd_ctm
     for step in range(init_steps, steps):
         print(f"beta = {(step + 1) * dbeta:0.3f}" )
         info = fpeps.evolution_step_(env, gates, opts_svd=opts_svd_evol)
@@ -211,4 +212,4 @@ def test_NTU_spinful_infinite(config_kwargs):
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0"])
+    pytest.main([__file__, "-vs", "--durations=0", "--long_tests"])

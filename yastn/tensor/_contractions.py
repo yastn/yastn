@@ -457,11 +457,8 @@ def apply_mask(a, *args, axes=0) -> yastn.Tensor | tuple[yastn.Tensor]:
         raise YastnError("There should be exactly one axis for each tensor to be projected.")
     results = []
 
-    if not isinstance(a, dict):
-        nsym = a.config.sym.NSYM
-        mask = {t[:nsym]: a.config.backend.to_mask(a._data[slice(*sl.slcs[0])]) for t, sl in zip(a.struct.t, a.slices)}
-    else:
-        mask = a
+    nsym = a.config.sym.NSYM
+    mask = {t[:nsym]: a.config.backend.to_mask(a._data[slice(*sl.slcs[0])]) for t, sl in zip(a.struct.t, a.slices)}
     mask_t = tuple(mask.keys())
     mask_D = tuple(len(v) for v in mask.values())
 

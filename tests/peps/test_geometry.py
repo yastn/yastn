@@ -51,18 +51,18 @@ def test_CheckerboardLattice(net=None):
 
     # whether a nearest-neighbor bond is horizontal or vertical and
     # whether it is ordered as (left, right) or (top, bottom) lattice sites.
-    assert net.nn_bond_type(Bond((0, 0), (0, 1))) == ('h', True)  # 'lr'
-    assert net.nn_bond_type(Bond((0, 3), (0, 2))) == ('h', False) # 'rl'
-    assert net.nn_bond_type(Bond((1, 3), (0, 3))) == ('v', False) # 'bt'
-    assert net.nn_bond_type(Bond((1, 0), (2, 0))) == ('v', True)  # 'tb'
+    assert net.nn_bond_dirn(Bond((0, 0), (0, 1))) == 'lr'
+    assert net.nn_bond_dirn(Bond((0, 3), (0, 2))) == 'rl'
+    assert net.nn_bond_dirn(Bond((1, 3), (0, 3))) == 'bt'
+    assert net.nn_bond_dirn(Bond((1, 0), (2, 0))) == 'tb'
     with pytest.raises(yastn.YastnError):
-        net.nn_bond_type(Bond((1, 0), (3, 0)))
+        net.nn_bond_dirn(Bond((1, 0), (3, 0)))
         # Bond((1, 0),(3, 0)) is not a nearest-neighbor bond.
 
     # order of bonds in net.bond()
-    assert all(net.nn_bond_type(bond) == ('h', True)
+    assert all(net.nn_bond_dirn(bond) == 'lr'
                for bond in net.bonds(dirn='h'))
-    assert all(net.nn_bond_type(bond) == ('v', True)
+    assert all(net.nn_bond_dirn(bond) == 'tb'
                for bond in net.bonds(dirn='v'))
 
     # pairs of sites consistent with the assumed fermionic order.
@@ -109,18 +109,18 @@ def test_SquareLattice_obc():
 
     # whether a nearest-neighbor bond is horizontal or vertical and
     # whether it is ordered as (left, right) or (top, bottom) lattice sites.
-    assert net.nn_bond_type(Bond((0, 0), (0, 1))) == ('h', True)  # 'lr'
-    assert net.nn_bond_type(Bond((0, 1), (0, 0))) == ('h', False) # 'rl'
-    assert net.nn_bond_type(Bond((2, 1), (1, 1))) == ('v', False) # 'bt'
-    assert net.nn_bond_type(Bond((1, 0), (2, 0))) == ('v', True)  # 'tb'
+    assert net.nn_bond_dirn(Bond((0, 0), (0, 1))) == 'lr'
+    assert net.nn_bond_dirn(Bond((0, 1), (0, 0))) == 'rl'
+    assert net.nn_bond_dirn(Bond((2, 1), (1, 1))) == 'bt'
+    assert net.nn_bond_dirn(Bond((1, 0), (2, 0))) == 'tb'
     with pytest.raises(yastn.YastnError):
-        net.nn_bond_type(Bond((0, 0), (2, 0)))
+        net.nn_bond_dirn(Bond((0, 0), (2, 0)))
         # Bond((0, 0), (2, 0)) is not a nearest-neighbor bond.
 
     # order of bonds in net.bond()
-    assert all(net.nn_bond_type(bond) == ('h', True)
+    assert all(net.nn_bond_dirn(bond) == 'lr'
                for bond in net.bonds(dirn='h'))
-    assert all(net.nn_bond_type(bond) == ('v', True)
+    assert all(net.nn_bond_dirn(bond) == 'tb'
                for bond in net.bonds(dirn='v'))
 
     # pairs of sites consistent with the assumed fermionic order.
@@ -155,21 +155,21 @@ def test_SquareLattice_cylinder():
     assert net.nn_site((2, 0), d=(2, 1)) == Site(1, 1)
     assert net.nn_site((2, 0), d=(-3, 1)) == Site(2, 1)
 
-    assert net.nn_bond_type(Bond((0, 0), (0, 1))) == ('h', True)  # 'lr'
-    assert net.nn_bond_type(Bond((0, 1), (0, 0))) == ('h', False) # 'rl'
-    assert net.nn_bond_type(Bond((2, 0), (0, 0))) == ('v', True)  # 'tb'
-    assert net.nn_bond_type(Bond((0, 1), (2, 1))) == ('v', False) # 'bt'
+    assert net.nn_bond_dirn(Bond((0, 0), (0, 1))) == 'lr'
+    assert net.nn_bond_dirn(Bond((0, 1), (0, 0))) == 'rl'
+    assert net.nn_bond_dirn(Bond((2, 0), (0, 0))) == 'tb'
+    assert net.nn_bond_dirn(Bond((0, 1), (2, 1))) == 'bt'
     with pytest.raises(yastn.YastnError):
-        net.nn_bond_type(Bond((3, 0), (2, 0)))
+        net.nn_bond_dirn(Bond((3, 0), (2, 0)))
         # Bond((3, 0), (2, 0)) is not a nearest-neighbor bond.
 
-    assert all(net.nn_bond_type(bond) == ('h', True)
+    assert all(net.nn_bond_dirn(bond) == 'lr'
                for bond in net.bonds(dirn='h'))
-    assert all(net.nn_bond_type(bond) == ('v', True)
+    assert all(net.nn_bond_dirn(bond) == 'tb'
                for bond in net.bonds(dirn='v'))
 
-    assert net.nn_bond_type(Bond((2, 0), (0, 0))) == ('v', True)
-    assert net.nn_bond_type(Bond((0, 0), (2, 0))) == ('v', False)
+    assert net.nn_bond_dirn(Bond((2, 0), (0, 0))) == 'tb'
+    assert net.nn_bond_dirn(Bond((0, 0), (2, 0))) == 'bt'
     assert not net.f_ordered((2, 0), (0, 0))
     assert net.f_ordered((0, 0), (2, 0))
 
@@ -206,8 +206,8 @@ def test_SquareLattice_infinite():
     assert net.site2index((1, 0)) == (1, 0)
     assert net.site2index(None) == None
 
-    assert all(net.nn_bond_type(bond) == ('h', True) for bond in net.bonds(dirn='h'))
-    assert all(net.nn_bond_type(bond) == ('v', True) for bond in net.bonds(dirn='v'))
+    assert all(net.nn_bond_dirn(bond) == 'lr' for bond in net.bonds(dirn='h'))
+    assert all(net.nn_bond_dirn(bond) == 'tb' for bond in net.bonds(dirn='v'))
 
     assert all(net.f_ordered(s0, s1) for s0, s1 in zip(net.sites(), net.sites()[1:]))
     assert all(net.f_ordered(*bond) for bond in net.bonds())
@@ -254,11 +254,10 @@ def test_RectangularUnitCell_2x2_bipartite():
 
 def test_RectangularUnitCell_3x3_Q_1o3_1o3():
     g = fpeps.RectangularUnitcell(pattern=[[0, 1, 2], [1, 2, 0], [2, 0, 1]])
+    print(g)
 
     assert g.dims == (3, 3)
     assert g.sites() == (Site(0, 0), Site(0, 1), Site(0, 2))
-
-    print(g)
 
     assert all(g.site2index(s) == 0 for s in [(0, 0), (0, 3), (0, -3), (1, -1), (-2, 2)])
     assert all(g.sites()[g.site2index(s)] == (0, 0) for s in [(0, 0), (0, 3), (0, -3), (1, -1), (-2, 2)])
@@ -289,6 +288,31 @@ def test_RectangularUnitCell_raises():
     with pytest.raises(yastn.YastnError):
         fpeps.RectangularUnitcell(pattern=[[1, 0], [1, 1]])
         # RectangularUnitcell: each unique label should have the same neighbors.
+
+
+def test_TriangularLattice():
+    net = fpeps.TriangularLattice()
+    assert net.dims == (3,3)
+    assert net._periodic == 'ii'  # lattice is infinite in both directions.
+    assert net.sites() == (Site(0, 0), Site(0, 1), Site(0, 2))  # three unique sites
+    assert net.bonds(dirn='h') == (Bond(Site(0, 0), Site(0, 1)), Bond(Site(0, 1), Site(0, 2)), Bond(Site(0, 2), Site(0, 3)))
+    assert net.bonds(dirn='v') == (Bond(Site(0, 0), Site(1, 0)), Bond(Site(0, 1), Site(1, 1)), Bond(Site(0, 2), Site(1, 2)))
+    assert net.bonds(dirn='d') == (Bond(Site(1, 0), Site(0, 1)), Bond(Site(1, 1), Site(0, 2)), Bond(Site(1, 2), Site(0, 3)))
+    assert len(net.bonds()) == 9
+    assert net.bonds(reverse=True) == net.bonds()[::-1]
+
+
+def test_geometry_equal():
+    gs = [fpeps.TriangularLattice(),
+          fpeps.RectangularUnitcell(pattern={(0, 0): 0, (1, 1): 0, (0, 1): 1, (1, 0): 1}),
+          fpeps.CheckerboardLattice(),
+          fpeps.SquareLattice(dims=(2, 2), boundary='infinite'),
+          fpeps.SquareLattice(dims=(2, 2), boundary='obc')]
+
+    assert gs[0] != None
+    assert all(g == g for g in gs)
+    assert all(g0 != g1 for n, g0 in enumerate(gs) for g1 in gs[n+1:])
+
 
 
 def test_Peps_get_set():
@@ -340,9 +364,9 @@ def test_Peps_inheritance():
     assert len(psi.bonds()) == 12
     assert len(psi.sites()) == 6
     assert psi.nn_site((0, 0), 'r') == (0, 1)
-    assert psi.nn_bond_type(Bond((0, 0), (0, 1))) == ('h', True)  # 'lr'
+    assert psi.nn_bond_dirn(Bond((0, 0), (0, 1))) == 'lr'
     assert psi.f_ordered((0, 0), (0, 1))
-
+    assert repr(psi) == str(psi)
 
 if __name__ == '__main__':
     pytest.main([__file__, "-vs", "--durations=0"])

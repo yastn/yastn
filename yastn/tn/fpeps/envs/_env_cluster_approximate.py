@@ -16,12 +16,12 @@ from .... import YastnError, tensordot, eye
 from ...import mps
 from .. import DoublePepsTensor
 from ._env_auxlliary import *
-
+from .._evolution import BondMetric
 
 
 _hair_dirn = {'t': hair_t, 'l': hair_l, 'b': hair_b, 'r': hair_r}
-#_axis_dirn ={'t': 2, 'l': 3, 'b': 0, 'r': 1}
-_axis_dirn = {'t': (1, 0), 'l': (1, 1), 'b': (0, 0), 'r': (0, 1)}
+_axis_dirn ={'t': 2, 'l': 3, 'b': 0, 'r': 1}
+#_axis_dirn = {'t': (1, 0), 'l': (1, 1), 'b': (0, 0), 'r': (0, 1)}
 
 class EnvApproximate:
     def __init__(self, psi, which='65', opts_svd=None, opts_var=None, update_sweeps=None):
@@ -46,10 +46,20 @@ class EnvApproximate:
         update_sweeps:
             Passed as max_sweeps to :meth:`yastn.tn.mps.compression_` for boundary MPS variational fine-tunning.
         """
+        self.psi = psi
+        self._set_which(which)
+        self.opts_var = {'max_sweeps': 2,} if opts_var is None else opts_var
+        self.opts_svd = opts_svd
+        self.update_sweeps = update_sweeps
+        self._envs = {}
+
+    def _get_which(self):
+        return self._which
+
+    def _set_which(self, which):
         if which not in ('43', '43+', '65', '65+', '87', '87+'):
             raise YastnError(f" Type of EnvApprox {which=} not recognized.")
         self._which = which
-        self.psi = psi
         if which in ('43', '43+'):
             self.Nl, self.Nw = 2, 1
         if which in ('65', '65+'):
@@ -57,14 +67,8 @@ class EnvApproximate:
         if which in ('87', '87+'):
             self.Nl, self.Nw = 4, 3
         self._hairs = '+' in which
-        self.opts_var = {'max_sweeps': 2, } if opts_var is None else opts_var
-        self.opts_svd = opts_svd
-        self.update_sweeps = update_sweeps
-        self._envs = {}
 
-    @property
-    def which(self):
-        return self._which
+    which = property(fget=_get_which, fset=_set_which)
 
     def __getitem__(self, key):
         return self._envs[key]
@@ -72,7 +76,10 @@ class EnvApproximate:
     def __setitem__(self, key, value):
         self._envs[key] = value
 
-    def post_evolution_(env, bond, *kwargs):
+    def pre_truncation_(env, bond):
+        pass
+
+    def post_truncation_(env, bond, *kwargs):
         pass
 
     def bond_metric(self, Q0, Q1, s0, s1, dirn):
@@ -113,7 +120,7 @@ class EnvApproximate:
                         (+3 -2) (+3 -1) (+3 +0)  (+3 +1) (+3 +2)  (+3 +3)
 
         """
-        assert self.psi.nn_site(s0, (0, 1) if dirn == 'h' else (1, 0)) == s1
+        assert self.psi.nn_site(s0, (0, 1) if dirn in ('h', 'lr') else (1, 0)) == s1
         bd = (s0, s1, dirn)
 
         try:
@@ -131,10 +138,10 @@ class EnvApproximate:
             env.update_env_(n, to='last')
             env.update_env_(2 * Nl - n - 1, to='first')
         g = tensordot(env.F[Nl-1, Nl], env.F[Nl, Nl-1], axes=((0, 2), (0, 2)))
-        return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
+        return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
     def initialize_env(self, bd):
-        if bd[2] == "h":
+        if bd[2] in ("h", "lr"):
             self[bd, self.Nw + 1] = self.boundary_mps(bd, 't')
             for nx in range(-self.Nw, 0):  # [bd, 1]
                 tmpo = self.transfer_mpo(bd, n=nx)
@@ -161,7 +168,7 @@ class EnvApproximate:
                 mps.compression_(self[bd, ny], (tmpo, self[bd, ny-1]), **self.opts_var)
 
     def update_env(self, bd):
-        if bd[2] == "h":  # dirn == "h":
+        if bd[2] in ("h", "lr"):
             self[bd, self.Nw + 1] = self.boundary_mps(bd, 't')
             for nx in range(-self.Nw, 0):  # [bd, 1]
                 tmpo = self.transfer_mpo(bd, n=nx)
@@ -187,7 +194,7 @@ class EnvApproximate:
         H = mps.Mpo(N = 2 * self.Nl)
         s0, s1, dirn = bd
 
-        if dirn == "h":
+        if dirn in ("h", "lr"):
             nx = n
             d = {(nx, ny): self.psi.nn_site(s0, d=(nx, ny))
                 for ny in range(-self.Nl + 1 - self._hairs, self.Nl + 1 + self._hairs)}
@@ -200,7 +207,6 @@ class EnvApproximate:
             H.A[H.first] = edge_l(d[nx, ny], hl=hl).add_leg(s=-1, axis=0)
             for site in H.sweep(to='last', dl=1, df=1):
                 ny += 1
-                # d[nx, ny].unfuse_legs(axes=(0, 1)) if d[nx, ny].ndim == 3 else d[nx, ny]
                 H.A[site] = DoublePepsTensor(bra=d[nx, ny], ket=d[nx, ny], transpose=(1, 2, 3, 0))
             ny += 1
             hr = hair_r(d[nx, ny + 1]) if self._hairs else None
@@ -219,7 +225,6 @@ class EnvApproximate:
             H.A[H.first] = edge_t(d[nx, ny], ht=ht).add_leg(s=-1, axis=0)
             for site in H.sweep(to='last', dl=1, df=1):
                 nx += 1
-                #.unfuse_legs(axes=(0, 1)) if d[nx, ny].ndim == 3 else d[nx, ny]
                 H.A[site] = DoublePepsTensor(bra=d[nx, ny], ket=d[nx, ny])
             nx += 1
             hb = hair_b(d[nx + 1, ny]) if self._hairs else None
@@ -242,8 +247,6 @@ class EnvApproximate:
         vectors, config = [], self.psi.config
         axis = _axis_dirn[dirn]
         for nxy in nns:
-            leg = d[nxy].get_legs(axes=axis[0])  # peps tensor are now [t l] [b r] s
-            leg = leg.unfuse_leg()  # we need to unfuse
-            leg = leg[axis[1]]
+            leg = d[nxy].get_legs(axes=axis)  # peps tensor are now [t l] [b r] s  # TODO check directions
             vectors.append(eye(config, legs=[leg, leg.conj()], isdiag=False).fuse_legs(axes=[(0, 1)]))
         return mps.product_mps(vectors)

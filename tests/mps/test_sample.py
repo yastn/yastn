@@ -159,7 +159,10 @@ def test_sample_mps_raises(config_kwargs):
                        match="Matrix projectors should be projectors, P @ P == P."):
         vecs = [2 * ops.n()]
         mps.sample(psi, projectors=vecs)
-
+    with pytest.raises(yastn.YastnError,
+                       match="Projectors should consist of vectors with ndim=1 or matrices with ndim=2."):
+        vecs = [yastn.ncon([v0, v0, v0], [[-0], [-1], [-2]])]
+        mps.sample(psi, projectors=vecs)
 
 if __name__ == '__main__':
     pytest.main([__file__, "-vs", "--durations=0"])

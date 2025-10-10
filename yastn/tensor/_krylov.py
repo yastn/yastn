@@ -14,7 +14,6 @@
 # ==============================================================================
 """ Building Krylov space. """
 
-
 def expand_krylov_space(self, f, tol, ncv, hermitian, V, H=None, **kwargs):
     """
     Expand the Krylov base up to ``ncv`` states or until reaching desired tolerance ``tol``.
@@ -30,14 +29,14 @@ def expand_krylov_space(self, f, tol, ncv, hermitian, V, H=None, **kwargs):
             for i in range(j + 1):
                 H[(i, j)] = V[i].vdot(w)
                 amplitudes.append(-H[(i, j)])
-            w = w.linear_combination(*V, amplitudes=amplitudes, **kwargs)
+            w = w.add(*V, amplitudes=amplitudes, **kwargs)
         else:  # Lanczos
             H[(j, j)] = V[j].vdot(w)
             if j == 0:
-                w = w.linear_combination(V[j], amplitudes=[1, -H[(j, j)]], **kwargs)
+                w = w.add(V[j], amplitudes=[1, -H[(j, j)]], **kwargs)
             else:
                 H[(j - 1, j)] = H[(j, j - 1)]
-                w = w.linear_combination(V[j - 1], V[j], amplitudes=[1, -H[(j - 1, j)], -H[(j, j)]], **kwargs)
+                w = w.add(V[j - 1], V[j], amplitudes=[1, -H[(j - 1, j)], -H[(j, j)]], **kwargs)
         H[(j + 1, j)] = w.norm()
         if H[(j + 1, j)] < tol:
             happy = True

@@ -16,7 +16,7 @@
 from __future__ import annotations
 from numbers import Number
 from typing import Sequence
-from ... import tensor, initialize, YastnError
+from ... import tensor, initialize, YastnError, tensordot
 from ._mps_parent import _MpsMpoParent
 
 
@@ -41,7 +41,7 @@ def Mpo(N, periodic=False) -> MpsMpoOBC | MpoPBC:
     return MpsMpoOBC(N, nr_phys=2)
 
 
-def add(*states, amplitudes=None) -> MpsMpoOBC:
+def add(*states, amplitudes=None, **kwargs) -> MpsMpoOBC:
     r"""
     Linear superposition of several MPS/MPOs with specific amplitudes, i.e., :math:`\sum_j \textrm{amplitudes[j]}{\times}\textrm{states[j]}`.
 
@@ -77,6 +77,10 @@ def add(*states, amplitudes=None) -> MpsMpoOBC:
     #    raise YastnError('MPS: Addition')
 
     amplitudes = [x * psi.factor for x, psi in zip(amplitudes, states)]
+
+    if phi.N == 1:
+        phi.A[0] = tensor.add(*(psi.A[0] for psi in states), amplitudes=amplitudes)
+        return phi
 
     n = phi.first
     d = {(j,): psi.A[n] * amplitudes[j] for j, psi in enumerate(states)}
@@ -145,7 +149,7 @@ def multiply(a, b, mode=None) -> MpsMpoOBC:
 
     axes_fuse = ((0, 3), 1, (2, 4)) if b.nr_phys == 1 else ((0, 3), 1, (2, 4), 5)
     for n in phi.sweep():
-        phi.A[n] = tensor.tensordot(a.A[n], b.A[n], axes=(3, 1)).fuse_legs(axes_fuse, mode)
+        phi.A[n] = tensordot(a.A[n], b.A[n], axes=(3, 1)).fuse_legs(axes_fuse, mode)
     phi.A[phi.first] = phi.A[phi.first].drop_leg_history(axes=0)
     phi.A[phi.last] = phi.A[phi.last].drop_leg_history(axes=2)
     phi.factor = a.factor * b.factor
@@ -163,6 +167,40 @@ class MpoPBC(_MpsMpoParent):
         super().__init__(N=N, nr_phys=2)
         self.tol = None
 
+    def to_tensor(self) -> tensor.Tensor:
+        r"""
+        Contract MPS/MPO to a single tensor.
+        Should only be used for a system with a very few sites.
+
+        ::
+
+            Tensor leg order
+
+            ┌─────────── ... ──────┐
+            |         MPS          |
+            └──┬─────┬── ... ───┬──┘
+               |     |          |
+               0     1         N-1
+
+               1     3        2N-1
+               |     |          |
+            ┌──┴─────┴── ... ───┴──┐
+            |          MPO         |
+            └──┬─────┬── ... ───┬──┘
+               |     |          |
+               0     2        2N-2
+
+        """
+        ten = self.factor * self.A[self.first]
+        if self.N == 1:
+            return ten.trace(axes=(0, 2))
+        for n in self.sweep(to='last', df=1):
+            ind = n + 1 if self.nr_phys == 1 else 2 * n
+            if n == self.last:
+                ten = tensordot(ten, self.A[n], axes=((ind, 0), (0, 2)))
+            else:
+                ten = tensordot(ten, self.A[n], axes=(ind, 0))
+        return ten
 
 
 class MpsMpoOBC(_MpsMpoParent):
@@ -255,7 +293,7 @@ class MpsMpoOBC(_MpsMpoParent):
         else:
             raise YastnError('"to" should be in "first" or "last"')
         nR = R.norm()
-        self.A[self.pC] = R / nR
+        self.A[self.pC] = R / nR if nR > 0 else R
         self.factor = 1 if normalize else self.factor * nR
 
     def diagonalize_central_(self, opts_svd, normalize=True) -> Number:
@@ -402,7 +440,7 @@ class MpsMpoOBC(_MpsMpoParent):
             cl = (0, 1) if self.nr_phys == 1 else (0, 1, 3)
         it = self.sweep(to=to) if n is None else [n]
         for n in it:
-            x = tensor.tensordot(self.A[n], self.A[n].conj(), axes=(cl, cl))
+            x = tensordot(self.A[n], self.A[n].conj(), axes=(cl, cl))
             x = x.drop_leg_history()
             x0 = initialize.eye(config=x.config, legs=x.get_legs((0, 1)))
             if (x - x0.diag()).norm() > tol:  # == 0
@@ -565,3 +603,33 @@ class MpsMpoOBC(_MpsMpoParent):
             SV.append(sv)
             psi.absorb_central_(to='last')
         return SV
+
+    def to_tensor(self) -> tensor.Tensor:
+        r"""
+        Contract MPS/MPO to a single tensor.
+        Should only be used for a system with a very few sites.
+
+        ::
+
+            Tensor leg order
+
+            ┌─────────── ... ──────┐
+            |         MPS          |
+            └──┬─────┬── ... ───┬──┘
+               |     |          |
+               0     1         N-1
+
+               1     3        2N-1
+               |     |          |
+            ┌──┴─────┴── ... ───┴──┐
+            |          MPO         |
+            └──┬─────┬── ... ───┬──┘
+               |     |          |
+               0     2        2N-2
+
+        """
+        ten = self.A[self.first].remove_leg(axis=0)
+        for n in self.sweep(to='last', df=1):
+            ind = n if self.nr_phys == 1 else 2 * n - 1
+            ten = tensordot(ten, self.A[n], axes=(ind, 0))
+        return self.factor * ten.remove_leg(axis=-self.nr_phys)

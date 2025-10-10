@@ -14,13 +14,22 @@
 # ==============================================================================
 """ Basic structures forming PEPS network. """
 from __future__ import annotations
-from typing import Sequence
-from typing import NamedTuple
+from typing import NamedTuple, Sequence
 from ... import YastnError
 
 
 class Site(NamedTuple):
-    """ Site coordinates `(nx, ny)` are consistent with matrix indexing with `(row, column)`. """
+    """
+    Site coordinates `(nx, ny)` are consistent with matrix indexing with `(row, column)`::
+
+        ┌───── y(cols) ──────ᐳ
+        │
+        x(rows)  (0,0) (0,1) ...
+        │        (1,0) (1,1) ...
+        │         ...
+        ᐯ
+
+    """
     nx : int = 0
     ny : int = 0
 
@@ -53,13 +62,22 @@ class SquareLattice():
         Parameters
         ----------
         dims: tuple[int, int]
-            Size of the unit cell in a form of ``dims=(rows, columns)``.
-            Site(0, 0) corresponds to top-left corner of the unit cell.
+            Size of the unit cell in a form of ``dims=(rows, columns)``. Site(0, 0) corresponds to top-left corner of the unit cell.
 
         boundary: str
-            'infinite' (the default) for an infinite lattice,
-            'obc' for a finite lattice, or
-            'cylinder' for a finite cylinder periodic along rows.
+            Type of boundary conditions:
+                * 'infinite' (the default) for an infinite lattice,
+                * 'obc' for a finite lattice, or
+                * 'cylinder' for a finite cylinder periodic along rows, i.e.::
+
+                    ┌───── y(cols) ──────ᐳ
+                    │
+                    │        (0, 0) (0, 1) ... (0, Ny-1)
+                    x(rows)  (1, 0) (1, 1) ... (1, Ny-1)
+                    │         ...
+                    │        (Nx-1, 0)   ...   (Nx-1, Ny-1)
+                    ᐯ        (0, 0)      ...   (0, Ny-1)
+
         """
         if boundary not in ('obc', 'infinite', 'cylinder'):
             raise YastnError(f"{boundary=} not recognized; should be 'obc', 'infinite', or 'cylinder'")
@@ -67,7 +85,7 @@ class SquareLattice():
         self.boundary = boundary
         self._periodic = _periodic_dict[boundary]
         self._dims = (dims[0], dims[1])
-        self._sites = tuple(Site(nx, ny) for ny in range(self._dims[1]) for nx in range(self._dims[0]))
+        self._sites = tuple(Site(nx, ny) for ny in range(self.Ny) for nx in range(self.Nx))
         self._dir = {'tl': (-1, -1), 't': (-1, 0), 'tr': (-1,  1),
                       'l': ( 0, -1),                'r': ( 0,  1),
                      'bl': ( 1, -1), 'b': ( 1, 0), 'br': ( 1,  1)}
@@ -97,6 +115,15 @@ class SquareLattice():
     def dims(self) -> tuple[int, int]:
         """ Size of the unit cell as (rows, columns). """
         return self._dims
+
+    def __eq__(self, other):
+        return isinstance(other, SquareLattice) and \
+               type(self) == type(other) and \
+               self._periodic == other._periodic and \
+               self._dims == other._dims and \
+               self._sites == other._sites and \
+               all(self.site2index((nx, ny)) == other.site2index((nx, ny))
+                   for ny in range(self.Ny) for nx in range(self.Nx))
 
     def sites(self, reverse=False) -> Sequence[Site]:
         """ Sequence of unique lattice sites. """
@@ -154,23 +181,24 @@ class SquareLattice():
         #     y = y % self._dims[1]
         return Site(x, y)
 
-    def nn_bond_type(self, bond) -> tuple[str, bool]:
+    def nn_bond_dirn(self, s0, s1=None) -> str:
         """
         Raise YastnError if a bond does not connect nearest-neighbor lattice sites.
         Return bond orientation in 2D grid as a tuple: dirn, l_ordered
         dirn is 'h' or 'v' (horizontal, vertical).
         l_ordered is True for bond directed as 'lr' or 'tb', and False for 'rl' or 'bt'.
         """
-        s0, s1 = bond
+        if s1 is None:
+            s0, s1 = s0   # allow syntax where s0 is a bond s0 = (s0, s1)
         if self.nn_site(s0, 'r') == s1 and self.nn_site(s1, 'l') == s0:
-            return 'h', True  # dirn, l_ordered
+            return 'lr'  # dirn
         if self.nn_site(s0, 'b') == s1 and self.nn_site(s1, 't') == s0:
-            return 'v', True
+            return 'tb'
         if self.nn_site(s0, 'l') == s1 and self.nn_site(s1, 'r') == s0:
-            return 'h', False
+            return 'rl'
         if self.nn_site(s0, 't') == s1 and self.nn_site(s1, 'b') == s0:
-            return 'v', False
-        raise YastnError(f"{bond} is not a nearest-neighbor bond.")
+            return 'bt'
+        raise YastnError(f"{s0}, {s1} are not nearest-neighbor sites.")
 
     def f_ordered(self, s0, s1) -> bool:
         """
@@ -191,7 +219,8 @@ class SquareLattice():
 
     def __dict__(self):
         """Return a dictionary representation of the object."""
-        return {'dims': self.dims, 'boundary': self.boundary, 'sites': self.sites()}
+        return {'lattice': type(self).__name__,
+                'dims': self.dims, 'boundary': self.boundary}
 
 
 class CheckerboardLattice(SquareLattice):
@@ -210,12 +239,14 @@ class CheckerboardLattice(SquareLattice):
         """ Tensor index depending on site. """
         return (site[0] + site[1]) % 2
 
+    def __dict__(self):
+        """Return a dictionary representation of the object."""
+        return {'lattice': type(self).__name__}
+
 
 class RectangularUnitcell(SquareLattice):
-    # TODO Optionally numpy.array(dtype=int) ?
-    #      Drop integer ? Can be anything, i.e. even string label for tensors
 
-    def __init__(self, pattern, boundary='infinite'):
+    def __init__(self, pattern, **kwargs):
         r"""
         Rectangular unit cells supporting patterns characterized by a single momentum ``Q=(q_x, q_y)``.
 
@@ -312,4 +343,57 @@ class RectangularUnitcell(SquareLattice):
             in format Sequence[Sequence[int]].
 
         """
-        return {'pattern': [[self.site2index((row,col)) for col in range(self.Ny)] for row in range(self.Nx)], 'boundary': self.boundary }
+        return {'lattice': type(self).__name__,
+                'pattern': [[self.site2index((row, col)) for col in range(self.Ny)] for row in range(self.Nx)]}
+
+
+class TriangularLattice(SquareLattice):
+
+    def __init__(self, **kwargs):
+        r"""
+        Geometric information about infinite triangular lattice, which
+        is an infinite lattice with :math:`3{\times}3` unit cell and three unique tensors.
+        """
+        super().__init__(dims=(3, 3), boundary='infinite')
+        self._sites = (Site(0, 0), Site(0, 1), Site(0, 2))
+        self._bonds_h = (Bond(Site(0, 0), Site(0, 1)), Bond(Site(0, 1), Site(0, 2)), Bond(Site(0, 2), Site(0, 3)))
+        self._bonds_v = (Bond(Site(0, 0), Site(1, 0)), Bond(Site(0, 1), Site(1, 1)), Bond(Site(0, 2), Site(1, 2)))
+        self._bonds_d = (Bond(Site(1, 0), Site(0, 1)), Bond(Site(1, 1), Site(0, 2)), Bond(Site(1, 2), Site(0, 3)))
+
+    def site2index(self, site):
+        """ Tensor index depending on site. """
+        return (site[1] - site[0]) % 3
+
+    def bonds(self, dirn=None, reverse=False) -> Sequence[Bond]:
+        """
+        Sequence of unique nearest neighbor bonds between lattice sites.
+
+        Parameters
+        ----------
+        dirn: None | str
+            return horizontal followed by vertical and diagonal bonds if None;
+            'v', 'h' and 'd' are, respectively, for vertical, horizontal and diagonal bonds only.
+
+        reverse: bool
+            whether to reverse the order of bonds.
+        """
+        if dirn == 'd':
+            return self._bonds_d[::-1] if reverse else self._bonds_d
+        if dirn == 'v':
+            return self._bonds_v[::-1] if reverse else self._bonds_v
+        if dirn == 'h':
+            return self._bonds_h[::-1] if reverse else self._bonds_h
+        return self._bonds_d[::-1] + self._bonds_v[::-1] + self._bonds_h[::-1] if reverse else self._bonds_h + self._bonds_v + self._bonds_d
+
+    def __dict__(self):
+        """
+        Return a dictionary representation of the object.
+
+        ..Note ::
+
+            For serialiation to JSON, dict keys must be str/int/... Hence, we store pattern
+            in format Sequence[Sequence[int]].
+
+        """
+        return {'lattice': type(self).__name__,
+                'pattern': [[self.site2index((row,col)) for col in range(self.Ny)] for row in range(self.Nx)]}

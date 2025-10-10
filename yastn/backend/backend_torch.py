@@ -34,7 +34,7 @@ __all__= [
     'zeros', 'ones', 'rand', 'to_tensor', 'to_mask', 'square_matrix_from_dict',
     'requires_grad_', 'requires_grad', 'move_to', 'conj',
     'trace', 'rsqrt', 'reciprocal', 'exp', 'sqrt', 'absolute',
-    'svd_lowrank', 'svd', 'eigh', 'qr',
+    'svd_lowrank', 'svd', 'eigh', 'qr', 'pinv',
     'argsort', 'eigs_which', 'allclose',
     'add', 'sub', 'apply_mask', 'vdot', 'diag_1dto2d', 'diag_2dto1d',
     'dot', 'dot_diag', 'transpose_dot_sum',
@@ -295,7 +295,7 @@ def svdvals(data, meta, sizeS, **kwargss):
     real_dtype = data.real.dtype if data.is_complex() else data.dtype
     Sdata = torch.zeros((sizeS,), dtype=real_dtype, device=data.device)
     for (sl, D, _, _, slS, _, _) in meta:
-        torch.linalg.svdvals(data[slice(*sl)].view(D), out=Sdata[slice(*slS)])
+        Sdata[slice(*slS)] = torch.linalg.svdvals(data[slice(*sl)].view(D))
     return Sdata
 
 
@@ -356,8 +356,48 @@ def eigh(data, meta=None, sizes=(1, 1), order_by_magnitude=False, ad_decomp_reg=
     return torch.linalg.eigh(data)  # S, U
 
 
-def eig(T):
-    return torch.linalg.eig(T)  # S, U
+def eig(data, meta=None, sizes=(1, 1), **kwargs):
+    if meta is None:
+        return torch.linalg.eig(data)  # S, U
+    # NOTE torch.linalg.eig returns right eigenvectors U only, i.e. M U = diag(S) U
+    #
+    # Assume worst case ?
+    Udata = torch.empty((sizes[0],), dtype=DTYPE['complex128'], device=data.device)
+    Sdata = torch.empty((sizes[1],), dtype=DTYPE['complex128'], device=data.device)
+    Vdata = torch.empty((sizes[2],), dtype=DTYPE['complex128'], device=data.device)
+    for (sl, D, slU, DU, slS, slV, DV) in meta:
+        S, U = torch.linalg.eig(data[slice(*sl)].reshape(D))
+        #
+        # in general diag(U.H @ U) = 1 but not U.H @ U = I, i.e. right eigenvectors are not orthogonal
+        #
+        # The solutions satisfy
+        # M @ U / U = S (as cols)
+        # V.H @ M / V.H = S (as rows)
+        #
+        # Search for left eigenvectors V (rows) via biorthogonality condition V.H @ U = I
+        try:
+            V= torch.linalg.solve(U.conj().T, torch.eye(len(S), dtype=U.dtype, device=data.device), left=True, out=None)
+            V= V.conj().T
+        except Exception as e:
+            raise ValueError("Biorthonormalization of left/right eigenvector pairs failed.") from e
+
+        tol= 1.0e-12 if data.is_complex() else 1.0e-14
+        if any( torch.abs(torch.sum(V.T * U, axis=0) - 1) > tol ):
+            raise ValueError("Biorthonormalization of left/right eigenvector pairs failed.")
+
+        s_order= eigs_which(S, which=kwargs.get('which', 'LM'))
+        Udata[slice(*slU)].reshape(DU)[:] = U[:,s_order]
+        Sdata[slice(*slS)] = S[s_order]
+        Vdata[slice(*slV)].reshape(DV)[:] = V[s_order,:]
+    return Udata, Sdata, Vdata
+
+
+def eigvals(data, meta, sizeS, **kwargs):
+    Sdata = torch.empty((sizeS,), dtype=DTYPE['complex128'], device=data.device)
+    for (sl, D, _, _, slS, _, _) in meta:
+        S = torch.linalg.eigvals(data[slice(*sl)].reshape(D))
+        Sdata[slice(*slS)]= S[eigs_which(S, which=kwargs.get('which', 'LM'))]
+    return Sdata
 
 
 def qr(data, meta, sizes):
@@ -372,6 +412,10 @@ def qr(data, meta, sizes):
     return Qdata, Rdata
 
 
+def pinv(A, rcond=None, hermitian=False, out=None, atol=None, rtol=None):
+    return torch.linalg.pinv(A, atol=atol, rtol=rtol if not rtol is None else rcond, hermitian=hermitian, out=out)
+
+
 @torch.no_grad()
 def argsort(data):
     return torch.argsort(data)
@@ -381,8 +425,8 @@ def argsort(data):
 def eigs_which(val, which):
     if which == 'LM':
         return (-abs(val)).argsort()
-    # if which == 'SM':
-    #     return abs(val).argsort()
+    if which == 'SM':
+        return abs(val).argsort()
     if which == 'LR':
         return (-real(val)).argsort()
     #if which == 'SR':
@@ -395,7 +439,8 @@ def eigs_which(val, which):
 
 
 def allclose(Adata, Bdata, rtol, atol):
-    return torch.allclose(Adata, Bdata, rtol=rtol, atol=atol)
+    dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
+    return torch.allclose(Adata.to(dtype=dtype), Bdata.to(dtype=dtype), rtol=rtol, atol=atol)
 
 
 def add(datas, metas, Dsize):

@@ -24,6 +24,20 @@ def mean(xs):
     return sum(xs) / len(xs)
 
 
+def run_save_load(env):
+    # test save, load
+
+    config = env.psi.config
+    d = env.save_to_dict()
+
+    env_save = fpeps.load_from_dict(config, d)
+
+    for k in env._env:
+        assert (env_save[k] - env[k]).norm() < 1e-12
+    for k in env.info:
+        assert env_save.info[k] == env.info[k]
+
+
 @pytest.mark.parametrize("boundary", ["obc", "cylinder"])
 def test_mpsboundary_measure(config_kwargs, boundary):
     """ Initialize a product PEPS and perform a set of measurment. """
@@ -39,13 +53,26 @@ def test_mpsboundary_measure(config_kwargs, boundary):
     psi = fpeps.product_peps(geometry, occs)
 
     opts_svd = {'D_total': 2, 'tol': 1e-10}
-    env = fpeps.EnvBoundaryMPS(psi, opts_svd=opts_svd, setup='lr')
+    env = fpeps.EnvBoundaryMPS(psi, opts_svd=opts_svd, setup='lrtb')
 
     esz = env.measure_1site(ops.sz())
     assert all(abs(v - esz[s]) < tol for s, v in vals.items())
+    site = (2, 2)
+    assert abs(env.measure_1site(ops.sz(), site=site) - vals[site]) < tol
+    out = env.measure_1site({'x': ops.sz()}, site=site)
+    assert abs(out['x'] - vals[site]) < tol
 
     eszz = env.measure_2site(ops.sz(), ops.sz(), opts_svd=opts_svd)
     assert all(abs(vals[s1] * vals[s2] - v) < tol for (s1, s2), v in eszz.items())
+
+    if boundary == "obc":
+        eszznn = env.measure_nn(ops.sz(), ops.sz())
+        print(eszznn)
+        assert all(abs(vals[s1] * vals[s2] - v) < tol for (s1, s2), v in eszznn.items())
+    elif boundary == "cylinder":
+        with pytest.raises(yastn.YastnError,
+                           match="EnvBoundaryMPS.measure_nn currently supports only open boundary conditions."):
+            eszznn = env.measure_nn(ops.sz(), ops.sz())
 
     vloc = [-1, 0, 1]
     pr = [ops.vec_z(val=v) for v in vloc]
@@ -54,7 +81,6 @@ def test_mpsboundary_measure(config_kwargs, boundary):
 
     smpl = env.sample(pr2s)
     assert all(vloc[smpl[s]] == vals[s] for s in sites)
-
 
     prs = {s: pr[:] for s in sites}
 
@@ -130,6 +156,8 @@ def test_finite_spinless_boundary_mps_ctmrg(config_kwargs):
         energy_old = energy
 
     mpsenv = fpeps.EnvBoundaryMPS(psi, opts_svd=opts_svd_ctm, setup='tlbr')
+
+    run_save_load(mpsenv)
 
     for ny in range(psi.Ny):
         vR0 = env.boundary_mps(n=ny, dirn='r')

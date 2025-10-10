@@ -13,11 +13,12 @@
 # limitations under the License.
 # ==============================================================================
 from itertools import accumulate
-from .... import Tensor, YastnError
+from tqdm import tqdm
+from .... import Tensor, YastnError, tensordot
 from ... import mps
-from ._env_auxlliary import identity_tm_boundary
+from ._env_auxlliary import identity_tm_boundary, clear_projectors
 from ._env_measure import _measure_nsite
-from .._peps import Peps
+from .._peps import Peps, Peps2Layers
 
 
 class EnvBoundaryMPS(Peps):
@@ -26,6 +27,29 @@ class EnvBoundaryMPS(Peps):
     """
 
     def __init__(self, psi, opts_svd, setup='l', opts_var=None):
+        r"""
+        Calculate boundary MPSs for finite PEPS.
+
+        Consequative MPS follows from contracting transfer matrix with previous MPS.
+        This employs :meth:`yastn.tn.mps.zipper` followed by :meth:`yastn.tn.mps.compression_` for refinment.
+
+        Parameters
+        ----------
+        psi: fpeps.Peps
+            Finite PEPS to be contracted.
+
+        opts_svd: dict
+            Passed to :meth:`yastn.tn.mps.zipper` and :meth:`yastn.tn.mps.compression_` (if ``method="2site"`` is used in ``opts_var``)
+            Controls bond dimensions of boundary MPSs.
+
+        setup: str
+            String containing directions from which the square lattice is contracted, consisting of characters "l", "r", "t", "b".
+            E.g., setup="lr" would calculate boundary MPSs from the left and from the right sites of the lattice. The default is "l".
+
+        opts_var: dict
+            Options passed to :meth:`yastn.tn.mps.compression_`. The default is ``None`` which sets opts_var={max_sweeps: 2, normalization: False}.
+        """
+
         super().__init__(psi.geometry)
         self.psi = psi
         self._env = {}
@@ -55,7 +79,7 @@ class EnvBoundaryMPS(Peps):
                 tmpo = psi.transfer_mpo(n=ny+1, dirn='v').T
                 phi0 = self._env[ny+1, 'r']
                 self._env[ny, 'r'], discarded = mps.zipper(tmpo, phi0, opts_svd, return_discarded=True)
-                mps.compression_(self._env[ny, 'r'], (tmpo, phi0), **opts_var)
+                mps.compression_(self._env[ny, 'r'], (tmpo, phi0), **opts_var, opts_svd=opts_svd)
                 self.info[ny, 'r'] = {'discarded': discarded}
 
         if 'l' in setup:
@@ -63,7 +87,7 @@ class EnvBoundaryMPS(Peps):
                 tmpo = psi.transfer_mpo(n=ny-1, dirn='v')
                 phi0 = self._env[ny-1, 'l']
                 self._env[ny, 'l'], discarded = mps.zipper(tmpo, phi0, opts_svd, return_discarded=True)
-                mps.compression_(self._env[ny, 'l'], (tmpo, phi0), **opts_var)
+                mps.compression_(self._env[ny, 'l'], (tmpo, phi0), **opts_var, opts_svd=opts_svd)
                 self.info[ny, 'l'] = {'discarded': discarded}
 
         if 't' in setup:
@@ -71,7 +95,7 @@ class EnvBoundaryMPS(Peps):
                 tmpo = psi.transfer_mpo(n=nx-1, dirn='h')
                 phi0 = self._env[nx-1, 't']
                 self._env[nx, 't'], discarded = mps.zipper(tmpo, phi0, opts_svd, return_discarded=True)
-                mps.compression_(self._env[nx, 't'], (tmpo, phi0), **opts_var)
+                mps.compression_(self._env[nx, 't'], (tmpo, phi0), **opts_var, opts_svd=opts_svd)
                 self.info[nx, 't'] = {'discarded': discarded}
 
         if 'b' in setup:
@@ -79,8 +103,21 @@ class EnvBoundaryMPS(Peps):
                 tmpo = psi.transfer_mpo(n=nx+1, dirn='h').T
                 phi0 = self._env[nx+1, 'b']
                 self._env[nx, 'b'], discarded = mps.zipper(tmpo, phi0, opts_svd, return_discarded=True)
-                mps.compression_(self._env[nx, 'b'], (tmpo, phi0), **opts_var)
+                mps.compression_(self._env[nx, 'b'], (tmpo, phi0), **opts_var, opts_svd=opts_svd)
                 self.info[nx, 'b'] = {'discarded': discarded}
+
+    def save_to_dict(self) -> dict:
+        r"""
+        Serialize EnvBoundaryMPS into a dictionary.
+        """
+        psi = self.psi
+        if isinstance(psi, Peps2Layers):
+            psi = psi.ket
+
+        d = {'class': 'EnvBoundaryMPS', 'psi': psi.save_to_dict()}
+        d['env'] = {k: v.save_to_dict() for k, v in self._env.items()}
+        d['info'] = {k: v.copy() for k, v in self.info.items()}
+        return d
 
     def boundary_mps(self, n, dirn):
         return self._env[n, dirn]
@@ -90,7 +127,7 @@ class EnvBoundaryMPS(Peps):
             return self.psi.transfer_mpo(n=ind[0], dirn=ind[1])
         return self._env[ind]
 
-    def measure_1site(peps_env, O):
+    def measure_1site(peps_env, O, site=None):
         """
         Calculate all 1-point expectation values <O_j> in a finite PEPS.
 
@@ -101,45 +138,81 @@ class EnvBoundaryMPS(Peps):
         O: dict[tuple[int, int], dict[int, operators]]
             mapping sites with list of operators at each site.
         """
-        out = {}
-
+        #
         psi = peps_env.psi
-        Nx, Ny = psi.Nx, psi.Ny
-        sites = [(nx, ny) for ny in range(Ny-1, -1, -1) for nx in range(Nx)]
-        opdict = _clear_operator_input(O, sites)
+        if site is None:
+            out = {}
+            Nx, Ny = psi.Nx, psi.Ny
+            sites = [(nx, ny) for ny in range(Ny-1, -1, -1) for nx in range(Nx)]
+            opdict = _clear_operator_input(O, sites)
 
-        for ny in range(Ny):
-            bra = peps_env.boundary_mps(n=ny, dirn='r')
-            tm = psi.transfer_mpo(n=ny, dirn='v')
-            ket = peps_env.boundary_mps(n=ny, dirn='l')
-            env = mps.Env(bra.conj(), [tm, ket]).setup_(to='first').setup_(to='last')
-            norm_env = env.measure()
-            for nx in range(Nx):
-                if (nx, ny) in opdict:
-                    for nz, op in opdict[nx, ny].items():
-                        tm[nx].set_operator_(op)
-                        env.update_env_(nx, to='first')
-                        out[(nx, ny) + nz] = env.measure(bd=(nx - 1, nx)) / norm_env
-        return out
+            for ny in range(Ny):
+                bra = peps_env.boundary_mps(n=ny, dirn='r')
+                tm = psi.transfer_mpo(n=ny, dirn='v')
+                ket = peps_env.boundary_mps(n=ny, dirn='l')
+                env = mps.Env(bra.conj(), [tm, ket]).setup_(to='first').setup_(to='last')
+                norm_env = env.measure()
+                for nx in range(Nx):
+                    if (nx, ny) in opdict:
+                        for nz, op in opdict[nx, ny].items():
+                            if op.ndim == 2:
+                                tm[nx].set_operator_(op)
+                            else:  # for a single-layer Peps, replace with new peps tensor
+                                tm[nx] = op.transpose(axes=(0, 3, 2, 1))
+                            env.update_env_(nx, to='first')
+                            out[(nx, ny) + nz] = env.measure(bd=(nx - 1, nx)) / norm_env
+            return out
+        # else:
+        nx, ny = site
+        bra = peps_env.boundary_mps(n=ny, dirn='r')
+        tm = psi.transfer_mpo(n=ny, dirn='v')
+        ket = peps_env.boundary_mps(n=ny, dirn='l')
+        env = mps.Env(bra.conj(), [tm, ket]).setup_(to='first').setup_(to='last')
+        norm_env = env.measure()
+        if isinstance(O, dict):
+            out = {}
+            for k, op in O.items():
+                if op.ndim == 2:
+                    tm[nx].set_operator_(op)
+                else:  # for a single-layer Peps, replace with new peps tensor
+                    tm[nx] = op.transpose(axes=(0, 3, 2, 1))
+                env.update_env_(nx, to='first')
+                out[k] = env.measure(bd=(nx - 1, nx)) / norm_env
+            return out
+        if O.ndim == 2:
+            tm[nx].set_operator_(O)
+        else:  # for a single-layer Peps, replace with new peps tensor
+            tm[nx] = O.transpose(axes=(0, 3, 2, 1))
+        env.update_env_(nx, to='first')
+        return env.measure(bd=(nx - 1, nx)) / norm_env
 
-
-    def measure_nn(peps_env, OP):
+    def measure_nn(peps_env, OP, P=None):
         """
         Calculate 2-point expectation values on <O_i P_j> in a finite on NN bonds.
 
         ----------
-        OP: dict[Bond, dict[int, operators]]
+        OP: dict[Bond, dict[int, Tensor]]
             mapping bond with list of two-point operators.
+
+        P: Tensor
+            For the same Tensor O and P on all bonds, can provide both as Tensors.
+            The default is None, where OP is a dict.
         """
         out = {}
-
         psi = peps_env.psi
+
+        if psi.boundary != "obc":
+            raise YastnError("EnvBoundaryMPS.measure_nn currently supports only open boundary conditions.")
+
+        if P is not None:
+            OP = {bond: (OP, P) for bond in psi.bonds()}
+        OP = {k: {(): v} if not isinstance(v, dict) else v for k, v in OP.items()}
 
         OPv, OPh = {}, {}
         for bond, ops in OP.items():
-            dirn, l_ordered = peps_env.nn_bond_type(bond)
-            assert l_ordered
-            if dirn == 'h':
+            dirn = peps_env.nn_bond_dirn(*bond)
+            assert dirn in ('lr', 'tb')
+            if dirn == 'lr':
                 nx = bond[0][0]
                 if nx not in OPh:
                     OPh[nx] = {}
@@ -161,12 +234,12 @@ class EnvBoundaryMPS(Peps):
                 nx = s0[0]
                 for nz, (op1, op2) in ops.items():
                     tm[nx].set_operator_(op1)
-                    tm[nx+1].set_operator_(op2)
-                    env.update_env_(nx+1, to='first')
+                    tm[nx + 1].set_operator_(op2)
+                    env.update_env_(nx + 1, to='first')
                     env.update_env_(nx, to='first')
                     tm[nx].del_operator_()
-                    tm[nx+1].del_operator_()
-                    out[s0, s1, nz] = env.measure(bd=(nx - 1, nx)) / norm_env
+                    tm[nx + 1].del_operator_()
+                    out[(s0, s1) + nz] = env.measure(bd=(nx - 1, nx)) / norm_env
 
         for nx, bond_ops in OPh.items():
             bra = peps_env.boundary_mps(n=nx, dirn='b')
@@ -179,12 +252,12 @@ class EnvBoundaryMPS(Peps):
                 ny = s0[1]
                 for nz, (op1, op2) in ops.items():
                     tm[ny].set_operator_(op1)
-                    tm[ny+1].set_operator_(op2)
-                    env.update_env_(ny+1, to='first')
+                    tm[ny + 1].set_operator_(op2)
+                    env.update_env_(ny + 1, to='first')
                     env.update_env_(ny, to='first')
                     tm[ny].del_operator_()
-                    tm[ny+1].del_operator_()
-                    out[s0, s1, nz] = env.measure(bd=(ny - 1, ny)) / norm_env
+                    tm[ny + 1].del_operator_()
+                    out[(s0, s1) + nz] = env.measure(bd=(ny - 1, ny)) / norm_env
 
         return out
 
@@ -206,7 +279,6 @@ class EnvBoundaryMPS(Peps):
         self.yrange = (min(site[1] for site in sites), max(site[1] for site in sites) + 1)
         dirn = 'lr'
         return _measure_nsite(self, *operators, sites=sites, dirn=dirn)
-
 
     def measure_2site(peps_env, O, P, opts_svd, opts_var=None):
         """
@@ -285,53 +357,85 @@ class EnvBoundaryMPS(Peps):
                             out[(nx1, ny1) + nz1, (nx2, ny2) + nz2] = env.measure(bd=(nx2-1, nx2)) / norm_env
         return out
 
-    def sample(peps_env, projectors, opts_svd=None, opts_var=None):
-        """
-        Sample a random configuration from a finite PEPS.
+    def sample(peps_env, projectors, number=1, opts_svd=None, opts_var=None, progressbar=False, return_probabilities=False, flatten_one=True, **kwargs):
+        r"""
+        Sample random configurations from PEPS.
+        Output a dictionary linking sites with lists of sampled projectors` keys for each site.
+        Projectors should be summing up to identity -- this is not checked.
 
-        Takes  CTM environments and a complete list of projectors to sample from.
+        Parameters
+        ----------
+        projectors: Dict[Any, yast.Tensor] | Sequence[yast.Tensor] | Dict[Site, Dict[Any, yast.Tensor]]
+            Projectors to sample from. We can provide a dict(key: projector), where the sampled results will be given as keys,
+            and the same set of projectors is used at each site. For a list of projectors, the keys follow from enumeration.
+            Finally, we can provide a dictionary between each site and sets of projectors.
+
+        number: int
+            Number of independent samples.
+
+        progressbar: bool
+            Whether to display progressbar. The default is ``False``.
+
+        return_probabilities: bool
+            Whether to return a tuple (samples, probabilities). The default is ``False``, where a dict samples is returned.
+
+        flatten_one: bool
+            Whether, for number==1, pop one-element lists for each lattice site to return samples={site: ind, } instead of {site: [ind]}.
+            The default is ``True``.
         """
         psi = peps_env.psi
         config = psi[0, 0].config
-        rands = (config.backend.rand(psi.Nx * psi.Ny) + 1) / 2
 
-        out = {}
+        xrange = [0, peps_env.Nx]
+        yrange = [0, peps_env.Ny]
+        sites = peps_env.sites()
+        projs_sites = clear_projectors(sites, projectors, xrange, yrange)
+
+        out = {site: [] for site in peps_env.sites()}
+        probabilities = []
+        rands = (config.backend.rand(psi.Nx * psi.Ny * number) + 1) / 2
         count = 0
-        vR = peps_env.boundary_mps(n=psi.Ny-1, dirn='r') # right boundary of indexed column through CTM environment tensors
 
-        for ny in range(psi.Ny - 1, -1, -1):
+        for _ in tqdm(range(number), desc="Sample...", disable=not progressbar):
+            probability = 1.
 
-            Os = psi.transfer_mpo(n=ny, dirn='v').T  # converts ny column of PEPS to MPO
-            vL = peps_env.boundary_mps(n=ny, dirn='l')  # left boundary of indexed column through CTM environment tensors
-
-            env = mps.Env(vL.conj(), [Os, vR]).setup_(to = 'first')
-
-            for nx in range(0, psi.Nx):
-                loc_projectors = projectors[nx, ny]
-                prob = []
-                norm_prob = env.measure(bd=(nx - 1, nx))
-                for proj in loc_projectors:
-                    Os[nx].set_operator_(proj)
+            vR = peps_env.boundary_mps(n=psi.Ny-1, dirn='r') # right boundary of indexed column through CTM environment tensors
+            for ny in range(psi.Ny - 1, -1, -1):
+                Os = psi.transfer_mpo(n=ny, dirn='v').T  # converts ny column of PEPS to MPO
+                vL = peps_env.boundary_mps(n=ny, dirn='l')  # left boundary of indexed column through CTM environment tensors
+                env = mps.Env(vL.conj(), [Os, vR]).setup_(to = 'first')
+                for nx in range(0, psi.Nx):
+                    acc_prob = 0
+                    norm_prob = env.measure(bd=(nx - 1, nx)).real
+                    for k, pr in projs_sites[(nx, ny)].items():
+                        Os[nx].set_operator_(pr)
+                        env.update_env_(nx, to='last')
+                        prob = env.measure(bd=(nx, nx+1)).real / norm_prob
+                        acc_prob += prob
+                        if rands[count] < acc_prob:
+                            probability *= prob
+                            out[nx, ny].append(k)
+                            Os[nx].set_operator_(pr / prob)
+                            break
                     env.update_env_(nx, to='last')
-                    prob.append(env.measure(bd=(nx, nx+1)) / norm_prob)
+                    count += 1
 
-                assert abs(sum(prob) - 1) < 1e-12
-                rand = rands[count]
-                ind = sum(apr < rand for apr in accumulate(prob))
-                out[nx, ny] = ind
-                Os[nx].set_operator_(loc_projectors[ind]) # updated with the new collapse
-                env.update_env_(nx, to='last')
-                count += 1
+                if opts_svd is None:
+                    opts_svd = {'D_total': max(vL.get_bond_dimensions())}
 
-            if opts_svd is None:
-                opts_svd = {'D_total': max(vL.get_bond_dimensions())}
+                vRnew = mps.zipper(Os, vR, opts_svd=opts_svd)
+                if opts_var is None:
+                    opts_var = {}
 
-            vRnew = mps.zipper(Os, vR, opts_svd=opts_svd)
-            if opts_var is None:
-                opts_var = {}
+                mps.compression_(vRnew, (Os, vR), method='1site', **opts_var)
+                vR = vRnew
+            probabilities.append(probability)
 
-            mps.compression_(vRnew, (Os, vR), method='1site', **opts_var)
-            vR = vRnew
+        if number == 1 and flatten_one:
+            out = {site: smp.pop() for site, smp in out.items()}
+
+        if return_probabilities:
+            return out, probabilities
         return out
 
     def sample_MC_(proj_env, st0, st1, st2, psi, projectors, opts_svd, opts_var, trial="local"):
@@ -398,7 +502,7 @@ def _sample_MC_column_local(ny, proj_env, st0, st1, psi, projectors, rands):
     vL = proj_env.boundary_mps(n=ny, dirn='l')
     env = mps.Env(vL.conj(), [Os, vR]).setup_(to='first')
     for nx in range(psi.Nx):
-        amp = env.hole(nx).tensordot(psi[nx, ny], axes=((0, 1), (0, 1)))
+        amp = env.hole(nx).tensordot(psi[nx, ny], axes=((0, 1, 2, 3), (0, 1, 2, 3)))
         prob = [abs(amp.vdot(pr, conj=(0, 0))) ** 2 for pr in projectors[nx, ny]]
         sumprob = sum(prob)
         prob = [x / sumprob for x in prob]
@@ -429,8 +533,8 @@ def _sample_MC_column_uniform(ny, proj_env, st0, st1, psi, projectors, rands):
         pr0 = projectors[nx, ny][ind0]
         pr1 = projectors[nx, ny][ind1]
 
-        A0 = (A @ pr0).unfuse_legs(axes=(0, 1))
-        A1 = (A @ pr1).unfuse_legs(axes=(0, 1))
+        A0 = (A @ pr0)
+        A1 = (A @ pr1)
 
         Os[nx] = A1
         env.update_env_(nx, to='last')

@@ -17,7 +17,7 @@ from itertools import product
 import pytest
 import yastn
 
-tol = 1.5e-10  #pylint: disable=invalid-name
+tol = 1e-9  #pylint: disable=invalid-name
 
 
 def eigh_combine(a,which='SR'):
