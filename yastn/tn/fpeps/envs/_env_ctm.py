@@ -28,6 +28,7 @@ from ._env_auxlliary import *
 from ._env_window import EnvWindow
 from ._env_measure import _measure_nsite
 from ._env_boundary_mps import _clear_operator_input
+import yastn
 
 logger = logging.Logger('ctmrg')
 
@@ -118,6 +119,15 @@ class EnvCTM(Peps):
     def max_D(self):
         return max(max(max(getattr(self[site], dirn).get_shape()) for dirn in ['tl', 'tr', 'bl', 'br'])
                    for site in self.sites())
+
+    def canonical_site(env, site):
+        '''
+        Turn the indices of the site nx and ny to the range [0, Wx-1] and [0, Wy-1] respectively.
+        '''
+        if site is None:
+            return None
+        site_c = Site(site.nx % env.psi.Nx, site.ny % env.psi.Ny)
+        return site_c
 
     # Cloning/Copying/Detaching(view)
     #
@@ -995,6 +1005,62 @@ class EnvCTM(Peps):
         update_env_(env_tmp, s0, env, proj, move=m0)
         update_env_(env, s1, env, proj, move=m1)
         update_storage_(env, env_tmp)
+
+    def build_bond_projectors_(env, bond: tuple, opts_svd: dict | None = None, **kwargs):
+        r"""
+        Update EnvCTM projectors related to a specific nearest-neighbor bond.
+        """
+        if opts_svd is None:
+            opts_svd = env.opts_svd
+
+        dirn = env.nn_bond_dirn(*bond)
+        s0, s1 = bond if dirn in 'lr tb' else bond[::-1]
+
+        proj = Peps(env.geometry)
+        for site in env.sites():
+            proj[site] = EnvCTM_projectors()
+
+        result_dict = {}
+
+        # move, m0, m1, d = 'hrlt' if dirn in 'lrl' else 'vbtl'
+        # env_tmp = EnvCTM(env.psi, init=None)  # empty environments
+        if dirn in 'lrl':
+
+            if env.nn_site(s0, d='t') is not None:
+                update_projectors_(proj, env.nn_site(s0, d='t'), 't', env, opts_svd, **kwargs)
+                result_dict[(env.canonical_site(env.nn_site(s0, d='t')), 'vtr')] = yastn.save_to_dict(proj[env.nn_site(s0, d='t')].vtr)
+                result_dict[(env.canonical_site(env.nn_site(s0, d='tr')), 'vtl')] = yastn.save_to_dict(proj[env.nn_site(s0, d='tr')].vtl)
+            if env.nn_site(s0, d='b') is not None:
+                update_projectors_(proj, s0, 'b', env, opts_svd, **kwargs)
+                result_dict[(env.canonical_site(env.nn_site(s0, d='b')), 'vbr')] = yastn.save_to_dict(proj[env.nn_site(s0, d='b')].vbr)
+                result_dict[(env.canonical_site(env.nn_site(s0, d='br')), 'vbl')] = yastn.save_to_dict(proj[env.nn_site(s0, d='br')].vbl)
+
+            # trivial_projectors_(proj, 'v', env, sites=[env.nn_site(s0, d='t')])
+            # trivial_projectors_(proj, 'v', env, sites=[env.nn_site(s0, d='b')])
+
+            # trivial_projectors_(proj, 'v', env, sites=[env.nn_site(s1, d='t')])
+            # trivial_projectors_(proj, 'v', env, sites=[env.nn_site(s1, d='b')])
+
+            return result_dict
+        else:
+
+            if env.nn_site(s0, d='l') is not None:
+                update_projectors_(proj, env.nn_site(s0, d='l'), 'l', env, opts_svd, **kwargs)
+                result_dict[(env.canonical_site(env.nn_site(s0, d='l')), 'hlb')] =  yastn.save_to_dict(proj[env.nn_site(s0, d='l')].hlb)
+                result_dict[(env.canonical_site(env.nn_site(s0, d='bl')), 'hlt')] = yastn.save_to_dict(proj[env.nn_site(s0, d='bl')].hlt)
+
+            if env.nn_site(s0, d='r') is not None:
+                update_projectors_(proj, s0, 'r', env, opts_svd, **kwargs)
+                result_dict[(env.canonical_site(env.nn_site(s0, d='r')), 'hrb')] = yastn.save_to_dict(proj[env.nn_site(s0, d='r')].hrb)
+                result_dict[(env.canonical_site(env.nn_site(s0, d='br')), 'hrt')] = yastn.save_to_dict(proj[env.nn_site(s0, d='br')].hrt)
+
+            # trivial_projectors_(proj, 'h', env, sites=[env.nn_site(s0, d='l')])
+            # trivial_projectors_(proj, 'h', env, sites=[env.nn_site(s0, d='r')])
+
+            # trivial_projectors_(proj, 'h', env, sites=[env.nn_site(s1, d='l')])
+            # trivial_projectors_(proj, 'h', env, sites=[env.nn_site(s1, d='r')])
+
+            return result_dict
 
 
     def pre_truncation_(env, bond):
