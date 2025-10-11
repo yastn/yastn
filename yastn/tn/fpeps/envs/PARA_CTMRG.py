@@ -510,7 +510,7 @@ def ParaMeasure1Site(psi, env, fid, op, cfg, n_cores = 24):
                 env_part, site0, _, _ = SubWindow(psi, site, fid, 0, 0, 0, 0, env)
                 jobs.append([env_part.save_to_dict(), site0, site])
 
-            list_of_dicts += Parallel(n_jobs = n_cores)(Measure1Site(job, op, cfg) for job in jobs)
+            list_of_dicts += parallel_pool(Measure1Site(job, op, cfg) for job in jobs)
             jobs.clear()
 
     result = {k: v for d in list_of_dicts for k, v in d.items()}
