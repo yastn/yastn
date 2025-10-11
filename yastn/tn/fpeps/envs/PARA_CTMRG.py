@@ -68,7 +68,7 @@ def BuildProjector_(job, opts_svd_ctm, cfg):
     result = env.build_bond_projectors_(bond, opts_svd_ctm)
     return result
 
-def SubWindow(psi, site, fid, top=1, left=1, bottom=1, right=1, env=None, only_site=False):
+def SubWindow(psi, site, fid, top=1, left=1, bottom=1, right=1, env=None, only_site=False, site_load=None, env_load_dict=None):
 
     '''
     Find the window around the particular site. The boundary has been taken into consideration
@@ -109,28 +109,33 @@ def SubWindow(psi, site, fid, top=1, left=1, bottom=1, right=1, env=None, only_s
 
     # site0 = Site(nx0, ny0)
 
-    for dx in range(-top, bottom + 1):
-        for dy in range(-left, right + 1):
-            d = (dx, dy)
-            # if psi.nn_site(site, d) is not None:
-            psi_part[psi_part.nn_site(site0, d)] = psi[psi.nn_site(site, d)]
-
-    if env is not None:
-
-        env_part = EnvCTM(psi_part, init="eye")
+    if site_load is None:
         for dx in range(-top, bottom + 1):
             for dy in range(-left, right + 1):
                 d = (dx, dy)
                 # if psi.nn_site(site, d) is not None:
-                env_part[psi_part.nn_site(site0, d)].l = env[psi.nn_site(site, d)].l
-                env_part[psi_part.nn_site(site0, d)].r = env[psi.nn_site(site, d)].r
-                env_part[psi_part.nn_site(site0, d)].t = env[psi.nn_site(site, d)].t
-                env_part[psi_part.nn_site(site0, d)].b = env[psi.nn_site(site, d)].b
+                psi_part[psi_part.nn_site(site0, d)] = psi[psi.nn_site(site, d)]
+    else:
+        for d in site_load:
+            if psi.nn_site(site, d) is not None:
+                psi_part[psi_part.nn_site(site0, d)] = psi[psi.nn_site(site, d)]
 
-                env_part[psi_part.nn_site(site0, d)].tl = env[psi.nn_site(site, d)].tl
-                env_part[psi_part.nn_site(site0, d)].bl = env[psi.nn_site(site, d)].bl
-                env_part[psi_part.nn_site(site0, d)].tr = env[psi.nn_site(site, d)].tr
-                env_part[psi_part.nn_site(site0, d)].br = env[psi.nn_site(site, d)].br
+    if env is not None:
+
+        env_part = EnvCTM(psi_part, init='eye')
+        if env_load_dict is None:
+            for dx in range(-top, bottom + 1):
+                for dy in range(-left, right + 1):
+                    d = (dx, dy)
+                    # if psi.nn_site(site, d) is not None:
+                    for attr in ['l', 'r', 't', 'b', 'tl', 'bl', 'tr', 'br']:
+                        setattr(env_part[psi_part.nn_site(site0, d)], attr, getattr(env[psi.nn_site(site, d)], attr))
+
+        else:
+            for d in list(env_load_dict.keys()):
+                if psi.nn_site(site, d) is not None:
+                    for attr in env_load_dict[d]:
+                        setattr(env_part[psi_part.nn_site(site0, d)], attr, getattr(env[psi.nn_site(site, d)], attr))
 
 
         return env_part, site0, Lx, Ly
@@ -148,6 +153,13 @@ def UpdateSite(job, cfg, dirn, proj_dict):
         proj[site_] = EnvCTM_projectors()
 
     if dirn in 'htb':
+
+        newt = None
+        newb = None
+        newtl = None
+        newtr = None
+        newbl = None
+        newbr = None
 
         if dirn in 'ht':
 
@@ -174,6 +186,11 @@ def UpdateSite(job, cfg, dirn, proj_dict):
             update_env_(env_tmp, site0, env_, proj, move='t')
             update_storage_(env_, env_tmp)
 
+            newt = yastn.save_to_dict(env_[site0].t)
+            newtl = yastn.save_to_dict(env_[site0].tl)
+            newtr = yastn.save_to_dict(env_[site0].tr)
+
+
         if dirn in 'hb':
 
             trivial_projectors_(proj, 'b', env_, sites=env_.sites())
@@ -199,14 +216,20 @@ def UpdateSite(job, cfg, dirn, proj_dict):
             update_env_(env_tmp, site0, env_, proj, move='b')
             update_storage_(env_, env_tmp)
 
-        return [yastn.save_to_dict(env_[site0].t),
-                yastn.save_to_dict(env_[site0].b),
-                yastn.save_to_dict(env_[site0].tl),
-                yastn.save_to_dict(env_[site0].tr),
-                yastn.save_to_dict(env_[site0].bl),
-                yastn.save_to_dict(env_[site0].br)]
+            newb = yastn.save_to_dict(env_[site0].b)
+            newbl = yastn.save_to_dict(env_[site0].bl)
+            newbr = yastn.save_to_dict(env_[site0].br)
+
+        return [newt, newb, newtl, newtr, newbl, newbr]
 
     if dirn in 'vlr':
+
+        newl = None
+        newr = None
+        newtl = None
+        newtr = None
+        newbl = None
+        newbr = None
 
         if dirn in 'vl':
 
@@ -232,6 +255,10 @@ def UpdateSite(job, cfg, dirn, proj_dict):
             update_env_(env_tmp, site0, env_, proj, move='l')
             update_storage_(env_, env_tmp)
 
+            newl = yastn.save_to_dict(env_[site0].l)
+            newtl = yastn.save_to_dict(env_[site0].tl)
+            newbl = yastn.save_to_dict(env_[site0].bl)
+
         if dirn in 'vr':
 
             trivial_projectors_(proj, 'r', env_, sites=env_.sites())
@@ -256,16 +283,16 @@ def UpdateSite(job, cfg, dirn, proj_dict):
             update_env_(env_tmp, site0, env_, proj, move='r')
             update_storage_(env_, env_tmp)
 
-        return [yastn.save_to_dict(env_[site0].l),
-                yastn.save_to_dict(env_[site0].r),
-                yastn.save_to_dict(env_[site0].tl),
-                yastn.save_to_dict(env_[site0].tr),
-                yastn.save_to_dict(env_[site0].bl),
-                yastn.save_to_dict(env_[site0].br)]
+            newr = yastn.save_to_dict(env_[site0].r)
+            newtr = yastn.save_to_dict(env_[site0].tr)
+            newbr = yastn.save_to_dict(env_[site0].br)
+
+        return [newl, newr, newtl, newtr, newbl, newbr]
 
 def ParaUpdateCTM_(psi, env, fid, bonds, opts_svd_ctm, cfg, n_cores, parallel_pool, dirn='h', proj_dict=None, sites_to_be_updated=None):
 
     # Build projectors
+    # Only pick the needed peps tensor(s) and CTMRG tensors. We don't use 'h' and 'v' options to save memory, thus these two are not optimized. (But can be done anyway)
 
     jobs = []
     for bond in bonds:
@@ -274,13 +301,13 @@ def ParaUpdateCTM_(psi, env, fid, bonds, opts_svd_ctm, cfg, n_cores, parallel_po
         elif dirn in 'v':
             env_part, site0, _, _ = SubWindow(psi, bond.site0, fid, 0, 1, 1, 1, env)
         elif dirn =='t':
-            env_part, site0, _, _ = SubWindow(psi, bond.site0, fid, 1, 0, 0, 1, env)
+            env_part, site0, _, _ = SubWindow(psi, bond.site0, fid, 1, 0, 0, 1, env, env_load_dict={(0, 0):['bl', 'b', 'l'], (0, 1):['br', 'b', 'r'], (-1, 0):['tl', 't', 'l'], (-1, 1):['tr', 't', 'r']})
         elif dirn =='l':
-            env_part, site0, _, _ = SubWindow(psi, bond.site0, fid, 0, 1, 1, 0, env)
+            env_part, site0, _, _ = SubWindow(psi, bond.site0, fid, 0, 1, 1, 0, env, env_load_dict={(0, 0):['tr', 't', 'r'], (0, -1):['tl', 't', 'l'], (1, 0):['br', 'b', 'r'], (1, -1):['bl', 'b', 'l']})
         elif dirn =='b':
-            env_part, site0, _, _ = SubWindow(psi, bond.site0, fid, 0, 0, 1, 1, env)
+            env_part, site0, _, _ = SubWindow(psi, bond.site0, fid, 0, 0, 1, 1, env, env_load_dict={(0, 0):['tl', 't', 'l'], (0, 1):['tr', 't', 'r'], (1, 0):['bl', 'b', 'l'], (1, 1):['br', 'b', 'r']})
         elif dirn =='r':
-            env_part, site0, _, _ = SubWindow(psi, bond.site0, fid, 0, 0, 1, 1, env)
+            env_part, site0, _, _ = SubWindow(psi, bond.site0, fid, 0, 0, 1, 1, env, env_load_dict={(0, 0):['tl', 't', 'l'], (0, 1):['tr', 't', 'r'], (1, 0):['bl', 'b', 'l'], (1, 1):['br', 'b', 'r']})
 
         if dirn in 'htb':
             bond0 = Bond(site0, env_part.nn_site(site0, 'r'))
@@ -320,18 +347,19 @@ def ParaUpdateCTM_(psi, env, fid, bonds, opts_svd_ctm, cfg, n_cores, parallel_po
     jobs.clear()
 
     for site in sites_to_be_updated:
+        # Only pick the needed peps tensor(s) and CTMRG tensors
         if dirn in 'h':
-            env_part, site0, _, _ = SubWindow(psi, site, fid, 1, 1, 1, 1, env)
+            env_part, site0, _, _ = SubWindow(psi, site, fid, 1, 1, 1, 1, env, site_load=[(-1, 0), (1, 0)], env_load_dict={(-1, 0):['t', 'tl', 'tr', 'l', 'r'], (1, 0):['b', 'bl', 'br', 'l', 'r']})
         if dirn in 'v':
-            env_part, site0, _, _ = SubWindow(psi, site, fid, 1, 1, 1, 1, env)
+            env_part, site0, _, _ = SubWindow(psi, site, fid, 1, 1, 1, 1, env, site_load=[(0, -1), (0, -1)], env_load_dict={(0, -1):['l', 'tl', 'bl', 't', 'b'], (0, 1):['r', 'tr', 'br', 't', 'b']})
         elif dirn =='t':
-            env_part, site0, _, _ = SubWindow(psi, site, fid, 1, 1, 0, 1, env)
+            env_part, site0, _, _ = SubWindow(psi, site, fid, 1, 1, 0, 1, env, site_load = [(-1, 0)], env_load_dict={(-1, 0):['t', 'tl', 'tr', 'l', 'r']})
         elif dirn =='l':
-            env_part, site0, _, _ = SubWindow(psi, site, fid, 1, 1, 1, 0, env)
+            env_part, site0, _, _ = SubWindow(psi, site, fid, 1, 1, 1, 0, env, site_load = [(0, -1)], env_load_dict={(0, -1):['l', 'tl', 'bl', 't', 'b']})
         elif dirn =='b':
-            env_part, site0, _, _ = SubWindow(psi, site, fid, 0, 1, 1, 1, env)
+            env_part, site0, _, _ = SubWindow(psi, site, fid, 0, 1, 1, 1, env, site_load = [(1, 0)], env_load_dict={(1, 0):['b', 'bl', 'br', 'l', 'r']})
         elif dirn =='r':
-            env_part, site0, _, _ = SubWindow(psi, site, fid, 1, 0, 1, 1, env)
+            env_part, site0, _, _ = SubWindow(psi, site, fid, 1, 0, 1, 1, env, site_load = [(0, 1)], env_load_dict={(0, 1):['r', 'tr', 'br', 't', 'b']})
 
         if dirn in 'htb':
             jobs.append([env_part.save_to_dict(), site0, site,
@@ -377,24 +405,17 @@ def ParaUpdateCTM_(psi, env, fid, bonds, opts_svd_ctm, cfg, n_cores, parallel_po
                     proj_dict.pop((env.canonical_site(env.nn_site(site, (0, -1))), 'hlt'))
                 if env.nn_site(site, (1, -1)) is not None:
                     proj_dict.pop((env.canonical_site(env.nn_site(site, (0, -1))), 'hlb'))
-    # print(len(proj_dict))
-    # for job in jobs:
-    #     if dirn == 'h':
-    #         if temp_site0 is not None:
-    #             temp_site = job[5]
-    #             proj_dict.pop((temp_site, 'vtr'))
-    # print(len(proj_dict))
-
-    # gathered_result = [UpdateSite(job, cfg, dirn, gathered_result) for job in jobs]
 
     ii = 0
     for result in gathered_result:
         site_ = sites_to_be_updated[ii]
-        if dirn in "htb":
+        if dirn in "ht":
             env[site_].t = yastn.load_from_dict(config=cfg, d = result[0])
+        if dirn in "hb":
             env[site_].b = yastn.load_from_dict(config=cfg, d = result[1])
-        if dirn in "vlr":
+        if dirn in "vl":
             env[site_].l = yastn.load_from_dict(config=cfg, d = result[0])
+        if dirn in "vr":
             env[site_].r = yastn.load_from_dict(config=cfg, d = result[1])
         if dirn in 'hvtl':
             env[site_].tl = yastn.load_from_dict(config=cfg, d = result[2])
@@ -538,7 +559,7 @@ def ParaMeasureNN(psi, env, fid, op0, op1, cfg, n_cores = 24):
             jobs = []
             for bond in psi.bonds(dirn='h')[(ii * n_cores):(min((ii + 1) * n_cores, num_of_hb))]:
                 # env_part, site0 = Window3x3(psi, env, bond.site0, fid)
-                env_part, site0, _, _ = SubWindow(psi, bond.site0, fid, 0, 0, 0, 1, env)
+                env_part, site0, _, _ = SubWindow(psi, bond.site0, fid, 0, 0, 0, 1, env, env_load_dict={(0, 0):['tl', 'bl', 'l', 't', 'b'], (0, 1):['tr', 'br', 'r', 't', 'b']})
                 bond0 = Bond(site0, env_part.nn_site(site0, 'r'))
                 jobs.append([env_part.save_to_dict(), bond0, bond])
             list_of_dicts += parallel_pool(MeasureNN(job, op0, op1, cfg) for job in jobs)
@@ -546,7 +567,7 @@ def ParaMeasureNN(psi, env, fid, op0, op1, cfg, n_cores = 24):
         for ii in range(0, int(np.ceil(num_of_vb / n_cores))):
             jobs = []
             for bond in psi.bonds(dirn='v')[ii * n_cores:min((ii + 1) * n_cores, num_of_vb)]:
-                env_part, site0, _, _ = SubWindow(psi, bond.site0, fid, 0, 0, 1, 0, env)
+                env_part, site0, _, _ = SubWindow(psi, bond.site0, fid, 0, 0, 1, 0, env, env_load_dict={(0, 0):['tl', 'tr', 'l', 't', 'r'], (1, 0):['bl', 'br', 'r', 'l', 'b']})
                 bond0 = Bond(site0, env_part.nn_site(site0, 'b'))
                 jobs.append([env_part.save_to_dict(), bond0, bond])
             list_of_dicts += parallel_pool(MeasureNN(job, op0, op1, cfg) for job in jobs)
@@ -559,4 +580,3 @@ def ParaMeasureNN(psi, env, fid, op0, op1, cfg, n_cores = 24):
 def PARActmrg_(psi, env, fid, cfg, max_sweeps=50, iterator_step=1, opts_svd_ctm=None, corner_tol=None, n_cores=1):
     tmp = _ctmrg_(psi, env, fid, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, cfg, n_cores=n_cores)
     return tmp if iterator_step else next(tmp)
-    # ParaUpdate(env, ctm_jobs_ver, ctm_jobs_hor, opts_svd_ctm, cfg)
