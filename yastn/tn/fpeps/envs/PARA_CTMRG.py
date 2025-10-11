@@ -363,38 +363,28 @@ def ParaUpdateCTM_(psi, env, fid, bonds, opts_svd_ctm, cfg, n_cores, parallel_po
                          env.canonical_site(env.nn_site(site, (1, -1))),
                          env.canonical_site(env.nn_site(site, (1, 1)))])
 
-    # print(proj_dict.keys())
     gathered_result = parallel_pool(UpdateSite(job, cfg, dirn, proj_dict) for job in jobs)
 
-    # if dirn == 'h':
-    #     for site in sites_to_be_updated[1:-1]:
-    #         if env.nn_site(site, (-1, 1)) is not None:
-    #             proj_dict.pop((env.canonical_site(env.nn_site(site, (-1, 0))), 'vtr'))
-    #         if env.nn_site(site, (-1, -1)) is not None:
-    #             proj_dict.pop((env.canonical_site(env.nn_site(site, (-1, 0))), 'vtl'))
-    #         if env.nn_site(site, (1, 1)) is not None:
-    #             proj_dict.pop((env.canonical_site(env.nn_site(site, (1, 0))), 'vbr'))
-    #         if env.nn_site(site, (1, -1)) is not None:
-    #             proj_dict.pop((env.canonical_site(env.nn_site(site, (1, 0))), 'vbl'))
-    # if dirn == 'v':
-    #     for site in sites_to_be_updated[1:-1]:
-    #         if env.nn_site(site, (-1, 1)) is not None:
-    #             proj_dict.pop((env.canonical_site(env.nn_site(site, (0, 1))), 'hrt'))
-    #         if env.nn_site(site, (1, 1)) is not None:
-    #             proj_dict.pop((env.canonical_site(env.nn_site(site, (0, 1))), 'hrb'))
-    #         if env.nn_site(site, (-1, -1)) is not None:
-    #             proj_dict.pop((env.canonical_site(env.nn_site(site, (0, -1))), 'hlt'))
-    #         if env.nn_site(site, (1, -1)) is not None:
-    #             proj_dict.pop((env.canonical_site(env.nn_site(site, (0, -1))), 'hlb'))
-    # print(len(proj_dict))
-    # for job in jobs:
-    #     if dirn == 'h':
-    #         if temp_site0 is not None:
-    #             temp_site = job[5]
-    #             proj_dict.pop((temp_site, 'vtr'))
-    # print(len(proj_dict))
-
-    # gathered_result = [UpdateSite(job, cfg, dirn, gathered_result) for job in jobs]
+    if dirn == 'h':
+        for site in sites_to_be_updated[1:-1]:
+            if env.nn_site(site, (-1, 1)) is not None:
+                proj_dict.pop((env.canonical_site(env.nn_site(site, (-1, 0))), 'vtr'))
+            if env.nn_site(site, (-1, -1)) is not None:
+                proj_dict.pop((env.canonical_site(env.nn_site(site, (-1, 0))), 'vtl'))
+            if env.nn_site(site, (1, 1)) is not None:
+                proj_dict.pop((env.canonical_site(env.nn_site(site, (1, 0))), 'vbr'))
+            if env.nn_site(site, (1, -1)) is not None:
+                proj_dict.pop((env.canonical_site(env.nn_site(site, (1, 0))), 'vbl'))
+    if dirn == 'v':
+        for site in sites_to_be_updated[1:-1]:
+            if env.nn_site(site, (-1, 1)) is not None:
+                proj_dict.pop((env.canonical_site(env.nn_site(site, (0, 1))), 'hrt'))
+            if env.nn_site(site, (1, 1)) is not None:
+                proj_dict.pop((env.canonical_site(env.nn_site(site, (0, 1))), 'hrb'))
+            if env.nn_site(site, (-1, -1)) is not None:
+                proj_dict.pop((env.canonical_site(env.nn_site(site, (0, -1))), 'hlt'))
+            if env.nn_site(site, (1, -1)) is not None:
+                proj_dict.pop((env.canonical_site(env.nn_site(site, (0, -1))), 'hlb'))
 
     ii = 0
     for result in gathered_result:
