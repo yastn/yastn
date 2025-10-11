@@ -469,7 +469,7 @@ def _ctmrg_(psi, env, fid, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, 
 
             for dirn in 'lr':
 
-                if n_cores >= psi.geometry.Ny:
+                if n_cores >= psi.geometry.Nx:
                     for ctm_jobs in ctm_jobs_ver:
                         ParaUpdateCTM_(psi, env, fid, ctm_jobs, opts_svd_ctm, cfg, n_cores=n_cores, parallel_pool=parallel_pool, dirn=dirn)
                 else:
