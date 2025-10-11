@@ -450,7 +450,7 @@ def _ctmrg_(psi, env, fid, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, 
 
                 if n_cores >= psi.geometry.Ny:
                     for ctm_jobs in ctm_jobs_ver:
-                        ParaUpdateCTM_(psi, env, fid, ctm_jobs, opts_svd_ctm, cfg, n_cores=n_cores, parallel_pool=parallel_pool, dirn='v')
+                        ParaUpdateCTM_(psi, env, fid, ctm_jobs, opts_svd_ctm, cfg, n_cores=n_cores, parallel_pool=parallel_pool, dirn=dirn)
                 else:
                     for ncols in range(psi.geometry.Ny):
                         proj_dict = {}
@@ -475,7 +475,7 @@ def _ctmrg_(psi, env, fid, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, 
                                     sites_to_be_updated.append(Site(0, ncols))
                                 if not updated_flag[-1]:
                                     sites_to_be_updated.append(Site(psi.geometry.Nx - 1, ncols))
-                            ParaUpdateCTM_(psi, env, fid, ctm_jobs, opts_svd_ctm, cfg, n_cores=n_cores, parallel_pool=parallel_pool, dirn='v', proj_dict=proj_dict, sites_to_be_updated=sites_to_be_updated)
+                            ParaUpdateCTM_(psi, env, fid, ctm_jobs, opts_svd_ctm, cfg, n_cores=n_cores, parallel_pool=parallel_pool, dirn=dirn, proj_dict=proj_dict, sites_to_be_updated=sites_to_be_updated)
 
 
 
