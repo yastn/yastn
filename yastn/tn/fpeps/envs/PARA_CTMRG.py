@@ -55,6 +55,7 @@ def CreateCTMJobBundle(env, n_cores=1):
 
     return [ctm_jobs_ver, ctm_jobs_hor]
 
+
 @delayed
 def BuildProjector_(job, opts_svd_ctm, cfg):
 
@@ -66,67 +67,6 @@ def BuildProjector_(job, opts_svd_ctm, cfg):
         opts_svd_ctm = env.opts_svd
     result = env.build_bond_projectors_(bond, opts_svd_ctm)
     return result
-
-def Window3x3(psi, env, site, fid, only_site=False):
-
-    '''
-    Find the 3x3 window around the particular site. The boundary has been taken into consideration
-    '''
-
-    ds = [(-1, -1), (-1, 0), (-1, 1),
-            (0, -1),  (0, 0),  (0, 1),
-            (1, -1),  (1, 0),  (1, 1), ]
-    flags = {}
-    for d in ds:
-        if psi.nn_site(site, d) is not None:
-            flags[d] = True
-        else:
-            flags[d] = False
-
-    nx0 = 1
-    ny0 = 1
-    Lx = 3
-    Ly = 3
-    if not flags[(0, -1)]:
-        Ly = Ly - 1
-        ny0 = ny0 - 1
-    if not flags[(0, 1)]:
-        Ly = Ly - 1
-    if not flags[(-1, 0)]:
-        Lx = Lx - 1
-        nx0 = nx0 - 1
-    if not flags[(1, 0)]:
-        Lx = Lx - 1
-
-    site0 = Site(nx0, ny0)
-
-    if only_site:
-        return site0
-
-    net_part = SquareLattice((Lx, Ly), 'obc')
-    psi_part = product_peps(net_part, fid)
-    # site0 = Site(nx0, ny0)
-
-    for d in ds:
-        if psi.nn_site(site, d) is not None:
-            psi_part[psi_part.nn_site(site0, d)] = psi[psi.nn_site(site, d)]
-
-    env_part = EnvCTM(psi_part, init="eye")
-    for d in ds:
-        if psi.nn_site(site, d) is not None:
-            env_part[psi_part.nn_site(site0, d)].l = env[psi.nn_site(site, d)].l
-            env_part[psi_part.nn_site(site0, d)].r = env[psi.nn_site(site, d)].r
-            env_part[psi_part.nn_site(site0, d)].t = env[psi.nn_site(site, d)].t
-            env_part[psi_part.nn_site(site0, d)].b = env[psi.nn_site(site, d)].b
-
-            env_part[psi_part.nn_site(site0, d)].tl = env[psi.nn_site(site, d)].tl
-            env_part[psi_part.nn_site(site0, d)].bl = env[psi.nn_site(site, d)].bl
-            env_part[psi_part.nn_site(site0, d)].tr = env[psi.nn_site(site, d)].tr
-            env_part[psi_part.nn_site(site0, d)].br = env[psi.nn_site(site, d)].br
-
-
-    return env_part, site0
-
 
 def SubWindow(psi, site, fid, top=1, left=1, bottom=1, right=1, env=None, only_site=False):
 
@@ -207,46 +147,57 @@ def UpdateSite(job, cfg, dirn, proj_dict):
     for site_ in proj.sites():
         proj[site_] = EnvCTM_projectors()
 
-    if dirn == 'h':
+    if dirn in 'htb':
 
-        trivial_projectors_(proj, 'v', env_, sites=env_.sites())
+        if dirn in 'ht':
 
-        temp_site = job[5]
-        temp_site0 = env_.canonical_site(env_.nn_site(site0, (-1, -1)))
-        if temp_site0 is not None:
-            proj[temp_site0].vtr = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'vtr')])
-            temp_site = job[3]
-            temp_site0 = env_.canonical_site(env_.nn_site(site0, (-1, 0)))
-            proj[temp_site0].vtl = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'vtl')])
+            trivial_projectors_(proj, 't', env_, sites=env_.sites())
+
+            temp_site = job[5]
+            temp_site0 = env_.canonical_site(env_.nn_site(site0, (-1, -1)))
+            if temp_site0 is not None:
+                proj[temp_site0].vtr = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'vtr')])
+                temp_site = job[3]
+                temp_site0 = env_.canonical_site(env_.nn_site(site0, (-1, 0)))
+                proj[temp_site0].vtl = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'vtl')])
 
 
-        temp_site = job[6]
-        temp_site0 = env_.canonical_site(env_.nn_site(site0, (-1, 1)))
-        if temp_site0 is not None:
-            proj[temp_site0].vtl = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'vtl')])
-            temp_site = job[3]
-            temp_site0 = env_.canonical_site(env_.nn_site(site0, (-1, 0)))
-            proj[temp_site0].vtr = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'vtr')])
+            temp_site = job[6]
+            temp_site0 = env_.canonical_site(env_.nn_site(site0, (-1, 1)))
+            if temp_site0 is not None:
+                proj[temp_site0].vtl = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'vtl')])
+                temp_site = job[3]
+                temp_site0 = env_.canonical_site(env_.nn_site(site0, (-1, 0)))
+                proj[temp_site0].vtr = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'vtr')])
 
-        temp_site = job[7]
-        temp_site0 = env_.canonical_site(env_.nn_site(site0, (1, -1)))
-        if temp_site0 is not None:
-            proj[temp_site0].vbr = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'vbr')])
-            temp_site = job[4]
-            temp_site0 = env_.canonical_site(env_.nn_site(site0, (1, 0)))
-            proj[temp_site0].vbl = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'vbl')])
+            env_tmp = EnvCTM(env_.psi, init=None)
+            update_env_(env_tmp, site0, env_, proj, move='t')
+            update_storage_(env_, env_tmp)
 
-        temp_site = job[8]
-        temp_site0 = env_.canonical_site(env_.nn_site(site0, (1, 1)))
-        if temp_site0 is not None:
-            proj[temp_site0].vbl = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'vbl')])
-            temp_site = job[4]
-            temp_site0 = env_.canonical_site(env_.nn_site(site0, (1, 0)))
-            proj[temp_site0].vbr = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'vbr')])
+        if dirn in 'hb':
 
-        env_tmp = EnvCTM(env_.psi, init=None)
-        update_env_(env_tmp, site0, env_, proj, move='v')
-        update_storage_(env_, env_tmp)
+            trivial_projectors_(proj, 'b', env_, sites=env_.sites())
+
+            temp_site = job[7]
+            temp_site0 = env_.canonical_site(env_.nn_site(site0, (1, -1)))
+            if temp_site0 is not None:
+                proj[temp_site0].vbr = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'vbr')])
+                temp_site = job[4]
+                temp_site0 = env_.canonical_site(env_.nn_site(site0, (1, 0)))
+                proj[temp_site0].vbl = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'vbl')])
+
+
+            temp_site = job[8]
+            temp_site0 = env_.canonical_site(env_.nn_site(site0, (1, 1)))
+            if temp_site0 is not None:
+                proj[temp_site0].vbl = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'vbl')])
+                temp_site = job[4]
+                temp_site0 = env_.canonical_site(env_.nn_site(site0, (1, 0)))
+                proj[temp_site0].vbr = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'vbr')])
+
+            env_tmp = EnvCTM(env_.psi, init=None)
+            update_env_(env_tmp, site0, env_, proj, move='b')
+            update_storage_(env_, env_tmp)
 
         return [yastn.save_to_dict(env_[site0].t),
                 yastn.save_to_dict(env_[site0].b),
@@ -255,45 +206,55 @@ def UpdateSite(job, cfg, dirn, proj_dict):
                 yastn.save_to_dict(env_[site0].bl),
                 yastn.save_to_dict(env_[site0].br)]
 
-    if dirn == 'v':
+    if dirn in 'vlr':
 
-        trivial_projectors_(proj, 'h', env_, sites=env_.sites())
+        if dirn in 'vl':
 
-        temp_site = job[5]
-        temp_site0 = env_.canonical_site(env_.nn_site(site0, (-1, -1)))
-        if temp_site0 is not None:
-            proj[temp_site0].hlb = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'hlb')])
-            temp_site = job[3]
-            temp_site0 = env_.canonical_site(env_.nn_site(site0, (0, -1)))
-            proj[temp_site0].hlt = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'hlt')])
+            trivial_projectors_(proj, 'l', env_, sites=env_.sites())
 
-        temp_site = job[6]
-        temp_site0 = env_.canonical_site(env_.nn_site(site0, (-1, 1)))
-        if temp_site0 is not None:
-            proj[temp_site0].hrb = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'hrb')])
-            temp_site = job[4]
-            temp_site0 = env_.canonical_site(env_.nn_site(site0, (0, 1)))
-            proj[temp_site0].hrt = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'hrt')])
+            temp_site = job[5]
+            temp_site0 = env_.canonical_site(env_.nn_site(site0, (-1, -1)))
+            if temp_site0 is not None:
+                proj[temp_site0].hlb = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'hlb')])
+                temp_site = job[3]
+                temp_site0 = env_.canonical_site(env_.nn_site(site0, (0, -1)))
+                proj[temp_site0].hlt = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'hlt')])
 
-        temp_site = job[7]
-        temp_site0 = env_.canonical_site(env_.nn_site(site0, (1, -1)))
-        if temp_site0 is not None:
-            proj[temp_site0].hlt = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'hlt')])
-            temp_site = job[3]
-            temp_site0 = env_.canonical_site(env_.nn_site(site0, (0, -1)))
-            proj[temp_site0].hlb = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'hlb')])
+            temp_site = job[7]
+            temp_site0 = env_.canonical_site(env_.nn_site(site0, (1, -1)))
+            if temp_site0 is not None:
+                proj[temp_site0].hlt = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'hlt')])
+                temp_site = job[3]
+                temp_site0 = env_.canonical_site(env_.nn_site(site0, (0, -1)))
+                proj[temp_site0].hlb = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'hlb')])
 
-        temp_site = job[8]
-        temp_site0 = env_.canonical_site(env_.nn_site(site0, (1, 1)))
-        if temp_site0 is not None:
-            proj[temp_site0].hrt = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'hrt')])
-            temp_site = job[4]
-            temp_site0 = env_.canonical_site(env_.nn_site(site0, (0, 1)))
-            proj[temp_site0].hrb = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'hrb')])
+            env_tmp = EnvCTM(env_.psi, init=None)
+            update_env_(env_tmp, site0, env_, proj, move='l')
+            update_storage_(env_, env_tmp)
 
-        env_tmp = EnvCTM(env_.psi, init=None)
-        update_env_(env_tmp, site0, env_, proj, move='h')
-        update_storage_(env_, env_tmp)
+        if dirn in 'vr':
+
+            trivial_projectors_(proj, 'r', env_, sites=env_.sites())
+
+            temp_site = job[6]
+            temp_site0 = env_.canonical_site(env_.nn_site(site0, (-1, 1)))
+            if temp_site0 is not None:
+                proj[temp_site0].hrb = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'hrb')])
+                temp_site = job[4]
+                temp_site0 = env_.canonical_site(env_.nn_site(site0, (0, 1)))
+                proj[temp_site0].hrt = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'hrt')])
+
+            temp_site = job[8]
+            temp_site0 = env_.canonical_site(env_.nn_site(site0, (1, 1)))
+            if temp_site0 is not None:
+                proj[temp_site0].hrt = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'hrt')])
+                temp_site = job[4]
+                temp_site0 = env_.canonical_site(env_.nn_site(site0, (0, 1)))
+                proj[temp_site0].hrb = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'hrb')])
+
+            env_tmp = EnvCTM(env_.psi, init=None)
+            update_env_(env_tmp, site0, env_, proj, move='r')
+            update_storage_(env_, env_tmp)
 
         return [yastn.save_to_dict(env_[site0].l),
                 yastn.save_to_dict(env_[site0].r),
@@ -308,10 +269,22 @@ def ParaUpdateCTM_(psi, env, fid, bonds, opts_svd_ctm, cfg, n_cores, parallel_po
 
     jobs = []
     for bond in bonds:
-        env_part, site0 = Window3x3(psi, env, bond.site0, fid)
-        if dirn == 'h':
+        if dirn in 'h':
+            env_part, site0, _, _ = SubWindow(psi, bond.site0, fid, 1, 0, 1, 1, env)
+        elif dirn in 'v':
+            env_part, site0, _, _ = SubWindow(psi, bond.site0, fid, 0, 1, 1, 1, env)
+        elif dirn =='t':
+            env_part, site0, _, _ = SubWindow(psi, bond.site0, fid, 1, 0, 0, 1, env)
+        elif dirn =='l':
+            env_part, site0, _, _ = SubWindow(psi, bond.site0, fid, 0, 1, 1, 0, env)
+        elif dirn =='b':
+            env_part, site0, _, _ = SubWindow(psi, bond.site0, fid, 0, 0, 1, 1, env)
+        elif dirn =='r':
+            env_part, site0, _, _ = SubWindow(psi, bond.site0, fid, 0, 0, 1, 1, env)
+
+        if dirn in 'htb':
             bond0 = Bond(site0, env_part.nn_site(site0, 'r'))
-        if dirn == 'v':
+        if dirn in 'vlr':
             bond0 = Bond(site0, env_part.nn_site(site0, 'b'))
         jobs.append([env_part.save_to_dict(), site0, bond0, bond])
 
@@ -319,6 +292,7 @@ def ParaUpdateCTM_(psi, env, fid, bonds, opts_svd_ctm, cfg, n_cores, parallel_po
 
     for ii in range(0, int(np.ceil(len(jobs) / n_cores))):
         gathered_result_ += parallel_pool(BuildProjector_(job, opts_svd_ctm, cfg) for job in jobs[(ii * n_cores):min(len(jobs), (ii + 1) * n_cores)])
+
     # gathered_result_ = [BuildProjector_(job, opts_svd_ctm, cfg) for job in jobs]
 
     if proj_dict is None:
@@ -338,15 +312,28 @@ def ParaUpdateCTM_(psi, env, fid, bonds, opts_svd_ctm, cfg, n_cores, parallel_po
     # Update CTMRG
 
     if sites_to_be_updated is None:
-        if dirn == "h":
+        if dirn in 'htb':
             sites_to_be_updated = [Site(nx_, ny_) for ny_ in range(env.psi.Ny) for nx_ in range(bonds[0].site0.nx, bonds[-1].site0.nx + 1)]
-        else:
+        elif dirn in 'vlr':
             sites_to_be_updated = [Site(nx_, ny_) for nx_ in range(env.psi.Nx)  for ny_ in range(bonds[0].site0.ny, bonds[-1].site0.ny + 1)]
 
     jobs.clear()
+
     for site in sites_to_be_updated:
-        env_part, site0 = Window3x3(psi, env, site, fid)
-        if dirn == 'h':
+        if dirn in 'h':
+            env_part, site0, _, _ = SubWindow(psi, site, fid, 1, 1, 1, 1, env)
+        if dirn in 'v':
+            env_part, site0, _, _ = SubWindow(psi, site, fid, 1, 1, 1, 1, env)
+        elif dirn =='t':
+            env_part, site0, _, _ = SubWindow(psi, site, fid, 1, 1, 0, 1, env)
+        elif dirn =='l':
+            env_part, site0, _, _ = SubWindow(psi, site, fid, 1, 1, 1, 0, env)
+        elif dirn =='b':
+            env_part, site0, _, _ = SubWindow(psi, site, fid, 0, 1, 1, 1, env)
+        elif dirn =='r':
+            env_part, site0, _, _ = SubWindow(psi, site, fid, 1, 0, 1, 1, env)
+
+        if dirn in 'htb':
             jobs.append([env_part.save_to_dict(), site0, site,
                          env.canonical_site(env.nn_site(site, (-1, 0))),
                          env.canonical_site(env.nn_site(site, (1, 0))),
@@ -354,7 +341,7 @@ def ParaUpdateCTM_(psi, env, fid, bonds, opts_svd_ctm, cfg, n_cores, parallel_po
                          env.canonical_site(env.nn_site(site, (-1, 1))),
                          env.canonical_site(env.nn_site(site, (1, -1))),
                          env.canonical_site(env.nn_site(site, (1, 1)))])
-        elif dirn == 'v':
+        elif dirn in 'vlr':
             jobs.append([env_part.save_to_dict(), site0, site,
                          env.canonical_site(env.nn_site(site, (0, -1))),
                          env.canonical_site(env.nn_site(site, (0, 1))),
@@ -363,42 +350,60 @@ def ParaUpdateCTM_(psi, env, fid, bonds, opts_svd_ctm, cfg, n_cores, parallel_po
                          env.canonical_site(env.nn_site(site, (1, -1))),
                          env.canonical_site(env.nn_site(site, (1, 1)))])
 
+    # print(proj_dict.keys())
     gathered_result = parallel_pool(UpdateSite(job, cfg, dirn, proj_dict) for job in jobs)
 
-    if dirn == 'h':
+    if dirn in 'htb':
         for site in sites_to_be_updated[1:-1]:
-            if env.nn_site(site, (-1, 1)) is not None:
-                proj_dict.pop((env.canonical_site(env.nn_site(site, (-1, 0))), 'vtr'))
-            if env.nn_site(site, (-1, -1)) is not None:
-                proj_dict.pop((env.canonical_site(env.nn_site(site, (-1, 0))), 'vtl'))
-            if env.nn_site(site, (1, 1)) is not None:
-                proj_dict.pop((env.canonical_site(env.nn_site(site, (1, 0))), 'vbr'))
-            if env.nn_site(site, (1, -1)) is not None:
-                proj_dict.pop((env.canonical_site(env.nn_site(site, (1, 0))), 'vbl'))
-    if dirn == 'v':
+            if dirn in 'ht':
+                if env.nn_site(site, (-1, 1)) is not None:
+                    proj_dict.pop((env.canonical_site(env.nn_site(site, (-1, 0))), 'vtr'))
+                if env.nn_site(site, (-1, -1)) is not None:
+                    proj_dict.pop((env.canonical_site(env.nn_site(site, (-1, 0))), 'vtl'))
+            if dirn in 'hb':
+                if env.nn_site(site, (1, 1)) is not None:
+                    proj_dict.pop((env.canonical_site(env.nn_site(site, (1, 0))), 'vbr'))
+                if env.nn_site(site, (1, -1)) is not None:
+                    proj_dict.pop((env.canonical_site(env.nn_site(site, (1, 0))), 'vbl'))
+    if dirn in 'vlr':
         for site in sites_to_be_updated[1:-1]:
-            if env.nn_site(site, (-1, 1)) is not None:
-                proj_dict.pop((env.canonical_site(env.nn_site(site, (0, 1))), 'hrt'))
-            if env.nn_site(site, (1, 1)) is not None:
-                proj_dict.pop((env.canonical_site(env.nn_site(site, (0, 1))), 'hrb'))
-            if env.nn_site(site, (-1, -1)) is not None:
-                proj_dict.pop((env.canonical_site(env.nn_site(site, (0, -1))), 'hlt'))
-            if env.nn_site(site, (1, -1)) is not None:
-                proj_dict.pop((env.canonical_site(env.nn_site(site, (0, -1))), 'hlb'))
+            if dirn in 'vr':
+                if env.nn_site(site, (-1, 1)) is not None:
+                    proj_dict.pop((env.canonical_site(env.nn_site(site, (0, 1))), 'hrt'))
+                if env.nn_site(site, (1, 1)) is not None:
+                    proj_dict.pop((env.canonical_site(env.nn_site(site, (0, 1))), 'hrb'))
+            if dirn in 'vl':
+                if env.nn_site(site, (-1, -1)) is not None:
+                    proj_dict.pop((env.canonical_site(env.nn_site(site, (0, -1))), 'hlt'))
+                if env.nn_site(site, (1, -1)) is not None:
+                    proj_dict.pop((env.canonical_site(env.nn_site(site, (0, -1))), 'hlb'))
+    # print(len(proj_dict))
+    # for job in jobs:
+    #     if dirn == 'h':
+    #         if temp_site0 is not None:
+    #             temp_site = job[5]
+    #             proj_dict.pop((temp_site, 'vtr'))
+    # print(len(proj_dict))
+
+    # gathered_result = [UpdateSite(job, cfg, dirn, gathered_result) for job in jobs]
 
     ii = 0
     for result in gathered_result:
         site_ = sites_to_be_updated[ii]
-        if dirn == "h":
+        if dirn in "htb":
             env[site_].t = yastn.load_from_dict(config=cfg, d = result[0])
             env[site_].b = yastn.load_from_dict(config=cfg, d = result[1])
-        if dirn == "v":
+        if dirn in "vlr":
             env[site_].l = yastn.load_from_dict(config=cfg, d = result[0])
             env[site_].r = yastn.load_from_dict(config=cfg, d = result[1])
-        env[site_].tl = yastn.load_from_dict(config=cfg, d = result[2])
-        env[site_].tr = yastn.load_from_dict(config=cfg, d = result[3])
-        env[site_].bl = yastn.load_from_dict(config=cfg, d = result[4])
-        env[site_].br = yastn.load_from_dict(config=cfg, d = result[5])
+        if dirn in 'hvtl':
+            env[site_].tl = yastn.load_from_dict(config=cfg, d = result[2])
+        if dirn in 'hvtr':
+            env[site_].tr = yastn.load_from_dict(config=cfg, d = result[3])
+        if dirn in 'hvbl':
+            env[site_].bl = yastn.load_from_dict(config=cfg, d = result[4])
+        if dirn in 'hvbr':
+            env[site_].br = yastn.load_from_dict(config=cfg, d = result[5])
 
         ii = ii + 1
 
@@ -410,63 +415,67 @@ def _ctmrg_(psi, env, fid, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, 
     with Parallel(n_jobs = n_cores, verbose=0) as parallel_pool:
         for sweep in range(1, max_sweeps + 1):
 
-            if n_cores >= psi.geometry.Ny:
-                for ctm_jobs in ctm_jobs_hor:
-                    ParaUpdateCTM_(psi, env, fid, ctm_jobs, opts_svd_ctm, cfg, n_cores=n_cores, parallel_pool=parallel_pool, dirn='h')
-            else:
-                for nrows in range(psi.geometry.Nx):
-                    proj_dict = {}
-                    updated_flag = [False for _ in range(psi.geometry.Ny)]
-                    for irow in range(len(ctm_jobs_hor) // psi.geometry.Nx):
-                        ctm_jobs = ctm_jobs_hor[nrows * (len(ctm_jobs_hor) // psi.geometry.Nx) + irow]
+            for dirn in 'tb':
 
-                        sites_to_be_updated = []
-                        if len((proj_dict)) == 0:
-                            for ny_ in range(ctm_jobs[0].site1.ny, ctm_jobs[-1].site0.ny + 1):
-                                sites_to_be_updated.append(Site(ctm_jobs[0].site0.nx, ny_))
-                                updated_flag[ny_] = True
-                        else:
-                            for ny_ in range(ctm_jobs[0].site0.ny, ctm_jobs[-1].site0.ny + 1):
-                                sites_to_be_updated.append(Site(ctm_jobs[0].site0.nx, ny_))
-                                updated_flag[ny_] = True
+                if n_cores >= psi.geometry.Ny:
+                    for ctm_jobs in ctm_jobs_hor:
+                        ParaUpdateCTM_(psi, env, fid, ctm_jobs, opts_svd_ctm, cfg, n_cores=n_cores, parallel_pool=parallel_pool, dirn=dirn)
+                else:
+                    for nrows in range(psi.geometry.Nx):
+                        proj_dict = {}
+                        updated_flag = [False for _ in range(psi.geometry.Ny)]
+                        for irow in range(len(ctm_jobs_hor) // psi.geometry.Nx):
+                            ctm_jobs = ctm_jobs_hor[nrows * (len(ctm_jobs_hor) // psi.geometry.Nx) + irow]
 
-                        # the first and the last
+                            sites_to_be_updated = []
+                            if len((proj_dict)) == 0:
+                                for ny_ in range(ctm_jobs[0].site1.ny, ctm_jobs[-1].site0.ny + 1):
+                                    sites_to_be_updated.append(Site(ctm_jobs[0].site0.nx, ny_))
+                                    updated_flag[ny_] = True
+                            else:
+                                for ny_ in range(ctm_jobs[0].site0.ny, ctm_jobs[-1].site0.ny + 1):
+                                    sites_to_be_updated.append(Site(ctm_jobs[0].site0.nx, ny_))
+                                    updated_flag[ny_] = True
 
-                        if irow == (len(ctm_jobs_hor) // psi.geometry.Nx) - 1:
-                            if not updated_flag[0]:
-                                sites_to_be_updated.append(Site(nrows, 0))
-                            if not updated_flag[-1]:
-                                sites_to_be_updated.append(Site(nrows, psi.geometry.Ny - 1))
-                        ParaUpdateCTM_(psi, env, fid, ctm_jobs, opts_svd_ctm, cfg, n_cores=n_cores, parallel_pool=parallel_pool, dirn='h', proj_dict=proj_dict, sites_to_be_updated=sites_to_be_updated)
+                            # the first and the last
 
-            if n_cores >= psi.geometry.Ny:
-                for ctm_jobs in ctm_jobs_ver:
-                    ParaUpdateCTM_(psi, env, fid, ctm_jobs, opts_svd_ctm, cfg, n_cores=n_cores, parallel_pool=parallel_pool, dirn='v')
-            else:
-                for ncols in range(psi.geometry.Ny):
-                    proj_dict = {}
-                    updated_flag = [False for _ in range(psi.geometry.Nx)]
-                    for icol in range(len(ctm_jobs_ver) // psi.geometry.Ny):
-                        ctm_jobs = ctm_jobs_ver[ncols * (len(ctm_jobs_ver) // psi.geometry.Ny) + icol]
+                            if irow == (len(ctm_jobs_hor) // psi.geometry.Nx) - 1:
+                                if not updated_flag[0]:
+                                    sites_to_be_updated.append(Site(nrows, 0))
+                                if not updated_flag[-1]:
+                                    sites_to_be_updated.append(Site(nrows, psi.geometry.Ny - 1))
+                            ParaUpdateCTM_(psi, env, fid, ctm_jobs, opts_svd_ctm, cfg, n_cores=n_cores, parallel_pool=parallel_pool, dirn=dirn, proj_dict=proj_dict, sites_to_be_updated=sites_to_be_updated)
 
-                        sites_to_be_updated = []
-                        if len((proj_dict)) == 0:
-                            for nx_ in range(ctm_jobs[0].site1.nx, ctm_jobs[-1].site0.nx + 1):
-                                sites_to_be_updated.append(Site(nx_, ctm_jobs[0].site0.ny))
-                                updated_flag[nx_] = True
-                        else:
-                            for nx_ in range(ctm_jobs[0].site0.nx, ctm_jobs[-1].site0.nx + 1):
-                                sites_to_be_updated.append(Site(nx_, ctm_jobs[0].site0.ny))
-                                updated_flag[nx_] = True
+            for dirn in 'lr':
 
-                        # the first and the last
+                if n_cores >= psi.geometry.Ny:
+                    for ctm_jobs in ctm_jobs_ver:
+                        ParaUpdateCTM_(psi, env, fid, ctm_jobs, opts_svd_ctm, cfg, n_cores=n_cores, parallel_pool=parallel_pool, dirn='v')
+                else:
+                    for ncols in range(psi.geometry.Ny):
+                        proj_dict = {}
+                        updated_flag = [False for _ in range(psi.geometry.Nx)]
+                        for icol in range(len(ctm_jobs_ver) // psi.geometry.Ny):
+                            ctm_jobs = ctm_jobs_ver[ncols * (len(ctm_jobs_ver) // psi.geometry.Ny) + icol]
 
-                        if icol == (len(ctm_jobs_ver) // psi.geometry.Ny) - 1:
-                            if not updated_flag[0]:
-                                sites_to_be_updated.append(Site(0, ncols))
-                            if not updated_flag[-1]:
-                                sites_to_be_updated.append(Site(psi.geometry.Nx - 1, ncols))
-                        ParaUpdateCTM_(psi, env, fid, ctm_jobs, opts_svd_ctm, cfg, n_cores=n_cores, parallel_pool=parallel_pool, dirn='v', proj_dict=proj_dict, sites_to_be_updated=sites_to_be_updated)
+                            sites_to_be_updated = []
+                            if len((proj_dict)) == 0:
+                                for nx_ in range(ctm_jobs[0].site1.nx, ctm_jobs[-1].site0.nx + 1):
+                                    sites_to_be_updated.append(Site(nx_, ctm_jobs[0].site0.ny))
+                                    updated_flag[nx_] = True
+                            else:
+                                for nx_ in range(ctm_jobs[0].site0.nx, ctm_jobs[-1].site0.nx + 1):
+                                    sites_to_be_updated.append(Site(nx_, ctm_jobs[0].site0.ny))
+                                    updated_flag[nx_] = True
+
+                            # the first and the last
+
+                            if icol == (len(ctm_jobs_ver) // psi.geometry.Ny) - 1:
+                                if not updated_flag[0]:
+                                    sites_to_be_updated.append(Site(0, ncols))
+                                if not updated_flag[-1]:
+                                    sites_to_be_updated.append(Site(psi.geometry.Nx - 1, ncols))
+                            ParaUpdateCTM_(psi, env, fid, ctm_jobs, opts_svd_ctm, cfg, n_cores=n_cores, parallel_pool=parallel_pool, dirn='v', proj_dict=proj_dict, sites_to_be_updated=sites_to_be_updated)
 
 
 
