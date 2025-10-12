@@ -71,7 +71,7 @@ class CTMRG_out(NamedTuple):
 
 
 class EnvCTM(Peps):
-    def __init__(self, psi, init='rand', leg=None):
+    def __init__(self, psi, init='rand', leg=None, ket=None):
         r"""
         Environment used in Corner Transfer Matrix Renormalization Group algorithm.
 
@@ -103,9 +103,12 @@ class EnvCTM(Peps):
 
         leg: Optional[yastn.Leg]
             Passed to :meth:`yastn.tn.fpeps.EnvCTM.reset_` to further customize initialization.
+
+        ket: Optional[]
+            If provided, and ``psi`` has physical legs, forms a double-layer PEPS <psi | ket>.
         """
         super().__init__(psi.geometry)
-        self.psi = Peps2Layers(psi) if psi.has_physical() else psi
+        self.psi = Peps2Layers(bra=psi, ket=ket) if psi.has_physical() else psi
         if init not in (None, 'rand', 'eye', 'dl'):
             raise YastnError(f"EnvCTM {init=} not recognized. Should be 'rand', 'eye', 'dl', or None.")
         for site in self.sites():
