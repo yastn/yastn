@@ -114,7 +114,7 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
                             mask_f=mask_f)
 
     U, S, V = Smask.apply_mask(U, S, V, axes=(-1, 0, 0))
-    if verbosity>2:
+    if verbosity > 2:
         fname = sys._getframe().f_code.co_name
         logger.info(f"{fname} truncation_mask tol {tol} tol_block {tol_block} D_total {D_total}")
         logger.info(f"truncation_mask D_block {D_block}")
@@ -165,13 +165,13 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
                 Requires torch backend and uses ``torch.svd_lowrank``.
             * ``"block_arnoldi"`` partial SVD using scipy's svds arnoldi method. Requires providing ``D_block`` in ``kwargs``.
             * ``"block_propack"`` partial SVD using scipy's svds propack method. Requires providing ``D_block`` in ``kwargs``.
-        
+
         kwargs will be passed to those functions for non-default settings.
 
     thresh: float
         In case of ``policy='block_arnoldi'`` or ``policy='block_propack'``,
         threshold on minimal block size for applying partial SVD solver instead of full SVD.
-        The default is ``thresh=0.1``. If for a matrix of size :math:`N \times N` 
+        The default is ``thresh=0.1``. If for a matrix of size :math:`N \times N`
          ``N*thresh`` < requested number of singular triples a full SVD is applied.
 
     fix_signs: bool
@@ -196,7 +196,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     if policy not in POLICIES:
        raise YastnError(f"Invalid SVD solver/policy {policy}. Choose one of {POLICIES}.")
     _test_axes_all(a, axes)
-    
+
     # 2. Global solvers
     verbosity= kwargs.get('verbosity', 0)
     if policy == "krylov":
@@ -219,7 +219,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         device = a.config.backend.get_device(data)
         data = a.config.backend.move_to(data, device='cpu')
 
-    # 3.1 Set minimal number of singular triples to solve for in each block. 
+    # 3.1 Set minimal number of singular triples to solve for in each block.
     #     Used by block-wise partial SVD and ignored by 'fullrank' policy.
     minD = tuple(min(ds) for ds in struct.D)
     if policy in ['lowrank', 'randomized', 'block_arnoldi', 'block_propack']:
@@ -235,7 +235,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
             nsym = a.config.sym.NSYM
             st = [x[nsym:] for x in struct.t] if nU else [x[:nsym] for x in struct.t]
             minD = tuple(min(D_block.get(t, sector_minD), d) for t, d in zip(st, minD))
-    
+
     if verbosity>2:
         fname = sys._getframe().f_code.co_name
         logger.info(f"{fname} {policy} struct.D {struct.D}")
@@ -653,7 +653,7 @@ def truncation_mask(S, tol=0, tol_block=0,
 
     if not (S.isdiag and S.yastn_dtype == "float64"):
         raise YastnError("truncation_mask() requires S to be real and diagonal.")
-    
+
     verbosity = kwargs.get('verbosity', 0)
     if verbosity>2:
         fname = sys._getframe().f_code.co_name
