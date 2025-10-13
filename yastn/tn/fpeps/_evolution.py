@@ -336,7 +336,6 @@ def initial_truncation_ZMT1(R0, R1, fgf, opts_svd, fRR, RRgRR, pinv_cutoffs, pre
 
     removed = 0
     while ((D_total - removed) > opts_svd['D_total']):
-
         g = build_g_rj(r_slices, G0)
         S, W = np.linalg.eigh(g)
 
@@ -457,9 +456,7 @@ def initial_truncation_ZMT3(R0, R1, fgf, opts_svd:dict, fRR, RRgRR, pinv_cutoffs
     elif pre_initial == "EAT":
         (MA, MB), error2, _, _ = initial_truncation_EAT(R0, R1, fgf, fRR, RRgRR, {"D_total":preD, "tol":-1}, pinv_cutoffs)
     elif pre_initial[:4] == "ZMT1":
-        opts_svd_pre = opts_svd
-        opts_svd_pre['D_total'] = preD
-        opts_svd_pre['preD'] = None
+        opts_svd_pre = {'D_total': preD, 'preD':None, 'tol':-1}
         if pre_initial == "ZMT10":
             pre_initial_ = None
         elif pre_initial == "ZMT1eat":
