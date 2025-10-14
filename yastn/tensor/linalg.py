@@ -22,6 +22,9 @@ from ._tests import YastnError, _test_axes_all
 from ._merging import _merge_to_matrix, _meta_unmerge_matrix, _unmerge
 from ._merging import _Fusion, _leg_struct_trivial
 # from ..krylov._krylov import svds
+import sys
+import logging
+logger= logging.getLogger(__name__)
 
 __all__ = ['qr', 'norm', 'entropy', 'truncation_mask', 'truncation_mask_multiplets',
            'svd', 'svd_with_truncation', 'eig', 'eigh', 'eigh_with_truncation']
@@ -102,6 +105,7 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
     -------
     `U`, `S`, `V`
     """
+    verbosity = kwargs.get('verbosity', 0)
     U, S, V = svd(a, axes=axes, sU=sU, nU=nU, policy=policy, D_block=D_block,
                   fix_signs=fix_signs, svd_on_cpu=svd_on_cpu, **kwargs)
     Smask = truncation_mask(S, tol=tol, tol_block=tol_block,
@@ -110,6 +114,11 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
                             mask_f=mask_f)
 
     U, S, V = Smask.apply_mask(U, S, V, axes=(-1, 0, 0))
+    if verbosity > 2:
+        fname = sys._getframe().f_code.co_name
+        logger.info(f"{fname} truncation_mask tol {tol} tol_block {tol_block} D_total {D_total}")
+        logger.info(f"truncation_mask D_block {D_block}")
+        logger.info(f"{fname} S {S.get_legs(0)}")
 
     U = U.moveaxis(source=-1, destination=Uaxis)
     V = V.moveaxis(source=0, destination=Vaxis)
@@ -118,7 +127,7 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
 
 def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         Uaxis=-1, Vaxis=0, policy='fullrank',
-        fix_signs=False, svd_on_cpu=False, **kwargs) -> tuple[yastn.Tensor, yastn.Tensor, yastn.Tensor] | yastn.Tensor:
+        fix_signs=False, svd_on_cpu=False, thresh= 0.1, **kwargs) -> tuple[yastn.Tensor, yastn.Tensor, yastn.Tensor] | yastn.Tensor:
     r"""
     Split tensor into :math:`a = U S V` using exact singular value decomposition (SVD),
     where the columns of `U` and the rows of `V` form orthonormal bases
@@ -147,10 +156,23 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         it is the last leg of `U` and the first of `V`, in which case ``a = U @ S @ V``.
 
     policy: str
-        ``"fullrank"`` or ``"lowrank"`` are allowed. Use standard full (but reduced) SVD for ``"fullrank"``.
-        For ``"lowrank"``, uses randomized/truncated SVD and requires providing ``D_block`` in ``kwargs``.
-        This employs ``scipy.sparse.linalg.svds`` for numpy backend; and ``torch.svd_lowrank`` for torch backend.
+        Driver for computing SVD or partial SVD
+
+            * (default) ``"fullrank"`` compute full SVD then truncate.
+            * ``"lowrank"`` default policy for partial SVD.
+                On NumPy backend uses ``block_arnoldi``. On torch backend uses ``block_arnoldi``.
+            * ``"randomized"`` randomized SVD up to desired size in each block. Requires providing ``D_block`` in ``kwargs``.
+                Requires torch backend and uses ``torch.svd_lowrank``.
+            * ``"block_arnoldi"`` partial SVD using scipy's svds arnoldi method. Requires providing ``D_block`` in ``kwargs``.
+            * ``"block_propack"`` partial SVD using scipy's svds propack method. Requires providing ``D_block`` in ``kwargs``.
+
         kwargs will be passed to those functions for non-default settings.
+
+    thresh: float
+        In case of ``policy='block_arnoldi'`` or ``policy='block_propack'``,
+        threshold on minimal block size for applying partial SVD solver instead of full SVD.
+        The default is ``thresh=0.1``. If for a matrix of size :math:`N \times N`
+         ``N*thresh`` < requested number of singular triples a full SVD is applied.
 
     fix_signs: bool
         Whether or not to fix phases in `U` and `V`,
@@ -169,6 +191,14 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     -------
     `U`, `S`, `V` (when ``compute_uv=True``) or `S` (when ``compute_uv=False``)
     """
+    POLICIES = ['fullrank', 'lowrank', 'randomized', 'block_arnoldi', 'block_propack', 'krylov']
+    # 1. validation
+    if policy not in POLICIES:
+       raise YastnError(f"Invalid SVD solver/policy {policy}. Choose one of {POLICIES}.")
+    _test_axes_all(a, axes)
+
+    # 2. Global solvers
+    verbosity= kwargs.get('verbosity', 0)
     if policy == "krylov":
         from ..krylov._krylov import svds
         if 'D_block' not in kwargs:
@@ -179,28 +209,38 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
             U, S, Vh = svds(a, axes=axes, sU=sU, nU=nU, k=D_block, ncv=None, tol=0, which='LM', solver='arpack')
             return U, S, Vh
 
-
-    _test_axes_all(a, axes)
+    # 3. Continue with block-wise SVD
     lout_l, lout_r = _clear_axes(*axes)
     axes = _unpack_axes(a.mfs, lout_l, lout_r)
-
     data, struct, slices, ls_l, ls_r = _merge_to_matrix(a, axes)
 
+    # TODO should this be handled by user ?
     if svd_on_cpu:
         device = a.config.backend.get_device(data)
         data = a.config.backend.move_to(data, device='cpu')
 
+    # 3.1 Set minimal number of singular triples to solve for in each block.
+    #     Used by block-wise partial SVD and ignored by 'fullrank' policy.
     minD = tuple(min(ds) for ds in struct.D)
-    if policy == 'lowrank' or policy == 'arnoldi':
+    if policy in ['lowrank', 'randomized', 'block_arnoldi', 'block_propack']:
         if 'D_block' not in kwargs:
             raise YastnError(policy + " policy in svd requires passing argument D_block.")
         D_block = kwargs['D_block']
         if not isinstance(D_block, dict):
             minD = tuple(min(D_block, d) for d in minD)
         else:
+            # Presumably {charge: D} data (D_block) for leg to be attached to U with signature sU
+            # TODO: control default for sectors not present in D_block
+            sector_minD= min(D_block.values())
             nsym = a.config.sym.NSYM
             st = [x[nsym:] for x in struct.t] if nU else [x[:nsym] for x in struct.t]
-            minD = tuple(min(D_block.get(t, 0), d) for t, d in zip(st, minD))
+            minD = tuple(min(D_block.get(t, sector_minD), d) for t, d in zip(st, minD))
+
+    if verbosity>2:
+        fname = sys._getframe().f_code.co_name
+        logger.info(f"{fname} {policy} struct.D {struct.D}")
+        logger.info(f"{fname} D_block {kwargs.get('D_block', 'NA')}")
+        logger.info(f"{fname} minD {minD}")
 
     meta, Ustruct, Uslices, Sstruct, Sslices, Vstruct, Vslices = _meta_svd(a.config, struct, slices, minD, sU, nU)
     sizes = tuple(x.size for x in (Ustruct, Sstruct, Vstruct))
@@ -211,13 +251,19 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         Sdata = a.config.backend.svdvals(data, meta, sizes[1])
     elif compute_uv and policy == 'lowrank':
         Udata, Sdata, Vdata = a.config.backend.svd_lowrank(data, meta, sizes)
-    elif compute_uv and policy == 'arnoldi':
-        thresh = kwargs.get('svds_thresh', 0.2)
-        solver = kwargs.get('svds_solver', 'arpack')
-        Udata, Sdata, Vdata = a.config.backend.svd_arnoldi(data, meta, sizes, thresh, solver)
+    elif policy == 'randomized': # always computes partial U and V
+        Udata, Sdata, Vdata = a.config.backend.svd_randomized(data, meta, sizes, **kwargs)
+    elif compute_uv and policy in ['block_arnoldi', 'block_propack']:
+        thresh = kwargs.get('svds_thresh', 0.1)
+        if policy == 'block_arnoldi':
+            solver = 'arpack'
+        elif policy == 'block_propack':
+            solver = 'propack'
+        Udata, Sdata, Vdata = a.config.backend.svds_scipy(data, meta, sizes, thresh, solver)
     else:
-        raise YastnError('svd() policy should in (`arnoldi`, `lowrank`, `fullrank`). compute_uv == False only works with `fullrank`')
+        raise YastnError("compute_uv == False is supported only for policy='fullrank'")
 
+    # 4. post-processing
     if svd_on_cpu:
         Sdata = a.config.backend.move_to(Sdata, device=device)
         if compute_uv:
@@ -495,6 +541,11 @@ def truncation_mask_multiplets(S, tol=0, D_total=float('inf'),
     if not (S.isdiag and S.yastn_dtype == "float64"):
         raise YastnError("Truncation_mask requires S to be real and diagonal.")
 
+    verbosity = kwargs.get('verbosity', 0)
+    if verbosity>2:
+        fname = sys._getframe().f_code.co_name
+        logger.info(f"{fname} tol {tol} tol_block {tol_block} D_total {D_total}")
+
     # makes a copy for partial truncations; also detaches from autograd computation graph
     Smask = S.copy()
     Smask._data = Smask.data > float('inf') # all False ?
@@ -602,6 +653,12 @@ def truncation_mask(S, tol=0, tol_block=0,
 
     if not (S.isdiag and S.yastn_dtype == "float64"):
         raise YastnError("truncation_mask() requires S to be real and diagonal.")
+
+    verbosity = kwargs.get('verbosity', 0)
+    if verbosity>2:
+        fname = sys._getframe().f_code.co_name
+        logger.info(f"{fname} tol {tol} tol_block {tol_block} D_total {D_total}")
+        logger.info(f"{fname} D_block {D_block}")
 
     # makes a copy for partial truncations; also detaches from autograd computation graph
     S = S.copy()

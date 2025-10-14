@@ -89,9 +89,11 @@ def tensordot(a, b, axes, conj=(0, 0)) -> yastn.Tensor:
     hfs_c = tuple(a.hfs[ii] for ii in nout_a) + tuple(b.hfs[ii] for ii in nout_b)
 
     if mask_needed:
-        msk_a, msk_b = _mask_tensors_leg_intersection(a, b, nin_a, nin_b)
+        msk_a, msk_b, a_hfs, b_hfs = _mask_tensors_leg_intersection(a, b, nin_a, nin_b)
         a = _apply_mask_axes(a, nin_a, msk_a)
         b = _apply_mask_axes(b, nin_b, msk_b)
+        a = a._replace(hfs=a_hfs)
+        b = b._replace(hfs=b_hfs)
 
     if a.config.tensordot_policy == 'fuse_to_matrix':
         data, struct_c, slices_c = _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b, s_c)
@@ -509,9 +511,11 @@ def vdot(a, b, conj=(1, 0)) -> Number:
     n_c = a.config.sym.add_charges(a.struct.n, b.struct.n)
     if n_c == a.config.sym.zero():
         if mask_needed:
-            msk_a, msk_b = _mask_tensors_leg_intersection(a, b, nin_a, nin_b)
+            msk_a, msk_b, a_hfs, b_hfs = _mask_tensors_leg_intersection(a, b, nin_a, nin_b)
             a = _apply_mask_axes(a, nin_a, msk_a)
             b = _apply_mask_axes(b, nin_b, msk_b)
+            a = a._replace(hfs=a_hfs)
+            b = b._replace(hfs=b_hfs)
         meta_vdot = _meta_vdot(a.struct, a.slices, b.struct, b.slices)
     else:
         meta_vdot = ()
@@ -567,8 +571,9 @@ def trace(a, axes=(0, 1)) -> yastn.Tensor:
         return a._replace(struct=struct, slices=(_slc(((0, 1),), (), 1),), mfs=mfs, hfs=hfs, isdiag=False, data=data)
 
     if mask_needed:
-        msk_0, msk_1 = _mask_tensors_leg_intersection(a, a, nin_0, nin_1)
+        msk_0, msk_1, a_hfs, _ = _mask_tensors_leg_intersection(a, a, nin_0, nin_1)
         a = _apply_mask_axes(a, nin_0 + nin_1, msk_0 + msk_1)
+        a = a._replace(hfs=a_hfs)
 
     meta, struct, slices = _meta_trace(a.struct, a.slices, nin_0, nin_1, out)
     data = a.config.backend.trace(a._data, order, meta, struct.size)
@@ -785,7 +790,6 @@ def einsum(subscripts, *operands, order=None) -> yastn.Tensor:
             if sin.count(v) > 1:
                 order.append(v)
         order = ''.join(sorted(order))
-
     din = {v: i + 1 for i, v in enumerate(order)}
     dout = {v: -i for i, v in enumerate(sout)}
     d = {**din, **dout}

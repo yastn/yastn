@@ -339,7 +339,7 @@ class Peps2Layers():
         If ket is not provided, ket = bra.
         """
         self.bra = bra
-        self.ket = bra if ket is None else ket
+        self._ket = ket
         assert self.ket.geometry == self.bra.geometry
         self.geometry = bra.geometry
 
@@ -347,8 +347,16 @@ class Peps2Layers():
             setattr(self, name, getattr(bra.geometry, name))
 
     @property
+    def ket(self):
+        return self.bra if self._ket is None else self._ket
+
+    @property
+    def ket_is_bra(self):
+        return self._ket is None
+
+    @property
     def config(self):
-        return self.ket.config
+        return self.bra.config
 
     def has_physical(self) -> bool:
         return False

@@ -166,6 +166,9 @@ def test_ctmrg_measure_product(config_kwargs, boundary):
     with pytest.raises(yastn.YastnError,
                        match=r"EnvCTM init='something' not recognized. Should be 'rand', 'eye', 'dl', or None."):
         fpeps.EnvCTM(psi, init='something')
+    with pytest.raises(yastn.YastnError,
+                       match=r"CTM update method='something' not recognized. Should be '1site' or '2site'"):
+        env.update_(opts_svd={}, method='something')
 
 
 @pytest.mark.parametrize("env_init", ["eye", "dl"])
