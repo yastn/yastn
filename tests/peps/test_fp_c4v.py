@@ -53,8 +53,8 @@ def _symmetrize_normalize(A):
     return A/A.norm(p='inf') # normalize
 
 
-def cost_U1_c4v_2x2(additional_imports, yastn_cfg, g, A, elems, slices : dict[tuple[int],tuple[slice,slice]], max_sweeps, 
-                    ctm_init='dl', fix_signs=False, 
+def cost_U1_c4v_2x2(additional_imports, yastn_cfg, g, A, elems, slices : dict[tuple[int],tuple[slice,slice]], max_sweeps,
+                    ctm_init='dl', fix_signs=False,
                     truncate_multiplets_mode='truncate', projector_svd_method='fullrank', checkpoint_move=False):
         _, torch, _= additional_imports
         tensors_loc= { k:v.clone() for k,v in A.items() }
@@ -106,7 +106,7 @@ def cost_U1_c4v_2x2(additional_imports, yastn_cfg, g, A, elems, slices : dict[tu
             "verbosity": 3
         }
 
-        info = env.ctmrg_(opts_svd = options_svd, max_sweeps=max_sweeps, 
+        info = env.ctmrg_(opts_svd = options_svd, max_sweeps=max_sweeps,
                         corner_tol=1.0e-8, truncation_f=truncation_f, use_qr=False, checkpoint_move=checkpoint_move)
         log.info(f"WARM-UP: Number of ctm steps: {info}")
 
@@ -117,8 +117,8 @@ def cost_U1_c4v_2x2(additional_imports, yastn_cfg, g, A, elems, slices : dict[tu
         return loss
 
 
-def cost_U1_c4v_2x2_fp(additional_imports, yastn_cfg, g, A, elems, slices : dict[tuple[int],tuple[slice,slice]], max_sweeps, 
-                    ctm_init='dl', fix_signs=False, 
+def cost_U1_c4v_2x2_fp(additional_imports, yastn_cfg, g, A, elems, slices : dict[tuple[int],tuple[slice,slice]], max_sweeps,
+                    ctm_init='dl', fix_signs=False,
                     truncate_multiplets_mode='truncate', projector_svd_method='fullrank', checkpoint_move=False):
     _, torch, _= additional_imports
     tensors_loc= { k:v.clone() for k,v in A.items() }
@@ -181,8 +181,8 @@ def cost_U1_c4v_2x2_fp(additional_imports, yastn_cfg, g, A, elems, slices : dict
     return loss
 
 
-def cost_U1_c4v_1x1_fp(additional_imports, yastn_cfg, g, A, elems, slices : dict[tuple[int],tuple[slice,slice]], max_sweeps, 
-                    ctm_init='dl', fix_signs=False, 
+def cost_U1_c4v_1x1_fp(additional_imports, yastn_cfg, g, A, elems, slices : dict[tuple[int],tuple[slice,slice]], max_sweeps,
+                    ctm_init='dl', fix_signs=False,
                     truncate_multiplets_mode='truncate', projector_svd_method='fullrank', checkpoint_move=False):
     _, torch, _= additional_imports
     tensors_loc= { k:v.clone() for k,v in A.items() }
@@ -202,7 +202,7 @@ def cost_U1_c4v_1x1_fp(additional_imports, yastn_cfg, g, A, elems, slices : dict
     with torch.no_grad():
         env_leg = yastn.Leg(psi.config, s=1, t=(0,), D=(1,))
         envc4v = fpeps.EnvCTM_c4v(psi, init=ctm_init, leg=env_leg)
-       
+
     # 3.1.1 post-init CTM steps (allow expansion of the environment in case of qr policy)
     if projector_svd_method=='qr':
         options_svd_pre_init= {
@@ -211,7 +211,7 @@ def cost_U1_c4v_1x1_fp(additional_imports, yastn_cfg, g, A, elems, slices : dict
             'fix_signs': fix_signs
         }
         with torch.no_grad():
-            info = envc4v.ctmrg_(opts_svd = options_svd_pre_init, max_sweeps=max_sweeps, 
+            info = envc4v.ctmrg_(opts_svd = options_svd_pre_init, max_sweeps=max_sweeps,
                         corner_tol=leg_charge_conv_check, truncation_f=truncation_f, use_qr=False, checkpoint_move=checkpoint_move)
             log.info(f"WARM-UP: Number of ctm steps: {info}")
 
@@ -219,14 +219,14 @@ def cost_U1_c4v_1x1_fp(additional_imports, yastn_cfg, g, A, elems, slices : dict
     options_svd={
         "policy": projector_svd_method,
         "D_total": CHI, 'D_block': CHI, "tol": 1.0e-8,
-        "eps_multiplet": 1.0e-8, "truncation_f": truncation_f, "svds_thresh": 0.1 
+        "eps_multiplet": 1.0e-8, "truncation_f": truncation_f, "svds_thresh": 0.1
         }
     envc4v, env_ts_slices, env_ts, t_ctm = fp_ctmrg_c4v(envc4v, \
         ctm_opts_fwd= {'opts_svd': options_svd, 'corner_tol': 1.0e-8, 'max_sweeps': max_sweeps, \
             'method': "default", 'use_qr': False}, \
         ctm_opts_fp= { 'opts_svd': {'policy': 'fullrank'}})
     refill_env_c4v(envc4v, env_ts, env_ts_slices)
-    
+
     # 3.4 evaluate loss
     # sum of traces of even sectors across 1x1 RDMs
     env= envc4v.get_env_bipartite()
@@ -246,12 +246,12 @@ def prepare_1x1(additional_imports, cost_f):
         d = json.load(f)
 
     g= fpeps.RectangularUnitcell(**d['geometry'])
-    A= { tuple(d['parameters_key_to_id'][coord]): yastn.load_from_dict(yastn_cfg_U1, d_ten) 
-                                 for coord,d_ten in d['parameters'].items() }   
+    A= { tuple(d['parameters_key_to_id'][coord]): yastn.load_from_dict(yastn_cfg_U1, d_ten)
+                                 for coord,d_ten in d['parameters'].items() }
 
     cost_function_1x1= lambda *args, **kwargs : cost_f(additional_imports, yastn_cfg_U1, g,A, *args, **kwargs)
 
-    return A, None, cost_function_1x1 
+    return A, None, cost_function_1x1
 
 CHI= 47
 REF_D3_U1_c4v_2x2_grad=[
@@ -308,7 +308,7 @@ REF_D3_U1_c4v_2x2_grad=[
 # @pytest.mark.skipif( "not config.getoption('long_tests')", reason="long duration tests are skipped" )
 @pytest.mark.parametrize("ctm_init", ['dl', 'eye'])
 @pytest.mark.parametrize("truncate_multiplets_mode", ["truncate", "expand"])
-@pytest.mark.parametrize("projector_svd_method", ["fullrank",])	
+@pytest.mark.parametrize("projector_svd_method", ["fullrank",])
 def test_D3_U1_c4v_2x2(ctm_init, truncate_multiplets_mode, projector_svd_method, additional_imports):
     config_kwargs, torch, gradcheck = additional_imports
     A, A_grad_expected, cost_f= prepare_1x1(additional_imports, cost_U1_c4v_2x2)
@@ -318,7 +318,7 @@ def test_D3_U1_c4v_2x2(ctm_init, truncate_multiplets_mode, projector_svd_method,
 
     loc_cost_f= lambda x : cost_f(x, slices, 50, ctm_init=ctm_init, \
         fix_signs=True, truncate_multiplets_mode=truncate_multiplets_mode, projector_svd_method=projector_svd_method)
-    
+
     l0= loc_cost_f(test_elems)
     l0.backward()
 
@@ -330,7 +330,7 @@ def test_D3_U1_c4v_2x2(ctm_init, truncate_multiplets_mode, projector_svd_method,
 @pytest.mark.parametrize("projector_svd_method", ["fullrank", "block_arnoldi", "block_propack"]) #"qr",
 def test_D3_U1_c4v_2x2_fp(ctm_init, truncate_multiplets_mode, projector_svd_method, additional_imports):
     """
-    Test fp gradients for explicit U(1) and C4v symmetric single-site ansatz 
+    Test fp gradients for explicit U(1) and C4v symmetric single-site ansatz
     for environments evaluated 2x2 U(1) iPEPS, generated from single-site ansatz. C4v symmetry is not explicit.
     """
     config_kwargs, torch, gradcheck = additional_imports
@@ -341,7 +341,7 @@ def test_D3_U1_c4v_2x2_fp(ctm_init, truncate_multiplets_mode, projector_svd_meth
 
     loc_cost_f= lambda x : cost_f(x, slices, 50, ctm_init=ctm_init, \
         fix_signs=True, truncate_multiplets_mode=truncate_multiplets_mode, projector_svd_method=projector_svd_method)
-    
+
     l0= loc_cost_f(test_elems)
     l0.backward()
 
@@ -353,7 +353,7 @@ def test_D3_U1_c4v_2x2_fp(ctm_init, truncate_multiplets_mode, projector_svd_meth
 @pytest.mark.parametrize("projector_svd_method", ["fullrank", "block_arnoldi", "block_propack"]) #"qr",
 def test_D3_U1_c4v_1x1_fp(ctm_init, truncate_multiplets_mode, projector_svd_method, additional_imports):
     """
-    Test fp gradients for explicit U(1) and C4v symmetric single-site ansatz 
+    Test fp gradients for explicit U(1) and C4v symmetric single-site ansatz
     for environments evaluated from C4v-symmetric CTM.
     """
     config_kwargs, torch, gradcheck = additional_imports
@@ -364,8 +364,12 @@ def test_D3_U1_c4v_1x1_fp(ctm_init, truncate_multiplets_mode, projector_svd_meth
 
     loc_cost_f= lambda x : cost_f(x, slices, 50, ctm_init=ctm_init, \
         fix_signs=True, truncate_multiplets_mode=truncate_multiplets_mode, projector_svd_method=projector_svd_method)
-    
+
     l0= loc_cost_f(test_elems)
     l0.backward()
 
     assert np.allclose(np.asarray(REF_D3_U1_c4v_2x2_grad), test_elems.grad.numpy(), rtol=1e-03, atol=1e-05)
+
+
+if __name__ == '__main__':
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--long_tests"])

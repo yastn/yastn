@@ -284,7 +284,7 @@ class FixedPoint_c4v(torch.autograd.Function):
 
         env_converged = ctm_env_out.copy()
         t0= time.perf_counter()
-        fp_proj = ctm_env_out.update_(**_ctm_opts_fp)
+        ctm_env_out.update_(**_ctm_opts_fp)
         t1= time.perf_counter()
         log.info(f"{type(ctx).__name__}.forward FP CTM step t {t1-t0} [s]")
 
@@ -296,7 +296,7 @@ class FixedPoint_c4v(torch.autograd.Function):
         log.info(f"{type(ctx).__name__}.forward FP gauge-fixing t {t1-t0} [s]")
 
         env_data, env_meta = env_converged.compress_env_1d()
-        fp_proj_data, fp_proj_meta = env_converged.compress_proj_1d(fp_proj)
+        fp_proj_data, fp_proj_meta = ctm_env_out.compress_proj_1d()
         sigma_data, sigma_meta = sigma.compress_to_1d()
         ctx.save_for_backward(*env_data, *fp_proj_data, sigma_data)
         ctx.env_meta, ctx.fp_proj_meta, ctx.sigma_meta = env_meta, fp_proj_meta, sigma_meta

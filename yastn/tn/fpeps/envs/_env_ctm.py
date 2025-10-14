@@ -115,6 +115,10 @@ class EnvCTM(Peps):
             self[site] = EnvCTM_local()
         if init is not None:
             self.reset_(init=init, leg=leg)
+        # empty structure for projectors
+        self.proj = Peps(self.geometry)
+        for site in self.sites():
+            self.proj[site] = EnvCTM_projectors()
 
     @property
     def config(self):
@@ -201,21 +205,25 @@ class EnvCTM(Peps):
         shallow= {
             'psi': {site: env.psi.bra[site] for site in env.sites()} if isinstance(env.psi,Peps2Layers) \
                 else {site: env.psi[site] for site in env.sites()},
-            'env': tuple( env_t for site in env.sites() for k,env_t in env[site].__dict__.items() )}
-        dtypes= set(tuple( t.yastn_dtype for t in shallow['psi'].values()) + tuple(t.yastn_dtype if t is not None else None for t in shallow['env']))
-        assert len(dtypes - set((None,)) )<2, f"CTM update: all tensors of state and environment should have the same dtype, got {dtypes}"
-        unrolled= {'psi': {site: t.compress_to_1d() for site,t in shallow['psi'].items()},
-            'env': tuple(t.compress_to_1d() if t else (None,None) for t in shallow['env'])}
-        meta= {'psi': {site: t_and_meta[1] for site,t_and_meta in unrolled['psi'].items()}, 'env': tuple(meta for t,meta in unrolled['env']),
-               '2layer': isinstance(env.psi, Peps2Layers), 'geometry': env.geometry, 'sites': env.sites()}
-        data= tuple( t for t,m in unrolled['psi'].values())+tuple( t for t,m in unrolled['env'])
+            'env': tuple( env_t for site in env.sites() for k, env_t in env[site].__dict__.items() )}
+        dtypes = set(tuple(t.yastn_dtype for t in shallow['psi'].values()) +
+                     tuple(t.yastn_dtype if t is not None else None for t in shallow['env']))
+        assert len(dtypes - set((None,))) < 2, f"CTM update: all tensors of state and environment should have the same dtype, got {dtypes}"
+        unrolled = {'psi': {site: t.compress_to_1d() for site,t in shallow['psi'].items()},
+                    'env': tuple(t.compress_to_1d() if t else (None, None) for t in shallow['env'])}
+        meta = {'psi': {site: t_and_meta[1] for site, t_and_meta in unrolled['psi'].items()},
+                'env': tuple(meta for t,meta in unrolled['env']),
+                '2layer': isinstance(env.psi, Peps2Layers),
+                'geometry': env.geometry,
+                'sites': env.sites()}
+        data = tuple( t for t,m in unrolled['psi'].values())+tuple( t for t,m in unrolled['env'])
         return data, meta
 
-    def compress_proj_1d(env, proj):
-            empty_proj= Tensor(config=env.config) # placeholder instead of None
-            data_t, meta_t= tuple(zip( *(t.compress_to_1d() if not (t is None) else empty_proj.compress_to_1d() \
-                for site in proj.sites() for t in proj[site].__dict__.values()) ))
-            meta= {'geometry': proj.geometry, 'proj': meta_t}
+    def compress_proj_1d(env):
+            empty_proj = Tensor(config=env.config) # placeholder instead of None
+            data_t, meta_t = tuple(zip(*(t.compress_to_1d() if not (t is None) else empty_proj.compress_to_1d() \
+                for site in env.sites() for t in env.proj[site].__dict__.values())))
+            meta = {'geometry': env.geometry, 'proj': meta_t}
             return data_t, meta
 
     def save_to_dict(self) -> dict:
@@ -943,63 +951,51 @@ class EnvCTM(Peps):
             opts_svd['tol'] = 1e-14
         if method not in ('1site', '2site'):
             raise YastnError(f"CTM update {method=} not recognized. Should be '1site' or '2site'")
-        checkpoint_move= kwargs.get('checkpoint_move',False)
 
-        #
-        # Empty structure for projectors
-        proj = Peps(env.geometry)
-        for site in proj.sites():
-            proj[site] = EnvCTM_projectors()
-
-        #
-        # get projectors and compute updated env tensors
-        # TODO currently supports only <psi|psi> for double-layer peps
+        checkpoint_move = kwargs.get('checkpoint_move', False)
         for d in moves:
-
             if checkpoint_move:
-                outputs_meta= {}
+                outputs_meta = {}
 
                 # extract raw parametric tensors as a tuple
-                inputs_t, inputs_meta= env.compress_env_1d()
+                inputs_t, inputs_meta = env.compress_env_1d()
 
-                def f_update_core_(move_d,loc_im,*inputs_t):
-                    loc_env = decompress_env_1d(inputs_t,loc_im)
-                    proj_tmp = _update_core_(loc_env, move_d, opts_svd, method=method, **kwargs)
+                def f_update_core_(move_d, loc_im, *inputs_t):
+                    loc_env = decompress_env_1d(inputs_t, loc_im)
+                    _update_core_(loc_env, move_d, opts_svd, method=method, **kwargs)
 
                     # return backend tensors - only environment and projectors
                     #
-                    out_env_data, out_env_meta= loc_env.compress_env_1d()
-                    out_proj_data, out_proj_meta= loc_env.compress_proj_1d(proj_tmp)
+                    out_env_data, out_env_meta = loc_env.compress_env_1d()
+                    out_proj_data, out_proj_meta = loc_env.compress_proj_1d()
 
-                    outputs_meta['env']= out_env_meta['env']
-                    outputs_meta['proj']= out_proj_meta
+                    outputs_meta['env'] = out_env_meta['env']
+                    outputs_meta['proj'] = out_proj_meta
 
                     return out_env_data[len(loc_env.sites()):] + out_proj_data
 
                 if env.config.backend.BACKEND_ID == "torch":
-                    if checkpoint_move=='reentrant':
-                        use_reentrant= True
-                    elif checkpoint_move=='nonreentrant':
-                        use_reentrant= False
-                    checkpoint_F= env.config.backend.checkpoint
-                    outputs= checkpoint_F(f_update_core_,d,inputs_meta,*inputs_t,\
+                    if checkpoint_move == 'reentrant':
+                        use_reentrant = True
+                    elif checkpoint_move == 'nonreentrant':
+                        use_reentrant = False
+                    checkpoint_F = env.config.backend.checkpoint
+                    outputs = checkpoint_F(f_update_core_, d, inputs_meta, *inputs_t, \
                                       **{'use_reentrant': use_reentrant, 'debug': False})
                 else:
                     raise RuntimeError(f"CTM update: checkpointing not supported for backend {env.config.BACKEND_ID}")
 
                 # update tensors of env and proj
-                for i,site in enumerate(env.sites()):
-                    for env_t,t,t_meta in zip(env[site].__dict__.keys(),outputs[i*8:(i+1)*8],outputs_meta['env'][i*8:(i+1)*8]):
-                        setattr(env[site],env_t,decompress_from_1d(t,t_meta) if t is not None else None)
+                for i, site in enumerate(env.sites()):
+                    for env_t, t, t_meta in zip(env[site].__dict__.keys(), outputs[i*8:(i+1)*8], outputs_meta['env'][i*8:(i+1)*8]):
+                        setattr(env[site], env_t, decompress_from_1d(t, t_meta) if t is not None else None)
 
-                for i,site in enumerate(proj.sites()):
-                    for proj_t,t,t_meta in zip(proj[site].__dict__.keys(),outputs[8*len(env.sites()):][i*8:(i+1)*8],outputs_meta['proj']['proj'][i*8:(i+1)*8]):
-                        setattr(proj[site],proj_t, decompress_from_1d(t,t_meta) if t_meta['struct'].size>0 else None)
-
+                for i, site in enumerate(env.sites()):
+                    for proj_t, t, t_meta in zip(env.proj[site].__dict__.keys(), outputs[8*len(env.sites()):][i*8:(i+1)*8], outputs_meta['proj']['proj'][i*8:(i+1)*8]):
+                        setattr(env.proj[site], proj_t, decompress_from_1d(t, t_meta) if t_meta['struct'].size > 0 else None)
             else:
-                proj_tmp = _update_core_(env, d, opts_svd, method=method, **kwargs)
-                update_storage_(proj, proj_tmp)
-        return proj
+                _update_core_(env, d, opts_svd, method=method, **kwargs)
+        return env
 
     def update_bond_(env, bond: tuple, opts_svd: dict | None = None, **kwargs):
         r"""
@@ -1011,18 +1007,14 @@ class EnvCTM(Peps):
         dirn = env.nn_bond_dirn(*bond)
         s0, s1 = bond if dirn in 'lr tb' else bond[::-1]
 
-        proj = Peps(env.geometry)
-        for site in env.sites():
-            proj[site] = EnvCTM_projectors()
-
         move, m0, m1, d = 'hrlt' if dirn in 'lrl' else 'vbtl'
-        update_projectors_(proj, s0, move, env, opts_svd, **kwargs)
-        update_projectors_(proj, env.nn_site(s0, d=d), move, env, opts_svd, **kwargs)
-        trivial_projectors_(proj, m0, env, sites=[s1])
-        trivial_projectors_(proj, m1, env, sites=[s0])
+        update_projectors_(env, s0, move, opts_svd, **kwargs)
+        update_projectors_(env, env.nn_site(s0, d=d), move, opts_svd, **kwargs)
+        trivial_projectors_(env, m0, sites=[s1])
+        trivial_projectors_(env, m1, sites=[s0])
         env_tmp = EnvCTM(env.psi, init=None)  # empty environments
-        update_env_(env_tmp, s0, env, proj, move=m0)
-        update_env_(env, s1, env, proj, move=m1)
+        update_env_(env_tmp, s0, env, move=m0)
+        update_env_(env, s1, env, move=m1)
         update_storage_(env, env_tmp)
 
 
@@ -1248,31 +1240,24 @@ def _update_core_(env, move: str, opts_svd: dict, **kwargs):
         shift_proj = None
         sitess = [[Site(nx, ny) for ny in range(env.Ny)] for nx in range(env.Nx-1, -1, -1)]
 
-    # Empty structure for projectors
-    proj = Peps(env.geometry)
-    for site in env.sites():
-        proj[site] = EnvCTM_projectors()
-
     for sites in sitess:
         sites_proj = [env.nn_site(site, shift_proj) for site in sites] if shift_proj else sites
         sites_proj = [site for site in sites_proj if site is not None]
         #
         # Projectors
         for site in sites_proj:
-            update_projectors_(proj, site, move, env, opts_svd, **kwargs)
+            update_projectors_(env, site, move, opts_svd, **kwargs)
         # fill (trivial) projectors on edges
-        trivial_projectors_(proj, move, env, sites_proj)
+        trivial_projectors_(env, move, sites_proj)
         #
         # Update move
         env_tmp = EnvCTM(env.psi, init=None)  # empty environments
         for site in sites:
-            update_env_(env_tmp, site, env, proj, move)
+            update_env_(env_tmp, site, env, move)
         update_storage_(env, env_tmp)
 
-    return proj
 
-
-def update_projectors_(proj, site, move, env, opts_svd, **kwargs):
+def update_projectors_(env, site, move, opts_svd, **kwargs):
     r"""
     Calculate new projectors for CTM moves passing to specific method to create enlarged corners.
     """
@@ -1284,9 +1269,9 @@ def update_projectors_(proj, site, move, env, opts_svd, **kwargs):
     # if method == '2site':
     #     return update_2site_projectors_(proj, *sites, move, env, opts_svd, **kwargs)
     if method == '1site':
-        return update_1site_projectors_(proj, *sites, move, env, opts_svd, **kwargs)
+        return update_1site_projectors_(env, *sites, move, opts_svd, **kwargs)
     elif method == '2site':
-        return update_extended_2site_projectors_(proj, *sites, move, env, opts_svd, **kwargs)
+        return update_extended_2site_projectors_(env, *sites, move, opts_svd, **kwargs)
 
 
 # def update_2site_projectors_(proj, tl, tr, bl, br, move, env, opts_svd, **kwargs):
@@ -1341,7 +1326,7 @@ def update_projectors_(proj, site, move, env, opts_svd, **kwargs):
 #         proj[bl].vbr, proj[br].vbl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
 
 
-def update_extended_2site_projectors_(proj, tl, tr, bl, br, move, env, opts_svd, **kwargs):
+def update_extended_2site_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwargs):
     r"""
     Calculate new projectors for CTM moves from 4x4 extended corners
     which are enlarged to 5x4 if some virtual bond is one.
@@ -1394,7 +1379,7 @@ def update_extended_2site_projectors_(proj, tl, tr, bl, br, move, env, opts_svd,
         else:
             _, r_t = qr(cor_tt, axes=(0, 1)) if use_qr else (None, cor_tt)
             _, r_b = qr(cor_bb, axes=(1, 0)) if use_qr else (None, cor_bb.T)
-        proj[tr].hrb, proj[br].hrt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
+        env.proj[tr].hrb, env.proj[br].hrt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
 
     if move in 'lh':
         sr = psi[tr].get_shape(axes=2)
@@ -1421,7 +1406,7 @@ def update_extended_2site_projectors_(proj, tl, tr, bl, br, move, env, opts_svd,
             _, r_t = qr(cor_tt, axes=(1, 0)) if use_qr else (None, cor_tt.T)
             _, r_b = qr(cor_bb, axes=(0, 1)) if use_qr else (None, cor_bb)
 
-        proj[tl].hlb, proj[bl].hlt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
+        env.proj[tl].hlb, env.proj[bl].hlt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
 
     if move in 'tbv':
         cor_ll = cor_bl @ cor_tl  # l(bottom) l(top)
@@ -1451,7 +1436,7 @@ def update_extended_2site_projectors_(proj, tl, tr, bl, br, move, env, opts_svd,
         else:
             _, r_l = qr(cor_ll, axes=(0, 1)) if use_qr else (None, cor_ll)
             _, r_r = qr(cor_rr, axes=(1, 0)) if use_qr else (None, cor_rr.T)
-        proj[tl].vtr, proj[tr].vtl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
+        env.proj[tl].vtr, env.proj[tr].vtl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
 
     if move in 'bv':
         st = psi[tl].get_shape(axes=3)
@@ -1477,10 +1462,10 @@ def update_extended_2site_projectors_(proj, tl, tr, bl, br, move, env, opts_svd,
         else:
             _, r_l = qr(cor_ll, axes=(1, 0)) if use_qr else (None, cor_ll.T)
             _, r_r = qr(cor_rr, axes=(0, 1)) if use_qr else (None, cor_rr)
-        proj[bl].vbr, proj[br].vbl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
+        env.proj[bl].vbr, env.proj[br].vbl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
 
 
-def update_1site_projectors_(proj, tl, tr, bl, br, move, env, opts_svd, **kwargs):
+def update_1site_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwargs):
     r"""
     Calculate new projectors for CTM moves from 4x2 extended corners.
     """
@@ -1493,10 +1478,10 @@ def update_1site_projectors_(proj, tl, tr, bl, br, move, env, opts_svd, **kwargs
         r_br, r_bl = regularize_1site_corners(cor_br, cor_bl)
 
     if move in 'lh':
-        proj[tr].hrb, proj[br].hrt = proj_corners(r_tr, r_br, opts_svd=opts_svd, **kwargs)
+        env.proj[tr].hrb, env.proj[br].hrt = proj_corners(r_tr, r_br, opts_svd=opts_svd, **kwargs)
 
     if move in 'rh':
-        proj[tl].hlb, proj[bl].hlt = proj_corners(r_tl, r_bl, opts_svd=opts_svd, **kwargs)
+        env.proj[tl].hlb, env.proj[bl].hlt = proj_corners(r_tl, r_bl, opts_svd=opts_svd, **kwargs)
 
     if move in 'tbv':
         cor_bl = (env[br].bl @ env[br].l).fuse_legs(axes=((0, 1), 2))
@@ -1507,10 +1492,10 @@ def update_1site_projectors_(proj, tl, tr, bl, br, move, env, opts_svd, **kwargs
         r_tr, r_br = regularize_1site_corners(cor_tr, cor_br)
 
     if move in 'tv':
-        proj[tl].vtr, proj[tr].vtl = proj_corners(r_tl, r_tr, opts_svd=opts_svd, **kwargs)
+        env.proj[tl].vtr, env.proj[tr].vtl = proj_corners(r_tl, r_tr, opts_svd=opts_svd, **kwargs)
 
     if move in 'bv':
-        proj[bl].vbr, proj[br].vbl = proj_corners(r_bl, r_br, opts_svd=opts_svd, **kwargs)
+        env.proj[bl].vbr, env.proj[br].vbl = proj_corners(r_bl, r_br, opts_svd=opts_svd, **kwargs)
 
 
 _for_trivial = (('hlt', 'r', 'l', 'tl', 2, 0, 0),
@@ -1523,7 +1508,7 @@ _for_trivial = (('hlt', 'r', 'l', 'tl', 2, 0, 0),
                 ('vbr', 't', 'b', 'br', 0, 3, 1))
 
 
-def trivial_projectors_(proj, move, env, sites):
+def trivial_projectors_(env, move, sites):
     r"""
     Adds trivial projectors if not present at the edges of the lattice with open boundary conditions.
     """
@@ -1532,16 +1517,16 @@ def trivial_projectors_(proj, move, env, sites):
     config = env.psi.config
     for site in sites:
         for s0, s1, s2, s3, a0, a1, a2 in _for_trivial:
-            if s2 in move and getattr(proj[site], s0) is None:
+            if s2 in move and getattr(env.proj[site], s0) is None:
                 site_nn = env.nn_site(site, d=s1)
                 if site_nn is not None:
                     l0 = getattr(env[site], s2).get_legs(a0).conj()
                     l1 = env.psi[site].get_legs(a1).conj()
                     l2 = getattr(env[site_nn], s3).get_legs(a2).conj()
-                    setattr(proj[site], s0, ones(config, legs=(l0, l1, l2)))
+                    setattr(env.proj[site], s0, ones(config, legs=(l0, l1, l2)))
 
 
-def update_env_(env_tmp, site, env, proj, move: str):
+def update_env_(env_tmp, site, env, move: str):
     r"""
     Horizontal move of CTM step. Compute updated environment tensors given projectors for ``site``
     in left (``dir='l'``), right ``dir='r'``, or both directions (``dir='lr'``).
@@ -1556,77 +1541,77 @@ def update_env_(env_tmp, site, env, proj, move: str):
     if move in 'lh':
         l = psi.nn_site(site, d='l')
         if l is not None:
-            tmp = env[l].l @ proj[l].hlt
+            tmp = env[l].l @ env.proj[l].hlt
             tmp = tensordot(psi[l], tmp, axes=((0, 1), (2, 1)))
-            tmp = tensordot(proj[l].hlb, tmp, axes=((0, 1), (2, 0)))
+            tmp = tensordot(env.proj[l].hlb, tmp, axes=((0, 1), (2, 0)))
             env_tmp[site].l = tmp / tmp.norm(p='inf')
 
         tl = psi.nn_site(site, d='tl')
         if tl is not None:
-            tmp = tensordot(proj[tl].hlb, env[l].tl @ env[l].t, axes=((0, 1), (0, 1)))
+            tmp = tensordot(env.proj[tl].hlb, env[l].tl @ env[l].t, axes=((0, 1), (0, 1)))
             env_tmp[site].tl = tmp / tmp.norm(p='inf')
 
         bl = psi.nn_site(site, d='bl')
         if bl is not None:
-            tmp = tensordot(env[l].b, env[l].bl @ proj[bl].hlt, axes=((2, 1), (0, 1)))
+            tmp = tensordot(env[l].b, env[l].bl @ env.proj[bl].hlt, axes=((2, 1), (0, 1)))
             env_tmp[site].bl = tmp / tmp.norm(p='inf')
 
     if move in 'rh':
         r = psi.nn_site(site, d='r')
         if r is not None:
-            tmp = env[r].r @ proj[r].hrb
+            tmp = env[r].r @ env.proj[r].hrb
             tmp = tensordot(psi[r], tmp, axes=((2, 3), (2, 1)))
-            tmp = tensordot(proj[r].hrt, tmp, axes=((0, 1), (2, 0)))
+            tmp = tensordot(env.proj[r].hrt, tmp, axes=((0, 1), (2, 0)))
             env_tmp[site].r = tmp / tmp.norm(p='inf')
 
         tr = psi.nn_site(site, d='tr')
         if tr is not None:
-            tmp = tensordot(env[r].t, env[r].tr @ proj[tr].hrb, axes=((2, 1), (0, 1)))
+            tmp = tensordot(env[r].t, env[r].tr @ env.proj[tr].hrb, axes=((2, 1), (0, 1)))
             env_tmp[site].tr = tmp / tmp.norm(p='inf')
 
         br = psi.nn_site(site, d='br')
         if br is not None:
-            tmp = tensordot(proj[br].hrt, env[r].br @ env[r].b, axes=((0, 1), (0, 1)))
+            tmp = tensordot(env.proj[br].hrt, env[r].br @ env[r].b, axes=((0, 1), (0, 1)))
             env_tmp[site].br = tmp / tmp.norm(p='inf')
 
     if move in 'tv':
         t = psi.nn_site(site, d='t')
         if t is not None:
-            tmp = tensordot(proj[t].vtl, env[t].t, axes=(0, 0))
+            tmp = tensordot(env.proj[t].vtl, env[t].t, axes=(0, 0))
             tmp = tensordot(tmp, psi[t], axes=((2, 0), (0, 1)))
-            tmp = tensordot(tmp, proj[t].vtr, axes=((1, 3), (0, 1)))
+            tmp = tensordot(tmp, env.proj[t].vtr, axes=((1, 3), (0, 1)))
             env_tmp[site].t = tmp / tmp.norm(p='inf')
 
         tl = psi.nn_site(site, d='tl')
         if tl is not None:
-            tmp = tensordot(env[t].l, env[t].tl @ proj[tl].vtr, axes=((2, 1), (0, 1)))
+            tmp = tensordot(env[t].l, env[t].tl @ env.proj[tl].vtr, axes=((2, 1), (0, 1)))
             env_tmp[site].tl = tmp / tmp.norm(p='inf')
 
         tr = psi.nn_site(site, d='tr')
         if tr is not None:
-            tmp = tensordot(proj[tr].vtl, env[t].tr @ env[t].r, axes=((0, 1), (0, 1)))
+            tmp = tensordot(env.proj[tr].vtl, env[t].tr @ env[t].r, axes=((0, 1), (0, 1)))
             env_tmp[site].tr =  tmp / tmp.norm(p='inf')
 
     if move in 'bv':
         b = psi.nn_site(site, d='b')
         if b is not None:
-            tmp = tensordot(proj[b].vbr, env[b].b, axes=(0, 0))
+            tmp = tensordot(env.proj[b].vbr, env[b].b, axes=(0, 0))
             tmp = tensordot(tmp, psi[b], axes=((2, 0), (2, 3)))
-            tmp = tensordot(tmp, proj[b].vbl, axes=((1, 3), (0, 1)))
+            tmp = tensordot(tmp, env.proj[b].vbl, axes=((1, 3), (0, 1)))
             env_tmp[site].b = tmp / tmp.norm(p='inf')
 
         bl = psi.nn_site(site, d='bl')
         if bl is not None:
-            tmp = tensordot(proj[bl].vbr, env[b].bl @ env[b].l, axes=((0, 1), (0, 1)))
+            tmp = tensordot(env.proj[bl].vbr, env[b].bl @ env[b].l, axes=((0, 1), (0, 1)))
             env_tmp[site].bl = tmp / tmp.norm(p='inf')
 
         br = psi.nn_site(site, d='br')
         if br is not None:
-            tmp = tensordot(env[b].r, env[b].br @ proj[br].vbl, axes=((2, 1), (0, 1)))
+            tmp = tensordot(env[b].r, env[b].br @ env.proj[br].vbl, axes=((2, 1), (0, 1)))
             env_tmp[site].br = tmp / tmp.norm(p='inf')
 
 
-def decompress_env_1d(data,meta):
+def decompress_env_1d(data, meta):
     """
     Reconstruct the environment from its compressed form.
 
@@ -1641,20 +1626,21 @@ def decompress_env_1d(data,meta):
     -------
     EnvCTM
     """
-    sites= meta['sites']
-    loc_bra= Peps(meta['geometry'], {site: decompress_from_1d(t,t_meta) for site,t,t_meta in zip(sites,data[:len(sites)],meta['psi'].values())})
-    loc_env = EnvCTM( Peps2Layers(loc_bra) if meta['2layer'] else loc_bra, init=None)
+    sites = meta['sites']
+    tensors = {site: decompress_from_1d(t,t_meta) for site, t, t_meta in zip(sites,data[:len(sites)], meta['psi'].values())}
+    loc_bra = Peps(meta['geometry'], tensors=tensors)
+    loc_env = EnvCTM(Peps2Layers(loc_bra) if meta['2layer'] else loc_bra, init=None)
 
     # assign backend tensors
     #
-    data_env= data[len(sites):]
-    for i,site in enumerate(sites):
-        for env_t,t,t_meta in zip(loc_env[site].__dict__.keys(),data_env[i*8:(i+1)*8],meta['env'][i*8:(i+1)*8]):
-            setattr(loc_env[site],env_t,decompress_from_1d(t,t_meta) if t is not None else None)
+    data_env = data[len(sites):]
+    for i, site in enumerate(sites):
+        for env_t, t, t_meta in zip(loc_env[site].__dict__.keys(), data_env[i*8:(i+1)*8], meta['env'][i*8:(i+1)*8]):
+            setattr(loc_env[site], env_t, decompress_from_1d(t, t_meta) if t is not None else None)
     return loc_env
 
 
-def decompress_proj_1d(data,meta):
+def decompress_proj_1d(data, meta):
     """
     Reconstruct the projectors from their compressed form.
 

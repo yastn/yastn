@@ -983,9 +983,9 @@ class FixedPoint(torch.autograd.Function):
             _ctm_opts_fp.update({k:v for k,v in ctm_opts_fp.items() if k not in ['opts_svd']})
 
         env_converged = ctm_env_out.copy()
-        t0= time.perf_counter()
-        fp_proj = ctm_env_out.update_(**_ctm_opts_fp)
-        t1= time.perf_counter()
+        t0 = time.perf_counter()
+        ctm_env_out.update_(**_ctm_opts_fp)
+        t1 = time.perf_counter()
         log.info(f"{type(ctx).__name__}.forward FP CTM step t {t1-t0} [s]")
 
         # 3. Find the gauge transformation
@@ -997,7 +997,7 @@ class FixedPoint(torch.autograd.Function):
         log.info(f"{type(ctx).__name__}.forward FP gauge-fixing t {t1-t0} [s]")
 
         env_data, env_meta = env_converged.compress_env_1d()
-        fp_proj_data, fp_proj_meta = env_converged.compress_proj_1d(fp_proj)
+        fp_proj_data, fp_proj_meta = ctm_env_out.compress_proj_1d()
         g_data, g_meta= _compress_gauges_1d(sigma_dict)
         ctx.save_for_backward(*env_data, *fp_proj_data, *g_data)
         ctx.env_meta, ctx.fp_proj_meta, ctx.g_meta = env_meta, fp_proj_meta, g_meta
@@ -1013,15 +1013,15 @@ class FixedPoint(torch.autograd.Function):
         dA = grad_env
 
         # env_data = torch.utils.checkpoint.detach_variable(ctx.saved_tensors)[0] # only one element in the tuple
-        env_data= ctx.saved_tensors[:len(ctx.env_meta['psi'])+len(ctx.env_meta['env'])]
-        fp_proj_data= ctx.saved_tensors[len(env_data):len(env_data)+len(ctx.fp_proj_meta['proj'])]
-        g_data= ctx.saved_tensors[-len(ctx.g_meta['gauges']):]
-        env= decompress_env_1d(env_data, ctx.env_meta)
-        fp_proj= decompress_proj_1d(fp_proj_data, ctx.fp_proj_meta)
-        sigma_dict= _decompress_gauges_1d(g_data, ctx.g_meta)
+        env_data = ctx.saved_tensors[:len(ctx.env_meta['psi'])+len(ctx.env_meta['env'])]
+        fp_proj_data = ctx.saved_tensors[len(env_data):len(env_data)+len(ctx.fp_proj_meta['proj'])]
+        g_data = ctx.saved_tensors[-len(ctx.g_meta['gauges']):]
+        env = decompress_env_1d(env_data, ctx.env_meta)
+        env.proj = decompress_proj_1d(fp_proj_data, ctx.fp_proj_meta)
+        sigma_dict = _decompress_gauges_1d(g_data, ctx.g_meta)
 
         psi_data = tuple(env.psi.ket[s]._data for s in env.psi.ket.sites())
-        _env_ts, _env_slices= env_raw_data(env)
+        _env_ts, _env_slices = env_raw_data(env)
 
         prev_grad_tmp = None
         diff_ave = None

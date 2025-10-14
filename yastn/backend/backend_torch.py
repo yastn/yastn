@@ -555,13 +555,14 @@ def diag_2dto1d(data, meta, Dsize):
 
 
 # functionals
-def checkpoint(f,*args,**kwargs):
+def checkpoint(f, *args, **kwargs):
     # context_fn=kwargs.pop('context_fn',None)
     # torch.utils.checkpoint.checkpoint
-    return _checkpoint(f, *args, use_reentrant=kwargs.pop('use_reentrant',None),
-                                             determinism_check=kwargs.pop('determinism_check','default'),
-                                             debug=kwargs.pop('debug',False), **kwargs)
-
+    return _checkpoint(f, *args,
+                       use_reentrant=kwargs.pop('use_reentrant',None),
+                       determinism_check=kwargs.pop('determinism_check', 'default'),
+                       debug=kwargs.pop('debug', False),
+                       **kwargs)
 
 
 #############

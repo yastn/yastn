@@ -233,10 +233,7 @@ class EnvCTM_c4v(EnvCTM):
         checkpoint_move= kwargs.pop('checkpoint_move',False)
 
         #
-        # Empty structure for projectors
-        proj = Peps(env.geometry)
-        for site in proj.sites(): proj[site] = EnvCTM_projectors()
-
+        #
         def _compress_proj(proj, empty_proj):
             data, meta= tuple(zip( *(t.compress_to_1d() if not (t is None) else empty_proj.compress_to_1d() \
                 for site in proj.sites() for t in proj[site].__dict__.values()) ))
@@ -256,16 +253,15 @@ class EnvCTM_c4v(EnvCTM):
             def f_update_core_2dir(move_d,loc_im,*inputs_t):
                 loc_env= decompress_env_c4v_1d(inputs_t,loc_im)
 
-                env_tmp, proj_tmp= _update_core_dir(loc_env, "default", opts_svd, method=method, **kwargs)
-                update_storage_(loc_env, env_tmp)
-
+                _update_core_dir(loc_env, "default", opts_svd, method=method, **kwargs)
+                #
                 # return backend tensors - only environment and projectors
                 #
-                out_env_data, out_env_meta= loc_env.compress_env_1d()
-                out_proj_data, out_proj_meta= _compress_proj(proj_tmp, Tensor(config=next(iter(out_env_meta['psi'].values()))['config']))
+                out_env_data, out_env_meta = loc_env.compress_env_1d()
+                out_proj_data, out_proj_meta= _compress_proj(loc_env.proj, Tensor(config=next(iter(out_env_meta['psi'].values()))['config']))
 
-                outputs_meta['env']= out_env_meta['env']
-                outputs_meta['proj']= out_proj_meta
+                outputs_meta['env'] = out_env_meta['env']
+                outputs_meta['proj'] = out_proj_meta
 
                 return out_env_data[len(loc_env.sites()):] + out_proj_data
 
@@ -285,15 +281,12 @@ class EnvCTM_c4v(EnvCTM):
                 for env_t,t,t_meta in zip(env[site].__dict__.keys(),outputs[i*8:(i+1)*8],outputs_meta['env'][i*8:(i+1)*8]):
                     setattr(env[site],env_t,decompress_from_1d(t,t_meta) if t is not None else None)
 
-            for i,site in enumerate(proj.sites()):
-                for proj_t,t,t_meta in zip(proj[site].__dict__.keys(),outputs[8*len(env.sites()):][i*8:(i+1)*8],outputs_meta['proj'][i*8:(i+1)*8]):
-                    setattr(proj[site],proj_t,decompress_from_1d(t,t_meta) if t_meta['struct'].size>0 else None)
-
+            for i,site in enumerate(env.sites()):
+                for proj_t,t,t_meta in zip(env.proj[site].__dict__.keys(),outputs[8*len(env.sites()):][i*8:(i+1)*8],outputs_meta['proj'][i*8:(i+1)*8]):
+                    setattr(env.proj[site],proj_t,decompress_from_1d(t,t_meta) if t_meta['struct'].size>0 else None)
         else:
-            env_tmp, proj_tmp= _update_core_dir(env, "default", opts_svd, method=method, **kwargs)
-            update_storage_(env, env_tmp)
-            update_storage_(proj, proj_tmp)
-        return proj
+            _update_core_dir(env, "default", opts_svd, method=method, **kwargs)
+
 
 
     def get_env_bipartite(self):
@@ -341,7 +334,8 @@ def _iterate_ctmrg_(env, opts_svd, method, max_sweeps, iterator_step, corner_tol
     max_dsv, converged = None, False
     proj_history = None
     for sweep in range(1, max_sweeps + 1):
-        current_proj= env.update_(opts_svd=opts_svd, method=method, proj_history=proj_history, **kwargs)
+        env.update_(opts_svd=opts_svd, method=method, proj_history=proj_history, **kwargs)
+        current_proj= env.proj
         # Here, we have access to all projectors obtained in the previous CTM step
         # For partial SVD solvers, we need
         # 1. estimate of how many singular triples to solve for in each block, both blocks kept in truncation
@@ -433,9 +427,7 @@ def _update_core_dir(env, dir : str, opts_svd : dict, **kwargs):
 
     #
     # Empty structure for projectors
-    proj = Peps(env.geometry)
-    for site in proj.sites():
-        proj[site] = EnvCTM_projectors()
+    #
     s0 = env.psi.sites()[0]
 
     # 1) get tl enlarged corner and projector from ED/SVD
@@ -456,10 +448,10 @@ def _update_core_dir(env, dir : str, opts_svd : dict, **kwargs):
     R= cor_tl_2x1.flip_signature().fuse_legs(axes=((0, 1), 2)) if policy in ['qr'] else cor_tl
     opts_svd["D_block"]= svd_predict_spec(s0, "vtl", s0, "vtr")
     opts_svd["sU"]= 1
-    proj[s0].vtl, s, proj[s0].vtr= proj_sym_corner(R, opts_svd, **kwargs)
+    env.proj[s0].vtl, s, env.proj[s0].vtr= proj_sym_corner(R, opts_svd, **kwargs)
 
     # 2) update move corner
-    P= proj[s0].vtl
+    P = env.proj[s0].vtl
     env_tmp = EnvCTM(env.psi, init=None)  # empty environments
     if policy in ['symeig']:
         assert (cor_tl-cor_tl.H)<1e-12,"enlarged corner is not hermitian"
@@ -469,7 +461,7 @@ def _update_core_dir(env, dir : str, opts_svd : dict, **kwargs):
         S= S.flip_charges()
         env_tmp[s0].tl= (S/S.norm(p='inf'))
     else:
-        S= ((proj[s0].vtr.conj() @ P) @ s)
+        S= ((env.proj[s0].vtr.conj() @ P) @ s)
         env_tmp[s0].tl= (S/S.norm(p='inf'))
 
     # 3) update move half-row/-column tensor. Here, P is to act on B-sublattice T tensor
@@ -494,8 +486,8 @@ def _update_core_dir(env, dir : str, opts_svd : dict, **kwargs):
 
     # tmp= 0.5*(tmp + tmp.transpose(axes=(2,1,0)))
     env_tmp[s0].t = tmp / tmp.norm(p='inf')
-
-    return env_tmp, proj
+    #
+    update_storage_(env, env_tmp)
 
 
 def proj_sym_corner(rr, opts_svd, **kwargs):

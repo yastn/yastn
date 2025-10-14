@@ -290,3 +290,7 @@ def test_3x3_D1_Z2_spinlessf_fp(ctm_init, truncate_multiplets_mode, projector_sv
     l0.backward()
 
     assert np.allclose(np.asarray(REF_3x3_D1_Z2_spinlessf_complex_grad), test_elems.grad.numpy(), rtol=1e-03, atol=1e-05)
+
+
+if __name__ == '__main__':
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--long_tests"])
