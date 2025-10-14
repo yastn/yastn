@@ -1007,22 +1007,34 @@ class EnvCTM(Peps):
         dirn = env.nn_bond_dirn(*bond)
         s0, s1 = bond if dirn in 'lr tb' else bond[::-1]
 
-        move, m0, m1, d = 'hrlt' if dirn in 'lrl' else 'vbtl'
-        update_projectors_(env, s0, move, opts_svd, **kwargs)
-        update_projectors_(env, env.nn_site(s0, d=d), move, opts_svd, **kwargs)
-        trivial_projectors_(env, m0, sites=[s1])
-        trivial_projectors_(env, m1, sites=[s0])
         env_tmp = EnvCTM(env.psi, init=None)  # empty environments
-        update_env_(env_tmp, s0, env, move=m0)
-        update_env_(env, s1, env, move=m1)
+        if dirn in 'lrl':
+            update_projectors_(env, s0, 'lrt', opts_svd, **kwargs)
+            update_projectors_(env, env.nn_site(s0, d='t'), 'lrb', opts_svd, **kwargs)
+            update_env_(env_tmp, s0, env, move='r')
+            update_env_(env_tmp, env.nn_site(s0, d='t'), env, move='r')
+            update_env_(env_tmp, env.nn_site(s0, d='b'), env, move='r')
+            update_env_(env_tmp, s1, env, move='l')
+            update_env_(env_tmp, env.nn_site(s1, d='t'), env, move='l')
+            update_env_(env_tmp, env.nn_site(s1, d='b'), env, move='l')
+        else:  # 'tbt'
+            update_projectors_(env, s0, 'tbl', opts_svd, **kwargs)
+            update_projectors_(env, env.nn_site(s0, d='l'), 'tbr', opts_svd, **kwargs)
+            update_env_(env_tmp, s0, env, move='b')
+            update_env_(env_tmp, env.nn_site(s0, d='l'), env, move='b')
+            update_env_(env_tmp, env.nn_site(s0, d='r'), env, move='b')
+            update_env_(env_tmp, s1, env, move='t')
+            update_env_(env_tmp, env.nn_site(s1, d='l'), env, move='t')
+            update_env_(env_tmp, env.nn_site(s1, d='r'), env, move='t')
         update_storage_(env, env_tmp)
 
 
     def pre_truncation_(env, bond):
         pass
+        # env.update_bond_(bond, opts_svd=env.opts_svd)
 
     def post_truncation_(env, bond, **kwargs):
-        pass
+        env.update_bond_(bond, opts_svd=env.opts_svd)
 
     def bond_metric(self, Q0, Q1, s0, s1, dirn) -> Tensor:
         r"""
@@ -1351,11 +1363,11 @@ def update_extended_2site_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwa
     cor_br = tensordot(cor_br, psi[br], axes=((2, 1), (2, 3)))
     cor_br = cor_br.fuse_legs(axes=((0, 2), (1, 3)))
 
-    if move in 'lrh':
+    if any(x in move for x in 'lrh'):
         cor_tt = cor_tl @ cor_tr  # b(left) b(right)
         cor_bb = cor_br @ cor_bl  # t(right) t(left)
 
-    if move in 'rh':
+    if any(x in move for x in 'rh'):
         sl = psi[tl].get_shape(axes=2)
         ltl = env.nn_site(tl, d='l')
         lbl = env.nn_site(bl, d='l')
@@ -1381,7 +1393,7 @@ def update_extended_2site_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwa
             _, r_b = qr(cor_bb, axes=(1, 0)) if use_qr else (None, cor_bb.T)
         env.proj[tr].hrb, env.proj[br].hrt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
 
-    if move in 'lh':
+    if any(x in move for x in 'lh'):
         sr = psi[tr].get_shape(axes=2)
         rtr = env.nn_site(tr, d='r')
         rbr = env.nn_site(br, d='r')
@@ -1408,11 +1420,11 @@ def update_extended_2site_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwa
 
         env.proj[tl].hlb, env.proj[bl].hlt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
 
-    if move in 'tbv':
+    if any(x in move for x in 'tbv'):
         cor_ll = cor_bl @ cor_tl  # l(bottom) l(top)
         cor_rr = cor_tr @ cor_br  # r(top) r(bottom)
 
-    if move in 'tv':
+    if any(x in move for x in 'tv'):
         sb = psi[bl].get_shape(axes=3)
         bbl = env.nn_site(bl, d='b')
         bbr = env.nn_site(br, d='b')
@@ -1438,7 +1450,7 @@ def update_extended_2site_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwa
             _, r_r = qr(cor_rr, axes=(1, 0)) if use_qr else (None, cor_rr.T)
         env.proj[tl].vtr, env.proj[tr].vtl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
 
-    if move in 'bv':
+    if any(x in move for x in 'bv'):
         st = psi[tl].get_shape(axes=3)
         ttl = env.nn_site(tl, d='t')
         ttr = env.nn_site(tr, d='t')

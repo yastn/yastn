@@ -185,7 +185,6 @@ def test_ctmrg_Ising_4x5(config_kwargs):
     for bond in bonds:
         env.update_bond_(bond, opts_svd=opts_svd)
 
-
     env = fpeps.EnvCTM(ket, init='eye')
     opts_svd = {"D_total": 4}
     info = env.ctmrg_(opts_svd=opts_svd, moves='lrtb', max_sweeps=4, corner_tol=1e-8)
@@ -288,4 +287,5 @@ def test_1x1_D1_Z2_spinlessf_conv(ctm_init, fix_signs, truncate_multiplets_mode,
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0", "--long_tests", "--backend", "torch"])
+    test_ctmrg_Ising_4x5({})
+    #pytest.main([__file__, "-vs", "--durations=0", "--long_tests", "--backend", "torch"])
