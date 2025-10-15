@@ -120,14 +120,19 @@ class EnvCTM(Peps):
         return max(max(max(getattr(self[site], dirn).get_shape()) for dirn in ['tl', 'tr', 'bl', 'br'])
                    for site in self.sites())
 
-    def canonical_site(env, site):
-        '''
-        Turn the indices of the site nx and ny to the range [0, Wx-1] and [0, Wy-1] respectively.
-        '''
+    def canonical_site(env:EnvCTM, site:Site):
+
+
         if site is None:
             return None
-        site_c = Site(site.nx % env.psi.Nx, site.ny % env.psi.Ny)
-        return site_c
+
+        index = env.psi.site2index(site)
+        if type(index) is tuple:
+            nx = env.psi.site2index(site)[0]
+            ny = env.psi.site2index(site)[1]
+            return Site(nx, ny)
+        else:
+            return env.psi.sites()[index]
 
     # Cloning/Copying/Detaching(view)
     #

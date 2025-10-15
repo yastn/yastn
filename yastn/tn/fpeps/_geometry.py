@@ -302,10 +302,10 @@ class RectangularUnitcell(SquareLattice):
                     label = self._site2index[nx, ny]
                     env = (self.site2index((nx - 1, ny)), self.site2index((nx, ny - 1)), self.site2index((nx + 1, ny)), self.site2index((nx, ny + 1)))
                     if label in label_sites:
-                        label_sites[label].append((nx, ny))
+                        label_sites[label].append(Site(nx, ny))
                         label_envs[label].append(env)
                     else:
-                        label_sites[label] = [(nx, ny)]
+                        label_sites[label] = [Site(nx, ny)]
                         label_envs[label] = [env]
         except TypeError:
             raise YastnError("RectangularUnitcell: pattern labels should be hashable.")

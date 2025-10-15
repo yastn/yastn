@@ -9,48 +9,66 @@ from .._peps import Peps
 from ...fpeps._geometry import Site, Bond
 
 
-def CreateCTMJobBundle(env, n_cores=1):
+def CreateCTMJobBundle(env:EnvCTM, n_cores=1):
 
     Lx = env.psi.geometry.Nx
     Ly = env.psi.geometry.Ny
 
     # ctm_jobs_hor = [[], []]
     ctm_jobs_hor = []
+
+    bonds_h = [Bond(env.canonical_site(bond.site0), env.canonical_site(bond.site1))for bond in env.psi.bonds(dirn="h")]
+    if Bond(Site(0, Ly - 1), Site(0, 0)) in bonds_h:
+        njobs_hor  = Ly
+    else:
+        njobs_hor = Ly - 1
+    Lx_ = int(min(Lx, len(bonds_h) / njobs_hor))
+
     if n_cores >= Ly:
-        njobs_hor  = len(env.psi.bonds(dirn="h")) // Lx
+
         num_of_hor = max(int(np.floor(n_cores / Ly)), 1)
-        for n_bundle in range(0, int(np.ceil(Lx / num_of_hor))):
+        for n_bundle in range(0, int(np.ceil(Lx_ / num_of_hor))):
             ctm_jobs_hor.append([])
-            for nrow in range(n_bundle * num_of_hor, min(Lx, (n_bundle + 1) * num_of_hor)):
-                ctm_jobs_hor[len(ctm_jobs_hor) - 1] += [env.psi.bonds(dirn="h")[nrow + Lx * _ ] for _ in range(0, njobs_hor)]
+            for nrow in range(n_bundle * num_of_hor, min(Lx_, (n_bundle + 1) * num_of_hor)):
+                ctm_jobs_hor[len(ctm_jobs_hor) - 1] += [bonds_h[nrow + Lx_ * _ ] for _ in range(0, njobs_hor)]
                 # ctm_jobs_hor.append([env.psi.bonds(dirn="h")[nrow + _ * njobs_hor] for _ in range(1, njobs_hor, 2)])
     else:
-        njobs_hor  = len(env.psi.bonds(dirn="h")) // Lx
+
         num_of_hor = int(np.ceil(njobs_hor / n_cores))
-        for nrow in range(Lx):
+        for nrow in range(Lx_):
             for jj in range(num_of_hor):
                 ctm_jobs_hor.append([])
-                ctm_jobs_hor[len(ctm_jobs_hor) - 1] += [env.psi.bonds(dirn="h")[nrow + Lx * _ ]
+                ctm_jobs_hor[len(ctm_jobs_hor) - 1] += [bonds_h[nrow + Lx_ * _ ]
                                                         for _ in range(jj * n_cores, min(njobs_hor, (jj + 1) * n_cores))]
                 # ctm_jobs_hor.append([env.psi.bonds(dirn="h")[nrow + _ * njobs_hor] for _ in range(1, njobs_hor, 2)])
 
 
     ctm_jobs_ver = []
+
+    bonds_v = [Bond(env.canonical_site(bond.site0), env.canonical_site(bond.site1))for bond in env.psi.bonds(dirn="v")]
+    if Bond(Site(Lx - 1, 0), Site(0, 0)) in bonds_v:
+        njobs_ver  = Lx
+    elif len(bonds_h) == len(bonds_v):
+        njobs_ver  = Lx
+    else:
+        njobs_ver  = Lx - 1
+    Ly_ = int(min(Ly, len(env.psi.bonds(dirn='v')) / njobs_ver))
+
     if n_cores >= Lx:
-        njobs_ver  = len(env.psi.bonds(dirn="v")) // Ly
+
         num_of_ver = max(int(np.floor(n_cores / Lx)), 1)
-        for n_bundle in range(0, int(np.ceil(Ly / num_of_ver))):
+        for n_bundle in range(0, int(np.ceil(Ly_ / num_of_ver))):
             ctm_jobs_ver.append([])
-            for ncol in range(n_bundle * num_of_ver, min(Ly, (n_bundle + 1) * num_of_ver)):
-                ctm_jobs_ver[len(ctm_jobs_ver) - 1] += [env.psi.bonds(dirn="v")[ncol * njobs_ver + _] for _ in range(0, njobs_ver)]
+            for ncol in range(n_bundle * num_of_ver, min(Ly_, (n_bundle + 1) * num_of_ver)):
+                ctm_jobs_ver[len(ctm_jobs_ver) - 1] += [bonds_v[ncol * njobs_ver + _] for _ in range(0, njobs_ver)]
             # ctm_jobs_ver.append([env.psi.bonds(dirn="v")[ncol * njobs_ver + _] for _ in range(1, njobs_ver, 2)])
     else:
-        njobs_ver = len(env.psi.bonds(dirn="v")) // Ly
+
         num_of_ver = int(np.ceil(njobs_ver / n_cores))
-        for ncol in range(Ly):
+        for ncol in range(Ly_):
             for jj in range(num_of_ver):
                 ctm_jobs_ver.append([])
-                ctm_jobs_ver[len(ctm_jobs_ver) - 1] += [env.psi.bonds(dirn="v")[ncol * njobs_ver + _]
+                ctm_jobs_ver[len(ctm_jobs_ver) - 1] += [bonds_v[ncol * njobs_ver + _]
                                                         for _ in range(jj * n_cores, min(njobs_ver, (jj + 1) * n_cores))]
 
     return [ctm_jobs_ver, ctm_jobs_hor]
@@ -339,10 +357,7 @@ def ParaUpdateCTM_(psi, env, fid, bonds, opts_svd_ctm, cfg, n_cores, parallel_po
     # Update CTMRG
 
     if sites_to_be_updated is None:
-        if dirn in 'htb':
-            sites_to_be_updated = [Site(nx_, ny_) for ny_ in range(env.psi.Ny) for nx_ in range(bonds[0].site0.nx, bonds[-1].site0.nx + 1)]
-        elif dirn in 'vlr':
-            sites_to_be_updated = [Site(nx_, ny_) for nx_ in range(env.psi.Nx)  for ny_ in range(bonds[0].site0.ny, bonds[-1].site0.ny + 1)]
+        sites_to_be_updated = [env.canonical_site(Site(nx_, ny_)) for ny_ in range(bonds[0].site0.ny, bonds[-1].site0.ny + 1) for nx_ in range(bonds[0].site0.nx, bonds[-1].site0.nx + 1)]
 
     jobs.clear()
 
@@ -378,7 +393,6 @@ def ParaUpdateCTM_(psi, env, fid, bonds, opts_svd_ctm, cfg, n_cores, parallel_po
                          env.canonical_site(env.nn_site(site, (1, -1))),
                          env.canonical_site(env.nn_site(site, (1, 1)))])
 
-    # print(proj_dict.keys())
     gathered_result = parallel_pool(UpdateSite(job, cfg, dirn, proj_dict) for job in jobs)
 
     if dirn in 'htb':
@@ -442,10 +456,10 @@ def _ctmrg_(psi, env, fid, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, 
                     for ctm_jobs in ctm_jobs_hor:
                         ParaUpdateCTM_(psi, env, fid, ctm_jobs, opts_svd_ctm, cfg, n_cores=n_cores, parallel_pool=parallel_pool, dirn=dirn)
                 else:
-                    for nrows in range(psi.geometry.Nx):
+                    for nrows in range(len(psi.sites()) // psi.geometry.Ny):
                         proj_dict = {}
                         updated_flag = [False for _ in range(psi.geometry.Ny)]
-                        for irow in range(len(ctm_jobs_hor) // psi.geometry.Nx):
+                        for irow in range(len(ctm_jobs_hor) // (len(psi.sites()) // psi.geometry.Ny)):
                             ctm_jobs = ctm_jobs_hor[nrows * (len(ctm_jobs_hor) // psi.geometry.Nx) + irow]
 
                             sites_to_be_updated = []
@@ -460,7 +474,7 @@ def _ctmrg_(psi, env, fid, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, 
 
                             # the first and the last
 
-                            if irow == (len(ctm_jobs_hor) // psi.geometry.Nx) - 1:
+                            if irow == len(ctm_jobs_hor) // (len(psi.sites()) // psi.geometry.Ny) - 1:
                                 if not updated_flag[0]:
                                     sites_to_be_updated.append(Site(nrows, 0))
                                 if not updated_flag[-1]:
@@ -473,10 +487,10 @@ def _ctmrg_(psi, env, fid, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, 
                     for ctm_jobs in ctm_jobs_ver:
                         ParaUpdateCTM_(psi, env, fid, ctm_jobs, opts_svd_ctm, cfg, n_cores=n_cores, parallel_pool=parallel_pool, dirn=dirn)
                 else:
-                    for ncols in range(psi.geometry.Ny):
+                    for ncols in range(len(psi.sites()) // psi.geometry.Nx):
                         proj_dict = {}
                         updated_flag = [False for _ in range(psi.geometry.Nx)]
-                        for icol in range(len(ctm_jobs_ver) // psi.geometry.Ny):
+                        for icol in range(len(ctm_jobs_ver) // (len(psi.sites()) // psi.geometry.Nx)):
                             ctm_jobs = ctm_jobs_ver[ncols * (len(ctm_jobs_ver) // psi.geometry.Ny) + icol]
 
                             sites_to_be_updated = []
@@ -491,7 +505,7 @@ def _ctmrg_(psi, env, fid, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, 
 
                             # the first and the last
 
-                            if icol == (len(ctm_jobs_ver) // psi.geometry.Ny) - 1:
+                            if icol == len(ctm_jobs_ver) // (len(psi.sites()) // psi.geometry.Nx) - 1:
                                 if not updated_flag[0]:
                                     sites_to_be_updated.append(Site(0, ncols))
                                 if not updated_flag[-1]:
