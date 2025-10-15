@@ -192,6 +192,9 @@ class LegMeta:
 
     def is_fused(self):
         return True
+    
+    def unfuse_leg(self):
+        return self.legs
 
 
 def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, nonnegative=False) -> yastn.Leg:

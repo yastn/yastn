@@ -14,242 +14,105 @@
 # ==============================================================================
 """Support of torch as a data structure used by yastn."""
 from itertools import groupby
+from typing import Sequence, Union
 import numpy as np
 import torch
 
 from .backend_torch import *
-
-import fused_transpose_merge_1d
+import cublocksparse
 
 BACKEND_ID = "torch_cpp"
 
-def transpose_and_merge(data, order, meta_new, meta_mrg, Dsize):
-    return kernel_transpose_and_merge_p2p_v3.apply(data, order, meta_new, meta_mrg, Dsize)
+def kernel_tensordot_bs(
+        a: torch.Tensor, b: torch.Tensor, 
+        NSYM: int,
+        a_struct_t : Sequence[Sequence[int]], # non-zero blocks of a indexed via charges (for product groups, the charges are flattened)
+        a_slices,   # slices of a, i.e. the locations of the non-zero blocks in the 1D tensor a
+        a_t_per_mode : Union[Sequence[Sequence[int]], Sequence[Sequence[Sequence[int]]]] , # list of charges for each leg of a (for product groups, the charges are not flattened)
+        a_D_per_mode : Sequence[Sequence[int]],   # list of Ds for each leg of a
+        nout_a : Sequence[int], nin_a : Sequence[int], # outgoing and contracted legs of a
+        b_struct_t : Sequence[Sequence[int]], # non-zero blocks of a indexed via charges (for product groups, the charges are flattened), 
+        b_slices,   # slices of a, i.e. the locations of the non-zero blocks in the 1D tensor b
+        b_t_per_mode : Union[Sequence[Sequence[int]], Sequence[Sequence[Sequence[int]]]],   # list of charges for each leg of b
+        b_D_per_mode : Sequence[Sequence[int]],   # list of Ds for each leg of b
+        nout_b, nin_b,
+        c_size, c_struct_t,   # non-zero blocks of c indexed via charges
+        c_slices
+    ):
+    dtype = torch.promote_types(a.dtype, a.dtype)
+    if c_size==0:
+        return torch.zeros(c_size, dtype=dtype, device=a.device)
 
+    # Sectors on contracted modes must share extents. Hence, we need to fill sectors (and their extents) 
+    # which are present in only one of the operands.
+    # pre-process _t_per_mode such that each mode (formally) contains all t's
+    
+    # Ts= set()
+    # for l in [a_t_per_mode[i] for i in nin_a]+[b_t_per_mode[j] for j in nin_b]:
+    #     Ts= Ts | set(l)
+    # Ts= sorted(list(Ts))
+    _merge_t = lambda x,y: sorted(list( set(a_t_per_mode[x]) | set( b_t_per_mode[y] )))
 
-class kernel_transpose_and_merge_plain(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, data, order, meta_new, meta_mrg, Dsize):
-        ctx.order = order
-        ctx.meta_new = meta_new
-        ctx.meta_mrg = meta_mrg
-        ctx.D_source = data.numel()
+    # pre-process _D_per_mode
+    filled_a_t_per_mode= [ a_t_per_mode[i] if i in nout_a else _merge_t(i,nin_b[nin_a.index(i)]) for i in range(len(nout_a+nin_a)) ]
+    filled_b_t_per_mode= [ b_t_per_mode[i] if i in nout_b else _merge_t(nin_a[nin_b.index(i)],i) for i in range(len(nout_b+nin_b)) ]
+    filled_c_t_per_mode= [ a_t_per_mode[i] for i in nout_a ] + [ b_t_per_mode[i] for i in nout_b ]
+    filled_a_D_per_mode= [None]*len(nout_a+nin_a)
+    filled_b_D_per_mode= [None]*len(nout_b+nin_b)
+    filled_c_D_per_mode= [None]*len(nout_a+nout_b)
+    for i_c,i in enumerate(nout_a): # fill extents outgoing legs of a
+        filled_c_D_per_mode[i_c]= filled_a_D_per_mode[i]= a_D_per_mode[i]
+    for i_c,i in enumerate(nout_b): # fill extents outgoing legs of b
+        filled_c_D_per_mode[i_c+len(nout_a)]= filled_b_D_per_mode[i]= b_D_per_mode[i]
+    for i_a,i_b in zip(nin_a,nin_b): # fill extents of union of sectors present in contracted legs of a and b
+        _tmp_a= dict(zip(a_t_per_mode[i_a],a_D_per_mode[i_a]))
+        _tmp_b= dict(zip(b_t_per_mode[i_b],b_D_per_mode[i_b]))
+        _tmp= _tmp_a | _tmp_b
+        filled_a_D_per_mode[i_a]= [ _tmp[t] for t in filled_a_t_per_mode[i_a] ]
+        filled_b_D_per_mode[i_b]= [ _tmp[t] for t in filled_b_t_per_mode[i_b] ]
 
-        # meta_new -> list of [(tn, Dn, sln), ...] where
-        #             tn -> effective charge for block in fused tensor
-        #             Dn -> effective shape of block tn in fused tensor
-        #             sln -> slice specifying the location of serialized tn block in 1d data of fused tensor
-        #
-        # meta_mrg -> t1 is effective charge of source block after fusion. I.e. t1==tn, means, that
-        #             this source block will belong to destination block tn
-        #          -> gr: tuple holding description of source data
-        #                 slo -> specifies the location of source block in 1d data
-        #                 Do  -> shape of the source block
-        #                 Dscl-> list of slice data which specifies the location of the "transformed"
-        #                        source block in the destination block tn
-        #                 Drsh-> the shape of the "transformed" source block in the destination block tn
-        #
-        jobs= [ (tn,Dn,sln,t1,list(gr)) for (tn,Dn,sln),(t1,gr) in \
-            zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])) ]
-        # print(f"rank(dest): {len(jobs[0][0])} src: {data.size()} dest: {Dsize}")
-        # for job in jobs:
-        #     print(f"{job[0]} {job[1]} {len(job[4])}")
-        newdata= fused_transpose_merge_1d.tm_forward_plain(data, order, jobs, Dsize)
-        return newdata
+    # TODO for NSYM>1 extra nesting
+    def _blocksparse_coords(struct_t, t_per_mode):
+        return [ [ t_per_mode[i].index( row[i*NSYM:(i+1)*NSYM] ) for i in range(len(t_per_mode)) ] \
+                for row in struct_t ]
 
-    @staticmethod
-    def backward(ctx, data_b):
-        order = ctx.order
-        inv_order= tuple(np.argsort(order))
-        meta_new = ctx.meta_new
-        meta_mrg = ctx.meta_mrg
-        D_source = ctx.D_source
+    # c_t_per_mode, c_D_per_mode can be obtained from per_mode info of a and b
+    c_t_per_mode= [ a_t_per_mode[i] for i in nout_a ] + [ b_t_per_mode[i] for i in nout_b ]
+    c_D_per_mode= [ a_D_per_mode[i] for i in nout_a ] + [ b_D_per_mode[i] for i in nout_b ]
 
-        newdata_b = torch.zeros((D_source,), dtype=data_b.dtype, device=data_b.device)
-        for (tn, Dn, sln), (t1, gr) in zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])):
-            assert tn == t1
-            tmp_b = data_b[slice(*sln)].view(Dn)
-            for (_, slo, Do, Dslc, _) in gr:
-                slcs = tuple(slice(*x) for x in Dslc)
-                inv_Do = tuple(Do[n] for n in order)
-                newdata_b[slice(*slo)].reshape(Do)[:] = tmp_b[slcs].reshape(inv_Do).permute(inv_order)
-        return newdata_b, None, None, None, None
+    # for compliance with PyTorch Custom OPS API
+    # a) as int64 tensors
+    # a_coords = torch.tensor(_blocksparse_coords(a_struct_t, a_t_per_mode), dtype=torch.int64, device=device)
+    # b_coords = torch.tensor(_blocksparse_coords(b_struct_t, b_t_per_mode), dtype=torch.int64, device=device)
+    # c_coords = torch.tensor(_blocksparse_coords(c_struct_t, c_t_per_mode), dtype=torch.int64, device=device)
+    # b) as lists of lists of indices flattened to 1D (which is expected format for cutensor's block-sparse API)
+    a_coords = sum(_blocksparse_coords(a_struct_t, filled_a_t_per_mode), start=[])
+    b_coords = sum(_blocksparse_coords(b_struct_t, filled_b_t_per_mode), start=[])
+    c_coords = sum(_blocksparse_coords(c_struct_t, filled_c_t_per_mode), start=[])
 
+    def _pad_and_convert(D_per_mode):
+        max_len = max(len(sublist) for sublist in D_per_mode)
+        padded_D_per_mode = [list(sublist) + [-1] * (max_len - len(sublist))
+                            for sublist in D_per_mode]
+        return torch.tensor(padded_D_per_mode, dtype=torch.int64, device='cpu')
+    T_a_D_per_mode= _pad_and_convert(filled_a_D_per_mode)
+    T_b_D_per_mode= _pad_and_convert(filled_b_D_per_mode)
+    T_c_D_per_mode= _pad_and_convert(filled_c_D_per_mode)
 
-class kernel_transpose_and_merge_plain_omp(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, data, order, meta_new, meta_mrg, Dsize):
-        ctx.order = order
-        ctx.meta_new = meta_new
-        ctx.meta_mrg = meta_mrg
-        ctx.D_source = data.numel()
+    # offsets & strides
+    _get_strides= lambda D: list(np.cumprod(D[::-1])[::-1][1:])+[1,]
+    a_offsets, a_strides= zip(*((s.slcs[0][0], _get_strides(s.D)) for s in a_slices))
+    b_offsets, b_strides= zip(*((s.slcs[0][0], _get_strides(s.D)) for s in b_slices))
+    c_offsets, c_strides= zip(*((s.slcs[0][0], _get_strides(s.D)) for s in c_slices))
+    # serialize to 1D
+    a_strides= sum(a_strides, start=[])
+    b_strides= sum(b_strides, start=[])
+    c_strides= sum(c_strides, start=[])
 
-        # meta_new -> list of [(tn, Dn, sln), ...] where
-        #             tn -> effective charge for block in fused tensor
-        #             Dn -> effective shape of block tn in fused tensor
-        #             sln -> slice specifying the location of serialized tn block in 1d data of fused tensor
-        #
-        # meta_mrg -> t1 is effective charge of source block after fusion. I.e. t1==tn, means, that
-        #             this source block will belong to destination block tn
-        #          -> gr: tuple holding description of source data
-        #                 slo -> specifies the location of source block in 1d data
-        #                 Do  -> shape of the source block
-        #                 Dscl-> list of slice data which specifies the location of the "transformed"
-        #                        source block in the destination block tn
-        #                 Drsh-> the shape of the "transformed" source block in the destination block tn
-        #
-        jobs= [ (tn,Dn,sln,t1,list(gr)) for (tn,Dn,sln),(t1,gr) in \
-            zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])) ]
-        newdata= fused_transpose_merge_1d.tm_forward_plain_omp(data, order, jobs, Dsize)
-        return newdata
-
-    @staticmethod
-    def backward(ctx, data_b):
-        order = ctx.order
-        inv_order= tuple(np.argsort(order))
-        meta_new = ctx.meta_new
-        meta_mrg = ctx.meta_mrg
-        D_source = ctx.D_source
-
-        newdata_b = torch.zeros((D_source,), dtype=data_b.dtype, device=data_b.device)
-        for (tn, Dn, sln), (t1, gr) in zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])):
-            assert tn == t1
-            tmp_b = data_b[slice(*sln)].view(Dn)
-            for (_, slo, Do, Dslc, _) in gr:
-                slcs = tuple(slice(*x) for x in Dslc)
-                inv_Do = tuple(Do[n] for n in order)
-                newdata_b[slice(*slo)].reshape(Do)[:] = tmp_b[slcs].reshape(inv_Do).permute(inv_order)
-        return newdata_b, None, None, None, None
-
-
-class kernel_transpose_and_merge_p2p_v2(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, data, order, meta_new, meta_mrg, Dsize):
-        ctx.order = order
-        ctx.meta_new = meta_new
-        ctx.meta_mrg = meta_mrg
-        ctx.D_source = data.numel()
-
-        # meta_new -> list of [(tn, Dn, sln), ...] where
-        #             tn -> effective charge for block in fused tensor
-        #             Dn -> effective shape of block tn in fused tensor
-        #             sln -> slice specifying the location of serialized tn block in 1d data of fused tensor
-        #
-        # meta_mrg -> t1 is effective charge of source block after fusion. I.e. t1==tn, means, that
-        #             this source block will belong to destination block tn
-        #          -> gr: tuple holding description of source data
-        #                 slo -> specifies the location of source block in 1d data
-        #                 Do  -> shape of the source block
-        #                 Dscl-> list of slice data which specifies the location of the "transformed"
-        #                        source block in the destination block tn
-        #                 Drsh-> the shape of the "transformed" source block in the destination block tn
-        #
-        jobs= [ (tn,Dn,sln,t1,list(gr)) for (tn,Dn,sln),(t1,gr) in \
-            zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])) ]
-        # for row in jobs:
-        #     print(f"{row[0]} {len(row[4])}")
-        source_inds, dest_inds= fused_transpose_merge_1d.map_source_to_dest_plain_omp_v2(order,meta_new,meta_mrg)
-        newdata= fused_transpose_merge_1d.forward_p2p_v2(data, source_inds, dest_inds, Dsize)
-        return newdata
-
-    @staticmethod
-    def backward(ctx, data_b):
-        order = ctx.order
-        inv_order= tuple(np.argsort(order))
-        meta_new = ctx.meta_new
-        meta_mrg = ctx.meta_mrg
-        D_source = ctx.D_source
-
-        newdata_b = torch.zeros((D_source,), dtype=data_b.dtype, device=data_b.device)
-        for (tn, Dn, sln), (t1, gr) in zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])):
-            assert tn == t1
-            tmp_b = data_b[slice(*sln)].view(Dn)
-            for (_, slo, Do, Dslc, _) in gr:
-                slcs = tuple(slice(*x) for x in Dslc)
-                inv_Do = tuple(Do[n] for n in order)
-                newdata_b[slice(*slo)].reshape(Do)[:] = tmp_b[slcs].reshape(inv_Do).permute(inv_order)
-        return newdata_b, None, None, None, None
-
-
-class kernel_transpose_and_merge_p2p_v3(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, data, order, meta_new, meta_mrg, Dsize):
-        # ctx.order = order
-        # ctx.meta_new = meta_new
-        # ctx.meta_mrg = meta_mrg
-        ctx.D_source = data.numel()
-
-        # meta_new -> list of [(tn, Dn, sln), ...] where
-        #             tn -> effective charge for block in fused tensor
-        #             Dn -> effective shape of block tn in fused tensor
-        #             sln -> slice specifying the location of serialized tn block in 1d data of fused tensor
-        #
-        # meta_mrg -> t1 is effective charge of source block after fusion. I.e. t1==tn, means, that
-        #             this source block will belong to destination block tn
-        #          -> gr: tuple holding description of source data
-        #                 slo -> specifies the location of source block in 1d data
-        #                 Do  -> shape of the source block
-        #                 Dscl-> list of slice data which specifies the location of the "transformed"
-        #                        source block in the destination block tn
-        #                 Drsh-> the shape of the "transformed" source block in the destination block tn
-        #
-        source_inds, dest_inds= fused_transpose_merge_1d.map_source_to_dest_v3(data, order, meta_new, meta_mrg)
-        ctx.save_for_backward(source_inds, dest_inds)
-        newdata= torch.zeros(Dsize,dtype=data.dtype, device=data.device,
-            requires_grad=data.requires_grad)
-        newdata[dest_inds]= data[source_inds]
-        return newdata
-
-    @staticmethod
-    def backward(ctx, data_b):
-        # order = ctx.order
-        # inv_order= tuple(np.argsort(order))
-        # meta_new = ctx.meta_new
-        # meta_mrg = ctx.meta_mrg
-        D_source = ctx.D_source
-        source_inds, dest_inds = ctx.saved_tensors
-
-        newdata_b = torch.zeros((D_source,), dtype=data_b.dtype, device=data_b.device)
-        # for (tn, Dn, sln), (t1, gr) in zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])):
-        #     assert tn == t1
-        #     tmp_b = data_b[slice(*sln)].view(Dn)
-        #     for (_, slo, Do, Dslc, _) in gr:
-        #         slcs = tuple(slice(*x) for x in Dslc)
-        #         inv_Do = tuple(Do[n] for n in order)
-        #         newdata_b[slice(*slo)].reshape(Do)[:] = tmp_b[slcs].reshape(inv_Do).permute(inv_order)
-        newdata_b[source_inds]= data_b[dest_inds]
-        return newdata_b, None, None, None, None
-
-
-def unmerge(data, meta):
-    return kernel_unmerge_ptp.apply(data, meta)
-
-class kernel_unmerge_ptp(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, data, meta):
-        Dsize = data.size()
-        # ctx.meta = meta
-        ctx.fwd_data_size = Dsize
-        # sln -> slice in dest tensor, specifying location of unfused block
-        # Dn  -> shape of the unfused block
-        # slo -> slice in source tensor, specifying location of t_effective(fused) block
-        # Do  -> shape of the fused block with t_eff
-        # sub_slc -> sub-block within block Do
-        source_inds= fused_transpose_merge_1d.map_source_to_dest_unmerge(Dsize[0], meta)
-        ctx.save_for_backward(source_inds)
-
-        newdata= data[source_inds]
-        return newdata
-
-    @staticmethod
-    def backward(ctx, data_b):
-        # meta = ctx.meta
-        fwd_data_size = ctx.fwd_data_size
-        # no zero blocks should be introduces here
-        newdata_b = torch.empty(fwd_data_size, dtype=data_b.dtype, device=data_b.device)
-        # for sln, Dn, slo, Do, sub_slc in meta:
-        #     slcs = tuple(slice(*x) for x in sub_slc)
-        #     newdata_b[slice(*slo)].view(Do)[slcs] = data_b[slice(*sln)].view(Dn)
-        source_inds = ctx.saved_tensors
-        newdata_b[source_inds]= data_b
-        return newdata_b, None, None, None
+    # import pdb; pdb.set_trace()  # DEBUG
+    return cublocksparse.ops.tensordot_bs(
+            a, b, 
+            a_coords, a_offsets, a_strides, T_a_D_per_mode, nout_a, nin_a,
+            b_coords, b_offsets, b_strides, T_b_D_per_mode, nout_b, nin_b,
+            c_size, c_coords, c_offsets, c_strides, T_c_D_per_mode
+        )

@@ -110,8 +110,11 @@ def make_config(**kwargs) -> NamedTuple:
     elif kwargs["backend"] == 'torch':
         from .backend import backend_torch
         kwargs["backend"] = backend_torch
+    elif kwargs["backend"] == 'torch_cpp':
+        from .backend import backend_torch_cpp
+        kwargs["backend"] = backend_torch_cpp
     elif isinstance(kwargs["backend"], str):
-        raise YastnError("backend encoded as string only supports: 'np', 'torch'")
+        raise YastnError("backend encoded as string only supports: 'np', 'torch', 'torch_cpp'")
 
     if "sym" not in kwargs:
         kwargs["sym"] = sym_none
