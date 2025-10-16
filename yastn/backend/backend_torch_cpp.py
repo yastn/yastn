@@ -73,8 +73,12 @@ def kernel_tensordot_bs(
 
     # TODO for NSYM>1 extra nesting
     def _blocksparse_coords(struct_t, t_per_mode):
-        return [ [ t_per_mode[i].index( row[i*NSYM:(i+1)*NSYM] ) for i in range(len(t_per_mode)) ] \
+        if NSYM>0:
+            return [ [ t_per_mode[i].index( row[i*NSYM:(i+1)*NSYM] ) for i in range(len(t_per_mode)) ] \
                 for row in struct_t ]
+        return [ [ t_per_mode[i].index( (row[i],) ) for i in range(len(t_per_mode)) ] \
+                for row in struct_t ]
+
 
     # c_t_per_mode, c_D_per_mode can be obtained from per_mode info of a and b
     c_t_per_mode= [ a_t_per_mode[i] for i in nout_a ] + [ b_t_per_mode[i] for i in nout_b ]
