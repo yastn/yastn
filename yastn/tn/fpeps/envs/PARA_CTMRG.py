@@ -384,7 +384,7 @@ def ParaUpdateCTM_(psi, env, fid, bonds, opts_svd_ctm, cfg, n_cores, parallel_po
                          env.canonical_site(env.nn_site(site, (1, -1))),
                          env.canonical_site(env.nn_site(site, (1, 1)))])
 
-    gathered_result = parallel_pool(UpdateSite(job, cfg, dirn, proj_dict) for job in jobs)
+    updated_ctm_tensors = parallel_pool(UpdateSite(job, cfg, dirn, proj_dict) for job in jobs)
 
     if dirn in 'htb':
         for site in sites_to_be_updated[1:-1]:
@@ -412,7 +412,7 @@ def ParaUpdateCTM_(psi, env, fid, bonds, opts_svd_ctm, cfg, n_cores, parallel_po
                     proj_dict.pop((env.canonical_site(env.nn_site(site, (0, -1))), 'hlb'))
 
     ii = 0
-    for result in gathered_result:
+    for result in updated_ctm_tensors:
         site_ = sites_to_be_updated[ii]
         if dirn in "ht":
             env[site_].t = yastn.load_from_dict(config=cfg, d = result[0])
@@ -447,10 +447,10 @@ def _ctmrg_(psi, env, fid, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, 
                     for ctm_jobs in ctm_jobs_hor:
                         ParaUpdateCTM_(psi, env, fid, ctm_jobs, opts_svd_ctm, cfg, n_cores=n_cores, parallel_pool=parallel_pool, dirn=dirn)
                 else:
-                    for nrows in range(psi.geometry.Nx):
+                    for nrows in range(len(psi.sites()) // psi.geometry.Ny):
                         proj_dict = {}
                         updated_flag = [False for _ in range(psi.geometry.Ny)]
-                        for irow in range(len(ctm_jobs_hor) // psi.geometry.Nx):
+                        for irow in range(len(ctm_jobs_hor) // (len(psi.sites()) // psi.geometry.Ny)):
                             ctm_jobs = ctm_jobs_hor[nrows * (len(ctm_jobs_hor) // psi.geometry.Nx) + irow]
 
                             sites_to_be_updated = []
@@ -465,7 +465,7 @@ def _ctmrg_(psi, env, fid, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, 
 
                             # the first and the last
 
-                            if irow == (len(ctm_jobs_hor) // psi.geometry.Nx) - 1:
+                            if irow == len(ctm_jobs_hor) // (len(psi.sites()) // psi.geometry.Ny) - 1:
                                 if not updated_flag[0]:
                                     sites_to_be_updated.append(Site(nrows, 0))
                                 if not updated_flag[-1]:
@@ -478,10 +478,10 @@ def _ctmrg_(psi, env, fid, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, 
                     for ctm_jobs in ctm_jobs_ver:
                         ParaUpdateCTM_(psi, env, fid, ctm_jobs, opts_svd_ctm, cfg, n_cores=n_cores, parallel_pool=parallel_pool, dirn=dirn)
                 else:
-                    for ncols in range(psi.geometry.Ny):
+                    for ncols in range(len(psi.sites()) // psi.geometry.Nx):
                         proj_dict = {}
                         updated_flag = [False for _ in range(psi.geometry.Nx)]
-                        for icol in range(len(ctm_jobs_ver) // psi.geometry.Ny):
+                        for icol in range(len(ctm_jobs_ver) // (len(psi.sites()) // psi.geometry.Nx)):
                             ctm_jobs = ctm_jobs_ver[ncols * (len(ctm_jobs_ver) // psi.geometry.Ny) + icol]
 
                             sites_to_be_updated = []
@@ -496,7 +496,7 @@ def _ctmrg_(psi, env, fid, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, 
 
                             # the first and the last
 
-                            if icol == (len(ctm_jobs_ver) // psi.geometry.Ny) - 1:
+                            if icol == len(ctm_jobs_ver) // (len(psi.sites()) // psi.geometry.Nx) - 1:
                                 if not updated_flag[0]:
                                     sites_to_be_updated.append(Site(0, ncols))
                                 if not updated_flag[-1]:
