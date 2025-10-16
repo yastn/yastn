@@ -64,7 +64,7 @@ jobs:
       # Run tests
       - name: tests
         run: |
-          pytest -v;
+          pytest -v --ignore ./experimental;
           pytest -v --tensordot_policy fuse_contracted ./tests/tensor;
           pytest -v --tensordot_policy no_fusion ./tests/tensor;
   
@@ -115,6 +115,7 @@ jobs:
           pytest -v --backend torch --tensordot_policy fuse_contracted ./tests/tensor;
           pytest -v --backend torch --tensordot_policy no_fusion ./tests/tensor;
           pytest -v --backend torch ./tests/peps
+
 
   deploy-docs:
     if: contains(fromJson('["refs/heads/master","refs/heads/docs"]'), github.ref)

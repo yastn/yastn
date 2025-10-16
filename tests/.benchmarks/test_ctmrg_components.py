@@ -21,7 +21,7 @@ import yastn
 from yastn.backend import backend_torch
 from yastn.backend import backend_np
 import yastn.tn.fpeps as fpeps
-from yastn.tn.fpeps import Peps, RectangularUnitcell
+from yastn.tn.fpeps import Peps, Peps2Layers, RectangularUnitcell
 
 tol = 1e-12  #pylint: disable=invalid-name
 
@@ -130,8 +130,7 @@ def test_enlarged_corner_U1(config_kwargs):
     b= a.clone()
     b.config= config
     psi2= Peps(geometry, tensors=dict(zip(geometry.sites(), [b, ])))
-    env2.psi.ket= psi2
-    env2.psi.bra= psi2
+    env2.psi= Peps2Layers(psi2)
     for t in "tl", "tr", "bl", "br", "t", "l", "r", "b":
         setattr(getattr(env2[0,0],t),"config",config)
     # import pdb; pdb.set_trace()
