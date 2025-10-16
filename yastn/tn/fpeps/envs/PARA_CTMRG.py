@@ -34,18 +34,18 @@ def CreateCTMJobBundle(env:EnvCTM, n_cores=1):
         for nrow in range(Lx_):
             for jj in range(num_of_hor):
                 ctm_jobs_hor.append([])
-                ctm_jobs_hor[len(ctm_jobs_hor) - 1] += [env.psi.bonds(dirn="h")[nrow + Lx_ * _ ]
+                ctm_jobs_hor[len(ctm_jobs_hor) - 1] += [bonds_h[nrow + Lx_ * _ ]
                                                         for _ in range(jj * n_cores, min(njobs_hor, (jj + 1) * n_cores))]
                 # ctm_jobs_hor.append([env.psi.bonds(dirn="h")[nrow + _ * njobs_hor] for _ in range(1, njobs_hor, 2)])
 
 
     ctm_jobs_ver = []
-    bonds_v = [Bond(env.canonical_site(bond.site0), env.canonical_site(bond.site1))for bond in env.psi.bonds(dirn="v")]
+    bonds_v = [Bond(env.canonical_site(bond.site0), env.canonical_site(bond.site1)) for bond in env.psi.bonds(dirn="v")]
     if Bond(env.canonical_site(Site(Lx - 1, 0)), env.canonical_site(Site(0, 0))) in bonds_v:
         njobs_ver  = Lx
     else:
         njobs_ver  = Lx - 1
-    Ly_ = int(min(Ly, len(env.psi.bonds(dirn='v')) / njobs_ver))
+    Ly_ = int(min(Ly, len(bonds_v) / njobs_ver))
     if n_cores >= Lx:
         num_of_ver = max(int(np.floor(n_cores / Lx)), 1)
         for n_bundle in range(0, int(np.ceil(Ly_ / num_of_ver))):
