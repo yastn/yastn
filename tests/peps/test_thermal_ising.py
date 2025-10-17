@@ -81,7 +81,7 @@ def Ising(D, chi, dbeta, ntu_environment):
 if __name__== '__main__':
     logging.basicConfig(level='INFO')
     parser = argparse.ArgumentParser()
-    parser.add_argument("-D", type=int, default=6)
+    parser.add_argument("-D", type=int, default=5)
     parser.add_argument("-DBETA", type=float, default=0.01)
     parser.add_argument("-NTUEnvironment", default='NN+')
     parser.add_argument("-X", type=int, default=25)
