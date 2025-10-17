@@ -1278,6 +1278,7 @@ def update_projectors_(env, site, move, opts_svd, **kwargs):
     if None in sites:
         return
     method = kwargs.get('method', '2site')
+
     # if method == '2site':
     #     return update_2site_projectors_(proj, *sites, move, env, opts_svd, **kwargs)
     if method == '1site':
@@ -1736,6 +1737,8 @@ def proj_corners(r0, r1, opts_svd, **kwargs):
         opts_svd['mask_f'] = kwargs['truncation_f']
     opts_svd['fix_signs'] = opts_svd.get('fix_signs', True)
     verbosity = opts_svd.get('verbosity', 0)
+    # only verbosity from opts_svd is to be passed down to svd_with_truncation 
+    kwargs.pop('verbosity', None)
 
     u, s, v = rr.svd_with_truncation(axes=(0, 1), sU=r0.s[1], **opts_svd, **kwargs)
 
