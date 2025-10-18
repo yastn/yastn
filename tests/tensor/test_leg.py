@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 """ Test: yastn.Leg, get_legs() """
+import numpy as np
 import pytest
 import yastn
 
@@ -58,34 +59,60 @@ def test_leg(config_kwargs):
     assert leg1u == leg1
 
 
-def test_random_leg(config_kwargs):
+def check_gaussian_distribution(leg, nc, sigma, D_total):
+    assert sum(leg.D) == D_total
+    ref = [np.exp((t[0] - nc) ** 2 / (-2 * sigma ** 2)) for t in leg.t]
+    ref = np.array(ref) / sum(ref)
+    dis = np.array(leg.D) / D_total
+    assert np.linalg.norm(ref - dis) < 0.1
+
+
+def test_gaussian_leg(config_kwargs):
     #
     config_Z3 = yastn.make_config(sym='Z3', **config_kwargs)
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     #
-    leg = yastn.random_leg(config_U1, n=0, s=1, D_total=1024)
-    assert sum(leg.D) == 1024 and sum(t[0] * D for t, D in zip(leg.t, leg.D)) / 1024 < 0.2
-    leg = yastn.random_leg(config_U1, s=1, D_total=1024)
-    assert sum(leg.D) == 1024 and sum(t[0] * D for t, D in zip(leg.t, leg.D)) / 1024 < 0.2
-    leg = yastn.random_leg(config_U1, n=1, s=1, D_total=1024)
-    assert sum(leg.D) == 1024 and sum((t[0] - 1) * D for t, D in zip(leg.t, leg.D)) / 1024 < 0.2
-    leg = yastn.random_leg(config_U1, s=1, n=0, D_total=1024, nonnegative=True)
-    assert sum(leg.D) == 1024 and all(t[0] >= 0 for t in leg.t)
-    leg = yastn.random_leg(config_Z3, s=1, n=2, D_total=1024)
-    assert sum(leg.D) == 1024 and leg.t == ((0,), (1,), (2,))
-    with pytest.raises(yastn.YastnError):
-        yastn.random_leg(config_U1, n=(0, 0), D_total=1024)
-        # len(n) is not consistent with provided symmetry.
-
-    leg0 = yastn.Leg(config_U1, s=-1, t=(0, 1), D=(1, 1))
-    # limit charges on random leg, to be consistent with provided legs (e.g. for creation of a tensor with 3 legs)
-    leg = yastn.random_leg(config_U1, s=1, n=0, D_total=1024, legs=[leg0, leg0])
-    assert sum(leg.D) == 1024 and leg.t == ((0,), (1,), (2,))
-    leg = yastn.random_leg(config_U1, s=1, n=0, D_total=1024, legs=[leg0.conj(), leg0])
-    assert sum(leg.D) == 1024 and leg.t == ((-1,), (0,), (1,))
-
-    leg_dense = yastn.random_leg(yastn.make_config(), s=1, D_total=10)
-    assert leg_dense.D == (10,) and leg_dense.t == ((),)
+    for D_total in [1024, 2043]:
+        for method in ['round', 'rand']:
+            for sigma in [1, 2]:
+                leg = yastn.gaussian_leg(config_U1, n=0, s=1, D_total=D_total, sigma=sigma, method=method)
+                check_gaussian_distribution(leg, nc=0, sigma=sigma, D_total=D_total)
+                #
+                leg = yastn.gaussian_leg(config_U1, s=1, D_total=D_total, sigma=sigma, method=method)
+                check_gaussian_distribution(leg, nc=0, sigma=sigma, D_total=D_total)
+                #
+                leg = yastn.gaussian_leg(config_U1, n=1, s=1, D_total=D_total, sigma=sigma, method=method)
+                check_gaussian_distribution(leg, nc=1, sigma=sigma, D_total=D_total)
+                #
+                leg = yastn.gaussian_leg(config_U1, s=1, n=0, D_total=D_total, sigma=sigma, nonnegative=True, method=method)
+                check_gaussian_distribution(leg, nc=0, sigma=sigma, D_total=D_total)
+                assert all(t[0] >= 0 for t in leg.t)
+                #
+                leg = yastn.gaussian_leg(config_U1, s=1, n=2.5, D_total=D_total, sigma=sigma, nonnegative=True, method=method)
+                check_gaussian_distribution(leg, nc=2.5, sigma=sigma, D_total=D_total)
+                assert all(t[0] >= 0 for t in leg.t)
+                #
+                leg = yastn.gaussian_leg(config_Z3, s=1, n=2, D_total=D_total, sigma=sigma, method=method)
+                check_gaussian_distribution(leg, nc=2, sigma=sigma, D_total=D_total)
+                assert leg.t == ((0,), (1,), (2,))
+                #
+                with pytest.raises(yastn.YastnError):
+                    yastn.gaussian_leg(config_U1, n=(0, 0), D_total=D_total)
+                    # len(n) is not consistent with provided symmetry.
+                #
+                leg0 = yastn.Leg(config_U1, s=-1, t=(0, 1), D=(1, 1))
+                # limit charges on random leg, to be consistent with provided legs (e.g. for creation of a tensor with 3 legs)
+                leg = yastn.gaussian_leg(config_U1, s=1, n=0, D_total=D_total, legs=[leg0, leg0], sigma=sigma, method=method)
+                check_gaussian_distribution(leg, nc=0, sigma=sigma, D_total=D_total)
+                assert leg.t == ((0,), (1,), (2,))
+                #
+                leg = yastn.gaussian_leg(config_U1, s=1, n=1.5, D_total=D_total, legs=[leg0.conj(), leg0], sigma=sigma, method=method)
+                check_gaussian_distribution(leg, nc=1.5, sigma=sigma, D_total=D_total)
+                assert leg.t == ((-1,), (0,), (1,))
+                #
+                config_dense = yastn.make_config()
+                leg_dense = yastn.gaussian_leg(config_dense, s=1, D_total=D_total, sigma=sigma, method=method)
+                assert leg_dense.D == (D_total,) and leg_dense.t == ((),)
 
 
 def test_leg_meta_fusion(config_kwargs):

@@ -14,7 +14,7 @@
 # ==============================================================================
 from __future__ import annotations
 import numpy as np
-from ... import rand, Leg, random_leg, YastnError
+from ... import rand, Leg, gaussian_leg, YastnError
 from ... import load_from_dict as load_from_dict_tensor
 from ... import load_from_hdf5 as load_from_hdf5_tensor
 from ._mps_obc import Mpo, Mps, MpsMpoOBC
@@ -107,7 +107,7 @@ def _product_MpsMpoOBC(vectors, N=None, nr_phys=1) -> MpsMpoOBC:
     return psi
 
 
-def random_mps(I, n=None, D_total=8, sigma=1, dtype='float64') -> MpsMpoOBC:
+def random_mps(I, n=None, D_total=8, sigma=1, dtype='float64', method='round') -> MpsMpoOBC:
     r"""
     Generate a random MPS of total charge ``n`` and bond dimension ``D_total``.
 
@@ -131,6 +131,8 @@ def random_mps(I, n=None, D_total=8, sigma=1, dtype='float64') -> MpsMpoOBC:
         The standard deviation of the normal distribution.
     dtype: string
         Number format, i.e., ``'float64'`` or ``'complex128'``
+    method: str
+        Passed to :meth:`yastn.gaussian_leg`.
 
     Example
     -------
@@ -165,7 +167,7 @@ def random_mps(I, n=None, D_total=8, sigma=1, dtype='float64') -> MpsMpoOBC:
         lp = I[site].get_legs(axes=1)  # ket leg of MPS/MPO
         nl = n_profile[site]  # mean n changes linearly along the chain
         if site != psi.first:
-            ll = random_leg(config, s=-1, n=nl, D_total=D_total, sigma=sigma, legs=[lp, lr])
+            ll = gaussian_leg(config, s=-1, n=nl, D_total=D_total, sigma=sigma, legs=[lp, lr], method=method)
         else:
             ll = Leg(config, s=-1, t=(nl,), D=(1,))
         psi.A[site] = rand(config, legs=[ll, lp, lr], dtype=dtype)
@@ -175,7 +177,7 @@ def random_mps(I, n=None, D_total=8, sigma=1, dtype='float64') -> MpsMpoOBC:
     raise YastnError("MPS: Random mps is a zero state. Check parameters, or try running again in this is due to randomness of the initialization. ")
 
 
-def random_mpo(I, D_total=8, sigma=1, dtype='float64') -> MpsMpoOBC:
+def random_mpo(I, D_total=8, sigma=1, dtype='float64', method='round') -> MpsMpoOBC:
     r"""
     Generate a random MPO with bond dimension ``D_total``.
 
@@ -196,6 +198,8 @@ def random_mpo(I, D_total=8, sigma=1, dtype='float64') -> MpsMpoOBC:
         from which dimensions of charge sectors are drawn.
     dtype: string
         number format, i.e., ``'float64'`` or ``'complex128'``
+    method: str
+        Passed to :meth:`yastn.gaussian_leg`.
     """
     config = I.config
     n0 = config.sym.zero()
@@ -206,7 +210,7 @@ def random_mpo(I, D_total=8, sigma=1, dtype='float64') -> MpsMpoOBC:
         lp = I[site].get_legs(axes=1)
         lpc = I[site].get_legs(axes=3) if I[site].ndim == 4 else lp.conj()
         if site != psi.first:
-            ll = random_leg(config, s=-1, n=n0, D_total=D_total, sigma=sigma, legs=[lp, lr, lpc])
+            ll = gaussian_leg(config, s=-1, n=n0, D_total=D_total, sigma=sigma, legs=[lp, lr, lpc], method=method)
         else:
             ll = Leg(config, s=-1, t=(n0,), D=(1,),)
         psi.A[site] = rand(config, legs=[ll, lp, lr, lpc], dtype=dtype)

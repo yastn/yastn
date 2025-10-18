@@ -231,7 +231,7 @@ def test_generate_random_mps(config_kwargs):
         ops = yastn.operators.SpinfulFermions(sym='U1xU1', **config_kwargs)
         ops.random_seed(seed=0)  # fix seed
         I = mps.product_mpo(ops.I(), 100)  # identity MPS
-        mps.random_mpo(I, D_total=1, sigma=4)
+        mps.random_mpo(I, D_total=1, sigma=4, method='rand')
         # Random mpo is a zero state. Check parameters,
         # or try running again in this is due to randomness of the initialization.
 
