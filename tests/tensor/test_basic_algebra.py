@@ -218,7 +218,7 @@ def test_algebra_fuse_hard(config_kwargs):
     b = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1, 1),
                 t=(t2, t2, t3, t3, t1, t1), D=(Db, Dc, Da, Dc, Da, Db))
     algebra_hf(lambda x, y: x / 0.5 + y * 3, a, b, hf_axes1=((0, 1), (2, 3), (4, 5)))
-    b.set_block(ts=(2, 2, 1, -2, -3, 0), Ds=(4, 6, 1, 1, 1, 3), val='rand')
+    b.set_block(ts=(2, 2, 1, -2, -3, 0), Ds=(4, 6, 1, 1, 1, 3), val='normal')
     algebra_hf(lambda x, y: x - 3 * y, a, b, hf_axes1=((0, 1), (2, 3), (4, 5)))
 
     # Z2xU1 with 4 legs
@@ -230,8 +230,8 @@ def test_algebra_fuse_hard(config_kwargs):
 
     algebra_hf(lambda x, y: x / 0.5 + y * 3, a, b.conj())
 
-    a.set_block(ts=((1, 2), (1, 2), (1, 2), (1, 2)), Ds=(6, 6, 6, 6), val='rand')
-    a.set_block(ts=((1, -1), (1, -1), (1, -1), (1, -1)), Ds=(3, 3, 3, 3), val='rand')
+    a.set_block(ts=((1, 2), (1, 2), (1, 2), (1, 2)), Ds=(6, 6, 6, 6), val='normal')
+    a.set_block(ts=((1, -1), (1, -1), (1, -1), (1, -1)), Ds=(3, 3, 3, 3), val='normal')
     algebra_hf(lambda x, y: x - y ** 3, a.conj(), b)
 
 
@@ -289,9 +289,9 @@ def test_algebra_exceptions(config_kwargs):
                        match="Bond dimensions related to some charge are not consistent."):
         # Here, individual blocks between a na b are consistent, but cannot form consistent sum.
         a = yastn.Tensor(config=config_U1, s=(1, -1, 1, -1))
-        a.set_block(ts=(1, 1, 0, 0), Ds=(2, 2, 1, 1), val='rand')
+        a.set_block(ts=(1, 1, 0, 0), Ds=(2, 2, 1, 1), val='normal')
         b = yastn.Tensor(config=config_U1, s=(1, -1, 1, -1))
-        b.set_block(ts=(1, 1, 1, 1), Ds=(1, 1, 1, 1), val='rand')
+        b.set_block(ts=(1, 1, 1, 1), Ds=(1, 1, 1, 1), val='normal')
         _ = a + b
     with pytest.raises(yastn.YastnError,
                        match="Indicated axes of two tensors have different number of meta-fused legs or sub-fusions order."):
@@ -324,9 +324,9 @@ def test_hf_union_exceptions(config_kwargs):
     leg3 = yastn.Leg(config_U1, s=1, t=(-2, 0, 2), D=(2, 5, 2))
     with pytest.raises(yastn.YastnError):
         a = yastn.Tensor(config=config_U1, s=(1, -1, 1, -1))
-        a.set_block(ts=(1, 1, 0, 0), Ds=(2, 2, 1, 1), val='rand')
+        a.set_block(ts=(1, 1, 0, 0), Ds=(2, 2, 1, 1), val='normal')
         b = yastn.Tensor(config=config_U1, s=(1, -1, 1, -1))
-        b.set_block(ts=(1, 1, 1, 1), Ds=(1, 1, 1, 1), val='rand')
+        b.set_block(ts=(1, 1, 1, 1), Ds=(1, 1, 1, 1), val='normal')
         a = a.fuse_legs(axes=[(0, 1, 2, 3)], mode='hard')
         b = b.fuse_legs(axes=[(0, 1, 2, 3)], mode='hard')
         _ = a + b

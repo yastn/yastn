@@ -65,6 +65,30 @@ def test_initialize_dense(config_kwargs):
     assert a.is_consistent()
     assert np.linalg.norm(np.diag(np.diag(npa)) - npa) < tol  # == 0.0
 
+    # rand options
+    D = 1000
+    c = yastn.rand(config=config_dense, s=1, D=D).to_numpy()
+    assert sum(c > 0) > 0.45 * D and sum(c < 0) > 0.45 * D
+    #
+    c = yastn.rand(config=config_dense, lim=(0, 1), s=1, D=D).to_numpy()
+    assert sum(c >= 0) == D and sum(c <= 1) == D
+    #
+    c = yastn.rand(config=config_dense, lim='normal', s=1, D=D).to_numpy()
+    assert sum(c < 1) > 0.80 * D and sum(c > 1) > 0.12 * D
+    #
+    c = yastn.rand(config=config_dense, s=1, D=D, dtype='complex128').to_numpy()
+    assert sum(c.imag > 0) > 0.45 * D and sum(c.imag < 0) > 0.45 * D
+    assert sum(c.real > 0) > 0.45 * D and sum(c.real < 0) > 0.45 * D
+    #
+    c = yastn.rand(config=config_dense, lim=(0, 1), s=1, D=D, dtype='complex128').to_numpy()
+    assert sum(c.imag >= 0) == D and sum(c.imag <= 1) == D
+    assert sum(c.real >= 0) == D and sum(c.real <= 1) == D
+    #
+    c = yastn.rand(config=config_dense, lim='normal', s=1, D=D, dtype='complex128').to_numpy()
+    assert sum(c.imag < np.sqrt(0.5)) > 0.80 * D and sum(c.imag > np.sqrt(0.5)) > 0.12 * D
+    assert sum(c.real < np.sqrt(0.5)) > 0.80 * D and sum(c.real > np.sqrt(0.5)) > 0.12 * D
+
+
 
 def test_initialize_U1(config_kwargs):
     """ initialization of tensor with U1 symmetry """

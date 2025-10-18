@@ -149,23 +149,25 @@ def random_mps(I, n=None, D_total=8, sigma=1, dtype='float64') -> MpsMpoOBC:
     """
     if n is None:
         n = I.config.sym.zero()
+
     try:
         n = tuple(n)
     except TypeError:
         n = (n,)
     an = np.array(n, dtype=np.int64)
+    n_profile = [tuple(an * (I.N - site) / I.N) for site in range(I.N + 1)]
 
     psi = Mps(I.N)
     config = I.config
 
-    lr = Leg(config, s=1, t=(tuple(an * 0),), D=(1,),)
+    lr = Leg(config, s=1, t=(n_profile[I.N],), D=(1,))
     for site in psi.sweep(to='first'):
         lp = I[site].get_legs(axes=1)  # ket leg of MPS/MPO
-        nl = tuple(an * (I.N - site) / I.N)  # mean n changes linearly along the chain
+        nl = n_profile[site]  # mean n changes linearly along the chain
         if site != psi.first:
             ll = random_leg(config, s=-1, n=nl, D_total=D_total, sigma=sigma, legs=[lp, lr])
         else:
-            ll = Leg(config, s=-1, t=(n,), D=(1,),)
+            ll = Leg(config, s=-1, t=(nl,), D=(1,))
         psi.A[site] = rand(config, legs=[ll, lp, lr], dtype=dtype)
         lr = psi.A[site].get_legs(axes=0).conj()
     if sum(lr.D) == 1:

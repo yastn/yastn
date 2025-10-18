@@ -263,8 +263,7 @@ def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, nonnegative=F
 
     Ds = np.zeros(len(ts), dtype=np.int64)
     cdf = np.add.accumulate(pd).reshape(1, -1)
-    # backend.rand gives distribution in [-1, 1]; subjected to backend seed fixing
-    samples = (config.backend.rand(D_total, dtype='float64') + 1.) / 2.
+    samples = config.backend.rand(D_total, dtype='float64')  # in [0, 1]
     samples = np.array(samples).reshape(D_total, 1)
     inds = np.sum(samples > cdf, axis=1, dtype=np.int64)
     for i in inds:
