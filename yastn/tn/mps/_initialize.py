@@ -107,7 +107,7 @@ def _product_MpsMpoOBC(vectors, N=None, nr_phys=1) -> MpsMpoOBC:
     return psi
 
 
-def random_mps(I, n=None, D_total=8, sigma=1, lim=(-1, 1), dtype='float64', **kwargs) -> MpsMpoOBC:
+def random_mps(I, n=None, D_total=8, sigma=1, distribution=(-1, 1), dtype='float64', **kwargs) -> MpsMpoOBC:
     r"""
     Generate a random MPS of total charge ``n`` and bond dimension ``D_total``.
 
@@ -130,7 +130,7 @@ def random_mps(I, n=None, D_total=8, sigma=1, lim=(-1, 1), dtype='float64', **kw
         the desired total bond dimension might not be reached on some bonds, in particular, for higher symmetries.
     sigma: int
         The standard deviation of the normal distribution.
-    lim: tuple[float, float] | str
+    distribution: tuple[float, float] | str
         Passed to :meth:`yastn.rand`. Range of random numbers, or a string 'normal' for normal distribution.
         The default is (-1, 1).
     dtype: str
@@ -192,14 +192,14 @@ def random_mps(I, n=None, D_total=8, sigma=1, lim=(-1, 1), dtype='float64', **kw
             ll = gaussian_leg(config, s=-1, n=nl, D_total=D_total, sigma=sigma, legs=[lp, lr], **kwargs)
         else:
             ll = Leg(config, s=-1, t=(n0,), D=(1,))
-        psi.A[site] = rand(config, lim=lim, legs=[ll, lp, lr], dtype=dtype)
+        psi.A[site] = rand(config, distribution=distribution, legs=[ll, lp, lr], dtype=dtype)
         lr = psi.A[site].get_legs(axes=0).conj()
     if sum(lr.D) == 1:
         return psi
     raise YastnError("Random mps is a zero state. Check parameters, or try running again in this is due to randomness of the initialization.")
 
 
-def random_mpo(I, D_total=8, sigma=1, lim=(-1, 1), dtype='float64', **kwargs) -> MpsMpoOBC:
+def random_mpo(I, D_total=8, sigma=1, distribution=(-1, 1), dtype='float64', **kwargs) -> MpsMpoOBC:
     r"""
     Generate a random MPO with bond dimension ``D_total``.
 
@@ -217,7 +217,7 @@ def random_mpo(I, D_total=8, sigma=1, lim=(-1, 1), dtype='float64', **kwargs) ->
         in particular, for higher symmetries.
     sigma: int
         Standard deviation of a normal distribution from which dimensions of charge sectors are drawn.
-    lim: tuple[float, float] | str
+    distribution: tuple[float, float] | str
         Passed to :meth:`yastn.rand`. Range of random numbers, or a string 'normal' for normal distribution.
         The default is (-1, 1).
     dtype: str
@@ -237,7 +237,7 @@ def random_mpo(I, D_total=8, sigma=1, lim=(-1, 1), dtype='float64', **kwargs) ->
             ll = gaussian_leg(config, s=-1, n=n0, D_total=D_total, sigma=sigma, legs=[lp, lr, lpc], **kwargs)
         else:
             ll = Leg(config, s=-1, t=(n0,), D=(1,),)
-        psi.A[site] = rand(config, lim=lim, legs=[ll, lp, lr, lpc], dtype=dtype)
+        psi.A[site] = rand(config, distribution=distribution, legs=[ll, lp, lr, lpc], dtype=dtype)
         lr = psi.A[site].get_legs(axes=0).conj()
     if sum(lr.D) == 1:
         return psi

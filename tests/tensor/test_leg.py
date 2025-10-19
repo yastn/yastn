@@ -72,6 +72,7 @@ def test_gaussian_leg(config_kwargs):
     config_Z3 = yastn.make_config(sym='Z3', **config_kwargs)
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     #
+    config_U1.backend.random_seed(seed=0)
     for D_total in [1024, 2043]:
         for method in ['round', 'rand']:
             for sigma in [1, 2]:

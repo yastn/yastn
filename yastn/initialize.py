@@ -153,22 +153,22 @@ def _fill(config=None, legs=(), n=None, isdiag=False, val='rand', **kwargs):
     return a
 
 
-def rand(config=None, lim=(-1, 1), legs=(), n=None, isdiag=False, **kwargs) -> Tensor:
+def rand(config=None, distribution=(-1, 1), legs=(), n=None, isdiag=False, **kwargs) -> Tensor:
     r"""
     Initialize tensor with all allowed blocks filled with random numbers.
 
     Draws from a uniform distribution in the range specify by ``lim``,
     or ``lim`` in real and imaginary part, depending on desired ``dtype``.
-    ``lim='normal'`` invokes normal distribution with zero mean and standard deviation one.
-    The default is ``lim=(-1, 1)``.
+    ``distribution='normal'`` invokes normal distribution with zero mean and standard deviation one.
+    The default is ``distribution=(-1, 1)``.
 
     Parameters
     ----------
     config: module | _config(NamedTuple)
         :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
-    lim: tuple[int, int] | str
+    distribution: tuple[int, int] | str
         The range from which the numbers are drawn from a uniform distribution.
-        For ``lim='normal'`` normal distribution is used.
+        For ``distribution='normal'`` normal distribution is used.
     legs: Sequence[yastn.Leg]
         Specify legs of the tensor passing a list of :class:`yastn.Leg`.
     n: int | Sequence[int]
@@ -192,36 +192,36 @@ def rand(config=None, lim=(-1, 1), legs=(), n=None, isdiag=False, **kwargs) -> T
     If any of :code:`s`, :code:`t`, or :code:`D` are specified,
     :code:`legs` are overriden and only :code:`t`, :code:`D`, and :code:`s` are used.
     """
-    return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val=('rand', lim), **kwargs)
+    return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val=('rand', distribution), **kwargs)
 
 
-def rand_like(T: Tensor, lim=(-1, 1), **kwargs) -> Tensor:
+def rand_like(T: Tensor, distribution=(-1, 1), **kwargs) -> Tensor:
     r"""
     Initialize tensor with same structure as ``T`` filled with random numbers.
 
     Draws from a uniform distribution in the range specify by ``lim``,
     or ``lim`` in real and imaginary part, depending on desired ``dtype``.
-    ``lim='normal'`` invokes normal distribution. The default is ``lim=(-1, 1)``.
+    ``distribution='normal'`` invokes normal distribution. The default is ``distribution=(-1, 1)``.
     """
-    return rand(config=T.config, legs=T.get_legs(), n=T.n, isdiag=T.isdiag, lim=lim, **kwargs)
+    return rand(config=T.config, legs=T.get_legs(), n=T.n, isdiag=T.isdiag, distribution=distribution, **kwargs)
 
 
-def randR(config=None, lim=(-1, 1), legs=(), n=None, isdiag=False, **kwargs) -> Tensor:
+def randR(config=None, distribution=(-1, 1), legs=(), n=None, isdiag=False, **kwargs) -> Tensor:
     r"""
     Initialize tensor with all allowed blocks filled with real random numbers,
     see :meth:`yastn.rand`.
     """
     kwargs['dtype'] = 'float64'
-    return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='rand', lim=lim, **kwargs)
+    return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='rand', distribution=distribution, **kwargs)
 
 
-def randC(config=None, lim=(-1, 1), legs=(), n=None, isdiag=False, **kwargs) -> Tensor:
+def randC(config=None, distribution=(-1, 1), legs=(), n=None, isdiag=False, **kwargs) -> Tensor:
     r"""
     Initialize tensor with all allowed blocks filled with complex random numbers,
     see :meth:`yastn.rand`.
     """
     kwargs['dtype'] = 'complex128'
-    return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='rand', lim=lim, **kwargs)
+    return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='rand', distribution=distribution, **kwargs)
 
 
 def zeros(config=None, legs=(), n=None, isdiag=False, **kwargs) -> Tensor:
