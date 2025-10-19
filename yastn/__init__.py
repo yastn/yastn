@@ -17,6 +17,7 @@ from .initialize import *
 from .krylov import *
 from . import operators
 from .tensor._auxliary import Method, SpecialTensor
+from .tensor.oe_blocksparse import get_contraction_path, contract_with_unroll
 try:
     from ._version import version as __version__
     from ._version import version_tuple
