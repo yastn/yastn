@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 """ product and random Mps initialization """
+import re
 import numpy as np
 import pytest
 import yastn
@@ -40,38 +41,38 @@ def test_MpsMpoOBC_getitem_setitem(config_kwargs):
     assert psi3[1] == T3
     #
     #  raising in getitem setitem
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match="MpsMpoOBC: Tensor rank should be 3."):
         psi3[5] = T4
-        # MpsMpoOBC: Tensor rank should be 3.
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match="MpsMpoOBC: Tensor rank should be 4."):
         psi4[5] = T3
-        # MpsMpoOBC: Tensor rank should be 4.
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match="MpsMpoOBC: n should be an integer in 0, 1, ..., N-1."):
         psi4[5.] = T4
-        # MpsMpoOBC: n should be an integer in 0, 1, ..., N-1.
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match="MpsMpoOBC: n should be an integer in 0, 1, ..., N-1."):
         psi3[9] = T3
-        # MpsMpoOBC: n should be an integer in 0, 1, ..., N-1.
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match=re.escape("MpsMpoOBC does not have site with index (4, 5).")):
         psi3[(4, 5)]
-        #  MpsMpoOBC does not have site with index (4, 5)
     #
     #  raising in MpsMpoOBC
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match="Number of Mps sites N should be a positive integer."):
         mps.Mps(N=0)
-        # Number of Mps sites N should be a positive integer.
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match="Number of Mps sites N should be a positive integer."):
         mps.Mps(N=3.)
-        # Number of Mps sites N should be a positive integer.
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match="Number of physical legs, nr_phys, should be 1 or 2."):
         mps.MpsMpoOBC(N=5, nr_phys=3)
-        # Number of physical legs, nr_phys, should be 1 or 2.
     #
     #  raising in sweep
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match='"to" in sweep should be in "first" or "last".'):
         psi = mps.Mps(5)
         psi.sweep(to='center')
-        # "to" in sweep should be in "first" or "last"
 
 
 def test_product_mps(config_kwargs, tol=1e-12):
@@ -107,9 +108,9 @@ def test_product_mps(config_kwargs, tol=1e-12):
 
         assert mps.measure_1site(psi, ops.n(), psi) == {0: 1.0, 1: 0.0, 2: 1.0, 3: 0.0, 4: 0.0, 5: 1.0, 6: 1.0}
 
-        with pytest.raises(yastn.YastnError):
+        with pytest.raises(yastn.YastnError,
+                           match="Vector should have ndim = 1."):
             psi = mps.product_mps(v1.add_leg(), N=4)
-            # Vector should have ndim = 1.
 
     psi = mps.random_dense_mps(N=5, D=4, d=3, **config_kwargs)
     assert len(psi) == 5
@@ -134,9 +135,10 @@ def test_product_mpo(config_kwargs, tol=1e-12):
         assert I.virtual_leg('last').t == (nr,)
         assert all(I[site].s == (-1, 1, 1, -1) for site in I.sweep())
 
-        with pytest.raises(yastn.YastnError):
+        with pytest.raises(yastn.YastnError,
+                           match="Operator should have ndim = 2."):
             mps.product_mpo(ops.vec_z(val=1), N=8)
-            # Operator should have ndim = 2.
+
 
     H = mps.random_dense_mpo(N=5, D=4, d=3, **config_kwargs)
     assert len(H) == 5
@@ -220,20 +222,48 @@ def test_generate_random_mps(config_kwargs):
         bds = H.get_bond_dimensions()
         assert bds[0] == bds[-1] == 1
         assert all(bd > D_total/2 for bd in bds[2:-2])
-
-    # impossible number of particles for given N.
-    with pytest.raises(yastn.YastnError):
+    #
+    # test 2 charge sectors; and passing extra parameters to gaussian_leg
+    ops = yastn.operators.SpinfulFermions(sym='U1xU1', **config_kwargs)
+    N = 5
+    I = mps.product_mpo(ops.I(), N)  # identity MPS
+    n_profile = [(2, 2), (2, 1), (1, 1), (1, 1), (0.5, 0.5), (0, 0)]
+    psi = mps.random_mps(I, n=n_profile, D_total=20, sigma=2, method='rand')
+    phi = mps.random_mps(I, n=n_profile, D_total=20, sigma=2)
+    assert psi.get_bond_charges_dimensions() != phi.get_bond_charges_dimensions()
+    #
+    with pytest.raises(yastn.YastnError,
+                       match="Random mps is a zero state. Check parameters, or try running again in this is due to randomness of the initialization."):
+        # Impossible number of particles for given N.
         random_mps_spinless_fermions(config_kwargs, 'U1', N=5, D_total=4, n=20)
-        # MPS: Random mps is a zero state. Check parameters,
-        # or try running again in this is due to randomness of the initialization.
 
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match=re.escape("Wrong number of elements in 'n'. It should be a charge on the first virtual leg, or list of charges on all len(I) + 1 virtual legs.")):
+        n_profile = [5, 4, 3]
+        random_mps_spinless_fermions(config_kwargs, 'U1', N=5, D_total=4, n=n_profile)
+        # Profile should speficy the first, or all virtual charges.
+
+    with pytest.raises(yastn.YastnError,
+                       match="The charge on the last virtual leg should be zero."):
+        n_profile = [0, 0.5, 1, 1, 1.5, 2]
+        random_mps_spinless_fermions(config_kwargs, 'U1', N=5, D_total=4, n=n_profile)
+        # correct profile is e.g., [2, 1.5, 1, 1, 1, 0]
+
+    n_profile = [2, 1.5, 1, 1, 1, 0]
+    random_mps_spinless_fermions(config_kwargs, 'U1', N=5, D_total=4, n=n_profile)
+
+    with pytest.raises(yastn.YastnError,
+                       match="Charge on the first virtual leg is not consistent with tensor symmetry."):
+        n_profile = [2, 1.5, 1, 1, 1, 0]
+        random_mps_spinless_fermions(config_kwargs, 'Z2', N=5, D_total=4, n=n_profile)
+        # for Z2 symmetry, the charge on first virtual leg should be 0 or 1.
+
+    with pytest.raises(yastn.YastnError,
+                       match="Random mpo is a zero state. Check parameters, or try running again in this is due to randomness of the initialization."):
         ops = yastn.operators.SpinfulFermions(sym='U1xU1', **config_kwargs)
         ops.random_seed(seed=0)  # fix seed
         I = mps.product_mpo(ops.I(), 100)  # identity MPS
         mps.random_mpo(I, D_total=1, sigma=4, method='rand')
-        # Random mpo is a zero state. Check parameters,
-        # or try running again in this is due to randomness of the initialization.
 
 
 def test_mixed_dims_mpo_and_transpose(config_kwargs):

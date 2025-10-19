@@ -107,7 +107,7 @@ def _product_MpsMpoOBC(vectors, N=None, nr_phys=1) -> MpsMpoOBC:
     return psi
 
 
-def random_mps(I, n=None, D_total=8, sigma=1, dtype='float64', method='round') -> MpsMpoOBC:
+def random_mps(I, n=None, D_total=8, sigma=1, dtype='float64', **kwargs) -> MpsMpoOBC:
     r"""
     Generate a random MPS of total charge ``n`` and bond dimension ``D_total``.
 
@@ -119,65 +119,84 @@ def random_mps(I, n=None, D_total=8, sigma=1, dtype='float64', method='round') -
     ----------
     I: MpsMpoOBC
         MPS or MPO that defines local Hilbert spaces.
-    n: int
-        Total charge of MPS.
-        Virtual MPS spaces are drawn randomly from a normal distribution,
-        whose mean value changes linearly along the chain from `n` to 0.
+    n: int | tuple[int] | Sequence[number] | Sequence[tulpe[numbers]] | None
+        Total charge of MPS, which equalls the charge on the first virtual leg of MPS.
+        Virtual charge bond dimensions along the MPS are drawn from a normal distribution with specified mean.
+        ``n`` can be a list that provides the means for all virtual legs (with zero charge on the last leg).
+        If ``n`` is a single charge, the means change linearly along the chain from ``n`` to 0.
+        If None, which is the default, the MPS charge is set to zero.
     D_total: int
-        Largest bond dimension. Note that due to the random and local nature of the procedure,
-        the desired total bond dimension might not be reached on some bonds,
-        in particular, for higher symmetries.
+        Largest bond dimension. Note that due to the local (and potentially random) nature of the procedure,
+        the desired total bond dimension might not be reached on some bonds, in particular, for higher symmetries.
     sigma: int
         The standard deviation of the normal distribution.
     dtype: string
         Number format, i.e., ``'float64'`` or ``'complex128'``
-    method: str
-        Passed to :meth:`yastn.gaussian_leg`.
+    kwargs: dict
+        Further parameters passed to :meth:`yastn.gaussian_leg`.
 
     Example
     -------
 
     ::
 
+        import numpy as np
         import yastn
         import yastn.tn.mps as mps
 
         ops = yastn.operators.SpinlessFermions(sym='U1')
-        I = mps.product_mpo(ops.I(), N=13)
-        psi = mps.random_mps(I, n=6, D_total=8)
+        N = 13
+        I = mps.product_mpo(ops.I(), N=N)
 
+        psi = mps.random_mps(I, n=6, D_total=8)
         # Random MPS with 13 sites occupied by 6 fermions (fixed by U1 symmetry),
         # and maximal bond dimension 8.
+
+        n_profile = np.cos(np.linspace(0, np.pi / 2, N + 1)) * 7
+        phi = mps.random_mps(I, n=n_profile, D_total=32, sigma=2)
+        # Here mean virtual charges along the chain are distributed according to n_profile,
+        # sigma = 2 gives a broader spread of charges on virtual legs.
+        # MPS encodes a state with 7 particles.
+
     """
-    if n is None:
-        n = I.config.sym.zero()
-
-    try:
-        n = tuple(n)
-    except TypeError:
-        n = (n,)
-    an = np.array(n, dtype=np.int64)
-    n_profile = [tuple(an * (I.N - site) / I.N) for site in range(I.N + 1)]
-
-    psi = Mps(I.N)
     config = I.config
 
-    lr = Leg(config, s=1, t=(n_profile[I.N],), D=(1,))
+    if n is None:
+        n = config.sym.zero()
+    an = np.array(n)
+    if an.size == config.sym.NSYM:
+        n_profile = np.linspace(1, 0, I.N + 1).reshape(-1, 1) * an.reshape(1, config.sym.NSYM)
+    elif an.size == config.sym.NSYM * (I.N + 1):
+        n_profile = an.reshape(I.N + 1, config.sym.NSYM)
+    else:
+        raise YastnError("Wrong number of elements in 'n'. It should be a charge on the first virtual leg, or list of charges on all len(I) + 1 virtual legs.")
+
+    nr = tuple(np.round(n_profile[I.N]).astype(np.int64).tolist())
+    if nr != config.sym.zero():
+        raise YastnError("The charge on the last virtual leg should be zero.")
+    n0 = np.round(n_profile[0]).astype(np.int64)
+    fn0 = config.sym.fuse(n0.reshape(1, 1, config.sym.NSYM), (1,), 1).ravel()
+    n0, fn0 = tuple(n0.tolist()), tuple(fn0.tolist())
+    if n0 != fn0:
+        raise YastnError("Charge on the first virtual leg is not consistent with tensor symmetry.")
+
+    psi = Mps(I.N)
+    lr = Leg(config, s=1, t=(nr,), D=(1,))
     for site in psi.sweep(to='first'):
         lp = I[site].get_legs(axes=1)  # ket leg of MPS/MPO
         nl = n_profile[site]  # mean n changes linearly along the chain
         if site != psi.first:
-            ll = gaussian_leg(config, s=-1, n=nl, D_total=D_total, sigma=sigma, legs=[lp, lr], method=method)
+            ll = gaussian_leg(config, s=-1, n=nl, D_total=D_total, sigma=sigma, legs=[lp, lr], **kwargs)
         else:
-            ll = Leg(config, s=-1, t=(nl,), D=(1,))
+            ll = Leg(config, s=-1, t=(n0,), D=(1,))
         psi.A[site] = rand(config, legs=[ll, lp, lr], dtype=dtype)
         lr = psi.A[site].get_legs(axes=0).conj()
     if sum(lr.D) == 1:
         return psi
-    raise YastnError("MPS: Random mps is a zero state. Check parameters, or try running again in this is due to randomness of the initialization. ")
+    raise YastnError("Random mps is a zero state. Check parameters, or try running again in this is due to randomness of the initialization.")
 
 
-def random_mpo(I, D_total=8, sigma=1, dtype='float64', method='round') -> MpsMpoOBC:
+def random_mpo(I, D_total=8, sigma=1, dtype='float64', **kwargs) -> MpsMpoOBC:
     r"""
     Generate a random MPO with bond dimension ``D_total``.
 
@@ -198,8 +217,8 @@ def random_mpo(I, D_total=8, sigma=1, dtype='float64', method='round') -> MpsMpo
         from which dimensions of charge sectors are drawn.
     dtype: string
         number format, i.e., ``'float64'`` or ``'complex128'``
-    method: str
-        Passed to :meth:`yastn.gaussian_leg`.
+    kwargs: dict
+        Further parameters passed to :meth:`yastn.gaussian_leg`.
     """
     config = I.config
     n0 = config.sym.zero()
@@ -210,7 +229,7 @@ def random_mpo(I, D_total=8, sigma=1, dtype='float64', method='round') -> MpsMpo
         lp = I[site].get_legs(axes=1)
         lpc = I[site].get_legs(axes=3) if I[site].ndim == 4 else lp.conj()
         if site != psi.first:
-            ll = gaussian_leg(config, s=-1, n=n0, D_total=D_total, sigma=sigma, legs=[lp, lr, lpc], method=method)
+            ll = gaussian_leg(config, s=-1, n=n0, D_total=D_total, sigma=sigma, legs=[lp, lr, lpc], **kwargs)
         else:
             ll = Leg(config, s=-1, t=(n0,), D=(1,),)
         psi.A[site] = rand(config, legs=[ll, lp, lr, lpc], dtype=dtype)

@@ -219,7 +219,7 @@ def gaussian_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, nonnegative
     method: str
         For 'round', approximate the integer sectorial bond dimensions to match gaussian distribution.
         For 'rand', distribute sectorial bond dimensions randomly from gaussian distribution.
-        The default is 'round'.
+        The default is 'round', which gives repeatable outcomes.
     """
     if config.sym.NSYM == 0:
         return Leg(config, s=s, D=(D_total,))
