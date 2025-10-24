@@ -1030,9 +1030,12 @@ class FixedPoint(torch.autograd.Function):
         with torch.enable_grad():
             if verbosity > 2 and _env_ts.is_cuda:
                 torch.cuda.memory._dump_snapshot(f"{type(ctx).__name__}_backward_prevjp_CUDAMEM.pickle")
+            time0 = time.perf_counter()
             #_, dfdC_vjp = torch.func.vjp(lambda x: FixedPoint.fixed_point_iter(env, sigma_dict, ctx.ctm_opts_fp, _env_slices, x, psi_data), _env_ts)
             #_, dfdA_vjp = torch.func.vjp(lambda x: FixedPoint.fixed_point_iter(env, sigma_dict, ctx.ctm_opts_fp, _env_slices, _env_ts, x), psi_data)
             _, df_vjp = torch.func.vjp(lambda x,y: FixedPoint.fixed_point_iter(env, sigma_dict, ctx.ctm_opts_fp, _env_slices, x, y), _env_ts, psi_data)
+            time1 = time.perf_counter()
+            log.info(f"{type(ctx).__name__}.backward t_vjp {time1-time0} [s]")
             dfdC_vjp= lambda x: (df_vjp(x)[0],)
             dfdA_vjp= lambda x: (df_vjp(x)[1],)
             if verbosity > 2 and _env_ts.is_cuda:
@@ -1041,6 +1044,7 @@ class FixedPoint(torch.autograd.Function):
         refill_state(env.psi.ket, psi_data)
 
         alpha = 0.4
+        time0 = time.perf_counter()
         for step in range(ctx.ctm_opts_fp['max_sweeps']):
             grads = dfdC_vjp(grads)
             # with torch.enable_grad():
@@ -1075,6 +1079,9 @@ class FixedPoint(torch.autograd.Function):
                 prev_grad_tmp = grad_tmp
 
         dA = dfdA_vjp(dA)[0]
+        time1 = time.perf_counter()
+        log.info(f"{type(ctx).__name__}.backward t_gradsum {time1-time0} [s], steps {step+1}")
+
         # with torch.enable_grad():
         #     dA = torch.autograd.grad(FixedPoint.fixed_point_iter(ctx.env, ctx.sigma_dict, ctx.opts_svd, ctx.slices, env_data, psi_data), psi_data, grad_outputs=dA)
 

@@ -125,12 +125,27 @@ class EnvCTM(Peps):
         return self.psi.config
 
     def max_D(self):
+        """
+        Bond dimension of largest sector in the environment.
+        """
         m_D = 0
         for site in self.sites():
             for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
                 if getattr(self[site], dirn) is not None:
                     m_D = max(max(getattr(self[site], dirn).get_shape()), m_D)
         return m_D
+
+    def effective_chi(self):
+        r"""
+        :return: returns the effective bond dimension of the environment
+        :rtype: int
+
+        The effective bond dimension is defined as maximum of sum of sector dimensions
+        among all environment indices/legs.
+        """
+        max_chi= max( [ sum(l.D) for site in self.sites() for dirn in ['tl', 'tr', 'bl', 'br',] \
+                       for l in getattr(self[site], dirn).get_legs() ] )
+        return max_chi
 
     # Cloning/Copying/Detaching(view)
     #
