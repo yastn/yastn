@@ -39,6 +39,7 @@ __all__= [
     'add', 'sub', 'apply_mask', 'vdot', 'diag_1dto2d', 'diag_2dto1d',
     'dot', 'dot_diag', 'transpose_dot_sum',
     'merge_to_dense', 'merge_super_blocks', 'is_independent',
+    'apply_mask', 'embed_mask', 
     'transpose', 'transpose_and_merge', 'unmerge']
 
 
