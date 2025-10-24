@@ -13,5 +13,5 @@ The spaces of the :class:`yastn.Tensor` are characterized by a structure :class:
 
 .. autofunction:: yastn.leg_product
 .. autofunction:: yastn.undo_leg_product
-.. autofunction:: yastn.random_leg
+.. autofunction:: yastn.gaussian_leg
 .. autofunction:: yastn.legs_union
