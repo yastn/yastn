@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 """ Parent class for operator classes. """
-from ..initialize import make_config
+from ..tensor import make_config
 
 class meta_operators():
     # Predefine common elements of all operator classes.

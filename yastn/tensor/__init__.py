@@ -21,8 +21,9 @@ In principle, any number of symmetries can be used, including dense tensor with 
 An instance of a Tensor is specified by a list of blocks (dense tensors) labeled by symmetries' charges on each leg.
 """
 from __future__ import annotations
+from typing import Sequence
 from ._auxliary import _struct, _config
-from ._merging import _Fusion
+from ._merging import _Fusion, _slc
 from ._tests import YastnError
 from ._tests import *
 from ._control_lru import *
@@ -33,6 +34,7 @@ from ._algebra import *
 from ._merging import *
 from .linalg import *
 from ._legs import *
+from ._initialize import *
 from . import _tests
 from . import _control_lru
 from . import _contractions
@@ -42,6 +44,7 @@ from . import _algebra
 from . import linalg
 from . import _merging
 from . import _legs
+from . import _initialize
 __all__ = ['Tensor', 'linalg', 'YastnError']
 __all__.extend(linalg.__all__)
 __all__.extend(_tests.__all__)
@@ -52,6 +55,7 @@ __all__.extend(_algebra.__all__)
 __all__.extend(_output.__all__)
 __all__.extend(_merging.__all__)
 __all__.extend(_legs.__all__)
+__all__.extend(_initialize.__all__)
 
 
 class Tensor:
@@ -132,17 +136,48 @@ class Tensor:
     from ._output import get_shape, get_signature, get_dtype
     from ._output import get_tensor_charge, get_rank
     from ._output import to_number, to_dense, to_numpy, to_raw_tensor, to_nonsymmetric
-    from ._output import save_to_hdf5, save_to_dict, compress_to_1d
+    from ._output import save_to_hdf5, save_to_dict, compress_to_1d, to_dict
     from ._tests import is_consistent, are_independent
     from ._merging import fuse_legs, unfuse_legs, fuse_meta_to_hard
     from ._krylov import expand_krylov_space
 
-    def _replace(self, **kwargs) -> yastn.Tensor:
+    def _replace(self, **kwargs) -> Tensor:
         """ Creates a shallow copy replacing fields specified in kwargs. """
         for arg in ('config', 'struct', 'mfs', 'hfs', 'data', 'slices'):
             if arg not in kwargs:
                 kwargs[arg] = getattr(self, arg)
         return Tensor(**kwargs)
+
+    @classmethod
+    def from_dict(cls, d: dict, config:_config | None=None):
+        #
+        d = d.copy()
+
+        if 'level' not in d:
+            d['level'] = 2
+
+        if d['level'] >= 1:
+            for k in ['struct', 'slices', 'hfs', 'mfs']:
+                d[k] = _convert_lists_to_tuples(d[k])
+
+            d['config'] = make_config(**d['config'])
+            d['hfs'] = tuple(_Fusion(**hf) for hf in d['hfs'])
+            d['struct'] = _struct(**d['struct'])
+            d['slices'] = tuple(_slc(*x) for x in d['slices'])
+
+        if config is not None:
+            if d['config'].sym.SYM_ID != config.sym.SYM_ID:
+                raise YastnError("Symmetry rule in config does not match the one in stored in d.")
+            if d['config'].fermionic != d['config'].fermionic:
+                raise YastnError("Fermionic statistics in config does not match the one in stored in d.")
+            d['config'] = config
+
+        if d['level'] >= 2:
+            dtype = d['data'].dtype.name if hasattr(d['data'], 'dtype') else d['config'].default_dtype
+            d['data'] = d['config'].backend.to_tensor(d['data'], dtype=dtype, device=d['config'].default_device)
+
+        return cls(**d)
+
 
     @property
     def s(self) -> Sequence[int]:
@@ -218,7 +253,7 @@ class Tensor:
         return self.config.backend.get_device(self._data)
 
     @property
-    def dtype(self) -> numpy.dtype | torch.dtype:
+    def dtype(self) -> 'numpy.dtype' | 'torch.dtype':
         """ Datatype ``dtype`` of tensor data used by the ``backend``. """
         return self.config.backend.get_dtype(self._data)
 
@@ -228,20 +263,30 @@ class Tensor:
         return 'complex128' if self.config.backend.is_complex(self._data) else 'float64'
 
     @property
-    def data(self) -> numpy.array | torch.tensor:
+    def data(self) -> 'numpy.array' | 'torch.tensor':
         """ Return underlying 1D-array storing the elements of the tensor. """
         return self._data
 
     @property
-    def T(self) -> yastn.Tensor:
+    def T(self) -> Tensor:
         r""" Same as :meth:`self.transpose()<yastn.transpose>`. """
         return self.transpose()
 
     @property
-    def H(self) -> yastn.Tensor:
+    def H(self) -> Tensor:
         r""" Same as :meth:`self.T.conj()`, i.e., transpose and conjugate. """
         return self.transpose().conj()
 
     @property
     def shape(self) -> tuple[int]:
         return self.get_shape()
+
+def _convert_lists_to_tuples(nested_iterable):
+    if isinstance(nested_iterable, list):
+        return tuple( _convert_lists_to_tuples(v) if isinstance(v, (list, tuple, set, dict)) else v for v in nested_iterable)
+    elif isinstance(nested_iterable, dict):
+        return {k: (_convert_lists_to_tuples(v) if isinstance(v, (list, tuple, set, dict)) else v) for k, v in nested_iterable.items()}
+    elif isinstance(nested_iterable, (tuple, set)):
+        return type(nested_iterable)(_convert_lists_to_tuples(v) if isinstance(v, (list, tuple, set, dict)) else v for v in nested_iterable)
+    else:
+        return nested_iterable

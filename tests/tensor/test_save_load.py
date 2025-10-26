@@ -21,6 +21,34 @@ import yastn
 tol = 1e-12  #pylint: disable=invalid-name
 
 
+def identical_tensors(a, b):
+    da, db = a.__dict__, b.__dict__
+    assert da.keys() == db.keys()
+    for k in da:
+        if k != '_data':
+            assert da[k] == db[k]
+    assert type(a.data) == type(b.data)
+    assert np.allclose(a.to_numpy(), b.to_numpy())
+
+
+def test_to_from_dict(config_kwargs):
+    config = yastn.make_config(sym='U1', **config_kwargs)
+    legs = [yastn.Leg(config, s=1, t=(0, 1, 2), D= (3, 5, 2)),
+            yastn.Leg(config, s=-1, t=(0, 1, 3), D= (1, 2, 3)),
+            yastn.Leg(config, s=1, t=(-1, 0, 1), D= (2, 3, 4)),
+            yastn.Leg(config, s=1, t=(-1, 0, 1), D= (4, 3, 2))]
+
+    a = yastn.rand(config, legs=legs)
+    a = a.fuse_legs(axes=(0, (1, 2), 3), mode='hard')
+    a = a.fuse_legs(axes=(0, (1, 2)), mode='meta')
+
+    for level, ind in zip([0, 1, 2], [False, False, True]):
+        d = a.to_dict(level=level)
+        b = yastn.Tensor.from_dict(d)
+        identical_tensors(a, b)
+        assert yastn.are_independent(a, b) == ind
+
+
 def check_to_numpy(a1, config):
     """ save/load to numpy and tests consistency."""
     d1 = a1.save_to_dict()
