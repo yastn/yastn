@@ -49,6 +49,9 @@ class EnvCTM_local():
     bl: Tensor | None = None  # bottom-left
     l:  Tensor | None = None  # left
 
+    def __repr__(self) -> str:
+        return f"EnvCTM_local({ ',\n'.join(f'{k}={v}' for k,v in self.__dict__.items()) })"
+
 
 @dataclass()
 class EnvCTM_projectors():
@@ -61,6 +64,9 @@ class EnvCTM_projectors():
     vtr: Tensor | None = None  # vertical top right
     vbl: Tensor | None = None  # vertical bottom left
     vbr: Tensor | None = None  # vertical bottom right
+
+    def __repr__(self) -> str:
+        return f"EnvCTM_projectors({ ',\n'.join(f'{k}={v}' for k,v in self.__dict__.items()) })"
 
 
 class CTMRG_out(NamedTuple):
@@ -119,6 +125,9 @@ class EnvCTM(Peps):
         self.proj = Peps(self.geometry)
         for site in self.sites():
             self.proj[site] = EnvCTM_projectors()
+
+    def __repr__(self) -> str:
+        return f"EnvCTM(envs={super().__repr__()},\nproj={self.proj})"
 
     @property
     def config(self):
@@ -1362,6 +1371,11 @@ def update_extended_2site_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwa
     """
     psi = env.psi
     use_qr = kwargs.get("use_qr", True)
+    psh = env.proj
+    # Inherit _partial_svd_predict_spec from EnvCTM
+    svd_predict_spec= lambda s0,p0,s1,p1,sign: opts_svd.get('D_block', float('inf')) \
+        if psh is None or (getattr(psh[s0],p0) is None or getattr(psh[s1],p1) is None) else \
+        env._partial_svd_predict_spec(getattr(psh[s0],p0).get_legs(-1), getattr(psh[s1],p1).get_legs(-1), sign)
 
     cor_tl = env[tl].l @ env[tl].tl @ env[tl].t
     cor_tl = tensordot(cor_tl, psi[tl], axes=((2, 1), (0, 1)))
@@ -1407,6 +1421,8 @@ def update_extended_2site_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwa
         else:
             _, r_t = qr(cor_tt, axes=(0, 1)) if use_qr else (None, cor_tt)
             _, r_b = qr(cor_bb, axes=(1, 0)) if use_qr else (None, cor_bb.T)
+        
+        opts_svd["D_block"]= svd_predict_spec(tr, "hrb", br, "hrt", r_t.s[1])
         env.proj[tr].hrb, env.proj[br].hrt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
 
     if any(x in move for x in 'lh'):
@@ -1434,6 +1450,7 @@ def update_extended_2site_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwa
             _, r_t = qr(cor_tt, axes=(1, 0)) if use_qr else (None, cor_tt.T)
             _, r_b = qr(cor_bb, axes=(0, 1)) if use_qr else (None, cor_bb)
 
+        opts_svd["D_block"]= svd_predict_spec(tl, "hlb", bl, "hlt", r_t.s[1])
         env.proj[tl].hlb, env.proj[bl].hlt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
 
     if any(x in move for x in 'tbv'):
@@ -1464,6 +1481,8 @@ def update_extended_2site_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwa
         else:
             _, r_l = qr(cor_ll, axes=(0, 1)) if use_qr else (None, cor_ll)
             _, r_r = qr(cor_rr, axes=(1, 0)) if use_qr else (None, cor_rr.T)
+
+        opts_svd["D_block"]= svd_predict_spec(tl, "vtr", tr, "vtl", r_l.s[1])
         env.proj[tl].vtr, env.proj[tr].vtl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
 
     if any(x in move for x in 'bv'):
@@ -1490,6 +1509,8 @@ def update_extended_2site_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwa
         else:
             _, r_l = qr(cor_ll, axes=(1, 0)) if use_qr else (None, cor_ll.T)
             _, r_r = qr(cor_rr, axes=(0, 1)) if use_qr else (None, cor_rr)
+
+        opts_svd["D_block"]= svd_predict_spec(bl, "vbr", br, "vbl", r_l.s[1])
         env.proj[bl].vbr, env.proj[br].vbl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
 
 
