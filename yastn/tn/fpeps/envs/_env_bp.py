@@ -18,9 +18,9 @@ from itertools import pairwise
 from tqdm import tqdm
 from typing import NamedTuple
 from .... import Tensor, eye, YastnError, tensordot, vdot, ncon
-from .._peps import Peps, Peps2Layers, DoublePepsTensor
+from .._peps import Peps2Layers, DoublePepsTensor
 from .._gates_auxiliary import fkron, gate_fix_swap_gate, match_ancilla
-from .._geometry import Bond, Site
+from .._geometry import Bond, Site, Lattice
 from .._evolution import BipartiteBondMetric, BondMetric
 from ._env_auxlliary import *
 from ._env_auxlliary import clear_projectors
@@ -46,7 +46,7 @@ class BP_out(NamedTuple):
     converged: bool = False
 
 
-class EnvBP(Peps):
+class EnvBP(Lattice):
 
     def __init__(self, psi, init='eye', tol_positive=1e-12, which="BP"):
         r"""

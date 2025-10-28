@@ -18,8 +18,9 @@ from ... import Tensor, YastnError, block
 from ...tn.mps import Mpo, MpsMpoOBC, MpoPBC
 from ._doublePepsTensor import DoublePepsTensor
 from ._gates_auxiliary import apply_gate_onsite, gate_from_mpo, gate_fix_swap_gate, fill_eye_in_gate
+from ._geometry import Lattice
 
-class Peps():
+class Peps(Lattice):
 
     def __init__(self, geometry, tensors: Union[None, Sequence[Sequence[Tensor]], dict[tuple[int,int],Tensor]]= None):
         r"""
@@ -80,10 +81,7 @@ class Peps():
             # above, some provided tensors are redundant, although this redundancy is consistent with the geometry.
 
         """
-        self.geometry = geometry
-        for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "f_ordered", "nn_bond_dirn"]:
-            setattr(self, name, getattr(geometry, name))
-        self._data = {self.site2index(site): None for site in self.sites()}
+        super().__init__(geometry)
 
         if tensors is not None:
             try:
@@ -102,7 +100,7 @@ class Peps():
                         raise YastnError("Peps: Non-unique assignment of tensor to unique lattice sites.")
             except (KeyError, TypeError):
                 raise YastnError("Peps: tensors assigned outside of the lattice geometry.")
-            if any(tensor is None for tensor in self._data.values()):
+            if any(tensor is None for tensor in self._site_data.values()):
                 raise YastnError("Peps: Not all unique lattice sites got assigned with a tensor.")
 
     @property
@@ -115,63 +113,9 @@ class Peps():
         site0 = self.sites()[0]
         return self[site0].ndim in (3, 5)
 
-    def __getitem__(self, site) -> Tensor:
-        """ Get tensor for site. """
-        return self._data[self.site2index(site)]
-
-    def __setitem__(self, site, obj):
-        """ Set tensor at site. """
-        self._data[self.site2index(site)] = obj
-
-    def __dict__(self) -> dict:
-        """
-        Serialize PEPS into a dictionary.
-        """
-        d = {**self.geometry.__dict__(),
-             'data': {}}
-        for site in self.sites():
-            d['data'][site] = self[site].save_to_dict()
-        return d
-
-    def save_to_dict(self) -> dict:
-        """
-        Serialize PEPS into a dictionary.
-        """
-        return self.__dict__()
-
     def __repr__(self) -> str:
-        return f"Peps(geometry={self.geometry.__repr__()}, tensors={ self._data })"
+        return f"Peps(geometry={self.geometry.__repr__()}, tensors={ self._site_data })"
 
-    def clone(self) -> Peps:
-        r"""
-        Returns a deep clone of the PEPS instance by :meth:`cloning<yastn.Tensor.clone>` each tensor in
-        the network. Each tensor in the cloned PEPS will contain its own independent data blocks.
-        """
-        psi = Peps(geometry=self.geometry)
-        for ind in self._data:
-            psi._data[ind] = self._data[ind].clone()
-        return psi
-
-    def copy(self) -> Peps:
-        r"""
-        Returns a deep copy of the PEPS instance by :meth:`copy<yastn.Tensor.copy>` each tensor in
-        the network. Each tensor in the copied PEPS will contain its own independent data blocks.
-        """
-        psi = Peps(geometry=self.geometry)
-        for ind in self._data:
-            psi._data[ind] = self._data[ind].copy()
-        return psi
-
-    def shallow_copy(self) -> Peps:
-        r"""
-        New instance of :class:`yastn.tn.mps.Peps` pointing to the same tensors as the old one.
-
-        Shallow copy is usually sufficient to retain the old PEPS.
-        """
-        psi = Peps(geometry=self.geometry)
-        for ind in self._data:
-            psi._data[ind] = self._data[ind]
-        return psi
 
     def transfer_mpo(self, n=0, dirn='v') -> MpsMpoOBC | MpoPBC:
         """
@@ -200,7 +144,7 @@ class Peps():
         elif dirn == 'v':
             periodic = (self.boundary == "cylinder")
             op = Mpo(N=self.Nx, periodic=periodic)
-            op.tol = self._data['tol'] if 'tol' in self._data else None
+            op.tol = self._site_data['tol'] if 'tol' in self._site_data else None
             for nx in range(self.Nx):
                 site = (nx, n)
                 psi = self[site]

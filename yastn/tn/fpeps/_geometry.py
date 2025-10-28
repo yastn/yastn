@@ -217,10 +217,11 @@ class SquareLattice():
         y = site[1] % self._dims[1] if self._periodic[1] == 'i' else site[1]
         return (x, y)
 
-    def __dict__(self):
+    def to_dict(self):
         """Return a dictionary representation of the object."""
         return {'lattice': type(self).__name__,
-                'dims': self.dims, 'boundary': self.boundary}
+                'dims': self.dims,
+                'boundary': self.boundary}
 
 
 class CheckerboardLattice(SquareLattice):
@@ -239,7 +240,7 @@ class CheckerboardLattice(SquareLattice):
         """ Tensor index depending on site. """
         return (site[0] + site[1]) % 2
 
-    def __dict__(self):
+    def to_dict(self):
         """Return a dictionary representation of the object."""
         return {'lattice': type(self).__name__}
 
@@ -333,7 +334,7 @@ class RectangularUnitcell(SquareLattice):
     def __repr__(self):
         return f"RectangularUnitcell(pattern={self._site2index})"
 
-    def __dict__(self):
+    def to_dict(self):
         """
         Return a dictionary representation of the object.
 
@@ -385,7 +386,7 @@ class TriangularLattice(SquareLattice):
             return self._bonds_h[::-1] if reverse else self._bonds_h
         return self._bonds_d[::-1] + self._bonds_v[::-1] + self._bonds_h[::-1] if reverse else self._bonds_h + self._bonds_v + self._bonds_d
 
-    def __dict__(self):
+    def to_dict(self):
         """
         Return a dictionary representation of the object.
 
@@ -397,3 +398,79 @@ class TriangularLattice(SquareLattice):
         """
         return {'lattice': type(self).__name__,
                 'pattern': [[self.site2index((row,col)) for col in range(self.Ny)] for row in range(self.Nx)]}
+
+
+
+
+class Lattice():
+
+    def __init__(self, geometry):
+        r"""
+        A dataclass combining a geometry with data container pointing to unique lattice sites.
+
+        Parameters
+        ----------
+        geometry: SquareLattice | CheckerboardLattice | RectangularUnitcell
+            Specify lattice geometry.
+        """
+        self.geometry = geometry
+        for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "f_ordered", "nn_bond_dirn"]:
+            setattr(self, name, getattr(geometry, name))
+        self._site_data = {self.site2index(site): None for site in self.sites()}
+
+    def __getitem__(self, site):
+        """ Get tensor for site. """
+        return self._site_data[self.site2index(site)]
+
+    def __setitem__(self, site, obj):
+        """ Set tensor at site. """
+        self._site_data[self.site2index(site)] = obj
+
+    def to_dict(self) -> dict:
+        """
+        Serialize Lattice into a dictionary.
+        """
+        return {'type': type(self).__name__,
+                'geometry': self.geometry.to_dict(),
+                'site_data': {site: self[site].to_dict() for site in self.sites()}}
+
+    def save_to_dict(self) -> dict:
+        """
+        Serialize PEPS into a dictionary.
+        """
+        d = {**self.geometry.to_dict(),
+             'data': {}}
+        for site in self.sites():
+            d['data'][site] = self[site].save_to_dict()
+        return d
+
+    def clone(self) -> Lattice:
+        r"""
+        Returns a deep clone of the PEPS instance by :meth:`cloning<yastn.Tensor.clone>` each tensor in
+        the network. Each tensor in the cloned PEPS will contain its own independent data blocks.
+        """
+        psi = type(self)(geometry=self.geometry)
+        for ind in self._site_data:
+            psi._site_data[ind] = self._site_data[ind].clone()
+        return psi
+
+    def copy(self) -> Lattice:
+        r"""
+        Returns a deep copy of the PEPS instance by :meth:`copy<yastn.Tensor.copy>` each tensor in
+        the network. Each tensor in the copied PEPS will contain its own independent data blocks.
+        """
+        psi = type(self)(geometry=self.geometry)
+        for ind in self._site_data:
+            psi._site_data[ind] = self._site_data[ind].copy()
+        return psi
+
+    def shallow_copy(self) -> Lattice:
+        r"""
+        New instance of :class:`yastn.tn.peps.Lattice` pointing to the same tensors as the old one.
+
+        Shallow copy is usually sufficient to retain the old PEPS.
+        """
+        psi = type(self)(geometry=self.geometry)
+        for ind in self._site_data:
+            psi._site_data[ind] = self._site_data[ind]
+        return psi

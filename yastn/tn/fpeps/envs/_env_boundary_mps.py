@@ -14,14 +14,15 @@
 # ==============================================================================
 from itertools import accumulate
 from tqdm import tqdm
-from .... import Tensor, YastnError, tensordot
+from .... import Tensor, YastnError
 from ... import mps
 from ._env_auxlliary import identity_tm_boundary, clear_projectors
 from ._env_measure import _measure_nsite
-from .._peps import Peps, Peps2Layers
+from .._peps import Peps2Layers
+from .._geometry import Lattice
 
 
-class EnvBoundaryMPS(Peps):
+class EnvBoundaryMPS(Lattice):
     r"""
     Boundary MPS class for finite PEPS contraction.
     """

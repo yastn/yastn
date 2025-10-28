@@ -13,16 +13,16 @@
 # limitations under the License.
 # ==============================================================================
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from typing import NamedTuple, Union, Callable, Sequence
 import logging
-from .... import Tensor, rand, ones, eye, YastnError, Leg, tensordot, qr, truncation_mask, vdot, decompress_from_1d
+from .... import Tensor, rand, ones, eye, YastnError, Leg, tensordot, qr, vdot, decompress_from_1d
 from ....operators import sign_canonical_order
 from ... import mps
 from ...mps import MpsMpoOBC
 from .._peps import Peps, Peps2Layers
 from .._gates_auxiliary import fkron, gate_fix_swap_gate
-from .._geometry import Site
+from .._geometry import Site, Lattice
 from .._evolution import BondMetric
 from ._env_auxlliary import *
 from ._env_window import EnvWindow
@@ -34,7 +34,39 @@ import logging
 logger= logging.getLogger(__name__)
 
 @dataclass()
-class EnvCTM_local():
+class dataclass_common():
+
+    def copy(self):
+        print(fields(self))
+        return type(self)(**{k.name: getattr(self, k.name).copy() for k in fields(self)})
+
+    def clone(self):
+        return type(self)(**{k.name: getattr(self, k.name).clone() for k in fields(self)})
+
+    def detach(self):
+        return type(self)(**{k.name: getattr(self, k.name).detach() for k in fields(self)})
+
+    def shallow_copy(self):
+        return type(self)(**{k.name: getattr(self, k.name) for k in fields(self)})
+
+
+    # def detach_(self):
+    #     r"""
+    #     Detach all environment tensors from the computational graph.
+    #     Data of environment tensors in detached environment is a `view` of the original data.
+    #     """
+    #     for site in self.sites():
+    #         for dirn in ["tl", "tr", "bl", "br", "t", "l", "b", "r"]:
+    #             try:
+    #                 try:
+    #                     getattr(self[site], dirn)._data.detach_()
+    #                 except RuntimeError:
+    #                     setattr(self[site], dirn, getattr(self[site], dirn).detach())
+    #             except AttributeError:
+    #                 pass
+
+@dataclass()
+class EnvCTM_local(dataclass_common):
     r"""
     Dataclass for CTM environment tensors associated with Peps lattice site.
 
@@ -70,7 +102,7 @@ class CTMRG_out(NamedTuple):
     max_D: int = 1
 
 
-class EnvCTM(Peps):
+class EnvCTM(Lattice):
     def __init__(self, psi, init='rand', leg=None, ket=None):
         r"""
         Environment used in Corner Transfer Matrix Renormalization Group algorithm.
@@ -134,7 +166,13 @@ class EnvCTM(Peps):
 
     # Cloning/Copying/Detaching(view)
     #
+
     def copy(self) -> EnvCTM:
+        r"""
+        Return a clone of the environment preserving the autograd - resulting clone is a part
+        of the computational graph. Data of cloned environment tensors is indepedent
+        from the originals.
+        """
         env = EnvCTM(self.psi, init=None)
         for site in env.sites():
             for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
@@ -1737,7 +1775,7 @@ def proj_corners(r0, r1, opts_svd, **kwargs):
         opts_svd['mask_f'] = kwargs['truncation_f']
     opts_svd['fix_signs'] = opts_svd.get('fix_signs', True)
     verbosity = opts_svd.get('verbosity', 0)
-    # only verbosity from opts_svd is to be passed down to svd_with_truncation 
+    # only verbosity from opts_svd is to be passed down to svd_with_truncation
     kwargs.pop('verbosity', None)
 
     u, s, v = rr.svd_with_truncation(axes=(0, 1), sU=r0.s[1], **opts_svd, **kwargs)

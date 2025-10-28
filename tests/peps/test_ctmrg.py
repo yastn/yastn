@@ -287,5 +287,5 @@ def test_1x1_D1_Z2_spinlessf_conv(ctm_init, fix_signs, truncate_multiplets_mode,
 
 
 if __name__ == '__main__':
-    test_ctmrg_Ising_4x5({})
-    #pytest.main([__file__, "-vs", "--durations=0", "--long_tests", "--backend", "torch"])
+    #test_ctmrg_Ising_4x5({})
+    pytest.main([__file__, "-vs", "--durations=0"]) #,  "--long_tests", "--backend", "torch"])
