@@ -40,7 +40,10 @@ class CTMRG_out(NamedTuple):
     max_D: int = 1
 
 
-class EnvCTM(Lattice):
+PEPS_CLASSES = {'Peps': Peps,
+                'Peps2Layers': Peps2Layers}
+
+class EnvCTM():
     def __init__(self, psi, init='rand', leg=None, ket=None):
         r"""
         Environment used in Corner Transfer Matrix Renormalization Group algorithm.
@@ -77,22 +80,33 @@ class EnvCTM(Lattice):
         ket: Optional[]
             If provided, and ``psi`` has physical legs, forms a double-layer PEPS <psi | ket>.
         """
-        super().__init__(psi.geometry)
+        self.geometry = psi.geometry
+        for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "f_ordered", "nn_bond_dirn"]:
+            setattr(self, name, getattr(self.geometry, name))
         self.psi = Peps2Layers(bra=psi, ket=ket) if psi.has_physical() else psi
         if init not in (None, 'rand', 'eye', 'dl'):
             raise YastnError(f"EnvCTM {init=} not recognized. Should be 'rand', 'eye', 'dl', or None.")
+
+        self.env = Lattice(self.geometry)
         for site in self.sites():
             self[site] = EnvCTM_local()
         if init is not None:
             self.reset_(init=init, leg=leg)
+
         # empty structure for projectors
-        self.proj = Peps(self.geometry)
+        self.proj = Lattice(self.geometry)
         for site in self.sites():
             self.proj[site] = EnvCTM_projectors()
 
     @property
     def config(self):
         return self.psi.config
+
+    def __getitem__(self, site):
+        return self.env[site]
+
+    def __setitem__(self, site, obj):
+        self.env[site] = obj
 
     def max_D(self):
         m_D = 0
@@ -112,16 +126,14 @@ class EnvCTM(Lattice):
         from the originals.
         """
         env = EnvCTM(self.psi, init=None)
-        for site in env.sites():
-            for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
-                setattr(env[site], dirn, getattr(self[site], dirn).copy())
+        env.env = self.env.copy()
+        env.proj = self.proj.copy()
         return env
 
     def shallow_copy(self) -> EnvCTM:
         env = EnvCTM(self.psi, init=None)
-        for site in env.sites():
-            for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
-                setattr(env[site], dirn, getattr(self[site], dirn))
+        env.env = self.env.shallow_copy()
+        env.proj = self.proj.shallow_copy()
         return env
 
     def clone(self) -> EnvCTM:
@@ -131,9 +143,8 @@ class EnvCTM(Lattice):
         from the originals.
         """
         env = EnvCTM(self.psi, init=None)
-        for site in env.sites():
-            for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
-                setattr(env[site], dirn, getattr(self[site], dirn).clone())
+        env.env = self.env.clone()
+        env.proj = self.proj.clone()
         return env
 
     def detach(self) -> EnvCTM:
@@ -143,9 +154,8 @@ class EnvCTM(Lattice):
         with the originals.
         """
         env = EnvCTM(self.psi, init=None)
-        for site in env.sites():
-            for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
-                setattr(env[site], dirn, getattr(self[site], dirn).detach())
+        env.env = self.env.detach()
+        env.proj = self.proj.detach()
         return env
 
     def detach_(self):
@@ -153,15 +163,26 @@ class EnvCTM(Lattice):
         Detach all environment tensors from the computational graph.
         Data of environment tensors in detached environment is a `view` of the original data.
         """
-        for site in self.sites():
-            for dirn in ["tl", "tr", "bl", "br", "t", "l", "b", "r"]:
-                try:
-                    try:
-                        getattr(self[site], dirn)._data.detach_()
-                    except RuntimeError:
-                        setattr(self[site], dirn, getattr(self[site], dirn).detach())
-                except AttributeError:
-                    pass
+        self.env.detach_()
+        self.proj.detach_()
+
+    def to_dict(self, level=2):
+        return {'type': type(self).__name__,
+                'psi': self.psi.to_dict(level=level),
+                'env': self.env.to_dict(level=level),
+                'proj': self.proj.to_dict(level=level)}
+
+    @classmethod
+    def from_dict(cls, d, config=None):
+        if cls.__name__ != d['type']:
+            raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
+
+        psi = PEPS_CLASSES[d['psi']['type']].from_dict(d['psi'], config=config)
+        env = cls(psi, init=None)
+        env.env = Lattice.from_dict(d['env'], config=config)
+        env.proj = Lattice.from_dict(d['proj'], config=config)
+        return env
+
 
     def compress_env_1d(env):
         r"""

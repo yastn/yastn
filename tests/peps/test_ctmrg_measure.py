@@ -26,33 +26,22 @@ def run_ctm_save_load_copy(env):
 
     config = env.psi.config
     d = env.save_to_dict()
-
     env_save = fpeps.load_from_dict(config, d)
+
     env_copy = env.copy()
     env_clone = env.clone()
     env_shallow = env.shallow_copy()
+    env_shallow.detach_()
     env_detach = env.detach()
 
-    for site in env.sites():
-        for dirn in  ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
-            ten0 = getattr(env[site], dirn)
-            ten1 = getattr(env_save[site], dirn)
-            ten2 = getattr(env_copy[site], dirn)
-            ten3 = getattr(env_clone[site], dirn)
-            ten4 = getattr(env_shallow[site], dirn)
-            ten5 = getattr(env_detach[site], dirn)
+    env_dict_level_0 = fpeps.EnvCTM.from_dict(env.to_dict(level=0))
+    env_dict_level_1 = fpeps.EnvCTM.from_dict(env.to_dict(level=1))
+    env_dict_level_2 = fpeps.EnvCTM.from_dict(env.to_dict(level=2))
 
-            assert yastn.are_independent(ten0, ten1)
-            assert yastn.are_independent(ten0, ten2)
-            assert yastn.are_independent(ten0, ten3)
-            assert ten0 is ten4
+    for new in [env_copy, env_clone, env_shallow, env_detach, env_dict_level_0, env_dict_level_1, env_dict_level_2]:
+        assert env.env.allclose(new.env)
+        assert env.proj.allclose(new.proj)
 
-            assert (ten0 - ten1).norm() < 1e-14
-            assert (ten0 - ten2).norm() < 1e-14
-            assert (ten0 - ten3).norm() < 1e-14
-            assert (ten0 - ten4).norm() < 1e-14
-            assert (ten0 - ten5).norm() < 1e-14
-    env.detach_()
 
 
 @pytest.mark.parametrize("boundary", ["obc", "infinite"])

@@ -116,7 +116,6 @@ class Peps(Lattice):
     def __repr__(self) -> str:
         return f"Peps(geometry={self.geometry.__repr__()}, tensors={ self._site_data })"
 
-
     def transfer_mpo(self, n=0, dirn='v') -> MpsMpoOBC | MpoPBC:
         """
         Converts a specified row or column of the PEPS into a Matrix Product Operator (MPO) representation,
@@ -308,3 +307,18 @@ class Peps2Layers():
     def __getitem__(self, site) -> DoublePepsTensor:
         """ Get tensor for site. """
         return DoublePepsTensor(bra=self.bra[site], ket=self.ket[site])
+
+    def to_dict(self, level=2) -> dict:
+        d = {'type': type(self).__name__,
+             'bra': self.bra.to_dict(level=level)}
+        if self._ket is not None:
+            d['ket'] = self._ket.to_dict(level=level)
+        return d
+
+    @classmethod
+    def from_dict(cls, d, config=None):
+        if cls.__name__ != d['type']:
+            raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
+        bra = Peps.from_dict(d['bra'], config=config)
+        ket = Peps.from_dict(d['ket'], config=config) if ('ket' in d) else None
+        return Peps2Layers(bra=bra, ket=ket)
