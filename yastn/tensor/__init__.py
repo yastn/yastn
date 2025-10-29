@@ -152,6 +152,8 @@ class Tensor:
     def from_dict(cls, d: dict, config:_config | None=None):
         #
         d = d.copy()
+        if d['type'] != 'Tensor':
+            raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
 
         if 'level' not in d:
             d['level'] = 2

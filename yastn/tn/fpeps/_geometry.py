@@ -15,7 +15,8 @@
 """ Basic structures forming PEPS network. """
 from __future__ import annotations
 from typing import NamedTuple, Sequence
-from ... import YastnError
+from ... import YastnError, Tensor
+from .envs._env_dataclasses import EnvBP_local, EnvCTM_local, EnvCTM_projectors
 
 
 class Site(NamedTuple):
@@ -55,7 +56,7 @@ _periodic_dict = {'infinite': 'ii', 'obc': 'oo', 'cylinder': 'po'}
 
 class SquareLattice():
 
-    def __init__(self, dims=(2, 2), boundary='infinite'):
+    def __init__(self, dims=(2, 2), boundary='infinite', **kwargs):
         r"""
         Geometric information about 2D square lattice.
 
@@ -219,14 +220,14 @@ class SquareLattice():
 
     def to_dict(self):
         """Return a dictionary representation of the object."""
-        return {'lattice': type(self).__name__,
+        return {'type': type(self).__name__,
                 'dims': self.dims,
                 'boundary': self.boundary}
 
 
 class CheckerboardLattice(SquareLattice):
 
-    def __init__(self):
+    def __init__(self, **kwargs):
         r"""
         Geometric information about infinite checkerboard lattice, which
         is an infinite lattice with :math:`2{\times}2` unit cell and two unique tensors.
@@ -242,7 +243,7 @@ class CheckerboardLattice(SquareLattice):
 
     def to_dict(self):
         """Return a dictionary representation of the object."""
-        return {'lattice': type(self).__name__}
+        return {'type': type(self).__name__}
 
 
 class RectangularUnitcell(SquareLattice):
@@ -344,7 +345,7 @@ class RectangularUnitcell(SquareLattice):
             in format Sequence[Sequence[int]].
 
         """
-        return {'lattice': type(self).__name__,
+        return {'type': type(self).__name__,
                 'pattern': [[self.site2index((row, col)) for col in range(self.Ny)] for row in range(self.Nx)]}
 
 
@@ -396,11 +397,19 @@ class TriangularLattice(SquareLattice):
             in format Sequence[Sequence[int]].
 
         """
-        return {'lattice': type(self).__name__,
+        return {'type': type(self).__name__,
                 'pattern': [[self.site2index((row,col)) for col in range(self.Ny)] for row in range(self.Nx)]}
 
 
+LATTICE_CLASSES = {"SquareLattice": SquareLattice,
+                   "CheckerboardLattice": CheckerboardLattice,
+                   "RectangularUnitcell": RectangularUnitcell,
+                   "TriangularLattice": TriangularLattice}
 
+DATA_CLASSES = {"Tensor": Tensor,
+                "EnvBP_local": EnvBP_local,
+                "EnvCTM_local": EnvCTM_local,
+                "EnvCTM_projectors": EnvCTM_projectors}
 
 class Lattice():
 
@@ -413,7 +422,7 @@ class Lattice():
         geometry: SquareLattice | CheckerboardLattice | RectangularUnitcell
             Specify lattice geometry.
         """
-        self.geometry = geometry
+        self.geometry = geometry.geometry if hasattr(geometry, 'geometry') else geometry
         for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "f_ordered", "nn_bond_dirn"]:
             setattr(self, name, getattr(geometry, name))
         self._site_data = {self.site2index(site): None for site in self.sites()}
@@ -426,13 +435,23 @@ class Lattice():
         """ Set tensor at site. """
         self._site_data[self.site2index(site)] = obj
 
-    def to_dict(self) -> dict:
+    def to_dict(self, level=2) -> dict:
         """
         Serialize Lattice into a dictionary.
         """
         return {'type': type(self).__name__,
                 'geometry': self.geometry.to_dict(),
-                'site_data': {site: self[site].to_dict() for site in self.sites()}}
+                'site_data': {k: v.to_dict(level=level) for k, v in self._site_data.items() if v is not None}}
+
+    @classmethod
+    def from_dict(cls, d, config=None):
+        if cls.__name__ != d['type']:
+            raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
+        geometry = LATTICE_CLASSES[d['geometry']['type']](**d['geometry'])
+        net = cls(geometry)
+        for k, v in d['site_data'].items():
+            net._site_data[k] = DATA_CLASSES[v['type']].from_dict(v, config=config)
+        return net
 
     def save_to_dict(self) -> dict:
         """
@@ -449,20 +468,22 @@ class Lattice():
         Returns a deep clone of the PEPS instance by :meth:`cloning<yastn.Tensor.clone>` each tensor in
         the network. Each tensor in the cloned PEPS will contain its own independent data blocks.
         """
-        psi = type(self)(geometry=self.geometry)
+        net = type(self)(geometry=self.geometry)
         for ind in self._site_data:
-            psi._site_data[ind] = self._site_data[ind].clone()
-        return psi
+            if self._site_data[ind] is not None:
+                net._site_data[ind] = self._site_data[ind].clone()
+        return net
 
     def copy(self) -> Lattice:
         r"""
         Returns a deep copy of the PEPS instance by :meth:`copy<yastn.Tensor.copy>` each tensor in
         the network. Each tensor in the copied PEPS will contain its own independent data blocks.
         """
-        psi = type(self)(geometry=self.geometry)
+        net = type(self)(geometry=self.geometry)
         for ind in self._site_data:
-            psi._site_data[ind] = self._site_data[ind].copy()
-        return psi
+            if self._site_data[ind] is not None:
+                net._site_data[ind] = self._site_data[ind].copy()
+        return net
 
     def shallow_copy(self) -> Lattice:
         r"""
@@ -470,7 +491,53 @@ class Lattice():
 
         Shallow copy is usually sufficient to retain the old PEPS.
         """
-        psi = type(self)(geometry=self.geometry)
+        net = type(self)(geometry=self.geometry)
         for ind in self._site_data:
-            psi._site_data[ind] = self._site_data[ind]
-        return psi
+            net._site_data[ind] = self._site_data[ind]
+        return net
+
+    def detach(self) -> Lattice:
+        r"""
+        Return a detached view of the environment - resulting environment is **not** a part
+        of the computational graph. Data of detached environment tensors is shared
+        with the originals.
+        """
+        net = type(self)(geometry=self.geometry)
+        for ind in self._site_data:
+            if self._site_data[ind] is not None:
+                net._site_data[ind] = self._site_data[ind].detach()
+        return net
+
+    def detach_(self):
+        r"""
+        Detach all environment tensors from the computational graph.
+        Data of environment tensors in detached environment is a `view` of the original data.
+        """
+        for ind in self._site_data:
+            if self._site_data[ind] is not None:
+                self._site_data[ind].detach_()
+
+    def allclose(self, other, rtol=1e-13, atol=1e-13):
+        if not isinstance(other, type(self)):
+            return False
+        if self.geometry != other.geometry:
+            return False
+        for k, a in self._site_data.items():
+            b = other._site_data[k]
+            if (a is not None and b is not None and not a.allclose(b, rtol=rtol, atol=atol)) or \
+               (a is not None and b is None) or (a is None and b is not None):
+                return False
+        return True
+
+    def are_independent(self, other, independent=True):
+        """
+        Test if corresponding data fields have independent tensors
+
+        independent allows testing case when all elements are None
+        """
+        tests = []
+        for k, a in self._site_data.items():
+            b = other._site_data[k]
+            if a is not None and b is not None:
+                tests.append(a.are_independent(b) == independent)
+        return all(tests)

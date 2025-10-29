@@ -62,15 +62,52 @@ def test_dataclasses(config_kwargs):
                           [True, True, False, False, False, False, True]):
             assert a.allclose(b)
             assert b is not a
-            for k in fields(a):
-                ta, tb = getattr(a, k.name), getattr(b, k.name)
-                if ta is not None and tb is not None:
-                    assert yastn.are_independent(ta, tb) == ind
+            assert a.are_independent(b, independent=ind)
+
 
     with pytest.raises(yastn.YastnError,
                        match=re.escape("EnvBP_local does not match d['type'] == EnvCTM_local")):
         d = ctm.to_dict()
         fpeps.envs.EnvBP_local.from_dict(d)
+
+
+def test_lattice(config_kwargs):
+    """ Test operations of Lattice"""
+    geometries = [fpeps.SquareLattice(dims=(2, 2), boundary='obc'),
+                  fpeps.CheckerboardLattice(),
+                  fpeps.RectangularUnitcell(dims=(2, 2), pattern=[[1, 0], [1, 0]]),
+                  fpeps.TriangularLattice(),]
+
+
+    config = yastn.make_config(sym='U1', **config_kwargs)
+    leg = yastn.Leg(config, s=1, t=(-1, 0, 1), D=(2, 3, 4))
+    T = yastn.rand(config, legs=[leg, leg, leg.conj()])
+    C = yastn.rand(config, legs=[leg, leg.conj()])
+
+    objs = [T,
+            fpeps.envs.EnvCTM_local(tl=C, t=T, tr=C, r=T, br=C, b=T, bl=C, l=None),
+            fpeps.envs.EnvCTM_projectors(hlt=T, hlb=T, hrt=T, hrb=T, vtl=T, vtr=T, vbl=T, vbr=None),
+            fpeps.envs.EnvBP_local(t=C, l=C, b=C, r=None)]
+    #
+    for geometry in geometries:
+        for cls in [fpeps.Lattice, fpeps.Peps]:
+            net = cls(geometry)
+            for obj in objs:
+                net[0, 0] = net[0, 1] = obj
+                net_copy = net.copy()
+                net_clone = net.clone()
+                net_shallow = net.shallow_copy()
+                net_shallow.detach_()
+                net_detach = net.detach()
+                net_dict_level_0 = cls.from_dict(net.to_dict(level=0))
+                net_dict_level_1 = cls.from_dict(net.to_dict(level=1))
+                net_dict_level_2 = cls.from_dict(net.to_dict(level=2))
+                #
+                for nn, ind in zip([net_copy, net_clone, net_shallow, net_detach, net_dict_level_0, net_dict_level_1, net_dict_level_2],
+                                    [True, True, False, False, False, False, True]):
+                    assert net.allclose(nn)
+                    assert nn is not net
+                    assert net.are_independent(nn, independent=ind)
 
 
 if __name__ == '__main__':

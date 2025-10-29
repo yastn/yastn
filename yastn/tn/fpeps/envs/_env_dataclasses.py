@@ -50,6 +50,19 @@ class dataclasses_common():
                 return False
         return True
 
+    def are_independent(self, other, independent=True):
+        """
+        Test if corresponding data fields have independent tensors
+
+        independent allows testing case when all elements are None
+        """
+        tests = []
+        for k in fields(self):
+            ta, tb = getattr(self, k.name), getattr(other, k.name)
+            if ta is not None and tb is not None:
+                tests.append(ta.are_independent(tb) == independent)
+        return all(tests)
+
     def to_dict(self, level=2):
         d = {'type': type(self).__name__}
         for k in fields(self):
@@ -60,7 +73,7 @@ class dataclasses_common():
     @classmethod
     def from_dict(cls, d, config=None):
         if cls.__name__ != d['type']:
-            raise YastnError(f"{cls.__name__ } does not match d['type'] == {d['type']}")
+            raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
         dd = {k.name: Tensor.from_dict(d[k.name], config=config) for k in fields(cls) if k.name in d}
         return cls(**dd)
 

@@ -104,13 +104,15 @@ def load_from_dict(config, d) -> Peps:
         return env
 
     # otherwise assume class == 'Peps'
-    if d['lattice'] in ["square", "SquareLattice"]:
+    if 'lattice' in d:
+       d['type'] = d['lattice']  # for backward compatibility
+    if d['type'] in ["square", "SquareLattice"]:
         net = SquareLattice(dims=d['dims'], boundary=d['boundary'])
-    elif d['lattice'] in ["checkerboard", "CheckerboardLattice"]:
+    elif d['type'] in ["checkerboard", "CheckerboardLattice"]:
         net = CheckerboardLattice()
-    elif d['lattice'] in ["rectangularunitcell", "RectangularUnitcell"]:
+    elif d['type'] in ["rectangularunitcell", "RectangularUnitcell"]:
         net = RectangularUnitcell(pattern=d['pattern'])
-    elif d['lattice'] in ["triangular", "TriangularLattice"]:
+    elif d['type'] in ["triangular", "TriangularLattice"]:
         net = TriangularLattice()
 
     psi = Peps(net)
