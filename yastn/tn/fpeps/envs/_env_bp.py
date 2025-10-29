@@ -13,11 +13,10 @@
 # limitations under the License.
 # ==============================================================================
 from __future__ import annotations
-from dataclasses import dataclass
 from itertools import pairwise
 from tqdm import tqdm
 from typing import NamedTuple
-from .... import Tensor, eye, YastnError, tensordot, vdot, ncon
+from .... import eye, YastnError, tensordot, vdot, ncon
 from .._peps import Peps2Layers, DoublePepsTensor
 from .._gates_auxiliary import fkron, gate_fix_swap_gate, match_ancilla
 from .._geometry import Bond, Site, Lattice
@@ -25,19 +24,7 @@ from .._evolution import BipartiteBondMetric, BondMetric
 from ._env_auxlliary import *
 from ._env_auxlliary import clear_projectors
 from ._env_boundary_mps import _clear_operator_input
-
-
-@dataclass()
-class EnvBP_local():
-    r"""
-    Dataclass for BP environment tensors at a single Peps site on square lattice.
-
-    Contains fields ``t``,  ``l``, ``b``, ``r``
-    """
-    t: Tensor | None = None  # top
-    l: Tensor | None = None  # left
-    b: Tensor | None = None  # bottom
-    r: Tensor | None = None  # right
+from ._env_dataclasses import EnvBP_local
 
 
 class BP_out(NamedTuple):

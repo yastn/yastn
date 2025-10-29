@@ -96,7 +96,7 @@ def copy(x):
 
 
 def to_numpy(x):
-    return x.resolve_conj().detach().cpu().numpy()
+    return x.numpy(force=True).copy()
 
 
 def get_shape(x):

@@ -31,7 +31,7 @@ __all__ = ['conj', 'conj_blocks', 'flip_signature', 'flip_charges', 'switch_sign
            'requires_grad_', 'grad', 'drop_leg_history']
 
 
-def copy(a) -> yastn.Tensor:
+def copy(a) -> 'Tensor':
     r"""
     Return a copy of the tensor. Data of the resulting tensor is independent
     from the original.
@@ -47,7 +47,7 @@ def copy(a) -> yastn.Tensor:
     return a._replace(data=data)
 
 
-def clone(a) -> yastn.Tensor:
+def clone(a) -> 'Tensor':
     r"""
     Return a clone of the tensor preserving the autograd - resulting clone is a part
     of the computational graph. Data of the resulting tensor is indepedent
@@ -57,7 +57,7 @@ def clone(a) -> yastn.Tensor:
     return a._replace(data=data)
 
 
-def to(a, device=None, dtype=None) -> yastn.Tensor:
+def to(a, device=None, dtype=None) -> 'Tensor':
     r"""
     Move tensor to device and cast to given datatype.
 
@@ -78,7 +78,7 @@ def to(a, device=None, dtype=None) -> yastn.Tensor:
     return a._replace(data=data)
 
 
-def detach(a) -> yastn.Tensor:
+def detach(a) -> 'Tensor':
     r"""
     Detach tensor from the computational graph returning a `view`.
 
@@ -92,7 +92,14 @@ def detach(a) -> yastn.Tensor:
     return a._replace(data=data)
 
 
-def grad(a) -> yastn.Tensor:
+def detach_(a) -> 'Tensor':
+    r"""
+    Detach tensor from the computational graph, in place.
+    """
+    a.config.backend.detach_(a._data)
+
+
+def grad(a) -> 'Tensor':
     """
     Calculate the gradient of tensor elements after .backward() is called on the scalar result.
     """
@@ -100,7 +107,7 @@ def grad(a) -> yastn.Tensor:
     return a._replace(data=data)
 
 
-def requires_grad_(a, requires_grad=True) -> Never:
+def requires_grad_(a, requires_grad=True) -> None:
     r"""
     Activate or deactivate recording of operations on the tensor for automatic differentiation.
 
@@ -112,7 +119,7 @@ def requires_grad_(a, requires_grad=True) -> Never:
     a.config.backend.requires_grad_(a._data, requires_grad=requires_grad)
 
 
-def conj(a) -> yastn.Tensor:
+def conj(a) -> 'Tensor':
     r"""
     Return conjugated tensor. In particular, change the sign of the signature `s` to `-s`,
     the total charge `n` to `-n`, and complex conjugate each block of the tensor.
@@ -127,7 +134,7 @@ def conj(a) -> yastn.Tensor:
     return a._replace(hfs=hfs, struct=struct, data=data)
 
 
-def conj_blocks(a) -> yastn.Tensor:
+def conj_blocks(a) -> 'Tensor':
     """
     Complex-conjugate all blocks leaving symmetry structure (signature, blocks charge, and
     total charge) unchanged.
@@ -138,7 +145,7 @@ def conj_blocks(a) -> yastn.Tensor:
     return a._replace(data=data)
 
 
-def flip_signature(a) -> yastn.Tensor:
+def flip_signature(a) -> 'Tensor':
     r"""
     Change the signature of the tensor, `s` to `-s` or equivalently
     reverse the direction of in- and out-going legs, and also the total charge
@@ -153,7 +160,7 @@ def flip_signature(a) -> yastn.Tensor:
     return a._replace(hfs=hfs, struct=struct)
 
 
-def flip_charges(a, axes=None) -> yastn.Tensor:
+def flip_charges(a, axes=None) -> 'Tensor':
     r"""
     Flip signs of charges and signatures on specified legs.
 
@@ -205,7 +212,7 @@ def flip_charges(a, axes=None) -> yastn.Tensor:
     return a._replace(struct=struct, slices=slices, data=data, hfs=hfs)
 
 
-def switch_signature(a, axes: Union[Sequence[int],int,str] = ()) -> yastn.Tensor:
+def switch_signature(a, axes: Union[Sequence[int],int,str] = ()) -> 'Tensor':
     r"""
     Flip signature (and hence also charges) on specified legs.
     This function supports flipping signature of hard-fused legs.
@@ -245,7 +252,7 @@ def switch_signature(a, axes: Union[Sequence[int],int,str] = ()) -> yastn.Tensor
     return ncon( (a,)+symbols_1j, [outi_a,]+contractedi )
 
 
-def drop_leg_history(a, axes=None) -> yastn.Tensor:
+def drop_leg_history(a, axes=None) -> 'Tensor':
     r"""
     Drops information about original structure of fused or blocked legs
     that have been combined into a selected tensor leg(s).
@@ -270,7 +277,7 @@ def drop_leg_history(a, axes=None) -> yastn.Tensor:
     return a._replace(hfs=hfs)
 
 
-def transpose(a, axes=None) -> yastn.Tensor:
+def transpose(a, axes=None) -> 'Tensor':
     r"""
     Transpose tensor by permuting the order of its legs (spaces).
     Makes a shallow copy of tensor data if the order is not changed.
@@ -314,7 +321,7 @@ def transpose(a, axes=None) -> yastn.Tensor:
     return a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, data=data)
 
 
-def moveaxis(a, source, destination) -> yastn.Tensor:
+def moveaxis(a, source, destination) -> 'Tensor':
     r"""
     Change the position of an axis (or a group of axes) of the tensor.
     This is a convenience function for subset of possible permutations. It
@@ -338,7 +345,7 @@ def moveaxis(a, source, destination) -> yastn.Tensor:
     return transpose(a, axes)
 
 
-def move_leg(a, source, destination) -> yastn.Tensor:
+def move_leg(a, source, destination) -> 'Tensor':
     r"""
     Change the position of an axis (or a group of axes) of the tensor.
     This is a convenience function for subset of possible permutations. It
@@ -353,7 +360,7 @@ def move_leg(a, source, destination) -> yastn.Tensor:
     return moveaxis(a, source, destination)
 
 
-def add_leg(a, axis=-1, s=-1, t=None, leg=None) -> yastn.Tensor:
+def add_leg(a, axis=-1, s=-1, t=None, leg=None) -> 'Tensor':
     r"""
     Creates a new tensor with an extra leg that carries the charge (or part of it)
     of the orignal tensor. This is achieved by the extra leg having a single charge sector
@@ -422,7 +429,7 @@ def add_leg(a, axis=-1, s=-1, t=None, leg=None) -> yastn.Tensor:
     return a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices)
 
 
-def remove_leg(a, axis=-1) -> yastn.Tensor:
+def remove_leg(a, axis=-1) -> 'Tensor':
     r"""
     Removes leg with a single charge sector of dimension one from tensor.
     The charge carried by that leg (if any) is added to the
@@ -468,7 +475,7 @@ def remove_leg(a, axis=-1) -> yastn.Tensor:
     return a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices)
 
 
-def diag(a) -> yastn.Tensor:
+def diag(a) -> 'Tensor':
     """
     Select diagonal of 2D tensor and output it as a diagonal tensor, or vice versa.
     """
@@ -495,7 +502,7 @@ def diag(a) -> yastn.Tensor:
     return a._replace(struct=struct, slices=slices, data=data)
 
 
-def remove_zero_blocks(a, rtol=1e-12, atol=0) -> yastn.Tensor:
+def remove_zero_blocks(a, rtol=1e-12, atol=0) -> 'Tensor':
     r"""
     Remove blocks where all elements are below a cutoff.
 
