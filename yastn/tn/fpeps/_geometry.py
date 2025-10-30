@@ -15,9 +15,9 @@
 """ Basic structures forming PEPS network. """
 from __future__ import annotations
 from typing import NamedTuple, Sequence
+from warnings import warn
 from ... import YastnError
 from .envs._env_dataclasses import DATA_CLASSES
-
 
 class Site(NamedTuple):
     """
@@ -466,7 +466,11 @@ class Lattice():
     def save_to_dict(self) -> dict:
         """
         Serialize PEPS into a dictionary.
+
+        !!! This method is deprecated; use to_dict() instead. !!!
+
         """
+        warn('This method is deprecated; use to_dict() instead.', DeprecationWarning, stacklevel=2)
         d = {**self.geometry.to_dict(),
              'data': {}}
         for site in self.sites():

@@ -18,6 +18,7 @@ import numpy as np
 from functools import reduce
 from numbers import Number
 from operator import mul
+from warnings import warn
 from ._auxliary import _clear_axes, _unpack_axes, _struct, _slc, _flatten, _join_contiguous_slices
 from ._tests import YastnError, _test_configs_match
 from ..sym import sym_none
@@ -78,11 +79,15 @@ def save_to_dict(a) -> dict:
 
     Complementary function is :meth:`yastn.load_from_dict`.
 
+    !!! This method is deprecated; use to_dict(). !!!
+
     Parameters
     ----------
     a: yastn.Tensor
         tensor to export.
     """
+    warn('This method is deprecated; use to_dict() instead.', DeprecationWarning, stacklevel=2)
+
     _d = a.config.backend.to_numpy(a._data).copy()
     hfs = [hf._asdict() for hf in a.hfs]
     return {'type': type(a).__name__,

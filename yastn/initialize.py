@@ -28,7 +28,6 @@ from .tensor._legs import Leg, LegMeta, legs_union, _legs_mask_needed
 from .tensor._tests import _test_can_be_combined
 from .tensor._contractions import ncon
 
-
 __all__ = ['rand', 'rand_like', 'randR', 'randC', 'zeros', 'ones', 'eye', 'block',
            'load_from_dict', 'load_from_hdf5', 'decompress_from_1d',
            'split_data_and_meta', 'combine_data_and_meta']

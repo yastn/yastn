@@ -121,8 +121,27 @@ class EnvBP_local(dataclasses_common):
     b: Tensor | None = None  # bottom
     r: Tensor | None = None  # right
 
+@dataclass()
+class EnvCTM_c4v_local(dataclasses_common):
+    r"""
+    Dataclass for CTM environment tensors associated with Peps lattice site.
+    Contains fields ``tl``, ``t``, ``tr``, ``r``, ``br``, ``b``, ``bl``, ``l``
+    """
+    tl: Tensor | None = None  # top-left
+    t:  Tensor | None = None  # top
+
+@dataclass()
+class EnvCTM_c4v_projectors(dataclasses_common):
+    r"""
+    Dataclass for CTM projectors associated with Peps lattice site.
+    """
+    vtl: Tensor | None = None  # vertical top left
+    vtr: Tensor | None = None  # vertical top right
+
 
 DATA_CLASSES = {"Tensor": Tensor,
                 "EnvBP_local": EnvBP_local,
                 "EnvCTM_local": EnvCTM_local,
-                "EnvCTM_projectors": EnvCTM_projectors}
+                "EnvCTM_projectors": EnvCTM_projectors,
+                "EnvCTM_c4v_local": EnvCTM_c4v_local,
+                "EnvCTM_c4v_projectors": EnvCTM_c4v_projectors}

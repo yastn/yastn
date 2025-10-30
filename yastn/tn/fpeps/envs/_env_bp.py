@@ -16,6 +16,7 @@ from __future__ import annotations
 from itertools import pairwise
 from tqdm import tqdm
 from typing import NamedTuple
+from warnings import warn
 from .... import eye, YastnError, tensordot, vdot, ncon
 from .._peps import Peps2Layers, DoublePepsTensor, PEPS_CLASSES
 from .._gates_auxiliary import fkron, gate_fix_swap_gate, match_ancilla
@@ -109,7 +110,6 @@ class EnvBP():
     def from_dict(cls, d, config=None):
         if cls.__name__ != d['type']:
             raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
-
         psi = PEPS_CLASSES[d['psi']['type']].from_dict(d['psi'], config=config)
         env = cls(psi, init=None)
         env.env = Lattice.from_dict(d['env'], config=config)
@@ -118,7 +118,11 @@ class EnvBP():
     def save_to_dict(self) -> dict:
         r"""
         Serialize EnvBP into a dictionary.
+
+        !!! This method is deprecated; use to_dict() instead !!!
         """
+        warn('This method is deprecated; use to_dict() instead.', DeprecationWarning, stacklevel=2)
+
         psi = self.psi
         if isinstance(psi, Peps2Layers):
             psi = psi.ket

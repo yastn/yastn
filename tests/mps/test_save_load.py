@@ -85,16 +85,19 @@ def test_save_load_mps_dict(config_kwargs, sym, tol=1e-12):
     # Next, we serialize MPS into dictionary.
     #
     tmp = psi.save_to_dict()
+    tmp2 = psi.to_dict(level=2)
     #
     # Last, we load the MPS from the dictionary,
     # providing valid YASTN configuration
     #
     config = ops.config
     phi = mps.load_from_dict(config, tmp)
+    phi2 = mps.MpsMpoOBC.from_dict(tmp2)
     #
     # Test psi == phi
     #
     assert (psi - phi).norm() < tol * psi.norm()
+    assert (psi - phi2).norm() < tol * psi.norm()
     #
     # Similarly for MPO
     #
@@ -103,7 +106,10 @@ def test_save_load_mps_dict(config_kwargs, sym, tol=1e-12):
     psi.canonize_(to='first', normalize=False)  # retaining the norm
     tmp = psi.save_to_dict()
     phi = mps.load_from_dict(config, tmp)
+    tmp2 = psi.to_dict(level=2)
+    phi2 = mps.MpsMpoOBC.from_dict(tmp2)
     assert (psi - phi).norm() < tol * psi.norm()
+    assert (psi - phi2).norm() < tol * psi.norm()
 
 
 if __name__ == '__main__':

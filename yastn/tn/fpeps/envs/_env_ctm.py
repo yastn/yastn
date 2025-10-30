@@ -15,6 +15,7 @@
 from __future__ import annotations
 from typing import NamedTuple, Union, Callable, Sequence
 import logging
+from warnings import warn
 from .... import Tensor, rand, ones, eye, YastnError, Leg, tensordot, qr, vdot, decompress_from_1d
 from ....operators import sign_canonical_order
 from ... import mps
@@ -86,7 +87,7 @@ class EnvCTM():
         self.proj = Lattice(self.geometry, objects={site: EnvCTM_projectors() for site in self.sites()})
 
         if init not in (None, 'rand', 'eye', 'dl'):
-            raise YastnError(f"EnvCTM {init=} not recognized. Should be 'rand', 'eye', 'dl', or None.")
+            raise YastnError(f"{type(self).__name__} {init=} not recognized. Should be 'rand', 'eye', 'dl', or None.")
         if init is not None:
             self.reset_(init=init, leg=leg)
 
@@ -167,7 +168,6 @@ class EnvCTM():
     def from_dict(cls, d, config=None):
         if cls.__name__ != d['type']:
             raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
-
         psi = PEPS_CLASSES[d['psi']['type']].from_dict(d['psi'], config=config)
         env = cls(psi, init=None)
         env.env = Lattice.from_dict(d['env'], config=config)
@@ -216,7 +216,11 @@ class EnvCTM():
     def save_to_dict(self) -> dict:
         r"""
         Serialize EnvCTM into a dictionary.
+
+        !!! This method is deprecated; use to_dict() instead !!!
         """
+        warn('This method is deprecated; use to_dict() instead.', DeprecationWarning, stacklevel=2)
+
         psi = self.psi
         if isinstance(psi, Peps2Layers):
             psi = psi.ket

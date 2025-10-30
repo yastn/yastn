@@ -15,9 +15,13 @@
 """ MpsMpoParent structure and basic methods common for OBC and PBC. """
 from __future__ import annotations
 from typing import Iterator, Sequence
+from warnings import warn
 from numbers import Number, Integral
 from ... import YastnError, Tensor, Leg
+#from ...tn.fpeps._doublePepsTensor import DoublePepsTensor
 
+# TENSOR_CLASSES = {"Tensor": Tensor,
+#                   "DoublePepsTensor": DoublePepsTensor}
 
 class _MpsMpoParent:
     # The basic structure of MPS/MPO with `N` sites.
@@ -290,10 +294,14 @@ class _MpsMpoParent:
         r"""
         Serialize MPS/MPO into a dictionary.
 
+        !!! This method is deprecated; use to_dict() instead !!!
+
         Each element represents serialized :class:`yastn.Tensor`
         (see, :meth:`yastn.Tensor.save_to_dict`) of the MPS/MPO.
         Absorbs central block if it exists.
         """
+        warn('This method is deprecated; use to_dict() instead.', DeprecationWarning, stacklevel=2)
+
         psi = self.shallow_copy()
         psi.absorb_central_()  # make sure central block is eliminated
         out_dict = {
@@ -337,3 +345,35 @@ class _MpsMpoParent:
         """
         axes = (tuple(range(self.N)),) if self.nr_phys == 1 else (tuple(range(0, 2 * self.N, 2)), tuple(range(1, 2 * self.N, 2)))
         return self.to_tensor().fuse_legs(axes=axes)
+
+    def to_dict(psi, level=2):
+        r"""
+        Serialize MPS/MPO into a dictionary.
+
+        Each element represents serialized :class:`yastn.Tensor`
+        (see, :meth:`yastn.Tensor.to_dict`) of the MPS/MPO.
+        """
+        try:
+            factor = psi.config.backend.to_numpy(psi.factor)
+        except:
+            factor = psi.factor
+        return {'type': type(psi).__name__,
+                'N': psi.N,
+                'pC': psi.pC,
+                'nr_phys': psi.nr_phys,
+                'factor': factor,
+                'A': {k: v.to_dict(level=level) for k, v in psi.A.items()}}
+
+    @classmethod
+    def from_dict(cls, d, config=None):
+        r"""
+        Create MPS/MPO from dictionary.
+        """
+        if cls.__name__ != d['type']:
+            raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
+        psi = cls(N=d['N'], nr_phys=d['nr_phys'])
+        psi.factor = d['factor']
+        psi.pC = d['pC']
+        psi.A = {k: Tensor.from_dict(v, config=config) for k, v in d['A'].items()}
+        # psi.A = {k: TENSOR_CLASSES[v['type']].from_dict(v, config=config) for k, v in d['A'].items()}
+        return psi
