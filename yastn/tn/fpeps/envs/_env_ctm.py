@@ -19,7 +19,7 @@ from .... import Tensor, rand, ones, eye, YastnError, Leg, tensordot, qr, vdot, 
 from ....operators import sign_canonical_order
 from ... import mps
 from ...mps import MpsMpoOBC
-from .._peps import Peps, Peps2Layers
+from .._peps import PEPS_CLASSES, Peps2Layers, Peps
 from .._gates_auxiliary import fkron, gate_fix_swap_gate
 from .._geometry import Site, Lattice
 from .._evolution import BondMetric
@@ -39,9 +39,6 @@ class CTMRG_out(NamedTuple):
     converged: bool = False
     max_D: int = 1
 
-
-PEPS_CLASSES = {'Peps': Peps,
-                'Peps2Layers': Peps2Layers}
 
 class EnvCTM():
     def __init__(self, psi, init='rand', leg=None, ket=None):
@@ -77,26 +74,21 @@ class EnvCTM():
         leg: Optional[yastn.Leg]
             Passed to :meth:`yastn.tn.fpeps.EnvCTM.reset_` to further customize initialization.
 
-        ket: Optional[]
+        ket: Optional[yastn.tn.Peps]
             If provided, and ``psi`` has physical legs, forms a double-layer PEPS <psi | ket>.
         """
         self.geometry = psi.geometry
         for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "f_ordered", "nn_bond_dirn"]:
             setattr(self, name, getattr(self.geometry, name))
+
         self.psi = Peps2Layers(bra=psi, ket=ket) if psi.has_physical() else psi
+        self.env = Lattice(self.geometry, objects={site: EnvCTM_local() for site in self.sites()})
+        self.proj = Lattice(self.geometry, objects={site: EnvCTM_projectors() for site in self.sites()})
+
         if init not in (None, 'rand', 'eye', 'dl'):
             raise YastnError(f"EnvCTM {init=} not recognized. Should be 'rand', 'eye', 'dl', or None.")
-
-        self.env = Lattice(self.geometry)
-        for site in self.sites():
-            self[site] = EnvCTM_local()
         if init is not None:
             self.reset_(init=init, leg=leg)
-
-        # empty structure for projectors
-        self.proj = Lattice(self.geometry)
-        for site in self.sites():
-            self.proj[site] = EnvCTM_projectors()
 
     @property
     def config(self):
@@ -118,7 +110,6 @@ class EnvCTM():
 
     # Cloning/Copying/Detaching(view)
     #
-
     def copy(self) -> EnvCTM:
         r"""
         Return a clone of the environment preserving the autograd - resulting clone is a part
@@ -182,7 +173,6 @@ class EnvCTM():
         env.env = Lattice.from_dict(d['env'], config=config)
         env.proj = Lattice.from_dict(d['proj'], config=config)
         return env
-
 
     def compress_env_1d(env):
         r"""

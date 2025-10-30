@@ -17,7 +17,7 @@ from itertools import pairwise
 from tqdm import tqdm
 from typing import NamedTuple
 from .... import eye, YastnError, tensordot, vdot, ncon
-from .._peps import Peps2Layers, DoublePepsTensor
+from .._peps import Peps2Layers, DoublePepsTensor, PEPS_CLASSES
 from .._gates_auxiliary import fkron, gate_fix_swap_gate, match_ancilla
 from .._geometry import Bond, Site, Lattice
 from .._evolution import BipartiteBondMetric, BondMetric
@@ -33,7 +33,7 @@ class BP_out(NamedTuple):
     converged: bool = False
 
 
-class EnvBP(Lattice):
+class EnvBP():
 
     def __init__(self, psi, init='eye', tol_positive=1e-12, which="BP"):
         r"""
@@ -51,15 +51,17 @@ class EnvBP(Lattice):
         which: str
             Type of environment from 'BP', 'NN+BP', 'NNN+BP'
         """
-        super().__init__(psi.geometry)
+        self.geometry = psi.geometry
+        for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "f_ordered", "nn_bond_dirn"]:
+            setattr(self, name, getattr(self.geometry, name))
+
         self.psi = Peps2Layers(psi) if psi.has_physical() else psi
+        self.env = Lattice(self.geometry, objects={site: EnvBP_local() for site in self.sites()})
         self.tol_positive = tol_positive
         self._set_which(which)
 
         if init not in (None, 'eye'):
             raise YastnError(f"EnvBP {init=} not recognized. Should be 'eye' or None.")
-        for site in self.sites():
-            self[site] = EnvBP_local()
         if init is not None:
             self.reset_(init=init)
 
@@ -77,34 +79,40 @@ class EnvBP(Lattice):
     def config(self):
         return self.psi.config
 
+    def __getitem__(self, site):
+        return self.env[site]
+
+    def __setitem__(self, site, obj):
+        self.env[site] = obj
+
     def copy(self) -> EnvBP:
-        psi = self.psi
-        if isinstance(psi, Peps2Layers):
-            psi = psi.ket
-        env = EnvBP(psi, init=None)
-        for site in env.sites():
-            for dirn in ['t', 'l', 'b', 'r']:
-                setattr(env[site], dirn, getattr(self[site], dirn).copy())
+        env = EnvBP(self.psi, init=None)
+        env.env = self.env.copy()
         return env
 
     def clone(self) -> EnvBP:
-        psi = self.psi
-        if isinstance(psi, Peps2Layers):
-            psi = psi.ket
-        env = EnvBP(psi, init=None)
-        for site in env.sites():
-            for dirn in ['t', 'l', 'b', 'r']:
-                setattr(env[site], dirn, getattr(self[site], dirn).clone())
+        env = EnvBP(self.psi, init=None)
+        env.env = self.env.clone()
         return env
 
     def shallow_copy(self) -> EnvBP:
-        psi = self.psi
-        if isinstance(psi, Peps2Layers):
-            psi = psi.ket
         env = EnvBP(self.psi, init=None)
-        for site in env.sites():
-            for dirn in ['t', 'l', 'b', 'r']:
-                setattr(env[site], dirn, getattr(self[site], dirn))
+        env.env = self.env.shallow_copy()
+        return env
+
+    def to_dict(self, level=2):
+        return {'type': type(self).__name__,
+                'psi': self.psi.to_dict(level=level),
+                'env': self.env.to_dict(level=level)}
+
+    @classmethod
+    def from_dict(cls, d, config=None):
+        if cls.__name__ != d['type']:
+            raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
+
+        psi = PEPS_CLASSES[d['psi']['type']].from_dict(d['psi'], config=config)
+        env = cls(psi, init=None)
+        env.env = Lattice.from_dict(d['env'], config=config)
         return env
 
     def save_to_dict(self) -> dict:

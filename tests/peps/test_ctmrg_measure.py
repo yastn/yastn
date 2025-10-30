@@ -38,10 +38,12 @@ def run_ctm_save_load_copy(env):
     env_dict_level_1 = fpeps.EnvCTM.from_dict(env.to_dict(level=1))
     env_dict_level_2 = fpeps.EnvCTM.from_dict(env.to_dict(level=2))
 
-    for new in [env_copy, env_clone, env_shallow, env_detach, env_dict_level_0, env_dict_level_1, env_dict_level_2]:
+    for new, ind in zip([env_copy, env_clone, env_shallow, env_detach, env_dict_level_0, env_dict_level_1, env_dict_level_2],
+                        [True, True, False, False, False, False, True]):
         assert env.env.allclose(new.env)
         assert env.proj.allclose(new.proj)
-
+        assert env.env.are_independent(new.env, independent=ind)
+        assert env.proj.are_independent(new.proj, independent=ind)
 
 
 @pytest.mark.parametrize("boundary", ["obc", "infinite"])

@@ -19,10 +19,9 @@ from ... import mps
 from ._env_auxlliary import identity_tm_boundary, clear_projectors
 from ._env_measure import _measure_nsite
 from .._peps import Peps2Layers
-from .._geometry import Lattice
 
 
-class EnvBoundaryMPS(Lattice):
+class EnvBoundaryMPS():
     r"""
     Boundary MPS class for finite PEPS contraction.
     """
@@ -50,8 +49,10 @@ class EnvBoundaryMPS(Lattice):
         opts_var: dict
             Options passed to :meth:`yastn.tn.mps.compression_`. The default is ``None`` which sets opts_var={max_sweeps: 2, normalization: False}.
         """
+        self.geometry = psi.geometry
+        for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "f_ordered", "nn_bond_dirn"]:
+            setattr(self, name, getattr(self.geometry, name))
 
-        super().__init__(psi.geometry)
         self.psi = psi
         self._env = {}
         self.offset = 0

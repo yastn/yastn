@@ -17,10 +17,6 @@ import time, logging
 import torch
 import numpy as np
 from scipy.optimize import minimize
-from collections import namedtuple
-
-# import torch.utils.checkpoint
-
 from .... import zeros, eye, tensordot, diag, decompress_from_1d
 from ._env_ctm import ctm_conv_corner_spec, decompress_proj_1d
 from ._env_ctm_c4v import EnvCTM_c4v, decompress_env_c4v_1d

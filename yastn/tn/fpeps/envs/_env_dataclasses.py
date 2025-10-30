@@ -120,3 +120,9 @@ class EnvBP_local(dataclasses_common):
     l: Tensor | None = None  # left
     b: Tensor | None = None  # bottom
     r: Tensor | None = None  # right
+
+
+DATA_CLASSES = {"Tensor": Tensor,
+                "EnvBP_local": EnvBP_local,
+                "EnvCTM_local": EnvCTM_local,
+                "EnvCTM_projectors": EnvCTM_projectors}

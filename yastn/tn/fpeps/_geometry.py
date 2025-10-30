@@ -15,8 +15,8 @@
 """ Basic structures forming PEPS network. """
 from __future__ import annotations
 from typing import NamedTuple, Sequence
-from ... import YastnError, Tensor
-from .envs._env_dataclasses import EnvBP_local, EnvCTM_local, EnvCTM_projectors
+from ... import YastnError
+from .envs._env_dataclasses import DATA_CLASSES
 
 
 class Site(NamedTuple):
@@ -405,15 +405,9 @@ LATTICE_CLASSES = {"SquareLattice": SquareLattice,
                    "CheckerboardLattice": CheckerboardLattice,
                    "RectangularUnitcell": RectangularUnitcell,
                    "TriangularLattice": TriangularLattice}
-
-DATA_CLASSES = {"Tensor": Tensor,
-                "EnvBP_local": EnvBP_local,
-                "EnvCTM_local": EnvCTM_local,
-                "EnvCTM_projectors": EnvCTM_projectors}
-
 class Lattice():
 
-    def __init__(self, geometry):
+    def __init__(self, geometry, objects=None):
         r"""
         A dataclass combining a geometry with data container pointing to unique lattice sites.
 
@@ -426,6 +420,22 @@ class Lattice():
         for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "f_ordered", "nn_bond_dirn"]:
             setattr(self, name, getattr(geometry, name))
         self._site_data = {self.site2index(site): None for site in self.sites()}
+
+        if objects is not None:
+            try:
+                if isinstance(objects, Sequence):
+                    objects = {(nx, ny): tensor for nx, row in enumerate(objects) for ny, tensor in enumerate(row)}
+                if not isinstance(objects, dict):
+                    objects = {site: objects for site in self.geometry.sites()}
+                for site, tensor in objects.items():
+                    if self[site] is None:
+                        self[site] = tensor
+                    elif self[site] is not tensor:
+                        raise YastnError(f"{type(self).__name__}: Non-unique assignment to unique lattice sites.")
+            except (KeyError, TypeError):
+                raise YastnError(f"{type(self).__name__}: Assignment outside of the lattice geometry.")
+            if any(tensor is None for tensor in self._site_data.values()):
+                raise YastnError(f"{type(self).__name__}: Not all unique lattice sites got assigned.")
 
     def __getitem__(self, site):
         """ Get tensor for site. """
@@ -539,5 +549,5 @@ class Lattice():
         for k, a in self._site_data.items():
             b = other._site_data[k]
             if a is not None and b is not None:
-                tests.append(a.are_independent(b) == independent)
+                tests.append(a.are_independent(b, independent=independent))
         return all(tests)

@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 from __future__ import annotations
-from typing import Sequence, Union
+from typing import Sequence
 from ... import Tensor, YastnError, block
 from ...tn.mps import Mpo, MpsMpoOBC, MpoPBC
 from ._doublePepsTensor import DoublePepsTensor
@@ -22,7 +22,7 @@ from ._geometry import Lattice
 
 class Peps(Lattice):
 
-    def __init__(self, geometry, tensors: Union[None, Sequence[Sequence[Tensor]], dict[tuple[int,int],Tensor]]= None):
+    def __init__(self, geometry, tensors: None | Tensor | Sequence[Sequence[Tensor]] | dict[tuple[int,int], Tensor] = None):
         r"""
         A PEPS instance on a specified lattice can be initialized as empty (with no tensors assiged) or with tensors assigned to each unique lattice site.
 
@@ -33,12 +33,13 @@ class Peps(Lattice):
 
         Parameters
         ----------
-        geometry: SquareLattice | CheckerboardLattice | RectangularUnitcell
+        geometry: SquareLattice | CheckerboardLattice | RectangularUnitcell | TriangularLattice
             Specify lattice geometry.
 
-        tensors: Optional[Sequence[Sequence[Tensor]] | dict[tuple[int,int],Tensor]]]
+        tensors: Optional[Tensor | Sequence[Sequence[Tensor]] | dict[tuple[int,int],Tensor]]]
             Fill in the Peps lattice with tensors.
             Each unique sites should get assigned in a way consistent with the geometry.
+            If a single Tensor is provided, it is distributed over the lattice.
 
         Example
         -------
@@ -60,7 +61,6 @@ class Peps(Lattice):
             #
             A00 = yastn.rand(config, legs=[leg.conj(), leg, leg, leg.conj(), leg])
             psi[0, 0] = A00
-            #
             assert psi[0, 0].ndim == 5
 
             # PEPS with no physical legs is also possible.
@@ -79,29 +79,11 @@ class Peps(Lattice):
             #
             psi = fpeps.Peps(geometry, tensors=[[A00, A01], [A01, A00]])
             # above, some provided tensors are redundant, although this redundancy is consistent with the geometry.
-
+            #
+            psi = fpeps.Peps(geometry, tensors=A00)
+            # above, all PEPS sites are assigned with the tensor A00.
         """
-        super().__init__(geometry)
-
-        if tensors is not None:
-            try:
-                if isinstance(tensors, Sequence):
-                    dict_tensors = {}
-                    for nx, row in enumerate(tensors):
-                        for ny, tensor in enumerate(row):
-                            dict_tensors[nx, ny] = tensor
-                    tensors = dict_tensors
-                tmp_tensors = {}  # TODO: remove it when extra fusion of Peps tensors is removed
-                for site, tensor in tensors.items():
-                    if self[site] is None:
-                        self[site] = tensor
-                        tmp_tensors[self.site2index(site)] = tensor
-                    if tmp_tensors[self.site2index(site)] is not tensor:
-                        raise YastnError("Peps: Non-unique assignment of tensor to unique lattice sites.")
-            except (KeyError, TypeError):
-                raise YastnError("Peps: tensors assigned outside of the lattice geometry.")
-            if any(tensor is None for tensor in self._site_data.values()):
-                raise YastnError("Peps: Not all unique lattice sites got assigned with a tensor.")
+        super().__init__(geometry, tensors)
 
     @property
     def config(self):
@@ -322,3 +304,7 @@ class Peps2Layers():
         bra = Peps.from_dict(d['bra'], config=config)
         ket = Peps.from_dict(d['ket'], config=config) if ('ket' in d) else None
         return Peps2Layers(bra=bra, ket=ket)
+
+
+PEPS_CLASSES = {'Peps': Peps,
+                'Peps2Layers': Peps2Layers}
