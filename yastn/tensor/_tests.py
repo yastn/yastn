@@ -103,7 +103,7 @@ def _test_axes_all(a, axes, native=False):
         raise YastnError('Provided axes do not match tensor ndim.')
 
 
-def are_independent(a, b):
+def are_independent(a, b, independent=True):
     """
     Test if all elements of two yastn tensors are independent objects in memory.
     """
@@ -111,7 +111,7 @@ def are_independent(a, b):
     test.append(a is not b)
     test.append(a._data is not b._data)
     test.append(a.config.backend.is_independent(a._data, b._data))
-    return all(test)
+    return all(test) == independent
 
 
 def is_consistent(a):

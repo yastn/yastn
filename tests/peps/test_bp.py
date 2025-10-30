@@ -60,12 +60,12 @@ def run_bp_save_load_copy(env):
     env_clone = env.clone()
     env_shallow = env.shallow_copy()
 
-    env_dict_level_0 = fpeps.EnvBP.from_dict(env.to_dict(level=0))
-    env_dict_level_1 = fpeps.EnvBP.from_dict(env.to_dict(level=1))
-    env_dict_level_2 = fpeps.EnvBP.from_dict(env.to_dict(level=2))
+    dicts = [env.to_dict(level) for level in [0, 1, 2]]
+    env_dict = [fpeps.EnvBP.from_dict(d) for d in dicts]
+    env_split = [fpeps.EnvBP.from_dict(yastn.combine_data_and_meta(*yastn.split_data_and_meta(d))) for d in dicts]
 
-    for new, ind in zip([env_save, env_copy, env_clone, env_shallow, env_dict_level_0, env_dict_level_1, env_dict_level_2],
-                        [True, True, True, False, False, False, True]):
+    for new, ind in zip([env_save, env_copy, env_clone, env_shallow, *env_dict, *env_split],
+                        [True, True, True, False, False, False, True, False, False, True]):
         assert env.env.allclose(new.env)
         assert env.env.are_independent(new.env, independent=ind)
 

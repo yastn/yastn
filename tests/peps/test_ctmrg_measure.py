@@ -34,12 +34,12 @@ def run_ctm_save_load_copy(env):
     env_shallow.detach_()
     env_detach = env.detach()
 
-    env_dict_level_0 = fpeps.EnvCTM.from_dict(env.to_dict(level=0))
-    env_dict_level_1 = fpeps.EnvCTM.from_dict(env.to_dict(level=1))
-    env_dict_level_2 = fpeps.EnvCTM.from_dict(env.to_dict(level=2))
+    dicts = [env.to_dict(level) for level in [0, 1, 2]]
+    env_dict = [fpeps.EnvCTM.from_dict(d) for d in dicts]
+    env_split = [fpeps.EnvCTM.from_dict(yastn.combine_data_and_meta(*yastn.split_data_and_meta(d))) for d in dicts]
 
-    for new, ind in zip([env_copy, env_clone, env_shallow, env_detach, env_dict_level_0, env_dict_level_1, env_dict_level_2],
-                        [True, True, False, False, False, False, True]):
+    for new, ind in zip([env_copy, env_clone, env_shallow, env_detach, *env_dict, *env_split],
+                        [True, True, False, False, False, False, True, False, False, True]):
         assert env.env.allclose(new.env)
         assert env.proj.allclose(new.proj)
         assert env.env.are_independent(new.env, independent=ind)

@@ -45,8 +45,20 @@ def test_to_from_dict(config_kwargs):
     for level, ind in zip([0, 1, 2], [False, False, True]):
         d = a.to_dict(level=level)
         b = yastn.Tensor.from_dict(d)
+
+        data, meta = yastn.split_data_and_meta(d)
+        dd = yastn.combine_data_and_meta(data, meta)
+        c = yastn.Tensor.from_dict(dd)
+
         identical_tensors(a, b)
+        identical_tensors(a, c)
+
         assert yastn.are_independent(a, b) == ind
+        #
+        # the result below depends on the backend: TODO
+        # assert yastn.are_independent(b, c) == ind  # for numpy
+        # # assert yastn.are_independent(b, c) == False  # for torch
+        # torch.as_tensor and numpy.array have different behavior in creating a copy
 
 
 def check_to_numpy(a1, config):
@@ -145,4 +157,4 @@ def test_load_exceptions(config_kwargs):
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0"])
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])

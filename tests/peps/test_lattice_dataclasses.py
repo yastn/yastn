@@ -54,12 +54,13 @@ def test_dataclasses(config_kwargs):
         a_shallow = a.shallow_copy()
         a_shallow.detach_()
         a_detach = a.detach()
-        a_dict_level_0 = a.from_dict(a.to_dict(level=0))
-        a_dict_level_1 = a.from_dict(a.to_dict(level=1))
-        a_dict_level_2 = a.from_dict(a.to_dict(level=2))
 
-        for b, ind in zip([a_copy, a_clone, a_shallow, a_detach, a_dict_level_0, a_dict_level_1, a_dict_level_2],
-                          [True, True, False, False, False, False, True]):
+        dicts = [a.to_dict(level) for level in [0, 1, 2]]
+        a_dict = [a.from_dict(d) for d in dicts]
+        a_split = [a.from_dict(yastn.combine_data_and_meta(*yastn.split_data_and_meta(d))) for d in dicts]
+
+        for b, ind in zip([a_copy, a_clone, a_shallow, a_detach, *a_dict, *a_split],
+                          [True, True, False, False, False, False, True, False, False, True]):
             assert a.allclose(b)
             assert b is not a
             assert a.are_independent(b, independent=ind)
