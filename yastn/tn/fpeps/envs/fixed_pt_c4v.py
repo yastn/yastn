@@ -17,8 +17,8 @@ import time, logging
 import torch
 import numpy as np
 from scipy.optimize import minimize
-from .... import zeros, eye, tensordot, diag, decompress_from_1d
-from ._env_ctm import ctm_conv_corner_spec, decompress_proj_1d
+from .... import zeros, eye, tensordot, diag, split_data_and_meta, combine_data_and_meta
+from ._env_ctm import ctm_conv_corner_spec
 from ._env_ctm_c4v import EnvCTM_c4v, decompress_env_c4v_1d
 from .fixed_pt import fast_env_T_gauge_multi_sites, NoFixedPointError, real_to_complex, complex_to_real
 from .rdm import *
@@ -306,10 +306,10 @@ class FixedPoint_c4v(torch.autograd.Function):
         log.info(f"{type(ctx).__name__}.forward FP gauge-fixing t {t1-t0} [s]")
 
         env_data, env_meta = env_converged.compress_env_1d()
-        fp_proj_data, fp_proj_meta = ctm_env_out.compress_proj_1d()
-        sigma_data, sigma_meta = sigma.compress_to_1d()
-        ctx.save_for_backward(*env_data, *fp_proj_data, sigma_data)
-        ctx.env_meta, ctx.fp_proj_meta, ctx.sigma_meta = env_meta, fp_proj_meta, sigma_meta
+        sigma_d = sigma.to_dict(level=0)
+        sigma_data, sigma_meta = split_data_and_meta(sigma_d)
+        ctx.save_for_backward(*env_data, *sigma_data)
+        ctx.env_meta, ctx.sigma_meta = env_meta, sigma_meta
         ctx.ctm_opts_fp = _ctm_opts_fp
         env_1d, env_slices= env_raw_data_c4v(env_converged)
 
@@ -321,14 +321,12 @@ class FixedPoint_c4v(torch.autograd.Function):
         grads = grad_env
         dA = grad_env
 
-        # env_data = torch.utils.checkpoint.detach_variable(ctx.saved_tensors)[0] # only one element in the tuple
         env_data= ctx.saved_tensors[:len(ctx.env_meta['psi'])+len(ctx.env_meta['env'])]
-        fp_proj_data= ctx.saved_tensors[len(env_data):len(env_data)+len(ctx.fp_proj_meta['proj'])]
         sigma_data= ctx.saved_tensors[-1]
 
         env= decompress_env_c4v_1d(env_data, ctx.env_meta)
-        fp_proj= decompress_proj_1d(fp_proj_data, ctx.fp_proj_meta)
-        sigma = decompress_from_1d(sigma_data, ctx.sigma_meta)
+        sigma_d = combine_data_and_meta((sigma_data,), ctx.sigma_meta)
+        sigma = Tensor.from_dict(sigma_d)
         psi_data = tuple(env.psi.ket[s]._data for s in env.psi.ket.sites())
         _env_ts, _env_slices= env_raw_data_c4v(env)
 

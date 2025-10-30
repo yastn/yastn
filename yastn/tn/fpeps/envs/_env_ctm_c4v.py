@@ -73,6 +73,60 @@ class EnvCTM_c4v(EnvCTM):
         if init is not None:
             self.reset_(init=init, leg=leg)
 
+    # Cloning/Copying/Detaching(view)
+    #
+    def copy(self) -> EnvCTM:
+        env = EnvCTM_c4v(self.psi, init=None)
+        for site in env.sites():
+            for dirn in ['tl', 't']:
+                setattr(env[site], dirn, getattr(self[site], dirn).copy())
+        return env
+
+    def shallow_copy(self) -> EnvCTM_c4v:
+        env = EnvCTM_c4v(self.psi, init=None)
+        for site in env.sites():
+            for dirn in ['tl', 't']:
+                setattr(env[site], dirn, getattr(self[site], dirn))
+        return env
+
+    def clone(self) -> EnvCTM_c4v:
+        r"""
+        Return a clone of the environment preserving the autograd - resulting clone is a part
+        of the computational graph. Data of cloned environment tensors is indepedent
+        from the originals.
+        """
+        env = EnvCTM_c4v(self.psi, init=None)
+        for site in env.sites():
+            for dirn in ['tl', 't']:
+                setattr(env[site], dirn, getattr(self[site], dirn).clone())
+        return env
+
+    def detach(self) -> EnvCTM_c4v:
+        r"""
+        Return a detached view of the environment - resulting environment is **not** a part
+        of the computational graph. Data of detached environment tensors is shared
+        with the originals.
+        """
+        env = EnvCTM_c4v(self.psi, init=None)
+        for site in env.sites():
+            for dirn in ['tl', 't']:
+                setattr(env[site], dirn, getattr(self[site], dirn).detach())
+        return env
+
+    def detach_(self):
+        r"""
+        Detach all environment tensors from the computational graph.
+        Data of environment tensors in detached environment is a `view` of the original data.
+        """
+        for site in self.sites():
+            for dirn in ['tl', 't']:
+                if getattr(self[site], dirn) is None:
+                    continue
+                try:
+                    getattr(self[site], dirn)._data.detach_()
+                except RuntimeError:
+                    setattr(self[site], dirn, getattr(self[site], dirn).detach())
+
     # def compress_env_c4v_1d(env):
     #     r"""
     #     Compress environment to data tensors and (hashable) metadata, see :func:`yastn.tensor.compress_to_1d`.
@@ -248,6 +302,23 @@ class EnvCTM_c4v(EnvCTM):
         env_bp[s1].l= env_bp[s1].b= env_bp[s1].r= env_bp[s1].t= self[0,0].t.flip_signature()
         return env_bp
 
+
+    def save_to_dict(self) -> dict:
+        r"""
+        Serialize EnvCTM into a dictionary.
+        """
+        psi = self.psi
+        if isinstance(psi, Peps2Layers):
+            psi = psi.ket
+
+        d = {'class': 'EnvCTM_C4v',
+             'psi': psi.save_to_dict(),
+             'data': {}}
+        for site in self.sites():
+            d_local = {dirn: getattr(self[site], dirn).save_to_dict()
+                       for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r'] if getattr(self[site], dirn)}
+            d['data'][site] = d_local
+        return d
 
     def ctmrg_(env, opts_svd, method='default', max_sweeps=1, iterator_step=1, corner_tol=None, truncation_f: Callable=None,  **kwargs):
         if "checkpoint_move" in kwargs:

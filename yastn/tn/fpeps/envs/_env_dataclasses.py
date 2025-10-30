@@ -138,10 +138,21 @@ class EnvCTM_c4v_projectors(dataclasses_common):
     vtl: Tensor | None = None  # vertical top left
     vtr: Tensor | None = None  # vertical top right
 
+@dataclass()
+class Gauge(dataclasses_common):
+    r"""
+    Dataclass for gauge matrices at a single Peps site on square lattice.
+    Contains fields ``t``,  ``l``, ``b``, ``r``
+    """
+    t: Tensor | None = None  # top
+    l: Tensor | None = None  # left
+    b: Tensor | None = None  # bottom
+    r: Tensor | None = None  # right
 
 DATA_CLASSES = {"Tensor": Tensor,
                 "EnvBP_local": EnvBP_local,
                 "EnvCTM_local": EnvCTM_local,
                 "EnvCTM_projectors": EnvCTM_projectors,
                 "EnvCTM_c4v_local": EnvCTM_c4v_local,
-                "EnvCTM_c4v_projectors": EnvCTM_c4v_projectors}
+                "EnvCTM_c4v_projectors": EnvCTM_c4v_projectors,
+                "Gauge": Gauge}
