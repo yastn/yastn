@@ -67,6 +67,7 @@ def evolution_step_(env, gates, opts_svd, method='mpo', fix_metric=0,
         in which case the truncation is done gradually in a few steps.
     method: str
         For ``'NN'``, split multi-site gates into a series of nearest-neighbor gates.
+        Also, matric tensors are calculated using Peps tensor before gate application.
         Otherwise, apply mpo-gate first, and then sequentially truncate enlarged bonds (the default).
     fix_metric: int | None
         Error measure of the metric tensor is a sum of: the norm of its non-hermitian part
@@ -107,15 +108,20 @@ def evolution_step_(env, gates, opts_svd, method='mpo', fix_metric=0,
     infos = []
 
     if 'nn' in method.lower():
-        gates = [Gate(gate_from_mpo(gate.G), gate.sites) if isinstance(gate.G, MpsMpoOBC) else gate  for gate in gates]
+        gates = [Gate(gate_from_mpo(gate.G), gate.sites) if isinstance(gate.G, MpsMpoOBC) else gate for gate in gates]
         gates = [ng for og in gates for ng in split_gate_2site(og)]
 
     for gate in gates:
-        psi.apply_gate_(gate)
+        if 'nn' in method.lower():
+            psi_tmp = psi.shallow_copy()
+            psi_tmp.apply_gate_(gate)  # updated tensors are taken from psi_tmp
+        else:
+            psi_tmp = None
+            psi.apply_gate_(gate)
+            env.pre_truncation_(gate.sites)
 
-        env.pre_truncation_(gate.sites)
         for s0, s1 in pairwise(gate.sites):
-            info = truncate_(env, opts_svd, (s0, s1), fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization)
+            info = truncate_(env, opts_svd, (s0, s1), fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization, psi_tmp=psi_tmp)
             infos.append(info)
 
     return infos
@@ -142,7 +148,8 @@ def split_gate_2site(gate):
 def truncate_(env, opts_svd, bond=None,
               fix_metric=0,
               pinv_cutoffs=(1e-12, 1e-11, 1e-10, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4),
-              max_iter=100, tol_iter=1e-13, initialization="EAT_SVD"):
+              max_iter=100, tol_iter=1e-13, initialization="EAT_SVD",
+              psi_tmp=None):
     r"""
     Truncate virtual bond dimensions of PEPS.
 
@@ -209,12 +216,13 @@ def truncate_(env, opts_svd, bond=None,
         s0, s1 = bond
         info = {'bond': bond}
 
+        A0, A1 = (psi[s0], psi[s1]) if psi_tmp is None else (psi_tmp[s0], psi_tmp[s1])
         if dirn == 'lr':  # Horizontal gate, "lr" ordered
-            Q0, R0 = psi[s0].qr(axes=((0, 1, 2, 4), 3), sQ=-1, Qaxis=3)  # t l b rr sa @ rr r
-            Q1, R1 = psi[s1].qr(axes=((0, 2, 3, 4), 1), sQ=1, Qaxis=1, Raxis=-1)  # t ll b r sa @ l ll
+            Q0, R0 = A0.qr(axes=((0, 1, 2, 4), 3), sQ=-1, Qaxis=3)  # t l b rr sa @ rr r
+            Q1, R1 = A1.qr(axes=((0, 2, 3, 4), 1), sQ=1, Qaxis=1, Raxis=-1)  # t ll b r sa @ l ll
         else:  # dirn == 'tb':  Vertical gate, "tb" ordered
-            Q0, R0 = psi[s0].qr(axes=((0, 1, 3, 4), 2), sQ=1, Qaxis=2)  # t l bb r sa @ bb b
-            Q1, R1 = psi[s1].qr(axes=((1, 2, 3, 4), 0), sQ=-1, Qaxis=0, Raxis=-1)  # tt l b r sa @ t tt
+            Q0, R0 = A0.qr(axes=((0, 1, 3, 4), 2), sQ=1, Qaxis=2)  # t l bb r sa @ bb b
+            Q1, R1 = A1.qr(axes=((1, 2, 3, 4), 0), sQ=-1, Qaxis=0, Raxis=-1)  # tt l b r sa @ t tt
 
         fgf = env.bond_metric(Q0, Q1, s0, s1, dirn)
 

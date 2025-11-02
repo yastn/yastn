@@ -5,14 +5,9 @@ import yastn.tn.fpeps as fpeps
 import logging
 import argparse
 import time
-import os
-# from yastn.tn.fpeps._evolution import truncate_
 from yastn.tn.fpeps._peps import Peps
-# from predisentangler import *
-from itertools import pairwise
-# from generate_initial_state import *
 
-def Ising(D, chi, dbeta, ntu_environment):
+def Ising(D, chi, dbeta, ntu_environment, method):
 
     sym = "dense"
     net = fpeps.CheckerboardLattice()
@@ -24,69 +19,68 @@ def Ising(D, chi, dbeta, ntu_environment):
     Id, Z, X = opt.I(), opt.z(), opt.x()
     psi = fpeps.product_peps(net, Id)
 
+    hx = 2.9
+    hz = 5e-4
+    beta = 1.8
     dbeta = 0.01
-    env_evolution = fpeps.EnvNTU(psi, which=ntu_environment)
+    steps = int(beta / dbeta)
+    dbeta = beta / steps
 
-    diff, num_of_iter = 0, 0
+    if 'BP' in ntu_environment:
+        env_evolution = fpeps.EnvBP(psi, which=ntu_environment)
+        env_evolution.iterate_(max_sweeps=100, diff_tol=1e-8)
+    else:
+        env_evolution = fpeps.EnvNTU(psi, which=ntu_environment)
 
-    for step in range(180):
+    gateZZ = fpeps.gates.gate_nn_Ising(-1, dbeta / 4, Id, Z)
+    gateX = fpeps.gates.gate_local_field(hx,  dbeta / 4, Id, X)
+    gateZ = fpeps.gates.gate_local_field(hz, dbeta / 4, Id, Z)
+    gates = fpeps.gates.distribute(net, gates_nn=[gateZZ], gates_local=[gateX, gateZ], symmetrize=False)
+    gates = gates[::-1] + gates
 
-        sum_err = 0
-        ntu_iterations = 0
+    H = - fpeps.fkron(Z, Z) - hz * (fpeps.fkron(Z, Id) + fpeps.fkron(Id, Z)) / 4 - hx * (fpeps.fkron(X, Id) + fpeps.fkron(Id, X)) / 4
+    gate = fpeps.gates.gate_nn_exp(dbeta / 4, Id, H)
+    gates = fpeps.gates.distribute(net, gates_nn=[gate])
 
-        for bond in net.bonds():
-
-            gate = fpeps.gates.gate_nn_Ising(-1, dbeta / 4, Id, Z, bond=bond)
-            infos = fpeps.evolution_step_(env_evolution, [gate], opts_svd=opts_svd, max_iter=1, initialization="EAT")
-            # psi.apply_gate_(gate)
-            # infos = []
-            # for s0, s1 in pairwise(gate.sites):
-            #     info = truncate_(env_evolution, opts_svd, (s0, s1), max_iter=100, initialization="EAT")
-            #     infos.append(info)
-
-            for info in infos:
-                ntu_iterations += info.iterations['eat_opt']
-            sum_err = sum_err + min(list(infos[0].truncation_errors.values()))
-
-        for site in net.sites():
-            gate = [fpeps.gates.gate_local_field(2.9,  dbeta / 4, Id, X, site=site), fpeps.gates.gate_local_field(5e-4, dbeta / 2, Id, Z, site=site), fpeps.gates.gate_local_field(2.9,  dbeta / 4, Id, X, site=site)]
-            infos = fpeps.evolution_step_(env_evolution, gate, opts_svd=opts_svd, max_iter=1, initialization="EAT")
-            # for gate in [fpeps.gates.gate_local_field(2.9,  dbeta / 4, Id, X, site=site), fpeps.gates.gate_local_field(5e-4, dbeta / 2, Id, Z, site=site), fpeps.gates.gate_local_field(2.9,  dbeta / 4, Id, X, site=site)]:
-            #     psi.apply_gate_(gate)
-
-        for bond in net.bonds()[::-1]:
-
-            gate = fpeps.gates.gate_nn_Ising(-1, dbeta / 4, Id, Z, bond=bond)
-            infos = fpeps.evolution_step_(env_evolution, [gate], opts_svd=opts_svd, max_iter=1, initialization="EAT")
-            # psi.apply_gate_(gate)
-            # infos = []
-            # for s0, s1 in pairwise(gate.sites):
-            #     info = truncate_(env_evolution, opts_svd, (s0, s1), max_iter=100, initialization="EAT")
-            #     infos.append(info)
-
-            for info in infos:
-                ntu_iterations += info.iterations['eat_opt']
-
-            sum_err = sum_err + min(list(infos[0].truncation_errors.values()))
-
-        print('%.3f %.3e %.0f' % ((step + 1) * dbeta, sum_err / 4, ntu_iterations / 8))
+    infoss = []
+    for step in range(steps):
+        infos = fpeps.evolution_step_(env_evolution, gates, opts_svd=opts_svd, max_iter=1, initialization="EAT", method=method)
+        if 'BP' in ntu_environment:
+            env_evolution.iterate_(max_sweeps=100, diff_tol=1e-8)
+        infoss.append(infos)
+        Delta = fpeps.accumulated_truncation_error(infoss)
+        #print(f"{step+1}  {Delta=:0.4e}")
 
     env = fpeps.EnvCTM(psi, init="eye")
     opts_svd_ctm = {'D_total': chi, 'tol': 1e-8, 'truncate_multiplets': True}
-    for _ in env.ctmrg_(max_sweeps=50, iterator_step=1, opts_svd=opts_svd_ctm, method='2site', corner_tol=1e-5):
+    for info in env.ctmrg_(max_sweeps=50, iterator_step=1, opts_svd=opts_svd_ctm, method='2site', corner_tol=1e-5):
         pass
-    print(env.measure_1site(Z))
+        #print(info)
+    print(f"{D=}, {chi=}, {dbeta}, {ntu_environment=} {method=}")
+    print("<X> = ", env.measure_1site(X))
+    print("<Z> = ", env.measure_1site(Z))
+    # print("<ZZ> = ", env.measure_nn(Z, Z))
+    print("Delta =", Delta)
+
 
 
 if __name__== '__main__':
-    logging.basicConfig(level='INFO')
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-D", type=int, default=5)
-    parser.add_argument("-DBETA", type=float, default=0.01)
-    parser.add_argument("-NTUEnvironment", default='NN+')
-    parser.add_argument("-X", type=int, default=25)
-    args = parser.parse_args()
-    tt = time.time()
+    # logging.basicConfig(level='INFO')
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument("-D", type=int, default=5)
+    # parser.add_argument("-DBETA", type=float, default=0.01)
+    # parser.add_argument("-NTUEnvironment", default='NN+')
+    # parser.add_argument("-X", type=int, default=20)
+    # parser.add_argument("-method", type=str, default='mpo')
 
-    Ising(D=args.D, chi=args.X, dbeta=args.DBETA, ntu_environment=args.NTUEnvironment)
-    logging.info('Elapsed time: %0.2f s.', (time.time() - tt))
+    # args = parser.parse_args()
+    # tt = time.time()
+
+    # Ising(D=args.D, chi=args.X, dbeta=args.DBETA, ntu_environment=args.NTUEnvironment, method=args.method)
+
+    # logging.info('Elapsed time: %0.2f s.', (time.time() - tt))
+
+    for D in [12]:
+        for ee in ['NN', 'NN+', 'BP', 'NN+BP']:
+            for method in ['nn', 'mpo']:
+                Ising(D, chi=25, dbeta=0.01, ntu_environment=ee, method=method)
