@@ -8,7 +8,7 @@ import time
 from yastn.tn.fpeps._peps import Peps
 
 def Ising(D, chi, dbeta, ntu_environment, method):
-
+    print(f"{D=}, {chi=}, {dbeta}, {ntu_environment=} {method=}")
     sym = "dense"
     net = fpeps.CheckerboardLattice()
     psi = Peps(net)
@@ -33,7 +33,7 @@ def Ising(D, chi, dbeta, ntu_environment, method):
         env_evolution = fpeps.EnvNTU(psi, which=ntu_environment)
 
     gateZZ = fpeps.gates.gate_nn_Ising(-1, dbeta / 4, Id, Z)
-    gateX = fpeps.gates.gate_local_field(hx,  dbeta / 4, Id, X)
+    gateX = fpeps.gates.gate_local_field(hx, dbeta / 4, Id, X)
     gateZ = fpeps.gates.gate_local_field(hz, dbeta / 4, Id, Z)
     gates = fpeps.gates.distribute(net, gates_nn=[gateZZ], gates_local=[gateX, gateZ], symmetrize=False)
     gates = gates[::-1] + gates
@@ -56,7 +56,6 @@ def Ising(D, chi, dbeta, ntu_environment, method):
     for info in env.ctmrg_(max_sweeps=50, iterator_step=1, opts_svd=opts_svd_ctm, method='2site', corner_tol=1e-5):
         pass
         #print(info)
-    print(f"{D=}, {chi=}, {dbeta}, {ntu_environment=} {method=}")
     print("<X> = ", env.measure_1site(X))
     print("<Z> = ", env.measure_1site(Z))
     # print("<ZZ> = ", env.measure_nn(Z, Z))
@@ -71,7 +70,7 @@ if __name__== '__main__':
     # parser.add_argument("-DBETA", type=float, default=0.01)
     # parser.add_argument("-NTUEnvironment", default='NN+')
     # parser.add_argument("-X", type=int, default=20)
-    # parser.add_argument("-method", type=str, default='mpo')
+    # parser.add_argument("-method", type=str, default='nn')
 
     # args = parser.parse_args()
     # tt = time.time()
@@ -80,7 +79,7 @@ if __name__== '__main__':
 
     # logging.info('Elapsed time: %0.2f s.', (time.time() - tt))
 
-    for D in [12]:
+    for D in [5]:
         for ee in ['NN', 'NN+', 'BP', 'NN+BP']:
             for method in ['nn', 'mpo']:
                 Ising(D, chi=25, dbeta=0.01, ntu_environment=ee, method=method)

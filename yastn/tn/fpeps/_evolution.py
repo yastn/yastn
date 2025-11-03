@@ -14,9 +14,9 @@
 # ==============================================================================
 """ Routines for time evolution with nn gates on a 2D lattice. """
 
-from ... import tensordot, vdot, svd_with_truncation, YastnError, Tensor
+from ... import tensordot, vdot, svd_with_truncation, YastnError, Tensor, eye, ones
 from ._peps import Peps2Layers
-from ._gates_auxiliary import Gate, gate_from_mpo
+from ._gates_auxiliary import Gate, gate_from_mpo, fill_eye_in_gate
 from ..mps import MpsMpoOBC
 from typing import NamedTuple
 from itertools import pairwise
@@ -103,26 +103,30 @@ def evolution_step_(env, gates, opts_svd, method='mpo', fix_metric=0,
     """
     psi = env.psi
     if isinstance(psi, Peps2Layers):
-        psi = psi.ket  # to make it work with CtmEnv
+        psi = psi.ket  # to make it work with CTMEnv
 
     infos = []
 
     if 'nn' in method.lower():
         gates = [Gate(gate_from_mpo(gate.G), gate.sites) if isinstance(gate.G, MpsMpoOBC) else gate for gate in gates]
+        gates = [Gate(fill_eye_in_gate(psi, gate.G, gate.sites), gate.sites) if (len(gate.G) == 2 and len(gate.sites) > 2) else gate for gate in gates]
         gates = [ng for og in gates for ng in split_gate_2site(og)]
 
     for gate in gates:
         if 'nn' in method.lower():
-            psi_tmp = psi.shallow_copy()
-            psi_tmp.apply_gate_(gate)  # updated tensors are taken from psi_tmp
+            if len(gate.sites) == 1:
+                psi.apply_gate_(gate)
+            else:
+                psi_new = psi.shallow_copy()  # use old environment for truncation
+                psi_new.apply_gate_(gate)
+                info = truncate_(env, opts_svd, gate.sites, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization, psi_new=psi_new)
+                infos.append(info)
         else:
-            psi_tmp = None
             psi.apply_gate_(gate)
             env.pre_truncation_(gate.sites)
-
-        for s0, s1 in pairwise(gate.sites):
-            info = truncate_(env, opts_svd, (s0, s1), fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization, psi_tmp=psi_tmp)
-            infos.append(info)
+            for s0, s1 in pairwise(gate.sites):
+                info = truncate_(env, opts_svd, (s0, s1), fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization)
+                infos.append(info)
 
     return infos
 
@@ -149,7 +153,7 @@ def truncate_(env, opts_svd, bond=None,
               fix_metric=0,
               pinv_cutoffs=(1e-12, 1e-11, 1e-10, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4),
               max_iter=100, tol_iter=1e-13, initialization="EAT_SVD",
-              psi_tmp=None):
+              psi_new=None):
     r"""
     Truncate virtual bond dimensions of PEPS.
 
@@ -216,7 +220,7 @@ def truncate_(env, opts_svd, bond=None,
         s0, s1 = bond
         info = {'bond': bond}
 
-        A0, A1 = (psi[s0], psi[s1]) if psi_tmp is None else (psi_tmp[s0], psi_tmp[s1])
+        A0, A1 = (psi[s0], psi[s1]) if psi_new is None else (psi_new[s0], psi_new[s1])
         if dirn == 'lr':  # Horizontal gate, "lr" ordered
             Q0, R0 = A0.qr(axes=((0, 1, 2, 4), 3), sQ=-1, Qaxis=3)  # t l b rr sa @ rr r
             Q1, R1 = A1.qr(axes=((0, 2, 3, 4), 1), sQ=1, Qaxis=1, Raxis=-1)  # t ll b r sa @ l ll

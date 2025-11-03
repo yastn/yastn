@@ -94,7 +94,7 @@ class EnvBP(Peps):
         psi = self.psi
         if isinstance(psi, Peps2Layers):
             psi = psi.ket
-        env = EnvBP(psi, init=None)
+        env = EnvBP(psi, init=None, which=self.which)
         for site in env.sites():
             for dirn in ['t', 'l', 'b', 'r']:
                 setattr(env[site], dirn, getattr(self[site], dirn).copy())
@@ -104,7 +104,7 @@ class EnvBP(Peps):
         psi = self.psi
         if isinstance(psi, Peps2Layers):
             psi = psi.ket
-        env = EnvBP(psi, init=None)
+        env = EnvBP(psi, init=None, which=self.which)
         for site in env.sites():
             for dirn in ['t', 'l', 'b', 'r']:
                 setattr(env[site], dirn, getattr(self[site], dirn).clone())
@@ -114,7 +114,7 @@ class EnvBP(Peps):
         psi = self.psi
         if isinstance(psi, Peps2Layers):
             psi = psi.ket
-        env = EnvBP(self.psi, init=None)
+        env = EnvBP(self.psi, init=None, which=self.which)
         for site in env.sites():
             for dirn in ['t', 'l', 'b', 'r']:
                 setattr(env[site], dirn, getattr(self[site], dirn))
