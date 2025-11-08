@@ -176,7 +176,7 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
     order_a = nout_a + nin_a
     order_b = nin_b + nout_b
 
-    if a.config.backend.BACKEND_ID == 'torch_cpp':
+    if a.config.backend.BACKEND_ID == 'torch_cpp' and len(struct_c.s)>0:
         # NOTE nout_a, nin_a, nout_b, nin_b use ndim_n or ndim ? 
         #      *) when default_fusion='meta', they are wrt. native legs. The charges of non-zero blocks are also wrt. to native legs.
         
