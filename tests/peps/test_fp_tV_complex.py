@@ -24,7 +24,7 @@ from yastn.tn.fpeps.envs.rdm import rdm1x1
 import numpy as np
 import warnings
 try:
-    from yastn.tn.fpeps.envs.fixed_pt import fp_ctmrg, refill_env
+    from yastn.tn.fpeps.envs.fixed_pt import fp_ctmrg
 except ImportError:
     warnings.warn("This test requires torch")
 
@@ -102,11 +102,10 @@ def cost_function_fp(additional_imports, yastn_cfg, g, A, elems, slices : dict[t
         "tol": 1.0e-8, "eps_multiplet": 1.0e-8,
         "svds_thresh": 0.1
     }
-    env, env_ts_slices, env_ts = fp_ctmrg(env, \
+    env = fp_ctmrg(env, \
         ctm_opts_fwd= {'opts_svd': options_svd, 'corner_tol': 1.0e-8, 'max_sweeps': max_sweeps, \
             'method': "2site", 'use_qr': False, }, \
         ctm_opts_fp= {'opts_svd': {'policy': 'fullrank'}})
-    refill_env(env, env_ts, env_ts_slices)
 
     # sum of traces of even sectors across 1x1 RDMs
     loss= sum( rdm1x1( c, psi, env)[0][(0,0)].trace() for c in psi.sites() )
