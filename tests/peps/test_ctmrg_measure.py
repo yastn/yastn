@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 """ Test PEPS measurments with MpsBoundary in a product state. """
+import re
 import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
@@ -164,10 +165,10 @@ def test_ctmrg_measure_product(config_kwargs, boundary):
                        match="Number of operators and sites should match."):
         env.measure_nsite(sz, sz, sites=((0, 0),))
     with pytest.raises(yastn.YastnError,
-                       match=r"EnvCTM init='something' not recognized. Should be 'rand', 'eye', 'dl', or None."):
+                       match=re.escape("EnvCTM init='something' not recognized. Should be 'rand', 'eye', 'dl', or None.")):
         fpeps.EnvCTM(psi, init='something')
     with pytest.raises(yastn.YastnError,
-                       match=r"CTM update method='something' not recognized. Should be '1site' or '2site'"):
+                       match=re.escape("CTM update method='something' not recognized. Should be '1site' or '2site'")):
         env.update_(opts_svd={}, method='something')
 
 
