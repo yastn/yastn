@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 """ yastn.swap_gate() to introduce fermionic statistics. """
+import re
 import pytest
 import yastn
 
@@ -178,7 +179,7 @@ def test_swap_gate_exceptions(config_kwargs):
                        match='Odd number of elements in axes. Elements of axes should come in pairs.'):
         a.swap_gate(axes=(0, 1, 2))
     with pytest.raises(yastn.YastnError,
-                       match=r'Length or number of charges does not match sym.NSYM or axes.'):
+                       match=re.escape('Length or number of charges does not match sym.NSYM or axes.')):
         a.swap_gate(axes=(0,), charge=(1, 1))
 
 

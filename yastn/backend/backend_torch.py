@@ -196,9 +196,12 @@ def ones(D, dtype='float64', device='cpu'):
     return torch.ones(D, dtype=DTYPE[dtype], device=device)
 
 
-def rand(D, dtype='float64', device='cpu'):
+def rand(D, dtype='float64', distribution=(0, 1), device='cpu'):
+    if distribution == 'normal':
+        return torch.randn(D, dtype=DTYPE[dtype], device=device)
     ds = 1 if dtype=='float64' else 1 + 1j
-    return 2 * torch.rand(D, dtype=DTYPE[dtype], device=device) - ds
+    out = torch.rand(D, dtype=DTYPE[dtype], device=device)
+    return out if distribution == (0, 1) else (distribution[1] - distribution[0]) * out + distribution[0] * ds
 
 
 def randint(low, high):

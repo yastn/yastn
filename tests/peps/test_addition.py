@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 """ Test fpeps.add and __add__ """
-import numpy as np
+import re
 import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
@@ -118,7 +118,7 @@ def test_to_tensor(config_kwargs):
     geometry = fpeps.SquareLattice(dims=(2, 3), boundary='infinite')
     psi = fpeps.product_peps(geometry, {k: vec[v] for k, v in occ0.items()})
     with pytest.raises(yastn.YastnError,
-                       match=r'to_tensor\(\) works only for a finite PEPS.'):
+                       match=re.escape('to_tensor() works only for a finite PEPS.')):
         psi = psi.to_tensor()
 
 

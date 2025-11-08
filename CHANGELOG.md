@@ -185,7 +185,7 @@ v0.9
 - simplify syntax of `yastn.decompose_from_1d(r1d, meta)`. It no longer takes config, that is stored in meta.
 
 20-07-2022
-- a new function `yastn.random_leg` that allows that randomly distributes bond dimensions
+- a new function `yastn.gaussian_leg` that allows that randomly distributes bond dimensions
   according to Gaussian distribution cenered at provided mean charge.
 
 23-07-2022
