@@ -21,7 +21,9 @@ In principle, any number of symmetries can be used, including dense tensor with 
 An instance of a Tensor is specified by a list of blocks (dense tensors) labeled by symmetries' charges on each leg.
 """
 from __future__ import annotations
+from itertools import accumulate
 from typing import Sequence
+import numpy as np
 from ._auxliary import _struct, _config
 from ._merging import _Fusion, _slc
 from ._tests import YastnError
@@ -149,35 +151,56 @@ class Tensor:
         return Tensor(**kwargs)
 
     @classmethod
-    def from_dict(cls, d: dict, config:_config | None=None):
+    def from_dict(cls, d: dict, config:_config | None=None) -> Tensor:
         #
-        if d['type'] != 'Tensor':
-            raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
-        d = d.copy()
-        if 'level' not in d:
-            d['level'] = 2
+        if 'dict_ver' not in d:  # d from a legacy method save_to_dict
+            if config is None:
+                raise YastnError("Legacy save_to_dict format requires config.")
+            c_isdiag = bool(d['isdiag'])
+            c_Dp = [x[0] for x in d['D']] if c_isdiag else np.prod(d['D'], axis=1, dtype=np.int64).tolist()
+            cd = _convert_lists_to_tuples({'s': d['s'], 'n': d['n'], 't': d['t'], 'D': d['D'], 'hfs': d['hfs'], 'mfs': d['mfs']})
 
-        if d['level'] >= 1:
-            for k in ['struct', 'slices', 'hfs', 'mfs']:
-                d[k] = _convert_lists_to_tuples(d[k])
+            slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(c_Dp), c_Dp, cd['D']))
+            struct = _struct(s=cd['s'], n=cd['n'], diag=c_isdiag, t=cd['t'], D=cd['D'], size=sum(c_Dp))
+            hfs = tuple(_Fusion(**hf) for hf in cd['hfs'])
+            c = Tensor(config=config, struct=struct, slices=slices, hfs=hfs, mfs=cd['mfs'])
+            if 'SYM_ID' in d and c.config.sym.SYM_ID != d['SYM_ID'].replace('(','').replace(')',''):  # for backward compatibility matching U1 and U(1)
+                raise YastnError("Symmetry rule in config do not match loaded one.")
+            if 'fermionic' in d and c.config.fermionic != d['fermionic']:
+                raise YastnError("Fermionic statistics in config do not match loaded one.")
+            dtype = dtype=d['_d'].dtype.name if hasattr(d['_d'], 'dtype') else config.default_dtype
+            c._data = c.config.backend.to_tensor(d['_d'], dtype=dtype, device=c.device)
+            c.is_consistent()
+            return c
+        #
+        if d['dict_ver'] == 1:  # d from method to_dict (single version as of now)
+            if d['type'] != 'Tensor':
+                raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
 
-            d['config'] = make_config(**d['config'])
-            d['hfs'] = tuple(_Fusion(**hf) for hf in d['hfs'])
-            d['struct'] = _struct(**d['struct'])
-            d['slices'] = tuple(_slc(*x) for x in d['slices'])
+            if d['level'] >= 1 or config is not None:
+                d = d.copy()
 
-        if config is not None:
-            if d['config'].sym.SYM_ID != config.sym.SYM_ID:
-                raise YastnError("Symmetry rule in config does not match the one in stored in d.")
-            if d['config'].fermionic != d['config'].fermionic:
-                raise YastnError("Fermionic statistics in config does not match the one in stored in d.")
-            d['config'] = config
+            if d['level'] >= 1:
+                for k in ['struct', 'slices', 'hfs', 'mfs']:
+                    d[k] = _convert_lists_to_tuples(d[k])
 
-        if d['level'] >= 2:
-            dtype = d['data'].dtype.name if hasattr(d['data'], 'dtype') else d['config'].default_dtype
-            d['data'] = d['config'].backend.to_tensor(d['data'], dtype=dtype, device=d['config'].default_device)
+                d['config'] = make_config(**d['config'])
+                d['hfs'] = tuple(_Fusion(**hf) for hf in d['hfs'])
+                d['struct'] = _struct(**d['struct'])
+                d['slices'] = tuple(_slc(*x) for x in d['slices'])
 
-        return cls(**d)
+            if config is not None:
+                if d['config'].sym.SYM_ID != config.sym.SYM_ID:
+                    raise YastnError("Symmetry rule in config does not match the one in stored in d.")
+                if d['config'].fermionic != d['config'].fermionic:
+                    raise YastnError("Fermionic statistics in config does not match the one in stored in d.")
+                d['config'] = config
+
+            if d['level'] >= 2 or config is not None:
+                dtype = d['data'].dtype.name if hasattr(d['data'], 'dtype') else d['config'].default_dtype
+                d['data'] = d['config'].backend.to_tensor(d['data'], dtype=dtype, device=d['config'].default_device)
+
+            return cls(**d)
 
 
     @property

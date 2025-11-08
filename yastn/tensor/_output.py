@@ -61,6 +61,7 @@ def to_dict(a, level=2) -> dict:
     data = a.data if level < 2 else a.config.backend.to_numpy(a.data)
 
     return {'type': type(a).__name__,
+            'dict_ver': 1,  # to_dict version
             'level': level,
             'config': config,
             'data': data,
@@ -97,7 +98,7 @@ def save_to_dict(a) -> dict:
             'SYM_ID': a.config.sym.SYM_ID, 'fermionic': a.config.fermionic}
 
 
-def save_to_hdf5(a, file, path) -> Never:
+def save_to_hdf5(a, file, path) -> None:
     """
     Export tensor into hdf5 type file.
 

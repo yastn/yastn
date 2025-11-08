@@ -358,6 +358,7 @@ class _MpsMpoParent:
         except:
             factor = psi.factor
         return {'type': type(psi).__name__,
+                'dict_ver': 1,
                 'N': psi.N,
                 'pC': psi.pC,
                 'nr_phys': psi.nr_phys,
@@ -369,11 +370,22 @@ class _MpsMpoParent:
         r"""
         Create MPS/MPO from dictionary.
         """
-        if cls.__name__ != d['type']:
-            raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
-        psi = cls(N=d['N'], nr_phys=d['nr_phys'])
-        psi.factor = d['factor']
-        psi.pC = d['pC']
-        psi.A = {k: Tensor.from_dict(v, config=config) for k, v in d['A'].items()}
-        # psi.A = {k: TENSOR_CLASSES[v['type']].from_dict(v, config=config) for k, v in d['A'].items()}
-        return psi
+        if 'dict_ver' not in d:  # d from a legacy method save_to_dict
+            nr_phys = d['nr_phys']
+            N = d['N'] if 'N' in d else len(d['A'])  # backwards compability
+            out_mps = cls(N, nr_phys=nr_phys)
+            if 'factor' in d:  # backwards compability
+                out_mps.factor = d['factor']
+            for n in range(out_mps.N):
+                out_mps.A[n] = Tensor.from_dict(d=d['A'][n], config=config)
+            return out_mps
+
+        if d['dict_ver'] == 1:
+            if cls.__name__ != d['type']:
+                raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
+            psi = cls(N=d['N'], nr_phys=d['nr_phys'])
+            psi.factor = d['factor']
+            psi.pC = d['pC']
+            psi.A = {k: Tensor.from_dict(v, config=config) for k, v in d['A'].items()}
+            # psi.A = {k: TENSOR_CLASSES[v['type']].from_dict(v, config=config) for k, v in d['A'].items()}
+            return psi

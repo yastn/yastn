@@ -60,16 +60,18 @@ class EnvGauge():
 
     def to_dict(self, level=2):
         return {'type': type(self).__name__,
+                'dict_ver': 1,
                 'gauge': self.gauge.to_dict(level=level)}
 
     @classmethod
     def from_dict(cls, d, config=None):
-        if cls.__name__ != d['type']:
-            raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
-        gauge = Lattice.from_dict(d['gauge'], config=config)
-        g = cls(gauge.geometry)
-        g.gauge = gauge
-        return g
+        if d['dict_ver'] == 1:
+            if cls.__name__ != d['type']:
+                raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
+            gauge = Lattice.from_dict(d['gauge'], config=config)
+            g = cls(gauge.geometry)
+            g.gauge = gauge
+            return g
 
 def _concat_data(env_data):
     '''

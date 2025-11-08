@@ -239,14 +239,7 @@ def load_from_dict(config, in_dict) -> MpsMpoOBC:
         dictionary containing serialized MPS/MPO, i.e.,
         a result of :meth:`yastn.tn.mps.MpsMpoOBC.save_to_dict`.
     """
-    nr_phys = in_dict['nr_phys']
-    N = in_dict['N'] if 'N' in in_dict else len(in_dict['A'])  # backwards compability
-    out_mps = MpsMpoOBC(N, nr_phys=nr_phys)
-    if 'factor' in in_dict:  # backwards compability
-        out_mps.factor = in_dict['factor']
-    for n in range(out_mps.N):
-        out_mps.A[n] = load_from_dict_tensor(config=config, d=in_dict['A'][n])
-    return out_mps
+    return MpsMpoOBC.from_dict(in_dict, config)
 
 
 def load_from_hdf5(config, file, my_address) -> MpsMpoOBC:
