@@ -17,7 +17,8 @@ import time, logging
 import torch
 import numpy as np
 from scipy.optimize import minimize
-from .... import zeros, eye, tensordot, diag, split_data_and_meta, combine_data_and_meta
+from ....tensor import tensordot, diag
+from ....initialize import zeros, eye, split_data_and_meta, combine_data_and_meta
 from ._env_ctm import ctm_conv_corner_spec
 from ._env_ctm_c4v import EnvCTM_c4v, decompress_env_c4v_1d
 from .fixed_pt import fast_env_T_gauge_multi_sites, NoFixedPointError, real_to_complex, complex_to_real

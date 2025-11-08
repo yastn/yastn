@@ -16,8 +16,8 @@ from __future__ import annotations
 import logging
 from typing import Callable, Sequence
 
-from .... import Tensor, Leg, YastnError, tensordot, truncation_mask, decompress_from_1d, \
-    truncation_mask_multiplets
+from ....tensor import Tensor, Leg, YastnError, tensordot, truncation_mask, truncation_mask_multiplets
+from ....initialize import decompress_from_1d
 from .._peps import Peps, Peps2Layers, DoublePepsTensor
 from .._geometry import RectangularUnitcell
 from ._env_auxlliary import *

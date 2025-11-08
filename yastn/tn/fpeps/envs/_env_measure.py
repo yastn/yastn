@@ -14,7 +14,7 @@
 # ==============================================================================
 """ Common measure functions for EnvCTM and EnvBoudndaryMPS """
 from ... import mps
-from .... import YastnError
+from ....tensor import YastnError
 from ....operators import sign_canonical_order
 
 

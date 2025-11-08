@@ -42,6 +42,7 @@ def run_save_load(env):
     for level in [0, 1, 2]:
         d = env.to_dict(level=level)
         compare_envs(env, fpeps.EnvBoundaryMPS.from_dict(d))
+        compare_envs(env, yastn.from_dict(yastn.combine_data_and_meta(*yastn.split_data_and_meta(d))))
 
 
 @pytest.mark.parametrize("boundary", ["obc", "cylinder"])

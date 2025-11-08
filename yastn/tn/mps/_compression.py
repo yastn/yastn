@@ -18,7 +18,8 @@ from typing import NamedTuple
 import logging
 from ._measure import Env
 from ._mps_obc import MpsMpoOBC, MpoPBC
-from ... import ones, eye, YastnError
+from ...tensor import YastnError
+from ...initialize import ones, eye
 
 logger = logging.Logger('compression')
 

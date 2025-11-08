@@ -17,7 +17,7 @@ from __future__ import annotations
 from typing import Iterator, Sequence
 from warnings import warn
 from numbers import Number, Integral
-from ... import YastnError, Tensor, Leg
+from ...tensor import YastnError, Tensor, Leg
 #from ...tn.fpeps._doublePepsTensor import DoublePepsTensor
 
 # TENSOR_CLASSES = {"Tensor": Tensor,

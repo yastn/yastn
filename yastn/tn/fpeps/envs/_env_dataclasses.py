@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 from dataclasses import dataclass, fields
-from .... import Tensor, YastnError
+from ....tensor import Tensor, YastnError
 
 
 @dataclass()

@@ -18,7 +18,8 @@ from operator import itemgetter
 import numpy as np
 import numbers
 from typing import NamedTuple
-from ... import zeros, ncon, Leg, YastnError, Tensor, block, svd_with_truncation
+from ...tensor import ncon, Leg, YastnError, Tensor, svd_with_truncation
+from ...initialize import zeros, block
 from ._mps_obc import Mpo, MpsMpoOBC
 from ._initialize import product_mpo
 from ...operators import sign_canonical_order

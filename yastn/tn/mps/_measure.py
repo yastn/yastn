@@ -18,7 +18,8 @@ from itertools import groupby, accumulate
 from numbers import Number
 from typing import Sequence
 import numpy as np
-from ... import YastnError, Tensor, eye, qr
+from ...tensor import YastnError, Tensor, qr
+from ...initialize import eye
 from . import MpsMpoOBC
 from ._env import Env, Env2
 from ...operators import swap_charges, sign_canonical_order

@@ -17,7 +17,8 @@ from __future__ import annotations
 from typing import NamedTuple
 from tqdm import tqdm
 from ._measure import Env
-from ... import YastnError, expmv, vdot
+from ...tensor import YastnError, vdot
+from ...krylov import expmv
 
 #################################
 #           tdvp                #

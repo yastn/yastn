@@ -16,15 +16,13 @@
 from __future__ import annotations
 from itertools import islice
 import numpy as np
-import scipy as spy
 import scipy.sparse.linalg as spla
 from scipy.linalg import solve_triangular as slv_tri
-import yastn
-from ..tensor import YastnError, Leg, LegMeta, einsum, truncation_mask
+from ..tensor import YastnError, Leg, LegMeta, einsum, truncation_mask, Tensor
 from ..tensor._tests import _test_axes_all
 from ..tensor.linalg import _find_gaps
-from ..tensor._auxliary import _struct, _slc, _clear_axes, _unpack_axes, _flatten
-from .. import zeros, decompress_from_1d, Tensor
+from ..tensor._auxliary import _clear_axes, _unpack_axes, _flatten
+from ..initialize import zeros, decompress_from_1d
 
 __all__ = ['expmv', 'eigs', 'lin_solver', 'svds']
 

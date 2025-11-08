@@ -17,7 +17,8 @@ from itertools import pairwise
 from tqdm import tqdm
 from typing import NamedTuple
 from warnings import warn
-from .... import eye, YastnError, tensordot, vdot, ncon, Tensor
+from ....tensor import YastnError, tensordot, vdot, ncon, Tensor
+from ....initialize import eye
 from .._peps import Peps2Layers, DoublePepsTensor, PEPS_CLASSES
 from .._gates_auxiliary import fkron, gate_fix_swap_gate, match_ancilla
 from .._geometry import Bond, Site, Lattice

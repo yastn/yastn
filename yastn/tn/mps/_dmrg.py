@@ -16,7 +16,8 @@
 from __future__ import annotations
 from typing import NamedTuple, Sequence
 import logging
-from ... import eigs, YastnError
+from ...tensor import YastnError
+from ...krylov import eigs
 from ._measure import Env
 from ._env import Env_sum, Env_project
 from . import MpsMpoOBC
