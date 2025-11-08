@@ -16,7 +16,7 @@ from __future__ import annotations
 from typing import NamedTuple, Union, Callable, Sequence
 import logging
 from warnings import warn
-from .... import Tensor, rand, ones, eye, YastnError, Leg, tensordot, qr, vdot, decompress_from_1d, split_data_and_meta, combine_data_and_meta
+from .... import Tensor, rand, ones, eye, YastnError, Leg, tensordot, qr, vdot, split_data_and_meta, combine_data_and_meta
 from ....operators import sign_canonical_order
 from ... import mps
 from ...mps import MpsMpoOBC
@@ -952,7 +952,6 @@ class EnvCTM():
         checkpoint_move = kwargs.get('checkpoint_move', False)
         for d in moves:
             if checkpoint_move:
-                outputs_meta = {}
                 def f_update_core_(move_d, loc_im, *inputs_t):
                     loc_env = EnvCTM.from_dict(combine_data_and_meta(inputs_t, loc_im))
                     _update_core_(loc_env, move_d, opts_svd, method=method, **kwargs)
@@ -972,12 +971,12 @@ class EnvCTM():
                     checkpoint_F = env.config.backend.checkpoint
                     out_data, out_meta = checkpoint_F(f_update_core_, d, inputs_meta, *inputs_t, \
                                       **{'use_reentrant': use_reentrant, 'debug': False})
-                    # reconstruct env from output tensors
-                    out_env_dict = combine_data_and_meta(out_data, out_meta)
-                    env.update_from_dict_(out_env_dict)
                 else:
                     raise RuntimeError(f"CTM update: checkpointing not supported for backend {env.config.BACKEND_ID}")
 
+                # reconstruct env from output tensors
+                out_env_dict = combine_data_and_meta(out_data, out_meta)
+                env.update_from_dict_(out_env_dict)
             else:
                 _update_core_(env, d, opts_svd, method=method, **kwargs)
         return env
@@ -1190,27 +1189,6 @@ class EnvCTM():
             if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
                 yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
         yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
-
-    def _partial_svd_predict_spec(env,leg0,leg1,sU):
-        # TODO externalize defaults for extending number of singular values to solve for
-        """
-        Used in block-wise partial SVD solvers.
-
-        Based on the projector spectra leg0, leg1, from (previous) projector pair,
-        suggest number of singular value triples to solve for in each of the blocks.
-
-        Parameters
-        ----------
-        leg0, leg1: yastn.Tensor
-            Projector spectra for the previous projector pair.
-        sU: int
-            Signature of U in SVD decomposition. See :func:`proj_corners` and :func:`linalg.svd`.
-        """
-        # the projector spectra for projector pair are related by charge conjugation
-        assert leg0 == leg1.conj(), f"Projector spectrum history mismatch between leg0={leg0} and leg1={leg1}"
-        #
-        l= leg0 if sU == leg0.s else leg1
-        return { t: max(d+10,int(d*1.1)) for t,d in zip(l.t, l.D) }
 
 
 def _update_core_(env, move: str, opts_svd: dict, **kwargs):
@@ -1752,3 +1730,24 @@ def update_storage_(old, new):
         for k, v in new[site].__dict__.items():
             if v is not None:
                 setattr(old[site], k, v)
+
+def _partial_svd_predict_spec(leg0,leg1,sU):
+    # TODO externalize defaults for extending number of singular values to solve for
+    """
+    Used in block-wise partial SVD solvers.
+
+    Based on the projector spectra leg0, leg1, from (previous) projector pair,
+    suggest number of singular value triples to solve for in each of the blocks.
+
+    Parameters
+    ----------
+    leg0, leg1: yastn.Tensor
+        Projector spectra for the previous projector pair.
+    sU: int
+        Signature of U in SVD decomposition. See :func:`proj_corners` and :func:`linalg.svd`.
+    """
+    # the projector spectra for projector pair are related by charge conjugation
+    assert leg0 == leg1.conj(), f"Projector spectrum history mismatch between leg0={leg0} and leg1={leg1}"
+    #
+    l= leg0 if sU == leg0.s else leg1
+    return { t: max(d+10,int(d*1.1)) for t,d in zip(l.t, l.D) }

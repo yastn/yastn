@@ -1036,8 +1036,8 @@ class FixedPoint(torch.autograd.Function):
 
         env_data = ctx.saved_tensors[:ctx.env_data_num]
         g_data = ctx.saved_tensors[ctx.env_data_num:]
-        env_dict = combine_data_and_meta(env_data, ctx.env_meta)
 
+        env_dict = combine_data_and_meta(env_data, ctx.env_meta)
         g_dict = combine_data_and_meta(g_data, ctx.g_meta)
         env_gauge = EnvGauge.from_dict(g_dict)
 
