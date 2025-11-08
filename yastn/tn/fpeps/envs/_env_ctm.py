@@ -16,7 +16,9 @@ from __future__ import annotations
 from typing import NamedTuple, Union, Callable, Sequence
 import logging
 from warnings import warn
-from .... import Tensor, rand, ones, eye, YastnError, Leg, tensordot, qr, vdot, split_data_and_meta, combine_data_and_meta
+
+from ....tensor import Tensor, YastnError, Leg, tensordot, qr, vdot
+from ....initialize import rand, ones, eye, split_data_and_meta, combine_data_and_meta
 from ....operators import sign_canonical_order
 from ... import mps
 from ...mps import MpsMpoOBC

@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from .... import YastnError, tensordot, eye
+from ....tensor import YastnError, tensordot
+from ....initialize import eye
 from ...import mps
 from .. import DoublePepsTensor
 from ._env_auxlliary import *

@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from .... import ncon
+from ....tensor import ncon
 from .. import Site, Peps, Peps2Layers, EnvCTM
-from .... import tensordot, Tensor, YastnError
+from ....tensor import tensordot, Tensor, YastnError
 from ._env_auxlliary import append_vec_tl, append_vec_br, append_vec_tr, append_vec_bl
 from typing import Sequence, Union, TypeVar
 import logging

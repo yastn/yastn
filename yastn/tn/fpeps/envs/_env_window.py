@@ -15,7 +15,7 @@
 from __future__ import annotations
 from tqdm import tqdm
 from ... import mps
-from .... import YastnError
+from ....tensor import YastnError
 from .._geometry import Site
 from ._env_boundary_mps import _clear_operator_input, clear_projectors
 

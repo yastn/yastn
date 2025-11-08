@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 from __future__ import annotations
-from ... import YastnError
+from ...tensor import YastnError
 from ._mps_obc import Mpo, MpsMpoOBC
 from ._latex2term import latex2term
 from ._initialize import random_mpo, random_mps

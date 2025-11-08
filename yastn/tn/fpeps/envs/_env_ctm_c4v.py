@@ -15,8 +15,8 @@
 from __future__ import annotations
 import logging
 from typing import Callable, Sequence
-
-from .... import Leg, YastnError, eye, tensordot, truncation_mask, truncation_mask_multiplets, split_data_and_meta, combine_data_and_meta
+from ....tensor import Leg, YastnError, tensordot, truncation_mask, truncation_mask_multiplets
+from ....initialize import eye, split_data_and_meta, combine_data_and_meta
 from .._peps import Peps, Peps2Layers, DoublePepsTensor, PEPS_CLASSES
 from .._geometry import RectangularUnitcell, Lattice
 from ._env_dataclasses import EnvCTM_c4v_local, EnvCTM_c4v_projectors

@@ -62,7 +62,7 @@ def run_bp_save_load_copy(env):
 
     dicts = [env.to_dict(level) for level in [0, 1, 2]]
     env_dict = [fpeps.EnvBP.from_dict(d) for d in dicts]
-    env_split = [fpeps.EnvBP.from_dict(yastn.combine_data_and_meta(*yastn.split_data_and_meta(d))) for d in dicts]
+    env_split = [yastn.from_dict(yastn.combine_data_and_meta(*yastn.split_data_and_meta(d))) for d in dicts]
 
     for new, ind in zip([env_save, env_copy, env_clone, env_shallow, *env_dict, *env_split],
                         [True, True, True, False, False, False, True, False, False, True]):

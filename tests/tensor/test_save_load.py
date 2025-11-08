@@ -49,10 +49,11 @@ def test_to_from_dict(config_kwargs):
         data, meta = yastn.split_data_and_meta(d)
         dd = yastn.combine_data_and_meta(data, meta)
         c = yastn.Tensor.from_dict(dd)
-
+        d = yastn.from_dict(dd)
+        #
         identical_tensors(a, b)
         identical_tensors(a, c)
-
+        identical_tensors(a, d)
         assert yastn.are_independent(a, b) == ind
         #
         # the result below depends on the backend: TODO

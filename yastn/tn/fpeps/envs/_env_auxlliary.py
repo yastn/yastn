@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from .... import tensordot, ones, Leg, eye, Tensor, YastnError, ncon
+from ....tensor import tensordot, Leg, Tensor, YastnError, ncon
+from ....initialize import ones, eye
 from ... import mps
 
 __all__ = ['hair_t', 'hair_l', 'hair_b', 'hair_r',

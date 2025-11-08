@@ -36,7 +36,7 @@ def run_ctm_save_load_copy(env):
 
     dicts = [env.to_dict(level) for level in [0, 1, 2]]
     env_dict = [fpeps.EnvCTM.from_dict(d) for d in dicts]
-    env_split = [fpeps.EnvCTM.from_dict(yastn.combine_data_and_meta(*yastn.split_data_and_meta(d))) for d in dicts]
+    env_split = [yastn.from_dict(yastn.combine_data_and_meta(*yastn.split_data_and_meta(d))) for d in dicts]
 
     for new, ind in zip([env_copy, env_clone, env_shallow, env_detach, *env_dict, *env_split],
                         [True, True, False, False, False, False, True, False, False, True]):

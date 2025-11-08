@@ -93,11 +93,13 @@ def test_save_load_mps_dict(config_kwargs, sym, tol=1e-12):
     config = ops.config
     phi = mps.load_from_dict(config, tmp)
     phi2 = mps.MpsMpoOBC.from_dict(tmp2)
+    phi3 = yastn.from_dict(tmp2)
     #
     # Test psi == phi
     #
     assert (psi - phi).norm() < tol * psi.norm()
     assert (psi - phi2).norm() < tol * psi.norm()
+    assert (psi - phi3).norm() < tol * psi.norm()
     #
     # Similarly for MPO
     #
@@ -108,8 +110,19 @@ def test_save_load_mps_dict(config_kwargs, sym, tol=1e-12):
     phi = mps.load_from_dict(config, tmp)
     tmp2 = psi.to_dict(level=2)
     phi2 = mps.MpsMpoOBC.from_dict(tmp2)
+    phi3 = yastn.from_dict(tmp2)
     assert (psi - phi).norm() < tol * psi.norm()
     assert (psi - phi2).norm() < tol * psi.norm()
+    assert (psi - phi3).norm() < tol * psi.norm()
+
+    psi_pbc = mps.MpoPBC(N=len(psi))
+    for n in psi_pbc.sweep():
+        psi_pbc[n] = psi[n]
+    tmp3 = psi_pbc.to_dict()
+    phi_pbc1 = mps.MpoPBC.from_dict(tmp3)
+    phi_pbc2 = yastn.from_dict(tmp3)
+    assert type(phi_pbc1) == mps.MpoPBC
+    assert type(phi_pbc2) == mps.MpoPBC
 
 
 if __name__ == '__main__':

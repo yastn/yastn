@@ -14,7 +14,8 @@
 # ==============================================================================
 from __future__ import annotations
 from typing import Sequence
-from ... import Tensor, YastnError, block
+from ...tensor import Tensor, YastnError
+from ...initialize import block
 from ...tn.mps import Mpo, MpsMpoOBC, MpoPBC
 from ._doublePepsTensor import DoublePepsTensor
 from ._gates_auxiliary import apply_gate_onsite, gate_from_mpo, gate_fix_swap_gate, fill_eye_in_gate

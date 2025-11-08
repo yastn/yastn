@@ -14,7 +14,7 @@
 # ==============================================================================
 """ Routines for time evolution with nn gates on a 2D lattice. """
 
-from ... import tensordot, vdot, svd_with_truncation, YastnError, Tensor
+from ...tensor import tensordot, vdot, svd_with_truncation, YastnError, Tensor
 from ._peps import Peps2Layers
 from ._gates_auxiliary import Gate, gate_from_mpo
 from ..mps import MpsMpoOBC

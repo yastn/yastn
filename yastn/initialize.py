@@ -17,6 +17,7 @@ Methods creating new YASTN tensors from scratch and
 importing tensors from different formats such as 1D + metadata or dictionary representation
 """
 from __future__ import annotations
+from dataclasses import dataclass
 from ast import literal_eval
 from itertools import groupby, accumulate
 from operator import itemgetter
@@ -30,7 +31,7 @@ from .tensor._contractions import ncon
 
 __all__ = ['rand', 'rand_like', 'randR', 'randC', 'zeros', 'ones', 'eye', 'block',
            'load_from_dict', 'load_from_hdf5', 'decompress_from_1d',
-           'split_data_and_meta', 'combine_data_and_meta']
+           'split_data_and_meta', 'combine_data_and_meta', 'Method']
 
 
 def split_data_and_meta(d: dict) -> tuple[tuple['numpy.array' | 'torch.tensor'], dict]:
@@ -483,3 +484,24 @@ def _sum_legs_hfs(legs):
     D_in = [leg.D for leg in legs]
     s_out = legs[0].s
     return _combine_hfs_sum(hfs, t_in, D_in, s_out)
+
+
+@dataclass
+class Method():
+    """
+    Auxiliary mutable method class.
+    It introduces the mechanism to change the method used in :meth:`yastn.tn.mps.dmrg_`, :meth:`yastn.tn.mps.tdvp_`,
+    and other generator functions in between consecutive sweeps.
+    Updating the value in place will inject the new value back into the generator.
+    """
+    string: str = ''
+
+    def __eq__(self, string):
+        return string == self.string
+
+    def __str__(self):
+        return self.string
+
+    def update_(self, string):
+        """ Update the method name in place. """
+        self.string = str(string)

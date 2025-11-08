@@ -14,8 +14,7 @@
 # ==============================================================================
 from __future__ import annotations
 from ..initialize import eye
-from .. import diag
-from ..tensor import YastnError, Leg, Tensor
+from ..tensor import YastnError, Leg, Tensor, diag
 from ._meta_operators import meta_operators
 
 class Qdit(meta_operators):

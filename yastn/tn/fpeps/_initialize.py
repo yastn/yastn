@@ -18,9 +18,7 @@ from ._peps import Peps
 from .envs._env_ctm import EnvCTM
 from .envs._env_bp import EnvBP
 from .envs._env_boundary_mps import EnvBoundaryMPS
-from ...initialize import load_from_dict as load_tensor_from_dict
-from ..mps import load_from_dict as load_mps_from_dict
-from ... import YastnError, Tensor
+from ...tensor import YastnError, Tensor
 
 
 def product_peps(geometry, vectors) -> Peps:
@@ -42,8 +40,8 @@ def product_peps(geometry, vectors) -> Peps:
         If dict is provided, it should specify a map between
         each unique lattice site and the corresponding vector.
     """
-    if not isinstance(geometry, (SquareLattice, CheckerboardLattice, TriangularLattice)):
-        raise YastnError("Geometry should be an instance of SquareLattice or CheckerboardLattice or TriangularLattice")
+    if not isinstance(geometry, (SquareLattice, CheckerboardLattice, TriangularLattice, RectangularUnitcell)):
+        raise YastnError("Geometry should be an instance of SquareLattice or CheckerboardLattice or TriangularLattice or RectangularUnitcell")
 
     if isinstance(vectors, Tensor):
         vectors = {site: vectors.copy() for site in geometry.sites()}
