@@ -160,19 +160,29 @@ class EnvCTM():
 
     def to_dict(self, level=2):
         return {'type': type(self).__name__,
+                'dict_ver': 1,
                 'psi': self.psi.to_dict(level=level),
                 'env': self.env.to_dict(level=level),
                 'proj': self.proj.to_dict(level=level)}
 
     @classmethod
     def from_dict(cls, d, config=None):
-        if cls.__name__ != d['type']:
-            raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
-        psi = PEPS_CLASSES[d['psi']['type']].from_dict(d['psi'], config=config)
-        env = cls(psi, init=None)
-        env.env = Lattice.from_dict(d['env'], config=config)
-        env.proj = Lattice.from_dict(d['proj'], config=config)
-        return env
+        if 'dict_ver' not in d:
+            psi = PEPS_CLASSES["Peps"].from_dict(d['psi'], config)
+            env = EnvCTM(psi, init=None)
+            for site in env.sites():
+                for dirn, v in d['data'][site].items():
+                    setattr(env[site], dirn, Tensor.from_dict(v, config))
+            return env
+
+        if d['dict_ver'] == 1:
+            if cls.__name__ != d['type']:
+                raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
+            psi = PEPS_CLASSES[d['psi']['type']].from_dict(d['psi'], config=config)
+            env = cls(psi, init=None)
+            env.env = Lattice.from_dict(d['env'], config=config)
+            env.proj = Lattice.from_dict(d['proj'], config=config)
+            return env
 
     def compress_env_1d(env):
         r"""

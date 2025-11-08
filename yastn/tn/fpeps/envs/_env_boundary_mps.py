@@ -18,7 +18,7 @@ from .... import Tensor, YastnError
 from ... import mps
 from ._env_auxlliary import identity_tm_boundary, clear_projectors
 from ._env_measure import _measure_nsite
-from .._peps import Peps2Layers
+from .._peps import PEPS_CLASSES, Peps2Layers, Peps
 
 
 class EnvBoundaryMPS():
@@ -107,6 +107,28 @@ class EnvBoundaryMPS():
                 self._env[nx, 'b'], discarded = mps.zipper(tmpo, phi0, opts_svd, return_discarded=True)
                 mps.compression_(self._env[nx, 'b'], (tmpo, phi0), **opts_var, opts_svd=opts_svd)
                 self.info[nx, 'b'] = {'discarded': discarded}
+
+
+    def to_dict(self, level=2):
+        return {'type': type(self).__name__,
+                'dict_ver': 1,
+                'psi': self.psi.to_dict(level=level),
+                'env': {k: v.to_dict(level=level) for k, v in self._env.items()},
+                'info': {k: v.copy() for k, v in self.info.items()}
+                }
+
+    @classmethod
+    def from_dict(cls, d, config=None):
+        if 'dict_ver' not in d:
+            psi = Peps.from_dict(d['psi'], config)
+        elif d['dict_ver'] == 1:
+            psi = PEPS_CLASSES[d['psi']['type']].from_dict(d['psi'], config=config)
+        env = EnvBoundaryMPS(psi, opts_svd={}, setup='')
+        for k, v in d['env'].items():
+            env._env[k] = mps.MpsMpoOBC.from_dict(v, config)
+        for k, v in d['info'].items():
+            env.info[k] = v.copy()
+        return env
 
     def save_to_dict(self) -> dict:
         r"""

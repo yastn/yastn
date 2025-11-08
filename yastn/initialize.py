@@ -314,36 +314,7 @@ def load_from_dict(config=None, d=None) -> Tensor:
         of :meth:`yastn.Tensor.save_to_dict`.
     """
     if d is not None:
-        c_isdiag = bool(d['isdiag'])
-        c_Dp = [x[0] for x in d['D']] if c_isdiag else np.prod(d['D'], axis=1, dtype=np.int64).tolist()
-
-        # When parsing Tensor serialized to JSON, tuples get converted to lists. For valid _struct, the lists
-        # have to be remapped back to tuples [requirement for hashing]
-        def _convert_lists_to_tuples(nested_iterable):
-            if isinstance(nested_iterable, list):
-                return tuple( _convert_lists_to_tuples(v) if isinstance(v,(list,tuple,set,dict)) else v for v in nested_iterable )
-            elif isinstance(nested_iterable, dict):
-                return { k: (_convert_lists_to_tuples(v) if isinstance(v,(list,tuple,set,dict)) else v) for k,v in nested_iterable.items() }
-            elif isinstance(nested_iterable, (tuple,set)):
-                return type(nested_iterable)( _convert_lists_to_tuples(v) if isinstance(v,(list,tuple,set,dict)) else v for v in nested_iterable )
-            else:
-                return nested_iterable
-        cd= _convert_lists_to_tuples({'s': d['s'], 'n': d['n'], 't': d['t'], 'D': d['D'], 'hfs': d['hfs'], 'mfs': d['mfs']})
-
-        slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(c_Dp), c_Dp, cd['D']))
-        struct = _struct(s=cd['s'], n=cd['n'], diag=c_isdiag, t=cd['t'], D=cd['D'], size=sum(c_Dp))
-        hfs = tuple(_Fusion(**hf) for hf in cd['hfs'])
-        c = Tensor(config=config, struct=struct, slices=slices, hfs=hfs, mfs=cd['mfs'])
-        if 'SYM_ID' in d and c.config.sym.SYM_ID != d['SYM_ID'].replace('(','').replace(')',''):  # for backward compatibility matching U1 and U(1)
-            raise YastnError("Symmetry rule in config do not match loaded one.")
-        if 'fermionic' in d and c.config.fermionic != d['fermionic']:
-            raise YastnError("Fermionic statistics in config do not match loaded one.")
-        if hasattr(d['_d'],'dtype'):
-            c._data = c.config.backend.to_tensor(d['_d'], dtype=d['_d'].dtype.name, device=c.device)
-        else:
-            c._data = c.config.backend.to_tensor(d['_d'], dtype=config.default_dtype, device=c.device)
-        c.is_consistent()
-        return c
+        return Tensor.from_dict(d, config)
     raise YastnError("Dictionary d is required.")
 
 

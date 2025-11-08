@@ -292,6 +292,7 @@ class Peps2Layers():
 
     def to_dict(self, level=2) -> dict:
         d = {'type': type(self).__name__,
+             'dict_ver': 1,
              'bra': self.bra.to_dict(level=level)}
         if self._ket is not None:
             d['ket'] = self._ket.to_dict(level=level)
@@ -299,11 +300,12 @@ class Peps2Layers():
 
     @classmethod
     def from_dict(cls, d, config=None):
-        if cls.__name__ != d['type']:
-            raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
-        bra = Peps.from_dict(d['bra'], config=config)
-        ket = Peps.from_dict(d['ket'], config=config) if ('ket' in d) else None
-        return Peps2Layers(bra=bra, ket=ket)
+        if d['dict_ver'] == 1:
+            if cls.__name__ != d['type']:
+                raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
+            bra = Peps.from_dict(d['bra'], config=config)
+            ket = Peps.from_dict(d['ket'], config=config) if ('ket' in d) else None
+            return Peps2Layers(bra=bra, ket=ket)
 
 
 PEPS_CLASSES = {'Peps': Peps,

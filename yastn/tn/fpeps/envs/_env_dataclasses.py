@@ -64,7 +64,8 @@ class dataclasses_common():
         return all(tests)
 
     def to_dict(self, level=2):
-        d = {'type': type(self).__name__}
+        d = {'type': type(self).__name__,
+             'dict_ver': 1}
         for k in fields(self):
             if getattr(self, k.name) is not None:
                 d[k.name] = getattr(self, k.name).to_dict(level=level)
@@ -72,11 +73,11 @@ class dataclasses_common():
 
     @classmethod
     def from_dict(cls, d, config=None):
-        if cls.__name__ != d['type']:
-            raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
-        dd = {k.name: Tensor.from_dict(d[k.name], config=config) for k in fields(cls) if k.name in d}
-        return cls(**dd)
-
+        if d['dict_ver'] == 1:
+            if cls.__name__ != d['type']:
+                raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
+            dd = {k.name: Tensor.from_dict(d[k.name], config=config) for k in fields(cls) if k.name in d}
+            return cls(**dd)
 
 
 @dataclass()

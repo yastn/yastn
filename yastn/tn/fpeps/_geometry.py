@@ -221,6 +221,7 @@ class SquareLattice():
     def to_dict(self):
         """Return a dictionary representation of the object."""
         return {'type': type(self).__name__,
+                'dict_ver': 1,
                 'dims': self.dims,
                 'boundary': self.boundary}
 
@@ -243,7 +244,8 @@ class CheckerboardLattice(SquareLattice):
 
     def to_dict(self):
         """Return a dictionary representation of the object."""
-        return {'type': type(self).__name__}
+        return {'type': type(self).__name__,
+                'dict_ver': 1}
 
 
 class RectangularUnitcell(SquareLattice):
@@ -346,6 +348,7 @@ class RectangularUnitcell(SquareLattice):
 
         """
         return {'type': type(self).__name__,
+                'dict_ver': 1,
                 'pattern': [[self.site2index((row, col)) for col in range(self.Ny)] for row in range(self.Nx)]}
 
 
@@ -398,6 +401,7 @@ class TriangularLattice(SquareLattice):
 
         """
         return {'type': type(self).__name__,
+                'dict_ver': 1,
                 'pattern': [[self.site2index((row,col)) for col in range(self.Ny)] for row in range(self.Nx)]}
 
 
@@ -450,18 +454,39 @@ class Lattice():
         Serialize Lattice into a dictionary.
         """
         return {'type': type(self).__name__,
+                'dict_ver': 1,
                 'geometry': self.geometry.to_dict(),
                 'site_data': {k: v.to_dict(level=level) for k, v in self._site_data.items() if v is not None}}
 
     @classmethod
     def from_dict(cls, d, config=None):
-        if cls.__name__ != d['type']:
-            raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
-        geometry = LATTICE_CLASSES[d['geometry']['type']](**d['geometry'])
-        net = cls(geometry)
-        for k, v in d['site_data'].items():
-            net._site_data[k] = DATA_CLASSES[v['type']].from_dict(v, config=config)
-        return net
+
+        if 'dict_ver' not in d:  # d from a legacy method save_to_dict
+            if 'lattice' in d:
+                d['type'] = d['lattice']  # for backward compatibility
+            if d['type'] in ["square", "SquareLattice"]:
+                net = SquareLattice(dims=d['dims'], boundary=d['boundary'])
+            elif d['type'] in ["checkerboard", "CheckerboardLattice"]:
+                net = CheckerboardLattice()
+            elif d['type'] in ["rectangularunitcell", "RectangularUnitcell"]:
+                net = RectangularUnitcell(pattern=d['pattern'])
+            elif d['type'] in ["triangular", "TriangularLattice"]:
+                net = TriangularLattice()
+            psi = cls(net)
+            for site in psi.sites():
+                obj = DATA_CLASSES["Tensor"].from_dict(d['data'][site], config)
+                if obj.ndim == 3:  obj = obj.unfuse_legs(axes=(0, 1))  # for backward compatibility
+                psi[site] = obj
+            return psi
+
+        if d['dict_ver'] == 1:  # d from method to_dict (single version as of now)
+            if cls.__name__ != d['type']:
+                raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
+            geometry = LATTICE_CLASSES[d['geometry']['type']](**d['geometry'])
+            net = cls(geometry)
+            for k, v in d['site_data'].items():
+                net._site_data[k] = DATA_CLASSES[v['type']].from_dict(v, config=config)
+            return net
 
     def save_to_dict(self) -> dict:
         """
@@ -473,6 +498,7 @@ class Lattice():
         warn('This method is deprecated; use to_dict() instead.', DeprecationWarning, stacklevel=2)
         d = {**self.geometry.to_dict(),
              'data': {}}
+        d.pop('dict_ver')
         for site in self.sites():
             d['data'][site] = self[site].save_to_dict()
         return d
