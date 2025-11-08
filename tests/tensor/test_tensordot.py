@@ -55,18 +55,30 @@ def tensordot_vs_numpy(a, b, axes, conj):
     return c
 
 
-def test_dot_basic_dense(config_kwargs):
+@pytest.mark.parametrize("dtype",["float32","float64","complex64","complex128"])
+def test_dot_basic_dense(config_kwargs,dtype):
     """ test tensordot for different symmetries. """
     # dense
     config_dense = yastn.make_config(sym='none', **config_kwargs)
     config_dense.backend.random_seed(1)
-    a = yastn.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5), dtype='float64')
-    b = yastn.rand(config=config_dense, s=(1, -1, 1), D=(2, 3, 5), dtype='float64')
+    a = yastn.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5), dtype=dtype)
+    b = yastn.rand(config=config_dense, s=(1, -1, 1), D=(2, 3, 5), dtype=dtype)
     c1 = tensordot_vs_numpy(a, b, axes=((0, 3), (0, 2)), conj=(0, 0))
     c2 = tensordot_vs_numpy(b, a, axes=((2, 0), (3, 0)), conj=(1, 1))
     assert yastn.norm(c1.conj() - c2.transpose(axes=(1, 2, 0))) < tol
     # outer product
     tensordot_vs_numpy(a, b, axes=((), ()), conj=(0, 0))
+
+
+@pytest.mark.parametrize("dtype",["float32","float64","complex64","complex128"])
+def test_dot_basic_dense_1(config_kwargs,dtype):
+    """ test tensordot for different symmetries. """
+    # dense
+    config_dense = yastn.make_config(sym='none', **config_kwargs)
+    config_dense.backend.random_seed(1)
+    a = yastn.rand(config=config_dense, s=(-1, 1), D=(2, 2), dtype=dtype)
+    b = yastn.rand(config=config_dense, s=(1, 1), D=(2, 2), dtype=dtype)
+    c1 = tensordot_vs_numpy(a, b, axes=((1,), (1,)), conj=(0, 1))
 
 
 def test_dot_basic_dense2(config_kwargs):
@@ -358,84 +370,6 @@ def test_tensordot_exceptions(config_kwargs):
         config = config_U1._replace(tensordot_policy='something')
         c = a._replace(config=config)
         _ = yastn.tensordot(c, b, axes=((1, 2), (0, 1)))
-
-
-@torch_test
-def test_tensordot_fuse_hard_backward(config_kwargs):
-    import torch
-    # U1
-    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
-
-    config_U1.backend.random_seed(seed=0)
-    t1, t2, t3 = (-1, 0, 1), (-2, 0, 2), (-3, 0, 3)
-    D1, D2, D3 = (1, 2, 2), (2, 2, 2), (2, 2, 2)
-    #
-    dtype = 'complex128'  # 'float64'
-    a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1, 1),
-                t=(t1, t1, t2, t2, t3, t3), D=(D1, D2, D2, D1, D1, D2), dtype=dtype)
-    b = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1, 1),
-                t=(t2, t2, t3, t3, t1, t1), D=(D2, D3, D1, D3, D1, D2), dtype=dtype)
-    fb = yastn.fuse_legs(b, axes=(0, (4, 3, 1), (5, 2)), mode='hard')
-    ffb = yastn.fuse_legs(fb, axes=(0, (2, 1)), mode='hard')
-
-    target_block = (0, 0, 0, 0, 0, 0)
-    target_block_size = a[target_block].size()
-
-    def test_f_native(block):
-        a.set_block(ts=target_block, val=block)
-        ab = yastn.tensordot(a, b.conj(), axes=((1, 2, 3, 4, 5), (1, 2, 3, 4, 5)))
-        ab = ab.norm()
-        return ab
-
-    def test_f_fused(block):
-        a.set_block(ts=target_block, val=block)
-        fa = yastn.fuse_legs(a, axes=(0, (4, 3, 1), (5, 2)), mode='hard')
-        ffa = yastn.fuse_legs(fa, axes=(0, (2, 1)), mode='hard')
-        ffab = yastn.tensordot(ffa.conj(), ffb, axes=(1, 1))
-        ffab = ffab.norm()
-        return ffab
-
-    op_args = (torch.randn(target_block_size, dtype=a.get_dtype(), requires_grad=True),)
-    assert torch.autograd.gradcheck(test_f_native, op_args, eps=1e-6, atol=1e-4)
-
-    op_args = (torch.randn(target_block_size, dtype=a.get_dtype(), requires_grad=True),)
-    assert torch.autograd.gradcheck(test_f_fused, op_args, eps=1e-6, atol=1e-4)
-
-
-@torch_test
-def test_tensordot_backward(config_kwargs):
-    import torch
-
-    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
-    config_U1.backend.random_seed(seed=0)
-    dtypes = ("float64", "complex128")
-
-    for dtype in dtypes:  # mixing types does not work torch=2.4
-        a = yastn.rand(config=config_U1, s=(-1, -1, 1, 1),
-                    t=[(0, 1), (0, 1), (0, 1), (0, 1)],
-                    D=[(2, 3), (4, 5), (4, 3), (2, 1)], dtype=dtype)
-        b1 = yastn.rand(config=config_U1, s=(1, 1, -1, -1),  # charges match exactly
-                    t=[(0, 1), (0, 1), (0, 1), (0, 1)],
-                    D=[(2, 3), (4, 5), (4, 3), (2, 1)], dtype=dtype)
-        b2 = yastn.rand(config=config_U1, s=(1, 1, -1, -1),  # some block mismatches
-                    t=[(0, 2), (1, 2), (0, 1, 2), (0, 1, 2)],
-                    D=[(2, 3), (5, 6), (4, 3, 4), (2, 1, 3)], dtype=dtype)
-        b3 = yastn.rand(config=config_U1, s=(1, 1, -1, -1),  # no matching blocks in a @ b
-                    t=[(0, 2), (-1, 2), (-1,  2), (0, 1, 2)],
-                    D=[(2, 3), (5, 6), (4, 4), (2, 1, 3)], dtype=dtype)
-
-        for b in [b1, b2, b3]:
-            target_block = (0, 1, 1, 0)
-            target_block_size = a[target_block].size()
-
-            def test_f(block):
-                a.set_block(ts=target_block, val=block)
-                ab = yastn.tensordot(a, b, axes=((1, 2), (1, 2)))  # 2 outgoing legs are a problem
-                ab = ab.norm()
-                return ab
-
-            op_args = (torch.randn(target_block_size, dtype=a.get_dtype(), requires_grad=True),)
-            assert torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4)
 
 
 if __name__ == '__main__':

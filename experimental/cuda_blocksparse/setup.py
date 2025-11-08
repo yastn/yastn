@@ -41,10 +41,13 @@ def get_extensions():
     abs_dir = os.path.abspath(os.path.dirname(__file__))
 
     extra_link_args = [
+      f"-L{os.path.join(abs_dir, '../libcutensor-linux-x86_64-2.4.0.0/lib/12')}",
       "-lcutensor",
     ]
+    include_dirs = [
+        f"{os.path.join(abs_dir, '../libcutensor-linux-x86_64-2.4.0.0/include')}",
+    ]
     # additional include dirs, IMPORTANT to be searched first
-    include_dirs = []
     extra_compile_args = {
         "cxx": [
             "-O3" if not debug_mode else "-O0",
