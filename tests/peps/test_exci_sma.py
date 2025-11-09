@@ -38,7 +38,7 @@ def test_exci_sma_UUD(config_kwargs):
     for out in env_ctm.ctmrg_(opts_svd=env_opts_svd, max_sweeps=30, iterator_step=1, corner_tol=1e-12):
         # print(out)
         continue
-    
+
     config = yastn.make_config(sym='none', **config_kwargs)
     s12 = yastn.operators.Spin12(**config._asdict())
     Id, Sz, Sx, Sy, Sp, Sm = s12.I(), s12.sz(), s12.sx(), s12.sy(), s12.sp(), s12.sm()
@@ -50,22 +50,22 @@ def test_exci_sma_UUD(config_kwargs):
     lp = 3 # patch size
     bonds = [
         ((0, 0),),
-        ((0, 0), (0, 1)), 
-        ((0, 0), (1, 0)), 
-        # ((0, 1), (1, 0)), 
+        ((0, 0), (0, 1)),
+        ((0, 0), (1, 0)),
+        # ((0, 1), (1, 0)),
     ]
     def _shift_coord(coord, dx, dy):
         return (coord[0] + dx, coord[1] + dy)
-    
+
     def _convert_tensor(t_val, config):
         A = yastn.Tensor(config=config, s=(-1, 1, 1, -1, 1))
         A.set_block(val=t_val, Ds=t_val.shape)
         return A
-    
+
     def compute_exci(env_ctm, *operators, sites_op, exci_bra, exci_ket, site_bra, site_ket):
         sites = sites_op + [site_bra, site_ket]
         xrange = (min(site[0] for site in sites), max(site[0] for site in sites) + 1)
-        yrange = (min(site[1] for site in sites), max(site[1] for site in sites) + 1)    
+        yrange = (min(site[1] for site in sites), max(site[1] for site in sites) + 1)
         # exci_bra.requires_grad_(requires_grad=True)
         # if exci_bra._data.grad is not None:
         #     exci_bra._data.grad.zero_()
@@ -96,7 +96,7 @@ def test_exci_sma_UUD(config_kwargs):
 
                 # compute excited energies
                 if len(bond) == 1:
-                    H_val = -hz * compute_exci(env_ctm, Sz, sites_op=shift_bond, exci_bra=exci_bra, exci_ket=exci_ket, site_bra=site_bra, site_ket=site_ket)                    
+                    H_val = -hz * compute_exci(env_ctm, Sz, sites_op=shift_bond, exci_bra=exci_bra, exci_ket=exci_ket, site_bra=site_bra, site_ket=site_ket)
                     es_exci[bond][lx_b-min_x, ly_b-min_y, lx_k-min_x, ly_k-min_y, i_sl] = H_val
                 else:
                     H_val = Jzz * compute_exci(env_ctm, Sz, Sz, sites_op=shift_bond, exci_bra=exci_bra, exci_ket=exci_ket, site_bra=site_bra, site_ket=site_ket)
@@ -110,7 +110,7 @@ def test_exci_sma_UUD(config_kwargs):
                     exci_bra_c = _convert_tensor(bra_c_np, config)
 
                     N_val = compute_exci(env_ctm, sites_op=[], exci_bra=exci_bra_c, exci_ket=exci_ket, site_bra=site_c, site_ket=site_ket)
-                    # ns_exci[:, i_basis, lx_k, ly_k, i_sl] = exci_basis[state.site2index(site_bra)].T @ dN_dbra                                
+                    # ns_exci[:, i_basis, lx_k, ly_k, i_sl] = exci_basis[state.site2index(site_bra)].T @ dN_dbra
                     ns_exci[lx_k-min_x, ly_k-min_y, i_sl] = N_val
         computed_norm = True
 
@@ -122,9 +122,9 @@ def test_exci_sma_UUD(config_kwargs):
     print("<Jzz.Sz(0,0).Sz(1,0)>=-0.754", "<Jzz.Sz(0,1).Sz(1,1)>=0.754", "<Jzz.Sz(0,2).Sz(1,2)>=-0.754")
 
     # excited state expectation values
-    print(f"<B(0, 0)|-hz.S^z(0, 0)|B(0, 0)>={es_exci[(0, 0)][1, 1, 1, 1, 0]:.5f}")
-    print(f"<B(0, 1)|-hz.S^z(0, 1)|B(0, 1)>={es_exci[(0, 0)][1, 1, 1, 1, 1]:.5f}")
-    print(f"<B(0, 2)|-hz.S^z(0, 2)|B(0, 2)>={es_exci[(0, 0)][1, 1, 1, 1, 2]:.5f}")
+    print(f"<B(0, 0)|-hz.S^z(0, 0)|B(0, 0)>={es_exci[((0, 0),)][1, 1, 1, 1, 0]:.5f}")
+    print(f"<B(0, 1)|-hz.S^z(0, 1)|B(0, 1)>={es_exci[((0, 0),)][1, 1, 1, 1, 1]:.5f}")
+    print(f"<B(0, 2)|-hz.S^z(0, 2)|B(0, 2)>={es_exci[((0, 0),)][1, 1, 1, 1, 2]:.5f}")
 
     print(f"<B(0, 0)|Jzz.Sz(0,0).Sz(0,1)|B(0, 0)>={es_exci[((0, 0), (0, 1))][1, 1, 1, 1, 0]:.5f}")
     print(f"<B(0, 1)|Jzz.Sz(0,1).Sz(0,2)|B(0, 1)>={es_exci[((0, 0), (0, 1))][1, 1, 1, 1, 1]:.5f}")
@@ -132,13 +132,13 @@ def test_exci_sma_UUD(config_kwargs):
 
 if __name__ == '__main__':
     # pytest.main([__file__, "-vs", "--durations=0", "--long_tests"])
-    yastn_config = {"backend": "torch", 
-                    "fermionic": False, 
-                    "default_dtype": "complex128", 
+    yastn_config = {"backend": "torch",
+                    "fermionic": False,
+                    "default_dtype": "complex128",
                     "default_device": 'cpu',
                     "tensordot_policy": "no_fusion"
                     }
-    
+
     # yastn.make_config(
     #     backend='torch',
     #     sym='dense',

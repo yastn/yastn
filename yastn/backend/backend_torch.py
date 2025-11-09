@@ -122,7 +122,7 @@ def imag(x):
 
 
 def max_abs(x):
-    return x.abs().max()
+    return x.abs().max() if x.numel() > 0 else torch.tensor(0, device=x.device)
 
 def maximum(input, output):
     return torch.maximum(input, output)
@@ -360,17 +360,17 @@ def eig(data, meta=None, sizes=(1, 1), **kwargs):
         #
         # in general diag(U.H @ U) = 1 but not U.H @ U = I, i.e. right eigenvectors are not orthogonal
         #
-        # The solutions satisfy 
+        # The solutions satisfy
         # M @ U / U = S (as cols)
         # V.H @ M / V.H = S (as rows)
-        # 
+        #
         # Search for left eigenvectors V (rows) via biorthogonality condition V.H @ U = I
         try:
             V= torch.linalg.solve(U.conj().T, torch.eye(len(S), dtype=U.dtype, device=data.device), left=True, out=None)
             V= V.conj().T
         except Exception as e:
             raise ValueError("Biorthonormalization of left/right eigenvector pairs failed.") from e
-        
+
         tol= 1.0e-12 if data.is_complex() else 1.0e-14
         if any( torch.abs(torch.sum(V.T * U, axis=0) - 1) > tol ):
             raise ValueError("Biorthonormalization of left/right eigenvector pairs failed.")

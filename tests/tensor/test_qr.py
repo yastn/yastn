@@ -74,6 +74,12 @@ def test_qr_basic(config_kwargs):
     a = yastn.ones(config=config_Z2xU1, legs=legs)
     run_qr_combine(a)
 
+    # test qr of empty Tensor
+    for config in [config_dense, config_U1, config_Z2xU1]:
+        a = yastn.Tensor(config, s=(1, -1, 1))
+        Q, R = yastn.linalg.qr(a, axes=(0, (1, 2)))
+        assert Q.size == R.size == 0
+
 
 def test_qr_Z3(config_kwargs):
     # Z3

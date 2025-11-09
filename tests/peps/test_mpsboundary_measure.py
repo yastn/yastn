@@ -47,7 +47,7 @@ def test_mpsboundary_measure(config_kwargs, boundary):
     # initialized PEPS in a product state
     geometry = fpeps.SquareLattice(dims=(4, 3), boundary=boundary)
     sites = geometry.sites()
-    vals = [1, 1, -1, 1, 1, -1, 1, -1, -1, -1, 1, -1]
+    vals = [1, 1, -1, 1, 0, -1, 1, 0, -1, 0, 1, -1]
     vals = dict(zip(sites, vals))
     occs = {s: ops.vec_z(val=v) for s, v in vals.items()}
     psi = fpeps.product_peps(geometry, occs)

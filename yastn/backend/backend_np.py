@@ -103,7 +103,7 @@ def imag(x):
 
 
 def max_abs(x):
-    return np.abs(x).max()
+    return np.abs(x).max() if x.size > 0 else 0
 
 
 def norm_matrix(x):
@@ -309,7 +309,7 @@ def eig_lowrank(data, meta, sizes, **kwargs):
         if k < min(D) - 1 and D[0] * D[1] > 5000:
             # the second condition is heuristic estimate when performing dense eig should be faster.
             try:
-                S, U= scipy.sparse.linalg.eigs(data[slice(*sl)].reshape(D), k=k, M=None, sigma=None, 
+                S, U= scipy.sparse.linalg.eigs(data[slice(*sl)].reshape(D), k=k, M=None, sigma=None,
                     which=which, v0=None, ncv=None, maxiter=None, tol=0, return_eigenvectors=True, Minv=None, OPinv=None, OPpart=None)
             except scipy.sparse.linalg.ArpackError as e:
                 raise e
@@ -334,16 +334,16 @@ def eig(data, meta=None, sizes=(1, 1), **kwargs):
         # in general diag(U.H @ U) = 1 but not U.H @ U = I, i.e. right eigenvectors are not orthogonal
         # same is true for left eigenvectors V, diag(V.H @ V) = 1 but not V.H @ V = I
         #
-        # The solutions satisfy 
+        # The solutions satisfy
         # M @ U / U = S (as cols)
         # V.H @ M / V.H = S (as rows)
-        # 
+        #
         # However, in general V and U are not biorthogonal, i.e. V.H @ U != I
         #
         # One can enforce biorthogonality by replacing V -> V @ (V.H @ U)^{-1}
-        # TODO 
+        # TODO
         # If matrix has repeated/clustered eigenvalues or is defective, plain diagonal rescaling may be ill‑conditioned.
-        
+
         tol = 1e-12 if np.iscomplexobj(data) else 1e-14
         try:
             # Column-wise overlaps d_j = v_j^H u_j
@@ -355,7 +355,7 @@ def eig(data, meta=None, sizes=(1, 1), **kwargs):
                 raise ValueError("At least one left/right eigenvector pair has ~zero overlap; "
                             "biorthonormalization by simple scaling is ill-conditioned. "
                             "Matrix may be defective or numerically close to defective.")
-            
+
             # Symmetric scaling: divide V by sqrt(d), and U by conj(sqrt(d)),
             # so that (U')^H V' has ones on the diagonal.
             s = np.sqrt(d)
@@ -364,12 +364,12 @@ def eig(data, meta=None, sizes=(1, 1), **kwargs):
         except ValueError as e:
             try:
                 # V.H @ U != I -> solve U.H @ V = I for V
-                _V = scipy.linalg.solve(U.conj().T, np.eye(len(S)), lower=False, overwrite_a=False, overwrite_b=False, 
+                _V = scipy.linalg.solve(U.conj().T, np.eye(len(S)), lower=False, overwrite_a=False, overwrite_b=False,
                                     check_finite=True, assume_a='gen', transposed=False)
                 _U, _V = U, _V.conj().T
             except (scipy.linalg.LinAlgError, np.linalg.LinAlgError) as e:
                 raise ValueError("Biorthonormalization of left/right eigenvector pairs failed.") from e
-        
+
         if any( np.abs(np.sum(_V.T * _U, axis=0) - 1) > tol ):
             raise ValueError("Biorthonormalization of left/right eigenvector pairs failed.")
 
@@ -383,7 +383,7 @@ def eig(data, meta=None, sizes=(1, 1), **kwargs):
 def eigvals(data, meta, sizeS, **kwargs):
     Sdata = np.empty((sizeS,), dtype=DTYPE['complex128'])
     for (sl, D, _, _, slS, _, _) in meta:
-        S = scipy.linalg.eigvals(data[slice(*sl)].reshape(D), b=None, overwrite_a=False, 
+        S = scipy.linalg.eigvals(data[slice(*sl)].reshape(D), b=None, overwrite_a=False,
                                      check_finite=True, homogeneous_eigvals=False)
         Sdata[slice(*slS)]= S[eigs_which(S, which=kwargs.get('which', 'LM'))]
     return Sdata
