@@ -448,8 +448,13 @@ def optimize_truncation(M0, M1, error2_old, fgf, fRR, fgRR, RRgRR, pinv_cutoffs,
     Optimizes the matrices M0 and M1 by minimizing
     truncation error using least square optimization.
     """
-    gf = fgf.unfuse_legs(axes=0)
-    gRR =  fgRR.unfuse_legs(axes=0)
+    if max_iter > 0:
+        gf = fgf.unfuse_legs(axes=0)
+        gRR =  fgRR.unfuse_legs(axes=0)
+
+    error2 = error2_old
+    pinv_c = 0
+    iter = 0
 
     for iter in range(1, max_iter+1):
         # fix M1 and optimize M0
