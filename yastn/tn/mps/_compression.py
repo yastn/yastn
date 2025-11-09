@@ -335,8 +335,10 @@ def _zipper_MpoPBC(a, psi, opts_svd, normalize) -> MpsMpoOBC:
     lmpo, lpsi = a.virtual_leg('last'), psi.virtual_leg('last')
 
     tmp = eye(psi.config, legs=lmpo, isdiag=False)
-    tmp = tmp.add_leg(axis=0, s=-lpsi.s, t=lpsi.t[0])
-    tmp = tmp.add_leg(axis=3, s=lpsi.s, t=lpsi.t[0])
+    tmp = tmp.tensordot(eye(psi.config, legs=lpsi, isdiag=False), axes=((), ()))
+    tmp = tmp.transpose(axes=(3, 0, 1, 2))
+    # tmp = tmp.add_leg(axis=0, s=-lpsi.s, t=lpsi.t[0])
+    # tmp = tmp.add_leg(axis=3, s=lpsi.s, t=lpsi.t[0])
 
     connector = eye(psi.config, legs=lmpo, isdiag=False)
 
