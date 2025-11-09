@@ -17,7 +17,7 @@ from itertools import groupby
 from typing import Sequence, Union
 import numpy as np
 import torch
-
+import torch.cuda as cuda
 from .backend_torch import *
 import cublocksparse
 

@@ -31,6 +31,7 @@ from ._env_boundary_mps import _clear_operator_input
 
 import sys
 import logging
+
 logger= logging.getLogger(__name__)
 
 @dataclass()
@@ -125,6 +126,8 @@ class EnvCTM(Peps):
         self.proj = Peps(self.geometry)
         for site in self.sites():
             self.proj[site] = EnvCTM_projectors()
+
+        self.profiling_mode= None
 
     def __repr__(self) -> str:
         return f"EnvCTM(envs={super().__repr__()},\nproj={self.proj})"
@@ -1212,7 +1215,12 @@ class EnvCTM(Peps):
         """ Generator for ctmrg_. """
         max_dsv, converged, history = None, False, []
         for sweep in range(1, max_sweeps + 1):
-            env.update_(opts_svd=opts_svd, moves=moves, method=method, **kwargs)
+            if env.profiling_mode in ["NVTX",]:
+                env.config.backend.cuda.nvtx.range_push(f"update_")
+                env.update_(opts_svd=opts_svd, moves=moves, method=method, **kwargs)
+                env.config.backend.cuda.nvtx.range_pop()
+            else:
+                env.update_(opts_svd=opts_svd, moves=moves, method=method, **kwargs)
 
             # use default CTM convergence check
             if corner_tol is not None:
@@ -1281,15 +1289,28 @@ def _update_core_(env, move: str, opts_svd: dict, **kwargs):
         sites_proj = [site for site in sites_proj if site is not None]
         #
         # Projectors
-        for site in sites_proj:
-            update_projectors_(env, site, move, opts_svd, **kwargs)
+        if env.profiling_mode in ["NVTX",]:
+            env.config.backend.cuda.nvtx.range_push(f"update_projectors_")
+            for site in sites_proj:
+                update_projectors_(env, site, move, opts_svd, **kwargs)
+            env.config.backend.cuda.nvtx.range_pop()
+        else:
+            for site in sites_proj:
+                update_projectors_(env, site, move, opts_svd, **kwargs)
         # fill (trivial) projectors on edges
         trivial_projectors_(env, move, sites_proj)
         #
         # Update move
         env_tmp = EnvCTM(env.psi, init=None)  # empty environments
-        for site in sites:
-            update_env_(env_tmp, site, env, move)
+        if env.profiling_mode in ["NVTX",]:
+            env.config.backend.cuda.nvtx.range_push(f"update_env_")
+            for site in sites:
+                update_env_(env_tmp, site, env, move)
+            env.config.backend.cuda.nvtx.range_pop()
+        else:
+            for site in sites:
+                update_env_(env_tmp, site, env, move)
+        
         update_storage_(env, env_tmp)
 
 
@@ -1371,6 +1392,7 @@ def update_extended_2site_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwa
     """
     psi = env.psi
     use_qr = kwargs.get("use_qr", True)
+    kwargs["profiling_mode"]= env.profiling_mode
     psh = env.proj
     # Inherit _partial_svd_predict_spec from EnvCTM
     svd_predict_spec= lambda s0,p0,s1,p1,sign: opts_svd.get('D_block', float('inf')) \
@@ -1775,8 +1797,14 @@ def proj_corners(r0, r1, opts_svd, **kwargs):
     verbosity = opts_svd.get('verbosity', 0)
     # only verbosity from opts_svd is to be passed down to svd_with_truncation 
     kwargs.pop('verbosity', None)
+    profiling_mode= kwargs.get('profiling_mode', None)
 
-    u, s, v = rr.svd_with_truncation(axes=(0, 1), sU=r0.s[1], **opts_svd, **kwargs)
+    if profiling_mode in ["NVTX",]:
+        rr.config.backend.cuda.nvtx.range_push(f"svd_with_truncation")
+        u, s, v = rr.svd_with_truncation(axes=(0, 1), sU=r0.s[1], **opts_svd, **kwargs)
+        rr.config.backend.cuda.nvtx.range_pop()
+    else:
+        u, s, v = rr.svd_with_truncation(axes=(0, 1), sU=r0.s[1], **opts_svd, **kwargs)
 
     if verbosity > 2:
         fname = sys._getframe().f_code.co_name

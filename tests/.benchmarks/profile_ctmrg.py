@@ -55,8 +55,6 @@ def distributeU1_exponential(D, p = 0.25):
 
 def profile_ctmrg(on_site_t, X, config_profile):
     USE_TORCH_NVTX= ("torch" in config_profile.backend.BACKEND_ID)
-    if USE_TORCH_NVTX:
-        import torch
 
     geometry= RectangularUnitcell(pattern=[[0,]])
     psi = Peps(geometry, tensors=dict(zip(geometry.sites(), [on_site_t, ])))
@@ -72,10 +70,6 @@ def profile_ctmrg(on_site_t, X, config_profile):
     # clone current env
     env2= env.clone()
 
-    # do 1 more step on original env for reference
-    # info = env.ctmrg_(opts_svd = {"D_total": X, 'fix_signs': False}, max_sweeps= 1, 
-    #                         truncation_f=None, use_qr=False, checkpoint_move=False)
-
     # switch backends 
     b= on_site_t.clone()
     b.config= config_profile
@@ -88,25 +82,14 @@ def profile_ctmrg(on_site_t, X, config_profile):
     max_sweeps= 5
     corner_tol= 1.0e-8
     
+
     max_dsv, converged, history = None, False, []
-    for sweep in range(1, max_sweeps + 1):
-        if USE_TORCH_NVTX:
-            torch.cuda.nvtx.range_push(f"ctm step {sweep}")
-        env2.update_(opts_svd=opts_svd, moves='hv', method='2site', use_qr=False, checkpoint_move=False)
-        if USE_TORCH_NVTX:
-            torch.cuda.nvtx.range_pop()
-
-        # use default CTM convergence check
-        if corner_tol is not None:
-            # Evaluate convergence of CTM by computing the difference of environment corner spectra between consecutive CTM steps.
-            corner_sv = env2.calculate_corner_svd()
-            max_dsv = max((corner_sv[k] - history[-1][k]).norm().item() for k in corner_sv) if history else float('Nan')
-            history.append(corner_sv)
-            converged = max_dsv < corner_tol
-            print(f'Sweep = {sweep:03d}; max_diff_corner_singular_values = {max_dsv:0.2e} max_X {env2.effective_chi()}')
-
-            if converged:
-                break
+    if USE_TORCH_NVTX:
+        env2.profiling_mode= "NVTX"
+    for ctm_step in env2.iterate_(opts_svd=opts_svd, moves='hv', method='2site', max_sweeps=max_sweeps, 
+                                  iterator_step=1, corner_tol=corner_tol, truncation_f=None, use_qr=False, checkpoint_move=False):
+        sweep, max_dsv, max_D, converged = ctm_step
+        print(f'Sweep = {sweep:03d}; max_diff_corner_singular_values = {max_dsv:0.2e} max_D {max_D} max_X {env2.effective_chi()}')
 
 
 @torch_test

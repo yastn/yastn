@@ -17,6 +17,7 @@ from itertools import groupby
 from functools import reduce
 import torch
 from torch.utils.checkpoint import checkpoint as _checkpoint
+import torch.cuda as cuda
 from .linalg.torch_eig_sym import SYMEIG
 from ._backend_torch_backwards import kernel_svd, kernel_svds_scipy
 from ._backend_torch_backwards import kernel_dot, kernel_transpose_dot_sum, kernel_negate_blocks
