@@ -41,10 +41,13 @@ def get_extensions():
     abs_dir = os.path.abspath(os.path.dirname(__file__))
 
     extra_link_args = [
+        # -Lpath/to/shared/objects if necessary 
       "-lcutensor",
     ]
+    include_dirs = [
+        # -Ipath/to/include if necessary,
+    ]
     # additional include dirs, IMPORTANT to be searched first
-    include_dirs = []
     extra_compile_args = {
         "cxx": [
             "-O3" if not debug_mode else "-O0",

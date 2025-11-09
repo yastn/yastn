@@ -53,7 +53,7 @@ def make_config(**kwargs) -> NamedTuple:
 
     Parameters
     ----------
-    backend : backend module or str
+    backend: backend module or str
         Specify ``backend`` providing linear algebra and base dense tensors.
         Currently supported backends are
 
@@ -63,14 +63,14 @@ def make_config(**kwargs) -> NamedTuple:
         The above backends can be specified as strings: "np", "torch".
         Defaults to NumPy backend.
 
-    sym : symmetry module or compatible object or str
+    sym: symmetry module or compatible object or str
         Specify abelian symmetry. To see how YASTN defines symmetries,
         see :class:`yastn.sym.sym_abelian`.
         Defaults to ``yastn.sym.sym_none``, effectively a dense tensor.
         For predefined symmetries, takes string input from
         'none' (or 'dense'), 'Z2', 'Z3', 'U1', 'U1xU1', 'U1xU1xZ2'.
 
-    default_device : str
+    default_device: str
         Tensors can be stored on various devices as supported by ``backend``
 
             * NumPy supports only ``'cpu'`` device
@@ -82,14 +82,14 @@ def make_config(**kwargs) -> NamedTuple:
     default_dtype: str
         Default data type (dtype) of YASTN tensors. Supported options are: ``'float64'``,
         ``'complex128'``. If not specified, the default dtype is ``'float64'``.
-    fermionic : bool or tuple[bool,...]
+    fermionic: bool or tuple[bool,...]
         Specify behavior of :meth:`yastn.swap_gate` function, allowing to introduce fermionic statistics.
         Allowed values: ``False``, ``True``, or a tuple ``(True, False, ...)`` with one bool for each component
         charge vector, i.e., of length sym.NSYM. The default is ``False``.
     default_fusion: str
         Specify default strategy to handle leg fusion: ``'hard'`` or ``'meta'``. See :meth:`yastn.Tensor.fuse_legs`
         for details. The default is ``'hard'``.
-    force_fusion : str
+    force_fusion: str
         Overrides fusion strategy provided in :meth:`yastn.Tensor.fuse_legs`. The default is ``None``.
     tensordot_policy: str
         Contraction approach used by :meth:`yastn.tensordot`
@@ -156,33 +156,38 @@ def _fill(config=None, legs=(), n=None, isdiag=False, val='rand', **kwargs):
     return a
 
 
-def rand(config=None, legs=(), n=None, isdiag=False, **kwargs) -> Tensor:
+def rand(config=None, distribution=(-1, 1), legs=(), n=None, isdiag=False, **kwargs) -> Tensor:
     r"""
     Initialize tensor with all allowed blocks filled with random numbers.
 
-    Draws from a uniform distribution in [-1, 1] or [-1, 1] + 1j * [-1, 1],
-    depending on desired ``dtype``.
+    Draws from a uniform distribution in the range specify by ``lim``,
+    or ``lim`` in real and imaginary part, depending on desired ``dtype``.
+    ``distribution='normal'`` invokes normal distribution with zero mean and standard deviation one.
+    The default is ``distribution=(-1, 1)``.
 
     Parameters
     ----------
-    config : module | _config(NamedTuple)
+    config: module | _config(NamedTuple)
         :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
-    legs : Sequence[yastn.Leg]
+    distribution: tuple[int, int] | str
+        The range from which the numbers are drawn from a uniform distribution.
+        For ``distribution='normal'`` normal distribution is used.
+    legs: Sequence[yastn.Leg]
         Specify legs of the tensor passing a list of :class:`yastn.Leg`.
-    n : int | Sequence[int]
+    n: int | Sequence[int]
         Total charge of the tensor.
-    isdiag : bool
+    isdiag: bool
         whether or not to make tensor diagonal.
-    dtype : str
+    dtype: str
         Desired datatype, overrides :code:`default_dtype` specified in configuration.
-    device : str
+    device: str
         Device on which the tensor should be initialized. Overrides attribute :code:`default_device`
         specified in configuration.
-    s : Optional[Sequence[int]]
+    s: Optional[Sequence[int]]
         (alternative) Tensor signature. Also determines the number of legs. The default is s=().
-    t : Optional[Sequence[Sequence[int | Sequence[int]]]]
+    t: Optional[Sequence[Sequence[int | Sequence[int]]]]
         (alternative) List of charges for each leg. The default is t=().
-    D : Optional[Sequence[Sequence[int]]]
+    D: Optional[Sequence[Sequence[int]]]
         (alternative) List of corresponding bond dimensions. The default is D=().
 
     Note
@@ -190,35 +195,36 @@ def rand(config=None, legs=(), n=None, isdiag=False, **kwargs) -> Tensor:
     If any of :code:`s`, :code:`t`, or :code:`D` are specified,
     :code:`legs` are overriden and only :code:`t`, :code:`D`, and :code:`s` are used.
     """
-    return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='rand', **kwargs)
+    return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val=('rand', distribution), **kwargs)
 
 
-def rand_like(T: Tensor, **kwargs) -> Tensor:
+def rand_like(T: Tensor, distribution=(-1, 1), **kwargs) -> Tensor:
     r"""
     Initialize tensor with same structure as ``T`` filled with random numbers.
 
-    Draws from a uniform distribution in [-1, 1] or [-1, 1] + 1j * [-1, 1],
-    depending on desired ``dtype``.
+    Draws from a uniform distribution in the range specify by ``lim``,
+    or ``lim`` in real and imaginary part, depending on desired ``dtype``.
+    ``distribution='normal'`` invokes normal distribution. The default is ``distribution=(-1, 1)``.
     """
-    return rand(config=T.config, legs=T.get_legs(), n=T.n, isdiag=T.isdiag, **kwargs)
+    return rand(config=T.config, legs=T.get_legs(), n=T.n, isdiag=T.isdiag, distribution=distribution, **kwargs)
 
 
-def randR(config=None, legs=(), n=None, isdiag=False, **kwargs) -> Tensor:
+def randR(config=None, distribution=(-1, 1), legs=(), n=None, isdiag=False, **kwargs) -> Tensor:
     r"""
     Initialize tensor with all allowed blocks filled with real random numbers,
     see :meth:`yastn.rand`.
     """
     kwargs['dtype'] = 'float64'
-    return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='rand', **kwargs)
+    return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='rand', distribution=distribution, **kwargs)
 
 
-def randC(config=None, legs=(), n=None, isdiag=False, **kwargs) -> Tensor:
+def randC(config=None, distribution=(-1, 1), legs=(), n=None, isdiag=False, **kwargs) -> Tensor:
     r"""
     Initialize tensor with all allowed blocks filled with complex random numbers,
     see :meth:`yastn.rand`.
     """
     kwargs['dtype'] = 'complex128'
-    return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='rand', **kwargs)
+    return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='rand', distribution=distribution, **kwargs)
 
 
 def zeros(config=None, legs=(), n=None, isdiag=False, **kwargs) -> Tensor:
@@ -227,24 +233,24 @@ def zeros(config=None, legs=(), n=None, isdiag=False, **kwargs) -> Tensor:
 
     Parameters
     ----------
-    config : module | _config(NamedTuple)
+    config: module | _config(NamedTuple)
         :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
-    legs : Sequence[yastn.Leg]
+    legs: Sequence[yastn.Leg]
         Specify legs of the tensor passing a list of :class:`yastn.Leg`.
-    n : int | Sequence[int]
+    n: int | Sequence[int]
         total charge of the tensor.
-    isdiag : bool
+    isdiag: bool
         whether or not to make tensor diagonal
-    dtype : str
+    dtype: str
         Desired datatype, overrides :code:`default_dtype` specified in configuration.
-    device : str
+    device: str
         Device on which the tensor should be initialized. Overrides attribute :code:`default_device`
         specified in configuration.
-    s : Optional[Sequence[int]]
+    s: Optional[Sequence[int]]
         (alternative) Tensor signature. Also determines the number of legs. The default is s=().
-    t : Optional[Sequence[Sequence[int | Sequence[int]]]]
+    t: Optional[Sequence[Sequence[int | Sequence[int]]]]
         (alternative) List of charges for each leg. The default is t=().
-    D : Optional[Sequence[Sequence[int]]]
+    D: Optional[Sequence[Sequence[int]]]
         (alternative) List of corresponding bond dimensions. The default is D=().
 
     Note
@@ -261,24 +267,24 @@ def ones(config=None, legs=(), n=None, isdiag=False, **kwargs) -> Tensor:
 
     Parameters
     ----------
-    config : module | _config(NamedTuple)
+    config: module | _config(NamedTuple)
         :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
-    legs : Sequence[yastn.Leg]
+    legs: Sequence[yastn.Leg]
         Specify legs of the tensor passing a list of :class:`yastn.Leg`.
-    n : int | Sequence[int]
+    n: int | Sequence[int]
         total charge of the tensor.
-    isdiag : bool
+    isdiag: bool
         whether or not to make tensor diagonal.
-    dtype : str
+    dtype: str
         Desired datatype, overrides :code:`default_dtype` specified in configuration.
-    device : str
+    device: str
         Device on which the tensor should be initialized. Overrides attribute :code:`default_device`
         specified in configuration.
-    s : Optional[Sequence[int]]
+    s: Optional[Sequence[int]]
         (alternative) Tensor signature. Also determines the number of legs. The default is s=().
-    t : Optional[Sequence[Sequence[int | Sequence[int]]]]
+    t: Optional[Sequence[Sequence[int | Sequence[int]]]]
         (alternative) List of charges for each leg. The default is t=().
-    D : Optional[Sequence[Sequence[int]]]
+    D: Optional[Sequence[Sequence[int]]]
         (alternative) List of corresponding bond dimensions. The default is D=().
 
     Note
@@ -300,22 +306,22 @@ def eye(config=None, legs=(), isdiag=True, **kwargs) -> Tensor:
 
     Parameters
     ----------
-    config : module | _config(NamedTuple)
+    config: module | _config(NamedTuple)
         :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
-    legs : Sequence[yastn.Leg]
+    legs: Sequence[yastn.Leg]
         Specify legs of the tensor passing a list of :class:`yastn.Leg`.
-    isdiag : bool
+    isdiag: bool
         Specify by bool whether to return explicitly diagonal tensor.
         If :code:`True`, the signatures of the legs have to be opposite, and fused legs are not supported.
         If :code:`False`, it supports having fused legs and any combination of signatures.
-    device : str
+    device: str
         Device on which the tensor should be initialized. Overrides attribute :code:`default_device`
         specified in configuration.
-    s : Optional[Sequence[int]]
+    s: Optional[Sequence[int]]
         (alternative) Tensor signature; should be (1, -1) or (-1, 1). The default is s=(1, -1).
-    t : Optional[Sequence[Sequence[int | Sequence[int]]]]
+    t: Optional[Sequence[Sequence[int | Sequence[int]]]]
         (alternative) List of charges for each leg. The default is t=().
-    D : Optional[list]
+    D: Optional[list]
         (alternative) List of corresponding bond dimensions. The default is D=().
 
     Note
@@ -359,9 +365,9 @@ def load_from_dict(config=None, d=None) -> Tensor:
 
     Parameters
     ----------
-    config : module | _config(NamedTuple)
+    config: module | _config(NamedTuple)
         :ref:`YASTN configuration <tensor/configuration:yastn  configuration>`
-    d : dict
+    d: dict
         Tensor stored in form of a dictionary. Typically provided by an output
         of :meth:`yastn.Tensor.save_to_dict`.
     """
@@ -405,7 +411,7 @@ def load_from_hdf5(config, file, path) -> Tensor:
 
     Parameters
     ----------
-    config : module | _config(NamedTuple)
+    config: module | _config(NamedTuple)
         :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
     file:
         pointer to opened HDF5 file.
@@ -443,10 +449,10 @@ def decompress_from_1d(r1d, meta) -> Tensor:
 
     Parameters
     ----------
-    r1d : rank-1 tensor
+    r1d: rank-1 tensor
         1-D array (of backend type) holding serialized blocks.
 
-    meta : dict
+    meta: dict
         structure of symmetric tensor. Non-zero blocks are indexed by associated charges.
         Each such entry contains block's dimensions and the location of its data
         in rank-1 tensor :code:`r1d`.
@@ -467,11 +473,11 @@ def block(tensors, common_legs=None) -> Tensor:
 
     Parameters
     ----------
-    tensors : dict[Sequence[int], Tensor]
+    tensors: dict[Sequence[int], Tensor]
         dictionary of tensors {(x,y,...): tensor at position x,y,.. in the new, blocked super-tensor}.
         Length of tuple should be equall to :code:`tensor.ndim - len(common_legs)`.
 
-    common_legs : Sequence[int]
+    common_legs: Sequence[int]
         Legs that are not blocked.
         This is equivalently to all tensors having the same position
         (not specified explicitly) in the super-tensor on that leg.

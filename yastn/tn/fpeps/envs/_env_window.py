@@ -202,7 +202,7 @@ class EnvWindow:
 
         out = {site: [] for site in sites}
         probabilities = []
-        rands = (self.psi.config.backend.rand(self.Nx * self.Ny * number) + 1) / 2  # in [0, 1]
+        rands = self.psi.config.backend.rand(self.Nx * self.Ny * number)  # in [0, 1]
         count = 0
 
         for _ in tqdm(range(number), desc="Sample...", disable=not progressbar):

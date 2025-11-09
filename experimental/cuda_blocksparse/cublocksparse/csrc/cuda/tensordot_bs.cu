@@ -61,8 +61,9 @@ using ModeType   = int32_t;
 using ExtentType = int64_t;
 using StrideType = int64_t;
 
+template <typename scalar_t>
 int tensordot_bs_cuda_impl(
-    const double* a_ptr,
+    const scalar_t* a_ptr,
     const std::vector<ModeType> &modeA,                  // Modes of the tensor, which in turn also define the "rank/dim" of the tensor
     const std::vector<ModeType> nonZeroCoordinatesA,     // Coordinates of the non-zero blocks in the tensor, which are specified as a vector of indices
                                                          // with respect to sectionExtents already serialized into 1D, i.e.
@@ -73,17 +74,18 @@ int tensordot_bs_cuda_impl(
                                                          //    const std::vector<ModeType> modeB,
     const std::vector<StrideType> &offsetsA,
     const std::vector<StrideType> &stridesA,
-    const double* b_ptr,
+    const scalar_t* b_ptr,
     const std::vector<ModeType> &modeB,
     const std::vector<ModeType> nonZeroCoordinatesB,
     const std::vector<StrideType> &offsetsB,
     const std::vector<StrideType> &stridesB,
-    double* c_ptr,
+    scalar_t* c_ptr,
     const std::vector<ModeType> &modeC,
     const std::vector<ModeType> nonZeroCoordinatesC,
     const std::vector<StrideType> &offsetsC,
     const std::vector<StrideType> &stridesC,
-    const std::unordered_map<ModeType, std::vector<ExtentType>> sectionExtents
+    const std::unordered_map<ModeType, std::vector<ExtentType>> sectionExtents,
+    const cudaDataType_t dataType
 )
 try
 {
@@ -114,9 +116,9 @@ try
       int64_t size
     ) -> void
     {
-        std::vector<double> temp(size, 0.0);
-        HANDLE_CUDA_ERROR(cudaMemcpy(temp.data(), static_cast<double*>(dev),
-                                     temp.size() * sizeof(double),
+        std::vector<scalar_t> temp(size, 0.0);
+        HANDLE_CUDA_ERROR(cudaMemcpy(temp.data(), static_cast<scalar_t*>(dev),
+                                     temp.size() * sizeof(scalar_t),
                                      cudaMemcpyDeviceToHost));
         for (int i = 0; i < size; ++i) {
             std::cout << temp[i] << ", ";
@@ -126,7 +128,6 @@ try
 
     // Helper-λ to allocate and initialise block-sparse tensors with random
     // data. In this example we use 64-bit double precision numbers.
-    cutensorDataType_t dataType = CUTENSOR_R_64F;
     auto initTensor = [&handle,&sectionExtents,&printTensor,&yastn_log_level,dataType]
     (
       const std::vector<ModeType>   &modes,              
@@ -135,7 +136,7 @@ try
       const std::vector<StrideType> &strides, 
       cutensorBlockSparseTensorDescriptor_t &desc, 
       Guard<cutensorBlockSparseTensorDescriptor_t> &guard,
-      const double * buf, // Buffer to holding the non-zero blocks of the tensor
+      const scalar_t * buf, // Buffer to holding the non-zero blocks of the tensor
       std::vector<void*> &dev
     ) -> void
     {
@@ -275,7 +276,7 @@ try
     struct StreamGuard { cudaStream_t stream; ~StreamGuard() { cudaStreamDestroy(stream); } };
     StreamGuard guardStream { stream };
 
-    double alpha = 1., beta = 0.;
+    scalar_t alpha = 1., beta = 0.;
     HANDLE_ERROR(cutensorBlockSparseContract(handle, plan,
                 (void*) &alpha, (const void *const *) devA.data(), (const void *const *) devB.data(),
                 (void*) &beta,  (const void *const *) devC.data(), (      void *const *) devC.data(), 
@@ -325,22 +326,27 @@ at::Tensor tensordot_bs_cuda(
   }
   TORCH_CHECK(a.dim() == 1, "Input 'a' must be 1D.");
   TORCH_CHECK(b.dim() == 1, "Input 'b' must be 1D.");
-  TORCH_CHECK(a.dtype() == at::kDouble, "Input 'a' must be float64."); // At this stage, we support only float64.
-  TORCH_CHECK(b.dtype() == at::kDouble, "Input 'b' must be float64.");
+  // inputs must all have the same dtype
+  TORCH_CHECK( a.dtype() == b.dtype(), "Inputs must have the same dtype" )
+  cudaDataType_t dtype;
+  if (a.dtype() == c10::ScalarType::Double) 
+      dtype= CUDA_R_64F;
+  else if (a.dtype() == c10::ScalarType::ComplexDouble)
+      dtype= CUDA_C_64F;  
+  else if (a.dtype() == c10::ScalarType::Float)
+      dtype= CUDA_R_32F;
+  else if (a.dtype() == c10::ScalarType::ComplexFloat)
+      dtype= CUDA_C_32F;
+  else
+    throw std::runtime_error { "Unsupported dtype." };
   TORCH_CHECK(a_D_per_mode.dtype() == at::kLong, "Input 'a_D_per_mode' must be int64 valued.");
   TORCH_CHECK(b_D_per_mode.dtype() == at::kLong, "Input 'b_D_per_mode' must be int64 valued.");
   TORCH_CHECK(c_D_per_mode.dtype() == at::kLong, "Input 'c_D_per_mode' must be int64 valued.");
   TORCH_INTERNAL_ASSERT(a.device().type() == at::DeviceType::CUDA);
   TORCH_INTERNAL_ASSERT(b.device().type() == at::DeviceType::CUDA);
-  //at::Tensor a_contig = a.contiguous(); // For 1D tensors, contiguous is not needed
-  //at::Tensor b_contig = b.contiguous();
-
-  const double* a_ptr = a.data_ptr<double>();
-  const double* b_ptr = b.data_ptr<double>();
 
   at::Tensor result = torch::zeros(c_size, a.options());
-  double* result_ptr = result.data_ptr<double>();
-
+  
   // Prepare inputs for the CUDA implementation.
   //
   // 0) prepare mode labels (possibly use integers directly) and 1) prepare extents per mode
@@ -362,6 +368,9 @@ at::Tensor tensordot_bs_cuda(
   b_modes.resize(nout_b.size() + nin_b.size());
   c_modes.resize(nout_a.size() + nout_b.size());
   for (size_t i = 0; i < nout_a.size(); ++i) { 
+    // modes of a: 0 1 2 3 ...
+    //     nout_a  specifies outgoing indices of a AND in what order they should appear in c as
+    // modes of c: nout_a[0], nout_a[1], ...
     a_modes[nout_a[i]]= alphabet[i]; 
     c_modes[i]= alphabet[i];
     for (size_t j = 0; j < a_D_per_mode.size(1); ++j) {
@@ -438,24 +447,32 @@ if (yastn_log_level > 3) {
                [](int64_t x) { return static_cast<int32_t>(x); });
 
   // Call the CUDA implementation.  
-  tensordot_bs_cuda_impl(
-    a_ptr,
-    a_modes, 
-    a_blocks32,
-    a_offsets,
-    a_strides,
-    b_ptr,
-    b_modes,
-    b_blocks32,
-    b_offsets,
-    b_strides,
-    result_ptr,
-    c_modes, 
-    c_blocks32,
-    c_offsets,
-    c_strides,
-    sectionExtents
-  );
+  AT_DISPATCH_FLOATING_AND_COMPLEX_TYPES(
+    a.scalar_type(), "tensordot_bs_cuda_impl", [&] {
+        const scalar_t* a_ptr = a.data_ptr<scalar_t>();
+        const scalar_t* b_ptr = b.data_ptr<scalar_t>();
+        scalar_t* result_ptr = result.data_ptr<scalar_t>();
+    
+        tensordot_bs_cuda_impl<scalar_t>(
+            a_ptr,
+            a_modes, 
+            a_blocks32,
+            a_offsets,
+            a_strides,
+            b_ptr,
+            b_modes,
+            b_blocks32,
+            b_offsets,
+            b_strides,
+            result_ptr,
+            c_modes, 
+            c_blocks32,
+            c_offsets,
+            c_strides,
+            sectionExtents,
+            dtype
+    );
+  });
 
   return result;
 }

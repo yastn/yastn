@@ -29,12 +29,13 @@ __all__= [
     'get_dtype', 'is_complex', 'get_device', 'random_seed', 'grad',
     'detach', 'detach_', 'clone', 'copy',
     'to_numpy', 'get_shape', 'get_size', 'diag_create', 'diag_get', 'real',
-    'imag', 'max_abs', 'norm_matrix', 'delete', 'insert',
+    'imag', 'max_abs', 'maximum', 'norm_matrix', 'delete', 'insert',
     'expm', 'first_element', 'item', 'sum_elements', 'norm', 'entropy',
     'zeros', 'ones', 'rand', 'to_tensor', 'to_mask', 'square_matrix_from_dict',
     'requires_grad_', 'requires_grad', 'move_to', 'conj',
     'trace', 'rsqrt', 'reciprocal', 'exp', 'sqrt', 'absolute',
-    'svd_lowrank', 'svd', 'eigh', 'qr', 'pinv',
+    'fix_svd_signs', 'svdvals', 'svd_lowrank', 'svd', 'svd_randomized', 'svds_scipy',
+    'eigh', 'qr', 'pinv',
     'argsort', 'eigs_which', 'allclose',
     'add', 'sub', 'apply_mask', 'vdot', 'diag_1dto2d', 'diag_2dto1d',
     'dot', 'dot_diag', 'transpose_dot_sum',
@@ -196,9 +197,12 @@ def ones(D, dtype='float64', device='cpu'):
     return torch.ones(D, dtype=DTYPE[dtype], device=device)
 
 
-def rand(D, dtype='float64', device='cpu'):
+def rand(D, dtype='float64', distribution=(0, 1), device='cpu'):
+    if distribution == 'normal':
+        return torch.randn(D, dtype=DTYPE[dtype], device=device)
     ds = 1 if dtype=='float64' else 1 + 1j
-    return 2 * torch.rand(D, dtype=DTYPE[dtype], device=device) - ds
+    out = torch.rand(D, dtype=DTYPE[dtype], device=device)
+    return out if distribution == (0, 1) else (distribution[1] - distribution[0]) * out + distribution[0] * ds
 
 
 def randint(low, high):

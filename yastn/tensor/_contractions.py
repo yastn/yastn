@@ -23,6 +23,7 @@ from ._auxliary import _struct, _slc, SpecialTensor, _clear_axes, _unpack_axes, 
 from ._merging import _merge_to_matrix, _unmerge, _meta_unmerge_matrix, _meta_fuse_hard
 from ._merging import _transpose_and_merge, _mask_tensors_leg_intersection, _meta_mask
 from ._tests import YastnError, _test_can_be_combined, _test_axes_match
+from ._legs import LegMeta
 
 __all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon', 'einsum', 'broadcast', 'apply_mask']
 
@@ -175,19 +176,13 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
     order_a = nout_a + nin_a
     order_b = nin_b + nout_b
 
-    if a.config.backend.BACKEND_ID == 'torch_cpp':
+    if a.config.backend.BACKEND_ID == 'torch_cpp' and len(struct_c.s)>0:
         # NOTE nout_a, nin_a, nout_b, nin_b use ndim_n or ndim ? 
         #      *) when default_fusion='meta', they are wrt. native legs. The charges of non-zero blocks are also wrt. to native legs.
-        def _rm_to_cm_order(t, t_slices, reverse=False):
-            t_cm= t.clone()
-            for slc in t_slices:
-                _block= t[slice(*slc.slcs[0])].view(slc.D) if not reverse else t[slice(*slc.slcs[0])].view(*reversed(slc.D))
-                t_cm[slice(*slc.slcs[0])]= _block.permute(*reversed(range(_block.dim()))).clone().reshape(-1)
-            return t_cm
         
         a_blocks_t, b_blocks_t, c_blocks_t= a.struct.t, b.struct.t, struct_c.t
         a_slices, b_slices = a.slices, b.slices
-        if a.config.sym.NSYM == 0 and a.config.sym.NSYM == 0:
+        if a.config.sym.NSYM == 0 and b.config.sym.NSYM == 0:
             # if no symmetry, create single block for each tensor for syntax compatibility
             a_blocks_t, b_blocks_t, c_blocks_t= ((0,)*a.ndim_n,), ((0,)*b.ndim_n,), ((0,)*(len(nout_a)+len(nout_b)),)
         else: # take only subset of blocks that are involved in the contraction
@@ -198,24 +193,22 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
                 b_blocks_t= tuple(b.struct.t[i] for i in ind_b)
                 b_slices= tuple(b.slices[i] for i in ind_b)
 
-        # import pdb; pdb.set_trace()  # DEBUG
         data = a.config.backend.kernel_tensordot_bs(
             a.data, b.data, 
             a.config.sym.NSYM,
             a_blocks_t, 
             a_slices,
-            [l.t for l in a.get_legs( native=(a.config.default_fusion=='meta') )] if a.config.sym.NSYM > 0 else [((0,),)]*a.ndim_n, #
-            [l.D for l in a.get_legs( native=(a.config.default_fusion=='meta') )],
+            [l.t for l in a.get_legs( native=True )] if a.config.sym.NSYM > 0 else [((0,),)]*a.ndim_n,
+            [l.D for l in a.get_legs( native=True )],
             nout_a, nin_a,
             b_blocks_t,
             b_slices,
-            [l.t for l in b.get_legs( native=(b.config.default_fusion=='meta') )] if b.config.sym.NSYM > 0 else [((0,),)]*b.ndim_n,
-            [l.D for l in b.get_legs( native=(b.config.default_fusion=='meta') )], 
+            [l.t for l in b.get_legs( native=True )] if b.config.sym.NSYM > 0 else [((0,),)]*b.ndim_n,
+            [l.D for l in b.get_legs( native=True )], 
             nout_b, nin_b,
             struct_c.size, c_blocks_t,
             slices_c
         )
-        # data= _rm_to_cm_order(data_cm, slices_c, reverse=True)  # convert back to row-major order
     else:
         data = a.config.backend.transpose_dot_sum(a.data, b.data, meta_dot,
                                               reshape_a, reshape_b, order_a, order_b, struct_c.size)
