@@ -4,7 +4,7 @@ import yastn
 import yastn.tn.fpeps as fpeps
 from yastn.tn.fpeps import TriangularLattice
 import itertools
-
+print(yastn.tn.fpeps.__file__)
 import numpy as np
 
 def init_peps(config_kwargs):
@@ -50,8 +50,8 @@ def test_exci_sma_UUD(config_kwargs):
     lp = 3 # patch size
     bonds = [
         ((0, 0),),
-        # ((0, 0), (0, 1)), 
-        # ((0, 0), (1, 0)), 
+        ((0, 0), (0, 1)), 
+        ((0, 0), (1, 0)), 
         # ((0, 1), (1, 0)), 
     ]
     def _shift_coord(coord, dx, dy):
@@ -109,7 +109,7 @@ def test_exci_sma_UUD(config_kwargs):
                     bra_c_np = exci_basis[psi.site2index(site_c)].reshape(1,1,1,1,2)
                     exci_bra_c = _convert_tensor(bra_c_np, config)
 
-                    N_val = compute_exci(env_ctm, exci_bra=exci_bra_c, exci_ket=exci_ket, site_bra=site_c, site_ket=site_ket)
+                    N_val = compute_exci(env_ctm, sites_op=[], exci_bra=exci_bra_c, exci_ket=exci_ket, site_bra=site_c, site_ket=site_ket)
                     # ns_exci[:, i_basis, lx_k, ly_k, i_sl] = exci_basis[state.site2index(site_bra)].T @ dN_dbra                                
                     ns_exci[lx_k-min_x, ly_k-min_y, i_sl] = N_val
         computed_norm = True
@@ -119,13 +119,16 @@ def test_exci_sma_UUD(config_kwargs):
     print("Ground state values: ")
     print("<-hz.S^z(0, 0)>=-1.54", "<-hz.S^z(0, 1)>=-1.54", "<-hz.S^z(0, 2)>=+1.54")
     print("<Jzz.Sz(0,0).Sz(0,1)>=0.754", "<Jzz.Sz(0,1).Sz(0,2)>=-0.754", "<Jzz.Sz(0,2).Sz(0,3)>=-0.754")
+    print("<Jzz.Sz(0,0).Sz(1,0)>=-0.754", "<Jzz.Sz(0,1).Sz(1,1)>=0.754", "<Jzz.Sz(0,2).Sz(1,2)>=-0.754")
 
     # excited state expectation values
     print(f"<B(0, 0)|-hz.S^z(0, 0)|B(0, 0)>={es_exci[(0, 0)][1, 1, 1, 1, 0]:.5f}")
     print(f"<B(0, 1)|-hz.S^z(0, 1)|B(0, 1)>={es_exci[(0, 0)][1, 1, 1, 1, 1]:.5f}")
     print(f"<B(0, 2)|-hz.S^z(0, 2)|B(0, 2)>={es_exci[(0, 0)][1, 1, 1, 1, 2]:.5f}")
 
-
+    print(f"<B(0, 0)|Jzz.Sz(0,0).Sz(0,1)|B(0, 0)>={es_exci[((0, 0), (0, 1))][1, 1, 1, 1, 0]:.5f}")
+    print(f"<B(0, 1)|Jzz.Sz(0,1).Sz(0,2)|B(0, 1)>={es_exci[((0, 0), (0, 1))][1, 1, 1, 1, 1]:.5f}")
+    print(f"<B(0, 2)|Jzz.Sz(0,2).Sz(0,3)|B(0, 2)>={es_exci[((0, 0), (0, 1))][1, 1, 1, 1, 2]:.5f}")
 
 if __name__ == '__main__':
     # pytest.main([__file__, "-vs", "--durations=0", "--long_tests"])
