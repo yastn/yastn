@@ -84,7 +84,7 @@ def contract_window(bra, tms, ket, i0, i1, opts_svd, opts_var):
     """ Helper funcion performing mps contraction of < mps0 | mpo mpo ... | mps1 >. """
     vec = ket
     for ny in range(i0, i1):
-        vec_next = mps.zipper(tms[ny], vec, opts_svd=opts_svd)
+        vec_next = mps.zipper(tms[ny], vec, opts_svd=opts_svd, normalize=False)
         mps.compression_(vec_next, (tms[ny], vec), method='1site', normalize=False, **opts_var)
         vec = vec_next
 
@@ -117,7 +117,7 @@ class EnvExciSMA:
     def sites(self):
         return [Site(nx, ny) for ny in range(*self.yrange) for nx in range(*self.xrange)]
 
-    def __getitem__(self, ind, exci_bra=None, exci_ket=None, site_bra=None, site_ket=None) -> mps.MpsMpoOBC:
+    def __getitem__(self, ind) -> mps.MpsMpoOBC:
         """
         Boundary MPS build of CTM tensors, or a transfer matrix MPO.
 
@@ -137,7 +137,13 @@ class EnvExciSMA:
             'v', 'l', and 'r' refer to a vertical direction (n specifies a column).
             'v' is a vertical/column MPO transfer matrix; 'r' and 'l' are right and left boundary MPSs.
         """
-        n, dirn = ind[0], ind[1]
+        if len(ind) == 2:
+            n, dirn = ind
+            exci_bra = exci_ket = site_bra = site_ket = None
+        elif len(ind) == 6:
+            n, dirn, exci_bra, exci_ket, site_bra, site_ket = ind
+        else:
+            raise ValueError(f"Unexpected number of indices in __getitem__: {len(ind)}")
 
         if dirn in 'rvl' and not self.yrange[0] <= n < self.yrange[1]:
             raise YastnError(f"{n=} not within {self.yrange=}")
@@ -211,9 +217,9 @@ class EnvExciSMA:
         if sites is None or len(operators) != len(sites_op):
             raise YastnError("Number of operators plus excited tensors and sites should match.")
 
-        sign = sign_canonical_order(*operators, sites=sites, f_ordered=self.psi.f_ordered)
+        sign = sign_canonical_order(*operators, sites=sites_op, f_ordered=self.psi.f_ordered)
         ops = {}
-        for n, op in zip(sites, operators):
+        for n, op in zip(sites_op, operators):
             ops[n] = ops[n] @ op if n in ops else op
 
         if opts_var is None:
