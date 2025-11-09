@@ -14,9 +14,9 @@
 # ==============================================================================
 """ yastn.from_dict() handling imports off all major classes """
 from .tensor import Tensor
-from .tn.mps import MpsMpoOBC, MpoPBC
 from .tn.fpeps import Lattice, Peps, Peps2Layers
 from .tn.fpeps import EnvBoundaryMPS, EnvBP, EnvCTM, EnvCTM_c4v
+from .tn.mps import MpsMpoOBC, MpoPBC
 
 
 types = {"Tensor": Tensor,

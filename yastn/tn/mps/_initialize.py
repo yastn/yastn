@@ -13,12 +13,14 @@
 # limitations under the License.
 # ==============================================================================
 from __future__ import annotations
+
 import numpy as np
-from ...tensor import Leg, random_leg, YastnError
+
+from ._mps_obc import Mpo, Mps, MpsMpoOBC
 from ...initialize import load_from_hdf5 as load_from_hdf5_tensor
 from ...initialize import rand
-from ._mps_obc import Mpo, Mps, MpsMpoOBC
 from ...operators import Qdit
+from ...tensor import Leg, random_leg, YastnError
 
 
 def product_mps(vectors, N=None) -> MpsMpoOBC:

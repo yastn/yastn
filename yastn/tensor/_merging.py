@@ -18,12 +18,13 @@ from functools import lru_cache
 from itertools import groupby, product, accumulate
 from operator import itemgetter
 from typing import NamedTuple
+
 import numpy as np
+
 from ._auxliary import _slc, _flatten, _clear_axes, _unpack_legs
 from ._tests import YastnError, _test_axes_all, _get_tD_legs
 
-
-__all__ = ['fuse_legs', 'unfuse_legs', 'fuse_meta_to_hard']
+__all__ = ['fuse_legs', 'unfuse_legs', 'fuse_meta_to_hard', '_Fusion', '_slc']
 
 
 class _LegSlices(NamedTuple):

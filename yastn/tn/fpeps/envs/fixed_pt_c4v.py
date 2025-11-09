@@ -13,19 +13,20 @@
 # limitations under the License.
 # ==============================================================================
 import copy
-import time, logging
-import torch
+import logging
+import time
+
 import numpy as np
 from scipy.optimize import minimize
-from ....tensor import tensordot, diag
-from ....initialize import zeros, eye, split_data_and_meta, combine_data_and_meta
+import torch
+
 from ._env_ctm_c4v import EnvCTM_c4v, ctm_c4v_conv_corner_spec
 from .fixed_pt import fast_env_T_gauge_multi_sites, NoFixedPointError, real_to_complex, complex_to_real, _concat_data, _assemble_dict_from_1d
 from .fixed_pt import fast_env_T_gauge_multi_sites, NoFixedPointError, real_to_complex, complex_to_real
 from .rdm import *
 from .._geometry import Lattice
-from .... import zeros, eye, tensordot, diag, split_data_and_meta, combine_data_and_meta
-
+from ....initialize import zeros, eye, split_data_and_meta, combine_data_and_meta
+from ....tensor import tensordot, diag
 
 log = logging.getLogger("FixedPoint_c4v")
 

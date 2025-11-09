@@ -14,8 +14,10 @@
 # ==============================================================================
 """ Generator of basic local spingful-fermion operators. """
 from __future__ import annotations
-from ..tensor import YastnError, Tensor, Leg
+
 from ._meta_operators import meta_operators
+from ..tensor import YastnError, Tensor, Leg
+
 
 class SpinfulFermions(meta_operators):
     """ Predefine operators for spinful fermions. """

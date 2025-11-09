@@ -13,23 +13,22 @@
 # limitations under the License.
 # ==============================================================================
 import copy
-import time, logging
-from typing import Mapping
-import torch
+import logging
+import time
+
 import numpy as np
 from scipy.optimize import minimize
 from scipy.sparse.linalg import LinearOperator
 from scipy.sparse.linalg import eigsh, eigs, ArpackNoConvergence
-# import primme
+import torch
 
-import torch.utils.checkpoint
-
-
-from .rdm import *
 from ._env_ctm import ctm_conv_corner_spec
 from ._env_dataclasses import Gauge
+from .rdm import *
 from .._geometry import Lattice
-from ....tensor import Tensor, zeros, eye, tensordot, diag, rand, qr, split_data_and_meta, combine_data_and_meta
+from ....initialize import zeros, eye, rand, split_data_and_meta, combine_data_and_meta
+from ....tensor import Tensor, tensordot, diag, qr
+
 log = logging.getLogger(__name__)
 
 

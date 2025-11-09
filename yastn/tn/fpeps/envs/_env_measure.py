@@ -14,8 +14,8 @@
 # ==============================================================================
 """ Common measure functions for EnvCTM and EnvBoudndaryMPS """
 from ... import mps
-from ....tensor import YastnError
 from ....operators import sign_canonical_order
+from ....tensor import YastnError
 
 
 def _measure_nsite(env, *operators, sites=None, dirn='tb', opts_svd=None, opts_var=None) -> float:

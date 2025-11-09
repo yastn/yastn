@@ -15,10 +15,12 @@
 """ Testing and controls. """
 from functools import reduce
 from operator import mul
+
 import numpy as np
+
 from ._auxliary import _flatten, _unpack_axes, _struct
 
-__all__ = ['are_independent', 'is_consistent']
+__all__ = ['are_independent', 'is_consistent', 'YastnError']
 
 
 class YastnError(Exception):

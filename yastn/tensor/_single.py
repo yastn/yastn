@@ -17,13 +17,14 @@ from __future__ import annotations
 from typing import Sequence, Union
 from itertools import accumulate
 from operator import itemgetter
+
 import numpy as np
-from ._contractions import ncon
+
 from ._auxliary import _slc, _clear_axes, _unpack_axes, _join_contiguous_slices
+from ._contractions import ncon
+from ._legs import LegMeta, Leg, leg_product
 from ._merging import _Fusion
 from ._tests import YastnError, _test_axes_all
-from ._legs import LegMeta, Leg, leg_product
-
 
 __all__ = ['conj', 'conj_blocks', 'flip_signature', 'flip_charges', 'switch_signature',
            'transpose', 'moveaxis', 'move_leg', 'diag', 'remove_zero_blocks',

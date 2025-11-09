@@ -14,9 +14,12 @@
 # ==============================================================================
 """ Generator of basic local spin-1/2 operators. """
 from __future__ import annotations
+
 import numpy as np
-from ..tensor import YastnError, Tensor, Leg
+
 from ._meta_operators import meta_operators
+from ..tensor import YastnError, Tensor, Leg
+
 
 class Spin12(meta_operators):
     # Predefined set of Pauli operators and spin-1/2 operators.

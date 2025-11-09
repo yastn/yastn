@@ -13,8 +13,9 @@
 # limitations under the License.
 # ==============================================================================
 from typing import NamedTuple
-from ...tensor import tensordot, YastnError
+
 from ...initialize import eye
+from ...tensor import tensordot, YastnError
 
 
 class Gate(NamedTuple):

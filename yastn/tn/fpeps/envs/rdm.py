@@ -12,13 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from ....tensor import ncon
-from .. import Site, Peps, Peps2Layers, EnvCTM
-from ....tensor import tensordot, Tensor, YastnError
-from ._env_auxlliary import append_vec_tl, append_vec_br, append_vec_tr, append_vec_bl
-from typing import Sequence, Union, TypeVar
-import logging
 from functools import reduce
+import logging
+from typing import Sequence, Union, TypeVar
+
+from ._env_auxlliary import append_vec_tl, append_vec_br, append_vec_tr, append_vec_bl
+from ._env_ctm import EnvCTM
+from .._geometry import Site
+from .._peps import Peps, Peps2Layers
+from ....tensor import ncon, tensordot, Tensor, YastnError
+
 log = logging.getLogger(__name__)
 Scalar = TypeVar('Scalar')
 

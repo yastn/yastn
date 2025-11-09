@@ -15,6 +15,7 @@
 """ Parent class for operator classes. """
 from ..tensor import make_config
 
+
 class meta_operators():
     # Predefine common elements of all operator classes.
     def __init__(self, **kwargs):

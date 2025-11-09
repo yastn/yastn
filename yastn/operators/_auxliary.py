@@ -15,6 +15,7 @@
 """ Auxiliary functions supporting operator-related operations. """
 import numpy as np
 
+
 def swap_charges(charges_0, charges_1, fss) -> int:
     """ Calculates a sign accumulated while swapping lists of charges. """
     if not fss:

@@ -16,8 +16,10 @@
 from __future__ import annotations
 from typing import NamedTuple, Sequence
 from warnings import warn
-from ...tensor import YastnError
+
 from .envs._env_dataclasses import DATA_CLASSES
+from ...tensor import YastnError
+
 
 class Site(NamedTuple):
     """

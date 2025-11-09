@@ -14,10 +14,12 @@
 # ==============================================================================
 """ MpsMpoParent structure and basic methods common for OBC and PBC. """
 from __future__ import annotations
+from numbers import Number, Integral
 from typing import Iterator, Sequence
 from warnings import warn
-from numbers import Number, Integral
+
 from ...tensor import YastnError, Tensor, Leg
+
 #from ...tn.fpeps._doublePepsTensor import DoublePepsTensor
 
 # TENSOR_CLASSES = {"Tensor": Tensor,

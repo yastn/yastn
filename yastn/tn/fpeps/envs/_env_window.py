@@ -13,11 +13,13 @@
 # limitations under the License.
 # ==============================================================================
 from __future__ import annotations
+
 from tqdm import tqdm
+
+from ._env_boundary_mps import _clear_operator_input, clear_projectors
+from .._geometry import Site
 from ... import mps
 from ....tensor import YastnError
-from .._geometry import Site
-from ._env_boundary_mps import _clear_operator_input, clear_projectors
 
 
 class EnvWindow:

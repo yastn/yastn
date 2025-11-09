@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from .tensor import *
-from .initialize import *
-from .krylov import *
 from . import operators
 from ._from_dict import from_dict
+from .initialize import *
+from .krylov import *
+from .tensor import *
 try:
     from ._version import version as __version__
     from ._version import version_tuple

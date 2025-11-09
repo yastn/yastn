@@ -13,12 +13,14 @@
 # limitations under the License.
 # ==============================================================================
 from itertools import accumulate
+
 from tqdm import tqdm
-from ....tensor import Tensor, YastnError
-from ... import mps
+
 from ._env_auxlliary import identity_tm_boundary, clear_projectors
 from ._env_measure import _measure_nsite
-from .._peps import PEPS_CLASSES, Peps2Layers, Peps
+from .._peps import PEPS_CLASSES, Peps2Layers
+from ... import mps
+from ....tensor import Tensor, YastnError
 
 
 class EnvBoundaryMPS():
@@ -120,7 +122,7 @@ class EnvBoundaryMPS():
     @classmethod
     def from_dict(cls, d, config=None):
         if 'dict_ver' not in d:
-            psi = Peps.from_dict(d['psi'], config)
+            psi = PEPS_CLASSES['Peps'].from_dict(d['psi'], config)
         elif d['dict_ver'] == 1:
             psi = PEPS_CLASSES[d['psi']['type']].from_dict(d['psi'], config=config)
         env = EnvBoundaryMPS(psi, opts_svd={}, setup='')

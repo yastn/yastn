@@ -17,17 +17,18 @@ Methods creating new YASTN tensors from scratch and
 importing tensors from different formats such as 1D + metadata or dictionary representation
 """
 from __future__ import annotations
-from dataclasses import dataclass
 from ast import literal_eval
+from dataclasses import dataclass
 from itertools import groupby, accumulate
 from operator import itemgetter
+
 import numpy as np
-from .tensor import Tensor, YastnError
+
+from .tensor import Tensor, YastnError, ncon
 from .tensor._auxliary import _struct, _slc, _clear_axes, _unpack_legs
-from .tensor._merging import _Fusion, _embed_tensor, _combine_hfs_sum
 from .tensor._legs import Leg, LegMeta, legs_union, _legs_mask_needed
+from .tensor._merging import _Fusion, _embed_tensor, _combine_hfs_sum
 from .tensor._tests import _test_can_be_combined
-from .tensor._contractions import ncon
 
 __all__ = ['rand', 'rand_like', 'randR', 'randC', 'zeros', 'ones', 'eye', 'block',
            'load_from_dict', 'load_from_hdf5', 'decompress_from_1d',

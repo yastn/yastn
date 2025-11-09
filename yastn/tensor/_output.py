@@ -14,17 +14,18 @@
 # ==============================================================================
 """ Methods outputing data from yastn.Tensor. """
 from __future__ import annotations
-import numpy as np
 from functools import reduce
 from numbers import Number
 from operator import mul
 from warnings import warn
+
+import numpy as np
+
 from ._auxliary import _clear_axes, _unpack_axes, _struct, _slc, _flatten, _join_contiguous_slices
-from ._tests import YastnError, _test_configs_match
-from ..sym import sym_none
 from ._legs import Leg, LegMeta, legs_union, _legs_mask_needed
 from ._merging import _embed_tensor
-
+from ._tests import YastnError, _test_configs_match
+from ..sym import sym_none
 
 __all__ = ['compress_to_1d', 'save_to_dict', 'save_to_hdf5', 'requires_grad']
 

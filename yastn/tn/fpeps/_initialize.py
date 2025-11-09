@@ -15,9 +15,9 @@
 """ Initialization of peps tensors for real or imaginary time evolution """
 from ._geometry import SquareLattice, CheckerboardLattice, RectangularUnitcell, TriangularLattice
 from ._peps import Peps
-from .envs._env_ctm import EnvCTM
-from .envs._env_bp import EnvBP
 from .envs._env_boundary_mps import EnvBoundaryMPS
+from .envs._env_bp import EnvBP
+from .envs._env_ctm import EnvCTM
 from ...tensor import YastnError, Tensor
 
 

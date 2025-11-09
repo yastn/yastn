@@ -12,17 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from ....tensor import YastnError, tensordot
-from ....initialize import eye
-from ...import mps
-from .. import DoublePepsTensor
 from ._env_auxlliary import *
 from .._evolution import BondMetric
+from .._doublePepsTensor import DoublePepsTensor
+from ... import mps
+from ....initialize import eye
+from ....tensor import YastnError, tensordot
 
 
 _hair_dirn = {'t': hair_t, 'l': hair_l, 'b': hair_b, 'r': hair_r}
 _axis_dirn ={'t': 2, 'l': 3, 'b': 0, 'r': 1}
-#_axis_dirn = {'t': (1, 0), 'l': (1, 1), 'b': (0, 0), 'r': (0, 1)}
+
 
 class EnvApproximate:
     def __init__(self, psi, which='65', opts_svd=None, opts_var=None, update_sweeps=None):

@@ -13,28 +13,27 @@
 # limitations under the License.
 # ==============================================================================
 from __future__ import annotations
-from typing import NamedTuple, Union, Callable, Sequence
 import logging
+import sys
+from typing import NamedTuple, Union, Callable, Sequence
 from warnings import warn
 
-from ....tensor import Tensor, YastnError, Leg, tensordot, qr, vdot
-from ....initialize import rand, ones, eye, split_data_and_meta, combine_data_and_meta
-from ....operators import sign_canonical_order
-from ... import mps
-from ...mps import MpsMpoOBC
-from .._peps import PEPS_CLASSES, Peps2Layers, Peps
-from .._gates_auxiliary import fkron, gate_fix_swap_gate
-from .._geometry import Site, Lattice
-from .._evolution import BondMetric
 from ._env_auxlliary import *
-from ._env_window import EnvWindow
-from ._env_measure import _measure_nsite
 from ._env_boundary_mps import _clear_operator_input
 from ._env_dataclasses import EnvCTM_local, EnvCTM_projectors
+from ._env_measure import _measure_nsite
+from ._env_window import EnvWindow
+from .._evolution import BondMetric
+from .._gates_auxiliary import fkron, gate_fix_swap_gate
+from .._geometry import Site, Lattice
+from .._peps import PEPS_CLASSES, Peps2Layers
+from ... import mps
+from ....initialize import rand, ones, eye, split_data_and_meta, combine_data_and_meta
+from ....operators import sign_canonical_order
+from ....tensor import Tensor, YastnError, Leg, tensordot, qr, vdot
 
-import sys
-import logging
-logger= logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
+
 
 class CTMRG_out(NamedTuple):
     sweeps: int = 0
@@ -491,7 +490,7 @@ class EnvCTM():
         # modify existing environment in place
         update_storage_(self, env_tmp)
 
-    def boundary_mps(self, n, dirn) -> MpsMpoOBC:
+    def boundary_mps(self, n, dirn) -> mps.MpsMpoOBC:
         r""" Convert environmental tensors of Ctm to an MPS. """
         if dirn == 'b':
             H = mps.Mps(N=self.Ny)

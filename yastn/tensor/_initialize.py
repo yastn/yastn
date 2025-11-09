@@ -13,20 +13,20 @@
 # limitations under the License.
 # ==============================================================================
 """ Methods creating a new yastn.Tensor """
-
-from typing import NamedTuple
 from functools import reduce
 from itertools import product, accumulate
-from operator import mul, itemgetter
 import numbers
+from operator import mul, itemgetter
+
 import numpy as np
+
 from ._auxliary import _flatten, _slc, _config
 from ._tests import YastnError, _test_tD_consistency, _test_struct_types
 from ..backend import backend_np
 from ..sym import sym_none, sym_U1, sym_Z2, sym_Z3, sym_U1xU1, sym_U1xU1xZ2
 
-
 __all__ = ['make_config']
+
 
 _syms = {"dense": sym_none,
          "none": sym_none,

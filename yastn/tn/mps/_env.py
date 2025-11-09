@@ -17,9 +17,10 @@ from __future__ import annotations
 import abc
 import copy
 from numbers import Number
-from ...tensor import tensordot, ncon, vdot, qr, svd, Tensor, YastnError
-from ...initialize import eye
+
 from ._mps_obc import MpsMpoOBC, MpoPBC
+from ...initialize import eye
+from ...tensor import tensordot, ncon, vdot, qr, svd, Tensor, YastnError
 
 
 def Env(bra, target, **kwargs):

@@ -12,12 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from ._geometry import Site, Bond, Lattice, SquareLattice, CheckerboardLattice, RectangularUnitcell, TriangularLattice
-from ._peps import Peps, Peps2Layers, add
-from ._initialize import product_peps, load_from_dict
-from ._evolution import evolution_step_, truncate_, accumulated_truncation_error
 from ._doublePepsTensor import DoublePepsTensor
+from ._evolution import evolution_step_, truncate_, accumulated_truncation_error
 from ._gates_auxiliary import Gate, fkron
+from ._geometry import Site, Bond, Lattice, SquareLattice, CheckerboardLattice, RectangularUnitcell, TriangularLattice
+from ._initialize import product_peps, load_from_dict
+from ._peps import Peps, Peps2Layers, add
 from .gates import Gate_nn, Gate_local
 from .envs._env_ctm import EnvCTM
 from .envs._env_ctm_c4v import EnvCTM_c4v

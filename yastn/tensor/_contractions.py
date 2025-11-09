@@ -15,11 +15,13 @@
 """ Contractions of yastn tensors """
 from __future__ import annotations
 import abc
-import numpy as np
 from functools import lru_cache
 from itertools import groupby, accumulate, product
 from numbers import Number
 from operator import itemgetter
+
+import numpy as np
+
 from ._auxliary import _struct, _slc, _clear_axes, _unpack_axes, _flatten, _join_contiguous_slices
 from ._merging import _merge_to_matrix, _unmerge, _meta_unmerge_matrix, _meta_fuse_hard
 from ._merging import _transpose_and_merge, _mask_tensors_leg_intersection, _meta_mask

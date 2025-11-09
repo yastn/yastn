@@ -15,6 +15,7 @@
 """ Auxliary functions used by yastn.Tensor. """
 from itertools import accumulate, chain
 from typing import NamedTuple
+
 from ..sym import sym_none
 
 

@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from ....tensor import tensordot, YastnError
 from ._env_auxlliary import *
 from .._evolution import BondMetric
+from ....tensor import tensordot, YastnError
 
 
 class EnvNTU:

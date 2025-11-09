@@ -15,20 +15,23 @@
 """ Building Krylov space. """
 from __future__ import annotations
 from itertools import islice
+from typing import Sequence, TypeVar
+
 import numpy as np
 import scipy.sparse.linalg as spla
-from scipy.linalg import solve_triangular as slv_tri
-from ..tensor import YastnError, Leg, LegMeta, einsum, truncation_mask, Tensor
-from ..tensor._tests import _test_axes_all
-from ..tensor.linalg import _find_gaps
-from ..tensor._auxliary import _clear_axes, _unpack_axes, _flatten
+
 from ..initialize import zeros, decompress_from_1d
+from ..tensor import YastnError, Leg, LegMeta, einsum, truncation_mask, Tensor
+from ..tensor._auxliary import _clear_axes, _unpack_axes, _flatten
+from ..tensor._tests import _test_axes_all
 
 __all__ = ['expmv', 'eigs', 'lin_solver', 'svds']
 
+Vector = TypeVar('Vector')
+
 
 # Krylov based methods, handled by anonymous function decribing action of matrix on a vector
-def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, return_info=False, **kwargs) -> vector:
+def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, return_info=False, **kwargs) -> Vector:
     r"""
     Calculate :math:`e^{(tF)}v`, where :math:`v` is a vector, and :math:`F(v)` is linear operator acting on :math:`v`.
 
@@ -170,7 +173,7 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
     return (v, info) if return_info else v
 
 
-def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=False, **kwargs) -> tuple[array, Sequence[vectors]]:
+def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=False, **kwargs) -> tuple[Sequence[float], Sequence[Vector]]:
     r"""
     Search for dominant eigenvalues of linear operator ``f`` using Arnoldi algorithm.
     Economic implementation (without restart) for internal use within :meth:`yastn.tn.mps.dmrg_`.
@@ -234,7 +237,7 @@ def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=Fals
     return val[:k], Y
 
 
-def lin_solver(f, b, v0, ncv=10, tol=1e-13, pinv_tol=1e-13, hermitian=False, **kwargs) -> tuple[array, Sequence[vectors]]:
+def lin_solver(f, b, v0, ncv=10, tol=1e-13, pinv_tol=1e-13, hermitian=False, **kwargs) -> tuple[Sequence[float], Sequence[Vector]]:
     r"""
     Search for solution of the linear equation ``f(x) = b``, where ``x`` is estimated vector and ``f(x)`` is matrix-vector operation.
     Implementation based on pseudoinverse of Krylov expansion [1].

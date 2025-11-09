@@ -14,7 +14,9 @@
 # ==============================================================================
 """ Define rules for Z3 symmetry. """
 import numpy as np
+
 from .sym_abelian import sym_abelian
+
 
 class sym_Z3(sym_abelian):
     """Z3 symmetry"""

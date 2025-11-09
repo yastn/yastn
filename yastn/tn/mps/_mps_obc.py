@@ -16,10 +16,11 @@
 from __future__ import annotations
 from numbers import Number
 from typing import Sequence
-from ...initialize import block, eye
-from ...tensor import ncon, Tensor, svd, truncation_mask, bitwise_not, entropy, tensordot, YastnError
-from ...tensor import add as tensor_add
+
 from ._mps_parent import _MpsMpoParent
+from ...initialize import block, eye
+from ...tensor import add as tensor_add
+from ...tensor import ncon, Tensor, svd, truncation_mask, bitwise_not, entropy, tensordot, YastnError
 
 
 ###################################

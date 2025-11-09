@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from ....tensor import tensordot, Leg, Tensor, YastnError, ncon
-from ....initialize import ones, eye
 from ... import mps
+from ....initialize import ones, eye
+from ....tensor import tensordot, Leg, Tensor, YastnError, ncon
 
 __all__ = ['hair_t', 'hair_l', 'hair_b', 'hair_r',
            'cor_tl', 'cor_bl', 'cor_br', 'cor_tr',

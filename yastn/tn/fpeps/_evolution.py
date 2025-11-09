@@ -13,13 +13,13 @@
 # limitations under the License.
 # ==============================================================================
 """ Routines for time evolution with nn gates on a 2D lattice. """
-
-from ...tensor import tensordot, vdot, svd_with_truncation, YastnError, Tensor
-from ._peps import Peps2Layers
-from ._gates_auxiliary import Gate, gate_from_mpo
-from ..mps import MpsMpoOBC
-from typing import NamedTuple
 from itertools import pairwise
+from typing import NamedTuple
+
+from ._gates_auxiliary import Gate, gate_from_mpo
+from ._peps import Peps2Layers
+from ..mps import MpsMpoOBC
+from ...tensor import tensordot, vdot, svd_with_truncation, YastnError, Tensor
 
 
 class BondMetric(NamedTuple):
