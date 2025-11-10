@@ -120,22 +120,22 @@ def test_window_measure(config_kwargs):
     #
     # test measure_2site
     #
-    out = env_win.measure_2site(ops.z(), ops.z())
+    out = env_win.measure_2site(ops.z(), ops.z(), site0='corner')
     sites = env_win.sites()
     assert len(sites) == 3 * 4
     assert all(((0, 0), site) in out for site in sites)
     #
     # here we can check some values
     #
-    outv = env_ctm.measure_2site(ops.z(), ops.z(), xrange=(1, 5), yrange=(0, 1))
-    ev = [env_ctm.measure_line(ops.z(), ops.z(), sites=((1, 0), (n, 0))) for n in [2, 3, 4,]]
+    outv = env_ctm.measure_2site(ops.z(), ops.z(), xrange=(0, 1), yrange=(1, 5))
+    ev = [env_ctm.measure_line(ops.z(), ops.z(), sites=((0, 1), (0, n))) for n in [2, 3, 4,]]
     for n, ref in zip([1, 2, 3, 4], [1] + ev):
-        assert abs(outv[(1, 0), (n, 0)] - ref) / abs(ref) < 1e-2
+        assert abs(outv[(0, 1), (0, n)] - ref) / abs(ref) < 1e-2
     #
-    outh = env_ctm.measure_2site(ops.z(), ops.z(), xrange=(2, 3), yrange=(2, 5))
-    eh = [env_ctm.measure_line(ops.z(), ops.z(), sites=((2, 2), (2, n))) for n in [3, 4]]
+    outh = env_ctm.measure_2site(ops.z(), ops.z(), xrange=(2, 5), yrange=(2, 3))
+    eh = [env_ctm.measure_line(ops.z(), ops.z(), sites=((2, 2), (n, 2))) for n in [3, 4]]
     for n, ref in zip([2, 3, 4], [1] + eh):
-        assert abs(outh[(2, 2), (2, n)] - ref) / abs(ref) < 1e-5
+        assert abs(outh[(2, 2), (n, 2)] - ref) / abs(ref) < 1e-5
 
 
 if __name__ == '__main__':

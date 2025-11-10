@@ -120,7 +120,9 @@ class EnvWindow:
         raise YastnError(f"{dirn=} not recognized. Should be 't', 'h' 'b', 'r', 'v', or 'l'.")
 
 
-    def measure_2site(self, O0, O1, opts_svd=None, opts_var=None):
+    # this goes column after column;
+
+    def measure_2site(self, O0, O1, opts_svd=None, opts_var=None, site0='corner'):
         """
         Calculate all 2-point correlations <o1 o2> in a finite peps.
 
@@ -130,63 +132,139 @@ class EnvWindow:
         if opts_var is None:
             opts_var = {'max_sweeps': 2}
         if opts_svd is None:
-            D_total = max(max(self[ny, dirn].get_bond_dimensions()) for ny in range(*self.yrange) for dirn in 'lr')
+            D_total = max(max(self[nx, dirn].get_bond_dimensions()) for nx in range(*self.xrange) for dirn in 'tb')
             opts_svd = {'D_total': D_total}
 
         sites = self.sites()
         O0dict = _clear_operator_input(O0, sites)
         O1dict = _clear_operator_input(O1, sites)
         out = {}
-        O1n = [*O1dict[sites[0]].values()][0].n  # All O1 should have the same charge
+        # O1n = [*O1dict[sites[0]].values()][0].n  # All O1 should have the same charge
         # All O0 should have the same charge  # TODO
 
-        (nx0, ny0), ix0 = sites[0], 1
-        vecc, tm, vec = self[ny0, 'r'].conj(), self[ny0, 'v'], self[ny0, 'l']
+        if site0 == 'corner':
+            yrange0 = (self.yrange[0], self.yrange[0] + 1)
+        elif site0 == 'row':
+            yrange0 = self.yrange
+        else:
+            raise YastnError("site0 should be 'corner' or 'row' ")
 
-        if ny0 < self.yrange[1] - 1:
-            vec_next = mps.zipper(tm, vec, opts_svd=opts_svd)
-            mps.compression_(vec_next, (tm, vec), method='1site', normalize=False, **opts_var)
+        nx0 = sites[0][0]
+        vecs = {nx0: self[nx0, 't']}
+        for nx in range(self.xrange[0], self.xrange[1] - 1):
+            tm = self[nx, 'h']
+            vecs[nx + 1] = mps.zipper(tm, vecs[nx], opts_svd=opts_svd)
+            mps.compression_(vecs[nx + 1], (tm, vecs[nx]), method='1site', normalize=False, **opts_var)
 
-        env = mps.Env(vecc, [tm, vec]).setup_(to='first').setup_(to='last')
-        norm_env = env.measure(bd=(0, 1))
-        # calculate on-site correlations
-        for nz1, o1 in O1dict[nx0, ny0].items():
-            tm[ix0].set_operator_(O0 @ o1)
-            env.update_env_(ix0, to='first')
-            out[(nx0, ny0), (nx0, ny0) + nz1] = env.measure(bd=(ix0-1, ix0)) / norm_env
+        for iy0, ny0 in enumerate(range(*yrange0), start=1):
+            for nz0, o0 in O0dict[nx0, ny0].items():
 
-        tm[ix0].set_operator_(O0)
-        env.setup_(to='last')
+                vecc, tm, vec = self[nx0, 'b'].conj(), self[nx0, 'h'], vecs[nx0]
+                env = mps.Env(vecc, [tm, vec]).setup_(to='first').setup_(to='last')
+                norm_env = env.measure(bd=(0, 1))
+                # calculate on-site correlations
+                for nz1, o1 in O1dict[nx0, ny0].items():
+                    tm[iy0].set_operator_(o0 @ o1)
+                    env.update_env_(iy0, to='first')
+                    out[(nx0, ny0) + nz0, (nx0, ny0) + nz1] = env.measure(bd=(iy0-1, iy0)) / norm_env
 
-        if ny0 < self.yrange[1] - 1:
-            vec_O0_next = mps.zipper(tm, vec, opts_svd=opts_svd)
-            mps.compression_(vec_O0_next, (tm, vec), method='1site', normalize=False, **opts_var)
+                tm[iy0].set_operator_(o0)
+                env.setup_(to='last')
 
-        for ix1, nx1 in enumerate(range(nx0+1, self.xrange[1]), start=nx0-self.xrange[0]+2):
-            for nz1, o1 in O1dict[nx1, ny0].items():
-                tm[ix1].set_operator_(o1)
-                env.update_env_(ix1, to='first')
-                out[(nx0, ny0), (nx1, ny0) + nz1] = env.measure(bd=(ix1-1, ix1)) / norm_env
+                if nx0 < self.xrange[1] - 1:
+                    vec_o0_next = mps.zipper(tm, vec, opts_svd=opts_svd)
+                    mps.compression_(vec_o0_next, (tm, vec), method='1site', normalize=False, **opts_var)
 
-        # all subsequent rows
-        for ny1 in range(self.yrange[0]+1, self.yrange[1]):
-            vecc, tm, vec_O0, vec = self[ny1, 'r'].conj(), self[ny1, 'v'], vec_O0_next, vec_next
-            norm_env = mps.vdot(vecc, tm, vec)
+                for iy1, ny1 in enumerate(range(ny0 + 1, self.yrange[1]), start=ny0 - self.yrange[0] + 2):
+                    for nz1, o1 in O1dict[nx0, ny1].items():
+                        tm[iy1].set_operator_(o1)
+                        env.update_env_(iy1, to='first')
+                        out[(nx0, ny0) + nz0, (nx0, ny1) + nz1] = env.measure(bd=(iy1-1, iy1)) / norm_env
 
-            if ny1 < self.yrange[1] - 1:
-                vec_next = mps.zipper(tm, vec, opts_svd=opts_svd)
-                mps.compression_(vec_next, (tm, vec), method='1site', normalize=False, **opts_var)
-                vec_O0_next = mps.zipper(tm, vec_O0, opts_svd=opts_svd)
-                mps.compression_(vec_O0_next, (tm, vec_O0,), method='1site', normalize=False, **opts_var)
+                # all subsequent rows
+                for nx1 in range(self.xrange[0]+1, self.xrange[1]):
+                    vecc, tm, vec_o0, vec = self[nx1, 'b'].conj(), self[nx1, 'h'], vec_o0_next, vecs[nx1]
+                    norm_env = mps.vdot(vecc, tm, vec)
 
-            env = mps.Env(vecc, [tm, vec_O0]).setup_(to='last').setup_(to='first')
-            for ix1, nx1 in enumerate(range(*self.xrange), start=1):
-                for nz1, o1 in O1dict[nx1, ny0].items():
-                    tm[ix1].set_operator_(o1)
-                    env.update_env_(ix1, to='first')
-                    out[(nx0, ny0), (nx1, ny1) + nz1] = env.measure(bd=(ix1-1, ix1)) / norm_env
+                    if nx1 < self.xrange[1] - 1:
+                        vec_o0_next = mps.zipper(tm, vec_o0, opts_svd=opts_svd)
+                        mps.compression_(vec_o0_next, (tm, vec_o0), method='1site', normalize=False, **opts_var)
+
+                    env = mps.Env(vecc, [tm, vec_o0]).setup_(to='last').setup_(to='first')
+                    for iy1, ny1 in enumerate(range(*self.yrange), start=1):
+                        for nz1, o1 in O1dict[nx1, ny1].items():
+                            tm[iy1].set_operator_(o1)
+                            env.update_env_(iy1, to='first')
+                            out[(nx0, ny0) + nz0, (nx1, ny1) + nz1] = env.measure(bd=(iy1-1, iy1)) / norm_env
         return out
 
+    # this goes row after row;
+    # def measure_2site(self, O0, O1, opts_svd=None, opts_var=None):
+    #     """
+    #     Calculate all 2-point correlations <o1 o2> in a finite peps.
+
+    #     o1 and o2 are given as dict[tuple[int, int], dict[int, operators]],
+    #     mapping sites with list of operators at each site.
+    #     """
+    #     if opts_var is None:
+    #         opts_var = {'max_sweeps': 2}
+    #     if opts_svd is None:
+    #         D_total = max(max(self[ny, dirn].get_bond_dimensions()) for ny in range(*self.yrange) for dirn in 'lr')
+    #         opts_svd = {'D_total': D_total}
+
+    #     sites = self.sites()
+    #     O0dict = _clear_operator_input(O0, sites)
+    #     O1dict = _clear_operator_input(O1, sites)
+    #     out = {}
+    #     O1n = [*O1dict[sites[0]].values()][0].n  # All O1 should have the same charge
+    #     # All O0 should have the same charge  # TODO
+
+    #     (nx0, ny0), ix0 = sites[0], 1
+    #     vecc, tm, vec = self[ny0, 'r'].conj(), self[ny0, 'v'], self[ny0, 'l']
+
+    #     if ny0 < self.yrange[1] - 1:
+    #         vec_next = mps.zipper(tm, vec, opts_svd=opts_svd)
+    #         mps.compression_(vec_next, (tm, vec), method='1site', normalize=False, **opts_var)
+
+    #     env = mps.Env(vecc, [tm, vec]).setup_(to='first').setup_(to='last')
+    #     norm_env = env.measure(bd=(0, 1))
+    #     # calculate on-site correlations
+    #     for nz1, o1 in O1dict[nx0, ny0].items():
+    #         tm[ix0].set_operator_(O0 @ o1)
+    #         env.update_env_(ix0, to='first')
+    #         out[(nx0, ny0), (nx0, ny0) + nz1] = env.measure(bd=(ix0-1, ix0)) / norm_env
+
+    #     tm[ix0].set_operator_(O0)
+    #     env.setup_(to='last')
+
+    #     if ny0 < self.yrange[1] - 1:
+    #         vec_O0_next = mps.zipper(tm, vec, opts_svd=opts_svd)
+    #         mps.compression_(vec_O0_next, (tm, vec), method='1site', normalize=False, **opts_var)
+
+    #     for ix1, nx1 in enumerate(range(nx0+1, self.xrange[1]), start=nx0-self.xrange[0]+2):
+    #         for nz1, o1 in O1dict[nx1, ny0].items():
+    #             tm[ix1].set_operator_(o1)
+    #             env.update_env_(ix1, to='first')
+    #             out[(nx0, ny0), (nx1, ny0) + nz1] = env.measure(bd=(ix1-1, ix1)) / norm_env
+
+    #     # all subsequent rows
+    #     for ny1 in range(self.yrange[0]+1, self.yrange[1]):
+    #         vecc, tm, vec_O0, vec = self[ny1, 'r'].conj(), self[ny1, 'v'], vec_O0_next, vec_next
+    #         norm_env = mps.vdot(vecc, tm, vec)
+
+    #         if ny1 < self.yrange[1] - 1:
+    #             vec_next = mps.zipper(tm, vec, opts_svd=opts_svd)
+    #             mps.compression_(vec_next, (tm, vec), method='1site', normalize=False, **opts_var)
+    #             vec_O0_next = mps.zipper(tm, vec_O0, opts_svd=opts_svd)
+    #             mps.compression_(vec_O0_next, (tm, vec_O0,), method='1site', normalize=False, **opts_var)
+
+    #         env = mps.Env(vecc, [tm, vec_O0]).setup_(to='last').setup_(to='first')
+    #         for ix1, nx1 in enumerate(range(*self.xrange), start=1):
+    #             for nz1, o1 in O1dict[nx1, ny0].items():
+    #                 tm[ix1].set_operator_(o1)
+    #                 env.update_env_(ix1, to='first')
+    #                 out[(nx0, ny0), (nx1, ny1) + nz1] = env.measure(bd=(ix1-1, ix1)) / norm_env
+    #     return out
 
     def sample(self, projectors, number=1, opts_svd=None, opts_var=None, progressbar=False, return_probabilities=False, flatten_one=True) -> dict[Site, list]:
         """

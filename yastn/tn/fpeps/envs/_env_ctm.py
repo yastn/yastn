@@ -822,7 +822,7 @@ class EnvCTM():
         dirn = 'lr' if (xrange[1] - xrange[0]) >= (yrange[1] - yrange[0]) else 'tb'
         return _measure_nsite(env_win, *operators, sites=sites, dirn=dirn)
 
-    def measure_2site(self, O, P, xrange, yrange, opts_svd=None, opts_var=None, bonds='<') -> dict[Site, float]:
+    def measure_2site(self, O, P, xrange, yrange, opts_svd=None, opts_var=None, site0='corner') -> dict[Site, float]:
         r"""
         Calculate 2-point correlations <O P> between top-left corner of the window, and all sites in the window.
 
@@ -847,20 +847,13 @@ class EnvCTM():
             Options passed to :meth:`yastn.tn.mps.compression_` used in the refining of boundary MPSs.
             The default is ``None``, in which case make 2 variational sweeps.
 
-        bonds: tuple[int, int] | Sequence[tuple[int, int]] | str
-            Which 2-site correlators to calculate.
-            For a single bond, tuple[int, int], return float. Otherwise, return dict[bond, float].
-            It is possible to provide a string to build a list of bonds as:
-
-            * '<' for all i < j.
-            * '=' for all i == j.
-            * '>' for all i > j.
-            * 'a' for all i, j; equivalent to "<=>".
-
-            The default is '<'.
+        site0: str
+            For site0 == 'corner', calculate all correlations with site0 fixed to top-left corner of the window.
+            For site0 == 'row', calculate all correlations with site0 from top row of the window.
+            The default is 'corner'.
         """
         env_win = EnvWindow(self, xrange, yrange)
-        return env_win.measure_2site(O, P, opts_svd=opts_svd, opts_var=opts_var)
+        return env_win.measure_2site(O, P, opts_svd=opts_svd, opts_var=opts_var, site0=site0)
 
     def sample(self, projectors, number=1, xrange=None, yrange=None, opts_svd=None, opts_var=None, progressbar=False, return_probabilities=False, flatten_one=True, **kwargs) -> dict[Site, list]:
         r"""

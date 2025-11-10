@@ -216,7 +216,7 @@ class SquareLattice():
         """
         if site is None:
             return None
-        x = site[0] % self._dims[0] if self._periodic[0] == 'i' else site[0]
+        x = site[0] % self._dims[0] if self._periodic[0] in 'ip' else site[0]
         y = site[1] % self._dims[1] if self._periodic[1] == 'i' else site[1]
         return (x, y)
 
@@ -308,10 +308,10 @@ class RectangularUnitcell(SquareLattice):
                     label = self._site2index[nx, ny]
                     env = (self.site2index((nx - 1, ny)), self.site2index((nx, ny - 1)), self.site2index((nx + 1, ny)), self.site2index((nx, ny + 1)))
                     if label in label_sites:
-                        label_sites[label].append((nx, ny))
+                        label_sites[label].append(Site(nx, ny))
                         label_envs[label].append(env)
                     else:
-                        label_sites[label] = [(nx, ny)]
+                        label_sites[label] = [Site(nx, ny)]
                         label_envs[label] = [env]
         except TypeError:
             raise YastnError("RectangularUnitcell: pattern labels should be hashable.")
