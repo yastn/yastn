@@ -9,9 +9,8 @@ import numpy as np
 import torch
 from scipy.linalg import eig
 
-
-def _cast_to_real(t):
-    return t.real if t.is_complex() else t
+torch_test = pytest.mark.skipif("'torch' not in config.getoption('--backend')",
+                                   reason="requires autograd support")
 
 
 def init_peps(config_kwargs):
@@ -30,6 +29,7 @@ def init_peps(config_kwargs):
     return psi
 
 
+@torch_test
 def test_exci_sma_UUD(config_kwargs):
     """ Compute excited state expectation values of a UUD state on a 3x3 finite patch. """
     print(" Compute excited state expectation values of a UUD state on a 3x3 finite patch. ")
@@ -57,27 +57,27 @@ def test_exci_sma_UUD(config_kwargs):
     ### Compute ground state energy
     e0s = {}
     for site in psi.sites():
-        e0s[f"{tuple(site)}"] = - hz * _cast_to_real(env_ctm.measure_1site(Sz, site=site))
+        e0s[f"{tuple(site)}"] = - hz * env_ctm.measure_1site(Sz, site=site).real
         # horizontal bond
         site_r = psi.nn_site(site, "r")
         h_bond = fpeps.Bond(site, site_r)
-        e0s[f"{tuple(site)}, {tuple(site_r)}"] = Jzz * _cast_to_real(env_ctm.measure_nn(Sz, Sz, bond=h_bond))
-        e0s[f"{tuple(site)}, {tuple(site_r)}"] += 0.5 * Jxy * _cast_to_real(env_ctm.measure_nn(Sp, Sm, bond=h_bond))
-        e0s[f"{tuple(site)}, {tuple(site_r)}"] += 0.5 * Jxy * _cast_to_real(env_ctm.measure_nn(Sm, Sp, bond=h_bond))
+        e0s[f"{tuple(site)}, {tuple(site_r)}"] = Jzz * env_ctm.measure_nn(Sz, Sz, bond=h_bond).real
+        e0s[f"{tuple(site)}, {tuple(site_r)}"] += 0.5 * Jxy * env_ctm.measure_nn(Sp, Sm, bond=h_bond).real
+        e0s[f"{tuple(site)}, {tuple(site_r)}"] += 0.5 * Jxy * env_ctm.measure_nn(Sm, Sp, bond=h_bond).real
 
         # vertical bond
         site_b = psi.nn_site(site, "b")
         v_bond = fpeps.Bond(site, site_b)
-        e0s[f"{tuple(site)}, {tuple(site_b)}"] = Jzz * _cast_to_real(env_ctm.measure_nn(Sz, Sz, bond=v_bond))
-        e0s[f"{tuple(site)}, {tuple(site_b)}"] += 0.5 * Jxy * _cast_to_real(env_ctm.measure_nn(Sp, Sm, bond=v_bond))
-        e0s[f"{tuple(site)}, {tuple(site_b)}"] += 0.5 * Jxy * _cast_to_real(env_ctm.measure_nn(Sm, Sp, bond=v_bond))
-            
+        e0s[f"{tuple(site)}, {tuple(site_b)}"] = Jzz * env_ctm.measure_nn(Sz, Sz, bond=v_bond).real
+        e0s[f"{tuple(site)}, {tuple(site_b)}"] += 0.5 * Jxy * env_ctm.measure_nn(Sp, Sm, bond=v_bond).real
+        e0s[f"{tuple(site)}, {tuple(site_b)}"] += 0.5 * Jxy * env_ctm.measure_nn(Sm, Sp, bond=v_bond).real
+
         # anti-diagonal bond
-        e0s[f"{tuple(site_b)}, {tuple(site_r)}"] = Jzz * _cast_to_real(env_ctm.measure_2x2(Sz, Sz, sites=[site_b, site_r]))
-        e0s[f"{tuple(site_b)}, {tuple(site_r)}"] += 0.5 * Jxy * _cast_to_real(env_ctm.measure_2x2(Sp, Sm, sites=[site_b, site_r]))
-        e0s[f"{tuple(site_b)}, {tuple(site_r)}"] += 0.5 * Jxy * _cast_to_real(env_ctm.measure_2x2(Sm, Sp, sites=[site_b, site_r]))
+        e0s[f"{tuple(site_b)}, {tuple(site_r)}"] = Jzz * env_ctm.measure_2x2(Sz, Sz, sites=[site_b, site_r]).real
+        e0s[f"{tuple(site_b)}, {tuple(site_r)}"] += 0.5 * Jxy * env_ctm.measure_2x2(Sp, Sm, sites=[site_b, site_r]).real
+        e0s[f"{tuple(site_b)}, {tuple(site_r)}"] += 0.5 * Jxy * env_ctm.measure_2x2(Sm, Sp, sites=[site_b, site_r]).real
     e_gs = sum([v for v in e0s.values()]).numpy()
-    
+
     ### Compute excited state energy
     lp = 3 # patch size
     bonds = [
@@ -103,7 +103,6 @@ def test_exci_sma_UUD(config_kwargs):
             exci_bra._data.grad.zero_()
         env_exci = fpeps.EnvExciSMA(env_ctm, xrange, yrange)
         bond_val_exci = env_exci.measure_exci(*operators, exci_bra=exci_bra, exci_ket=exci_ket, site_bra=site_bra, site_ket=site_ket, sites_op=sites_op)
-        
         grad_dbra = None
         if compute_grad:
             grad_dbra = torch.autograd.grad(bond_val_exci, exci_bra.data, grad_outputs=torch.ones_like(bond_val_exci), retain_graph=True)[0]
@@ -219,12 +218,12 @@ def test_exci_sma_UUD(config_kwargs):
         ],
     }
 
-    # compute each k 
+    # compute each k
     evs = np.zeros((len(kxs), 3)) # only 3 modes
     for ik, kx in enumerate(kxs_):
         ky = kys_[ik]
 
-        h_eff = np.zeros((3, 3), dtype=np.complex128) 
+        h_eff = np.zeros((3, 3), dtype=np.complex128)
         n_eff = np.zeros((3, 3), dtype=np.complex128)
         computed_norm = False
         for bond in bonds:
@@ -250,7 +249,7 @@ def test_exci_sma_UUD(config_kwargs):
                         n_eff[sl_c, sl_ket] += tmp_n / (2)
                         n_eff[sl_ket, sl_c] += tmp_n.conj() / (2)
             computed_norm = True
-        
+
         # subtract ground state energy
         h_eff = h_eff - e_gs * n_eff * 3
 
@@ -268,13 +267,13 @@ def test_exci_sma_UUD(config_kwargs):
         evs[ik, :] = ev
 
     print(evs.T)
-    
-    # Reference values from CTM summation (3, 21) 
+
+    # Reference values from CTM summation (3, 21)
     # [[2.84500011, 2.8618264 , 2.90943498, 2.97813477, 3.0430191 , 3.0430191 , 2.97813477, 2.90943498, 2.8618264 , 2.84500011,
     #   2.86621718, 2.92521297, 3.0052694 , 3.05500011, 3.07579664, 3.13406725, 3.1017295 , 3.00827071, 2.92406725, 2.86579664, 2.84500011],
     #  [3.4750001 , 3.45817381, 3.41056523, 3.34186544, 3.27698111, 3.27698111, 3.34186544, 3.41056523, 3.45817381, 3.4750001 ,
     #   3.45378303, 3.39478724, 3.31473081, 3.2650001 , 3.24420357, 3.18593296, 3.21827071, 3.3117295 , 3.39593296, 3.45420357, 3.4750001 ],
-    #  [5.78000011, 5.78000011, 5.78000011, 5.78000011, 5.78000011, 5.78000011, 5.78000011, 5.78000011, 5.78000011, 5.78000011, 
+    #  [5.78000011, 5.78000011, 5.78000011, 5.78000011, 5.78000011, 5.78000011, 5.78000011, 5.78000011, 5.78000011, 5.78000011,
     #   5.78000011, 5.78000011, 5.78000011, 5.78000011, 5.78000011, 5.78000011, 5.78000011, 5.78000011, 5.78000011, 5.78000011, 5.78000011]]
 
 
