@@ -6,7 +6,11 @@ from yastn.tn.fpeps import TriangularLattice
 import itertools
 import numpy as np
 
-import torch
+try:
+    import torch
+except ModuleNotFoundError:
+    pass
+
 from scipy.linalg import eig
 
 torch_test = pytest.mark.skipif("'torch' not in config.getoption('--backend')",
