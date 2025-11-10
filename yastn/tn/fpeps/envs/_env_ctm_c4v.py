@@ -145,13 +145,23 @@ class EnvCTM_c4v():
         self.proj.detach_()
 
     def to_dict(self, level=2):
+        r"""
+        Serialize EnvCTM_c4v to a dictionary.
+        Complementary function is :meth:`yastn.EnvCTM_c4v.from_dict` or a general :meth:`yastn.from_dict`.
+        See :meth:`yastn.Tensor.to_dict` for further description.
+        """
         return {'type': type(self).__name__,
+                'dict_ver': 1,
                 'psi': self.psi.to_dict(level=level),
                 'env': self.env.to_dict(level=level),
                 'proj': self.proj.to_dict(level=level)}
 
     @classmethod
     def from_dict(cls, d, config=None):
+        r"""
+        De-serializes EnvCTM_c4v from the dictionary ``d``.
+        See :meta:`yastn.Tensor.from_dict` for further description.
+        """
         if cls.__name__ != d['type']:
             raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
         psi = PEPS_CLASSES[d['psi']['type']].from_dict(d['psi'], config=config)

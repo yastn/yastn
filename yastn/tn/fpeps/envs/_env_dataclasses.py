@@ -67,6 +67,7 @@ class dataclasses_common():
         return all(tests)
 
     def to_dict(self, level=2):
+        """ Return a dictionary representation of the object. """
         d = {'type': type(self).__name__,
              'dict_ver': 1}
         for k in fields(self):
@@ -76,6 +77,7 @@ class dataclasses_common():
 
     @classmethod
     def from_dict(cls, d, config=None):
+        r""" De-serializes dataclass object from the dictionary ``d``. """
         if d['dict_ver'] == 1:
             if cls.__name__ != d['type']:
                 raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")

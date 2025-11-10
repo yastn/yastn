@@ -160,6 +160,11 @@ class EnvCTM():
         self.proj.detach_()
 
     def to_dict(self, level=2):
+        r"""
+        Serialize EnvCTM to a dictionary.
+        Complementary function is :meth:`yastn.EnvCTM.from_dict` or a general :meth:`yastn.from_dict`.
+        See :meth:`yastn.Tensor.to_dict` for further description.
+        """
         return {'type': type(self).__name__,
                 'dict_ver': 1,
                 'psi': self.psi.to_dict(level=level),
@@ -168,6 +173,10 @@ class EnvCTM():
 
     @classmethod
     def from_dict(cls, d, config=None):
+        r"""
+        De-serializes EnvCTM from the dictionary ``d``.
+        See :meta:`yastn.Tensor.from_dict` for further description.
+        """
         if 'dict_ver' not in d:
             psi = PEPS_CLASSES["Peps"].from_dict(d['psi'], config)
             env = EnvCTM(psi, init=None)
@@ -1596,62 +1605,6 @@ def update_env_(env_tmp, site, env, move: str):
         if br is not None:
             tmp = tensordot(env[b].r, env[b].br @ env.proj[br].vbl, axes=((2, 1), (0, 1)))
             env_tmp[site].br = tmp / tmp.norm(p='inf')
-
-
-# def decompress_env_1d(data, meta):
-#     """
-#     Reconstruct the environment from its compressed form.
-
-#     Parameters
-#     ----------
-#     data : Sequence[Tensor]
-#         Collection of 1D data tensors for both environment and underlying PEPS.
-#     meta : dict
-#         Holds metadata of original environment (and PEPS).
-
-#     Returns
-#     -------
-#     EnvCTM
-#     """
-#     sites = meta['sites']
-#     tensors = {site: decompress_from_1d(t,t_meta) for site, t, t_meta in zip(sites,data[:len(sites)], meta['psi'].values())}
-#     loc_bra = Peps(meta['geometry'], tensors=tensors)
-#     loc_env = EnvCTM(Peps2Layers(loc_bra) if meta['2layer'] else loc_bra, init=None)
-
-#     # assign backend tensors
-#     #
-#     data_env = data[len(sites):]
-#     for i, site in enumerate(sites):
-#         for env_t, t, t_meta in zip(loc_env[site].__dict__.keys(), data_env[i*8:(i+1)*8], meta['env'][i*8:(i+1)*8]):
-#             setattr(loc_env[site], env_t, decompress_from_1d(t, t_meta) if t is not None else None)
-#     return loc_env
-
-
-# def decompress_proj_1d(data, meta):
-#     """
-#     Reconstruct the projectors from their compressed form.
-
-#     Parameters
-#     ----------
-#     data : Sequence[Tensor]
-#         Collection of 1D data tensors for both environment and underlying PEPS.
-#     meta : dict
-#         Holds metadata of original projectors (and PEPS geometry).
-
-#     Returns
-#     -------
-#     Peps of EnvCTM_projectors
-#         Projectors for the CTM environment.
-#     """
-#     proj = Peps(meta['geometry'])
-#     for site in proj.sites(): proj[site] = EnvCTM_projectors()
-
-#     # assign backend tensors
-#     #
-#     for i,site in enumerate(proj.sites()):
-#         for env_t,t,t_meta in zip(proj[site].__dict__.keys(),data[i*8:(i+1)*8],meta['proj'][i*8:(i+1)*8]):
-#             setattr(proj[site],env_t,decompress_from_1d(t,t_meta) if t is not None else None)
-#     return proj
 
 
 def ctm_conv_corner_spec(env : EnvCTM, history : Sequence[dict[tuple[Site,str],Tensor]]=[],

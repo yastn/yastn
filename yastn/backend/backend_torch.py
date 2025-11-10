@@ -96,7 +96,7 @@ def copy(x):
 
 
 def to_numpy(x):
-    return x.numpy(force=True).copy()
+    return x if isinstance(x, (int, float, complex)) else x.numpy(force=True).copy()
 
 
 def get_shape(x):

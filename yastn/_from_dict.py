@@ -32,4 +32,17 @@ types = {"Tensor": Tensor,
          }
 
 def from_dict(d, config=None):
+    r"""
+    De-serializes an object from the dictionary ``d``.
+    Object type is read from ``d``.
+
+    Parameters
+    ----------
+    d : dict
+        Object stored in form of a dictionary created with ``to_dict`` method.
+
+    config : Optional[module | _config(NamedTuple)]
+        :ref:`YASTN configuration <tensor/configuration:yastn  configuration>`
+        If provided, overrides configuration stored in `d`.
+    """
     return types[d['type']].from_dict(d, config)

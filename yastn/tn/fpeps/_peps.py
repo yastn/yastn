@@ -30,7 +30,7 @@ class Peps(Lattice):
         A PEPS instance on a specified lattice can be initialized as empty (with no tensors assiged) or with tensors assigned to each unique lattice site.
 
         PEPS inherits key methods (e.g., sites, bonds, dims) from the associated lattice geometry.
-        Supports :code:`[]` notation to get/set individual tensors.
+        Supports ``[]`` notation to get/set individual tensors.
         PEPS tensors can be either rank-5 (including physical legs) or rank-4 (without physical legs).
         Leg enumeration follows the order: top, left, bottom, right, and physical leg.
 
@@ -294,6 +294,11 @@ class Peps2Layers():
         return DoublePepsTensor(bra=self.bra[site], ket=self.ket[site])
 
     def to_dict(self, level=2) -> dict:
+        r"""
+        Serialize Peps2Layers to a dictionary.
+        Complementary function is :meth:`yastn.Peps2Layers.from_dict` or a general :meth:`yastn.from_dict`.
+        See :meth:`yastn.Tensor.to_dict` for further description.
+        """
         d = {'type': type(self).__name__,
              'dict_ver': 1,
              'bra': self.bra.to_dict(level=level)}
@@ -303,6 +308,11 @@ class Peps2Layers():
 
     @classmethod
     def from_dict(cls, d, config=None):
+        r"""
+        De-serializes :class:`yastn.tn.fpeps.Peps2Layers` from the dictionary ``d``.
+        See :meta:`yastn.Tensor.from_dict` for further description.
+        """
+
         if d['dict_ver'] == 1:
             if cls.__name__ != d['type']:
                 raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")

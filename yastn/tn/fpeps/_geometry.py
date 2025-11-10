@@ -153,7 +153,7 @@ class SquareLattice():
 
     def nn_site(self, site, d) -> Site | None:
         """
-        Index of the lattice site neighboring the :code:`site` in the direction :code:`d`.
+        Index of the lattice site neighboring the ``site`` in the direction ``d``.
 
         For infinite lattices, this function simply shifts the ``site`` by provided vector ``d``.
         For finite lattices with open/periodic boundary it handles corner cases where ``d`` is too large and the
@@ -221,7 +221,7 @@ class SquareLattice():
         return (x, y)
 
     def to_dict(self):
-        """Return a dictionary representation of the object."""
+        """ Return a dictionary representation of the object. """
         return {'type': type(self).__name__,
                 'dict_ver': 1,
                 'dims': self.dims,
@@ -245,7 +245,7 @@ class CheckerboardLattice(SquareLattice):
         return (site[0] + site[1]) % 2
 
     def to_dict(self):
-        """Return a dictionary representation of the object."""
+        """ Return a dictionary representation of the object. """
         return {'type': type(self).__name__,
                 'dict_ver': 1}
 
@@ -340,15 +340,9 @@ class RectangularUnitcell(SquareLattice):
         return f"RectangularUnitcell(pattern={self._site2index})"
 
     def to_dict(self):
-        """
-        Return a dictionary representation of the object.
-
-        ..Note ::
-
-            For serialiation to JSON, dict keys must be str/int/... Hence, we store pattern
-            in format Sequence[Sequence[int]].
-
-        """
+        """ Return a dictionary representation of the object. """
+        # For serialiation to JSON, dict keys must be str/int/...
+        # Hence, we store pattern in format Sequence[Sequence[int]].
         return {'type': type(self).__name__,
                 'dict_ver': 1,
                 'pattern': [[self.site2index((row, col)) for col in range(self.Ny)] for row in range(self.Nx)]}
@@ -393,18 +387,12 @@ class TriangularLattice(SquareLattice):
         return self._bonds_d[::-1] + self._bonds_v[::-1] + self._bonds_h[::-1] if reverse else self._bonds_h + self._bonds_v + self._bonds_d
 
     def to_dict(self):
-        """
-        Return a dictionary representation of the object.
-
-        ..Note ::
-
-            For serialiation to JSON, dict keys must be str/int/... Hence, we store pattern
-            in format Sequence[Sequence[int]].
-
-        """
+        """ Return a dictionary representation of the object. """
+        # For serialiation to JSON, dict keys must be str/int/...
+        # Hence, we store pattern in format Sequence[Sequence[int]].
         return {'type': type(self).__name__,
                 'dict_ver': 1,
-                'pattern': [[self.site2index((row,col)) for col in range(self.Ny)] for row in range(self.Nx)]}
+                'pattern': [[self.site2index((row, col)) for col in range(self.Ny)] for row in range(self.Nx)]}
 
 
 LATTICE_CLASSES = {"SquareLattice": SquareLattice,
@@ -453,7 +441,10 @@ class Lattice():
 
     def to_dict(self, level=2) -> dict:
         """
-        Serialize Lattice into a dictionary.
+        Serialize Lattice or Peps into a dictionary.
+        Complementary functions are :meth:`yastn.Lattice.from_dict` and :meth:`yastn.Peps.from_dict`,
+        or a general :meth:`yastn.from_dict`.
+        See :meth:`yastn.Tensor.to_dict` for further description.
         """
         return {'type': type(self).__name__,
                 'dict_ver': 1,
@@ -462,7 +453,10 @@ class Lattice():
 
     @classmethod
     def from_dict(cls, d, config=None):
-
+        r"""
+        De-serializes Lattice or :class:`yastn.tn.fpeps.Peps` from the dictionary ``d``.
+        See :meta:`yastn.Tensor.from_dict` for further description.
+        """
         if 'dict_ver' not in d:  # d from a legacy method save_to_dict
             if 'lattice' in d:
                 d['type'] = d['lattice']  # for backward compatibility

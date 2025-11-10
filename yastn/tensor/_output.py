@@ -32,19 +32,21 @@ __all__ = ['compress_to_1d', 'save_to_dict', 'save_to_hdf5', 'requires_grad']
 
 def to_dict(a, level=2) -> dict:
     r"""
-    Export YASTN tensor to dictionary containing all the information needed to recreate the tensor.
-    Complementary function is :meth:`yastn.from_dict`.
+    Serialize YASTN tensor to a dictionary containing all the information needed to recreate the tensor.
+    Complementary function is :meth:`yastn.Tensor.from_dict` or a general :meth:`yastn.from_dict`.
+
+    Using argument `level == 2` allows robust saving with numpy.save method.
 
     Parameters
     ----------
     a: yastn.Tensor
-        tensor to export.
+        tensor to serialize.
     level: int
         Controls how much internal Tensor data and meta sub-classes are turned into basic python data structures.
         For level == 0, nothing is converted.
-        For level >= 1, converts information about config, and tensor decomposition into python dictionaries.
+        For level >= 1, converts information about config and tensor block structure into python dictionaries.
         For level >= 2, turns tensor data into numpy array.
-        Level == 2 allows save saving with numpy.save, which is the default.
+        Level == 2 (or == 1 for numpy backend) allows saving with numpy.save, which is the default.
     """
     if level >= 1:
         config = a.config._asdict()

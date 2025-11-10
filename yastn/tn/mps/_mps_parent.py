@@ -350,15 +350,12 @@ class _MpsMpoParent:
 
     def to_dict(psi, level=2):
         r"""
-        Serialize MPS/MPO into a dictionary.
-
-        Each element represents serialized :class:`yastn.Tensor`
-        (see, :meth:`yastn.Tensor.to_dict`) of the MPS/MPO.
+        Serialize MPS/MPO to a dictionary.
+        Complementary functions are :meth:`yastn.MpsMpoOBC.from_dict` and :meth:`yastn.MpoPBC.from_dict`,
+        or a general :meth:`yastn.from_dict`.
+        See :meth:`yastn.Tensor.to_dict` for further description.
         """
-        try:
-            factor = psi.config.backend.to_numpy(psi.factor)
-        except:
-            factor = psi.factor
+        factor = psi.factor if level < 2 else psi.config.backend.to_numpy(psi.factor)
         return {'type': type(psi).__name__,
                 'dict_ver': 1,
                 'N': psi.N,
@@ -370,7 +367,8 @@ class _MpsMpoParent:
     @classmethod
     def from_dict(cls, d, config=None):
         r"""
-        Create MPS/MPO from dictionary.
+        De-serializes MPS or MPO from the dictionary ``d``.
+        See :meta:`yastn.Tensor.from_dict` for further description.
         """
         if 'dict_ver' not in d:  # d from a legacy method save_to_dict
             nr_phys = d['nr_phys']

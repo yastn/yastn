@@ -58,12 +58,14 @@ class EnvGauge():
         self.gauge[site] = obj
 
     def to_dict(self, level=2):
+        """ Return a dictionary representation of the object. """
         return {'type': type(self).__name__,
                 'dict_ver': 1,
                 'gauge': self.gauge.to_dict(level=level)}
 
     @classmethod
     def from_dict(cls, d, config=None):
+        r""" De-serializes EnvGauge from the dictionary ``d``. """
         if d['dict_ver'] == 1:
             if cls.__name__ != d['type']:
                 raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")

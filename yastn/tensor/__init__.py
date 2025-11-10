@@ -152,7 +152,20 @@ class Tensor:
         return Tensor(**kwargs)
 
     @classmethod
-    def from_dict(cls, d: dict, config:_config | None=None) -> Tensor:
+    def from_dict(cls, d: dict, config:None | _config=None) -> Tensor:
+        """
+        De-serializes tensor from the dictionary ``d``.
+
+        Parameters
+        ----------
+        d : dict
+            Tensor stored in form of a dictionary. Typically provided by an output
+            of :meth:`yastn.Tensor.to_dict`.
+
+        config : Optional[module | _config(NamedTuple)]
+            :ref:`YASTN configuration <tensor/configuration:yastn  configuration>`
+            If provided, overrides configuration stored in `d`.
+        """
         #
         if 'dict_ver' not in d:  # d from a legacy method save_to_dict
             if config is None:

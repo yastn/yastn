@@ -112,6 +112,11 @@ class EnvBoundaryMPS():
 
 
     def to_dict(self, level=2):
+        r"""
+        Serialize EnvBoundaryMPS to a dictionary.
+        Complementary function is :meth:`yastn.EnvBoundaryMPS.from_dict` or a general :meth:`yastn.from_dict`.
+        See :meth:`yastn.Tensor.to_dict` for further description.
+        """
         return {'type': type(self).__name__,
                 'dict_ver': 1,
                 'psi': self.psi.to_dict(level=level),
@@ -121,6 +126,10 @@ class EnvBoundaryMPS():
 
     @classmethod
     def from_dict(cls, d, config=None):
+        r"""
+        De-serializes EnvBoundaryMPS from the dictionary ``d``.
+        See :meta:`yastn.Tensor.from_dict` for further description.
+        """
         if 'dict_ver' not in d:
             psi = PEPS_CLASSES['Peps'].from_dict(d['psi'], config)
         elif d['dict_ver'] == 1:
