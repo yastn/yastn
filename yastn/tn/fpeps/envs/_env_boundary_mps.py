@@ -16,7 +16,7 @@ from itertools import accumulate
 
 from tqdm import tqdm
 
-from ._env_auxlliary import identity_tm_boundary, clear_projectors
+from ._env_auxlliary import identity_boundary, clear_projectors
 from ._env_measure import _measure_nsite
 from .._peps import PEPS_CLASSES, Peps2Layers
 from ... import mps
@@ -588,3 +588,17 @@ def _sample_MC_column_uniform(ny, proj_env, st0, st1, psi, projectors, rands):
         else:  # reject
             st1[nx, ny] = ind0
     return vR, Os, vL, accept
+
+
+def identity_tm_boundary(tmpo):
+    """
+    For transfer matrix MPO build of DoublePepsTensors,
+    create MPS that contracts each DoublePepsTensor from the right.
+    """
+    phi = mps.Mps(N=tmpo.N)
+    config = tmpo.config
+    for n in phi.sweep(to='last'):
+        legf = tmpo[n].get_legs(axes=3).conj()
+        tmp = identity_boundary(config, legf)
+        phi[n] = tmp.add_leg(0, s=-1).add_leg(2, s=1)
+    return phi

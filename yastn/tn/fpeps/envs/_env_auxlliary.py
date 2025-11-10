@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from ... import mps
 from ....initialize import ones, eye
 from ....tensor import tensordot, Leg, Tensor, YastnError, ncon
 
@@ -22,8 +21,7 @@ __all__ = ['hair_t', 'hair_l', 'hair_b', 'hair_r',
            'append_vec_tl', 'append_vec_tr',
            'append_vec_bl', 'append_vec_br',
            'tensors_from_psi', 'cut_into_hairs',
-           'identity_tm_boundary', 'identity_boundary',
-           'trivial_peps_tensor']
+           'identity_boundary', 'trivial_peps_tensor']
 
 
 def trivial_peps_tensor(config):
@@ -38,20 +36,6 @@ def tensors_from_psi(d, psi):
         triv = trivial_peps_tensor(psi.config)
     for k, v in d.items():
         d[k] = triv if v is None else psi[v]
-
-
-def identity_tm_boundary(tmpo):
-    """
-    For transfer matrix MPO build of DoublePepsTensors,
-    create MPS that contracts each DoublePepsTensor from the right.
-    """
-    phi = mps.Mps(N=tmpo.N)
-    config = tmpo.config
-    for n in phi.sweep(to='last'):
-        legf = tmpo[n].get_legs(axes=3).conj()
-        tmp = identity_boundary(config, legf)
-        phi[n] = tmp.add_leg(0, s=-1).add_leg(2, s=1)
-    return phi
 
 
 def identity_boundary(config, leg):

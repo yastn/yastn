@@ -19,11 +19,11 @@ from typing import Iterator, Sequence
 from warnings import warn
 
 from ...tensor import YastnError, Tensor, Leg
+from ...tn.fpeps._doublePepsTensor import DoublePepsTensor
 
-#from ...tn.fpeps._doublePepsTensor import DoublePepsTensor
+TENSOR_CLASSES = {"Tensor": Tensor,
+                  "DoublePepsTensor": DoublePepsTensor}
 
-# TENSOR_CLASSES = {"Tensor": Tensor,
-#                   "DoublePepsTensor": DoublePepsTensor}
 
 class _MpsMpoParent:
     # The basic structure of MPS/MPO with `N` sites.
@@ -386,6 +386,5 @@ class _MpsMpoParent:
             psi = cls(N=d['N'], nr_phys=d['nr_phys'])
             psi.factor = d['factor']
             psi.pC = d['pC']
-            psi.A = {k: Tensor.from_dict(v, config=config) for k, v in d['A'].items()}
-            # psi.A = {k: TENSOR_CLASSES[v['type']].from_dict(v, config=config) for k, v in d['A'].items()}
+            psi.A = {k: TENSOR_CLASSES[v['type']].from_dict(v, config=config) for k, v in d['A'].items()}
             return psi
