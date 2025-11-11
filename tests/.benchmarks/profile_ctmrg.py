@@ -29,6 +29,8 @@ from yastn.backend import backend_np
 from yastn.backend import backend_torch
 import yastn.tn.fpeps as fpeps
 from yastn.tn.fpeps import Peps, Peps2Layers, RectangularUnitcell
+from itertools import product
+import json
 
 tol = 1e-12  #pylint: disable=invalid-name
 
@@ -53,7 +55,7 @@ def distributeU1_exponential(D, p = 0.25):
     return sectors
 
 
-def profile_ctmrg(on_site_t, X, config_profile):
+def profile_ctmrg(on_site_t, X, config_profile, svd_policy="fullrank"):
     USE_TORCH_NVTX= ("torch" in config_profile.backend.BACKEND_ID)
 
     geometry= RectangularUnitcell(pattern=[[0,]])
@@ -64,7 +66,7 @@ def profile_ctmrg(on_site_t, X, config_profile):
     nsteps= 2
     X= nsteps*(D**2)
     env = fpeps.EnvCTM(psi, init='eye')
-    info = env.ctmrg_(opts_svd = {"D_total": X, 'fix_signs': False, 'tol': 1.0e-12}, max_sweeps= nsteps, 
+    info = env.ctmrg_(opts_svd = {"policy": svd_policy, "D_total": X, 'fix_signs': False, 'tol': 1.0e-12}, max_sweeps= nsteps, 
                             truncation_f=None, use_qr=False, checkpoint_move=False)
     
     # clone current env
@@ -78,7 +80,7 @@ def profile_ctmrg(on_site_t, X, config_profile):
     for t in "tl", "tr", "bl", "br", "t", "l", "r", "b":
         setattr(getattr(env2[0,0],t),"config",config_profile)
 
-    opts_svd = {"D_total": X, 'fix_signs': False, 'tol': 1.0e-12}
+    opts_svd = {"policy": svd_policy, "D_total": X, 'fix_signs': False, 'tol': 1.0e-12}
     max_sweeps= 5
     corner_tol= 1.0e-8
     
@@ -93,7 +95,47 @@ def profile_ctmrg(on_site_t, X, config_profile):
 
 
 @torch_test
-def test_ctmrg_U1_torch(config_kwargs,D : int=3, X : int=None):
+def test_ctmrg_U1xU1_torch(config_kwargs,D : int=3, X : int=None, u1_charges : list[int]=None, u1_Ds: list[int]=None, 
+                           input_shape_file=None, **kwargs):
+    """
+    """
+    config = yastn.make_config(sym='U1xU1', **config_kwargs)
+    _cfg= copy.deepcopy(config_kwargs)
+    _cfg["backend"]= backend_torch 
+    config_torch = yastn.make_config(sym='U1xU1', **_cfg)
+    config.backend.random_seed(1)
+
+    # make on-site tensor
+    if input_shape_file:
+        with open(input_shape_file, 'r') as f:
+            shape_data= json.load(f)
+
+            assert shape_data["symmetry"]=="U1xU1", "Input shape file symmetry mismatch"
+            a= yastn.rand(config_torch, 
+                          legs= [ yastn.Leg(config_torch, s= shape_data[lid]["signature"], t=shape_data[lid]["charges"], D=shape_data[lid]["dimensions"]) 
+                                    for lid in ["a_leg_t","a_leg_l","a_leg_b","a_leg_r","a_leg_s"] 
+                            ])                 
+    else:
+        if u1_charges and u1_Ds and len(u1_charges)==len(u1_Ds):
+            aux_ts,aux_Ds= u1_charges,u1_Ds
+        else:    
+            aux_ts,aux_Ds= tuple(zip(*distributeU1_exponential(D)))
+        # product of U1s
+        aux_ts= list(product(aux_ts,aux_ts))
+        aux_Ds= [ x*y for x,y in product(aux_Ds,aux_Ds) ]
+        D= sum(aux_Ds)
+        X= 2*D**2 if X is None else X
+        l0= yastn.Leg(config_torch, s=1, t=aux_ts, D=aux_Ds)
+        lp= yastn.Leg(config_torch, s=1, t=(((1,-1),(-1,1))), D=(1,1) )
+        a= yastn.rand(config_torch, legs=[l0.conj(), l0.conj(), l0, l0, lp], n=config_torch.sym.zero())
+    
+    print(a)
+    
+    profile_ctmrg(a, X, config, **kwargs)
+
+
+@torch_test
+def test_ctmrg_U1_torch(config_kwargs,D : int=3, X : int=None, u1_charges : list[int]=None, u1_Ds: list[int]=None, **kwargs):
     """
     """
     config = yastn.make_config(sym='U1', **config_kwargs)
@@ -103,19 +145,23 @@ def test_ctmrg_U1_torch(config_kwargs,D : int=3, X : int=None):
     config.backend.random_seed(1)
 
     # make on-site tensor
+    if u1_charges and u1_Ds and len(u1_charges)==len(u1_Ds):
+        aux_ts,aux_Ds= u1_charges,u1_Ds
+        D= sum(aux_Ds)
+    else:    
+        aux_ts,aux_Ds= tuple(zip(*distributeU1_exponential(D)))
     X= 2*D**2 if X is None else X
-    aux_ts,aux_Ds= tuple(zip(*distributeU1_exponential(D)))
     l0= yastn.Leg(config_torch, s=1, t=aux_ts, D=aux_Ds)
     print(f"aux leg {l0}")
     lp= yastn.Leg(config_torch, s=1, t=(-1,1), D=(1,1) )
-    a= yastn.rand(config_torch, legs=[l0.conj(), l0.conj(), l0, l0, lp], n=1)
+    a= yastn.rand(config_torch, legs=[l0.conj(), l0.conj(), l0, l0, lp], n=config_torch.sym.zero())
 
     # 
-    profile_ctmrg(a, 2*(D**2), config)
+    profile_ctmrg(a, X, config, **kwargs)
 
 
 @torch_test
-def test_ctmrg_Z2_torch(config_kwargs, D : int=4, X : int=None):
+def test_ctmrg_Z2_torch(config_kwargs, D : int=4, X : int=None, **kwargs):
     """
     """
     config = yastn.make_config(sym='Z2', **config_kwargs)
@@ -133,7 +179,7 @@ def test_ctmrg_Z2_torch(config_kwargs, D : int=4, X : int=None):
     a= yastn.rand(config_torch, legs=[l0.conj(), l0.conj(), l0, l0, lp], n=1)
 
     # 
-    profile_ctmrg(a, X, config)
+    profile_ctmrg(a, X, config, **kwargs)
 
 
 if __name__ == '__main__':
@@ -144,18 +190,39 @@ if __name__ == '__main__':
     parser.add_argument("--device", help='cpu or cuda', default='cpu', action='store')
     parser.add_argument("--tensordot_policy", choices=['fuse_to_matrix', 'fuse_contracted', 'no_fusion'], default='fuse_to_matrix', action='store')
     parser.add_argument("--default_fusion", choices=['hard', 'meta'], default='hard', action='store')
+    parser.add_argument("--svd_policy", type=str, default='fullrank', choices=["fullrank", "qr", "randomized", "block_arnoldi", "block_propack"], help="svd driver")
     parser.add_argument("--D", type=int, default=3, help="iPEPS bond dimension")
     parser.add_argument("--X", type=int, default=None, help="environment bond dimension")
-    parser.add_argument("--sym", type=str, default='Z2', choices=['U1','Z2'], help="symmetry")
+    parser.add_argument("--sym", type=str, default='Z2', choices=['U1','Z2', 'U1xU1'], help="symmetry")
+    parser.add_argument(
+        "--u1_charges",
+        dest="u1_charges",
+        default=None,
+        type=int,
+        help="U(1) charges assigned to the states in the virtual space",
+        nargs="+",
+    )
+    parser.add_argument(
+        "--u1_Ds",
+        dest="u1_Ds",
+        default=None,
+        type=int,
+        help="dimensions of U(1) sectors in the virtual space",
+        nargs="+",
+    )
+    parser.add_argument("--input_shape_file", type=str, default=None)
     args, unknown_args = parser.parse_known_args()
 
     config_kwargs=  {'backend': args.backend, 'default_device': args.device,
             'default_fusion': args.default_fusion, 'tensordot_policy': args.tensordot_policy,}
     
     if args.sym == 'Z2':
-        test_ctmrg_Z2_torch(config_kwargs, D=args.D, X=args.X)
+        test_ctmrg_Z2_torch(config_kwargs, D=args.D, X=args.X, svd_policy=args.svd_policy)
     if args.sym == 'U1':
-        test_ctmrg_U1_torch(config_kwargs, D=args.D, X=args.X)
+        test_ctmrg_U1_torch(config_kwargs, D=args.D, X=args.X, u1_charges=args.u1_charges, u1_Ds=args.u1_Ds, svd_policy=args.svd_policy)
+    if args.sym == 'U1xU1':
+        test_ctmrg_U1xU1_torch(config_kwargs, D=args.D, X=args.X, u1_charges=args.u1_charges, u1_Ds=args.u1_Ds, 
+                               input_shape_file=args.input_shape_file, svd_policy=args.svd_policy)
 
 
 
