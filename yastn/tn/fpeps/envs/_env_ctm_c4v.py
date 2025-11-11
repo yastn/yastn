@@ -95,9 +95,8 @@ class EnvCTM_c4v():
     def max_D(self):
         m_D = 0
         for site in self.sites():
-            for dirn in ['t', 'tl']:
-                if getattr(self[site], dirn) is not None:
-                    m_D = max(max(getattr(self[site], dirn).get_shape()), m_D)
+            if getattr(self[site], 'tl') is not None:
+                m_D = max(max(getattr(self[site], 'tl').get_shape()), m_D)
         return m_D
 
     # Cloning/Copying/Detaching(view)

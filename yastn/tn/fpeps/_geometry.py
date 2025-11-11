@@ -439,6 +439,10 @@ class Lattice():
         """ Set tensor at site. """
         self._site_data[self.site2index(site)] = obj
 
+    def items(self):
+        """ Allows iterating over lattice sites like in dict. """
+        return ((site, self[site]) for site in self.sites())
+
     def to_dict(self, level=2) -> dict:
         """
         Serialize Lattice or Peps into a dictionary.

@@ -105,7 +105,7 @@ class EnvCTM():
     def max_D(self):
         m_D = 0
         for site in self.sites():
-            for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
+            for dirn in ['tl', 'tr', 'bl', 'br']:
                 if getattr(self[site], dirn) is not None:
                     m_D = max(max(getattr(self[site], dirn).get_shape()), m_D)
         return m_D
@@ -199,46 +199,6 @@ class EnvCTM():
         self.env = Lattice.from_dict(d['env'])
         self.proj = Lattice.from_dict(d['proj'])
 
-
-    # def compress_env_1d(env):
-    #     r"""
-    #     Compress environment to data tensors and (hashable) metadata, see :func:`yastn.tensor.compress_to_1d`.
-
-    #     Parameters
-    #     ----------
-    #     env : EnvCTM
-    #         Environment instance to be transformed.
-
-    #     Returns
-    #     -------
-    #     (tuple[Tensor] , dict)
-    #         A pair where the first element is a tuple of raw data tensors (of type derived from backend)
-    #         and the second is a dict with corresponding metadata.
-    #     """
-    #     shallow= {
-    #         'psi': {site: env.psi.bra[site] for site in env.sites()} if isinstance(env.psi,Peps2Layers) \
-    #             else {site: env.psi[site] for site in env.sites()},
-    #         'env': tuple( env_t for site in env.sites() for k, env_t in env[site].__dict__.items() )}
-    #     dtypes = set(tuple(t.yastn_dtype for t in shallow['psi'].values()) +
-    #                  tuple(t.yastn_dtype if t is not None else None for t in shallow['env']))
-    #     assert len(dtypes - set((None,))) < 2, f"CTM update: all tensors of state and environment should have the same dtype, got {dtypes}"
-    #     unrolled = {'psi': {site: t.compress_to_1d() for site,t in shallow['psi'].items()},
-    #                 'env': tuple(t.compress_to_1d() if t else (None, None) for t in shallow['env'])}
-    #     meta = {'psi': {site: t_and_meta[1] for site, t_and_meta in unrolled['psi'].items()},
-    #             'env': tuple(meta for t,meta in unrolled['env']),
-    #             '2layer': isinstance(env.psi, Peps2Layers),
-    #             'geometry': env.geometry,
-    #             'sites': env.sites()}
-    #     data = tuple( t for t,m in unrolled['psi'].values())+tuple( t for t,m in unrolled['env'])
-    #     return data, meta
-
-    # def compress_proj_1d(env):
-    #         empty_proj = Tensor(config=env.config) # placeholder instead of None
-    #         data_t, meta_t = tuple(zip(*(t.compress_to_1d() if not (t is None) else empty_proj.compress_to_1d() \
-    #             for site in env.sites() for t in env.proj[site].__dict__.values())))
-    #         meta = {'geometry': env.geometry, 'proj': meta_t}
-    #         return data_t, meta
-
     def save_to_dict(self) -> dict:
         r"""
         Serialize EnvCTM into a dictionary.
@@ -259,7 +219,6 @@ class EnvCTM():
                        for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']}
             d['data'][site] = d_local
         return d
-
 
     def reset_(self, init='rand', leg=None, **kwargs):
         r"""

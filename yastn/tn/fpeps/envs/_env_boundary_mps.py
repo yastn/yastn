@@ -19,6 +19,7 @@ from tqdm import tqdm
 from ._env_auxlliary import identity_boundary, clear_projectors
 from ._env_measure import _measure_nsite
 from .._peps import PEPS_CLASSES, Peps2Layers
+from .._geometry import Lattice
 from ... import mps
 from ....tensor import Tensor, YastnError
 
@@ -518,8 +519,13 @@ class EnvBoundaryMPS():
         return accept / (2 * Nx * Ny)  # acceptance rate
 
 
-def _clear_operator_input(op, sites):
-    op_dict = op.copy() if isinstance(op, dict) else {site: op for site in sites}
+def _clear_operator_input(op, sites=None):
+    if isinstance(op, Lattice):
+        op_dict = op.shallow_copy()
+    elif isinstance(op, dict):
+        op_dict = op.copy()
+    else:
+        op_dict = {site: op for site in sites}
     for k, v in op_dict.items():
         if isinstance(v, dict):
             op_dict[k] = {(i,): vi for i, vi in v.items()}
