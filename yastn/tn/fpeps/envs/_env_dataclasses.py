@@ -136,6 +136,15 @@ class EnvCTM_c4v_local(dataclasses_common):
     tl: Tensor | None = None  # top-left
     t:  Tensor | None = None  # top
 
+    def __getattr__(self, dirn):
+        if dirn in ["tl", "tr", "br", "bl"]:
+            return self.tl
+
+        elif dirn in ["t", "l", "b", "r"]:
+            return self.t
+        else:
+            return None
+
 @dataclass()
 class EnvCTM_c4v_projectors(dataclasses_common):
     r"""

@@ -118,13 +118,16 @@ class EnvCTM():
         of the computational graph. Data of cloned environment tensors is indepedent
         from the originals.
         """
-        env = EnvCTM(self.psi, init=None)
+        # env = EnvCTM(self.psi, init=None)
+        cls = type(self)
+        env = cls(self.psi, init=None)
         env.env = self.env.copy()
         env.proj = self.proj.copy()
         return env
 
     def shallow_copy(self) -> EnvCTM:
-        env = EnvCTM(self.psi, init=None)
+        cls = type(self)
+        env = cls(self.psi, init=None)
         env.env = self.env.shallow_copy()
         env.proj = self.proj.shallow_copy()
         return env
@@ -135,7 +138,8 @@ class EnvCTM():
         of the computational graph. Data of cloned environment tensors is indepedent
         from the originals.
         """
-        env = EnvCTM(self.psi, init=None)
+        cls = type(self)
+        env = cls(self.psi, init=None)
         env.env = self.env.clone()
         env.proj = self.proj.clone()
         return env
@@ -146,7 +150,8 @@ class EnvCTM():
         of the computational graph. Data of detached environment tensors is shared
         with the originals.
         """
-        env = EnvCTM(self.psi, init=None)
+        cls = type(self)
+        env = cls(self.psi, init=None)
         env.env = self.env.detach()
         env.proj = self.proj.detach()
         return env

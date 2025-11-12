@@ -26,9 +26,21 @@ from ....tensor import Leg, YastnError, tensordot, truncation_mask, truncation_m
 
 logger = logging.Logger('ctmrg')
 
+class EnvFlip:
+    """Read-only view: tensors are flipped on access."""
+    __slots__ = ("_base",)
 
-# class EnvCTM_c4v(EnvCTM):
-class EnvCTM_c4v():
+    def __init__(self, base: EnvCTM_c4v_local):
+        self._base = base
+
+    # attribute access
+    def __getattr__(self, dirn):
+        return getattr(self._base, dirn).flip_signature()
+
+    def __repr__(self):
+        return f"EnvFlip(base={self._base!r})"
+
+class EnvCTM_c4v(EnvCTM):
     def __init__(self, psi, init='eye', ket=None):
         r"""
         Environment used in Corner Transfer Matrix Renormalization Group algorithm for C4v symmetric
@@ -82,15 +94,11 @@ class EnvCTM_c4v():
         if init is not None:
             self.reset_(init=init)
 
-    @property
-    def config(self):
-        return self.psi.config
-
     def __getitem__(self, site):
-        return self.env[site]
-
-    def __setitem__(self, site, obj):
-        self.env[site] = obj
+        if (site[0] + site[1])%2 == 1:
+            return EnvFlip(self.env[site])
+        else:
+            return self.env[site]
 
     def max_D(self):
         m_D = 0
@@ -99,82 +107,7 @@ class EnvCTM_c4v():
                 m_D = max(max(getattr(self[site], 'tl').get_shape()), m_D)
         return m_D
 
-    # Cloning/Copying/Detaching(view)
-    #
-    def copy(self) -> EnvCTM:
-        env = EnvCTM_c4v(self.psi, init=None)
-        env.env = self.env.copy()
-        env.proj = self.proj.copy()
-        return env
-
-    def shallow_copy(self) -> EnvCTM_c4v:
-        env = EnvCTM_c4v(self.psi, init=None)
-        env.env = self.env.shallow_copy()
-        env.proj = self.proj.shallow_copy()
-        return env
-
-    def clone(self) -> EnvCTM_c4v:
-        r"""
-        Return a clone of the environment preserving the autograd - resulting clone is a part
-        of the computational graph. Data of cloned environment tensors is indepedent
-        from the originals.
-        """
-        env = EnvCTM_c4v(self.psi, init=None)
-        env.env = self.env.clone()
-        env.proj = self.proj.clone()
-        return env
-
-    def detach(self) -> EnvCTM_c4v:
-        r"""
-        Return a detached view of the environment - resulting environment is **not** a part
-        of the computational graph. Data of detached environment tensors is shared
-        with the originals.
-        """
-        env = EnvCTM_c4v(self.psi, init=None)
-        env.env = self.env.detach()
-        env.proj = self.proj.detach()
-        return env
-
-    def detach_(self):
-        r"""
-        Detach all environment tensors from the computational graph.
-        Data of environment tensors in detached environment is a `view` of the original data.
-        """
-        self.env.detach_()
-        self.proj.detach_()
-
-    def to_dict(self, level=2):
-        r"""
-        Serialize EnvCTM_c4v to a dictionary.
-        Complementary function is :meth:`yastn.EnvCTM_c4v.from_dict` or a general :meth:`yastn.from_dict`.
-        See :meth:`yastn.Tensor.to_dict` for further description.
-        """
-        return {'type': type(self).__name__,
-                'dict_ver': 1,
-                'psi': self.psi.to_dict(level=level),
-                'env': self.env.to_dict(level=level),
-                'proj': self.proj.to_dict(level=level)}
-
-    @classmethod
-    def from_dict(cls, d, config=None):
-        r"""
-        De-serializes EnvCTM_c4v from the dictionary ``d``.
-        See :meta:`yastn.Tensor.from_dict` for further description.
-        """
-        if cls.__name__ != d['type']:
-            raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
-        psi = PEPS_CLASSES[d['psi']['type']].from_dict(d['psi'], config=config)
-        env = cls(psi, init=None)
-        env.env = Lattice.from_dict(d['env'], config=config)
-        env.proj = Lattice.from_dict(d['proj'], config=config)
-        return env
-
-    def update_from_dict_(self, d):
-        self.psi = PEPS_CLASSES[d['psi']['type']].from_dict(d['psi'])
-        self.env = Lattice.from_dict(d['env'])
-        self.proj = Lattice.from_dict(d['proj'])
-
-    def reset_(self, init='eye', **kwargs):
+    def reset_(self, init='eye'):
         r"""
         Initialize C4v-symmetric CTMRG environment::
 
