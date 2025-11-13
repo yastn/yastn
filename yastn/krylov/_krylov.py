@@ -418,13 +418,13 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
     def mv(v): # Av
         col = Tensor.from_dict(combine_data_and_meta(to_tensor(v), col_meta))
         res = einsum('ij,jx->ix',A_mat,col)
-        row, res_meta = split_data_and_meta(res.to_dict(level=0))
+        row, res_meta = split_data_and_meta(res.to_dict(level=0), squeeze=True)
         return to_numpy(row)
 
     def vm(v): # A^\dag v  vs  (v* A)^\dag = A^\dag v
         row = Tensor.from_dict(combine_data_and_meta(to_tensor(v).conj(), row_meta))
         res = einsum('ix,ij->jx', row, A_mat)
-        col, res_meta= split_data_and_meta(res.to_dict(level=0))
+        col, res_meta= split_data_and_meta(res.to_dict(level=0), squeeze=True)
         return to_numpy(col.conj())
 
     # step 2: invoke dense svds

@@ -48,11 +48,11 @@ def test_eigs_simple(config_kwargs):
             yastn.Leg(a.config, s=1, t=(-1, 0, 1), D=(1, 1, 1))]
     v0 = yastn.rand(config=a.config, legs=legs)
     # Define a wrapper that goes r1d -> yastn.tensor -> tm @ yastn.tensor -> r1d
-    r1d, meta = yastn.split_data_and_meta(v0.to_dict(level=0))
+    r1d, meta = yastn.split_data_and_meta(v0.to_dict(level=0), squeeze=True)
     def f(x):
         t = yastn.Tensor.from_dict(yastn.combine_data_and_meta(x, meta))
         t2 = yastn.ncon([t, a, a.conj()], [(1, 3, -3), (1, 2, -1), (3, 2, -2)])
-        t3, _ = yastn.split_data_and_meta(t2.to_dict(level=0, meta=meta))
+        t3, _ = yastn.split_data_and_meta(t2.to_dict(level=0, meta=meta), squeeze=True)
         return t3
     ff = LinearOperator(shape=(len(r1d), len(r1d)), matvec=f, dtype=np.float64)
     # scipy.sparse.linalg.eigs that goes though yastn symmetric tensor.
@@ -67,11 +67,11 @@ def test_eigs_simple(config_kwargs):
     legs = [a.get_legs(0).conj(),
             a.get_legs(0)]
     v0 = yastn.rand(config=a.config, legs=legs, n=0)
-    r1d, meta = yastn.split_data_and_meta(v0.to_dict(level=0))
+    r1d, meta = yastn.split_data_and_meta(v0.to_dict(level=0), squeeze=True)
     def f(x):
         t = yastn.Tensor.from_dict(yastn.combine_data_and_meta(x, meta))
         t2 = yastn.ncon([t, a, a.conj()], [(1, 3), (1, 2, -1), (3, 2, -2)])
-        t3, _ = yastn.split_data_and_meta(t2.to_dict(level=0, meta=meta))
+        t3, _ = yastn.split_data_and_meta(t2.to_dict(level=0, meta=meta), squeeze=True)
         return t3
     ff = LinearOperator(shape=(len(r1d), len(r1d)), matvec=f, dtype=np.float64)
     wb, vb1d = eigs(ff, v0=r1d, k=1, which='LM', tol=1e-10)  # scipy.sparse.linalg.eigs
@@ -108,11 +108,11 @@ def test_eigs_mismatches(config_kwargs):
     leg02 = yastn.legs_union(leg0, leg2)
     leg_aux = yastn.Leg(a.config, s=1, t=(-1, 0, 1), D=(1, 1, 1))
     vv = yastn.rand(config=a.config, legs=(leg02, leg02.conj(), leg_aux), dtype='float64')
-    r1d, meta = yastn.split_data_and_meta(vv.to_dict(level=0))
+    r1d, meta = yastn.split_data_and_meta(vv.to_dict(level=0), squeeze=True)
     def f(x):  # change all that into a wrapper around ncon part?
         t = yastn.Tensor.from_dict(yastn.combine_data_and_meta(x, meta))
         t2 = yastn.ncon([a, a.conj(), t], [(-1, 1, 2), (-2, 1, 3), (2, 3, -3)])
-        t3, _ = yastn.split_data_and_meta(t2.to_dict(level=0, meta=meta))
+        t3, _ = yastn.split_data_and_meta(t2.to_dict(level=0, meta=meta), squeeze=True)
         return t3
     ff = LinearOperator(shape=(len(r1d), len(r1d)), matvec=f, dtype=np.float64)
 
