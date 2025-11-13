@@ -212,15 +212,15 @@ class Tensor:
                 d['config'] = config
 
             if d['level'] >= 2 or config is not None:
+                dtype = d['config'].default_dtype
                 if hasattr(d['data'], 'dtype'):
-                    dtype = 'complex128' if d['config'].backend.is_complex(d['data']) else 'float64'
-                else:
-                    dtype = d['config'].default_dtype
+                    if 'complex128' in str(d['data'].dtype):
+                        dtype = 'complex128'
+                    if 'float64' in str(d['data'].dtype):
+                        dtype = 'float64'
                 d['data'] = d['config'].backend.to_tensor(d['data'], dtype=dtype, device=d['config'].default_device)
 
-            out = cls(**d)
-            out.is_consistent()
-            return out
+            return cls(**d)
 
     @property
     def s(self) -> Sequence[int]:
