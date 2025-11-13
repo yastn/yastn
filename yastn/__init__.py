@@ -14,6 +14,7 @@
 # ==============================================================================
 from . import operators
 from ._from_dict import from_dict
+from ._split_combine_dict import *
 from .initialize import *
 from .krylov import *
 from .tensor import *

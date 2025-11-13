@@ -26,8 +26,10 @@ from ._env_ctm import ctm_conv_corner_spec
 from ._env_dataclasses import Gauge
 from .rdm import *
 from .._geometry import Lattice
-from ....initialize import zeros, eye, rand, split_data_and_meta, combine_data_and_meta
+from ....initialize import zeros, eye, rand
 from ....tensor import Tensor, tensordot, diag, qr
+from ...._split_combine_dict import split_data_and_meta, combine_data_and_meta
+
 
 log = logging.getLogger(__name__)
 

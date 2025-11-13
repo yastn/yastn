@@ -28,9 +28,10 @@ from .._gates_auxiliary import fkron, gate_fix_swap_gate
 from .._geometry import Site, Lattice
 from .._peps import PEPS_CLASSES, Peps2Layers
 from ... import mps
-from ....initialize import rand, ones, eye, split_data_and_meta, combine_data_and_meta
+from ....initialize import rand, ones, eye
 from ....operators import sign_canonical_order
 from ....tensor import Tensor, YastnError, Leg, tensordot, qr, vdot
+from ...._split_combine_dict import split_data_and_meta, combine_data_and_meta
 
 logger = logging.getLogger(__name__)
 

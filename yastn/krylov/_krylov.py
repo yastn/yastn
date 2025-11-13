@@ -20,10 +20,11 @@ from typing import Sequence, TypeVar
 import numpy as np
 import scipy.sparse.linalg as spla
 
-from ..initialize import zeros, decompress_from_1d
+from ..initialize import zeros
 from ..tensor import YastnError, Leg, LegMeta, einsum, truncation_mask, Tensor
 from ..tensor._auxliary import _clear_axes, _unpack_axes, _flatten
 from ..tensor._tests import _test_axes_all
+from .._split_combine_dict import split_data_and_meta, combine_data_and_meta
 
 __all__ = ['expmv', 'eigs', 'lin_solver', 'svds']
 
@@ -405,30 +406,30 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
             return replace(l, D= (1,)*len(l.t), legs=(make_dummy_leg(il) for il in l.legs))
         raise YastnError('Leg type not recognized')
 
-    v0_row= zeros(config=A.config, legs=(rows.conj(), make_dummy_leg(rows)) )
-    _, row_meta= v0_row.compress_to_1d(meta=None)
-    v0_col= zeros(config=A.config, legs=(cols.conj(), make_dummy_leg(cols)) )
-    _, col_meta= v0_col.compress_to_1d(meta=None)
+    v0_row = zeros(config=A.config, legs=(rows.conj(), make_dummy_leg(rows)) )
+    _, row_meta = split_data_and_meta(v0_row.to_dict(level=0))
+    v0_col = zeros(config=A.config, legs=(cols.conj(), make_dummy_leg(cols)) )
+    _, col_meta = split_data_and_meta(v0_col.to_dict(level=0))
 
     # take care of negative strides
-    to_tensor= lambda x: A_mat.config.backend.to_tensor(x if np.sum(np.array(x.strides)<0)==0 else x.copy() , dtype=A_mat.yastn_dtype, device=A_mat.device)
-    to_numpy= lambda x: A_mat.config.backend.to_numpy(x)
+    to_tensor = lambda x: A_mat.config.backend.to_tensor(x if np.sum(np.array(x.strides)<0)==0 else x.copy(), dtype=A_mat.yastn_dtype, device=A_mat.device)
+    to_numpy = lambda x: A_mat.config.backend.to_numpy(x)
 
     def mv(v): # Av
-        col= decompress_from_1d(to_tensor(v), col_meta)
-        res= einsum('ij,jx->ix',A_mat,col)
-        row, res_meta= res.compress_to_1d(meta=None)
+        col = Tensor.from_dict(combine_data_and_meta(to_tensor(v), col_meta))
+        res = einsum('ij,jx->ix',A_mat,col)
+        row, res_meta = split_data_and_meta(res.to_dict(level=0))
         return to_numpy(row)
 
     def vm(v): # A^\dag v  vs  (v* A)^\dag = A^\dag v
-        row= decompress_from_1d(to_tensor(v).conj(), row_meta)
-        res= einsum('ix,ij->jx',row,A_mat)
-        col, res_meta= res.compress_to_1d(meta=None)
+        row = Tensor.from_dict(combine_data_and_meta(to_tensor(v).conj(), row_meta))
+        res = einsum('ix,ij->jx', row, A_mat)
+        col, res_meta= split_data_and_meta(res.to_dict(level=0))
         return to_numpy(col.conj())
 
     # step 2: invoke dense svds
-    lop_A= spla.LinearOperator((v0_row.size, v0_col.size), matvec=mv, rmatvec=vm)
-    U, S, Vh= spla.svds(lop_A, k=k, ncv=ncv, tol=tol, which=which, v0=None, maxiter=maxiter, \
+    lop_A = spla.LinearOperator((v0_row.size, v0_col.size), matvec=mv, rmatvec=vm)
+    U, S, Vh = spla.svds(lop_A, k=k, ncv=ncv, tol=tol, which=which, v0=None, maxiter=maxiter, \
                                     return_singular_vectors=return_singular_vectors, solver=solver, options=options,) #rng=None)
 
     # Individual singular vectors are ordered by magnitude in ascending manner [scipy], across all charge sectors.
@@ -438,8 +439,8 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
     # A = U S Vh , while vA = v0_row A with vA having a structure of rows a
     #              and A v0_col = Av with Av having s structure of cols
     #
-    rowA= v0_row.conj()
-    colA= v0_col.conj()
+    rowA = v0_row.conj()
+    colA = v0_col.conj()
     U_sorted= {}
 
     # ISSUE: in case of degeneracy, the singular vectors can be mixed-up across sectors

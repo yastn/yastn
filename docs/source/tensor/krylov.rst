@@ -17,5 +17,6 @@ Other libraries
 ---------------
 With *NumPy* backend, it is possible to link to algorithms in
 `sparse.sparse.linalg <https://docs.scipy.org/doc/scipy/reference/sparse.linalg.html>`_,
-employing :meth:`yastn.Tensor.compress_to_1d` and :meth:`yastn.decompress_from_1d`.
+employing :meth:`yastn.Tensor.to_dict` and :meth:`yastn.Tensor.from_dict`, combined
+with :meth:`yastn.split_data_and_meta` and :meth:`yastn.combine_data_and_meta`.
 See, an :ref:`example<examples/tensor/decomposition:combining with scipy.sparse.linalg.eigs>`.

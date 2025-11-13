@@ -25,8 +25,9 @@ from .fixed_pt import fast_env_T_gauge_multi_sites, NoFixedPointError, real_to_c
 from .fixed_pt import fast_env_T_gauge_multi_sites, NoFixedPointError, real_to_complex, complex_to_real
 from .rdm import *
 from .._geometry import Lattice
-from ....initialize import zeros, eye, split_data_and_meta, combine_data_and_meta
+from ....initialize import zeros, eye
 from ....tensor import tensordot, diag
+from ...._split_combine_dict import split_data_and_meta, combine_data_and_meta
 
 log = logging.getLogger("FixedPoint_c4v")
 

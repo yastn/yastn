@@ -71,14 +71,14 @@ See examples at :ref:`examples/tensor/init:serialization of symmetric tensors`.
 These utility operations can export and then import tensors from
 different formats. For example, exporting and importing tensor or MPS to and from a file.
 
-.. autofunction:: yastn.Tensor.save_to_dict
+.. autofunction:: yastn.Tensor.to_dict
+
+.. autofunction:: yastn.Tensor.from_dict
 
 .. autofunction:: yastn.Tensor.save_to_hdf5
 
-.. autofunction:: yastn.Tensor.compress_to_1d
-
-.. autofunction:: yastn.load_from_dict
-
 .. autofunction:: yastn.load_from_hdf5
 
-.. autofunction:: yastn.decompress_from_1d
+.. autofunction:: yastn.Tensor.save_to_dict
+
+.. autofunction:: yastn.load_from_dict

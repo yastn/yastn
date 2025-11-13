@@ -26,6 +26,7 @@ from typing import Sequence
 
 import numpy as np
 
+from .._split_combine_dict import *
 from ._algebra import *
 from ._auxliary import _struct, _config
 from ._contractions import *
@@ -139,7 +140,7 @@ class Tensor:
     from ._output import get_shape, get_signature, get_dtype
     from ._output import get_tensor_charge, get_rank
     from ._output import to_number, to_dense, to_numpy, to_raw_tensor, to_nonsymmetric
-    from ._output import save_to_hdf5, save_to_dict, compress_to_1d, to_dict
+    from ._output import save_to_hdf5, save_to_dict, to_dict
     from ._tests import is_consistent, are_independent
     from ._merging import fuse_legs, unfuse_legs, fuse_meta_to_hard
     from ._krylov import expand_krylov_space
@@ -211,11 +212,15 @@ class Tensor:
                 d['config'] = config
 
             if d['level'] >= 2 or config is not None:
-                dtype = d['data'].dtype.name if hasattr(d['data'], 'dtype') else d['config'].default_dtype
+                if hasattr(d['data'], 'dtype'):
+                    dtype = 'complex128' if d['config'].backend.is_complex(d['data']) else 'float64'
+                else:
+                    dtype = d['config'].default_dtype
                 d['data'] = d['config'].backend.to_tensor(d['data'], dtype=dtype, device=d['config'].default_device)
 
-            return cls(**d)
-
+            out = cls(**d)
+            out.is_consistent()
+            return out
 
     @property
     def s(self) -> Sequence[int]:
@@ -318,6 +323,7 @@ class Tensor:
     @property
     def shape(self) -> tuple[int]:
         return self.get_shape()
+
 
 def _convert_lists_to_tuples(nested_iterable):
     if isinstance(nested_iterable, list):

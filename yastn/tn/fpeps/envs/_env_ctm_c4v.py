@@ -21,8 +21,9 @@ from ._env_ctm import EnvCTM, update_storage_, CTMRG_out, _partial_svd_predict_s
 from ._env_dataclasses import EnvCTM_c4v_local, EnvCTM_c4v_projectors
 from .._geometry import RectangularUnitcell, Lattice
 from .._peps import Peps, Peps2Layers, DoublePepsTensor, PEPS_CLASSES
-from ....initialize import eye, split_data_and_meta, combine_data_and_meta
+from ....initialize import eye
 from ....tensor import Leg, YastnError, tensordot, truncation_mask, truncation_mask_multiplets
+from ...._split_combine_dict import split_data_and_meta, combine_data_and_meta
 
 logger = logging.Logger('ctmrg')
 
