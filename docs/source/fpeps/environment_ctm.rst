@@ -44,4 +44,4 @@ two-site nearest-neighbor observables :meth:`yastn.tn.fpeps.EnvCTM.measure_nn`, 
 .. autoclass:: yastn.tn.fpeps.EnvCTM
     :members: to_dict, from_dict, reset_, bond_metric, update_, iterate_, measure_1site, measure_nn, sample, measure_2x2, measure_line, measure_nsite
 
-.. autoclass:: yastn.tn.fpeps.EnvCTM_local
+.. autoclass:: yastn.tn.fpeps.envs.EnvCTM_local

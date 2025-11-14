@@ -368,7 +368,7 @@ class _MpsMpoParent:
     def from_dict(cls, d, config=None):
         r"""
         De-serializes MPS or MPO from the dictionary ``d``.
-        See :meta:`yastn.Tensor.from_dict` for further description.
+        See :meth:`yastn.Tensor.from_dict` for further description.
         """
         if 'dict_ver' not in d:  # d from a legacy method save_to_dict
             nr_phys = d['nr_phys']

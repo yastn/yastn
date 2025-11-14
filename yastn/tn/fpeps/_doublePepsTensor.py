@@ -195,7 +195,7 @@ class DoublePepsTensor(SpecialTensor):
     def from_dict(cls, d, config=None) -> DoublePepsTensor:
         r"""
         De-serializes DoublePepsTensor from the dictionary ``d``.
-        See :meta:`yastn.Tensor.from_dict` for further description.
+        See :meth:`yastn.Tensor.from_dict` for further description.
         """
         if cls.__name__ != d['type']:
             raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")

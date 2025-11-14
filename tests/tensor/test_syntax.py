@@ -171,9 +171,9 @@ def test_syntax_tensor_export_import_operations(config_kwargs):
     # holding raw-data of blocks and dictionary, meta, which holds
     # the symmetric structure of the tensors.
     #
-    vector, meta = yastn.split_data_and_meta(a.to_dict(level=0))
+    vector, meta = yastn.split_data_and_meta(a.to_dict(level=0), squeeze=True)
     # assure that tensor structures is embeded in provided meta
-    vector, meta = yastn.split_data_and_meta(a.to_dict(level=0, meta=meta))
+    vector, meta = yastn.split_data_and_meta(a.to_dict(level=0, meta=meta), squeeze=True)
     tensor = yastn.Tensor.from_dict(yastn.combine_data_and_meta(vector, meta))
 
 

@@ -459,7 +459,7 @@ class Lattice():
     def from_dict(cls, d, config=None):
         r"""
         De-serializes Lattice or :class:`yastn.tn.fpeps.Peps` from the dictionary ``d``.
-        See :meta:`yastn.Tensor.from_dict` for further description.
+        See :meth:`yastn.Tensor.from_dict` for further description.
         """
         if 'dict_ver' not in d:  # d from a legacy method save_to_dict
             if 'lattice' in d:

@@ -310,7 +310,7 @@ class Peps2Layers():
     def from_dict(cls, d, config=None):
         r"""
         De-serializes :class:`yastn.tn.fpeps.Peps2Layers` from the dictionary ``d``.
-        See :meta:`yastn.Tensor.from_dict` for further description.
+        See :meth:`yastn.Tensor.from_dict` for further description.
         """
 
         if d['dict_ver'] == 1:

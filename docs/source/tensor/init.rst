@@ -72,6 +72,7 @@ These utility operations can export and then import tensors from
 different formats. For example, exporting and importing tensor or MPS to and from a file.
 
 .. autofunction:: yastn.Tensor.to_dict
+.. autofunction:: yastn.from_dict
 .. autofunction:: yastn.Tensor.from_dict
 .. autofunction:: yastn.Tensor.save_to_hdf5
 .. autofunction:: yastn.load_from_hdf5

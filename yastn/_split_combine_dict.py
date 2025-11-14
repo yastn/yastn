@@ -55,7 +55,7 @@ def _split_data_and_meta(d, data):
 
 def combine_data_and_meta(data: tuple['numpy.array' | 'torch.tensor'], meta: dict) -> dict:
     """
-    Reverse :meth:`yastn.separate_data_and_meta`.
+    Reverse :meth:`yastn.split_data_and_meta`.
     """
     d = {}
     if not isinstance(data, (list, tuple)):

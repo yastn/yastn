@@ -129,7 +129,7 @@ class EnvBoundaryMPS():
     def from_dict(cls, d, config=None):
         r"""
         De-serializes EnvBoundaryMPS from the dictionary ``d``.
-        See :meta:`yastn.Tensor.from_dict` for further description.
+        See :meth:`yastn.Tensor.from_dict` for further description.
         """
         if 'dict_ver' not in d:
             psi = PEPS_CLASSES['Peps'].from_dict(d['psi'], config)
