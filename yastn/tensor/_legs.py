@@ -14,16 +14,19 @@
 # ==============================================================================
 """ class yastn.Leg """
 from __future__ import annotations
+from typing import Sequence
 from dataclasses import dataclass
 from itertools import product, groupby
 from operator import itemgetter
+
 import numpy as np
+
 from ._auxliary import _flatten
+from ._merging import _Fusion, _hfs_union, _combine_hfs_prod, _unfuse_Fusion
 from ._tests import YastnError
 from ..sym import sym_none
-from ._merging import _Fusion, _hfs_union, _combine_hfs_prod, _unfuse_Fusion
 
-__all__ = ['Leg', 'LegMeta', 'legs_union', 'random_leg', 'leg_product', 'undo_leg_product']
+__all__ = ['Leg', 'LegMeta', 'legs_union', 'gaussian_leg', 'leg_product', 'undo_leg_product']
 
 
 @dataclass(frozen=True, repr=False)
@@ -108,11 +111,11 @@ class Leg:
     def __repr__(self):
         return self.__str__()
 
-    def conj(self) -> yastn.Leg:
+    def conj(self) -> Leg:
         r""" New :class:`yastn.Leg` with switched signature. """
         return Leg(sym=self.sym, s=-self.s, t=self.t, D=self.D, hf=self.hf.conj(), _verified=True)
 
-    def drop_history(self) -> yastn.Leg:
+    def drop_history(self) -> Leg:
         r""" New :class:`yastn.Leg` with no information on merging history. """
         return Leg(self.sym, self.s, self.t, self.D)
 
@@ -185,7 +188,7 @@ class LegMeta:
     def __str__(self):
         return ("LegMeta(sym={}, s={}, t={}, D={}, hist={})".format(self.sym, self.s, self.t, self.D, self.history()))
 
-    def conj(self) -> yastn.Leg:
+    def conj(self) -> Leg:
         r""" New :class:`yastn.Leg` with switched signature. """
         legs_conj = tuple(leg.conj() for leg in self.legs)
         return LegMeta(sym=self.sym, s=-self.s, t=self.t, D=self.D, mf=self.mf, legs=legs_conj)
@@ -194,7 +197,7 @@ class LegMeta:
         return True
 
 
-def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, nonnegative=False) -> yastn.Leg:
+def gaussian_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, nonnegative=False, method='round', spanning_vectors=None) -> Leg:
     """
     Create :class:`yastn.Leg` randomly distributing bond dimensions to sectors
     according to Gaussian distribution.
@@ -215,6 +218,10 @@ def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, nonnegative=F
         If :code:`True`, cut off negative charges.
     legs : Sequence[yastn.Leg]
         limits charges to match provided legs (e.g., in tensor with zero charge).
+    method: str
+        For 'round', approximate the integer sectorial bond dimensions to match gaussian distribution.
+        For 'rand', distribute sectorial bond dimensions randomly from gaussian distribution.
+        The default is 'round', which gives repeatable outcomes.
     """
     if config.sym.NSYM == 0:
         return Leg(config, s=s, D=(D_total,))
@@ -227,21 +234,18 @@ def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, nonnegative=F
         n = (n,)
     if len(n) != config.sym.NSYM:
         raise YastnError('len(n) is not consistent with provided symmetry.')
-
-    an = np.array(n, dtype=np.int64)
-    spanning_vectors = np.eye(len(n)) if not hasattr(config.sym, 'spanning_vectors') \
-        else np.array(config.sym.spanning_vectors)
-
-    nvec = len(spanning_vectors)
-    maxr = np.ceil(3 * sigma).astype(dtype=np.int64)
+    an = np.array(n).reshape(1, len(n))
+    spanning_vectors = np.eye(len(n)) if spanning_vectors is None else np.array(spanning_vectors)
 
     if legs is None:
+        nvec = len(spanning_vectors)
+        maxr = np.ceil(4 * sigma).astype(np.int64)
         shifts = np.zeros((2 * maxr + 1,) * nvec + (nvec,))
         for i in range(nvec):
             dims = (1,) * i + (2 * maxr + 1,) + (1,) * (nvec - i - 1)
             shifts[(slice(None),) * nvec + (i,)] = np.reshape(np.arange(-maxr, maxr+1), dims)
         ts = shifts.reshape(-1, nvec) @ spanning_vectors + an
-        ts = np.round(ts).astype(dtype=np.int64)
+        ts = np.round(ts).astype(np.int64)
         ts = config.sym.fuse(ts.reshape(-1, 1, config.sym.NSYM), (1,), 1)
     else:
         ss = tuple(leg.s for leg in legs)
@@ -257,19 +261,23 @@ def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, nonnegative=F
     uts = sorted(set(map(tuple, ts.tolist())))
     ts = np.array(uts, dtype=np.int64)
 
-    distance = np.linalg.norm((ts - an.reshape(1, len(n))) @ spanning_vectors.T, axis=1)
+    distance = np.linalg.norm((ts - an) @ spanning_vectors.T, axis=1)
     pd = np.exp(- (distance ** 2) / (2 * sigma ** 2))
     pd = pd / sum(pd)
 
-    Ds = np.zeros(len(ts), dtype=np.int64)
-    cdf = np.add.accumulate(pd).reshape(1, -1)
-    # backend.rand gives distribution in [-1, 1]; subjected to backend seed fixing
-    samples = (config.backend.rand(D_total, dtype='float64') + 1.) / 2.
-    samples = np.array(samples).reshape(D_total, 1)
-    inds = np.sum(samples > cdf, axis=1, dtype=np.int64)
-    for i in inds:
-        Ds[i] += 1
-    Ds = Ds.tolist()
+    if method == 'rand':
+        Ds = np.zeros(len(ts), dtype=np.int64)
+        cdf = np.add.accumulate(pd).reshape(1, -1)
+        rands = config.backend.rand(D_total, dtype='float64', device='cpu')  # in [0, 1]
+        for r in rands:
+            Ds[np.sum(r.item() > cdf)] += 1
+        Ds = Ds.tolist()
+    else: # method == 'round'
+        Ds = np.round(pd * D_total).astype(np.int64)
+        while sum(Ds) > D_total:
+            Ds[np.argmax(Ds - pd * D_total)] -= 1
+        while sum(Ds) < D_total:
+            Ds[np.argmin(Ds - pd * D_total)] += 1
     tnonzero, Dnonzero = zip(*[(t, D) for t, D in zip(uts, Ds) if D > 0])
     return Leg(config, s=s, t=tnonzero, D=Dnonzero)
 
@@ -283,7 +291,7 @@ def _legs_mask_needed(*legs):
     raise YastnError("Mixing meta- and hard-fused legs")
 
 
-def leg_product(*legs, t_allowed=None) -> yastn.Leg:
+def leg_product(*legs, t_allowed=None) -> Leg:
     """
     Output Leg being an outer product of a list of legs.
 
@@ -325,7 +333,7 @@ def leg_product(*legs, t_allowed=None) -> yastn.Leg:
     return Leg(sym=sym, s=seff, t=tnew, D=Dnew, hf=hf)
 
 
-def undo_leg_product(leg) -> Sequence[yastn.Leg]:
+def undo_leg_product(leg) -> Sequence[Leg]:
     """
     Reverse the operation of :meth:`yastn.leg_product`.
 
@@ -342,7 +350,7 @@ def undo_leg_product(leg) -> Sequence[yastn.Leg]:
     return tuple(Leg(sym=leg.sym, s=s, t=t, D=D, hf=hf) for s, t, D, hf in zip(ss, ts, Ds, hfs))
 
 
-def legs_union(*legs) -> yastn.Leg:
+def legs_union(*legs) -> Leg:
     """
     Output Leg that represent space being an union of spaces of a list of legs.
 

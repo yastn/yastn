@@ -27,7 +27,7 @@ Core Classes
 ------------
 
 .. autoclass:: yastn.tn.fpeps.SquareLattice
-    :members: sites, bonds, nn_site
+    :members: sites, bonds, nn_site, to_dict
 
 .. autoclass:: yastn.tn.fpeps.CheckerboardLattice
 

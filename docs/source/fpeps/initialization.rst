@@ -39,11 +39,12 @@ Import and export PEPS
 ----------------------
 
 PEPS instances can be saved as Python dict after serialization by
-:meth:`yastn.tn.fpeps.Peps.save_to_dict`. This enables saving the PEPS structure,
+:meth:`yastn.tn.fpeps.Peps.to_dict`. This enables saving the PEPS structure,
 lattice geometry, and tensor data for storage or transfer. A PEPS object can later be
-deserialized back using :meth:`yastn.tn.fpeps.load_from_dict`.
+deserialized back using :meth:`yastn.tn.fpeps.Peps.from_dict` or a general :meth:`yastn.from_dict`.
 
-.. autofunction:: yastn.tn.fpeps.load_from_dict
+.. autofunction:: yastn.tn.fpeps.Peps.to_dict
+.. autofunction:: yastn.tn.fpeps.Peps.from_dict
 
 Finite (small) PEPS can be contracted into a tensor.
 

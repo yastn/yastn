@@ -14,10 +14,13 @@
 # ==============================================================================
 """ Generator of basic local spin-1 operators. """
 from __future__ import annotations
+
 import numpy as np
-from .. import block
-from ..tensor import YastnError, Tensor, Leg
+
 from ._meta_operators import meta_operators
+from ..initialize import block
+from ..tensor import YastnError, Tensor, Leg
+
 
 class Spin1(meta_operators):
     # Predefine operators for spin-1 system.

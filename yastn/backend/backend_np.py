@@ -75,7 +75,7 @@ def copy(x):
 
 
 def to_numpy(x):
-    return x.copy()
+    return x if isinstance(x, (int, float, complex)) else x.copy()
 
 
 def get_shape(x):
@@ -172,10 +172,19 @@ def ones(D, dtype='float64', **kwargs):
     return np.ones(D, dtype=DTYPE[dtype])
 
 
-def rand(D, dtype='float64', **kwargs):
+def rand(D, dtype='float64', distribution=(0, 1), **kwargs):
+    if distribution == 'normal':
+        if dtype == 'float64':
+            return rng['rng'].normal(size=D)
+        # else:  # dtype == 'complex128':
+        return (rng['rng'].normal(size=D) + 1j * rng['rng'].normal(size=D)) / (2. ** 0.5)
     if dtype == 'float64':
-        return 2 * rng['rng'].random(D) - 1
-    return 2 * (rng['rng'].random(D) + 1j * rng['rng'].random(D)) - (1 + 1j)  # dtype == 'complex128
+        out = rng['rng'].random(D)
+        ds = 1
+    else:  # dtype == 'complex128':
+        out = rng['rng'].random(D) + 1j * rng['rng'].random(D)
+        ds = 1 + 1j
+    return out if distribution == (0, 1) else (distribution[1] - distribution[0]) * out + distribution[0] * ds
 
 
 def randint(low, high):
@@ -263,20 +272,29 @@ def safe_svd(a):
     return U, S, V
 
 
-def svd_lowrank(data, meta, sizes):
+def svd_lowrank(data, meta, sizes, **kwargs):
+    return svds_scipy(data, meta, sizes, None, 'arpack', **kwargs)
+
+def svds_scipy(data, meta, sizes, thresh=None, solver='arpack', **kwargs):
     Udata = np.empty((sizes[0],), dtype=data.dtype)
     Sdata = np.empty((sizes[1],), dtype=DTYPE['float64'])
     Vdata = np.empty((sizes[2],), dtype=data.dtype)
     for (sl, D, slU, DU, slS, slV, DV) in meta:
         k = slS[1] - slS[0]
-        if k < min(D) - 1 and D[0] * D[1] > 5000:
-            # the second condition is heuristic estimate when performing dense svd should be faster.
-            try:
-                U, S, V = scipy.sparse.linalg.svds(data[slice(*sl)].reshape(D), k=k, ncv=min(5 * k, min(D) - 1),
-                                                   which='LM', maxiter=20 * min(D), solver='arpack')
-            except scipy.sparse.linalg.ArpackError:
+        # Is block too small for iterative svd ?
+        # TODO user defined threshold
+        # the second condition is heuristic estimate when performing dense svd should be faster.
+        if (k < min(D) - 1 and D[0] * D[1] > 5000) or (not(thresh is None) and min(D)*thresh > k):
+            if solver == 'arpack':
+                try:
+                    U, S, V = scipy.sparse.linalg.svds(data[slice(*sl)].reshape(D), k=k, ncv=min(5 * k, min(D) - 1),
+                                                    which='LM', maxiter=20 * min(D), solver='arpack')
+                except scipy.sparse.linalg.ArpackError:
+                    U, S, V = scipy.sparse.linalg.svds(data[slice(*sl)].reshape(D), k=k,
+                                                    which='LM', maxiter=20 * k, solver='propack')
+            if solver == 'propack':
                 U, S, V = scipy.sparse.linalg.svds(data[slice(*sl)].reshape(D), k=k,
-                                                   which='LM', maxiter=20 * k, solver='propack')
+                                                    which='LM', maxiter=20 * k, solver='propack')
             ord = np.argsort(-S)
             U, S, V = U[:, ord], S[ord], V[ord, :]
         else:

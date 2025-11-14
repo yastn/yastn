@@ -13,10 +13,10 @@
 # limitations under the License.
 # ==============================================================================
 """ Interpretation of latex-like string into instrucitons further interpreted by YASTN. """
-
-from typing import NamedTuple
 from itertools import chain
 import re
+from typing import NamedTuple
+
 
 class GeneratorError(Exception):
     pass

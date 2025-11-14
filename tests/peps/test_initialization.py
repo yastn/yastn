@@ -117,23 +117,26 @@ def test_Peps_initialization(config_kwargs):
     assert (psi[0, 0] - A00).norm() < 1e-13
     assert (psi[1, 0] - A01).norm() < 1e-13
     #
+    psi = fpeps.Peps(geometry, tensors=A00)
+    assert all((psi[site] - A00).norm() < 1e-13 for site in psi.sites())
+    #
     # raising exceptions
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match='Peps: Non-unique assignment to unique lattice sites.'):
         fpeps.Peps(geometry, tensors={(0, 0): A00, (1, 1): A01})
-        # Peps: Non-unique assignment of tensor to unique lattice sites.
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match='Peps: Assignment outside of the lattice geometry.'):
         g_finite = fpeps.SquareLattice(dims=(2, 2), boundary='obc')
         fpeps.Peps(g_finite, tensors={(0, 4): A00})
-        # Peps: tensors assigned outside of the lattice geometry.
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match='Peps: Assignment outside of the lattice geometry.'):
         fpeps.Peps(geometry, tensors={0: A00})
-        # Peps: Non-unique assignment of tensor to unique lattice sites.
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match='Peps: Assignment outside of the lattice geometry.'):
         fpeps.Peps(geometry, tensors=[A00])
-        # Peps: tensors assigned outside of the lattice geometry.
-    with pytest.raises(yastn.YastnError):
+    with pytest.raises(yastn.YastnError,
+                       match='Not all unique lattice sites got assigned.'):
         fpeps.Peps(geometry, tensors=[[A00]])
-        # Peps: Not all unique lattice sites got assigned with a tensor.
 
 
 if __name__ == '__main__':

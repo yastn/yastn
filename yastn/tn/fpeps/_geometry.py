@@ -15,7 +15,10 @@
 """ Basic structures forming PEPS network. """
 from __future__ import annotations
 from typing import NamedTuple, Sequence
-from ... import YastnError
+from warnings import warn
+
+from .envs._env_dataclasses import DATA_CLASSES
+from ...tensor import YastnError
 
 
 class Site(NamedTuple):
@@ -55,7 +58,7 @@ _periodic_dict = {'infinite': 'ii', 'obc': 'oo', 'cylinder': 'po'}
 
 class SquareLattice():
 
-    def __init__(self, dims=(2, 2), boundary='infinite'):
+    def __init__(self, dims=(2, 2), boundary='infinite', **kwargs):
         r"""
         Geometric information about 2D square lattice.
 
@@ -150,7 +153,7 @@ class SquareLattice():
 
     def nn_site(self, site, d) -> Site | None:
         """
-        Index of the lattice site neighboring the :code:`site` in the direction :code:`d`.
+        Index of the lattice site neighboring the ``site`` in the direction ``d``.
 
         For infinite lattices, this function simply shifts the ``site`` by provided vector ``d``.
         For finite lattices with open/periodic boundary it handles corner cases where ``d`` is too large and the
@@ -213,19 +216,21 @@ class SquareLattice():
         """
         if site is None:
             return None
-        x = site[0] % self._dims[0] if self._periodic[0] == 'i' else site[0]
+        x = site[0] % self._dims[0] if self._periodic[0] in 'ip' else site[0]
         y = site[1] % self._dims[1] if self._periodic[1] == 'i' else site[1]
         return (x, y)
 
-    def __dict__(self):
-        """Return a dictionary representation of the object."""
-        return {'lattice': type(self).__name__,
-                'dims': self.dims, 'boundary': self.boundary}
+    def to_dict(self):
+        """ Return a dictionary representation of the object. """
+        return {'type': type(self).__name__,
+                'dict_ver': 1,
+                'dims': self.dims,
+                'boundary': self.boundary}
 
 
 class CheckerboardLattice(SquareLattice):
 
-    def __init__(self):
+    def __init__(self, **kwargs):
         r"""
         Geometric information about infinite checkerboard lattice, which
         is an infinite lattice with :math:`2{\times}2` unit cell and two unique tensors.
@@ -239,9 +244,10 @@ class CheckerboardLattice(SquareLattice):
         """ Tensor index depending on site. """
         return (site[0] + site[1]) % 2
 
-    def __dict__(self):
-        """Return a dictionary representation of the object."""
-        return {'lattice': type(self).__name__}
+    def to_dict(self):
+        """ Return a dictionary representation of the object. """
+        return {'type': type(self).__name__,
+                'dict_ver': 1}
 
 
 class RectangularUnitcell(SquareLattice):
@@ -302,10 +308,10 @@ class RectangularUnitcell(SquareLattice):
                     label = self._site2index[nx, ny]
                     env = (self.site2index((nx - 1, ny)), self.site2index((nx, ny - 1)), self.site2index((nx + 1, ny)), self.site2index((nx, ny + 1)))
                     if label in label_sites:
-                        label_sites[label].append((nx, ny))
+                        label_sites[label].append(Site(nx, ny))
                         label_envs[label].append(env)
                     else:
-                        label_sites[label] = [(nx, ny)]
+                        label_sites[label] = [Site(nx, ny)]
                         label_envs[label] = [env]
         except TypeError:
             raise YastnError("RectangularUnitcell: pattern labels should be hashable.")
@@ -333,17 +339,12 @@ class RectangularUnitcell(SquareLattice):
     def __repr__(self):
         return f"RectangularUnitcell(pattern={self._site2index})"
 
-    def __dict__(self):
-        """
-        Return a dictionary representation of the object.
-
-        ..Note ::
-
-            For serialiation to JSON, dict keys must be str/int/... Hence, we store pattern
-            in format Sequence[Sequence[int]].
-
-        """
-        return {'lattice': type(self).__name__,
+    def to_dict(self):
+        """ Return a dictionary representation of the object. """
+        # For serialiation to JSON, dict keys must be str/int/...
+        # Hence, we store pattern in format Sequence[Sequence[int]].
+        return {'type': type(self).__name__,
+                'dict_ver': 1,
                 'pattern': [[self.site2index((row, col)) for col in range(self.Ny)] for row in range(self.Nx)]}
 
 
@@ -399,15 +400,198 @@ class TriangularLattice(SquareLattice):
             return self._bonds_h[::-1] if reverse else self._bonds_h
         return self._bonds_d[::-1] + self._bonds_v[::-1] + self._bonds_h[::-1] if reverse else self._bonds_h + self._bonds_v + self._bonds_d
 
-    def __dict__(self):
+    def to_dict(self):
+        """ Return a dictionary representation of the object. """
+        # For serialiation to JSON, dict keys must be str/int/...
+        # Hence, we store pattern in format Sequence[Sequence[int]].
+        return {'type': type(self).__name__,
+                'dict_ver': 1,
+                'pattern': [[self.site2index((row, col)) for col in range(self.Ny)] for row in range(self.Nx)]}
+
+
+LATTICE_CLASSES = {"SquareLattice": SquareLattice,
+                   "CheckerboardLattice": CheckerboardLattice,
+                   "RectangularUnitcell": RectangularUnitcell,
+                   "TriangularLattice": TriangularLattice}
+class Lattice():
+
+    def __init__(self, geometry, objects=None):
+        r"""
+        A dataclass combining a geometry with data container pointing to unique lattice sites.
+
+        Parameters
+        ----------
+        geometry: SquareLattice | CheckerboardLattice | RectangularUnitcell
+            Specify lattice geometry.
         """
-        Return a dictionary representation of the object.
+        self.geometry = geometry.geometry if hasattr(geometry, 'geometry') else geometry
+        for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "f_ordered", "nn_bond_dirn"]:
+            setattr(self, name, getattr(geometry, name))
+        self._site_data = {self.site2index(site): None for site in self.sites()}
 
-        ..Note ::
+        if objects is not None:
+            try:
+                if isinstance(objects, Sequence):
+                    objects = {(nx, ny): tensor for nx, row in enumerate(objects) for ny, tensor in enumerate(row)}
+                if not isinstance(objects, dict):
+                    objects = {site: objects for site in self.geometry.sites()}
+                for site, tensor in objects.items():
+                    if self[site] is None:
+                        self[site] = tensor
+                    elif self[site] is not tensor:
+                        raise YastnError(f"{type(self).__name__}: Non-unique assignment to unique lattice sites.")
+            except (KeyError, TypeError):
+                raise YastnError(f"{type(self).__name__}: Assignment outside of the lattice geometry.")
+            if any(tensor is None for tensor in self._site_data.values()):
+                raise YastnError(f"{type(self).__name__}: Not all unique lattice sites got assigned.")
 
-            For serialiation to JSON, dict keys must be str/int/... Hence, we store pattern
-            in format Sequence[Sequence[int]].
+    def __getitem__(self, site):
+        """ Get tensor for site. """
+        return self._site_data[self.site2index(site)]
+
+    def __setitem__(self, site, obj):
+        """ Set tensor at site. """
+        self._site_data[self.site2index(site)] = obj
+
+    def items(self):
+        """ Allows iterating over lattice sites like in dict. """
+        return ((site, self[site]) for site in self.sites())
+
+    def to_dict(self, level=2) -> dict:
+        """
+        Serialize Lattice or Peps into a dictionary.
+        Complementary functions are :meth:`yastn.Lattice.from_dict` and :meth:`yastn.Peps.from_dict`,
+        or a general :meth:`yastn.from_dict`.
+        See :meth:`yastn.Tensor.to_dict` for further description.
+        """
+        return {'type': type(self).__name__,
+                'dict_ver': 1,
+                'geometry': self.geometry.to_dict(),
+                'site_data': {k: v.to_dict(level=level) for k, v in self._site_data.items() if v is not None}}
+
+    @classmethod
+    def from_dict(cls, d, config=None):
+        r"""
+        De-serializes Lattice or :class:`yastn.tn.fpeps.Peps` from the dictionary ``d``.
+        See :meth:`yastn.Tensor.from_dict` for further description.
+        """
+        if 'dict_ver' not in d:  # d from a legacy method save_to_dict
+            if 'lattice' in d:
+                d['type'] = d['lattice']  # for backward compatibility
+            if d['type'] in ["square", "SquareLattice"]:
+                net = SquareLattice(dims=d['dims'], boundary=d['boundary'])
+            elif d['type'] in ["checkerboard", "CheckerboardLattice"]:
+                net = CheckerboardLattice()
+            elif d['type'] in ["rectangularunitcell", "RectangularUnitcell"]:
+                net = RectangularUnitcell(pattern=d['pattern'])
+            elif d['type'] in ["triangular", "TriangularLattice"]:
+                net = TriangularLattice()
+            psi = cls(net)
+            for site in psi.sites():
+                obj = DATA_CLASSES["Tensor"].from_dict(d['data'][site], config)
+                if obj.ndim == 3:  obj = obj.unfuse_legs(axes=(0, 1))  # for backward compatibility
+                psi[site] = obj
+            return psi
+
+        if d['dict_ver'] == 1:  # d from method to_dict (single version as of now)
+            if cls.__name__ != d['type']:
+                raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
+            geometry = LATTICE_CLASSES[d['geometry']['type']](**d['geometry'])
+            net = cls(geometry)
+            for k, v in d['site_data'].items():
+                net._site_data[k] = DATA_CLASSES[v['type']].from_dict(v, config=config)
+            return net
+
+    def save_to_dict(self) -> dict:
+        """
+        Serialize PEPS into a dictionary.
+
+        !!! This method is deprecated; use to_dict() instead. !!!
 
         """
-        return {'lattice': type(self).__name__,
-                'pattern': [[self.site2index((row,col)) for col in range(self.Ny)] for row in range(self.Nx)]}
+        warn('This method is deprecated; use to_dict() instead.', DeprecationWarning, stacklevel=2)
+        d = {**self.geometry.to_dict(),
+             'data': {}}
+        d.pop('dict_ver')
+        for site in self.sites():
+            d['data'][site] = self[site].save_to_dict()
+        return d
+
+    def clone(self) -> Lattice:
+        r"""
+        Returns a deep clone of the PEPS instance by :meth:`cloning<yastn.Tensor.clone>` each tensor in
+        the network. Each tensor in the cloned PEPS will contain its own independent data blocks.
+        """
+        net = type(self)(geometry=self.geometry)
+        for ind in self._site_data:
+            if self._site_data[ind] is not None:
+                net._site_data[ind] = self._site_data[ind].clone()
+        return net
+
+    def copy(self) -> Lattice:
+        r"""
+        Returns a deep copy of the PEPS instance by :meth:`copy<yastn.Tensor.copy>` each tensor in
+        the network. Each tensor in the copied PEPS will contain its own independent data blocks.
+        """
+        net = type(self)(geometry=self.geometry)
+        for ind in self._site_data:
+            if self._site_data[ind] is not None:
+                net._site_data[ind] = self._site_data[ind].copy()
+        return net
+
+    def shallow_copy(self) -> Lattice:
+        r"""
+        New instance of :class:`yastn.tn.peps.Lattice` pointing to the same tensors as the old one.
+
+        Shallow copy is usually sufficient to retain the old PEPS.
+        """
+        net = type(self)(geometry=self.geometry)
+        for ind in self._site_data:
+            net._site_data[ind] = self._site_data[ind]
+        return net
+
+    def detach(self) -> Lattice:
+        r"""
+        Return a detached view of the environment - resulting environment is **not** a part
+        of the computational graph. Data of detached environment tensors is shared
+        with the originals.
+        """
+        net = type(self)(geometry=self.geometry)
+        for ind in self._site_data:
+            if self._site_data[ind] is not None:
+                net._site_data[ind] = self._site_data[ind].detach()
+        return net
+
+    def detach_(self):
+        r"""
+        Detach all environment tensors from the computational graph.
+        Data of environment tensors in detached environment is a `view` of the original data.
+        """
+        for ind in self._site_data:
+            if self._site_data[ind] is not None:
+                self._site_data[ind].detach_()
+
+    def allclose(self, other, rtol=1e-13, atol=1e-13):
+        if not isinstance(other, type(self)):
+            return False
+        if self.geometry != other.geometry:
+            return False
+        for k, a in self._site_data.items():
+            b = other._site_data[k]
+            if (a is not None and b is not None and not a.allclose(b, rtol=rtol, atol=atol)) or \
+               (a is not None and b is None) or (a is None and b is not None):
+                return False
+        return True
+
+    def are_independent(self, other, independent=True):
+        """
+        Test if corresponding data fields have independent tensors
+
+        independent allows testing case when all elements are None
+        """
+        tests = []
+        for k, a in self._site_data.items():
+            b = other._site_data[k]
+            if a is not None and b is not None:
+                tests.append(a.are_independent(b, independent=independent))
+        return all(tests)

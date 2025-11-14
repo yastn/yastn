@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 """ Test PEPS measurments with MpsBoundary in a product state. """
+import re
 import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
@@ -27,32 +28,22 @@ def run_ctm_save_load_copy(env):
     config = env.psi.config
     d = env.save_to_dict()
 
-    env_save = fpeps.load_from_dict(config, d)
     env_copy = env.copy()
     env_clone = env.clone()
     env_shallow = env.shallow_copy()
+    env_shallow.detach_()
     env_detach = env.detach()
 
-    for site in env.sites():
-        for dirn in  ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
-            ten0 = getattr(env[site], dirn)
-            ten1 = getattr(env_save[site], dirn)
-            ten2 = getattr(env_copy[site], dirn)
-            ten3 = getattr(env_clone[site], dirn)
-            ten4 = getattr(env_shallow[site], dirn)
-            ten5 = getattr(env_detach[site], dirn)
+    dicts = [env.to_dict(level) for level in [0, 1, 2]]
+    env_dict = [fpeps.EnvCTM.from_dict(d) for d in dicts]
+    env_split = [yastn.from_dict(yastn.combine_data_and_meta(*yastn.split_data_and_meta(d))) for d in dicts]
 
-            assert yastn.are_independent(ten0, ten1)
-            assert yastn.are_independent(ten0, ten2)
-            assert yastn.are_independent(ten0, ten3)
-            assert ten0 is ten4
-
-            assert (ten0 - ten1).norm() < 1e-14
-            assert (ten0 - ten2).norm() < 1e-14
-            assert (ten0 - ten3).norm() < 1e-14
-            assert (ten0 - ten4).norm() < 1e-14
-            assert (ten0 - ten5).norm() < 1e-14
-    env.detach_()
+    for new, ind in zip([env_copy, env_clone, env_shallow, env_detach, *env_dict, *env_split],
+                        [True, True, False, False, False, False, True, False, False, True]):
+        assert env.env.allclose(new.env)
+        assert env.proj.allclose(new.proj)
+        assert env.env.are_independent(new.env, independent=ind)
+        assert env.proj.are_independent(new.proj, independent=ind)
 
 
 @pytest.mark.parametrize("boundary", ["obc", "infinite"])
@@ -164,8 +155,11 @@ def test_ctmrg_measure_product(config_kwargs, boundary):
                        match="Number of operators and sites should match."):
         env.measure_nsite(sz, sz, sites=((0, 0),))
     with pytest.raises(yastn.YastnError,
-                       match=r"EnvCTM init='something' not recognized. Should be 'rand', 'eye', 'dl', or None."):
+                       match=re.escape("EnvCTM init='something' not recognized. Should be 'rand', 'eye', 'dl', or None.")):
         fpeps.EnvCTM(psi, init='something')
+    with pytest.raises(yastn.YastnError,
+                       match=re.escape("CTM update method='something' not recognized. Should be '1site' or '2site'")):
+        env.update_(opts_svd={}, method='something')
 
 
 @pytest.mark.parametrize("env_init", ["eye", "dl"])

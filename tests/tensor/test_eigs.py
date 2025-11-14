@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-""" yastn.compress_to_1d() yastn.decompress_from_1d()  in combination with scipy LinearOperator and eigs """
+""" yastn.to_dict() from_dict() split_data_and_meta  combine_data_and_meta in combination with scipy LinearOperator and eigs """
 import pytest
 from scipy.sparse.linalg import eigs
 import yastn

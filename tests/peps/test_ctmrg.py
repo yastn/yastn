@@ -144,19 +144,24 @@ def test_ctmrg_Ising_4x5(config_kwargs):
     leg2 = yastn.Leg(config, s=1, t=(0, 1), D=(2, 2))
 
     T = yastn.ones(config, legs=[leg, leg, leg.conj(), leg.conj()], n=0)
+
+    Tket = yastn.rand(config, legs=[leg, leg, leg.conj(), leg.conj(), leg], n=0)
+    Tbra = yastn.rand(config, legs=[leg2, leg2, leg2.conj(), leg2.conj(), leg], n=0)
+
     XL = yastn.ones(config, legs=[leg, leg, leg.conj(), leg2.conj()], n=0)
     XR = yastn.ones(config, legs=[leg, leg2, leg.conj(), leg.conj()], n=0)
     XT = yastn.ones(config, legs=[leg, leg, leg2.conj(), leg.conj()], n=0)
     XB = yastn.ones(config, legs=[leg2, leg, leg.conj(), leg.conj()], n=0)
     #
     geometry = fpeps.SquareLattice(dims=(4, 5), boundary='obc')
-    psi = fpeps.Peps(geometry=geometry, tensors=[[T, T, T, T, T],
-                                                 [T, T, T, T, T],
-                                                 [T, T, T, T, T],
-                                                 [T, T, T, T, T]])
-    #
+    psi = fpeps.Peps(geometry=geometry, tensors=[[T] * 5] * 4)
+
+    bra = fpeps.Peps(geometry=geometry, tensors=[[Tbra] * 5] * 4)
+    ket = fpeps.Peps(geometry=geometry, tensors=[[Tket] * 5] * 4)
+
+
     chi = 4
-    env = fpeps.EnvCTM(psi, init='eye')
+    env = fpeps.EnvCTM(psi, init='eye', ket=ket)
     opts_svd = {"D_total": chi}
     info = env.ctmrg_(opts_svd=opts_svd, moves='lrtb', max_sweeps=10, corner_tol=1e-12)
     assert info.converged
@@ -176,9 +181,21 @@ def test_ctmrg_Ising_4x5(config_kwargs):
     #
     # checks if properly updated on a boundary
     bonds = [((0, 0), (0, 1)), ((3, 4), (3, 3)),
-             ((0, 0), (1, 0)), ((3, 4), (2, 4))]
+            ((0, 0), (1, 0)), ((3, 4), (2, 4))]
     for bond in bonds:
         env.update_bond_(bond, opts_svd=opts_svd)
+
+    env = fpeps.EnvCTM(ket, init='eye')
+    opts_svd = {"D_total": 4}
+    info = env.ctmrg_(opts_svd=opts_svd, moves='lrtb', max_sweeps=4, corner_tol=1e-8)
+    # assert info.converged
+    env[2,3].t.get_legs(axes=1).unfuse_leg() == (leg, leg)
+
+    env = fpeps.EnvCTM(bra, init='eye', ket=ket)
+    opts_svd = {"D_total": 4}
+    info = env.ctmrg_(opts_svd=opts_svd, moves='lrtb', max_sweeps=4, corner_tol=1e-8)
+    # assert info.converged
+    env[2,3].t.get_legs(axes=1).unfuse_leg() == (leg2, leg)
 
 
 @pytest.mark.parametrize("checkpoint_move", ['reentrant', 'nonreentrant', False])
@@ -244,7 +261,7 @@ def test_1x1_D1_Z2_spinlessf_conv(ctm_init, fix_signs, truncate_multiplets_mode,
         d = json.load(f)
 
     g= fpeps.RectangularUnitcell(**d['geometry'])
-    A= { tuple(d['parameters_key_to_id'][coord]): yastn.load_from_dict(yastn_cfg_Z2, d_ten)
+    A= {tuple(d['parameters_key_to_id'][coord]): yastn.Tensor.from_dict(d_ten, config=yastn_cfg_Z2)
                                  for coord,d_ten in d['parameters'].items() }
 
     psi = fpeps.Peps(g, tensors=A)
@@ -270,4 +287,4 @@ def test_1x1_D1_Z2_spinlessf_conv(ctm_init, fix_signs, truncate_multiplets_mode,
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0", "--long_tests", "--backend", "torch"])
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"]) #,  "--long_tests", ])

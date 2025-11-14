@@ -14,9 +14,15 @@
 # ==============================================================================
 """ MpsMpoParent structure and basic methods common for OBC and PBC. """
 from __future__ import annotations
-from typing import Iterator, Sequence
 from numbers import Number, Integral
-from ... import YastnError, Tensor, Leg
+from typing import Iterator, Sequence
+from warnings import warn
+
+from ...tensor import YastnError, Tensor, Leg
+from ...tn.fpeps._doublePepsTensor import DoublePepsTensor
+
+TENSOR_CLASSES = {"Tensor": Tensor,
+                  "DoublePepsTensor": DoublePepsTensor}
 
 
 class _MpsMpoParent:
@@ -78,14 +84,14 @@ class _MpsMpoParent:
             return range(df, self.N - dl)
         if to == 'first':
             return range(self.N - 1 - dl, df - 1, -1)
-        raise YastnError('"to" in sweep should be in "first" or "last"')
+        raise YastnError('"to" in sweep should be in "first" or "last".')
 
     def __getitem__(self, n) -> Tensor:
         """ Return tensor corresponding to n-th site."""
         try:
             return self.A[n]
         except KeyError as e:
-            raise YastnError(f"MpsMpoOBC does not have site with index {n}") from e
+            raise YastnError(f"MpsMpoOBC does not have site with index {n}.") from e
 
     def __setitem__(self, n, tensor):
         """
@@ -94,9 +100,9 @@ class _MpsMpoParent:
         Assigning central block is not supported.
         """
         if not isinstance(n, Integral) or n < self.first or n > self.last:
-            raise YastnError("MpsMpoOBC: n should be an integer in 0, 1, ..., N-1")
+            raise YastnError("MpsMpoOBC: n should be an integer in 0, 1, ..., N-1.")
         if tensor.ndim != self.nr_phys + 2:
-            raise YastnError(f"MpsMpoOBC: Tensor rank should be {self.nr_phys + 2}")
+            raise YastnError(f"MpsMpoOBC: Tensor rank should be {self.nr_phys + 2}.")
         self.A[n] = tensor
 
     def shallow_copy(self) -> _MpsMpoParent:
@@ -290,10 +296,14 @@ class _MpsMpoParent:
         r"""
         Serialize MPS/MPO into a dictionary.
 
+        !!! This method is deprecated; use to_dict() instead !!!
+
         Each element represents serialized :class:`yastn.Tensor`
         (see, :meth:`yastn.Tensor.save_to_dict`) of the MPS/MPO.
         Absorbs central block if it exists.
         """
+        warn('This method is deprecated; use to_dict() instead.', DeprecationWarning, stacklevel=2)
+
         psi = self.shallow_copy()
         psi.absorb_central_()  # make sure central block is eliminated
         out_dict = {
@@ -337,3 +347,44 @@ class _MpsMpoParent:
         """
         axes = (tuple(range(self.N)),) if self.nr_phys == 1 else (tuple(range(0, 2 * self.N, 2)), tuple(range(1, 2 * self.N, 2)))
         return self.to_tensor().fuse_legs(axes=axes)
+
+    def to_dict(psi, level=2):
+        r"""
+        Serialize MPS/MPO to a dictionary.
+        Complementary functions are :meth:`yastn.MpsMpoOBC.from_dict` and :meth:`yastn.MpoPBC.from_dict`,
+        or a general :meth:`yastn.from_dict`.
+        See :meth:`yastn.Tensor.to_dict` for further description.
+        """
+        factor = psi.factor if level < 2 else psi.config.backend.to_numpy(psi.factor)
+        return {'type': type(psi).__name__,
+                'dict_ver': 1,
+                'N': psi.N,
+                'pC': psi.pC,
+                'nr_phys': psi.nr_phys,
+                'factor': factor,
+                'A': {k: v.to_dict(level=level) for k, v in psi.A.items()}}
+
+    @classmethod
+    def from_dict(cls, d, config=None):
+        r"""
+        De-serializes MPS or MPO from the dictionary ``d``.
+        See :meth:`yastn.Tensor.from_dict` for further description.
+        """
+        if 'dict_ver' not in d:  # d from a legacy method save_to_dict
+            nr_phys = d['nr_phys']
+            N = d['N'] if 'N' in d else len(d['A'])  # backwards compability
+            out_mps = cls(N, nr_phys=nr_phys)
+            if 'factor' in d:  # backwards compability
+                out_mps.factor = d['factor']
+            for n in range(out_mps.N):
+                out_mps.A[n] = Tensor.from_dict(d=d['A'][n], config=config)
+            return out_mps
+
+        if d['dict_ver'] == 1:
+            if cls.__name__ != d['type']:
+                raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
+            psi = cls(N=d['N'], nr_phys=d['nr_phys'])
+            psi.factor = d['factor']
+            psi.pC = d['pC']
+            psi.A = {k: TENSOR_CLASSES[v['type']].from_dict(v, config=config) for k, v in d['A'].items()}
+            return psi

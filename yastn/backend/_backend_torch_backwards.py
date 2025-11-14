@@ -19,7 +19,7 @@ import numpy as np
 import torch
 
 from .linalg.torch_svd_gesdd import SVDGESDD
-from .linalg.torch_svd_arnoldi import SVDARNOLDI
+from .linalg.torch_svds_scipy import SVDS_SCIPY
 # from .linalg.torch_eig_arnoldi import SYMARNOLDI, SYMARNOLDI_2C
 
 
@@ -27,9 +27,9 @@ class kernel_svd(torch.autograd.Function):
     @staticmethod
     def forward(data, meta, sizes, fullrank_uv=False, ad_decomp_reg=1.0e-12, diagnostics=None):
         real_dtype = data.real.dtype if data.is_complex() else data.dtype
-        Udata = torch.empty((sizes[0],), dtype=data.dtype, device=data.device)
-        Sdata = torch.empty((sizes[1],), dtype=real_dtype, device=data.device)
-        Vhdata = torch.empty((sizes[2],), dtype=data.dtype, device=data.device)
+        Udata = torch.empty(sizes[0], dtype=data.dtype, device=data.device)
+        Sdata = torch.empty(sizes[1], dtype=real_dtype, device=data.device)
+        Vhdata = torch.empty(sizes[2], dtype=data.dtype, device=data.device)
         reg = torch.as_tensor(ad_decomp_reg, dtype=real_dtype, device=data.device)
         for (sl, D, slU, DU, slS, slV, DV) in meta:
             U, S, Vh = SVDGESDD.forward(data[slice(*sl)].view(D), reg, fullrank_uv, diagnostics)
@@ -66,16 +66,16 @@ class kernel_svd(torch.autograd.Function):
         return data_b, None, None, None, None, None
 
 
-class kernel_svd_arnoldi(torch.autograd.Function):
+class kernel_svds_scipy(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, data, meta, sizes, thresh, solver):
+    def forward(ctx, data, meta, sizes, thresh, solver, **kwargs):
         real_dtype = data.real.dtype if data.is_complex() else data.dtype
-        Udata = torch.empty((sizes[0],), dtype=data.dtype, device=data.device)
-        Sdata = torch.empty((sizes[1],), dtype=real_dtype, device=data.device)
-        Vhdata = torch.empty((sizes[2],), dtype=data.dtype, device=data.device)
+        Udata = torch.empty(sizes[0], dtype=data.dtype, device=data.device)
+        Sdata = torch.empty(sizes[1], dtype=real_dtype, device=data.device)
+        Vhdata = torch.empty(sizes[2], dtype=data.dtype, device=data.device)
         for (sl, D, slU, DU, slS, slV, DV) in meta:
             k = slS[1] - slS[0]
-            U, S, V = SVDARNOLDI.apply(data[slice(*sl)].view(D), k, thresh, solver)
+            U, S, V = SVDS_SCIPY.apply(data[slice(*sl)].view(D), k, thresh, solver, **kwargs)
             Udata[slice(*slU)].reshape(DU)[:] = U
             Sdata[slice(*slS)] = S
             Vhdata[slice(*slV)].reshape(DV)[:] = V
@@ -187,18 +187,41 @@ class kernel_transpose_dot_sum(torch.autograd.Function):
         for (sl, Dslc, list_tab) in meta_dot:
             tmp = Cdata_b[slice(*sl)].view(Dslc)
             for ta, tb in list_tab:
-                At_b[ta] += tmp @ Bt[tb].adjoint()
-                Bt_b[tb] += At[ta].adjoint() @ tmp
+                # At_b[ta] += tmp @ Bt[tb].adjoint()
+                # Bt_b[tb] += At[ta].adjoint() @ tmp
+                At_b[ta] = At_b[ta] + tmp @ Bt[tb].adjoint()
+                Bt_b[tb] = Bt_b[tb] + At[ta].adjoint() @ tmp
 
-        Adata_b = torch.zeros_like(Adata)
-        for v, (sl, Di, _, _) in zip(At_b, Areshape):
-            inv_Di = tuple(Di[n] for n in Aorder)
-            Adata_b[slice(*sl)].reshape(Di)[:] = v.reshape(inv_Di).permute(inv_Aorder)
+        # Adata_b = torch.zeros_like(Adata)
+        # for v, (sl, Di, _, _) in zip(At_b, Areshape):
+        #     inv_Di = tuple(Di[n] for n in Aorder)
+        #     Adata_b[slice(*sl)].reshape(Di)[:] = v.reshape(inv_Di).permute(inv_Aorder)
 
-        Bdata_b = torch.zeros_like(Bdata)
-        for v, (sl, Di, _, _) in zip(Bt_b, Breshape):
-            inv_Di = tuple(Di[n] for n in Border)
-            Bdata_b[slice(*sl)].reshape(Di)[:] = v.reshape(inv_Di).permute(inv_Border)
+        # Bdata_b = torch.zeros_like(Bdata)
+        # for v, (sl, Di, _, _) in zip(Bt_b, Breshape):
+        #     inv_Di = tuple(Di[n] for n in Border)
+        #     Bdata_b[slice(*sl)].reshape(Di)[:] = v.reshape(inv_Di).permute(inv_Border)
+
+        # Accumulate gradients
+        # Build gradient tensors using scatter (vmap compatible)
+        def build_grad(blocks_grad, reshape_info, order, inv_order, size, dtype, device):
+            indices_list = []
+            values_list = []
+            for grad, (sl, Di, _, _) in zip(blocks_grad, reshape_info):
+                inv_Di = tuple(Di[n] for n in order)
+                values = grad.reshape(inv_Di).permute(inv_order).contiguous().reshape(-1)
+                indices = torch.arange(sl[0], sl[1], dtype=torch.long, device=device)
+                indices_list.append(indices)
+                values_list.append(values)
+
+            if indices_list:
+                all_idx = torch.cat(indices_list)
+                all_val = torch.cat(values_list)
+                return torch.zeros(size, dtype=dtype, device=device).scatter(0, all_idx, all_val)
+            return torch.zeros(size, dtype=dtype, device=device)
+
+        Adata_b = build_grad(At_b, Areshape, Aorder, inv_Aorder, Adata.numel(), Adata.dtype, Adata.device)
+        Bdata_b = build_grad(Bt_b, Breshape, Border, inv_Border, Bdata.numel(), Bdata.dtype, Bdata.device)
 
         return Adata_b, Bdata_b, None, None, None, None, None, None
 

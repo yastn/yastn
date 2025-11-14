@@ -13,31 +13,36 @@
 # limitations under the License.
 # ==============================================================================
 from __future__ import annotations
-from typing import Sequence, Union
-from ... import Tensor, YastnError, block
-from ...tn.mps import Mpo, MpsMpoOBC, MpoPBC
+from typing import Sequence
+
 from ._doublePepsTensor import DoublePepsTensor
 from ._gates_auxiliary import apply_gate_onsite, gate_from_mpo, gate_fix_swap_gate, fill_eye_in_gate
+from ._geometry import Lattice
+from ...initialize import block
+from ...tensor import Tensor, YastnError
+from ...tn.mps import Mpo, MpsMpoOBC, MpoPBC
 
-class Peps():
 
-    def __init__(self, geometry, tensors: Union[None, Sequence[Sequence[Tensor]], dict[tuple[int,int],Tensor]]= None):
+class Peps(Lattice):
+
+    def __init__(self, geometry, tensors: None | Tensor | Sequence[Sequence[Tensor]] | dict[tuple[int,int], Tensor] = None):
         r"""
         A PEPS instance on a specified lattice can be initialized as empty (with no tensors assiged) or with tensors assigned to each unique lattice site.
 
         PEPS inherits key methods (e.g., sites, bonds, dims) from the associated lattice geometry.
-        Supports :code:`[]` notation to get/set individual tensors.
+        Supports ``[]`` notation to get/set individual tensors.
         PEPS tensors can be either rank-5 (including physical legs) or rank-4 (without physical legs).
         Leg enumeration follows the order: top, left, bottom, right, and physical leg.
 
         Parameters
         ----------
-        geometry: SquareLattice | CheckerboardLattice | RectangularUnitcell
+        geometry: SquareLattice | CheckerboardLattice | RectangularUnitcell | TriangularLattice
             Specify lattice geometry.
 
-        tensors: Optional[Sequence[Sequence[Tensor]] | dict[tuple[int,int],Tensor]]]
+        tensors: Optional[Tensor | Sequence[Sequence[Tensor]] | dict[tuple[int,int],Tensor]]]
             Fill in the Peps lattice with tensors.
             Each unique sites should get assigned in a way consistent with the geometry.
+            If a single Tensor is provided, it is distributed over the lattice.
 
         Example
         -------
@@ -59,7 +64,6 @@ class Peps():
             #
             A00 = yastn.rand(config, legs=[leg.conj(), leg, leg, leg.conj(), leg])
             psi[0, 0] = A00
-            #
             assert psi[0, 0].ndim == 5
 
             # PEPS with no physical legs is also possible.
@@ -78,32 +82,11 @@ class Peps():
             #
             psi = fpeps.Peps(geometry, tensors=[[A00, A01], [A01, A00]])
             # above, some provided tensors are redundant, although this redundancy is consistent with the geometry.
-
+            #
+            psi = fpeps.Peps(geometry, tensors=A00)
+            # above, all PEPS sites are assigned with the tensor A00.
         """
-        self.geometry = geometry
-        for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "f_ordered", "nn_bond_dirn"]:
-            setattr(self, name, getattr(geometry, name))
-        self._data = {self.site2index(site): None for site in self.sites()}
-
-        if tensors is not None:
-            try:
-                if isinstance(tensors, Sequence):
-                    dict_tensors = {}
-                    for nx, row in enumerate(tensors):
-                        for ny, tensor in enumerate(row):
-                            dict_tensors[nx, ny] = tensor
-                    tensors = dict_tensors
-                tmp_tensors = {}  # TODO: remove it when extra fusion of Peps tensors is removed
-                for site, tensor in tensors.items():
-                    if self[site] is None:
-                        self[site] = tensor
-                        tmp_tensors[self.site2index(site)] = tensor
-                    if tmp_tensors[self.site2index(site)] is not tensor:
-                        raise YastnError("Peps: Non-unique assignment of tensor to unique lattice sites.")
-            except (KeyError, TypeError):
-                raise YastnError("Peps: tensors assigned outside of the lattice geometry.")
-            if any(tensor is None for tensor in self._data.values()):
-                raise YastnError("Peps: Not all unique lattice sites got assigned with a tensor.")
+        super().__init__(geometry, tensors)
 
     @property
     def config(self):
@@ -115,63 +98,8 @@ class Peps():
         site0 = self.sites()[0]
         return self[site0].ndim in (3, 5)
 
-    def __getitem__(self, site) -> Tensor:
-        """ Get tensor for site. """
-        return self._data[self.site2index(site)]
-
-    def __setitem__(self, site, obj):
-        """ Set tensor at site. """
-        self._data[self.site2index(site)] = obj
-
-    def __dict__(self) -> dict:
-        """
-        Serialize PEPS into a dictionary.
-        """
-        d = {**self.geometry.__dict__(),
-             'data': {}}
-        for site in self.sites():
-            d['data'][site] = self[site].save_to_dict()
-        return d
-
-    def save_to_dict(self) -> dict:
-        """
-        Serialize PEPS into a dictionary.
-        """
-        return self.__dict__()
-
     def __repr__(self) -> str:
-        return f"Peps(geometry={self.geometry.__repr__()}, tensors={ self._data })"
-
-    def clone(self) -> Peps:
-        r"""
-        Returns a deep clone of the PEPS instance by :meth:`cloning<yastn.Tensor.clone>` each tensor in
-        the network. Each tensor in the cloned PEPS will contain its own independent data blocks.
-        """
-        psi = Peps(geometry=self.geometry)
-        for ind in self._data:
-            psi._data[ind] = self._data[ind].clone()
-        return psi
-
-    def copy(self) -> Peps:
-        r"""
-        Returns a deep copy of the PEPS instance by :meth:`copy<yastn.Tensor.copy>` each tensor in
-        the network. Each tensor in the copied PEPS will contain its own independent data blocks.
-        """
-        psi = Peps(geometry=self.geometry)
-        for ind in self._data:
-            psi._data[ind] = self._data[ind].copy()
-        return psi
-
-    def shallow_copy(self) -> Peps:
-        r"""
-        New instance of :class:`yastn.tn.mps.Peps` pointing to the same tensors as the old one.
-
-        Shallow copy is usually sufficient to retain the old PEPS.
-        """
-        psi = Peps(geometry=self.geometry)
-        for ind in self._data:
-            psi._data[ind] = self._data[ind]
-        return psi
+        return f"Peps(geometry={self.geometry.__repr__()}, tensors={ self._site_data })"
 
     def transfer_mpo(self, n=0, dirn='v') -> MpsMpoOBC | MpoPBC:
         """
@@ -200,7 +128,7 @@ class Peps():
         elif dirn == 'v':
             periodic = (self.boundary == "cylinder")
             op = Mpo(N=self.Nx, periodic=periodic)
-            op.tol = self._data['tol'] if 'tol' in self._data else None
+            op.tol = self._site_data['tol'] if 'tol' in self._site_data else None
             for nx in range(self.Nx):
                 site = (nx, n)
                 psi = self[site]
@@ -339,7 +267,7 @@ class Peps2Layers():
         If ket is not provided, ket = bra.
         """
         self.bra = bra
-        self.ket = bra if ket is None else ket
+        self._ket = ket
         assert self.ket.geometry == self.bra.geometry
         self.geometry = bra.geometry
 
@@ -347,8 +275,16 @@ class Peps2Layers():
             setattr(self, name, getattr(bra.geometry, name))
 
     @property
+    def ket(self):
+        return self.bra if self._ket is None else self._ket
+
+    @property
+    def ket_is_bra(self):
+        return self._ket is None
+
+    @property
     def config(self):
-        return self.ket.config
+        return self.bra.config
 
     def has_physical(self) -> bool:
         return False
@@ -356,3 +292,34 @@ class Peps2Layers():
     def __getitem__(self, site) -> DoublePepsTensor:
         """ Get tensor for site. """
         return DoublePepsTensor(bra=self.bra[site], ket=self.ket[site])
+
+    def to_dict(self, level=2) -> dict:
+        r"""
+        Serialize Peps2Layers to a dictionary.
+        Complementary function is :meth:`yastn.Peps2Layers.from_dict` or a general :meth:`yastn.from_dict`.
+        See :meth:`yastn.Tensor.to_dict` for further description.
+        """
+        d = {'type': type(self).__name__,
+             'dict_ver': 1,
+             'bra': self.bra.to_dict(level=level)}
+        if self._ket is not None:
+            d['ket'] = self._ket.to_dict(level=level)
+        return d
+
+    @classmethod
+    def from_dict(cls, d, config=None):
+        r"""
+        De-serializes :class:`yastn.tn.fpeps.Peps2Layers` from the dictionary ``d``.
+        See :meth:`yastn.Tensor.from_dict` for further description.
+        """
+
+        if d['dict_ver'] == 1:
+            if cls.__name__ != d['type']:
+                raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
+            bra = Peps.from_dict(d['bra'], config=config)
+            ket = Peps.from_dict(d['ket'], config=config) if ('ket' in d) else None
+            return Peps2Layers(bra=bra, ket=ket)
+
+
+PEPS_CLASSES = {'Peps': Peps,
+                'Peps2Layers': Peps2Layers}

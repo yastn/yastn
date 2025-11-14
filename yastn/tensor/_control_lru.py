@@ -14,10 +14,10 @@
 # ==============================================================================
 """ Dynamical changing of lru_cache maxsize. """
 from functools import lru_cache
+
 from . import _merging, _contractions, _algebra
 
-
-__all__ = ['set_cache_maxsize', 'get_cache_info', 'clear_cache']
+__all__ = ['clear_cache', 'get_cache_info', 'set_cache_maxsize']
 
 
 def set_cache_maxsize(maxsize=0):

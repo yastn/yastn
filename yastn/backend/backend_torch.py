@@ -18,7 +18,7 @@ from functools import reduce
 import torch
 from torch.utils.checkpoint import checkpoint as _checkpoint
 from .linalg.torch_eig_sym import SYMEIG
-from ._backend_torch_backwards import kernel_svd, kernel_svd_arnoldi
+from ._backend_torch_backwards import kernel_svd, kernel_svds_scipy
 from ._backend_torch_backwards import kernel_dot, kernel_transpose_dot_sum, kernel_negate_blocks
 from ._backend_torch_backwards import kernel_apply_mask, kernel_embed_mask
 from ._backend_torch_backwards import kernel_transpose, kernel_transpose_and_merge, kernel_unmerge
@@ -44,7 +44,9 @@ __all__= [
 
 torch.random.seed()
 BACKEND_ID = "torch"
-DTYPE = {'float64': torch.float64,
+DTYPE = {'float32': torch.float32,
+         'float64': torch.float64,
+         'complex64': torch.complex64,
          'complex128': torch.complex128}
 
 
@@ -94,7 +96,7 @@ def copy(x):
 
 
 def to_numpy(x):
-    return x.resolve_conj().detach().cpu().numpy()
+    return x if isinstance(x, (int, float, complex)) else x.numpy(force=True).copy()
 
 
 def get_shape(x):
@@ -193,9 +195,12 @@ def ones(D, dtype='float64', device='cpu'):
     return torch.ones(D, dtype=DTYPE[dtype], device=device)
 
 
-def rand(D, dtype='float64', device='cpu'):
+def rand(D, dtype='float64', distribution=(0, 1), device='cpu'):
+    if distribution == 'normal':
+        return torch.randn(D, dtype=DTYPE[dtype], device=device)
     ds = 1 if dtype=='float64' else 1 + 1j
-    return 2 * torch.rand(D, dtype=DTYPE[dtype], device=device) - ds
+    out = torch.rand(D, dtype=DTYPE[dtype], device=device)
+    return out if distribution == (0, 1) else (distribution[1] - distribution[0]) * out + distribution[0] * ds
 
 
 def randint(low, high):
@@ -281,19 +286,8 @@ def bitwise_not(data):
     return torch.bitwise_not(data)
 
 
-def svd_lowrank(data, meta, sizes):
-    # torch.svd_lowrank decomposes A = USV^T and return U,S,V
-    real_dtype = data.real.dtype if data.is_complex() else data.dtype
-    Udata = torch.zeros((sizes[0],), dtype=data.dtype, device=data.device)
-    Sdata = torch.zeros((sizes[1],), dtype=real_dtype, device=data.device)
-    Vdata = torch.zeros((sizes[2],), dtype=data.dtype, device=data.device)
-    for (sl, D, slU, DU, slS, slV, DV) in meta:
-        q = slS[1] - slS[0]
-        U, S, V = torch.svd_lowrank(data[slice(*sl)].view(D), q=q, niter=512)
-        Udata[slice(*slU)].reshape(DU)[:] = U
-        Sdata[slice(*slS)] = S
-        Vdata[slice(*slV)].reshape(DV)[:] = V.t().conj()
-    return Udata, Sdata, Vdata
+def svd_lowrank(data, meta, sizes, **kwargs):
+    return svds_scipy(data, meta, sizes, solver='arpack', **kwargs)
 
 
 def svd(data, meta, sizes, fullrank_uv=False, ad_decomp_reg=1.0e-12, diagnostics=None, **kwargs):
@@ -308,8 +302,27 @@ def svdvals(data, meta, sizeS, **kwargss):
     return Sdata
 
 
-def svd_arnoldi(data, meta, sizes, thresh=0.2, solver='arpack'):
-    return kernel_svd_arnoldi.apply(data,meta,sizes, thresh, solver)
+def svd_randomized(data, meta, sizes, q=None, niter=3, **kwargs):
+    """
+    Computes the SVD of block-sparse matrix using randomized SVD within each block.
+    See torch.svd_lowrank for details.
+    """
+    real_dtype = data.real.dtype if data.is_complex() else data.dtype
+    Udata = torch.zeros((sizes[0],), dtype=data.dtype, device=data.device)
+    Sdata = torch.zeros((sizes[1],), dtype=real_dtype, device=data.device)
+    Vdata = torch.zeros((sizes[2],), dtype=data.dtype, device=data.device)
+    for (sl, D, slU, DU, slS, slV, DV) in meta:
+        k = slS[1] - slS[0]
+        q=max(k,min([2*k]+list(D)))
+        U, S, V = torch.svd_lowrank(data[slice(*sl)].view(D), q=q, niter=niter)
+        Udata[slice(*slU)].reshape(DU)[:] = U[:,:k]
+        Sdata[slice(*slS)] = S[:k]
+        Vdata[slice(*slV)].reshape(DV)[:] = V[:,:k].t().conj()
+    return Udata, Sdata, Vdata
+
+
+def svds_scipy(data, meta, sizes, thresh=0.1, solver='arpack', **kwargs):
+    return kernel_svds_scipy.apply(data,meta,sizes, thresh, solver, **kwargs)
 
 
 def fix_svd_signs(Udata, Vhdata, meta):
@@ -545,13 +558,14 @@ def diag_2dto1d(data, meta, Dsize):
 
 
 # functionals
-def checkpoint(f,*args,**kwargs):
+def checkpoint(f, *args, **kwargs):
     # context_fn=kwargs.pop('context_fn',None)
     # torch.utils.checkpoint.checkpoint
-    return _checkpoint(f, *args, use_reentrant=kwargs.pop('use_reentrant',None),
-                                             determinism_check=kwargs.pop('determinism_check','default'),
-                                             debug=kwargs.pop('debug',False), **kwargs)
-
+    return _checkpoint(f, *args,
+                       use_reentrant=kwargs.pop('use_reentrant',None),
+                       determinism_check=kwargs.pop('determinism_check', 'default'),
+                       debug=kwargs.pop('debug', False),
+                       **kwargs)
 
 
 #############

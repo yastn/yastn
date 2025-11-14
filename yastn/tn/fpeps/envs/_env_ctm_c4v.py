@@ -1,4 +1,4 @@
-# Copyright 2024 The YASTN Authors. All Rights Reserved.
+# Copyright 2025 The YASTN Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,18 +14,35 @@
 # ==============================================================================
 from __future__ import annotations
 import logging
-from .... import Tensor, YastnError, tensordot, truncation_mask, decompress_from_1d, \
-    truncation_mask_multiplets
-from .._peps import Peps, Peps2Layers, DoublePepsTensor
-from .._geometry import RectangularUnitcell
+from typing import Callable, Sequence
+
 from ._env_auxlliary import *
-from ._env_ctm import EnvCTM, decompress_env_1d, EnvCTM_projectors, update_storage_
+from ._env_ctm import EnvCTM, update_storage_, CTMRG_out, _partial_svd_predict_spec
+from ._env_dataclasses import EnvCTM_c4v_local, EnvCTM_c4v_projectors
+from .._geometry import RectangularUnitcell, Lattice
+from .._peps import Peps, Peps2Layers, DoublePepsTensor, PEPS_CLASSES
+from ....initialize import eye
+from ....tensor import Leg, YastnError, tensordot, truncation_mask, truncation_mask_multiplets
+from ...._split_combine_dict import split_data_and_meta, combine_data_and_meta
 
 logger = logging.Logger('ctmrg')
 
+class EnvFlip:
+    """Read-only view: tensors are flipped on access."""
+    __slots__ = ("_base",)
+
+    def __init__(self, base: EnvCTM_c4v_local):
+        self._base = base
+
+    # attribute access
+    def __getattr__(self, dirn):
+        return getattr(self._base, dirn).flip_signature()
+
+    def __repr__(self):
+        return f"EnvFlip(base={self._base!r})"
 
 class EnvCTM_c4v(EnvCTM):
-    def __init__(self, psi, init='eye', leg=None):
+    def __init__(self, psi, init='eye', ket=None):
         r"""
         Environment used in Corner Transfer Matrix Renormalization Group algorithm for C4v symmetric
         single-site iPEPS. Here, the on-site tensor is assumed to be C4v-symmetric, i.e. transform
@@ -62,98 +79,36 @@ class EnvCTM_c4v(EnvCTM):
         init: str
             None, 'eye' or 'dl'. Initialization scheme, see :meth:`yastn.tn.fpeps.EnvCTM.reset_`.
 
-        leg: Optional[yastn.Leg]
-            Passed to :meth:`yastn.tn.fpeps.EnvCTM.reset_` to further customize initialization.
+        ket: Optional[yastn.tn.Peps]
+            If provided, and ``psi`` has physical legs, forms a double-layer PEPS <psi | ket>.
         """
-        super().__init__(psi, init=None)
-        if init not in (None, 'rand', 'eye', 'dl'):
-            raise YastnError(f"EnvCTM_c4v {init=} not recognized. Should be 'rand', 'eye', 'dl', or None.")
+        self.geometry = psi.geometry
+        for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "f_ordered", "nn_bond_dirn"]:
+            setattr(self, name, getattr(self.geometry, name))
+
+        self.psi = Peps2Layers(bra=psi, ket=ket) if psi.has_physical() else psi
+        self.env = Lattice(self.geometry, objects={site: EnvCTM_c4v_local() for site in self.sites()})
+        self.proj = Lattice(self.geometry, objects={site: EnvCTM_c4v_projectors() for site in self.sites()})
+
+        if init not in (None, 'eye', 'dl'):
+            raise YastnError(f"{type(self).__name__} {init=} not recognized. Should be 'rand', 'eye', 'dl', or None.")
         if init is not None:
-            self.reset_(init=init, leg=leg)
+            self.reset_(init=init)
 
-    # Cloning/Copying/Detaching(view)
-    #
-    def copy(self) -> EnvCTM:
-        env = EnvCTM_c4v(self.psi, init=None)
-        for site in env.sites():
-            for dirn in ['tl', 't']:
-                setattr(env[site], dirn, getattr(self[site], dirn).copy())
-        return env
+    def __getitem__(self, site):
+        if (site[0] + site[1])%2 == 1:
+            return EnvFlip(self.env[site])
+        else:
+            return self.env[site]
 
-    def shallow_copy(self) -> EnvCTM_c4v:
-        env = EnvCTM_c4v(self.psi, init=None)
-        for site in env.sites():
-            for dirn in ['tl', 't']:
-                setattr(env[site], dirn, getattr(self[site], dirn))
-        return env
-
-    def clone(self) -> EnvCTM_c4v:
-        r"""
-        Return a clone of the environment preserving the autograd - resulting clone is a part
-        of the computational graph. Data of cloned environment tensors is indepedent
-        from the originals.
-        """
-        env = EnvCTM_c4v(self.psi, init=None)
-        for site in env.sites():
-            for dirn in ['tl', 't']:
-                setattr(env[site], dirn, getattr(self[site], dirn).clone())
-        return env
-
-    def detach(self) -> EnvCTM_c4v:
-        r"""
-        Return a detached view of the environment - resulting environment is **not** a part
-        of the computational graph. Data of detached environment tensors is shared
-        with the originals.
-        """
-        env = EnvCTM_c4v(self.psi, init=None)
-        for site in env.sites():
-            for dirn in ['tl', 't']:
-                setattr(env[site], dirn, getattr(self[site], dirn).detach())
-        return env
-
-    def detach_(self):
-        r"""
-        Detach all environment tensors from the computational graph.
-        Data of environment tensors in detached environment is a `view` of the original data.
-        """
+    def max_D(self):
+        m_D = 0
         for site in self.sites():
-            for dirn in ['tl', 't']:
-                if getattr(self[site], dirn) is None:
-                    continue
-                try:
-                    getattr(self[site], dirn)._data.detach_()
-                except RuntimeError:
-                    setattr(self[site], dirn, getattr(self[site], dirn).detach())
+            if getattr(self[site], 'tl') is not None:
+                m_D = max(max(getattr(self[site], 'tl').get_shape()), m_D)
+        return m_D
 
-    # def compress_env_c4v_1d(env):
-    #     r"""
-    #     Compress environment to data tensors and (hashable) metadata, see :func:`yastn.tensor.compress_to_1d`.
-
-    #     Parameters
-    #     ----------
-    #     env : EnvCTM_c4v
-    #         Environment instance to be transformed.
-
-    #     Returns
-    #     -------
-    #     (tuple[Tensor] , dict)
-    #         A pair where the first element is a tuple of raw data tensors (of type derived from backend)
-    #         and the second is a dict with corresponding metadata.
-    #     """
-    #     shallow= {
-    #         'psi': {site: env.psi.bra[site] for site in env.sites()} if isinstance(env.psi,Peps2Layers) \
-    #             else {site: env.psi[site] for site in env.sites()},
-    #         'env': tuple( env_t for site in env.sites() for k,env_t in env[site].__dict__.items() if env_t is not None)}
-    #     dtypes= set(tuple( t.yastn_dtype for t in shallow['psi'].values()) + tuple(t.yastn_dtype for t in shallow['env']))
-    #     assert len(dtypes)<2, f"CTM update: all tensors of state and environment should have the same dtype, got {dtypes}"
-    #     unrolled= {'psi': {site: t.compress_to_1d() for site,t in shallow['psi'].items()},
-    #         'env': tuple(t.compress_to_1d() for t in shallow['env'])}
-    #     meta= {'psi': {site: t_and_meta[1] for site,t_and_meta in unrolled['psi'].items()}, 'env': tuple(meta for t,meta in unrolled['env']),
-    #            '2layer': isinstance(env.psi, Peps2Layers), 'geometry': env.geometry, 'sites': env.sites()}
-    #     data= tuple( t for t,m in unrolled['psi'].values())+tuple( t for t,m in unrolled['env'])
-    #     return data, meta
-
-    def reset_(self, init='eye', leg=None, **kwargs):
+    def reset_(self, init='eye'):
         r"""
         Initialize C4v-symmetric CTMRG environment::
 
@@ -172,15 +127,20 @@ class EnvCTM_c4v(EnvCTM):
             ['eye', 'dl']
             For 'eye' starts with identity environments of dimension 1.
             For 'dl' and Env of double-layer PEPS, trace on-site tensors to initialize environment.
-
-        leg: None | yastn.Leg
-            If not provided, random initialization has CTMRG bond dimension set to 1.
-            Otherwise, the provided Leg is used to initialize CTMRG virtual legs.
         """
         assert init in ['eye', 'dl'], "Invalid initialization type. Should be 'eye' or 'dl'."
 
         if init == 'eye':
-            super().reset_(init='eye', leg=leg, **kwargs)
+            config = self.psi.config
+            leg0 = Leg(config, s=1, t=(config.sym.zero(),), D=(1,))
+
+            self[0,0].tl = eye(config, legs=[leg0, leg0.conj()], isdiag=False)
+            legs = self.psi[0,0].get_legs()
+            tmp1 = identity_boundary(config, legs[0].conj())
+            tmp0 = eye(config, legs=[leg0, leg0.conj()], isdiag=False)
+            tmp = tensordot(tmp0, tmp1, axes=((), ())).transpose(axes=(0, 2, 1))
+            self[0,0].t = tmp
+
             self[0,0].tl= self[0,0].tl.flip_charges(axes=1)
             self[0,0].t= self[0,0].t.flip_charges(axes=0)
         elif init == 'dl':
@@ -188,7 +148,7 @@ class EnvCTM_c4v(EnvCTM):
             g= RectangularUnitcell(pattern=[[0,1],[1,0]])
             bp= Peps(geometry=g, \
                     tensors={ g.sites()[0]: self.psi.ket[0,0], g.sites()[1]: self.psi.ket[0,0].conj() }, )
-            env_bp= EnvCTM(bp, init='eye', leg=leg)
+            env_bp= EnvCTM(bp, init='eye')
             env_bp.expand_outward_()
             # env_bp.init_env_from_onsite_()
 
@@ -226,72 +186,38 @@ class EnvCTM_c4v(EnvCTM):
             opts_svd['tol'] = 1e-14
         if method not in ('default',):
             raise YastnError(f"CTM update {method=} not recognized. Should be 'default' or ...")
-        if 'policy' in kwargs:
-            opts_svd['policy'] = kwargs.get('policy')
+        # if 'policy' in kwargs:
+        #     opts_svd['policy'] = kwargs.get('policy')
         checkpoint_move= kwargs.pop('checkpoint_move',False)
 
-        #
-        # Empty structure for projectors
-        proj = Peps(env.geometry)
-        for site in proj.sites(): proj[site] = EnvCTM_projectors()
-
-        def _compress_proj(proj, empty_proj):
-            data, meta= tuple(zip( *(t.compress_to_1d() if not (t is None) else empty_proj.compress_to_1d() \
-                for site in proj.sites() for t in proj[site].__dict__.values()) ))
-            return data, meta
-
-        #
-        # get projectors and compute updated env tensors
-        # TODO currently supports only <psi|psi> for double-layer peps
-
-
         if checkpoint_move:
-            outputs_meta= {}
+            def f_update_core_2dir(loc_im,*inputs_t):
+                loc_env= EnvCTM_c4v.from_dict(combine_data_and_meta(inputs_t, loc_im))
 
-            # extract raw parametric tensors as a tuple
-            inputs_t, inputs_meta= env.compress_env_1d()
+                _update_core_dir(loc_env, "default", opts_svd, method=method, **kwargs)
+                out_dict = loc_env.to_dict(level=0)
+                out_data, out_meta = split_data_and_meta(out_dict)
 
-            def f_update_core_2dir(move_d,loc_im,*inputs_t):
-                loc_env= decompress_env_c4v_1d(inputs_t,loc_im)
-
-                env_tmp, proj_tmp= _update_core_dir(loc_env, "default", opts_svd, method=method, **kwargs)
-                update_storage_(loc_env, env_tmp)
-
-                # return backend tensors - only environment and projectors
-                #
-                out_env_data, out_env_meta= loc_env.compress_env_1d()
-                out_proj_data, out_proj_meta= _compress_proj(proj_tmp, Tensor(config=next(iter(out_env_meta['psi'].values()))['config']))
-
-                outputs_meta['env']= out_env_meta['env']
-                outputs_meta['proj']= out_proj_meta
-
-                return out_env_data[len(loc_env.sites()):] + out_proj_data
+                return out_data, out_meta
 
             if env.config.backend.BACKEND_ID == "torch":
+                env_dict = env.to_dict(level=0)
+                inputs_t, inputs_meta = split_data_and_meta(env_dict)
                 if checkpoint_move=='reentrant':
                     use_reentrant= True
                 elif checkpoint_move=='nonreentrant':
                     use_reentrant= False
                 checkpoint_F= env.config.backend.checkpoint
-                outputs= checkpoint_F(f_update_core_2dir,None,inputs_meta,*inputs_t,\
+                out_data, out_meta = checkpoint_F(f_update_core_2dir, inputs_meta,*inputs_t,\
                                     **{'use_reentrant': use_reentrant, 'debug': False})
             else:
                 raise RuntimeError(f"CTM update: checkpointing not supported for backend {env.config.BACKEND_ID}")
-
-            # update tensors of env and proj
-            for i,site in enumerate(env.sites()):
-                for env_t,t,t_meta in zip(env[site].__dict__.keys(),outputs[i*8:(i+1)*8],outputs_meta['env'][i*8:(i+1)*8]):
-                    setattr(env[site],env_t,decompress_from_1d(t,t_meta) if t is not None else None)
-
-            for i,site in enumerate(proj.sites()):
-                for proj_t,t,t_meta in zip(proj[site].__dict__.keys(),outputs[8*len(env.sites()):][i*8:(i+1)*8],outputs_meta['proj'][i*8:(i+1)*8]):
-                    setattr(proj[site],proj_t,decompress_from_1d(t,t_meta) if t_meta['struct'].size>0 else None)
-
+            # reconstruct env from output tensors
+            out_env_dict = combine_data_and_meta(out_data, out_meta)
+            env.update_from_dict_(out_env_dict)
         else:
-            env_tmp, proj_tmp= _update_core_dir(env, "default", opts_svd, method=method, **kwargs)
-            update_storage_(env, env_tmp)
-            update_storage_(proj, proj_tmp)
-        return proj
+            _update_core_dir(env, "default", opts_svd, method=method, **kwargs)
+
 
 
     def get_env_bipartite(self):
@@ -321,130 +247,215 @@ class EnvCTM_c4v(EnvCTM):
              'data': {}}
         for site in self.sites():
             d_local = {dirn: getattr(self[site], dirn).save_to_dict()
-                       for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']}
+                       for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r'] if getattr(self[site], dirn)}
             d['data'][site] = d_local
         return d
 
+    def ctmrg_(env, opts_svd, method='default', max_sweeps=1, iterator_step=1, corner_tol=None, truncation_f: Callable=None,  **kwargs):
+        if "checkpoint_move" in kwargs:
+            if env.config.backend.BACKEND_ID == "torch":
+                assert kwargs["checkpoint_move"] in ['reentrant','nonreentrant',False], f"Invalid choice for {kwargs['checkpoint_move']}"
+        # BUG: fails when uncomment the following line
+        # kwargs["truncation_f"]= truncation_f
+        tmp = _iterate_ctmrg_(env, opts_svd, method, max_sweeps, iterator_step, corner_tol, **kwargs)
+        return tmp if iterator_step else next(tmp)
 
-def decompress_env_c4v_1d(data,meta)->EnvCTM_c4v:
-    """
-    Reconstruct the environment from its compressed form.
+def _iterate_ctmrg_(env, opts_svd, method, max_sweeps, iterator_step, corner_tol, **kwargs):
+    """ Generator for ctmrg_(). """
+    max_dsv, converged = None, False
+    proj_history = None
+    for sweep in range(1, max_sweeps + 1):
+        env.update_(opts_svd=opts_svd, method=method, proj_history=proj_history, **kwargs)
+        current_proj= env.proj
+        # Here, we have access to all projectors obtained in the previous CTM step
+        # For partial SVD solvers, we need
+        # 1. estimate of how many singular triples to solve for in each block, both blocks kept in truncation
+        #    and blocks discarded in truncation
+        # 2. perform truncation, typically restricting only total number of singular triples
+        #
+        policy= opts_svd.get('policy','fullrank')
+        if policy not in ['fullrank', "qr"]:
+            if proj_history is None:
+                # Empty structure for projectors
+                proj_history = Peps(env.geometry)
+                for site in proj_history.sites(): proj_history[site] = EnvCTM_c4v_projectors()
+            for site in current_proj.sites():
+                if current_proj[site].vtl is not None:
+                    proj_history[site].vtl = current_proj[site].vtl.get_legs(-1)
+                if current_proj[site].vtr is not None:
+                    proj_history[site].vtr = current_proj[site].vtr.get_legs(0)
 
-    Parameters
-    ----------
-    data : Sequence[Tensor]
-        Collection of 1D data tensors for both environment and underlying PEPS.
-    meta : dict
-        Holds metadata of original environment (and PEPS).
+        # Default CTM convergence check
+        if corner_tol is not None:
+            if sweep==1: history = []
+            converged, max_dsv, history= ctm_c4v_conv_corner_spec(env.detach(), history, corner_tol)
+            logging.info(f'Sweep = {sweep:03d}; max_diff_corner_singular_values = {max_dsv}')
+            if converged: break
+
+        if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
+            yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
+    yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
+
+
+def leg_charge_conv_check(env : EnvCTM_c4v, history : Sequence[Leg] = None, conv_len=3):
+    r"""
+    CTM convergence check targeting distribution of charges only (ignoring corner spectra).
 
     Returns
     -------
-    EnvCTM
+        converged : bool
+            If charge sectors stay constant for more than ``conv_len`` CTM steps, return ``True``.
+        history : Sequence[Leg]
+            Past charge sectors of corner tensor
     """
-    loc_env= decompress_env_1d(data,meta)
-    res= EnvCTM_c4v(psi=loc_env.psi, init=None)
-    for site in loc_env.sites():
-        for dirn in ['tl','t']:
-            if getattr(loc_env[site], dirn) is not None:
-                setattr(res[site], dirn, getattr(loc_env[site], dirn))
-    return res
-
+    tD = env[(0,0)].tl.get_legs(axes=0).tD
+    converged = True
+    # number of past env interations to check against
+    # TODO make adjustable
+    conv_len = 3
+    history.append(tD)
+    if len(history) < conv_len:
+        return False, history
+    for i in range(1, conv_len+1):
+        if tD != history[-i]:
+            converged = False
+            break
+    return converged, history
 
 def _update_core_dir(env, dir : str, opts_svd : dict, **kwargs):
-        assert dir in ['default'], "Invalid directions"
-        method= kwargs.get('method','default')
-        policy= opts_svd.get('policy','fullrank')
+    assert dir in ['default'], "Invalid directions"
+    method= kwargs.get('method','default')
+    policy= opts_svd.get('policy','fullrank')
+    psh = kwargs.pop("proj_history", None)
+    # Inherit _partial_svd_predict_spec from EnvCTM
+    svd_predict_spec= lambda s0,p0,s1,p1: opts_svd.get('D_block', float('inf')) if psh is None else \
+        _partial_svd_predict_spec(getattr(psh[s0],p0), getattr(psh[s1],p1), opts_svd.get('sU', 1))
 
-        #
-        # Empty structure for projectors
-        proj = Peps(env.geometry)
-        for site in proj.sites():
-            proj[site] = EnvCTM_projectors()
-        s0 = env.psi.sites()[0]
+    #
+    # Empty structure for projectors
+    #
+    s0 = env.psi.sites()[0]
 
-        # 1) get tl enlarged corner and projector from ED/SVD
-        # (+) 0--tl--1 0--t--2 (-)
-        #                 1
-        cor_tl_2x1 = env[s0].tl @ env[s0].t
-        # (-) 0--t--2 0--tl--1 0--t--2->3(-)
-        #        1                1->2
-        cor_tl = env[s0].t @ cor_tl_2x1
-        # tl--t---1 (-)
-        # t---A--3 (fusion of + and -)
-        # 0   2
-        cor_tl = tensordot(cor_tl, env.psi[s0], axes=((2, 1), (0, 1)))
-        cor_tl = cor_tl.fuse_legs(axes=((0, 2), (1, 3)))
+    # 1) get tl enlarged corner and projector from ED/SVD
+    # (+) 0--tl--1 0--t--2 (-)
+    #                 1
+    cor_tl_2x1 = env[s0].tl @ env[s0].t
+    # (-) 0--t--2 0--tl--1 0--t--2->3(-)
+    #        1                1->2
+    cor_tl = env[s0].t @ cor_tl_2x1
+    # tl--t---1 (-)
+    # t---A--3 (fusion of + and -)
+    # 0   2
+    cor_tl = tensordot(cor_tl, env.psi[s0], axes=((2, 1), (0, 1)))
+    cor_tl = cor_tl.fuse_legs(axes=((0, 2), (1, 3)))
 
-        # Note: U(1)-symm corner is not hermitian. Instead blocks related by conj of charges are hermitian conjugates,
-        #       i.e. (2,-2) and (-2,2) blocks are hermitian conjugates.
-        R= cor_tl_2x1.flip_signature().fuse_legs(axes=((0, 1), 2)) if policy in ['qr'] else cor_tl
-        proj[s0].vtl, s, proj[s0].vtr= proj_sym_corner(R, opts_svd, sU=1, **kwargs)
+    # Note: U(1)-symm corner is not hermitian. Instead blocks related by conj of charges are hermitian conjugates,
+    #       i.e. (2,-2) and (-2,2) blocks are hermitian conjugates.
+    R= cor_tl_2x1.flip_signature().fuse_legs(axes=((0, 1), 2)) if policy in ['qr'] else cor_tl
+    opts_svd["D_block"]= svd_predict_spec(s0, "vtl", s0, "vtr")
+    opts_svd["sU"]= 1
+    env.proj[s0].vtl, s, env.proj[s0].vtr= proj_sym_corner(R, opts_svd, **kwargs)
 
-        # 2) update move corner
-        P= proj[s0].vtl
-        env_tmp = EnvCTM(env.psi, init=None)  # empty environments
-        if policy in ['symeig']:
-            assert (cor_tl-cor_tl.H)<1e-12,"enlarged corner is not hermitian"
-            env_tmp[s0].tl = s/s.norm(p='inf')
-        elif policy in ["qr"]:
-            S= P.flip_signature().tensordot( cor_tl @ P.flip_signature(), (0, 0))
-            S= S.flip_charges()
-            env_tmp[s0].tl= (S/S.norm(p='inf'))
-        else:
-            S= ((proj[s0].vtr.conj() @ P) @ s)
-            env_tmp[s0].tl= (S/S.norm(p='inf'))
+    # 2) update move corner
+    P = env.proj[s0].vtl
+    env_tmp = EnvCTM(env.psi, init=None)  # empty environments
+    if policy in ['symeig']:
+        assert (cor_tl-cor_tl.H)<1e-12,"enlarged corner is not hermitian"
+        env_tmp[s0].tl = s/s.norm(p='inf')
+    elif policy in ["qr"]:
+        S= P.flip_signature().tensordot( cor_tl @ P.flip_signature(), (0, 0))
+        S= S.flip_charges()
+        env_tmp[s0].tl= (S/S.norm(p='inf'))
+    else:
+        S= ((env.proj[s0].vtr.conj() @ P) @ s)
+        env_tmp[s0].tl= (S/S.norm(p='inf'))
 
-        # 3) update move half-row/-column tensor. Here, P is to act on B-sublattice T tensor
-        #
-        #   Note:
-        #   flip_signature() is equivalent to conj().conj_blocks(), which changes the total charge from +n to -n
-        #   flip_charges(axes) is equivalent to switch_signature(axes), which leaves the total charge unchanged
-        #
-        P= P.unfuse_legs(axes=0)
-        # 1<-2--P--0    0--T--2->3
-        #        --1->0    1->2
-        tmp = tensordot(P, env[s0].t.flip_signature(), axes=(0, 0)) # Pass from T_A to T_B
-        #  0<-1--P-----T--3->1  0--P--2
-        #        |     2           |
-        #        |      0          |
-        #         --0 1--A--3   1--
-        #                2=>1
-        _b_sublattice= env.psi.bra[s0].flip_signature() # transform A with signature [1,1,1,1,1] into B with [-1,-1,-1,-1,-1]
-        tmp = tensordot(tmp, DoublePepsTensor(bra=_b_sublattice, ket=_b_sublattice), axes=((0, 2), (1, 0)))
-        tmp = tensordot(tmp, P, axes=((1, 3), (0, 1)))
-        tmp = tmp.flip_charges(axes=(0,2)) #tmp.switch_signature(axes=(0,2))
+    # 3) update move half-row/-column tensor. Here, P is to act on B-sublattice T tensor
+    #
+    #   Note:
+    #   flip_signature() is equivalent to conj().conj_blocks(), which changes the total charge from +n to -n
+    #   flip_charges(axes) is equivalent to switch_signature(axes), which leaves the total charge unchanged
+    #
+    P= P.unfuse_legs(axes=0)
+    # 1<-2--P--0    0--T--2->3
+    #        --1->0    1->2
+    tmp = tensordot(P, env[s0].t.flip_signature(), axes=(0, 0)) # Pass from T_A to T_B
+    #  0<-1--P-----T--3->1  0--P--2
+    #        |     2           |
+    #        |      0          |
+    #         --0 1--A--3   1--
+    #                2=>1
+    _b_sublattice= env.psi.bra[s0].flip_signature() # transform A with signature [1,1,1,1,1] into B with [-1,-1,-1,-1,-1]
+    tmp = tensordot(tmp, DoublePepsTensor(bra=_b_sublattice, ket=_b_sublattice), axes=((0, 2), (1, 0)))
+    tmp = tensordot(tmp, P, axes=((1, 3), (0, 1)))
+    tmp = tmp.flip_charges(axes=(0,2)) #tmp.switch_signature(axes=(0,2))
 
-        # tmp= 0.5*(tmp + tmp.transpose(axes=(2,1,0)))
-        env_tmp[s0].t = tmp / tmp.norm(p='inf')
-
-        return env_tmp, proj
+    # tmp= 0.5*(tmp + tmp.transpose(axes=(2,1,0)))
+    env_tmp[s0].t = tmp / tmp.norm(p='inf')
+    #
+    update_storage_(env, env_tmp)
 
 
 def proj_sym_corner(rr, opts_svd, **kwargs):
     r""" Projector on largest (by magnitude) eigenvalues of (hermitian) symmetric corner. """
     policy = opts_svd.get('policy', 'symeig')
-    fix_signs= opts_svd.get('fix_signs',True)
     truncation_f= kwargs.get('truncation_f',\
         lambda x : truncation_mask_multiplets(x,keep_multiplets=True, \
-            D_total=opts_svd['D_total'], tol=opts_svd['tol'], \
+            D_total=opts_svd['D_total'], D_block=opts_svd['D_block'], tol=opts_svd['tol'], \
             eps_multiplet=opts_svd['eps_multiplet'], hermitian=True, ) )
 
     if policy in ['symeig']:
+        # TODO U1-c4v-symmetric corner is not Hermitian
+        raise YastnError("Policy 'symeig' is not supported for c4v-symmetric corner projector.")
         # TODO fix_signs ?
-        _kwargs= dict(kwargs)
-        for k in ["method", "use_qr",]: del _kwargs[k]
-        s,u= rr.eigh_with_truncation(axes=(0,1), sU=rr.s[1], which='LM', mask_f= truncation_f, **opts_svd, **_kwargs)
-        v= None
-    elif policy in ['fullrank', 'lowrank', 'arnoldi', 'krylov']:
+        # _kwargs= dict(kwargs)
+        # for k in ["method", "use_qr",]: del _kwargs[k]
+        # s,u= rr.eigh_with_truncation(axes=(0,1), sU=rr.s[1], which='LM', mask_f= truncation_f, **opts_svd, **_kwargs)
+        # v= None
+    elif policy in ['fullrank', 'randomized', 'block_arnoldi', 'block_propack']:
         # sU = ? r0.s[1]
         if truncation_f is None:
-            u, s, v = rr.svd(axes=(0, 1), fix_signs=fix_signs, **kwargs)
+            u, s, v = rr.svd(axes=(0, 1), **opts_svd)
             Smask = truncation_mask(s, **opts_svd)
             u, s, v = Smask.apply_mask(u, s, v, axes=(-1, 0, 0))
         else:
-            u, s, v = rr.svd_with_truncation(axes=(0, 1), mask_f=truncation_f, **kwargs)
+            u, s, v = rr.svd_with_truncation(axes=(0, 1), mask_f=truncation_f, **opts_svd)
     elif policy in ['qr']:
         u, s= rr.qr(axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0)
         v= None
+    else:
+        raise YastnError(f"Unsupported policy {policy} for c4v-symmetric corner projector.")
 
     return u, s, v
+
+def ctm_c4v_conv_corner_spec(env, history=[], corner_tol=1.0e-8):
+    """
+    Evaluate convergence of CTM by computing the difference of environment corner spectra between consecutive CTM steps.
+    """
+    history.append(calculate_c4v_corner_svd(env))
+    def spec_diff(x,y):
+        if x is not None and y is not None:
+            return (x - y).norm().item()
+        elif x is None and y is None:
+            return 0
+        else:
+            return float('Inf')
+    max_dsv = max(spec_diff(history[-1][k], history[-2][k]) for k in history[-1]) if len(history)>1 else float('Nan')
+    history[-1]['max_dsv'] = max_dsv
+
+    return (corner_tol is not None and max_dsv < corner_tol), max_dsv, history
+
+
+def calculate_c4v_corner_svd(env):
+    """
+    Return normalized SVD spectra, with largest singular value set to unity, of all corner tensors of environment.
+    The corners are indexed by pair of Site and corner identifier.
+    """
+    _get_spec= lambda x: x.svd(compute_uv=False) if not (x is None) and not x.isdiag else x
+
+    corner_sv = {}
+    corner_sv[(0, 0), 'tl'] = _get_spec(env[0,0].tl)
+    for k, v in corner_sv.items():
+        if not corner_sv[k] is None:
+            corner_sv[k] = v / v.norm(p='inf')
+    return corner_sv

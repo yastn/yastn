@@ -15,6 +15,7 @@
 """ Define rules for U1xU1 symmetry. """
 from .sym_abelian import sym_abelian
 
+
 class sym_U1xU1(sym_abelian):
     """U1xU1 symmetry"""
 

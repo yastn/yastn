@@ -13,31 +13,22 @@
 # limitations under the License.
 # ==============================================================================
 from __future__ import annotations
-from dataclasses import dataclass
 from itertools import pairwise
-from tqdm import tqdm
 from typing import NamedTuple
-from .... import Tensor, eye, YastnError, tensordot, vdot, ncon
-from .._peps import Peps, Peps2Layers, DoublePepsTensor
-from .._gates_auxiliary import fkron, gate_fix_swap_gate, match_ancilla
-from .._geometry import Bond, Site
-from .._evolution import BipartiteBondMetric, BondMetric
+from warnings import warn
+
+from tqdm import tqdm
+
 from ._env_auxlliary import *
 from ._env_auxlliary import clear_projectors
 from ._env_boundary_mps import _clear_operator_input
-
-
-@dataclass()
-class EnvBP_local():
-    r"""
-    Dataclass for BP environment tensors at a single Peps site on square lattice.
-
-    Contains fields ``t``,  ``l``, ``b``, ``r``
-    """
-    t: Tensor | None = None  # top
-    l: Tensor | None = None  # left
-    b: Tensor | None = None  # bottom
-    r: Tensor | None = None  # right
+from ._env_dataclasses import EnvBP_local
+from .._evolution import BipartiteBondMetric, BondMetric
+from .._gates_auxiliary import fkron, gate_fix_swap_gate, match_ancilla
+from .._geometry import Bond, Site, Lattice
+from .._peps import Peps2Layers, DoublePepsTensor, PEPS_CLASSES
+from ....initialize import eye
+from ....tensor import YastnError, tensordot, vdot, ncon, Tensor
 
 
 class BP_out(NamedTuple):
@@ -46,7 +37,7 @@ class BP_out(NamedTuple):
     converged: bool = False
 
 
-class EnvBP(Peps):
+class EnvBP():
 
     def __init__(self, psi, init='eye', tol_positive=1e-12, which="BP"):
         r"""
@@ -64,15 +55,17 @@ class EnvBP(Peps):
         which: str
             Type of environment from 'BP', 'NN+BP', 'NNN+BP'
         """
-        super().__init__(psi.geometry)
+        self.geometry = psi.geometry
+        for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "f_ordered", "nn_bond_dirn"]:
+            setattr(self, name, getattr(self.geometry, name))
+
         self.psi = Peps2Layers(psi) if psi.has_physical() else psi
+        self.env = Lattice(self.geometry, objects={site: EnvBP_local() for site in self.sites()})
         self.tol_positive = tol_positive
         self._set_which(which)
 
         if init not in (None, 'eye'):
             raise YastnError(f"EnvBP {init=} not recognized. Should be 'eye' or None.")
-        for site in self.sites():
-            self[site] = EnvBP_local()
         if init is not None:
             self.reset_(init=init)
 
@@ -90,40 +83,68 @@ class EnvBP(Peps):
     def config(self):
         return self.psi.config
 
+    def __getitem__(self, site):
+        return self.env[site]
+
+    def __setitem__(self, site, obj):
+        self.env[site] = obj
+
     def copy(self) -> EnvBP:
-        psi = self.psi
-        if isinstance(psi, Peps2Layers):
-            psi = psi.ket
-        env = EnvBP(psi, init=None)
-        for site in env.sites():
-            for dirn in ['t', 'l', 'b', 'r']:
-                setattr(env[site], dirn, getattr(self[site], dirn).copy())
+        env = EnvBP(self.psi, init=None)
+        env.env = self.env.copy()
         return env
 
     def clone(self) -> EnvBP:
-        psi = self.psi
-        if isinstance(psi, Peps2Layers):
-            psi = psi.ket
-        env = EnvBP(psi, init=None)
-        for site in env.sites():
-            for dirn in ['t', 'l', 'b', 'r']:
-                setattr(env[site], dirn, getattr(self[site], dirn).clone())
+        env = EnvBP(self.psi, init=None)
+        env.env = self.env.clone()
         return env
 
     def shallow_copy(self) -> EnvBP:
-        psi = self.psi
-        if isinstance(psi, Peps2Layers):
-            psi = psi.ket
         env = EnvBP(self.psi, init=None)
-        for site in env.sites():
-            for dirn in ['t', 'l', 'b', 'r']:
-                setattr(env[site], dirn, getattr(self[site], dirn))
+        env.env = self.env.shallow_copy()
         return env
+
+    def to_dict(self, level=2):
+        r"""
+        Serialize EnvBP to a dictionary.
+        Complementary function is :meth:`yastn.EnvBP.from_dict` or a general :meth:`yastn.from_dict`.
+        See :meth:`yastn.Tensor.to_dict` for further description.
+        """
+        return {'type': type(self).__name__,
+                'dict_ver': 1,
+                'psi': self.psi.to_dict(level=level),
+                'env': self.env.to_dict(level=level)}
+
+    @classmethod
+    def from_dict(cls, d, config=None):
+        r"""
+        De-serializes EnvBP from the dictionary ``d``.
+        See :meth:`yastn.Tensor.from_dict` for further description.
+        """
+        if 'dict_ver' not in d:
+            psi = PEPS_CLASSES["Peps"].from_dict(d['psi'], config)
+            env = EnvBP(psi, init=None)
+            for site in env.sites():
+                for dirn, v in d['data'][site].items():
+                    setattr(env[site], dirn, Tensor.from_dict(v, config))
+            return env
+
+        if d['dict_ver'] == 1:
+            if cls.__name__ != d['type']:
+                raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
+            psi = PEPS_CLASSES[d['psi']['type']].from_dict(d['psi'], config=config)
+            env = cls(psi, init=None)
+            env.env = Lattice.from_dict(d['env'], config=config)
+            return env
 
     def save_to_dict(self) -> dict:
         r"""
         Serialize EnvBP into a dictionary.
+
+        !!! This method is deprecated; use to_dict() instead !!!
         """
+        warn('This method is deprecated; use to_dict() instead.', DeprecationWarning, stacklevel=2)
+
         psi = self.psi
         if isinstance(psi, Peps2Layers):
             psi = psi.ket
@@ -589,7 +610,7 @@ class EnvBP(Peps):
 
         out = {site: [] for site in sites}
         probabilities = []
-        rands = (self.psi.config.backend.rand(self.Nx * self.Ny * number) + 1) / 2  # in [0, 1]
+        rands = self.psi.config.backend.rand(self.Nx * self.Ny * number)  # in [0, 1]
         count = 0
 
         for _ in tqdm(range(number), desc="Sample...", disable=not progressbar):

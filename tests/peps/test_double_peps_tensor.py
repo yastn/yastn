@@ -36,6 +36,29 @@ def create_double_peps_tensor(config_kwargs, dtype='float64'):
     return fpeps.DoublePepsTensor(bra=A, ket=A)
 
 
+def test_double_peps_tensor_copy(config_kwargs):
+    T0 = create_double_peps_tensor(config_kwargs)
+
+    for op in [None,
+               yastn.eye(T0.config, legs=T0.bra.get_legs(axes=4))]:
+        T0.op = op
+        T0_conj = T0.conj()
+        T0_copy = T0.copy()
+        T0_clone = T0.clone()
+        dicts = [T0.to_dict(level=level) for level in [0, 1, 2]]
+        T0_dict = [fpeps.DoublePepsTensor.from_dict(d) for d in dicts]
+        T0_split = [yastn.from_dict(yastn.combine_data_and_meta(*yastn.split_data_and_meta(d))) for d in dicts]
+
+        for new, ind in zip([T0_conj, T0_copy, T0_clone, *T0_dict, *T0_split],
+                            [False, True, True, False, False, True, False, False, True]):
+            assert T0.ket.are_independent(new.ket, independent=ind)
+            assert T0.bra.are_independent(new.bra, independent=ind)
+            if op is not None:
+                assert op.are_independent(new.op, independent=ind)
+            assert T0.swaps is not new.swaps
+            assert T0.swaps == new.swaps
+
+
 def test_double_peps_tensor_basic(config_kwargs):
     """
     Test transpose, fuse_layers, get_legs, get_shape in DoublePepsTensor.
@@ -51,9 +74,6 @@ def test_double_peps_tensor_basic(config_kwargs):
     assert f0.shape == (16, 25, 36, 49)
     assert T0.ndim == 4
 
-    for tmp in  [T0.copy(), T0.clone()]:
-        assert yastn.are_independent(tmp.ket, T0.ket)
-        assert yastn.are_independent(tmp.bra, T0.bra)
 
     allowed_transpose = ((0, 1, 2, 3), (1, 2, 3, 0), (2, 3, 0, 1), (3, 0, 1, 2),
                          (0, 3, 2, 1), (1, 0, 3, 2), (2, 1, 0, 3), (3, 2, 1, 0))

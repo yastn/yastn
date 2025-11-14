@@ -14,18 +14,95 @@
 # ==============================================================================
 """ Methods outputing data from yastn.Tensor. """
 from __future__ import annotations
-import numpy as np
 from functools import reduce
 from numbers import Number
 from operator import mul
-from ._auxliary import _clear_axes, _unpack_axes, _struct, _slc, _flatten, _join_contiguous_slices
-from ._tests import YastnError, _test_configs_match
-from ..sym import sym_none
+from typing import Sequence
+from warnings import warn
+
+import numpy as np
+
+from ._auxliary import _clear_axes, _unpack_axes, _struct, _slc, _flatten
 from ._legs import Leg, LegMeta, legs_union, _legs_mask_needed
 from ._merging import _embed_tensor
+from ._tests import YastnError
+from ..sym import sym_none
+from .._split_combine_dict import split_data_and_meta, combine_data_and_meta
+
+__all__ = ['save_to_dict', 'save_to_hdf5', 'requires_grad']
 
 
-__all__ = ['compress_to_1d', 'save_to_dict', 'save_to_hdf5', 'requires_grad']
+def to_dict(a, level=2, meta=None) -> dict:
+    r"""
+    Serialize YASTN tensor to a dictionary containing all the information needed to recreate the tensor.
+    Complementary function is :meth:`yastn.Tensor.from_dict` or a general :meth:`yastn.from_dict`.
+
+    Using argument `level == 2` allows robust saving with numpy.save method.
+
+    Parameters
+    ----------
+    a: yastn.Tensor
+        tensor to serialize.
+    level: int
+        Controls how much internal Tensor data and meta sub-classes are turned into basic python data structures.
+        For level == 0, nothing is converted.
+        For level >= 1, converts information about config and tensor block structure into python dictionaries.
+        For level >= 2, turns tensor data into numpy array.
+        Level == 2 (or == 1 for numpy backend) allows saving with numpy.save, which is the default.
+
+    meta: dict
+        There is an option to provide meta-data obtained from earlier application of :meth:`yastn.Tensor.to_dict`.
+        Extra zero blocks (missing in tensor) are then included in the returned 1D array
+        to make it consistent with structure given in ``meta``.
+        Raises error if tensor has some blocks which are not included in ``meta`` or otherwise
+        :code:`meta` does not match the tensor.
+
+    .. note::
+        :meth:`yastn.Tensor.to_dict` and :meth:`yastn.Tensor.from_dict`, together with
+        :meth:`yastn.split_data_and_meta` and :meth:`yastn.combine_data_and_meta` provide mechanism
+        that allows using external matrix-free methods, such as :func:`eigs` implemented in SciPy.
+        See example at :ref:`examples/tensor/decomposition:combining with scipy.sparse.linalg.eigs`.
+    """
+    if level >= 1:
+        config = a.config._asdict()
+        config['sym'] = config['sym'].SYM_ID
+        config['backend'] = config['backend'].BACKEND_ID
+        hfs = tuple(hf._asdict() for hf in a.hfs)
+        struct = a.struct._asdict()
+        slices = [tuple(slc) for slc in a.slices]
+    else:
+        config = a.config
+        hfs = a.hfs
+        struct = a.struct
+        slices = a.slices
+
+    data = a.data if level < 2 else a.config.backend.to_numpy(a.data)
+
+    d = {'type': type(a).__name__,
+         'dict_ver': 1,  # to_dict version
+         'level': level,
+         'config': config,
+         'data': data,
+         'struct': struct,
+         'slices': slices,
+         'isdiag': a.isdiag,
+         'hfs': hfs,
+         'mfs': a.mfs}
+
+    if meta is not None:
+        if not all(meta[k] == d[k] for k in ['type', 'dict_ver', 'config', 'struct', 'slices', 'isdiag', 'hfs', 'mfs']):
+            size = meta['struct'].size if hasattr(meta['struct'], 'size') else meta['struct']['size']
+            tmp = a.config.backend.zeros(size, dtype=a.yastn_dtype, device=a.device)
+            ap = type(a).from_dict(combine_data_and_meta(tmp, meta))
+            try:
+                a = a + ap  # fill-in zero blocks
+            except YastnError as e:
+                raise YastnError("Tensor is inconsistent with meta: " + str(e))
+            d = a.to_dict(level=level)
+            if not all(meta[k] == d[k] for k in ['type', 'dict_ver', 'config', 'struct', 'slices', 'isdiag', 'hfs', 'mfs']):
+                raise YastnError("Tensor is inconsistent with meta.")
+    return d
+
 
 def save_to_dict(a) -> dict:
     r"""
@@ -35,11 +112,15 @@ def save_to_dict(a) -> dict:
 
     Complementary function is :meth:`yastn.load_from_dict`.
 
+    !!! This method is deprecated; use to_dict(). !!!
+
     Parameters
     ----------
     a: yastn.Tensor
         tensor to export.
     """
+    warn('This method is deprecated; use to_dict() instead.', DeprecationWarning, stacklevel=2)
+
     _d = a.config.backend.to_numpy(a._data).copy()
     hfs = [hf._asdict() for hf in a.hfs]
     return {'type': type(a).__name__,
@@ -49,7 +130,7 @@ def save_to_dict(a) -> dict:
             'SYM_ID': a.config.sym.SYM_ID, 'fermionic': a.config.fermionic}
 
 
-def save_to_hdf5(a, file, path) -> Never:
+def save_to_hdf5(a, file, path) -> None:
     """
     Export tensor into hdf5 type file.
 
@@ -70,84 +151,6 @@ def save_to_hdf5(a, file, path) -> Never:
     file.create_dataset(path+'/ts', data=a.struct.t)
     file.create_dataset(path+'/Ds', data=a.struct.D)
     file.create_dataset(path+'/matrix', data=_d)
-
-
-def compress_to_1d(a, meta=None) -> tuple[numpy.array | torch.tensor, dict]:
-    """
-    Return 1D array containing tensor data (without cloning the data if not necessary) and
-    create metadata allowing re-creation of the original tensor.
-
-    Parameters
-    ----------
-        a: yastn.Tensor
-            Specifies tensor to export.
-        meta: dict
-            There is an option to provide meta-data obtained from earlier application of :meth:`yastn.Tensor.compress_to_1d`.
-            Extra zero blocks (missing in tensor) are then included in the returned 1D array
-            to make it consistent with structure given in :code:`meta`.
-            Raises error if tensor has some blocks which are not included in :code:`meta` or otherwise
-            :code:`meta` does not match the tensor.
-
-    .. note::
-        :meth:`yastn.Tensor.compress_to_1d` and :meth:`yastn.decompress_from_1d`
-        provide mechanism that allows using external matrix-free methods, such as :func:`eigs` implemented in SciPy.
-        See example at :ref:`examples/tensor/decomposition:combining with scipy.sparse.linalg.eigs`.
-
-    Returns
-    -------
-    tensor (type derived from backend)
-        1D array with tensor data.
-    dict
-        metadata with structure of the symmetric tensor needed to encode the 1D array into blocks.
-    """
-    if meta is None:
-        meta = {'config': a.config, 'struct': a.struct, 'slices': a.slices,
-                'mfs': a.mfs, 'legs': a.get_legs(native=True)}
-        return a._data, meta
-
-    _test_configs_match(a.config, meta['config'])
-    if a.struct.s != meta['struct'].s:
-        raise YastnError("Tensor signature do not match meta.")
-    if a.struct.n != meta['struct'].n:
-        raise YastnError("Tensor charge do not match meta.")
-    if a.isdiag != meta['struct'].diag:
-        raise YastnError("Tensor diagonality do not match meta.")
-    if a.mfs != meta['mfs']:
-        raise YastnError("Tensor meta-fusion structure do not match meta.")
-
-    meta_hfs = tuple(leg.hf for leg in meta['legs'])
-    if a.hfs != meta_hfs:  # mask needed
-        legs_a = a.get_legs()
-        legs_u = {n: legs_union(leg_a, leg) for n, (leg_a, leg) in enumerate(zip(legs_a, meta['legs']))}
-        a = _embed_tensor(a, legs_a, legs_u)
-        if a.hfs != meta_hfs:
-            raise YastnError("Tensor fused legs do not match meta.")
-
-    if a.struct == meta['struct'] and a.slices == meta['slices']:
-        return a._data, meta
-
-    # filling in missing zero blocks
-    ia, im = 0, 0
-    slcs_a, slcs_m = [], []
-    while ia < len(a.struct.t):
-        if a.struct.t[ia] < meta['struct'].t[im] or im >= len(meta['struct'].t):
-            raise YastnError("Tensor has blocks that do not appear in meta.")
-        if a.struct.t[ia] == meta['struct'].t[im]:
-            if a.struct.D[ia] != meta['struct'].D[im]:
-                raise YastnError("Bond dimensions do not match meta.")
-            slcs_a.append(a.slices[ia].slcs[0])
-            slcs_m.append(meta['slices'][im].slcs[0])
-            ia += 1
-            im += 1
-        else: #a.struct.t[ia] > meta['struct'].t[im]:
-            im += 1
-    meta_embed = _join_contiguous_slices(slcs_m, slcs_a)
-    #
-    # add redundant information, to use a general backend function embed_mask
-    meta_embed = tuple((sl_m, sl_m[1] - sl_m[0], sl_a, sl_a[1] - sl_a[0], 0) for sl_m, sl_a in meta_embed)
-    mask = {0: slice(None)}
-    data = a.config.backend.embed_mask(a._data, mask, meta_embed, meta['struct'].size, 0, 0)
-    return data, meta
 
 
 ############################
@@ -308,7 +311,7 @@ def __getitem__(a, key) -> numpy.ndarray | torch.tensor:
     try:
         ind = a.struct.t.index(key)
     except ValueError as exc:
-        raise YastnError('Tensor does not have block specify by key.') from exc
+        raise YastnError('Tensor does not have the block specified by key.') from exc
     x = a._data[slice(*a.slices[ind].slcs[0])]
     return x if a.isdiag else x.reshape(a.struct.D[ind])
 
@@ -426,7 +429,7 @@ def to_raw_tensor(a) -> numpy.ndarray | torch.tensor:
     raise YastnError('Only tensor with a single block can be converted to raw tensor.')
 
 
-def to_nonsymmetric(a, legs=None, native=False, reverse=False) -> yastn.Tensor:
+def to_nonsymmetric(a, legs=None, native=False, reverse=False) -> 'Tensor':
     r"""
     Create equivalent :class:`yastn.Tensor` with no explict symmetry. All blocks of the original
     tensor are accummulated into a single block.

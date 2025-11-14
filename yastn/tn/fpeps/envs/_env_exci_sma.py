@@ -1,7 +1,7 @@
 from __future__ import annotations
 from tqdm import tqdm
 from ... import mps
-from .... import YastnError
+from ....tensor import YastnError
 from .._geometry import Site
 from ._env_boundary_mps import _clear_operator_input, clear_projectors
 from ....operators import sign_canonical_order
@@ -137,9 +137,9 @@ class EnvExciSMA:
 
         raise YastnError(f"{dirn=} not recognized. Should be 't', 'h' 'b', 'r', 'v', or 'l'.")
 
-    
+
     def measure_exci(self, *operators, exci_bra=None, exci_ket=None, site_bra=None, site_ket=None, sites_op=None, dirn='tb', opts_svd=None, opts_var=None):
-        
+
         sites = [site_bra, site_ket] + sites_op
 
         if sites is None or len(operators) != len(sites_op):
@@ -198,4 +198,3 @@ class EnvExciSMA:
         val_op = contract_window(bra, tms, ket, i0, i1, opts_svd, opts_var)
         # return sign * val_op / val_no
         return sign * val_op
-

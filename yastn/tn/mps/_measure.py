@@ -17,12 +17,14 @@ from __future__ import annotations
 from itertools import groupby, accumulate
 from numbers import Number
 from typing import Sequence
-import numpy as np
-from ... import YastnError, Tensor, eye, qr
-from . import MpsMpoOBC
-from ._env import Env, Env2
-from ...operators import swap_charges, sign_canonical_order
 
+import numpy as np
+
+from ._env import Env, Env2
+from ._mps_obc import MpsMpoOBC
+from ...initialize import eye
+from ...operators import swap_charges, sign_canonical_order
+from ...tensor import YastnError, Tensor, qr
 
 
 def vdot(*args) -> Number:
@@ -407,7 +409,7 @@ def sample(psi, projectors, number=1, return_probabilities=False) -> np.ndarray[
     bdrs = [tmp for _ in range(number)]
 
     for n in sites:
-        rands = (psi.config.backend.rand(number) + 1) / 2  # in [0, 1]
+        rands = psi.config.backend.rand(number)  # in [0, 1]
         An = psi[n] if psi.nr_phys == 1 else psi[n].fuse_legs(axes=(0, 1, (2, 3)))
         for k, (bdr, cut) in enumerate(zip(bdrs, rands)):
             state = bdr @ An
