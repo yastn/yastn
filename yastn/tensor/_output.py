@@ -17,6 +17,7 @@ from __future__ import annotations
 from functools import reduce
 from numbers import Number
 from operator import mul
+from typing import Sequence
 from warnings import warn
 
 import numpy as np
@@ -428,7 +429,7 @@ def to_raw_tensor(a) -> numpy.ndarray | torch.tensor:
     raise YastnError('Only tensor with a single block can be converted to raw tensor.')
 
 
-def to_nonsymmetric(a, legs=None, native=False, reverse=False) -> yastn.Tensor:
+def to_nonsymmetric(a, legs=None, native=False, reverse=False) -> 'Tensor':
     r"""
     Create equivalent :class:`yastn.Tensor` with no explict symmetry. All blocks of the original
     tensor are accummulated into a single block.

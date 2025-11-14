@@ -199,7 +199,7 @@ def _leg_struct_trivial(struct, axis=0):
 #  =========== fuse legs ======================
 
 
-def fuse_legs(a, axes, mode=None) -> yastn.Tensor:
+def fuse_legs(a, axes, mode=None) -> 'Tensor':
     r"""
     Fuse groups of legs into effective legs, reducing the rank of the tensor.
 
@@ -384,7 +384,7 @@ def fuse_meta_to_hard(a):
 #  =========== unfuse legs ======================
 
 
-def unfuse_legs(a, axes) -> yastn.Tensor:
+def unfuse_legs(a, axes) -> 'Tensor':
     r"""
     Unfuse legs, reverting one layer of fusion.
 
