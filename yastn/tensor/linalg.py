@@ -15,19 +15,21 @@
 """ Linalg methods for yastn.Tensor. """
 from __future__ import annotations
 from itertools import accumulate
+import logging
 from numbers import Number
+import sys
+
 import numpy as np
+
 from ._auxliary import _struct, _slc, _clear_axes, _unpack_axes
-from ._tests import YastnError, _test_axes_all
 from ._merging import _merge_to_matrix, _meta_unmerge_matrix, _unmerge
 from ._merging import _Fusion, _leg_struct_trivial
-# from ..krylov._krylov import svds
-import sys
-import logging
-logger= logging.getLogger(__name__)
+from ._tests import YastnError, _test_axes_all
 
 __all__ = ['qr', 'norm', 'entropy', 'truncation_mask', 'truncation_mask_multiplets',
            'svd', 'svd_with_truncation', 'eig', 'eigh', 'eigh_with_truncation']
+
+logger = logging.getLogger(__name__)
 
 
 def norm(a, p='fro') -> Number:

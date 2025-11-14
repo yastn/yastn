@@ -12,9 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from ... import tensordot, leg_product, YastnError, SpecialTensor
-from .envs._env_auxlliary import append_vec_tl, append_vec_br, append_vec_tr, append_vec_bl
+from __future__ import annotations
+
 from ._gates_auxiliary import match_ancilla, apply_gate_onsite
+from .envs._env_auxlliary import append_vec_tl, append_vec_br, append_vec_tr, append_vec_bl
+from ...tensor import tensordot, leg_product, YastnError, SpecialTensor, Tensor
 from ...tensor._auxliary import _clear_axes
 
 
@@ -158,24 +160,52 @@ class DoublePepsTensor(SpecialTensor):
 
     def conj(self):
         r""" Conjugate DoublePepsTensor. """
-        return DoublePepsTensor(bra=self.bra.conj(), ket=self.ket.conj(), transpose=self._t, op=self.op, swaps=self.swaps)
+        op_conj = self.op.conj() if self.op is not None else None
+        return DoublePepsTensor(bra=self.bra.conj(), ket=self.ket.conj(), transpose=self._t, op=op_conj, swaps=self.swaps)
 
     def clone(self):
         r"""
         Makes a clone of yastn.tn.fpeps.DoublePepsTensor by :meth:`cloning<yastn.Tensor.clone>`-ing
         all constituent tensors forming a new instance of DoublePepsTensor.
         """
-        return DoublePepsTensor(bra=self.bra.clone(), ket=self.ket.clone(), transpose=self._t, op=self.op, swaps=self.swaps)
+        op_clone = self.op.clone() if self.op is not None else None
+        return DoublePepsTensor(bra=self.bra.clone(), ket=self.ket.clone(), transpose=self._t, op=op_clone, swaps=self.swaps)
 
     def copy(self):
         r"""
         Makes a copy of yastn.tn.fpeps.DoublePepsTensor by :meth:`copying<yastn.Tensor.copy>`-ing
         all constituent tensors forming a new instance of DoublePepsTensor.
         """
-        return DoublePepsTensor(bra=self.bra.copy(), ket=self.ket.copy(), transpose=self._t, op=self.op, swaps=self.swaps)
+        op_copy = self.op.copy() if self.op is not None else None
+        return DoublePepsTensor(bra=self.bra.copy(), ket=self.ket.copy(), transpose=self._t, op=op_copy, swaps=self.swaps)
+
+    def to_dict(self, level=2):
+        r""" Serialize DoublePepsTensor into a dictionary. """
+        d = {'type': type(self).__name__,
+             'dict_ver': 1,
+             'bra': self.bra.to_dict(level=level),
+             'ket': self.ket.to_dict(level=level),
+             'transpose': self._t,
+             'swaps': self.swaps.copy()}
+        if self.op is not None:
+            d['op'] = self.op.to_dict(level=level)
+        return d
+
+    @classmethod
+    def from_dict(cls, d, config=None) -> DoublePepsTensor:
+        r"""
+        De-serializes DoublePepsTensor from the dictionary ``d``.
+        See :meth:`yastn.Tensor.from_dict` for further description.
+        """
+        if cls.__name__ != d['type']:
+            raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
+        bra = Tensor.from_dict(d=d['bra'], config=config)
+        ket = Tensor.from_dict(d=d['ket'], config=config)
+        op = Tensor.from_dict(d=d['op'], config=config) if 'op' in d else None
+        return DoublePepsTensor(bra=bra, ket=ket, transpose=d['transpose'], op=op, swaps=d['swaps'])
 
     def tensordot(self, b, axes, reverse=False):
-        """
+        r"""
         tensordot(DublePepsTensor, b, axes) with tenor leg order conventions matching the default for tensordot.
         tensordot(self, b, axes, reverse=True) corresponds to tensordot(b, self, axes).
         """

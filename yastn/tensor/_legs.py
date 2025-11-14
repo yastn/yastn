@@ -18,11 +18,13 @@ from typing import Sequence
 from dataclasses import dataclass
 from itertools import product, groupby
 from operator import itemgetter
+
 import numpy as np
+
 from ._auxliary import _flatten
+from ._merging import _Fusion, _hfs_union, _combine_hfs_prod, _unfuse_Fusion
 from ._tests import YastnError
 from ..sym import sym_none
-from ._merging import _Fusion, _hfs_union, _combine_hfs_prod, _unfuse_Fusion
 
 __all__ = ['Leg', 'LegMeta', 'legs_union', 'gaussian_leg', 'leg_product', 'undo_leg_product']
 

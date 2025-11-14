@@ -14,7 +14,9 @@
 # ==============================================================================
 """ Define rules for U1xU1xZ2 symmetry. """
 import numpy as np
+
 from .sym_abelian import sym_abelian
+
 
 class sym_U1xU1xZ2(sym_abelian):
     """ U1xU1xZ2 -- here Z2 will be used to account for global fermionic parity. """

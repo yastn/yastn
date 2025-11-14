@@ -14,13 +14,14 @@
 # ==============================================================================
 """ Various variants of the DMRG algorithm for Mps."""
 from __future__ import annotations
-from typing import NamedTuple, Sequence
 import logging
-from ... import eigs, YastnError
-from ._measure import Env
-from ._env import Env_sum, Env_project
-from . import MpsMpoOBC
+from typing import NamedTuple, Sequence
 
+from ._env import Env_sum, Env_project
+from ._measure import Env
+from ._mps_obc import MpsMpoOBC
+from ...krylov import eigs
+from ...tensor import YastnError
 
 logger = logging.Logger('dmrg')
 

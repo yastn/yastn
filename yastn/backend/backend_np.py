@@ -75,7 +75,7 @@ def copy(x):
 
 
 def to_numpy(x):
-    return x.copy()
+    return x if isinstance(x, (int, float, complex)) else x.copy()
 
 
 def get_shape(x):

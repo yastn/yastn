@@ -15,12 +15,10 @@
 """ Initialization of peps tensors for real or imaginary time evolution """
 from ._geometry import SquareLattice, CheckerboardLattice, RectangularUnitcell, TriangularLattice
 from ._peps import Peps
-from .envs._env_ctm import EnvCTM
-from .envs._env_bp import EnvBP
 from .envs._env_boundary_mps import EnvBoundaryMPS
-from ...initialize import load_from_dict as load_tensor_from_dict
-from ..mps import load_from_dict as load_mps_from_dict
-from ... import YastnError, Tensor
+from .envs._env_bp import EnvBP
+from .envs._env_ctm import EnvCTM
+from ...tensor import YastnError, Tensor
 
 
 def product_peps(geometry, vectors) -> Peps:
@@ -42,8 +40,8 @@ def product_peps(geometry, vectors) -> Peps:
         If dict is provided, it should specify a map between
         each unique lattice site and the corresponding vector.
     """
-    if not isinstance(geometry, (SquareLattice, CheckerboardLattice, TriangularLattice)):
-        raise YastnError("Geometry should be an instance of SquareLattice or CheckerboardLattice or TriangularLattice")
+    if not isinstance(geometry, (SquareLattice, CheckerboardLattice, TriangularLattice, RectangularUnitcell)):
+        raise YastnError("Geometry should be an instance of SquareLattice or CheckerboardLattice or TriangularLattice or RectangularUnitcell")
 
     if isinstance(vectors, Tensor):
         vectors = {site: vectors.copy() for site in geometry.sites()}
@@ -82,40 +80,12 @@ def load_from_dict(config, d) -> Peps:
         a result of :meth:`yastn.tn.fpeps.Peps.save_to_dict`, or
         :meth:`yastn.tn.fpeps.EnvCTM.save_to_dict`.
     """
-
-    if 'class' in d and d['class'] in ('EnvCTM', 'EnvBP'):
-        psi = load_from_dict(config, d['psi'])
+    if 'class' in d:
         if d['class'] == 'EnvCTM':
-            env = EnvCTM(psi, init=None)
-        elif d['class'] == 'EnvBP':
-            env = EnvBP(psi, init=None)
-        for site in env.sites():
-            for dirn, v in d['data'][site].items():
-                setattr(env[site], dirn, load_tensor_from_dict(config, v))
-        return env
-
-    if 'class' in d and d['class'] == 'EnvBoundaryMPS':
-        psi = load_from_dict(config, d['psi'])
-        env = EnvBoundaryMPS(psi, opts_svd={}, setup='')
-        for k, v in d['env'].items():
-            env._env[k] = load_mps_from_dict(config, v)
-        for k, v in d['info'].items():
-            env.info[k] = v.copy()
-        return env
-
+            return EnvCTM.from_dict(d, config)
+        if d['class'] == 'EnvBP':
+            return EnvBP.from_dict(d, config)
+        if d['class'] == 'EnvBoundaryMPS':
+            return EnvBoundaryMPS.from_dict(d, config)
     # otherwise assume class == 'Peps'
-    if d['lattice'] in ["square", "SquareLattice"]:
-        net = SquareLattice(dims=d['dims'], boundary=d['boundary'])
-    elif d['lattice'] in ["checkerboard", "CheckerboardLattice"]:
-        net = CheckerboardLattice()
-    elif d['lattice'] in ["rectangularunitcell", "RectangularUnitcell"]:
-        net = RectangularUnitcell(pattern=d['pattern'])
-    elif d['lattice'] in ["triangular", "TriangularLattice"]:
-        net = TriangularLattice()
-
-    psi = Peps(net)
-    for site in psi.sites():
-        obj = load_tensor_from_dict(config, d['data'][site])
-        if obj.ndim == 3:  obj = obj.unfuse_legs(axes=(0, 1))  # for backward compatibility
-        psi[site] = obj
-    return psi
+    return Peps.from_dict(d, config)

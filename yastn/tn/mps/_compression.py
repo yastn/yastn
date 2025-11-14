@@ -14,13 +14,16 @@
 # ==============================================================================
 """ Algorithm for variational optimization of Mps to match the target state."""
 from __future__ import annotations
-from typing import NamedTuple
 import logging
+from typing import NamedTuple
+
 from ._measure import Env
 from ._mps_obc import MpsMpoOBC, MpoPBC
-from ... import ones, eye, YastnError
+from ...initialize import ones, eye
+from ...tensor import YastnError
 
 logger = logging.Logger('compression')
+
 
 class compression_out(NamedTuple):
     sweeps: int = 0

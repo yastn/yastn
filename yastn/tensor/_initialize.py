@@ -13,14 +13,112 @@
 # limitations under the License.
 # ==============================================================================
 """ Methods creating a new yastn.Tensor """
-
 from functools import reduce
 from itertools import product, accumulate
-from operator import mul, itemgetter
 import numbers
+from operator import mul, itemgetter
+
 import numpy as np
-from ._auxliary import _flatten, _slc
+
+from ._auxliary import _flatten, _slc, _config
 from ._tests import YastnError, _test_tD_consistency, _test_struct_types
+from ..backend import backend_np
+from ..sym import sym_none, sym_U1, sym_Z2, sym_Z3, sym_U1xU1, sym_U1xU1xZ2
+
+__all__ = ['make_config']
+
+
+_syms = {"dense": sym_none,
+         "none": sym_none,
+         "U1": sym_U1,
+         "Z2": sym_Z2,
+         "Z3": sym_Z3,
+         "U1xU1": sym_U1xU1,
+         "U1xU1xZ2": sym_U1xU1xZ2}
+
+
+# def make_config(backend=backend_np, sym=sym_none, default_device='cpu',
+#                 default_dtype='float64', fermionic=False,
+#                 default_fusion='hard', force_fusion=None, tensordot_policy='fuse_contracted', **kwargs):
+def make_config(**kwargs) -> _config:
+    r"""
+    Create structure with YASTN configuration
+
+    Parameters
+    ----------
+    backend : backend module or str
+        Specify ``backend`` providing linear algebra and base dense tensors.
+        Currently supported backends are
+
+            * NumPy as ``yastn.backend.backend_np``
+            * PyTorch as ``yastn.backend.backend_torch``
+
+        The above backends can be specified as strings: "np", "torch".
+        Defaults to NumPy backend.
+
+    sym : symmetry module or compatible object or str
+        Specify abelian symmetry. To see how YASTN defines symmetries,
+        see :class:`yastn.sym.sym_abelian`.
+        Defaults to ``yastn.sym.sym_none``, effectively a dense tensor.
+        For predefined symmetries, takes string input from
+        'none' (or 'dense'), 'Z2', 'Z3', 'U1', 'U1xU1', 'U1xU1xZ2'.
+
+    default_device : str
+        Tensors can be stored on various devices as supported by ``backend``
+
+            * NumPy supports only ``'cpu'`` device
+            * PyTorch supports multiple devices, see
+              https://pytorch.org/docs/stable/tensor_attributes.html#torch.torch.device
+
+        If not specified, the default device is ``'cpu'``.
+
+    default_dtype: str
+        Default data type (dtype) of YASTN tensors. Supported options are: ``'float64'``,
+        ``'complex128'``. If not specified, the default dtype is ``'float64'``.
+    fermionic : bool or tuple[bool,...]
+        Specify behavior of :meth:`yastn.swap_gate` function, allowing to introduce fermionic statistics.
+        Allowed values: ``False``, ``True``, or a tuple ``(True, False, ...)`` with one bool for each component
+        charge vector, i.e., of length sym.NSYM. The default is ``False``.
+    default_fusion: str
+        Specify default strategy to handle leg fusion: ``'hard'`` or ``'meta'``. See :meth:`yastn.Tensor.fuse_legs`
+        for details. The default is ``'hard'``.
+    force_fusion : str
+        Overrides fusion strategy provided in :meth:`yastn.Tensor.fuse_legs`. The default is ``None``.
+    tensordot_policy: str
+        Contraction approach used by :meth:`yastn.tensordot`
+
+            * ``'fuse_to_matrix'`` Tensordot involves suitable permutation of each tensor while performing a fusion of each tensor into a sequence of matrices and calling matrix-matrix multiplication. Postprocessing includes unfusioning the remaining legs in the result, which often copy data adding extra overhead.
+            * ``'fuse_contracted'`` Tensordot involves suitable permutation of each tensor while performing a fusion of to-be-contracted legs of each tensor and calling multiplication. It involves a larger number of multiplication calls for smaller objects, but unfusing the legs of the result is not needed.
+            * ``'no_fusion'`` Tensordot involves suitable permutation of tensor blocks and calling matrix-matrix multiplication for a potentially large number of small objects. Resulting contributions to new blocks get added. However, overheads of initial fusion (copying data) can sometimes be avoided in this approach.
+
+    Example
+    -------
+
+    ::
+
+        config = yastn.make_config(backend='np', sym='U1')
+    """
+    if "backend" not in kwargs or kwargs["backend"] == 'np':
+        kwargs["backend"] = backend_np
+    elif kwargs["backend"] == 'torch':
+        from ..backend import backend_torch
+        kwargs["backend"] = backend_torch
+    elif kwargs["backend"] == 'torch_cpp':
+        from ..backend import backend_torch_cpp
+        kwargs["backend"] = backend_torch_cpp
+    elif isinstance(kwargs["backend"], str):
+        raise YastnError("backend encoded as string only supports: 'np', 'torch'")
+
+    if "sym" not in kwargs:
+        kwargs["sym"] = sym_none
+    elif isinstance(kwargs["sym"], str):
+        try:
+            kwargs["sym"] = _syms[kwargs["sym"]]
+        except KeyError:
+            raise YastnError("sym encoded as string only supports: 'dense', 'Z2', 'Z3', 'U1', 'U1xU1', 'U1xU1xZ2'.")
+
+    return _config(**{a: kwargs[a] for a in _config._fields if a in kwargs})
+
 
 
 def __setitem__(a, key, newvalue):

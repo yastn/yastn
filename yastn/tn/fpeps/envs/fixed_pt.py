@@ -1,23 +1,36 @@
+# Copyright 2025 The YASTN Authors. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
 import copy
-import time, logging
-from typing import Mapping
-import torch
+import logging
+import time
+
 import numpy as np
 from scipy.optimize import minimize
 from scipy.sparse.linalg import LinearOperator
 from scipy.sparse.linalg import eigsh, eigs, ArpackNoConvergence
-# import primme
+import torch
 
-from collections import namedtuple
-
-import torch.utils.checkpoint
-
-
-from .... import Tensor, zeros, eye, YastnError, tensordot, diag, rand, qr
-from ._env_ctm import ctm_conv_corner_spec, decompress_env_1d, decompress_proj_1d
-from .... import zeros, decompress_from_1d
-from ....tensor._tests import _test_axes_match
+from ._env_ctm import ctm_conv_corner_spec
+from ._env_dataclasses import Gauge
 from .rdm import *
+from .._geometry import Lattice
+from ....initialize import zeros, eye, rand
+from ....tensor import Tensor, tensordot, diag, qr
+from ...._split_combine_dict import split_data_and_meta, combine_data_and_meta
+
+
 log = logging.getLogger(__name__)
 
 
@@ -30,50 +43,60 @@ class NoFixedPointError(Exception):
         self.code = code          				 # Add a custom attribute for error codes
 log = logging.getLogger("FixedPoint")
 
+class EnvGauge():
+    def __init__(self, geometry):
+        r"""
+        Gauge matrices used in fixed-point AD.
+        """
+        self.geometry = geometry
+        for name in ["dims", "sites", "nn_site", "site2index", "Nx", "Ny"]:
+            setattr(self, name, getattr(self.geometry, name))
+        self.gauge = Lattice(self.geometry, objects={site: Gauge() for site in self.sites()})
 
-def env_raw_data(env):
+    def __getitem__(self, site):
+        return self.gauge[site]
+
+    def __setitem__(self, site, obj):
+        self.gauge[site] = obj
+
+    def to_dict(self, level=2):
+        """ Return a dictionary representation of the object. """
+        return {'type': type(self).__name__,
+                'dict_ver': 1,
+                'gauge': self.gauge.to_dict(level=level)}
+
+    @classmethod
+    def from_dict(cls, d, config=None):
+        r""" De-serializes EnvGauge from the dictionary ``d``. """
+        if d['dict_ver'] == 1:
+            if cls.__name__ != d['type']:
+                raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
+            gauge = Lattice.from_dict(d['gauge'], config=config)
+            g = cls(gauge.geometry)
+            g.gauge = gauge
+            return g
+
+def _concat_data(env_data):
     '''
     Combine all env raw tensors into a 1d tensor.
     '''
-    data_list = []
     slice_list = []
     numel = 0
-    for site in env.sites():
-        for dirn in ["tl", "tr", "bl", "br", "t", "l", "b", "r"]:
-            data_list.append(getattr(env[site], dirn)._data)
-            slice_list.append((numel, len(data_list[-1])))
-            numel += len(data_list[-1])
+    for t in env_data:
+        slice_list.append((numel, len(t)))
+        numel += len(t)
+    return torch.cat(env_data), slice_list
 
-    return torch.cat(data_list), slice_list
+def _split_data(data1d, slice_list):
+    '''
+    Recover a tuple of tensors from a 1d tensor and a given slice_list.
+    '''
+    env_data = tuple(torch.narrow(data1d, 0, *s) for s in slice_list )
+    return env_data
 
-def refill_env(env, data, slice_list):
-    ind = 0
-    for site in env.sites():
-        for dirn in ["tl", "tr", "bl", "br", "t", "l", "b", "r"]:
-            getattr(env[site], dirn)._data = torch.narrow(data, 0, *slice_list[ind])
-            ind += 1
-
-def refill_state(state, data):
-    # def unflatten(flattened_list, nested_iterable):
-    #     def unflatten_helper(flattened_iter, nested_iterable):
-    #         if isinstance(nested_iterable, dict):
-    #             for k, v in nested_iterable.items():
-    #                 unflatten_helper(flattened_iter, v)
-    #         elif isinstance(nested_iterable, (list, tuple, set)):
-    #             for v in nested_iterable:
-    #                 unflatten_helper(flattened_iter, v)
-    #         else:
-    #             nested_iterable._data = next(flattened_iter)
-
-    #     flattened_iter = iter(flattened_list)
-    #     unflatten_helper(flattened_iter, nested_iterable)
-
-    # unflatten(data, state.parameters)
-    # state.sync_()
-    assert len(state.sites()) == len(data), "Number of sites in state and data do not match"
-    for site,d in zip(state.sites(), data):
-        state[site]._data = d
-    return state
+def _assemble_dict_from_1d(meta, data1d, slices):
+    ts = _split_data(data1d, slices)
+    return combine_data_and_meta(ts, meta)
 
 def extract_dsv_t(t, history):
     max_dsv = max((history[t][k] - history[t+1][k]).norm().item() for k in history[t]) if len(history)>t else float('Nan')
@@ -356,16 +379,18 @@ def fast_env_T_gauge_multi_sites(config, T_olds, T_news):
         #               |          |
         #        ------M_1---...--M_L-------
         v0= zeros(config=Ts[0].config, legs=(leg.conj(), leg), n=Ts[0].config.sym.zero())
-        _, meta_L= v0.compress_to_1d(meta=None)
+        d_L = v0.to_dict(level=0)
+        _, meta_L = split_data_and_meta(d_L)
 
         v1= zeros(config=Ts[0].config, legs=(leg, leg.conj()), n=Ts[0].config.sym.zero())
-        _, meta_R= v1.compress_to_1d(meta=None)
+        d_R = v1.to_dict(level=0)
+        _, meta_R = split_data_and_meta(d_R)
 
         to_tensor= lambda x: Ts[0].config.backend.to_tensor(x if np.sum(np.array(x.strides)<0)==0 else x.copy() , dtype=Ts[0].yastn_dtype, device=Ts[0].device)
-        to_numpy= lambda x: Ts[0].config.backend.to_numpy(x)
 
         def vm(v):
-            rho = decompress_from_1d(to_tensor(v.conj()), meta_L)
+            rho_d = combine_data_and_meta((to_tensor(v.conj()),), meta_L)
+            rho = Tensor.from_dict(rho_d)
 
             # Cost: O(chi^3 D^2)
             for i in range(len(Ts)):
@@ -382,11 +407,15 @@ def fast_env_T_gauge_multi_sites(config, T_olds, T_news):
                 #          -----M_i----1
                 rho = tensordot(Ts[i], rho, axes=([0, 1], [0, 1]))
 
-            rho_data, rho_meta= rho.compress_to_1d(meta=meta_L)
-            return to_numpy(rho_data).conj()
+            # rho_data, rho_meta= rho.compress_to_1d(meta=meta_L)
+            d_rho = rho.to_dict(level=2)
+            rho_data, _ = split_data_and_meta(d_rho)
+            return rho_data[0].conj()
 
         def mv(v):
-            rho = decompress_from_1d(to_tensor(v), meta_R)
+            rho_d = combine_data_and_meta((to_tensor(v), ), meta_R)
+            rho = Tensor.from_dict(rho_d)
+
             # Cost: O(chi^3 D^2)
             for i in range(len(Ts)):
                 #     1---T_i-----
@@ -402,16 +431,14 @@ def fast_env_T_gauge_multi_sites(config, T_olds, T_news):
                 #    1----M_i^*--/
                 rho = tensordot(rho, Ms[-1-i], axes=([0, 2], [2, 1]), conj=(0, 1))
 
-            rho_data, rho_meta= rho.compress_to_1d(meta=meta_R)
-            return to_numpy(rho_data)
+            # rho_data, rho_meta= rho.compress_to_1d(meta=meta_R)
+            d_rho = rho.to_dict(level=2)
+            rho_data, _ = split_data_and_meta(d_rho)
+            return rho_data[0]
 
         A = LinearOperator((v0.size, v0.size), matvec=mv, rmatvec=vm)
         w, vs = eigs(A, k=1, which='LM', ncv=ncv, maxiter=eigs_maxiter)
-        return w, decompress_from_1d(to_tensor(vs[:, 0]), meta_R)
-
-        # svds is slightly worse in precision compared to eigs
-        # u, s, vh = svds(A, k=1, which='LM')
-        # return s, decompress_from_1d(to_tensor(vh[0, :].conj()), meta_R)
+        return w, Tensor.from_dict(combine_data_and_meta((to_tensor(vs[:, 0]),), meta_R))
 
     def normalize_QR(Q, R):
         # make the diagonal entries of R matrix positive
@@ -458,21 +485,11 @@ def real_to_complex(z):      # real vector of length 2n -> complex of length n
 def complex_to_real(z):      # complex vector of length n -> real of length 2n
     return np.concatenate((np.real(z), np.imag(z)))
 
-Gauge = namedtuple("Gauge", "t l b r")
-
-def _compress_gauges_1d(gauges : Mapping[Site,Gauge]):
-    data_t, meta_t= tuple(zip( *(getattr(gauges[site],dirn).compress_to_1d() for site in gauges.keys() \
-        for dirn in "tlbr") ))
-    meta= {'gauges': meta_t, 'sites': tuple(gauges.keys())}
-    return data_t, meta
-
-def _decompress_gauges_1d(data_t, meta) -> Mapping[Site,Gauge]:
-    return {site: Gauge(*[decompress_from_1d(data_t[i], meta['gauges'][i]) for i in range(4*j, 4*j+4)]) \
-        for j, site in enumerate(meta['sites'])}
 
 def compute_env_gauge_product(env, zero_modes_dict, cs_dict):
     # Given sigma matrices formed by cs_dict and zero_modes_dict, compute sigma-conjugated env tensors.
-    sigma_dict, phases_ind = {}, {}
+    # env_gauge, phases_ind = {}, {}
+    env_gauge, phases_ind = EnvGauge(env.geometry), {}
     ind = 0
     fixed_env = env.copy()
     for site in env.sites():
@@ -487,25 +504,27 @@ def compute_env_gauge_product(env, zero_modes_dict, cs_dict):
             phases_ind[(site_ind, dirn)] = ind
             sigma_list.append(zero_mode)
             ind += 1
-        sigma_dict[site_ind] = Gauge(*sigma_list)
+        env_gauge[site] = Gauge(*sigma_list)
 
     for site in env.sites():
-        site_ind = env.site2index(site)
-        site_t, site_l, site_b, site_r = env.site2index(env.nn_site(site, "t")), env.site2index(env.nn_site(site, "l")), env.site2index(env.nn_site(site, "b")), env.site2index(env.nn_site(site, "r"))
+        # site_ind = env.site2index(site)
+        # site_t, site_l, site_b, site_r = env.site2index(env.nn_site(site, "t")), env.site2index(env.nn_site(site, "l")), env.site2index(env.nn_site(site, "b")), env.site2index(env.nn_site(site, "r"))
 
-        sigma1_t, sigma1_l, sigma1_b, sigma1_r = sigma_dict[site_ind].t, sigma_dict[site_ind].l, sigma_dict[site_ind].b, sigma_dict[site_ind].r
-        sigma2_l, sigma2_b, sigma2_r, sigma2_t = sigma_dict[site_t].l, sigma_dict[site_l].b, sigma_dict[site_b].r, sigma_dict[site_r].t
+        site_t, site_l, site_b, site_r = env.nn_site(site, "t"), env.nn_site(site, "l"), env.nn_site(site, "b"), env.nn_site(site, "r")
+
+        sigma1_t, sigma1_l, sigma1_b, sigma1_r = env_gauge[site].t, env_gauge[site].l, env_gauge[site].b, env_gauge[site].r
+        sigma2_l, sigma2_b, sigma2_r, sigma2_t = env_gauge[site_t].l, env_gauge[site_l].b, env_gauge[site_b].r, env_gauge[site_r].t
         for dirn in ["t", "l", "b", "r"]:
             T_new = getattr(env[site], dirn)
-            sigma1 = getattr(sigma_dict[site_ind], dirn)
+            sigma1 = getattr(env_gauge[site], dirn)
             if dirn == "t":
-                sigma2 = getattr(sigma_dict[site_r], dirn)
+                sigma2 = getattr(env_gauge[site_r], dirn)
             elif dirn == "r":
-                sigma2 = getattr(sigma_dict[site_b], dirn)
+                sigma2 = getattr(env_gauge[site_b], dirn)
             elif dirn == "b":
-                sigma2 = getattr(sigma_dict[site_l], dirn)
+                sigma2 = getattr(env_gauge[site_l], dirn)
             elif dirn == "l":
-                sigma2 = getattr(sigma_dict[site_t], dirn)
+                sigma2 = getattr(env_gauge[site_t], dirn)
 
             fixed_T = tensordot(
                 tensordot(sigma1, T_new, axes=(0, 0), conj=(1, 0)),
@@ -542,7 +561,7 @@ def compute_env_gauge_product(env, zero_modes_dict, cs_dict):
                 )
             setattr(fixed_env[site], dirn, fixed_C)
 
-    return sigma_dict, phases_ind, fixed_env
+    return env_gauge, phases_ind, fixed_env
 
 def phase_loss(phases, env_old, fixed_env, phases_ind):
     exp_phases = torch.exp(1j * phases)
@@ -768,7 +787,7 @@ def find_coeff_multi_sites(env_old, env, zero_modes_dict, dtype=torch.complex128
 
 def find_gauge_multi_sites(env_old, env, verbose=False):
     zero_modes_dict = {}
-    sigma_dict = {}
+    env_gauge = {}
     for site in env.sites():
         site_ind = env.site2index(site)
         for k, (N, d) in zip(["t", "l", "b", "r"], [(env.Ny, "r"), (env.Nx, "t"), (env.Ny, "l"), (env.Nx, "b")]):
@@ -791,7 +810,7 @@ def find_gauge_multi_sites(env_old, env, verbose=False):
         off_diag = matrix - torch.diag(torch.diag(matrix))  # Remove diagonal elements
         return torch.all(torch.abs(off_diag) < tol)  # Check if all off-diagonal elements are near zero
 
-    sigma_dict, _, fixed_env = compute_env_gauge_product(env, zero_modes_dict, cs_dict)
+    env_gauge, _, fixed_env = compute_env_gauge_product(env, zero_modes_dict, cs_dict)
     if verbose:
         cardinal = ("t", "l", "b", "r")          # 4 legs  (order fixed)
         corner   = ("tl", "bl", "br", "tr")      # 4 corners (order fixed)
@@ -801,7 +820,7 @@ def find_gauge_multi_sites(env_old, env, verbose=False):
             for dirn in corner:
                 print("C diff:", (getattr(fixed_env[s], dirn) - getattr(env_old[s], dirn)).norm() / getattr(env_old[s], dirn).norm())
 
-    return sigma_dict
+    return env_gauge
 
 
 def fp_ctmrg(env: EnvCTM, \
@@ -822,7 +841,10 @@ def fp_ctmrg(env: EnvCTM, \
         Sequence[Tensor]: raw environment data for the backward pass.
     """
     raw_peps_params= tuple( env.psi.ket[s]._data for s in env.psi.ket.sites() )
-    return FixedPoint.apply(env, ctm_opts_fwd, ctm_opts_fp, *raw_peps_params)
+    env, env_t_meta, env_slices, env_1d = FixedPoint.apply(env, ctm_opts_fwd, ctm_opts_fp, *raw_peps_params)
+    env_t_dict = _assemble_dict_from_1d(env_t_meta, env_1d, env_slices)
+    env.env = Lattice.from_dict(env_t_dict)
+    return env
 
 
 class FixedPoint(torch.autograd.Function):
@@ -845,27 +867,27 @@ class FixedPoint(torch.autograd.Function):
         return rdms
 
     @staticmethod
-    def fixed_point_iter(env_in, sigma_dict, ctm_opts_fp, slices, env_data, psi_data):
-        refill_env(env_in, env_data, slices)
-        refill_state(env_in.psi.ket, psi_data)
-        # refill_state_v2(env_in.psi.ket, psi_data)
+    def fixed_point_iter(env_gauge, ctm_opts_fp, env_dict, env_meta, env_slices, psi_meta, env_data, psi_data):
+        env_t_dict = _assemble_dict_from_1d(env_meta, env_data, env_slices)
+        psi_dict = combine_data_and_meta(psi_data, psi_meta)
+        env_dict['env'], env_dict['psi'] = env_t_dict, psi_dict
+        env_in = EnvCTM.from_dict(env_dict)
         env_in.update_(
             **ctm_opts_fp
         )
 
         for site in env_in.sites():
-            site_ind = env_in.site2index(site)
-            site_t, site_l, site_b, site_r = env_in.site2index(env_in.nn_site(site, "t")), env_in.site2index(env_in.nn_site(site, "l")), env_in.site2index(env_in.nn_site(site, "b")), env_in.site2index(env_in.nn_site(site, "r"))
+            site_t, site_l, site_b, site_r = env_in.nn_site(site, "t"), env_in.nn_site(site, "l"), env_in.nn_site(site, "b"), env_in.nn_site(site, "r")
             for dirn in ["t", "l", "b", "r"]:
-                sigma1 = getattr(sigma_dict[site_ind], dirn)
+                sigma1 = getattr(env_gauge[site], dirn)
                 if dirn == "t":
-                    sigma2 = getattr(sigma_dict[site_r], dirn)
+                    sigma2 = getattr(env_gauge[site_r], dirn)
                 elif dirn == "r":
-                    sigma2 = getattr(sigma_dict[site_b], dirn)
+                    sigma2 = getattr(env_gauge[site_b], dirn)
                 elif dirn == "b":
-                    sigma2 = getattr(sigma_dict[site_l], dirn)
+                    sigma2 = getattr(env_gauge[site_l], dirn)
                 elif dirn == "l":
-                    sigma2 = getattr(sigma_dict[site_t], dirn)
+                    sigma2 = getattr(env_gauge[site_t], dirn)
                 fixed_t = tensordot(
                     tensordot(sigma1, getattr(env_in[site], dirn), axes=(0, 0), conj=(1, 0)),
                     sigma2,
@@ -873,9 +895,8 @@ class FixedPoint(torch.autograd.Function):
                 )
                 setattr(env_in[site], dirn, fixed_t)
 
-            sigma1_t, sigma1_l, sigma1_b, sigma1_r = sigma_dict[site_ind].t, sigma_dict[site_ind].l, sigma_dict[site_ind].b, sigma_dict[site_ind].r
-            sigma2_l, sigma2_b, sigma2_r, sigma2_t = sigma_dict[site_t].l, sigma_dict[site_l].b, sigma_dict[site_b].r, sigma_dict[site_r].t
-            # sigma_t, sigma_l, sigma_b, sigma_r = sigma_dict[site].t, sigma_dict[site].l, sigma_dict[site].b, sigma_dict[site].r
+            sigma1_t, sigma1_l, sigma1_b, sigma1_r = env_gauge[site].t, env_gauge[site].l, env_gauge[site].b, env_gauge[site].r
+            sigma2_l, sigma2_b, sigma2_r, sigma2_t = env_gauge[site_t].l, env_gauge[site_l].b, env_gauge[site_b].r, env_gauge[site_r].t
             for dirn in ["tl", "bl", "br", "tr"]:
                 C_new = getattr(env_in[site], dirn)
                 if dirn == "tl":
@@ -904,8 +925,9 @@ class FixedPoint(torch.autograd.Function):
                     )
                 setattr(env_in[site], dirn, fixed_C)
 
-        env_out_data, slices = env_raw_data(env_in)
-        return (env_out_data, )
+        env_out_dict = env_in.to_dict(level=0)
+        env_t_data, _ = split_data_and_meta(env_out_dict['env'])
+        return (_concat_data(env_t_data)[0], )
 
     def get_converged_env(
         env,
@@ -990,38 +1012,43 @@ class FixedPoint(torch.autograd.Function):
 
         # 3. Find the gauge transformation
         t0 = time.perf_counter()
-        sigma_dict = find_gauge_multi_sites(env_converged, ctm_env_out, verbose=True)
-        if sigma_dict is None:
+        env_gauge = find_gauge_multi_sites(env_converged, ctm_env_out, verbose=True)
+        if env_gauge is None:
             raise NoFixedPointError(code=1, message="No fixed point found: fail to find the gauge matrix!")
         t1 = time.perf_counter()
         log.info(f"{type(ctx).__name__}.forward FP gauge-fixing t {t1-t0} [s]")
 
-        env_data, env_meta = env_converged.compress_env_1d()
-        fp_proj_data, fp_proj_meta = ctm_env_out.compress_proj_1d()
-        g_data, g_meta= _compress_gauges_1d(sigma_dict)
-        ctx.save_for_backward(*env_data, *fp_proj_data, *g_data)
-        ctx.env_meta, ctx.fp_proj_meta, ctx.g_meta = env_meta, fp_proj_meta, g_meta
+        env_dict = env_converged.to_dict(level=0)
+        env_data, env_meta = split_data_and_meta(env_dict)
+
+        g_dict = env_gauge.to_dict(level=0)
+        g_data, g_meta = split_data_and_meta(g_dict)
+        ctx.save_for_backward(*env_data, *g_data)
+        ctx.env_data_num = len(env_data)
+        ctx.env_meta, ctx.g_meta = env_meta, g_meta
         ctx.ctm_opts_fp = _ctm_opts_fp
 
-        env_1d, env_slices= env_raw_data(env_converged)
-        return env_converged, env_slices, env_1d
+        # Note: one of the ouput of forward must be torch tensor to trigger backward
+        env_t_data, env_t_meta = split_data_and_meta(env_dict['env'])
+        env_1d, env_slices = _concat_data(env_t_data)
+        return env_converged, env_t_meta, env_slices, env_1d
 
     @staticmethod
-    def backward(ctx, none0, none1, *grad_env):
+    def backward(ctx, none0, none1, none2, *grad_env):
         verbosity= ctx.verbosity
         grads = grad_env
         dA = grad_env
 
-        # env_data = torch.utils.checkpoint.detach_variable(ctx.saved_tensors)[0] # only one element in the tuple
-        env_data = ctx.saved_tensors[:len(ctx.env_meta['psi'])+len(ctx.env_meta['env'])]
-        fp_proj_data = ctx.saved_tensors[len(env_data):len(env_data)+len(ctx.fp_proj_meta['proj'])]
-        g_data = ctx.saved_tensors[-len(ctx.g_meta['gauges']):]
-        env = decompress_env_1d(env_data, ctx.env_meta)
-        env.proj = decompress_proj_1d(fp_proj_data, ctx.fp_proj_meta)
-        sigma_dict = _decompress_gauges_1d(g_data, ctx.g_meta)
+        env_data = ctx.saved_tensors[:ctx.env_data_num]
+        g_data = ctx.saved_tensors[ctx.env_data_num:]
 
-        psi_data = tuple(env.psi.ket[s]._data for s in env.psi.ket.sites())
-        _env_ts, _env_slices = env_raw_data(env)
+        env_dict = combine_data_and_meta(env_data, ctx.env_meta)
+        g_dict = combine_data_and_meta(g_data, ctx.g_meta)
+        env_gauge = EnvGauge.from_dict(g_dict)
+
+        _env_data, _env_meta = split_data_and_meta(env_dict['env'])
+        _env_ts, _env_slices = _concat_data(_env_data)
+        _psi_data, _psi_meta = split_data_and_meta(env_dict['psi'])
 
         prev_grad_tmp = None
         diff_ave = None
@@ -1030,53 +1057,44 @@ class FixedPoint(torch.autograd.Function):
         with torch.enable_grad():
             if verbosity > 2 and _env_ts.is_cuda:
                 torch.cuda.memory._dump_snapshot(f"{type(ctx).__name__}_backward_prevjp_CUDAMEM.pickle")
-            #_, dfdC_vjp = torch.func.vjp(lambda x: FixedPoint.fixed_point_iter(env, sigma_dict, ctx.ctm_opts_fp, _env_slices, x, psi_data), _env_ts)
-            #_, dfdA_vjp = torch.func.vjp(lambda x: FixedPoint.fixed_point_iter(env, sigma_dict, ctx.ctm_opts_fp, _env_slices, _env_ts, x), psi_data)
-            _, df_vjp = torch.func.vjp(lambda x,y: FixedPoint.fixed_point_iter(env, sigma_dict, ctx.ctm_opts_fp, _env_slices, x, y), _env_ts, psi_data)
+            #_, dfdC_vjp = torch.func.vjp(lambda x: FixedPoint.fixed_point_iter(env, env_gauge, ctx.ctm_opts_fp, _env_slices, x, psi_data), _env_ts)
+            #_, dfdA_vjp = torch.func.vjp(lambda x: FixedPoint.fixed_point_iter(env, env_gauge, ctx.ctm_opts_fp, _env_slices, _env_ts, x), psi_data)
+            _, df_vjp = torch.func.vjp(lambda x,y: FixedPoint.fixed_point_iter(env_gauge, ctx.ctm_opts_fp, env_dict, _env_meta, _env_slices, _psi_meta, x, y), _env_ts, _psi_data)
             dfdC_vjp= lambda x: (df_vjp(x)[0],)
             dfdA_vjp= lambda x: (df_vjp(x)[1],)
             if verbosity > 2 and _env_ts.is_cuda:
                 torch.cuda.memory._dump_snapshot(f"{type(ctx).__name__}_backward_postvjp_CUDAMEM.pickle")
-        # fixed_point_iter changes the data of psi, so we need to refill the state to recover the previous state
-        refill_state(env.psi.ket, psi_data)
 
         alpha = 0.4
         for step in range(ctx.ctm_opts_fp['max_sweeps']):
             grads = dfdC_vjp(grads)
             # with torch.enable_grad():
-            #     grads = torch.autograd.grad(FixedPoint.fixed_point_iter(ctx.env, ctx.sigma_dict, ctx.opts_svd, ctx.slices, env_data, psi_data), env_data, grad_outputs=grads)
+            #     grads = torch.autograd.grad(FixedPoint.fixed_point_iter(ctx.env, ctx.env_gauge, ctx.opts_svd, ctx.slices, env_data, psi_data), env_data, grad_outputs=grads)
             if all([torch.norm(grad, p=torch.inf) < ctx.ctm_opts_fp["corner_tol"] for grad in grads]):
                 break
             else:
                 dA = tuple(dA[i] + grads[i] for i in range(len(grads)))
-            # for grad in grads:
-            #     print(torch.norm(grad, p=torch.inf))
 
-            if step % 1 == 0:
-                # with torch.enable_grad():
-                #     grad_tmp = torch.autograd.grad(FixedPoint.fixed_point_iter(ctx.env, ctx.sigma_dict, ctx.opts_svd, ctx.slices, env_data, psi_data), psi_data, grad_outputs=dA)
-                grad_tmp = torch.cat(dfdA_vjp(dA)[0])
-                if prev_grad_tmp is not None:
-                    grad_diff = torch.norm(grad_tmp[0] - prev_grad_tmp[0])
-                    print("full grad diff", grad_diff)
-                    if grad_diff < ctx.ctm_opts_fp["corner_tol"]:
-                        # print("The norm of the full grad diff is below 1e-10.")
-                        log.log(logging.INFO, f"Fixed_pt: The norm of the full grad diff is below {ctx.ctm_opts_fp['corner_tol']}.")
+            grad_tmp = torch.cat(dfdA_vjp(dA)[0])
+            if prev_grad_tmp is not None:
+                grad_diff = torch.norm(grad_tmp[0] - prev_grad_tmp[0])
+                print("full grad diff", grad_diff)
+                if grad_diff < ctx.ctm_opts_fp["corner_tol"]:
+                    # print("The norm of the full grad diff is below 1e-10.")
+                    log.log(logging.INFO, f"Fixed_pt: The norm of the full grad diff is below {ctx.ctm_opts_fp['corner_tol']}.")
+                    break
+                if diff_ave is not None:
+                    if grad_diff > diff_ave:
+                        # print("Full grad diff is no longer decreasing!")
+                        log.log(logging.INFO, f"Fixed_pt: Full grad diff is no longer decreasing.")
                         break
-                    if diff_ave is not None:
-                        if grad_diff > diff_ave:
-                            # print("Full grad diff is no longer decreasing!")
-                            log.log(logging.INFO, f"Fixed_pt: Full grad diff is no longer decreasing.")
-                            break
-                        else:
-                            diff_ave = alpha*grad_diff + (1-alpha)*diff_ave
                     else:
-                        diff_ave = grad_diff
-                prev_grad_tmp = grad_tmp
+                        diff_ave = alpha*grad_diff + (1-alpha)*diff_ave
+                else:
+                    diff_ave = grad_diff
+            prev_grad_tmp = grad_tmp
 
         dA = dfdA_vjp(dA)[0]
-        # with torch.enable_grad():
-        #     dA = torch.autograd.grad(FixedPoint.fixed_point_iter(ctx.env, ctx.sigma_dict, ctx.opts_svd, ctx.slices, env_data, psi_data), psi_data, grad_outputs=dA)
 
         # --------option 2----------
         # Solve equations of the form Ax = b. Takes extremely long time if df/dC has eigenvalues close to 1
@@ -1086,13 +1104,13 @@ class FixedPoint(torch.autograd.Function):
         # def mat_vec_A(u):
         #   u = torch.from_numpy(u)
         #   with torch.enable_grad():
-        #       res = torch.autograd.grad(FixedPoint.fixed_point_iter(ctx.env, ctx.sigma_dict, ctx.opts_svd, ctx.slices, env_data), env_data, grad_outputs=u)
+        #       res = torch.autograd.grad(FixedPoint.fixed_point_iter(ctx.env, ctx.env_gauge, ctx.opts_svd, ctx.slices, env_data), env_data, grad_outputs=u)
         #   return (u - res[0]).numpy()
 
         # def rmat_vec_A(u):
         #   u = torch.from_numpy(u)
         #   u = u.conj()
-        #   f = lambda x: FixedPoint.fixed_point_iter(ctx.env, ctx.sigma_dict, ctx.opts_svd, ctx.slices, x)
+        #   f = lambda x: FixedPoint.fixed_point_iter(ctx.env, ctx.env_gauge, ctx.opts_svd, ctx.slices, x)
         #   with torch.enable_grad():
         #       output, res = torch.autograd.functional.jvp(f, env_data, u)
         #   return (u - res).conj().numpy()
@@ -1105,6 +1123,6 @@ class FixedPoint(torch.autograd.Function):
 
         # u = torch.from_numpy(u)
         # with torch.enable_grad():
-        #   dA = torch.autograd.grad(FixedPoint.fixed_point_iter(ctx.env, ctx.sigma_dict, ctx.opts_svd, ctx.slices, env_data), ctx.env.psi.ket.get_parameters(), grad_outputs=u)
+        #   dA = torch.autograd.grad(FixedPoint.fixed_point_iter(ctx.env, ctx.env_gauge, ctx.opts_svd, ctx.slices, env_data), ctx.env.psi.ket.get_parameters(), grad_outputs=u)
 
         return None, None, None, *dA

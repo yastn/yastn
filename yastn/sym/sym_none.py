@@ -15,6 +15,7 @@
 """ Define trivial rules for dense tensor. """
 from .sym_abelian import sym_abelian
 
+
 class sym_none(sym_abelian):
     """No symmetry"""
 

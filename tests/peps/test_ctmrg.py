@@ -261,7 +261,7 @@ def test_1x1_D1_Z2_spinlessf_conv(ctm_init, fix_signs, truncate_multiplets_mode,
         d = json.load(f)
 
     g= fpeps.RectangularUnitcell(**d['geometry'])
-    A= { tuple(d['parameters_key_to_id'][coord]): yastn.load_from_dict(yastn_cfg_Z2, d_ten)
+    A= {tuple(d['parameters_key_to_id'][coord]): yastn.Tensor.from_dict(d_ten, config=yastn_cfg_Z2)
                                  for coord,d_ten in d['parameters'].items() }
 
     psi = fpeps.Peps(g, tensors=A)
@@ -287,5 +287,4 @@ def test_1x1_D1_Z2_spinlessf_conv(ctm_init, fix_signs, truncate_multiplets_mode,
 
 
 if __name__ == '__main__':
-    test_ctmrg_Ising_4x5({})
-    #pytest.main([__file__, "-vs", "--durations=0", "--long_tests", "--backend", "torch"])
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"]) #,  "--long_tests", ])

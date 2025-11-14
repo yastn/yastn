@@ -16,16 +16,16 @@
 from __future__ import annotations
 from functools import lru_cache
 from itertools import accumulate
-from ._auxliary import _slc, _join_contiguous_slices
-from ._tests import YastnError, _test_can_be_combined, _get_tD_legs, _test_axes_match
-from ._merging import _embed_tensor
-from ._legs import legs_union
 
+from ._auxliary import _slc, _join_contiguous_slices
+from ._legs import legs_union
+from ._merging import _embed_tensor
+from ._tests import YastnError, _test_can_be_combined, _get_tD_legs, _test_axes_match
 
 __all__ = ['add', 'real', 'imag', 'sqrt', 'rsqrt', 'reciprocal', 'exp', 'bitwise_not', 'allclose']
 
 
-def __add__(a, b) -> yastn.Tensor:
+def __add__(a, b) -> 'Tensor':
     """
     Add two tensors, use: :math:`a + b`.
 
@@ -37,7 +37,7 @@ def __add__(a, b) -> yastn.Tensor:
     return a._replace(hfs=hfs, struct=struct, slices=slices, data=data)
 
 
-def __sub__(a, b) -> yastn.Tensor:
+def __sub__(a, b) -> 'Tensor':
     """
     Subtract two tensors, use: :math:`a - b`.
 
@@ -207,7 +207,7 @@ def allclose(a, b, rtol=1e-13, atol=1e-13) -> bool:
     return a.config.backend.allclose(a._data, b._data, rtol, atol)
 
 
-def __lt__(a, number) -> yastn.Tensor[bool]:
+def __lt__(a, number) -> 'Tensor[bool]':
     """
     Logical tensor with elements less-than a number (if it makes sense for backend data tensors),
     use: `mask = tensor < number`
@@ -218,7 +218,7 @@ def __lt__(a, number) -> yastn.Tensor[bool]:
     return a._replace(data=data)
 
 
-def __gt__(a, number) -> yastn.Tensor[bool]:
+def __gt__(a, number) -> 'Tensor[bool]':
     """
     Logical tensor with elements greater-than a number (if it makes sense for backend data tensors),
     use: `mask = tensor > number`
@@ -229,7 +229,7 @@ def __gt__(a, number) -> yastn.Tensor[bool]:
     return a._replace(data=data)
 
 
-def __le__(a, number) -> yastn.Tensor[bool]:
+def __le__(a, number) -> 'Tensor[bool]':
     """
     Logical tensor with elements less-than-or-equal-to a number (if it makes sense for backend data tensors),
     use: `mask = tensor <= number`
@@ -240,7 +240,7 @@ def __le__(a, number) -> yastn.Tensor[bool]:
     return a._replace(data=data)
 
 
-def __ge__(a, number) -> yastn.Tensor[bool]:
+def __ge__(a, number) -> 'Tensor[bool]':
     """
     Logical tensor with elements greater-than-or-equal-to a number (if it makes sense for backend data tensors),
     use: `mask = tensor >= number`
@@ -251,7 +251,7 @@ def __ge__(a, number) -> yastn.Tensor[bool]:
     return a._replace(data=data)
 
 
-def __mul__(a, number) -> yastn.Tensor:
+def __mul__(a, number) -> 'Tensor':
     """ Multiply tensor by a number, use: `number * tensor`. """
     data = a._data * number
     if a.config.backend.get_size(data) != a.struct.size:
@@ -259,7 +259,7 @@ def __mul__(a, number) -> yastn.Tensor:
     return a._replace(data=data)
 
 
-def __rmul__(a, number) -> yastn.Tensor:
+def __rmul__(a, number) -> 'Tensor':
     """ Multiply tensor by a number, use: `tensor * number`. """
     return a.__mul__(number)
 
@@ -272,12 +272,12 @@ def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
     raise YastnError(f"Only np.float * Mps is supported; {ufunc.__name__} was called.")
 
 
-def __neg__(a) -> yastn.Tensor:
+def __neg__(a) -> 'Tensor':
     """ Multiply tensor by -1, use: `-tensor`. """
     return a.__mul__(-1)
 
 
-def __pow__(a, exponent) -> yastn.Tensor:
+def __pow__(a, exponent) -> 'Tensor':
     """ Element-wise exponent of tensor, use: `tensor ** exponent`. """
     data = a._data ** exponent
     if a.config.backend.get_size(data) != a.struct.size:
@@ -285,7 +285,7 @@ def __pow__(a, exponent) -> yastn.Tensor:
     return a._replace(data=data)
 
 
-def __truediv__(a, number) -> yastn.Tensor:
+def __truediv__(a, number) -> 'Tensor':
     """ Divide tensor by a scalar, use: `tensor / number`. """
     data = a._data / number
     if a.config.backend.get_size(data) != a.struct.size:
@@ -294,7 +294,7 @@ def __truediv__(a, number) -> yastn.Tensor:
     return a._replace(data=data)
 
 
-def __abs__(a) -> yastn.Tensor:
+def __abs__(a) -> 'Tensor':
     r"""
     Return tensor with element-wise absolute values.
 
@@ -304,7 +304,7 @@ def __abs__(a) -> yastn.Tensor:
     return a._replace(data=data)
 
 
-def real(a) -> yastn.Tensor:
+def real(a) -> 'Tensor':
     r"""
     Return tensor with imaginary part set to zero.
 
@@ -316,7 +316,7 @@ def real(a) -> yastn.Tensor:
     return a._replace(data=data)
 
 
-def imag(a) -> yastn.Tensor:
+def imag(a) -> 'Tensor':
     r"""
     Return tensor with real part set to zero.
 
@@ -328,13 +328,13 @@ def imag(a) -> yastn.Tensor:
     return a._replace(data=data)
 
 
-def sqrt(a) -> yastn.Tensor:
+def sqrt(a) -> 'Tensor':
     """ Return tensor after applying element-wise square root for each tensor element. """
     data = a.config.backend.sqrt(a._data)
     return a._replace(data=data)
 
 
-def rsqrt(a, cutoff=0) -> yastn.Tensor:
+def rsqrt(a, cutoff=0) -> 'Tensor':
     """
     Return element-wise operation `1/sqrt(tensor)`.
 
@@ -349,7 +349,7 @@ def rsqrt(a, cutoff=0) -> yastn.Tensor:
     return a._replace(data=data)
 
 
-def reciprocal(a, cutoff=0) -> yastn.Tensor:
+def reciprocal(a, cutoff=0) -> 'Tensor':
     """
     Return element-wise operation `1/tensor`.
 
@@ -364,7 +364,7 @@ def reciprocal(a, cutoff=0) -> yastn.Tensor:
     return a._replace(data=data)
 
 
-def exp(a, step=1.) -> yastn.Tensor:
+def exp(a, step=1.) -> 'Tensor':
     r"""
     Return element-wise `\exp(step * tensor)`.
 
@@ -375,7 +375,7 @@ def exp(a, step=1.) -> yastn.Tensor:
     return a._replace(data=data)
 
 
-def bitwise_not(a) -> yastn.Tensor[bool]:
+def bitwise_not(a) -> 'Tensor[bool]':
     r"""
     Return tensor after applying bitwise not on each tensor element.
 

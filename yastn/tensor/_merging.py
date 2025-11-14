@@ -18,12 +18,13 @@ from functools import lru_cache
 from itertools import groupby, product, accumulate
 from operator import itemgetter
 from typing import NamedTuple
+
 import numpy as np
+
 from ._auxliary import _slc, _flatten, _clear_axes, _unpack_legs
 from ._tests import YastnError, _test_axes_all, _get_tD_legs
 
-
-__all__ = ['fuse_legs', 'unfuse_legs', 'fuse_meta_to_hard']
+__all__ = ['fuse_legs', 'unfuse_legs', 'fuse_meta_to_hard', '_Fusion', '_slc']
 
 
 class _LegSlices(NamedTuple):
@@ -198,7 +199,7 @@ def _leg_struct_trivial(struct, axis=0):
 #  =========== fuse legs ======================
 
 
-def fuse_legs(a, axes, mode=None) -> yastn.Tensor:
+def fuse_legs(a, axes, mode=None) -> 'Tensor':
     r"""
     Fuse groups of legs into effective legs, reducing the rank of the tensor.
 
@@ -383,7 +384,7 @@ def fuse_meta_to_hard(a):
 #  =========== unfuse legs ======================
 
 
-def unfuse_legs(a, axes) -> yastn.Tensor:
+def unfuse_legs(a, axes) -> 'Tensor':
     r"""
     Unfuse legs, reverting one layer of fusion.
 

@@ -14,8 +14,10 @@
 # ==============================================================================
 """ Generator of basic local spinful-fermion operators for tJ model. """
 from __future__ import annotations
-from ..tensor import YastnError, Tensor, Leg
+
 from ._meta_operators import meta_operators
+from ..tensor import YastnError, Tensor, Leg
+
 
 class SpinfulFermions_tJ(meta_operators):
     """ Predefine operators for spinful fermions. """

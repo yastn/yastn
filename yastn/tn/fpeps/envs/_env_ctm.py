@@ -13,54 +13,27 @@
 # limitations under the License.
 # ==============================================================================
 from __future__ import annotations
-from dataclasses import dataclass
-from typing import NamedTuple, Union, Callable, Sequence
 import logging
-from .... import Tensor, rand, ones, eye, YastnError, Leg, tensordot, qr, truncation_mask, vdot, decompress_from_1d
-from ....operators import sign_canonical_order
-from ... import mps
-from ...mps import MpsMpoOBC
-from .._peps import Peps, Peps2Layers
-from .._gates_auxiliary import fkron, gate_fix_swap_gate
-from .._geometry import Site
-from .._evolution import BondMetric
-from ._env_auxlliary import *
-from ._env_window import EnvWindow
-from ._env_measure import _measure_nsite
-from ._env_boundary_mps import _clear_operator_input
-
 import sys
-import logging
-logger= logging.getLogger(__name__)
+from typing import NamedTuple, Union, Callable, Sequence
+from warnings import warn
 
-@dataclass()
-class EnvCTM_local():
-    r"""
-    Dataclass for CTM environment tensors associated with Peps lattice site.
+from ._env_auxlliary import *
+from ._env_boundary_mps import _clear_operator_input
+from ._env_dataclasses import EnvCTM_local, EnvCTM_projectors
+from ._env_measure import _measure_nsite
+from ._env_window import EnvWindow
+from .._evolution import BondMetric
+from .._gates_auxiliary import fkron, gate_fix_swap_gate
+from .._geometry import Site, Lattice
+from .._peps import PEPS_CLASSES, Peps2Layers
+from ... import mps
+from ....initialize import rand, ones, eye
+from ....operators import sign_canonical_order
+from ....tensor import Tensor, YastnError, Leg, tensordot, qr, vdot
+from ...._split_combine_dict import split_data_and_meta, combine_data_and_meta
 
-    Contains fields ``tl``, ``t``, ``tr``, ``r``, ``br``, ``b``, ``bl``, ``l``
-    """
-    tl: Tensor | None = None  # top-left
-    t:  Tensor | None = None  # top
-    tr: Tensor | None = None  # top-right
-    r:  Tensor | None = None  # right
-    br: Tensor | None = None  # bottom-right
-    b:  Tensor | None = None  # bottom
-    bl: Tensor | None = None  # bottom-left
-    l:  Tensor | None = None  # left
-
-
-@dataclass()
-class EnvCTM_projectors():
-    r""" Dataclass for CTM projectors associated with Peps lattice site. """
-    hlt: Tensor | None = None  # horizontal left top
-    hlb: Tensor | None = None  # horizontal left bottom
-    hrt: Tensor | None = None  # horizontal right top
-    hrb: Tensor | None = None  # horizontal right bottom
-    vtl: Tensor | None = None  # vertical top left
-    vtr: Tensor | None = None  # vertical top right
-    vbl: Tensor | None = None  # vertical bottom left
-    vbr: Tensor | None = None  # vertical bottom right
+logger = logging.getLogger(__name__)
 
 
 class CTMRG_out(NamedTuple):
@@ -70,7 +43,7 @@ class CTMRG_out(NamedTuple):
     max_D: int = 1
 
 
-class EnvCTM(Peps):
+class EnvCTM():
     def __init__(self, psi, init='rand', leg=None, ket=None):
         r"""
         Environment used in Corner Transfer Matrix Renormalization Group algorithm.
@@ -104,30 +77,36 @@ class EnvCTM(Peps):
         leg: Optional[yastn.Leg]
             Passed to :meth:`yastn.tn.fpeps.EnvCTM.reset_` to further customize initialization.
 
-        ket: Optional[]
+        ket: Optional[yastn.tn.Peps]
             If provided, and ``psi`` has physical legs, forms a double-layer PEPS <psi | ket>.
         """
-        super().__init__(psi.geometry)
+        self.geometry = psi.geometry
+        for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "f_ordered", "nn_bond_dirn"]:
+            setattr(self, name, getattr(self.geometry, name))
+
         self.psi = Peps2Layers(bra=psi, ket=ket) if psi.has_physical() else psi
+        self.env = Lattice(self.geometry, objects={site: EnvCTM_local() for site in self.sites()})
+        self.proj = Lattice(self.geometry, objects={site: EnvCTM_projectors() for site in self.sites()})
+
         if init not in (None, 'rand', 'eye', 'dl'):
-            raise YastnError(f"EnvCTM {init=} not recognized. Should be 'rand', 'eye', 'dl', or None.")
-        for site in self.sites():
-            self[site] = EnvCTM_local()
+            raise YastnError(f"{type(self).__name__} {init=} not recognized. Should be 'rand', 'eye', 'dl', or None.")
         if init is not None:
             self.reset_(init=init, leg=leg)
-        # empty structure for projectors
-        self.proj = Peps(self.geometry)
-        for site in self.sites():
-            self.proj[site] = EnvCTM_projectors()
 
     @property
     def config(self):
         return self.psi.config
 
+    def __getitem__(self, site):
+        return self.env[site]
+
+    def __setitem__(self, site, obj):
+        self.env[site] = obj
+
     def max_D(self):
         m_D = 0
         for site in self.sites():
-            for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
+            for dirn in ['tl', 'tr', 'bl', 'br']:
                 if getattr(self[site], dirn) is not None:
                     m_D = max(max(getattr(self[site], dirn).get_shape()), m_D)
         return m_D
@@ -135,17 +114,23 @@ class EnvCTM(Peps):
     # Cloning/Copying/Detaching(view)
     #
     def copy(self) -> EnvCTM:
-        env = EnvCTM(self.psi, init=None)
-        for site in env.sites():
-            for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
-                setattr(env[site], dirn, getattr(self[site], dirn).copy())
+        r"""
+        Return a clone of the environment preserving the autograd - resulting clone is a part
+        of the computational graph. Data of cloned environment tensors is indepedent
+        from the originals.
+        """
+        # env = EnvCTM(self.psi, init=None)
+        cls = type(self)
+        env = cls(self.psi, init=None)
+        env.env = self.env.copy()
+        env.proj = self.proj.copy()
         return env
 
     def shallow_copy(self) -> EnvCTM:
-        env = EnvCTM(self.psi, init=None)
-        for site in env.sites():
-            for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
-                setattr(env[site], dirn, getattr(self[site], dirn))
+        cls = type(self)
+        env = cls(self.psi, init=None)
+        env.env = self.env.shallow_copy()
+        env.proj = self.proj.shallow_copy()
         return env
 
     def clone(self) -> EnvCTM:
@@ -154,10 +139,10 @@ class EnvCTM(Peps):
         of the computational graph. Data of cloned environment tensors is indepedent
         from the originals.
         """
-        env = EnvCTM(self.psi, init=None)
-        for site in env.sites():
-            for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
-                setattr(env[site], dirn, getattr(self[site], dirn).clone())
+        cls = type(self)
+        env = cls(self.psi, init=None)
+        env.env = self.env.clone()
+        env.proj = self.proj.clone()
         return env
 
     def detach(self) -> EnvCTM:
@@ -166,10 +151,10 @@ class EnvCTM(Peps):
         of the computational graph. Data of detached environment tensors is shared
         with the originals.
         """
-        env = EnvCTM(self.psi, init=None)
-        for site in env.sites():
-            for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
-                setattr(env[site], dirn, getattr(self[site], dirn).detach())
+        cls = type(self)
+        env = cls(self.psi, init=None)
+        env.env = self.env.detach()
+        env.proj = self.proj.detach()
         return env
 
     def detach_(self):
@@ -177,59 +162,57 @@ class EnvCTM(Peps):
         Detach all environment tensors from the computational graph.
         Data of environment tensors in detached environment is a `view` of the original data.
         """
-        for site in self.sites():
-            for dirn in ["tl", "tr", "bl", "br", "t", "l", "b", "r"]:
-                try:
-                    try:
-                        getattr(self[site], dirn)._data.detach_()
-                    except RuntimeError:
-                        setattr(self[site], dirn, getattr(self[site], dirn).detach())
-                except AttributeError:
-                    pass
+        self.env.detach_()
+        self.proj.detach_()
 
-    def compress_env_1d(env):
+    def to_dict(self, level=2):
         r"""
-        Compress environment to data tensors and (hashable) metadata, see :func:`yastn.tensor.compress_to_1d`.
-
-        Parameters
-        ----------
-        env : EnvCTM
-            Environment instance to be transformed.
-
-        Returns
-        -------
-        (tuple[Tensor] , dict)
-            A pair where the first element is a tuple of raw data tensors (of type derived from backend)
-            and the second is a dict with corresponding metadata.
+        Serialize EnvCTM to a dictionary.
+        Complementary function is :meth:`yastn.EnvCTM.from_dict` or a general :meth:`yastn.from_dict`.
+        See :meth:`yastn.Tensor.to_dict` for further description.
         """
-        shallow= {
-            'psi': {site: env.psi.bra[site] for site in env.sites()} if isinstance(env.psi,Peps2Layers) \
-                else {site: env.psi[site] for site in env.sites()},
-            'env': tuple( env_t for site in env.sites() for k, env_t in env[site].__dict__.items() )}
-        dtypes = set(tuple(t.yastn_dtype for t in shallow['psi'].values()) +
-                     tuple(t.yastn_dtype if t is not None else None for t in shallow['env']))
-        assert len(dtypes - set((None,))) < 2, f"CTM update: all tensors of state and environment should have the same dtype, got {dtypes}"
-        unrolled = {'psi': {site: t.compress_to_1d() for site,t in shallow['psi'].items()},
-                    'env': tuple(t.compress_to_1d() if t else (None, None) for t in shallow['env'])}
-        meta = {'psi': {site: t_and_meta[1] for site, t_and_meta in unrolled['psi'].items()},
-                'env': tuple(meta for t,meta in unrolled['env']),
-                '2layer': isinstance(env.psi, Peps2Layers),
-                'geometry': env.geometry,
-                'sites': env.sites()}
-        data = tuple( t for t,m in unrolled['psi'].values())+tuple( t for t,m in unrolled['env'])
-        return data, meta
+        return {'type': type(self).__name__,
+                'dict_ver': 1,
+                'psi': self.psi.to_dict(level=level),
+                'env': self.env.to_dict(level=level),
+                'proj': self.proj.to_dict(level=level)}
 
-    def compress_proj_1d(env):
-            empty_proj = Tensor(config=env.config) # placeholder instead of None
-            data_t, meta_t = tuple(zip(*(t.compress_to_1d() if not (t is None) else empty_proj.compress_to_1d() \
-                for site in env.sites() for t in env.proj[site].__dict__.values())))
-            meta = {'geometry': env.geometry, 'proj': meta_t}
-            return data_t, meta
+    @classmethod
+    def from_dict(cls, d, config=None):
+        r"""
+        De-serializes EnvCTM from the dictionary ``d``.
+        See :meth:`yastn.Tensor.from_dict` for further description.
+        """
+        if 'dict_ver' not in d:
+            psi = PEPS_CLASSES["Peps"].from_dict(d['psi'], config)
+            env = EnvCTM(psi, init=None)
+            for site in env.sites():
+                for dirn, v in d['data'][site].items():
+                    setattr(env[site], dirn, Tensor.from_dict(v, config))
+            return env
+
+        if d['dict_ver'] == 1:
+            if cls.__name__ != d['type']:
+                raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
+            psi = PEPS_CLASSES[d['psi']['type']].from_dict(d['psi'], config=config)
+            env = cls(psi, init=None)
+            env.env = Lattice.from_dict(d['env'], config=config)
+            env.proj = Lattice.from_dict(d['proj'], config=config)
+            return env
+
+    def update_from_dict_(self, d):
+        self.psi = PEPS_CLASSES[d['psi']['type']].from_dict(d['psi'])
+        self.env = Lattice.from_dict(d['env'])
+        self.proj = Lattice.from_dict(d['proj'])
 
     def save_to_dict(self) -> dict:
         r"""
         Serialize EnvCTM into a dictionary.
+
+        !!! This method is deprecated; use to_dict() instead !!!
         """
+        warn('This method is deprecated; use to_dict() instead.', DeprecationWarning, stacklevel=2)
+
         psi = self.psi
         if isinstance(psi, Peps2Layers):
             psi = psi.ket
@@ -242,7 +225,6 @@ class EnvCTM(Peps):
                        for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']}
             d['data'][site] = d_local
         return d
-
 
     def reset_(self, init='rand', leg=None, **kwargs):
         r"""
@@ -482,7 +464,7 @@ class EnvCTM(Peps):
         # modify existing environment in place
         update_storage_(self, env_tmp)
 
-    def boundary_mps(self, n, dirn) -> MpsMpoOBC:
+    def boundary_mps(self, n, dirn) -> mps.MpsMpoOBC:
         r""" Convert environmental tensors of Ctm to an MPS. """
         if dirn == 'b':
             H = mps.Mps(N=self.Ny)
@@ -805,7 +787,7 @@ class EnvCTM(Peps):
         dirn = 'lr' if (xrange[1] - xrange[0]) >= (yrange[1] - yrange[0]) else 'tb'
         return _measure_nsite(env_win, *operators, sites=sites, dirn=dirn)
 
-    def measure_2site(self, O, P, xrange, yrange, opts_svd=None, opts_var=None, bonds='<') -> dict[Site, float]:
+    def measure_2site(self, O, P, xrange, yrange, opts_svd=None, opts_var=None, site0='corner') -> dict[Site, float]:
         r"""
         Calculate 2-point correlations <O P> between top-left corner of the window, and all sites in the window.
 
@@ -830,20 +812,13 @@ class EnvCTM(Peps):
             Options passed to :meth:`yastn.tn.mps.compression_` used in the refining of boundary MPSs.
             The default is ``None``, in which case make 2 variational sweeps.
 
-        bonds: tuple[int, int] | Sequence[tuple[int, int]] | str
-            Which 2-site correlators to calculate.
-            For a single bond, tuple[int, int], return float. Otherwise, return dict[bond, float].
-            It is possible to provide a string to build a list of bonds as:
-
-            * '<' for all i < j.
-            * '=' for all i == j.
-            * '>' for all i > j.
-            * 'a' for all i, j; equivalent to "<=>".
-
-            The default is '<'.
+        site0: str
+            For site0 == 'corner', calculate all correlations with site0 fixed to top-left corner of the window.
+            For site0 == 'row', calculate all correlations with site0 from top row of the window.
+            The default is 'corner'.
         """
         env_win = EnvWindow(self, xrange, yrange)
-        return env_win.measure_2site(O, P, opts_svd=opts_svd, opts_var=opts_var)
+        return env_win.measure_2site(O, P, opts_svd=opts_svd, opts_var=opts_var, site0=site0)
 
     def sample(self, projectors, number=1, xrange=None, yrange=None, opts_svd=None, opts_var=None, progressbar=False, return_probabilities=False, flatten_one=True, **kwargs) -> dict[Site, list]:
         r"""
@@ -955,44 +930,31 @@ class EnvCTM(Peps):
         checkpoint_move = kwargs.get('checkpoint_move', False)
         for d in moves:
             if checkpoint_move:
-                outputs_meta = {}
-
-                # extract raw parametric tensors as a tuple
-                inputs_t, inputs_meta = env.compress_env_1d()
-
                 def f_update_core_(move_d, loc_im, *inputs_t):
-                    loc_env = decompress_env_1d(inputs_t, loc_im)
+                    loc_env = EnvCTM.from_dict(combine_data_and_meta(inputs_t, loc_im))
                     _update_core_(loc_env, move_d, opts_svd, method=method, **kwargs)
 
-                    # return backend tensors - only environment and projectors
-                    #
-                    out_env_data, out_env_meta = loc_env.compress_env_1d()
-                    out_proj_data, out_proj_meta = loc_env.compress_proj_1d()
-
-                    outputs_meta['env'] = out_env_meta['env']
-                    outputs_meta['proj'] = out_proj_meta
-
-                    return out_env_data[len(loc_env.sites()):] + out_proj_data
+                    out_dict = loc_env.to_dict(level=0)
+                    out_data, out_meta = split_data_and_meta(out_dict)
+                    return out_data, out_meta
 
                 if env.config.backend.BACKEND_ID == "torch":
+                    env_dict = env.to_dict(level=0)
+                    inputs_t, inputs_meta = split_data_and_meta(env_dict)
+
                     if checkpoint_move == 'reentrant':
                         use_reentrant = True
                     elif checkpoint_move == 'nonreentrant':
                         use_reentrant = False
                     checkpoint_F = env.config.backend.checkpoint
-                    outputs = checkpoint_F(f_update_core_, d, inputs_meta, *inputs_t, \
+                    out_data, out_meta = checkpoint_F(f_update_core_, d, inputs_meta, *inputs_t, \
                                       **{'use_reentrant': use_reentrant, 'debug': False})
                 else:
                     raise RuntimeError(f"CTM update: checkpointing not supported for backend {env.config.BACKEND_ID}")
 
-                # update tensors of env and proj
-                for i, site in enumerate(env.sites()):
-                    for env_t, t, t_meta in zip(env[site].__dict__.keys(), outputs[i*8:(i+1)*8], outputs_meta['env'][i*8:(i+1)*8]):
-                        setattr(env[site], env_t, decompress_from_1d(t, t_meta) if t is not None else None)
-
-                for i, site in enumerate(env.sites()):
-                    for proj_t, t, t_meta in zip(env.proj[site].__dict__.keys(), outputs[8*len(env.sites()):][i*8:(i+1)*8], outputs_meta['proj']['proj'][i*8:(i+1)*8]):
-                        setattr(env.proj[site], proj_t, decompress_from_1d(t, t_meta) if t_meta['struct'].size > 0 else None)
+                # reconstruct env from output tensors
+                out_env_dict = combine_data_and_meta(out_data, out_meta)
+                env.update_from_dict_(out_env_dict)
             else:
                 _update_core_(env, d, opts_svd, method=method, **kwargs)
         return env
@@ -1205,27 +1167,6 @@ class EnvCTM(Peps):
             if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
                 yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
         yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
-
-    def _partial_svd_predict_spec(env,leg0,leg1,sU):
-        # TODO externalize defaults for extending number of singular values to solve for
-        """
-        Used in block-wise partial SVD solvers.
-
-        Based on the projector spectra leg0, leg1, from (previous) projector pair,
-        suggest number of singular value triples to solve for in each of the blocks.
-
-        Parameters
-        ----------
-        leg0, leg1: yastn.Tensor
-            Projector spectra for the previous projector pair.
-        sU: int
-            Signature of U in SVD decomposition. See :func:`proj_corners` and :func:`linalg.svd`.
-        """
-        # the projector spectra for projector pair are related by charge conjugation
-        assert leg0 == leg1.conj(), f"Projector spectrum history mismatch between leg0={leg0} and leg1={leg1}"
-        #
-        l= leg0 if sU == leg0.s else leg1
-        return { t: max(d+10,int(d*1.1)) for t,d in zip(l.t, l.D) }
 
 
 def _update_core_(env, move: str, opts_svd: dict, **kwargs):
@@ -1624,62 +1565,6 @@ def update_env_(env_tmp, site, env, move: str):
             env_tmp[site].br = tmp / tmp.norm(p='inf')
 
 
-def decompress_env_1d(data, meta):
-    """
-    Reconstruct the environment from its compressed form.
-
-    Parameters
-    ----------
-    data : Sequence[Tensor]
-        Collection of 1D data tensors for both environment and underlying PEPS.
-    meta : dict
-        Holds metadata of original environment (and PEPS).
-
-    Returns
-    -------
-    EnvCTM
-    """
-    sites = meta['sites']
-    tensors = {site: decompress_from_1d(t,t_meta) for site, t, t_meta in zip(sites,data[:len(sites)], meta['psi'].values())}
-    loc_bra = Peps(meta['geometry'], tensors=tensors)
-    loc_env = EnvCTM(Peps2Layers(loc_bra) if meta['2layer'] else loc_bra, init=None)
-
-    # assign backend tensors
-    #
-    data_env = data[len(sites):]
-    for i, site in enumerate(sites):
-        for env_t, t, t_meta in zip(loc_env[site].__dict__.keys(), data_env[i*8:(i+1)*8], meta['env'][i*8:(i+1)*8]):
-            setattr(loc_env[site], env_t, decompress_from_1d(t, t_meta) if t is not None else None)
-    return loc_env
-
-
-def decompress_proj_1d(data, meta):
-    """
-    Reconstruct the projectors from their compressed form.
-
-    Parameters
-    ----------
-    data : Sequence[Tensor]
-        Collection of 1D data tensors for both environment and underlying PEPS.
-    meta : dict
-        Holds metadata of original projectors (and PEPS geometry).
-
-    Returns
-    -------
-    Peps of EnvCTM_projectors
-        Projectors for the CTM environment.
-    """
-    proj = Peps(meta['geometry'])
-    for site in proj.sites(): proj[site] = EnvCTM_projectors()
-
-    # assign backend tensors
-    #
-    for i,site in enumerate(proj.sites()):
-        for env_t,t,t_meta in zip(proj[site].__dict__.keys(),data[i*8:(i+1)*8],meta['proj'][i*8:(i+1)*8]):
-            setattr(proj[site],env_t,decompress_from_1d(t,t_meta) if t is not None else None)
-    return proj
-
-
 def ctm_conv_corner_spec(env : EnvCTM, history : Sequence[dict[tuple[Site,str],Tensor]]=[],
                          corner_tol : Union[None,float]=1.0e-8)->tuple[bool,float,Sequence[dict[tuple[Site,str],Tensor]]]:
     """
@@ -1737,7 +1622,7 @@ def proj_corners(r0, r1, opts_svd, **kwargs):
         opts_svd['mask_f'] = kwargs['truncation_f']
     opts_svd['fix_signs'] = opts_svd.get('fix_signs', True)
     verbosity = opts_svd.get('verbosity', 0)
-    # only verbosity from opts_svd is to be passed down to svd_with_truncation 
+    # only verbosity from opts_svd is to be passed down to svd_with_truncation
     kwargs.pop('verbosity', None)
 
     u, s, v = rr.svd_with_truncation(axes=(0, 1), sU=r0.s[1], **opts_svd, **kwargs)
@@ -1767,3 +1652,24 @@ def update_storage_(old, new):
         for k, v in new[site].__dict__.items():
             if v is not None:
                 setattr(old[site], k, v)
+
+def _partial_svd_predict_spec(leg0,leg1,sU):
+    # TODO externalize defaults for extending number of singular values to solve for
+    """
+    Used in block-wise partial SVD solvers.
+
+    Based on the projector spectra leg0, leg1, from (previous) projector pair,
+    suggest number of singular value triples to solve for in each of the blocks.
+
+    Parameters
+    ----------
+    leg0, leg1: yastn.Tensor
+        Projector spectra for the previous projector pair.
+    sU: int
+        Signature of U in SVD decomposition. See :func:`proj_corners` and :func:`linalg.svd`.
+    """
+    # the projector spectra for projector pair are related by charge conjugation
+    assert leg0 == leg1.conj(), f"Projector spectrum history mismatch between leg0={leg0} and leg1={leg1}"
+    #
+    l= leg0 if sU == leg0.s else leg1
+    return { t: max(d+10,int(d*1.1)) for t,d in zip(l.t, l.D) }
