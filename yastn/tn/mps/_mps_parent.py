@@ -84,14 +84,14 @@ class _MpsMpoParent:
             return range(df, self.N - dl)
         if to == 'first':
             return range(self.N - 1 - dl, df - 1, -1)
-        raise YastnError('"to" in sweep should be in "first" or "last"')
+        raise YastnError('"to" in sweep should be in "first" or "last".')
 
     def __getitem__(self, n) -> Tensor:
         """ Return tensor corresponding to n-th site."""
         try:
             return self.A[n]
         except KeyError as e:
-            raise YastnError(f"MpsMpoOBC does not have site with index {n}") from e
+            raise YastnError(f"MpsMpoOBC does not have site with index {n}.") from e
 
     def __setitem__(self, n, tensor):
         """
@@ -100,9 +100,9 @@ class _MpsMpoParent:
         Assigning central block is not supported.
         """
         if not isinstance(n, Integral) or n < self.first or n > self.last:
-            raise YastnError("MpsMpoOBC: n should be an integer in 0, 1, ..., N-1")
+            raise YastnError("MpsMpoOBC: n should be an integer in 0, 1, ..., N-1.")
         if tensor.ndim != self.nr_phys + 2:
-            raise YastnError(f"MpsMpoOBC: Tensor rank should be {self.nr_phys + 2}")
+            raise YastnError(f"MpsMpoOBC: Tensor rank should be {self.nr_phys + 2}.")
         self.A[n] = tensor
 
     def shallow_copy(self) -> _MpsMpoParent:

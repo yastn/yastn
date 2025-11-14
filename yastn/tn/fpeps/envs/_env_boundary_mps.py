@@ -429,7 +429,7 @@ class EnvBoundaryMPS():
 
         out = {site: [] for site in peps_env.sites()}
         probabilities = []
-        rands = (config.backend.rand(psi.Nx * psi.Ny * number) + 1) / 2
+        rands = config.backend.rand(psi.Nx * psi.Ny * number)  # in [0, 1]
         count = 0
 
         for _ in tqdm(range(number), desc="Sample...", disable=not progressbar):
@@ -493,7 +493,7 @@ class EnvBoundaryMPS():
         Nx, Ny = psi.Nx, psi.Ny
         config = psi[0, 0].config
         # pre-draw uniformly distributed random numbers as iterator;
-        rands = iter((config.backend.rand(2 * Nx * Ny) + 1) / 2)  # in [0, 1]
+        rands = iter(config.backend.rand(2 * Nx * Ny))  # in [0, 1]
 
         # sweep though the lattice
         accept = 0

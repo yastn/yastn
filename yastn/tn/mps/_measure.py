@@ -409,7 +409,7 @@ def sample(psi, projectors, number=1, return_probabilities=False) -> np.ndarray[
     bdrs = [tmp for _ in range(number)]
 
     for n in sites:
-        rands = (psi.config.backend.rand(number) + 1) / 2  # in [0, 1]
+        rands = psi.config.backend.rand(number)  # in [0, 1]
         An = psi[n] if psi.nr_phys == 1 else psi[n].fuse_legs(axes=(0, 1, (2, 3)))
         for k, (bdr, cut) in enumerate(zip(bdrs, rands)):
             state = bdr @ An

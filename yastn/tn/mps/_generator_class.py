@@ -94,21 +94,21 @@ class Generator:
         """ Identity MPO derived from identity in local operators class. """
         return self._I.shallow_copy()
 
-    def random_mps(self, n=None, D_total=8, sigma=1, dtype='float64') -> MpsMpoOBC:
+    def random_mps(self, n=None, D_total=8, sigma=1, dtype='float64', **kwargs) -> MpsMpoOBC:
         r"""
         Generate a random MPS of total charge ``n`` and bond dimension ``D_total``.
 
         Equivalent to :meth:`mps.random_mps<yastn.tn.mps.random_mps>`.
         """
-        return random_mps(self._I, n=n, D_total=D_total, sigma=sigma, dtype=dtype)
+        return random_mps(self._I, n=n, D_total=D_total, sigma=sigma, dtype=dtype, **kwargs)
 
-    def random_mpo(self, D_total=8, sigma=1, dtype='float64') -> MpsMpoOBC:
+    def random_mpo(self, D_total=8, sigma=1, dtype='float64', **kwargs) -> MpsMpoOBC:
         r"""
         Generate a random MPO with bond dimension ``D_total``.
 
         Equivalent to :meth:`mps.random_mps<yastn.tn.mps.random_mpo>`.
         """
-        return random_mpo(self._I, D_total=D_total, sigma=sigma, dtype=dtype)
+        return random_mpo(self._I, D_total=D_total, sigma=sigma, dtype=dtype, **kwargs)
 
     def mpo_from_latex(self, H_str, parameters=None, opts=None) -> MpsMpoOBC:
         r"""

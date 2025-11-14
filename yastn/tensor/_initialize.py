@@ -252,8 +252,9 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
         Dimensions of the block. If ``None``, tries to infer
         dimensions from legs of the tensor.
 
-    val : str | tensor-like
-        recognized string values are ``'rand'``, ``'ones'``,`or  ``'zeros'``.
+    val : tensor-like | str | tuple[str, tuple]
+        recognized string values are ``'ones'``, ``'zeros'``, ``'normal'``, ``'rand'``,
+        or a tuple ``('rand', distribution)``, for uniform distribution in range given by tuple lim.
         Otherwise any tensor-like format such as nested list, numpy.ndarray, etc.,
         can be used provided it is supported by :doc:`tensor's backend </tensor/configuration>`.
     """
@@ -306,11 +307,15 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
 
 
 def _init_block(config, Dsize, val, dtype, device):
+    if isinstance(val, tuple) and val[0] == 'rand':
+        return config.backend.rand((Dsize,), distribution=val[1], dtype=dtype, device=device)
     if isinstance(val, str):
         if val == 'zeros':
             return config.backend.zeros((Dsize,), dtype=dtype, device=device)
         if val == 'rand':
             return config.backend.rand((Dsize,), dtype=dtype, device=device)
+        if val == 'normal':
+            return config.backend.rand((Dsize,), distribution='normal', dtype=dtype, device=device)
         if val == 'ones':
             return config.backend.ones((Dsize,), dtype=dtype, device=device)
         raise YastnError('val should be in ("zeros", "ones", "rand") or an array of the correct size')

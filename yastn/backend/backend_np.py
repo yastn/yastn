@@ -172,10 +172,19 @@ def ones(D, dtype='float64', **kwargs):
     return np.ones(D, dtype=DTYPE[dtype])
 
 
-def rand(D, dtype='float64', **kwargs):
+def rand(D, dtype='float64', distribution=(0, 1), **kwargs):
+    if distribution == 'normal':
+        if dtype == 'float64':
+            return rng['rng'].normal(size=D)
+        # else:  # dtype == 'complex128':
+        return (rng['rng'].normal(size=D) + 1j * rng['rng'].normal(size=D)) / (2. ** 0.5)
     if dtype == 'float64':
-        return 2 * rng['rng'].random(D) - 1
-    return 2 * (rng['rng'].random(D) + 1j * rng['rng'].random(D)) - (1 + 1j)  # dtype == 'complex128
+        out = rng['rng'].random(D)
+        ds = 1
+    else:  # dtype == 'complex128':
+        out = rng['rng'].random(D) + 1j * rng['rng'].random(D)
+        ds = 1 + 1j
+    return out if distribution == (0, 1) else (distribution[1] - distribution[0]) * out + distribution[0] * ds
 
 
 def randint(low, high):
