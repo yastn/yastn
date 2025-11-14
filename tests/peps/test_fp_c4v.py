@@ -240,11 +240,11 @@ def prepare_1x1(additional_imports, cost_f):
     with open(json_file_path,'r') as f:
         d = json.load(f)
 
-    g= fpeps.RectangularUnitcell(**d['geometry'])
-    A= { tuple(d['parameters_key_to_id'][coord]): yastn.load_from_dict(yastn_cfg_U1, d_ten)
-                                 for coord,d_ten in d['parameters'].items() }
+    g = fpeps.RectangularUnitcell(**d['geometry'])
+    A = {tuple(d['parameters_key_to_id'][coord]): yastn.Tensor.from_dict(d_ten, config=yastn_cfg_U1)
+                                 for coord,d_ten in d['parameters'].items()}
 
-    cost_function_1x1= lambda *args, **kwargs : cost_f(additional_imports, yastn_cfg_U1, g,A, *args, **kwargs)
+    cost_function_1x1 = lambda *args, **kwargs : cost_f(additional_imports, yastn_cfg_U1, g,A, *args, **kwargs)
 
     return A, None, cost_function_1x1
 

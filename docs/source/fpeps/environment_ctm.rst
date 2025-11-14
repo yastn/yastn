@@ -42,6 +42,6 @@ Once the CTMRG converges, it is straightforward to obtain one-site :meth:`yastn.
 two-site nearest-neighbor observables :meth:`yastn.tn.fpeps.EnvCTM.measure_nn`, or other expectation values of interests.
 
 .. autoclass:: yastn.tn.fpeps.EnvCTM
-    :members: save_to_dict, reset_, bond_metric, update_, iterate_, measure_1site, measure_nn, sample, measure_2x2, measure_line, measure_nsite
+    :members: to_dict, from_dict, reset_, bond_metric, update_, iterate_, measure_1site, measure_nn, sample, measure_2x2, measure_line, measure_nsite
 
 .. autoclass:: yastn.tn.fpeps.EnvCTM_local

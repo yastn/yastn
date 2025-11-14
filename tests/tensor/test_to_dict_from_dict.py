@@ -1,4 +1,4 @@
-# Copyright 2024 The YASTN Authors. All Rights Reserved.
+# Copyright 2025 The YASTN Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,41 +12,54 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-""" fill_tensor (which is called in: rand, zeros, ones), yastn.to_numpy() """
+""" Tensor.to_dict() Tensor.from_dict() yastn.save_to_hdf5() yastn.load_from_hdf5(). """
+import os
+import numpy as np
 import pytest
 import yastn
 
 
-def run_to_dict_simple(a):
-    r1d, meta = yastn.split_data_and_meta(a.to_dict(level=0))
-    b = yastn.Tensor.from_dict(yastn.combine_data_and_meta(r1d, meta))
-    assert yastn.norm(a - b) < 1e-12
+def test_to_from_dict(config_kwargs):
+    config = yastn.make_config(sym='U1', **config_kwargs)
+    legs = [yastn.Leg(config, s=1, t=(0, 1, 2), D= (3, 5, 2)),
+            yastn.Leg(config, s=-1, t=(0, 1, 3), D= (1, 2, 3)),
+            yastn.Leg(config, s=1, t=(-1, 0, 1), D= (2, 3, 4)),
+            yastn.Leg(config, s=1, t=(-1, 0, 1), D= (4, 3, 2))]
+
+    a = yastn.rand(config, legs=legs)
+    a = a.fuse_legs(axes=(0, (1, 2), 3), mode='hard')
+    a = a.fuse_legs(axes=(0, (1, 2)), mode='meta')
+
+    for level, ind in zip([0, 1, 2], [False, False, True]):
+        d = a.to_dict(level=level)
+        b = yastn.Tensor.from_dict(d)
+        assert b.is_consistent()
+
+        data, meta = yastn.split_data_and_meta(d)
+        dd = yastn.combine_data_and_meta(data, meta)
+        c = yastn.Tensor.from_dict(dd)
+        d = yastn.from_dict(dd)
+        assert d.is_consistent()
+        #
+        are_identical_tensors(a, b)
+        are_identical_tensors(a, c)
+        are_identical_tensors(a, d)
+        assert yastn.are_independent(a, b) == ind
+        #
+        # the result below depends on the backend: TODO
+        # assert yastn.are_independent(b, c) == ind  # for numpy
+        # # assert yastn.are_independent(b, c) == False  # for torch
+        # torch.as_tensor and numpy.array have different behavior in creating a copy
 
 
-def run_to_dict_with_meta(a, a_reference) :
-    _, meta = yastn.split_data_and_meta(a_reference.to_dict(level=0))
-    r1d, _ = yastn.split_data_and_meta(a.to_dict(level=0, meta=meta))
-    c = yastn.Tensor.from_dict(yastn.combine_data_and_meta(r1d, meta))
-    assert yastn.norm(a - c) < 1e-12
-
-
-def test_to_dict_basic(config_kwargs):
-    # 3d dense
-    config_dense = yastn.make_config(sym='none', **config_kwargs)
-    a = yastn.rand(config=config_dense, s=(-1, 1, 1), D=(1, 2, 3))
-    run_to_dict_simple(a)
-
-    # 0d U1
-    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
-    a = yastn.ones(config=config_U1) # s=() # t=(), D=()
-    run_to_dict_simple(a)
-
-    # diagonal Z2xU1
-    config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
-    leg = yastn.Leg(config_Z2xU1, s=1, t=((0, -1), (1, 0), (0, 1)), D=(2, 3, 4))
-    a = yastn.rand(config=config_Z2xU1, isdiag=True, legs=leg)
-    run_to_dict_simple(a)
-    run_to_dict_with_meta(a, 2 * a)
+def are_identical_tensors(a, b):
+    da, db = a.__dict__, b.__dict__
+    assert da.keys() == db.keys()
+    for k in da:
+        if k != '_data':
+            assert da[k] == db[k]
+    assert type(a.data) == type(b.data)
+    assert np.allclose(a.to_numpy(), b.to_numpy())
 
 
 def test_to_dict_embed(config_kwargs):
@@ -64,15 +77,21 @@ def test_to_dict_embed(config_kwargs):
     af_ref = a_ref.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
     aff_ref = af_ref.fuse_legs(axes=[(0, 1)], mode='meta')
     #
-    run_to_dict_simple(a)
     # here have to add zero blocks
-    run_to_dict_with_meta(a, a_ref)
-    run_to_dict_with_meta(af, af_ref)
-    run_to_dict_with_meta(aff, aff_ref)
+    check_dict_with_meta(a, a_ref)
+    check_dict_with_meta(af, af_ref)
+    check_dict_with_meta(aff, aff_ref)
+
+
+def check_dict_with_meta(a, a_reference) :
+    _, meta = yastn.split_data_and_meta(a_reference.to_dict(level=0))
+    r1d, _ = yastn.split_data_and_meta(a.to_dict(level=0, meta=meta))
+    c = yastn.Tensor.from_dict(yastn.combine_data_and_meta(r1d, meta))
+    assert yastn.norm(a - c) < 1e-12
 
 
 @pytest.mark.skipif("'torch' not in config.getoption('--backend')", reason="Uses torch.autograd.gradcheck().")
-def test_mask_backward(config_kwargs):
+def test_to_dict_backward(config_kwargs):
     import torch
 
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
@@ -114,8 +133,85 @@ def test_mask_backward(config_kwargs):
     assert torch.autograd.gradcheck(test_ff, op_args, eps=1e-6, atol=1e-4, check_undefined_grad=False)
 
 
+def check_to_numpy(a1, config):
+    """ save/load to numpy and tests consistency."""
+    d1 = a1.to_dict()
+    a2 = 2 * a1  # second tensor to be saved
+    d2 = a2.to_dict()
+    data = {'tensor1': d1, 'tensor2': d2}  # two tensors to be saved
+    np.save('tmp.npy', data)
+    ldata = np.load('tmp.npy', allow_pickle=True).item()
+    os.remove('tmp.npy')
+
+    b1 = yastn.from_dict(ldata['tensor1'], config=config)
+    b2 = yastn.from_dict(ldata['tensor2'], config=config)
+
+    assert all(yastn.norm(a - b) < 1e-12 for a, b in [(a1, b1), (a2, b2)])
+    assert all(b.is_consistent for b in (b1, b2))
+    assert all(yastn.are_independent(a, b) for a, b in [(a1, b1), (a2, b2)])
+    are_identical_tensors(a1, b1)
+    are_identical_tensors(a2, b2)
+
+
+def check_to_hdf5(a, *args):
+    """ Test if two Tensor-s have the same values. """
+    h5py = pytest.importorskip("h5py")
+    try:
+        os.remove("tmp.h5")
+    except OSError:
+        pass
+    with h5py.File('tmp.h5', 'w') as f:
+        a.save_to_hdf5(f, './')
+    with h5py.File('tmp.h5', 'r') as f:
+        b = yastn.load_from_hdf5(a.config, f, './')
+    os.remove("tmp.h5")
+    b.is_consistent()
+    assert yastn.are_independent(a, b)
+    are_identical_tensors(a, b)
+
+
+@pytest.mark.parametrize("test_f", [check_to_numpy, check_to_hdf5])
+def test_save_load(config_kwargs, test_f):
+    """ test exporting tensor to native python data-structure,
+        that allows robust saving/loading with np.save/load."""
+    config_dense = yastn.make_config(sym='none', **config_kwargs)
+    a = yastn.rand(config=config_dense)  # s=() i.e. a scalar
+    assert a.size == 1
+    test_f(a, config_dense)
+
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    legs = [yastn.Leg(config_U1, s=1, t=(0, 1, 2), D= (3, 5, 2)),
+            yastn.Leg(config_U1, s=-1, t=(0, 1, 3), D= (1, 2, 3)),
+            yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D= (2, 3, 4))]
+
+    a = yastn.rand(config=config_U1, legs=legs)
+    test_f(a, config_U1)
+
+    a = yastn.randC(config=config_U1, legs=legs, n=1)
+    test_f(a, config_U1) # here a is complex
+
+    a = yastn.rand(config=config_U1, isdiag=True, legs=legs[0])
+    test_f(a, config_U1)
+
+    config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
+    legs = [yastn.Leg(config_Z2xU1, s=-1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(1, 2, 3, 4)),
+            yastn.Leg(config_Z2xU1, s=1, t=((0, -2), (0, 2)), D=(2, 1)),
+            yastn.Leg(config_Z2xU1, s=1, t=((0, -2), (0, 0), (0, 2), (1, -2), (1, 0), (1, 2)), D=(2, 3, 5, 4, 1, 6))]
+    a = yastn.ones(config=config_Z2xU1, legs=legs, n=(0, -2))
+    test_f(a, config_Z2xU1)
+
+    a = yastn.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
+                  t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
+                  D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
+    a = a.fuse_legs(axes=((0, 2), 1, (4, 3), 5), mode='hard')
+    a = a.fuse_legs(axes=((0, 2), 1, 3), mode='hard')
+    a = a.fuse_legs(axes=((0, 2), 1), mode='meta')
+    test_f(a, config_U1)
+
+
 def test_to_dict_exceptions(config_kwargs):
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+
     a = yastn.Tensor(config=config_U1, s=(-1, 1, 1, 1))
     a.set_block(ts=(2, 0, 1, 1), Ds=(1, 2, 3, 4))
     _, a_meta = yastn.split_data_and_meta(a.to_dict(level=0))
@@ -123,6 +219,16 @@ def test_to_dict_exceptions(config_kwargs):
     ad = yastn.eye(config=config_U1, legs=yastn.Leg(config_U1, s=1, t=(0, 1), D=(2, 3)))
     _, ad_meta = yastn.split_data_and_meta(ad.to_dict(level=0))
 
+    with pytest.raises(yastn.YastnError,
+                       match="Symmetry rule in config does not match the one in stored in d."):
+        config_Z2 = yastn.make_config(sym='Z2', **config_kwargs)
+        d = a.to_dict()
+        yastn.from_dict(d, config=config_Z2)
+    with pytest.raises(yastn.YastnError,
+                       match="Fermionic statistics in config does not match the one in stored in d."):
+        config_U1_fermionic = yastn.make_config(sym='U1', fermionic=True, **config_kwargs)
+        d = a.to_dict()
+        yastn.from_dict(d, config=config_U1_fermionic)
     with pytest.raises(yastn.YastnError,
                       match="Tensor is inconsistent with meta: Signatures do not match."):
         b = yastn.Tensor(config=config_U1, s=(1, 1, 1, 1))

@@ -26,7 +26,6 @@ def run_ctm_save_load_copy(env):
 
     config = env.psi.config
     d = env.save_to_dict()
-    env_save = fpeps.load_from_dict(config, d)
 
     env_copy = env.copy()
     env_clone = env.clone()

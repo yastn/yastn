@@ -265,6 +265,8 @@ def load_from_dict(config=None, d=None) -> Tensor:
     """
     Create tensor from the dictionary :code:`d`.
 
+    !!! This method is deprecated; use to_dict(). !!!
+
     Parameters
     ----------
     config : module | _config(NamedTuple)
@@ -273,9 +275,7 @@ def load_from_dict(config=None, d=None) -> Tensor:
         Tensor stored in form of a dictionary. Typically provided by an output
         of :meth:`yastn.Tensor.save_to_dict`.
     """
-    if d is not None:
-        return Tensor.from_dict(d, config)
-    raise YastnError("Dictionary d is required.")
+    return Tensor.from_dict(d, config)
 
 
 def load_from_hdf5(config, file, path) -> Tensor:

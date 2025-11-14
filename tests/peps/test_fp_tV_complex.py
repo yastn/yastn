@@ -126,7 +126,7 @@ def prepare_1x1(additional_imports, cost_f):
         d = json.load(f, object_hook=complex_decoder)
 
     g= fpeps.RectangularUnitcell(**d['geometry'])
-    A= { tuple(d['parameters_key_to_id'][coord]): yastn.load_from_dict(yastn_cfg_Z2, d_ten)
+    A= { tuple(d['parameters_key_to_id'][coord]): yastn.from_dict(d_ten, config=yastn_cfg_Z2)
                                  for coord,d_ten in d['parameters'].items() }
 
     cost_function_1x1= lambda *args, **kwargs : cost_f(additional_imports, yastn_cfg_Z2,g,A, *args, **kwargs)
@@ -147,7 +147,7 @@ def prepare_3x3(additional_imports, cost_f):
         d = json.load(f, object_hook=complex_decoder)
 
     g= fpeps.RectangularUnitcell(**d['geometry'])
-    A= { tuple(d['parameters_key_to_id'][coord]): yastn.load_from_dict(yastn_cfg_Z2, d_ten)
+    A= { tuple(d['parameters_key_to_id'][coord]): yastn.from_dict(d_ten, config=yastn_cfg_Z2)
                                  for coord,d_ten in d['parameters'].items() }
 
     cost_function_3x3= lambda *args, **kwargs : cost_f(additional_imports, yastn_cfg_Z2,g,A, *args, **kwargs)

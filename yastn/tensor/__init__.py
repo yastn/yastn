@@ -195,21 +195,21 @@ class Tensor:
             if d['level'] >= 1 or config is not None:
                 d = d.copy()
 
+            if config is not None:
+                if (d['config']['sym'] if isinstance(d['config'], dict) else d['config'].sym.SYM_ID)  != config.sym.SYM_ID:
+                    raise YastnError("Symmetry rule in config does not match the one in stored in d.")
+                if (d['config']['fermionic'] if isinstance(d['config'], dict) else d['config'].fermionic) != config.fermionic:
+                    raise YastnError("Fermionic statistics in config does not match the one in stored in d.")
+                d['config'] = config
+
             if d['level'] >= 1:
                 for k in ['struct', 'slices', 'hfs', 'mfs']:
                     d[k] = _convert_lists_to_tuples(d[k])
-
-                d['config'] = make_config(**d['config'])
+                if not isinstance(d['config'], _config):
+                    d['config'] = make_config(**d['config'])
                 d['hfs'] = tuple(_Fusion(**hf) for hf in d['hfs'])
                 d['struct'] = _struct(**d['struct'])
                 d['slices'] = tuple(_slc(*x) for x in d['slices'])
-
-            if config is not None:
-                if d['config'].sym.SYM_ID != config.sym.SYM_ID:
-                    raise YastnError("Symmetry rule in config does not match the one in stored in d.")
-                if d['config'].fermionic != d['config'].fermionic:
-                    raise YastnError("Fermionic statistics in config does not match the one in stored in d.")
-                d['config'] = config
 
             if d['level'] >= 2 or config is not None:
                 dtype = d['config'].default_dtype
