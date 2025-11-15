@@ -65,6 +65,12 @@ def test_eigh_basic(config_kwargs,which):
     a = yastn.ones(config=config_Z2xU1, legs=legs)
     eigh_combine(a,which=which)
 
+    # test eigh of empty Tensor
+    for config in [config_dense, config_U1, config_Z2xU1]:
+        a = yastn.Tensor(config, s=(1, -1, 1, -1))
+        S, U = yastn.linalg.eigh(a, axes=((0, 1), (2, 3)))
+        assert S.size == U.size == 0
+
 
 @pytest.mark.parametrize("which", ['SR', 'LR', 'LM', 'SM'])
 def test_eigh_Z3(config_kwargs,which):

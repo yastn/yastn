@@ -103,7 +103,7 @@ def imag(x):
 
 
 def max_abs(x):
-    return np.abs(x).max()
+    return np.abs(x).max() if x.size > 0 else 0
 
 
 def norm_matrix(x):

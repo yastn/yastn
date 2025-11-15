@@ -296,7 +296,7 @@ class MpsMpoOBC(_MpsMpoParent):
         else:
             raise YastnError('"to" should be in "first" or "last"')
         nR = R.norm()
-        self.A[self.pC] = R / nR if nR > 0 else R
+        self.A[self.pC] = R / nR if nR else R
         self.factor = 1 if normalize else self.factor * nR
 
     def diagonalize_central_(self, opts_svd, normalize=True) -> Number:
@@ -330,11 +330,11 @@ class MpsMpoOBC(_MpsMpoParent):
 
             mask = truncation_mask(S, **opts_svd)
             nSout = bitwise_not(mask).apply_mask(S, axes=0).norm()
-            discarded = nSout / nSold
+            discarded = nSout / nSold if nSold else 0.
 
             U, S, V = mask.apply_mask(U, S, V, axes=(1, 0, 0))
             nS = S.norm()
-            self.A[self.pC] = S / nS
+            self.A[self.pC] = S / nS if nS else S
             self.factor = 1 if normalize else self.factor * nS
 
             n1, n2 = self.pC
@@ -494,7 +494,7 @@ class MpsMpoOBC(_MpsMpoParent):
             discarded2_local = discarded_local ** 2
             discarded2_total = discarded2_local + discarded2_total - discarded2_total * discarded2_local
             self.absorb_central_(to=to)
-        return self.config.backend.sqrt(discarded2_total)
+        return discarded2_total ** 0.5
 
     def pre_2site(self, bd, precompute=False) -> Tensor:
         r"""
@@ -550,8 +550,11 @@ class MpsMpoOBC(_MpsMpoParent):
         else:  # self.nr_phys == 2:
             self.A[nl] = U.unfuse_legs(axes=0).transpose(axes=(0, 1, 3, 2))
         self.A[nr] = V.unfuse_legs(axes=1)
-
-        return bitwise_not(mask).apply_mask(S, axes=0).norm() / S.norm()  # discarded weight
+        nS = S.norm()
+        discarded_weight = bitwise_not(mask).apply_mask(S, axes=0).norm()
+        if nS:
+            discarded_weight = discarded_weight / nS
+        return discarded_weight
 
 
     def pre_1site(self, n, precompute=False) -> Tensor:

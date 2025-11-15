@@ -73,6 +73,12 @@ def test_svd_basic(config_kwargs):
     a = yastn.ones(config=config_Z2xU1, legs=legs)
     svd_combine(a)
 
+    # test svd of empty Tensor
+    for config in [config_dense, config_U1, config_Z2xU1]:
+        a = yastn.Tensor(config, s=(1, -1, 1))
+        U, S, V = yastn.linalg.svd(a, axes=(0, (1, 2)))
+        assert U.size == S.size == V.size == 0
+
 
 def test_svd_Z3(config_kwargs):
     # Z3

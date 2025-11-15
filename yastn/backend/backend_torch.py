@@ -124,7 +124,7 @@ def imag(x):
 
 
 def max_abs(x):
-    return x.abs().max()
+    return x.abs().max() if x.numel() > 0 else torch.tensor(0, device=x.device)
 
 def maximum(input, output):
     return torch.maximum(input, output)
