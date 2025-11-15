@@ -191,6 +191,12 @@ class EnvApproximate:
                 tmpo = self.transfer_mpo(bd, n=ny).H
                 mps.compression_(self[bd, ny], (tmpo, self[bd, ny-1]), max_sweeps=self.update_sweeps)
 
+    def apply_patch(self):
+        pass
+
+    def move_to_patch(self, sites):
+        pass
+
     def transfer_mpo(self, bd, n, Q0=None, Q1=None):
         H = mps.Mpo(N = 2 * self.Nl)
         s0, s1, dirn = bd

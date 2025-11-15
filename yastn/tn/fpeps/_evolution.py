@@ -107,7 +107,7 @@ def evolution_step_(env, gates, opts_svd, method='mpo', fix_metric=0,
     """
     psi = env.psi
     if isinstance(psi, Peps2Layers):
-        psi = psi.ket  # to make it work with CtmEnv
+        psi = psi.ket
 
     infos = []
 
@@ -116,13 +116,14 @@ def evolution_step_(env, gates, opts_svd, method='mpo', fix_metric=0,
         gates = [ng for og in gates for ng in split_gate_2site(og)]
 
     for gate in gates:
+        env.move_to_patch(gate.sites)
         psi.apply_gate_(gate)
 
         env.pre_truncation_(gate.sites)
         for s0, s1 in pairwise(gate.sites):
             info = truncate_(env, opts_svd, (s0, s1), fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization)
             infos.append(info)
-
+        env.apply_patch()
     return infos
 
 

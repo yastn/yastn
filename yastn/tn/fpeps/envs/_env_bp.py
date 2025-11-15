@@ -89,6 +89,14 @@ class EnvBP():
     def __setitem__(self, site, obj):
         self.env[site] = obj
 
+    def apply_patch(self):
+        self.psi.bra.apply_patch()
+        self.env.apply_patch()
+
+    def move_to_patch(self, sites):
+        self.psi.bra.move_to_patch(sites)
+        self.env.move_to_patch(sites)
+
     def copy(self) -> EnvBP:
         env = EnvBP(self.psi, init=None)
         env.env = self.env.copy()

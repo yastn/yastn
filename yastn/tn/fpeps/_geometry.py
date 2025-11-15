@@ -428,6 +428,7 @@ class Lattice():
         for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "f_ordered", "nn_bond_dirn"]:
             setattr(self, name, getattr(geometry, name))
         self._site_data = {self.site2index(site): None for site in self.sites()}
+        self._patch = {}
 
         if objects is not None:
             try:
@@ -447,11 +448,31 @@ class Lattice():
 
     def __getitem__(self, site):
         """ Get tensor for site. """
+        if site in self._patch:
+            return self._patch[site]
         return self._site_data[self.site2index(site)]
 
     def __setitem__(self, site, obj):
         """ Set tensor at site. """
-        self._site_data[self.site2index(site)] = obj
+        if site in self._patch:
+            self._patch[site] = obj
+        else:
+            self._site_data[self.site2index(site)] = obj
+
+    def apply_patch(self):
+        """
+        Moves the tensors in the patch into site_data.
+        For periodic lattice, this propagates those tensors across the lattice.
+        """
+        for site in list(self._patch.keys()):
+            self._site_data[self.site2index(site)] = self._patch.pop(site)
+
+    def move_to_patch(self, sites):
+        """ Initialize a patch, with a shallow copy of data object for provided sites. """
+        if not isinstance(sites[0], (tuple, list)):
+            sites = [sites]
+        for site in sites:
+            self._patch[site] = self[site].shallow_copy()
 
     def items(self):
         """ Allows iterating over lattice sites like in dict. """

@@ -53,6 +53,12 @@ class EnvNTU:
 
     which = property(fget=_get_which, fset=_set_which)
 
+    def apply_patch(self):
+        self.psi.apply_patch()
+
+    def move_to_patch(self, sites):
+        self.psi.move_to_patch(sites)
+
     def pre_truncation_(env, bond):
         pass
 

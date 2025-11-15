@@ -29,7 +29,18 @@ from ._tests import YastnError, _test_axes_all
 __all__ = ['conj', 'conj_blocks', 'flip_signature', 'flip_charges', 'switch_signature',
            'transpose', 'moveaxis', 'move_leg', 'diag', 'remove_zero_blocks',
            'add_leg', 'remove_leg', 'copy', 'clone', 'detach', 'to',
-           'requires_grad_', 'grad', 'drop_leg_history']
+           'requires_grad_', 'grad', 'drop_leg_history', 'shallow_copy']
+
+
+def shallow_copy(a) -> 'Tensor':
+    r"""
+    Return a shallow copy of the tensor.
+
+    Returns
+    -------
+    yastn.Tensor
+    """
+    return a._replace()
 
 
 def copy(a) -> 'Tensor':
