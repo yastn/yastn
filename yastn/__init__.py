@@ -21,6 +21,6 @@ from .tensor import *
 try:
     from ._version import version as __version__
     from ._version import version_tuple
-except ImportError:
-    __version__ = "unknown version"
-    version_tuple = (0, 0, "unknown version")
+except ImportError:  # pragma: no cover
+    __version__ = "unknown version"  # pragma: no cover
+    version_tuple = (0, 0, "unknown version")  # pragma: no cover

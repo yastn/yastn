@@ -104,8 +104,8 @@ def make_config(**kwargs) -> _config:
         from ..backend import backend_torch
         kwargs["backend"] = backend_torch
     elif kwargs["backend"] == 'torch_cpp':
-        from ..backend import backend_torch_cpp
-        kwargs["backend"] = backend_torch_cpp
+        from ..backend import backend_torch_cpp  # pragma: no cover
+        kwargs["backend"] = backend_torch_cpp  # pragma: no cover
     elif isinstance(kwargs["backend"], str):
         raise YastnError("backend encoded as string only supports: 'np', 'torch'")
 
