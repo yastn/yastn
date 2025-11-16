@@ -182,6 +182,8 @@ def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
     if a.config.sym.NSYM == 0:
         if a.isdiag and len(D) == 1:
             D = D + D
+        if () in D:
+            D = ((0,),) * a.ndim_n
         if len(D) != a.ndim_n:
             raise YastnError("Number of elements in D does not match tensor rank.")
         tset = np.zeros((1, a.ndim_n, a.config.sym.NSYM))

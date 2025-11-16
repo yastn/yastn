@@ -350,20 +350,34 @@ class RectangularUnitcell(SquareLattice):
 
 class TriangularLattice(SquareLattice):
 
-    def __init__(self, **kwargs):
+    def __init__(self, dims=(3, 3), boundary='infinite', full_patch=False, **kwargs):
         r"""
         Geometric information about infinite triangular lattice, which
-        is an infinite lattice with :math:`3{\times}3` unit cell and three unique tensors.
+        is an infinite lattice with :math:`3{\times}3` (full_patch) unit cell and nine unique tensors,
+        or :math:`\sqrt{3}{\times}\sqrt{3}` unit cell and three unique tensors;
+        a finite lattice with with :math:`Nx{\times}Ny` patch and :math: `Nx{\times}Ny` unique tensors.
         """
-        super().__init__(dims=(3, 3), boundary='infinite')
-        self._sites = (Site(0, 0), Site(0, 1), Site(0, 2))
-        self._bonds_h = (Bond(Site(0, 0), Site(0, 1)), Bond(Site(0, 1), Site(0, 2)), Bond(Site(0, 2), Site(0, 3)))
-        self._bonds_v = (Bond(Site(0, 0), Site(1, 0)), Bond(Site(0, 1), Site(1, 1)), Bond(Site(0, 2), Site(1, 2)))
-        self._bonds_d = (Bond(Site(1, 0), Site(0, 1)), Bond(Site(1, 1), Site(0, 2)), Bond(Site(1, 2), Site(0, 3)))
+        self.full_patch = full_patch
+        super().__init__(dims=dims, boundary=boundary)
+        if self.full_patch:
+            bonds_d = []
+            for s in self._sites:
+                s_r = self.nn_site(s, d='r')  # left is before right in the fermionic order
+                s_b = self.nn_site(s, d='b')  # top is before bottom in the fermionic order
+                bonds_d.append(Bond(s_b, s_r))
+            self._bonds_d = bonds_d
+        else:
+            self._sites = (Site(0, 0), Site(0, 1), Site(0, 2))
+            self._bonds_h = (Bond(Site(0, 0), Site(0, 1)), Bond(Site(0, 1), Site(0, 2)), Bond(Site(0, 2), Site(0, 3)))
+            self._bonds_v = (Bond(Site(0, 0), Site(1, 0)), Bond(Site(0, 1), Site(1, 1)), Bond(Site(0, 2), Site(1, 2)))
+            self._bonds_d = (Bond(Site(1, 0), Site(0, 1)), Bond(Site(1, 1), Site(0, 2)), Bond(Site(1, 2), Site(0, 3)))
 
     def site2index(self, site):
         """ Tensor index depending on site. """
-        return (site[1] - site[0]) % 3
+        if self.full_patch:
+            return (site[0] % self.Nx) * self.Ny + site[1] % self.Ny
+        else:
+            return (site[1] - site[0]) % 3
 
     def bonds(self, dirn=None, reverse=False) -> Sequence[Bond]:
         """

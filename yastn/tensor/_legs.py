@@ -86,7 +86,7 @@ class Leg:
             if not all(int(x) == x for x in t):
                 raise YastnError('Charges should be tuples of ints.')
             lD, nsym = len(D), self.sym.NSYM
-            if lD * nsym != len(t) or (nsym == 0 and lD != 1):
+            if lD * nsym != len(t) or (nsym == 0 and lD > 1):
                 raise YastnError('Number of provided charges and bond dimensions do not match sym.NSYM')
             #
             t = np.array(t, dtype=np.int64)

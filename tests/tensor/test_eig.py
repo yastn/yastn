@@ -53,18 +53,24 @@ def test_eig_basic(config_kwargs):
     # dense
     config_dense = yastn.make_config(sym='none', **config_kwargs)
     config_dense.backend.random_seed(seed=seed)
-    
+
     a = yastn.rand(config=config_dense, s=(-1, 1, -1, 1), D=[11, 11, 13, 13])
     eig_combine(a)
 
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     legs = [yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 4)),
-            yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(2, 3, 4)),    
+            yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(2, 3, 4)),
             yastn.Leg(config_U1, s=1, t=(-2, 0, 2), D=(2, 3, 4)),
             yastn.Leg(config_U1, s=-1, t=(-2, 0, 2), D=(2, 3, 4))]
     a = yastn.rand(config=config_U1, n=0, legs=legs)
     eig_combine(a)
+
+    # test eig of empty Tensor
+    for config in [config_dense, config_U1]:
+        a = yastn.Tensor(config, s=(1, -1, 1))
+        U, S, V = yastn.linalg.eig(a, axes=((0, 1), 2))
+        assert U.size == S.size == V.size == 0
 
 
 def test_eig_degeneracy_fail(config_kwargs):
