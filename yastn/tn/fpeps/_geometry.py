@@ -461,14 +461,14 @@ class Lattice():
 
     def apply_patch(self):
         """
-        Moves the tensors in the patch into site_data.
-        For periodic lattice, this propagates those tensors across the lattice.
+        Move the tensors in the patch into site_data.
+        For periodic lattice, this repeats those tensors across the lattice.
         """
         for site in list(self._patch.keys()):
             self._site_data[self.site2index(site)] = self._patch.pop(site)
 
     def move_to_patch(self, sites):
-        """ Initialize a patch, with a shallow copy of data object for provided sites. """
+        """ Initialize a patch with a shallow copy of data object for provided sites. """
         if not isinstance(sites[0], (tuple, list)):
             sites = [sites]
         for site in sites:

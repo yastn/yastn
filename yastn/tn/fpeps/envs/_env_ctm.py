@@ -177,16 +177,6 @@ class EnvCTM():
                 'env': self.env.to_dict(level=level),
                 'proj': self.proj.to_dict(level=level)}
 
-    def apply_patch(self):
-        self.psi.bra.apply_patch()  # this assumes Peps2Layers with bra == ket
-        self.env.apply_patch()
-        self.proj.apply_patch()
-
-    def move_to_patch(self, sites):
-        self.psi.bra.move_to_patch(sites)  # this assumes Peps2Layers with bra == ket
-        self.env.move_to_patch(sites)
-        self.proj.move_to_patch(sites)
-
     @classmethod
     def from_dict(cls, d, config=None):
         r"""
@@ -1000,6 +990,13 @@ class EnvCTM():
             update_env_(env_tmp, env.nn_site(s1, d='r'), env, move='t')
         update_storage_(env, env_tmp)
 
+    def apply_patch(self):
+        self.env.apply_patch()
+        self.proj.apply_patch()
+
+    def move_to_patch(self, sites):
+        self.env.move_to_patch(sites)
+        self.proj.move_to_patch(sites)
 
     def pre_truncation_(env, bond):
         pass

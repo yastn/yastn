@@ -77,6 +77,12 @@ class EnvApproximate:
     def __setitem__(self, key, value):
         self._envs[key] = value
 
+    def apply_patch(self):
+        pass
+
+    def move_to_patch(self, sites):
+        pass
+
     def pre_truncation_(env, bond):
         pass
 
@@ -190,12 +196,6 @@ class EnvApproximate:
             for ny in range(-self.Nw, 0):  # [bd, -1]
                 tmpo = self.transfer_mpo(bd, n=ny).H
                 mps.compression_(self[bd, ny], (tmpo, self[bd, ny-1]), max_sweeps=self.update_sweeps)
-
-    def apply_patch(self):
-        pass
-
-    def move_to_patch(self, sites):
-        pass
 
     def transfer_mpo(self, bd, n, Q0=None, Q1=None):
         H = mps.Mpo(N = 2 * self.Nl)
