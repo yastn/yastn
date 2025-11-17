@@ -52,7 +52,8 @@ class Evolution_out(NamedTuple):
 
 def evolution_step_(env, gates, opts_svd, method='mpo', fix_metric=0,
                     pinv_cutoffs=(1e-12, 1e-11, 1e-10, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4),
-                    max_iter=100, tol_iter=1e-13, initialization="EAT_SVD"):
+                    max_iter=100, tol_iter=1e-13, initialization="EAT_SVD",
+                    opts_post_truncation=None):
     r"""
     Perform a single step of PEPS evolution by applying a list of gates.
     Truncate bond dimension after each application of a two-site gate.
@@ -89,6 +90,8 @@ def evolution_step_(env, gates, opts_svd, method='mpo', fix_metric=0,
     initialization: str
         Tested initializations of iterative optimization. The one resulting in the smallest error is selected.
         Possible options are 'SVD' (svd initialization only), 'EAT' (EAT optimization only), 'SVD_EAT' (tries both).
+    opts_post_truncation: None | dict
+        Arguments passed to post_truncation_ function of the environment. The default is None.
 
     Returns
     -------
@@ -122,7 +125,7 @@ def evolution_step_(env, gates, opts_svd, method='mpo', fix_metric=0,
         env.move_to_patch(gate.sites)
         env.pre_truncation_(gate.sites)
         for s0, s1 in pairwise(gate.sites):
-            info = truncate_(env, opts_svd, (s0, s1), fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization)
+            info = truncate_(env, opts_svd, (s0, s1), fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization, opts_post_truncation)
             infos.append(info)
 
         psi.apply_patch()
@@ -151,7 +154,8 @@ def split_gate_2site(gate):
 def truncate_(env, opts_svd, bond=None,
               fix_metric=0,
               pinv_cutoffs=(1e-12, 1e-11, 1e-10, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4),
-              max_iter=100, tol_iter=1e-13, initialization="EAT_SVD"):
+              max_iter=100, tol_iter=1e-13, initialization="EAT_SVD",
+              opts_post_truncation=None):
     r"""
     Truncate virtual bond dimensions of PEPS.
 
@@ -184,6 +188,8 @@ def truncate_(env, opts_svd, bond=None,
     initialization: str
         Tested initializations of iterative optimization. The one resulting in the smallest error is selected.
         Possible options are 'SVD' (svd initialization only), 'EAT' (EAT optimization only), 'SVD_EAT' (tries both).
+    opts_post_truncation: None | dict
+        Arguments passed to post_truncation_ function of the environment. The default is None.
 
     Returns
     -------
@@ -202,7 +208,10 @@ def truncate_(env, opts_svd, bond=None,
     """
     psi = env.psi
     if isinstance(psi, Peps2Layers):
-        psi = psi.ket  # to make it work with CtmEnv
+        psi = psi.ket  # to make it work with EnvCTM and EnvBP
+
+    if opts_post_truncation is None:
+        opts_post_truncation = {}
 
     if bond is None:
         bonds = psi.bonds()
@@ -239,7 +248,7 @@ def truncate_(env, opts_svd, bond=None,
             psi[s0] = tensordot(Q0, M0, axes=(2, 0)).transpose(axes=(0, 1, 4, 2, 3))  # t l b r sa
             psi[s1] = tensordot(M1, Q1, axes=(1, 0)) # t l b r sa
 
-        env.post_truncation_(bond)
+        env.post_truncation_(bond, **opts_post_truncation)
         infos.append(Evolution_out(**info))
     return infos[0] if len(bonds) == 1 else infos
 
