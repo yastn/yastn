@@ -394,14 +394,14 @@ class EnvBP():
         """
         if dirn in ("h", "lr") and self.which == "BP":
             assert self.psi.nn_site(s0, (0, 1)) == s1
-            vecl = hair_l(Q0, hl=self[s0].l, ht=self[s0].t, hb=self[s0].b)
-            vecr = hair_r(Q1, hr=self[s1].r, ht=self[s1].t, hb=self[s1].b).T
+            vecl = hair_l(Q0, ht=self[s0].t, hl=self[s0].l, hb=self[s0].b)
+            vecr = hair_r(Q1, ht=self[s1].t, hb=self[s1].b, hr=self[s1].r).T
             return BipartiteBondMetric(gL=vecl, gR=vecr)  # (rr' rr,  ll ll')
 
         if dirn in ("v", "tb") and self.which == "BP":
             assert self.psi.nn_site(s0, (1, 0)) == s1
-            vect = hair_t(Q0, hl=self[s0].l, ht=self[s0].t, hr=self[s0].r)
-            vecb = hair_b(Q1, hr=self[s1].r, hb=self[s1].b, hl=self[s1].l).T
+            vect = hair_t(Q0, ht=self[s0].t, hl=self[s0].l, hr=self[s0].r)
+            vecb = hair_b(Q1, hl=self[s1].l, hb=self[s1].b, hr=self[s1].r).T
             return BipartiteBondMetric(gL=vect, gR=vecb)  # (bb' bb,  tt tt')
 
         if dirn in ("h", "lr") and self.which == "NN+BP":
@@ -504,11 +504,11 @@ class EnvBP():
             sm = mm[0, -1]
             etl = edge_l(m[0, -1]) if sm is None else edge_l(m[0, -1], hl=self[sm].l)
             sm = mm[-1, -1]
-            ctl = cor_tl(m[-1, -1]) if sm is None else cor_tl(m[-1, -1], hl=self[sm].l, ht=self[sm].t)
+            ctl = cor_tl(m[-1, -1]) if sm is None else cor_tl(m[-1, -1], ht=self[sm].t, hl=self[sm].l)
             sm = mm[-1, 0]
             ett = edge_t(m[-1, 0]) if sm is None else edge_t(m[-1, 0], ht=self[sm].t)
             sm = mm[-1, 1]
-            ctr = cor_tr(m[-1, 1]) if sm is None else cor_tr(m[-1, 1], hr=self[sm].r, ht=self[sm].t)
+            ctr = cor_tr(m[-1, 1]) if sm is None else cor_tr(m[-1, 1], ht=self[sm].t, hr=self[sm].r)
             sm = mm[0, 1]
             etr = edge_r(m[0, 1]) if sm is None else edge_r(m[0, 1], hr=self[sm].r)
             vect = append_vec_tl(Q0, Q0, etl @ (ctl @ ett))
@@ -517,7 +517,7 @@ class EnvBP():
             sm = mm[1, 1]
             ebr = edge_r(m[1, 1]) if sm is None else edge_r(m[1, 1], hr=self[sm].r)
             sm = mm[2, 1]
-            cbr = cor_br(m[2, 1]) if sm is None else cor_br(m[2, 1], hr=self[sm].r, hb=self[sm].b)
+            cbr = cor_br(m[2, 1]) if sm is None else cor_br(m[2, 1], hb=self[sm].b, hr=self[sm].r)
             sm = mm[2, 0]
             ebb = edge_b(m[2, 0]) if sm is None else edge_b(m[2, 0], hb=self[sm].b)
             sm = mm[2, -1]

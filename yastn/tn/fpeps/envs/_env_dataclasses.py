@@ -156,10 +156,9 @@ class EnvCTM_c4v_local(dataclasses_common):
     def __getattr__(self, dirn):
         if dirn in ["tr", "br", "bl"]:
             return self.tl
-        elif dirn in ["l", "b", "r"]:
+        if dirn in ["l", "b", "r"]:
             return self.t
-        else:
-            raise AttributeError()
+        raise AttributeError()
 
 @dataclass()
 class EnvCTM_c4v_projectors(dataclasses_common):
