@@ -35,7 +35,7 @@ class compression_out(NamedTuple):
 
 def compression_(psi, target, method='1site',
                 overlap_tol=None, Schmidt_tol=None, max_sweeps=1,
-                iterator_step=None, opts_svd=None, normalize=True):
+                iterator=False, opts_svd=None, normalize=True, **kwargs):
     r"""
     Perform variational optimization sweeps until convergence to best approximate the target, starting from MPS/MPO :code:`psi`.
 
@@ -53,15 +53,15 @@ def compression_(psi, target, method='1site',
         * sum of any of the three above: target is ``[[MPS], [MPO, MPS], [[MPO, MPO, ...], MPS], ...]``
         * for ``psi`` being itself an MPO, all MPS's above should be replaced with MPO, e.g., ``[MPO, MPO]``
 
-    Outputs iterator if :code:`iterator_step` is given, which allows
-    inspecting :code:`psi` outside of :code:`compression_` function after every :code:`iterator_step` sweeps.
+    Outputs iterator if ``iterator==True``, which allows
+    inspecting ``psi`` outside of ``compression_`` function after every sweep.
 
     Parameters
     ----------
     psi: yastn.tn.mps.MpsMpoOBC
         Initial state. It is updated during execution.
         It is first canonized to the first site, if not provided in such a form.
-        State resulting from :code:`compression_` is canonized to the first site.
+        State resulting from ``compression_`` is canonized to the first site.
 
     target: MPS or MPO
         Defines target state. The target can be:
@@ -86,9 +86,9 @@ def compression_(psi, target, method='1site',
     max_sweeps: int
         Maximal number of sweeps.
 
-    iterator_step: int
-        If int, :code:`compression_` returns a generator that would yield output after every iterator_step sweeps.
-        The default is None, in which case  :code:`compression_` sweeps are performed immediately.
+    iterator: bool
+        If True, :code:`compression_` returns a generator that would yield output after every sweep.
+        The default is False, in which case  :code:`compression_` sweeps are performed immediately.
 
     opts_svd: dict
         Options passed to :meth:`yastn.linalg.svd` used to truncate virtual spaces in :code:`method='2site'`.
@@ -104,17 +104,18 @@ def compression_(psi, target, method='1site',
             * :code:`max_dSchmidt` norm of Schmidt values change on the worst cut in the last sweep.
             * :code:`max_discarded_weight` norm of discarded_weights on the worst cut in '2site' procedure.
     """
-
+    kwargs["iterator_step"] = kwargs.get("iterator_step", int(iterator))
     tmp = _compression_(psi, target, method,
                         overlap_tol, Schmidt_tol, max_sweeps,
-                        iterator_step, opts_svd, normalize)
-    return tmp if iterator_step else next(tmp)
+                        opts_svd, normalize, **kwargs)
+    return tmp if kwargs["iterator_step"] else next(tmp)
 
 
 def _compression_(psi, target, method,
                 overlap_tol, Schmidt_tol, max_sweeps,
-                iterator_step, opts_svd, normalize):
+                opts_svd, normalize, **kwargs):
     """ Generator for compression_(). """
+    iterator_step = kwargs.get("iterator_step", 0)
 
     if not psi.is_canonical(to='first'):
         psi.canonize_(to='first')

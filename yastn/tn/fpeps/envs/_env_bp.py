@@ -177,8 +177,8 @@ class EnvBP():
         for site in self.sites():
             legs = self.psi[site].get_legs()
             for ind, dirn in enumerate(['tR', 'lR', 'bR', 'rR']):
-                #if self.nn_site(site, d=dirn[0]) is None or init == 'eye':
-                tmp = eye(config, legs=legs[ind].unfuse_leg(), isdiag=False)
+                if self.nn_site(site, d=dirn[0]) is None or init == 'eye':
+                    tmp = eye(config, legs=legs[ind].unfuse_leg(), isdiag=False)
                 setattr(self[site], dirn, tmp / tmp.norm())
 
 
@@ -548,23 +548,23 @@ class EnvBP():
         if max_sweeps > 0:
             env.iterate_(max_sweeps=max_sweeps)
 
-    def iterate_(env, max_sweeps=1, iterator_step=None, diff_tol=None):
+    def iterate_(env, max_sweeps=1, iterator=False, diff_tol=None, **kwargs):
         r"""
         Perform BP updates :meth:`yastn.tn.fpeps.EnvBP.update_` until convergence.
         Convergence can be measured based on maximal difference between old and new tensors.
 
-        Outputs iterator if ``iterator_step`` is given, which allows
+        Outputs iterator if ``iterator==True``, which allows
         inspecting ``env``, e.g., calculating expectation values,
-        outside of ``iterate_`` function after every ``iterator_step`` sweeps.
+        outside of ``iterate_`` function after each sweeps.
 
         Parameters
         ----------
         max_sweeps: int
             Maximal number of sweeps.
 
-        iterator_step: int
-            If int, ``iterate_`` returns a generator that would yield output after every iterator_step sweeps.
-            The default is ``None``, in which case  ``iterate_`` sweeps are performed immediately.
+        iterator: bool
+            If True, ``iterate_`` returns a generator that would yield output after every sweep.
+            The default is False, in which case  ``iterate_`` sweeps are performed immediately.
 
         diff_tol: float
             Convergence tolerance for the change of belief tensors in one iteration.
@@ -573,7 +573,7 @@ class EnvBP():
 
         Returns
         -------
-        Generator if iterator_step is not ``None``.
+        Generator if iterator is True.
 
         BP_out(NamedTuple)
             NamedTuple including fields:
@@ -582,8 +582,9 @@ class EnvBP():
                 * ``max_diff`` maximal difference between old and new belief tensors.
                 * ``converged`` whether convergence based on ``diff_tol`` has been reached.
         """
-        tmp = _iterate_(env, max_sweeps, iterator_step, diff_tol)
-        return tmp if iterator_step else next(tmp)
+        kwargs["iterator_step"] = kwargs.get("iterator_step", int(iterator))
+        tmp = _iterate_(env, max_sweeps, diff_tol, **kwargs)
+        return tmp if kwargs["iterator_step"] else next(tmp)
 
     def sample(self, projectors, number=1, xrange=None, yrange=None, progressbar=False, return_probabilities=False, flatten_one=True, **kwargs) -> dict[Site, list]:
         r"""
@@ -681,8 +682,9 @@ class EnvBP():
         return out
 
 
-def _iterate_(env, max_sweeps, iterator_step, diff_tol):
+def _iterate_(env, max_sweeps, diff_tol, **kwargs):
     """ Generator for ctmrg_(). """
+    iterator_step = kwargs.get("iterator_step", 0)
     converged = None
     for sweep in range(1, max_sweeps + 1):
         max_diff = env.update_()

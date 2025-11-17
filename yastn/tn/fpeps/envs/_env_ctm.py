@@ -922,7 +922,7 @@ class EnvCTM():
         -------
         proj: Peps structure loaded with CTM projectors related to all lattice site.
         """
-        if all(s not in opts_svd for s in ('tol', 'tol_block')):
+        if 'tol' not in opts_svd and 'tol_block' not in opts_svd:
             opts_svd['tol'] = 1e-14
         if method not in ('1site', '2site'):
             raise YastnError(f"CTM update {method=} not recognized. Should be '1site' or '2site'")
@@ -933,14 +933,11 @@ class EnvCTM():
                 def f_update_core_(move_d, loc_im, *inputs_t):
                     loc_env = EnvCTM.from_dict(combine_data_and_meta(inputs_t, loc_im))
                     _update_core_(loc_env, move_d, opts_svd, method=method, **kwargs)
-
-                    out_dict = loc_env.to_dict(level=0)
-                    out_data, out_meta = split_data_and_meta(out_dict)
+                    out_data, out_meta = split_data_and_meta(loc_env.to_dict(level=0))
                     return out_data, out_meta
 
-                if env.config.backend.BACKEND_ID == "torch":
-                    env_dict = env.to_dict(level=0)
-                    inputs_t, inputs_meta = split_data_and_meta(env_dict)
+                if "torch" in env.config.backend.BACKEND_ID:
+                    inputs_t, inputs_meta = split_data_and_meta(env.to_dict(level=0))
 
                     if checkpoint_move == 'reentrant':
                         use_reentrant = True
@@ -953,8 +950,7 @@ class EnvCTM():
                     raise RuntimeError(f"CTM update: checkpointing not supported for backend {env.config.BACKEND_ID}")
 
                 # reconstruct env from output tensors
-                out_env_dict = combine_data_and_meta(out_data, out_meta)
-                env.update_from_dict_(out_env_dict)
+                env.update_from_dict_(combine_data_and_meta(out_data, out_meta))
             else:
                 _update_core_(env, d, opts_svd, method=method, **kwargs)
         return env
@@ -1076,14 +1072,14 @@ class EnvCTM():
                     dict_bond_dimension[site, corners_id[ii]].append(temp_D)
         return [dict_bond_dimension, dict_symmetric_sector]
 
-    def iterate_(env, opts_svd=None, moves='hv', method='2site', max_sweeps=1, iterator_step=None, corner_tol=None, truncation_f: Callable = None, **kwargs):
+    def iterate_(env, opts_svd=None, moves='hv', method='2site', max_sweeps=1, iterator=False, corner_tol=None, truncation_f: Callable = None, **kwargs):
         r"""
         Perform CTMRG updates :meth:`yastn.tn.fpeps.EnvCTM.update_` until convergence.
         Convergence can be measured based on singular values of CTM environment corner tensors.
 
-        Outputs iterator if ``iterator_step`` is given, which allows
+        Outputs iterator if ``iterator`` is given, which allows
         inspecting ``env``, e.g., calculating expectation values,
-        outside of ``ctmrg_`` function after every ``iterator_step`` sweeps.
+        outside of ``ctmrg_`` function after every sweeps.
 
         Parameters
         ----------
@@ -1109,9 +1105,9 @@ class EnvCTM():
         max_sweeps: int
             The maximal number of sweeps.
 
-        iterator_step: int
-            If int, ``ctmrg_`` returns a generator that would yield output after every iterator_step sweeps.
-            The default is ``None``, in which case  ``ctmrg_`` sweeps are performed immediately.
+        iterator: bool
+            If True, ``ctmrg_`` returns a generator that would yield output after every sweep.
+            The default is False, in which case  ``ctmrg_`` sweeps are performed immediately.
 
         corner_tol: float
             Convergence tolerance for the change of singular values of all corners in a single update.
@@ -1134,7 +1130,7 @@ class EnvCTM():
 
         Returns
         -------
-        Generator if iterator_step is not ``None``.
+        Generator if iterator is True.
 
         CTMRG_out(NamedTuple)
             NamedTuple including fields:
@@ -1145,16 +1141,18 @@ class EnvCTM():
                 * ``converged`` whether convergence based on ``corner_tol`` has been reached.
         """
         if "checkpoint_move" in kwargs:
-            if env.config.backend.BACKEND_ID == "torch":
-                assert kwargs["checkpoint_move"] in ['reentrant','nonreentrant',False], f"Invalid choice for {kwargs['checkpoint_move']}"
-        kwargs["truncation_f"]= truncation_f
-        tmp = env._ctmrg_iterator_(opts_svd, moves, method, max_sweeps, iterator_step, corner_tol, **kwargs)
-        return tmp if iterator_step else next(tmp)
+            if "torch" in env.config.backend.BACKEND_ID:
+                assert kwargs["checkpoint_move"] in ['reentrant', 'nonreentrant', False], f"Invalid choice for {kwargs['checkpoint_move']}"
+        kwargs["truncation_f"] = truncation_f
+        kwargs["iterator_step"] = kwargs.get("iterator_step", int(iterator))
+        tmp = env._ctmrg_iterator_(opts_svd, moves, method, max_sweeps, corner_tol, **kwargs)
+        return tmp if kwargs["iterator_step"] else next(tmp)
 
     ctmrg_ = iterate_   #  For backward compatibility, allow using EnvCtm.ctmrg_() instead of EnvCtm.iterate_().
 
-    def _ctmrg_iterator_(env, opts_svd, moves, method, max_sweeps, iterator_step, corner_tol, **kwargs):
+    def _ctmrg_iterator_(env, opts_svd, moves, method, max_sweeps, corner_tol, **kwargs):
         """ Generator for ctmrg_. """
+        iterator_step = kwargs.get("iterator_step", 0)
         max_dsv, converged, history = None, False, []
         for sweep in range(1, max_sweeps + 1):
             env.update_(opts_svd=opts_svd, moves=moves, method=method, **kwargs)
@@ -1572,8 +1570,8 @@ def update_env_(env_tmp, site, env, move: str):
             env_tmp[site].br = tmp / tmp.norm(p='inf')
 
 
-def ctm_conv_corner_spec(env : EnvCTM, history : Sequence[dict[tuple[Site,str],Tensor]]=[],
-                         corner_tol : Union[None,float]=1.0e-8)->tuple[bool,float,Sequence[dict[tuple[Site,str],Tensor]]]:
+def ctm_conv_corner_spec(env: EnvCTM, history: Sequence[dict[tuple[Site, str], Tensor]]=[],
+                         corner_tol: None | float=1.0e-8) -> tuple[bool, float, Sequence[dict[tuple[Site, str], Tensor]]]:
     """
     Evaluate convergence of CTM by computing the difference of environment corner spectra between consecutive CTM steps.
     """
