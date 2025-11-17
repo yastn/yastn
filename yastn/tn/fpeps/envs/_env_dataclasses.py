@@ -122,10 +122,27 @@ class EnvBP_local(dataclasses_common):
     Dataclass for BP environment tensors at a single Peps site on square lattice.
     Contains fields ``t``,  ``l``, ``b``, ``r``
     """
-    t: Tensor | None = None  # top
-    l: Tensor | None = None  # left
-    b: Tensor | None = None  # bottom
-    r: Tensor | None = None  # right
+    t: Tensor | None = None  # top R.H @ R
+    l: Tensor | None = None  # left R.H @ R
+    b: Tensor | None = None  # bottom R.H @ R
+    r: Tensor | None = None  # right R.H @ R
+    tR: Tensor | None = None  # top R
+    lR: Tensor | None = None  # left R
+    bR: Tensor | None = None  # bottom R
+    rR: Tensor | None = None  # right R
+
+    def __getattribute__(self, dirn):
+        if dirn in ['t', 'l', 'b', 'r']:
+            res = super(EnvBP_local, self).__getattribute__(dirn)
+            if res is None:
+                resR = super(EnvBP_local, self).__getattribute__(dirn + "R")
+                if resR is not None:
+                    res = resR.H @ resR
+                    super(EnvBP_local, self).__setattr__(dirn, res)
+            return res
+        else:
+            return super(EnvBP_local, self).__getattribute__(dirn)
+
 
 @dataclass()
 class EnvCTM_c4v_local(dataclasses_common):
@@ -137,13 +154,12 @@ class EnvCTM_c4v_local(dataclasses_common):
     t:  Tensor | None = None  # top
 
     def __getattr__(self, dirn):
-        if dirn in ["tl", "tr", "br", "bl"]:
+        if dirn in ["tr", "br", "bl"]:
             return self.tl
-
-        elif dirn in ["t", "l", "b", "r"]:
+        elif dirn in ["l", "b", "r"]:
             return self.t
         else:
-            return None
+            raise AttributeError()
 
 @dataclass()
 class EnvCTM_c4v_projectors(dataclasses_common):

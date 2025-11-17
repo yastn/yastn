@@ -127,6 +127,11 @@ class EnvBP():
             for site in env.sites():
                 for dirn, v in d['data'][site].items():
                     setattr(env[site], dirn, Tensor.from_dict(v, config))
+                    tmp = getattr(env[site], dirn)
+                    s = tmp.s[1]
+                    S, U = tmp.eigh(axes=(0, 1), sU=s)
+                    _, R = (S.sqrt() @ U.H).qr(axes=(0, 1), sQ=s)
+                    setattr(env[site], dirn + 'R', R / R.norm())
             return env
 
         if d['dict_ver'] == 1:
@@ -171,11 +176,11 @@ class EnvBP():
         config = self.psi.config
         for site in self.sites():
             legs = self.psi[site].get_legs()
-            for ind, dirn in enumerate('tlbr'):
-                if self.nn_site(site, d=dirn) is None or init == 'eye':
-                    tmp = eye(config, legs=legs[ind].unfuse_leg(), isdiag=False)
-                tmp = tmp / tmp.norm()
-                setattr(self[site], dirn, tmp)
+            for ind, dirn in enumerate(['tR', 'lR', 'bR', 'rR']):
+                #if self.nn_site(site, d=dirn[0]) is None or init == 'eye':
+                tmp = eye(config, legs=legs[ind].unfuse_leg(), isdiag=False)
+                setattr(self[site], dirn, tmp / tmp.norm())
+
 
     def measure_1site(self, O, site=None) -> dict:
         r"""
@@ -205,7 +210,7 @@ class EnvBP():
             ten = self.psi[site]
 
             if isinstance(ten, DoublePepsTensor):
-                Atlbr = ncon([ten.ket, lenv.t, lenv.l, lenv.b, lenv.r], [(1, 2, 3, 4, -4), (-0, 1), (-1, 2), (-2, 3), (-3, 4)])
+                Atlbr = ncon([ten.ket, lenv.tR, lenv.lR, lenv.bR, lenv.rR], [(1, 2, 3, 4, -4), (-0, 1), (-1, 2), (-2, 3), (-3, 4)])
                 val_no = vdot(Atlbr, Atlbr)
 
                 for nz, op in ops.items():
@@ -263,26 +268,26 @@ class EnvBP():
         ten0, ten1 = self.psi[s0], self.psi[s1]
 
         if dirn in ('lr', 'rl'):
-            tmp0 = hair_l(ten0.bra, ht=env0.t.H @ env0.t, hl=env0.l.H @ env0.l, hb=env0.b.H @ env0.b, A_ket=ten0.ket)
-            tmp1 = hair_r(ten1.bra, ht=env1.t.H @ env1.t, hr=env1.r.H @ env1.r, hb=env1.b.H @ env1.b, A_ket=ten1.ket)
+            tmp0 = hair_l(ten0.bra, ht=env0.t, hl=env0.l, hb=env0.b, A_ket=ten0.ket)
+            tmp1 = hair_r(ten1.bra, ht=env1.t, hr=env1.r, hb=env1.b, A_ket=ten1.ket)
             val_no = vdot(tmp0, tmp1, conj=(0, 0))
 
             ten0 = ten0.apply_gate_on_ket(G0, dirn='l')  # if G0.ndim <= 3 else G0
             ten1 = ten1.apply_gate_on_ket(G1, dirn='r')  # if G1.ndim <= 3 else G1
 
-            tmp0 = hair_l(ten0.bra, ht=env0.t.H @ env0.t, hl=env0.l.H @ env0.l, hb=env0.b.H @ env0.b, A_ket=ten0.ket)
-            tmp1 = hair_r(ten1.bra, ht=env1.t.H @ env1.t, hr=env1.r.H @ env1.r, hb=env1.b.H @ env1.b, A_ket=ten1.ket)
+            tmp0 = hair_l(ten0.bra, ht=env0.t, hl=env0.l, hb=env0.b, A_ket=ten0.ket)
+            tmp1 = hair_r(ten1.bra, ht=env1.t, hr=env1.r, hb=env1.b, A_ket=ten1.ket)
             val_op = vdot(tmp0, tmp1, conj=(0, 0))
         else:  # dirn in ('tb', 'bt'):
-            tmp0 = hair_t(ten0.bra, ht=env0.t.H @ env0.t, hl=env0.l.H @ env0.l, hr=env0.r.H @ env0.r, A_ket=ten0.ket)
-            tmp1 = hair_b(ten1.bra, hl=env1.l.H @ env1.l, hr=env1.r.H @ env1.r, hb=env1.b.H @ env1.b, A_ket=ten1.ket)
+            tmp0 = hair_t(ten0.bra, ht=env0.t, hl=env0.l, hr=env0.r, A_ket=ten0.ket)
+            tmp1 = hair_b(ten1.bra, hl=env1.l, hr=env1.r, hb=env1.b, A_ket=ten1.ket)
             val_no = vdot(tmp0, tmp1, conj=(0, 0))
 
             ten0 = ten0.apply_gate_on_ket(G0, dirn='t')  # if G0.ndim <= 3 else G0
             ten1 = ten1.apply_gate_on_ket(G1, dirn='b')  # if G1.ndim <= 3 else G1
 
-            tmp0 = hair_t(ten0.bra, ht=env0.t.H @ env0.t, hl=env0.l.H @ env0.l, hr=env0.r.H @ env0.r, A_ket=ten0.ket)
-            tmp1 = hair_b(ten1.bra, hl=env1.l.H @ env1.l, hr=env1.r.H @ env1.r, hb=env1.b.H @ env1.b, A_ket=ten1.ket)
+            tmp0 = hair_t(ten0.bra, ht=env0.t, hl=env0.l, hr=env0.r, A_ket=ten0.ket)
+            tmp1 = hair_b(ten1.bra, hl=env1.l, hr=env1.r, hb=env1.b, A_ket=ten1.ket)
             val_op = vdot(tmp0, tmp1, conj=(0, 0))
 
         return val_op / val_no
@@ -316,49 +321,34 @@ class EnvBP():
         ten0, env0 = env.psi[s0], env[s0]
 
         if dirn == 'lr':
-            tmp = ncon([ten0.ket, env0.t, env0.l, env0.b], [(1, 2, 3, -3, -4), (-0, 1), (-1, 2), (-2, 3)])
-            _, R = tmp.qr(axes=((0, 1, 2, 4), 3))
+            tmp = ncon([ten0.ket, env0.tR, env0.lR, env0.bR], [(1, 2, 3, -3, -4), (-0, 1), (-1, 2), (-2, 3)])
+            _, R = tmp.qr(axes=((0, 1, 2, 4), 3), sQ=tmp.s[3])
             R = R / R.norm()
-            diff = diff_beliefs(env[s1].l, R)
-            env_tmp[s1].l = R
-
-            # new_l = hair_l(ten0.bra, ht=env0.t, hl=env0.l, hb=env0.b, A_ket=ten0.ket)
-            # new_l = regularize_belief(new_l, env.tol_positive)
-            # diff = diff_beliefs(env[s1].l, new_l)
-            # env_tmp[s1].l = new_l
+            diff = diff_beliefs(env[s1].lR, R)
+            env_tmp[s1].lR = R
+            env_tmp[s1].l = None
         if dirn == 'rl':
-            tmp = ncon([ten0.ket, env0.t, env0.b, env0.r], [(1, -1, 2, 3, -4), (-0, 1), (-2, 2), (-3, 3)])
-            _, R = tmp.qr(axes=((0, 2, 3, 4), 1))
+            tmp = ncon([ten0.ket, env0.tR, env0.bR, env0.rR], [(1, -1, 2, 3, -4), (-0, 1), (-2, 2), (-3, 3)])
+            _, R = tmp.qr(axes=((0, 2, 3, 4), 1), sQ=tmp.s[1])
             R = R / R.norm()
-            diff = diff_beliefs(env[s1].r, R)
-            env_tmp[s1].r = R
-
-            # new_r = hair_r(ten0.bra, ht=env0.t, hb=env0.b, hr=env0.r, A_ket=ten0.ket)
-            # new_r = regularize_belief(new_r, env.tol_positive)
-            # diff = diff_beliefs(env[s1].r, new_r)
-            # env_tmp[s1].r = new_r
+            diff = diff_beliefs(env[s1].rR, R)
+            env_tmp[s1].rR = R
+            env_tmp[s1].r = None
         if dirn == 'tb':
-            tmp = ncon([ten0.ket, env0.t, env0.l, env0.r], [(1, 2, -2, 3, -4), (-0, 1), (-1, 2), (-3, 3)])
-            _, R = tmp.qr(axes=((0, 1, 3, 4), 2))
+            tmp = ncon([ten0.ket, env0.tR, env0.lR, env0.rR], [(1, 2, -2, 3, -4), (-0, 1), (-1, 2), (-3, 3)])
+            _, R = tmp.qr(axes=((0, 1, 3, 4), 2), sQ=tmp.s[2])
             R = R / R.norm()
-            diff = diff_beliefs(env[s1].t, R)
-            env_tmp[s1].t = R
-
-            # new_t = hair_t(ten0.bra, ht=env0.t, hl=env0.l, hr=env0.r, A_ket=ten0.ket)
-            # new_t = regularize_belief(new_t, env.tol_positive)
-            # diff = diff_beliefs(env[s1].t, new_t)
-            # env_tmp[s1].t = new_t
+            diff = diff_beliefs(env[s1].tR, R)
+            env_tmp[s1].tR = R
+            env_tmp[s1].t = None
         if dirn == 'bt':
-            tmp = ncon([ten0.ket, env0.l, env0.b, env0.r], [(-0, 1, 2, 3, -4), (-1, 1), (-2, 2), (-3, 3)])
-            _, R = tmp.qr(axes=((1, 2, 3, 4), 0))
+            tmp = ncon([ten0.ket, env0.lR, env0.bR, env0.rR], [(-0, 1, 2, 3, -4), (-1, 1), (-2, 2), (-3, 3)])
+            _, R = tmp.qr(axes=((1, 2, 3, 4), 0), sQ=tmp.s[0])
             R = R / R.norm()
-            diff = diff_beliefs(env[s1].b, R)
-            env_tmp[s1].b = R
+            diff = diff_beliefs(env[s1].bR, R)
+            env_tmp[s1].bR = R
+            env_tmp[s1].b = None
 
-            # new_b = hair_b(ten0.bra, hl=env0.l, hb=env0.b, hr=env0.r, A_ket=ten0.ket)
-            # new_b = regularize_belief(new_b, env.tol_positive)
-            # diff = diff_beliefs(env[s1].b, new_b)
-            # env_tmp[s1].b = new_b
         return diff
 
     def bond_metric(self, Q0, Q1, s0, s1, dirn):
@@ -404,14 +394,14 @@ class EnvBP():
         """
         if dirn in ("h", "lr") and self.which == "BP":
             assert self.psi.nn_site(s0, (0, 1)) == s1
-            vecl = hair_l(Q0, hl=self[s0].l.H @ self[s0].l, ht=self[s0].t.H @ self[s0].t, hb=self[s0].b.H @ self[s0].b)
-            vecr = hair_r(Q1, hr=self[s1].r.H @ self[s1].r, ht=self[s1].t.H @ self[s1].t, hb=self[s1].b.H @ self[s1].b).T
+            vecl = hair_l(Q0, hl=self[s0].l, ht=self[s0].t, hb=self[s0].b)
+            vecr = hair_r(Q1, hr=self[s1].r, ht=self[s1].t, hb=self[s1].b).T
             return BipartiteBondMetric(gL=vecl, gR=vecr)  # (rr' rr,  ll ll')
 
         if dirn in ("v", "tb") and self.which == "BP":
             assert self.psi.nn_site(s0, (1, 0)) == s1
-            vect = hair_t(Q0, hl=self[s0].l.H @ self[s0].l, ht=self[s0].t.H @ self[s0].t, hr=self[s0].r.H @ self[s0].r)
-            vecb = hair_b(Q1, hr=self[s1].r.H @ self[s1].r, hb=self[s1].b.H @ self[s1].b, hl=self[s1].l.H @ self[s1].l).T
+            vect = hair_t(Q0, hl=self[s0].l, ht=self[s0].t, hr=self[s0].r)
+            vecb = hair_b(Q1, hr=self[s1].r, hb=self[s1].b, hl=self[s1].l).T
             return BipartiteBondMetric(gL=vect, gR=vecb)  # (bb' bb,  tt tt')
 
         if dirn in ("h", "lr") and self.which == "NN+BP":
@@ -423,20 +413,20 @@ class EnvBP():
             m = {k: (v.ket if isinstance(v, DoublePepsTensor) else v) for k, v in m.items()}
 
             sm = mm[0, -1]
-            env_hl = hair_l(m[0, -1]) if sm is None else hair_l(m[0, -1], ht=self[sm].t.H @ self[sm].t, hl=self[sm].l.H @ self[sm].l, hb=self[sm].b.H @ self[sm].b)
+            env_hl = hair_l(m[0, -1]) if sm is None else hair_l(m[0, -1], ht=self[sm].t, hl=self[sm].l, hb=self[sm].b)
             sm = mm[0, 2]
-            env_hr = hair_r(m[0,  2]) if sm is None else hair_r(m[0,  2], ht=self[sm].t.H @ self[sm].t, hb=self[sm].b.H @ self[sm].b, hr=self[sm].r.H @ self[sm].r)
+            env_hr = hair_r(m[0,  2]) if sm is None else hair_r(m[0,  2], ht=self[sm].t, hb=self[sm].b, hr=self[sm].r)
             env_l = edge_l(Q0, hl=env_hl)  # [bl bl'] [rr rr'] [tl tl']
             env_r = edge_r(Q1, hr=env_hr)  # [tr tr'] [ll ll'] [br br']
 
             sm = mm[-1, 0]
-            ctl = cor_tl(m[-1, 0]) if sm is None else cor_tl(m[-1, 0], ht=self[sm].t.H @ self[sm].t, hl=self[sm].l.H @ self[sm].l)
+            ctl = cor_tl(m[-1, 0]) if sm is None else cor_tl(m[-1, 0], ht=self[sm].t, hl=self[sm].l)
             sm = mm[-1, 1]
-            ctr = cor_tr(m[-1, 1]) if sm is None else cor_tr(m[-1, 1], ht=self[sm].t.H @ self[sm].t, hr=self[sm].r.H @ self[sm].r)
+            ctr = cor_tr(m[-1, 1]) if sm is None else cor_tr(m[-1, 1], ht=self[sm].t, hr=self[sm].r)
             sm = mm[ 1, 1]
-            cbr = cor_br(m[ 1, 1]) if sm is None else cor_br(m[ 1, 1], hb=self[sm].b.H @ self[sm].b, hr=self[sm].r.H @ self[sm].r)
+            cbr = cor_br(m[ 1, 1]) if sm is None else cor_br(m[ 1, 1], hb=self[sm].b, hr=self[sm].r)
             sm = mm[ 1, 0]
-            cbl = cor_bl(m[ 1, 0]) if sm is None else cor_bl(m[ 1, 0], hb=self[sm].b.H @ self[sm].b, hl=self[sm].l.H @ self[sm].l)
+            cbl = cor_bl(m[ 1, 0]) if sm is None else cor_bl(m[ 1, 0], hb=self[sm].b, hl=self[sm].l)
 
             g = tensordot((cbr @ cbl) @ env_l, (ctl @ ctr) @ env_r, axes=((0, 2), (2, 0)))  # [rr rr'] [ll ll']
             return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
@@ -449,20 +439,20 @@ class EnvBP():
             m = {k: (v.ket if isinstance(v, DoublePepsTensor) else v) for k, v in m.items()}
 
             sm = mm[-1, 0]
-            env_ht = hair_t(m[-1, 0]) if sm is None else hair_t(m[-1, 0], ht=self[sm].t.H @ self[sm].t, hl=self[sm].l.H @ self[sm].l, hr=self[sm].r.H @ self[sm].r)
+            env_ht = hair_t(m[-1, 0]) if sm is None else hair_t(m[-1, 0], ht=self[sm].t, hl=self[sm].l, hr=self[sm].r)
             sm = mm[2, 0]
-            env_hb = hair_b(m[ 2, 0]) if sm is None else hair_b(m[ 2, 0], hl=self[sm].l.H @ self[sm].l, hb=self[sm].b.H @ self[sm].b, hr=self[sm].r.H @ self[sm].r)
+            env_hb = hair_b(m[ 2, 0]) if sm is None else hair_b(m[ 2, 0], hl=self[sm].l, hb=self[sm].b, hr=self[sm].r)
             env_t = edge_t(Q0, ht=env_ht)  # [lt lt'] [bb bb'] [rt rt']
             env_b = edge_b(Q1, hb=env_hb)  # [rb rb'] [tt tt'] [lb lb']
 
             sm = mm[1, -1]
-            cbl = cor_bl(m[1, -1]) if sm is None else cor_bl(m[1, -1], hb=self[sm].b.H @ self[sm].b, hl=self[sm].l.H @ self[sm].l)
+            cbl = cor_bl(m[1, -1]) if sm is None else cor_bl(m[1, -1], hb=self[sm].b, hl=self[sm].l)
             sm = mm[0, -1]
-            ctl = cor_tl(m[0, -1]) if sm is None else cor_tl(m[0, -1], ht=self[sm].t.H @ self[sm].t, hl=self[sm].l.H @ self[sm].l)
+            ctl = cor_tl(m[0, -1]) if sm is None else cor_tl(m[0, -1], ht=self[sm].t, hl=self[sm].l)
             sm = mm[0,  1]
-            ctr = cor_tr(m[0,  1]) if sm is None else cor_tr(m[0,  1], ht=self[sm].t.H @ self[sm].t, hr=self[sm].r.H @ self[sm].r)
+            ctr = cor_tr(m[0,  1]) if sm is None else cor_tr(m[0,  1], ht=self[sm].t, hr=self[sm].r)
             sm = mm[1,  1]
-            cbr = cor_br(m[1,  1]) if sm is None else cor_br(m[1,  1], hb=self[sm].b.H @ self[sm].b, hr=self[sm].r.H @ self[sm].r)
+            cbr = cor_br(m[1,  1]) if sm is None else cor_br(m[1,  1], hb=self[sm].b, hr=self[sm].r)
 
             g = tensordot((cbl @ ctl) @ env_t, (ctr @ cbr) @ env_b, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
             return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
@@ -476,28 +466,28 @@ class EnvBP():
             m = {k: (v.ket if isinstance(v, DoublePepsTensor) else v) for k, v in m.items()}
 
             sm = mm[0, -1]
-            ell = edge_l(m[0, -1]) if sm is None else edge_l(m[0, -1], hl=self[sm].l.H @ self[sm].l)
+            ell = edge_l(m[0, -1]) if sm is None else edge_l(m[0, -1], hl=self[sm].l)
             sm = mm[-1, -1]
-            clt = cor_tl(m[-1, -1]) if sm is None else cor_tl(m[-1, -1], ht=self[sm].t.H @ self[sm].t, hl=self[sm].l.H @ self[sm].l)
+            clt = cor_tl(m[-1, -1]) if sm is None else cor_tl(m[-1, -1], ht=self[sm].t, hl=self[sm].l)
             sm = mm[-1, 0]
-            elt = edge_t(m[-1, 0]) if sm is None else edge_t(m[-1, 0], ht=self[sm].t.H @ self[sm].t)
+            elt = edge_t(m[-1, 0]) if sm is None else edge_t(m[-1, 0], ht=self[sm].t)
             sm = mm[1, 0]
-            elb = edge_b(m[1, 0]) if sm is None else edge_b(m[1, 0], hb=self[sm].b.H @ self[sm].b)
+            elb = edge_b(m[1, 0]) if sm is None else edge_b(m[1, 0], hb=self[sm].b)
             sm = mm[1, -1]
-            clb = cor_bl(m[1, -1]) if sm is None else cor_bl(m[1, -1], hb=self[sm].b.H @ self[sm].b, hl=self[sm].l.H @ self[sm].l)
+            clb = cor_bl(m[1, -1]) if sm is None else cor_bl(m[1, -1], hb=self[sm].b, hl=self[sm].l)
             vecl = append_vec_tl(Q0, Q0, ell @ (clt @ elt))
             vecl = tensordot(elb @ clb, vecl, axes=((2, 1), (0, 1)))
 
             sm = mm[0, 2]
-            err = edge_r(m[0, 2]) if sm is None else edge_r(m[0, 2], hr=self[sm].r.H @ self[sm].r)
+            err = edge_r(m[0, 2]) if sm is None else edge_r(m[0, 2], hr=self[sm].r)
             sm = mm[1, 2]
-            crb = cor_br(m[1, 2]) if sm is None else cor_br(m[1, 2], hb=self[sm].b.H @ self[sm].b, hr=self[sm].r.H @ self[sm].r)
+            crb = cor_br(m[1, 2]) if sm is None else cor_br(m[1, 2], hb=self[sm].b, hr=self[sm].r)
             sm = mm[1, 1]
-            erb = edge_b(m[1, 1]) if sm is None else edge_b(m[1, 1], hb=self[sm].b.H @ self[sm].b)
+            erb = edge_b(m[1, 1]) if sm is None else edge_b(m[1, 1], hb=self[sm].b)
             sm = mm[-1, 1]
-            ert = edge_t(m[-1, 1]) if sm is None else edge_t(m[-1, 1], ht=self[sm].t.H @ self[sm].t)
+            ert = edge_t(m[-1, 1]) if sm is None else edge_t(m[-1, 1], ht=self[sm].t)
             sm = mm[-1, 2]
-            crt = cor_tr(m[-1, 2]) if sm is None else cor_tr(m[-1, 2], hr=self[sm].r.H @ self[sm].r, ht=self[sm].t.H @ self[sm].t)
+            crt = cor_tr(m[-1, 2]) if sm is None else cor_tr(m[-1, 2], hr=self[sm].r, ht=self[sm].t)
             vecr = append_vec_br(Q1, Q1, err @ (crb @ erb))
             vecr = tensordot(ert @ crt, vecr, axes=((2, 1), (0, 1)))
             g = tensordot(vecl, vecr, axes=((0, 1), (1, 0)))  # [rr rr'] [ll ll']
@@ -512,28 +502,28 @@ class EnvBP():
             m = {k: (v.ket if isinstance(v, DoublePepsTensor) else v) for k, v in m.items()}
 
             sm = mm[0, -1]
-            etl = edge_l(m[0, -1]) if sm is None else edge_l(m[0, -1], hl=self[sm].l.H @ self[sm].l)
+            etl = edge_l(m[0, -1]) if sm is None else edge_l(m[0, -1], hl=self[sm].l)
             sm = mm[-1, -1]
-            ctl = cor_tl(m[-1, -1]) if sm is None else cor_tl(m[-1, -1], hl=self[sm].l.H @ self[sm].l, ht=self[sm].t.H @ self[sm].t)
+            ctl = cor_tl(m[-1, -1]) if sm is None else cor_tl(m[-1, -1], hl=self[sm].l, ht=self[sm].t)
             sm = mm[-1, 0]
-            ett = edge_t(m[-1, 0]) if sm is None else edge_t(m[-1, 0], ht=self[sm].t.H @ self[sm].t)
+            ett = edge_t(m[-1, 0]) if sm is None else edge_t(m[-1, 0], ht=self[sm].t)
             sm = mm[-1, 1]
-            ctr = cor_tr(m[-1, 1]) if sm is None else cor_tr(m[-1, 1], hr=self[sm].r.H @ self[sm].r, ht=self[sm].t.H @ self[sm].t)
+            ctr = cor_tr(m[-1, 1]) if sm is None else cor_tr(m[-1, 1], hr=self[sm].r, ht=self[sm].t)
             sm = mm[0, 1]
-            etr = edge_r(m[0, 1]) if sm is None else edge_r(m[0, 1], hr=self[sm].r.H @ self[sm].r)
+            etr = edge_r(m[0, 1]) if sm is None else edge_r(m[0, 1], hr=self[sm].r)
             vect = append_vec_tl(Q0, Q0, etl @ (ctl @ ett))
             vect = tensordot(vect, ctr @ etr, axes=((2, 3), (0, 1)))
 
             sm = mm[1, 1]
-            ebr = edge_r(m[1, 1]) if sm is None else edge_r(m[1, 1], hr=self[sm].r.H @ self[sm].r)
+            ebr = edge_r(m[1, 1]) if sm is None else edge_r(m[1, 1], hr=self[sm].r)
             sm = mm[2, 1]
-            cbr = cor_br(m[2, 1]) if sm is None else cor_br(m[2, 1], hr=self[sm].r.H @ self[sm].r, hb=self[sm].b.H @ self[sm].b)
+            cbr = cor_br(m[2, 1]) if sm is None else cor_br(m[2, 1], hr=self[sm].r, hb=self[sm].b)
             sm = mm[2, 0]
-            ebb = edge_b(m[2, 0]) if sm is None else edge_b(m[2, 0], hb=self[sm].b.H @ self[sm].b)
+            ebb = edge_b(m[2, 0]) if sm is None else edge_b(m[2, 0], hb=self[sm].b)
             sm = mm[2, -1]
-            cbl = cor_bl(m[2, -1]) if sm is None else cor_bl(m[2, -1], hb=self[sm].b.H @ self[sm].b, hl=self[sm].l.H @ self[sm].l)
+            cbl = cor_bl(m[2, -1]) if sm is None else cor_bl(m[2, -1], hb=self[sm].b, hl=self[sm].l)
             sm = mm[1, -1]
-            ebl = edge_l(m[1, -1]) if sm is None else edge_l(m[1, -1], hl=self[sm].l.H @ self[sm].l)
+            ebl = edge_l(m[1, -1]) if sm is None else edge_l(m[1, -1], hl=self[sm].l)
             vecb = append_vec_br(Q1, Q1, ebr @ (cbr @ ebb))
             vecb = tensordot(vecb, cbl @ ebl, axes=((2, 3), (0, 1)))
             g = tensordot(vect, vecb, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
@@ -552,7 +542,7 @@ class EnvBP():
             for s0, s1 in pairwise(sites):
                 env.update_bond_((s0, s1))
 
-    def post_truncation_(env, bond, max_sweeps=1):
+    def post_truncation_(env, bond, max_sweeps=0):
         env.update_bond_(bond)
         env.update_bond_(bond[::-1])
         if max_sweeps > 0:
@@ -649,17 +639,14 @@ class EnvBP():
             env = {site: EnvBP_local() for site in sites}
             for (nx, ny) in sites:
                 nx0, ny0 = nx % self.Nx, ny % self.Ny
-                env[nx, ny].t = self[nx0, ny0].t.copy()
-                env[nx, ny].l = self[nx0, ny0].l.copy()
-                env[nx, ny].b = self[nx0, ny0].b.copy()
-                env[nx, ny].r = self[nx0, ny0].r.copy()
+                env[nx, ny] = self[nx0, ny0].shallow_copy()
 
             for ny in range(*yrange):
                 for nx in range(*xrange):
                     nx0, ny0 = nx % self.Nx, ny % self.Ny
                     lenv = env[nx, ny]
                     ten = self.psi[nx0, ny0]
-                    Atlbr = ncon([ten.ket, lenv.t, lenv.l, lenv.b, lenv.r], [(1, 2, 3, 4, -4), (-0, 1), (-1, 2), (-2, 3), (-3, 4)])
+                    Atlbr = ncon([ten.ket, lenv.tR, lenv.lR, lenv.bR, lenv.rR], [(1, 2, 3, 4, -4), (-0, 1), (-1, 2), (-2, 3), (-3, 4)])
                     norm_prob = vdot(Atlbr, Atlbr)
                     acc_prob = 0
                     for k, proj in projs_sites[(nx, ny)].items():
@@ -671,19 +658,16 @@ class EnvBP():
                             out[nx, ny].append(k)
                             ketp = tensordot(ten.ket, proj, axes=(4, 1)) / prob
                             if nx + 1 < xrange[1]:
-                                tmp = ncon([ketp, lenv.t, lenv.l, lenv.r], [(1, 2, -2, 3, -4), (-0, 1), (-1, 2), (-3, 3)])
-                                _, R = tmp.qr(axes=((0, 1, 3, 4), 2))
-                                env[nx + 1, ny].t = R / R.norm()
-                                # new_t = hair_t(ten.bra, ht=lenv.t, hl=lenv.l, hr=lenv.r, A_ket=ketp)
-                                # new_t = regularize_belief(new_t, self.tol_positive)
-                                # env[nx + 1, ny].t = new_t
+                                tmp = ncon([ketp, lenv.tR, lenv.lR, lenv.rR], [(1, 2, -2, 3, -4), (-0, 1), (-1, 2), (-3, 3)])
+                                _, R = tmp.qr(axes=((0, 1, 3, 4), 2), sQ=tmp.s[2])
+                                env[nx + 1, ny].tR = R / R.norm()
+                                env[nx + 1, ny].t = None
+
                             if ny + 1 < yrange[1]:
-                                tmp = ncon([ketp, lenv.t, lenv.l, lenv.b], [(1, 2, 3, -3, -4), (-0, 1), (-1, 2), (-2, 3)])
-                                _, R = tmp.qr(axes=((0, 1, 2, 4), 3))
-                                env[nx, ny + 1].l = R / R.norm()
-                                # new_l = hair_l(ten.bra, ht=lenv.t, hl=lenv.l, hb=lenv.b, A_ket=ketp)
-                                # new_l = regularize_belief(new_l, self.tol_positive)
-                                # env[nx, ny + 1].l = new_l
+                                tmp = ncon([ketp, lenv.tR, lenv.lR, lenv.bR], [(1, 2, 3, -3, -4), (-0, 1), (-1, 2), (-2, 3)])
+                                _, R = tmp.qr(axes=((0, 1, 2, 4), 3), sQ=tmp.s[3])
+                                env[nx, ny + 1].lR = R / R.norm()
+                                env[nx, ny + 1].l = None
                             probability *= prob
                             break
                     count += 1
@@ -710,14 +694,6 @@ def _iterate_(env, max_sweeps, iterator_step, diff_tol):
         if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
             yield BP_out(sweeps=sweep, max_diff=max_diff, converged=converged)
     yield BP_out(sweeps=sweep, max_diff=max_diff, converged=converged)
-
-
-def regularize_belief(mat, tol):
-    """ Make matrix mat hermitian and positive, truncating eigenvalues at a given relative tolerance. """
-    mat = mat + mat.H
-    S, U = mat.eigh_with_truncation(axes=(0, 1), tol=tol)
-    S = S / S.norm()
-    return U @ S @ U.H
 
 
 def diff_beliefs(old, new):
