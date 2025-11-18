@@ -90,17 +90,17 @@ class EnvBP():
         self.env[site] = obj
 
     def copy(self) -> EnvBP:
-        env = EnvBP(self.psi, init=None)
+        env = EnvBP(self.psi, init=None, which=self.which)
         env.env = self.env.copy()
         return env
 
     def clone(self) -> EnvBP:
-        env = EnvBP(self.psi, init=None)
+        env = EnvBP(self.psi, init=None, which=self.which)
         env.env = self.env.clone()
         return env
 
     def shallow_copy(self) -> EnvBP:
-        env = EnvBP(self.psi, init=None)
+        env = EnvBP(self.psi, init=None, which=self.which)
         env.env = self.env.shallow_copy()
         return env
 
@@ -112,6 +112,7 @@ class EnvBP():
         """
         return {'type': type(self).__name__,
                 'dict_ver': 1,
+                'which': self.which,
                 'psi': self.psi.to_dict(level=level),
                 'env': self.env.to_dict(level=level)}
 
@@ -138,7 +139,7 @@ class EnvBP():
             if cls.__name__ != d['type']:
                 raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
             psi = PEPS_CLASSES[d['psi']['type']].from_dict(d['psi'], config=config)
-            env = cls(psi, init=None)
+            env = cls(psi, init=None, which=d.get('which', 'BP'))
             env.env = Lattice.from_dict(d['env'], config=config)
             return env
 
@@ -301,19 +302,16 @@ class EnvBP():
         diff: maximal difference between belief tensors befor and after the update.
         """
         #
-        env_tmp = None  # EnvBP(self.psi, init=None)  # empty environments
-        diffs  = [self.update_bond_(bond, env_tmp=env_tmp) for bond in self.bonds('h')]
-        diffs += [self.update_bond_(bond[::-1], env_tmp=env_tmp) for bond in self.bonds('h')[::-1]]
-        diffs += [self.update_bond_(bond, env_tmp=env_tmp) for bond in self.bonds('v')]
-        diffs += [self.update_bond_(bond[::-1], env_tmp=env_tmp) for bond in self.bonds('v')[::-1]]
+        diffs  = [self.update_bond_(bond) for bond in self.bonds('h')]
+        diffs += [self.update_bond_(bond[::-1]) for bond in self.bonds('h')[::-1]]
+        diffs += [self.update_bond_(bond) for bond in self.bonds('v')]
+        diffs += [self.update_bond_(bond[::-1]) for bond in self.bonds('v')[::-1]]
         #
-        # update_storage_(self, env_tmp)
         return max(diffs)
 
-    def update_bond_(env, bond, env_tmp=None):
+    def update_bond_(env, bond):
         #
-        if env_tmp is None:
-            env_tmp = env  # update env in-place
+        env_tmp = env  # update env in-place
 
         bond = Bond(*bond)
         dirn = env.nn_bond_dirn(*bond)
