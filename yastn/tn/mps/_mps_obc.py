@@ -16,8 +16,11 @@
 from __future__ import annotations
 from numbers import Number
 from typing import Sequence
-from ... import tensor, initialize, YastnError, tensordot
+
 from ._mps_parent import _MpsMpoParent
+from ...initialize import block, eye
+from ...tensor import add as tensor_add
+from ...tensor import ncon, Tensor, svd, truncation_mask, bitwise_not, entropy, tensordot, YastnError
 
 
 ###################################
@@ -79,23 +82,23 @@ def add(*states, amplitudes=None, **kwargs) -> MpsMpoOBC:
     amplitudes = [x * psi.factor for x, psi in zip(amplitudes, states)]
 
     if phi.N == 1:
-        phi.A[0] = tensor.add(*(psi.A[0] for psi in states), amplitudes=amplitudes)
+        phi.A[0] = tensor_add(*(psi.A[0] for psi in states), amplitudes=amplitudes)
         return phi
 
     n = phi.first
     d = {(j,): psi.A[n] * amplitudes[j] for j, psi in enumerate(states)}
     common_legs = (0, 1) if phi.nr_phys == 1 else (0, 1, 3)
-    phi.A[n] = initialize.block(d, common_legs)
+    phi.A[n] = block(d, common_legs)
 
     common_legs = (1,) if phi.nr_phys == 1 else (1, 3)
     for n in phi.sweep(to='last', df=1, dl=1):
         d = {(j, j): psi.A[n] for j, psi in enumerate(states)}
-        phi.A[n] = initialize.block(d, common_legs)
+        phi.A[n] = block(d, common_legs)
 
     n = phi.last
     d = {(j,): psi.A[n] for j, psi in enumerate(states)}
     common_legs = (1, 2) if phi.nr_phys == 1 else (1, 2, 3)
-    phi.A[n] = initialize.block(d, common_legs)
+    phi.A[n] = block(d, common_legs)
 
     return phi
 
@@ -167,7 +170,7 @@ class MpoPBC(_MpsMpoParent):
         super().__init__(N=N, nr_phys=2)
         self.tol = None
 
-    def to_tensor(self) -> tensor.Tensor:
+    def to_tensor(self) -> Tensor:
         r"""
         Contract MPS/MPO to a single tensor.
         Should only be used for a system with a very few sites.
@@ -293,7 +296,7 @@ class MpsMpoOBC(_MpsMpoParent):
         else:
             raise YastnError('"to" should be in "first" or "last"')
         nR = R.norm()
-        self.A[self.pC] = R / nR if nR > 0 else R
+        self.A[self.pC] = R / nR if nR else R
         self.factor = 1 if normalize else self.factor * nR
 
     def diagonalize_central_(self, opts_svd, normalize=True) -> Number:
@@ -322,23 +325,23 @@ class MpsMpoOBC(_MpsMpoParent):
         discarded = 0.
         if self.pC is not None:
 
-            U, S, V = tensor.svd(self.A[self.pC], axes=(0, 1), sU=1)
+            U, S, V = svd(self.A[self.pC], axes=(0, 1), sU=1)
             nSold = S.norm()
 
-            mask = tensor.truncation_mask(S, **opts_svd)
-            nSout = tensor.bitwise_not(mask).apply_mask(S, axes=0).norm()
-            discarded = nSout / nSold
+            mask = truncation_mask(S, **opts_svd)
+            nSout = bitwise_not(mask).apply_mask(S, axes=0).norm()
+            discarded = nSout / nSold if nSold else 0.
 
             U, S, V = mask.apply_mask(U, S, V, axes=(1, 0, 0))
             nS = S.norm()
-            self.A[self.pC] = S / nS
+            self.A[self.pC] = S / nS if nS else S
             self.factor = 1 if normalize else self.factor * nS
 
             n1, n2 = self.pC
 
             if n1 >= self.first:
                 ax = (-0, -1, 1) if self.nr_phys == 1 else (-0, -1, 1, -3)
-                self.A[n1] = tensor.ncon([self.A[n1], U], (ax, (1, -2)))
+                self.A[n1] = ncon([self.A[n1], U], (ax, (1, -2)))
             else:
                 self.A[self.pC] = U @ self.A[self.pC]
 
@@ -373,7 +376,7 @@ class MpsMpoOBC(_MpsMpoParent):
 
             if (to == 'first' and n1 >= self.first) or n2 > self.last:
                 ax = (-0, -1, 1) if self.nr_phys == 1 else (-0, -1, 1, -3)
-                self.A[n1] = tensor.ncon([self.A[n1], C], (ax, (1, -2)))
+                self.A[n1] = ncon([self.A[n1], C], (ax, (1, -2)))
             else:  # (to == 'last' and n2 <= self.last) or n1 < self.first
                 self.A[n2] = C @ self.A[n2]
 
@@ -442,7 +445,7 @@ class MpsMpoOBC(_MpsMpoParent):
         for n in it:
             x = tensordot(self.A[n], self.A[n].conj(), axes=(cl, cl))
             x = x.drop_leg_history()
-            x0 = initialize.eye(config=x.config, legs=x.get_legs((0, 1)))
+            x0 = eye(config=x.config, legs=x.get_legs((0, 1)))
             if (x - x0.diag()).norm() > tol:  # == 0
                 return False
         return self.pC is None  # True if no central block
@@ -491,9 +494,9 @@ class MpsMpoOBC(_MpsMpoParent):
             discarded2_local = discarded_local ** 2
             discarded2_total = discarded2_local + discarded2_total - discarded2_total * discarded2_local
             self.absorb_central_(to=to)
-        return self.config.backend.sqrt(discarded2_total)
+        return discarded2_total ** 0.5
 
-    def pre_2site(self, bd, precompute=False) -> tensor.Tensor:
+    def pre_2site(self, bd, precompute=False) -> Tensor:
         r"""
         Merge two neighbouring MPS sites and return the resulting tensor,
         Consistent with functions in env_
@@ -539,19 +542,22 @@ class MpsMpoOBC(_MpsMpoParent):
             AA = AA.unfuse_legs(axes=(1, 2))
             AA = AA.fuse_legs(axes=((0, 1, 3), (2, 5, 4)))
 
-        U, S, V = tensor.svd(AA, axes=(0, 1), sU=1, **opts_svd)
-        mask = tensor.truncation_mask(S, **opts_svd)
+        U, S, V = svd(AA, axes=(0, 1), sU=1, **opts_svd)
+        mask = truncation_mask(S, **opts_svd)
         U, self.A[bd], V = mask.apply_mask(U, S, V, axes=(1, 0, 0))
         if self.nr_phys == 1:
             self.A[nl] = U.unfuse_legs(axes=0)
         else:  # self.nr_phys == 2:
             self.A[nl] = U.unfuse_legs(axes=0).transpose(axes=(0, 1, 3, 2))
         self.A[nr] = V.unfuse_legs(axes=1)
+        nS = S.norm()
+        discarded_weight = bitwise_not(mask).apply_mask(S, axes=0).norm()
+        if nS:
+            discarded_weight = discarded_weight / nS
+        return discarded_weight
 
-        return tensor.bitwise_not(mask).apply_mask(S, axes=0).norm() / S.norm()  # discarded weight
 
-
-    def pre_1site(self, n, precompute=False) -> tensor.Tensor:
+    def pre_1site(self, n, precompute=False) -> Tensor:
         """ Preper 1-site tensor for environment Heff`s. """
         A = self.A[n]
         if self.nr_phys == 1 and precompute:
@@ -582,9 +588,9 @@ class MpsMpoOBC(_MpsMpoParent):
 
         """
         schmidt_spectra = self.get_Schmidt_values()
-        return [tensor.entropy(spectrum ** 2, alpha=alpha) for spectrum in schmidt_spectra]
+        return [entropy(spectrum ** 2, alpha=alpha) for spectrum in schmidt_spectra]
 
-    def get_Schmidt_values(self) -> Sequence[tensor.Tensor]:
+    def get_Schmidt_values(self) -> Sequence[Tensor]:
         r"""
         Schmidt values for bipartition across all bonds along MPS/MPO from the first to the last site,
         including trivial leftmost and rightmost cuts. This gives a list with N+1 elements.
@@ -595,16 +601,16 @@ class MpsMpoOBC(_MpsMpoParent):
         psi.canonize_(to='first')
         # canonize_ attaches trivial central block at the end
         axes = (0, (1, 2)) if self.nr_phys == 1 else (0, (1, 2, 3))
-        _, sv, _ = tensor.svd(psi.A[self.first], axes=axes, sU=1)
+        _, sv, _ = svd(psi.A[self.first], axes=axes, sU=1)
         SV.append(sv)
         for n in psi.sweep(to='last'):
             psi.orthogonalize_site_(n=n, to='last')
-            _, sv, _ = tensor.svd(psi.A[psi.pC], sU=1)
+            _, sv, _ = svd(psi.A[psi.pC], sU=1)
             SV.append(sv)
             psi.absorb_central_(to='last')
         return SV
 
-    def to_tensor(self) -> tensor.Tensor:
+    def to_tensor(self) -> Tensor:
         r"""
         Contract MPS/MPO to a single tensor.
         Should only be used for a system with a very few sites.

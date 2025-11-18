@@ -18,113 +18,21 @@ importing tensors from different formats such as 1D + metadata or dictionary rep
 """
 from __future__ import annotations
 from ast import literal_eval
+from dataclasses import dataclass
 from itertools import groupby, accumulate
 from operator import itemgetter
-from typing import NamedTuple
+
 import numpy as np
-from .tensor import Tensor, YastnError
-from .tensor._auxliary import _struct, _config, _slc, _clear_axes, _unpack_legs
-from .tensor._merging import _Fusion, _embed_tensor, _combine_hfs_sum
+
+from .tensor import Tensor, YastnError, ncon
+from .tensor._auxliary import _struct, _slc, _clear_axes, _unpack_legs
 from .tensor._legs import Leg, LegMeta, legs_union, _legs_mask_needed
+from .tensor._merging import _Fusion, _embed_tensor, _combine_hfs_sum
 from .tensor._tests import _test_can_be_combined
-from .tensor._contractions import ncon
-from .backend import backend_np
-from .sym import sym_none, sym_U1, sym_Z2, sym_Z3, sym_U1xU1, sym_U1xU1xZ2
-
-
-_syms = {"dense": sym_none,
-         "none": sym_none,
-         "U1": sym_U1,
-         "Z2": sym_Z2,
-         "Z3": sym_Z3,
-         "U1xU1": sym_U1xU1,
-         "U1xU1xZ2": sym_U1xU1xZ2}
+from ._split_combine_dict import combine_data_and_meta
 
 __all__ = ['rand', 'rand_like', 'randR', 'randC', 'zeros', 'ones', 'eye', 'block',
-           'make_config', 'load_from_dict', 'load_from_hdf5', 'decompress_from_1d']
-
-
-# def make_config(backend=backend_np, sym=sym_none, default_device='cpu',
-#                 default_dtype='float64', fermionic=False,
-#                 default_fusion='hard', force_fusion=None, tensordot_policy='fuse_contracted', **kwargs):
-def make_config(**kwargs) -> NamedTuple:
-    r"""
-    Create structure with YASTN configuration
-
-    Parameters
-    ----------
-    backend: backend module or str
-        Specify ``backend`` providing linear algebra and base dense tensors.
-        Currently supported backends are
-
-            * NumPy as ``yastn.backend.backend_np``
-            * PyTorch as ``yastn.backend.backend_torch``
-
-        The above backends can be specified as strings: "np", "torch".
-        Defaults to NumPy backend.
-
-    sym: symmetry module or compatible object or str
-        Specify abelian symmetry. To see how YASTN defines symmetries,
-        see :class:`yastn.sym.sym_abelian`.
-        Defaults to ``yastn.sym.sym_none``, effectively a dense tensor.
-        For predefined symmetries, takes string input from
-        'none' (or 'dense'), 'Z2', 'Z3', 'U1', 'U1xU1', 'U1xU1xZ2'.
-
-    default_device: str
-        Tensors can be stored on various devices as supported by ``backend``
-
-            * NumPy supports only ``'cpu'`` device
-            * PyTorch supports multiple devices, see
-              https://pytorch.org/docs/stable/tensor_attributes.html#torch.torch.device
-
-        If not specified, the default device is ``'cpu'``.
-
-    default_dtype: str
-        Default data type (dtype) of YASTN tensors. Supported options are: ``'float64'``,
-        ``'complex128'``. If not specified, the default dtype is ``'float64'``.
-    fermionic: bool or tuple[bool,...]
-        Specify behavior of :meth:`yastn.swap_gate` function, allowing to introduce fermionic statistics.
-        Allowed values: ``False``, ``True``, or a tuple ``(True, False, ...)`` with one bool for each component
-        charge vector, i.e., of length sym.NSYM. The default is ``False``.
-    default_fusion: str
-        Specify default strategy to handle leg fusion: ``'hard'`` or ``'meta'``. See :meth:`yastn.Tensor.fuse_legs`
-        for details. The default is ``'hard'``.
-    force_fusion: str
-        Overrides fusion strategy provided in :meth:`yastn.Tensor.fuse_legs`. The default is ``None``.
-    tensordot_policy: str
-        Contraction approach used by :meth:`yastn.tensordot`
-
-            * ``'fuse_to_matrix'`` Tensordot involves suitable permutation of each tensor while performing a fusion of each tensor into a sequence of matrices and calling matrix-matrix multiplication. Postprocessing includes unfusioning the remaining legs in the result, which often copy data adding extra overhead.
-            * ``'fuse_contracted'`` Tensordot involves suitable permutation of each tensor while performing a fusion of to-be-contracted legs of each tensor and calling multiplication. It involves a larger number of multiplication calls for smaller objects, but unfusing the legs of the result is not needed.
-            * ``'no_fusion'`` Tensordot involves suitable permutation of tensor blocks and calling matrix-matrix multiplication for a potentially large number of small objects. Resulting contributions to new blocks get added. However, overheads of initial fusion (copying data) can sometimes be avoided in this approach.
-
-    Example
-    -------
-
-    ::
-
-        config = yastn.make_config(backend='np', sym='U1')
-    """
-    if "backend" not in kwargs or kwargs["backend"] == 'np':
-        kwargs["backend"] = backend_np
-    elif kwargs["backend"] == 'torch':
-        from .backend import backend_torch
-        kwargs["backend"] = backend_torch
-    elif kwargs["backend"] == 'torch_cpp':
-        from .backend import backend_torch_cpp
-        kwargs["backend"] = backend_torch_cpp
-    elif isinstance(kwargs["backend"], str):
-        raise YastnError("backend encoded as string only supports: 'np', 'torch', 'torch_cpp'")
-
-    if "sym" not in kwargs:
-        kwargs["sym"] = sym_none
-    elif isinstance(kwargs["sym"], str):
-        try:
-            kwargs["sym"] = _syms[kwargs["sym"]]
-        except KeyError:
-            raise YastnError("sym encoded as string only supports: 'dense', 'Z2', 'Z3', 'U1', 'U1xU1', 'U1xU1xZ2'.")
-
-    return _config(**{a: kwargs[a] for a in _config._fields if a in kwargs})
+           'load_from_dict', 'load_from_hdf5', 'Method']
 
 
 def _fill(config=None, legs=(), n=None, isdiag=False, val='rand', **kwargs):
@@ -363,6 +271,8 @@ def load_from_dict(config=None, d=None) -> Tensor:
     """
     Create tensor from the dictionary :code:`d`.
 
+    !!! This method is deprecated; use to_dict(). !!!
+
     Parameters
     ----------
     config: module | _config(NamedTuple)
@@ -371,38 +281,7 @@ def load_from_dict(config=None, d=None) -> Tensor:
         Tensor stored in form of a dictionary. Typically provided by an output
         of :meth:`yastn.Tensor.save_to_dict`.
     """
-    if d is not None:
-        c_isdiag = bool(d['isdiag'])
-        c_Dp = [x[0] for x in d['D']] if c_isdiag else np.prod(d['D'], axis=1, dtype=np.int64).tolist()
-
-        # When parsing Tensor serialized to JSON, tuples get converted to lists. For valid _struct, the lists
-        # have to be remapped back to tuples [requirement for hashing]
-        def _convert_lists_to_tuples(nested_iterable):
-            if isinstance(nested_iterable, list):
-                return tuple( _convert_lists_to_tuples(v) if isinstance(v,(list,tuple,set,dict)) else v for v in nested_iterable )
-            elif isinstance(nested_iterable, dict):
-                return { k: (_convert_lists_to_tuples(v) if isinstance(v,(list,tuple,set,dict)) else v) for k,v in nested_iterable.items() }
-            elif isinstance(nested_iterable, (tuple,set)):
-                return type(nested_iterable)( _convert_lists_to_tuples(v) if isinstance(v,(list,tuple,set,dict)) else v for v in nested_iterable )
-            else:
-                return nested_iterable
-        cd= _convert_lists_to_tuples({'s': d['s'], 'n': d['n'], 't': d['t'], 'D': d['D'], 'hfs': d['hfs'], 'mfs': d['mfs']})
-
-        slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(c_Dp), c_Dp, cd['D']))
-        struct = _struct(s=cd['s'], n=cd['n'], diag=c_isdiag, t=cd['t'], D=cd['D'], size=sum(c_Dp))
-        hfs = tuple(_Fusion(**hf) for hf in cd['hfs'])
-        c = Tensor(config=config, struct=struct, slices=slices, hfs=hfs, mfs=cd['mfs'])
-        if 'SYM_ID' in d and c.config.sym.SYM_ID != d['SYM_ID'].replace('(','').replace(')',''):  # for backward compatibility matching U1 and U(1)
-            raise YastnError("Symmetry rule in config do not match loaded one.")
-        if 'fermionic' in d and c.config.fermionic != d['fermionic']:
-            raise YastnError("Fermionic statistics in config do not match loaded one.")
-        if hasattr(d['_d'],'dtype'):
-            c._data = c.config.backend.to_tensor(d['_d'], dtype=d['_d'].dtype.name, device=c.device)
-        else:
-            c._data = c.config.backend.to_tensor(d['_d'], dtype=config.default_dtype, device=c.device)
-        c.is_consistent()
-        return c
-    raise YastnError("Dictionary d is required.")
+    return Tensor.from_dict(d, config)
 
 
 def load_from_hdf5(config, file, path) -> Tensor:
@@ -437,30 +316,6 @@ def load_from_hdf5(config, file, path) -> Tensor:
     c._data = c.config.backend.to_tensor(vmat, dtype=vmat.dtype.name, device=c.device)
     c.is_consistent()
     return c
-
-
-def decompress_from_1d(r1d, meta) -> Tensor:
-    """
-    Generate tensor from dictionary :code:`meta` describing the structure of the tensor,
-    charges and dimensions of its non-zero blocks, and 1-D array :code:`r1d` containing
-    serialized data of non-zero blocks.
-
-    Typically, the pair :code:`r1d` and :code:`meta` is obtained from :meth:`yastn.Tensor.compress_to_1d`.
-
-    Parameters
-    ----------
-    r1d: rank-1 tensor
-        1-D array (of backend type) holding serialized blocks.
-
-    meta: dict
-        structure of symmetric tensor. Non-zero blocks are indexed by associated charges.
-        Each such entry contains block's dimensions and the location of its data
-        in rank-1 tensor :code:`r1d`.
-    """
-    hfs = tuple(leg.hf for leg in meta['legs'])
-    a = Tensor(config=meta['config'], hfs=hfs, mfs=meta['mfs'], struct=meta['struct'], slices=meta['slices'])
-    a._data = r1d
-    return a
 
 
 def block(tensors, common_legs=None) -> Tensor:
@@ -570,3 +425,24 @@ def _sum_legs_hfs(legs):
     D_in = [leg.D for leg in legs]
     s_out = legs[0].s
     return _combine_hfs_sum(hfs, t_in, D_in, s_out)
+
+
+@dataclass
+class Method():
+    """
+    Auxiliary mutable method class.
+    It introduces the mechanism to change the method used in :meth:`yastn.tn.mps.dmrg_`, :meth:`yastn.tn.mps.tdvp_`,
+    and other generator functions in between consecutive sweeps.
+    Updating the value in place will inject the new value back into the generator.
+    """
+    string: str = ''
+
+    def __eq__(self, string):
+        return string == self.string
+
+    def __str__(self):
+        return self.string
+
+    def update_(self, string):
+        """ Update the method name in place. """
+        self.string = str(string)

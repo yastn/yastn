@@ -12,15 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from .tensor import *
+from . import operators
+from ._from_dict import from_dict
+from ._split_combine_dict import *
 from .initialize import *
 from .krylov import *
-from . import operators
-from .tensor._auxliary import Method, SpecialTensor
 from .tensor.oe_blocksparse import get_contraction_path, contract_with_unroll
+from .tensor import *
 try:
     from ._version import version as __version__
     from ._version import version_tuple
-except ImportError:
-    __version__ = "unknown version"
-    version_tuple = (0, 0, "unknown version")
+except ImportError:  # pragma: no cover
+    __version__ = "unknown version"  # pragma: no cover
+    version_tuple = (0, 0, "unknown version")  # pragma: no cover

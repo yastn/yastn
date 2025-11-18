@@ -18,11 +18,13 @@ from typing import Sequence
 from dataclasses import dataclass
 from itertools import product, groupby
 from operator import itemgetter
+
 import numpy as np
+
 from ._auxliary import _flatten
+from ._merging import _Fusion, _hfs_union, _combine_hfs_prod, _unfuse_Fusion
 from ._tests import YastnError
 from ..sym import sym_none
-from ._merging import _Fusion, _hfs_union, _combine_hfs_prod, _unfuse_Fusion
 
 __all__ = ['Leg', 'LegMeta', 'legs_union', 'gaussian_leg', 'leg_product', 'undo_leg_product']
 
@@ -84,7 +86,7 @@ class Leg:
             if not all(int(x) == x for x in t):
                 raise YastnError('Charges should be tuples of ints.')
             lD, nsym = len(D), self.sym.NSYM
-            if lD * nsym != len(t) or (nsym == 0 and lD != 1):
+            if lD * nsym != len(t) or (nsym == 0 and lD > 1):
                 raise YastnError('Number of provided charges and bond dimensions do not match sym.NSYM')
             #
             t = np.array(t, dtype=np.int64)

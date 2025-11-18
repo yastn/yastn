@@ -23,19 +23,26 @@ tol = 1e-12  #pylint: disable=invalid-name
 def mean(xs):
     return sum(xs) / len(xs)
 
+def compare_envs(env0, env1):
+    for k in env1._env:
+        assert (env1[k] - env0[k]).norm() < 1e-12 * env0[k].norm()
+    for k in env0.info:
+        assert env0.info[k] == env1.info[k]
+    assert env0._env.keys() == env1._env.keys()
+    assert env0.info.keys() == env1.info.keys()
 
 def run_save_load(env):
     # test save, load
 
     config = env.psi.config
+
     d = env.save_to_dict()
+    compare_envs(env, fpeps.load_from_dict(config, d))
 
-    env_save = fpeps.load_from_dict(config, d)
-
-    for k in env._env:
-        assert (env_save[k] - env[k]).norm() < 1e-12
-    for k in env.info:
-        assert env_save.info[k] == env.info[k]
+    for level in [0, 1, 2]:
+        d = env.to_dict(level=level)
+        compare_envs(env, fpeps.EnvBoundaryMPS.from_dict(d))
+        compare_envs(env, yastn.from_dict(yastn.combine_data_and_meta(*yastn.split_data_and_meta(d))))
 
 
 @pytest.mark.parametrize("boundary", ["obc", "cylinder"])
@@ -47,7 +54,7 @@ def test_mpsboundary_measure(config_kwargs, boundary):
     # initialized PEPS in a product state
     geometry = fpeps.SquareLattice(dims=(4, 3), boundary=boundary)
     sites = geometry.sites()
-    vals = [1, 1, -1, 1, 1, -1, 1, -1, -1, -1, 1, -1]
+    vals = [1, 1, -1, 1, 0, -1, 1, 0, -1, 0, 1, -1]
     vals = dict(zip(sites, vals))
     occs = {s: ops.vec_z(val=v) for s, v in vals.items()}
     psi = fpeps.product_peps(geometry, occs)

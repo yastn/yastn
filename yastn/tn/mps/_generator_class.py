@@ -13,11 +13,12 @@
 # limitations under the License.
 # ==============================================================================
 from __future__ import annotations
-from ... import YastnError
-from ._mps_obc import Mpo, MpsMpoOBC
-from ._latex2term import latex2term
-from ._initialize import random_mpo, random_mps
+
 from ._generate_mpo import Hterm, generate_mpo
+from ._initialize import random_mpo, random_mps
+from ._latex2term import latex2term
+from ._mps_obc import Mpo, MpsMpoOBC
+from ...tensor import YastnError
 
 
 class Generator:

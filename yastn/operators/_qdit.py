@@ -13,10 +13,11 @@
 # limitations under the License.
 # ==============================================================================
 from __future__ import annotations
-from ..initialize import eye
-from .. import diag
-from ..tensor import YastnError, Leg, Tensor
+
 from ._meta_operators import meta_operators
+from ..initialize import eye
+from ..tensor import YastnError, Leg, Tensor, diag
+
 
 class Qdit(meta_operators):
     # Predefine dense operators with set dimension of the local space.

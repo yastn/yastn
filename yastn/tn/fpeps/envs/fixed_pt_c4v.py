@@ -1,18 +1,33 @@
+# Copyright 2025 The YASTN Authors. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
 import copy
-import time, logging
-import torch
+import logging
+import time
+
 import numpy as np
 from scipy.optimize import minimize
-from collections import namedtuple
+import torch
 
-# import torch.utils.checkpoint
-
-from .... import zeros, eye, tensordot, diag, decompress_from_1d
-from ._env_ctm import ctm_conv_corner_spec, decompress_proj_1d
-from ._env_ctm_c4v import EnvCTM_c4v, decompress_env_c4v_1d
+from ._env_ctm_c4v import EnvCTM_c4v, ctm_c4v_conv_corner_spec
+from .fixed_pt import fast_env_T_gauge_multi_sites, NoFixedPointError, real_to_complex, complex_to_real, _concat_data, _assemble_dict_from_1d
 from .fixed_pt import fast_env_T_gauge_multi_sites, NoFixedPointError, real_to_complex, complex_to_real
 from .rdm import *
-
+from .._geometry import Lattice
+from ....initialize import zeros, eye
+from ....tensor import tensordot, diag
+from ...._split_combine_dict import split_data_and_meta, combine_data_and_meta
 
 log = logging.getLogger("FixedPoint_c4v")
 
@@ -139,8 +154,10 @@ def fp_ctmrg_c4v(env: EnvCTM_c4v, \
         Sequence[Tensor]: raw environment data for the backward pass.
     """
     raw_peps_params= tuple( env.psi.ket[s]._data for s in env.psi.ket.sites() )
-    env_converged, env_slices, env_1d = FixedPoint_c4v.apply(env, ctm_opts_fwd, ctm_opts_fp, *raw_peps_params)
-    return env_converged, env_slices, env_1d, FixedPoint_c4v.t_ctm
+    env_converged, env_t_meta, env_slices, env_1d = FixedPoint_c4v.apply(env, ctm_opts_fwd, ctm_opts_fp, *raw_peps_params)
+    env_t_dict = _assemble_dict_from_1d(env_t_meta, env_1d, env_slices)
+    env_converged.env = Lattice.from_dict(env_t_dict)
+    return env_converged
 
 
 class FixedPoint_c4v(torch.autograd.Function):
@@ -163,9 +180,11 @@ class FixedPoint_c4v(torch.autograd.Function):
         return rdms
 
     @staticmethod
-    def fixed_point_iter(env_in, sigma, ctm_opts_fp, slices, env_data, psi_data):
-        refill_env_c4v(env_in, env_data, slices)
-        refill_state_c4v(env_in.psi.ket, psi_data)
+    def fixed_point_iter(sigma, ctm_opts_fp, env_dict, env_meta, env_slices, psi_meta, env_data, psi_data):
+        env_t_dict = _assemble_dict_from_1d(env_meta, env_data, env_slices)
+        psi_dict = combine_data_and_meta(psi_data, psi_meta)
+        env_dict['env'], env_dict['psi'] = env_t_dict, psi_dict
+        env_in = EnvCTM_c4v.from_dict(env_dict)
 
         env_in.update_(
             **ctm_opts_fp
@@ -188,12 +207,13 @@ class FixedPoint_c4v(torch.autograd.Function):
         )
         setattr(env_in[site], "tl", fixed_C)
 
-        env_out_data, slices = env_raw_data_c4v(env_in)
-        return (env_out_data, )
+        env_out_dict = env_in.to_dict(level=0)
+        env_t_data, _ = split_data_and_meta(env_out_dict['env'])
+        return (_concat_data(env_t_data)[0], )
 
     @torch.no_grad()
     def ctm_conv_check(env, history, corner_tol):
-        converged, max_dsv, history = ctm_conv_corner_spec(env, history, corner_tol)
+        converged, max_dsv, history = ctm_c4v_conv_corner_spec(env, history, corner_tol)
         # print("max_dsv:", max_dsv)
         log.log(logging.INFO, f"CTM iter {len(history)} |delta_C| {max_dsv}")
         return converged, history
@@ -221,7 +241,7 @@ class FixedPoint_c4v(torch.autograd.Function):
         #     if converged:
         #         break
 
-        ctm_itr= env.ctmrg_(iterator_step=1, method=method,  max_sweeps=max_sweeps,
+        ctm_itr= env.ctmrg_(iterator=True, method=method,  max_sweeps=max_sweeps,
             opts_svd=opts_svd, corner_tol=None, **kwargs)
 
         for sweep in range(max_sweeps):
@@ -231,7 +251,7 @@ class FixedPoint_c4v(torch.autograd.Function):
             t_ctm += t1-t0
 
             t2 = time.perf_counter()
-            converged, max_dsv, conv_history = ctm_conv_corner_spec(env, conv_history, corner_tol)
+            converged, max_dsv, conv_history = ctm_c4v_conv_corner_spec(env, conv_history, corner_tol)
             t_check += time.perf_counter()-t2
             if kwargs.get('verbosity',0)>2:
                 log.log(logging.INFO, f"CTM iter {len(conv_history)} |delta_C| {max_dsv} t {t1-t0} [s]")
@@ -294,33 +314,36 @@ class FixedPoint_c4v(torch.autograd.Function):
         if sigma is None:
             raise NoFixedPointError(code=1, message="No fixed point found: fail to find the gauge matrix!")
         log.info(f"{type(ctx).__name__}.forward FP gauge-fixing t {t1-t0} [s]")
+        env_dict = env_converged.to_dict(level=0)
+        env_data, env_meta = split_data_and_meta(env_dict)
 
-        env_data, env_meta = env_converged.compress_env_1d()
-        fp_proj_data, fp_proj_meta = ctm_env_out.compress_proj_1d()
-        sigma_data, sigma_meta = sigma.compress_to_1d()
-        ctx.save_for_backward(*env_data, *fp_proj_data, sigma_data)
-        ctx.env_meta, ctx.fp_proj_meta, ctx.sigma_meta = env_meta, fp_proj_meta, sigma_meta
+        sigma_d = sigma.to_dict(level=0)
+        sigma_data, sigma_meta = split_data_and_meta(sigma_d)
+        ctx.save_for_backward(*env_data, *sigma_data)
+        ctx.env_meta, ctx.sigma_meta = env_meta, sigma_meta
         ctx.ctm_opts_fp = _ctm_opts_fp
-        env_1d, env_slices= env_raw_data_c4v(env_converged)
 
-        return env_converged, env_slices, env_1d
+        env_t_data, env_t_meta = split_data_and_meta(env_dict['env'])
+        env_1d, env_slices = _concat_data(env_t_data)
+
+        return env_converged, env_t_meta, env_slices, env_1d
 
     @staticmethod
-    def backward(ctx, none0, none1, *grad_env):
+    def backward(ctx, none0, none1, none2, *grad_env):
         verbosity = ctx.verbosity
         grads = grad_env
         dA = grad_env
 
-        # env_data = torch.utils.checkpoint.detach_variable(ctx.saved_tensors)[0] # only one element in the tuple
-        env_data= ctx.saved_tensors[:len(ctx.env_meta['psi'])+len(ctx.env_meta['env'])]
-        fp_proj_data= ctx.saved_tensors[len(env_data):len(env_data)+len(ctx.fp_proj_meta['proj'])]
+        env_data= ctx.saved_tensors[:-1]
         sigma_data= ctx.saved_tensors[-1]
 
-        env= decompress_env_c4v_1d(env_data, ctx.env_meta)
-        fp_proj= decompress_proj_1d(fp_proj_data, ctx.fp_proj_meta)
-        sigma = decompress_from_1d(sigma_data, ctx.sigma_meta)
-        psi_data = tuple(env.psi.ket[s]._data for s in env.psi.ket.sites())
-        _env_ts, _env_slices= env_raw_data_c4v(env)
+        env_dict = combine_data_and_meta(env_data, ctx.env_meta)
+        sigma_d = combine_data_and_meta((sigma_data,), ctx.sigma_meta)
+        sigma = Tensor.from_dict(sigma_d)
+
+        _env_data, _env_meta = split_data_and_meta(env_dict['env'])
+        _env_ts, _env_slices = _concat_data(_env_data)
+        _psi_data, _psi_meta = split_data_and_meta(env_dict['psi'])
 
         prev_grad_tmp = None
         diff_ave = None
@@ -330,13 +353,11 @@ class FixedPoint_c4v(torch.autograd.Function):
                 torch.cuda.memory._dump_snapshot(f"{type(ctx).__name__}_backward_prevjp_CUDAMEM.pickle")
             # _, dfdC_vjp = torch.func.vjp(lambda x: FixedPoint_c4v.fixed_point_iter(env, sigma, ctx.ctm_opts_fp, _env_slices, x, psi_data), _env_ts)
             # _, dfdA_vjp = torch.func.vjp(lambda x: FixedPoint_c4v.fixed_point_iter(env, sigma, ctx.ctm_opts_fp, _env_slices, _env_ts, x), psi_data)
-            _, df_vjp = torch.func.vjp(lambda x,y: FixedPoint_c4v.fixed_point_iter(env, sigma, ctx.ctm_opts_fp, _env_slices, x, y), _env_ts, psi_data)
+            _, df_vjp = torch.func.vjp(lambda x,y: FixedPoint_c4v.fixed_point_iter(sigma, ctx.ctm_opts_fp, env_dict, _env_meta, _env_slices, _psi_meta, x, y), _env_ts, _psi_data)
             dfdC_vjp= lambda x: (df_vjp(x)[0],)
             dfdA_vjp= lambda x: (df_vjp(x)[1],)
             if verbosity > 2 and _env_ts.is_cuda:
                 torch.cuda.memory._dump_snapshot(f"{type(ctx).__name__}_backward_postvjp_CUDAMEM.pickle")
-        # fixed_point_iter changes the data of psi, so we need to refill the state to recover the previous state
-        refill_state_c4v(env.psi.ket, psi_data)
 
         alpha = 0.4
         for step in range(ctx.ctm_opts_fp['max_sweeps']):

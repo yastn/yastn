@@ -14,21 +14,37 @@
 # ==============================================================================
 """ Contractions of yastn tensors """
 from __future__ import annotations
-import numpy as np
+import abc
 from functools import lru_cache
 from itertools import groupby, accumulate, product
 from numbers import Number
 from operator import itemgetter
-from ._auxliary import _struct, _slc, SpecialTensor, _clear_axes, _unpack_axes, _flatten, _join_contiguous_slices
+
+import numpy as np
+
+from ._auxliary import _struct, _slc, _clear_axes, _unpack_axes, _flatten, _join_contiguous_slices
 from ._merging import _merge_to_matrix, _unmerge, _meta_unmerge_matrix, _meta_fuse_hard
 from ._merging import _transpose_and_merge, _mask_tensors_leg_intersection, _meta_mask
 from ._tests import YastnError, _test_can_be_combined, _test_axes_match
 from ._legs import LegMeta
 
-__all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon', 'einsum', 'broadcast', 'apply_mask']
+__all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon', 'einsum', 'broadcast', 'apply_mask', 'SpecialTensor']
 
 
-def __matmul__(a, b) -> yastn.Tensor:
+class SpecialTensor(metaclass=abc.ABCMeta):
+    """
+    A parent class to create a special tensor-like object.
+
+    ``yastn.tensordot(a, b, axes)`` check if ``a`` or ``b`` is an instance of SpecialTensor
+    and calls ``a.tensordo(b, axes)`` or ``b.tensordo(a, axes, reverse=True)``
+    """
+
+    @abc.abstractmethod
+    def tensordot(self, b, axes, reverse=False):
+        pass  # pragma: no cover
+
+
+def __matmul__(a, b) -> 'Tensor':
     r"""
     The operation ``A @ B`` uses ``@`` operator to compute tensor dot product.
     The operation contracts the last axis of ``self``, i.e., ``a``,
@@ -39,7 +55,7 @@ def __matmul__(a, b) -> yastn.Tensor:
     return tensordot(a, b, axes=(a.ndim - 1, 0))
 
 
-def tensordot(a, b, axes, conj=(0, 0)) -> yastn.Tensor:
+def tensordot(a, b, axes, conj=(0, 0)) -> 'Tensor':
     r"""
     Compute tensor dot product of two tensors along specified axes.
 
@@ -402,7 +418,7 @@ def _meta_tensordot_nf(struct_a, slices_a, struct_b, slices_b, ind_a, ind_b, nou
     return meta_dot, reshape_a, reshape_b, struct_c, slices_c
 
 
-def broadcast(a, *args, axes=0) -> yastn.Tensor | tuple[yastn.Tensor]:
+def broadcast(a, *args, axes=0) -> 'Tensor' | tuple['Tensor']:
     r"""
     Compute tensordot product of diagonal tensor ``a`` with tensors in ``args``.
 
@@ -481,7 +497,7 @@ def _meta_broadcast(b_struct, b_slices, a_struct, a_slices, axis):
     return meta, c_struct, c_slices
 
 
-def apply_mask(a, *args, axes=0) -> yastn.Tensor | tuple[yastn.Tensor]:
+def apply_mask(a, *args, axes=0) -> 'Tensor' | tuple['Tensor']:
     r"""
     Apply mask given by nonzero elements of diagonal tensor ``a`` on specified axes of tensors in args.
     Number of tensors in ``args`` is not restricted.
@@ -590,7 +606,7 @@ def _meta_vdot(struct_a, slices_a, struct_b, slices_b):
     return meta_vdot
 
 
-def trace(a, axes=(0, 1)) -> yastn.Tensor:
+def trace(a, axes=(0, 1)) -> 'Tensor':
     r"""
     Compute trace of legs specified by axes.
 
@@ -670,7 +686,7 @@ def _meta_trace(struct, slices, nin_0, nin_1, out):
     return tuple(meta_trace), c_struct, tuple(c_slices)
 
 
-def swap_gate(a, axes, charge=None) -> yastn.Tensor:
+def swap_gate(a, axes, charge=None) -> 'Tensor':
     r"""
     Return tensor after application of a swap gate.
 
@@ -770,7 +786,7 @@ def _slices_to_negate(tp, slices):
     return tuple(joined_negate)
 
 
-def einsum(subscripts, *operands, order=None) -> yastn.Tensor:
+def einsum(subscripts, *operands, order=None) -> 'Tensor':
     r"""
     Execute series of tensor contractions.
 
@@ -850,7 +866,7 @@ def einsum(subscripts, *operands, order=None) -> yastn.Tensor:
     return ncon(ts, inds, conjs=conjs)
 
 
-def ncon(ts, inds, conjs=None, order=None) -> yastn.Tensor:
+def ncon(ts, inds, conjs=None, order=None) -> 'Tensor':
     r"""
     Execute series of tensor contractions.
 

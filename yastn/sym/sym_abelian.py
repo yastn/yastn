@@ -14,11 +14,14 @@
 # ==============================================================================
 """ Parent class for defining symmetry rules. """
 from __future__ import annotations
+
 import numpy as np
+
 
 class sym_meta(type):
     def __str__(cls):
         return cls.SYM_ID
+
 
 class sym_abelian(metaclass=sym_meta):
     """

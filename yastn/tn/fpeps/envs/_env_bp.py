@@ -13,31 +13,22 @@
 # limitations under the License.
 # ==============================================================================
 from __future__ import annotations
-from dataclasses import dataclass
 from itertools import pairwise
-from tqdm import tqdm
 from typing import NamedTuple
-from .... import Tensor, eye, YastnError, tensordot, vdot, ncon
-from .._peps import Peps, Peps2Layers, DoublePepsTensor
-from .._gates_auxiliary import fkron, gate_fix_swap_gate, match_ancilla
-from .._geometry import Bond, Site
-from .._evolution import BipartiteBondMetric, BondMetric
+from warnings import warn
+
+from tqdm import tqdm
+
 from ._env_auxlliary import *
 from ._env_auxlliary import clear_projectors
 from ._env_boundary_mps import _clear_operator_input
-
-
-@dataclass()
-class EnvBP_local():
-    r"""
-    Dataclass for BP environment tensors at a single Peps site on square lattice.
-
-    Contains fields ``t``,  ``l``, ``b``, ``r``
-    """
-    t: Tensor | None = None  # top
-    l: Tensor | None = None  # left
-    b: Tensor | None = None  # bottom
-    r: Tensor | None = None  # right
+from ._env_dataclasses import EnvBP_local
+from .._evolution import BipartiteBondMetric, BondMetric
+from .._gates_auxiliary import fkron, gate_fix_swap_gate, match_ancilla
+from .._geometry import Bond, Site, Lattice
+from .._peps import Peps2Layers, DoublePepsTensor, PEPS_CLASSES
+from ....initialize import eye
+from ....tensor import YastnError, tensordot, vdot, ncon, Tensor
 
 
 class BP_out(NamedTuple):
@@ -46,7 +37,7 @@ class BP_out(NamedTuple):
     converged: bool = False
 
 
-class EnvBP(Peps):
+class EnvBP():
 
     def __init__(self, psi, init='eye', tol_positive=1e-12, which="BP"):
         r"""
@@ -64,15 +55,17 @@ class EnvBP(Peps):
         which: str
             Type of environment from 'BP', 'NN+BP', 'NNN+BP'
         """
-        super().__init__(psi.geometry)
+        self.geometry = psi.geometry
+        for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "f_ordered", "nn_bond_dirn"]:
+            setattr(self, name, getattr(self.geometry, name))
+
         self.psi = Peps2Layers(psi) if psi.has_physical() else psi
+        self.env = Lattice(self.geometry, objects={site: EnvBP_local() for site in self.sites()})
         self.tol_positive = tol_positive
         self._set_which(which)
 
         if init not in (None, 'eye'):
             raise YastnError(f"EnvBP {init=} not recognized. Should be 'eye' or None.")
-        for site in self.sites():
-            self[site] = EnvBP_local()
         if init is not None:
             self.reset_(init=init)
 
@@ -90,40 +83,73 @@ class EnvBP(Peps):
     def config(self):
         return self.psi.config
 
+    def __getitem__(self, site):
+        return self.env[site]
+
+    def __setitem__(self, site, obj):
+        self.env[site] = obj
+
     def copy(self) -> EnvBP:
-        psi = self.psi
-        if isinstance(psi, Peps2Layers):
-            psi = psi.ket
-        env = EnvBP(psi, init=None)
-        for site in env.sites():
-            for dirn in ['t', 'l', 'b', 'r']:
-                setattr(env[site], dirn, getattr(self[site], dirn).copy())
+        env = EnvBP(self.psi, init=None)
+        env.env = self.env.copy()
         return env
 
     def clone(self) -> EnvBP:
-        psi = self.psi
-        if isinstance(psi, Peps2Layers):
-            psi = psi.ket
-        env = EnvBP(psi, init=None)
-        for site in env.sites():
-            for dirn in ['t', 'l', 'b', 'r']:
-                setattr(env[site], dirn, getattr(self[site], dirn).clone())
+        env = EnvBP(self.psi, init=None)
+        env.env = self.env.clone()
         return env
 
     def shallow_copy(self) -> EnvBP:
-        psi = self.psi
-        if isinstance(psi, Peps2Layers):
-            psi = psi.ket
         env = EnvBP(self.psi, init=None)
-        for site in env.sites():
-            for dirn in ['t', 'l', 'b', 'r']:
-                setattr(env[site], dirn, getattr(self[site], dirn))
+        env.env = self.env.shallow_copy()
         return env
+
+    def to_dict(self, level=2):
+        r"""
+        Serialize EnvBP to a dictionary.
+        Complementary function is :meth:`yastn.EnvBP.from_dict` or a general :meth:`yastn.from_dict`.
+        See :meth:`yastn.Tensor.to_dict` for further description.
+        """
+        return {'type': type(self).__name__,
+                'dict_ver': 1,
+                'psi': self.psi.to_dict(level=level),
+                'env': self.env.to_dict(level=level)}
+
+    @classmethod
+    def from_dict(cls, d, config=None):
+        r"""
+        De-serializes EnvBP from the dictionary ``d``.
+        See :meth:`yastn.Tensor.from_dict` for further description.
+        """
+        if 'dict_ver' not in d:
+            psi = PEPS_CLASSES["Peps"].from_dict(d['psi'], config)
+            env = EnvBP(psi, init=None)
+            for site in env.sites():
+                for dirn, v in d['data'][site].items():
+                    setattr(env[site], dirn, Tensor.from_dict(v, config))
+                    tmp = getattr(env[site], dirn)
+                    s = tmp.s[1]
+                    S, U = tmp.eigh(axes=(0, 1), sU=s)
+                    _, R = (S.sqrt() @ U.H).qr(axes=(0, 1), sQ=s)
+                    setattr(env[site], dirn + 'R', R / R.norm())
+            return env
+
+        if d['dict_ver'] == 1:
+            if cls.__name__ != d['type']:
+                raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
+            psi = PEPS_CLASSES[d['psi']['type']].from_dict(d['psi'], config=config)
+            env = cls(psi, init=None)
+            env.env = Lattice.from_dict(d['env'], config=config)
+            return env
 
     def save_to_dict(self) -> dict:
         r"""
         Serialize EnvBP into a dictionary.
+
+        !!! This method is deprecated; use to_dict() instead !!!
         """
+        warn('This method is deprecated; use to_dict() instead.', DeprecationWarning, stacklevel=2)
+
         psi = self.psi
         if isinstance(psi, Peps2Layers):
             psi = psi.ket
@@ -150,11 +176,11 @@ class EnvBP(Peps):
         config = self.psi.config
         for site in self.sites():
             legs = self.psi[site].get_legs()
-            for ind, dirn in enumerate('tlbr'):
-                if self.nn_site(site, d=dirn) is None or init == 'eye':
+            for ind, dirn in enumerate(['tR', 'lR', 'bR', 'rR']):
+                if self.nn_site(site, d=dirn[0]) is None or init == 'eye':
                     tmp = eye(config, legs=legs[ind].unfuse_leg(), isdiag=False)
-                tmp = tmp / tmp.norm()
-                setattr(self[site], dirn, tmp)
+                setattr(self[site], dirn, tmp / tmp.norm())
+
 
     def measure_1site(self, O, site=None) -> dict:
         r"""
@@ -184,13 +210,13 @@ class EnvBP(Peps):
             ten = self.psi[site]
 
             if isinstance(ten, DoublePepsTensor):
-                Atlbr = ncon([ten.ket, lenv.t, lenv.l, lenv.b, lenv.r], [(1, 2, 3, 4, -4), (-0, 1), (-1, 2), (-2, 3), (-3, 4)])
-                val_no = vdot(ten.bra, Atlbr)
+                Atlbr = ncon([ten.ket, lenv.tR, lenv.lR, lenv.bR, lenv.rR], [(1, 2, 3, 4, -4), (-0, 1), (-1, 2), (-2, 3), (-3, 4)])
+                val_no = vdot(Atlbr, Atlbr)
 
                 for nz, op in ops.items():
                     op = match_ancilla(ten.ket, op)
                     Atmp = tensordot(Atlbr, op, axes=(4, 1))
-                    val_op = vdot(ten.bra, Atmp)
+                    val_op = vdot(Atlbr, Atmp)
                     out[site + nz] = val_op / val_no
             else:
                 pass
@@ -295,25 +321,34 @@ class EnvBP(Peps):
         ten0, env0 = env.psi[s0], env[s0]
 
         if dirn == 'lr':
-            new_l = hair_l(ten0.bra, ht=env0.t, hl=env0.l, hb=env0.b, A_ket=ten0.ket)
-            new_l = regularize_belief(new_l, env.tol_positive)
-            diff = diff_beliefs(env[s1].l, new_l)
-            env_tmp[s1].l = new_l
+            tmp = ncon([ten0.ket, env0.tR, env0.lR, env0.bR], [(1, 2, 3, -3, -4), (-0, 1), (-1, 2), (-2, 3)])
+            _, R = tmp.qr(axes=((0, 1, 2, 4), 3), sQ=tmp.s[3])
+            R = R / R.norm()
+            diff = diff_beliefs(env[s1].lR, R)
+            env_tmp[s1].lR = R
+            env_tmp[s1].l = None
         if dirn == 'rl':
-            new_r = hair_r(ten0.bra, ht=env0.t, hb=env0.b, hr=env0.r, A_ket=ten0.ket)
-            new_r = regularize_belief(new_r, env.tol_positive)
-            diff = diff_beliefs(env[s1].r, new_r)
-            env_tmp[s1].r = new_r
+            tmp = ncon([ten0.ket, env0.tR, env0.bR, env0.rR], [(1, -1, 2, 3, -4), (-0, 1), (-2, 2), (-3, 3)])
+            _, R = tmp.qr(axes=((0, 2, 3, 4), 1), sQ=tmp.s[1])
+            R = R / R.norm()
+            diff = diff_beliefs(env[s1].rR, R)
+            env_tmp[s1].rR = R
+            env_tmp[s1].r = None
         if dirn == 'tb':
-            new_t = hair_t(ten0.bra, ht=env0.t, hl=env0.l, hr=env0.r, A_ket=ten0.ket)
-            new_t = regularize_belief(new_t, env.tol_positive)
-            diff = diff_beliefs(env[s1].t, new_t)
-            env_tmp[s1].t = new_t
+            tmp = ncon([ten0.ket, env0.tR, env0.lR, env0.rR], [(1, 2, -2, 3, -4), (-0, 1), (-1, 2), (-3, 3)])
+            _, R = tmp.qr(axes=((0, 1, 3, 4), 2), sQ=tmp.s[2])
+            R = R / R.norm()
+            diff = diff_beliefs(env[s1].tR, R)
+            env_tmp[s1].tR = R
+            env_tmp[s1].t = None
         if dirn == 'bt':
-            new_b = hair_b(ten0.bra, hl=env0.l, hb=env0.b, hr=env0.r, A_ket=ten0.ket)
-            new_b = regularize_belief(new_b, env.tol_positive)
-            diff = diff_beliefs(env[s1].b, new_b)
-            env_tmp[s1].b = new_b
+            tmp = ncon([ten0.ket, env0.lR, env0.bR, env0.rR], [(-0, 1, 2, 3, -4), (-1, 1), (-2, 2), (-3, 3)])
+            _, R = tmp.qr(axes=((1, 2, 3, 4), 0), sQ=tmp.s[0])
+            R = R / R.norm()
+            diff = diff_beliefs(env[s1].bR, R)
+            env_tmp[s1].bR = R
+            env_tmp[s1].b = None
+
         return diff
 
     def bond_metric(self, Q0, Q1, s0, s1, dirn):
@@ -359,14 +394,14 @@ class EnvBP(Peps):
         """
         if dirn in ("h", "lr") and self.which == "BP":
             assert self.psi.nn_site(s0, (0, 1)) == s1
-            vecl = hair_l(Q0, hl=self[s0].l, ht=self[s0].t, hb=self[s0].b)
-            vecr = hair_r(Q1, hr=self[s1].r, ht=self[s1].t, hb=self[s1].b).T
+            vecl = hair_l(Q0, ht=self[s0].t, hl=self[s0].l, hb=self[s0].b)
+            vecr = hair_r(Q1, ht=self[s1].t, hb=self[s1].b, hr=self[s1].r).T
             return BipartiteBondMetric(gL=vecl, gR=vecr)  # (rr' rr,  ll ll')
 
         if dirn in ("v", "tb") and self.which == "BP":
             assert self.psi.nn_site(s0, (1, 0)) == s1
-            vect = hair_t(Q0, hl=self[s0].l, ht=self[s0].t, hr=self[s0].r)
-            vecb = hair_b(Q1, hr=self[s1].r, hb=self[s1].b, hl=self[s1].l).T
+            vect = hair_t(Q0, ht=self[s0].t, hl=self[s0].l, hr=self[s0].r)
+            vecb = hair_b(Q1, hl=self[s1].l, hb=self[s1].b, hr=self[s1].r).T
             return BipartiteBondMetric(gL=vect, gR=vecb)  # (bb' bb,  tt tt')
 
         if dirn in ("h", "lr") and self.which == "NN+BP":
@@ -469,11 +504,11 @@ class EnvBP(Peps):
             sm = mm[0, -1]
             etl = edge_l(m[0, -1]) if sm is None else edge_l(m[0, -1], hl=self[sm].l)
             sm = mm[-1, -1]
-            ctl = cor_tl(m[-1, -1]) if sm is None else cor_tl(m[-1, -1], hl=self[sm].l, ht=self[sm].t)
+            ctl = cor_tl(m[-1, -1]) if sm is None else cor_tl(m[-1, -1], ht=self[sm].t, hl=self[sm].l)
             sm = mm[-1, 0]
             ett = edge_t(m[-1, 0]) if sm is None else edge_t(m[-1, 0], ht=self[sm].t)
             sm = mm[-1, 1]
-            ctr = cor_tr(m[-1, 1]) if sm is None else cor_tr(m[-1, 1], hr=self[sm].r, ht=self[sm].t)
+            ctr = cor_tr(m[-1, 1]) if sm is None else cor_tr(m[-1, 1], ht=self[sm].t, hr=self[sm].r)
             sm = mm[0, 1]
             etr = edge_r(m[0, 1]) if sm is None else edge_r(m[0, 1], hr=self[sm].r)
             vect = append_vec_tl(Q0, Q0, etl @ (ctl @ ett))
@@ -482,7 +517,7 @@ class EnvBP(Peps):
             sm = mm[1, 1]
             ebr = edge_r(m[1, 1]) if sm is None else edge_r(m[1, 1], hr=self[sm].r)
             sm = mm[2, 1]
-            cbr = cor_br(m[2, 1]) if sm is None else cor_br(m[2, 1], hr=self[sm].r, hb=self[sm].b)
+            cbr = cor_br(m[2, 1]) if sm is None else cor_br(m[2, 1], hb=self[sm].b, hr=self[sm].r)
             sm = mm[2, 0]
             ebb = edge_b(m[2, 0]) if sm is None else edge_b(m[2, 0], hb=self[sm].b)
             sm = mm[2, -1]
@@ -494,35 +529,42 @@ class EnvBP(Peps):
             g = tensordot(vect, vecb, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
             return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
-    def pre_truncation_(env, sites):
-        for s0, s1 in pairwise(sites[-1::-1]):
-            env.update_bond_((s0, s1))
-        for s0, s1 in pairwise(sites):
-            env.update_bond_((s0, s1))
+    def apply_patch(self):
+        self.env.apply_patch()
 
-    def post_truncation_(env, bond, max_sweeps=1):
+    def move_to_patch(self, sites):
+        self.env.move_to_patch(sites)
+
+    def pre_truncation_(env, sites):
+        if len(sites) > 2:
+            for s0, s1 in pairwise(sites[-1::-1]):
+                env.update_bond_((s0, s1))
+            for s0, s1 in pairwise(sites):
+                env.update_bond_((s0, s1))
+
+    def post_truncation_(env, bond, max_sweeps=0):
         env.update_bond_(bond)
         env.update_bond_(bond[::-1])
         if max_sweeps > 0:
             env.iterate_(max_sweeps=max_sweeps)
 
-    def iterate_(env, max_sweeps=1, iterator_step=None, diff_tol=None):
+    def iterate_(env, max_sweeps=1, iterator=False, diff_tol=None, **kwargs):
         r"""
         Perform BP updates :meth:`yastn.tn.fpeps.EnvBP.update_` until convergence.
         Convergence can be measured based on maximal difference between old and new tensors.
 
-        Outputs iterator if ``iterator_step`` is given, which allows
+        Outputs iterator if ``iterator==True``, which allows
         inspecting ``env``, e.g., calculating expectation values,
-        outside of ``iterate_`` function after every ``iterator_step`` sweeps.
+        outside of ``iterate_`` function after each sweeps.
 
         Parameters
         ----------
         max_sweeps: int
             Maximal number of sweeps.
 
-        iterator_step: int
-            If int, ``iterate_`` returns a generator that would yield output after every iterator_step sweeps.
-            The default is ``None``, in which case  ``iterate_`` sweeps are performed immediately.
+        iterator: bool
+            If True, ``iterate_`` returns a generator that would yield output after every sweep.
+            The default is False, in which case  ``iterate_`` sweeps are performed immediately.
 
         diff_tol: float
             Convergence tolerance for the change of belief tensors in one iteration.
@@ -531,7 +573,7 @@ class EnvBP(Peps):
 
         Returns
         -------
-        Generator if iterator_step is not ``None``.
+        Generator if iterator is True.
 
         BP_out(NamedTuple)
             NamedTuple including fields:
@@ -540,8 +582,9 @@ class EnvBP(Peps):
                 * ``max_diff`` maximal difference between old and new belief tensors.
                 * ``converged`` whether convergence based on ``diff_tol`` has been reached.
         """
-        tmp = _iterate_(env, max_sweeps, iterator_step, diff_tol)
-        return tmp if iterator_step else next(tmp)
+        kwargs["iterator_step"] = kwargs.get("iterator_step", int(iterator))
+        tmp = _iterate_(env, max_sweeps, diff_tol, **kwargs)
+        return tmp if kwargs["iterator_step"] else next(tmp)
 
     def sample(self, projectors, number=1, xrange=None, yrange=None, progressbar=False, return_probabilities=False, flatten_one=True, **kwargs) -> dict[Site, list]:
         r"""
@@ -597,35 +640,35 @@ class EnvBP(Peps):
             env = {site: EnvBP_local() for site in sites}
             for (nx, ny) in sites:
                 nx0, ny0 = nx % self.Nx, ny % self.Ny
-                env[nx, ny].t = self[nx0, ny0].t.copy()
-                env[nx, ny].l = self[nx0, ny0].l.copy()
-                env[nx, ny].b = self[nx0, ny0].b.copy()
-                env[nx, ny].r = self[nx0, ny0].r.copy()
+                env[nx, ny] = self[nx0, ny0].shallow_copy()
 
             for ny in range(*yrange):
                 for nx in range(*xrange):
                     nx0, ny0 = nx % self.Nx, ny % self.Ny
                     lenv = env[nx, ny]
                     ten = self.psi[nx0, ny0]
-                    Atlbr = ncon([ten.ket, lenv.t, lenv.l, lenv.b, lenv.r], [(1, 2, 3, 4, -4), (-0, 1), (-1, 2), (-2, 3), (-3, 4)])
-                    norm_prob = vdot(ten.bra, Atlbr)
+                    Atlbr = ncon([ten.ket, lenv.tR, lenv.lR, lenv.bR, lenv.rR], [(1, 2, 3, 4, -4), (-0, 1), (-1, 2), (-2, 3), (-3, 4)])
+                    norm_prob = vdot(Atlbr, Atlbr)
                     acc_prob = 0
                     for k, proj in projs_sites[(nx, ny)].items():
                         proj = match_ancilla(ten.ket, proj)
                         Atmp = tensordot(Atlbr, proj, axes=(4, 1))
-                        prob = vdot(ten.bra, Atmp) / norm_prob
+                        prob = vdot(Atlbr, Atmp) / norm_prob
                         acc_prob += prob
                         if rands[count] < acc_prob:
                             out[nx, ny].append(k)
                             ketp = tensordot(ten.ket, proj, axes=(4, 1)) / prob
                             if nx + 1 < xrange[1]:
-                                new_t = hair_t(ten.bra, ht=lenv.t, hl=lenv.l, hr=lenv.r, A_ket=ketp)
-                                new_t = regularize_belief(new_t, self.tol_positive)
-                                env[nx + 1, ny].t = new_t
+                                tmp = ncon([ketp, lenv.tR, lenv.lR, lenv.rR], [(1, 2, -2, 3, -4), (-0, 1), (-1, 2), (-3, 3)])
+                                _, R = tmp.qr(axes=((0, 1, 3, 4), 2), sQ=tmp.s[2])
+                                env[nx + 1, ny].tR = R / R.norm()
+                                env[nx + 1, ny].t = None
+
                             if ny + 1 < yrange[1]:
-                                new_l = hair_l(ten.bra, ht=lenv.t, hl=lenv.l, hb=lenv.b, A_ket=ketp)
-                                new_l = regularize_belief(new_l, self.tol_positive)
-                                env[nx, ny + 1].l = new_l
+                                tmp = ncon([ketp, lenv.tR, lenv.lR, lenv.bR], [(1, 2, 3, -3, -4), (-0, 1), (-1, 2), (-2, 3)])
+                                _, R = tmp.qr(axes=((0, 1, 2, 4), 3), sQ=tmp.s[3])
+                                env[nx, ny + 1].lR = R / R.norm()
+                                env[nx, ny + 1].l = None
                             probability *= prob
                             break
                     count += 1
@@ -639,8 +682,9 @@ class EnvBP(Peps):
         return out
 
 
-def _iterate_(env, max_sweeps, iterator_step, diff_tol):
+def _iterate_(env, max_sweeps, diff_tol, **kwargs):
     """ Generator for ctmrg_(). """
+    iterator_step = kwargs.get("iterator_step", 0)
     converged = None
     for sweep in range(1, max_sweeps + 1):
         max_diff = env.update_()
@@ -652,14 +696,6 @@ def _iterate_(env, max_sweeps, iterator_step, diff_tol):
         if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
             yield BP_out(sweeps=sweep, max_diff=max_diff, converged=converged)
     yield BP_out(sweeps=sweep, max_diff=max_diff, converged=converged)
-
-
-def regularize_belief(mat, tol):
-    """ Make matrix mat hermitian and positive, truncating eigenvalues at a given relative tolerance. """
-    mat = mat + mat.H
-    S, U = mat.eigh_with_truncation(axes=(0, 1), tol=tol)
-    S = S / S.norm()
-    return U @ S @ U.H
 
 
 def diff_beliefs(old, new):

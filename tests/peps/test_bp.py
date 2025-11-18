@@ -55,30 +55,19 @@ def run_bp_save_load_copy(env):
 
     config = env.psi.config
     d = env.save_to_dict()
-
     env_save = fpeps.load_from_dict(config, d)
     env_copy = env.copy()
     env_clone = env.clone()
     env_shallow = env.shallow_copy()
 
-    for site in env.sites():
-        for dirn in  ['t', 'l', 'b', 'r']:
-            ten0 = getattr(env[site], dirn)
-            ten1 = getattr(env_save[site], dirn)
-            ten2 = getattr(env_copy[site], dirn)
-            ten3 = getattr(env_clone[site], dirn)
-            ten4 = getattr(env_shallow[site], dirn)
+    dicts = [env.to_dict(level) for level in [0, 1, 2]]
+    env_dict = [fpeps.EnvBP.from_dict(d) for d in dicts]
+    env_split = [yastn.from_dict(yastn.combine_data_and_meta(*yastn.split_data_and_meta(d))) for d in dicts]
 
-            assert yastn.are_independent(ten0, ten1)
-            assert yastn.are_independent(ten0, ten2)
-            assert yastn.are_independent(ten0, ten3)
-            assert ten0 is ten4
-
-            assert (ten0 - ten1).norm() < 1e-14
-            assert (ten0 - ten2).norm() < 1e-14
-            assert (ten0 - ten3).norm() < 1e-14
-            assert (ten0 - ten4).norm() < 1e-14
-
+    for new, ind in zip([env_save, env_copy, env_clone, env_shallow, *env_dict, *env_split],
+                        [True, True, True, False, False, False, True, False, False, True]):
+        assert env.env.allclose(new.env)
+        assert env.env.are_independent(new.env, independent=ind)
 
 
 def test_iterate_measure_2x1(config_kwargs):

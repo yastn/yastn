@@ -1,4 +1,4 @@
-# Copyright 2024 The YASTN Authors. All Rights Reserved.
+# Copyright 2025 The YASTN Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,8 +27,8 @@ import logging
 import warnings
 
 try:
-    from yastn.tn.fpeps.envs.fixed_pt_c4v import fp_ctmrg_c4v, refill_env_c4v
-    from yastn.tn.fpeps.envs.fixed_pt import fp_ctmrg, refill_env
+    from yastn.tn.fpeps.envs.fixed_pt_c4v import fp_ctmrg_c4v
+    from yastn.tn.fpeps.envs.fixed_pt import fp_ctmrg
 except ImportError:
     warnings.warn("This test requires torch")
 
@@ -93,8 +93,7 @@ def cost_U1_c4v_2x2(additional_imports, yastn_cfg, g, A, elems, slices : dict[tu
                     tol=1.0e-8, tol_block=0.0, eps_multiplet=1.0e-8)
 
         with torch.no_grad():
-            env_leg = yastn.Leg(psi.config, s=1, t=(0,), D=(1,))
-            env = fpeps.EnvCTM(psi, init=ctm_init, leg=env_leg)
+            env = fpeps.EnvCTM(psi, init=ctm_init)
 
         # 3.2 setup and run CTMRG
         options_svd={
@@ -157,8 +156,7 @@ def cost_U1_c4v_2x2_fp(additional_imports, yastn_cfg, g, A, elems, slices : dict
                 tol=1.0e-8, tol_block=0.0, eps_multiplet=1.0e-8)
 
     with torch.no_grad():
-        env_leg = yastn.Leg(psi.config, s=1, t=(0,), D=(1,))
-        env = fpeps.EnvCTM(psi, init=ctm_init, leg=env_leg)
+        env = fpeps.EnvCTM(psi, init=ctm_init)
 
     # 3.2 setup and run CTMRG
     options_svd={
@@ -167,11 +165,10 @@ def cost_U1_c4v_2x2_fp(additional_imports, yastn_cfg, g, A, elems, slices : dict
         "tol": 1.0e-8, "eps_multiplet": 1.0e-8,
         "svds_thresh": 0.1
     }
-    env, env_ts_slices, env_ts = fp_ctmrg(env, \
+    env = fp_ctmrg(env, \
         ctm_opts_fwd= {'opts_svd': options_svd, 'corner_tol': 1.0e-8, 'max_sweeps': max_sweeps, \
             'method': "2site", 'use_qr': False, }, \
         ctm_opts_fp= {'opts_svd': {'policy': 'fullrank'}})
-    refill_env(env, env_ts, env_ts_slices)
 
     # 3.4 evaluate loss
     r1x1,norm= rdm1x1( (0,0), psi, env)
@@ -200,8 +197,7 @@ def cost_U1_c4v_1x1_fp(additional_imports, yastn_cfg, g, A, elems, slices : dict
                 tol=1.0e-8, tol_block=0.0, eps_multiplet=1.0e-8)
 
     with torch.no_grad():
-        env_leg = yastn.Leg(psi.config, s=1, t=(0,), D=(1,))
-        envc4v = fpeps.EnvCTM_c4v(psi, init=ctm_init, leg=env_leg)
+        envc4v = fpeps.EnvCTM_c4v(psi, init=ctm_init)
 
     # 3.1.1 post-init CTM steps (allow expansion of the environment in case of qr policy)
     if projector_svd_method=='qr':
@@ -221,11 +217,10 @@ def cost_U1_c4v_1x1_fp(additional_imports, yastn_cfg, g, A, elems, slices : dict
         "D_total": CHI, 'D_block': CHI, "tol": 1.0e-8,
         "eps_multiplet": 1.0e-8, "truncation_f": truncation_f, "svds_thresh": 0.1
         }
-    envc4v, env_ts_slices, env_ts, t_ctm = fp_ctmrg_c4v(envc4v, \
+    envc4v = fp_ctmrg_c4v(envc4v, \
         ctm_opts_fwd= {'opts_svd': options_svd, 'corner_tol': 1.0e-8, 'max_sweeps': max_sweeps, \
             'method': "default", 'use_qr': False}, \
         ctm_opts_fp= { 'opts_svd': {'policy': 'fullrank'}})
-    refill_env_c4v(envc4v, env_ts, env_ts_slices)
 
     # 3.4 evaluate loss
     # sum of traces of even sectors across 1x1 RDMs
@@ -245,11 +240,11 @@ def prepare_1x1(additional_imports, cost_f):
     with open(json_file_path,'r') as f:
         d = json.load(f)
 
-    g= fpeps.RectangularUnitcell(**d['geometry'])
-    A= { tuple(d['parameters_key_to_id'][coord]): yastn.load_from_dict(yastn_cfg_U1, d_ten)
-                                 for coord,d_ten in d['parameters'].items() }
+    g = fpeps.RectangularUnitcell(**d['geometry'])
+    A = {tuple(d['parameters_key_to_id'][coord]): yastn.Tensor.from_dict(d_ten, config=yastn_cfg_U1)
+                                 for coord,d_ten in d['parameters'].items()}
 
-    cost_function_1x1= lambda *args, **kwargs : cost_f(additional_imports, yastn_cfg_U1, g,A, *args, **kwargs)
+    cost_function_1x1 = lambda *args, **kwargs : cost_f(additional_imports, yastn_cfg_U1, g,A, *args, **kwargs)
 
     return A, None, cost_function_1x1
 

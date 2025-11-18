@@ -14,7 +14,9 @@
 # ==============================================================================
 """ Define rules for Z2 symmetry. """
 import numpy as np
+
 from .sym_abelian import sym_abelian
+
 
 class sym_Z2(sym_abelian):
     """Z2 symmetry"""

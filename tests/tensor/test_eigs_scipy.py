@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-""" yastn.compress_to_1d() yastn.decompress_from_1d()  in combination with scipy LinearOperator and eigs """
+""" yastn.to_dict() yastn.from_dict() yastn.split_data_and_meta()
+    yastn.combine_data_and_meta(), in combination with scipy LinearOperator and eigs """
 import numpy as np
 import pytest
 from scipy.sparse.linalg import eigs, LinearOperator
@@ -30,7 +31,7 @@ def test_eigs_simple(config_kwargs):
     legs = [yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 2)),
             yastn.Leg(config_U1, s=1, t=(0, 1), D=(1, 1)),
             yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(2, 3, 2))]
-    a = yastn.rand(config=config_U1, legs=legs)  # could be mps tensor
+    a = yastn.rand(config=config_U1, legs=legs)  # e.g., it could be an MPS tensor
     a, _ = yastn.qr(a, axes=((0, 1), 2), sQ=-1)  # orthonormalize
 
     # Dense transfer matrix build from a; reference solution
@@ -47,34 +48,34 @@ def test_eigs_simple(config_kwargs):
             yastn.Leg(a.config, s=1, t=(-1, 0, 1), D=(1, 1, 1))]
     v0 = yastn.rand(config=a.config, legs=legs)
     # Define a wrapper that goes r1d -> yastn.tensor -> tm @ yastn.tensor -> r1d
-    r1d, meta = yastn.compress_to_1d(v0)
+    r1d, meta = yastn.split_data_and_meta(v0.to_dict(level=0), squeeze=True)
     def f(x):
-        t = yastn.decompress_from_1d(x, meta=meta)
+        t = yastn.Tensor.from_dict(yastn.combine_data_and_meta(x, meta))
         t2 = yastn.ncon([t, a, a.conj()], [(1, 3, -3), (1, 2, -1), (3, 2, -2)])
-        t3, _ = yastn.compress_to_1d(t2, meta=meta)
+        t3, _ = yastn.split_data_and_meta(t2.to_dict(level=0, meta=meta), squeeze=True)
         return t3
     ff = LinearOperator(shape=(len(r1d), len(r1d)), matvec=f, dtype=np.float64)
     # scipy.sparse.linalg.eigs that goes though yastn symmetric tensor.
     wa, va1d = eigs(ff, v0=r1d, k=1, which='LM', tol=1e-10)
     # Transform eigenvectors into yastn tensors
-    va = [yastn.decompress_from_1d(x, meta) for x in va1d.T]
+    va = [yastn.Tensor.from_dict(yastn.combine_data_and_meta(x, meta)) for x in va1d.T]
     # We can remove zero blocks now, as there are eigenvectors with well defined charge
     # (though we might get superposition of symmetry sectors in case of degeneracy).
     va = [x.remove_zero_blocks() for x in va]
 
-    # we can also limit ourselves directly to eigenvectors with desired charge, here 0.
+    # we can also limit ourselves directly to eigenvectors with desired charge, here n=0.
     legs = [a.get_legs(0).conj(),
             a.get_legs(0)]
     v0 = yastn.rand(config=a.config, legs=legs, n=0)
-    r1d, meta = yastn.compress_to_1d(v0)
+    r1d, meta = yastn.split_data_and_meta(v0.to_dict(level=0), squeeze=True)
     def f(x):
-        t = yastn.decompress_from_1d(x, meta=meta)
+        t = yastn.Tensor.from_dict(yastn.combine_data_and_meta(x, meta))
         t2 = yastn.ncon([t, a, a.conj()], [(1, 3), (1, 2, -1), (3, 2, -2)])
-        t3, _ = yastn.compress_to_1d(t2, meta=meta)
+        t3, _ = yastn.split_data_and_meta(t2.to_dict(level=0, meta=meta), squeeze=True)
         return t3
     ff = LinearOperator(shape=(len(r1d), len(r1d)), matvec=f, dtype=np.float64)
     wb, vb1d = eigs(ff, v0=r1d, k=1, which='LM', tol=1e-10)  # scipy.sparse.linalg.eigs
-    vb = [yastn.decompress_from_1d(x, meta) for x in vb1d.T]  # eigenvectors as yastn tensors
+    vb = [yastn.Tensor.from_dict(yastn.combine_data_and_meta(x, meta)) for x in vb1d.T]  # eigenvectors as yastn tensors
 
     # dominant eigenvalue should have amplitude 1 (likely degenerate in our example)
     assert all(pytest.approx(abs(x), rel=1e-10) == 1.0 for x in (w_ref, wa, wb))
@@ -107,12 +108,11 @@ def test_eigs_mismatches(config_kwargs):
     leg02 = yastn.legs_union(leg0, leg2)
     leg_aux = yastn.Leg(a.config, s=1, t=(-1, 0, 1), D=(1, 1, 1))
     vv = yastn.rand(config=a.config, legs=(leg02, leg02.conj(), leg_aux), dtype='float64')
-    r1d, meta = yastn.compress_to_1d(vv)
-
+    r1d, meta = yastn.split_data_and_meta(vv.to_dict(level=0), squeeze=True)
     def f(x):  # change all that into a wrapper around ncon part?
-        t = yastn.decompress_from_1d(x, meta)
-        t2 = yastn.ncon([a, a, t], [(-1, 1, 2), (-2, 1, 3), (2, 3, -3)], conjs=(0, 1, 0))
-        t3, _ = yastn.compress_to_1d(t2, meta=meta)
+        t = yastn.Tensor.from_dict(yastn.combine_data_and_meta(x, meta))
+        t2 = yastn.ncon([a, a.conj(), t], [(-1, 1, 2), (-2, 1, 3), (2, 3, -3)])
+        t3, _ = yastn.split_data_and_meta(t2.to_dict(level=0, meta=meta), squeeze=True)
         return t3
     ff = LinearOperator(shape=(len(r1d), len(r1d)), matvec=f, dtype=np.float64)
 
@@ -120,7 +120,7 @@ def test_eigs_mismatches(config_kwargs):
     wy1, vy1d = eigs(ff, v0=r1d, k=5, which='LM', tol=1e-10)  # scipy going though yastn.tensor
 
     # transform eigenvectors into yastn tensors
-    vy = [yastn.decompress_from_1d(x, meta) for x in vy1d.T]
+    vy = [yastn.Tensor.from_dict(yastn.combine_data_and_meta(x, meta)) for x in vy1d.T]
     # remove zero blocks and checks if that was correct
     vyr = [yastn.remove_zero_blocks(a, rtol=1e-12) for a in vy]
     assert all((yastn.norm(x - y) < tol for x, y in zip(vy, vyr)))

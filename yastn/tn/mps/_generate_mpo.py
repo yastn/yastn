@@ -14,15 +14,18 @@
 # ==============================================================================
 """ Methods to generate (Hamiltonian) Mpo. """
 from __future__ import annotations
-from operator import itemgetter
-import numpy as np
-import numbers
-from typing import NamedTuple
-from ... import zeros, ncon, Leg, YastnError, Tensor, block, svd_with_truncation
-from ._mps_obc import Mpo, MpsMpoOBC
-from ._initialize import product_mpo
-from ...operators import sign_canonical_order
 from itertools import groupby
+import numbers
+from operator import itemgetter
+from typing import NamedTuple
+
+import numpy as np
+
+from ._initialize import product_mpo
+from ._mps_obc import Mpo, MpsMpoOBC
+from ...initialize import zeros, block
+from ...operators import sign_canonical_order
+from ...tensor import ncon, Leg, YastnError, Tensor, svd_with_truncation
 
 
 class Hterm(NamedTuple):

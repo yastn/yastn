@@ -1,4 +1,4 @@
-# Copyright 2024 The YASTN Authors. All Rights Reserved.
+# Copyright 2025 The YASTN Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ from yastn.tn.fpeps.envs.rdm import rdm1x1
 import numpy as np
 import warnings
 try:
-    from yastn.tn.fpeps.envs.fixed_pt import fp_ctmrg, refill_env
+    from yastn.tn.fpeps.envs.fixed_pt import fp_ctmrg
 except ImportError:
     warnings.warn("This test requires torch")
 
@@ -102,11 +102,10 @@ def cost_function_fp(additional_imports, yastn_cfg, g, A, elems, slices : dict[t
         "tol": 1.0e-8, "eps_multiplet": 1.0e-8,
         "svds_thresh": 0.1
     }
-    env, env_ts_slices, env_ts = fp_ctmrg(env, \
+    env = fp_ctmrg(env, \
         ctm_opts_fwd= {'opts_svd': options_svd, 'corner_tol': 1.0e-8, 'max_sweeps': max_sweeps, \
             'method': "2site", 'use_qr': False, }, \
         ctm_opts_fp= {'opts_svd': {'policy': 'fullrank'}})
-    refill_env(env, env_ts, env_ts_slices)
 
     # sum of traces of even sectors across 1x1 RDMs
     loss= sum( rdm1x1( c, psi, env)[0][(0,0)].trace() for c in psi.sites() )
@@ -127,7 +126,7 @@ def prepare_1x1(additional_imports, cost_f):
         d = json.load(f, object_hook=complex_decoder)
 
     g= fpeps.RectangularUnitcell(**d['geometry'])
-    A= { tuple(d['parameters_key_to_id'][coord]): yastn.load_from_dict(yastn_cfg_Z2, d_ten)
+    A= { tuple(d['parameters_key_to_id'][coord]): yastn.from_dict(d_ten, config=yastn_cfg_Z2)
                                  for coord,d_ten in d['parameters'].items() }
 
     cost_function_1x1= lambda *args, **kwargs : cost_f(additional_imports, yastn_cfg_Z2,g,A, *args, **kwargs)
@@ -148,7 +147,7 @@ def prepare_3x3(additional_imports, cost_f):
         d = json.load(f, object_hook=complex_decoder)
 
     g= fpeps.RectangularUnitcell(**d['geometry'])
-    A= { tuple(d['parameters_key_to_id'][coord]): yastn.load_from_dict(yastn_cfg_Z2, d_ten)
+    A= { tuple(d['parameters_key_to_id'][coord]): yastn.from_dict(d_ten, config=yastn_cfg_Z2)
                                  for coord,d_ten in d['parameters'].items() }
 
     cost_function_3x3= lambda *args, **kwargs : cost_f(additional_imports, yastn_cfg_Z2,g,A, *args, **kwargs)

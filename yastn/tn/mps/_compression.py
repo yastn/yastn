@@ -14,13 +14,16 @@
 # ==============================================================================
 """ Algorithm for variational optimization of Mps to match the target state."""
 from __future__ import annotations
-from typing import NamedTuple
 import logging
+from typing import NamedTuple
+
 from ._measure import Env
 from ._mps_obc import MpsMpoOBC, MpoPBC
-from ... import ones, eye, YastnError
+from ...initialize import ones, eye
+from ...tensor import YastnError
 
 logger = logging.Logger('compression')
+
 
 class compression_out(NamedTuple):
     sweeps: int = 0
@@ -32,7 +35,7 @@ class compression_out(NamedTuple):
 
 def compression_(psi, target, method='1site',
                 overlap_tol=None, Schmidt_tol=None, max_sweeps=1,
-                iterator_step=None, opts_svd=None, normalize=True):
+                iterator=False, opts_svd=None, normalize=True, **kwargs):
     r"""
     Perform variational optimization sweeps until convergence to best approximate the target, starting from MPS/MPO :code:`psi`.
 
@@ -50,15 +53,15 @@ def compression_(psi, target, method='1site',
         * sum of any of the three above: target is ``[[MPS], [MPO, MPS], [[MPO, MPO, ...], MPS], ...]``
         * for ``psi`` being itself an MPO, all MPS's above should be replaced with MPO, e.g., ``[MPO, MPO]``
 
-    Outputs iterator if :code:`iterator_step` is given, which allows
-    inspecting :code:`psi` outside of :code:`compression_` function after every :code:`iterator_step` sweeps.
+    Outputs iterator if ``iterator==True``, which allows
+    inspecting ``psi`` outside of ``compression_`` function after every sweep.
 
     Parameters
     ----------
     psi: yastn.tn.mps.MpsMpoOBC
         Initial state. It is updated during execution.
         It is first canonized to the first site, if not provided in such a form.
-        State resulting from :code:`compression_` is canonized to the first site.
+        State resulting from ``compression_`` is canonized to the first site.
 
     target: MPS or MPO
         Defines target state. The target can be:
@@ -83,9 +86,9 @@ def compression_(psi, target, method='1site',
     max_sweeps: int
         Maximal number of sweeps.
 
-    iterator_step: int
-        If int, :code:`compression_` returns a generator that would yield output after every iterator_step sweeps.
-        The default is None, in which case  :code:`compression_` sweeps are performed immediately.
+    iterator: bool
+        If True, :code:`compression_` returns a generator that would yield output after every sweep.
+        The default is False, in which case  :code:`compression_` sweeps are performed immediately.
 
     opts_svd: dict
         Options passed to :meth:`yastn.linalg.svd` used to truncate virtual spaces in :code:`method='2site'`.
@@ -101,17 +104,18 @@ def compression_(psi, target, method='1site',
             * :code:`max_dSchmidt` norm of Schmidt values change on the worst cut in the last sweep.
             * :code:`max_discarded_weight` norm of discarded_weights on the worst cut in '2site' procedure.
     """
-
+    kwargs["iterator_step"] = kwargs.get("iterator_step", int(iterator))
     tmp = _compression_(psi, target, method,
                         overlap_tol, Schmidt_tol, max_sweeps,
-                        iterator_step, opts_svd, normalize)
-    return tmp if iterator_step else next(tmp)
+                        opts_svd, normalize, **kwargs)
+    return tmp if kwargs["iterator_step"] else next(tmp)
 
 
 def _compression_(psi, target, method,
                 overlap_tol, Schmidt_tol, max_sweeps,
-                iterator_step, opts_svd, normalize):
+                opts_svd, normalize, **kwargs):
     """ Generator for compression_(). """
+    iterator_step = kwargs.get("iterator_step", 0)
 
     if not psi.is_canonical(to='first'):
         psi.canonize_(to='first')
@@ -146,7 +150,8 @@ def _compression_(psi, target, method,
 
         psi.factor = 1
         overlap = env.measure()
-        doverlap, overlap_old = (overlap - overlap_old) / overlap, overlap
+        doverlap = (overlap - overlap_old) / overlap if overlap else 0.
+        overlap_old = overlap
         converged = []
 
         if not normalize:
@@ -230,7 +235,9 @@ def _compression_2site_sweep_(env, opts_svd=None, Schmidt=None):
             bd = (n, n + 1)
             AA = env.project_ket_on_bra_2(bd)
             _disc_weight_bd = bra.post_2site_(AA, bd, opts_svd)
-            bra.A[bra.pC] = bra.A[bra.pC] / bra.A[bra.pC].norm()
+            pCnorm = bra.A[bra.pC].norm()
+            if pCnorm:
+                bra.A[bra.pC] = bra.A[bra.pC] / pCnorm
             max_disc_weight = max(max_disc_weight, _disc_weight_bd)
             if Schmidt is not None and to == 'first':
                 Schmidt[bra.pC] = bra[bra.pC]
@@ -310,22 +317,26 @@ def _zipper_MpoOBC(a, psi, opts_svd, normalize) -> MpsMpoOBC:
 
         mask = S.truncation_mask(**opts_svd)
         nSout = mask.bitwise_not().apply_mask(S, axes=0).norm()
-        discarded2_local = (nSout / nSold) ** 2
+        discarded2_local = (nSout / nSold) ** 2 if nSold else 0.
         discarded2_total = discarded2_total + discarded2_local - discarded2_total * discarded2_local
 
         U, S, V = mask.apply_mask(U, S, V, axes=(2, 0, 0))
         nS = S.norm()
 
         psi[n] = V if psi.nr_phys == 1 else V.unfuse_legs(axes=2)
-        tmp = U @ S / nS
+        if nS:
+            S = S / nS
+        tmp = U @ S
         psi.factor = psi.factor * nS
 
     tmp = tmp.fuse_legs(axes=((0, 1), 2)).drop_leg_history(axes=0)
     ntmp = tmp.norm()
-    psi[psi.first] = (tmp / ntmp) @ psi[psi.first]
+    if ntmp:
+        tmp = tmp / ntmp
+    psi[psi.first] = tmp @ psi[psi.first]
     psi.factor = 1 if normalize else psi.factor * ntmp
 
-    return psi, psi.config.backend.sqrt(discarded2_total)
+    return psi, discarded2_total ** 0.5
 
 
 def _zipper_MpoPBC(a, psi, opts_svd, normalize) -> MpsMpoOBC:
@@ -335,8 +346,10 @@ def _zipper_MpoPBC(a, psi, opts_svd, normalize) -> MpsMpoOBC:
     lmpo, lpsi = a.virtual_leg('last'), psi.virtual_leg('last')
 
     tmp = eye(psi.config, legs=lmpo, isdiag=False)
-    tmp = tmp.add_leg(axis=0, s=-lpsi.s, t=lpsi.t[0])
-    tmp = tmp.add_leg(axis=3, s=lpsi.s, t=lpsi.t[0])
+    tmp = tmp.tensordot(eye(psi.config, legs=lpsi, isdiag=False), axes=((), ()))
+    tmp = tmp.transpose(axes=(3, 0, 1, 2))
+    # tmp = tmp.add_leg(axis=0, s=-lpsi.s, t=lpsi.t[0])
+    # tmp = tmp.add_leg(axis=3, s=lpsi.s, t=lpsi.t[0])
 
     connector = eye(psi.config, legs=lmpo, isdiag=False)
 
@@ -356,15 +369,16 @@ def _zipper_MpoPBC(a, psi, opts_svd, normalize) -> MpsMpoOBC:
 
             mask = S.truncation_mask(**opts_svd)
             nSout = mask.bitwise_not().apply_mask(S, axes=0).norm()
-            discarded2_local = (nSout / nSold) ** 2
+            discarded2_local = (nSout / nSold) ** 2 if nSold else 0.
             discarded2_total = discarded2_total + discarded2_local - discarded2_total * discarded2_local
 
             U, S, V = mask.apply_mask(U, S, V, axes=(2, 0, 0))
             nS = S.norm()
 
             psi[n] = V if psi.nr_phys == 1 else V.unfuse_legs(axes=2)
-            tmp = U @ (S / nS)
-            tmp = tmp.unfuse_legs(axes=0)
+            if nS:
+                S = S / nS
+            tmp = (U @ S).unfuse_legs(axes=0)
 
             if a.tol is not None and a.tol > 0:
                 Uc, Sc, Vc = tmp.svd_with_truncation(axes=(1, (0, 2, 3)), tol=a.tol)
@@ -378,7 +392,8 @@ def _zipper_MpoPBC(a, psi, opts_svd, normalize) -> MpsMpoOBC:
             tmp = tmp.trace(axes=(0, 1))
             ntmp = tmp.norm()
             psi.factor = 1 if normalize else psi.factor * ntmp
-            tmp = (tmp / ntmp).transpose(axes=(1, 0, 2))
-            psi[n] = tmp # if psi.nr_phys == 1 else tmp.unfuse_legs(axes=2)
+            if ntmp:
+                tmp = (tmp / ntmp)
+            psi[n] = tmp.transpose(axes=(1, 0, 2))
 
-    return psi, psi.config.backend.sqrt(discarded2_total)
+    return psi, discarded2_total ** 0.5

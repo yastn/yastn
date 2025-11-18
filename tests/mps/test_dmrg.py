@@ -147,12 +147,11 @@ def test_dmrg_XX_model_dense(config_kwargs, tol=1e-6):
     psis = run_dmrg(psi, H, O_occ, Eng_gs, occ_gs, opts_svd, tol)
     #
     # _dmrg can be executed as a generator to monitor states
-    # between dmrg sweeps. This is done by providing `iterator_step`.
+    # between dmrg sweeps. This is done by setting `iterator=True`.
     #
     psi = generate.random_mps(D_total=Dmax)
     for step in mps.dmrg_(psi, H, method='1site',
-                          max_sweeps=20, iterator_step=2):
-        assert step.sweeps % 2 == 0  # stop every second sweep here
+                          max_sweeps=20, iterator=True):
         occ = mps.measure_mpo(psi, O_occ, psi)  # measure occupation
         # here breaks if it is close to the known result.
         if abs(occ.item() - occ_gs[0]) < tol:
@@ -318,7 +317,7 @@ def test_dmrg_method_change(config_kwargs):
     psi = mps.random_mps(I, n=0, D_total=8)
     method = yastn.Method('2site')
     opts_svd = {"D_total": 16}
-    for out in mps.dmrg_(psi, [HXX, HZ], method=method, max_sweeps=10, iterator_step=1, opts_svd=opts_svd, energy_tol=1e-10, Schmidt_tol=1e-10):
+    for out in mps.dmrg_(psi, [HXX, HZ], method=method, max_sweeps=10, iterator=True, opts_svd=opts_svd, energy_tol=1e-10, Schmidt_tol=1e-10):
         if out.sweeps == 2:
             method.update_('1site')
         assert out.method == '2site' if out.sweeps <= 2 else '1site'

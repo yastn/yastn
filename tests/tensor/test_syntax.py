@@ -159,25 +159,23 @@ def test_syntax_tensor_export_import_operations(config_kwargs):
             yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6)),
             yastn.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(7, 8, 9))]
 
-    a= yastn.rand(config=config_U1, legs=legs)
+    a = yastn.rand(config=config_U1, legs=legs)
+    #
+    # Tensors can be serialized directly into basic Python dictionary
+    #
+    dictionary = a.to_dict()
+    tensor = yastn.from_dict(d=dictionary, config=config_U1)  # providing config is optional
+    #
+    # By applying methods split_data_and_meta and combine_data_and_meta
+    # we can further serialize symmetric tensors into 1-D vector,
+    # holding raw-data of blocks and dictionary, meta, which holds
+    # the symmetric structure of the tensors.
+    #
+    vector, meta = yastn.split_data_and_meta(a.to_dict(level=0), squeeze=True)
+    # assure that tensor structures is embeded in provided meta
+    vector, meta = yastn.split_data_and_meta(a.to_dict(level=0, meta=meta), squeeze=True)
+    tensor = yastn.Tensor.from_dict(yastn.combine_data_and_meta(vector, meta))
 
-    #
-    # We can serialize symmetric tensors into 1-D vector, holding
-    # reshaped raw-data of blocks and dictionary, meta, which holds
-    # the symmetric structure of the tensors. Each entry of meta represents
-    # non-zero block indexed by charges and it points to location of 1-D vector
-    # where the raw data of that block is stored
-    #
-    vector, meta = yastn.compress_to_1d(a)
-    vector, meta = a.compress_to_1d(meta=meta)
-    tensor = yastn.decompress_from_1d(vector, meta)
-
-    #
-    # Tensors can be also serialized directly into basic Python dictionary
-    #
-    dictionary = yastn.save_to_dict(a)
-    dictionary = a.save_to_dict()
-    tensor = yastn.load_from_dict(config=config_U1, d=dictionary)
 
 
 def test_syntax_block_access(config_kwargs):

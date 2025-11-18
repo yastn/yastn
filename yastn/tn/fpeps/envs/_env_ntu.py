@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from .... import tensordot, YastnError
 from ._env_auxlliary import *
 from .._evolution import BondMetric
+from ....tensor import tensordot, YastnError
 
 
 class EnvNTU:
@@ -52,6 +52,12 @@ class EnvNTU:
         self._which = which
 
     which = property(fget=_get_which, fset=_set_which)
+
+    def apply_patch(self):
+        pass
+
+    def move_to_patch(self, sites):
+        pass
 
     def pre_truncation_(env, bond):
         pass

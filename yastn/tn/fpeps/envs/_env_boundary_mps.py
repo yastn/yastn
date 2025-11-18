@@ -13,15 +13,18 @@
 # limitations under the License.
 # ==============================================================================
 from itertools import accumulate
+
 from tqdm import tqdm
-from .... import Tensor, YastnError, tensordot
-from ... import mps
-from ._env_auxlliary import identity_tm_boundary, clear_projectors
+
+from ._env_auxlliary import identity_boundary, clear_projectors
 from ._env_measure import _measure_nsite
-from .._peps import Peps, Peps2Layers
+from .._peps import PEPS_CLASSES, Peps2Layers
+from .._geometry import Lattice
+from ... import mps
+from ....tensor import Tensor, YastnError
 
 
-class EnvBoundaryMPS(Peps):
+class EnvBoundaryMPS():
     r"""
     Boundary MPS class for finite PEPS contraction.
     """
@@ -49,8 +52,10 @@ class EnvBoundaryMPS(Peps):
         opts_var: dict
             Options passed to :meth:`yastn.tn.mps.compression_`. The default is ``None`` which sets opts_var={max_sweeps: 2, normalization: False}.
         """
+        self.geometry = psi.geometry
+        for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "f_ordered", "nn_bond_dirn"]:
+            setattr(self, name, getattr(self.geometry, name))
 
-        super().__init__(psi.geometry)
         self.psi = psi
         self._env = {}
         self.offset = 0
@@ -106,6 +111,37 @@ class EnvBoundaryMPS(Peps):
                 mps.compression_(self._env[nx, 'b'], (tmpo, phi0), **opts_var, opts_svd=opts_svd)
                 self.info[nx, 'b'] = {'discarded': discarded}
 
+
+    def to_dict(self, level=2):
+        r"""
+        Serialize EnvBoundaryMPS to a dictionary.
+        Complementary function is :meth:`yastn.EnvBoundaryMPS.from_dict` or a general :meth:`yastn.from_dict`.
+        See :meth:`yastn.Tensor.to_dict` for further description.
+        """
+        return {'type': type(self).__name__,
+                'dict_ver': 1,
+                'psi': self.psi.to_dict(level=level),
+                'env': {k: v.to_dict(level=level) for k, v in self._env.items()},
+                'info': {k: v.copy() for k, v in self.info.items()}
+                }
+
+    @classmethod
+    def from_dict(cls, d, config=None):
+        r"""
+        De-serializes EnvBoundaryMPS from the dictionary ``d``.
+        See :meth:`yastn.Tensor.from_dict` for further description.
+        """
+        if 'dict_ver' not in d:
+            psi = PEPS_CLASSES['Peps'].from_dict(d['psi'], config)
+        elif d['dict_ver'] == 1:
+            psi = PEPS_CLASSES[d['psi']['type']].from_dict(d['psi'], config=config)
+        env = EnvBoundaryMPS(psi, opts_svd={}, setup='')
+        for k, v in d['env'].items():
+            env._env[k] = mps.MpsMpoOBC.from_dict(v, config)
+        for k, v in d['info'].items():
+            env.info[k] = v.copy()
+        return env
+
     def save_to_dict(self) -> dict:
         r"""
         Serialize EnvBoundaryMPS into a dictionary.
@@ -118,6 +154,8 @@ class EnvBoundaryMPS(Peps):
         d['env'] = {k: v.save_to_dict() for k, v in self._env.items()}
         d['info'] = {k: v.copy() for k, v in self.info.items()}
         return d
+
+
 
     def boundary_mps(self, n, dirn):
         return self._env[n, dirn]
@@ -483,8 +521,13 @@ class EnvBoundaryMPS(Peps):
         return accept / (2 * Nx * Ny)  # acceptance rate
 
 
-def _clear_operator_input(op, sites):
-    op_dict = op.copy() if isinstance(op, dict) else {site: op for site in sites}
+def _clear_operator_input(op, sites=None):
+    if isinstance(op, Lattice):
+        op_dict = op.shallow_copy()
+    elif isinstance(op, dict):
+        op_dict = op.copy()
+    else:
+        op_dict = {site: op for site in sites}
     for k, v in op_dict.items():
         if isinstance(v, dict):
             op_dict[k] = {(i,): vi for i, vi in v.items()}
@@ -553,3 +596,17 @@ def _sample_MC_column_uniform(ny, proj_env, st0, st1, psi, projectors, rands):
         else:  # reject
             st1[nx, ny] = ind0
     return vR, Os, vL, accept
+
+
+def identity_tm_boundary(tmpo):
+    """
+    For transfer matrix MPO build of DoublePepsTensors,
+    create MPS that contracts each DoublePepsTensor from the right.
+    """
+    phi = mps.Mps(N=tmpo.N)
+    config = tmpo.config
+    for n in phi.sweep(to='last'):
+        legf = tmpo[n].get_legs(axes=3).conj()
+        tmp = identity_boundary(config, legf)
+        phi[n] = tmp.add_leg(0, s=-1).add_leg(2, s=1)
+    return phi

@@ -15,19 +15,21 @@
 """ Linalg methods for yastn.Tensor. """
 from __future__ import annotations
 from itertools import accumulate
+import logging
 from numbers import Number
+import sys
+
 import numpy as np
+
 from ._auxliary import _struct, _slc, _clear_axes, _unpack_axes
-from ._tests import YastnError, _test_axes_all
 from ._merging import _merge_to_matrix, _meta_unmerge_matrix, _unmerge
 from ._merging import _Fusion, _leg_struct_trivial
-# from ..krylov._krylov import svds
-import sys
-import logging
-logger= logging.getLogger(__name__)
+from ._tests import YastnError, _test_axes_all
 
 __all__ = ['qr', 'norm', 'entropy', 'truncation_mask', 'truncation_mask_multiplets',
            'svd', 'svd_with_truncation', 'eig', 'eigh', 'eigh_with_truncation']
+
+logger = logging.getLogger(__name__)
 
 
 def norm(a, p='fro') -> Number:
@@ -340,13 +342,13 @@ def _meta_svd(config, struct, slices, minD, sU, nU):
     UD = tuple((ds[0], dm) for ds, dm in zip(struct.D, minD))
     SD = tuple((dm, dm) for dm in minD)
     VD = tuple((dm, ds[1]) for dm, ds in zip(minD, struct.D))
-    UDp = np.prod(UD, axis=1, dtype=np.int64).tolist()
+    UDp = np.prod(UD, axis=1, dtype=np.int64).tolist() if UD else ()
     Usl = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(UDp), UDp, UD))
 
     meta = tuple(zip(slices, struct.D, Usl, UD, St, Vt, VD))
     St, Vt, SD, VD = zip(*sorted(zip(St, Vt, SD, VD))) if len(St) > 0 else ((), (), (), ())
     SDp = tuple(dd[0] for dd in SD)
-    VDp = np.prod(VD, axis=1, dtype=np.int64).tolist()
+    VDp = np.prod(VD, axis=1, dtype=np.int64).tolist() if VD else ()
     Ssl = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(SDp), SDp, SD))
     Vsl = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(VDp), VDp, VD))
     Sdict = {x: y.slcs[0] for x, y in zip(St, Ssl)}
@@ -674,7 +676,8 @@ def truncation_mask(S, tol=0, tol_block=0,
     for t, sl in zip(S.struct.t, S.slices):
         t = t[:nsym]
         tol_rel = tol_block[t] if (isinstance(tol_block, dict) and t in tol_block) else tol_null
-        D_tol = sum(S.data[slice(*sl.slcs[0])] > tol_rel * S.config.backend.max_abs(S.data[slice(*sl.slcs[0])])).item()
+        above_tol = S.data[slice(*sl.slcs[0])] > tol_rel * S.config.backend.max_abs(S.data[slice(*sl.slcs[0])])
+        D_tol = S.config.backend.sum_elements(above_tol).item()
         D_bl = D_block[t] if (isinstance(D_block, dict) and t in D_block) else D_null
         D_bl = min(D_bl, D_tol)
         if 0 < D_bl < sl.Dp:  # block truncation
@@ -684,7 +687,8 @@ def truncation_mask(S, tol=0, tol_block=0,
             Smask._data[slice(*sl.slcs[0])] = False
 
     temp_data = S._data * Smask.data
-    D_tol = sum(temp_data > tol * S.config.backend.max_abs(temp_data)).item()
+    above_tol = temp_data > tol * S.config.backend.max_abs(temp_data)
+    D_tol = S.config.backend.sum_elements(above_tol).item()
     D_total = min(D_total, D_tol)
 
     if D_total == 0:
@@ -780,13 +784,13 @@ def _meta_qr(config, struct, slices, sQ):
     Rt = tuple(y + x[nsym:] for y, x in zip(t_con, struct.t))
     QD = tuple((ds[0], dm) for ds, dm in zip(struct.D, minD))
     RD = tuple((dm, ds[1]) for dm, ds in zip(minD, struct.D))
-    QDp = np.prod(QD, axis=1, dtype=np.int64).tolist()
+    QDp = np.prod(QD, axis=1, dtype=np.int64).tolist() if QD else ()
     Qsl = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(QDp), QDp, QD))
 
     meta = tuple(zip(slices, struct.D, Qsl, QD, Rt, RD))
 
     Rt, RD = zip(*sorted(zip(Rt, RD))) if len(Rt) > 0 else ((), ())
-    RDp = np.prod(RD, axis=1, dtype=np.int64).tolist()
+    RDp = np.prod(RD, axis=1, dtype=np.int64).tolist() if RD else ()
     Rsl = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(RDp), RDp, RD))
     Rdict = {x: y.slcs[0] for x, y in zip(Rt, Rsl)}
 
