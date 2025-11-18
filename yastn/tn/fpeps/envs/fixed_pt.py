@@ -22,7 +22,6 @@ from scipy.sparse.linalg import LinearOperator
 from scipy.sparse.linalg import eigsh, eigs, ArpackNoConvergence
 import torch
 
-from ._env_ctm import ctm_conv_corner_spec
 from ._env_dataclasses import Gauge
 from .rdm import *
 from .._geometry import Lattice
@@ -951,7 +950,7 @@ class FixedPoint(torch.autograd.Function):
             t_ctm += t1-t0
 
             t2 = time.perf_counter()
-            converged, max_dsv, conv_history = ctm_conv_corner_spec(env, conv_history, corner_tol)
+            converged, max_dsv, conv_history = env.ctm_conv_corner_spec(conv_history, corner_tol)
             t_check += time.perf_counter()-t2
             if kwargs.get('verbosity',0)>2:
                 log.log(logging.INFO, f"CTM iter {len(conv_history)} |delta_C| {max_dsv} t {t1-t0} [s]")
