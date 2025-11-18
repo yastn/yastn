@@ -31,6 +31,7 @@ import yastn.tn.fpeps as fpeps
 from yastn.tn.fpeps import Peps, Peps2Layers, RectangularUnitcell
 from itertools import product
 import json
+import time
 
 tol = 1e-12  #pylint: disable=invalid-name
 
@@ -63,8 +64,7 @@ def profile_ctmrg(on_site_t, X, config_profile, svd_policy="fullrank"):
 
     # grow X until saturation
     D= max([ sum(l.D) for l in on_site_t.get_legs()[:4]]) # over aux legs
-    nsteps= 2
-    X= nsteps*(D**2)
+    nsteps= max(2,X//(D**2))
     env = fpeps.EnvCTM(psi, init='eye')
     info = env.ctmrg_(opts_svd = {"policy": svd_policy, "D_total": X, 'fix_signs': False, 'tol': 1.0e-12}, max_sweeps= nsteps, 
                             truncation_f=None, use_qr=False, checkpoint_move=False)
@@ -80,18 +80,22 @@ def profile_ctmrg(on_site_t, X, config_profile, svd_policy="fullrank"):
     for t in "tl", "tr", "bl", "br", "t", "l", "r", "b":
         setattr(getattr(env2[0,0],t),"config",config_profile)
 
-    opts_svd = {"policy": svd_policy, "D_total": X, 'fix_signs': False, 'tol': 1.0e-12}
+    opts_svd = {"policy": svd_policy, "D_total": X, 'fix_signs': False, 'tol': 1.0e-12} 
     max_sweeps= 5
     corner_tol= 1.0e-8
     
 
     max_dsv, converged, history = None, False, []
+    t0= time.perf_counter()
     if USE_TORCH_NVTX:
         env2.profiling_mode= "NVTX"
     for ctm_step in env2.iterate_(opts_svd=opts_svd, moves='hv', method='2site', max_sweeps=max_sweeps, 
                                   iterator_step=1, corner_tol=corner_tol, truncation_f=None, use_qr=False, checkpoint_move=False):
         sweep, max_dsv, max_D, converged = ctm_step
-        print(f'Sweep = {sweep:03d}; max_diff_corner_singular_values = {max_dsv:0.2e} max_D {max_D} max_X {env2.effective_chi()}')
+        t1= time.perf_counter()
+        print(f'Sweep = {sweep:03d} t {t1-t0} [s] max_diff_corner_singular_values = {max_dsv:0.2e} max_D {max_D} max_X {env2.effective_chi()}')
+        print("\n".join([f"Corner {c} {getattr(env2[0,0],c).get_legs(0)}" for c in ["tl", "tr", "bl", "br"]]))
+        t0=t1
 
 
 @torch_test
@@ -114,7 +118,9 @@ def test_ctmrg_U1xU1_torch(config_kwargs,D : int=3, X : int=None, u1_charges : l
             a= yastn.rand(config_torch, 
                           legs= [ yastn.Leg(config_torch, s= shape_data[lid]["signature"], t=shape_data[lid]["charges"], D=shape_data[lid]["dimensions"]) 
                                     for lid in ["a_leg_t","a_leg_l","a_leg_b","a_leg_r","a_leg_s"] 
-                            ])                 
+                            ])
+            D= min( sum(l.D) for l in a.get_legs()[:4])
+            X= 2*D**2 if X is None else X            
     else:
         if u1_charges and u1_Ds and len(u1_charges)==len(u1_Ds):
             aux_ts,aux_Ds= u1_charges,u1_Ds
@@ -211,7 +217,7 @@ if __name__ == '__main__':
         nargs="+",
     )
     parser.add_argument("--input_shape_file", type=str, default=None)
-    args, unknown_args = parser.parse_known_args()
+    args = parser.parse_args()
 
     config_kwargs=  {'backend': args.backend, 'default_device': args.device,
             'default_fusion': args.default_fusion, 'tensordot_policy': args.tensordot_policy,}
