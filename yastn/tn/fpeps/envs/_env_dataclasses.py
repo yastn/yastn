@@ -84,6 +84,9 @@ class dataclasses_common():
             dd = {k.name: Tensor.from_dict(d[k.name], config=config) for k in fields(cls) if k.name in d}
             return cls(**dd)
 
+    def fields(self, among=None):
+        return [k.name for k in fields(self) if (among is None or k.name in among)]
+
 
 @dataclass()
 class EnvCTM_local(dataclasses_common):

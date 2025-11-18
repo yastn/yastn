@@ -106,7 +106,7 @@ class EnvCTM():
     def max_D(self):
         m_D = 0
         for site in self.sites():
-            for dirn in ['tl', 'tr', 'bl', 'br']:
+            for dirn in self[site].fields(among=['tl', 'tr', 'bl', 'br']):
                 if getattr(self[site], dirn) is not None:
                     m_D = max(max(getattr(self[site], dirn).get_shape()), m_D)
         return m_D
@@ -221,7 +221,7 @@ class EnvCTM():
              'data': {}}
         for site in self.sites():
             d_local = {dirn: getattr(self[site], dirn).save_to_dict()
-                       for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']}
+                       for dirn in self[site].fields()}
             d['data'][site] = d_local
         return d
 
@@ -259,7 +259,7 @@ class EnvCTM():
                     else:
                         setattr(self[site], dirn, rand(config, legs=[leg, leg.conj()]))
 
-                for ind, dirn in enumerate('tlbr'):
+                for ind, dirn in enumerate(['t', 'l', 'b', 'r']):
                     if self.nn_site(site, d=dirn) is None or init == 'eye':
                         tmp1 = identity_boundary(config, legs[ind].conj())
                         tmp0 = eye(config, legs=[leg0, leg0.conj()], isdiag=False)
@@ -876,10 +876,8 @@ class EnvCTM():
         _get_spec = lambda x: x.svd(compute_uv=False) if not (x is None) and not x.isdiag else x
         corner_sv = {}
         for site in env.sites():
-            corner_sv[site, 'tl'] = _get_spec(env[site].tl)
-            corner_sv[site, 'tr'] = _get_spec(env[site].tr)
-            corner_sv[site, 'bl'] = _get_spec(env[site].bl)
-            corner_sv[site, 'br'] = _get_spec(env[site].br)
+            for dirn in env[site].fields(among=['tl', 'tr', 'bl', 'br']):
+                corner_sv[site, dirn] = _get_spec(getattr(env[site], dirn))
         for k, v in corner_sv.items():
             if not corner_sv[k] is None:
                 corner_sv[k] = v / v.norm(p='inf')
