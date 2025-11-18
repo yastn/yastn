@@ -23,7 +23,6 @@ from ._env_boundary_mps import _clear_operator_input
 from ._env_dataclasses import EnvCTM_local, EnvCTM_projectors
 from ._env_measure import _measure_nsite
 from ._env_window import EnvWindow
-from ._env_ctm_distributed import update_extended_2site_projectors_D_
 from .._evolution import BondMetric
 from .._gates_auxiliary import fkron, gate_fix_swap_gate
 from .._geometry import Site, Lattice
@@ -917,6 +916,27 @@ class EnvCTM():
             corner_sv[k] = v / v.norm(p='inf')
         return corner_sv
 
+    def _partial_svd_predict_spec(self,leg0,leg1,sU):
+        # TODO externalize defaults for extending number of singular values to solve for
+        """
+        Used in block-wise partial SVD solvers.
+
+        Based on the projector spectra leg0, leg1, from (previous) projector pair,
+        suggest number of singular value triples to solve for in each of the blocks.
+
+        Parameters
+        ----------
+        leg0, leg1: yastn.Tensor
+            Projector spectra for the previous projector pair.
+        sU: int
+            Signature of U in SVD decomposition. See :func:`proj_corners` and :func:`linalg.svd`.
+        """
+        # the projector spectra for projector pair are related by charge conjugation
+        assert leg0 == leg1.conj(), f"Projector spectrum history mismatch between leg0={leg0} and leg1={leg1}"
+        #
+        l= leg0 if sU == leg0.s else leg1
+        return { t: max(d+10,int(d*1.1)) for t,d in zip(l.t, l.D) }
+
     def update_(env, opts_svd, moves='hv', method='2site', **kwargs):
         r"""
         Perform one step of CTMRG update. Environment tensors are updated in place.
@@ -1281,7 +1301,7 @@ def update_projectors_(env, site, move, opts_svd, **kwargs):
     if method == '1site':
         return update_1site_projectors_(env, *sites, move, opts_svd, **kwargs)
     elif method == '2site' and kwargs.get('devices', None):
-        update_extended_2site_projectors_D_(env, *sites, move, opts_svd, **kwargs)
+        return update_extended_2site_projectors_D_(env, *sites, move, opts_svd, **kwargs)
     elif method == '2site':
         return update_extended_2site_projectors_(env, *sites, move, opts_svd, **kwargs)
 
@@ -1349,7 +1369,7 @@ def update_extended_2site_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwa
     psh = env.proj
     svd_predict_spec= lambda s0,p0,s1,p1,sign: opts_svd.get('D_block', float('inf')) \
         if psh is None or (getattr(psh[s0],p0) is None or getattr(psh[s1],p1) is None) else \
-        _partial_svd_predict_spec(getattr(psh[s0],p0).get_legs(-1), getattr(psh[s1],p1).get_legs(-1), sign)
+        env._partial_svd_predict_spec(getattr(psh[s0],p0).get_legs(-1), getattr(psh[s1],p1).get_legs(-1), sign)
 
     cor_tl = env[tl].l @ env[tl].tl @ env[tl].t
     cor_tl = tensordot(cor_tl, psi[tl], axes=((2, 1), (0, 1)))
@@ -1486,6 +1506,180 @@ def update_extended_2site_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwa
 
         opts_svd["D_block"]= svd_predict_spec(bl, "vbr", br, "vbl", r_l.s[1])
         env.proj[bl].vbr, env.proj[br].vbl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
+
+
+def _validate_devices_list(devices: list[str] | None) -> None:
+    if devices:
+        assert len(devices) > 0, "At least one device must be provided."
+
+def update_extended_2site_projectors_D_(env_source, tl, tr, bl, br, move, opts_svd, 
+        devices: list[str] | None = None, **kwargs):
+    r"""
+    If move is 'hv' can use up to two devices to schedule the computations.
+    """
+    _validate_devices_list(devices)
+
+    use_qr = kwargs.get("use_qr", True)
+    kwargs["profiling_mode"]= env.profiling_mode
+    psh = env.proj
+    svd_predict_spec= lambda s0,p0,s1,p1,sign: opts_svd.get('D_block', float('inf')) \
+        if psh is None or (getattr(psh[s0],p0) is None or getattr(psh[s1],p1) is None) else \
+        env._partial_svd_predict_spec(getattr(psh[s0],p0).get_legs(-1), getattr(psh[s1],p1).get_legs(-1), sign)
+
+    # This part is shared between between l and r projectors for h move 
+    # and between t and b projectors for v move
+    #
+    # <RUN on device[0] of devices>
+    env = env_source.to(devices[0]) if devices else env_source
+    psi = env.psi
+
+    cor_tl = env[tl].l @ env[tl].tl @ env[tl].t
+    cor_tl = tensordot(cor_tl, psi[tl], axes=((2, 1), (0, 1)))
+    cor_tl = cor_tl.fuse_legs(axes=((0, 2), (1, 3)))
+
+    cor_bl = env[bl].b @ env[bl].bl @ env[bl].l
+    cor_bl = tensordot(cor_bl, psi[bl], axes=((2, 1), (1, 2)))
+    cor_bl = cor_bl.fuse_legs(axes=((0, 3), (1, 2)))
+
+    cor_tr = env[tr].t @ env[tr].tr @ env[tr].r
+    cor_tr = tensordot(cor_tr, psi[tr], axes=((1, 2), (0, 3)))
+    cor_tr = cor_tr.fuse_legs(axes=((0, 2), (1, 3)))
+
+    cor_br = env[br].r @ env[br].br @ env[br].b
+    cor_br = tensordot(cor_br, psi[br], axes=((2, 1), (2, 3)))
+    cor_br = cor_br.fuse_legs(axes=((0, 2), (1, 3)))
+
+    if any(x in move for x in 'lrh'):
+        cor_tt = cor_tl @ cor_tr  # b(left) b(right)
+        cor_bb = cor_br @ cor_bl  # t(right) t(left)
+
+    if any(x in move for x in 'rh'):
+        sl = psi[tl].get_shape(axes=2)
+        ltl = env.nn_site(tl, d='l')
+        lbl = env.nn_site(bl, d='l')
+        if sl == 1 and ltl and lbl:
+            cor_ltl = env[ltl].l @ env[ltl].tl @ env[ltl].t
+            cor_ltl = tensordot(cor_ltl, psi[ltl], axes=((2, 1), (0, 1)))
+            cor_ltl = tensordot(cor_ltl, env[tl].t, axes=(1, 0))
+            cor_ltl = tensordot(cor_ltl, psi[tl], axes=((3, 2), (0, 1)))
+            cor_ltl = cor_ltl.fuse_legs(axes=((0, 1, 3), (2, 4)))
+
+            cor_lbl = env[lbl].b @ env[lbl].bl @ env[lbl].l
+            cor_lbl = tensordot(cor_lbl, psi[lbl], axes=((2, 1), (1, 2)))
+            cor_lbl = env[bl].b @ cor_lbl
+            cor_lbl = tensordot(cor_lbl, psi[bl], axes=((4, 1), (1, 2)))
+            cor_lbl = cor_lbl.fuse_legs(axes=((0, 4), (1, 2, 3)))
+
+            cor_ltt = cor_ltl @ cor_tr  # b(left) b(right)
+            cor_lbb = cor_br @ cor_lbl  # t(right) t(left)
+            _, r_t = qr(cor_ltt, axes=(0, 1)) if use_qr else (None, cor_ltt)
+            _, r_b = qr(cor_lbb, axes=(1, 0)) if use_qr else (None, cor_lbb.T)
+        else:
+            _, r_t = qr(cor_tt, axes=(0, 1)) if use_qr else (None, cor_tt)
+            _, r_b = qr(cor_bb, axes=(1, 0)) if use_qr else (None, cor_bb.T)
+        
+        opts_svd["D_block"]= svd_predict_spec(tr, "hrb", br, "hrt", r_t.s[1])
+        hrb, hrt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
+        env.proj[tr].hrb, env.proj[br].hrt= hrb.to(env_source.config.default_device), \
+            hrt.to(env_source.config.default_device)
+
+    if any(x in move for x in 'lh'):
+        sr = psi[tr].get_shape(axes=2)
+        rtr = env.nn_site(tr, d='r')
+        rbr = env.nn_site(br, d='r')
+        if sr == 1 and rtr and rbr:
+            cor_rtr = env[rtr].t @ env[rtr].tr @ env[rtr].r
+            cor_rtr = tensordot(cor_rtr, psi[rtr], axes=((1, 2), (0, 3)))
+            cor_rtr = env[tr].t @ cor_rtr
+            cor_rtr = tensordot(cor_rtr, psi[tr], axes=((1, 3), (0, 3)))
+            cor_rtr = cor_rtr.fuse_legs(axes=((0, 3), (1, 2, 4)))
+
+            cor_rbr = env[rbr].r @ env[rbr].br @ env[rbr].b
+            cor_rbr = tensordot(cor_rbr, psi[rbr], axes=((2, 1), (2, 3)))
+            cor_rbr = tensordot(cor_rbr, env[br].b, axes=(1, 0))
+            cor_rbr = tensordot(cor_rbr, psi[br], axes=((3, 2), (2, 3)))
+            cor_rbr = cor_rbr.fuse_legs(axes=((0, 1, 3), (2, 4)))
+
+            cor_rtt = cor_tl @ cor_rtr  # b(left) b(right)
+            cor_rbb = cor_rbr @ cor_bl  # t(right) t(left)
+            _, r_t = qr(cor_rtt, axes=(1, 0)) if use_qr else (None, cor_rtt.T)
+            _, r_b = qr(cor_rbb, axes=(0, 1)) if use_qr else (None, cor_rbb)
+        else:
+            _, r_t = qr(cor_tt, axes=(1, 0)) if use_qr else (None, cor_tt.T)
+            _, r_b = qr(cor_bb, axes=(0, 1)) if use_qr else (None, cor_bb)
+
+        opts_svd["D_block"]= svd_predict_spec(tl, "hlb", bl, "hlt", r_t.s[1])
+        if devices and len(devices) > 1:
+            r_t, r_b = r_t.to(device=devices[1]), r_b.to(device=devices[1])
+        hlb, hlt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
+        env.proj[tl].hlb, env.proj[bl].hlt= hlb.to(env_source.config.default_device), \
+            hlt.to(env_source.config.default_device)
+
+    if any(x in move for x in 'tbv'):
+        cor_ll = cor_bl @ cor_tl  # l(bottom) l(top)
+        cor_rr = cor_tr @ cor_br  # r(top) r(bottom)
+
+    if any(x in move for x in 'tv'):
+        sb = psi[bl].get_shape(axes=3)
+        bbl = env.nn_site(bl, d='b')
+        bbr = env.nn_site(br, d='b')
+        if sb == 1 and bbl and bbr:
+            cor_bbl = env[bbl].b @ env[bbl].bl @ env[bbl].l
+            cor_bbl = tensordot(cor_bbl, psi[bbl], axes=((2, 1), (1, 2)))
+            cor_bbl = tensordot(cor_bbl, env[bl].l, axes=(1, 0))
+            cor_bbl = tensordot(cor_bbl, psi[bl], axes=((3, 1), (1, 2)))
+            cor_bbl = cor_bbl.fuse_legs(axes=((0, 1, 4), (2, 3)))
+
+            cor_bbr = env[bbr].r @ env[bbr].br @ env[bbr].b
+            cor_bbr = tensordot(cor_bbr, psi[bbr], axes=((2, 1), (2, 3)))
+            cor_bbr = env[br].r @ cor_bbr
+            cor_bbr = tensordot(cor_bbr, psi[br], axes=((3, 1), (2, 3)))
+            cor_bbr = cor_bbr.fuse_legs(axes=((0, 3), (1, 2, 4)))
+
+            cor_bll = cor_bbl @ cor_tl  # l(bottom) l(top)
+            cor_brr = cor_tr @ cor_bbr  # r(top) r(bottom)
+            _, r_l = qr(cor_bll, axes=(0, 1)) if use_qr else (None, cor_bll)
+            _, r_r = qr(cor_brr, axes=(1, 0)) if use_qr else (None, cor_brr.T)
+        else:
+            _, r_l = qr(cor_ll, axes=(0, 1)) if use_qr else (None, cor_ll)
+            _, r_r = qr(cor_rr, axes=(1, 0)) if use_qr else (None, cor_rr.T)
+
+        opts_svd["D_block"]= svd_predict_spec(tl, "vtr", tr, "vtl", r_l.s[1])
+        vtr, vtl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
+        env.proj[tl].vtr, env.proj[tr].vtl= vtr.to(env_source.config.default_device), \
+            vtl.to(env_source.config.default_device)
+
+    if any(x in move for x in 'bv'):
+        st = psi[tl].get_shape(axes=3)
+        ttl = env.nn_site(tl, d='t')
+        ttr = env.nn_site(tr, d='t')
+        if st == 1 and ttl and ttr:
+            cor_ttl = env[ttl].l @ env[ttl].tl @ env[ttl].t
+            cor_ttl = tensordot(cor_ttl, psi[ttl], axes=((2, 1), (0, 1)))
+            cor_ttl = env[tl].l @ cor_ttl
+            cor_ttl = tensordot(cor_ttl, psi[tl], axes=((3, 1), (0, 1)))
+            cor_ttl = cor_ttl.fuse_legs(axes=((0, 3), (1, 2, 4)))
+
+            cor_ttr = env[ttr].t @ env[ttr].tr @ env[ttr].r
+            cor_ttr = tensordot(cor_ttr, psi[ttr], axes=((1, 2), (0, 3)))
+            cor_ttr = tensordot(cor_ttr, env[tr].r, axes=(1, 0))
+            cor_ttr = tensordot(cor_ttr, psi[tr], axes=((2, 3), (0, 3)))
+            cor_ttr = cor_ttr.fuse_legs(axes=((0, 1, 3), (2, 4)))
+
+            cor_tll = cor_bl @ cor_ttl  # l(bottom) l(top)
+            cor_trr = cor_ttr @ cor_br  # r(top) r(bottom)
+            _, r_l = qr(cor_tll, axes=(1, 0)) if use_qr else (None, cor_tll.T)
+            _, r_r = qr(cor_trr, axes=(0, 1)) if use_qr else (None, cor_trr)
+        else:
+            _, r_l = qr(cor_ll, axes=(1, 0)) if use_qr else (None, cor_ll.T)
+            _, r_r = qr(cor_rr, axes=(0, 1)) if use_qr else (None, cor_rr)
+
+        opts_svd["D_block"]= svd_predict_spec(bl, "vbr", br, "vbl", r_l.s[1])
+        if devices and len(devices) > 1:
+            r_l, r_r = r_l.to(device=devices[1]), r_r.to(device=devices[1])
+        vbr, vbl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
+        env.proj[bl].vbr, env.proj[br].vbl= vbr.to(env_source.config.default_device), \
+            vbl.to(env_source.config.default_device)
 
 
 def update_1site_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwargs):
@@ -1727,24 +1921,3 @@ def update_storage_(old, new):
         for k, v in new[site].__dict__.items():
             if v is not None:
                 setattr(old[site], k, v)
-
-def _partial_svd_predict_spec(leg0,leg1,sU):
-    # TODO externalize defaults for extending number of singular values to solve for
-    """
-    Used in block-wise partial SVD solvers.
-
-    Based on the projector spectra leg0, leg1, from (previous) projector pair,
-    suggest number of singular value triples to solve for in each of the blocks.
-
-    Parameters
-    ----------
-    leg0, leg1: yastn.Tensor
-        Projector spectra for the previous projector pair.
-    sU: int
-        Signature of U in SVD decomposition. See :func:`proj_corners` and :func:`linalg.svd`.
-    """
-    # the projector spectra for projector pair are related by charge conjugation
-    assert leg0 == leg1.conj(), f"Projector spectrum history mismatch between leg0={leg0} and leg1={leg1}"
-    #
-    l= leg0 if sU == leg0.s else leg1
-    return { t: max(d+10,int(d*1.1)) for t,d in zip(l.t, l.D) }
