@@ -218,7 +218,6 @@ class Peps(Lattice):
     def __add__(self, other) -> Peps:
         return add(self, other)
 
-
 def add(*states, amplitudes=None, **kwargs) -> MpsMpoOBC:
     r"""
     Linear superposition of several PEPSs with specific amplitudes, i.e., :math:`\sum_j \textrm{amplitudes[j]}{\times}\textrm{states[j]}`.
@@ -292,6 +291,10 @@ class Peps2Layers():
     def __getitem__(self, site) -> DoublePepsTensor:
         """ Get tensor for site. """
         return DoublePepsTensor(bra=self.bra[site], ket=self.ket[site])
+
+    def to(self, device: str=None, dtype: str=None) -> Peps2Layers:
+        return Peps2Layers(bra=self.bra.to(device=device, dtype=dtype),
+                           ket=self.ket.to(device=device, dtype=dtype) if not self.ket_is_bra else None)
 
     def to_dict(self, level=2) -> dict:
         r"""

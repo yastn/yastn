@@ -22,6 +22,10 @@ __all__ = ["EnvBP_local", "EnvCTM_local", "EnvCTM_projectors", "EnvCTM_c4v_local
 @dataclass()
 class dataclasses_common():
 
+    def to(self, device: str=None, dtype: str=None):
+        return type(self)(**{k.name: getattr(self, k.name).to(device=device, dtype=dtype) for k in fields(self)
+                             if getattr(self, k.name) is not None})
+
     def copy(self):
         return type(self)(**{k.name: getattr(self, k.name).copy() for k in fields(self)
                              if getattr(self, k.name) is not None})

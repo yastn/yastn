@@ -538,6 +538,23 @@ class Lattice():
             d['data'][site] = self[site].save_to_dict()
         return d
 
+    def to(self, device:str=None, dtype:str=None):
+        r"""
+        Move all PEPS tensors to specified device and/or change their data type.
+
+        Parameters
+        ----------
+        device: str
+            Target device.
+        dtype: str
+            Target data type.
+        """
+        net = type(self)(geometry=self.geometry)
+        for ind in self._site_data:
+            if self._site_data[ind] is not None:
+                net._site_data[ind] = self._site_data[ind].to(device=device, dtype=dtype)
+        return net
+
     def clone(self) -> Lattice:
         r"""
         Returns a deep clone of the PEPS instance by :meth:`cloning<yastn.Tensor.clone>` each tensor in

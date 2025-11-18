@@ -56,7 +56,7 @@ def distributeU1_exponential(D, p = 0.25):
     return sectors
 
 
-def profile_ctmrg(on_site_t, X, config_profile, svd_policy="fullrank"):
+def profile_ctmrg(on_site_t, X, config_profile, svd_policy="fullrank", devices=None):
     USE_TORCH_NVTX= ("torch" in config_profile.backend.BACKEND_ID)
 
     geometry= RectangularUnitcell(pattern=[[0,]])
@@ -67,7 +67,7 @@ def profile_ctmrg(on_site_t, X, config_profile, svd_policy="fullrank"):
     nsteps= max(2,X//(D**2))
     env = fpeps.EnvCTM(psi, init='eye')
     info = env.ctmrg_(opts_svd = {"policy": svd_policy, "D_total": X, 'fix_signs': False, 'tol': 1.0e-12}, max_sweeps= nsteps, 
-                            truncation_f=None, use_qr=False, checkpoint_move=False)
+                            truncation_f=None, use_qr=False, checkpoint_move=False, devices=devices)
     
     # clone current env
     env2= env.clone()
@@ -90,7 +90,8 @@ def profile_ctmrg(on_site_t, X, config_profile, svd_policy="fullrank"):
     if USE_TORCH_NVTX:
         env2.profiling_mode= "NVTX"
     for ctm_step in env2.iterate_(opts_svd=opts_svd, moves='hv', method='2site', max_sweeps=max_sweeps, 
-                                  iterator_step=1, corner_tol=corner_tol, truncation_f=None, use_qr=False, checkpoint_move=False):
+                                  iterator_step=1, corner_tol=corner_tol, truncation_f=None, use_qr=False, checkpoint_move=False,
+                                  devices=devices):
         sweep, max_dsv, max_D, converged = ctm_step
         t1= time.perf_counter()
         print(f'Sweep = {sweep:03d} t {t1-t0} [s] max_diff_corner_singular_values = {max_dsv:0.2e} max_D {max_D} max_X {env2.effective_chi()}')
@@ -193,7 +194,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='profile ctmrg', allow_abbrev=False)
     parser.add_argument("--backend", help='backend', default='np', choices=['np','torch','torch_cpp'], action='store')
-    parser.add_argument("--device", help='cpu or cuda', default='cpu', action='store')
+    parser.add_argument("--devices", help='cpu or (list of) cuda. Default is cpu', default=None, dest='devices', nargs="+")
     parser.add_argument("--tensordot_policy", choices=['fuse_to_matrix', 'fuse_contracted', 'no_fusion'], default='fuse_to_matrix', action='store')
     parser.add_argument("--default_fusion", choices=['hard', 'meta'], default='hard', action='store')
     parser.add_argument("--svd_policy", type=str, default='fullrank', choices=["fullrank", "qr", "randomized", "block_arnoldi", "block_propack"], help="svd driver")
@@ -219,16 +220,23 @@ if __name__ == '__main__':
     parser.add_argument("--input_shape_file", type=str, default=None)
     args = parser.parse_args()
 
-    config_kwargs=  {'backend': args.backend, 'default_device': args.device,
+    # process devices
+    if args.devices is None:
+        args.devices= ['cpu']
+    ctm_devices= [] if len(args.devices)==1 else args.devices
+    
+    config_kwargs=  {'backend': args.backend, 'default_device': args.devices[0],
             'default_fusion': args.default_fusion, 'tensordot_policy': args.tensordot_policy,}
     
     if args.sym == 'Z2':
-        test_ctmrg_Z2_torch(config_kwargs, D=args.D, X=args.X, svd_policy=args.svd_policy)
+        test_ctmrg_Z2_torch(config_kwargs, D=args.D, X=args.X, svd_policy=args.svd_policy,
+                            devices=ctm_devices)
     if args.sym == 'U1':
-        test_ctmrg_U1_torch(config_kwargs, D=args.D, X=args.X, u1_charges=args.u1_charges, u1_Ds=args.u1_Ds, svd_policy=args.svd_policy)
+        test_ctmrg_U1_torch(config_kwargs, D=args.D, X=args.X, u1_charges=args.u1_charges, u1_Ds=args.u1_Ds, 
+                            svd_policy=args.svd_policy, devices=ctm_devices)
     if args.sym == 'U1xU1':
         test_ctmrg_U1xU1_torch(config_kwargs, D=args.D, X=args.X, u1_charges=args.u1_charges, u1_Ds=args.u1_Ds, 
-                               input_shape_file=args.input_shape_file, svd_policy=args.svd_policy)
+                               input_shape_file=args.input_shape_file, svd_policy=args.svd_policy, devices=ctm_devices)
 
 
 

@@ -23,6 +23,7 @@ from ._env_boundary_mps import _clear_operator_input
 from ._env_dataclasses import EnvCTM_local, EnvCTM_projectors
 from ._env_measure import _measure_nsite
 from ._env_window import EnvWindow
+from ._env_ctm_distributed import update_extended_2site_projectors_D_
 from .._evolution import BondMetric
 from .._gates_auxiliary import fkron, gate_fix_swap_gate
 from .._geometry import Site, Lattice
@@ -150,6 +151,19 @@ class EnvCTM():
         env = cls(self.psi, init=None)
         env.env = self.env.shallow_copy()
         env.proj = self.proj.shallow_copy()
+        return env
+
+    def to(self, device: str=None, dtype: str=None) -> EnvCTM:
+        r"""
+        Return a clone of the environment on specified device and/or dtype.
+        Resulting environment is a part of the computational graph.
+        Data of environment tensors in the new environment is indepedent
+        from the originals.
+        """
+        #TODO Ket ?
+        env = type(self)(psi=self.psi.bra.to(device=device, dtype=dtype), init=None)
+        env.env = self.env.to(device=device, dtype=dtype)
+        env.proj = self.proj.to(device=device, dtype=dtype)
         return env
 
     def clone(self) -> EnvCTM:
@@ -1266,9 +1280,10 @@ def update_projectors_(env, site, move, opts_svd, **kwargs):
     #     return update_2site_projectors_(proj, *sites, move, env, opts_svd, **kwargs)
     if method == '1site':
         return update_1site_projectors_(env, *sites, move, opts_svd, **kwargs)
+    elif method == '2site' and kwargs.get('devices', None):
+        update_extended_2site_projectors_D_(env, *sites, move, opts_svd, **kwargs)
     elif method == '2site':
         return update_extended_2site_projectors_(env, *sites, move, opts_svd, **kwargs)
-
 
 # def update_2site_projectors_(proj, tl, tr, bl, br, move, env, opts_svd, **kwargs):
 #     r"""
@@ -1332,10 +1347,9 @@ def update_extended_2site_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwa
     use_qr = kwargs.get("use_qr", True)
     kwargs["profiling_mode"]= env.profiling_mode
     psh = env.proj
-    # Inherit _partial_svd_predict_spec from EnvCTM
     svd_predict_spec= lambda s0,p0,s1,p1,sign: opts_svd.get('D_block', float('inf')) \
         if psh is None or (getattr(psh[s0],p0) is None or getattr(psh[s1],p1) is None) else \
-        env._partial_svd_predict_spec(getattr(psh[s0],p0).get_legs(-1), getattr(psh[s1],p1).get_legs(-1), sign)
+        _partial_svd_predict_spec(getattr(psh[s0],p0).get_legs(-1), getattr(psh[s1],p1).get_legs(-1), sign)
 
     cor_tl = env[tl].l @ env[tl].tl @ env[tl].t
     cor_tl = tensordot(cor_tl, psi[tl], axes=((2, 1), (0, 1)))
