@@ -251,17 +251,19 @@ class EnvCTM_c4v(EnvCTM):
             d['data'][site] = d_local
         return d
 
-    def ctmrg_(env, opts_svd, method='default', max_sweeps=1, iterator_step=1, corner_tol=None, truncation_f: Callable=None,  **kwargs):
+    def ctmrg_(env, opts_svd, method='default', max_sweeps=1, iterator=False, corner_tol=None, truncation_f: Callable=None,  **kwargs):
+        kwargs["iterator_step"] = kwargs.get("iterator_step", int(iterator))
         if "checkpoint_move" in kwargs:
             if env.config.backend.BACKEND_ID == "torch":
                 assert kwargs["checkpoint_move"] in ['reentrant','nonreentrant',False], f"Invalid choice for {kwargs['checkpoint_move']}"
         # BUG: fails when uncomment the following line
         # kwargs["truncation_f"]= truncation_f
-        tmp = _iterate_ctmrg_(env, opts_svd, method, max_sweeps, iterator_step, corner_tol, **kwargs)
-        return tmp if iterator_step else next(tmp)
+        tmp = _iterate_ctmrg_(env, opts_svd, method, max_sweeps, corner_tol, **kwargs)
+        return tmp if kwargs["iterator_step"] else next(tmp)
 
-def _iterate_ctmrg_(env, opts_svd, method, max_sweeps, iterator_step, corner_tol, **kwargs):
+def _iterate_ctmrg_(env, opts_svd, method, max_sweeps, corner_tol, **kwargs):
     """ Generator for ctmrg_(). """
+    iterator_step = kwargs.get("iterator_step", 0)
     max_dsv, converged = None, False
     proj_history = None
     for sweep in range(1, max_sweeps + 1):

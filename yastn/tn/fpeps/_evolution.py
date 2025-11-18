@@ -16,10 +16,13 @@
 from itertools import pairwise
 from typing import NamedTuple
 
+import numpy as np
+
 from ._gates_auxiliary import Gate, gate_from_mpo
 from ._peps import Peps2Layers
 from ..mps import MpsMpoOBC
 from ...tensor import tensordot, vdot, svd_with_truncation, YastnError, Tensor
+
 
 
 class BondMetric(NamedTuple):
@@ -43,11 +46,14 @@ class Evolution_out(NamedTuple):
     truncation_errors: dict[str, float] = ()
     iterations: dict[str, int] = ()
     pinv_cutoffs: dict[str, float] = ()
+    loopiness: float = 0
+    truncated_sectors:dict[str, tuple] = ()
 
 
 def evolution_step_(env, gates, opts_svd, method='mpo', fix_metric=0,
                     pinv_cutoffs=(1e-12, 1e-11, 1e-10, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4),
-                    max_iter=100, tol_iter=1e-13, initialization="EAT_SVD"):
+                    max_iter=100, tol_iter=1e-13, initialization="EAT_SVD",
+                    opts_post_truncation=None):
     r"""
     Perform a single step of PEPS evolution by applying a list of gates.
     Truncate bond dimension after each application of a two-site gate.
@@ -84,6 +90,8 @@ def evolution_step_(env, gates, opts_svd, method='mpo', fix_metric=0,
     initialization: str
         Tested initializations of iterative optimization. The one resulting in the smallest error is selected.
         Possible options are 'SVD' (svd initialization only), 'EAT' (EAT optimization only), 'SVD_EAT' (tries both).
+    opts_post_truncation: None | dict
+        Arguments passed to post_truncation_ function of the environment. The default is None.
 
     Returns
     -------
@@ -102,7 +110,7 @@ def evolution_step_(env, gates, opts_svd, method='mpo', fix_metric=0,
     """
     psi = env.psi
     if isinstance(psi, Peps2Layers):
-        psi = psi.ket  # to make it work with CtmEnv
+        psi = psi.ket
 
     infos = []
 
@@ -111,13 +119,17 @@ def evolution_step_(env, gates, opts_svd, method='mpo', fix_metric=0,
         gates = [ng for og in gates for ng in split_gate_2site(og)]
 
     for gate in gates:
+        psi.move_to_patch(gate.sites)
         psi.apply_gate_(gate)
 
+        env.move_to_patch(gate.sites)
         env.pre_truncation_(gate.sites)
         for s0, s1 in pairwise(gate.sites):
-            info = truncate_(env, opts_svd, (s0, s1), fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization)
+            info = truncate_(env, opts_svd, (s0, s1), fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization, opts_post_truncation)
             infos.append(info)
 
+        psi.apply_patch()
+        env.apply_patch()
     return infos
 
 
@@ -142,7 +154,8 @@ def split_gate_2site(gate):
 def truncate_(env, opts_svd, bond=None,
               fix_metric=0,
               pinv_cutoffs=(1e-12, 1e-11, 1e-10, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4),
-              max_iter=100, tol_iter=1e-13, initialization="EAT_SVD"):
+              max_iter=100, tol_iter=1e-13, initialization="EAT_SVD",
+              opts_post_truncation=None):
     r"""
     Truncate virtual bond dimensions of PEPS.
 
@@ -175,6 +188,8 @@ def truncate_(env, opts_svd, bond=None,
     initialization: str
         Tested initializations of iterative optimization. The one resulting in the smallest error is selected.
         Possible options are 'SVD' (svd initialization only), 'EAT' (EAT optimization only), 'SVD_EAT' (tries both).
+    opts_post_truncation: None | dict
+        Arguments passed to post_truncation_ function of the environment. The default is None.
 
     Returns
     -------
@@ -193,7 +208,10 @@ def truncate_(env, opts_svd, bond=None,
     """
     psi = env.psi
     if isinstance(psi, Peps2Layers):
-        psi = psi.ket  # to make it work with CtmEnv
+        psi = psi.ket  # to make it work with EnvCTM and EnvBP
+
+    if opts_post_truncation is None:
+        opts_post_truncation = {}
 
     if bond is None:
         bonds = psi.bonds()
@@ -230,9 +248,303 @@ def truncate_(env, opts_svd, bond=None,
             psi[s0] = tensordot(Q0, M0, axes=(2, 0)).transpose(axes=(0, 1, 4, 2, 3))  # t l b r sa
             psi[s1] = tensordot(M1, Q1, axes=(1, 0)) # t l b r sa
 
-        env.post_truncation_(bond)
+        env.post_truncation_(bond, **opts_post_truncation)
         infos.append(Evolution_out(**info))
     return infos[0] if len(bonds) == 1 else infos
+
+def build_g_rj(r_slices: dict, G0: Tensor):
+
+    g = []
+    for key1 in r_slices.keys():
+        for ii in range(len(r_slices[key1])):
+            g.append([])
+            for key2 in r_slices.keys():
+                for jj in range(len(r_slices[key2])):
+                    temp = tensordot(r_slices[key1][ii], G0, axes=((0, 1), (2, 3)))
+                    temp = tensordot(r_slices[key2][jj], temp, axes=((0, 1), (0, 1)), conj=(1, 0))._data[0]
+                    g[len(g) - 1].append(temp)
+    g = np.array(g)
+    g = (g + g.T.conjugate()) / 2
+    return g
+
+def initial_truncation_ZMT1(R0, R1, fgf, opts_svd, fRR, RRgRR, pinv_cutoffs, pre_initial=None):
+
+    if opts_svd.get("preD") is None:
+        preD = 32767
+    else:
+        preD = opts_svd["preD"]
+
+    if pre_initial == "EAT":
+        (R0, R1), _, _, _= initial_truncation_EAT(R0, R1, fgf, fRR, RRgRR, {"D_total": preD, "tol":-1}, pinv_cutoffs)
+    elif pre_initial == "SVD":
+        R0, S, R1 = svd_with_truncation(R0 @ R1, sU=R0.s[1], D_total=preD)
+        S = S.sqrt()
+        R0, R1 = S.broadcast(R0, R1, axes=(1, 0))
+
+    G0 = fgf.unfuse_legs(axes=(0, 1))
+
+    G = fgf.unfuse_legs(axes=1)
+    G = tensordot(G, R0, axes=(1, 0))
+    G = tensordot(G, R1, axes=(1, 1))
+    G = G.fuse_legs(axes=((0, (1, 2))))
+    G = G.unfuse_legs(axes=0)
+    G = tensordot(R1.conj(), G, axes=(1, 1))
+    G = tensordot(R0.conj(), G, axes=(0, 1))
+    Gremove = G.unfuse_legs(axes=2)
+    Gremove.remove_zero_blocks()
+    Gremove = Gremove.fuse_legs(axes=((0, 2), (1, 3)))
+    _, S, _ = svd_with_truncation(Gremove, axes=(0, 1), policy='lowrank', D_block=2, D_total=2)
+    S = np.diag(S.to_numpy())
+    loopiness = np.min(S) / np.max(S)
+
+    # slice RA to column vectors
+    data_r0 = R0.T.compress_to_1d()
+    accumulated = 0
+    r0_slices = {}
+    D_total = 0
+    len_t = len(data_r0[1]['struct'].t[0]) // 2
+    for ii in range(len(data_r0[1]['struct'].D)):
+        r0_slices[data_r0[1]['struct'].t[ii]] = []
+        Ds = data_r0[1]['struct'].D[ii]
+        D_total = D_total + Ds[0]
+        for _ in range(Ds[0]):
+            data = data_r0[0][accumulated:(accumulated + Ds[1])]
+            tensor = Tensor(config=R0.config, s=R0.T.get_signature(), dtype="complex128")
+            tensor.set_block(ts=(data_r0[1]['struct'].t[ii][0:len_t], data_r0[1]['struct'].t[ii][len_t:]), val=data, Ds=[1, Ds[1]])
+            r0_slices[data_r0[1]['struct'].t[ii]].append(tensor.T)
+            accumulated = accumulated + Ds[1]
+
+    # slice RB to row vectors
+    data_r1 = R1.compress_to_1d()
+    accumulated = 0
+    r1_slices = {}
+    for ii in range(len(data_r1[1]['struct'].D)):
+        r1_slices[data_r1[1]['struct'].t[ii]] = []
+        Ds = data_r1[1]['struct'].D[ii]
+        for _ in range(Ds[0]):
+            data = data_r1[0][accumulated:(accumulated + Ds[1])]
+            tensor = Tensor(config=R0.config, s=R1.get_signature(), dtype="complex128")
+            tensor.set_block(ts=(data_r1[1]['struct'].t[ii][0:len_t], data_r1[1]['struct'].t[ii][:len_t]), val=data, Ds=[1, Ds[1]])
+            r1_slices[data_r1[1]['struct'].t[ii]].append(tensor)
+            accumulated = accumulated + Ds[1]
+    # build Rj=RAj * RBj
+    r_slices = {}
+    for ii in range(len(data_r0[1]['struct'].D)):
+        r0s = r0_slices[data_r0[1]['struct'].t[ii]]
+        r1s = r1_slices.get(data_r0[1]['struct'].t[ii])
+        if r1s is not None:
+            r_slices[data_r0[1]['struct'].t[ii]] = []
+            for kk in range(len(r0s)):
+                r0 = r0s[kk]
+                r1 = r1s[kk]
+                r_slices[data_r0[1]['struct'].t[ii]].append(r0 @ r1)
+
+    weight = {}
+    for ii in range(len(data_r0[1]['struct'].D)):
+        Ds = data_r0[1]['struct'].D[ii]
+        weight[data_r0[1]['struct'].t[ii]] = [1.0 + 0.0j for _ in range (Ds[0])]
+
+    removed = 0
+    while ((D_total - removed) > opts_svd['D_total']):
+        g = build_g_rj(r_slices, G0)
+        S, W = np.linalg.eigh(g)
+
+        to_be_removed_w = 0
+        to_be_eliminated = np.argmax(np.abs(W[:, to_be_removed_w].T))
+        coef = 1
+
+        # update weight & kick dropped index
+        s = 0
+        sum_weight2 = 0
+        for key in r_slices.keys():
+            eliminate_ii = None
+            for ii in range(len(r_slices[key])):
+                if s == to_be_eliminated:
+                    eliminate_ii = ii
+                else:
+                    weight[key][ii] = 1 - (W[s,to_be_removed_w] / W[to_be_eliminated,to_be_removed_w]) * coef
+                    sum_weight2 = sum_weight2 + np.abs(weight[key][ii]) ** 2
+                s = s + 1
+
+            if eliminate_ii is not None:
+                weight[key].pop(eliminate_ii)
+                r_slices[key].pop(eliminate_ii)
+                r0_slices[key].pop(eliminate_ii)
+                r1_slices[key].pop(eliminate_ii)
+
+        for key in r_slices.keys():
+            for ii in range(len(r_slices[key])):
+                r_slices[key][ii] = r_slices[key][ii] * weight[key][ii]
+                r0_slices[key][ii] = r0_slices[key][ii] * (weight[key][ii] ** 0.5)
+                r1_slices[key][ii] = r1_slices[key][ii] * (weight[key][ii] ** 0.5)
+
+        removed = removed + 1
+
+
+    # Build MA and MB
+    MA = Tensor(config=R0.config, s=R0.T.get_signature(), dtype="complex128")
+    for key in r0_slices.keys():
+        temp_block = []
+        for ii in range(len(r0_slices[key])):
+            temp_block.append(r0_slices[key][ii]._data)
+        temp_block = np.array(temp_block)
+        if len(temp_block) != 0:
+            MA.set_block(ts=(r0_slices[key][ii].get_legs()[1].t[0], r0_slices[key][ii].get_legs()[0].t[0]),
+                        Ds=temp_block.shape,
+                        val=temp_block)
+    MA = MA.T
+
+    MB = Tensor(config=R1.config, s=R1.get_signature(), dtype="complex128")
+    for key in r1_slices.keys():
+        temp_block = []
+        for ii in range(len(r1_slices[key])):
+            temp_block.append(r1_slices[key][ii]._data)
+        temp_block = np.array(temp_block)
+        if len(temp_block) != 0:
+            MB.set_block(ts=(r1_slices[key][ii].get_legs()[0].t[0], r1_slices[key][ii].get_legs()[1].t[0]),
+                        Ds=temp_block.shape,
+                        val=temp_block)
+
+    MAMB = (MA @ MB)
+
+    return (MA, MB), abs(calculate_truncation_error2(MAMB, fgf, fRR, RRgRR)), loopiness
+
+def build_g_ijkl(fgf: Tensor, R0: Tensor, R1: Tensor):
+
+    G = fgf.unfuse_legs(axes=1)
+    G = tensordot(G, R0, axes=(1, 0))
+    G = tensordot(G, R1, axes=(1, 1))
+    G = G.fuse_legs(axes=((0, (1, 2))))
+    G = G.unfuse_legs(axes=0)
+    G = tensordot(R1.conj(), G, axes=(1, 1))
+    G = tensordot(R0.conj(), G, axes=(0, 1))
+    G = G.unfuse_legs(axes=2)
+    # G = G.fuse_legs(axes=((0, 1), 2))
+
+    gts = G.compress_to_1d()[1]['struct'].t
+    slices = G.compress_to_1d()[1]['slices']
+    gts_slices_dict = dict(zip(gts, slices))
+
+    ts = G.get_legs()[0].t
+
+    g = None
+    for key1 in ts:
+        temp = None
+        for key2 in ts:
+            target_key = (*key1, *key1, *key2, *key2)
+
+            mat_begin = gts_slices_dict[target_key].slcs[0][0]
+            mat_end = gts_slices_dict[target_key].slcs[0][1]
+            mat_shape = [gts_slices_dict[target_key].D[0] * gts_slices_dict[target_key].D[1], gts_slices_dict[target_key].D[2] * gts_slices_dict[target_key].D[3]]
+            mat = G._data[mat_begin:mat_end].reshape(mat_shape)
+            if temp is None:
+                temp = mat
+            else:
+                temp = np.hstack((temp, mat))
+        if g is None:
+            g = temp
+        else:
+            g = np.vstack((g, temp))
+
+    return (g + g.T.conjugate()) / 2
+
+
+def initial_truncation_ZMT3(R0, R1, fgf, opts_svd:dict, fRR, RRgRR, pinv_cutoffs, pre_initial=None):
+
+    if opts_svd.get("preD") is None:
+        preD = 32767
+    else:
+        preD = opts_svd["preD"]
+
+    if pre_initial is None:
+        MA = R0
+        MB = R1
+    elif pre_initial == "SVD":
+        R0, S, R1 = svd_with_truncation(R0 @ R1, sU=R0.s[1], D_total=preD)
+        S = S.sqrt()
+        MA, MB = S.broadcast(R0, R1, axes=(1, 0))
+    elif pre_initial == "EAT":
+        (MA, MB), error2, _, _ = initial_truncation_EAT(R0, R1, fgf, fRR, RRgRR, {"D_total":preD, "tol":-1}, pinv_cutoffs)
+    elif pre_initial[:4] == "ZMT1":
+        opts_svd_pre = {'D_total': preD, 'preD':None, 'tol':-1}
+        if pre_initial == "ZMT10":
+            pre_initial_ = None
+        elif pre_initial == "ZMT1eat":
+            pre_initial_ = "EAT"
+        elif pre_initial == "ZMT1svd":
+            pre_initial_ = "SVD"
+        (MA, MB), error2, _ = initial_truncation_ZMT1(R0, R1, fgf, opts_svd_pre, fRR, RRgRR, pinv_cutoffs, pre_initial=pre_initial_)
+
+    G = fgf.unfuse_legs(axes=1)
+    G = tensordot(G, R0, axes=(1, 0))
+    G = tensordot(G, R1, axes=(1, 1))
+    G = G.fuse_legs(axes=((0, (1, 2))))
+    G = G.unfuse_legs(axes=0)
+    G = tensordot(R1.conj(), G, axes=(1, 1))
+    G = tensordot(R0.conj(), G, axes=(0, 1))
+    Gremove = G.unfuse_legs(axes=2)
+    Gremove.remove_zero_blocks()
+    Gremove = Gremove.fuse_legs(axes=((0, 2), (1, 3)))
+    _, S, _ = svd_with_truncation(Gremove, axes=(0, 1), policy='lowrank', D_block=2, D_total=2)
+    S = np.diag(S.to_numpy())
+    loopiness = np.min(S) / np.max(S)
+
+
+    D_total = 0
+    for ii in range(len(MB.get_legs()[0].D)):
+        D_total = D_total + MB.get_legs()[0].D[ii]
+
+    while D_total > opts_svd['D_total']:
+
+        g_ijkl = build_g_ijkl(fgf, MA, MB)
+        _, W = np.linalg.eigh(g_ijkl)
+
+        accumulated = 0
+        normalization = 0
+        for ii in range(len(MB.get_legs()[0].D)):
+            Ds = MB.get_legs()[0].D[ii]
+            mat = np.array(W[accumulated:(accumulated + Ds * Ds),0]).reshape(Ds, Ds)
+            mat = (mat.T.conjugate()) @ mat
+
+            normalization = normalization + mat.trace()
+            accumulated = accumulated + Ds * Ds
+        normalization = normalization ** 0.5
+
+        accumulated = 0
+        all_d = np.array([])
+        for ii in range(len(MB.get_legs()[0].D)):
+            Ds = MB.get_legs()[0].D[ii]
+            mat = np.array(W[accumulated:(accumulated + Ds * Ds),0]).reshape(Ds, Ds) / normalization
+            d = np.linalg.eigvals(mat)
+            all_d = np.hstack([all_d, d])
+            accumulated = accumulated + Ds * Ds
+
+        largest_d = all_d[np.argmax(np.abs(all_d))]
+
+        R = Tensor(config=R0.config, s=MB.get_signature(), dtype="complex128")
+
+        accumulated = 0
+        for ii in range(len(MB.get_legs()[0].D)):
+            Ds = MB.get_legs()[0].D[ii]
+            mat = -np.array(W[accumulated:(accumulated + Ds * Ds),0]).reshape(Ds, Ds) / largest_d + np.eye(Ds, Ds)
+            R.set_block((MB.get_legs()[0].t[ii], MB.get_legs()[0].t[ii]), val=mat, Ds=[Ds, Ds])
+            accumulated = accumulated + Ds * Ds
+
+        D_total = D_total - 1
+
+        R.remove_zero_blocks()
+        U, S, Vh = svd_with_truncation(R, sU=R.s[1], D_total=D_total)
+        S = S.sqrt()
+        U, Vh = S.broadcast(U, Vh, axes=(1, 0))
+        MA = MA @ U
+        MB = Vh @ MB
+
+        D_total = 0
+        for new_d in MA.get_legs()[1].D:
+            D_total = D_total + new_d
+
+    error2 = calculate_truncation_error2(MA @ MB, fgf, fRR, RRgRR)
+    return (MA, MB), error2, loopiness
 
 
 def truncate_optimize_(g, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization, info):
@@ -261,21 +573,79 @@ def truncate_optimize_(g, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter, 
     #
     pinv_cutoffs = sorted(pinv_cutoffs)
     M0, M1 = R0, R1
+    loopiness = None
     for opts in [opts_svd] if isinstance(opts_svd, dict) else opts_svd:
 
-        Ms, error2s, pinvs, iters = {}, {}, {}, {}
+        truncated_sectors, Ms, error2s, pinvs, iters = {}, {}, {}, {}, {}
 
         if 'EAT' in initialization:
             key = 'eat'
             Ms[key], error2s[key], pinvs[key], info["eat_metric_error"] = initial_truncation_EAT(M0, M1, fgf, fRR, RRgRR, opts, pinv_cutoffs)
             key = 'eat_opt'
             Ms[key], error2s[key], pinvs[key], iters[key] = optimize_truncation(*Ms['eat'], error2s['eat'], fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter)
+            truncated_sectors[key] = Ms[key][0].get_legs()[1].D
         if 'SVD' in initialization:
             key = 'svd'
             Ms[key] = symmetrized_svd(M0, M1, opts, normalize=False)
             error2s[key] = calculate_truncation_error2(Ms[key][0] @ Ms[key][1], fgf, fRR, RRgRR)
             key = 'svd_opt'
             Ms[key], error2s[key], pinvs[key], iters[key] = optimize_truncation(*Ms['svd'], error2s['svd'], fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter)
+            truncated_sectors[key] = Ms[key][0].get_legs()[1].D
+        if 'ZMT10' in initialization:
+            key = "ZMT1"
+            Ms[key], error2s[key], loopiness = initial_truncation_ZMT1(M0, M1, fgf, opts_svd, fRR, RRgRR, pinv_cutoffs)
+            key = "ZMT1_opt"
+            Ms[key], error2s[key], pinvs[key], iters[key] = optimize_truncation(*Ms['ZMT1'], error2s['ZMT1'], fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter)
+            truncated_sectors[key] = Ms[key][0].get_legs()[1].D
+        if 'ZMT1svd' in initialization:
+            key = "ZMT1svd"
+            Ms[key], error2s[key], loopiness = initial_truncation_ZMT1(M0, M1, fgf, opts_svd, fRR, RRgRR, pinv_cutoffs, pre_initial="SVD")
+            key = "ZMT1svd_opt"
+            Ms[key], error2s[key], pinvs[key], iters[key] = optimize_truncation(*Ms['ZMT1svd'], error2s['ZMT1svd'], fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter)
+            truncated_sectors[key] = Ms[key][0].get_legs()[1].D
+        if 'ZMT1eat' in initialization:
+            key = "ZMT1eat"
+            Ms[key], error2s[key], loopiness = initial_truncation_ZMT1(M0, M1, fgf, opts_svd, fRR, RRgRR, pinv_cutoffs, pre_initial="EAT")
+            key = "ZMT1eat_opt"
+            Ms[key], error2s[key], pinvs[key], iters[key] = optimize_truncation(*Ms['ZMT1eat'], error2s['ZMT1eat'], fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter)
+            truncated_sectors[key] = Ms[key][0].get_legs()[1].D
+        if 'ZMT30' in initialization:
+            key = 'ZMT30'
+            Ms[key], error2s[key], loopiness = initial_truncation_ZMT3(M0, M1, fgf, opts_svd, fRR, RRgRR, pinv_cutoffs, pre_initial=None)
+            key = "ZMT30_opt"
+            Ms[key], error2s[key], pinvs[key], iters[key] = optimize_truncation(*Ms['ZMT30'], error2s['ZMT30'], fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter)
+            truncated_sectors[key] = Ms[key][0].get_legs()[1].D
+        if 'ZMT3eat' in initialization:
+            key = 'ZMT3eat'
+            Ms[key], error2s[key], loopiness = initial_truncation_ZMT3(M0, M1, fgf, opts_svd, fRR, RRgRR, pinv_cutoffs, pre_initial="EAT")
+            key = "ZMT3eat_opt"
+            Ms[key], error2s[key], pinvs[key], iters[key] = optimize_truncation(*Ms['ZMT3eat'], error2s['ZMT3eat'], fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter)
+            truncated_sectors[key] = Ms[key][0].get_legs()[1].D
+        if 'ZMT3svd' in initialization:
+            key = 'ZMT3svd'
+            Ms[key], error2s[key], loopiness = initial_truncation_ZMT3(M0, M1, fgf, opts_svd, fRR, RRgRR, pinv_cutoffs, pre_initial="SVD")
+            key = "ZMT3svd_opt"
+            Ms[key], error2s[key], pinvs[key], iters[key] = optimize_truncation(*Ms['ZMT3svd'], error2s['ZMT3svd'], fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter)
+            truncated_sectors[key] = Ms[key][0].get_legs()[1].D
+        if 'ZMT3zmt10' in initialization:
+            key = 'ZMT3zmt10'
+            Ms[key], error2s[key], loopiness = initial_truncation_ZMT3(M0, M1, fgf, opts_svd, fRR, RRgRR, pinv_cutoffs, pre_initial="ZMT10")
+            key = "ZMT3zmt10_opt"
+            Ms[key], error2s[key], pinvs[key], iters[key] = optimize_truncation(*Ms['ZMT3zmt10'], error2s['ZMT3zmt10'], fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter)
+            truncated_sectors[key] = Ms[key][0].get_legs()[1].D
+        if 'ZMT3zmt1eat' in initialization:
+            key = 'ZMT3zmt1eat'
+            Ms[key], error2s[key], loopiness = initial_truncation_ZMT3(M0, M1, fgf, opts_svd, fRR, RRgRR, pinv_cutoffs, pre_initial="ZMT1eat")
+            key = "ZMT3zmt1eat_opt"
+            Ms[key], error2s[key], pinvs[key], iters[key] = optimize_truncation(*Ms['ZMT3zmt1eat'], error2s['ZMT3zmt1eat'], fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter)
+            truncated_sectors[key] = Ms[key][0].get_legs()[1].D
+        if 'ZMT3zmt1svd' in initialization:
+            key = 'ZMT3zmt1svd'
+            Ms[key], error2s[key], loopiness = initial_truncation_ZMT3(M0, M1, fgf, opts_svd, fRR, RRgRR, pinv_cutoffs, pre_initial="ZMT1svd")
+            key = "ZMT3zmt1svd_opt"
+            Ms[key], error2s[key], pinvs[key], iters[key] = optimize_truncation(*Ms['ZMT3zmt1svd'], error2s['ZMT3zmt1svd'], fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter)
+            truncated_sectors[key] = Ms[key][0].get_legs()[1].D
+
         if len(Ms) == 0:
             raise YastnError(f"{initialization=} not recognized. Should contain 'SVD' or 'EAT'.")
 
@@ -286,6 +656,8 @@ def truncate_optimize_(g, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter, 
         info['truncation_error'] = error2s[key]
         info['pinv_cutoffs'] = pinvs
         info['iterations'] = iters
+        info['loopiness'] = loopiness
+        info['truncated_sectors'] = truncated_sectors
         M0, M1 = Ms[key]
 
     M0, M1 = symmetrized_svd(M0, M1, opts, normalize=True)
@@ -449,7 +821,7 @@ def optimize_truncation(M0, M1, error2_old, fgf, fRR, fgRR, RRgRR, pinv_cutoffs,
     truncation error using least square optimization.
     """
     gf = fgf.unfuse_legs(axes=0)
-    gRR =  fgRR.unfuse_legs(axes=0)
+    gRR = fgRR.unfuse_legs(axes=0)
 
     for iter in range(1, max_iter+1):
         # fix M1 and optimize M0

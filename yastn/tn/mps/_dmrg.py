@@ -40,8 +40,8 @@ class DMRG_out(NamedTuple):
 
 
 def dmrg_(psi, H, project=None, method='1site',
-        energy_tol=None, Schmidt_tol=None, max_sweeps=1, iterator_step=None,
-        opts_eigs=None, opts_svd=None, precompute=False):
+        energy_tol=None, Schmidt_tol=None, max_sweeps=1, iterator=False,
+        opts_eigs=None, opts_svd=None, precompute=False, **kwargs):
     r"""
     Perform DMRG sweeps until convergence, starting from MPS ``psi``.
 
@@ -50,8 +50,8 @@ def dmrg_(psi, H, project=None, method='1site',
     The DMRG algorithm sweeps through the lattice at most ``max_sweeps`` times
     or until all convergence measures (with provided tolerance other than the default ``None``) change by less than the provided tolerance during a single sweep.
 
-    Outputs iterator if ``iterator_step`` is given, which allows
-    inspecting ``psi`` outside of ``dmrg_`` function after every ``iterator_step`` sweeps.
+    Outputs iterator if ``iterator==True``, which allows
+    inspecting ``psi`` outside of ``dmrg_`` function after every sweep.
 
     Parameters
     ----------
@@ -75,7 +75,7 @@ def dmrg_(psi, H, project=None, method='1site',
 
     method: str | yastn.Method
         DMRG variant to use; options are ``'1site'`` or ``'2site'``.
-        Auxlliary class :class:`yastn.Method` can be used to change the method in between sweeps while the yield gets called after every ``iterator_step`` sweeps.
+        Auxlliary class :class:`yastn.Method` can be used to change the method in between sweeps while the yield gets called after each sweeps.
 
     energy_tol: float
         Convergence tolerance for the change of energy in a single sweep.
@@ -88,9 +88,9 @@ def dmrg_(psi, H, project=None, method='1site',
     max_sweeps: int
         Maximal number of sweeps.
 
-    iterator_step: int
-        If int, ``dmrg_`` returns a generator that would yield output after every iterator_step sweeps.
-        The default is None, in which case  ``dmrg_`` sweeps are performed immediately.
+    iterator: bool
+        If True, ``dmrg_`` returns a generator that would yield output after every sweep.
+        The default is False, in which case  ``dmrg_`` sweeps are performed immediately.
 
     opts_eigs: dict
         options passed to :meth:`yastn.eigs`.
@@ -109,7 +109,7 @@ def dmrg_(psi, H, project=None, method='1site',
 
     Returns
     -------
-    Generator if iterator_step is not None.
+    Generator if iterator is True.
 
     DMRG_out(NamedTuple)
         NamedTuple including fields:
@@ -121,16 +121,18 @@ def dmrg_(psi, H, project=None, method='1site',
             * ``max_dSchmidt`` norm of Schmidt values change on the worst cut in the last sweep.
             * ``max_discarded_weight`` norm of discarded_weights on the worst cut in '2site' procedure.
     """
+    kwargs["iterator_step"] = kwargs.get("iterator_step", int(iterator))
     tmp = _dmrg_(psi, H, project, method,
-                energy_tol, Schmidt_tol, max_sweeps, iterator_step,
-                opts_eigs, opts_svd, precompute)
-    return tmp if iterator_step else next(tmp)
+                energy_tol, Schmidt_tol, max_sweeps,
+                opts_eigs, opts_svd, precompute, **kwargs)
+    return tmp if kwargs["iterator_step"] else next(tmp)
 
 
 def _dmrg_(psi, H : MpsMpoOBC | Sequence[tuple[MpsMpoOBC, float]], project, method,
-        energy_tol, Schmidt_tol, max_sweeps, iterator_step,
-        opts_eigs, opts_svd, precompute):
+        energy_tol, Schmidt_tol, max_sweeps,
+        opts_eigs, opts_svd, precompute, **kwargs):
     """ Generator for dmrg_(). """
+    iterator_step = kwargs.get("iterator_step", 0)
 
     if not psi.is_canonical(to='first'):
         psi.canonize_(to='first')

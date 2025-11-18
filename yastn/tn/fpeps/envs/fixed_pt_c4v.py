@@ -241,7 +241,7 @@ class FixedPoint_c4v(torch.autograd.Function):
         #     if converged:
         #         break
 
-        ctm_itr= env.ctmrg_(iterator_step=1, method=method,  max_sweeps=max_sweeps,
+        ctm_itr= env.ctmrg_(iterator=True, method=method,  max_sweeps=max_sweeps,
             opts_svd=opts_svd, corner_tol=None, **kwargs)
 
         for sweep in range(max_sweeps):

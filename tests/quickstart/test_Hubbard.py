@@ -104,14 +104,12 @@ def test_quickstart_hubbard(config_kwargs, D, betas):
         mean = lambda data: sum(data) / len(data)
 
         ctm = env_ctm.ctmrg_(opts_svd=opts_svd_ctm,
-                             iterator_step=1,
+                             iterator=True,
                              max_sweeps=50)  # generator
 
         energy_old, tol_exp = 0, 1e-7
         for info in ctm:
-            # single CMTRG sweep as iterator_step=1 in the ctm generator
-            #
-            # calculate energy expectation value
+            # calculate energy expectation value after each sweep
             #
             # measure_1site returns {site: value} for all unique sites
             ev_nn = env_ctm.measure_1site((n_up - I / 2) @ (n_dn - I / 2))

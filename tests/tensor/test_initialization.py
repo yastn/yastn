@@ -179,6 +179,10 @@ def test_initialize_U1(config_kwargs):
     assert np.linalg.norm(np.diag(np.diag(npa)) - npa.conj()) < tol  # == 0.0
     assert a3.is_consistent()
 
+    a4 = yastn.rand_like(a3)
+    assert a4.struct == a3.struct
+
+
 
 def test_initialize_Z2xU1(config_kwargs):
     """ initialization of tensor with more complicated symmetry indexed by 2 numbers"""

@@ -77,6 +77,12 @@ class EnvApproximate:
     def __setitem__(self, key, value):
         self._envs[key] = value
 
+    def apply_patch(self):
+        pass
+
+    def move_to_patch(self, sites):
+        pass
+
     def pre_truncation_(env, bond):
         pass
 

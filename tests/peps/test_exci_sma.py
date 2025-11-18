@@ -46,7 +46,7 @@ def test_exci_sma_UUD(config_kwargs):
     env_opts_svd = {
         "D_total": 20,
     }
-    for out in env_ctm.ctmrg_(opts_svd=env_opts_svd, max_sweeps=30, iterator_step=1, corner_tol=1e-12):
+    for out in env_ctm.ctmrg_(opts_svd=env_opts_svd, max_sweeps=30, iterator=True, corner_tol=1e-12):
         # print(out)
         continue
 

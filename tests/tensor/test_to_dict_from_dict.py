@@ -137,14 +137,14 @@ def check_to_numpy(a1, config):
     """ save/load to numpy and tests consistency."""
     d1 = a1.to_dict()
     a2 = 2 * a1  # second tensor to be saved
-    d2 = a2.to_dict()
+    d2 = a2.save_to_dict()
     data = {'tensor1': d1, 'tensor2': d2}  # two tensors to be saved
     np.save('tmp.npy', data)
     ldata = np.load('tmp.npy', allow_pickle=True).item()
     os.remove('tmp.npy')
 
     b1 = yastn.from_dict(ldata['tensor1'], config=config)
-    b2 = yastn.from_dict(ldata['tensor2'], config=config)
+    b2 = yastn.load_from_dict(d=ldata['tensor2'], config=config)
 
     assert all(yastn.norm(a - b) < 1e-12 for a, b in [(a1, b1), (a2, b2)])
     assert all(b.is_consistent for b in (b1, b2))

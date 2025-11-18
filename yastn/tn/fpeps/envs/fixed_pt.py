@@ -940,7 +940,7 @@ class FixedPoint(torch.autograd.Function):
         t_ctm, t_check = 0.0, 0.0
         converged, conv_history = False, []
 
-        ctm_itr= env.ctmrg_(iterator_step=1, method=method,  max_sweeps=max_sweeps,
+        ctm_itr= env.ctmrg_(iterator=True, method=method,  max_sweeps=max_sweeps,
                    opts_svd=opts_svd,
                    corner_tol=None, **kwargs)
 

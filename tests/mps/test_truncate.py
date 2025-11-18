@@ -183,7 +183,7 @@ def test_compression(config_kwargs, tol=1e-12):
         overlap_old, doverlap_old = 0, 1
         for out in mps.compression_(c, (a, b),
                                     method='2site', opts_svd={'D_total': 13},
-                                    max_sweeps = 2, iterator_step=1):  # normalize=True
+                                    max_sweeps = 2, iterator=True):  # normalize=True
             assert doverlap_old > out.doverlap and overlap_old < out.overlap
             overlap_old, doverlap_old = out.overlap, out.doverlap
             assert out.max_discarded_weight > 0
