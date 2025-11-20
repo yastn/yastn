@@ -216,7 +216,7 @@ class EnvCTM():
         if isinstance(psi, Peps2Layers):
             psi = psi.ket
 
-        d = {'class': 'EnvCTM',
+        d = {'class': type(self.__name__),
              'psi': psi.save_to_dict(),
              'data': {}}
         for site in self.sites():
@@ -879,7 +879,7 @@ class EnvCTM():
             for dirn in env[site].fields(among=['tl', 'tr', 'bl', 'br']):
                 corner_sv[site, dirn] = _get_spec(getattr(env[site], dirn))
         for k, v in corner_sv.items():
-            if not corner_sv[k] is None:
+            if corner_sv[k] is not None:
                 corner_sv[k] = v / v.norm(p='inf')
         return corner_sv
 
@@ -1301,12 +1301,12 @@ class EnvCTM():
                 * ``max_D`` largest bond dimension of environment tensors virtual legs.
                 * ``converged`` whether convergence based on ``corner_tol`` has been reached.
         """
-        if "checkpoint_move" in kwargs:
-            if "torch" in env.config.backend.BACKEND_ID:
-                assert kwargs["checkpoint_move"] in ['reentrant', 'nonreentrant', False], f"Invalid choice for {kwargs['checkpoint_move']}"
+        kwargs["iterator_step"] = kwargs.get("iterator_step", int(iterator))
+        if ("checkpoint_move" in kwargs) and ("torch" in env.config.backend.BACKEND_ID):
+            assert kwargs["checkpoint_move"] in ['reentrant', 'nonreentrant', False], f"Invalid choice for {kwargs['checkpoint_move']}"
         kwargs["truncation_f"] = truncation_f
         kwargs["iterator_step"] = kwargs.get("iterator_step", int(iterator))
-        tmp = env._ctmrg_iterator_(opts_svd, moves, method, max_sweeps, corner_tol, **kwargs)
+        tmp = env._ctmrg_iterator_(opts_svd=opts_svd, moves=moves, method=method, max_sweeps=max_sweeps, corner_tol=corner_tol, **kwargs)
         return tmp if kwargs["iterator_step"] else next(tmp)
 
     ctmrg_ = iterate_   #  For backward compatibility, allow using EnvCtm.ctmrg_() instead of EnvCtm.iterate_().
@@ -1320,7 +1320,7 @@ class EnvCTM():
 
             # use default CTM convergence check
             if corner_tol is not None:
-                converged, max_dsv, history = env.ctm_conv_corner_spec(history, corner_tol)
+                converged, max_dsv, history = env.detach().ctm_conv_corner_spec(history, corner_tol)
                 logging.info(f'Sweep = {sweep:03d}; max_diff_corner_singular_values = {max_dsv:0.2e}')
                 if converged:
                     break

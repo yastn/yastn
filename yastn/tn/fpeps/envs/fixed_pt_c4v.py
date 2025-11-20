@@ -20,7 +20,7 @@ import numpy as np
 from scipy.optimize import minimize
 import torch
 
-from ._env_ctm_c4v import EnvCTM_c4v, ctm_c4v_conv_corner_spec
+from ._env_ctm_c4v import EnvCTM_c4v
 from .fixed_pt import fast_env_T_gauge_multi_sites, NoFixedPointError, real_to_complex, complex_to_real, _concat_data, _assemble_dict_from_1d
 from .fixed_pt import fast_env_T_gauge_multi_sites, NoFixedPointError, real_to_complex, complex_to_real
 from .rdm import *
@@ -213,7 +213,7 @@ class FixedPoint_c4v(torch.autograd.Function):
 
     @torch.no_grad()
     def ctm_conv_check(env, history, corner_tol):
-        converged, max_dsv, history = ctm_c4v_conv_corner_spec(env, history, corner_tol)
+        converged, max_dsv, history = env.ctm_conv_corner_spec(history, corner_tol)
         # print("max_dsv:", max_dsv)
         log.log(logging.INFO, f"CTM iter {len(history)} |delta_C| {max_dsv}")
         return converged, history
@@ -251,7 +251,7 @@ class FixedPoint_c4v(torch.autograd.Function):
             t_ctm += t1-t0
 
             t2 = time.perf_counter()
-            converged, max_dsv, conv_history = ctm_c4v_conv_corner_spec(env, conv_history, corner_tol)
+            converged, max_dsv, conv_history = env.detach().ctm_conv_corner_spec(conv_history, corner_tol)
             t_check += time.perf_counter()-t2
             if kwargs.get('verbosity',0)>2:
                 log.log(logging.INFO, f"CTM iter {len(conv_history)} |delta_C| {max_dsv} t {t1-t0} [s]")

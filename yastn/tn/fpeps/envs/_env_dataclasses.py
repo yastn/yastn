@@ -147,7 +147,7 @@ class EnvBP_local(dataclasses_common):
             return super(EnvBP_local, self).__getattribute__(dirn)
 
 
-@dataclass()
+@dataclass(slots=True)
 class EnvCTM_c4v_local(dataclasses_common):
     r"""
     Dataclass for CTM environment tensors associated with Peps lattice site.
@@ -163,6 +163,11 @@ class EnvCTM_c4v_local(dataclasses_common):
             return self.t
         raise AttributeError()
 
+    def __setattr__(self, dirn, obj):
+        assert dirn in ["tl", "t"], "Sanity check; EnvCTM_c4v_local has 'tl' and 't' fields only."
+        super(EnvCTM_c4v_local, self).__setattr__(dirn, obj)
+
+
 @dataclass()
 class EnvCTM_c4v_projectors(dataclasses_common):
     r"""
@@ -170,6 +175,11 @@ class EnvCTM_c4v_projectors(dataclasses_common):
     """
     vtl: Tensor | None = None  # vertical top left
     vtr: Tensor | None = None  # vertical top right
+
+    def __setattr__(self, dirn, obj):
+        assert dirn in ["vtl", "vtr"], "Sanity check; EnvCTM_c4v_local has only 't' and 'tl' fields. "
+        super(EnvCTM_c4v_projectors, self).__setattr__(dirn, obj)
+
 
 @dataclass()
 class Gauge(dataclasses_common):
