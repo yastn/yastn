@@ -1205,23 +1205,30 @@ def update_extended_2site_projectors_D_(env_source, tl, tr, bl, br, move, opts_s
 
     def move_lh():
         if any(x in move for x in 'lh'):
+            cor_tt_t= cor_tt
+            cor_bb_t= cor_bb
             if devices and len(devices) > 1:
-                env= env_source.to(device=devices[1],non_blocking=True) if devices else env_source
-                psi = env.psi
+                cor_tt_t = cor_tt.to(device=devices[1],non_blocking=True) if devices else cor_tt
+                cor_bb_t = cor_bb.to(device=devices[1],non_blocking=True) if devices else cor_bb
             sr = psi[tr].get_shape(axes=2)
             rtr = env.nn_site(tr, d='r')
             rbr = env.nn_site(br, d='r')
-            if sr == 1 and rtr and rbr:
-                cor_rtr = env[rtr].t @ env[rtr].tr @ env[rtr].r
-                cor_rtr = tensordot(cor_rtr, psi[rtr], axes=((1, 2), (0, 3)))
-                cor_rtr = env[tr].t @ cor_rtr
-                cor_rtr = tensordot(cor_rtr, psi[tr], axes=((1, 3), (0, 3)))
+            if sr == 1 and rtr and rbr:   
+                env_t= env
+                psi_t= env.psi 
+                if devices and len(devices) > 1:
+                    env_t= env_source.to(device=devices[1],non_blocking=True) if devices else env_source
+                    psi_t = env_t.psi
+                cor_rtr = env_t[rtr].t @ env_t[rtr].tr @ env_t[rtr].r
+                cor_rtr = tensordot(cor_rtr, psi_t[rtr], axes=((1, 2), (0, 3)))
+                cor_rtr = env_t[tr].t @ cor_rtr
+                cor_rtr = tensordot(cor_rtr, psi_t[tr], axes=((1, 3), (0, 3)))
                 cor_rtr = cor_rtr.fuse_legs(axes=((0, 3), (1, 2, 4)))
 
-                cor_rbr = env[rbr].r @ env[rbr].br @ env[rbr].b
-                cor_rbr = tensordot(cor_rbr, psi[rbr], axes=((2, 1), (2, 3)))
-                cor_rbr = tensordot(cor_rbr, env[br].b, axes=(1, 0))
-                cor_rbr = tensordot(cor_rbr, psi[br], axes=((3, 2), (2, 3)))
+                cor_rbr = env_t[rbr].r @ env_t[rbr].br @ env_t[rbr].b
+                cor_rbr = tensordot(cor_rbr, psi_t[rbr], axes=((2, 1), (2, 3)))
+                cor_rbr = tensordot(cor_rbr, env_t[br].b, axes=(1, 0))
+                cor_rbr = tensordot(cor_rbr, psi_t[br], axes=((3, 2), (2, 3)))
                 cor_rbr = cor_rbr.fuse_legs(axes=((0, 1, 3), (2, 4)))
 
                 cor_rtt = cor_tl @ cor_rtr  # b(left) b(right)
@@ -1229,12 +1236,10 @@ def update_extended_2site_projectors_D_(env_source, tl, tr, bl, br, move, opts_s
                 _, r_t = qr(cor_rtt, axes=(1, 0)) if use_qr else (None, cor_rtt.T)
                 _, r_b = qr(cor_rbb, axes=(0, 1)) if use_qr else (None, cor_rbb)
             else:
-                _, r_t = qr(cor_tt, axes=(1, 0)) if use_qr else (None, cor_tt.T)
-                _, r_b = qr(cor_bb, axes=(0, 1)) if use_qr else (None, cor_bb)
+                _, r_t = qr(cor_tt_t, axes=(1, 0)) if use_qr else (None, cor_tt_t.T)
+                _, r_b = qr(cor_bb_t, axes=(0, 1)) if use_qr else (None, cor_bb_t)
 
             opts_svd["D_block"]= svd_predict_spec(tl, "hlb", bl, "hlt", r_t.s[1])
-            # if devices and len(devices) > 1:
-            #     r_t, r_b =  r_t.to(device=devices[1],non_blocking=True), r_b.to(device=devices[1],non_blocking=True)
             hlb, hlt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
             env_source.proj[tl].hlb, env_source.proj[bl].hlt= hlb.to(device=env_source.config.default_device,non_blocking=True), \
                 hlt.to(device=env_source.config.default_device,non_blocking=True)
