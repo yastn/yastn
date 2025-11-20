@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from tqdm import tqdm
 
-from ._env_boundary_mps import _clear_operator_input, clear_projectors
+from ._env_auxlliary import clear_projectors, _clear_operator_input
 from .._geometry import Site
 from ... import mps
 from ....tensor import YastnError
@@ -251,7 +251,6 @@ def measure_2site_row(self, O0, O1, opts_svd=None, opts_var=None):
                         env.update_env_(iy1, to='first')
                         out[(nx0, ny0) + nz0, (nx1, ny1) + nz1] = env.measure(bd=(iy1-1, iy1)) / norm_env
     return out
-
 
 
 def measure_2site_corner_columns(self, O0, O1, opts_svd=None, opts_var=None):

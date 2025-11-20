@@ -17,6 +17,7 @@ import logging
 import sys
 from typing import NamedTuple, Union, Callable, Sequence
 from warnings import warn
+from concurrent.futures import ThreadPoolExecutor
 
 from ._env_auxlliary import *
 from ._env_boundary_mps import _clear_operator_input
@@ -152,7 +153,7 @@ class EnvCTM():
         env.proj = self.proj.shallow_copy()
         return env
 
-    def to(self, device: str=None, dtype: str=None) -> EnvCTM:
+    def to(self, device: str=None, dtype: str=None, **kwargs) -> EnvCTM:
         r"""
         Return a clone of the environment on specified device and/or dtype.
         Resulting environment is a part of the computational graph.
@@ -160,9 +161,9 @@ class EnvCTM():
         from the originals.
         """
         #TODO Ket ?
-        env = type(self)(psi=self.psi.bra.to(device=device, dtype=dtype), init=None)
-        env.env = self.env.to(device=device, dtype=dtype)
-        env.proj = self.proj.to(device=device, dtype=dtype)
+        env = type(self)(psi=self.psi.bra.to(device=device, dtype=dtype, **kwargs), init=None)
+        env.env = self.env.to(device=device, dtype=dtype, **kwargs)
+        env.proj = self.proj.to(device=device, dtype=dtype, **kwargs)
         return env
 
     def clone(self) -> EnvCTM:
@@ -516,391 +517,6 @@ class EnvCTM():
                 H.A[nx] = self[nx, n].l.transpose(axes=(2, 1, 0))
         return H
 
-    def measure_1site(self, O, site=None) -> dict:
-        r"""
-        Calculate local expectation values within CTM environment.
-
-        Returns a number if ``site`` is provided.
-        If ``None``, returns a dictionary {site: value} for all unique lattice sites.
-
-        Parameters
-        ----------
-        env: EnvCtm
-            Class containing CTM environment tensors along with lattice structure data.
-
-        O: Tensor
-            Single-site operator
-        """
-
-        # if site is None:
-        #     return {site: self.measure_1site(O, site) for site in self.sites()}
-
-        if site is None:
-            opdict = _clear_operator_input(O, self.sites())
-            return_one = False
-        else:
-            return_one = True
-            opdict = {site: {(): O}}
-
-        out = {}
-        for site, ops in opdict.items():
-            lenv = self[site]
-            ten = self.psi[site]
-            vect = (lenv.l @ lenv.tl) @ (lenv.t @ lenv.tr)
-            vecb = (lenv.r @ lenv.br) @ (lenv.b @ lenv.bl)
-
-            tmp = tensordot(vect, ten, axes=((2, 1), (0, 1)))
-            val_no = tensordot(vecb, tmp, axes=((0, 1, 2, 3), (1, 3, 2, 0))).to_number()
-
-            for nz, op in ops.items():
-                if op.ndim == 2:
-                    ten.set_operator_(op)
-                else:  # for a single-layer Peps, replace with new peps tensor
-                    ten = op
-                tmp = tensordot(vect, ten, axes=((2, 1), (0, 1)))
-                val_op = tensordot(vecb, tmp, axes=((0, 1, 2, 3), (1, 3, 2, 0))).to_number()
-                out[site + nz] = val_op / val_no
-
-        if return_one and not isinstance(O, dict):
-            return out[site + nz]
-        return out
-
-    def measure_nn(self, O, P, bond=None) -> dict:
-        r"""
-        Calculate nearest-neighbor expectation values within CTM environment.
-
-        Return a number if the nearest-neighbor ``bond`` is provided.
-        If ``None``, returns a dictionary {bond: value} for all unique lattice bonds.
-
-        Parameters
-        ----------
-        O, P: yastn.Tensor
-            Calculate <O_s0 P_s1>.
-            P is applied first, which might matter for fermionic operators.
-
-        bond: yastn.tn.fpeps.Bond | tuple[tuple[int, int], tuple[int, int]]
-            Bond of the form (s0, s1). Sites s0 and s1 should be nearest-neighbors on the lattice.
-        """
-        if bond is None:
-            if isinstance(O, dict):
-                Odict = _clear_operator_input(O, self.sites())
-                Pdict = _clear_operator_input(P, self.sites())
-                out = {}
-                for (s0, s1) in self.bonds():
-                    for nz0, op0 in Odict[s0].items():
-                        for nz1, op1 in Pdict[s1].items():
-                            out[s0 + nz0, s1 + nz1] = self.measure_nn(op0, op1, bond=(s0, s1))
-                return out
-            else:
-                return {bond: self.measure_nn(O, P, bond) for bond in self.bonds()}
-
-        if O.ndim == 2 and P.ndim == 2:
-            O, P = fkron(O, P, sites=(0, 1), merge=False)
-
-        dirn = self.nn_bond_dirn(*bond)
-        if O.ndim == 3 and P.ndim == 3:
-            O, P = gate_fix_swap_gate(O, P, dirn, self.f_ordered(*bond))
-
-        s0, s1 = bond if dirn in ('lr', 'tb') else bond[::-1]
-        G0, G1 = (O, P) if dirn in ('lr', 'tb') else (P, O)
-        env0, env1 = self[s0], self[s1]
-        ten0, ten1 = self.psi[s0], self.psi[s1]
-
-        if dirn in ('lr', 'rl'):
-            vecl = (env0.bl @ env0.l) @ (env0.tl @ env0.t)
-            vecr = (env1.tr @ env1.r) @ (env1.br @ env1.b)
-
-            tmp0 = tensordot(ten0, vecl, axes=((0, 1), (2, 1)))
-            tmp0 = tensordot(env0.b, tmp0, axes=((1, 2), (0, 2)))
-            tmp1 = tensordot(vecr, ten1, axes=((2, 1), (2, 3)))
-            tmp1 = tensordot(tmp1, env1.t, axes=((2, 0), (1, 2)))
-            val_no = vdot(tmp0, tmp1, conj=(0, 0))
-
-            ten0 = ten0.apply_gate_on_ket(G0, dirn='l') if G0.ndim <= 3 else G0
-            ten1 = ten1.apply_gate_on_ket(G1, dirn='r') if G1.ndim <= 3 else G1
-
-            tmp0 = tensordot(ten0, vecl, axes=((0, 1), (2, 1)))
-            tmp0 = tensordot(env0.b, tmp0, axes=((1, 2), (0, 2)))
-            tmp1 = tensordot(vecr, ten1, axes=((2, 1), (2, 3)))
-            tmp1 = tensordot(tmp1, env1.t, axes=((2, 0), (1, 2)))
-            val_op = vdot(tmp0, tmp1, conj=(0, 0))
-        else:  # dirn in ('tb', 'bt'):
-            vect = (env0.l @ env0.tl) @ (env0.t @ env0.tr)
-            vecb = (env1.r @ env1.br) @ (env1.b @ env1.bl)
-
-            tmp0 = tensordot(vect, ten0, axes=((2, 1), (0, 1)))
-            tmp0 = tensordot(tmp0, env0.r, axes=((1, 3), (0, 1)))
-            tmp1 = tensordot(ten1, vecb, axes=((2, 3), (2, 1)))
-            tmp1 = tensordot(env1.l, tmp1, axes=((0, 1), (3, 1)))
-            val_no = vdot(tmp0, tmp1, conj=(0, 0))
-
-            ten0 = ten0.apply_gate_on_ket(G0, dirn='t') if G0.ndim <= 3 else G0
-            ten1 = ten1.apply_gate_on_ket(G1, dirn='b') if G1.ndim <= 3 else G1
-
-            tmp0 = tensordot(vect, ten0, axes=((2, 1), (0, 1)))
-            tmp0 = tensordot(tmp0, env0.r, axes=((1, 3), (0, 1)))
-            tmp1 = tensordot(ten1, vecb, axes=((2, 3), (2, 1)))
-            tmp1 = tensordot(env1.l, tmp1, axes=((0, 1), (3, 1)))
-            val_op = vdot(tmp0, tmp1, conj=(0, 0))
-
-        return val_op / val_no
-
-    def measure_2x2(self, *operators, sites=None) -> float:
-        r"""
-        Calculate expectation value of a product of local operators
-        in a :math:`2 \times 2` window within the CTM environment.
-        Perform exact contraction of the window.
-
-        Parameters
-        ----------
-        operators: Sequence[yastn.Tensor]
-            List of local operators to calculate <O0_s0 O1_s1 ...>.
-
-        sites: Sequence[tuple[int, int]]
-            A list of sites [s0, s1, ...] matching corresponding operators.
-        """
-        if sites is None or len(operators) != len(sites):
-            raise YastnError("Number of operators and sites should match.")
-
-        sign = sign_canonical_order(*operators, sites=sites, f_ordered=self.f_ordered)
-        ops = {}
-        for n, op in zip(sites, operators):
-            ops[n] = ops[n] @ op if n in ops else op
-
-        minx = min(site[0] for site in sites)  # tl corner
-        miny = min(site[1] for site in sites)
-
-        maxx = max(site[0] for site in sites)  # br corner
-        maxy = max(site[1] for site in sites)
-
-        if minx == maxx and self.nn_site((minx, miny), 'b') is None:
-            minx -= 1  # for a finite system
-        if miny == maxy and self.nn_site((minx, miny), 'r') is None:
-            miny -= 1  # for a finite system
-
-        tl = Site(minx, miny)
-        tr = self.nn_site(tl, 'r')
-        br = self.nn_site(tl, 'br')
-        bl = self.nn_site(tl, 'b')
-        window = [tl, tr, br, bl]
-
-        if any(site not in window for site in sites):
-            raise YastnError("Sites do not form a 2x2 window.")
-
-        ten_tl = self.psi[tl]
-        ten_tr = self.psi[tr]
-        ten_br = self.psi[br]
-        ten_bl = self.psi[bl]
-
-        vec_tl = self[tl].l @ (self[tl].tl @ self[tl].t)
-        vec_tr = self[tr].t @ (self[tr].tr @ self[tr].r)
-        vec_br = self[br].r @ (self[br].br @ self[br].b)
-        vec_bl = self[bl].b @ (self[bl].bl @ self[bl].l)
-
-        cor_tl = tensordot(vec_tl, ten_tl, axes=((2, 1), (0, 1)))
-        cor_tl = cor_tl.fuse_legs(axes=((0, 2), (1, 3)))
-        cor_tr = tensordot(vec_tr, ten_tr, axes=((1, 2), (0, 3)))
-        cor_tr = cor_tr.fuse_legs(axes=((0, 2), (1, 3)))
-        cor_br = tensordot(vec_br, ten_br, axes=((2, 1), (2, 3)))
-        cor_br = cor_br.fuse_legs(axes=((0, 2), (1, 3)))
-        cor_bl = tensordot(vec_bl, ten_bl, axes=((2, 1), (1, 2)))
-        cor_bl = cor_bl.fuse_legs(axes=((0, 3), (1, 2)))
-
-        val_no = vdot(cor_tl @ cor_tr, tensordot(cor_bl, cor_br, axes=(0, 1)), conj=(0, 0))
-
-        if tl in ops:
-            ten_tl.set_operator_(ops[tl])
-        if bl in ops:
-            ten_bl.set_operator_(ops[bl])
-            ten_bl.add_charge_swaps_(ops[bl].n, axes='k1')
-            ten_tl.add_charge_swaps_(ops[bl].n, axes=['b3', 'k4'])
-        if tr in ops:
-            ten_tr.set_operator_(ops[tr])
-            ten_tr.add_charge_swaps_(ops[tr].n, axes='b0')
-            ten_tl.add_charge_swaps_(ops[tr].n, axes=['k2', 'k4'])
-        if br in ops:
-            ten_br.set_operator_(ops[br])
-            ten_br.add_charge_swaps_(ops[br].n, axes='k1')
-            ten_tr.add_charge_swaps_(ops[br].n, axes=['b3', 'b0', 'k4'])
-            ten_tl.add_charge_swaps_(ops[br].n, axes=['k2', 'k4'])
-
-        if ten_tl.has_operator_or_swap():
-            cor_tl = tensordot(vec_tl, ten_tl, axes=((2, 1), (0, 1)))
-            cor_tl = cor_tl.fuse_legs(axes=((0, 2), (1, 3)))
-        if ten_bl.has_operator_or_swap():
-            cor_bl = tensordot(vec_bl, ten_bl, axes=((2, 1), (1, 2)))
-            cor_bl = cor_bl.fuse_legs(axes=((0, 3), (1, 2)))
-        if ten_tr.has_operator_or_swap():
-            cor_tr = tensordot(vec_tr, ten_tr, axes=((1, 2), (0, 3)))
-            cor_tr = cor_tr.fuse_legs(axes=((0, 2), (1, 3)))
-        if ten_br.has_operator_or_swap():
-            cor_br = tensordot(vec_br, ten_br, axes=((2, 1), (2, 3)))
-            cor_br = cor_br.fuse_legs(axes=((0, 2), (1, 3)))
-
-        val_op = vdot(cor_tl @ cor_tr, tensordot(cor_bl, cor_br, axes=(0, 1)), conj=(0, 0))
-        return sign * val_op / val_no
-
-    def measure_line(self, *operators, sites=None) -> float:
-        r"""
-        Calculate expectation value of a product of local opertors
-        along a horizontal or vertical line within CTM environment.
-        Perform exact contraction of a width-one window.
-
-        Parameters
-        ----------
-        operators: Sequence[yastn.Tensor]
-            List of local operators to calculate <O0_s0 O1_s1 ...>.
-
-        sites: Sequence[tuple[int, int]]
-            List of sites that should match operators.
-        """
-        if sites is None or len(operators) != len(sites):
-            raise YastnError("Number of operators and sites should match.")
-
-        sign = sign_canonical_order(*operators, sites=sites, f_ordered=self.f_ordered)
-        ops = {}
-        for n, op in zip(sites, operators):
-            ops[n] = ops[n] @ op if n in ops else op
-
-        xs = sorted(set(site[0] for site in sites))
-        ys = sorted(set(site[1] for site in sites))
-        if len(xs) > 1 and len(ys) > 1:
-            raise YastnError("Sites should form a horizontal or vertical line.")
-
-        env_win = EnvWindow(self, (xs[0], xs[-1] + 1), (ys[0], ys[-1] + 1))
-        horizontal = (len(xs) == 1)
-        if horizontal:
-            vr = env_win[xs[0], 't']
-            tm = env_win[xs[0], 'h']
-            vl = env_win[xs[0], 'b'].conj()
-            axes_op = 'b0'
-            axes_string = ('b0', 'k2', 'k4')
-        else:  # vertical
-            vr = env_win[ys[0], 'l']
-            tm = env_win[ys[0], 'v']
-            vl = env_win[ys[0], 'r'].conj()
-            axes_op = 'k1'
-            axes_string = ('k1', 'k4', 'b3')
-
-        val_no = mps.vdot(vl, tm, vr)
-
-        for site, op in ops.items():
-            ind = site[0] - xs[0] + site[1] - ys[0] + 1
-            if op.ndim == 2:
-                tm[ind].set_operator_(op)
-                tm[ind].add_charge_swaps_(op.n, axes=axes_op)
-                for ii in range(1, ind):
-                    tm[ii].add_charge_swaps_(op.n, axes=axes_string)
-            else:
-                axes = (1, 2, 3, 0) if horizontal else (0, 3, 2, 1)
-                tm[ind] = op.transpose(axes=axes)
-
-        val_op = mps.vdot(vl, tm, vr)
-        return sign * val_op / val_no
-
-    def measure_nsite(self, *operators, sites=None) -> float:
-        r"""
-        Calculate expectation value of a product of local operators.
-        Perform approximate contraction of a windows of PEPS sites
-        within CTM environment using boundary MPS.
-        The size of the window is taken to include provided sites.
-
-        Parameters
-        ----------
-        operators: Sequence[yastn.Tensor]
-            List of local operators to calculate <O0_s0 O1_s1 ...>.
-
-        sites: Sequence[int]
-            A list of sites [s0, s1, ...] matching corresponding operators.
-        """
-        xrange = (min(site[0] for site in sites), max(site[0] for site in sites) + 1)
-        yrange = (min(site[1] for site in sites), max(site[1] for site in sites) + 1)
-        env_win = EnvWindow(self, xrange, yrange)
-        dirn = 'lr' if (xrange[1] - xrange[0]) >= (yrange[1] - yrange[0]) else 'tb'
-        return _measure_nsite(env_win, *operators, sites=sites, dirn=dirn)
-
-    def measure_2site(self, O, P, xrange, yrange, opts_svd=None, opts_var=None, site0='corner') -> dict[Site, float]:
-        r"""
-        Calculate 2-point correlations <O P> between top-left corner of the window, and all sites in the window.
-
-        wip: other combinations of 2-sites and fermionically-nontrivial operators will be coverad latter.
-
-        Parameters
-        ----------
-        O, P: yastn.Tensor
-            one-site operators
-
-        xrange: tuple[int, int]
-            range of rows forming a window, [r0, r1); r0 included, r1 excluded.
-
-        yrange: tuple[int, int]
-            range of columns forming a window.
-
-        opts_svd: dict
-            Options passed to :meth:`yastn.linalg.svd` used to truncate virtual spaces of boundary MPSs used in sampling.
-            The default is ``None``, in which case take ``D_total`` as the largest dimension from CTM environment.
-
-        opts_svd: dict
-            Options passed to :meth:`yastn.tn.mps.compression_` used in the refining of boundary MPSs.
-            The default is ``None``, in which case make 2 variational sweeps.
-
-        site0: str
-            For site0 == 'corner', calculate all correlations with site0 fixed to top-left corner of the window.
-            For site0 == 'row', calculate all correlations with site0 from top row of the window.
-            The default is 'corner'.
-        """
-        env_win = EnvWindow(self, xrange, yrange)
-        return env_win.measure_2site(O, P, opts_svd=opts_svd, opts_var=opts_var, site0=site0)
-
-    def sample(self, projectors, number=1, xrange=None, yrange=None, opts_svd=None, opts_var=None, progressbar=False, return_probabilities=False, flatten_one=True, **kwargs) -> dict[Site, list]:
-        r"""
-        Sample random configurations from PEPS.
-        Output a dictionary linking sites with lists of sampled projectors` keys for each site.
-        Projectors should be summing up to identity -- this is not checked.
-
-        Parameters
-        ----------
-        projectors: Dict[Any, yast.Tensor] | Sequence[yast.Tensor] | Dict[Site, Dict[Any, yast.Tensor]]
-            Projectors to sample from. We can provide a dict(key: projector), where the sampled results will be given as keys,
-            and the same set of projectors is used at each site. For a list of projectors, the keys follow from enumeration.
-            Finally, we can provide a dictionary between each site and sets of projectors.
-
-        number: int
-            Number of independent samples.
-
-        xrange: tuple[int, int]
-            range of rows to sample from, [r0, r1); r0 included, r1 excluded.
-
-        yrange: tuple[int, int]
-            range of columns to sample from.
-
-        opts_svd: dict
-            Options passed to :meth:`yastn.linalg.svd` used to truncate virtual spaces of boundary MPSs used in sampling.
-            The default is ``None``, in which case take ``D_total`` as the largest dimension from CTM environment.
-
-        opts_var: dict
-            Options passed to :meth:`yastn.tn.mps.compression_` used in the refining of boundary MPSs.
-            The default is ``None``, in which case make 2 variational sweeps.
-
-        progressbar: bool
-            Whether to display progressbar. The default is ``False``.
-
-        return_probabilities: bool
-            Whether to return a tuple (samples, probabilities). The default is ``False``, where a dict samples is returned.
-
-        flatten_one: bool
-            Whether, for number==1, pop one-element lists for each lattice site to return samples={site: ind, } instead of {site: [ind]}.
-            The default is ``True``.
-        """
-        if xrange is None:
-            xrange = [0, self.Nx]
-        if yrange is None:
-            yrange = [0, self.Ny]
-        env_win = EnvWindow(self, xrange, yrange)
-        return env_win.sample(projectors, number=number,
-                              opts_svd=opts_svd, opts_var=opts_var,
-                              progressbar=progressbar, return_probabilities=return_probabilities, flatten_one=flatten_one)
-
     def calculate_corner_svd(self):
         """
         Return normalized SVD spectra, with largest singular value set to unity, of all corner tensors of environment.
@@ -1231,6 +847,9 @@ class EnvCTM():
                 yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
         yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
 
+    from ._env_measure import measure_1site, measure_nn, measure_2x2, measure_line, \
+        measure_nsite, measure_2site, sample
+
 
 def _update_core_(env, move: str, opts_svd: dict, **kwargs):
     r"""
@@ -1520,17 +1139,17 @@ def update_extended_2site_projectors_D_(env_source, tl, tr, bl, br, move, opts_s
     _validate_devices_list(devices)
 
     use_qr = kwargs.get("use_qr", True)
-    kwargs["profiling_mode"]= env.profiling_mode
-    psh = env.proj
+    kwargs["profiling_mode"]= env_source.profiling_mode
+    psh = env_source.proj
     svd_predict_spec= lambda s0,p0,s1,p1,sign: opts_svd.get('D_block', float('inf')) \
         if psh is None or (getattr(psh[s0],p0) is None or getattr(psh[s1],p1) is None) else \
-        env._partial_svd_predict_spec(getattr(psh[s0],p0).get_legs(-1), getattr(psh[s1],p1).get_legs(-1), sign)
+        env_source._partial_svd_predict_spec(getattr(psh[s0],p0).get_legs(-1), getattr(psh[s1],p1).get_legs(-1), sign)
 
     # This part is shared between between l and r projectors for h move 
     # and between t and b projectors for v move
     #
     # <RUN on device[0] of devices>
-    env = env_source.to(devices[0]) if devices else env_source
+    env = env_source.to(device=devices[0],non_blocking=True) if devices else env_source
     psi = env.psi
 
     cor_tl = env[tl].l @ env[tl].tl @ env[tl].t
@@ -1553,67 +1172,78 @@ def update_extended_2site_projectors_D_(env_source, tl, tr, bl, br, move, opts_s
         cor_tt = cor_tl @ cor_tr  # b(left) b(right)
         cor_bb = cor_br @ cor_bl  # t(right) t(left)
 
-    if any(x in move for x in 'rh'):
-        sl = psi[tl].get_shape(axes=2)
-        ltl = env.nn_site(tl, d='l')
-        lbl = env.nn_site(bl, d='l')
-        if sl == 1 and ltl and lbl:
-            cor_ltl = env[ltl].l @ env[ltl].tl @ env[ltl].t
-            cor_ltl = tensordot(cor_ltl, psi[ltl], axes=((2, 1), (0, 1)))
-            cor_ltl = tensordot(cor_ltl, env[tl].t, axes=(1, 0))
-            cor_ltl = tensordot(cor_ltl, psi[tl], axes=((3, 2), (0, 1)))
-            cor_ltl = cor_ltl.fuse_legs(axes=((0, 1, 3), (2, 4)))
+    def move_rh():
+        if any(x in move for x in 'rh'):
+            sl = psi[tl].get_shape(axes=2)
+            ltl = env.nn_site(tl, d='l')
+            lbl = env.nn_site(bl, d='l')
+            if sl == 1 and ltl and lbl:
+                cor_ltl = env[ltl].l @ env[ltl].tl @ env[ltl].t
+                cor_ltl = tensordot(cor_ltl, psi[ltl], axes=((2, 1), (0, 1)))
+                cor_ltl = tensordot(cor_ltl, env[tl].t, axes=(1, 0))
+                cor_ltl = tensordot(cor_ltl, psi[tl], axes=((3, 2), (0, 1)))
+                cor_ltl = cor_ltl.fuse_legs(axes=((0, 1, 3), (2, 4)))
 
-            cor_lbl = env[lbl].b @ env[lbl].bl @ env[lbl].l
-            cor_lbl = tensordot(cor_lbl, psi[lbl], axes=((2, 1), (1, 2)))
-            cor_lbl = env[bl].b @ cor_lbl
-            cor_lbl = tensordot(cor_lbl, psi[bl], axes=((4, 1), (1, 2)))
-            cor_lbl = cor_lbl.fuse_legs(axes=((0, 4), (1, 2, 3)))
+                cor_lbl = env[lbl].b @ env[lbl].bl @ env[lbl].l
+                cor_lbl = tensordot(cor_lbl, psi[lbl], axes=((2, 1), (1, 2)))
+                cor_lbl = env[bl].b @ cor_lbl
+                cor_lbl = tensordot(cor_lbl, psi[bl], axes=((4, 1), (1, 2)))
+                cor_lbl = cor_lbl.fuse_legs(axes=((0, 4), (1, 2, 3)))
 
-            cor_ltt = cor_ltl @ cor_tr  # b(left) b(right)
-            cor_lbb = cor_br @ cor_lbl  # t(right) t(left)
-            _, r_t = qr(cor_ltt, axes=(0, 1)) if use_qr else (None, cor_ltt)
-            _, r_b = qr(cor_lbb, axes=(1, 0)) if use_qr else (None, cor_lbb.T)
-        else:
-            _, r_t = qr(cor_tt, axes=(0, 1)) if use_qr else (None, cor_tt)
-            _, r_b = qr(cor_bb, axes=(1, 0)) if use_qr else (None, cor_bb.T)
-        
-        opts_svd["D_block"]= svd_predict_spec(tr, "hrb", br, "hrt", r_t.s[1])
-        hrb, hrt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
-        env.proj[tr].hrb, env.proj[br].hrt= hrb.to(env_source.config.default_device), \
-            hrt.to(env_source.config.default_device)
+                cor_ltt = cor_ltl @ cor_tr  # b(left) b(right)
+                cor_lbb = cor_br @ cor_lbl  # t(right) t(left)
+                _, r_t = qr(cor_ltt, axes=(0, 1)) if use_qr else (None, cor_ltt)
+                _, r_b = qr(cor_lbb, axes=(1, 0)) if use_qr else (None, cor_lbb.T)
+            else:
+                _, r_t = qr(cor_tt, axes=(0, 1)) if use_qr else (None, cor_tt)
+                _, r_b = qr(cor_bb, axes=(1, 0)) if use_qr else (None, cor_bb.T)
+            
+            opts_svd["D_block"]= svd_predict_spec(tr, "hrb", br, "hrt", r_t.s[1])
+            hrb, hrt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
+            env_source.proj[tr].hrb, env_source.proj[br].hrt= hrb.to(device=env_source.config.default_device,non_blocking=True), \
+                hrt.to(device=env_source.config.default_device,non_blocking=True)
 
-    if any(x in move for x in 'lh'):
-        sr = psi[tr].get_shape(axes=2)
-        rtr = env.nn_site(tr, d='r')
-        rbr = env.nn_site(br, d='r')
-        if sr == 1 and rtr and rbr:
-            cor_rtr = env[rtr].t @ env[rtr].tr @ env[rtr].r
-            cor_rtr = tensordot(cor_rtr, psi[rtr], axes=((1, 2), (0, 3)))
-            cor_rtr = env[tr].t @ cor_rtr
-            cor_rtr = tensordot(cor_rtr, psi[tr], axes=((1, 3), (0, 3)))
-            cor_rtr = cor_rtr.fuse_legs(axes=((0, 3), (1, 2, 4)))
+    def move_lh():
+        if any(x in move for x in 'lh'):
+            if devices and len(devices) > 1:
+                env= env_source.to(device=devices[1],non_blocking=True) if devices else env_source
+                psi = env.psi
+            sr = psi[tr].get_shape(axes=2)
+            rtr = env.nn_site(tr, d='r')
+            rbr = env.nn_site(br, d='r')
+            if sr == 1 and rtr and rbr:
+                cor_rtr = env[rtr].t @ env[rtr].tr @ env[rtr].r
+                cor_rtr = tensordot(cor_rtr, psi[rtr], axes=((1, 2), (0, 3)))
+                cor_rtr = env[tr].t @ cor_rtr
+                cor_rtr = tensordot(cor_rtr, psi[tr], axes=((1, 3), (0, 3)))
+                cor_rtr = cor_rtr.fuse_legs(axes=((0, 3), (1, 2, 4)))
 
-            cor_rbr = env[rbr].r @ env[rbr].br @ env[rbr].b
-            cor_rbr = tensordot(cor_rbr, psi[rbr], axes=((2, 1), (2, 3)))
-            cor_rbr = tensordot(cor_rbr, env[br].b, axes=(1, 0))
-            cor_rbr = tensordot(cor_rbr, psi[br], axes=((3, 2), (2, 3)))
-            cor_rbr = cor_rbr.fuse_legs(axes=((0, 1, 3), (2, 4)))
+                cor_rbr = env[rbr].r @ env[rbr].br @ env[rbr].b
+                cor_rbr = tensordot(cor_rbr, psi[rbr], axes=((2, 1), (2, 3)))
+                cor_rbr = tensordot(cor_rbr, env[br].b, axes=(1, 0))
+                cor_rbr = tensordot(cor_rbr, psi[br], axes=((3, 2), (2, 3)))
+                cor_rbr = cor_rbr.fuse_legs(axes=((0, 1, 3), (2, 4)))
 
-            cor_rtt = cor_tl @ cor_rtr  # b(left) b(right)
-            cor_rbb = cor_rbr @ cor_bl  # t(right) t(left)
-            _, r_t = qr(cor_rtt, axes=(1, 0)) if use_qr else (None, cor_rtt.T)
-            _, r_b = qr(cor_rbb, axes=(0, 1)) if use_qr else (None, cor_rbb)
-        else:
-            _, r_t = qr(cor_tt, axes=(1, 0)) if use_qr else (None, cor_tt.T)
-            _, r_b = qr(cor_bb, axes=(0, 1)) if use_qr else (None, cor_bb)
+                cor_rtt = cor_tl @ cor_rtr  # b(left) b(right)
+                cor_rbb = cor_rbr @ cor_bl  # t(right) t(left)
+                _, r_t = qr(cor_rtt, axes=(1, 0)) if use_qr else (None, cor_rtt.T)
+                _, r_b = qr(cor_rbb, axes=(0, 1)) if use_qr else (None, cor_rbb)
+            else:
+                _, r_t = qr(cor_tt, axes=(1, 0)) if use_qr else (None, cor_tt.T)
+                _, r_b = qr(cor_bb, axes=(0, 1)) if use_qr else (None, cor_bb)
 
-        opts_svd["D_block"]= svd_predict_spec(tl, "hlb", bl, "hlt", r_t.s[1])
-        if devices and len(devices) > 1:
-            r_t, r_b = r_t.to(device=devices[1]), r_b.to(device=devices[1])
-        hlb, hlt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
-        env.proj[tl].hlb, env.proj[bl].hlt= hlb.to(env_source.config.default_device), \
-            hlt.to(env_source.config.default_device)
+            opts_svd["D_block"]= svd_predict_spec(tl, "hlb", bl, "hlt", r_t.s[1])
+            # if devices and len(devices) > 1:
+            #     r_t, r_b =  r_t.to(device=devices[1],non_blocking=True), r_b.to(device=devices[1],non_blocking=True)
+            hlb, hlt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
+            env_source.proj[tl].hlb, env_source.proj[bl].hlt= hlb.to(device=env_source.config.default_device,non_blocking=True), \
+                hlt.to(device=env_source.config.default_device,non_blocking=True)
+
+    with ThreadPoolExecutor(max_workers=2 if len(devices)>1 else 1) as executor:
+        j1= executor.submit(move_rh)
+        j2= executor.submit(move_lh)
+        j1.result()
+        j2.result()
 
     if any(x in move for x in 'tbv'):
         cor_ll = cor_bl @ cor_tl  # l(bottom) l(top)
@@ -1646,8 +1276,8 @@ def update_extended_2site_projectors_D_(env_source, tl, tr, bl, br, move, opts_s
 
         opts_svd["D_block"]= svd_predict_spec(tl, "vtr", tr, "vtl", r_l.s[1])
         vtr, vtl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
-        env.proj[tl].vtr, env.proj[tr].vtl= vtr.to(env_source.config.default_device), \
-            vtl.to(env_source.config.default_device)
+        env_source.proj[tl].vtr, env_source.proj[tr].vtl= vtr.to(device=env_source.config.default_device,non_blocking=True), \
+            vtl.to(device=env_source.config.default_device,non_blocking=True)
 
     if any(x in move for x in 'bv'):
         st = psi[tl].get_shape(axes=3)
@@ -1676,10 +1306,10 @@ def update_extended_2site_projectors_D_(env_source, tl, tr, bl, br, move, opts_s
 
         opts_svd["D_block"]= svd_predict_spec(bl, "vbr", br, "vbl", r_l.s[1])
         if devices and len(devices) > 1:
-            r_l, r_r = r_l.to(device=devices[1]), r_r.to(device=devices[1])
+            r_l, r_r = r_l.to(device=devices[1],non_blocking=True), r_r.to(device=devices[1],non_blocking=True)
         vbr, vbl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
-        env.proj[bl].vbr, env.proj[br].vbl= vbr.to(env_source.config.default_device), \
-            vbl.to(env_source.config.default_device)
+        env_source.proj[bl].vbr, env_source.proj[br].vbl= vbr.to(device=env_source.config.default_device,non_blocking=True), \
+            vbl.to(device=env_source.config.default_device,non_blocking=True)
 
 
 def update_1site_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwargs):

@@ -16,7 +16,7 @@ from itertools import accumulate
 
 from tqdm import tqdm
 
-from ._env_auxlliary import identity_boundary, clear_projectors
+from ._env_auxlliary import identity_boundary, clear_projectors, _clear_operator_input
 from ._env_measure import _measure_nsite
 from .._peps import PEPS_CLASSES, Peps2Layers
 from .._geometry import Lattice
@@ -519,23 +519,6 @@ class EnvBoundaryMPS():
                 proj_env._env.pop((ny, 'r'))
 
         return accept / (2 * Nx * Ny)  # acceptance rate
-
-
-def _clear_operator_input(op, sites=None):
-    if isinstance(op, Lattice):
-        op_dict = op.shallow_copy()
-    elif isinstance(op, dict):
-        op_dict = op.copy()
-    else:
-        op_dict = {site: op for site in sites}
-    for k, v in op_dict.items():
-        if isinstance(v, dict):
-            op_dict[k] = {(i,): vi for i, vi in v.items()}
-        elif isinstance(v, Tensor):
-            op_dict[k] = {(): v}
-        else: # is iterable
-            op_dict[k] = {(i,): vi for i, vi in enumerate(v)}
-    return op_dict
 
 
 def _sample_MC_column_local(ny, proj_env, st0, st1, psi, projectors, rands):

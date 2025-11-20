@@ -292,9 +292,9 @@ class Peps2Layers():
         """ Get tensor for site. """
         return DoublePepsTensor(bra=self.bra[site], ket=self.ket[site])
 
-    def to(self, device: str=None, dtype: str=None) -> Peps2Layers:
-        return Peps2Layers(bra=self.bra.to(device=device, dtype=dtype),
-                           ket=self.ket.to(device=device, dtype=dtype) if not self.ket_is_bra else None)
+    def to(self, device: str=None, dtype: str=None, **kwargs) -> Peps2Layers:
+        return Peps2Layers(bra=self.bra.to(device=device, dtype=dtype, **kwargs),
+                           ket=self.ket.to(device=device, dtype=dtype, **kwargs) if not self.ket_is_bra else None)
 
     def to_dict(self, level=2) -> dict:
         r"""

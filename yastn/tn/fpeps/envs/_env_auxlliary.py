@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+from yastn.tn.fpeps._geometry import Lattice
 from ....initialize import ones, eye
 from ....tensor import tensordot, Leg, Tensor, YastnError, ncon
 
@@ -379,3 +380,21 @@ def clear_projectors(sites, projectors, xrange, yrange):
                 raise YastnError("Projectors should consist of vectors (ndim=1) or matrices (ndim=2).")
 
     return projs_sites
+
+
+def _clear_operator_input(op, sites=None):
+    if isinstance(op, Lattice):
+        op_dict = op.shallow_copy()
+    elif isinstance(op, dict):
+        op_dict = op.copy()
+    else:
+        op_dict = {site: op for site in sites}
+    for k, v in op_dict.items():
+        if isinstance(v, dict):
+            op_dict[k] = {(i,): vi for i, vi in v.items()}
+        elif isinstance(v, Tensor):
+            op_dict[k] = {(): v}
+        else: # is iterable
+            op_dict[k] = {(i,): vi for i, vi in enumerate(v)}
+    return op_dict
+

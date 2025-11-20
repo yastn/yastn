@@ -538,7 +538,7 @@ class Lattice():
             d['data'][site] = self[site].save_to_dict()
         return d
 
-    def to(self, device:str=None, dtype:str=None):
+    def to(self, device:str=None, dtype:str=None, **kwargs):
         r"""
         Move all PEPS tensors to specified device and/or change their data type.
 
@@ -552,7 +552,7 @@ class Lattice():
         net = type(self)(geometry=self.geometry)
         for ind in self._site_data:
             if self._site_data[ind] is not None:
-                net._site_data[ind] = self._site_data[ind].to(device=device, dtype=dtype)
+                net._site_data[ind] = self._site_data[ind].to(device=device, dtype=dtype, **kwargs)
         return net
 
     def clone(self) -> Lattice:
