@@ -596,6 +596,8 @@ class EnvCTM():
         if method not in ('1site', '2site'):
             raise YastnError(f"CTM update {method=} not recognized. Should be '1site' or '2site'")
 
+        l_update_core_= _update_core_D_ if kwargs.get('devices', None) else _update_core_
+
         checkpoint_move = kwargs.get('checkpoint_move', False)
         for d in moves:
             if checkpoint_move:
@@ -621,7 +623,7 @@ class EnvCTM():
                 # reconstruct env from output tensors
                 env.update_from_dict_(combine_data_and_meta(out_data, out_meta))
             else:
-                _update_core_(env, d, opts_svd, method=method, **kwargs)
+                l_update_core_(env, d, opts_svd, method=method, **kwargs)
         return env
 
     def update_bond_(env, bond: tuple, opts_svd: dict | None = None, **kwargs):
@@ -905,6 +907,91 @@ def _update_core_(env, move: str, opts_svd: dict, **kwargs):
         update_storage_(env, env_tmp)
 
 
+def _update_core_D_(env, move: str, opts_svd: dict, **kwargs):
+    r"""
+    Core function updating CTM environment tensors pefrorming specified move.
+
+        #GPUs <= len(sites)
+            Invoke update_projectors_ on multiple devices in parallel, each invocation receiving one GPU
+        #GPUS >= 2*len(sites)
+            Invoke update_projectors_ on multiple devices in parallel, each invocation receiving two GPUs. 
+    """
+    assert move in ['h', 'v', 'l', 'r', 't', 'b'], "Invalid move"
+    if (move in 'hv') or (len(env.sites()) < env.Nx * env.Ny):
+        # For horizontal and vertical moves,
+        # and unit cell with a nontrivial pattern like CheckerboardLattice or RectangularUnitcell,
+        # all sites are updated simultaneously.
+        shift_proj = None
+        jobs = [env.sites()] # 1 group with all non-equivalent sites
+    elif move == 'l':  # Move done sequentially, column after column. Number of jobs = Ny groups of Nx jobs
+        shift_proj = 'l'
+        jobs = [[Site(nx, ny) for nx in range(env.Nx)] for ny in range(env.Ny)]
+    elif move == 'r':  # Move done sequentially, column after column.
+        shift_proj = None
+        jobs = [[Site(nx, ny) for nx in range(env.Nx)] for ny in range(env.Ny-1, -1, -1)]
+    elif move == 't':  # Move done sequentially, row after row.
+        shift_proj = 't'
+        jobs = [[Site(nx, ny) for ny in range(env.Ny)] for nx in range(env.Nx)]
+    elif move == 'b':  # Move done sequentially, row after row.
+        shift_proj = None
+        jobs = [[Site(nx, ny) for ny in range(env.Ny)] for nx in range(env.Nx-1, -1, -1)]
+
+    def f_invoke_update_projectors_D_(devices,site_l):
+        # env_l= env.to(device=devices[0])
+        kwargs_l= kwargs.copy()
+        kwargs_l['devices']= devices
+        update_projectors_(env, site_l, move, opts_svd, **kwargs_l)
+
+    def _partition_devices(num_jobs : int) -> Sequence[Sequence[str]]:
+        devices = kwargs.get('devices', None)
+        _validate_devices_list(devices)
+
+        if len(devices) <= num_jobs:
+            reps = (num_jobs + len(devices) - 1) // len(devices)
+            return [ [d] for d in (devices * reps)[:num_jobs] ]
+        elif len(devices) >= 2 * num_jobs:
+            return [ devices[2*i:2*i+2] for i in range(num_jobs) ]
+        else:
+            return [ devices[i:i+1]+devices[i+num_jobs:i+1+num_jobs] for i in range(num_jobs) ]
+            
+    for site_group in jobs:
+        sites_proj = [env.nn_site(site, shift_proj) for site in site_group] if shift_proj else site_group
+        sites_proj = [site for site in sites_proj if site is not None] # handles boundaries of finite PEPS
+        
+        #
+        # Projectors
+        device_groups= _partition_devices(len(sites_proj))
+        logger.info(f"_update_core_D_ {move} {device_groups} ")
+        print(f"_update_core_D_ {move} {device_groups} ")
+
+        if env.profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.range_push(f"update_projectors_")
+        with ThreadPoolExecutor(max_workers=len(sites_proj)) as executor:
+            futures= []
+            for i,site in enumerate(sites_proj):
+                futures.append(
+                    executor.submit( f_invoke_update_projectors_D_, device_groups[i], site )
+                )
+            for f in futures:
+                f.result()  # wait for all to complete
+        if env.profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.range_pop()
+
+        # fill (trivial) projectors on edges
+        trivial_projectors_(env, move, sites_proj)
+        #
+        # Update move
+        env_tmp = EnvCTM(env.psi, init=None)  # empty environments
+        if env.profiling_mode in ["NVTX",]:
+            env.config.backend.cuda.nvtx.range_push(f"update_env_")
+            for site in site_group:
+                update_env_(env_tmp, site, env, move)
+            env.config.backend.cuda.nvtx.range_pop()
+        else:
+            for site in site_group:
+                update_env_(env_tmp, site, env, move)
+        
+        update_storage_(env, env_tmp)
+
+
 def update_projectors_(env, site, move, opts_svd, **kwargs):
     r"""
     Calculate new projectors for CTM moves passing to specific method to create enlarged corners.
@@ -1130,6 +1217,7 @@ def update_extended_2site_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwa
 def _validate_devices_list(devices: list[str] | None) -> None:
     if devices:
         assert len(devices) > 0, "At least one device must be provided."
+
 
 def update_extended_2site_projectors_D_(env_source, tl, tr, bl, br, move, opts_svd, 
         devices: list[str] | None = None, **kwargs):

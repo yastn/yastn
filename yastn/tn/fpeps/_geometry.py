@@ -421,7 +421,7 @@ class Lattice():
 
         Parameters
         ----------
-        geometry: SquareLattice | CheckerboardLattice | RectangularUnitcell
+        geometry: SquareLattice
             Specify lattice geometry.
         """
         self.geometry = geometry.geometry if hasattr(geometry, 'geometry') else geometry
