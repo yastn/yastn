@@ -224,12 +224,11 @@ def cost_U1_c4v_1x1_fp(additional_imports, yastn_cfg, g, A, elems, slices : dict
 
     # 3.4 evaluate loss
     # sum of traces of even sectors across 1x1 RDMs
-    env= envc4v.get_env_bipartite()
 
-    r1x1,norm= rdm1x1( (0,0), psi, env)
+    r1x1, norm = rdm1x1((0, 0), psi, envc4v)
     for c in r1x1.get_blocks_charge():
         print(f"{norm} {c} {r1x1[c]}")
-    loss= r1x1[(1,1)].trace()
+    loss = r1x1[1, 1].trace()
     return loss
 
 
