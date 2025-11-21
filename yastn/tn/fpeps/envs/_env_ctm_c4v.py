@@ -40,6 +40,19 @@ class EnvFlip:
     def __repr__(self):
         return f"EnvFlip(base={self._base!r})"
 
+class PsiFlip:
+    def __init__(self, psi):
+        self._psi = psi
+
+    def __getattribute__(self, name):
+        return self._psi.__getattribute__(name)
+
+    def __getitem__(self, site):
+        if (site[0] + site[1])%2 == 1:
+            return self._psi[site].flip_signature()
+        return self._psi[site]
+
+
 class EnvCTM_c4v(EnvCTM):
     def __init__(self, psi, init='eye', ket=None):
         r"""
@@ -85,6 +98,9 @@ class EnvCTM_c4v(EnvCTM):
         for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "f_ordered", "nn_bond_dirn"]:
             setattr(self, name, getattr(self.geometry, name))
 
+        psi = PsiFlip(psi)
+        if ket:
+            ket = PsiFlip(ket)
         self.psi = Peps2Layers(bra=psi, ket=ket) if psi.has_physical() else psi
         self.env = Lattice(self.geometry, objects={site: EnvCTM_c4v_local() for site in self.sites()})
         self.proj = Lattice(self.geometry, objects={site: EnvCTM_c4v_projectors() for site in self.sites()})
@@ -93,7 +109,6 @@ class EnvCTM_c4v(EnvCTM):
             raise YastnError(f"{type(self).__name__} {init=} not recognized. Should be 'rand', 'eye', 'dl', or None.")
         if init is not None:
             self.reset_(init=init)
-
 
     def __getitem__(self, site):
         if (site[0] + site[1])%2 == 1:
@@ -122,34 +137,14 @@ class EnvCTM_c4v(EnvCTM):
             For 'dl' and Env of double-layer PEPS, trace on-site tensors to initialize environment.
         """
         assert init in ['eye', 'dl'], "Invalid initialization type. Should be 'eye' or 'dl'."
-
-        if init == 'eye':
-            config = self.psi.config
-            leg0 = Leg(config, s=1, t=(config.sym.zero(),), D=(1,))
-
-            self[0,0].tl = eye(config, legs=[leg0, leg0.conj()], isdiag=False)
-            legs = self.psi[0,0].get_legs()
-            tmp1 = identity_boundary(config, legs[0].conj())
-            tmp0 = eye(config, legs=[leg0, leg0.conj()], isdiag=False)
-            tmp = tensordot(tmp0, tmp1, axes=((), ())).transpose(axes=(0, 2, 1))
-            self[0,0].t = tmp
-
-            self[0,0].tl= self[0,0].tl.flip_charges(axes=1)
-            self[0,0].t= self[0,0].t.flip_charges(axes=0)
-        elif init == 'dl':
-            # create underlying two-site bipartite PEPS
-            g= RectangularUnitcell(pattern=[[0,1],[1,0]])
-            bp= Peps(geometry=g, \
-                    tensors={ g.sites()[0]: self.psi.ket[0,0], g.sites()[1]: self.psi.ket[0,0].conj() }, )
-            env_bp= EnvCTM(bp, init='eye')
-            env_bp.expand_outward_()
-            # env_bp.init_env_from_onsite_()
-
-            self[0,0].t= env_bp[0,0].t.drop_leg_history(axes=(0,2)).switch_signature(axes=0)
-            self[0,0].tl= env_bp[0,0].tl.drop_leg_history(axes=(0,1)).switch_signature(axes=1)
+        super().reset_(init=init)
+        for site in self.sites():  # IS THIS NEEDED?  DOES NOT BREAK TESTS
+            self[site].t = self[site].t.flip_charges(axes=0)
+            self[site].tl = self[site].tl.flip_charges(axes=1)
 
     def iterate_(env, opts_svd=None, method='2site', max_sweeps=1, iterator=False, corner_tol=None, truncation_f: Callable = None, **kwargs):
         return super().iterate_(opts_svd=opts_svd, moves='d', method=method, max_sweeps=max_sweeps, iterator=iterator, corner_tol=corner_tol, truncation_f=truncation_f, **kwargs)
+        # move = 'd' has len(move) == 1, as iterate_ will for loop over the string move
 
     ctmrg_ = iterate_
 
@@ -173,7 +168,6 @@ class EnvCTM_c4v(EnvCTM):
             if any(psh[site].vtl is None for site in psh.sites()) or \
                any(psh[site].vtr is None for site in psh.sites()):
                 psh = None
-
 
 
         # Inherit _partial_svd_predict_spec from EnvCTM
@@ -244,19 +238,6 @@ class EnvCTM_c4v(EnvCTM):
         #
         update_storage_(env, env_tmp)
 
-    def get_env_bipartite(self):
-        g= RectangularUnitcell(pattern=[[0,1],[1,0]])
-        bp= Peps(geometry=g, \
-            tensors={ g.sites()[0]: self.psi.ket[0,0], g.sites()[1]: self.psi.ket[0,0].flip_signature() }, )
-        env_bp= EnvCTM(bp, init=None)
-        s0= g.sites()[0]
-        env_bp[s0].tr= env_bp[s0].br= env_bp[s0].bl= env_bp[s0].tl= self[0,0].tl
-        env_bp[s0].l= env_bp[s0].b= env_bp[s0].r= env_bp[s0].t= self[0,0].t
-        s1= g.sites()[1]
-        env_bp[s1].tr= env_bp[s1].br= env_bp[s1].bl= env_bp[s1].tl= self[0,0].tl.flip_signature()
-        env_bp[s1].l= env_bp[s1].b= env_bp[s1].r= env_bp[s1].t= self[0,0].t.flip_signature()
-        return env_bp
-
 
 def leg_charge_conv_check(env : EnvCTM_c4v, history : Sequence[Leg] = None, conv_len=3):
     r"""
@@ -308,7 +289,7 @@ def proj_sym_corner(rr, opts_svd, **kwargs):
         # v= None
     elif policy in ['fullrank', 'randomized', 'block_arnoldi', 'block_propack']:
         # sU = ? r0.s[1]
-        # u, s, v = rr.svd_with_truncation(axes=(0, 1), mask_f=truncation_f, **opts_svd)
+        # u, s, v = rr.svd_with_truncation(axes=(0, 1), mask_f=truncation_f, **opts_svd)  # BUG in one of the tests
         u, s, v = rr.svd_with_truncation(axes=(0, 1), mask_f=default_truncation_f, **opts_svd)
 
     elif policy in ['qr']:
