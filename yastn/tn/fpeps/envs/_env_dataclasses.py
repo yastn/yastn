@@ -85,7 +85,7 @@ class dataclasses_common():
             return cls(**dd)
 
     def fields(self, among=None):
-        return [k.name for k in fields(self) if (among is None or k.name in among)]
+        return tuple(k.name for k in fields(self) if (among is None or k.name in among))
 
 
 @dataclass()

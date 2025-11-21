@@ -216,7 +216,7 @@ class EnvCTM():
         if isinstance(psi, Peps2Layers):
             psi = psi.ket
 
-        d = {'class': type(self.__name__),
+        d = {'class': type(self).__name__,
              'psi': psi.save_to_dict(),
              'data': {}}
         for site in self.sites():
@@ -241,67 +241,39 @@ class EnvCTM():
             If not provided, random initialization has CTMRG bond dimension set to 1.
             Otherwise, the provided Leg is used to initialize CTMRG virtual legs.
         """
-        config = self.psi.config
-        leg0 = Leg(config, s=1, t=(config.sym.zero(),), D=(1,))
+        normalize = kwargs.get('normalize', 'inf')
+        leg0 = Leg(self.config, s=1, t=(self.config.sym.zero(),), D=(1,))
+        if leg is None:
+            leg = leg0
 
-        if init == 'dl':
-            self.init_env_from_onsite_(**kwargs)
-        else:
-            if leg is None:
-                leg = leg0
+        li = {'t': 0, 'l': 1, 'b': 2, 'r': 3}
+        ef = {'t': edge_t, 'l': edge_l, 'b': edge_b, 'r': edge_r,
+                'tl': cor_tl, 'tr': cor_tr, 'bl': cor_bl, 'br': cor_br}
 
-            for site in self.sites():
-                legs = self.psi[site].get_legs()
-
-                for dirn in ('tl', 'tr', 'bl', 'br'):
-                    if self.nn_site(site, d=dirn) is None or init == 'eye':
-                        setattr(self[site], dirn, eye(config, legs=[leg0, leg0.conj()], isdiag=False))
-                    else:
-                        setattr(self[site], dirn, rand(config, legs=[leg, leg.conj()]))
-
-                for ind, dirn in enumerate(['t', 'l', 'b', 'r']):
-                    if self.nn_site(site, d=dirn) is None or init == 'eye':
-                        tmp1 = identity_boundary(config, legs[ind].conj())
-                        tmp0 = eye(config, legs=[leg0, leg0.conj()], isdiag=False)
-                        tmp = tensordot(tmp0, tmp1, axes=((), ())).transpose(axes=(0, 2, 1))
-                        setattr(self[site], dirn, tmp)
-                    else:
-                        setattr(self[site], dirn, rand(config, legs=[leg, legs[ind].conj(), leg.conj()]))
-
-    def init_env_from_onsite_(self, normalize: str | Callable = 'inf'):
-        r"""
-        Initialize CTMRG environment by tracing on-site double-layer tensors A.
-
-        For double-layer PEPS, the top-left corner is initialized as
-
-            C_(bb',rr')= \sum_{ll',tt',s} A_tlbrs A*_t'l'b'r's
-
-        with other corners initialized analogously. The half-row/-column tensors T are
-        also initialized by tracing. For top half-column tensors
-
-            T_(ll',bb',rr') = \sum_{tt',s} A_tlbrs A*_t'l'b'r's
-
-        and analogously for the remaining T tensors.
-
-        Args:
-            normalize: Normalization of initial environment tensors or custom normalization function
-                with signature f(Tensor)->Tensor.
-                For 'inf' (default) normalizes magnitude of largest element to 1, i.e. L-infinity norm.
-        """
-        assert isinstance(self.psi, Peps2Layers), "Initialization by traced double-layer on-site tensors requires double-layer PEPS"
         for site in self.sites():
-            for dirn, edge_f in (('t', edge_t), ('l', edge_l), ('b', edge_b), ('r', edge_r),
-                                 ('tl', cor_tl), ('tr', cor_tr), ('bl', cor_bl), ('br', cor_br)):
-                shifted_site = self.nn_site(site, dirn)
-
-                if shifted_site is not None:
-                    A_bra = self.psi.bra[shifted_site]
-                    A_ket = self.psi.ket[shifted_site]
-                else:
-                    A_bra = A_ket = trivial_peps_tensor(self.config)
-                T = edge_f(A_bra=A_bra, A_ket=A_ket)
+            for dirn in self[site].fields():
+                shifted_site = self.nn_site(site, d=dirn)
+                legs = self.psi[site].get_legs()
+                if init == 'dl':
+                    assert isinstance(self.psi, Peps2Layers), "Initialization by traced double-layer on-site tensors requires double-layer PEPS"
+                    if shifted_site is not None:
+                        A_bra, A_ket = self.psi.bra[shifted_site], self.psi.ket[shifted_site]
+                    else:
+                        A_bra = A_ket = trivial_peps_tensor(self.config)
+                    T = ef[dirn](A_bra=A_bra, A_ket=A_ket)
+                elif dirn in ['tl', 'tr', 'bl', 'br'] and (init == 'eye' or shifted_site is None):
+                    T = eye(self.config, legs=[leg0, leg0.conj()], isdiag=False)
+                elif dirn in ['tl', 'tr', 'bl', 'br'] and init == 'rand':
+                    T = rand(self.config, legs=[leg, leg.conj()])
+                elif dirn in ['t', 'l', 'b', 'r'] and (init == 'eye' or shifted_site is None):
+                    tmp1 = identity_boundary(self.config, legs[li[dirn]].conj())
+                    tmp0 = eye(self.config, legs=[leg0, leg0.conj()], isdiag=False)
+                    T = tensordot(tmp0, tmp1, axes=((), ())).transpose(axes=(0, 2, 1))
+                elif dirn in ['t', 'l', 'b', 'r'] and init == 'rand':
+                    T = rand(self.config, legs=[leg, legs[li[dirn]].conj(), leg.conj()])
                 T = T / T.norm(p=normalize) if isinstance(normalize, str) else normalize(T)
                 setattr(self[site], dirn, T)
+
 
     def expand_outward_(self):
         """
