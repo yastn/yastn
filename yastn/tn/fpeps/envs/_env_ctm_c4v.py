@@ -41,16 +41,19 @@ class EnvFlip:
         return f"EnvFlip(base={self._base!r})"
 
 class PsiFlip:
-    def __init__(self, psi):
-        self._psi = psi
+    """Read-only view: tensors are flipped on access."""
+    __slots__ = ("_base",)
 
-    def __getattribute__(self, name):
-        return self._psi.__getattribute__(name)
+    def __init__(self, psi):
+        self._base = psi
+
+    def __getattr__(self, name):
+        return self._base.__getattribute__(name)
 
     def __getitem__(self, site):
-        if (site[0] + site[1])%2 == 1:
-            return self._psi[site].flip_signature()
-        return self._psi[site]
+        if (site[0] + site[1]) % 2 == 1:
+            return self._base[site].flip_signature()
+        return self._base[site]
 
 
 class EnvCTM_c4v(EnvCTM):
@@ -111,10 +114,11 @@ class EnvCTM_c4v(EnvCTM):
             self.reset_(init=init)
 
     def __getitem__(self, site):
-        if (site[0] + site[1])%2 == 1:
+        if (site[0] + site[1]) % 2 == 1:
             return EnvFlip(self.env[site])
         else:
             return self.env[site]
+
 
     def reset_(self, init='eye'):
         r"""
@@ -137,10 +141,36 @@ class EnvCTM_c4v(EnvCTM):
             For 'dl' and Env of double-layer PEPS, trace on-site tensors to initialize environment.
         """
         assert init in ['eye', 'dl'], "Invalid initialization type. Should be 'eye' or 'dl'."
-        super().reset_(init=init)
-        for site in self.sites():  # IS THIS NEEDED?  DOES NOT BREAK TESTS
-            self[site].t = self[site].t.flip_charges(axes=0)
-            self[site].tl = self[site].tl.flip_charges(axes=1)
+        # super().reset_(init=init)
+        # for site in self.sites():
+        #     self[site].t = self[site].t.drop_leg_history(axes=(0, 2)).flip_charges(axes=0)
+        #     self[site].tl = self[site].tl.drop_leg_history(axes=(0, 1)).flip_charges(axes=1)
+
+        if init == 'eye':
+            config = self.psi.config
+            leg0 = Leg(config, s=1, t=(config.sym.zero(),), D=(1,))
+
+            self[0,0].tl = eye(config, legs=[leg0, leg0.conj()], isdiag=False)
+            legs = self.psi[0,0].get_legs()
+            tmp1 = identity_boundary(config, legs[0].conj())
+            tmp0 = eye(config, legs=[leg0, leg0.conj()], isdiag=False)
+            tmp = tensordot(tmp0, tmp1, axes=((), ())).transpose(axes=(0, 2, 1))
+            self[0,0].t = tmp
+
+            self[0,0].tl= self[0,0].tl.flip_charges(axes=1)
+            self[0,0].t= self[0,0].t.flip_charges(axes=0)
+        elif init == 'dl':
+            # create underlying two-site bipartite PEPS
+            g= RectangularUnitcell(pattern=[[0,1],[1,0]])
+            bp= Peps(geometry=g, \
+                    tensors={ g.sites()[0]: self.psi.ket[0,0], g.sites()[1]: self.psi.ket[0,0].conj() }, )
+            env_bp= EnvCTM(bp, init='eye')
+            env_bp.expand_outward_()
+            # env_bp.init_env_from_onsite_()
+
+            self[0,0].t= env_bp[0,0].t.drop_leg_history(axes=(0,2)).switch_signature(axes=0)
+            self[0,0].tl= env_bp[0,0].tl.drop_leg_history(axes=(0,1)).switch_signature(axes=1)
+
 
     def iterate_(env, opts_svd=None, method='2site', max_sweeps=1, iterator=False, corner_tol=None, truncation_f: Callable = None, **kwargs):
         return super().iterate_(opts_svd=opts_svd, moves='d', method=method, max_sweeps=max_sweeps, iterator=iterator, corner_tol=corner_tol, truncation_f=truncation_f, **kwargs)
@@ -155,84 +185,83 @@ class EnvCTM_c4v(EnvCTM):
     def _update_core_(env, move : str, opts_svd : dict, **kwargs):
         assert move in ['d'], "Invalid move"
         policy = opts_svd.get('policy', 'fullrank')
-
-        psh = None
-        if policy not in ['fullrank', "qr"]:
-            psh = Lattice(env.geometry)
-            for site in psh.sites():
-                psh[site] = EnvCTM_c4v_projectors()
-                if env.proj[site].vtl is not None:
-                    psh[site].vtl = env.proj[site].vtl.get_legs(-1)
-                if env.proj[site].vtr is not None:
-                    psh[site].vtr = env.proj[site].vtr.get_legs(0)
-            if any(psh[site].vtl is None for site in psh.sites()) or \
-               any(psh[site].vtr is None for site in psh.sites()):
-                psh = None
-
-
-        # Inherit _partial_svd_predict_spec from EnvCTM
-        svd_predict_spec= lambda s0,p0,s1,p1: opts_svd.get('D_block', float('inf')) if psh is None else \
-            _partial_svd_predict_spec(getattr(psh[s0],p0), getattr(psh[s1],p1), opts_svd.get('sU', 1))
-
-        #
-        # Empty structure for projectors
         #
         s0 = env.psi.sites()[0]
-
+        #
+        if policy in ['fullrank', "qr"] or env.proj[s0].vtl is None or env.proj[s0].vtr is None:
+            svd_predict_spec = lambda s0, p0, s1, p1: opts_svd.get('D_block', float('inf'))
+        else:
+            psh = Lattice(env.geometry)
+            psh[s0] = EnvCTM_c4v_projectors(vtl=env.proj[s0].vtl.get_legs(-1),
+                                            vtr=env.proj[s0].vtr.get_legs(0))
+            svd_predict_spec = lambda s0, p0, s1, p1: _partial_svd_predict_spec(getattr(psh[s0], p0), getattr(psh[s1], p1), opts_svd.get('sU', 1))
+        #
         # 1) get tl enlarged corner and projector from ED/SVD
+        #
         # (+) 0--tl--1 0--t--2 (-)
         #                 1
+        #
         cor_tl_2x1 = env[s0].tl @ env[s0].t
+        #
         # (-) 0--t--2 0--tl--1 0--t--2->3(-)
         #        1                1->2
+        #
         cor_tl = env[s0].t @ cor_tl_2x1
+        #
         # tl--t---1 (-)
         # t---A--3 (fusion of + and -)
         # 0   2
         cor_tl = tensordot(cor_tl, env.psi[s0], axes=((2, 1), (0, 1)))
         cor_tl = cor_tl.fuse_legs(axes=((0, 2), (1, 3)))
-
+        #
         # Note: U(1)-symm corner is not hermitian. Instead blocks related by conj of charges are hermitian conjugates,
-        #       i.e. (2,-2) and (-2,2) blocks are hermitian conjugates.
-        R= cor_tl_2x1.flip_signature().fuse_legs(axes=((0, 1), 2)) if policy in ['qr'] else cor_tl
-        opts_svd["D_block"]= svd_predict_spec(s0, "vtl", s0, "vtr")
-        opts_svd["sU"]= 1
-        env.proj[s0].vtl, s, env.proj[s0].vtr= proj_sym_corner(R, opts_svd, **kwargs)
-
+        #       i.e. (2, -2) and (-2, 2) blocks are hermitian conjugates.
+        #
+        if policy == 'qr':
+            R = cor_tl_2x1.flip_signature().fuse_legs(axes=((0, 1), 2))
+        else:
+            R = cor_tl
+        opts_svd["D_block"] = svd_predict_spec(s0, "vtl", s0, "vtr")
+        opts_svd["sU"] = 1
+        env.proj[s0].vtl, s, env.proj[s0].vtr = proj_sym_corner(R, opts_svd, **kwargs)
+        #
         # 2) update move corner
+        #
         P = env.proj[s0].vtl
         env_tmp = EnvCTM(env.psi, init=None)  # empty environments
         if policy in ['symeig']:
-            assert (cor_tl-cor_tl.H)<1e-12,"enlarged corner is not hermitian"
-            env_tmp[s0].tl = s/s.norm(p='inf')
+            assert (cor_tl - cor_tl.H) < 1e-12, "Enlarged corner is not hermitian"
+            env_tmp[s0].tl = s / s.norm(p='inf')
         elif policy in ["qr"]:
-            S= P.flip_signature().tensordot( cor_tl @ P.flip_signature(), (0, 0))
-            S= S.flip_charges()
-            env_tmp[s0].tl= (S/S.norm(p='inf'))
+            S = P.flip_signature().tensordot(cor_tl @ P.flip_signature(), (0, 0))
+            S = S.flip_charges()
+            env_tmp[s0].tl= S / S.norm(p='inf')
         else:
-            S= ((env.proj[s0].vtr.conj() @ P) @ s)
-            env_tmp[s0].tl= (S/S.norm(p='inf'))
-
+            S = (env.proj[s0].vtr.conj() @ P) @ s
+            env_tmp[s0].tl = S / S.norm(p='inf')
+        #
         # 3) update move half-row/-column tensor. Here, P is to act on B-sublattice T tensor
         #
         #   Note:
         #   flip_signature() is equivalent to conj().conj_blocks(), which changes the total charge from +n to -n
         #   flip_charges(axes) is equivalent to switch_signature(axes), which leaves the total charge unchanged
         #
-        P= P.unfuse_legs(axes=0)
+        P = P.unfuse_legs(axes=0)
+        #
         # 1<-2--P--0    0--T--2->3
         #        --1->0    1->2
+        #
         tmp = tensordot(P, env[s0].t.flip_signature(), axes=(0, 0)) # Pass from T_A to T_B
         #  0<-1--P-----T--3->1  0--P--2
         #        |     2           |
         #        |      0          |
         #         --0 1--A--3   1--
         #                2=>1
-        _b_sublattice= env.psi.bra[s0].flip_signature() # transform A with signature [1,1,1,1,1] into B with [-1,-1,-1,-1,-1]
-        tmp = tensordot(tmp, DoublePepsTensor(bra=_b_sublattice, ket=_b_sublattice), axes=((0, 2), (1, 0)))
+        s1 = env.nn_site(s0, d='r')
+        tmp = tensordot(tmp, env.psi[s1], axes=((0, 2), (1, 0)))
         tmp = tensordot(tmp, P, axes=((1, 3), (0, 1)))
-        tmp = tmp.flip_charges(axes=(0,2)) #tmp.switch_signature(axes=(0,2))
-
+        tmp = tmp.flip_charges(axes=(0, 2))  # tmp.switch_signature(axes=(0,2))
+        #
         # tmp= 0.5*(tmp + tmp.transpose(axes=(2,1,0)))
         env_tmp[s0].t = tmp / tmp.norm(p='inf')
         #
@@ -263,7 +292,6 @@ def leg_charge_conv_check(env : EnvCTM_c4v, history : Sequence[Leg] = None, conv
             converged = False
             break
     return converged, history
-
 
 
 def proj_sym_corner(rr, opts_svd, **kwargs):
