@@ -17,11 +17,11 @@ import time
 import pytest
 import math
 import copy
+import sys
 try:
     import yastn
 except ModuleNotFoundError as e:
     import os 
-    import sys
     dir_path = os.path.dirname(os.path.realpath(__file__))
     sys.path.insert(0, dir_path+"/../../")
     import yastn
@@ -29,10 +29,19 @@ from yastn.backend import backend_np
 from yastn.backend import backend_torch
 import yastn.tn.fpeps as fpeps
 from yastn.tn.fpeps import Peps, Peps2Layers, RectangularUnitcell
+from yastn.tn.fpeps.envs._env_ctm_distributed import iterate_T_
 from itertools import product
 import json
 import time
+import logging
 
+logger = logging.getLogger()
+for h in list(logger.handlers): logger.removeHandler(h)
+handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(logging.INFO)
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
+    
 tol = 1e-12  #pylint: disable=invalid-name
 
 torch_test = pytest.mark.skipif("'torch' not in config.getoption('--backend')",
@@ -66,10 +75,12 @@ def profile_ctmrg(on_site_t, X, config_profile, Nx=1, Ny=1, svd_policy="fullrank
     D= max([ sum(l.D) for l in on_site_t.get_legs()[:4]]) # over aux legs
     nsteps= max(2,X//(D**2))
     env = fpeps.EnvCTM(psi, init='eye')
-    info = env.ctmrg_(opts_svd = {"policy": svd_policy, "D_total": X, 'fix_signs': False, 'tol': 1.0e-12}, max_sweeps= nsteps, 
-                            truncation_f=None, use_qr=False, checkpoint_move=False, devices=devices)
-    import pdb; pdb.set_trace()
 
+    info = env.ctmrg_(opts_svd = {"policy": svd_policy, "D_total": X, 'fix_signs': False, 'tol': 1.0e-12}, max_sweeps= nsteps, 
+                            truncation_f=None, use_qr=False, checkpoint_move=False)
+    # info = iterate_T_(env, opts_svd = {"policy": svd_policy, "D_total": X, 'fix_signs': False, 'tol': 1.0e-12}, max_sweeps= nsteps, 
+    #                         truncation_f=None, use_qr=False, checkpoint_move=False, devices=devices)
+    
     # clone current env
     env2= env.clone()
 
@@ -91,9 +102,12 @@ def profile_ctmrg(on_site_t, X, config_profile, Nx=1, Ny=1, svd_policy="fullrank
     t0= time.perf_counter()
     if USE_TORCH_NVTX:
         env2.profiling_mode= "NVTX"
-    for ctm_step in env2.iterate_(opts_svd=opts_svd, moves='hv', method='2site', max_sweeps=max_sweeps, 
-                                  iterator_step=1, corner_tol=corner_tol, truncation_f=None, use_qr=False, checkpoint_move=False,
-                                  devices=devices):
+    # for ctm_step in env2.iterate_(opts_svd=opts_svd, moves='hv', method='2site', max_sweeps=max_sweeps, 
+    #                               iterator_step=1, corner_tol=corner_tol, truncation_f=None, use_qr=False, checkpoint_move=False,
+    #                               devices=devices):
+    for ctm_step in iterate_T_(env2, opts_svd=opts_svd, moves='hv', method='2site', max_sweeps=max_sweeps,
+                               iterator_step=1, corner_tol=corner_tol, truncation_f=None, use_qr=False, checkpoint_move=False, 
+                               devices=devices):
         sweep, max_dsv, max_D, converged = ctm_step
         t1= time.perf_counter()
         print(f'Sweep = {sweep:03d} t {t1-t0} [s] max_diff_corner_singular_values = {max_dsv:0.2e} max_D {max_D} max_X {env2.effective_chi()}')

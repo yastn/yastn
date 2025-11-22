@@ -596,8 +596,6 @@ class EnvCTM():
         if method not in ('1site', '2site'):
             raise YastnError(f"CTM update {method=} not recognized. Should be '1site' or '2site'")
 
-        l_update_core_= _update_core_D_ if kwargs.get('devices', None) else _update_core_
-
         checkpoint_move = kwargs.get('checkpoint_move', False)
         for d in moves:
             if checkpoint_move:
@@ -623,7 +621,7 @@ class EnvCTM():
                 # reconstruct env from output tensors
                 env.update_from_dict_(combine_data_and_meta(out_data, out_meta))
             else:
-                l_update_core_(env, d, opts_svd, method=method, **kwargs)
+                _update_core_(env, d, opts_svd, method=method, **kwargs)
         return env
 
     def update_bond_(env, bond: tuple, opts_svd: dict | None = None, **kwargs):
@@ -907,91 +905,6 @@ def _update_core_(env, move: str, opts_svd: dict, **kwargs):
         update_storage_(env, env_tmp)
 
 
-def _update_core_D_(env, move: str, opts_svd: dict, **kwargs):
-    r"""
-    Core function updating CTM environment tensors pefrorming specified move.
-
-        #GPUs <= len(sites)
-            Invoke update_projectors_ on multiple devices in parallel, each invocation receiving one GPU
-        #GPUS >= 2*len(sites)
-            Invoke update_projectors_ on multiple devices in parallel, each invocation receiving two GPUs. 
-    """
-    assert move in ['h', 'v', 'l', 'r', 't', 'b'], "Invalid move"
-    if (move in 'hv') or (len(env.sites()) < env.Nx * env.Ny):
-        # For horizontal and vertical moves,
-        # and unit cell with a nontrivial pattern like CheckerboardLattice or RectangularUnitcell,
-        # all sites are updated simultaneously.
-        shift_proj = None
-        jobs = [env.sites()] # 1 group with all non-equivalent sites
-    elif move == 'l':  # Move done sequentially, column after column. Number of jobs = Ny groups of Nx jobs
-        shift_proj = 'l'
-        jobs = [[Site(nx, ny) for nx in range(env.Nx)] for ny in range(env.Ny)]
-    elif move == 'r':  # Move done sequentially, column after column.
-        shift_proj = None
-        jobs = [[Site(nx, ny) for nx in range(env.Nx)] for ny in range(env.Ny-1, -1, -1)]
-    elif move == 't':  # Move done sequentially, row after row.
-        shift_proj = 't'
-        jobs = [[Site(nx, ny) for ny in range(env.Ny)] for nx in range(env.Nx)]
-    elif move == 'b':  # Move done sequentially, row after row.
-        shift_proj = None
-        jobs = [[Site(nx, ny) for ny in range(env.Ny)] for nx in range(env.Nx-1, -1, -1)]
-
-    def f_invoke_update_projectors_D_(devices,site_l):
-        # env_l= env.to(device=devices[0])
-        kwargs_l= kwargs.copy()
-        kwargs_l['devices']= devices
-        update_projectors_(env, site_l, move, opts_svd, **kwargs_l)
-
-    def _partition_devices(num_jobs : int) -> Sequence[Sequence[str]]:
-        devices = kwargs.get('devices', None)
-        _validate_devices_list(devices)
-
-        if len(devices) <= num_jobs:
-            reps = (num_jobs + len(devices) - 1) // len(devices)
-            return [ [d] for d in (devices * reps)[:num_jobs] ]
-        elif len(devices) >= 2 * num_jobs:
-            return [ devices[2*i:2*i+2] for i in range(num_jobs) ]
-        else:
-            return [ devices[i:i+1]+devices[i+num_jobs:i+1+num_jobs] for i in range(num_jobs) ]
-            
-    for site_group in jobs:
-        sites_proj = [env.nn_site(site, shift_proj) for site in site_group] if shift_proj else site_group
-        sites_proj = [site for site in sites_proj if site is not None] # handles boundaries of finite PEPS
-        
-        #
-        # Projectors
-        device_groups= _partition_devices(len(sites_proj))
-        logger.info(f"_update_core_D_ {move} {device_groups} ")
-        print(f"_update_core_D_ {move} {device_groups} ")
-
-        if env.profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.range_push(f"update_projectors_")
-        with ThreadPoolExecutor(max_workers=len(sites_proj)) as executor:
-            futures= []
-            for i,site in enumerate(sites_proj):
-                futures.append(
-                    executor.submit( f_invoke_update_projectors_D_, device_groups[i], site )
-                )
-            for f in futures:
-                f.result()  # wait for all to complete
-        if env.profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.range_pop()
-
-        # fill (trivial) projectors on edges
-        trivial_projectors_(env, move, sites_proj)
-        #
-        # Update move
-        env_tmp = EnvCTM(env.psi, init=None)  # empty environments
-        if env.profiling_mode in ["NVTX",]:
-            env.config.backend.cuda.nvtx.range_push(f"update_env_")
-            for site in site_group:
-                update_env_(env_tmp, site, env, move)
-            env.config.backend.cuda.nvtx.range_pop()
-        else:
-            for site in site_group:
-                update_env_(env_tmp, site, env, move)
-        
-        update_storage_(env, env_tmp)
-
-
 def update_projectors_(env, site, move, opts_svd, **kwargs):
     r"""
     Calculate new projectors for CTM moves passing to specific method to create enlarged corners.
@@ -1006,8 +919,6 @@ def update_projectors_(env, site, move, opts_svd, **kwargs):
     #     return update_2site_projectors_(proj, *sites, move, env, opts_svd, **kwargs)
     if method == '1site':
         return update_1site_projectors_(env, *sites, move, opts_svd, **kwargs)
-    elif method == '2site' and kwargs.get('devices', None):
-        return update_extended_2site_projectors_D_(env, *sites, move, opts_svd, **kwargs)
     elif method == '2site':
         return update_extended_2site_projectors_(env, *sites, move, opts_svd, **kwargs)
 
@@ -1212,213 +1123,6 @@ def update_extended_2site_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwa
 
         opts_svd["D_block"]= svd_predict_spec(bl, "vbr", br, "vbl", r_l.s[1])
         env.proj[bl].vbr, env.proj[br].vbl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
-
-
-def _validate_devices_list(devices: list[str] | None) -> None:
-    if devices:
-        assert len(devices) > 0, "At least one device must be provided."
-
-
-def update_extended_2site_projectors_D_(env_source, tl, tr, bl, br, move, opts_svd, 
-        devices: list[str] | None = None, **kwargs):
-    r"""
-    If move is 'hv' use up to two devices to schedule the computations.
-    NOTE: cusolver's svd is thread-blocking, it necessary to create multiple threads/processes 
-    """
-    _validate_devices_list(devices)
-
-    use_qr = kwargs.get("use_qr", True)
-    kwargs["profiling_mode"]= env_source.profiling_mode
-    psh = env_source.proj
-    svd_predict_spec= lambda s0,p0,s1,p1,sign: opts_svd.get('D_block', float('inf')) \
-        if psh is None or (getattr(psh[s0],p0) is None or getattr(psh[s1],p1) is None) else \
-        env_source._partial_svd_predict_spec(getattr(psh[s0],p0).get_legs(-1), getattr(psh[s1],p1).get_legs(-1), sign)
-
-    # This part is shared between between l and r projectors for h move 
-    # and between t and b projectors for v move
-    #
-    env = env_source.to(device=devices[0],non_blocking=True) if devices else env_source
-    psi = env.psi
-
-    cor_tl = env[tl].l @ env[tl].tl @ env[tl].t
-    cor_tl = tensordot(cor_tl, psi[tl], axes=((2, 1), (0, 1)))
-    cor_tl = cor_tl.fuse_legs(axes=((0, 2), (1, 3)))
-
-    cor_bl = env[bl].b @ env[bl].bl @ env[bl].l
-    cor_bl = tensordot(cor_bl, psi[bl], axes=((2, 1), (1, 2)))
-    cor_bl = cor_bl.fuse_legs(axes=((0, 3), (1, 2)))
-
-    cor_tr = env[tr].t @ env[tr].tr @ env[tr].r
-    cor_tr = tensordot(cor_tr, psi[tr], axes=((1, 2), (0, 3)))
-    cor_tr = cor_tr.fuse_legs(axes=((0, 2), (1, 3)))
-
-    cor_br = env[br].r @ env[br].br @ env[br].b
-    cor_br = tensordot(cor_br, psi[br], axes=((2, 1), (2, 3)))
-    cor_br = cor_br.fuse_legs(axes=((0, 2), (1, 3)))
-
-    if any(x in move for x in 'lrh'):
-        cor_tt = cor_tl @ cor_tr  # b(left) b(right)
-        cor_bb = cor_br @ cor_bl  # t(right) t(left)
-
-    def move_rh():
-        if any(x in move for x in 'rh'):
-            sl = psi[tl].get_shape(axes=2)
-            ltl = env.nn_site(tl, d='l')
-            lbl = env.nn_site(bl, d='l')
-            if sl == 1 and ltl and lbl:
-                cor_ltl = env[ltl].l @ env[ltl].tl @ env[ltl].t
-                cor_ltl = tensordot(cor_ltl, psi[ltl], axes=((2, 1), (0, 1)))
-                cor_ltl = tensordot(cor_ltl, env[tl].t, axes=(1, 0))
-                cor_ltl = tensordot(cor_ltl, psi[tl], axes=((3, 2), (0, 1)))
-                cor_ltl = cor_ltl.fuse_legs(axes=((0, 1, 3), (2, 4)))
-
-                cor_lbl = env[lbl].b @ env[lbl].bl @ env[lbl].l
-                cor_lbl = tensordot(cor_lbl, psi[lbl], axes=((2, 1), (1, 2)))
-                cor_lbl = env[bl].b @ cor_lbl
-                cor_lbl = tensordot(cor_lbl, psi[bl], axes=((4, 1), (1, 2)))
-                cor_lbl = cor_lbl.fuse_legs(axes=((0, 4), (1, 2, 3)))
-
-                cor_ltt = cor_ltl @ cor_tr  # b(left) b(right)
-                cor_lbb = cor_br @ cor_lbl  # t(right) t(left)
-                _, r_t = qr(cor_ltt, axes=(0, 1)) if use_qr else (None, cor_ltt)
-                _, r_b = qr(cor_lbb, axes=(1, 0)) if use_qr else (None, cor_lbb.T)
-            else:
-                _, r_t = qr(cor_tt, axes=(0, 1)) if use_qr else (None, cor_tt)
-                _, r_b = qr(cor_bb, axes=(1, 0)) if use_qr else (None, cor_bb.T)
-            
-            opts_svd["D_block"]= svd_predict_spec(tr, "hrb", br, "hrt", r_t.s[1])
-            hrb, hrt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
-            env_source.proj[tr].hrb, env_source.proj[br].hrt= hrb.to(device=env_source.config.default_device,non_blocking=True), \
-                hrt.to(device=env_source.config.default_device,non_blocking=True)
-
-    def move_lh():
-        if any(x in move for x in 'lh'):
-            cor_tt_t= cor_tt
-            cor_bb_t= cor_bb
-            if devices and len(devices) > 1:
-                cor_tt_t = cor_tt.to(device=devices[1],non_blocking=True) if devices else cor_tt
-                cor_bb_t = cor_bb.to(device=devices[1],non_blocking=True) if devices else cor_bb
-            sr = psi[tr].get_shape(axes=2)
-            rtr = env.nn_site(tr, d='r')
-            rbr = env.nn_site(br, d='r')
-            if sr == 1 and rtr and rbr:   
-                env_t= env
-                psi_t= env.psi 
-                if devices and len(devices) > 1:
-                    env_t= env_source.to(device=devices[1],non_blocking=True) if devices else env_source
-                    psi_t = env_t.psi
-                cor_rtr = env_t[rtr].t @ env_t[rtr].tr @ env_t[rtr].r
-                cor_rtr = tensordot(cor_rtr, psi_t[rtr], axes=((1, 2), (0, 3)))
-                cor_rtr = env_t[tr].t @ cor_rtr
-                cor_rtr = tensordot(cor_rtr, psi_t[tr], axes=((1, 3), (0, 3)))
-                cor_rtr = cor_rtr.fuse_legs(axes=((0, 3), (1, 2, 4)))
-
-                cor_rbr = env_t[rbr].r @ env_t[rbr].br @ env_t[rbr].b
-                cor_rbr = tensordot(cor_rbr, psi_t[rbr], axes=((2, 1), (2, 3)))
-                cor_rbr = tensordot(cor_rbr, env_t[br].b, axes=(1, 0))
-                cor_rbr = tensordot(cor_rbr, psi_t[br], axes=((3, 2), (2, 3)))
-                cor_rbr = cor_rbr.fuse_legs(axes=((0, 1, 3), (2, 4)))
-
-                cor_rtt = cor_tl @ cor_rtr  # b(left) b(right)
-                cor_rbb = cor_rbr @ cor_bl  # t(right) t(left)
-                _, r_t = qr(cor_rtt, axes=(1, 0)) if use_qr else (None, cor_rtt.T)
-                _, r_b = qr(cor_rbb, axes=(0, 1)) if use_qr else (None, cor_rbb)
-            else:
-                _, r_t = qr(cor_tt_t, axes=(1, 0)) if use_qr else (None, cor_tt_t.T)
-                _, r_b = qr(cor_bb_t, axes=(0, 1)) if use_qr else (None, cor_bb_t)
-
-            opts_svd["D_block"]= svd_predict_spec(tl, "hlb", bl, "hlt", r_t.s[1])
-            hlb, hlt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
-            env_source.proj[tl].hlb, env_source.proj[bl].hlt= hlb.to(device=env_source.config.default_device,non_blocking=True), \
-                hlt.to(device=env_source.config.default_device,non_blocking=True)
-
-    with ThreadPoolExecutor(max_workers=2 if len(devices)>1 else 1) as executor:
-        j1= executor.submit(move_rh)
-        j2= executor.submit(move_lh)
-        j1.result()
-        j2.result()
-
-    if any(x in move for x in 'tbv'):
-        cor_ll = cor_bl @ cor_tl  # l(bottom) l(top)
-        cor_rr = cor_tr @ cor_br  # r(top) r(bottom)
-
-    def move_tv():
-        if any(x in move for x in 'tv'):
-            sb = psi[bl].get_shape(axes=3)
-            bbl = env.nn_site(bl, d='b')
-            bbr = env.nn_site(br, d='b')
-            if sb == 1 and bbl and bbr:
-                cor_bbl = env[bbl].b @ env[bbl].bl @ env[bbl].l
-                cor_bbl = tensordot(cor_bbl, psi[bbl], axes=((2, 1), (1, 2)))
-                cor_bbl = tensordot(cor_bbl, env[bl].l, axes=(1, 0))
-                cor_bbl = tensordot(cor_bbl, psi[bl], axes=((3, 1), (1, 2)))
-                cor_bbl = cor_bbl.fuse_legs(axes=((0, 1, 4), (2, 3)))
-
-                cor_bbr = env[bbr].r @ env[bbr].br @ env[bbr].b
-                cor_bbr = tensordot(cor_bbr, psi[bbr], axes=((2, 1), (2, 3)))
-                cor_bbr = env[br].r @ cor_bbr
-                cor_bbr = tensordot(cor_bbr, psi[br], axes=((3, 1), (2, 3)))
-                cor_bbr = cor_bbr.fuse_legs(axes=((0, 3), (1, 2, 4)))
-
-                cor_bll = cor_bbl @ cor_tl  # l(bottom) l(top)
-                cor_brr = cor_tr @ cor_bbr  # r(top) r(bottom)
-                _, r_l = qr(cor_bll, axes=(0, 1)) if use_qr else (None, cor_bll)
-                _, r_r = qr(cor_brr, axes=(1, 0)) if use_qr else (None, cor_brr.T)
-            else:
-                _, r_l = qr(cor_ll, axes=(0, 1)) if use_qr else (None, cor_ll)
-                _, r_r = qr(cor_rr, axes=(1, 0)) if use_qr else (None, cor_rr.T)
-
-            opts_svd["D_block"]= svd_predict_spec(tl, "vtr", tr, "vtl", r_l.s[1])
-            vtr, vtl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
-            env_source.proj[tl].vtr, env_source.proj[tr].vtl= vtr.to(device=env_source.config.default_device,non_blocking=True), \
-                vtl.to(device=env_source.config.default_device,non_blocking=True)
-
-    def move_bv():
-        if any(x in move for x in 'bv'):
-            cor_ll_t= cor_ll
-            cor_rr_t= cor_rr
-            if devices and len(devices) > 1:
-                cor_ll_t = cor_ll.to(device=devices[1],non_blocking=True) if devices else cor_ll
-                cor_rr_t = cor_rr.to(device=devices[1],non_blocking=True) if devices else cor_rr
-            st = psi[tl].get_shape(axes=3)
-            ttl = env.nn_site(tl, d='t')
-            ttr = env.nn_site(tr, d='t')
-            if st == 1 and ttl and ttr:
-                env_t= env
-                psi_t = env.psi
-                if devices and len(devices) > 1:
-                    env_t= env_source.to(device=devices[1],non_blocking=True) if devices else env_source
-                    psi_t = env_t.psi
-                cor_ttl = env_t[ttl].l @ env_t[ttl].tl @ env_t[ttl].t
-                cor_ttl = tensordot(cor_ttl, psi_t[ttl], axes=((2, 1), (0, 1)))
-                cor_ttl = env_t[tl].l @ cor_ttl
-                cor_ttl = tensordot(cor_ttl, psi_t[tl], axes=((3, 1), (0, 1)))
-                cor_ttl = cor_ttl.fuse_legs(axes=((0, 3), (1, 2, 4)))
-
-                cor_ttr = env_t[ttr].t @ env_t[ttr].tr @ env_t[ttr].r
-                cor_ttr = tensordot(cor_ttr, psi_t[ttr], axes=((1, 2), (0, 3)))
-                cor_ttr = tensordot(cor_ttr, env_t[tr].r, axes=(1, 0))
-                cor_ttr = tensordot(cor_ttr, psi_t[tr], axes=((2, 3), (0, 3)))
-                cor_ttr = cor_ttr.fuse_legs(axes=((0, 1, 3), (2, 4)))
-
-                cor_tll = cor_bl @ cor_ttl  # l(bottom) l(top)
-                cor_trr = cor_ttr @ cor_br  # r(top) r(bottom)
-                _, r_l = qr(cor_tll, axes=(1, 0)) if use_qr else (None, cor_tll.T)
-                _, r_r = qr(cor_trr, axes=(0, 1)) if use_qr else (None, cor_trr)
-            else:
-                _, r_l = qr(cor_ll_t, axes=(1, 0)) if use_qr else (None, cor_ll_t.T)
-                _, r_r = qr(cor_rr_t, axes=(0, 1)) if use_qr else (None, cor_rr_t)
-
-            opts_svd["D_block"]= svd_predict_spec(bl, "vbr", br, "vbl", r_l.s[1])
-            vbr, vbl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
-            env_source.proj[bl].vbr, env_source.proj[br].vbl= vbr.to(device=env_source.config.default_device,non_blocking=True), \
-                vbl.to(device=env_source.config.default_device,non_blocking=True)
-
-    with ThreadPoolExecutor(max_workers=2 if len(devices)>1 else 1) as executor:
-        j1= executor.submit(move_bv)
-        j2= executor.submit(move_tv)
-        j1.result()
-        j2.result()
 
 
 def update_1site_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwargs):
