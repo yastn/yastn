@@ -22,6 +22,7 @@ from ....tensor import Tensor, YastnError, Leg, tensordot, qr, vdot
 from ._env_ctm import CTMRG_out, EnvCTM, proj_corners, trivial_projectors_, update_env_, update_storage_
 from ...._split_combine_dict import split_data_and_meta, combine_data_and_meta
 import logging
+import os
 logger = logging.getLogger(__name__)
 
 
@@ -283,6 +284,11 @@ def _update_core_T_(thread_pool_executor, env, move: str, opts_svd: dict, **kwar
             job.result()  # wait for all to complete
         if env.profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.range_pop()
 
+        _profile_transfer= os.getenv("YASTN_CTMRG_PROFILE_TRANSFER", "0")
+        if _profile_transfer in ["1",]:
+            logger.info("YASTN_CTMRG_PROFILE_TRANSFER enabled")
+            return
+
         # fill (trivial) projectors on edges
         trivial_projectors_(env, move, sites_proj)
         #
@@ -340,21 +346,16 @@ def update_extended_2site_projectors_T_(thread_pool_executor,
     psi = env.psi
 
     if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.range_push(f"contract {move}")
-    cor_tl = env[tl].l @ env[tl].tl @ env[tl].t
-    cor_tl = tensordot(cor_tl, psi[tl], axes=((2, 1), (0, 1)))
-    cor_tl = cor_tl.fuse_legs(axes=((0, 2), (1, 3)))
+    
+    cor_tl = c2x2('tl',env[tl].l, env[tl].tl, env[tl].t, psi[tl])
+    cor_bl = c2x2('bl',env[bl].b, env[bl].bl, env[bl].l, psi[bl])
+    cor_tr = c2x2('tr',env[tr].t, env[tr].tr, env[tr].r, psi[tr])
+    cor_br = c2x2('br',env[br].r, env[br].br, env[br].b, psi[br])
 
-    cor_bl = env[bl].b @ env[bl].bl @ env[bl].l
-    cor_bl = tensordot(cor_bl, psi[bl], axes=((2, 1), (1, 2)))
-    cor_bl = cor_bl.fuse_legs(axes=((0, 3), (1, 2)))
-
-    cor_tr = env[tr].t @ env[tr].tr @ env[tr].r
-    cor_tr = tensordot(cor_tr, psi[tr], axes=((1, 2), (0, 3)))
-    cor_tr = cor_tr.fuse_legs(axes=((0, 2), (1, 3)))
-
-    cor_br = env[br].r @ env[br].br @ env[br].b
-    cor_br = tensordot(cor_br, psi[br], axes=((2, 1), (2, 3)))
-    cor_br = cor_br.fuse_legs(axes=((0, 2), (1, 3)))
+    _profile_transfer= os.getenv("YASTN_CTMRG_PROFILE_TRANSFER", "0")
+    if _profile_transfer in ["1",]:
+        logger.info("YASTN_CTMRG_PROFILE_TRANSFER enabled")
+        return []
 
     if any(x in move for x in 'lrh'):
         cor_tt = cor_tl @ cor_tr  # b(left) b(right)
@@ -545,3 +546,42 @@ def update_extended_2site_projectors_T_(thread_pool_executor,
         move_tv()
     if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.range_pop()
     return res
+
+
+def c2x2(id_c2x2, t1, c, t2, onsite_t, mode='fuse'):
+    if id_c2x2 == 'tl':
+        return c2x2_tl(t1, c, t2, onsite_t, mode=mode)
+    elif id_c2x2 == 'bl': 
+        return c2x2_bl(t1, c, t2, onsite_t, mode=mode)
+    elif id_c2x2 == 'tr':
+        return c2x2_tr(t1, c, t2, onsite_t, mode=mode)
+    elif id_c2x2 == 'br':
+        return c2x2_br(t1, c, t2, onsite_t, mode=mode)
+
+def c2x2_tl(t_left, c_topleft, t_top, onsite_t, mode='fuse'):
+    cor_tl = t_left @ c_topleft @ t_top
+    cor_tl = tensordot(cor_tl, onsite_t, axes=((2, 1), (0, 1)))
+    if mode == 'fuse':
+        cor_tl = cor_tl.fuse_legs(axes=((0, 2), (1, 3)))
+    return cor_tl
+
+def c2x2_bl(t_bottom, c_bottomleft, t_left, onsite_t, mode='fuse'):
+    cor_bl = t_bottom @ c_bottomleft @ t_left
+    cor_bl = tensordot(cor_bl, onsite_t, axes=((2, 1), (1, 2)))
+    if mode == 'fuse': 
+        cor_bl = cor_bl.fuse_legs(axes=((0, 3), (1, 2)))
+    return cor_bl
+
+def c2x2_tr(t_top, c_topright, t_right, onsite_t, mode='fuse'):
+    cor_tr = t_top @ c_topright @ t_right
+    cor_tr = tensordot(cor_tr, onsite_t, axes=((1, 2), (0, 3)))
+    if mode == 'fuse':
+        cor_tr = cor_tr.fuse_legs(axes=((0, 2), (1, 3)))
+    return cor_tr
+
+def c2x2_br(t_right, c_bottomright, t_bottom, onsite_t, mode='fuse'):
+    cor_br = t_right @ c_bottomright @ t_bottom
+    cor_br = tensordot(cor_br, onsite_t, axes=((2, 1), (2, 3)))
+    if mode == 'fuse':
+        cor_br = cor_br.fuse_legs(axes=((0, 2), (1, 3)))
+    return cor_br
