@@ -96,7 +96,7 @@ class Peps(Lattice):
     def has_physical(self) -> bool:
         """ Whether PEPS has phyical leg"""
         site0 = self.sites()[0]
-        return self[site0].ndim in (3, 5)
+        return self[site0].ndim == 5
 
     def __repr__(self) -> str:
         return f"Peps(geometry={self.geometry.__repr__()}, tensors={ self._site_data })"

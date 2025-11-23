@@ -101,8 +101,9 @@ class EnvCTM_c4v(EnvCTM):
         for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "f_ordered", "nn_bond_dirn"]:
             setattr(self, name, getattr(self.geometry, name))
 
-        psi = PsiFlip(psi)
-        if ket:
+        if not isinstance(psi, PsiFlip):
+            psi = PsiFlip(psi)
+        if ket and not isinstance(ket, PsiFlip):
             ket = PsiFlip(ket)
         self.psi = Peps2Layers(bra=psi, ket=ket) if psi.has_physical() else psi
         self.env = Lattice(self.geometry, objects={site: EnvCTM_c4v_local() for site in self.sites()})
@@ -141,36 +142,11 @@ class EnvCTM_c4v(EnvCTM):
             For 'dl' and Env of double-layer PEPS, trace on-site tensors to initialize environment.
         """
         assert init in ['eye', 'dl'], "Invalid initialization type. Should be 'eye' or 'dl'."
-        # super().reset_(init=init)
-        # for site in self.sites():
-        #     self[site].t = self[site].t.drop_leg_history(axes=(0, 2)).flip_charges(axes=0)
-        #     self[site].tl = self[site].tl.drop_leg_history(axes=(0, 1)).flip_charges(axes=1)
-
+        super().reset_(init=init)
         if init == 'eye':
-            config = self.psi.config
-            leg0 = Leg(config, s=1, t=(config.sym.zero(),), D=(1,))
-
-            self[0,0].tl = eye(config, legs=[leg0, leg0.conj()], isdiag=False)
-            legs = self.psi[0,0].get_legs()
-            tmp1 = identity_boundary(config, legs[0].conj())
-            tmp0 = eye(config, legs=[leg0, leg0.conj()], isdiag=False)
-            tmp = tensordot(tmp0, tmp1, axes=((), ())).transpose(axes=(0, 2, 1))
-            self[0,0].t = tmp
-
-            self[0,0].tl= self[0,0].tl.flip_charges(axes=1)
-            self[0,0].t= self[0,0].t.flip_charges(axes=0)
-        elif init == 'dl':
-            # create underlying two-site bipartite PEPS
-            g= RectangularUnitcell(pattern=[[0,1],[1,0]])
-            bp= Peps(geometry=g, \
-                    tensors={ g.sites()[0]: self.psi.ket[0,0], g.sites()[1]: self.psi.ket[0,0].conj() }, )
-            env_bp= EnvCTM(bp, init='eye')
-            env_bp.expand_outward_()
-            # env_bp.init_env_from_onsite_()
-
-            self[0,0].t= env_bp[0,0].t.drop_leg_history(axes=(0,2)).switch_signature(axes=0)
-            self[0,0].tl= env_bp[0,0].tl.drop_leg_history(axes=(0,1)).switch_signature(axes=1)
-
+            for site in self.sites():
+                self[site].t = self[site].t.flip_charges(axes=0)
+                self[site].tl = self[site].tl.flip_charges(axes=1)
 
     def iterate_(env, opts_svd=None, method='2site', max_sweeps=1, iterator=False, corner_tol=None, truncation_f: Callable = None, **kwargs):
         return super().iterate_(opts_svd=opts_svd, moves='d', method=method, max_sweeps=max_sweeps, iterator=iterator, corner_tol=corner_tol, truncation_f=truncation_f, **kwargs)

@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 from __future__ import annotations
+from typing import Sequence
 
 from ._gates_auxiliary import match_ancilla, apply_gate_onsite
 from .envs._env_auxlliary import append_vec_tl, append_vec_br, append_vec_tr, append_vec_bl
@@ -150,6 +151,14 @@ class DoublePepsTensor(SpecialTensor):
         # lbs = self.bra.get_legs(axes=axes)
         legs = tuple(leg_product(lt, lb.conj()) for lt, lb in zip(lts, lbs))
         return legs if multiple_legs else legs[0]
+
+    def get_signature(self):
+        return self.s
+
+    @property
+    def s(self) -> Sequence[int]:
+        return self.ket.s[:4]
+
 
     def transpose(self, axes):
         """ Transposition of DoublePepsTensor. Only cyclic permutations are allowed. """

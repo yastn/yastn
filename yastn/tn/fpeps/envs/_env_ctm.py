@@ -242,10 +242,19 @@ class EnvCTM():
             Otherwise, the provided Leg is used to initialize CTMRG virtual legs.
         """
         normalize = kwargs.get('normalize', 'inf')
+        if init == 'dl' and not isinstance(self.psi, Peps2Layers):
+            self.reset_(init='eye')
+            self.expand_outward_()
+            for site in self.sites():
+                for dirn in self[site].fields():
+                    T = getattr(self[site], dirn)
+                    T = T / T.norm(p=normalize) if isinstance(normalize, str) else normalize(T)
+                    setattr(self[site], dirn, T)
+            return
+
         leg0 = Leg(self.config, s=1, t=(self.config.sym.zero(),), D=(1,))
         if leg is None:
             leg = leg0
-
         li = {'t': 0, 'l': 1, 'b': 2, 'r': 3}
         ef = {'t': edge_t, 'l': edge_l, 'b': edge_b, 'r': edge_r,
                 'tl': cor_tl, 'tr': cor_tr, 'bl': cor_bl, 'br': cor_br}
@@ -255,7 +264,6 @@ class EnvCTM():
                 shifted_site = self.nn_site(site, d=dirn)
                 legs = self.psi[site].get_legs()
                 if init == 'dl':
-                    assert isinstance(self.psi, Peps2Layers), "Initialization by traced double-layer on-site tensors requires double-layer PEPS"
                     if shifted_site is not None:
                         A_bra, A_ket = self.psi.bra[shifted_site], self.psi.ket[shifted_site]
                     else:
@@ -281,156 +289,162 @@ class EnvCTM():
 
         It can be used to build initial "dl" (or "nn") environment from initial "eye" environment.
         """
-        env_tmp = EnvCTM(self.psi, init=None)  # empty environments
+        cls = type(self)
+        env_tmp = cls(self.psi, init=None)  # empty environments
         #
         for site in self.sites():
             tl = self.nn_site(site, d='tl')
-            if tl is not None:
-                tmp = self[tl].l @ self[tl].tl @ self[tl].t
-                tmp = tensordot(tmp, self.psi[tl], axes=((2, 1), (0, 1)))
-                tmp = tmp.fuse_legs(axes=((0, 2), (1, 3)))
-                env_tmp[site].tl = tmp / tmp.norm(p='inf')
-            else:
-                env_tmp[site].tl = self[site].tl
+            if 'tl' in self[site].fields():
+                if tl is not None:
+                    tmp = self[tl].l @ self[tl].tl @ self[tl].t
+                    tmp = tensordot(tmp, self.psi[tl], axes=((2, 1), (0, 1)))
+                    tmp = tmp.fuse_legs(axes=((0, 2), (1, 3)))
+                    env_tmp[site].tl = tmp / tmp.norm(p='inf')
+                else:
+                    env_tmp[site].tl = self[site].tl
             #
             bl = self.nn_site(site, d='bl')
-            if bl is not None:
-                tmp = self[bl].b @ self[bl].bl @ self[bl].l
-                tmp = tensordot(tmp, self.psi[bl], axes=((2, 1), (1, 2)))
-                tmp = tmp.fuse_legs(axes=((0, 3), (1, 2)))
-                env_tmp[site].bl = tmp / tmp.norm(p='inf')
-            else:
-                env_tmp[site].bl = self[site].bl
+            if 'bl' in self[site].fields():
+                if bl is not None:
+                    tmp = self[bl].b @ self[bl].bl @ self[bl].l
+                    tmp = tensordot(tmp, self.psi[bl], axes=((2, 1), (1, 2)))
+                    tmp = tmp.fuse_legs(axes=((0, 3), (1, 2)))
+                    env_tmp[site].bl = tmp / tmp.norm(p='inf')
+                else:
+                    env_tmp[site].bl = self[site].bl
             #
             tr = self.nn_site(site, d='tr')
-            if tr is not None:
-                tmp = self[tr].t @ self[tr].tr @ self[tr].r
-                tmp = tensordot(tmp, self.psi[tr], axes=((1, 2), (0, 3)))
-                tmp = tmp.fuse_legs(axes=((0, 2), (1, 3)))
-                env_tmp[site].tr = tmp / tmp.norm(p='inf')
-            else:
-                env_tmp[site].tr = self[site].tr
+            if 'tr' in self[site].fields():
+                if tr is not None:
+                    tmp = self[tr].t @ self[tr].tr @ self[tr].r
+                    tmp = tensordot(tmp, self.psi[tr], axes=((1, 2), (0, 3)))
+                    tmp = tmp.fuse_legs(axes=((0, 2), (1, 3)))
+                    env_tmp[site].tr = tmp / tmp.norm(p='inf')
+                else:
+                    env_tmp[site].tr = self[site].tr
             #
             br = self.nn_site(site, d='br')
-            if br is not None:
-                tmp = self[br].r @ self[br].br @ self[br].b
-                tmp = tensordot(tmp, self.psi[br], axes=((2, 1), (2, 3)))
-                tmp = tmp.fuse_legs(axes=((0, 2), (1, 3)))
-                env_tmp[site].br = tmp / tmp.norm(p='inf')
-            else:
-                env_tmp[site].br = self[site].br
+            if 'br' in self[site].fields():
+                if br is not None:
+                    tmp = self[br].r @ self[br].br @ self[br].b
+                    tmp = tensordot(tmp, self.psi[br], axes=((2, 1), (2, 3)))
+                    tmp = tmp.fuse_legs(axes=((0, 2), (1, 3)))
+                    env_tmp[site].br = tmp / tmp.norm(p='inf')
+                else:
+                    env_tmp[site].br = self[site].br
             #
-            # trivial_projectors_(proj, dir, env)
+            if 'l' in self[site].fields():
+                l = self.nn_site(site, d='l')
+                if l is not None:
+                    l0, _, l2 = self[l].l.get_legs()
+                    l_t, _, l_b, _ = self.psi[l].get_legs()
+                    c_tl = env_tmp[site].tl.get_legs(axes=0)
+                    c_bl = env_tmp[site].bl.get_legs(axes=1)
+
+                    if tl:
+                        proj_hlt = eye(self.config, legs=[c_tl, c_tl.conj()], isdiag=False)  # proj[l].hlt
+                        proj_hlt = proj_hlt.unfuse_legs(axes=0)
+                    else:
+                        proj_hlt = eye(self.config, legs=[l_t.conj(), c_tl.conj()], isdiag=False)  # proj[l].hlt
+                        proj_hlt = proj_hlt.add_leg(axis=0, leg=l2.conj())
+                    if bl:
+                        proj_hlb = eye(self.config, legs=[c_bl, c_bl.conj()], isdiag=False)  # proj[l].hlb
+                        proj_hlb = proj_hlb.unfuse_legs(axes=0)
+                    else:
+                        proj_hlb = eye(self.config, legs=[l_b.conj(), c_bl.conj()], isdiag=False)  # proj[l].hlb
+                        proj_hlb = proj_hlb.add_leg(axis=0, leg=l0.conj())
+
+                    tmp = self[l].l @ proj_hlt
+                    tmp = tensordot(self.psi[l], tmp, axes=((0, 1), (2, 1)))
+                    tmp = tensordot(proj_hlb, tmp, axes=((0, 1), (2, 0)))
+                    env_tmp[site].l = tmp / tmp.norm(p='inf')
+                else:
+                    env_tmp[site].l = self[site].l
             #
-            l = self.nn_site(site, d='l')
-            if l is not None:
-                l0, _, l2 = self[l].l.get_legs()
-                l_t, _, l_b, _ = self.psi[l].get_legs()
-                c_tl = env_tmp[site].tl.get_legs(axes=0)
-                c_bl = env_tmp[site].bl.get_legs(axes=1)
+            if 'r' in self[site].fields():
+                r = self.nn_site(site, d='r')
+                if r is not None:
+                    l0, _, l2 = self[r].r.get_legs()
+                    r_t, _, r_b, _ = self.psi[r].get_legs()
+                    c_br = env_tmp[site].br.get_legs(axes=0)
+                    c_tr = env_tmp[site].tr.get_legs(axes=1)
+                    if br:
+                        proj_hrb = eye(self.config, legs=(c_br, c_br.conj()), isdiag=False)  # proj[r].hrb
+                        proj_hrb = proj_hrb.unfuse_legs(axes=0)
+                    else:
+                        proj_hrb = eye(self.config, legs=(r_b.conj(), c_br.conj()), isdiag=False)  # proj[r].hrb
+                        proj_hrb = proj_hrb.add_leg(axis=0, leg=l2.conj())
+                    if tr:
+                        proj_hrt = eye(self.config, legs=(c_tr, c_tr.conj()), isdiag=False)  # proj[r].hrt
+                        proj_hrt = proj_hrt.unfuse_legs(axes=0)
+                    else:
+                        proj_hrt = eye(self.config, legs=(r_t.conj(), c_tr.conj()), isdiag=False)  # proj[r].hrt
+                        proj_hrt = proj_hrt.add_leg(axis=0, leg=l0.conj())
 
-                if tl:
-                    proj_hlt = eye(self.config, legs=[c_tl, c_tl.conj()], isdiag=False)  # proj[l].hlt
-                    proj_hlt = proj_hlt.unfuse_legs(axes=0)
+                    tmp = self[r].r @ proj_hrb
+                    tmp = tensordot(self.psi[r], tmp, axes=((2, 3), (2, 1)))
+                    tmp = tensordot(proj_hrt, tmp, axes=((0, 1), (2, 0)))
+                    env_tmp[site].r = tmp / tmp.norm(p='inf')
                 else:
-                    proj_hlt = eye(self.config, legs=[l_t.conj(), c_tl.conj()], isdiag=False)  # proj[l].hlt
-                    proj_hlt = proj_hlt.add_leg(axis=0, leg=l2.conj())
-                if bl:
-                    proj_hlb = eye(self.config, legs=[c_bl, c_bl.conj()], isdiag=False)  # proj[l].hlb
-                    proj_hlb = proj_hlb.unfuse_legs(axes=0)
-                else:
-                    proj_hlb = eye(self.config, legs=[l_b.conj(), c_bl.conj()], isdiag=False)  # proj[l].hlb
-                    proj_hlb = proj_hlb.add_leg(axis=0, leg=l0.conj())
-
-                tmp = self[l].l @ proj_hlt
-                tmp = tensordot(self.psi[l], tmp, axes=((0, 1), (2, 1)))
-                tmp = tensordot(proj_hlb, tmp, axes=((0, 1), (2, 0)))
-                env_tmp[site].l = tmp / tmp.norm(p='inf')
-            else:
-                env_tmp[site].l = self[site].l
+                    env_tmp[site].r = self[site].r
             #
-            r = self.nn_site(site, d='r')
-            if r is not None:
-                l0, _, l2 = self[r].r.get_legs()
-                r_t, _, r_b, _ = self.psi[r].get_legs()
-                c_br = env_tmp[site].br.get_legs(axes=0)
-                c_tr = env_tmp[site].tr.get_legs(axes=1)
+            if 't' in self[site].fields():
+                t = self.nn_site(site, d='t')
+                if t is not None:
+                    l0, _, l2 = self[t].t.get_legs()
+                    _, t_l, _, t_r = self.psi[t].get_legs()
+                    c_tr = env_tmp[site].tr.get_legs(axes=0)
+                    c_tl = env_tmp[site].tl.get_legs(axes=1)
 
-                if br:
-                    proj_hrb = eye(self.config, legs=(c_br, c_br.conj()), isdiag=False)  # proj[r].hrb
-                    proj_hrb = proj_hrb.unfuse_legs(axes=0)
-                else:
-                    proj_hrb = eye(self.config, legs=(r_b.conj(), c_br.conj()), isdiag=False)  # proj[r].hrb
-                    proj_hrb = proj_hrb.add_leg(axis=0, leg=l2.conj())
-                if tr:
-                    proj_hrt = eye(self.config, legs=(c_tr, c_tr.conj()), isdiag=False)  # proj[r].hrt
-                    proj_hrt = proj_hrt.unfuse_legs(axes=0)
-                else:
-                    proj_hrt = eye(self.config, legs=(r_t.conj(), c_tr.conj()), isdiag=False)  # proj[r].hrt
-                    proj_hrt = proj_hrt.add_leg(axis=0, leg=l0.conj())
+                    if tr:
+                        proj_vtr = eye(self.config, legs=[c_tr, c_tr.conj()], isdiag=False)  # proj[t].vtr
+                        proj_vtr = proj_vtr.unfuse_legs(axes=0)
+                    else:
+                        proj_vtr = eye(self.config, legs=[t_r.conj(), c_tr.conj()], isdiag=False)  # proj[t].vtr
+                        proj_vtr = proj_vtr.add_leg(axis=0, leg=l2.conj())
 
-                tmp = self[r].r @ proj_hrb
-                tmp = tensordot(self.psi[r], tmp, axes=((2, 3), (2, 1)))
-                tmp = tensordot(proj_hrt, tmp, axes=((0, 1), (2, 0)))
-                env_tmp[site].r = tmp / tmp.norm(p='inf')
-            else:
-                env_tmp[site].r = self[site].r
+                    if tl:
+                        proj_vtl = eye(self.config, legs=[c_tl, c_tl.conj()], isdiag=False)  # proj[t].vtl
+                        proj_vtl = proj_vtl.unfuse_legs(axes=0)
+                    else:
+                        proj_vtl = eye(self.config, legs=[t_l.conj(), c_tl.conj()], isdiag=False)  # proj[t].vtl
+                        proj_vtl = proj_vtl.add_leg(axis=0, leg=l0.conj())
+
+                    tmp = tensordot(proj_vtl, self[t].t, axes=(0, 0))
+                    tmp = tensordot(tmp, self.psi[t], axes=((2, 0), (0, 1)))
+                    tmp = tensordot(tmp, proj_vtr, axes=((1, 3), (0, 1)))
+                    env_tmp[site].t = tmp / tmp.norm(p='inf')
+                else:
+                    env_tmp[site].t = self[site].t
             #
-            t = self.nn_site(site, d='t')
-            if t is not None:
-                l0, _, l2 = self[t].t.get_legs()
-                _, t_l, _, t_r = self.psi[t].get_legs()
-                c_tr = env_tmp[site].tr.get_legs(axes=0)
-                c_tl = env_tmp[site].tl.get_legs(axes=1)
+            if 'b' in self[site].fields():
+                b = self.nn_site(site, d='b')
+                if b is not None:
+                    l0, _, l2 = self[b].b.get_legs()
+                    _, b_l, _, b_r = self.psi[b].get_legs()
+                    c_bl = env_tmp[site].bl.get_legs(axes=0)
+                    c_br = env_tmp[site].br.get_legs(axes=1)
 
-                if tr:
-                    proj_vtr = eye(self.config, legs=[c_tr, c_tr.conj()], isdiag=False)  # proj[t].vtr
-                    proj_vtr = proj_vtr.unfuse_legs(axes=0)
+                    if bl:
+                        proj_vbl = eye(self.config, legs=[c_bl, c_bl.conj()], isdiag=False)  # proj[b].vbl
+                        proj_vbl = proj_vbl.unfuse_legs(axes=0)
+                    else:
+                        proj_vbl = eye(self.config, legs=[b_l.conj(), c_bl.conj()], isdiag=False)  # proj[b].vbl
+                        proj_vbl = proj_vbl.add_leg(axis=0, leg=l2.conj())
+
+                    if br:
+                        proj_vbr = eye(self.config, legs=[c_br, c_br.conj()], isdiag=False)  # proj[b].vbr
+                        proj_vbr = proj_vbr.unfuse_legs(axes=0)
+                    else:
+                        proj_vbr = eye(self.config, legs=[b_r.conj(), c_br.conj()], isdiag=False)  # proj[b].vbr
+                        proj_vbr = proj_vbr.add_leg(axis=0, leg=l0.conj())
+
+                    tmp = tensordot(proj_vbr, self[b].b, axes=(0, 0))
+                    tmp = tensordot(tmp, self.psi[b], axes=((2, 0), (2, 3)))
+                    tmp = tensordot(tmp, proj_vbl, axes=((1, 3), (0, 1)))
+                    env_tmp[site].b = tmp / tmp.norm(p='inf')
                 else:
-                    proj_vtr = eye(self.config, legs=[t_r.conj(), c_tr.conj()], isdiag=False)  # proj[t].vtr
-                    proj_vtr = proj_vtr.add_leg(axis=0, leg=l2.conj())
-
-                if tl:
-                    proj_vtl = eye(self.config, legs=[c_tl, c_tl.conj()], isdiag=False)  # proj[t].vtl
-                    proj_vtl = proj_vtl.unfuse_legs(axes=0)
-                else:
-                    proj_vtl = eye(self.config, legs=[t_l.conj(), c_tl.conj()], isdiag=False)  # proj[t].vtl
-                    proj_vtl = proj_vtl.add_leg(axis=0, leg=l0.conj())
-
-                tmp = tensordot(proj_vtl, self[t].t, axes=(0, 0))
-                tmp = tensordot(tmp, self.psi[t], axes=((2, 0), (0, 1)))
-                tmp = tensordot(tmp, proj_vtr, axes=((1, 3), (0, 1)))
-                env_tmp[site].t = tmp / tmp.norm(p='inf')
-            else:
-                env_tmp[site].t = self[site].t
-            #
-            b = self.nn_site(site, d='b')
-            if b is not None:
-                l0, _, l2 = self[b].b.get_legs()
-                _, b_l, _, b_r = self.psi[b].get_legs()
-                c_bl = env_tmp[site].bl.get_legs(axes=0)
-                c_br = env_tmp[site].br.get_legs(axes=1)
-
-                if bl:
-                    proj_vbl = eye(self.config, legs=[c_bl, c_bl.conj()], isdiag=False)  # proj[b].vbl
-                    proj_vbl = proj_vbl.unfuse_legs(axes=0)
-                else:
-                    proj_vbl = eye(self.config, legs=[b_l.conj(), c_bl.conj()], isdiag=False)  # proj[b].vbl
-                    proj_vbl = proj_vbl.add_leg(axis=0, leg=l2.conj())
-
-                if br:
-                    proj_vbr = eye(self.config, legs=[c_br, c_br.conj()], isdiag=False)  # proj[b].vbr
-                    proj_vbr = proj_vbr.unfuse_legs(axes=0)
-                else:
-                    proj_vbr = eye(self.config, legs=[b_r.conj(), c_br.conj()], isdiag=False)  # proj[b].vbr
-                    proj_vbr = proj_vbr.add_leg(axis=0, leg=l0.conj())
-
-                tmp = tensordot(proj_vbr, self[b].b, axes=(0, 0))
-                tmp = tensordot(tmp, self.psi[b], axes=((2, 0), (2, 3)))
-                tmp = tensordot(tmp, proj_vbl, axes=((1, 3), (0, 1)))
-                env_tmp[site].b = tmp / tmp.norm(p='inf')
-            else:
-                env_tmp[site].b = self[site].b
+                    env_tmp[site].b = self[site].b
         #
         # modify existing environment in place
         update_storage_(self, env_tmp)
@@ -1292,7 +1306,7 @@ class EnvCTM():
 
             # use default CTM convergence check
             if corner_tol is not None:
-                converged, max_dsv, history = env.detach().ctm_conv_corner_spec(history, corner_tol)
+                converged, max_dsv, history = env.ctm_conv_corner_spec(history, corner_tol)
                 logging.info(f'Sweep = {sweep:03d}; max_diff_corner_singular_values = {max_dsv:0.2e}')
                 if converged:
                     break
