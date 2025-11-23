@@ -272,14 +272,15 @@ def _update_core_T_(thread_pool_executor, env, move: str, opts_svd: dict, **kwar
         if env.profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.range_push(f"update_projectors_")
         futures= []
         for i,site in enumerate(sites_proj):
-            jobs= f_invoke_update_projectors_D_(device_groups[i], site)
-            for j in jobs: j[1].add_done_callback(
-                lambda x: logger.info(f" update_projectors_T_ {site,j[0]} init {j[2]} "+ \
-                                      (f" cancelled {time.perf_counter()}" if x.cancelled() else f"t {time.perf_counter()-j[2]}")))
-            futures.extend(jobs)
-        logger.info(f"_update_core_T_ launched {[ (j[0],j[2]) for j in futures ]}")
+            job= f_invoke_update_projectors_D_(device_groups[i], site)
+            job.add_done_callback(lambda x: futures.extend(x.result()))
+                # lambda x: logger.info(f" update_projectors_T_ {site,j[0]} init {j[2]} "+ \
+                #                       (f" cancelled {time.perf_counter()}" if x.cancelled() else f"t {time.perf_counter()-j[2]}")))
+            futures.append(job)
+            
+        # logger.info(f"_update_core_T_ launched {[ (j[0],j[2]) for j in futures ]}")
         for job in futures:
-            job[1].result()  # wait for all to complete
+            job.result()  # wait for all to complete
         if env.profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.range_pop()
 
         # fill (trivial) projectors on edges
@@ -310,9 +311,11 @@ def update_projectors_T_(thread_pool_executor, env, site, move, opts_svd, **kwar
     if method == '1site':
         raise NotImplementedError("1site method not implemented in distributed CTM yet.")
     elif method == '2site' and kwargs.get('devices', None):
-        return update_extended_2site_projectors_T_(thread_pool_executor, env, *sites, move, opts_svd, **kwargs)
-    
+        return thread_pool_executor.submit(
+            update_extended_2site_projectors_T_, thread_pool_executor, env, *sites, move, opts_svd, **kwargs,
+        )
 
+    
 def update_extended_2site_projectors_T_(thread_pool_executor,
         env_source, tl, tr, bl, br, move, opts_svd, 
         devices: list[str] | None = None, **kwargs):
@@ -320,7 +323,7 @@ def update_extended_2site_projectors_T_(thread_pool_executor,
     If move is 'hv' use up to two devices to schedule the computations.
     NOTE: cusolver's svd is thread-blocking, it necessary to create multiple threads/processes 
     """
-
+    logger.info(f"update_extended_2site_projectors_T_ {move} devices {devices} ")
     use_qr = kwargs.get("use_qr", True)
     kwargs["profiling_mode"]= env_source.profiling_mode
     psh = env_source.proj
@@ -425,10 +428,15 @@ def update_extended_2site_projectors_T_(thread_pool_executor,
             hlt.to(device=env_source.config.default_device,non_blocking=True)
 
     res= []
-    if any(x in move for x in 'rh'):
-        res.append( ('rh', thread_pool_executor.submit(move_rh), time.perf_counter()) )
     if any(x in move for x in 'lh'):
-        res.append( ('lh', thread_pool_executor.submit(move_lh), time.perf_counter()) )
+        if len(devices)>1 and devices[0]!=devices[1]:
+            res.append( ('lh', thread_pool_executor.submit(move_lh), time.perf_counter()) )
+            logger.info(f"update_extended_2site_projectors_T_ lh")
+        else:
+            move_lh()
+    if any(x in move for x in 'rh'):
+        # res.append( ('rh', thread_pool_executor.submit(move_rh), time.perf_counter()) )
+        move_rh() 
 
     if any(x in move for x in 'tbv'):
         cor_ll = cor_bl @ cor_tl  # l(bottom) l(top)
@@ -507,7 +515,12 @@ def update_extended_2site_projectors_T_(thread_pool_executor,
             vbl.to(device=env_source.config.default_device,non_blocking=True)
 
     if any(x in move for x in 'bv'):
-        res.append( ('bv', thread_pool_executor.submit(move_bv), time.perf_counter()) )
+        if len(devices)>1 and devices[0]!=devices[1]:
+            res.append( ('bv', thread_pool_executor.submit(move_bv), time.perf_counter()) )
+            logger.info(f"update_extended_2site_projectors_T_ bv")
+        else:
+            move_bv()
     if any(x in move for x in 'tv'):
-        res.append( ('tv', thread_pool_executor.submit(move_tv), time.perf_counter()) )
+        # res.append( ('tv', thread_pool_executor.submit(move_tv), time.perf_counter()) )
+        move_tv()
     return res
