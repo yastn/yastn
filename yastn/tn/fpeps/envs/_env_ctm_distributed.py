@@ -339,6 +339,7 @@ def update_extended_2site_projectors_T_(thread_pool_executor,
     env = env_source.to(device=devices[0],non_blocking=True) if devices else env_source
     psi = env.psi
 
+    if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.range_push(f"contract {move}")
     cor_tl = env[tl].l @ env[tl].tl @ env[tl].t
     cor_tl = tensordot(cor_tl, psi[tl], axes=((2, 1), (0, 1)))
     cor_tl = cor_tl.fuse_legs(axes=((0, 2), (1, 3)))
@@ -358,6 +359,7 @@ def update_extended_2site_projectors_T_(thread_pool_executor,
     if any(x in move for x in 'lrh'):
         cor_tt = cor_tl @ cor_tr  # b(left) b(right)
         cor_bb = cor_br @ cor_bl  # t(right) t(left)
+        if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.range_pop()
 
     def move_rh():
         if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.range_push(f"move_rh")
@@ -437,19 +439,20 @@ def update_extended_2site_projectors_T_(thread_pool_executor,
     if any(x in move for x in 'lh'):
         if len(devices)>1 and devices[0]!=devices[1]:
             res.append( ('lh', thread_pool_executor.submit(move_lh), time.perf_counter()) )
-            if env.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.mark(f"thread(move_lh)")
+            if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.mark(f"thread(move_lh)")
             logger.info(f"update_extended_2site_projectors_T_ {move}")
         else:
-            if env.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.mark(f"move_lh")
+            if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.mark(f"move_lh")
             move_lh()
     if any(x in move for x in 'rh'):
         # res.append( ('rh', thread_pool_executor.submit(move_rh), time.perf_counter()) )
-        if env.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.mark(f"move_rh")
+        if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.mark(f"move_rh")
         move_rh()
 
     if any(x in move for x in 'tbv'):
         cor_ll = cor_bl @ cor_tl  # l(bottom) l(top)
         cor_rr = cor_tr @ cor_br  # r(top) r(bottom)
+        if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.range_pop()
     else:
         if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.range_pop()
         return res
@@ -531,14 +534,14 @@ def update_extended_2site_projectors_T_(thread_pool_executor,
     if any(x in move for x in 'bv'):
         if len(devices)>1 and devices[0]!=devices[1]:
             res.append( ('bv', thread_pool_executor.submit(move_bv), time.perf_counter()) )
-            if env.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.mark(f"thread(move_bv)")
+            if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.mark(f"thread(move_bv)")
             logger.info(f"update_extended_2site_projectors_T_ {move}")
         else:
-            if env.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.mark(f"move_bv")
+            if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.mark(f"move_bv")
             move_bv()
     if any(x in move for x in 'tv'):
         # res.append( ('tv', thread_pool_executor.submit(move_tv), time.perf_counter()) )
-        if env.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.mark(f"move_tv")
+        if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.mark(f"move_tv")
         move_tv()
     if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.range_pop()
     return res
