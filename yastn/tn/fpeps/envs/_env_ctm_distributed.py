@@ -311,6 +311,7 @@ def update_projectors_T_(thread_pool_executor, env, site, move, opts_svd, **kwar
     if method == '1site':
         raise NotImplementedError("1site method not implemented in distributed CTM yet.")
     elif method == '2site' and kwargs.get('devices', None):
+        if env.profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.mark(f"update_extended_2site_projectors_T_ {site} {move}")
         return thread_pool_executor.submit(
             update_extended_2site_projectors_T_, thread_pool_executor, env, *sites, move, opts_svd, **kwargs,
         )
@@ -323,6 +324,7 @@ def update_extended_2site_projectors_T_(thread_pool_executor,
     If move is 'hv' use up to two devices to schedule the computations.
     NOTE: cusolver's svd is thread-blocking, it necessary to create multiple threads/processes 
     """
+    if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.range_push(f"update_extended_2site_projectors_T_ {move}")
     logger.info(f"update_extended_2site_projectors_T_ {move} devices {devices} ")
     use_qr = kwargs.get("use_qr", True)
     kwargs["profiling_mode"]= env_source.profiling_mode
@@ -358,6 +360,7 @@ def update_extended_2site_projectors_T_(thread_pool_executor,
         cor_bb = cor_br @ cor_bl  # t(right) t(left)
 
     def move_rh():
+        if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.range_push(f"move_rh")
         sl = psi[tl].get_shape(axes=2)
         ltl = env.nn_site(tl, d='l')
         lbl = env.nn_site(bl, d='l')
@@ -386,8 +389,10 @@ def update_extended_2site_projectors_T_(thread_pool_executor,
         hrb, hrt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
         env_source.proj[tr].hrb, env_source.proj[br].hrt= hrb.to(device=env_source.config.default_device,non_blocking=True), \
             hrt.to(device=env_source.config.default_device,non_blocking=True)
+        if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.range_pop()
 
     def move_lh():
+        if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.range_push(f"move_lh")
         cor_tt_t= cor_tt
         cor_bb_t= cor_bb
         if devices and len(devices) > 1:
@@ -426,25 +431,31 @@ def update_extended_2site_projectors_T_(thread_pool_executor,
         hlb, hlt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
         env_source.proj[tl].hlb, env_source.proj[bl].hlt= hlb.to(device=env_source.config.default_device,non_blocking=True), \
             hlt.to(device=env_source.config.default_device,non_blocking=True)
+        if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.range_pop()
 
     res= []
     if any(x in move for x in 'lh'):
         if len(devices)>1 and devices[0]!=devices[1]:
             res.append( ('lh', thread_pool_executor.submit(move_lh), time.perf_counter()) )
-            logger.info(f"update_extended_2site_projectors_T_ lh")
+            if env.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.mark(f"thread(move_lh)")
+            logger.info(f"update_extended_2site_projectors_T_ {move}")
         else:
+            if env.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.mark(f"move_lh")
             move_lh()
     if any(x in move for x in 'rh'):
         # res.append( ('rh', thread_pool_executor.submit(move_rh), time.perf_counter()) )
-        move_rh() 
+        if env.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.mark(f"move_rh")
+        move_rh()
 
     if any(x in move for x in 'tbv'):
         cor_ll = cor_bl @ cor_tl  # l(bottom) l(top)
         cor_rr = cor_tr @ cor_br  # r(top) r(bottom)
     else:
+        if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.range_pop()
         return res
 
     def move_tv():
+        if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.range_push(f"move_tv")
         sb = psi[bl].get_shape(axes=3)
         bbl = env.nn_site(bl, d='b')
         bbr = env.nn_site(br, d='b')
@@ -473,8 +484,10 @@ def update_extended_2site_projectors_T_(thread_pool_executor,
         vtr, vtl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
         env_source.proj[tl].vtr, env_source.proj[tr].vtl= vtr.to(device=env_source.config.default_device,non_blocking=True), \
             vtl.to(device=env_source.config.default_device,non_blocking=True)
+        if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.range_pop()
 
     def move_bv():
+        if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.range_push(f"move_bv")
         cor_ll_t= cor_ll
         cor_rr_t= cor_rr
         if devices and len(devices) > 1:
@@ -513,14 +526,19 @@ def update_extended_2site_projectors_T_(thread_pool_executor,
         vbr, vbl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
         env_source.proj[bl].vbr, env_source.proj[br].vbl= vbr.to(device=env_source.config.default_device,non_blocking=True), \
             vbl.to(device=env_source.config.default_device,non_blocking=True)
+        if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.range_pop()
 
     if any(x in move for x in 'bv'):
         if len(devices)>1 and devices[0]!=devices[1]:
             res.append( ('bv', thread_pool_executor.submit(move_bv), time.perf_counter()) )
-            logger.info(f"update_extended_2site_projectors_T_ bv")
+            if env.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.mark(f"thread(move_bv)")
+            logger.info(f"update_extended_2site_projectors_T_ {move}")
         else:
+            if env.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.mark(f"move_bv")
             move_bv()
     if any(x in move for x in 'tv'):
         # res.append( ('tv', thread_pool_executor.submit(move_tv), time.perf_counter()) )
+        if env.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.mark(f"move_tv")
         move_tv()
+    if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.range_pop()
     return res
