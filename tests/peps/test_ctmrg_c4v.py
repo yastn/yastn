@@ -65,7 +65,7 @@ def state_Ising(beta, config, layers):
     return T, X
 
 
-def check_env_signature_convention(env):
+def check_env_c4v_signature_convention(env):
     """ expected signature of PEPS and environment tensors"""
     assert env.psi[0, 0].get_signature() == (1,) * env.psi[0, 0].ndim
     assert env[0, 0].t.get_signature() == (-1, -1, -1)
@@ -87,13 +87,18 @@ def ctmrg_Ising(config, beta, layers, Env, init, policy, checkpoint_move):
     net = fpeps.SquareLattice(dims=(1, 1), boundary='infinite')
     psi = fpeps.Peps(net, tensors=T)
     #
-    Env = fpeps.EnvCTM if Env == 'EnvCTM' else fpeps.EnvCTM_c4v
-    env = Env(psi, init=init)
+    if Env == 'EnvCTM':
+        env = fpeps.EnvCTM(psi, init=init)
+    elif Env == 'EnvCTM_c4v':
+        env = fpeps.EnvCTM_c4v(psi, init=init)
+        check_env_c4v_signature_convention(env)
     #
     opts_svd = {"D_total": 16, 'policy': policy, 'eps_multiplet': 1e-10}
     info = env.ctmrg_(opts_svd=opts_svd, max_sweeps=200, use_qr=False, corner_tol=1e-8, checkpoint_move=checkpoint_move)
     assert info.max_dsv < 1e-8
     assert info.converged == True
+    if Env == 'EnvCTM_c4v':
+        check_env_c4v_signature_convention(env)
     #
     # calculate spontanious magnetization from long range correlator; vertical or horizontal
     eXv = env.measure_line(X, X, sites=[(0, 0), (100, 0)]) ** 0.5
