@@ -200,7 +200,9 @@ class EnvCTM():
             return env
 
     def update_from_dict_(self, d):
-        self.psi = PEPS_CLASSES[d['psi']['type']].from_dict(d['psi'])
+        psi = PEPS_CLASSES[d['psi']['type']].from_dict(d['psi'])
+        tmp = type(self)(psi, init=None)
+        self.psi = tmp.psi
         self.env = Lattice.from_dict(d['env'])
         self.proj = Lattice.from_dict(d['proj'])
 

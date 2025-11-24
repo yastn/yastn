@@ -159,7 +159,6 @@ class DoublePepsTensor(SpecialTensor):
     def s(self) -> Sequence[int]:
         return self.ket.s[:4]
 
-
     def transpose(self, axes):
         """ Transposition of DoublePepsTensor. Only cyclic permutations are allowed. """
         axes = tuple(self._t[ax] for ax in axes)
@@ -167,10 +166,10 @@ class DoublePepsTensor(SpecialTensor):
             raise YastnError("DoublePEPSTensor only supports permutations that retain legs' ordering.")
         return DoublePepsTensor(bra=self.bra, ket=self.ket, transpose=axes, op=self.op, swaps=self.swaps)
 
-    def flip_signature(self):
-        r""" Conjugate DoublePepsTensor. """
-        op_fs = self.op.flip_signature() if self.op is not None else None
-        return DoublePepsTensor(bra=self.bra.flip_signature(), ket=self.ket.flip_signature(), transpose=self._t, op=op_fs, swaps=self.swaps)
+    # def flip_signature(self):
+    #     r""" Conjugate DoublePepsTensor. """
+    #     op_fs = self.op.flip_signature() if self.op is not None else None
+    #     return DoublePepsTensor(bra=self.bra.flip_signature(), ket=self.ket.flip_signature(), transpose=self._t, op=op_fs, swaps=self.swaps)
 
     def conj(self):
         r""" Conjugate DoublePepsTensor. """
