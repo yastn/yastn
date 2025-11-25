@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from tqdm import tqdm
 
-from ._env_boundary_mps import _clear_operator_input, clear_projectors
+from ._env_auxlliary import clear_operator_input, clear_projectors
 from .._geometry import Site
 from ... import mps
 from ....tensor import YastnError
@@ -197,8 +197,8 @@ def measure_2site_row(self, O0, O1, opts_svd=None, opts_var=None):
         opts_svd = {'D_total': D_total}
 
     sites = self.sites()
-    O0dict = _clear_operator_input(O0, sites)
-    O1dict = _clear_operator_input(O1, sites)
+    O0dict = clear_operator_input(O0, sites)
+    O1dict = clear_operator_input(O1, sites)
     out = {}
     # O1n = [*O1dict[sites[0]].values()][0].n  # All O1 should have the same charge
     # All O0 should have the same charge  # TODO
@@ -268,8 +268,8 @@ def measure_2site_corner_columns(self, O0, O1, opts_svd=None, opts_var=None):
         opts_svd = {'D_total': D_total}
 
     sites = self.sites()
-    O0dict = _clear_operator_input(O0, sites)
-    O1dict = _clear_operator_input(O1, sites)
+    O0dict = clear_operator_input(O0, sites)
+    O1dict = clear_operator_input(O1, sites)
     out = {}
     O1n = [*O1dict[sites[0]].values()][0].n  # All O1 should have the same charge
     # All O0 should have the same charge  # TODO

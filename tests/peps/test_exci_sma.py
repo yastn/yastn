@@ -80,7 +80,7 @@ def test_exci_sma_UUD(config_kwargs):
         e0s[f"{tuple(site_b)}, {tuple(site_r)}"] = Jzz * env_ctm.measure_2x2(Sz, Sz, sites=[site_b, site_r]).real
         e0s[f"{tuple(site_b)}, {tuple(site_r)}"] += 0.5 * Jxy * env_ctm.measure_2x2(Sp, Sm, sites=[site_b, site_r]).real
         e0s[f"{tuple(site_b)}, {tuple(site_r)}"] += 0.5 * Jxy * env_ctm.measure_2x2(Sm, Sp, sites=[site_b, site_r]).real
-    e_gs = sum([v for v in e0s.values()]).numpy()
+    e_gs = sum([v for v in e0s.values()]).numpy(force=True)
 
     ### Compute excited state energy
     lp = 3 # patch size

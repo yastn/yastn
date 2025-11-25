@@ -316,7 +316,7 @@ def test_D3_U1_c4v_2x2(ctm_init, truncate_multiplets_mode, projector_svd_method,
     l0= loc_cost_f(test_elems)
     l0.backward()
 
-    assert np.allclose(np.asarray(REF_D3_U1_c4v_2x2_grad), test_elems.grad.numpy(), rtol=1e-03, atol=1e-05)
+    assert np.allclose(np.asarray(REF_D3_U1_c4v_2x2_grad), test_elems.grad.numpy(force=True), rtol=1e-03, atol=1e-05)
 
 
 @pytest.mark.parametrize("ctm_init", ['dl', 'eye'])
@@ -339,7 +339,7 @@ def test_D3_U1_c4v_2x2_fp(ctm_init, truncate_multiplets_mode, projector_svd_meth
     l0= loc_cost_f(test_elems)
     l0.backward()
 
-    assert np.allclose(np.asarray(REF_D3_U1_c4v_2x2_grad), test_elems.grad.numpy(), rtol=1e-03, atol=1e-05)
+    assert np.allclose(np.asarray(REF_D3_U1_c4v_2x2_grad), test_elems.grad.numpy(force=True), rtol=1e-03, atol=1e-05)
 
 
 @pytest.mark.parametrize("ctm_init", ['dl', 'eye'])
@@ -362,7 +362,7 @@ def test_D3_U1_c4v_1x1_fp(ctm_init, truncate_multiplets_mode, projector_svd_meth
     l0= loc_cost_f(test_elems)
     l0.backward()
 
-    assert np.allclose(np.asarray(REF_D3_U1_c4v_2x2_grad), test_elems.grad.numpy(), rtol=1e-03, atol=1e-05)
+    assert np.allclose(np.asarray(REF_D3_U1_c4v_2x2_grad), test_elems.grad.numpy(force=True), rtol=1e-03, atol=1e-05)
 
 
 if __name__ == '__main__':

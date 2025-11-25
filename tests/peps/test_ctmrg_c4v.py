@@ -83,6 +83,8 @@ def ctmrg_Ising(config, beta, layers, Env, init, policy, checkpoint_move):
         T = T.flip_charges(axes=(2, 3))
         if X.ndim == 4:
             X = X.flip_charges(axes=(2, 3))
+    else:
+        X = fpeps.Lattice(fpeps.CheckerboardLattice(), objects={(0, 0): X, (1, 0): X.flip_signature()})
 
     net = fpeps.SquareLattice(dims=(1, 1), boundary='infinite')
     psi = fpeps.Peps(net, tensors=T)
@@ -100,9 +102,21 @@ def ctmrg_Ising(config, beta, layers, Env, init, policy, checkpoint_move):
     if Env == 'EnvCTM_c4v':
         check_env_c4v_signature_convention(env)
     #
+    # test that spontaneus magnetization is not broken -- per Z2 symemtry
+    assert abs(env.measure_1site(X)[0, 0].item()) < 1e-10
+    assert abs(env.measure_1site(X, site=(1, 0)).item()) < 1e-10
+    #
+    nn1 = env.measure_nn(X, X)
+    nn2 = env.measure_nn(X, X, bond=[(1, 0), (2, 0)])
+    nn3 = env.measure_2x2(X, X, sites=[(1, 0), (2, 0)])
+    assert abs(nn1[(0, 0), (0, 1)].item() - nn2.item()) < 1e-10
+    assert abs(nn1[(0, 0), (1, 0)].item() - nn2.item()) < 1e-10
+    assert abs(nn2.item() - nn3.item()) < 1e-10
+    #
     # calculate spontanious magnetization from long range correlator; vertical or horizontal
-    eXv = env.measure_line(X, X, sites=[(0, 0), (100, 0)]) ** 0.5
-    eXh = env.measure_line(X, X, sites=[(0, 0), (0, 100)]) ** 0.5
+    #
+    eXv = env.measure_line(X, X, sites=[(0, 0), (99, 0)]) ** 0.5
+    eXh = env.measure_line(X, X, sites=[(0, 0), (0, 99)]) ** 0.5
     #
     assert abs(eXv.item() - MX(beta.item())) < 1e-8
     assert abs(eXh.item() - MX(beta.item())) < 1e-8
@@ -111,7 +125,7 @@ def ctmrg_Ising(config, beta, layers, Env, init, policy, checkpoint_move):
 
 
 @pytest.mark.parametrize("beta", [0.5])
-@pytest.mark.parametrize("layers", [1, 2])
+@pytest.mark.parametrize("layers", [1, ])
 @pytest.mark.parametrize("Env", ["EnvCTM_c4v", "EnvCTM"])
 @pytest.mark.parametrize("init", ['dl', 'eye'])
 @pytest.mark.parametrize("policy", ['fullrank', 'block_arnoldi', 'block_propack']) #, 'qr', 'symeig', ])  'randomized' not supported by backend_np

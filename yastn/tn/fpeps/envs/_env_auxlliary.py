@@ -14,6 +14,8 @@
 # ==============================================================================
 from ....initialize import ones, eye
 from ....tensor import tensordot, Leg, Tensor, YastnError, ncon
+from .._geometry import Lattice
+
 
 __all__ = ['hair_t', 'hair_l', 'hair_b', 'hair_r',
            'cor_tl', 'cor_bl', 'cor_br', 'cor_tr',
@@ -21,7 +23,8 @@ __all__ = ['hair_t', 'hair_l', 'hair_b', 'hair_r',
            'append_vec_tl', 'append_vec_tr',
            'append_vec_bl', 'append_vec_br',
            'tensors_from_psi', 'cut_into_hairs',
-           'identity_boundary', 'trivial_peps_tensor']
+           'identity_boundary', 'trivial_peps_tensor',
+           'clear_projectors', 'clear_operator_input']
 
 
 def trivial_peps_tensor(config):
@@ -379,3 +382,20 @@ def clear_projectors(sites, projectors, xrange, yrange):
                 raise YastnError("Projectors should consist of vectors (ndim=1) or matrices (ndim=2).")
 
     return projs_sites
+
+
+def clear_operator_input(op, sites):
+    if isinstance(op, Lattice):
+        op_dict = op.shallow_copy()
+    elif isinstance(op, dict):
+        op_dict = op.copy()
+    else:
+        op_dict = {site: op for site in sites}
+    for k, v in op_dict.items():
+        if isinstance(v, dict):
+            op_dict[k] = {(i,): vi for i, vi in v.items()}
+        elif isinstance(v, Tensor):
+            op_dict[k] = {(): v}
+        else: # is iterable
+            op_dict[k] = {(i,): vi for i, vi in enumerate(v)}
+    return op_dict

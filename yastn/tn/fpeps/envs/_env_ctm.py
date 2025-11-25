@@ -13,19 +13,19 @@
 # limitations under the License.
 # ==============================================================================
 from __future__ import annotations
+from itertools import chain
 import logging
 import sys
-from typing import NamedTuple, Union, Callable, Sequence
+from typing import NamedTuple, Callable, Sequence
 from warnings import warn
 
 from ._env_auxlliary import *
-from ._env_boundary_mps import _clear_operator_input
 from ._env_dataclasses import EnvCTM_local, EnvCTM_projectors
 from ._env_measure import _measure_nsite
 from ._env_window import EnvWindow
 from .._evolution import BondMetric
 from .._gates_auxiliary import fkron, gate_fix_swap_gate
-from .._geometry import Site, Lattice
+from .._geometry import Site, Lattice, is_site, is_bond
 from .._peps import PEPS_CLASSES, Peps2Layers
 from ... import mps
 from ....initialize import rand, ones, eye
@@ -486,16 +486,19 @@ class EnvCTM():
         O: Tensor
             Single-site operator
         """
-
-        # if site is None:
-        #     return {site: self.measure_1site(O, site) for site in self.sites()}
-
+        return_one = False
         if site is None:
-            opdict = _clear_operator_input(O, self.sites())
-            return_one = False
-        else:
+            sites = self.sites()
+        elif is_site(site):  # single site
             return_one = True
-            opdict = {site: {(): O}}
+            sites = [site]
+        elif all(is_site(ss) for ss in site):
+            sites = site  # a few sites
+        else:
+            raise YastnError("site should be None, Site, or Sequence[Site]")
+        opdict = clear_operator_input(O, sites)
+        if return_one and len(opdict[site]) > 1:
+            return_one = False
 
         out = {}
         for site, ops in opdict.items():
@@ -516,9 +519,7 @@ class EnvCTM():
                 val_op = tensordot(vecb, tmp, axes=((0, 1, 2, 3), (1, 3, 2, 0))).to_number()
                 out[site + nz] = val_op / val_no
 
-        if return_one and not isinstance(O, dict):
-            return out[site + nz]
-        return out
+        return out[site + nz] if return_one else out
 
     def measure_nn(self, O, P, bond=None) -> dict:
         r"""
@@ -536,69 +537,81 @@ class EnvCTM():
         bond: yastn.tn.fpeps.Bond | tuple[tuple[int, int], tuple[int, int]]
             Bond of the form (s0, s1). Sites s0 and s1 should be nearest-neighbors on the lattice.
         """
+        return_one = False
         if bond is None:
-            if isinstance(O, dict):
-                Odict = _clear_operator_input(O, self.sites())
-                Pdict = _clear_operator_input(P, self.sites())
-                out = {}
-                for (s0, s1) in self.bonds():
-                    for nz0, op0 in Odict[s0].items():
-                        for nz1, op1 in Pdict[s1].items():
-                            out[s0 + nz0, s1 + nz1] = self.measure_nn(op0, op1, bond=(s0, s1))
-                return out
-            else:
-                return {bond: self.measure_nn(O, P, bond) for bond in self.bonds()}
+            bonds = self.bonds()
+        elif is_bond(bond):  # single bond
+            return_one = True
+            bonds = [bond]
+        elif all(is_bond(bb) for bb in bond):
+            bonds = bond  # a few sites
+        else:
+            raise YastnError("bond should be None, Bond, or Sequence[Bond]")
+        Osites = list(set(bond[0] for bond in bonds))
+        Psites = list(set(bond[1] for bond in bonds))
+        Odict = clear_operator_input(O, Osites)
+        Pdict = clear_operator_input(P, Psites)
 
-        if O.ndim == 2 and P.ndim == 2:
-            O, P = fkron(O, P, sites=(0, 1), merge=False)
+        if return_one and (len(Odict[bond[0]]) > 1 or len(Pdict[bond[1]]) > 1):
+            return_one = False
 
-        dirn = self.nn_bond_dirn(*bond)
-        if O.ndim == 3 and P.ndim == 3:
-            O, P = gate_fix_swap_gate(O, P, dirn, self.f_ordered(*bond))
+        out = {}
+        for bond in bonds:
+            for nz0, O in Odict[bond[0]].items():
+                for nz1, P in Pdict[bond[1]].items():
 
-        s0, s1 = bond if dirn in ('lr', 'tb') else bond[::-1]
-        G0, G1 = (O, P) if dirn in ('lr', 'tb') else (P, O)
-        env0, env1 = self[s0], self[s1]
-        ten0, ten1 = self.psi[s0], self.psi[s1]
+                    if O.ndim == 2 and P.ndim == 2:
+                        O, P = fkron(O, P, sites=(0, 1), merge=False)
 
-        if dirn in ('lr', 'rl'):
-            vecl = (env0.bl @ env0.l) @ (env0.tl @ env0.t)
-            vecr = (env1.tr @ env1.r) @ (env1.br @ env1.b)
+                    dirn = self.nn_bond_dirn(*bond)
+                    if O.ndim == 3 and P.ndim == 3:
+                        O, P = gate_fix_swap_gate(O, P, dirn, self.f_ordered(*bond))
 
-            tmp0 = tensordot(ten0, vecl, axes=((0, 1), (2, 1)))
-            tmp0 = tensordot(env0.b, tmp0, axes=((1, 2), (0, 2)))
-            tmp1 = tensordot(vecr, ten1, axes=((2, 1), (2, 3)))
-            tmp1 = tensordot(tmp1, env1.t, axes=((2, 0), (1, 2)))
-            val_no = vdot(tmp0, tmp1, conj=(0, 0))
+                    s0, s1 = bond if dirn in ('lr', 'tb') else bond[::-1]
+                    G0, G1 = (O, P) if dirn in ('lr', 'tb') else (P, O)
+                    env0, env1 = self[s0], self[s1]
+                    ten0, ten1 = self.psi[s0], self.psi[s1]
 
-            ten0 = ten0.apply_gate_on_ket(G0, dirn='l') if G0.ndim <= 3 else G0
-            ten1 = ten1.apply_gate_on_ket(G1, dirn='r') if G1.ndim <= 3 else G1
+                    if dirn in ('lr', 'rl'):
+                        vecl = (env0.bl @ env0.l) @ (env0.tl @ env0.t)
+                        vecr = (env1.tr @ env1.r) @ (env1.br @ env1.b)
 
-            tmp0 = tensordot(ten0, vecl, axes=((0, 1), (2, 1)))
-            tmp0 = tensordot(env0.b, tmp0, axes=((1, 2), (0, 2)))
-            tmp1 = tensordot(vecr, ten1, axes=((2, 1), (2, 3)))
-            tmp1 = tensordot(tmp1, env1.t, axes=((2, 0), (1, 2)))
-            val_op = vdot(tmp0, tmp1, conj=(0, 0))
-        else:  # dirn in ('tb', 'bt'):
-            vect = (env0.l @ env0.tl) @ (env0.t @ env0.tr)
-            vecb = (env1.r @ env1.br) @ (env1.b @ env1.bl)
+                        tmp0 = tensordot(ten0, vecl, axes=((0, 1), (2, 1)))
+                        tmp0 = tensordot(env0.b, tmp0, axes=((1, 2), (0, 2)))
+                        tmp1 = tensordot(vecr, ten1, axes=((2, 1), (2, 3)))
+                        tmp1 = tensordot(tmp1, env1.t, axes=((2, 0), (1, 2)))
+                        val_no = vdot(tmp0, tmp1, conj=(0, 0))
 
-            tmp0 = tensordot(vect, ten0, axes=((2, 1), (0, 1)))
-            tmp0 = tensordot(tmp0, env0.r, axes=((1, 3), (0, 1)))
-            tmp1 = tensordot(ten1, vecb, axes=((2, 3), (2, 1)))
-            tmp1 = tensordot(env1.l, tmp1, axes=((0, 1), (3, 1)))
-            val_no = vdot(tmp0, tmp1, conj=(0, 0))
+                        ten0 = ten0.apply_gate_on_ket(G0, dirn='l') if G0.ndim <= 3 else G0
+                        ten1 = ten1.apply_gate_on_ket(G1, dirn='r') if G1.ndim <= 3 else G1
 
-            ten0 = ten0.apply_gate_on_ket(G0, dirn='t') if G0.ndim <= 3 else G0
-            ten1 = ten1.apply_gate_on_ket(G1, dirn='b') if G1.ndim <= 3 else G1
+                        tmp0 = tensordot(ten0, vecl, axes=((0, 1), (2, 1)))
+                        tmp0 = tensordot(env0.b, tmp0, axes=((1, 2), (0, 2)))
+                        tmp1 = tensordot(vecr, ten1, axes=((2, 1), (2, 3)))
+                        tmp1 = tensordot(tmp1, env1.t, axes=((2, 0), (1, 2)))
+                        val_op = vdot(tmp0, tmp1, conj=(0, 0))
+                    else:  # dirn in ('tb', 'bt'):
+                        vect = (env0.l @ env0.tl) @ (env0.t @ env0.tr)
+                        vecb = (env1.r @ env1.br) @ (env1.b @ env1.bl)
 
-            tmp0 = tensordot(vect, ten0, axes=((2, 1), (0, 1)))
-            tmp0 = tensordot(tmp0, env0.r, axes=((1, 3), (0, 1)))
-            tmp1 = tensordot(ten1, vecb, axes=((2, 3), (2, 1)))
-            tmp1 = tensordot(env1.l, tmp1, axes=((0, 1), (3, 1)))
-            val_op = vdot(tmp0, tmp1, conj=(0, 0))
+                        tmp0 = tensordot(vect, ten0, axes=((2, 1), (0, 1)))
+                        tmp0 = tensordot(tmp0, env0.r, axes=((1, 3), (0, 1)))
+                        tmp1 = tensordot(ten1, vecb, axes=((2, 3), (2, 1)))
+                        tmp1 = tensordot(env1.l, tmp1, axes=((0, 1), (3, 1)))
+                        val_no = vdot(tmp0, tmp1, conj=(0, 0))
 
-        return val_op / val_no
+                        ten0 = ten0.apply_gate_on_ket(G0, dirn='t') if G0.ndim <= 3 else G0
+                        ten1 = ten1.apply_gate_on_ket(G1, dirn='b') if G1.ndim <= 3 else G1
+
+                        tmp0 = tensordot(vect, ten0, axes=((2, 1), (0, 1)))
+                        tmp0 = tensordot(tmp0, env0.r, axes=((1, 3), (0, 1)))
+                        tmp1 = tensordot(ten1, vecb, axes=((2, 3), (2, 1)))
+                        tmp1 = tensordot(env1.l, tmp1, axes=((0, 1), (3, 1)))
+                        val_op = vdot(tmp0, tmp1, conj=(0, 0))
+
+                    out[bond[0] + nz0, bond[1] + nz1] = val_op / val_no
+
+        return out[bond[0] + nz0, bond[1] + nz1] if return_one else out
 
     def measure_2x2(self, *operators, sites=None) -> float:
         r"""
@@ -616,6 +629,9 @@ class EnvCTM():
         """
         if sites is None or len(operators) != len(sites):
             raise YastnError("Number of operators and sites should match.")
+
+        # unpack operators if operators provided as a Lattice or dict
+        operators = [op[site] if not isinstance(op, Tensor) else op for op, site in zip(operators, sites)]
 
         sign = sign_canonical_order(*operators, sites=sites, f_ordered=self.f_ordered)
         ops = {}
@@ -663,32 +679,47 @@ class EnvCTM():
 
         val_no = vdot(cor_tl @ cor_tr, tensordot(cor_bl, cor_br, axes=(0, 1)), conj=(0, 0))
 
-        if tl in ops:
-            ten_tl.set_operator_(ops[tl])
-        if bl in ops:
-            ten_bl.set_operator_(ops[bl])
-            ten_bl.add_charge_swaps_(ops[bl].n, axes='k1')
-            ten_tl.add_charge_swaps_(ops[bl].n, axes=['b3', 'k4'])
-        if tr in ops:
-            ten_tr.set_operator_(ops[tr])
-            ten_tr.add_charge_swaps_(ops[tr].n, axes='b0')
-            ten_tl.add_charge_swaps_(ops[tr].n, axes=['k2', 'k4'])
-        if br in ops:
-            ten_br.set_operator_(ops[br])
-            ten_br.add_charge_swaps_(ops[br].n, axes='k1')
-            ten_tr.add_charge_swaps_(ops[br].n, axes=['b3', 'b0', 'k4'])
-            ten_tl.add_charge_swaps_(ops[br].n, axes=['k2', 'k4'])
+        up_tl, up_bl, up_tr, up_br = False, False, False, False
+        if isinstance(self.psi, Peps2Layers):
+            if tl in ops:
+                ten_tl.set_operator_(ops[tl])
+            if bl in ops:
+                ten_bl.set_operator_(ops[bl])
+                ten_bl.add_charge_swaps_(ops[bl].n, axes='k1')
+                ten_tl.add_charge_swaps_(ops[bl].n, axes=['b3', 'k4'])
+            if tr in ops:
+                ten_tr.set_operator_(ops[tr])
+                ten_tr.add_charge_swaps_(ops[tr].n, axes='b0')
+                ten_tl.add_charge_swaps_(ops[tr].n, axes=['k2', 'k4'])
+            if br in ops:
+                ten_br.set_operator_(ops[br])
+                ten_br.add_charge_swaps_(ops[br].n, axes='k1')
+                ten_tr.add_charge_swaps_(ops[br].n, axes=['b3', 'b0', 'k4'])
+                ten_tl.add_charge_swaps_(ops[br].n, axes=['k2', 'k4'])
+            up_tl = ten_tl.has_operator_or_swap()
+            up_bl = ten_bl.has_operator_or_swap()
+            up_tr = ten_tr.has_operator_or_swap()
+            up_br = ten_br.has_operator_or_swap()
+        else:
+            if tl in ops:
+                ten_tl, up_tl = ops[tl], True
+            if bl in ops:
+                ten_bl, up_bl = ops[bl], True
+            if tr in ops:
+                ten_tr, up_tr = ops[tr], True
+            if br in ops:
+                ten_br, up_br = ops[br], True
 
-        if ten_tl.has_operator_or_swap():
+        if up_tl:
             cor_tl = tensordot(vec_tl, ten_tl, axes=((2, 1), (0, 1)))
             cor_tl = cor_tl.fuse_legs(axes=((0, 2), (1, 3)))
-        if ten_bl.has_operator_or_swap():
+        if up_bl:
             cor_bl = tensordot(vec_bl, ten_bl, axes=((2, 1), (1, 2)))
             cor_bl = cor_bl.fuse_legs(axes=((0, 3), (1, 2)))
-        if ten_tr.has_operator_or_swap():
+        if up_tr:
             cor_tr = tensordot(vec_tr, ten_tr, axes=((1, 2), (0, 3)))
             cor_tr = cor_tr.fuse_legs(axes=((0, 2), (1, 3)))
-        if ten_br.has_operator_or_swap():
+        if up_br:
             cor_br = tensordot(vec_br, ten_br, axes=((2, 1), (2, 3)))
             cor_br = cor_br.fuse_legs(axes=((0, 2), (1, 3)))
 
@@ -711,6 +742,9 @@ class EnvCTM():
         """
         if sites is None or len(operators) != len(sites):
             raise YastnError("Number of operators and sites should match.")
+
+        # unpack operators if operators provided as a Lattice or dict
+        operators = [op[site] if not isinstance(op, Tensor) else op for op, site in zip(operators, sites)]
 
         sign = sign_canonical_order(*operators, sites=sites, f_ordered=self.f_ordered)
         ops = {}

@@ -20,8 +20,6 @@ from warnings import warn
 from tqdm import tqdm
 
 from ._env_auxlliary import *
-from ._env_auxlliary import clear_projectors
-from ._env_boundary_mps import _clear_operator_input
 from ._env_dataclasses import EnvBP_local
 from .._evolution import BipartiteBondMetric, BondMetric
 from .._gates_auxiliary import fkron, gate_fix_swap_gate, match_ancilla
@@ -200,7 +198,7 @@ class EnvBP():
         """
 
         if site is None:
-            opdict = _clear_operator_input(O, self.sites())
+            opdict = clear_operator_input(O, self.sites())
         else:
             opdict = {site: {(): O}}
 
@@ -245,8 +243,8 @@ class EnvBP():
 
         if bond is None:
             if isinstance(O, dict):
-                Odict = _clear_operator_input(O, self.sites())
-                Pdict = _clear_operator_input(P, self.sites())
+                Odict = clear_operator_input(O, self.sites())
+                Pdict = clear_operator_input(P, self.sites())
                 out = {}
                 for (s0, s1) in self.bonds():
                     for nz0, op0 in Odict[s0].items():

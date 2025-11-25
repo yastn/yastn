@@ -16,13 +16,11 @@ from __future__ import annotations
 import logging
 from typing import Callable, Sequence
 
-from ._env_auxlliary import *
 from ._env_ctm import EnvCTM, update_storage_, _partial_svd_predict_spec
 from ._env_dataclasses import EnvCTM_c4v_local, EnvCTM_c4v_projectors
-from .._geometry import RectangularUnitcell, Lattice
-from .._peps import Peps, Peps2Layers, DoublePepsTensor
-from ....initialize import eye
-from ....tensor import Leg, YastnError, tensordot, truncation_mask, truncation_mask_multiplets
+from .._geometry import Lattice
+from .._peps import Peps2Layers
+from ....tensor import Leg, YastnError, tensordot, truncation_mask_multiplets
 
 logger = logging.Logger('ctmrg')
 
@@ -48,7 +46,7 @@ class PsiFlip:
         self._base = psi
 
     def __getattr__(self, name):
-        return self._base.__getattribute__(name)
+        return getattr(self._base, name)
 
     def __getitem__(self, site):
         if (site[0] + site[1]) % 2 == 1:
