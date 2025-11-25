@@ -68,6 +68,11 @@ def distributeU1_exponential(D, p = 0.25):
 def profile_ctmrg(on_site_t, X, config_profile, Nx=1, Ny=1, svd_policy="fullrank", devices=None, **kwargs):
     USE_TORCH_NVTX= ("torch" in config_profile.backend.BACKEND_ID)
 
+    if kwargs.get("to_dense",False):
+        on_site_t= on_site_t.to_nonsymmetric()
+        _kwargs= config_profile._asdict()
+        _kwargs["sym"]= yastn.sym.sym_none
+        config_profile = yastn.make_config(**_kwargs)
     geometry= RectangularUnitcell(pattern=[ [col for col in range(row*Ny,(row+1)*Ny)] for row in range(Nx) ],)
     psi = Peps(geometry, tensors=dict(zip(geometry.sites(), [ on_site_t.clone() for _ in range(len(geometry.sites())) ])))
 
@@ -94,8 +99,8 @@ def profile_ctmrg(on_site_t, X, config_profile, Nx=1, Ny=1, svd_policy="fullrank
             setattr(getattr(env2[site],t),"config",config_profile)
 
     opts_svd = {"policy": svd_policy, "D_total": X, 'fix_signs': False, 'tol': 1.0e-12} 
-    max_sweeps= 5
-    corner_tol= 1.0e-8
+    max_sweeps= kwargs.get("max_sweeps",5)
+    corner_tol= -1
     
 
     max_dsv, converged, history = None, False, []
@@ -230,6 +235,8 @@ if __name__ == '__main__':
     parser.add_argument("--D", type=int, default=3, help="iPEPS bond dimension")
     parser.add_argument("--X", type=int, default=None, help="environment bond dimension")
     parser.add_argument("--sym", type=str, default='Z2', choices=['U1','Z2', 'U1xU1'], help="symmetry")
+    parser.add_argument("--max_sweeps", type=int, default=5, help="Number of ctmrg sweeps ran under profiling")
+    parser.add_argument("--to_dense", action='store_true', help="Run profile case as dense")
     parser.add_argument(
         "--u1_charges",
         dest="u1_charges",
@@ -257,15 +264,15 @@ if __name__ == '__main__':
     config_kwargs=  {'backend': args.backend, 'default_device': args.devices[0],
             'default_fusion': args.default_fusion, 'tensordot_policy': args.tensordot_policy,}
     
+    kwargs= dict( Nx=args.Nx, Ny=args.Ny, svd_policy=args.svd_policy, max_sweeps=args.max_sweeps, to_dense=args.to_dense,) 
     if args.sym == 'Z2':
-        test_ctmrg_Z2_torch(config_kwargs, Nx=args.Nx, Ny=args.Ny, D=args.D, X=args.X, svd_policy=args.svd_policy,
-                            devices=ctm_devices)
+        test_ctmrg_Z2_torch(config_kwargs,  D=args.D, X=args.X, devices=ctm_devices, **kwargs)
     if args.sym == 'U1':
-        test_ctmrg_U1_torch(config_kwargs, Nx=args.Nx, Ny=args.Ny, D=args.D, X=args.X, u1_charges=args.u1_charges, u1_Ds=args.u1_Ds, 
-                            input_shape_file=args.input_shape_file, svd_policy=args.svd_policy, devices=ctm_devices)
+        test_ctmrg_U1_torch(config_kwargs, D=args.D, X=args.X, u1_charges=args.u1_charges, u1_Ds=args.u1_Ds, 
+                            input_shape_file=args.input_shape_file, devices=ctm_devices, **kwargs)
     if args.sym == 'U1xU1':
-        test_ctmrg_U1xU1_torch(config_kwargs, Nx=args.Nx, Ny=args.Ny, D=args.D, X=args.X, u1_charges=args.u1_charges, u1_Ds=args.u1_Ds, 
-                               input_shape_file=args.input_shape_file, svd_policy=args.svd_policy, devices=ctm_devices)
+        test_ctmrg_U1xU1_torch(config_kwargs, D=args.D, X=args.X, u1_charges=args.u1_charges, u1_Ds=args.u1_Ds, 
+                               input_shape_file=args.input_shape_file, devices=ctm_devices, **kwargs)
 
 
 

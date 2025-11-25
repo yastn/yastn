@@ -17,12 +17,15 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Callable, Sequence
 import time
 
+import numpy as np
+from yastn._from_dict import from_dict
 from yastn.tn.fpeps._geometry import Site
 from ....tensor import Tensor, YastnError, Leg, tensordot, qr, vdot
 from ._env_ctm import CTMRG_out, EnvCTM, proj_corners, trivial_projectors_, update_env_, update_storage_
 from ...._split_combine_dict import split_data_and_meta, combine_data_and_meta
 import logging
 import os
+import torch
 logger = logging.getLogger(__name__)
 
 
@@ -341,20 +344,39 @@ def update_extended_2site_projectors_T_(thread_pool_executor,
 
     # This part is shared between between l and r projectors for h move 
     # and between t and b projectors for v move
-    #
-    env = env_source.to(device=devices[0],non_blocking=True) if devices else env_source
-    psi = env.psi
+    # 
 
+    # variation 2
+    def _transfer(ts,env,dest):
+        data, meta= zip( *(split_data_and_meta(t.to_dict(level=0)) for t in ts) )
+        stacks= np.cumsum([0,]+[len(d) for d in data])
+        data_views= np.cumsum( [0,]+[d.view(-1).shape[0] for d in sum(data,())] )
+        data_dest= env.config.backend.move_to( torch.cat( sum(data,())   ), device=dest, non_blocking=True )
+
+        return tuple( from_dict( combine_data_and_meta( 
+            tuple(data_dest[data_views[k]:data_views[k+1]] for k in range(stacks[i],stacks[i+1])),  m ) ) 
+                     for i,m in enumerate(meta) )
+        
     if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.range_push(f"contract {move}")
     
-    cor_tl = c2x2('tl',env[tl].l, env[tl].tl, env[tl].t, psi[tl])
-    cor_bl = c2x2('bl',env[bl].b, env[bl].bl, env[bl].l, psi[bl])
-    cor_tr = c2x2('tr',env[tr].t, env[tr].tr, env[tr].r, psi[tr])
-    cor_br = c2x2('br',env[br].r, env[br].br, env[br].b, psi[br])
+    env= env_source
+    psi= env.psi
+    ts= ( env_source[tl].l, env_source[tl].tl, env_source[tl].t, env_source.psi[tl],
+            env_source[bl].b, env_source[bl].bl, env_source[bl].l, env_source.psi[bl],
+            env_source[tr].t, env_source[tr].tr, env_source[tr].r, env_source.psi[tr],
+            env_source[br].r, env_source[br].br, env_source[br].b, env_source.psi[br], )
+    if devices and devices[0] != env_source.config.default_device:
+        ts= _transfer(ts, env_source, devices[0])
+
+    cor_tl = c2x2('tl',*ts[0:4])
+    cor_bl = c2x2('bl',*ts[4:8])
+    cor_tr = c2x2('tr',*ts[8:12])
+    cor_br = c2x2('br',*ts[12:16])
 
     _profile_transfer= os.getenv("YASTN_CTMRG_PROFILE_TRANSFER", "0")
     if _profile_transfer in ["1",]:
         logger.info("YASTN_CTMRG_PROFILE_TRANSFER enabled")
+        env_source.config.backend.cuda.nvtx.range_pop()
         return []
 
     if any(x in move for x in 'lrh'):
