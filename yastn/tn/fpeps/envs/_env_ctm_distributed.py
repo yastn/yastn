@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 from __future__ import annotations
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 from typing import Callable, Sequence
 import time
 
@@ -122,7 +122,10 @@ def _ctmrg_iterator_T_(env, opts_svd, moves, method, max_sweeps, corner_tol, **k
     _validate_devices_list(devices)
 
     max_workers= len(devices) # one is the main thread
-    with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="ctmrg" ) as thread_pool_executor:
+    # with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="ctmrg" ) as thread_pool_executor:`
+    import torch.multiprocessing as mp
+    with ProcessPoolExecutor(max_workers=max_workers, mp_context=mp.get_context('spawn'), initializer=None, initargs=(), 
+                             max_tasks_per_child=None) as thread_pool_executor:
         logger.info(f"ctmrg_T main loop max_workers={max_workers} on devices={devices}")
         for sweep in range(1, max_sweeps + 1):
             if env.profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.range_push(f"update_")
@@ -218,7 +221,7 @@ def update_T_(thread_pool_executor, env, opts_svd, moves='hv', method='2site', *
     return env
 
 
-def _update_core_T_(thread_pool_executor, env, move: str, opts_svd: dict, **kwargs):
+def _update_core_T_(executor, env, move: str, opts_svd: dict, **kwargs):
     r"""
     Core function updating CTM environment tensors pefrorming specified move.
 
@@ -226,6 +229,11 @@ def _update_core_T_(thread_pool_executor, env, move: str, opts_svd: dict, **kwar
             Invoke update_projectors_ on multiple devices in parallel, each invocation receiving one GPU
         #GPUS >= 2*len(sites)
             Invoke update_projectors_ on multiple devices in parallel, each invocation receiving two GPUs. 
+
+        To avoid nested process creation, we execute update in two-stage process:
+
+            Stage 1: compute enlarged corners and enlarged halfs of the system
+            Stage 2: compute projectors
     """
     assert move in ['h', 'v', 'l', 'r', 't', 'b'], "Invalid move"
     if (move in 'hv') or (len(env.sites()) < env.Nx * env.Ny):
@@ -247,12 +255,6 @@ def _update_core_T_(thread_pool_executor, env, move: str, opts_svd: dict, **kwar
         shift_proj = None
         jobs = [[Site(nx, ny) for ny in range(env.Ny)] for nx in range(env.Nx-1, -1, -1)]
 
-    def f_invoke_update_projectors_D_(devices,site_l):
-        # env_l= env.to(device=devices[0])
-        kwargs_l= kwargs.copy()
-        kwargs_l['devices']= devices
-        return update_projectors_T_(thread_pool_executor, env, site_l, move, opts_svd, **kwargs_l)
-
     def _partition_devices(num_jobs : int) -> Sequence[Sequence[str]]:
         devices = kwargs.get('devices', None)
 
@@ -263,7 +265,14 @@ def _update_core_T_(thread_pool_executor, env, move: str, opts_svd: dict, **kwar
             return [ devices[2*i:2*i+2] for i in range(num_jobs) ]
         else:
             return [ devices[i:i+1]+devices[i+num_jobs:i+1+num_jobs] for i in range(num_jobs) ]
-            
+
+    corner_sites= lambda site: tuple(env.nn_site(site, d=d) for d in ((0, 0), (0, 1), (1, 0), (1, 1)))
+
+    svd_predict_spec= lambda s0,p0,s1,p1,sign: opts_svd.get('D_block', float('inf')) \
+        if env.proj is None or (getattr(env.proj[s0],p0) is None or getattr(env.proj[s1],p1) is None) else \
+        env._partial_svd_predict_spec(getattr(env.proj[s0],p0).get_legs(-1), getattr(env.proj[s1],p1).get_legs(-1), sign)    
+
+    stage1_futures= {}
     for site_group in jobs:
         sites_proj = [env.nn_site(site, shift_proj) for site in site_group] if shift_proj else site_group
         sites_proj = [site for site in sites_proj if site is not None] # handles boundaries of finite PEPS
@@ -274,26 +283,66 @@ def _update_core_T_(thread_pool_executor, env, move: str, opts_svd: dict, **kwar
         logger.info(f"_update_core_T_ {move} {device_groups} ")
 
         if env.profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.range_push(f"update_projectors_")
-        futures= []
-        for i,site in enumerate(sites_proj):
-            job= f_invoke_update_projectors_D_(device_groups[i], site)
-            job.add_done_callback(lambda x: futures.extend(x.result()))
-                # lambda x: logger.info(f" update_projectors_T_ {site,j[0]} init {j[2]} "+ \
-                #                       (f" cancelled {time.perf_counter()}" if x.cancelled() else f"t {time.perf_counter()-j[2]}")))
-            futures.append(job)
-            
-        # logger.info(f"_update_core_T_ launched {[ (j[0],j[2]) for j in futures ]}")
-        for job in futures:
-            job.result()  # wait for all to complete
+        
+        # Stage 1: compute enlarged corners and halfs
+        
+        env_d= env.to_dict(level=1)
+        stage1_futures= {
+                executor.submit(
+                    projectors_stage1, env_d, *corner_sites(site), 
+                                      move, device_groups[i][0], **kwargs
+                ): (i,site) for i,site in enumerate(sites_proj)
+            }
+        
+        # Stage 2: compute projectors
+        stage2_futures = {}
+        for f1 in as_completed(stage1_futures):
+            i,site = stage1_futures[f1]
+            tl,tr,bl,br= corner_sites(site)
+
+            # launch stage-2 for z0 and z1 immediately
+            half1_d, half2_d = f1.result()
+            if move in 'h':
+                opts_svd["D_blocks"]= svd_predict_spec(tr, "hrb", br, "hrt", half1_d['struct']['s'][1])
+                f2_0 = executor.submit(projectors_move_MP_, 'rh', half1_d, half2_d, 
+                                       device_groups[i][0], env.config.default_device, opts_svd, **kwargs)
+                opts_svd["D_blocks"]= svd_predict_spec(tl, "hlb", bl, "hlt", half1_d['struct']['s'][1])
+                f2_1 = executor.submit(projectors_move_MP_, 'lh', half1_d, half2_d, 
+                                       device_groups[i][1], env.config.default_device, opts_svd, **kwargs)
+            elif move in 'v':
+                opts_svd["D_block"]= svd_predict_spec(tl, "vtr", tr, "vtl", half1_d['struct']['s'][1])
+                f2_0 = executor.submit(projectors_move_MP_, 'tv', half1_d, half2_d, 
+                                       device_groups[i][0], env.config.default_device, opts_svd, **kwargs)
+                opts_svd["D_block"]= svd_predict_spec(bl, "vbr", br, "vbl", half1_d['struct']['s'][1])
+                f2_1 = executor.submit(projectors_move_MP_, 'bv', half1_d, half2_d, 
+                                       device_groups[i][1], env.config.default_device, opts_svd, **kwargs)
+            stage2_futures[f2_0] = (i, site, 'rh' if move=='h' else 'tv')
+            stage2_futures[f2_1] = (i, site, 'lh' if move=='h' else 'bv')
+
+        for f2 in stage2_futures:
+            p1_d,p2_d= f2.result()  # wait for all to complete
+            i,site,proj_pair= stage2_futures[f2]
+            tl,tr,bl,br= corner_sites(site)
+            if proj_pair=='rh':
+                env.proj[tr].hrb, env.proj[br].hrt= from_dict(p1_d), from_dict(p2_d)
+            elif proj_pair=='lh':
+                env.proj[tl].hlb, env.proj[bl].hlt= from_dict(p1_d), from_dict(p2_d)
+            elif proj_pair=='tv':
+                env.proj[tl].thl, env.proj[tr].thr= from_dict(p1_d), from_dict(p2_d)
+            elif proj_pair=='bv':
+                env.proj[bl].bhl, env.proj[br].bhr= from_dict(p1_d), from_dict(p2_d)
+
+
         if env.profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.range_pop()
 
-        _profile_transfer= os.getenv("YASTN_CTMRG_PROFILE_TRANSFER", "0")
-        if _profile_transfer in ["1",]:
-            logger.info("YASTN_CTMRG_PROFILE_TRANSFER enabled")
-            return
+        # _profile_transfer= os.getenv("YASTN_CTMRG_PROFILE_TRANSFER", "0")
+        # if _profile_transfer in ["1",]:
+        #     logger.info("YASTN_CTMRG_PROFILE_TRANSFER enabled")
+        #     return
 
-        # fill (trivial) projectors on edges
+        # fill trivial projectors on edges (if any)
         trivial_projectors_(env, move, sites_proj)
+        
         #
         # Update move
         env_tmp = EnvCTM(env.psi, init=None)  # empty environments
@@ -321,10 +370,11 @@ def update_projectors_T_(thread_pool_executor, env, site, move, opts_svd, **kwar
         raise NotImplementedError("1site method not implemented in distributed CTM yet.")
     elif method == '2site' and kwargs.get('devices', None):
         if env.profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.mark(f"update_extended_2site_projectors_T_ {site} {move}")
-        return thread_pool_executor.submit(
-            update_extended_2site_projectors_T_, thread_pool_executor, env, *sites, move, opts_svd, **kwargs,
-        )
-
+        # return thread_pool_executor.submit(
+        #     update_extended_2site_projectors_T_(thread_pool_executor, env, *sites, move, opts_svd, **kwargs)
+        # )
+        return update_extended_2site_projectors_MP_(thread_pool_executor, env, *sites, move, opts_svd, **kwargs)
+        
     
 def update_extended_2site_projectors_T_(thread_pool_executor,
         env_source, tl, tr, bl, br, move, opts_svd, 
@@ -461,7 +511,11 @@ def update_extended_2site_projectors_T_(thread_pool_executor,
     res= []
     if any(x in move for x in 'lh'):
         if len(devices)>1 and devices[0]!=devices[1]:
-            res.append( ('lh', thread_pool_executor.submit(move_lh), time.perf_counter()) )
+            # res.append( ('lh', thread_pool_executor.submit(move_lh), time.perf_counter()) )
+            res.append( ('lh', thread_pool_executor.submit(move_lh_mp, cor_tt, cor_bb, env_source, tl, tr, bl, br,
+                    use_qr, svd_predict_spec,
+                    opts_svd, devices, **kwargs), 
+                         time.perf_counter()) )
             if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.mark(f"thread(move_lh)")
             logger.info(f"update_extended_2site_projectors_T_ {move}")
         else:
@@ -556,7 +610,11 @@ def update_extended_2site_projectors_T_(thread_pool_executor,
 
     if any(x in move for x in 'bv'):
         if len(devices)>1 and devices[0]!=devices[1]:
-            res.append( ('bv', thread_pool_executor.submit(move_bv), time.perf_counter()) )
+            # res.append( ('bv', thread_pool_executor.submit(move_bv), time.perf_counter()) )
+            res.append( ('bv', thread_pool_executor.submit(move_bv_mp, cor_ll, cor_rr, env_source, tl, tr, bl, br, 
+               use_qr, svd_predict_spec,
+               opts_svd, devices, **kwargs                         
+                                                           ), time.perf_counter()) )
             if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.mark(f"thread(move_bv)")
             logger.info(f"update_extended_2site_projectors_T_ {move}")
         else:
@@ -569,6 +627,200 @@ def update_extended_2site_projectors_T_(thread_pool_executor,
     if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.range_pop()
     return res
 
+
+def update_extended_2site_projectors_MP_(
+        env_source, tl, tr, bl, br, move, opts_svd, 
+        devices: list[str] | None = None, **kwargs):
+    r"""
+    If move is 'hv' use up to two devices to schedule the computations.
+    NOTE: cusolver's svd is thread-blocking, it necessary to create multiple threads/processes 
+    """
+    if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.range_push(f"update_extended_2site_projectors_T_ {move}")
+    logger.info(f"update_extended_2site_projectors_T_ {move} devices {devices} ")
+    use_qr = kwargs.get("use_qr", True)
+    kwargs["profiling_mode"]= env_source.profiling_mode
+    psh = env_source.proj
+    svd_predict_spec= lambda s0,p0,s1,p1,sign: opts_svd.get('D_block', float('inf')) \
+        if psh is None or (getattr(psh[s0],p0) is None or getattr(psh[s1],p1) is None) else \
+        env_source._partial_svd_predict_spec(getattr(psh[s0],p0).get_legs(-1), getattr(psh[s1],p1).get_legs(-1), sign)
+        
+    env= env_source.to(device=devices[0],non_blocking=True) if devices and devices[0] != env_source.config.default_device else env_source
+    psi= env.psi
+
+
+    def move_rh():
+        if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.range_push(f"move_rh")
+        sl = psi[tl].get_shape(axes=2)
+        ltl = env.nn_site(tl, d='l')
+        lbl = env.nn_site(bl, d='l')
+        if sl == 1 and ltl and lbl:
+            cor_ltl = env[ltl].l @ env[ltl].tl @ env[ltl].t
+            cor_ltl = tensordot(cor_ltl, psi[ltl], axes=((2, 1), (0, 1)))
+            cor_ltl = tensordot(cor_ltl, env[tl].t, axes=(1, 0))
+            cor_ltl = tensordot(cor_ltl, psi[tl], axes=((3, 2), (0, 1)))
+            cor_ltl = cor_ltl.fuse_legs(axes=((0, 1, 3), (2, 4)))
+
+            cor_lbl = env[lbl].b @ env[lbl].bl @ env[lbl].l
+            cor_lbl = tensordot(cor_lbl, psi[lbl], axes=((2, 1), (1, 2)))
+            cor_lbl = env[bl].b @ cor_lbl
+            cor_lbl = tensordot(cor_lbl, psi[bl], axes=((4, 1), (1, 2)))
+            cor_lbl = cor_lbl.fuse_legs(axes=((0, 4), (1, 2, 3)))
+
+            cor_ltt = cor_ltl @ cor_tr  # b(left) b(right)
+            cor_lbb = cor_br @ cor_lbl  # t(right) t(left)
+            _, r_t = qr(cor_ltt, axes=(0, 1)) if use_qr else (None, cor_ltt)
+            _, r_b = qr(cor_lbb, axes=(1, 0)) if use_qr else (None, cor_lbb.T)
+        else:
+            _, r_t = qr(cor_tt, axes=(0, 1)) if use_qr else (None, cor_tt)
+            _, r_b = qr(cor_bb, axes=(1, 0)) if use_qr else (None, cor_bb.T)
+        
+        opts_svd["D_block"]= svd_predict_spec(tr, "hrb", br, "hrt", r_t.s[1])
+        hrb, hrt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
+        env_source.proj[tr].hrb, env_source.proj[br].hrt= hrb.to(device=env_source.config.default_device,non_blocking=True), \
+            hrt.to(device=env_source.config.default_device,non_blocking=True)
+        if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.range_pop()
+
+    res= []
+    if any(x in move for x in 'lh'):
+        if len(devices)>1 and devices[0]!=devices[1]:
+            # res.append( ('lh', thread_pool_executor.submit(move_lh), time.perf_counter()) )
+            res.append( ('lh', thread_pool_executor.submit(move_lh_mp, cor_tt, cor_bb, env_source, tl, tr, bl, br,
+                    use_qr, svd_predict_spec,
+                    opts_svd, devices, **kwargs), 
+                         time.perf_counter()) )
+            if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.mark(f"thread(move_lh)")
+            logger.info(f"update_extended_2site_projectors_T_ {move}")
+        else:
+            if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.mark(f"move_lh")
+            move_lh()
+    if any(x in move for x in 'rh'):
+        # res.append( ('rh', thread_pool_executor.submit(move_rh), time.perf_counter()) )
+        if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.mark(f"move_rh")
+        move_rh()
+
+    if any(x in move for x in 'tbv'):
+        if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.range_pop()
+    else:
+        if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.range_pop()
+        return res
+
+    
+
+
+    if any(x in move for x in 'bv'):
+        if len(devices)>1 and devices[0]!=devices[1]:
+            # res.append( ('bv', thread_pool_executor.submit(move_bv), time.perf_counter()) )
+            res.append( ('bv', thread_pool_executor.submit(move_bv_mp, cor_ll, cor_rr, env_source, tl, tr, bl, br, 
+               use_qr, svd_predict_spec,
+               opts_svd, devices, **kwargs                         
+                                                           ), time.perf_counter()) )
+            if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.mark(f"thread(move_bv)")
+            logger.info(f"update_extended_2site_projectors_T_ {move}")
+        else:
+            if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.mark(f"move_bv")
+            move_bv()
+    if any(x in move for x in 'tv'):
+        # res.append( ('tv', thread_pool_executor.submit(move_tv), time.perf_counter()) )
+        if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.mark(f"move_tv")
+        move_tv()
+    if env_source.profiling_mode in ["NVTX",]: env_source.config.backend.cuda.nvtx.range_pop()
+    return res
+
+
+def projectors_move_MP_(proj_pair, h1_d, h2_d, device, ret_device, opt_svd, **kwargs):
+    profiling_mode= kwargs.get("profiling_mode", None)
+    h1= from_dict(h1_d).to(device=device,non_blocking=True), 
+    h2= from_dict(h2_d).to(device=device,non_blocking=True)
+    if profiling_mode in ["NVTX",]: h1.config.backend.cuda.nvtx.range_push(f"{proj_pair}")
+    if proj_pair in ['rh']:
+        res= projectors_move_rh(h1, h2, opt_svd, **kwargs)
+    elif proj_pair in ['lh']:
+        res= projectors_move_lh_mp(h1, h2, opt_svd, **kwargs)
+    elif proj_pair in ['tv']:          
+        res= projectors_move_tv(h1, h2, opt_svd, **kwargs)
+    elif proj_pair in ['bv']:
+        res= projectors_move_bv_mp(h1, h2, opt_svd, **kwargs)
+    else:
+        raise ValueError(f"projectors_move_MP_ invalid proj_pair {proj_pair}")
+    res= tuple(r.to_dict(level=1).to(device=ret_device) for r in res)
+    if profiling_mode in ["NVTX",]: h1.config.backend.cuda.nvtx.range_pop()
+    return res
+
+def projectors_move_rh(cor_tt, cor_bb, opts_svd, **kwargs):
+    use_qr = kwargs.get("use_qr", True)
+
+    _, r_t = qr(cor_tt, axes=(0, 1)) if use_qr else (None, cor_tt)
+    _, r_b = qr(cor_bb, axes=(1, 0)) if use_qr else (None, cor_bb.T)
+    
+    hrb, hrt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
+    return hrb, hrt
+    
+def projectors_move_lh_mp(cor_tt, cor_bb, opts_svd, **kwargs):
+    use_qr = kwargs.get("use_qr", True)
+    
+    _, r_t = qr(cor_tt, axes=(1, 0)) if use_qr else (None, cor_tt.T)
+    _, r_b = qr(cor_bb, axes=(0, 1)) if use_qr else (None, cor_bb)
+
+    hlb, hlt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
+    return hlb, hlt
+
+def projectors_move_tv(cor_ll, cor_rr, opts_svd, **kwargs):
+    use_qr = kwargs.get("use_qr", True)
+
+    _, r_l = qr(cor_ll, axes=(0, 1)) if use_qr else (None, cor_ll)
+    _, r_r = qr(cor_rr, axes=(1, 0)) if use_qr else (None, cor_rr.T)
+
+    vtr, vtl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
+    return vtr, vtl
+
+def projectors_move_bv_mp(cor_ll, cor_rr, opts_svd, **kwargs):
+    use_qr = kwargs.get("use_qr", True)
+    
+    _, r_l = qr(cor_ll, axes=(1, 0)) if use_qr else (None, cor_ll.T)
+    _, r_r = qr(cor_rr, axes=(0, 1)) if use_qr else (None, cor_rr)
+    
+    vbr, vbl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
+    return vbr, vbl
+
+
+def projectors_stage1(env_source_dict, tl, tr, bl, br, move, device, **kwargs):
+    print(f"projectors_stage1 move {move} device {device} {tl},{tr},{bl},{br}")
+    env= from_dict(env_source_dict)
+    env= env.to(device=device,non_blocking=True) if device != env.config.default_device else env
+    ts= ( env[tl].l, env[tl].tl, env[tl].t, env.psi[tl],
+            env[bl].b, env[bl].bl, env[bl].l, env.psi[bl],
+            env[tr].t, env[tr].tr, env[tr].r, env.psi[tr],
+            env[br].r, env[br].br, env[br].b, env.psi[br], )
+    
+    res= ()
+    if any(x in move for x in 'lrh'):
+        cor_tt, cor_bb= contractions_2x2_lhr(ts) 
+        res+= (cor_tt, cor_bb)
+    if any(x in move for x in 'tvb'):
+        cor_ll, cor_rr= contractions_2x2_tvb(ts) 
+        res+= (cor_ll, cor_rr)
+    res= tuple(r.to_dict(level=1) for r in res)
+    return res
+
+def contractions_2x2_lhr(ts):
+    cor_tl = c2x2('tl',*ts[0:4])
+    cor_bl = c2x2('bl',*ts[4:8])
+    cor_tr = c2x2('tr',*ts[8:12])
+    cor_br = c2x2('br',*ts[12:16])
+
+    cor_tt = cor_tl @ cor_tr  # b(left) b(right)
+    cor_bb = cor_br @ cor_bl  # t(right) t(left)
+    return cor_tt, cor_bb
+
+def contractions_2x2_tvb(ts):
+    cor_tl = c2x2('tl',*ts[0:4])
+    cor_bl = c2x2('bl',*ts[4:8])
+    cor_tr = c2x2('tr',*ts[8:12])
+    cor_br = c2x2('br',*ts[12:16])
+
+    cor_ll = cor_bl @ cor_tl  # l(bottom) l(top)
+    cor_rr = cor_tr @ cor_br  # r(top) r(bottom)
+    return cor_ll, cor_rr
 
 def c2x2(id_c2x2, t1, c, t2, onsite_t, mode='fuse'):
     if id_c2x2 == 'tl':
