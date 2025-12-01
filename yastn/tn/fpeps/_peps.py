@@ -273,6 +273,13 @@ class Peps2Layers():
         for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "f_ordered", "nn_bond_dirn"]:
             setattr(self, name, getattr(bra.geometry, name))
 
+    def clone(self):
+        if self._ket is None:
+            return type(self)(self.bra.clone())
+        if self.bra == self._ket: # TODO is this desired behavior?
+            return type(self)(self.bra.clone())
+        return type(self)(self.bra.clone(), ket=self._ket.clone())
+
     @property
     def ket(self):
         return self.bra if self._ket is None else self._ket

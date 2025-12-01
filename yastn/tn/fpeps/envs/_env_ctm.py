@@ -173,7 +173,7 @@ class EnvCTM():
         from the originals.
         """
         cls = type(self)
-        env = cls(self.psi, init=None)
+        env = cls(self.psi.clone(), init=None)
         env.env = self.env.clone()
         env.proj = self.proj.clone()
         return env
