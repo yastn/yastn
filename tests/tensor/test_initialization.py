@@ -88,7 +88,11 @@ def test_initialize_dense(config_kwargs):
     c = yastn.rand(config=config_dense, distribution='normal', s=1, D=D, dtype='complex128').to_numpy()
     assert sum(c.imag < np.sqrt(0.5)) > 0.79 * D and sum(c.imag > np.sqrt(0.5)) > 0.11 * D
     assert sum(c.real < np.sqrt(0.5)) > 0.79 * D and sum(c.real > np.sqrt(0.5)) > 0.11 * D
-
+    #
+    legs = [yastn.Leg(config_dense, s=-1, D=(1,)),
+            yastn.Leg(config_dense, s=1, D=())]
+    a1 = yastn.ones(config=config_dense, legs=legs)
+    assert a1.shape == (0, 0)
 
 
 def test_initialize_U1(config_kwargs):
@@ -178,6 +182,12 @@ def test_initialize_U1(config_kwargs):
     assert a3.size == np.sum(npa != 0.)
     assert np.linalg.norm(np.diag(np.diag(npa)) - npa.conj()) < tol  # == 0.0
     assert a3.is_consistent()
+    #
+    # empty leg
+    legs = [yastn.Leg(config_U1, s=-1, t=(-2, 0, 2), D=(1, 2, 3)),
+            yastn.Leg(config_U1, s=1, t=(), D=())]
+    a1 = yastn.ones(config=config_U1, legs=legs)
+    assert a1.shape == (0, 0)
 
 
 def test_initialize_Z2xU1(config_kwargs):

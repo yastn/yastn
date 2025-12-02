@@ -173,11 +173,11 @@ def test_exci_sma_UUD(config_kwargs):
                     N_val, dN_dbra = compute_exci(env_ctm, sites_op=[], exci_bra=exci_bra_c, exci_ket=exci_ket, site_bra=site_c, site_ket=site_ket)
                     # ns_exci[:, i_basis, lx_k, ly_k, i_sl] = exci_basis[state.site2index(site_bra)].T.conj() @ dN_dbra
                     ns_exci[lx_k-min_x, ly_k-min_y, i_sl] = N_val
-                    
+
                     ### Compute norm using sweep from the top left corner
                     if lx_k == min_x and lx_k == min_y:
                         N_val_tl, _ = compute_norm_exci_tl(env_ctm, exci_bra, exci_psi, (min_x, max_x+1), (min_y, max_y+1))
-                        ns_exci_tl[:, :, i_sl] = np.array([v for v in N_val_tl.values()]).reshape(lp, lp)
+                        ns_exci_tl[:, :, i_sl] = np.array([v.detach() for v in N_val_tl.values()]).reshape(lp, lp)
         computed_norm = True
 
 
