@@ -29,7 +29,7 @@ from yastn.backend import backend_np
 from yastn.backend import backend_torch
 import yastn.tn.fpeps as fpeps
 from yastn.tn.fpeps import Peps, Peps2Layers, RectangularUnitcell
-from yastn.tn.fpeps.envs._env_ctm_distributed import iterate_T_
+from yastn.tn.fpeps.envs._env_ctm_dist_mp import iterate_D_
 from itertools import product
 import json
 import time
@@ -83,8 +83,6 @@ def profile_ctmrg(on_site_t, X, config_profile, Nx=1, Ny=1, svd_policy="fullrank
 
     info = env.ctmrg_(opts_svd = {"policy": svd_policy, "D_total": X, 'fix_signs': False, 'tol': 1.0e-12}, max_sweeps= nsteps, 
                             truncation_f=None, use_qr=False, checkpoint_move=False)
-    # info = iterate_T_(env, opts_svd = {"policy": svd_policy, "D_total": X, 'fix_signs': False, 'tol': 1.0e-12}, max_sweeps= nsteps, 
-    #                         truncation_f=None, use_qr=False, checkpoint_move=False, devices=devices)
     
     # clone current env
     env2= env.clone()
@@ -105,14 +103,16 @@ def profile_ctmrg(on_site_t, X, config_profile, Nx=1, Ny=1, svd_policy="fullrank
 
     max_dsv, converged, history = None, False, []
     t0= time.perf_counter()
-    if USE_TORCH_NVTX:
-        env2.profiling_mode= "NVTX"
-    # for ctm_step in env2.iterate_(opts_svd=opts_svd, moves='hv', method='2site', max_sweeps=max_sweeps, 
-    #                               iterator_step=1, corner_tol=corner_tol, truncation_f=None, use_qr=False, checkpoint_move=False,
-    #                               devices=devices):
-    for ctm_step in iterate_T_(env2, opts_svd=opts_svd, moves='hv', method='2site', max_sweeps=max_sweeps,
+    if USE_TORCH_NVTX: env2.profiling_mode= "NVTX"
+
+    if len(devices)==1:
+        ctm_gen= env2.iterate_(opts_svd=opts_svd, moves='hv', method='2site', max_sweeps=max_sweeps, 
+                                  iterator_step=1, corner_tol=corner_tol, truncation_f=None, use_qr=False, checkpoint_move=False)
+    elif len(devices)>1:
+        ctm_gen= iterate_D_(env2, opts_svd=opts_svd, moves='hv', method='2site', max_sweeps=max_sweeps,
                                iterator_step=1, corner_tol=corner_tol, truncation_f=None, use_qr=False, checkpoint_move=False, 
-                               devices=devices):
+                               devices=devices)
+    for ctm_step in ctm_gen:
         sweep, max_dsv, max_D, converged = ctm_step
         t1= time.perf_counter()
         print(f'Sweep = {sweep:03d} t {t1-t0} [s] max_diff_corner_singular_values = {max_dsv:0.2e} max_D {max_D} max_X {env2.effective_chi()}')
@@ -121,14 +121,11 @@ def profile_ctmrg(on_site_t, X, config_profile, Nx=1, Ny=1, svd_policy="fullrank
 
 
 @torch_test
-def test_ctmrg_U1xU1_torch(config_kwargs,D : int=3, X : int=None, u1_charges : list[int]=None, u1_Ds: list[int]=None, 
+def test_ctmrg_U1xU1(config_kwargs,D : int=3, X : int=None, u1_charges : list[int]=None, u1_Ds: list[int]=None, 
                            input_shape_file=None, **kwargs):
     """
     """
     config = yastn.make_config(sym='U1xU1', **config_kwargs)
-    _cfg= copy.deepcopy(config_kwargs)
-    _cfg["backend"]= backend_torch 
-    config_torch = yastn.make_config(sym='U1xU1', **_cfg)
     config.backend.random_seed(1)
 
     # make on-site tensor
@@ -137,8 +134,8 @@ def test_ctmrg_U1xU1_torch(config_kwargs,D : int=3, X : int=None, u1_charges : l
             shape_data= json.load(f)
 
             assert shape_data["symmetry"]=="U1xU1", "Input shape file symmetry mismatch"
-            a= yastn.rand(config_torch, 
-                          legs= [ yastn.Leg(config_torch, s= shape_data[lid]["signature"], t=shape_data[lid]["charges"], D=shape_data[lid]["dimensions"]) 
+            a= yastn.rand(config, 
+                          legs= [ yastn.Leg(config, s= shape_data[lid]["signature"], t=shape_data[lid]["charges"], D=shape_data[lid]["dimensions"]) 
                                     for lid in ["a_leg_t","a_leg_l","a_leg_b","a_leg_r","a_leg_s"] 
                             ])
             D= min( sum(l.D) for l in a.get_legs()[:4])
@@ -153,23 +150,20 @@ def test_ctmrg_U1xU1_torch(config_kwargs,D : int=3, X : int=None, u1_charges : l
         aux_Ds= [ x*y for x,y in product(aux_Ds,aux_Ds) ]
         D= sum(aux_Ds)
         X= 2*D**2 if X is None else X
-        l0= yastn.Leg(config_torch, s=1, t=aux_ts, D=aux_Ds)
-        lp= yastn.Leg(config_torch, s=1, t=(((1,-1),(-1,1))), D=(1,1) )
-        a= yastn.rand(config_torch, legs=[l0.conj(), l0.conj(), l0, l0, lp], n=config_torch.sym.zero())
+        l0= yastn.Leg(config, s=1, t=aux_ts, D=aux_Ds)
+        lp= yastn.Leg(config, s=1, t=(((1,-1),(-1,1))), D=(1,1) )
+        a= yastn.rand(config, legs=[l0.conj(), l0.conj(), l0, l0, lp], n=config.sym.zero())
     
     print(a)
     profile_ctmrg(a, X, config, **kwargs)
 
 
 @torch_test
-def test_ctmrg_U1_torch(config_kwargs, D : int=3, X : int=None, u1_charges : list[int]=None, u1_Ds: list[int]=None, 
+def test_ctmrg_U1(config_kwargs, D : int=3, X : int=None, u1_charges : list[int]=None, u1_Ds: list[int]=None, 
                         input_shape_file=None, **kwargs):
     """
     """
     config = yastn.make_config(sym='U1', **config_kwargs)
-    _cfg= copy.deepcopy(config_kwargs)
-    _cfg["backend"]= backend_torch 
-    config_torch = yastn.make_config(sym='U1', **_cfg)
     config.backend.random_seed(1)
 
     # make on-site tensor
@@ -178,8 +172,8 @@ def test_ctmrg_U1_torch(config_kwargs, D : int=3, X : int=None, u1_charges : lis
             shape_data= json.load(f)
 
             assert shape_data["symmetry"]=="U1", "Input shape file symmetry mismatch"
-            a= yastn.rand(config_torch, 
-                          legs= [ yastn.Leg(config_torch, s= shape_data[lid]["signature"], t=shape_data[lid]["charges"], D=shape_data[lid]["dimensions"]) 
+            a= yastn.rand(config, 
+                          legs= [ yastn.Leg(config, s= shape_data[lid]["signature"], t=shape_data[lid]["charges"], D=shape_data[lid]["dimensions"]) 
                                     for lid in ["a_leg_t","a_leg_l","a_leg_b","a_leg_r","a_leg_s"] 
                             ])
             D= min( sum(l.D) for l in a.get_legs()[:4])
@@ -191,31 +185,28 @@ def test_ctmrg_U1_torch(config_kwargs, D : int=3, X : int=None, u1_charges : lis
         else:    
             aux_ts,aux_Ds= tuple(zip(*distributeU1_exponential(D)))
         X= 2*D**2 if X is None else X
-        l0= yastn.Leg(config_torch, s=1, t=aux_ts, D=aux_Ds)
-        lp= yastn.Leg(config_torch, s=1, t=(-1,1), D=(1,1) )
-        a= yastn.rand(config_torch, legs=[l0.conj(), l0.conj(), l0, l0, lp], n=0)
+        l0= yastn.Leg(config, s=1, t=aux_ts, D=aux_Ds)
+        lp= yastn.Leg(config, s=1, t=(-1,1), D=(1,1) )
+        a= yastn.rand(config, legs=[l0.conj(), l0.conj(), l0, l0, lp], n=0)
 
     print(a)
     profile_ctmrg(a, X, config, **kwargs)
 
 
 @torch_test
-def test_ctmrg_Z2_torch(config_kwargs, D : int=4, X : int=None, **kwargs):
+def test_ctmrg_Z2(config_kwargs, D : int=4, X : int=None, **kwargs):
     """
     """
     config = yastn.make_config(sym='Z2', **config_kwargs)
-    _cfg= copy.deepcopy(config_kwargs)
-    _cfg["backend"]= backend_torch 
-    config_torch = yastn.make_config(sym='Z2', **_cfg)
     config.backend.random_seed(1)
 
     # make on-site tensor
     X= 2*D**2 if X is None else X
     aux_ts,aux_Ds= (0,1), (D-D//2,D//2)
-    l0= yastn.Leg(config_torch, s=1, t=aux_ts, D=aux_Ds)
+    l0= yastn.Leg(config, s=1, t=aux_ts, D=aux_Ds)
     print(f"CTM D {D} X {X} aux leg {l0}")
-    lp= yastn.Leg(config_torch, s=1, t=(0,), D=(2,) )
-    a= yastn.rand(config_torch, legs=[l0.conj(), l0.conj(), l0, l0, lp], n=1)
+    lp= yastn.Leg(config, s=1, t=(0,), D=(2,) )
+    a= yastn.rand(config, legs=[l0.conj(), l0.conj(), l0, l0, lp], n=1)
 
     # 
     profile_ctmrg(a, X, config, **kwargs)
@@ -257,21 +248,19 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # process devices
-    if args.devices is None:
-        args.devices= ['cpu']
-    ctm_devices= [] if len(args.devices)==1 else args.devices
+    ctm_devices= ['cpu'] if args.devices is None else args.devices
     
     config_kwargs=  {'backend': args.backend, 'default_device': args.devices[0],
             'default_fusion': args.default_fusion, 'tensordot_policy': args.tensordot_policy,}
     
     kwargs= dict( Nx=args.Nx, Ny=args.Ny, svd_policy=args.svd_policy, max_sweeps=args.max_sweeps, to_dense=args.to_dense,) 
     if args.sym == 'Z2':
-        test_ctmrg_Z2_torch(config_kwargs,  D=args.D, X=args.X, devices=ctm_devices, **kwargs)
+        test_ctmrg_Z2(config_kwargs,  D=args.D, X=args.X, devices=ctm_devices, **kwargs)
     if args.sym == 'U1':
-        test_ctmrg_U1_torch(config_kwargs, D=args.D, X=args.X, u1_charges=args.u1_charges, u1_Ds=args.u1_Ds, 
+        test_ctmrg_U1(config_kwargs, D=args.D, X=args.X, u1_charges=args.u1_charges, u1_Ds=args.u1_Ds, 
                             input_shape_file=args.input_shape_file, devices=ctm_devices, **kwargs)
     if args.sym == 'U1xU1':
-        test_ctmrg_U1xU1_torch(config_kwargs, D=args.D, X=args.X, u1_charges=args.u1_charges, u1_Ds=args.u1_Ds, 
+        test_ctmrg_U1xU1(config_kwargs, D=args.D, X=args.X, u1_charges=args.u1_charges, u1_Ds=args.u1_Ds, 
                                input_shape_file=args.input_shape_file, devices=ctm_devices, **kwargs)
 
 

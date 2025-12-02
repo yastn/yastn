@@ -16,6 +16,7 @@
 from ....tensor import tensordot, vdot
 from .._gates_auxiliary import fkron, gate_fix_swap_gate
 from .._geometry import Site
+from ._env_auxlliary import _clear_operator_input
 from ._env_window import EnvWindow
 from ... import mps
 from ....operators import sign_canonical_order

@@ -16,6 +16,7 @@
 from itertools import groupby
 from functools import reduce
 import warnings
+import multiprocessing as mp
 import numpy as np
 import scipy.linalg
 import scipy.sparse.linalg

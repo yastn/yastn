@@ -13,8 +13,6 @@
 # limitations under the License.
 # ==============================================================================
 from __future__ import annotations
-import torch.multiprocessing as mp
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 from typing import Callable, Sequence
 import time
 
@@ -23,6 +21,7 @@ from yastn._from_dict import from_dict
 from yastn.tn.fpeps._geometry import Site
 from ....tensor import Tensor, YastnError, Leg, tensordot, qr, vdot
 from ._env_ctm import CTMRG_out, EnvCTM, proj_corners, trivial_projectors_, update_env_, update_storage_
+from ._env_auxlliary import halves_4x4_lhr, halves_4x4_tvb
 from ...._split_combine_dict import split_data_and_meta, combine_data_and_meta
 import logging
 import os
@@ -37,7 +36,7 @@ def _validate_devices_list(devices: list[str] | None) -> None:
         raise YastnError("At least two devices must be provided for distributed CTM.")
 
 
-def iterate_T_(env, opts_svd=None, moves='hv', method='2site', max_sweeps=1, iterator=False, corner_tol=None, truncation_f: Callable = None, **kwargs):
+def iterate_D_(env, opts_svd=None, moves='hv', method='2site', max_sweeps=1, iterator=False, corner_tol=None, truncation_f: Callable = None, **kwargs):
         r"""
         Perform CTMRG updates :meth:`yastn.tn.fpeps.EnvCTM.update_` until convergence.
         Convergence can be measured based on singular values of CTM environment corner tensors.
@@ -110,11 +109,11 @@ def iterate_T_(env, opts_svd=None, moves='hv', method='2site', max_sweeps=1, ite
                 assert kwargs["checkpoint_move"] in ['reentrant', 'nonreentrant', False], f"Invalid choice for {kwargs['checkpoint_move']}"
         kwargs["truncation_f"] = truncation_f
         kwargs["iterator_step"] = kwargs.get("iterator_step", int(iterator))
-        tmp = _ctmrg_iterator_T_(env, opts_svd, moves, method, max_sweeps, corner_tol, **kwargs)
+        tmp = _ctmrg_iterator_D_(env, opts_svd, moves, method, max_sweeps, corner_tol, **kwargs)
         return tmp if kwargs["iterator_step"] else next(tmp)
 
 
-def _ctmrg_iterator_T_(env, opts_svd, moves, method, max_sweeps, corner_tol, **kwargs):
+def _ctmrg_iterator_D_(env, opts_svd, moves, method, max_sweeps, corner_tol, **kwargs):
     """ Generator for iterate_ (or its alias ctmrg_). """
     iterator_step = kwargs.get("iterator_step", 0)
     max_dsv, converged, history = None, False, []
@@ -122,10 +121,8 @@ def _ctmrg_iterator_T_(env, opts_svd, moves, method, max_sweeps, corner_tol, **k
     devices= kwargs.get('devices', None)
     _validate_devices_list(devices)
 
+    mp= env.config.backend.mp
     max_workers= len(devices) # one is the main thread
-    
-    
-    mp.set_start_method('spawn', force=True)
     task_queue = mp.Queue()
     stage1_queue = mp.Queue()
     stage2_queue = mp.Queue()
@@ -140,7 +137,7 @@ def _ctmrg_iterator_T_(env, opts_svd, moves, method, max_sweeps, corner_tol, **k
         logger.info(f"ctmrg_T main loop max_workers={max_workers} on devices={devices}")
         for sweep in range(1, max_sweeps + 1):
             if env.profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.range_push(f"update_")
-            update_T_(ctmrg_mp_context, env, opts_svd=opts_svd, moves=moves, method=method, **kwargs)
+            update_D_(ctmrg_mp_context, env, opts_svd=opts_svd, moves=moves, method=method, **kwargs)
             if env.profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.range_pop()
             
             # use default CTM convergence check
@@ -169,7 +166,7 @@ def _ctmrg_iterator_T_(env, opts_svd, moves, method, max_sweeps, corner_tol, **k
     yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
 
 
-def update_T_(thread_pool_executor, env, opts_svd, moves='hv', method='2site', **kwargs):
+def update_D_(ctmrg_mp_context, env, opts_svd, moves='hv', method='2site', **kwargs):
     r"""
     Perform one step of CTMRG update. Environment tensors are updated in place.
 
@@ -217,7 +214,7 @@ def update_T_(thread_pool_executor, env, opts_svd, moves='hv', method='2site', *
         if checkpoint_move:
             def f_update_core_(move_d, loc_im, *inputs_t):
                 loc_env = EnvCTM.from_dict(combine_data_and_meta(inputs_t, loc_im))
-                _update_core_T_(thread_pool_executor, loc_env, move_d, opts_svd, method=method, **kwargs)
+                _update_core_D_(ctmrg_mp_context, loc_env, move_d, opts_svd, method=method, **kwargs)
                 out_data, out_meta = split_data_and_meta(loc_env.to_dict(level=0))
                 return out_data, out_meta
 
@@ -237,11 +234,11 @@ def update_T_(thread_pool_executor, env, opts_svd, moves='hv', method='2site', *
             # reconstruct env from output tensors
             env.update_from_dict_(combine_data_and_meta(out_data, out_meta))
         else:
-            _update_core_T_(thread_pool_executor, env, d, opts_svd, method=method, **kwargs)
+            _update_core_D_(ctmrg_mp_context, env, d, opts_svd, method=method, **kwargs)
     return env
 
 
-def _update_core_T_(executor, env, move: str, opts_svd: dict, **kwargs):
+def _update_core_D_(ctmrg_mp_context, env, move: str, opts_svd: dict, **kwargs):
     r"""
     Core function updating CTM environment tensors pefrorming specified move.
 
@@ -293,7 +290,7 @@ def _update_core_T_(executor, env, move: str, opts_svd: dict, **kwargs):
         if env.proj is None or (getattr(env.proj[s0],p0) is None or getattr(env.proj[s1],p1) is None) else \
         env._partial_svd_predict_spec(getattr(env.proj[s0],p0).get_legs(-1), getattr(env.proj[s1],p1).get_legs(-1), sign)    
 
-    task_queue, stage1_queue, stage2_queue= executor
+    task_queue, stage1_queue, stage2_queue= ctmrg_mp_context
     for site_group in jobs:
         sites_proj = [env.nn_site(site, shift_proj) for site in site_group] if shift_proj else site_group
         sites_proj = [site for site in sites_proj if site is not None] # handles boundaries of finite PEPS
@@ -307,15 +304,9 @@ def _update_core_T_(executor, env, move: str, opts_svd: dict, **kwargs):
         
         # Stage 1: compute enlarged corners and halfs
         env_d= env.to_dict(level=1)
-        # stage1_futures= {
-        #         executor.submit(
-        #             projectors_stage1, env_d, *corner_sites(site), 
-        #                               move, device_groups[i][0], **kwargs
-        #         ): (i,site) for i,site in enumerate(sites_proj)
-        #     }
         for i,site in enumerate(sites_proj):
             task_queue.put( ("projectors_stage1", 
-                             (i, site, env_d, *corner_sites(site), move), kwargs) )
+                             (i, site, env_d, move), kwargs) )
         
         # blocking wait for all stage-1 to complete
         for _ in range(len(sites_proj)):
@@ -360,11 +351,6 @@ def _update_core_T_(executor, env, move: str, opts_svd: dict, **kwargs):
 
         if env.profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.range_pop()
 
-        # _profile_transfer= os.getenv("YASTN_CTMRG_PROFILE_TRANSFER", "0")
-        # if _profile_transfer in ["1",]:
-        #     logger.info("YASTN_CTMRG_PROFILE_TRANSFER enabled")
-        #     return
-
         # fill trivial projectors on edges (if any)
         trivial_projectors_(env, move, sites_proj)
         
@@ -405,8 +391,30 @@ def _ctmrg_worker_mp(i:int, devices:Sequence[str],
         del args, func_kwargs, task
 
 
-def projectors_move_MP_(stage2_queue, device, i, site, proj_pair, h1_d, h2_d, 
+def projectors_move_MP_(out_queue, device, i, site, proj_pair, h1_d, h2_d, 
                         ret_device, opt_svd, **kwargs):
+    r"""
+    Stage 1 of CTM projector calculation: compute enlarged corners and halfs.
+
+    Parameters
+    ----------
+    out_queue: mp.Queue
+        multiprocessing Queue to put the result into.
+    device: str
+        Device to perform calculations on.
+    i: int
+        Index of the job.
+    site: Site
+        Reference lattice site for which the projectors are calculated.
+    proj_pair: str
+        Projector pair to calculate: 'rh', 'lh', 'tv', or 'bv
+    h1_d, h2_d: dict
+        pair of rank-2 tensors from which to construct the projectors serialized to dictionaries.
+    ret_device: str
+        Device to put the result onto.
+    opt_svd: dict
+        Options for SVD truncation.
+    """
     profiling_mode= kwargs.get("profiling_mode", None)
     h1= from_dict(h1_d).clone().to(device=device,non_blocking=True)
     h2= from_dict(h2_d).clone().to(device=device,non_blocking=True)
@@ -416,15 +424,15 @@ def projectors_move_MP_(stage2_queue, device, i, site, proj_pair, h1_d, h2_d,
     if proj_pair in ['rh']:
         res= projectors_move_rh(h1, h2, opt_svd, **kwargs)
     elif proj_pair in ['lh']:
-        res= projectors_move_lh_mp(h1, h2, opt_svd, **kwargs)
+        res= projectors_move_lh(h1, h2, opt_svd, **kwargs)
     elif proj_pair in ['tv']:          
         res= projectors_move_tv(h1, h2, opt_svd, **kwargs)
     elif proj_pair in ['bv']:
-        res= projectors_move_bv_mp(h1, h2, opt_svd, **kwargs)
+        res= projectors_move_bv(h1, h2, opt_svd, **kwargs)
     else:
         raise ValueError(f"projectors_move_MP_ invalid proj_pair {proj_pair}")
     res= tuple(r.to(device=ret_device).to_dict(level=1) for r in res)
-    stage2_queue.put( (i, site, proj_pair, res) )
+    out_queue.put( (i, site, proj_pair, res) )
     if profiling_mode in ["NVTX",]: h1.config.backend.cuda.nvtx.range_pop()
     del h1, h2, res
 
@@ -437,7 +445,7 @@ def projectors_move_rh(cor_tt, cor_bb, opts_svd, **kwargs):
     hrb, hrt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
     return hrb, hrt
     
-def projectors_move_lh_mp(cor_tt, cor_bb, opts_svd, **kwargs):
+def projectors_move_lh(cor_tt, cor_bb, opts_svd, **kwargs):
     use_qr = kwargs.get("use_qr", True)
     
     _, r_t = qr(cor_tt, axes=(1, 0)) if use_qr else (None, cor_tt.T)
@@ -455,7 +463,7 @@ def projectors_move_tv(cor_ll, cor_rr, opts_svd, **kwargs):
     vtr, vtl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
     return vtr, vtl
 
-def projectors_move_bv_mp(cor_ll, cor_rr, opts_svd, **kwargs):
+def projectors_move_bv(cor_ll, cor_rr, opts_svd, **kwargs):
     use_qr = kwargs.get("use_qr", True)
     
     _, r_l = qr(cor_ll, axes=(1, 0)) if use_qr else (None, cor_ll.T)
@@ -465,11 +473,33 @@ def projectors_move_bv_mp(cor_ll, cor_rr, opts_svd, **kwargs):
     return vbr, vbl
 
 
-def projectors_stage1(out_queue,device,i,site,env_source_dict, tl, tr, bl, br, move, **kwargs):
+def projectors_stage1(out_queue,device,
+                      i,site,env_d, move, **kwargs):
+    r"""
+    Stage 1 of CTM projector calculation: compute enlarged corners and halfs.
+
+    Parameters
+    ----------
+    out_queue: mp.Queue
+        multiprocessing Queue to put the result into.
+    device: str
+        Device to perform calculations on.
+    i: int
+        Index of the job.
+    site: Site
+        Reference lattice site for which the projectors are calculated.
+    env_d: dict
+        EnvCTM serialized to dictionary.
+    tl, tr, bl, br: Site
+        Lattice sites corresponding to corners.
+    move: str
+        CTM move direction: 'h', 'v', 'l', 'r', 't', or 'b'.
+    """
     profiling_mode= kwargs.get("profiling_mode", None)
-    env= from_dict(env_source_dict).clone().to(device=device,non_blocking=True)
+    env= from_dict(env_d).clone().to(device=device,non_blocking=True)
     
     if profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.range_push(f"projectors_stage1")
+    tl, tr, bl, br= tuple(env.nn_site(site, d=d) for d in ((0, 0), (0, 1), (1, 0), (1, 1)))
     ts= ( env[tl].l, env[tl].tl, env[tl].t, env.psi[tl],
             env[bl].b, env[bl].bl, env[bl].l, env.psi[bl],
             env[tr].t, env[tr].tr, env[tr].r, env.psi[tr],
@@ -478,71 +508,13 @@ def projectors_stage1(out_queue,device,i,site,env_source_dict, tl, tr, bl, br, m
     cor_tt, cor_bb, cor_ll, cor_rr= None, None, None, None
     res= ()
     if any(x in move for x in 'lrh'):
-        cor_tt, cor_bb= contractions_2x2_lhr(ts) 
+        cor_tt, cor_bb= halves_4x4_lhr(ts) 
         res+= (cor_tt, cor_bb)
     if any(x in move for x in 'tvb'):
-        cor_ll, cor_rr= contractions_2x2_tvb(ts) 
+        cor_ll, cor_rr= halves_4x4_tvb(ts) 
         res+= (cor_ll, cor_rr)
     res= tuple(r.to_dict(level=1) for r in res)
     out_queue.put( (i,site, res) )
     if profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.range_pop()
     del env, ts
     del cor_tt, cor_bb, cor_ll, cor_rr, res
-
-def contractions_2x2_lhr(ts):
-    cor_tl = c2x2('tl',*ts[0:4])
-    cor_bl = c2x2('bl',*ts[4:8])
-    cor_tr = c2x2('tr',*ts[8:12])
-    cor_br = c2x2('br',*ts[12:16])
-
-    cor_tt = cor_tl @ cor_tr  # b(left) b(right)
-    cor_bb = cor_br @ cor_bl  # t(right) t(left)
-    return cor_tt, cor_bb
-
-def contractions_2x2_tvb(ts):
-    cor_tl = c2x2('tl',*ts[0:4])
-    cor_bl = c2x2('bl',*ts[4:8])
-    cor_tr = c2x2('tr',*ts[8:12])
-    cor_br = c2x2('br',*ts[12:16])
-
-    cor_ll = cor_bl @ cor_tl  # l(bottom) l(top)
-    cor_rr = cor_tr @ cor_br  # r(top) r(bottom)
-    return cor_ll, cor_rr
-
-def c2x2(id_c2x2, t1, c, t2, onsite_t, mode='fuse'):
-    if id_c2x2 == 'tl':
-        return c2x2_tl(t1, c, t2, onsite_t, mode=mode)
-    elif id_c2x2 == 'bl': 
-        return c2x2_bl(t1, c, t2, onsite_t, mode=mode)
-    elif id_c2x2 == 'tr':
-        return c2x2_tr(t1, c, t2, onsite_t, mode=mode)
-    elif id_c2x2 == 'br':
-        return c2x2_br(t1, c, t2, onsite_t, mode=mode)
-
-def c2x2_tl(t_left, c_topleft, t_top, onsite_t, mode='fuse'):
-    cor_tl = t_left @ c_topleft @ t_top
-    cor_tl = tensordot(cor_tl, onsite_t, axes=((2, 1), (0, 1)))
-    if mode == 'fuse':
-        cor_tl = cor_tl.fuse_legs(axes=((0, 2), (1, 3)))
-    return cor_tl
-
-def c2x2_bl(t_bottom, c_bottomleft, t_left, onsite_t, mode='fuse'):
-    cor_bl = t_bottom @ c_bottomleft @ t_left
-    cor_bl = tensordot(cor_bl, onsite_t, axes=((2, 1), (1, 2)))
-    if mode == 'fuse': 
-        cor_bl = cor_bl.fuse_legs(axes=((0, 3), (1, 2)))
-    return cor_bl
-
-def c2x2_tr(t_top, c_topright, t_right, onsite_t, mode='fuse'):
-    cor_tr = t_top @ c_topright @ t_right
-    cor_tr = tensordot(cor_tr, onsite_t, axes=((1, 2), (0, 3)))
-    if mode == 'fuse':
-        cor_tr = cor_tr.fuse_legs(axes=((0, 2), (1, 3)))
-    return cor_tr
-
-def c2x2_br(t_right, c_bottomright, t_bottom, onsite_t, mode='fuse'):
-    cor_br = t_right @ c_bottomright @ t_bottom
-    cor_br = tensordot(cor_br, onsite_t, axes=((2, 1), (2, 3)))
-    if mode == 'fuse':
-        cor_br = cor_br.fuse_legs(axes=((0, 2), (1, 3)))
-    return cor_br
