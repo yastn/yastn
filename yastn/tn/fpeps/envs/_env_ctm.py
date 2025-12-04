@@ -964,7 +964,7 @@ def update_extended_2site_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwa
 
         _, r_t = qr(h1, axes=(0, 1)) if use_qr else (None, h1)
         _, r_b = qr(h2, axes=(1, 0)) if use_qr else (None, h2.T)
-        opts_svd["D_block"]= svd_predict_spec(tr, "hrb", br, "hrt", r_t.s[1])
+        opts_svd["k_block"]= svd_predict_spec(tr, "hrb", br, "hrt", r_t.s[1])
         env.proj[tr].hrb, env.proj[br].hrt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
 
     if any(x in move for x in 'lh'):
@@ -991,7 +991,7 @@ def update_extended_2site_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwa
 
         _, r_t = qr(h1, axes=(1, 0)) if use_qr else (None, h1.T)
         _, r_b = qr(h2, axes=(0, 1)) if use_qr else (None, h2)
-        opts_svd["D_block"]= svd_predict_spec(tl, "hlb", bl, "hlt", r_t.s[1])
+        opts_svd["k_block"]= svd_predict_spec(tl, "hlb", bl, "hlt", r_t.s[1])
         env.proj[tl].hlb, env.proj[bl].hlt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
 
     if any(x in move for x in 'tbv'):
@@ -1022,7 +1022,7 @@ def update_extended_2site_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwa
 
         _, r_l = qr(h1, axes=(0, 1)) if use_qr else (None, h1)
         _, r_r = qr(h2, axes=(1, 0)) if use_qr else (None, h2.T)
-        opts_svd["D_block"]= svd_predict_spec(tl, "vtr", tr, "vtl", r_l.s[1])
+        opts_svd["k_block"]= svd_predict_spec(tl, "vtr", tr, "vtl", r_l.s[1])
         env.proj[tl].vtr, env.proj[tr].vtl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
 
     if any(x in move for x in 'bv'):
@@ -1049,7 +1049,7 @@ def update_extended_2site_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwa
 
         _, r_l = qr(h1, axes=(1, 0)) if use_qr else (None, h1.T)
         _, r_r = qr(h2, axes=(0, 1)) if use_qr else (None, h2)
-        opts_svd["D_block"]= svd_predict_spec(bl, "vbr", br, "vbl", r_l.s[1])
+        opts_svd["k_block"]= svd_predict_spec(bl, "vbr", br, "vbl", r_l.s[1])
         env.proj[bl].vbr, env.proj[br].vbl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
 
 
