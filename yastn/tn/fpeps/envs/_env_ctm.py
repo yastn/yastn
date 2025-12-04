@@ -17,21 +17,15 @@ import logging
 import sys
 from typing import NamedTuple, Union, Callable, Sequence
 from warnings import warn
-from concurrent.futures import ThreadPoolExecutor
 
 from ._env_auxlliary import *
-from ._env_boundary_mps import _clear_operator_input
 from ._env_dataclasses import EnvCTM_local, EnvCTM_projectors
-from ._env_measure import _measure_nsite
-from ._env_window import EnvWindow
 from .._evolution import BondMetric
-from .._gates_auxiliary import fkron, gate_fix_swap_gate
 from .._geometry import Site, Lattice
 from .._peps import PEPS_CLASSES, Peps2Layers
 from ... import mps
 from ....initialize import rand, ones, eye
-from ....operators import sign_canonical_order
-from ....tensor import Tensor, YastnError, Leg, tensordot, qr, vdot
+from ....tensor import Tensor, YastnError, Leg, tensordot, qr
 from ...._split_combine_dict import split_data_and_meta, combine_data_and_meta
 
 logger = logging.getLogger(__name__)
@@ -901,7 +895,7 @@ def _update_core_(env, move: str, opts_svd: dict, **kwargs):
         else:
             for site in sites:
                 update_env_(env_tmp, site, env, move)
-        
+
         update_storage_(env, env_tmp)
 
 
@@ -967,7 +961,7 @@ def update_extended_2site_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwa
             h2 = cor_br @ cor_lbl  # t(right) t(left)
         else:
             h1,h2= cor_tt, cor_bb
-        
+
         _, r_t = qr(h1, axes=(0, 1)) if use_qr else (None, h1)
         _, r_b = qr(h2, axes=(1, 0)) if use_qr else (None, h2.T)
         opts_svd["k_block"]= svd_predict_spec(tr, "hrb", br, "hrt", r_t.s[1])
@@ -994,7 +988,7 @@ def update_extended_2site_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwa
             h2 = cor_rbr @ cor_bl  # t(right) t(left)
         else:
             h1,h2= cor_tt, cor_bb
-        
+
         _, r_t = qr(h1, axes=(1, 0)) if use_qr else (None, h1.T)
         _, r_b = qr(h2, axes=(0, 1)) if use_qr else (None, h2)
         opts_svd["k_block"]= svd_predict_spec(tl, "hlb", bl, "hlt", r_t.s[1])
@@ -1052,7 +1046,7 @@ def update_extended_2site_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwa
             h2 = cor_ttr @ cor_br  # r(top) r(bottom)
         else:
             h1,h2= cor_ll, cor_rr
-            
+
         _, r_l = qr(h1, axes=(1, 0)) if use_qr else (None, h1.T)
         _, r_r = qr(h2, axes=(0, 1)) if use_qr else (None, h2)
         opts_svd["k_block"]= svd_predict_spec(bl, "vbr", br, "vbl", r_l.s[1])
