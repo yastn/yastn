@@ -324,11 +324,6 @@ def ParaUpdateCTM_(psi, env, fid, bonds, opts_svd_ctm, cfg, parallel_pool, dirn=
 
         jobs.append([env_part.save_to_dict(), site0, bond0, bond])
 
-    print("--------------------------")
-    for job in jobs:
-        print(job[3])
-    print("--------------------------")
-
     # gathered_result_ = []
 
     # for ii in range(0, int(np.ceil(len(jobs) / n_cores))):
@@ -346,7 +341,6 @@ def ParaUpdateCTM_(psi, env, fid, bonds, opts_svd_ctm, cfg, parallel_pool, dirn=
             key0 = key[0]
             key1 = key[1]
             key0_new = env.canonical_site(Site(key0.nx + dx, key0.ny + dy))
-            print((key0_new, key1))
             proj_dict[(key0_new, key1)] = gathered_result_[ii][key]
 
     if sites_to_be_updated is None:
@@ -358,8 +352,6 @@ def ParaUpdateCTM_(psi, env, fid, bonds, opts_svd_ctm, cfg, parallel_pool, dirn=
                 sites_to_be_updated.append(bond.site1)
 
     jobs.clear()
-
-    print(sites_to_be_updated)
 
     for site in sites_to_be_updated:
         # Only pick the needed peps tensor(s) and CTMRG tensors
