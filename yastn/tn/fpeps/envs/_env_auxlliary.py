@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 from typing import Sequence
-from yastn.tn.fpeps._geometry import Lattice
+from ....tn.fpeps._geometry import Lattice
 from ....initialize import ones, eye
 from ....tensor import tensordot, Leg, Tensor, YastnError, ncon
 
@@ -107,7 +107,7 @@ def hair_r(A_bra, ht=None, hb=None, hr=None, A_ket=None):
         A_ket = ncon([ht, A_ket], [(-0, 1), (1, -1, -2, -3, -4)])
     return tensordot(A_bra.conj(), A_ket, axes=((0, 2, 3, 4), (0, 2, 3, 4)))  # l' l
 
-# 
+#
 # Initialization of corner and edge tensors from PEPS on-site tensor
 
 def cor_tl(A_bra, ht=None, hl=None, A_ket=None):
@@ -203,7 +203,7 @@ def edge_b(A_bra, hb=None, A_ket=None):  # A = [t l] [b r] s;  hb = b' b
     egb = egb.swap_gate(axes=((1, 4), 3)) # l l' X t'
     return egb.fuse_legs(axes=((2, 5), (0, 3), (1, 4)))  # [r r'] [t t'] [l l']
 
-# 
+#
 # Typical contractions featuring in CTM for square lattice
 
 def append_vec_tl(Ac, A, vectl, op=None, mode='old', in_b=(2, 1), out_a=(2, 3)):
@@ -402,7 +402,7 @@ def halves_4x4_tvb(ts):
         t_l_1  a_1    a_3    t_r_3  =  left_half         right_half
         c_bl   t_b_1  t_b_3  c_br      |                 |
                                         -------0 1-------
-        
+
     Legs are ordered as per the CTM conventions, see :class:`yastn.tn.fpeps.EnvCtm`.
 
     Args:
@@ -428,7 +428,7 @@ def corner2x2(id_c2x2, t1, c, t2, onsite_t, mode='fuse'):
     """
     Contract 2x2 corner of PEPS and its CTM environment from two edges t1, t2 and corner c with onsite tensor onsite_t.
     Legs are ordered as per the CTM conventions, see :class:`yastn.tn.fpeps.EnvCtm`.
-    
+
     Args:
         id_c2x2: str
             Identifier of corner: 'tl', 'bl', 'tr', 'br' for top-left, bottom-left, top-right, bottom-right corner, respectively.
@@ -437,7 +437,7 @@ def corner2x2(id_c2x2, t1, c, t2, onsite_t, mode='fuse'):
     """
     if id_c2x2 == 'tl':
         return corner2x2_tl(t1, c, t2, onsite_t, mode=mode)
-    elif id_c2x2 == 'bl': 
+    elif id_c2x2 == 'bl':
         return corner2x2_bl(t1, c, t2, onsite_t, mode=mode)
     elif id_c2x2 == 'tr':
         return corner2x2_tr(t1, c, t2, onsite_t, mode=mode)
@@ -454,7 +454,7 @@ def corner2x2_tl(t_left, c_topleft, t_top, onsite_t, mode='fuse'):
 def corner2x2_bl(t_bottom, c_bottomleft, t_left, onsite_t, mode='fuse'):
     cor_bl = t_bottom @ c_bottomleft @ t_left
     cor_bl = tensordot(cor_bl, onsite_t, axes=((2, 1), (1, 2)))
-    if mode == 'fuse': 
+    if mode == 'fuse':
         cor_bl = cor_bl.fuse_legs(axes=((0, 3), (1, 2)))
     return cor_bl
 

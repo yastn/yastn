@@ -89,7 +89,8 @@ class dataclasses_common():
             return cls(**dd)
 
     def __repr__(self) -> str:
-        return f"{type(self)}({ ',\n'.join(f'{k}={v}' for k,v in self.__dict__.items()) })"
+        body = ',\n'.join(f'{k}={v}' for k, v in self.__dict__.items())
+        return f"{type(self)}({body})"
 
 @dataclass()
 class EnvCTM_local(dataclasses_common):

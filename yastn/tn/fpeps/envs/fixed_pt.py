@@ -1057,8 +1057,8 @@ class FixedPoint(torch.autograd.Function):
         with torch.enable_grad():
             time0 = time.perf_counter()
             _, df_vjp = torch.func.vjp(lambda x,y: FixedPoint.fixed_point_iter(env_gauge, ctx.ctm_opts_fp, env_dict, _env_meta, _env_slices, _psi_meta, x, y), _env_ts, _psi_data)
-            log.info(f"{type(ctx).__name__}.backward t_vjp {time1-time0} [s]")
             time1 = time.perf_counter()
+            log.info(f"{type(ctx).__name__}.backward t_vjp {time1-time0} [s]")
 
             dfdC_vjp= lambda x: (df_vjp(x)[0],)
             dfdA_vjp= lambda x: (df_vjp(x)[1],)
