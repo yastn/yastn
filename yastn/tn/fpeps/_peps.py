@@ -273,6 +273,9 @@ class Peps2Layers():
         for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "f_ordered", "nn_bond_dirn"]:
             setattr(self, name, getattr(bra.geometry, name))
 
+    def detach(self):
+        return type(self)(bra=self.bra.detach(), ket=None if self._ket is None else self._ket.detach())
+
     def clone(self):
         if self._ket is None:
             return type(self)(self.bra.clone())

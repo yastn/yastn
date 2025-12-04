@@ -23,6 +23,7 @@ from scipy.sparse.linalg import eigsh, eigs, ArpackNoConvergence
 import torch
 
 from ._env_ctm import ctm_conv_corner_spec
+from ._env_ctm_dist_mp import iterate_D_
 from ._env_dataclasses import Gauge
 from .rdm import *
 from .._geometry import Lattice
@@ -825,7 +826,7 @@ def find_gauge_multi_sites(env_old, env, verbose=False):
 
 def fp_ctmrg(env: EnvCTM, \
             ctm_opts_fwd : dict= {'method': "2site", 'corner_tol': 1e-8, 'max_sweeps': 100, 'opts_svd': {}, 'verbosity': 0},
-            ctm_opts_fp: dict= {'opts_svd': {'policy':'fullrank'}, "verbosity": 0})->tuple[EnvCTM,Sequence[torch.Tensor],Sequence[slice]]:
+            ctm_opts_fp: dict= {'opts_svd': {'policy':'fullrank'}, "verbosity": 0}, fwd_devices=None)->tuple[EnvCTM,Sequence[torch.Tensor],Sequence[slice]]:
     r"""
     Compute the fixed-point environment for the given state using CTMRG.
     First, run CTMRG until convergence then find the gauge transformation guaranteeing element-wise
@@ -841,7 +842,7 @@ def fp_ctmrg(env: EnvCTM, \
         Sequence[Tensor]: raw environment data for the backward pass.
     """
     raw_peps_params= tuple( env.psi.ket[s]._data for s in env.psi.ket.sites() )
-    env, env_t_meta, env_slices, env_1d = FixedPoint.apply(env, ctm_opts_fwd, ctm_opts_fp, *raw_peps_params)
+    env, env_t_meta, env_slices, env_1d = FixedPoint.apply(env, ctm_opts_fwd, ctm_opts_fp, fwd_devices, *raw_peps_params)
     env_t_dict = _assemble_dict_from_1d(env_t_meta, env_1d, env_slices)
     env.env = Lattice.from_dict(env_t_dict)
     return env
@@ -935,14 +936,18 @@ class FixedPoint(torch.autograd.Function):
         max_sweeps=100,
         opts_svd=None,
         corner_tol=1e-8,
+        fwd_devices=None,
         **kwargs
     ):
         t_ctm, t_check = 0.0, 0.0
         converged, conv_history = False, []
-
-        ctm_itr= env.ctmrg_(iterator=True, method=method,  max_sweeps=max_sweeps,
-                   opts_svd=opts_svd,
-                   corner_tol=None, **kwargs)
+        if len(fwd_devices) == 1:
+            ctm_itr = env.ctmrg_(iterator=True, method=method,  max_sweeps=max_sweeps,
+                    opts_svd=opts_svd, corner_tol=None, **kwargs)
+        elif len(fwd_devices) > 1:
+            ctm_itr = iterate_D_(env, opts_svd=opts_svd, moves='hv', method='2site', max_sweeps=max_sweeps,
+                        iterator_step=1, corner_tol=corner_tol, truncation_f=None, use_qr=False, checkpoint_move=False,
+                        devices=fwd_devices)
 
         for sweep in range(max_sweeps):
             t0 = time.perf_counter()
@@ -965,7 +970,7 @@ class FixedPoint(torch.autograd.Function):
         return env, converged, conv_history, t_ctm, t_check
 
     @staticmethod
-    def forward(ctx, env: EnvCTM, ctm_opts_fwd : dict, ctm_opts_fp: dict, *state_params):
+    def forward(ctx, env: EnvCTM, ctm_opts_fwd : dict, ctm_opts_fp: dict, fwd_devices, *state_params):
         r"""
         Compute the fixed-point environment for the given state using CTMRG.
         First, run CTMRG until convergence then find the gauge transformation guaranteeing element-wise
@@ -989,6 +994,7 @@ class FixedPoint(torch.autograd.Function):
         ctm_env_out, converged, *FixedPoint.ctm_log, FixedPoint.t_ctm, FixedPoint.t_check = FixedPoint.get_converged_env(
             env,
             **ctm_opts_fwd,
+            fwd_devices=fwd_devices,
         )
         if not converged:
             raise NoFixedPointError(code=1, message="No fixed point found: CTM forward does not converge!")
@@ -1051,7 +1057,7 @@ class FixedPoint(torch.autograd.Function):
         _psi_data, _psi_meta = split_data_and_meta(env_dict['psi'])
 
         prev_grad_tmp = None
-        diff_ave = None
+        diff_ave = 1.0
 
         # Compute vjp only
         with torch.enable_grad():
@@ -1082,15 +1088,14 @@ class FixedPoint(torch.autograd.Function):
                     # print("The norm of the full grad diff is below 1e-10.")
                     log.log(logging.INFO, f"Fixed_pt: The norm of the full grad diff is below {ctx.ctm_opts_fp['corner_tol']}.")
                     break
-                if diff_ave is not None:
-                    if grad_diff > diff_ave:
-                        # print("Full grad diff is no longer decreasing!")
-                        log.log(logging.INFO, f"Fixed_pt: Full grad diff is no longer decreasing.")
-                        break
-                    else:
-                        diff_ave = alpha*grad_diff + (1-alpha)*diff_ave
-                else:
-                    diff_ave = grad_diff
+
+                if grad_diff > diff_ave:
+                    # print("Full grad diff is no longer decreasing!")
+                    log.log(logging.INFO, f"Fixed_pt: Full grad diff is no longer decreasing.")
+                    break
+
+                diff_ave = alpha*grad_diff + (1-alpha)*diff_ave if diff_ave is not None else grad_diff
+
             prev_grad_tmp = grad_tmp
 
         dA = dfdA_vjp(dA)[0]
@@ -1129,4 +1134,4 @@ class FixedPoint(torch.autograd.Function):
         # with torch.enable_grad():
         #   dA = torch.autograd.grad(FixedPoint.fixed_point_iter(ctx.env, ctx.env_gauge, ctx.opts_svd, ctx.slices, env_data), ctx.env.psi.ket.get_parameters(), grad_outputs=u)
 
-        return None, None, None, *dA
+        return None, None, None, None, *dA
