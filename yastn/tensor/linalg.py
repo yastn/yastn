@@ -79,7 +79,7 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
 
     policy: str
         ``"fullrank"`` or ``"lowrank"`` are allowed. For ``"fullrank"`` use standard full (but reduced) SVD,
-        and for ``"lowrank"`` use randomized/truncated SVD and requires providing ``D_block`` in ``kwargs``.
+        and for ``"lowrank"`` use randomized/truncated SVD and requires providing ``D_block`` or ``k_block`` in ``kwargs``.
 
     tol: float
         relative tolerance of singular values below which to truncate across all blocks.
@@ -88,7 +88,11 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
         relative tolerance of singular values below which to truncate within individual blocks.
 
     D_block: int
-        largest number of singular values to keep in a single block.
+        largest number of singular values to keep in a single block. 
+
+    k_block: None (default) | int | dict
+        When ``policy='lowrank'``, number of singular values to compute in each block.
+        If ``D_block`` is provided, it is used instead to determine number of singular values to compute.
 
     D_total: int
         largest total number of singular values to keep.
@@ -163,10 +167,10 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
             * (default) ``"fullrank"`` compute full SVD then truncate.
             * ``"lowrank"`` default policy for partial SVD.
                 On NumPy backend uses ``block_arnoldi``. On torch backend uses ``block_arnoldi``.
-            * ``"randomized"`` randomized SVD up to desired size in each block. Requires providing ``D_block`` in ``kwargs``.
+            * ``"randomized"`` randomized SVD up to desired size in each block. Requires providing ``k_block`` in ``kwargs``.
                 Requires torch backend and uses ``torch.svd_lowrank``.
-            * ``"block_arnoldi"`` partial SVD using scipy's svds arnoldi method. Requires providing ``D_block`` in ``kwargs``.
-            * ``"block_propack"`` partial SVD using scipy's svds propack method. Requires providing ``D_block`` in ``kwargs``.
+            * ``"block_arnoldi"`` partial SVD using scipy's svds arnoldi method. Requires providing ``k_block`` in ``kwargs``.
+            * ``"block_propack"`` partial SVD using scipy's svds propack method. Requires providing ``k_block`` in ``kwargs``.
 
         kwargs will be passed to those functions for non-default settings.
 
@@ -189,6 +193,10 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         Nothing is done for data already residing on CPU.
         The default is ``False``.
 
+    k_block: None (default) | int | dict
+        When ``policy='lowrank'``, number of singular values to compute in each block.
+        If ``D_block`` is provided, it is used instead to determine number of singular values to compute.
+
     Returns
     -------
     `U`, `S`, `V` (when ``compute_uv=True``) or `S` (when ``compute_uv=False``)
@@ -198,17 +206,21 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     if policy not in POLICIES:
        raise YastnError(f"Invalid SVD solver/policy {policy}. Choose one of {POLICIES}.")
     _test_axes_all(a, axes)
+    # 1.1 non-default D_block provides defaults for k_block
+    if 'D_block' in kwargs and not (kwargs['D_block'] in [None, float('inf')]) and \
+        ('k_block' not in kwargs or kwargs['k_block'] in [None,]): 
+        kwargs['k_block'] = kwargs['D_block']
 
     # 2. Global solvers
     verbosity= kwargs.get('verbosity', 0)
     if policy == "krylov":
         from ..krylov._krylov import svds
-        if 'D_block' not in kwargs:
-            raise YastnError(policy + " policy in svd requires passing argument D_block.")
+        if 'k_block' not in kwargs:
+            raise YastnError(policy + " policy in svd requires passing argument k_block.")
         else:
             # WIP: BUG for SVDS
-            D_block = min(kwargs['D_block'], min(a.get_shape(axes=0), a.get_shape(axes=1)))
-            U, S, Vh = svds(a, axes=axes, sU=sU, nU=nU, k=D_block, ncv=None, tol=0, which='LM', solver='arpack')
+            k_block = min(kwargs['k_block'], min(a.get_shape(axes=0), a.get_shape(axes=1)))
+            U, S, Vh = svds(a, axes=axes, sU=sU, nU=nU, k=k_block, ncv=None, tol=0, which='LM', solver='arpack')
             return U, S, Vh
 
     # 3. Continue with block-wise SVD
@@ -225,18 +237,18 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     #     Used by block-wise partial SVD and ignored by 'fullrank' policy.
     minD = tuple(min(ds) for ds in struct.D)
     if policy in ['lowrank', 'randomized', 'block_arnoldi', 'block_propack']:
-        if 'D_block' not in kwargs:
+        if 'k_block' not in kwargs:
             raise YastnError(policy + " policy in svd requires passing argument D_block.")
-        D_block = kwargs['D_block']
-        if not isinstance(D_block, dict):
-            minD = tuple(min(D_block, d) for d in minD)
+        k_block = kwargs['k_block']
+        if not isinstance(k_block, dict):
+            minD = tuple(min(k_block, d) for d in minD)
         else:
-            # Presumably {charge: D} data (D_block) for leg to be attached to U with signature sU
-            # TODO: control default for sectors not present in D_block
-            sector_minD= min(D_block.values())
+            # Presumably {charge: D} data (k_block) for leg to be attached to U with signature sU
+            # TODO: control default for sectors not present in k_block
+            sector_minD= min(k_block.values())
             nsym = a.config.sym.NSYM
             st = [x[nsym:] for x in struct.t] if nU else [x[:nsym] for x in struct.t]
-            minD = tuple(min(D_block.get(t, sector_minD), d) for t, d in zip(st, minD))
+            minD = tuple(min(k_block.get(t, sector_minD), d) for t, d in zip(st, minD))
 
     if verbosity>2:
         fname = sys._getframe().f_code.co_name
@@ -546,6 +558,7 @@ def truncation_mask_multiplets(S, tol=0, D_total=float('inf'),
     verbosity = kwargs.get('verbosity', 0)
     if verbosity>2:
         fname = sys._getframe().f_code.co_name
+        tol_block = kwargs.get('tol_block', "N/A")
         logger.info(f"{fname} tol {tol} tol_block {tol_block} D_total {D_total}")
 
     # makes a copy for partial truncations; also detaches from autograd computation graph
