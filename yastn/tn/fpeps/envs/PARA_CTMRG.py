@@ -307,26 +307,24 @@ def ParaUpdateCTM_(psi:Peps, env:EnvCTM, fid, sites, opts_svd_ctm, cfg, parallel
     for site in sites:
         if move =='t':
             site_ = canonical_site(env, env.nn_site(site, 't'))
-            env_part, site0, _, _ = SubWindow(psi, site_, fid, 0, 0, 2, 1, env,
+            env_part, site0, _, _ = SubWindow(psi, site_, fid, 0, 0, 1, 1, env,
                                               env_load_dict={(0, 0): ['l', 'tl', 't'], (0, 1): ['t', 'tr', 'r'],
-                                                             (1, 0): ['l', 'bl', 'b'], (1, 1): ['b', 'br', 'r'],
-                                                             (2, 0): ['b', 'bl', 'l'], (2, 1): ['r', 'br', 'r']})
+                                                             (1, 0): ['l', 'bl', 'b'], (1, 1): ['b', 'br', 'r']})
         elif move =='l':
             site_ = canonical_site(env, env.nn_site(site, 'l'))
-            env_part, site0, _, _ = SubWindow(psi, site_, fid, 0, 0, 1, 2, env,
-                                              env_load_dict={(0, 0): ['l', 'tl', 't'], (0, 1): ['t', 'tr', 'r'], (0, 2): ['t', 'tr', 'r'],
-                                                             (1, 0): ['l', 'bl', 'b'], (1, 1): ['b', 'br', 'r'], (1, 2): ['r', 'br', 'b']})
+            env_part, site0, _, _ = SubWindow(psi, site_, fid, 0, 0, 1, 1, env,
+                                              env_load_dict={(0, 0): ['l', 'tl', 't'], (0, 1): ['t', 'tr', 'r'],
+                                                             (1, 0): ['l', 'bl', 'b'], (1, 1): ['b', 'br', 'r']})
         elif move =='b':
             site_ = site
-            env_part, site0, _, _ = SubWindow(psi, site_, fid, 1, 0, 1, 1, env,
-                                              env_load_dict={(-1, 0):['l', 'tl', 't'], (-1, 1): ['t', 'tr', 'r'],
-                                                             (0, 0): ['l', 'tl', 't'], (0, 1): ['t', 'tr', 'r'],
+            env_part, site0, _, _ = SubWindow(psi, site_, fid, 0, 0, 1, 1, env,
+                                              env_load_dict={(0, 0): ['l', 'tl', 't'], (0, 1): ['t', 'tr', 'r'],
                                                              (1, 0): ['l', 'bl', 'b'], (1, 1): ['b', 'br', 'r']})
         elif move =='r':
             site_ = site
-            env_part, site0, _, _ = SubWindow(psi, site_, fid, 0, 1, 1, 1, env,
-                                              env_load_dict={(0, -1):['l', 'tl', 't'], (0, 0): ['l', 'tl', 't'], (0, 1):['t', 'tr', 'r'],
-                                                             (1, -1):['b', 'bl', 'l'], (1, 0):['l', 'bl', 'b'], (1, 1):['b', 'br', 'r']})
+            env_part, site0, _, _ = SubWindow(psi, site_, fid, 0, 0, 1, 1, env,
+                                              env_load_dict={(0, 0): ['l', 'tl', 't'], (0, 1):['t', 'tr', 'r'],
+                                                             (1, 0):['l', 'bl', 'b'], (1, 1):['b', 'br', 'r']})
 
         if site_ is not None:
             jobs.append([env_part.save_to_dict(), site0, site_])
