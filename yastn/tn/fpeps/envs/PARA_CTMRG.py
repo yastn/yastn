@@ -399,12 +399,14 @@ def ParaUpdateCTM_(psi:Peps, env:EnvCTM, fid, sites, opts_svd_ctm, cfg, parallel
         ii = ii + 1
 
 
-def _ctmrg_(psi, env, fid, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, cfg, n_cores=24, ctm_jobs_vh=None):
+def _ctmrg_(psi:Peps, env:EnvCTM, fid, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, n_cores=24, ctm_jobs_vh=None):
 
     if ctm_jobs_vh is None:
         ctm_jobs_ver, ctm_jobs_hor = CreateCTMJobBundle(env, n_cores)
     else:
         ctm_jobs_ver, ctm_jobs_hor = ctm_jobs_vh
+
+    cfg = psi.config
 
     max_dsv, converged, history = None, False, []
     with Parallel(n_jobs = n_cores, verbose=0) as parallel_pool:
@@ -417,7 +419,7 @@ def _ctmrg_(psi, env, fid, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, 
                     if ctm_jobs_vh is None:
                         ParaUpdateCTM_(psi, env, fid, ctm_jobs, opts_svd_ctm, cfg, parallel_pool=parallel_pool, move=move)
                     else:
-                        ParaUpdateCTM_(psi, env, fid, ctm_jobs[0], opts_svd_ctm, cfg, parallel_pool=parallel_pool, move=move, sites_to_be_updated=ctm_jobs[1])
+                        ParaUpdateCTM_(psi, env, fid, ctm_jobs, opts_svd_ctm, cfg, parallel_pool=parallel_pool, move=move, sites_to_be_updated=ctm_jobs)
 
             for move in 'lr':
 
@@ -426,7 +428,7 @@ def _ctmrg_(psi, env, fid, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, 
                     if ctm_jobs_vh is None:
                         ParaUpdateCTM_(psi, env, fid, ctm_jobs, opts_svd_ctm, cfg, parallel_pool=parallel_pool, move=move)
                     else:
-                        ParaUpdateCTM_(psi, env, fid, ctm_jobs[0], opts_svd_ctm, cfg, parallel_pool=parallel_pool, move=move, sites_to_be_updated=ctm_jobs[1])
+                        ParaUpdateCTM_(psi, env, fid, ctm_jobs, opts_svd_ctm, cfg, parallel_pool=parallel_pool, move=move, sites_to_be_updated=ctm_jobs)
 
             if corner_tol is not None:
                 # Evaluate convergence of CTM by computing the difference of environment corner spectra between consecutive CTM steps.
@@ -505,6 +507,6 @@ def ParaMeasureNN(psi, env, fid, op0, op1, cfg, n_cores = 24):
     return result
 
 
-def PARActmrg_(psi:Peps, env:EnvCTM, fid, cfg, max_sweeps=50, iterator_step=1, opts_svd_ctm=None, corner_tol=None, n_cores=1, ctm_jobs_vh=None):
-    tmp = _ctmrg_(psi, env, fid, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, cfg, n_cores=n_cores, ctm_jobs_vh=ctm_jobs_vh)
+def PARActmrg_(psi:Peps, env:EnvCTM, fid, max_sweeps=50, iterator_step=1, opts_svd_ctm=None, corner_tol=None, n_cores=1, ctm_jobs_vh=None):
+    tmp = _ctmrg_(psi, env, fid, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, n_cores=n_cores, ctm_jobs_vh=ctm_jobs_vh)
     return tmp if iterator_step else next(tmp)
