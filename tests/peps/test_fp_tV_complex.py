@@ -190,7 +190,7 @@ def test_1x1_D1_Z2_spinlessf_conv(ctm_init, truncate_multiplets_mode, tol, check
     l0= loc_cost_f(test_elems)
     l0.backward()
 
-    assert np.allclose(np.asarray(REF_1x1_D1_Z2_spinlessf_complex_grad), test_elems.grad.numpy(), rtol=1e-03, atol=1e-05)
+    assert np.allclose(np.asarray(REF_1x1_D1_Z2_spinlessf_complex_grad), test_elems.grad.numpy(force=True), rtol=1e-03, atol=1e-05)
 
 @pytest.mark.parametrize("ctm_init", ['dl', 'eye'])
 @pytest.mark.parametrize("truncate_multiplets_mode", ["truncate", "expand"])
@@ -208,7 +208,7 @@ def test_1x1_D1_Z2_spinlessf_fp(ctm_init, truncate_multiplets_mode, projector_sv
     l0= loc_cost_f(test_elems)
     l0.backward()
 
-    assert np.allclose(np.asarray(REF_1x1_D1_Z2_spinlessf_complex_grad), test_elems.grad.numpy(), rtol=1e-03, atol=1e-05)
+    assert np.allclose(np.asarray(REF_1x1_D1_Z2_spinlessf_complex_grad), test_elems.grad.numpy(force=True), rtol=1e-03, atol=1e-05)
 
 ##### Z_2 3x3 Spinless fermions honeycomb #####
 REF_3x3_D1_Z2_spinlessf_complex_grad=[
@@ -266,7 +266,7 @@ def test_3x3_D1_Z2_spinlessf_conv(ctm_init, truncate_multiplets_mode, checkpoint
 
     l0= loc_cost_f(test_elems)
     l0.backward()
-    assert np.allclose(np.asarray(REF_3x3_D1_Z2_spinlessf_complex_grad), test_elems.grad.numpy(), rtol=1e-03, atol=1e-05)
+    assert np.allclose(np.asarray(REF_3x3_D1_Z2_spinlessf_complex_grad), test_elems.grad.numpy(force=True), rtol=1e-03, atol=1e-05)
 
 @pytest.mark.parametrize("ctm_init", ['dl', 'eye'])
 @pytest.mark.parametrize("truncate_multiplets_mode", ["truncate", "expand"])
@@ -288,8 +288,8 @@ def test_3x3_D1_Z2_spinlessf_fp(ctm_init, truncate_multiplets_mode, projector_sv
     l0= loc_cost_f(test_elems)
     l0.backward()
 
-    assert np.allclose(np.asarray(REF_3x3_D1_Z2_spinlessf_complex_grad), test_elems.grad.numpy(), rtol=1e-03, atol=1e-05)
+    assert np.allclose(np.asarray(REF_3x3_D1_Z2_spinlessf_complex_grad), test_elems.grad.numpy(force=True), rtol=1e-03, atol=1e-05)
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--long_tests"])
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--long_tests", "--device", "cuda"])

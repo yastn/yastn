@@ -16,12 +16,11 @@ from itertools import accumulate
 
 from tqdm import tqdm
 
-from ._env_auxlliary import identity_boundary, clear_projectors
+from ._env_auxlliary import identity_boundary, clear_projectors, clear_operator_input
 from ._env_measure import _measure_nsite
 from .._peps import PEPS_CLASSES, Peps2Layers
-from .._geometry import Lattice
 from ... import mps
-from ....tensor import Tensor, YastnError
+from ....tensor import YastnError
 
 
 class EnvBoundaryMPS():
@@ -182,7 +181,7 @@ class EnvBoundaryMPS():
             out = {}
             Nx, Ny = psi.Nx, psi.Ny
             sites = [(nx, ny) for ny in range(Ny-1, -1, -1) for nx in range(Nx)]
-            opdict = _clear_operator_input(O, sites)
+            opdict = clear_operator_input(O, sites)
 
             for ny in range(Ny):
                 bra = peps_env.boundary_mps(n=ny, dirn='r')
@@ -336,8 +335,8 @@ class EnvBoundaryMPS():
         psi = peps_env.psi
         Nx, Ny = psi.Nx, psi.Ny
         sites = [(nx, ny) for ny in range(Ny-1, -1, -1) for nx in range(Nx)]
-        op1dict = _clear_operator_input(O, sites)
-        op2dict = _clear_operator_input(P, sites)
+        op1dict = clear_operator_input(O, sites)
+        op2dict = clear_operator_input(P, sites)
 
         for nx1, ny1 in sites:
             # print( f"Correlations from {nx1} {ny1} ... ")
@@ -519,23 +518,6 @@ class EnvBoundaryMPS():
                 proj_env._env.pop((ny, 'r'))
 
         return accept / (2 * Nx * Ny)  # acceptance rate
-
-
-def _clear_operator_input(op, sites=None):
-    if isinstance(op, Lattice):
-        op_dict = op.shallow_copy()
-    elif isinstance(op, dict):
-        op_dict = op.copy()
-    else:
-        op_dict = {site: op for site in sites}
-    for k, v in op_dict.items():
-        if isinstance(v, dict):
-            op_dict[k] = {(i,): vi for i, vi in v.items()}
-        elif isinstance(v, Tensor):
-            op_dict[k] = {(): v}
-        else: # is iterable
-            op_dict[k] = {(i,): vi for i, vi in enumerate(v)}
-    return op_dict
 
 
 def _sample_MC_column_local(ny, proj_env, st0, st1, psi, projectors, rands):

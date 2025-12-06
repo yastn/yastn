@@ -15,7 +15,7 @@
 """ Common measure functions for EnvCTM and EnvBoudndaryMPS """
 from ... import mps
 from ....operators import sign_canonical_order
-from ....tensor import YastnError
+from ....tensor import YastnError, Tensor
 
 
 def _measure_nsite(env, *operators, sites=None, dirn='tb', opts_svd=None, opts_var=None) -> float:
@@ -26,6 +26,9 @@ def _measure_nsite(env, *operators, sites=None, dirn='tb', opts_svd=None, opts_v
     """
     if sites is None or len(operators) != len(sites):
         raise YastnError("Number of operators and sites should match.")
+
+    # unpack operators if operators provided as a Lattice or dict
+    operators = [op[site] if not isinstance(op, Tensor) else op for op, site in zip(operators, sites)]
 
     sign = sign_canonical_order(*operators, sites=sites, f_ordered=env.psi.f_ordered)
     ops = {}

@@ -39,6 +39,9 @@ class Site(NamedTuple):
     def __str__(self):
         return f"Site({self.nx}, {self.ny})"
 
+def is_site(site):
+    return isinstance(site, tuple) and len(site) == 2 and all(isinstance(nn, int) for nn in site)
+
 
 class Bond(NamedTuple):
     """ A bond between two lattice sites. """
@@ -50,6 +53,9 @@ class Bond(NamedTuple):
 
     def __format__(self, spec):
             return str(self).format(spec)
+
+def is_bond(bond):
+    return isinstance(bond, (tuple, list)) and len(bond) == 2 and all(is_site(site) for site in bond)
 
 
 _periodic_dict = {'infinite': 'ii', 'obc': 'oo', 'cylinder': 'po'}

@@ -3,7 +3,6 @@ from tqdm import tqdm
 from ... import mps
 from ....tensor import YastnError
 from .._geometry import Site
-from ._env_boundary_mps import _clear_operator_input, clear_projectors
 from ....operators import sign_canonical_order
 from .._peps import Peps, Peps2Layers
 from .._doublePepsTensor import DoublePepsTensor
