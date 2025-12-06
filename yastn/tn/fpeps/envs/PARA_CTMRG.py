@@ -36,6 +36,8 @@ def BuildProjector_(job, move, opts_svd_ctm, cfg, method='2site'):
     env = load_from_dict(config=cfg, d=env_dict)
 
     sites = [env.nn_site(site, d=d) for d in ((0, 0), (0, 1), (1, 0), (1, 1))]
+    if None in sites:
+        return
     tl, tr, bl, br = sites
     if opts_svd_ctm is None:
         opts_svd_ctm = env.opts_svd
@@ -67,6 +69,9 @@ def SubWindow(psi, site, fid, top=1, left=1, bottom=1, right=1, env=None, only_s
     '''
     Find the window around the particular site. The boundary has been taken into consideration
     '''
+
+    if site is None:
+        return None, None, None, None
 
     nx0 = top
     ny0 = left
@@ -285,6 +290,8 @@ def UpdateSite(job, cfg, dirn, proj_dict):
         return [newl, newr, newtl, newtr, newbl, newbr]
 
 def canonical_site(env, site):
+    if site is None:
+        return None
     site_index = env.psi.geometry.site2index(site)
     if type(site_index) is tuple:
         return Site(*site_index)
@@ -321,11 +328,10 @@ def ParaUpdateCTM_(psi:Peps, env:EnvCTM, fid, sites, opts_svd_ctm, cfg, parallel
                                               env_load_dict={(0, -1):['l', 'tl', 't'], (0, 0): ['l', 'tl', 't'], (0, 1):['t', 'tr', 'r'],
                                                              (1, -1):['b', 'bl', 'l'], (1, 0):['l', 'bl', 'b'], (1, 1):['b', 'br', 'r']})
 
-
-        jobs.append([env_part.save_to_dict(), site0, site_])
+        if site_ is not None:
+            jobs.append([env_part.save_to_dict(), site0, site_])
 
     gathered_result_ = parallel_pool(BuildProjector_(job, move, opts_svd_ctm, cfg) for job in jobs)
-
 
     if proj_dict is None:
         proj_dict = {}
@@ -335,11 +341,13 @@ def ParaUpdateCTM_(psi:Peps, env:EnvCTM, fid, sites, opts_svd_ctm, cfg, parallel
         site = jobs[ii][2]
         dx = -site0.nx + site.nx
         dy = -site0.ny + site.ny
-        for key in gathered_result_[ii].keys():
-            key0 = key[0]
-            key1 = key[1]
-            key0_new = canonical_site(env, Site(key0.nx + dx, key0.ny + dy))
-            proj_dict[(key0_new, key1)] = gathered_result_[ii][key]
+
+        if gathered_result_[ii] is not None:
+            for key in gathered_result_[ii].keys():
+                key0 = key[0]
+                key1 = key[1]
+                key0_new = canonical_site(env, Site(key0.nx + dx, key0.ny + dy))
+                proj_dict[(key0_new, key1)] = gathered_result_[ii][key]
 
     if sites_to_be_updated is None:
         sites_to_be_updated=sites
