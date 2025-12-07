@@ -42,7 +42,7 @@ def _test_tensordot_grad(a,b,axes):
 
     a.requires_grad_(True)
     b.requires_grad_(True)
-    if not (a.grad()._data is None): a.grad()._data.zero_() 
+    if not (a.grad()._data is None): a.grad()._data.zero_()
     if not (b.grad()._data is None): b.grad()._data.zero_()
     ab= yastn.tensordot(a, b, axes=axes)
     cost_f= ab.norm()
@@ -60,7 +60,7 @@ def test_tensordot_fuse_hard_backward_0(config_kwargs,dtype):
     torch.manual_seed(1)
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
-    
+
     ref_cfg= config_kwargs
     ref_cfg["backend"]= "torch"
     refcfg_U1 = yastn.make_config(sym='U1', **ref_cfg)
@@ -74,7 +74,7 @@ def test_tensordot_fuse_hard_backward_0(config_kwargs,dtype):
                 t=(t1, t1, t1), D=(D1, D1, D1,), dtype=dtype)
     b = yastn.rand(config=config_U1, s=(1, 1, 1),
                 t=(t1, t1, t1), D=(D1, D1, D1), dtype=dtype)
-    
+
     _test_tensordot_grad(a,b.conj(),((2, 1,), (1, 2)))
 
 @torch_test
@@ -84,7 +84,7 @@ def test_tensordot_fuse_hard_backward_01(config_kwargs,dtype):
     torch.manual_seed(1)
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
-    
+
     ref_cfg= config_kwargs
     ref_cfg["backend"]= "torch"
     refcfg_U1 = yastn.make_config(sym='U1', **ref_cfg)
@@ -98,7 +98,7 @@ def test_tensordot_fuse_hard_backward_01(config_kwargs,dtype):
                 t=(t1, t1), D=(D1, D1,), dtype=dtype)
     b = yastn.rand(config=config_U1, s=(-1, 1,),
                 t=(t1, t1,), D=(D1, D1), dtype=dtype)
-    
+
     _test_tensordot_grad(a,b, ((1,), (0,)))
 
 
@@ -109,7 +109,7 @@ def test_tensordot_fuse_hard_backward_02(config_kwargs,dtype):
     torch.manual_seed(1)
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
-    
+
     ref_cfg= config_kwargs
     ref_cfg["backend"]= "torch"
     refcfg_U1 = yastn.make_config(sym='U1', **ref_cfg)
@@ -123,7 +123,7 @@ def test_tensordot_fuse_hard_backward_02(config_kwargs,dtype):
                 t=(t1, t1), D=(D1, D1,), dtype=dtype)
     b = yastn.rand(config=config_U1, s=(-1, 1,),
                 t=(t1, t1,), D=(D1, D1), dtype=dtype)
-    
+
     _test_tensordot_grad(a,b, ((1,), (0,)))
 
 
@@ -134,7 +134,7 @@ def test_tensordot_fuse_hard_backward_1(config_kwargs,dtype):
     torch.manual_seed(1)
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
-    
+
     ref_cfg= config_kwargs
     ref_cfg["backend"]= "torch"
     refcfg_U1 = yastn.make_config(sym='U1', **ref_cfg)
@@ -148,7 +148,7 @@ def test_tensordot_fuse_hard_backward_1(config_kwargs,dtype):
                 t=(t1, t1), D=(D1, D1,), dtype=dtype)
     b = yastn.rand(config=config_U1, s=(1, 1,),
                 t=(t1, t1,), D=(D1, D1), dtype=dtype)
-    
+
     _test_tensordot_grad(a,b.conj(), ((1,), (0,)))
 
 
@@ -157,7 +157,7 @@ def test_tensordot_fuse_hard_backward_12(config_kwargs):
     import torch
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
-    
+
     ref_cfg= config_kwargs
     ref_cfg["backend"]= "torch"
     refcfg_U1 = yastn.make_config(sym='U1', **ref_cfg)
@@ -171,7 +171,7 @@ def test_tensordot_fuse_hard_backward_12(config_kwargs):
                 t=(t1, t1), D=(D1, D1,), dtype=dtype)
     b = yastn.rand(config=config_U1, s=(1, 1,),
                 t=(t1, t1,), D=(D1, D1), dtype=dtype)
-    
+
     _test_tensordot_grad(a,b,axes=(0,0))
 
 @torch_test
@@ -179,7 +179,7 @@ def test_tensordot_fuse_hard_backward_13(config_kwargs):
     import torch
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
-    
+
     ref_cfg= config_kwargs
     ref_cfg["backend"]= "torch"
     refcfg_U1 = yastn.make_config(sym='U1', **ref_cfg)
@@ -193,7 +193,7 @@ def test_tensordot_fuse_hard_backward_13(config_kwargs):
                 t=(t1, t1), D=(D1, D1,), dtype=dtype)
     b = yastn.rand(config=config_U1, s=(1, -1,),
                 t=(t1, t1,), D=(D1, D1), dtype=dtype)
-    
+
     _test_tensordot_grad(a,b,axes=(1,1))
 
 
@@ -202,7 +202,7 @@ def test_tensordot_fuse_hard_backward_2(config_kwargs):
     import torch
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
-    
+
     ref_cfg= config_kwargs
     ref_cfg["backend"]= "torch"
     refcfg_U1 = yastn.make_config(sym='U1', **ref_cfg)
@@ -216,7 +216,7 @@ def test_tensordot_fuse_hard_backward_2(config_kwargs):
                 t=(t1, t1, t2), D=(D1, D2, D1), dtype=dtype)
     b = yastn.rand(config=config_U1, s=(1, 1, 1),
                 t=(t1, t1, t2), D=(D1, D2, D1), dtype=dtype)
-    
+
     _test_tensordot_grad(a,b.conj(),axes=((2,1), (0,1)))
 
 @torch_test
@@ -224,7 +224,7 @@ def test_tensordot_fuse_hard_backward_22(config_kwargs):
     import torch
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
-    
+
     ref_cfg= config_kwargs
     ref_cfg["backend"]= "torch"
     refcfg_U1 = yastn.make_config(sym='U1', **ref_cfg)
@@ -238,7 +238,7 @@ def test_tensordot_fuse_hard_backward_22(config_kwargs):
                 t=(t1, t1, t1), D=(D1, D2, D1), dtype=dtype)
     b = yastn.rand(config=config_U1, s=(1, -1, 1),
                 t=(t1, t1, t1), D=(D1, D2, D1), dtype=dtype)
-    
+
     _test_tensordot_grad(a,b,axes=((0,1), (0,1)))
 
 @torch_test
@@ -246,7 +246,7 @@ def test_tensordot_fuse_hard_backward_23(config_kwargs):
     import torch
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
-    
+
     ref_cfg= config_kwargs
     ref_cfg["backend"]= "torch"
     refcfg_U1 = yastn.make_config(sym='U1', **ref_cfg)
@@ -260,7 +260,7 @@ def test_tensordot_fuse_hard_backward_23(config_kwargs):
                 t=(t1, t1, t2), D=(D1, D2, D1), dtype=dtype)
     b = yastn.rand(config=config_U1, s=(1, -1, 1),
                 t=(t1, t1, t2), D=(D1, D2, D1), dtype=dtype)
-    
+
     _test_tensordot_grad(a,b,axes=((0,1), (0,1)))
 
 
@@ -270,7 +270,7 @@ def test_tensordot_fuse_hard_backward_3(config_kwargs,dtype):
     import torch
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
-    
+
     ref_cfg= config_kwargs
     ref_cfg["backend"]= "torch"
     refcfg_U1 = yastn.make_config(sym='U1', **ref_cfg)
@@ -278,12 +278,12 @@ def test_tensordot_fuse_hard_backward_3(config_kwargs,dtype):
     config_U1.backend.random_seed(seed=0)
     t1, t2 = (-1, 0, 1), (-1, 0, 1),
     D1, D2 = (2, 2, 2), (2, 2, 2),
-    
+
     a = yastn.rand(config=config_U1, s=(-1, 1, 1),
                 t=(t1, t1, t2), D=(D1, D2, D2), dtype=dtype)
     b = yastn.rand(config=config_U1, s=(1, 1, 1),
                 t=(t1, t1, t2), D=(D1, D2, D2), dtype=dtype)
-    
+
     _test_tensordot_grad(a,b.conj(),axes=((2,1),(1,0)))
 
 @torch_test
@@ -291,7 +291,7 @@ def test_tensordot_fuse_hard_backward_4(config_kwargs):
     import torch
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
-    
+
     ref_cfg= config_kwargs
     ref_cfg["backend"]= "torch"
     refcfg_U1 = yastn.make_config(sym='U1', **ref_cfg)
@@ -305,7 +305,7 @@ def test_tensordot_fuse_hard_backward_4(config_kwargs):
                 t=(t1, t1, t2, t2, t3, t3), D=(D1, D2, D2, D1, D1, D2), dtype=dtype)
     b = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1, 1),
                 t=(t2, t2, t3, t3, t1, t1), D=(D2, D3, D1, D3, D1, D2), dtype=dtype)
-    
+
     axes= ((1, 5, 2, 3, ), (1, 4, 2, 0))
     _test_tensordot_grad(a,b.conj(),axes=axes)
 
@@ -333,9 +333,9 @@ def test_tensordot_fuse_hard_Z2xU1(config_kwargs):
                   t=(t2, t2), D=((1, 2, 3, 4), (2, 3, 4, 5)))
     #
     # no matching charges
-    with pytest.raises(RuntimeError,
-                       match="element 0 of tensors does not require grad and does not have a grad_f"):
-        _test_tensordot_grad(b,a, axes=((1,), (0)))
+    # with pytest.raises(RuntimeError,
+    #                    match="element 0 of tensors does not require grad and does not have a grad_f"):
+    _test_tensordot_grad(b, a, axes=((1,), (0)))
 
 
 @torch_test
@@ -388,7 +388,7 @@ def test_tensordot_gradcheck(config_kwargs,dtype):
 
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     config_U1.backend.random_seed(seed=0)
-    
+
     a = yastn.rand(config=config_U1, s=(-1, -1, 1, 1),
                 t=[(0, 1), (0, 1), (0, 1), (0, 1)],
                 D=[(2, 3), (4, 5), (4, 3), (2, 1)], dtype=dtype)
