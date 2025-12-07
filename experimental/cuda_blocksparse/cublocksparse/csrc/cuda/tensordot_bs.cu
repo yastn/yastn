@@ -9,6 +9,20 @@
 #include <cuda_runtime.h>
 #include <cutensor.h>
 
+// Optional NVTX3 support
+#if __has_include(<nvtx3/nvtx3.hpp>)
+    #include <nvtx3/nvtx3.hpp>
+    #define CUBLOCKSPARSE_HAS_NVTX 1
+#else
+    #define CUBLOCKSPARSE_HAS_NVTX 0
+#endif
+// NVTX helper macro - no-op when NVTX is not available
+#if CUBLOCKSPARSE_HAS_NVTX
+    #define NVTX_MARK(msg) nvtx3::mark(msg)
+#else
+    #define NVTX_MARK(msg) ((void)0)
+#endif
+
 #include <random>
 #include <memory>
 #include <vector>
@@ -61,6 +75,214 @@ using ModeType   = int32_t;
 using ExtentType = int64_t;
 using StrideType = int64_t;
 
+
+// ============================================================================
+// Plan Cache Implementation
+// ============================================================================
+
+struct CachedPlan {
+    cutensorHandle_t handle { nullptr };
+    cutensorPlan_t plan { nullptr };
+    cutensorOperationDescriptor_t opDesc { nullptr };
+    cutensorBlockSparseTensorDescriptor_t descA { nullptr };
+    cutensorBlockSparseTensorDescriptor_t descB { nullptr };
+    cutensorBlockSparseTensorDescriptor_t descC { nullptr };
+    uint64_t workspaceSize { 0 };
+    size_t hitCount { 0 };
+    
+    ~CachedPlan() {
+        if (plan) cutensorDestroyPlan(plan);
+        if (opDesc) cutensorDestroyOperationDescriptor(opDesc);
+        if (descA) cutensorDestroyBlockSparseTensorDescriptor(descA);
+        if (descB) cutensorDestroyBlockSparseTensorDescriptor(descB);
+        if (descC) cutensorDestroyBlockSparseTensorDescriptor(descC);
+        if (handle) cutensorDestroy(handle);
+    }
+    
+    // Non-copyable, movable
+    CachedPlan() = default;
+    CachedPlan(const CachedPlan&) = delete;
+    CachedPlan& operator=(const CachedPlan&) = delete;
+    CachedPlan(CachedPlan&& other) noexcept {
+        handle = other.handle; other.handle = nullptr;
+        plan = other.plan; other.plan = nullptr;
+        opDesc = other.opDesc; other.opDesc = nullptr;
+        descA = other.descA; other.descA = nullptr;
+        descB = other.descB; other.descB = nullptr;
+        descC = other.descC; other.descC = nullptr;
+        workspaceSize = other.workspaceSize;
+        hitCount = other.hitCount;
+    }
+    CachedPlan& operator=(CachedPlan&& other) noexcept {
+        if (this != &other) {
+            this->~CachedPlan();
+            new (this) CachedPlan(std::move(other));
+        }
+        return *this;
+    }
+};
+
+class PlanCache {
+public:
+    static PlanCache& instance() {
+        static PlanCache cache;
+        return cache;
+    }
+    
+    // Generate a unique key from contraction parameters
+    static std::string make_key(
+        const std::vector<ModeType>& modeA,
+        const std::vector<ModeType>& nonZeroCoordinatesA,
+        const std::vector<StrideType>& stridesA,
+        const std::vector<ModeType>& modeB,
+        const std::vector<ModeType>& nonZeroCoordinatesB,
+        const std::vector<StrideType>& stridesB,
+        const std::vector<ModeType>& modeC,
+        const std::vector<ModeType>& nonZeroCoordinatesC,
+        const std::vector<StrideType>& stridesC,
+        const std::unordered_map<ModeType, std::vector<ExtentType>>& sectionExtents,
+        cudaDataType_t dataType
+    ) {
+        std::ostringstream oss;
+        oss << "dtype=" << dataType << ";";
+        
+        auto appendVec = [&oss](const char* name, const auto& vec) {
+            oss << name << "=[";
+            for (size_t i = 0; i < vec.size(); ++i) {
+                if (i > 0) oss << ",";
+                oss << vec[i];
+            }
+            oss << "];";
+        };
+        
+        appendVec("mA", modeA);
+        appendVec("nzA", nonZeroCoordinatesA);
+        appendVec("sA", stridesA);
+        appendVec("mB", modeB);
+        appendVec("nzB", nonZeroCoordinatesB);
+        appendVec("sB", stridesB);
+        appendVec("mC", modeC);
+        appendVec("nzC", nonZeroCoordinatesC);
+        appendVec("sC", stridesC);
+        
+        oss << "ext={";
+        for (const auto& [mode, extents] : sectionExtents) {
+            oss << mode << ":[";
+            for (size_t i = 0; i < extents.size(); ++i) {
+                if (i > 0) oss << ",";
+                oss << extents[i];
+            }
+            oss << "],";
+        }
+        oss << "}";
+        
+        return oss.str();
+    }
+    
+    CachedPlan* get(const std::string& key) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto it = cache_.find(key);
+        if (it != cache_.end()) {
+            it->second->hitCount++;
+            return it->second.get();
+        }
+        return nullptr;
+    }
+    
+    void insert(const std::string& key, std::unique_ptr<CachedPlan> plan) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        cache_[key] = std::move(plan);
+    }
+    
+    void clear() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        cache_.clear();
+    }
+    
+    size_t size() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return cache_.size();
+    }
+    
+    std::vector<std::pair<std::string, size_t>> get_stats() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        std::vector<std::pair<std::string, size_t>> stats;
+        stats.reserve(cache_.size());
+        for (const auto& [key, plan] : cache_) {
+            stats.emplace_back(key, plan->hitCount);
+        }
+        return stats;
+    }
+    
+    std::vector<std::string> get_keys() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        std::vector<std::string> keys;
+        keys.reserve(cache_.size());
+        for (const auto& [key, _] : cache_) {
+            keys.push_back(key);
+        }
+        return keys;
+    }
+
+private:
+    PlanCache() = default;
+    mutable std::mutex mutex_;
+    std::unordered_map<std::string, std::unique_ptr<CachedPlan>> cache_;
+};
+
+// Global accessor functions for Python bindings
+void clear_plan_cache() {
+    PlanCache::instance().clear();
+}
+
+size_t plan_cache_size() {
+    return PlanCache::instance().size();
+}
+
+std::vector<std::string> plan_cache_keys() {
+    return PlanCache::instance().get_keys();
+}
+
+std::vector<std::pair<std::string, size_t>> plan_cache_stats() {
+    return PlanCache::instance().get_stats();
+}
+
+// ============================================================================
+// Tensor initialization helper (extracted for reuse)
+// ============================================================================
+
+template <typename scalar_t>
+void initBlockSparseTensorDescriptor(
+    cutensorHandle_t handle,
+    const std::vector<ModeType>& modes,
+    const std::vector<ModeType>& nonZeroCoordinates,
+    const std::vector<StrideType>& strides,
+    const std::unordered_map<ModeType, std::vector<ExtentType>>& sectionExtents,
+    cudaDataType_t dataType,
+    cutensorBlockSparseTensorDescriptor_t& desc
+    // Guard<cutensorBlockSparseTensorDescriptor_t> &guard,
+    // std::vector<void*> &dev
+) {
+    uint32_t numModes = modes.size();
+    uint64_t numNonZeroBlocks = nonZeroCoordinates.size() / numModes;
+    std::vector<uint32_t> numSections;
+    std::vector<ExtentType> extents;
+    
+    for (ModeType mode : modes) {
+        const std::vector<ExtentType>& modeExtents = sectionExtents.at(mode);
+        numSections.push_back(modeExtents.size());
+        extents.insert(extents.end(), modeExtents.begin(), modeExtents.end());
+    }
+    
+    HANDLE_ERROR(cutensorCreateBlockSparseTensorDescriptor(
+        handle, &desc,
+        numModes, numNonZeroBlocks, numSections.data(), extents.data(),
+        nonZeroCoordinates.data(), strides.data(), dataType
+    ));
+    // guard.p = desc;
+    // guard.destroy = &cutensorDestroyBlockSparseTensorDescriptor;
+}
+
 template <typename scalar_t>
 int tensordot_bs_cuda_impl(
     const scalar_t* a_ptr,
@@ -90,185 +312,136 @@ int tensordot_bs_cuda_impl(
 try
 {
     const char* env = std::getenv("YASTN_LOG_LEVEL");
-    int yastn_log_level = 0;
-    if (env) {
-        yastn_log_level = std::atoi(env);
-        if ( yastn_log_level>1) { std::cout << "YASTN_LOG_LEVEL = " << yastn_log_level << std::endl; }
-    } 
+    int yastn_log_level = (env) ? std::atoi(env) : 0;
+    env = std::getenv("YASTN_PROFILE");
+    int yastn_profile = (env) ? std::atoi(env) : 0;
+
+    // Generate cache key
+    std::string cacheKey = PlanCache::make_key(
+        modeA, nonZeroCoordinatesA, stridesA,
+        modeB, nonZeroCoordinatesB, stridesB,
+        modeC, nonZeroCoordinatesC, stridesC,
+        sectionExtents, dataType
+    );
+    
+    PlanCache& cache = PlanCache::instance();
+    CachedPlan* cachedPlan = cache.get(cacheKey);
+    
+    // NVTX marker for plan cache hit/miss
+    if (yastn_profile) NVTX_MARK( (cachedPlan) ? "cublocksparse::PlanCache HIT" : "cublocksparse::PlanCache MISS" );
+
+    // Prepare device pointers for blocks
+    uint32_t numModesA = modeA.size();
+    uint32_t numModesB = modeB.size();
+    uint32_t numModesC = modeC.size();
+    uint64_t numBlocksA = nonZeroCoordinatesA.size() / numModesA;
+    uint64_t numBlocksB = nonZeroCoordinatesB.size() / numModesB;
+    uint64_t numBlocksC = nonZeroCoordinatesC.size() / numModesC;
+    
+    std::vector<void*> devA(numBlocksA);
+    std::vector<void*> devB(numBlocksB);
+    std::vector<void*> devC(numBlocksC);
+    
+    for (uint64_t i = 0; i < numBlocksA; ++i) {
+        devA[i] = (void*)(a_ptr + offsetsA[i]);
+    }
+    for (uint64_t i = 0; i < numBlocksB; ++i) {
+        devB[i] = (void*)(b_ptr + offsetsB[i]);
+    }
+    for (uint64_t i = 0; i < numBlocksC; ++i) {
+        devC[i] = (void*)(c_ptr + offsetsC[i]);
+    }
 
     auto bufA= a_ptr;
     auto bufB= b_ptr;
     auto bufC= c_ptr;
 
-    // Initialise the library.
     cutensorHandle_t handle;
-    HANDLE_ERROR(cutensorCreate(&handle));
-    Guard<cutensorHandle_t> guardHandle { handle, &cutensorDestroy };
+    cutensorPlan_t plan;
+    uint64_t workspaceSize;
+
+    // Initialise the library.
+    // cutensorHandle_t handle;
+    // HANDLE_ERROR(cutensorCreate(&handle));
+    // Guard<cutensorHandle_t> guardHandle { handle, &cutensorDestroy };
 
     //////////////////////////////////////
     //                                  //
     // We compute C_{modeC} = A_{modeA}B_{modeB}   //
     //////////////////////////////////////
-   
-    auto printTensor = []
-    (
-      void * dev,
-      int64_t size
-    ) -> void
-    {
-        std::vector<scalar_t> temp(size, 0.0);
-        HANDLE_CUDA_ERROR(cudaMemcpy(temp.data(), static_cast<scalar_t*>(dev),
-                                     temp.size() * sizeof(scalar_t),
-                                     cudaMemcpyDeviceToHost));
-        for (int i = 0; i < size; ++i) {
-            std::cout << temp[i] << ", ";
+                          
+    if (cachedPlan) {
+        // Cache hit - reuse existing plan
+        if (yastn_log_level > 5) {
+            std::cout << "cublocksparse::PlanCache HIT (hits: " << cachedPlan->hitCount << ")" << std::endl;
         }
-        std::cout<<std::endl;
-    };
-
-    // Helper-λ to allocate and initialise block-sparse tensors with random
-    // data. In this example we use 64-bit double precision numbers.
-    auto initTensor = [&handle,&sectionExtents,&printTensor,&yastn_log_level,dataType]
-    (
-      const std::vector<ModeType>   &modes,              
-      const std::vector<ModeType> &nonZeroCoordinates, 
-      const std::vector<StrideType> &offsets,
-      const std::vector<StrideType> &strides, 
-      cutensorBlockSparseTensorDescriptor_t &desc, 
-      Guard<cutensorBlockSparseTensorDescriptor_t> &guard,
-      const scalar_t * buf, // Buffer to holding the non-zero blocks of the tensor
-      std::vector<void*> &dev
-    ) -> void
-    {
-        if (yastn_log_level > 3) {
-            std::cout << "initTensor: modes: ";
-            for (auto e : modes) { std::cout << e << " "; }
-            std::cout << std::endl;
-            std::cout << "initTensor: nonZeroCoordinates: ";
-            for (auto e : nonZeroCoordinates) { std::cout << e << " "; }
-            std::cout << std::endl;
+        handle = cachedPlan->handle;
+        plan = cachedPlan->plan;
+        workspaceSize = cachedPlan->workspaceSize;
+    } else {
+        // Cache miss - create new plan
+        if (yastn_log_level > 5) {
+            std::cout << "cublocksparse::PlanCache MISS - creating new plan" << std::endl;
         }
-
-        uint32_t numModes         = modes.size();
-        uint64_t numNonZeroBlocks = nonZeroCoordinates.size() / numModes;
-        std::vector<uint32_t>     numSections;
-        std::vector<ExtentType>   extents;
-        for ( ModeType mode: modes ) // serialize sectionExtents into 1D for both number of section per mode (numSections)
-                                     // and extents per each mode (extents) 
-        {
-            const std::vector<ExtentType> &modeExtents = sectionExtents.at(mode);
-
-            numSections.push_back(modeExtents.size());
-            extents.insert(extents.end(),modeExtents.begin(),modeExtents.end());
-        }
-        if (yastn_log_level > 3) {
-            std::cout << "extents: ";
-            for (auto e : extents) { std::cout << e << " "; }
-            std::cout << std::endl << "strides: ";
-            for (auto e : strides) { std::cout << e << " "; }
-            std::cout << std::endl;
-        }
-
-        // We assume packed contiguous storage, column-major order.
-        // This means that we may pass nullptr for the strides array later.
-        // The offets are used to set the pointers in the dev vector.
-        if (yastn_log_level > 3) {
-            std::cout << "offsets: ";
-            for (auto v : offsets) { std::cout << v << " "; }
-            std::cout << std::endl;
-        }
-        dev.resize(numNonZeroBlocks);
-        for ( uint64_t i = 0; i < numNonZeroBlocks; ++i ) {
-            dev[i] = (void*)(buf + offsets[i]);
-            if (yastn_log_level > 3) {
-                ExtentType block_size = 1;
-                for (size_t j = 0; j < numModes; ++j) {
-                    block_size *= sectionExtents.at(modes[j])[nonZeroCoordinates[j + i * numModes]];
-                }
-                std::cout<< "block "<< i << " at " << offsets[i] << " size " << block_size << std::endl; 
-                printTensor(dev[i], block_size);
-            }
-        }
-
-        // Print contents of nonZeroCoordinates from its pointer
-        if (yastn_log_level > 3) {
-            std::cout << "nonZeroCoordinates (from pointer): ";
-            const ModeType* ptr = nonZeroCoordinates.data();
-            for (size_t i = 0; i < nonZeroCoordinates.size(); ++i) {
-            std::cout << ptr[i] << " ";
-            }
-            std::cout << std::endl;
-        }
-        HANDLE_ERROR(cutensorCreateBlockSparseTensorDescriptor
-        (
-            handle, &desc,
-            numModes, numNonZeroBlocks, numSections.data(), extents.data(),
-            nonZeroCoordinates.data(), strides.data(), dataType
+        
+        auto newPlan = std::make_unique<CachedPlan>();
+        
+        HANDLE_ERROR(cutensorCreate(&newPlan->handle));
+        handle = newPlan->handle;
+        
+        // Create tensor descriptors
+        initBlockSparseTensorDescriptor<scalar_t>(
+            handle, modeA, nonZeroCoordinatesA, stridesA,
+            sectionExtents, dataType, newPlan->descA
+        );
+        initBlockSparseTensorDescriptor<scalar_t>(
+            handle, modeB, nonZeroCoordinatesB, stridesB,
+            sectionExtents, dataType, newPlan->descB
+        );
+        initBlockSparseTensorDescriptor<scalar_t>(
+            handle, modeC, nonZeroCoordinatesC, stridesC,
+            sectionExtents, dataType, newPlan->descC
+        );
+        
+        // Create contraction descriptor
+        HANDLE_ERROR(cutensorCreateBlockSparseContraction(
+            handle, &newPlan->opDesc,
+            newPlan->descA, modeA.data(), CUTENSOR_OP_IDENTITY,
+            newPlan->descB, modeB.data(), CUTENSOR_OP_IDENTITY,
+            newPlan->descC, modeC.data(), CUTENSOR_OP_IDENTITY,
+            newPlan->descC, modeC.data(),
+            CUTENSOR_COMPUTE_DESC_64F
         ));
-        guard.p = desc;
-        guard.destroy = &cutensorDestroyBlockSparseTensorDescriptor;
-    };
-                                         
+        
+        // Create plan preference (using default settings here)
+        cutensorPlanPreference_t planPref = nullptr;
+        // const cutensorAlgo_t algo = CUTENSOR_ALGO_DEFAULT;
+        // const cutensorJitMode_t jitMode = CUTENSOR_JIT_MODE_NONE;
+        // HANDLE_ERROR(cutensorCreatePlanPreference(handle,&planPref,algo,jitMode));
+        // Guard<cutensorPlanPreference_t> guardPlanPref { planPref, &cutensorDestroyPlanPreference };
+        
+        // Query workspace
+        const cutensorWorksizePreference_t workspacePref = CUTENSOR_WORKSPACE_DEFAULT;
+        HANDLE_ERROR(cutensorEstimateWorkspaceSize(
+            handle, newPlan->opDesc, planPref, workspacePref, &newPlan->workspaceSize
+        ));
+        workspaceSize = newPlan->workspaceSize;
 
-    //////////////
-    // Tensor A //
-    //////////////
-
-    std::vector<void*> devA;
-    cutensorBlockSparseTensorDescriptor_t descA;
-    Guard<cutensorBlockSparseTensorDescriptor_t> guardDescA;
-    initTensor(modeA,nonZeroCoordinatesA,offsetsA,stridesA,descA,guardDescA,bufA,devA);
-
-    //////////////
-    // Tensor B //
-    //////////////
-
-    std::vector<void*> devB;
-    cutensorBlockSparseTensorDescriptor_t descB;
-    Guard<cutensorBlockSparseTensorDescriptor_t> guardDescB;
-    initTensor(modeB,nonZeroCoordinatesB,offsetsB,stridesB,descB,guardDescB,bufB,devB);
-
-    //////////////
-    // Tensor C //
-    //////////////
-
-    std::vector<void*> devC;
-    cutensorBlockSparseTensorDescriptor_t descC;
-    Guard<cutensorBlockSparseTensorDescriptor_t> guardDescC;
-    initTensor(modeC,nonZeroCoordinatesC,offsetsC,stridesC,descC,guardDescC,bufC,devC);
+        // Create plan
+        HANDLE_ERROR(cutensorCreatePlan(
+            handle, &newPlan->plan, newPlan->opDesc, planPref, workspaceSize
+        ));
+        plan = newPlan->plan;
+        
+        cache.insert(cacheKey, std::move(newPlan));
+    }
 
     /*******************************
      * Block-sparse Contraction.   *
      *******************************/
 
-    cutensorOperationDescriptor_t desc;
-    HANDLE_ERROR(cutensorCreateBlockSparseContraction(handle, &desc,
-                descA, modeA.data(), CUTENSOR_OP_IDENTITY,
-                descB, modeB.data(), CUTENSOR_OP_IDENTITY,
-                descC, modeC.data(), CUTENSOR_OP_IDENTITY,
-                descC, modeC.data(),
-                CUTENSOR_COMPUTE_DESC_64F));
-    Guard<cutensorOperationDescriptor_t> guardOpDesc { desc, &cutensorDestroyOperationDescriptor };
-
-    // Plan preference
-    cutensorPlanPreference_t planPref = nullptr;
-    // const cutensorAlgo_t algo = CUTENSOR_ALGO_DEFAULT;
-    // const cutensorJitMode_t jitMode = CUTENSOR_JIT_MODE_NONE;
-    // HANDLE_ERROR(cutensorCreatePlanPreference(handle,&planPref,algo,jitMode));
-    // Guard<cutensorPlanPreference_t> guardPlanPref { planPref, &cutensorDestroyPlanPreference };
-
-    // Query workspace estimate
-    uint64_t workspaceSize = 0;
-    const cutensorWorksizePreference_t workspacePref = CUTENSOR_WORKSPACE_DEFAULT;
-    HANDLE_ERROR(cutensorEstimateWorkspaceSize(handle,desc,planPref,workspacePref,&workspaceSize));
-
     cuda_ptr<char> work = cuda_alloc<char>(workspaceSize);
     if ( uintptr_t(work.get()) % 128 != 0 ) throw std::bad_alloc {};
-
-    // Create Contraction Plan
-    cutensorPlan_t plan;
-    HANDLE_ERROR(cutensorCreatePlan(handle,&plan,desc,planPref,workspaceSize));
-    Guard<cutensorPlan_t> guardPlan { plan, &cutensorDestroyPlan };
 
     // Execute
     cudaStream_t stream;
@@ -276,12 +449,14 @@ try
     struct StreamGuard { cudaStream_t stream; ~StreamGuard() { cudaStreamDestroy(stream); } };
     StreamGuard guardStream { stream };
 
+    if (yastn_profile) NVTX_MARK( "cublocksparse::cutensorBlockSparseContract" );
     scalar_t alpha = 1., beta = 0.;
     HANDLE_ERROR(cutensorBlockSparseContract(handle, plan,
                 (void*) &alpha, (const void *const *) devA.data(), (const void *const *) devB.data(),
                 (void*) &beta,  (const void *const *) devC.data(), (      void *const *) devC.data(), 
                 (void*) work.get(), workspaceSize, stream));
 
+    // HANDLE_CUDA_ERROR(cudaStreamSynchronize(stream));
     return EXIT_SUCCESS;
 }
 catch ( std::exception &ex )
@@ -319,11 +494,11 @@ at::Tensor tensordot_bs_cuda(
     const at::Tensor& c_D_per_mode
 ) {
   const char* env = std::getenv("YASTN_LOG_LEVEL");
-  int yastn_log_level = 0;
-  if (env) {
-    yastn_log_level = std::atoi(env);
-    if (yastn_log_level>0) { std::cout << "YASTN_LOG_LEVEL = " << yastn_log_level << std::endl; }
-  }
+  int yastn_log_level = (env) ? std::atoi(env) : 0;
+  env = std::getenv("YASTN_PROFILE");
+  int yastn_profile = (env) ? std::atoi(env) : 0;
+//   if (yastn_log_level>0) { std::cout << "YASTN_LOG_LEVEL = " << yastn_log_level << std::endl; }
+
   TORCH_CHECK(a.dim() == 1, "Input 'a' must be 1D.");
   TORCH_CHECK(b.dim() == 1, "Input 'b' must be 1D.");
   // inputs must all have the same dtype
@@ -394,7 +569,7 @@ at::Tensor tensordot_bs_cuda(
     }
   }
 
-if (yastn_log_level > 3) {
+if (yastn_log_level > 5) {
     std::cout << "Computed a_modes: ";
     for (auto m : a_modes) {
         // std::cout << static_cast<char>(m) << ' ';

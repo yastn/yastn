@@ -33,6 +33,7 @@ def get_extensions():
         print("Compiling in debug mode")
 
     use_cuda = use_cuda and torch.cuda.is_available() and CUDA_HOME is not None
+    print(f"CUDA_HOME {CUDA_HOME}")
     extension = CUDAExtension if use_cuda else CppExtension
     if debug_mode and use_cuda:
         print(f"Using {'CUDA' if use_cuda else 'C++'} extension")
@@ -41,11 +42,11 @@ def get_extensions():
     abs_dir = os.path.abspath(os.path.dirname(__file__))
 
     extra_link_args = [
-        # -Lpath/to/shared/objects if necessary 
-      "-lcutensor",
+        "-lcutensor",
+        # -Lpath/to/shared/objects if necessary
     ]
     include_dirs = [
-        # -Ipath/to/include if necessary,
+        # path/to/include if necessary, i.e. for nvtx
     ]
     # additional include dirs, IMPORTANT to be searched first
     extra_compile_args = {
