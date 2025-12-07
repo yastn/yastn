@@ -26,6 +26,7 @@ from ._auxliary import _struct, _slc, _clear_axes, _unpack_axes, _flatten, _join
 from ._merging import _merge_to_matrix, _unmerge, _meta_unmerge_matrix, _meta_fuse_hard
 from ._merging import _transpose_and_merge, _mask_tensors_leg_intersection, _meta_mask
 from ._tests import YastnError, _test_can_be_combined, _test_axes_match
+from ._legs import LegMeta
 
 __all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon', 'einsum', 'broadcast', 'apply_mask', 'SpecialTensor']
 
@@ -190,27 +191,73 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
                                                                             ind_a, ind_b, nout_a, nin_a, nin_b, nout_b)
     order_a = nout_a + nin_a
     order_b = nin_b + nout_b
-    data = a.config.backend.transpose_dot_sum(a.data, b.data, meta_dot,
+
+    if a.config.backend.BACKEND_ID == 'torch_cpp' and len(struct_c.s)>0:
+        # NOTE nout_a, nin_a, nout_b, nin_b use ndim_n or ndim ? 
+        #      *) when default_fusion='meta', they are wrt. native legs. The charges of non-zero blocks are also wrt. to native legs.
+        
+        a_blocks_t, b_blocks_t, c_blocks_t= a.struct.t, b.struct.t, struct_c.t
+        a_slices, b_slices = a.slices, b.slices
+        if a.config.sym.NSYM == 0 and b.config.sym.NSYM == 0:
+            # if no symmetry, create single block for each tensor for syntax compatibility
+            a_blocks_t, b_blocks_t, c_blocks_t= ((0,)*a.ndim_n,), ((0,)*b.ndim_n,), ((0,)*(len(nout_a)+len(nout_b)),)
+        else: # take only subset of blocks that are involved in the contraction
+            if ind_a:  # ind_a and/or ind_b is None if all blocks of a are involved
+                a_blocks_t= tuple(a.struct.t[i] for i in ind_a)
+                a_slices= tuple(a.slices[i] for i in ind_a)
+            if ind_b:
+                b_blocks_t= tuple(b.struct.t[i] for i in ind_b)
+                b_slices= tuple(b.slices[i] for i in ind_b)
+
+        data = a.config.backend.kernel_tensordot_bs(
+            a.data, b.data, 
+            a.config.sym.NSYM,
+            a_blocks_t, 
+            a_slices,
+            [l.t for l in a.get_legs( native=True )] if a.config.sym.NSYM > 0 else [((0,),)]*a.ndim_n,
+            [l.D for l in a.get_legs( native=True )],
+            nout_a, nin_a,
+            b_blocks_t,
+            b_slices,
+            [l.t for l in b.get_legs( native=True )] if b.config.sym.NSYM > 0 else [((0,),)]*b.ndim_n,
+            [l.D for l in b.get_legs( native=True )], 
+            nout_b, nin_b,
+            struct_c.size, c_blocks_t,
+            slices_c
+        )
+    else:
+        data = a.config.backend.transpose_dot_sum(a.data, b.data, meta_dot,
                                               reshape_a, reshape_b, order_a, order_b, struct_c.size)
     return data, struct_c, slices_c
 
 
 @lru_cache(maxsize=1024)
-def _common_inds(t_a, t_b, nin_a, nin_b, ndimn_a, ndimn_b, nsym):
-    r""" Return row indices of nparray ``a`` that are in ``b``, and vice versa. Outputs tuples."""
-    t_a = np.array(t_a, dtype=np.int64).reshape((len(t_a), ndimn_a, nsym))
+def _common_inds(t_a, t_b, nin_a : tuple[int], nin_b : tuple[int], ndimn_a, ndimn_b, nsym):
+    r"""
+    Return row indices of nparray ``a`` that are in ``b``, and vice versa. Outputs tuples.
+    In other words: Return indices of blocks from ``t_a`` and ``t_b``, which pariticpate in 
+        a contraction specified by ``nin_a`` and ``nin_b``.
+    
+    Parameters
+    ----------
+        t_a : Sequence[Sequence[int]]
+            (usually) charges of non-zero blocks in some operand
+        t_b : Sequence[Sequence[int]]
+            (usually) charges of non-zero blocks in some other operand
+    """
+    t_a = np.array(t_a, dtype=np.int64).reshape((len(t_a), ndimn_a, nsym)) # array for block charges as: block x <num-of-(native)modes(=legs)> x <order-of-sym-group>
     t_b = np.array(t_b, dtype=np.int64).reshape((len(t_b), ndimn_b, nsym))
-    t_a = t_a[:, nin_a, :].reshape(len(t_a), len(nin_a) * nsym).tolist()
+    t_a = t_a[:, nin_a, :].reshape(len(t_a), len(nin_a) * nsym).tolist() # narrowed to contracted modes, and serialize <num-of-ingoing-modes(=legs)> x <order-of-sym-group> to 1D
     t_b = t_b[:, nin_b, :].reshape(len(t_b), len(nin_b) * nsym).tolist()
     la = [tuple(x) for x in t_a]
     lb = [tuple(x) for x in t_b]
     sa = set(la)
     sb = set(lb)
-    ia = tuple(ii for ii, el in enumerate(la) if el in sb)
+    ia = tuple(ii for ii, el in enumerate(la) if el in sb) # matching <ingoing-block-sectors>_of-a with <ingoing-block-sectors>_of-b
     ib = tuple(ii for ii, el in enumerate(lb) if el in sa)
-    if len(ia) == len(la):
-        ia = None
-    if len(ib) == len(lb):
+    if len(ia) == len(la): # all <ingoing-block-sectors>_of-a appear among sectors of b
+        ia = None 
+    if len(ib) == len(lb): # all <ingoing-block-sectors>_of-b appear among sectors of a
         ib = None
     return ia, ib
 
@@ -289,20 +336,21 @@ def _meta_tensordot_nf(struct_a, slices_a, struct_b, slices_b, ind_a, ind_b, nou
 
     ta = struct_a.t if ind_a is None else [struct_a.t[ii] for ii in ind_a]
     Da = struct_a.D if ind_a is None else [struct_a.D[ii] for ii in ind_a]
-    slices_a = [sl.slcs[0] for sl in slices_a] if ind_a is None else [slices_a[ii].slcs[0] for ii in ind_a]
+    slices_a = [sl.slcs[0] for sl in slices_a] if ind_a is None else [slices_a[ii].slcs[0] for ii in ind_a] # narrow struct and slice information to relevant blocks
+                                                                                                            # i.e. ones, which are contracted with existing (non-zero) blocks in b
 
     lta, ndima = len(ta), len(struct_a.s)
-    ata = np.array(ta, dtype=np.int64).reshape((lta, ndima, nsym))
-    aDa = np.array(Da, dtype=np.int64).reshape((lta, ndima))
-    tao = ata[:, nout_a, :].reshape(lta, len(nout_a) * nsym)
-    tac = ata[:, nin_a, :].reshape(lta, len(nin_a) * nsym)
-    Dao = aDa[:, nout_a]
+    ata = np.array(ta, dtype=np.int64).reshape((lta, ndima, nsym)) # array for block charges as: block x <num-of-(native)modes(=legs)> x <order-of-sym-group>
+    aDa = np.array(Da, dtype=np.int64).reshape((lta, ndima))       # array for block dimensions
+    tao = ata[:, nout_a, :].reshape(lta, len(nout_a) * nsym)       # narrowed to contracted modes, and serialize <num-of-ingoing-modes(=legs)> x <order-of-sym-group> to 1D
+    tac = ata[:, nin_a, :].reshape(lta, len(nin_a) * nsym)         # narrowed to outgoing modes, and serialize <num-of-ingoing-modes(=legs)> x <order-of-sym-group> to 1D
+    Dao = aDa[:, nout_a]    # narrow sector sizes
     Dac = aDa[:, nin_a]
-    Daop = np.prod(Dao, axis=1, dtype=np.int64)
-    Dacp = np.prod(Dac, axis=1, dtype=np.int64)
+    Daop = np.prod(Dao, axis=1, dtype=np.int64) # total size of outgoing sectors (per block)
+    Dacp = np.prod(Dac, axis=1, dtype=np.int64) # total size of contracted sectors (per block)
 
     tDac = np.hstack([tac, Dac])
-    unique_tDac, inv_tDac, count_tDac = np.unique(tDac, return_inverse=True, return_counts=True, axis=0)
+    unique_tDac, inv_tDac, count_tDac = np.unique(tDac, return_inverse=True, return_counts=True, axis=0) # if more blocks of a contribute to given contracted sector (in b) 
     arg_tDac = np.argsort(inv_tDac)
 
     tb = struct_b.t if ind_b is None else [struct_b.t[ii] for ii in ind_b]
@@ -327,7 +375,7 @@ def _meta_tensordot_nf(struct_a, slices_a, struct_b, slices_b, ind_a, ind_b, nou
         raise YastnError('Bond dimensions do not match.')
 
     # blocks are enumerated consistent with slices_a,b
-    reshape_a = tuple(zip(slices_a, Da, Daop, Dacp))
+    reshape_a = tuple(zip(slices_a, Da, Daop, Dacp)) # narrowed to contracted blocks
     reshape_b = tuple(zip(slices_b, Db, Dbcp, Dbop))
 
     count_ab = count_tDac * count_tDbc

@@ -234,8 +234,8 @@ def test_ctmrg_Ising_dense(checkpoint_move, config_kwargs):
 
     env = fpeps.EnvCTM(psi, init='rand')
     opts_svd = {"D_total": chi}
-    info = env.ctmrg_(opts_svd=opts_svd, max_sweeps=4, corner_tol=1e-8, checkpoint_move=checkpoint_move)
-    info = env.ctmrg_(opts_svd=opts_svd, max_sweeps=200, corner_tol=1e-8, method='1site', checkpoint_move=checkpoint_move)
+    info = env.ctmrg_(opts_svd=opts_svd, max_sweeps=5, corner_tol=1e-8, checkpoint_move=checkpoint_move)
+    info = env.ctmrg_(opts_svd=opts_svd, max_sweeps=500, corner_tol=1e-8, method='1site', checkpoint_move=checkpoint_move)
     print(info)
 
     ev_XX = env.measure_nn(TX, TX)

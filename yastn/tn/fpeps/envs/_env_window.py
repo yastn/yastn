@@ -253,7 +253,6 @@ def measure_2site_row(self, O0, O1, opts_svd=None, opts_var=None):
     return out
 
 
-
 def measure_2site_corner_columns(self, O0, O1, opts_svd=None, opts_var=None):
     """
     Calculate all 2-point correlations <o1 o2> in a finite peps.

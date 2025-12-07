@@ -22,6 +22,10 @@ __all__ = ["EnvBP_local", "EnvCTM_local", "EnvCTM_projectors", "EnvCTM_c4v_local
 @dataclass()
 class dataclasses_common():
 
+    def to(self, device: str=None, dtype: str=None, **kwargs):
+        return type(self)(**{k.name: getattr(self, k.name).to(device=device, dtype=dtype, **kwargs) for k in fields(self)
+                             if getattr(self, k.name) is not None})
+
     def copy(self):
         return type(self)(**{k.name: getattr(self, k.name).copy() for k in fields(self)
                              if getattr(self, k.name) is not None})
@@ -87,6 +91,9 @@ class dataclasses_common():
     def fields(self, among=None):
         return tuple(k.name for k in fields(self) if (among is None or k.name in among))
 
+    def __repr__(self) -> str:
+        body = ',\n'.join(f'{k}={v}' for k, v in self.__dict__.items())
+        return f"{type(self)}({body})"
 
 @dataclass()
 class EnvCTM_local(dataclasses_common):

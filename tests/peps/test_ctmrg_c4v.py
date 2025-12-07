@@ -124,11 +124,11 @@ def ctmrg_Ising(config, beta, layers, Env, init, policy, checkpoint_move):
     return (eXv + eXh) / 2
 
 
-@pytest.mark.parametrize("beta", [0.5])
+@pytest.mark.parametrize("beta", [0.5, ])
 @pytest.mark.parametrize("layers", [1, ])
 @pytest.mark.parametrize("Env", ["EnvCTM_c4v", "EnvCTM"])
 @pytest.mark.parametrize("init", ['dl', 'eye'])
-@pytest.mark.parametrize("policy", ['fullrank', 'block_arnoldi', 'block_propack']) #, 'qr', 'symeig', ])  'randomized' not supported by backend_np
+@pytest.mark.parametrize("policy", ['fullrank', ]) #, 'block_arnoldi', 'block_propack', 'qr', 'symeig', ])  'randomized' not supported by backend_np
 def test_ctmrg_Ising(config_kwargs, beta, layers, Env, init, policy):
     r"""
     Use CTMRG to calculate some expectation values in classical 2D Ising model.

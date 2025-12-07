@@ -17,6 +17,9 @@ from itertools import groupby
 from functools import reduce
 import torch
 from torch.utils.checkpoint import checkpoint as _checkpoint
+import torch.cuda as cuda
+import torch.multiprocessing as mp
+mp.set_start_method('spawn', force=True)
 from .linalg.torch_eig_sym import SYMEIG
 from ._backend_torch_backwards import kernel_svd, kernel_svds_scipy
 from ._backend_torch_backwards import kernel_dot, kernel_transpose_dot_sum, kernel_negate_blocks
@@ -29,16 +32,18 @@ __all__= [
     'get_dtype', 'is_complex', 'get_device', 'random_seed', 'grad',
     'detach', 'detach_', 'clone', 'copy',
     'to_numpy', 'get_shape', 'get_size', 'diag_create', 'diag_get', 'real',
-    'imag', 'max_abs', 'norm_matrix', 'delete', 'insert',
+    'imag', 'max_abs', 'maximum', 'norm_matrix', 'delete', 'insert',
     'expm', 'first_element', 'item', 'sum_elements', 'norm', 'entropy',
     'zeros', 'ones', 'rand', 'to_tensor', 'to_mask', 'square_matrix_from_dict',
     'requires_grad_', 'requires_grad', 'move_to', 'conj',
     'trace', 'rsqrt', 'reciprocal', 'exp', 'sqrt', 'absolute',
-    'svd_lowrank', 'svd', 'eigh', 'qr', 'pinv',
+    'fix_svd_signs', 'svdvals', 'svd_lowrank', 'svd', 'svd_randomized', 'svds_scipy',
+    'eigh', 'qr', 'pinv',
     'argsort', 'eigs_which', 'allclose',
     'add', 'sub', 'apply_mask', 'vdot', 'diag_1dto2d', 'diag_2dto1d',
     'dot', 'dot_diag', 'transpose_dot_sum',
     'merge_to_dense', 'merge_super_blocks', 'is_independent',
+    'apply_mask', 'embed_mask', 
     'transpose', 'transpose_and_merge', 'unmerge']
 
 

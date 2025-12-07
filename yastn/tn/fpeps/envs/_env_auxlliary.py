@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+from typing import Sequence
+from ....tn.fpeps._geometry import Lattice
 from ....initialize import ones, eye
 from ....tensor import tensordot, Leg, Tensor, YastnError, ncon
 from .._geometry import Lattice
@@ -22,6 +24,7 @@ __all__ = ['hair_t', 'hair_l', 'hair_b', 'hair_r',
            'edge_t', 'edge_l', 'edge_b', 'edge_r',
            'append_vec_tl', 'append_vec_tr',
            'append_vec_bl', 'append_vec_br',
+           'corner2x2',
            'tensors_from_psi', 'cut_into_hairs',
            'identity_boundary', 'trivial_peps_tensor',
            'clear_projectors', 'clear_operator_input']
@@ -107,6 +110,8 @@ def hair_r(A_bra, ht=None, hb=None, hr=None, A_ket=None):
         A_ket = ncon([ht, A_ket], [(-0, 1), (1, -1, -2, -3, -4)])
     return tensordot(A_bra.conj(), A_ket, axes=((0, 2, 3, 4), (0, 2, 3, 4)))  # l' l
 
+#
+# Initialization of corner and edge tensors from PEPS on-site tensor
 
 def cor_tl(A_bra, ht=None, hl=None, A_ket=None):
     """ top-left corner tensor """
@@ -201,6 +206,8 @@ def edge_b(A_bra, hb=None, A_ket=None):  # A = [t l] [b r] s;  hb = b' b
     egb = egb.swap_gate(axes=((1, 4), 3)) # l l' X t'
     return egb.fuse_legs(axes=((2, 5), (0, 3), (1, 4)))  # [r r'] [t t'] [l l']
 
+#
+# Typical contractions featuring in CTM for square lattice
 
 def append_vec_tl(Ac, A, vectl, op=None, mode='old', in_b=(2, 1), out_a=(2, 3)):
     # A = t l b r s;  Ac = t' l' b' r' s;  vectl = x [l l'] [t t'] y (order in axes0)
@@ -355,6 +362,118 @@ def append_vec_bl(Ac, A, vecbl, op=None, mode='old', in_b=(2, 1), out_a=(0, 3)):
         axes1, axes2 = (2,) + axes1, 0  # [x y] [] [] -> x y [] []
     vecbl = vecbl.fuse_legs(axes=axes1)
     return vecbl.unfuse_legs(axes=axes2)
+
+
+def halves_4x4_lhr(ts:Sequence[Tensor]):
+    """
+    Contract top and bottom halves of 4x4 network of PEPS and its CTM environment, i.e. a 2x2 patch
+    of PEPS with its CTM boundary::
+
+        c_tl   t_t_0  t_t_2  c_tr       -- top_half -----
+        t_l_0  a_0    a_2    t_r_2     |0                |1
+        t_l_1  a_1    a_3    t_r_3  =  |1                |0
+        c_bl   t_b_1  t_b_3  c_br       -- bottom_half --
+
+    Legs are ordered as per the CTM conventions, see :class:`yastn.tn.fpeps.EnvCtm`.
+
+    Args:
+        ts: Sequence of Tensors in order (the boundary is traversed clockwise):
+            [t_t_0, c_tl, t_l_0, a_0,
+             t_b_1, c_bl, t_l_1, a_1,
+             t_t_2, c_tr, t_r_2, a_2,
+             t_b_3, c_br, t_r_3, a_3]
+
+    Returns::
+        top_half, bottom_half: Tensor
+    """
+    cor_tl = corner2x2('tl',*ts[0:4])
+    cor_bl = corner2x2('bl',*ts[4:8])
+    cor_tr = corner2x2('tr',*ts[8:12])
+    cor_br = corner2x2('br',*ts[12:16])
+
+    top_half = cor_tl @ cor_tr     # b(left) b(right)
+    bottom_half = cor_br @ cor_bl  # t(right) t(left)
+    return top_half, bottom_half
+
+def halves_4x4_tvb(ts):
+    """
+    Contract left and right halves of 4x4 network of PEPS and its CTM environment, i.e. a 2x2 patch
+    of PEPS with its CTM boundary::
+
+        c_tl   t_t_0  t_t_2  c_tr       -------1 0-------
+        t_l_0  a_0    a_2    t_r_2     |                 |
+        t_l_1  a_1    a_3    t_r_3  =  left_half         right_half
+        c_bl   t_b_1  t_b_3  c_br      |                 |
+                                        -------0 1-------
+
+    Legs are ordered as per the CTM conventions, see :class:`yastn.tn.fpeps.EnvCtm`.
+
+    Args:
+        ts: Sequence of Tensors in order (the boundary is traversed clockwise):
+            [t_t_0, c_tl, t_l_0, a_0,
+             t_b_1, c_bl, t_l_1, a_1,
+             t_t_2, c_tr, t_r_2, a_2,
+             t_b_3, c_br, t_r_3, a_3]
+
+    Returns::
+        left_half, right_half: Tensor
+    """
+    cor_tl = corner2x2('tl',*ts[0:4])
+    cor_bl = corner2x2('bl',*ts[4:8])
+    cor_tr = corner2x2('tr',*ts[8:12])
+    cor_br = corner2x2('br',*ts[12:16])
+
+    cor_ll = cor_bl @ cor_tl  # l(bottom) l(top)
+    cor_rr = cor_tr @ cor_br  # r(top) r(bottom)
+    return cor_ll, cor_rr
+
+def corner2x2(id_c2x2, t1, c, t2, onsite_t, mode='fuse'):
+    """
+    Contract 2x2 corner of PEPS and its CTM environment from two edges t1, t2 and corner c with onsite tensor onsite_t.
+    Legs are ordered as per the CTM conventions, see :class:`yastn.tn.fpeps.EnvCtm`.
+
+    Args:
+        id_c2x2: str
+            Identifier of corner: 'tl', 'bl', 'tr', 'br' for top-left, bottom-left, top-right, bottom-right corner, respectively.
+        mode: str
+            'fuse' (default) to fuse output legs into two pairs, returning a rank-2 tensor.
+    """
+    if id_c2x2 == 'tl':
+        return corner2x2_tl(t1, c, t2, onsite_t, mode=mode)
+    elif id_c2x2 == 'bl':
+        return corner2x2_bl(t1, c, t2, onsite_t, mode=mode)
+    elif id_c2x2 == 'tr':
+        return corner2x2_tr(t1, c, t2, onsite_t, mode=mode)
+    elif id_c2x2 == 'br':
+        return corner2x2_br(t1, c, t2, onsite_t, mode=mode)
+
+def corner2x2_tl(t_left, c_topleft, t_top, onsite_t, mode='fuse'):
+    cor_tl = t_left @ c_topleft @ t_top
+    cor_tl = tensordot(cor_tl, onsite_t, axes=((2, 1), (0, 1)))
+    if mode == 'fuse':
+        cor_tl = cor_tl.fuse_legs(axes=((0, 2), (1, 3)))
+    return cor_tl
+
+def corner2x2_bl(t_bottom, c_bottomleft, t_left, onsite_t, mode='fuse'):
+    cor_bl = t_bottom @ c_bottomleft @ t_left
+    cor_bl = tensordot(cor_bl, onsite_t, axes=((2, 1), (1, 2)))
+    if mode == 'fuse':
+        cor_bl = cor_bl.fuse_legs(axes=((0, 3), (1, 2)))
+    return cor_bl
+
+def corner2x2_tr(t_top, c_topright, t_right, onsite_t, mode='fuse'):
+    cor_tr = t_top @ c_topright @ t_right
+    cor_tr = tensordot(cor_tr, onsite_t, axes=((1, 2), (0, 3)))
+    if mode == 'fuse':
+        cor_tr = cor_tr.fuse_legs(axes=((0, 2), (1, 3)))
+    return cor_tr
+
+def corner2x2_br(t_right, c_bottomright, t_bottom, onsite_t, mode='fuse'):
+    cor_br = t_right @ c_bottomright @ t_bottom
+    cor_br = tensordot(cor_br, onsite_t, axes=((2, 1), (2, 3)))
+    if mode == 'fuse':
+        cor_br = cor_br.fuse_legs(axes=((0, 2), (1, 3)))
+    return cor_br
 
 
 def clear_projectors(sites, projectors, xrange, yrange):

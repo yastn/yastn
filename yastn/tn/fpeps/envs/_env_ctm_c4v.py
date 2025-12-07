@@ -16,7 +16,8 @@ from __future__ import annotations
 import logging
 from typing import Callable, Sequence
 
-from ._env_ctm import EnvCTM, update_storage_, _partial_svd_predict_spec
+from ._env_ctm import EnvCTM, update_storage_
+from ._env_auxlliary import *
 from ._env_dataclasses import EnvCTM_c4v_local, EnvCTM_c4v_projectors
 from .._geometry import Lattice
 from .._peps import Peps2Layers
@@ -112,6 +113,8 @@ class EnvCTM_c4v(EnvCTM):
         if init is not None:
             self.reset_(init=init)
 
+        self.profiling_mode = None
+
     def __getitem__(self, site):
         if (site[0] + site[1]) % 2 == 1:
             return EnvFlip(self.env[site])
@@ -168,7 +171,7 @@ class EnvCTM_c4v(EnvCTM):
             psh = Lattice(env.geometry)
             psh[s0] = EnvCTM_c4v_projectors(vtl=env.proj[s0].vtl.get_legs(-1),
                                             vtr=env.proj[s0].vtr.get_legs(0))
-            svd_predict_spec = lambda s0, p0, s1, p1: _partial_svd_predict_spec(getattr(psh[s0], p0), getattr(psh[s1], p1), opts_svd.get('sU', 1))
+            svd_predict_spec = lambda s0, p0, s1, p1: env._partial_svd_predict_spec(getattr(psh[s0], p0), getattr(psh[s1], p1), opts_svd.get('sU', 1))
         #
         # 1) get tl enlarged corner and projector from ED/SVD
         #
