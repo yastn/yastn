@@ -218,7 +218,6 @@ class Peps(Lattice):
     def __add__(self, other) -> Peps:
         return add(self, other)
 
-
 def add(*states, amplitudes=None, **kwargs) -> MpsMpoOBC:
     r"""
     Linear superposition of several PEPSs with specific amplitudes, i.e., :math:`\sum_j \textrm{amplitudes[j]}{\times}\textrm{states[j]}`.
@@ -274,6 +273,16 @@ class Peps2Layers():
         for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "f_ordered", "nn_bond_dirn"]:
             setattr(self, name, getattr(bra.geometry, name))
 
+    def detach(self):
+        return type(self)(bra=self.bra.detach(), ket=None if self._ket is None else self._ket.detach())
+
+    def clone(self):
+        if self._ket is None:
+            return type(self)(self.bra.clone())
+        if self.bra == self._ket: # TODO is this desired behavior?
+            return type(self)(self.bra.clone())
+        return type(self)(self.bra.clone(), ket=self._ket.clone())
+
     @property
     def ket(self):
         return self.bra if self._ket is None else self._ket
@@ -292,6 +301,10 @@ class Peps2Layers():
     def __getitem__(self, site) -> DoublePepsTensor:
         """ Get tensor for site. """
         return DoublePepsTensor(bra=self.bra[site], ket=self.ket[site])
+
+    def to(self, device: str=None, dtype: str=None, **kwargs) -> Peps2Layers:
+        return Peps2Layers(bra=self.bra.to(device=device, dtype=dtype, **kwargs),
+                           ket=self.ket.to(device=device, dtype=dtype, **kwargs) if not self.ket_is_bra else None)
 
     def to_dict(self, level=2) -> dict:
         r"""

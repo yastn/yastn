@@ -22,6 +22,10 @@ __all__ = ["EnvBP_local", "EnvCTM_local", "EnvCTM_projectors", "EnvCTM_c4v_local
 @dataclass()
 class dataclasses_common():
 
+    def to(self, device: str=None, dtype: str=None, **kwargs):
+        return type(self)(**{k.name: getattr(self, k.name).to(device=device, dtype=dtype, **kwargs) for k in fields(self)
+                             if getattr(self, k.name) is not None})
+
     def copy(self):
         return type(self)(**{k.name: getattr(self, k.name).copy() for k in fields(self)
                              if getattr(self, k.name) is not None})
@@ -84,6 +88,9 @@ class dataclasses_common():
             dd = {k.name: Tensor.from_dict(d[k.name], config=config) for k in fields(cls) if k.name in d}
             return cls(**dd)
 
+    def __repr__(self) -> str:
+        body = ',\n'.join(f'{k}={v}' for k, v in self.__dict__.items())
+        return f"{type(self)}({body})"
 
 @dataclass()
 class EnvCTM_local(dataclasses_common):

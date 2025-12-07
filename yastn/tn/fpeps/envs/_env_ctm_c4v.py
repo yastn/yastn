@@ -17,7 +17,7 @@ import logging
 from typing import Callable, Sequence
 
 from ._env_auxlliary import *
-from ._env_ctm import EnvCTM, update_storage_, CTMRG_out, _partial_svd_predict_spec
+from ._env_ctm import EnvCTM, update_storage_, CTMRG_out
 from ._env_dataclasses import EnvCTM_c4v_local, EnvCTM_c4v_projectors
 from .._geometry import RectangularUnitcell, Lattice
 from .._peps import Peps, Peps2Layers, DoublePepsTensor, PEPS_CLASSES
@@ -331,7 +331,7 @@ def _update_core_dir(env, dir : str, opts_svd : dict, **kwargs):
     psh = kwargs.pop("proj_history", None)
     # Inherit _partial_svd_predict_spec from EnvCTM
     svd_predict_spec= lambda s0,p0,s1,p1: opts_svd.get('D_block', float('inf')) if psh is None else \
-        _partial_svd_predict_spec(getattr(psh[s0],p0), getattr(psh[s1],p1), opts_svd.get('sU', 1))
+        env._partial_svd_predict_spec(getattr(psh[s0],p0), getattr(psh[s1],p1), opts_svd.get('sU', 1))
 
     #
     # Empty structure for projectors

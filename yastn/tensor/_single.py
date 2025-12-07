@@ -69,7 +69,7 @@ def clone(a) -> 'Tensor':
     return a._replace(data=data)
 
 
-def to(a, device=None, dtype=None) -> 'Tensor':
+def to(a, device=None, dtype=None, **kwargs) -> 'Tensor':
     r"""
     Move tensor to device and cast to given datatype.
 
@@ -86,7 +86,7 @@ def to(a, device=None, dtype=None) -> 'Tensor':
     """
     if dtype in (None, a.yastn_dtype) and device in (None, a.device):
         return a._replace()
-    data = a.config.backend.move_to(a._data, dtype=dtype, device=device)
+    data = a.config.backend.move_to(a._data, dtype=dtype, device=device, **kwargs)
     return a._replace(data=data)
 
 
