@@ -56,7 +56,7 @@ def test_quickstart_hubbard(config_kwargs, D, betas):
 
     import yastn
     import yastn.tn.fpeps as fpeps
-    import yastn.tn.fpeps.envs.PARA_CTMRG as para_ctmrg
+    import yastn.yastn.tn.fpeps.envs.para_ctmrg as para_ctmrg
     from tqdm import tqdm  # progressbar
 
     t = 1
