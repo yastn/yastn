@@ -82,7 +82,6 @@ def SubWindow(env_psi: Peps | EnvCTM, site, top=1, left=1, bottom=1, right=1, on
         ket = None
         env = None
     elif type(env_psi) is EnvCTM:
-        print("pass")
         env = env_psi
         if type(env.psi) is Peps:
             psi = env_psi.psi
