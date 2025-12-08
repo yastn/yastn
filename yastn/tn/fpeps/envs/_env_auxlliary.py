@@ -13,10 +13,10 @@
 # limitations under the License.
 # ==============================================================================
 from typing import Sequence
-from ....tn.fpeps._geometry import Lattice
+
+from .._geometry import Lattice
 from ....initialize import ones, eye
 from ....tensor import tensordot, Leg, Tensor, YastnError, ncon
-from .._geometry import Lattice
 
 
 __all__ = ['hair_t', 'hair_l', 'hair_b', 'hair_r',

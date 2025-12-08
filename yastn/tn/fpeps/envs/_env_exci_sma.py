@@ -1,11 +1,10 @@
 from __future__ import annotations
-from tqdm import tqdm
+
+from .._doublePepsTensor import DoublePepsTensor
+from .._geometry import Site
 from ... import mps
 from ....tensor import YastnError
-from .._geometry import Site
 from ....operators import sign_canonical_order
-from .._peps import Peps, Peps2Layers
-from .._doublePepsTensor import DoublePepsTensor
 
 def contract_window(bra, tms, ket, i0, i1, opts_svd, opts_var):
     """ Helper funcion performing mps contraction of < mps0 | mpo mpo ... | mps1 >. """

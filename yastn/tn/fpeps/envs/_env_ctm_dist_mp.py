@@ -13,19 +13,18 @@
 # limitations under the License.
 # ==============================================================================
 from __future__ import annotations
-from typing import Callable, Sequence
-import time
-
-import numpy as np
-from ...._from_dict import from_dict
-from ....tn.fpeps._geometry import Site
-from ....tensor import Tensor, YastnError, Leg, tensordot, qr, vdot
-from ._env_ctm import CTMRG_out, EnvCTM, proj_corners, trivial_projectors_, update_env_, update_storage_
-from ._env_auxlliary import halves_4x4_lhr, halves_4x4_tvb
-from ...._split_combine_dict import split_data_and_meta, combine_data_and_meta
 import logging
-import os
-import torch
+from typing import Callable, Sequence
+
+from ._env_auxlliary import halves_4x4_lhr, halves_4x4_tvb
+from ._env_ctm import CTMRG_out, EnvCTM, proj_corners, update_storage_
+from .._geometry import Site
+
+from ...._from_dict import from_dict
+from ...._split_combine_dict import split_data_and_meta, combine_data_and_meta
+from ....tensor import YastnError, qr
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -354,7 +353,7 @@ def _update_core_D_(ctmrg_mp_context, env, move: str, opts_svd: dict, **kwargs):
         if env.profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.range_pop()
 
         # fill trivial projectors on edges (if any)
-        trivial_projectors_(env, move, sites_proj)
+        env._trivial_projectors_(move, sites_proj)
 
         #
         # Update move

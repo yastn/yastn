@@ -22,7 +22,6 @@ import torch
 
 from ._env_ctm_c4v import EnvCTM_c4v
 from .fixed_pt import fast_env_T_gauge_multi_sites, NoFixedPointError, real_to_complex, complex_to_real, _concat_data, _assemble_dict_from_1d
-from .fixed_pt import fast_env_T_gauge_multi_sites, NoFixedPointError, real_to_complex, complex_to_real
 from .rdm import *
 from .._geometry import Lattice
 from ....initialize import zeros, eye

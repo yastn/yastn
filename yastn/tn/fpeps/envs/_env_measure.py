@@ -13,15 +13,15 @@
 # limitations under the License.
 # ==============================================================================
 """ Common measure functions for EnvCTM and EnvBoudndaryMPS """
-from ....tensor import tensordot, vdot
-from .._gates_auxiliary import fkron, gate_fix_swap_gate
-from .._geometry import Site, is_bond, is_site
+
 from ._env_auxlliary import clear_operator_input
 from ._env_window import EnvWindow
+from .._gates_auxiliary import fkron, gate_fix_swap_gate
+from .._geometry import Site, is_bond, is_site
 from .._peps import Peps2Layers
 from ... import mps
 from ....operators import sign_canonical_order
-from ....tensor import YastnError, Tensor
+from ....tensor import YastnError, Tensor, tensordot, vdot
 
 
 def _measure_nsite(env, *operators, sites=None, dirn='tb', opts_svd=None, opts_var=None) -> float:

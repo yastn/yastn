@@ -18,8 +18,7 @@ import time
 
 import numpy as np
 from scipy.optimize import minimize
-from scipy.sparse.linalg import LinearOperator
-from scipy.sparse.linalg import eigsh, eigs, ArpackNoConvergence
+from scipy.sparse.linalg import LinearOperator, eigsh, eigs, ArpackNoConvergence
 import torch
 
 from ._env_ctm_dist_mp import iterate_D_

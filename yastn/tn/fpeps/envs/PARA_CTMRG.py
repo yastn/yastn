@@ -3,10 +3,12 @@ import logging
 import numpy as np
 
 from joblib import Parallel, delayed
-from ...fpeps import *
+
+#from ...fpeps import *
 from ._env_ctm import CTMRG_out, EnvCTM, update_storage_
+from .._initialize import load_from_dict, product_peps
 from .._peps import Peps
-from ...fpeps._geometry import Site, Bond
+from .._geometry import Site, Bond, SquareLattice
 
 
 def CreateCTMJobBundle(env:EnvCTM, n_cores=1):

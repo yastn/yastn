@@ -22,8 +22,7 @@ from warnings import warn
 from ._env_auxlliary import *
 from ._env_dataclasses import EnvCTM_local, EnvCTM_projectors
 from .._evolution import BondMetric
-from .._gates_auxiliary import fkron, gate_fix_swap_gate
-from .._geometry import Site, Lattice, is_site, is_bond
+from .._geometry import Site, Lattice
 from .._peps import PEPS_CLASSES, Peps2Layers
 from ... import mps
 from ....initialize import rand, ones, eye
