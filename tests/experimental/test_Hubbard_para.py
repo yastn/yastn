@@ -107,7 +107,7 @@ def test_quickstart_hubbard(config_kwargs, D, betas):
         # ctm = env_ctm.ctmrg_(opts_svd=opts_svd_ctm,
         #                      iterator=True,
         #                      max_sweeps=50)  # generator
-        ctm = para_ctmrg.PARActmrg_(psi, env_ctm, I, max_sweeps=50, opts_svd_ctm=opts_svd_ctm, n_cores=2, ctm_jobs_vh=[[psi.sites()], [psi.sites()]])
+        ctm = para_ctmrg.PARActmrg_(env_ctm, max_sweeps=50, opts_svd_ctm=opts_svd_ctm, n_cores=2, ctm_jobs_vh=[[psi.sites()], [psi.sites()]])
 
         energy_old, tol_exp = 0, 1e-7
         for info in ctm:
