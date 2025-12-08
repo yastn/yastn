@@ -196,3 +196,73 @@ class EnvExciSMA:
         val_op = contract_window(bra, tms, ket, i0, i1, opts_svd, opts_var)
         # return sign * val_op / val_no
         return sign * val_op
+
+
+    def measure_exci_norm_tl(self, exci_bra=None, exci_ket=None, opts_svd=None, opts_var=None):
+        if opts_var is None:
+            opts_var = {'max_sweeps': 2}
+        if opts_svd is None:
+            D_total = max(max(self[nx, dirn].get_bond_dimensions()) for nx in range(*self.xrange) for dirn in 'tb')
+            opts_svd = {'D_total': D_total}
+
+        sites = self.sites()
+        out = {}
+        
+        nx0 = sites[0][0]
+        vecs = {nx0: self[nx0, 't']}
+
+        # for nx in range(self.xrange[0], self.xrange[1] - 1):
+        #     t_bra = exci_bra if nx == nx0 else None
+        #     t_ket = None
+        #     tm = self[nx, 'h', t_bra, t_ket, (nx0, ny0), None]            
+        #     vecs[nx + 1] = mps.zipper(tm, vecs[nx], opts_svd=opts_svd)
+        #     mps.compression_(vecs[nx + 1], (tm, vecs[nx]), method='1site', normalize=False, **opts_var)
+
+        for iy0, ny0 in enumerate(range(*self.yrange), start=1):
+            if iy0 > 1:
+                break
+            # t_bra = exci_bra
+            vecc, tm, vec = self[nx0, 'b'].conj(), self[nx0, 'h', exci_bra, None, (nx0, ny0), None] , vecs[nx0]
+            # vecc, tm, vec = self[nx0, 'b'].conj(), self[nx0, 'h'] , vecs[nx0]
+            
+            env = mps.Env(vecc, [tm, vec]).setup_(to='first').setup_(to='last')
+            # calculate onsite correlations
+            ket0 = tm[iy0].ket
+            # tm[iy0] = DoublePepsTensor(bra=tm[iy0].bra, ket=exci_ket[nx0, ny0]).transpose(axes=(1, 2, 3, 0))
+            tm[iy0] = DoublePepsTensor(bra=exci_bra, ket=exci_ket[nx0, ny0]).transpose(axes=(1, 2, 3, 0))
+
+            env.update_env_(iy0, to='first')
+            out[(nx0, ny0), (nx0, ny0)] = env.measure(bd=(iy0-1, iy0))
+            
+            tm[iy0] = DoublePepsTensor(bra=exci_bra, ket=ket0).transpose(axes=(1, 2, 3, 0))
+            # # env.update_env_(ny0, to='first')
+            env.setup_(to='last')
+
+            if nx0 < self.xrange[1] - 1:
+                vec_o0_next = mps.zipper(tm, vec, opts_svd=opts_svd, normalize=False)
+                mps.compression_(vec_o0_next, (tm, vec), method='1site', normalize=False, **opts_var)
+
+            for iy1, ny1 in enumerate(range(ny0 + 1, self.yrange[1]), start=ny0 - self.yrange[0] + 2):
+                ket0 = tm[iy1].ket
+                tm[iy1] = DoublePepsTensor(bra=tm[iy1].bra, ket=exci_ket[nx0, ny1]).transpose(axes=(1, 2, 3, 0))
+                env.update_env_(iy1, to='first')
+                out[(nx0, ny0), (nx0, ny1)] = env.measure(bd=(iy1-1, iy1))
+                tm[iy1] = DoublePepsTensor(bra=tm[iy1].bra, ket=ket0).transpose(axes=(1, 2, 3, 0))
+
+            # subsequent rows
+            for nx1 in range(self.xrange[0]+1, self.xrange[1]):
+                vecc, tm, vec_o0 = self[nx1, 'b'].conj(), self[nx1, 'h'], vec_o0_next
+
+                if nx1 < self.xrange[1] - 1:
+                    vec_o0_next = mps.zipper(tm, vec_o0, opts_svd=opts_svd, normalize=False)
+                    mps.compression_(vec_o0_next, (tm, vec_o0), method='1site', normalize=False, **opts_var)
+
+                env = mps.Env(vecc, [tm, vec_o0]).setup_(to='last').setup_(to='first')
+                for iy1, ny1 in enumerate(range(*self.yrange), start=1):
+                    ket0 = tm[iy1].ket
+                    tm[iy1] = DoublePepsTensor(bra=tm[iy1].bra, ket=exci_ket[nx1, ny1]).transpose(axes=(1, 2, 3, 0))
+                    env.update_env_(iy1, to='first')
+                    out[(nx0, ny0), (nx1, ny1)] = env.measure(bd=(iy1-1, iy1))
+                    tm[iy1] = DoublePepsTensor(bra=tm[iy1].bra, ket=ket0).transpose(axes=(1, 2, 3, 0))
+
+        return out

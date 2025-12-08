@@ -182,8 +182,7 @@ def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
     if a.config.sym.NSYM == 0:
         if a.isdiag and len(D) == 1:
             D = D + D
-        if () in D:
-            D = ((0,),) * a.ndim_n
+        D = tuple(x if x else (0,) for x in D)  # replae () with (0,)
         if len(D) != a.ndim_n:
             raise YastnError("Number of elements in D does not match tensor rank.")
         tset = np.zeros((1, a.ndim_n, a.config.sym.NSYM))
@@ -214,6 +213,11 @@ def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
         ind = np.all(a.config.sym.fuse(comb_t, a.struct.s, 1) == a.struct.n, axis=1)
         tset = comb_t[ind]
         Dset = comb_D[ind]
+
+    # eliminate zero blocks
+    ind_nonzero = np.all(Dset, axis=1)
+    tset = tset[ind_nonzero]
+    Dset = Dset[ind_nonzero]
 
     if a.isdiag and np.any(Dset[:, 0] != Dset[:, 1]):
         raise YastnError("Diagonal tensor requires the same bond dimensions on both legs.")
