@@ -18,6 +18,7 @@ from tqdm import tqdm
 
 from ._env_auxlliary import identity_boundary, clear_projectors, clear_operator_input
 from ._env_measure import _measure_nsite
+from ._env_window import measure_2site_all, measure_2site_row
 from .._peps import PEPS_CLASSES, Peps2Layers
 from ... import mps
 from ....tensor import YastnError
@@ -80,36 +81,54 @@ class EnvBoundaryMPS():
 
         if 'r' in setup:
             for ny in range(ri-1, li-1, -1):
-                tmpo = psi.transfer_mpo(n=ny+1, dirn='v').T
-                phi0 = self._env[ny+1, 'r']
-                self._env[ny, 'r'], discarded = mps.zipper(tmpo, phi0, opts_svd, return_discarded=True)
-                mps.compression_(self._env[ny, 'r'], (tmpo, phi0), **opts_var, opts_svd=opts_svd)
-                self.info[ny, 'r'] = {'discarded': discarded}
+                self._update_boundary_(ny, 'r', opts_svd, opts_var)
 
         if 'l' in setup:
             for ny in range(li+1, ri+1):
-                tmpo = psi.transfer_mpo(n=ny-1, dirn='v')
-                phi0 = self._env[ny-1, 'l']
-                self._env[ny, 'l'], discarded = mps.zipper(tmpo, phi0, opts_svd, return_discarded=True)
-                mps.compression_(self._env[ny, 'l'], (tmpo, phi0), **opts_var, opts_svd=opts_svd)
-                self.info[ny, 'l'] = {'discarded': discarded}
+                self._update_boundary_(ny, 'l', opts_svd, opts_var)
 
         if 't' in setup:
             for nx in range(ti+1, bi+1):
-                tmpo = psi.transfer_mpo(n=nx-1, dirn='h')
-                phi0 = self._env[nx-1, 't']
-                self._env[nx, 't'], discarded = mps.zipper(tmpo, phi0, opts_svd, return_discarded=True)
-                mps.compression_(self._env[nx, 't'], (tmpo, phi0), **opts_var, opts_svd=opts_svd)
-                self.info[nx, 't'] = {'discarded': discarded}
+                self._update_boundary_(nx, 't', opts_svd, opts_var)
+            if self.boundary == 'cylinder':  # attempt to converge iteratively
+                psi0 = self._env[bi, 't']
+                for _ in range(100):
+                    for nx in range(ti, bi+1):
+                        self._update_boundary_(nx, 't', opts_svd, opts_var)
+                    if (self._env[bi, 't'] - psi0).norm() < 1e-6:
+                        break
+                    psi0 = self._env[bi, 't']
 
         if 'b' in setup:
             for nx in range(bi-1, ti-1, -1):
-                tmpo = psi.transfer_mpo(n=nx+1, dirn='h').T
-                phi0 = self._env[nx+1, 'b']
-                self._env[nx, 'b'], discarded = mps.zipper(tmpo, phi0, opts_svd, return_discarded=True)
-                mps.compression_(self._env[nx, 'b'], (tmpo, phi0), **opts_var, opts_svd=opts_svd)
-                self.info[nx, 'b'] = {'discarded': discarded}
+                self._update_boundary_(nx, 'b', opts_svd, opts_var)
+            if self.boundary == 'cylinder':  # attempt to converge iteratively
+                psi0 = self._env[ti, 'b']
+                for _ in range(100):
+                    for nx in range(bi, ti-1, -1):
+                        self._update_boundary_(nx, 'b', opts_svd, opts_var)
+                    if (self._env[ti, 'b'] - psi0).norm() < 1e-6:
+                        break
+                    psi0 = self._env[ti, 'b']
 
+    def _update_boundary_(self, n, dirn, opts_svd, opts_var):
+        if dirn == 'r':
+            tmpo = self.psi.transfer_mpo(n=n+1, dirn='v').T
+            phi0 = self._env[n+1, 'r']
+        if dirn == 'l':
+            tmpo = self.psi.transfer_mpo(n=n-1, dirn='v')
+            phi0 = self._env[n-1, 'l']
+        if dirn == 't':
+            nx = (n - 1) % self.Nx
+            tmpo = self.psi.transfer_mpo(n=nx, dirn='h')
+            phi0 = self._env[nx, 't']
+        if dirn == 'b':
+            nx = (n + 1) % self.Nx
+            tmpo = self.psi.transfer_mpo(n=nx, dirn='h').T
+            phi0 = self._env[nx, 'b']
+        self._env[n, dirn], discarded = mps.zipper(tmpo, phi0, opts_svd, return_discarded=True)
+        mps.compression_(self._env[n, dirn], (tmpo, phi0), **opts_var, opts_svd=opts_svd)
+        self.info[n, dirn] = {'discarded': discarded}
 
     def to_dict(self, level=2):
         r"""
@@ -153,8 +172,6 @@ class EnvBoundaryMPS():
         d['env'] = {k: v.save_to_dict() for k, v in self._env.items()}
         d['info'] = {k: v.copy() for k, v in self.info.items()}
         return d
-
-
 
     def boundary_mps(self, n, dirn):
         return self._env[n, dirn]
@@ -317,82 +334,16 @@ class EnvBoundaryMPS():
         dirn = 'lr'
         return _measure_nsite(self, *operators, sites=sites, dirn=dirn)
 
-    def measure_2site(peps_env, O, P, opts_svd, opts_var=None):
-        """
-        Calculate all 2-point correlations <O_i P_j> in a finite PEPS.
 
-        Takes CTM environments and operators.
+    def measure_2site(self, O0, O1, opts_svd=None, opts_var=None, site0='all'):
+        xrange = [0, self.Nx]
+        yrange = [0, self.Ny]
+        if site0 == 'all':
+            return measure_2site_all(self, O0, O1, opts_svd, opts_var)
+        if site0 == 'row':
+            return measure_2site_row(self, O0, O1, xrange, yrange, self.sites(), opts_svd, opts_var)
+        raise YastnError("site0 should be 'corner' or 'row'. ")
 
-        Parameters
-        ----------
-        O, P: dict[tuple[int, int], dict[int, operators]],
-            mapping sites with list of operators at each site.
-        """
-        out = {}
-        if opts_var is None:
-            opts_var =  {'max_sweeps': 2}
-
-        psi = peps_env.psi
-        Nx, Ny = psi.Nx, psi.Ny
-        sites = [(nx, ny) for ny in range(Ny-1, -1, -1) for nx in range(Nx)]
-        op1dict = clear_operator_input(O, sites)
-        op2dict = clear_operator_input(P, sites)
-
-        for nx1, ny1 in sites:
-            # print( f"Correlations from {nx1} {ny1} ... ")
-            for nz1, o1 in op1dict[nx1, ny1].items():
-                vR = peps_env.boundary_mps(n=ny1, dirn='r')
-                vL = peps_env.boundary_mps(n=ny1, dirn='l')
-                Os = psi.transfer_mpo(n=ny1, dirn='v').T
-                env = mps.Env(vL.conj(), [Os, vR]).setup_(to='first').setup_(to='last')
-                norm_env = env.measure(bd=(-1, 0))
-
-                if ny1 > 0:
-                    vRnext = mps.zipper(Os, vR, opts_svd=opts_svd)
-                    mps.compression_(vRnext, (Os, vR), method='1site', normalize=False, **opts_var)
-
-                # first calculate on-site correlations
-                for nz2, o2 in op2dict[nx1, ny1].items():
-                    Os[nx1].set_operator_(o1 @ o2)
-                    env.update_env_(nx1, to='last')
-                    out[(nx1, ny1) + nz1, (nx1, ny1) + nz2] = env.measure(bd=(nx1, nx1+1)) / norm_env
-
-                Os[nx1].set_operator_(o1)
-                env.setup_(to='last')
-
-                if ny1 > 0:
-                    vRo1next = mps.zipper(Os, vR, opts_svd=opts_svd)
-                    mps.compression_(vRo1next, (Os, vR), method='1site', normalize=False, **opts_var)
-
-                # calculate correlations along the row
-                for nx2 in range(nx1 + 1, Nx):
-                    for nz2, o2 in op2dict[nx2, ny1].items():
-                        Os[nx2].set_operator_(o2)
-                        env.update_env_(nx2, to='first')
-                        out[(nx1, ny1) + nz1, (nx2, ny1) + nz2] = env.measure(bd=(nx2-1, nx2)) / norm_env
-
-                # and all subsequent rows
-                for ny2 in range(ny1-1, -1, -1):
-                    vR = vRnext
-                    vRo1 = vRo1next
-                    vL = peps_env.boundary_mps(n=ny2, dirn='l')
-                    Os = psi.transfer_mpo(n=ny2, dirn='v').T
-                    env = mps.Env(vL.conj(), [Os, vR]).setup_(to='first')
-                    norm_env = env.measure(bd=(-1, 0))
-
-                    if ny2 > 0:
-                        vRnext = mps.zipper(Os, vR, opts_svd=opts_svd)
-                        mps.compression_(vRnext, (Os, vR), method='1site', normalize=False, **opts_var)
-                        vRo1next = mps.zipper(Os, vRo1, opts_svd=opts_svd)
-                        mps.compression_(vRo1next, (Os, vRo1), method='1site', normalize=False, **opts_var)
-
-                    env = mps.Env(vL.conj(), [Os, vRo1]).setup_(to='first').setup_(to='last')
-                    for nx2 in range(psi.Nx):
-                        for nz2, o2 in op2dict[nx2, ny2].items():
-                            Os[nx2].set_operator_(o2)
-                            env.update_env_(nx2, to='first')
-                            out[(nx1, ny1) + nz1, (nx2, ny2) + nz2] = env.measure(bd=(nx2-1, nx2)) / norm_env
-        return out
 
     def sample(peps_env, projectors, number=1, opts_svd=None, opts_var=None, progressbar=False, return_probabilities=False, flatten_one=True, **kwargs):
         r"""
