@@ -6,9 +6,10 @@ from joblib import Parallel, delayed
 
 #from ...fpeps import *
 from ._env_ctm import CTMRG_out, EnvCTM, update_storage_
-from .._initialize import load_from_dict, product_peps
+from .._initialize import product_peps
 from .._peps import Peps
 from .._geometry import Site, Bond, SquareLattice
+from ...._from_dict import from_dict
 
 
 def CreateCTMJobBundle(env:EnvCTM, n_cores=1):
@@ -35,7 +36,7 @@ def BuildProjector_(job, move, opts_svd_ctm, cfg, method='2site'):
 
     env_dict = job[0]
     site = job[1]
-    env = load_from_dict(config=cfg, d=env_dict)
+    env = EnvCTM.from_dict(config=cfg, d=env_dict)
 
     sites = [env.nn_site(site, d=d) for d in ((0, 0), (0, 1), (1, 0), (1, 1))]
     if None in sites:
@@ -49,20 +50,20 @@ def BuildProjector_(job, move, opts_svd_ctm, cfg, method='2site'):
     result_dict = {}
 
     if any(x in move for x in 'rh'):
-        result_dict[(tr, 'hrb')] = yastn.save_to_dict(env.proj[tr].hrb)
-        result_dict[(br, 'hrt')] = yastn.save_to_dict(env.proj[br].hrt)
+        result_dict[(tr, 'hrb')] = env.proj[tr].hrb.to_dict()
+        result_dict[(br, 'hrt')] = env.proj[br].hrt.to_dict()
 
     if any(x in move for x in 'lh'):
-        result_dict[(tl, 'hlb')] = yastn.save_to_dict(env.proj[tl].hlb)
-        result_dict[(bl, 'hlt')] = yastn.save_to_dict(env.proj[bl].hlt)
+        result_dict[(tl, 'hlb')] = env.proj[tl].hlb.to_dict()
+        result_dict[(bl, 'hlt')] = env.proj[bl].hlt.to_dict()
 
     if any(x in move for x in 'tv'):
-        result_dict[(tl, 'vtr')] = yastn.save_to_dict(env.proj[tl].vtr)
-        result_dict[(tr, 'vtl')] = yastn.save_to_dict(env.proj[tr].vtl)
+        result_dict[(tl, 'vtr')] = env.proj[tl].vtr.to_dict()
+        result_dict[(tr, 'vtl')] = env.proj[tr].vtl.to_dict()
 
     if any(x in move for x in 'bv'):
-        result_dict[(bl, 'vbr')] = yastn.save_to_dict(env.proj[bl].vbr)
-        result_dict[(br, 'vbl')] = yastn.save_to_dict(env.proj[br].vbl)
+        result_dict[(bl, 'vbr')] = env.proj[bl].vbr.to_dict()
+        result_dict[(br, 'vbl')] = env.proj[br].vbl.to_dict()
 
     return result_dict
 
@@ -148,9 +149,7 @@ def SubWindow(psi, site, fid, top=1, left=1, bottom=1, right=1, env=None, only_s
 @delayed
 def UpdateSite(job, cfg, dirn, proj_dict):
 
-    env_: EnvCTM
-
-    env_ = load_from_dict(config=cfg, d=job[0])
+    env_ = EnvCTM.from_dict(config=cfg, d=job[0])
     site0 = job[1]
 
 
@@ -170,27 +169,27 @@ def UpdateSite(job, cfg, dirn, proj_dict):
             temp_site = job[5]
             temp_site0 = canonical_site(env_, env_.nn_site(site0, (-1, -1)))
             if temp_site0 is not None:
-                env_.proj[temp_site0].vtr = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'vtr')])
+                env_.proj[temp_site0].vtr = from_dict(config=cfg, d=proj_dict[(temp_site, 'vtr')])
                 temp_site = job[3]
                 temp_site0 = canonical_site(env_, env_.nn_site(site0, (-1, 0)))
-                env_.proj[temp_site0].vtl = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'vtl')])
+                env_.proj[temp_site0].vtl = from_dict(config=cfg, d=proj_dict[(temp_site, 'vtl')])
 
 
             temp_site = job[6]
             temp_site0 = canonical_site(env_, env_.nn_site(site0, (-1, 1)))
             if temp_site0 is not None:
-                env_.proj[temp_site0].vtl = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'vtl')])
+                env_.proj[temp_site0].vtl = from_dict(config=cfg, d=proj_dict[(temp_site, 'vtl')])
                 temp_site = job[3]
                 temp_site0 = canonical_site(env_, env_.nn_site(site0, (-1, 0)))
-                env_.proj[temp_site0].vtr = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'vtr')])
+                env_.proj[temp_site0].vtr = from_dict(config=cfg, d=proj_dict[(temp_site, 'vtr')])
 
             env_tmp = EnvCTM(env_.psi, init=None)
             env_tmp._update_env_(site0, env_, move='t')
             update_storage_(env_, env_tmp)
 
-            newt = yastn.save_to_dict(env_[site0].t)
-            newtl = yastn.save_to_dict(env_[site0].tl)
-            newtr = yastn.save_to_dict(env_[site0].tr)
+            newt = yastn.Tensor.to_dict(env_[site0].t)
+            newtl = yastn.Tensor.to_dict(env_[site0].tl)
+            newtr = yastn.Tensor.to_dict(env_[site0].tr)
 
 
         if dirn in 'hb':
@@ -200,27 +199,27 @@ def UpdateSite(job, cfg, dirn, proj_dict):
             temp_site = job[7]
             temp_site0 = canonical_site(env_, env_.nn_site(site0, (1, -1)))
             if temp_site0 is not None:
-                env_.proj[temp_site0].vbr = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'vbr')])
+                env_.proj[temp_site0].vbr = from_dict(config=cfg, d=proj_dict[(temp_site, 'vbr')])
                 temp_site = job[4]
                 temp_site0 = canonical_site(env_, env_.nn_site(site0, (1, 0)))
-                env_.proj[temp_site0].vbl = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'vbl')])
+                env_.proj[temp_site0].vbl = from_dict(config=cfg, d=proj_dict[(temp_site, 'vbl')])
 
 
             temp_site = job[8]
             temp_site0 = canonical_site(env_, env_.nn_site(site0, (1, 1)))
             if temp_site0 is not None:
-                env_.proj[temp_site0].vbl = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'vbl')])
+                env_.proj[temp_site0].vbl = from_dict(config=cfg, d=proj_dict[(temp_site, 'vbl')])
                 temp_site = job[4]
                 temp_site0 = canonical_site(env_, env_.nn_site(site0, (1, 0)))
-                env_.proj[temp_site0].vbr = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'vbr')])
+                env_.proj[temp_site0].vbr = from_dict(config=cfg, d=proj_dict[(temp_site, 'vbr')])
 
             env_tmp = EnvCTM(env_.psi, init=None)
             env_tmp._update_env_(site0, env_, move='b')
             update_storage_(env_, env_tmp)
 
-            newb = yastn.save_to_dict(env_[site0].b)
-            newbl = yastn.save_to_dict(env_[site0].bl)
-            newbr = yastn.save_to_dict(env_[site0].br)
+            newb = yastn.Tensor.to_dict(env_[site0].b)
+            newbl = yastn.Tensor.to_dict(env_[site0].bl)
+            newbr = yastn.Tensor.to_dict(env_[site0].br)
 
         return [newt, newb, newtl, newtr, newbl, newbr]
 
@@ -240,26 +239,26 @@ def UpdateSite(job, cfg, dirn, proj_dict):
             temp_site = job[5]
             temp_site0 = canonical_site(env_, env_.nn_site(site0, (-1, -1)))
             if temp_site0 is not None:
-                env_.proj[temp_site0].hlb = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'hlb')])
+                env_.proj[temp_site0].hlb = from_dict(config=cfg, d=proj_dict[(temp_site, 'hlb')])
                 temp_site = job[3]
                 temp_site0 = canonical_site(env_, env_.nn_site(site0, (0, -1)))
-                env_.proj[temp_site0].hlt = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'hlt')])
+                env_.proj[temp_site0].hlt = from_dict(config=cfg, d=proj_dict[(temp_site, 'hlt')])
 
             temp_site = job[7]
             temp_site0 = canonical_site(env_, env_.nn_site(site0, (1, -1)))
             if temp_site0 is not None:
-                env_.proj[temp_site0].hlt = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'hlt')])
+                env_.proj[temp_site0].hlt = from_dict(config=cfg, d=proj_dict[(temp_site, 'hlt')])
                 temp_site = job[3]
                 temp_site0 = canonical_site(env_, env_.nn_site(site0, (0, -1)))
-                env_.proj[temp_site0].hlb = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'hlb')])
+                env_.proj[temp_site0].hlb = from_dict(config=cfg, d=proj_dict[(temp_site, 'hlb')])
 
             env_tmp = EnvCTM(env_.psi, init=None)
             env_tmp._update_env_(site0, env_, move='l')
             update_storage_(env_, env_tmp)
 
-            newl = yastn.save_to_dict(env_[site0].l)
-            newtl = yastn.save_to_dict(env_[site0].tl)
-            newbl = yastn.save_to_dict(env_[site0].bl)
+            newl = yastn.Tensor.to_dict(env_[site0].l)
+            newtl = yastn.Tensor.to_dict(env_[site0].tl)
+            newbl = yastn.Tensor.to_dict(env_[site0].bl)
 
         if dirn in 'vr':
 
@@ -268,26 +267,26 @@ def UpdateSite(job, cfg, dirn, proj_dict):
             temp_site = job[6]
             temp_site0 = canonical_site(env_, env_.nn_site(site0, (-1, 1)))
             if temp_site0 is not None:
-                env_.proj[temp_site0].hrb = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'hrb')])
+                env_.proj[temp_site0].hrb = from_dict(config=cfg, d=proj_dict[(temp_site, 'hrb')])
                 temp_site = job[4]
                 temp_site0 = canonical_site(env_, env_.nn_site(site0, (0, 1)))
-                env_.proj[temp_site0].hrt = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'hrt')])
+                env_.proj[temp_site0].hrt = from_dict(config=cfg, d=proj_dict[(temp_site, 'hrt')])
 
             temp_site = job[8]
             temp_site0 = canonical_site(env_, env_.nn_site(site0, (1, 1)))
             if temp_site0 is not None:
-                env_.proj[temp_site0].hrt = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'hrt')])
+                env_.proj[temp_site0].hrt = from_dict(config=cfg, d=proj_dict[(temp_site, 'hrt')])
                 temp_site = job[4]
                 temp_site0 = canonical_site(env_, env_.nn_site(site0, (0, 1)))
-                env_.proj[temp_site0].hrb = yastn.load_from_dict(config=cfg, d=proj_dict[(temp_site, 'hrb')])
+                env_.proj[temp_site0].hrb = from_dict(config=cfg, d=proj_dict[(temp_site, 'hrb')])
 
             env_tmp = EnvCTM(env_.psi, init=None)
             env_tmp._update_env_(site0, env_, move='r')
             update_storage_(env_, env_tmp)
 
-            newr = yastn.save_to_dict(env_[site0].r)
-            newtr = yastn.save_to_dict(env_[site0].tr)
-            newbr = yastn.save_to_dict(env_[site0].br)
+            newr = yastn.Tensor.to_dict(env_[site0].r)
+            newtr = yastn.Tensor.to_dict(env_[site0].tr)
+            newbr = yastn.Tensor.to_dict(env_[site0].br)
 
         return [newl, newr, newtl, newtr, newbl, newbr]
 
@@ -329,7 +328,7 @@ def ParaUpdateCTM_(psi:Peps, env:EnvCTM, fid, sites, opts_svd_ctm, cfg, parallel
                                                              (1, 0):['l', 'bl', 'b'], (1, 1):['b', 'br', 'r']})
 
         if site_ is not None:
-            jobs.append([env_part.save_to_dict(), site0, site_])
+            jobs.append([env_part.to_dict(), site0, site_])
 
     gathered_result_ = parallel_pool(BuildProjector_(job, move, opts_svd_ctm, cfg) for job in jobs)
 
@@ -365,7 +364,7 @@ def ParaUpdateCTM_(psi:Peps, env:EnvCTM, fid, sites, opts_svd_ctm, cfg, parallel
             env_part, site0, _, _ = SubWindow(psi, site, fid, 1, 0, 1, 1, env, site_load = [(0, 1)], env_load_dict={(0, 1):['r', 'tr', 'br', 't', 'b']})
 
         if move in 'htb':
-            jobs.append([env_part.save_to_dict(), site0, site,
+            jobs.append([env_part.to_dict(), site0, site,
                          canonical_site(env, env.nn_site(site, (-1, 0))),
                          canonical_site(env, env.nn_site(site, (1, 0))),
                          canonical_site(env, env.nn_site(site, (-1, -1))),
@@ -373,7 +372,7 @@ def ParaUpdateCTM_(psi:Peps, env:EnvCTM, fid, sites, opts_svd_ctm, cfg, parallel
                          canonical_site(env, env.nn_site(site, (1, -1))),
                          canonical_site(env, env.nn_site(site, (1, 1)))])
         elif move in 'vlr':
-            jobs.append([env_part.save_to_dict(), site0, site,
+            jobs.append([env_part.to_dict(), site0, site,
                          canonical_site(env, env.nn_site(site, (0, -1))),
                          canonical_site(env, env.nn_site(site, (0, 1))),
                          canonical_site(env, env.nn_site(site, (-1, -1))),
@@ -388,21 +387,21 @@ def ParaUpdateCTM_(psi:Peps, env:EnvCTM, fid, sites, opts_svd_ctm, cfg, parallel
     for result in updated_ctm_tensors:
         site_ = sites_to_be_updated[ii]
         if move in "ht":
-            env[site_].t = yastn.load_from_dict(config=cfg, d = result[0])
+            env[site_].t = from_dict(config=cfg, d = result[0])
         if move in "hb":
-            env[site_].b = yastn.load_from_dict(config=cfg, d = result[1])
+            env[site_].b = from_dict(config=cfg, d = result[1])
         if move in "vl":
-            env[site_].l = yastn.load_from_dict(config=cfg, d = result[0])
+            env[site_].l = from_dict(config=cfg, d = result[0])
         if move in "vr":
-            env[site_].r = yastn.load_from_dict(config=cfg, d = result[1])
+            env[site_].r = from_dict(config=cfg, d = result[1])
         if move in 'hvtl':
-            env[site_].tl = yastn.load_from_dict(config=cfg, d = result[2])
+            env[site_].tl = from_dict(config=cfg, d = result[2])
         if move in 'hvtr':
-            env[site_].tr = yastn.load_from_dict(config=cfg, d = result[3])
+            env[site_].tr = from_dict(config=cfg, d = result[3])
         if move in 'hvbl':
-            env[site_].bl = yastn.load_from_dict(config=cfg, d = result[4])
+            env[site_].bl = from_dict(config=cfg, d = result[4])
         if move in 'hvbr':
-            env[site_].br = yastn.load_from_dict(config=cfg, d = result[5])
+            env[site_].br = from_dict(config=cfg, d = result[5])
 
         ii = ii + 1
 
@@ -456,14 +455,14 @@ def _ctmrg_(psi:Peps, env:EnvCTM, fid, max_sweeps, iterator_step, corner_tol, op
 @delayed
 def Measure1Site(job, op, cfg):
     env_dict, site0, site = job
-    env = load_from_dict(cfg, env_dict)
+    env = EnvCTM.from_dict(config=cfg, d=env_dict)
     return {site: env.measure_1site(op, site=site0)}
 
 @delayed
 def MeasureNN(job, op0, op1, cfg):
 
     env_dict, bond0, bond = job
-    env = load_from_dict(cfg, env_dict)
+    env = EnvCTM.from_dict(config=cfg, d=env_dict)
     return {bond: env.measure_nn(op0, op1, bond=bond0)}
 
 def ParaMeasure1Site(psi, env, fid, op, cfg, n_cores = 24):
@@ -476,7 +475,7 @@ def ParaMeasure1Site(psi, env, fid, op, cfg, n_cores = 24):
             jobs = []
             for site in psi.sites()[ii * n_cores:min((ii + 1) * n_cores, num_of_sites)]:
                 env_part, site0, _, _ = SubWindow(psi, site, fid, 0, 0, 0, 0, env)
-                jobs.append([env_part.save_to_dict(), site0, site])
+                jobs.append([env_part.to_dict(), site0, site])
 
             list_of_dicts += parallel_pool(Measure1Site(job, op, cfg) for job in jobs)
             jobs.clear()
@@ -499,7 +498,7 @@ def ParaMeasureNN(psi, env, fid, op0, op1, cfg, n_cores = 24):
                 # env_part, site0 = Window3x3(psi, env, bond.site0, fid)
                 env_part, site0, _, _ = SubWindow(psi, bond.site0, fid, 0, 0, 0, 1, env, env_load_dict={(0, 0):['tl', 'bl', 'l', 't', 'b'], (0, 1):['tr', 'br', 'r', 't', 'b']})
                 bond0 = Bond(site0, env_part.nn_site(site0, 'r'))
-                jobs.append([env_part.save_to_dict(), bond0, bond])
+                jobs.append([env_part.to_dict(), bond0, bond])
             list_of_dicts += parallel_pool(MeasureNN(job, op0, op1, cfg) for job in jobs)
             jobs.clear()
         for ii in range(0, int(np.ceil(num_of_vb / n_cores))):
@@ -507,7 +506,7 @@ def ParaMeasureNN(psi, env, fid, op0, op1, cfg, n_cores = 24):
             for bond in psi.bonds(dirn='v')[ii * n_cores:min((ii + 1) * n_cores, num_of_vb)]:
                 env_part, site0, _, _ = SubWindow(psi, bond.site0, fid, 0, 0, 1, 0, env, env_load_dict={(0, 0):['tl', 'tr', 'l', 't', 'r'], (1, 0):['bl', 'br', 'r', 'l', 'b']})
                 bond0 = Bond(site0, env_part.nn_site(site0, 'b'))
-                jobs.append([env_part.save_to_dict(), bond0, bond])
+                jobs.append([env_part.to_dict(), bond0, bond])
             list_of_dicts += parallel_pool(MeasureNN(job, op0, op1, cfg) for job in jobs)
             jobs.clear()
 
