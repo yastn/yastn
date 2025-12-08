@@ -187,9 +187,9 @@ def UpdateSite(job, cfg, dirn, proj_dict):
             env_tmp._update_env_(site0, env_, move='t')
             update_storage_(env_, env_tmp)
 
-            newt = yastn.Tensor.to_dict(env_[site0].t)
-            newtl = yastn.Tensor.to_dict(env_[site0].tl)
-            newtr = yastn.Tensor.to_dict(env_[site0].tr)
+            newt = env_[site0].t.to_dict()
+            newtl = env_[site0].tl.to_dict()
+            newtr = env_[site0].tr.to_dict()
 
 
         if dirn in 'hb':
@@ -217,9 +217,9 @@ def UpdateSite(job, cfg, dirn, proj_dict):
             env_tmp._update_env_(site0, env_, move='b')
             update_storage_(env_, env_tmp)
 
-            newb = yastn.Tensor.to_dict(env_[site0].b)
-            newbl = yastn.Tensor.to_dict(env_[site0].bl)
-            newbr = yastn.Tensor.to_dict(env_[site0].br)
+            newb = env_[site0].b.to_dict()
+            newbl = env_[site0].bl.to_dict()
+            newbr = env_[site0].br.to_dict()
 
         return [newt, newb, newtl, newtr, newbl, newbr]
 
@@ -256,9 +256,9 @@ def UpdateSite(job, cfg, dirn, proj_dict):
             env_tmp._update_env_(site0, env_, move='l')
             update_storage_(env_, env_tmp)
 
-            newl = yastn.Tensor.to_dict(env_[site0].l)
-            newtl = yastn.Tensor.to_dict(env_[site0].tl)
-            newbl = yastn.Tensor.to_dict(env_[site0].bl)
+            newl = env_[site0].l.to_dict()
+            newtl = env_[site0].tl.to_dict()
+            newbl = env_[site0].bl.to_dict()
 
         if dirn in 'vr':
 
@@ -284,9 +284,9 @@ def UpdateSite(job, cfg, dirn, proj_dict):
             env_tmp._update_env_(site0, env_, move='r')
             update_storage_(env_, env_tmp)
 
-            newr = yastn.Tensor.to_dict(env_[site0].r)
-            newtr = yastn.Tensor.to_dict(env_[site0].tr)
-            newbr = yastn.Tensor.to_dict(env_[site0].br)
+            newr = env_[site0].r.to_dict()
+            newtr = env_[site0].tr.to_dict()
+            newbr = env_[site0].br.to_dict()
 
         return [newl, newr, newtl, newtr, newbl, newbr]
 
