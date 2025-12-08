@@ -941,6 +941,8 @@ class FixedPoint(torch.autograd.Function):
     ):
         t_ctm, t_check = 0.0, 0.0
         converged, conv_history = False, []
+        if fwd_devices is None:
+            fwd_devices = [env.config.default_device]
         if len(fwd_devices) == 1:
             ctm_itr = env.ctmrg_(iterator=True, method=method,  max_sweeps=max_sweeps,
                     opts_svd=opts_svd, corner_tol=None, **kwargs)
