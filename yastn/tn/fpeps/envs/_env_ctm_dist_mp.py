@@ -30,6 +30,8 @@ logger = logging.getLogger(__name__)
 
 
 def _validate_devices_list(devices: list[str] | None) -> None:
+    if devices is None:
+        raise YastnError("Devices list must be provided for distributed CTM.")
     if devices:
         assert len(devices) > 0, "At least one device must be provided."
     if len(devices) < 2:
