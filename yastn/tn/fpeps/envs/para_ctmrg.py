@@ -82,6 +82,7 @@ def SubWindow(env_psi: Peps | EnvCTM, site, top=1, left=1, bottom=1, right=1, on
         ket = None
         env = None
     elif type(env_psi) is EnvCTM:
+        print("pass")
         env = env_psi
         if type(env.psi) is Peps:
             psi = env_psi.psi
@@ -484,7 +485,9 @@ def MeasureNN(job, op0, op1, cfg):
     env = EnvCTM.from_dict(config=cfg, d=env_dict)
     return {bond: env.measure_nn(op0, op1, bond=bond0)}
 
-def ParaMeasure1Site(psi, env, op, cfg, n_cores = 24):
+def ParaMeasure1Site(env, op, cfg, n_cores = 24):
+
+    psi = env.psi
 
     list_of_dicts = []
 
@@ -502,7 +505,9 @@ def ParaMeasure1Site(psi, env, op, cfg, n_cores = 24):
     result = {k: v for d in list_of_dicts for k, v in d.items()}
     return result
 
-def ParaMeasureNN(psi, env, op0, op1, cfg, n_cores = 24):
+def ParaMeasureNN(env, op0, op1, cfg, n_cores = 24):
+
+    psi = env.si
 
     list_of_dicts = []
 
