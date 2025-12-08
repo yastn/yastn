@@ -507,7 +507,7 @@ def ParaMeasure1Site(env, op, cfg, n_cores = 24):
 
 def ParaMeasureNN(env, op0, op1, cfg, n_cores = 24):
 
-    psi = env.si
+    psi = env.psi
 
     list_of_dicts = []
 
