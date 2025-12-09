@@ -16,7 +16,7 @@ from __future__ import annotations
 from typing import Sequence
 
 from ._gates_auxiliary import match_ancilla, apply_gate_onsite
-from .envs._env_auxlliary import append_vec_tl, append_vec_br, append_vec_tr, append_vec_bl
+from .envs._env_contractions import append_vec_tl, append_vec_br, append_vec_tr, append_vec_bl
 from ...tensor import tensordot, leg_product, YastnError, SpecialTensor, Tensor
 from ...tensor._auxliary import _clear_axes
 

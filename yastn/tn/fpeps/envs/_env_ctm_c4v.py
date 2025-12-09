@@ -17,7 +17,7 @@ import logging
 from typing import Callable, Sequence
 
 from ._env_ctm import EnvCTM, update_storage_
-from ._env_auxlliary import *
+from ._env_contractions import *
 from ._env_dataclasses import EnvCTM_c4v_local, EnvCTM_c4v_projectors
 from .._geometry import Lattice
 from .._peps import Peps2Layers

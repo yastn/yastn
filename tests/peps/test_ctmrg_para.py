@@ -19,10 +19,9 @@ of 2D Ising model with zero transverse field (Onsager solution)
 """
 import numpy as np
 import pytest
-import os, json
+
 import yastn
 import yastn.tn.fpeps as fpeps
-from yastn.tn.fpeps.envs.para_ctmrg import *
 
 @pytest.mark.skipif("not config.getoption('joblib')", reason="requires joblib library")
 def test_para_ctmrg_Ising(config_kwargs):
@@ -30,6 +29,7 @@ def test_para_ctmrg_Ising(config_kwargs):
     Use CTMRG to calculate some expectation values in classical 2D Ising model.
     Compare with analytical results.
     """
+    from yastn.tn.fpeps.envs.para_ctmrg import PARActmrg_
     #
     # We start by representing the partition function
     # of the model at temperature beta as a PEPS network.

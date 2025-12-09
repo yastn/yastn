@@ -16,7 +16,7 @@
 import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
-from yastn.tn.fpeps.envs._env_auxlliary import *
+from yastn.tn.fpeps.envs._env_contractions import *
 
 tol = 1e-12  #pylint: disable=invalid-name
 

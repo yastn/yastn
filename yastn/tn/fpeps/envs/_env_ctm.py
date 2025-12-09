@@ -19,7 +19,7 @@ import sys
 from typing import NamedTuple, Callable, Sequence
 from warnings import warn
 
-from ._env_auxlliary import *
+from ._env_contractions import *
 from ._env_dataclasses import EnvCTM_local, EnvCTM_projectors
 from .._evolution import BondMetric
 from .._geometry import Site, Lattice
@@ -994,7 +994,7 @@ class EnvCTM():
         converged = (corner_tol is not None) and (max_dsv < corner_tol)
         return converged, max_dsv, history
 
-    from ._env_measure import measure_1site, measure_nn, measure_2x2, measure_line, \
+    from ._env_ctm_measure import measure_1site, measure_nn, measure_2x2, measure_line, \
         measure_nsite, measure_2site, sample
 
 

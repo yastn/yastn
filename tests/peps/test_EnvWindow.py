@@ -120,13 +120,6 @@ def test_window_measure(config_kwargs):
     #
     # test measure_2site
     #
-    out = env_win.measure_2site(ops.z(), ops.z(), site0='corner')
-    sites = env_win.sites()
-    assert len(sites) == 3 * 4
-    assert all(((0, 0), site) in out for site in sites)
-    #
-    # here we can check some values
-    #
     outv = env_ctm.measure_2site(ops.z(), ops.z(), xrange=(1, 5), yrange=(0, 1))
     ev = [env_ctm.measure_line(ops.z(), ops.z(), sites=((1, 0), (n, 0))) for n in [2, 3, 4,]]
     for n, ref in zip([1, 2, 3, 4], [1] + ev):

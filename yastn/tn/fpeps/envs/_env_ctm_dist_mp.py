@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 from typing import Callable, Sequence
 
-from ._env_auxlliary import halves_4x4_lhr, halves_4x4_tvb
+from ._env_contractions import halves_4x4_lhr, halves_4x4_tvb
 from ._env_ctm import CTMRG_out, EnvCTM, proj_corners, update_storage_
 from .._geometry import Site
 

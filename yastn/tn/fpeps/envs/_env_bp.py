@@ -19,7 +19,7 @@ from warnings import warn
 
 from tqdm import tqdm
 
-from ._env_auxlliary import *
+from ._env_contractions import *
 from ._env_dataclasses import EnvBP_local
 from .._evolution import BipartiteBondMetric, BondMetric
 from .._gates_auxiliary import fkron, gate_fix_swap_gate, match_ancilla

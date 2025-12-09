@@ -16,9 +16,8 @@ from itertools import accumulate
 
 from tqdm import tqdm
 
-from ._env_auxlliary import identity_boundary, clear_projectors, clear_operator_input
-from ._env_measure import _measure_nsite
-from ._env_window import measure_2site_all, _measure_2site_row
+from ._env_contractions import identity_boundary, clear_projectors, clear_operator_input
+from ._env_window import _measure_nsite, _measure_2site_columns, _measure_2site_row
 from .._peps import PEPS_CLASSES, Peps2Layers
 from ... import mps
 from ....tensor import YastnError
@@ -58,10 +57,11 @@ class EnvBoundaryMPS():
 
         self.psi = psi
         self._env = {}
+
         self.offset = 0
 
-        li, ri = 0, psi.Ny-1
         ti, bi = 0, psi.Nx-1
+        li, ri = 0, psi.Ny-1
 
         if 'l' in setup or 'r' in setup:
             tmpo = psi.transfer_mpo(n=li, dirn='v')
@@ -338,11 +338,13 @@ class EnvBoundaryMPS():
     def measure_2site(self, O0, O1, opts_svd=None, opts_var=None, site0='all'):
         xrange = [0, self.Nx]
         yrange = [0, self.Ny]
+        pairs = [(s0, s1) for s0 in self.sites() for s1 in self.sites()]
         if site0 == 'all':
-            return measure_2site_all(self, O0, O1, opts_svd, opts_var)
+            offset = xrange[0]
+            return _measure_2site_columns(self, O0, O1, xrange, yrange, offset, pairs, opts_svd, opts_var)
         if site0 == 'row':
-            pairs = [(s0, s1) for s0 in self.sites() for s1 in self.sites()]
-            return _measure_2site_row(self, O0, O1, xrange, yrange, pairs, opts_svd, opts_var)
+            offset = yrange[0]
+            return _measure_2site_row(self, O0, O1, xrange, yrange, offset, pairs, opts_svd, opts_var)
         raise YastnError("site0 should be 'corner' or 'row'. ")
 
 
