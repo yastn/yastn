@@ -57,8 +57,7 @@ def measure_overlap(bra, ket) -> Number:
     ket: yastn.tn.mps.MpsMpoOBC
     """
     env = Env(bra, ket)
-    env.setup_(to='first')
-    return env.measure(bd=(-1, 0))
+    return env.measure(bd=(-1, env.N))
 
 
 def measure_mpo(bra, op: MpsMpoOBC | Sequence[tuple[MpsMpoOBC, Number]], ket) -> Number:
@@ -80,8 +79,7 @@ def measure_mpo(bra, op: MpsMpoOBC | Sequence[tuple[MpsMpoOBC, Number]], ket) ->
     ket: yastn.tn.mps.MpsMpoOBC
     """
     env = Env(bra, [op, ket])
-    env.setup_(to='first')
-    return env.measure(bd=(-1, 0))
+    return env.measure(bd=(-1, env.N))
 
 
 def measure_1site(bra, O, ket, sites=None) -> dict[int, Number]:

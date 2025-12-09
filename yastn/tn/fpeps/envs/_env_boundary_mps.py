@@ -18,7 +18,7 @@ from tqdm import tqdm
 
 from ._env_auxlliary import identity_boundary, clear_projectors, clear_operator_input
 from ._env_measure import _measure_nsite
-from ._env_window import measure_2site_all, measure_2site_row
+from ._env_window import measure_2site_all, _measure_2site_row
 from .._peps import PEPS_CLASSES, Peps2Layers
 from ... import mps
 from ....tensor import YastnError
@@ -341,7 +341,8 @@ class EnvBoundaryMPS():
         if site0 == 'all':
             return measure_2site_all(self, O0, O1, opts_svd, opts_var)
         if site0 == 'row':
-            return measure_2site_row(self, O0, O1, xrange, yrange, self.sites(), opts_svd, opts_var)
+            pairs = [(s0, s1) for s0 in self.sites() for s1 in self.sites()]
+            return _measure_2site_row(self, O0, O1, xrange, yrange, pairs, opts_svd, opts_var)
         raise YastnError("site0 should be 'corner' or 'row'. ")
 
 

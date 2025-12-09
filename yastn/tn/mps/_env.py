@@ -139,7 +139,6 @@ class EnvParent(metaclass=abc.ABCMeta):
             index of bond at which to calculate overlap.
         """
 
-    @abc.abstractmethod
     def update_env_(self, n, to='last'):
         r"""
         Update environment including site ``n``, in the direction given by ``to``.
@@ -152,6 +151,10 @@ class EnvParent(metaclass=abc.ABCMeta):
         to: str
             ``first`` or ``last``.
         """
+        if to == 'last':
+            self.F[n, n + 1] = self.update_env_to_last(self.F[n - 1, n], n)
+        elif to == 'first':
+            self.F[n, n - 1] = self.update_env_to_first(self.F[n + 1, n], n)
 
     @abc.abstractmethod
     def Heff0(self, C, bd) -> Tensor:
@@ -263,7 +266,7 @@ class Env_sum(EnvParent):
 
     def __init__(self, envs):
         super().__init__(bra=envs[0].bra)
-        self.envs=envs
+        self.envs = envs
 
     def clear_site_(self, *args):
         for env in self.envs:
@@ -342,20 +345,24 @@ class Env2(EnvParent):
         return self.bra.factor * self.ket.factor
 
     def measure(self, bd=(-1, 0)):
-        tmp = tensordot(self.F[bd], self.F[bd[::-1]], axes=((0, 1), (1, 0)))
-        return self.factor() * tmp.to_number()
+        bd = tuple(sorted(bd))
+        vecL = self.F[bd[0], bd[0]+1]
+        vecR = self.F[bd[1], bd[1]-1]
+        for n in range(bd[0] + 1, bd[1]):
+            vecL = self.update_env_to_last(vecL, n)
+        return self.factor() * tensordot(vecL, vecR, axes=((0, 1), (1, 0))).to_number()
 
-    def update_env_(self, n, to='last'):
-        if to == 'first':
-            tmp = tensordot(self.ket.A[n], self.F[n + 1, n], axes=(2, 0))
-            tmp = tmp.swap_gate(axes=1, charge=self.F[n + 1, n].n)
-            axes = ((1, 2), (1, 2)) if self.nr_phys == 1 else ((1, 3, 2), (1, 2, 3))
-            self.F[n, n - 1] = tensordot(tmp, self.bra.A[n].conj(), axes=axes)
-        else:  # to == 'last'
-            tmp = tensordot(self.F[n - 1, n], self.ket.A[n], axes=((1, 0)))
-            tmp = tmp.swap_gate(axes=1, charge=self.F[n - 1, n].n)
-            axes = ((0, 1), (0, 1)) if self.nr_phys == 1 else ((0, 1, 3), (0, 1, 3))
-            self.F[n, n + 1] = tensordot(self.bra.A[n].conj(), tmp, axes=axes)
+    def update_env_to_first(self, vecR, n):
+        tmp = tensordot(self.ket.A[n], vecR, axes=(2, 0))
+        tmp = tmp.swap_gate(axes=1, charge=vecR.n)
+        axes = ((1, 2), (1, 2)) if self.nr_phys == 1 else ((1, 3, 2), (1, 2, 3))
+        return tensordot(tmp, self.bra.A[n].conj(), axes=axes)
+
+    def update_env_to_last(self, vecL, n):
+        tmp = tensordot(vecL, self.ket.A[n], axes=((1, 0)))
+        tmp = tmp.swap_gate(axes=1, charge=vecL.n)
+        axes = ((0, 1), (0, 1)) if self.nr_phys == 1 else ((0, 1, 3), (0, 1, 3))
+        return tensordot(self.bra.A[n].conj(), tmp, axes=axes)
 
     def Heff0(self, C, bd):
         raise NotImplementedError("Should not be triggered by current higher-level functions.")
@@ -442,6 +449,14 @@ class EnvParent_3(EnvParent):
         psi_t = self.bra.A[n].get_legs(axes=1).t
         return any(tt not in psi_t for tt in op_t)
 
+    def measure(self, bd=(-1, 0)):
+        bd = tuple(sorted(bd))
+        vecL = self.F[bd[0], bd[0]+1]
+        vecR = self.F[bd[1], bd[1]-1]
+        for n in range(bd[0] + 1, bd[1]):
+            vecL = self.update_env_to_last(vecL, n)
+        return self.factor() * vdot(vecL, vecR, conj=(0, 0))
+
 
 class EnvParent_3_obc(EnvParent_3):
 
@@ -460,9 +475,6 @@ class EnvParent_3_obc(EnvParent_3):
         tmp = eye(self.config, legs=legs, isdiag=False, n=n_rt)
         self.F[self.N, self.N - 1] = tmp.add_leg(axis=1, leg=legv)
 
-    def measure(self, bd=(-1, 0)):
-        return vdot(self.F[bd], self.F[bd[::-1]], conj=(0, 0)) * self.factor()
-
     def Heff0(self, C, bd):
         bd, ibd = (bd[::-1], bd) if bd[1] < bd[0] else (bd, bd[::-1])
         tmp = tensordot(self.F[bd], C @ self.F[ibd], axes=((0, 1), (0, 1)))
@@ -471,15 +483,15 @@ class EnvParent_3_obc(EnvParent_3):
 
 class Env_mps_mpo_mps(EnvParent_3_obc):
 
-    def update_env_(self, n, to='last'):
-        if to == 'last':
-            tmp = self.F[n - 1, n] @ self.bra.A[n].conj()
-            tmp = tensordot(self.op.A[n], tmp, axes=((0, 1), (1, 2)))
-            self.F[n, n + 1] = tensordot(self.ket.A[n], tmp, axes=((0, 1), (2, 1)))
-        elif to == 'first':
-            tmp = self.ket.A[n] @ self.F[n + 1, n]
-            tmp = tensordot(tmp, self.op.A[n], axes=((2, 1), (2, 3)))
-            self.F[n, n - 1] = tensordot(tmp, self.bra.A[n].conj(), axes=((3, 1), (1, 2)))
+    def update_env_to_last(self, vecL, n):
+        tmp = vecL @ self.bra.A[n].conj()
+        tmp = tensordot(self.op.A[n], tmp, axes=((0, 1), (1, 2)))
+        return tensordot(self.ket.A[n], tmp, axes=((0, 1), (2, 1)))
+
+    def update_env_to_first(self, vecR, n):
+        tmp = self.ket.A[n] @ vecR
+        tmp = tensordot(tmp, self.op.A[n], axes=((2, 1), (2, 3)))
+        return tensordot(tmp, self.bra.A[n].conj(), axes=((3, 1), (1, 2)))
 
     def Heff1(self, A, n):
         tmp = A @ self.F[n + 1, n]
@@ -566,15 +578,15 @@ class Env_mps_mpo_mps_precompute(EnvParent_3_obc):
 
 class Env_mpo_mpo_mpo(EnvParent_3_obc):
 
-    def update_env_(self, n, to='last'):
-        if to == 'last':
-            tmp = self.F[n - 1, n] @ self.bra.A[n].conj()
-            tmp = tensordot(self.op.A[n], tmp, axes=((0, 1), (1, 2)))
-            self.F[n, n + 1] = tensordot(self.ket.A[n], tmp, axes=((1, 0, 3), (1, 2, 4)))
-        elif to == 'first':
-            tmp = tensordot(self.ket.A[n], self.F[n + 1, n], axes=(2, 0))
-            tmp = tensordot(tmp, self.op.A[n], axes=((3, 1), (2, 3)))
-            self.F[n, n - 1] = tensordot(tmp, self.bra.A[n].conj(), axes=((4, 2, 1), (1, 2, 3)))
+    def update_env_to_last(self, vecL, n):
+        tmp = vecL @ self.bra.A[n].conj()
+        tmp = tensordot(self.op.A[n], tmp, axes=((0, 1), (1, 2)))
+        return tensordot(self.ket.A[n], tmp, axes=((1, 0, 3), (1, 2, 4)))
+
+    def update_env_to_first(self, vecR, n):
+        tmp = tensordot(self.ket.A[n], vecR, axes=(2, 0))
+        tmp = tensordot(tmp, self.op.A[n], axes=((3, 1), (2, 3)))
+        return tensordot(tmp, self.bra.A[n].conj(), axes=((4, 2, 1), (1, 2, 3)))
 
     def Heff1(self, A, n):
         tmp = A @ self.F[n + 1, n]
@@ -603,15 +615,15 @@ class Env_mpo_mpo_mpo(EnvParent_3_obc):
 
 class Env_mpo_mpobra_mpo(EnvParent_3_obc):
 
-    def update_env_(self, n, to='last'):
-        if to == 'last':
-            tmp = tensordot(self.F[n - 1, n], self.ket.A[n], axes=(0, 0))
-            tmp = tensordot(tmp, self.op.A[n], axes=((0, 4), (0, 1)))
-            self.F[n, n + 1] = tensordot(tmp, self.bra.A[n].conj(), axes=((0, 1, 4), (0, 1, 3)))
-        elif to == 'first':
-            tmp = tensordot(self.F[n + 1, n], self.bra.A[n].conj(), axes=(2, 2))
-            tmp = tensordot(self.op.A[n], tmp, axes=((2, 3), (1, 4)))
-            self.F[n, n - 1] = tensordot(self.ket.A[n], tmp, axes=((1, 2, 3), (4, 2, 1)))
+    def update_env_to_last(self, vecL, n):
+        tmp = tensordot(vecL, self.ket.A[n], axes=(0, 0))
+        tmp = tensordot(tmp, self.op.A[n], axes=((0, 4), (0, 1)))
+        return tensordot(tmp, self.bra.A[n].conj(), axes=((0, 1, 4), (0, 1, 3)))
+
+    def update_env_to_first(self, vecR, n):
+        tmp = tensordot(vecR, self.bra.A[n].conj(), axes=(2, 2))
+        tmp = tensordot(self.op.A[n], tmp, axes=((2, 3), (1, 4)))
+        return tensordot(self.ket.A[n], tmp, axes=((1, 2, 3), (4, 2, 1)))
 
     def Heff1(self, A, n):
         tmp = tensordot(self.F[n - 1, n], A, axes=(0, 0))
@@ -662,9 +674,6 @@ class EnvParent_3_pbc(EnvParent_3):
         tmp_bk = eye(self.config, legs=[llk.conj(), llb], isdiag=False)
         self.F[self.N, self.N - 1] = ncon([tmp_bk, tmp_oo], ((-0, -3), (-1, -2)))
 
-    def measure(self, bd=(-1, 0)):
-        return vdot(self.F[bd], self.F[bd[::-1]], conj=(0, 0)) * self.factor()
-
     def Heff0(self, C, bd):
         bd, ibd = (bd[::-1], bd) if bd[1] < bd[0] else (bd, bd[::-1])
         tmp = tensordot(self.F[bd], C @ self.F[ibd], axes=((0, 1, 2), (0, 1, 2)))
@@ -673,15 +682,15 @@ class EnvParent_3_pbc(EnvParent_3):
 
 class Env_mps_mpopbc_mps(EnvParent_3_pbc):
 
-    def update_env_(self, n, to='last'):
-        if to == 'last':
-            tmp = self.F[n - 1, n] @ self.bra.A[n].conj()
-            tmp = tensordot(self.op.A[n], tmp, axes=((0, 1), (1, 3)))
-            self.F[n, n + 1] = tensordot(self.ket.A[n], tmp, axes=((0, 1), (2, 1)))
-        elif to == 'first':
-            tmp = tensordot(self.F[n + 1, n], self.bra.A[n].conj(), axes=(3, 2))
-            tmp = tensordot(self.op.A[n], tmp, axes=((1, 2), (4, 1)))
-            self.F[n, n - 1] = tensordot(self.ket.A[n], tmp, axes=((1, 2), (1, 2)))
+    def update_env_to_last(self, vecL, n):
+        tmp = vecL @ self.bra.A[n].conj()
+        tmp = tensordot(self.op.A[n], tmp, axes=((0, 1), (1, 3)))
+        return tensordot(self.ket.A[n], tmp, axes=((0, 1), (2, 1)))
+
+    def update_env_to_first(self, vecR, n):
+        tmp = tensordot(vecR, self.bra.A[n].conj(), axes=(3, 2))
+        tmp = tensordot(self.op.A[n], tmp, axes=((1, 2), (4, 1)))
+        return tensordot(self.ket.A[n], tmp, axes=((1, 2), (1, 2)))
 
     def Heff1(self, A, n):
         precompute = (A.ndim == 2)
