@@ -203,8 +203,8 @@ def _measure_2site_row(self, O0, O1, xrange, yrange, pairs, opts_svd=None, opts_
     # All O0 should have the same charge  # TODO
 
     vecs = {nx: self[nx, 't'].shallow_copy() for nx in range(*xrange)}
-    for nx in range(xrange[0], xrange[1] - 1):
-        mps.compression_(vecs[nx + 1], (self[nx, 'h'], vecs[nx]), method='1site', normalize=False, **opts_var)
+    for nx in range(xrange[0], xrange[1] - 1):  # this is done to propagete the norm of boundary vectors
+        mps.compression_(vecs[nx + 1], [self[nx, 'h'], vecs[nx]], method='1site', normalize=False, **opts_var)
 
     for nx0 in range(*xrange):
         for ny0 in range(*yrange):
@@ -212,15 +212,15 @@ def _measure_2site_row(self, O0, O1, xrange, yrange, pairs, opts_svd=None, opts_
             for nz0, o0 in O0dict[nx0, ny0].items():
 
                 vecc, tm, vec = self[nx0, 'b'].conj(), self[nx0, 'h'], vecs[nx0]
-                env = mps.Env(vecc, [tm, vec]).setup_(to='first').setup_(to='last')
+                env = mps.Env(vecc, [tm, vec])
+                env.setup_(to='first').setup_(to='last')
                 norm_env = env.measure(bd=(0, 1))
 
                 # calculate on-site correlations
                 if ((nx0, ny0), (nx0, ny0)) in pairs:
                     for nz1, o1 in O1dict[nx0, ny0].items():
                         tm[iy0].set_operator_(o0 @ o1)
-                        env.update_env_(iy0, to='first')
-                        out[(nx0, ny0) + nz0, (nx0, ny0) + nz1] = env.measure(bd=(iy0-1, iy0)) / norm_env
+                        out[(nx0, ny0) + nz0, (nx0, ny0) + nz1] = env.measure(bd=(iy0-1, iy0+1)) / norm_env
 
                 tm[iy0].set_operator_(o0)
                 env.setup_(to='last')
@@ -231,12 +231,10 @@ def _measure_2site_row(self, O0, O1, xrange, yrange, pairs, opts_svd=None, opts_
 
                 for ny1 in range(ny0 + 1, yrange[1]):
                     iy1 = ny1 - yrange[0] + self.offset
-
                     if ((nx0, ny0), (nx0, ny1)) in pairs:
                         for nz1, o1 in O1dict[nx0, ny1].items():
                             tm[iy1].set_operator_(o1)
-                            env.update_env_(iy1, to='first')
-                            out[(nx0, ny0) + nz0, (nx0, ny1) + nz1] = env.measure(bd=(iy1-1, iy1)) / norm_env
+                            out[(nx0, ny0) + nz0, (nx0, ny1) + nz1] = env.measure(bd=(iy1-1, iy1+1)) / norm_env
 
                 # all subsequent rows
                 for nx1 in range(xrange[0] + 1, xrange[1]):
@@ -247,14 +245,14 @@ def _measure_2site_row(self, O0, O1, xrange, yrange, pairs, opts_svd=None, opts_
                         vec_o0_next = mps.zipper(tm, vec_o0, opts_svd=opts_svd)
                         mps.compression_(vec_o0_next, (tm, vec_o0), method='1site', normalize=False, **opts_var)
 
-                    env = mps.Env(vecc, [tm, vec_o0]).setup_(to='last').setup_(to='first')
+                    env = mps.Env(vecc, [tm, vec_o0])
+                    env.setup_(to='last').setup_(to='first')
                     for ny1 in range(*yrange):
                         iy1 = ny1 - yrange[0] + self.offset
                         if ((nx0, ny0), (nx1, ny1)) in pairs:
                             for nz1, o1 in O1dict[nx1, ny1].items():
                                 tm[iy1].set_operator_(o1)
-                                env.update_env_(iy1, to='first')
-                                out[(nx0, ny0) + nz0, (nx1, ny1) + nz1] = env.measure(bd=(iy1-1, iy1)) / norm_env
+                                out[(nx0, ny0) + nz0, (nx1, ny1) + nz1] = env.measure(bd=(iy1-1, iy1+1)) / norm_env
         return out
 
 
