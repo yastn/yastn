@@ -125,14 +125,52 @@ def test_exci_sma_UUD(config_kwargs):
 
         return bond_val_exci, grad_dbra
 
+    def compute_norm_exci(env_ctm, exci_bra, exci_ket, xrange, yrange, compute_grad=False):
+        # exci_bra.requires_grad_(requires_grad=True)
+        # if exci_bra._data.grad is not None:
+        #     exci_bra._data.grad.zero_()
+        env_exci = fpeps.EnvExciSMA(env_ctm, xrange, yrange)
+        bond_val_exci = env_exci.measure_exci_norm(exci_bra=exci_bra, exci_ket=exci_ket)
+        grad_dbra = None
+        if compute_grad:
+            grad_dbra = torch.autograd.grad(bond_val_exci, exci_bra.data, grad_outputs=torch.ones_like(bond_val_exci), retain_graph=True)[0]
+
+        return bond_val_exci, grad_dbra
+
+    def compute_energy_exci(env_ctm, *operators, sites_op=None, exci_psi=None, xrange=None, yrange=None, compute_grad=False):
+        # exci_bra.requires_grad_(requires_grad=True)
+        # if exci_bra._data.grad is not None:
+        #     exci_bra._data.grad.zero_()
+        env_exci = fpeps.EnvExciSMA(env_ctm, xrange, yrange)
+        bond_val_exci = env_exci.measure_exci_ops(*operators, exci_psi=exci_psi, sites_op=sites_op)
+        grad_dbra = None
+        # if compute_grad:
+        #     grad_dbra = torch.autograd.grad(bond_val_exci, exci_bra.data, grad_outputs=torch.ones_like(bond_val_exci), retain_graph=True)[0]
+
+        return bond_val_exci, grad_dbra
+
+    def convert2emat(exci_e_dict, lp, min_x, min_y):
+        e_mat = np.zeros((lp, lp, lp, lp))
+        for k, v in exci_e_dict.items():
+            e_mat[k[0][0]-min_x, k[0][1]-min_y, k[1][0]-min_x, k[1][1]-min_y] = v.detach()
+        return e_mat
+
+    def convert2nmat(exci_n_dict, lp, min_x, min_y):
+        n_mat = np.zeros((lp, lp))
+        for k, v in exci_n_dict.items():
+            n_mat[k[0]-min_x, k[1]-min_y] = v.detach()
+        return n_mat
+
     # build the excited state
     exci_psi = init_peps(config_kwargs)
     for site in psi.sites():
         exci_psi[site] = _convert_tensor(exci_basis[psi.site2index(site)].reshape(1,1,1,1,2), config)
 
     es_exci = {bond: np.zeros((lp, lp, lp, lp, 3), dtype=np.complex128) for bond in bonds}
+    es_exci_c = {bond: np.zeros((lp, lp, lp, lp, 3), dtype=np.complex128) for bond in bonds}
     ns_exci = np.zeros((lp, lp, 3), dtype=np.complex128)
     ns_exci_tl = np.zeros((lp, lp, 3), dtype=np.complex128)
+    ns_exci_c = np.zeros((lp, lp, 3), dtype=np.complex128)
     computed_norm = False
     for bond in bonds:
         for i_sl in range(3):
@@ -155,6 +193,9 @@ def test_exci_sma_UUD(config_kwargs):
                 if len(bond) == 1:
                     Hhz_val, dHhz_dbra = compute_exci(env_ctm, Sz, sites_op=shift_bond, exci_bra=exci_bra, exci_ket=exci_ket, site_bra=site_bra, site_ket=site_ket)
                     es_exci[bond][lx_b-min_x, ly_b-min_y, lx_k-min_x, ly_k-min_y, i_sl] = -hz * Hhz_val
+                    if lx_k == min_x and ly_k == min_y:
+                        Hhz_val_c, _ = compute_energy_exci(env_ctm, Sz, sites_op=shift_bond, exci_psi=exci_psi, xrange=(min_x, max_x+1), yrange=(min_y, max_y+1))
+                        es_exci_c[bond][:, :, :, :, i_sl] = -hz * convert2emat(Hhz_val_c, lp, min_x, min_y)
                 else:
                     H_zz_val, dHzz_dbra = compute_exci(env_ctm, Sz, Sz, sites_op=shift_bond, exci_bra=exci_bra, exci_ket=exci_ket, site_bra=site_bra, site_ket=site_ket)
                     H_xx_val, dHxx_dbra = compute_exci(env_ctm, Sx, Sx, sites_op=shift_bond, exci_bra=exci_bra, exci_ket=exci_ket, site_bra=site_bra, site_ket=site_ket)
@@ -163,6 +204,12 @@ def test_exci_sma_UUD(config_kwargs):
                     # es_exci[bond][:, i_basis, lx_b, ly_b, lx_k, ly_k, i_sl] += exci_basis[state.site2index(site_bra)].T.conj() @ dHxx_dbra
                     # es_exci[bond][:, i_basis, lx_b, ly_b, lx_k, ly_k, i_sl] += exci_basis[state.site2index(site_bra)].T.conj() @ dHyy_dbra
                     es_exci[bond][lx_b-min_x, ly_b-min_y, lx_k-min_x, ly_k-min_y, i_sl] = Jzz * H_zz_val + Jxy * (H_xx_val + H_yy_val)
+
+                    if lx_k == min_x and ly_k == min_y:
+                        H_zz_val_c, _ = compute_energy_exci(env_ctm, Sz, Sz, sites_op=shift_bond, exci_psi=exci_psi, xrange=(min_x, max_x+1), yrange=(min_y, max_y+1))
+                        H_xx_val_c, _ = compute_energy_exci(env_ctm, Sx, Sx, sites_op=shift_bond, exci_psi=exci_psi, xrange=(min_x, max_x+1), yrange=(min_y, max_y+1))
+                        H_yy_val_c, _ = compute_energy_exci(env_ctm, Sy, Sy, sites_op=shift_bond, exci_psi=exci_psi, xrange=(min_x, max_x+1), yrange=(min_y, max_y+1))
+                        es_exci_c[bond][:, :, :, :, i_sl] = Jzz * convert2emat(H_zz_val_c, lp, min_x, min_y) + Jxy * (convert2emat(H_xx_val_c, lp, min_x, min_y) + convert2emat(H_yy_val_c, lp, min_x, min_y))
 
                 # compute excited norms
                 if not computed_norm and lx_b == min_x and ly_b == min_y:
@@ -174,12 +221,24 @@ def test_exci_sma_UUD(config_kwargs):
                     # ns_exci[:, i_basis, lx_k, ly_k, i_sl] = exci_basis[state.site2index(site_bra)].T.conj() @ dN_dbra
                     ns_exci[lx_k-min_x, ly_k-min_y, i_sl] = N_val
 
-                    ### Compute norm using sweep from the top left corner
-                    if lx_k == min_x and lx_k == min_y:
+                    if lx_k == min_x and ly_k == min_y:
+                        ### Compute norm using sweep from the top left corner
                         N_val_tl, _ = compute_norm_exci_tl(env_ctm, exci_bra, exci_psi, (min_x, max_x+1), (min_y, max_y+1))
                         ns_exci_tl[:, :, i_sl] = np.array([v.detach() for v in N_val_tl.values()]).reshape(lp, lp)
+                        ### Compute norm using sweep from the middle row to top and bottom
+                        N_val_c, _ = compute_norm_exci(env_ctm, exci_bra_c, exci_psi, (min_x, max_x+1), (min_y, max_y+1))
+                        # ns_exci_c[:, :, i_sl] = np.array([v.detach() for v in N_val_c.values()]).reshape(lp, lp)
+                        ns_exci_c[:, :, i_sl] = convert2nmat(N_val_c, lp, min_x, min_y)
+
         computed_norm = True
 
+    print("Compared the excited energy and norm matrices from full computation and efficient sweeps:")
+    is_nmat_equal = np.allclose(ns_exci_c, ns_exci)
+    is_emat_equal = True
+    for bond in bonds:
+        is_emat_equal = is_emat_equal and np.allclose(es_exci[bond], es_exci_c[bond])
+    print("N_full==N_efficient?", is_nmat_equal)
+    print("E_full==E_efficient?", is_emat_equal)
 
     # ground state expectation values
     print("Ground state values: ")
