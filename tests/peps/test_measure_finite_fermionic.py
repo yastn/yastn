@@ -339,4 +339,4 @@ def test_measure_lbp(config_kwargs, sym, L=3):
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--backend", "torch", "--device", "cuda"])
+    pytest.main([__file__, "-vs", "--backend", "np"]) #, "torch", "--device", "cuda"])

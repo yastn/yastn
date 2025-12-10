@@ -176,7 +176,38 @@ class EnvWindow:
         return out
 
 
-def _measure_2site_row(self, O0, O1, xrange, yrange, offset, pairs, opts_svd=None, opts_var=None):
+def _measure_2site(env, O0, O1, xrange, yrange, offset, pairs="corner <=", dirn='v', opts_svd=None, opts_var=None):
+    """
+    Worker function for measure_2site; works for EnvBoundaryMPS and EnvWindow (derived from EnvCTM).
+    """
+    sites = [Site(nx, ny) for nx in range(*xrange) for ny in range(*yrange)]
+    O0dict = clear_operator_input(O0, sites)
+    O1dict = clear_operator_input(O1, sites)
+
+    if 'corner' in pairs:
+        s0 = (xrange[0], yrange[0])
+        pairs = [Site(s0, s1) for s1 in sites]
+    elif 'row' in pairs:
+        row_sites = [Site(xrange[0], ny) for ny in range(*yrange)]
+        pairs = [Site(s0, s1) for s0 in row_sites for s1 in sites]
+    else:
+        pairs = [Site(s0, s1) for s0 in sites for s1 in sites]
+
+    # All O0 should have the same charge; the same for O1; this is added for fermionic systems
+    n0 = next(iter(O0dict[sites[0]].values())).n
+    n1 = next(iter(O1dict[sites[0]].values())).n
+    if env.psi.config.fermionic and \
+       (any(x.n != n0 for d in O0dict.values() for x in d.values()) or \
+        any(x.n != n1 for d in O1dict.values() for x in d.values())):
+            raise YastnError("All O0 (O1) operators should have the same charge.")
+
+    if dirn == 'v':
+        return _measure_2site_columns(env, O0dict, O1dict, xrange, yrange, offset, pairs, opts_svd, opts_var)
+    else:  # dirn == 'h':
+        return _measure_2site_row(env, O0dict, O1dict, xrange, yrange, offset, pairs, opts_svd, opts_var)
+
+
+def _measure_2site_row(self, O0dict, O1dict, xrange, yrange, offset, pairs, opts_svd=None, opts_var=None):
     """
     Calculate all 2-point correlations <o1 o2> in a finite peps.
 
@@ -189,15 +220,11 @@ def _measure_2site_row(self, O0, O1, xrange, yrange, offset, pairs, opts_svd=Non
         D_total = max(max(self[nx, dirn].get_bond_dimensions()) for nx in range(*xrange) for dirn in 'tb')
         opts_svd = {'D_total': D_total}
 
-    sites = [Site(nx, ny) for nx in range(*xrange) for ny in range(*yrange)]
-    O0dict = clear_operator_input(O0, sites)
-    O1dict = clear_operator_input(O1, sites)
-    out = {}
-    # All O0 should have the same charge  # TODO
-
     vecs = {nx: self[nx, 't'].shallow_copy() for nx in range(*xrange)}
     for nx in range(xrange[0], xrange[1] - 1):  # this is done to propagete the norm of boundary vectors
         mps.compression_(vecs[nx + 1], [self[nx, 'h'], vecs[nx]], method='1site', normalize=False, **opts_var)
+
+    out = {}  # dict for results
 
     for nx0 in range(*xrange):
         for ny0 in range(*yrange):
@@ -250,7 +277,7 @@ def _measure_2site_row(self, O0, O1, xrange, yrange, offset, pairs, opts_svd=Non
     return out
 
 
-def _measure_2site_columns(self, O0, O1, xrange, yrange, offset, pairs, opts_svd=None, opts_var=None):
+def _measure_2site_columns(self, O0dict, O1dict, xrange, yrange, offset, pairs, opts_svd=None, opts_var=None):
     """
     Calculate all 2-point correlations <o1 o2> in a finite peps.
 
@@ -263,22 +290,12 @@ def _measure_2site_columns(self, O0, O1, xrange, yrange, offset, pairs, opts_svd
         D_total = max(max(self[ny, dirn].get_bond_dimensions()) for ny in range(*yrange) for dirn in 'lr')
         opts_svd = {'D_total': D_total}
 
-    sites = [Site(nx, ny) for nx in range(*xrange) for ny in range(*yrange)]
-    O0dict = clear_operator_input(O0, sites)
-    O1dict = clear_operator_input(O1, sites)
-    # All O0 should have the same charge; the same for O1; this is added for fermionic systems
-    n0 = next(iter(O0dict[sites[0]].values())).n
-    n1 = next(iter(O1dict[sites[0]].values())).n
-    if self.psi.config.fermionic and \
-       (any(x.n != n0 for d in O0dict.values() for x in d.values()) or \
-        any(x.n != n1 for d in O1dict.values() for x in d.values())):
-            raise YastnError("All O0 (O1) operators should have the same charge.")
-
     vecs = {ny: self[ny, 'l'].shallow_copy() for ny in range(*yrange)}
     for ny in range(yrange[0], yrange[1] - 1):  # this is done to propagete the norm of boundary vectors
         mps.compression_(vecs[ny + 1], [self[ny, 'v'], vecs[ny]], method='1site', normalize=False, **opts_var)
 
-    out = {}
+    out = {}  # dict for results
+
     for ny0 in range(*yrange):
         for nx0 in range(*xrange):
             ix0 = nx0 - xrange[0] + offset

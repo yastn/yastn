@@ -17,7 +17,7 @@ from itertools import accumulate
 from tqdm import tqdm
 
 from ._env_contractions import identity_boundary, clear_projectors, clear_operator_input
-from ._env_window import _measure_nsite, _measure_2site_columns, _measure_2site_row
+from ._env_window import _measure_nsite, _measure_2site
 from .._peps import PEPS_CLASSES, Peps2Layers
 from ... import mps
 from ....tensor import YastnError
@@ -335,17 +335,50 @@ class EnvBoundaryMPS():
         return _measure_nsite(self, *operators, sites=sites, dirn=dirn)
 
 
-    def measure_2site(self, O0, O1, opts_svd=None, opts_var=None, site0='all'):
-        xrange = [0, self.Nx]
-        yrange = [0, self.Ny]
-        pairs = [(s0, s1) for s0 in self.sites() for s1 in self.sites()]
-        if site0 == 'all':
-            offset = xrange[0]
-            return _measure_2site_columns(self, O0, O1, xrange, yrange, offset, pairs, opts_svd, opts_var)
-        if site0 == 'row':
-            offset = yrange[0]
-            return _measure_2site_row(self, O0, O1, xrange, yrange, offset, pairs, opts_svd, opts_var)
-        raise YastnError("site0 should be 'corner' or 'row'. ")
+    def measure_2site(self, O, P, xrange=None, yrange=None, pairs='corner <=', dirn='v', opts_svd=None, opts_var=None):
+        r"""
+        Calculate expectation values :math:`\langle \textrm{O}_i \textrm{P}_j \rangle`
+        of local operators :code:`O` and :code:`P` for pairs of lattice sites :math:`i, j`.
+
+        Parameters
+        ----------
+        O, P: yastn.Tensor
+            one-site operators. It is possible to provide a dict of :class:`yastn.tn.fpeps.Lattice` object
+            mapping operators to sites.
+            For each site, it is possible to provide a list or dict of operators, where the expectation value is calculated
+            for each combination of those operators
+
+        xrange: None | tuple[int, int]
+            range of rows forming a window, [r0, r1); r0 included, r1 excluded.
+            For None, takes a single unit cell of the lattice.
+
+        yrange: tuple[int, int]
+            range of columns forming a window.
+            For None, takes a single unit cell of the lattice.
+
+        pairs: str | list[tuple[tule[int, int], tuple[int, int]]]
+            Limits the pairs of sites to calculate the expectation values.
+            If 'corner' in pairs, O is limited to top-left corner of the lattice
+            If 'row' in pairs, O is limited to top row of the lattice
+
+        dirn: str
+            'h' or 'v', where the boundary MPSs used for truncation are, respectively, horizontal or vertical.
+            The default is 'v'.
+
+        opts_svd: dict
+            Options passed to :meth:`yastn.linalg.svd` used to truncate virtual spaces of boundary MPSs used in sampling.
+            The default is ``None``, in which case take ``D_total`` as the largest dimension from CTM environment.
+
+        opts_svd: dict
+            Options passed to :meth:`yastn.tn.mps.compression_` used in the refining of boundary MPSs.
+            The default is ``None``, in which case make 2 variational sweeps.
+        """
+        if xrange is None:
+            xrange = [0, self.Nx]
+        if yrange is None:
+            yrange = [0, self.Ny]
+        offset = yrange[0] if dirn == 'h' else xrange[0]
+        return _measure_2site(self, O, P, xrange, yrange, offset=offset, pairs=pairs, dirn=dirn, opts_svd=opts_svd, opts_var=opts_var)
 
 
     def sample(peps_env, projectors, number=1, opts_svd=None, opts_var=None, progressbar=False, return_probabilities=False, flatten_one=True, **kwargs):

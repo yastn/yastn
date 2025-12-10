@@ -120,12 +120,12 @@ def test_window_measure(config_kwargs):
     #
     # test measure_2site
     #
-    outv = env_ctm.measure_2site(ops.z(), ops.z(), xrange=(1, 5), yrange=(0, 1))
+    outv = env_ctm.measure_2site(ops.z(), ops.z(), xrange=(1, 5), yrange=(0, 1), dirn='v', pairs="corner <")
     ev = [env_ctm.measure_line(ops.z(), ops.z(), sites=((1, 0), (n, 0))) for n in [2, 3, 4,]]
     for n, ref in zip([1, 2, 3, 4], [1] + ev):
         assert abs(outv[(1, 0), (n, 0)] - ref) / abs(ref) < 1e-2
     #
-    outh = env_ctm.measure_2site(ops.z(), ops.z(), xrange=(2, 5), yrange=(2, 3), site0='row')
+    outh = env_ctm.measure_2site(ops.z(), ops.z(), xrange=(2, 5), yrange=(2, 3), dirn='h', pairs="corner <")
     eh = [env_ctm.measure_line(ops.z(), ops.z(), sites=((2, 2), (n, 2))) for n in [3, 4]]
     for n, ref in zip([2, 3, 4], [1] + eh):
         assert abs(outh[(2, 2), (n, 2)] - ref) / abs(ref) < 1e-5

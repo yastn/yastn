@@ -124,16 +124,16 @@ def test_ctmrg_measure_product(config_kwargs, boundary):
     if boundary != 'obc':
         out = env.sample(xrange=(3, 7), yrange=(-1, 2), number=5, projectors=vecs)
         assert all(all(x == vals[g.site2index(k)] for x in v) for k, v in out.items())
-
     #
     #  measure_2site
     #
-    out = env.measure_2site(sz, sz, xrange=(1, 4), yrange=(0, 3))
-    assert all(abs(vals[s0] * vals[s1] - v) < tol for (s0, s1), v in out.items())
+    for dirn in ['h', 'v']:
+        out = env.measure_2site(sz, sz, xrange=(1, 4), yrange=(0, 3), dirn=dirn, pairs='all <=')
+        assert all(abs(vals[s0] * vals[s1] - v) < tol for (s0, s1), v in out.items())
 
-    if boundary != 'obc':
-        out = env.measure_2site(sz, sz, xrange=(3, 7), yrange=(-1, 2))
-        assert all(abs(vals[g.site2index(s0)] * vals[g.site2index(s1)] - v) < tol for (s0, s1), v in out.items())
+        if boundary != 'obc':
+            out = env.measure_2site(sz, sz, xrange=(3, 7), yrange=(-1, 2), dirn=dirn, pairs='all <=')
+            assert all(abs(vals[g.site2index(s0)] * vals[g.site2index(s1)] - v) < tol for (s0, s1), v in out.items())
     #
     # save, copy, ...
     #

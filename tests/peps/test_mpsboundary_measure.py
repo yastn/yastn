@@ -69,7 +69,7 @@ def test_mpsboundary_measure(config_kwargs, boundary):
     out = env.measure_1site({'x': ops.sz()}, site=site)
     assert abs(out['x'] - vals[site]) < tol
 
-    eszz = env.measure_2site(ops.sz(), ops.sz(), opts_svd=opts_svd)
+    eszz = env.measure_2site(ops.sz(), ops.sz(), opts_svd=opts_svd, pairs="<=")
     assert len(eszz) == env.Nx * env.Ny * (env.Nx * env.Ny + 1) // 2
     assert all(abs(vals[s1] * vals[s2] - v) < tol for (s1, s2), v in eszz.items())
 

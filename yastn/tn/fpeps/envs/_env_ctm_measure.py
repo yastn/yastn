@@ -15,7 +15,7 @@
 """ Common measure functions for EnvCTM and EnvBoudndaryMPS """
 
 from ._env_contractions import clear_operator_input
-from ._env_window import EnvWindow, _measure_2site_columns, _measure_2site_row, _measure_nsite
+from ._env_window import EnvWindow, _measure_2site, _measure_nsite
 from .._gates_auxiliary import fkron, gate_fix_swap_gate
 from .._geometry import Site, is_bond, is_site
 from .._peps import Peps2Layers
@@ -366,22 +366,35 @@ def measure_nsite(self, *operators, sites=None) -> float:
     return _measure_nsite(env_win, *operators, sites=sites, dirn=dirn)
 
 
-def measure_2site(self, O, P, xrange, yrange, opts_svd=None, opts_var=None, site0='corner') -> dict[Site, float]:
+def measure_2site(self, O, P, xrange=None, yrange=None, pairs='corner <=', dirn='v', opts_svd=None, opts_var=None) -> dict[Site, float]:
     r"""
-    Calculate 2-point correlations <O P> between top-left corner of the window, and all sites in the window.
-
-    wip: other combinations of 2-sites and fermionically-nontrivial operators will be coverad latter.
+    Calculate expectation values :math:`\langle \textrm{O}_i \textrm{P}_j \rangle`
+    of local operators :code:`O` and :code:`P` for pairs of lattice sites :math:`i, j`.
 
     Parameters
     ----------
     O, P: yastn.Tensor
-        one-site operators
+        one-site operators. It is possible to provide a dict of :class:`yastn.tn.fpeps.Lattice` object
+        mapping operators to sites.
+        For each site, it is possible to provide a list or dict of operators, where the expectation value is calculated
+        for each combination of those operators
 
-    xrange: tuple[int, int]
+    xrange: None | tuple[int, int]
         range of rows forming a window, [r0, r1); r0 included, r1 excluded.
+        For None, takes a single unit cell of the lattice.
 
     yrange: tuple[int, int]
         range of columns forming a window.
+        For None, takes a single unit cell of the lattice.
+
+    pairs: str | list[tuple[tule[int, int], tuple[int, int]]]
+        Limits the pairs of sites to calculate the expectation values.
+        If 'corner' in pairs, O is limited to top-left corner of the lattice
+        If 'row' in pairs, O is limited to top row of the lattice
+
+    dirn: str
+        'h' or 'v', where the boundary MPSs used for truncation are, respectively, horizontal or vertical.
+        The default is 'v'.
 
     opts_svd: dict
         Options passed to :meth:`yastn.linalg.svd` used to truncate virtual spaces of boundary MPSs used in sampling.
@@ -390,20 +403,13 @@ def measure_2site(self, O, P, xrange, yrange, opts_svd=None, opts_var=None, site
     opts_svd: dict
         Options passed to :meth:`yastn.tn.mps.compression_` used in the refining of boundary MPSs.
         The default is ``None``, in which case make 2 variational sweeps.
-
-    site0: str
-        For site0 == 'corner', calculate all correlations with site0 fixed to top-left corner of the window.
-        For site0 == 'row', calculate all correlations with site0 from top row of the window.
-        The default is 'corner'.
     """
+    if xrange is None:
+        xrange = [0, self.Nx]
+    if yrange is None:
+        yrange = [0, self.Ny]
     env_win = EnvWindow(self, xrange, yrange)
-    pairs = [(s0, s1) for s0 in env_win.sites() for s1 in env_win.sites()]
-    offset = 1
-    if site0 == 'corner':
-        return _measure_2site_columns(env_win, O, P, xrange, yrange, offset, pairs, opts_svd, opts_var)
-    if site0 == 'row':
-        return _measure_2site_row(env_win, O, P, xrange, yrange, offset, pairs, opts_svd, opts_var)
-    raise YastnError("site0 should be 'corner' or 'row'. ")
+    return _measure_2site(env_win, O, P, xrange, yrange, offset=1, pairs=pairs, dirn=dirn, opts_svd=opts_svd, opts_var=opts_var)
 
 
 def sample(env, projectors, number=1, xrange=None, yrange=None, opts_svd=None, opts_var=None, progressbar=False, return_probabilities=False, flatten_one=True, **kwargs) -> dict[Site, list]:
