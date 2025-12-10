@@ -480,7 +480,7 @@ def _ctmrg_(env:EnvCTM, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, n_c
 
             if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
                 yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
-    yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, converged=converged)
+    yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
 
 @delayed
 def Measure1Site(job, op, cfg):
