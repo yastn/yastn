@@ -45,7 +45,15 @@ class dataclasses_common():
     def detach_(self):
         for k in fields(self):
             if getattr(self, k.name) is not None:
-                getattr(self, k.name).detach_()
+                try:
+                    getattr(self, k.name).detach_()
+                except RuntimeError as e:
+                    # NOTE
+                    # RuntimeError: Can't detach views in-place. Use detach() instead. If you are using DistributedDataParallel (DDP) 
+                    # for training, and gradient_as_bucket_view is set as True, gradients are views of DDP buckets, and hence detach_() 
+                    # cannot be called on these gradients. To fix this error, please refer to the Optimizer.zero_grad() 
+                    # function in torch/optim/optimizer.py as the solution.
+                    setattr(self, k.name, getattr(self, k.name).detach())
 
     def allclose(self, other, rtol=1e-13, atol=1e-13):
         if type(self) != type(other):
