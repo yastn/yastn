@@ -548,6 +548,6 @@ def ParaMeasureNN(env, op0, op1, cfg, n_cores=24):
     return result
 
 
-def PARActmrg_(env:EnvCTM, max_sweeps=50, iterator_step=1, opts_svd_ctm=None, corner_tol=None, n_cores=1, ctm_jobs_hv=None, moves='tblr'):
+def PARActmrg_(env:EnvCTM, max_sweeps=50, iterator_step=1, opts_svd_ctm=None, corner_tol=None, n_cores=1, ctm_jobs_hv=None, moves='hv'):
     tmp = _ctmrg_(env, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, n_cores=n_cores, ctm_jobs_hv=ctm_jobs_hv, moves=moves)
     return tmp if iterator_step else next(tmp)
