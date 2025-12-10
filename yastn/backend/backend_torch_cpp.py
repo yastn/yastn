@@ -109,8 +109,8 @@ def _meta_tensordot_bs(
     #     else:
     #         filled_b_t_per_mode.append(_merge_t(nin_a[nin_b_to_pos[i]], i))
     
-    filled_a_t_per_mode= a_t_per_mode
-    filled_b_t_per_mode= b_t_per_mode
+    filled_a_t_per_mode= list(a_t_per_mode)
+    filled_b_t_per_mode= list(b_t_per_mode)
 
     for ia,ib in zip(nin_a,nin_b):
         if filled_a_t_per_mode[ia]==filled_b_t_per_mode[ib]:
@@ -172,14 +172,14 @@ def _meta_tensordot_bs(
         return res
 
     def _blocksparse_coords_v3(struct_t, filled_t_per_mode):
-        ts= np.array(struct_t).reshape( len(struct_t), len(filled_t_per_mode), NSYM )
+        ts= np.array(struct_t).reshape( len(struct_t), len(filled_t_per_mode), max(1,NSYM) ) # NSYM=0 is treated as NSYM=1 with 0 sector charge only
         n= normalize_ts(filled_t_per_mode) 
         ts-= np.stack([f[0] for f in n])                # shift to zero-based [:,...] -= [...] broadcast over :
         # ts[...,1:]*= np.stack([f[1] for f in n])[:,:-1] # raise by base
         # ts= np.sum(ts,axis=-1).tolist()              # compute linearized indices      
         B= np.empty( ts.shape[:2], dtype=np.int64 )
         for mode in range(len(filled_t_per_mode)):
-            B[:,mode]= n[mode][2][ tuple( ts[:,mode,i] for i in range(NSYM) ) ]
+            B[:,mode]= n[mode][2][ tuple( ts[:,mode,i] for i in range(max(1,NSYM)) ) ]
         
         return B.reshape(-1).tolist()
 
@@ -223,7 +223,7 @@ def _meta_tensordot_bs(
         S[:,-1]=1
         Ds= np.asarray( tuple(b.D for b in slices) )
         np.cumprod( Ds[:, -1:0:-1], axis=-1, out= S[:,:len(slices[0].D)-1][:,::-1])
-        return tuple(s.slcs[0][0] for s in slices), S.reshape(-1).tolist()    
+        return tuple(s.slcs[0][0] for s in slices), S.reshape(-1).tolist()
     
     a_offsets, a_strides= _offsets_and_strides(a_slices)
     b_offsets, b_strides= _offsets_and_strides(b_slices)
@@ -250,16 +250,18 @@ def kernel_tensordot_bs(
         c_size, c_struct_t, c_slices,   # non-zero blocks of c indexed via charges
         profile=False
     ):
-    dtype = torch.promote_types(a.dtype, a.dtype)
+    dtype = torch.promote_types(a.dtype, b.dtype)
     if c_size==0:
         return torch.zeros(c_size, dtype=dtype, device=a.device)
 
+    if profile: torch.cuda.nvtx.range_push("_meta_tensordot_bs")
     res= _meta_tensordot_bs(NSYM,
         a_struct_t, a_slices, a_t_per_mode, a_D_per_mode,
         nout_a, nin_a,
         b_struct_t, b_slices, b_t_per_mode, b_D_per_mode,
         nout_b, nin_b,
         c_struct_t, c_slices, profile)
+    if profile: torch.cuda.nvtx.range_pop()
 
     a_coords, a_offsets, a_strides, T_a_D_per_mode, \
     b_coords, b_offsets, b_strides, T_b_D_per_mode, \

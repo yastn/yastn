@@ -213,18 +213,19 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
                 b_slices= tuple(b.slices[i] for i in ind_b)
         
         if a.config.profile: a.config.backend.cuda.nvtx.range_push(f"kernel_tensordot_bs")
+        a_legs, b_legs= a.get_legs( native=True ), b.get_legs( native=True )
         data = a.config.backend.kernel_tensordot_bs(
             a.data, b.data, 
             a.config.sym.NSYM,
             a_blocks_t, 
             a_slices,
-            [l.t for l in a.get_legs( native=True )] if a.config.sym.NSYM > 0 else [((0,),)]*a.ndim_n,
-            [l.D for l in a.get_legs( native=True )],
+            [l.t for l in a_legs] if a.config.sym.NSYM > 0 else [((0,),)]*a.ndim_n,
+            [l.D for l in a_legs],
             nout_a, nin_a,
             b_blocks_t,
             b_slices,
-            [l.t for l in b.get_legs( native=True )] if b.config.sym.NSYM > 0 else [((0,),)]*b.ndim_n,
-            [l.D for l in b.get_legs( native=True )], 
+            [l.t for l in b_legs] if b.config.sym.NSYM > 0 else [((0,),)]*b.ndim_n,
+            [l.D for l in b_legs], 
             nout_b, nin_b,
             struct_c.size, c_blocks_t,
             slices_c,
