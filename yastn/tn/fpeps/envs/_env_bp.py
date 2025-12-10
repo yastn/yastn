@@ -22,7 +22,7 @@ from tqdm import tqdm
 from ._env_contractions import *
 from ._env_dataclasses import EnvBP_local
 from .._evolution import BipartiteBondMetric, BondMetric
-from .._gates_auxiliary import fkron, gate_fix_swap_gate, match_ancilla
+from .._gates_auxiliary import fkron, gate_fix_swap_gate, match_ancilla, clear_projectors, clear_operator_input
 from .._geometry import Bond, Site, Lattice
 from .._peps import Peps2Layers, DoublePepsTensor, PEPS_CLASSES
 from ....initialize import eye

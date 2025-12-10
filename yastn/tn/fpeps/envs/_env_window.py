@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from tqdm import tqdm
 
-from ._env_contractions import clear_operator_input, clear_projectors
+from .._gates_auxiliary import clear_operator_input, clear_projectors
 from .._geometry import Site
 from ... import mps
 from ....operators import sign_canonical_order
@@ -121,59 +121,59 @@ class EnvWindow:
         raise YastnError(f"{dirn=} not recognized. Should be 't', 'h' 'b', 'r', 'v', or 'l'.")
 
 
-    def sample(self, projectors, number=1, opts_svd=None, opts_var=None, progressbar=False, return_probabilities=False, flatten_one=True) -> dict[Site, list]:
-        """
-        Sample random configurations from PEPS.
-        See :meth:`yastn.tn.fpeps.EnvCTM.sample` for description.
-        """
-        if opts_var is None:
-            opts_var = {'max_sweeps': 2}
-        if opts_svd is None:
-            D_total = max(max(self[ny, dirn].get_bond_dimensions()) for ny in range(*self.yrange) for dirn in 'lr')
-            opts_svd = {'D_total': D_total}
+def _sample(self, projectors, xrange, yrange, number=1, opts_svd=None, opts_var=None, progressbar=False, return_probabilities=False, flatten_one=True) -> dict[Site, list]:
+    """
+    Sample random configurations from PEPS.
+    See :meth:`yastn.tn.fpeps.EnvCTM.sample` for description.
+    """
+    if opts_var is None:
+        opts_var = {'max_sweeps': 2}
+    if opts_svd is None:
+        D_total = max(max(self[ny, dirn].get_bond_dimensions()) for ny in range(*yrange) for dirn in 'lr')
+        opts_svd = {'D_total': D_total}
 
-        sites = self.sites()
-        projs_sites = clear_projectors(sites, projectors, self.xrange, self.yrange)
+    sites = self.sites()
+    projs_sites = clear_projectors(sites, projectors, xrange, yrange)
 
-        out = {site: [] for site in sites}
-        probabilities = []
-        rands = self.psi.config.backend.rand(self.Nx * self.Ny * number)  # in [0, 1]
-        count = 0
+    out = {site: [] for site in sites}
+    probabilities = []
+    rands = self.psi.config.backend.rand(self.Nx * self.Ny * number)  # in [0, 1]
+    count = 0
 
-        for _ in tqdm(range(number), desc="Sample...", disable=not progressbar):
-            probability = 1.
-            vec = self[self.yrange[0], 'l']
-            for ny in range(*self.yrange):
-                vecc = self[ny, 'r'].conj()
-                tm = self[ny, 'v']
-                env = mps.Env(vecc, [tm, vec]).setup_(to='first')
-                for ix, nx in enumerate(range(*self.xrange), start=self.offset):
-                    env.update_env_(ix - 1, to='last')
-                    norm_prob = env.measure(bd=(ix - 1, ix)).real
-                    acc_prob = 0
-                    for k, proj in projs_sites[nx, ny].items():
-                        tm[ix].set_operator_(proj)
-                        env.update_env_(ix, to='first')
-                        prob = env.measure(bd=(ix-1, ix)).real / norm_prob
-                        acc_prob += prob
-                        if rands[count] < acc_prob:
-                            out[nx, ny].append(k)
-                            tm[ix].set_operator_(proj / prob)
-                            probability *= prob
-                            break
-                    count += 1
-                if ny + 1 < self.yrange[1]:
-                    vec_new = mps.zipper(tm, vec, opts_svd=opts_svd)
-                    mps.compression_(vec_new, (tm, vec), method='1site', **opts_var)
-                    vec = vec_new
-            probabilities.append(probability)
+    for _ in tqdm(range(number), desc="Sample...", disable=not progressbar):
+        probability = 1.
+        vec = self[yrange[0], 'l']
+        for ny in range(*yrange):
+            vecc = self[ny, 'r'].conj()
+            tm = self[ny, 'v']
+            env = mps.Env(vecc, [tm, vec]).setup_(to='first')
+            for ix, nx in enumerate(range(*xrange), start=self.offset):
+                env.update_env_(ix - 1, to='last')
+                norm_prob = env.measure(bd=(ix - 1, ix)).real
+                acc_prob = 0
+                for k, proj in projs_sites[nx, ny].items():
+                    tm[ix].set_operator_(proj)
+                    env.update_env_(ix, to='first')
+                    prob = env.measure(bd=(ix-1, ix)).real / norm_prob
+                    acc_prob += prob
+                    if rands[count] < acc_prob:
+                        out[nx, ny].append(k)
+                        tm[ix].set_operator_(proj / prob)
+                        probability *= prob
+                        break
+                count += 1
+            if ny + 1 < yrange[1]:
+                vec_new = mps.zipper(tm, vec, opts_svd=opts_svd)
+                mps.compression_(vec_new, (tm, vec), method='1site', **opts_var)
+                vec = vec_new
+        probabilities.append(probability)
 
-        if number == 1 and flatten_one:
-            out = {site: smp.pop() for site, smp in out.items()}
+    if number == 1 and flatten_one:
+        out = {site: smp.pop() for site, smp in out.items()}
 
-        if return_probabilities:
-            return out, probabilities
-        return out
+    if return_probabilities:
+        return out, probabilities
+    return out
 
 
 def _measure_2site(env, O0, O1, xrange, yrange, offset, pairs="corner <=", dirn='v', opts_svd=None, opts_var=None):
@@ -200,6 +200,9 @@ def _measure_2site(env, O0, O1, xrange, yrange, offset, pairs="corner <=", dirn=
        (any(x.n != n0 for d in O0dict.values() for x in d.values()) or \
         any(x.n != n1 for d in O1dict.values() for x in d.values())):
             raise YastnError("All O0 (O1) operators should have the same charge.")
+
+    if env.psi.config.fermionic and (n0 != env.psi.config.sym.zero() or n1 != env.psi.config.sym.zero()):
+        raise YastnError("measure_2site currently does not support fermionic operators.")  # TODO
 
     if dirn == 'v':
         return _measure_2site_columns(env, O0dict, O1dict, xrange, yrange, offset, pairs, opts_svd, opts_var)

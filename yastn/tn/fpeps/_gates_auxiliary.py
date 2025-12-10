@@ -14,8 +14,9 @@
 # ==============================================================================
 from typing import NamedTuple
 
+from ._geometry import Lattice
 from ...initialize import eye
-from ...tensor import tensordot, YastnError
+from ...tensor import tensordot, YastnError, Tensor
 
 
 class Gate(NamedTuple):
@@ -192,3 +193,47 @@ def fill_eye_in_gate(peps, G, sites):
         G.append(ten)
     G.append(g1)
     return G
+
+
+def clear_projectors(sites, projectors, xrange, yrange):
+    """ prepare projectors for sampling functions. """
+    if not isinstance(projectors, dict) or all(isinstance(x, Tensor) for x in projectors.values()):
+        projectors = {site: projectors for site in sites}  # spread projectors over sites
+    if set(sites) != set(projectors.keys()):
+        raise YastnError(f"Projectors not defined for some sites in xrange={xrange}, yrange={yrange}.")
+
+    # change each list of projectors into keys and projectors
+    projs_sites = {}
+    for k, v in projectors.items():
+        projs_sites[k] = dict(v) if isinstance(v, dict) else dict(enumerate(v))
+        for l, pr in projs_sites[k].items():
+            if pr.ndim == 1:  # vectors need conjugation
+                if abs(pr.norm() - 1) > 1e-10:
+                    raise YastnError("Local states to project on should be normalized.")
+                projs_sites[k][l] = tensordot(pr, pr.conj(), axes=((), ()))
+            elif pr.ndim == 2:
+                if (pr.n != pr.config.sym.zero()) or abs(pr @ pr - pr).norm() > 1e-10:
+                    raise YastnError("Matrix projectors should be projectors, P @ P == P.")
+            elif pr.ndim == 4:
+                pass
+            else:
+                raise YastnError("Projectors should consist of vectors (ndim=1) or matrices (ndim=2).")
+
+    return projs_sites
+
+
+def clear_operator_input(op, sites):
+    if isinstance(op, Lattice):
+        op_dict = op.shallow_copy()
+    elif isinstance(op, dict):
+        op_dict = op.copy()
+    else:
+        op_dict = {site: op for site in sites}
+    for k, v in op_dict.items():
+        if isinstance(v, dict):
+            op_dict[k] = {(i,): vi for i, vi in v.items()}
+        elif isinstance(v, Tensor):
+            op_dict[k] = {(): v}
+        else: # is iterable
+            op_dict[k] = {(i,): vi for i, vi in enumerate(v)}
+    return op_dict

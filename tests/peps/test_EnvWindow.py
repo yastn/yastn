@@ -91,15 +91,13 @@ def test_window_measure(config_kwargs):
     info = env_ctm.ctmrg_(opts_svd, max_sweeps=20, corner_tol=1e-4)
     print(info)  # did not converge
     #
-    env_win = fpeps.EnvWindow(env_ctm, xrange=(0, 4), yrange=(0, 3))
-    #
     # test sample
     #
     ops = yastn.operators.Spin12(sym='dense', **config_kwargs)
     vecs = [ops.vec_z(val=v) for v in [-1, 1]]
     #
     number = 4
-    out, probs = env_win.sample(vecs, number=number, return_probabilities=True, progressbar=True)
+    out, probs = env_ctm.sample(vecs, xrange=(0, 4), yrange=(0, 3), number=number, return_probabilities=True, progressbar=True)
     assert len(out) == 12
     for ny in range(0, 3):
         for nx in range(0, 4):
@@ -107,7 +105,7 @@ def test_window_measure(config_kwargs):
             assert all(x in [0, 1] for x in out[nx, ny])
 
     vecs = {k: v for k, v in zip('tb', vecs)}
-    out = env_win.sample(vecs, number=number)
+    out = env_ctm.sample(vecs, xrange=(0, 4), yrange=(0, 3), number=number)
     assert len(out) == 12
     for ny in range(0, 3):
         for nx in range(0, 4):
@@ -115,7 +113,7 @@ def test_window_measure(config_kwargs):
             assert all(x in 'tb' for x in out[nx, ny])
     #
     with pytest.raises(yastn.YastnError):
-        env_win.sample(projectors={(0, 0): vecs, (1, 0): vecs})
+        env_ctm.sample(projectors={(0, 0): vecs, (1, 0): vecs}, xrange=(0, 4), yrange=(0, 3))
         # Projectors not defined for some sites in xrange=(0, 4), yrange=(0, 3).
     #
     # test measure_2site

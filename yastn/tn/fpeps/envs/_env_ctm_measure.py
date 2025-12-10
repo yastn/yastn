@@ -14,9 +14,8 @@
 # ==============================================================================
 """ Common measure functions for EnvCTM and EnvBoudndaryMPS """
 
-from ._env_contractions import clear_operator_input
-from ._env_window import EnvWindow, _measure_2site, _measure_nsite
-from .._gates_auxiliary import fkron, gate_fix_swap_gate
+from ._env_window import EnvWindow, _measure_2site, _measure_nsite, _sample
+from .._gates_auxiliary import fkron, gate_fix_swap_gate, clear_operator_input
 from .._geometry import Site, is_bond, is_site
 from .._peps import Peps2Layers
 from ... import mps
@@ -458,6 +457,6 @@ def sample(env, projectors, number=1, xrange=None, yrange=None, opts_svd=None, o
     if yrange is None:
         yrange = [0, env.Ny]
     env_win = EnvWindow(env, xrange, yrange)
-    return env_win.sample(projectors, number=number,
-                            opts_svd=opts_svd, opts_var=opts_var,
-                            progressbar=progressbar, return_probabilities=return_probabilities, flatten_one=flatten_one)
+    return _sample(env_win, projectors, xrange, yrange,
+                   number=number, opts_svd=opts_svd, opts_var=opts_var,
+                   progressbar=progressbar, return_probabilities=return_probabilities, flatten_one=flatten_one)

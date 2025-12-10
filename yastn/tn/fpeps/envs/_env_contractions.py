@@ -14,9 +14,8 @@
 # ==============================================================================
 from typing import Sequence
 
-from .._geometry import Lattice
 from ....initialize import ones, eye
-from ....tensor import tensordot, Leg, Tensor, YastnError, ncon
+from ....tensor import tensordot, Leg, Tensor, ncon
 
 
 __all__ = ['hair_t', 'hair_l', 'hair_b', 'hair_r',
@@ -26,8 +25,7 @@ __all__ = ['hair_t', 'hair_l', 'hair_b', 'hair_r',
            'append_vec_bl', 'append_vec_br',
            'corner2x2',
            'tensors_from_psi', 'cut_into_hairs',
-           'identity_boundary', 'trivial_peps_tensor',
-           'clear_projectors', 'clear_operator_input']
+           'identity_boundary', 'trivial_peps_tensor']
 
 
 def trivial_peps_tensor(config):
@@ -474,47 +472,3 @@ def corner2x2_br(t_right, c_bottomright, t_bottom, onsite_t, mode='fuse'):
     if mode == 'fuse':
         cor_br = cor_br.fuse_legs(axes=((0, 2), (1, 3)))
     return cor_br
-
-
-def clear_projectors(sites, projectors, xrange, yrange):
-    """ prepare projectors for sampling functions. """
-    if not isinstance(projectors, dict) or all(isinstance(x, Tensor) for x in projectors.values()):
-        projectors = {site: projectors for site in sites}  # spread projectors over sites
-    if set(sites) != set(projectors.keys()):
-        raise YastnError(f"Projectors not defined for some sites in xrange={xrange}, yrange={yrange}.")
-
-    # change each list of projectors into keys and projectors
-    projs_sites = {}
-    for k, v in projectors.items():
-        projs_sites[k] = dict(v) if isinstance(v, dict) else dict(enumerate(v))
-        for l, pr in projs_sites[k].items():
-            if pr.ndim == 1:  # vectors need conjugation
-                if abs(pr.norm() - 1) > 1e-10:
-                    raise YastnError("Local states to project on should be normalized.")
-                projs_sites[k][l] = tensordot(pr, pr.conj(), axes=((), ()))
-            elif pr.ndim == 2:
-                if (pr.n != pr.config.sym.zero()) or abs(pr @ pr - pr).norm() > 1e-10:
-                    raise YastnError("Matrix projectors should be projectors, P @ P == P.")
-            elif pr.ndim == 4:
-                pass
-            else:
-                raise YastnError("Projectors should consist of vectors (ndim=1) or matrices (ndim=2).")
-
-    return projs_sites
-
-
-def clear_operator_input(op, sites):
-    if isinstance(op, Lattice):
-        op_dict = op.shallow_copy()
-    elif isinstance(op, dict):
-        op_dict = op.copy()
-    else:
-        op_dict = {site: op for site in sites}
-    for k, v in op_dict.items():
-        if isinstance(v, dict):
-            op_dict[k] = {(i,): vi for i, vi in v.items()}
-        elif isinstance(v, Tensor):
-            op_dict[k] = {(): v}
-        else: # is iterable
-            op_dict[k] = {(i,): vi for i, vi in enumerate(v)}
-    return op_dict
