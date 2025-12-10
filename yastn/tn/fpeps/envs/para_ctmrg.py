@@ -19,13 +19,13 @@ def CreateCTMJobBundle(env:EnvCTM, n_cores=1):
 
     sites = env.psi.sites()
 
-    nbundles_hor = min(max(n_cores // Ly, 1), Lx)
-    ctm_jobs_hor = [[sites[ix + iy * Lx] for iy in range(Ly) for ix in range(ib * nbundles_hor, min((ib + 1) * nbundles_hor, Lx))] for ib in range(int(np.floor(Lx / nbundles_hor)))]
+    nbundles_ver = min(max(n_cores // Ly, 1), Lx)
+    ctm_jobs_ver = [[sites[ix + iy * Lx] for iy in range(Ly) for ix in range(ib * nbundles_ver, min((ib + 1) * nbundles_ver, Lx))] for ib in range(int(np.floor(Lx / nbundles_ver)))]
 
-    nbundles_ver = min(max(n_cores // Lx, 1), Ly)
-    ctm_jobs_ver = [[sites[ix + iy * Lx] for ix in range(Lx) for iy in range(ib * nbundles_ver, min((ib + 1) * nbundles_ver, Ly))] for ib in range(int(np.floor(Ly / nbundles_ver)))]
+    nbundles_hor = min(max(n_cores // Lx, 1), Ly)
+    ctm_jobs_hor = [[sites[ix + iy * Lx] for ix in range(Lx) for iy in range(ib * nbundles_hor, min((ib + 1) * nbundles_hor, Ly))] for ib in range(int(np.floor(Ly / nbundles_hor)))]
 
-    return [ctm_jobs_ver, ctm_jobs_hor]
+    return [ctm_jobs_hor, ctm_jobs_ver]
 
 
 @delayed
@@ -47,19 +47,19 @@ def BuildProjector_(job, opts_svd_ctm, cfg, method='2site'):
 
     result_dict = {}
 
-    if any(x in move for x in 'rv'):
+    if any(x in move for x in 'rh'):
         result_dict[(tr, 'hrb')] = env.proj[tr].hrb.to_dict(level=1)
         result_dict[(br, 'hrt')] = env.proj[br].hrt.to_dict(level=1)
 
-    if any(x in move for x in 'lv'):
+    if any(x in move for x in 'lh'):
         result_dict[(tl, 'hlb')] = env.proj[tl].hlb.to_dict(level=1)
         result_dict[(bl, 'hlt')] = env.proj[bl].hlt.to_dict(level=1)
 
-    if any(x in move for x in 'th'):
+    if any(x in move for x in 'tv'):
         result_dict[(tl, 'vtr')] = env.proj[tl].vtr.to_dict(level=1)
         result_dict[(tr, 'vtl')] = env.proj[tr].vtl.to_dict(level=1)
 
-    if any(x in move for x in 'bh'):
+    if any(x in move for x in 'bv'):
         result_dict[(bl, 'vbr')] = env.proj[bl].vbr.to_dict(level=1)
         result_dict[(br, 'vbl')] = env.proj[br].vbl.to_dict(level=1)
 
@@ -167,13 +167,14 @@ def SubWindow(env_psi: Peps | EnvCTM, site, top=1, left=1, bottom=1, right=1, on
 
 
 @delayed
-def UpdateSite(job, cfg, dirn, proj_dict):
+def UpdateSite(job, cfg, move, proj_dict):
 
     env_ = EnvCTM.from_dict(config=cfg, d=job[0])
     site0 = job[1]
 
+    env_tmp = EnvCTM(env_.psi, init=None)
 
-    if dirn in 'htb':
+    if move in 'vtb':
 
         newt = None
         newb = None
@@ -182,7 +183,7 @@ def UpdateSite(job, cfg, dirn, proj_dict):
         newbl = None
         newbr = None
 
-        if dirn in 'ht':
+        if move in 'vt':
 
             env_._trivial_projectors_('t', sites=env_.sites())
 
@@ -203,16 +204,7 @@ def UpdateSite(job, cfg, dirn, proj_dict):
                 temp_site0 = canonical_site(env_, env_.nn_site(site0, (-1, 0)))
                 env_.proj[temp_site0].vtr = from_dict(config=cfg, d=proj_dict[(temp_site, 'vtr')])
 
-            env_tmp = EnvCTM(env_.psi, init=None)
-            env_tmp._update_env_(site0, env_, move='t')
-            update_storage_(env_, env_tmp)
-
-            newt = env_[site0].t.to_dict(level=1)
-            newtl = env_[site0].tl.to_dict(level=1)
-            newtr = env_[site0].tr.to_dict(level=1)
-
-
-        if dirn in 'hb':
+        if move in 'vb':
 
             env_._trivial_projectors_('b', sites=env_.sites())
 
@@ -233,17 +225,22 @@ def UpdateSite(job, cfg, dirn, proj_dict):
                 temp_site0 = canonical_site(env_, env_.nn_site(site0, (1, 0)))
                 env_.proj[temp_site0].vbr = from_dict(config=cfg, d=proj_dict[(temp_site, 'vbr')])
 
-            env_tmp = EnvCTM(env_.psi, init=None)
-            env_tmp._update_env_(site0, env_, move='b')
-            update_storage_(env_, env_tmp)
+        env_tmp._update_env_(site0, env_, move=move)
 
+        if move in 'vt':
+            update_storage_(env_, env_tmp)
+            newt = env_[site0].t.to_dict(level=1)
+            newtl = env_[site0].tl.to_dict(level=1)
+            newtr = env_[site0].tr.to_dict(level=1)
+        if move in 'vb':
+            update_storage_(env_, env_tmp)
             newb = env_[site0].b.to_dict(level=1)
             newbl = env_[site0].bl.to_dict(level=1)
             newbr = env_[site0].br.to_dict(level=1)
 
         return [newt, newb, newtl, newtr, newbl, newbr]
 
-    if dirn in 'vlr':
+    if move in 'hlr':
 
         newl = None
         newr = None
@@ -252,7 +249,7 @@ def UpdateSite(job, cfg, dirn, proj_dict):
         newbl = None
         newbr = None
 
-        if dirn in 'vl':
+        if move in 'hl':
 
             env_._trivial_projectors_('l', sites=env_.sites())
 
@@ -272,15 +269,7 @@ def UpdateSite(job, cfg, dirn, proj_dict):
                 temp_site0 = canonical_site(env_, env_.nn_site(site0, (0, -1)))
                 env_.proj[temp_site0].hlb = from_dict(config=cfg, d=proj_dict[(temp_site, 'hlb')])
 
-            env_tmp = EnvCTM(env_.psi, init=None)
-            env_tmp._update_env_(site0, env_, move='l')
-            update_storage_(env_, env_tmp)
-
-            newl = env_[site0].l.to_dict(level=1)
-            newtl = env_[site0].tl.to_dict(level=1)
-            newbl = env_[site0].bl.to_dict(level=1)
-
-        if dirn in 'vr':
+        if move in 'hr':
 
             env_._trivial_projectors_('r', sites=env_.sites())
 
@@ -300,10 +289,15 @@ def UpdateSite(job, cfg, dirn, proj_dict):
                 temp_site0 = canonical_site(env_, env_.nn_site(site0, (0, 1)))
                 env_.proj[temp_site0].hrb = from_dict(config=cfg, d=proj_dict[(temp_site, 'hrb')])
 
-            env_tmp = EnvCTM(env_.psi, init=None)
-            env_tmp._update_env_(site0, env_, move='r')
-            update_storage_(env_, env_tmp)
+        env_tmp._update_env_(site0, env_, move=move)
 
+        if move in 'hl':
+            update_storage_(env_, env_tmp)
+            newl = env_[site0].l.to_dict(level=1)
+            newtl = env_[site0].tl.to_dict(level=1)
+            newbl = env_[site0].bl.to_dict(level=1)
+        if move in 'hr':
+            update_storage_(env_, env_tmp)
             newr = env_[site0].r.to_dict(level=1)
             newtr = env_[site0].tr.to_dict(level=1)
             newbr = env_[site0].br.to_dict(level=1)
@@ -327,7 +321,7 @@ def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, parallel_pool, move='t'
 
     jobs = []
     for site in sites:
-        if move in 'ht':
+        if move in 'vt':
             site_ = canonical_site(env, env.nn_site(site, 't'))
             env_part, site0, _, _ = SubWindow(env, site_, 0, 0, 1, 1,
                                               env_load_dict={(0, 0): ['l', 'tl', 't'], (0, 1): ['t', 'tr', 'r'],
@@ -335,7 +329,7 @@ def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, parallel_pool, move='t'
             if site_ is not None:
                 jobs.append([env_part.to_dict(level=1), site0, site_, 't'])
 
-        if move in 'vl':
+        if move in 'hl':
             site_ = canonical_site(env, env.nn_site(site, 'l'))
             env_part, site0, _, _ = SubWindow(env, site_, 0, 0, 1, 1,
                                               env_load_dict={(0, 0): ['l', 'tl', 't'], (0, 1): ['t', 'tr', 'r'],
@@ -343,7 +337,7 @@ def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, parallel_pool, move='t'
             if site_ is not None:
                 jobs.append([env_part.to_dict(level=1), site0, site_, 'l'])
 
-        if move in 'hb':
+        if move in 'vb':
             site_ = site
             env_part, site0, _, _ = SubWindow(env, site_, 0, 0, 1, 1,
                                               env_load_dict={(0, 0): ['l', 'tl', 't'], (0, 1): ['t', 'tr', 'r'],
@@ -351,7 +345,7 @@ def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, parallel_pool, move='t'
             if site_ is not None:
                 jobs.append([env_part.to_dict(level=1), site0, site_, 'b'])
 
-        if move in 'vr':
+        if move in 'hr':
             site_ = site
             env_part, site0, _, _ = SubWindow(env, site_, 0, 0, 1, 1,
                                               env_load_dict={(0, 0): ['l', 'tl', 't'], (0, 1):['t', 'tr', 'r'],
@@ -359,6 +353,7 @@ def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, parallel_pool, move='t'
             if site_ is not None:
                 jobs.append([env_part.to_dict(level=1), site0, site_, 'r'])
 
+    logging.info('num of jobs = {}'.format(len(jobs)))
     gathered_result_ = parallel_pool(BuildProjector_(job, opts_svd_ctm, cfg) for job in jobs)
 
     if proj_dict is None:
@@ -383,16 +378,21 @@ def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, parallel_pool, move='t'
     jobs.clear()
 
     for site in sites_to_be_updated:
-        if move in 'ht':
+        if move in 'v':
+            env_part, site0, _, _ = SubWindow(env, site, 1, 1, 1, 1, site_load = [(-1, 0), (1, 0)], env_load_dict={(-1, 0):['t', 'tl', 'tr', 'l', 'r'], (1, 0):['b', 'bl', 'br', 'l', 'r']})
+        if move in 'h':
+            env_part, site0, _, _ = SubWindow(env, site, 1, 1, 1, 1, site_load = [(0, -1), (0, 1)], env_load_dict={(0, -1):['l', 'tl', 'bl', 't', 'b'], (0, 1):['r', 'tr', 'br', 't', 'b']})
+        if move in 't':
             env_part, site0, _, _ = SubWindow(env, site, 1, 1, 0, 1, site_load = [(-1, 0)], env_load_dict={(-1, 0):['t', 'tl', 'tr', 'l', 'r']})
-        if move in 'vl':
+        if move in 'l':
             env_part, site0, _, _ = SubWindow(env, site, 1, 1, 1, 0, site_load = [(0, -1)], env_load_dict={(0, -1):['l', 'tl', 'bl', 't', 'b']})
-        if move in 'hb':
+        if move in 'b':
             env_part, site0, _, _ = SubWindow(env, site, 0, 1, 1, 1, site_load = [(1, 0)], env_load_dict={(1, 0):['b', 'bl', 'br', 'l', 'r']})
-        if move in 'vr':
+        if move in 'r':
             env_part, site0, _, _ = SubWindow(env, site, 1, 0, 1, 1, site_load = [(0, 1)], env_load_dict={(0, 1):['r', 'tr', 'br', 't', 'b']})
 
-        if move in 'htb':
+
+        if move in 'vtb':
             jobs.append([env_part.to_dict(level=1), site0, site,
                          canonical_site(env, env.nn_site(site, (-1, 0))),
                          canonical_site(env, env.nn_site(site, (1, 0))),
@@ -400,7 +400,7 @@ def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, parallel_pool, move='t'
                          canonical_site(env, env.nn_site(site, (-1, 1))),
                          canonical_site(env, env.nn_site(site, (1, -1))),
                          canonical_site(env, env.nn_site(site, (1, 1)))])
-        elif move in 'vlr':
+        elif move in 'hlr':
             jobs.append([env_part.to_dict(level=1), site0, site,
                          canonical_site(env, env.nn_site(site, (0, -1))),
                          canonical_site(env, env.nn_site(site, (0, 1))),
@@ -415,13 +415,13 @@ def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, parallel_pool, move='t'
     ii = 0
     for result in updated_ctm_tensors:
         site_ = sites_to_be_updated[ii]
-        if move in "ht":
+        if move in "vt":
             env[site_].t = from_dict(config=cfg, d = result[0])
-        if move in "hb":
+        if move in "vb":
             env[site_].b = from_dict(config=cfg, d = result[1])
-        if move in "vl":
+        if move in "hl":
             env[site_].l = from_dict(config=cfg, d = result[0])
-        if move in "vr":
+        if move in "hr":
             env[site_].r = from_dict(config=cfg, d = result[1])
         if move in 'hvtl':
             env[site_].tl = from_dict(config=cfg, d = result[2])
@@ -435,12 +435,12 @@ def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, parallel_pool, move='t'
         ii = ii + 1
 
 
-def _ctmrg_(env:EnvCTM, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, n_cores=24, ctm_jobs_vh=None, moves='hv'):
+def _ctmrg_(env:EnvCTM, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, n_cores=24, ctm_jobs_hv=None, moves='hv'):
 
-    if ctm_jobs_vh is None:
-        ctm_jobs_ver, ctm_jobs_hor = CreateCTMJobBundle(env, n_cores)
+    if ctm_jobs_hv is None:
+        ctm_jobs_hor, ctm_jobs_ver = CreateCTMJobBundle(env, n_cores)
     else:
-        ctm_jobs_ver, ctm_jobs_hor = ctm_jobs_vh
+        ctm_jobs_hor, ctm_jobs_ver = ctm_jobs_hv
 
     cfg = env.psi.config
 
@@ -450,19 +450,19 @@ def _ctmrg_(env:EnvCTM, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, n_c
 
             for move in moves:
 
-                if move in 'htb':
+                if move in 'vtb':
                     # if n_cores >= psi.geometry.Ny:
-                    for ctm_jobs in ctm_jobs_hor:
-                        if ctm_jobs_vh is None:
+                    for ctm_jobs in ctm_jobs_ver:
+                        if ctm_jobs_hv is None:
                             ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, parallel_pool=parallel_pool, move=move)
                         else:
                             ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, parallel_pool=parallel_pool, move=move, sites_to_be_updated=ctm_jobs)
 
-                if move in 'vlr':
+                if move in 'hlr':
 
                     # if n_cores >= psi.geometry.Nx:
-                    for ctm_jobs in ctm_jobs_ver:
-                        if ctm_jobs_vh is None:
+                    for ctm_jobs in ctm_jobs_hor:
+                        if ctm_jobs_hv is None:
                             ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, parallel_pool=parallel_pool, move=move)
                         else:
                             ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, parallel_pool=parallel_pool, move=move, sites_to_be_updated=ctm_jobs)
@@ -480,7 +480,7 @@ def _ctmrg_(env:EnvCTM, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, n_c
 
             if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
                 yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
-    yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, converged=converged)
+    yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
 
 @delayed
 def Measure1Site(job, op, cfg):
@@ -548,6 +548,6 @@ def ParaMeasureNN(env, op0, op1, cfg, n_cores=24):
     return result
 
 
-def PARActmrg_(env:EnvCTM, max_sweeps=50, iterator_step=1, opts_svd_ctm=None, corner_tol=None, n_cores=1, ctm_jobs_vh=None, moves='tblr'):
-    tmp = _ctmrg_(env, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, n_cores=n_cores, ctm_jobs_vh=ctm_jobs_vh, moves=moves)
+def PARActmrg_(env:EnvCTM, max_sweeps=50, iterator_step=1, opts_svd_ctm=None, corner_tol=None, n_cores=1, ctm_jobs_hv=None, moves='tblr'):
+    tmp = _ctmrg_(env, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, n_cores=n_cores, ctm_jobs_hv=ctm_jobs_hv, moves=moves)
     return tmp if iterator_step else next(tmp)
