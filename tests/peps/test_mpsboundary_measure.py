@@ -81,7 +81,9 @@ def test_mpsboundary_measure(config_kwargs, boundary):
         with pytest.raises(yastn.YastnError,
                            match="EnvBoundaryMPS.measure_nn currently supports only open boundary conditions."):
             eszznn = env.measure_nn(ops.sz(), ops.sz())
-
+    #
+    # test sampling entire lattice
+    #
     vloc = [-1, 0, 1]
     pr = [ops.vec_z(val=v) for v in vloc]
     pr2 = [x.tensordot(x.conj(), axes=((), ())) for x in pr]
@@ -89,9 +91,16 @@ def test_mpsboundary_measure(config_kwargs, boundary):
 
     smpl = env.sample(pr2s)
     assert all(vloc[smpl[s]] == vals[s] for s in sites)
-
+    #
+    # sampling over subset of sites
+    #
+    smpl_2x2 = env.sample(pr2s, xrange=(2, 4), yrange=(1, 3))
+    assert all(vloc[v] == vals[s] for s, v in smpl_2x2.items())
+    assert len(smpl_2x2) == 2 * 2
+    #
+    # MC sampling
+    #
     prs = {s: pr[:] for s in sites}
-
     proj_psi = psi.copy()
     for k in psi.sites():
         leg = psi[k].get_legs(axes=-1)
@@ -100,9 +109,9 @@ def test_mpsboundary_measure(config_kwargs, boundary):
             prs[k][i] = t.add_leg(leg=leg).fuse_legs(axes=[(0, 1)]).conj()
 
         proj_psi[k] = psi[k] @ prs[k][smpl[k]]
-
-    proj_env = fpeps.EnvBoundaryMPS(proj_psi, opts_svd=opts_svd)
-
+    #
+    proj_env = fpeps.EnvBoundaryMPS(proj_psi, opts_svd=opts_svd, setup='lr')  # TODO: unify direction of MC samling with rest; to work with default setup
+    #
     smpl1 = {}
     smpl2 = {}
 

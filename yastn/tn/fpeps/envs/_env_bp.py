@@ -22,11 +22,11 @@ from tqdm import tqdm
 from ._env_contractions import *
 from ._env_dataclasses import EnvBP_local
 from .._evolution import BipartiteBondMetric, BondMetric
-from .._gates_auxiliary import fkron, gate_fix_swap_gate, match_ancilla
+from .._gates_auxiliary import fkron, gate_fix_swap_gate, match_ancilla, clear_projectors, clear_operator_input
 from .._geometry import Bond, Site, Lattice
 from .._peps import Peps2Layers, DoublePepsTensor, PEPS_CLASSES
 from ....initialize import eye
-from ....tensor import YastnError, tensordot, vdot, ncon, Tensor
+from ....tensor import YastnError, tensordot, vdot, ncon, Tensor, add as tensor_add
 
 
 class BP_out(NamedTuple):
@@ -624,7 +624,7 @@ class EnvBP():
            raise YastnError(f"Window range {xrange=}, {yrange=} does not fit within the lattice.")
 
         sites = [Site(nx, ny) for ny in range(*yrange) for nx in range(*xrange)]
-        projs_sites = clear_projectors(sites, projectors, xrange, yrange)
+        projs_sites = clear_projectors(sites, projectors)
 
         out = {site: [] for site in sites}
         probabilities = []
@@ -644,29 +644,34 @@ class EnvBP():
                     lenv = env[nx, ny]
                     ten = self.psi[nx0, ny0]
                     Atlbr = ncon([ten.ket, lenv.tR, lenv.lR, lenv.bR, lenv.rR], [(1, 2, 3, 4, -4), (-0, 1), (-1, 2), (-2, 3), (-3, 4)])
-                    norm_prob = vdot(Atlbr, Atlbr)
+                    #
+                    proj_sum = tensor_add(*projs_sites[nx, ny].values())
+                    proj_sum = match_ancilla(ten.ket, proj_sum)
+                    Atmp = tensordot(Atlbr, proj_sum, axes=(4, 1))
+                    norm_prob = vdot(Atlbr, Atmp)
+                    #
                     acc_prob = 0
                     for k, proj in projs_sites[(nx, ny)].items():
                         proj = match_ancilla(ten.ket, proj)
                         Atmp = tensordot(Atlbr, proj, axes=(4, 1))
                         prob = vdot(Atlbr, Atmp) / norm_prob
                         acc_prob += prob
-                        if rands[count] < acc_prob:
-                            out[nx, ny].append(k)
-                            ketp = tensordot(ten.ket, proj, axes=(4, 1)) / prob
-                            if nx + 1 < xrange[1]:
-                                tmp = ncon([ketp, lenv.tR, lenv.lR, lenv.rR], [(1, 2, -2, 3, -4), (-0, 1), (-1, 2), (-3, 3)])
-                                _, R = tmp.qr(axes=((0, 1, 3, 4), 2), sQ=tmp.s[2])
-                                env[nx + 1, ny].tR = R / R.norm()
-                                env[nx + 1, ny].t = None
-
-                            if ny + 1 < yrange[1]:
-                                tmp = ncon([ketp, lenv.tR, lenv.lR, lenv.bR], [(1, 2, 3, -3, -4), (-0, 1), (-1, 2), (-2, 3)])
-                                _, R = tmp.qr(axes=((0, 1, 2, 4), 3), sQ=tmp.s[3])
-                                env[nx, ny + 1].lR = R / R.norm()
-                                env[nx, ny + 1].l = None
-                            probability *= prob
+                        if rands[count] <= acc_prob:
                             break
+                    out[nx, ny].append(k)
+                    ketp = tensordot(ten.ket, proj, axes=(4, 1)) / prob
+                    if nx + 1 < xrange[1]:
+                        tmp = ncon([ketp, lenv.tR, lenv.lR, lenv.rR], [(1, 2, -2, 3, -4), (-0, 1), (-1, 2), (-3, 3)])
+                        _, R = tmp.qr(axes=((0, 1, 3, 4), 2), sQ=tmp.s[2])
+                        env[nx + 1, ny].tR = R / R.norm()
+                        env[nx + 1, ny].t = None
+
+                    if ny + 1 < yrange[1]:
+                        tmp = ncon([ketp, lenv.tR, lenv.lR, lenv.bR], [(1, 2, 3, -3, -4), (-0, 1), (-1, 2), (-2, 3)])
+                        _, R = tmp.qr(axes=((0, 1, 2, 4), 3), sQ=tmp.s[3])
+                        env[nx, ny + 1].lR = R / R.norm()
+                        env[nx, ny + 1].l = None
+                    probability *= prob
                     count += 1
             probabilities.append(probability)
 

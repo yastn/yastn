@@ -1,20 +1,12 @@
 from __future__ import annotations
 
+from ._env_window import contract_window
 from .._doublePepsTensor import DoublePepsTensor
 from .._geometry import Site
 from ... import mps
 from ....tensor import YastnError
 from ....operators import sign_canonical_order
 
-def contract_window(bra, tms, ket, i0, i1, opts_svd, opts_var):
-    """ Helper funcion performing mps contraction of < mps0 | mpo mpo ... | mps1 >. """
-    vec = ket
-    for ny in range(i0, i1):
-        vec_next = mps.zipper(tms[ny], vec, opts_svd=opts_svd, normalize=False)
-        mps.compression_(vec_next, (tms[ny], vec), method='1site', normalize=False, **opts_var)
-        vec = vec_next
-
-    return mps.vdot(bra, tms[i1], vec)
 
 class EnvExciSMA:
     """ EnvWindowSMA class for expectation values within PEPS with CTM boundary. """
@@ -207,14 +199,14 @@ class EnvExciSMA:
 
         sites = self.sites()
         out = {}
-        
+
         nx0 = sites[0][0]
         vecs = {nx0: self[nx0, 't']}
 
         # for nx in range(self.xrange[0], self.xrange[1] - 1):
         #     t_bra = exci_bra if nx == nx0 else None
         #     t_ket = None
-        #     tm = self[nx, 'h', t_bra, t_ket, (nx0, ny0), None]            
+        #     tm = self[nx, 'h', t_bra, t_ket, (nx0, ny0), None]
         #     vecs[nx + 1] = mps.zipper(tm, vecs[nx], opts_svd=opts_svd)
         #     mps.compression_(vecs[nx + 1], (tm, vecs[nx]), method='1site', normalize=False, **opts_var)
 
@@ -224,7 +216,7 @@ class EnvExciSMA:
             # t_bra = exci_bra
             vecc, tm, vec = self[nx0, 'b'].conj(), self[nx0, 'h', exci_bra, None, (nx0, ny0), None] , vecs[nx0]
             # vecc, tm, vec = self[nx0, 'b'].conj(), self[nx0, 'h'] , vecs[nx0]
-            
+
             env = mps.Env(vecc, [tm, vec]).setup_(to='first').setup_(to='last')
             # calculate onsite correlations
             ket0 = tm[iy0].ket
@@ -233,7 +225,7 @@ class EnvExciSMA:
 
             env.update_env_(iy0, to='first')
             out[(nx0, ny0), (nx0, ny0)] = env.measure(bd=(iy0-1, iy0))
-            
+
             tm[iy0] = DoublePepsTensor(bra=exci_bra, ket=ket0).transpose(axes=(1, 2, 3, 0))
             # # env.update_env_(ny0, to='first')
             env.setup_(to='last')

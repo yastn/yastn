@@ -14,9 +14,8 @@
 # ==============================================================================
 """ Common measure functions for EnvCTM and EnvBoudndaryMPS """
 
-from ._env_contractions import clear_operator_input
-from ._env_window import EnvWindow, _measure_2site, _measure_nsite
-from .._gates_auxiliary import fkron, gate_fix_swap_gate
+from ._env_window import EnvWindow, _measure_2site, _measure_nsite, _sample
+from .._gates_auxiliary import fkron, gate_fix_swap_gate, clear_operator_input
 from .._geometry import Site, is_bond, is_site
 from .._peps import Peps2Layers
 from ... import mps
@@ -379,13 +378,14 @@ def measure_2site(self, O, P, xrange=None, yrange=None, pairs='corner <=', dirn=
         For each site, it is possible to provide a list or dict of operators, where the expectation value is calculated
         for each combination of those operators
 
+
     xrange: None | tuple[int, int]
         range of rows forming a window, [r0, r1); r0 included, r1 excluded.
-        For None, takes a single unit cell of the lattice.
+        For None, takes a single unit cell of the lattice, which is the default.
 
-    yrange: tuple[int, int]
+    yrange: None | tuple[int, int]
         range of columns forming a window.
-        For None, takes a single unit cell of the lattice.
+        For None, takes a single unit cell of the lattice, which is the default.
 
     pairs: str | list[tuple[tule[int, int], tuple[int, int]]]
         Limits the pairs of sites to calculate the expectation values.
@@ -412,7 +412,7 @@ def measure_2site(self, O, P, xrange=None, yrange=None, pairs='corner <=', dirn=
     return _measure_2site(env_win, O, P, xrange, yrange, offset=1, pairs=pairs, dirn=dirn, opts_svd=opts_svd, opts_var=opts_var)
 
 
-def sample(env, projectors, number=1, xrange=None, yrange=None, opts_svd=None, opts_var=None, progressbar=False, return_probabilities=False, flatten_one=True, **kwargs) -> dict[Site, list]:
+def sample(env, projectors, number=1, xrange=None, yrange=None, dirn='v', opts_svd=None, opts_var=None, progressbar=False, return_probabilities=False, flatten_one=True, **kwargs) -> dict[Site, list]:
     r"""
     Sample random configurations from PEPS.
     Output a dictionary linking sites with lists of sampled projectors` keys for each site.
@@ -428,11 +428,17 @@ def sample(env, projectors, number=1, xrange=None, yrange=None, opts_svd=None, o
     number: int
         Number of independent samples.
 
-    xrange: tuple[int, int]
-        range of rows to sample from, [r0, r1); r0 included, r1 excluded.
+    xrange: None | tuple[int, int]
+        range of rows forming a window, [r0, r1); r0 included, r1 excluded.
+        For None, takes a single unit cell of the lattice, which is the default.
 
-    yrange: tuple[int, int]
-        range of columns to sample from.
+    yrange: None | tuple[int, int]
+        range of columns forming a window.
+        For None, takes a single unit cell of the lattice, which is the default.
+
+    dirn: str
+        'h' or 'v', where the boundary MPSs used for truncation are, respectively, horizontal or vertical.
+        The default is 'v'.
 
     opts_svd: dict
         Options passed to :meth:`yastn.linalg.svd` used to truncate virtual spaces of boundary MPSs used in sampling.
@@ -458,6 +464,6 @@ def sample(env, projectors, number=1, xrange=None, yrange=None, opts_svd=None, o
     if yrange is None:
         yrange = [0, env.Ny]
     env_win = EnvWindow(env, xrange, yrange)
-    return env_win.sample(projectors, number=number,
-                            opts_svd=opts_svd, opts_var=opts_var,
-                            progressbar=progressbar, return_probabilities=return_probabilities, flatten_one=flatten_one)
+    return _sample(env_win, projectors, xrange, yrange, dirn=dirn, offset=1,
+                   number=number, opts_svd=opts_svd, opts_var=opts_var,
+                   progressbar=progressbar, return_probabilities=return_probabilities, flatten_one=flatten_one)
