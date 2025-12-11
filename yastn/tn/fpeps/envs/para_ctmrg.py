@@ -2,7 +2,7 @@ import yastn
 import logging
 import numpy as np
 
-from joblib import Parallel, delayed
+# from joblib import Parallel, delayed
 
 #from ...fpeps import *
 from ._env_ctm import CTMRG_out, EnvCTM, update_storage_
@@ -10,7 +10,13 @@ from .._initialize import product_peps
 from .._peps import Peps
 from .._geometry import Site, Bond, SquareLattice
 from ...._from_dict import from_dict
+import ray
+import psutil
 
+def get_taskset_cpu_count():
+    proc = psutil.Process()
+    affinity = proc.cpu_affinity()
+    return len(affinity)
 
 def CreateCTMJobBundle(env:EnvCTM, n_cores=1):
 
@@ -28,7 +34,7 @@ def CreateCTMJobBundle(env:EnvCTM, n_cores=1):
     return [ctm_jobs_hor, ctm_jobs_ver]
 
 
-@delayed
+@ray.remote(num_cpus=4)
 def BuildProjector_(job, opts_svd_ctm, cfg, method='2site'):
 
     env_dict = job[0]
@@ -166,7 +172,7 @@ def SubWindow(env_psi: Peps | EnvCTM, site, top=1, left=1, bottom=1, right=1, on
         return psi_part, site0, Lx, Ly
 
 
-@delayed
+@ray.remote(num_cpus=4)
 def UpdateSite(job, cfg, move, proj_dict):
 
     env_ = EnvCTM.from_dict(config=cfg, d=job[0])
@@ -314,7 +320,7 @@ def canonical_site(env, site):
     else:
         return env.psi.sites()[site_index]
 
-def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, parallel_pool, move='t', proj_dict=None, sites_to_be_updated=None):
+def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, n_cores, move='t', proj_dict=None, sites_to_be_updated=None):
 
     # Build projectors
     # Only pick the needed peps tensor(s) and CTMRG tensors. We don't use 'h' and 'v' options to save memory, thus these two are not optimized. (But can be done anyway)
@@ -354,7 +360,11 @@ def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, parallel_pool, move='t'
                 jobs.append([env_part.to_dict(level=1), site0, site_, 'r'])
 
     logging.info('num of jobs = {}'.format(len(jobs)))
-    gathered_result_ = parallel_pool(BuildProjector_(job, opts_svd_ctm, cfg) for job in jobs)
+    ray.init(num_cpus=get_taskset_cpu_count(), ignore_reinit_error=True, namespace='BuilidProjector')
+    gathered_result_ = []
+    # for ii in range(0, int(np.ceil(len(jobs) / n_cores))):
+    #     gathered_result_ += ray.get([BuildProjector_.remote(job, opts_svd_ctm, cfg) for job in jobs[ii * n_cores:min((ii + 1) * n_cores, len(jobs))]])
+    gathered_result_ += ray.get([BuildProjector_.remote(job, opts_svd_ctm, cfg) for job in jobs])
 
     if proj_dict is None:
         proj_dict = {}
@@ -409,7 +419,13 @@ def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, parallel_pool, move='t'
                          canonical_site(env, env.nn_site(site, (1, -1))),
                          canonical_site(env, env.nn_site(site, (1, 1)))])
 
-    updated_ctm_tensors = parallel_pool(UpdateSite(job, cfg, move, proj_dict) for job in jobs)
+    ray.init(num_cpus=get_taskset_cpu_count(), ignore_reinit_error=True, namespace='UpdateSite')
+    updated_ctm_tensors = []
+    # for ii in range(0, int(np.ceil(len(jobs) / n_cores))):
+    #     updated_ctm_tensors += ray.get([UpdateSite.remote(job, cfg, move, proj_dict) for job in jobs[ii * n_cores:min((ii + 1) * n_cores, len(jobs))]])
+    updated_ctm_tensors += ray.get([UpdateSite.remote(job, cfg, move, proj_dict) for job in jobs])
+
+
     proj_dict.clear()
 
     ii = 0
@@ -445,50 +461,50 @@ def _ctmrg_(env:EnvCTM, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, n_c
     cfg = env.psi.config
 
     max_dsv, converged, history = None, False, []
-    with Parallel(n_jobs=n_cores, verbose=0) as parallel_pool:
-        for sweep in range(1, max_sweeps + 1):
 
-            for move in moves:
+    for sweep in range(1, max_sweeps + 1):
 
-                if move in 'vtb':
-                    # if n_cores >= psi.geometry.Ny:
-                    for ctm_jobs in ctm_jobs_ver:
-                        if ctm_jobs_hv is None:
-                            ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, parallel_pool=parallel_pool, move=move)
-                        else:
-                            ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, parallel_pool=parallel_pool, move=move, sites_to_be_updated=ctm_jobs)
+        for move in moves:
 
-                if move in 'hlr':
+            if move in 'vtb':
+                # if n_cores >= psi.geometry.Ny:
+                for ctm_jobs in ctm_jobs_ver:
+                    if ctm_jobs_hv is None:
+                        ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, n_cores=n_cores, move=move)
+                    else:
+                        ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, n_cores=n_cores, move=move, sites_to_be_updated=ctm_jobs)
 
-                    # if n_cores >= psi.geometry.Nx:
-                    for ctm_jobs in ctm_jobs_hor:
-                        if ctm_jobs_hv is None:
-                            ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, parallel_pool=parallel_pool, move=move)
-                        else:
-                            ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, parallel_pool=parallel_pool, move=move, sites_to_be_updated=ctm_jobs)
+            if move in 'hlr':
 
-            if corner_tol is not None:
-                # Evaluate convergence of CTM by computing the difference of environment corner spectra between consecutive CTM steps.
-                corner_sv = env.calculate_corner_svd()
-                max_dsv = max((corner_sv[k] - history[-1][k]).norm().item() for k in corner_sv) if history else float('Nan')
-                history.append(corner_sv)
-                converged = max_dsv < corner_tol
-                logging.info(f'Sweep = {sweep:03d}; max_diff_corner_singular_values = {max_dsv:0.2e}')
+                # if n_cores >= psi.geometry.Nx:
+                for ctm_jobs in ctm_jobs_hor:
+                    if ctm_jobs_hv is None:
+                        ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, n_cores=n_cores, move=move)
+                    else:
+                        ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, n_cores=n_cores, move=move, sites_to_be_updated=ctm_jobs)
 
-                if converged:
-                    break
+        if corner_tol is not None:
+            # Evaluate convergence of CTM by computing the difference of environment corner spectra between consecutive CTM steps.
+            corner_sv = env.calculate_corner_svd()
+            max_dsv = max((corner_sv[k] - history[-1][k]).norm().item() for k in corner_sv) if history else float('Nan')
+            history.append(corner_sv)
+            converged = max_dsv < corner_tol
+            logging.info(f'Sweep = {sweep:03d}; max_diff_corner_singular_values = {max_dsv:0.2e}')
 
-            if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
-                yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
+            if converged:
+                break
+
+        if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
+            yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
     yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
 
-@delayed
+@ray.remote(num_cpus=4)
 def Measure1Site(job, op, cfg):
     env_dict, site0, site = job
     env = EnvCTM.from_dict(config=cfg, d=env_dict)
     return {site: env.measure_1site(op, site=site0)}
 
-@delayed
+@ray.remote(num_cpus=4)
 def MeasureNN(job, op0, op1, cfg):
 
     env_dict, bond0, bond = job
@@ -497,25 +513,29 @@ def MeasureNN(job, op0, op1, cfg):
 
 def ParaMeasure1Site(env, op, cfg, n_cores=24):
 
+    ray.init(num_cpus=get_taskset_cpu_count(), ignore_reinit_error=True, namespace='Measure1Site')
+
     psi = env.psi
 
     list_of_dicts = []
 
     num_of_sites = len(psi.sites())
-    with Parallel(n_jobs = n_cores) as parallel_pool:
-        for ii in range(0, int(np.ceil(num_of_sites / n_cores))):
-            jobs = []
-            for site in psi.sites()[ii * n_cores:min((ii + 1) * n_cores, num_of_sites)]:
-                env_part, site0, _, _ = SubWindow(env, site, 0, 0, 0, 0)
-                jobs.append([env_part.to_dict(level=1), site0, site])
 
-            list_of_dicts += parallel_pool(Measure1Site(job, op, cfg) for job in jobs)
-            jobs.clear()
+    for ii in range(0, int(np.ceil(num_of_sites / n_cores))):
+        jobs = []
+        for site in psi.sites()[ii * n_cores:min((ii + 1) * n_cores, num_of_sites)]:
+            env_part, site0, _, _ = SubWindow(env, site, 0, 0, 0, 0)
+            jobs.append([env_part.to_dict(level=1), site0, site])
+        list_of_dicts += ray.get([Measure1Site.remote(job, op, cfg) for job in jobs])
+
+        jobs.clear()
 
     result = {k: v for d in list_of_dicts for k, v in d.items()}
     return result
 
 def ParaMeasureNN(env, op0, op1, cfg, n_cores=24):
+
+    ray.init(num_cpus=get_taskset_cpu_count(), ignore_reinit_error=True, namespace='MeasureNN')
 
     psi = env.psi
 
@@ -524,25 +544,26 @@ def ParaMeasureNN(env, op0, op1, cfg, n_cores=24):
     num_of_hb = len(psi.bonds(dirn='h'))
     num_of_vb = len(psi.bonds(dirn='v'))
 
-    with Parallel(n_jobs = n_cores) as parallel_pool:
 
-        for ii in range(0, int(np.ceil(num_of_hb / n_cores))):
-            jobs = []
-            for bond in psi.bonds(dirn='h')[(ii * n_cores):(min((ii + 1) * n_cores, num_of_hb))]:
-                # env_part, site0 = Window3x3(psi, env, bond.site0, fid)
-                env_part, site0, _, _ = SubWindow(env, bond.site0, 0, 0, 0, 1, env_load_dict={(0, 0):['tl', 'bl', 'l', 't', 'b'], (0, 1):['tr', 'br', 'r', 't', 'b']})
-                bond0 = Bond(site0, env_part.nn_site(site0, 'r'))
-                jobs.append([env_part.to_dict(level=1), bond0, bond])
-            list_of_dicts += parallel_pool(MeasureNN(job, op0, op1, cfg) for job in jobs)
-            jobs.clear()
-        for ii in range(0, int(np.ceil(num_of_vb / n_cores))):
-            jobs = []
-            for bond in psi.bonds(dirn='v')[ii * n_cores:min((ii + 1) * n_cores, num_of_vb)]:
-                env_part, site0, _, _ = SubWindow(env, bond.site0, 0, 0, 1, 0, env_load_dict={(0, 0):['tl', 'tr', 'l', 't', 'r'], (1, 0):['bl', 'br', 'r', 'l', 'b']})
-                bond0 = Bond(site0, env_part.nn_site(site0, 'b'))
-                jobs.append([env_part.to_dict(level=1), bond0, bond])
-            list_of_dicts += parallel_pool(MeasureNN(job, op0, op1, cfg) for job in jobs)
-            jobs.clear()
+
+    for ii in range(0, int(np.ceil(num_of_hb / n_cores))):
+        jobs = []
+        for bond in psi.bonds(dirn='h')[(ii * n_cores):(min((ii + 1) * n_cores, num_of_hb))]:
+            # env_part, site0 = Window3x3(psi, env, bond.site0, fid)
+            env_part, site0, _, _ = SubWindow(env, bond.site0, 0, 0, 0, 1, env_load_dict={(0, 0):['tl', 'bl', 'l', 't', 'b'], (0, 1):['tr', 'br', 'r', 't', 'b']})
+            bond0 = Bond(site0, env_part.nn_site(site0, 'r'))
+            jobs.append([env_part.to_dict(level=1), bond0, bond])
+        list_of_dicts += ray.get([MeasureNN.remote(job, op0, op1, cfg) for job in jobs])
+        jobs.clear()
+    for ii in range(0, int(np.ceil(num_of_vb / n_cores))):
+        jobs = []
+        for bond in psi.bonds(dirn='v')[ii * n_cores:min((ii + 1) * n_cores, num_of_vb)]:
+            env_part, site0, _, _ = SubWindow(env, bond.site0, 0, 0, 1, 0, env_load_dict={(0, 0):['tl', 'tr', 'l', 't', 'r'], (1, 0):['bl', 'br', 'r', 'l', 'b']})
+            bond0 = Bond(site0, env_part.nn_site(site0, 'b'))
+            jobs.append([env_part.to_dict(level=1), bond0, bond])
+        list_of_dicts += ray.get([MeasureNN.remote(job, op0, op1, cfg) for job in jobs])
+        jobs.clear()
+
 
     result = {k: v for d in list_of_dicts for k, v in d.items()}
     return result

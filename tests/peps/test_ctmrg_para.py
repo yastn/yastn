@@ -23,7 +23,7 @@ import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
 
-@pytest.mark.skipif("not config.getoption('joblib')", reason="requires joblib library")
+@pytest.mark.skipif("not config.getoption('ray')", reason="requires ray library")
 def test_para_ctmrg_Ising(config_kwargs):
     r"""
     Use CTMRG to calculate some expectation values in classical 2D Ising model.
