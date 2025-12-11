@@ -17,8 +17,8 @@ from itertools import accumulate
 from tqdm import tqdm
 
 from ._env_contractions import identity_boundary
-from ._env_window import _measure_nsite, _measure_2site
-from .._gates_auxiliary import clear_projectors, clear_operator_input
+from ._env_window import _measure_nsite, _measure_2site, _sample
+from .._gates_auxiliary import clear_operator_input
 from .._peps import PEPS_CLASSES, Peps2Layers
 from ... import mps
 from ....tensor import YastnError
@@ -29,7 +29,7 @@ class EnvBoundaryMPS():
     Boundary MPS class for finite PEPS contraction.
     """
 
-    def __init__(self, psi, opts_svd, setup='l', opts_var=None):
+    def __init__(self, psi, opts_svd, setup='r', opts_var=None):
         r"""
         Calculate boundary MPSs for finite PEPS.
 
@@ -335,7 +335,6 @@ class EnvBoundaryMPS():
         dirn = 'lr'
         return _measure_nsite(self, *operators, sites=sites, dirn=dirn)
 
-
     def measure_2site(self, O, P, xrange=None, yrange=None, pairs='corner <=', dirn='v', opts_svd=None, opts_var=None):
         r"""
         Calculate expectation values :math:`\langle \textrm{O}_i \textrm{P}_j \rangle`
@@ -381,8 +380,7 @@ class EnvBoundaryMPS():
         offset = yrange[0] if dirn == 'h' else xrange[0]
         return _measure_2site(self, O, P, xrange, yrange, offset=offset, pairs=pairs, dirn=dirn, opts_svd=opts_svd, opts_var=opts_var)
 
-
-    def sample(peps_env, projectors, number=1, opts_svd=None, opts_var=None, progressbar=False, return_probabilities=False, flatten_one=True, **kwargs):
+    def sample(env, projectors, xrange=None, yrange=None, dirn='v', number=1, opts_svd=None, opts_var=None, progressbar=False, return_probabilities=False, flatten_one=True, **kwargs):
         r"""
         Sample random configurations from PEPS.
         Output a dictionary linking sites with lists of sampled projectors` keys for each site.
@@ -394,6 +392,18 @@ class EnvBoundaryMPS():
             Projectors to sample from. We can provide a dict(key: projector), where the sampled results will be given as keys,
             and the same set of projectors is used at each site. For a list of projectors, the keys follow from enumeration.
             Finally, we can provide a dictionary between each site and sets of projectors.
+
+        xrange: None | tuple[int, int]
+            range of rows forming a window, [r0, r1); r0 included, r1 excluded.
+            For None, takes a single unit cell of the lattice, which is the default.
+
+        yrange: None | tuple[int, int]
+            range of columns forming a window.
+            For None, takes a single unit cell of the lattice, which is the default.
+
+        dirn: str
+            'h' or 'v', where the boundary MPSs used for truncation are, respectively, horizontal or vertical.
+            The default is 'v'.
 
         number: int
             Number of independent samples.
@@ -408,60 +418,14 @@ class EnvBoundaryMPS():
             Whether, for number==1, pop one-element lists for each lattice site to return samples={site: ind, } instead of {site: [ind]}.
             The default is ``True``.
         """
-        psi = peps_env.psi
-        config = psi[0, 0].config
-
-        xrange = [0, peps_env.Nx]
-        yrange = [0, peps_env.Ny]
-        sites = peps_env.sites()
-        projs_sites = clear_projectors(sites, projectors, xrange, yrange)
-
-        out = {site: [] for site in peps_env.sites()}
-        probabilities = []
-        rands = config.backend.rand(psi.Nx * psi.Ny * number)  # in [0, 1]
-        count = 0
-
-        for _ in tqdm(range(number), desc="Sample...", disable=not progressbar):
-            probability = 1.
-
-            vR = peps_env.boundary_mps(n=psi.Ny-1, dirn='r') # right boundary of indexed column through CTM environment tensors
-            for ny in range(psi.Ny - 1, -1, -1):
-                Os = psi.transfer_mpo(n=ny, dirn='v').T  # converts ny column of PEPS to MPO
-                vL = peps_env.boundary_mps(n=ny, dirn='l')  # left boundary of indexed column through CTM environment tensors
-                env = mps.Env(vL.conj(), [Os, vR]).setup_(to = 'first')
-                for nx in range(0, psi.Nx):
-                    acc_prob = 0
-                    norm_prob = env.measure(bd=(nx - 1, nx)).real
-                    for k, pr in projs_sites[(nx, ny)].items():
-                        Os[nx].set_operator_(pr)
-                        env.update_env_(nx, to='last')
-                        prob = env.measure(bd=(nx, nx+1)).real / norm_prob
-                        acc_prob += prob
-                        if rands[count] < acc_prob:
-                            probability *= prob
-                            out[nx, ny].append(k)
-                            Os[nx].set_operator_(pr / prob)
-                            break
-                    env.update_env_(nx, to='last')
-                    count += 1
-
-                if opts_svd is None:
-                    opts_svd = {'D_total': max(vL.get_bond_dimensions())}
-
-                vRnew = mps.zipper(Os, vR, opts_svd=opts_svd)
-                if opts_var is None:
-                    opts_var = {}
-
-                mps.compression_(vRnew, (Os, vR), method='1site', **opts_var)
-                vR = vRnew
-            probabilities.append(probability)
-
-        if number == 1 and flatten_one:
-            out = {site: smp.pop() for site, smp in out.items()}
-
-        if return_probabilities:
-            return out, probabilities
-        return out
+        if xrange is None:
+            xrange = [0, env.Nx]
+        if yrange is None:
+            yrange = [0, env.Ny]
+        offset = yrange[0] if dirn == 'h' else xrange[0]
+        return _sample(env, projectors, xrange, yrange, offset=offset, dirn=dirn,
+                number=number, opts_svd=opts_svd, opts_var=opts_var,
+                progressbar=progressbar, return_probabilities=return_probabilities, flatten_one=flatten_one)
 
     def sample_MC_(proj_env, st0, st1, st2, psi, projectors, opts_svd, opts_var, trial="local"):
         """

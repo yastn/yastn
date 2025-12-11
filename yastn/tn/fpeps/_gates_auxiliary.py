@@ -195,12 +195,12 @@ def fill_eye_in_gate(peps, G, sites):
     return G
 
 
-def clear_projectors(sites, projectors, xrange, yrange):
+def clear_projectors(sites, projectors):
     """ prepare projectors for sampling functions. """
     if not isinstance(projectors, dict) or all(isinstance(x, Tensor) for x in projectors.values()):
         projectors = {site: projectors for site in sites}  # spread projectors over sites
-    if set(sites) != set(projectors.keys()):
-        raise YastnError(f"Projectors not defined for some sites in xrange={xrange}, yrange={yrange}.")
+    if not set(sites) <= set(projectors.keys()):
+        raise YastnError(f"Projectors not defined for some sites.")
 
     # change each list of projectors into keys and projectors
     projs_sites = {}

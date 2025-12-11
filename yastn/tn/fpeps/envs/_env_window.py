@@ -20,7 +20,7 @@ from .._gates_auxiliary import clear_operator_input, clear_projectors
 from .._geometry import Site
 from ... import mps
 from ....operators import sign_canonical_order
-from ....tensor import Tensor, YastnError
+from ....tensor import Tensor, YastnError, add as tensor_add
 
 
 class EnvWindow:
@@ -121,64 +121,126 @@ class EnvWindow:
         raise YastnError(f"{dirn=} not recognized. Should be 't', 'h' 'b', 'r', 'v', or 'l'.")
 
 
-def _sample(self, projectors, xrange, yrange, number=1, opts_svd=None, opts_var=None, progressbar=False, return_probabilities=False, flatten_one=True) -> dict[Site, list]:
+def _sample(env, projectors, xrange, yrange, offset, number=1, dirn='v', opts_svd=None, opts_var=None, progressbar=False, return_probabilities=False, flatten_one=True):
     """
-    Sample random configurations from PEPS.
-    See :meth:`yastn.tn.fpeps.EnvCTM.sample` for description.
+    Worker function for sampling; works for EnvBoundaryMPS and EnvWindow (derived from EnvCTM).
+    See docstring of :meth:`EnvCTM.sample`.
     """
     if opts_var is None:
         opts_var = {'max_sweeps': 2}
+
     if opts_svd is None:
-        D_total = max(max(self[ny, dirn].get_bond_dimensions()) for ny in range(*yrange) for dirn in 'lr')
+        rr = yrange if dirn == 'v' else xrange
+        dd = 'lr' if dirn == 'v' else 'tb'
+        D_total = max(max(env[n, d].get_bond_dimensions()) for n in range(*rr) for d in dd)
         opts_svd = {'D_total': D_total}
 
-    sites = self.sites()
-    projs_sites = clear_projectors(sites, projectors, xrange, yrange)
+    sites = [Site(nx, ny) for nx in range(*xrange) for ny in range(*yrange)]
+    projs_sites = clear_projectors(sites, projectors)
 
-    out = {site: [] for site in sites}
-    probabilities = []
-    rands = self.psi.config.backend.rand(self.Nx * self.Ny * number)  # in [0, 1]
-    count = 0
+    out, probs = {site: [] for site in sites}, []
 
     for _ in tqdm(range(number), desc="Sample...", disable=not progressbar):
-        probability = 1.
-        vec = self[yrange[0], 'l']
-        for ny in range(*yrange):
-            vecc = self[ny, 'r'].conj()
-            tm = self[ny, 'v']
-            env = mps.Env(vecc, [tm, vec]).setup_(to='first')
-            for ix, nx in enumerate(range(*xrange), start=self.offset):
-                env.update_env_(ix - 1, to='last')
-                norm_prob = env.measure(bd=(ix - 1, ix)).real
-                acc_prob = 0
-                for k, proj in projs_sites[nx, ny].items():
-                    tm[ix].set_operator_(proj)
-                    env.update_env_(ix, to='first')
-                    prob = env.measure(bd=(ix-1, ix)).real / norm_prob
-                    acc_prob += prob
-                    if rands[count] < acc_prob:
-                        out[nx, ny].append(k)
-                        tm[ix].set_operator_(proj / prob)
-                        probability *= prob
-                        break
-                count += 1
+
+        if dirn == 'v':
+            smpl, prob = _sample_one_columns(env, projs_sites, xrange, yrange, offset, opts_svd, opts_var)
+        else:  # dirn == 'h':
+            smpl, prob = _sample_one_rows(env, projs_sites, xrange, yrange, offset, opts_svd, opts_var)
+
+        if number == 1 and flatten_one:
+            out, probs = smpl, prob
+        else:
+            for site, v in smpl.items():
+                out[site].append(v)
+            probs.append(prob)
+
+    return (out, probs) if return_probabilities else out
+
+
+def _sample_one_columns(self, projs_sites, xrange, yrange, offset, opts_svd=None, opts_var=None):
+    """ Worker function for a single sample wher boundary MPSs are vertical. """
+    out, probability, count = {}, 1., 0
+    #
+    vec = self[yrange[0], 'l']
+    rands = vec.config.backend.rand((xrange[1] - xrange[0]) * (yrange[1] - yrange[0]))  # in [0, 1]
+    #
+    for ny in range(*yrange):
+        vecc = self[ny, 'r'].conj()
+        tm = self[ny, 'v']
+        env = mps.Env(vecc, [tm, vec])
+        for ix in range(env.N-1, offset, -1):
+            env.update_env_(ix, to='first')
+        for ix in range(offset):
+            env.update_env_(ix, to='last')
+        #
+        for ix, nx in enumerate(range(*xrange), start=offset):
+            proj_sum = tensor_add(*projs_sites[nx, ny].values())
+            tm[ix].set_operator_(proj_sum)
+            norm_prob = env.measure(bd=(ix-1, ix+1)).real
+            acc_prob = 0
+            for k, proj in projs_sites[nx, ny].items():
+                tm[ix].set_operator_(proj)
+                prob = env.measure(bd=(ix-1, ix+1)).real / norm_prob
+                acc_prob += prob
+                if rands[count] <= acc_prob:
+                    break
+            out[nx, ny] = k
+            probability *= prob
+            tm[ix].set_operator_(proj / prob)
+            if nx + 1 < xrange[1]:
+                env.update_env_(ix, to='last')
+            count += 1
+        if ny + 1 < yrange[1]:
+            vec_new = mps.zipper(tm, vec, opts_svd=opts_svd)
+            mps.compression_(vec_new, (tm, vec), method='1site', **opts_var)
+            vec = vec_new
+    return out, probability
+
+
+def _sample_one_rows(self, projs_sites, xrange, yrange, offset, opts_svd=None, opts_var=None):
+    """ Worker function for a single sample wher boundary MPSs are horizontal. """
+    out, probability, count = {}, 1., 0
+    #
+    vec = self[xrange[0], 't']
+    rands = vec.config.backend.rand((xrange[1] - xrange[0]) * (yrange[1] - yrange[0]))  # in [0, 1]
+    #
+    for nx in range(*xrange):
+        vecc = self[nx, 'b'].conj()
+        tm = self[nx, 'h']
+        env = mps.Env(vecc, [tm, vec])
+        for iy in range(env.N-1, offset, -1):
+            env.update_env_(iy, to='first')
+        for iy in range(offset):
+            env.update_env_(iy, to='last')
+        #
+        for iy, ny in enumerate(range(*yrange), start=offset):
+            proj_sum = tensor_add(*projs_sites[nx, ny].values())
+            tm[iy].set_operator_(proj_sum)
+            norm_prob = env.measure(bd=(iy-1, iy+1)).real
+            acc_prob = 0
+            for k, proj in projs_sites[nx, ny].items():
+                tm[iy].set_operator_(proj)
+                prob = env.measure(bd=(iy-1, iy+1)).real / norm_prob
+                acc_prob += prob
+                if rands[count] <= acc_prob:
+                    break
+            out[nx, ny] = k
+            probability *= prob
+            tm[iy].set_operator_(proj / prob)
             if ny + 1 < yrange[1]:
-                vec_new = mps.zipper(tm, vec, opts_svd=opts_svd)
-                mps.compression_(vec_new, (tm, vec), method='1site', **opts_var)
-                vec = vec_new
-        probabilities.append(probability)
-
-    if number == 1 and flatten_one:
-        out = {site: smp.pop() for site, smp in out.items()}
-
-    if return_probabilities:
-        return out, probabilities
-    return out
+                env.update_env_(iy, to='last')
+            count += 1
+        if nx + 1 < xrange[1]:
+            vec_new = mps.zipper(tm, vec, opts_svd=opts_svd)
+            mps.compression_(vec_new, (tm, vec), method='1site', **opts_var)
+            vec = vec_new
+    return out, probability
 
 
 def _measure_2site(env, O0, O1, xrange, yrange, offset, pairs="corner <=", dirn='v', opts_svd=None, opts_var=None):
     """
     Worker function for measure_2site; works for EnvBoundaryMPS and EnvWindow (derived from EnvCTM).
+    See docstring of :meth:`EnvCTM.measure_2site`.
     """
     sites = [Site(nx, ny) for nx in range(*xrange) for ny in range(*yrange)]
     O0dict = clear_operator_input(O0, sites)
@@ -204,21 +266,22 @@ def _measure_2site(env, O0, O1, xrange, yrange, offset, pairs="corner <=", dirn=
     if env.psi.config.fermionic and (n0 != env.psi.config.sym.zero() or n1 != env.psi.config.sym.zero()):
         raise YastnError("measure_2site currently does not support fermionic operators.")  # TODO
 
+    if opts_var is None:
+        opts_var = {'max_sweeps': 2}
+
     if dirn == 'v':
         return _measure_2site_columns(env, O0dict, O1dict, xrange, yrange, offset, pairs, opts_svd, opts_var)
     else:  # dirn == 'h':
-        return _measure_2site_row(env, O0dict, O1dict, xrange, yrange, offset, pairs, opts_svd, opts_var)
+        return _measure_2site_rows(env, O0dict, O1dict, xrange, yrange, offset, pairs, opts_svd, opts_var)
 
 
-def _measure_2site_row(self, O0dict, O1dict, xrange, yrange, offset, pairs, opts_svd=None, opts_var=None):
+def _measure_2site_rows(self, O0dict, O1dict, xrange, yrange, offset, pairs, opts_svd=None, opts_var=None):
     """
     Calculate all 2-point correlations <o1 o2> in a finite peps.
 
     o1 and o2 are given as dict[tuple[int, int], dict[int, operators]],
     mapping sites with list of operators at each site.
     """
-    if opts_var is None:
-        opts_var = {'max_sweeps': 2}
     if opts_svd is None:
         D_total = max(max(self[nx, dirn].get_bond_dimensions()) for nx in range(*xrange) for dirn in 'tb')
         opts_svd = {'D_total': D_total}
@@ -287,8 +350,6 @@ def _measure_2site_columns(self, O0dict, O1dict, xrange, yrange, offset, pairs, 
     o1 and o2 are given as dict[tuple[int, int], dict[int, operators]],
     mapping sites with list of operators at each site.
     """
-    if opts_var is None:
-        opts_var = {'max_sweeps': 2}
     if opts_svd is None:
         D_total = max(max(self[ny, dirn].get_bond_dimensions()) for ny in range(*yrange) for dirn in 'lr')
         opts_svd = {'D_total': D_total}
