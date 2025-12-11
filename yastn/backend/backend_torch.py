@@ -402,16 +402,30 @@ def eigvals(data, meta, sizeS, **kwargs):
         Sdata[slice(*slS)]= S[eigs_which(S, which=kwargs.get('which', 'LM'))]
     return Sdata
 
+# def qr(data, meta, sizes):
+#     Qdata = torch.zeros((sizes[0],), dtype=data.dtype, device=data.device)
+#     Rdata = torch.zeros((sizes[1],), dtype=data.dtype, device=data.device)
+#     for (sl, D, slQ, DQ, slR, DR) in meta:
+#         Q, R = torch.linalg.qr(data[slice(*sl)].view(D))
+#         sR = torch.sign(real(R.diag()))
+#         sR[sR == 0] = 1
+#         Qdata[slice(*slQ)].view(DQ)[:] = Q * sR  # positive diag of R
+#         Rdata[slice(*slR)].view(DR)[:] = sR.reshape([-1, 1]) * R
+#     return Qdata, Rdata
 
 def qr(data, meta, sizes):
     Qdata = torch.zeros((sizes[0],), dtype=data.dtype, device=data.device)
     Rdata = torch.zeros((sizes[1],), dtype=data.dtype, device=data.device)
     for (sl, D, slQ, DQ, slR, DR) in meta:
-        Q, R = torch.linalg.qr(data[slice(*sl)].view(D))
-        sR = torch.sign(real(R.diag()))
-        sR[sR == 0] = 1
-        Qdata[slice(*slQ)].view(DQ)[:] = Q * sR  # positive diag of R
-        Rdata[slice(*slR)].view(DR)[:] = sR.reshape([-1, 1]) * R
+        A = data[slice(*sl)].view(D)
+        with torch.no_grad():
+            Q, R = torch.linalg.qr(A)
+            sR = torch.sign(torch.real(torch.diag(R)))
+            sR[sR == 0] = 1
+            Q = Q * sR
+            R = sR.reshape([-1, 1]) * R
+        Qdata[slice(*slQ)].view(DQ).copy_(Q)
+        Rdata[slice(*slR)].view(DR).copy_(R)
     return Qdata, Rdata
 
 
