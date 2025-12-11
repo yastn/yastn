@@ -281,50 +281,47 @@ class EnvExciSMA:
         out = {}
         for ix0, nx0 in enumerate(range(*self.xrange), start=1):
             for iy0, ny0 in enumerate(range(*self.yrange), start=1):            
-                if True:
-                    vecc, tm, vec = veccs[nx0], tms[nx0], vecs[nx0]
-                    
-                    bra0 = tm[iy0].bra
-                    tm[iy0] = DoublePepsTensor(bra=exci_psi[nx0, ny0], ket=tm[iy0].ket, op=tm[iy0].op).transpose(axes=(1, 2, 3, 0))
+                vecc, tm, vec = veccs[nx0], tms[nx0], vecs[nx0]
 
-                    # onsite
-                    env = mps.Env(vecc.conj(), [tm, vec]).setup_(to='first').setup_(to='last')
-                    ket0 = tm[iy0].ket
-                    tm[iy0] = DoublePepsTensor(bra=tm[iy0].bra, ket=exci_psi[nx0, ny0], op=tm[iy0].op).transpose(axes=(1, 2, 3, 0))
-                    env.update_env_(iy0, to='first')
-                    out[(nx0, ny0), (nx0, ny0)] = env.measure(bd=(iy0-1, iy0))
-                    tm[iy0] = DoublePepsTensor(bra=tm[iy0].bra, ket=ket0, op=tm[iy0].op).transpose(axes=(1, 2, 3, 0))
+                bra0 = tm[iy0].bra
+                tm[iy0] = DoublePepsTensor(bra=exci_psi[nx0, ny0], ket=tm[iy0].ket, op=tm[iy0].op).transpose(axes=(1, 2, 3, 0))
+
+                # onsite
+                env = mps.Env(vecc.conj(), [tm, vec]).setup_(to='first').setup_(to='last')
+                ket0 = tm[iy0].ket
+                tm[iy0] = DoublePepsTensor(bra=tm[iy0].bra, ket=exci_psi[nx0, ny0], op=tm[iy0].op).transpose(axes=(1, 2, 3, 0))
+                env.update_env_(iy0, to='first')
+                out[(nx0, ny0), (nx0, ny0)] = env.measure(bd=(iy0-1, iy0))
+                tm[iy0] = DoublePepsTensor(bra=tm[iy0].bra, ket=ket0, op=tm[iy0].op).transpose(axes=(1, 2, 3, 0))
                     
-                    if nx0 < self.xrange[1] - 1:
-                        vec_o0_next = mps.zipper(tm, vec, opts_svd=opts_svd, normalize=False)
-                        mps.compression_(vec_o0_next, (tm, vec), method='1site', normalize=False, **opts_var)    
-                    
-                    # same row
-                    for iy1, ny1 in enumerate(range(ny0 + 1, self.yrange[1]), start=ny0 - self.yrange[0] + 2):
+                if nx0 < self.xrange[1] - 1:
+                    vec_o0_next = mps.zipper(tm, vec, opts_svd=opts_svd, normalize=False)
+                    mps.compression_(vec_o0_next, (tm, vec), method='1site', normalize=False, **opts_var)    
+                
+                # same row
+                for iy1, ny1 in enumerate(range(ny0 + 1, self.yrange[1]), start=ny0 - self.yrange[0] + 2):
+                    ket0 = tm[iy1].ket
+                    tm[iy1] = DoublePepsTensor(bra=tm[iy1].bra, ket=exci_psi[nx0, ny1], op=tm[iy1].op).transpose(axes=(1, 2, 3, 0))
+                    env.update_env_(iy1, to='first')
+                    out[(nx0, ny0), (nx0, ny1)] = env.measure(bd=(iy1-1, iy1))
+                    tm[iy1] = DoublePepsTensor(bra=tm[iy1].bra, ket=ket0, op=tm[iy1].op).transpose(axes=(1, 2, 3, 0))
+
+                # subsequent rows
+                for nx1 in range(nx0+1, self.xrange[1]):
+                    vecc, tm, vec_o0 = veccs[nx1], tms[nx1], vec_o0_next
+
+                    if nx1 < self.xrange[1] - 1:
+                        vec_o0_next = mps.zipper(tm, vec_o0, opts_svd=opts_svd, normalize=False)
+                        mps.compression_(vec_o0_next, (tm, vec_o0), method='1site', normalize=False, **opts_var)
+
+                    env = mps.Env(vecc.conj(), [tm, vec_o0]).setup_(to='last').setup_(to='first')
+                    for iy1, ny1 in enumerate(range(*self.yrange), start=1):
                         ket0 = tm[iy1].ket
-                        tm[iy1] = DoublePepsTensor(bra=tm[iy1].bra, ket=exci_psi[nx0, ny1], op=tm[iy1].op).transpose(axes=(1, 2, 3, 0))
+                        tm[iy1] = DoublePepsTensor(bra=tm[iy1].bra, ket=exci_psi[nx1, ny1], op=tm[iy1].op).transpose(axes=(1, 2, 3, 0))
                         env.update_env_(iy1, to='first')
-                        out[(nx0, ny0), (nx0, ny1)] = env.measure(bd=(iy1-1, iy1))
-                        tm[iy1] = DoublePepsTensor(bra=tm[iy1].bra, ket=ket0, op=tm[iy1].op).transpose(axes=(1, 2, 3, 0))
-
-                    # subsequent rows
-                    for nx1 in range(nx0+1, self.xrange[1]):
-                        vecc, tm, vec_o0 = veccs[nx1], tms[nx1], vec_o0_next
-
-                        if nx1 < self.xrange[1] - 1:
-                            vec_o0_next = mps.zipper(tm, vec_o0, opts_svd=opts_svd, normalize=False)
-                            mps.compression_(vec_o0_next, (tm, vec_o0), method='1site', normalize=False, **opts_var)
-
-                        env = mps.Env(vecc.conj(), [tm, vec_o0]).setup_(to='last').setup_(to='first')
-                        for iy1, ny1 in enumerate(range(*self.yrange), start=1):
-                            ket0 = tm[iy1].ket
-                            tm[iy1] = DoublePepsTensor(bra=tm[iy1].bra, ket=exci_psi[nx1, ny1], op=tm[iy1].op).transpose(axes=(1, 2, 3, 0))
-                            env.update_env_(iy1, to='first')
-                            out[(nx0, ny0), (nx1, ny1)] = env.measure(bd=(iy1-1, iy1))
-                            tm[iy1] = DoublePepsTensor(bra=tm[iy1].bra, ket=ket0, op=tm[iy1].op).transpose(axes=(1, 2, 3, 0))
-                
-                tms[nx0][iy0] = DoublePepsTensor(bra=bra0, ket=tms[nx0][iy0].ket, op=tms[nx0][iy0].op).transpose(axes=(1, 2, 3, 0))
-                
+                        out[(nx0, ny0), (nx1, ny1)] = env.measure(bd=(iy1-1, iy1))
+                        tm[iy1] = DoublePepsTensor(bra=tm[iy1].bra, ket=ket0, op=tm[iy1].op).transpose(axes=(1, 2, 3, 0))    
+            tms[nx0][iy0] = DoublePepsTensor(bra=bra0, ket=tms[nx0][iy0].ket, op=tms[nx0][iy0].op).transpose(axes=(1, 2, 3, 0))
         return out
 
     def measure_exci_norm(self, exci_bra=None, exci_ket=None, opts_svd=None, opts_var=None):
