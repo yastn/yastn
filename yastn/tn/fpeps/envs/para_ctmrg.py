@@ -1,7 +1,7 @@
 import yastn
 import logging
 import numpy as np
-
+import torch
 # from joblib import Parallel, delayed
 
 #from ...fpeps import *
@@ -32,6 +32,44 @@ def CreateCTMJobBundle(env:EnvCTM, n_cores=1):
     ctm_jobs_hor = [[sites[ix + iy * Lx] for ix in range(Lx) for iy in range(ib * nbundles_hor, min((ib + 1) * nbundles_hor, Ly))] for ib in range(int(np.floor(Ly / nbundles_hor)))]
 
     return [ctm_jobs_hor, ctm_jobs_ver]
+
+@ray.remote(num_gpus=1)
+def BuildProjectorGPU_(job, opts_svd_ctm, cfg:yastn.tensor._auxliary._config, method='2site'):
+
+    env_dict = job[0]
+    site = job[1]
+    move = job[3]
+
+    new_cfg = yastn.make_config(**new_cfg)
+    env = EnvCTM.from_dict(config=new_cfg, d=env_dict)
+
+    sites = [env.nn_site(site, d=d) for d in ((0, 0), (0, 1), (1, 0), (1, 1))]
+    if None in sites:
+        return
+    tl, tr, bl, br = sites
+    if opts_svd_ctm is None:
+        opts_svd_ctm = env.opts_svd
+    env._update_projectors_(site, move, opts_svd_ctm, method=method)
+
+    result_dict = {}
+
+    if any(x in move for x in 'rh'):
+        result_dict[(tr, 'hrb')] = env.proj[tr].hrb.to_dict(level=1)
+        result_dict[(br, 'hrt')] = env.proj[br].hrt.to_dict(level=1)
+
+    if any(x in move for x in 'lh'):
+        result_dict[(tl, 'hlb')] = env.proj[tl].hlb.to_dict(level=1)
+        result_dict[(bl, 'hlt')] = env.proj[bl].hlt.to_dict(level=1)
+
+    if any(x in move for x in 'tv'):
+        result_dict[(tl, 'vtr')] = env.proj[tl].vtr.to_dict(level=1)
+        result_dict[(tr, 'vtl')] = env.proj[tr].vtl.to_dict(level=1)
+
+    if any(x in move for x in 'bv'):
+        result_dict[(bl, 'vbr')] = env.proj[bl].vbr.to_dict(level=1)
+        result_dict[(br, 'vbl')] = env.proj[br].vbl.to_dict(level=1)
+
+    return result_dict
 
 
 @ray.remote(num_cpus=4)
@@ -320,7 +358,7 @@ def canonical_site(env, site):
     else:
         return env.psi.sites()[site_index]
 
-def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, n_cores, move='t', proj_dict=None, sites_to_be_updated=None):
+def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, move='t', proj_dict=None, sites_to_be_updated=None):
 
     # Build projectors
     # Only pick the needed peps tensor(s) and CTMRG tensors. We don't use 'h' and 'v' options to save memory, thus these two are not optimized. (But can be done anyway)
@@ -361,10 +399,7 @@ def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, n_cores, move='t', proj
 
     logging.info('num of jobs = {}'.format(len(jobs)))
     ray.init(num_cpus=get_taskset_cpu_count(), ignore_reinit_error=True, namespace='BuilidProjector')
-    gathered_result_ = []
-    # for ii in range(0, int(np.ceil(len(jobs) / n_cores))):
-    #     gathered_result_ += ray.get([BuildProjector_.remote(job, opts_svd_ctm, cfg) for job in jobs[ii * n_cores:min((ii + 1) * n_cores, len(jobs))]])
-    gathered_result_ += ray.get([BuildProjector_.remote(job, opts_svd_ctm, cfg) for job in jobs])
+    gathered_result_ = ray.get([BuildProjector_.remote(job, opts_svd_ctm, cfg) for job in jobs])
 
     if proj_dict is None:
         proj_dict = {}
@@ -470,18 +505,18 @@ def _ctmrg_(env:EnvCTM, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, n_c
                 # if n_cores >= psi.geometry.Ny:
                 for ctm_jobs in ctm_jobs_ver:
                     if ctm_jobs_hv is None:
-                        ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, n_cores=n_cores, move=move)
+                        ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, move=move)
                     else:
-                        ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, n_cores=n_cores, move=move, sites_to_be_updated=ctm_jobs)
+                        ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, move=move, sites_to_be_updated=ctm_jobs)
 
             if move in 'hlr':
 
                 # if n_cores >= psi.geometry.Nx:
                 for ctm_jobs in ctm_jobs_hor:
                     if ctm_jobs_hv is None:
-                        ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, n_cores=n_cores, move=move)
+                        ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, move=move)
                     else:
-                        ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, n_cores=n_cores, move=move, sites_to_be_updated=ctm_jobs)
+                        ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, move=move, sites_to_be_updated=ctm_jobs)
 
         if corner_tol is not None:
             # Evaluate convergence of CTM by computing the difference of environment corner spectra between consecutive CTM steps.
