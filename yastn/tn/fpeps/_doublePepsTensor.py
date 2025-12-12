@@ -72,9 +72,10 @@ class DoublePepsTensor(SpecialTensor):
 
     def apply_gate_on_ket(self, op, dirn):
         """ Returns a shallow copy with ket tensor modified by application of gate. """
+        if 'k4' in self.swaps:
+            op = op.swap_gate(axes=2, charge=self.swaps.pop('k4'))
         ket = apply_gate_onsite(self.ket, op, dirn=dirn)
         return DoublePepsTensor(bra=self.bra, ket=ket, transpose=self._t, op=self.op, swaps=self.swaps)
-
 
     def add_charge_swaps_(self, charge, axes):
         """

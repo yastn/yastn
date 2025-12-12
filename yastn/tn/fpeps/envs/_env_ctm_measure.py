@@ -16,8 +16,8 @@
 
 from ._env_window import EnvWindow, _measure_2site, _measure_nsite, _sample
 from .._gates_auxiliary import fkron, gate_fix_swap_gate, clear_operator_input
+from .._doublePepsTensor import DoublePepsTensor
 from .._geometry import Site, is_bond, is_site
-from .._peps import Peps2Layers
 from ... import mps
 from ....operators import sign_canonical_order
 from ....tensor import YastnError, Tensor, tensordot, vdot
@@ -63,7 +63,7 @@ def measure_1site(self, O, site=None) -> dict:
         val_no = tensordot(vecb, tmp, axes=((0, 1, 2, 3), (1, 3, 2, 0))).to_number()
 
         for nz, op in ops.items():
-            if op.ndim == 2:
+            if isinstance(ten, DoublePepsTensor):  # 2-layers PEPS
                 ten.set_operator_(op)
             else:  # for a single-layer Peps, replace with new peps tensor
                 ten = op
@@ -135,8 +135,11 @@ def measure_nn(self, O, P, bond=None) -> dict:
                     tmp1 = tensordot(tmp1, env1.t, axes=((2, 0), (1, 2)))
                     val_no = vdot(tmp0, tmp1, conj=(0, 0))
 
-                    ten0 = ten0.apply_gate_on_ket(G0, dirn='l') if G0.ndim <= 3 else G0
-                    ten1 = ten1.apply_gate_on_ket(G1, dirn='r') if G1.ndim <= 3 else G1
+                    if isinstance(ten0, DoublePepsTensor):  # 2-layers PEPS
+                        ten0 = ten0.apply_gate_on_ket(G0, dirn='l')
+                        ten1 = ten1.apply_gate_on_ket(G1, dirn='r')
+                    else:  # 1-layer PEPS
+                        ten0, ten1 = G0, G1
 
                     tmp0 = tensordot(ten0, vecl, axes=((0, 1), (2, 1)))
                     tmp0 = tensordot(env0.b, tmp0, axes=((1, 2), (0, 2)))
@@ -153,8 +156,11 @@ def measure_nn(self, O, P, bond=None) -> dict:
                     tmp1 = tensordot(env1.l, tmp1, axes=((0, 1), (3, 1)))
                     val_no = vdot(tmp0, tmp1, conj=(0, 0))
 
-                    ten0 = ten0.apply_gate_on_ket(G0, dirn='t') if G0.ndim <= 3 else G0
-                    ten1 = ten1.apply_gate_on_ket(G1, dirn='b') if G1.ndim <= 3 else G1
+                    if isinstance(ten0, DoublePepsTensor):  # 2-layers PEPS
+                        ten0 = ten0.apply_gate_on_ket(G0, dirn='t')
+                        ten1 = ten1.apply_gate_on_ket(G1, dirn='b')
+                    else: # 1-layer PEPS
+                        ten0, ten1 = G0, G1
 
                     tmp0 = tensordot(vect, ten0, axes=((2, 1), (0, 1)))
                     tmp0 = tensordot(tmp0, env0.r, axes=((1, 3), (0, 1)))
@@ -234,7 +240,7 @@ def measure_2x2(self, *operators, sites=None) -> float:
     val_no = vdot(cor_tl @ cor_tr, tensordot(cor_bl, cor_br, axes=(0, 1)), conj=(0, 0))
 
     up_tl, up_bl, up_tr, up_br = False, False, False, False
-    if isinstance(self.psi, Peps2Layers):
+    if isinstance(ten_tl, DoublePepsTensor):
         if tl in ops:
             ten_tl.set_operator_(ops[tl])
         if bl in ops:
@@ -254,7 +260,7 @@ def measure_2x2(self, *operators, sites=None) -> float:
         up_bl = ten_bl.has_operator_or_swap()
         up_tr = ten_tr.has_operator_or_swap()
         up_br = ten_br.has_operator_or_swap()
-    else:
+    else:  # single-layer Peps
         if tl in ops:
             ten_tl, up_tl = ops[tl], True
         if bl in ops:
@@ -330,12 +336,12 @@ def measure_line(self, *operators, sites=None) -> float:
 
     for site, op in ops.items():
         ind = site[0] - xs[0] + site[1] - ys[0] + 1
-        if op.ndim == 2:
+        if isinstance(tm[ind], DoublePepsTensor):  # 2-layers PEPS
             tm[ind].set_operator_(op)
             tm[ind].add_charge_swaps_(op.n, axes=axes_op)
             for ii in range(1, ind):
                 tm[ii].add_charge_swaps_(op.n, axes=axes_string)
-        else:
+        else:  # 1-layer PEPS
             axes = (1, 2, 3, 0) if horizontal else (0, 3, 2, 1)
             tm[ind] = op.transpose(axes=axes)
 

@@ -119,6 +119,16 @@ def ctmrg_Ising(config, beta, layers, Env, init, policy, checkpoint_move):
     assert abs(nn1[(0, 0), (1, 0)].item() - nn2.item()) < 1e-10
     assert abs(nn2.item() - nn3.item()) < 1e-10
     #
+    dd1 = env.measure_2x2(X, X, sites=[(0, 0), (1, 1)])
+    dd2 = env.measure_2site(X, X, xrange=(0, 2), yrange=(0, 2), pairs="corner <", dirn='v')
+    dd3 = env.measure_2site(X, X, xrange=(0, 2), yrange=(0, 2), pairs="corner <", dirn='h')
+    assert abs(nn2.item() - dd2[(0, 0), (0, 1)].item()) < 1e-10
+    assert abs(nn2.item() - dd2[(0, 0), (1, 0)].item()) < 1e-10
+    assert abs(nn2.item() - dd3[(0, 0), (0, 1)].item()) < 1e-10
+    assert abs(nn2.item() - dd3[(0, 0), (1, 0)].item()) < 1e-10
+    assert abs(dd1.item() - dd2[(0, 0), (1, 1)].item()) < 1e-10
+    assert abs(dd1.item() - dd3[(0, 0), (1, 1)].item()) < 1e-10
+    #
     # calculate spontanious magnetization from long range correlator; vertical or horizontal
     #
     eXv = env.measure_line(X, X, sites=[(0, 0), (99, 0)]) ** 0.5
@@ -130,20 +140,20 @@ def ctmrg_Ising(config, beta, layers, Env, init, policy, checkpoint_move):
     return (eXv + eXh) / 2
 
 
-# @pytest.mark.parametrize("beta", [0.5, ])
-# @pytest.mark.parametrize("layers", [1, 2])
-# @pytest.mark.parametrize("Env", ["EnvCTM_c4v"])
-# @pytest.mark.parametrize("init", ['dl', 'eye'])
-# @pytest.mark.parametrize("policy", ['fullrank', 'qr']) #, 'block_arnoldi', 'block_propack', 'symeig', ])  'randomized' not supported by backend_np
-# def test_ctmrg_Ising(config_kwargs, beta, layers, Env, init, policy):
-#     r"""
-#     Use CTMRG to calculate some expectation values in classical 2D Ising model.
-#     Compare with analytical results.
-#     """
-#     config = yastn.make_config(sym='Z2', **config_kwargs)
-#     beta = config.backend.to_tensor(beta)
-#     # ctmrg_c4v_Ising(config, beta, layers, init, policy, checkpoint_move=False)
-#     ctmrg_Ising(config, beta, layers, Env, init, policy, checkpoint_move=False)
+@pytest.mark.parametrize("beta", [0.5, ])
+@pytest.mark.parametrize("layers", [1, 2])
+@pytest.mark.parametrize("Env", ["EnvCTM_c4v"])
+@pytest.mark.parametrize("init", ['dl', 'eye'])
+@pytest.mark.parametrize("policy", ['fullrank', 'qr']) #, 'block_arnoldi', 'block_propack', 'symeig', ])  'randomized' not supported by backend_np
+def test_ctmrg_Ising(config_kwargs, beta, layers, Env, init, policy):
+    r"""
+    Use CTMRG to calculate some expectation values in classical 2D Ising model.
+    Compare with analytical results.
+    """
+    config = yastn.make_config(sym='Z2', **config_kwargs)
+    beta = config.backend.to_tensor(beta)
+    # ctmrg_c4v_Ising(config, beta, layers, init, policy, checkpoint_move=False)
+    ctmrg_Ising(config, beta, layers, Env, init, policy, checkpoint_move=False)
 
 
 @torch_test
@@ -167,7 +177,6 @@ def test_ctmrg_Ising_AD(config_kwargs, beta, layers, Env, init, policy, checkpoi
     eX.backward()
     edX = beta.grad
     # Compare with the the analytical result
-    print(abs(edX.item() - dMX(beta.item())))
     assert abs(edX.item() - dMX(beta.item())) < 1e-7
 
 

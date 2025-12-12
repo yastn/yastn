@@ -94,4 +94,4 @@ def test_para_ctmrg_Ising(config_kwargs):
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vv", "--durations=0", "--backend", "np", "--joblib"])
+    pytest.main([__file__, "-vv", "--durations=0", "--backend", "np", "--ray"])
