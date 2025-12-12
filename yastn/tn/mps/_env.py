@@ -107,11 +107,21 @@ class EnvParent(metaclass=abc.ABCMeta):
 
         Parameters
         ----------
-        to: str
-            ``first`` or ``last``.
+        to: str | int | tuple[int, int]
+            If to == ``first`` or ``last``, sweep all sites, prepering respectively, right and left environments.
+            Otherwise, to specifies a site or a bond, environments of which to calculate by sweeping from edges.
         """
-        for n in self.bra.sweep(to=to):
-            self.update_env_(n, to=to)
+        if isinstance(to, str):
+            for n in self.bra.sweep(to=to):
+                self.update_env_(n, to=to)
+        else:
+            if isinstance(to, int):
+                to = (to - 1, to + 1)
+            # assume to is a tuple
+            for n in range(to[0] + 1):
+                self.update_env_(n, to='last')
+            for n in range(self.N-1, to[1] - 1, -1):
+                self.update_env_(n, to='first')
         return self
 
     def clear_site_(self, *args):

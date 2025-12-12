@@ -168,10 +168,7 @@ def _sample_one_columns(self, projs_sites, xrange, yrange, offset, opts_svd=None
         vecc = self[ny, 'r'].conj()
         tm = self[ny, 'v']
         env = mps.Env(vecc, [tm, vec])
-        for ix in range(env.N-1, offset, -1):
-            env.update_env_(ix, to='first')
-        for ix in range(offset):
-            env.update_env_(ix, to='last')
+        env.setup_(to=offset)
         #
         for ix, nx in enumerate(range(*xrange), start=offset):
             proj_sum = tensor_add(*projs_sites[nx, ny].values())
@@ -207,11 +204,7 @@ def _sample_one_rows(self, projs_sites, xrange, yrange, offset, opts_svd=None, o
     for nx in range(*xrange):
         vecc = self[nx, 'b'].conj()
         tm = self[nx, 'h']
-        env = mps.Env(vecc, [tm, vec])
-        for iy in range(env.N-1, offset, -1):
-            env.update_env_(iy, to='first')
-        for iy in range(offset):
-            env.update_env_(iy, to='last')
+        env = mps.Env(vecc, [tm, vec]).setup_(to=offset)
         #
         for iy, ny in enumerate(range(*yrange), start=offset):
             proj_sum = tensor_add(*projs_sites[nx, ny].values())
@@ -263,9 +256,6 @@ def _measure_2site(env, O0, O1, xrange, yrange, offset, pairs="corner <=", dirn=
         any(x.n != n1 for d in O1dict.values() for x in d.values())):
             raise YastnError("All O0 (O1) operators should have the same charge.")
 
-    if env.psi.config.fermionic and (n0 != env.psi.config.sym.zero() or n1 != env.psi.config.sym.zero()):
-        raise YastnError("measure_2site currently does not support fermionic operators.")  # TODO
-
     if opts_var is None:
         opts_var = {'max_sweeps': 2}
 
@@ -299,8 +289,8 @@ def _measure_2site_rows(self, O0dict, O1dict, xrange, yrange, offset, pairs, opt
 
                 vecc, tm, vec = self[nx0, 'b'].conj(), self[nx0, 'h'], vecs[nx0]
                 env = mps.Env(vecc, [tm, vec])
-                env.setup_(to='first').setup_(to='last')
-                norm_env = env.measure(bd=(0, 1))
+                env.setup_(to=iy0)
+                norm_env = env.measure(bd=(iy0-1, iy0+1))
 
                 # calculate on-site correlations
                 nx1, ny1 = nx0, ny0
@@ -310,18 +300,24 @@ def _measure_2site_rows(self, O0dict, O1dict, xrange, yrange, offset, pairs, opt
                         out[(nx0, ny0) + nz0, (nx1, ny1) + nz1] = env.measure(bd=(iy0-1, iy0+1)) / norm_env
 
                 tm[iy0].set_operator_(o0)
-                env.setup_(to='last')
-
-                if nx0 < xrange[1] - 1:
-                    vec_o0_next = mps.zipper(tm, vec, opts_svd=opts_svd)
-                    mps.compression_(vec_o0_next, (tm, vec), method='1site', normalize=False, **opts_var)
+                tm[iy0].add_charge_swaps_(o0.n, axes=['k4', 'k2'])
 
                 for ny1 in range(ny0 + 1, yrange[1]):
                     iy1 = ny1 - yrange[0] + offset
+                    env.update_env_(iy1 - 1, to='last')
                     if ((nx0, ny0), (nx1, ny1)) in pairs:
+                        tm[iy1].add_charge_swaps_(o0.n, axes='b0')
                         for nz1, o1 in O1dict[nx0, ny1].items():
                             tm[iy1].set_operator_(o1)
                             out[(nx0, ny0) + nz0, (nx1, ny1) + nz1] = env.measure(bd=(iy1-1, iy1+1)) / norm_env
+                            tm[iy1].del_operator_()
+                        tm[iy1].add_charge_swaps_(o0.n, axes=['k4', 'k2'])
+
+                iy_end = yrange[1] - 1 - yrange[0] + offset  # the last index in iy loops
+                if nx0 < xrange[1] - 1:
+                    tm[iy_end].add_charge_swaps_(o0.n, axes='b3')
+                    vec_o0_next = mps.zipper(tm, vec, opts_svd=opts_svd)
+                    mps.compression_(vec_o0_next, (tm, vec), method='1site', normalize=False, **opts_var)
 
                 # all subsequent rows
                 for nx1 in range(nx0 + 1, xrange[1]):
@@ -329,17 +325,27 @@ def _measure_2site_rows(self, O0dict, O1dict, xrange, yrange, offset, pairs, opt
                     norm_env = mps.vdot(vecc, tm, vec)
 
                     if nx1 < xrange[1] - 1:
+                        tm[iy_end].add_charge_swaps_(o0.n, axes=['k3', 'b3'])  # iy1 follows from the end of previous loop
                         vec_o0_next = mps.zipper(tm, vec_o0, opts_svd=opts_svd)
                         mps.compression_(vec_o0_next, (tm, vec_o0), method='1site', normalize=False, **opts_var)
+                        tm[iy_end].del_charge_swaps_()
 
+                    tm[iy_end].add_charge_swaps_(o0.n, axes='k3')  # iy1 follows from the end of previous loop
                     env = mps.Env(vecc, [tm, vec_o0])
-                    env.setup_(to='last').setup_(to='first')
-                    for ny1 in range(*yrange):
+                    env.setup_(to=iy_end)
+
+                    for ny1 in range(yrange[1] - 1, yrange[0] - 1, -1):
                         iy1 = ny1 - yrange[0] + offset
+                        if iy1 < iy_end:
+                            env.update_env_(iy1 + 1, to='first')
+
                         if ((nx0, ny0), (nx1, ny1)) in pairs:
+                            tm[iy1].add_charge_swaps_(o0.n, axes=['k2', 'k4'])
                             for nz1, o1 in O1dict[nx1, ny1].items():
                                 tm[iy1].set_operator_(o1)
                                 out[(nx0, ny0) + nz0, (nx1, ny1) + nz1] = env.measure(bd=(iy1-1, iy1+1)) / norm_env
+                                tm[iy1].del_operator_()
+                            tm[iy1].add_charge_swaps_(o0.n, axes='b0')
     return out
 
 
@@ -367,8 +373,8 @@ def _measure_2site_columns(self, O0dict, O1dict, xrange, yrange, offset, pairs, 
 
                 vecc, tm, vec = self[ny0, 'r'].conj(), self[ny0, 'v'], vecs[ny0]
                 env = mps.Env(vecc, [tm, vec])
-                env.setup_(to='first').setup_(to='last')
-                norm_env = env.measure(bd=(0, 1))
+                env.setup_(to=ix0)
+                norm_env = env.measure(bd=(ix0-1, ix0+1))
 
                 # calculate on-site correlations
                 nx1, ny1 = nx0, ny0
@@ -378,18 +384,24 @@ def _measure_2site_columns(self, O0dict, O1dict, xrange, yrange, offset, pairs, 
                         out[(nx0, ny0) + nz0, (nx1, ny1) + nz1] = env.measure(bd=(ix0-1, ix0+1)) / norm_env
 
                 tm[ix0].set_operator_(o0)
-                env.setup_(to='last')
-
-                if ny0 < yrange[1] - 1:
-                    vec_o0_next = mps.zipper(tm, vec, opts_svd=opts_svd)
-                    mps.compression_(vec_o0_next, [tm, vec], method='1site', normalize=False, **opts_var)
+                tm[ix0].add_charge_swaps_(o0.n, axes=['k4', 'b3'])
 
                 for nx1 in range(nx0 + 1, xrange[1]):
                     ix1 = nx1 - xrange[0] + offset
+                    env.update_env_(ix1 - 1, to='last')
                     if ((nx0, ny0), (nx1, ny1)) in pairs:
+                        tm[ix1].add_charge_swaps_(o0.n, axes='k1')
                         for nz1, o1 in O1dict[nx0, ny1].items():
                             tm[ix1].set_operator_(o1)
                             out[(nx0, ny0) + nz0, (nx1, ny1) + nz1] = env.measure(bd=(ix1-1, ix1+1)) / norm_env
+                            tm[ix1].del_operator_()
+                        tm[ix1].add_charge_swaps_(o0.n, axes=['b4', 'b3'])
+
+                ix_end = xrange[1] - 1 - xrange[0] + offset  # the last index in iy loops
+                if ny0 < yrange[1] - 1:
+                    tm[ix_end].add_charge_swaps_(o0.n, axes='k2')
+                    vec_o0_next = mps.zipper(tm, vec, opts_svd=opts_svd)
+                    mps.compression_(vec_o0_next, [tm, vec], method='1site', normalize=False, **opts_var)
 
                 # all subsequent columns
                 for ny1 in range(ny0 + 1, yrange[1]):
@@ -397,17 +409,28 @@ def _measure_2site_columns(self, O0dict, O1dict, xrange, yrange, offset, pairs, 
                     norm_env = mps.vdot(vecc, tm, vec)
 
                     if ny1 < yrange[1] - 1:
+                        tm[ix_end].add_charge_swaps_(o0.n, axes=['b2', 'k2'])  # iy1 follows from the end of previous loop
                         vec_o0_next = mps.zipper(tm, vec_o0, opts_svd=opts_svd)
                         mps.compression_(vec_o0_next, (tm, vec_o0), method='1site', normalize=False, **opts_var)
+                        tm[ix_end].del_charge_swaps_()
 
+                    tm[ix_end].add_charge_swaps_(o0.n, axes='b2')  # iy1 follows from the end of previous loop
                     env = mps.Env(vecc, [tm, vec_o0])
-                    env.setup_(to='last').setup_(to='first')
-                    for nx1 in range(*xrange):
+                    env.setup_(to=ix_end)
+
+                    for nx1 in range(xrange[1]-1, xrange[0]-1, -1):
                         ix1 = nx1 - xrange[0] + offset
+                        if ix1 < ix_end:
+                            env.update_env_(ix1 + 1, to='first')
+
                         if ((nx0, ny0), (nx1, ny1)) in pairs:
+                            tm[ix1].add_charge_swaps_(o0.n, axes=['b3', 'b4'])
                             for nz1, o1 in O1dict[nx1, ny1].items():
                                 tm[ix1].set_operator_(o1)
                                 out[(nx0, ny0) + nz0, (nx1, ny1) + nz1] = env.measure(bd=(ix1-1, ix1+1)) / norm_env
+                                tm[ix1].del_operator_()
+                            tm[ix1].add_charge_swaps_(o0.n, axes='k1')
+
     return out
 
 

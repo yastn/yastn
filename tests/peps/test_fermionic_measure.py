@@ -225,10 +225,12 @@ def test_measure(config_kwargs, sym, L):
     cpc_mps = mps.measure_2site(phi, ops.cp(), ops.c(), phi, bonds='a')
     cpc_peps = {}
     cpc_peps['nn'] = env_ctm.measure_nn(ops.cp(), ops.c())
+    cpc_peps['2s_h'] = env_ctm.measure_2site(ops.cp(), ops.c(), dirn='h')
+    cpc_peps['2s_v'] = env_ctm.measure_2site(ops.cp(), ops.c(), dirn='v')
     cpc_peps['2x2'] = measure_combinations(ops.cp(), ops.c(), env=env_ctm, fun='measure_2x2')
     cpc_peps['line'] = measure_combinations(ops.cp(), ops.c(), env=env_ctm, fun='measure_line')
     cpc_peps['nsite'] = measure_combinations(ops.cp(), ops.c(), env=env_ctm, fun='measure_nsite')
-    # cpc_peps['nsite_mps'] = measure_combinations(ops.cp(), ops.c(), env=env_bd, fun='measure_nsite')
+    cpc_peps['nsite_mps'] = measure_combinations(ops.cp(), ops.c(), env=env_bd, fun='measure_nsite')
     assert(len(cpc_peps['line'])) == 2 * L ** 3 - L ** 2
     assert(len(cpc_peps['nsite'])) == L ** 4
     # assert(len(cpc_peps['nsite_mps'])) == L ** 4

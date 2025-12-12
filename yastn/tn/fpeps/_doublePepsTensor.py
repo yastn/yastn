@@ -98,6 +98,10 @@ class DoublePepsTensor(SpecialTensor):
             if t != self.config.sym.zero():
                 self.swaps[ax] = t
 
+    def del_charge_swaps_(self):
+        """ Remove all charge swaps. """
+        self.swaps = {}
+
     def has_operator_or_swap(self):
         return self.op is not None or (self.config.fermionic and self.swaps)
 

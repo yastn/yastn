@@ -98,6 +98,24 @@ def check_env3_measure(psi1, op, psi2, tol):
     assert np.std(results) / abs(np.mean(results)) < tol
 
 
+def test_env_setup(config_kwargs):
+    """ Simple test of minimal setup and measure. """
+    ops = yastn.operators.SpinfulFermions(sym='Z2', **config_kwargs)
+    N = 10
+    I = mps.product_mpo(ops.I(), N)
+    env = mps.Env(I, I)
+    assert len(env.F) == 2
+    env.measure((-1, 10))
+    #
+    env.setup_(to=(0, 9))
+    assert len(env.F) == 4
+    env.measure((0, 9))
+    #
+    env.setup_(to=5)
+    assert len(env.F) == 11
+    env.measure((4, 6))
+
+
 def test_env_raise(config_kwargs):
     ops = yastn.operators.SpinfulFermions(sym='Z2', **config_kwargs)
     I12 = mps.product_mpo(ops.I(), 12)
