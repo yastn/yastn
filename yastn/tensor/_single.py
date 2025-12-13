@@ -460,31 +460,30 @@ def remove_leg(a, axis=-1) -> 'Tensor':
         raise YastnError('Cannot remove axis of a scalar tensor.')
 
     axis = axis % a.ndim
-    if a.mfs[axis] != (1,):
-        raise YastnError('Axis to be removed cannot be fused.')
-    mfs = a.mfs[:axis] + a.mfs[axis + 1:]
 
+    mfs = a.mfs[:axis] + a.mfs[axis + 1:]
+    remove = a.mfs[axis][0]
     axis = sum(a.mfs[ii][0] for ii in range(axis))  # unpack mfs
-    if a.hfs[axis].tree != (1,):
-        raise YastnError('Axis to be removed cannot be fused.')
 
     nsym = a.config.sym.NSYM
-    if len(a.struct.t) > 0:
-        t = a.struct.t[0][axis * nsym: (axis + 1) * nsym]
-    else:
-        t = a.config.sym.zero()
+    for _ in range(remove):
+        if len(a.struct.t) > 0:
+            t = a.struct.t[0][axis * nsym: (axis + 1) * nsym]
+        else:
+            t = a.config.sym.zero()
 
-    if any(x[axis] != 1 for x in a.struct.D) or any(x[axis * nsym: (axis + 1) * nsym] != t for x in a.struct.t):
-        raise YastnError('Axis to be removed must have single charge of dimension one.')
+        if any(x[axis] != 1 for x in a.struct.D) or any(x[axis * nsym: (axis + 1) * nsym] != t for x in a.struct.t):
+            raise YastnError('Axis to be removed must have single charge of dimension one.')
 
-    news = a.struct.s[:axis] + a.struct.s[axis + 1:]
-    newn = a.config.sym.add_charges(a.struct.n, t, signatures=(-1, a.struct.s[axis]), new_signature=-1)
-    newt = tuple(x[: axis * nsym] + x[(axis + 1) * nsym:] for x in a.struct.t)
-    newD = tuple(x[: axis] + x[axis + 1:] for x in a.struct.D)
-    struct = a.struct._replace(t=newt, D=newD, s=news, n=newn)
-    slices = tuple(_slc(x.slcs, y, x.Dp) for x, y in zip(a.slices, newD))
-    hfs = a.hfs[:axis] + a.hfs[axis + 1:]
-    return a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices)
+        news = a.struct.s[:axis] + a.struct.s[axis + 1:]
+        newn = a.config.sym.add_charges(a.struct.n, t, signatures=(-1, a.struct.s[axis]), new_signature=-1)
+        newt = tuple(x[: axis * nsym] + x[(axis + 1) * nsym:] for x in a.struct.t)
+        newD = tuple(x[: axis] + x[axis + 1:] for x in a.struct.D)
+        struct = a.struct._replace(t=newt, D=newD, s=news, n=newn)
+        slices = tuple(_slc(x.slcs, y, x.Dp) for x, y in zip(a.slices, newD))
+        hfs = a.hfs[:axis] + a.hfs[axis + 1:]
+        a = a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices)
+    return a
 
 
 def diag(a) -> 'Tensor':
