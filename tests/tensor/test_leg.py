@@ -151,6 +151,10 @@ def test_leg_meta_fusion(config_kwargs):
     assert umlegs.legs[0] == yastn.legs_union(legs[0], legs[2])
     assert umlegs.legs[0] == yastn.legs_union(legs[1], legs[3])
 
+    ll = a.get_legs()
+    assert ll[0].are_consistent(ll[1], sgn=1)
+    assert not ll[0].are_consistent(leg)
+
 
 def test_leg_hard_fusion(config_kwargs):
     """ legs with hard fusion """
@@ -165,6 +169,7 @@ def test_leg_hard_fusion(config_kwargs):
     legsf = af.get_legs()
     assert all(legf.is_fused() for legf in legsf)
     assert str(legsf[1]) == 'Leg(sym=U1, s=-1, t=((0,), (2,)), D=(10, 15), hist=p(oo))'
+    assert(legsf[0].are_consistent(legsf[1], sgn=1))
 
     l2, l3 = yastn.undo_leg_product(legsf[1])
     assert l2 == legs[2]

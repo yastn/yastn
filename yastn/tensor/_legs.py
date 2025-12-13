@@ -162,6 +162,9 @@ class Leg:
     def unfuse_leg(self):
         return undo_leg_product(self)
 
+    def are_consistent(self, other, sgn=-1):
+        return are_legs_consistent(self, other, sgn=sgn)
+
 
 @dataclass(frozen=True, repr=False)
 class LegMeta:
@@ -195,9 +198,12 @@ class LegMeta:
 
     def is_fused(self):
         return True
-    
+
     def unfuse_leg(self):
         return self.legs
+
+    def are_consistent(self, other, sgn=-1):
+        return are_legs_consistent(self, other, sgn=sgn)
 
 
 def gaussian_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, nonnegative=False, method='round', spanning_vectors=None) -> Leg:
@@ -390,6 +396,31 @@ def legs_union(*legs) -> Leg:
         D = tuple(np.prod(Dt, axis=1, dtype=np.int64).tolist())
         return LegMeta(sym=legs[0].sym, s=legs[0].s, t=t, D=D, mf=legs[0].mf, legs=new_legs)
     raise YastnError('All arguments of legs_union should have consistent fusions.')
+
+
+def are_legs_consistent(leg0, leg1, sgn=-1) -> bool:
+    """
+    Output Leg that represent space being an union of spaces of a list of legs.
+
+    It collects charges appearing in all provided legs.
+    Their dimensions and fusion history have to match.
+    """
+    if isinstance(leg0, Leg) and isinstance(leg1, Leg):
+        if leg0.s != sgn * leg1.s or \
+           leg0.hf.tree != leg1.hf.tree or \
+           leg0.hf.op != leg1.hf.op or \
+           any(s0 != sgn * s1 for s0, s1 in zip(leg0.hf.s, leg1.hf.s)):
+                return False
+        tDs0 = [dict(zip(t, D)) for n, t, D in zip(leg0.hf.tree[1:], leg0.hf.t, leg0.hf.D) if n == 1]
+        tDs1 = [dict(zip(t, D)) for n, t, D in zip(leg1.hf.tree[1:], leg1.hf.t, leg1.hf.D) if n == 1]
+        if any(any(tD0[k] != tD1[k] for k in tD0.keys() & tD1.keys()) for tD0, tD1 in zip(tDs0, tDs1)):
+            return False
+        return True
+    if isinstance(leg0, LegMeta) and isinstance(leg1, LegMeta):
+        if leg0.mf != leg1.mf:
+            return False
+        return all(are_legs_consistent(l0, l1, sgn=sgn) for l0, l1 in zip(leg0.legs, leg1.legs))
+    return False
 
 
 def _str_tree(tree, op) -> str:
