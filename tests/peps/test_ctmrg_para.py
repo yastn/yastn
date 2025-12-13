@@ -60,7 +60,7 @@ def test_para_ctmrg_Ising(config_kwargs):
     env = fpeps.EnvCTM(psi, init='rand')
     opts_svd = {"D_total": chi}
     # info = env.ctmrg_(opts_svd=opts_svd, max_sweeps=200, corner_tol=1e-12)
-    for info in PARActmrg_(env, opts_svd_ctm=opts_svd, max_sweeps=200, corner_tol=1e-12, n_cores=4, ctm_jobs_hv=[[psi.sites()], [psi.sites()]]):
+    for info in PARActmrg_(env, opts_svd_ctm=opts_svd, max_sweeps=200, corner_tol=1e-12, cpus_per_task=1, ctm_jobs_hv=[[psi.sites()], [psi.sites()]]):
         pass
     assert info.max_dsv < 1e-12
     assert info.converged == True
@@ -94,4 +94,4 @@ def test_para_ctmrg_Ising(config_kwargs):
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vv", "--durations=0", "--backend", "np", "--joblib"])
+    pytest.main([__file__, "-vv", "--durations=0", "--backend", "np", "--ray"])
