@@ -197,20 +197,26 @@ def fill_eye_in_gate(peps, G, sites):
 
 def clear_projectors(sites, projectors):
     """ prepare projectors for sampling functions. """
-    if not isinstance(projectors, dict) or all(isinstance(x, Tensor) for x in projectors.values()):
-        projectors = {site: projectors for site in sites}  # spread projectors over sites
-    if not set(sites) <= set(projectors.keys()):
+    if isinstance(projectors, Lattice):
+        projectors = projectors.shallow_copy()
+    elif isinstance(projectors, dict) and not all(isinstance(x, Tensor) for x in projectors.values()):
+        projectors = projectors.copy()
+    else:
+        projectors = {site: projectors.copy() for site in sites}
+
+    try:
+        for k in sites: projectors[k]
+    except KeyError:
         raise YastnError(f"Projectors not defined for some sites.")
 
     # change each list of projectors into keys and projectors
-    projs_sites = {}
     for k, v in projectors.items():
-        projs_sites[k] = dict(v) if isinstance(v, dict) else dict(enumerate(v))
-        for l, pr in projs_sites[k].items():
+        projectors[k] = dict(v) if isinstance(v, dict) else dict(enumerate(v))
+        for l, pr in projectors[k].items():
             if pr.ndim == 1:  # vectors need conjugation
                 if abs(pr.norm() - 1) > 1e-10:
                     raise YastnError("Local states to project on should be normalized.")
-                projs_sites[k][l] = tensordot(pr, pr.conj(), axes=((), ()))
+                projectors[k][l] = tensordot(pr, pr.conj(), axes=((), ()))
             elif pr.ndim == 2:
                 if (pr.n != pr.config.sym.zero()) or abs(pr @ pr - pr).norm() > 1e-10:
                     raise YastnError("Matrix projectors should be projectors, P @ P == P.")
@@ -219,7 +225,7 @@ def clear_projectors(sites, projectors):
             else:
                 raise YastnError("Projectors should consist of vectors (ndim=1) or matrices (ndim=2).")
 
-    return projs_sites
+    return projectors
 
 
 def clear_operator_input(op, sites):
@@ -229,6 +235,12 @@ def clear_operator_input(op, sites):
         op_dict = op.copy()
     else:
         op_dict = {site: op for site in sites}
+
+    try:
+        for k in sites: op_dict[k]
+    except KeyError:
+        raise YastnError(f"Operators not defined for some sites.")
+
     for k, v in op_dict.items():
         if isinstance(v, dict):
             op_dict[k] = {(i,): vi for i, vi in v.items()}
