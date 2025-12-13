@@ -13,13 +13,12 @@
 # limitations under the License.
 # ==============================================================================
 from __future__ import annotations
-from itertools import chain
 import logging
 import sys
 from typing import NamedTuple, Callable, Sequence
 from warnings import warn
 
-from ._env_contractions import *
+from ._env_contractions import identity_boundary
 from ._env_dataclasses import EnvCTM_local, EnvCTM_projectors
 from .._evolution import BondMetric
 from .._geometry import Site, Lattice
@@ -255,6 +254,9 @@ class EnvCTM():
             d['data'][site] = d_local
         return d
 
+    def _default_corner_signature(self):
+        return (1, -1)
+
     def reset_(self, init='rand', leg=None, **kwargs):
         r"""
         Initialize CTMRG environment.
@@ -270,9 +272,11 @@ class EnvCTM():
         leg: None | yastn.Leg
             If not provided, random initialization has CTMRG bond dimension set to 1.
             Otherwise, the provided Leg is used to initialize CTMRG virtual legs.
+            Leg signature is fixed to the default values.
         """
         normalize = kwargs.get('normalize', 'inf')
-        if init == 'dl' and not isinstance(self.psi, Peps2Layers):
+
+        if init == 'dl':
             self.reset_(init='eye')
             self.expand_outward_()
             for site in self.sites():
@@ -282,33 +286,35 @@ class EnvCTM():
                     setattr(self[site], dirn, T)
             return
 
-        leg0 = Leg(self.config, s=1, t=(self.config.sym.zero(),), D=(1,))
-        if leg is None:
-            leg = leg0
+        cs = self._default_corner_signature()
+        leg_one_0 = Leg(self.config, s=cs[0], t=(self.config.sym.zero(),), D=(1,))
+        leg_one_1 = Leg(self.config, s=cs[1], t=(self.config.sym.zero(),), D=(1,))
+
+        leg_0 = leg_one_0 if leg is None else (leg if leg.s == cs[0] else leg.conj())
+        leg_1 = leg_one_1 if leg is None else (leg if leg.s == cs[1] else leg.conj())
+
         li = {'t': 0, 'l': 1, 'b': 2, 'r': 3}
-        ef = {'t': edge_t, 'l': edge_l, 'b': edge_b, 'r': edge_r,
-                'tl': cor_tl, 'tr': cor_tr, 'bl': cor_bl, 'br': cor_br}
 
         for site in self.sites():
-            for dirn in self[site].fields():
+            legs = self.psi[site].get_legs()
+
+            for dirn in self[site].fields(among=['tl', 'tr', 'bl', 'br']):
                 shifted_site = self.nn_site(site, d=dirn)
-                legs = self.psi[site].get_legs()
-                if init == 'dl':
-                    if shifted_site is not None:
-                        A_bra, A_ket = self.psi.bra[shifted_site], self.psi.ket[shifted_site]
-                    else:
-                        A_bra = A_ket = trivial_peps_tensor(self.config)
-                    T = ef[dirn](A_bra=A_bra, A_ket=A_ket)
-                elif dirn in ['tl', 'tr', 'bl', 'br'] and (init == 'eye' or shifted_site is None):
-                    T = eye(self.config, legs=[leg0, leg0.conj()], isdiag=False)
-                elif dirn in ['tl', 'tr', 'bl', 'br'] and init == 'rand':
-                    T = rand(self.config, legs=[leg, leg.conj()])
-                elif dirn in ['t', 'l', 'b', 'r'] and (init == 'eye' or shifted_site is None):
+                if init == 'eye' or shifted_site is None:
+                    T = eye(self.config, legs=[leg_one_0, leg_one_1], isdiag=False)
+                elif init == 'rand':
+                    T = rand(self.config, legs=[leg_0, leg_1])
+                T = T / T.norm(p=normalize) if isinstance(normalize, str) else normalize(T)
+                setattr(self[site], dirn, T)
+
+            for dirn in self[site].fields(among=['t', 'l', 'b', 'r']):
+                shifted_site = self.nn_site(site, d=dirn)
+                if init == 'eye' or shifted_site is None:
                     tmp1 = identity_boundary(self.config, legs[li[dirn]].conj())
-                    tmp0 = eye(self.config, legs=[leg0, leg0.conj()], isdiag=False)
+                    tmp0 = eye(self.config, legs=[leg_one_1.conj(), leg_one_0.conj()], isdiag=False)
                     T = tensordot(tmp0, tmp1, axes=((), ())).transpose(axes=(0, 2, 1))
-                elif dirn in ['t', 'l', 'b', 'r'] and init == 'rand':
-                    T = rand(self.config, legs=[leg, legs[li[dirn]].conj(), leg.conj()])
+                elif init == 'rand':
+                    T = rand(self.config, legs=[leg_1.conj(), legs[li[dirn]].conj(), leg_0.conj()])
                 T = T / T.norm(p=normalize) if isinstance(normalize, str) else normalize(T)
                 setattr(self[site], dirn, T)
 

@@ -121,6 +121,8 @@ class EnvCTM_c4v(EnvCTM):
         else:
             return self.env[site]
 
+    def _default_corner_signature(self):
+        return (1, 1)
 
     def reset_(self, init='eye'):
         r"""
@@ -144,10 +146,6 @@ class EnvCTM_c4v(EnvCTM):
         """
         assert init in ['eye', 'dl'], "Invalid initialization type. Should be 'eye' or 'dl'."
         super().reset_(init=init)
-        if init == 'eye':
-            for site in self.sites():
-                self[site].t = self[site].t.flip_charges(axes=0)
-                self[site].tl = self[site].tl.flip_charges(axes=1)
 
     def iterate_(env, opts_svd=None, method='2site', max_sweeps=1, iterator=False, corner_tol=None, truncation_f: Callable = None, **kwargs):
         return super().iterate_(opts_svd=opts_svd, moves='d', method=method, max_sweeps=max_sweeps, iterator=iterator, corner_tol=corner_tol, truncation_f=truncation_f, **kwargs)
@@ -228,13 +226,13 @@ class EnvCTM_c4v(EnvCTM):
         # 1<-2--P--0    0--T--2->3
         #        --1->0    1->2
         #
-        tmp = tensordot(P, env[s0].t.flip_signature(), axes=(0, 0)) # Pass from T_A to T_B
+        s1 = env.nn_site(s0, d='r')
+        tmp = tensordot(P, env[s1].t, axes=(0, 0)) # Pass from T_A to T_B
         #  0<-1--P-----T--3->1  0--P--2
         #        |     2           |
         #        |      0          |
         #         --0 1--A--3   1--
         #                2=>1
-        s1 = env.nn_site(s0, d='r')
         tmp = tensordot(tmp, env.psi[s1], axes=((0, 2), (1, 0)))
         tmp = tensordot(tmp, P, axes=((1, 3), (0, 1)))
         tmp = tmp.flip_charges(axes=(0, 2))  # tmp.switch_signature(axes=(0,2))
