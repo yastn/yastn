@@ -507,24 +507,18 @@ def MeasureNN(job, op0, op1, cfg):
 def ParaMeasure1Site(env, op, cfg, cpus_per_task=4):
 
     if not ray.is_initialized():
-        ray.init(num_cpus=get_taskset_cpu_count(), ignore_reinit_error=True, namespace='BuilidProjector')
+        ray.init(num_cpus=get_taskset_cpu_count(), ignore_reinit_error=True, namespace='Measure1Site')
 
     psi = env.psi
-
     list_of_dicts = []
 
-    num_of_sites = len(psi.sites())
+    jobs = []
+    for site in psi.sites():
+        env_part, site0, _, _ = SubWindow(env, site, 0, 0, 0, 0)
+        jobs.append([ray.put(env_part.to_dict(level=1)), site0, site])
 
-    n_tasks_per_batch = get_taskset_cpu_count() // cpus_per_task
-
-    for ii in range(0, int(np.ceil(num_of_sites / n_tasks_per_batch))):
-        jobs = []
-        for site in psi.sites()[ii * n_tasks_per_batch:min((ii + 1) * n_tasks_per_batch, num_of_sites)]:
-            env_part, site0, _, _ = SubWindow(env, site, 0, 0, 0, 0)
-            jobs.append([ray.put(env_part.to_dict(level=1)), site0, site])
-        list_of_dicts += ray.get([Measure1Site.options(num_cpus=cpus_per_task).remote(job, op, cfg) for job in jobs])
-
-        jobs.clear()
+    list_of_dicts += ray.get([Measure1Site.options(num_cpus=cpus_per_task).remote(job, op, cfg) for job in jobs])
+    jobs.clear()
 
     result = {k: v for d in list_of_dicts for k, v in d.items()}
     return result
@@ -532,35 +526,28 @@ def ParaMeasure1Site(env, op, cfg, cpus_per_task=4):
 def ParaMeasureNN(env, op0, op1, cfg, cpus_per_task=4):
 
     if not ray.is_initialized():
-        ray.init(num_cpus=get_taskset_cpu_count(), ignore_reinit_error=True, namespace='BuilidProjector')
+        ray.init(num_cpus=get_taskset_cpu_count(), ignore_reinit_error=True, namespace='MeasureNN')
 
     psi = env.psi
-
     list_of_dicts = []
 
-    num_of_hb = len(psi.bonds(dirn='h'))
-    num_of_vb = len(psi.bonds(dirn='v'))
+    jobs = []
 
-    n_tasks_per_batch = get_taskset_cpu_count() // cpus_per_task
+    for bond in psi.bonds(dirn='h'):
+        env_part, site0, _, _ = SubWindow(env, bond.site0, 0, 0, 0, 1, env_load_dict={(0, 0):['tl', 'bl', 'l', 't', 'b'], (0, 1):['tr', 'br', 'r', 't', 'b']})
+        bond0 = Bond(site0, env_part.nn_site(site0, 'r'))
+        jobs.append([ray.put(env_part.to_dict(level=1)), bond0, bond])
 
-    for ii in range(0, int(np.ceil(num_of_hb / n_tasks_per_batch))):
-        jobs = []
-        for bond in psi.bonds(dirn='h')[(ii * n_tasks_per_batch):(min((ii + 1) * n_tasks_per_batch, num_of_hb))]:
-            # env_part, site0 = Window3x3(psi, env, bond.site0, fid)
-            env_part, site0, _, _ = SubWindow(env, bond.site0, 0, 0, 0, 1, env_load_dict={(0, 0):['tl', 'bl', 'l', 't', 'b'], (0, 1):['tr', 'br', 'r', 't', 'b']})
-            bond0 = Bond(site0, env_part.nn_site(site0, 'r'))
-            jobs.append([ray.put(env_part.to_dict(level=1)), bond0, bond])
-        list_of_dicts += ray.get([MeasureNN.options(num_cpus=cpus_per_task).remote(job, op0, op1, cfg) for job in jobs])
-        jobs.clear()
-    for ii in range(0, int(np.ceil(num_of_vb / n_tasks_per_batch))):
-        jobs = []
-        for bond in psi.bonds(dirn='v')[ii * n_tasks_per_batch:min((ii + 1) * n_tasks_per_batch, num_of_vb)]:
-            env_part, site0, _, _ = SubWindow(env, bond.site0, 0, 0, 1, 0, env_load_dict={(0, 0):['tl', 'tr', 'l', 't', 'r'], (1, 0):['bl', 'br', 'r', 'l', 'b']})
-            bond0 = Bond(site0, env_part.nn_site(site0, 'b'))
-            jobs.append([ray.put(env_part.to_dict(level=1)), bond0, bond])
-        list_of_dicts += ray.get([MeasureNN.options(num_cpus=cpus_per_task).remote(job, op0, op1, cfg) for job in jobs])
-        jobs.clear()
+    list_of_dicts += ray.get([MeasureNN.options(num_cpus=cpus_per_task).remote(job, op0, op1, cfg) for job in jobs])
+    jobs.clear()
 
+    for bond in psi.bonds(dirn='v'):
+        env_part, site0, _, _ = SubWindow(env, bond.site0, 0, 0, 1, 0, env_load_dict={(0, 0):['tl', 'tr', 'l', 't', 'r'], (1, 0):['bl', 'br', 'r', 'l', 'b']})
+        bond0 = Bond(site0, env_part.nn_site(site0, 'b'))
+        jobs.append([ray.put(env_part.to_dict(level=1)), bond0, bond])
+
+    list_of_dicts += ray.get([MeasureNN.options(num_cpus=cpus_per_task).remote(job, op0, op1, cfg) for job in jobs])
+    jobs.clear()
 
     result = {k: v for d in list_of_dicts for k, v in d.items()}
     return result
