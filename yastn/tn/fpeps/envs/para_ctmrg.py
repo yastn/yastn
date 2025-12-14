@@ -1,10 +1,5 @@
-import yastn
 import logging
 import numpy as np
-import torch
-# from joblib import Parallel, delayed
-
-#from ...fpeps import *
 from ._env_ctm import CTMRG_out, EnvCTM, update_storage_
 from .._initialize import product_peps
 from .._peps import Peps
@@ -18,59 +13,30 @@ def get_taskset_cpu_count():
     affinity = proc.cpu_affinity()
     return len(affinity)
 
-def CreateCTMJobBundle(env:EnvCTM, n_cores=1):
+import os
+os.environ.update({
+    'RAY_object_store_memory_lock': '0',
+    'RAY_object_store_memory': '100000000000',
+    'RAY_plasma_unlimited': '1',
+    'RAY_enable_memory_plasma_logging': '1',
+    'RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO': '0'})
+
+def CreateCTMJobBundle(env:EnvCTM, cpus_per_task=4):
+
+    n_tasks_per_batch = get_taskset_cpu_count() // cpus_per_task
 
     Lx = env.psi.geometry.Nx
     Ly = env.psi.geometry.Ny
 
     sites = env.psi.sites()
 
-    nbundles_ver = min(max(n_cores // Ly, 1), Lx)
+    nbundles_ver = min(max(n_tasks_per_batch // Ly, 1), Lx)
     ctm_jobs_ver = [[sites[ix + iy * Lx] for iy in range(Ly) for ix in range(ib * nbundles_ver, min((ib + 1) * nbundles_ver, Lx))] for ib in range(int(np.floor(Lx / nbundles_ver)))]
 
-    nbundles_hor = min(max(n_cores // Lx, 1), Ly)
+    nbundles_hor = min(max(n_tasks_per_batch // Lx, 1), Ly)
     ctm_jobs_hor = [[sites[ix + iy * Lx] for ix in range(Lx) for iy in range(ib * nbundles_hor, min((ib + 1) * nbundles_hor, Ly))] for ib in range(int(np.floor(Ly / nbundles_hor)))]
 
     return [ctm_jobs_hor, ctm_jobs_ver]
-
-@ray.remote(num_gpus=1)
-def BuildProjectorGPU_(job, opts_svd_ctm, cfg:yastn.tensor._auxliary._config, method='2site'):
-
-    env_dict = job[0]
-    site = job[1]
-    move = job[3]
-
-    new_cfg = yastn.make_config(**new_cfg)
-    env = EnvCTM.from_dict(config=new_cfg, d=env_dict)
-
-    sites = [env.nn_site(site, d=d) for d in ((0, 0), (0, 1), (1, 0), (1, 1))]
-    if None in sites:
-        return
-    tl, tr, bl, br = sites
-    if opts_svd_ctm is None:
-        opts_svd_ctm = env.opts_svd
-    env._update_projectors_(site, move, opts_svd_ctm, method=method)
-
-    result_dict = {}
-
-    if any(x in move for x in 'rh'):
-        result_dict[(tr, 'hrb')] = env.proj[tr].hrb.to_dict(level=1)
-        result_dict[(br, 'hrt')] = env.proj[br].hrt.to_dict(level=1)
-
-    if any(x in move for x in 'lh'):
-        result_dict[(tl, 'hlb')] = env.proj[tl].hlb.to_dict(level=1)
-        result_dict[(bl, 'hlt')] = env.proj[bl].hlt.to_dict(level=1)
-
-    if any(x in move for x in 'tv'):
-        result_dict[(tl, 'vtr')] = env.proj[tl].vtr.to_dict(level=1)
-        result_dict[(tr, 'vtl')] = env.proj[tr].vtl.to_dict(level=1)
-
-    if any(x in move for x in 'bv'):
-        result_dict[(bl, 'vbr')] = env.proj[bl].vbr.to_dict(level=1)
-        result_dict[(br, 'vbl')] = env.proj[br].vbl.to_dict(level=1)
-
-    return result_dict
-
 
 @ray.remote(num_cpus=4)
 def BuildProjector_(job, opts_svd_ctm, cfg, method='2site'):
@@ -79,7 +45,7 @@ def BuildProjector_(job, opts_svd_ctm, cfg, method='2site'):
     site = job[1]
     move = job[3]
 
-    env = EnvCTM.from_dict(config=cfg, d=env_dict)
+    env = EnvCTM.from_dict(config=cfg, d=ray.get(env_dict))
 
     sites = [env.nn_site(site, d=d) for d in ((0, 0), (0, 1), (1, 0), (1, 1))]
     if None in sites:
@@ -87,6 +53,7 @@ def BuildProjector_(job, opts_svd_ctm, cfg, method='2site'):
     tl, tr, bl, br = sites
     if opts_svd_ctm is None:
         opts_svd_ctm = env.opts_svd
+
     env._update_projectors_(site, move, opts_svd_ctm, method=method)
 
     result_dict = {}
@@ -210,10 +177,10 @@ def SubWindow(env_psi: Peps | EnvCTM, site, top=1, left=1, bottom=1, right=1, on
         return psi_part, site0, Lx, Ly
 
 
-@ray.remote(num_cpus=4)
+@ray.remote(num_cpus=4, num_gpus=0)
 def UpdateSite(job, cfg, move, proj_dict):
 
-    env_ = EnvCTM.from_dict(config=cfg, d=job[0])
+    env_ = EnvCTM.from_dict(config=cfg, d=ray.get(job[0]))
     site0 = job[1]
 
     env_tmp = EnvCTM(env_.psi, init=None)
@@ -358,48 +325,42 @@ def canonical_site(env, site):
     else:
         return env.psi.sites()[site_index]
 
-def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, move='t', proj_dict=None, sites_to_be_updated=None):
+def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, move='t', proj_dict=None, sites_to_be_updated=None, cpus_per_task=4, gpus_per_task=0):
 
     # Build projectors
-    # Only pick the needed peps tensor(s) and CTMRG tensors. We don't use 'h' and 'v' options to save memory, thus these two are not optimized. (But can be done anyway)
+    # Only pick the needed peps tensor(s) and CTMRG tensors.
 
     jobs = []
     for site in sites:
-        if move in 'vt':
+
+        if (move in 'hv') or (len(env.sites()) < env.Nx * env.Ny):
+            site_ = site
+            env_part, site0, _, _ = SubWindow(env, site_, 0, 0, 1, 1,
+                                              env_load_dict={(0, 0): ['l', 'tl', 't'], (0, 1):['t', 'tr', 'r'],
+                                                             (1, 0): ['l', 'bl', 'b'],  (1, 1):['b', 'br', 'r']})
+        elif move in 't':
             site_ = canonical_site(env, env.nn_site(site, 't'))
             env_part, site0, _, _ = SubWindow(env, site_, 0, 0, 1, 1,
                                               env_load_dict={(0, 0): ['l', 'tl', 't'], (0, 1): ['t', 'tr', 'r'],
                                                              (1, 0): ['l', 'bl', 'b'], (1, 1): ['b', 'br', 'r']})
-            if site_ is not None:
-                jobs.append([env_part.to_dict(level=1), site0, site_, 't'])
 
-        if move in 'hl':
+        elif move in 'l':
             site_ = canonical_site(env, env.nn_site(site, 'l'))
             env_part, site0, _, _ = SubWindow(env, site_, 0, 0, 1, 1,
                                               env_load_dict={(0, 0): ['l', 'tl', 't'], (0, 1): ['t', 'tr', 'r'],
                                                              (1, 0): ['l', 'bl', 'b'], (1, 1): ['b', 'br', 'r']})
-            if site_ is not None:
-                jobs.append([env_part.to_dict(level=1), site0, site_, 'l'])
 
-        if move in 'vb':
+        elif move in 'br':
             site_ = site
             env_part, site0, _, _ = SubWindow(env, site_, 0, 0, 1, 1,
                                               env_load_dict={(0, 0): ['l', 'tl', 't'], (0, 1): ['t', 'tr', 'r'],
                                                              (1, 0): ['l', 'bl', 'b'], (1, 1): ['b', 'br', 'r']})
-            if site_ is not None:
-                jobs.append([env_part.to_dict(level=1), site0, site_, 'b'])
 
-        if move in 'hr':
-            site_ = site
-            env_part, site0, _, _ = SubWindow(env, site_, 0, 0, 1, 1,
-                                              env_load_dict={(0, 0): ['l', 'tl', 't'], (0, 1):['t', 'tr', 'r'],
-                                                             (1, 0):['l', 'bl', 'b'], (1, 1):['b', 'br', 'r']})
-            if site_ is not None:
-                jobs.append([env_part.to_dict(level=1), site0, site_, 'r'])
 
-    logging.info('num of jobs = {}'.format(len(jobs)))
-    ray.init(num_cpus=get_taskset_cpu_count(), ignore_reinit_error=True, namespace='BuilidProjector')
-    gathered_result_ = ray.get([BuildProjector_.remote(job, opts_svd_ctm, cfg) for job in jobs])
+        if site_ is not None:
+            jobs.append([ray.put(env_part.to_dict(level=1)), site0, site_, move])
+
+    gathered_result_ = ray.get([BuildProjector_.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task).remote(job, opts_svd_ctm, cfg) for job in jobs])
 
     if proj_dict is None:
         proj_dict = {}
@@ -438,7 +399,7 @@ def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, move='t', proj_dict=Non
 
 
         if move in 'vtb':
-            jobs.append([env_part.to_dict(level=1), site0, site,
+            jobs.append([ray.put(env_part.to_dict(level=1)), site0, site,
                          canonical_site(env, env.nn_site(site, (-1, 0))),
                          canonical_site(env, env.nn_site(site, (1, 0))),
                          canonical_site(env, env.nn_site(site, (-1, -1))),
@@ -446,7 +407,7 @@ def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, move='t', proj_dict=Non
                          canonical_site(env, env.nn_site(site, (1, -1))),
                          canonical_site(env, env.nn_site(site, (1, 1)))])
         elif move in 'hlr':
-            jobs.append([env_part.to_dict(level=1), site0, site,
+            jobs.append([ray.put(env_part.to_dict(level=1)), site0, site,
                          canonical_site(env, env.nn_site(site, (0, -1))),
                          canonical_site(env, env.nn_site(site, (0, 1))),
                          canonical_site(env, env.nn_site(site, (-1, -1))),
@@ -454,11 +415,8 @@ def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, move='t', proj_dict=Non
                          canonical_site(env, env.nn_site(site, (1, -1))),
                          canonical_site(env, env.nn_site(site, (1, 1)))])
 
-    ray.init(num_cpus=get_taskset_cpu_count(), ignore_reinit_error=True, namespace='UpdateSite')
     updated_ctm_tensors = []
-    # for ii in range(0, int(np.ceil(len(jobs) / n_cores))):
-    #     updated_ctm_tensors += ray.get([UpdateSite.remote(job, cfg, move, proj_dict) for job in jobs[ii * n_cores:min((ii + 1) * n_cores, len(jobs))]])
-    updated_ctm_tensors += ray.get([UpdateSite.remote(job, cfg, move, proj_dict) for job in jobs])
+    updated_ctm_tensors = ray.get([UpdateSite.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task).remote(job, cfg, move, proj_dict) for job in jobs])
 
 
     proj_dict.clear()
@@ -486,10 +444,10 @@ def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, move='t', proj_dict=Non
         ii = ii + 1
 
 
-def _ctmrg_(env:EnvCTM, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, n_cores=24, ctm_jobs_hv=None, moves='hv'):
+def _ctmrg_(env:EnvCTM, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, ctm_jobs_hv=None, moves='hv', cpus_per_task=4, gpus_per_task=0):
 
     if ctm_jobs_hv is None:
-        ctm_jobs_hor, ctm_jobs_ver = CreateCTMJobBundle(env, n_cores)
+        ctm_jobs_hor, ctm_jobs_ver = CreateCTMJobBundle(env, cpus_per_task=cpus_per_task)
     else:
         ctm_jobs_hor, ctm_jobs_ver = ctm_jobs_hv
 
@@ -502,21 +460,21 @@ def _ctmrg_(env:EnvCTM, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, n_c
         for move in moves:
 
             if move in 'vtb':
-                # if n_cores >= psi.geometry.Ny:
+                # if n_tasks_per_batch >= psi.geometry.Ny:
                 for ctm_jobs in ctm_jobs_ver:
                     if ctm_jobs_hv is None:
-                        ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, move=move)
+                        ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, move=move, cpus_per_task=cpus_per_task, gpus_per_task=gpus_per_task)
                     else:
-                        ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, move=move, sites_to_be_updated=ctm_jobs)
+                        ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, move=move, sites_to_be_updated=ctm_jobs, cpus_per_task=cpus_per_task, gpus_per_task=gpus_per_task)
 
             if move in 'hlr':
 
-                # if n_cores >= psi.geometry.Nx:
+                # if n_tasks_per_batch >= psi.geometry.Nx:
                 for ctm_jobs in ctm_jobs_hor:
                     if ctm_jobs_hv is None:
-                        ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, move=move)
+                        ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, move=move, cpus_per_task=cpus_per_task, gpus_per_task=gpus_per_task)
                     else:
-                        ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, move=move, sites_to_be_updated=ctm_jobs)
+                        ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, move=move, sites_to_be_updated=ctm_jobs, cpus_per_task=cpus_per_task, gpus_per_task=gpus_per_task)
 
         if corner_tol is not None:
             # Evaluate convergence of CTM by computing the difference of environment corner spectra between consecutive CTM steps.
@@ -533,77 +491,71 @@ def _ctmrg_(env:EnvCTM, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, n_c
             yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
     yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
 
-@ray.remote(num_cpus=4)
+@ray.remote(num_cpus=4, num_gpus=0)
 def Measure1Site(job, op, cfg):
     env_dict, site0, site = job
-    env = EnvCTM.from_dict(config=cfg, d=env_dict)
+    env = EnvCTM.from_dict(config=cfg, d=ray.get(env_dict))
     return {site: env.measure_1site(op, site=site0)}
 
-@ray.remote(num_cpus=4)
+@ray.remote(num_cpus=4, num_gpus=0)
 def MeasureNN(job, op0, op1, cfg):
 
     env_dict, bond0, bond = job
-    env = EnvCTM.from_dict(config=cfg, d=env_dict)
+    env = EnvCTM.from_dict(config=cfg, d=ray.get(env_dict))
     return {bond: env.measure_nn(op0, op1, bond=bond0)}
 
-def ParaMeasure1Site(env, op, cfg, n_cores=24):
+def ParaMeasure1Site(env, op, cfg, cpus_per_task=4, gpus_per_task=0):
 
-    ray.init(num_cpus=get_taskset_cpu_count(), ignore_reinit_error=True, namespace='Measure1Site')
+    if not ray.is_initialized():
+        ray.init(num_cpus=get_taskset_cpu_count(), ignore_reinit_error=True, namespace='Measure1Site')
 
     psi = env.psi
-
     list_of_dicts = []
 
-    num_of_sites = len(psi.sites())
+    jobs = []
+    for site in psi.sites():
+        env_part, site0, _, _ = SubWindow(env, site, 0, 0, 0, 0)
+        jobs.append([ray.put(env_part.to_dict(level=1)), site0, site])
 
-    for ii in range(0, int(np.ceil(num_of_sites / n_cores))):
-        jobs = []
-        for site in psi.sites()[ii * n_cores:min((ii + 1) * n_cores, num_of_sites)]:
-            env_part, site0, _, _ = SubWindow(env, site, 0, 0, 0, 0)
-            jobs.append([env_part.to_dict(level=1), site0, site])
-        list_of_dicts += ray.get([Measure1Site.remote(job, op, cfg) for job in jobs])
-
-        jobs.clear()
+    list_of_dicts += ray.get([Measure1Site.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task).remote(job, op, cfg) for job in jobs])
+    jobs.clear()
 
     result = {k: v for d in list_of_dicts for k, v in d.items()}
     return result
 
-def ParaMeasureNN(env, op0, op1, cfg, n_cores=24):
+def ParaMeasureNN(env, op0, op1, cfg, cpus_per_task=4, gpus_per_task=0):
 
-    ray.init(num_cpus=get_taskset_cpu_count(), ignore_reinit_error=True, namespace='MeasureNN')
+    if not ray.is_initialized():
+        ray.init(num_cpus=get_taskset_cpu_count(), ignore_reinit_error=True, namespace='MeasureNN')
 
     psi = env.psi
-
     list_of_dicts = []
 
-    num_of_hb = len(psi.bonds(dirn='h'))
-    num_of_vb = len(psi.bonds(dirn='v'))
+    jobs = []
 
+    for bond in psi.bonds(dirn='h'):
+        env_part, site0, _, _ = SubWindow(env, bond.site0, 0, 0, 0, 1, env_load_dict={(0, 0):['tl', 'bl', 'l', 't', 'b'], (0, 1):['tr', 'br', 'r', 't', 'b']})
+        bond0 = Bond(site0, env_part.nn_site(site0, 'r'))
+        jobs.append([ray.put(env_part.to_dict(level=1)), bond0, bond])
 
+    list_of_dicts += ray.get([MeasureNN.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task).remote(job, op0, op1, cfg) for job in jobs])
+    jobs.clear()
 
-    for ii in range(0, int(np.ceil(num_of_hb / n_cores))):
-        jobs = []
-        for bond in psi.bonds(dirn='h')[(ii * n_cores):(min((ii + 1) * n_cores, num_of_hb))]:
-            # env_part, site0 = Window3x3(psi, env, bond.site0, fid)
-            env_part, site0, _, _ = SubWindow(env, bond.site0, 0, 0, 0, 1, env_load_dict={(0, 0):['tl', 'bl', 'l', 't', 'b'], (0, 1):['tr', 'br', 'r', 't', 'b']})
-            bond0 = Bond(site0, env_part.nn_site(site0, 'r'))
-            jobs.append([env_part.to_dict(level=1), bond0, bond])
-        list_of_dicts += ray.get([MeasureNN.remote(job, op0, op1, cfg) for job in jobs])
-        jobs.clear()
-    for ii in range(0, int(np.ceil(num_of_vb / n_cores))):
-        jobs = []
-        for bond in psi.bonds(dirn='v')[ii * n_cores:min((ii + 1) * n_cores, num_of_vb)]:
-            env_part, site0, _, _ = SubWindow(env, bond.site0, 0, 0, 1, 0, env_load_dict={(0, 0):['tl', 'tr', 'l', 't', 'r'], (1, 0):['bl', 'br', 'r', 'l', 'b']})
-            bond0 = Bond(site0, env_part.nn_site(site0, 'b'))
-            jobs.append([env_part.to_dict(level=1), bond0, bond])
-        list_of_dicts += ray.get([MeasureNN.remote(job, op0, op1, cfg) for job in jobs])
-        jobs.clear()
+    for bond in psi.bonds(dirn='v'):
+        env_part, site0, _, _ = SubWindow(env, bond.site0, 0, 0, 1, 0, env_load_dict={(0, 0):['tl', 'tr', 'l', 't', 'r'], (1, 0):['bl', 'br', 'r', 'l', 'b']})
+        bond0 = Bond(site0, env_part.nn_site(site0, 'b'))
+        jobs.append([ray.put(env_part.to_dict(level=1)), bond0, bond])
 
+    list_of_dicts += ray.get([MeasureNN.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task).remote(job, op0, op1, cfg) for job in jobs])
+    jobs.clear()
 
     result = {k: v for d in list_of_dicts for k, v in d.items()}
     return result
 
 
-def PARActmrg_(env:EnvCTM, max_sweeps=50, iterator_step=1, opts_svd_ctm=None, corner_tol=None, n_cores=1, ctm_jobs_hv=None, moves='hv'):
-    tmp = _ctmrg_(env, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, n_cores=n_cores, ctm_jobs_hv=ctm_jobs_hv, moves=moves)
+def PARActmrg_(env:EnvCTM, max_sweeps=50, iterator_step=1, opts_svd_ctm=None, corner_tol=None, ctm_jobs_hv=None, moves='hv', cpus_per_task=4, gpus_per_task=0):
+    if ray.is_initialized():
+        ray.shutdown()
+    ray.init(num_cpus=get_taskset_cpu_count(), ignore_reinit_error=True, namespace='BuilidProjector')
+    tmp = _ctmrg_(env, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, cpus_per_task=cpus_per_task, gpus_per_task=gpus_per_task, ctm_jobs_hv=ctm_jobs_hv, moves=moves)
     return tmp if iterator_step else next(tmp)
