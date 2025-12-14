@@ -491,20 +491,20 @@ def _ctmrg_(env:EnvCTM, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, ctm
             yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
     yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
 
-@ray.remote(num_cpus=4)
+@ray.remote(num_cpus=4, num_gpus=0)
 def Measure1Site(job, op, cfg):
     env_dict, site0, site = job
     env = EnvCTM.from_dict(config=cfg, d=ray.get(env_dict))
     return {site: env.measure_1site(op, site=site0)}
 
-@ray.remote(num_cpus=4)
+@ray.remote(num_cpus=4, num_gpus=0)
 def MeasureNN(job, op0, op1, cfg):
 
     env_dict, bond0, bond = job
     env = EnvCTM.from_dict(config=cfg, d=ray.get(env_dict))
     return {bond: env.measure_nn(op0, op1, bond=bond0)}
 
-def ParaMeasure1Site(env, op, cfg, cpus_per_task=4):
+def ParaMeasure1Site(env, op, cfg, cpus_per_task=4, gpus_per_task=0):
 
     if not ray.is_initialized():
         ray.init(num_cpus=get_taskset_cpu_count(), ignore_reinit_error=True, namespace='Measure1Site')
@@ -517,13 +517,13 @@ def ParaMeasure1Site(env, op, cfg, cpus_per_task=4):
         env_part, site0, _, _ = SubWindow(env, site, 0, 0, 0, 0)
         jobs.append([ray.put(env_part.to_dict(level=1)), site0, site])
 
-    list_of_dicts += ray.get([Measure1Site.options(num_cpus=cpus_per_task).remote(job, op, cfg) for job in jobs])
+    list_of_dicts += ray.get([Measure1Site.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task).remote(job, op, cfg) for job in jobs])
     jobs.clear()
 
     result = {k: v for d in list_of_dicts for k, v in d.items()}
     return result
 
-def ParaMeasureNN(env, op0, op1, cfg, cpus_per_task=4):
+def ParaMeasureNN(env, op0, op1, cfg, cpus_per_task=4, gpus_per_task=0):
 
     if not ray.is_initialized():
         ray.init(num_cpus=get_taskset_cpu_count(), ignore_reinit_error=True, namespace='MeasureNN')
@@ -538,7 +538,7 @@ def ParaMeasureNN(env, op0, op1, cfg, cpus_per_task=4):
         bond0 = Bond(site0, env_part.nn_site(site0, 'r'))
         jobs.append([ray.put(env_part.to_dict(level=1)), bond0, bond])
 
-    list_of_dicts += ray.get([MeasureNN.options(num_cpus=cpus_per_task).remote(job, op0, op1, cfg) for job in jobs])
+    list_of_dicts += ray.get([MeasureNN.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task).remote(job, op0, op1, cfg) for job in jobs])
     jobs.clear()
 
     for bond in psi.bonds(dirn='v'):
@@ -546,7 +546,7 @@ def ParaMeasureNN(env, op0, op1, cfg, cpus_per_task=4):
         bond0 = Bond(site0, env_part.nn_site(site0, 'b'))
         jobs.append([ray.put(env_part.to_dict(level=1)), bond0, bond])
 
-    list_of_dicts += ray.get([MeasureNN.options(num_cpus=cpus_per_task).remote(job, op0, op1, cfg) for job in jobs])
+    list_of_dicts += ray.get([MeasureNN.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task).remote(job, op0, op1, cfg) for job in jobs])
     jobs.clear()
 
     result = {k: v for d in list_of_dicts for k, v in d.items()}
