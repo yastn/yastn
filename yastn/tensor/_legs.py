@@ -411,8 +411,8 @@ def are_legs_consistent(leg0, leg1, sgn=-1) -> bool:
            leg0.hf.op != leg1.hf.op or \
            any(s0 != sgn * s1 for s0, s1 in zip(leg0.hf.s, leg1.hf.s)):
                 return False
-        tDs0 = [dict(zip(t, D)) for n, t, D in zip(leg0.hf.tree[1:], leg0.hf.t, leg0.hf.D) if n == 1]
-        tDs1 = [dict(zip(t, D)) for n, t, D in zip(leg1.hf.tree[1:], leg1.hf.t, leg1.hf.D) if n == 1]
+        tDs0 = [dict(zip(t, D)) for n, t, D in zip(leg0.hf.tree, (leg0.t,) + leg0.hf.t, (leg0.D,) + leg0.hf.D) if n == 1]
+        tDs1 = [dict(zip(t, D)) for n, t, D in zip(leg1.hf.tree, (leg1.t,) + leg1.hf.t, (leg1.D,) + leg1.hf.D) if n == 1]
         if any(any(tD0[k] != tD1[k] for k in tD0.keys() & tD1.keys()) for tD0, tD1 in zip(tDs0, tDs1)):
             return False
         return True

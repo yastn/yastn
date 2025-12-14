@@ -131,6 +131,7 @@ def test_ctmrg_hexagonal(config_kwargs):
         env = fpeps.EnvCTM(psi, init='eye')
         opts_svd = {"D_total": chi}
         info = env.ctmrg_(opts_svd=opts_svd, moves='hv', max_sweeps=100, corner_tol=1e-5)
+        assert env.is_consistent()
         assert info.max_D == chi
 
 
@@ -155,15 +156,14 @@ def test_ctmrg_Ising_4x5(config_kwargs):
     #
     geometry = fpeps.SquareLattice(dims=(4, 5), boundary='obc')
     psi = fpeps.Peps(geometry=geometry, tensors=[[T] * 5] * 4)
-
     bra = fpeps.Peps(geometry=geometry, tensors=[[Tbra] * 5] * 4)
     ket = fpeps.Peps(geometry=geometry, tensors=[[Tket] * 5] * 4)
-
-
+    #
     chi = 4
     env = fpeps.EnvCTM(psi, init='eye', ket=ket)
     opts_svd = {"D_total": chi}
     info = env.ctmrg_(opts_svd=opts_svd, moves='lrtb', max_sweeps=10, corner_tol=1e-12)
+    assert env.is_consistent()
     assert info.converged
     #
     # enlarge some bonds
@@ -174,9 +174,11 @@ def test_ctmrg_Ising_4x5(config_kwargs):
     psi[(2, 3)] = XB
     env.opts_svd = opts_svd
     env.update_bond_(((1, 3), (2, 3)))
+    assert env.is_consistent()
     #
     # now full sweep of ctmrg can be executed
     info = env.ctmrg_(opts_svd=opts_svd, moves='hv', max_sweeps=10, corner_tol=1e-12)
+    assert env.is_consistent()
     assert info.converged
     #
     # checks if properly updated on a boundary
@@ -184,17 +186,18 @@ def test_ctmrg_Ising_4x5(config_kwargs):
             ((0, 0), (1, 0)), ((3, 4), (2, 4))]
     for bond in bonds:
         env.update_bond_(bond, opts_svd=opts_svd)
+        assert env.is_consistent()
 
     env = fpeps.EnvCTM(ket, init='eye')
     opts_svd = {"D_total": 4}
     info = env.ctmrg_(opts_svd=opts_svd, moves='lrtb', max_sweeps=4, corner_tol=1e-8)
-    # assert info.converged
+    assert env.is_consistent()
     env[2,3].t.get_legs(axes=1).unfuse_leg() == (leg, leg)
 
     env = fpeps.EnvCTM(bra, init='eye', ket=ket)
     opts_svd = {"D_total": 4}
     info = env.ctmrg_(opts_svd=opts_svd, moves='lrtb', max_sweeps=4, corner_tol=1e-8)
-    # assert info.converged
+    assert env.is_consistent()
     env[2,3].t.get_legs(axes=1).unfuse_leg() == (leg2, leg)
 
 

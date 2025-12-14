@@ -981,12 +981,59 @@ class EnvCTM():
         converged = (corner_tol is not None) and (max_dsv < corner_tol)
         return converged, max_dsv, history
 
+    def is_consistent(env, verbosity = 2):
+        out = {}
+        env_legs = {}
+        sites = set(s0 for s0, _ in env.bonds()) | set(s1 for _, s1 in env.bonds())
+        for site in sites:
+            env_legs[site, 'psi'] = env.psi[site].get_legs()
+            for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
+                ten = getattr(env[site], dirn)
+                if ten is not None:
+                    env_legs[site, dirn] = ten.get_legs()
+            legs_consistent_(out, env_legs, (site, 'psi'), 0, (site, 't'), 1)
+            legs_consistent_(out, env_legs, (site, 'psi'), 1, (site, 'l'), 1)
+            legs_consistent_(out, env_legs, (site, 'psi'), 2, (site, 'b'), 1)
+            legs_consistent_(out, env_legs, (site, 'psi'), 3, (site, 'r'), 1)
+            legs_consistent_(out, env_legs, (site, 'tl'), 1, (site, 't'), 0)
+            legs_consistent_(out, env_legs, (site, 't'), 2, (site, 'tr'), 0)
+            legs_consistent_(out, env_legs, (site, 'tr'), 1, (site, 'r'), 0)
+            legs_consistent_(out, env_legs, (site, 'r'), 2, (site, 'br'), 0)
+            legs_consistent_(out, env_legs, (site, 'br'), 1, (site, 'b'), 0)
+            legs_consistent_(out, env_legs, (site, 'b'), 2, (site, 'bl'), 0)
+            legs_consistent_(out, env_legs, (site, 'bl'), 1, (site, 'l'), 0)
+            legs_consistent_(out, env_legs, (site, 'l'), 2, (site, 'tl'), 0)
 
-    def check_env_consistency(self):
-        pass
+        for bond in env.bonds():
+            dirn = env.nn_bond_dirn(*bond)
+            s0, s1 = bond if dirn == 'lr' or 'tb' else bond[::-1]
+            if 'l' in dirn:
+                legs_consistent_(out, env_legs, (s0, 't'), 2, (s1, 't'), 0)
+                legs_consistent_(out, env_legs, (s0, 'b'), 0, (s1, 'b'), 2)
+                legs_consistent_(out, env_legs, (s0, 'tr'), 0, (s1, 'tl'), 1)
+                legs_consistent_(out, env_legs, (s0, 'br'), 1, (s1, 'bl'), 0)
+            if 't' in dirn:
+                legs_consistent_(out, env_legs, (s0, 'l'), 0, (s1, 'l'), 2)
+                legs_consistent_(out, env_legs, (s0, 'r'), 2, (s1, 'r'), 0)
+                legs_consistent_(out, env_legs, (s0, 'bl'), 1, (s1, 'tl'), 0)
+                legs_consistent_(out, env_legs, (s0, 'br'), 0, (s1, 'tr'), 1)
+
+        not_consistent = [k for k, v in out.items() if not v]
+        if verbosity > 0:
+            if not_consistent:
+                print("Unconsistent environment bonds: ")
+                for x in not_consistent:
+                    print(x)
+        return len(not_consistent) == 0
 
     from ._env_ctm_measure import measure_1site, measure_nn, measure_2x2, measure_line, \
         measure_nsite, measure_2site, sample
+
+
+def legs_consistent_(out, env_legs, i0, l0, i1, l1):
+    if i0 is None or i1 is None:
+        return
+    out[i0, l0, i1, l1] = env_legs[i0][l0].are_consistent(env_legs[i1][l1])
 
 
 def spec_diff(x, y):

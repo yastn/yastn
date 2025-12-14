@@ -46,6 +46,10 @@ def test_leg(config_kwargs):
     a = yastn.ones(config=config_U1, legs=legs)
     assert a.get_legs() == legs
 
+    assert legs[0].are_consistent(legs[1])
+    assert legs[0].are_consistent(legs[2])
+    assert not legs[0].are_consistent(legs[3])
+
     assert yastn.legs_union(legs[1], legs[2]) == yastn.Leg(config_U1, s=1, t=(-2, 0, 2, 4), D=(1, 2, 3, 4))
     assert a.get_legs(-1) == a.get_legs(3)
 
@@ -169,7 +173,7 @@ def test_leg_hard_fusion(config_kwargs):
     legsf = af.get_legs()
     assert all(legf.is_fused() for legf in legsf)
     assert str(legsf[1]) == 'Leg(sym=U1, s=-1, t=((0,), (2,)), D=(10, 15), hist=p(oo))'
-    assert(legsf[0].are_consistent(legsf[1], sgn=1))
+    assert legsf[0].are_consistent(legsf[1], sgn=1)
 
     l2, l3 = yastn.undo_leg_product(legsf[1])
     assert l2 == legs[2]
@@ -182,6 +186,10 @@ def test_leg_hard_fusion(config_kwargs):
     cf =  af.fuse_legs(axes=[(0, 1)], mode='meta')
     legmf = cf.get_legs(axes=0)
     assert legmf.history() == 'm(p(oo)p(oo))'
+
+    df = a.fuse_legs(axes=((0, 2), (1, 3)), mode='hard')
+    legsf = df.get_legs()
+    assert not legsf[0].are_consistent(legsf[1])
 
 
 def test_leg_exceptions(config_kwargs):

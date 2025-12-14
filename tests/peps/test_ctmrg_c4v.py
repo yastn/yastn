@@ -85,18 +85,22 @@ def ctmrg_c4v_Ising(config, beta, layers, init, policy, checkpoint_move):
     #
     env = fpeps.EnvCTM_c4v(psi, init=init)
     check_env_c4v_signature_convention(env)
+    assert env.is_consistent()
+    #
+    D = 16
     #
     if policy == 'qr':
-        opts_svd = {"D_total": 16, 'policy': 'fullrank', 'eps_multiplet': 1e-10}
-        info = env.ctmrg_(opts_svd=opts_svd, max_sweeps=4, use_qr=False, corner_tol=1e-8, checkpoint_move=checkpoint_move)
-
-    opts_svd = {"D_total": 16, 'policy': policy, 'eps_multiplet': 1e-10}
+        opts_svd = {"D_total": D, 'policy': 'fullrank', 'eps_multiplet': 1e-10}
+        max_sweeps = int(np.ceil(np.log2(D)))
+        info = env.ctmrg_(opts_svd=opts_svd, max_sweeps=max_sweeps, use_qr=False, corner_tol=1e-8, checkpoint_move=checkpoint_move)
+    #
+    opts_svd = {"D_total": D, 'policy': policy, 'eps_multiplet': 1e-10}
     info = env.ctmrg_(opts_svd=opts_svd, max_sweeps=200, use_qr=False, corner_tol=1e-8, checkpoint_move=checkpoint_move)
-    print(info)
-
+    assert env.is_consistent()
+    check_env_c4v_signature_convention(env)
+    #
     assert info.max_dsv < 1e-8
     assert info.converged == True
-    check_env_c4v_signature_convention(env)
     #
     # test that spontaneus magnetization is not broken -- per Z2 symemtry
     assert abs(env.measure_1site(X)[0, 0].item()) < 1e-10
