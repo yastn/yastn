@@ -39,7 +39,9 @@ def CreateCTMJobBundle(env:EnvCTM, cpus_per_task=4):
     return [ctm_jobs_hor, ctm_jobs_ver]
 
 @ray.remote(num_cpus=4, num_gpus=0, num_returns=1)
-def BuildProjector(site, move, env, opts_svd_ctm, cfg, method='2site'):
+def BuildProjector_(env_dict, site, site0, move, opts_svd_ctm, cfg, method='2site'):
+
+    env = EnvCTM.from_dict(config=cfg, d=env_dict)
 
     sites = [env.nn_site(site, d=d) for d in ((0, 0), (0, 1), (1, 0), (1, 1))]
     if None in sites:
@@ -71,9 +73,10 @@ def BuildProjector(site, move, env, opts_svd_ctm, cfg, method='2site'):
     return result_dict
 
 @ray.remote(num_cpus=4, num_gpus=0, num_returns=6)
-def UpdateSite(site, site_t_or_l, site_b_or_r, site_tl, site_tr, site_bl, site_br, env, cfg, move, proj_dict):
+def UpdateSite(env_remote, site0, site, site_t_or_l, site_b_or_r, site_tl, site_tr, site_bl, site_br, cfg, move, proj_dict):
 
-    env_tmp = EnvCTM(env.psi, init=None)
+    env_ = EnvCTM.from_dict(config=cfg, d=env_remote)
+    env_tmp = EnvCTM(env_.psi, init=None)
 
     if move in 'vtb':
 
@@ -86,58 +89,58 @@ def UpdateSite(site, site_t_or_l, site_b_or_r, site_tl, site_tr, site_bl, site_b
 
         if move in 'vt':
 
-            env._trivial_projectors_('t', sites=env.sites())
+            env_._trivial_projectors_('t', sites=env_.sites())
 
             temp_site = site_tl
-            temp_site0 = canonical_site(env, env.nn_site(site, (-1, -1)))
+            temp_site0 = canonical_site(env_, env_.nn_site(site0, (-1, -1)))
             if temp_site0 is not None:
-                env.proj[temp_site0].vtr = from_dict(config=cfg, d=proj_dict[(temp_site, 'vtr')])
+                env_.proj[temp_site0].vtr = from_dict(config=cfg, d=proj_dict[(temp_site, 'vtr')])
                 temp_site = site_t_or_l
-                temp_site0 = canonical_site(env, env.nn_site(site, (-1, 0)))
-                env.proj[temp_site0].vtl = from_dict(config=cfg, d=proj_dict[(temp_site, 'vtl')])
+                temp_site0 = canonical_site(env_, env_.nn_site(site0, (-1, 0)))
+                env_.proj[temp_site0].vtl = from_dict(config=cfg, d=proj_dict[(temp_site, 'vtl')])
 
 
             temp_site = site_tr
-            temp_site0 = canonical_site(env, env.nn_site(site, (-1, 1)))
+            temp_site0 = canonical_site(env_, env_.nn_site(site0, (-1, 1)))
             if temp_site0 is not None:
-                env.proj[temp_site0].vtl = from_dict(config=cfg, d=proj_dict[(temp_site, 'vtl')])
+                env_.proj[temp_site0].vtl = from_dict(config=cfg, d=proj_dict[(temp_site, 'vtl')])
                 temp_site = site_t_or_l
-                temp_site0 = canonical_site(env, env.nn_site(site, (-1, 0)))
-                env.proj[temp_site0].vtr = from_dict(config=cfg, d=proj_dict[(temp_site, 'vtr')])
+                temp_site0 = canonical_site(env_, env_.nn_site(site0, (-1, 0)))
+                env_.proj[temp_site0].vtr = from_dict(config=cfg, d=proj_dict[(temp_site, 'vtr')])
 
         if move in 'vb':
 
-            env._trivial_projectors_('b', sites=env.sites())
+            env_._trivial_projectors_('b', sites=env_.sites())
 
             temp_site = site_bl
-            temp_site0 = canonical_site(env, env.nn_site(site, (1, -1)))
+            temp_site0 = canonical_site(env_, env_.nn_site(site0, (1, -1)))
             if temp_site0 is not None:
-                env.proj[temp_site0].vbr = from_dict(config=cfg, d=proj_dict[(temp_site, 'vbr')])
+                env_.proj[temp_site0].vbr = from_dict(config=cfg, d=proj_dict[(temp_site, 'vbr')])
                 temp_site = site_b_or_r
-                temp_site0 = canonical_site(env, env.nn_site(site, (1, 0)))
-                env.proj[temp_site0].vbl = from_dict(config=cfg, d=proj_dict[(temp_site, 'vbl')])
+                temp_site0 = canonical_site(env_, env_.nn_site(site0, (1, 0)))
+                env_.proj[temp_site0].vbl = from_dict(config=cfg, d=proj_dict[(temp_site, 'vbl')])
 
 
             temp_site = site_br
-            temp_site0 = canonical_site(env, env.nn_site(site, (1, 1)))
+            temp_site0 = canonical_site(env_, env_.nn_site(site0, (1, 1)))
             if temp_site0 is not None:
-                env.proj[temp_site0].vbl = from_dict(config=cfg, d=proj_dict[(temp_site, 'vbl')])
+                env_.proj[temp_site0].vbl = from_dict(config=cfg, d=proj_dict[(temp_site, 'vbl')])
                 temp_site = site_b_or_r
-                temp_site0 = canonical_site(env, env.nn_site(site, (1, 0)))
-                env.proj[temp_site0].vbr = from_dict(config=cfg, d=proj_dict[(temp_site, 'vbr')])
+                temp_site0 = canonical_site(env_, env_.nn_site(site0, (1, 0)))
+                env_.proj[temp_site0].vbr = from_dict(config=cfg, d=proj_dict[(temp_site, 'vbr')])
 
-        env_tmp._update_env_(site, env, move=move)
+        env_tmp._update_env_(site0, env_, move=move)
 
         if move in 'vt':
-            update_storage_(env, env_tmp)
-            newt = env[site].t.to_dict(level=1)
-            newtl = env[site].tl.to_dict(level=1)
-            newtr = env[site].tr.to_dict(level=1)
+            update_storage_(env_, env_tmp)
+            newt = env_[site0].t.to_dict(level=1)
+            newtl = env_[site0].tl.to_dict(level=1)
+            newtr = env_[site0].tr.to_dict(level=1)
         if move in 'vb':
-            update_storage_(env, env_tmp)
-            newb = env[site].b.to_dict(level=1)
-            newbl = env[site].bl.to_dict(level=1)
-            newbr = env[site].br.to_dict(level=1)
+            update_storage_(env_, env_tmp)
+            newb = env_[site0].b.to_dict(level=1)
+            newbl = env_[site0].bl.to_dict(level=1)
+            newbr = env_[site0].br.to_dict(level=1)
 
         return (newt, newb, newtl, newtr, newbl, newbr)
 
@@ -152,56 +155,56 @@ def UpdateSite(site, site_t_or_l, site_b_or_r, site_tl, site_tr, site_bl, site_b
 
         if move in 'hl':
 
-            env._trivial_projectors_('l', sites=env.sites())
+            env_._trivial_projectors_('l', sites=env_.sites())
 
             temp_site = site_tl
-            temp_site0 = canonical_site(env, env.nn_site(site, (-1, -1)))
+            temp_site0 = canonical_site(env_, env_.nn_site(site0, (-1, -1)))
             if temp_site0 is not None:
-                env.proj[temp_site0].hlb = from_dict(config=cfg, d=proj_dict[(temp_site, 'hlb')])
+                env_.proj[temp_site0].hlb = from_dict(config=cfg, d=proj_dict[(temp_site, 'hlb')])
                 temp_site = site_t_or_l
-                temp_site0 = canonical_site(env, env.nn_site(site, (0, -1)))
-                env.proj[temp_site0].hlt = from_dict(config=cfg, d=proj_dict[(temp_site, 'hlt')])
+                temp_site0 = canonical_site(env_, env_.nn_site(site0, (0, -1)))
+                env_.proj[temp_site0].hlt = from_dict(config=cfg, d=proj_dict[(temp_site, 'hlt')])
 
             temp_site = site_bl
-            temp_site0 = canonical_site(env, env.nn_site(site, (1, -1)))
+            temp_site0 = canonical_site(env_, env_.nn_site(site0, (1, -1)))
             if temp_site0 is not None:
-                env.proj[temp_site0].hlt = from_dict(config=cfg, d=proj_dict[(temp_site, 'hlt')])
+                env_.proj[temp_site0].hlt = from_dict(config=cfg, d=proj_dict[(temp_site, 'hlt')])
                 temp_site = site_t_or_l
-                temp_site0 = canonical_site(env, env.nn_site(site, (0, -1)))
-                env.proj[temp_site0].hlb = from_dict(config=cfg, d=proj_dict[(temp_site, 'hlb')])
+                temp_site0 = canonical_site(env_, env_.nn_site(site0, (0, -1)))
+                env_.proj[temp_site0].hlb = from_dict(config=cfg, d=proj_dict[(temp_site, 'hlb')])
 
         if move in 'hr':
 
-            env._trivial_projectors_('r', sites=env.sites())
+            env_._trivial_projectors_('r', sites=env_.sites())
 
             temp_site = site_tr
-            temp_site0 = canonical_site(env, env.nn_site(site, (-1, 1)))
+            temp_site0 = canonical_site(env_, env_.nn_site(site0, (-1, 1)))
             if temp_site0 is not None:
-                env.proj[temp_site0].hrb = from_dict(config=cfg, d=proj_dict[(temp_site, 'hrb')])
+                env_.proj[temp_site0].hrb = from_dict(config=cfg, d=proj_dict[(temp_site, 'hrb')])
                 temp_site = site_b_or_r
-                temp_site0 = canonical_site(env, env.nn_site(site, (0, 1)))
-                env.proj[temp_site0].hrt = from_dict(config=cfg, d=proj_dict[(temp_site, 'hrt')])
+                temp_site0 = canonical_site(env_, env_.nn_site(site0, (0, 1)))
+                env_.proj[temp_site0].hrt = from_dict(config=cfg, d=proj_dict[(temp_site, 'hrt')])
 
             temp_site = site_br
-            temp_site0 = canonical_site(env, env.nn_site(site, (1, 1)))
+            temp_site0 = canonical_site(env_, env_.nn_site(site0, (1, 1)))
             if temp_site0 is not None:
-                env.proj[temp_site0].hrt = from_dict(config=cfg, d=proj_dict[(temp_site, 'hrt')])
+                env_.proj[temp_site0].hrt = from_dict(config=cfg, d=proj_dict[(temp_site, 'hrt')])
                 temp_site = site_b_or_r
-                temp_site0 = canonical_site(env, env.nn_site(site, (0, 1)))
-                env.proj[temp_site0].hrb = from_dict(config=cfg, d=proj_dict[(temp_site, 'hrb')])
+                temp_site0 = canonical_site(env_, env_.nn_site(site0, (0, 1)))
+                env_.proj[temp_site0].hrb = from_dict(config=cfg, d=proj_dict[(temp_site, 'hrb')])
 
-        env_tmp._update_env_(site, env, move=move)
+        env_tmp._update_env_(site0, env_, move=move)
 
         if move in 'hl':
-            update_storage_(env, env_tmp)
-            newl = env[site].l.to_dict(level=1)
-            newtl = env[site].tl.to_dict(level=1)
-            newbl = env[site].bl.to_dict(level=1)
+            update_storage_(env_, env_tmp)
+            newl = env_[site0].l.to_dict(level=1)
+            newtl = env_[site0].tl.to_dict(level=1)
+            newbl = env_[site0].bl.to_dict(level=1)
         if move in 'hr':
-            update_storage_(env, env_tmp)
-            newr = env[site].r.to_dict(level=1)
-            newtr = env[site].tr.to_dict(level=1)
-            newbr = env[site].br.to_dict(level=1)
+            update_storage_(env_, env_tmp)
+            newr = env_[site0].r.to_dict(level=1)
+            newtr = env_[site0].tr.to_dict(level=1)
+            newbr = env_[site0].br.to_dict(level=1)
 
         return (newl, newr, newtl, newtr, newbl, newbr)
 
@@ -320,40 +323,54 @@ def canonical_site(env, site):
 def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, move='t', proj_dict=None, sites_to_be_updated=None, cpus_per_task=4, gpus_per_task=0):
 
     # Build projectors
-
-    env_remote = ray.put(env)
+    # Only pick the needed peps tensor(s) and CTMRG tensors.
 
     jobs = []
     for site in sites:
 
         if (move in 'hv') or (len(env.sites()) < env.Nx * env.Ny):
             site_ = site
-
+            env_part, site0, _, _ = SubWindow(env, site_, 0, 0, 1, 1,
+                                              env_load_dict={(0, 0): ['l', 'tl', 't'], (0, 1):['t', 'tr', 'r'],
+                                                             (1, 0): ['l', 'bl', 'b'],  (1, 1):['b', 'br', 'r']})
         elif move in 't':
             site_ = canonical_site(env, env.nn_site(site, 't'))
+            env_part, site0, _, _ = SubWindow(env, site_, 0, 0, 1, 1,
+                                              env_load_dict={(0, 0): ['l', 'tl', 't'], (0, 1): ['t', 'tr', 'r'],
+                                                             (1, 0): ['l', 'bl', 'b'], (1, 1): ['b', 'br', 'r']})
 
         elif move in 'l':
             site_ = canonical_site(env, env.nn_site(site, 'l'))
+            env_part, site0, _, _ = SubWindow(env, site_, 0, 0, 1, 1,
+                                              env_load_dict={(0, 0): ['l', 'tl', 't'], (0, 1): ['t', 'tr', 'r'],
+                                                             (1, 0): ['l', 'bl', 'b'], (1, 1): ['b', 'br', 'r']})
 
         elif move in 'br':
             site_ = site
+            env_part, site0, _, _ = SubWindow(env, site_, 0, 0, 1, 1,
+                                              env_load_dict={(0, 0): ['l', 'tl', 't'], (0, 1): ['t', 'tr', 'r'],
+                                                             (1, 0): ['l', 'bl', 'b'], (1, 1): ['b', 'br', 'r']})
+
 
         if site_ is not None:
-            jobs.append((site_, move))
+            jobs.append((env_part.to_dict(level=1), site0, site_, move))
 
-    gathered_result_ = ray.get([BuildProjector.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task).remote(*job, env_remote, opts_svd_ctm, cfg) for job in jobs])
+    gathered_result_ = ray.get([BuildProjector_.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task).remote(*job, opts_svd_ctm, cfg) for job in jobs])
 
     if proj_dict is None:
         proj_dict = {}
 
     for ii in range(len(jobs)):
-        site = jobs[ii][0]
+        site0 = jobs[ii][1]
+        site = jobs[ii][2]
+        dx = -site0.nx + site.nx
+        dy = -site0.ny + site.ny
 
         if gathered_result_[ii] is not None:
             for key in gathered_result_[ii].keys():
                 key0 = key[0]
                 key1 = key[1]
-                key0_new = canonical_site(env, Site(key0.nx, key0.ny))
+                key0_new = canonical_site(env, Site(key0.nx + dx, key0.ny + dy))
                 proj_dict[(key0_new, key1)] = gathered_result_[ii][key]
 
     if sites_to_be_updated is None:
@@ -362,9 +379,22 @@ def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, move='t', proj_dict=Non
     jobs.clear()
 
     for site in sites_to_be_updated:
+        if move in 'v':
+            env_part, site0, _, _ = SubWindow(env, site, 1, 1, 1, 1, site_load = [(-1, 0), (1, 0)], env_load_dict={(-1, 0):['t', 'tl', 'tr', 'l', 'r'], (1, 0):['b', 'bl', 'br', 'l', 'r']})
+        if move in 'h':
+            env_part, site0, _, _ = SubWindow(env, site, 1, 1, 1, 1, site_load = [(0, -1), (0, 1)], env_load_dict={(0, -1):['l', 'tl', 'bl', 't', 'b'], (0, 1):['r', 'tr', 'br', 't', 'b']})
+        if move in 't':
+            env_part, site0, _, _ = SubWindow(env, site, 1, 1, 0, 1, site_load = [(-1, 0)], env_load_dict={(-1, 0):['t', 'tl', 'tr', 'l', 'r']})
+        if move in 'l':
+            env_part, site0, _, _ = SubWindow(env, site, 1, 1, 1, 0, site_load = [(0, -1)], env_load_dict={(0, -1):['l', 'tl', 'bl', 't', 'b']})
+        if move in 'b':
+            env_part, site0, _, _ = SubWindow(env, site, 0, 1, 1, 1, site_load = [(1, 0)], env_load_dict={(1, 0):['b', 'bl', 'br', 'l', 'r']})
+        if move in 'r':
+            env_part, site0, _, _ = SubWindow(env, site, 1, 0, 1, 1, site_load = [(0, 1)], env_load_dict={(0, 1):['r', 'tr', 'br', 't', 'b']})
+
 
         if move in 'vtb':
-            jobs.append((site,
+            jobs.append((env_part.to_dict(level=1), site0, site,
                          canonical_site(env, env.nn_site(site, (-1, 0))),
                          canonical_site(env, env.nn_site(site, (1, 0))),
                          canonical_site(env, env.nn_site(site, (-1, -1))),
@@ -372,7 +402,7 @@ def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, move='t', proj_dict=Non
                          canonical_site(env, env.nn_site(site, (1, -1))),
                          canonical_site(env, env.nn_site(site, (1, 1)))))
         elif move in 'hlr':
-            jobs.append((site,
+            jobs.append((env_part.to_dict(level=1), site0, site,
                          canonical_site(env, env.nn_site(site, (0, -1))),
                          canonical_site(env, env.nn_site(site, (0, 1))),
                          canonical_site(env, env.nn_site(site, (-1, -1))),
@@ -381,7 +411,7 @@ def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, move='t', proj_dict=Non
                          canonical_site(env, env.nn_site(site, (1, 1)))))
 
     updated_ctm_tensors = []
-    updated_ctm_tensors = ray.get([UpdateSite.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, num_returns=1).remote(*job, env_remote, cfg, move, proj_dict) for job in jobs])
+    updated_ctm_tensors = ray.get([UpdateSite.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, num_returns=1).remote(*job, cfg, move, proj_dict) for job in jobs])
 
     proj_dict.clear()
 
@@ -456,12 +486,16 @@ def _ctmrg_(env:EnvCTM, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, ctm
     yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
 
 @ray.remote(num_cpus=4, num_gpus=0)
-def Measure1Site(site, env, op, cfg):
-    return {site: env.measure_1site(op, site=site)}
+def Measure1Site(env_dict, site0, site, op, cfg):
+
+    env = EnvCTM.from_dict(config=cfg, d=env_dict)
+    return {site: env.measure_1site(op, site=site0)}
 
 @ray.remote(num_cpus=4, num_gpus=0)
-def MeasureNN(bond, env, op0, op1, cfg):
-    return {bond: env.measure_nn(op0, op1, bond)}
+def MeasureNN(env_dict, bond0, bond, op0, op1, cfg):
+
+    env = EnvCTM.from_dict(config=cfg, d=env_dict)
+    return {bond: env.measure_nn(op0, op1, bond=bond0)}
 
 def ParaMeasure1Site(env, op, cfg, cpus_per_task=4, gpus_per_task=0):
 
@@ -469,8 +503,15 @@ def ParaMeasure1Site(env, op, cfg, cpus_per_task=4, gpus_per_task=0):
         ray.init(num_cpus=get_taskset_cpu_count(), ignore_reinit_error=True, namespace='Measure1Site')
 
     psi = env.psi
-    env_remote = ray.put(env)
-    list_of_dicts = ray.get([Measure1Site.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task).remote(site, env_remote, op, cfg) for site in env.psi.sites()])
+    list_of_dicts = []
+
+    jobs = []
+    for site in psi.sites():
+        env_part, site0, _, _ = SubWindow(env, site, 0, 0, 0, 0)
+        jobs.append((env_part.to_dict(level=1), site0, site))
+
+    list_of_dicts += ray.get([Measure1Site.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task).remote(*job, op, cfg) for job in jobs])
+    jobs.clear()
 
     result = {k: v for d in list_of_dicts for k, v in d.items()}
     return result
@@ -483,10 +524,23 @@ def ParaMeasureNN(env, op0, op1, cfg, cpus_per_task=4, gpus_per_task=0):
     psi = env.psi
     list_of_dicts = []
 
-    env_remote = ray.put(env)
+    jobs = []
 
-    list_of_dicts += ray.get([MeasureNN.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task).remote(bond, env_remote, op0, op1, cfg) for bond in psi.bonds(dirn='h')])
-    list_of_dicts += ray.get([MeasureNN.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task).remote(bond, env_remote, op0, op1, cfg) for bond in psi.bonds(dirn='v')])
+    for bond in psi.bonds(dirn='h'):
+        env_part, site0, _, _ = SubWindow(env, bond.site0, 0, 0, 0, 1, env_load_dict={(0, 0):['tl', 'bl', 'l', 't', 'b'], (0, 1):['tr', 'br', 'r', 't', 'b']})
+        bond0 = Bond(site0, env_part.nn_site(site0, 'r'))
+        jobs.append((env_part.to_dict(level=1), bond0, bond))
+
+    list_of_dicts += ray.get([MeasureNN.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task).remote(*job, op0, op1, cfg) for job in jobs])
+    jobs.clear()
+
+    for bond in psi.bonds(dirn='v'):
+        env_part, site0, _, _ = SubWindow(env, bond.site0, 0, 0, 1, 0, env_load_dict={(0, 0):['tl', 'tr', 'l', 't', 'r'], (1, 0):['bl', 'br', 'r', 'l', 'b']})
+        bond0 = Bond(site0, env_part.nn_site(site0, 'b'))
+        jobs.append((env_part.to_dict(level=1), bond0, bond))
+
+    list_of_dicts += ray.get([MeasureNN.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task).remote(*job, op0, op1, cfg) for job in jobs])
+    jobs.clear()
 
     result = {k: v for d in list_of_dicts for k, v in d.items()}
     return result
