@@ -356,6 +356,8 @@ def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, move='t', proj_dict=Non
                 key0_new = canonical_site(env, Site(key0.nx, key0.ny))
                 proj_dict[(key0_new, key1)] = gathered_result_[ii][key]
 
+    proj_dict_remote = ray.put(proj_dict)
+
     if sites_to_be_updated is None:
         sites_to_be_updated=sites
 
@@ -381,7 +383,7 @@ def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, move='t', proj_dict=Non
                          canonical_site(env, env.nn_site(site, (1, 1)))))
 
     updated_ctm_tensors = []
-    updated_ctm_tensors = ray.get([UpdateSite.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, num_returns=1).remote(*job, env_remote, cfg, move, proj_dict) for job in jobs])
+    updated_ctm_tensors = ray.get([UpdateSite.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, num_returns=1).remote(*job, env_remote, cfg, move, proj_dict_remote) for job in jobs])
 
     proj_dict.clear()
 
