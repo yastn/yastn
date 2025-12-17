@@ -305,7 +305,11 @@ def _update_core_D_(ctmrg_mp_context, env, move: str, opts_svd: dict, **kwargs):
         if env.profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.range_push(f"update_projectors_")
 
         # Stage 1: compute enlarged corners and halfs
-        env_d= env.to_dict(level=1)
+        # input must be detached() to be serialized
+        env_detach = env.detach()
+        env_detach.psi = env_detach.psi.detach()
+        env_d= env_detach.to_dict(level=1)
+
         for i,site in enumerate(sites_proj):
             task_queue.put( ("projectors_stage1",
                              (i, site, env_d, move), kwargs) )
@@ -499,8 +503,8 @@ def projectors_stage1(out_queue,device,
     """
     profiling_mode= kwargs.get("profiling_mode", None)
     env= from_dict(env_d).clone().to(device=device,non_blocking=True)
-    env = env.detach()
-    env.psi = env.psi.detach()
+    # env = env.detach()
+    # env.psi = env.psi.detach()
 
     if profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.range_push(f"projectors_stage1")
     tl, tr, bl, br= tuple(env.nn_site(site, d=d) for d in ((0, 0), (0, 1), (1, 0), (1, 1)))
