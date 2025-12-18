@@ -18,10 +18,10 @@ import pytest
 import math
 import copy
 import sys
+import os
 try:
     import yastn
 except ModuleNotFoundError as e:
-    import os 
     dir_path = os.path.dirname(os.path.realpath(__file__))
     sys.path.insert(0, dir_path+"/../../")
     import yastn
@@ -43,6 +43,7 @@ logger.addHandler(handler)
 logger.setLevel(logging.INFO)
     
 tol = 1e-12  #pylint: disable=invalid-name
+YASTN_LOG_LEVEL = int(os.getenv("YASTN_LOG_LEVEL","0"))
 
 torch_test = pytest.mark.skipif("'torch' not in config.getoption('--backend')",
                                 reason="Uses torch.autograd.gradcheck().")
@@ -98,7 +99,7 @@ def profile_ctmrg(on_site_t, X, config_profile, Nx=1, Ny=1, svd_policy="fullrank
 
     opts_svd = {"policy": svd_policy, "D_total": X, 'fix_signs': False, 'tol': 1.0e-12} 
     max_sweeps= kwargs.get("max_sweeps",5)
-    corner_tol= -1
+    corner_tol= kwargs.get("ctm_conv_crit",-1)
     
 
     max_dsv, converged, history = None, False, []
@@ -119,6 +120,18 @@ def profile_ctmrg(on_site_t, X, config_profile, Nx=1, Ny=1, svd_policy="fullrank
         print("\n".join([f"Corner {c} {getattr(env2[0,0],c).get_legs(0)}" for c in ["tl", "tr", "bl", "br"]]))
         t0=t1
 
+        if config_profile.backend.BACKEND_ID in ["torch_cpp"] and YASTN_LOG_LEVEL>1:
+            # for i,v in enumerate(config_profile.backend.cutensor_cache_stats().values()):
+            #     print(f"Cutensor plan cache {i}: {v}")
+            print(f"cutensor.cache_stats: "+str(list(config_profile.backend.cutensor_cache_stats().values())))
+
+
+def uniform_init_(a, target_cfg: yastn.tensor._auxliary._config):
+    cfg_uni= yastn.make_config(sym=target_cfg.sym, backend='np', default_device='cpu', default_fusion='none',)
+    cfg_uni.backend.random_seed(1)
+
+    a_uni= yastn.rand(cfg_uni, legs= a.get_legs(), n=a.n)
+    a._data= target_cfg.backend.to_tensor( a_uni._data, device=target_cfg.default_device, dtype=target_cfg.default_dtype )
 
 @torch_test
 def test_ctmrg_U1xU1(config_kwargs,D : int=3, X : int=None, u1_charges : list[int]=None, u1_Ds: list[int]=None, 
@@ -126,7 +139,6 @@ def test_ctmrg_U1xU1(config_kwargs,D : int=3, X : int=None, u1_charges : list[in
     """
     """
     config = yastn.make_config(sym='U1xU1', **config_kwargs)
-    config.backend.random_seed(1)
 
     # make on-site tensor
     if input_shape_file:
@@ -154,6 +166,7 @@ def test_ctmrg_U1xU1(config_kwargs,D : int=3, X : int=None, u1_charges : list[in
         lp= yastn.Leg(config, s=1, t=(((1,-1),(-1,1))), D=(1,1) )
         a= yastn.rand(config, legs=[l0.conj(), l0.conj(), l0, l0, lp], n=config.sym.zero())
     
+    uniform_init_(a, config)
     print(a)
     profile_ctmrg(a, X, config, **kwargs)
 
@@ -164,7 +177,6 @@ def test_ctmrg_U1(config_kwargs, D : int=3, X : int=None, u1_charges : list[int]
     """
     """
     config = yastn.make_config(sym='U1', **config_kwargs)
-    config.backend.random_seed(1)
 
     # make on-site tensor
     if input_shape_file:
@@ -189,6 +201,7 @@ def test_ctmrg_U1(config_kwargs, D : int=3, X : int=None, u1_charges : list[int]
         lp= yastn.Leg(config, s=1, t=(-1,1), D=(1,1) )
         a= yastn.rand(config, legs=[l0.conj(), l0.conj(), l0, l0, lp], n=0)
 
+    uniform_init_(a, config)
     print(a)
     profile_ctmrg(a, X, config, **kwargs)
 
@@ -209,6 +222,7 @@ def test_ctmrg_Z2(config_kwargs, D : int=4, X : int=None, **kwargs):
     a= yastn.rand(config, legs=[l0.conj(), l0.conj(), l0, l0, lp], n=1)
 
     # 
+    uniform_init_(a, config)
     profile_ctmrg(a, X, config, **kwargs)
 
 
@@ -228,6 +242,8 @@ if __name__ == '__main__':
     parser.add_argument("--sym", type=str, default='Z2', choices=['U1','Z2', 'U1xU1'], help="symmetry")
     parser.add_argument("--max_sweeps", type=int, default=5, help="Number of ctmrg sweeps ran under profiling")
     parser.add_argument("--to_dense", action='store_true', help="Run profile case as dense")
+    parser.add_argument("--ctm_conv_crit", type=float, default=-1, help="Covergence criterion for ctmrg. "\
+        +"Terminate once max change in corner singular values is below this value. -1 means run until max_sweeps.")
     parser.add_argument(
         "--u1_charges",
         dest="u1_charges",
@@ -253,7 +269,8 @@ if __name__ == '__main__':
     config_kwargs=  {'backend': args.backend, 'default_device': args.devices[0],
             'default_fusion': args.default_fusion, 'tensordot_policy': args.tensordot_policy,}
     
-    kwargs= dict( Nx=args.Nx, Ny=args.Ny, svd_policy=args.svd_policy, max_sweeps=args.max_sweeps, to_dense=args.to_dense,) 
+    kwargs= dict( Nx=args.Nx, Ny=args.Ny, svd_policy=args.svd_policy, max_sweeps=args.max_sweeps, to_dense=args.to_dense,
+                 ctm_conv_crit=args.ctm_conv_crit,) 
     if args.sym == 'Z2':
         test_ctmrg_Z2(config_kwargs,  D=args.D, X=args.X, devices=ctm_devices, **kwargs)
     if args.sym == 'U1':
@@ -262,8 +279,3 @@ if __name__ == '__main__':
     if args.sym == 'U1xU1':
         test_ctmrg_U1xU1(config_kwargs, D=args.D, X=args.X, u1_charges=args.u1_charges, u1_Ds=args.u1_Ds, 
                                input_shape_file=args.input_shape_file, devices=ctm_devices, **kwargs)
-
-
-
-
-

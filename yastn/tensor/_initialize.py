@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 """ Methods creating a new yastn.Tensor """
+import os
 from functools import reduce
 from itertools import product, accumulate
 import numbers
@@ -90,7 +91,11 @@ def make_config(**kwargs) -> _config:
             * ``'fuse_to_matrix'`` Tensordot involves suitable permutation of each tensor while performing a fusion of each tensor into a sequence of matrices and calling matrix-matrix multiplication. Postprocessing includes unfusioning the remaining legs in the result, which often copy data adding extra overhead.
             * ``'fuse_contracted'`` Tensordot involves suitable permutation of each tensor while performing a fusion of to-be-contracted legs of each tensor and calling multiplication. It involves a larger number of multiplication calls for smaller objects, but unfusing the legs of the result is not needed.
             * ``'no_fusion'`` Tensordot involves suitable permutation of tensor blocks and calling matrix-matrix multiplication for a potentially large number of small objects. Resulting contributions to new blocks get added. However, overheads of initial fusion (copying data) can sometimes be avoided in this approach.
-
+    profile : bool
+        If ``True``, enables profiling of tensor operations in backends supporting it.
+        Currently, only PyTorch backend with NVTX support is available.
+        Default is ``False``. If YASTN_PROFILE=1 is set in the environment, overrides this argument to ``True``.
+            
     Example
     -------
 
@@ -116,6 +121,9 @@ def make_config(**kwargs) -> _config:
             kwargs["sym"] = _syms[kwargs["sym"]]
         except KeyError:
             raise YastnError("sym encoded as string only supports: 'dense', 'Z2', 'Z3', 'U1', 'U1xU1', 'U1xU1xZ2'.")
+
+    if "profile" not in kwargs:
+        kwargs["profile"] = bool(int(os.getenv("YASTN_PROFILE","0")))
 
     return _config(**{a: kwargs[a] for a in _config._fields if a in kwargs})
 
