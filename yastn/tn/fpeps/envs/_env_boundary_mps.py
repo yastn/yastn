@@ -178,9 +178,12 @@ class EnvBoundaryMPS():
         return self._env[n, dirn]
 
     def __getitem__(self, ind):
-        if ind[1] == 'v' or ind[1] == 'h':
-            return self.psi.transfer_mpo(n=ind[0], dirn=ind[1])
-        return self._env[ind]
+        n, dirn = ind
+        if dirn in 'tbh':
+            n = n % self.Nx
+        if dirn in ['h', 'v']:
+            return self.psi.transfer_mpo(n=n, dirn=dirn)
+        return self._env[n, dirn]
 
     def measure_1site(peps_env, O, site=None):
         """
