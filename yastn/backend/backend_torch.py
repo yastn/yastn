@@ -38,13 +38,14 @@ __all__= [
     'requires_grad_', 'requires_grad', 'move_to', 'conj',
     'trace', 'rsqrt', 'reciprocal', 'exp', 'sqrt', 'absolute',
     'fix_svd_signs', 'svdvals', 'svd_lowrank', 'svd', 'svd_randomized', 'svds_scipy',
-    'eigh', 'qr', 'pinv',
+    'eigh', 'qr', 'pinv', 'eig', 'eigvals',
     'argsort', 'eigs_which', 'allclose',
     'add', 'sub', 'apply_mask', 'vdot', 'diag_1dto2d', 'diag_2dto1d',
     'dot', 'dot_diag', 'transpose_dot_sum',
     'merge_to_dense', 'merge_super_blocks', 'is_independent',
-    'apply_mask', 'embed_mask', 
-    'transpose', 'transpose_and_merge', 'unmerge']
+    'apply_mask', 'embed_mask',
+    'transpose', 'transpose_and_merge', 'unmerge',
+    'negate_blocks', 'bitwise_not']
 
 
 torch.random.seed()

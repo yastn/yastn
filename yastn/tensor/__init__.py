@@ -91,6 +91,9 @@ class Tensor:
             dty = kwargs['dtype'] if 'dtype' in kwargs else self.config.default_dtype
             self._data = self.config.backend.zeros((0,), dtype=dty, device=dev)
 
+        if self._data is not None and self._data.ndim != 1:  # e.g. some scipy procedure might add extra dim=1.
+            self._data = self._data.reshape(-1)
+
         try:
             self.struct = kwargs['struct']
         except KeyError:

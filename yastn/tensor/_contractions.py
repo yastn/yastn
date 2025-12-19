@@ -195,10 +195,10 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
     order_a = nout_a + nin_a
     order_b = nin_b + nout_b
 
-    if a.config.backend.BACKEND_ID == 'torch_cpp' and len(struct_c.s)>0:
-        # NOTE nout_a, nin_a, nout_b, nin_b use ndim_n or ndim ? 
+    if a.config.backend.BACKEND_ID == 'torch_cpp' and len(struct_c.s)>0 and len(a.struct.s)>0 and len(b.struct.s)>0:
+        # NOTE nout_a, nin_a, nout_b, nin_b use ndim_n or ndim ?
         #      *) when default_fusion='meta', they are wrt. native legs. The charges of non-zero blocks are also wrt. to native legs.
-        
+
         a_blocks_t, b_blocks_t, c_blocks_t= a.struct.t, b.struct.t, struct_c.t
         a_slices, b_slices = a.slices, b.slices
         if a.config.sym.NSYM == 0 and b.config.sym.NSYM == 0:
@@ -211,13 +211,13 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
             if ind_b:
                 b_blocks_t= tuple(b.struct.t[i] for i in ind_b)
                 b_slices= tuple(b.slices[i] for i in ind_b)
-        
+
         if a.config.profile: a.config.backend.cuda.nvtx.range_push(f"kernel_tensordot_bs")
         a_legs, b_legs= a.get_legs( native=True ), b.get_legs( native=True )
         data = a.config.backend.kernel_tensordot_bs(
-            a.data, b.data, 
+            a.data, b.data,
             a.config.sym.NSYM,
-            a_blocks_t, 
+            a_blocks_t,
             a_slices,
             [l.t for l in a_legs] if a.config.sym.NSYM > 0 else [((0,),)]*a.ndim_n,
             [l.D for l in a_legs],
@@ -225,7 +225,7 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
             b_blocks_t,
             b_slices,
             [l.t for l in b_legs] if b.config.sym.NSYM > 0 else [((0,),)]*b.ndim_n,
-            [l.D for l in b_legs], 
+            [l.D for l in b_legs],
             nout_b, nin_b,
             struct_c.size, c_blocks_t,
             slices_c,
@@ -243,9 +243,9 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
 def _common_inds(t_a, t_b, nin_a : tuple[int], nin_b : tuple[int], ndimn_a, ndimn_b, nsym):
     r"""
     Return row indices of nparray ``a`` that are in ``b``, and vice versa. Outputs tuples.
-    In other words: Return indices of blocks from ``t_a`` and ``t_b``, which pariticpate in 
+    In other words: Return indices of blocks from ``t_a`` and ``t_b``, which pariticpate in
         a contraction specified by ``nin_a`` and ``nin_b``.
-    
+
     Parameters
     ----------
         t_a : Sequence[Sequence[int]]
@@ -264,7 +264,7 @@ def _common_inds(t_a, t_b, nin_a : tuple[int], nin_b : tuple[int], ndimn_a, ndim
     ia = tuple(ii for ii, el in enumerate(la) if el in sb) # matching <ingoing-block-sectors>_of-a with <ingoing-block-sectors>_of-b
     ib = tuple(ii for ii, el in enumerate(lb) if el in sa)
     if len(ia) == len(la): # all <ingoing-block-sectors>_of-a appear among sectors of b
-        ia = None 
+        ia = None
     if len(ib) == len(lb): # all <ingoing-block-sectors>_of-b appear among sectors of a
         ib = None
     return ia, ib
@@ -358,7 +358,7 @@ def _meta_tensordot_nf(struct_a, slices_a, struct_b, slices_b, ind_a, ind_b, nou
     Dacp = np.prod(Dac, axis=1, dtype=np.int64) # total size of contracted sectors (per block)
 
     tDac = np.hstack([tac, Dac])
-    unique_tDac, inv_tDac, count_tDac = np.unique(tDac, return_inverse=True, return_counts=True, axis=0) # if more blocks of a contribute to given contracted sector (in b) 
+    unique_tDac, inv_tDac, count_tDac = np.unique(tDac, return_inverse=True, return_counts=True, axis=0) # if more blocks of a contribute to given contracted sector (in b)
     arg_tDac = np.argsort(inv_tDac)
 
     tb = struct_b.t if ind_b is None else [struct_b.t[ii] for ii in ind_b]

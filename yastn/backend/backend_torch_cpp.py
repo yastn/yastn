@@ -36,7 +36,7 @@ def _meta_tensordot_bs(
         a_t_per_mode : Union[Sequence[Sequence[int]], Sequence[Sequence[Sequence[int]]]] , # list of charges for each leg of a (for product groups, the charges are not flattened)
         a_D_per_mode : Sequence[Sequence[int]],   # list of Ds for each leg of a
         nout_a : Sequence[int], nin_a : Sequence[int], # outgoing and contracted legs of a
-        b_struct_t : Sequence[Sequence[int]], # non-zero blocks of a indexed via charges (for product groups, the charges are flattened), 
+        b_struct_t : Sequence[Sequence[int]], # non-zero blocks of a indexed via charges (for product groups, the charges are flattened),
         b_slices,   # slices of a, i.e. the locations of the non-zero blocks in the 1D tensor b
         b_t_per_mode : Union[Sequence[Sequence[int]], Sequence[Sequence[Sequence[int]]]],   # list of charges for each leg of b
         b_D_per_mode : Sequence[Sequence[int]],   # list of Ds for each leg of b
@@ -48,18 +48,18 @@ def _meta_tensordot_bs(
 
     Returns:
         meta_dot: metadata for cutensor block-sparse tensordot
-    """   
-    # Sectors on contracted modes must share extents. Hence, we need to fill sectors (and their extents) 
+    """
+    # Sectors on contracted modes must share extents. Hence, we need to fill sectors (and their extents)
     # which are present in only one of the operands.
     # pre-process _t_per_mode such that each mode (formally) contains all t's
-    
+
     # _merge_t = lambda x,y: sorted(list( set(a_t_per_mode[x]) | set( b_t_per_mode[y] )))
 
     # # pre-process _D_per_mode
     # filled_a_t_per_mode= [ a_t_per_mode[i] if i in nout_a else _merge_t(i,nin_b[nin_a.index(i)]) for i in range(len(nout_a+nin_a)) ]
     # filled_b_t_per_mode= [ b_t_per_mode[i] if i in nout_b else _merge_t(nin_a[nin_b.index(i)],i) for i in range(len(nout_b+nin_b)) ]
-    
-    
+
+
     # Build merged charge sets for contracted legs more efficiently
     # Pre-compute mapping from leg index to position in nin_a/nin_b
     nin_a_set = set(nin_a)
@@ -72,7 +72,7 @@ def _meta_tensordot_bs(
         merged = set(a_t_per_mode[a_idx])
         merged.update(b_t_per_mode[b_idx])
         return sorted(merged)
-    
+
     def _merge_t_v1(a_idx, b_idx):
         # Merge two sorted lists in O(n+m) time
         a_list = a_t_per_mode[a_idx]
@@ -108,7 +108,7 @@ def _meta_tensordot_bs(
     #         filled_b_t_per_mode.append(b_t_per_mode[i])
     #     else:
     #         filled_b_t_per_mode.append(_merge_t(nin_a[nin_b_to_pos[i]], i))
-    
+
     filled_a_t_per_mode= list(a_t_per_mode)
     filled_b_t_per_mode= list(b_t_per_mode)
 
@@ -155,7 +155,7 @@ def _meta_tensordot_bs(
             res= [[lookups[i][(row[i],)] for i in range(len(t_per_mode))]
                     for row in struct_t]
         return sum(res, start=[])
-        
+
     # Linearization of block coordinates
     # NOT APPLICABLE: Block index can have value at most equal to number of extents in the respective mode - 1
     def normalize_ts(filled_t_per_mode):
@@ -163,24 +163,24 @@ def _meta_tensordot_bs(
         for t_mode in filled_t_per_mode:
             tm= np.asarray(t_mode)
             floor= np.min(tm, axis=0)
-            
+
             idx2i= np.empty( np.max(tm,axis=0)-floor+1, dtype=np.int64 )
             for i, idx in enumerate(tm):
                 idx2i[tuple(idx - floor)]= i
-            
+
             res.append( (floor, list(accumulate( np.max(tm, axis=0)-floor+1, operator.mul )), idx2i) )
         return res
 
     def _blocksparse_coords_v3(struct_t, filled_t_per_mode):
         ts= np.array(struct_t).reshape( len(struct_t), len(filled_t_per_mode), max(1,NSYM) ) # NSYM=0 is treated as NSYM=1 with 0 sector charge only
-        n= normalize_ts(filled_t_per_mode) 
+        n= normalize_ts(filled_t_per_mode)
         ts-= np.stack([f[0] for f in n])                # shift to zero-based [:,...] -= [...] broadcast over :
         # ts[...,1:]*= np.stack([f[1] for f in n])[:,:-1] # raise by base
-        # ts= np.sum(ts,axis=-1).tolist()              # compute linearized indices      
+        # ts= np.sum(ts,axis=-1).tolist()              # compute linearized indices
         B= np.empty( ts.shape[:2], dtype=np.int64 )
         for mode in range(len(filled_t_per_mode)):
             B[:,mode]= n[mode][2][ tuple( ts[:,mode,i] for i in range(max(1,NSYM)) ) ]
-        
+
         return B.reshape(-1).tolist()
 
     # c_t_per_mode, c_D_per_mode can be obtained from per_mode info of a and b
@@ -224,7 +224,7 @@ def _meta_tensordot_bs(
         Ds= np.asarray( tuple(b.D for b in slices) )
         np.cumprod( Ds[:, -1:0:-1], axis=-1, out= S[:,:len(slices[0].D)-1][:,::-1])
         return tuple(s.slcs[0][0] for s in slices), S.reshape(-1).tolist()
-    
+
     a_offsets, a_strides= _offsets_and_strides(a_slices)
     b_offsets, b_strides= _offsets_and_strides(b_slices)
     c_offsets, c_strides= _offsets_and_strides(c_slices)
@@ -235,14 +235,14 @@ def _meta_tensordot_bs(
 
 
 def kernel_tensordot_bs(
-        a: torch.Tensor, b: torch.Tensor, 
+        a: torch.Tensor, b: torch.Tensor,
         NSYM: int,
         a_struct_t : Sequence[Sequence[int]], # non-zero blocks of a indexed via charges (for product groups, the charges are flattened)
         a_slices,   # slices of a, i.e. the locations of the non-zero blocks in the 1D tensor a
         a_t_per_mode : Union[Sequence[Sequence[int]], Sequence[Sequence[Sequence[int]]]] , # list of charges for each leg of a (for product groups, the charges are not flattened)
         a_D_per_mode : Sequence[Sequence[int]],   # list of Ds for each leg of a
         nout_a : Sequence[int], nin_a : Sequence[int], # outgoing and contracted legs of a
-        b_struct_t : Sequence[Sequence[int]], # non-zero blocks of a indexed via charges (for product groups, the charges are flattened), 
+        b_struct_t : Sequence[Sequence[int]], # non-zero blocks of a indexed via charges (for product groups, the charges are flattened),
         b_slices,   # slices of a, i.e. the locations of the non-zero blocks in the 1D tensor b
         b_t_per_mode : Union[Sequence[Sequence[int]], Sequence[Sequence[Sequence[int]]]],   # list of charges for each leg of b
         b_D_per_mode : Sequence[Sequence[int]],   # list of Ds for each leg of b
@@ -268,8 +268,14 @@ def kernel_tensordot_bs(
     c_coords, c_offsets, c_strides, T_c_D_per_mode = res
 
     if profile: torch.cuda.nvtx.range_push(f"ops.tensordot_bs")
+    # TODO type promotion should be handled by cutensor
+    if a.dtype != dtype:
+        a = a.to(dtype=dtype)
+    if b.dtype != dtype:
+        b = b.to(dtype=dtype)
+
     res= cublocksparse.ops.tensordot_bs(
-            a, b, 
+            a, b,
             a_coords, a_offsets, a_strides, T_a_D_per_mode, nout_a, nin_a,
             b_coords, b_offsets, b_strides, T_b_D_per_mode, nout_b, nin_b,
             c_size, c_coords, c_offsets, c_strides, T_c_D_per_mode

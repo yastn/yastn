@@ -80,7 +80,7 @@ def test_exci_sma_UUD(config_kwargs):
         e0s[f"{tuple(site_b)}, {tuple(site_r)}"] = Jzz * env_ctm.measure_2x2(Sz, Sz, sites=[site_b, site_r]).real
         e0s[f"{tuple(site_b)}, {tuple(site_r)}"] += 0.5 * Jxy * env_ctm.measure_2x2(Sp, Sm, sites=[site_b, site_r]).real
         e0s[f"{tuple(site_b)}, {tuple(site_r)}"] += 0.5 * Jxy * env_ctm.measure_2x2(Sm, Sp, sites=[site_b, site_r]).real
-    e_gs = sum([v for v in e0s.values()]).numpy()
+    e_gs = sum([v for v in e0s.values()]).numpy(force=True)
 
     ### Compute excited state energy
     lp = 3 # patch size
@@ -177,7 +177,7 @@ def test_exci_sma_UUD(config_kwargs):
                     ### Compute norm using sweep from the top left corner
                     if lx_k == min_x and lx_k == min_y:
                         N_val_tl, _ = compute_norm_exci_tl(env_ctm, exci_bra, exci_psi, (min_x, max_x+1), (min_y, max_y+1))
-                        ns_exci_tl[:, :, i_sl] = np.array([v.detach() for v in N_val_tl.values()]).reshape(lp, lp)
+                        ns_exci_tl[:, :, i_sl] = np.array([v.numpy(force=True) for v in N_val_tl.values()]).reshape(lp, lp)
         computed_norm = True
 
 
