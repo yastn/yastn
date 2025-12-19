@@ -1,9 +1,8 @@
 import logging
 import numpy as np
 from ._env_ctm import CTMRG_out, EnvCTM, update_storage_
-from .._initialize import product_peps
 from .._peps import Peps
-from .._geometry import Site, Bond, SquareLattice
+from .._geometry import Site, SquareLattice
 from ...._from_dict import from_dict
 import ray
 import psutil
