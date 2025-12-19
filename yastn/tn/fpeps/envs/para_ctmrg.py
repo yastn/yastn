@@ -413,7 +413,8 @@ def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, move='t', proj_dict=Non
 def _ctmrg_(env:EnvCTM, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, ctm_jobs_hv=None, moves='hv', cpus_per_task=4, gpus_per_task=0):
 
     if ctm_jobs_hv is None:
-        ctm_jobs_hor, ctm_jobs_ver = CreateCTMJobBundle(env, cpus_per_task=cpus_per_task)
+        # ctm_jobs_hor, ctm_jobs_ver = CreateCTMJobBundle(env, cpus_per_task=cpus_per_task)
+        ctm_jobs_hor, ctm_jobs_ver = env.psi.sites(), env.psi.sites()
     else:
         ctm_jobs_hor, ctm_jobs_ver = ctm_jobs_hv
 
