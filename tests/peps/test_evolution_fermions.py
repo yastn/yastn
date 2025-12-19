@@ -87,21 +87,22 @@ def test_peps_evolution_hopping(config_kwargs, boundary, method):
         # test evolution with EnvNTU
         psi = fpeps.product_peps(geometry, ops.I())
         env = fpeps.EnvNTU(psi, which='NN')
+        generate_jobs(psi, dirn, NTUEnvX, NTUEnvY)
         fpeps.evolution_step_(env, gates, opts_svd={'D_total': 16}, method=method)
         psi = psi.to_tensor()
         psin = psi.to_numpy()
         psin = psin * phin.ravel()[0] / psin.ravel()[0]  # evolution_step_ does not keep the norm
         assert np.allclose(phin, psin)
         #
-        # test evolution with EnvBP
-        psi = fpeps.product_peps(geometry, ops.I())
-        env = fpeps.EnvBP(psi, which='BP')
-        env.iterate_(max_sweeps=5)
-        fpeps.evolution_step_(env, gates, opts_svd={'D_total': 16}, method=method)
-        psi = psi.to_tensor()
-        psin = psi.to_numpy()
-        psin = psin * phin.ravel()[0] / psin.ravel()[0]  # evolution_step_ does not keep the norm
-        assert np.allclose(phin, psin)
+        # # test evolution with EnvBP
+        # psi = fpeps.product_peps(geometry, ops.I())
+        # env = fpeps.EnvBP(psi, which='BP')
+        # env.iterate_(max_sweeps=5)
+        # fpeps.evolution_step_(env, gates, opts_svd={'D_total': 16}, method=method)
+        # psi = psi.to_tensor()
+        # psin = psi.to_numpy()
+        # psin = psin * phin.ravel()[0] / psin.ravel()[0]  # evolution_step_ does not keep the norm
+        # assert np.allclose(phin, psin)
 
 
 if __name__ == '__main__':

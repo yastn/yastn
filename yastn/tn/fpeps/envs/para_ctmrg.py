@@ -1,9 +1,8 @@
 import logging
 import numpy as np
 from ._env_ctm import CTMRG_out, EnvCTM, update_storage_
-from .._initialize import product_peps
 from .._peps import Peps
-from .._geometry import Site, Bond, SquareLattice
+from .._geometry import Site, SquareLattice
 from ...._from_dict import from_dict
 import ray
 import psutil
@@ -413,7 +412,8 @@ def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, move='t', proj_dict=Non
 def _ctmrg_(env:EnvCTM, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, ctm_jobs_hv=None, moves='hv', cpus_per_task=4, gpus_per_task=0):
 
     if ctm_jobs_hv is None:
-        ctm_jobs_hor, ctm_jobs_ver = CreateCTMJobBundle(env, cpus_per_task=cpus_per_task)
+        # ctm_jobs_hor, ctm_jobs_ver = CreateCTMJobBundle(env, cpus_per_task=cpus_per_task)
+        ctm_jobs_hor, ctm_jobs_ver = env.psi.sites(), env.psi.sites()
     else:
         ctm_jobs_hor, ctm_jobs_ver = ctm_jobs_hv
 
@@ -458,26 +458,26 @@ def _ctmrg_(env:EnvCTM, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, ctm
     yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
 
 @ray.remote(num_cpus=4, num_gpus=0)
-def Measure1Site(site, env, op, cfg):
+def Measure1Site(site, env, op):
     return {site: env.measure_1site(op, site=site)}
 
 @ray.remote(num_cpus=4, num_gpus=0)
-def MeasureNN(bond, env, op0, op1, cfg):
+def MeasureNN(bond, env, op0, op1):
     return {bond: env.measure_nn(op0, op1, bond)}
 
-def ParaMeasure1Site(env, op, cfg, cpus_per_task=4, gpus_per_task=0):
+def ParaMeasure1Site(env, op, cpus_per_task=4, gpus_per_task=0):
 
     if not ray.is_initialized():
         ray.init(num_cpus=get_taskset_cpu_count(), ignore_reinit_error=True, namespace='Measure1Site')
 
     psi = env.psi
     env_remote = ray.put(env)
-    list_of_dicts = ray.get([Measure1Site.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task).remote(site, env_remote, op, cfg) for site in env.psi.sites()])
+    list_of_dicts = ray.get([Measure1Site.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task).remote(site, env_remote, op) for site in env.psi.sites()])
 
     result = {k: v for d in list_of_dicts for k, v in d.items()}
     return result
 
-def ParaMeasureNN(env, op0, op1, cfg, cpus_per_task=4, gpus_per_task=0):
+def ParaMeasureNN(env, op0, op1, cpus_per_task=4, gpus_per_task=0):
 
     if not ray.is_initialized():
         ray.init(num_cpus=get_taskset_cpu_count(), ignore_reinit_error=True, namespace='MeasureNN')
@@ -487,14 +487,14 @@ def ParaMeasureNN(env, op0, op1, cfg, cpus_per_task=4, gpus_per_task=0):
 
     env_remote = ray.put(env)
 
-    list_of_dicts += ray.get([MeasureNN.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task).remote(bond, env_remote, op0, op1, cfg) for bond in psi.bonds(dirn='h')])
-    list_of_dicts += ray.get([MeasureNN.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task).remote(bond, env_remote, op0, op1, cfg) for bond in psi.bonds(dirn='v')])
+    list_of_dicts += ray.get([MeasureNN.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task).remote(bond, env_remote, op0, op1) for bond in psi.bonds(dirn='h')])
+    list_of_dicts += ray.get([MeasureNN.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task).remote(bond, env_remote, op0, op1) for bond in psi.bonds(dirn='v')])
 
     result = {k: v for d in list_of_dicts for k, v in d.items()}
     return result
 
 
-def PARActmrg_(env:EnvCTM, max_sweeps=50, iterator_step=1, opts_svd_ctm=None, corner_tol=None, ctm_jobs_hv=None, moves='hv', cpus_per_task=4, gpus_per_task=0):
+def PARActmrg_(env:EnvCTM, max_sweeps=50, iterator_step=1, opts_svd_ctm=None, corner_tol=None, ctm_jobs_hv=None, moves='hv', cpus_per_task=1, gpus_per_task=0):
     if ray.is_initialized():
         ray.shutdown()
     ray.init(num_cpus=get_taskset_cpu_count(), ignore_reinit_error=True, namespace='BuilidProjector')
