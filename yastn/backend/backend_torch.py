@@ -17,9 +17,8 @@ from itertools import groupby
 from functools import reduce
 import torch
 from torch.utils.checkpoint import checkpoint as _checkpoint
-import torch.cuda as cuda
-import torch.multiprocessing as mp
-mp.set_start_method('spawn', force=True)
+# import torch.multiprocessing as mp
+# mp.set_start_method('spawn', force=True)
 from .linalg.torch_eig_sym import SYMEIG
 from ._backend_torch_backwards import kernel_svd, kernel_svds_scipy
 from ._backend_torch_backwards import kernel_dot, kernel_transpose_dot_sum, kernel_negate_blocks
@@ -30,7 +29,7 @@ from ._backend_torch_backwards import kernel_transpose, kernel_transpose_and_mer
 __all__= [
     'DTYPE', 'cuda_is_available',
     'get_dtype', 'is_complex', 'get_device', 'random_seed', 'grad',
-    'detach', 'detach_', 'clone', 'copy',
+    'detach', 'detach_', 'clone', 'copy', 'randint',
     'to_numpy', 'get_shape', 'get_size', 'diag_create', 'diag_get', 'real',
     'imag', 'max_abs', 'maximum', 'norm_matrix', 'delete', 'insert',
     'expm', 'first_element', 'item', 'sum_elements', 'norm', 'entropy',
