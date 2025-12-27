@@ -21,7 +21,7 @@ from warnings import warn
 from ._env_contractions import identity_boundary, corner2x2, append_vec_tl, append_vec_br
 from ._env_dataclasses import EnvCTM_local, EnvCTM_projectors
 from .._evolution import BondMetric
-from .._geometry import Site, Lattice
+from .._geometry import Site, Lattice, CheckerboardLattice
 from .._peps import PEPS_CLASSES, Peps2Layers
 from ... import mps
 from ....initialize import rand, ones, eye
@@ -641,28 +641,39 @@ class EnvCTM():
             opts_svd = env.opts_svd
 
         dirn = env.nn_bond_dirn(*bond)
-        s0, s1 = bond if dirn in 'lr tb' else bond[::-1]
+        s0, s1 = bond if dirn in ['lr', 'tb'] else bond[::-1]
 
-        env_tmp = EnvCTM(env.psi, init=None)  # empty environments
+        env.psi.bra.apply_patch()
+        env.apply_patch()
+
+        assert isinstance(env.geometry, CheckerboardLattice), "Currently only CheckerboardLattice is supported."
+
+        if 'method' not in kwargs:
+            kwargs['method'] = '2site'
+
         if dirn in 'lrl':
-            env._update_projectors_(s0, 'lrt', opts_svd, **kwargs)
-            env._update_projectors_(env.nn_site(s0, d='t'), 'lrb', opts_svd, **kwargs)
-            env_tmp._update_env_(s0, env, move='r')
-            env_tmp._update_env_(env.nn_site(s0, d='t'), env, move='r')
-            env_tmp._update_env_(env.nn_site(s0, d='b'), env, move='r')
-            env_tmp._update_env_(s1, env, move='l')
-            env_tmp._update_env_(env.nn_site(s1, d='t'), env, move='l')
-            env_tmp._update_env_(env.nn_site(s1, d='b'), env, move='l')
+            env._update_env_(s0, env, move='r')
+            env._update_env_(s1, env, move='l')
+
+            env._update_projectors_(s0, 'v', opts_svd, **kwargs)
+            env._update_projectors_(s1, 'v', opts_svd, **kwargs)
+            env_tmp = EnvCTM(env.psi, init=None)  # empty environments
+            env_tmp._update_env_(s0, env, move='v')
+            env_tmp._update_env_(s1, env, move='v')
+            update_storage_(env, env_tmp)
         else:  # 'tbt'
-            env._update_projectors_(s0, 'tbl', opts_svd, **kwargs)
-            env._update_projectors_(env.nn_site(s0, d='l'), 'tbr', opts_svd, **kwargs)
-            env_tmp._update_env_(s0, env, move='b')
-            env_tmp._update_env_(env.nn_site(s0, d='l'), env, move='b')
-            env_tmp._update_env_(env.nn_site(s0, d='r'), env, move='b')
-            env_tmp._update_env_(s1, env, move='t')
-            env_tmp._update_env_(env.nn_site(s1, d='l'), env, move='t')
-            env_tmp._update_env_(env.nn_site(s1, d='r'), env, move='t')
-        update_storage_(env, env_tmp)
+            env._update_env_(s0, env, move='b')
+            env._update_env_(s1, env, move='t')
+
+            env._update_projectors_(s0, 'h', opts_svd, **kwargs)
+            env._update_projectors_(s1, 'h', opts_svd, **kwargs)
+            env_tmp = EnvCTM(env.psi, init=None)  # empty environments
+            env_tmp._update_env_(s0, env, move='h')
+            env_tmp._update_env_(s1, env, move='h')
+            update_storage_(env, env_tmp)
+
+        assert env.is_consistent()
+
 
     def _update_projectors_(env, site, move, opts_svd, **kwargs):
         r"""
@@ -794,7 +805,9 @@ class EnvCTM():
         #env.update_bond_(bond, opts_svd=env.opts_svd)
 
     def post_truncation_(env, bond, **kwargs):
-        env.update_bond_(bond, opts_svd=env.opts_svd)
+        if 'opts_svd' not in kwargs:
+            kwargs['opts_svd'] = env.opts_svd
+        env.update_bond_(bond, **kwargs)
 
     def bond_metric(self, Q0, Q1, s0, s1, dirn) -> Tensor:
         r"""

@@ -475,7 +475,9 @@ class Lattice():
 
     def move_to_patch(self, sites):
         """ Initialize a patch with a shallow copy of data object for provided sites. """
-        if not isinstance(sites[0], (tuple, list)):
+        if not sites:
+            return
+        if is_site(sites):
             sites = [sites]
         for site in sites:
             self._patch[site] = self[site].shallow_copy()

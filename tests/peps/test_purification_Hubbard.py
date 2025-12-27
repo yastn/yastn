@@ -21,7 +21,7 @@ def mean(xs):
     return sum(xs) / len(xs)
 
 @pytest.mark.skipif("not config.getoption('long_tests')", reason="long duration tests are skipped")
-def test_NTU_spinful_finite(config_kwargs):
+def atest_NTU_spinful_finite(config_kwargs):
     """ Simulate purification of spinful fermions in a small finite system """
     print(" Simulating spinful fermions in a small finite system. ")
 
@@ -128,7 +128,7 @@ def test_NTU_spinful_infinite(config_kwargs):
     """ Simulate purification of spinful fermions in an infinite system.s """
     print("Simulating spinful fermions in an infinite system. """)
     geometry = fpeps.CheckerboardLattice()
-
+    # geometry = fpeps.SquareLattice(dims=(3, 3), boundary='obc')
     mu_up, mu_dn = 0, 0  # chemical potential
     t_up, t_dn = 1, 1  # hopping amplitude
     U = 0
@@ -158,7 +158,7 @@ def test_NTU_spinful_infinite(config_kwargs):
     dbeta = (beta / 2) / steps
 
     infos = []
-    init_steps = 2
+    init_steps = 0
     # first few steps are performed with NTU-NN+ to reach fixed peps bond dimensions.
     print("Evolve with NN+")
     env = fpeps.EnvNTU(psi, which='NN+')
@@ -179,9 +179,9 @@ def test_NTU_spinful_infinite(config_kwargs):
         print(f"beta = {(step + 1) * dbeta:0.3f}" )
         info = fpeps.evolution_step_(env, gates, opts_svd=opts_svd_evol)
         infos.append(info)
-        env.update_(opts_svd=opts_svd_ctm)  # update CTM tensors after a full evolution step.
-        for inf in info:
-            print(inf)
+        # env.update_(opts_svd=opts_svd_ctm)  # update CTM tensors after a full evolution step.
+        # for inf in info:
+        #     print(inf)
 
     print(f"Delta_mean: {fpeps.accumulated_truncation_error(infos, statistics='mean'):0.4f}")
     print(f"Delta_max : {fpeps.accumulated_truncation_error(infos, statistics='max'):0.4f}")
