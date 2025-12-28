@@ -21,7 +21,7 @@ from warnings import warn
 from ._env_contractions import identity_boundary, corner2x2, append_vec_tl, append_vec_br
 from ._env_dataclasses import EnvCTM_local, EnvCTM_projectors
 from .._evolution import BondMetric
-from .._geometry import Site, Lattice, CheckerboardLattice
+from .._geometry import Site, Lattice
 from .._peps import PEPS_CLASSES, Peps2Layers
 from ... import mps
 from ....initialize import rand, ones, eye
@@ -643,36 +643,19 @@ class EnvCTM():
         dirn = env.nn_bond_dirn(*bond)
         s0, s1 = bond if dirn in ['lr', 'tb'] else bond[::-1]
 
-        env.psi.bra.apply_patch()
-        env.apply_patch()
-
-        assert isinstance(env.geometry, CheckerboardLattice), "Currently only CheckerboardLattice is supported."
-
         if 'method' not in kwargs:
             kwargs['method'] = '2site'
 
         if dirn in 'lrl':
             env._update_env_(s0, env, move='r')
             env._update_env_(s1, env, move='l')
-
-            env._update_projectors_(s0, 'v', opts_svd, **kwargs)
-            env._update_projectors_(s1, 'v', opts_svd, **kwargs)
-            env_tmp = EnvCTM(env.psi, init=None)  # empty environments
-            env_tmp._update_env_(s0, env, move='v')
-            env_tmp._update_env_(s1, env, move='v')
-            update_storage_(env, env_tmp)
+            env._update_projectors_(s0, 't', opts_svd, **kwargs)
+            env._update_projectors_(env.nn_site(s0, d='t'), 'b', opts_svd, **kwargs)
         else:  # 'tbt'
             env._update_env_(s0, env, move='b')
             env._update_env_(s1, env, move='t')
-
-            env._update_projectors_(s0, 'h', opts_svd, **kwargs)
-            env._update_projectors_(s1, 'h', opts_svd, **kwargs)
-            env_tmp = EnvCTM(env.psi, init=None)  # empty environments
-            env_tmp._update_env_(s0, env, move='h')
-            env_tmp._update_env_(s1, env, move='h')
-            update_storage_(env, env_tmp)
-
-        assert env.is_consistent()
+            env._update_projectors_(s0, 'l', opts_svd, **kwargs)
+            env._update_projectors_(env.nn_site(s0, d='l'), 'r', opts_svd, **kwargs)
 
 
     def _update_projectors_(env, site, move, opts_svd, **kwargs):

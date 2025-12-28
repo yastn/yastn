@@ -167,26 +167,26 @@ def test_ctmrg_Ising_4x5(config_kwargs):
     assert info.converged
     #
     # enlarge some bonds
-    # psi[(1, 1)] = XL
-    # psi[(1, 2)] = XR
-    # env.update_bond_(((1, 1), (1, 2)), opts_svd=opts_svd)
-    # psi[(1, 3)] = XT
-    # psi[(2, 3)] = XB
-    # env.opts_svd = opts_svd
-    # env.update_bond_(((1, 3), (2, 3)))
-    # assert env.is_consistent()
-    # #
-    # # now full sweep of ctmrg can be executed
-    # info = env.ctmrg_(opts_svd=opts_svd, moves='hv', max_sweeps=10, corner_tol=1e-12)
-    # assert env.is_consistent()
-    # assert info.converged
-    # #
-    # # checks if properly updated on a boundary
-    # bonds = [((0, 0), (0, 1)), ((3, 4), (3, 3)),
-    #         ((0, 0), (1, 0)), ((3, 4), (2, 4))]
-    # for bond in bonds:
-    #     env.update_bond_(bond, opts_svd=opts_svd)
-    #     assert env.is_consistent()
+    psi[(1, 1)] = XL
+    psi[(1, 2)] = XR
+    env.update_bond_(((1, 1), (1, 2)), opts_svd=opts_svd)
+    psi[(1, 3)] = XT
+    psi[(2, 3)] = XB
+    env.opts_svd = opts_svd
+    env.update_bond_(((1, 3), (2, 3)))
+    assert env.is_consistent()
+    #
+    # now full sweep of ctmrg can be executed
+    info = env.ctmrg_(opts_svd=opts_svd, moves='hv', max_sweeps=10, corner_tol=1e-12)
+    assert env.is_consistent()
+    assert info.converged
+    #
+    # checks if properly updated on a boundary
+    bonds = [((0, 0), (0, 1)), ((3, 4), (3, 3)),
+            ((0, 0), (1, 0)), ((3, 4), (2, 4))]
+    for bond in bonds:
+        env.update_bond_(bond, opts_svd=opts_svd)
+        assert env.is_consistent()
 
     env = fpeps.EnvCTM(ket, init='eye')
     opts_svd = {"D_total": 4}
