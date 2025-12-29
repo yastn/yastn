@@ -89,7 +89,7 @@ def test(initialization="EAT", opts_svd_evolution={"D_total": 6, 'tol_block': 1e
 
     env = fpeps.EnvCTM(psi, init="eye")
 
-    for ctmrg_step in env.ctmrg_(max_sweeps=max_sweeps, iterator=True, opts_svd=opts_svd_ctm, method='2site', corner_tol=corner_tol):
+    for ctmrg_step in env.ctmrg_(max_sweeps=max_sweeps, iterator=True, opts_svd=opts_svd_ctm, method='2x2', corner_tol=corner_tol):
         pass
 
 

@@ -167,7 +167,7 @@ def cost_U1_c4v_2x2_fp(additional_imports, yastn_cfg, g, A, elems, slices : dict
     }
     env = fp_ctmrg(env, \
         ctm_opts_fwd= {'opts_svd': options_svd, 'corner_tol': 1.0e-8, 'max_sweeps': max_sweeps, \
-            'method': "2site", 'use_qr': False, }, \
+            'method': "2x2", 'use_qr': False, }, \
         ctm_opts_fp= {'opts_svd': {'policy': 'fullrank'}})
 
     # 3.4 evaluate loss
@@ -219,7 +219,7 @@ def cost_U1_c4v_1x1_fp(additional_imports, yastn_cfg, g, A, elems, slices : dict
         }
     envc4v = fp_ctmrg_c4v(envc4v, \
         ctm_opts_fwd= {'opts_svd': options_svd, 'corner_tol': 1.0e-8, 'max_sweeps': max_sweeps, \
-            'method': "2site", 'use_qr': False}, \
+            'method': "2x2", 'use_qr': False}, \
         ctm_opts_fp= { 'opts_svd': {'policy': 'fullrank'}})
 
     # 3.4 evaluate loss

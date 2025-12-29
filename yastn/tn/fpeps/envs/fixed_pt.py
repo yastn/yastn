@@ -823,7 +823,7 @@ def find_gauge_multi_sites(env_old, env, verbose=False):
 
 
 def fp_ctmrg(env: EnvCTM, \
-            ctm_opts_fwd : dict= {'method': "2site", 'corner_tol': 1e-8, 'max_sweeps': 100, 'opts_svd': {}, 'verbosity': 0},
+            ctm_opts_fwd : dict= {'method': "2x2", 'corner_tol': 1e-8, 'max_sweeps': 100, 'opts_svd': {}, 'verbosity': 0},
             ctm_opts_fp: dict= {'opts_svd': {'policy':'fullrank'}, "verbosity": 0}, fwd_devices=None)->tuple[EnvCTM,Sequence[torch.Tensor],Sequence[slice]]:
     r"""
     Compute the fixed-point environment for the given state using CTMRG.
@@ -930,7 +930,7 @@ class FixedPoint(torch.autograd.Function):
 
     def get_converged_env(
         env,
-        method="2site",
+        method="2x2",
         max_sweeps=100,
         opts_svd=None,
         corner_tol=1e-8,
@@ -945,7 +945,7 @@ class FixedPoint(torch.autograd.Function):
             ctm_itr = env.ctmrg_(iterator=True, method=method,  max_sweeps=max_sweeps,
                     opts_svd=opts_svd, corner_tol=None, **kwargs)
         elif len(fwd_devices) > 1:
-            ctm_itr = iterate_D_(env, opts_svd=opts_svd, moves='hv', method='2site', max_sweeps=max_sweeps,
+            ctm_itr = iterate_D_(env, opts_svd=opts_svd, moves='hv', method='2x2', max_sweeps=max_sweeps,
                         iterator_step=1, corner_tol=corner_tol, truncation_f=None, use_qr=False, checkpoint_move=False,
                         devices=fwd_devices)
 

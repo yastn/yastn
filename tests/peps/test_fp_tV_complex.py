@@ -104,7 +104,7 @@ def cost_function_fp(additional_imports, yastn_cfg, g, A, elems, slices : dict[t
     }
     env = fp_ctmrg(env, \
         ctm_opts_fwd= {'opts_svd': options_svd, 'corner_tol': 1.0e-8, 'max_sweeps': max_sweeps, \
-            'method': "2site", 'use_qr': False, }, \
+            'method': "2x2", 'use_qr': False, }, \
         ctm_opts_fp= {'opts_svd': {'policy': 'fullrank'}})
 
     # sum of traces of even sectors across 1x1 RDMs

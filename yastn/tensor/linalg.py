@@ -87,8 +87,9 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
     tol_block: float
         relative tolerance of singular values below which to truncate within individual blocks.
 
-    D_block: int
-        largest number of singular values to keep in a single block. 
+    D_block: int | dict
+        largest number of singular values to keep in a single block.
+        It is also possible to provide a dictionary mapping charges to maximal number of elements in the charge sector.
 
     k_block: None (default) | int | dict
         When ``policy='lowrank'``, number of singular values to compute in each block.
@@ -208,7 +209,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     _test_axes_all(a, axes)
     # 1.1 non-default D_block provides defaults for k_block
     if 'D_block' in kwargs and not (kwargs['D_block'] in [None, float('inf')]) and \
-        ('k_block' not in kwargs or kwargs['k_block'] in [None,]): 
+        ('k_block' not in kwargs or kwargs['k_block'] in [None,]):
         kwargs['k_block'] = kwargs['D_block']
 
     # 2. Global solvers
@@ -649,8 +650,9 @@ def truncation_mask(S, tol=0, tol_block=0,
     D_total: int
         maximum number of elements kept across all blocks.
 
-    D_block: int
+    D_block: int | dict
         maximum number of elements kept per block.
+        It is also possible to provide a dictionary mapping charges to maximal number of elements in the charge sector.
 
     truncate_multiplets: bool
         If ``True``, enlarge the truncation range specified by other arguments by shifting

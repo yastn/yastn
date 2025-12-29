@@ -136,7 +136,7 @@ def find_gauge_c4v(env_old, env, verbose=False):
     return sigma
 
 def fp_ctmrg_c4v(env: EnvCTM_c4v, \
-            ctm_opts_fwd : dict= {'opts_svd': {}, 'corner_tol': 1e-8, 'max_sweeps': 100, 'method': "2site",},
+            ctm_opts_fwd : dict= {'opts_svd': {}, 'corner_tol': 1e-8, 'max_sweeps': 100, 'method': "2x2",},
             ctm_opts_fp: dict=  {'opts_svd': {'policy': 'fullrank'}}):
     r"""
     Compute the fixed-point environment for the given state using CTMRG.
@@ -219,7 +219,7 @@ class FixedPoint_c4v(torch.autograd.Function):
 
     def get_converged_env(
         env,
-        method="2site",
+        method="2x2",
         max_sweeps=100,
         opts_svd=None,
         corner_tol=1e-8,

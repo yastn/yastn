@@ -37,7 +37,7 @@ def _validate_devices_list(devices: list[str] | None) -> None:
         raise YastnError("At least two devices must be provided for distributed CTM.")
 
 
-def iterate_D_(env, opts_svd=None, moves='hv', method='2site', max_sweeps=1, iterator=False, corner_tol=None, truncation_f: Callable = None, **kwargs):
+def iterate_D_(env, opts_svd=None, moves='hv', method='2x2', max_sweeps=1, iterator=False, corner_tol=None, truncation_f: Callable = None, **kwargs):
         r"""
         Perform CTMRG updates :meth:`yastn.tn.fpeps.EnvCTM.update_` until convergence.
         Convergence can be measured based on singular values of CTM environment corner tensors.
@@ -62,10 +62,10 @@ def iterate_D_(env, opts_svd=None, moves='hv', method='2site', max_sweeps=1, ite
             The default is 'hv'.
 
         method: str
-            '2site', '1site'. The default is '2site'.
+            '2x2', '1x2' in mathod. The default is '2x2'.
 
-                * '2site' uses the standard 4x4 enlarged corners, enabling enlargement of EnvCTM bond dimensions. When some PEPS bonds are rank-1, it recognizes it to use 5x4 corners to prevent artificial collapse of EnvCTM bond dimensions to 1, which is important for hexagonal lattice.
-                * '1site' uses smaller 4x2 corners. It is significantly faster, but is less stable and  does not allow for EnvCTM bond dimension growth.
+                * '2x2' uses the standard 2x2 enlarged corners forming 4x4 patch, enabling enlargement of EnvCTM bond dimensions. When some PEPS bonds are rank-1, it recognizes it to use 5x4 corners to prevent artificial collapse of EnvCTM bond dimensions to 1, which is important for hexagonal lattice.
+                * '1x2' uses smaller 1x2 corners forming 2x4 patch. It is significantly faster, but is less stable and  does not allow for EnvCTM bond dimension growth.
 
         max_sweeps: int
             The maximal number of sweeps.
@@ -167,7 +167,7 @@ def _ctmrg_iterator_D_(env, opts_svd, moves, method, max_sweeps, corner_tol, **k
     yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
 
 
-def update_D_(ctmrg_mp_context, env, opts_svd, moves='hv', method='2site', **kwargs):
+def update_D_(ctmrg_mp_context, env, opts_svd, moves='hv', method='2x2', **kwargs):
     r"""
     Perform one step of CTMRG update. Environment tensors are updated in place.
 
@@ -193,9 +193,9 @@ def update_D_(ctmrg_mp_context, env, opts_svd, moves='hv', method='2site', **kwa
         The default is 'hv'.
 
     method: str
-        '2site' or '1site'. The default is '2site'.
-        '2site' uses the standard 4x4 enlarged corners, allowing to enlarge EnvCTM bond dimension.
-        '1site' uses smaller 4x2 corners. It is significantly faster, but is less stable and
+        '2x2' or '1x2' in method. The default is '2x2'.
+        '2x2' uses the standard 2x2 enlarged corners, allowing to enlarge EnvCTM bond dimension.
+        '1x2' uses smaller 1x2 corners. It is significantly faster, but is less stable and
         does not allow to grow EnvCTM bond dimension.
 
     checkpoint_move: bool
@@ -207,8 +207,6 @@ def update_D_(ctmrg_mp_context, env, opts_svd, moves='hv', method='2site', **kwa
     """
     if 'tol' not in opts_svd and 'tol_block' not in opts_svd:
         opts_svd['tol'] = 1e-14
-    if method not in ('1site', '2site'):
-        raise YastnError(f"CTM update {method=} not recognized. Should be '1site' or '2site'")
 
     checkpoint_move = kwargs.get('checkpoint_move', False)
     for d in moves:

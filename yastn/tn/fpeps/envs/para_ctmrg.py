@@ -38,7 +38,7 @@ def CreateCTMJobBundle(env:EnvCTM, cpus_per_task=4):
     return [ctm_jobs_hor, ctm_jobs_ver]
 
 @ray.remote(num_cpus=4, num_gpus=0, num_returns=1)
-def BuildProjector(site, move, env, opts_svd_ctm, cfg, method='2site'):
+def BuildProjector(site, move, env, opts_svd_ctm, cfg, method='2x2'):
 
     sites = [env.nn_site(site, d=d) for d in ((0, 0), (0, 1), (1, 0), (1, 1))]
     if None in sites:

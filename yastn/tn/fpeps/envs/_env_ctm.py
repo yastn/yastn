@@ -522,7 +522,7 @@ class EnvCTM():
         l= leg0 if sU == leg0.s else leg1
         return { t: max(d+10,int(d*1.1)) for t,d in zip(l.t, l.D) }
 
-    def update_(env, opts_svd, moves='hv', method='2site', **kwargs):
+    def update_(env, opts_svd, moves='hv', method='2x2 corner', **kwargs):
         r"""
         Perform one step of CTMRG update. Environment tensors are updated in place.
 
@@ -548,9 +548,9 @@ class EnvCTM():
             The default is 'hv'.
 
         method: str
-            '2site' or '1site'. The default is '2site'.
-            '2site' uses the standard 4x4 enlarged corners, allowing to enlarge EnvCTM bond dimension.
-            '1site' uses smaller 4x2 corners. It is significantly faster, but is less stable and
+            '2x2' or '1x2' in method. The default is '2x2 corner'.
+            '2x2' uses the standard 2x2 enlarged corners forming 4x4 patch, allowing to enlarge EnvCTM bond dimension.
+            '1x2' uses smaller 1x2 corners forming 2x4 patch. It is significantly faster, but is less stable and
             does not allow to grow EnvCTM bond dimension.
 
         checkpoint_move: bool
@@ -562,8 +562,6 @@ class EnvCTM():
         """
         if 'tol' not in opts_svd and 'tol_block' not in opts_svd:
             opts_svd['tol'] = 1e-14
-        if method not in ('1site', '2site'):
-            raise YastnError(f"CTM update {method=} not recognized. Should be '1site' or '2site'")
 
         checkpoint_move = kwargs.get('checkpoint_move', False)
         for d in moves:
@@ -593,7 +591,7 @@ class EnvCTM():
                 env._update_core_(d, opts_svd, method=method, **kwargs)
         return env
 
-    def _update_core_(env, move: str, opts_svd: dict, **kwargs):
+    def _update_core_(env, move: str, opts_svd: dict, method: str, **kwargs):
         r"""
         Core function updating CTM environment tensors pefrorming specified move.
         """
@@ -623,7 +621,7 @@ class EnvCTM():
             #
             # Projectors
             for site in sites_proj:
-                env._update_projectors_(site, move, opts_svd, **kwargs)
+                env._update_projectors_(site, move, opts_svd, method, **kwargs)
             # fill (trivial) projectors on edges
             env._trivial_projectors_(move, sites_proj)
             #
@@ -633,9 +631,13 @@ class EnvCTM():
                 env_tmp._update_env_(site, env, move)
             update_storage_(env, env_tmp)
 
-    def update_bond_(env, bond: tuple, opts_svd: dict | None = None, **kwargs):
+    def update_bond_(env, bond: tuple, opts_svd: dict | None = None, method: str = '2x2 corner', **kwargs):
         r"""
         Update EnvCTM tensors related to a specific nearest-neighbor bond.
+
+        Intended primarily for FU evolution scheme -- assuming fixed sectorial bond dimensions.
+        May require using a dictionary "D_block" specifying sectorial bond dimensions in
+        opts_svd's passed to PEPS truncation and CTM.
         """
         if opts_svd is None:
             opts_svd = env.opts_svd
@@ -643,22 +645,19 @@ class EnvCTM():
         dirn = env.nn_bond_dirn(*bond)
         s0, s1 = bond if dirn in ['lr', 'tb'] else bond[::-1]
 
-        if 'method' not in kwargs:
-            kwargs['method'] = '2site'
-
         if dirn in 'lrl':
             env._update_env_(s0, env, move='r')
             env._update_env_(s1, env, move='l')
-            env._update_projectors_(s0, 't', opts_svd, **kwargs)
-            env._update_projectors_(env.nn_site(s0, d='t'), 'b', opts_svd, **kwargs)
+            env._update_projectors_(s0, 't', opts_svd, method, **kwargs)
+            env._update_projectors_(env.nn_site(s0, d='t'), 'b', opts_svd, method, **kwargs)
         else:  # 'tbt'
             env._update_env_(s0, env, move='b')
             env._update_env_(s1, env, move='t')
-            env._update_projectors_(s0, 'l', opts_svd, **kwargs)
-            env._update_projectors_(env.nn_site(s0, d='l'), 'r', opts_svd, **kwargs)
+            env._update_projectors_(s0, 'l', opts_svd, method, **kwargs)
+            env._update_projectors_(env.nn_site(s0, d='l'), 'r', opts_svd, method, **kwargs)
 
 
-    def _update_projectors_(env, site, move, opts_svd, **kwargs):
+    def _update_projectors_(env, site, move, opts_svd, method, **kwargs):
         r"""
         Calculate new projectors for CTM moves passing to specific method to create enlarged corners.
         """
@@ -666,14 +665,13 @@ class EnvCTM():
         # tl, tr, bl, br = sites
         if None in sites:
             return
-        method = kwargs.get('method', '2site')
 
-        # if method == '2site':
-        #     return update_2site_projectors_(proj, *sites, move, env, opts_svd, **kwargs)
-        if method == '1site':
-            return update_1site_projectors_(env, *sites, move, opts_svd, **kwargs)
-        elif method == '2site':
-            return update_extended_2site_projectors_(env, *sites, move, opts_svd, **kwargs)
+        if '1x2' in method or '2x1' in method or method == '1site':
+            return update_1x2_projectors_(env, *sites, move, opts_svd, **kwargs)
+        elif '2x2' in method or method == '2site':
+            return update_extended_2x2_projectors_(env, *sites, move, opts_svd, **kwargs)
+        else:
+            raise YastnError(f"CTM update {method=} not recognized. Should contain '1x2' or '2x2'")
 
     def _trivial_projectors_(env, move, sites):
         r"""
@@ -788,8 +786,6 @@ class EnvCTM():
         #env.update_bond_(bond, opts_svd=env.opts_svd)
 
     def post_truncation_(env, bond, **kwargs):
-        if 'opts_svd' not in kwargs:
-            kwargs['opts_svd'] = env.opts_svd
         env.update_bond_(bond, **kwargs)
 
     def bond_metric(self, Q0, Q1, s0, s1, dirn) -> Tensor:
@@ -863,7 +859,7 @@ class EnvCTM():
                     dict_bond_dimension[site, corners_id[ii]].append(temp_D)
         return [dict_bond_dimension, dict_symmetric_sector]
 
-    def iterate_(env, opts_svd=None, moves='hv', method='2site', max_sweeps=1, iterator=False, corner_tol=None, truncation_f: Callable = None, **kwargs):
+    def iterate_(env, opts_svd=None, moves='hv', method='2x2 corner', max_sweeps=1, iterator=False, corner_tol=None, truncation_f: Callable = None, **kwargs):
         r"""
         Perform CTMRG updates :meth:`yastn.tn.fpeps.EnvCTM.update_` until convergence.
         Convergence can be measured based on singular values of CTM environment corner tensors.
@@ -888,10 +884,10 @@ class EnvCTM():
             The default is 'hv'.
 
         method: str
-            '2site', '1site'. The default is '2site'.
+            '2x2' or '1x2' contained in method. The default is '2x2'.
 
-                * '2site' uses the standard 4x4 enlarged corners, enabling enlargement of EnvCTM bond dimensions. When some PEPS bonds are rank-1, it recognizes it to use 5x4 corners to prevent artificial collapse of EnvCTM bond dimensions to 1, which is important for hexagonal lattice.
-                * '1site' uses smaller 4x2 corners. It is significantly faster, but is less stable and  does not allow for EnvCTM bond dimension growth.
+                * '2x2' uses the standard 2x2 enlarged corners (forming 4x4 patch), enabling enlargement of EnvCTM bond dimensions. When some PEPS bonds are rank-1, it recognizes it to use 3x2 corners to prevent artificial collapse of EnvCTM bond dimensions to 1, which is important for hexagonal lattice.
+                * '1x2' uses smaller 1x2 corners (forming 2x4 patch). It is significantly faster, but is less stable and  does not allow for EnvCTM bond dimension growth.
 
         max_sweeps: int
             The maximal number of sweeps.
@@ -1051,7 +1047,7 @@ _for_trivial = (('hlt', 'r', 'l', 'tl', 2, 0, 0),
                 ('vbr', 't', 'b', 'br', 0, 3, 1))
 
 
-def update_extended_2site_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwargs):
+def update_extended_2x2_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwargs):
     r"""
     Calculate new projectors for CTM moves from 4x4 extended corners
     which are enlarged to 5x4 if some virtual bond is one.
@@ -1187,7 +1183,7 @@ def update_extended_2site_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwa
         env.proj[bl].vbr, env.proj[br].vbl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
 
 
-def update_1site_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwargs):
+def update_1x2_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwargs):
     r"""
     Calculate new projectors for CTM moves from 4x2 extended corners.
     """

@@ -107,10 +107,10 @@ def profile_ctmrg(on_site_t, X, config_profile, Nx=1, Ny=1, svd_policy="fullrank
     if USE_TORCH_NVTX: env2.profiling_mode= "NVTX"
 
     if len(devices)==1:
-        ctm_gen= env2.iterate_(opts_svd=opts_svd, moves='hv', method='2site', max_sweeps=max_sweeps, 
+        ctm_gen= env2.iterate_(opts_svd=opts_svd, moves='hv', method='2x2', max_sweeps=max_sweeps, 
                                   iterator_step=1, corner_tol=corner_tol, truncation_f=None, use_qr=False, checkpoint_move=False)
     elif len(devices)>1:
-        ctm_gen= iterate_D_(env2, opts_svd=opts_svd, moves='hv', method='2site', max_sweeps=max_sweeps,
+        ctm_gen= iterate_D_(env2, opts_svd=opts_svd, moves='hv', method='2x2', max_sweeps=max_sweeps,
                                iterator_step=1, corner_tol=corner_tol, truncation_f=None, use_qr=False, checkpoint_move=False, 
                                devices=devices)
     for ctm_step in ctm_gen:

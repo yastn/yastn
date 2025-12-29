@@ -190,12 +190,10 @@ def test_NTU_spinful_infinite(config_kwargs):
     energy_old, tol_exp = 0, 1e-7
 
     # env = fpeps.EnvCTM(psi)
-    for _ in range(10):  # we double-check convergence of CTM tensors
-        env.update_(opts_svd=opts_svd_ctm)  # method='2site',
+    for info in env.update_(opts_svd=opts_svd_ctm, max_sweeps=10, iterator=True):  # we double-check convergence of CTM tensors
         cdagc_up = env.measure_nn(cdag_up, c_up)
         cdagc_dn = env.measure_nn(cdag_dn, c_dn)
         energy = -2 * mean([*cdagc_up.values(), *cdagc_dn.values()])
-
         if abs(energy - energy_old) < tol_exp:
             break
         energy_old = energy
