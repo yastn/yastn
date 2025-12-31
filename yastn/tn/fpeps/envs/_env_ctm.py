@@ -501,7 +501,7 @@ class EnvCTM():
                 corner_sv[k] = v / v.norm(p='inf')
         return corner_sv
 
-    def _partial_svd_predict_spec(self,leg0,leg1,sU):
+    def _partial_svd_predict_spec(self, leg0, leg1, sU):
         # TODO externalize defaults for extending number of singular values to solve for
         """
         Used in block-wise partial SVD solvers.
@@ -519,8 +519,8 @@ class EnvCTM():
         # the projector spectra for projector pair are related by charge conjugation
         assert leg0 == leg1.conj(), f"Projector spectrum history mismatch between leg0={leg0} and leg1={leg1}"
         #
-        l= leg0 if sU == leg0.s else leg1
-        return { t: max(d+10,int(d*1.1)) for t,d in zip(l.t, l.D) }
+        l = leg0 if sU == leg0.s else leg1
+        return {t: max(d + 10, int(d * 1.1)) for t, d in zip(l.t, l.D)}
 
     def update_(env, opts_svd, moves='hv', method='2x2 corner', **kwargs):
         r"""
@@ -1251,7 +1251,8 @@ def proj_corners(r0, r1, opts_svd, **kwargs):
         fname = sys._getframe().f_code.co_name
         logger.info(f"{fname} S {s.get_legs(0)}")
 
-    rs = s.rsqrt()
+    cutoff = kwargs.get('cutoff', 0)
+    rs = s.rsqrt(cutoff=cutoff)
     p0 = tensordot(r1, (rs @ v).conj(), axes=(0, 1)).unfuse_legs(axes=0)
     p1 = tensordot(r0, (u @ rs).conj(), axes=(0, 0)).unfuse_legs(axes=0)
     return p0, p1

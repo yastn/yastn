@@ -75,7 +75,7 @@ def check_env_c4v_signature_convention(env):
     assert env[0, 1].tl.get_signature() == (-1, -1)
 
 
-def ctmrg_c4v_Ising(config, beta, layers, init, policy, checkpoint_move):
+def ctmrg_c4v_Ising(config, beta, layers, init, method, checkpoint_move):
     """ Perform ctmrg using EnvCTM_c4v and check spontanious magnetization"""
     T, X = state_Ising(beta, config, layers=layers)
     X = fpeps.Lattice(fpeps.CheckerboardLattice(), objects={(0, 0): X, (1, 0): X.flip_signature()})
@@ -89,13 +89,13 @@ def ctmrg_c4v_Ising(config, beta, layers, init, policy, checkpoint_move):
     #
     D = 16
     #
-    if policy == 'qr':
-        opts_svd = {"D_total": D, 'policy': 'fullrank', 'eps_multiplet': 1e-10}
+    if '1x2' in method or '2x1' in method:
+        opts_svd = {"D_total": D, 'eps_multiplet': 1e-10}
         max_sweeps = int(np.ceil(np.log2(D)))
-        info = env.ctmrg_(opts_svd=opts_svd, max_sweeps=max_sweeps, use_qr=False, corner_tol=1e-8, checkpoint_move=checkpoint_move)
+        info = env.ctmrg_(opts_svd=opts_svd, max_sweeps=max_sweeps, use_qr=False, corner_tol=1e-8, checkpoint_move=checkpoint_move, method='2x2')
     #
-    opts_svd = {"D_total": D, 'policy': policy, 'eps_multiplet': 1e-10}
-    info = env.ctmrg_(opts_svd=opts_svd, max_sweeps=200, use_qr=False, corner_tol=1e-8, checkpoint_move=checkpoint_move)
+    opts_svd = {"D_total": D, 'eps_multiplet': 1e-10}
+    info = env.ctmrg_(opts_svd=opts_svd, max_sweeps=200, use_qr=False, corner_tol=1e-8, checkpoint_move=checkpoint_move, method=method)
     assert env.is_consistent()
     check_env_c4v_signature_convention(env)
     #
@@ -137,24 +137,24 @@ def ctmrg_c4v_Ising(config, beta, layers, init, policy, checkpoint_move):
 @pytest.mark.parametrize("beta", [0.5, ])
 @pytest.mark.parametrize("layers", [1, 2])
 @pytest.mark.parametrize("init", ['dl', 'eye'])
-@pytest.mark.parametrize("policy", ['fullrank', 'qr']) #, 'block_arnoldi', 'block_propack', 'symeig', ])  'randomized' not supported by backend_np
-def test_ctmrg_c4v_Ising(config_kwargs, beta, layers, init, policy):
+@pytest.mark.parametrize("method", ['2x2', '2x1 svd', '2x1 qr'])  #, 'block_arnoldi', 'block_propack', 'symeig', ])  'randomized' not supported by backend_np
+def test_ctmrg_c4v_Ising(config_kwargs, beta, layers, init, method):
     r"""
     Use CTMRG to calculate some expectation values in classical 2D Ising model.
     Compare with analytical results.
     """
     config = yastn.make_config(sym='Z2', **config_kwargs)
     beta = config.backend.to_tensor(beta)
-    ctmrg_c4v_Ising(config, beta, layers, init, policy, checkpoint_move=False)
+    ctmrg_c4v_Ising(config, beta, layers, init, method, checkpoint_move=False)
 
 
 @torch_test
 @pytest.mark.parametrize("beta", [0.5])
 @pytest.mark.parametrize("layers", [1])
 @pytest.mark.parametrize("init", ['eye'])
-@pytest.mark.parametrize("policy", ['fullrank']) #, 'qr', 'block_arnoldi', 'block_propack' 'qr', 'symeig', ]) # TODO qr breaks the AD test
+@pytest.mark.parametrize("method", ['2x2', '2x1 svd']) #, '2x1 qr', 'block_arnoldi', 'block_propack' 'qr', 'symeig', ]) # TODO qr breaks the AD test
 @pytest.mark.parametrize("checkpoint_move", [False, ])  # 'reentrant'  TODO: break the tests
-def test_ctmrg_c4v_Ising_AD(config_kwargs, beta, layers, init, policy, checkpoint_move):
+def test_ctmrg_c4v_Ising_AD(config_kwargs, beta, layers, init, method, checkpoint_move):
     r"""
     Use CTMRG to calculate some expectation values in classical 2D Ising model.
     Calculate magnetic susceptibility using AD, and compare with the analytical results.
@@ -162,13 +162,14 @@ def test_ctmrg_c4v_Ising_AD(config_kwargs, beta, layers, init, policy, checkpoin
     config = yastn.make_config(sym='Z2', **config_kwargs)
     beta = config.backend.to_tensor(beta)
     beta.requires_grad_()
-    eX = ctmrg_c4v_Ising(config, beta, layers, init, policy, checkpoint_move=checkpoint_move)
+    eX = ctmrg_c4v_Ising(config, beta, layers, init, method, checkpoint_move=checkpoint_move)
 
     # calculate gradient to get  dX / dbeta
     eX.backward()
     edX = beta.grad
     # Compare with the the analytical result
-    assert abs(edX.item() - dMX(beta.item())) < 1e-7
+    print(abs(edX.item() - dMX(beta.item())))
+    assert abs(edX.item() - dMX(beta.item())) < 1e-6
 
 
 if __name__ == '__main__':

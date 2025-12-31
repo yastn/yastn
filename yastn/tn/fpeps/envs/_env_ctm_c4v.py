@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 from typing import Callable, Sequence
 
-from ._env_ctm import EnvCTM, update_storage_
+from ._env_ctm import EnvCTM, proj_corners
 from ._env_contractions import *
 from ._env_dataclasses import EnvCTM_c4v_local, EnvCTM_c4v_projectors
 from .._geometry import Lattice
@@ -157,90 +157,181 @@ class EnvCTM_c4v(EnvCTM):
         kwargs['moves'] = 'd'
         return super().update_(opts_svd=opts_svd, method=method, **kwargs)
 
-    def _update_core_(env, move : str, opts_svd : dict, **kwargs):
+    def _update_core_(env, move: str, opts_svd: dict, method: str, **kwargs):
         assert move in ['d'], "Invalid move"
-        policy = opts_svd.get('policy', 'fullrank')
+        if '2x2' in method:
+            env._update_2x2_(opts_svd, **kwargs)
+        elif '1x2' in method or '2x1' in method:
+            svd_proj = ('svd' in method)
+            env._update_1x2_(svd_proj=svd_proj, **kwargs)
+        else:
+            raise YastnError(f"Unsupported {method=} for c4v-symmetric corner projector.")
+        #
+        # policy = opts_svd.get('policy', 'fullrank')
+        # #
+        # s0 = env.psi.sites()[0]
+        # #
+        # if policy in ['fullrank', "qr"] or env.proj[s0].vtl is None or env.proj[s0].vtr is None:
+        #     svd_predict_spec = lambda s0, p0, s1, p1: opts_svd.get('D_block', float('inf'))
+        # else:
+        #     psh = Lattice(env.geometry)
+        #     psh[s0] = EnvCTM_c4v_projectors(vtl=env.proj[s0].vtl.get_legs(-1),
+        #                                     vtr=env.proj[s0].vtr.get_legs(0))
+        #     svd_predict_spec = lambda s0, p0, s1, p1: env._partial_svd_predict_spec(getattr(psh[s0], p0), getattr(psh[s1], p1), opts_svd.get('sU', 1))
+        # #
+        # # 1) get tl enlarged corner and projector from ED/SVD
+        # #
+        # # (+) 0--tl--1 0--t--2 (-)
+        # #                 1
+        # #
+        # cor_tl_2x1 = env[s0].tl @ env[s0].t
+        # #
+        # # (-) 0--t--2 0--tl--1 0--t--2->3(-)
+        # #        1                1->2
+        # #
+        # cor_tl = env[s0].t @ cor_tl_2x1
+        # #
+        # # tl--t---1 (-)
+        # # t---A--3 (fusion of + and -)
+        # # 0   2
+        # cor_tl = tensordot(cor_tl, env.psi[s0], axes=((2, 1), (0, 1)))
+        # cor_tl = cor_tl.fuse_legs(axes=((0, 2), (1, 3)))
+        # #
+        # # Note: U(1)-symm corner is not hermitian. Instead blocks related by conj of charges are hermitian conjugates,
+        # #       i.e. (2, -2) and (-2, 2) blocks are hermitian conjugates.
+        # #
+        # if policy == 'qr':
+        #     R = cor_tl_2x1.flip_signature().fuse_legs(axes=((0, 1), 2))
+        # else:
+        #     R = cor_tl
+        # opts_svd["D_block"] = svd_predict_spec(s0, "vtl", s0, "vtr")
+        # opts_svd["sU"] = 1
+        # env.proj[s0].vtl, s, env.proj[s0].vtr = proj_sym_corner(R, opts_svd, **kwargs)
+        # #
+        # # 2) update move corner
+        # #
+        # P = env.proj[s0].vtl
+        # env_tmp = EnvCTM(env.psi, init=None)  # empty environments
+        # if policy in ['symeig']:
+        #     assert (cor_tl - cor_tl.H) < 1e-12, "Enlarged corner is not hermitian"
+        #     env_tmp[s0].tl = s / s.norm(p='inf')
+        # elif policy in ["qr"]:
+        #     S = P.flip_signature().tensordot(cor_tl @ P.flip_signature(), (0, 0))
+        #     S = S.flip_charges()
+        #     env_tmp[s0].tl= S / S.norm(p='inf')
+        # else:
+        #     S = (env.proj[s0].vtr.conj() @ P) @ s
+        #     env_tmp[s0].tl = S / S.norm(p='inf')
+        # #
+        # # 3) update move half-row/-column tensor. Here, P is to act on B-sublattice T tensor
+        # #
+        # #   Note:
+        # #   flip_signature() is equivalent to conj().conj_blocks(), which changes the total charge from +n to -n
+        # #   flip_charges(axes) is equivalent to switch_signature(axes), which leaves the total charge unchanged
+        # #
+        # P = P.unfuse_legs(axes=0)
+        # #
+        # # 1<-2--P--0    0--T--2->3
+        # #        --1->0    1->2
+        # #
+        # s1 = env.nn_site(s0, d='r')
+        # tmp = tensordot(P, env[s1].t, axes=(0, 0)) # Pass from T_A to T_B
+        # #  0<-1--P-----T--3->1  0--P--2
+        # #        |     2           |
+        # #        |      0          |
+        # #         --0 1--A--3   1--
+        # #                2=>1
+        # tmp = tensordot(tmp, env.psi[s1], axes=((0, 2), (1, 0)))
+        # tmp = tensordot(tmp, P, axes=((1, 3), (0, 1)))
+        # tmp = tmp.flip_charges(axes=(0, 2))  # tmp.switch_signature(axes=(0,2))
+        # #
+        # # tmp= 0.5*(tmp + tmp.transpose(axes=(2,1,0)))
+        # env_tmp[s0].t = tmp / tmp.norm(p='inf')
+        # #
+        # update_storage_(env, env_tmp)
+
+
+    def _update_1x2_(env, svd_proj=False, **kwargs):
         #
         s0 = env.psi.sites()[0]
         #
-        if policy in ['fullrank', "qr"] or env.proj[s0].vtl is None or env.proj[s0].vtr is None:
-            svd_predict_spec = lambda s0, p0, s1, p1: opts_svd.get('D_block', float('inf'))
-        else:
-            psh = Lattice(env.geometry)
-            psh[s0] = EnvCTM_c4v_projectors(vtl=env.proj[s0].vtl.get_legs(-1),
-                                            vtr=env.proj[s0].vtr.get_legs(0))
-            svd_predict_spec = lambda s0, p0, s1, p1: env._partial_svd_predict_spec(getattr(psh[s0], p0), getattr(psh[s1], p1), opts_svd.get('sU', 1))
+        if not svd_proj:
+            cor_tl_2x1 = env[s0].tl @ env[s0].t
+            Q, _ = cor_tl_2x1.qr(axes=((0, 1), 2), sQ=1, Qaxis=-1, Raxis=0)
+            env.proj[s0].vtl = Q
+            #
+            cor_tl = env[s0].t @ cor_tl_2x1
+            cor_tl = tensordot(cor_tl, env.psi[s0], axes=((2, 1), (0, 1)))
+            new_tl = tensordot(cor_tl, Q, axes=((1, 3), (0, 1)))
+            new_tl = tensordot(Q, new_tl, axes=((0, 1), (0, 1)))
+            #
+            tmp = tensordot(Q, env[s0].t, axes=(0, 0))
+            tmp = tensordot(tmp, env.psi[s0], axes=((0, 2), (1, 0)))
+            tmp = tensordot(tmp, Q, axes=((1, 3), (0, 1)))
+            new_t = tmp.flip_signature()
+        else:  # WIP
+            r1 = env[s0].tl @ env[s0].t
+            cor_tl = env[s0].t @ r1
+            cor_tl = tensordot(cor_tl, env.psi[s0], axes=((2, 1), (0, 1)))
+
+            r0 = env[s0].t @ env[s0].tl
+            r0 = r0.fuse_legs(axes=(0, (2, 1))).flip_signature()
+            r1 = r1.fuse_legs(axes=(2, (0, 1)))
+            p0, p1 = proj_corners(r0, r1, opts_svd={}, cutoff=1e-10, **kwargs)  # TODO: cutoff set by hand; can we make it inverse-free?
+            p0 = p0.unfuse_legs(axes=0)
+            p1 = p1.unfuse_legs(axes=0)
+            p0 = p0.flip_signature()
+
+            new_tl = tensordot(cor_tl.flip_signature(), p0, axes=((1, 3), (0, 1)))
+            new_tl = tensordot(p1, new_tl, axes=((0, 1), (0, 1)))
+            #
+            s1 = env.nn_site(s0, d='r')
+            tmp = tensordot(p1, env[s1].t, axes=(0, 0))
+            tmp = tensordot(tmp, env.psi[s1], axes=((0, 2), (1, 0)))
+            new_t = tensordot(tmp, p0, axes=((1, 3), (0, 1)))
+            new_t = new_t.flip_charges(axes=(0, 2))
         #
-        # 1) get tl enlarged corner and projector from ED/SVD
+        env[s0].tl = new_tl / new_tl.norm(p='inf')
+        env[s0].t = new_t / new_t.norm(p='inf')
+
+
+    def _update_2x2_(env, opts_svd, **kwargs):
         #
-        # (+) 0--tl--1 0--t--2 (-)
-        #                 1
+        s0 = env.psi.sites()[0]
         #
-        cor_tl_2x1 = env[s0].tl @ env[s0].t
+        policy = opts_svd.get('policy', 'fullrank')
+        if policy != 'fullrank' and env.proj[s0].vtl is not None and env.proj[s0].vtr is not None:
+            opts_svd["D_block"] = env._partial_svd_predict_spec(env.proj[s0].vtl.get_legs(-1), env.proj[s0].vtr.get_legs(0), sU=1)
+        elif "D_block" not in opts_svd:
+            opts_svd["D_block"] = float('inf')
         #
-        # (-) 0--t--2 0--tl--1 0--t--2->3(-)
-        #        1                1->2
+        default_truncation_f = lambda x : truncation_mask_multiplets(x,
+                                                                 keep_multiplets=True,
+                                                                 D_total=opts_svd['D_total'],
+                                                                 D_block=opts_svd['D_block'],
+                                                                 tol=opts_svd['tol'],
+                                                                 eps_multiplet=opts_svd['eps_multiplet'],
+                                                                 hermitian=True)
+        truncation_f = default_truncation_f  # TODO: kwargs.get('truncation_f', default_truncation_f)
         #
-        cor_tl = env[s0].t @ cor_tl_2x1
-        #
-        # tl--t---1 (-)
-        # t---A--3 (fusion of + and -)
-        # 0   2
+        cor_tl = env[s0].t @ (env[s0].tl @ env[s0].t)
         cor_tl = tensordot(cor_tl, env.psi[s0], axes=((2, 1), (0, 1)))
-        cor_tl = cor_tl.fuse_legs(axes=((0, 2), (1, 3)))
         #
-        # Note: U(1)-symm corner is not hermitian. Instead blocks related by conj of charges are hermitian conjugates,
-        #       i.e. (2, -2) and (-2, 2) blocks are hermitian conjugates.
+        U, S, V = cor_tl.svd_with_truncation(axes=((0, 2), (1, 3)), sU=1, mask_f=truncation_f, **opts_svd)
+        env.proj[s0].vtl, env.proj[s0].vtr = U, V
         #
-        if policy == 'qr':
-            R = cor_tl_2x1.flip_signature().fuse_legs(axes=((0, 1), 2))
-        else:
-            R = cor_tl
-        opts_svd["D_block"] = svd_predict_spec(s0, "vtl", s0, "vtr")
-        opts_svd["sU"] = 1
-        env.proj[s0].vtl, s, env.proj[s0].vtr = proj_sym_corner(R, opts_svd, **kwargs)
-        #
-        # 2) update move corner
-        #
-        P = env.proj[s0].vtl
-        env_tmp = EnvCTM(env.psi, init=None)  # empty environments
-        if policy in ['symeig']:
-            assert (cor_tl - cor_tl.H) < 1e-12, "Enlarged corner is not hermitian"
-            env_tmp[s0].tl = s / s.norm(p='inf')
-        elif policy in ["qr"]:
-            S = P.flip_signature().tensordot(cor_tl @ P.flip_signature(), (0, 0))
-            S = S.flip_charges()
-            env_tmp[s0].tl= S / S.norm(p='inf')
-        else:
-            S = (env.proj[s0].vtr.conj() @ P) @ s
-            env_tmp[s0].tl = S / S.norm(p='inf')
-        #
-        # 3) update move half-row/-column tensor. Here, P is to act on B-sublattice T tensor
-        #
-        #   Note:
-        #   flip_signature() is equivalent to conj().conj_blocks(), which changes the total charge from +n to -n
-        #   flip_charges(axes) is equivalent to switch_signature(axes), which leaves the total charge unchanged
-        #
-        P = P.unfuse_legs(axes=0)
-        #
-        # 1<-2--P--0    0--T--2->3
-        #        --1->0    1->2
+        new_tl = tensordot(V.conj(), U, axes=((1, 2), (0, 1))) @ S
+        new_tl = new_tl / new_tl.norm(p='inf')
         #
         s1 = env.nn_site(s0, d='r')
-        tmp = tensordot(P, env[s1].t, axes=(0, 0)) # Pass from T_A to T_B
-        #  0<-1--P-----T--3->1  0--P--2
-        #        |     2           |
-        #        |      0          |
-        #         --0 1--A--3   1--
-        #                2=>1
+        tmp = tensordot(U, env[s1].t, axes=(0, 0))
         tmp = tensordot(tmp, env.psi[s1], axes=((0, 2), (1, 0)))
-        tmp = tensordot(tmp, P, axes=((1, 3), (0, 1)))
-        tmp = tmp.flip_charges(axes=(0, 2))  # tmp.switch_signature(axes=(0,2))
+        tmp = tensordot(tmp, U, axes=((1, 3), (0, 1)))
+        tmp = tmp.flip_charges(axes=(0, 2))
+        new_t = tmp / tmp.norm(p='inf')
         #
-        # tmp= 0.5*(tmp + tmp.transpose(axes=(2,1,0)))
-        env_tmp[s0].t = tmp / tmp.norm(p='inf')
-        #
-        update_storage_(env, env_tmp)
+        env[s0].tl = new_tl
+        env[s0].t = new_t
 
 
 def leg_charge_conv_check(env : EnvCTM_c4v, history : Sequence[Leg] = None, conv_len=3):
@@ -269,36 +360,36 @@ def leg_charge_conv_check(env : EnvCTM_c4v, history : Sequence[Leg] = None, conv
     return converged, history
 
 
-def proj_sym_corner(rr, opts_svd, **kwargs):
-    r""" Projector on largest (by magnitude) eigenvalues of (hermitian) symmetric corner. """
-    policy = opts_svd.get('policy', 'symeig')
-    default_truncation_f = lambda x : truncation_mask_multiplets(x,
-                                                                 keep_multiplets=True,
-                                                                 D_total=opts_svd['D_total'],
-                                                                 D_block=opts_svd['D_block'],
-                                                                 tol=opts_svd['tol'],
-                                                                 eps_multiplet=opts_svd['eps_multiplet'],
-                                                                 hermitian=True)
-    truncation_f = kwargs.get('truncation_f', default_truncation_f)
+# def proj_sym_corner(rr, opts_svd, **kwargs):
+#     r""" Projector on largest (by magnitude) eigenvalues of (hermitian) symmetric corner. """
+#     policy = opts_svd.get('policy', 'symeig')
+#     default_truncation_f = lambda x : truncation_mask_multiplets(x,
+#                                                                  keep_multiplets=True,
+#                                                                  D_total=opts_svd['D_total'],
+#                                                                  D_block=opts_svd['D_block'],
+#                                                                  tol=opts_svd['tol'],
+#                                                                  eps_multiplet=opts_svd['eps_multiplet'],
+#                                                                  hermitian=True)
+#     truncation_f = kwargs.get('truncation_f', default_truncation_f)
 
 
-    if policy in ['symeig']:
-        # TODO U1-c4v-symmetric corner is not Hermitian
-        raise YastnError("Policy 'symeig' is not supported for c4v-symmetric corner projector.")
-        # TODO fix_signs ?
-        # _kwargs= dict(kwargs)
-        # for k in ["method", "use_qr",]: del _kwargs[k]
-        # s,u= rr.eigh_with_truncation(axes=(0,1), sU=rr.s[1], which='LM', mask_f= truncation_f, **opts_svd, **_kwargs)
-        # v= None
-    elif policy in ['fullrank', 'randomized', 'block_arnoldi', 'block_propack']:
-        # sU = ? r0.s[1]
-        # u, s, v = rr.svd_with_truncation(axes=(0, 1), mask_f=truncation_f, **opts_svd)  # BUG in one of the tests
-        u, s, v = rr.svd_with_truncation(axes=(0, 1), mask_f=default_truncation_f, **opts_svd)
+#     if policy in ['symeig']:
+#         # TODO U1-c4v-symmetric corner is not Hermitian
+#         raise YastnError("Policy 'symeig' is not supported for c4v-symmetric corner projector.")
+#         # TODO fix_signs ?
+#         # _kwargs= dict(kwargs)
+#         # for k in ["method", "use_qr",]: del _kwargs[k]
+#         # s,u= rr.eigh_with_truncation(axes=(0,1), sU=rr.s[1], which='LM', mask_f= truncation_f, **opts_svd, **_kwargs)
+#         # v= None
+#     elif policy in ['fullrank', 'randomized', 'block_arnoldi', 'block_propack']:
+#         # sU = ? r0.s[1]
+#         # u, s, v = rr.svd_with_truncation(axes=(0, 1), mask_f=truncation_f, **opts_svd)  # BUG in one of the tests
+#         u, s, v = rr.svd_with_truncation(axes=(0, 1), mask_f=default_truncation_f, **opts_svd)
 
-    elif policy in ['qr']:
-        u, s = rr.qr(axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0)
-        v = None
-    else:
-        raise YastnError(f"Unsupported policy {policy} for c4v-symmetric corner projector.")
+#     elif policy in ['qr']:
+#         u, s = rr.qr(axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0)
+#         v = None
+#     else:
+#         raise YastnError(f"Unsupported policy {policy} for c4v-symmetric corner projector.")
 
-    return u, s, v
+#     return u, s, v

@@ -15,14 +15,12 @@
 """ Test for AD of environments of selected states """
 import os
 import json
-from typing import Sequence
 import pytest
 import numpy as np
 import yastn
 import yastn.tn.fpeps as fpeps
 from yastn.tn.fpeps.envs.rdm import rdm1x1
 from yastn.tn.fpeps.envs._env_ctm_c4v import leg_charge_conv_check
-import yastn.tn.mps as mps
 import logging
 import warnings
 
@@ -53,7 +51,7 @@ def _symmetrize_normalize(A):
     return A/A.norm(p='inf') # normalize
 
 
-def cost_U1_c4v_2x2(additional_imports, yastn_cfg, g, A, elems, slices : dict[tuple[int],tuple[slice,slice]], max_sweeps,
+def cost_U1_c4v_2x2(additional_imports, g, A, elems, slices : dict[tuple[int],tuple[slice,slice]], max_sweeps,
                     ctm_init='dl', fix_signs=False,
                     truncate_multiplets_mode='truncate', projector_svd_method='fullrank', checkpoint_move=False):
         _, torch, _= additional_imports
@@ -116,7 +114,7 @@ def cost_U1_c4v_2x2(additional_imports, yastn_cfg, g, A, elems, slices : dict[tu
         return loss
 
 
-def cost_U1_c4v_2x2_fp(additional_imports, yastn_cfg, g, A, elems, slices : dict[tuple[int],tuple[slice,slice]], max_sweeps,
+def cost_U1_c4v_2x2_fp(additional_imports, g, A, elems, slices : dict[tuple[int],tuple[slice,slice]], max_sweeps,
                     ctm_init='dl', fix_signs=False,
                     truncate_multiplets_mode='truncate', projector_svd_method='fullrank', checkpoint_move=False):
     _, torch, _= additional_imports
@@ -165,9 +163,10 @@ def cost_U1_c4v_2x2_fp(additional_imports, yastn_cfg, g, A, elems, slices : dict
         "tol": 1.0e-8, "eps_multiplet": 1.0e-8,
         "svds_thresh": 0.1
     }
+    method = '2x1' if 'qr' in projector_svd_method else '2x2'
     env = fp_ctmrg(env, \
         ctm_opts_fwd= {'opts_svd': options_svd, 'corner_tol': 1.0e-8, 'max_sweeps': max_sweeps, \
-            'method': "2x2", 'use_qr': False, }, \
+            'method': method, 'use_qr': False, }, \
         ctm_opts_fp= {'opts_svd': {'policy': 'fullrank'}})
 
     # 3.4 evaluate loss
@@ -178,7 +177,7 @@ def cost_U1_c4v_2x2_fp(additional_imports, yastn_cfg, g, A, elems, slices : dict
     return loss
 
 
-def cost_U1_c4v_1x1_fp(additional_imports, yastn_cfg, g, A, elems, slices : dict[tuple[int],tuple[slice,slice]], max_sweeps,
+def cost_U1_c4v_1x1_fp(additional_imports, g, A, elems, slices : dict[tuple[int],tuple[slice,slice]], max_sweeps,
                     ctm_init='dl', fix_signs=False,
                     truncate_multiplets_mode='truncate', projector_svd_method='fullrank', checkpoint_move=False):
     _, torch, _= additional_imports
@@ -207,11 +206,12 @@ def cost_U1_c4v_1x1_fp(additional_imports, yastn_cfg, g, A, elems, slices : dict
             'fix_signs': fix_signs
         }
         with torch.no_grad():
-            info = envc4v.ctmrg_(opts_svd = options_svd_pre_init, max_sweeps=max_sweeps,
+            info = envc4v.ctmrg_(opts_svd = options_svd_pre_init, max_sweeps=max_sweeps, method='2x2',
                         corner_tol=leg_charge_conv_check, truncation_f=truncation_f, use_qr=False, checkpoint_move=checkpoint_move)
             log.info(f"WARM-UP: Number of ctm steps: {info}")
 
     # 3.2 setup and run CTMRG
+    method = '2x1' if 'qr' in projector_svd_method else '2x2'
     options_svd={
         "policy": projector_svd_method,
         "D_total": CHI, 'D_block': CHI, "tol": 1.0e-8,
@@ -219,7 +219,7 @@ def cost_U1_c4v_1x1_fp(additional_imports, yastn_cfg, g, A, elems, slices : dict
         }
     envc4v = fp_ctmrg_c4v(envc4v, \
         ctm_opts_fwd= {'opts_svd': options_svd, 'corner_tol': 1.0e-8, 'max_sweeps': max_sweeps, \
-            'method': "2x2", 'use_qr': False}, \
+            'method': method, 'use_qr': False}, \
         ctm_opts_fp= { 'opts_svd': {'policy': 'fullrank'}})
 
     # 3.4 evaluate loss
@@ -243,7 +243,7 @@ def prepare_1x1(additional_imports, cost_f):
     A = {tuple(d['parameters_key_to_id'][coord]): yastn.Tensor.from_dict(d_ten, config=yastn_cfg_U1)
                                  for coord,d_ten in d['parameters'].items()}
 
-    cost_function_1x1 = lambda *args, **kwargs : cost_f(additional_imports, yastn_cfg_U1, g,A, *args, **kwargs)
+    cost_function_1x1 = lambda *args, **kwargs : cost_f(additional_imports, g,A, *args, **kwargs)
 
     return A, None, cost_function_1x1
 
