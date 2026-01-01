@@ -134,7 +134,7 @@ def ctmrg_c4v_Ising(config, beta, layers, init, method, checkpoint_move):
     return (eXv + eXh) / 2
 
 
-@pytest.mark.parametrize("beta", [0.5, ])
+@pytest.mark.parametrize("beta", [0.5])
 @pytest.mark.parametrize("layers", [1, 2])
 @pytest.mark.parametrize("init", ['dl', 'eye'])
 @pytest.mark.parametrize("method", ['2x2', '2x1 svd', '2x1 qr'])  #, 'block_arnoldi', 'block_propack', 'symeig', ])  'randomized' not supported by backend_np
@@ -152,8 +152,8 @@ def test_ctmrg_c4v_Ising(config_kwargs, beta, layers, init, method):
 @pytest.mark.parametrize("beta", [0.5])
 @pytest.mark.parametrize("layers", [1])
 @pytest.mark.parametrize("init", ['eye'])
-@pytest.mark.parametrize("method", ['2x2', '2x1 svd']) #, '2x1 qr', 'block_arnoldi', 'block_propack' 'qr', 'symeig', ]) # TODO qr breaks the AD test
-@pytest.mark.parametrize("checkpoint_move", [False, ])  # 'reentrant'  TODO: break the tests
+@pytest.mark.parametrize("method", ['2x2', '2x1 svd']) # '2x1 qr' is least precise, giving biggest error in AD test
+@pytest.mark.parametrize("checkpoint_move", [False, ])  # 'nonreentrant'   TODO: break the tests
 def test_ctmrg_c4v_Ising_AD(config_kwargs, beta, layers, init, method, checkpoint_move):
     r"""
     Use CTMRG to calculate some expectation values in classical 2D Ising model.

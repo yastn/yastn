@@ -158,7 +158,7 @@ def test_ctmrg_measure_product(config_kwargs, boundary):
                        match=re.escape("EnvCTM init='something' not recognized. Should be 'rand', 'eye', 'dl', or None.")):
         fpeps.EnvCTM(psi, init='something')
     with pytest.raises(yastn.YastnError,
-                       match=re.escape("CTM update method='something' not recognized. Should be '1x2' or '2x2'")):
+                       match=re.escape("CTM update method='something' not recognized. Should contain '1x2' or '2x2'")):
         env.update_(opts_svd={}, method='something')
 
 

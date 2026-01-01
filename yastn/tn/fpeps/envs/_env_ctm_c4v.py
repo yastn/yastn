@@ -257,7 +257,9 @@ class EnvCTM_c4v(EnvCTM):
         #
         if not svd_proj:
             cor_tl_2x1 = env[s0].tl @ env[s0].t
-            Q, _ = cor_tl_2x1.qr(axes=((0, 1), 2), sQ=1, Qaxis=-1, Raxis=0)
+            Q, _ = cor_tl_2x1.qr(axes=((0, 1), 2), sQ=1)
+            #Q, _, _ = cor_tl_2x1.svd(axes=((0, 1), 2), sU=1)
+
             env.proj[s0].vtl = Q
             #
             cor_tl = env[s0].t @ cor_tl_2x1
