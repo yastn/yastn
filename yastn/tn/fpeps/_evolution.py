@@ -560,10 +560,10 @@ def truncate_optimize_(g, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter, 
     # check metric tensor eigenvalues
     if fix_metric is not None:
         S, U = fgf.eigh(axes=(0, 1))
-        smin = min(S._data)
+        smin = S._data.min()
         info['min_eigenvalue'] = (smin / fgf_norm).item()
         g_error = max(-smin, 0) + nonhermitian
-        info['wrong_eigenvalues'] = sum(S._data < g_error).item() / len(S._data)
+        info['wrong_eigenvalues'] = (S._data < g_error).sum().item() / len(S._data)
         S._data[S._data < g_error] = g_error * fix_metric
         fgf = U @ S @ U.H
     #
@@ -677,8 +677,9 @@ def truncate_bipartite_(g, R0, R1, opts_svd, pinv_cutoffs, info):
     F0 = R0.H @ E0 @ R0
     F1 = R1 @ E1 @ R1.H
     #
-    S0, U0 = F0.eigh_with_truncation(axes=(0, 1), tol=min(pinv_cutoffs))
-    S1, U1 = F1.eigh_with_truncation(axes=(0, 1), tol=min(pinv_cutoffs))
+    min_pinv_cutoff = min(pinv_cutoffs)
+    S0, U0 = F0.eigh_with_truncation(axes=(0, 1), tol=min_pinv_cutoff)
+    S1, U1 = F1.eigh_with_truncation(axes=(0, 1), tol=min_pinv_cutoff)
     #
     W0, W1 = symmetrized_svd(S0.sqrt() @ U0.H, U1 @ S1.sqrt(), opts_svd, normalize=False)
     p0, p1 = R0 @ U0, U1.H @ R1
@@ -686,8 +687,8 @@ def truncate_bipartite_(g, R0, R1, opts_svd, pinv_cutoffs, info):
     error2, s0max, s1max = 100, max(S0._data), max(S1._data)
     vs0o, vs1o = len(S0._data) + 1, len(S1._data) + 1
     for c_off in sorted(pinv_cutoffs):
-        vs0 = sum(S0._data > c_off * s0max).item()
-        vs1 = sum(S1._data > c_off * s1max).item()
+        vs0 = (S0._data > c_off * s0max).sum().item()
+        vs1 = (S1._data > c_off * s1max).sum().item()
         if vs0 < vs0o or vs1 < vs1o:
             vs0o, vs1o = vs0, vs1
             M0_tmp = p0 @ S0.reciprocal(cutoff=c_off * s0max).sqrt() @ W0
@@ -794,17 +795,20 @@ def initial_truncation_EAT(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs):
     F0 = R0.H @ G0 @ R0
     F1 = R1 @ G1 @ R1.H
     #
-    S0, U0 = F0.eigh_with_truncation(axes=(0, 1), tol=min(pinv_cutoffs))
-    S1, U1 = F1.eigh_with_truncation(axes=(0, 1), tol=min(pinv_cutoffs))
+    min_pinv_cutoff = min(pinv_cutoffs)
+    S0, U0 = F0.eigh_with_truncation(axes=(0, 1), tol=min_pinv_cutoff)
+    S1, U1 = F1.eigh_with_truncation(axes=(0, 1), tol=min_pinv_cutoff)
     #
     W0, W1 = symmetrized_svd(S0.sqrt() @ U0.H, U1 @ S1.sqrt(), opts_svd, normalize=False)
     p0, p1 = R0 @ U0, U1.H @ R1
     #
-    error2, s0max, s1max = 100, max(S0._data), max(S1._data)
+    error2 = 100
+    s0max = S0._data.max().item()
+    s1max = S1._data.max().item()
     vs0o, vs1o = len(S0._data) + 1, len(S1._data) + 1
     for c_off in pinv_cutoffs:
-        vs0 = sum(S0._data > c_off * s0max).item()
-        vs1 = sum(S1._data > c_off * s1max).item()
+        vs0 = (S0._data > c_off * s0max).sum().item()
+        vs1 = (S1._data > c_off * s1max).sum().item()
         if vs0 < vs0o or vs1 < vs1o:
             vs0o, vs1o = vs0, vs1
             M0_tmp = p0 @ S0.reciprocal(cutoff=c_off * s0max).sqrt() @ W0
@@ -853,11 +857,11 @@ def optimal_pinv(g, j, pinv_cutoffs, error_fun):
     M = pinv(g) * j, where pinv cutoff is optimized based on error_fun.
     """
     S, U = g.eigh_with_truncation(axes=(0, 1), tol=min(pinv_cutoffs))
-    smax = max(S._data)
+    smax = S._data.max().item()
     UHJ = U.H @ j
     error2, values_old = 100, len(S._data) + 1
     for cutoff in pinv_cutoffs:
-        values = sum(S._data > cutoff * smax).item()
+        values = (S._data > cutoff * smax).sum().item()
         if values < values_old:
             values_old = values
             Sr = S.reciprocal(cutoff=cutoff * smax)

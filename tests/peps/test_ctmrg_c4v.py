@@ -173,4 +173,4 @@ def test_ctmrg_c4v_Ising_AD(config_kwargs, beta, layers, init, method, checkpoin
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0" , "--backend", "np"])
+    pytest.main([__file__, "-vs", "--durations=0" , "--backend", "torch"])

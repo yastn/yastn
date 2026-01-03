@@ -98,7 +98,7 @@ jobs:
 
       - name: setup pytorch
         run: |
-            pip install torch==2.7 --index-url https://download.pytorch.org/whl/cpu
+            pip install torch==2.9 --index-url https://download.pytorch.org/whl/cpu
 
       - name: static analysis flake8
         run: |
@@ -151,9 +151,9 @@ jobs:
             torch_v: '2.4'
           - backend: torch
             python_v: '3.12'
-            numpy_v: '2.2'
-            scipy_v: '1.15'
-            torch_v: '2.7'
+            numpy_v: '2.4'
+            scipy_v: '1.16'
+            torch_v: '2.9'
       fail-fast: false
 
     # Steps represent a sequence of tasks that will be executed as part of the job
