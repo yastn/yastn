@@ -1019,7 +1019,7 @@ class EnvCTM():
         return len(not_consistent) == 0
 
     from ._env_ctm_measure import measure_1site, measure_nn, measure_2x2, measure_line, \
-        measure_nsite, measure_2site, sample
+        measure_nsite, measure_2site, sample, transfer_matrix_spectrum
 
 
 def legs_consistent_(out, env_legs, i0, l0, i1, l1):

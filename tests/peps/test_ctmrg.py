@@ -103,11 +103,23 @@ def test_ctmrg_Ising(config_kwargs):
     # We calculate the square of the spontaneous magnetization
     # from the large-distance limit of XX correlator
     #
-    pairs = [((0, 0), (0, 100)),  # horizontal
-             ((0, 0), (100, 0))]  # vertical
+    pairs = [((0, 0), (0, 50)),  # horizontal
+             ((0, 0), (50, 0))]  # vertical
     for pair in pairs:
         ev_XXlong = env.measure_line(XB, XB, sites=pair)
         assert abs(MX2 - ev_XXlong) < 1e-10
+    #
+    if config.backend.BACKEND_ID == 'np':
+        # transfer_matrix_spectrum is currently supported only by numpy backend
+        e0 = env.transfer_matrix_spectrum(n=0, dtype='float64', k=2, dirn='h')
+        e1 = env.transfer_matrix_spectrum(n=1, dtype='float64', k=2, dirn='v')
+        xi0 = -1 / np.log(e0[1] / e0[0])
+        xi1 = -1 / np.log(e1[1] / e1[0])
+        xi_exact = 4.384  # for beta = 0.5
+        # due to lack of symmetry breaking for beta=0.5, spectra in odd and even sectors are the same.
+        assert 0.95 < xi0 / xi_exact < 1
+        assert 0.95 < xi1 / xi_exact < 1
+        # correlation length is expected to be underestimated for finite chi
 
 
 def test_ctmrg_hexagonal(config_kwargs):

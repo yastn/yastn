@@ -538,7 +538,7 @@ class EnvBP():
             for s0, s1 in pairwise(sites):
                 env.update_bond_((s0, s1))
 
-    def post_truncation_(env, bond, max_sweeps=0):
+    def post_truncation_(env, bond, max_sweeps=0, **kwargs):
         env.update_bond_(bond)
         env.update_bond_(bond[::-1])
         if max_sweeps > 0:

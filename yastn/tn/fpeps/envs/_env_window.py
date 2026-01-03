@@ -122,12 +122,13 @@ class EnvWindow:
         raise YastnError(f"{dirn=} not recognized. Should be 't', 'h' 'b', 'r', 'v', or 'l'.")
 
 
-def set_operator_(tm, n, op):
+def set_operator_(tm, n, op, horizontal=True):
     """ helper function to cover 2-layers and 1-layer peps """
     if isinstance(tm[n], DoublePepsTensor):
         tm[n].set_operator_(op)
     else:
-        tm[n] = op
+        axes = (1, 2, 3, 0) if horizontal else (0, 3, 2, 1)
+        tm[n] = op.transpose(axes=axes)
 
 def restore_old_tensor_(tm, n, old_ten):
     """ helper function to cover 2-layers and 1-layer peps """
@@ -333,10 +334,10 @@ def _measure_2site_rows(self, O0dict, O1dict, xrange, yrange, offset, pairs, opt
                     for nz1, o1 in O1dict[nx0, ny0].items():
                         if not isinstance(tm[iy0], DoublePepsTensor):
                             raise YastnError("Cannot calculate same-site correlator in 1-layer Peps; remove '=' from pairs.")
-                        set_operator_(tm, iy0, o0 @ o1)
+                        set_operator_(tm, iy0, o0 @ o1, horizontal=True)
                         out[(nx0, ny0) + nz0, (nx1, ny1) + nz1] = env.measure(bd=(iy0-1, iy0+1)) / norm_env
 
-                set_operator_(tm, iy0, o0)
+                set_operator_(tm, iy0, o0, horizontal=True)
                 add_charge_swaps_(tm, iy0, o0.n, axes=['k4', 'k2'])
 
                 for ny1 in range(ny0 + 1, yrange[1]):
@@ -346,7 +347,7 @@ def _measure_2site_rows(self, O0dict, O1dict, xrange, yrange, offset, pairs, opt
                         old_tensor = tm[iy1]
                         add_charge_swaps_(tm, iy1, o0.n, axes='b0')
                         for nz1, o1 in O1dict[nx1, ny1].items():
-                            set_operator_(tm, iy1, o1)
+                            set_operator_(tm, iy1, o1, horizontal=True)
                             out[(nx0, ny0) + nz0, (nx1, ny1) + nz1] = env.measure(bd=(iy1-1, iy1+1)) / norm_env
                         restore_old_tensor_(tm, iy1, old_tensor)
                         add_charge_swaps_(tm, iy1, o0.n, axes=['k4', 'k2'])
@@ -381,7 +382,7 @@ def _measure_2site_rows(self, O0dict, O1dict, xrange, yrange, offset, pairs, opt
                             old_tensor = tm[iy1]
                             add_charge_swaps_(tm, iy1, o0.n, axes=['k2', 'k4'])
                             for nz1, o1 in O1dict[nx1, ny1].items():
-                                set_operator_(tm, iy1, o1)
+                                set_operator_(tm, iy1, o1, horizontal=True)
                                 out[(nx0, ny0) + nz0, (nx1, ny1) + nz1] = env.measure(bd=(iy1-1, iy1+1)) / norm_env
                             restore_old_tensor_(tm, iy1, old_tensor)
                             add_charge_swaps_(tm, iy1, o0.n, axes='b0')
@@ -421,10 +422,10 @@ def _measure_2site_columns(self, O0dict, O1dict, xrange, yrange, offset, pairs, 
                     for nz1, o1 in O1dict[nx0, ny0].items():
                         if not isinstance(tm[ix0], DoublePepsTensor):
                             raise YastnError("Cannot calculate same-site correlator in 1-layer Peps; remove '=' from pairs.")
-                        set_operator_(tm, ix0, o0 @ o1)
+                        set_operator_(tm, ix0, o0 @ o1, horizontal=False)
                         out[(nx0, ny0) + nz0, (nx1, ny1) + nz1] = env.measure(bd=(ix0-1, ix0+1)) / norm_env
 
-                set_operator_(tm, ix0, o0)
+                set_operator_(tm, ix0, o0, horizontal=False)
                 add_charge_swaps_(tm, ix0, o0.n, axes=['k4', 'b3'])
 
                 for nx1 in range(nx0 + 1, xrange[1]):
@@ -434,7 +435,7 @@ def _measure_2site_columns(self, O0dict, O1dict, xrange, yrange, offset, pairs, 
                         old_tensor = tm[ix1]
                         add_charge_swaps_(tm, ix1, o0.n, axes='k1')
                         for nz1, o1 in O1dict[nx1, ny1].items():
-                            set_operator_(tm, ix1, o1)
+                            set_operator_(tm, ix1, o1, horizontal=False)
                             out[(nx0, ny0) + nz0, (nx1, ny1) + nz1] = env.measure(bd=(ix1-1, ix1+1)) / norm_env
                         restore_old_tensor_(tm, ix1, old_tensor)
                         add_charge_swaps_(tm, ix1, o0.n, axes=['b4', 'b3'])
@@ -469,7 +470,7 @@ def _measure_2site_columns(self, O0dict, O1dict, xrange, yrange, offset, pairs, 
                             old_tensor = tm[ix1]
                             add_charge_swaps_(tm, ix1, o0.n, axes=['b3', 'b4'])
                             for nz1, o1 in O1dict[nx1, ny1].items():
-                                set_operator_(tm, ix1, o1)
+                                set_operator_(tm, ix1, o1, horizontal=False)
                                 out[(nx0, ny0) + nz0, (nx1, ny1) + nz1] = env.measure(bd=(ix1-1, ix1+1)) / norm_env
                             restore_old_tensor_(tm, ix1, old_tensor)
                             add_charge_swaps_(tm, ix1, o0.n, axes='k1')

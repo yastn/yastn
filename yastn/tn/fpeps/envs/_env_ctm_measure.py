@@ -14,13 +14,17 @@
 # ==============================================================================
 """ Common measure functions for EnvCTM and EnvBoudndaryMPS """
 
+import scipy.sparse.linalg as sla
+
 from ._env_window import EnvWindow, _measure_2site, _measure_nsite, _sample
 from .._gates_auxiliary import fkron, gate_fix_swap_gate, clear_operator_input
 from .._doublePepsTensor import DoublePepsTensor
 from .._geometry import Site, is_bond, is_site
 from ... import mps
+from ....initialize import rand
 from ....operators import sign_canonical_order
-from ....tensor import YastnError, Tensor, tensordot, vdot
+from ....tensor import YastnError, Tensor, tensordot, vdot, split_data_and_meta, combine_data_and_meta
+
 
 
 def measure_1site(self, O, site=None) -> dict:
@@ -416,6 +420,63 @@ def measure_2site(self, O, P, xrange=None, yrange=None, pairs='corner <=', dirn=
         yrange = [0, self.Ny]
     env_win = EnvWindow(self, xrange, yrange)
     return _measure_2site(env_win, O, P, xrange, yrange, offset=1, pairs=pairs, dirn=dirn, opts_svd=opts_svd, opts_var=opts_var)
+
+
+def transfer_matrix_spectrum(env, k=2, n=None, dirn='h', i=0, L=None, dtype='float64'):
+    r"""
+    Calculate dominant transfer matrix eigenvalues.
+    Employs scipy.sparse.linalg.eigs for eigenvalue solver -- as such, works with numpy backend only.
+
+    Parameters
+    ----------
+    k: int
+        number of eigenvalues to recover; The default is 2.
+
+    n: tuple[int] | int | None
+        charge of eigenvector. The default None gives zero charge.
+
+    dirn: str
+        'h' or 'v'. Vertical of horizontal transfer matrix.
+
+    i: int
+        index of row or column from which the transfer matrix is build.
+
+    L: None | int
+        The length of transfer matrix.
+        The default is None, for which it corresponds to the size of the unit cell.
+
+    dtype: str
+        'float64' or 'complex128', dtype used in initializing random starting vector and used in eigensolver.
+    """
+    if L is None:
+        L = env.Nx if dirn == 'v' else env.Ny
+
+    xrange, yrange = ([0, L], [i, i+1]) if dirn == 'v' else ([i, i+1], [0, L])
+    env_win = EnvWindow(env, xrange, yrange)
+    lvr = 'lvr' if dirn == 'v' else 'thb'
+    vr = env_win[i, lvr[0]]
+    tm = env_win[i, lvr[1]]
+    vl = env_win[i, lvr[2]].conj()
+    env_mps = mps.Env(vl, [tm, vr])
+    env_mps.update_env_(0, to='last')
+    legs = list(env_mps.F[0, 1].get_legs())
+
+    v0 = rand(env.config, legs=legs, n=n, dtype=dtype)
+
+    r1d, meta = split_data_and_meta(v0.to_dict(level=0), squeeze=True)
+    def f(x):
+        tin = Tensor.from_dict(combine_data_and_meta(x, meta))
+        env_mps.F[0, 1] = tin
+        for j in range(1, L + 1):
+            env_mps.update_env_(j, to='last')
+        tout = env_mps.F[L, L+1]
+        tout, _ = split_data_and_meta(tout.to_dict(level=0, meta=meta), squeeze=True)
+        return tout
+
+    ff = sla.LinearOperator(shape=(len(r1d), len(r1d)), matvec=f, dtype=v0.data.dtype)
+    eigenvalues, vs1d = sla.eigs(ff, v0=r1d, k=k, which='LM', tol=1e-10)
+    return eigenvalues
+
 
 
 def sample(env, projectors, number=1, xrange=None, yrange=None, dirn='v', opts_svd=None, opts_var=None, progressbar=False, return_probabilities=False, flatten_one=True, **kwargs) -> dict[Site, list]:
