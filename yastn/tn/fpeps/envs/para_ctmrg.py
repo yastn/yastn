@@ -473,7 +473,6 @@ def MeasureNN(bond, env, op0, op1):
 
 def ParaMeasure(env, funcs, argss, kwargss, cpus_per_task=4, gpus_per_task=0):
 
-    print(len(funcs))
     if not ray.is_initialized():
         ray.init(num_cpus=get_taskset_cpu_count(), ignore_reinit_error=True, namespace='Measure')
 
