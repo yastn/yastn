@@ -1,6 +1,7 @@
 import logging
 import numpy as np
 from ._env_ctm import CTMRG_out, EnvCTM, update_storage_
+from ..envs import _env_ctm_measure
 from .._peps import Peps
 from .._geometry import Site, SquareLattice
 from ...._from_dict import from_dict
@@ -462,8 +463,25 @@ def Measure1Site(site, env, op):
     return {site: env.measure_1site(op, site=site)}
 
 @ray.remote(num_cpus=4, num_gpus=0)
+def Measure(env, func_name:str, args:tuple, kwargs:dict):
+    func = getattr(_env_ctm_measure, func_name)
+    return func(env, *args, **kwargs)
+
+@ray.remote(num_cpus=4, num_gpus=0)
 def MeasureNN(bond, env, op0, op1):
     return {bond: env.measure_nn(op0, op1, bond)}
+
+def ParaMeasure(env, funcs, argss, kwargss, cpus_per_task=4, gpus_per_task=0):
+
+    print(len(funcs))
+    if not ray.is_initialized():
+        ray.init(num_cpus=get_taskset_cpu_count(), ignore_reinit_error=True, namespace='Measure')
+
+    env_remote = ray.put(env)
+
+    list_of_results = ray.get([Measure.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task).remote(env_remote, funcs[ii], argss[ii], kwargss[ii]) for ii in range(len(funcs))])
+
+    return list_of_results
 
 def ParaMeasure1Site(env, op, cpus_per_task=4, gpus_per_task=0):
 
