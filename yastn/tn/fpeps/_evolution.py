@@ -298,51 +298,51 @@ def initial_truncation_ZMT1(R0, R1, fgf, opts_svd, fRR, RRgRR, pinv_cutoffs, pre
     loopiness = np.min(S) / np.max(S)
 
     # slice RA to column vectors
-    data_r0 = R0.T.compress_to_1d()
+    data_r0 = R0.T.to_dict(level=0)
     accumulated = 0
     r0_slices = {}
     D_total = 0
-    len_t = len(data_r0[1]['struct'].t[0]) // 2
-    for ii in range(len(data_r0[1]['struct'].D)):
-        r0_slices[data_r0[1]['struct'].t[ii]] = []
-        Ds = data_r0[1]['struct'].D[ii]
+    len_t = len(data_r0['struct'].t[0]) // 2
+    for ii in range(len(data_r0['struct'].D)):
+        r0_slices[data_r0['struct'].t[ii]] = []
+        Ds = data_r0['struct'].D[ii]
         D_total = D_total + Ds[0]
         for _ in range(Ds[0]):
-            data = data_r0[0][accumulated:(accumulated + Ds[1])]
+            data = data_r0['data'][accumulated:(accumulated + Ds[1])]
             tensor = Tensor(config=R0.config, s=R0.T.get_signature(), dtype="complex128")
-            tensor.set_block(ts=(data_r0[1]['struct'].t[ii][0:len_t], data_r0[1]['struct'].t[ii][len_t:]), val=data, Ds=[1, Ds[1]])
-            r0_slices[data_r0[1]['struct'].t[ii]].append(tensor.T)
+            tensor.set_block(ts=(data_r0['struct'].t[ii][0:len_t], data_r0['struct'].t[ii][len_t:]), val=data, Ds=[1, Ds[1]])
+            r0_slices[data_r0['struct'].t[ii]].append(tensor.T)
             accumulated = accumulated + Ds[1]
 
     # slice RB to row vectors
-    data_r1 = R1.compress_to_1d()
+    data_r1 = R1.to_dict(level=0)
     accumulated = 0
     r1_slices = {}
-    for ii in range(len(data_r1[1]['struct'].D)):
-        r1_slices[data_r1[1]['struct'].t[ii]] = []
-        Ds = data_r1[1]['struct'].D[ii]
+    for ii in range(len(data_r1['struct'].D)):
+        r1_slices[data_r1['struct'].t[ii]] = []
+        Ds = data_r1['struct'].D[ii]
         for _ in range(Ds[0]):
-            data = data_r1[0][accumulated:(accumulated + Ds[1])]
+            data = data_r1['data'][accumulated:(accumulated + Ds[1])]
             tensor = Tensor(config=R0.config, s=R1.get_signature(), dtype="complex128")
-            tensor.set_block(ts=(data_r1[1]['struct'].t[ii][0:len_t], data_r1[1]['struct'].t[ii][:len_t]), val=data, Ds=[1, Ds[1]])
-            r1_slices[data_r1[1]['struct'].t[ii]].append(tensor)
+            tensor.set_block(ts=(data_r1['struct'].t[ii][0:len_t], data_r1['struct'].t[ii][:len_t]), val=data, Ds=[1, Ds[1]])
+            r1_slices[data_r1['struct'].t[ii]].append(tensor)
             accumulated = accumulated + Ds[1]
     # build Rj=RAj * RBj
     r_slices = {}
-    for ii in range(len(data_r0[1]['struct'].D)):
-        r0s = r0_slices[data_r0[1]['struct'].t[ii]]
-        r1s = r1_slices.get(data_r0[1]['struct'].t[ii])
+    for ii in range(len(data_r0['struct'].D)):
+        r0s = r0_slices[data_r0['struct'].t[ii]]
+        r1s = r1_slices.get(data_r0['struct'].t[ii])
         if r1s is not None:
-            r_slices[data_r0[1]['struct'].t[ii]] = []
+            r_slices[data_r0['struct'].t[ii]] = []
             for kk in range(len(r0s)):
                 r0 = r0s[kk]
                 r1 = r1s[kk]
-                r_slices[data_r0[1]['struct'].t[ii]].append(r0 @ r1)
+                r_slices[data_r0['struct'].t[ii]].append(r0 @ r1)
 
     weight = {}
-    for ii in range(len(data_r0[1]['struct'].D)):
-        Ds = data_r0[1]['struct'].D[ii]
-        weight[data_r0[1]['struct'].t[ii]] = [1.0 + 0.0j for _ in range (Ds[0])]
+    for ii in range(len(data_r0['struct'].D)):
+        Ds = data_r0['struct'].D[ii]
+        weight[data_r0['struct'].t[ii]] = [1.0 + 0.0j for _ in range (Ds[0])]
 
     removed = 0
     while ((D_total - removed) > opts_svd['D_total']):
@@ -421,8 +421,8 @@ def build_g_ijkl(fgf: Tensor, R0: Tensor, R1: Tensor):
     G = G.unfuse_legs(axes=2)
     # G = G.fuse_legs(axes=((0, 1), 2))
 
-    gts = G.compress_to_1d()[1]['struct'].t
-    slices = G.compress_to_1d()[1]['slices']
+    gts = G.struct.t
+    slices = G.slices
     gts_slices_dict = dict(zip(gts, slices))
 
     ts = G.get_legs()[0].t
