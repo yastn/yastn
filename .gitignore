@@ -132,6 +132,7 @@ dmypy.json
 
 # data files
 *.npy
+!tests/tensor/inputs/*.npy
 *.h5
 *.dat
 tests/*.txt
