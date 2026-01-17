@@ -141,7 +141,7 @@ jobs:
         include:
           - backend: np
             python_v: '3.10'
-            numpy_v: '1.21.6'
+            numpy_v: '1.26.4'
             scipy_v: '1.11.4'
             torch_v: 'none'
           - backend: torch
