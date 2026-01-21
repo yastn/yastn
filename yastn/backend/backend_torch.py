@@ -16,6 +16,7 @@
 from itertools import groupby
 from functools import reduce
 import torch
+import torch.cuda as cuda
 from torch.utils.checkpoint import checkpoint as _checkpoint
 # import torch.multiprocessing as mp
 # mp.set_start_method('spawn', force=True)
