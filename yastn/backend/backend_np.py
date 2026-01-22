@@ -24,8 +24,11 @@ import scipy.sparse.linalg
 # non-deterministic initialization of random number generator
 rng = {'rng': np.random.default_rng(None)}  # initialize random number generator
 BACKEND_ID = "np"
-DTYPE = {'float32': np.float32, 'float64': np.float64,
-         'complex64': np.complex64, 'complex128': np.complex128}
+DTYPE = {'float32': np.float32,
+         'float64': np.float64,
+         'complex64': np.complex64,
+         'complex128': np.complex128,
+         'bool': bool}
 
 
 def cuda_is_available():
@@ -34,6 +37,10 @@ def cuda_is_available():
 
 def get_dtype(t):
     return t.dtype
+
+
+def get_yastn_dtype(t):
+    return t.dtype.name
 
 
 def is_complex(x):

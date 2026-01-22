@@ -119,6 +119,11 @@ def test_initialize_U1(config_kwargs):
     assert npa.shape == a1.get_shape() == (6, 3, 6, 1)
     assert a1.size == np.sum(npa != 0.)
     assert a1.is_consistent()
+    #
+    # dtypes
+    for dtype in ['float64', 'float32', 'complex128', 'complex64', 'bool']:
+        a1 = yastn.ones(config=config_U1, legs=legs, dtype=dtype)
+        assert a1.yastn_dtype == dtype
 
     # 0-dim tensor
     a = yastn.ones(config=config_U1)  # s=()  # t=(), D=()
@@ -191,7 +196,6 @@ def test_initialize_U1(config_kwargs):
 
     a4 = yastn.rand_like(a3)
     assert a4.struct == a3.struct
-
 
 
 def test_initialize_Z2xU1(config_kwargs):

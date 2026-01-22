@@ -72,7 +72,7 @@ def test_mask_basic(config_kwargs):
     bge = b >= 0
     ble = b <= 0
     assert bgt.trace().item() + ble.trace().item() == blt.trace().item() + bge.trace().item() == b.get_shape(axes=0)
-
+    assert bgt.yastn_dtype == 'bool'
     assert all(bgt.bitwise_not().data == ble.data)
 
     for bb in [bgt, blt, bge, ble]:

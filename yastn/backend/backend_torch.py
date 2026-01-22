@@ -29,8 +29,8 @@ from ._backend_torch_backwards import kernel_transpose, kernel_transpose_and_mer
 
 __all__= [
     'DTYPE', 'cuda_is_available',
-    'get_dtype', 'is_complex', 'get_device', 'random_seed', 'grad',
-    'detach', 'detach_', 'clone', 'copy', 'randint',
+    'get_dtype', 'get_yastn_dtype', 'is_complex', 'get_device', 'random_seed',
+    'grad', 'detach', 'detach_', 'clone', 'copy', 'randint',
     'to_numpy', 'get_shape', 'get_size', 'diag_create', 'diag_get', 'real',
     'imag', 'max_abs', 'maximum', 'norm_matrix', 'delete', 'insert',
     'expm', 'first_element', 'item', 'sum_elements', 'norm', 'entropy',
@@ -53,7 +53,8 @@ BACKEND_ID = "torch"
 DTYPE = {'float32': torch.float32,
          'float64': torch.float64,
          'complex64': torch.complex64,
-         'complex128': torch.complex128}
+         'complex128': torch.complex128,
+         'bool': torch.bool}
 
 
 def cuda_is_available():
@@ -62,6 +63,11 @@ def cuda_is_available():
 
 def get_dtype(t):
     return t.dtype
+
+
+def get_yastn_dtype(t):
+    dtypes = [k for k, v in DTYPE.items() if t.dtype == v]
+    return dtypes[0] if len(dtypes) == 1 else 'unknown'
 
 
 def is_complex(x):

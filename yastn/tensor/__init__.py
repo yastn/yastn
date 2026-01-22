@@ -306,8 +306,10 @@ class Tensor:
 
     @property
     def yastn_dtype(self) -> str:
-        """ Return :code:`'complex128'` if tensor data are complex else :code:`'float64'`. """
-        return 'complex128' if self.config.backend.is_complex(self._data) else 'float64'
+        """
+        Return string representing data dtype, e.g., ``'complex128'``, ``'float64'``, ``'complex64'``, ``'float32'``. ``'bool'``.
+        """
+        return self.config.backend.get_yastn_dtype(self._data)
 
     @property
     def data(self) -> 'numpy.array' | 'torch.tensor':
