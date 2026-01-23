@@ -208,9 +208,11 @@ def ones(D, dtype='float64', device='cpu'):
 
 
 def rand(D, dtype='float64', distribution=(0, 1), device='cpu'):
+    if dtype == 'bool':
+        return torch.rand(D, dtype=DTYPE['float64'], device=device) > 0.5
     if distribution == 'normal':
         return torch.randn(D, dtype=DTYPE[dtype], device=device)
-    ds = 1 if dtype=='float64' else 1 + 1j
+    ds = 1 if ('float' in dtype or 'bool' in dtype) else 1 + 1j
     out = torch.rand(D, dtype=DTYPE[dtype], device=device)
     return out if distribution == (0, 1) else (distribution[1] - distribution[0]) * out + distribution[0] * ds
 
@@ -302,6 +304,12 @@ def svd_lowrank(data, meta, sizes, **kwargs):
     return svds_scipy(data, meta, sizes, solver='arpack', **kwargs)
 
 
+def dtype_to_complex(data):
+    """ type promotion to complex. """
+    tmp = 1j * torch.tensor(1, dtype=data.dtype)
+    return tmp.dtype
+
+
 def svd(data, meta, sizes, fullrank_uv=False, ad_decomp_reg=1.0e-12, diagnostics=None, **kwargs):
     return kernel_svd.apply(data, meta, sizes, fullrank_uv, ad_decomp_reg, diagnostics)
 
@@ -334,7 +342,7 @@ def svd_randomized(data, meta, sizes, q=None, niter=3, **kwargs):
 
 
 def svds_scipy(data, meta, sizes, thresh=0.1, solver='arpack', **kwargs):
-    return kernel_svds_scipy.apply(data,meta,sizes, thresh, solver, **kwargs)
+    return kernel_svds_scipy.apply(data, meta, sizes, thresh, solver, **kwargs)
 
 
 def fix_svd_signs(Udata, Vhdata, meta):
@@ -354,7 +362,7 @@ def fix_svd_signs(Udata, Vhdata, meta):
 
 
 def eigh(data, meta=None, sizes=(1, 1), order_by_magnitude=False, ad_decomp_reg=1.0e-12):
-    real_dtype= data.real.dtype if data.is_complex() else data.dtype
+    real_dtype = data.real.dtype if data.is_complex() else data.dtype
     Sdata = torch.zeros((sizes[0],), dtype=real_dtype, device=data.device)
     Udata = torch.zeros((sizes[1],), dtype=data.dtype, device=data.device)
     if meta is not None:
@@ -377,9 +385,10 @@ def eig(data, meta=None, sizes=(1, 1), **kwargs):
     # NOTE torch.linalg.eig returns right eigenvectors U only, i.e. M U = diag(S) U
     #
     # Assume worst case ?
-    Udata = torch.empty((sizes[0],), dtype=DTYPE['complex128'], device=data.device)
-    Sdata = torch.empty((sizes[1],), dtype=DTYPE['complex128'], device=data.device)
-    Vdata = torch.empty((sizes[2],), dtype=DTYPE['complex128'], device=data.device)
+    dtype = dtype_to_complex(data)
+    Udata = torch.empty((sizes[0],), dtype=dtype, device=data.device)
+    Sdata = torch.empty((sizes[1],), dtype=dtype, device=data.device)
+    Vdata = torch.empty((sizes[2],), dtype=dtype, device=data.device)
     for (sl, D, slU, DU, slS, slV, DV) in meta:
         S, U = torch.linalg.eig(data[slice(*sl)].reshape(D))
         #
@@ -408,7 +417,8 @@ def eig(data, meta=None, sizes=(1, 1), **kwargs):
 
 
 def eigvals(data, meta, sizeS, **kwargs):
-    Sdata = torch.empty((sizeS,), dtype=DTYPE['complex128'], device=data.device)
+    dtype = dtype_to_complex(data)
+    Sdata = torch.empty((sizeS,), dtype=dtype, device=data.device)
     for (sl, D, _, _, slS, _, _) in meta:
         S = torch.linalg.eigvals(data[slice(*sl)].reshape(D))
         Sdata[slice(*slS)]= S[eigs_which(S, which=kwargs.get('which', 'LM'))]
