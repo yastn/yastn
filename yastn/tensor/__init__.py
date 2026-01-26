@@ -87,16 +87,16 @@ class Tensor:
         if 'data' in kwargs:
             self._data = kwargs['data']  # 1d container for tensor data
         else:
-            dev = kwargs['device'] if 'device' in kwargs else self.config.default_device
-            dty = kwargs['dtype'] if 'dtype' in kwargs else self.config.default_dtype
+            dev = kwargs.get('device', self.config.default_device)
+            dty = kwargs.get('dtype', self.config.default_dtype)
             self._data = self.config.backend.zeros((0,), dtype=dty, device=dev)
-
+        #
         if self._data is not None and self._data.ndim != 1:  # e.g. some scipy procedure might add extra dim=1.
             self._data = self._data.reshape(-1)
-
-        try:
+        #
+        if 'struct' in kwargs:
             self.struct = kwargs['struct']
-        except KeyError:
+        else:
             try:
                 s = tuple(s)
             except TypeError:
@@ -115,17 +115,26 @@ class Tensor:
                 if any(x != 0 for x in n):
                     raise YastnError("Tensor charge of a diagonal tensor should be 0.")
             self.struct = _struct(s=s, n=n, diag=bool(isdiag))
-
-        self.slices = kwargs['slices'] if 'slices' in kwargs else ()
-
-        # fusion tree for each leg: encodes number of fused legs e.g. 5 2 1 1 3 1 2 1 1 = [[1, 1], [1, [1, 1]]]
+        #
+        self.slices = kwargs.get('slices', ())
+        #
+        self.trans = kwargs.get('trans', None)
         try:
-            self.mfs = tuple(kwargs['mfs'])
-        except (KeyError, TypeError):
+            self.trans = tuple(self.trans)
+        except TypeError:
+            self.trans = tuple(range(len(self.struct.s)))
+        #
+        # fusion tree for each leg: encodes number of fused legs e.g. 5 2 1 1 3 1 2 1 1 = ((1, 1), (1, (1, 1)))
+        self.mfs = kwargs.get('mfs', None)
+        try:
+            self.mfs = tuple(self.mfs)
+        except TypeError:
             self.mfs = ((1,),) * len(self.struct.s)
+        #
+        self.hfs = kwargs.get('hfs', None)
         try:
-            self.hfs = tuple(kwargs['hfs'])
-        except (KeyError, TypeError):
+            self.hfs = tuple(self.hfs)
+        except TypeError:
             self.hfs = tuple(_Fusion(s=(x,)) for x in self.struct.s)
 
     # pylint: disable=C0415
@@ -151,7 +160,7 @@ class Tensor:
 
     def _replace(self, **kwargs) -> Tensor:
         """ Creates a shallow copy replacing fields specified in kwargs. """
-        for arg in ('config', 'struct', 'mfs', 'hfs', 'data', 'slices'):
+        for arg in ('config', 'struct', 'mfs', 'hfs', 'data', 'slices', 'trans'):
             if arg not in kwargs:
                 kwargs[arg] = getattr(self, arg)
         return Tensor(**kwargs)

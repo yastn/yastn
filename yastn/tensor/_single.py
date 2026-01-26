@@ -289,10 +289,10 @@ def drop_leg_history(a, axes=None) -> 'Tensor':
     return a._replace(hfs=hfs)
 
 
-def transpose(a, axes=None) -> 'Tensor':
+def transpose(a, axes=None):
     r"""
     Transpose tensor by permuting the order of its legs (spaces).
-    Makes a shallow copy of tensor data if the order is not changed.
+    Makes a shallow copy of tensor data.
 
     Parameters
     ----------
@@ -304,13 +304,36 @@ def transpose(a, axes=None) -> 'Tensor':
     if axes is None:
         axes = tuple(range(a.ndim-1, -1, -1))
     _test_axes_all(a, axes, native=False)
-    if axes == tuple(range(a.ndim)):
-        return a._replace()
     uaxes, = _unpack_axes(a.mfs, axes)
-    order = np.array(uaxes, dtype=np.int64)
     mfs = tuple(a.mfs[ii] for ii in axes)
-    hfs = tuple(a.hfs[ii] for ii in uaxes)
-    c_s = tuple(a.struct.s[ii] for ii in uaxes)
+    trans = tuple(a.trans[ii] for ii in uaxes)
+    b = a._replace(trans=trans, mfs=mfs)
+    return consume_trans(b)
+
+    # axes = tuple(self._t[ax] for ax in axes)
+    # in_a = tuple(self._t[ax] for ax in in_a)
+    # out_a = tuple(ax for ax in self._t if ax not in in_a)
+
+
+
+def consume_trans(a) -> 'Tensor':
+    r"""
+    Transpose tensor by permuting the order of its legs (spaces).
+    Makes a shallow copy of tensor data if the order is not changed.
+
+    Parameters
+    ----------
+    axes: Sequence[int]
+        new order of legs. Has to be a valid permutation of :code:`(0, 1, ..., ndim-1)`
+        where :code:`ndim` is tensor order (number of legs).
+        By default is :code:`range(a.ndim)[::-1]`, which reverses the order of the axes.
+    """
+    no_trans = tuple(range(a.ndim_n))
+    if a.trans == no_trans:
+        return a._replace()
+    order = np.array(a.trans, dtype=np.int64)
+    hfs = tuple(a.hfs[ii] for ii in a.trans)
+    c_s = tuple(a.struct.s[ii] for ii in a.trans)
     lt, ndim_n, nsym = len(a.struct.t), len(a.struct.s), len(a.struct.n)
 
     tset = np.array(a.struct.t, dtype=np.int64).reshape(lt, ndim_n, nsym)
@@ -329,8 +352,8 @@ def transpose(a, axes=None) -> 'Tensor':
     struct = a.struct._replace(s=c_s, t=c_t, D=c_D)
     meta = tuple((sln.slcs[0], sln.D, mt[2].slcs[0], mt[2].D) for sln, mt, in zip(slices, meta))
 
-    data = a._data if a.isdiag else a.config.backend.transpose(a._data, uaxes, meta)
-    return a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, data=data)
+    data = a._data if a.isdiag else a.config.backend.transpose(a._data, a.trans, meta)
+    return a._replace(hfs=hfs, struct=struct, slices=slices, data=data, trans=no_trans)
 
 
 def moveaxis(a, source, destination) -> 'Tensor':
@@ -438,7 +461,8 @@ def add_leg(a, axis=-1, s=-1, t=None, leg=None) -> 'Tensor':
     struct = a.struct._replace(t=newt, D=newD, s=news, n=newn)
     slices = tuple(_slc(x.slcs, y, x.Dp) for x, y in zip(a.slices, newD))
     hfs = a.hfs[:axis] + (hfsa,) + a.hfs[axis:]
-    return a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices)
+
+    return a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, trans=None)
 
 
 def remove_leg(a, axis=-1) -> 'Tensor':
@@ -482,7 +506,7 @@ def remove_leg(a, axis=-1) -> 'Tensor':
         struct = a.struct._replace(t=newt, D=newD, s=news, n=newn)
         slices = tuple(_slc(x.slcs, y, x.Dp) for x, y in zip(a.slices, newD))
         hfs = a.hfs[:axis] + a.hfs[axis + 1:]
-        a = a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices)
+        a = a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, trans=None)
     return a
 
 

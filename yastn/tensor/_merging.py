@@ -293,7 +293,7 @@ def _fuse_legs_hard(a, axes, order):
             hfs.append(a.hfs[axis[0]])
         else:  # len(axis) == 0
             hfs.append(_Fusion(tree=(1,), op='o', s=(struct.s[n],), t=(), D=()))
-    return a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, data=data)
+    return a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, data=data, trans=None)
 
 
 @lru_cache(maxsize=1024)
@@ -461,7 +461,7 @@ def unfuse_legs(a, axes) -> 'Tensor':
         data = _unmerge(a.config, a._data, meta)
         for unfused, n in zip(nlegs[::-1], axes_hf[::-1]):
             mfs = mfs[:n] + [mfs[n]] * unfused + mfs[n+1:]
-        return a._replace(struct=struct, slices=slices, mfs=tuple(mfs), hfs=hfs, data=data)
+        return a._replace(struct=struct, slices=slices, mfs=tuple(mfs), hfs=hfs, data=data, trans=None)
     return a._replace(mfs=tuple(mfs))
 
 

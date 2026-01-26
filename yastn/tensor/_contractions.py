@@ -122,7 +122,7 @@ def tensordot(a, b, axes, conj=(0, 0)) -> 'Tensor':
         raise YastnError("Tensordot policy not recognized. It should be 'fuse_to_matrix', 'fuse_contracted', or 'no_fusion'.")
 
     struct_c = struct_c._replace(n=n_c)
-    return a._replace(data=data, struct=struct_c, slices=slices_c, mfs=mfs_c, hfs=hfs_c)
+    return a._replace(data=data, struct=struct_c, slices=slices_c, mfs=mfs_c, hfs=hfs_c, trans=None)
 
 
 def _tensordot_diag(a, b, in_b, destination):
@@ -664,7 +664,7 @@ def trace(a, axes=(0, 1)) -> 'Tensor':
     if a.isdiag:
         struct = a.struct._replace(s=(), diag=False, t=((),), D=((),), size=1)
         data = a.config.backend.sum_elements(a._data)
-        return a._replace(struct=struct, slices=(_slc(((0, 1),), (), 1),), mfs=mfs, hfs=hfs, isdiag=False, data=data)
+        return a._replace(struct=struct, slices=(_slc(((0, 1),), (), 1),), mfs=mfs, hfs=hfs, isdiag=False, data=data, trans=None)
 
     if mask_needed:
         msk_0, msk_1, a_hfs, _ = _mask_tensors_leg_intersection(a, a, nin_0, nin_1)
@@ -673,7 +673,8 @@ def trace(a, axes=(0, 1)) -> 'Tensor':
 
     meta, struct, slices = _meta_trace(a.struct, a.slices, nin_0, nin_1, out)
     data = a.config.backend.trace(a._data, order, meta, struct.size)
-    return a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, data=data)
+
+    return a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, data=data, trans=None)
 
 
 @lru_cache(maxsize=1024)
