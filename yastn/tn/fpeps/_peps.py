@@ -124,7 +124,7 @@ class Peps(Lattice):
                 site = (n, ny)
                 psi = self[site]
                 op.A[ny] = psi.transpose(axes=(1, 2, 3, 0)) if psi.ndim == 4 else \
-                           DoublePepsTensor(bra=psi, ket=psi, trans=(1, 2, 3, 0))
+                           DoublePepsTensor(bra=psi, ket=psi).transpose((1, 2, 3, 0))
         elif dirn == 'v':
             periodic = (self.boundary == "cylinder")
             op = Mpo(N=self.Nx, periodic=periodic)

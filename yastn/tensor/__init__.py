@@ -146,7 +146,7 @@ class Tensor:
     from ._algebra import __abs__, real, imag, sqrt, rsqrt, reciprocal, exp, bitwise_not
     from ._single import conj, conj_blocks, flip_signature, flip_charges, switch_signature, transpose, moveaxis, move_leg, diag
     from ._single import grad, requires_grad_, remove_zero_blocks, add_leg, remove_leg, drop_leg_history
-    from ._single import copy, shallow_copy, clone, detach, detach_, to
+    from ._single import copy, shallow_copy, clone, detach, detach_, to, consume_transpose
     from ._output import print_properties, __str__, __repr__, print_blocks_shape, is_complex
     from ._output import get_blocks_charge, get_blocks_shape, get_legs
     from ._output import zero_of_dtype, item, __getitem__, __contains__
@@ -201,7 +201,11 @@ class Tensor:
             c.is_consistent()
             return c
         #
-        if d['dict_ver'] == 1:  # d from method to_dict (single version as of now)
+        if d['dict_ver'] in [1, 2]:  # d from method to_dict (single version as of now)
+
+            if 'trans' not in d:  # to handle dict_ver==1 with no trans
+                d['trans'] = None
+
             if d['type'] != 'Tensor':
                 raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
 
@@ -245,7 +249,7 @@ class Tensor:
         """
         inds, n = [], 0
         for mf in self.mfs:
-            inds.append(n)
+            inds.append(self.trans[n])
             n += mf[0]
         return tuple(self.struct.s[ind] for ind in inds)
 
@@ -257,7 +261,7 @@ class Tensor:
         This includes legs (spaces) which have been fused together
         by :meth:`yastn.fuse_legs` using ``mode='meta'``.
         """
-        return self.struct.s
+        return tuple(self.struct.s[ind] for ind in self.trans)
 
     @property
     def n(self) -> Sequence[int]:

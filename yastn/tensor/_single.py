@@ -26,7 +26,8 @@ from ._legs import LegMeta, Leg, leg_product
 from ._merging import _Fusion
 from ._tests import YastnError, _test_axes_all
 
-__all__ = ['conj', 'conj_blocks', 'flip_signature', 'flip_charges', 'switch_signature',
+__all__ = ['conj', 'conj_blocks', 'consume_transpose',
+           'flip_signature', 'flip_charges', 'switch_signature',
            'transpose', 'moveaxis', 'move_leg', 'diag', 'remove_zero_blocks',
            'add_leg', 'remove_leg', 'copy', 'clone', 'detach', 'to',
            'requires_grad_', 'grad', 'drop_leg_history', 'shallow_copy']
@@ -85,7 +86,7 @@ def to(a, device=None, dtype=None, **kwargs) -> 'Tensor':
         desired dtype
     """
     if dtype in (None, a.yastn_dtype) and device in (None, a.device):
-        return a._replace()
+        return a
     data = a.config.backend.move_to(a._data, dtype=dtype, device=device, **kwargs)
     return a._replace(data=data)
 
@@ -184,6 +185,7 @@ def flip_charges(a, axes=None) -> 'Tensor':
         index of the leg, or a group of legs.
         The default is ``None``, which flips all legs.
     """
+    a = a.consume_transpose()
     if a.isdiag:
         raise YastnError('Cannot flip charges of a diagonal tensor. Use diag() first.')
     if axes is None:
@@ -235,6 +237,7 @@ def switch_signature(a, axes: Union[Sequence[int],int,str] = ()) -> 'Tensor':
         index of the leg, or a group of legs.
         If ``axes="all"``, all signatures are flipped.
     """
+    a = a.consume_transpose()
     from .. import eye
     if a.isdiag:
         raise YastnError('Cannot flip charges of a diagonal tensor. Use diag() first.')
@@ -277,6 +280,7 @@ def drop_leg_history(a, axes=None) -> 'Tensor':
         index of the leg, or a group of legs.
         The default is :code:`None`, which drops information from all legs.
     """
+    a = a.consume_transpose()
     if axes is None:
         axes = tuple(range(a.ndim))
     else:
@@ -307,16 +311,13 @@ def transpose(a, axes=None):
     uaxes, = _unpack_axes(a.mfs, axes)
     mfs = tuple(a.mfs[ii] for ii in axes)
     trans = tuple(a.trans[ii] for ii in uaxes)
-    b = a._replace(trans=trans, mfs=mfs)
-    return consume_trans(b)
-
+    return a._replace(trans=trans, mfs=mfs)
     # axes = tuple(self._t[ax] for ax in axes)
     # in_a = tuple(self._t[ax] for ax in in_a)
     # out_a = tuple(ax for ax in self._t if ax not in in_a)
 
 
-
-def consume_trans(a) -> 'Tensor':
+def consume_transpose(a) -> 'Tensor':
     r"""
     Transpose tensor by permuting the order of its legs (spaces).
     Makes a shallow copy of tensor data if the order is not changed.
@@ -330,7 +331,7 @@ def consume_trans(a) -> 'Tensor':
     """
     no_trans = tuple(range(a.ndim_n))
     if a.trans == no_trans:
-        return a._replace()
+        return a
     order = np.array(a.trans, dtype=np.int64)
     hfs = tuple(a.hfs[ii] for ii in a.trans)
     c_s = tuple(a.struct.s[ii] for ii in a.trans)
@@ -421,6 +422,7 @@ def add_leg(a, axis=-1, s=-1, t=None, leg=None) -> 'Tensor':
         It has to be of dimension one but can contain information about the fusion of other dimension-one legs.
         If provided, it overrides information in ``s`` and ``t``. The default is ``None``.
     """
+    a = a.consume_transpose()
     if a.isdiag:
         raise YastnError('Cannot add axis to a diagonal tensor.')
 
@@ -478,6 +480,7 @@ def remove_leg(a, axis=-1) -> 'Tensor':
     axis: int
         index of the leg to be removed.
     """
+    a = a.consume_transpose()
     if a.isdiag:
         raise YastnError('Cannot remove axis to a diagonal tensor.')
     if a.ndim == 0:
@@ -514,6 +517,8 @@ def diag(a) -> 'Tensor':
     """
     Select diagonal of 2D tensor and output it as a diagonal tensor, or vice versa.
     """
+    a = a.consume_transpose()
+
     if not a.isdiag:  # isdiag=False -> isdiag=True
         if a.ndim_n != 2 or sum(a.struct.s) != 0:
             raise YastnError('Diagonal tensor requires 2 legs with opposite signatures.')

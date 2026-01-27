@@ -344,6 +344,9 @@ def block(tensors, common_legs=None) -> Tensor:
         This is equivalently to all tensors having the same position
         (not specified explicitly) in the super-tensor on that leg.
     """
+
+
+    tensors = {k: v.consume_transpose() for k, v in tensors.items()}
     tn0 = next(iter(tensors.values()))  # first tensor; used to initialize new objects and retrive common values
     out_s, = ((),) if common_legs is None else _clear_axes(common_legs)
     out_b = tuple(ii for ii in range(tn0.ndim) if ii not in out_s)

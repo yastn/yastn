@@ -79,18 +79,19 @@ def to_dict(a, level=2, meta=None) -> dict:
     data = a.data if level < 2 else a.config.backend.to_numpy(a.data)
 
     d = {'type': type(a).__name__,
-         'dict_ver': 1,  # to_dict version
+         'dict_ver': 2,  # to_dict version
          'level': level,
          'config': config,
          'data': data,
          'struct': struct,
          'slices': slices,
+         'trans': a.trans,
          'isdiag': a.isdiag,
          'hfs': hfs,
          'mfs': a.mfs}
 
     if meta is not None:
-        if not all(meta[k] == d[k] for k in ['type', 'dict_ver', 'config', 'struct', 'slices', 'isdiag', 'hfs', 'mfs']):
+        if not all(meta[k] == d[k] for k in ['type', 'dict_ver', 'config', 'struct', 'slices', 'trans', 'isdiag', 'hfs', 'mfs']):
             size = meta['struct'].size if hasattr(meta['struct'], 'size') else meta['struct']['size']
             tmp = a.config.backend.zeros(size, dtype=a.yastn_dtype, device=a.device)
             ap = type(a).from_dict(combine_data_and_meta(tmp, meta))
@@ -120,7 +121,7 @@ def save_to_dict(a) -> dict:
         tensor to export.
     """
     warn('This method is deprecated; use to_dict() instead.', DeprecationWarning, stacklevel=2)
-
+    a = a.consume_transpose()
     _d = a.config.backend.to_numpy(a._data).copy()
     hfs = [hf._asdict() for hf in a.hfs]
     return {'type': type(a).__name__,
@@ -141,6 +142,7 @@ def save_to_hdf5(a, file, path) -> None:
     a : yastn.Tensor
         tensor to export.
     """
+    a = a.consume_transpose()
     _d = a.config.backend.to_numpy(a._data)
     hfs = tuple(tuple(hf) for hf in a.hfs)
     file.create_dataset(path+'/isdiag', data=[int(a.isdiag)])
@@ -281,7 +283,7 @@ def get_shape(a, axes=None, native=False) ->  int | Sequence[int]:
         indices of legs; If ``axes=None`` returns shape for all legs. The default is ``axes=None``.
     """
     if axes is None:
-        axes = tuple(n for n in range(a.ndim_n if native else a.ndim))
+        axes = tuple(range(a.ndim_n if native else a.ndim))
     if isinstance(axes, int):
         return sum(a.get_legs(axes, native=native).D)
     return tuple(sum(leg.D) for leg in a.get_legs(axes, native=native))
@@ -307,6 +309,8 @@ def __getitem__(a, key) -> numpy.ndarray | torch.tensor:
     key : Sequence[int] | Sequence[Sequence[int]]
         charges of the block.
     """
+    a = a.consume_transpose()
+
     key = tuple(_flatten(key))
     try:
         ind = a.struct.t.index(key)
@@ -344,13 +348,15 @@ def get_legs(a, axes=None, native=False) -> yastn.Leg | Sequence[yastn.Leg]:
     tset = np.array(a.struct.t, dtype=np.int64).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
     Dset = np.array(a.struct.D, dtype=np.int64).reshape((len(a.struct.D), len(a.struct.s)))
     if axes is None:
-        axes = tuple(range(a.ndim)) if not native else tuple(range(a.ndim_n))
+        axes = tuple(range(a.ndim if not native else a.ndim_n))
     multiple_legs = hasattr(axes, '__iter__')
     axes, = _clear_axes(axes)
     for ax in axes:
         nax = (ax,)
         if not native:
             nax, = _unpack_axes(a.mfs, (ax,))
+
+        nax = tuple(a.trans[ax] for ax in nax)
 
         legs_ax = []
         for i in nax:
@@ -456,6 +462,8 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False) -> 'Tensor':
         reverse the order in which blocks are sorted. Default order is ascending in
         values of block's charges.
     """
+    a = a.consume_transpose()
+
     config_dense = a.config._replace(sym=sym_none)
 
     legs_a = list(a.get_legs(native=native))

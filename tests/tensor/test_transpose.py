@@ -19,22 +19,24 @@ import yastn
 
 tol = 1e-12  #pylint: disable=invalid-name
 
-def run_moveaxis(a, ad, source, destination, result):
+def run_moveaxis(a, ad, source, destination, result_D, result_s):
     newa = a.moveaxis(source=source, destination=destination)
-    assert newa.to_numpy().shape == result
-    assert newa.get_shape() == result
-    assert np.moveaxis(ad, source=source, destination=destination).shape == result
+    assert newa.to_numpy().shape == result_D
+    assert newa.get_shape() == result_D
+    assert newa.s == result_s
+    assert np.moveaxis(ad, source=source, destination=destination).shape == result_D
     assert newa.is_consistent()
-    assert a.are_independent(newa)
+    assert not a.are_independent(newa)
 
 
-def run_transpose(a, ad, axes, result):
+def run_transpose(a, ad, axes, result_D, result_s):
     newa = a.transpose(axes=axes)
-    assert newa.to_numpy().shape == result
-    assert newa.get_shape() == result
-    assert np.transpose(ad, axes=axes).shape == result
+    assert newa.to_numpy().shape == result_D
+    assert newa.get_shape() == result_D
+    assert newa.s == result_s
+    assert np.transpose(ad, axes=axes).shape == result_D
     assert newa.is_consistent()
-    assert a.are_independent(newa)
+    assert not a.are_independent(newa)
 
 
 def test_transpose_syntax(config_kwargs):
@@ -82,12 +84,12 @@ def test_transpose_basic(config_kwargs):
     a = yastn.ones(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
     assert a.get_shape() == (2, 3, 4, 5)
     ad = a.to_numpy()
-    run_transpose(a, ad, axes=(1, 3, 2, 0), result=(3, 5, 4, 2))
-    run_moveaxis(a, ad, source=1, destination=-1, result=(2, 4, 5, 3))
-    run_moveaxis(a, ad, source=(1, 3), destination=(1, 0), result=(5, 3, 2, 4))
-    run_moveaxis(a, ad, source=(3, 1), destination=(0, 1), result=(5, 3, 2, 4))
-    run_moveaxis(a, ad, source=(3, 1), destination=(1, 0), result=(3, 5, 2, 4))
-    run_moveaxis(a, ad, source=(1, 3), destination=(0, 1), result=(3, 5, 2, 4))
+    run_transpose(a, ad, axes=(1, 3, 2, 0), result_D=(3, 5, 4, 2), result_s=(1, -1, 1, -1))
+    run_moveaxis(a, ad, source=1, destination=-1, result_D=(2, 4, 5, 3), result_s=(-1, 1, -1, 1))
+    run_moveaxis(a, ad, source=(1, 3), destination=(1, 0), result_D=(5, 3, 2, 4), result_s=(-1, 1, -1, 1))
+    run_moveaxis(a, ad, source=(3, 1), destination=(0, 1), result_D=(5, 3, 2, 4), result_s=(-1, 1, -1, 1))
+    run_moveaxis(a, ad, source=(3, 1), destination=(1, 0), result_D=(3, 5, 2, 4), result_s=(1, -1, -1, 1))
+    run_moveaxis(a, ad, source=(1, 3), destination=(0, 1), result_D=(3, 5, 2, 4), result_s=(1, -1, -1, 1))
 
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
@@ -96,10 +98,10 @@ def test_transpose_basic(config_kwargs):
                   D=[(2, 3), (4, 5), (6, 7), (6, 5), (4, 3), (2, 1)])
     ad = a.to_numpy()
     assert a.get_shape() == (5, 9, 13, 11, 7, 3)
-    run_transpose(a, ad, axes=(1, 2, 3, 0, 5, 4), result=(9, 13, 11, 5, 3, 7))
-    run_moveaxis(a, ad, source=1, destination=4, result=(5, 13, 11, 7, 9, 3))
-    run_moveaxis(a, ad, source=(2, 0), destination=(0, 2), result=(13, 9, 5, 11, 7, 3))
-    run_moveaxis(a, ad, source=(2, -1, 0), destination=(-1, 2, -2), result=(9, 11, 3, 7, 5, 13))
+    run_transpose(a, ad, axes=(1, 2, 3, 0, 5, 4), result_D=(9, 13, 11, 5, 3, 7), result_s=(-1, -1, 1, -1, 1, 1))
+    run_moveaxis(a, ad, source=1, destination=4, result_D=(5, 13, 11, 7, 9, 3), result_s=(-1, -1, 1, 1, -1, 1))
+    run_moveaxis(a, ad, source=(2, 0), destination=(0, 2), result_D=(13, 9, 5, 11, 7, 3), result_s=(-1, -1, -1, 1, 1, 1))
+    run_moveaxis(a, ad, source=(2, -1, 0), destination=(-1, 2, -2), result_D=(9, 11, 3, 7, 5, 13), result_s=(-1, 1, 1, 1, -1, -1))
 
     # Z2xU1
     config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
@@ -110,8 +112,8 @@ def test_transpose_basic(config_kwargs):
     a = yastn.ones(config=config_Z2xU1, legs=legs)
     assert a.get_shape() == (19, 14, 18, 10)
     ad = a.to_numpy()
-    run_transpose(a, ad, axes=(1, 2, 3, 0), result=(14, 18, 10, 19))
-    run_moveaxis(a, ad, source=-1, destination=-3, result=(19, 10, 14, 18))
+    run_transpose(a, ad, axes=(1, 2, 3, 0), result_D=(14, 18, 10, 19), result_s=(-1, 1, 1, -1))
+    run_moveaxis(a, ad, source=-1, destination=-3, result_D=(19, 10, 14, 18), result_s=(-1, 1, -1, 1))
 
 
 def test_transpose_diag(config_kwargs):
@@ -147,12 +149,14 @@ def test_transpose_backward(config_kwargs):
                   t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
                   D=[(2, 3), (4, 5), (6, 7), (6, 5), (4, 3), (2, 1)])
     b = a.transpose(axes=(1, 2, 3, 0, 5, 4))
+    b = b.consume_transpose()
     target_block = (0, 1, 0, 0, 1, 0)
     target_block_size = a[target_block].size()
 
     def test_f(block):
         a.set_block(ts=target_block, val=block)
         tmp_a = a.transpose(axes=(1, 2, 3, 0, 5, 4))
+        tmp_a = tmp_a.consume_transpose()
         ab = b.vdot(tmp_a)
         return ab
 

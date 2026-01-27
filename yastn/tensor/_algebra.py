@@ -86,9 +86,12 @@ def _pre_addition(*tensors):
     Test and prepare tensors before addition.
     """
     mask_needed = False
+    for b in tensors[1:]:
+        _test_can_be_combined(tensors[0], b)
+
+    tensors = [ten.consume_transpose() for ten in tensors]
     a = tensors[0]
     for b in tensors[1:]:
-        _test_can_be_combined(a, b)
         if a.struct.n != b.struct.n:
             raise YastnError('Tensor charges do not match.')
         if a.isdiag != b.isdiag:
@@ -202,7 +205,7 @@ def allclose(a, b, rtol=1e-13, atol=1e-13) -> bool:
     rtol, atol: float
         Desired relative and absolute precision.
     """
-    if a.struct != b.struct or a.slices != b.slices or a.hfs != b.hfs or a.mfs != b.mfs:
+    if a.struct != b.struct or a.slices != b.slices or a.hfs != b.hfs or a.mfs != b.mfs or a.trans != b.trans:
         return False
     return a.config.backend.allclose(a._data, b._data, rtol, atol)
 

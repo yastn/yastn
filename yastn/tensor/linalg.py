@@ -202,6 +202,8 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     -------
     `U`, `S`, `V` (when ``compute_uv=True``) or `S` (when ``compute_uv=False``)
     """
+    a = a.consume_transpose()
+
     POLICIES = ['fullrank', 'lowrank', 'randomized', 'block_arnoldi', 'block_propack', 'krylov']
     # 1. validation
     if policy not in POLICIES:
@@ -422,6 +424,8 @@ def eig(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     -------
     `U`, `S`, `V` (when ``compute_uv=True``) or `S` (when ``compute_uv=False``)
     """
+
+    a = a.consume_transpose()
 
     _test_axes_all(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
@@ -749,6 +753,7 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0) -> tuple[yastn.Tensor, yastn.Ten
     `Q`, `R`
     """
     _test_axes_all(a, axes)
+    a = a.consume_transpose()
     lout_l, lout_r = _clear_axes(*axes)
     axes = _unpack_axes(a.mfs, lout_l, lout_r)
 
@@ -844,6 +849,7 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='SR') -> tuple[yastn.Tensor, yastn.Tenso
     `S`, `U`
     """
     _test_axes_all(a, axes)
+    a = a.consume_transpose()
     lout_l, lout_r = _clear_axes(*axes)
     axes = _unpack_axes(a.mfs, lout_l, lout_r)
 

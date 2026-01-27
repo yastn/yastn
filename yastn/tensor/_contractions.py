@@ -87,6 +87,9 @@ def tensordot(a, b, axes, conj=(0, 0)) -> 'Tensor':
     if isinstance(b, SpecialTensor):
         return b.tensordot(a, axes=axes, reverse=True)
 
+    a = a.consume_transpose()
+    b = b.consume_transpose()
+
     in_a, in_b = _clear_axes(*axes)  # contracted meta legs
     mask_needed, (nin_a, nin_b) = _test_axes_match(a, b, sgn=-1, axes=(in_a, in_b))
 
@@ -468,12 +471,16 @@ def broadcast(a, *args, axes=0) -> 'Tensor' | tuple['Tensor']:
         legs of tensors in ``args`` to be multiplied by diagonal tensor ``a``.
         Number of tensors provided in ``args`` should match the length of ``axes``.
     """
+    a = a.consume_transpose()
+
     multiple_axes = hasattr(axes, '__iter__')
     axes = (axes,) if not multiple_axes else axes
     if len(axes) != len(args):
         raise YastnError("There should be exactly one axis for each tensor to be projected.")
     results = []
     for b, ax in zip(args, axes):
+        b = b.consume_transpose()
+
         _test_can_be_combined(a, b)
         ax = _broadcast_input(ax, b.mfs, a.isdiag)
         if b.hfs[ax].tree != (1,):
@@ -547,6 +554,8 @@ def apply_mask(a, *args, axes=0) -> 'Tensor' | tuple['Tensor']:
     axes: int | Sequence[int]
         leg of tensors in ``args`` where the mask is applied.
     """
+    a = a.consume_transpose()
+
     multiple_axes = hasattr(axes, '__iter__')
     axes = (axes,) if not multiple_axes else axes
     if len(axes) != len(args):
@@ -559,6 +568,8 @@ def apply_mask(a, *args, axes=0) -> 'Tensor' | tuple['Tensor']:
     mask_D = tuple(len(v) for v in mask.values())
 
     for b, ax in zip(args, axes):
+        b = b.consume_transpose()
+
         _test_can_be_combined(a, b)
         ax = _broadcast_input(ax, b.mfs, a.isdiag)
         if b.hfs[ax].tree != (1,):
@@ -596,6 +607,9 @@ def vdot(a, b, conj=(1, 0)) -> Number:
         indicate which tensors to conjugate: ``(0, 0)``, ``(0, 1)``, ``(1, 0)``, or ``(1, 1)``.
         The default is ``(1, 0)``, i.e., tensor ``a`` is conjugated.
     """
+    a = a.consume_transpose()
+    b = b.consume_transpose()
+
     _test_can_be_combined(a, b)
     if conj[0] == 1:
         a = a.conj()
@@ -647,6 +661,8 @@ def trace(a, axes=(0, 1)) -> 'Tensor':
     axes: tuple[int, int] | tuple[Sequence[int], Sequence[int]]
         Legs to be traced out, e.g., ``axes=(0, 1)``; or ``axes=((2, 3, 4), (0, 1, 5))``.
     """
+    a = a.consume_transpose()
+
     in_0, in_1 = _clear_axes(*axes)  # contracted legs
     if set(in_0) & set(in_1):
         raise YastnError('The same axis in axes[0] and axes[1].')
@@ -747,6 +763,7 @@ def swap_gate(a, axes, charge=None) -> 'Tensor':
     """
     if not a.config.fermionic:
         return a
+    a = a.consume_transpose()
     nsym = a.config.sym.NSYM
     fss = (True,) * nsym if a.config.fermionic is True else a.config.fermionic
     if charge is None:
