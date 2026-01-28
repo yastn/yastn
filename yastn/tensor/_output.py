@@ -244,7 +244,14 @@ def get_signature(a, native=False) -> Sequence[int]:
 
     If ``native=True``, ignore fusion with ``mode=meta`` and return the signature of tensors's native legs, see :attr:`yastn.Tensor.s_n`.
     """
-    return a.s_n if native else a.s
+    if native:
+        return tuple(a.struct.s[ind] for ind in a.trans)
+    else:
+        inds, n = [], 0
+        for mf in a.mfs:
+            inds.append(a.trans[n])
+            n += mf[0]
+        return tuple(a.struct.s[ind] for ind in inds)
 
 
 def get_rank(a, native=False) -> int:

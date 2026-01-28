@@ -174,7 +174,6 @@ def _test_struct_types(struct):
     assert isinstance(struct.size, int)
 
 
-
 def _get_tD_legs(struct):
     """ different views on struct.t and struct.D """
     lt, ndim_n, nsym = len(struct.t), len(struct.s), len(struct.n)

@@ -202,15 +202,13 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     -------
     `U`, `S`, `V` (when ``compute_uv=True``) or `S` (when ``compute_uv=False``)
     """
-    a = a.consume_transpose()
-
     POLICIES = ['fullrank', 'lowrank', 'randomized', 'block_arnoldi', 'block_propack', 'krylov']
     # 1. validation
     if policy not in POLICIES:
        raise YastnError(f"Invalid SVD solver/policy {policy}. Choose one of {POLICIES}.")
     _test_axes_all(a, axes)
     # 1.1 non-default D_block provides defaults for k_block
-    if 'D_block' in kwargs and not (kwargs['D_block'] in [None, float('inf')]) and \
+    if 'D_block' in kwargs and kwargs['D_block'] not in [None, float('inf')] and \
         ('k_block' not in kwargs or kwargs['k_block'] in [None,]):
         kwargs['k_block'] = kwargs['D_block']
 
@@ -227,15 +225,19 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
             return U, S, Vh
 
     # 3. Continue with block-wise SVD
-    lout_l, lout_r = _clear_axes(*axes)
-    axes = _unpack_axes(a.mfs, lout_l, lout_r)
-    data, struct, slices, ls_l, ls_r = _merge_to_matrix(a, axes)
-
-    # TODO should this be handled by user ?
+    out_ml, out_mr = _clear_axes(*axes)
+    #
+    # unpack meta-fusion and apply transpose
+    out_hl, out_hr = _unpack_axes(a.mfs, out_ml, out_mr)
+    out_hl = tuple(a.trans[ax] for ax in out_hl)
+    out_hr = tuple(a.trans[ax] for ax in out_hr)
+    #
+    data, struct, slices, ls_l, ls_r = _merge_to_matrix(a, (out_hl, out_hr))
+    #
     if svd_on_cpu:
         device = a.config.backend.get_device(data)
         data = a.config.backend.move_to(data, device='cpu')
-
+    #
     # 3.1 Set minimal number of singular triples to solve for in each block.
     #     Used by block-wise partial SVD and ignored by 'fullrank' policy.
     minD = tuple(min(ds) for ds in struct.D)
@@ -299,23 +301,24 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     if not compute_uv:
         return S
 
-    Us = tuple(a.struct.s[ii] for ii in axes[0]) + (sU,)
+    Us = tuple(a.struct.s[ii] for ii in out_hl) + (sU,)
     Umeta_unmerge, Ustruct, Uslices = _meta_unmerge_matrix(a.config, Ustruct, Uslices, ls_l, ls_s, Us)
     Udata = _unmerge(a.config, Udata, Umeta_unmerge)
-    Umfs = tuple(a.mfs[ii] for ii in lout_l) + ((1,),)
-    Uhfs = tuple(a.hfs[ii] for ii in axes[0]) + (_Fusion(s=(sU,)),)
+    Umfs = tuple(a.mfs[ii] for ii in out_ml) + ((1,),)
+    Uhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(s=(sU,)),)
     U = a._replace(struct=Ustruct, slices=Uslices, data=Udata, mfs=Umfs, hfs=Uhfs, trans=None)
 
-    Vs = (-sU,) + tuple(a.struct.s[ii] for ii in axes[1])
+    Vs = (-sU,) + tuple(a.struct.s[ii] for ii in out_hr)
     Vmeta_unmerge, Vstruct, Vslices = _meta_unmerge_matrix(a.config, Vstruct, Vslices, ls_s, ls_r, Vs)
     Vdata = _unmerge(a.config, Vdata, Vmeta_unmerge)
-    Vmfs = ((1,),) + tuple(a.mfs[ii] for ii in lout_r)
-    Vhfs = (_Fusion(s=(-sU,)),) + tuple(a.hfs[ii] for ii in axes[1])
+    Vmfs = ((1,),) + tuple(a.mfs[ii] for ii in out_mr)
+    Vhfs = (_Fusion(s=(-sU,)),) + tuple(a.hfs[ii] for ii in out_hr)
     V = a._replace(struct=Vstruct, slices=Vslices, data=Vdata, mfs=Vmfs, hfs=Vhfs, trans=None)
 
     U = U.moveaxis(source=-1, destination=Uaxis)
     V = V.moveaxis(source=0, destination=Vaxis)
     return U, S, V
+
 
 def _meta_svd(config, struct, slices, minD, sU, nU):
     """
@@ -378,7 +381,7 @@ def _meta_svd(config, struct, slices, minD, sU, nU):
 
 
 def eig(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
-        Uaxis=-1, Vaxis=0, policy='fullrank', which='LM', **kwargs) -> tuple[yastn.Tensor, yastn.Tensor, yastn.Tensor] | yastn.Tensor:
+        Uaxis=-1, Vaxis=0, policy='fullrank', which='LM', **kwargs) -> tuple['Tensor', 'Tensor', 'Tensor'] | 'Tensor':
     r"""
     Split tensor into :math:`a = U S V` using exact eigenvalue decomposition (ED),
     where the columns of `U` and the rows of `V` satisfy biorthogonality, i.e. `V @ U = I`,
@@ -424,14 +427,15 @@ def eig(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     -------
     `U`, `S`, `V` (when ``compute_uv=True``) or `S` (when ``compute_uv=False``)
     """
-
-    a = a.consume_transpose()
-
     _test_axes_all(a, axes)
-    lout_l, lout_r = _clear_axes(*axes)
-    axes = _unpack_axes(a.mfs, lout_l, lout_r)
-
-    data, struct, slices, ls_l, ls_r = _merge_to_matrix(a, axes)
+    out_ml, out_mr = _clear_axes(*axes)
+    #
+    # unpack meta-fusion and apply transpose
+    out_hl, out_hr = _unpack_axes(a.mfs, out_ml, out_mr)
+    out_hl = tuple(a.trans[ax] for ax in out_hl)
+    out_hr = tuple(a.trans[ax] for ax in out_hr)
+    #
+    data, struct, slices, ls_l, ls_r = _merge_to_matrix(a, (out_hl, out_hr))
     if ls_l != ls_r:
         raise YastnError("Legs of effective square blocks do not match.")
 
@@ -456,18 +460,18 @@ def eig(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     if not compute_uv:
         return S
 
-    Us = tuple(a.struct.s[ii] for ii in axes[0]) + (sU,)
+    Us = tuple(a.struct.s[ii] for ii in out_hl) + (sU,)
     Umeta_unmerge, Ustruct, Uslices = _meta_unmerge_matrix(a.config, Ustruct, Uslices, ls_l, ls_s, Us)
     Udata = _unmerge(a.config, Udata, Umeta_unmerge)
-    Umfs = tuple(a.mfs[ii] for ii in lout_l) + ((1,),)
-    Uhfs = tuple(a.hfs[ii] for ii in axes[0]) + (_Fusion(s=(sU,)),)
+    Umfs = tuple(a.mfs[ii] for ii in out_ml) + ((1,),)
+    Uhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(s=(sU,)),)
     U = a._replace(struct=Ustruct, slices=Uslices, data=Udata, mfs=Umfs, hfs=Uhfs, trans=None)
 
-    Vs = (-sU,) + tuple(a.struct.s[ii] for ii in axes[1])
+    Vs = (-sU,) + tuple(a.struct.s[ii] for ii in out_hr)
     Vmeta_unmerge, Vstruct, Vslices = _meta_unmerge_matrix(a.config, Vstruct, Vslices, ls_s, ls_r, Vs)
     Vdata = _unmerge(a.config, Vdata, Vmeta_unmerge)
-    Vmfs = ((1,),) + tuple(a.mfs[ii] for ii in lout_r)
-    Vhfs = (_Fusion(s=(-sU,)),) + tuple(a.hfs[ii] for ii in axes[1])
+    Vmfs = ((1,),) + tuple(a.mfs[ii] for ii in out_mr)
+    Vhfs = (_Fusion(s=(-sU,)),) + tuple(a.hfs[ii] for ii in out_hr)
     V = a._replace(struct=Vstruct, slices=Vslices, data=Vdata, mfs=Vmfs, hfs=Vhfs, trans=None)
 
     U = U.moveaxis(source=-1, destination=Uaxis)
@@ -530,6 +534,7 @@ def _find_gaps(S, tol=0, eps_multiplet=1e-13, which='LM'):
     gaps = np.abs(s[:len(s) - 1] - s[1:len(s)]) / maxgap
 
     return gaps
+
 
 def truncation_mask_multiplets(S, tol=0, D_total=float('inf'),
                                eps_multiplet=1e-13, hermitian=False, **kwargs) -> yastn.Tensor[bool]:
@@ -753,11 +758,14 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0) -> tuple[yastn.Tensor, yastn.Ten
     `Q`, `R`
     """
     _test_axes_all(a, axes)
-    a = a.consume_transpose()
-    lout_l, lout_r = _clear_axes(*axes)
-    axes = _unpack_axes(a.mfs, lout_l, lout_r)
+    out_ml, out_mr = _clear_axes(*axes)
+    #
+    # unpack meta-fusion and apply transpose
+    out_hl, out_hr = _unpack_axes(a.mfs, out_ml, out_mr)
+    out_hl = tuple(a.trans[ax] for ax in out_hl)
+    out_hr = tuple(a.trans[ax] for ax in out_hr)
 
-    data, struct, slices, ls_l, ls_r = _merge_to_matrix(a, axes)
+    data, struct, slices, ls_l, ls_r = _merge_to_matrix(a, (out_hl, out_hr))
     meta, Qstruct, Qslices, Rstruct, Rslices = _meta_qr(a.config, struct, slices, sQ)
 
     sizes = tuple(x.size for x in (Qstruct, Rstruct))
@@ -765,18 +773,18 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0) -> tuple[yastn.Tensor, yastn.Ten
 
     ls = _leg_struct_trivial(Rstruct, axis=0)
 
-    Qs = tuple(a.struct.s[lg] for lg in axes[0]) + (sQ,)
+    Qs = tuple(a.struct.s[lg] for lg in out_hl) + (sQ,)
     Qmeta_unmerge, Qstruct, Qslices = _meta_unmerge_matrix(a.config, Qstruct, Qslices, ls_l, ls, Qs)
     Qdata = _unmerge(a.config, Qdata, Qmeta_unmerge)
-    Qmfs = tuple(a.mfs[ii] for ii in lout_l) + ((1,),)
-    Qhfs = tuple(a.hfs[ii] for ii in axes[0]) + (_Fusion(s=(sQ,)),)
+    Qmfs = tuple(a.mfs[ii] for ii in out_ml) + ((1,),)
+    Qhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(s=(sQ,)),)
     Q = a._replace(struct=Qstruct, slices=Qslices, data=Qdata, mfs=Qmfs, hfs=Qhfs, trans=None)
 
-    Rs = (-sQ,) + tuple(a.struct.s[lg] for lg in axes[1])
+    Rs = (-sQ,) + tuple(a.struct.s[lg] for lg in out_hr)
     Rmeta_unmerge, Rstruct, Rslices = _meta_unmerge_matrix(a.config, Rstruct, Rslices, ls, ls_r, Rs)
     Rdata = _unmerge(a.config, Rdata, Rmeta_unmerge)
-    Rmfs = ((1,),) + tuple(a.mfs[ii] for ii in lout_r)
-    Rhfs = (_Fusion(s=(-sQ,)),) + tuple(a.hfs[ii] for ii in axes[1])
+    Rmfs = ((1,),) + tuple(a.mfs[ii] for ii in out_mr)
+    Rhfs = (_Fusion(s=(-sQ,)),) + tuple(a.hfs[ii] for ii in out_hr)
     R = a._replace(struct=Rstruct, slices=Rslices, data=Rdata, mfs=Rmfs, hfs=Rhfs, trans=None)
 
     Q = Q.moveaxis(source=-1, destination=Qaxis)
@@ -849,17 +857,20 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='SR') -> tuple[yastn.Tensor, yastn.Tenso
     `S`, `U`
     """
     _test_axes_all(a, axes)
-    a = a.consume_transpose()
-    lout_l, lout_r = _clear_axes(*axes)
-    axes = _unpack_axes(a.mfs, lout_l, lout_r)
-
+    out_ml, out_mr = _clear_axes(*axes)
+    #
+    # unpack meta-fusion and apply transpose
+    out_hl, out_hr = _unpack_axes(a.mfs, out_ml, out_mr)
+    out_hl = tuple(a.trans[ax] for ax in out_hl)
+    out_hr = tuple(a.trans[ax] for ax in out_hr)
+    #
     if not all(x == 0 for x in a.struct.n):
         raise YastnError('eigh requires tensor charge to be zero.')
 
-    data, struct, slices, ls_l, ls_r = _merge_to_matrix(a, axes)
+    data, struct, slices, ls_l, ls_r = _merge_to_matrix(a, (out_hl, out_hr))
 
     if ls_l != ls_r:
-        raise YastnError("Tensor likely is not hermitian. Legs of effective square blocks not match.")
+        raise YastnError("Tensor likely is not hermitian. Legs of effective square blocks do not match.")
 
     meta, Sstruct, Sslices, Ustruct, Uslices = _meta_eigh(a.config, struct, slices, sU)
     sizes = tuple(x.size for x in (Sstruct, Ustruct))
@@ -868,11 +879,11 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='SR') -> tuple[yastn.Tensor, yastn.Tenso
 
     ls_s = _leg_struct_trivial(Sstruct, axis=1)
 
-    Us = tuple(a.struct.s[lg] for lg in axes[0]) + (sU,)
+    Us = tuple(a.struct.s[lg] for lg in out_hl) + (sU,)
     Umeta_unmerge, Ustruct, Uslices = _meta_unmerge_matrix(a.config, Ustruct, Uslices, ls_l, ls_s, Us)
     Udata = _unmerge(a.config, Udata, Umeta_unmerge)
-    Umfs = tuple(a.mfs[ii] for ii in lout_l) + ((1,),)
-    Uhfs = tuple(a.hfs[ii] for ii in axes[0]) + (_Fusion(s=(sU,)),)
+    Umfs = tuple(a.mfs[ii] for ii in out_ml) + ((1,),)
+    Uhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(s=(sU,)),)
     U = a._replace(struct=Ustruct, slices=Uslices, data=Udata, mfs=Umfs, hfs=Uhfs, trans=None)
 
     Smfs = ((1,), (1,))
@@ -885,13 +896,12 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='SR') -> tuple[yastn.Tensor, yastn.Tenso
         blocks_U = U.get_blocks_charge()
         for b in S.get_blocks_charge():
             arg_b = a.config.backend.eigs_which(S[b], which)
-            S[b]= S[b][arg_b]
+            S[b] = S[b][arg_b]
             slice_U = tuple([slice(None),]*(U.ndim-1)+[arg_b,])
             for b_U in blocks_U: # suboptimal since U may have more blocks
                 if b_U[-nsym:] == b[:nsym]:
                     # blocks_U.remove(b_U)
                     U[b_U] = U[b_U][slice_U]
-
 
     U = U.moveaxis(source=-1, destination=Uaxis)
     return S, U

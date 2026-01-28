@@ -247,11 +247,8 @@ class Tensor:
         Legs (spaces) fused together by :meth:`yastn.Tensor.fuse` are treated as a single leg.
         The signature of each fused leg is given by the first native leg in the fused space.
         """
-        inds, n = [], 0
-        for mf in self.mfs:
-            inds.append(self.trans[n])
-            n += mf[0]
-        return tuple(self.struct.s[ind] for ind in inds)
+        return self.get_signature(native=False)
+
 
     @property
     def s_n(self) -> Sequence[int]:
@@ -261,7 +258,8 @@ class Tensor:
         This includes legs (spaces) which have been fused together
         by :meth:`yastn.fuse_legs` using ``mode='meta'``.
         """
-        return tuple(self.struct.s[ind] for ind in self.trans)
+        return self.get_signature(native=True)
+
 
     @property
     def n(self) -> Sequence[int]:

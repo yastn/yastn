@@ -85,11 +85,13 @@ def _pre_addition(*tensors):
     """
     Test and prepare tensors before addition.
     """
-    mask_needed = False
-    for b in tensors[1:]:
-        _test_can_be_combined(tensors[0], b)
+    for ten in tensors[1:]:
+        _test_can_be_combined(tensors[0], ten)
 
+    # if len(set(ten.trans for ten in tensors)) > 1:
     tensors = [ten.consume_transpose() for ten in tensors]
+
+    mask_needed = False
     a = tensors[0]
     for b in tensors[1:]:
         if a.struct.n != b.struct.n:

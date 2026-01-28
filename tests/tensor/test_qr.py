@@ -96,5 +96,29 @@ def test_qr_Z3(config_kwargs):
             assert all(R.config.backend.diag_get(R.imag()[t]) == 0)
 
 
+def test_qr_transpose_meta(config_kwargs):
+    """ test qr decomposition with meta-fuse and transpose """
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1,),
+                  t=((0, 1), (0, 1), (0, 1), (0, 1), (0, 1)),
+                  D=((1, 2), (3, 4), (5, 6), (7, 8), (9, 10)))
+    #
+    af = a.fuse_legs(axes=(2, (0, 1), (4, 3)), mode='meta')
+    assert af.trans == (2, 0, 1, 4, 3)
+    aft = af.transpose(axes=((2, 0, 1)))
+    assert aft.trans == (4, 3, 2, 0, 1)
+    #
+    Qft, Rft = yastn.linalg.qr(aft, axes=((1, 2), 0))
+    Q, R = yastn.linalg.qr(a, axes=((2, 0, 1), (4, 3)))
+    #
+    QRft = (Qft @ Rft).transpose((2, 0, 1))
+    assert (aft - QRft).norm() < tol
+    #
+    Qm = Q.fuse_legs(axes=(0, (1, 2), 3), mode='meta')
+    Rm = R.fuse_legs(axes=(0, (1, 2)), mode='meta')
+    assert yastn.norm(Qft - Qm) < tol  # == 0.0
+    assert yastn.norm(Rft - Rm) < tol  # == 0.0
+
+
 if __name__ == '__main__':
     pytest.main([__file__, "-vs", "--durations=0"])
