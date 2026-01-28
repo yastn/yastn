@@ -316,15 +316,16 @@ def __getitem__(a, key) -> numpy.ndarray | torch.tensor:
     key : Sequence[int] | Sequence[Sequence[int]]
         charges of the block.
     """
-    a = a.consume_transpose()
-
-    key = tuple(_flatten(key))
     try:
-        ind = a.struct.t.index(key)
+        key = np.array(key, dtype=np.int64).reshape(a.ndim_n, a.config.sym.NSYM)
+        reverse_trans = np.argsort(a.trans)
+        ukey = tuple(key[reverse_trans, :].ravel().tolist())
+        ind = a.struct.t.index(ukey)
     except ValueError as exc:
         raise YastnError('Tensor does not have the block specified by key.') from exc
     x = a._data[slice(*a.slices[ind].slcs[0])]
-    return x if a.isdiag else x.reshape(a.struct.D[ind])
+    return x if a.isdiag else a.config.backend.permute_dims(x.reshape(a.struct.D[ind]), a.trans)
+
 
 def __contains__(a, key) -> bool:
     key = tuple(_flatten(key)) if (hasattr(key,'__iter__') or hasattr(key,'__next__')) else (key,)

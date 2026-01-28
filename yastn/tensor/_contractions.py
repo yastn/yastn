@@ -25,7 +25,7 @@ import numpy as np
 from ._auxliary import _struct, _slc, _clear_axes, _unpack_axes, _flatten, _join_contiguous_slices
 from ._merging import _merge_to_matrix, _unmerge, _meta_unmerge_matrix, _meta_fuse_hard
 from ._merging import _transpose_and_merge, _mask_tensors_leg_intersection, _meta_mask
-from ._tests import YastnError, _test_can_be_combined, _test_axes_match
+from ._tests import YastnError, _test_can_be_combined, _unpack_trans_test_axes_pair
 from ._legs import LegMeta
 
 __all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon', 'einsum', 'broadcast', 'apply_mask', 'SpecialTensor']
@@ -87,11 +87,9 @@ def tensordot(a, b, axes, conj=(0, 0)) -> 'Tensor':
     if isinstance(b, SpecialTensor):
         return b.tensordot(a, axes=axes, reverse=True)
 
-    a = a.consume_transpose()
-    b = b.consume_transpose()
-
     in_a, in_b = _clear_axes(*axes)  # contracted meta legs
-    mask_needed, (nin_a, nin_b) = _test_axes_match(a, b, sgn=-1, axes=(in_a, in_b))
+    mask_needed, (nin_a, nin_b) = _unpack_trans_test_axes_pair(a, b, sgn=-1, axes=(in_a, in_b))
+    # nin_a and nin_b take into account a.trans and b.trans, respectively
 
     if a.isdiag:
         return _tensordot_diag(a, b, in_b, destination=(0,))
@@ -99,8 +97,8 @@ def tensordot(a, b, axes, conj=(0, 0)) -> 'Tensor':
         return _tensordot_diag(b, a, in_a, destination=(-1,))
 
     _test_can_be_combined(a, b)
-    nout_a = tuple(ii for ii in range(a.ndim_n) if ii not in nin_a)  # outgoing native legs
-    nout_b = tuple(ii for ii in range(b.ndim_n) if ii not in nin_b)  # outgoing native legs
+    nout_a = tuple(ii for ii in a.trans if ii not in nin_a)  # outgoing native legs
+    nout_b = tuple(ii for ii in b.trans if ii not in nin_b)  # outgoing native legs
 
     n_c = a.config.sym.add_charges(a.struct.n, b.struct.n)
     s_c = tuple(a.struct.s[i1] for i1 in nout_a) + tuple(b.struct.s[i2] for i2 in nout_b)
@@ -471,7 +469,8 @@ def broadcast(a, *args, axes=0) -> 'Tensor' | tuple['Tensor']:
         legs of tensors in ``args`` to be multiplied by diagonal tensor ``a``.
         Number of tensors provided in ``args`` should match the length of ``axes``.
     """
-    a = a.consume_transpose()
+    if not a.isdiag:
+        raise YastnError('First tensor should be diagonal.')
 
     multiple_axes = hasattr(axes, '__iter__')
     axes = (axes,) if not multiple_axes else axes
@@ -479,10 +478,12 @@ def broadcast(a, *args, axes=0) -> 'Tensor' | tuple['Tensor']:
         raise YastnError("There should be exactly one axis for each tensor to be projected.")
     results = []
     for b, ax in zip(args, axes):
-        b = b.consume_transpose()
-
         _test_can_be_combined(a, b)
-        ax = _broadcast_input(ax, b.mfs, a.isdiag)
+        ax = ax % len(b.mfs)
+        if b.mfs[ax] != (1,):
+            raise YastnError('Second tensor`s leg specified by axis cannot be fused.')
+        ax = sum(b.mfs[ii][0] for ii in range(ax))  # unpack mfs
+        ax = b.trans[ax]  # transpose
         if b.hfs[ax].tree != (1,):
             raise YastnError('Second tensor`s leg specified in axes cannot be fused.')
 
@@ -496,16 +497,6 @@ def broadcast(a, *args, axes=0) -> 'Tensor' | tuple['Tensor']:
         data = b.config.backend.dot_diag(a._data, b._data, meta, struct.size, ax, b_ndim)
         results.append(b._replace(struct=struct, slices=slices, data=data))
     return results if multiple_axes else results.pop()
-
-
-def _broadcast_input(axis, mf, isdiag):
-    if not isdiag:
-        raise YastnError('First tensor should be diagonal.')
-    axis = axis % len(mf)
-    if mf[axis] != (1,):
-        raise YastnError('Second tensor`s leg specified by axis cannot be fused.')
-    axis = sum(mf[ii][0] for ii in range(axis))  # unpack
-    return axis
 
 
 @lru_cache(maxsize=1024)
@@ -554,7 +545,8 @@ def apply_mask(a, *args, axes=0) -> 'Tensor' | tuple['Tensor']:
     axes: int | Sequence[int]
         leg of tensors in ``args`` where the mask is applied.
     """
-    a = a.consume_transpose()
+    if not a.isdiag:
+        raise YastnError('First tensor should be diagonal.')
 
     multiple_axes = hasattr(axes, '__iter__')
     axes = (axes,) if not multiple_axes else axes
@@ -568,10 +560,12 @@ def apply_mask(a, *args, axes=0) -> 'Tensor' | tuple['Tensor']:
     mask_D = tuple(len(v) for v in mask.values())
 
     for b, ax in zip(args, axes):
-        b = b.consume_transpose()
-
         _test_can_be_combined(a, b)
-        ax = _broadcast_input(ax, b.mfs, a.isdiag)
+        ax = ax % len(b.mfs)
+        if b.mfs[ax] != (1,):
+            raise YastnError('Second tensor`s leg specified by axis cannot be fused.')
+        ax = sum(b.mfs[ii][0] for ii in range(ax))  # unpack mfs
+        ax = b.trans[ax]  # transpose
         if b.hfs[ax].tree != (1,):
             raise YastnError('Second tensor`s leg specified by axes cannot be fused.')
 
@@ -607,8 +601,8 @@ def vdot(a, b, conj=(1, 0)) -> Number:
         indicate which tensors to conjugate: ``(0, 0)``, ``(0, 1)``, ``(1, 0)``, or ``(1, 1)``.
         The default is ``(1, 0)``, i.e., tensor ``a`` is conjugated.
     """
-    a = a.consume_transpose()
-    b = b.consume_transpose()
+    # axes = (tuple(range(a.ndim)), tuple(range(b.ndim)))
+    # return tensordot(a, b, axes=axes, conj=conj).to_number()
 
     _test_can_be_combined(a, b)
     if conj[0] == 1:
@@ -616,7 +610,11 @@ def vdot(a, b, conj=(1, 0)) -> Number:
     if conj[1] == 1:
         b = b.conj()
 
-    mask_needed, (nin_a, nin_b) = _test_axes_match(a, b, sgn=-1)
+    if a.trans != b.trans:
+        a = a.consume_transpose()
+        b = b.consume_transpose()
+
+    mask_needed, (nin_a, nin_b) = _unpack_trans_test_axes_pair(a, b, sgn=-1)
 
     n_c = a.config.sym.add_charges(a.struct.n, b.struct.n)
     if n_c == a.config.sym.zero():
@@ -661,21 +659,21 @@ def trace(a, axes=(0, 1)) -> 'Tensor':
     axes: tuple[int, int] | tuple[Sequence[int], Sequence[int]]
         Legs to be traced out, e.g., ``axes=(0, 1)``; or ``axes=((2, 3, 4), (0, 1, 5))``.
     """
-    a = a.consume_transpose()
-
     in_0, in_1 = _clear_axes(*axes)  # contracted legs
     if set(in_0) & set(in_1):
         raise YastnError('The same axis in axes[0] and axes[1].')
-    mask_needed, (nin_0, nin_1) = _test_axes_match(a, a, sgn=-1, axes=(in_0, in_1))
+    mask_needed, (nin_0, nin_1) = _unpack_trans_test_axes_pair(a, a, sgn=-1, axes=(in_0, in_1))
+    # nin_0, nin_1 take into account a.trans
 
     if len(nin_0) == 0:
         return a
 
     order = nin_0 + nin_1
-    out = tuple(i for i in range(a.ndim_n) if i not in order)
+    out = tuple(ax for ax in a.trans if ax not in order)
     order = order + out
+
     mfs = tuple(a.mfs[i] for i in range(a.ndim) if i not in in_0 + in_1)
-    hfs = tuple(a.hfs[ii] for ii in out)
+    hfs = tuple(a.hfs[ax] for ax in out)
 
     if a.isdiag:
         struct = a.struct._replace(s=(), diag=False, t=((),), D=((),), size=1)
@@ -763,29 +761,35 @@ def swap_gate(a, axes, charge=None) -> 'Tensor':
     """
     if not a.config.fermionic:
         return a
-    a = a.consume_transpose()
     nsym = a.config.sym.NSYM
     fss = (True,) * nsym if a.config.fermionic is True else a.config.fermionic
     if charge is None:
         axes = tuple(_clear_axes(*axes))  # swapped groups of legs
-        negate_slices = _meta_swap_gate(a.struct.t, a.slices, a.mfs, a.ndim_n, nsym, axes, fss)
+        axes = _unpack_axes(a.mfs, *axes)
+        axes = tuple(tuple(a.trans[ax] for ax in axs) for axs in axes)
+        negate_slices = _meta_swap_gate(a.struct.t, a.slices, a.ndim_n, nsym, axes, fss)
     else:
         axes, = _clear_axes(axes)  # swapped groups of legs
-        negate_slices = _meta_swap_gate_charge(a.struct.t, a.slices, tuple(charge), a.mfs, a.ndim_n, nsym, axes, fss)
+        if isinstance(charge[0], int):
+            charge = (charge,) * len(axes)
+        charges = ()
+        for t, ax in zip(charge, axes):
+            charges += t * a.mfs[ax][0]
+        axes, = _unpack_axes(a.mfs, axes)
+        axes = tuple(a.trans[ax] for ax in axes)
+        negate_slices = _meta_swap_gate_charge(a.struct.t, a.slices, charges, a.ndim_n, nsym, axes, fss)
 
     newdata = a.config.backend.negate_blocks(a._data, negate_slices)
     return a._replace(data=newdata)
 
 
 @lru_cache(maxsize=1024)
-def _meta_swap_gate(tset, slices, mf, ndim, nsym, axes, fss):
+def _meta_swap_gate(tset, slices, ndim, nsym, axes, fss):
     r""" Calculate which blocks to negate. """
-    axes = _unpack_axes(mf, *axes)
     lt = len(tset)
     tset = np.array(tset, dtype=np.int64).reshape((lt, ndim, nsym))
     iaxes = iter(axes)
     tp = np.zeros(lt, dtype=np.int64)
-
     if len(axes) % 2 == 1:
         raise YastnError('Odd number of elements in axes. Elements of axes should come in pairs.')
     for l1, l2 in zip(*(iaxes, iaxes)):
@@ -797,24 +801,14 @@ def _meta_swap_gate(tset, slices, mf, ndim, nsym, axes, fss):
 
 
 @lru_cache(maxsize=1024)
-def _meta_swap_gate_charge(tset, slices, charge, mf, ndim, nsym, axes, fss):
+def _meta_swap_gate_charge(tset, slices, charges, ndim, nsym, axes, fss):
     r""" Calculate which blocks to negate. """
-    if isinstance(charge[0], int):
-        charge = (charge,) * len(axes)
-
-    charges = ()
-    for t, ax in zip(charge, axes):
-        charges += t * mf[ax][0]
-
-    axes, = _unpack_axes(mf, axes)
     tset = np.array(tset, dtype=np.int64).reshape((len(tset), ndim, nsym))
     tp = tset[:, axes, :]
-
     try:
         charges = np.array(charges, dtype=np.int64).reshape(1, len(axes), nsym) % 2
     except ValueError:
         raise YastnError(f'Length or number of charges does not match sym.NSYM or axes.')
-
     tp = np.sum(tp[:, :, fss] * charges[:, :, fss], axis=(1, 2), dtype=np.int64) % 2
     return _slices_to_negate(tp, slices)
 

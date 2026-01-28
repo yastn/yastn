@@ -37,7 +37,6 @@ def test_broadcast_dense(config_kwargs):
     r4 = b.tensordot(a, axes=(1, 1)).transpose((0, 3, 1, 2))
     assert all(yastn.norm(r1 - x) < tol for x in (r2, r3, r4))
 
-
     # broadcast with conj
     a = yastn.randC(config=config, s=(-1, 1), D=(5, 5))
     a = a.diag()  # 5x5 isdiag == True
@@ -79,7 +78,7 @@ def test_broadcast_U1(config_kwargs):
     b = yastn.rand(config=config, legs=[leg1.conj(), leg2, leg3, leg4.conj()])
     assert b.get_shape() == (6, 15, 24, 33)
 
-    # broadcast
+    # broadcast via tensordot
     r1 = a.broadcast(b, axes=2)
     r2 = a.tensordot(b, axes=(1, 2)).transpose((1, 2, 0, 3))
     r3 = b.tensordot(a1, axes=(2, 1)).transpose((0, 1, 3, 2))
@@ -95,6 +94,22 @@ def test_broadcast_U1(config_kwargs):
     r3 = c.tensordot(a, axes=((2, 3), (1, 0)))
     assert all(x.is_consistent() for x in [r1, r2, r3])
     assert all(yastn.norm(r1 - x) < tol for x in [r2, r3])
+
+    # broadcast with transpose and meta
+    bf = b.fuse_legs(axes=(3, (1, 0), 2), mode='meta')
+    assert bf.trans == (3, 1, 0, 2)
+    rfb = a.broadcast(bf, axes=2)
+    assert rfb.trans == (3, 1, 0, 2)
+    rb = a.broadcast(b, axes=2)
+    rbf = rb.fuse_legs(axes=(3, (1, 0), 2), mode='meta')
+    assert (rbf - rfb).norm() < tol
+
+    # broadcast with transposed diag -- transpose is ignored
+    at = a.T
+    assert at.trans == (1, 0)
+    r1 = a.broadcast(b, axes=2)
+    r2 = at.broadcast(b, axes=2)
+    assert (r1 - r2).norm() < tol
 
 
 def test_broadcast_Z2xU1(config_kwargs):
@@ -163,4 +178,3 @@ def test_broadcast_exceptions(config_kwargs):
 
 if __name__ == '__main__':
     pytest.main([__file__, "-vs", "--durations=0"])
-

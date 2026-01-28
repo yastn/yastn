@@ -95,7 +95,7 @@ def make_config(**kwargs) -> _config:
         If ``True``, enables profiling of tensor operations in backends supporting it.
         Currently, only PyTorch backend with NVTX support is available.
         Default is ``False``. If YASTN_PROFILE=1 is set in the environment, overrides this argument to ``True``.
-            
+
     Example
     -------
 
@@ -141,14 +141,17 @@ def __setitem__(a, key, newvalue):
     key : Sequence[int] | Sequence[Sequence[int]]
         charges of the block
     """
-    key = np.array(key, dtype=np.int64)
-    key = tuple(key.ravel().tolist())
     try:
-        ind = a.struct.t.index(key)
+        key = np.array(key, dtype=np.int64).reshape(a.ndim_n, a.config.sym.NSYM)
+        reverse_trans = tuple(np.argsort(a.trans).tolist())
+        ukey = tuple(key[reverse_trans, :].ravel().tolist())
+        ind = a.struct.t.index(ukey)
     except ValueError as exc:
         raise YastnError('Tensor does not have a block specified by the key.') from exc
     slc = slice(*a.slices[ind].slcs[0])
-    a._data[slc] = newvalue.reshape(-1)
+    Dx = a.struct.D[ind]
+    Dx = tuple(Dx[ax] for ax in a.trans)
+    a._data[slc] =  a.config.backend.permute_dims(newvalue.reshape(Dx), reverse_trans).reshape(-1)
 
 
 def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None

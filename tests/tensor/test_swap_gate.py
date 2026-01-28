@@ -51,7 +51,14 @@ def test_swap_gate_basic(config_kwargs):
     assert pytest.approx(yastn.vdot(b, c).item(), rel=tol) == 0
     assert pytest.approx(yastn.vdot(b, d).item(), rel=tol) == -4
     assert pytest.approx(yastn.vdot(c, d).item(), rel=tol) == 4
-
+    #
+    #  test with meta-fusion and transpose
+    ct = a.fuse_legs(axes=((1, 3), 2, 0), mode='meta')
+    cts = ct.swap_gate(axes=(0, 2))
+    cs = a.swap_gate(axes=(0, (1, 3)))
+    cst = cs.fuse_legs(axes=((1, 3), 2, 0), mode='meta')
+    assert (cts - cst).norm() < tol
+    #
     config_Z2 = yastn.make_config(sym='Z2', fermionic=False, **config_kwargs)
     leg = yastn.Leg(config_Z2, t=(0, 1), D=(1, 1))
     a_bosonic = yastn.ones(config=config_Z2, legs=[leg, leg, leg, leg], n=0)

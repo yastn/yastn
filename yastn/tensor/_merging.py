@@ -281,10 +281,12 @@ def fuse_legs(a, axes, mode=None) -> 'Tensor':
 
 
 def _fuse_legs_hard(a, axes, order):
-    r""" Function performing hard fusion. axes are for native legs and are cleaned outside."""
-
-    a = a.consume_transpose()
-
+    r"""
+    Function performing hard fusion. axes are for native legs and are cleaned outside.
+    a.trans is accounted for here
+    """
+    order = tuple(a.trans[ax] for ax in order)
+    axes = tuple(tuple(a.trans[ax] for ax in group) for group in axes)
     struct, slices, meta_mrg, t_in, D_in = _meta_fuse_hard(a.config, a.struct, a.slices, axes, inds=None)
     data = _transpose_and_merge(a.config, a._data, order, struct, slices, meta_mrg)
     mfs = ((1,),) * len(struct.s)
@@ -433,7 +435,6 @@ def unfuse_legs(a, axes) -> 'Tensor':
         leg(s) to unfuse.
     """
     a = a.consume_transpose()
-
     if a.isdiag:
         raise YastnError('Cannot unfuse legs of a diagonal tensor.')
     if isinstance(axes, int):

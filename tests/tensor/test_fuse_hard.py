@@ -203,8 +203,12 @@ def test_hard_transpose(config_kwargs):
                   D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
     assert a.get_shape() == (3, 5, 7, 9, 11, 13)
 
-    b = a.fuse_legs(axes=((0, 1), 2, (3, 4), 5), mode='hard')
+    at = a.transpose(axes=(3, 4, 2, 1, 0, 5))
+    assert at.trans == (3, 4, 2, 1, 0, 5)
+
+    b = at.fuse_legs(axes=((4, 3), 2, (0, 1), 5), mode='hard')
     assert b.get_shape() == (15, 7, 99, 13)
+    assert b.trans == (0, 1, 2, 3)
 
     c = np.transpose(b, axes=(3, 2, 1, 0))
     assert c.get_shape() == (13, 99, 7, 15)

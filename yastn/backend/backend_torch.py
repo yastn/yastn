@@ -36,7 +36,7 @@ __all__= [
     'expm', 'first_element', 'item', 'sum_elements', 'norm', 'entropy',
     'zeros', 'ones', 'rand', 'to_tensor', 'to_mask', 'square_matrix_from_dict',
     'requires_grad_', 'requires_grad', 'move_to', 'conj',
-    'trace', 'rsqrt', 'reciprocal', 'exp', 'sqrt', 'absolute',
+    'trace', 'rsqrt', 'reciprocal', 'exp', 'sqrt', 'absolute', 'permute_dims',
     'fix_svd_signs', 'svdvals', 'svd_lowrank', 'svd', 'svd_randomized', 'svds_scipy',
     'eigh', 'qr', 'pinv', 'eig', 'eigvals',
     'argsort', 'eigs_which', 'allclose',
@@ -155,6 +155,10 @@ def insert(x, start, values):
 
 def expm(x):
     return torch.matrix_exp(x)
+
+
+def permute_dims(x, axes):
+    return torch.permute(x, axes)
 
 
 #########################

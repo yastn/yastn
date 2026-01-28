@@ -56,19 +56,20 @@ def _test_tD_consistency(struct):
             raise YastnError('Inconsist assigment of bond dimension to some charge.')
 
 
-def _test_axes_match(a, b, sgn=1, axes=None):
+def _unpack_trans_test_axes_pair(a, b, sgn=1, axes=None):
     """
     Test if legs of a in axes[0] and legs ob b in axes[1] have matching signature and fusion structures.
     sgn in (-1, 1) is the sign of required match between signatures.
 
-    Return meta-unfused axes and information if hard-fusion mask will be required.
+    Return meta-unfused axes (after application of trans) and information if hard-fusion mask will be required.
     """
 
     if axes is None:
         if a.ndim != b.ndim:
             raise YastnError('Tensors have different number of legs.')
         axes = (tuple(range(a.ndim)), tuple(range(b.ndim)))
-        uaxes = (tuple(range(a.ndim_n)), tuple(range(b.ndim_n)))
+        ua = tuple(range(a.ndim_n))
+        ub = tuple(range(b.ndim_n))
     else:
         if len(axes[0]) != len(axes[1]):
             raise YastnError('axes[0] and axes[1] indicate different number of legs.')
@@ -79,23 +80,26 @@ def _test_axes_match(a, b, sgn=1, axes=None):
             raise YastnError('Axis outside of tensor ndim.')
         ua, = _unpack_axes(a.mfs, axes[0])
         ub, = _unpack_axes(b.mfs, axes[1])
-        uaxes = (ua, ub)
 
-    if not all(a.struct.s[i1] == sgn * b.struct.s[i2] for i1, i2 in zip(*uaxes)):
+    # transpose axes
+    haxes = (tuple(a.trans[ax] for ax in ua),
+             tuple(b.trans[ax] for ax in ub))
+
+    if not all(a.struct.s[i1] == sgn * b.struct.s[i2] for i1, i2 in zip(*haxes)):
         raise YastnError('Signatures do not match.')
 
     if any(a.mfs[i1] != b.mfs[i2] for i1, i2 in zip(*axes)):
         raise YastnError('Indicated axes of two tensors have different number of meta-fused legs or sub-fusions order.')
 
     mask_needed = False  # for hard-fused legs
-    for i1, i2 in zip(*uaxes):
+    for i1, i2 in zip(*haxes):
         if a.hfs[i1].tree != b.hfs[i2].tree or a.hfs[i1].op != b.hfs[i2].op:
             raise YastnError('Indicated axes of two tensors have different number of hard-fused legs or sub-fusions order.')
         if any(s1 != sgn * s2 for s1, s2 in zip(a.hfs[i1].s, b.hfs[i2].s)):
             raise YastnError('Signatures of hard-fused legs do not match.')
         if a.hfs[i1].t != b.hfs[i2].t or a.hfs[i1].D != b.hfs[i2].D:
             mask_needed = True
-    return mask_needed, uaxes
+    return mask_needed, haxes
 
 
 def _test_axes_all(a, axes, native=False):

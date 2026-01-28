@@ -20,7 +20,7 @@ from itertools import accumulate
 from ._auxliary import _slc, _join_contiguous_slices
 from ._legs import legs_union
 from ._merging import _embed_tensor
-from ._tests import YastnError, _test_can_be_combined, _get_tD_legs, _test_axes_match
+from ._tests import YastnError, _test_can_be_combined, _get_tD_legs, _unpack_trans_test_axes_pair
 
 __all__ = ['add', 'real', 'imag', 'sqrt', 'rsqrt', 'reciprocal', 'exp', 'bitwise_not', 'allclose']
 
@@ -98,7 +98,7 @@ def _pre_addition(*tensors):
             raise YastnError('Tensor charges do not match.')
         if a.isdiag != b.isdiag:
             raise YastnError('Cannot add diagonal tensor to non-diagonal tensor.')
-        mask_needed_ab, _ = _test_axes_match(a, b, sgn=1)
+        mask_needed_ab, _ = _unpack_trans_test_axes_pair(a, b, sgn=1)
         mask_needed = mask_needed or mask_needed_ab
 
     if mask_needed:
