@@ -39,21 +39,29 @@ def test_fuse_transpose(config_kwargs):
                   t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
                   D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
     assert a.get_shape() == (3, 5, 7, 9, 11, 13)
-
-    fa = a.fuse_legs(axes=((0, 1), 2, (3, 4), 5), mode='meta')
-    assert fa.get_shape() == (15, 7, 99, 13)
-
+    #
+    fa = a.fuse_legs(axes=((3, 4), 2, (0, 1), 5), mode='meta')
+    assert fa.get_shape() == (99, 7, 15, 13)
+    assert fa.trans == (3, 4, 2, 0, 1, 5)
+    #
     fc = np.transpose(fa, axes=(3, 2, 1, 0))
-    assert fc.get_shape() == (13, 99, 7, 15)
-
-    fc = fc.unfuse_legs(axes=(1, 3))
-    assert fc.get_shape() == (13, 9, 11, 7, 3, 5)
-
-    fc = fa.moveaxis(source=1, destination=2)
-    assert fc.get_shape() == (15, 99, 7, 13)
-
-    c = fc.unfuse_legs(axes=(1, 0))
-    assert c.get_shape() == (3, 5, 9, 11, 7, 13)
+    assert fc.get_shape() == (13, 15, 7, 99)
+    assert fc.trans == (5, 0, 1, 2, 3, 4)
+    #
+    fd = fc.unfuse_legs(axes=(1, 3))
+    assert fd.get_shape() == (13, 3, 5, 7, 9, 11)
+    assert fd.trans == (5, 0, 1, 2, 3, 4)
+    #
+    fe = fa.moveaxis(source=1, destination=2)
+    assert fe.get_shape() == (99, 15, 7, 13)
+    assert fe.trans == (3, 4, 0, 1, 2, 5)
+    #
+    e = fe.unfuse_legs(axes=(1, 0))
+    assert e.get_shape() == (9, 11, 3, 5, 7, 13)
+    assert e.trans == (3, 4, 0, 1, 2, 5)
+    #
+    # no operations on data in combination of fuse-meta, unfuse-meta and transpose
+    assert e.data is a.data
 
 
 def test_get_shapes(config_kwargs):

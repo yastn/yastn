@@ -128,7 +128,6 @@ def make_config(**kwargs) -> _config:
     return _config(**{a: kwargs[a] for a in _config._fields if a in kwargs})
 
 
-
 def __setitem__(a, key, newvalue):
     """
     Update data of the selected block.
@@ -149,9 +148,11 @@ def __setitem__(a, key, newvalue):
     except ValueError as exc:
         raise YastnError('Tensor does not have a block specified by the key.') from exc
     slc = slice(*a.slices[ind].slcs[0])
-    Dx = a.struct.D[ind]
-    Dx = tuple(Dx[ax] for ax in a.trans)
-    a._data[slc] =  a.config.backend.permute_dims(newvalue.reshape(Dx), reverse_trans).reshape(-1)
+    Dt = a.struct.D[ind]
+    Dr = tuple(Dt[ax] for ax in a.trans)
+    if not a.isdiag:
+        newvalue = a.config.backend.permute_dims(newvalue.reshape(Dr), reverse_trans)
+    a._data[slc] = newvalue.reshape(-1)
 
 
 def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None

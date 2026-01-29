@@ -48,6 +48,8 @@ class DoublePepsTensor(SpecialTensor):
         self.trans = trans
         self.swaps = {} if swaps is None else dict(swaps)
 
+    __iter__ = None  # ensure that the DoublePepsTensor is not iterable
+
     @property
     def config(self):
         return self.ket.config

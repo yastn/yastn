@@ -158,6 +158,8 @@ class Tensor:
     from ._merging import fuse_legs, unfuse_legs, fuse_meta_to_hard
     from ._krylov import expand_krylov_space
 
+    __iter__ = None  # ensure that the Tensor is not iterable
+
     def _replace(self, **kwargs) -> Tensor:
         """ Creates a shallow copy replacing fields specified in kwargs. """
         for arg in ('config', 'struct', 'mfs', 'hfs', 'data', 'slices', 'trans'):

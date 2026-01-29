@@ -434,15 +434,14 @@ def unfuse_legs(a, axes) -> 'Tensor':
     axes: int | Sequence[int]
         leg(s) to unfuse.
     """
-    a = a.consume_transpose()
     if a.isdiag:
         raise YastnError('Cannot unfuse legs of a diagonal tensor.')
     if isinstance(axes, int):
         axes = (axes,)
-    ni, mfs, axes_hf = 0, [], []
+    ui, mfs, axes_mf, axes_uf, axes_hf = 0, [], [], [], []
     for mi in range(a.ndim):
-        dni = a.mfs[mi][0]
-        if mi not in axes or (a.mfs[mi][0] == 1 and a.hfs[ni].tree[0] == 1):
+        hi = a.trans[ui]
+        if mi not in axes or (a.mfs[mi][0] == 1 and a.hfs[hi].tree[0] == 1):
             mfs.append(a.mfs[mi])
         elif a.mfs[mi][0] > 1:
             stack = a.mfs[mi]
@@ -456,18 +455,33 @@ def unfuse_legs(a, axes) -> 'Tensor':
                     if cum == 0:
                         mfs.append(stack[pos_init: pos + 1])
                         pos_init = pos + 1
-        elif a.hfs[ni].op[0] == 'p':  # and a.hfs[ni].tree[0] > 1 and a.mfs[mi][0] == 1 and mi in axes
-            axes_hf.append(ni)
-            mfs.append(a.mfs[mi])
+        elif a.hfs[hi].op[0] == 'p':  # and a.hfs[ni].tree[0] > 1 and a.mfs[mi][0] == 1 and mi in axes
+            axes_hf.append(hi)
+            axes_uf.append(ui)
+            axes_mf.append(len(mfs))
+            mfs.append((1,))  # a.mfs[mi] == (1,)
         else:  # c.hfs[ni].op == 's':
             raise YastnError('Cannot unfuse a leg obtained as a result of yastn.block()')
-        ni += dni
+        ui += a.mfs[mi][0]
     if axes_hf:
         meta, struct, slices, nlegs, hfs = _meta_unfuse_hard(a.config, a.struct, a.slices, tuple(axes_hf), tuple(a.hfs))
         data = _unmerge(a.config, a._data, meta)
-        for unfused, n in zip(nlegs[::-1], axes_hf[::-1]):
-            mfs = mfs[:n] + [mfs[n]] * unfused + mfs[n+1:]
-        return a._replace(struct=struct, slices=slices, mfs=tuple(mfs), hfs=hfs, data=data, trans=None)
+
+        for unfused, n in zip(nlegs[::-1], axes_mf[::-1]):
+            mfs = mfs[:n] + [(1,)] * unfused + mfs[n+1:]
+
+        trans = list(a.trans)
+        for unfused, n in zip(nlegs[::-1], axes_uf[::-1]):
+            trans = trans[:n] + [trans[n]] * unfused + trans[n+1:]
+        for ax in range(max(trans), -1, -1):
+            newax = sum(i < ax for i in trans)
+            ii = trans.index(ax)
+            while ii < len(trans) and trans[ii] == ax:
+                trans[ii] = newax
+                newax += 1
+                ii += 1
+
+        return a._replace(struct=struct, slices=slices, mfs=tuple(mfs), hfs=hfs, data=data, trans=trans)
     return a._replace(mfs=tuple(mfs))
 
 
