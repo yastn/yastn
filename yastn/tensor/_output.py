@@ -470,10 +470,10 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False) -> 'Tensor':
         reverse the order in which blocks are sorted. Default order is ascending in
         values of block's charges.
     """
-    a = a.consume_transpose()
-
     config_dense = a.config._replace(sym=sym_none)
-
+    #
+    a = a.consume_transpose()
+    #
     legs_a = list(a.get_legs(native=native))
     ndim_a = len(legs_a)  # ndim_n if native else ndim
 

@@ -140,7 +140,8 @@ def test_transpose_exceptions(config_kwargs):
 
 @pytest.mark.skipif("'torch' not in config.getoption('--backend')",
                     reason="Uses torch.autograd.gradcheck().")
-def test_transpose_backward(config_kwargs):
+@pytest.mark.parametrize('consume', [True, False])
+def test_transpose_backward(config_kwargs, consume):
     import torch
 
     # U1
@@ -149,14 +150,16 @@ def test_transpose_backward(config_kwargs):
                   t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
                   D=[(2, 3), (4, 5), (6, 7), (6, 5), (4, 3), (2, 1)])
     b = a.transpose(axes=(1, 2, 3, 0, 5, 4))
-    b = b.consume_transpose()
+    if consume:
+        b = b.consume_transpose()
     target_block = (0, 1, 0, 0, 1, 0)
     target_block_size = a[target_block].size()
 
     def test_f(block):
         a.set_block(ts=target_block, val=block)
         tmp_a = a.transpose(axes=(1, 2, 3, 0, 5, 4))
-        tmp_a = tmp_a.consume_transpose()
+        if consume:
+            tmp_a = tmp_a.consume_transpose()
         ab = b.vdot(tmp_a)
         return ab
 

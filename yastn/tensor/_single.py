@@ -185,7 +185,6 @@ def flip_charges(a, axes=None) -> 'Tensor':
         index of the leg, or a group of legs.
         The default is ``None``, which flips all legs.
     """
-    a = a.consume_transpose()
     if a.isdiag:
         raise YastnError('Cannot flip charges of a diagonal tensor. Use diag() first.')
     if axes is None:
@@ -196,6 +195,7 @@ def flip_charges(a, axes=None) -> 'Tensor':
         except TypeError:
             axes = (axes,)
     uaxes, = _unpack_axes(a.mfs, axes)
+    uaxes = tuple(a.trans[ax] for ax in uaxes)
 
     snew = list(a.struct.s)
     hfs = list(a.hfs)
@@ -237,7 +237,6 @@ def switch_signature(a, axes: Union[Sequence[int],int,str] = ()) -> 'Tensor':
         index of the leg, or a group of legs.
         If ``axes="all"``, all signatures are flipped.
     """
-    a = a.consume_transpose()
     from .. import eye
     if a.isdiag:
         raise YastnError('Cannot flip charges of a diagonal tensor. Use diag() first.')
@@ -280,7 +279,6 @@ def drop_leg_history(a, axes=None) -> 'Tensor':
         index of the leg, or a group of legs.
         The default is :code:`None`, which drops information from all legs.
     """
-    a = a.consume_transpose()
     if axes is None:
         axes = tuple(range(a.ndim))
     else:
@@ -289,6 +287,7 @@ def drop_leg_history(a, axes=None) -> 'Tensor':
         except TypeError:
             axes = (axes,)
     uaxes, = _unpack_axes(a.mfs, axes)
+    uaxes = tuple(a.trans[ax] for ax in uaxes)
     hfs = tuple(_Fusion(s=(a.struct.s[n],)) if n in uaxes else a.hfs[n] for n in range(a.ndim_n))
     return a._replace(hfs=hfs)
 
@@ -422,7 +421,6 @@ def add_leg(a, axis=-1, s=-1, t=None, leg=None) -> 'Tensor':
         It has to be of dimension one but can contain information about the fusion of other dimension-one legs.
         If provided, it overrides information in ``s`` and ``t``. The default is ``None``.
     """
-    a = a.consume_transpose()
     if a.isdiag:
         raise YastnError('Cannot add axis to a diagonal tensor.')
 
@@ -447,7 +445,15 @@ def add_leg(a, axis=-1, s=-1, t=None, leg=None) -> 'Tensor':
     axis = axis % (a.ndim + 1)
     mfs = a.mfs[:axis] + ((1,),) + a.mfs[axis:]
 
-    axis = sum(a.mfs[ii][0] for ii in range(axis))  # unpack mfs
+    uaxis = sum(a.mfs[ii][0] for ii in range(axis))  # unpack mfs
+
+    trans = list(a.trans)
+    haxis = trans[uaxis] if uaxis < len(trans) else uaxis
+    for k, v in enumerate(trans):
+        if v >= haxis:
+            trans[k] = v + 1
+    trans = trans[:uaxis] + [haxis] + trans[uaxis:]
+
     nsym = a.config.sym.NSYM
     if t is None:
         t = a.config.sym.add_charges(a.struct.n, signatures=(-1,), new_signature=s)
@@ -456,15 +462,15 @@ def add_leg(a, axis=-1, s=-1, t=None, leg=None) -> 'Tensor':
             raise YastnError('len(t) does not match the number of symmetry charges.')
         t = a.config.sym.add_charges(t, signatures=(s,), new_signature=s)
 
-    news = a.struct.s[:axis] + (s,) + a.struct.s[axis:]
+    news = a.struct.s[:haxis] + (s,) + a.struct.s[haxis:]
     newn = a.config.sym.add_charges(a.struct.n, t, signatures=(1, s))
-    newt = tuple(x[:axis * nsym] + t + x[axis * nsym:] for x in a.struct.t)
-    newD = tuple(x[:axis] + (1,) + x[axis:] for x in a.struct.D)
+    newt = tuple(x[:haxis * nsym] + t + x[haxis * nsym:] for x in a.struct.t)
+    newD = tuple(x[:haxis] + (1,) + x[haxis:] for x in a.struct.D)
     struct = a.struct._replace(t=newt, D=newD, s=news, n=newn)
     slices = tuple(_slc(x.slcs, y, x.Dp) for x, y in zip(a.slices, newD))
-    hfs = a.hfs[:axis] + (hfsa,) + a.hfs[axis:]
+    hfs = a.hfs[:haxis] + (hfsa,) + a.hfs[haxis:]
 
-    return a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, trans=None)
+    return a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, trans=trans)
 
 
 def remove_leg(a, axis=-1) -> 'Tensor':
@@ -480,7 +486,6 @@ def remove_leg(a, axis=-1) -> 'Tensor':
     axis: int
         index of the leg to be removed.
     """
-    a = a.consume_transpose()
     if a.isdiag:
         raise YastnError('Cannot remove axis to a diagonal tensor.')
     if a.ndim == 0:
@@ -490,26 +495,34 @@ def remove_leg(a, axis=-1) -> 'Tensor':
 
     mfs = a.mfs[:axis] + a.mfs[axis + 1:]
     remove = a.mfs[axis][0]
-    axis = sum(a.mfs[ii][0] for ii in range(axis))  # unpack mfs
+    uaxis = sum(a.mfs[ii][0] for ii in range(axis))  # unpack mfs
 
+    trans = list(a.trans)
     nsym = a.config.sym.NSYM
+
     for _ in range(remove):
+        haxis = trans[uaxis]
+        trans = trans[:uaxis] + trans[uaxis + 1:]
+        for k, v in enumerate(trans):
+            if v > haxis:
+                trans[k] = v - 1
+
         if len(a.struct.t) > 0:
-            t = a.struct.t[0][axis * nsym: (axis + 1) * nsym]
+            t = a.struct.t[0][haxis * nsym: (haxis + 1) * nsym]
         else:
             t = a.config.sym.zero()
 
-        if any(x[axis] != 1 for x in a.struct.D) or any(x[axis * nsym: (axis + 1) * nsym] != t for x in a.struct.t):
+        if any(x[haxis] != 1 for x in a.struct.D) or any(x[haxis * nsym: (haxis + 1) * nsym] != t for x in a.struct.t):
             raise YastnError('Axis to be removed must have single charge of dimension one.')
 
-        news = a.struct.s[:axis] + a.struct.s[axis + 1:]
-        newn = a.config.sym.add_charges(a.struct.n, t, signatures=(-1, a.struct.s[axis]), new_signature=-1)
-        newt = tuple(x[: axis * nsym] + x[(axis + 1) * nsym:] for x in a.struct.t)
-        newD = tuple(x[: axis] + x[axis + 1:] for x in a.struct.D)
+        news = a.struct.s[:haxis] + a.struct.s[haxis + 1:]
+        newn = a.config.sym.add_charges(a.struct.n, t, signatures=(-1, a.struct.s[haxis]), new_signature=-1)
+        newt = tuple(x[: haxis * nsym] + x[(haxis + 1) * nsym:] for x in a.struct.t)
+        newD = tuple(x[: haxis] + x[haxis + 1:] for x in a.struct.D)
         struct = a.struct._replace(t=newt, D=newD, s=news, n=newn)
         slices = tuple(_slc(x.slcs, y, x.Dp) for x, y in zip(a.slices, newD))
-        hfs = a.hfs[:axis] + a.hfs[axis + 1:]
-        a = a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, trans=None)
+        hfs = a.hfs[:haxis] + a.hfs[haxis + 1:]
+        a = a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, trans=trans)
     return a
 
 
@@ -517,8 +530,6 @@ def diag(a) -> 'Tensor':
     """
     Select diagonal of 2D tensor and output it as a diagonal tensor, or vice versa.
     """
-    a = a.consume_transpose()
-
     if not a.isdiag:  # isdiag=False -> isdiag=True
         if a.ndim_n != 2 or sum(a.struct.s) != 0:
             raise YastnError('Diagonal tensor requires 2 legs with opposite signatures.')
@@ -530,8 +541,13 @@ def diag(a) -> 'Tensor':
             raise YastnError('yastn.diag() allowed only for square blocks.')
         #     isdiag=True -> isdiag=False                    isdiag=False -> isdiag=True
     Dp = tuple(x.Dp ** 2 for x in a.slices) if a.isdiag else tuple(D[0] for D in a.struct.D)
+    #
+    news = a.struct.s
+    if a.trans == (1, 0):  # sufficient for the transpose, to have consistent signature flow
+        news == news[::-1]
+    #
     slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dp), Dp, a.struct.D))
-    struct = a.struct._replace(diag=not a.isdiag, size=sum(Dp))
+    struct = a.struct._replace(diag=not a.isdiag, size=sum(Dp), s=news)
 
     if a.isdiag:  # isdiag=True -> isdiag=False
         meta = tuple((x.slcs[0], y.slcs[0]) for x, y in zip(slices, a.slices))
@@ -539,7 +555,7 @@ def diag(a) -> 'Tensor':
     else:  # isdiag=False -> isdiag=True
         meta = tuple((x.slcs[0], y.slcs[0], y.D) for x, y in zip(slices, a.slices))
         data = a.config.backend.diag_2dto1d(a._data, meta, struct.size)
-    return a._replace(struct=struct, slices=slices, data=data)
+    return a._replace(struct=struct, slices=slices, data=data, trans=None)
 
 
 def remove_zero_blocks(a, rtol=1e-12, atol=0) -> 'Tensor':
