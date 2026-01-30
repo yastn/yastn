@@ -34,7 +34,7 @@ class EnvBoundaryMPS():
         Calculate boundary MPSs for finite PEPS.
 
         Consequative MPS follows from contracting transfer matrix with previous MPS.
-        This employs :meth:`yastn.tn.mps.zipper` followed by :meth:`yastn.tn.mps.compression_` for refinment.
+        This employs :meth:`yastn.tn.mps.zipper` followed by :meth:`yastn.tn.mps.compression_` for refinement.
 
         Parameters
         ----------

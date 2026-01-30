@@ -112,9 +112,9 @@ jobs:
       # Run tests
       - name: tests
         run: |
-          pytest -v --backend torch ./tests/peps;
           pytest -v --backend torch --tensordot_policy fuse_to_matrix  ./tests/tensor;
           pytest -v --backend torch --tensordot_policy no_fusion ./tests/tensor;
+          pytest -v --backend torch ./tests/peps;
 
 
   deploy-docs:

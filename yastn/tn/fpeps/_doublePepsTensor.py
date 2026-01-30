@@ -181,6 +181,25 @@ class DoublePepsTensor(SpecialTensor):
         op_conj = self.op.conj() if self.op is not None else None
         return DoublePepsTensor(bra=self.bra.conj(), ket=self.ket.conj(), transpose=self._t, op=op_conj, swaps=self.swaps)
 
+    def to(self, device=None, dtype=None, **kwargs):
+        r"""
+        Move DoublePepsTensor to device and cast to given datatype.
+
+        Returns a clone of the DoublePepsTensor residing on ``device`` in desired datatype ``dtype``.
+        If DoublePepsTensor already resides on ``device``, returns ``self``. This operation preserves autograd.
+        If no change is needed, makes only a shallow copy of the tensor data.
+
+        Parameters
+        ----------
+        device: str
+            device identifier
+        dtype: str
+            desired dtype
+        """
+        op_clone = self.op.to(device=device, dtype=dtype, **kwargs) if self.op is not None else None
+        return DoublePepsTensor(bra=self.bra.to(device=device, dtype=dtype, **kwargs), \
+                                ket=self.ket.to(device=device, dtype=dtype, **kwargs), transpose=self._t, op=op_clone, swaps=self.swaps)
+
     def clone(self):
         r"""
         Makes a clone of yastn.tn.fpeps.DoublePepsTensor by :meth:`cloning<yastn.Tensor.clone>`-ing
@@ -224,7 +243,7 @@ class DoublePepsTensor(SpecialTensor):
 
     def tensordot(self, b, axes, reverse=False):
         r"""
-        tensordot(DublePepsTensor, b, axes) with tenor leg order conventions matching the default for tensordot.
+        tensordot(DublePepsTensor, b, axes) with tensor leg order conventions matching the default for tensordot.
         tensordot(self, b, axes, reverse=True) corresponds to tensordot(b, self, axes).
         """
 
@@ -236,12 +255,12 @@ class DoublePepsTensor(SpecialTensor):
 
         in_a, in_b = _clear_axes(*axes)  # contracted meta legs
         if len(in_a) != 2 or len(in_b) != 2:
-            raise YastnError('DoublePepTensor.tensordot only supports contraction of exactly 2 legs.')
+            raise YastnError('DoublePepsTensor.tensordot only supports contraction of exactly 2 legs.')
         sa0, sa1 = set(in_a), set(in_b)
         if len(sa0) != len(in_a) or len(sa1) != len(in_b):
-            raise YastnError('DoublePepTensor.tensordot repeated axis in axes[0] or axes[1].')
+            raise YastnError('DoublePepsTensor.tensordot repeated axis in axes[0] or axes[1].')
         if sa0 - set(range(self.ndim)) or sa1 - set(range(b.ndim)):
-            raise YastnError('DoublePepTensor.tensordot axes outside of tensor ndim.')
+            raise YastnError('DoublePepsTensor.tensordot axes outside of tensor ndim.')
 
         in_a = tuple(self._t[ax] for ax in in_a)
         out_a = tuple(ax for ax in self._t if ax not in in_a)
@@ -260,7 +279,7 @@ class DoublePepsTensor(SpecialTensor):
             return append_vec_tr(Ab, Ak, b, op=self.op, mode=mode, in_b=in_b, out_a=out_a)
         elif in_a == (1, 2):
             return append_vec_bl(Ab, Ak, b, op=self.op, mode=mode, in_b=in_b, out_a=out_a)
-        raise YastnError('DoublePepTensor.tensordot, 2 axes of self should be neighbouring.')
+        raise YastnError('DoublePepsTensor.tensordot, 2 axes of self should be neighbouring.')
 
     def fuse_layers(self):
         """

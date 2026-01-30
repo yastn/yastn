@@ -412,17 +412,21 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
     _, col_meta = split_data_and_meta(v0_col.to_dict(level=0))
 
     # take care of negative strides
-    to_tensor = lambda x: A_mat.config.backend.to_tensor(x if np.sum(np.array(x.strides)<0)==0 else x.copy(), dtype=A_mat.yastn_dtype, device=A_mat.device)
+    _f_fix_shape= lambda x: x if len(x.shape)==1 else x.reshape(-1)
+    _f_fix_strides = lambda x: x if np.sum(np.array(x.strides)<0)==0 else x.copy()
+    to_tensor = lambda x: A_mat.config.backend.to_tensor(
+        _f_fix_strides(x), 
+        dtype=A_mat.yastn_dtype, device=A_mat.device)
     to_numpy = lambda x: A_mat.config.backend.to_numpy(x)
 
     def mv(v): # Av
-        col = Tensor.from_dict(combine_data_and_meta(to_tensor(v), col_meta))
+        col = Tensor.from_dict(combine_data_and_meta(to_tensor(_f_fix_shape(v)), col_meta))
         res = einsum('ij,jx->ix',A_mat,col)
         row, res_meta = split_data_and_meta(res.to_dict(level=0), squeeze=True)
         return to_numpy(row)
 
     def vm(v): # A^\dag v  vs  (v* A)^\dag = A^\dag v
-        row = Tensor.from_dict(combine_data_and_meta(to_tensor(v).conj(), row_meta))
+        row = Tensor.from_dict(combine_data_and_meta(to_tensor(_f_fix_shape(v)).conj(), row_meta))
         res = einsum('ix,ij->jx', row, A_mat)
         col, res_meta= split_data_and_meta(res.to_dict(level=0), squeeze=True)
         return to_numpy(col.conj())
