@@ -295,7 +295,7 @@ def drop_leg_history(a, axes=None) -> 'Tensor':
 def transpose(a, axes=None):
     r"""
     Transpose tensor by permuting the order of its legs (spaces).
-    Makes a shallow copy of tensor data.
+    Do not copy tensor data.
 
     Parameters
     ----------
@@ -311,22 +311,12 @@ def transpose(a, axes=None):
     mfs = tuple(a.mfs[ii] for ii in axes)
     trans = tuple(a.trans[ii] for ii in uaxes)
     return a._replace(trans=trans, mfs=mfs)
-    # axes = tuple(self._t[ax] for ax in axes)
-    # in_a = tuple(self._t[ax] for ax in in_a)
-    # out_a = tuple(ax for ax in self._t if ax not in in_a)
 
 
 def consume_transpose(a) -> 'Tensor':
     r"""
-    Transpose tensor by permuting the order of its legs (spaces).
-    Makes a shallow copy of tensor data if the order is not changed.
-
-    Parameters
-    ----------
-    axes: Sequence[int]
-        new order of legs. Has to be a valid permutation of :code:`(0, 1, ..., ndim-1)`
-        where :code:`ndim` is tensor order (number of legs).
-        By default is :code:`range(a.ndim)[::-1]`, which reverses the order of the axes.
+    Enforce logical transformation done by Tensor.transpose()
+    on Tensor.struct and reshufling Tensor.data
     """
     no_trans = tuple(range(a.ndim_n))
     if a.trans == no_trans:

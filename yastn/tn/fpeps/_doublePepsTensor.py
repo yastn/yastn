@@ -200,7 +200,7 @@ class DoublePepsTensor(SpecialTensor):
         """
         op_clone = self.op.to(device=device, dtype=dtype, **kwargs) if self.op is not None else None
         return DoublePepsTensor(bra=self.bra.to(device=device, dtype=dtype, **kwargs), \
-                                ket=self.ket.to(device=device, dtype=dtype, **kwargs), transpose=self._t, op=op_clone, swaps=self.swaps)
+                                ket=self.ket.to(device=device, dtype=dtype, **kwargs), transpose=self.trans, op=op_clone, swaps=self.swaps)
 
     def clone(self):
         r"""

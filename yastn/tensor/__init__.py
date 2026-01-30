@@ -116,6 +116,13 @@ class Tensor:
         #
         self.slices = kwargs.get('slices', ())
         #
+        # self.mfs and self.trans describe logical/meta transformation of legs
+        # 1) at the highest level, self.mfs is a logical fusion of legs,
+        # where a group of consecutive legs is treated as a single leg
+        # 2) Next, self.trans is a transpose/permutation of leg indices,
+        # mapping from logical legs (unpacked from mfs) to native legs in data that are described by self.struct
+        # 3) At the lowest level, self.hfs contains information about hard-fusion of native legs
+        #
         self.trans = kwargs.get('trans', None)
         try:
             self.trans = tuple(self.trans)
