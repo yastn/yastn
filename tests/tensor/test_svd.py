@@ -117,6 +117,30 @@ def test_svd_complex(config_kwargs):
     svd_combine(a)
 
 
+def test_svd_transpose_meta(config_kwargs):
+    """ test svd decomposition with meta-fuse and transpose """
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1,),
+                  t=((0, 1), (0, 1), (0, 1), (0, 1), (0, 1)),
+                  D=((1, 2), (3, 4), (5, 6), (7, 8), (9, 10)))
+    #
+    af = a.fuse_legs(axes=(2, (0, 1), (4, 3)), mode='meta')
+    aff = af.fuse_legs(axes=((0, 2), 1), mode='meta')
+    assert aff.trans == (2, 4, 3, 0, 1)
+    #
+    Uff, Sff, Vff = yastn.linalg.svd(aff, axes=(0, 1))
+    USVff = Uff @ Sff @ Vff
+    assert yastn.norm(USVff - aff) < tol  # == 0.0
+    #
+    U, S, V = yastn.linalg.svd(a, axes=((2, 4, 3), (0, 1)))
+    Um = U.fuse_legs(axes=(0, (1, 2), 3), mode='meta')
+    Um = Um.fuse_legs(axes=((0, 1), 2), mode='meta')
+    Vm = V.fuse_legs(axes=(0, (1, 2)), mode='meta')
+    assert yastn.norm(Uff - Um) < tol  # == 0.0
+    assert yastn.norm(Sff - S) < tol  # == 0.0
+    assert yastn.norm(Vff - Vm) < tol  # == 0.0
+
+
 def test_svd_sparse(config_kwargs):
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.Tensor(config=config_U1, s=(-1, -1, -1, 1, 1, 1), n=0)
@@ -483,5 +507,4 @@ def test_svd_exceptions(config_kwargs):
 
 if __name__ == '__main__':
     pytest.main([__file__, "-vs", "--durations=0", "--backend", "np", '--device', "cpu", "--tensordot_policy", "no_fusion"])
-
-    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])
+    # pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])

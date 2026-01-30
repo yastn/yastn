@@ -88,6 +88,22 @@ def test_eigh_Z3(config_kwargs,which):
         assert S.is_consistent()
 
 
+def test_eigh_transpose_meta(config_kwargs):
+    """ test eigh decomposition with meta-fuse and transpose """
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1),
+                  t=((0, 1), (0, 1), (0, 1), (0, 1)),
+                  D=((1, 2), (3, 4), (5, 6), (7, 8)))
+    #
+    aH = yastn.tensordot(a, a.conj(), axes=(3, 3))
+    aHf = aH.fuse_legs(axes=((0, 2), 1, (3, 5), 4), mode='meta')
+    aHff = aHf.fuse_legs(axes=((0, 1), (2, 3)), mode='meta')
+    assert aHff.trans == (0, 2, 1, 3, 5, 4)
+    Sff, Uff = yastn.linalg.eigh(aHff, axes=(0, 1))
+    USUff = Uff @ Sff @ Uff.H
+    assert yastn.norm(USUff - aHff) < tol  # == 0.0
+
+
 def test_eigh_exceptions(config_kwargs):
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     legs = [yastn.Leg(config_U1, s=-1, t=(-1, 0), D=(2, 3)),

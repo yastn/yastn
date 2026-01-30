@@ -129,6 +129,10 @@ def expm(x):
     return scipy.linalg.expm(x)
 
 
+def permute_dims(x, axes):
+    return np.transpose(x, axes)
+
+
 #########################
 #    output numbers     #
 #########################

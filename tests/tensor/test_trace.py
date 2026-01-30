@@ -109,6 +109,21 @@ def test_trace_basic(config_kwargs):
     assert pytest.approx(b.item(), rel=tol) == 6
 
 
+def test_trace_transpose_meta(config_kwargs):
+    """ test trace with meta-fuse and transpose. """
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1, -1),
+                  t=((0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)),
+                  D=((1, 2), (3, 4), (5, 6), (3, 4), (1, 2), (7, 8)))
+    #
+    af = a.fuse_legs(axes=((1, 4), 5, (3, 0), 2), mode='meta')
+    assert af.trans == (1, 4, 5, 3, 0, 2)
+    #
+    aft = af.trace(axes=(2, 0))
+    at = a.trace(axes=((1, 4), (3, 0)))
+    assert yastn.norm(aft - at.T) < tol  # == 0.0
+
+
 def test_trace_fusions(config_kwargs):
     """ test trace of meta-fused and hard-fused tensors. """
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)

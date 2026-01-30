@@ -85,6 +85,23 @@ def test_mask_basic(config_kwargs):
     assert ble.apply_mask(bgt, axes=1).trace() < tol  # == 0.
 
 
+    # mask with transpose and meta
+    # bf = b.fuse_legs(axes=(3, (1, 0), 2), mode='meta')
+    # assert bf.trans == (3, 1, 0, 2)
+    # rfb = a.broadcast(bf, axes=2)
+    # assert rfb.trans == (3, 1, 0, 2)
+    # rb = a.broadcast(b, axes=2)
+    # rbf = rb.fuse_legs(axes=(3, (1, 0), 2), mode='meta')
+    # assert (rbf - rfb).norm() < tol
+
+    # # broadcast with transposed diag -- transpose is ignored
+    # at = a.T
+    # assert at.trans == (1, 0)
+    # r1 = a.broadcast(b, axes=2)
+    # r2 = at.broadcast(b, axes=2)
+    # assert (r1 - r2).norm() < tol
+
+
 def test_mask_exceptions(config_kwargs):
     """ trigger exceptions for apply_mask """
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)

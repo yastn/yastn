@@ -77,7 +77,17 @@ def test_algebra_basic(config_kwargs):
     a = yastn.rand(config=config_U1, legs=[leg0a, leg1, leg2, leg3], dtype='float64')
     b = yastn.rand(config=config_U1, legs=[leg0b, leg1, leg2, leg3], dtype='float64')
     combine_tests(a, b)
-
+    #
+    # test with transpose
+    a = a.transpose((3, 1, 0, 2))
+    b = b.transpose((3, 1, 0, 2))
+    r0 = algebra_vs_numpy(lambda x, y: 2. * x + y, a, b)
+    assert r0.trans == (3, 1, 0, 2)
+    a = a.consume_transpose()
+    r1 = algebra_vs_numpy(lambda x, y: 2. * x + y, a, b)
+    assert r1.trans == (0, 1, 2, 3)
+    assert (r0 - r1).norm() < tol
+    #
     c = yastn.eye(config=config_U1, t=1, D=5)
     d = yastn.eye(config=config_U1, t=2, D=5)
     r4 = algebra_vs_numpy(lambda x, y: 2. * x + y, c, d)
@@ -91,6 +101,8 @@ def test_algebra_basic(config_kwargs):
     r7 = algebra_vs_numpy(lambda x, y: x - y / 0.5, e, f)
     assert pytest.approx(r7.norm().item(), rel=tol) == 5 * np.sqrt(5)
     assert pytest.approx(r7.norm(p='inf').item(), rel=tol) == 2
+
+
 
     # Z2xU1
     config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)

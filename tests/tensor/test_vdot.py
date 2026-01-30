@@ -14,6 +14,7 @@
 # ==============================================================================
 """ yastn.vdot() """
 import pytest
+import numpy as np
 import yastn
 
 tol = 1e-12  #pylint: disable=invalid-name
@@ -119,6 +120,34 @@ def vdot_hf(a, b, hf_axes1=(0, (2, 3), 1)):
     ffs2 = yastn.vdot(ffb, ffa)
     fffs2 = yastn.vdot(fffb, fffa)
     assert all(abs(s - x.item()) < tol for x in (fs, ffs, fffs, fs2.conj(), ffs2.conj(), fffs2.conj()))
+
+
+def test_vdot_transpose_meta(config_kwargs):
+    """ test vdot with meta-fuse and transpose. """
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    t1 = (0, 1)
+    D1 = (3, 2)
+    a = yastn.rand(config=config_U1, s=(1, -1, 1, -1, 1, -1),
+                t=(t1, t1, t1, t1, t1, t1), D=(D1, D1, D1, D1, D1, D1))
+    b = yastn.rand(config=config_U1, s=(1, -1, 1, -1, 1, -1),
+                t=(t1, t1, t1, t1, t1, t1), D=(D1, D1, D1, D1, D1, D1))
+    da = a.to_numpy()
+    db = b.to_numpy()
+    #
+    af = a.fuse_legs(axes=((2, 3), (1, 0), (4, 5)), mode='meta')
+    bf = b.fuse_legs(axes=((2, 3), (1, 0), (4, 5)), mode='meta')
+    #
+    c = yastn.vdot(a, b)
+    cf = yastn.vdot(af, bf)
+    assert abs(c.item() - cf.item()) < tol
+    #
+    bft = bf.transpose(axes=(2, 1, 0))
+    df = yastn.vdot(af, bft)
+    #
+    dat = da.transpose((3, 2, 0, 1, 5, 4))
+    dbt = db.transpose((5, 4, 0, 1, 3, 2))
+    dt = np.vdot(dat, dbt)
+    assert abs(df.item() - dt) < tol
 
 
 def test_vdot_exceptions(config_kwargs):

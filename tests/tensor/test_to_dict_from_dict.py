@@ -150,7 +150,7 @@ def check_to_numpy(a1, config):
     assert all(b.is_consistent for b in (b1, b2))
     assert all(yastn.are_independent(a, b) for a, b in [(a1, b1), (a2, b2)])
     are_identical_tensors(a1, b1)
-    are_identical_tensors(a2, b2)
+    are_identical_tensors(a2.consume_transpose(), b2)
 
 
 def check_to_hdf5(a, *args):
@@ -167,7 +167,7 @@ def check_to_hdf5(a, *args):
     os.remove("tmp.h5")
     b.is_consistent()
     assert yastn.are_independent(a, b)
-    are_identical_tensors(a, b)
+    are_identical_tensors(a.consume_transpose(), b)
 
 
 @pytest.mark.parametrize("test_f", [check_to_numpy, check_to_hdf5])

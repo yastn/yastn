@@ -101,15 +101,15 @@ def test_add_leg_fused(config_kwargs):
     leg0p = yastn.Leg(config, s=-1, t=(1,), D=(1,))
     leg1 = yastn.Leg(config, s=1, t=(-1, 0, 1), D=(2, 3, 4))
 
-    legs = [leg0z, leg0m, leg0p, leg1.conj(), leg1]
+    legs = [leg1.conj(), leg0z, leg0m, leg0p, leg1]
     a = yastn.ones(config=config, legs=legs)
     #
-    # test fusions
+    # test with fusions and transposition
     #
     for mode, mfs in [('hard', ((1,), (1,), (1,), (1,))),
-                      ('meta', ((3, 2, 1, 1, 1), (1,), (3, 2, 1, 1, 1), (1,)))]:
-        b = a.fuse_legs(axes=((0, 1), 2, 3, 4), mode=mode)
-        b = b.fuse_legs(axes=((0, 1), 2, 3), mode=mode)
+                      ('meta', ((3, 1, 2, 1, 1), (1,), (3, 1, 2, 1, 1), (1,)))]:
+        b = a.fuse_legs(axes=((2, 3), 1, 0, 4), mode=mode)
+        b = b.fuse_legs(axes=((1, 0), 2, 3), mode=mode)
         legf = b.get_legs(axes=0)
 
         c = b.add_leg(axis=2, leg=legf)
@@ -118,9 +118,14 @@ def test_add_leg_fused(config_kwargs):
         assert c.mfs == mfs
 
         c = c.unfuse_legs(axes=(0, 2))
-        c = c.unfuse_legs(axes=(0, 3))
+        c = c.unfuse_legs(axes=(1, 4))
+
+        if mode == 'meta':
+            assert c.trans == (1, 2, 3, 0, 4, 5, 6, 7)
+        else:
+            assert c.trans == (0, 1, 2, 3, 4, 5, 6, 7)
         legc1 = c.get_legs()
-        legc2 = legs[:4] + [leg0z, leg0m, leg0p,] + legs[4:]
+        legc2 = [leg0z, leg0m, leg0p, leg1.conj(), leg0z, leg0m, leg0p, leg1]
         assert all(l1 == l2 for l1, l2 in zip(legc1, legc2))
 
 
@@ -163,13 +168,15 @@ def test_operators_chain(config_kwargs):
     assert yastn.norm(T1 - T2) < tol
     assert T1.n == (2,)
     #
-    # remove fused leg of dim=1
-    T3 = T1.fuse_legs(axes=((0, 1, 2, (3, 4, 5), 6, 7)), mode='hard')
-    T4 = T1.fuse_legs(axes=((0, 1, 2, (3, 4, 5), 6, 7)), mode='meta')
-    T3 = T3.remove_leg(axis=3)
-    T4 = T4.remove_leg(axis=3)
+    # remove fused leg of dim=1; with transpose
+
+    T3 = T1.fuse_legs(axes=((1, 4, (2, 5, 3), 6, 0, 7)), mode='hard')
+    T4 = T1.fuse_legs(axes=((1, 4, (2, 5, 3), 6, 0, 7)), mode='meta')
+    T3 = T3.remove_leg(axis=2)
+    T4 = T4.remove_leg(axis=2)
+    T3.trans == (0, 1, 2, 3, 4)
+    T4.trans == (1, 2, 3, 0, 4)
     assert yastn.norm(T3 - T4) < tol
-    assert T3.ndim == 5
     #
     # special case when there are no blocks in the tensor
     a = yastn.Tensor(config=config, s=(1, -1, 1, -1), n=1)
@@ -224,4 +231,4 @@ def test_remove_leg_exceptions(config_kwargs):
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0",  "--backend", "torch_cpp", "--device", "cuda", "--tensordot_policy", "no_fusion"])
+    pytest.main([__file__, "-vs", "--durations=0",   "--tensordot_policy", "no_fusion"])

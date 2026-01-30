@@ -317,15 +317,26 @@ def test_tensordot_fuse_meta(config_kwargs):
                   D=((2, 1, 2), (4,), (4, 6), (7, 8), (3, 4, 5)), dtype=dtype)
 
     c = tensordot_vs_numpy(a, b, axes=((0, 3, 4), (0, 3, 4)), conj=(0, 1), dtype=dtype)
-    fa = a.fuse_legs(axes=(0, (1, 2), (4, 3)), mode='meta')
-    fb = b.fuse_legs(axes=(0, (1, 2), (4, 3)), mode='meta')
+    fa = a.fuse_legs(axes=(0, (2, 1), (4, 3)), mode='meta')
+    fb = b.fuse_legs(axes=(0, (2, 1), (4, 3)), mode='meta')
+    assert fa.trans == (0, 2, 1, 4, 3)
+    assert fb.trans == (0, 2, 1, 4, 3)
+    #
     fc = tensordot_vs_numpy(fa, fb, axes=((2, 0), (2, 0)), conj=(0, 1), dtype=dtype)
-    fc = fc.unfuse_legs(axes=(0, 1))
+    assert fc.trans == (0, 1, 2, 3) and fc.ndim == 2
+    #
     fa = fa.fuse_legs(axes=((0, 2), 1), mode='meta')
     fb = fb.fuse_legs(axes=((0, 2), 1), mode='meta')
+    assert fa.trans == (0, 4, 3, 2, 1)
+    assert fb.trans == (0, 4, 3, 2, 1)
+    #
     ffc = tensordot_vs_numpy(fa, fb, axes=((0,), (0,)), conj=(0, 1), dtype=dtype)
-    ffc = ffc.unfuse_legs(axes=(0, 1))
-    assert all(yastn.norm(c - x) < tol[dtype] for x in (fc, ffc))
+    assert ffc.trans == (0, 1, 2, 3) and ffc.ndim == 2
+    #
+    cf = c.fuse_legs(axes=((1, 0), (3, 2)), mode='meta')
+    assert cf.trans == (1, 0, 3, 2) and cf.ndim == 2
+    #
+    assert all(yastn.norm(cf - x) < tol[dtype] for x in (fc, ffc))
 
 
 def test_tensordot_exceptions(config_kwargs):

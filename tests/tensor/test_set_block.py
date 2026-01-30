@@ -133,6 +133,33 @@ def test_Z2xU1(config_kwargs):
     assert a.is_consistent()
 
 
+def test_set_block_transpose(config_kwargs):
+    """ Tensor.__getitem__  with transpose. """
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    legs = (yastn.Leg(config_U1, s=1, t=(-2, 0, 2), D=(2, 1, 3)),
+            yastn.Leg(config_U1, s=-1, t=(-1, 1), D=(3, 2)),
+            yastn.Leg(config_U1, s=1, t=(-2, 0, 2), D=(1, 3, 4)),
+            yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(4, 2, 5)))
+    a = yastn.rand(config=config_U1, legs=legs)
+    #
+    # get block of a
+    block0 = a[(-2, -1, 2, 1)]
+    assert block0.shape == (2, 3, 4, 5)
+    #
+    # transpose a, and get the same block after transpose
+    at = a.transpose(axes=(3, 2, 0, 1))
+    block1 = at[(1, 2, -2, -1)]
+    assert block1.shape == (5, 4, 2, 3)
+    block0t = config_U1.backend.permute_dims(block0, axes=(3, 2, 0, 1))
+    assert config_U1.backend.allclose(block0t, block1, rtol=1e-12, atol=1e-12)
+    #
+    # set block of a.transpose, and check that it is properly assigned in a
+    new = np.arange(2 * 3 * 4 * 5).reshape(5, 4, 2, 3)
+    at[(1, 2, -2, -1)] = config_U1.backend.to_tensor(new, Ds=new.size, dtype=a.yastn_dtype, device=a.device)
+    new_rt = config_U1.backend.to_numpy(a[(-2, -1, 2, 1)])
+    assert np.allclose(new, new_rt.transpose((3, 2, 0, 1)), atol=1e-12, rtol=1e-12)
+
+
 def test_dense(config_kwargs):
     """ initialization of dense tensor with no symmetry """
     config_dense = yastn.make_config(sym='none', **config_kwargs)

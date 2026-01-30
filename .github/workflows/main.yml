@@ -205,9 +205,9 @@ jobs:
       matrix:
         include:
           - python_v: '3.12'
-            numpy_v: '1.26'
-            scipy_v: '1.14'
-            torch_v: '2.4'
+            numpy_v: '2.4'
+            scipy_v: '1.16'
+            torch_v: '2.9'
       fail-fast: true
 
     steps:
