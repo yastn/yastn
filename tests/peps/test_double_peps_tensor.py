@@ -161,16 +161,16 @@ def test_double_peps_tensor_raises(config_kwargs):
                        match="DoublePEPSTensor only supports permutations that retain legs' ordering"):
         fpeps.DoublePepsTensor(bra=T0.ket, ket=T0.bra).transpose((1, 2, 0, 3))
     with pytest.raises(yastn.YastnError,
-                       match="DoublePepTensor.tensordot only supports contraction of exactly 2 legs"):
+                       match="DoublePepsTensor.tensordot only supports contraction of exactly 2 legs"):
         T0.tensordot(t01, axes=(1, 1))
     with pytest.raises(yastn.YastnError,
-                       match="DoublePepTensor.tensordot repeated axis in axes"):
+                       match="DoublePepsTensor.tensordot repeated axis in axes"):
         T0.tensordot(t01, axes=((2, 2), (1, 1)))
     with pytest.raises(yastn.YastnError,
-                       match="DoublePepTensor.tensordot axes outside of tensor ndim"):
+                       match="DoublePepsTensor.tensordot axes outside of tensor ndim"):
         T0.tensordot(t01, axes=((3, 4), (1, 2)))
     with pytest.raises(yastn.YastnError,
-                       match="DoublePepTensor.tensordot, 2 axes of self should be neighbouring"):
+                       match="DoublePepsTensor.tensordot, 2 axes of self should be neighbouring"):
         T0.tensordot(t01, axes=((1, 3), (1, 2)))
     with pytest.raises(yastn.YastnError,
                        match="Elements of axes should be 'b0', 'b1', 'b2', 'b3', 'b4', 'k0', 'k1', 'k2', 'k3', 'k4'."):

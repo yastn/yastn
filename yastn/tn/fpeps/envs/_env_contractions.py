@@ -16,7 +16,7 @@ from typing import Sequence
 
 from ....initialize import ones, eye
 from ....tensor import tensordot, Leg, Tensor, ncon
-
+from .._geometry import Site
 
 __all__ = ['hair_t', 'hair_l', 'hair_b', 'hair_r',
            'cor_tl', 'cor_bl', 'cor_br', 'cor_tr',
@@ -25,7 +25,8 @@ __all__ = ['hair_t', 'hair_l', 'hair_b', 'hair_r',
            'append_vec_bl', 'append_vec_br',
            'corner2x2',
            'tensors_from_psi', 'cut_into_hairs',
-           'identity_boundary', 'trivial_peps_tensor']
+           'identity_boundary', 'trivial_peps_tensor',
+           'update_env_fetch_args', 'update_env_dir']
 
 
 def trivial_peps_tensor(config):
@@ -472,3 +473,183 @@ def corner2x2_br(t_right, c_bottomright, t_bottom, onsite_t, mode='fuse'):
     if mode == 'fuse':
         cor_br = cor_br.fuse_legs(axes=((0, 2), (1, 3)))
     return cor_br
+
+#
+# update of CTM tensors given (some) projectors
+def update_env_fetch_args( site, env, move: str ):
+    """
+    Fetch the necessary tensors from the environment for updating the environment
+    along the specified move direction.
+
+    move: str
+        'l', 'r', 't', 'b' for left, right, top, bottom move, respectively.
+        If combined moves are desired, e.g., 'h' for 'lr' or 'v' for 'tb', the function should be called
+        multiple times for each individual move.
+
+    Returns:
+        Returns arguments for the update_env_{l,r,t,b} functions in the following order::
+            (DoublePepsTensor,Tensor,Tensor,Tensor) or (None,)*4 
+            + (Site,Tensor,Tensor,Tensor) or (None,)*4
+            + (Site,Tensor,Tensor,Tensor) or (None,)*4
+    """
+    assert move in ['l', 'r', 't', 'b'], "move must be one of 'l', 'r', 't', 'b'"
+    
+    psi= env.psi
+    if move in 'l':
+        l = psi.nn_site(site, d='l')
+        tl = psi.nn_site(site, d='tl')
+        bl = psi.nn_site(site, d='bl')
+
+        res= ((psi[l], env[l].l, env.proj[l].hlt, env.proj[l].hlb ) if l else (None,)*4) \
+            + ((tl, env.proj[tl].hlb, env[l].tl, env[l].t) if tl else (None,)*4) \
+            + ((bl, env.proj[bl].hlt, env[l].b, env[l].bl, ) if bl else (None,)*4)
+        return res
+
+    if move in 'r': 
+        r = psi.nn_site(site, d='r')
+        tr = psi.nn_site(site, d='tr')
+        br = psi.nn_site(site, d='br')
+
+        res= ((psi[r], env[r].r, env.proj[r].hrb, env.proj[r].hrt ) if r else (None,)*4) \
+            + ((tr, env.proj[tr].hrb, env[r].t, env[r].tr,) if tr else (None,)*4) \
+            + ((br, env.proj[br].hrt, env[r].br, env[r].b, ) if br else (None,)*4)
+        return res
+    
+    if move in 't':
+        t = psi.nn_site(site, d='t')
+        tl = psi.nn_site(site, d='tl')
+        tr = psi.nn_site(site, d='tr')
+
+        res= ((psi[t], env[t].t, env.proj[t].vtl, env.proj[t].vtr ) if t else (None,)*4) \
+            + ((tl, env.proj[tl].vtr, env[t].l, env[t].tl,) if tl else (None,)*4) \
+            + ((tr, env.proj[tr].vtl, env[t].tr, env[t].r, ) if tr else (None,)*4)
+        return res
+
+    if move in 'b': 
+        b = psi.nn_site(site, d='b')
+        bl = psi.nn_site(site, d='bl')
+        br = psi.nn_site(site, d='br')
+
+        res= ((psi[b], env[b].b, env.proj[b].vbr, env.proj[b].vbl ) if b else (None,)*4) \
+            + ((bl, env.proj[bl].vbr, env[b].bl, env[b].l) if bl else (None,)*4) \
+            + ((br, env.proj[br].vbl, env[b].r, env[b].br) if br else (None,)*4)
+        return res
+
+def update_env_dir( move: str, *args ):
+    """
+    Update the CTM environment tensors along the specified move direction.
+
+    move: str
+        'l', 'r', 't', 'b' for left, right, top, bottom move, respectively.
+        If combined moves are desired, e.g., 'h' for 'lr' or 'v' for 'tb', the function should be called
+        multiple times for each individual move.
+
+    args:
+        Arguments as returned by :func:`update_env_fetch_args`.
+    
+    Returns:
+        Updated environment tensors as returned by the corresponding 
+        :func:`update_env_{l,r,t,b}` function.
+    """
+    assert move in ['l', 'r', 't', 'b'], "move must be one of 'l', 'r', 't', 'b'"
+
+    if move in 'l':
+        return update_env_l(*args)
+    if move in 'r':
+        return update_env_r(*args)
+    if move in 't':
+        return update_env_t(*args)
+    if move in 'b':
+        return update_env_b(*args)
+
+def update_env_l( psi_l, env_l_l, proj_l_hlt, proj_l_hlb,
+                  site_tl : Site, proj_tl_hlb, env_l_tl, env_l_t,
+                  site_bl : Site, proj_bl_hlt, env_l_b, env_l_bl, ):
+
+    res_env_l= None
+    if psi_l is not None:
+        tmp = env_l_l @ proj_l_hlt
+        tmp = tensordot(psi_l, tmp, axes=((0, 1), (2, 1)))
+        tmp = tensordot(proj_l_hlb, tmp, axes=((0, 1), (2, 0)))
+        res_env_l = tmp / tmp.norm(p='inf')
+
+    res_env_tl= None
+    if site_tl is not None:
+        tmp = tensordot(proj_tl_hlb, env_l_tl @ env_l_t, axes=((0, 1), (0, 1)))
+        res_env_tl = tmp / tmp.norm(p='inf')
+
+    res_env_bl= None
+    if site_bl is not None:
+        tmp = tensordot(env_l_b, env_l_bl @ proj_bl_hlt, axes=((2, 1), (0, 1)))
+        res_env_bl = tmp / tmp.norm(p='inf')
+    
+    return res_env_l, res_env_tl, res_env_bl
+
+def update_env_r( psi_r, env_r_r, proj_r_hrb, proj_r_hrt,
+                  site_tr : Site, proj_tr_hrb, env_r_t, env_r_tr,
+                  site_br : Site, proj_br_hrt, env_r_br, env_r_b, ):
+
+    res_env_r= None
+    if psi_r is not None:
+        tmp = env_r_r @ proj_r_hrb
+        tmp = tensordot(psi_r, tmp, axes=((2, 3), (2, 1)))
+        tmp = tensordot(proj_r_hrt, tmp, axes=((0, 1), (2, 0)))
+        res_env_r = tmp / tmp.norm(p='inf')
+
+    res_env_tr= None
+    if site_tr is not None:
+        tmp = tensordot(env_r_t, env_r_tr @ proj_tr_hrb, axes=((2, 1), (0, 1)))
+        res_env_tr = tmp / tmp.norm(p='inf')
+
+    res_env_br= None
+    if site_br is not None:
+        tmp = tensordot(proj_br_hrt, env_r_br @ env_r_b, axes=((0, 1), (0, 1)))
+        res_env_br = tmp / tmp.norm(p='inf')
+    
+    return res_env_r, res_env_tr, res_env_br
+
+def update_env_t( psi_t, env_t_t, proj_t_vtl, proj_t_vtr,
+                  site_tl : Site, proj_tl_vtr, env_t_l, env_t_tl,
+                  site_tr : Site, proj_tr_vtl, env_t_tr, env_t_r, ):
+
+    res_env_t= None
+    if psi_t is not None:
+        tmp = tensordot(proj_t_vtl, env_t_t, axes=(0, 0))
+        tmp = tensordot(tmp, psi_t, axes=((2, 0), (0, 1)))
+        tmp = tensordot(tmp, proj_t_vtr, axes=((1, 3), (0, 1)))
+        res_env_t = tmp / tmp.norm(p='inf')
+
+    res_env_tl= None
+    if site_tl is not None:
+        tmp = tensordot(env_t_l, env_t_tl @ proj_tl_vtr, axes=((2, 1), (0, 1)))
+        res_env_tl = tmp / tmp.norm(p='inf')
+
+    res_env_tr= None
+    if site_tr is not None:
+        tmp = tensordot(proj_tr_vtl, env_t_tr @ env_t_r, axes=((0, 1), (0, 1)))
+        res_env_tr = tmp / tmp.norm(p='inf')
+    
+    return res_env_t, res_env_tl, res_env_tr
+
+def update_env_b( psi_b, env_b_b, proj_b_vbr, proj_b_vbl, 
+                    site_bl : Site, proj_bl_vbr, env_b_bl, env_b_l,
+                    site_br : Site, proj_br_vbl, env_b_r, env_b_br, ): 
+    
+    res_env_b= None
+    if psi_b is not None:   
+        tmp = tensordot(proj_b_vbr, env_b_b, axes=(0, 0))
+        tmp = tensordot(tmp, psi_b, axes=((2, 0), (2, 3)))
+        tmp = tensordot(tmp, proj_b_vbl, axes=((1, 3), (0, 1)))
+        res_env_b = tmp / tmp.norm(p='inf')
+    
+    res_env_bl= None
+    if site_bl is not None:
+        tmp = tensordot(proj_bl_vbr, env_b_bl @ env_b_l, axes=((0, 1), (0, 1)))
+        res_env_bl = tmp / tmp.norm(p='inf')
+
+    res_env_br= None
+    if site_br is not None:
+        tmp = tensordot(env_b_r, env_b_br @ proj_br_vbl, axes=((2, 1), (0, 1)))
+        res_env_br = tmp / tmp.norm(p='inf')
+    
+    return res_env_b, res_env_bl, res_env_br

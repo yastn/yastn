@@ -94,7 +94,7 @@ class Peps(Lattice):
         return self[self.sites()[0]].config
 
     def has_physical(self) -> bool:
-        """ Whether PEPS has phyical leg"""
+        """ Whether PEPS has physical leg"""
         site0 = self.sites()[0]
         return self[site0].ndim == 5
 

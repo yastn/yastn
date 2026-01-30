@@ -38,6 +38,9 @@ class CTMRG_out(NamedTuple):
 
 
 class EnvCTM():
+
+    _default_corner_signature = (1, -1)
+
     def __init__(self, psi, init='rand', leg=None, ket=None):
         r"""
         Environment used in Corner Transfer Matrix Renormalization Group algorithm.
@@ -254,9 +257,6 @@ class EnvCTM():
             d['data'][site] = d_local
         return d
 
-    def _default_corner_signature(self):
-        return (1, -1)
-
     def reset_(self, init='rand', leg=None, **kwargs):
         r"""
         Initialize CTMRG environment.
@@ -286,7 +286,7 @@ class EnvCTM():
                     setattr(self[site], dirn, T)
             return
 
-        cs = self._default_corner_signature()
+        cs = self._default_corner_signature
         leg_one_0 = Leg(self.config, s=cs[0], t=(self.config.sym.zero(),), D=(1,))
         leg_one_1 = Leg(self.config, s=cs[1], t=(self.config.sym.zero(),), D=(1,))
 

@@ -85,18 +85,16 @@ class Tensor:
         self.config = config if isinstance(config, _config) else _config(**{a: getattr(config, a) for a in _config._fields if hasattr(config, a)})
 
         if 'data' in kwargs:
+            assert (kwargs['data'] is None or kwargs['data'].ndim == 1), "Tensor data should be None or a 1D array."
             self._data = kwargs['data']  # 1d container for tensor data
         else:
             dev = kwargs.get('device', self.config.default_device)
             dty = kwargs.get('dtype', self.config.default_dtype)
             self._data = self.config.backend.zeros((0,), dtype=dty, device=dev)
         #
-        if self._data is not None and self._data.ndim != 1:  # e.g. some scipy procedure might add extra dim=1.
-            self._data = self._data.reshape(-1)
-        #
-        if 'struct' in kwargs:
+        try:
             self.struct = kwargs['struct']
-        else:
+        except KeyError:
             try:
                 s = tuple(s)
             except TypeError:
