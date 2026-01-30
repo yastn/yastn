@@ -85,7 +85,7 @@ class Tensor:
         self.config = config if isinstance(config, _config) else _config(**{a: getattr(config, a) for a in _config._fields if hasattr(config, a)})
 
         if 'data' in kwargs:
-            assert kwargs['data'].ndim == 1, "Tensor data should be a 1D array."
+            assert (kwargs['data'] is None or kwargs['data'].ndim == 1), "Tensor data should be None or a 1D array."
             self._data = kwargs['data']  # 1d container for tensor data
         else:
             dev = kwargs['device'] if 'device' in kwargs else self.config.default_device
