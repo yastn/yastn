@@ -155,7 +155,10 @@ def _compression_(psi, target, method,
         converged = []
 
         if not normalize:
-            psi.factor = overlap
+            am = abs(overlap)
+            psi.factor = am
+            if am > 0:
+                psi.A[0] = psi.A[0] * (overlap / am)
 
         if overlap_tol is not None:
             converged.append(abs(doverlap) < overlap_tol)

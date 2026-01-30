@@ -46,7 +46,7 @@ def test_exci_sma_UUD(config_kwargs):
     env_opts_svd = {
         "D_total": 20,
     }
-    for out in env_ctm.ctmrg_(opts_svd=env_opts_svd, max_sweeps=30, iterator=True, corner_tol=1e-12):
+    for out in env_ctm.ctmrg_(opts_svd=env_opts_svd, max_sweeps=30, iterator_step=1, corner_tol=1e-12):
         # print(out)
         continue
 
@@ -113,8 +113,26 @@ def test_exci_sma_UUD(config_kwargs):
 
         return bond_val_exci, grad_dbra
 
+    def compute_norm_exci_tl(env_ctm, exci_bra, exci_ket, xrange, yrange, compute_grad=False):
+        # exci_bra.requires_grad_(requires_grad=True)
+        # if exci_bra._data.grad is not None:
+        #     exci_bra._data.grad.zero_()
+        env_exci = fpeps.EnvExciSMA(env_ctm, xrange, yrange)
+        bond_val_exci = env_exci.measure_exci_norm_tl(exci_bra=exci_bra, exci_ket=exci_ket)
+        grad_dbra = None
+        if compute_grad:
+            grad_dbra = torch.autograd.grad(bond_val_exci, exci_bra.data, grad_outputs=torch.ones_like(bond_val_exci), retain_graph=True)[0]
+
+        return bond_val_exci, grad_dbra
+
+    # build the excited state
+    exci_psi = init_peps(config_kwargs)
+    for site in psi.sites():
+        exci_psi[site] = _convert_tensor(exci_basis[psi.site2index(site)].reshape(1,1,1,1,2), config)
+
     es_exci = {bond: np.zeros((lp, lp, lp, lp, 3), dtype=np.complex128) for bond in bonds}
     ns_exci = np.zeros((lp, lp, 3), dtype=np.complex128)
+    ns_exci_tl = np.zeros((lp, lp, 3), dtype=np.complex128)
     computed_norm = False
     for bond in bonds:
         for i_sl in range(3):
@@ -155,6 +173,11 @@ def test_exci_sma_UUD(config_kwargs):
                     N_val, dN_dbra = compute_exci(env_ctm, sites_op=[], exci_bra=exci_bra_c, exci_ket=exci_ket, site_bra=site_c, site_ket=site_ket)
                     # ns_exci[:, i_basis, lx_k, ly_k, i_sl] = exci_basis[state.site2index(site_bra)].T.conj() @ dN_dbra
                     ns_exci[lx_k-min_x, ly_k-min_y, i_sl] = N_val
+
+                    ### Compute norm using sweep from the top left corner
+                    if lx_k == min_x and lx_k == min_y:
+                        N_val_tl, _ = compute_norm_exci_tl(env_ctm, exci_bra, exci_psi, (min_x, max_x+1), (min_y, max_y+1))
+                        ns_exci_tl[:, :, i_sl] = np.array([v.numpy(force=True) for v in N_val_tl.values()]).reshape(lp, lp)
         computed_norm = True
 
 

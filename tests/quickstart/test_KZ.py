@@ -111,7 +111,8 @@ def test_quickstart_KZ(config_kwargs):
     # Calculating 2-site <X_i X_j> for all pairs i <= j
     Exx_peps = env_mps.measure_2site(ops.x(), ops.x(),
                                      opts_svd=opts_svd_env,
-                                     opts_var=opts_var_env)
+                                     opts_var=opts_var_env,
+                                     pairs="<=")
     #
     print("MPS simulations")
     #

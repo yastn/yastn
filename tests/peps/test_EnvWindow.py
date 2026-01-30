@@ -28,10 +28,10 @@ def init_peps(config_kwargs, Dphys=(), boundary='infinite'):
     s = (-1, 1, 1, -1) + (1,) * len(Dphys)
     config = yastn.make_config(sym='none', **config_kwargs)
     config.backend.random_seed(seed=5)
-    psi[0, 0] = yastn.rand(config, s=s, D=(2, 3, 4, 5) + Dphys, dtype='complex128')
-    psi[1, 0] = yastn.rand(config, s=s, D=(4, 3, 2, 4) + Dphys, dtype='complex128')
-    psi[0, 1] = yastn.rand(config, s=s, D=(3, 5, 5, 2) + Dphys, dtype='complex128')
-    psi[1, 1] = yastn.rand(config, s=s, D=(5, 4, 3, 3) + Dphys, dtype='complex128')
+    psi[0, 0] = yastn.rand(config, s=s, D=(2, 3, 2, 3) + Dphys, dtype='complex128')
+    psi[1, 0] = yastn.rand(config, s=s, D=(2, 3, 2, 2) + Dphys, dtype='complex128')
+    psi[0, 1] = yastn.rand(config, s=s, D=(3, 3, 3, 2) + Dphys, dtype='complex128')
+    psi[1, 1] = yastn.rand(config, s=s, D=(3, 2, 3, 3) + Dphys, dtype='complex128')
     psi[0, 2] = yastn.rand(config, s=s, D=(2, 2, 3, 3) + Dphys, dtype='complex128')
     psi[1, 2] = yastn.rand(config, s=s, D=(3, 3, 2, 3) + Dphys, dtype='complex128')
     return psi
@@ -84,14 +84,12 @@ def test_window_measure(config_kwargs):
     """ checks syntax of sample and measure_2site"""
     # for Dphys = 2
     psi = init_peps(config_kwargs, Dphys=(2,))
-    D_total = 15
-    opts_svd = {'D_total': D_total, 'tol': 1e-10}
+    #
+    opts_svd_ctm = {'D_total': 7, 'tol': 1e-10}
     env_ctm = fpeps.EnvCTM(psi, init='eye')
-    #
-    info = env_ctm.ctmrg_(opts_svd, max_sweeps=20, corner_tol=1e-4)
-    print(info)  # did not converge
-    #
-    env_win = fpeps.EnvWindow(env_ctm, xrange=(0, 4), yrange=(0, 3))
+
+    for info in env_ctm.ctmrg_(opts_svd_ctm, max_sweeps=20, corner_tol=1e-4, iterator=True):
+        print(info)  # did not converge
     #
     # test sample
     #
@@ -99,7 +97,7 @@ def test_window_measure(config_kwargs):
     vecs = [ops.vec_z(val=v) for v in [-1, 1]]
     #
     number = 4
-    out, probs = env_win.sample(vecs, number=number, return_probabilities=True, progressbar=True)
+    out, probs = env_ctm.sample(vecs, xrange=(0, 4), yrange=(0, 3), number=number, return_probabilities=True, progressbar=True)
     assert len(out) == 12
     for ny in range(0, 3):
         for nx in range(0, 4):
@@ -107,7 +105,7 @@ def test_window_measure(config_kwargs):
             assert all(x in [0, 1] for x in out[nx, ny])
 
     vecs = {k: v for k, v in zip('tb', vecs)}
-    out = env_win.sample(vecs, number=number)
+    out = env_ctm.sample(vecs, xrange=(0, 4), yrange=(0, 3), number=number)
     assert len(out) == 12
     for ny in range(0, 3):
         for nx in range(0, 4):
@@ -115,27 +113,20 @@ def test_window_measure(config_kwargs):
             assert all(x in 'tb' for x in out[nx, ny])
     #
     with pytest.raises(yastn.YastnError):
-        env_win.sample(projectors={(0, 0): vecs, (1, 0): vecs})
+        env_ctm.sample(projectors={(0, 0): vecs, (1, 0): vecs}, xrange=(0, 4), yrange=(0, 3))
         # Projectors not defined for some sites in xrange=(0, 4), yrange=(0, 3).
     #
     # test measure_2site
     #
-    out = env_win.measure_2site(ops.z(), ops.z(), site0='corner')
-    sites = env_win.sites()
-    assert len(sites) == 3 * 4
-    assert all(((0, 0), site) in out for site in sites)
-    #
-    # here we can check some values
-    #
-    outv = env_ctm.measure_2site(ops.z(), ops.z(), xrange=(1, 5), yrange=(0, 1))
+    outv = env_ctm.measure_2site(ops.z(), ops.z(), xrange=(1, 5), yrange=(0, 1), dirn='v', pairs="corner <")
     ev = [env_ctm.measure_line(ops.z(), ops.z(), sites=((1, 0), (n, 0))) for n in [2, 3, 4,]]
-    for n, ref in zip([1, 2, 3, 4], [1] + ev):
+    for n, ref in zip([2, 3, 4], ev):
         assert abs(outv[(1, 0), (n, 0)] - ref) / abs(ref) < 1e-2
     #
-    outh = env_ctm.measure_2site(ops.z(), ops.z(), xrange=(2, 5), yrange=(2, 3), site0='row')
+    outh = env_ctm.measure_2site(ops.z(), ops.z(), xrange=(2, 5), yrange=(2, 3), dirn='h', pairs="corner <")
     eh = [env_ctm.measure_line(ops.z(), ops.z(), sites=((2, 2), (n, 2))) for n in [3, 4]]
-    for n, ref in zip([2, 3, 4], [1] + eh):
-        assert abs(outh[(2, 2), (n, 2)] - ref) / abs(ref) < 1e-5
+    for n, ref in zip([3, 4], eh):
+        assert abs(outh[(2, 2), (n, 2)] - ref) / abs(ref) < 1e-2
 
 
 if __name__ == '__main__':

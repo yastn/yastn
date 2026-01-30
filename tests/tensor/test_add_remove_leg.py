@@ -162,7 +162,15 @@ def test_operators_chain(config_kwargs):
     T2 = yastn.remove_leg(T2, axis=0)
     assert yastn.norm(T1 - T2) < tol
     assert T1.n == (2,)
-
+    #
+    # remove fused leg of dim=1
+    T3 = T1.fuse_legs(axes=((0, 1, 2, (3, 4, 5), 6, 7)), mode='hard')
+    T4 = T1.fuse_legs(axes=((0, 1, 2, (3, 4, 5), 6, 7)), mode='meta')
+    T3 = T3.remove_leg(axis=3)
+    T4 = T4.remove_leg(axis=3)
+    assert yastn.norm(T3 - T4) < tol
+    assert T3.ndim == 5
+    #
     # special case when there are no blocks in the tensor
     a = yastn.Tensor(config=config, s=(1, -1, 1, -1), n=1)
     a = a.remove_leg(axis=1)
@@ -211,18 +219,9 @@ def test_remove_leg_exceptions(config_kwargs):
         scalar = yastn.tensordot(a, a, axes=((0, 1), (0, 1)), conj=(0, 1))
         _ = scalar.remove_leg(axis=0)  # Cannot remove axis of a scalar tensor.
     with pytest.raises(yastn.YastnError):
-        a = yastn.ones(config=config, legs=[leg, leg.conj(), leg])
-        a = a.fuse_legs(axes=((0, 1), 2), mode='meta')
-        _ = a.remove_leg(axis=0)  # Axis to be removed cannot be fused.
-    with pytest.raises(yastn.YastnError):
-        a = yastn.ones(config=config, legs=[leg, leg.conj(), leg, leg])
-        a = a.fuse_legs(axes=((0, 1), 2, 3), mode='meta')
-        a = a.fuse_legs(axes=(0, (1, 2)), mode='hard')
-        _ = a.remove_leg(axis=0)  # Axis to be removed cannot be fused.
-    with pytest.raises(yastn.YastnError):
         a = yastn.ones(config=config, legs=[leg, leg.conj(), leg, leg])
         _ = a.remove_leg(axis=1)  # Axis to be removed must have single charge of dimension one.
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0"])
+    pytest.main([__file__, "-vs", "--durations=0",  "--backend", "torch_cpp", "--device", "cuda", "--tensordot_policy", "no_fusion"])

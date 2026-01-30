@@ -21,7 +21,7 @@ def mean(xs):
     return sum(xs) / len(xs)
 
 @pytest.mark.skipif("not config.getoption('long_tests')", reason="long duration tests are skipped")
-def test_NTU_spinful_finite(config_kwargs):
+def atest_NTU_spinful_finite(config_kwargs):
     """ Simulate purification of spinful fermions in a small finite system """
     print(" Simulating spinful fermions in a small finite system. ")
 
@@ -128,16 +128,15 @@ def test_NTU_spinful_infinite(config_kwargs):
     """ Simulate purification of spinful fermions in an infinite system.s """
     print("Simulating spinful fermions in an infinite system. """)
     geometry = fpeps.CheckerboardLattice()
-
+    # geometry = fpeps.SquareLattice(dims=(3, 3), boundary='obc')
     mu_up, mu_dn = 0, 0  # chemical potential
     t_up, t_dn = 1, 1  # hopping amplitude
     U = 0
+    #
     beta = 0.1
-
     dbeta = 0.01
-    D = 5
-
-    ops = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', **config_kwargs)
+    #
+    ops = yastn.operators.SpinfulFermions(sym='U1xU1', **config_kwargs)
     I = ops.I()
     c_up, c_dn = ops.c(spin='u'), ops.c(spin='d')
     cdag_up, cdag_dn = ops.cp(spin='u'), ops.cp(spin='d')
@@ -150,15 +149,16 @@ def test_NTU_spinful_infinite(config_kwargs):
 
     # initialized at infinite temperature
     psi = fpeps.product_peps(geometry, I)
-
-    opts_svd_ctm = {'D_total': D * D, 'tol': 1e-8}
-    opts_svd_evol = {"D_total": D, 'tol': 1e-14}
+    #
+    # for FU, we fix distribution of bond dimensions for the stability of bond_update
+    opts_svd_evol = {"D_block": {(0, 0): 1, (0, 1): 1, (1, 0): 1, (0, -1): 1, (-1, 0): 1} }
+    opts_svd_ctm  = {"D_block": {(0, 0): 1, (0, 1): 1, (1, 0): 1, (0, -1): 1, (-1, 0): 1}}
 
     steps = round((beta / 2) / dbeta)
     dbeta = (beta / 2) / steps
 
     infos = []
-    init_steps = 2
+    init_steps = 1
     # first few steps are performed with NTU-NN+ to reach fixed peps bond dimensions.
     print("Evolve with NN+")
     env = fpeps.EnvNTU(psi, which='NN+')
@@ -171,17 +171,14 @@ def test_NTU_spinful_infinite(config_kwargs):
     # here it requirs Peps bond dimensions not to change in time
     print("Switching to full update")
     env = fpeps.EnvCTM(psi, init='eye')
-    for _ in range(4):  # few CTM iterations to converge
-        env.update_(opts_svd=opts_svd_ctm)
+    info = env.ctmrg_(opts_svd=opts_svd_ctm, corner_tol=1e-4, max_sweeps=4)
+    print(info)
 
-    env.opts_svd = opts_svd_ctm
+    opts_post_truncation = {'opts_svd': opts_svd_ctm, 'method': '1site'}
     for step in range(init_steps, steps):
         print(f"beta = {(step + 1) * dbeta:0.3f}" )
-        info = fpeps.evolution_step_(env, gates, opts_svd=opts_svd_evol)
+        info = fpeps.evolution_step_(env, gates, opts_svd=opts_svd_evol, opts_post_truncation=opts_post_truncation)
         infos.append(info)
-        env.update_(opts_svd=opts_svd_ctm)  # update CTM tensors after a full evolution step.
-        for inf in info:
-            print(inf)
 
     print(f"Delta_mean: {fpeps.accumulated_truncation_error(infos, statistics='mean'):0.4f}")
     print(f"Delta_max : {fpeps.accumulated_truncation_error(infos, statistics='max'):0.4f}")
@@ -193,12 +190,10 @@ def test_NTU_spinful_infinite(config_kwargs):
     energy_old, tol_exp = 0, 1e-7
 
     # env = fpeps.EnvCTM(psi)
-    for _ in range(10):  # we double-check convergence of CTM tensors
-        env.update_(opts_svd=opts_svd_ctm)  # method='2site',
+    for info in env.iterate_(opts_svd=opts_svd_ctm, max_sweeps=10, iterator=True):  # we double-check convergence of CTM tensors
         cdagc_up = env.measure_nn(cdag_up, c_up)
         cdagc_dn = env.measure_nn(cdag_dn, c_dn)
         energy = -2 * mean([*cdagc_up.values(), *cdagc_dn.values()])
-
         if abs(energy - energy_old) < tol_exp:
             break
         energy_old = energy

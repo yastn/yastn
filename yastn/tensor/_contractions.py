@@ -186,48 +186,64 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
     r"""
     Perform tensordot directly: permute blocks and execute dot accumulaing results into result blocks.
     """
+    if a.config.profile: a.config.backend.cuda.nvtx.range_push(f"_tensordot_nf")
     ind_a, ind_b = _common_inds(a.struct.t, b.struct.t, nin_a, nin_b, a.ndim_n, b.ndim_n, a.config.sym.NSYM)
-    meta_dot, reshape_a, reshape_b, struct_c, slices_c = _meta_tensordot_nf(a.struct, a.slices, b.struct, b.slices,
+    if a.config.profile: a.config.backend.cuda.nvtx.range_push(f"_meta_tensordot_nf")
+    meta_dot, reshape_a, reshape_b, struct_c, slices_c, legs_a, legs_b = _meta_tensordot_nf(a.struct, a.slices, b.struct, b.slices,
                                                                             ind_a, ind_b, nout_a, nin_a, nin_b, nout_b)
+    if a.config.profile: a.config.backend.cuda.nvtx.range_pop()
     order_a = nout_a + nin_a
     order_b = nin_b + nout_b
+    nsym = a.config.sym.NSYM
 
-    if a.config.backend.BACKEND_ID == 'torch_cpp' and len(struct_c.s)>0:
-        # NOTE nout_a, nin_a, nout_b, nin_b use ndim_n or ndim ? 
+    if a.config.backend.BACKEND_ID == 'torch_cpp' and struct_c.t and 0 < len(struct_c.s) < 9 and 0 < len(a.struct.s) < 9 and 0 < len(b.struct.s) < 9:
+        # NOTE nout_a, nin_a, nout_b, nin_b use ndim_n or ndim ?
         #      *) when default_fusion='meta', they are wrt. native legs. The charges of non-zero blocks are also wrt. to native legs.
-        
-        a_blocks_t, b_blocks_t, c_blocks_t= a.struct.t, b.struct.t, struct_c.t
+
+        a_blocks_t, b_blocks_t, c_blocks_t = a.struct.t, b.struct.t, struct_c.t
         a_slices, b_slices = a.slices, b.slices
-        if a.config.sym.NSYM == 0 and b.config.sym.NSYM == 0:
+        if nsym == 0:
             # if no symmetry, create single block for each tensor for syntax compatibility
-            a_blocks_t, b_blocks_t, c_blocks_t= ((0,)*a.ndim_n,), ((0,)*b.ndim_n,), ((0,)*(len(nout_a)+len(nout_b)),)
+            a_blocks_t, b_blocks_t, c_blocks_t= ((0,) * a.ndim_n,), ((0,) * b.ndim_n,), ((0,) * (len(nout_a) + len(nout_b)),)
         else: # take only subset of blocks that are involved in the contraction
             if ind_a:  # ind_a and/or ind_b is None if all blocks of a are involved
-                a_blocks_t= tuple(a.struct.t[i] for i in ind_a)
-                a_slices= tuple(a.slices[i] for i in ind_a)
+                a_blocks_t = tuple(a.struct.t[i] for i in ind_a)
+                a_slices = tuple(a.slices[i] for i in ind_a)
             if ind_b:
-                b_blocks_t= tuple(b.struct.t[i] for i in ind_b)
-                b_slices= tuple(b.slices[i] for i in ind_b)
+                b_blocks_t = tuple(b.struct.t[i] for i in ind_b)
+                b_slices = tuple(b.slices[i] for i in ind_b)
 
+        if a.config.profile: a.config.backend.cuda.nvtx.range_push(f"kernel_tensordot_bs")
+        #a_legs, b_legs= a.get_legs( native=True ), b.get_legs( native=True )
+        a_t_per_mode = [l[0] for l in legs_a] if nsym > 0 else [((0,),)] * a.ndim_n
+        a_D_per_mode = [l[1] for l in legs_a]
+
+        b_t_per_mode = [l[0] for l in legs_b] if nsym > 0 else [((0,),)] * b.ndim_n
+        b_D_per_mode = [l[1] for l in legs_b]
+
+        # legs_a, legs_b
         data = a.config.backend.kernel_tensordot_bs(
-            a.data, b.data, 
+            a.data, b.data,
             a.config.sym.NSYM,
-            a_blocks_t, 
+            a_blocks_t,
             a_slices,
-            [l.t for l in a.get_legs( native=True )] if a.config.sym.NSYM > 0 else [((0,),)]*a.ndim_n,
-            [l.D for l in a.get_legs( native=True )],
+            a_t_per_mode,
+            a_D_per_mode,
             nout_a, nin_a,
             b_blocks_t,
             b_slices,
-            [l.t for l in b.get_legs( native=True )] if b.config.sym.NSYM > 0 else [((0,),)]*b.ndim_n,
-            [l.D for l in b.get_legs( native=True )], 
+            b_t_per_mode,
+            b_D_per_mode,
             nout_b, nin_b,
             struct_c.size, c_blocks_t,
-            slices_c
+            slices_c,
+            a.config.profile
         )
+        if a.config.profile: a.config.backend.cuda.nvtx.range_pop()
     else:
         data = a.config.backend.transpose_dot_sum(a.data, b.data, meta_dot,
                                               reshape_a, reshape_b, order_a, order_b, struct_c.size)
+    if a.config.profile: a.config.backend.cuda.nvtx.range_pop()
     return data, struct_c, slices_c
 
 
@@ -235,9 +251,9 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
 def _common_inds(t_a, t_b, nin_a : tuple[int], nin_b : tuple[int], ndimn_a, ndimn_b, nsym):
     r"""
     Return row indices of nparray ``a`` that are in ``b``, and vice versa. Outputs tuples.
-    In other words: Return indices of blocks from ``t_a`` and ``t_b``, which pariticpate in 
+    In other words: Return indices of blocks from ``t_a`` and ``t_b``, which pariticpate in
         a contraction specified by ``nin_a`` and ``nin_b``.
-    
+
     Parameters
     ----------
         t_a : Sequence[Sequence[int]]
@@ -256,7 +272,7 @@ def _common_inds(t_a, t_b, nin_a : tuple[int], nin_b : tuple[int], ndimn_a, ndim
     ia = tuple(ii for ii, el in enumerate(la) if el in sb) # matching <ingoing-block-sectors>_of-a with <ingoing-block-sectors>_of-b
     ib = tuple(ii for ii, el in enumerate(lb) if el in sa)
     if len(ia) == len(la): # all <ingoing-block-sectors>_of-a appear among sectors of b
-        ia = None 
+        ia = None
     if len(ib) == len(lb): # all <ingoing-block-sectors>_of-b appear among sectors of a
         ib = None
     return ia, ib
@@ -349,8 +365,16 @@ def _meta_tensordot_nf(struct_a, slices_a, struct_b, slices_b, ind_a, ind_b, nou
     Daop = np.prod(Dao, axis=1, dtype=np.int64) # total size of outgoing sectors (per block)
     Dacp = np.prod(Dac, axis=1, dtype=np.int64) # total size of contracted sectors (per block)
 
+    legs_a = []
+    for i in range(ndima):
+        tai = np.hstack([ata[:, i, :], aDa[:, (i,)]])
+        unique_tai = sorted(np.unique(tai, axis=0).tolist())
+        ti = tuple(tuple(x[:-1]) for x in unique_tai)
+        Di = tuple(x[-1] for x in unique_tai)
+        legs_a.append((ti, Di))
+
     tDac = np.hstack([tac, Dac])
-    unique_tDac, inv_tDac, count_tDac = np.unique(tDac, return_inverse=True, return_counts=True, axis=0) # if more blocks of a contribute to given contracted sector (in b) 
+    unique_tDac, inv_tDac, count_tDac = np.unique(tDac, return_inverse=True, return_counts=True, axis=0) # if more blocks of a contribute to given contracted sector (in b)
     arg_tDac = np.argsort(inv_tDac)
 
     tb = struct_b.t if ind_b is None else [struct_b.t[ii] for ii in ind_b]
@@ -366,6 +390,14 @@ def _meta_tensordot_nf(struct_a, slices_a, struct_b, slices_b, ind_a, ind_b, nou
     Dbc = aDb[:, nin_b]
     Dbop = np.prod(Dbo, axis=1, dtype=np.int64)
     Dbcp = np.prod(Dbc, axis=1, dtype=np.int64)
+
+    legs_b = []
+    for i in range(ndimb):
+        tbi = np.hstack([atb[:, i, :], aDb[:, (i,)]])
+        unique_tbi = sorted(np.unique(tbi, axis=0).tolist())
+        ti = tuple(tuple(x[:-1]) for x in unique_tbi)
+        Di = tuple(x[-1] for x in unique_tbi)
+        legs_b.append((ti, Di))
 
     tDbc = np.hstack([tbc, Dbc])
     unique_tDbc, inv_tDbc, count_tDbc = np.unique(tDbc, return_inverse=True, return_counts=True, axis=0)
@@ -415,7 +447,7 @@ def _meta_tensordot_nf(struct_a, slices_a, struct_b, slices_b, ind_a, ind_b, nou
 
     s_c = tuple(struct_a.s[i] for i in nout_a) + tuple(struct_b.s[i] for i in nout_b)
     struct_c = _struct(s=s_c, t=c_t, D=c_D, size=acc_Dp[-1])
-    return meta_dot, reshape_a, reshape_b, struct_c, slices_c
+    return meta_dot, reshape_a, reshape_b, struct_c, slices_c, legs_a, legs_b
 
 
 def broadcast(a, *args, axes=0) -> 'Tensor' | tuple['Tensor']:

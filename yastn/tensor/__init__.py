@@ -85,6 +85,7 @@ class Tensor:
         self.config = config if isinstance(config, _config) else _config(**{a: getattr(config, a) for a in _config._fields if hasattr(config, a)})
 
         if 'data' in kwargs:
+            assert (kwargs['data'] is None or kwargs['data'].ndim == 1), "Tensor data should be None or a 1D array."
             self._data = kwargs['data']  # 1d container for tensor data
         else:
             dev = kwargs['device'] if 'device' in kwargs else self.config.default_device
@@ -303,8 +304,10 @@ class Tensor:
 
     @property
     def yastn_dtype(self) -> str:
-        """ Return :code:`'complex128'` if tensor data are complex else :code:`'float64'`. """
-        return 'complex128' if self.config.backend.is_complex(self._data) else 'float64'
+        """
+        Return string representing data dtype, e.g., ``'complex128'``, ``'float64'``, ``'complex64'``, ``'float32'``. ``'bool'``.
+        """
+        return self.config.backend.get_yastn_dtype(self._data)
 
     @property
     def data(self) -> 'numpy.array' | 'torch.tensor':

@@ -88,7 +88,11 @@ def test_initialize_dense(config_kwargs):
     c = yastn.rand(config=config_dense, distribution='normal', s=1, D=D, dtype='complex128').to_numpy()
     assert sum(c.imag < np.sqrt(0.5)) > 0.79 * D and sum(c.imag > np.sqrt(0.5)) > 0.11 * D
     assert sum(c.real < np.sqrt(0.5)) > 0.79 * D and sum(c.real > np.sqrt(0.5)) > 0.11 * D
-
+    #
+    legs = [yastn.Leg(config_dense, s=-1, D=(1,)),
+            yastn.Leg(config_dense, s=1, D=())]
+    a1 = yastn.ones(config=config_dense, legs=legs)
+    assert a1.shape == (0, 0)
 
 
 def test_initialize_U1(config_kwargs):
@@ -115,7 +119,7 @@ def test_initialize_U1(config_kwargs):
     assert npa.shape == a1.get_shape() == (6, 3, 6, 1)
     assert a1.size == np.sum(npa != 0.)
     assert a1.is_consistent()
-
+    #
     # 0-dim tensor
     a = yastn.ones(config=config_U1)  # s=()  # t=(), D=()
     npa = a.to_numpy()
@@ -178,14 +182,37 @@ def test_initialize_U1(config_kwargs):
     assert a3.size == np.sum(npa != 0.)
     assert np.linalg.norm(np.diag(np.diag(npa)) - npa.conj()) < tol  # == 0.0
     assert a3.is_consistent()
+    #
+    # empty leg
+    legs = [yastn.Leg(config_U1, s=-1, t=(-2, 0, 2), D=(1, 2, 3)),
+            yastn.Leg(config_U1, s=1, t=(), D=())]
+    a1 = yastn.ones(config=config_U1, legs=legs)
+    assert a1.shape == (0, 0)
 
     a4 = yastn.rand_like(a3)
     assert a4.struct == a3.struct
 
 
+def test_initialize_dtype(config_kwargs):
+    """ Initialization with different dtypes """
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    legs = [yastn.Leg(config_U1, s=-1, t=(-2, 0, 2), D=(1, 2, 3)),
+            yastn.Leg(config_U1, s=1, t=(-2, 0, 2), D=(3, 2, 1)),
+            yastn.Leg(config_U1, s=1, t=(-2, 0, 2), D=(1, 2, 3))]
+
+    for dtype in ['float64', 'float32', 'complex128', 'complex64', 'bool']:
+        a = yastn.ones(config=config_U1, legs=legs, dtype=dtype)
+        assert a.yastn_dtype == dtype
+        b = yastn.zeros(config=config_U1, legs=legs, dtype=dtype)
+        assert b.yastn_dtype == dtype
+        c = yastn.rand(config=config_U1, legs=legs, dtype=dtype, distribution=(-2, 2))
+        assert c.yastn_dtype == dtype
+        d = yastn.rand(config=config_U1, legs=legs, dtype=dtype, distribution='normal')
+        assert d.yastn_dtype == dtype
+
 
 def test_initialize_Z2xU1(config_kwargs):
-    """ initialization of tensor with more complicated symmetry indexed by 2 numbers"""
+    """ Initialization of tensor with more complicated symmetry indexed by 2 numbers"""
     config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
     #
     # 3-dim tensor

@@ -47,8 +47,6 @@ def run_qr_combine(a):
     check_diag_R_nonnegative(R2.fuse_legs(axes=((0, 1), 2), mode='hard'))
 
 
-
-
 def test_qr_basic(config_kwargs):
     """ test qr decomposition for various symmetries """
     # dense

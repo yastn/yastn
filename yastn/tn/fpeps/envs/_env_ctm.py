@@ -15,17 +15,17 @@
 from __future__ import annotations
 import logging
 import sys
-from typing import NamedTuple, Union, Callable, Sequence
+from typing import NamedTuple, Callable, Sequence
 from warnings import warn
 
-from ._env_auxlliary import *
+from ._env_contractions import identity_boundary, corner2x2, append_vec_tl, append_vec_br
 from ._env_dataclasses import EnvCTM_local, EnvCTM_projectors
 from .._evolution import BondMetric
 from .._geometry import Site, Lattice
 from .._peps import PEPS_CLASSES, Peps2Layers
 from ... import mps
 from ....initialize import rand, ones, eye
-from ....tensor import Tensor, YastnError, Leg, tensordot, qr
+from ....tensor import Tensor, YastnError, Leg, tensordot, qr, ncon
 from ...._split_combine_dict import split_data_and_meta, combine_data_and_meta
 
 logger = logging.getLogger(__name__)
@@ -38,6 +38,9 @@ class CTMRG_out(NamedTuple):
 
 
 class EnvCTM():
+
+    _default_corner_signature = (1, -1)
+
     def __init__(self, psi, init='rand', leg=None, ket=None):
         r"""
         Environment used in Corner Transfer Matrix Renormalization Group algorithm.
@@ -87,7 +90,7 @@ class EnvCTM():
         if init is not None:
             self.reset_(init=init, leg=leg)
 
-        self.profiling_mode= None
+        self.profiling_mode = None
 
     def __repr__(self) -> str:
         return f"EnvCTM(envs={super().__repr__()},\nproj={self.proj})"
@@ -108,7 +111,7 @@ class EnvCTM():
         """
         m_D = 0
         for site in self.sites():
-            for dirn in ['tl', 'tr', 'bl', 'br']:
+            for dirn in self[site].fields(among=['tl', 'tr', 'bl', 'br']):
                 if getattr(self[site], dirn) is not None:
                     m_D = max(max(getattr(self[site], dirn).get_shape()), m_D)
         return m_D
@@ -133,7 +136,6 @@ class EnvCTM():
         of the computational graph. Data of cloned environment tensors is indepedent
         from the originals.
         """
-        # env = EnvCTM(self.psi, init=None)
         cls = type(self)
         env = cls(self.psi, init=None)
         env.env = self.env.copy()
@@ -228,7 +230,9 @@ class EnvCTM():
             return env
 
     def update_from_dict_(self, d):
-        self.psi = PEPS_CLASSES[d['psi']['type']].from_dict(d['psi'])
+        psi = PEPS_CLASSES[d['psi']['type']].from_dict(d['psi'])
+        tmp = type(self)(psi, init=None)
+        self.psi = tmp.psi
         self.env = Lattice.from_dict(d['env'])
         self.proj = Lattice.from_dict(d['proj'])
 
@@ -244,12 +248,12 @@ class EnvCTM():
         if isinstance(psi, Peps2Layers):
             psi = psi.ket
 
-        d = {'class': 'EnvCTM',
+        d = {'class': type(self).__name__,
              'psi': psi.save_to_dict(),
              'data': {}}
         for site in self.sites():
             d_local = {dirn: getattr(self[site], dirn).save_to_dict()
-                       for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']}
+                       for dirn in self[site].fields()}
             d['data'][site] = d_local
         return d
 
@@ -268,68 +272,52 @@ class EnvCTM():
         leg: None | yastn.Leg
             If not provided, random initialization has CTMRG bond dimension set to 1.
             Otherwise, the provided Leg is used to initialize CTMRG virtual legs.
+            Leg signature is fixed to the default values.
         """
-        config = self.psi.config
-        leg0 = Leg(config, s=1, t=(config.sym.zero(),), D=(1,))
+        normalize = kwargs.get('normalize', 'inf')
 
         if init == 'dl':
-            self.init_env_from_onsite_(**kwargs)
-        else:
-            if leg is None:
-                leg = leg0
-
+            self.reset_(init='eye')
+            self.expand_outward_()
             for site in self.sites():
-                legs = self.psi[site].get_legs()
+                for dirn in self[site].fields():
+                    T = getattr(self[site], dirn)
+                    T = T / T.norm(p=normalize) if isinstance(normalize, str) else normalize(T)
+                    setattr(self[site], dirn, T)
+            return
 
-                for dirn in ('tl', 'tr', 'bl', 'br'):
-                    if self.nn_site(site, d=dirn) is None or init == 'eye':
-                        setattr(self[site], dirn, eye(config, legs=[leg0, leg0.conj()], isdiag=False))
-                    else:
-                        setattr(self[site], dirn, rand(config, legs=[leg, leg.conj()]))
+        cs = self._default_corner_signature
+        leg_one_0 = Leg(self.config, s=cs[0], t=(self.config.sym.zero(),), D=(1,))
+        leg_one_1 = Leg(self.config, s=cs[1], t=(self.config.sym.zero(),), D=(1,))
 
-                for ind, dirn in enumerate('tlbr'):
-                    if self.nn_site(site, d=dirn) is None or init == 'eye':
-                        tmp1 = identity_boundary(config, legs[ind].conj())
-                        tmp0 = eye(config, legs=[leg0, leg0.conj()], isdiag=False)
-                        tmp = tensordot(tmp0, tmp1, axes=((), ())).transpose(axes=(0, 2, 1))
-                        setattr(self[site], dirn, tmp)
-                    else:
-                        setattr(self[site], dirn, rand(config, legs=[leg, legs[ind].conj(), leg.conj()]))
+        leg_0 = leg_one_0 if leg is None else (leg if leg.s == cs[0] else leg.conj())
+        leg_1 = leg_one_1 if leg is None else (leg if leg.s == cs[1] else leg.conj())
 
-    def init_env_from_onsite_(self, normalize: str | Callable = 'inf'):
-        r"""
-        Initialize CTMRG environment by tracing on-site double-layer tensors A.
+        li = {'t': 0, 'l': 1, 'b': 2, 'r': 3}
 
-        For double-layer PEPS, the top-left corner is initialized as
-
-            C_(bb',rr')= \sum_{ll',tt',s} A_tlbrs A*_t'l'b'r's
-
-        with other corners initialized analogously. The half-row/-column tensors T are
-        also initialized by tracing. For top half-column tensors
-
-            T_(ll',bb',rr') = \sum_{tt',s} A_tlbrs A*_t'l'b'r's
-
-        and analogously for the remaining T tensors.
-
-        Args:
-            normalize: Normalization of initial environment tensors or custom normalization function
-                with signature f(Tensor)->Tensor.
-                For 'inf' (default) normalizes magnitude of largest element to 1, i.e. L-infinity norm.
-        """
-        assert isinstance(self.psi, Peps2Layers), "Initialization by traced double-layer on-site tensors requires double-layer PEPS"
         for site in self.sites():
-            for dirn, edge_f in (('t', edge_t), ('l', edge_l), ('b', edge_b), ('r', edge_r),
-                                 ('tl', cor_tl), ('tr', cor_tr), ('bl', cor_bl), ('br', cor_br)):
-                shifted_site = self.nn_site(site, dirn)
+            legs = self.psi[site].get_legs()
 
-                if shifted_site is not None:
-                    A_bra = self.psi.bra[shifted_site]
-                    A_ket = self.psi.ket[shifted_site]
-                else:
-                    A_bra = A_ket = trivial_peps_tensor(self.config)
-                T = edge_f(A_bra=A_bra, A_ket=A_ket)
+            for dirn in self[site].fields(among=['tl', 'tr', 'bl', 'br']):
+                shifted_site = self.nn_site(site, d=dirn)
+                if init == 'eye' or shifted_site is None:
+                    T = eye(self.config, legs=[leg_one_0, leg_one_1], isdiag=False)
+                elif init == 'rand':
+                    T = rand(self.config, legs=[leg_0, leg_1])
                 T = T / T.norm(p=normalize) if isinstance(normalize, str) else normalize(T)
                 setattr(self[site], dirn, T)
+
+            for dirn in self[site].fields(among=['t', 'l', 'b', 'r']):
+                shifted_site = self.nn_site(site, d=dirn)
+                if init == 'eye' or shifted_site is None:
+                    tmp1 = identity_boundary(self.config, legs[li[dirn]].conj())
+                    tmp0 = eye(self.config, legs=[leg_one_1.conj(), leg_one_0.conj()], isdiag=False)
+                    T = tensordot(tmp0, tmp1, axes=((), ())).transpose(axes=(0, 2, 1))
+                elif init == 'rand':
+                    T = rand(self.config, legs=[leg_1.conj(), legs[li[dirn]].conj(), leg_0.conj()])
+                T = T / T.norm(p=normalize) if isinstance(normalize, str) else normalize(T)
+                setattr(self[site], dirn, T)
+
 
     def expand_outward_(self):
         """
@@ -337,156 +325,143 @@ class EnvCTM():
 
         It can be used to build initial "dl" (or "nn") environment from initial "eye" environment.
         """
-        env_tmp = EnvCTM(self.psi, init=None)  # empty environments
+        cls = type(self)
+        env_tmp = cls(self.psi, init=None)  # empty environments
         #
         for site in self.sites():
             tl = self.nn_site(site, d='tl')
-            if tl is not None:
+            if 'tl' in self[site].fields() and tl is not None:
                 tmp = self[tl].l @ self[tl].tl @ self[tl].t
                 tmp = tensordot(tmp, self.psi[tl], axes=((2, 1), (0, 1)))
                 tmp = tmp.fuse_legs(axes=((0, 2), (1, 3)))
                 env_tmp[site].tl = tmp / tmp.norm(p='inf')
-            else:
-                env_tmp[site].tl = self[site].tl
             #
             bl = self.nn_site(site, d='bl')
-            if bl is not None:
+            if 'bl' in self[site].fields() and bl is not None:
                 tmp = self[bl].b @ self[bl].bl @ self[bl].l
                 tmp = tensordot(tmp, self.psi[bl], axes=((2, 1), (1, 2)))
                 tmp = tmp.fuse_legs(axes=((0, 3), (1, 2)))
                 env_tmp[site].bl = tmp / tmp.norm(p='inf')
-            else:
-                env_tmp[site].bl = self[site].bl
             #
             tr = self.nn_site(site, d='tr')
-            if tr is not None:
+            if 'tr' in self[site].fields() and tr is not None:
                 tmp = self[tr].t @ self[tr].tr @ self[tr].r
                 tmp = tensordot(tmp, self.psi[tr], axes=((1, 2), (0, 3)))
                 tmp = tmp.fuse_legs(axes=((0, 2), (1, 3)))
                 env_tmp[site].tr = tmp / tmp.norm(p='inf')
-            else:
-                env_tmp[site].tr = self[site].tr
             #
             br = self.nn_site(site, d='br')
-            if br is not None:
+            if 'br' in self[site].fields() and br is not None:
                 tmp = self[br].r @ self[br].br @ self[br].b
                 tmp = tensordot(tmp, self.psi[br], axes=((2, 1), (2, 3)))
                 tmp = tmp.fuse_legs(axes=((0, 2), (1, 3)))
                 env_tmp[site].br = tmp / tmp.norm(p='inf')
-            else:
-                env_tmp[site].br = self[site].br
-            #
-            # trivial_projectors_(proj, dir, env)
-            #
+
             l = self.nn_site(site, d='l')
-            if l is not None:
+            if 'l' in self[site].fields() and l is not None:
                 l0, _, l2 = self[l].l.get_legs()
                 l_t, _, l_b, _ = self.psi[l].get_legs()
-                c_tl = env_tmp[site].tl.get_legs(axes=0)
-                c_bl = env_tmp[site].bl.get_legs(axes=1)
 
-                if tl:
-                    proj_hlt = eye(self.config, legs=[c_tl, c_tl.conj()], isdiag=False)  # proj[l].hlt
-                    proj_hlt = proj_hlt.unfuse_legs(axes=0)
-                else:
-                    proj_hlt = eye(self.config, legs=[l_t.conj(), c_tl.conj()], isdiag=False)  # proj[l].hlt
-                    proj_hlt = proj_hlt.add_leg(axis=0, leg=l2.conj())
-                if bl:
-                    proj_hlb = eye(self.config, legs=[c_bl, c_bl.conj()], isdiag=False)  # proj[l].hlb
-                    proj_hlb = proj_hlb.unfuse_legs(axes=0)
-                else:
-                    proj_hlb = eye(self.config, legs=[l_b.conj(), c_bl.conj()], isdiag=False)  # proj[l].hlb
-                    proj_hlb = proj_hlb.add_leg(axis=0, leg=l0.conj())
+                tmp0 = eye(self.config, legs=[l2.conj(), l2], isdiag=False)
+                tmp1 = eye(self.config, legs=[l_t.conj(), l_t], isdiag=False)
+                proj_hlt = ncon([tmp0, tmp1], ((-0, -2), (-1, -3)))
+                proj_hlt = proj_hlt.fuse_legs(axes=(0, 1, (2, 3)))
+                if tl is None:
+                    proj_hlt = proj_hlt.remove_leg(axis=2)
+                    proj_hlt = proj_hlt.add_leg(axis=2, leg=self[site].tl.get_legs(axes=0).conj())
+
+                tmp0 = eye(self.config, legs=[l0.conj(), l0], isdiag=False)
+                tmp1 = eye(self.config, legs=[l_b.conj(), l_b], isdiag=False)
+                proj_hlb = ncon([tmp0, tmp1], ((-0, -2), (-1, -3)))
+                proj_hlb = proj_hlb.fuse_legs(axes=(0, 1, (2, 3)))
+                if bl is None:
+                    proj_hlb = proj_hlb.remove_leg(axis=2)
+                    proj_hlb = proj_hlb.add_leg(axis=2, leg=self[site].bl.get_legs(axes=1).conj())
 
                 tmp = self[l].l @ proj_hlt
                 tmp = tensordot(self.psi[l], tmp, axes=((0, 1), (2, 1)))
                 tmp = tensordot(proj_hlb, tmp, axes=((0, 1), (2, 0)))
                 env_tmp[site].l = tmp / tmp.norm(p='inf')
-            else:
-                env_tmp[site].l = self[site].l
+
             #
             r = self.nn_site(site, d='r')
-            if r is not None:
+            if 'r' in self[site].fields() and r is not None:
                 l0, _, l2 = self[r].r.get_legs()
-                r_t, _, r_b, _ = self.psi[r].get_legs()
-                c_br = env_tmp[site].br.get_legs(axes=0)
-                c_tr = env_tmp[site].tr.get_legs(axes=1)
+                l_t, _, l_b, _ = self.psi[r].get_legs()
 
-                if br:
-                    proj_hrb = eye(self.config, legs=(c_br, c_br.conj()), isdiag=False)  # proj[r].hrb
-                    proj_hrb = proj_hrb.unfuse_legs(axes=0)
-                else:
-                    proj_hrb = eye(self.config, legs=(r_b.conj(), c_br.conj()), isdiag=False)  # proj[r].hrb
-                    proj_hrb = proj_hrb.add_leg(axis=0, leg=l2.conj())
-                if tr:
-                    proj_hrt = eye(self.config, legs=(c_tr, c_tr.conj()), isdiag=False)  # proj[r].hrt
-                    proj_hrt = proj_hrt.unfuse_legs(axes=0)
-                else:
-                    proj_hrt = eye(self.config, legs=(r_t.conj(), c_tr.conj()), isdiag=False)  # proj[r].hrt
-                    proj_hrt = proj_hrt.add_leg(axis=0, leg=l0.conj())
+                tmp0 = eye(self.config, legs=[l2.conj(), l2], isdiag=False)
+                tmp1 = eye(self.config, legs=[l_b.conj(), l_b], isdiag=False)
+                proj_hrb = ncon([tmp0, tmp1], ((-0, -2), (-1, -3)))
+                proj_hrb = proj_hrb.fuse_legs(axes=(0, 1, (2, 3)))
+                if br is None:
+                    proj_hrb = proj_hrb.remove_leg(axis=2)
+                    proj_hrb = proj_hrb.add_leg(axis=2, leg=self[site].br.get_legs(axes=0).conj())
+
+                tmp0 = eye(self.config, legs=[l0.conj(), l0], isdiag=False)
+                tmp1 = eye(self.config, legs=[l_t.conj(), l_t], isdiag=False)
+                proj_hrt = ncon([tmp0, tmp1], ((-0, -2), (-1, -3)))
+                proj_hrt = proj_hrt.fuse_legs(axes=(0, 1, (2, 3)))
+                if tr is None:
+                    proj_hrt = proj_hrt.remove_leg(axis=2)
+                    proj_hrt = proj_hrt.add_leg(axis=2, leg=self[site].tr.get_legs(axes=1).conj())
 
                 tmp = self[r].r @ proj_hrb
                 tmp = tensordot(self.psi[r], tmp, axes=((2, 3), (2, 1)))
                 tmp = tensordot(proj_hrt, tmp, axes=((0, 1), (2, 0)))
                 env_tmp[site].r = tmp / tmp.norm(p='inf')
-            else:
-                env_tmp[site].r = self[site].r
             #
             t = self.nn_site(site, d='t')
-            if t is not None:
+            if 't' in self[site].fields() and t is not None:
                 l0, _, l2 = self[t].t.get_legs()
-                _, t_l, _, t_r = self.psi[t].get_legs()
-                c_tr = env_tmp[site].tr.get_legs(axes=0)
-                c_tl = env_tmp[site].tl.get_legs(axes=1)
+                _, l_l, _, l_r = self.psi[t].get_legs()
 
-                if tr:
-                    proj_vtr = eye(self.config, legs=[c_tr, c_tr.conj()], isdiag=False)  # proj[t].vtr
-                    proj_vtr = proj_vtr.unfuse_legs(axes=0)
-                else:
-                    proj_vtr = eye(self.config, legs=[t_r.conj(), c_tr.conj()], isdiag=False)  # proj[t].vtr
-                    proj_vtr = proj_vtr.add_leg(axis=0, leg=l2.conj())
+                tmp0 = eye(self.config, legs=[l2.conj(), l2], isdiag=False)
+                tmp1 = eye(self.config, legs=[l_r.conj(), l_r], isdiag=False)
+                proj_vtr = ncon([tmp0, tmp1], ((-0, -2), (-1, -3)))
+                proj_vtr = proj_vtr.fuse_legs(axes=(0, 1, (2, 3)))
+                if tr is None:
+                    proj_vtr = proj_vtr.remove_leg(axis=2)
+                    proj_vtr = proj_vtr.add_leg(axis=2, leg=self[site].tr.get_legs(axes=0).conj())
 
-                if tl:
-                    proj_vtl = eye(self.config, legs=[c_tl, c_tl.conj()], isdiag=False)  # proj[t].vtl
-                    proj_vtl = proj_vtl.unfuse_legs(axes=0)
-                else:
-                    proj_vtl = eye(self.config, legs=[t_l.conj(), c_tl.conj()], isdiag=False)  # proj[t].vtl
-                    proj_vtl = proj_vtl.add_leg(axis=0, leg=l0.conj())
+                tmp0 = eye(self.config, legs=[l0.conj(), l0], isdiag=False)
+                tmp1 = eye(self.config, legs=[l_l.conj(), l_l], isdiag=False)
+                proj_vtl = ncon([tmp0, tmp1], ((-0, -2), (-1, -3)))
+                proj_vtl = proj_vtl.fuse_legs(axes=(0, 1, (2, 3)))
+                if tl is None:
+                    proj_vtl = proj_vtl.remove_leg(axis=2)
+                    proj_vtl = proj_vtl.add_leg(axis=2, leg=self[site].tl.get_legs(axes=1).conj())
 
                 tmp = tensordot(proj_vtl, self[t].t, axes=(0, 0))
                 tmp = tensordot(tmp, self.psi[t], axes=((2, 0), (0, 1)))
                 tmp = tensordot(tmp, proj_vtr, axes=((1, 3), (0, 1)))
                 env_tmp[site].t = tmp / tmp.norm(p='inf')
-            else:
-                env_tmp[site].t = self[site].t
+
             #
             b = self.nn_site(site, d='b')
-            if b is not None:
+            if 'b' in self[site].fields() and b is not None:
                 l0, _, l2 = self[b].b.get_legs()
-                _, b_l, _, b_r = self.psi[b].get_legs()
-                c_bl = env_tmp[site].bl.get_legs(axes=0)
-                c_br = env_tmp[site].br.get_legs(axes=1)
+                _, l_l, _, l_r = self.psi[b].get_legs()
 
-                if bl:
-                    proj_vbl = eye(self.config, legs=[c_bl, c_bl.conj()], isdiag=False)  # proj[b].vbl
-                    proj_vbl = proj_vbl.unfuse_legs(axes=0)
-                else:
-                    proj_vbl = eye(self.config, legs=[b_l.conj(), c_bl.conj()], isdiag=False)  # proj[b].vbl
-                    proj_vbl = proj_vbl.add_leg(axis=0, leg=l2.conj())
+                tmp0 = eye(self.config, legs=[l0.conj(), l0], isdiag=False)
+                tmp1 = eye(self.config, legs=[l_r.conj(), l_r], isdiag=False)
+                proj_vbr = ncon([tmp0, tmp1], ((-0, -2), (-1, -3)))
+                proj_vbr = proj_vbr.fuse_legs(axes=(0, 1, (2, 3)))
+                if br is None:
+                    proj_vbr = proj_vbr.remove_leg(axis=2)
+                    proj_vbr = proj_vbr.add_leg(axis=2, leg=self[site].br.get_legs(axes=1).conj())
 
-                if br:
-                    proj_vbr = eye(self.config, legs=[c_br, c_br.conj()], isdiag=False)  # proj[b].vbr
-                    proj_vbr = proj_vbr.unfuse_legs(axes=0)
-                else:
-                    proj_vbr = eye(self.config, legs=[b_r.conj(), c_br.conj()], isdiag=False)  # proj[b].vbr
-                    proj_vbr = proj_vbr.add_leg(axis=0, leg=l0.conj())
+                tmp0 = eye(self.config, legs=[l2.conj(), l2], isdiag=False)
+                tmp1 = eye(self.config, legs=[l_l.conj(), l_l], isdiag=False)
+                proj_vbl = ncon([tmp0, tmp1], ((-0, -2), (-1, -3)))
+                proj_vbl = proj_vbl.fuse_legs(axes=(0, 1, (2, 3)))
+                if bl is None:
+                    proj_vbl = proj_vbl.remove_leg(axis=2)
+                    proj_vbl = proj_vbl.add_leg(axis=2, leg=self[site].bl.get_legs(axes=0).conj())
 
                 tmp = tensordot(proj_vbr, self[b].b, axes=(0, 0))
                 tmp = tensordot(tmp, self.psi[b], axes=((2, 0), (2, 3)))
                 tmp = tensordot(tmp, proj_vbl, axes=((1, 3), (0, 1)))
                 env_tmp[site].b = tmp / tmp.norm(p='inf')
-            else:
-                env_tmp[site].b = self[site].b
         #
         # modify existing environment in place
         update_storage_(self, env_tmp)
@@ -511,22 +486,22 @@ class EnvCTM():
                 H.A[nx] = self[nx, n].l.transpose(axes=(2, 1, 0))
         return H
 
-    def calculate_corner_svd(self):
+    def calculate_corner_svd(env):
         """
         Return normalized SVD spectra, with largest singular value set to unity, of all corner tensors of environment.
         The corners are indexed by pair of Site and corner identifier.
         """
+        _get_spec = lambda x: x.svd(compute_uv=False) if not (x is None) and not x.isdiag else x
         corner_sv = {}
-        for site in self.sites():
-            corner_sv[site, 'tl'] = self[site].tl.svd(compute_uv=False)
-            corner_sv[site, 'tr'] = self[site].tr.svd(compute_uv=False)
-            corner_sv[site, 'bl'] = self[site].bl.svd(compute_uv=False)
-            corner_sv[site, 'br'] = self[site].br.svd(compute_uv=False)
+        for site in env.sites():
+            for dirn in env[site].fields(among=['tl', 'tr', 'bl', 'br']):
+                corner_sv[site, dirn] = _get_spec(getattr(env[site], dirn))
         for k, v in corner_sv.items():
-            corner_sv[k] = v / v.norm(p='inf')
+            if corner_sv[k] is not None:
+                corner_sv[k] = v / v.norm(p='inf')
         return corner_sv
 
-    def _partial_svd_predict_spec(self,leg0,leg1,sU):
+    def _partial_svd_predict_spec(self, leg0, leg1, sU):
         # TODO externalize defaults for extending number of singular values to solve for
         """
         Used in block-wise partial SVD solvers.
@@ -544,10 +519,10 @@ class EnvCTM():
         # the projector spectra for projector pair are related by charge conjugation
         assert leg0 == leg1.conj(), f"Projector spectrum history mismatch between leg0={leg0} and leg1={leg1}"
         #
-        l= leg0 if sU == leg0.s else leg1
-        return { t: max(d+10,int(d*1.1)) for t,d in zip(l.t, l.D) }
+        l = leg0 if sU == leg0.s else leg1
+        return {t: max(d + 10, int(d * 1.1)) for t, d in zip(l.t, l.D)}
 
-    def update_(env, opts_svd, moves='hv', method='2site', **kwargs):
+    def update_(env, opts_svd, moves='hv', method='2x2 corner', **kwargs):
         r"""
         Perform one step of CTMRG update. Environment tensors are updated in place.
 
@@ -573,9 +548,9 @@ class EnvCTM():
             The default is 'hv'.
 
         method: str
-            '2site' or '1site'. The default is '2site'.
-            '2site' uses the standard 4x4 enlarged corners, allowing to enlarge EnvCTM bond dimension.
-            '1site' uses smaller 4x2 corners. It is significantly faster, but is less stable and
+            '2x2' or '1x2' in method. The default is '2x2 corner'.
+            '2x2' uses the standard 2x2 enlarged corners forming 4x4 patch, allowing to enlarge EnvCTM bond dimension.
+            '1x2' uses smaller 1x2 corners forming 2x4 patch. It is significantly faster, but is less stable and
             does not allow to grow EnvCTM bond dimension.
 
         checkpoint_move: bool
@@ -587,15 +562,13 @@ class EnvCTM():
         """
         if 'tol' not in opts_svd and 'tol_block' not in opts_svd:
             opts_svd['tol'] = 1e-14
-        if method not in ('1site', '2site'):
-            raise YastnError(f"CTM update {method=} not recognized. Should be '1site' or '2site'")
 
         checkpoint_move = kwargs.get('checkpoint_move', False)
         for d in moves:
             if checkpoint_move:
                 def f_update_core_(move_d, loc_im, *inputs_t):
-                    loc_env = EnvCTM.from_dict(combine_data_and_meta(inputs_t, loc_im))
-                    _update_core_(loc_env, move_d, opts_svd, method=method, **kwargs)
+                    loc_env = type(env).from_dict(combine_data_and_meta(inputs_t, loc_im))
+                    loc_env._update_core_(move_d, opts_svd, method=method, **kwargs)
                     out_data, out_meta = split_data_and_meta(loc_env.to_dict(level=0))
                     return out_data, out_meta
 
@@ -615,39 +588,190 @@ class EnvCTM():
                 # reconstruct env from output tensors
                 env.update_from_dict_(combine_data_and_meta(out_data, out_meta))
             else:
-                _update_core_(env, d, opts_svd, method=method, **kwargs)
+                env._update_core_(d, opts_svd, method=method, **kwargs)
         return env
 
-    def update_bond_(env, bond: tuple, opts_svd: dict | None = None, **kwargs):
+    def _update_core_(env, move: str, opts_svd: dict, method: str, **kwargs):
+        r"""
+        Core function updating CTM environment tensors pefrorming specified move.
+        """
+        assert move in ['h', 'v', 'l', 'r', 't', 'b'], "Invalid move"
+        if (move in 'hv') or (len(env.sites()) < env.Nx * env.Ny):
+            # For horizontal and vertical moves,
+            # and unit cell with a nontrivial pattern like CheckerboardLattice or RectangularUnitcell,
+            # all sites are updated simultaneously.
+            shift_proj = None
+            sitess = [env.sites()]
+        elif move == 'l':  # Move done sequentially, column after column.
+            shift_proj = 'l'
+            sitess = [[Site(nx, ny) for nx in range(env.Nx)] for ny in range(env.Ny)]
+        elif move == 'r':  # Move done sequentially, column after column.
+            shift_proj = None
+            sitess = [[Site(nx, ny) for nx in range(env.Nx)] for ny in range(env.Ny-1, -1, -1)]
+        elif move == 't':  # Move done sequentially, row after row.
+            shift_proj = 't'
+            sitess = [[Site(nx, ny) for ny in range(env.Ny)] for nx in range(env.Nx)]
+        elif move == 'b':  # Move done sequentially, row after row.
+            shift_proj = None
+            sitess = [[Site(nx, ny) for ny in range(env.Ny)] for nx in range(env.Nx-1, -1, -1)]
+
+        for sites in sitess:
+            sites_proj = [env.nn_site(site, shift_proj) for site in sites] if shift_proj else sites
+            sites_proj = [site for site in sites_proj if site is not None]
+            #
+            # Projectors
+            for site in sites_proj:
+                env._update_projectors_(site, move, opts_svd, method, **kwargs)
+            # fill (trivial) projectors on edges
+            env._trivial_projectors_(move, sites_proj)
+            #
+            # Update move
+            env_tmp = EnvCTM(env.psi, init=None)  # empty environments
+            for site in sites:
+                env_tmp._update_env_(site, env, move)
+            update_storage_(env, env_tmp)
+
+    def update_bond_(env, bond: tuple, opts_svd: dict | None = None, method: str = '2x2 corner', **kwargs):
         r"""
         Update EnvCTM tensors related to a specific nearest-neighbor bond.
+
+        Intended primarily for FU evolution scheme -- assuming fixed sectorial bond dimensions.
+        May require using a dictionary "D_block" specifying sectorial bond dimensions in
+        opts_svd's passed to PEPS truncation and CTM.
         """
         if opts_svd is None:
             opts_svd = env.opts_svd
 
         dirn = env.nn_bond_dirn(*bond)
-        s0, s1 = bond if dirn in 'lr tb' else bond[::-1]
+        s0, s1 = bond if dirn in ['lr', 'tb'] else bond[::-1]
 
-        env_tmp = EnvCTM(env.psi, init=None)  # empty environments
         if dirn in 'lrl':
-            update_projectors_(env, s0, 'lrt', opts_svd, **kwargs)
-            update_projectors_(env, env.nn_site(s0, d='t'), 'lrb', opts_svd, **kwargs)
-            update_env_(env_tmp, s0, env, move='r')
-            update_env_(env_tmp, env.nn_site(s0, d='t'), env, move='r')
-            update_env_(env_tmp, env.nn_site(s0, d='b'), env, move='r')
-            update_env_(env_tmp, s1, env, move='l')
-            update_env_(env_tmp, env.nn_site(s1, d='t'), env, move='l')
-            update_env_(env_tmp, env.nn_site(s1, d='b'), env, move='l')
+            env._update_env_(s0, env, move='r')
+            env._update_env_(s1, env, move='l')
+            env._update_projectors_(s0, 't', opts_svd, method, **kwargs)
+            env._update_projectors_(env.nn_site(s0, d='t'), 'b', opts_svd, method, **kwargs)
         else:  # 'tbt'
-            update_projectors_(env, s0, 'tbl', opts_svd, **kwargs)
-            update_projectors_(env, env.nn_site(s0, d='l'), 'tbr', opts_svd, **kwargs)
-            update_env_(env_tmp, s0, env, move='b')
-            update_env_(env_tmp, env.nn_site(s0, d='l'), env, move='b')
-            update_env_(env_tmp, env.nn_site(s0, d='r'), env, move='b')
-            update_env_(env_tmp, s1, env, move='t')
-            update_env_(env_tmp, env.nn_site(s1, d='l'), env, move='t')
-            update_env_(env_tmp, env.nn_site(s1, d='r'), env, move='t')
-        update_storage_(env, env_tmp)
+            env._update_env_(s0, env, move='b')
+            env._update_env_(s1, env, move='t')
+            env._update_projectors_(s0, 'l', opts_svd, method, **kwargs)
+            env._update_projectors_(env.nn_site(s0, d='l'), 'r', opts_svd, method, **kwargs)
+
+
+    def _update_projectors_(env, site, move, opts_svd, method, **kwargs):
+        r"""
+        Calculate new projectors for CTM moves passing to specific method to create enlarged corners.
+        """
+        sites = [env.nn_site(site, d=d) for d in ((0, 0), (0, 1), (1, 0), (1, 1))]
+        # tl, tr, bl, br = sites
+        if None in sites:
+            return
+
+        if '1x2' in method or '2x1' in method or method == '1site':
+            return update_1x2_projectors_(env, *sites, move, opts_svd, **kwargs)
+        elif '2x2' in method or method == '2site':
+            return update_extended_2x2_projectors_(env, *sites, move, opts_svd, **kwargs)
+        else:
+            raise YastnError(f"CTM update {method=} not recognized. Should contain '1x2' or '2x2'")
+
+    def _trivial_projectors_(env, move, sites):
+        r"""
+        Adds trivial projectors if not present at the edges of the lattice with open boundary conditions.
+        """
+        if move == 'h':  move = 'lr'
+        if move == 'v':  move = 'tb'
+        for site in sites:
+            for s0, s1, s2, s3, a0, a1, a2 in _for_trivial:
+                if s2 in move and getattr(env.proj[site], s0) is None:
+                    site_nn = env.nn_site(site, d=s1)
+                    if site_nn is not None:
+                        l0 = getattr(env[site], s2).get_legs(a0).conj()
+                        l1 = env.psi[site].get_legs(a1).conj()
+                        l2 = getattr(env[site_nn], s3).get_legs(a2).conj()
+                        setattr(env.proj[site], s0, ones(env.config, legs=(l0, l1, l2)))
+
+    def _update_env_(env_tmp, site, env, move: str):
+        r"""
+        Horizontal move of CTM step. Compute updated environment tensors given projectors for ``site``
+        in left (``dir='l'``), right ``dir='r'``, or both directions (``dir='lr'``).
+        Updated environment tensors are stored in ``env_tmp``.
+        Vertical move of CTM step. Compute updated environment tensors given projectors for ``site``
+        in top (``dir='t'``), bottom ``dir='b'``, or both directions (``dir='tb'``).
+        Updated environment tensors are stored in ``env_tmp``.
+
+        """
+        psi = env.psi
+
+        if move in 'lh':
+            l = psi.nn_site(site, d='l')
+            if l is not None:
+                tmp = env[l].l @ env.proj[l].hlt
+                tmp = tensordot(psi[l], tmp, axes=((0, 1), (2, 1)))
+                tmp = tensordot(env.proj[l].hlb, tmp, axes=((0, 1), (2, 0)))
+                env_tmp[site].l = tmp / tmp.norm(p='inf')
+
+            tl = psi.nn_site(site, d='tl')
+            if tl is not None:
+                tmp = tensordot(env.proj[tl].hlb, env[l].tl @ env[l].t, axes=((0, 1), (0, 1)))
+                env_tmp[site].tl = tmp / tmp.norm(p='inf')
+
+            bl = psi.nn_site(site, d='bl')
+            if bl is not None:
+                tmp = tensordot(env[l].b, env[l].bl @ env.proj[bl].hlt, axes=((2, 1), (0, 1)))
+                env_tmp[site].bl = tmp / tmp.norm(p='inf')
+
+        if move in 'rh':
+            r = psi.nn_site(site, d='r')
+            if r is not None:
+                tmp = env[r].r @ env.proj[r].hrb
+                tmp = tensordot(psi[r], tmp, axes=((2, 3), (2, 1)))
+                tmp = tensordot(env.proj[r].hrt, tmp, axes=((0, 1), (2, 0)))
+                env_tmp[site].r = tmp / tmp.norm(p='inf')
+
+            tr = psi.nn_site(site, d='tr')
+            if tr is not None:
+                tmp = tensordot(env[r].t, env[r].tr @ env.proj[tr].hrb, axes=((2, 1), (0, 1)))
+                env_tmp[site].tr = tmp / tmp.norm(p='inf')
+
+            br = psi.nn_site(site, d='br')
+            if br is not None:
+                tmp = tensordot(env.proj[br].hrt, env[r].br @ env[r].b, axes=((0, 1), (0, 1)))
+                env_tmp[site].br = tmp / tmp.norm(p='inf')
+
+        if move in 'tv':
+            t = psi.nn_site(site, d='t')
+            if t is not None:
+                tmp = tensordot(env.proj[t].vtl, env[t].t, axes=(0, 0))
+                tmp = tensordot(tmp, psi[t], axes=((2, 0), (0, 1)))
+                tmp = tensordot(tmp, env.proj[t].vtr, axes=((1, 3), (0, 1)))
+                env_tmp[site].t = tmp / tmp.norm(p='inf')
+
+            tl = psi.nn_site(site, d='tl')
+            if tl is not None:
+                tmp = tensordot(env[t].l, env[t].tl @ env.proj[tl].vtr, axes=((2, 1), (0, 1)))
+                env_tmp[site].tl = tmp / tmp.norm(p='inf')
+
+            tr = psi.nn_site(site, d='tr')
+            if tr is not None:
+                tmp = tensordot(env.proj[tr].vtl, env[t].tr @ env[t].r, axes=((0, 1), (0, 1)))
+                env_tmp[site].tr =  tmp / tmp.norm(p='inf')
+
+        if move in 'bv':
+            b = psi.nn_site(site, d='b')
+            if b is not None:
+                tmp = tensordot(env.proj[b].vbr, env[b].b, axes=(0, 0))
+                tmp = tensordot(tmp, psi[b], axes=((2, 0), (2, 3)))
+                tmp = tensordot(tmp, env.proj[b].vbl, axes=((1, 3), (0, 1)))
+                env_tmp[site].b = tmp / tmp.norm(p='inf')
+
+            bl = psi.nn_site(site, d='bl')
+            if bl is not None:
+                tmp = tensordot(env.proj[bl].vbr, env[b].bl @ env[b].l, axes=((0, 1), (0, 1)))
+                env_tmp[site].bl = tmp / tmp.norm(p='inf')
+
+            br = psi.nn_site(site, d='br')
+            if br is not None:
+                tmp = tensordot(env[b].r, env[b].br @ env.proj[br].vbl, axes=((2, 1), (0, 1)))
+                env_tmp[site].br = tmp / tmp.norm(p='inf')
 
     def apply_patch(self):
         self.env.apply_patch()
@@ -662,7 +786,7 @@ class EnvCTM():
         #env.update_bond_(bond, opts_svd=env.opts_svd)
 
     def post_truncation_(env, bond, **kwargs):
-        env.update_bond_(bond, opts_svd=env.opts_svd)
+        env.update_bond_(bond, **kwargs)
 
     def bond_metric(self, Q0, Q1, s0, s1, dirn) -> Tensor:
         r"""
@@ -735,7 +859,7 @@ class EnvCTM():
                     dict_bond_dimension[site, corners_id[ii]].append(temp_D)
         return [dict_bond_dimension, dict_symmetric_sector]
 
-    def iterate_(env, opts_svd=None, moves='hv', method='2site', max_sweeps=1, iterator=False, corner_tol=None, truncation_f: Callable = None, **kwargs):
+    def iterate_(env, opts_svd=None, moves='hv', method='2x2 corner', max_sweeps=1, iterator=False, corner_tol=None, truncation_f: Callable = None, **kwargs):
         r"""
         Perform CTMRG updates :meth:`yastn.tn.fpeps.EnvCTM.update_` until convergence.
         Convergence can be measured based on singular values of CTM environment corner tensors.
@@ -760,10 +884,10 @@ class EnvCTM():
             The default is 'hv'.
 
         method: str
-            '2site', '1site'. The default is '2site'.
+            '2x2' or '1x2' contained in method. The default is '2x2'.
 
-                * '2site' uses the standard 4x4 enlarged corners, enabling enlargement of EnvCTM bond dimensions. When some PEPS bonds are rank-1, it recognizes it to use 5x4 corners to prevent artificial collapse of EnvCTM bond dimensions to 1, which is important for hexagonal lattice.
-                * '1site' uses smaller 4x2 corners. It is significantly faster, but is less stable and  does not allow for EnvCTM bond dimension growth.
+                * '2x2' uses the standard 2x2 enlarged corners (forming 4x4 patch), enabling enlargement of EnvCTM bond dimensions. When some PEPS bonds are rank-1, it recognizes it to use 3x2 corners to prevent artificial collapse of EnvCTM bond dimensions to 1, which is important for hexagonal lattice.
+                * '1x2' uses smaller 1x2 corners (forming 2x4 patch). It is significantly faster, but is less stable and  does not allow for EnvCTM bond dimension growth.
 
         max_sweeps: int
             The maximal number of sweeps.
@@ -803,12 +927,12 @@ class EnvCTM():
                 * ``max_D`` largest bond dimension of environment tensors virtual legs.
                 * ``converged`` whether convergence based on ``corner_tol`` has been reached.
         """
-        if "checkpoint_move" in kwargs:
-            if "torch" in env.config.backend.BACKEND_ID:
-                assert kwargs["checkpoint_move"] in ['reentrant', 'nonreentrant', False], f"Invalid choice for {kwargs['checkpoint_move']}"
+        kwargs["iterator_step"] = kwargs.get("iterator_step", int(iterator))
+        if ("checkpoint_move" in kwargs) and ("torch" in env.config.backend.BACKEND_ID):
+            assert kwargs["checkpoint_move"] in ['reentrant', 'nonreentrant', False], f"Invalid choice for {kwargs['checkpoint_move']}"
         kwargs["truncation_f"] = truncation_f
         kwargs["iterator_step"] = kwargs.get("iterator_step", int(iterator))
-        tmp = env._ctmrg_iterator_(opts_svd, moves, method, max_sweeps, corner_tol, **kwargs)
+        tmp = env._ctmrg_iterator_(opts_svd=opts_svd, moves=moves, method=method, max_sweeps=max_sweeps, corner_tol=corner_tol, **kwargs)
         return tmp if kwargs["iterator_step"] else next(tmp)
 
     ctmrg_ = iterate_   #  For backward compatibility, allow using EnvCtm.ctmrg_() instead of EnvCtm.iterate_().
@@ -827,13 +951,8 @@ class EnvCTM():
 
             # use default CTM convergence check
             if corner_tol is not None:
-                # Evaluate convergence of CTM by computing the difference of environment corner spectra between consecutive CTM steps.
-                corner_sv = env.calculate_corner_svd()
-                max_dsv = max((corner_sv[k] - history[-1][k]).norm().item() for k in corner_sv) if history else float('Nan')
-                history.append(corner_sv)
-                converged = max_dsv < corner_tol
+                converged, max_dsv, history = env.ctm_conv_corner_spec(history, corner_tol)
                 logging.info(f'Sweep = {sweep:03d}; max_diff_corner_singular_values = {max_dsv:0.2e}')
-
                 if converged:
                     break
 
@@ -841,83 +960,94 @@ class EnvCTM():
                 yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
         yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
 
-    from ._env_measure import measure_1site, measure_nn, measure_2x2, measure_line, \
-        measure_nsite, measure_2site, sample
+    def ctm_conv_corner_spec(env: EnvCTM,
+                             history: Sequence[dict[tuple[Site, str], Tensor]]=[],
+                             corner_tol: None | float=1.0e-8) -> tuple[bool, float, Sequence[dict[tuple[Site, str], Tensor]]]:
+        """
+        Evaluate convergence of CTM by computing the difference of environment corner spectra between consecutive CTM steps.
+        """
+        corner_sv = env.calculate_corner_svd()
+        max_dsv = max(spec_diff(history[-1][k], corner_sv[k]) for k in corner_sv) if history else float('Nan')
+        corner_sv['max_dsv'] = max_dsv
+        history.append(corner_sv)
+        converged = (corner_tol is not None) and (max_dsv < corner_tol)
+        return converged, max_dsv, history
+
+    def is_consistent(env, verbosity = 2):
+        out = {}
+        env_legs = {}
+        sites = set(s0 for s0, _ in env.bonds()) | set(s1 for _, s1 in env.bonds())
+        for site in sites:
+            env_legs[site, 'psi'] = env.psi[site].get_legs()
+            for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
+                ten = getattr(env[site], dirn)
+                if ten is not None:
+                    env_legs[site, dirn] = ten.get_legs()
+            legs_consistent_(out, env_legs, (site, 'psi'), 0, (site, 't'), 1)
+            legs_consistent_(out, env_legs, (site, 'psi'), 1, (site, 'l'), 1)
+            legs_consistent_(out, env_legs, (site, 'psi'), 2, (site, 'b'), 1)
+            legs_consistent_(out, env_legs, (site, 'psi'), 3, (site, 'r'), 1)
+            legs_consistent_(out, env_legs, (site, 'tl'), 1, (site, 't'), 0)
+            legs_consistent_(out, env_legs, (site, 't'), 2, (site, 'tr'), 0)
+            legs_consistent_(out, env_legs, (site, 'tr'), 1, (site, 'r'), 0)
+            legs_consistent_(out, env_legs, (site, 'r'), 2, (site, 'br'), 0)
+            legs_consistent_(out, env_legs, (site, 'br'), 1, (site, 'b'), 0)
+            legs_consistent_(out, env_legs, (site, 'b'), 2, (site, 'bl'), 0)
+            legs_consistent_(out, env_legs, (site, 'bl'), 1, (site, 'l'), 0)
+            legs_consistent_(out, env_legs, (site, 'l'), 2, (site, 'tl'), 0)
+
+        for bond in env.bonds():
+            dirn = env.nn_bond_dirn(*bond)
+            s0, s1 = bond if dirn == 'lr' or 'tb' else bond[::-1]
+            if 'l' in dirn:
+                legs_consistent_(out, env_legs, (s0, 't'), 2, (s1, 't'), 0)
+                legs_consistent_(out, env_legs, (s0, 'b'), 0, (s1, 'b'), 2)
+                legs_consistent_(out, env_legs, (s0, 'tr'), 0, (s1, 'tl'), 1)
+                legs_consistent_(out, env_legs, (s0, 'br'), 1, (s1, 'bl'), 0)
+            if 't' in dirn:
+                legs_consistent_(out, env_legs, (s0, 'l'), 0, (s1, 'l'), 2)
+                legs_consistent_(out, env_legs, (s0, 'r'), 2, (s1, 'r'), 0)
+                legs_consistent_(out, env_legs, (s0, 'bl'), 1, (s1, 'tl'), 0)
+                legs_consistent_(out, env_legs, (s0, 'br'), 0, (s1, 'tr'), 1)
+
+        not_consistent = [k for k, v in out.items() if not v]
+        if verbosity > 0:
+            if not_consistent:
+                print("Unconsistent environment bonds: ")
+                for x in not_consistent:
+                    print(x)
+        return len(not_consistent) == 0
+
+    from ._env_ctm_measure import measure_1site, measure_nn, measure_2x2, measure_line, \
+        measure_nsite, measure_2site, sample, transfer_matrix_spectrum
 
 
-def _update_core_(env, move: str, opts_svd: dict, **kwargs):
-    r"""
-    Core function updating CTM environment tensors pefrorming specified move.
-    """
-    assert move in ['h', 'v', 'l', 'r', 't', 'b'], "Invalid move"
-    if (move in 'hv') or (len(env.sites()) < env.Nx * env.Ny):
-        # For horizontal and vertical moves,
-        # and unit cell with a nontrivial pattern like CheckerboardLattice or RectangularUnitcell,
-        # all sites are updated simultaneously.
-        shift_proj = None
-        sitess = [env.sites()]
-    elif move == 'l':  # Move done sequentially, column after column.
-        shift_proj = 'l'
-        sitess = [[Site(nx, ny) for nx in range(env.Nx)] for ny in range(env.Ny)]
-    elif move == 'r':  # Move done sequentially, column after column.
-        shift_proj = None
-        sitess = [[Site(nx, ny) for nx in range(env.Nx)] for ny in range(env.Ny-1, -1, -1)]
-    elif move == 't':  # Move done sequentially, row after row.
-        shift_proj = 't'
-        sitess = [[Site(nx, ny) for ny in range(env.Ny)] for nx in range(env.Nx)]
-    elif move == 'b':  # Move done sequentially, row after row.
-        shift_proj = None
-        sitess = [[Site(nx, ny) for ny in range(env.Ny)] for nx in range(env.Nx-1, -1, -1)]
-
-    for sites in sitess:
-        sites_proj = [env.nn_site(site, shift_proj) for site in sites] if shift_proj else sites
-        sites_proj = [site for site in sites_proj if site is not None]
-        #
-        # Projectors
-        if env.profiling_mode in ["NVTX",]:
-            env.config.backend.cuda.nvtx.range_push(f"update_projectors_")
-            for site in sites_proj:
-                update_projectors_(env, site, move, opts_svd, **kwargs)
-            env.config.backend.cuda.nvtx.range_pop()
-        else:
-            for site in sites_proj:
-                update_projectors_(env, site, move, opts_svd, **kwargs)
-        # fill (trivial) projectors on edges
-        trivial_projectors_(env, move, sites_proj)
-        #
-        # Update move
-        env_tmp = EnvCTM(env.psi, init=None)  # empty environments
-        if env.profiling_mode in ["NVTX",]:
-            env.config.backend.cuda.nvtx.range_push(f"update_env_")
-            for site in sites:
-                update_env_(env_tmp, site, env, move)
-            env.config.backend.cuda.nvtx.range_pop()
-        else:
-            for site in sites:
-                update_env_(env_tmp, site, env, move)
-
-        update_storage_(env, env_tmp)
-
-
-def update_projectors_(env, site, move, opts_svd, **kwargs):
-    r"""
-    Calculate new projectors for CTM moves passing to specific method to create enlarged corners.
-    """
-    sites = [env.nn_site(site, d=d) for d in ((0, 0), (0, 1), (1, 0), (1, 1))]
-    # tl, tr, bl, br = sites
-    if None in sites:
+def legs_consistent_(out, env_legs, i0, l0, i1, l1):
+    if i0 is None or i1 is None:
         return
-    method = kwargs.get('method', '2site')
-
-    # if method == '2site':
-    #     return update_2site_projectors_(proj, *sites, move, env, opts_svd, **kwargs)
-    if method == '1site':
-        return update_1site_projectors_(env, *sites, move, opts_svd, **kwargs)
-    elif method == '2site':
-        return update_extended_2site_projectors_(env, *sites, move, opts_svd, **kwargs)
+    out[i0, l0, i1, l1] = env_legs[i0][l0].are_consistent(env_legs[i1][l1])
 
 
-def update_extended_2site_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwargs):
+def spec_diff(x, y):
+    if x is not None and y is not None:
+        return (x - y).norm().item()
+    elif x is None and y is None:
+        return 0
+    else:
+        return float('Inf')
+
+
+_for_trivial = (('hlt', 'r', 'l', 'tl', 2, 0, 0),
+                ('hlb', 'r', 'l', 'bl', 0, 2, 1),
+                ('hrt', 'l', 'r', 'tr', 0, 0, 1),
+                ('hrb', 'l', 'r', 'br', 2, 2, 0),
+                ('vtl', 'b', 't', 'tl', 0, 1, 1),
+                ('vtr', 'b', 't', 'tr', 2, 3, 0),
+                ('vbl', 't', 'b', 'bl', 2, 1, 0),
+                ('vbr', 't', 'b', 'br', 0, 3, 1))
+
+
+def update_extended_2x2_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwargs):
     r"""
     Calculate new projectors for CTM moves from 4x4 extended corners
     which are enlarged to 5x4 if some virtual bond is one.
@@ -1053,7 +1183,7 @@ def update_extended_2site_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwa
         env.proj[bl].vbr, env.proj[br].vbl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
 
 
-def update_1site_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwargs):
+def update_1x2_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwargs):
     r"""
     Calculate new projectors for CTM moves from 4x2 extended corners.
     """
@@ -1084,156 +1214,6 @@ def update_1site_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwargs):
 
     if move in 'bv':
         env.proj[bl].vbr, env.proj[br].vbl = proj_corners(r_bl, r_br, opts_svd=opts_svd, **kwargs)
-
-
-_for_trivial = (('hlt', 'r', 'l', 'tl', 2, 0, 0),
-                ('hlb', 'r', 'l', 'bl', 0, 2, 1),
-                ('hrt', 'l', 'r', 'tr', 0, 0, 1),
-                ('hrb', 'l', 'r', 'br', 2, 2, 0),
-                ('vtl', 'b', 't', 'tl', 0, 1, 1),
-                ('vtr', 'b', 't', 'tr', 2, 3, 0),
-                ('vbl', 't', 'b', 'bl', 2, 1, 0),
-                ('vbr', 't', 'b', 'br', 0, 3, 1))
-
-
-def trivial_projectors_(env, move, sites):
-    r"""
-    Adds trivial projectors if not present at the edges of the lattice with open boundary conditions.
-    """
-    if move == 'h':  move = 'lr'
-    if move == 'v':  move = 'tb'
-    config = env.psi.config
-    for site in sites:
-        for s0, s1, s2, s3, a0, a1, a2 in _for_trivial:
-            if s2 in move and getattr(env.proj[site], s0) is None:
-                site_nn = env.nn_site(site, d=s1)
-                if site_nn is not None:
-                    l0 = getattr(env[site], s2).get_legs(a0).conj()
-                    l1 = env.psi[site].get_legs(a1).conj()
-                    l2 = getattr(env[site_nn], s3).get_legs(a2).conj()
-                    setattr(env.proj[site], s0, ones(config, legs=(l0, l1, l2)))
-
-
-def update_env_(env_tmp, site, env, move: str):
-    r"""
-    Horizontal move of CTM step. Compute updated environment tensors given projectors for ``site``
-    in left (``dir='l'``), right ``dir='r'``, or both directions (``dir='lr'``).
-    Updated environment tensors are stored in ``env_tmp``.
-    Vertical move of CTM step. Compute updated environment tensors given projectors for ``site``
-    in top (``dir='t'``), bottom ``dir='b'``, or both directions (``dir='tb'``).
-    Updated environment tensors are stored in ``env_tmp``.
-
-    """
-    psi = env.psi
-
-    if move in 'lh':
-        l = psi.nn_site(site, d='l')
-        if l is not None:
-            tmp = env[l].l @ env.proj[l].hlt
-            tmp = tensordot(psi[l], tmp, axes=((0, 1), (2, 1)))
-            tmp = tensordot(env.proj[l].hlb, tmp, axes=((0, 1), (2, 0)))
-            env_tmp[site].l = tmp / tmp.norm(p='inf')
-
-        tl = psi.nn_site(site, d='tl')
-        if tl is not None:
-            tmp = tensordot(env.proj[tl].hlb, env[l].tl @ env[l].t, axes=((0, 1), (0, 1)))
-            env_tmp[site].tl = tmp / tmp.norm(p='inf')
-
-        bl = psi.nn_site(site, d='bl')
-        if bl is not None:
-            tmp = tensordot(env[l].b, env[l].bl @ env.proj[bl].hlt, axes=((2, 1), (0, 1)))
-            env_tmp[site].bl = tmp / tmp.norm(p='inf')
-
-    if move in 'rh':
-        r = psi.nn_site(site, d='r')
-        if r is not None:
-            tmp = env[r].r @ env.proj[r].hrb
-            tmp = tensordot(psi[r], tmp, axes=((2, 3), (2, 1)))
-            tmp = tensordot(env.proj[r].hrt, tmp, axes=((0, 1), (2, 0)))
-            env_tmp[site].r = tmp / tmp.norm(p='inf')
-
-        tr = psi.nn_site(site, d='tr')
-        if tr is not None:
-            tmp = tensordot(env[r].t, env[r].tr @ env.proj[tr].hrb, axes=((2, 1), (0, 1)))
-            env_tmp[site].tr = tmp / tmp.norm(p='inf')
-
-        br = psi.nn_site(site, d='br')
-        if br is not None:
-            tmp = tensordot(env.proj[br].hrt, env[r].br @ env[r].b, axes=((0, 1), (0, 1)))
-            env_tmp[site].br = tmp / tmp.norm(p='inf')
-
-    if move in 'tv':
-        t = psi.nn_site(site, d='t')
-        if t is not None:
-            tmp = tensordot(env.proj[t].vtl, env[t].t, axes=(0, 0))
-            tmp = tensordot(tmp, psi[t], axes=((2, 0), (0, 1)))
-            tmp = tensordot(tmp, env.proj[t].vtr, axes=((1, 3), (0, 1)))
-            env_tmp[site].t = tmp / tmp.norm(p='inf')
-
-        tl = psi.nn_site(site, d='tl')
-        if tl is not None:
-            tmp = tensordot(env[t].l, env[t].tl @ env.proj[tl].vtr, axes=((2, 1), (0, 1)))
-            env_tmp[site].tl = tmp / tmp.norm(p='inf')
-
-        tr = psi.nn_site(site, d='tr')
-        if tr is not None:
-            tmp = tensordot(env.proj[tr].vtl, env[t].tr @ env[t].r, axes=((0, 1), (0, 1)))
-            env_tmp[site].tr =  tmp / tmp.norm(p='inf')
-
-    if move in 'bv':
-        b = psi.nn_site(site, d='b')
-        if b is not None:
-            tmp = tensordot(env.proj[b].vbr, env[b].b, axes=(0, 0))
-            tmp = tensordot(tmp, psi[b], axes=((2, 0), (2, 3)))
-            tmp = tensordot(tmp, env.proj[b].vbl, axes=((1, 3), (0, 1)))
-            env_tmp[site].b = tmp / tmp.norm(p='inf')
-
-        bl = psi.nn_site(site, d='bl')
-        if bl is not None:
-            tmp = tensordot(env.proj[bl].vbr, env[b].bl @ env[b].l, axes=((0, 1), (0, 1)))
-            env_tmp[site].bl = tmp / tmp.norm(p='inf')
-
-        br = psi.nn_site(site, d='br')
-        if br is not None:
-            tmp = tensordot(env[b].r, env[b].br @ env.proj[br].vbl, axes=((2, 1), (0, 1)))
-            env_tmp[site].br = tmp / tmp.norm(p='inf')
-
-
-def ctm_conv_corner_spec(env: EnvCTM, history: Sequence[dict[tuple[Site, str], Tensor]]=[],
-                         corner_tol: None | float=1.0e-8) -> tuple[bool, float, Sequence[dict[tuple[Site, str], Tensor]]]:
-    """
-    Evaluate convergence of CTM by computing the difference of environment corner spectra between consecutive CTM steps.
-    """
-    history.append(calculate_corner_svd(env))
-    def spec_diff(x,y):
-        if x is not None and y is not None:
-            return (x - y).norm().item()
-        elif x is None and y is None:
-            return 0
-        else:
-            return float('Inf')
-    max_dsv = max(spec_diff(history[-1][k], history[-2][k]) for k in history[-1]) if len(history)>1 else float('Nan')
-    history[-1]['max_dsv'] = max_dsv
-
-    return (corner_tol is not None and max_dsv < corner_tol), max_dsv, history
-
-
-def calculate_corner_svd(env : dict[tuple[Site,str],Tensor]):
-    """
-    Return normalized SVD spectra, with largest singular value set to unity, of all corner tensors of environment.
-    The corners are indexed by pair of Site and corner identifier.
-    """
-    _get_spec= lambda x: x.svd(compute_uv=False) if not (x is None) and not x.isdiag else x
-    corner_sv = {}
-    for site in env.sites():
-        corner_sv[site, 'tl'] = _get_spec(env[site].tl)
-        corner_sv[site, 'tr'] = _get_spec(env[site].tr)
-        corner_sv[site, 'bl'] = _get_spec(env[site].bl)
-        corner_sv[site, 'br'] = _get_spec(env[site].br)
-    for k, v in corner_sv.items():
-        if not corner_sv[k] is None:
-            corner_sv[k] = v / v.norm(p='inf')
-    return corner_sv
 
 
 def regularize_1site_corners(cor_0, cor_1):
@@ -1271,7 +1251,8 @@ def proj_corners(r0, r1, opts_svd, **kwargs):
         fname = sys._getframe().f_code.co_name
         logger.info(f"{fname} S {s.get_legs(0)}")
 
-    rs = s.rsqrt()
+    cutoff = kwargs.get('cutoff', 0)
+    rs = s.rsqrt(cutoff=cutoff)
     p0 = tensordot(r1, (rs @ v).conj(), axes=(0, 1)).unfuse_legs(axes=0)
     p1 = tensordot(r0, (u @ rs).conj(), axes=(0, 0)).unfuse_legs(axes=0)
     return p0, p1

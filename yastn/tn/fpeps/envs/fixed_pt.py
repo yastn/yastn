@@ -18,11 +18,9 @@ import time
 
 import numpy as np
 from scipy.optimize import minimize
-from scipy.sparse.linalg import LinearOperator
-from scipy.sparse.linalg import eigsh, eigs, ArpackNoConvergence
+from scipy.sparse.linalg import LinearOperator, eigsh, eigs, ArpackNoConvergence
 import torch
 
-from ._env_ctm import ctm_conv_corner_spec
 from ._env_ctm_dist_mp import iterate_D_
 from ._env_dataclasses import Gauge
 from .rdm import *
@@ -825,7 +823,7 @@ def find_gauge_multi_sites(env_old, env, verbose=False):
 
 
 def fp_ctmrg(env: EnvCTM, \
-            ctm_opts_fwd : dict= {'method': "2site", 'corner_tol': 1e-8, 'max_sweeps': 100, 'opts_svd': {}, 'verbosity': 0},
+            ctm_opts_fwd : dict= {'method': "2x2", 'corner_tol': 1e-8, 'max_sweeps': 100, 'opts_svd': {}, 'verbosity': 0},
             ctm_opts_fp: dict= {'opts_svd': {'policy':'fullrank'}, "verbosity": 0}, fwd_devices=None)->tuple[EnvCTM,Sequence[torch.Tensor],Sequence[slice]]:
     r"""
     Compute the fixed-point environment for the given state using CTMRG.
@@ -932,7 +930,7 @@ class FixedPoint(torch.autograd.Function):
 
     def get_converged_env(
         env,
-        method="2site",
+        method="2x2",
         max_sweeps=100,
         opts_svd=None,
         corner_tol=1e-8,
@@ -947,7 +945,7 @@ class FixedPoint(torch.autograd.Function):
             ctm_itr = env.ctmrg_(iterator=True, method=method,  max_sweeps=max_sweeps,
                     opts_svd=opts_svd, corner_tol=None, **kwargs)
         elif len(fwd_devices) > 1:
-            ctm_itr = iterate_D_(env, opts_svd=opts_svd, moves='hv', method='2site', max_sweeps=max_sweeps,
+            ctm_itr = iterate_D_(env, opts_svd=opts_svd, moves='hv', method='2x2', max_sweeps=max_sweeps,
                         iterator_step=1, corner_tol=corner_tol, truncation_f=None, use_qr=False, checkpoint_move=False,
                         devices=fwd_devices)
 
@@ -958,7 +956,7 @@ class FixedPoint(torch.autograd.Function):
             t_ctm += t1-t0
 
             t2 = time.perf_counter()
-            converged, max_dsv, conv_history = ctm_conv_corner_spec(env, conv_history, corner_tol)
+            converged, max_dsv, conv_history = env.ctm_conv_corner_spec(conv_history, corner_tol)
             t_check += time.perf_counter()-t2
             if kwargs.get('verbosity',0)>2:
                 log.log(logging.INFO, f"CTM iter {len(conv_history)} |delta_C| {max_dsv} t {t1-t0} [s]")

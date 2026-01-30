@@ -94,9 +94,9 @@ class Peps(Lattice):
         return self[self.sites()[0]].config
 
     def has_physical(self) -> bool:
-        """ Whether PEPS has phyical leg"""
+        """ Whether PEPS has physical leg"""
         site0 = self.sites()[0]
-        return self[site0].ndim in (3, 5)
+        return self[site0].ndim == 5
 
     def __repr__(self) -> str:
         return f"Peps(geometry={self.geometry.__repr__()}, tensors={ self._site_data })"
@@ -312,12 +312,12 @@ class Peps2Layers():
         Complementary function is :meth:`yastn.Peps2Layers.from_dict` or a general :meth:`yastn.from_dict`.
         See :meth:`yastn.Tensor.to_dict` for further description.
         """
-        d = {'type': type(self).__name__,
+        if self._ket is None:
+            return self.bra.to_dict(level=level)  # 2 layers would be reintroduced by environment functions
+        return {'type': type(self).__name__,
              'dict_ver': 1,
-             'bra': self.bra.to_dict(level=level)}
-        if self._ket is not None:
-            d['ket'] = self._ket.to_dict(level=level)
-        return d
+             'bra': self.bra.to_dict(level=level),
+             'ket': self.ket.to_dict(level=level)}
 
     @classmethod
     def from_dict(cls, d, config=None):

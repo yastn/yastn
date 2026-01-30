@@ -80,10 +80,10 @@ def purification_tJ(config_kwargs, mu):
     opts_svd_ctm = {'D_total': chi}
 
     env = fpeps.EnvCTM(psi, init="eye")
-    env.update_(opts_svd=opts_svd_ctm, method="2site")
+    env.update_(opts_svd=opts_svd_ctm, method="2x2")
 
     print("Time evolution done")
-    info = env.ctmrg_(max_sweeps=max_sweeps, method="2site", opts_svd=opts_svd_ctm, corner_tol=tol_exp)
+    info = env.ctmrg_(max_sweeps=max_sweeps, method="2x2", opts_svd=opts_svd_ctm, corner_tol=tol_exp)
 
     # calculate expectation values
     cdagc_up = env.measure_nn(cdag_up, c_up)  # calculate for all unique bonds

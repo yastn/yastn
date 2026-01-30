@@ -65,7 +65,7 @@ jobs:
       - name: tests
         run: |
           pytest -v --ignore ./experimental;
-          pytest -v --tensordot_policy fuse_contracted ./tests/tensor;
+          pytest -v --tensordot_policy fuse_to_matrix ./tests/tensor;
           pytest -v --tensordot_policy no_fusion ./tests/tensor;
 
   # runs basic tests on torch backend.
@@ -98,7 +98,7 @@ jobs:
 
       - name: setup pytorch
         run: |
-            pip install torch==2.7 --index-url https://download.pytorch.org/whl/cpu
+            pip install torch==2.9 --index-url https://download.pytorch.org/whl/cpu
 
       - name: static analysis flake8
         run: |
@@ -112,7 +112,7 @@ jobs:
       # Run tests
       - name: tests
         run: |
-          pytest -v --backend torch --tensordot_policy fuse_contracted ./tests/tensor;
+          pytest -v --backend torch --tensordot_policy fuse_to_matrix  ./tests/tensor;
           pytest -v --backend torch --tensordot_policy no_fusion ./tests/tensor;
           pytest -v --backend torch ./tests/peps;
 
@@ -141,7 +141,7 @@ jobs:
         include:
           - backend: np
             python_v: '3.10'
-            numpy_v: '1.21.6'
+            numpy_v: '1.26.4'
             scipy_v: '1.11.4'
             torch_v: 'none'
           - backend: torch
@@ -151,9 +151,9 @@ jobs:
             torch_v: '2.4'
           - backend: torch
             python_v: '3.12'
-            numpy_v: '2.2'
-            scipy_v: '1.15'
-            torch_v: '2.7'
+            numpy_v: '2.4'
+            scipy_v: '1.16'
+            torch_v: '2.9'
       fail-fast: false
 
     # Steps represent a sequence of tasks that will be executed as part of the job
@@ -193,7 +193,6 @@ jobs:
       - name: tests
         run: |
           pytest -v --backend ${{ matrix.backend }} ./tests;
-          pytest -v --backend ${{ matrix.backend }} --tensordot_policy fuse_contracted ./tests/tensor;
           pytest -v --backend ${{ matrix.backend }} --tensordot_policy fuse_to_matrix ./tests/tensor;
           pytest -v --backend ${{ matrix.backend }} --tensordot_policy no_fusion ./tests/tensor;
 
@@ -234,14 +233,12 @@ jobs:
 
       - name: Run tests and collect coverage
         run: |
-          pytest -v --cov=yastn --cov-report=xml --backend np ./tests;
+          pytest -v --cov=yastn --cov-report=xml --backend torch ./tests;
+          pytest -v --cov=yastn --cov-report=xml --backend torch --tensordot_policy no_fusion --cov-append ./tests/tensor;
+          pytest -v --cov=yastn --cov-report=xml --backend torch --tensordot_policy fuse_to_matrix --cov-append ./tests/tensor;
           pytest -v --cov=yastn --cov-report=xml --backend np --tensordot_policy no_fusion --cov-append ./tests/tensor;
           pytest -v --cov=yastn --cov-report=xml --backend np --tensordot_policy fuse_contracted --cov-append ./tests/tensor;
           pytest -v --cov=yastn --cov-report=xml --backend np --tensordot_policy fuse_to_matrix --cov-append ./tests/tensor;
-          pytest -v --cov=yastn --cov-report=xml --backend torch --cov-append ./tests/peps;
-          pytest -v --cov=yastn --cov-report=xml --backend torch --tensordot_policy no_fusion --cov-append ./tests/tensor;
-          pytest -v --cov=yastn --cov-report=xml --backend torch --tensordot_policy fuse_contracted --cov-append ./tests/tensor;
-          pytest -v --cov=yastn --cov-report=xml --backend torch --tensordot_policy fuse_to_matrix --cov-append ./tests/tensor;
 
       - name: Upload coverage reports to Codecov with GitHub Action
         uses: codecov/codecov-action@v4.2.0

@@ -96,6 +96,9 @@ class dataclasses_common():
             dd = {k.name: Tensor.from_dict(d[k.name], config=config) for k in fields(cls) if k.name in d}
             return cls(**dd)
 
+    def fields(self, among=None):
+        return tuple(k.name for k in fields(self) if (among is None or k.name in among))
+
     def __repr__(self) -> str:
         body = ',\n'.join(f'{k}={v}' for k, v in self.__dict__.items())
         return f"{type(self)}({body})"
@@ -159,7 +162,7 @@ class EnvBP_local(dataclasses_common):
             return super(EnvBP_local, self).__getattribute__(dirn)
 
 
-@dataclass()
+@dataclass(slots=True)
 class EnvCTM_c4v_local(dataclasses_common):
     r"""
     Dataclass for CTM environment tensors associated with Peps lattice site.
@@ -175,6 +178,11 @@ class EnvCTM_c4v_local(dataclasses_common):
             return self.t
         raise AttributeError()
 
+    def __setattr__(self, dirn, obj):
+        assert dirn in ["tl", "t"], "Sanity check; EnvCTM_c4v_local has 'tl' and 't' fields only."
+        super(EnvCTM_c4v_local, self).__setattr__(dirn, obj)
+
+
 @dataclass()
 class EnvCTM_c4v_projectors(dataclasses_common):
     r"""
@@ -182,6 +190,11 @@ class EnvCTM_c4v_projectors(dataclasses_common):
     """
     vtl: Tensor | None = None  # vertical top left
     vtr: Tensor | None = None  # vertical top right
+
+    def __setattr__(self, dirn, obj):
+        assert dirn in ["vtl", "vtr"], "Sanity check; EnvCTM_c4v_local has only 't' and 'tl' fields. "
+        super(EnvCTM_c4v_projectors, self).__setattr__(dirn, obj)
+
 
 @dataclass()
 class Gauge(dataclasses_common):

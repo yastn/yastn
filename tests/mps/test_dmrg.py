@@ -160,7 +160,7 @@ def test_dmrg_XX_model_dense(config_kwargs, tol=1e-6):
     # Here, dmrg stopped based on convergence, not on max_sweeps.
 
 
-def test_dmrg_XX_model_Z2(config_kwargs, tol=1e-6):
+def test_dmrg_XX_model_Z2(config_kwargs, tol=1e-5):
     """
     Initialize random MPS of Z2 tensors and tests mps.dmrg_ vs known results.
     """

@@ -52,10 +52,10 @@ def test_iterate_measure_product(config_kwargs):
 
 def run_bp_save_load_copy(env):
     # test save, load
+    env.which = 'NN+BP'
 
-    config = env.psi.config
     d = env.save_to_dict()
-    env_save = fpeps.load_from_dict(config, d)
+    env_save = fpeps.load_from_dict(env.config, d)
     env_copy = env.copy()
     env_clone = env.clone()
     env_shallow = env.shallow_copy()
@@ -68,6 +68,10 @@ def run_bp_save_load_copy(env):
                         [True, True, True, False, False, False, True, False, False, True]):
         assert env.env.allclose(new.env)
         assert env.env.are_independent(new.env, independent=ind)
+
+    for new in [env_copy, env_clone, env_shallow, *env_dict, *env_split]:
+        assert new.which == env.which
+    assert env_save.which != env.which  # old save_to_dict did not store which.
 
 
 def test_iterate_measure_2x1(config_kwargs):

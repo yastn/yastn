@@ -19,16 +19,14 @@ from warnings import warn
 
 from tqdm import tqdm
 
-from ._env_auxlliary import *
-from ._env_auxlliary import clear_projectors
-from ._env_boundary_mps import _clear_operator_input
+from ._env_contractions import *
 from ._env_dataclasses import EnvBP_local
 from .._evolution import BipartiteBondMetric, BondMetric
-from .._gates_auxiliary import fkron, gate_fix_swap_gate, match_ancilla
+from .._gates_auxiliary import fkron, gate_fix_swap_gate, match_ancilla, clear_projectors, clear_operator_input
 from .._geometry import Bond, Site, Lattice
 from .._peps import Peps2Layers, DoublePepsTensor, PEPS_CLASSES
 from ....initialize import eye
-from ....tensor import YastnError, tensordot, vdot, ncon, Tensor
+from ....tensor import YastnError, tensordot, vdot, ncon, Tensor, add as tensor_add
 
 
 class BP_out(NamedTuple):
@@ -90,17 +88,17 @@ class EnvBP():
         self.env[site] = obj
 
     def copy(self) -> EnvBP:
-        env = EnvBP(self.psi, init=None)
+        env = EnvBP(self.psi, init=None, which=self.which)
         env.env = self.env.copy()
         return env
 
     def clone(self) -> EnvBP:
-        env = EnvBP(self.psi, init=None)
+        env = EnvBP(self.psi, init=None, which=self.which)
         env.env = self.env.clone()
         return env
 
     def shallow_copy(self) -> EnvBP:
-        env = EnvBP(self.psi, init=None)
+        env = EnvBP(self.psi, init=None, which=self.which)
         env.env = self.env.shallow_copy()
         return env
 
@@ -112,6 +110,7 @@ class EnvBP():
         """
         return {'type': type(self).__name__,
                 'dict_ver': 1,
+                'which': self.which,
                 'psi': self.psi.to_dict(level=level),
                 'env': self.env.to_dict(level=level)}
 
@@ -138,7 +137,7 @@ class EnvBP():
             if cls.__name__ != d['type']:
                 raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
             psi = PEPS_CLASSES[d['psi']['type']].from_dict(d['psi'], config=config)
-            env = cls(psi, init=None)
+            env = cls(psi, init=None, which=d.get('which', 'BP'))
             env.env = Lattice.from_dict(d['env'], config=config)
             return env
 
@@ -199,7 +198,7 @@ class EnvBP():
         """
 
         if site is None:
-            opdict = _clear_operator_input(O, self.sites())
+            opdict = clear_operator_input(O, self.sites())
         else:
             opdict = {site: {(): O}}
 
@@ -244,8 +243,8 @@ class EnvBP():
 
         if bond is None:
             if isinstance(O, dict):
-                Odict = _clear_operator_input(O, self.sites())
-                Pdict = _clear_operator_input(P, self.sites())
+                Odict = clear_operator_input(O, self.sites())
+                Pdict = clear_operator_input(P, self.sites())
                 out = {}
                 for (s0, s1) in self.bonds():
                     for nz0, op0 in Odict[s0].items():
@@ -301,19 +300,16 @@ class EnvBP():
         diff: maximal difference between belief tensors befor and after the update.
         """
         #
-        env_tmp = None  # EnvBP(self.psi, init=None)  # empty environments
-        diffs  = [self.update_bond_(bond, env_tmp=env_tmp) for bond in self.bonds('h')]
-        diffs += [self.update_bond_(bond[::-1], env_tmp=env_tmp) for bond in self.bonds('h')[::-1]]
-        diffs += [self.update_bond_(bond, env_tmp=env_tmp) for bond in self.bonds('v')]
-        diffs += [self.update_bond_(bond[::-1], env_tmp=env_tmp) for bond in self.bonds('v')[::-1]]
+        diffs  = [self.update_bond_(bond) for bond in self.bonds('h')]
+        diffs += [self.update_bond_(bond[::-1]) for bond in self.bonds('h')[::-1]]
+        diffs += [self.update_bond_(bond) for bond in self.bonds('v')]
+        diffs += [self.update_bond_(bond[::-1]) for bond in self.bonds('v')[::-1]]
         #
-        # update_storage_(self, env_tmp)
         return max(diffs)
 
-    def update_bond_(env, bond, env_tmp=None):
+    def update_bond_(env, bond):
         #
-        if env_tmp is None:
-            env_tmp = env  # update env in-place
+        env_tmp = env  # update env in-place
 
         bond = Bond(*bond)
         dirn = env.nn_bond_dirn(*bond)
@@ -542,7 +538,7 @@ class EnvBP():
             for s0, s1 in pairwise(sites):
                 env.update_bond_((s0, s1))
 
-    def post_truncation_(env, bond, max_sweeps=0):
+    def post_truncation_(env, bond, max_sweeps=0, **kwargs):
         env.update_bond_(bond)
         env.update_bond_(bond[::-1])
         if max_sweeps > 0:
@@ -628,7 +624,7 @@ class EnvBP():
            raise YastnError(f"Window range {xrange=}, {yrange=} does not fit within the lattice.")
 
         sites = [Site(nx, ny) for ny in range(*yrange) for nx in range(*xrange)]
-        projs_sites = clear_projectors(sites, projectors, xrange, yrange)
+        projs_sites = clear_projectors(sites, projectors)
 
         out = {site: [] for site in sites}
         probabilities = []
@@ -648,29 +644,34 @@ class EnvBP():
                     lenv = env[nx, ny]
                     ten = self.psi[nx0, ny0]
                     Atlbr = ncon([ten.ket, lenv.tR, lenv.lR, lenv.bR, lenv.rR], [(1, 2, 3, 4, -4), (-0, 1), (-1, 2), (-2, 3), (-3, 4)])
-                    norm_prob = vdot(Atlbr, Atlbr)
+                    #
+                    proj_sum = tensor_add(*projs_sites[nx, ny].values())
+                    proj_sum = match_ancilla(ten.ket, proj_sum)
+                    Atmp = tensordot(Atlbr, proj_sum, axes=(4, 1))
+                    norm_prob = vdot(Atlbr, Atmp)
+                    #
                     acc_prob = 0
                     for k, proj in projs_sites[(nx, ny)].items():
                         proj = match_ancilla(ten.ket, proj)
                         Atmp = tensordot(Atlbr, proj, axes=(4, 1))
                         prob = vdot(Atlbr, Atmp) / norm_prob
                         acc_prob += prob
-                        if rands[count] < acc_prob:
-                            out[nx, ny].append(k)
-                            ketp = tensordot(ten.ket, proj, axes=(4, 1)) / prob
-                            if nx + 1 < xrange[1]:
-                                tmp = ncon([ketp, lenv.tR, lenv.lR, lenv.rR], [(1, 2, -2, 3, -4), (-0, 1), (-1, 2), (-3, 3)])
-                                _, R = tmp.qr(axes=((0, 1, 3, 4), 2), sQ=tmp.s[2])
-                                env[nx + 1, ny].tR = R / R.norm()
-                                env[nx + 1, ny].t = None
-
-                            if ny + 1 < yrange[1]:
-                                tmp = ncon([ketp, lenv.tR, lenv.lR, lenv.bR], [(1, 2, 3, -3, -4), (-0, 1), (-1, 2), (-2, 3)])
-                                _, R = tmp.qr(axes=((0, 1, 2, 4), 3), sQ=tmp.s[3])
-                                env[nx, ny + 1].lR = R / R.norm()
-                                env[nx, ny + 1].l = None
-                            probability *= prob
+                        if rands[count] <= acc_prob:
                             break
+                    out[nx, ny].append(k)
+                    ketp = tensordot(ten.ket, proj, axes=(4, 1)) / prob
+                    if nx + 1 < xrange[1]:
+                        tmp = ncon([ketp, lenv.tR, lenv.lR, lenv.rR], [(1, 2, -2, 3, -4), (-0, 1), (-1, 2), (-3, 3)])
+                        _, R = tmp.qr(axes=((0, 1, 3, 4), 2), sQ=tmp.s[2])
+                        env[nx + 1, ny].tR = R / R.norm()
+                        env[nx + 1, ny].t = None
+
+                    if ny + 1 < yrange[1]:
+                        tmp = ncon([ketp, lenv.tR, lenv.lR, lenv.bR], [(1, 2, 3, -3, -4), (-0, 1), (-1, 2), (-2, 3)])
+                        _, R = tmp.qr(axes=((0, 1, 2, 4), 3), sQ=tmp.s[3])
+                        env[nx, ny + 1].lR = R / R.norm()
+                        env[nx, ny + 1].l = None
+                    probability *= prob
                     count += 1
             probabilities.append(probability)
 

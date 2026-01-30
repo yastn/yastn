@@ -33,6 +33,7 @@ def test_env2_update(config_kwargs, tol=1e-12):
         #
         check_env2_measure(psi1, psi2, tol)
         check_env2_measure(H1, H2, tol)
+        check_env2_measure(psi1, [[H1, psi1], [psi2]], tol)
 
 
 def check_env2_measure(psi1, psi2, tol):
@@ -43,20 +44,19 @@ def check_env2_measure(psi1, psi2, tol):
     env.setup_(to='last')
 
     results = [env.measure()]
-    for n in range(N - 1):
-        results.append(env.measure(bd=(n, n + 1)))
-    results.append(env.measure(bd=(N - 1, N)))
-    results.append(env.measure(bd=(N, N - 1)))
-    for n in range(N - 1, 0, -1):
-        results.append(env.measure(bd=(n, n - 1)))
-    results.append(env.measure(bd=(0, -1)))
-
-    env2 = mps.Env(psi2, psi1)
-    env2.setup_(to='last')
-    results.append(env2.measure(bd=(N, N - 1)).conj())
-
     results.append(mps.measure_overlap(bra=psi1, ket=psi2))
-    results.append(mps.measure_overlap(bra=psi2, ket=psi1).conj())
+
+    for n1 in range(-1, N+1):
+        for n2 in range(-1, N+1):
+            if n1 != n2:
+                results.append(env.measure(bd=(n1, n2)))
+
+    if not isinstance(psi2, list):
+        env2 = mps.Env(psi2, psi1)
+        env2.setup_(to='last')
+        results.append(env2.measure(bd=(N, N - 1)).conj())
+        results.append(mps.measure_overlap(bra=psi2, ket=psi1).conj())
+
     results = [x.item() for x in results]  # added for cuda
     assert np.std(results) / abs(np.mean(results)) < tol
 
@@ -89,16 +89,31 @@ def check_env3_measure(psi1, op, psi2, tol):
     env.setup_(to='last')
 
     results = [env.measure()]
-    for n in range(N - 1):
-        results.append(env.measure(bd=(n, n + 1)))
-    results.append(env.measure(bd=(N - 1, N)))
-    results.append(env.measure(bd=(N, N - 1)))
-    for n in range(N - 1, 0, -1):
-        results.append(env.measure(bd=(n, n - 1)))
-    results.append(env.measure(bd=(0, -1)))
+    for n1 in range(-1, N+1):
+        for n2 in range(-1, N+1):
+            if n1 != n2:
+                results.append(env.measure(bd=(n1, n2)))
     results.append(mps.measure_mpo(bra=psi1, op=op, ket=psi2))
     results = [x.item() for x in results]  # added for cuda
     assert np.std(results) / abs(np.mean(results)) < tol
+
+
+def test_env_setup(config_kwargs):
+    """ Simple test of minimal setup and measure. """
+    ops = yastn.operators.SpinfulFermions(sym='Z2', **config_kwargs)
+    N = 10
+    I = mps.product_mpo(ops.I(), N)
+    env = mps.Env(I, I)
+    assert len(env.F) == 2
+    env.measure((-1, 10))
+    #
+    env.setup_(to=(0, 9))
+    assert len(env.F) == 4
+    env.measure((0, 9))
+    #
+    env.setup_(to=5)
+    assert len(env.F) == 11
+    env.measure((4, 6))
 
 
 def test_env_raise(config_kwargs):

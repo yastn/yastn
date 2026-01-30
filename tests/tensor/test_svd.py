@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 """ yastn.linalg.svd() and truncation of its singular values """
+import os
 from itertools import product
 import numpy as np
 import pytest
@@ -307,6 +308,14 @@ def test_svd_truncate_lowrank(config_kwargs):
     a2 = U2 @ S2 @ V2
     assert yastn.norm(a1 - a2) < tol
 
+def test_svd_ill_conditioned(config_kwargs):
+    """ test svd on ill-conditioned matrix """
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    fname = os.path.join(os.path.dirname(__file__), 'inputs/ill_conditioned_svd.npy')
+    tensor_dict = np.load(fname, allow_pickle=True).item()
+    tensor = yastn.from_dict(tensor_dict, config_U1)
+    yastn.svd_with_truncation(tensor, axes=((0, 1), (2, 3)), D_total=12)
+
 
 def test_svd_multiplets(config_kwargs):
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
@@ -473,4 +482,6 @@ def test_svd_exceptions(config_kwargs):
 
 
 if __name__ == '__main__':
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "np", '--device', "cpu", "--tensordot_policy", "no_fusion"])
+
     pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])

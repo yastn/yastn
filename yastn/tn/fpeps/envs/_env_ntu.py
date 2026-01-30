@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from ._env_auxlliary import *
+from ._env_contractions import *
 from .._evolution import BondMetric
 from ....tensor import tensordot, YastnError
 
@@ -62,7 +62,7 @@ class EnvNTU:
     def pre_truncation_(env, bond):
         pass
 
-    def post_truncation_(env, bond, *kwargs):
+    def post_truncation_(env, bond, **kwargs):
         pass
 
     def bond_metric(self, Q0, Q1, s0, s1, dirn):

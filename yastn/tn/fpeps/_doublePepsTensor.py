@@ -13,9 +13,10 @@
 # limitations under the License.
 # ==============================================================================
 from __future__ import annotations
+from typing import Sequence
 
 from ._gates_auxiliary import match_ancilla, apply_gate_onsite
-from .envs._env_auxlliary import append_vec_tl, append_vec_br, append_vec_tr, append_vec_bl
+from .envs._env_contractions import append_vec_tl, append_vec_br, append_vec_tr, append_vec_bl
 from ...tensor import tensordot, leg_product, YastnError, SpecialTensor, Tensor
 from ...tensor._auxliary import _clear_axes
 
@@ -71,9 +72,10 @@ class DoublePepsTensor(SpecialTensor):
 
     def apply_gate_on_ket(self, op, dirn):
         """ Returns a shallow copy with ket tensor modified by application of gate. """
+        if 'k4' in self.swaps:
+            op = op.swap_gate(axes=2, charge=self.swaps.pop('k4'))
         ket = apply_gate_onsite(self.ket, op, dirn=dirn)
         return DoublePepsTensor(bra=self.bra, ket=ket, transpose=self._t, op=self.op, swaps=self.swaps)
-
 
     def add_charge_swaps_(self, charge, axes):
         """
@@ -96,6 +98,10 @@ class DoublePepsTensor(SpecialTensor):
             t = self.config.sym.add_charges(t, charge) if t is not None else charge
             if t != self.config.sym.zero():
                 self.swaps[ax] = t
+
+    def del_charge_swaps_(self):
+        """ Remove all charge swaps. """
+        self.swaps = {}
 
     def has_operator_or_swap(self):
         return self.op is not None or (self.config.fermionic and self.swaps)
@@ -151,6 +157,13 @@ class DoublePepsTensor(SpecialTensor):
         legs = tuple(leg_product(lt, lb.conj()) for lt, lb in zip(lts, lbs))
         return legs if multiple_legs else legs[0]
 
+    def get_signature(self):
+        return self.s
+
+    @property
+    def s(self) -> Sequence[int]:
+        return self.ket.s[:4]
+
     def transpose(self, axes):
         """ Transposition of DoublePepsTensor. Only cyclic permutations are allowed. """
         axes = tuple(self._t[ax] for ax in axes)
@@ -158,10 +171,34 @@ class DoublePepsTensor(SpecialTensor):
             raise YastnError("DoublePEPSTensor only supports permutations that retain legs' ordering.")
         return DoublePepsTensor(bra=self.bra, ket=self.ket, transpose=axes, op=self.op, swaps=self.swaps)
 
+    # def flip_signature(self):
+    #     r""" Conjugate DoublePepsTensor. """
+    #     op_fs = self.op.flip_signature() if self.op is not None else None
+    #     return DoublePepsTensor(bra=self.bra.flip_signature(), ket=self.ket.flip_signature(), transpose=self._t, op=op_fs, swaps=self.swaps)
+
     def conj(self):
         r""" Conjugate DoublePepsTensor. """
         op_conj = self.op.conj() if self.op is not None else None
         return DoublePepsTensor(bra=self.bra.conj(), ket=self.ket.conj(), transpose=self._t, op=op_conj, swaps=self.swaps)
+
+    def to(self, device=None, dtype=None, **kwargs):
+        r"""
+        Move DoublePepsTensor to device and cast to given datatype.
+
+        Returns a clone of the DoublePepsTensor residing on ``device`` in desired datatype ``dtype``.
+        If DoublePepsTensor already resides on ``device``, returns ``self``. This operation preserves autograd.
+        If no change is needed, makes only a shallow copy of the tensor data.
+
+        Parameters
+        ----------
+        device: str
+            device identifier
+        dtype: str
+            desired dtype
+        """
+        op_clone = self.op.to(device=device, dtype=dtype, **kwargs) if self.op is not None else None
+        return DoublePepsTensor(bra=self.bra.to(device=device, dtype=dtype, **kwargs), \
+                                ket=self.ket.to(device=device, dtype=dtype, **kwargs), transpose=self._t, op=op_clone, swaps=self.swaps)
 
     def clone(self):
         r"""
@@ -206,7 +243,7 @@ class DoublePepsTensor(SpecialTensor):
 
     def tensordot(self, b, axes, reverse=False):
         r"""
-        tensordot(DublePepsTensor, b, axes) with tenor leg order conventions matching the default for tensordot.
+        tensordot(DublePepsTensor, b, axes) with tensor leg order conventions matching the default for tensordot.
         tensordot(self, b, axes, reverse=True) corresponds to tensordot(b, self, axes).
         """
 
@@ -218,12 +255,12 @@ class DoublePepsTensor(SpecialTensor):
 
         in_a, in_b = _clear_axes(*axes)  # contracted meta legs
         if len(in_a) != 2 or len(in_b) != 2:
-            raise YastnError('DoublePepTensor.tensordot only supports contraction of exactly 2 legs.')
+            raise YastnError('DoublePepsTensor.tensordot only supports contraction of exactly 2 legs.')
         sa0, sa1 = set(in_a), set(in_b)
         if len(sa0) != len(in_a) or len(sa1) != len(in_b):
-            raise YastnError('DoublePepTensor.tensordot repeated axis in axes[0] or axes[1].')
+            raise YastnError('DoublePepsTensor.tensordot repeated axis in axes[0] or axes[1].')
         if sa0 - set(range(self.ndim)) or sa1 - set(range(b.ndim)):
-            raise YastnError('DoublePepTensor.tensordot axes outside of tensor ndim.')
+            raise YastnError('DoublePepsTensor.tensordot axes outside of tensor ndim.')
 
         in_a = tuple(self._t[ax] for ax in in_a)
         out_a = tuple(ax for ax in self._t if ax not in in_a)
@@ -242,7 +279,7 @@ class DoublePepsTensor(SpecialTensor):
             return append_vec_tr(Ab, Ak, b, op=self.op, mode=mode, in_b=in_b, out_a=out_a)
         elif in_a == (1, 2):
             return append_vec_bl(Ab, Ak, b, op=self.op, mode=mode, in_b=in_b, out_a=out_a)
-        raise YastnError('DoublePepTensor.tensordot, 2 axes of self should be neighbouring.')
+        raise YastnError('DoublePepsTensor.tensordot, 2 axes of self should be neighbouring.')
 
     def fuse_layers(self):
         """

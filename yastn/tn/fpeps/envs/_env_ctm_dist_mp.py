@@ -13,19 +13,18 @@
 # limitations under the License.
 # ==============================================================================
 from __future__ import annotations
-from typing import Callable, Sequence
-import time
-
-import numpy as np
-from ...._from_dict import from_dict
-from ....tn.fpeps._geometry import Site
-from ....tensor import Tensor, YastnError, Leg, tensordot, qr, vdot
-from ._env_ctm import CTMRG_out, EnvCTM, proj_corners, trivial_projectors_, update_env_, update_storage_
-from ._env_auxlliary import halves_4x4_lhr, halves_4x4_tvb
-from ...._split_combine_dict import split_data_and_meta, combine_data_and_meta
 import logging
-import os
-import torch
+from typing import Callable, Sequence
+
+from ._env_contractions import halves_4x4_lhr, halves_4x4_tvb, update_env_fetch_args, update_env_dir
+from ._env_ctm import CTMRG_out, EnvCTM, proj_corners, update_storage_
+from .. import Site, DoublePepsTensor
+
+from ...._from_dict import from_dict
+from ...._split_combine_dict import split_data_and_meta, combine_data_and_meta
+from ....tensor import Tensor, YastnError, qr
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -38,7 +37,7 @@ def _validate_devices_list(devices: list[str] | None) -> None:
         raise YastnError("At least two devices must be provided for distributed CTM.")
 
 
-def iterate_D_(env, opts_svd=None, moves='hv', method='2site', max_sweeps=1, iterator=False, corner_tol=None, truncation_f: Callable = None, **kwargs):
+def iterate_D_(env, opts_svd=None, moves='hv', method='2x2', max_sweeps=1, iterator=False, corner_tol=None, truncation_f: Callable = None, **kwargs):
         r"""
         Perform CTMRG updates :meth:`yastn.tn.fpeps.EnvCTM.update_` until convergence.
         Convergence can be measured based on singular values of CTM environment corner tensors.
@@ -63,10 +62,10 @@ def iterate_D_(env, opts_svd=None, moves='hv', method='2site', max_sweeps=1, ite
             The default is 'hv'.
 
         method: str
-            '2site', '1site'. The default is '2site'.
+            '2x2', '1x2' in mathod. The default is '2x2'.
 
-                * '2site' uses the standard 4x4 enlarged corners, enabling enlargement of EnvCTM bond dimensions. When some PEPS bonds are rank-1, it recognizes it to use 5x4 corners to prevent artificial collapse of EnvCTM bond dimensions to 1, which is important for hexagonal lattice.
-                * '1site' uses smaller 4x2 corners. It is significantly faster, but is less stable and  does not allow for EnvCTM bond dimension growth.
+                * '2x2' uses the standard 2x2 enlarged corners forming 4x4 patch, enabling enlargement of EnvCTM bond dimensions. When some PEPS bonds are rank-1, it recognizes it to use 5x4 corners to prevent artificial collapse of EnvCTM bond dimensions to 1, which is important for hexagonal lattice.
+                * '1x2' uses smaller 1x2 corners forming 2x4 patch. It is significantly faster, but is less stable and  does not allow for EnvCTM bond dimension growth.
 
         max_sweeps: int
             The maximal number of sweeps.
@@ -168,7 +167,7 @@ def _ctmrg_iterator_D_(env, opts_svd, moves, method, max_sweeps, corner_tol, **k
     yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
 
 
-def update_D_(ctmrg_mp_context, env, opts_svd, moves='hv', method='2site', **kwargs):
+def update_D_(ctmrg_mp_context, env, opts_svd, moves='hv', method='2x2', **kwargs):
     r"""
     Perform one step of CTMRG update. Environment tensors are updated in place.
 
@@ -194,9 +193,9 @@ def update_D_(ctmrg_mp_context, env, opts_svd, moves='hv', method='2site', **kwa
         The default is 'hv'.
 
     method: str
-        '2site' or '1site'. The default is '2site'.
-        '2site' uses the standard 4x4 enlarged corners, allowing to enlarge EnvCTM bond dimension.
-        '1site' uses smaller 4x2 corners. It is significantly faster, but is less stable and
+        '2x2' or '1x2' in method. The default is '2x2'.
+        '2x2' uses the standard 2x2 enlarged corners, allowing to enlarge EnvCTM bond dimension.
+        '1x2' uses smaller 1x2 corners. It is significantly faster, but is less stable and
         does not allow to grow EnvCTM bond dimension.
 
     checkpoint_move: bool
@@ -208,8 +207,6 @@ def update_D_(ctmrg_mp_context, env, opts_svd, moves='hv', method='2site', **kwa
     """
     if 'tol' not in opts_svd and 'tol_block' not in opts_svd:
         opts_svd['tol'] = 1e-14
-    if method not in ('1site', '2site'):
-        raise YastnError(f"CTM update {method=} not recognized. Should be '1site' or '2site'")
 
     checkpoint_move = kwargs.get('checkpoint_move', False)
     for d in moves:
@@ -354,14 +351,40 @@ def _update_core_D_(ctmrg_mp_context, env, move: str, opts_svd: dict, **kwargs):
         if env.profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.range_pop()
 
         # fill trivial projectors on edges (if any)
-        trivial_projectors_(env, move, sites_proj)
+        env._trivial_projectors_(move, sites_proj)
 
         #
         # Update move
+        if env.profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.range_push(f"update_env_D_")
+        
+        # NOTE Here, we assumme that master process has up-to-date view of all on-site tensors, projectors, and env tensors
+        #
+        # Compute updated tensors in parallel and send back to default device
+        moves= 'lr'*('h'==move) + 'tb'*('v'==move) + move*(move in 'lrtb')
+        for i,site in enumerate(site_group):
+            for mv in moves:
+                job_ts= update_env_fetch_args(site, env, mv)
+                job_ts_d= tuple(t.to_dict(level=1) if isinstance(t,(Tensor,DoublePepsTensor)) else t for t in job_ts)
+                task_queue.put( ("update_env_move_MP_",
+                    (i, site, mv, env.config.default_device, job_ts_d), \
+                        {'profiling_mode': kwargs.get('profiling_mode', None)}) )
+        
+        # blocking wait for all updates to complete and assignment to env_tmp
         env_tmp = EnvCTM(env.psi, init=None)  # empty environments
-        if env.profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.range_push(f"update_env_")
-        for site in site_group:
-            update_env_(env_tmp, site, env, move)
+        for i,_s in enumerate(site_group):
+            for _mv in moves:
+                _i, site, mv, tmp_env_ts_d = stage1_queue.get()
+                tmp_env_ts= tuple(from_dict(t_d).clone() for t_d in tmp_env_ts_d)
+                del tmp_env_ts_d
+                if mv=='l':
+                    env_tmp[site].l, env_tmp[site].tl, env_tmp[site].bl= tmp_env_ts
+                elif mv=='r':
+                    env_tmp[site].r, env_tmp[site].tr, env_tmp[site].br= tmp_env_ts
+                elif mv=='t':
+                    env_tmp[site].t, env_tmp[site].tl, env_tmp[site].tr= tmp_env_ts
+                elif mv=='b':
+                    env_tmp[site].b, env_tmp[site].bl, env_tmp[site].br= tmp_env_ts
+                
         if env.profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.range_pop()
 
         update_storage_(env, env_tmp)
@@ -388,6 +411,8 @@ def _ctmrg_worker_mp(i:int, devices:Sequence[str],
             projectors_stage1(stage1_queue, device, *args, **func_kwargs)
         elif function_name == "projectors_move_MP_":
             projectors_move_MP_(stage2_queue, device, *args, **func_kwargs)
+        elif function_name == "update_env_move_MP_":
+            update_env_move_MP_(stage1_queue, device, *args, **func_kwargs)
         else:
             raise ValueError(f"Unknown function name: {function_name}")
         del args, func_kwargs, task
@@ -522,3 +547,37 @@ def projectors_stage1(out_queue,device,
     if profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.range_pop()
     del env, ts
     del cor_tt, cor_bb, cor_ll, cor_rr, res
+
+
+def update_env_move_MP_(out_queue, device, i, site, move, ret_device, args_d, **kwargs):
+    r"""
+    Update CTM environment tensors performing specified move.
+    Parameters
+    ----------
+    out_queue: mp.Queue
+        multiprocessing Queue to put the result into.
+    device: str
+        Device to perform calculations on.
+    i: int
+        Index of the job.
+    site: Site
+        Reference lattice site for which the environment tensors are updated.
+    move: str
+        CTM move direction: 'l', 'r', 't', or 'b'.
+    ret_device: str
+        Device to put the result onto.
+    args_d: tuple(dict|Site)
+        Tensors required for the update serialized to dictionaries. 
+    """
+    profiling_mode= kwargs.get("profiling_mode", None)
+    args= tuple(from_dict(t_d).clone().to(device=device,non_blocking=True) if isinstance(t_d, dict) else t_d for t_d in args_d)
+    del args_d
+
+    if profiling_mode in ["NVTX",]: args[0].config.backend.cuda.nvtx.range_push(f"{site} {move}")
+    res= update_env_dir(move, *args)
+    res= tuple(r.to(device=ret_device).to_dict(level=1) for r in res)
+
+    out_queue.put( (i, site, move, res) )
+    if profiling_mode in ["NVTX",]: args[0].config.backend.cuda.nvtx.range_pop()
+    del args, res
+

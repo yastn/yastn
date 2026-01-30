@@ -103,7 +103,8 @@ def rand(config=None, distribution=(-1, 1), legs=(), n=None, isdiag=False, **kwa
     If any of :code:`s`, :code:`t`, or :code:`D` are specified,
     :code:`legs` are overriden and only :code:`t`, :code:`D`, and :code:`s` are used.
     """
-    return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val=('rand', distribution), **kwargs)
+    val = distribution if distribution == 'normal' else ('rand', distribution)
+    return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val=val, **kwargs)
 
 
 def rand_like(T: Tensor, distribution=(-1, 1), **kwargs) -> Tensor:
@@ -122,7 +123,10 @@ def randR(config=None, distribution=(-1, 1), legs=(), n=None, isdiag=False, **kw
     Initialize tensor with all allowed blocks filled with real random numbers,
     see :meth:`yastn.rand`.
     """
-    kwargs['dtype'] = 'float64'
+    if 'dtype' not in kwargs or kwargs['dtype'] == 'complex128':
+        kwargs['dtype'] = 'float64'
+    if kwargs['dtype'] == 'complex64':
+        kwargs['dtype'] = 'float32'
     return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='rand', distribution=distribution, **kwargs)
 
 
@@ -131,7 +135,10 @@ def randC(config=None, distribution=(-1, 1), legs=(), n=None, isdiag=False, **kw
     Initialize tensor with all allowed blocks filled with complex random numbers,
     see :meth:`yastn.rand`.
     """
-    kwargs['dtype'] = 'complex128'
+    if 'dtype' not in kwargs or kwargs['dtype'] == 'float64':
+        kwargs['dtype'] = 'complex128'
+    if kwargs['dtype'] == 'float32':
+        kwargs['dtype'] = 'complex64'
     return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='rand', distribution=distribution, **kwargs)
 
 

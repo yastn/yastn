@@ -16,10 +16,12 @@
 from itertools import groupby
 from functools import reduce
 import torch
-from torch.utils.checkpoint import checkpoint as _checkpoint
 import torch.cuda as cuda
+from torch.utils.checkpoint import checkpoint as _checkpoint
+
 import torch.multiprocessing as mp
-mp.set_start_method('spawn', force=True)
+mp.set_start_method('spawn', force=True) # to avoid issues with ''fork' and sharing CUDA tensors in some environments
+
 from .linalg.torch_eig_sym import SYMEIG
 from ._backend_torch_backwards import kernel_svd, kernel_svds_scipy
 from ._backend_torch_backwards import kernel_dot, kernel_transpose_dot_sum, kernel_negate_blocks
@@ -29,8 +31,8 @@ from ._backend_torch_backwards import kernel_transpose, kernel_transpose_and_mer
 
 __all__= [
     'DTYPE', 'cuda_is_available',
-    'get_dtype', 'is_complex', 'get_device', 'random_seed', 'grad',
-    'detach', 'detach_', 'clone', 'copy',
+    'get_dtype', 'get_yastn_dtype', 'is_complex', 'get_device', 'random_seed',
+    'grad', 'detach', 'detach_', 'clone', 'copy', 'randint',
     'to_numpy', 'get_shape', 'get_size', 'diag_create', 'diag_get', 'real',
     'imag', 'max_abs', 'maximum', 'norm_matrix', 'delete', 'insert',
     'expm', 'first_element', 'item', 'sum_elements', 'norm', 'entropy',
@@ -38,13 +40,14 @@ __all__= [
     'requires_grad_', 'requires_grad', 'move_to', 'conj',
     'trace', 'rsqrt', 'reciprocal', 'exp', 'sqrt', 'absolute',
     'fix_svd_signs', 'svdvals', 'svd_lowrank', 'svd', 'svd_randomized', 'svds_scipy',
-    'eigh', 'qr', 'pinv',
+    'eigh', 'qr', 'pinv', 'eig', 'eigvals',
     'argsort', 'eigs_which', 'allclose',
     'add', 'sub', 'apply_mask', 'vdot', 'diag_1dto2d', 'diag_2dto1d',
     'dot', 'dot_diag', 'transpose_dot_sum',
     'merge_to_dense', 'merge_super_blocks', 'is_independent',
-    'apply_mask', 'embed_mask', 
-    'transpose', 'transpose_and_merge', 'unmerge']
+    'apply_mask', 'embed_mask',
+    'transpose', 'transpose_and_merge', 'unmerge',
+    'negate_blocks', 'bitwise_not']
 
 
 torch.random.seed()
@@ -52,7 +55,8 @@ BACKEND_ID = "torch"
 DTYPE = {'float32': torch.float32,
          'float64': torch.float64,
          'complex64': torch.complex64,
-         'complex128': torch.complex128}
+         'complex128': torch.complex128,
+         'bool': torch.bool}
 
 
 def cuda_is_available():
@@ -61,6 +65,11 @@ def cuda_is_available():
 
 def get_dtype(t):
     return t.dtype
+
+
+def get_yastn_dtype(t):
+    dtypes = [k for k, v in DTYPE.items() if t.dtype == v]
+    return dtypes[0] if len(dtypes) == 1 else 'unknown'
 
 
 def is_complex(x):
@@ -201,9 +210,11 @@ def ones(D, dtype='float64', device='cpu'):
 
 
 def rand(D, dtype='float64', distribution=(0, 1), device='cpu'):
+    if dtype == 'bool':
+        return torch.rand(D, dtype=DTYPE['float64'], device=device) > 0.5
     if distribution == 'normal':
         return torch.randn(D, dtype=DTYPE[dtype], device=device)
-    ds = 1 if dtype=='float64' else 1 + 1j
+    ds = 1 if ('float' in dtype or 'bool' in dtype) else 1 + 1j
     out = torch.rand(D, dtype=DTYPE[dtype], device=device)
     return out if distribution == (0, 1) else (distribution[1] - distribution[0]) * out + distribution[0] * ds
 
@@ -295,6 +306,12 @@ def svd_lowrank(data, meta, sizes, **kwargs):
     return svds_scipy(data, meta, sizes, solver='arpack', **kwargs)
 
 
+def dtype_to_complex(data):
+    """ type promotion to complex. """
+    tmp = 1j * torch.tensor(1, dtype=data.dtype)
+    return tmp.dtype
+
+
 def svd(data, meta, sizes, fullrank_uv=False, ad_decomp_reg=1.0e-12, diagnostics=None, **kwargs):
     return kernel_svd.apply(data, meta, sizes, fullrank_uv, ad_decomp_reg, diagnostics)
 
@@ -327,7 +344,7 @@ def svd_randomized(data, meta, sizes, q=None, niter=3, **kwargs):
 
 
 def svds_scipy(data, meta, sizes, thresh=0.1, solver='arpack', **kwargs):
-    return kernel_svds_scipy.apply(data,meta,sizes, thresh, solver, **kwargs)
+    return kernel_svds_scipy.apply(data, meta, sizes, thresh, solver, **kwargs)
 
 
 def fix_svd_signs(Udata, Vhdata, meta):
@@ -347,7 +364,7 @@ def fix_svd_signs(Udata, Vhdata, meta):
 
 
 def eigh(data, meta=None, sizes=(1, 1), order_by_magnitude=False, ad_decomp_reg=1.0e-12):
-    real_dtype= data.real.dtype if data.is_complex() else data.dtype
+    real_dtype = data.real.dtype if data.is_complex() else data.dtype
     Sdata = torch.zeros((sizes[0],), dtype=real_dtype, device=data.device)
     Udata = torch.zeros((sizes[1],), dtype=data.dtype, device=data.device)
     if meta is not None:
@@ -370,9 +387,10 @@ def eig(data, meta=None, sizes=(1, 1), **kwargs):
     # NOTE torch.linalg.eig returns right eigenvectors U only, i.e. M U = diag(S) U
     #
     # Assume worst case ?
-    Udata = torch.empty((sizes[0],), dtype=DTYPE['complex128'], device=data.device)
-    Sdata = torch.empty((sizes[1],), dtype=DTYPE['complex128'], device=data.device)
-    Vdata = torch.empty((sizes[2],), dtype=DTYPE['complex128'], device=data.device)
+    dtype = dtype_to_complex(data)
+    Udata = torch.empty((sizes[0],), dtype=dtype, device=data.device)
+    Sdata = torch.empty((sizes[1],), dtype=dtype, device=data.device)
+    Vdata = torch.empty((sizes[2],), dtype=dtype, device=data.device)
     for (sl, D, slU, DU, slS, slV, DV) in meta:
         S, U = torch.linalg.eig(data[slice(*sl)].reshape(D))
         #
@@ -401,7 +419,8 @@ def eig(data, meta=None, sizes=(1, 1), **kwargs):
 
 
 def eigvals(data, meta, sizeS, **kwargs):
-    Sdata = torch.empty((sizeS,), dtype=DTYPE['complex128'], device=data.device)
+    dtype = dtype_to_complex(data)
+    Sdata = torch.empty((sizeS,), dtype=dtype, device=data.device)
     for (sl, D, _, _, slS, _, _) in meta:
         S = torch.linalg.eigvals(data[slice(*sl)].reshape(D))
         Sdata[slice(*slS)]= S[eigs_which(S, which=kwargs.get('which', 'LM'))]

@@ -17,8 +17,13 @@ import pytest
 torch_test = pytest.mark.skipif("'torch' not in config.getoption('--backend')",
                                 reason="Test torch backend.linalg routines.")
 
+long_test = pytest.mark.skipif("not config.getoption('long_tests')",
+                               reason="long duration tests are skipped")
+
+
 
 @torch_test
+@long_test
 def test_SVDSYMARNOLDI_random():
     import torch
     from yastn.backend.linalg.torch_svds_scipy import SVDSYMARNOLDI
@@ -38,6 +43,7 @@ def test_SVDSYMARNOLDI_random():
 
 
 @torch_test
+@long_test
 def test_SVDARNOLDI_random():
     import torch
     from yastn.backend.linalg.torch_svds_scipy import SVDS_SCIPY
@@ -54,6 +60,7 @@ def test_SVDARNOLDI_random():
 
 
 @torch_test
+@long_test
 def test_SVDARNOLDI_rank_deficient():
     import torch
     from yastn.backend.linalg.torch_svds_scipy import SVDS_SCIPY
@@ -71,6 +78,7 @@ def test_SVDARNOLDI_rank_deficient():
 
 
 @torch_test
+@long_test
 def test_SYMEIG_random():
     import torch
     from yastn.backend.linalg.torch_eig_sym import SYMEIG
@@ -96,6 +104,7 @@ def test_SYMEIG_random():
 
 
 @torch_test
+@long_test
 def test_SYMEIG_3x3degenerate():
     import torch
     from yastn.backend.linalg.torch_eig_sym import SYMEIG
@@ -123,6 +132,7 @@ def test_SYMEIG_3x3degenerate():
 
 
 @torch_test
+@long_test
 def test_SYMEIG_rank_deficient():
     import torch
     from yastn.backend.linalg.torch_eig_sym import SYMEIG
@@ -152,4 +162,4 @@ def test_SYMEIG_rank_deficient():
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--long_tests"])

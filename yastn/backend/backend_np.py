@@ -16,7 +16,6 @@
 from itertools import groupby
 from functools import reduce
 import warnings
-import multiprocessing as mp
 import numpy as np
 import scipy.linalg
 import scipy.sparse.linalg
@@ -25,8 +24,11 @@ import scipy.sparse.linalg
 # non-deterministic initialization of random number generator
 rng = {'rng': np.random.default_rng(None)}  # initialize random number generator
 BACKEND_ID = "np"
-DTYPE = {'float32': np.float32, 'float64': np.float64,
-         'complex64': np.complex64, 'complex128': np.complex128}
+DTYPE = {'float32': np.float32,
+         'float64': np.float64,
+         'complex64': np.complex64,
+         'complex128': np.complex128,
+         'bool': bool}
 
 
 def cuda_is_available():
@@ -35,6 +37,10 @@ def cuda_is_available():
 
 def get_dtype(t):
     return t.dtype
+
+
+def get_yastn_dtype(t):
+    return t.dtype.name
 
 
 def is_complex(x):
@@ -174,18 +180,21 @@ def ones(D, dtype='float64', **kwargs):
 
 
 def rand(D, dtype='float64', distribution=(0, 1), **kwargs):
-    if distribution == 'normal':
-        if dtype == 'float64':
-            return rng['rng'].normal(size=D)
-        # else:  # dtype == 'complex128':
-        return (rng['rng'].normal(size=D) + 1j * rng['rng'].normal(size=D)) / (2. ** 0.5)
-    if dtype == 'float64':
+    if dtype == 'bool':
+        return rng['rng'].random(D) > 0.5
+    if distribution == 'normal' and ('float' in dtype or 'bool' in dtype):
+        out = rng['rng'].normal(size=D)
+    elif distribution == 'normal' and 'complex' in dtype:
+        out = (rng['rng'].normal(size=D) + 1j * rng['rng'].normal(size=D)) / (2. ** 0.5)
+    elif ('float' in dtype or 'bool' in dtype):  # uniform distribution
         out = rng['rng'].random(D)
-        ds = 1
+        if distribution != (0, 1):
+            out = (distribution[1] - distribution[0]) * out + distribution[0]
     else:  # dtype == 'complex128':
         out = rng['rng'].random(D) + 1j * rng['rng'].random(D)
-        ds = 1 + 1j
-    return out if distribution == (0, 1) else (distribution[1] - distribution[0]) * out + distribution[0] * ds
+        if distribution != (0, 1):
+            out = (distribution[1] - distribution[0]) * out + distribution[0] * (1 + 1j)
+    return out.astype(dtype=DTYPE[dtype])
 
 
 def randint(low, high):
@@ -276,9 +285,17 @@ def safe_svd(a):
 def svd_lowrank(data, meta, sizes, **kwargs):
     return svds_scipy(data, meta, sizes, None, 'arpack', **kwargs)
 
+
+def dtype_to_complex(data):
+    """ type promotion to complex. """
+    tmp = 1j * np.array(1, dtype=data.dtype)
+    return tmp.dtype
+
+
 def svds_scipy(data, meta, sizes, thresh=None, solver='arpack', **kwargs):
+    real_dtype = data.real.dtype if np.iscomplexobj(data) else data.dtype
     Udata = np.empty((sizes[0],), dtype=data.dtype)
-    Sdata = np.empty((sizes[1],), dtype=DTYPE['float64'])
+    Sdata = np.empty((sizes[1],), dtype=real_dtype)
     Vdata = np.empty((sizes[2],), dtype=data.dtype)
     for (sl, D, slU, DU, slS, slV, DV) in meta:
         k = slS[1] - slS[0]
@@ -307,8 +324,9 @@ def svds_scipy(data, meta, sizes, thresh=None, solver='arpack', **kwargs):
 
 
 def svd(data, meta, sizes, **kwargs):
+    real_dtype = data.real.dtype if np.iscomplexobj(data) else data.dtype
     Udata = np.empty((sizes[0],), dtype=data.dtype)
-    Sdata = np.empty((sizes[1],), dtype=DTYPE['float64'])
+    Sdata = np.empty((sizes[1],), dtype=real_dtype)
     Vdata = np.empty((sizes[2],), dtype=data.dtype)
     for (sl, D, slU, DU, slS, slV, DV) in meta:
         U, S, V = safe_svd(data[slice(*sl)].reshape(D))
@@ -319,10 +337,11 @@ def svd(data, meta, sizes, **kwargs):
 
 
 def eig_lowrank(data, meta, sizes, **kwargs):
-    which= kwargs.get('which', 'LM')
-    Udata = np.empty((sizes[0],), dtype=DTYPE['complex128'])
-    Sdata = np.empty((sizes[1],), dtype=DTYPE['complex128'])
-    Vdata = np.empty((sizes[2],), dtype=DTYPE['complex128'])
+    which = kwargs.get('which', 'LM')
+    dtype = dtype_to_complex(data)
+    Udata = np.empty((sizes[0],), dtype=dtype)
+    Sdata = np.empty((sizes[1],), dtype=dtype)
+    Vdata = np.empty((sizes[2],), dtype=dtype)
     for (sl, D, slU, DU, slS, slV, DV) in meta:
         k = slS[1] - slS[0]
         if k < min(D) - 1 and D[0] * D[1] > 5000:
@@ -343,10 +362,10 @@ def eig_lowrank(data, meta, sizes, **kwargs):
 def eig(data, meta=None, sizes=(1, 1), **kwargs):
     if meta is None:
         return np.linalg.eig(data)  # S, U
-    # Assume worst case ?
-    Udata = np.empty((sizes[0],), dtype=DTYPE['complex128'])
-    Sdata = np.empty((sizes[1],), dtype=DTYPE['complex128'])
-    Vdata = np.empty((sizes[2],), dtype=DTYPE['complex128'])
+    dtype = dtype_to_complex(data)  # Assume worst case ?
+    Udata = np.empty((sizes[0],), dtype=dtype)
+    Sdata = np.empty((sizes[1],), dtype=dtype)
+    Vdata = np.empty((sizes[2],), dtype=dtype)
     for (sl, D, slU, DU, slS, slV, DV) in meta:
         S, V, U = scipy.linalg.eig(data[slice(*sl)].reshape(D), left=True, right=True)
         #
@@ -400,7 +419,8 @@ def eig(data, meta=None, sizes=(1, 1), **kwargs):
 
 
 def eigvals(data, meta, sizeS, **kwargs):
-    Sdata = np.empty((sizeS,), dtype=DTYPE['complex128'])
+    dtype = dtype_to_complex(data)
+    Sdata = np.empty((sizeS,), dtype=dtype)
     for (sl, D, _, _, slS, _, _) in meta:
         S = scipy.linalg.eigvals(data[slice(*sl)].reshape(D), b=None, overwrite_a=False,
                                      check_finite=True, homogeneous_eigvals=False)
@@ -409,7 +429,8 @@ def eigvals(data, meta, sizeS, **kwargs):
 
 
 def svdvals(data, meta, sizeS, **kwargs):
-    Sdata = np.empty((sizeS,), dtype=DTYPE['float64'])
+    real_dtype = data.real.dtype if np.iscomplexobj(data) else data.dtype
+    Sdata = np.empty((sizeS,), dtype=real_dtype)
     for (sl, D, _, _, slS, _, _) in meta:
         try:
             S = scipy.linalg.svd(data[slice(*sl)].reshape(D), full_matrices=False, compute_uv=False)
@@ -434,7 +455,8 @@ def fix_svd_signs(Udata, Vdata, meta):
 
 
 def eigh(data, meta=None, sizes=(1, 1)):
-    Sdata = np.zeros((sizes[0],), dtype=DTYPE['float64'])
+    real_dtype = data.real.dtype if np.iscomplexobj(data) else data.dtype
+    Sdata = np.zeros((sizes[0],), dtype=real_dtype)
     Udata = np.zeros((sizes[1],), dtype=data.dtype)
     if meta is not None:
         for (sl, D, slU, DU, slS) in meta:

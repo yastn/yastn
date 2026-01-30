@@ -283,7 +283,7 @@ def test_Kagome_RVB_D3_U1_sym_vs_pepstorch(ctm_init, truncate_multiplets_mode, c
     R= loc_cost_f(test_elems)
     R.backward()
 
-    assert np.allclose(A_grad_expected._data.numpy(), test_elems.grad.numpy(), rtol=1e-03, atol=1e-05)
+    assert np.allclose(A_grad_expected._data.numpy(force=True), test_elems.grad.numpy(force=True), rtol=1e-03, atol=1e-05)
 
 
 @pytest.mark.skipif( "not config.getoption('long_tests')", reason="long duration tests are skipped" )

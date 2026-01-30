@@ -39,6 +39,9 @@ class Site(NamedTuple):
     def __str__(self):
         return f"Site({self.nx}, {self.ny})"
 
+def is_site(site):
+    return isinstance(site, tuple) and len(site) == 2 and all(isinstance(nn, int) for nn in site)
+
 
 class Bond(NamedTuple):
     """ A bond between two lattice sites. """
@@ -50,6 +53,9 @@ class Bond(NamedTuple):
 
     def __format__(self, spec):
             return str(self).format(spec)
+
+def is_bond(bond):
+    return isinstance(bond, (tuple, list)) and len(bond) == 2 and all(is_site(site) for site in bond)
 
 
 _periodic_dict = {'infinite': 'ii', 'obc': 'oo', 'cylinder': 'po'}
@@ -469,7 +475,9 @@ class Lattice():
 
     def move_to_patch(self, sites):
         """ Initialize a patch with a shallow copy of data object for provided sites. """
-        if not isinstance(sites[0], (tuple, list)):
+        if not sites:
+            return
+        if is_site(sites):
             sites = [sites]
         for site in sites:
             self._patch[site] = self[site].shallow_copy()

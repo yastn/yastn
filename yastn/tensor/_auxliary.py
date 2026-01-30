@@ -43,6 +43,7 @@ class _config(NamedTuple):
     default_fusion: str = 'hard'
     force_fusion: str = None
     tensordot_policy: str = 'fuse_contracted'
+    profile: bool = False
 
 
 def _flatten(nested_iterator):
