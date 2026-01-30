@@ -238,6 +238,8 @@ class Tensor:
                 d['data'] = d['config'].backend.to_tensor(d['data'], dtype=dtype, device=d['config'].default_device)
 
             return cls(**d)
+        else:
+            raise YastnError(f"Tensor.to_dict with dict_ver = {d['dict_ver']} not supported")
 
     @property
     def s(self) -> Sequence[int]:

@@ -88,8 +88,8 @@ def _pre_addition(*tensors):
     for ten in tensors[1:]:
         _test_can_be_combined(tensors[0], ten)
 
-    # if len(set(ten.trans for ten in tensors)) > 1:
-    tensors = [ten.consume_transpose() for ten in tensors]
+    if len(set(ten.trans for ten in tensors)) > 1:  # if ten.trans differ
+        tensors = [ten.consume_transpose() for ten in tensors]
 
     mask_needed = False
     a = tensors[0]

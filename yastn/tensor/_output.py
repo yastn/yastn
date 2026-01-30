@@ -78,8 +78,9 @@ def to_dict(a, level=2, meta=None) -> dict:
 
     data = a.data if level < 2 else a.config.backend.to_numpy(a.data)
 
+    # dict_ver=2: Tensor has field 'trans'
     d = {'type': type(a).__name__,
-         'dict_ver': 2,  # to_dict version
+         'dict_ver': 2,
          'level': level,
          'config': config,
          'data': data,

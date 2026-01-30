@@ -31,17 +31,11 @@ def _test_can_be_combined(a, b):
     """Check if config's of two tensors allow for performing operations mixing them. """
     if type(a) is not type(b):
         raise YastnError('Operation requires two yastn.Tensor-s')
-    if a.device != b.device:
-        raise YastnError('Devices of the two tensors do not match.')
-    _test_configs_match(a.config, b.config)
-
-
-def _test_configs_match(a_config, b_config):
-    if a_config.sym.SYM_ID != b_config.sym.SYM_ID:
+    if a.config.sym.SYM_ID != b.config.sym.SYM_ID:
         raise YastnError('Two tensors have different symmetry rules.')
-    if a_config.fermionic != b_config.fermionic:
+    if a.config.fermionic != b.config.fermionic:
         raise YastnError('Two tensors have different assigment of fermionic statistics.')
-    if a_config.backend.BACKEND_ID != b_config.backend.BACKEND_ID:
+    if a.config.backend.BACKEND_ID != b.config.backend.BACKEND_ID:
         raise YastnError('Two tensors have different backends.')
 
 
