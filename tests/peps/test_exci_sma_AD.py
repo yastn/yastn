@@ -25,8 +25,8 @@ def init_peps_D(D, epsilon, config_kwargs):
     psi = fpeps.Peps(geometry)
     # s = (-1, 1, 1, -1) + (1,)
     config = yastn.make_config(sym='dense', **config_kwargs)
-    up_block = torch.Tensor([[[[[0, 0] for _ in range(D)] for _ in range(D)] for _ in range(D)] for _ in range(D)])
-    dn_block = torch.tensor([[[[[0, 0] for _ in range(D)] for _ in range(D)] for _ in range(D)] for _ in range(D)])
+    up_block = torch.tensor([[[[[0, 0] for _ in range(D)] for _ in range(D)] for _ in range(D)] for _ in range(D)], dtype=torch.complex128)
+    dn_block = torch.tensor([[[[[0, 0] for _ in range(D)] for _ in range(D)] for _ in range(D)] for _ in range(D)], dtype=torch.complex128)
     up_block[0,0,0,0,0] = 1
     dn_block[0,0,0,0,1] = 1
 
@@ -136,16 +136,33 @@ def testAD_exci_sma(D, epsilon, config_kwargs):
         A.set_block(val=t_val, Ds=t_val.shape)
         return A
 
-    def compute_exci(env_ctm, *operators, sites_op, exci_bra, exci_ket, site_bra, site_ket, compute_grad=False):
+    def compute_exci(env_ctm, *operators, sites_op, exci_bra, exci_ket, site_bra, site_ket, config):
         sites = sites_op + [site_bra, site_ket]
         xrange = (min(site[0] for site in sites), max(site[0] for site in sites) + 1)
         yrange = (min(site[1] for site in sites), max(site[1] for site in sites) + 1)
+
+        Theta = torch.nn.Parameter(torch.randn(D, D, D, D, 2, dtype=torch.cdouble))
+        exci_bra = _convert_tensor(Theta, config)        
         exci_bra.requires_grad_(requires_grad=True)
+        Bket1 = torch.randn(D, D, D, D, 2, dtype=torch.cdouble)
+        Bket2 = torch.randn(D, D, D, D, 2, dtype=torch.cdouble)
+        # assert torch.allclose(Bket1, Bket2)
+        exci_ket1 = _convert_tensor(Bket1, config)  
+        exci_ket2 = _convert_tensor(Bket2, config)  
+
         if exci_bra._data.grad is not None:
             exci_bra._data.grad.zero_()
         env_exci = fpeps.EnvExciSMA(env_ctm, xrange, yrange)
-        bond_val_exci = env_exci.measure_exci(*operators, exci_bra=exci_bra, exci_ket=exci_ket, site_bra=site_bra, site_ket=site_ket, sites_op=sites_op)
-        grad_dbra = torch.autograd.grad(bond_val_exci, exci_bra._data, grad_outputs=torch.ones_like(bond_val_exci), retain_graph=True)[0]
+        # bond_val_exci = env_exci.measure_exci(*operators, exci_bra=exci_bra, exci_ket=exci_ket, site_bra=site_bra, site_ket=site_ket, sites_op=sites_op)
+        # grad_dbra = torch.autograd.grad(bond_val_exci, exci_bra._data, grad_outputs=torch.ones_like(bond_val_exci), retain_graph=True)[0]
+        
+        bond_val_exci1 = env_exci.measure_exci(*operators, exci_bra=exci_bra, exci_ket=exci_ket1, site_bra=site_bra, site_ket=site_ket, sites_op=sites_op)
+        bond_val_exci2 = env_exci.measure_exci(*operators, exci_bra=exci_bra, exci_ket=exci_ket2, site_bra=site_bra, site_ket=site_ket, sites_op=sites_op)
+
+        X1 = torch.autograd.grad(bond_val_exci1, exci_bra._data, grad_outputs=torch.ones_like(bond_val_exci1), retain_graph=True)[0]
+        X2 = torch.autograd.grad(bond_val_exci2, exci_bra._data, grad_outputs=torch.ones_like(bond_val_exci2), retain_graph=True)[0]
+        assert torch.allclose(X1, X2)
+        
         with torch.no_grad():
             grad_dbra = grad_dbra.resolve_conj().numpy()
         return bond_val_exci, grad_dbra
@@ -173,23 +190,23 @@ def testAD_exci_sma(D, epsilon, config_kwargs):
 
                     # compute excited energies
                     if len(bond) == 1:
-                        Hhz_val, dHhz_dbra = compute_exci(env_ctm, Sz, sites_op=shift_bond, exci_bra=exci_bra, exci_ket=exci_ket, site_bra=site_bra, site_ket=site_ket)
-                        Hid_val, dH_id_dbra = compute_exci(env_ctm, Id, sites_op=shift_bond, exci_bra=exci_bra, exci_ket=exci_ket, site_bra=site_bra, site_ket=site_ket)
+                        Hhz_val, dHhz_dbra = compute_exci(env_ctm, Sz, sites_op=shift_bond, exci_bra=exci_bra, exci_ket=exci_ket, site_bra=site_bra, site_ket=site_ket, config=config)
+                        Hid_val, dH_id_dbra = compute_exci(env_ctm, Id, sites_op=shift_bond, exci_bra=exci_bra, exci_ket=exci_ket, site_bra=site_bra, site_ket=site_ket, config=config)
                         # es_exci[bond][lx_b-min_x, ly_b-min_y, lx_k-min_x, ly_k-min_y, i_sl] = -hz * Hhz_val
-                        es_exci[bond][:, i_basis, lx_b-min_x, ly_b-min_y, lx_k-min_x, ly_k-min_y, i_sl] = -hz * ortho_basis[psi.site2index(site_bra)].T @ dHhz_dbra
-                        es_exci[bond][:, i_basis, lx_b-min_x, ly_b-min_y, lx_k-min_x, ly_k-min_y, i_sl] -= e0s[f'{shift_bond[0]}'].numpy() * (ortho_basis[psi.site2index(site_bra)].T @ dH_id_dbra)
+                        es_exci[bond][:, i_basis, lx_b-min_x, ly_b-min_y, lx_k-min_x, ly_k-min_y, i_sl] = -hz * ortho_basis[psi.site2index(site_bra)].T.conj() @ dHhz_dbra
+                        es_exci[bond][:, i_basis, lx_b-min_x, ly_b-min_y, lx_k-min_x, ly_k-min_y, i_sl] -= e0s[f'{shift_bond[0]}'].numpy() * (ortho_basis[psi.site2index(site_bra)].T.conj() @ dH_id_dbra)
 
                     else:
-                        H_zz_val, dHzz_dbra = compute_exci(env_ctm, Sz, Sz, sites_op=shift_bond, exci_bra=exci_bra, exci_ket=exci_ket, site_bra=site_bra, site_ket=site_ket)
-                        H_xx_val, dHxx_dbra = compute_exci(env_ctm, Sx, Sx, sites_op=shift_bond, exci_bra=exci_bra, exci_ket=exci_ket, site_bra=site_bra, site_ket=site_ket)
-                        H_yy_val, dHyy_dbra = compute_exci(env_ctm, Sy, Sy, sites_op=shift_bond, exci_bra=exci_bra, exci_ket=exci_ket, site_bra=site_bra, site_ket=site_ket)
-                        H_id_val, dH_id_dbra = compute_exci(env_ctm, Id, Id, sites_op=shift_bond, exci_bra=exci_bra, exci_ket=exci_ket, site_bra=site_bra, site_ket=site_ket)
+                        H_zz_val, dHzz_dbra = compute_exci(env_ctm, Sz, Sz, sites_op=shift_bond, exci_bra=exci_bra, exci_ket=exci_ket, site_bra=site_bra, site_ket=site_ket, config=config)
+                        H_xx_val, dHxx_dbra = compute_exci(env_ctm, Sx, Sx, sites_op=shift_bond, exci_bra=exci_bra, exci_ket=exci_ket, site_bra=site_bra, site_ket=site_ket, config=config)
+                        H_yy_val, dHyy_dbra = compute_exci(env_ctm, Sy, Sy, sites_op=shift_bond, exci_bra=exci_bra, exci_ket=exci_ket, site_bra=site_bra, site_ket=site_ket, config=config)
+                        H_id_val, dH_id_dbra = compute_exci(env_ctm, Id, Id, sites_op=shift_bond, exci_bra=exci_bra, exci_ket=exci_ket, site_bra=site_bra, site_ket=site_ket, config=config)
                         # es_exci[bond][i_basis, i_basis, lx_b-min_x, ly_b-min_y, lx_k-min_x, ly_k-min_y, i_sl] = Jzz * H_zz_val + Jxy * (H_xx_val + H_yy_val) - e0s[f'{shift_bond[0]}, {shift_bond[1]}'] * H_id_val
 
-                        es_exci[bond][:, i_basis, lx_b-min_x, ly_b-min_y, lx_k-min_x, ly_k-min_y, i_sl] = Jzz * ortho_basis[psi.site2index(site_bra)].T @ dHzz_dbra
-                        es_exci[bond][:, i_basis, lx_b-min_x, ly_b-min_y, lx_k-min_x, ly_k-min_y, i_sl] += Jxy * ortho_basis[psi.site2index(site_bra)].T @ dHxx_dbra
-                        es_exci[bond][:, i_basis, lx_b-min_x, ly_b-min_y, lx_k-min_x, ly_k-min_y, i_sl] += Jxy * ortho_basis[psi.site2index(site_bra)].T @ dHyy_dbra
-                        es_exci[bond][:, i_basis, lx_b-min_x, ly_b-min_y, lx_k-min_x, ly_k-min_y, i_sl] -= e0s[f'{shift_bond[0]}, {shift_bond[1]}'].numpy() * ortho_basis[psi.site2index(site_bra)].T @ dH_id_dbra
+                        es_exci[bond][:, i_basis, lx_b-min_x, ly_b-min_y, lx_k-min_x, ly_k-min_y, i_sl] = Jzz * ortho_basis[psi.site2index(site_bra)].T.conj() @ dHzz_dbra
+                        es_exci[bond][:, i_basis, lx_b-min_x, ly_b-min_y, lx_k-min_x, ly_k-min_y, i_sl] += Jxy * ortho_basis[psi.site2index(site_bra)].T.conj() @ dHxx_dbra
+                        es_exci[bond][:, i_basis, lx_b-min_x, ly_b-min_y, lx_k-min_x, ly_k-min_y, i_sl] += Jxy * ortho_basis[psi.site2index(site_bra)].T.conj() @ dHyy_dbra
+                        es_exci[bond][:, i_basis, lx_b-min_x, ly_b-min_y, lx_k-min_x, ly_k-min_y, i_sl] -= e0s[f'{shift_bond[0]}, {shift_bond[1]}'].numpy() * ortho_basis[psi.site2index(site_bra)].T.conj() @ dH_id_dbra
 
                     # compute excited norms
                     if not computed_norm and lx_b == min_x and ly_b == min_y:
@@ -197,8 +214,8 @@ def testAD_exci_sma(D, epsilon, config_kwargs):
                         bra_c_np = ortho_basis[psi.site2index(site_c)][:, i_basis].reshape(D,D,D,D,2)
                         exci_bra_c = _convert_tensor(bra_c_np, config)
 
-                        N_val, dN_dbra = compute_exci(env_ctm, sites_op=[], exci_bra=exci_bra_c, exci_ket=exci_ket, site_bra=site_c, site_ket=site_ket, compute_grad=True)
-                        ns_exci[:, i_basis, lx_k-min_x, ly_k-min_y, i_sl] = ortho_basis[psi.site2index(site_c)].T @ dN_dbra
+                        N_val, dN_dbra = compute_exci(env_ctm, sites_op=[], exci_bra=exci_bra_c, exci_ket=exci_ket, site_bra=site_c, site_ket=site_ket, config=config)
+                        ns_exci[:, i_basis, lx_k-min_x, ly_k-min_y, i_sl] = ortho_basis[psi.site2index(site_c)].T.conj() @ dN_dbra
                         # ns_exci[lx_k-min_x, ly_k-min_y, i_sl] = N_val
             computed_norm = True
 
@@ -339,6 +356,6 @@ if __name__ == '__main__':
     #     default_dtype="complex128",
     #     tensordot_policy="no_fusion",
     # )
-    testAD_exci_sma(1, 0.01, yastn_config)
-    # testAD_exci_sma(1, 0, yastn_config)
+    # testAD_exci_sma(1, 0.01, yastn_config)
+    testAD_exci_sma(1, 0, yastn_config)
     # testAD_exci_sma(2, 0.01, yastn_config)

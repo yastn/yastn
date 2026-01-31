@@ -174,10 +174,12 @@ class EnvExciSMA:
             bra = self[i1, 'r'].conj()
             # tms = {ny: self[ny, 'v'] for ny in range(*self.yrange)}
             tms = {}
+            tms0 = {}
             for ny in range(*self.yrange):
                 t_bra = exci_bra if ny == site_bra[1] else None
                 t_ket = exci_ket if ny == site_ket[1] else None
                 tms[ny] = self[ny, 'v', t_bra, t_ket, site_bra, site_ket]
+                tms0[ny] = self[ny, 'v']
             ket = self[i0, 'l']
             dx = self.xrange[0] - self.offset
             tens = {(nx, ny): tm[nx - dx] for ny, tm in tms.items() for nx in range(*self.xrange)}
@@ -186,15 +188,17 @@ class EnvExciSMA:
             bra = self[i1, 'b'].conj()
             # tms = {nx: self[nx, 'h'] for nx in range(*self.xrange)}
             tms = {}
+            tms0 = {}
             for nx in range(*self.xrange):
                 t_bra = exci_bra if nx == site_bra[0] else None
                 t_ket = exci_ket if nx == site_ket[0] else None
                 tms[nx] = self[nx, 'h', t_bra, t_ket, site_bra, site_ket]
+                tms0[nx] = self[nx, 'h']
             ket = self[i0, 't']
             dy = self.yrange[0] - self.offset
             tens = {(nx, ny): tm[ny - dy] for nx, tm in tms.items() for ny in range(*self.yrange)}
 
-        # val_no = contract_window(bra, tms, ket, i0, i1, opts_svd, opts_var)
+        val_no = contract_window(bra, tms0, ket, i0, i1, opts_svd, opts_var)
 
         nx0, ny0 = self.xrange[0], self.yrange[0]
         for (nx, ny), op in ops.items():
@@ -208,8 +212,7 @@ class EnvExciSMA:
                 tens[nx0, jj].add_charge_swaps_(op.n, axes=['b0', 'k2', 'k4'])
 
         val_op = contract_window(bra, tms, ket, i0, i1, opts_svd, opts_var)
-        # return sign * val_op / val_no
-        return sign * val_op
+        return sign * val_op / val_no
 
     def measure_exci_ops(self, *operators, exci_psi=None, sites_op=None, opts_svd=None, opts_var=None):
         if opts_var is None:
