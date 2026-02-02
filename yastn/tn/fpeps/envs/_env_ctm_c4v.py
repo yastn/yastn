@@ -56,9 +56,9 @@ class PsiFlip:
 
 
 class EnvCTM_c4v(EnvCTM):
-    
+
     _default_corner_signature = (1,1)
-    
+
     def __init__(self, psi, init='eye', ket=None):
         r"""
         Environment used in Corner Transfer Matrix Renormalization Group algorithm for C4v symmetric

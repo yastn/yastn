@@ -50,7 +50,7 @@ def decompose_nn_gate(Gnn, bond=None) -> Gate:
 
 def gate_nn_exp(step, I, H, bond=None) -> Gate:
     r"""
-    Gate exp(-step * H) for a hermitian Hamiltonian H,
+    Gate exp(-step * H) for a Hermitian Hamiltonian H,
     consistent with leg order of :meth:`yastn.tn.fpeps.gates.fkron`.
     Add 0 * I to the Hamiltonian to avoid situation,
     where some blocks are missing in the Hamiltonian.
@@ -193,7 +193,7 @@ def gate_local_field(h, step, I, X, site=None) -> Gate:
 
 def distribute(geometry, gates_nn=None, gates_local=None, symmetrize=True) -> Sequence[Gate]:
     r"""
-    Distributes gates homogeneous over the lattice.
+    Distributes gates homogeneously over the lattice.
 
     Parameters
     ----------

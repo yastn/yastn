@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-""" yastn.from_dict() handling imports off all major classes """
+""" yastn.from_dict() handling imports of all major classes """
 from .tensor import Tensor
 from .tn.fpeps import Lattice, Peps, Peps2Layers, DoublePepsTensor
 from .tn.fpeps import EnvBoundaryMPS, EnvBP, EnvCTM, EnvCTM_c4v

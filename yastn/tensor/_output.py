@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-""" Methods outputing data from yastn.Tensor. """
+""" Methods outputting data from yastn.Tensor. """
 from __future__ import annotations
 from functools import reduce
 from numbers import Number
@@ -22,7 +22,7 @@ from warnings import warn
 
 import numpy as np
 
-from ._auxliary import _clear_axes, _unpack_axes, _struct, _slc, _flatten
+from ._auxiliary import _clear_axes, _unpack_axes, _struct, _slc, _flatten
 from ._legs import Leg, LegMeta, legs_union, _legs_mask_needed
 from ._merging import _embed_tensor
 from ._tests import YastnError
@@ -401,7 +401,7 @@ def to_dense(a, legs=None, native=False, reverse=False) -> numpy.ndarray | torch
     The type of the returned tensor depends on the backend, i.e. ``numpy.ndarray`` or ``torch.tensor``.
     Blocks are ordered according to increasing charges on each leg.
     It is possible to supply a list of additional charge sectors to be included by
-    explictly specifying ``legs``.
+    explicitly specifying ``legs``.
     Specified ``legs`` should be consistent with current structure of the tensor.
     This allows to fill in extra zero blocks.
 
@@ -446,11 +446,11 @@ def to_raw_tensor(a) -> numpy.ndarray | torch.tensor:
 
 def to_nonsymmetric(a, legs=None, native=False, reverse=False) -> 'Tensor':
     r"""
-    Create equivalent :class:`yastn.Tensor` with no explict symmetry. All blocks of the original
-    tensor are accummulated into a single block.
+    Create equivalent :class:`yastn.Tensor` with no explicit symmetry. All blocks of the original
+    tensor are accumulated into a single block.
 
     Blocks are ordered according to increasing charges on each leg.
-    It is possible to supply a list of additional charge sectors to be included by explictly
+    It is possible to supply a list of additional charge sectors to be included by explicitly
     specifying ``legs``. These legs should be consistent with current structure of the tensor.
     This allows to fill in extra zero blocks.
 

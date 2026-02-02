@@ -17,7 +17,7 @@ from __future__ import annotations
 from functools import lru_cache
 from itertools import accumulate
 
-from ._auxliary import _slc, _join_contiguous_slices
+from ._auxiliary import _slc, _join_contiguous_slices
 from ._legs import legs_union
 from ._merging import _embed_tensor
 from ._tests import YastnError, _test_can_be_combined, _get_tD_legs, _unpack_trans_test_axes_pair
@@ -60,7 +60,7 @@ def add(*tensors, amplitudes=None, **kwargs):
 
     amplitudes: None | Sequence[Number]
         If ``None``, all amplitudes are assumed to be one.
-        Otherwise, The number of tensors and amplitudes should be the same.
+        Otherwise, the number of tensors and amplitudes should be the same.
         Individual amplitude can be ``None``, which gives the same result as ``1``
         but without an extra multiplication.
     """
@@ -196,7 +196,7 @@ def allclose(a, b, rtol=1e-13, atol=1e-13) -> bool:
     If this condition is satisfied, execute :code:`backend.allclose` function
     to compare tensors’ data.
 
-    Note that if two tenors differ by zero blocks, the function returns :code:`False`.
+    Note that if two tensors differ by zero blocks, the function returns :code:`False`.
     To resolve such differences, use :code:`(a - b).norm() < tol`
 
     Parameters
@@ -303,7 +303,7 @@ def __abs__(a) -> 'Tensor':
     r"""
     Return tensor with element-wise absolute values.
 
-    Can be on called on tensor as ``abs(tensor)``.
+    Can be called on tensor as ``abs(tensor)``.
     """
     data = a.config.backend.absolute(a._data)
     return a._replace(data=data)

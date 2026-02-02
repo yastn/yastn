@@ -18,7 +18,7 @@ from typing import Sequence
 from ._gates_auxiliary import match_ancilla, apply_gate_onsite
 from .envs._env_contractions import append_vec_tl, append_vec_br, append_vec_tr, append_vec_bl
 from ...tensor import tensordot, leg_product, YastnError, SpecialTensor, Tensor
-from ...tensor._auxliary import _clear_axes
+from ...tensor._auxiliary import _clear_axes
 
 
 _allowed_transpose = ((0, 1, 2, 3), (1, 2, 3, 0), (2, 3, 0, 1), (3, 0, 1, 2),
@@ -88,7 +88,7 @@ class DoublePepsTensor(SpecialTensor):
         charge: tuple[int]
 
         axes: Sequence[str] | str
-            identfy axes: 'bt', 'bl', 'bb', 'br', 'bs', 'kt', 'kl', 'kb', 'kr', 'ks'
+            identify axes: 'bt', 'bl', 'bb', 'br', 'bs', 'kt', 'kl', 'kb', 'kr', 'ks'
             k/b is for ket/bra; t/l/b/r/s is for top/left/bottom/right/system
         """
         if isinstance(axes, str):

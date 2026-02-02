@@ -211,7 +211,7 @@ class SquareLattice():
 
     def f_ordered(self, s0, s1) -> bool:
         """
-        Check if sites s0, s1 are fermionicaly ordered (or identical).
+        Check if sites s0, s1 are fermionically ordered (or identical).
         """
         return s0[1] < s1[1] or (s0[1] == s1[1] and s0[0] <= s1[0])
 
@@ -361,7 +361,7 @@ class TriangularLattice(SquareLattice):
         Geometric information about infinite triangular lattice, which
         is an infinite lattice with :math:`3{\times}3` (full_patch) unit cell and nine unique tensors,
         or :math:`\sqrt{3}{\times}\sqrt{3}` unit cell and three unique tensors;
-        a finite lattice with with :math:`Nx{\times}Ny` patch and :math: `Nx{\times}Ny` unique tensors.
+        a finite lattice with :math:`Nx{\times}Ny` patch and :math:`Nx{\times}Ny` unique tensors.
         """
         self.full_patch = full_patch
         super().__init__(dims=dims, boundary=boundary)

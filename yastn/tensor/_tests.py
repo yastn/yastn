@@ -18,7 +18,7 @@ from operator import mul
 
 import numpy as np
 
-from ._auxliary import _flatten, _unpack_axes, _struct
+from ._auxiliary import _flatten, _unpack_axes, _struct
 
 __all__ = ['are_independent', 'is_consistent', 'YastnError']
 
@@ -47,7 +47,7 @@ def _test_tD_consistency(struct):
         Di = Dset[:, i].tolist()
         tDi = list(zip(ti, Di))
         if len(set(ti)) != len(set(tDi)):
-            raise YastnError('Inconsist assigment of bond dimension to some charge.')
+            raise YastnError('Inconsistent assignment of bond dimension to some charge.')
 
 
 def _unpack_trans_test_axes_pair(a, b, sgn=1, axes=None):
@@ -116,7 +116,7 @@ def are_independent(a, b, independent=True):
 
 def is_consistent(a):
     """
-    Test is yastn tensor is does not contain inconsistent structures
+    Test if yastn tensor does not contain inconsistent structures
 
     Check that:
     1) tset and Dset correspond to A

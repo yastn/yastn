@@ -128,7 +128,7 @@ See examples at :ref:`examples/tensor/decomposition:decompositions of symmetric 
 
 .. _tensor-aux:
 
-Auxliary
+Auxiliary
 --------
 
 Methods called by :doc:`Krylov-based algorithms</tensor/krylov>`.

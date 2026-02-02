@@ -707,7 +707,7 @@ def truncate_bipartite_(g, R0, R1, opts_svd, pinv_cutoffs, info):
 
 def accumulated_truncation_error(infoss, statistics='mean'):
     r"""
-    Return accumulated truncation error :math:`\Delta` calcuated from evolution output statistics.
+    Return accumulated truncation error :math:`\Delta` calculated from evolution output statistics.
 
     :math:`\Delta = \sum_{steps} statistics_{bond} [\sum_{gate \in bond} truncation\_error(gate, step)]`,
     where statistics is mean or max.
@@ -731,7 +731,7 @@ def accumulated_truncation_error(infoss, statistics='mean'):
             infos = fpeps.evolution_step_(env, gates, opt_svd)
             infoss.append(infos)
 
-        # Accumulated runcation error
+        # Accumulated truncation error
         Delta = fpeps.accumulated_truncation_error(infoss)
     """
     if statistics == 'max':

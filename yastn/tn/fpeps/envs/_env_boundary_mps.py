@@ -33,7 +33,7 @@ class EnvBoundaryMPS():
         r"""
         Calculate boundary MPSs for finite PEPS.
 
-        Consequative MPS follows from contracting transfer matrix with previous MPS.
+        Consecutive MPS follows from contracting transfer matrix with previous MPS.
         This employs :meth:`yastn.tn.mps.zipper` followed by :meth:`yastn.tn.mps.compression_` for refinement.
 
         Parameters
@@ -432,7 +432,7 @@ class EnvBoundaryMPS():
 
     def sample_MC_(proj_env, st0, st1, st2, psi, projectors, opts_svd, opts_var, trial="local"):
         """
-        Monte Carlo steps in a finite peps. Makes two steps
+        Monte Carlo steps in a finite PEPS. Makes two steps
         while sweeping finite lattice back and forth.
 
         Takes environments and a complete list of projectors to sample from.
@@ -476,7 +476,7 @@ class EnvBoundaryMPS():
 
 
 def _sample_MC_column_local(ny, proj_env, st0, st1, psi, projectors, rands):
-    # update is proposed based on local probabilies
+    # update is proposed based on local probabilities
     vR = proj_env.boundary_mps(n=ny, dirn='r')
     Os = proj_env.psi.transfer_mpo(n=ny, dirn='v').T
     vL = proj_env.boundary_mps(n=ny, dirn='l')

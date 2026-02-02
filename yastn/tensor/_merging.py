@@ -21,7 +21,7 @@ from typing import NamedTuple
 
 import numpy as np
 
-from ._auxliary import _slc, _flatten, _clear_axes, _unpack_legs
+from ._auxiliary import _slc, _flatten, _clear_axes, _unpack_legs
 from ._tests import YastnError, _test_axes_all, _get_tD_legs
 
 __all__ = ['fuse_legs', 'unfuse_legs', 'fuse_meta_to_hard', '_Fusion', '_slc']
@@ -55,7 +55,7 @@ class _Fusion(NamedTuple):
     'p' product of spaces, 's' direct sum, 'o' original space with no internal structure.
 
     Charges t and dimensions D are given for fused spaces only.
-    Their indexing is shifted by one comparing to tree, op, s.
+    Their indexing is shifted by one compared to tree, op, s.
     For the top level, charges and dimensions follow from existing blocks.
     """
     tree: tuple = (1,)  # order of fusions
@@ -113,7 +113,7 @@ def _no_change_in_transpose_and_merge(meta_mrg, meta_new, Dsize):
 
 def _unmerge(config, data, meta):
     Dsize = meta[-1][0][1] if len(meta) > 0 else 0
-    assert len(data) == Dsize, "This should not have happen"
+    assert len(data) == Dsize, "This should not have happened"
     if _no_change_in_unmerge(meta):
         return data
     return config.backend.unmerge(data, meta)
@@ -378,7 +378,7 @@ def _meta_fuse_hard(config, struct, slices, axes, inds):
 
 
 def fuse_meta_to_hard(a):
-    r""" Changes all meta fusions into a hard fusions. If there are no meta fusions, return self. """
+    r""" Changes all meta fusions into hard fusions. If there are no meta fusions, return self. """
     while any(mf != (1,) for mf in a.mfs):
         axes, new_mfs = _consume_mfs_lowest(a.mfs)
         order = tuple(range(a.ndim_n))
@@ -585,7 +585,7 @@ def _meta_mask(a_struct, a_slices, a_isdiag, mask_t, mask_D, axis):
 
 def _mask_nonzero(mask):
     r"""
-    Change boolen masks into masks of indices.
+    Change boolean masks into masks of indices.
     Fow trivial mask with all true, return None.
     """
     if all(np.all(v) for v in mask.values()):
@@ -637,7 +637,7 @@ def _embed_tensor(a, legs, legs_new):
                 a = a._replace(struct=struct, slices=slices, data=data, hfs=hfs)
     return a
 
-#  =========== auxliary functions handling fusion logic ======================
+#  =========== auxiliary functions handling fusion logic ======================
 
 
 @lru_cache(maxsize=1024)
@@ -769,7 +769,7 @@ def _mask_falsify_mismatches_(ms1, ms2):
 @lru_cache(maxsize=1024)
 def _masks_hfs_intersection(sym, ts, Ds, hfs):
     r"""
-    Calculate two masks that project onto intersecion of two spaces.
+    Calculate two masks that project onto intersection of two spaces.
     ts = tuple[ts0, ts1], where ts0, ts1 are top-layer charges in two intersected legs.
     Ds = tuple[Ds0, Ds1] with corresponding top-lyer bond dimensions.
     hfs = tuple[hfs0, hfs1], where hfs0, hfs1 are hard fusion data for two spaces

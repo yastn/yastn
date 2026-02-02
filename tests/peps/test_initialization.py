@@ -44,7 +44,7 @@ def test_product_peps(config_kwargs):
     #
     with pytest.raises(yastn.YastnError):
         psi = fpeps.product_peps(geometry, {(0, 0): v0})
-        # product_peps did not initialize some peps tensor
+        # product_peps did not initialize some PEPS tensor
 
     with pytest.raises(yastn.YastnError):
         fpeps.product_peps(geometry, ops.I().add_leg(s=1))

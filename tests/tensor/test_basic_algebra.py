@@ -393,19 +393,19 @@ def test_auxiliary():
     # _join_contiguous_slices
     slc1 = ((0, 10), (10, 20), (30, 40), (40, 50))
     slc2 = ((0, 10), (10, 20), (20, 30), (40, 50))
-    meta = yastn.tensor._auxliary._join_contiguous_slices(slc1, slc2)
+    meta = yastn.tensor._auxiliary._join_contiguous_slices(slc1, slc2)
     assert meta == (((0, 20), (0, 20)), ((30, 40), (20, 30)), ((40, 50), (40, 50)))
 
     slc1 = ((0, 10), (10, 20), (20, 30), (40, 50))
     slc2 = ((10, 20), (20, 30), (30, 40), (40, 50))
-    meta = yastn.tensor._auxliary._join_contiguous_slices(slc1, slc2)
+    meta = yastn.tensor._auxiliary._join_contiguous_slices(slc1, slc2)
     assert meta == (((0, 30), (10, 40)), ((40, 50), (40, 50)))
 
     # _slices_to_negate
-    slices = (yastn.tensor._auxliary._slc(((0, 10),)),
-              yastn.tensor._auxliary._slc(((10, 20),)),
-              yastn.tensor._auxliary._slc(((20, 30),)),
-              yastn.tensor._auxliary._slc(((30, 40),)))
+    slices = (yastn.tensor._auxiliary._slc(((0, 10),)),
+              yastn.tensor._auxiliary._slc(((10, 20),)),
+              yastn.tensor._auxiliary._slc(((20, 30),)),
+              yastn.tensor._auxiliary._slc(((30, 40),)))
 
     negate_slices = yastn.tensor._contractions._slices_to_negate([0, 0, 0, 0], slices)
     assert negate_slices == ()

@@ -21,7 +21,7 @@ import sys
 
 import numpy as np
 
-from ._auxliary import _struct, _slc, _clear_axes, _unpack_axes
+from ._auxiliary import _struct, _slc, _clear_axes, _unpack_axes
 from ._merging import _merge_to_matrix, _meta_unmerge_matrix, _unmerge
 from ._merging import _Fusion, _leg_struct_trivial
 from ._tests import YastnError, _test_axes_all
@@ -134,7 +134,7 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
 
 def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         Uaxis=-1, Vaxis=0, policy='fullrank',
-        fix_signs=False, svd_on_cpu=False, thresh= 0.1, **kwargs) -> tuple[yastn.Tensor, yastn.Tensor, yastn.Tensor] | yastn.Tensor:
+        fix_signs=False, svd_on_cpu=False, thresh=0.1, **kwargs) -> tuple[yastn.Tensor, yastn.Tensor, yastn.Tensor] | yastn.Tensor:
     r"""
     Split tensor into :math:`a = U S V` using exact singular value decomposition (SVD),
     where the columns of `U` and the rows of `V` form orthonormal bases
@@ -504,9 +504,9 @@ def _find_gaps(S, tol=0, eps_multiplet=1e-13, which='LM'):
         ``‘LR’`` : largest real part,
         ``‘SR’`` : smallest real part.
 
-    Return
+    Returns
     ------
-        gaps: nd.array
+        gaps: numpy.ndarray
             gaps[i] gives normalized gap as absolute value of difference between i-th and i+1
             element of S wrt. to order 'which', normalized by largest overall gap.
     """
@@ -946,7 +946,7 @@ def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, which='SR', policy='fullrank',
                          tol=0, tol_block=0, D_block=float('inf'), D_total=float('inf'),
                          truncate_multiplets=False, mask_f=None, **kwargs) -> tuple[yastn.Tensor, yastn.Tensor]:
     r"""
-    Split symmetric tensor using exact eigenvalue decomposition, :math:`a= USU^{\dagger}`.
+    Split symmetric tensor using exact eigenvalue decomposition, :math:`a= USU^{\dagger}``.
     Optionally, truncate the resulting decomposition.
 
     Tensor is expected to be symmetric (hermitian) with total charge 0.
@@ -1020,7 +1020,7 @@ def entropy(a, alpha=1, tol=1e-12) -> Number:
     ----------
     alpha: float
         Order of Renyi entropy.
-        ``alpha=1`` (the default) is von Neuman entropy: :math:`-{\rm Tr}(a \cdot {\rm log2}(a))`
+        ``alpha=1`` (the default) is von Neumann entropy: :math:`-{\rm Tr}(a \cdot {\rm log2}(a))`
         otherwise: :math:`\frac{1}{1-alpha} {\rm log2}({\rm Tr}(a^{alpha}))`
 
     tol: float

@@ -20,7 +20,7 @@ from operator import itemgetter
 
 import numpy as np
 
-from ._auxliary import _slc, _clear_axes, _unpack_axes, _join_contiguous_slices
+from ._auxiliary import _slc, _clear_axes, _unpack_axes, _join_contiguous_slices
 from ._contractions import ncon
 from ._legs import LegMeta, Leg, leg_product
 from ._merging import _Fusion
@@ -63,7 +63,7 @@ def copy(a) -> 'Tensor':
 def clone(a) -> 'Tensor':
     r"""
     Return a clone of the tensor preserving the autograd - resulting clone is a part
-    of the computational graph. Data of the resulting tensor is indepedent
+    of the computational graph. Data of the resulting tensor is independent
     from the original.
     """
     data = a.config.backend.clone(a._data)
@@ -552,7 +552,7 @@ def remove_zero_blocks(a, rtol=1e-12, atol=0) -> 'Tensor':
     r"""
     Remove blocks where all elements are below a cutoff.
 
-    Cutoff is a combination of absolut tolerance and
+    Cutoff is a combination of absolute tolerance and
     relative tolerance with respect to maximal element in the tensor.
     """
     cutoff = atol + rtol * a.norm(p='inf')

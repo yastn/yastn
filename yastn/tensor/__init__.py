@@ -28,7 +28,7 @@ import numpy as np
 
 from .._split_combine_dict import *
 from ._algebra import *
-from ._auxliary import _struct, _config
+from ._auxiliary import _struct, _config
 from ._contractions import *
 from ._control_lru import *
 from ._initialize import *
@@ -123,11 +123,11 @@ class Tensor:
         # mapping from logical legs (unpacked from mfs) to native legs in data that are described by self.struct
         # 3) At the lowest level, self.hfs contains information about hard-fusion of native legs
         #
-        self.trans = kwargs.get('trans', None)
+        self._trans = kwargs.get('trans', None)
         try:
-            self.trans = tuple(self.trans)
+            self._trans = tuple(self._trans)
         except TypeError:
-            self.trans = tuple(range(len(self.struct.s)))
+            self._trans = tuple(range(len(self.struct.s)))
         #
         # fusion tree for each leg: encodes number of fused legs e.g. 5 2 1 1 3 1 2 1 1 = ((1, 1), (1, (1, 1)))
         self.mfs = kwargs.get('mfs', None)
@@ -175,7 +175,7 @@ class Tensor:
     @classmethod
     def from_dict(cls, d: dict, config:None | _config=None) -> Tensor:
         """
-        De-serializes tensor from the dictionary ``d``.
+        Deserializes tensor from the dictionary ``d``.
 
         Parameters
         ----------
@@ -248,6 +248,13 @@ class Tensor:
         else:
             raise YastnError(f"Tensor.to_dict with dict_ver = {d['dict_ver']} not supported")
 
+
+    @property
+    def trans(self) -> Sequence[int]:
+        r""" Transpose between logical legs and data spaces. """
+        return self._trans
+
+
     @property
     def s(self) -> Sequence[int]:
         r"""
@@ -276,7 +283,7 @@ class Tensor:
         Total charge of the tensor.
 
         In case of direct product of abelian symmetries,
-        total charge for each symmetry, accummulated in a tuple.
+        total charge for each symmetry, accumulated in a tuple.
         """
         return self.struct.n
 

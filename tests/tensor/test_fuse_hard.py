@@ -427,7 +427,7 @@ def test_fuse_mix(config_kwargs):
     _test_fuse_mix(a)
 
 
-def test_auxliary_merging_functions(config_kwargs):
+def test_auxiliary_merging_functions(config_kwargs):
     mf1 = (1,)
     nt = yastn.tensor._merging._mf_to_ntree(mf1)
     mfx = yastn.tensor._merging._ntree_to_mf(nt)

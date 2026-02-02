@@ -22,7 +22,7 @@ from operator import itemgetter
 
 import numpy as np
 
-from ._auxliary import _struct, _slc, _clear_axes, _unpack_axes, _flatten, _join_contiguous_slices
+from ._auxiliary import _struct, _slc, _clear_axes, _unpack_axes, _flatten, _join_contiguous_slices
 from ._merging import _merge_to_matrix, _unmerge, _meta_unmerge_matrix, _meta_fuse_hard
 from ._merging import _transpose_and_merge, _mask_tensors_leg_intersection, _meta_mask
 from ._tests import YastnError, _test_can_be_combined, _unpack_trans_test_axes_pair
@@ -185,7 +185,7 @@ def _tensordot_fc(a, b, nout_a, nin_a, nin_b, nout_b):
 
 def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
     r"""
-    Perform tensordot directly: permute blocks and execute dot accumulaing results into result blocks.
+    Perform tensordot directly: permute blocks and execute dot accumulating results into result blocks.
     """
     if a.config.profile: a.config.backend.cuda.nvtx.range_push(f"_tensordot_nf")
     ind_a, ind_b = _common_inds(a.struct.t, b.struct.t, nin_a, nin_b, a.ndim_n, b.ndim_n, a.config.sym.NSYM)
@@ -252,7 +252,7 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
 def _common_inds(t_a, t_b, nin_a : tuple[int], nin_b : tuple[int], ndimn_a, ndimn_b, nsym):
     r"""
     Return row indices of nparray ``a`` that are in ``b``, and vice versa. Outputs tuples.
-    In other words: Return indices of blocks from ``t_a`` and ``t_b``, which pariticpate in
+    In other words: Return indices of blocks from ``t_a`` and ``t_b``, which participate in
         a contraction specified by ``nin_a`` and ``nin_b``.
 
     Parameters
@@ -457,7 +457,7 @@ def broadcast(a, *args, axes=0) -> 'Tensor' | tuple['Tensor']:
 
     Produce diagonal tensor if both are diagonal.
     Legs of the resulting tensors are ordered in the same way as those of tensors in ``args``.
-    It is used (in combination with :meth:`yastn.transpose`) as a subrutine of
+    It is used (in combination with :meth:`yastn.transpose`) as a subroutine of
     :meth:`yastn.tensordot` for contractions involving diagonal tensor.
 
     Parameters
@@ -531,7 +531,7 @@ def apply_mask(a, *args, axes=0) -> 'Tensor' | tuple['Tensor']:
     r"""
     Apply mask given by nonzero elements of diagonal tensor ``a`` on specified axes of tensors in args.
     Number of tensors in ``args`` is not restricted.
-    The length of the list ``axes`` has to be mathing with ``args``.
+    The length of the list ``axes`` has to be matching with ``args``.
 
     Legs of resulting tensor are ordered in the same way as those of tensors in ``args``.
     Bond dimensions of specified ``axes`` of ``args`` are truncated according to the mask ``a``.

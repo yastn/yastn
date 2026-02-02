@@ -21,7 +21,7 @@ from operator import mul, itemgetter
 
 import numpy as np
 
-from ._auxliary import _flatten, _slc, _config
+from ._auxiliary import _flatten, _slc, _config
 from ._tests import YastnError, _test_tD_consistency, _test_struct_types
 from ..backend import backend_np
 from ..sym import sym_none, sym_U1, sym_Z2, sym_Z3, sym_U1xU1, sym_U1xU1xZ2
@@ -194,7 +194,7 @@ def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
     if a.config.sym.NSYM == 0:
         if a.isdiag and len(D) == 1:
             D = D + D
-        D = tuple(x if x else (0,) for x in D)  # replae () with (0,)
+        D = tuple(x if x else (0,) for x in D)  # replace () with (0,)
         if len(D) != a.ndim_n:
             raise YastnError("Number of elements in D does not match tensor rank.")
         tset = np.zeros((1, a.ndim_n, a.config.sym.NSYM))
@@ -264,7 +264,7 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
     Parameters
     ----------
     ts : Sequence[int] | Sequence[Sequence[int]]
-        Charges identifing the block. Ignored if tensor has no symmetry.
+        Charges identifying the block. Ignored if tensor has no symmetry.
 
     Ds : Sequence[int]
         Dimensions of the block. If ``None``, tries to infer
