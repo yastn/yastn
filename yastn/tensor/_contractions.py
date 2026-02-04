@@ -910,7 +910,7 @@ def einsum(subscripts, *operands, order=None) -> 'Tensor':
     return ncon(ts, inds, conjs=conjs)
 
 
-def ncon(ts, inds, conjs=None, order=None) -> 'Tensor':
+def ncon(ts, inds, conjs=None, order=None, swap=None) -> 'Tensor':
     r"""
     Execute series of tensor contractions.
 
@@ -923,7 +923,11 @@ def ncon(ts, inds, conjs=None, order=None) -> 'Tensor':
         each inner tuple labels legs of respective tensor with integers.
         Positive values label legs to be contracted,
         with pairs of legs to be contracted denoted by the same integer label.
-        Non-positive numbers label legs of the resulting tensor, in reversed order.
+        Non-positive numbers label legs of the resulting tensor, in reversed order,
+        i.e. -0 for the first outgoing leg, -1 for the second, -2 for the third, etc.
+
+    swap: Sequence[Sequence[int]]
+        Sequence of two-element tuples identifying pairs of legs where swap gate is applied.
 
     conjs: Sequence[int]
         For each tensor in ``ts`` contains either ``0`` or ``1``.
@@ -956,30 +960,40 @@ def ncon(ts, inds, conjs=None, order=None) -> 'Tensor':
     for tensor, ind in zip(ts, inds):
         if tensor.ndim != len(ind):
             raise YastnError('Number of legs of one of the tensors do not match provided indices.')
-
-    inds = tuple(_clear_axes(*inds))
+    #
+    ts = dict(enumerate(ts))
+    #
     if conjs is not None:
-        conjs = tuple(conjs)
+        for t, to_conj in enumerate(conjs):
+            if to_conj:
+                ts[t] = ts[t].conj()
+    #
+    inds = tuple(_clear_axes(*inds))
     if order is not None:
         order = tuple(order)
-
-    meta_tr, meta_dot, meta_transpose = _meta_ncon(inds, conjs, order)
-    ts = dict(enumerate(ts))
-    for command in meta_tr:
-        t, axes = command
-        ts[t] = trace(ts[t], axes=axes)
-    for command in meta_dot:
-        (t1, t2), axes, conj = command
-        ts[t1] = tensordot(ts[t1], ts[t2], axes=axes, conj=conj)
-        del ts[t2]
-    t, axes, to_conj = meta_transpose
-    if axes is not None:
-        ts[t] = ts[t].transpose(axes=axes)
-    return ts[t].conj() if to_conj else ts[t]
+    if swap is not None:
+        swap = tuple(_clear_axes(*swap))
+    #
+    commands = _meta_ncon(inds, order)
+    #
+    for command in commands:
+        if command[0] == 'tensordot':
+            (t1, t2), axes = command[1:]
+            ts[t1] = tensordot(ts[t1], ts[t2], axes=axes)
+            del ts[t2]
+        elif command[0] == 'trace':
+            t, axes = command[1:]
+            ts[t] = trace(ts[t], axes=axes)
+        else:
+            assert command[0] == 'transpose', "Sanity check"
+            t, axes = command[1:]
+            ts[t] = ts[t].transpose(axes=axes)
+    assert len(ts) == 1, "Sanity check"
+    return ts.popitem()[1]
 
 
 @lru_cache(maxsize=1024)
-def _meta_ncon(inds, conjs, order):
+def _meta_ncon(inds, order):
     r""" Turning information in ``inds`` and ``conjs`` into list of contraction commands. """
     if not all(-256 < x < 256 for x in _flatten(inds)):
         raise YastnError('Ncon requires indices to be between -256 and 256.')
@@ -992,67 +1006,65 @@ def _meta_ncon(inds, conjs, order):
         reorder = {o: k for k, o in enumerate(order, start=1)}
         inds = [[reorder[o] if o > 0 else o for o in xx] for xx in inds]
 
-    edges = [[order, leg, ten] if order > 0 else [-order + 1024, leg, ten]
-             for ten, el in enumerate(inds) for leg, order in enumerate(el)]
+    edges = [[ind, ten, leg] if ind > 0 else [-ind + 1024, ten, leg]
+             for ten, el in enumerate(inds) for leg, ind in enumerate(el)]
     edges.append([512, 512, 512])  # this will mark the end of contractions.
-    conjs = [0] * len(inds) if conjs is None else list(conjs)
-
-    # order of contraction with info on tensor and axis
-    edges = sorted(edges, reverse=True, key=itemgetter(0))
-    return _consume_edges(edges, conjs)
-
-
-def _consume_edges(edges, conjs):
-    r""" Consumes edges to generate order of contractions. """
-    eliminated, ntensors = [], len(conjs)
-    meta_tr, meta_dot = [], []
-    order1, leg1, ten1 = edges.pop()
-    ax1, ax2 = [], []
-    while order1 != 512:  # tensordot two tensors, or trace one tensor; 512 is cutoff marking end of truncation
-        order2, leg2, ten2 = edges.pop()
-        if order1 != order2:
+    #
+    edges = sorted(edges, reverse=True)
+    #
+    commands, eliminated, dot_done = [], [], False
+    #
+    axes1, axes2 = [], []
+    while edges[-1][0] != 512:  # tensordot two tensors, or trace one tensor; 512 is cutoff marking end of truncation
+        ind1, ten1, leg1 = edges.pop()
+        ind2, ten2, leg2 = edges.pop()
+        if ind1 != ind2:
             raise YastnError('Indices of legs to contract do not match.')
-        t1, t2, leg1, leg2 = (ten1, ten2, leg1, leg2) if ten1 < ten2 else (ten2, ten1, leg2, leg1)
-        ax1.append(leg1)
-        ax2.append(leg2)
-        if edges[-1][0] == 512 or min(edges[-1][2], edges[-2][2]) != t1 or max(edges[-1][2], edges[-2][2]) != t2:
-            # execute contraction
-            if t1 == t2:  # trace
-                if len(meta_dot) > 0:
+        if ten1 > ten2:
+            ten1, ten2 = ten2, ten1
+            leg1, leg2 = leg2, leg1
+        axes1.append(leg1)
+        axes2.append(leg2)
+        if edges[-1][0] == 512 or (edges[-1][1], edges[-2][1]) not in [(ten1, ten2), (ten2, ten1)]:
+            # contract
+            if ten1 == ten2: # trace
+                if dot_done:
                     raise YastnError("Likely inefficient order of contractions. Do all traces before tensordot. " +
                                      "Call all axes connecting two tensors one after another.")
-                meta_tr.append((t1, (tuple(ax1), tuple(ax2))))
-                ax12 = ax1 + ax2
-                for edge in edges:  # edge = (order, leg, tensor)
-                    edge[1] -= sum(i < edge[1] for i in ax12) if edge[2] == t1 else 0
-            else:  # tensordot (tensor numbers, axes, conj)
-                meta_dot.append(((t1, t2), (tuple(ax1), tuple(ax2)), (conjs[t1], conjs[t2])))
-                eliminated.append(t2)
-                conjs[t1], conjs[t2] = 0, 0
-                lt1 = sum(ii[2] == t1 for ii in edges)  # legs of t1
-                for edge in edges:  # edge = (order, leg, tensor)
-                    if edge[2] == t1:
-                        edge[1] = edge[1] - sum(i < edge[1] for i in ax1)
-                    elif edge[2] == t2:
-                        edge[1:] = edge[1] + lt1 - sum(i < edge[1] for i in ax2), t1
-            ax1, ax2 = [], []
-        order1, leg1, ten1 = edges.pop()
-
-    remaining = [i for i in range(ntensors) if i not in eliminated]
-    t1 = remaining[0]
-    for t2 in remaining[1:]:
-        meta_dot.append(((t1, t2), ((), ()), (conjs[t1], conjs[t2])))
-        eliminated.append(t2)
-        conjs[t1], conjs[t2] = 0, 0
-        lt1 = sum(tt == t1 for _, _, tt in edges)
-        for edge in edges:  # edge = (order, leg, tensor)
-            if edge[2] == t2:
-                edge[1:] = edge[1] + lt1, t1
-    unique_out = tuple(ed[0] for ed in edges)
-    if len(unique_out) != len(set(unique_out)):
+                commands.append(('trace', ten1, (tuple(axes1), tuple(axes2))))
+                axes12 = axes1 + axes2
+                for edge in edges:
+                    if edge[1] == ten1:
+                        edge[2] += -sum(ax < edge[2] for ax in axes12)
+            else:  # tensordot
+                dot_done = True
+                commands.append(('tensordot', (ten1, ten2), (tuple(axes1), tuple(axes2))))
+                eliminated.append(ten2)
+                lt1 = sum(ten == ten1 for _, ten, _ in edges)  # legs of ten1
+                for edge in edges:
+                    if edge[1] == ten1:
+                        edge[2] += -sum(ax < edge[2] for ax in axes1)
+                    elif edge[1] == ten2:
+                        edge[1] = ten1
+                        edge[2] += lt1 - sum(ax < edge[2] for ax in axes2)
+            axes1, axes2 = [], []
+    #
+    edges.pop()  # eliminate cutoff element
+    #
+    remaining = [ten for ten in range(len(inds)) if ten not in eliminated]
+    ten1 = remaining[0]
+    for ten2 in remaining[1:]:
+        commands.append(('tensordot', (ten1, ten2), ((), ())))
+        eliminated.append(ten2)
+        lt1 = sum(ten == ten1 for _, ten, _ in edges)
+        for edge in edges:
+            if edge[1] == ten2:
+                edge[1] = ten1
+                edge[2] += lt1
+    if len(edges) != len(set(ind for ind, _, _ in edges)):
         raise YastnError("Repeated non-positive (outgoing) index is ambiguous.")
-    axes = tuple(ed[1] for ed in sorted(edges))  # final order for transpose
-    if axes == tuple(range(len(axes))):
-        axes = None
-    meta_transpose = (t1, axes, conjs[t1])
-    return tuple(meta_tr), tuple(meta_dot), meta_transpose
+    axes = tuple(leg for _, _, leg in sorted(edges))  # final order for transpose
+    if axes != tuple(range(len(axes))):
+        commands.append(('transpose', ten1, axes))
+
+    return tuple(commands)
