@@ -172,8 +172,8 @@ def test_ncon_einsum_basic(config_kwargs):
     inds1 = ((4, -2, -0), (-3, -1, 5), (4, 3, 1, 1), (3, 2, 5, 2))
     inds2 = ((11, -4, -1), (-6, -3, 2), (11, 3, 8, 8), (3, 1, 2, 1))
     order2 = (8, 1, 3, 11, 2)
-    ins1 = yastn.tensor._contractions._meta_ncon(inds1, None)
-    ins2 = yastn.tensor._contractions._meta_ncon(inds2, order2)
+    ins1 = yastn.tensor._contractions._meta_ncon(inds1, None, ())
+    ins2 = yastn.tensor._contractions._meta_ncon(inds2, order2, ())
     assert ins1 == ins2
 
 
@@ -235,6 +235,33 @@ def test_ncon_einsum_exceptions(config_kwargs):
     with pytest.raises(yastn.YastnError,
                        match="Order does not cover all contracted indices."):
         yastn.einsum('klm, *klm->', a, a, order='kl')
+
+
+
+def test_ncon_einsum_swaps(config_kwargs):
+    """ tests of ncon executing a series of tensor contractions. """
+    config_Z2 = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
+    leg = yastn.Leg(config_Z2, s=1, t=(0, 1), D=(1, 1))
+    a = yastn.rand(config=config_Z2, legs = [leg, leg, leg.conj(), leg, leg.conj()])
+    b = yastn.rand(config=config_Z2, legs = [leg, leg.conj(), leg])
+    c = yastn.rand(config=config_Z2, legs = [leg, leg.conj(), leg])
+    #
+    x = yastn.ncon([a, b, c], ((1, 4, 2, -0, 1), (2, 3, -1), (3, 4, -2)), swap=((-0, 3), (-0, 1), (-1, -2)))
+    y = yastn.einsum('adbAa,bcB,cdC->ABC', a, b, c, swap='Ac,Aa,BC')
+    #
+    # reference
+    d = a.swap_gate(axes=(3, 4))
+    d = yastn.trace(d, axes=(0, 4))
+    d = yastn.tensordot(d, b, axes=(1, 0))  # -3 -0 -2 -1
+    d = d.swap_gate(axes=(1, 2))
+    d = yastn.tensordot(d, c, axes=((2, 0), (0, 1)))  # -3 -0 -2 -1
+    d = d.swap_gate(axes=(1, 2))
+    assert (x - d).norm() < tol
+    assert (y - d).norm() < tol
+
+
+
+
 
 
 if __name__ == '__main__':

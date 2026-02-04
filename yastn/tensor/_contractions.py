@@ -830,7 +830,7 @@ def _slices_to_negate(tp, slices):
     return tuple(joined_negate)
 
 
-def einsum(subscripts, *operands, order=None) -> 'Tensor':
+def einsum(subscripts, *operands, order=None, swap=None) -> 'Tensor':
     r"""
     Execute series of tensor contractions.
 
@@ -906,8 +906,11 @@ def einsum(subscripts, *operands, order=None) -> 'Tensor':
     if any(v not in d for v in sin):
         raise YastnError('Order does not cover all contracted indices.')
     inds = [tuple(d[v] for v in ss) for ss in sin.split(',')]
+    if swap is not None:
+        swap = [tuple(d[v] for v in ss) for ss in swap.split(',')]
+
     ts = list(operands)
-    return ncon(ts, inds, conjs=conjs)
+    return ncon(ts, inds, conjs=conjs, swap=swap)
 
 
 def ncon(ts, inds, conjs=None, order=None, swap=None) -> 'Tensor':
@@ -971,16 +974,18 @@ def ncon(ts, inds, conjs=None, order=None, swap=None) -> 'Tensor':
     inds = tuple(_clear_axes(*inds))
     if order is not None:
         order = tuple(order)
-    if swap is not None:
-        swap = tuple(_clear_axes(*swap))
+    swap = tuple(_clear_axes(*swap)) if swap is not None else ()
     #
-    commands = _meta_ncon(inds, order)
+    commands = _meta_ncon(inds, order, swap)
     #
     for command in commands:
         if command[0] == 'tensordot':
             (t1, t2), axes = command[1:]
             ts[t1] = tensordot(ts[t1], ts[t2], axes=axes)
             del ts[t2]
+        elif command[0] == 'swap_gate':
+            t, axes = command[1:]
+            ts[t] = swap_gate(ts[t], axes=axes)
         elif command[0] == 'trace':
             t, axes = command[1:]
             ts[t] = trace(ts[t], axes=axes)
@@ -993,7 +998,7 @@ def ncon(ts, inds, conjs=None, order=None, swap=None) -> 'Tensor':
 
 
 @lru_cache(maxsize=1024)
-def _meta_ncon(inds, order):
+def _meta_ncon(inds, order, swap):
     r""" Turning information in ``inds`` and ``conjs`` into list of contraction commands. """
     if not all(-256 < x < 256 for x in _flatten(inds)):
         raise YastnError('Ncon requires indices to be between -256 and 256.')
@@ -1005,10 +1010,23 @@ def _meta_ncon(inds, order):
             raise YastnError("Positive ints in ins and order should match.")
         reorder = {o: k for k, o in enumerate(order, start=1)}
         inds = [[reorder[o] if o > 0 else o for o in xx] for xx in inds]
-
-    edges = [[ind, ten, leg] if ind > 0 else [-ind + 1024, ten, leg]
-             for ten, el in enumerate(inds) for leg, ind in enumerate(el)]
+    #
+    edges = [[ind, ten, leg] for ten, el in enumerate(inds) for leg, ind in enumerate(el)]
+    #
+    swaps = []
+    if any(len(sw) != 2 for sw in swap):
+        raise YastnError("swap should be a sequence of pairs.")
+    for ind1, ind2 in swap:
+        sw1 = [[ten, leg] for ind, ten, leg in edges if ind == ind1]
+        sw2 = [[ten, leg] for ind, ten, leg in edges if ind == ind2]
+        if len(sw1) not in [1, 2] or len(sw2) not in [1, 2]:
+            raise YastnError("Indices of the legs to swap do not match inds.")
+        swaps.append([sw1, sw2])
+    #
     edges.append([512, 512, 512])  # this will mark the end of contractions.
+    for edge in edges:  # modify outgoing indices for sorting
+        if edge[0] <= 0:
+            edge[0] = -edge[0] + 1024
     #
     edges = sorted(edges, reverse=True)
     #
@@ -1026,6 +1044,21 @@ def _meta_ncon(inds, order):
         axes1.append(leg1)
         axes2.append(leg2)
         if edges[-1][0] == 512 or (edges[-1][1], edges[-2][1]) not in [(ten1, ten2), (ten2, ten1)]:
+            # first collect swaps
+            swap_now, swap_later = [], []
+            for sw12 in swaps:
+                sw_now = _swap_on_tensor(*sw12)
+                swap_now.append(sw_now) if sw_now else swap_later.append(sw12)
+            swap_tensors = {}
+            for ten_swap, axes_swap in swap_now:
+                if ten_swap in swap_tensors:
+                    swap_tensors[ten_swap].extend(axes_swap)
+                else:
+                    swap_tensors[ten_swap] = list(axes_swap)
+            for ten_swap, axes_swap in swap_tensors.items():
+                commands.append(('swap_gate', ten_swap, tuple(axes_swap)))
+            swaps = swap_later
+
             # contract
             if ten1 == ten2: # trace
                 if dot_done:
@@ -1036,6 +1069,11 @@ def _meta_ncon(inds, order):
                 for edge in edges:
                     if edge[1] == ten1:
                         edge[2] += -sum(ax < edge[2] for ax in axes12)
+                for sw12 in swaps:
+                    for sws in sw12:
+                        for sw in sws:
+                            if sw[0] == ten1:
+                                sw[1] += -sum(ax < sw[1] for ax in axes12)
             else:  # tensordot
                 dot_done = True
                 commands.append(('tensordot', (ten1, ten2), (tuple(axes1), tuple(axes2))))
@@ -1047,6 +1085,15 @@ def _meta_ncon(inds, order):
                     elif edge[1] == ten2:
                         edge[1] = ten1
                         edge[2] += lt1 - sum(ax < edge[2] for ax in axes2)
+                for sw12 in swaps:
+                    for sws in sw12:
+                        for sw in sws:
+                            if sw[0] == ten1:
+                                sw[1] += -sum(ax < sw[1] for ax in axes1)
+                            elif sw[0] == ten2:
+                                sw[0] = ten1
+                                sw[1] +=  lt1 - sum(ax < sw[1] for ax in axes2)
+
             axes1, axes2 = [], []
     #
     edges.pop()  # eliminate cutoff element
@@ -1061,10 +1108,35 @@ def _meta_ncon(inds, order):
             if edge[1] == ten2:
                 edge[1] = ten1
                 edge[2] += lt1
+        for sw12 in swaps:
+            for sws in sw12:
+                for sw in sws:
+                    if sw[0] == ten2:
+                        sw[0] = ten1
+                        sw[1] += lt1
     if len(edges) != len(set(ind for ind, _, _ in edges)):
         raise YastnError("Repeated non-positive (outgoing) index is ambiguous.")
-    axes = tuple(leg for _, _, leg in sorted(edges))  # final order for transpose
+    #
+    # final swaps
+    axes_swap = tuple(ax for sw12 in swaps for ax in _swap_on_tensor(*sw12)[1])
+    if axes_swap:
+        commands.append(('swap_gate', ten1, axes_swap))
+    #
+    # final order for transpose
+    axes = tuple(leg for _, _, leg in sorted(edges))
     if axes != tuple(range(len(axes))):
         commands.append(('transpose', ten1, axes))
-
+    #
     return tuple(commands)
+
+
+def _swap_on_tensor(sw1, sw2):
+    tens1 = [x[0] for x in sw1]
+    tens2 = [x[0] for x in sw2]
+    ten = set(tens1) & set(tens2)
+    if ten:
+        ten = ten.pop()
+        i1 = tens1.index(ten)
+        i2 = tens2.index(ten)
+        return ten, tuple(sorted((sw1[i1][1], sw2[i2][1])))
+    return False
