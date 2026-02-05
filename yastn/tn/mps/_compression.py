@@ -179,7 +179,7 @@ def _compression_(psi, target, method,
 
 def _compression_1site_sweep_(env, Schmidt=None):
     r"""
-    Using :code:`verions='1site'` DMRG, an MPS :code:`psi` with fixed
+    Using :code:`method='1site'` DMRG, an MPS :code:`psi` with fixed
     virtual spaces is variationally optimized to maximize overlap
     :math:`\langle \psi | \psi_{\textrm{target}}\rangle` with
     the target MPS :code:`psi_target`.
@@ -278,7 +278,7 @@ def zipper(a, b, opts_svd=None, normalize=True, return_discarded=False) -> MpsMp
         Discarded weight approximates norm of truncated elements normalized by the norm of the untruncated state.
     """
     if a.N != b.N:
-        raise YastnError('Zippr: Mpo and Mpo/Mps must have the same number of sites to be multiplied.')
+        raise YastnError('Zipper: Mpo and Mpo/Mps must have the same number of sites to be multiplied.')
 
     psi = b.shallow_copy()
     psi.canonize_(to='last', normalize=normalize)

@@ -567,7 +567,7 @@ class MpsMpoOBC(_MpsMpoParent):
         return A
 
     def post_1site_(self, A, n) -> Number:
-        """ Assign 1-site tensor to MPS site, undoing changes from :meth:`pre_1site`.s """
+        """ Assign 1-site tensor to MPS site, undoing changes from :meth:`pre_1site`. """
         if self.nr_phys == 1 and A.ndim == 2:
             A = A.unfuse_legs(axes=1)
         elif self.nr_phys == 2:

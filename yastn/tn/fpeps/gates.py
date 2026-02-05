@@ -191,7 +191,7 @@ def gate_local_field(h, step, I, X, site=None) -> Gate:
     return Gate_local(G_loc, site)
 
 
-def distribute(geometry, gates_nn=None, gates_local=None, symmetrize=True) -> Sequence[Gate]:
+def distribute(geometry, gates_nn=None, gates_local=None, symmetrize=True, reverse_sites=False) -> Sequence[Gate]:
     r"""
     Distributes gates homogeneously over the lattice.
 
@@ -210,6 +210,11 @@ def distribute(geometry, gates_nn=None, gates_local=None, symmetrize=True) -> Se
     symmetrize: bool
         Whether to iterate through provided gates forward and then backward, resulting in a 2nd order method.
         In that case, each gate should correspond to half of the desired timestep. The default is ``True``.
+
+    reverse_sites: bool
+        If symmetrize, whether to also reverse the sites associated with the gate.
+        This affects truncation order in 3-site gates, but requires a symmetric gate operator.
+        The default is ``False``.
     """
     nn = []
     if gates_nn is not None:
@@ -228,6 +233,10 @@ def distribute(geometry, gates_nn=None, gates_local=None, symmetrize=True) -> Se
                 local.append(Gloc._replace(sites=(site,)))
 
     gates = nn + local
+
     if symmetrize:
-        gates = gates + gates[::-1]
+        gates_back = gates[::-1]
+        if reverse_sites:
+            gates_back = [gate._replace(sites=gate.sites[::-1]) for gate in gates_back]
+        gates = gates + gates_back
     return gates

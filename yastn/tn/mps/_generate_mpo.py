@@ -297,8 +297,3 @@ def generate_mpo(I, terms=None, opts_svd=None, N=None, f_map=None) -> MpsMpoOBC:
             J = (S / nS) @ V
         O[n] = nJ.transpose(axes=(0, 1, 3, 2))
     return O
-
-    # reshapes = []
-    #     reshape = zeros(config=config, legs=[leg1, leg2, leg3])
-    #         reshape[lt + ft + rt][li[lt], fi, ri] += 1
-    #     nJ = J @ reshapes[n]
