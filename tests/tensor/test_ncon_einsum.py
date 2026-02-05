@@ -237,30 +237,73 @@ def test_ncon_einsum_exceptions(config_kwargs):
         yastn.einsum('klm, *klm->', a, a, order='kl')
 
 
-
 def test_ncon_einsum_swaps(config_kwargs):
     """ tests of ncon executing a series of tensor contractions. """
     config_Z2 = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
-    leg = yastn.Leg(config_Z2, s=1, t=(0, 1), D=(1, 1))
-    a = yastn.rand(config=config_Z2, legs = [leg, leg, leg.conj(), leg, leg.conj()])
-    b = yastn.rand(config=config_Z2, legs = [leg, leg.conj(), leg])
-    c = yastn.rand(config=config_Z2, legs = [leg, leg.conj(), leg])
+    l = yastn.Leg(config_Z2, s=1, t=(0, 1), D=(1, 1))
+    lc = l.conj()
     #
-    x = yastn.ncon([a, b, c], ((1, 4, 2, -0, 1), (2, 3, -1), (3, 4, -2)), swap=((-0, 3), (-0, 1), (-1, -2)))
-    y = yastn.einsum('adbAa,bcB,cdC->ABC', a, b, c, swap='Ac,Aa,BC')
+    # first diagram
+    a = yastn.rand(config=config_Z2, legs=[l, lc])
+    b = yastn.rand(config=config_Z2, legs=[l, lc])
+    #
+    x = yastn.ncon([a, b], ((1, 2), (2, 1)), swap=[(1, 2)])
+    y = yastn.einsum('ab,ba', a, b, swap='ab')
+    #
+    r = a.swap_gate(axes=(0, 1))
+    r = yastn.tensordot(r, b, axes=((0, 1), (1, 0)))
+    #
+    assert (x - r).norm() < tol * r.norm()
+    assert (y - r).norm() < tol * r.norm()
+    #
+    # second diagram
+    a = yastn.rand(config=config_Z2, legs=[l, l, lc, l, lc])
+    b = yastn.rand(config=config_Z2, legs=[l, lc, l])
+    c = yastn.rand(config=config_Z2, legs=[l, lc, l])
+    #
+    x = yastn.ncon([a, b, c, c], ((1, 4, 2, -0, 1), (2, 3, -1), (3, 4, -2), (-3, -4, -5)), swap=((-0, 3), (-0, 1), (-1, -2), (-3, -5), (-4, -2)))
+    y = yastn.einsum('adbAa,bcB,cdC,DEF->ABCDEF', a, b, c, c, swap='Ac,Aa,BC,CE,DF')
     #
     # reference
     d = a.swap_gate(axes=(3, 4))
-    d = yastn.trace(d, axes=(0, 4))
-    d = yastn.tensordot(d, b, axes=(1, 0))  # -3 -0 -2 -1
-    d = d.swap_gate(axes=(1, 2))
-    d = yastn.tensordot(d, c, axes=((2, 0), (0, 1)))  # -3 -0 -2 -1
-    d = d.swap_gate(axes=(1, 2))
-    assert (x - d).norm() < tol
-    assert (y - d).norm() < tol
+    r = yastn.trace(d, axes=(0, 4))
+    r = yastn.tensordot(r, b, axes=(1, 0))
+    r = r.swap_gate(axes=(1, 2))
+    r = yastn.tensordot(r, c, axes=((2, 0), (0, 1)))
+    r = r.swap_gate(axes=(1, 2))
+    e = c.swap_gate(axes=(0, 2))
+    r = yastn.tensordot(r, e, axes=((), ()))
+    r = r.swap_gate(axes=(2, 4))
+    #
+    assert (x - r).norm() < tol * r.norm()
+    assert (y - r).norm() < tol * r.norm()
+    #
+    # third diagram to test different contraction orders
+    a = yastn.rand(config=config_Z2, n=1, legs=[l, l, l, l])
+    b = yastn.rand(config=config_Z2, n=1, legs=[l, l, l, l, lc])
+    c = yastn.rand(config=config_Z2, n=1, legs=[l, l, lc, lc])
+    d = yastn.rand(config=config_Z2, n=1, legs=[l, lc, lc, lc, lc])
+    e = yastn.rand(config=config_Z2, n=1, legs=[l, lc, lc, lc])
+    f = yastn.rand(config=config_Z2, n=1, legs=[lc, lc])
+    #
+    # reference
+    r = yastn.tensordot(a, b, axes=(0, 4))
+    r = r.swap_gate(axes=(0, (4, 5, 6), 1, 6))
+    r = yastn.tensordot(r, c, axes=((0, 3), (2, 3)))
+    r = r.swap_gate(axes=((0, 2, 3), 6))
+    r = yastn.tensordot(r, d, axes=((0, 2, 3, 5), (1, 3, 2, 4)))
+    r = yastn.tensordot(r, e, axes=((1, 2, 3), (1, 2, 3)))
+    r = yastn.tensordot(r, f, axes=((0, 1), (0, 1)))
+    #
+    for order in [None]:  # (2, 4, 7, 1, 3, 5, 6, 11, 8, 9, 10, 12)]:
+        x = yastn.ncon([a, b, c, d, e, f], ((1, 2, 4, 11), (3, 5, 6, 8, 1), (7, 9, 2, 3), (10, 4, 6, 5, 7), (12, 8, 9, 10), (11, 12)),
+                       swap=((2, 8), (2, 5), (2, 6), (4, 8), (9, 6), (9, 5), (4, 9)), order=order)
+        assert (x - r).norm() < tol * r.norm()
 
-
-
+    for order in [None]: #, 'bdgacefkhijl']:
+        y = yastn.einsum('abdk,cefha,gibc,jdfeg,lhij,kl', a, b, c, d, e, f,
+                         swap='bh,be,bf,dh,ei,fi,di', order=order)  #
+        assert (y - r).norm() < tol * r.norm()
 
 
 

@@ -361,7 +361,7 @@ def _meta_tensordot_nf(struct_a, slices_a, struct_b, slices_b, ind_a, ind_b, nou
     aDa = np.array(Da, dtype=np.int64).reshape((lta, ndima))       # array for block dimensions
     tao = ata[:, nout_a, :].reshape(lta, len(nout_a) * nsym)       # narrowed to contracted modes, and serialize <num-of-ingoing-modes(=legs)> x <order-of-sym-group> to 1D
     tac = ata[:, nin_a, :].reshape(lta, len(nin_a) * nsym)         # narrowed to outgoing modes, and serialize <num-of-ingoing-modes(=legs)> x <order-of-sym-group> to 1D
-    Dao = aDa[:, nout_a]    # narrow sector sizes
+    Dao = aDa[:, nout_a]  # narrow sector sizes
     Dac = aDa[:, nin_a]
     Daop = np.prod(Dao, axis=1, dtype=np.int64) # total size of outgoing sectors (per block)
     Dacp = np.prod(Dac, axis=1, dtype=np.int64) # total size of contracted sectors (per block)
@@ -744,7 +744,7 @@ def swap_gate(a, axes, charge=None) -> 'Tensor':
     are tested for oddity, where the contributions from each selected charge get multiplied.
     See :class:`yastn.operators.SpinfulFermions` for an example.
     For ``fermionic=True``, all charges are considered.
-    For ``fermionic=False``,  swap_gate returns ``a``.
+    For ``fermionic=False``, swap_gate returns ``a``.
 
     Parameters
     ----------
@@ -978,6 +978,12 @@ def ncon(ts, inds, conjs=None, order=None, swap=None) -> 'Tensor':
     #
     commands = _meta_ncon(inds, order, swap)
     #
+    ts = _execute_commands(ts, commands)
+    assert len(ts) == 1, "Sanity check"
+    return ts.popitem()[1]
+
+
+def _execute_commands(ts, commands):
     for command in commands:
         if command[0] == 'tensordot':
             (t1, t2), axes = command[1:]
@@ -993,8 +999,7 @@ def ncon(ts, inds, conjs=None, order=None, swap=None) -> 'Tensor':
             assert command[0] == 'transpose', "Sanity check"
             t, axes = command[1:]
             ts[t] = ts[t].transpose(axes=axes)
-    assert len(ts) == 1, "Sanity check"
-    return ts.popitem()[1]
+    return ts
 
 
 @lru_cache(maxsize=1024)
@@ -1030,6 +1035,8 @@ def _meta_ncon(inds, order, swap):
     #
     edges = sorted(edges, reverse=True)
     #
+    nlegs = {k: len(v) for k, v in enumerate(inds)}
+
     commands, eliminated, dot_done = [], [], False
     #
     axes1, axes2 = [], []
@@ -1066,6 +1073,7 @@ def _meta_ncon(inds, order, swap):
                                      "Call all axes connecting two tensors one after another.")
                 commands.append(('trace', ten1, (tuple(axes1), tuple(axes2))))
                 axes12 = axes1 + axes2
+                nlegs[ten1] -= len(axes12)
                 for edge in edges:
                     if edge[1] == ten1:
                         edge[2] += -sum(ax < edge[2] for ax in axes12)
@@ -1078,13 +1086,14 @@ def _meta_ncon(inds, order, swap):
                 dot_done = True
                 commands.append(('tensordot', (ten1, ten2), (tuple(axes1), tuple(axes2))))
                 eliminated.append(ten2)
-                lt1 = sum(ten == ten1 for _, ten, _ in edges)  # legs of ten1
+                nlegs[ten1] -= len(axes1)
+                nlegs[ten2] -= len(axes2)
                 for edge in edges:
                     if edge[1] == ten1:
                         edge[2] += -sum(ax < edge[2] for ax in axes1)
                     elif edge[1] == ten2:
                         edge[1] = ten1
-                        edge[2] += lt1 - sum(ax < edge[2] for ax in axes2)
+                        edge[2] += nlegs[ten1] - sum(ax < edge[2] for ax in axes2)
                 for sw12 in swaps:
                     for sws in sw12:
                         for sw in sws:
@@ -1092,8 +1101,8 @@ def _meta_ncon(inds, order, swap):
                                 sw[1] += -sum(ax < sw[1] for ax in axes1)
                             elif sw[0] == ten2:
                                 sw[0] = ten1
-                                sw[1] +=  lt1 - sum(ax < sw[1] for ax in axes2)
-
+                                sw[1] += nlegs[ten1] - sum(ax < sw[1] for ax in axes2)
+                nlegs[ten1] = nlegs.pop(ten1) + nlegs.pop(ten2)
             axes1, axes2 = [], []
     #
     edges.pop()  # eliminate cutoff element
@@ -1103,17 +1112,20 @@ def _meta_ncon(inds, order, swap):
     for ten2 in remaining[1:]:
         commands.append(('tensordot', (ten1, ten2), ((), ())))
         eliminated.append(ten2)
-        lt1 = sum(ten == ten1 for _, ten, _ in edges)
+        nlegs[ten1] -= len(axes1)
+        nlegs[ten2] -= len(axes2)
         for edge in edges:
             if edge[1] == ten2:
                 edge[1] = ten1
-                edge[2] += lt1
+                edge[2] += nlegs[ten1]
         for sw12 in swaps:
             for sws in sw12:
                 for sw in sws:
                     if sw[0] == ten2:
                         sw[0] = ten1
-                        sw[1] += lt1
+                        sw[1] += nlegs[ten1]
+        nlegs[ten1] = nlegs.pop(ten1) + nlegs.pop(ten2)
+    #
     if len(edges) != len(set(ind for ind, _, _ in edges)):
         raise YastnError("Repeated non-positive (outgoing) index is ambiguous.")
     #
