@@ -986,19 +986,18 @@ def ncon(ts, inds, conjs=None, order=None, swap=None) -> 'Tensor':
 def _execute_commands(ts, commands):
     for command in commands:
         if command[0] == 'tensordot':
-            (t1, t2), axes = command[1:]
-            ts[t1] = tensordot(ts[t1], ts[t2], axes=axes)
-            del ts[t2]
+            tout, (t1, t2), axes = command[1:]
+            ts[tout] = tensordot(ts.pop(t1), ts.pop(t2), axes=axes)
         elif command[0] == 'swap_gate':
-            t, axes = command[1:]
-            ts[t] = swap_gate(ts[t], axes=axes)
+            tout, tin, axes = command[1:]
+            ts[tout] = swap_gate(ts.pop(tin), axes=axes)
         elif command[0] == 'trace':
-            t, axes = command[1:]
-            ts[t] = trace(ts[t], axes=axes)
+            tout, tin, axes = command[1:]
+            ts[tout] = trace(ts.pop(tin), axes=axes)
         else:
             assert command[0] == 'transpose', "Sanity check"
-            t, axes = command[1:]
-            ts[t] = ts[t].transpose(axes=axes)
+            tout, tin, axes = command[1:]
+            ts[tout] = ts.pop(tin).transpose(axes=axes)
     return ts
 
 
@@ -1036,8 +1035,9 @@ def _meta_ncon(inds, order, swap):
     edges = sorted(edges, reverse=True)
     #
     nlegs = {k: len(v) for k, v in enumerate(inds)}
-
-    commands, eliminated, dot_done = [], [], False
+    ten_out = max(nlegs)
+    #
+    commands, dot_done = [], False
     #
     axes1, axes2 = [], []
     while edges[-1][0] != 512:  # tensordot two tensors, or trace one tensor; 512 is cutoff marking end of truncation
@@ -1063,7 +1063,7 @@ def _meta_ncon(inds, order, swap):
                 else:
                     swap_tensors[ten_swap] = list(axes_swap)
             for ten_swap, axes_swap in swap_tensors.items():
-                commands.append(('swap_gate', ten_swap, tuple(axes_swap)))
+                commands.append(('swap_gate', ten_swap, ten_swap, tuple(axes_swap)))
             swaps = swap_later
 
             # contract
@@ -1071,7 +1071,7 @@ def _meta_ncon(inds, order, swap):
                 if dot_done:
                     raise YastnError("Likely inefficient order of contractions. Do all traces before tensordot. " +
                                      "Call all axes connecting two tensors one after another.")
-                commands.append(('trace', ten1, (tuple(axes1), tuple(axes2))))
+                commands.append(('trace', ten1, ten1, (tuple(axes1), tuple(axes2))))
                 axes12 = axes1 + axes2
                 nlegs[ten1] -= len(axes12)
                 for edge in edges:
@@ -1084,47 +1084,54 @@ def _meta_ncon(inds, order, swap):
                                 sw[1] += -sum(ax < sw[1] for ax in axes12)
             else:  # tensordot
                 dot_done = True
-                commands.append(('tensordot', (ten1, ten2), (tuple(axes1), tuple(axes2))))
-                eliminated.append(ten2)
+                ten_out += 1
+                commands.append(('tensordot', ten_out, (ten1, ten2), (tuple(axes1), tuple(axes2))))
                 nlegs[ten1] -= len(axes1)
                 nlegs[ten2] -= len(axes2)
                 for edge in edges:
                     if edge[1] == ten1:
+                        edge[1] = ten_out
                         edge[2] += -sum(ax < edge[2] for ax in axes1)
                     elif edge[1] == ten2:
-                        edge[1] = ten1
+                        edge[1] = ten_out
                         edge[2] += nlegs[ten1] - sum(ax < edge[2] for ax in axes2)
                 for sw12 in swaps:
                     for sws in sw12:
                         for sw in sws:
                             if sw[0] == ten1:
+                                sw[0] = ten_out
                                 sw[1] += -sum(ax < sw[1] for ax in axes1)
                             elif sw[0] == ten2:
-                                sw[0] = ten1
+                                sw[0] = ten_out
                                 sw[1] += nlegs[ten1] - sum(ax < sw[1] for ax in axes2)
-                nlegs[ten1] = nlegs.pop(ten1) + nlegs.pop(ten2)
+                nlegs[ten_out] = nlegs.pop(ten1) + nlegs.pop(ten2)
             axes1, axes2 = [], []
     #
     edges.pop()  # eliminate cutoff element
     #
-    remaining = [ten for ten in range(len(inds)) if ten not in eliminated]
+    remaining = list(nlegs.keys())
     ten1 = remaining[0]
-    for ten2 in remaining[1:]:
-        commands.append(('tensordot', (ten1, ten2), ((), ())))
-        eliminated.append(ten2)
+    for ten2 in remaining[1:]:  # tensordot
+        ten_out += 1
+        commands.append(('tensordot', ten_out, (ten1, ten2), ((), ())))
         nlegs[ten1] -= len(axes1)
         nlegs[ten2] -= len(axes2)
         for edge in edges:
+            if edge[1] == ten1:
+                edge[1] = ten_out
             if edge[1] == ten2:
-                edge[1] = ten1
+                edge[1] = ten_out
                 edge[2] += nlegs[ten1]
         for sw12 in swaps:
             for sws in sw12:
                 for sw in sws:
+                    if sw[0] == ten1:
+                        sw[0] = ten_out
                     if sw[0] == ten2:
-                        sw[0] = ten1
+                        sw[0] = ten_out
                         sw[1] += nlegs[ten1]
-        nlegs[ten1] = nlegs.pop(ten1) + nlegs.pop(ten2)
+        nlegs[ten_out] = nlegs.pop(ten1) + nlegs.pop(ten2)
+        ten1 = ten_out
     #
     if len(edges) != len(set(ind for ind, _, _ in edges)):
         raise YastnError("Repeated non-positive (outgoing) index is ambiguous.")
@@ -1132,12 +1139,12 @@ def _meta_ncon(inds, order, swap):
     # final swaps
     axes_swap = tuple(ax for sw12 in swaps for ax in _swap_on_tensor(*sw12)[1])
     if axes_swap:
-        commands.append(('swap_gate', ten1, axes_swap))
+        commands.append(('swap_gate', ten_out, ten_out, axes_swap))
     #
     # final order for transpose
     axes = tuple(leg for _, _, leg in sorted(edges))
     if axes != tuple(range(len(axes))):
-        commands.append(('transpose', ten1, axes))
+        commands.append(('transpose', ten_out, ten_out, axes))
     #
     return tuple(commands)
 
