@@ -31,6 +31,7 @@ from ._algebra import *
 from ._auxiliary import _struct, _config
 from ._contractions import *
 from ._control_lru import *
+from ._einsum import *
 from ._initialize import *
 from ._legs import *
 from ._merging import *
@@ -41,6 +42,7 @@ from .linalg import *
 from . import _algebra
 from . import _contractions
 from . import _control_lru
+from . import _einsum
 from . import _initialize
 from . import _legs
 from . import _merging
@@ -53,6 +55,7 @@ __all__ = ['Tensor', 'linalg', 'YastnError']
 __all__.extend(_algebra.__all__)
 __all__.extend(_contractions.__all__)
 __all__.extend(_control_lru.__all__)
+__all__.extend(_einsum.__all__)
 __all__.extend(_initialize.__all__)
 __all__.extend(_legs.__all__)
 __all__.extend(_merging.__all__)

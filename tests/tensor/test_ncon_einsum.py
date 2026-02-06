@@ -172,8 +172,8 @@ def test_ncon_einsum_basic(config_kwargs):
     inds1 = ((4, -2, -0), (-3, -1, 5), (4, 3, 1, 1), (3, 2, 5, 2))
     inds2 = ((11, -4, -1), (-6, -3, 2), (11, 3, 8, 8), (3, 1, 2, 1))
     order2 = (8, 1, 3, 11, 2)
-    ins1 = yastn.tensor._contractions._meta_ncon(inds1, None, ())
-    ins2 = yastn.tensor._contractions._meta_ncon(inds2, order2, ())
+    ins1 = yastn.tensor._einsum._meta_ncon(inds1, None, ())
+    ins2 = yastn.tensor._einsum._meta_ncon(inds2, order2, ())
     assert ins1 == ins2
 
 
