@@ -267,36 +267,18 @@ def _meta_ncon(inds, order, swap):
                 commands.append(('trace', ten1, ten1, (tuple(axes1), tuple(axes2))))
                 axes12 = axes1 + axes2
                 nlegs[ten1] -= len(axes12)
-                for edge in edges:
-                    if edge[1] == ten1:
-                        edge[2] += -sum(ax < edge[2] for ax in axes12)
-                for sw12 in swaps:
-                    for sws in sw12:
-                        for sw in sws:
-                            if sw[0] == ten1:
-                                sw[1] += -sum(ax < sw[1] for ax in axes12)
+                _shift_edges_(edges, ten1, ten1, dax=lambda x: -sum(ax < x for ax in axes12))
+                _shift_swaps_(swaps, ten1, ten1, dax=lambda x: -sum(ax < x for ax in axes12))
             else:  # tensordot
                 dot_done = True
                 ten_out += 1
                 commands.append(('tensordot', ten_out, (ten1, ten2), (tuple(axes1), tuple(axes2))))
                 nlegs[ten1] -= len(axes1)
                 nlegs[ten2] -= len(axes2)
-                for edge in edges:
-                    if edge[1] == ten1:
-                        edge[1] = ten_out
-                        edge[2] += -sum(ax < edge[2] for ax in axes1)
-                    elif edge[1] == ten2:
-                        edge[1] = ten_out
-                        edge[2] += nlegs[ten1] - sum(ax < edge[2] for ax in axes2)
-                for sw12 in swaps:
-                    for sws in sw12:
-                        for sw in sws:
-                            if sw[0] == ten1:
-                                sw[0] = ten_out
-                                sw[1] += -sum(ax < sw[1] for ax in axes1)
-                            elif sw[0] == ten2:
-                                sw[0] = ten_out
-                                sw[1] += nlegs[ten1] - sum(ax < sw[1] for ax in axes2)
+                _shift_edges_(edges, ten1, ten_out, dax=lambda x: -sum(ax < x for ax in axes1))
+                _shift_edges_(edges, ten2, ten_out, dax=lambda x: nlegs[ten1] - sum(ax < x for ax in axes2))
+                _shift_swaps_(swaps, ten1, ten_out, dax=lambda x: -sum(ax < x for ax in axes1))
+                _shift_swaps_(swaps, ten2, ten_out, dax=lambda x: nlegs[ten1] - sum(ax < x for ax in axes2))
                 nlegs[ten_out] = nlegs.pop(ten1) + nlegs.pop(ten2)
             axes1, axes2 = [], []
     #
@@ -309,20 +291,10 @@ def _meta_ncon(inds, order, swap):
         commands.append(('tensordot', ten_out, (ten1, ten2), ((), ())))
         nlegs[ten1] -= len(axes1)
         nlegs[ten2] -= len(axes2)
-        for edge in edges:
-            if edge[1] == ten1:
-                edge[1] = ten_out
-            if edge[1] == ten2:
-                edge[1] = ten_out
-                edge[2] += nlegs[ten1]
-        for sw12 in swaps:
-            for sws in sw12:
-                for sw in sws:
-                    if sw[0] == ten1:
-                        sw[0] = ten_out
-                    if sw[0] == ten2:
-                        sw[0] = ten_out
-                        sw[1] += nlegs[ten1]
+        _shift_edges_(edges, ten1, ten_out, dax=lambda x: 0)
+        _shift_edges_(edges, ten2, ten_out, dax=lambda x: nlegs[ten1])
+        _shift_swaps_(swaps, ten1, ten_out, dax=lambda x: 0)
+        _shift_swaps_(swaps, ten2, ten_out, dax=lambda x: nlegs[ten1])
         nlegs[ten_out] = nlegs.pop(ten1) + nlegs.pop(ten2)
         ten1 = ten_out
     #
@@ -340,6 +312,22 @@ def _meta_ncon(inds, order, swap):
         commands.append(('transpose', ten_out, ten_out, axes))
     #
     return tuple(commands)
+
+
+def _shift_edges_(edges, ten_old, ten_new, dax):
+    for edge in edges:
+        if edge[1] == ten_old:
+            edge[1] = ten_new
+            edge[2] += dax(edge[2])
+
+
+def _shift_swaps_(swaps, ten_old, ten_new, dax):
+    for sw12 in swaps:
+        for sws in sw12:
+            for sw in sws:
+                if sw[0] == ten_old:
+                    sw[0] = ten_new
+                    sw[1] += dax(sw[1])
 
 
 def _swap_on_tensor(sw1, sw2):
