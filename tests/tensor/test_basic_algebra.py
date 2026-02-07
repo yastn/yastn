@@ -77,7 +77,17 @@ def test_algebra_basic(config_kwargs):
     a = yastn.rand(config=config_U1, legs=[leg0a, leg1, leg2, leg3], dtype='float64')
     b = yastn.rand(config=config_U1, legs=[leg0b, leg1, leg2, leg3], dtype='float64')
     combine_tests(a, b)
-
+    #
+    # test with transpose
+    a = a.transpose((3, 1, 0, 2))
+    b = b.transpose((3, 1, 0, 2))
+    r0 = algebra_vs_numpy(lambda x, y: 2. * x + y, a, b)
+    assert r0.trans == (3, 1, 0, 2)
+    a = a.consume_transpose()
+    r1 = algebra_vs_numpy(lambda x, y: 2. * x + y, a, b)
+    assert r1.trans == (0, 1, 2, 3)
+    assert (r0 - r1).norm() < tol
+    #
     c = yastn.eye(config=config_U1, t=1, D=5)
     d = yastn.eye(config=config_U1, t=2, D=5)
     r4 = algebra_vs_numpy(lambda x, y: 2. * x + y, c, d)
@@ -91,6 +101,8 @@ def test_algebra_basic(config_kwargs):
     r7 = algebra_vs_numpy(lambda x, y: x - y / 0.5, e, f)
     assert pytest.approx(r7.norm().item(), rel=tol) == 5 * np.sqrt(5)
     assert pytest.approx(r7.norm(p='inf').item(), rel=tol) == 2
+
+
 
     # Z2xU1
     config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
@@ -381,19 +393,19 @@ def test_auxiliary():
     # _join_contiguous_slices
     slc1 = ((0, 10), (10, 20), (30, 40), (40, 50))
     slc2 = ((0, 10), (10, 20), (20, 30), (40, 50))
-    meta = yastn.tensor._auxliary._join_contiguous_slices(slc1, slc2)
+    meta = yastn.tensor._auxiliary._join_contiguous_slices(slc1, slc2)
     assert meta == (((0, 20), (0, 20)), ((30, 40), (20, 30)), ((40, 50), (40, 50)))
 
     slc1 = ((0, 10), (10, 20), (20, 30), (40, 50))
     slc2 = ((10, 20), (20, 30), (30, 40), (40, 50))
-    meta = yastn.tensor._auxliary._join_contiguous_slices(slc1, slc2)
+    meta = yastn.tensor._auxiliary._join_contiguous_slices(slc1, slc2)
     assert meta == (((0, 30), (10, 40)), ((40, 50), (40, 50)))
 
     # _slices_to_negate
-    slices = (yastn.tensor._auxliary._slc(((0, 10),)),
-              yastn.tensor._auxliary._slc(((10, 20),)),
-              yastn.tensor._auxliary._slc(((20, 30),)),
-              yastn.tensor._auxliary._slc(((30, 40),)))
+    slices = (yastn.tensor._auxiliary._slc(((0, 10),)),
+              yastn.tensor._auxiliary._slc(((10, 20),)),
+              yastn.tensor._auxiliary._slc(((20, 30),)),
+              yastn.tensor._auxiliary._slc(((30, 40),)))
 
     negate_slices = yastn.tensor._contractions._slices_to_negate([0, 0, 0, 0], slices)
     assert negate_slices == ()

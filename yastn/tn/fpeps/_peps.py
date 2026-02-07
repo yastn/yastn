@@ -27,7 +27,7 @@ class Peps(Lattice):
 
     def __init__(self, geometry, tensors: None | Tensor | Sequence[Sequence[Tensor]] | dict[tuple[int,int], Tensor] = None):
         r"""
-        A PEPS instance on a specified lattice can be initialized as empty (with no tensors assiged) or with tensors assigned to each unique lattice site.
+        A PEPS instance on a specified lattice can be initialized as empty (with no tensors assigned) or with tensors assigned to each unique lattice site.
 
         PEPS inherits key methods (e.g., sites, bonds, dims) from the associated lattice geometry.
         Supports ``[]`` notation to get/set individual tensors.
@@ -52,7 +52,7 @@ class Peps(Lattice):
             import yastn
             import yastn.tn.fpeps as fpeps
 
-            # PEPS with CheckerboarLattice geometry and no tensors assigned.
+            # PEPS with CheckerboardLattice geometry and no tensors assigned.
             #
             geometry = fpeps.CheckerboardLattice()
             psi = fpeps.Peps(geometry)
@@ -124,7 +124,7 @@ class Peps(Lattice):
                 site = (n, ny)
                 psi = self[site]
                 op.A[ny] = psi.transpose(axes=(1, 2, 3, 0)) if psi.ndim == 4 else \
-                           DoublePepsTensor(bra=psi, ket=psi, transpose=(1, 2, 3, 0))
+                           DoublePepsTensor(bra=psi, ket=psi).transpose((1, 2, 3, 0))
         elif dirn == 'v':
             periodic = (self.boundary == "cylinder")
             op = Mpo(N=self.Nx, periodic=periodic)

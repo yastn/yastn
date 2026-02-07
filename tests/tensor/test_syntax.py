@@ -84,7 +84,7 @@ def test_syntax_create_empty_tensor_and_fill(config_kwargs):
     # sector 2 on 3rd leg throws an error.
     #
     with pytest.raises(yastn.YastnError,
-                       match="Inconsist assigment of bond dimension to some charge."):
+                       match="Inconsistent assignment of bond dimension to some charge."):
         d.set_block(ts=(2, 1, 2, 1), Ds=(3, 3, 10, 2), val='rand')
 
 

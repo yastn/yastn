@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-""" Methods outputing data from yastn.Tensor. """
+""" Methods outputting data from yastn.Tensor. """
 from __future__ import annotations
 from functools import reduce
 from numbers import Number
@@ -22,7 +22,7 @@ from warnings import warn
 
 import numpy as np
 
-from ._auxliary import _clear_axes, _unpack_axes, _struct, _slc, _flatten
+from ._auxiliary import _clear_axes, _unpack_axes, _struct, _slc, _flatten
 from ._legs import Leg, LegMeta, legs_union, _legs_mask_needed
 from ._merging import _embed_tensor
 from ._tests import YastnError
@@ -78,19 +78,21 @@ def to_dict(a, level=2, meta=None) -> dict:
 
     data = a.data if level < 2 else a.config.backend.to_numpy(a.data)
 
+    # dict_ver=2: Tensor has field 'trans'
     d = {'type': type(a).__name__,
-         'dict_ver': 1,  # to_dict version
+         'dict_ver': 2,
          'level': level,
          'config': config,
          'data': data,
          'struct': struct,
          'slices': slices,
+         'trans': a.trans,
          'isdiag': a.isdiag,
          'hfs': hfs,
          'mfs': a.mfs}
 
     if meta is not None:
-        if not all(meta[k] == d[k] for k in ['type', 'dict_ver', 'config', 'struct', 'slices', 'isdiag', 'hfs', 'mfs']):
+        if not all(meta[k] == d[k] for k in ['type', 'dict_ver', 'config', 'struct', 'slices', 'trans', 'isdiag', 'hfs', 'mfs']):
             size = meta['struct'].size if hasattr(meta['struct'], 'size') else meta['struct']['size']
             tmp = a.config.backend.zeros(size, dtype=a.yastn_dtype, device=a.device)
             ap = type(a).from_dict(combine_data_and_meta(tmp, meta))
@@ -120,7 +122,7 @@ def save_to_dict(a) -> dict:
         tensor to export.
     """
     warn('This method is deprecated; use to_dict() instead.', DeprecationWarning, stacklevel=2)
-
+    a = a.consume_transpose()
     _d = a.config.backend.to_numpy(a._data).copy()
     hfs = [hf._asdict() for hf in a.hfs]
     return {'type': type(a).__name__,
@@ -141,6 +143,7 @@ def save_to_hdf5(a, file, path) -> None:
     a : yastn.Tensor
         tensor to export.
     """
+    a = a.consume_transpose()
     _d = a.config.backend.to_numpy(a._data)
     hfs = tuple(tuple(hf) for hf in a.hfs)
     file.create_dataset(path+'/isdiag', data=[int(a.isdiag)])
@@ -242,7 +245,14 @@ def get_signature(a, native=False) -> Sequence[int]:
 
     If ``native=True``, ignore fusion with ``mode=meta`` and return the signature of tensors's native legs, see :attr:`yastn.Tensor.s_n`.
     """
-    return a.s_n if native else a.s
+    if native:
+        return tuple(a.struct.s[ind] for ind in a.trans)
+    else:
+        inds, n = [], 0
+        for mf in a.mfs:
+            inds.append(a.trans[n])
+            n += mf[0]
+        return tuple(a.struct.s[ind] for ind in inds)
 
 
 def get_rank(a, native=False) -> int:
@@ -281,7 +291,7 @@ def get_shape(a, axes=None, native=False) ->  int | Sequence[int]:
         indices of legs; If ``axes=None`` returns shape for all legs. The default is ``axes=None``.
     """
     if axes is None:
-        axes = tuple(n for n in range(a.ndim_n if native else a.ndim))
+        axes = tuple(range(a.ndim_n if native else a.ndim))
     if isinstance(axes, int):
         return sum(a.get_legs(axes, native=native).D)
     return tuple(sum(leg.D) for leg in a.get_legs(axes, native=native))
@@ -307,13 +317,16 @@ def __getitem__(a, key) -> numpy.ndarray | torch.tensor:
     key : Sequence[int] | Sequence[Sequence[int]]
         charges of the block.
     """
-    key = tuple(_flatten(key))
     try:
-        ind = a.struct.t.index(key)
+        key = np.array(key, dtype=np.int64).reshape(a.ndim_n, a.config.sym.NSYM)
+        reverse_trans = np.argsort(a.trans)
+        ukey = tuple(key[reverse_trans, :].ravel().tolist())
+        ind = a.struct.t.index(ukey)
     except ValueError as exc:
         raise YastnError('Tensor does not have the block specified by key.') from exc
     x = a._data[slice(*a.slices[ind].slcs[0])]
-    return x if a.isdiag else x.reshape(a.struct.D[ind])
+    return x if a.isdiag else a.config.backend.permute_dims(x.reshape(a.struct.D[ind]), a.trans)
+
 
 def __contains__(a, key) -> bool:
     key = tuple(_flatten(key)) if (hasattr(key,'__iter__') or hasattr(key,'__next__')) else (key,)
@@ -344,13 +357,15 @@ def get_legs(a, axes=None, native=False) -> yastn.Leg | Sequence[yastn.Leg]:
     tset = np.array(a.struct.t, dtype=np.int64).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
     Dset = np.array(a.struct.D, dtype=np.int64).reshape((len(a.struct.D), len(a.struct.s)))
     if axes is None:
-        axes = tuple(range(a.ndim)) if not native else tuple(range(a.ndim_n))
+        axes = tuple(range(a.ndim if not native else a.ndim_n))
     multiple_legs = hasattr(axes, '__iter__')
     axes, = _clear_axes(axes)
     for ax in axes:
         nax = (ax,)
         if not native:
             nax, = _unpack_axes(a.mfs, (ax,))
+
+        nax = tuple(a.trans[ax] for ax in nax)
 
         legs_ax = []
         for i in nax:
@@ -386,7 +401,7 @@ def to_dense(a, legs=None, native=False, reverse=False) -> numpy.ndarray | torch
     The type of the returned tensor depends on the backend, i.e. ``numpy.ndarray`` or ``torch.tensor``.
     Blocks are ordered according to increasing charges on each leg.
     It is possible to supply a list of additional charge sectors to be included by
-    explictly specifying ``legs``.
+    explicitly specifying ``legs``.
     Specified ``legs`` should be consistent with current structure of the tensor.
     This allows to fill in extra zero blocks.
 
@@ -431,11 +446,11 @@ def to_raw_tensor(a) -> numpy.ndarray | torch.tensor:
 
 def to_nonsymmetric(a, legs=None, native=False, reverse=False) -> 'Tensor':
     r"""
-    Create equivalent :class:`yastn.Tensor` with no explict symmetry. All blocks of the original
-    tensor are accummulated into a single block.
+    Create equivalent :class:`yastn.Tensor` with no explicit symmetry. All blocks of the original
+    tensor are accumulated into a single block.
 
     Blocks are ordered according to increasing charges on each leg.
-    It is possible to supply a list of additional charge sectors to be included by explictly
+    It is possible to supply a list of additional charge sectors to be included by explicitly
     specifying ``legs``. These legs should be consistent with current structure of the tensor.
     This allows to fill in extra zero blocks.
 
@@ -457,7 +472,9 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False) -> 'Tensor':
         values of block's charges.
     """
     config_dense = a.config._replace(sym=sym_none)
-
+    #
+    a = a.consume_transpose()
+    #
     legs_a = list(a.get_legs(native=native))
     ndim_a = len(legs_a)  # ndim_n if native else ndim
 

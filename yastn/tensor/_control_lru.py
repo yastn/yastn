@@ -21,7 +21,7 @@ __all__ = ['clear_cache', 'get_cache_info', 'set_cache_maxsize']
 
 
 def set_cache_maxsize(maxsize=0):
-    """Change maxsize of lru_cache to reuses some metadata."""
+    """Change maxsize of lru_cache to reuse some metadata."""
     _contractions._meta_broadcast = lru_cache(maxsize)(_contractions._meta_broadcast.__wrapped__)
     _contractions._meta_tensordot_f2m = lru_cache(maxsize)(_contractions._meta_tensordot_f2m.__wrapped__)
     _contractions._meta_tensordot_fc = lru_cache(maxsize)(_contractions._meta_tensordot_fc.__wrapped__)
@@ -43,7 +43,7 @@ def set_cache_maxsize(maxsize=0):
 
 
 def clear_cache():
-    """Change maxsize of lru_cache to reuses some metadata."""
+    """Change maxsize of lru_cache to reuse some metadata."""
     _contractions._meta_broadcast.cache_clear()
     _contractions._meta_tensordot_f2m.cache_clear()
     _contractions._meta_tensordot_fc.cache_clear()

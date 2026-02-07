@@ -51,7 +51,7 @@ def tdvp_(psi, H,
         or as a function returning (sum of) MPO for time-dependent problem, i.e. ``Callable[[float], Mpo]``
         or ``Callable[[float], Sequence[Mpo]]``, see :meth:`Env()<yastn.tn.mps.Env>`.
 
-    time: float64 or tuple(float64)
+    times: float64 or tuple(float64)
         Initial and final times; can also provide intermediate times for snapshots returned
         by the iterator. If only the final time is provided, initial time is set to 0.
 

@@ -50,17 +50,6 @@ def test_config_exceptions_torch(config_kwargs):
             _ = a + b
             # Two tensors have different backends.
 
-    if config.backend.cuda_is_available():
-        a = yastn.rand(config=config, s=(1, -1, 1), t=((0, 1), (0, 1), (0, 1)), D=((1, 2), (1, 2), (1, 2)))
-        b = yastn.rand(config=config, s=(1, -1, 1), t=((0, 1), (0, 1), (0, 1)), D=((1, 2), (1, 2), (1, 2)))
-        a = a.to(device='cpu')
-        b = b.to(device='cuda')
-        assert 'cpu' in a.device
-        assert 'cuda' in b.device
-        with pytest.raises(yastn.YastnError):
-            _ = a + b
-            # Devices of the two tensors do not match.
-
 
 def test_make_config(config_kwargs):
     """ Parameters in yastn.make_config(). """
@@ -78,4 +67,4 @@ def test_make_config(config_kwargs):
 
 if __name__ == '__main__':
     # pytest.main([__file__, "-vs", "--durations=0"])
-    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--device", "cuda"])

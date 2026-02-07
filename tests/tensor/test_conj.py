@@ -87,8 +87,10 @@ def test_flip_charges(config_kwargs):
     leg = yastn.Leg(config_Z2xU1, s=1, t=((0, 1), (1, 0), (0, -1)), D=(2, 3, 2))
     a = yastn.rand(config=config_Z2xU1, legs=[leg, leg, leg.conj(), leg.conj()])
     b = a.flip_charges()
-    c = a.flip_charges(axes=(1, 2))
-
+    #
+    c = a.transpose(axes=(1, 3, 0, 2)).flip_charges(axes=(0, 3))
+    c = c.transpose(axes=(2, 0, 3, 1))
+    #
     assert a.s == (1, 1, -1, -1)
     assert b.s == (-1, -1, 1, 1)
     assert c.s == (1, -1, 1, -1)
@@ -115,8 +117,10 @@ def test_switch_signature(config_kwargs):
     leg = yastn.Leg(config_Z2xU1, s=1, t=((0, 1), (1, 0), (0, -1)), D=(2, 3, 2))
     a = yastn.rand(config=config_Z2xU1, legs=[leg, leg, leg.conj(), leg.conj()])
     b = a.switch_signature(axes='all')
-    c = a.switch_signature(axes=(1, 2))
-
+    #
+    c = a.transpose(axes=(1, 3, 0, 2)).switch_signature(axes=(0, 3))
+    c = c.transpose(axes=(2, 0, 3, 1))
+    #
     assert a.s == (1, 1, -1, -1)
     assert b.s == (-1, -1, 1, 1)
     assert c.s == (1, -1, 1, -1)
@@ -139,7 +143,7 @@ def test_switch_signature(config_kwargs):
     assert (d0 - d).norm() < tol
     assert a.switch_signature(axes=(1,2)).get_legs() == e.unfuse_legs(axes=1).get_legs()
     assert (a.switch_signature(axes=(1,2)) - e.unfuse_legs(axes=1)).norm() < tol
-    
+
     with pytest.raises(yastn.YastnError):
         f = yastn.rand(config_Z2xU1, legs=leg, isdiag=True)
         f.switch_signature(axes='all')
@@ -203,4 +207,3 @@ def test_conj_Z2xU1(config_kwargs):
 
 if __name__ == '__main__':
     pytest.main([__file__, "-vs", "--durations=0"])
-

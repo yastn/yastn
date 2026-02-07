@@ -28,7 +28,7 @@ import numpy as np
 
 from .._split_combine_dict import *
 from ._algebra import *
-from ._auxliary import _struct, _config
+from ._auxiliary import _struct, _config
 from ._contractions import *
 from ._control_lru import *
 from ._initialize import *
@@ -88,10 +88,10 @@ class Tensor:
             assert (kwargs['data'] is None or kwargs['data'].ndim == 1), "Tensor data should be None or a 1D array."
             self._data = kwargs['data']  # 1d container for tensor data
         else:
-            dev = kwargs['device'] if 'device' in kwargs else self.config.default_device
-            dty = kwargs['dtype'] if 'dtype' in kwargs else self.config.default_dtype
+            dev = kwargs.get('device', self.config.default_device)
+            dty = kwargs.get('dtype', self.config.default_dtype)
             self._data = self.config.backend.zeros((0,), dtype=dty, device=dev)
-
+        #
         try:
             self.struct = kwargs['struct']
         except KeyError:
@@ -113,17 +113,33 @@ class Tensor:
                 if any(x != 0 for x in n):
                     raise YastnError("Tensor charge of a diagonal tensor should be 0.")
             self.struct = _struct(s=s, n=n, diag=bool(isdiag))
-
-        self.slices = kwargs['slices'] if 'slices' in kwargs else ()
-
-        # fusion tree for each leg: encodes number of fused legs e.g. 5 2 1 1 3 1 2 1 1 = [[1, 1], [1, [1, 1]]]
+        #
+        self.slices = kwargs.get('slices', ())
+        #
+        # self.mfs and self.trans describe logical/meta transformation of legs
+        # 1) at the highest level, self.mfs is a logical fusion of legs,
+        # where a group of consecutive legs is treated as a single leg
+        # 2) Next, self.trans is a transpose/permutation of leg indices,
+        # mapping from logical legs (unpacked from mfs) to native legs in data that are described by self.struct
+        # 3) At the lowest level, self.hfs contains information about hard-fusion of native legs
+        #
+        self._trans = kwargs.get('trans', None)
         try:
-            self.mfs = tuple(kwargs['mfs'])
-        except (KeyError, TypeError):
+            self._trans = tuple(self._trans)
+        except TypeError:
+            self._trans = tuple(range(len(self.struct.s)))
+        #
+        # fusion tree for each leg: encodes number of fused legs e.g. 5 2 1 1 3 1 2 1 1 = ((1, 1), (1, (1, 1)))
+        self.mfs = kwargs.get('mfs', None)
+        try:
+            self.mfs = tuple(self.mfs)
+        except TypeError:
             self.mfs = ((1,),) * len(self.struct.s)
+        #
+        self.hfs = kwargs.get('hfs', None)
         try:
-            self.hfs = tuple(kwargs['hfs'])
-        except (KeyError, TypeError):
+            self.hfs = tuple(self.hfs)
+        except TypeError:
             self.hfs = tuple(_Fusion(s=(x,)) for x in self.struct.s)
 
     # pylint: disable=C0415
@@ -135,7 +151,7 @@ class Tensor:
     from ._algebra import __abs__, real, imag, sqrt, rsqrt, reciprocal, exp, bitwise_not
     from ._single import conj, conj_blocks, flip_signature, flip_charges, switch_signature, transpose, moveaxis, move_leg, diag
     from ._single import grad, requires_grad_, remove_zero_blocks, add_leg, remove_leg, drop_leg_history
-    from ._single import copy, shallow_copy, clone, detach, detach_, to
+    from ._single import copy, shallow_copy, clone, detach, detach_, to, consume_transpose
     from ._output import print_properties, __str__, __repr__, print_blocks_shape, is_complex
     from ._output import get_blocks_charge, get_blocks_shape, get_legs
     from ._output import zero_of_dtype, item, __getitem__, __contains__
@@ -147,9 +163,11 @@ class Tensor:
     from ._merging import fuse_legs, unfuse_legs, fuse_meta_to_hard
     from ._krylov import expand_krylov_space
 
+    __iter__ = None  # ensure that the Tensor is not iterable
+
     def _replace(self, **kwargs) -> Tensor:
         """ Creates a shallow copy replacing fields specified in kwargs. """
-        for arg in ('config', 'struct', 'mfs', 'hfs', 'data', 'slices'):
+        for arg in ('config', 'struct', 'mfs', 'hfs', 'data', 'slices', 'trans'):
             if arg not in kwargs:
                 kwargs[arg] = getattr(self, arg)
         return Tensor(**kwargs)
@@ -157,7 +175,7 @@ class Tensor:
     @classmethod
     def from_dict(cls, d: dict, config:None | _config=None) -> Tensor:
         """
-        De-serializes tensor from the dictionary ``d``.
+        Deserializes tensor from the dictionary ``d``.
 
         Parameters
         ----------
@@ -190,7 +208,11 @@ class Tensor:
             c.is_consistent()
             return c
         #
-        if d['dict_ver'] == 1:  # d from method to_dict (single version as of now)
+        if d['dict_ver'] in [1, 2]:  # d from method to_dict (single version as of now)
+
+            if 'trans' not in d:  # to handle dict_ver==1 with no trans
+                d['trans'] = None
+
             if d['type'] != 'Tensor':
                 raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
 
@@ -223,6 +245,15 @@ class Tensor:
                 d['data'] = d['config'].backend.to_tensor(d['data'], dtype=dtype, device=d['config'].default_device)
 
             return cls(**d)
+        else:
+            raise YastnError(f"Tensor.to_dict with dict_ver = {d['dict_ver']} not supported")
+
+
+    @property
+    def trans(self) -> Sequence[int]:
+        r""" Transpose between logical legs and data spaces. """
+        return self._trans
+
 
     @property
     def s(self) -> Sequence[int]:
@@ -232,11 +263,8 @@ class Tensor:
         Legs (spaces) fused together by :meth:`yastn.Tensor.fuse` are treated as a single leg.
         The signature of each fused leg is given by the first native leg in the fused space.
         """
-        inds, n = [], 0
-        for mf in self.mfs:
-            inds.append(n)
-            n += mf[0]
-        return tuple(self.struct.s[ind] for ind in inds)
+        return self.get_signature(native=False)
+
 
     @property
     def s_n(self) -> Sequence[int]:
@@ -246,7 +274,8 @@ class Tensor:
         This includes legs (spaces) which have been fused together
         by :meth:`yastn.fuse_legs` using ``mode='meta'``.
         """
-        return self.struct.s
+        return self.get_signature(native=True)
+
 
     @property
     def n(self) -> Sequence[int]:
@@ -254,7 +283,7 @@ class Tensor:
         Total charge of the tensor.
 
         In case of direct product of abelian symmetries,
-        total charge for each symmetry, accummulated in a tuple.
+        total charge for each symmetry, accumulated in a tuple.
         """
         return self.struct.n
 

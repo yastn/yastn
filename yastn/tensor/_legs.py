@@ -21,7 +21,7 @@ from operator import itemgetter
 
 import numpy as np
 
-from ._auxliary import _flatten
+from ._auxiliary import _flatten
 from ._merging import _Fusion, _hfs_union, _combine_hfs_prod, _unfuse_Fusion
 from ._tests import YastnError
 from ..sym import sym_none
@@ -75,7 +75,7 @@ class Leg:
     def __post_init__(self):
         if not self._verified:
             if not hasattr(self.sym, 'SYM_ID'):  # if config is provided
-                object.__setattr__(self, "sym", self.sym.sym)  # replace is with config.sym
+                object.__setattr__(self, "sym", self.sym.sym)  # replace it with config.sym
             if self.s not in (-1, 1):
                 raise YastnError('Signature of Leg should be 1 or -1')
             object.__setattr__(self, "s", int(self.s))
@@ -156,7 +156,7 @@ class Leg:
         return _str_tree(self.hf.tree, self.hf.op)
 
     def is_fused(self) -> bool:
-        """ Return :code:`True` if the leg is a result of fusion, and :code:`False` is it is elementary. """
+        """ Return :code:`True` if the leg is a result of fusion, and :code:`False` if it is elementary. """
         return self.hf.tree[0] > 1
 
     def unfuse_leg(self):
@@ -169,7 +169,7 @@ class Leg:
 @dataclass(frozen=True, repr=False)
 class LegMeta:
     """
-    Auxilliary Leg class desctibing a meta-leg: a list of legs, where explicit hard-fusion was not performed.
+    Auxiliary Leg class describing a meta-leg: a list of legs, where explicit hard-fusion was not performed.
     """
     sym: any = sym_none
     s: int = 1

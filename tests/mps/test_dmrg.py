@@ -30,7 +30,7 @@ def run_dmrg(phi, H, O_occ, E_target, occ_target, opts_svd, tol, precompute=Fals
     # orthogonal to provided MPSs. We start with empty list,
     # project = [], and keep adding to it previously found eigenstates.
     # This allows us to find the ground state
-    # and a few consequative lowest-energy eigenstates.
+    # and a few consecutive lowest-energy eigenstates.
     #
     project, states = [], []
     for ref_eng, ref_occ  in zip(E_target, occ_target):

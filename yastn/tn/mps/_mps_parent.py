@@ -372,9 +372,9 @@ class _MpsMpoParent:
         """
         if 'dict_ver' not in d:  # d from a legacy method save_to_dict
             nr_phys = d['nr_phys']
-            N = d['N'] if 'N' in d else len(d['A'])  # backwards compability
+            N = d['N'] if 'N' in d else len(d['A'])  # backwards compatibility
             out_mps = cls(N, nr_phys=nr_phys)
-            if 'factor' in d:  # backwards compability
+            if 'factor' in d:  # backwards compatibility
                 out_mps.factor = d['factor']
             for n in range(out_mps.N):
                 out_mps.A[n] = Tensor.from_dict(d=d['A'][n], config=config)

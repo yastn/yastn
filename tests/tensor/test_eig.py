@@ -73,6 +73,29 @@ def test_eig_basic(config_kwargs):
         assert U.size == S.size == V.size == 0
 
 
+def test_eig_transpose_meta(config_kwargs):
+    """ test eig decomposition with meta-fuse and transpose """
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1),
+                  t=((0, 1), (0, 1), (0, 1), (0, 1)),
+                  D=((1, 2), (3, 4), (1, 2), (3, 4)))
+    #
+    af = a.fuse_legs(axes=((1, 2), (3, 0)), mode='meta')
+    assert af.trans == (1, 2, 3, 0)
+    #
+    aft = af.transpose(axes=(1, 0))
+    Uf, Sf, Vf = yastn.linalg.eig(aft, axes=(1, 0))
+    USVf = Uf @ Sf @ Vf
+    assert yastn.norm(USVf - af) < tol  # == 0.0
+    #
+    U, S, V = yastn.linalg.eig(a, axes=((1, 2), (3, 0)))
+    Um = U.fuse_legs(axes=((0, 1), 2), mode='meta')
+    Vm = V.fuse_legs(axes=(0, (1, 2)), mode='meta')
+    assert yastn.norm(Uf - Um) < tol  # == 0.0
+    assert yastn.norm(Sf - S) < tol  # == 0.0
+    assert yastn.norm(Vf - Vm) < tol  # == 0.0
+
+
 def test_eig_degeneracy_fail(config_kwargs):
     # Z2xU1
     config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)

@@ -202,21 +202,29 @@ def test_hard_transpose(config_kwargs):
                   t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
                   D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
     assert a.get_shape() == (3, 5, 7, 9, 11, 13)
-
-    b = a.fuse_legs(axes=((0, 1), 2, (3, 4), 5), mode='hard')
+    #
+    at = a.transpose(axes=(3, 4, 2, 1, 0, 5))
+    assert at.trans == (3, 4, 2, 1, 0, 5)
+    #
+    b  = at.fuse_legs(axes=((4, 3), 2, (0, 1), 5), mode='hard')
     assert b.get_shape() == (15, 7, 99, 13)
-
+    assert b.trans == (0, 1, 2, 3)
+    #
     c = np.transpose(b, axes=(3, 2, 1, 0))
     assert c.get_shape() == (13, 99, 7, 15)
-
+    assert c.trans == (3, 2, 1, 0)
+    #
     c = c.unfuse_legs(axes=(1, 3))
     assert c.get_shape() == (13, 9, 11, 7, 3, 5)
-
+    assert c.trans == (5, 3, 4, 2, 0, 1)
+    #
     c = b.moveaxis(source=1, destination=2)
     assert c.get_shape() == (15, 99, 7, 13)
-
+    assert c.trans == (0, 2, 1, 3)
+    #
     c = c.unfuse_legs(axes=(1, 0))
     assert c.get_shape() == (3, 5, 9, 11, 7, 13)
+    assert c.trans == (0, 1, 3, 4, 2, 5)
 
 
 def test_hard_dot(config_kwargs):
@@ -317,28 +325,93 @@ def test_hard_dot_sparse(config_kwargs):
 
 
 def _test_fuse_mix(a):
-    ma = a.fuse_legs(axes=((0, 1), (2, 3), (4, 5)), mode='meta')
+    ma = a.fuse_legs(axes=((0, 1), (5, 2), (4, 3)), mode='meta')
     assert (ma.ndim_n, ma.ndim) == (6, 3)
-    ha = a.fuse_legs(axes=((0, 1), (2, 3), (4, 5)), mode='hard')
+    assert ma.trans == (0, 1, 5, 2, 4, 3)
+    ha = a.fuse_legs(axes=((0, 1), (5, 2), (4, 3)), mode='hard')
     assert (ha.ndim_n, ha.ndim) == (3, 3)
-
+    assert ha.trans == (0, 1, 2)
+    #
     hma = ma.fuse_legs(axes=((2, 0), 1), mode='hard')
     assert (hma.ndim_n, hma.ndim) == (2, 2)
+    assert hma.trans == (0, 1)
+    #
     hha = ha.fuse_legs(axes=((2, 0), 1), mode='hard')
     assert (hha.ndim_n, hha.ndim) == (2, 2)
+    assert hha.trans == (0, 1)
+    #
+    assert yastn.norm(hma - hha) < tol
+    #
     mma = ma.fuse_legs(axes=((2, 0), 1), mode='meta')
     assert (mma.ndim_n, mma.ndim) == (6, 2)
+    assert mma.trans == (4, 3, 0, 1, 5, 2)
+    #
     mha = ha.fuse_legs(axes=((2, 0), 1), mode='meta')
     assert (mha.ndim_n, mha.ndim) == (3, 2)
-
-    assert yastn.norm(hma - hha) < tol
-
+    assert mha.trans == (2, 0, 1)
+    #
     fmma = yastn.fuse_meta_to_hard(mma)
     fmha = yastn.fuse_meta_to_hard(mha)
     fhha = yastn.fuse_meta_to_hard(hha)
+    assert fmma.trans == (0, 1)
+    assert fmha.trans == (0, 1)
+    assert fhha is hha
+    #
     assert yastn.norm(fmma - hha) < tol
     assert yastn.norm(fmha - hha) < tol
     assert yastn.norm(fhha - hha) < tol
+    #
+    umha = mha.unfuse_legs(axes=(0, 1))
+    assert umha.trans == (3, 0, 1, 2)
+    assert (umha.ndim_n, umha.ndim) == (4, 4)
+    #
+    # hard and meta unfuse at the same time
+    ha = a.fuse_legs(axes=(0, 1, (2, 3), 4, 5), mode='hard')
+    mha = ha.fuse_legs(axes=((0, 1), (3, 4), 2), mode='meta')
+    mmha = mha.fuse_legs(axes=((1, 0), 2), mode='meta')
+    assert (mmha.ndim_n, mmha.ndim) == (5, 2)
+    assert mmha.trans == (3, 4, 0, 1, 2)
+    assert mmha.mfs == ((4, 2, 1, 1, 2, 1, 1), (1,))
+    #
+    ummha = mmha.unfuse_legs(axes=(0, 1))
+    assert (ummha.ndim_n, ummha.ndim) == (6, 4)
+    assert ummha.trans == (4, 5, 0, 1, 2, 3)
+    assert ummha.mfs == ((2, 1, 1), (2, 1, 1), (1,), (1,))
+    #
+    uummha = ummha.unfuse_legs(axes=(0, 1))
+    assert (uummha.ndim_n, uummha.ndim) == (6, 6)
+    assert uummha.trans == (4, 5, 0, 1, 2, 3)
+    assert uummha.mfs == ((1,), (1,), (1,), (1,), (1,), (1,))
+    assert (a.transpose((4, 5, 0, 1, 2, 3)) - uummha).norm() < tol
+    #
+    # hard and meta unfuse at the same time; other combination
+    ha = a.fuse_legs(axes=(0, 1, 2, 3, (4, 5)), mode='hard')
+    #
+    mha = ha.fuse_legs(axes=((1, 0), 4, (3, 2)), mode='meta')
+    assert mha.trans == (1, 0, 4, 3, 2)
+    assert mha.mfs == ((2, 1, 1), (1,), (2, 1, 1))
+    assert umha.is_consistent()
+    #
+    umha = mha.unfuse_legs(axes=(0, 1, 2))
+    assert umha.trans == (1, 0, 4, 5, 3, 2)
+    assert umha.mfs == ((1,), (1,), (1,), (1,), (1,), (1,))
+    assert (a.transpose((1, 0, 4, 5, 3, 2)) - umha).norm() < tol
+    assert umha.is_consistent()
+    #
+    umha = mha.unfuse_legs(axes=(0, 1))
+    assert umha.trans == (1, 0, 4, 5, 3, 2)
+    assert umha.mfs == ((1,), (1,), (1,), (1,), (2, 1, 1))
+    assert umha.is_consistent()
+    #
+    umha = mha.unfuse_legs(axes=(1, 2))
+    assert umha.trans == (1, 0, 4, 5, 3, 2)
+    assert umha.mfs == ((2, 1, 1), (1,), (1,), (1,), (1,))
+    assert umha.is_consistent()
+    #
+    umha = mha.unfuse_legs(axes=(1,))
+    assert umha.trans == (1, 0, 4, 5, 3, 2)
+    assert umha.mfs == ((2, 1, 1), (1,), (1,), (2, 1, 1))
+    assert umha.is_consistent()
 
 
 def test_fuse_mix(config_kwargs):
@@ -354,7 +427,7 @@ def test_fuse_mix(config_kwargs):
     _test_fuse_mix(a)
 
 
-def test_auxliary_merging_functions(config_kwargs):
+def test_auxiliary_merging_functions(config_kwargs):
     mf1 = (1,)
     nt = yastn.tensor._merging._mf_to_ntree(mf1)
     mfx = yastn.tensor._merging._ntree_to_mf(nt)
