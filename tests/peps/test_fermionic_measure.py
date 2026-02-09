@@ -209,7 +209,7 @@ def test_measure(config_kwargs, sym, L):
     nn_peps['2x2'] = measure_combinations(ops.n(), ops.n(), env=env_ctm, fun='measure_2x2')
     nn_peps['line'] = measure_combinations(ops.n(), ops.n(), env=env_ctm, fun='measure_line')
     nn_peps['nsite'] = measure_combinations(ops.n(), ops.n(), env=env_ctm, fun='measure_nsite')
-    nn_peps['nsite_exact_horz'] = measure_combinations(ops.n(), ops.n(), env=env_ctm, fun='measure_nsite_exact')
+    nn_peps['nsite_exact'] = measure_combinations(ops.n(), ops.n(), env=env_ctm, fun='measure_nsite_exact')
     # nn_peps['nsite_mps'] = measure_combinations(ops.n(), ops.n(), env=env_bd, fun='measure_nsite')
     assert(len(nn_peps['line'])) == 2 * L ** 3 - L ** 2
     assert(len(nn_peps['nsite'])) == L ** 4
@@ -231,7 +231,7 @@ def test_measure(config_kwargs, sym, L):
     cpc_peps['2x2'] = measure_combinations(ops.cp(), ops.c(), env=env_ctm, fun='measure_2x2')
     cpc_peps['line'] = measure_combinations(ops.cp(), ops.c(), env=env_ctm, fun='measure_line')
     cpc_peps['nsite'] = measure_combinations(ops.cp(), ops.c(), env=env_ctm, fun='measure_nsite')
-    cpc_peps['nsite_exact_horz'] = measure_combinations(ops.cp(), ops.c(), env=env_ctm, fun='measure_nsite_exact')
+    cpc_peps['nsite_exact'] = measure_combinations(ops.cp(), ops.c(), env=env_ctm, fun='measure_nsite_exact')
     cpc_peps['nsite_mps'] = measure_combinations(ops.cp(), ops.c(), env=env_bd, fun='measure_nsite')
     assert(len(cpc_peps['line'])) == 2 * L ** 3 - L ** 2
     assert(len(cpc_peps['nsite'])) == L ** 4
