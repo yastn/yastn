@@ -356,7 +356,7 @@ def _update_core_D_(ctmrg_mp_context, env, move: str, opts_svd: dict, **kwargs):
         #
         # Update move
         if env.profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.range_push(f"update_env_D_")
-        
+
         # NOTE Here, we assumme that master process has up-to-date view of all on-site tensors, projectors, and env tensors
         #
         # Compute updated tensors in parallel and send back to default device
@@ -368,7 +368,7 @@ def _update_core_D_(ctmrg_mp_context, env, move: str, opts_svd: dict, **kwargs):
                 task_queue.put( ("update_env_move_MP_",
                     (i, site, mv, env.config.default_device, job_ts_d), \
                         {'profiling_mode': kwargs.get('profiling_mode', None)}) )
-        
+
         # blocking wait for all updates to complete and assignment to env_tmp
         env_tmp = EnvCTM(env.psi, init=None)  # empty environments
         for i,_s in enumerate(site_group):
@@ -384,7 +384,7 @@ def _update_core_D_(ctmrg_mp_context, env, move: str, opts_svd: dict, **kwargs):
                     env_tmp[site].t, env_tmp[site].tl, env_tmp[site].tr= tmp_env_ts
                 elif mv=='b':
                     env_tmp[site].b, env_tmp[site].bl, env_tmp[site].br= tmp_env_ts
-                
+
         if env.profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.range_pop()
 
         update_storage_(env, env_tmp)
@@ -567,15 +567,15 @@ def update_env_move_MP_(out_queue, device, i, site, move, ret_device, args_d, **
     ret_device: str
         Device to put the result onto.
     args_d: tuple(dict|Site)
-        Tensors required for the update serialized to dictionaries. 
+        Tensors required for the update serialized to dictionaries.
     """
     profiling_mode= kwargs.get("profiling_mode", None)
-    args= tuple(from_dict(t_d).clone().to(device=device,non_blocking=True) if isinstance(t_d, dict) else t_d for t_d in args_d)
+    args= tuple(from_dict(t_d).to(device=device,non_blocking=True) if isinstance(t_d, dict) else t_d for t_d in args_d)
     del args_d
 
     if profiling_mode in ["NVTX",]: args[0].config.backend.cuda.nvtx.range_push(f"{site} {move}")
     res= update_env_dir(move, *args)
-    res= tuple(r.to(device=ret_device).to_dict(level=1) for r in res)
+    res= tuple(r.detach().to(device=ret_device).to_dict(level=1) for r in res)
 
     out_queue.put( (i, site, move, res) )
     if profiling_mode in ["NVTX",]: args[0].config.backend.cuda.nvtx.range_pop()

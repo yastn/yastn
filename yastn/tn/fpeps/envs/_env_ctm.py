@@ -41,7 +41,7 @@ class EnvCTM():
 
     _default_corner_signature = (1, -1)
 
-    def __init__(self, psi, init='rand', leg=None, ket=None):
+    def __init__(self, psi, init='rand', leg=None, bra=None):
         r"""
         Environment used in Corner Transfer Matrix Renormalization Group algorithm.
 
@@ -74,14 +74,14 @@ class EnvCTM():
         leg: Optional[yastn.Leg]
             Passed to :meth:`yastn.tn.fpeps.EnvCTM.reset_` to further customize initialization.
 
-        ket: Optional[yastn.tn.Peps]
-            If provided, and ``psi`` has physical legs, forms a double-layer PEPS <psi | ket>.
+        bra: Optional[yastn.tn.Peps]
+            If provided, and ``psi`` has physical legs, forms a double-layer PEPS <bra | ket>.
         """
         self.geometry = psi.geometry
         for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "f_ordered", "nn_bond_dirn"]:
             setattr(self, name, getattr(self.geometry, name))
 
-        self.psi = Peps2Layers(bra=psi, ket=ket) if psi.has_physical() else psi
+        self.psi = Peps2Layers(ket=psi, bra=bra) if psi.has_physical() else psi
         self.env = Lattice(self.geometry, objects={site: EnvCTM_local() for site in self.sites()})
         self.proj = Lattice(self.geometry, objects={site: EnvCTM_projectors() for site in self.sites()})
 
@@ -1019,7 +1019,7 @@ class EnvCTM():
         return len(not_consistent) == 0
 
     from ._env_ctm_measure import measure_1site, measure_nn, measure_2x2, measure_line, \
-        measure_nsite, measure_2site, sample, transfer_matrix_spectrum
+        measure_nsite, measure_2site, measure_nsite_exact, sample, transfer_matrix_spectrum
 
 
 def legs_consistent_(out, env_legs, i0, l0, i1, l1):

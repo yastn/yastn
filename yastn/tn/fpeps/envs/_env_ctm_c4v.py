@@ -56,10 +56,10 @@ class PsiFlip:
 
 
 class EnvCTM_c4v(EnvCTM):
-    
+
     _default_corner_signature = (1,1)
-    
-    def __init__(self, psi, init='eye', ket=None):
+
+    def __init__(self, psi, init='eye', bra=None):
         r"""
         Environment used in Corner Transfer Matrix Renormalization Group algorithm for C4v symmetric
         single-site iPEPS. Here, the on-site tensor is assumed to be C4v-symmetric, i.e. transform
@@ -96,8 +96,8 @@ class EnvCTM_c4v(EnvCTM):
         init: str
             None, 'eye' or 'dl'. Initialization scheme, see :meth:`yastn.tn.fpeps.EnvCTM.reset_`.
 
-        ket: Optional[yastn.tn.Peps]
-            If provided, and ``psi`` has physical legs, forms a double-layer PEPS <psi | ket>.
+        bra: Optional[yastn.tn.Peps]
+            If provided, and ``psi`` has physical legs, forms a double-layer PEPS <bra | psi>.
         """
         self.geometry = psi.geometry
         for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "f_ordered", "nn_bond_dirn"]:
@@ -105,9 +105,9 @@ class EnvCTM_c4v(EnvCTM):
 
         if not isinstance(psi, PsiFlip):
             psi = PsiFlip(psi)
-        if ket and not isinstance(ket, PsiFlip):
-            ket = PsiFlip(ket)
-        self.psi = Peps2Layers(bra=psi, ket=ket) if psi.has_physical() else psi
+        if bra and not isinstance(bra, PsiFlip):
+            bra = PsiFlip(bra)
+        self.psi = Peps2Layers(ket=psi, bra=bra) if psi.has_physical() else psi
         self.env = Lattice(self.geometry, objects={site: EnvCTM_c4v_local() for site in self.sites()})
         self.proj = Lattice(self.geometry, objects={site: EnvCTM_c4v_projectors() for site in self.sites()})
 

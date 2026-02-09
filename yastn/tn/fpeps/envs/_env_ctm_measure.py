@@ -290,6 +290,167 @@ def measure_2x2(self, *operators, sites=None) -> float:
     val_op = vdot(cor_tl @ cor_tr, tensordot(cor_bl, cor_br, axes=(0, 1)), conj=(0, 0))
     return sign * val_op / val_no
 
+def measure_nsite_exact(self, *operators, sites=None) -> float:
+    r"""
+    Calculate expectation value of a product of local operators
+    in a :math:`Nx \times Ny` window (determined by sites) within the CTM environment.
+    Perform exact contraction of the window.
+    If Nx <= Ny, contract from left to right. Otherwise, contract from top to bottom.
+
+    Note: use with caution for large windows, as the computational cost grows exponentially with the window size.
+
+    Parameters
+    ----------
+    operators: Sequence[yastn.Tensor]
+        List of local operators to calculate <O0_s0 O1_s1 ...>.
+
+    sites: Sequence[tuple[int, int]]
+        A list of sites [s0, s1, ...] matching corresponding operators.
+    """
+    if sites is None or len(operators) != len(sites):
+        raise YastnError("Number of operators and sites should match.")
+
+    # unpack operators if operators provided as a Lattice or dict
+    operators = [op[site] if not isinstance(op, Tensor) else op for op, site in zip(operators, sites)]
+
+    sign = sign_canonical_order(*operators, sites=sites, f_ordered=self.f_ordered)
+    ops = {}
+    for n, op in zip(sites, operators):
+        ops[n] = ops[n] @ op if n in ops else op
+
+    minx = min(site[0] for site in sites)  # tl corner
+    miny = min(site[1] for site in sites)
+
+    maxx = max(site[0] for site in sites)  # br corner
+    maxy = max(site[1] for site in sites)
+
+    if minx == maxx and self.nn_site((minx, miny), 'b') is None:
+        minx -= 1  # for a finite system
+    if miny == maxy and self.nn_site((minx, miny), 'r') is None:
+        miny -= 1  # for a finite system
+
+    Nx, Ny = maxx - minx + 1, maxy - miny + 1
+
+    # four corners of the patch
+    tl = Site(minx, miny)
+    tr = Site(minx, maxy)
+    br = Site(maxx, maxy)
+    bl = Site(maxx, miny)
+    window = [Site(x, y) for x in range(minx, maxx+1) for y in range(miny, maxy+1)]
+    tens = {site: self.psi[site] for site in window}
+
+    def _contract_patch_horz(tens):
+        # Form the left boundary
+        bdy_left = self[tl].tl
+        site = tl
+        for i, x in enumerate(range(minx, maxx+1)):
+            l = self[site].l
+            bdy_left = tensordot(bdy_left, l, axes=(i, 2))
+            site = self.nn_site(site, (1, 0))
+        bdy_left = tensordot(bdy_left, self[bl].bl, axes=(Nx, 1))
+        #   |----------|---- 0
+        #   |          |---- 1
+        #   | bdy_left |---- ...
+        #   |          |---- Nx
+        #   |----------|---- Nx+1
+
+        # Form the right boundary
+        bdy_right = self[tr].tr
+        site = tr
+        for i, x in enumerate(range(minx, maxx+1)):
+            r = self[site].r
+            bdy_right = tensordot(bdy_right, r, axes=(i+1, 0))
+            site = self.nn_site(site, (1, 0))
+        bdy_right = tensordot(bdy_right, self[br].br, axes=(Nx+1, 0))
+        #    0  ----|-----------|
+        #    1  ----|           |
+        #    ...----| bdy_right |
+        #    Nx ----|           |
+        #   Nx+1----|-----------|
+
+        # Contract from left to right
+        for y in range(miny, maxy+1):
+            t = self[Site(minx, y)].t
+            bdy_left = t.tensordot(bdy_left, axes=(0, 0))
+            for i, x in enumerate(range(minx, maxx+1)):
+                bdy_left = tensordot(tens[Site(x, y)], bdy_left, axes=((0,1), (0,i+2)))
+            bdy_left = tensordot(self[Site(maxx,y)].b, bdy_left, axes=((1, 2), (0, Nx+2)))
+            bdy_left = bdy_left.transpose(axes=tuple(range(Nx+1, -1, -1)))
+
+        return vdot(bdy_left, bdy_right, conj=(0, 0))
+
+    def _contract_patch_vert(tens):
+        # Form the top boundary
+        bdy_top = self[tl].tl
+        site = tl
+        for i, y in enumerate(range(miny, maxy+1)):
+            t = self[site].t
+            bdy_top = tensordot(bdy_top, t, axes=(i+1, 0))
+            site = self.nn_site(site, (0, 1))
+        bdy_top = tensordot(bdy_top, self[tr].tr, axes=(Ny+1, 0))
+        #   |-----------|
+        #   | bdy_top   |
+        #   |-----------|
+        #   |  |  |     |
+        #   0  1 ...  Ny+1
+
+        # Form the bottom boundary
+        bdy_bottom = self[bl].bl
+        site = bl
+        for i, y in enumerate(range(miny, maxy+1)):
+            b = self[site].b
+            bdy_bottom = tensordot(bdy_bottom, b, axes=(i, 2))
+            site = self.nn_site(site, (0, 1))
+        bdy_bottom = tensordot(bdy_bottom, self[br].br, axes=(Ny, 1))
+        #   0  1 ...  Ny+1
+        #   |  |  |     |
+        #   |-----------|
+        #   | bdy_bot   |
+        #   |-----------|
+
+        # Contract from top to bottom
+        for x in range(minx, maxx+1):
+            l = self[Site(x, miny)].l
+            bdy_top = l.tensordot(bdy_top, axes=(2, 0))
+            for i, y in enumerate(range(miny, maxy+1)):
+                bdy_top = tensordot(tens[Site(x, y)], bdy_top, axes=((0,1), (i+2,1)))
+            bdy_top = tensordot(self[Site(x,maxy)].r, bdy_top, axes=((0,1), (Ny+2,1)))
+            bdy_top = bdy_top.transpose(axes=tuple(range(Ny+1, -1, -1)))
+        return vdot(bdy_top, bdy_bottom, conj=(0, 0))
+
+    contract_fn = _contract_patch_horz if Nx <= Ny else _contract_patch_vert
+    val_no = contract_fn(tens)
+
+    # Insert operators
+    axes_string_x = ['b3', 'k4', 'k1']
+    axes_string_y = ['k2', 'k4', 'b0']
+    if isinstance(tens[tl], DoublePepsTensor):
+        for y in range(miny, maxy+1):
+            for x in range(minx, maxx+1):
+                site = Site(x, y)
+                if site in ops:
+                    tens[site].set_operator_(ops[site])
+                    if x > minx:
+                        tens[site].add_charge_swaps_(ops[site].n, axes='k1')
+                        for x1 in range(x-1, minx, -1):
+                            tens[Site(x1, y)].add_charge_swaps_(ops[site].n, axes=axes_string_x)
+                        tens[Site(minx, y)].add_charge_swaps_(ops[site].n, axes=['b3', 'k4'])
+
+                    if y > miny:
+                        tens[Site(minx, y)].add_charge_swaps_(ops[site].n, axes='b0')
+                        for y1 in range(y-1, miny, -1):
+                            tens[Site(minx, y1)].add_charge_swaps_(ops[site].n, axes=axes_string_y)
+                        tens[Site(minx, miny)].add_charge_swaps_(ops[site].n, axes=['k2', 'k4'])
+
+    else:  # single-layer Peps
+        for y in range(miny, maxy+1):
+            for x in range(minx, maxx+1):
+                site = Site(x, y)
+                if site in ops:
+                    tens[site] = ops[site]
+
+    val_op = contract_fn(tens)
+    return sign * val_op / val_no
 
 def measure_line(self, *operators, sites=None) -> float:
     r"""
