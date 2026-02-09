@@ -18,7 +18,7 @@ from typing import Sequence
 from ._gates_auxiliary import match_ancilla, apply_gate_onsite
 from .envs._env_contractions import append_vec_tl, append_vec_br, append_vec_tr, append_vec_bl
 from ...tensor import tensordot, leg_product, YastnError, SpecialTensor, Tensor
-from ...tensor._auxliary import _clear_axes
+from ...tensor._auxiliary import _clear_axes
 
 
 _allowed_transpose = ((0, 1, 2, 3), (1, 2, 3, 0), (2, 3, 0, 1), (3, 0, 1, 2),
@@ -26,7 +26,7 @@ _allowed_transpose = ((0, 1, 2, 3), (1, 2, 3, 0), (2, 3, 0, 1), (3, 0, 1, 2),
 
 
 class DoublePepsTensor(SpecialTensor):
-    def __init__(self, bra, ket, transpose=(0, 1, 2, 3), op=None, swaps=None):
+    def __init__(self, bra, ket, trans=(0, 1, 2, 3), op=None, swaps=None):
         r"""
         Class that treats a pair of tensors forming a site of double-layer PEPS as a single tensor.
 
@@ -42,11 +42,13 @@ class DoublePepsTensor(SpecialTensor):
         self.bra = bra
         self.op = op
         self.ket = ket
-        transpose = tuple(transpose)
-        if transpose not in _allowed_transpose:
+        trans = tuple(trans)
+        if trans not in _allowed_transpose:
             raise YastnError("DoublePEPSTensor only supports permutations that retain legs' ordering.")
-        self._t = transpose
+        self.trans = trans
         self.swaps = {} if swaps is None else dict(swaps)
+
+    __iter__ = None  # ensure that the DoublePepsTensor is not iterable
 
     @property
     def config(self):
@@ -60,7 +62,7 @@ class DoublePepsTensor(SpecialTensor):
         """
         Include the operator that is applied on the physical leg of the ket tensor during contraction.
 
-        By default, it resets the previous operator (if present).
+        By default, it resets the previous operator (if present)
         Otherwise, multiply the previous operator from the left, i.e., apply it after the one in self.op.
         """
         op = match_ancilla(self.ket, op)
@@ -75,7 +77,7 @@ class DoublePepsTensor(SpecialTensor):
         if 'k4' in self.swaps:
             op = op.swap_gate(axes=2, charge=self.swaps.pop('k4'))
         ket = apply_gate_onsite(self.ket, op, dirn=dirn)
-        return DoublePepsTensor(bra=self.bra, ket=ket, transpose=self._t, op=self.op, swaps=self.swaps)
+        return DoublePepsTensor(bra=self.bra, ket=ket, trans=self.trans, op=self.op, swaps=self.swaps)
 
     def add_charge_swaps_(self, charge, axes):
         """
@@ -86,7 +88,7 @@ class DoublePepsTensor(SpecialTensor):
         charge: tuple[int]
 
         axes: Sequence[str] | str
-            identfy axes: 'bt', 'bl', 'bb', 'br', 'bs', 'kt', 'kl', 'kb', 'kr', 'ks'
+            identify axes: 'bt', 'bl', 'bb', 'br', 'bs', 'kt', 'kl', 'kb', 'kr', 'ks'
             k/b is for ket/bra; t/l/b/r/s is for top/left/bottom/right/system
         """
         if isinstance(axes, str):
@@ -146,7 +148,7 @@ class DoublePepsTensor(SpecialTensor):
             axes = tuple(range(4))
         multiple_legs = hasattr(axes, '__iter__')
         axes = (axes,) if isinstance(axes, int) else tuple(axes)
-        axes = tuple(self._t[ax] for ax in axes)
+        axes = tuple(self.trans[ax] for ax in axes)
 
         lts = self.ket.get_legs(axes=(0, 1, 2, 3))
         lbs = self.bra.get_legs(axes=(0, 1, 2, 3))
@@ -166,20 +168,20 @@ class DoublePepsTensor(SpecialTensor):
 
     def transpose(self, axes):
         """ Transposition of DoublePepsTensor. Only cyclic permutations are allowed. """
-        axes = tuple(self._t[ax] for ax in axes)
+        axes = tuple(self.trans[ax] for ax in axes)
         if axes not in _allowed_transpose:
             raise YastnError("DoublePEPSTensor only supports permutations that retain legs' ordering.")
-        return DoublePepsTensor(bra=self.bra, ket=self.ket, transpose=axes, op=self.op, swaps=self.swaps)
+        return DoublePepsTensor(bra=self.bra, ket=self.ket, trans=axes, op=self.op, swaps=self.swaps)
 
     # def flip_signature(self):
     #     r""" Conjugate DoublePepsTensor. """
     #     op_fs = self.op.flip_signature() if self.op is not None else None
-    #     return DoublePepsTensor(bra=self.bra.flip_signature(), ket=self.ket.flip_signature(), transpose=self._t, op=op_fs, swaps=self.swaps)
+    #     return DoublePepsTensor(bra=self.bra.flip_signature(), ket=self.ket.flip_signature(), trans=self.trans, op=op_fs, swaps=self.swaps)
 
     def conj(self):
         r""" Conjugate DoublePepsTensor. """
         op_conj = self.op.conj() if self.op is not None else None
-        return DoublePepsTensor(bra=self.bra.conj(), ket=self.ket.conj(), transpose=self._t, op=op_conj, swaps=self.swaps)
+        return DoublePepsTensor(bra=self.bra.conj(), ket=self.ket.conj(), trans=self.trans, op=op_conj, swaps=self.swaps)
 
     def to(self, device=None, dtype=None, **kwargs):
         r"""
@@ -198,7 +200,7 @@ class DoublePepsTensor(SpecialTensor):
         """
         op_clone = self.op.to(device=device, dtype=dtype, **kwargs) if self.op is not None else None
         return DoublePepsTensor(bra=self.bra.to(device=device, dtype=dtype, **kwargs), \
-                                ket=self.ket.to(device=device, dtype=dtype, **kwargs), transpose=self._t, op=op_clone, swaps=self.swaps)
+                                ket=self.ket.to(device=device, dtype=dtype, **kwargs), transpose=self.trans, op=op_clone, swaps=self.swaps)
 
     def clone(self):
         r"""
@@ -206,7 +208,7 @@ class DoublePepsTensor(SpecialTensor):
         all constituent tensors forming a new instance of DoublePepsTensor.
         """
         op_clone = self.op.clone() if self.op is not None else None
-        return DoublePepsTensor(bra=self.bra.clone(), ket=self.ket.clone(), transpose=self._t, op=op_clone, swaps=self.swaps)
+        return DoublePepsTensor(bra=self.bra.clone(), ket=self.ket.clone(), trans=self.trans, op=op_clone, swaps=self.swaps)
 
     def copy(self):
         r"""
@@ -214,7 +216,7 @@ class DoublePepsTensor(SpecialTensor):
         all constituent tensors forming a new instance of DoublePepsTensor.
         """
         op_copy = self.op.copy() if self.op is not None else None
-        return DoublePepsTensor(bra=self.bra.copy(), ket=self.ket.copy(), transpose=self._t, op=op_copy, swaps=self.swaps)
+        return DoublePepsTensor(bra=self.bra.copy(), ket=self.ket.copy(), trans=self.trans, op=op_copy, swaps=self.swaps)
 
     def to_dict(self, level=2):
         r""" Serialize DoublePepsTensor into a dictionary. """
@@ -222,7 +224,7 @@ class DoublePepsTensor(SpecialTensor):
              'dict_ver': 1,
              'bra': self.bra.to_dict(level=level),
              'ket': self.ket.to_dict(level=level),
-             'transpose': self._t,
+             'transpose': self.trans,
              'swaps': self.swaps.copy()}
         if self.op is not None:
             d['op'] = self.op.to_dict(level=level)
@@ -239,7 +241,7 @@ class DoublePepsTensor(SpecialTensor):
         bra = Tensor.from_dict(d=d['bra'], config=config)
         ket = Tensor.from_dict(d=d['ket'], config=config)
         op = Tensor.from_dict(d=d['op'], config=config) if 'op' in d else None
-        return DoublePepsTensor(bra=bra, ket=ket, transpose=d['transpose'], op=op, swaps=d['swaps'])
+        return DoublePepsTensor(bra=bra, ket=ket, trans=d['transpose'], op=op, swaps=d['swaps'])
 
     def tensordot(self, b, axes, reverse=False):
         r"""
@@ -262,8 +264,8 @@ class DoublePepsTensor(SpecialTensor):
         if sa0 - set(range(self.ndim)) or sa1 - set(range(b.ndim)):
             raise YastnError('DoublePepsTensor.tensordot axes outside of tensor ndim.')
 
-        in_a = tuple(self._t[ax] for ax in in_a)
-        out_a = tuple(ax for ax in self._t if ax not in in_a)
+        in_a = tuple(self.trans[ax] for ax in in_a)
+        out_a = tuple(ax for ax in self.trans if ax not in in_a)
 
         if in_a[0] > in_a[1]:  # reference order is (t, l, b, r)
             in_a = in_a[::-1]
@@ -297,7 +299,7 @@ class DoublePepsTensor(SpecialTensor):
         tt = tt.unfuse_legs(axes=(2, 3))  # [t t'] [l l'] b r b' r'
         tt = tt.swap_gate(axes=((2, 4), 5))  # b b' X r'
         tt = tt.fuse_legs(axes=(0, 1, (2, 4), (3, 5)))  # [t t'] [l l'] [b b'] [r r']
-        return tt.transpose(axes=self._t)
+        return tt.transpose(axes=self.trans)
 
     def print_properties(self, file=None):
         """ Print basic properties of DoublePepsTensor. """

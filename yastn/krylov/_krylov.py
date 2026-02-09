@@ -22,7 +22,7 @@ import scipy.sparse.linalg as spla
 
 from ..initialize import zeros
 from ..tensor import YastnError, Leg, LegMeta, einsum, truncation_mask, Tensor
-from ..tensor._auxliary import _clear_axes, _unpack_axes, _flatten
+from ..tensor._auxiliary import _clear_axes, _unpack_axes, _flatten
 from ..tensor._tests import _test_axes_all
 from .._split_combine_dict import split_data_and_meta, combine_data_and_meta
 
@@ -58,7 +58,7 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
             Initial guess for the size of the Krylov space.
 
         hermitian: bool
-            Assume that ``f`` is a hermitian operator, in which case Lanczos iterations are used.
+            Assume that ``f`` is a Hermitian operator, in which case Lanczos iterations are used.
             Otherwise Arnoldi iterations are used to span the Krylov space.
 
         normalize: bool
@@ -210,7 +210,7 @@ def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=Fals
             The default is ``1e-13``. (not implemented for now)
 
         hermitian: bool
-            Assume that ``f`` is a hermitian operator, in which case Lanczos iterations are used.
+            Assume that ``f`` is a Hermitian operator, in which case Lanczos iterations are used.
             Otherwise Arnoldi iterations are used to span the Krylov space.
     """
     # Maximal number of restarts - NOT IMPLEMENTED FOR NOW.
@@ -265,11 +265,11 @@ def lin_solver(f, b, v0, ncv=10, tol=1e-13, pinv_tol=1e-13, hermitian=False, **k
             The default is ``1e-13``. TODO Not implemented yet.
 
         pinv_tol: float
-            Cutoff for pseudoinverve. Sets lower bound on inverted Schmidt values.
+            Cutoff for pseudoinverse. Sets lower bound on inverted Schmidt values.
             The default is ``1e-13``.
 
         hermitian: bool
-            Assume that ``f`` is a hermitian operator, in which case Lanczos iterations are used.
+            Assume that ``f`` is a Hermitian operator, in which case Lanczos iterations are used.
             Otherwise Arnoldi iterations are used to span the Krylov space.
 
     Results
@@ -278,7 +278,7 @@ def lin_solver(f, b, v0, ncv=10, tol=1e-13, pinv_tol=1e-13, hermitian=False, **k
             Approximation of ``v`` in ``f(v) = b`` problem.
 
         res: float
-            norm of the resudual vector ``r = norm(f(vf) - b)``.
+            norm of the residual vector ``r = norm(f(vf) - b)``.
     """
     backend = v0.config.backend
 
@@ -415,7 +415,7 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
     _f_fix_shape= lambda x: x if len(x.shape)==1 else x.reshape(-1)
     _f_fix_strides = lambda x: x if np.sum(np.array(x.strides)<0)==0 else x.copy()
     to_tensor = lambda x: A_mat.config.backend.to_tensor(
-        _f_fix_strides(x), 
+        _f_fix_strides(x),
         dtype=A_mat.yastn_dtype, device=A_mat.device)
     to_numpy = lambda x: A_mat.config.backend.to_numpy(x)
 
@@ -465,7 +465,7 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
                  for c,slc in zip(rowA.get_blocks_charge(), rowA.slices)] for m in range(d)])
 
     # overlap matrix for single non-zero charge sector, iterate over subspace
-    # with ascending index (compatible with sliciing of U below)
+    # with ascending index (compatible with slicing of U below)
     def overlaps_per_sector(c_sec,d):
         ic_slc= dict(zip(rowA.get_blocks_charge(), rowA.slices))[c_sec]
         overlaps= np.asarray([[ U[slice(*ic_slc.slcs[0]),i+1-d+m_row].conj() @ U[slice(*ic_slc.slcs[0]),i+1-d+m_col] \
@@ -529,7 +529,7 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
 
             # 2) identify charge sectors that contain the degenerate subspace
             mask= C > 1.0e-14
-            if np.sum(mask)>1: # its a part of a multiplet
+            if np.sum(mask)>1: # it's a part of a multiplet
                 if kwargs.get('truncate_multiplets',False): continue
                 YastnError('Last singular triple is part of a multiplet without well-defined charge')
         U_sorted[ index_to_charge[ np.argmax(np.abs(U[:, i])) ] ].append(i)

@@ -31,7 +31,7 @@ class Gate(NamedTuple):
 
     For a two-site operator acting on sites beyond nearest neighbor, it can be provided as `G` with two elements, and `sites` forming a path between the end sites where the provided elements of `G` will act.
 
-    It is also possible to provide `G` as a list of tensots.
+    It is also possible to provide `G` as a list of tensors.
     In this case, the convention of legs is (ket, bra, virtual_0, virtual_1) -- i.e., the first two legs are always physical (operator) legs.
     For one site, there are no virtual legs.
     For two or more sites, the first and last elements of G have one virtual leg (3 in total).

@@ -17,10 +17,10 @@ from __future__ import annotations
 from functools import lru_cache
 from itertools import accumulate
 
-from ._auxliary import _slc, _join_contiguous_slices
+from ._auxiliary import _slc, _join_contiguous_slices
 from ._legs import legs_union
 from ._merging import _embed_tensor
-from ._tests import YastnError, _test_can_be_combined, _get_tD_legs, _test_axes_match
+from ._tests import YastnError, _test_can_be_combined, _get_tD_legs, _unpack_trans_test_axes_pair
 
 __all__ = ['add', 'real', 'imag', 'sqrt', 'rsqrt', 'reciprocal', 'exp', 'bitwise_not', 'allclose']
 
@@ -60,7 +60,7 @@ def add(*tensors, amplitudes=None, **kwargs):
 
     amplitudes: None | Sequence[Number]
         If ``None``, all amplitudes are assumed to be one.
-        Otherwise, The number of tensors and amplitudes should be the same.
+        Otherwise, the number of tensors and amplitudes should be the same.
         Individual amplitude can be ``None``, which gives the same result as ``1``
         but without an extra multiplication.
     """
@@ -85,15 +85,20 @@ def _pre_addition(*tensors):
     """
     Test and prepare tensors before addition.
     """
+    for ten in tensors[1:]:
+        _test_can_be_combined(tensors[0], ten)
+
+    if len(set(ten.trans for ten in tensors)) > 1:  # if ten.trans differ
+        tensors = [ten.consume_transpose() for ten in tensors]
+
     mask_needed = False
     a = tensors[0]
     for b in tensors[1:]:
-        _test_can_be_combined(a, b)
         if a.struct.n != b.struct.n:
             raise YastnError('Tensor charges do not match.')
         if a.isdiag != b.isdiag:
             raise YastnError('Cannot add diagonal tensor to non-diagonal tensor.')
-        mask_needed_ab, _ = _test_axes_match(a, b, sgn=1)
+        mask_needed_ab, _ = _unpack_trans_test_axes_pair(a, b, sgn=1)
         mask_needed = mask_needed or mask_needed_ab
 
     if mask_needed:
@@ -191,7 +196,7 @@ def allclose(a, b, rtol=1e-13, atol=1e-13) -> bool:
     If this condition is satisfied, execute :code:`backend.allclose` function
     to compare tensors’ data.
 
-    Note that if two tenors differ by zero blocks, the function returns :code:`False`.
+    Note that if two tensors differ by zero blocks, the function returns :code:`False`.
     To resolve such differences, use :code:`(a - b).norm() < tol`
 
     Parameters
@@ -202,7 +207,7 @@ def allclose(a, b, rtol=1e-13, atol=1e-13) -> bool:
     rtol, atol: float
         Desired relative and absolute precision.
     """
-    if a.struct != b.struct or a.slices != b.slices or a.hfs != b.hfs or a.mfs != b.mfs:
+    if a.struct != b.struct or a.slices != b.slices or a.hfs != b.hfs or a.mfs != b.mfs or a.trans != b.trans:
         return False
     return a.config.backend.allclose(a._data, b._data, rtol, atol)
 
@@ -298,7 +303,7 @@ def __abs__(a) -> 'Tensor':
     r"""
     Return tensor with element-wise absolute values.
 
-    Can be on called on tensor as ``abs(tensor)``.
+    Can be called on tensor as ``abs(tensor)``.
     """
     data = a.config.backend.absolute(a._data)
     return a._replace(data=data)

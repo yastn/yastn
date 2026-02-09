@@ -580,4 +580,3 @@ def update_env_move_MP_(out_queue, device, i, site, move, ret_device, args_d, **
     out_queue.put( (i, site, move, res) )
     if profiling_mode in ["NVTX",]: args[0].config.backend.cuda.nvtx.range_pop()
     del args, res
-

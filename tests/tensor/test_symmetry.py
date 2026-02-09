@@ -129,7 +129,7 @@ def test_symmetry():
 
 
 def test_add_charges():
-    """ tests auxliary symmetry function: add_charges. """
+    """ tests auxiliary symmetry function: add_charges. """
     assert sym_none.add_charges((), (), ()) == ()
     #
     assert sym_Z2.add_charges((1,), (1,), (0,), (1,)) == (1,)

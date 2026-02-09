@@ -75,7 +75,7 @@ def dmrg_(psi, H, project=None, method='1site',
 
     method: str | yastn.Method
         DMRG variant to use; options are ``'1site'`` or ``'2site'``.
-        Auxlliary class :class:`yastn.Method` can be used to change the method in between sweeps while the yield gets called after each sweeps.
+        Auxiliary class :class:`yastn.Method` can be used to change the method in between sweeps while the yield gets called after each sweeps.
 
     energy_tol: float
         Convergence tolerance for the change of energy in a single sweep.
@@ -117,7 +117,7 @@ def dmrg_(psi, H, project=None, method='1site',
             * ``sweeps`` number of performed dmrg sweeps.
             * ``method`` method used in the last sweep.
             * ``energy`` energy after the last sweep.
-            * ``denergy`` absolut value of energy change in the last sweep.
+            * ``denergy`` absolute value of energy change in the last sweep.
             * ``max_dSchmidt`` norm of Schmidt values change on the worst cut in the last sweep.
             * ``max_discarded_weight`` norm of discarded_weights on the worst cut in '2site' procedure.
     """

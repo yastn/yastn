@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-""" Initialization of peps tensors for real or imaginary time evolution """
+""" Initialization of PEPS tensors for real or imaginary time evolution """
 from ._geometry import SquareLattice, CheckerboardLattice, RectangularUnitcell, TriangularLattice
 from ._peps import Peps
 from .envs._env_boundary_mps import EnvBoundaryMPS
@@ -61,7 +61,7 @@ def product_peps(geometry, vectors) -> Peps:
             vec = vec.add_leg(axis=0, s=s)
         psi[site] = vec
     if any(psi[site] is None for site in psi.sites()):
-        raise YastnError("product_peps did not initialize some peps tensor")
+        raise YastnError("product_peps did not initialize some PEPS tensor")
     return psi
 
 

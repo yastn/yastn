@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-""" Auxliary functions used by yastn.Tensor. """
+""" Auxiliary functions used by yastn.Tensor. """
 from itertools import accumulate, chain
 from typing import NamedTuple
 

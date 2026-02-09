@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-""" Generator of basic local spingless-fermion operators. """
+""" Generator of basic local spinless-fermion operators. """
 from __future__ import annotations
 
 from ._meta_operators import meta_operators

@@ -25,7 +25,7 @@ from operator import itemgetter
 import numpy as np
 
 from .tensor import Tensor, YastnError, ncon
-from .tensor._auxliary import _struct, _slc, _clear_axes, _unpack_legs
+from .tensor._auxiliary import _struct, _slc, _clear_axes, _unpack_legs
 from .tensor._legs import Leg, LegMeta, legs_union, _legs_mask_needed
 from .tensor._merging import _Fusion, _embed_tensor, _combine_hfs_sum
 from .tensor._tests import _test_can_be_combined
@@ -68,7 +68,7 @@ def rand(config=None, distribution=(-1, 1), legs=(), n=None, isdiag=False, **kwa
     r"""
     Initialize tensor with all allowed blocks filled with random numbers.
 
-    Draws from a uniform distribution in the range specify by ``lim``,
+    Draws from a uniform distribution in the range specified by ``lim``,
     or ``lim`` in real and imaginary part, depending on desired ``dtype``.
     ``distribution='normal'`` invokes normal distribution with zero mean and standard deviation one.
     The default is ``distribution=(-1, 1)``.
@@ -101,7 +101,7 @@ def rand(config=None, distribution=(-1, 1), legs=(), n=None, isdiag=False, **kwa
     Note
     ----
     If any of :code:`s`, :code:`t`, or :code:`D` are specified,
-    :code:`legs` are overriden and only :code:`t`, :code:`D`, and :code:`s` are used.
+    :code:`legs` are overridden and only :code:`t`, :code:`D`, and :code:`s` are used.
     """
     val = distribution if distribution == 'normal' else ('rand', distribution)
     return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val=val, **kwargs)
@@ -111,7 +111,7 @@ def rand_like(T: Tensor, distribution=(-1, 1), **kwargs) -> Tensor:
     r"""
     Initialize tensor with same structure as ``T`` filled with random numbers.
 
-    Draws from a uniform distribution in the range specify by ``lim``,
+    Draws from a uniform distribution in the range specified by ``lim``,
     or ``lim`` in real and imaginary part, depending on desired ``dtype``.
     ``distribution='normal'`` invokes normal distribution. The default is ``distribution=(-1, 1)``.
     """
@@ -171,7 +171,7 @@ def zeros(config=None, legs=(), n=None, isdiag=False, **kwargs) -> Tensor:
     Note
     ----
     If any of :code:`s`, :code:`t`, or :code:`D` are specified,
-    :code:`legs` are overriden and only :code:`t`, :code:`D`, and :code:`s` are used.
+    :code:`legs` are overridden and only :code:`t`, :code:`D`, and :code:`s` are used.
     """
     return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='zeros', **kwargs)
 
@@ -205,7 +205,7 @@ def ones(config=None, legs=(), n=None, isdiag=False, **kwargs) -> Tensor:
     Note
     ----
     If any of :code:`s`, :code:`t`, or :code:`D` are specified,
-    :code:`legs` are overriden and only :code:`t`, :code:`D`, and :code:`s` are used.
+    :code:`legs` are overridden and only :code:`t`, :code:`D`, and :code:`s` are used.
     """
     return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='ones', **kwargs)
 
@@ -242,7 +242,7 @@ def eye(config=None, legs=(), isdiag=True, **kwargs) -> Tensor:
     Note
     ----
     If any of :code:`s`, :code:`t`, or :code:`D` are specified,
-    :code:`legs` are overriden and only :code:`t`, :code:`D`, and :code:`s` are used.
+    :code:`legs` are overridden and only :code:`t`, :code:`D`, and :code:`s` are used.
     """
     if isdiag:
         return _fill(config=config, legs=legs, isdiag=True, val='ones', **kwargs)
@@ -250,7 +250,7 @@ def eye(config=None, legs=(), isdiag=True, **kwargs) -> Tensor:
         legs = (legs,)
     if len(legs) == 1:
         legs = (legs[0], legs[0].conj())
-    legs = legs[:2]  # in case more then 2 legs are provided
+    legs = legs[:2]  # in case more than 2 legs are provided
     if any(isinstance(leg, LegMeta) for leg in legs):
         raise YastnError("eye() does not support 'meta'-fused legs")
 
@@ -337,14 +337,17 @@ def block(tensors, common_legs=None) -> Tensor:
     ----------
     tensors: dict[Sequence[int], Tensor]
         dictionary of tensors {(x,y,...): tensor at position x,y,.. in the new, blocked super-tensor}.
-        Length of tuple should be equall to :code:`tensor.ndim - len(common_legs)`.
+        Length of tuple should be equal to :code:`tensor.ndim - len(common_legs)`.
 
     common_legs: Sequence[int]
         Legs that are not blocked.
         This is equivalently to all tensors having the same position
         (not specified explicitly) in the super-tensor on that leg.
     """
-    tn0 = next(iter(tensors.values()))  # first tensor; used to initialize new objects and retrive common values
+    #
+    # merge_super_blocks do not perform transpose, so we do it here
+    tensors = {k: v.consume_transpose() for k, v in tensors.items()}
+    tn0 = next(iter(tensors.values()))  # first tensor; used to initialize new objects and retrieve common values
     out_s, = ((),) if common_legs is None else _clear_axes(common_legs)
     out_b = tuple(ii for ii in range(tn0.ndim) if ii not in out_s)
 
@@ -359,12 +362,12 @@ def block(tensors, common_legs=None) -> Tensor:
 
     # perform hard fusion of meta-fused legs before blocking
     tensors = {pa: a.fuse_meta_to_hard() for pa, a in zip(posa, tensors.values())}
-    tn0 = next(iter(tensors.values()))  # first tensor; used to initialize new objects and retrive common values
+    tn0 = next(iter(tensors.values()))  # first tensor; used to initialize new objects and retrieve common values
 
     for tn in tensors.values():
         _test_can_be_combined(tn, tn0)
         if tn.struct.s != tn0.struct.s:
-            raise YastnError('Signatues of blocked tensors are inconsistent.')
+            raise YastnError('Signatures of blocked tensors are inconsistent.')
         if tn.struct.n != tn0.struct.n:
             raise YastnError('Tensor charges of blocked tensors are inconsistent.')
         if tn.isdiag:

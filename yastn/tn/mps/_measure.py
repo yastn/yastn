@@ -30,7 +30,7 @@ from ...tensor import YastnError, Tensor, qr
 def vdot(*args) -> Number:
     r"""
     Calculate the overlap :math:`\langle \textrm{bra}|\textrm{ket}\rangle`,
-    or :math:`\langle \textrm{bra}|\textrm{op}|\textrm{ket} \rangle` depending on the number of provided agruments.
+    or :math:`\langle \textrm{bra}|\textrm{op}|\textrm{ket} \rangle` depending on the number of provided arguments.
 
     Parameters
     -----------
