@@ -215,7 +215,7 @@ def update_D_(ctmrg_mp_context, env, opts_svd, moves='hv', method='2x2', **kwarg
                 loc_env = EnvCTM.from_dict(combine_data_and_meta(inputs_t, loc_im))
                 _update_core_D_(ctmrg_mp_context, loc_env, move_d, opts_svd, method=method, **kwargs)
                 out_data, out_meta = split_data_and_meta(loc_env.to_dict(level=0))
-                return out_data, out_meta
+                return out_meta, *out_data
 
             if "torch" in env.config.backend.BACKEND_ID:
                 inputs_t, inputs_meta = split_data_and_meta(env.to_dict(level=0))
@@ -225,7 +225,7 @@ def update_D_(ctmrg_mp_context, env, opts_svd, moves='hv', method='2x2', **kwarg
                 elif checkpoint_move == 'nonreentrant':
                     use_reentrant = False
                 checkpoint_F = env.config.backend.checkpoint
-                out_data, out_meta = checkpoint_F(f_update_core_, d, inputs_meta, *inputs_t, \
+                out_meta, *out_data = checkpoint_F(f_update_core_, d, inputs_meta, *inputs_t, \
                                     **{'use_reentrant': use_reentrant, 'debug': False})
             else:
                 raise RuntimeError(f"CTM update: checkpointing not supported for backend {env.config.BACKEND_ID}")
@@ -570,12 +570,12 @@ def update_env_move_MP_(out_queue, device, i, site, move, ret_device, args_d, **
         Tensors required for the update serialized to dictionaries.
     """
     profiling_mode= kwargs.get("profiling_mode", None)
-    args= tuple(from_dict(t_d).clone().to(device=device,non_blocking=True) if isinstance(t_d, dict) else t_d for t_d in args_d)
+    args= tuple(from_dict(t_d).to(device=device,non_blocking=True) if isinstance(t_d, dict) else t_d for t_d in args_d)
     del args_d
 
     if profiling_mode in ["NVTX",]: args[0].config.backend.cuda.nvtx.range_push(f"{site} {move}")
     res= update_env_dir(move, *args)
-    res= tuple(r.to(device=ret_device).to_dict(level=1) for r in res)
+    res= tuple(r.detach().to(device=ret_device).to_dict(level=1) for r in res)
 
     out_queue.put( (i, site, move, res) )
     if profiling_mode in ["NVTX",]: args[0].config.backend.cuda.nvtx.range_pop()

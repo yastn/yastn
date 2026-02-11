@@ -172,7 +172,7 @@ def test_ctmrg_Ising_4x5(config_kwargs):
     ket = fpeps.Peps(geometry=geometry, tensors=[[Tket] * 5] * 4)
     #
     chi = 4
-    env = fpeps.EnvCTM(psi, init='eye', ket=ket)
+    env = fpeps.EnvCTM(psi, init='eye', bra=bra)
     opts_svd = {"D_total": chi}
     info = env.ctmrg_(opts_svd=opts_svd, moves='lrtb', max_sweeps=10, corner_tol=1e-12)
     assert env.is_consistent()
@@ -206,7 +206,7 @@ def test_ctmrg_Ising_4x5(config_kwargs):
     assert env.is_consistent()
     env[2,3].t.get_legs(axes=1).unfuse_leg() == (leg, leg)
 
-    env = fpeps.EnvCTM(bra, init='eye', ket=ket)
+    env = fpeps.EnvCTM(ket, init='eye', bra=bra)
     opts_svd = {"D_total": 4}
     info = env.ctmrg_(opts_svd=opts_svd, moves='lrtb', max_sweeps=4, corner_tol=1e-8)
     assert env.is_consistent()

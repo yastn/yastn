@@ -33,9 +33,9 @@ class DoublePepsTensor(SpecialTensor):
         Parameters
         ----------
         bra: yastn.Tensor
-            The "bra" (or top) tensor of the cell.
+            The "bra" (or bottom) tensor of the cell.
         ket: yastn.Tensor
-            The "ket" (or bottom) tensor of the cell.
+            The "ket" (or top) tensor of the cell.
         transpose: tuple[int, int  int, int]
             Transposition with respect to canonical order of PEPS legs.
         """

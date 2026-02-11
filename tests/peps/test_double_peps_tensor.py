@@ -159,7 +159,7 @@ def test_double_peps_tensor_raises(config_kwargs):
         T0.transpose(axes=(1, 0, 2, 3))
     with pytest.raises(yastn.YastnError,
                        match="DoublePEPSTensor only supports permutations that retain legs' ordering"):
-        fpeps.DoublePepsTensor(bra=T0.ket, ket=T0.bra).transpose((1, 2, 0, 3))
+        fpeps.DoublePepsTensor(bra=T0.bra, ket=T0.ket).transpose((1, 2, 0, 3))
     with pytest.raises(yastn.YastnError,
                        match="DoublePepsTensor.tensordot only supports contraction of exactly 2 legs"):
         T0.tensordot(t01, axes=(1, 1))

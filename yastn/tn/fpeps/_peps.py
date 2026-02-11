@@ -259,37 +259,37 @@ def add(*states, amplitudes=None, **kwargs) -> MpsMpoOBC:
 
 class Peps2Layers():
 
-    def __init__(self, bra, ket=None):
+    def __init__(self, ket, bra=None):
         """
         PEPS class supporting <bra|ket> contraction.
 
-        If ket is not provided, ket = bra.
+        If bra is not provided, bra = ket.
         """
-        self.bra = bra
-        self._ket = ket
-        assert self.ket.geometry == self.bra.geometry
-        self.geometry = bra.geometry
+        self.ket = ket
+        self._bra = bra
+        assert self.bra.geometry == self.ket.geometry
+        self.geometry = ket.geometry
 
         for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "f_ordered", "nn_bond_dirn"]:
-            setattr(self, name, getattr(bra.geometry, name))
+            setattr(self, name, getattr(ket.geometry, name))
 
     def detach(self):
-        return type(self)(bra=self.bra.detach(), ket=None if self._ket is None else self._ket.detach())
+        return type(self)(ket=self.ket.detach(), bra=None if self._bra is None else self._bra.detach())
 
     def clone(self):
-        if self._ket is None:
-            return type(self)(self.bra.clone())
-        if self.bra == self._ket: # TODO is this desired behavior?
-            return type(self)(self.bra.clone())
-        return type(self)(self.bra.clone(), ket=self._ket.clone())
+        if self._bra is None:
+            return type(self)(self.ket.clone())
+        if self.ket == self._bra: # TODO is this desired behavior?
+            return type(self)(self.ket.clone())
+        return type(self)(self.ket.clone(), ket=self._bra.clone())
 
     @property
-    def ket(self):
-        return self.bra if self._ket is None else self._ket
+    def bra(self):
+        return self.ket if self._bra is None else self._bra
 
     @property
-    def ket_is_bra(self):
-        return self._ket is None
+    def bra_is_ket(self):
+        return self._bra is None
 
     @property
     def config(self):
@@ -303,8 +303,8 @@ class Peps2Layers():
         return DoublePepsTensor(bra=self.bra[site], ket=self.ket[site])
 
     def to(self, device: str=None, dtype: str=None, **kwargs) -> Peps2Layers:
-        return Peps2Layers(bra=self.bra.to(device=device, dtype=dtype, **kwargs),
-                           ket=self.ket.to(device=device, dtype=dtype, **kwargs) if not self.ket_is_bra else None)
+        return Peps2Layers(ket=self.ket.to(device=device, dtype=dtype, **kwargs),
+                           bra=self.bra.to(device=device, dtype=dtype, **kwargs) if not self.bra_is_ket else None)
 
     def to_dict(self, level=2) -> dict:
         r"""
@@ -312,8 +312,8 @@ class Peps2Layers():
         Complementary function is :meth:`yastn.Peps2Layers.from_dict` or a general :meth:`yastn.from_dict`.
         See :meth:`yastn.Tensor.to_dict` for further description.
         """
-        if self._ket is None:
-            return self.bra.to_dict(level=level)  # 2 layers would be reintroduced by environment functions
+        if self._bra is None:
+            return self.ket.to_dict(level=level)  # 2 layers would be reintroduced by environment functions
         return {'type': type(self).__name__,
              'dict_ver': 1,
              'bra': self.bra.to_dict(level=level),
@@ -329,8 +329,8 @@ class Peps2Layers():
         if d['dict_ver'] == 1:
             if cls.__name__ != d['type']:
                 raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
-            bra = Peps.from_dict(d['bra'], config=config)
-            ket = Peps.from_dict(d['ket'], config=config) if ('ket' in d) else None
+            ket = Peps.from_dict(d['ket'], config=config)
+            bra = Peps.from_dict(d['bra'], config=config) if ('bra' in d) else None
             return Peps2Layers(bra=bra, ket=ket)
 
 
