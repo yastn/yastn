@@ -27,10 +27,10 @@ Scalar = TypeVar('Scalar')
 
 
 # utility functions for corner contractions, leaving the physical indices uncontracted.
-def _append_vec_tl_open(A, Ac, vectl):
-    # A = t l b r s;  Ac = t' l' b' r' s';  vectl = x [l l'] [t t'] y
+def _append_vec_tl_open(Ac, A, vectl):
     """
     Append the A and Ac tensors to the top-left vector with open and unswapped physical indices [s s'].
+    A = t l b r s;  Ac = t' l' b' r' s';  vectl = x [l l'] [t t'] y
     """
     vectl = vectl.fuse_legs(axes=(2, (0, 3), 1))  # [t t'] [x y] [l l']
     vectl = vectl.unfuse_legs(axes=(0, 2))  # t t' [x y] l l'
@@ -44,9 +44,10 @@ def _append_vec_tl_open(A, Ac, vectl):
     return vectl
 
 
-def _append_vec_br_open(A, Ac, vecbr):  # A = t l b r s;  Ac = t' l' b' r' s';  vecbr = x [r r'] [b b'] y
+def _append_vec_br_open(Ac, A, vecbr):
     """
     Append the A and Ac tensors to the bottom-right vector with open and unswapped physical indices [s s'].
+    A = t l b r s;  Ac = t' l' b' r' s';  vecbr = x [r r'] [b b'] y
     """
     vecbr = vecbr.fuse_legs(axes=(2, (0, 3), 1))  # [b b'] [x y] [r r']
     vecbr = vecbr.unfuse_legs(axes=(0, 2))  # b b' [x y] r r'
@@ -60,10 +61,10 @@ def _append_vec_br_open(A, Ac, vecbr):  # A = t l b r s;  Ac = t' l' b' r' s';  
     return vecbr
 
 
-def _append_vec_tr_open(A, Ac, vectr):
-    # A = t l b r s;  Ac = t' l' b' r' s';  vectr = x [t t'] [r r'] y
+def _append_vec_tr_open(Ac, A, vectr):
     """
     Append the A and Ac tensors to the top-right vector with open physical indices [s s'], swapped with t'.
+    A = t l b r s;  Ac = t' l' b' r' s';  vectr = x [t t'] [r r'] y
     """
     vectr = vectr.fuse_legs(axes=(1, (0, 3), 2))  # [t t'] [x y] [r r']
     vectr = vectr.unfuse_legs(axes=(0, 2))  # t t' [x y] r r'
@@ -77,10 +78,10 @@ def _append_vec_tr_open(A, Ac, vectr):
     return vectr
 
 
-def _append_vec_bl_open(A, Ac, vecbl):
-    # A = t l b r s;  Ac = t' l' b' r' s';  vecbl = x [b b'] [l l'] y
+def _append_vec_bl_open(Ac, A, vecbl):
     """
     Append the A and Ac tensors to the bottom-left vector with open physical indices, swapped with b.
+    A = t l b r s;  Ac = t' l' b' r' s';  vecbl = x [b b'] [l l'] y
     """
     vecbl = vecbl.fuse_legs(axes=(1, (0, 3), 2))  # [b b'] [x y] [l l']
     vecbl = vecbl.unfuse_legs(axes=(0, 2))  # b b' [x y] l l'
