@@ -215,7 +215,7 @@ def update_D_(ctmrg_mp_context, env, opts_svd, moves='hv', method='2x2', **kwarg
                 loc_env = EnvCTM.from_dict(combine_data_and_meta(inputs_t, loc_im))
                 _update_core_D_(ctmrg_mp_context, loc_env, move_d, opts_svd, method=method, **kwargs)
                 out_data, out_meta = split_data_and_meta(loc_env.to_dict(level=0))
-                return out_data, out_meta
+                return out_meta, *out_data
 
             if "torch" in env.config.backend.BACKEND_ID:
                 inputs_t, inputs_meta = split_data_and_meta(env.to_dict(level=0))
@@ -225,7 +225,7 @@ def update_D_(ctmrg_mp_context, env, opts_svd, moves='hv', method='2x2', **kwarg
                 elif checkpoint_move == 'nonreentrant':
                     use_reentrant = False
                 checkpoint_F = env.config.backend.checkpoint
-                out_data, out_meta = checkpoint_F(f_update_core_, d, inputs_meta, *inputs_t, \
+                out_meta, *out_data = checkpoint_F(f_update_core_, d, inputs_meta, *inputs_t, \
                                     **{'use_reentrant': use_reentrant, 'debug': False})
             else:
                 raise RuntimeError(f"CTM update: checkpointing not supported for backend {env.config.BACKEND_ID}")
