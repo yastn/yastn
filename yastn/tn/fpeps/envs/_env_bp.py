@@ -51,7 +51,7 @@ class EnvBP():
             None, 'eye'. Initialization scheme, see :meth:`yastn.tn.fpeps.EnvBP.reset_`.
 
         which: str
-            Type of environment from 'BP', 'NN+BP', 'NNN+BP'
+            Type of environment from 'BP', 'NN+BP', 'NNN+BP', 'Ladder+BP'
         """
         self.geometry = psi.geometry
         for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "f_ordered", "nn_bond_dirn"]:
@@ -71,7 +71,7 @@ class EnvBP():
         return self._which
 
     def _set_which(self, which):
-        if which not in ('NNN+BP', 'NN+BP', 'BP'):
+        if which not in ('NNN+BP', 'NN+BP', 'BP', 'Ladder+BP'):
             raise YastnError(f" Type of EnvBP bond_metric {which=} not recognized.")
         self._which = which
 
@@ -387,6 +387,23 @@ class EnvBP():
                       ║       ║        ║       ║
                       b       b        b       b
 
+
+            If which == 'Ladder+BP':
+
+                      t        t
+                      ║        ║
+                l══(-2 +0)══(-2 +1)══r
+                      ║        ║
+                l══(-1 +0)══(-1 +1)══r
+                      ║        ║
+                l═════Q0══   ══Q1════r
+                      ║        ║
+                l══(+1 +0)══(+1 +1)══l
+                      ║        ║
+                l══(+2 +0)══(+2 +1)══l
+                      ║        ║
+                      b        b
+
         """
         if dirn in ("h", "lr") and self.which == "BP":
             assert self.psi.nn_site(s0, (0, 1)) == s1
@@ -524,6 +541,75 @@ class EnvBP():
             vecb = tensordot(vecb, cbl @ ebl, axes=((2, 3), (0, 1)))
             g = tensordot(vect, vecb, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
             return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
+
+        #
+        if dirn in ("h", "lr") and self.which == "Ladder+BP":
+            assert self.psi.nn_site(s0, (0, 1)) == s1
+
+            m = {d: self.psi.nn_site(s0, d=d) for d in [(-2,0), (-2,1), (-1,0), (-1,1), (1,0), (1,1), (2,0), (2,1)]}
+            mm = dict(m)  # for testing for None
+            tensors_from_psi(m, self.psi)
+            m = {k: (v.ket if isinstance(v, DoublePepsTensor) else v) for k, v in m.items()}
+
+            sm = mm[-2, 0]
+            ctl = cor_tl(m[-2, 0]) if sm is None else cor_tl(m[-2, 0], ht=self[sm].t, hl=self[sm].l)
+            sm = mm[-2, 1]
+            ctr = cor_tr(m[-2, 1]) if sm is None else cor_tr(m[-2, 1], ht=self[sm].t, hr=self[sm].r)
+            sm = mm[ 2, 1]
+            cbr = cor_br(m[ 2, 1]) if sm is None else cor_br(m[ 2, 1], hb=self[sm].b, hr=self[sm].r)
+            sm = mm[ 2, 0]
+            cbl = cor_bl(m[ 2, 0]) if sm is None else cor_bl(m[ 2, 0], hb=self[sm].b, hl=self[sm].l)
+
+            sm = mm[-1, 0]
+            env_tl = edge_l(m[-1, 0]) if sm is None else edge_l(m[-1, 0], hl=self[sm].l)
+            sm = mm[-1, 1]
+            env_tr = edge_r(m[-1, 1]) if sm is None else edge_r(m[-1, 1], hr=self[sm].r)
+
+            env_l = edge_l(Q0, hl=self[0, 0].l)  # [bl bl'] [rr rr'] [tl tl']
+            env_r = edge_r(Q1, hr=self[0, 1].r)  # [tr tr'] [ll ll'] [br br']
+
+            sm = mm[1, 1]
+            env_br = edge_r(m[1, 1]) if sm is None else edge_r(m[1, 1], hr=self[sm].r)
+            sm = mm[1, 0]
+            env_bl = edge_l(m[1, 0]) if sm is None else edge_l(m[1, 0], hl=self[sm].l)
+
+            g = ncon((ctl, ctr, env_tl, env_tr, cbr, cbl, env_br, env_bl, env_l, env_r),
+                     ((2, 1), (1, 3), (9, 4, 2), (3, 4, 11), (8, 5), (5, 6), (12, 7, 8), (6, 7, 10), (10, -0, 9), (11, -1, 12)))
+
+        if dirn in ("v", "tb") and self.which == "Ladder+BP":
+
+            assert self.psi.nn_site(s0, (1, 0)) == s1
+            m = {d: self.psi.nn_site(s0, d=d) for d in [(0,-2), (1,-2), (0,-1), (1,-1), (1,1), (0,1), (1,2), (0,2)]}
+            mm = dict(m)  # for testing for None
+            tensors_from_psi(m, self.psi)
+            m = {k: (v.ket if isinstance(v, DoublePepsTensor) else v) for k, v in m.items()}
+
+            env_t = edge_t(Q0, ht=self[0, 0].t)  # [lt lt'] [bb bb'] [rt rt']
+            env_b = edge_b(Q1, hb=self[1, 0].b)  # [rb rb'] [tt tt'] [lb lb']
+
+            sm = mm[0, -1]
+            env_tl = edge_t(m[0,-1]) if sm is None else edge_t(m[0,-1], ht=self[sm].t)
+            sm = mm[1, -1]
+            env_bl = edge_b(m[1,-1]) if sm is None else edge_b(m[1,-1], hb=self[sm].b)
+            sm = mm[0, 1]
+            env_tr = edge_t(m[0, 1]) if sm is None else edge_t(m[0, 1], ht=self[sm].t)
+            sm = mm[1, 1]
+            env_br = edge_b(m[1, 1]) if sm is None else edge_b(m[1, 1], hb=self[sm].b)
+
+            sm = mm[1, -2]
+            cbl = cor_bl(m[1, -2]) if sm is None else cor_bl(m[1, -2], hb=self[sm].b, hl=self[sm].l)
+            sm = mm[0, -2]
+            ctl = cor_tl(m[0, -2]) if sm is None else cor_tl(m[0, -2], ht=self[sm].t, hl=self[sm].l)
+            sm = mm[0,  2]
+            ctr = cor_tr(m[0,  2]) if sm is None else cor_tr(m[0,  2], ht=self[sm].t, hr=self[sm].r)
+            sm = mm[1,  2]
+            cbr = cor_br(m[1,  2]) if sm is None else cor_br(m[1,  2], hb=self[sm].b, hr=self[sm].r)
+
+            g = ncon((cbl, ctl, env_bl, env_tl, ctr, cbr, env_tr, env_br, env_t, env_b),
+                     ((2, 1), (1, 3), (11, 4, 2), (3, 4, 9), (8, 5), (5, 6), (10, 7, 8), (6, 7, 12), (9, -0, 10), (12, -1, 11)))
+
+        return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
+
 
     def apply_patch(self):
         self.env.apply_patch()

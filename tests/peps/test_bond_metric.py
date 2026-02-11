@@ -64,7 +64,7 @@ def test_spinless_infinite_approx(config_kwargs):
 
         Gs = {'FU': env_CTM.bond_metric(QA, QB, s0, s1, dirn).g}
 
-        for k in ['NN', 'NN+', 'NN++', 'NNN', 'NNN+', 'NNN++']:
+        for k in ['NN', 'NN+', 'NN++', 'NNN', 'NNN+', 'NNN++', 'Ladder']:
             env_NTU.which = k
             assert env_NTU.which == k
             Gs[k] = env_NTU.bond_metric(QA, QB, s0, s1, dirn).g
@@ -74,7 +74,7 @@ def test_spinless_infinite_approx(config_kwargs):
             assert env_MPS.which == k
             Gs[k] = env_MPS.bond_metric(QA, QB, s0, s1, dirn).g
 
-        for k in ['NN+BP', 'NNN+BP']:
+        for k in ['NN+BP', 'NNN+BP', 'Ladder+BP']:
             env_BP.which = k
             assert env_BP.which == k
             Gs[k] = env_BP.bond_metric(QA, QB, s0, s1, dirn).g
@@ -95,6 +95,9 @@ def test_spinless_infinite_approx(config_kwargs):
         assert (Gs['NN+BP'] - Gs['FU']).norm() < 1e-3
         assert (Gs['NN+BP'] - Gs['NN+']).norm() < 1e-2
         assert (Gs['NNN+BP'] - Gs['NNN+']).norm() < 1e-3
+        assert (Gs['NN+BP'] - Gs['Ladder+BP']).norm() < 1e-4
+        assert (Gs['NN'] - Gs['Ladder']).norm() < 1e-3
+
 
     with pytest.raises(yastn.YastnError):
         fpeps.EnvNTU(psi, which="some")
