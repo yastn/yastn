@@ -486,7 +486,7 @@ class Lattice():
         """ Allows iterating over lattice sites like in dict. """
         return ((site, self[site]) for site in self.sites())
 
-    def to_dict(self, level=2) -> dict:
+    def to_dict(self, level=2, resolve_ops=False) -> dict:
         """
         Serialize Lattice or Peps into a dictionary.
         Complementary functions are :meth:`yastn.Lattice.from_dict` and :meth:`yastn.Peps.from_dict`,
@@ -496,7 +496,7 @@ class Lattice():
         return {'type': type(self).__name__,
                 'dict_ver': 1,
                 'geometry': self.geometry.to_dict(),
-                'site_data': {k: v.to_dict(level=level) for k, v in self._site_data.items() if v is not None}}
+                'site_data': {k: v.to_dict(level=level, resolve_ops=resolve_ops) for k, v in self._site_data.items() if v is not None}}
 
     @classmethod
     def from_dict(cls, d, config=None):
