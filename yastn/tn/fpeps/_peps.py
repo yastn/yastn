@@ -306,18 +306,18 @@ class Peps2Layers():
         return Peps2Layers(ket=self.ket.to(device=device, dtype=dtype, **kwargs),
                            bra=self.bra.to(device=device, dtype=dtype, **kwargs) if not self.bra_is_ket else None)
 
-    def to_dict(self, level=2) -> dict:
+    def to_dict(self, level=2, resolve_ops=False) -> dict:
         r"""
         Serialize Peps2Layers to a dictionary.
         Complementary function is :meth:`yastn.Peps2Layers.from_dict` or a general :meth:`yastn.from_dict`.
         See :meth:`yastn.Tensor.to_dict` for further description.
         """
-        if self._bra is None:
-            return self.ket.to_dict(level=level)  # 2 layers would be reintroduced by environment functions
+        if self._ket is None:
+            return self.bra.to_dict(level=level, resolve_ops=resolve_ops)  # 2 layers would be reintroduced by environment functions
         return {'type': type(self).__name__,
              'dict_ver': 1,
-             'bra': self.bra.to_dict(level=level),
-             'ket': self.ket.to_dict(level=level)}
+             'bra': self.bra.to_dict(level=level, resolve_ops=resolve_ops),
+             'ket': self.ket.to_dict(level=level, resolve_ops=resolve_ops)}
 
     @classmethod
     def from_dict(cls, d, config=None):

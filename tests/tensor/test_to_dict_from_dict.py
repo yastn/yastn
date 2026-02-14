@@ -19,7 +19,18 @@ import pytest
 import yastn
 
 
-def test_to_from_dict(config_kwargs):
+def are_identical_tensors(a, b):
+    da, db = a.__dict__, b.__dict__
+    assert da.keys() == db.keys()
+    for k in da:
+        if k != '_data':
+            assert da[k] == db[k]
+    assert type(a.data) == type(b.data)
+    assert np.allclose(a.to_numpy(), b.to_numpy())
+
+
+@pytest.mark.parametrize("resolve_transpose", [True,False])
+def test_to_from_dict(resolve_transpose, config_kwargs):
     config = yastn.make_config(sym='U1', **config_kwargs)
     legs = [yastn.Leg(config, s=1, t=(0, 1, 2), D= (3, 5, 2)),
             yastn.Leg(config, s=-1, t=(0, 1, 3), D= (1, 2, 3)),
@@ -31,7 +42,7 @@ def test_to_from_dict(config_kwargs):
     a = a.fuse_legs(axes=(0, (1, 2)), mode='meta')
 
     for level, ind in zip([0, 1, 2], [False, False, True]):
-        d = a.to_dict(level=level)
+        d = a.to_dict(level=level,resolve_transpose=resolve_transpose)
         b = yastn.Tensor.from_dict(d)
         assert b.is_consistent()
 
@@ -50,16 +61,6 @@ def test_to_from_dict(config_kwargs):
         # assert yastn.are_independent(b, c) == ind  # for numpy
         # # assert yastn.are_independent(b, c) == False  # for torch
         # torch.as_tensor and numpy.array have different behavior in creating a copy
-
-
-def are_identical_tensors(a, b):
-    da, db = a.__dict__, b.__dict__
-    assert da.keys() == db.keys()
-    for k in da:
-        if k != '_data':
-            assert da[k] == db[k]
-    assert type(a.data) == type(b.data)
-    assert np.allclose(a.to_numpy(), b.to_numpy())
 
 
 def test_to_dict_embed(config_kwargs):
