@@ -22,12 +22,12 @@ from operator import itemgetter
 
 import numpy as np
 
-from ._auxiliary import _struct, _slc, _clear_axes, _unpack_axes, _join_contiguous_slices
+from ._auxiliary import _struct, _slc, _clear_axes, _unpack_axes, _join_contiguous_slices, sign_canonical_order
 from ._merging import _merge_to_matrix, _unmerge, _meta_unmerge_matrix, _meta_fuse_hard
 from ._merging import _transpose_and_merge, _mask_tensors_leg_intersection, _meta_mask
 from ._tests import YastnError, _test_can_be_combined, _unpack_trans_test_axes_pair
 
-__all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'broadcast', 'apply_mask', 'SpecialTensor']
+__all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'broadcast', 'apply_mask', 'SpecialTensor', 'fkron']
 
 
 class SpecialTensor(metaclass=abc.ABCMeta):
@@ -827,3 +827,54 @@ def _slices_to_negate(tp, slices):
             start, stop = next_start, next_stop
     joined_negate.append((start, stop))
     return tuple(joined_negate)
+
+
+def fkron(*operators, sites=None, application_order=None):
+    """
+    Fermionic kron;  Returns a Kronecker product of two local operators, A and B,
+    including swap-gate (fermionic string) to handle fermionic operators.
+
+    Parameters
+    ----------
+    operators: 'Tensor'
+        dim-2 operators
+
+    If merge, returns equivalent of
+    ncon([A, B], [(-0, -1), (-2, -3)]) for sites==(0, 1), and
+    ncon([A, B], [(-2, -3), (-0, -1)]) for sites==(1, 0),
+    with proper operator order and swap gate applied.::
+
+           1     3     5
+           |     |     |
+        ┌──┴─────┴─────┴──┐
+        |                 |
+        └──┬─────┬─────┬──┘
+           |     |     |
+           0     2     4
+
+    """
+    if sites is None:
+        sites = list(range(len(operators)))
+
+    if len(operators) != len(sites) or set(sites) != set(range(len(sites))):
+        raise YastnError("sites should be a permutation of 0, 1, ..., len(operators) - 1.")
+
+    if application_order is not None:
+        if len(application_order) != len(sites) or set(application_order) != set(range(len(sites))):
+            raise YastnError("application_order should be a permutation of 0, 1, ..., len(operators) - 1.")
+        sites = [sites[ind] for ind in application_order[::-1]]
+        operators = [operators[ind] for ind in application_order[::-1]]
+
+    sym = operators[0].config.sym
+
+    sign = sign_canonical_order(*operators, sites=sites, f_ordered=lambda s1, s2: s1 <= s2)
+    operators = dict(zip(sites, operators))
+    operators = [operators[n] for n in range(len(operators))]
+    n_pattern = [op.n for op in operators]
+    acc_n_pattern = [sym.add_charges(*n_pattern[n+1:]) for n in range(len(n_pattern))]
+    operators = [op.swap_gate(axes=1, charge=charge) for op, charge in zip(operators, acc_n_pattern)]
+
+    res = sign * operators[0]
+    for op in operators[1:]:
+        res = tensordot(res, op, axes=((), ()))
+    return res

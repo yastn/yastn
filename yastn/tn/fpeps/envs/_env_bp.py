@@ -22,7 +22,7 @@ from tqdm import tqdm
 from ._env_contractions import *
 from ._env_dataclasses import EnvBP_local
 from .._evolution import BipartiteBondMetric, BondMetric
-from .._gates_auxiliary import fkron, gate_fix_swap_gate, match_ancilla, clear_projectors, clear_operator_input
+from .._gates_auxiliary import gate_fix_swap_gate, match_ancilla, clear_projectors, clear_operator_input
 from .._geometry import Bond, Site, Lattice
 from .._peps import Peps2Layers, DoublePepsTensor, PEPS_CLASSES
 from ....initialize import eye
@@ -255,7 +255,9 @@ class EnvBP():
                 return {bond: self.measure_nn(O, P, bond) for bond in self.bonds()}
 
         if O.ndim == 2 and P.ndim == 2:
-            O, P = fkron(O, P, sites=(0, 1), merge=False)
+            O = O.add_leg(s=1, axis=2)
+            P = P.add_leg(s=-1, axis=2)
+            O = O.swap_gate(axes=(1, 2))
 
         dirn = self.nn_bond_dirn(*bond)
         if O.ndim == 3 and P.ndim == 3:

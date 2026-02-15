@@ -23,7 +23,7 @@ from itertools import product
 #
 from yastn.tn.fpeps import Site
 from yastn.tn.fpeps.envs.rdm import measure_rdm_nn, measure_rdm_2x2, measure_rdm_diag
-from yastn.operators._auxiliary import sign_canonical_order
+from yastn.tensor import sign_canonical_order
 
 tol = 1e-12
 

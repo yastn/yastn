@@ -19,4 +19,3 @@ from ._spin1 import Spin1
 from ._spinless_fermions import SpinlessFermions
 from ._spinful_fermions import SpinfulFermions
 from ._spinful_fermions_tJ import SpinfulFermions_tJ
-from ._auxiliary import swap_charges, sign_canonical_order

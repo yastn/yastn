@@ -24,8 +24,7 @@ import numpy as np
 from ._initialize import product_mpo
 from ._mps_obc import Mpo, MpsMpoOBC
 from ...initialize import zeros, block
-from ...operators import sign_canonical_order
-from ...tensor import ncon, Leg, YastnError, Tensor, svd_with_truncation
+from ...tensor import ncon, Leg, YastnError, Tensor, svd_with_truncation, sign_canonical_order
 
 
 class Hterm(NamedTuple):

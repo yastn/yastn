@@ -23,8 +23,7 @@ import numpy as np
 from ._env import Env, Env2
 from ._mps_obc import MpsMpoOBC
 from ...initialize import eye
-from ...operators import swap_charges, sign_canonical_order
-from ...tensor import YastnError, Tensor, qr
+from ...tensor import YastnError, Tensor, qr, swap_charges, sign_canonical_order
 
 
 def vdot(*args) -> Number:

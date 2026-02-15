@@ -70,7 +70,7 @@ Custom gates
 Auxiliary functions help generate gates by exponentiating hermitian Hamiltonians,
 generate two-site Hamiltonian ensuring proper fermionic order, etc.
 
-.. autofunction:: yastn.tn.fpeps.fkron
+.. autofunction:: yastn.tensor.fkron
 .. autofunction:: yastn.tn.fpeps.gates.gate_nn_exp
 .. autofunction:: yastn.tn.fpeps.gates.gate_local_exp
 .. autofunction:: yastn.tn.fpeps.gates.decompose_nn_gate

@@ -28,7 +28,7 @@ import numpy as np
 
 from .._split_combine_dict import *
 from ._algebra import *
-from ._auxiliary import _struct, _config
+from ._auxiliary import *
 from ._contractions import *
 from ._control_lru import *
 from ._einsum import *
