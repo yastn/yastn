@@ -831,23 +831,35 @@ def _slices_to_negate(tp, slices):
 
 def fkron(*operators, sites=None, application_order=None):
     """
-    Fermionic kron;  Returns a Kronecker product of two local operators, A and B,
+    Returns a Kronecker product of operators,
     including swap-gate (fermionic string) to handle fermionic operators.
 
     Parameters
     ----------
-    operators: 'Tensor'
-        dim-2 operators
+    operators: yastn.Tensor
+        a sequence of rank-2 tensors
 
-    If merge, returns equivalent of
-    ncon([A, B], [(-0, -1), (-2, -3)]) for sites==(0, 1), and
-    ncon([A, B], [(-2, -3), (-0, -1)]) for sites==(1, 0),
-    with proper operator order and swap gate applied.::
+    sites: Sequence[int] | None
+        sites corresponding to the provided operators.
+        Should be a permutation of 0, 1, ..., len(operators) - 1.
+        If None, assume 0, 1, ..., len(operators) - 1.
+        Site 0 is the first in the fermionic order.
+
+    application_order: Sequence[int] | None
+        Order of applying operators, which might correspond to a sign change for fermionic operators.
+        Should be a permutation of 0, 1, ..., len(operators) - 1.
+        If None, the last operator is applied first.
+
+
+    Results
+    -------
+    Order of outgoing legs, where sites 0, 1, ... go from left to right,
+    e.g., fkron(A, B, C, sites=(0, 1, 2)) gives ::
 
            1     3     5
            |     |     |
         ┌──┴─────┴─────┴──┐
-        |                 |
+        |  A     B     C  |
         └──┬─────┬─────┬──┘
            |     |     |
            0     2     4
