@@ -467,4 +467,12 @@ def rdm(psi, *sites):
             axes = ((ii, ii + 1), (0, 1)) if psi.nr_phys == 1 else ((ii, ii + 1, ii + 3), (0, 1, 3))
             FL = tensordot(FL, An, axes=axes)
     rho = tensordot(FL, FR, axes=((ii, ii + 1), (1, 0)))
+
+    for ii, st in enumerate(sites):
+        nd = sum(st > i for i in sites[ii+1:])
+        axes_sw = (2 * (ii + nd), tuple(2 * i for i in range(ii, ii + nd)),
+                   2 * (ii + nd) + 1, tuple(2 * i + 1 for i in range(ii, ii + nd)))
+        rho = rho.swap_gate(axes=axes_sw)
+        rho = rho.moveaxis(source=(2 * (ii + nd), 2 * (ii + nd) + 1), destination=(2 * ii, 2 * ii + 1))
+
     return rho

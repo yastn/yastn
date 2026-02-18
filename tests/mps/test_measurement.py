@@ -425,45 +425,30 @@ def test_rdm(config_kwargs, nr_phys, tol=1e-12):
     #
     # test 2-point reduced density matrix
     #
-    n0, n1 = 3, 5
-    rho = mps.rdm(psi, n0, n1)
-    #
-    Occp = yastn.fkron(c, cp)
-    Ocpc = yastn.fkron(cp, c)
-    #
-    tr = yastn.einsum('aabb', rho).item()
-    assert abs(tr - 1) < tol
-    #
-    res0 = yastn.einsum('abcd,badc', rho, Occp).item()
-    res1 = yastn.einsum('abcd,badc', rho, Ocpc).item()
-    #
-    ref0 = mps.measure_2site(psi, c, cp, psi, bonds=(n0, n1))
-    ref1 = mps.measure_2site(psi, cp, c, psi, bonds=(n0, n1))
-    #
-    assert abs(res0 - ref0) < 1e-12
-    assert abs(res1 - ref1) < 1e-12
+    for n0, n1 in [(3, 5), (4, 2), (6, 5)]:
+        rho = mps.rdm(psi, n0, n1)
+        tr = yastn.einsum('aabb', rho).item()
+        assert abs(tr - 1) < tol
+        #
+        for c0, c1 in [(c, cp), (cp, c), (cp, cp), (c, c)]:
+            O = yastn.fkron(c0, c1)
+            res = yastn.einsum('abcd,badc', rho, O).item()
+            ref = mps.measure_2site(psi, c0, c1, psi, bonds=(n0, n1))
+            assert abs(res - ref) < 1e-12
     #
     # test 4-point reduced density matrix
     #
-    n0, n1, n2, n3 = 3, 5, 7, 9
-    rho = mps.rdm(psi, n0, n1, n2, n3)
-    #
-    O0 = mps.generate_mpo(I, [mps.Hterm(positions=(n0, n1, n2, n3), operators=(c, c, cp, cp))])
-    O1 = mps.generate_mpo(I, [mps.Hterm(positions=(n0, n1, n2, n3), operators=(cp, c, c, cp))])
-    f0 = yastn.fkron(c, c, cp, cp)
-    f1 = yastn.fkron(cp, c, c, cp)
-    #
-    tr = yastn.einsum('aabbccdd', rho).item()
-    assert abs(tr - 1) < tol
-    #
-    res0 = yastn.einsum('abcdefgh,badcfehg', rho, f0).item()
-    res1 = yastn.einsum('abcdefgh,badcfehg', rho, f1).item()
-    #
-    ref0 = mps.vdot(psi, O0, psi)
-    ref1 = mps.vdot(psi, O1, psi)
-    #
-    assert abs(res0 - ref0) < 1e-12
-    assert abs(res1 - ref1) < 1e-12
+    for n0, n1, n2, n3 in [(3, 5, 7, 9), (7, 5, 3, 9), (11, 8, 3, 7), (5, 3, 7, 1)]:
+        rho = mps.rdm(psi, n0, n1, n2, n3)
+        tr = yastn.einsum('aabbccdd', rho).item()
+        assert abs(tr - 1) < tol
+        #
+        for c0, c1, c2, c3 in [(c, c, cp, cp), (c, cp, c, cp), (cp, c, n, n), (cp, cp, c, cp)]:
+            O = mps.generate_mpo(I, [mps.Hterm(positions=(n0, n1, n2, n3), operators=(c0, c1, c2, c3))])
+            f = yastn.fkron(c0, c1, c2, c3)
+            res = yastn.einsum('abcdefgh,badcfehg', rho, f).item()
+            ref = mps.vdot(psi, O, psi)
+            assert abs(res - ref) < 1e-12
 
 
 if __name__ == '__main__':
