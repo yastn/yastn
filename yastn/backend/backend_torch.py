@@ -29,15 +29,14 @@ from ._backend_torch_backwards import kernel_apply_mask, kernel_embed_mask
 from ._backend_torch_backwards import kernel_transpose, kernel_transpose_and_merge, kernel_unmerge
 
 
-__all__= [
-    'DTYPE', 'cuda_is_available',
-    'get_dtype', 'get_yastn_dtype', 'is_complex', 'get_device', 'random_seed',
-    'grad', 'detach', 'detach_', 'clone', 'copy', 'randint',
-    'to_numpy', 'get_shape', 'get_size', 'diag_create', 'diag_get', 'real',
+__all__= ['DTYPE', 'get_dtype', 'get_yastn_dtype',
+    'cuda_is_available', 'get_device', 'move_to', 
+    'grad', 'requires_grad_', 'requires_grad', 'detach', 'detach_', 'clone', 'copy', 'checkpoint', 
+    'random_seed', 'randint',
+    'to_numpy', 'get_shape', 'get_size', 'diag_create', 'diag_get', 'real', 'is_complex', 'conj',
     'imag', 'max_abs', 'maximum', 'norm_matrix', 'delete', 'insert',
     'expm', 'first_element', 'item', 'sum_elements', 'norm', 'entropy',
     'zeros', 'ones', 'rand', 'to_tensor', 'to_mask', 'square_matrix_from_dict',
-    'requires_grad_', 'requires_grad', 'move_to', 'conj',
     'trace', 'rsqrt', 'reciprocal', 'exp', 'sqrt', 'absolute', 'permute_dims',
     'fix_svd_signs', 'svdvals', 'svd_lowrank', 'svd', 'svd_randomized', 'svds_scipy',
     'eigh', 'qr', 'pinv', 'eig', 'eigvals',
@@ -587,8 +586,6 @@ def diag_2dto1d(data, meta, Dsize):
 
 # functionals
 def checkpoint(f, *args, **kwargs):
-    # context_fn=kwargs.pop('context_fn',None)
-    # torch.utils.checkpoint.checkpoint
     return _checkpoint(f, *args,
                        use_reentrant=kwargs.pop('use_reentrant',None),
                        determinism_check=kwargs.pop('determinism_check', 'default'),

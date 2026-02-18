@@ -25,8 +25,8 @@ import yastn.tn.mps as mps
 
 @pytest.fixture
 def additional_imports(config_kwargs):
-    if config_kwargs["backend"] != "torch":
-        pytest.skip("torch backend is required")
+    if not config_kwargs["backend"] in ["torch", "torch_cpp"]:
+        pytest.skip("Backend with AD support is required: [torch, torch_cpp]")
         return config_kwargs, None, None
     else:
         import torch

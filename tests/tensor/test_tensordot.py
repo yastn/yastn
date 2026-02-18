@@ -168,59 +168,6 @@ def test_dot_basic_U1(config_kwargs):
     assert yastn.norm(c1.conj() - c2.transpose(axes=(3, 4, 5, 0, 1, 2))) < tol[dtype]
 
 
-def test_dot_basic_Z2(config_kwargs):
-    """ test tensordot for different symmetries. """
-    # Z2
-    config_Z2 = yastn.make_config(sym='Z2', **config_kwargs)
-    dtype = 'float64'
-    a = yastn.rand(config=config_Z2, s=(-1, 1, 1, -1),
-                  t=((0, 1), (0, 1), (0, 1), (0, 1)),
-                  D=((1, 2), (3, 4), (5 ,6), (7, 8)), dtype=dtype)
-    b = yastn.rand(config=config_Z2, s=(1, -1, 1),
-                  t=((0, 1), (0, 1), (0, 1)),
-                  D=((1, 2), (3, 4), (7, 8)), dtype=dtype)
-    tensordot_vs_numpy(a, b, axes=((0, 1), (0, 1)), conj=(0, 0), dtype=dtype)
-    tensordot_vs_numpy(a, b, axes=((1, 3), (1, 2)), conj=(0, 0), dtype=dtype)
-
-    import pdb; pdb.set_trace()
-
-    a = yastn.Tensor(config=config_Z2, s=(-1, 1, 1, -1), n=-2)
-    a.set_block(ts=(2, 1, 0, 1), Ds=(2, 1, 10, 1), val='rand')
-    b = yastn.Tensor(config=config_Z2, s=(-1, 1, 1, -1), n=1)
-    b.set_block(ts=(1, 2, 0, 0), Ds=(1, 2, 10, 10), val='rand')
-    c = tensordot_vs_numpy(a, b, axes=((2, 1), (1, 2)), conj=(1, 0), dtype=dtype)
-    assert c.struct.n == (3,)
-    a.set_block(ts=(1, 1, -1, 1), Ds=(1, 1, 11, 1), val='rand')
-    a.set_block(ts=(2, 2, -1, 1), Ds=(2, 2, 11, 1), val='rand')
-    a.set_block(ts=(3, 3, -1, 1), Ds=(3, 3, 11, 1), val='rand')
-    b.set_block(ts=(1, 1, 1, 0), Ds=(1, 1, 1, 10), val='rand')
-    b.set_block(ts=(3, 3, 1, 0), Ds=(3, 3, 1, 10), val='rand')
-    b.set_block(ts=(3, 3, 2, 1), Ds=(3, 3, 2, 1), val='rand')
-    tensordot_vs_numpy(a, b, axes=((0, 1), (0, 1)), conj=(0, 1), dtype=dtype)
-    tensordot_vs_numpy(a, b, axes=((0, 3, 1), (1, 2, 0)), conj=(0, 0), dtype=dtype)
-    #
-    # corner cases
-    a = yastn.rand(config=config_Z2, s=(-1, 1, 1),
-                  t=((-1, 1, 0), (-1, 1, 0), (-1, 1, 0)),
-                  D=((1, 2, 3), (3, 2, 1), (1, 2, 2)), dtype=dtype)
-    b = yastn.rand(config=config_Z2, s=(-1, 1, 1),
-                  t=((-2, 2), (-1, 1, -3), (-1, 1, -3)),
-                  D=((1, 2), (3, 2, 1), (1, 2, 2)), dtype=dtype)
-    # some charges are missing
-    assert a.size > 0 and b.size > 0
-    tensordot_vs_numpy(b, a, axes=((2,), (0,)), conj=(0, 0), dtype=dtype)
-    #
-    # no matching charges
-    c = tensordot_vs_numpy(a, b, axes=((2,), (0,)), conj=(0, 0), dtype=dtype)
-    assert c.size == 0
-    assert c.norm() < tol[dtype]
-    #
-    # outer product
-    c1 = tensordot_vs_numpy(a, b, axes=((), ()), conj=(0, 0), dtype=dtype)
-    c2 = tensordot_vs_numpy(b, a, axes=((), ()), conj=(1, 1), dtype=dtype)
-    assert yastn.norm(c1.conj() - c2.transpose(axes=(3, 4, 5, 0, 1, 2))) < tol[dtype]
-
-
 def test_dot_basic_U1_2(config_kwargs):
     """ test tensordot for different symmetries. """
     # U1

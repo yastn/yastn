@@ -18,18 +18,13 @@ import operator
 from typing import Sequence, Union
 import numpy as np
 import torch
-import torch.cuda as cuda
 from .backend_torch import *
-import cublocksparse
+import tapp_torch
 
 BACKEND_ID = "torch_cpp"
 
-def cutensor_cache_stats():
-    """Get information about the cutensor plan cache."""
-    return cublocksparse.plan_cache_stats()
 
-# @jit(nopython=True)
-def _meta_tensordot_bs(
+def _meta_tapp_torch_tensordot_bs(
         NSYM: int,
         a_struct_t : Sequence[Sequence[int]], # non-zero blocks of a indexed via charges (for product groups, the charges are flattened)
         a_slices,   # slices of a, i.e. the locations of the non-zero blocks in the 1D tensor a
@@ -49,30 +44,11 @@ def _meta_tensordot_bs(
     Returns:
         meta_dot: metadata for cutensor block-sparse tensordot
     """
+    # I. Merge sectors for contracted modes
+    #
     # Sectors on contracted modes must share extents. Hence, we need to fill sectors (and their extents)
     # which are present in only one of the operands.
     # pre-process _t_per_mode such that each mode (formally) contains all t's
-
-    # _merge_t = lambda x,y: sorted(list( set(a_t_per_mode[x]) | set( b_t_per_mode[y] )))
-
-    # # pre-process _D_per_mode
-    # filled_a_t_per_mode= [ a_t_per_mode[i] if i in nout_a else _merge_t(i,nin_b[nin_a.index(i)]) for i in range(len(nout_a+nin_a)) ]
-    # filled_b_t_per_mode= [ b_t_per_mode[i] if i in nout_b else _merge_t(nin_a[nin_b.index(i)],i) for i in range(len(nout_b+nin_b)) ]
-
-
-    # Build merged charge sets for contracted legs more efficiently
-    # Pre-compute mapping from leg index to position in nin_a/nin_b
-    nin_a_set = set(nin_a)
-    nin_b_set = set(nin_b)
-    nin_a_to_pos = {v: i for i, v in enumerate(nin_a)}
-    nin_b_to_pos = {v: i for i, v in enumerate(nin_b)}
-
-    def _merge_t_v0(a_idx, b_idx):
-        # Use frozenset union for faster set operations
-        merged = set(a_t_per_mode[a_idx])
-        merged.update(b_t_per_mode[b_idx])
-        return sorted(merged)
-
     def _merge_t_v1(a_idx, b_idx):
         # Merge two sorted lists in O(n+m) time
         a_list = a_t_per_mode[a_idx]
@@ -94,21 +70,6 @@ def _meta_tensordot_bs(
         result.extend(b_list[j:])
         return result
 
-    # Pre-process _t_per_mode - avoid repeated index() calls
-    # filled_a_t_per_mode = []
-    # for i in range(len(nout_a) + len(nin_a)):
-    #     if i not in nin_a_set:
-    #         filled_a_t_per_mode.append(a_t_per_mode[i])
-    #     else:
-    #         filled_a_t_per_mode.append(_merge_t(i, nin_b[nin_a_to_pos[i]]))
-
-    # filled_b_t_per_mode = []
-    # for i in range(len(nout_b) + len(nin_b)):
-    #     if i not in nin_b_set:
-    #         filled_b_t_per_mode.append(b_t_per_mode[i])
-    #     else:
-    #         filled_b_t_per_mode.append(_merge_t(nin_a[nin_b_to_pos[i]], i))
-
     filled_a_t_per_mode= list(a_t_per_mode)
     filled_b_t_per_mode= list(b_t_per_mode)
 
@@ -118,10 +79,9 @@ def _meta_tensordot_bs(
         merged_t= _merge_t_v1(ia,ib)
         filled_a_t_per_mode[ia]= merged_t
         filled_b_t_per_mode[ib]= merged_t
-
-
     filled_c_t_per_mode= [ a_t_per_mode[i] for i in nout_a ] + [ b_t_per_mode[i] for i in nout_b ]
     if profile: torch.cuda.nvtx.mark("kernel_tensordot_bs _merge_t done")
+    
     filled_a_D_per_mode= [None]*len(nout_a+nin_a)
     filled_b_D_per_mode= [None]*len(nout_b+nin_b)
     filled_c_D_per_mode= [None]*len(nout_a+nout_b)
@@ -137,27 +97,16 @@ def _meta_tensordot_bs(
         filled_b_D_per_mode[i_b]= [ _tmp[t] for t in filled_b_t_per_mode[i_b] ]
     if profile: torch.cuda.nvtx.mark("kernel_tensordot_bs filled_*_D_per_mode done")
 
-    # TODO for NSYM>1 extra nesting
-    def _blocksparse_coords(struct_t, t_per_mode):
-        if NSYM>0:
-            return [ [ t_per_mode[i].index( row[i*NSYM:(i+1)*NSYM] ) for i in range(len(t_per_mode)) ] \
-                for row in struct_t ]
-        return [ [ t_per_mode[i].index( (row[i],) ) for i in range(len(t_per_mode)) ] \
-                for row in struct_t ]
-
-    def _blocksparse_coords_v1(struct_t, t_per_mode):
-        if NSYM > 0:
-            lookups = [{tuple(t): idx for idx, t in enumerate(mode_ts)} for mode_ts in t_per_mode]
-            res= [[lookups[i][tuple(row[i*NSYM:(i+1)*NSYM])] for i in range(len(t_per_mode))]
-                    for row in struct_t]
-        else:
-            lookups = [{(t,): idx for idx, t in enumerate(mode_ts)} for mode_ts in t_per_mode]
-            res= [[lookups[i][(row[i],)] for i in range(len(t_per_mode))]
-                    for row in struct_t]
-        return sum(res, start=[])
-
+    # II. Domain-agnostic indexing of block coordinates
+    #
+    # The blocks are indexed by their charges. However, cutensor expects non-negative integers as block coordinates. 
+    # Here we convert the charge-based coordinates to unsigned-int block coordinates. 
+    # The conversion is done in two steps:
+    #   1) For each mode, we shift the coordinates such that the minimum coordinate becomes zero.
+    #   2) For each mode, we raise the coordinates by the base equal to the number of unique coordinates in that mode.
+    #
     # Linearization of block coordinates
-    # NOT APPLICABLE: Block index can have value at most equal to number of extents in the respective mode - 1
+    # NOTE: Block index can have value at most equal to number of extents in the respective mode - 1
     def normalize_ts(filled_t_per_mode):
         res= []
         for t_mode in filled_t_per_mode:
@@ -183,41 +132,17 @@ def _meta_tensordot_bs(
 
         return B.reshape(-1).tolist()
 
-    # c_t_per_mode, c_D_per_mode can be obtained from per_mode info of a and b
-    c_t_per_mode= [ a_t_per_mode[i] for i in nout_a ] + [ b_t_per_mode[i] for i in nout_b ]
-    c_D_per_mode= [ a_D_per_mode[i] for i in nout_a ] + [ b_D_per_mode[i] for i in nout_b ]
-
-    # for compliance with PyTorch Custom OPS API
-    # a) as int64 tensors
-    # a_coords = torch.tensor(_blocksparse_coords(a_struct_t, a_t_per_mode), dtype=torch.int64, device=device)
-    # b_coords = torch.tensor(_blocksparse_coords(b_struct_t, b_t_per_mode), dtype=torch.int64, device=device)
-    # c_coords = torch.tensor(_blocksparse_coords(c_struct_t, c_t_per_mode), dtype=torch.int64, device=device)
-    # b) as lists of lists of indices flattened to 1D (which is expected format for cutensor's block-sparse API)
+    # For compliance with PyTorch Custom OPS API
+    # lists of lists of indices flattened to 1D (which is expected format for cutensor's block-sparse API)
     a_coords = _blocksparse_coords_v3(a_struct_t, filled_a_t_per_mode)
     b_coords = _blocksparse_coords_v3(b_struct_t, filled_b_t_per_mode)
     c_coords = _blocksparse_coords_v3(c_struct_t, filled_c_t_per_mode)
     if profile: torch.cuda.nvtx.mark("kernel_tensordot_bs _blocksparse_coords done")
 
-    def _pad_and_convert(D_per_mode):
-        max_len = max(len(sublist) for sublist in D_per_mode)
-        padded_D_per_mode = [list(sublist) + [-1] * (max_len - len(sublist))
-                            for sublist in D_per_mode]
-        return torch.tensor(padded_D_per_mode, dtype=torch.int64, device='cpu')
-    T_a_D_per_mode= _pad_and_convert(filled_a_D_per_mode)
-    T_b_D_per_mode= _pad_and_convert(filled_b_D_per_mode)
-    T_c_D_per_mode= _pad_and_convert(filled_c_D_per_mode)
-    if profile: torch.cuda.nvtx.mark("kernel_tensordot_bs _pad_and_convert done")
-
-    # offsets & strides
-    # _get_strides= lambda D: list(np.cumprod(D[::-1])[::-1][1:])+[1,]
-    # a_offsets, a_strides= zip(*((s.slcs[0][0], _get_strides(s.D)) for s in a_slices))
-    # b_offsets, b_strides= zip(*((s.slcs[0][0], _get_strides(s.D)) for s in b_slices))
-    # c_offsets, c_strides= zip(*((s.slcs[0][0], _get_strides(s.D)) for s in c_slices))
-    # # serialize to 1D
-    # a_strides= sum(a_strides, start=[])
-    # b_strides= sum(b_strides, start=[])
-    # c_strides= sum(c_strides, start=[])
-
+    # III. Compute offsets and strides for each block
+    #
+    # The offsets and strides are needed to map the block-sparse coordinates to the respective locations in the 1D tensors a, b, c. 
+    # 
     def _offsets_and_strides(slices):
         S= np.empty( (len(slices),len(slices[0].D)), dtype=np.int64 )
         S[:,-1]=1
@@ -228,10 +153,21 @@ def _meta_tensordot_bs(
     a_offsets, a_strides= _offsets_and_strides(a_slices)
     b_offsets, b_strides= _offsets_and_strides(b_slices)
     c_offsets, c_strides= _offsets_and_strides(c_slices)
+    if profile: torch.cuda.nvtx.mark("kernel_tensordot_bs strides_and_offsets done")
 
-    return a_coords, a_offsets, a_strides, T_a_D_per_mode, \
-        b_coords, b_offsets, b_strides, T_b_D_per_mode, \
-        c_coords, c_offsets, c_strides, T_c_D_per_mode
+    def _convert_extents(filled_D_per_mode):
+        numSectionsPerMode= list([len(m) for m in filled_D_per_mode])
+        sectionExtents_flat= sum([ list(m) for m in filled_D_per_mode ], start=[])
+        return numSectionsPerMode, sectionExtents_flat
+
+    a_numSectionsPerMode, a_sectionExtents= _convert_extents(filled_a_D_per_mode)
+    b_numSectionsPerMode, b_sectionExtents= _convert_extents(filled_b_D_per_mode)
+    c_numSectionsPerMode, c_sectionExtents= _convert_extents(filled_c_D_per_mode)
+    if profile: torch.cuda.nvtx.mark("kernel_tensordot_bs _pad_and_convert done")
+
+    return a_numSectionsPerMode, a_sectionExtents, a_coords, a_strides, a_offsets, \
+        b_numSectionsPerMode, b_sectionExtents, b_coords, b_strides, b_offsets, \
+        c_numSectionsPerMode, c_sectionExtents, c_coords, c_strides, c_offsets
 
 
 def kernel_tensordot_bs(
@@ -255,17 +191,13 @@ def kernel_tensordot_bs(
         return torch.zeros(c_size, dtype=dtype, device=a.device)
 
     if profile: torch.cuda.nvtx.range_push("_meta_tensordot_bs")
-    res= _meta_tensordot_bs(NSYM,
+    meta= _meta_tapp_torch_tensordot_bs(NSYM,
         a_struct_t, a_slices, a_t_per_mode, a_D_per_mode,
         nout_a, nin_a,
         b_struct_t, b_slices, b_t_per_mode, b_D_per_mode,
         nout_b, nin_b,
         c_struct_t, c_slices, profile)
     if profile: torch.cuda.nvtx.range_pop()
-
-    a_coords, a_offsets, a_strides, T_a_D_per_mode, \
-    b_coords, b_offsets, b_strides, T_b_D_per_mode, \
-    c_coords, c_offsets, c_strides, T_c_D_per_mode = res
 
     if profile: torch.cuda.nvtx.range_push(f"ops.tensordot_bs")
     # TODO type promotion should be handled by cutensor
@@ -274,11 +206,17 @@ def kernel_tensordot_bs(
     if b.dtype != dtype:
         b = b.to(dtype=dtype)
 
-    res= cublocksparse.ops.tensordot_bs(
-            a, b,
-            a_coords, a_offsets, a_strides, T_a_D_per_mode, nout_a, nin_a,
-            b_coords, b_offsets, b_strides, T_b_D_per_mode, nout_b, nin_b,
-            c_size, c_coords, c_offsets, c_strides, T_c_D_per_mode
-        )
+    def _remap_nout_(nout,offset):
+        r_nout= [None]*len(nout)
+        for n,i in enumerate(np.argsort(nout)):
+            r_nout[i]= n + offset
+        return r_nout
+
+    modes_out= _remap_nout_(nout_a,0) + _remap_nout_(nout_b,len(nout_a))
+
+    res= torch.ops.tapp_torch.tensordot_bs(a, b, nin_a, nin_b,
+        *meta,
+        modes_out)
+
     if profile: torch.cuda.nvtx.range_pop()
     return res

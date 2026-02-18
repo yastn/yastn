@@ -27,8 +27,11 @@ It supports a range of Projected Entangled Pair States (PEPS) and Matrix Product
 
 - [NumPy](https://numpy.org/)
 - [PyTorch](https://pytorch.org/)
+- [`cuTensor`](https://developer.nvidia.com/cutensor)-accelerated PyTorch backend (see Installation)
 
 It allows automatic differentiation (autograd) on backends which support it.
+
+
 
 ##### To see YASTN in action, see
 
@@ -47,6 +50,14 @@ pip install .
 ```
 or just clone and add YASTN root to your Python import path to successfully ``import yastn``
 (see `pyproject.toml` for dependencies).
+
+To enable `cuTensor`-accelerated backend, get `TAPP_torch` via git
+```
+git submodules update --init --recursive
+```
+then go to `third_party\TAPP-torch` and follow installation instructions therein.
+
+
 
 ### Run the tests
 

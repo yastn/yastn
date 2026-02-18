@@ -42,7 +42,7 @@ def test_to_from_dict(resolve_transpose, config_kwargs):
     a = a.fuse_legs(axes=(0, (1, 2)), mode='meta')
 
     for level, ind in zip([0, 1, 2], [False, False, True]):
-        d = a.to_dict(level=level,resolve_transpose=resolve_transpose)
+        d = a.to_dict(level=level,resolve_ops=resolve_transpose)
         b = yastn.Tensor.from_dict(d)
         assert b.is_consistent()
 
