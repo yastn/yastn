@@ -408,26 +408,59 @@ def test_measure_syntax_raises(config_kwargs):
         mps.measure_nsite(psi3, ops.cp(), ket=psi3, sites=(1, 2))
 
 
-def test_rdm(config_kwargs, tol=1e-12):
+@pytest.mark.parametrize("nr_phys", [1, 2])
+def test_rdm(config_kwargs, nr_phys, tol=1e-12):
     """ Initialize small MPS and measure fermionic correlators. Additionally text measure_2site syntax. """
 
     ops = yastn.operators.SpinlessFermions(sym='Z2', **config_kwargs)
     N = 12
     I = mps.product_mpo(ops.I(), N)
-    psi = mps.random_mps(I, D_total=16, dtype='complex128')
+    c, cp, n = ops.c(), ops.cp(), ops.n()
+    #
+    if nr_phys == 1:
+        psi = mps.random_mps(I, D_total=16, dtype='complex128')
+    else:
+        psi = mps.random_mpo(I, D_total=16, dtype='complex128')
+    psi.canonize_(to='last').canonize_(to='first')
+    #
+    # test 2-point reduced density matrix
     #
     n0, n1 = 3, 5
     rho = mps.rdm(psi, n0, n1)
     #
-    c, cp, n = ops.c(), ops.cp(), ops.n()
     Occp = yastn.fkron(c, cp)
     Ocpc = yastn.fkron(cp, c)
+    #
+    tr = yastn.einsum('aabb', rho).item()
+    assert abs(tr - 1) < tol
     #
     res0 = yastn.einsum('abcd,badc', rho, Occp).item()
     res1 = yastn.einsum('abcd,badc', rho, Ocpc).item()
     #
-    ref0 = mps.measure_2site(psi, c, cp, psi, bonds=(20, 25))
-    ref1 = mps.measure_2site(psi, cp, c, psi, bonds=(20, 25))
+    ref0 = mps.measure_2site(psi, c, cp, psi, bonds=(n0, n1))
+    ref1 = mps.measure_2site(psi, cp, c, psi, bonds=(n0, n1))
+    #
+    assert abs(res0 - ref0) < 1e-12
+    assert abs(res1 - ref1) < 1e-12
+    #
+    # test 4-point reduced density matrix
+    #
+    n0, n1, n2, n3 = 3, 5, 7, 9
+    rho = mps.rdm(psi, n0, n1, n2, n3)
+    #
+    O0 = mps.generate_mpo(I, [mps.Hterm(positions=(n0, n1, n2, n3), operators=(c, c, cp, cp))])
+    O1 = mps.generate_mpo(I, [mps.Hterm(positions=(n0, n1, n2, n3), operators=(cp, c, c, cp))])
+    f0 = yastn.fkron(c, c, cp, cp)
+    f1 = yastn.fkron(cp, c, c, cp)
+    #
+    tr = yastn.einsum('aabbccdd', rho).item()
+    assert abs(tr - 1) < tol
+    #
+    res0 = yastn.einsum('abcdefgh,badcfehg', rho, f0).item()
+    res1 = yastn.einsum('abcdefgh,badcfehg', rho, f1).item()
+    #
+    ref0 = mps.vdot(psi, O0, psi)
+    ref1 = mps.vdot(psi, O1, psi)
     #
     assert abs(res0 - ref0) < 1e-12
     assert abs(res1 - ref1) < 1e-12

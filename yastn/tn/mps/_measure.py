@@ -451,15 +451,20 @@ def rdm(psi, *sites):
     FR = env.F[nf + 1, nf]
     ii = 0
     for n in range(ni, nf + 1):
-        FL = tensordot(FL, psi[n].conj(), axes=(ii, 0))
+        An = psi[n]
+        if psi.nr_phys == 2:
+            An = An.swap_gate(axes=(0, 3))
+
+        FL = tensordot(FL, An.conj(), axes=(ii, 0))
         if n in sites:
             axes = (ii, 0) if psi.nr_phys == 1 else ((ii, ii + 3), (0, 3))
-            FL = tensordot(FL, psi[n], axes=axes)
-            FL = FL.swap_gate(axes=((ii, ii + 2), ii + 1))
-            FL = FL.moveaxis(source=ii + 1, destination=ii + 2)
+            FL = tensordot(FL, An, axes=axes)
+            FL = FL.swap_gate(axes=((ii, ii + 2), ii + 3))
+            FL = FL.swap_gate(axes=(tuple(range(ii)), ii + 2))
+            FL = FL.moveaxis(source=(ii + 2, ii), destination=(ii, ii + 1))
             ii += 2
         else:
             axes = ((ii, ii + 1), (0, 1)) if psi.nr_phys == 1 else ((ii, ii + 1, ii + 3), (0, 1, 3))
-            FL = tensordot(FL, psi[n], axes=axes)
+            FL = tensordot(FL, An, axes=axes)
     rho = tensordot(FL, FR, axes=((ii, ii + 1), (1, 0)))
     return rho
