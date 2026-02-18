@@ -23,7 +23,7 @@ import numpy as np
 from ._env import Env, Env2
 from ._mps_obc import MpsMpoOBC
 from ...initialize import eye
-from ...tensor import YastnError, Tensor, qr, swap_charges, sign_canonical_order
+from ...tensor import YastnError, Tensor, qr, swap_charges, sign_canonical_order, tensordot
 
 
 def vdot(*args) -> Number:
@@ -433,3 +433,33 @@ def sample(psi, projectors, number=1, return_probabilities=False) -> np.ndarray[
     if return_probabilities:
         return samples, probabilities
     return samples
+
+
+def rdm(psi, *sites):
+    """
+    Reduced density matrix supported on selected sites for MPS psi.
+    """
+    ni, nf = min(sites), max(sites)
+    #
+    if len(sites) != len(set(sites)) or ni < psi.first or nf > psi.last:
+        raise YastnError("Repeated site or some sites outside of psi.")
+    #
+    env = Env2(psi, psi)
+    #
+    env.setup_(to=(ni - 1, nf + 1))
+    FL = env.F[ni - 1, ni]
+    FR = env.F[nf + 1, nf]
+    ii = 0
+    for n in range(ni, nf + 1):
+        FL = tensordot(FL, psi[n].conj(), axes=(ii, 0))
+        if n in sites:
+            axes = (ii, 0) if psi.nr_phys == 1 else ((ii, ii + 3), (0, 3))
+            FL = tensordot(FL, psi[n], axes=axes)
+            FL = FL.swap_gate(axes=((ii, ii + 2), ii + 1))
+            FL = FL.moveaxis(source=ii + 1, destination=ii + 2)
+            ii += 2
+        else:
+            axes = ((ii, ii + 1), (0, 1)) if psi.nr_phys == 1 else ((ii, ii + 1, ii + 3), (0, 1, 3))
+            FL = tensordot(FL, psi[n], axes=axes)
+    rho = tensordot(FL, FR, axes=((ii, ii + 1), (1, 0)))
+    return rho

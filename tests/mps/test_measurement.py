@@ -408,14 +408,30 @@ def test_measure_syntax_raises(config_kwargs):
         mps.measure_nsite(psi3, ops.cp(), ket=psi3, sites=(1, 2))
 
 
+def test_rdm(config_kwargs, tol=1e-12):
+    """ Initialize small MPS and measure fermionic correlators. Additionally text measure_2site syntax. """
+
+    ops = yastn.operators.SpinlessFermions(sym='Z2', **config_kwargs)
+    N = 12
+    I = mps.product_mpo(ops.I(), N)
+    psi = mps.random_mps(I, D_total=16, dtype='complex128')
+    #
+    n0, n1 = 3, 5
+    rho = mps.rdm(psi, n0, n1)
+    #
+    c, cp, n = ops.c(), ops.cp(), ops.n()
+    Occp = yastn.fkron(c, cp)
+    Ocpc = yastn.fkron(cp, c)
+    #
+    res0 = yastn.einsum('abcd,badc', rho, Occp).item()
+    res1 = yastn.einsum('abcd,badc', rho, Ocpc).item()
+    #
+    ref0 = mps.measure_2site(psi, c, cp, psi, bonds=(20, 25))
+    ref1 = mps.measure_2site(psi, cp, c, psi, bonds=(20, 25))
+    #
+    assert abs(res0 - ref0) < 1e-12
+    assert abs(res1 - ref1) < 1e-12
+
+
 if __name__ == '__main__':
     pytest.main([__file__, "-vs", "--durations=0"])
-
-# if __name__ == "__main__":
-#     measure_mps_aklt()
-#     for sym in ['dense', 'Z3', 'U1']:
-#         mps_spectrum_ghz(sym=sym)
-#         test_mpo_spectrum(sym=sym, config=cfg)
-#     for sym in ['Z2', 'U1', 'U1xU1', 'U1xU1xZ2']:
-#         test_measure_fermions_and_unbalanced(sym=sym, config=cfg)
-#     test_measure_syntax_raises()
