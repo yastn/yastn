@@ -312,7 +312,7 @@ class Peps2Layers():
         Complementary function is :meth:`yastn.Peps2Layers.from_dict` or a general :meth:`yastn.from_dict`.
         See :meth:`yastn.Tensor.to_dict` for further description.
         """
-        if self._ket is None:
+        if self.ket is None:
             return self.bra.to_dict(level=level, resolve_ops=resolve_ops)  # 2 layers would be reintroduced by environment functions
         return {'type': type(self).__name__,
              'dict_ver': 1,
