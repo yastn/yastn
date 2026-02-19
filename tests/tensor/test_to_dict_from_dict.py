@@ -29,8 +29,8 @@ def are_identical_tensors(a, b):
     assert np.allclose(a.to_numpy(), b.to_numpy())
 
 
-@pytest.mark.parametrize("resolve_transpose", [True,False])
-def test_to_from_dict(resolve_transpose, config_kwargs):
+@pytest.mark.parametrize("resolve_ops", [True,False])
+def test_to_from_dict(resolve_ops, config_kwargs):
     config = yastn.make_config(sym='U1', **config_kwargs)
     legs = [yastn.Leg(config, s=1, t=(0, 1, 2), D= (3, 5, 2)),
             yastn.Leg(config, s=-1, t=(0, 1, 3), D= (1, 2, 3)),
@@ -42,7 +42,7 @@ def test_to_from_dict(resolve_transpose, config_kwargs):
     a = a.fuse_legs(axes=(0, (1, 2)), mode='meta')
 
     for level, ind in zip([0, 1, 2], [False, False, True]):
-        d = a.to_dict(level=level,resolve_ops=resolve_transpose)
+        d = a.to_dict(level=level,resolve_ops=resolve_ops)
         b = yastn.Tensor.from_dict(d)
         assert b.is_consistent()
 
