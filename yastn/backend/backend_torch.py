@@ -16,7 +16,7 @@
 from itertools import groupby
 from functools import reduce
 import torch
-import torch.cuda as cuda
+import torch.cuda.nvtx as nvtx
 from torch.utils.checkpoint import checkpoint as _checkpoint
 
 import torch.multiprocessing as mp
@@ -30,7 +30,7 @@ from ._backend_torch_backwards import kernel_transpose, kernel_transpose_and_mer
 
 
 __all__= ['DTYPE', 'get_dtype', 'get_yastn_dtype',
-    'cuda_is_available', 'get_device', 'move_to', 
+    'nvtx', 'cuda_is_available', 'get_device', 'move_to', 
     'grad', 'requires_grad_', 'requires_grad', 'detach', 'detach_', 'clone', 'copy', 'checkpoint', 
     'random_seed', 'randint',
     'to_numpy', 'get_shape', 'get_size', 'diag_create', 'diag_get', 'real', 'is_complex', 'conj',
