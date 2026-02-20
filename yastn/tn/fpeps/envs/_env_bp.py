@@ -71,8 +71,8 @@ class EnvBP():
         return self._which
 
     def _set_which(self, which):
-        if which not in ('NNN+BP', 'NN+BP', 'BP', 'Ladder+BP'):
-            raise YastnError(f" Type of EnvBP bond_metric {which=} not recognized.")
+        if which not in ('NNN+BP', 'NN+BP', 'BP') and "ladder" not in which.lower():
+            raise YastnError(f"Type of EnvBP bond_metric {which=} not recognized.")
         self._which = which
 
     which = property(fget=_get_which, fset=_set_which)
@@ -543,43 +543,50 @@ class EnvBP():
             return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
         #
-        if dirn in ("h", "lr") and self.which == "Ladder+BP":
-            assert self.psi.nn_site(s0, (0, 1)) == s1
+        if dirn in ("h", "lr") and "ladder" in self.which.lower():
+            digits = ''.join(c for c in self.which if c.isdigit())
+            nn = int(digits) if digits else 2
 
-            m = {d: self.psi.nn_site(s0, d=d) for d in [(-2,0), (-2,1), (-1,0), (-1,1), (1,0), (1,1), (2,0), (2,1)]}
+            assert self.psi.nn_site(s0, (0, 1)) == s1
+            sites = []
+            for ii in range(1, nn + 1):
+                sites.extend([(-ii, 0), (-ii, 1), (ii, 0), (ii, 1)])
+
+            m = {d: self.psi.nn_site(s0, d=d) for d in sites}
             mm = dict(m)  # for testing for None
             tensors_from_psi(m, self.psi)
             m = {k: (v.ket if isinstance(v, DoublePepsTensor) else v) for k, v in m.items()}
 
-            sm = mm[-2, 0]
-            ctl = cor_tl(m[-2, 0]) if sm is None else cor_tl(m[-2, 0], ht=self[sm].t, hl=self[sm].l)
-            sm = mm[-2, 1]
-            ctr = cor_tr(m[-2, 1]) if sm is None else cor_tr(m[-2, 1], ht=self[sm].t, hr=self[sm].r)
-            sm = mm[ 2, 1]
-            cbr = cor_br(m[ 2, 1]) if sm is None else cor_br(m[ 2, 1], hb=self[sm].b, hr=self[sm].r)
-            sm = mm[ 2, 0]
-            cbl = cor_bl(m[ 2, 0]) if sm is None else cor_bl(m[ 2, 0], hb=self[sm].b, hl=self[sm].l)
+            ctl = cor_tl(m[-nn, 0]) if mm[-nn, 0] is None else cor_tl(m[-nn, 0], ht=self[mm[-nn, 0]].t, hl=self[mm[-nn, 0]].l)
+            ctr = cor_tr(m[-nn, 1]) if mm[-nn, 1] is None else cor_tr(m[-nn, 1], ht=self[mm[-nn, 1]].t, hr=self[mm[-nn, 1]].r)
+            cbr = cor_br(m[ nn, 1]) if mm[ nn, 1] is None else cor_br(m[ nn, 1], hb=self[mm[ nn, 1]].b, hr=self[mm[ nn, 1]].r)
+            cbl = cor_bl(m[ nn, 0]) if mm[ nn, 0] is None else cor_bl(m[ nn, 0], hb=self[mm[ nn, 0]].b, hl=self[mm[ nn, 0]].l)
 
-            sm = mm[-1, 0]
-            env_tl = edge_l(m[-1, 0]) if sm is None else edge_l(m[-1, 0], hl=self[sm].l)
-            sm = mm[-1, 1]
-            env_tr = edge_r(m[-1, 1]) if sm is None else edge_r(m[-1, 1], hr=self[sm].r)
+            env_tl = {ii: edge_l(m[-ii, 0]) if mm[-ii, 0] is None else edge_l(m[-ii, 0], hl=self[mm[-ii, 0]].l) for ii in range(1, nn)}
+            env_tr = {ii: edge_r(m[-ii, 1]) if mm[-ii, 1] is None else edge_r(m[-ii, 1], hr=self[mm[-ii, 1]].r) for ii in range(1, nn)}
+            env_br = {ii: edge_r(m[ ii, 1]) if mm[ ii, 1] is None else edge_r(m[ ii, 1], hr=self[mm[ ii, 1]].r) for ii in range(1, nn)}
+            env_bl = {ii: edge_l(m[ ii, 0]) if mm[ ii, 0] is None else edge_l(m[ ii, 0], hl=self[mm[ ii, 0]].l) for ii in range(1, nn)}
 
             env_l = edge_l(Q0, hl=self[0, 0].l)  # [bl bl'] [rr rr'] [tl tl']
             env_r = edge_r(Q1, hr=self[0, 1].r)  # [tr tr'] [ll ll'] [br br']
 
-            sm = mm[1, 1]
-            env_br = edge_r(m[1, 1]) if sm is None else edge_r(m[1, 1], hr=self[sm].r)
-            sm = mm[1, 0]
-            env_bl = edge_l(m[1, 0]) if sm is None else edge_l(m[1, 0], hl=self[sm].l)
+            et = ctl @ ctr
+            eb = cbr @ cbl
+            for ii in range(1, nn):
+                et = ncon([et, env_tl[ii], env_tr[ii]], [[1, 3], [-0, 2, 1], [3, 2, -1]])
+                eb = ncon([eb, env_br[ii], env_bl[ii]], [[1, 3], [-0, 2, 1], [3, 2, -1]])
+            g = ncon([eb, env_l, et, env_r], [[3, 2], [2, -0, 1], [1, 4], [4, -1, 3]])
 
-            g = ncon((ctl, ctr, env_tl, env_tr, cbr, cbl, env_br, env_bl, env_l, env_r),
-                     ((2, 1), (1, 3), (9, 4, 2), (3, 4, 11), (8, 5), (5, 6), (12, 7, 8), (6, 7, 10), (10, -0, 9), (11, -1, 12)))
-
-        if dirn in ("v", "tb") and self.which == "Ladder+BP":
+        if dirn in ("v", "tb") and "ladder" in self.which.lower():
+            digits = ''.join(c for c in self.which if c.isdigit())
+            nn = int(digits) if digits else 2
 
             assert self.psi.nn_site(s0, (1, 0)) == s1
-            m = {d: self.psi.nn_site(s0, d=d) for d in [(0,-2), (1,-2), (0,-1), (1,-1), (1,1), (0,1), (1,2), (0,2)]}
+            sites = []
+            for ii in range(1, nn + 1):
+                sites.extend([(0, -ii), (1, -ii), (0, ii), (1, ii)])
+
+            m = {d: self.psi.nn_site(s0, d=d) for d in sites}
             mm = dict(m)  # for testing for None
             tensors_from_psi(m, self.psi)
             m = {k: (v.ket if isinstance(v, DoublePepsTensor) else v) for k, v in m.items()}
@@ -587,26 +594,22 @@ class EnvBP():
             env_t = edge_t(Q0, ht=self[0, 0].t)  # [lt lt'] [bb bb'] [rt rt']
             env_b = edge_b(Q1, hb=self[1, 0].b)  # [rb rb'] [tt tt'] [lb lb']
 
-            sm = mm[0, -1]
-            env_tl = edge_t(m[0,-1]) if sm is None else edge_t(m[0,-1], ht=self[sm].t)
-            sm = mm[1, -1]
-            env_bl = edge_b(m[1,-1]) if sm is None else edge_b(m[1,-1], hb=self[sm].b)
-            sm = mm[0, 1]
-            env_tr = edge_t(m[0, 1]) if sm is None else edge_t(m[0, 1], ht=self[sm].t)
-            sm = mm[1, 1]
-            env_br = edge_b(m[1, 1]) if sm is None else edge_b(m[1, 1], hb=self[sm].b)
+            cbl = cor_bl(m[1, -nn]) if mm[1, -nn] is None else cor_bl(m[1, -nn], hb=self[mm[1, -nn]].b, hl=self[mm[1, -nn]].l)
+            ctl = cor_tl(m[0, -nn]) if mm[0, -nn] is None else cor_tl(m[0, -nn], ht=self[mm[0, -nn]].t, hl=self[mm[0, -nn]].l)
+            ctr = cor_tr(m[0,  nn]) if mm[0,  nn] is None else cor_tr(m[0,  nn], ht=self[mm[0,  nn]].t, hr=self[mm[0,  nn]].r)
+            cbr = cor_br(m[1,  nn]) if mm[1,  nn] is None else cor_br(m[1,  nn], hb=self[mm[1,  nn]].b, hr=self[mm[1,  nn]].r)
 
-            sm = mm[1, -2]
-            cbl = cor_bl(m[1, -2]) if sm is None else cor_bl(m[1, -2], hb=self[sm].b, hl=self[sm].l)
-            sm = mm[0, -2]
-            ctl = cor_tl(m[0, -2]) if sm is None else cor_tl(m[0, -2], ht=self[sm].t, hl=self[sm].l)
-            sm = mm[0,  2]
-            ctr = cor_tr(m[0,  2]) if sm is None else cor_tr(m[0,  2], ht=self[sm].t, hr=self[sm].r)
-            sm = mm[1,  2]
-            cbr = cor_br(m[1,  2]) if sm is None else cor_br(m[1,  2], hb=self[sm].b, hr=self[sm].r)
+            env_tl = {ii: edge_t(m[0, -ii]) if mm[0, -ii] is None else edge_t(m[0, -ii], ht=self[mm[0, -ii]].t) for ii in range(1, nn)}
+            env_bl = {ii: edge_b(m[1, -ii]) if mm[1, -ii] is None else edge_b(m[1, -ii], hb=self[mm[1, -ii]].b) for ii in range(1, nn)}
+            env_tr = {ii: edge_t(m[0,  ii]) if mm[0,  ii] is None else edge_t(m[0,  ii], ht=self[mm[0,  ii]].t) for ii in range(1, nn)}
+            env_br = {ii: edge_b(m[1,  ii]) if mm[1,  ii] is None else edge_b(m[1,  ii], hb=self[mm[1,  ii]].b) for ii in range(1, nn)}
 
-            g = ncon((cbl, ctl, env_bl, env_tl, ctr, cbr, env_tr, env_br, env_t, env_b),
-                     ((2, 1), (1, 3), (11, 4, 2), (3, 4, 9), (8, 5), (5, 6), (10, 7, 8), (6, 7, 12), (9, -0, 10), (12, -1, 11)))
+            el = cbl @ ctl
+            er = ctr @ cbr
+            for ii in range(1, nn):
+                el = ncon([el, env_bl[ii], env_tl[ii]], [[1, 3], [-0, 2, 1], [3, 2, -1]])
+                er = ncon([er, env_tr[ii], env_br[ii]], [[1, 3], [-0, 2, 1], [3, 2, -1]])
+            g = ncon([el, env_t, er, env_b], [[4, 1], [1, -0, 2], [2, 3], [3, -1, 4]])
 
         return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 

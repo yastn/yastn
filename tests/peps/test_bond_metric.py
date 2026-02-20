@@ -64,7 +64,7 @@ def test_spinless_infinite_approx(config_kwargs):
 
         Gs = {'FU': env_CTM.bond_metric(QA, QB, s0, s1, dirn).g}
 
-        for k in ['NN', 'NN+', 'NN++', 'NNN', 'NNN+', 'NNN++', 'Ladder']:
+        for k in ['NN', 'NN+', 'NN++', 'NNN', 'NNN+', 'NNN++', 'Ladder1', 'Ladder2', 'Ladder3', 'Ladder']:
             env_NTU.which = k
             assert env_NTU.which == k
             Gs[k] = env_NTU.bond_metric(QA, QB, s0, s1, dirn).g
@@ -74,7 +74,7 @@ def test_spinless_infinite_approx(config_kwargs):
             assert env_MPS.which == k
             Gs[k] = env_MPS.bond_metric(QA, QB, s0, s1, dirn).g
 
-        for k in ['NN+BP', 'NNN+BP', 'Ladder+BP']:
+        for k in ['NN+BP', 'NNN+BP', 'Ladder+BP', 'Ladder1+BP', 'Ladder2+BP', 'Ladder3+BP']:
             env_BP.which = k
             assert env_BP.which == k
             Gs[k] = env_BP.bond_metric(QA, QB, s0, s1, dirn).g
@@ -95,13 +95,14 @@ def test_spinless_infinite_approx(config_kwargs):
         assert (Gs['NN+BP'] - Gs['FU']).norm() < 1e-3
         assert (Gs['NN+BP'] - Gs['NN+']).norm() < 1e-2
         assert (Gs['NNN+BP'] - Gs['NNN+']).norm() < 1e-3
-        assert (Gs['NN+BP'] - Gs['Ladder+BP']).norm() < 1e-4
-        assert (Gs['NN'] - Gs['Ladder']).norm() < 1e-3
-
-
-    with pytest.raises(yastn.YastnError):
-        fpeps.EnvNTU(psi, which="some")
-        #  Type of EnvNTU which='some' not recognized.
+        assert (Gs['NN+BP'] - Gs['Ladder2+BP']).norm() < 1e-4
+        assert (Gs['NN'] - Gs['Ladder2']).norm() < 1e-3
+        assert (Gs['Ladder2'] - Gs['Ladder']).norm() < 1e-10
+        assert (Gs['Ladder2+BP'] - Gs['Ladder+BP']).norm() < 1e-10
+        assert (Gs['Ladder1'] - Gs['NN']).norm() < 1e-10
+        assert (Gs['Ladder1+BP'] - Gs['NN+BP']).norm() < 1e-6
+        assert (Gs['Ladder2'] - Gs['Ladder3']).norm() < 1e-4
+        assert (Gs['Ladder2+BP'] - Gs['Ladder3+BP']).norm() < 1e-4
 
     with pytest.raises(yastn.YastnError):
         fpeps.EnvApproximate(psi, which="some")
@@ -110,6 +111,9 @@ def test_spinless_infinite_approx(config_kwargs):
     with pytest.raises(yastn.YastnError):
         fpeps.EnvBP(psi, which="some")
         # Type of EnvBP bond_metric which='some' not recognized.
+
+    with pytest.raises(yastn.YastnError):
+        fpeps.EnvNTU(psi, which="some")
 
 
 if __name__ == '__main__':
