@@ -567,8 +567,8 @@ class EnvBP():
             env_br = {ii: edge_r(m[ ii, 1]) if mm[ ii, 1] is None else edge_r(m[ ii, 1], hr=self[mm[ ii, 1]].r) for ii in range(1, nn)}
             env_bl = {ii: edge_l(m[ ii, 0]) if mm[ ii, 0] is None else edge_l(m[ ii, 0], hl=self[mm[ ii, 0]].l) for ii in range(1, nn)}
 
-            env_l = edge_l(Q0, hl=self[0, 0].l)  # [bl bl'] [rr rr'] [tl tl']
-            env_r = edge_r(Q1, hr=self[0, 1].r)  # [tr tr'] [ll ll'] [br br']
+            env_l = edge_l(Q0, hl=self[s0].l)  # [bl bl'] [rr rr'] [tl tl']
+            env_r = edge_r(Q1, hr=self[s1].r)  # [tr tr'] [ll ll'] [br br']
 
             et = ctl @ ctr
             eb = cbr @ cbl
@@ -591,8 +591,8 @@ class EnvBP():
             tensors_from_psi(m, self.psi)
             m = {k: (v.ket if isinstance(v, DoublePepsTensor) else v) for k, v in m.items()}
 
-            env_t = edge_t(Q0, ht=self[0, 0].t)  # [lt lt'] [bb bb'] [rt rt']
-            env_b = edge_b(Q1, hb=self[1, 0].b)  # [rb rb'] [tt tt'] [lb lb']
+            env_t = edge_t(Q0, ht=self[s0].t)  # [lt lt'] [bb bb'] [rt rt']
+            env_b = edge_b(Q1, hb=self[s1].b)  # [rb rb'] [tt tt'] [lb lb']
 
             cbl = cor_bl(m[1, -nn]) if mm[1, -nn] is None else cor_bl(m[1, -nn], hb=self[mm[1, -nn]].b, hl=self[mm[1, -nn]].l)
             ctl = cor_tl(m[0, -nn]) if mm[0, -nn] is None else cor_tl(m[0, -nn], ht=self[mm[0, -nn]].t, hl=self[mm[0, -nn]].l)
