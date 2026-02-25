@@ -41,7 +41,7 @@ def _convert_path_to_ncon_args(*args, **kwargs):
     # or, case II, there is a single extra index group at the end specifying output indices
     # case II
     tensors= args[0 : 2 * (len(args) // 2) : 2]
-    in_igs= list(args[1 : 2 * (len(args) // 2) : 2])
+    in_igs= list(list(ig) for ig in args[1 : 2 * (len(args) // 2) : 2] )
     if len(args) % 2 == 1:
         out_ig= args[-1]
     else:
