@@ -484,33 +484,21 @@ def real_to_complex(z):      # real vector of length 2n -> complex of length n
 def complex_to_real(z):      # complex vector of length n -> real of length 2n
     return np.concatenate((np.real(z), np.imag(z)))
 
-
-def compute_env_gauge_product(env, zero_modes_dict, cs_dict):
-    # Given sigma matrices formed by cs_dict and zero_modes_dict, compute sigma-conjugated env tensors.
-    # env_gauge, phases_ind = {}, {}
-    env_gauge, phases_ind = EnvGauge(env.geometry), {}
-    ind = 0
-    fixed_env = env.copy()
+def generate_gauge_sigma(env, zero_modes_dict):
+    env_gauge = EnvGauge(env.geometry)
     for site in env.sites():
         sigma_list = []
         site_ind = env.site2index(site)
-        cs = cs_dict[site_ind]
-        for i, dirn in enumerate(["t", "l", "b", "r"]):
-            dtype = "complex128" if zero_modes_dict[(site_ind, dirn)][0].dtype is torch.complex128 else "float64"
-            zero_mode = zeros(zero_modes_dict[(site_ind, dirn)][0].config, legs=zero_modes_dict[(site_ind, dirn)][0].get_legs(), dtype=dtype)
-            for j in range(len(cs[i])):
-                zero_mode += cs[i][j] * zero_modes_dict[(site_ind, dirn)][j]
-            phases_ind[(site_ind, dirn)] = ind
-            sigma_list.append(zero_mode)
-            ind += 1
+        for dirn in ["t", "l", "b", "r"]:
+            sigma_list.append(zero_modes_dict[(site_ind, dirn)][0])
         env_gauge[site] = Gauge(*sigma_list)
+    return env_gauge
 
+def apply_sigma(env, env_gauge):
+    # Given sigma matrices given by the env_gauge, compute sigma-conjugated env tensors.
+    fixed_env = env.copy()
     for site in env.sites():
-        # site_ind = env.site2index(site)
-        # site_t, site_l, site_b, site_r = env.site2index(env.nn_site(site, "t")), env.site2index(env.nn_site(site, "l")), env.site2index(env.nn_site(site, "b")), env.site2index(env.nn_site(site, "r"))
-
         site_t, site_l, site_b, site_r = env.nn_site(site, "t"), env.nn_site(site, "l"), env.nn_site(site, "b"), env.nn_site(site, "r")
-
         sigma1_t, sigma1_l, sigma1_b, sigma1_r = env_gauge[site].t, env_gauge[site].l, env_gauge[site].b, env_gauge[site].r
         sigma2_l, sigma2_b, sigma2_r, sigma2_t = env_gauge[site_t].l, env_gauge[site_l].b, env_gauge[site_b].r, env_gauge[site_r].t
         for dirn in ["t", "l", "b", "r"]:
@@ -560,229 +548,31 @@ def compute_env_gauge_product(env, zero_modes_dict, cs_dict):
                 )
             setattr(fixed_env[site], dirn, fixed_C)
 
-    return env_gauge, phases_ind, fixed_env
+    return fixed_env
 
-def phase_loss(phases, env_old, fixed_env, phases_ind):
-    exp_phases = torch.exp(1j * phases)
-    exp_phases = torch.cat((exp_phases.new_ones(1), exp_phases))   #   … + an extra ‘1’
+def extract_phase(v1, v2):
+    # Given v1 = v2 e^{1j * phi}, find phi.
+    v1, v2 = torch.as_tensor(v1, dtype=torch.complex128), torch.as_tensor(v2, dtype=torch.complex128)
+    c = torch.dot(v1, v2.conj())
+    return torch.angle(c)
 
-    # gather all indices / tensors that never change during optimisation
-    sites      = env_old.sites()
-    n_sites    = len(sites)
-    cardinal = ("t", "l", "b", "r")          # 4 legs  (order fixed)
-    corner   = ("tl", "bl", "br", "tr")      # 4 corners (order fixed)
+def U1_phase(env_old, fixed_env):
+    phases_dict = {}
+    for site in env_old.sites():
+        for dirn in ["tl", "bl", "br", "tr", "t", "l", "b", "r"]:
+            v1, v2 = getattr(env_old[site], dirn)._data, getattr(fixed_env[site], dirn)._data
+            phase = extract_phase(v1, v2)
+            phases_dict[(env_old.site2index(site), dirn)] = phase
+    return phases_dict
 
-    # indices for phase factors
-    phase1_idx = torch.tensor(
-        [phases_ind[(env_old.site2index(s), d)]      # (site, dir)
-        for s in sites for d in cardinal],
-        dtype=torch.long
-    )
-
-    neigh_map = {
-        "t": lambda s: (env_old.site2index(env_old.nn_site(s, "r")), "t"),
-        "l": lambda s: (env_old.site2index(env_old.nn_site(s, "t")), "l"),
-        "b": lambda s: (env_old.site2index(env_old.nn_site(s, "l")), "b"),
-        "r": lambda s: (env_old.site2index(env_old.nn_site(s, "b")), "r"),
-    }
-    phase2_idx = torch.tensor(
-        [phases_ind[neigh_map[d](s)]
-        for s in sites for d in cardinal],
-        dtype=torch.long
-    )
-
-    fixed_T = [getattr(fixed_env[s], d) for s in sites for d in cardinal]
-    T_old = [getattr(env_old[s], d) for s in sites for d in cardinal]
-    fixed_C = [getattr(fixed_env[s], d) for s in sites for d in corner]
-    C_old   = [getattr(env_old[s], d) for s in sites for d in corner]
-
-    phase1 = exp_phases[phase1_idx].view(n_sites, 4)      # (N,4)
-    phase2 = exp_phases[phase2_idx].view(n_sites, 4)      # (N,4)
-
-    # compute loss
-    # loss_T, loss_C = torch.zeros(1, dtype=torch.float64), torch.zeros(1, dtype=torch.float64)
-    # for i in range(n_sites):
-    #     for j in range(4):
-    #         diff_T = phase1[i][j].conj() * fixed_T[4*i+j] * phase2[i][j] - T_old[4*i+j]
-    #         loss_T += diff_T.norm(p='fro')**2
-
-
-    # prepare the phases used for contracting the corners
-    # phase1_c = phase1
-    # phase2_c = torch.roll(phase2, shifts=-1, dims=1) # [t l b r] -> [l b r t]
-
-    # for i in range(n_sites):
-    #     for j in range(4):
-    #         diff_C = phase2_c[i][j].conj() * fixed_C[4*i+j] * phase1_c[i][j] - C_old[4*i+j]
-    #         loss_C += diff_C.norm(p='fro')**2
-
-    # ---vectorized_version
-    fixed_T_1D, T_old_1D = torch.cat([T._data for T in fixed_T]), torch.cat([T._data for T in T_old])
-    lengths = torch.tensor([len(T._data) for T in fixed_T], dtype=torch.long, device=phases.device)
-    phase1_1D, phase2_1D = torch.repeat_interleave(torch.flatten(phase1), lengths), torch.repeat_interleave(torch.flatten(phase2), lengths)
-    loss_T= (fixed_T_1D * phase1_1D.conj() * phase2_1D - T_old_1D).norm(p='fro')**2
-
-    phase1_c = phase1
-    phase2_c = torch.roll(phase2, shifts=-1, dims=1) # [t l b r] -> [l b r t]
-    fixed_C_1D, C_old_1D = torch.cat([C._data for C in fixed_C]), torch.cat([C._data for C in C_old])
-    lengths = torch.tensor([len(C._data) for C in fixed_C], dtype=torch.long, device=phases.device)
-    phase1_c_1D, phase2_c_1D = torch.repeat_interleave(torch.flatten(phase1_c), lengths), torch.repeat_interleave(torch.flatten(phase2_c), lengths)
-    loss_C= (fixed_C_1D * phase2_c_1D.conj() * phase1_c_1D - C_old_1D).norm(p='fro')**2
-
-    return loss_T + loss_C
-
-def phase_init_choice(phases, env_old, fixed_env, phases_ind):
-    phases = np.concatenate((np.array([0.0]), phases))  # add an extra '1' phase
-    is_fixed = np.zeros(len(phases), dtype=bool)
-    is_fixed[0] = True  # the first phase is fixed to 1
-
-    # gather all indices / tensors that never change during optimisation
-    sites      = env_old.sites()
-    # indices for phase factors
-
-    T_neigh_map = {
-        "t": lambda s: (env_old.nn_site(s, "r"), "t", "t"),
-        "l": lambda s: (env_old.nn_site(s, "t"), "l", "l"),
-        "b": lambda s: (env_old.nn_site(s, "l"), "b", "b"),
-        "r": lambda s: (env_old.nn_site(s, "b"), "r", "r"),
-    }
-    C_neigh_map = {
-        "t": lambda s: (env_old.nn_site(s, "t"), "l", "tl"),
-        "l": lambda s: (env_old.nn_site(s, "l"), "b", "bl"),
-        "b": lambda s: (env_old.nn_site(s, "b"), "r", "br"),
-        "r": lambda s: (env_old.nn_site(s, "r"), "t", "tr"),
-    }
-
-
-    def extract_phase(v1, v2):
-        # Given v1 = v2 e^{1j * phi}, find phi.
-        v1, v2 = torch.as_tensor(v1, dtype=torch.complex128), torch.as_tensor(v2, dtype=torch.complex128)
-        c = torch.dot(v1, v2.conj())
-        return torch.angle(c)
-
-    # BFS
-    queue = [(sites[0], "t")]  # start from the first site and direction 't'
-    while len(queue) > 0:
-        site, dirn = queue.pop(0)
-        new_site, new_dirn, env_dirn = T_neigh_map[dirn](site)
-        ind, ind_new = phases_ind[(env_old.site2index(site), dirn)], phases_ind[(env_old.site2index(new_site), new_dirn)]
-        if not is_fixed[ind_new]:
-            phases[ind_new] = extract_phase(np.exp(1j*phases[ind])*getattr(env_old[site], env_dirn)._data, getattr(fixed_env[site], env_dirn)._data)
-            is_fixed[ind_new] = True
-            queue.append((new_site, new_dirn))
-
-        new_site, new_dirn, env_dirn = C_neigh_map[dirn](site)
-        ind, ind_new = phases_ind[(env_old.site2index(site), dirn)], phases_ind[(env_old.site2index(new_site), new_dirn)]
-        if not is_fixed[ind_new]:
-            phases[ind_new] = extract_phase(np.exp(1j*phases[ind])*getattr(fixed_env[site], env_dirn)._data, getattr(env_old[site], env_dirn)._data)
-            is_fixed[ind_new] = True
-            queue.append((new_site, new_dirn))
-
-
-    return phases[1:]
-
-def phase_loss_and_grad(phases, env_old, fixed_env, phases_ind):
-    device = env_old[(0, 0)].t.device
-    phases = torch.as_tensor(phases, dtype=torch.float64, device=device).requires_grad_(True)
-    with torch.enable_grad():
-        loss = phase_loss(phases, env_old, fixed_env, phases_ind)
-
-    loss.backward()
-    grad = phases.grad.detach().cpu().numpy()
-    return loss.item(), grad
-
-def unitary_loss(cs_data, env, zero_modes_dict, dtype=torch.complex128):
-    loss = 0.0
-    # assemble unitaries
-    ind = 0
+def apply_U1_(env, phases_dict):
     for site in env.sites():
         site_ind = env.site2index(site)
-        for i, dirn in enumerate(("t", "l", "b", "r")):
-            legs = zero_modes_dict[(site_ind, dirn)][0].get_legs()
-            identity = diag(eye(config=zero_modes_dict[(site_ind, dirn)][0].config, legs=(legs[0], legs[0].conj())))
-            unitary = zeros(config=zero_modes_dict[(site_ind, dirn)][0].config, legs=legs, dtype='complex128' if dtype is torch.complex128 else 'float64')
-            for j in range(len(zero_modes_dict[(site_ind, dirn)])):
-                unitary = unitary + cs_data[ind] * zero_modes_dict[(site_ind, dirn)][j]
-                ind += 1
-            loss += ((tensordot(unitary, unitary, axes=(1, 1), conj=(0, 1)) - identity).norm(p='fro')**2/ identity.norm(p='fro')**2).item().real
-    return loss
-
-def find_coeff_multi_sites(env_old, env, zero_modes_dict, dtype=torch.complex128, verbose=False):
-    # Fix the relative U(1) phases associated with the sigma matrices.
-
-    if dtype == torch.complex128:
-        cs_data = []
-        ind2row = {}
-        start = 0
-        for site in env.sites():
-            site_ind = env.site2index(site)
-            num = 0
-            for dirn in ("t", "l", "b", "r"):
-                cs_data.append(np.ones(len(zero_modes_dict[(site_ind, dirn)]), dtype=np.complex128))
-                num += len(zero_modes_dict[(site_ind, dirn)])
-            ind2row[site_ind] = slice(start, start+num)
-            start += num
-        cs_data = np.concatenate(cs_data)
-        res = minimize(fun=lambda z: unitary_loss(real_to_complex(z), env, zero_modes_dict, dtype), x0=complex_to_real(cs_data),\
-                       jac='3-point', method='SLSQP', options={"eps":1e-9, "ftol":1e-14})
-        res = real_to_complex(res.x)
-    else:
-        cs_data = []
-        ind2row = {}
-        start = 0
-        for site in env.sites():
-            site_ind = env.site2index(site)
-            num = 0
-            for dirn in ("t", "l", "b", "r"):
-                cs_data.append(np.ones(len(zero_modes_dict[(site_ind, dirn)]), dtype=np.float64))
-                num += len(zero_modes_dict[(site_ind, dirn)])
-            ind2row[site_ind] = slice(start, start+num)
-            start += num
-        cs_data = np.concatenate(cs_data)
-        res = minimize(fun=unitary_loss, x0=cs_data,
-                       args=(env, zero_modes_dict, dtype), jac='3-point', method='SLSQP', options={"eps":1e-9, "ftol":1e-14})
-        res = res.x
-
-    cs_dict = {}
-    ind = 0
-    for site in env.sites():
-        cs = []
-        site_ind = env.site2index(site)
-        for i, dirn in enumerate(("t", "l", "b", "r")):
-            cs.append(np.array(res[ind:ind+len(zero_modes_dict[(site_ind, dirn)])]))
-            ind += len(zero_modes_dict[(site_ind, dirn)])
-        cs_dict[env.site2index(site)] = cs
-    start = time.time()
-    _, phases_ind, fixed_env = compute_env_gauge_product(env, zero_modes_dict, cs_dict)
-    init_phases = np.zeros(4*len(cs_dict)-1)
-    phases = phase_init_choice(init_phases, env_old, fixed_env, phases_ind)
-    # res = minimize(fun=phase_loss_and_grad, x0=phases, args=(env_old, fixed_env, phases_ind), jac=True, method='SLSQP', options={"ftol":1e-14, "maxiter":1000})
-    # phases = res.x
-    end = time.time()
-    if verbose:
-        # print(f"Fixing phase takes {end-start:.1f}s with loss fn ", res.fun)
-        print(f"Fixing phase takes {end-start:.1f}s with loss fn ", phase_loss_and_grad(phases, env_old, fixed_env, phases_ind)[0])
-        print("phases: ", phases)
-
-    # assemble the coefficients dict
-    if isinstance(phases, torch.Tensor):
-        exp_phases = torch.exp(1j*phases).to(dtype)
-        exp_phases = torch.cat((exp_phases.new_ones(1), exp_phases))   #   … + an extra ‘1’
-    else:
-        if dtype == torch.complex128:
-            exp_phases = np.exp(1j*phases).astype(np.complex128)
-        else:
-            exp_phases = np.exp(1j*phases).astype(np.float64)
-        exp_phases = np.concatenate((np.ones(1, dtype=exp_phases.dtype), exp_phases))   #   … + an extra ‘1’
-    ind = 0
-    for site in env.sites():
-        site_ind = env.site2index(site)
-        for i, dirn in enumerate(("t", "l", "b", "r")):
-            for j in range(len(zero_modes_dict[(site_ind, dirn)])):
-                cs_dict[site_ind][i][j] = cs_dict[site_ind][i][j] * exp_phases[ind]
-            ind += 1
-        cs_dict[site_ind] = torch.utils.checkpoint.detach_variable(tuple(cs_dict[site_ind]))
-    return cs_dict
+        for dirn in ["tl", "bl", "br", "tr", "t", "l", "b", "r"]:
+            phase = phases_dict[(site_ind, dirn)]
+            t = getattr(env[site], dirn)
+            t._data = t._data * torch.exp(1j*phase).to(t._data.dtype)
+            setattr(env[site], dirn, t)
 
 def find_gauge_multi_sites(env_old, env, verbose=False):
     zero_modes_dict = {}
@@ -802,14 +592,11 @@ def find_gauge_multi_sites(env_old, env, verbose=False):
                 return None
             zero_modes_dict[(site_ind, k)] = zero_modes
 
-    cs_dict = find_coeff_multi_sites(env_old, env, zero_modes_dict, dtype=zero_modes_dict[(0, "t")][0].dtype, verbose=verbose)
+    env_gauge = generate_gauge_sigma(env, zero_modes_dict)
+    fixed_env = apply_sigma(env, env_gauge)
+    phase_dict = U1_phase(env_old, fixed_env)
+    apply_U1_(fixed_env, phase_dict)
 
-    def is_diagonal(matrix, tol=1e-6):
-        print(torch.diag(matrix))
-        off_diag = matrix - torch.diag(torch.diag(matrix))  # Remove diagonal elements
-        return torch.all(torch.abs(off_diag) < tol)  # Check if all off-diagonal elements are near zero
-
-    env_gauge, _, fixed_env = compute_env_gauge_product(env, zero_modes_dict, cs_dict)
     if verbose:
         cardinal = ("t", "l", "b", "r")          # 4 legs  (order fixed)
         corner   = ("tl", "bl", "br", "tr")      # 4 corners (order fixed)
@@ -819,7 +606,7 @@ def find_gauge_multi_sites(env_old, env, verbose=False):
             for dirn in corner:
                 print("C diff:", (getattr(fixed_env[s], dirn) - getattr(env_old[s], dirn)).norm() / getattr(env_old[s], dirn).norm())
 
-    return env_gauge
+    return env_gauge, phase_dict
 
 
 def fp_ctmrg(env: EnvCTM, \
@@ -866,7 +653,7 @@ class FixedPoint(torch.autograd.Function):
         return rdms
 
     @staticmethod
-    def fixed_point_iter(env_gauge, ctm_opts_fp, env_dict, env_meta, env_slices, psi_meta, env_data, psi_data):
+    def fixed_point_iter(env_gauge, phase_dict, ctm_opts_fp, env_dict, env_meta, env_slices, psi_meta, env_data, psi_data):
         env_t_dict = _assemble_dict_from_1d(env_meta, env_data, env_slices)
         psi_dict = combine_data_and_meta(psi_data, psi_meta)
         env_dict['env'], env_dict['psi'] = env_t_dict, psi_dict
@@ -923,7 +710,7 @@ class FixedPoint(torch.autograd.Function):
                         axes=(1, 0),
                     )
                 setattr(env_in[site], dirn, fixed_C)
-
+        apply_U1_(env_in, phase_dict)
         env_out_dict = env_in.to_dict(level=0)
         env_t_data, _ = split_data_and_meta(env_out_dict['env'])
         return (_concat_data(env_t_data)[0], )
@@ -1018,7 +805,7 @@ class FixedPoint(torch.autograd.Function):
 
         # 3. Find the gauge transformation
         t0 = time.perf_counter()
-        env_gauge = find_gauge_multi_sites(env_converged, ctm_env_out, verbose=True)
+        env_gauge, phase_dict = find_gauge_multi_sites(env_converged, ctm_env_out, verbose=True)
         if env_gauge is None:
             raise NoFixedPointError(code=1, message="No fixed point found: fail to find the gauge matrix!")
         t1 = time.perf_counter()
@@ -1033,6 +820,7 @@ class FixedPoint(torch.autograd.Function):
         ctx.env_data_num = len(env_data)
         ctx.env_meta, ctx.g_meta = env_meta, g_meta
         ctx.ctm_opts_fp = _ctm_opts_fp
+        ctx.phase_dict = phase_dict
 
         # Note: one of the ouput of forward must be torch tensor to trigger backward
         env_t_data, env_t_meta = split_data_and_meta(env_dict['env'])
@@ -1062,7 +850,7 @@ class FixedPoint(torch.autograd.Function):
         # Compute vjp only
         with torch.enable_grad():
             time0 = time.perf_counter()
-            _, df_vjp = torch.func.vjp(lambda x,y: FixedPoint.fixed_point_iter(env_gauge, ctx.ctm_opts_fp, env_dict, _env_meta, _env_slices, _psi_meta, x, y), _env_ts, _psi_data)
+            _, df_vjp = torch.func.vjp(lambda x,y: FixedPoint.fixed_point_iter(env_gauge, ctx.phase_dict, ctx.ctm_opts_fp, env_dict, _env_meta, _env_slices, _psi_meta, x, y), _env_ts, _psi_data)
             time1 = time.perf_counter()
             log.info(f"{type(ctx).__name__}.backward t_vjp {time1-time0} [s]")
 
@@ -1089,7 +877,7 @@ class FixedPoint(torch.autograd.Function):
                     log.log(logging.INFO, f"Fixed_pt: The norm of the full grad diff is below {ctx.ctm_opts_fp['corner_tol']}.")
                     break
 
-                if grad_diff > diff_ave:
+                if grad_diff > 2*diff_ave:
                     # print("Full grad diff is no longer decreasing!")
                     log.log(logging.INFO, f"Fixed_pt: Full grad diff is no longer decreasing.")
                     break
