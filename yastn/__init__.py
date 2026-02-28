@@ -17,7 +17,7 @@ from ._from_dict import from_dict
 from ._split_combine_dict import *
 from .initialize import *
 from .krylov import *
-from .tensor.oe_blocksparse import get_contraction_path, contract_with_unroll
+from .tensor.oe_blocksparse import get_contraction_path, contract_with_unroll, SlicedLeg, make_sliced_legs
 from .tensor import *
 try:
     from ._version import version as __version__
