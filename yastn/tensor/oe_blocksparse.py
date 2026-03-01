@@ -1,4 +1,4 @@
-# Copyright 2024 The YASTN Authors. All Rights Reserved.
+# Copyright 2026 The YASTN Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,10 +20,7 @@ import time
 
 import numpy as np
 import opt_einsum as oe  # type: ignore
-from opt_einsum.contract import (  # type: ignore
-    PathInfo,
-    shape_only,
-)
+from opt_einsum.contract import PathInfo  # type: ignore
 try:
     from opt_einsum.contract import _VALID_CONTRACT_KWARGS
 except:
@@ -470,7 +467,7 @@ def _log_input_mem_size(shapes : tuple[tuple[int]],names=None,who=None,**kwargs)
         log.info(f"{who} total size {sum(np.asarray(t).prod() for t in shapes)}")
 
 
-def get_contraction_path(*tn_to_contract, unroll=[], names=None, who=None, **kwargs):
+def get_contraction_path(*tn_to_contract, unroll=None, names=None, who=None, **kwargs):
     r"""Returns optimal contraction path for tensor network contraction specified in interleaved
     format. Takes into account unrolled indices if any.
 
@@ -491,8 +488,41 @@ def get_contraction_path(*tn_to_contract, unroll=[], names=None, who=None, **kwa
     #      Here, we pass shape of the underlying 1D data array
     _log_input_mem_size(tuple(tuple(t._data.shape) for t in tn_to_contract[:-1][0::2]),names=names,who=who,**kwargs)
 
+    if isinstance(unroll, list):
+        raise ValueError(
+            "unroll must be a dict or None, got a list. "
+            "Pass unroll=None (or omit) for no unrolling, or a dict mapping labels to SlicedLegs."
+        )
+
+    if isinstance(unroll, dict) and unroll:
+        tensors_orig = tn_to_contract[0 : 2 * (len(tn_to_contract) // 2) : 2]
+        igs = list(tn_to_contract[1 : 2 * (len(tn_to_contract) // 2) : 2])
+        out_ig = tn_to_contract[-1]
+
+        rep_tensors = list(tensors_orig)
+        for k, (t, ig) in enumerate(zip(tensors_orig, igs)):
+            for label, sliced_legs in unroll.items():
+                if label in ig:
+                    user_ax = list(ig).index(label)
+                    full_leg = rep_tensors[k].get_legs(user_ax)
+                    rep_sl = max(sliced_legs, key=lambda sl: sum(sl.D))
+                    mask_t = _build_mask_tensor(rep_sl, full_leg, rep_tensors[k].config)
+                    candidate = mask_t.apply_mask(rep_tensors[k], axes=user_ax)
+                    if candidate.struct.t:          # non-empty after masking
+                        rep_tensors[k] = candidate  # else keep current (fallback)
+
+        rep_args = []
+        for t, ig in zip(rep_tensors, igs):
+            rep_args.extend([t, ig])
+        rep_args.append(out_ig)
+        tn_for_path = tuple(rep_args)
+        unroll_for_path = list(unroll.keys())
+    else:
+        tn_for_path = tn_to_contract
+        unroll_for_path = []
+
     expr, shapes, unrolled_shapes = _preprocess_interleaved_to_expr_and_shapes(
-        *tn_to_contract, unroll=unroll if unroll else []
+        *tn_for_path, unroll=unroll_for_path
     )
 
     # TODO only shapes are used in performance model for contraction path search
@@ -725,13 +755,17 @@ def _get_contraction_path_info(path, *operands, **kwargs):
 
 
 def contract_with_unroll_compute_constants(*args, **kwargs):
-    r"""Extension of opt_einsum's contract allowing for index unrolling
-    and use of checkpointing over unrolled loop.
+    r"""Like :func:`contract_with_unroll`, but tensors that carry no unrolled
+    index (constants) are contracted together once before the loop starts.
+    Only the smaller variable sub-network is re-evaluated on every iteration,
+    avoiding repeated work.
 
-    :param args: input to einsum in interleaved format. Explicit index labeling
-                 of output is required
-    :param unroll: indices to unroll
-    :param checkpoint_unrolled:
+    Constant tensors that are disconnected in the network (share no index) are
+    pre-contracted independently, keeping each intermediate small.
+
+    :param args: interleaved format ``(T1, ig1, T2, ig2, ..., out_ig)``
+    :param unroll: dict mapping index labels to lists of :class:`SlicedLeg`
+    :param optimize: contraction path for the full network
     """
     verbosity = kwargs.get("verbosity", 0)
     checkpoint_on_device = kwargs.pop("checkpoint_on_device",False)
@@ -745,136 +779,127 @@ def contract_with_unroll_compute_constants(*args, **kwargs):
         def _core_f(*ts):
             ts_moved= (x.to(device=checkpoint_on_device) for x in ts)
             args_moved= tuple(a for t_ig in zip(ts_moved,igs) for a in t_ig) + (args[-1],) if len(args)%2==1 else ()
-            res= contract_with_unroll(*args_moved,**kwargs)
+            res= contract_with_unroll_compute_constants(*args_moved,**kwargs)
             return res.to(device=source_device)
 
         res= checkpoint(_core_f,*ts)
         if verbosity>0:
-            log.info("After checkpointed contract_with_unroll_mode2\n"
+            log.info("After checkpointed contract_with_unroll_compute_constants\n"
                 +_debug_allocated_tensors(device=checkpoint_on_device,totals_only=True)
             )
         return res
 
-    who = kwargs.pop("who","unknown")
-    verbosity = kwargs.pop("verbosity", 0)
-    unroll = kwargs.pop("unroll", [])
-    checkpoint_unrolled = kwargs.pop("checkpoint_unrolled", False)
+    kwargs.pop("who", None)
+    kwargs.pop("verbosity", None)
+    kwargs.pop("checkpoint_unrolled", None)
+    unroll = kwargs.pop("unroll", None)
 
-    if not unroll or len(unroll) == 0:
+    if isinstance(unroll, list):
+        raise ValueError(
+            "contract_with_unroll_compute_constants: unroll must be a dict, got a list. "
+            "Pass unroll=None (or omit) for no unrolling, or a dict mapping labels to SlicedLegs."
+        )
+
+    if unroll is None:
         return oe.contract(*args, **kwargs)
 
-    # We are unrolling. In general, there will be several constant
-    # tensors among the individual unrolled calls.
-    # Strategy is to build opt_einsum's ContractExpression, which makes use of these
-    # constants
-    #
-    # Although contract supports interleaved format in general, in _gen_expression mode
-    # the default subscript format is expected instead
-    subscripts, shapes, unrolled_shapes = _preprocess_interleaved_to_expr_and_shapes(
-        *args, unroll=unroll
-    )
-
-    # Get positions of tensor arguments which are constants wrt to unrolled contraction
-    constants = tuple(
-        idx for idx, ig in enumerate(args[1::2]) if not any([i in unroll for i in ig])
-    )
-
-    kwargs["_constants_dict"] = {
-        i: args[0 : 2 * (len(args) // 2) : 2][i] for i in constants
-    }
-
-    # Build operands, passing tensors for constants and opt_einsum's Shaped (just shapes) for rest of the ops
-    shapes_and_constant_ops = tuple(
-        t if idx in constants else shape_only(tuple(i for i in shapes[idx] if i > 0))
-        for idx, t in enumerate(args[0 : 2 * (len(args) // 2) : 2])
-    )
-
-    kwargs["_gen_expression"] = True
-    oe_backend = kwargs.pop("backend", "auto")
-    _contract_unroll_loop_body= oe.contract(
-        subscripts, *shapes_and_constant_ops, **kwargs
-    )
-    def contract_unroll_loop_body(*args):
-        return _contract_unroll_loop_body(*args, backend=oe_backend)
-    if checkpoint_unrolled:
-        # force evaluation of all constants
-        _contract_unroll_loop_body.evaluate_constants(backend=oe_backend)
-        _expr_const_ts= _contract_unroll_loop_body._evaluated_constants[oe_backend]
-
-        def _contract_unroll_loop_body_checkpointed(*args):
-            # reassign constants so the checkpointed evaluation preserves gradient flow
-            count,j=0,-1
-            while j>=-len(_expr_const_ts):
-                if not (_expr_const_ts[j] is None):
-                    count+=1
-                    _expr_const_ts[j]= args[-count]
-                j-=1
-
-            return _contract_unroll_loop_body(*args[:-count], backend=oe_backend)
-
-        def contract_unroll_loop_body(*args):
-            # get handle of evaluated constant tensors
-            c_args= tuple(t for t in _expr_const_ts if not (t is None))
-            joint_args= args+c_args
-            return checkpoint(_contract_unroll_loop_body_checkpointed, *joint_args)
-
-    # assign shape to each index label
-    i_to_s = {
-        i: s
-        for ig, t in zip(args[1::2], args[0 : 2 * (len(args) // 2) : 2])
-        for i, s in zip(ig, t.shape)
-    }
-
-    # index groups stripped of unrolled indices
-    igs = tuple(
-        tuple(i for i in ig if not i in unroll) for ig in (args[1::2] + (args[-1],))
-    )
-
-    # prepare tensor to accumulate individual contractions
-    shape_out = tuple(i_to_s[i] for i in args[-1])
-    ig_out_contracted_unrolled = tuple(i for i in unroll if not (i in args[-1]))
-    partials = torch.empty(
-        shape_out + tuple(i_to_s[i] for i in ig_out_contracted_unrolled),\
-        device=args[0].device, dtype=args[0].dtype
-    )
-
-    if verbosity>0:
-        log.info(who+" before unrolled loop\n"
-            +_debug_allocated_tensors(device=args[0].device,totals_only=True))
-
-    for ui_vals in product(*tuple(range(i_to_s[i]) for i in unroll)):
-        ui_map = {u: v for u, v in zip(unroll, ui_vals)}
-
-        ig_out = tuple(ui_map[i] if i in unroll else slice(None) for i in args[-1])
-        ig_contracted_unrolled = tuple(ui_map[i] for i in unroll if not (i in args[-1]))
-
-        # ops containing *only* variable tensors, narrowed by unrolled indices if applicable
-        unrolled_ops = tuple(
-            t[tuple(ui_map[i] if i in unroll else slice(None) for i in ig)]
-            for t, ig in zip(args[0 : 2 * (len(args) // 2) : 2], args[1::2])
-            if len([i for i in unroll if i in ig]) > 0
+    if not isinstance(unroll, dict):
+        raise NotImplementedError(
+            "contract_with_unroll_compute_constants: list-based unrolling is not supported. "
+            "Pass unroll as a dict mapping labels to lists of SlicedLeg."
         )
 
-        partials[ig_out + ig_contracted_unrolled]= contract_unroll_loop_body(
-            *unrolled_ops
-        )
+    path = kwargs.pop("optimize", None)
+    assert path is not None, "optimize (contraction path) must be provided"
 
-        if verbosity>1:
-            log.info(who+f" unrolled loop {ui_vals}\n"
-                +_debug_allocated_tensors(device=args[0].device,totals_only=True))
+    tensors = args[0 : 2 * (len(args) // 2) : 2]
+    index_groups = list(args[1 : 2 * (len(args) // 2) : 2])
+    out_ig = args[-1]
+    unroll_labels = set(unroll.keys())
 
-    result = oe.contract(
-        partials, tuple(args[-1]) + ig_out_contracted_unrolled, args[-1]
+    # Partition tensors into constants (no unrolled index) and variables.
+    const_mask = [not any(u in ig for u in unroll_labels) for ig in index_groups]
+
+    if not any(const_mask):
+        # Nothing to pre-compute; delegate directly.
+        return _contract_with_sliced_unroll(*args, unroll=unroll, optimize=path, **kwargs)
+
+    var_tensors = [t for t, c in zip(tensors, const_mask) if not c]
+    var_igs     = [list(ig) for ig, c in zip(index_groups, const_mask) if not c]
+    var_and_out = set(i for ig in var_igs for i in ig) | set(out_ig)
+
+    # Find connected components of the constant sub-network via Union-Find.
+    # Two constant tensors are connected if they share at least one index.
+    # Each component is contracted independently, keeping intermediates small.
+    const_positions = [k for k, c in enumerate(const_mask) if c]
+    parent = {k: k for k in const_positions}
+
+    def _find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    index_to_first = {}
+    for k in const_positions:
+        for idx in index_groups[k]:
+            if idx in index_to_first:
+                px, py = _find(k), _find(index_to_first[idx])
+                if px != py:
+                    parent[px] = py
+            else:
+                index_to_first[idx] = k
+
+    comps = {}
+    for k in const_positions:
+        root = _find(k)
+        comps.setdefault(root, []).append(k)
+
+    # Pre-contract each component once, outside the loop.
+    pre_contracted = []  # list of (tensor, ig)
+    for comp in comps.values():
+        comp_tensors = [tensors[k] for k in comp]
+        comp_igs     = [list(index_groups[k]) for k in comp]
+
+        # Output indices: those that feed into the variable network or the final output.
+        seen = set()
+        comp_out_ig = []
+        for ig in comp_igs:
+            for i in ig:
+                if i in var_and_out and i not in seen:
+                    comp_out_ig.append(i)
+                    seen.add(i)
+        comp_out_ig = tuple(comp_out_ig)
+
+        if len(comp) == 1:
+            pre_contracted.append((comp_tensors[0], comp_igs[0]))
+        else:
+            comp_interleaved = []
+            for t, ig in zip(comp_tensors, comp_igs):
+                comp_interleaved.extend([t, ig])
+            comp_interleaved.append(comp_out_ig)
+            comp_path, _ = get_contraction_path(*comp_interleaved)
+            c_ts, c_inds, c_conjs, c_order = _convert_path_to_ncon_args(
+                *comp_interleaved, optimize=comp_path
+            )
+            pre_contracted.append((ncon(c_ts, c_inds, conjs=c_conjs, order=c_order), list(comp_out_ig)))
+
+    # Rebuild the reduced network: variable tensors + one tensor per constant component.
+    reduced_interleaved = []
+    for t, ig in zip(var_tensors, var_igs):
+        reduced_interleaved.extend([t, ig])
+    for t, ig in pre_contracted:
+        reduced_interleaved.extend([t, ig])
+    reduced_interleaved.append(out_ig)
+
+    # Find a contraction path for the reduced network (strip unrolled dims from shape model).
+    reduced_path, _ = get_contraction_path(*reduced_interleaved, unroll=unroll)
+
+    return _contract_with_sliced_unroll(
+        *reduced_interleaved, unroll=unroll, optimize=reduced_path, **kwargs
     )
 
-    if verbosity>0:
-        log.info(who+" unrolled loop concluded\n"
-            +_debug_allocated_tensors(device=args[0].device,totals_only=False))
 
-    return result
-
-# IF checkpoint_on_device moves all ops to checkpoint on device
-# does not use constant expressions in opt_einsum contract
 def contract_with_unroll(*args, **kwargs):
     r"""Extension of opt_einsum's contract allowing for index unrolling
     and use of checkpointing over unrolled loop.
@@ -906,12 +931,18 @@ def contract_with_unroll(*args, **kwargs):
             )
         return res
 
-    who = kwargs.pop("who","unknown")
-    verbosity = kwargs.pop("verbosity", 0)
-    unroll = kwargs.pop("unroll", [])
-    checkpoint_unrolled = kwargs.pop("checkpoint_unrolled", False)
+    kwargs.pop("who", None)
+    kwargs.pop("verbosity", None)
+    kwargs.pop("checkpoint_unrolled", None)
+    unroll = kwargs.pop("unroll", None)
 
-    if not unroll or len(unroll) == 0:
+    if isinstance(unroll, list):
+        raise ValueError(
+            "contract_with_unroll: unroll must be a dict, got a list. "
+            "Pass unroll=None (or omit) for no unrolling, or a dict mapping labels to SlicedLegs."
+        )
+
+    if unroll is None:
         # convert to ncon call
         ts, inds, conjs, order= _convert_path_to_ncon_args(*args,**kwargs)
         return ncon(ts, inds, conjs=conjs, order=order)
@@ -922,126 +953,7 @@ def contract_with_unroll(*args, **kwargs):
         assert path is not None, "optimize (contraction path) must be provided"
         return _contract_with_sliced_unroll(*args, unroll=unroll, optimize=path, **kwargs)
 
-    # We are unrolling. In general, there will be several constant
-    # tensors among the individual unrolled calls.
-    # Strategy is to build opt_einsum's ContractExpression, which makes use of these
-    # constants
-    #
-    # Although contract supports interleaved format in general, in _gen_expression mode
-    # the default subscript format is expected instead
-    subscripts, shapes, unrolled_shapes = _preprocess_interleaved_to_expr_and_shapes(
-        *args, unroll=unroll
+    raise NotImplementedError(
+        "contract_with_unroll: unsupported unroll type. "
+        "Pass unroll as a dict mapping labels to lists of SlicedLeg."
     )
-
-    # Get positions of tensor arguments which are constants wrt to unrolled contraction
-    constants = tuple(
-        idx for idx, ig in enumerate(args[1::2]) if not any([i in unroll for i in ig])
-    )
-
-    if not checkpoint_unrolled:
-        kwargs["_constants_dict"] = {
-            i: args[0 : 2 * (len(args) // 2) : 2][i] for i in constants
-        }
-
-        # Build operands, passing tensors for constants and opt_einsum's Shaped (just shapes) for rest of the ops
-        shapes_and_constant_ops = tuple(
-            t if idx in constants else shape_only(tuple(i for i in shapes[idx] if i > 0))
-            for idx, t in enumerate(args[0 : 2 * (len(args) // 2) : 2])
-        )
-    else:
-        # Build operands, passing opt_einsum's Shaped (just shapes) for both constants and rest of the ops
-        shapes_and_constant_ops = tuple(
-            shape_only(tuple(i for i in shapes[idx] if i > 0))
-            for idx, t in enumerate(args[0 : 2 * (len(args) // 2) : 2])
-        )
-
-    kwargs["_gen_expression"] = True
-    oe_backend = kwargs.pop("backend", "auto")
-    _contract_unroll_loop_body= oe.contract(
-        subscripts, *shapes_and_constant_ops, **kwargs
-    )
-    def contract_unroll_loop_body(*args):
-        return _contract_unroll_loop_body(*args, backend=oe_backend)
-
-    # narrowing of ops by unrolled indices is done within checkpointed section
-    def contract_unroll_loop_body_checkpointed(unrolled_ops_slices,*args):
-        unrolled_ops = tuple(
-            t[s] for t, s in zip(args, unrolled_ops_slices)
-        )
-        return _contract_unroll_loop_body(*unrolled_ops, backend=oe_backend)
-
-    # assign shape to each index label
-    i_to_s = {
-        i: s
-        for ig, t in zip(args[1::2], args[0 : 2 * (len(args) // 2) : 2])
-        for i, s in zip(ig, t.shape)
-    }
-
-    # index groups stripped of unrolled indices
-    igs = tuple(
-        tuple(i for i in ig if not i in unroll) for ig in (args[1::2] + (args[-1],))
-    )
-
-    # prepare tensor to accumulate individual contractions
-    shape_out = tuple(i_to_s[i] for i in args[-1])
-    ig_out_contracted_unrolled = tuple(i for i in unroll if not (i in args[-1]))
-    partials = torch.empty(
-        shape_out + tuple(i_to_s[i] for i in ig_out_contracted_unrolled),\
-        device=args[0].device, dtype=args[0].dtype
-    )
-
-    if verbosity>0:
-        log.info(who+" before unrolled loop\n"
-            +_debug_allocated_tensors(device=args[0].device,totals_only=True))
-
-    all_ops=args[0 : 2 * (len(args) // 2) : 2]
-    for ui_vals in product(*tuple(range(i_to_s[i]) for i in unroll)):
-        ui_map = {u: v for u, v in zip(unroll, ui_vals)}
-
-        ig_out = tuple(ui_map[i] if i in unroll else slice(None) for i in args[-1])
-        ig_contracted_unrolled = tuple(ui_map[i] for i in unroll if not (i in args[-1]))
-
-        # narrowing is done before checkpointing
-        # if checkpoint_unrolled:
-        #     # narrowed ops containing all tensors
-        #     unrolled_ops = tuple(
-        #         t[tuple(ui_map[i] if i in unroll else slice(None) for i in ig)]
-        #         for t, ig in zip(args[0 : 2 * (len(args) // 2) : 2], args[1::2])
-        #     )
-        #     partials[ig_out + ig_contracted_unrolled]= checkpoint(
-        #         contract_unroll_loop_body, *unrolled_ops
-        #     )
-        if checkpoint_unrolled:
-            # ops containing all tensors
-            unrolled_ops_slices = tuple(
-                tuple(ui_map[i] if i in unroll else slice(None) for i in ig)
-                for ig in args[1::2]
-            )
-
-            partials[ig_out + ig_contracted_unrolled]= checkpoint(
-                contract_unroll_loop_body_checkpointed, unrolled_ops_slices, *all_ops )
-        else:
-            # ops containing *only* variable tensors, narrowed by unrolled indices if applicable
-            unrolled_ops = tuple(
-                t[tuple(ui_map[i] if i in unroll else slice(None) for i in ig)]
-                for t, ig in zip(args[0 : 2 * (len(args) // 2) : 2], args[1::2])
-                if len([i for i in unroll if i in ig]) > 0
-            )
-
-            partials[ig_out + ig_contracted_unrolled]= contract_unroll_loop_body(
-                *unrolled_ops
-            )
-
-        if verbosity>1:
-            log.info(who+f" unrolled loop {ui_vals}\n"
-                +_debug_allocated_tensors(device=args[0].device,totals_only=True))
-
-    result = oe.contract(
-        partials, tuple(args[-1]) + ig_out_contracted_unrolled, args[-1]
-    )
-
-    if verbosity>0:
-        log.info(who+" unrolled loop concluded\n"
-            +_debug_allocated_tensors(device=args[0].device,totals_only=False))
-
-    return result
