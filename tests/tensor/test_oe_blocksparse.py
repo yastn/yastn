@@ -659,3 +659,63 @@ def test_cwu_cc_path_uses_sliced_sizes(config_kwargs):
         optimize=path,
     )
     assert yastn.norm(result - expected) < tol
+
+
+# ---------------------------------------------------------------------------
+# 10. checkpoint_loop option
+# ---------------------------------------------------------------------------
+
+def test_checkpoint_loop(config_kwargs):
+    """
+    contract_with_unroll and contract_with_unroll_compute_constants with
+    checkpoint_loop=True produce the same result as without checkpointing.
+
+    On the torch backend this exercises per-iteration torch.utils.checkpoint
+    wrapping (masking + ncon inside the checkpoint region).  On the numpy
+    backend a warning is emitted and it falls back to the standard loop.
+    """
+    cfg = yastn.make_config(sym='U1', **config_kwargs)
+    leg_i = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
+    leg_j = yastn.Leg(cfg, s=1, t=(0, 1), D=(3, 3))
+    leg_k = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
+    leg_l = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
+    A = yastn.rand(config=cfg, legs=[leg_i, leg_j.conj()], n=0)
+    B = yastn.rand(config=cfg, legs=[leg_j, leg_k.conj()], n=0)
+    C = yastn.rand(config=cfg, legs=[leg_k, leg_l.conj()], n=0)  # constant
+
+    path, _ = yastn.get_contraction_path(
+        A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), ('i', 'l')
+    )
+    expected = yastn.ncon([A, B, C], [[-1, 1], [1, 2], [2, -2]])
+    sliced_j = yastn.make_sliced_legs(leg_j)
+
+    # contract_with_unroll with checkpoint_loop
+    result_cu = yastn.contract_with_unroll(
+        A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), ('i', 'l'),
+        unroll={'j': sliced_j}, optimize=path, checkpoint_loop=True,
+    )
+    assert yastn.norm(result_cu - expected) < tol
+
+    # contract_with_unroll_compute_constants with checkpoint_loop
+    result_cc = contract_with_unroll_compute_constants(
+        A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), ('i', 'l'),
+        unroll={'j': sliced_j}, optimize=path, checkpoint_loop=True,
+    )
+    assert yastn.norm(result_cc - expected) < tol
+
+    # Also test with intra-sector slicing on the unrolled index
+    leg_j2 = yastn.Leg(cfg, s=1, t=(0, 1), D=(4, 4))
+    A2 = yastn.rand(config=cfg, legs=[leg_i, leg_j2.conj()], n=0)
+    B2 = yastn.rand(config=cfg, legs=[leg_j2, leg_k.conj()], n=0)
+    path2, _ = yastn.get_contraction_path(
+        A2, ('i', 'j'), B2, ('j', 'k'), C, ('k', 'l'), ('i', 'l')
+    )
+    expected2 = yastn.ncon([A2, B2, C], [[-1, 1], [1, 2], [2, -2]])
+
+    result_is = yastn.contract_with_unroll(
+        A2, ('i', 'j'), B2, ('j', 'k'), C, ('k', 'l'), ('i', 'l'),
+        unroll={'j': _split_leg_intra(leg_j2)}, optimize=path2, checkpoint_loop=True,
+    )
+    assert yastn.norm(result_is - expected2) < tol
+
+

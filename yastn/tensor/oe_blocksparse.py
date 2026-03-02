@@ -25,7 +25,7 @@ try:
     from opt_einsum.contract import _VALID_CONTRACT_KWARGS
 except:
     _VALID_CONTRACT_KWARGS = {'optimize', 'memory_limit', 'einsum_call', 'use_blas', 'shapes'}
-from . import Tensor, ncon
+from . import Tensor, ncon, split_data_and_meta, combine_data_and_meta
 from ._legs import Leg
 
 try:
@@ -39,16 +39,6 @@ except ImportError:
 
 log = logging.getLogger(__name__)
 
-
-def _debug_allocated_tensors(device=None, totals_only=False):
-    """Returns a string with CUDA memory statistics for a given device."""
-    if not _TORCH_AVAILABLE or device is None or 'cuda' not in str(device):
-        return f"device={device} (no CUDA memory stats)"
-    allocated = torch.cuda.memory_allocated(device)
-    reserved  = torch.cuda.memory_reserved(device)
-    return (f"CUDA device={device} "
-            f"allocated={allocated/2**20:.1f}MB "
-            f"reserved={reserved/2**20:.1f}MB")
 
 class SlicedLeg:
     r"""
@@ -221,7 +211,98 @@ def _expand_partial_output(partial, sl_map, output_unroll_info):
     return expanded
 
 
-def _contract_with_sliced_unroll(*args, unroll, optimize, **kwargs):
+def _iteration_checkpointed(tensors, sl_map, tensor_unroll_info, index_groups,
+                              out_ig, optimize, output_unroll_info, unroll_labels):
+    r"""
+    Run one unroll-loop iteration under ``torch.utils.checkpoint``.
+
+    Uses :func:`yastn.split_data_and_meta` / :func:`yastn.combine_data_and_meta`
+    to separate raw tensor data (tracked by autograd) from YASTN structural
+    metadata (Python objects, not tracked).  Masking and ``ncon`` are both
+    executed inside the checkpointed region so none of their intermediate
+    activations need to be stored during the forward pass.
+
+    The output YASTN tensor structure is captured in a mutable closure cell
+    that is set during the checkpointed forward call and read back immediately
+    after :func:`torch.utils.checkpoint.checkpoint` returns — no separate
+    no-grad structural pre-run is needed.
+
+    Parameters
+    ----------
+    tensors : sequence of yastn.Tensor
+        Input tensors (before masking for this iteration).
+    sl_map : dict[label, SlicedLeg]
+        Active :class:`SlicedLeg` for each unroll label.
+    tensor_unroll_info : dict[(int, label), (int, Leg)]
+        Precomputed ``(user_axis, full_leg)`` for each
+        ``(tensor_index, unroll_label)`` pair.
+    index_groups : list[list]
+        Index groups for each tensor.
+    out_ig : tuple | list
+        Output index group.
+    optimize : list[tuple[int, int]]
+        Pairwise contraction path.
+    output_unroll_info : dict[int, (label, Leg)]
+        Maps native output axis → ``(label, full_leg)`` for output-unrolled
+        indices.
+    unroll_labels : list
+        Ordered list of unroll labels.
+
+    Returns
+    -------
+    yastn.Tensor
+    """
+    # Split each input tensor into raw data + structural metadata.
+    # Metadata (struct, slices, config, …) are pure Python objects — no memory
+    # overhead from storing them.  Only the _data tensors participate in autograd.
+    input_datas, input_metas = zip(
+        *(split_data_and_meta(t.to_dict(level=0), squeeze=True) for t in tensors)
+    )
+
+    # Mutable cell: _fn sets this during its (first) forward call so the
+    # output YASTN structural metadata is available after checkpoint() returns.
+    # On the backward re-run _fn sets the same value again — harmlessly.
+    _out_meta = [None]
+
+    def _fn(*datas):
+        # Reconstruct YASTN tensors from structural metadata + current data.
+        recon = [Tensor.from_dict(combine_data_and_meta(d, m))
+                 for d, m in zip(datas, input_metas)]
+
+        # Apply masks inside the checkpoint (so masked intermediates are not
+        # stored during the forward pass).
+        masked = list(recon)
+        for k in range(len(masked)):
+            for u in unroll_labels:
+                if (k, u) not in tensor_unroll_info:
+                    continue
+                user_ax, full_leg = tensor_unroll_info[(k, u)]
+                mask_t = _build_mask_tensor(sl_map[u], full_leg, masked[k].config)
+                masked[k] = mask_t.apply_mask(masked[k], axes=user_ax)
+
+        interleaved = []
+        for T, ig in zip(masked, index_groups):
+            interleaved.append(T)
+            interleaved.append(ig)
+        interleaved.append(out_ig)
+        ts, inds, conjs, order = _convert_path_to_ncon_args(
+            *interleaved, optimize=optimize
+        )
+        partial = ncon(ts, inds, conjs=conjs, order=order)
+
+        if output_unroll_info:
+            partial = _expand_partial_output(partial, sl_map, output_unroll_info)
+
+        # Capture output structure so it can be read back outside checkpoint().
+        p_data, p_meta = split_data_and_meta(partial.to_dict(level=0), squeeze=True)
+        _out_meta[0] = p_meta
+        return p_data
+
+    result_data = checkpoint(_fn, *input_datas, use_reentrant=False)
+    return Tensor.from_dict(combine_data_and_meta(result_data, _out_meta[0]))
+
+
+def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False, **kwargs):
     r"""
     Contract a tensor network with block-sparse index unrolling.
 
@@ -245,6 +326,12 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, **kwargs):
         that index.
     optimize : list[tuple[int, int]]
         Pairwise contraction path (as returned by :func:`get_contraction_path`).
+    checkpoint_loop : bool
+        If ``True`` and PyTorch is available, each loop-body iteration is
+        wrapped in :func:`torch.utils.checkpoint.checkpoint`.  Masking and
+        ``ncon`` intermediates are recomputed during backward instead of
+        stored, trading extra forward computation for lower peak memory.
+        Default: ``False``.
     **kwargs :
         Forwarded to ``ncon``.
 
@@ -284,37 +371,51 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, **kwargs):
                     output_unroll_info[out_ax] = (u, full_leg)
                     break
 
+    if checkpoint_loop and not _TORCH_AVAILABLE:
+        import warnings
+        warnings.warn(
+            "checkpoint_loop=True requires PyTorch, which is not available; "
+            "falling back to non-checkpointed loop."
+        )
+        checkpoint_loop = False
+
     # Cartesian product over SlicedLeg choices, one per unroll label
     result = None
     for combo in product(*(unroll[u] for u in unroll_labels)):
         sl_map = {u: sl for u, sl in zip(unroll_labels, combo)}
 
-        # Apply masks: for each tensor, apply masks for all its unroll indices
-        masked_tensors = list(tensors)
-        for k in range(len(tensors)):
-            for u in unroll_labels:
-                if (k, u) not in tensor_unroll_info:
-                    continue
-                user_ax, full_leg = tensor_unroll_info[(k, u)]
-                mask_t = _build_mask_tensor(sl_map[u], full_leg, masked_tensors[k].config)
-                masked_tensors[k] = mask_t.apply_mask(masked_tensors[k], axes=user_ax)
+        if checkpoint_loop:
+            partial = _iteration_checkpointed(
+                tensors, sl_map, tensor_unroll_info, index_groups, out_ig,
+                optimize, output_unroll_info, unroll_labels,
+            )
+        else:
+            # Apply masks: for each tensor, apply masks for all its unroll indices
+            masked_tensors = list(tensors)
+            for k in range(len(tensors)):
+                for u in unroll_labels:
+                    if (k, u) not in tensor_unroll_info:
+                        continue
+                    user_ax, full_leg = tensor_unroll_info[(k, u)]
+                    mask_t = _build_mask_tensor(sl_map[u], full_leg, masked_tensors[k].config)
+                    masked_tensors[k] = mask_t.apply_mask(masked_tensors[k], axes=user_ax)
 
-        # Build interleaved args for _convert_path_to_ncon_args
-        interleaved = []
-        for T, ig in zip(masked_tensors, index_groups):
-            interleaved.append(T)
-            interleaved.append(ig)
-        interleaved.append(out_ig)
+            # Build interleaved args for _convert_path_to_ncon_args
+            interleaved = []
+            for T, ig in zip(masked_tensors, index_groups):
+                interleaved.append(T)
+                interleaved.append(ig)
+            interleaved.append(out_ig)
 
-        ts, inds, conjs, order = _convert_path_to_ncon_args(
-            *interleaved, optimize=optimize
-        )
-        partial = ncon(ts, inds, conjs=conjs, order=order)
+            ts, inds, conjs, order = _convert_path_to_ncon_args(
+                *interleaved, optimize=optimize
+            )
+            partial = ncon(ts, inds, conjs=conjs, order=order)
 
-        # For output-unrolled indices, zero-pad partial blocks to full size so
-        # that + accumulation assembles them correctly (handles intra-sector slices).
-        if output_unroll_info:
-            partial = _expand_partial_output(partial, sl_map, output_unroll_info)
+            # For output-unrolled indices, zero-pad partial blocks to full size so
+            # that + accumulation assembles them correctly (handles intra-sector slices).
+            if output_unroll_info:
+                partial = _expand_partial_output(partial, sl_map, output_unroll_info)
 
         result = partial if result is None else result + partial
 
@@ -766,29 +867,10 @@ def contract_with_unroll_compute_constants(*args, **kwargs):
     :param args: interleaved format ``(T1, ig1, T2, ig2, ..., out_ig)``
     :param unroll: dict mapping index labels to lists of :class:`SlicedLeg`
     :param optimize: contraction path for the full network
+    :param checkpoint_loop: if True, each unrolled loop iteration is wrapped in
+        :func:`torch.utils.checkpoint.checkpoint`.
     """
-    verbosity = kwargs.get("verbosity", 0)
-    checkpoint_on_device = kwargs.pop("checkpoint_on_device",False)
-    if checkpoint_on_device in ['NONE','none','None',None]: checkpoint_on_device= False
-
-    if checkpoint_on_device:
-        # split args into tensors and index groups
-        igs,ts= args[1::2], args[0 : 2 * (len(args) // 2) : 2]
-        source_device= ts[0].device
-
-        def _core_f(*ts):
-            ts_moved= (x.to(device=checkpoint_on_device) for x in ts)
-            args_moved= tuple(a for t_ig in zip(ts_moved,igs) for a in t_ig) + (args[-1],) if len(args)%2==1 else ()
-            res= contract_with_unroll_compute_constants(*args_moved,**kwargs)
-            return res.to(device=source_device)
-
-        res= checkpoint(_core_f,*ts)
-        if verbosity>0:
-            log.info("After checkpointed contract_with_unroll_compute_constants\n"
-                +_debug_allocated_tensors(device=checkpoint_on_device,totals_only=True)
-            )
-        return res
-
+    checkpoint_loop = kwargs.pop("checkpoint_loop", False)
     kwargs.pop("who", None)
     kwargs.pop("verbosity", None)
     kwargs.pop("checkpoint_unrolled", None)
@@ -822,7 +904,8 @@ def contract_with_unroll_compute_constants(*args, **kwargs):
 
     if not any(const_mask):
         # Nothing to pre-compute; delegate directly.
-        return _contract_with_sliced_unroll(*args, unroll=unroll, optimize=path, **kwargs)
+        return _contract_with_sliced_unroll(*args, unroll=unroll, optimize=path,
+                                            checkpoint_loop=checkpoint_loop, **kwargs)
 
     var_tensors = [t for t, c in zip(tensors, const_mask) if not c]
     var_igs     = [list(ig) for ig, c in zip(index_groups, const_mask) if not c]
@@ -896,7 +979,8 @@ def contract_with_unroll_compute_constants(*args, **kwargs):
     reduced_path, _ = get_contraction_path(*reduced_interleaved, unroll=unroll)
 
     return _contract_with_sliced_unroll(
-        *reduced_interleaved, unroll=unroll, optimize=reduced_path, **kwargs
+        *reduced_interleaved, unroll=unroll, optimize=reduced_path,
+        checkpoint_loop=checkpoint_loop, **kwargs
     )
 
 
@@ -907,30 +991,11 @@ def contract_with_unroll(*args, **kwargs):
     :param args: input to einsum in interleaved format. Explicit index labeling
                  of output is required
     :param unroll: indices to unroll
-    :param use_checkpoint:
+    :param checkpoint_loop: if True, each unrolled loop iteration is wrapped in
+        :func:`torch.utils.checkpoint.checkpoint`, avoiding storage of masking
+        and ncon intermediates across all iterations simultaneously.
     """
-    verbosity = kwargs.get("verbosity", 0)
-    checkpoint_on_device = kwargs.pop("checkpoint_on_device",False)
-    if checkpoint_on_device in ['NONE','none','None',None]: checkpoint_on_device= False
-
-    if checkpoint_on_device:
-        # split args into tensors and index groups
-        igs,ts= args[1::2], args[0 : 2 * (len(args) // 2) : 2]
-        source_device= ts[0].device
-
-        def _core_f(*ts):
-            ts_moved= (x.to(device=checkpoint_on_device) for x in ts)
-            args_moved= tuple(a for t_ig in zip(ts_moved,igs) for a in t_ig) + (args[-1],) if len(args)%2==1 else ()
-            res= contract_with_unroll(*args_moved,**kwargs)
-            return res.to(device=source_device)
-
-        res= checkpoint(_core_f,*ts)
-        if verbosity>0:
-            log.info("After checkpointed contract_with_unroll_mode2\n"
-                +_debug_allocated_tensors(device=checkpoint_on_device,totals_only=True)
-            )
-        return res
-
+    checkpoint_loop = kwargs.pop("checkpoint_loop", False)
     kwargs.pop("who", None)
     kwargs.pop("verbosity", None)
     kwargs.pop("checkpoint_unrolled", None)
@@ -951,7 +1016,8 @@ def contract_with_unroll(*args, **kwargs):
         # block-sparse sliced unrolling: unroll is {label: [SlicedLeg, ...]}
         path = kwargs.pop("optimize", None)
         assert path is not None, "optimize (contraction path) must be provided"
-        return _contract_with_sliced_unroll(*args, unroll=unroll, optimize=path, **kwargs)
+        return _contract_with_sliced_unroll(*args, unroll=unroll, optimize=path,
+                                            checkpoint_loop=checkpoint_loop, **kwargs)
 
     raise NotImplementedError(
         "contract_with_unroll: unsupported unroll type. "
