@@ -215,7 +215,10 @@ def kernel_tensordot_bs(
     modes_out= _remap_nout_(nout_a,0) + _remap_nout_(nout_b,len(nout_a))
 
     if NSYM==0:
-        res= torch.ops.tapp_torch.tensordot(a, b, nin_a, nin_b, modes_out)
+        a_shaped= a.reshape( list([m[0] for m in a_D_per_mode]) )
+        b_shaped= b.reshape( list([m[0] for m in b_D_per_mode]) )
+        res= torch.ops.tapp_torch.tensordot(a_shaped, b_shaped, nin_a, nin_b, modes_out)
+        res= res.reshape(-1)
     else:
         res= torch.ops.tapp_torch.tensordot_bs(a, b, nin_a, nin_b,
             *meta,
