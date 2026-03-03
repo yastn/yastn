@@ -17,6 +17,7 @@ from functools import lru_cache
 from itertools import product
 import gc, subprocess
 import time
+from typing import Hashable, Mapping, Sequence, Union
 
 import numpy as np
 import opt_einsum as oe  # type: ignore
@@ -28,15 +29,6 @@ except:
 from . import Tensor, ncon, split_data_and_meta, combine_data_and_meta
 from ..initialize import block as yastn_block
 from ._legs import Leg
-
-try:
-    import torch
-    from torch.utils.checkpoint import checkpoint
-    _TORCH_AVAILABLE = True
-except ImportError:
-    _TORCH_AVAILABLE = False
-    torch = None
-    checkpoint = None
 
 log = logging.getLogger(__name__)
 
@@ -112,6 +104,46 @@ def make_sliced_legs(leg):
     return [SlicedLeg(t=(ti,), D=(Di,)) for ti, Di in zip(leg.t, leg.D)]
 
 
+def slice_leg_uniform(leg: Leg, size: int):
+    r"""
+    Uniformly slice YASTN :class:`yastn.Leg` into segments of at most ``size``.
+    Resulting slices can span multiple charge sectors.
+
+    The returned list of :class:`SlicedLeg` objects forms a valid partition of
+    the leg, with each slice selecting a contiguous subset of the block
+    dimension within each charge sector.  The last slice  may be
+    smaller than the specified size.
+
+    Parameters
+    ----------
+    leg : yastn.Leg
+    size : int
+
+    Returns
+    -------
+    list[SlicedLeg]
+    """
+    sliced_legs = []
+    ts, Ds, slices = [], [], {}
+    remaining = size
+    for t, D in zip(leg.t, leg.D):
+        sector_offset = 0
+        while sector_offset < D:
+            take = min(D - sector_offset, remaining)
+            ts.append(t)
+            Ds.append(take)
+            slices[t] = slice(sector_offset, sector_offset + take)
+            sector_offset += take
+            remaining -= take
+            if remaining == 0:
+                sliced_legs.append(SlicedLeg(t=ts, D=Ds, slices=slices))
+                ts, Ds, slices = [], [], {}
+                remaining = size
+    if ts:
+        sliced_legs.append(SlicedLeg(t=ts, D=Ds, slices=slices))
+    return sliced_legs
+
+
 def _build_mask_tensor(sliced_leg, full_leg, config):
     r"""
     Build a YASTN diagonal mask tensor for ``apply_mask``.
@@ -147,7 +179,7 @@ def _build_mask_tensor(sliced_leg, full_leg, config):
 
 
 def _iteration_checkpointed(tensors, sl_map, tensor_unroll_info, index_groups,
-                              out_ig, optimize, unroll_labels):
+                              out_ig, optimize, unroll_labels) -> Tensor:
     r"""
     Run one unroll-loop iteration under ``torch.utils.checkpoint``.
 
@@ -227,6 +259,8 @@ def _iteration_checkpointed(tensors, sl_map, tensor_unroll_info, index_groups,
         _out_meta[0] = p_meta
         return p_data
 
+    assert hasattr(tensors[0].config.backend, "checkpoint"), "Backend does not support checkpointing"
+    checkpoint = tensors[0].config.backend.checkpoint
     result_data = checkpoint(_fn, *input_datas, use_reentrant=False)
     return Tensor.from_dict(combine_data_and_meta(result_data, _out_meta[0]))
 
@@ -301,14 +335,6 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
                     output_unroll_info[out_ax] = (u, full_leg)
                     break
 
-    if checkpoint_loop and not _TORCH_AVAILABLE:
-        import warnings
-        warnings.warn(
-            "checkpoint_loop=True requires PyTorch, which is not available; "
-            "falling back to non-checkpointed loop."
-        )
-        checkpoint_loop = False
-
     # Output-unroll labels ordered by their axis index in the output tensor.
     # Contracted-only unroll labels are not in this list.
     output_unroll_labels = [u for _, (u, _) in sorted(output_unroll_info.items())]
@@ -317,7 +343,9 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
     # Partials are grouped by their position along output-unrolled axes.
     # Contracted-only unroll combos accumulate into the same key via +.
     output_pos_partials = {}
-    for combo in product(*(unroll[u] for u in unroll_labels)):
+    for n,combo in enumerate(product(*(unroll[u] for u in unroll_labels))):
+        _cfg= tensors[0].config
+        if _cfg.profile: _cfg.backend.nvtx.range_push(f"_contract_with_sliced_unroll {n}")
         sl_map = {u: sl for u, sl in zip(unroll_labels, combo)}
 
         if checkpoint_loop:
@@ -354,6 +382,8 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
         prev = output_pos_partials.get(output_pos_key)
         output_pos_partials[output_pos_key] = partial if prev is None else prev + partial
 
+        if _cfg.profile: _cfg.backend.nvtx.range_pop()
+
     if not output_unroll_info:
         return output_pos_partials.get((), None)
 
@@ -367,6 +397,43 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
     # block() records fusion history in hfs, making the result incompatible
     # with plain ncon outputs.  Drop it so the caller gets an ordinary tensor.
     return result.drop_leg_history()
+
+
+def _validate_and_resolve_unroll(*args,
+        unroll=None) \
+            -> Mapping[Hashable,Union[Sequence[SlicedLeg],int]]:
+    r"""
+    Validates the ``unroll`` argument and resolves any integer values
+    to lists of :class:`SlicedLeg` objects via uniform slicing of the corresponding leg in the input tensors.
+
+    :param unroll: Mapping[Hashable,Union[Sequence[SlicedLeg],int]] or None
+
+    Returns
+    -------
+    Mapping[Hashable,Sequence[SlicedLeg]] or None
+    """
+    if unroll is None:
+        return None
+    assert isinstance(unroll, dict), "unroll must be a dict or None"
+    for k, v in unroll.items():
+        assert isinstance(v, (list, int)), "unroll values must be either list of SlicedLeg or integer"
+        if isinstance(v, list):
+            assert all(isinstance(sl, SlicedLeg) for sl in v), "unroll list values must be of type SlicedLeg"
+        else:
+            assert v > 0, "unroll integer value must be positive"
+            # Find the leg with label k in the network and slice it uniformly
+            found = False
+            for t, ig in zip(args[0 : 2 * (len(args) // 2) : 2],
+                             args[1 : 2 * (len(args) // 2) : 2]):
+                if k in ig:
+                    user_ax = list(ig).index(k)
+                    full_leg = t.get_legs(user_ax)
+                    unroll[k] = slice_leg_uniform(full_leg, v)
+                    found = True
+                    break
+            if not found:
+                raise ValueError(f"Index label {k} not found in any tensor index group.")
+    return unroll
 
 
 def _convert_path_to_ncon_args(*args, **kwargs):
@@ -515,22 +582,32 @@ def _log_input_mem_size(shapes : tuple[tuple[int]],names=None,who=None,**kwargs)
         log.info(f"{who} total size {sum(np.asarray(t).prod() for t in shapes)}")
 
 
-def get_contraction_path(*tn_to_contract, unroll=None, names=None, who=None, **kwargs):
+def get_contraction_path(*tn_to_contract, unroll=None,
+                         names:Sequence[str]=None, who:str=None, **kwargs)-> tuple[Sequence[tuple[int]], PathInfo]:
     r"""Returns optimal contraction path for tensor network contraction specified in interleaved
     format. Takes into account unrolled indices if any.
 
     :param tn_to_contract: input to einsum in interleaved format. Explicit index labeling
                            of output is required
-    :param unroll: indices to unroll
+    :param unroll: Mapping[Hashable,Union[Sequence[SlicedLeg],int]]
+        indices to unroll
     :param names: string labels for tensors used for more readable logging. The order of
                   names has to follow order of tensors as they appear in ``tn_to_contract``
     :param who: string id for logging identifying this optimal contraction path search
-    """
 
+    Returns
+    -------
+    path : Sequence[tuple[int]]
+        Optimal contraction path as a sequence of tuples specifying which pair of tensors to contract at each step.
+        The path is in terms of positions in current list of tensors, which is shrinking at each step.
+    path_info : opt_einsum.contract.PathInfo
+         Detailed information about the contraction path, including shapes and memory usage of intermediate tensors.
+    """
     # require explicit specification of output index labels
     assert (
         len(tn_to_contract) % 2 == 1
     ), "Explicit specification of output index labels is required"
+    unroll = _validate_and_resolve_unroll(*tn_to_contract, unroll=unroll)
 
     # TODO how to report block-sparse memory footprint & shape
     #      Here, we pass shape of the underlying 1D data array
@@ -812,7 +889,8 @@ def contract_with_unroll_compute_constants(*args, **kwargs):
     pre-contracted independently, keeping each intermediate small.
 
     :param args: interleaved format ``(T1, ig1, T2, ig2, ..., out_ig)``
-    :param unroll: dict mapping index labels to lists of :class:`SlicedLeg`
+    :param unroll: Mapping[Hashable,Union[Sequence[SlicedLeg],int]] or None
+        specifying indices to unroll and how to slice them.
     :param optimize: contraction path for the full network
     :param checkpoint_loop: if True, each unrolled loop iteration is wrapped in
         :func:`torch.utils.checkpoint.checkpoint`.
@@ -820,23 +898,13 @@ def contract_with_unroll_compute_constants(*args, **kwargs):
     checkpoint_loop = kwargs.pop("checkpoint_loop", False)
     kwargs.pop("who", None)
     kwargs.pop("verbosity", None)
-    kwargs.pop("checkpoint_unrolled", None)
     unroll = kwargs.pop("unroll", None)
-
-    if isinstance(unroll, list):
-        raise ValueError(
-            "contract_with_unroll_compute_constants: unroll must be a dict, got a list. "
-            "Pass unroll=None (or omit) for no unrolling, or a dict mapping labels to SlicedLegs."
-        )
+    unroll = _validate_and_resolve_unroll(*args, unroll=unroll)
 
     if unroll is None:
-        return oe.contract(*args, **kwargs)
-
-    if not isinstance(unroll, dict):
-        raise NotImplementedError(
-            "contract_with_unroll_compute_constants: list-based unrolling is not supported. "
-            "Pass unroll as a dict mapping labels to lists of SlicedLeg."
-        )
+        # convert to ncon call
+        ts, inds, conjs, order= _convert_path_to_ncon_args(*args,**kwargs)
+        return ncon(ts, inds, conjs=conjs, order=order)
 
     path = kwargs.pop("optimize", None)
     assert path is not None, "optimize (contraction path) must be provided"
@@ -937,7 +1005,8 @@ def contract_with_unroll(*args, **kwargs):
 
     :param args: input to einsum in interleaved format. Explicit index labeling
                  of output is required
-    :param unroll: indices to unroll
+    :param unroll: Mapping[Hashable,Sequence[SlicedLeg]] or None
+        indices to unroll
     :param checkpoint_loop: if True, each unrolled loop iteration is wrapped in
         :func:`torch.utils.checkpoint.checkpoint`, avoiding storage of masking
         and ncon intermediates across all iterations simultaneously.
@@ -945,14 +1014,8 @@ def contract_with_unroll(*args, **kwargs):
     checkpoint_loop = kwargs.pop("checkpoint_loop", False)
     kwargs.pop("who", None)
     kwargs.pop("verbosity", None)
-    kwargs.pop("checkpoint_unrolled", None)
     unroll = kwargs.pop("unroll", None)
-
-    if isinstance(unroll, list):
-        raise ValueError(
-            "contract_with_unroll: unroll must be a dict, got a list. "
-            "Pass unroll=None (or omit) for no unrolling, or a dict mapping labels to SlicedLegs."
-        )
+    unroll = _validate_and_resolve_unroll(*args, unroll=unroll)
 
     if unroll is None:
         # convert to ncon call

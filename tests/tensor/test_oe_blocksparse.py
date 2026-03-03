@@ -19,6 +19,8 @@ from opt_einsum.contract import PathInfo
 
 tol = 1e-10
 
+torch_test = pytest.mark.skipif("'torch' not in config.getoption('--backend')",
+                                reason="Uses torch.utils.checkpoint.")
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -112,6 +114,8 @@ def test_contract_with_unroll_no_unroll(config_kwargs):
 # 3. SlicedLeg API
 # ---------------------------------------------------------------------------
 
+from yastn.tensor.oe_blocksparse import slice_leg_uniform
+
 def test_sliced_leg_api(config_kwargs):
     """SlicedLeg construction and make_sliced_legs behave as documented."""
     # Construction: plain ints normalised to 1-tuples
@@ -134,6 +138,14 @@ def test_sliced_leg_api(config_kwargs):
         assert part.D == (Di,)
         assert part.slices[ti] == slice(None)
 
+    # uniform slicing with slice_leg_uniform(leg: Leg, size: int)
+    parts1= slice_leg_uniform(leg, 2)
+    assert len(parts1) == 5
+    assert parts1[0].t == ((0,),) and parts1[0].D == (2,)
+    assert parts1[1].t == ((1,),) and parts1[1].D == (2,)
+    assert parts1[2].t == ((1,),(2,)) and parts1[2].D == (1,1)
+    assert parts1[3].t == ((2,),) and parts1[3].D == (2,)
+    assert parts1[4].t == ((2,),) and parts1[4].D == (1,)
 
 # ---------------------------------------------------------------------------
 # 4. Sliced unrolling of contracted indices
@@ -166,6 +178,22 @@ def test_sliced_unroll_contracted_index(config_kwargs):
     result_is = yastn.contract_with_unroll(
         A, ('i', 'j'), B, ('j', 'k'), ('i', 'k'),
         unroll={'j': _split_leg_intra(leg_j)},
+        optimize=path,
+    )
+    assert yastn.norm(result_is - expected) < tol
+
+    # uniform slicing: leg j split into 4 uniform slices
+    result_is = yastn.contract_with_unroll(
+        A, ('i', 'j'), B, ('j', 'k'), ('i', 'k'),
+        unroll={'j': 2},
+        optimize=path,
+    )
+    assert yastn.norm(result_is - expected) < tol
+
+    # uniform slicing: leg j split into 3 slices
+    result_is = yastn.contract_with_unroll(
+        A, ('i', 'j'), B, ('j', 'k'), ('i', 'k'),
+        unroll={'j': 3},
         optimize=path,
     )
     assert yastn.norm(result_is - expected) < tol
@@ -238,6 +266,22 @@ def test_sliced_unroll_output_index(config_kwargs):
     result_is = yastn.contract_with_unroll(
         A, ('i', 'j'), B, ('j', 'k'), ('i', 'k'),
         unroll={'i': _split_leg_intra(leg_i)},
+        optimize=path,
+    )
+    assert yastn.norm(result_is - expected) < tol
+
+    # uniform output unrolling: leg i split into 4 uniform slices
+    result_is = yastn.contract_with_unroll(
+        A, ('i', 'j'), B, ('j', 'k'), ('i', 'k'),
+        unroll={'i': 2},
+        optimize=path,
+    )
+    assert yastn.norm(result_is - expected) < tol
+
+    # uniform output unrolling: leg i split into 3 slices
+    result_is = yastn.contract_with_unroll(
+        A, ('i', 'j'), B, ('j', 'k'), ('i', 'k'),
+        unroll={'i': 3},
         optimize=path,
     )
     assert yastn.norm(result_is - expected) < tol
@@ -535,13 +579,13 @@ def test_cwu_cc_list_unroll_raises(config_kwargs):
     """Passing unroll as a list raises ValueError (empty) or NotImplementedError (non-empty)."""
     cfg = yastn.make_config(sym='U1', **config_kwargs)
     (A, B), _ = _u1_chain(cfg, 2, 3, 2)
-    with pytest.raises(ValueError):
+    with pytest.raises(AssertionError):
         contract_with_unroll_compute_constants(
             A, ('i', 'j'), B, ('j', 'k'), ('i', 'k'),
             unroll=[],
             optimize=[(0, 1)],
         )
-    with pytest.raises(ValueError):
+    with pytest.raises(AssertionError):
         contract_with_unroll_compute_constants(
             A, ('i', 'j'), B, ('j', 'k'), ('i', 'k'),
             unroll=['j'],
@@ -665,6 +709,7 @@ def test_cwu_cc_path_uses_sliced_sizes(config_kwargs):
 # 10. checkpoint_loop option
 # ---------------------------------------------------------------------------
 
+@torch_test
 def test_checkpoint_loop(config_kwargs):
     """
     contract_with_unroll and contract_with_unroll_compute_constants with
