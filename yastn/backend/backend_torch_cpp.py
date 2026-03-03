@@ -214,9 +214,12 @@ def kernel_tensordot_bs(
 
     modes_out= _remap_nout_(nout_a,0) + _remap_nout_(nout_b,len(nout_a))
 
-    res= torch.ops.tapp_torch.tensordot_bs(a, b, nin_a, nin_b,
-        *meta,
-        modes_out)
+    if NSYM==0:
+        res= torch.ops.tapp_torch.tensordot(a, b, nin_a, nin_b, modes_out)
+    else:
+        res= torch.ops.tapp_torch.tensordot_bs(a, b, nin_a, nin_b,
+            *meta,
+            modes_out)
 
     if profile: nvtx.range_pop()
     return res

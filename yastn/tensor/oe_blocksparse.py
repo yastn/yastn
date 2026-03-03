@@ -253,7 +253,7 @@ def _expand_partial_output(partial, sl_map, output_unroll_info):
 
 
 def _iteration_checkpointed(tensors, sl_map, tensor_unroll_info, index_groups,
-                              out_ig, optimize, output_unroll_info, unroll_labels):
+                              out_ig, optimize, output_unroll_info, unroll_labels)->Tensor:
     r"""
     Run one unroll-loop iteration under ``torch.utils.checkpoint``.
 
@@ -339,6 +339,7 @@ def _iteration_checkpointed(tensors, sl_map, tensor_unroll_info, index_groups,
         _out_meta[0] = p_meta
         return p_data
 
+    assert hasattr(tensors[0].config.backend, "checkpoint"), "Backend does not support checkpointing"
     checkpoint= tensors[0].config.backend.checkpoint
     result_data = checkpoint(_fn, *input_datas, use_reentrant=False)
     return Tensor.from_dict(combine_data_and_meta(result_data, _out_meta[0]))
@@ -413,17 +414,11 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
                     output_unroll_info[out_ax] = (u, full_leg)
                     break
 
-    if checkpoint_loop and not _TORCH_AVAILABLE:
-        import warnings
-        warnings.warn(
-            "checkpoint_loop=True requires PyTorch, which is not available; "
-            "falling back to non-checkpointed loop."
-        )
-        checkpoint_loop = False
-
     # Cartesian product over SlicedLeg choices, one per unroll label
     result = None
-    for combo in product(*(unroll[u] for u in unroll_labels)):
+    for n,combo in enumerate(product(*(unroll[u] for u in unroll_labels))):
+        _cfg= tensors[0].config
+        if _cfg.profile: _cfg.backend.nvtx.range_push(f"_contract_with_sliced_unroll {n}")
         sl_map = {u: sl for u, sl in zip(unroll_labels, combo)}
 
         if checkpoint_loop:
@@ -460,6 +455,7 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
                 partial = _expand_partial_output(partial, sl_map, output_unroll_info)
 
         result = partial if result is None else result + partial
+        if _cfg.profile: _cfg.backend.nvtx.range_pop()
 
     return result
 
@@ -954,7 +950,8 @@ def contract_with_unroll_compute_constants(*args, **kwargs):
     pre-contracted independently, keeping each intermediate small.
 
     :param args: interleaved format ``(T1, ig1, T2, ig2, ..., out_ig)``
-    :param unroll: dict mapping index labels to lists of :class:`SlicedLeg`
+    :param unroll: Mapping[Hashable,Union[Sequence[SlicedLeg],int]] or None
+        specifying indices to unroll and how to slice them.
     :param optimize: contraction path for the full network
     :param checkpoint_loop: if True, each unrolled loop iteration is wrapped in
         :func:`torch.utils.checkpoint.checkpoint`.
@@ -962,18 +959,13 @@ def contract_with_unroll_compute_constants(*args, **kwargs):
     checkpoint_loop = kwargs.pop("checkpoint_loop", False)
     kwargs.pop("who", None)
     kwargs.pop("verbosity", None)
-    kwargs.pop("checkpoint_unrolled", None)
     unroll = kwargs.pop("unroll", None)
     unroll = _validate_and_resolve_unroll(*args, unroll=unroll)
 
     if unroll is None:
-        return oe.contract(*args, **kwargs)
-
-    if not isinstance(unroll, dict):
-        raise NotImplementedError(
-            "contract_with_unroll_compute_constants: list-based unrolling is not supported. "
-            "Pass unroll as a dict mapping labels to lists of SlicedLeg."
-        )
+        # convert to ncon call
+        ts, inds, conjs, order= _convert_path_to_ncon_args(*args,**kwargs)
+        return ncon(ts, inds, conjs=conjs, order=order)
 
     path = kwargs.pop("optimize", None)
     assert path is not None, "optimize (contraction path) must be provided"
@@ -1074,7 +1066,8 @@ def contract_with_unroll(*args, **kwargs):
 
     :param args: input to einsum in interleaved format. Explicit index labeling
                  of output is required
-    :param unroll: indices to unroll
+    :param unroll: Mapping[Hashable,Sequence[SlicedLeg]] or None
+        indices to unroll
     :param checkpoint_loop: if True, each unrolled loop iteration is wrapped in
         :func:`torch.utils.checkpoint.checkpoint`, avoiding storage of masking
         and ncon intermediates across all iterations simultaneously.
@@ -1082,7 +1075,6 @@ def contract_with_unroll(*args, **kwargs):
     checkpoint_loop = kwargs.pop("checkpoint_loop", False)
     kwargs.pop("who", None)
     kwargs.pop("verbosity", None)
-    kwargs.pop("checkpoint_unrolled", None)
     unroll = kwargs.pop("unroll", None)
     unroll = _validate_and_resolve_unroll(*args, unroll=unroll)
 
