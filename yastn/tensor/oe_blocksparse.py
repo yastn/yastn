@@ -26,6 +26,7 @@ try:
 except:
     _VALID_CONTRACT_KWARGS = {'optimize', 'memory_limit', 'einsum_call', 'use_blas', 'shapes'}
 from . import Tensor, ncon, split_data_and_meta, combine_data_and_meta
+from ..initialize import block as yastn_block
 from ._legs import Leg
 
 try:
@@ -145,74 +146,8 @@ def _build_mask_tensor(sliced_leg, full_leg, config):
     return mask_tensor
 
 
-def _expand_partial_output(partial, sl_map, output_unroll_info):
-    r"""
-    Zero-pad a partial contraction result to full block size on output-unrolled axes.
-
-    When an output index is unrolled with intra-sector slicing the partial result
-    has reduced-dimension blocks on that axis.  This function embeds each block
-    back into its full-sized counterpart (filling with zeros outside the slice)
-    so that subsequent ``+`` accumulation assembles the tensor correctly.
-
-    For charge-sector-level output unrolling (``slice(None)``) the expansion is
-    a no-op: the full and partial block dimensions are identical.
-
-    Operates entirely in the native backend format (numpy or torch) — no
-    intermediate numpy conversion is performed.
-
-    Parameters
-    ----------
-    partial : yastn.Tensor
-    sl_map : dict[label, SlicedLeg]
-        Current SlicedLeg combination for this loop iteration.
-    output_unroll_info : dict[int, tuple[label, yastn.Leg]]
-        Maps native output axis index → ``(unroll_label, full Leg)``.
-
-    Returns
-    -------
-    yastn.Tensor  with full-sized blocks on the output-unrolled axes.
-    """
-    if not partial.struct.t:
-        return partial  # empty tensor: nothing to expand
-
-    config = partial.config
-    backend = config.backend
-    nsym = config.sym.NSYM
-    ndim = partial.ndim_n
-    dtype = partial.yastn_dtype
-    device = partial.device
-
-    expanded = Tensor(config=config, s=partial.struct.s, n=partial.struct.n)
-
-    for i, block_ct in enumerate(partial.struct.t):
-        # Slice block data in the native backend format (no numpy conversion)
-        start, stop = partial.slices[i].slcs[0]
-        partial_D = partial.struct.D[i]
-        block_data = partial._data[start:stop].reshape(partial_D)
-
-        # Build full block shape and the embedding slice tuple
-        full_shape = list(partial_D)
-        out_slices = [slice(None)] * ndim
-
-        for out_ax, (u, full_leg) in output_unroll_info.items():
-            ci = tuple(block_ct[out_ax * nsym : (out_ax + 1) * nsym])
-            if ci in full_leg.tD:
-                full_shape[out_ax] = full_leg.tD[ci]
-                out_slices[out_ax] = sl_map[u].slices.get(ci, slice(None))
-
-        # Allocate a flat zero block in the native format, reshape, then write
-        # partial data at the appropriate slice.  set_block will ravel it back.
-        Dsize = int(np.prod(full_shape))
-        full_block = backend.zeros((Dsize,), dtype=dtype, device=device).reshape(full_shape)
-        full_block[tuple(out_slices)] = block_data
-
-        expanded.set_block(ts=block_ct, Ds=tuple(full_shape), val=full_block)
-
-    return expanded
-
-
 def _iteration_checkpointed(tensors, sl_map, tensor_unroll_info, index_groups,
-                              out_ig, optimize, output_unroll_info, unroll_labels):
+                              out_ig, optimize, unroll_labels):
     r"""
     Run one unroll-loop iteration under ``torch.utils.checkpoint``.
 
@@ -242,9 +177,6 @@ def _iteration_checkpointed(tensors, sl_map, tensor_unroll_info, index_groups,
         Output index group.
     optimize : list[tuple[int, int]]
         Pairwise contraction path.
-    output_unroll_info : dict[int, (label, Leg)]
-        Maps native output axis → ``(label, full_leg)`` for output-unrolled
-        indices.
     unroll_labels : list
         Ordered list of unroll labels.
 
@@ -290,9 +222,6 @@ def _iteration_checkpointed(tensors, sl_map, tensor_unroll_info, index_groups,
         )
         partial = ncon(ts, inds, conjs=conjs, order=order)
 
-        if output_unroll_info:
-            partial = _expand_partial_output(partial, sl_map, output_unroll_info)
-
         # Capture output structure so it can be read back outside checkpoint().
         p_data, p_meta = split_data_and_meta(partial.to_dict(level=0), squeeze=True)
         _out_meta[0] = p_meta
@@ -309,11 +238,12 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
     For each combination of :class:`SlicedLeg` objects (one per unroll index),
     mask the relevant tensors with :meth:`~yastn.Tensor.apply_mask`, run the
     full ``ncon`` contraction on the reduced tensors, then accumulate the
-    partial results by summation.
+    partial results.
 
-    Both contracted and output indices may be unrolled.  For output indices
-    the partial results are first zero-padded back to full block size via
-    :func:`_expand_partial_output` before the ``+`` accumulation step.
+    Both contracted and output indices may be unrolled.  Partials are grouped
+    by their position along output-unrolled axes; contracted-only unroll combos
+    are summed with ``+`` within each group.  The groups are then assembled into
+    the final tensor via :func:`yastn.block`.
 
     Parameters
     ----------
@@ -379,15 +309,21 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
         )
         checkpoint_loop = False
 
-    # Cartesian product over SlicedLeg choices, one per unroll label
-    result = None
+    # Output-unroll labels ordered by their axis index in the output tensor.
+    # Contracted-only unroll labels are not in this list.
+    output_unroll_labels = [u for _, (u, _) in sorted(output_unroll_info.items())]
+
+    # Cartesian product over SlicedLeg choices, one per unroll label.
+    # Partials are grouped by their position along output-unrolled axes.
+    # Contracted-only unroll combos accumulate into the same key via +.
+    output_pos_partials = {}
     for combo in product(*(unroll[u] for u in unroll_labels)):
         sl_map = {u: sl for u, sl in zip(unroll_labels, combo)}
 
         if checkpoint_loop:
             partial = _iteration_checkpointed(
                 tensors, sl_map, tensor_unroll_info, index_groups, out_ig,
-                optimize, output_unroll_info, unroll_labels,
+                optimize, unroll_labels,
             )
         else:
             # Apply masks: for each tensor, apply masks for all its unroll indices
@@ -412,14 +348,25 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
             )
             partial = ncon(ts, inds, conjs=conjs, order=order)
 
-            # For output-unrolled indices, zero-pad partial blocks to full size so
-            # that + accumulation assembles them correctly (handles intra-sector slices).
-            if output_unroll_info:
-                partial = _expand_partial_output(partial, sl_map, output_unroll_info)
+        # Key by the index of each output-unroll SlicedLeg in its unroll list.
+        # Contracted-only combos all share the same key and are summed with +.
+        output_pos_key = tuple(list(unroll[u]).index(sl_map[u]) for u in output_unroll_labels)
+        prev = output_pos_partials.get(output_pos_key)
+        output_pos_partials[output_pos_key] = partial if prev is None else prev + partial
 
-        result = partial if result is None else result + partial
+    if not output_unroll_info:
+        return output_pos_partials.get((), None)
 
-    return result
+    # Assemble partial results at different output positions using block().
+    # The output-unrolled axes are the blocked axes; all others are common_legs.
+    blocked_axes = sorted(output_unroll_info.keys())
+    first_partial = next(iter(output_pos_partials.values()))
+    ndim_out = first_partial.ndim_n
+    common_legs_axes = [ax for ax in range(ndim_out) if ax not in blocked_axes]
+    result = yastn_block(output_pos_partials, common_legs=common_legs_axes)
+    # block() records fusion history in hfs, making the result incompatible
+    # with plain ncon outputs.  Drop it so the caller gets an ordinary tensor.
+    return result.drop_leg_history()
 
 
 def _convert_path_to_ncon_args(*args, **kwargs):
