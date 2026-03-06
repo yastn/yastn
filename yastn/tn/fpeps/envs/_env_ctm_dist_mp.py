@@ -17,7 +17,7 @@ import logging
 from typing import Callable, Sequence
 
 from ._env_contractions import halves_4x4_lhr, halves_4x4_tvb, update_env_fetch_args, update_env_dir
-from ._env_ctm import CTMRG_out, EnvCTM, proj_corners, update_storage_
+from ._env_ctm import CTMRG_out, EnvCTM, proj_corners
 from .. import Site, DoublePepsTensor
 
 from ...._from_dict import from_dict
@@ -117,7 +117,7 @@ def iterate_D_(env, opts_svd=None, moves='hv', method='2x2', max_sweeps=1, itera
 def _ctmrg_iterator_D_(env, opts_svd, moves, method, max_sweeps, corner_tol, **kwargs):
     """ Generator for iterate_ (or its alias ctmrg_). """
     iterator_step = kwargs.get("iterator_step", 0)
-    max_dsv, converged, history = None, False, []
+    max_dsv, converged, prev_corner_sv = None, False, None
 
     devices= kwargs.get('devices', None)
     _validate_devices_list(devices)
@@ -145,8 +145,8 @@ def _ctmrg_iterator_D_(env, opts_svd, moves, method, max_sweeps, corner_tol, **k
             if corner_tol is not None:
                 # Evaluate convergence of CTM by computing the difference of environment corner spectra between consecutive CTM steps.
                 corner_sv = env.calculate_corner_svd()
-                max_dsv = max((corner_sv[k] - history[-1][k]).norm().item() for k in corner_sv) if history else float('Nan')
-                history.append(corner_sv)
+                max_dsv = max((corner_sv[k] - prev_corner_sv[k]).norm().item() for k in corner_sv) if prev_corner_sv is not None else float('Nan')
+                prev_corner_sv = corner_sv
                 converged = max_dsv < corner_tol
                 logging.info(f'Sweep = {sweep:03d}; max_diff_corner_singular_values = {max_dsv:0.2e}')
 
@@ -163,6 +163,9 @@ def _ctmrg_iterator_D_(env, opts_svd, moves, method, max_sweeps, corner_tol, **k
             task_queue.put(None)
         for p in procs:
             p.join()
+        for q in (task_queue, stage1_queue, stage2_queue):
+            q.close()
+            q.join_thread()
 
     yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
 
@@ -302,10 +305,15 @@ def _update_core_D_(ctmrg_mp_context, env, move: str, opts_svd: dict, **kwargs):
         if env.profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.range_push(f"update_projectors_")
 
         # Stage 1: compute enlarged corners and halfs
-        env_d= env.to_dict(level=1)
         for i,site in enumerate(sites_proj):
+            tl,tr,bl,br= tuple(env.nn_site(site, d=d) for d in ((0, 0), (0, 1), (1, 0), (1, 1)))
+            ts_d= tuple(t.detach().to_dict(level=1) for t in (
+                env[tl].l, env[tl].tl, env[tl].t, env.psi[tl],
+                env[bl].b, env[bl].bl, env[bl].l, env.psi[bl],
+                env[tr].t, env[tr].tr, env[tr].r, env.psi[tr],
+                env[br].r, env[br].br, env[br].b, env.psi[br]))
             task_queue.put( ("projectors_stage1",
-                             (i, site, env_d, move), kwargs) )
+                             (i, site, ts_d, move), kwargs) )
 
         # blocking wait for all stage-1 to complete
         for _ in range(len(sites_proj)):
@@ -332,6 +340,7 @@ def _update_core_D_(ctmrg_mp_context, env, move: str, opts_svd: dict, **kwargs):
                 task_queue.put( ("projectors_move_MP_",
                                  ( i, site, 'bv', h1.to_dict(level=1), h2.to_dict(level=1),
                                    env.config.default_device, opts_svd), kwargs) )
+            del h1, h2
 
         for _ in range(len(sites_proj)*2):
             i,site,proj_pair,(p1_d,p2_d)= stage2_queue.get()
@@ -364,30 +373,27 @@ def _update_core_D_(ctmrg_mp_context, env, move: str, opts_svd: dict, **kwargs):
         for i,site in enumerate(site_group):
             for mv in moves:
                 job_ts= update_env_fetch_args(site, env, mv)
-                job_ts_d= tuple(t.to_dict(level=1) if isinstance(t,(Tensor,DoublePepsTensor)) else t for t in job_ts)
+                job_ts_d= tuple(t.detach().to_dict(level=1) if isinstance(t,(Tensor,DoublePepsTensor)) else t for t in job_ts)
                 task_queue.put( ("update_env_move_MP_",
                     (i, site, mv, env.config.default_device, job_ts_d), \
                         {'profiling_mode': kwargs.get('profiling_mode', None)}) )
 
-        # blocking wait for all updates to complete and assignment to env_tmp
-        env_tmp = EnvCTM(env.psi, init=None)  # empty environments
+        # blocking wait for all updates to complete; write results directly into env
         for i,_s in enumerate(site_group):
             for _mv in moves:
                 _i, site, mv, tmp_env_ts_d = stage1_queue.get()
                 tmp_env_ts= tuple(from_dict(t_d).clone() for t_d in tmp_env_ts_d)
                 del tmp_env_ts_d
                 if mv=='l':
-                    env_tmp[site].l, env_tmp[site].tl, env_tmp[site].bl= tmp_env_ts
+                    env[site].l, env[site].tl, env[site].bl= tmp_env_ts
                 elif mv=='r':
-                    env_tmp[site].r, env_tmp[site].tr, env_tmp[site].br= tmp_env_ts
+                    env[site].r, env[site].tr, env[site].br= tmp_env_ts
                 elif mv=='t':
-                    env_tmp[site].t, env_tmp[site].tl, env_tmp[site].tr= tmp_env_ts
+                    env[site].t, env[site].tl, env[site].tr= tmp_env_ts
                 elif mv=='b':
-                    env_tmp[site].b, env_tmp[site].bl, env_tmp[site].br= tmp_env_ts
+                    env[site].b, env[site].bl, env[site].br= tmp_env_ts
 
         if env.profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.range_pop()
-
-        update_storage_(env, env_tmp)
 
 
 def _ctmrg_worker_mp(i:int, devices:Sequence[str],
@@ -443,8 +449,8 @@ def projectors_move_MP_(out_queue, device, i, site, proj_pair, h1_d, h2_d,
         Options for SVD truncation.
     """
     profiling_mode= kwargs.get("profiling_mode", None)
-    h1= from_dict(h1_d).clone().to(device=device,non_blocking=True)
-    h2= from_dict(h2_d).clone().to(device=device,non_blocking=True)
+    h1= from_dict(h1_d).to(device=device,non_blocking=True).clone()
+    h2= from_dict(h2_d).to(device=device,non_blocking=True).clone()
     del h1_d, h2_d
 
     if profiling_mode in ["NVTX",]: h1.config.backend.cuda.nvtx.range_push(f"{proj_pair}")
@@ -500,8 +506,8 @@ def projectors_move_bv(cor_ll, cor_rr, opts_svd, **kwargs):
     return vbr, vbl
 
 
-def projectors_stage1(out_queue,device,
-                      i,site,env_d, move, **kwargs):
+def projectors_stage1(out_queue, device,
+                      i, site, ts_d, move, **kwargs):
     r"""
     Stage 1 of CTM projector calculation: compute enlarged corners and halfs.
 
@@ -515,25 +521,19 @@ def projectors_stage1(out_queue,device,
         Index of the job.
     site: Site
         Reference lattice site for which the projectors are calculated.
-    env_d: dict
-        EnvCTM serialized to dictionary.
-    tl, tr, bl, br: Site
-        Lattice sites corresponding to corners.
+    ts_d: tuple[dict]
+        16 tensors required for the enlarged corner/half computation, serialized to dictionaries.
+        Order: (l_tl, tl_tl, t_tl, psi_tl, b_bl, bl_bl, l_bl, psi_bl,
+                t_tr, tr_tr, r_tr, psi_tr, r_br, br_br, b_br, psi_br)
     move: str
         CTM move direction: 'h', 'v', 'l', 'r', 't', or 'b'.
     """
     profiling_mode= kwargs.get("profiling_mode", None)
-    env= from_dict(env_d).clone().to(device=device,non_blocking=True)
-    env = env.detach()
-    env.psi = env.psi.detach()
+    ts= tuple(from_dict(t_d).to(device=device, non_blocking=True) for t_d in ts_d)
+    del ts_d
+    _config= ts[0].config
 
-    if profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.range_push(f"projectors_stage1")
-    tl, tr, bl, br= tuple(env.nn_site(site, d=d) for d in ((0, 0), (0, 1), (1, 0), (1, 1)))
-    ts= ( env[tl].l, env[tl].tl, env[tl].t, env.psi[tl],
-            env[bl].b, env[bl].bl, env[bl].l, env.psi[bl],
-            env[tr].t, env[tr].tr, env[tr].r, env.psi[tr],
-            env[br].r, env[br].br, env[br].b, env.psi[br], )
-
+    if profiling_mode in ["NVTX",]: _config.backend.cuda.nvtx.range_push(f"projectors_stage1")
     cor_tt, cor_bb, cor_ll, cor_rr= None, None, None, None
     res= ()
     if any(x in move for x in 'lrh'):
@@ -542,10 +542,10 @@ def projectors_stage1(out_queue,device,
     if any(x in move for x in 'tvb'):
         cor_ll, cor_rr= halves_4x4_tvb(ts)
         res+= (cor_ll, cor_rr)
+    del ts
     res= tuple(r.to_dict(level=1) for r in res)
-    out_queue.put( (i,site, res) )
-    if profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.range_pop()
-    del env, ts
+    out_queue.put( (i, site, res) )
+    if profiling_mode in ["NVTX",]: _config.backend.cuda.nvtx.range_pop()
     del cor_tt, cor_bb, cor_ll, cor_rr, res
 
 

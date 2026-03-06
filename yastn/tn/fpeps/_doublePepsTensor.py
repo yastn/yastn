@@ -218,6 +218,11 @@ class DoublePepsTensor(SpecialTensor):
         op_copy = self.op.copy() if self.op is not None else None
         return DoublePepsTensor(bra=self.bra.copy(), ket=self.ket.copy(), trans=self.trans, op=op_copy, swaps=self.swaps)
 
+    def detach(self):
+        r""" Return a detached DoublePepsTensor with constituent tensors detached from the computational graph. """
+        op_detach = self.op.detach() if self.op is not None else None
+        return DoublePepsTensor(bra=self.bra.detach(), ket=self.ket.detach(), trans=self.trans, op=op_detach, swaps=self.swaps)
+
     def to_dict(self, level=2):
         r""" Serialize DoublePepsTensor into a dictionary. """
         d = {'type': type(self).__name__,
