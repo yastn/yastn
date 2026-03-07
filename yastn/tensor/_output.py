@@ -32,7 +32,7 @@ from .._split_combine_dict import split_data_and_meta, combine_data_and_meta
 __all__ = ['save_to_dict', 'save_to_hdf5', 'requires_grad']
 
 
-def to_dict(a, level=2, meta=None) -> dict:
+def to_dict(a, level=2, meta=None, resolve_ops=False) -> dict:
     r"""
     Serialize YASTN tensor to a dictionary containing all the information needed to recreate the tensor.
     Complementary function is :meth:`yastn.Tensor.from_dict` or a general :meth:`yastn.from_dict`.
@@ -63,6 +63,9 @@ def to_dict(a, level=2, meta=None) -> dict:
         that allows using external matrix-free methods, such as :func:`eigs` implemented in SciPy.
         See example at :ref:`examples/tensor/decomposition:combining with scipy.sparse.linalg.eigs`.
     """
+    if resolve_ops:
+        return a.consume_transpose().to_dict(level=level, meta=meta, resolve_ops=False)        
+    
     if level >= 1:
         config = a.config._asdict()
         config['sym'] = config['sym'].SYM_ID

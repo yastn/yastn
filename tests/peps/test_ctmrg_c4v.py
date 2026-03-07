@@ -168,6 +168,7 @@ def test_ctmrg_c4v_Ising_AD(config_kwargs, beta, layers, init, method, checkpoin
     eX.backward()
     edX = beta.grad
     # Compare with the the analytical result
+    print(f"eX {eX} edX {edX}")
     print(abs(edX.item() - dMX(beta.item())))
     assert abs(edX.item() - dMX(beta.item())) < 1e-6
 
