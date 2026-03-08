@@ -14,9 +14,10 @@
 # ==============================================================================
 
 from typing import Sequence, Union
-import yastn
-from yastn.tensor import Leg
-import yastn.tn.mps as mps
+from ...tensor import Leg, ncon, Tensor, block, tensordot
+from ...initialize import rand, eye
+from ..._from_dict import from_dict, combine_data_and_meta, split_data_and_meta
+from ...mps import mps
 
 from scipy.sparse.linalg import LinearOperator
 from scipy.sparse.linalg import eigs
@@ -71,7 +72,7 @@ def apply_transfer_matrix(
     idxs[-2][-1]= -1 - ( v.ndim == 3 )
     idxs[-1][-1]= -2 - ( v.ndim == 3 )
 
-    vNAA= yastn.ncon(ts,idxs,conjs=conjs)
+    vNAA= ncon(ts,idxs,conjs=conjs)
     return vNAA
 
 
@@ -116,17 +117,17 @@ def eigs_implicit(umps:Union[mps.Mps,Sequence["Tensor"]],
 
     if V0 is None:
         # initial guess
-        V0= yastn.rand(umps[0].config, legs=[umps[0].get_legs(axes=0), 
+        V0= rand(umps[0].config, legs=[umps[0].get_legs(axes=0), 
             umps[0].get_legs(axes=0).conj() if umps_conj is None else umps_conj[0].get_legs(axes=0)])
-    V0_data, V0_meta= yastn.split_data_and_meta(V0.to_dict())
+    V0_data, V0_meta= split_data_and_meta(V0.to_dict())
 
     def _mv(v):
-        V= yastn.from_dict(yastn.combine_data_and_meta(cfg.backend.to_tensor(v,
+        V= from_dict(combine_data_and_meta(cfg.backend.to_tensor(v,
             dtype=cfg.default_dtype,
             device=cfg.default_device),
             meta=V0_meta))
         MV= apply_transfer_matrix(umps,V,umps_conj=umps_conj)
-        MV_data, MV_meta= yastn.split_data_and_meta(MV.to_dict(level=2))
+        MV_data, MV_meta= split_data_and_meta(MV.to_dict(level=2))
         return MV_data[0]
 
     T= LinearOperator((V0.size,V0.size), matvec=_mv, dtype=cfg.default_dtype)
@@ -135,7 +136,7 @@ def eigs_implicit(umps:Union[mps.Mps,Sequence["Tensor"]],
         return vals, None
     
     vals, vecs= eigs(T, k=k, v0=None, return_eigenvectors=True)
-    Vecs= yastn.block( {col: yastn.from_dict(yastn.combine_data_and_meta(cfg.backend.to_tensor(vecs[:,col],
+    Vecs= block( {col: from_dict(combine_data_and_meta(cfg.backend.to_tensor(vecs[:,col],
         dtype=cfg.default_dtype,
         device=cfg.default_device),
         meta=V0_meta)).add_leg(axis=0) for col in range(vecs.shape[1])}, common_legs=tuple(i+1 for i in range(len(V0.get_legs()))) ) 
@@ -181,17 +182,17 @@ def eigs_implicit_v2(mv:callable, config=None, legs:Sequence[Leg]=None,
     assert V0 or (config and legs), "Either V0 or (config and legs) must be provided to determine the shape of the eigenvectors."
     if V0 is None:
         # initial guess
-        V0= yastn.rand(config=config, legs=legs)
+        V0= rand(config=config, legs=legs)
     config= V0.config
-    V0_data, V0_meta= yastn.split_data_and_meta(V0.to_dict())
+    V0_data, V0_meta= split_data_and_meta(V0.to_dict())
 
     def _mv(v):
-        V= yastn.from_dict(yastn.combine_data_and_meta(config.backend.to_tensor(v,
+        V= from_dict(combine_data_and_meta(config.backend.to_tensor(v,
             dtype=config.default_dtype,
             device=config.default_device),
             meta=V0_meta))
         MV= mv(V)
-        MV_data, MV_meta= yastn.split_data_and_meta(MV.to_dict(level=2))
+        MV_data, MV_meta= split_data_and_meta(MV.to_dict(level=2))
         return MV_data[0]
 
     T= LinearOperator((V0.size,V0.size), matvec=_mv, dtype=config.default_dtype)
@@ -200,7 +201,7 @@ def eigs_implicit_v2(mv:callable, config=None, legs:Sequence[Leg]=None,
         return vals, None
     
     vals, vecs= eigs(T, k=k, v0=None, return_eigenvectors=True)
-    Vecs= yastn.block( {col: yastn.from_dict(yastn.combine_data_and_meta(config.backend.to_tensor(vecs[:,col],
+    Vecs= block( {col: from_dict(combine_data_and_meta(config.backend.to_tensor(vecs[:,col],
         dtype=config.default_dtype,
         device=config.default_device),
         meta=V0_meta)).add_leg(axis=0) for col in range(vecs.shape[1])}, common_legs=tuple(i+1 for i in range(len(V0.get_legs()))) ) 
@@ -228,7 +229,7 @@ def qr_sweep_all_cyclic(umps, C_init=None):
         R = C
         qs, Rs = [], [C]
         for i in range(len(umps)):
-            RA = yastn.tensordot(R, umps[i], axes=((1,), (0,)))
+            RA = tensordot(R, umps[i], axes=((1,), (0,)))
             Q, R = RA.qr(axes=((0, 1), 2), sQ=1, Qaxis=2)
             qs.append(Q)
             Rs.append(R)
@@ -237,7 +238,7 @@ def qr_sweep_all_cyclic(umps, C_init=None):
 
     if C_init is None:
         legs = [umps[0].get_legs(axes=0), umps[0].get_legs(axes=0).conj()]
-        C_init = yastn.eye(umps[0].config, legs=legs)
+        C_init = eye(umps[0].config, legs=legs)
     else:
         _, C_init= C_init.qr(axes=(0, 1))  # ensure C_init is isometric
 
@@ -320,7 +321,7 @@ def qr_sweep(umps:Union[mps.Mps,Sequence["Tensor"]], C_init:"Tensor"=None):
     """
     if C_init is None:
         legs = [umps[0].get_legs(axes=0), umps[0].get_legs(axes=0).conj()]
-        C_init = yastn.eye(umps[0].config, legs=legs)
+        C_init = eye(umps[0].config, legs=legs)
     else:
         _, C_init= C_init.qr(axes=(0, 1))  # ensure C_init is isometric
 
@@ -328,7 +329,7 @@ def qr_sweep(umps:Union[mps.Mps,Sequence["Tensor"]], C_init:"Tensor"=None):
     for i in range(len(umps)):
         A= umps[i]
         # R: (D, D_left),  A: (D_left, d, D_right)  ->  RA: (D, d, D_right)
-        RA = yastn.tensordot(R, A, axes=((1,), (0,)))
+        RA = tensordot(R, A, axes=((1,), (0,)))
         # QR: axes (0,1) -> Q with new bond at Qaxis=2,  axis 2 -> R with bond at Raxis=0
         Q, R = RA.qr(axes=((0, 1), 2), sQ=1, Qaxis=2)
         Qs.append(Q)
@@ -468,7 +469,7 @@ def biorthogonalize_left(umps_top:Union[mps.Mps,Sequence["Tensor"]],
 
         # check biorthogonality of P_L and Pbar_L
         I_approx= P_L.tensordot(Pbar_L, axes=((0, 1), (0, 1)))*(1/eval)
-        Delta= (I_approx - yastn.eye(I_approx.config, legs=I_approx.get_legs(), isdiag=False)).norm()
+        Delta= (I_approx - eye(I_approx.config, legs=I_approx.get_legs(), isdiag=False)).norm()
         print(f"Iteration {n_iter}: eval = {eval}, ||I_approx - I|| = {Delta}")
         n_iter += 1
 

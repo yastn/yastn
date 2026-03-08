@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
+from ._env_ctm import EnvCTM
 from ._env_dataclasses import EnvCTM_projectors
 from ...mps._umps import biorthogonalize_left, eigs_implicit_v2
 from .geometry import Lattice
