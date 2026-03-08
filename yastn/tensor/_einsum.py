@@ -207,6 +207,7 @@ def _meta_ncon(inds, order, swap):
             raise YastnError("Positive ints in ins and order should match.")
         reorder = {o: k for k, o in enumerate(order, start=1)}
         inds = [[reorder[o] if o > 0 else o for o in xx] for xx in inds]
+        swap = [[reorder[o] if o > 0 else o for o in xx] for xx in swap]
     #
     edges = [[ind, ten, leg] for ten, el in enumerate(inds) for leg, ind in enumerate(el)]
     #
@@ -258,7 +259,13 @@ def _meta_ncon(inds, order, swap):
             for ten_swap, axes_swap in swap_tensors.items():
                 commands.append(('swap_gate', ten_swap, ten_swap, tuple(axes_swap)))
             swaps = swap_later
-
+            #
+            # test if to-be-contracted legs are yet to be swaped
+            tas = [[ten1, ax] for ax in axes1] + [[ten2, ax] for ax in axes2]
+            bad_swaps = [sw12 for sw12 in swaps if any(ta in sw12[0] or ta in sw12[1] for ta in tas)]
+            if bad_swaps:
+                raise YastnError("Provided swaps are inconsistent with contraction order.")
+            #
             # contract
             if ten1 == ten2: # trace
                 if dot_done:

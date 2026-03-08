@@ -305,6 +305,15 @@ def test_ncon_einsum_swaps(config_kwargs):
                          swap='bh,be,bf,dh,ei,fi,di', order=order)  #
         assert (y - r).norm() < tol * r.norm()
 
+    with pytest.raises(yastn.YastnError,
+                       match="Provided swaps are inconsistent with contraction order."):
+        yastn.ncon([a, b, c, d, e, f], ((1, 2, 4, 11), (3, 5, 6, 8, 1), (7, 9, 2, 3), (10, 4, 6, 5, 7), (12, 8, 9, 10), (11, 12)),
+                swap=((2, 8), (2, 5), (2, 6), (4, 8), (9, 6), (9, 5), (4, 9)), order=(2, 4, 7, 1, 3, 5, 6, 11, 8, 9, 10, 12))
+
+    with pytest.raises(yastn.YastnError,
+                       match="Provided swaps are inconsistent with contraction order."):
+        yastn.einsum('abdk,cefha,gibc,jdfeg,lhij,kl', a, b, c, d, e, f,
+                         swap='bh,be,bf,dh,ei,fi,di', order='bdgacefkhijl')
 
 
 if __name__ == '__main__':
