@@ -924,9 +924,6 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='SR', policy='fullrank', **kwargs) -> tu
         Sdata, Udata = a.config.backend.eigh(data, meta, sizes)
     elif policy == 'block_lanczos':
         Sdata, Udata= a.config.backend.eigh_lowrank(data, meta, sizes, thresh=None, which=which, **kwargs)
-        # _real_dtype = {'complex128': 'float64', 'complex64': 'float32'}.get(a.yastn_dtype, a.yastn_dtype)
-        # Sdata = a.config.backend.to_tensor(Sdata_np, dtype=_real_dtype, device=a.device)
-        # Udata = a.config.backend.to_tensor(Udata_np, dtype=a.yastn_dtype, device=a.device)
     else:
         raise YastnError("eigh() policy should be 'fullrank' or 'block_lanczos'.")
 

@@ -466,8 +466,17 @@ class EnvCTM():
         # modify existing environment in place
         update_storage_(self, env_tmp)
 
-    def boundary_mps(self, n, dirn) -> mps.MpsMpoOBC:
-        r""" Convert environmental tensors of Ctm to an MPS. """
+    def boundary_mps(self, n:int, dirn: str) -> mps.MpsMpoOBC:
+        r""" 
+        Convert environmental tensors of Ctm to an MPS. 
+
+        Parameters
+        ----------
+        n: int
+            Row (''t','b') or column ('l', 'r') index, depending on the direction ``dirn``.
+        dirn: str
+            Direction of the boundary, 'l', 'r', 't', or 'b' for left, right, top, or bottom boundary, respectively.
+        """
         if dirn == 'b':
             H = mps.Mps(N=self.Ny)
             for ny in range(self.Ny):
