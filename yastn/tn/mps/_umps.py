@@ -14,22 +14,24 @@
 # ==============================================================================
 
 from typing import Sequence, Union
-from ...tensor import Leg, ncon, Tensor, block, tensordot
-from ...initialize import rand, eye
-from ..._from_dict import from_dict, combine_data_and_meta, split_data_and_meta
-from ...mps import mps
+from ...tensor import Leg, ncon, Tensor, tensordot
+from ...initialize import rand, eye, block
+from ..._from_dict import from_dict 
+from ...tensor import combine_data_and_meta, split_data_and_meta
+from . import Mps
 
 from scipy.sparse.linalg import LinearOperator
 from scipy.sparse.linalg import eigs
 
 
 def apply_transfer_matrix(
-        umps: Union[mps.Mps,Sequence["Tensor"]],
+        umps: Union[Mps,Sequence["Tensor"]],
         v: "Tensor",
-        umps_conj: Union[mps.Mps,Sequence["Tensor"]] = None
+        umps_conj: Union[Mps,Sequence["Tensor"]] = None
     ) -> "yastn.Tensor":
     """
-    Applies the transfer matrix of a uniform MPS (uMPS) to a tensor `v`.
+    Applies the transfer matrix of a uniform MPS (uMPS) to a tensor `v`, where
+    first index of v is contracted with "bra" layer of the transfer matrix and second index with "ket" layer.  
 
     This contracts the sequence of uMPS tensors (and optionally different conjugate tensors)
     with `v`, effectively computing the action of the transfer matrix on `v`.
@@ -37,10 +39,11 @@ def apply_transfer_matrix(
 
     ::
     
-               -- A  -- 2  2 --A --- 5 5 -- A --- 8 8 -- A --- 11 ...
-      \rho  = |                3            6            9
-               -- A+ -- 1  1 --A+ -- 4 4 -- A+ -- 7 7 -- A+ -- 10 ...
+               -- 2  2 --A --- 5 5 -- A --- 8 8 -- A --- 11 ...
+      \rho  = v                3            6            9
+               -- 1  1 --A+ -- 4 4 -- A+ -- 7 7 -- A+ -- 10 ...
 
+    i.e.        v_45 = (A+)_41 v_12 A_25  and cont.     
     Parameters
     ----------
     umps :
@@ -76,8 +79,8 @@ def apply_transfer_matrix(
     return vNAA
 
 
-def eigs_implicit(umps:Union[mps.Mps,Sequence["Tensor"]], 
-                  umps_conj:Union[mps.Mps,Sequence["Tensor"]]=None, 
+def eigs_implicit(umps:Union[Mps,Sequence["Tensor"]], 
+                  umps_conj:Union[Mps,Sequence["Tensor"]]=None, 
                   k=1, eigenvectors=False, V0:"Tensor"=None):
     """
     Compute the k leading eigenvalues (and optionally eigenvectors) of the
@@ -117,27 +120,30 @@ def eigs_implicit(umps:Union[mps.Mps,Sequence["Tensor"]],
 
     if V0 is None:
         # initial guess
-        V0= rand(umps[0].config, legs=[umps[0].get_legs(axes=0), 
-            umps[0].get_legs(axes=0).conj() if umps_conj is None else umps_conj[0].get_legs(axes=0)])
+        V0= rand(umps[0].config, legs=[
+            umps[0].get_legs(axes=0) if umps_conj is None else umps_conj[0].get_legs(axes=0).conj(),
+            umps[0].get_legs(axes=0).conj(), 
+        ])
     V0_data, V0_meta= split_data_and_meta(V0.to_dict())
 
     def _mv(v):
         V= from_dict(combine_data_and_meta(cfg.backend.to_tensor(v,
-            dtype=cfg.default_dtype,
+            dtype=str(v.dtype),
             device=cfg.default_device),
             meta=V0_meta))
         MV= apply_transfer_matrix(umps,V,umps_conj=umps_conj)
         MV_data, MV_meta= split_data_and_meta(MV.to_dict(level=2))
         return MV_data[0]
 
-    T= LinearOperator((V0.size,V0.size), matvec=_mv, dtype=cfg.default_dtype)
+    T= LinearOperator((V0.size,V0.size), matvec=_mv, 
+                      dtype=cfg.default_dtype if (umps_conj is None) else 'complex128')
     if not eigenvectors:
         vals= eigs(T, k=k, v0=None, return_eigenvectors=False)
         return vals, None
     
     vals, vecs= eigs(T, k=k, v0=None, return_eigenvectors=True)
     Vecs= block( {col: from_dict(combine_data_and_meta(cfg.backend.to_tensor(vecs[:,col],
-        dtype=cfg.default_dtype,
+        dtype=str(vecs.dtype),
         device=cfg.default_device),
         meta=V0_meta)).add_leg(axis=0) for col in range(vecs.shape[1])}, common_legs=tuple(i+1 for i in range(len(V0.get_legs()))) ) 
     
@@ -302,7 +308,7 @@ def isogauge_left(umps, C_init=None, eps=1e-12):
     return results
 
 
-def qr_sweep(umps:Union[mps.Mps,Sequence["Tensor"]], C_init:"Tensor"=None):
+def qr_sweep(umps:Union[Mps,Sequence["Tensor"]], C_init:"Tensor"=None):
     """
     Execute series of QR decompositions:  
     
@@ -371,10 +377,10 @@ def isogauge_left_v2(umps, C_init=None, eps=1e-12):
     return Qs, Rs
 
 
-def biorthogonalize_left(umps_top:Union[mps.Mps,Sequence["Tensor"]], 
-                         umps_bottom:Union[mps.Mps,Sequence["Tensor"]], 
-                         C_init="Tensor", pinv_cutoff=1e-12, eps=1e-12):
-    """
+def biorthogonalize_left(umps_top:Union[Mps,Sequence["Tensor"]], 
+                         umps_bottom:Union[Mps,Sequence["Tensor"]], 
+                         C_init:"Tensor"=None, pinv_cutoff=1e-12, eps=1e-12):
+    """ 
     Find the left biorthogonal gauge for a pair of uMPS (ket/bra) layers.
 
     ::
@@ -465,7 +471,8 @@ def biorthogonalize_left(umps_top:Union[mps.Mps,Sequence["Tensor"]],
         P_L= (Y_LU @ P_L) @ Y_LU_pinv
         Pbar_L= (Y_DL.transpose() @ Pbar_L) @ Y_DL_pinv.transpose()
         C_LU= Y_LU @ C_LU
-        C_DL= Y_DL @ C_DL
+        # C_DL= Y_DL @ C_DL
+        C_DL= C_DL @ Y_DL
 
         # check biorthogonality of P_L and Pbar_L
         I_approx= P_L.tensordot(Pbar_L, axes=((0, 1), (0, 1)))*(1/eval)

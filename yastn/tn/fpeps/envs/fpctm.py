@@ -15,8 +15,9 @@
 
 from ._env_ctm import EnvCTM
 from ._env_dataclasses import EnvCTM_projectors
-from ...mps._umps import biorthogonalize_left, eigs_implicit_v2
-from .geometry import Lattice
+# from ...mps._umps import biorthogonalize_left, eigs_implicit_v2
+from ....tn.mps._umps import biorthogonalize_left, eigs_implicit_v2
+from .._geometry import Lattice
 from ....tensor import tensordot, ncon
 from ._env_contractions import corner2x2
 
@@ -35,7 +36,7 @@ def _update_fpctm_projectors(env: EnvCTM) -> "Lattice[EnvCTM_projectors]":
     # -- C_DL  -- T_b [r-1,c] --     -- Pbar_L[r-1,c] -- C_DL --
     #
     pinv_cutoff, eps = 1e-12, 1e-12
-    for site in env.sites:
+    for site in env.sites():
         r,c= site
         # left projectors
         #
@@ -99,7 +100,7 @@ def _update_fpctm_env(env: EnvCTM) -> EnvCTM:
     env_new = EnvCTM(env.psi, init=None)
 
     # T-tensors
-    for site in env.sites:
+    for site in env.sites():
         r,c= site
     
         def fpop_l(T_l):
@@ -140,7 +141,7 @@ def _update_fpctm_env(env: EnvCTM) -> EnvCTM:
         env_new[r,c].b = evecs[0].remove_leg(0)
     
     # C-tensors
-    for site in env.sites:
+    for site in env.sites():
         r,c= site
 
         def fpop_tl(C_tl):
