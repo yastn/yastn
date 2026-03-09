@@ -21,7 +21,7 @@ from scipy.optimize import minimize
 import torch
 
 from ._env_ctm_c4v import EnvCTM_c4v
-from .fixed_pt import fast_env_T_gauge_multi_sites, NoFixedPointError, real_to_complex, complex_to_real, _concat_data, _assemble_dict_from_1d
+from .fixed_pt import fast_env_T_gauge_multi_sites, NoFixedPointError, _concat_data, _assemble_dict_from_1d, extract_phase
 from .rdm import *
 from .._geometry import Lattice
 from ....initialize import zeros, eye
@@ -46,44 +46,6 @@ def env_raw_data_c4v(env):
 
     return torch.cat(data_list), slice_list
 
-def refill_env_c4v(env, data, slice_list):
-    ind = 0
-    for site in env.sites():
-        for dirn in ["tl", "t"]:
-            getattr(env[site], dirn)._data = torch.narrow(data, 0, *slice_list[ind])
-            ind += 1
-
-def refill_state_c4v(state, data):
-    assert len(state.sites()) == len(data), "Number of sites in state and data do not match"
-    for site,d in zip(state.sites(), data):
-        state[site]._data = d
-    return state
-
-def find_coeff(zero_modes, dtype=torch.complex128):
-    def unitary_loss(cs):
-        loss = 0.0
-        # assemble unitaries
-        legs = zero_modes[0].get_legs()
-        identity = diag(eye(config=zero_modes[0].config, legs=(legs[0], legs[0].conj())))
-        unitary = zeros(config=zero_modes[0].config, legs=legs, dtype='complex128' if dtype is torch.complex128 else 'float64')
-        for j in range(len(zero_modes)):
-            unitary = unitary + cs[j] * zero_modes[j]
-        loss += ((tensordot(unitary, unitary, axes=(1, 1), conj=(0, 1)) - identity).norm(p='fro')**2/ identity.norm(p='fro')**2).item().real
-        return loss
-
-    if dtype == torch.complex128:
-        cs = np.ones(len(zero_modes), dtype=np.float64)
-        res = minimize(fun=lambda z: unitary_loss(real_to_complex(z)), x0=complex_to_real(cs), method='SLSQP', options={"eps":1e-9, "ftol":1e-14})
-        # print(res.message)
-        res = real_to_complex(res.x)
-    else:
-        cs = np.zeros(len(zero_modes), dtype=np.float64)
-        cs += np.random.rand(*cs.shape)*0.5
-        res = minimize(fun=unitary_loss, x0=cs, method='SLSQP', jac='3-point', options={"eps": 1e-9, "ftol":1e-14})
-        # print(res.message)
-        res = res.x
-    return res
-
 def find_gauge_c4v(env_old, env, verbose=False):
     r"""
     Find the gauge transformation matrix sigma that connects env and env_old.
@@ -104,13 +66,8 @@ def find_gauge_c4v(env_old, env, verbose=False):
     if len(zero_modes) == 0:
         return None
 
-    cs = find_coeff(zero_modes, dtype=zero_modes[0].dtype)
-
     site = env.sites()[0]
-    dtype = "complex128" if zero_modes[0].dtype is torch.complex128 else "float64"
-    sigma = zeros(zero_modes[0].config, legs=zero_modes[0].get_legs(), dtype=dtype)
-    for i, c in enumerate(cs):
-        sigma += c * zero_modes[i]
+    sigma = zero_modes[0]
     sigma._data.detach_()
 
     # Note: The sigma matrix for T_new^' can be obtained by flipping signatures of sigma matrix
@@ -120,7 +77,11 @@ def find_gauge_c4v(env_old, env, verbose=False):
         tensordot(sigma, env[site].t, axes=(0, 0), conj=(1, 0)), sigma_p, axes=(2, 0),
     )
     T_old = env_old[site].t
+
+    v1, v2 = T_old._data, fixed_t._data
+    T_phase = extract_phase(v1, v2)
     if verbose:
+        fixed_t._data = fixed_t._data * torch.exp(1j*T_phase).to(fixed_t._data.dtype)
         print("T diff:", (fixed_t - T_old).norm() / T_old.norm())
 
     fixed_C = tensordot(
@@ -128,12 +89,14 @@ def find_gauge_c4v(env_old, env, verbose=False):
         sigma,
         axes=(1, 0),
     )
-
     C_old = env_old[site].tl
+    v1, v2 = C_old._data, fixed_C._data
+    C_phase = extract_phase(v1, v2)
     if verbose:
+        fixed_C._data = fixed_C._data * torch.exp(1j*C_phase).to(fixed_C._data.dtype)
         print("C diff:", (fixed_C - C_old).norm() / C_old.norm())
 
-    return sigma
+    return sigma, T_phase, C_phase
 
 def fp_ctmrg_c4v(env: EnvCTM_c4v, \
             ctm_opts_fwd : dict= {'opts_svd': {}, 'corner_tol': 1e-8, 'max_sweeps': 100, 'method': "2x2",},
@@ -179,7 +142,7 @@ class FixedPoint_c4v(torch.autograd.Function):
         return rdms
 
     @staticmethod
-    def fixed_point_iter(sigma, ctm_opts_fp, env_dict, env_meta, env_slices, psi_meta, env_data, psi_data):
+    def fixed_point_iter(sigma, T_phase, C_phase, ctm_opts_fp, env_dict, env_meta, env_slices, psi_meta, env_data, psi_data):
         env_t_dict = _assemble_dict_from_1d(env_meta, env_data, env_slices)
         psi_dict = combine_data_and_meta(psi_data, psi_meta)
         env_dict['env'], env_dict['psi'] = env_t_dict, psi_dict
@@ -197,6 +160,7 @@ class FixedPoint_c4v(torch.autograd.Function):
             sigma_p,
             axes=(2, 0),
         )
+        fixed_t._data = fixed_t._data * torch.exp(1j*T_phase).to(fixed_t._data.dtype)
         setattr(env_in[site], "t", fixed_t)
 
         fixed_C = tensordot(
@@ -204,6 +168,7 @@ class FixedPoint_c4v(torch.autograd.Function):
             sigma,
             axes=(1, 0),
         )
+        fixed_C._data = fixed_C._data * torch.exp(1j*C_phase).to(fixed_C._data.dtype)
         setattr(env_in[site], "tl", fixed_C)
 
         env_out_dict = env_in.to_dict(level=0)
@@ -308,7 +273,7 @@ class FixedPoint_c4v(torch.autograd.Function):
         log.info(f"{type(ctx).__name__}.forward FP CTM step t {t1-t0} [s]")
 
         t0 = time.perf_counter()
-        sigma = find_gauge_c4v(env_converged, ctm_env_out, verbose=False)
+        sigma, T_phase, C_phase = find_gauge_c4v(env_converged, ctm_env_out, verbose=False)
         t1 = time.perf_counter()
         if sigma is None:
             raise NoFixedPointError(code=1, message="No fixed point found: fail to find the gauge matrix!")
@@ -318,7 +283,7 @@ class FixedPoint_c4v(torch.autograd.Function):
 
         sigma_d = sigma.to_dict(level=0)
         sigma_data, sigma_meta = split_data_and_meta(sigma_d)
-        ctx.save_for_backward(*env_data, *sigma_data)
+        ctx.save_for_backward(*env_data, *sigma_data, T_phase, C_phase)
         ctx.env_meta, ctx.sigma_meta = env_meta, sigma_meta
         ctx.ctm_opts_fp = _ctm_opts_fp
 
@@ -334,7 +299,7 @@ class FixedPoint_c4v(torch.autograd.Function):
         dA = grad_env
 
         env_data= ctx.saved_tensors[:-1]
-        sigma_data= ctx.saved_tensors[-1]
+        sigma_data, T_phase, C_phase = ctx.saved_tensors[-3], ctx.saved_tensors[-2], ctx.saved_tensors[-1]
 
         env_dict = combine_data_and_meta(env_data, ctx.env_meta)
         sigma_d = combine_data_and_meta((sigma_data,), ctx.sigma_meta)
@@ -352,7 +317,7 @@ class FixedPoint_c4v(torch.autograd.Function):
                 torch.cuda.memory._dump_snapshot(f"{type(ctx).__name__}_backward_prevjp_CUDAMEM.pickle")
             # _, dfdC_vjp = torch.func.vjp(lambda x: FixedPoint_c4v.fixed_point_iter(env, sigma, ctx.ctm_opts_fp, _env_slices, x, psi_data), _env_ts)
             # _, dfdA_vjp = torch.func.vjp(lambda x: FixedPoint_c4v.fixed_point_iter(env, sigma, ctx.ctm_opts_fp, _env_slices, _env_ts, x), psi_data)
-            _, df_vjp = torch.func.vjp(lambda x,y: FixedPoint_c4v.fixed_point_iter(sigma, ctx.ctm_opts_fp, env_dict, _env_meta, _env_slices, _psi_meta, x, y), _env_ts, _psi_data)
+            _, df_vjp = torch.func.vjp(lambda x,y: FixedPoint_c4v.fixed_point_iter(sigma, T_phase, C_phase, ctx.ctm_opts_fp, env_dict, _env_meta, _env_slices, _psi_meta, x, y), _env_ts, _psi_data)
             dfdC_vjp= lambda x: (df_vjp(x)[0],)
             dfdA_vjp= lambda x: (df_vjp(x)[1],)
             if verbosity > 2 and _env_ts.is_cuda:
