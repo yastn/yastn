@@ -1,4 +1,4 @@
-# Copyright 2024 The YASTN Authors. All Rights Reserved.
+# Copyright 2026 The YASTN Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,20 +17,485 @@ from functools import lru_cache
 from itertools import product
 import gc, subprocess
 import time
+from typing import Hashable, Mapping, Sequence, Union
 
 import numpy as np
 import opt_einsum as oe  # type: ignore
-from opt_einsum.contract import (  # type: ignore
-    PathInfo,
-    shape_only,
-)
+from opt_einsum.contract import PathInfo  # type: ignore
 try:
     from opt_einsum.contract import _VALID_CONTRACT_KWARGS
 except:
     _VALID_CONTRACT_KWARGS = {'optimize', 'memory_limit', 'einsum_call', 'use_blas', 'shapes'}
-from . import Tensor, ncon
+from . import Tensor, ncon, split_data_and_meta, combine_data_and_meta
+from ._legs import Leg
+
+try:
+    import torch
+    from torch.utils.checkpoint import checkpoint
+    _TORCH_AVAILABLE = True
+except ImportError:
+    _TORCH_AVAILABLE = False
+    torch = None
+    checkpoint = None
 
 log = logging.getLogger(__name__)
+
+
+class SlicedLeg:
+    r"""
+    Describes a subset of a YASTN tensor leg: a selection of charge sectors,
+    each optionally restricted to a contiguous slice within the sector's full
+    block dimension.
+
+    A collection of non-overlapping ``SlicedLeg`` objects whose union covers
+    all charge sectors of a leg forms a valid partition.  Iterating over such
+    a partition and summing the partial contractions reproduces the full result,
+    while each individual contraction operates on a strictly smaller tensor.
+
+    Parameters
+    ----------
+    t : Sequence[tuple | int]
+        Charge sectors included in this slice.  Each element must be a tuple
+        of ints (one per symmetry component, length ``NSYM``), or a plain int
+        for single-component symmetries (normalised to a 1-tuple internally).
+    D : Sequence[int]
+        Dimension of each charge sector *within this slice*.  Must equal
+        ``len(t)``.  Use ``full_D`` when the entire block is selected.
+    slices : dict[tuple, slice], optional
+        Maps each charge tuple to a ``slice`` object into the full block
+        dimension of that sector.  If omitted, every sector uses
+        ``slice(None)`` (i.e. the full block is selected).
+    """
+
+    def __init__(self, t, D, slices=None):
+        # normalise each charge to a tuple of ints
+        self.t = tuple(
+            tuple(ti) if hasattr(ti, '__iter__') else (int(ti),) for ti in t
+        )
+        self.D = tuple(int(d) for d in D)
+        if len(self.t) != len(self.D):
+            raise ValueError("SlicedLeg: len(t) must equal len(D)")
+        if slices is None:
+            self.slices = {ti: slice(None) for ti in self.t}
+        else:
+            # normalise keys the same way
+            self.slices = {
+                (tuple(k) if hasattr(k, '__iter__') else (int(k),)): v
+                for k, v in slices.items()
+            }
+
+    @property
+    def tD(self):
+        """Dict mapping charge tuple → dimension in this slice."""
+        return dict(zip(self.t, self.D))
+
+    def __repr__(self):
+        return f"SlicedLeg(t={self.t}, D={self.D}, slices={self.slices})"
+
+
+def make_sliced_legs(leg):
+    r"""
+    Split a YASTN :class:`yastn.Leg` into one :class:`SlicedLeg` per charge
+    sector (the simplest non-overlapping partition).
+
+    Each returned :class:`SlicedLeg` covers exactly one charge sector and
+    includes the full block dimension of that sector (``slice(None)``).
+
+    Parameters
+    ----------
+    leg : yastn.Leg
+
+    Returns
+    -------
+    list[SlicedLeg]
+    """
+    return [SlicedLeg(t=(ti,), D=(Di,)) for ti, Di in zip(leg.t, leg.D)]
+
+
+def slice_leg_uniform(leg: Leg, size: int):
+    r"""
+    Uniformly slice YASTN :class:`yastn.Leg` into segments of at most ``size``.
+    Resulting slices can span multiple charge sectors.
+
+    The returned list of :class:`SlicedLeg` objects forms a valid partition of
+    the leg, with each slice selecting a contiguous subset of the block
+    dimension within each charge sector.  The last slice  may be
+    smaller than the specified size.
+
+    Parameters
+    ----------
+    leg : yastn.Leg
+    size : int
+
+    Returns
+    -------
+    list[SlicedLeg]
+    """
+    sliced_legs = []
+    ts, Ds, slices = [], [], {}
+    remaining = size
+    for t, D in zip(leg.t, leg.D):
+        sector_offset = 0
+        while sector_offset < D:
+            take = min(D - sector_offset, remaining)
+            ts.append(t)
+            Ds.append(take)
+            slices[t] = slice(sector_offset, sector_offset + take)
+            sector_offset += take
+            remaining -= take
+            if remaining == 0:
+                sliced_legs.append(SlicedLeg(t=ts, D=Ds, slices=slices))
+                ts, Ds, slices = [], [], {}
+                remaining = size
+    if ts:
+        sliced_legs.append(SlicedLeg(t=ts, D=Ds, slices=slices))
+    return sliced_legs
+
+
+def _build_mask_tensor(sliced_leg, full_leg, config):
+    r"""
+    Build a YASTN diagonal mask tensor for ``apply_mask``.
+
+    For each charge sector in ``sliced_leg``, the diagonal block has 1.0 at
+    positions selected by the corresponding slice and 0.0 elsewhere.
+    Charge sectors absent from ``sliced_leg`` are simply omitted (the block is
+    empty / all-zero and therefore not stored).
+
+    Parameters
+    ----------
+    sliced_leg : SlicedLeg
+    full_leg : yastn.Leg
+        The full leg of the target tensor (provides total block dimensions).
+    config : yastn config
+
+    Returns
+    -------
+    yastn.Tensor  (diagonal)
+    """
+    nsym = config.sym.NSYM
+    n = (0,) * nsym
+    mask_tensor = Tensor(config=config, s=(full_leg.s, -full_leg.s), n=n, isdiag=True)
+    sl_tD = sliced_leg.tD
+    for ti, full_D in zip(full_leg.t, full_leg.D):
+        if ti not in sl_tD:
+            continue
+        sl = sliced_leg.slices.get(ti, slice(None))
+        data = np.zeros(full_D)
+        data[sl] = 1.0
+        mask_tensor.set_block(ts=ti, Ds=full_D, val=data)
+    return mask_tensor
+
+
+def _expand_partial_output(partial, sl_map, output_unroll_info):
+    r"""
+    Zero-pad a partial contraction result to full block size on output-unrolled axes.
+
+    When an output index is unrolled with intra-sector slicing the partial result
+    has reduced-dimension blocks on that axis.  This function embeds each block
+    back into its full-sized counterpart (filling with zeros outside the slice)
+    so that subsequent ``+`` accumulation assembles the tensor correctly.
+
+    For charge-sector-level output unrolling (``slice(None)``) the expansion is
+    a no-op: the full and partial block dimensions are identical.
+
+    Operates entirely in the native backend format (numpy or torch) — no
+    intermediate numpy conversion is performed.
+
+    Parameters
+    ----------
+    partial : yastn.Tensor
+    sl_map : dict[label, SlicedLeg]
+        Current SlicedLeg combination for this loop iteration.
+    output_unroll_info : dict[int, tuple[label, yastn.Leg]]
+        Maps native output axis index → ``(unroll_label, full Leg)``.
+
+    Returns
+    -------
+    yastn.Tensor  with full-sized blocks on the output-unrolled axes.
+    """
+    if not partial.struct.t:
+        return partial  # empty tensor: nothing to expand
+
+    config = partial.config
+    backend = config.backend
+    nsym = config.sym.NSYM
+    ndim = partial.ndim_n
+    dtype = partial.yastn_dtype
+    device = partial.device
+
+    expanded = Tensor(config=config, s=partial.struct.s, n=partial.struct.n)
+
+    for i, block_ct in enumerate(partial.struct.t):
+        # Slice block data in the native backend format (no numpy conversion)
+        start, stop = partial.slices[i].slcs[0]
+        partial_D = partial.struct.D[i]
+        block_data = partial._data[start:stop].reshape(partial_D)
+
+        # Build full block shape and the embedding slice tuple
+        full_shape = list(partial_D)
+        out_slices = [slice(None)] * ndim
+
+        for out_ax, (u, full_leg) in output_unroll_info.items():
+            ci = tuple(block_ct[out_ax * nsym : (out_ax + 1) * nsym])
+            if ci in full_leg.tD:
+                full_shape[out_ax] = full_leg.tD[ci]
+                out_slices[out_ax] = sl_map[u].slices.get(ci, slice(None))
+
+        # Allocate a flat zero block in the native format, reshape, then write
+        # partial data at the appropriate slice.  set_block will ravel it back.
+        Dsize = int(np.prod(full_shape))
+        full_block = backend.zeros((Dsize,), dtype=dtype, device=device).reshape(full_shape)
+        full_block[tuple(out_slices)] = block_data
+
+        expanded.set_block(ts=block_ct, Ds=tuple(full_shape), val=full_block)
+
+    return expanded
+
+
+def _iteration_checkpointed(tensors, sl_map, tensor_unroll_info, index_groups,
+                              out_ig, optimize, output_unroll_info, unroll_labels)->Tensor:
+    r"""
+    Run one unroll-loop iteration under ``torch.utils.checkpoint``.
+
+    Uses :func:`yastn.split_data_and_meta` / :func:`yastn.combine_data_and_meta`
+    to separate raw tensor data (tracked by autograd) from YASTN structural
+    metadata (Python objects, not tracked).  Masking and ``ncon`` are both
+    executed inside the checkpointed region so none of their intermediate
+    activations need to be stored during the forward pass.
+
+    The output YASTN tensor structure is captured in a mutable closure cell
+    that is set during the checkpointed forward call and read back immediately
+    after :func:`torch.utils.checkpoint.checkpoint` returns — no separate
+    no-grad structural pre-run is needed.
+
+    Parameters
+    ----------
+    tensors : sequence of yastn.Tensor
+        Input tensors (before masking for this iteration).
+    sl_map : dict[label, SlicedLeg]
+        Active :class:`SlicedLeg` for each unroll label.
+    tensor_unroll_info : dict[(int, label), (int, Leg)]
+        Precomputed ``(user_axis, full_leg)`` for each
+        ``(tensor_index, unroll_label)`` pair.
+    index_groups : list[list]
+        Index groups for each tensor.
+    out_ig : tuple | list
+        Output index group.
+    optimize : list[tuple[int, int]]
+        Pairwise contraction path.
+    output_unroll_info : dict[int, (label, Leg)]
+        Maps native output axis → ``(label, full_leg)`` for output-unrolled
+        indices.
+    unroll_labels : list
+        Ordered list of unroll labels.
+
+    Returns
+    -------
+    yastn.Tensor
+    """
+    # Split each input tensor into raw data + structural metadata.
+    # Metadata (struct, slices, config, …) are pure Python objects — no memory
+    # overhead from storing them.  Only the _data tensors participate in autograd.
+    input_datas, input_metas = zip(
+        *(split_data_and_meta(t.to_dict(level=0), squeeze=True) for t in tensors)
+    )
+
+    # Mutable cell: _fn sets this during its (first) forward call so the
+    # output YASTN structural metadata is available after checkpoint() returns.
+    # On the backward re-run _fn sets the same value again — harmlessly.
+    _out_meta = [None]
+
+    def _fn(*datas):
+        # Reconstruct YASTN tensors from structural metadata + current data.
+        recon = [Tensor.from_dict(combine_data_and_meta(d, m))
+                 for d, m in zip(datas, input_metas)]
+
+        # Apply masks inside the checkpoint (so masked intermediates are not
+        # stored during the forward pass).
+        masked = list(recon)
+        for k in range(len(masked)):
+            for u in unroll_labels:
+                if (k, u) not in tensor_unroll_info:
+                    continue
+                user_ax, full_leg = tensor_unroll_info[(k, u)]
+                mask_t = _build_mask_tensor(sl_map[u], full_leg, masked[k].config)
+                masked[k] = mask_t.apply_mask(masked[k], axes=user_ax)
+
+        interleaved = []
+        for T, ig in zip(masked, index_groups):
+            interleaved.append(T)
+            interleaved.append(ig)
+        interleaved.append(out_ig)
+        ts, inds, conjs, order = _convert_path_to_ncon_args(
+            *interleaved, optimize=optimize
+        )
+        partial = ncon(ts, inds, conjs=conjs, order=order)
+
+        if output_unroll_info:
+            partial = _expand_partial_output(partial, sl_map, output_unroll_info)
+
+        # Capture output structure so it can be read back outside checkpoint().
+        p_data, p_meta = split_data_and_meta(partial.to_dict(level=0), squeeze=True)
+        _out_meta[0] = p_meta
+        return p_data
+
+    assert hasattr(tensors[0].config.backend, "checkpoint"), "Backend does not support checkpointing"
+    checkpoint= tensors[0].config.backend.checkpoint
+    result_data = checkpoint(_fn, *input_datas, use_reentrant=False)
+    return Tensor.from_dict(combine_data_and_meta(result_data, _out_meta[0]))
+
+
+def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False, **kwargs):
+    r"""
+    Contract a tensor network with block-sparse index unrolling.
+
+    For each combination of :class:`SlicedLeg` objects (one per unroll index),
+    mask the relevant tensors with :meth:`~yastn.Tensor.apply_mask`, run the
+    full ``ncon`` contraction on the reduced tensors, then accumulate the
+    partial results by summation.
+
+    Both contracted and output indices may be unrolled.  For output indices
+    the partial results are first zero-padded back to full block size via
+    :func:`_expand_partial_output` before the ``+`` accumulation step.
+
+    Parameters
+    ----------
+    *args : interleaved ``(T1, ig1, T2, ig2, ..., out_ig)``
+        Tensor network in opt_einsum's interleaved format.  An explicit output
+        index group is required (odd number of elements in ``args``).
+    unroll : dict[label, list[SlicedLeg]]
+        Keys are index labels to unroll; values are lists of non-overlapping
+        :class:`SlicedLeg` objects whose union spans all charge sectors of
+        that index.
+    optimize : list[tuple[int, int]]
+        Pairwise contraction path (as returned by :func:`get_contraction_path`).
+    checkpoint_loop : bool
+        If ``True`` and PyTorch is available, each loop-body iteration is
+        wrapped in :func:`torch.utils.checkpoint.checkpoint`.  Masking and
+        ``ncon`` intermediates are recomputed during backward instead of
+        stored, trading extra forward computation for lower peak memory.
+        Default: ``False``.
+    **kwargs :
+        Forwarded to ``ncon``.
+
+    Returns
+    -------
+    yastn.Tensor
+    """
+    assert len(args) % 2 == 1, \
+        "_contract_with_sliced_unroll requires explicit output index group"
+
+    tensors = args[0 : 2 * (len(args) // 2) : 2]
+    index_groups = list(args[1 : 2 * (len(args) // 2) : 2])
+    out_ig = args[-1]
+
+    unroll_labels = list(unroll.keys())
+
+    # For each (tensor_index, unroll_label) pair: record the user-facing axis
+    # and the full Leg object at that position.
+    tensor_unroll_info = {}  # (k, u) -> (user_axis, full_leg)
+    for k, (T, ig) in enumerate(zip(tensors, index_groups)):
+        for u in unroll_labels:
+            if u in ig:
+                user_ax = list(ig).index(u)
+                full_leg = T.get_legs(user_ax)
+                tensor_unroll_info[(k, u)] = (user_ax, full_leg)
+
+    # For output indices that are unrolled, map output axis -> (label, full_leg).
+    # The full leg is taken from the input tensor that carries that output index.
+    out_ig_list = list(out_ig)
+    output_unroll_info = {}  # out_ax -> (label, full_leg)
+    for u in unroll_labels:
+        if u in out_ig_list:
+            out_ax = out_ig_list.index(u)
+            for k in range(len(tensors)):
+                if (k, u) in tensor_unroll_info:
+                    _, full_leg = tensor_unroll_info[(k, u)]
+                    output_unroll_info[out_ax] = (u, full_leg)
+                    break
+
+    # Cartesian product over SlicedLeg choices, one per unroll label
+    result = None
+    for n,combo in enumerate(product(*(unroll[u] for u in unroll_labels))):
+        _cfg= tensors[0].config
+        if _cfg.profile: _cfg.backend.nvtx.range_push(f"_contract_with_sliced_unroll {n}")
+        sl_map = {u: sl for u, sl in zip(unroll_labels, combo)}
+
+        if checkpoint_loop:
+            partial = _iteration_checkpointed(
+                tensors, sl_map, tensor_unroll_info, index_groups, out_ig,
+                optimize, output_unroll_info, unroll_labels,
+            )
+        else:
+            # Apply masks: for each tensor, apply masks for all its unroll indices
+            masked_tensors = list(tensors)
+            for k in range(len(tensors)):
+                for u in unroll_labels:
+                    if (k, u) not in tensor_unroll_info:
+                        continue
+                    user_ax, full_leg = tensor_unroll_info[(k, u)]
+                    mask_t = _build_mask_tensor(sl_map[u], full_leg, masked_tensors[k].config)
+                    masked_tensors[k] = mask_t.apply_mask(masked_tensors[k], axes=user_ax)
+
+            # Build interleaved args for _convert_path_to_ncon_args
+            interleaved = []
+            for T, ig in zip(masked_tensors, index_groups):
+                interleaved.append(T)
+                interleaved.append(ig)
+            interleaved.append(out_ig)
+
+            ts, inds, conjs, order = _convert_path_to_ncon_args(
+                *interleaved, optimize=optimize
+            )
+            partial = ncon(ts, inds, conjs=conjs, order=order)
+
+            # For output-unrolled indices, zero-pad partial blocks to full size so
+            # that + accumulation assembles them correctly (handles intra-sector slices).
+            if output_unroll_info:
+                partial = _expand_partial_output(partial, sl_map, output_unroll_info)
+
+        result = partial if result is None else result + partial
+        if _cfg.profile: _cfg.backend.nvtx.range_pop()
+
+    return result
+
+
+def _validate_and_resolve_unroll(*args,
+        unroll=None) \
+            -> Mapping[Hashable,Union[Sequence[SlicedLeg],int]]:
+    r"""
+    Validates the ``unroll`` argument and resolves any integer values 
+    to lists of :class:`SlicedLeg` objects via uniform slicing of the corresponding leg in the input tensors.
+
+    :param unroll: Mapping[Hashable,Union[Sequence[SlicedLeg],int]] or None
+
+    Returns
+    -------
+    Mapping[Hashable,Sequence[SlicedLeg]] or None
+    """
+    if unroll is None:
+        return None
+    assert isinstance(unroll, dict), "unroll must be a dict or None"
+    for k, v in unroll.items():
+        assert isinstance(v, (list, int)), "unroll values must be either list of SlicedLeg or integer"
+        if isinstance(v, list):
+            assert all(isinstance(sl, SlicedLeg) for sl in v), "unroll list values must be of type SlicedLeg"
+        else:
+            assert v > 0, "unroll integer value must be positive"
+            # Find the leg with label k in the network and slice it uniformly
+            found = False
+            for t, ig in zip(args[0 : 2 * (len(args) // 2) : 2], 
+                             args[1 : 2 * (len(args) // 2) : 2]):
+                if k in ig:
+                    user_ax = list(ig).index(k)
+                    full_leg = t.get_legs(user_ax)
+                    unroll[k] = slice_leg_uniform(full_leg, v)
+                    found = True
+                    break
+            if not found:
+                raise ValueError(f"Index label {k} not found in any tensor index group.")
+    return unroll
+
 
 def _convert_path_to_ncon_args(*args, **kwargs):
     path= kwargs.pop("optimize", None)
@@ -41,27 +506,27 @@ def _convert_path_to_ncon_args(*args, **kwargs):
     # or, case II, there is a single extra index group at the end specifying output indices
     # case II
     tensors= args[0 : 2 * (len(args) // 2) : 2]
-    in_igs= list(args[1 : 2 * (len(args) // 2) : 2])
+    in_igs= list(list(ig) for ig in args[1 : 2 * (len(args) // 2) : 2] )
     if len(args) % 2 == 1:
         out_ig= args[-1]
     else:
         raise NotImplementedError("ncon conversion for interleaved format without explicit output indices is not implemented")
 
-    # path is a sequence of tuple[int] specifying which tensors to contract at each step, starting from first pair 
+    # path is a sequence of tuple[int] specifying which tensors to contract at each step, starting from first pair
     # path uses positions in current list of tensors, which is shrinking at each step
     # TODO test for integer indices only ?
-    if all([len(e)==2 for e in path]): 
+    if all([len(e)==2 for e in path]):
         # pairwise contractions only - straightforward conversion
         conjs= [False]*len(tensors)
         order= None
-        
+
         # from original labeling to ncon labeling
         igs_to_ncon_igs= {i: None for i in list(set(sum(in_igs,[])))}
 
         # convert indexing to ncon format (with implied order given by path)
-        i=1 
+        i=1
         im=len(in_igs)-1 # index of last original tensor in_igs
-        orig_ig_inds= list(range(len(in_igs))) 
+        orig_ig_inds= list(range(len(in_igs)))
         for n,p in enumerate(path):
             ig2= in_igs.pop(p[1])
             ig1= in_igs.pop(p[0])
@@ -75,14 +540,14 @@ def _convert_path_to_ncon_args(*args, **kwargs):
             # print(f"{n} {p}->{(i_ig1,i_ig2)} {ig1} {ig2} common {common_inds} -> {out_inds} boundary im {im}")
 
             # assign ascending positive labels to common indices
-            # 
+            #
             for ci in common_inds:
                 if igs_to_ncon_igs[ci] is None:
                     igs_to_ncon_igs[ci]= i
                     i+= 1
                 else:
                     assert igs_to_ncon_igs[ci]== i, "Inconsistent mapping to ncon indices"
-            
+
             # Append index group for the resulting tensor at the end, move last original index
             # NOTE we are not handling order here
             if (p[0] <= im or p[1] <= im):
@@ -93,6 +558,12 @@ def _convert_path_to_ncon_args(*args, **kwargs):
         for i,oi in enumerate(out_ig):
             if igs_to_ncon_igs[oi] is None:
                 igs_to_ncon_igs[oi]= -i-1
+
+    else:
+        raise NotImplementedError(
+            "contract_with_unroll only supports pairwise contraction paths. "
+            "Got a path step contracting more than 2 tensors simultaneously."
+        )
 
     ncon_igs= [ [igs_to_ncon_igs[i] for i in ig] for ig in args[1 : 2 * (len(args) // 2) : 2] ]
     return tensors, ncon_igs, conjs, order
@@ -164,7 +635,7 @@ def _log_input_mem_size(shapes : tuple[tuple[int]],names=None,who=None,**kwargs)
     # log the total size (memory footprint) of tensors entering contraction
     if kwargs.get("verbosity",1):
         if names:
-            assert len(names) == len(shapes),"Number of names has to match number of operands"    
+            assert len(names) == len(shapes),"Number of names has to match number of operands"
             in_mem_list=", ".join(f"{n} {t} {np.asarray(t).prod()}" for n, t in zip(names, shapes))
         else:
             in_mem_list=", ".join(f"{n} {t} {np.asarray(t).prod()}" for n, t in enumerate(shapes))
@@ -172,29 +643,72 @@ def _log_input_mem_size(shapes : tuple[tuple[int]],names=None,who=None,**kwargs)
         log.info(f"{who} total size {sum(np.asarray(t).prod() for t in shapes)}")
 
 
-def get_contraction_path(*tn_to_contract, unroll=[], names=None, who=None, **kwargs):
+def get_contraction_path(*tn_to_contract, unroll=None, 
+                         names:Sequence[str]=None, who:str=None, **kwargs)-> tuple[Sequence[tuple[int]], PathInfo]:
     r"""Returns optimal contraction path for tensor network contraction specified in interleaved
     format. Takes into account unrolled indices if any.
 
     :param tn_to_contract: input to einsum in interleaved format. Explicit index labeling
                            of output is required
-    :param unroll: indices to unroll
+    :param unroll: Mapping[Hashable,Union[Sequence[SlicedLeg],int]]
+        indices to unroll
     :param names: string labels for tensors used for more readable logging. The order of
                   names has to follow order of tensors as they appear in ``tn_to_contract``
     :param who: string id for logging identifying this optimal contraction path search
-    """
 
+    Returns
+    -------
+    path : Sequence[tuple[int]]
+        Optimal contraction path as a sequence of tuples specifying which pair of tensors to contract at each step. 
+        The path is in terms of positions in current list of tensors, which is shrinking at each step.
+    path_info : opt_einsum.contract.PathInfo
+         Detailed information about the contraction path, including shapes and memory usage of intermediate tensors.
+    """
     # require explicit specification of output index labels
     assert (
         len(tn_to_contract) % 2 == 1
     ), "Explicit specification of output index labels is required"
-    
-    # TODO how to report block-sparse memory footprint & shape 
+    unroll = _validate_and_resolve_unroll(*tn_to_contract, unroll=unroll)
+
+    # TODO how to report block-sparse memory footprint & shape
     #      Here, we pass shape of the underlying 1D data array
     _log_input_mem_size(tuple(tuple(t._data.shape) for t in tn_to_contract[:-1][0::2]),names=names,who=who,**kwargs)
 
+    if isinstance(unroll, list):
+        raise ValueError(
+            "unroll must be a dict or None, got a list. "
+            "Pass unroll=None (or omit) for no unrolling, or a dict mapping labels to SlicedLegs."
+        )
+
+    if isinstance(unroll, dict) and unroll:
+        tensors_orig = tn_to_contract[0 : 2 * (len(tn_to_contract) // 2) : 2]
+        igs = list(tn_to_contract[1 : 2 * (len(tn_to_contract) // 2) : 2])
+        out_ig = tn_to_contract[-1]
+
+        rep_tensors = list(tensors_orig)
+        for k, (t, ig) in enumerate(zip(tensors_orig, igs)):
+            for label, sliced_legs in unroll.items():
+                if label in ig:
+                    user_ax = list(ig).index(label)
+                    full_leg = rep_tensors[k].get_legs(user_ax)
+                    rep_sl = max(sliced_legs, key=lambda sl: sum(sl.D))
+                    mask_t = _build_mask_tensor(rep_sl, full_leg, rep_tensors[k].config)
+                    candidate = mask_t.apply_mask(rep_tensors[k], axes=user_ax)
+                    if candidate.struct.t:          # non-empty after masking
+                        rep_tensors[k] = candidate  # else keep current (fallback)
+
+        rep_args = []
+        for t, ig in zip(rep_tensors, igs):
+            rep_args.extend([t, ig])
+        rep_args.append(out_ig)
+        tn_for_path = tuple(rep_args)
+        unroll_for_path = list(unroll.keys())
+    else:
+        tn_for_path = tn_to_contract
+        unroll_for_path = []
+
     expr, shapes, unrolled_shapes = _preprocess_interleaved_to_expr_and_shapes(
-        *tn_to_contract, unroll=unroll if unroll else []
+        *tn_for_path, unroll=unroll_for_path
     )
 
     # TODO only shapes are used in performance model for contraction path search
@@ -427,317 +941,156 @@ def _get_contraction_path_info(path, *operands, **kwargs):
 
 
 def contract_with_unroll_compute_constants(*args, **kwargs):
-    r"""Extension of opt_einsum's contract allowing for index unrolling
-    and use of checkpointing over unrolled loop.
+    r"""Like :func:`contract_with_unroll`, but tensors that carry no unrolled
+    index (constants) are contracted together once before the loop starts.
+    Only the smaller variable sub-network is re-evaluated on every iteration,
+    avoiding repeated work.
 
-    :param args: input to einsum in interleaved format. Explicit index labeling
-                 of output is required
-    :param unroll: indices to unroll
-    :param checkpoint_unrolled:
+    Constant tensors that are disconnected in the network (share no index) are
+    pre-contracted independently, keeping each intermediate small.
+
+    :param args: interleaved format ``(T1, ig1, T2, ig2, ..., out_ig)``
+    :param unroll: Mapping[Hashable,Union[Sequence[SlicedLeg],int]] or None
+        specifying indices to unroll and how to slice them.
+    :param optimize: contraction path for the full network
+    :param checkpoint_loop: if True, each unrolled loop iteration is wrapped in
+        :func:`torch.utils.checkpoint.checkpoint`.
     """
-    verbosity = kwargs.get("verbosity", 0)
-    checkpoint_on_device = kwargs.pop("checkpoint_on_device",False)
-    if checkpoint_on_device in ['NONE','none','None',None]: checkpoint_on_device= False
+    checkpoint_loop = kwargs.pop("checkpoint_loop", False)
+    kwargs.pop("who", None)
+    kwargs.pop("verbosity", None)
+    unroll = kwargs.pop("unroll", None)
+    unroll = _validate_and_resolve_unroll(*args, unroll=unroll)
 
-    if checkpoint_on_device:
-        # split args into tensors and index groups
-        igs,ts= args[1::2], args[0 : 2 * (len(args) // 2) : 2]
-        source_device= ts[0].device
+    if unroll is None:
+        # convert to ncon call
+        ts, inds, conjs, order= _convert_path_to_ncon_args(*args,**kwargs)
+        return ncon(ts, inds, conjs=conjs, order=order)
 
-        def _core_f(*ts):
-            ts_moved= (x.to(device=checkpoint_on_device) for x in ts)
-            args_moved= tuple(a for t_ig in zip(ts_moved,igs) for a in t_ig) + (args[-1],) if len(args)%2==1 else ()
-            res= contract_with_unroll(*args_moved,**kwargs)
-            return res.to(device=source_device)
+    path = kwargs.pop("optimize", None)
+    assert path is not None, "optimize (contraction path) must be provided"
 
-        res= checkpoint(_core_f,*ts)
-        if verbosity>0:
-            log.info("After checkpointed contract_with_unroll_mode2\n"
-                +_debug_allocated_tensors(device=checkpoint_on_device,totals_only=True)
+    tensors = args[0 : 2 * (len(args) // 2) : 2]
+    index_groups = list(args[1 : 2 * (len(args) // 2) : 2])
+    out_ig = args[-1]
+    unroll_labels = set(unroll.keys())
+
+    # Partition tensors into constants (no unrolled index) and variables.
+    const_mask = [not any(u in ig for u in unroll_labels) for ig in index_groups]
+
+    if not any(const_mask):
+        # Nothing to pre-compute; delegate directly.
+        return _contract_with_sliced_unroll(*args, unroll=unroll, optimize=path,
+                                            checkpoint_loop=checkpoint_loop, **kwargs)
+
+    var_tensors = [t for t, c in zip(tensors, const_mask) if not c]
+    var_igs     = [list(ig) for ig, c in zip(index_groups, const_mask) if not c]
+    var_and_out = set(i for ig in var_igs for i in ig) | set(out_ig)
+
+    # Find connected components of the constant sub-network via Union-Find.
+    # Two constant tensors are connected if they share at least one index.
+    # Each component is contracted independently, keeping intermediates small.
+    const_positions = [k for k, c in enumerate(const_mask) if c]
+    parent = {k: k for k in const_positions}
+
+    def _find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    index_to_first = {}
+    for k in const_positions:
+        for idx in index_groups[k]:
+            if idx in index_to_first:
+                px, py = _find(k), _find(index_to_first[idx])
+                if px != py:
+                    parent[px] = py
+            else:
+                index_to_first[idx] = k
+
+    comps = {}
+    for k in const_positions:
+        root = _find(k)
+        comps.setdefault(root, []).append(k)
+
+    # Pre-contract each component once, outside the loop.
+    pre_contracted = []  # list of (tensor, ig)
+    for comp in comps.values():
+        comp_tensors = [tensors[k] for k in comp]
+        comp_igs     = [list(index_groups[k]) for k in comp]
+
+        # Output indices: those that feed into the variable network or the final output.
+        seen = set()
+        comp_out_ig = []
+        for ig in comp_igs:
+            for i in ig:
+                if i in var_and_out and i not in seen:
+                    comp_out_ig.append(i)
+                    seen.add(i)
+        comp_out_ig = tuple(comp_out_ig)
+
+        if len(comp) == 1:
+            pre_contracted.append((comp_tensors[0], comp_igs[0]))
+        else:
+            comp_interleaved = []
+            for t, ig in zip(comp_tensors, comp_igs):
+                comp_interleaved.extend([t, ig])
+            comp_interleaved.append(comp_out_ig)
+            comp_path, _ = get_contraction_path(*comp_interleaved)
+            c_ts, c_inds, c_conjs, c_order = _convert_path_to_ncon_args(
+                *comp_interleaved, optimize=comp_path
             )
-        return res
+            pre_contracted.append((ncon(c_ts, c_inds, conjs=c_conjs, order=c_order), list(comp_out_ig)))
 
-    who = kwargs.pop("who","unknown")
-    verbosity = kwargs.pop("verbosity", 0)
-    unroll = kwargs.pop("unroll", [])
-    checkpoint_unrolled = kwargs.pop("checkpoint_unrolled", False)
+    # Rebuild the reduced network: variable tensors + one tensor per constant component.
+    reduced_interleaved = []
+    for t, ig in zip(var_tensors, var_igs):
+        reduced_interleaved.extend([t, ig])
+    for t, ig in pre_contracted:
+        reduced_interleaved.extend([t, ig])
+    reduced_interleaved.append(out_ig)
 
-    if not unroll or len(unroll) == 0:
-        return oe.contract(*args, **kwargs)
+    # Find a contraction path for the reduced network (strip unrolled dims from shape model).
+    reduced_path, _ = get_contraction_path(*reduced_interleaved, unroll=unroll)
 
-    # We are unrolling. In general, there will be several constant
-    # tensors among the individual unrolled calls.
-    # Strategy is to build opt_einsum's ContractExpression, which makes use of these
-    # constants
-    #
-    # Although contract supports interleaved format in general, in _gen_expression mode
-    # the default subscript format is expected instead
-    subscripts, shapes, unrolled_shapes = _preprocess_interleaved_to_expr_and_shapes(
-        *args, unroll=unroll
+    return _contract_with_sliced_unroll(
+        *reduced_interleaved, unroll=unroll, optimize=reduced_path,
+        checkpoint_loop=checkpoint_loop, **kwargs
     )
 
-    # Get positions of tensor arguments which are constants wrt to unrolled contraction
-    constants = tuple(
-        idx for idx, ig in enumerate(args[1::2]) if not any([i in unroll for i in ig])
-    )
 
-    kwargs["_constants_dict"] = {
-        i: args[0 : 2 * (len(args) // 2) : 2][i] for i in constants
-    }
-
-    # Build operands, passing tensors for constants and opt_einsum's Shaped (just shapes) for rest of the ops
-    shapes_and_constant_ops = tuple(
-        t if idx in constants else shape_only(tuple(i for i in shapes[idx] if i > 0))
-        for idx, t in enumerate(args[0 : 2 * (len(args) // 2) : 2])
-    )
-
-    kwargs["_gen_expression"] = True
-    oe_backend = kwargs.pop("backend", "auto")
-    _contract_unroll_loop_body= oe.contract(
-        subscripts, *shapes_and_constant_ops, **kwargs
-    )
-    def contract_unroll_loop_body(*args):
-        return _contract_unroll_loop_body(*args, backend=oe_backend)
-    if checkpoint_unrolled:
-        # force evaluation of all constants
-        _contract_unroll_loop_body.evaluate_constants(backend=oe_backend)
-        _expr_const_ts= _contract_unroll_loop_body._evaluated_constants[oe_backend]
-        
-        def _contract_unroll_loop_body_checkpointed(*args):
-            # reassign constants so the checkpointed evaluation preserves gradient flow
-            count,j=0,-1
-            while j>=-len(_expr_const_ts):
-                if not (_expr_const_ts[j] is None):
-                    count+=1
-                    _expr_const_ts[j]= args[-count]
-                j-=1
-
-            return _contract_unroll_loop_body(*args[:-count], backend=oe_backend)
-
-        def contract_unroll_loop_body(*args):
-            # get handle of evaluated constant tensors
-            c_args= tuple(t for t in _expr_const_ts if not (t is None))
-            joint_args= args+c_args
-            return checkpoint(_contract_unroll_loop_body_checkpointed, *joint_args)    
-
-    # assign shape to each index label
-    i_to_s = {
-        i: s
-        for ig, t in zip(args[1::2], args[0 : 2 * (len(args) // 2) : 2])
-        for i, s in zip(ig, t.shape)
-    }
-
-    # index groups stripped of unrolled indices
-    igs = tuple(
-        tuple(i for i in ig if not i in unroll) for ig in (args[1::2] + (args[-1],))
-    )
-
-    # prepare tensor to accumulate individual contractions
-    shape_out = tuple(i_to_s[i] for i in args[-1])
-    ig_out_contracted_unrolled = tuple(i for i in unroll if not (i in args[-1]))
-    partials = torch.empty(
-        shape_out + tuple(i_to_s[i] for i in ig_out_contracted_unrolled),\
-        device=args[0].device, dtype=args[0].dtype
-    )
-
-    if verbosity>0:
-        log.info(who+" before unrolled loop\n"
-            +_debug_allocated_tensors(device=args[0].device,totals_only=True))
-
-    for ui_vals in product(*tuple(range(i_to_s[i]) for i in unroll)):
-        ui_map = {u: v for u, v in zip(unroll, ui_vals)}
-
-        ig_out = tuple(ui_map[i] if i in unroll else slice(None) for i in args[-1])
-        ig_contracted_unrolled = tuple(ui_map[i] for i in unroll if not (i in args[-1]))
-
-        # ops containing *only* variable tensors, narrowed by unrolled indices if applicable
-        unrolled_ops = tuple(
-            t[tuple(ui_map[i] if i in unroll else slice(None) for i in ig)]
-            for t, ig in zip(args[0 : 2 * (len(args) // 2) : 2], args[1::2])
-            if len([i for i in unroll if i in ig]) > 0
-        )
-
-        partials[ig_out + ig_contracted_unrolled]= contract_unroll_loop_body(
-            *unrolled_ops
-        )
-
-        if verbosity>1:
-            log.info(who+f" unrolled loop {ui_vals}\n"
-                +_debug_allocated_tensors(device=args[0].device,totals_only=True))
-
-    result = oe.contract(
-        partials, tuple(args[-1]) + ig_out_contracted_unrolled, args[-1]
-    )
-
-    if verbosity>0:
-        log.info(who+" unrolled loop concluded\n"
-            +_debug_allocated_tensors(device=args[0].device,totals_only=False))
-
-    return result
-
-# IF checkpoint_on_device moves all ops to checkpoint on device
-# does not use constant expressions in opt_einsum contract
 def contract_with_unroll(*args, **kwargs):
     r"""Extension of opt_einsum's contract allowing for index unrolling
     and use of checkpointing over unrolled loop.
 
     :param args: input to einsum in interleaved format. Explicit index labeling
                  of output is required
-    :param unroll: indices to unroll
-    :param use_checkpoint:
+    :param unroll: Mapping[Hashable,Sequence[SlicedLeg]] or None
+        indices to unroll
+    :param checkpoint_loop: if True, each unrolled loop iteration is wrapped in
+        :func:`torch.utils.checkpoint.checkpoint`, avoiding storage of masking
+        and ncon intermediates across all iterations simultaneously.
     """
-    verbosity = kwargs.get("verbosity", 0)
-    checkpoint_on_device = kwargs.pop("checkpoint_on_device",False)
-    if checkpoint_on_device in ['NONE','none','None',None]: checkpoint_on_device= False
+    checkpoint_loop = kwargs.pop("checkpoint_loop", False)
+    kwargs.pop("who", None)
+    kwargs.pop("verbosity", None)
+    unroll = kwargs.pop("unroll", None)
+    unroll = _validate_and_resolve_unroll(*args, unroll=unroll)
 
-    if checkpoint_on_device:
-        # split args into tensors and index groups
-        igs,ts= args[1::2], args[0 : 2 * (len(args) // 2) : 2]
-        source_device= ts[0].device
-
-        def _core_f(*ts):
-            ts_moved= (x.to(device=checkpoint_on_device) for x in ts)
-            args_moved= tuple(a for t_ig in zip(ts_moved,igs) for a in t_ig) + (args[-1],) if len(args)%2==1 else ()
-            res= contract_with_unroll(*args_moved,**kwargs)
-            return res.to(device=source_device)
-
-        res= checkpoint(_core_f,*ts)
-        if verbosity>0:
-            log.info("After checkpointed contract_with_unroll_mode2\n"
-                +_debug_allocated_tensors(device=checkpoint_on_device,totals_only=True)
-            )
-        return res
-
-    who = kwargs.pop("who","unknown")
-    verbosity = kwargs.pop("verbosity", 0)
-    unroll = kwargs.pop("unroll", [])
-    checkpoint_unrolled = kwargs.pop("checkpoint_unrolled", False)
-
-    if not unroll or len(unroll) == 0:
+    if unroll is None:
         # convert to ncon call
         ts, inds, conjs, order= _convert_path_to_ncon_args(*args,**kwargs)
         return ncon(ts, inds, conjs=conjs, order=order)
 
-    # We are unrolling. In general, there will be several constant
-    # tensors among the individual unrolled calls.
-    # Strategy is to build opt_einsum's ContractExpression, which makes use of these
-    # constants
-    #
-    # Although contract supports interleaved format in general, in _gen_expression mode
-    # the default subscript format is expected instead
-    subscripts, shapes, unrolled_shapes = _preprocess_interleaved_to_expr_and_shapes(
-        *args, unroll=unroll
+    if isinstance(unroll, dict):
+        # block-sparse sliced unrolling: unroll is {label: [SlicedLeg, ...]}
+        path = kwargs.pop("optimize", None)
+        assert path is not None, "optimize (contraction path) must be provided"
+        return _contract_with_sliced_unroll(*args, unroll=unroll, optimize=path,
+                                            checkpoint_loop=checkpoint_loop, **kwargs)
+
+    raise NotImplementedError(
+        "contract_with_unroll: unsupported unroll type. "
+        "Pass unroll as a dict mapping labels to lists of SlicedLeg."
     )
-
-    # Get positions of tensor arguments which are constants wrt to unrolled contraction
-    constants = tuple(
-        idx for idx, ig in enumerate(args[1::2]) if not any([i in unroll for i in ig])
-    )
-
-    if not checkpoint_unrolled:
-        kwargs["_constants_dict"] = {
-            i: args[0 : 2 * (len(args) // 2) : 2][i] for i in constants
-        }
-
-        # Build operands, passing tensors for constants and opt_einsum's Shaped (just shapes) for rest of the ops
-        shapes_and_constant_ops = tuple(
-            t if idx in constants else shape_only(tuple(i for i in shapes[idx] if i > 0))
-            for idx, t in enumerate(args[0 : 2 * (len(args) // 2) : 2])
-        )
-    else:
-        # Build operands, passing opt_einsum's Shaped (just shapes) for both constants and rest of the ops
-        shapes_and_constant_ops = tuple(
-            shape_only(tuple(i for i in shapes[idx] if i > 0)) 
-            for idx, t in enumerate(args[0 : 2 * (len(args) // 2) : 2])
-        )
-
-    kwargs["_gen_expression"] = True
-    oe_backend = kwargs.pop("backend", "auto")
-    _contract_unroll_loop_body= oe.contract(
-        subscripts, *shapes_and_constant_ops, **kwargs
-    )
-    def contract_unroll_loop_body(*args):
-        return _contract_unroll_loop_body(*args, backend=oe_backend)
-
-    # narrowing of ops by unrolled indices is done within checkpointed section
-    def contract_unroll_loop_body_checkpointed(unrolled_ops_slices,*args):
-        unrolled_ops = tuple(
-            t[s] for t, s in zip(args, unrolled_ops_slices)
-        )
-        return _contract_unroll_loop_body(*unrolled_ops, backend=oe_backend)
-
-    # assign shape to each index label
-    i_to_s = {
-        i: s
-        for ig, t in zip(args[1::2], args[0 : 2 * (len(args) // 2) : 2])
-        for i, s in zip(ig, t.shape)
-    }
-
-    # index groups stripped of unrolled indices
-    igs = tuple(
-        tuple(i for i in ig if not i in unroll) for ig in (args[1::2] + (args[-1],))
-    )
-
-    # prepare tensor to accumulate individual contractions
-    shape_out = tuple(i_to_s[i] for i in args[-1])
-    ig_out_contracted_unrolled = tuple(i for i in unroll if not (i in args[-1]))
-    partials = torch.empty(
-        shape_out + tuple(i_to_s[i] for i in ig_out_contracted_unrolled),\
-        device=args[0].device, dtype=args[0].dtype
-    )
-
-    if verbosity>0:
-        log.info(who+" before unrolled loop\n"
-            +_debug_allocated_tensors(device=args[0].device,totals_only=True))
-
-    all_ops=args[0 : 2 * (len(args) // 2) : 2]
-    for ui_vals in product(*tuple(range(i_to_s[i]) for i in unroll)):
-        ui_map = {u: v for u, v in zip(unroll, ui_vals)}
-
-        ig_out = tuple(ui_map[i] if i in unroll else slice(None) for i in args[-1])
-        ig_contracted_unrolled = tuple(ui_map[i] for i in unroll if not (i in args[-1]))
-
-        # narrowing is done before checkpointing
-        # if checkpoint_unrolled:
-        #     # narrowed ops containing all tensors
-        #     unrolled_ops = tuple(
-        #         t[tuple(ui_map[i] if i in unroll else slice(None) for i in ig)]
-        #         for t, ig in zip(args[0 : 2 * (len(args) // 2) : 2], args[1::2])
-        #     )
-        #     partials[ig_out + ig_contracted_unrolled]= checkpoint(
-        #         contract_unroll_loop_body, *unrolled_ops
-        #     )
-        if checkpoint_unrolled:
-            # ops containing all tensors
-            unrolled_ops_slices = tuple(
-                tuple(ui_map[i] if i in unroll else slice(None) for i in ig)
-                for ig in args[1::2]
-            )
-
-            partials[ig_out + ig_contracted_unrolled]= checkpoint(
-                contract_unroll_loop_body_checkpointed, unrolled_ops_slices, *all_ops )
-        else:
-            # ops containing *only* variable tensors, narrowed by unrolled indices if applicable
-            unrolled_ops = tuple(
-                t[tuple(ui_map[i] if i in unroll else slice(None) for i in ig)]
-                for t, ig in zip(args[0 : 2 * (len(args) // 2) : 2], args[1::2])
-                if len([i for i in unroll if i in ig]) > 0
-            )
-
-            partials[ig_out + ig_contracted_unrolled]= contract_unroll_loop_body(
-                *unrolled_ops
-            )
-
-        if verbosity>1:
-            log.info(who+f" unrolled loop {ui_vals}\n"
-                +_debug_allocated_tensors(device=args[0].device,totals_only=True))
-
-    result = oe.contract(
-        partials, tuple(args[-1]) + ig_out_contracted_unrolled, args[-1]
-    )
-
-    if verbosity>0:
-        log.info(who+" unrolled loop concluded\n"
-            +_debug_allocated_tensors(device=args[0].device,totals_only=False))
-
-    return result

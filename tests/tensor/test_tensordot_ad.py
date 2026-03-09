@@ -277,7 +277,8 @@ def test_tensordot_fuse_hard_backward_3(config_kwargs,dtype):
     _test_tensordot_grad(a, b.conj(), axes=((2, 1), (1, 0)), dtype=dtype)
 
 @torch_test
-def test_tensordot_fuse_hard_backward_4(config_kwargs):
+@pytest.mark.parametrize("extent", [1,2])
+def test_tensordot_fuse_hard_backward_4(config_kwargs,extent):
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
 
@@ -286,7 +287,7 @@ def test_tensordot_fuse_hard_backward_4(config_kwargs):
 
     config_U1.backend.random_seed(seed=0)
     t1, t2, t3 = (-1, 0, 1), (-2, 0, 2), (-3, 0, 3)
-    D1, D2, D3 = (2, 2, 2), (2, 2, 2), (2, 2, 2)
+    D1, D2, D3 = (extent, extent, extent), (extent, extent, extent), (extent, extent, extent)
     #
     dtype = 'float64'
     a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1, 1),

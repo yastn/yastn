@@ -86,6 +86,8 @@ def test_ctmrg_measure_product(config_kwargs, boundary):
         s1,s2= s_elem[0]
         v = env.measure_2x2(sz, sz, sites=(s1, s2))
         assert abs(vals[s1] * vals[s2] - v) < tol
+        v = env.measure_nsite_exact(sz, sz, sites=(s1, s2))
+        assert abs(vals[s1] * vals[s2] - v) < tol
         s0, op= s_elem[1]
         v_rdm = measure_rdm_2x2(s0,psi,env,op)
         assert abs(v - v_rdm) < tol
@@ -93,6 +95,8 @@ def test_ctmrg_measure_product(config_kwargs, boundary):
 
     s1, s2, s3 = (1, 2), (2, 1), (2, 2)
     v = env.measure_2x2(sz, sz, sz, sites=(s1, s2, s3))
+    assert abs(vals[s1] * vals[s2] * vals[s3] - v) < tol
+    v = env.measure_nsite_exact(sz, sz, sz, sites=(s1, s2, s3))
     assert abs(vals[s1] * vals[s2] * vals[s3] - v) < tol
     v_rdm= measure_rdm_2x2((1,1),psi,env,(I,sz,sz,sz))
     assert abs(v - v_rdm) < tol
@@ -202,9 +206,13 @@ def test_ctmrg_measure_2x1(config_kwargs, env_init):
             for s in ['u', 'd']:
                 bond = [*g.sites()]
                 assert abs(env.measure_nn(ops.cp(s), ops.c(s), bond=bond) - val) < tol
+                assert abs(env.measure_nsite_exact(ops.cp(s), ops.c(s), sites=bond) - val) < tol
                 assert abs(env.measure_nn(ops.c(s), ops.cp(s), bond=bond[::-1]) - (-val)) < tol
+                assert abs(env.measure_nsite_exact(ops.c(s), ops.cp(s), sites=bond[::-1]) - (-val)) < tol
                 assert abs(env.measure_nn(ops.c(s), ops.cp(s), bond=bond) - (-val.conjugate())) < tol
+                assert abs(env.measure_nsite_exact(ops.c(s), ops.cp(s), sites=bond) - (-val.conjugate())) < tol
                 assert abs(env.measure_nn(ops.cp(s), ops.c(s), bond=bond[::-1]) - (val.conjugate())) < tol
+                assert abs(env.measure_nsite_exact(ops.cp(s), ops.c(s), sites=bond[::-1]) - (val.conjugate())) < tol
                 dirn = g.nn_bond_dirn(*bond)
                 if dirn in ("lr", "tb"):
                     assert abs(measure_rdm_nn(bond[0], dirn, psi, env,(ops.cp(s), ops.c(s))) - val) < tol
@@ -245,9 +253,13 @@ def test_ctmrg_measure_2x1(config_kwargs, env_init):
                     # env.ctmrg_(opts_svd = {"D_total": 2}, max_sweeps=2)
                     bond = [*g.sites()]
                     assert abs(env.measure_nn(ops.cp('u'), ops.c('u'), bond=bond) - val) < tol
+                    assert abs(env.measure_nsite_exact(ops.cp('u'), ops.c('u'), sites=bond) - val) < tol
                     assert abs(env.measure_nn(ops.c('u'), ops.cp('u'), bond=bond[::-1]) - (-val)) < tol
+                    assert abs(env.measure_nsite_exact(ops.c('u'), ops.cp('u'), sites=bond[::-1]) - (-val)) < tol
                     assert abs(env.measure_nn(ops.c('u'), ops.cp('u'), bond=bond) - (-val.conjugate())) < tol
+                    assert abs(env.measure_nsite_exact(ops.c('u'), ops.cp('u'), sites=bond) - (-val.conjugate())) < tol
                     assert abs(env.measure_nn(ops.cp('u'), ops.c('u'), bond=bond[::-1]) - (val.conjugate())) < tol
+                    assert abs(env.measure_nsite_exact(ops.cp('u'), ops.c('u'), sites=bond[::-1]) - (val.conjugate())) < tol
                     dirn = g.nn_bond_dirn(*bond)
                     if dirn in ("lr", "tb"):
                         assert abs(measure_rdm_nn(bond[0], dirn, psi, env, (ops.cp('u'), ops.c('u'))) - val) < tol
