@@ -187,12 +187,12 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
     r"""
     Perform tensordot directly: permute blocks and execute dot accumulating results into result blocks.
     """
-    if a.config.profile: a.config.backend.cuda.nvtx.range_push(f"_tensordot_nf")
+    if a.config.profile: a.config.backend.nvtx.range_push(f"_tensordot_nf")
     ind_a, ind_b = _common_inds(a.struct.t, b.struct.t, nin_a, nin_b, a.ndim_n, b.ndim_n, a.config.sym.NSYM)
-    if a.config.profile: a.config.backend.cuda.nvtx.range_push(f"_meta_tensordot_nf")
+    if a.config.profile: a.config.backend.nvtx.range_push(f"_meta_tensordot_nf")
     meta_dot, reshape_a, reshape_b, struct_c, slices_c, legs_a, legs_b = _meta_tensordot_nf(a.struct, a.slices, b.struct, b.slices,
                                                                             ind_a, ind_b, nout_a, nin_a, nin_b, nout_b)
-    if a.config.profile: a.config.backend.cuda.nvtx.range_pop()
+    if a.config.profile: a.config.backend.nvtx.range_pop()
     order_a = nout_a + nin_a
     order_b = nin_b + nout_b
     nsym = a.config.sym.NSYM
@@ -214,7 +214,7 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
                 b_blocks_t = tuple(b.struct.t[i] for i in ind_b)
                 b_slices = tuple(b.slices[i] for i in ind_b)
 
-        if a.config.profile: a.config.backend.cuda.nvtx.range_push(f"kernel_tensordot_bs")
+        if a.config.profile: a.config.backend.nvtx.range_push(f"kernel_tensordot_bs")
         #a_legs, b_legs= a.get_legs( native=True ), b.get_legs( native=True )
         a_t_per_mode = [l[0] for l in legs_a] if nsym > 0 else [((0,),)] * a.ndim_n
         a_D_per_mode = [l[1] for l in legs_a]
@@ -240,11 +240,11 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
             slices_c,
             a.config.profile
         )
-        if a.config.profile: a.config.backend.cuda.nvtx.range_pop()
+        if a.config.profile: a.config.backend.nvtx.range_pop()
     else:
         data = a.config.backend.transpose_dot_sum(a.data, b.data, meta_dot,
                                               reshape_a, reshape_b, order_a, order_b, struct_c.size)
-    if a.config.profile: a.config.backend.cuda.nvtx.range_pop()
+    if a.config.profile: a.config.backend.nvtx.range_pop()
     return data, struct_c, slices_c
 
 

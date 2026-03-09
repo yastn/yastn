@@ -243,7 +243,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     minD = tuple(min(ds) for ds in struct.D)
     if policy in ['lowrank', 'randomized', 'block_arnoldi', 'block_propack']:
         if 'k_block' not in kwargs:
-            raise YastnError(policy + " policy in svd requires passing argument D_block.")
+            raise YastnError(policy + " policy in svd requires passing argument D_block or k_block.")
         k_block = kwargs['k_block']
         if not isinstance(k_block, dict):
             minD = tuple(min(k_block, d) for d in minD)
@@ -417,11 +417,11 @@ def eig(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         kwargs will be passed to those functions for non-default settings.
 
     which: str
-        One of [``‘SR’``, ``‘LR``, ``‘SM’``, ``‘LM’``] specifying how to order S:
-        ``‘LM’`` : (default) sort by absolute value, largest first,
-        ``‘SM’`` : sort by absolute value, smallest first,
-        ``‘SR’`` : sort by real part, smallest first,
-        ``‘LR’`` : sort by real part, largest first.
+        One of [``'SR'``, ``'LR'`, ``'SM'``, ``'LM'``] specifying how to order S:
+        ``'LM'`` : (default) sort by absolute value, largest first,
+        ``'SM'`` : sort by absolute value, smallest first,
+        ``'SR'`` : sort by real part, smallest first,
+        ``'LR'`` : sort by real part, largest first.
 
     Returns
     -------
@@ -498,11 +498,11 @@ def _find_gaps(S, tol=0, eps_multiplet=1e-13, which='LM'):
         elements are not considered as part of the same multiplet.
 
     which: str
-        One of [``‘LM’``, ``‘LR’``, ``‘SR’``] specifying how to order S:
-        ``‘LM’`` : largest magnitude,
-        ``‘SM’`` : smallest magnitude,
-        ``‘LR’`` : largest real part,
-        ``‘SR’`` : smallest real part.
+        One of [``'LM'``, ``'LR'``, ``'SR'``] specifying how to order S:
+        ``'LM'`` : largest magnitude,
+        ``'SM'`` : smallest magnitude,
+        ``'LR'`` : largest real part,
+        ``'SR'`` : smallest real part.
 
     Returns
     ------
@@ -681,7 +681,7 @@ def truncation_mask(S, tol=0, tol_block=0,
         raise YastnError("truncation_mask() requires S to be real and diagonal.")
 
     verbosity = kwargs.get('verbosity', 0)
-    if verbosity>2:
+    if verbosity > 2:
         fname = sys._getframe().f_code.co_name
         logger.info(f"{fname} tol {tol} tol_block {tol_block} D_total {D_total}")
         logger.info(f"{fname} D_block {D_block}")
@@ -828,7 +828,7 @@ def _meta_qr(config, struct, slices, sQ):
     return meta, Qstruct, Qsl, Rstruct, Rsl
 
 
-def eigh(a, axes, sU=1, Uaxis=-1, which='SR') -> tuple[yastn.Tensor, yastn.Tensor]:
+def eigh(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank', **kwargs) -> tuple[yastn.Tensor, yastn.Tensor]:
     r"""
     Split symmetric tensor using exact eigenvalue decomposition, :math:`a= USU^{\dagger}`.
 
@@ -846,16 +846,37 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='SR') -> tuple[yastn.Tensor, yastn.Tenso
         specify which leg of `U` is the new connecting leg. By default, it is the last leg.
 
     which: str
-        One of [``‘SR’``, ``‘LR``, ``‘SM’``, ``‘LM’``] specifying how to order S:
-        ``‘LM’`` : sort by absolute value, largest first,
-        ``‘SM’`` : sort by absolute value, smallest first,
-        ``‘SR’`` : (default) sort by real part, smallest first,
-        ``‘LR’`` : sort by real part, largest first.
+        One of [``'SR'``, ``'LR'``, ``'SM'``, ``'LM'``] specifying how to order S:
+        ``'LM'`` : sort by absolute value, largest first,
+        ``'SM'`` : sort by absolute value, smallest first,
+        ``'SR'`` : (default) sort by real part, smallest first,
+        ``'LR'`` : sort by real part, largest first.
+
+    policy: str
+        ``'fullrank'`` : (default) use standard full eigenvalue decomposition.
+        ``'block_lanczos'`` : use partial eigenvalue decomposition via ``scipy.sparse.linalg.eigsh``.
+        Requires ``D_block`` or ``k_block`` in ``kwargs`` specifying the number of eigenvalues per block.
+
+    k_block: None (default) | int | dict
+        When ``policy='block_lanczos'``, number of eigenvalues to compute in each block.
+        If ``D_block`` is provided, it is used instead to determine number of eigenvalues to compute.
 
     Returns
     -------
     `S`, `U`
     """
+    POLICIES = ['fullrank', 'block_lanczos',]
+    verbosity = kwargs.get('verbosity', 0)
+
+    # 1. validation
+    if policy not in POLICIES:
+       raise YastnError(f"Invalid EIGH solver/policy {policy}. Choose one of {POLICIES}.")
+
+    # 1.1 non-default D_block provides defaults for k_block
+    if 'D_block' in kwargs and kwargs['D_block'] not in [None, float('inf')] and \
+        ('k_block' not in kwargs or kwargs['k_block'] in [None,]):
+        kwargs['k_block'] = kwargs['D_block']
+
     _test_axes_all(a, axes)
     out_ml, out_mr = _clear_axes(*axes)
     #
@@ -869,13 +890,45 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='SR') -> tuple[yastn.Tensor, yastn.Tenso
 
     data, struct, slices, ls_l, ls_r = _merge_to_matrix(a, (out_hl, out_hr))
 
+    #
+    # 3.1 Set minimal number of eigenpairs to solve for in each block.
+    #     Used by block-wise sparse solvers and ignored by 'fullrank' policy.
+    minD = tuple(min(ds) for ds in struct.D)
+    if policy in ['block_lanczos',]:
+        if 'k_block' not in kwargs:
+            raise YastnError(policy + " policy in eighs requires passing argument D_block.")
+        k_block = kwargs['k_block']
+        if not isinstance(k_block, dict):
+            minD = tuple(min(k_block, d) for d in minD)
+        else:
+            # Presumably {charge: D} data (k_block) for leg to be attached to U with signature sU
+            # TODO: control default for sectors not present in k_block
+            sector_minD= min(k_block.values())
+            nsym = a.config.sym.NSYM
+            st = [x[nsym:] for x in struct.t]
+            minD = tuple(min(k_block.get(t, sector_minD), d) for t, d in zip(st, minD))
+
+    if verbosity>2:
+        fname = sys._getframe().f_code.co_name
+        logger.info(f"{fname} {policy} struct.D {struct.D}")
+        logger.info(f"{fname} D_block {kwargs.get('D_block', 'NA')}")
+        logger.info(f"{fname} minD {minD}")
+
     if ls_l != ls_r:
         raise YastnError("Tensor likely is not hermitian. Legs of effective square blocks do not match.")
 
-    meta, Sstruct, Sslices, Ustruct, Uslices = _meta_eigh(a.config, struct, slices, sU)
+    meta, Sstruct, Sslices, Ustruct, Uslices = _meta_eigh(a.config, struct, slices, sU, minD)
     sizes = tuple(x.size for x in (Sstruct, Ustruct))
 
-    Sdata, Udata = a.config.backend.eigh(data, meta, sizes)
+    if policy == 'fullrank':
+        Sdata, Udata = a.config.backend.eigh(data, meta, sizes)
+    elif policy == 'block_lanczos':
+        Sdata, Udata= a.config.backend.eigh_lowrank(data, meta, sizes, thresh=None, which=which, **kwargs)
+        # _real_dtype = {'complex128': 'float64', 'complex64': 'float32'}.get(a.yastn_dtype, a.yastn_dtype)
+        # Sdata = a.config.backend.to_tensor(Sdata_np, dtype=_real_dtype, device=a.device)
+        # Udata = a.config.backend.to_tensor(Udata_np, dtype=a.yastn_dtype, device=a.device)
+    else:
+        raise YastnError("eigh() policy should be 'fullrank' or 'block_lanczos'.")
 
     ls_s = _leg_struct_trivial(Sstruct, axis=1)
 
@@ -891,13 +944,13 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='SR') -> tuple[yastn.Tensor, yastn.Tenso
     S = a._replace(struct=Sstruct, slices=Sslices, data=Sdata, mfs=Smfs, hfs=Shfs, trans=None)
 
     # sort in case of non-default order
-    if which != 'SR':
+    if policy in ['fullrank'] and which != 'SR':
         nsym = a.config.sym.NSYM
         blocks_U = U.get_blocks_charge()
         for b in S.get_blocks_charge():
             arg_b = a.config.backend.eigs_which(S[b], which)
             S[b] = S[b][arg_b]
-            slice_U = tuple([slice(None),]*(U.ndim-1)+[arg_b,])
+            slice_U = tuple([slice(None),] * (U.ndim_n - 1) + [arg_b,])
             for b_U in blocks_U: # suboptimal since U may have more blocks
                 if b_U[-nsym:] == b[:nsym]:
                     # blocks_U.remove(b_U)
@@ -907,7 +960,7 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='SR') -> tuple[yastn.Tensor, yastn.Tenso
     return S, U
 
 
-def _meta_eigh(config, struct, slices, sU):
+def _meta_eigh(config, struct, slices, sU, minD):
     """
     meta and struct for eigh
     U has signature = (struct.s[0], sU)
@@ -916,6 +969,13 @@ def _meta_eigh(config, struct, slices, sU):
     n0 = config.sym.zero()
     nsym = config.sym.NSYM
 
+    if any(D == 0 for D in minD):
+        at = tuple(x for x, mD in zip(struct.t, minD) if mD > 0)
+        aD = tuple(x for x, mD in zip(struct.D, minD) if mD > 0)
+        slices = tuple(x for x, mD in zip(slices, minD) if mD > 0)
+        minD = tuple(mD for mD in minD if mD > 0)
+        struct = struct._replace(t=at, D=aD)
+
     if sU == -struct.s[0]:
         t_con = tuple(x[:nsym] for x in struct.t)
     else: # and sU == struct.s[0]
@@ -923,26 +983,82 @@ def _meta_eigh(config, struct, slices, sU):
         t_con = tuple(map(tuple, config.sym.fuse(t_con[:, :1, :], (1,), -1).tolist()))
 
     Ut = tuple(x[:nsym] + y for x, y in zip(struct.t, t_con))
-    Ustruct = struct._replace(t=Ut, s=(struct.s[0], sU))
 
+    UD = tuple((ds[0], dm) for ds, dm in zip(struct.D, minD))
+    UDp = np.prod(UD, axis=1, dtype=np.int64).tolist() if UD else ()
+    Usl = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(UDp), UDp, UD))
+
+    # SD = struct.D
+    SD = tuple((dm, dm) for dm in minD)
     St = tuple(y + y for y in t_con)
-    SD = struct.D
-
-    meta = tuple(zip(slices, struct.D, St))
+    # meta = tuple(zip(slices, struct.D, St))
+    meta = tuple(zip(slices, struct.D, Usl, UD, St))
 
     St, SD = zip(*sorted(zip(St, SD))) if len(St) > 0 else ((), ())
     SDp = tuple(dd[0] for dd in SD)
-
     Ssl = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(SDp), SDp, SD))
     Sdict = {x: y.slcs[0] for x, y in zip(St, Ssl)}
 
-    meta = tuple((sl.slcs[0], d, sl.slcs[0], d, Sdict[ts]) for sl, d, ts in meta)
+    # meta = tuple((sl.slcs[0], d, sl.slcs[0], d, Sdict[ts]) for sl, d, ts in meta)
 
+    meta = tuple((sl.slcs[0], d, slu.slcs[0], du, Sdict[ts]) for sl, d, slu, du, ts in meta)
+
+    # Ustruct = struct._replace(t=Ut, s=(struct.s[0], sU))
+    Ustruct = _struct(s=(struct.s[0], sU), n=n0, diag=False, t=Ut, D=UD, size=sum(UDp))
     Sstruct = _struct(s=(-sU, sU), n=n0, diag=True, t=St, D=SD, size=sum(SDp))
-    return meta, Sstruct, Ssl, Ustruct, slices
+    # import pdb; pdb.set_trace()
+    return meta, Sstruct, Ssl, Ustruct, Usl
 
 
-def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, which='SR', policy='fullrank',
+def _meta_eigh_lowrank(config, struct, slices, sU, D_block):
+    """
+    meta and struct for eigh with lowrank (D_block eigenvalues per block).
+    Analogous to _meta_eigh but caps the output dimension to D_block per block.
+    Returns meta with separate U output buffer of shape (n, k) per block.
+    """
+    n0 = config.sym.zero()
+    nsym = config.sym.NSYM
+
+    if sU == -struct.s[0]:
+        t_con = tuple(x[:nsym] for x in struct.t)
+    else:
+        t_con = np.array(struct.t, dtype=np.int64).reshape((len(struct.t), 2, nsym))
+        t_con = tuple(map(tuple, config.sym.fuse(t_con[:, :1, :], (1,), -1).tolist()))
+
+    Ut = tuple(x[:nsym] + y for x, y in zip(struct.t, t_con))
+    St = tuple(y + y for y in t_con)
+
+    # k per block: capped by D_block (d[0]==d[1] for Hermitian blocks)
+    ks = tuple(min(d[0], D_block) for d in struct.D)
+
+    # Sstruct: sorted by charge, D=(k, k) per block
+    sorted_triples = sorted(zip(St, struct.D, ks)) if len(St) > 0 else []
+    if sorted_triples:
+        St_s, _, ks_s = zip(*sorted_triples)
+        SD_s = tuple((k, k) for k in ks_s)
+    else:
+        St_s, SD_s, ks_s = (), (), ()
+    SDp_s = ks_s
+    Ssl = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(SDp_s), SDp_s, SD_s))
+    Sdict = {ts: sl.slcs[0] for ts, sl in zip(St_s, Ssl)}
+    Sstruct = _struct(s=(-sU, sU), n=n0, diag=True, t=St_s, D=SD_s, size=sum(SDp_s))
+
+    # Ustruct: D=(n, k) per block in input order, stored in a separate buffer
+    UD = tuple((d[0], k) for d, k in zip(struct.D, ks))
+    Uk_sizes = tuple(n * k for n, k in UD)
+    Uk_cumul = tuple(accumulate(Uk_sizes))
+    Uk_starts = (0,) + Uk_cumul[:-1]
+    Uslices = tuple(_slc(((s, e),), dk, dp) for s, e, dk, dp in zip(Uk_starts, Uk_cumul, UD, Uk_sizes))
+    Ustruct = _struct(s=(struct.s[0], sU), n=struct.n, diag=False, t=Ut, D=UD, size=sum(Uk_sizes))
+
+    # meta: (input_sl, input_D, U_sl, U_D, S_sl) in input block order
+    meta = tuple((sl.slcs[0], d, usl.slcs[0], dk, Sdict[ts])
+                 for sl, d, usl, dk, ts in zip(slices, struct.D, Uslices, UD, St))
+
+    return meta, Sstruct, Ssl, Ustruct, Uslices
+
+
+def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank',
                          tol=0, tol_block=0, D_block=float('inf'), D_total=float('inf'),
                          truncate_multiplets=False, mask_f=None, **kwargs) -> tuple[yastn.Tensor, yastn.Tensor]:
     r"""
@@ -966,11 +1082,11 @@ def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, which='SR', policy='fullrank',
         specify which leg of `U` is the new connecting leg. By default, it is the last leg.
 
     which: str
-        One of [``‘SR’``, ``‘LR``, ``‘SM’``, ``‘LM’``] specifying how to order S:
-        ``‘LM’`` : sort by absolute value, largest first,
-        ``‘SM’`` : sort by absolute value, smallest first,
-        ``‘SR’`` : (default) sort by real part, smallest first,
-        ``‘LR’`` : sort by real part, largest first.
+        One of [``'SR'``, ``'LR'`, ``'SM'``, ``'LM'``] specifying how to order S:
+        ``'LM'`` : sort by absolute value, largest first,
+        ``'SM'`` : sort by absolute value, smallest first,
+        ``'SR'`` : (default) sort by real part, smallest first,
+        ``'LR'`` : sort by real part, largest first.
 
     policy: str
         ``"fullrank"`` : Use standard full ED for ``"fullrank"`` and then truncate.
@@ -996,11 +1112,17 @@ def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, which='SR', policy='fullrank',
     -------
     `S`, `U`
     """
-    S, U = eigh(a, axes=axes, sU=sU, Uaxis=Uaxis, which=which)
+    S, U = eigh(a, axes=axes, sU=sU, Uaxis=Uaxis, which=which, policy=policy)
 
-    _S= S
-    if which in ["SM", "LM"]:
-        _S= abs(S)
+    # # truncation mask assumes positive values in _S and select largest elements
+    # if which in ["SR", "SM"] and (tol in [-float('inf')]) and not (tol_block in [-float('inf')]):
+    #     raise YastnError("Truncation by tolerance with which='SR' or 'SM' is not supported."
+    #         +"Set tol and tol_block to -inf or use mask_f for custom truncation mask if needed.")
+
+    _S = abs(S) if which in ["SM", "LM"] else S
+    if which in ["SM", "SR"]:
+        _S = - _S
+
     Smask = truncation_mask(_S, tol=tol, tol_block=tol_block,
                         D_block=D_block, D_total=D_total,
                         truncate_multiplets=truncate_multiplets, mask_f=mask_f)

@@ -16,7 +16,7 @@
 from itertools import groupby
 from functools import reduce
 import torch
-import torch.cuda as cuda
+import torch.cuda.nvtx as nvtx
 from torch.utils.checkpoint import checkpoint as _checkpoint
 
 import torch.multiprocessing as mp
@@ -29,18 +29,17 @@ from ._backend_torch_backwards import kernel_apply_mask, kernel_embed_mask
 from ._backend_torch_backwards import kernel_transpose, kernel_transpose_and_merge, kernel_unmerge
 
 
-__all__= [
-    'DTYPE', 'cuda_is_available',
-    'get_dtype', 'get_yastn_dtype', 'is_complex', 'get_device', 'random_seed',
-    'grad', 'detach', 'detach_', 'clone', 'copy', 'randint',
-    'to_numpy', 'get_shape', 'get_size', 'diag_create', 'diag_get', 'real',
+__all__= ['DTYPE', 'get_dtype', 'get_yastn_dtype',
+    'nvtx', 'cuda_is_available', 'get_device', 'move_to', 
+    'grad', 'requires_grad_', 'requires_grad', 'detach', 'detach_', 'clone', 'copy', 'checkpoint', 
+    'random_seed', 'randint',
+    'to_numpy', 'get_shape', 'get_size', 'diag_create', 'diag_get', 'real', 'is_complex', 'conj',
     'imag', 'max_abs', 'maximum', 'norm_matrix', 'delete', 'insert',
     'expm', 'first_element', 'item', 'sum_elements', 'norm', 'entropy',
     'zeros', 'ones', 'rand', 'to_tensor', 'to_mask', 'square_matrix_from_dict',
-    'requires_grad_', 'requires_grad', 'move_to', 'conj',
     'trace', 'rsqrt', 'reciprocal', 'exp', 'sqrt', 'absolute', 'permute_dims',
     'fix_svd_signs', 'svdvals', 'svd_lowrank', 'svd', 'svd_randomized', 'svds_scipy',
-    'eigh', 'qr', 'pinv', 'eig', 'eigvals',
+    'eigh', 'qr', 'pinv', 'eig', 'eigh_lowrank', 'eigvals',
     'argsort', 'eigs_which', 'allclose',
     'add', 'sub', 'apply_mask', 'vdot', 'diag_1dto2d', 'diag_2dto1d',
     'dot', 'dot_diag', 'transpose_dot_sum',
@@ -422,6 +421,48 @@ def eig(data, meta=None, sizes=(1, 1), **kwargs):
     return Udata, Sdata, Vdata
 
 
+def eigh_lowrank(data, meta, sizes, thresh=None, **kwargs):
+    # TODO user-defined threshold
+    # TODO cupyx implementation of eigsh for GPU
+    import numpy as np
+    import scipy
+
+    _which_map= {'LM': 'LM', 'SM': 'SM', 'LR': 'LA',  'SR': 'SA'} 
+    _which = kwargs.get('which', 'LM')
+    data_device= data.device
+    data = data.cpu().numpy() if data.is_cuda else data.numpy()
+    real_dtype = data.real.dtype if np.iscomplexobj(data) else data.dtype
+    Sdata = np.zeros((sizes[0],), dtype=real_dtype)
+    Udata = np.zeros((sizes[1],), dtype=data.dtype)
+    for (sl, D, slU, DU, slS) in meta:
+        k = slS[1] - slS[0]
+        n = D[0]
+        block = data[slice(*sl)].reshape(D)
+        if k < n - 1 and n * n > 5000:
+            try:
+                S, U = scipy.sparse.linalg.eigsh(block, k=k, which=_which_map[_which],
+                    M=None, sigma=None, v0=None, ncv=None, maxiter=None, tol=0, 
+                    return_eigenvectors=kwargs.get("return_eigenvectors", True), 
+                    Minv=None, OPinv=None, mode='normal',) #rng=None)
+            except scipy.sparse.linalg.ArpackError as e:
+                raise e
+                # S, U = scipy.linalg.eigh(block)
+        else:
+            S, U = scipy.linalg.eigh(block) # always returns result sorted in ascending order ('SA') 
+        # sort in case of non-default order
+        # see https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.eigsh.html
+        if not (_which in ['SR'] and  kwargs.get("return_eigenvectors", True)):
+            arg_b = eigs_which(S, _which)
+            S,U = S[arg_b[:k]], U[:,arg_b[:k]]
+        else:
+            S,U = S[:k], U[:,:k]
+        Sdata[slice(*slS)] = S
+        Udata[slice(*slU)].reshape(DU)[:] = U
+    Sdata = torch.from_numpy(Sdata).to(device=data_device)
+    Udata = torch.from_numpy(Udata).to(device=data_device)
+    return Sdata, Udata
+
+
 def eigvals(data, meta, sizeS, **kwargs):
     dtype = dtype_to_complex(data)
     Sdata = torch.empty((sizeS,), dtype=dtype, device=data.device)
@@ -587,8 +628,6 @@ def diag_2dto1d(data, meta, Dsize):
 
 # functionals
 def checkpoint(f, *args, **kwargs):
-    # context_fn=kwargs.pop('context_fn',None)
-    # torch.utils.checkpoint.checkpoint
     return _checkpoint(f, *args,
                        use_reentrant=kwargs.pop('use_reentrant',None),
                        determinism_check=kwargs.pop('determinism_check', 'default'),

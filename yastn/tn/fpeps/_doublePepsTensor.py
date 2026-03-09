@@ -173,10 +173,10 @@ class DoublePepsTensor(SpecialTensor):
             raise YastnError("DoublePEPSTensor only supports permutations that retain legs' ordering.")
         return DoublePepsTensor(bra=self.bra, ket=self.ket, trans=axes, op=self.op, swaps=self.swaps)
 
-    # def flip_signature(self):
-    #     r""" Conjugate DoublePepsTensor. """
-    #     op_fs = self.op.flip_signature() if self.op is not None else None
-    #     return DoublePepsTensor(bra=self.bra.flip_signature(), ket=self.ket.flip_signature(), trans=self.trans, op=op_fs, swaps=self.swaps)
+    def flip_signature(self):
+        r""" Conjugate DoublePepsTensor. """
+        op_fs = self.op.flip_signature() if self.op is not None else None
+        return DoublePepsTensor(bra=self.bra.flip_signature(), ket=self.ket.flip_signature(), trans=self.trans, op=op_fs, swaps=self.swaps)
 
     def conj(self):
         r""" Conjugate DoublePepsTensor. """
