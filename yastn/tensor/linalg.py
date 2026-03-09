@@ -681,7 +681,7 @@ def truncation_mask(S, tol=0, tol_block=0,
         raise YastnError("truncation_mask() requires S to be real and diagonal.")
 
     verbosity = kwargs.get('verbosity', 0)
-    if verbosity>2:
+    if verbosity > 2:
         fname = sys._getframe().f_code.co_name
         logger.info(f"{fname} tol {tol} tol_block {tol_block} D_total {D_total}")
         logger.info(f"{fname} D_block {D_block}")
@@ -828,7 +828,7 @@ def _meta_qr(config, struct, slices, sQ):
     return meta, Qstruct, Qsl, Rstruct, Rsl
 
 
-def eigh(a, axes, sU=1, Uaxis=-1, which='SR', policy='fullrank', **kwargs) -> tuple[yastn.Tensor, yastn.Tensor]:
+def eigh(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank', **kwargs) -> tuple[yastn.Tensor, yastn.Tensor]:
     r"""
     Split symmetric tensor using exact eigenvalue decomposition, :math:`a= USU^{\dagger}`.
 
@@ -871,7 +871,7 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='SR', policy='fullrank', **kwargs) -> tu
     # 1. validation
     if policy not in POLICIES:
        raise YastnError(f"Invalid EIGH solver/policy {policy}. Choose one of {POLICIES}.")
-   
+
     # 1.1 non-default D_block provides defaults for k_block
     if 'D_block' in kwargs and kwargs['D_block'] not in [None, float('inf')] and \
         ('k_block' not in kwargs or kwargs['k_block'] in [None,]):
@@ -950,7 +950,7 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='SR', policy='fullrank', **kwargs) -> tu
         for b in S.get_blocks_charge():
             arg_b = a.config.backend.eigs_which(S[b], which)
             S[b] = S[b][arg_b]
-            slice_U = tuple([slice(None),]*(U.ndim-1)+[arg_b,])
+            slice_U = tuple([slice(None),] * (U.ndim_n - 1) + [arg_b,])
             for b_U in blocks_U: # suboptimal since U may have more blocks
                 if b_U[-nsym:] == b[:nsym]:
                     # blocks_U.remove(b_U)
@@ -983,11 +983,11 @@ def _meta_eigh(config, struct, slices, sU, minD):
         t_con = tuple(map(tuple, config.sym.fuse(t_con[:, :1, :], (1,), -1).tolist()))
 
     Ut = tuple(x[:nsym] + y for x, y in zip(struct.t, t_con))
-    
+
     UD = tuple((ds[0], dm) for ds, dm in zip(struct.D, minD))
     UDp = np.prod(UD, axis=1, dtype=np.int64).tolist() if UD else ()
     Usl = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(UDp), UDp, UD))
-    
+
     # SD = struct.D
     SD = tuple((dm, dm) for dm in minD)
     St = tuple(y + y for y in t_con)
@@ -1000,7 +1000,7 @@ def _meta_eigh(config, struct, slices, sU, minD):
     Sdict = {x: y.slcs[0] for x, y in zip(St, Ssl)}
 
     # meta = tuple((sl.slcs[0], d, sl.slcs[0], d, Sdict[ts]) for sl, d, ts in meta)
-    
+
     meta = tuple((sl.slcs[0], d, slu.slcs[0], du, Sdict[ts]) for sl, d, slu, du, ts in meta)
 
     # Ustruct = struct._replace(t=Ut, s=(struct.s[0], sU))
@@ -1058,7 +1058,7 @@ def _meta_eigh_lowrank(config, struct, slices, sU, D_block):
     return meta, Sstruct, Ssl, Ustruct, Uslices
 
 
-def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, which='SR', policy='fullrank',
+def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank',
                          tol=0, tol_block=0, D_block=float('inf'), D_total=float('inf'),
                          truncate_multiplets=False, mask_f=None, **kwargs) -> tuple[yastn.Tensor, yastn.Tensor]:
     r"""
@@ -1112,17 +1112,17 @@ def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, which='SR', policy='fullrank',
     -------
     `S`, `U`
     """
-    S, U = eigh(a, axes=axes, sU=sU, Uaxis=Uaxis, which=which)
+    S, U = eigh(a, axes=axes, sU=sU, Uaxis=Uaxis, which=which, policy=policy)
 
-    _S= S
-    # truncation mask sorts argument internally, in ascending order
-    if which in ["SR", "SM"] and (tol in [-float('inf')]) and not (tol_block in [-float('inf')]): 
-        raise YastnError("Truncation by tolerance with which='SR' or 'SM' is not supported."
-            +"Set tol and tol_block to -inf or use mask_f for custom truncation mask if needed.")
-    if which in ["SM", "LM"]:
-        _S= abs(S)
-    if which in ["SR"]: 
-        _S= -S
+    # # truncation mask assumes positive values in _S and select largest elements
+    # if which in ["SR", "SM"] and (tol in [-float('inf')]) and not (tol_block in [-float('inf')]):
+    #     raise YastnError("Truncation by tolerance with which='SR' or 'SM' is not supported."
+    #         +"Set tol and tol_block to -inf or use mask_f for custom truncation mask if needed.")
+
+    _S = abs(S) if which in ["SM", "LM"] else S
+    if which in ["SM", "SR"]:
+        _S = - _S
+
     Smask = truncation_mask(_S, tol=tol, tol_block=tol_block,
                         D_block=D_block, D_total=D_total,
                         truncate_multiplets=truncate_multiplets, mask_f=mask_f)
