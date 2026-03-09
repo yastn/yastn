@@ -142,11 +142,21 @@ def eigs_implicit(umps:Union[Mps,Sequence["Tensor"]],
         return vals, None
     
     vals, vecs= eigs(T, k=k, v0=None, return_eigenvectors=True)
+    if 'float' in cfg.default_dtype:
+        if sum(abs(vecs.imag))==0:
+            vecs= vecs.real
+        elif umps_conj is not None:
+            # possibly mixed transfer matrix. No guarantee on real eigenvector
+            # TODO attempt to remove a global phase
+            pass
+        else:
+            raise ValueError("Unexpected complex eigenvectors for real dtype.")
+
     Vecs= block( {col: from_dict(combine_data_and_meta(cfg.backend.to_tensor(vecs[:,col],
         dtype=str(vecs.dtype),
         device=cfg.default_device),
         meta=V0_meta)).add_leg(axis=0) for col in range(vecs.shape[1])}, common_legs=tuple(i+1 for i in range(len(V0.get_legs()))) ) 
-    
+
     return vals, Vecs
 
 
@@ -207,6 +217,12 @@ def eigs_implicit_v2(mv:callable, config=None, legs:Sequence[Leg]=None,
         return vals, None
     
     vals, vecs= eigs(T, k=k, v0=None, return_eigenvectors=True)
+    if 'float' in config.default_dtype:
+        if sum(abs(vecs.imag))==0:
+            vecs= vecs.real
+        else:
+            raise ValueError("Unexpected complex eigenvectors for real dtype.")
+    
     Vecs= block( {col: from_dict(combine_data_and_meta(config.backend.to_tensor(vecs[:,col],
         dtype=config.default_dtype,
         device=config.default_device),
@@ -379,7 +395,7 @@ def isogauge_left_v2(umps, C_init=None, eps=1e-12):
 
 def biorthogonalize_left(umps_top:Union[Mps,Sequence["Tensor"]], 
                          umps_bottom:Union[Mps,Sequence["Tensor"]], 
-                         C_init:"Tensor"=None, pinv_cutoff=1e-12, eps=1e-12):
+                         C_init:"Tensor"=None, pinv_cutoff=1e-12, eps=1e-12, verbosity=0):
     """ 
     Find the left biorthogonal gauge for a pair of uMPS (ket/bra) layers.
 
@@ -443,7 +459,8 @@ def biorthogonalize_left(umps_top:Union[Mps,Sequence["Tensor"]],
     U_L, S_L, V_Ldag= evecs.remove_leg(0).svd(axes=(0, 1), sU=1, nU=True, compute_uv=True,
         Uaxis=-1, Vaxis=0, policy='fullrank', fix_signs=False)
 
-    #CLU ≡ ΣLV †  L and  CDL ≡ ULΣL
+    # --(U_L √Σ)(√Σ-1 U_L†) -- U_L S_L V_L† -- (V_L √Σ-1) (√Σ V_L†)
+    #    C_DL                                              C_LU 
     C_LU= S_L.sqrt() @ V_Ldag
     C_DL= U_L @ S_L.sqrt()
     C_LU_pinv= (V_Ldag.H).consume_transpose() @ S_L.rsqrt(cutoff=pinv_cutoff) # TODO relative cutoff
@@ -451,13 +468,12 @@ def biorthogonalize_left(umps_top:Union[Mps,Sequence["Tensor"]],
 
     P_L = (C_LU @ umps_top[0]) @ C_LU_pinv
     Pbar_L = (C_DL.transpose() @ umps_bottom[0]) @ C_DL_pinv.transpose()
-    # Pbar_L = (C_DL_pinv @ umps_bottom[0]) @ C_DL
 
     Delta, n_iter= float('inf'), 0
     while Delta>eps and n_iter < 10:
         eval, evecs= eigs_implicit([P_L], umps_conj=[Pbar_L], k=1, eigenvectors=True)
         
-        U_L, S_L, V_Ldag= evecs.remove_leg(0).svd(axes=(0, 1), sU=1, nU=True, compute_uv=True,
+        U_L, S_L, V_Ldag= evecs.remove_leg(0).svd(axes=(0, 1), sU=-1, nU=True, compute_uv=True,
                                                 Uaxis=-1, Vaxis=0, policy='fullrank', fix_signs=False) # Y_L
         
         Y_LU = S_L.sqrt() @ V_Ldag
@@ -465,19 +481,33 @@ def biorthogonalize_left(umps_top:Union[Mps,Sequence["Tensor"]],
         Y_LU_pinv= (V_Ldag.H).consume_transpose() @ S_L.rsqrt(cutoff=pinv_cutoff) # TODO relative cutoff
         Y_DL_pinv= S_L.rsqrt(cutoff=pinv_cutoff) @ (U_L.H).consume_transpose()
 
-        # Ps_L → Y_LU Ps_L Y+_LU, 
-        # [P−L]s → Y+_DL [P−L]s Y_DL, 
-        # C_LU → Y_LU C_LU, and  C_DL → Y_DL C_DL
+        # Ps_L → Y_LU Ps_L Y_LU-1 -> Y_LU C_LU umps_top[0] C_LU_pinv Y_LU-1 
+        # [P−L]s → Y_DL^T [P−L]s (Y_DL-1)^T -> Y_DL^T C_DL^T umps_bottom[0] C_DL_pinv^T (Y_DL-1)^T 
+        # C_LU → Y_LU C_LU, and  C_DL → (C_DL Y_DL)^T
         P_L= (Y_LU @ P_L) @ Y_LU_pinv
         Pbar_L= (Y_DL.transpose() @ Pbar_L) @ Y_DL_pinv.transpose()
         C_LU= Y_LU @ C_LU
-        # C_DL= Y_DL @ C_DL
         C_DL= C_DL @ Y_DL
-
+        
         # check biorthogonality of P_L and Pbar_L
         I_approx= P_L.tensordot(Pbar_L, axes=((0, 1), (0, 1)))*(1/eval)
         Delta= (I_approx - eye(I_approx.config, legs=I_approx.get_legs(), isdiag=False)).norm()
-        print(f"Iteration {n_iter}: eval = {eval}, ||I_approx - I|| = {Delta}")
+        if verbosity > 0:
+            print(f"Iteration {n_iter}: eval = {eval}, ||I_approx - I|| = {Delta}")
+        
         n_iter += 1
 
     return P_L, Pbar_L, C_LU, C_DL
+
+
+def verify_biorth(umps_top, umps_bottom, P_L, Pbar_L, C_LU, C_DL, tol=1e-12):
+    C_LU_A0= C_LU @ umps_top[0]
+    C_DL_A0= C_DL.transpose() @ umps_bottom[0]
+    P_L_check= P_L @ C_LU
+    Pbar_L_check= Pbar_L @ C_DL.transpose()
+
+    res= {"C_LU A_0 - P_L C_LU": (C_LU_A0 - P_L_check).norm(),
+          "C_DL^T A_0 - Pbar_L C_DL^T": (C_DL_A0 - Pbar_L_check).norm()}    
+    passed= all( res[key] < tol for key in res )
+    return passed, res
+    

@@ -50,6 +50,9 @@ def _update_fpctm_projectors(env: EnvCTM) -> "Lattice[EnvCTM_projectors]":
         #  T_l[r-1,c] -- A[r-1,c]               =    T_l[r-1,c] -- A[r-1,c] --
         # C_LU[r-1,c] -- b[r-1,c] -- b[r-1,c+1]            -- Pbar_L[r-1,c] -- C_LU[r-1,c+1] -- t[r-1,c+1]       
         #
+        # 0->(+)-t->(-)-2
+        # 
+        # 2-<(-)-b-<(+)-0 => boundary_mps reverses 'b's order to match 't's order as 0-<(-)-b-<(+)-2 
         P_L, Pbar_L, C_LU, C_DL= biorthogonalize_left(env.boundary_mps(r,'t'), 
                                                       env.boundary_mps(r-1,'b'), 
                                                       C_init=None, pinv_cutoff=pinv_cutoff, eps=eps)
@@ -79,15 +82,15 @@ def _update_fpctm_projectors(env: EnvCTM) -> "Lattice[EnvCTM_projectors]":
         P_t, Pbar_t, C_UR, C_LU= biorthogonalize_left( env.boundary_mps(c, 'r'), 
                                                        env.boundary_mps(r+1, 'l'), 
                                                        C_init=None, pinv_cutoff=pinv_cutoff, eps=eps)
-        proj_new[r,c].vtl= P_t
-        proj_new[r,c+1].vtr= Pbar_t
+        proj_new[r,c].vtl= Pbar_t
+        proj_new[r,c+1].vtr= P_t
 
         # bottom projectors
         #
         #    T_l[.,c]     A[.,c]
         #      A[.,c-1] T_r[.,c-1]
-        P_b, Pbar_b, C_DL, C_RD= biorthogonalize_left( env.boundary_mps(c, 'l'), 
-                                                       env.boundary_mps(r-1, 'r'), 
+        P_b, Pbar_b, C_DL, C_RD= biorthogonalize_left( env.boundary_mps(c, 'l').reverse_sites(), 
+                                                       env.boundary_mps(r-1, 'r').reverse_sites(), 
                                                        C_init=None, pinv_cutoff=pinv_cutoff, eps=eps)
         proj_new[r,c].vbl= P_b
         proj_new[r,c-1].vbr= Pbar_b
@@ -109,9 +112,8 @@ def _update_fpctm_env(env: EnvCTM) -> EnvCTM:
                 T_l = tensordot(psi[r,c+_c], T_l, axes=((0, 1), (2, 1)))
                 T_l = tensordot(env.proj[r,c+_c].hlb, T_l, axes=((0, 1), (2, 0)))
             return T_l
-
         evals, evecs= eigs_implicit_v2(fpop_l, k=1, eigenvectors=True, V0= env[r,c].l)
-        env_new[r,c].l = evecs[0].remove_leg(0)
+        env_new[r,c].l = evecs.remove_leg(0)
 
         def fpop_r(T_r):
             for _c in range(env.Ny):
@@ -120,7 +122,7 @@ def _update_fpctm_env(env: EnvCTM) -> EnvCTM:
                 T_r = tensordot(env.proj[r,c-_c].hrt, T_r, axes=((0, 1), (2, 0)))
             return T_r
         evals, evecs= eigs_implicit_v2(fpop_r, k=1, eigenvectors=True, V0= env[r,c].r)
-        env_new[r,c].r = evecs[0].remove_leg(0)
+        env_new[r,c].r = evecs.remove_leg(0)
 
         def fpop_t(T_t):
             for _r in range(env.Nx):
@@ -129,7 +131,7 @@ def _update_fpctm_env(env: EnvCTM) -> EnvCTM:
                 T_t = tensordot(T_t, env.proj[r+_r,c].vtr, axes=((1, 3), (0, 1)))
             return T_t
         evals, evecs= eigs_implicit_v2(fpop_t, k=1, eigenvectors=True, V0= env[r,c].t)
-        env_new[r,c].t = evecs[0].remove_leg(0)
+        env_new[r,c].t = evecs.remove_leg(0)
 
         def fpop_b(T_b):
             for _r in range(env.Nx):
@@ -138,44 +140,46 @@ def _update_fpctm_env(env: EnvCTM) -> EnvCTM:
                 T_b = tensordot(T_b, env.proj[r-_r,c].vbl, axes=((1, 3), (0, 1)))
             return T_b
         evals, evecs= eigs_implicit_v2(fpop_b, k=1, eigenvectors=True, V0= env[r,c].b)
-        env_new[r,c].b = evecs[0].remove_leg(0)
-    
+        env_new[r,c].b = evecs.remove_leg(0)
+
     # C-tensors
+    mode="unfused"
+    t_env= env_new
     for site in env.sites():
         r,c= site
 
         def fpop_tl(C_tl):
-            C_tl= corner2x2('tl', env_new[r,c].l, C_tl, env_new[r,c].t, psi[r,c])
+            C_tl= corner2x2('tl', t_env[r,c].l, C_tl, t_env[r,c].t, psi[r,c], mode=mode)
             # C_lu= tensordot( C_lu, env.proj[r,c].hlb, axes=((0, 2), (0, 1)) )
             # C_lu= tensordot( C_lu, env.proj[r,c].vtr, axes=((0, 1), (0, 1)) )
             C_tl = ncon( [C_tl, env.proj[r,c].hlb, env.proj[r,c].vtr],
-                         [[0,1,2,3], [0, 2, -1], [1, 3, -2]], )
+                         [[1,3,2,4], [1, 2, -1], [3, 4, -2]], )
             return C_tl
         evals, evecs= eigs_implicit_v2(fpop_tl, k=1, eigenvectors=True, V0= env[r,c].tl)
-        env_new[r,c].tl = evecs[0].remove_leg(0)
+        env_new[r,c].tl = evecs.remove_leg(0)
 
         def fpop_tr(C_ru):
-            C_ru = corner2x2('tr', env_new[r,c].t, C_ru, env_new[r,c].r, psi[r,c])
+            C_ru = corner2x2('tr', t_env[r,c].t, C_ru, t_env[r,c].r, psi[r,c],  mode=mode)
             C_ru = ncon( [C_ru, env.proj[r,c].vtl, env.proj[r,c].hrb],
-                         [[0,1,2,3], [0, 2, -1], [1, 3, -2]], )
+                         [[1,3,2,4], [1, 2, -1], [3, 4, -2]], )
             return C_ru
         evals, evecs= eigs_implicit_v2(fpop_tr, k=1, eigenvectors=True, V0= env[r,c].tr)
-        env_new[r,c].tr = evecs[0].remove_leg(0)
+        env_new[r,c].tr = evecs.remove_leg(0)
 
         def fpop_br(C_br):
-            C_br = corner2x2('br', env_new[r,c].r, C_br, env_new[r,c].b, psi[r,c])
+            C_br = corner2x2('br', t_env[r,c].r, C_br, t_env[r,c].b, psi[r,c],  mode=mode)
             C_br = ncon( [C_br, env.proj[r,c].hrt, env.proj[r,c].vbl],
-                         [[0,1,2,3], [0, 2, -1], [1, 3, -2]], )
+                         [[1,3,2,4], [1, 2, -1], [3, 4, -2]], )
             return C_br
         evals, evecs= eigs_implicit_v2(fpop_br, k=1, eigenvectors=True, V0= env[r,c].br)
-        env_new[r,c].br = evecs[0].remove_leg(0)
+        env_new[r,c].br = evecs.remove_leg(0)
 
         def fpop_bl(C_bl):
-            C_bl = corner2x2('bl', env_new[r,c].b, C_bl, env_new[r,c].l, psi[r,c])
+            C_bl = corner2x2('bl', t_env[r,c].b, C_bl, t_env[r,c].l, psi[r,c],  mode=mode)
             C_bl = ncon( [C_bl, env.proj[r,c].vbr, env.proj[r,c].hlt],
-                         [[0,1,2,3], [0, 2, -1], [1, 3, -2]], )
+                         [[1,3,2,4], [1, 2, -1], [3, 4, -2]], )
             return C_bl
         evals, evecs= eigs_implicit_v2(fpop_bl, k=1, eigenvectors=True, V0= env[r,c].bl)
-        env_new[r,c].bl = evecs[0].remove_leg(0)
+        env_new[r,c].bl = evecs.remove_leg(0)
 
     return env_new
