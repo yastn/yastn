@@ -69,7 +69,7 @@ def einsum(subscripts, *operands, order=None, swap=None) -> 'Tensor':
     else:
         raise YastnError('Subscript should have at most one separator ->')
 
-    alphabet1 = 'ABCDEFGHIJKLMNOPQRSTUWXYZabcdefghijklmnopqrstuvwxyz'
+    alphabet1 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
     alphabet2 = alphabet1 + ',*'
     if any(v not in alphabet1 for v in sout) or \
        any(v not in alphabet2 for v in sin):
@@ -234,7 +234,7 @@ def _meta_ncon(inds, order, swap):
     commands, dot_done = [], False
     #
     axes1, axes2 = [], []
-    while edges[-1][0] != 512:  # tensordot two tensors, or trace one tensor; 512 is cutoff marking end of truncation
+    while edges[-1][0] != 512:  # tensordot two tensors, or trace one tensor; 512 is cutoff marking end of contractions
         ind1, ten1, leg1 = edges.pop()
         ind2, ten2, leg2 = edges.pop()
         if ind1 != ind2:
@@ -260,7 +260,7 @@ def _meta_ncon(inds, order, swap):
                 commands.append(('swap_gate', ten_swap, ten_swap, tuple(axes_swap)))
             swaps = swap_later
             #
-            # test if to-be-contracted legs are yet to be swaped
+            # test if to-be-contracted legs are yet to be swapped
             tas = [[ten1, ax] for ax in axes1] + [[ten2, ax] for ax in axes2]
             bad_swaps = [sw12 for sw12 in swaps if any(ta in sw12[0] or ta in sw12[1] for ta in tas)]
             if bad_swaps:
@@ -296,8 +296,6 @@ def _meta_ncon(inds, order, swap):
     for ten2 in remaining[1:]:  # tensordot
         ten_out += 1
         commands.append(('tensordot', ten_out, (ten1, ten2), ((), ())))
-        nlegs[ten1] -= len(axes1)
-        nlegs[ten2] -= len(axes2)
         _shift_edges_(edges, ten1, ten_out, dax=lambda x: 0)
         _shift_edges_(edges, ten2, ten_out, dax=lambda x: nlegs[ten1])
         _shift_swaps_(swaps, ten1, ten_out, dax=lambda x: 0)
