@@ -295,25 +295,50 @@ def test_ncon_einsum_swaps(config_kwargs):
     r = yastn.tensordot(r, e, axes=((1, 2, 3), (1, 2, 3)))
     r = yastn.tensordot(r, f, axes=((0, 1), (0, 1)))
     #
-    for order in [None]:  # (2, 4, 7, 1, 3, 5, 6, 11, 8, 9, 10, 12)]:
+    for order in [None,
+                  (2, 4, 7, 1, 3, 5, 6, 11, 8, 9, 10, 12),
+                  (6, 5, 8, 10, 9, 7, 3, 2, 1, 4, 11, 12),
+                  (12, 10, 1, 7, 9, 3, 6, 8, 11, 2, 5, 4),
+                  (12, 11, 6, 5, 1, 4, 10, 8, 3, 7, 9, 2)]:
         x = yastn.ncon([a, b, c, d, e, f], ((1, 2, 4, 11), (3, 5, 6, 8, 1), (7, 9, 2, 3), (10, 4, 6, 5, 7), (12, 8, 9, 10), (11, 12)),
                        swap=((2, 8), (2, 5), (2, 6), (4, 8), (9, 6), (9, 5), (4, 9)), order=order)
         assert (x - r).norm() < tol * r.norm()
 
-    for order in [None]: #, 'bdgacefkhijl']:
+    for order in [None, 'bdgacefkhijl']:
         y = yastn.einsum('abdk,cefha,gibc,jdfeg,lhij,kl', a, b, c, d, e, f,
-                         swap='bh,be,bf,dh,ei,fi,di', order=order)  #
+                         swap='bh,be,bf,dh,ei,fi,di', order=order)
         assert (y - r).norm() < tol * r.norm()
 
-    with pytest.raises(yastn.YastnError,
-                       match="Provided swaps are inconsistent with contraction order."):
-        yastn.ncon([a, b, c, d, e, f], ((1, 2, 4, 11), (3, 5, 6, 8, 1), (7, 9, 2, 3), (10, 4, 6, 5, 7), (12, 8, 9, 10), (11, 12)),
-                swap=((2, 8), (2, 5), (2, 6), (4, 8), (9, 6), (9, 5), (4, 9)), order=(2, 4, 7, 1, 3, 5, 6, 11, 8, 9, 10, 12))
 
-    with pytest.raises(yastn.YastnError,
-                       match="Provided swaps are inconsistent with contraction order."):
-        yastn.einsum('abdk,cefha,gibc,jdfeg,lhij,kl', a, b, c, d, e, f,
-                         swap='bh,be,bf,dh,ei,fi,di', order='bdgacefkhijl')
+def test_einsum_scalar_swap_order(config_kwargs):
+    r"""Scalar fermionic einsum should be invariant to contraction order."""
+    config_Z2 = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
+    l = yastn.Leg(config_Z2, s=1, t=(0, 1), D=(2, 2))
+    lc = l.conj()
+
+    A = yastn.rand(config=config_Z2, n=0, legs=[l, l, l, l])
+    B = yastn.rand(config=config_Z2, n=0, legs=[lc, lc, lc])
+    C = yastn.rand(config=config_Z2, n=0, legs=[lc, l, l, l])
+    D = yastn.rand(config=config_Z2, n=0, legs=[l, lc])
+    E = yastn.rand(config=config_Z2, n=0, legs=[lc, lc])
+    F = yastn.rand(config=config_Z2, n=0, legs=[lc, l, lc])
+
+    inds = ((9,1,2,3), (9, 2,3), (1,4,5,8), (7,8), (4,6), (5,6,7))
+    orders = [[9,2,3,1,4,5,6,7,8], [4,5,6,7,8,9,2,3,1], [8,1,6,4,5,7,9,2,3]]
+    swap = [(9,4), (9,5), (2,8), (3,8)]
+
+    def _assert_all_orders():
+        vals = [yastn.ncon((A, B, C, D, E, F), inds, swap=swap, order=order) for order in orders]
+        for v in vals:
+            assert v.ndim == 0
+        ref = vals[0]
+        den = ref.norm()
+        den = den.item() if hasattr(den, "item") else den
+        den = max(float(den), 1.0)
+        for v in vals[1:]:
+            assert (v - ref).norm() < tol * den
+
+    _assert_all_orders()
 
 
 if __name__ == '__main__':
