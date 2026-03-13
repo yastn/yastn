@@ -346,14 +346,18 @@ def _resolve_bad_swaps(swaps, edges, nlegs, ten1, ten2, axes1, axes2):
 
     Data structures
     ---------------
-    Internally, each "side" of a swap is a ``frozenset`` of ``(tensor, leg)``
-    tuples — the endpoints sharing one edge.  A swap key is a canonical
-    ``(tuple, tuple)`` pair derived from the two sides.  The Z2 swap set
-    ``z2`` is a Python ``set`` of such keys; toggling is
-    ``symmetric_difference_update``.
+    Internally, each edge is a sorted tuple of ``(tensor, leg)`` pairs —
+    the endpoints sharing one edge.  A swap key is a canonical
+    ``(edge_a, edge_b)`` pair with ``edge_a <= edge_b``.  The Z2 swap set
+    ``z2`` is a Python ``set`` of such keys; ``toggle`` adds a key if
+    absent or removes it if present.
 
-    An ``edge_of`` dict maps ``(tensor, leg)`` to its side (frozenset),
+    An ``edge_of`` dict maps ``(tensor, leg)`` to its edge (sorted tuple),
     giving O(1) edge lookup instead of scanning the ``edges`` list.
+
+    Newly added keys are tracked in ``_newly_added`` so that
+    ``collect_same_tensor`` only inspects recent additions rather than
+    scanning all of ``z2``.
 
     Jump-move identity
     ------------------
@@ -370,31 +374,6 @@ def _resolve_bad_swaps(swaps, edges, nlegs, ten1, ten2, axes1, axes2):
     For P_T = 1 (parity-odd) the prefactor depends on the charge of d,
     which is only known at execution time.  A ``parity_sign`` command is
     emitted so that ``_execute_commands`` can apply the correction.
-
-    Resolution strategy
-    -------------------
-    Bad swaps entering this function always have one side on the contracted
-    edge and the other side on a third-party edge (both endpoints != ten1,
-    ten2), because same-tensor swaps were already absorbed by the caller.
-
-    The resolution loop applies one jump per iteration:
-
-    **Step 1** — Find a third-party tensor C where every other leg of C
-    either Z2-cancels an existing swap or shares a tensor with the partner
-    side (same-tensor swap).  The jump fully absorbs all resulting swaps.
-    Tensors with >= 2 distinct legs in bad swaps are tried first, as they
-    are more likely to produce Z2 cancellations.
-
-    **Step 2** — No suitable third-party tensor found.  Jump directly on one
-    of the contracting tensors (ten1 or ten2) from its contracted leg.
-    Since that tensor's own identity appears in both the new swap sides
-    and the partner side, all resulting swaps are same-tensor swaps.
-    Step 2 never creates new bad swaps.
-
-    Each Step 1 iteration reduces the bad swap count by at least 1 (the
-    jumped swap is removed, and all new swaps are either cancelled or
-    absorbed).  Step 2 also removes exactly 1 bad swap.  The loop
-    terminates in at most ``len(swaps)`` iterations.
 
     Parameters
     ----------
@@ -467,36 +446,45 @@ def _resolve_bad_swaps(swaps, edges, nlegs, ten1, ten2, axes1, axes2):
         z2.symmetric_difference_update({_canonical(edge_a, edge_b)})
 
     commands = []
+    _newly_added = []  # keys added by toggle, consumed by collect_same_tensor
 
     def toggle(edge_a, edge_b):
         r"""Toggle a swap in the Z2 set.  Add if absent, remove if present."""
-        z2.symmetric_difference_update({_canonical(edge_a, edge_b)})
+        key = _canonical(edge_a, edge_b)
+        if key in z2:
+            z2.discard(key)
+        else:
+            z2.add(key)
+            _newly_added.append(key)
 
     def collect_same_tensor():
-        r"""Absorb all same-tensor swaps from z2 into swap_gate commands."""
+        r"""Absorb same-tensor swaps recently added to z2 into swap_gate commands."""
         by_tensor = {}
-        for key in list(z2):
+        while _newly_added:
+            key = _newly_added.pop()
+            if key not in z2:
+                continue  # Z2-cancelled since it was added
             result = _same_tensor(key[0], key[1])
             if result:
                 z2.discard(key)
                 ten_s, axes_s = result
                 by_tensor.setdefault(ten_s, []).extend(axes_s)
         for ten_s, ax_s in by_tensor.items():
-            if ax_s:
-                commands.append(('swap_gate', ten_s, ten_s, tuple(ax_s)))
+            commands.append(('swap_gate', ten_s, ten_s, tuple(ax_s)))
 
     def jump(tid, leg_xs, partner):
         r"""Replace swap(leg_xs, partner) with swaps on all other legs of tid."""
-        if type(leg_xs) is int:
+        if isinstance(leg_xs, int):
             leg_xs = (leg_xs,)
+        skip = set(leg_xs)
         for l in range(nlegs[tid]):
-            if l not in leg_xs:
+            if l not in skip:
                 toggle(edge_of[(tid, l)], partner)
         d_ten, d_leg = partner[0]
         commands.append(('parity_sign', tid, d_ten, (d_leg,)))
 
     def get_ax_to_jump(ax_dict):
-        r"""Get the leg of a tensor with minimal bad swaps."""
+        r"""Get the leg of a tensor with minimal bad swaps until the returned leg crosses all contracted legs."""
         min_cross, ax = min((len(keys), ax) for ax, keys in ax_dict.items())
 
         if min_cross == len(axes1): # No need to apply step-1
@@ -511,7 +499,6 @@ def _resolve_bad_swaps(swaps, edges, nlegs, ten1, ten2, axes1, axes2):
         if not bad:
             return None
 
-        # tp[C] = list of (key, partner_edge, leg) entries.
         tp = {}
         for key in bad:
             for si in (0, 1):
@@ -541,17 +528,6 @@ def _resolve_bad_swaps(swaps, edges, nlegs, ten1, ten2, axes1, axes2):
         if ready_for_step2:
             break
 
-            # all_absorbed = True
-            # for l in range(nlegs[C]):
-            #     if l != leg_x:
-            #         new_edge = edge_of[(C, l)]
-            #         if _canonical(new_edge, partner) in z2:
-            #             continue  # will Z2-cancel
-            #         if _same_tensor(new_edge, partner):
-            #             continue  # same-tensor swap
-            #         all_absorbed = False
-            #         break
-
     # Step-2: jump on a contracting tensor from its contracted legs.
     # Each remaining bad swap has a third-party edge crossing all contracted
     # legs.  Group by unique third-party edge: discard all bad swaps for that
@@ -569,6 +545,7 @@ def _resolve_bad_swaps(swaps, edges, nlegs, ten1, ten2, axes1, axes2):
                 if edge in seen_edges:
                     continue
                 seen_edges.add(edge)
+                assert len(tp[C][ax]) == len(axes1), "Sanity check: all bad swaps for this edge should cross all contracted legs."
                 for _key, _ in tp[C][ax]:
                     z2.discard(_key)
                 jump(t, ls, edge)
