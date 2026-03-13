@@ -4,8 +4,7 @@ from ._env_window import contract_window
 from .._doublePepsTensor import DoublePepsTensor
 from .._geometry import Site
 from ... import mps
-from ....tensor import YastnError
-from ....operators import sign_canonical_order
+from ....tensor import YastnError, sign_canonical_order
 
 
 class EnvExciSMA:

@@ -17,14 +17,12 @@
 import scipy.sparse.linalg as sla
 
 from ._env_window import EnvWindow, _measure_2site, _measure_nsite, _sample
-from .._gates_auxiliary import fkron, gate_fix_swap_gate, clear_operator_input
+from .._gates_auxiliary import gate_fix_swap_gate, clear_operator_input
 from .._doublePepsTensor import DoublePepsTensor
 from .._geometry import Site, is_bond, is_site
 from ... import mps
 from ....initialize import rand
-from ....operators import sign_canonical_order
-from ....tensor import YastnError, Tensor, tensordot, vdot, split_data_and_meta, combine_data_and_meta
-
+from ....tensor import YastnError, Tensor, tensordot, vdot, split_data_and_meta, combine_data_and_meta, sign_canonical_order
 
 
 def measure_1site(self, O, site=None) -> dict:
@@ -118,7 +116,9 @@ def measure_nn(self, O, P, bond=None) -> dict:
             for nz1, P in Pdict[bond[1]].items():
 
                 if O.ndim == 2 and P.ndim == 2:
-                    O, P = fkron(O, P, sites=(0, 1), merge=False)
+                    O = O.add_leg(s=1, axis=2)
+                    P = P.add_leg(s=-1, axis=2)
+                    O = O.swap_gate(axes=(1, 2))
 
                 dirn = self.nn_bond_dirn(*bond)
                 if O.ndim == 3 and P.ndim == 3:

@@ -197,6 +197,25 @@ def test_generate_mpo_raise(config_kwargs):
         mps.generate_mpo(I, Hterms)
 
 
+def test_generate_mpo_vs_fkron(config_kwargs):
+    """ test generate_mpo on simple fermionic examples """
+    ops = yastn.operators.SpinlessFermions(sym='U1', **config_kwargs)
+    #
+    cp, c, n, I = ops.cp(), ops.c(), ops.n(), ops.I()
+    #
+    O = mps.generate_mpo(I, [mps.Hterm(1., positions=[3, 1, 0, 2], operators=[cp, cp, c, c])], N=4)
+    P = yastn.fkron(cp, cp, c, c, sites=(3, 1, 0, 2))
+    Q = yastn.fkron(c, cp, c, cp, application_order=(2, 0, 1, 3))
+    assert (O.to_tensor() - P).norm() < 1e-12
+    assert (O.to_tensor() - Q).norm() < 1e-12
+    #
+    O = mps.generate_mpo(I, [mps.Hterm(1., positions=[1, 3, 0], operators=[cp, c, c])], N=4)
+    P = yastn.fkron(cp, I, c, c, sites=(1, 2, 3, 0))
+    Q = yastn.fkron(c, cp, I, c, application_order=(2, 0, 3, 1))
+    assert (O.to_tensor() - P).norm() < 1e-12
+    assert (O.to_tensor() - Q).norm() < 1e-12
+
+
 if __name__ == '__main__':
     pytest.main([__file__, "-vs", "--durations=0"])
     bench_mpo_generator(N=64)
