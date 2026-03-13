@@ -189,15 +189,9 @@ def _execute_commands(ts, commands):
             # If the jumped tensor has odd parity, apply (-1)^{n_d}
             # as a fermionic string on the partner leg.
             jumped_ten, d_ten, d_legs = command[1:]
-            jumped = ts[jumped_ten]
-            fss = jumped.config.fermionic
-            if fss:
-                nsym = jumped.config.sym.NSYM
-                fss_tuple = (True,) * nsym if fss is True else fss
-                n = jumped.n
-                charge = tuple(n[k] % 2 if fss_tuple[k] else 0 for k in range(nsym))
-                if any(charge):
-                    ts[d_ten] = swap_gate(ts[d_ten], axes=d_legs, charge=charge)
+            charge = ts[jumped_ten].n
+            if any(charge):
+                ts[d_ten] = swap_gate(ts[d_ten], axes=d_legs, charge=charge)
         elif command[0] == 'trace':
             tout, tin, axes = command[1:]
             ts[tout] = trace(ts.pop(tin), axes=axes)
@@ -374,6 +368,15 @@ def _resolve_bad_swaps(swaps, edges, nlegs, ten1, ten2, axes1, axes2):
     For P_T = 1 (parity-odd) the prefactor depends on the charge of d,
     which is only known at execution time.  A ``parity_sign`` command is
     emitted so that ``_execute_commands`` can apply the correction.
+
+    Strategy (Step-1 / Step-2)
+    --------------------------
+    ``get_ax_to_jump`` selects a leg on a third-party tensor C with the fewest
+    bad-swap crossings; if that minimum equals ``len(axes1)``, Step-1 is
+    skipped for C.  Step-1 performs a jump on the chosen leg and absorbs any
+    same-tensor swaps.  If no tensor yields a valid leg, Step-2 groups the
+    remaining bad swaps by their partner edge and jumps once from the
+    contracted legs to clear each partner edge.
 
     Parameters
     ----------
