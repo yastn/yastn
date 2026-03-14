@@ -474,6 +474,40 @@ def eigh(data, meta=None, sizes=(1, 1)):
     return np.linalg.eigh(data)  # S, U
 
 
+def eigh_lowrank(data, meta, sizes, thresh=None, **kwargs):
+    # TODO user-defined threshold
+    _which_map= {'LM': 'LM', 'SM': 'SM', 'LR': 'LA',  'SR': 'SA'} 
+    _which = kwargs.get('which', 'LM')
+    real_dtype = data.real.dtype if np.iscomplexobj(data) else data.dtype
+    Sdata = np.zeros((sizes[0],), dtype=real_dtype)
+    Udata = np.zeros((sizes[1],), dtype=data.dtype)
+    for (sl, D, slU, DU, slS) in meta:
+        k = slS[1] - slS[0]
+        n = D[0]
+        block = data[slice(*sl)].reshape(D)
+        if k < n - 1 and n * n > 5000:
+            try:
+                S, U = scipy.sparse.linalg.eigsh(block, k=k, which=_which_map[_which],
+                    M=None, sigma=None, v0=None, ncv=None, maxiter=None, tol=0, 
+                    return_eigenvectors=kwargs.get("return_eigenvectors", True), 
+                    Minv=None, OPinv=None, mode='normal',) #rng=None)
+            except scipy.sparse.linalg.ArpackError as e:
+                raise e
+                # S, U = scipy.linalg.eigh(block)
+        else:
+            S, U = scipy.linalg.eigh(block) # always returns result sorted in ascending order ('SA') 
+        # sort in case of non-default order
+        # see https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.eigsh.html
+        if not (_which in ['SR'] and  kwargs.get("return_eigenvectors", True)):
+            arg_b = eigs_which(S, _which)
+            S,U = S[arg_b[:k]], U[:,arg_b[:k]]
+        else:
+            S,U = S[:k], U[:,:k]
+        Sdata[slice(*slS)] = S
+        Udata[slice(*slU)].reshape(DU)[:] = U
+    return Sdata, Udata
+
+
 def qr(data, meta, sizes):
     Qdata = np.empty((sizes[0],), dtype=data.dtype)
     Rdata = np.empty((sizes[1],), dtype=data.dtype)

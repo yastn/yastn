@@ -108,52 +108,6 @@ def apply_gate_onsite(ten, G, dirn=None):
     # raise YastnError("dirn should be equal to 'l', 'r', 't', 'b', or None")
 
 
-def fkron(A, B, sites=(0, 1), merge=True):
-    """
-    Fermionic kron; auxiliary function for gate generation.
-    Returns a Kronecker product of two local operators, A and B,
-    including swap-gate (fermionic string) to handle fermionic operators.
-
-    Calculate A_0 B_1 for sites==(0, 1), and A_1 B_0 for sites==(1, 0),
-    i.e., operator B acts first (relevant when operators are fermionically non-trivial).
-
-    Site 0 is assumed to be first in fermionic orders.
-
-    If merge, returns equivalent of
-    ncon([A, B], [(-0, -1), (-2, -3)]) for sites==(0, 1), and
-    ncon([A, B], [(-2, -3), (-0, -1)]) for sites==(1, 0),
-    with proper operator order and swap gate applied.::
-
-           1     3
-           |     |
-        ┌──┴─────┴──┐
-        |           |
-        └──┬─────┬──┘
-           |     |
-           0     2
-
-    """
-
-    if sites not in ((0, 1), (1, 0)):
-        raise YastnError("Sites should be equal to (0, 1) or (1, 0).")
-    ordered = (sites == (0, 1))
-
-    s = -1 if ordered else 1
-    A = A.add_leg(s=s, axis=2)
-    B = B.add_leg(s=-s, axis=2)
-
-    if ordered:
-        A = A.swap_gate(axes=(1, 2))
-    else:
-        B = B.swap_gate(axes=(0, 2))
-
-    G0, G1 = (A, B) if ordered else (B, A)
-
-    if merge:
-        return tensordot(G0, G1, axes=(2, 2))
-    return G0, G1
-
-
 def gate_fix_swap_gate(G0, G1, dirn, f_ordered):
     """
     Modifies two gate tensors, that were generated consistently with fermionic order 0->1.

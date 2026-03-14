@@ -22,13 +22,12 @@ from operator import itemgetter
 
 import numpy as np
 
-from ._auxiliary import _struct, _slc, _clear_axes, _unpack_axes, _flatten, _join_contiguous_slices
+from ._auxiliary import _struct, _slc, _clear_axes, _unpack_axes, _join_contiguous_slices, sign_canonical_order
 from ._merging import _merge_to_matrix, _unmerge, _meta_unmerge_matrix, _meta_fuse_hard
 from ._merging import _transpose_and_merge, _mask_tensors_leg_intersection, _meta_mask
 from ._tests import YastnError, _test_can_be_combined, _unpack_trans_test_axes_pair
-from ._legs import LegMeta
 
-__all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon', 'einsum', 'broadcast', 'apply_mask', 'SpecialTensor']
+__all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'broadcast', 'apply_mask', 'SpecialTensor', 'fkron']
 
 
 class SpecialTensor(metaclass=abc.ABCMeta):
@@ -361,7 +360,7 @@ def _meta_tensordot_nf(struct_a, slices_a, struct_b, slices_b, ind_a, ind_b, nou
     aDa = np.array(Da, dtype=np.int64).reshape((lta, ndima))       # array for block dimensions
     tao = ata[:, nout_a, :].reshape(lta, len(nout_a) * nsym)       # narrowed to contracted modes, and serialize <num-of-ingoing-modes(=legs)> x <order-of-sym-group> to 1D
     tac = ata[:, nin_a, :].reshape(lta, len(nin_a) * nsym)         # narrowed to outgoing modes, and serialize <num-of-ingoing-modes(=legs)> x <order-of-sym-group> to 1D
-    Dao = aDa[:, nout_a]    # narrow sector sizes
+    Dao = aDa[:, nout_a]  # narrow sector sizes
     Dac = aDa[:, nin_a]
     Daop = np.prod(Dao, axis=1, dtype=np.int64) # total size of outgoing sectors (per block)
     Dacp = np.prod(Dac, axis=1, dtype=np.int64) # total size of contracted sectors (per block)
@@ -744,7 +743,7 @@ def swap_gate(a, axes, charge=None) -> 'Tensor':
     are tested for oddity, where the contributions from each selected charge get multiplied.
     See :class:`yastn.operators.SpinfulFermions` for an example.
     For ``fermionic=True``, all charges are considered.
-    For ``fermionic=False``,  swap_gate returns ``a``.
+    For ``fermionic=False``, swap_gate returns ``a``.
 
     Parameters
     ----------
@@ -830,229 +829,64 @@ def _slices_to_negate(tp, slices):
     return tuple(joined_negate)
 
 
-def einsum(subscripts, *operands, order=None) -> 'Tensor':
-    r"""
-    Execute series of tensor contractions.
-
-    Covering trace, tensordot (including outer products), and transpose.
-    Follows notation of :meth:`np.einsum` as close as possible.
+def fkron(*operators, sites=None, application_order=None):
+    """
+    Returns a Kronecker product of operators,
+    including swap-gate (fermionic string) to handle fermionic operators.
 
     Parameters
     ----------
-    subscripts: str
+    operators: yastn.Tensor
+        a sequence of rank-2 tensors
 
-    operands: Sequence[yastn.Tensor]
+    sites: Sequence[int] | None
+        sites corresponding to the provided operators.
+        Should be a permutation of 0, 1, ..., len(operators) - 1.
+        If None, assume 0, 1, ..., len(operators) - 1.
+        Site 0 is the first in the fermionic order.
 
-    order: str
-        Specify order in which repeated indices from subscipt are contracted.
-        By default it follows alphabetic order.
+    application_order: Sequence[int] | None
+        Order of applying operators, which might correspond to a sign change for fermionic operators.
+        Should be a permutation of 0, 1, ..., len(operators) - 1.
+        If None, the last operator is applied first.
 
-    Example
+
+    Results
     -------
+    Order of outgoing legs, where sites 0, 1, ... go from left to right,
+    e.g., fkron(A, B, C, sites=(0, 1, 2)) gives ::
 
-    ::
+           1     3     5
+           |     |     |
+        ┌──┴─────┴─────┴──┐
+        |  A     B     C  |
+        └──┬─────┬─────┬──┘
+           |     |     |
+           0     2     4
 
-        yastn.einsum('*ij,jh->ih', t1, t2)
-
-        # matrix-matrix multiplication, where the first matrix is conjugated.
-        # Equivalent to
-
-        t1.conj() @ t2
-
-        yastn.einsum('ab,al,bm->lm', t1, t2, t3, order='ba')
-
-        # Contract along `b` first, and `a` second.
     """
-    if not isinstance(subscripts, str):
-        raise YastnError('The first argument should be a string.')
+    if sites is None:
+        sites = list(range(len(operators)))
 
-    subscripts = subscripts.replace(' ', '')
+    if len(operators) != len(sites) or set(sites) != set(range(len(sites))):
+        raise YastnError("sites should be a permutation of 0, 1, ..., len(operators) - 1.")
 
-    tmp = subscripts.split('->')
-    if len(tmp) == 1:
-        sin, sout = tmp[0], ''
-    elif len(tmp) == 2:
-        sin, sout = tmp
-    else:
-        raise YastnError('Subscript should have at most one separator ->')
+    if application_order is not None:
+        if len(application_order) != len(sites) or set(application_order) != set(range(len(sites))):
+            raise YastnError("application_order should be a permutation of 0, 1, ..., len(operators) - 1.")
+        sites = [sites[ind] for ind in application_order[::-1]]
+        operators = [operators[ind] for ind in application_order[::-1]]
 
-    alphabet1 = 'ABCDEFGHIJKLMNOPQRSTUWXYZabcdefghijklmnopqrstuvwxyz'
-    alphabet2 = alphabet1 + ',*'
-    if any(v not in alphabet1 for v in sout) or \
-       any(v not in alphabet2 for v in sin):
-        raise YastnError('Only alphabetic characters can be used to index legs.')
+    sym = operators[0].config.sym
 
-    conjs = [1 if '*' in ss else 0 for ss in sin.split(',')]
-    sin = sin.replace('*', '')
+    sign = sign_canonical_order(*operators, sites=sites, f_ordered=lambda s1, s2: s1 <= s2)
+    operators = dict(zip(sites, operators))
+    operators = [operators[n] for n in range(len(operators))]
+    n_pattern = [op.n for op in operators]
+    acc_n_pattern = [sym.add_charges(*n_pattern[n+1:]) for n in range(len(n_pattern))]
+    operators = [op.swap_gate(axes=1, charge=charge) for op, charge in zip(operators, acc_n_pattern)]
 
-    if sout == '':
-        for v in sin.replace(',', ''):
-            if sin.count(v) == 1:
-                sout += v
-    elif len(sout) != len(set(sout)):
-        raise YastnError('Repeated index after ->')
-
-    if order is None:
-        order = []
-        for v in sin.replace(',', ''):
-            if sin.count(v) > 1:
-                order.append(v)
-        order = ''.join(sorted(order))
-    din = {v: i + 1 for i, v in enumerate(order)}
-    dout = {v: -i for i, v in enumerate(sout)}
-    d = {**din, **dout}
-    d[','] = 0
-
-    if any(v not in d for v in sin):
-        raise YastnError('Order does not cover all contracted indices.')
-    inds = [tuple(d[v] for v in ss) for ss in sin.split(',')]
-    ts = list(operands)
-    return ncon(ts, inds, conjs=conjs)
-
-
-def ncon(ts, inds, conjs=None, order=None) -> 'Tensor':
-    r"""
-    Execute series of tensor contractions.
-
-    Parameters
-    ----------
-    ts: Sequence[yastn.Tensor]
-        list of tensors to be contracted.
-
-    inds: Sequence[Sequence[int]]
-        each inner tuple labels legs of respective tensor with integers.
-        Positive values label legs to be contracted,
-        with pairs of legs to be contracted denoted by the same integer label.
-        Non-positive numbers label legs of the resulting tensor, in reversed order.
-
-    conjs: Sequence[int]
-        For each tensor in ``ts`` contains either ``0`` or ``1``.
-        If the value is ``1``, the tensor is conjugated.
-
-    order: Sequence[int]
-        Order in which legs, marked by positive indices in inds, are contracted.
-        If None, the legs are contracted following an ascending indices order.
-        The default is None.
-
-    Note
-    ----
-    :meth:`yastn.ncon` and :meth:`yastn.einsum` differ only by syntax.
-
-    Example
-    -------
-
-    ::
-
-        # matrix-matrix multiplication where the first matrix is conjugated
-
-        yastn.ncon([a, b], ((-0, 1), (1, -1)), conjs=(1, 0))
-
-        # outer product
-
-        yastn.ncon([a, b], ((-0, -2), (-1, -3)))
-    """
-    if len(ts) != len(inds):
-        raise YastnError('Number of tensors and indices do not match.')
-    for tensor, ind in zip(ts, inds):
-        if tensor.ndim != len(ind):
-            raise YastnError('Number of legs of one of the tensors do not match provided indices.')
-
-    inds = tuple(_clear_axes(*inds))
-    if conjs is not None:
-        conjs = tuple(conjs)
-    if order is not None:
-        order = tuple(order)
-
-    meta_tr, meta_dot, meta_transpose = _meta_ncon(inds, conjs, order)
-    ts = dict(enumerate(ts))
-    for command in meta_tr:
-        t, axes = command
-        ts[t] = trace(ts[t], axes=axes)
-    for command in meta_dot:
-        (t1, t2), axes, conj = command
-        ts[t1] = tensordot(ts[t1], ts[t2], axes=axes, conj=conj)
-        del ts[t2]
-    t, axes, to_conj = meta_transpose
-    if axes is not None:
-        ts[t] = ts[t].transpose(axes=axes)
-    return ts[t].conj() if to_conj else ts[t]
-
-
-@lru_cache(maxsize=1024)
-def _meta_ncon(inds, conjs, order):
-    r""" Turning information in ``inds`` and ``conjs`` into list of contraction commands. """
-    if not all(-256 < x < 256 for x in _flatten(inds)):
-        raise YastnError('Ncon requires indices to be between -256 and 256.')
-
-    if order is not None:
-        if len(order) != len(set(order)) or not all(o > 0 for o in order):
-            raise YastnError("Order should be a list of positive ints with no repetitions.")
-        if not set(o for o in _flatten(inds) if o > 0) == set(order):
-            raise YastnError("Positive ints in ins and order should match.")
-        reorder = {o: k for k, o in enumerate(order, start=1)}
-        inds = [[reorder[o] if o > 0 else o for o in xx] for xx in inds]
-
-    edges = [[order, leg, ten] if order > 0 else [-order + 1024, leg, ten]
-             for ten, el in enumerate(inds) for leg, order in enumerate(el)]
-    edges.append([512, 512, 512])  # this will mark the end of contractions.
-    conjs = [0] * len(inds) if conjs is None else list(conjs)
-
-    # order of contraction with info on tensor and axis
-    edges = sorted(edges, reverse=True, key=itemgetter(0))
-    return _consume_edges(edges, conjs)
-
-
-def _consume_edges(edges, conjs):
-    r""" Consumes edges to generate order of contractions. """
-    eliminated, ntensors = [], len(conjs)
-    meta_tr, meta_dot = [], []
-    order1, leg1, ten1 = edges.pop()
-    ax1, ax2 = [], []
-    while order1 != 512:  # tensordot two tensors, or trace one tensor; 512 is cutoff marking end of truncation
-        order2, leg2, ten2 = edges.pop()
-        if order1 != order2:
-            raise YastnError('Indices of legs to contract do not match.')
-        t1, t2, leg1, leg2 = (ten1, ten2, leg1, leg2) if ten1 < ten2 else (ten2, ten1, leg2, leg1)
-        ax1.append(leg1)
-        ax2.append(leg2)
-        if edges[-1][0] == 512 or min(edges[-1][2], edges[-2][2]) != t1 or max(edges[-1][2], edges[-2][2]) != t2:
-            # execute contraction
-            if t1 == t2:  # trace
-                if len(meta_dot) > 0:
-                    raise YastnError("Likely inefficient order of contractions. Do all traces before tensordot. " +
-                                     "Call all axes connecting two tensors one after another.")
-                meta_tr.append((t1, (tuple(ax1), tuple(ax2))))
-                ax12 = ax1 + ax2
-                for edge in edges:  # edge = (order, leg, tensor)
-                    edge[1] -= sum(i < edge[1] for i in ax12) if edge[2] == t1 else 0
-            else:  # tensordot (tensor numbers, axes, conj)
-                meta_dot.append(((t1, t2), (tuple(ax1), tuple(ax2)), (conjs[t1], conjs[t2])))
-                eliminated.append(t2)
-                conjs[t1], conjs[t2] = 0, 0
-                lt1 = sum(ii[2] == t1 for ii in edges)  # legs of t1
-                for edge in edges:  # edge = (order, leg, tensor)
-                    if edge[2] == t1:
-                        edge[1] = edge[1] - sum(i < edge[1] for i in ax1)
-                    elif edge[2] == t2:
-                        edge[1:] = edge[1] + lt1 - sum(i < edge[1] for i in ax2), t1
-            ax1, ax2 = [], []
-        order1, leg1, ten1 = edges.pop()
-
-    remaining = [i for i in range(ntensors) if i not in eliminated]
-    t1 = remaining[0]
-    for t2 in remaining[1:]:
-        meta_dot.append(((t1, t2), ((), ()), (conjs[t1], conjs[t2])))
-        eliminated.append(t2)
-        conjs[t1], conjs[t2] = 0, 0
-        lt1 = sum(tt == t1 for _, _, tt in edges)
-        for edge in edges:  # edge = (order, leg, tensor)
-            if edge[2] == t2:
-                edge[1:] = edge[1] + lt1, t1
-    unique_out = tuple(ed[0] for ed in edges)
-    if len(unique_out) != len(set(unique_out)):
-        raise YastnError("Repeated non-positive (outgoing) index is ambiguous.")
-    axes = tuple(ed[1] for ed in sorted(edges))  # final order for transpose
-    if axes == tuple(range(len(axes))):
-        axes = None
-    meta_transpose = (t1, axes, conjs[t1])
-    return tuple(meta_tr), tuple(meta_dot), meta_transpose
+    res = sign * operators[0]
+    for op in operators[1:]:
+        res = tensordot(res, op, axes=((), ()))
+    return res
