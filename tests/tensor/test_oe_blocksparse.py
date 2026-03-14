@@ -764,3 +764,275 @@ def test_checkpoint_loop(config_kwargs):
     assert yastn.norm(result_is - expected2) < tol
 
 
+# ---------------------------------------------------------------------------
+# 11. Swap-gate propagation through contract_with_unroll
+#
+# Diagrams translated from test_ncon_einsum_swaps in test_ncon_einsum.py,
+# using larger bond dimensions D=(2,3) for meaningful slicing tests.
+# ---------------------------------------------------------------------------
+
+
+def test_swap_diagram1(config_kwargs):
+    """Diagram 1 from test_ncon_einsum_swaps: 2-tensor full contraction.
+
+    ncon([a, b], ((1, 2), (2, 1)), swap=[(1, 2)])
+
+    Interleaved:  a, (p, q), b, (q, p), ()
+    swap: [(p, q)]
+
+    Tests: no unroll, charge-sector unroll, intra-sector slicing,
+    uniform slicing on each contracted index.
+    """
+    cfg = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
+    l = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 3))
+    lc = l.conj()
+    a = yastn.rand(config=cfg, legs=[l, lc])
+    b = yastn.rand(config=cfg, legs=[l, lc])
+
+    ref = yastn.ncon([a, b], ((1, 2), (2, 1)), swap=[(1, 2)])
+    path, _ = yastn.get_contraction_path(a, ('p', 'q'), b, ('q', 'p'), ())
+
+    # No unroll
+    r0 = yastn.contract_with_unroll(
+        a, ('p', 'q'), b, ('q', 'p'), (),
+        optimize=path, swap=[('p', 'q')],
+    )
+    assert (r0 - ref).norm() < tol
+
+    # Charge-sector unrolling on 'p'
+    r1 = yastn.contract_with_unroll(
+        a, ('p', 'q'), b, ('q', 'p'), (),
+        optimize=path, swap=[('p', 'q')],
+        unroll={'p': yastn.make_sliced_legs(l)},
+    )
+    assert (r1 - ref).norm() < tol
+
+    # Intra-sector slicing on 'q'
+    r2 = yastn.contract_with_unroll(
+        a, ('p', 'q'), b, ('q', 'p'), (),
+        optimize=path, swap=[('p', 'q')],
+        unroll={'q': _split_leg_intra(lc)},
+    )
+    assert (r2 - ref).norm() < tol
+
+    # Uniform slicing on 'p'
+    r3 = yastn.contract_with_unroll(
+        a, ('p', 'q'), b, ('q', 'p'), (),
+        optimize=path, swap=[('p', 'q')],
+        unroll={'p': 2},
+    )
+    assert (r3 - ref).norm() < tol
+
+    # Unroll both contracted indices
+    r4 = yastn.contract_with_unroll(
+        a, ('p', 'q'), b, ('q', 'p'), (),
+        optimize=path, swap=[('p', 'q')],
+        unroll={'p': yastn.make_sliced_legs(l), 'q': yastn.make_sliced_legs(lc)},
+    )
+    assert (r4 - ref).norm() < tol
+
+
+def test_swap_diagram3(config_kwargs):
+    """Diagram 3 from test_ncon_einsum_swaps: 6-tensor scalar contraction
+    with 7 swaps and parity-odd tensors (all n=1).
+
+    ncon([a, b, c, d, e, f],
+         ((1, 2, 4, 11), (3, 5, 6, 8, 1), (7, 9, 2, 3),
+          (10, 4, 6, 5, 7), (12, 8, 9, 10), (11, 12)),
+         swap=((2,8),(2,5),(2,6),(4,8),(9,6),(9,5),(4,9)))
+
+    Interleaved labels — mapping ncon ints to letters:
+      1->A, 2->B, 3->C, 4->D, 5->E, 6->F, 7->G, 8->H, 9->I, 10->J, 11->K, 12->L
+    swap: [(B,H),(B,E),(B,F),(D,H),(I,F),(I,E),(D,I)]
+
+    Tests: no unroll, charge-sector unroll on A, intra-sector slicing on B,
+    uniform slicing on H, and contract_with_unroll_compute_constants.
+    """
+    cfg = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
+    l = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 3))
+    lc = l.conj()
+
+    a = yastn.rand(config=cfg, n=1, legs=[l, l, l, l])
+    b = yastn.rand(config=cfg, n=1, legs=[l, l, l, l, lc])
+    c = yastn.rand(config=cfg, n=1, legs=[l, l, lc, lc])
+    d = yastn.rand(config=cfg, n=1, legs=[l, lc, lc, lc, lc])
+    e = yastn.rand(config=cfg, n=1, legs=[l, lc, lc, lc])
+    f = yastn.rand(config=cfg, n=1, legs=[lc, lc])
+
+    ref = yastn.ncon(
+        [a, b, c, d, e, f],
+        ((1, 2, 4, 11), (3, 5, 6, 8, 1), (7, 9, 2, 3),
+         (10, 4, 6, 5, 7), (12, 8, 9, 10), (11, 12)),
+        swap=((2, 8), (2, 5), (2, 6), (4, 8), (9, 6), (9, 5), (4, 9)),
+    )
+
+    il_args = (
+        a, ('A', 'B', 'D', 'K'),
+        b, ('C', 'E', 'F', 'H', 'A'),
+        c, ('G', 'I', 'B', 'C'),
+        d, ('J', 'D', 'F', 'E', 'G'),
+        e, ('L', 'H', 'I', 'J'),
+        f, ('K', 'L'),
+        (),
+    )
+    sw = [('B', 'H'), ('B', 'E'), ('B', 'F'), ('D', 'H'),
+          ('I', 'F'), ('I', 'E'), ('D', 'I')]
+
+    path, _ = yastn.get_contraction_path(*il_args)
+    den = max(ref.norm().item(), 1.0)
+
+    # No unroll
+    r0 = yastn.contract_with_unroll(*il_args, optimize=path, swap=sw)
+    assert (r0 - ref).norm() < tol * den
+
+    # Charge-sector unrolling on 'A' (connects a↔b)
+    r1 = yastn.contract_with_unroll(
+        *il_args, optimize=path, swap=sw,
+        unroll={'A': yastn.make_sliced_legs(l)},
+    )
+    assert (r1 - ref).norm() < tol * den
+
+    # Intra-sector slicing on 'B' (connects a↔c, appears in 3 swaps)
+    r2 = yastn.contract_with_unroll(
+        *il_args, optimize=path, swap=sw,
+        unroll={'B': _split_leg_intra(l)},
+    )
+    assert (r2 - ref).norm() < tol * den
+
+    # Uniform slicing on 'H' (connects b↔e, appears in 2 swaps)
+    r3 = yastn.contract_with_unroll(
+        *il_args, optimize=path, swap=sw,
+        unroll={'H': 2},
+    )
+    assert (r3 - ref).norm() < tol * den
+
+    # Unroll two indices simultaneously
+    r4 = yastn.contract_with_unroll(
+        *il_args, optimize=path, swap=sw,
+        unroll={'A': yastn.make_sliced_legs(l),
+                'H': yastn.make_sliced_legs(l)},
+    )
+    assert (r4 - ref).norm() < tol * den
+
+    # contract_with_unroll_compute_constants:
+    # unroll 'A' (connects a↔b) → c, d, e, f are constants
+    r5 = contract_with_unroll_compute_constants(
+        *il_args, optimize=path, swap=sw,
+        unroll={'A': yastn.make_sliced_legs(l)},
+    )
+    assert (r5 - ref).norm() < tol * den
+
+    # compute_constants with swap on constants:
+    # unroll 'A'; swap (I,F),(I,E),(D,I) live on constants c,d,e
+    r6 = contract_with_unroll_compute_constants(
+        *il_args, optimize=path, swap=sw,
+        unroll={'A': _split_leg_intra(l)},
+    )
+    assert (r6 - ref).norm() < tol * den
+
+
+def test_swap_diagram4_scalar(config_kwargs):
+    """Scalar fermionic network from test_einsum_scalar_swap_order:
+    6 tensors, all n=0, 4 swaps, scalar output.
+
+    ncon((A, B, C, D, E, F),
+         ((9,1,2,3), (9,2,3), (1,4,5,8), (7,8), (4,6), (5,6,7)),
+         swap=[(9,4),(9,5),(2,8),(3,8)])
+
+    Interleaved labels:
+      9->P, 1->Q, 2->R, 3->S, 4->T, 5->U, 6->V, 7->W, 8->X
+    swap: [(P,T),(P,U),(R,X),(S,X)]
+
+    Tests: no unroll, charge-sector, intra-sector, uniform slicing, multi-index
+    unroll, and contract_with_unroll_compute_constants.
+    """
+    cfg = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
+    l = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 3))
+    lc = l.conj()
+
+    A = yastn.rand(config=cfg, n=0, legs=[l, l, l, l])
+    B = yastn.rand(config=cfg, n=0, legs=[lc, lc, lc])
+    C = yastn.rand(config=cfg, n=0, legs=[lc, l, l, l])
+    D = yastn.rand(config=cfg, n=0, legs=[l, lc])
+    E = yastn.rand(config=cfg, n=0, legs=[lc, lc])
+    F = yastn.rand(config=cfg, n=0, legs=[lc, l, lc])
+
+    ref = yastn.ncon(
+        (A, B, C, D, E, F),
+        ((9, 1, 2, 3), (9, 2, 3), (1, 4, 5, 8), (7, 8), (4, 6), (5, 6, 7)),
+        swap=[(9, 4), (9, 5), (2, 8), (3, 8)],
+        order=(9, 2, 3, 1, 4, 5, 6, 7, 8),
+    )
+
+    il_args = (
+        A, ('P', 'Q', 'R', 'S'),
+        B, ('P', 'R', 'S'),
+        C, ('Q', 'T', 'U', 'X'),
+        D, ('W', 'X'),
+        E, ('T', 'V'),
+        F, ('U', 'V', 'W'),
+        (),
+    )
+    sw = [('P', 'T'), ('P', 'U'), ('R', 'X'), ('S', 'X')]
+
+    path, _ = yastn.get_contraction_path(*il_args)
+    den = max(ref.norm().item(), 1.0)
+
+    # No unroll
+    r0 = yastn.contract_with_unroll(*il_args, optimize=path, swap=sw)
+    assert (r0 - ref).norm() < tol * den
+
+    # Charge-sector unrolling on 'P' (connects A↔B, appears in 2 swaps)
+    r1 = yastn.contract_with_unroll(
+        *il_args, optimize=path, swap=sw,
+        unroll={'P': yastn.make_sliced_legs(l)},
+    )
+    assert (r1 - ref).norm() < tol * den
+
+    # Intra-sector slicing on 'R' (connects A↔B, appears in swap (R,X))
+    r2 = yastn.contract_with_unroll(
+        *il_args, optimize=path, swap=sw,
+        unroll={'R': _split_leg_intra(l)},
+    )
+    assert (r2 - ref).norm() < tol * den
+
+    # Uniform slicing on 'X' (connects C↔D, appears in 2 swaps)
+    r3 = yastn.contract_with_unroll(
+        *il_args, optimize=path, swap=sw,
+        unroll={'X': 2},
+    )
+    assert (r3 - ref).norm() < tol * den
+
+    # Two indices unrolled simultaneously
+    r4 = yastn.contract_with_unroll(
+        *il_args, optimize=path, swap=sw,
+        unroll={'P': yastn.make_sliced_legs(l),
+                'X': _split_leg_intra(l)},
+    )
+    assert (r4 - ref).norm() < tol * den
+
+    # contract_with_unroll_compute_constants:
+    # unroll 'P' (connects A↔B) → C, D, E, F are constants
+    # swaps (R,X) and (S,X) cross the variable/constant boundary
+    r5 = contract_with_unroll_compute_constants(
+        *il_args, optimize=path, swap=sw,
+        unroll={'P': yastn.make_sliced_legs(l)},
+    )
+    assert (r5 - ref).norm() < tol * den
+
+    # compute_constants with intra-sector slicing
+    r6 = contract_with_unroll_compute_constants(
+        *il_args, optimize=path, swap=sw,
+        unroll={'P': _split_leg_intra(l)},
+    )
+    assert (r6 - ref).norm() < tol * den
+
+    # compute_constants: unroll 'Q' (connects A↔C) →
+    # B is variable (shares P with A), D, E, F are constants sharing V,W,X
+    r7 = contract_with_unroll_compute_constants(
+        *il_args, optimize=path, swap=sw,
+        unroll={'Q': 2},
+    )
+    assert (r7 - ref).norm() < tol * den
+
+

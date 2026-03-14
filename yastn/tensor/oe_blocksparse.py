@@ -179,7 +179,7 @@ def _build_mask_tensor(sliced_leg, full_leg, config):
 
 
 def _iteration_checkpointed(tensors, sl_map, tensor_unroll_info, index_groups,
-                              out_ig, optimize, unroll_labels) -> Tensor:
+                              out_ig, optimize, unroll_labels, swap=None) -> Tensor:
     r"""
     Run one unroll-loop iteration under ``torch.utils.checkpoint``.
 
@@ -249,10 +249,10 @@ def _iteration_checkpointed(tensors, sl_map, tensor_unroll_info, index_groups,
             interleaved.append(T)
             interleaved.append(ig)
         interleaved.append(out_ig)
-        ts, inds, conjs, order = _convert_path_to_ncon_args(
-            *interleaved, optimize=optimize
+        ts, inds, conjs, order, ncon_swap = _convert_path_to_ncon_args(
+            *interleaved, optimize=optimize, swap=swap
         )
-        partial = ncon(ts, inds, conjs=conjs, order=order)
+        partial = ncon(ts, inds, conjs=conjs, order=order, swap=ncon_swap)
 
         # Capture output structure so it can be read back outside checkpoint().
         p_data, p_meta = split_data_and_meta(partial.to_dict(level=0), squeeze=True)
@@ -265,7 +265,7 @@ def _iteration_checkpointed(tensors, sl_map, tensor_unroll_info, index_groups,
     return Tensor.from_dict(combine_data_and_meta(result_data, _out_meta[0]))
 
 
-def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False, **kwargs):
+def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False, swap=None, **kwargs):
     r"""
     Contract a tensor network with block-sparse index unrolling.
 
@@ -351,7 +351,7 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
         if checkpoint_loop:
             partial = _iteration_checkpointed(
                 tensors, sl_map, tensor_unroll_info, index_groups, out_ig,
-                optimize, unroll_labels,
+                optimize, unroll_labels, swap=swap,
             )
         else:
             # Apply masks: for each tensor, apply masks for all its unroll indices
@@ -371,10 +371,10 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
                 interleaved.append(ig)
             interleaved.append(out_ig)
 
-            ts, inds, conjs, order = _convert_path_to_ncon_args(
-                *interleaved, optimize=optimize
+            ts, inds, conjs, order, ncon_swap = _convert_path_to_ncon_args(
+                *interleaved, optimize=optimize, swap=swap
             )
-            partial = ncon(ts, inds, conjs=conjs, order=order)
+            partial = ncon(ts, inds, conjs=conjs, order=order, swap=ncon_swap)
 
         # Key by the index of each output-unroll SlicedLeg in its unroll list.
         # Contracted-only combos all share the same key and are summed with +.
@@ -439,6 +439,7 @@ def _validate_and_resolve_unroll(*args,
 def _convert_path_to_ncon_args(*args, **kwargs):
     path= kwargs.pop("optimize", None)
     assert path is not None, "optimize (contraction path) has to be provided in kwargs"
+    swap= kwargs.pop("swap", None)
     # TODO assert on format of path Sequence[Tuple[int]]
 
     # args is either, case I, an interleaved sequence of tensors and index groups (Sequence[Hashable])
@@ -505,7 +506,13 @@ def _convert_path_to_ncon_args(*args, **kwargs):
         )
 
     ncon_igs= [ [igs_to_ncon_igs[i] for i in ig] for ig in args[1 : 2 * (len(args) // 2) : 2] ]
-    return tensors, ncon_igs, conjs, order
+
+    # convert swap labels to ncon indices
+    ncon_swap = None
+    if swap is not None:
+        ncon_swap = [tuple(igs_to_ncon_igs[v] for v in ss) for ss in swap]
+
+    return tensors, ncon_igs, conjs, order, ncon_swap
 
 
 def _model_shape_as_dense(t: Tensor):
@@ -899,12 +906,13 @@ def contract_with_unroll_compute_constants(*args, **kwargs):
     kwargs.pop("who", None)
     kwargs.pop("verbosity", None)
     unroll = kwargs.pop("unroll", None)
+    swap = kwargs.pop("swap", None)
     unroll = _validate_and_resolve_unroll(*args, unroll=unroll)
 
     if unroll is None:
         # convert to ncon call
-        ts, inds, conjs, order= _convert_path_to_ncon_args(*args,**kwargs)
-        return ncon(ts, inds, conjs=conjs, order=order)
+        ts, inds, conjs, order, ncon_swap = _convert_path_to_ncon_args(*args, swap=swap, **kwargs)
+        return ncon(ts, inds, conjs=conjs, order=order, swap=ncon_swap)
 
     path = kwargs.pop("optimize", None)
     assert path is not None, "optimize (contraction path) must be provided"
@@ -917,14 +925,28 @@ def contract_with_unroll_compute_constants(*args, **kwargs):
     # Partition tensors into constants (no unrolled index) and variables.
     const_mask = [not any(u in ig for u in unroll_labels) for ig in index_groups]
 
-    if not any(const_mask):
-        # Nothing to pre-compute; delegate directly.
-        return _contract_with_sliced_unroll(*args, unroll=unroll, optimize=path,
-                                            checkpoint_loop=checkpoint_loop, **kwargs)
-
     var_tensors = [t for t, c in zip(tensors, const_mask) if not c]
     var_igs     = [list(ig) for ig, c in zip(index_groups, const_mask) if not c]
     var_and_out = set(i for ig in var_igs for i in ig) | set(out_ig)
+
+    # If any swap crosses the variable/constant boundary (one label appears
+    # only in constants, the other only in variables), the pre-contraction
+    # cannot handle it because one label would disappear.  Fall back.
+    const_only_labels = set(
+        i for ig, c in zip(index_groups, const_mask) if c for i in ig
+    ) - var_and_out
+    has_cross_boundary_swap = False
+    if swap is not None:
+        for sw_pair in swap:
+            in_const = sum(v in const_only_labels for v in sw_pair)
+            if 0 < in_const < len(sw_pair):
+                has_cross_boundary_swap = True
+                break
+
+    if not any(const_mask) or has_cross_boundary_swap:
+        # Nothing to pre-compute, or swaps cross the boundary; delegate directly.
+        return _contract_with_sliced_unroll(*args, unroll=unroll, optimize=path,
+                                            checkpoint_loop=checkpoint_loop, swap=swap, **kwargs)
 
     # Find connected components of the constant sub-network via Union-Find.
     # Two constant tensors are connected if they share at least one index.
@@ -953,11 +975,33 @@ def contract_with_unroll_compute_constants(*args, **kwargs):
         root = _find(k)
         comps.setdefault(root, []).append(k)
 
+    # Split swaps between constant components and the reduced network.
+    # A swap (a, b) goes to a constant component if both labels belong to it.
+    comp_index_sets = {}
+    for root, positions in comps.items():
+        comp_index_sets[root] = set(
+            i for k in positions for i in index_groups[k]
+        )
+    comp_swaps = {root: [] for root in comps}  # swaps assigned to each component
+    reduced_swap = []  # swaps for the reduced network
+    if swap is not None:
+        for sw_pair in swap:
+            assigned = False
+            for root, idx_set in comp_index_sets.items():
+                if all(v in idx_set for v in sw_pair):
+                    comp_swaps[root].append(sw_pair)
+                    assigned = True
+                    break
+            if not assigned:
+                reduced_swap.append(sw_pair)
+    reduced_swap = reduced_swap or None
+
     # Pre-contract each component once, outside the loop.
     pre_contracted = []  # list of (tensor, ig)
-    for comp in comps.values():
+    for comp_root, comp in comps.items():
         comp_tensors = [tensors[k] for k in comp]
         comp_igs     = [list(index_groups[k]) for k in comp]
+        c_swap = comp_swaps[comp_root] or None
 
         # Output indices: those that feed into the variable network or the final output.
         seen = set()
@@ -969,7 +1013,7 @@ def contract_with_unroll_compute_constants(*args, **kwargs):
                     seen.add(i)
         comp_out_ig = tuple(comp_out_ig)
 
-        if len(comp) == 1:
+        if len(comp) == 1 and c_swap is None:
             pre_contracted.append((comp_tensors[0], comp_igs[0]))
         else:
             comp_interleaved = []
@@ -977,10 +1021,10 @@ def contract_with_unroll_compute_constants(*args, **kwargs):
                 comp_interleaved.extend([t, ig])
             comp_interleaved.append(comp_out_ig)
             comp_path, _ = get_contraction_path(*comp_interleaved)
-            c_ts, c_inds, c_conjs, c_order = _convert_path_to_ncon_args(
-                *comp_interleaved, optimize=comp_path
+            c_ts, c_inds, c_conjs, c_order, c_ncon_swap = _convert_path_to_ncon_args(
+                *comp_interleaved, optimize=comp_path, swap=c_swap
             )
-            pre_contracted.append((ncon(c_ts, c_inds, conjs=c_conjs, order=c_order), list(comp_out_ig)))
+            pre_contracted.append((ncon(c_ts, c_inds, conjs=c_conjs, order=c_order, swap=c_ncon_swap), list(comp_out_ig)))
 
     # Rebuild the reduced network: variable tensors + one tensor per constant component.
     reduced_interleaved = []
@@ -995,7 +1039,7 @@ def contract_with_unroll_compute_constants(*args, **kwargs):
 
     return _contract_with_sliced_unroll(
         *reduced_interleaved, unroll=unroll, optimize=reduced_path,
-        checkpoint_loop=checkpoint_loop, **kwargs
+        checkpoint_loop=checkpoint_loop, swap=reduced_swap, **kwargs
     )
 
 
@@ -1015,19 +1059,20 @@ def contract_with_unroll(*args, **kwargs):
     kwargs.pop("who", None)
     kwargs.pop("verbosity", None)
     unroll = kwargs.pop("unroll", None)
+    swap = kwargs.pop("swap", None)
     unroll = _validate_and_resolve_unroll(*args, unroll=unroll)
 
     if unroll is None:
         # convert to ncon call
-        ts, inds, conjs, order= _convert_path_to_ncon_args(*args,**kwargs)
-        return ncon(ts, inds, conjs=conjs, order=order)
+        ts, inds, conjs, order, ncon_swap = _convert_path_to_ncon_args(*args, swap=swap, **kwargs)
+        return ncon(ts, inds, conjs=conjs, order=order, swap=ncon_swap)
 
     if isinstance(unroll, dict):
         # block-sparse sliced unrolling: unroll is {label: [SlicedLeg, ...]}
         path = kwargs.pop("optimize", None)
         assert path is not None, "optimize (contraction path) must be provided"
         return _contract_with_sliced_unroll(*args, unroll=unroll, optimize=path,
-                                            checkpoint_loop=checkpoint_loop, **kwargs)
+                                            checkpoint_loop=checkpoint_loop, swap=swap, **kwargs)
 
     raise NotImplementedError(
         "contract_with_unroll: unsupported unroll type. "
