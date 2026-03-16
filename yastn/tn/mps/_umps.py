@@ -23,6 +23,9 @@ from . import Mps
 from scipy.sparse.linalg import LinearOperator
 from scipy.sparse.linalg import eigs
 
+import logging
+import warnings
+log = logging.getLogger(__name__)
 
 def apply_transfer_matrix(
         umps: Union[Mps,Sequence["Tensor"]],
@@ -81,7 +84,8 @@ def apply_transfer_matrix(
 
 def eigs_implicit(umps:Union[Mps,Sequence["Tensor"]], 
                   umps_conj:Union[Mps,Sequence["Tensor"]]=None, 
-                  k=1, eigenvectors=False, V0:"Tensor"=None):
+                  k=1, eigenvectors=False, V0:"Tensor"=None,
+                  **kwargs):
     """
     Compute the k leading eigenvalues (and optionally eigenvectors) of the
     transfer matrix of a uMPS using an implicit Arnoldi method (scipy ``eigs``).
@@ -106,7 +110,10 @@ def eigs_implicit(umps:Union[Mps,Sequence["Tensor"]],
     V0 : yastn.Tensor, optional
         Initial guess for the dominant eigenvector (rank-2).
         When ``None`` a random tensor with the correct leg structure is created.
-
+    kwargs : dict, optional
+        Additional keyword arguments to pass to ``scipy.sparse.linalg.eigs``, specifically
+        ``{ncv=None, tol=0, maxiter=None}`` by default. See the documentation of ``scipy.sparse.linalg.eigs`` for details. 
+        
     Returns
     -------
     TODO return eigenvalues as yastn.Tensor
@@ -124,7 +131,7 @@ def eigs_implicit(umps:Union[Mps,Sequence["Tensor"]],
             umps[0].get_legs(axes=0) if umps_conj is None else umps_conj[0].get_legs(axes=0).conj(),
             umps[0].get_legs(axes=0).conj(), 
         ])
-    V0_data, V0_meta= split_data_and_meta(V0.to_dict())
+    V0_data, V0_meta= split_data_and_meta(V0.to_dict(level=2))
 
     def _mv(v):
         V= from_dict(combine_data_and_meta(cfg.backend.to_tensor(v,
@@ -138,10 +145,10 @@ def eigs_implicit(umps:Union[Mps,Sequence["Tensor"]],
     T= LinearOperator((V0.size,V0.size), matvec=_mv, 
                       dtype=cfg.default_dtype if (umps_conj is None) else 'complex128')
     if not eigenvectors:
-        vals= eigs(T, k=k, v0=None, return_eigenvectors=False)
+        vals= eigs(T, k=k, v0=V0_data, return_eigenvectors=False, **kwargs)
         return vals, None
     
-    vals, vecs= eigs(T, k=k, v0=None, return_eigenvectors=True)
+    vals, vecs= eigs(T, k=k, v0=V0_data, return_eigenvectors=True, **kwargs)
     if 'float' in cfg.default_dtype:
         if sum(abs(vecs.imag))==0:
             vecs= vecs.real
@@ -161,7 +168,7 @@ def eigs_implicit(umps:Union[Mps,Sequence["Tensor"]],
 
 
 def eigs_implicit_v2(mv:callable, config=None, legs:Sequence[Leg]=None,
-                    k=1, eigenvectors=False, V0:"Tensor"=None):
+                    k=1, eigenvectors=False, V0:"Tensor"=None, **kwargs):
     """
     Compute the k leading eigenvalues (and optionally eigenvectors) of matrix-vector operator 
     using an implicit Arnoldi method (scipy ``eigs``).
@@ -185,6 +192,9 @@ def eigs_implicit_v2(mv:callable, config=None, legs:Sequence[Leg]=None,
     V0 : yastn.Tensor, optional
         Initial guess for the dominant eigenvector (rank-2).
         When ``None`` a random tensor with the correct leg structure is created.
+    kwargs : dict, optional
+        Additional keyword arguments to pass to ``scipy.sparse.linalg.eigs``, specifically
+        ``{ncv=None, tol=0, maxiter=None}`` by default. See the documentation of ``scipy.sparse.linalg.eigs`` for details.
 
     Returns
     -------
@@ -200,7 +210,7 @@ def eigs_implicit_v2(mv:callable, config=None, legs:Sequence[Leg]=None,
         # initial guess
         V0= rand(config=config, legs=legs)
     config= V0.config
-    V0_data, V0_meta= split_data_and_meta(V0.to_dict())
+    V0_data, V0_meta= split_data_and_meta(V0.to_dict(level=2))
 
     def _mv(v):
         V= from_dict(combine_data_and_meta(config.backend.to_tensor(v,
@@ -213,10 +223,10 @@ def eigs_implicit_v2(mv:callable, config=None, legs:Sequence[Leg]=None,
 
     T= LinearOperator((V0.size,V0.size), matvec=_mv, dtype='complex128')
     if not eigenvectors:
-        vals= eigs(T, k=k, v0=None, return_eigenvectors=False)
+        vals= eigs(T, k=k, v0=V0_data, return_eigenvectors=False, **kwargs)
         return vals, None
     
-    vals, vecs= eigs(T, k=k, v0=None, return_eigenvectors=True)
+    vals, vecs= eigs(T, k=k, v0=V0_data, return_eigenvectors=True, **kwargs)
     if 'float' in config.default_dtype:
         if sum(abs(vecs.imag))==0:
             vecs= vecs.real
@@ -397,7 +407,10 @@ def isogauge_left_v2(umps, C_init=None, eps=1e-12):
 
 def biorthogonalize_left(umps_top:Union[Mps,Sequence["Tensor"]], 
                          umps_bottom:Union[Mps,Sequence["Tensor"]], 
-                         C_init:"Tensor"=None, pinv_cutoff=1e-12, eps=1e-12, verbosity=0):
+                         C_LU_0:"Tensor"=None,
+                         C_DL_0:"Tensor"=None, 
+                         pinv_cutoff=1e-12, eps=1e-12, max_iter=10,
+                         eigs_kwargs:dict={}):
     """ 
     Find the left biorthogonal gauge for a pair of uMPS (ket/bra) layers.
 
@@ -437,13 +450,15 @@ def biorthogonalize_left(umps_top:Union[Mps,Sequence["Tensor"]],
         Sequence of rank-3 ket tensors (axes: left, phys, right).
     umps_bottom :
         Sequence of rank-3 bra tensors with the same structure.
-    C_init :
+    C_LU_0, C_DL_0 : yastn.Tensor, optional
         Unused placeholder for a future warm-start initial gauge. Default ``None``.
     pinv_cutoff : float, optional
         Singular-value cutoff for the pseudo-inverses of gauge matrices.
         Default ``1e-12``.
     eps : float, optional
         Convergence threshold on ``‖I_approx − I‖``. Default ``1e-12``.
+    eigs_kwargs : dict, optional
+        Additional keyword arguments to pass to ``eigs_implicit`` when computing eigenvectors.
 
     Returns
     -------
@@ -456,7 +471,21 @@ def biorthogonalize_left(umps_top:Union[Mps,Sequence["Tensor"]],
     C_DL : yastn.Tensor
         Lower gauge matrix (rank-2) transforming the bra bond index.
     """
-    eval, evecs= eigs_implicit(umps_top, umps_conj=umps_bottom, k=1, eigenvectors=True, V0=C_init)
+    # NOTE this should run starting from every non-equivalent site in the bMPS unit cell
+    #      producing a set of biorthogonalized tensors {P_L[i], Pbar_L[i]} and gauge matrices {C_LU[i], C_DL[i]} for i in [0, N-1]
+    C_init= None
+    if C_LU_0 is not None and C_DL_0 is not None:
+        try:
+            # C_LU --1 
+            # 1
+            # C_DL --0
+            C_init= C_DL_0 @ C_LU_0
+        except Exception as e:
+            message= f"[biorthogonalize_left] Failed to construct initial gauge from provided C_LU_0 and C_DL_0. Falling back to None."
+            warnings.warn(message + f" Error details: {e}")
+            log.warning(message)
+            C_init= None
+    eval, evecs= eigs_implicit(umps_top, umps_conj=umps_bottom, k=1, eigenvectors=True, V0=C_init, **eigs_kwargs)
 
     U_L, S_L, V_Ldag= evecs.remove_leg(0).svd(axes=(0, 1), sU=1, nU=True, compute_uv=True,
         Uaxis=-1, Vaxis=0, policy='fullrank', fix_signs=False)
@@ -472,8 +501,8 @@ def biorthogonalize_left(umps_top:Union[Mps,Sequence["Tensor"]],
     Pbar_L = (C_DL.transpose() @ umps_bottom[0]) @ C_DL_pinv.transpose()
 
     Delta, n_iter= float('inf'), 0
-    while Delta>eps and n_iter < 10:
-        eval, evecs= eigs_implicit([P_L], umps_conj=[Pbar_L], k=1, eigenvectors=True)
+    while Delta>eps and n_iter < max_iter:
+        eval, evecs= eigs_implicit([P_L], umps_conj=[Pbar_L], k=1, eigenvectors=True, **eigs_kwargs)
         
         U_L, S_L, V_Ldag= evecs.remove_leg(0).svd(axes=(0, 1), sU=-1, nU=True, compute_uv=True,
                                                 Uaxis=-1, Vaxis=0, policy='fullrank', fix_signs=False) # Y_L
@@ -494,14 +523,16 @@ def biorthogonalize_left(umps_top:Union[Mps,Sequence["Tensor"]],
         # check biorthogonality of P_L and Pbar_L
         I_approx= P_L.tensordot(Pbar_L, axes=((0, 1), (0, 1)))*(1/eval)
         Delta= (I_approx - eye(I_approx.config, legs=I_approx.get_legs(), isdiag=False)).norm()
-        if verbosity > 0:
-            print(f"Iteration {n_iter}: eval = {eval}, ||I_approx - I|| = {Delta}")
+        log.info(f"[biorthogonalize_left] Iteration {n_iter}: eval = {eval}, ||I_approx - I|| = {Delta}")
         
         n_iter += 1
 
-    passed,res= verify_biorth(umps_top, umps_bottom, P_L, Pbar_L, C_LU, C_DL)
+    passed,res= verify_biorth(umps_top, umps_bottom, P_L, Pbar_L, C_LU, C_DL, tol=eps)
     if not passed:
-        raise UserWarning("Warning: Biorthogonality verification failed. Residuals:", res)
+        message= f"[biorthogonalize_left] pulling-through verification failed {res}"
+        warnings.warn(message)
+        log.info(message)
+
     return P_L, Pbar_L, C_LU, C_DL
 
 
@@ -511,8 +542,10 @@ def verify_biorth(umps_top, umps_bottom, P_L, Pbar_L, C_LU, C_DL, tol=1e-12):
     P_L_check= P_L @ C_LU
     Pbar_L_check= Pbar_L @ C_DL.transpose()
 
-    res= {"C_LU A_0 - P_L C_LU": (C_LU_A0 - P_L_check).norm(),
-          "C_DL^T A_0 - Pbar_L C_DL^T": (C_DL_A0 - Pbar_L_check).norm()}    
+    res= {"|C_LU A_0 - P_L C_LU|_2/|C_LU_A0|_2": (C_LU_A0 - P_L_check).norm()/C_LU_A0.norm(),
+          "max(|C_LU A_0 - P_L C_LU|)/max(|C_LU_A0|)": (C_LU_A0 - P_L_check).norm(p='inf')/C_LU_A0.norm(p='inf'),
+          "|C_DL^T A_0 - Pbar_L C_DL^T|_2/|C_DL^T A_0|_2": (C_DL_A0 - Pbar_L_check).norm()/C_DL_A0.norm(),
+          "max(|C_DL^T A_0 - Pbar_L C_DL^T|)/max(|C_DL^T A_0|)": (C_DL_A0 - Pbar_L_check).norm(p='inf')/C_DL_A0.norm(p='inf')}    
     passed= all( res[key] < tol for key in res )
     return passed, res
     

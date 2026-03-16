@@ -19,11 +19,24 @@ from ._env_dataclasses import EnvCTM_projectors
 from ....tn.mps._umps import biorthogonalize_left, eigs_implicit_v2
 from .._geometry import Lattice
 from ....tensor import tensordot, ncon
+from ....initialize import eye
 from ._env_contractions import corner2x2
 
-def _update_fpctm_projectors(env: EnvCTM, seq='tlbr') -> EnvCTM: #"Lattice[EnvCTM_projectors]":
+# Default options dict — document once here
+FPCTM_OPTS_DEFAULT = {
+    'pinv_cutoff': 1e-12,       # pseudoinverse cutoff in biorthogonalization
+    'eps':     1e-12,           # convergence threshold for biorth loop
+    'max_iter': 10,             # max iterations of biorth loop
+    'eigs_kwargs': {            # forwarded to scipy.sparse.linalg.eigs
+        'tol':      0,          # 0 == machine precision
+        'maxiter':  None,       # None == scipy default
+        'ncv':      None,       # None == scipy default
+    }
+}
+
+def _update_fpctm_projectors(env: EnvCTM, seq='tlbr', opts:dict = None) -> EnvCTM: #"Lattice[EnvCTM_projectors]":
+    opts= {**FPCTM_OPTS_DEFAULT, **(opts or {})}
     env_new = EnvCTM(env.psi, init=None)
-    pinv_cutoff, eps = 1e-12, 1e-12
 
     #proj_new = Lattice(env.geometry, objects={site: EnvCTM_projectors() for site in env.sites()})
     # Biorthogonalize the top and bottom edges
@@ -57,7 +70,9 @@ def _update_fpctm_projectors(env: EnvCTM, seq='tlbr') -> EnvCTM: #"Lattice[EnvCT
         # 2-<(-)-b-<(+)-0 => boundary_mps reverses 'b's order to match 't's order as 0-<(-)-b-<(+)-2 
         P_L, Pbar_L, C_LU, C_DL= biorthogonalize_left(env.boundary_mps(r,'t'), 
                                                     env.boundary_mps(r-1,'b'), 
-                                                    C_init=None, pinv_cutoff=pinv_cutoff, eps=eps)
+                                                    C_LU_0= env[r,c].tl, C_DL_0= env[r-1,c].bl, 
+                                                    **opts)
+        # print(f"biorth_left r={r} c={c}"+"-"*20+f"\n(old) C_LU {env[r,c].tl}\n(new) C_LU shape {C_LU}\n(old) C_DL {env[r,c].bl}\n(new) C_DL shape {C_DL}\n"+"="*20)
         env_new.proj[r,c].hlt= P_L
         env_new.proj[r-1,c].hlb= Pbar_L
         env_new[0,0].tl= C_LU
@@ -73,10 +88,15 @@ def _update_fpctm_projectors(env: EnvCTM, seq='tlbr') -> EnvCTM: #"Lattice[EnvCT
         #               -- A[r+1,c] -- T_R[r+1,c]                                    -- A[r+1,c]      -- T_R[r+1,c] 
         #    
         #                -- A[r,c] -- T_r[r,c]                                 -- A[r,c]   -- T_r[r,c]
-        #    -- b[r,c-1] -- b[r,c] -- C_RD[r,c]  =  -- b[r,c-1] -- C_RD[r,c-1] -- P_R[r,c] -- 
+        #    -- b[r,c-1] -- b[r,c] -- C_RD[r,c]  =  -- b[r,c-1] -- C_RD[r,c-1] -- P_R[r,c] --
+        # 
         P_R, Pbar_R, C_RD, C_UR= biorthogonalize_left( env.boundary_mps(r, 'b').reverse_sites(), 
                                                        env.boundary_mps(r+1, 't').reverse_sites(), 
-                                                       C_init=None, pinv_cutoff=pinv_cutoff, eps=eps)
+            # C_LU_0= env[r,c].br.transpose(axes=(1,0)), C_DL_0= env[r+1,c].tl.transpose(axes=(1,0)),
+            C_LU_0= env[r,c].br, C_DL_0= env[r+1,c].tr,
+                                                       **opts)
+        
+        # print(f"biorth_left r={r} c={c}"+"-"*20+f"\n(old) C_RD {env[r,c].br}\n(new) C_RD shape {C_RD}\n(old) C_UR {env[r,c].tr}\n(new) C_UR shape {C_UR}\n"+"="*20)
         env_new.proj[r,c].hrb= P_R
         env_new.proj[r+1,c].hrt= Pbar_R
         env_new[0,0].br= C_RD
@@ -87,9 +107,12 @@ def _update_fpctm_projectors(env: EnvCTM, seq='tlbr') -> EnvCTM: #"Lattice[EnvCT
         #
         #      A[.,c] T_r[.,c]
         #  T_l[.,c+1]   A[.,c+1]
+        #
+        # boundary_mps reverses 'l's order to match 'r's order as 0-<(-)-b-<(+)-2 
         P_t, Pbar_t, C_UR, C_LU= biorthogonalize_left( env.boundary_mps(c, 'r'), 
                                                        env.boundary_mps(c+1, 'l'), 
-                                                       C_init=None, pinv_cutoff=pinv_cutoff, eps=eps)
+                                                       C_LU_0= env[r,c].tr, C_DL_0= env[r,c+1].tl, 
+                                                       **opts)
         env_new.proj[r,c].vtl= Pbar_t
         env_new.proj[r,c+1].vtr= P_t
         env_new[0,0].tr= C_UR
@@ -102,7 +125,8 @@ def _update_fpctm_projectors(env: EnvCTM, seq='tlbr') -> EnvCTM: #"Lattice[EnvCT
         #      A[.,c-1] T_r[.,c-1]
         P_b, Pbar_b, C_DL, C_RD= biorthogonalize_left( env.boundary_mps(c, 'l').reverse_sites(), 
                                                        env.boundary_mps(c-1, 'r').reverse_sites(), 
-                                                       C_init=None, pinv_cutoff=pinv_cutoff, eps=eps)
+                                                       C_LU_0= env[r,c].bl, C_DL_0= env[r,c-1].br,
+                                                       **opts)
         env_new.proj[r,c].vbl= P_b
         env_new.proj[r,c-1].vbr= Pbar_b
         env_new[0,0].bl= C_DL
@@ -205,10 +229,24 @@ def _update_fpctm_env(env: EnvCTM) -> EnvCTM:
 
     return env_new
 
-def _update_fpctm_env_T(env: EnvCTM, seq='tlbr') -> EnvCTM:
+def _update_fpctm_env_T(env: EnvCTM, seq='tlbr', opts:dict= None) -> EnvCTM:
     # Update the environment tensors using the projectors
+    opts= {**FPCTM_OPTS_DEFAULT, **(opts or {})}
     psi = env.psi  
     env_new = EnvCTM(env.psi, init=None)
+    
+    def project_T(T,p_hlt,p_hlb):
+        """
+        Match spaces of T-tensor and projectors, e.g. for left projector:
+        """
+        #    ------- p_hlt[r,c]--
+        #   2
+        # t.l[r,c]--
+        #   0
+        #    ------- p_hlb[r,c]--
+        p_b= eye(T.config, isdiag=False, legs=[p_hlb.get_legs(axes=0).conj(), T.get_legs(axes=0).conj()])
+        p_t= eye(T.config, isdiag=False, legs=[T.get_legs(axes=2).conj(), p_hlt.get_legs(axes=0).conj()])
+        return (p_b @ T) @ p_t
 
     def fpctm_t_left(r,c):
         def fpop_l(T_l):
@@ -217,7 +255,8 @@ def _update_fpctm_env_T(env: EnvCTM, seq='tlbr') -> EnvCTM:
                 T_l = tensordot(psi[r,c+_c], T_l, axes=((0, 1), (2, 1)))
                 T_l = tensordot(env.proj[r,c+_c].hlb, T_l, axes=((0, 1), (2, 0)))
             return T_l
-        evals, evecs= eigs_implicit_v2(fpop_l, k=1, eigenvectors=True, V0= env[r,c].l)
+        V0= project_T(env[r,c].l, env.proj[r,c].hlt, env.proj[r,c].hlb)
+        evals, evecs= eigs_implicit_v2(fpop_l, k=1, eigenvectors=True, V0= V0, **opts['eigs_kwargs'])
         env_new[r,c].l = evecs.remove_leg(0)
 
     def fpctm_t_right(r,c):
@@ -227,7 +266,8 @@ def _update_fpctm_env_T(env: EnvCTM, seq='tlbr') -> EnvCTM:
                 T_r = tensordot(psi[r,c-_c], T_r, axes=((2, 3), (2, 1)))
                 T_r = tensordot(env.proj[r,c-_c].hrt, T_r, axes=((0, 1), (2, 0)))
             return T_r
-        evals, evecs= eigs_implicit_v2(fpop_r, k=1, eigenvectors=True, V0= env[r,c].r)
+        V0= project_T(env[r,c].r, env.proj[r,c].hrb, env.proj[r,c].hrt)
+        evals, evecs= eigs_implicit_v2(fpop_r, k=1, eigenvectors=True, V0= V0, **opts['eigs_kwargs'])
         env_new[r,c].r = evecs.remove_leg(0)
 
     def fpctm_t_top(r,c):
@@ -237,7 +277,8 @@ def _update_fpctm_env_T(env: EnvCTM, seq='tlbr') -> EnvCTM:
                 T_t = tensordot(T_t, psi[r+_r,c], axes=((2, 0), (0, 1)))
                 T_t = tensordot(T_t, env.proj[r+_r,c].vtr, axes=((1, 3), (0, 1)))
             return T_t
-        evals, evecs= eigs_implicit_v2(fpop_t, k=1, eigenvectors=True, V0= env[r,c].t)
+        V0= project_T(env[r,c].t, env.proj[r,c].vtr, env.proj[r,c].vtl)
+        evals, evecs= eigs_implicit_v2(fpop_t, k=1, eigenvectors=True, V0= V0, **opts['eigs_kwargs'])
         env_new[r,c].t = evecs.remove_leg(0)
 
     def fpctm_t_bottom(r,c):
@@ -247,7 +288,8 @@ def _update_fpctm_env_T(env: EnvCTM, seq='tlbr') -> EnvCTM:
                 T_b = tensordot(T_b, psi[r-_r,c], axes=((2, 0), (2, 3)))
                 T_b = tensordot(T_b, env.proj[r-_r,c].vbl, axes=((1, 3), (0, 1)))
             return T_b
-        evals, evecs= eigs_implicit_v2(fpop_b, k=1, eigenvectors=True, V0= env[r,c].b)
+        V0= project_T(env[r,c].b, env.proj[r,c].vbl, env.proj[r,c].vbr)
+        evals, evecs= eigs_implicit_v2(fpop_b, k=1, eigenvectors=True, V0= V0, **opts['eigs_kwargs'])
         env_new[r,c].b = evecs.remove_leg(0)
 
     # T-tensors
