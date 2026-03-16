@@ -204,14 +204,14 @@ def eigs_implicit_v2(mv:callable, config=None, legs:Sequence[Leg]=None,
 
     def _mv(v):
         V= from_dict(combine_data_and_meta(config.backend.to_tensor(v,
-            dtype=config.default_dtype,
+            dtype=str(v.dtype),
             device=config.default_device),
             meta=V0_meta))
         MV= mv(V)
         MV_data, MV_meta= split_data_and_meta(MV.to_dict(level=2))
         return MV_data[0]
 
-    T= LinearOperator((V0.size,V0.size), matvec=_mv, dtype=config.default_dtype)
+    T= LinearOperator((V0.size,V0.size), matvec=_mv, dtype='complex128')
     if not eigenvectors:
         vals= eigs(T, k=k, v0=None, return_eigenvectors=False)
         return vals, None
@@ -221,6 +221,8 @@ def eigs_implicit_v2(mv:callable, config=None, legs:Sequence[Leg]=None,
         if sum(abs(vecs.imag))==0:
             vecs= vecs.real
         else:
+            # Non-symmetric operator. No guarantee on real eigenvector
+            # TODO attempt to remove a global phase
             raise ValueError("Unexpected complex eigenvectors for real dtype.")
     
     Vecs= block( {col: from_dict(combine_data_and_meta(config.backend.to_tensor(vecs[:,col],
@@ -497,6 +499,9 @@ def biorthogonalize_left(umps_top:Union[Mps,Sequence["Tensor"]],
         
         n_iter += 1
 
+    passed,res= verify_biorth(umps_top, umps_bottom, P_L, Pbar_L, C_LU, C_DL)
+    if not passed:
+        raise UserWarning("Warning: Biorthogonality verification failed. Residuals:", res)
     return P_L, Pbar_L, C_LU, C_DL
 
 
