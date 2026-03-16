@@ -458,6 +458,9 @@ def corner2x2_bl(t_bottom, c_bottomleft, t_left, onsite_t, mode='fuse'):
     cor_bl = tensordot(cor_bl, onsite_t, axes=((2, 1), (1, 2)))
     if mode == 'fuse':
         cor_bl = cor_bl.fuse_legs(axes=((0, 3), (1, 2)))
+    else:
+        # consistency with 'tl', 'tr', 'br'
+        cor_bl = cor_bl.transpose(axes=(0, 1, 3, 2))
     return cor_bl
 
 def corner2x2_tr(t_top, c_topright, t_right, onsite_t, mode='fuse'):

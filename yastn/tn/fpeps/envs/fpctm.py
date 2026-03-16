@@ -13,7 +13,8 @@
 # limitations under the License.
 # ==============================================================================
 
-from ._env_ctm import EnvCTM
+import time
+from ._env_ctm import EnvCTM, update_storage_
 from ._env_dataclasses import EnvCTM_projectors
 # from ...mps._umps import biorthogonalize_left, eigs_implicit_v2
 from ....tn.mps._umps import biorthogonalize_left, eigs_implicit_v2
@@ -22,20 +23,78 @@ from ....tensor import tensordot, ncon
 from ....initialize import eye
 from ._env_contractions import corner2x2
 
+import logging
+log = logging.getLogger(__name__)
+
 # Default options dict — document once here
 FPCTM_OPTS_DEFAULT = {
-    'pinv_cutoff': 1e-12,       # pseudoinverse cutoff in biorthogonalization
-    'eps':     1e-12,           # convergence threshold for biorth loop
-    'max_iter': 10,             # max iterations of biorth loop
-    'eigs_kwargs': {            # forwarded to scipy.sparse.linalg.eigs
-        'tol':      0,          # 0 == machine precision
-        'maxiter':  None,       # None == scipy default
-        'ncv':      None,       # None == scipy default
+    'seq': 'tlbr',                  # sequence of moves in FPCTM iteration, e.g. 'tlbr' or 'tbrl' etc.
+    'fpctm_init_iter': 1,           # first CTM iteration to start FPCTM moves, i.e. number of initial CTM iterations before starting FPCTM moves
+    'fpctm_freq': 5,                # frequency of FPCTM move, i.e. number of moves between convergence checks
+    'fpctm_iter': 10,               # number of FPCTM iterations, i.e. number of full passes through the sequence of moves
+    'corner_tol': 1e-8,             # convergence threshold for corner spectrum in FPCTM iterations
+    'verbosity': 0,                 # 0: only final convergence info
+    'biorth_kwargs': {
+        'pinv_cutoff': 1e-12,       # pseudoinverse cutoff in biorthogonalization
+        'eps':     1e-12,           # convergence threshold for biorth loop
+        'max_iter': 10,             # max iterations of biorth loop
+        'eigs_kwargs': {            # forwarded to scipy.sparse.linalg.eigs
+            'tol':      0,          # 0 == machine precision
+            'maxiter':  None,       # None == scipy default
+            'ncv':      None,       # None == scipy default
+        }
     }
 }
 
-def _update_fpctm_projectors(env: EnvCTM, seq='tlbr', opts:dict = None) -> EnvCTM: #"Lattice[EnvCTM_projectors]":
+def _update_fpctm(env: EnvCTM, opts: dict = None) -> EnvCTM:
     opts= {**FPCTM_OPTS_DEFAULT, **(opts or {})}
+    biorth_kwargs= opts['biorth_kwargs']
+
+    env_old= env.clone()
+    history_yastn_c=[env_old.calculate_corner_svd()]
+    
+    for m in range(opts['fpctm_iter']): 
+        t0= time.perf_counter()
+        for mv in opts['seq']:  
+            env_proj_and_c= _update_fpctm_projectors(env, seq=mv, opts= biorth_kwargs)
+        
+            update_storage_(env,env_proj_and_c)
+            update_storage_(env.proj, env_proj_and_c.proj)
+        
+            fpctm_env_t= _update_fpctm_env_T(env, seq=mv, opts=biorth_kwargs)
+            update_storage_(env,fpctm_env_t)
+        t1= time.perf_counter()
+
+        # check convergence [TODO optional ?]
+        for site in env.sites():
+            for tid in ['l', 't', 'r', 'b']:
+                t_old= env_old[site].__getattribute__(tid)
+                t_new= env[site].__getattribute__(tid)
+                if t_old.shape != t_new.shape:
+                    log.info(f"[_update_fpctm] FPCTM move iteration {m}: shape changed for site {site} tid {tid} from {t_old.shape} to {t_new.shape}")
+                else:
+                    diff= (t_old-t_new).norm()
+                    angle= t_old.vdot(t_new)
+                    norm= t_old.norm()
+                    rel_diff= diff/(norm+1e-12)
+                    log.info(f"[_update_fpctm] FPCTM move iteration {m}: site {site} tid {tid} diff {diff:.3e} angle {angle} norm {norm:.3e} rel_diff {rel_diff:.3e}")
+            
+        converged, max_dsv, history_yastn_c= env.ctm_conv_corner_spec(history_yastn_c, corner_tol= opts['corner_tol'])
+        update_storage_(env_old, env)
+        print(f"[_update_fpctm] FPCTM iteration {m} in {t1-t0}[s]: max corner dsv {max_dsv:.3e}")
+        log.info(f"[_update_fpctm] FPCTM iteration {m} in {t1-t0}[s]: max corner dsv {max_dsv:.3e} spec {history_yastn_c[-1]}")
+
+        if converged:
+            break
+        
+    # update corners
+    fpctm_env_c= _update_fpctm_env_C(env, opts=biorth_kwargs)
+    update_storage_(env,fpctm_env_c)
+    return env
+
+
+def _update_fpctm_projectors(env: EnvCTM, seq='tlbr', opts:dict = None) -> EnvCTM: #"Lattice[EnvCTM_projectors]":
+    opts= {**FPCTM_OPTS_DEFAULT['biorth_kwargs'], **(opts or {})}
     env_new = EnvCTM(env.psi, init=None)
 
     #proj_new = Lattice(env.geometry, objects={site: EnvCTM_projectors() for site in env.sites()})
@@ -231,7 +290,7 @@ def _update_fpctm_env(env: EnvCTM) -> EnvCTM:
 
 def _update_fpctm_env_T(env: EnvCTM, seq='tlbr', opts:dict= None) -> EnvCTM:
     # Update the environment tensors using the projectors
-    opts= {**FPCTM_OPTS_DEFAULT, **(opts or {})}
+    opts= {**FPCTM_OPTS_DEFAULT['biorth_kwargs'], **(opts or {})}
     psi = env.psi  
     env_new = EnvCTM(env.psi, init=None)
     
@@ -299,4 +358,60 @@ def _update_fpctm_env_T(env: EnvCTM, seq='tlbr', opts:dict= None) -> EnvCTM:
             r,c= site
             fpctm_t_mv[mv](r,c)
             
+    return env_new
+
+def _update_fpctm_env_C(env: EnvCTM, seq=['tl','tr','br','bl'], opts:dict= None) -> EnvCTM:
+    # Update the environment tensors using the projectors
+    opts= {**FPCTM_OPTS_DEFAULT['biorth_kwargs'], **(opts or {})}
+    psi = env.psi
+    env_new = EnvCTM(env.psi, init=None)
+
+    # C-tensors
+    mode="unfused"
+    t_env= env
+
+    def fpctm_c_tl(r,c):
+        def fpop_tl(C_tl):
+            C_tl= corner2x2('tl', t_env[r,c].l, C_tl, t_env[r,c].t, psi[r,c], mode=mode)
+            # C_lu= tensordot( C_lu, env.proj[r,c].hlb, axes=((0, 2), (0, 1)) )
+            # C_lu= tensordot( C_lu, env.proj[r,c].vtr, axes=((0, 1), (0, 1)) )
+            C_tl = ncon( [C_tl, env.proj[r,c].hlb, env.proj[r,c].vtr],
+                        [[1,3,2,4], [1, 2, -1], [3, 4, -2]], )
+            return C_tl
+        evals, evecs= eigs_implicit_v2(fpop_tl, k=1, eigenvectors=True, V0= env[r,c].tl)
+        env_new[r,c].tl = evecs.remove_leg(0)
+
+    def fpctm_c_tr(r,c):
+        def fpop_tr(C_ru):
+            C_ru = corner2x2('tr', t_env[r,c].t, C_ru, t_env[r,c].r, psi[r,c],  mode=mode)
+            C_ru = ncon( [C_ru, env.proj[r,c].vtl, env.proj[r,c].hrb],
+                         [[1,3,2,4], [1, 2, -1], [3, 4, -2]], )
+            return C_ru
+        evals, evecs= eigs_implicit_v2(fpop_tr, k=1, eigenvectors=True, V0= env[r,c].tr)
+        env_new[r,c].tr = evecs.remove_leg(0)
+
+    def fpctm_c_br(r,c):
+        def fpop_br(C_br):
+            C_br = corner2x2('br', t_env[r,c].r, C_br, t_env[r,c].b, psi[r,c],  mode=mode)
+            C_br = ncon( [C_br, env.proj[r,c].hrt, env.proj[r,c].vbl],
+                         [[1,3,2,4], [1, 2, -1], [3, 4, -2]], )
+            return C_br
+        evals, evecs= eigs_implicit_v2(fpop_br, k=1, eigenvectors=True, V0= env[r,c].br)
+        env_new[r,c].br = evecs.remove_leg(0)
+
+    def fpctm_c_bl(r,c):
+        def fpop_bl(C_bl):
+            C_bl = corner2x2('bl', t_env[r,c].b, C_bl, t_env[r,c].l, psi[r,c],  mode=mode)
+            C_bl = ncon( [C_bl, env.proj[r,c].vbr, env.proj[r,c].hlt],
+                         [[1,3,2,4], [1, 2, -1], [3, 4, -2]], )
+            return C_bl
+        evals, evecs= eigs_implicit_v2(fpop_bl, k=1, eigenvectors=True, V0= env[r,c].bl)
+        env_new[r,c].bl = evecs.remove_leg(0)
+
+    fpctm_c_mv= {'tl': fpctm_c_tl, 'tr': fpctm_c_tr, 'br': fpctm_c_br, 'bl': fpctm_c_bl}
+    for mv in seq:
+        for site in env.sites():
+            r,c= site
+            fpctm_c_mv[mv](r,c)
+
     return env_new
