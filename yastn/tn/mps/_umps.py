@@ -486,16 +486,17 @@ def biorthogonalize_left(umps_top:Union[Mps,Sequence["Tensor"]],
             log.warning(message)
             C_init= None
     eval, evecs= eigs_implicit(umps_top, umps_conj=umps_bottom, k=1, eigenvectors=True, V0=C_init, **eigs_kwargs)
-
+    
     U_L, S_L, V_Ldag= evecs.remove_leg(0).svd(axes=(0, 1), sU=1, nU=True, compute_uv=True,
         Uaxis=-1, Vaxis=0, policy='fullrank', fix_signs=False)
 
     # --(U_L √Σ)(√Σ-1 U_L†) -- U_L S_L V_L† -- (V_L √Σ-1) (√Σ V_L†)
     #    C_DL                                              C_LU 
+    pinv_cutoff_f= lambda S: pinv_cutoff * S.norm(p='inf')
     C_LU= S_L.sqrt() @ V_Ldag
     C_DL= U_L @ S_L.sqrt()
-    C_LU_pinv= (V_Ldag.H).consume_transpose() @ S_L.rsqrt(cutoff=pinv_cutoff) # TODO relative cutoff
-    C_DL_pinv= S_L.rsqrt(cutoff=pinv_cutoff) @ (U_L.H).consume_transpose()
+    C_LU_pinv= (V_Ldag.H).consume_transpose() @ S_L.rsqrt(cutoff=pinv_cutoff_f(S_L)) # TODO relative cutoff
+    C_DL_pinv= S_L.rsqrt(cutoff=pinv_cutoff_f(S_L)) @ (U_L.H).consume_transpose()
 
     P_L = (C_LU @ umps_top[0]) @ C_LU_pinv
     Pbar_L = (C_DL.transpose() @ umps_bottom[0]) @ C_DL_pinv.transpose()
@@ -509,8 +510,8 @@ def biorthogonalize_left(umps_top:Union[Mps,Sequence["Tensor"]],
         
         Y_LU = S_L.sqrt() @ V_Ldag
         Y_DL = U_L @ S_L.sqrt()
-        Y_LU_pinv= (V_Ldag.H).consume_transpose() @ S_L.rsqrt(cutoff=pinv_cutoff) # TODO relative cutoff
-        Y_DL_pinv= S_L.rsqrt(cutoff=pinv_cutoff) @ (U_L.H).consume_transpose()
+        Y_LU_pinv= (V_Ldag.H).consume_transpose() @ S_L.rsqrt(cutoff=pinv_cutoff_f(S_L)) # TODO relative cutoff
+        Y_DL_pinv= S_L.rsqrt(cutoff=pinv_cutoff_f(S_L)) @ (U_L.H).consume_transpose()
 
         # Ps_L → Y_LU Ps_L Y_LU-1 -> Y_LU C_LU umps_top[0] C_LU_pinv Y_LU-1 
         # [P−L]s → Y_DL^T [P−L]s (Y_DL-1)^T -> Y_DL^T C_DL^T umps_bottom[0] C_DL_pinv^T (Y_DL-1)^T 
