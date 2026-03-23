@@ -210,6 +210,7 @@ def test_measure(config_kwargs, sym, L):
     nn_peps['line'] = measure_combinations(ops.n(), ops.n(), env=env_ctm, fun='measure_line')
     nn_peps['nsite'] = measure_combinations(ops.n(), ops.n(), env=env_ctm, fun='measure_nsite')
     nn_peps['nsite_exact'] = measure_combinations(ops.n(), ops.n(), env=env_ctm, fun='measure_nsite_exact')
+    nn_peps['nsite_exact_oe'] = measure_combinations(ops.n(), ops.n(), env=env_ctm, fun='measure_nsite_exact_oe')
     # nn_peps['nsite_mps'] = measure_combinations(ops.n(), ops.n(), env=env_bd, fun='measure_nsite')
     assert(len(nn_peps['line'])) == 2 * L ** 3 - L ** 2
     assert(len(nn_peps['nsite'])) == L ** 4
@@ -232,6 +233,7 @@ def test_measure(config_kwargs, sym, L):
     cpc_peps['line'] = measure_combinations(ops.cp(), ops.c(), env=env_ctm, fun='measure_line')
     cpc_peps['nsite'] = measure_combinations(ops.cp(), ops.c(), env=env_ctm, fun='measure_nsite')
     cpc_peps['nsite_exact'] = measure_combinations(ops.cp(), ops.c(), env=env_ctm, fun='measure_nsite_exact')
+    cpc_peps['nsite_exact_oe'] = measure_combinations(ops.cp(), ops.c(), env=env_ctm, fun='measure_nsite_exact_oe')
     cpc_peps['nsite_mps'] = measure_combinations(ops.cp(), ops.c(), env=env_bd, fun='measure_nsite')
     assert(len(cpc_peps['line'])) == 2 * L ** 3 - L ** 2
     assert(len(cpc_peps['nsite'])) == L ** 4
@@ -261,12 +263,14 @@ def test_measure(config_kwargs, sym, L):
         v1 = env_ctm.measure_2x2(*operators, sites=sites)
         v2 = env_ctm.measure_nsite(*operators, sites=sites)
         v3 = env_ctm.measure_nsite_exact(*operators, sites=sites)
+        v4 = env_ctm.measure_nsite_exact_oe(*operators, sites=sites)
         I = mps.product_mpo(ops.I(), N=phi.N)
         O = mps.generate_mpo(I, terms=[mps.Hterm(positions=positions, operators=operators)])
         v0 = mps.vdot(phi, O, phi)
         assert abs(v1 - v0) < tol
         assert abs(v2 - v0) < tol
         assert abs(v3 - v0) < tol
+        assert abs(v4 - v0) < tol
 
         sorted_ops = [None]*4
         site_op = {(0, 0):0, (1, 0): 1, (0, 1): 2, (1, 1):3}
