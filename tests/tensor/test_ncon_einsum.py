@@ -196,12 +196,6 @@ def test_ncon_einsum_exceptions(config_kwargs):
                        match="Indices of legs to contract do not match."):
         _ = yastn.ncon([a, a], [(1, 2, -1), (1, 1, -2)])
     with pytest.raises(yastn.YastnError,
-                       match="Likely inefficient order of contractions. Do all traces before tensordot."):
-        _ = yastn.ncon([a, a], [(3, 3, 2), (1, 1, 2)], conjs=[0, 1])
-    with pytest.raises(yastn.YastnError,
-                       match="Likely inefficient order of contractions. Do all traces before tensordot."):
-        _ = yastn.ncon([a, a, a], [(1, 2, 3), (1, 3, 4), (2, 4, -0)], conjs=[0, 1, 0])
-    with pytest.raises(yastn.YastnError,
                        match="Repeated non-positive"): # (outgoing) index is ambiguous.
         yastn.ncon([a], [(-1, -1, -0)])
     with pytest.raises(yastn.YastnError,

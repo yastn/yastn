@@ -37,7 +37,7 @@ def einsum(subscripts, *operands, order=None, swap=None) -> 'Tensor':
     operands: Sequence[yastn.Tensor]
 
     order: str
-        Specify order in which repeated indices from subscipt are contracted.
+        Specify order in which repeated indices from subscript are contracted.
         By default it follows alphabetic order.
 
     Example
@@ -86,11 +86,7 @@ def einsum(subscripts, *operands, order=None, swap=None) -> 'Tensor':
         raise YastnError('Repeated index after ->')
 
     if order is None:
-        order = []
-        for v in sin.replace(',', ''):
-            if sin.count(v) > 1:
-                order.append(v)
-        order = ''.join(sorted(order))
+        order = ''.join(sorted(set(v for v in sin.replace(',', '') if sin.count(v) > 1)))
     din = {v: i + 1 for i, v in enumerate(order)}
     dout = {v: -i for i, v in enumerate(sout)}
     d = {**din, **dout}
@@ -204,7 +200,56 @@ def _execute_commands(ts, commands):
 
 @lru_cache(maxsize=1024)
 def _meta_ncon(inds, order, swap):
-    r""" Turning information in ``inds`` and ``conjs`` into list of contraction commands. """
+    r"""
+    Plan a sequence of contraction commands from index notation.
+
+    This is a pure-metadata planner: it inspects only index labels and tensor
+    IDs, never tensor data.  The result is an ``@lru_cache``-d tuple of
+    commands executed later by ``_execute_commands``.
+
+    Index encoding
+    --------------
+    * Positive indices label legs to be contracted (matching pairs).
+    * Non-positive indices label outgoing legs of the result.
+    * ``order`` remaps positive indices so that index 1 is contracted first.
+
+    Edge list
+    ---------
+    ``edges`` is a mutable list of ``[ind, tensor_id, leg_index]`` triples,
+    sorted **descending**.  ``edges.pop()`` yields the lowest index (next to
+    contract).  A sentinel ``[512, 512, 512]`` separates contracted edges
+    (ind < 512) from outgoing edges (ind > 1024, remapped from non-positive).
+
+    Main loop
+    ---------
+    Each iteration pops a matched pair of edges and batches consecutive
+    edges between the same tensor pair.  Before contracting, same-tensor
+    swaps are collected and bad swaps (touching contracted legs) are
+    resolved via ``_resolve_bad_swaps``.  The contraction is one of:
+
+    * **Tensordot** (``ten1 != ten2``): merge two tensors.
+    * **Trace** (``ten1 == ten2``): contract self-loop legs.
+    * **Unresolved fallback**: when ``_resolve_bad_swaps`` cannot move all
+      bad swaps away (partial crossing), contract only the crossed axes
+      and re-insert the rest as trace edges on the merged tensor.
+
+    Deferred trace
+    --------------
+    The jump-move identity is a Z2 tautology for self-loop edges, so
+    ``_resolve_bad_swaps`` cannot resolve bad swaps on trace legs.  When
+    bad swaps remain after resolution, the trace is deferred: its edges
+    are re-inserted with index = max external-edge index of the bad swaps.
+    Once the relevant third-party tensors merge into the trace tensor
+    (turning cross-tensor swaps into same-tensor swaps), the trace
+    executes.  If the merge chain is indirect, the trace re-defers with
+    a progressively higher index until resolved.
+
+    Post-loop
+    ---------
+    Disconnected tensors are combined via outer products.  Remaining
+    same-tensor swaps are applied, and output legs are transposed to the
+    requested order.
+    """
     if not all(-256 < x < 256 for x in _flatten(inds)):
         raise YastnError('Ncon requires indices to be between -256 and 256.')
 
@@ -239,9 +284,9 @@ def _meta_ncon(inds, order, swap):
     nlegs = {k: len(v) for k, v in enumerate(inds)}
     ten_out = max(nlegs)
     #
-    commands, dot_done = [], False
+    commands = []
     #
-    axes1, axes2 = [], []
+    axes1, axes2, inds_for_axes = [], [], []
     while edges[-1][0] != 512:  # tensordot two tensors, or trace one tensor; 512 is cutoff marking end of contractions
         ind1, ten1, leg1 = edges.pop()
         ind2, ten2, leg2 = edges.pop()
@@ -252,6 +297,7 @@ def _meta_ncon(inds, order, swap):
             leg1, leg2 = leg2, leg1
         axes1.append(leg1)
         axes2.append(leg2)
+        inds_for_axes.append(ind1)
         if edges[-1][0] == 512 or (edges[-1][1], edges[-2][1]) not in [(ten1, ten2), (ten2, ten1)]:
             # first collect swaps
             swap_now, swap_later = [], []
@@ -270,23 +316,107 @@ def _meta_ncon(inds, order, swap):
             #
             # resolve swaps on contracted legs via jump-moves
             tas = [[ten1, ax] for ax in axes1] + [[ten2, ax] for ax in axes2]
+            unresolved = False
             if any(any(ta in sw12[0] or ta in sw12[1] for ta in tas) for sw12 in swaps):
-                new_cmds, swaps = _resolve_bad_swaps(
+                new_cmds, swaps, unresolved = _resolve_bad_swaps(
                     swaps, edges, nlegs, ten1, ten2, axes1, axes2)
                 commands.extend(new_cmds)
             #
             # contract
-            if ten1 == ten2: # trace
-                if dot_done:
-                    raise YastnError("Likely inefficient order of contractions. Do all traces before tensordot. " +
-                                     "Call all axes connecting two tensors one after another.")
-                commands.append(('trace', ten1, ten1, (tuple(axes1), tuple(axes2))))
-                axes12 = axes1 + axes2
-                nlegs[ten1] -= len(axes12)
-                _shift_edges_(edges, ten1, ten1, dax=lambda x: -sum(ax < x for ax in axes12))
-                _shift_swaps_(swaps, ten1, ten1, dax=lambda x: -sum(ax < x for ax in axes12))
+            if unresolved:
+                # Partial crossing: contract the crossed axes, defer the rest.
+                # unresolved is a frozenset of axis indices crossed by the
+                # problematic third-party edge.  If a subsequent call reveals
+                # an even smaller crossing set, shrink until resolved.
+                to_contract = sorted(unresolved)
+                while True:
+                    uncrossed = [k for k in range(len(axes1)) if k not in set(to_contract)]
+                    axes1_c = [axes1[k] for k in to_contract]
+                    axes2_c = [axes2[k] for k in to_contract]
+                    _temp_edges = []
+                    for k in uncrossed:
+                        _temp_edges.append([inds_for_axes[k], ten1, axes1[k]])
+                        _temp_edges.append([inds_for_axes[k], ten2, axes2[k]])
+                    edges.extend(_temp_edges)
+                    edges.sort(reverse=True)
+                    new_cmds, swaps, unresolved2 = _resolve_bad_swaps(
+                        swaps, edges, nlegs, ten1, ten2, axes1_c, axes2_c)
+                    commands.extend(new_cmds)
+                    for te in _temp_edges:
+                        edges.remove(te)
+                    if not unresolved2:
+                        break
+                    # Map unresolved2 (indices into axes1_c) back to original indices
+                    to_contract = sorted(to_contract[k] for k in unresolved2)
+                ten_out += 1
+                commands.append(('tensordot', ten_out, (ten1, ten2),
+                                 (tuple(axes1_c), tuple(axes2_c))))
+                nlegs[ten1] -= len(axes1_c)
+                nlegs[ten2] -= len(axes2_c)
+                nlegs_ten1_rem = nlegs[ten1]
+                _shift_edges_(edges, ten1, ten_out,
+                              dax=lambda x: -sum(ax < x for ax in axes1_c))
+                _shift_edges_(edges, ten2, ten_out,
+                              dax=lambda x: nlegs_ten1_rem - sum(ax < x for ax in axes2_c))
+                _shift_swaps_(swaps, ten1, ten_out,
+                              dax=lambda x: -sum(ax < x for ax in axes1_c))
+                _shift_swaps_(swaps, ten2, ten_out,
+                              dax=lambda x: nlegs_ten1_rem - sum(ax < x for ax in axes2_c))
+                nlegs[ten_out] = nlegs.pop(ten1) + nlegs.pop(ten2)
+                # Re-insert uncrossed axes as trace pairs on ten_out
+                for k in uncrossed:
+                    new_ax1 = axes1[k] - sum(ax < axes1[k] for ax in axes1_c)
+                    new_ax2 = nlegs_ten1_rem + axes2[k] - sum(ax < axes2[k] for ax in axes2_c)
+                    edges.append([inds_for_axes[k], ten_out, new_ax1])
+                    edges.append([inds_for_axes[k], ten_out, new_ax2])
+                edges.sort(reverse=True)
+            elif ten1 == ten2:  # trace
+                # Check each pair independently for bad swaps.
+                # Pairs without bad swaps are traced immediately;
+                # pairs with bad swaps are deferred until the next
+                # contraction involving ten1, which is the earliest
+                # event that can merge a third-party tensor into ten1
+                # and turn the cross-tensor swap into a same-tensor swap.
+                # If ten1 has no remaining edges, defer to 511 (end).
+                # Re-deferral handles cases needing multiple merges.
+                imm_axes1, imm_axes2 = [], []
+                deferred = False
+                defer_ind = None  # computed lazily, shared by all pairs
+                npair = 0
+                for ax1, ax2 in zip(axes1, axes2):
+                    tas_pair = [[ten1, ax1], [ten1, ax2]]
+                    pair_bad = any(any(ta in sw12[0] or ta in sw12[1]
+                                       for ta in tas_pair) for sw12 in swaps)
+                    if not pair_bad:
+                        imm_axes1.append(ax1)
+                        imm_axes2.append(ax2)
+                        continue
+                    # Compute defer target once: min edge index of ten1.
+                    if defer_ind is None:
+                        defer_ind = min((e[0] for e in edges
+                                         if e[1] == ten1
+                                         and 0 < e[0] < 512), default=511)
+                    # Fractional index: sorts right after defer_ind,
+                    # never collides with integer edge indices,
+                    # and each pair gets a distinct value.
+                    npair += 1
+                    d = defer_ind + npair * 0.01
+                    edges.append([d, ten1, ax1])
+                    edges.append([d, ten1, ax2])
+                    deferred = True
+                #
+                if imm_axes1:
+                    commands.append(('trace', ten1, ten1,
+                                     (tuple(imm_axes1), tuple(imm_axes2))))
+                    axes12 = imm_axes1 + imm_axes2
+                    nlegs[ten1] -= len(axes12)
+                    _shift_edges_(edges, ten1, ten1,
+                                  dax=lambda x: -sum(ax < x for ax in axes12))
+                    _shift_swaps_(swaps, ten1, ten1,
+                                  dax=lambda x: -sum(ax < x for ax in axes12))
+                if deferred:
+                    edges.sort(reverse=True)
             else:  # tensordot
-                dot_done = True
                 ten_out += 1
                 commands.append(('tensordot', ten_out, (ten1, ten2), (tuple(axes1), tuple(axes2))))
                 nlegs[ten1] -= len(axes1)
@@ -296,7 +426,7 @@ def _meta_ncon(inds, order, swap):
                 _shift_swaps_(swaps, ten1, ten_out, dax=lambda x: -sum(ax < x for ax in axes1))
                 _shift_swaps_(swaps, ten2, ten_out, dax=lambda x: nlegs[ten1] - sum(ax < x for ax in axes2))
                 nlegs[ten_out] = nlegs.pop(ten1) + nlegs.pop(ten2)
-            axes1, axes2 = [], []
+            axes1, axes2, inds_for_axes = [], [], []
     #
     edges.pop()  # eliminate cutoff element
     #
@@ -316,7 +446,7 @@ def _meta_ncon(inds, order, swap):
         raise YastnError("Repeated non-positive (outgoing) index is ambiguous.")
     #
     # final swaps
-    axes_swap = tuple(ax for sw12 in swaps for ax in _swap_on_tensor(*sw12)[1])
+    axes_swap = tuple(ax for sw12 in swaps for sw in [_swap_on_tensor(*sw12)] if sw for ax in sw[1])
     if axes_swap:
         commands.append(('swap_gate', ten_out, ten_out, axes_swap))
     #
@@ -371,12 +501,25 @@ def _resolve_bad_swaps(swaps, edges, nlegs, ten1, ten2, axes1, axes2):
 
     Strategy (Step-1 / Step-2)
     --------------------------
-    ``get_ax_to_jump`` selects a leg on a third-party tensor C with the fewest
-    bad-swap crossings; if that minimum equals ``len(axes1)``, Step-1 is
-    skipped for C.  Step-1 performs a jump on the chosen leg and absorbs any
-    same-tensor swaps.  If no tensor yields a valid leg, Step-2 groups the
-    remaining bad swaps by their partner edge and jumps once from the
-    contracted legs to clear each partner edge.
+    **Step-1** iterates over third-party tensors involved in bad swaps.
+    ``get_ax_to_jump`` selects a leg on tensor C with fewer bad-swap
+    crossings than ``len(axes1)``; jumping on that leg reduces the bad-swap
+    count.  Same-tensor swaps created by the jump are absorbed immediately
+    via ``collect_same_tensor``.  Cycle detection (``seen_z2``) prevents
+    infinite loops when jumps keep regenerating the same z2 state.
+
+    **Step-2** handles remaining bad swaps where every third-party edge
+    crosses *all* contracted legs.  It jumps from the contracted legs of
+    the tensor with fewer surviving legs (to minimize new cross-tensor
+    swaps).  All third-party edges are scanned; fully-crossing ones are
+    processed first.  If only partially-crossing edges remain, the one
+    with the **maximum** crossing set is returned as ``unresolved``, so
+    the caller can contract the largest possible subset of axes.
+
+    **Trace skip**: when ``ten1 == ten2`` (self-loop), Step-2 is skipped
+    entirely because the jump identity degenerates into a Z2 tautology —
+    it would silently drop the fermionic sign.  The caller handles this
+    via deferred trace.
 
     Parameters
     ----------
@@ -406,7 +549,14 @@ def _resolve_bad_swaps(swaps, edges, nlegs, ten1, ten2, axes1, axes2):
         commands to be executed before the contraction.
 
     remaining_swaps : list
-        Swaps still in z2 after resolution (none of them bad).
+        Swaps still in z2 after resolution (none of them bad when
+        ``unresolved`` is ``False``).
+
+    unresolved : False or frozenset
+        ``False`` if all bad swaps were resolved.  Otherwise a
+        ``frozenset`` of axis indices (into ``axes1``/``axes2``) that
+        are crossed by the most-crossing partially-crossing third-party
+        edge.  The caller should contract this subset and defer the rest.
     """
     contracted = frozenset((ten1, ax) for ax in axes1) | frozenset((ten2, ax) for ax in axes2)
 
@@ -495,7 +645,7 @@ def _resolve_bad_swaps(swaps, edges, nlegs, ten1, ten2, axes1, axes2):
         return ax
 
     def get_third_party_tensor():
-        # Collect third-party tensor appearances in bad swaps.
+        r"""Return {tensor: {leg: [(key, partner), ...]}} for non-contracted tensors in bad swaps."""
         bad = [key for key in z2
                if any(tl in contracted for tl in key[0])
                or any(tl in contracted for tl in key[1])]
@@ -512,7 +662,18 @@ def _resolve_bad_swaps(swaps, edges, nlegs, ten1, ten2, axes1, axes2):
                         tp[t].setdefault(l, []).append((key, key[1 - si]))
         return tp
 
+    seen_z2 = {}  # z2_snapshot -> (commands_len, z2_copy)
     for _iter in range(256):
+        z2_snapshot = frozenset(z2)
+        if z2_snapshot in seen_z2:
+            # Cycling detected — undo commands from the cycling iterations.
+            prev_cmds_len, prev_z2 = seen_z2[z2_snapshot]
+            del commands[prev_cmds_len:]
+            z2.clear()
+            z2.update(prev_z2)
+            _newly_added.clear()
+            break
+        seen_z2[z2_snapshot] = (len(commands), set(z2))
         tp = get_third_party_tensor()
         if not tp:
             break
@@ -535,12 +696,27 @@ def _resolve_bad_swaps(swaps, edges, nlegs, ten1, ten2, axes1, axes2):
     # Each remaining bad swap has a third-party edge crossing all contracted
     # legs.  Group by unique third-party edge: discard all bad swaps for that
     # edge, then do one jump from the contracted legs.
-    tp = get_third_party_tensor()
-    if nlegs[ten1] - len(axes1) <= nlegs[ten2] - len(axes2):
-        t, ls = ten1, axes1
+    if ten1 == ten2:
+        # Trace (self-loop): skip Step-2 entirely.  The jump identity
+        # applied to a self-loop edge is a Z2 tautology — it removes
+        # the swap and replaces it with operations that exactly cancel,
+        # silently losing the fermionic sign.  Any remaining bad swaps
+        # will be resolved by the caller (deferred trace).
+        t, ls = None, None
+    elif nlegs[ten1] - len(axes1) <= nlegs[ten2] - len(axes2):
+        t, ls = ten1, axes1  # jump from the tensor with fewer surviving legs
     else:
         t, ls = ten2, axes2
-    if tp:
+
+    while t is not None:
+        tp = get_third_party_tensor()
+        if not tp:
+            break
+
+        # Scan all third-party edges: process fully-crossing ones,
+        # and track the best (max crossings) partial crossing.
+        first_full = None
+        best_partial = None
         seen_edges = set()
         for C in tp:
             for ax in tp[C]:
@@ -548,16 +724,42 @@ def _resolve_bad_swaps(swaps, edges, nlegs, ten1, ten2, axes1, axes2):
                 if edge in seen_edges:
                     continue
                 seen_edges.add(edge)
-                assert len(tp[C][ax]) == len(axes1), "Sanity check: all bad swaps for this edge should cross all contracted legs."
-                for _key, _ in tp[C][ax]:
-                    z2.discard(_key)
-                jump(t, ls, edge)
-                collect_same_tensor()
+
+                contracted_edges_crossed = set()
+                for _key, _partner in tp[C][ax]:
+                    for side in (_key[0], _key[1]):
+                        es = tuple(sorted(side))
+                        for k in range(len(axes1)):
+                            ce = tuple(sorted(((ten1, axes1[k]),
+                                               (ten2, axes2[k]))))
+                            if es == ce:
+                                contracted_edges_crossed.add(k)
+
+                if len(contracted_edges_crossed) == len(axes1):
+                    if first_full is None:
+                        first_full = (C, ax, edge)
+                elif best_partial is None or len(contracted_edges_crossed) > len(best_partial):
+                    best_partial = frozenset(contracted_edges_crossed)
+
+        if first_full is not None:
+            C, ax, edge = first_full
+            for _key, _ in tp[C][ax]:
+                z2.discard(_key)
+            jump(t, ls, edge)
+            collect_same_tensor()
+            continue  # restart with fresh tp
+
+        if best_partial is not None:
+            remaining = [[[list(tl) for tl in key[0]],
+                          [list(tl) for tl in key[1]]] for key in z2]
+            return commands, remaining, best_partial
+
+        break
 
     # Convert back to list format for the caller (_shift_swaps_ mutates).
     remaining = [[[list(tl) for tl in key[0]],
                   [list(tl) for tl in key[1]]] for key in z2]
-    return commands, remaining
+    return commands, remaining, False
 
 
 def _shift_edges_(edges, ten_old, ten_new, dax):
