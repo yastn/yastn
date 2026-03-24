@@ -1210,17 +1210,17 @@ def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint
 
     if is_double_layer:
         # --- Unfused path for double-layer PEPS ---
+        path_opts = {"optimizer": "greedy"}
         translated_unroll = _translate_unroll(unroll, Nx, Ny)
         build_fn = _build_separate_unfused if separate_layers else _build_interleaved_unfused
 
         # norm contraction (no operators)
         tn_no, swap_no = build_fn(
             self, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, bl, br)
-        path_no, _ = get_contraction_path(*tn_no, unroll=translated_unroll,
-                                          optimizer='greedy')
+        path_no, _ = get_contraction_path(*tn_no, unroll=translated_unroll, **path_opts)
         val_no = contract_with_unroll_compute_constants(
             *tn_no, optimize=path_no, unroll=translated_unroll,
-            checkpoint_loop=checkpoint_loop, swap=swap_no).to_number()
+            checkpoint_loop=checkpoint_loop, swap=swap_no, **path_opts).to_number()
 
         # insert operators and charge swaps (in-place on DoublePepsTensor)
         axes_string_x = ['b3', 'k4', 'k1']
@@ -1249,11 +1249,10 @@ def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint
         # operator contraction
         tn_op, swap_op = build_fn(
             self, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, bl, br)
-        path_op, _ = get_contraction_path(*tn_op, unroll=translated_unroll,
-                                          optimizer='greedy')
+        path_op, _ = get_contraction_path(*tn_op, unroll=translated_unroll, **path_opts)
         val_op = contract_with_unroll_compute_constants(
             *tn_op, optimize=path_op, unroll=translated_unroll,
-            checkpoint_loop=checkpoint_loop, swap=swap_op).to_number()
+            checkpoint_loop=checkpoint_loop, swap=swap_op, **path_opts).to_number()
 
         for s in window:
             tens[s].del_operator_()

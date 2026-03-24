@@ -903,8 +903,12 @@ def contract_with_unroll_compute_constants(*args, **kwargs):
         :func:`torch.utils.checkpoint.checkpoint`.
     """
     checkpoint_loop = kwargs.pop("checkpoint_loop", False)
-    kwargs.pop("who", None)
+    who = kwargs.pop("who", None)
     kwargs.pop("verbosity", None)
+    path_search_kwargs = {k: kwargs[k] for k in ("optimizer", "memory_limit")
+                          if k in kwargs}
+    if who is not None:
+        path_search_kwargs["who"] = who
     unroll = kwargs.pop("unroll", None)
     swap = kwargs.pop("swap", None)
     unroll = _validate_and_resolve_unroll(*args, unroll=unroll)
@@ -1020,7 +1024,7 @@ def contract_with_unroll_compute_constants(*args, **kwargs):
             for t, ig in zip(comp_tensors, comp_igs):
                 comp_interleaved.extend([t, ig])
             comp_interleaved.append(comp_out_ig)
-            comp_path, _ = get_contraction_path(*comp_interleaved)
+            comp_path, _ = get_contraction_path(*comp_interleaved, **path_search_kwargs)
             c_ts, c_inds, c_conjs, c_order, c_ncon_swap = _convert_path_to_ncon_args(
                 *comp_interleaved, optimize=comp_path, swap=c_swap
             )
@@ -1035,7 +1039,7 @@ def contract_with_unroll_compute_constants(*args, **kwargs):
     reduced_interleaved.append(out_ig)
 
     # Find a contraction path for the reduced network (strip unrolled dims from shape model).
-    reduced_path, _ = get_contraction_path(*reduced_interleaved, unroll=unroll)
+    reduced_path, _ = get_contraction_path(*reduced_interleaved, unroll=unroll, **path_search_kwargs)
 
     return _contract_with_sliced_unroll(
         *reduced_interleaved, unroll=unroll, optimize=reduced_path,
