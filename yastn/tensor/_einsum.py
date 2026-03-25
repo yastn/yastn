@@ -746,8 +746,14 @@ def _resolve_bad_swaps(swaps, edges, nlegs, ten1, ten2, axes1, axes2):
         if touched:
             deferred_indices.update(touched)
 
-    def resolve_tensor_dfs(tp, C, ax):
+    def resolve_tensor_dfs(tp, C, ax, seen_tensors=None):
         r"""Main resolution path: normalize one tensor and recursively push leftovers outward."""
+        if seen_tensors is None:
+            seen_tensors = set()
+        if C in seen_tensors or C not in tp or ax not in tp[C]:
+            return
+
+        seen_tensors.add(C)
         num_cross = len(tp[C][ax])
         if num_cross < len(axes1):
             for k in range(len(axes1)):
@@ -783,7 +789,8 @@ def _resolve_bad_swaps(swaps, edges, nlegs, ten1, ten2, axes1, axes2):
         if C not in tp:
             return
 
-        # Otherwise, propagate the bad swaps to the neighboring tensor (Depth-first-search)
+        # Once a tensor is reached from a given DFS root, do not revisit it
+        # again within that traversal, even through another branch.
         for bad_ax in tuple(tp[C]): # static snapshot since tp is mutated by the loop
             if C not in tp:
                 return
@@ -797,7 +804,7 @@ def _resolve_bad_swaps(swaps, edges, nlegs, ten1, ten2, axes1, axes2):
                 if len(eps) < 2: # can't propagate further due to the open edge
                     continue
                 other_side = eps[0] if (C, bad_ax) != eps[0] else eps[1]
-                resolve_tensor_dfs(tp, *other_side)
+                resolve_tensor_dfs(tp, *other_side, seen_tensors)
 
     def run_primary_resolver():
         r"""Drive the DFS-based resolver from each third-party tensor snapshot."""

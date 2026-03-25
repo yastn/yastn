@@ -249,6 +249,31 @@ def test_ncon_trace_fallback_value(config_kwargs, capsys):
     ref *= yastn.tensordot(B, C, axes=(0, 0)).item()
     assert abs(x.item() - ref) < tol
 
+def test_ncon_trace_fallback_multiple_pairs_value(config_kwargs, capsys):
+    r"""Fallback should handle multiple deferred trace pairs and still produce the right value."""
+    config_Z2 = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
+    l = yastn.Leg(config_Z2, s=1, t=(0, 1), D=(1, 1))
+    lc = l.conj()
+
+    A = yastn.rand(config=config_Z2, n=0, legs=[l, lc, l, lc])
+    B = yastn.rand(config=config_Z2, n=1, legs=[l])
+    C = yastn.rand(config=config_Z2, n=1, legs=[lc])
+    D = yastn.rand(config=config_Z2, n=1, legs=[l])
+    E = yastn.rand(config=config_Z2, n=1, legs=[lc])
+
+    x = yastn.ncon([A, B, C, D, E],
+                   [(1, 1, 2, 2), (3,), (3,), (4,), (4,)],
+                   swap=[(1, 3), (2, 4)])
+    captured = capsys.readouterr()
+    assert "fallback resolver activated" in captured.out
+
+    ref = A.swap_gate(axes=(0, 1)).swap_gate(axes=(2, 3))
+    ref = yastn.trace(ref, axes=(0, 1))
+    ref = yastn.trace(ref, axes=(0, 1)).item()
+    ref *= yastn.tensordot(B, C, axes=(0, 0)).item()
+    ref *= yastn.tensordot(D, E, axes=(0, 0)).item()
+    assert abs(x.item() - ref) < tol
+
 
 def test_ncon_einsum_swaps(config_kwargs):
     """ tests of ncon executing a series of tensor contractions. """
