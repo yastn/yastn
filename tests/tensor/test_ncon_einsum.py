@@ -231,6 +231,25 @@ def test_ncon_einsum_exceptions(config_kwargs):
         yastn.einsum('klm, *klm->', a, a, order='kl')
 
 
+def test_ncon_trace_fallback_value(config_kwargs, capsys):
+    r"""Trace fallback should still give the same value as an explicit swapped trace."""
+    config_Z2 = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
+    l = yastn.Leg(config_Z2, s=1, t=(0, 1), D=(1, 1))
+    lc = l.conj()
+
+    A = yastn.rand(config=config_Z2, n=0, legs=[l, lc])
+    B = yastn.rand(config=config_Z2, n=1, legs=[l])
+    C = yastn.rand(config=config_Z2, n=1, legs=[lc])
+
+    x = yastn.ncon([A, B, C], [(1, 1), (2,), (2,)], swap=[(1, 2)])
+    captured = capsys.readouterr()
+    assert "fallback resolver activated" in captured.out
+
+    ref = yastn.trace(A.swap_gate(axes=(0, 1)), axes=(0, 1)).item()
+    ref *= yastn.tensordot(B, C, axes=(0, 0)).item()
+    assert abs(x.item() - ref) < tol
+
+
 def test_ncon_einsum_swaps(config_kwargs):
     """ tests of ncon executing a series of tensor contractions. """
     config_Z2 = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
