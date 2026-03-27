@@ -726,14 +726,24 @@ def _translate_unroll(unroll, Nx, Ny):
 
     Interior PEPS bonds (``('v', i, j)`` with ``0 <= j < Ny`` and
     ``('h', i, j)`` with ``0 <= i < Nx``) are split into ket/bra
-    sub-labels.  Boundary (chi) bonds are kept as-is.
+    sub-labels. Explicit layer-qualified labels ``(..., 'k')`` and
+    ``(..., 'b')`` are kept as-is. Boundary (chi) bonds are kept as-is.
     """
+    def _is_interior_peps_bond(label):
+        return (label[0] == 'v' and 0 <= label[2] < Ny) or \
+               (label[0] == 'h' and 0 <= label[1] < Nx)
+
     if unroll is None:
         return None
     translated = {}
     for label, val in unroll.items():
-        if (label[0] == 'v' and 0 <= label[2] < Ny) or \
-           (label[0] == 'h' and 0 <= label[1] < Nx):
+        if len(label) == 4:
+            if label[-1] not in ('k', 'b'):
+                raise YastnError(f"Invalid layer-qualified unroll label {label}; expected trailing 'k' or 'b'.")
+            if not _is_interior_peps_bond(label[:-1]):
+                raise YastnError(f"Layer-qualified unroll label {label} is only valid for PEPS ket/bra bonds.")
+            translated[label] = val
+        elif _is_interior_peps_bond(label):
             translated[label + ('k',)] = val
             translated[label + ('b',)] = val
         else:
@@ -1068,7 +1078,7 @@ def _build_separate_unfused(env, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, b
     return tuple(args), swap_pairs
 
 
-def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint_loop=False, separate_layers=False) -> float:
+def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint_loop=False, separate_layers=False, optimizer="default") -> float:
     r"""
     Memory-efficient version of :meth:`measure_nsite_exact` using opt_einsum
     contraction path optimization, optional block-sparse index unrolling,
@@ -1210,7 +1220,7 @@ def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint
 
     if is_double_layer:
         # --- Unfused path for double-layer PEPS ---
-        path_opts = {"optimizer": "default"}
+        path_opts = {"optimizer": optimizer}
         translated_unroll = _translate_unroll(unroll, Nx, Ny)
         build_fn = _build_separate_unfused if separate_layers else _build_interleaved_unfused
 
