@@ -1210,7 +1210,7 @@ def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint
 
     if is_double_layer:
         # --- Unfused path for double-layer PEPS ---
-        path_opts = {"optimizer": "greedy"}
+        path_opts = {"optimizer": "default"}
         translated_unroll = _translate_unroll(unroll, Nx, Ny)
         build_fn = _build_separate_unfused if separate_layers else _build_interleaved_unfused
 
