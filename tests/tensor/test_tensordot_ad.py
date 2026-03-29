@@ -59,6 +59,63 @@ def _test_tensordot_grad(a, b, axes, dtype):
     assert np.allclose(ref_b.grad().to_numpy(), b.grad().to_numpy(), rtol=tt * 100, atol=tt)
 
 
+def _test_tensordot_grad_mixed(a, b, axes):
+    ref_a = a.copy()
+    ref_b = b.copy()
+    ref_a.requires_grad_(True)
+    ref_b.requires_grad_(True)
+    ref_ab = yastn.tensordot(ref_a.to(dtype='complex128'), ref_b, axes=axes)
+    ref_cost_f = ref_ab.norm()
+    ref_cost_f.backward()
+
+    a.requires_grad_(True)
+    b.requires_grad_(True)
+    if not (a.grad()._data is None): a.grad()._data.zero_()
+    if not (b.grad()._data is None): b.grad()._data.zero_()
+    ab = yastn.tensordot(a, b, axes=axes)
+    cost_f = ab.norm()
+    cost_f.backward()
+
+    assert abs(ref_cost_f.item() - cost_f.item()) < tol['complex128']
+    assert a.grad()._data.dtype == a.get_dtype()
+    assert b.grad()._data.dtype == b.get_dtype()
+    tt = tol_ad['complex128']
+    assert np.allclose(ref_a.grad().to_numpy(), a.grad().to_numpy(), rtol=tt * 100, atol=tt)
+    assert np.allclose(ref_b.grad().to_numpy(), b.grad().to_numpy(), rtol=tt * 100, atol=tt)
+
+
+def _test_tensordot_grad_mixed_dtype(a, b, axes):
+    refcfg_args = a.config._asdict()
+    refcfg_args["backend"] = "torch"
+    refcfg = yastn.make_config(**refcfg_args)
+
+    ref_a = a.copy().to(dtype='complex128')
+    ref_a.config = refcfg
+    ref_b = b.copy()
+    ref_b.config = refcfg
+
+    ref_a.requires_grad_(True)
+    ref_b.requires_grad_(True)
+    ref_ab = yastn.tensordot(ref_a, ref_b, axes=axes)
+    ref_cost_f = ref_ab.norm()
+    ref_cost_f.backward()
+
+    a.requires_grad_(True)
+    b.requires_grad_(True)
+    if not (a.grad()._data is None): a.grad()._data.zero_()
+    if not (b.grad()._data is None): b.grad()._data.zero_()
+    ab = yastn.tensordot(a, b, axes=axes)
+    cost_f = ab.norm()
+    cost_f.backward()
+
+    tt = tol_ad['complex128']
+    assert (ref_cost_f.item() - cost_f.item()) < tol['complex128']
+    assert a.grad().yastn_dtype == 'float64'
+    assert b.grad().yastn_dtype == 'complex128'
+    assert np.allclose(ref_a.grad().to_numpy().real, a.grad().to_numpy(), rtol=tt * 100, atol=tt)
+    assert np.allclose(ref_b.grad().to_numpy(), b.grad().to_numpy(), rtol=tt * 100, atol=tt)
+
+
 @torch_test
 @pytest.mark.parametrize("dtype", ["float64", "complex128", "float32", "complex64"])
 def test_tensordot_fuse_hard_backward_0(config_kwargs, dtype):
@@ -214,6 +271,25 @@ def test_tensordot_fuse_hard_backward_2(config_kwargs):
 
     _test_tensordot_grad(a, b.conj(), axes=((2, 1), (0, 1)), dtype=dtype)
 
+
+@torch_test
+def test_tensordot_fuse_hard_backward_mixed_dtype(config_kwargs):
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+
+    config_U1.backend.random_seed(seed=0)
+    t1 = (-1, 0, 1)
+    D1 = (1, 1, 1)
+    t2 = (-1, 0, 1)
+    D2 = (2, 2, 2)
+
+    a = yastn.rand(config=config_U1, s=(-1, 1, 1),
+                t=(t1, t1, t2), D=(D1, D2, D1), dtype='float64')
+    b = yastn.rand(config=config_U1, s=(1, 1, 1),
+                t=(t1, t1, t2), D=(D1, D2, D1), dtype='complex128')
+
+    _test_tensordot_grad_mixed_dtype(a, b.conj(), axes=((2, 1), (0, 1)))
+
+
 @torch_test
 def test_tensordot_fuse_hard_backward_22(config_kwargs):
     import torch
@@ -275,6 +351,22 @@ def test_tensordot_fuse_hard_backward_3(config_kwargs,dtype):
                 t=(t1, t1, t2), D=(D1, D2, D2), dtype=dtype)
 
     _test_tensordot_grad(a, b.conj(), axes=((2, 1), (1, 0)), dtype=dtype)
+
+
+@torch_test
+def test_tensordot_fuse_hard_backward_mixed_dtype(config_kwargs):
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+
+    config_U1.backend.random_seed(seed=0)
+    t1, t2 = (-1, 0, 1), (-1, 0, 1),
+    D1, D2 = (2, 2, 2), (2, 2, 2),
+
+    a = yastn.rand(config=config_U1, s=(-1, 1, 1),
+                t=(t1, t1, t2), D=(D1, D2, D2), dtype='float64')
+    b = yastn.rand(config=config_U1, s=(1, 1, 1),
+                t=(t1, t1, t2), D=(D1, D2, D2), dtype='complex128')
+
+    _test_tensordot_grad_mixed(a, b.conj(), axes=((2, 1), (1, 0)))
 
 @torch_test
 @pytest.mark.parametrize("extent", [1,2])

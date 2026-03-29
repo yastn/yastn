@@ -23,6 +23,14 @@ from .linalg.torch_svds_scipy import SVDS_SCIPY
 # from .linalg.torch_eig_arnoldi import SYMARNOLDI, SYMARNOLDI_2C
 
 
+def _project_grad_dtype(grad, target_dtype):
+    if grad.dtype == target_dtype:
+        return grad
+    if grad.is_complex() and not torch.empty((), dtype=target_dtype).is_complex():
+        grad = grad.real
+    return grad.to(dtype=target_dtype)
+
+
 class kernel_svd(torch.autograd.Function):
     @staticmethod
     def forward(data, meta, sizes, fullrank_uv=False, ad_decomp_reg=1.0e-12, diagnostics=None):
@@ -119,6 +127,7 @@ class kernel_dot(torch.autograd.Function):
         # adjoint of block-sparse matrix-matrix multiplication A.B = C
         # A_b = C_b.B^T ; B_b = A^T . C_b
         Adata, Bdata= ctx.saved_tensors
+        Adata_dtype, Bdata_dtype = Adata.dtype, Bdata.dtype
         meta_dot= ctx.meta_dot
         dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
         Adata_b = torch.zeros_like(Adata, dtype=dtype)
@@ -135,6 +144,8 @@ class kernel_dot(torch.autograd.Function):
             A = Adata[slice(*sla)].view(Da)
             Ab += Cb @ B.adjoint()  #  += is for fuse_contracted
             Bb += A.adjoint() @ Cb
+        Adata_b = _project_grad_dtype(Adata_b, Adata_dtype)
+        Bdata_b = _project_grad_dtype(Bdata_b, Bdata_dtype)
         return Adata_b, Bdata_b, None, None
 
 
@@ -171,6 +182,9 @@ class kernel_transpose_dot_sum(torch.autograd.Function):
         # adjoint of block-sparse matrix-matrix multiplication A . B = C
         # A_b = C_b . B^T ; B_b = A^T . C_b
         Adata, Bdata = ctx.saved_tensors
+        Adata_dtype = Adata.dtype
+        Bdata_dtype = Bdata.dtype
+        promoted_dtype = torch.promote_types(torch.promote_types(Adata_dtype, Bdata_dtype), Cdata_b.dtype)
         meta_dot = ctx.meta_dot
         Areshape = ctx.Areshape
         Breshape = ctx.Breshape
@@ -178,6 +192,13 @@ class kernel_transpose_dot_sum(torch.autograd.Function):
         Border = ctx.Border
         inv_Aorder = tuple(np.argsort(Aorder))
         inv_Border = tuple(np.argsort(Border))
+
+        if promoted_dtype != Adata_dtype:
+            Adata = Adata.to(dtype=promoted_dtype)
+        if promoted_dtype != Bdata_dtype:
+            Bdata = Bdata.to(dtype=promoted_dtype)
+        if promoted_dtype != Cdata_b.dtype:
+            Cdata_b = Cdata_b.to(dtype=promoted_dtype)
 
         At = tuple(Adata[slice(*sl)].view(Di).permute(Aorder).reshape(Dl, Dr) for sl, Di, Dl, Dr in Areshape)
         Bt = tuple(Bdata[slice(*sl)].view(Di).permute(Border).reshape(Dl, Dr) for sl, Di, Dl, Dr in Breshape)
@@ -220,8 +241,10 @@ class kernel_transpose_dot_sum(torch.autograd.Function):
                 return torch.zeros(size, dtype=dtype, device=device).scatter(0, all_idx, all_val)
             return torch.zeros(size, dtype=dtype, device=device)
 
-        Adata_b = build_grad(At_b, Areshape, Aorder, inv_Aorder, Adata.numel(), Adata.dtype, Adata.device)
-        Bdata_b = build_grad(Bt_b, Breshape, Border, inv_Border, Bdata.numel(), Bdata.dtype, Bdata.device)
+        Adata_b = build_grad(At_b, Areshape, Aorder, inv_Aorder, Adata.numel(), promoted_dtype, Adata.device)
+        Bdata_b = build_grad(Bt_b, Breshape, Border, inv_Border, Bdata.numel(), promoted_dtype, Bdata.device)
+        Adata_b = _project_grad_dtype(Adata_b, Adata_dtype)
+        Bdata_b = _project_grad_dtype(Bdata_b, Bdata_dtype)
 
         return Adata_b, Bdata_b, None, None, None, None, None, None
 
