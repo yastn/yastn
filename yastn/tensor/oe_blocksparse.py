@@ -14,6 +14,7 @@
 # ==============================================================================
 import logging
 from functools import lru_cache
+from contextlib import nullcontext
 from itertools import product
 import gc, subprocess
 import time
@@ -144,7 +145,7 @@ def slice_leg_uniform(leg: Leg, size: int):
     return sliced_legs
 
 
-def _build_mask_tensor(sliced_leg, full_leg, config):
+def _build_mask_tensor(sliced_leg, full_leg, config, device=None):
     r"""
     Build a YASTN diagonal mask tensor for ``apply_mask``.
 
@@ -159,6 +160,9 @@ def _build_mask_tensor(sliced_leg, full_leg, config):
     full_leg : yastn.Leg
         The full leg of the target tensor (provides total block dimensions).
     config : yastn config
+    device : str, optional
+        Target device for the mask tensor.  When provided and different from
+        ``config.default_device``, the finished mask is moved with ``.to()``.
 
     Returns
     -------
@@ -175,6 +179,8 @@ def _build_mask_tensor(sliced_leg, full_leg, config):
         data = np.zeros(full_D)
         data[sl] = 1.0
         mask_tensor.set_block(ts=ti, Ds=full_D, val=data)
+    if device is not None and device != mask_tensor.device:
+        mask_tensor = mask_tensor.to(device)
     return mask_tensor
 
 
@@ -241,7 +247,8 @@ def _iteration_checkpointed(tensors, sl_map, tensor_unroll_info, index_groups,
                 if (k, u) not in tensor_unroll_info:
                     continue
                 user_ax, full_leg = tensor_unroll_info[(k, u)]
-                mask_t = _build_mask_tensor(sl_map[u], full_leg, masked[k].config)
+                mask_t = _build_mask_tensor(sl_map[u], full_leg, masked[k].config,
+                                            device=masked[k].device)
                 masked[k] = mask_t.apply_mask(masked[k], axes=user_ax)
 
         interleaved = []
@@ -265,7 +272,7 @@ def _iteration_checkpointed(tensors, sl_map, tensor_unroll_info, index_groups,
     return Tensor.from_dict(combine_data_and_meta(result_data, _out_meta[0]))
 
 
-def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False, swap=None, **kwargs):
+def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False, swap=None, devices=None, **kwargs):
     r"""
     Contract a tensor network with block-sparse index unrolling.
 
@@ -296,6 +303,13 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
         ``ncon`` intermediates are recomputed during backward instead of
         stored, trading extra forward computation for lower peak memory.
         Default: ``False``.
+    devices : list[str], optional
+        List of device strings (e.g. ``['cuda:0', 'cuda:1']``) for
+        dispatching loop iterations round-robin across multiple devices.
+        Input tensors are pre-moved to each device once (autograd-preserving);
+        partials are accumulated per-device and gathered back to the original
+        device after the loop.  ``None`` (default) runs everything on the
+        original device.
     **kwargs :
         Forwarded to ``ncon``.
 
@@ -314,11 +328,14 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
 
     # For each (tensor_index, unroll_label) pair: record the user-facing axis
     # and the full Leg object at that position.
+    # Build per-ig index lookup to avoid repeated list(ig).index(u) calls.
     tensor_unroll_info = {}  # (k, u) -> (user_axis, full_leg)
     for k, (T, ig) in enumerate(zip(tensors, index_groups)):
+        ig_list = list(ig)
+        ig_index = {label: idx for idx, label in enumerate(ig_list)}
         for u in unroll_labels:
-            if u in ig:
-                user_ax = list(ig).index(u)
+            if u in ig_index:
+                user_ax = ig_index[u]
                 full_leg = T.get_legs(user_ax)
                 tensor_unroll_info[(k, u)] = (user_ax, full_leg)
 
@@ -339,53 +356,189 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
     # Contracted-only unroll labels are not in this list.
     output_unroll_labels = [u for _, (u, _) in sorted(output_unroll_info.items())]
 
+    # --- Multi-device setup ---
+    # Normalize devices; None means single-device (original behavior).
+    original_device = tensors[0].device
+    if devices is not None:
+        if not isinstance(devices, (list, tuple)):
+            devices = [devices]
+        devices = list(dict.fromkeys(str(d) for d in devices))  # deduplicate, preserve order
+        if len(devices) == 0 or (len(devices) == 1 and devices[0] == original_device):
+            devices = None
+
+    multi_device = devices is not None
+
+    # Callables for async stream dispatch; overridden below when available.
+    _stream_context = lambda dev: nullcontext()
+    _sync_streams = lambda: None
+
+    if multi_device:
+        # Pre-move input tensors to each target device once.
+        # .to(device) is autograd-tracked: backward sends gradients back.
+        tensors_by_device = {}
+        for dev in devices:
+            if dev == original_device:
+                tensors_by_device[dev] = tensors
+            else:
+                tensors_by_device[dev] = tuple(t.to(dev) for t in tensors)
+
+        # Create per-device CUDA streams so iterations on different GPUs
+        # overlap.  Each device gets one non-default stream; iterations
+        # assigned to the same device are serialized within that stream.
+        try:
+            import torch as _torch
+            if _torch.cuda.is_available() and len(devices) > 1:
+                _streams = {dev: _torch.cuda.Stream(device=dev)
+                            for dev in devices}
+                # Ensure pre-moved tensors are visible to non-default streams:
+                # record an event on each device's default stream (where copies
+                # ran) and have the per-device stream wait on it.
+                for dev in devices:
+                    with _torch.cuda.device(dev):
+                        ev = _torch.cuda.current_stream().record_event()
+                        _streams[dev].wait_event(ev)
+                _stream_context = lambda dev: _torch.cuda.stream(_streams[dev])
+                _sync_streams = lambda: [_streams[d].synchronize()
+                                         for d in devices]
+        except ImportError:
+            pass
+
+    # --- Pre-compute mask tensors for all (tensor, label, sliced_leg) triples ---
+    # Avoids rebuilding identical masks on every loop iteration.
+    # Key: (tensor_index, label, id(sliced_leg)) -> mask Tensor
+    # For multi-device: also cache per-device copies.
+    mask_cache = {}
+    for (k, u), (user_ax, full_leg) in tensor_unroll_info.items():
+        cfg = tensors[k].config
+        dev0 = tensors[k].device
+        for sl in unroll[u]:
+            mask_t = _build_mask_tensor(sl, full_leg, cfg, device=dev0)
+            mask_cache[(k, u, id(sl), dev0)] = mask_t
+            if multi_device:
+                for dev in devices:
+                    if dev != dev0:
+                        mask_cache[(k, u, id(sl), dev)] = mask_t.to(dev)
+
+    # --- Pre-compute ncon structural args (index-only, independent of tensor data) ---
+    # Build a template interleaved list to derive ncon indices, conjs, order, swap.
+    _template_interleaved = []
+    for T, ig in zip(tensors, index_groups):
+        _template_interleaved.append(T)
+        _template_interleaved.append(ig)
+    _template_interleaved.append(out_ig)
+    _, ncon_igs, ncon_conjs, ncon_order, ncon_swap = _convert_path_to_ncon_args(
+        *_template_interleaved, optimize=optimize, swap=swap
+    )
+
+    # --- Pre-compute output_pos_key lookup ---
+    # Maps id(sliced_leg) -> index in unroll[u] for each output-unrolled label.
+    sl_to_idx = {u: {id(sl): i for i, sl in enumerate(unroll[u])}
+                 for u in output_unroll_labels}
+
     # Cartesian product over SlicedLeg choices, one per unroll label.
     # Partials are grouped by their position along output-unrolled axes.
     # Contracted-only unroll combos accumulate into the same key via +.
+    #
+    # With multi-device: accumulate per-device first (no cross-device sync
+    # in the loop), then gather to original_device after the loop.
+    combos = list(product(*(unroll[u] for u in unroll_labels)))
+    if multi_device:
+        device_partials = {dev: {} for dev in devices}
     output_pos_partials = {}
-    for n,combo in enumerate(product(*(unroll[u] for u in unroll_labels))):
-        _cfg= tensors[0].config
-        if _cfg.profile: _cfg.backend.nvtx.range_push(f"_contract_with_sliced_unroll {n}")
-        sl_map = {u: sl for u, sl in zip(unroll_labels, combo)}
 
-        if checkpoint_loop:
-            partial = _iteration_checkpointed(
-                tensors, sl_map, tensor_unroll_info, index_groups, out_ig,
-                optimize, unroll_labels, swap=swap,
-            )
+    for n, combo in enumerate(combos):
+        if multi_device:
+            dev = devices[n % len(devices)]
+            iter_tensors = tensors_by_device[dev]
         else:
-            # Apply masks: for each tensor, apply masks for all its unroll indices
+            dev = None
+            iter_tensors = tensors
+
+        with _stream_context(dev):
+            _cfg= iter_tensors[0].config
+            if _cfg.profile:
+                tag = f"_contract_with_sliced_unroll {n}"
+                if multi_device:
+                    tag += f" [device={dev}]"
+                _cfg.backend.nvtx.range_push(tag)
+            sl_map = {u: sl for u, sl in zip(unroll_labels, combo)}
+
+            if checkpoint_loop:
+                partial = _iteration_checkpointed(
+                    iter_tensors, sl_map, tensor_unroll_info, index_groups, out_ig,
+                    optimize, unroll_labels, swap=swap,
+                )
+            else:
+                iter_dev = iter_tensors[0].device if multi_device else original_device
+                masked_tensors = list(iter_tensors)
+                skip = False
+                for k in range(len(iter_tensors)):
+                    was_masked = False
+                    for u in unroll_labels:
+                        if (k, u) not in tensor_unroll_info:
+                            continue
+                        user_ax = tensor_unroll_info[(k, u)][0]
+                        mask_t = mask_cache[(k, u, id(sl_map[u]), iter_dev)]
+                        masked_tensors[k] = mask_t.apply_mask(
+                            masked_tensors[k], axes=user_ax)
+                        was_masked = True
+                    # Skip this combo early if a masked tensor has no blocks.
+                    if was_masked and not masked_tensors[k].struct.t:
+                        skip = True
+                        break
+                if skip:
+                    if _cfg.profile: _cfg.backend.nvtx.range_pop()
+                    continue
+
+                # Use pre-computed ncon structural args; only tensors change.
+                partial = ncon(masked_tensors, ncon_igs, conjs=ncon_conjs,
+                               order=ncon_order, swap=ncon_swap)
+
+            # Key by the index of each output-unroll SlicedLeg in its unroll list.
+            # Contracted-only combos all share the same key and are summed with +.
+            output_pos_key = tuple(sl_to_idx[u][id(sl_map[u])] for u in output_unroll_labels)
+
+            if multi_device:
+                # Accumulate on-device to avoid cross-device synchronization.
+                prev = device_partials[dev].get(output_pos_key)
+                device_partials[dev][output_pos_key] = partial if prev is None else prev + partial
+            else:
+                prev = output_pos_partials.get(output_pos_key)
+                output_pos_partials[output_pos_key] = partial if prev is None else prev + partial
+
+            if _cfg.profile: _cfg.backend.nvtx.range_pop()
+
+    # Synchronize all per-device streams before cross-device gather.
+    _sync_streams()
+
+    # Gather per-device partials back to the original device.
+    if multi_device:
+        for dev in devices:
+            for key, partial in device_partials[dev].items():
+                if dev != original_device:
+                    partial = partial.to(original_device)
+                prev = output_pos_partials.get(key)
+                output_pos_partials[key] = partial if prev is None else prev + partial
+
+    if not output_unroll_info:
+        result = output_pos_partials.get((), None)
+        if result is None and combos:
+            # All combos were skipped (empty after masking).  Run one
+            # contraction on the (empty) masked tensors to produce a
+            # properly-shaped empty output tensor.
+            sl_map = {u: sl for u, sl in zip(unroll_labels, combos[0])}
             masked_tensors = list(tensors)
             for k in range(len(tensors)):
                 for u in unroll_labels:
                     if (k, u) not in tensor_unroll_info:
                         continue
-                    user_ax, full_leg = tensor_unroll_info[(k, u)]
-                    mask_t = _build_mask_tensor(sl_map[u], full_leg, masked_tensors[k].config)
-                    masked_tensors[k] = mask_t.apply_mask(masked_tensors[k], axes=user_ax)
-
-            # Build interleaved args for _convert_path_to_ncon_args
-            interleaved = []
-            for T, ig in zip(masked_tensors, index_groups):
-                interleaved.append(T)
-                interleaved.append(ig)
-            interleaved.append(out_ig)
-
-            ts, inds, conjs, order, ncon_swap = _convert_path_to_ncon_args(
-                *interleaved, optimize=optimize, swap=swap
-            )
-            partial = ncon(ts, inds, conjs=conjs, order=order, swap=ncon_swap)
-
-        # Key by the index of each output-unroll SlicedLeg in its unroll list.
-        # Contracted-only combos all share the same key and are summed with +.
-        output_pos_key = tuple(list(unroll[u]).index(sl_map[u]) for u in output_unroll_labels)
-        prev = output_pos_partials.get(output_pos_key)
-        output_pos_partials[output_pos_key] = partial if prev is None else prev + partial
-
-        if _cfg.profile: _cfg.backend.nvtx.range_pop()
-
-    if not output_unroll_info:
-        return output_pos_partials.get((), None)
+                    user_ax = tensor_unroll_info[(k, u)][0]
+                    mask_t = mask_cache[(k, u, id(sl_map[u]), original_device)]
+                    masked_tensors[k] = mask_t.apply_mask(
+                        masked_tensors[k], axes=user_ax)
+            result = ncon(masked_tensors, ncon_igs, conjs=ncon_conjs,
+                          order=ncon_order, swap=ncon_swap)
+        return result
 
     # Assemble partial results at different output positions using block().
     # The output-unrolled axes are the blocked axes; all others are common_legs.

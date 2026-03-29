@@ -1078,7 +1078,7 @@ def _build_separate_unfused(env, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, b
     return tuple(args), swap_pairs
 
 
-def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint_loop=False, separate_layers=False, optimizer="default") -> float:
+def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint_loop=False, separate_layers=False, optimizer="default", devices=None) -> float:
     r"""
     Memory-efficient version of :meth:`measure_nsite_exact` using opt_einsum
     contraction path optimization, optional block-sparse index unrolling,
@@ -1230,7 +1230,8 @@ def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint
         path_no, _ = get_contraction_path(*tn_no, unroll=translated_unroll, **path_opts)
         val_no = contract_with_unroll_compute_constants(
             *tn_no, optimize=path_no, unroll=translated_unroll,
-            checkpoint_loop=checkpoint_loop, swap=swap_no, **path_opts).to_number()
+            checkpoint_loop=checkpoint_loop, swap=swap_no, devices=devices,
+            **path_opts).to_number()
 
         # insert operators and charge swaps (in-place on DoublePepsTensor)
         axes_string_x = ['b3', 'k4', 'k1']
@@ -1262,7 +1263,8 @@ def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint
         path_op, _ = get_contraction_path(*tn_op, unroll=translated_unroll, **path_opts)
         val_op = contract_with_unroll_compute_constants(
             *tn_op, optimize=path_op, unroll=translated_unroll,
-            checkpoint_loop=checkpoint_loop, swap=swap_op, **path_opts).to_number()
+            checkpoint_loop=checkpoint_loop, swap=swap_op, devices=devices,
+            **path_opts).to_number()
 
         for s in window:
             tens[s].del_operator_()
@@ -1305,7 +1307,7 @@ def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint
         path_no, _ = get_contraction_path(*tn_no, unroll=unroll)
         val_no = contract_with_unroll_compute_constants(
             *tn_no, optimize=path_no, unroll=unroll,
-            checkpoint_loop=checkpoint_loop).to_number()
+            checkpoint_loop=checkpoint_loop, devices=devices).to_number()
 
         for y in range(miny, maxy + 1):
             for x in range(minx, maxx + 1):
@@ -1318,6 +1320,6 @@ def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint
         path_op, _ = get_contraction_path(*tn_op, unroll=unroll)
         val_op = contract_with_unroll_compute_constants(
             *tn_op, optimize=path_op, unroll=unroll,
-            checkpoint_loop=checkpoint_loop).to_number()
+            checkpoint_loop=checkpoint_loop, devices=devices).to_number()
 
     return sign * val_op / val_no
