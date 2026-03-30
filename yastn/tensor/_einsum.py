@@ -16,11 +16,11 @@
 from __future__ import annotations
 from functools import lru_cache
 
-from ._auxiliary import _clear_axes, _flatten
+from ._auxiliary import _clear_axes, _flatten, _unpack_axes
 from ._contractions import tensordot, trace, swap_gate
 from ._tests import YastnError
 
-__all__ = ['ncon', 'einsum']
+__all__ = ['ncon', 'einsum', 'ncon_prefilter']
 
 
 def einsum(subscripts, *operands, order=None, swap=None) -> 'Tensor':
@@ -424,6 +424,166 @@ def _meta_ncon(inds, order, swap):
         commands.append(('transpose', ten_out, ten_out, axes))
     #
     return tuple(commands)
+
+
+def ncon_prefilter(ts_meta, inds, nsym):
+    r"""
+    Predict which blocks of each input tensor contribute to the ncon result.
+
+    Uses iterative pairwise edge-based filtering: for each pair of tensors
+    sharing contracted indices, find which blocks have matching charges on
+    those axes.  Intersect surviving block sets per tensor across all edges,
+    then repeat until convergence (trimming one tensor can cascade).
+
+    **Skip**: returns ``None`` when no blocks survive (contraction is zero).
+
+    **Trim**: returns a dict mapping each tensor id to a ``frozenset`` of
+    needed block indices (``None`` = all blocks needed).
+
+    Parameters
+    ----------
+    ts_meta : dict[int, tuple]
+        ``{tensor_pos: (struct_t, ndim_n, trans, mfs)}`` for each input tensor.
+        Keys must be the positional tensor indices ``0, 1, ..., len(inds) - 1``
+        matching the order of ``inds``.
+        ``struct_t`` is the tuple-of-tuples block charges in native order,
+        ``ndim_n`` is the number of native dimensions,
+        ``trans`` is the user-to-native axis permutation (``None`` = identity),
+        and ``mfs`` records meta-fused user-axis structure. For backward
+        compatibility, ``mfs`` may be omitted for unfused inputs.
+    inds : tuple[tuple[int, ...], ...]
+        ncon index notation.  Positive labels = contracted (matching pairs),
+        non-positive labels = output legs.
+    nsym : int
+        Number of symmetry charges (``config.sym.NSYM``).
+
+    Returns
+    -------
+    None
+        If the contraction produces an empty (zero) tensor.
+    dict[int, frozenset | None]
+        Mapping ``{tensor_id: needed_block_indices}``.
+        ``None`` means all blocks are needed (no trimming).
+    """
+    if nsym == 0:
+        return {tid: None for tid in ts_meta}
+
+    if len(ts_meta) != len(inds):
+        raise YastnError("ts_meta and inds must describe the same number of tensors.")
+    expected_tids = tuple(range(len(inds)))
+    if set(ts_meta.keys()) != set(expected_tids):
+        raise YastnError("ts_meta keys must be positional tensor indices 0..len(inds)-1.")
+    tids = expected_tids
+
+    # --- Extract pairwise contracted edges and traces from index notation ---
+    # Group contracted axes by tensor pair for stronger filtering.
+    pair_axes = {}   # (tid_a, tid_b) -> [(uax_a, uax_b), ...]
+    trace_axes = {}  # tid -> [(uax1, uax2), ...]
+
+    label_locs = {}  # positive_label -> (tensor_id, user_axis)
+    for i, tid in enumerate(tids):
+        for ax, label in enumerate(inds[i]):
+            if label > 0:
+                if label in label_locs:
+                    prev_tid, prev_ax = label_locs.pop(label)
+                    if prev_tid == tid:
+                        trace_axes.setdefault(tid, []).append((prev_ax, ax))
+                    else:
+                        key = (prev_tid, tid) if prev_tid < tid else (tid, prev_tid)
+                        axes = (prev_ax, ax) if prev_tid < tid else (ax, prev_ax)
+                        pair_axes.setdefault(key, []).append(axes)
+                else:
+                    label_locs[label] = (tid, ax)
+
+    if not pair_axes and not trace_axes:
+        return {tid: None for tid in ts_meta}
+
+    # --- Helpers ---
+    def native_axes(tid, uax):
+        meta = ts_meta[tid]
+        if len(meta) == 4:
+            _, ndim_n, trans, mfs = meta
+        else:
+            _, ndim_n, trans = meta
+            n_user = len(trans) if trans else ndim_n
+            mfs = tuple((1,) for _ in range(n_user))
+        native, = _unpack_axes(mfs, (uax,))
+        return tuple(trans[ax] for ax in native) if trans else native
+
+    def block_charge_key(struct_t, block_idx, native_axes):
+        t = struct_t[block_idx]
+        return tuple(
+            tuple(t[na * nsym: (na + 1) * nsym] for na in axes)
+            for axes in native_axes
+        )
+
+    # --- Surviving block indices per tensor ---
+    surviving = {tid: set(range(len(meta[0]))) for tid, meta in ts_meta.items()}
+
+    converged = False
+    while not converged:
+        converged = True
+
+        # Pairwise contracted edges (grouped by tensor pair)
+        for (tid_a, tid_b), ax_pairs in pair_axes.items():
+            st_a = ts_meta[tid_a][0]
+            st_b = ts_meta[tid_b][0]
+            naxes_a = tuple(native_axes(tid_a, ua) for ua, _ in ax_pairs)
+            naxes_b = tuple(native_axes(tid_b, ub) for _, ub in ax_pairs)
+
+            grp_a = {}
+            for i in surviving[tid_a]:
+                grp_a.setdefault(block_charge_key(st_a, i, naxes_a), []).append(i)
+            grp_b = {}
+            for i in surviving[tid_b]:
+                grp_b.setdefault(block_charge_key(st_b, i, naxes_b), []).append(i)
+
+            common = set(grp_a) & set(grp_b)
+
+            new_a = set()
+            new_b = set()
+            for c in common:
+                new_a.update(grp_a[c])
+                new_b.update(grp_b[c])
+
+            if not new_a or not new_b:
+                return None
+
+            if len(new_a) < len(surviving[tid_a]):
+                surviving[tid_a] = new_a
+                converged = False
+            if len(new_b) < len(surviving[tid_b]):
+                surviving[tid_b] = new_b
+                converged = False
+
+        # Traces (same positive label appears twice on one tensor)
+        for tid, tax_pairs in trace_axes.items():
+            st = ts_meta[tid][0]
+            nat_pairs = [(native_axes(tid, u1), native_axes(tid, u2)) for u1, u2 in tax_pairs]
+            new_surv = set()
+            for i in surviving[tid]:
+                t = st[i]
+                if all(
+                    len(axes1) == len(axes2) and all(
+                        t[na1 * nsym: (na1 + 1) * nsym] == t[na2 * nsym: (na2 + 1) * nsym]
+                        for na1, na2 in zip(axes1, axes2)
+                    )
+                    for axes1, axes2 in nat_pairs
+                ):
+                    new_surv.add(i)
+
+            if not new_surv:
+                return None
+            if len(new_surv) < len(surviving[tid]):
+                surviving[tid] = new_surv
+                converged = False
+
+    # --- Build result ---
+    result = {}
+    for tid in ts_meta:
+        n_total = len(ts_meta[tid][0])
+        result[tid] = None if len(surviving[tid]) == n_total else frozenset(surviving[tid])
+    return result
 
 
 def _resolve_bad_swaps(swaps, edges, nlegs, ten1, ten2, axes1, axes2):
