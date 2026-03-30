@@ -424,10 +424,6 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
 
     multi_device = devices is not None
 
-    # Callables for async stream dispatch; overridden below when available.
-    _stream_context = lambda dev: nullcontext()
-    _sync_streams = lambda: None
-
     if multi_device:
         # Pre-move input tensors to each target device once.
         # .to(device) is autograd-tracked: backward sends gradients back.
@@ -438,26 +434,36 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
             else:
                 tensors_by_device[dev] = tuple(t.to(dev) for t in tensors)
 
-        # Create per-device CUDA streams so iterations on different GPUs
-        # overlap.  Each device gets one non-default stream; iterations
-        # assigned to the same device are serialized within that stream.
+        # Build worker list: one (device, stream_context) per device.
+        _workers = []  # list of (device, stream_context)
+        _all_streams = []
         try:
             import torch as _torch
-            if _torch.cuda.is_available() and len(devices) > 1:
-                _streams = {dev: _torch.cuda.Stream(device=dev)
-                            for dev in devices}
+            if _torch.cuda.is_available():
+                cuda_devices = [d for d in devices if d.startswith('cuda')]
+                for dev in cuda_devices:
+                    s = _torch.cuda.Stream(device=dev)
+                    _all_streams.append(s)
+                    _workers.append((dev, _torch.cuda.stream(s)))
                 # Ensure pre-moved tensors are visible to non-default streams:
-                # record an event on each device's default stream (where copies
-                # ran) and have the per-device stream wait on it.
-                for dev in devices:
+                # record an event on each device's default stream and have
+                # every worker stream on that device wait on it.
+                for dev in cuda_devices:
                     with _torch.cuda.device(dev):
                         ev = _torch.cuda.current_stream().record_event()
-                        _streams[dev].wait_event(ev)
-                _stream_context = lambda dev: _torch.cuda.stream(_streams[dev])
-                _sync_streams = lambda: [_streams[d].synchronize()
-                                         for d in devices]
+                    for s in _all_streams:
+                        if str(s.device) == dev:
+                            s.wait_event(ev)
+                # CPU devices get no CUDA stream.
+                for dev in devices:
+                    if not dev.startswith('cuda'):
+                        _workers.append((dev, nullcontext()))
         except ImportError:
             pass
+        if not _workers:
+            # Fallback when torch/CUDA is unavailable.
+            for dev in devices:
+                _workers.append((dev, nullcontext()))
 
     # --- Pre-compute mask tensors for all (tensor, label, sliced_leg) triples ---
     # Avoids rebuilding identical masks on every loop iteration.
@@ -545,71 +551,96 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
                     masked_tensors[k] = _filter_tensor_blocks(masked_tensors[k], trim_k)
         return ncon(masked_tensors, ncon_igs, conjs=ncon_conjs, order=ncon_order, swap=ncon_swap)
 
-    if multi_device:
-        device_partials = {dev: {} for dev in devices}
-    output_pos_partials = {}
+    def _process_combos(assigned, iter_tensors, dev, stream_ctx):
+        r"""Process a list of (n, sl_map, output_pos_key) entries on one device.
 
-    for n, (sl_map, output_pos_key) in enumerate(combo_entries):
-        if multi_device:
-            dev = devices[n % len(devices)]
-            iter_tensors = tensors_by_device[dev]
-        else:
-            dev = None
-            iter_tensors = tensors
+        Returns a dict {output_pos_key: accumulated_partial}.
+        Thread-safe: reads only from shared immutable state; writes only to
+        the returned local dict.
+        """
+        local_partials = {}
+        _cfg = iter_tensors[0].config
+        for n, sl_map, output_pos_key in assigned:
+            with stream_ctx:
+                if _cfg.profile:
+                    tag = f"_contract_with_sliced_unroll {n}"
+                    if dev is not None:
+                        tag += f" [device={dev}]"
+                    _cfg.backend.nvtx.range_push(tag)
 
-        with _stream_context(dev):
-            _cfg= iter_tensors[0].config
-            if _cfg.profile:
-                tag = f"_contract_with_sliced_unroll {n}"
-                if multi_device:
-                    tag += f" [device={dev}]"
-                _cfg.backend.nvtx.range_push(tag)
-
-            # --- Metadata-only masks for skip / prefilter decisions ---
-            masked_meta_tensors = _apply_masks_for_combo_meta(iter_tensors, sl_map)
-            skip = False
-            for k in range(len(iter_tensors)):
-                if any((k, u) in tensor_unroll_info for u in unroll_labels) and not masked_meta_tensors[k].struct.t:
-                    skip = True
-                    break
-            if skip:
-                if _cfg.profile: _cfg.backend.nvtx.range_pop()
-                continue
-
-            # --- Prefilter: skip cross-tensor zeros (shared by both branches) ---
-            pf_trim = None  # dict[k -> frozenset|None] or None if prefilter inactive
-            if _pf_inds is not None:
-                ts_meta = {k: (masked_meta_tensors[k].struct.t, masked_meta_tensors[k].ndim_n,
-                               masked_meta_tensors[k].trans, masked_meta_tensors[k].mfs)
-                           for k in range(len(masked_meta_tensors))}
-                pf_trim = ncon_prefilter(ts_meta, _pf_inds, nsym)
-                if pf_trim is None:
+                # --- Metadata-only masks for skip / prefilter decisions ---
+                masked_meta_tensors = _apply_masks_for_combo_meta(iter_tensors, sl_map)
+                skip = False
+                for k in range(len(iter_tensors)):
+                    if any((k, u) in tensor_unroll_info for u in unroll_labels) and not masked_meta_tensors[k].struct.t:
+                        skip = True
+                        break
+                if skip:
                     if _cfg.profile: _cfg.backend.nvtx.range_pop()
                     continue
 
-            partial = _contract_single_combo(iter_tensors, sl_map, pf_trim=pf_trim, use_checkpoint=checkpoint_loop)
+                # --- Prefilter: skip cross-tensor zeros ---
+                pf_trim = None
+                if _pf_inds is not None:
+                    ts_meta = {k: (masked_meta_tensors[k].struct.t, masked_meta_tensors[k].ndim_n,
+                                   masked_meta_tensors[k].trans, masked_meta_tensors[k].mfs)
+                               for k in range(len(masked_meta_tensors))}
+                    pf_trim = ncon_prefilter(ts_meta, _pf_inds, nsym)
+                    if pf_trim is None:
+                        if _cfg.profile: _cfg.backend.nvtx.range_pop()
+                        continue
 
-            if multi_device:
-                # Accumulate on-device to avoid cross-device synchronization.
-                prev = device_partials[dev].get(output_pos_key)
-                device_partials[dev][output_pos_key] = partial if prev is None else prev + partial
-            else:
-                prev = output_pos_partials.get(output_pos_key)
-                output_pos_partials[output_pos_key] = partial if prev is None else prev + partial
+                partial = _contract_single_combo(iter_tensors, sl_map, pf_trim=pf_trim, use_checkpoint=checkpoint_loop)
 
-            if _cfg.profile: _cfg.backend.nvtx.range_pop()
+                prev = local_partials.get(output_pos_key)
+                local_partials[output_pos_key] = partial if prev is None else prev + partial
 
-    # Synchronize all per-device streams before cross-device gather.
-    _sync_streams()
+                if _cfg.profile: _cfg.backend.nvtx.range_pop()
+        return local_partials
 
-    # Gather per-device partials back to the original device.
+    output_pos_partials = {}
+
     if multi_device:
-        for dev in devices:
-            for key, partial in device_partials[dev].items():
+        # --- Threaded multi-device dispatch ---
+        # Round-robin combo entries across all workers (not just devices).
+        # Each worker thread processes its assigned combos sequentially on
+        # its own CUDA stream.  CUDA kernels release the GIL, so while one
+        # worker's kernel runs, another worker can do Python metadata prep —
+        # pipelining Python overhead with GPU execution.
+        from concurrent.futures import ThreadPoolExecutor
+
+        n_workers = len(_workers)
+        worker_assigned = [[] for _ in range(n_workers)]
+        for n, (sl_map, output_pos_key) in enumerate(combo_entries):
+            worker_assigned[n % n_workers].append((n, sl_map, output_pos_key))
+
+        # Build per-worker args: (assigned_combos, tensors, device, stream_ctx).
+        worker_args = []
+        for w_idx, (dev, stream_ctx) in enumerate(_workers):
+            if not worker_assigned[w_idx]:
+                continue
+            worker_args.append((worker_assigned[w_idx], tensors_by_device[dev], dev, stream_ctx))
+
+        with ThreadPoolExecutor(max_workers=len(worker_args)) as pool:
+            futures = [pool.submit(_process_combos, *wa) for wa in worker_args]
+            worker_results = [f.result() for f in futures]
+
+        # Synchronize all streams before cross-device gather.
+        for s in _all_streams:
+            s.synchronize()
+
+        # Gather worker partials back to the original device.
+        for wa, local_partials in zip(worker_args, worker_results):
+            dev = wa[2]
+            for key, partial in local_partials.items():
                 if dev != original_device:
                     partial = partial.to(original_device)
                 prev = output_pos_partials.get(key)
                 output_pos_partials[key] = partial if prev is None else prev + partial
+    else:
+        # --- Single-device sequential path ---
+        assigned = [(n, sl_map, opk) for n, (sl_map, opk) in enumerate(combo_entries)]
+        output_pos_partials = _process_combos(assigned, tensors, None, nullcontext())
 
     if not output_unroll_info:
         result = output_pos_partials.get((), None)
