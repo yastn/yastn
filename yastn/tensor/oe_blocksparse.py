@@ -434,6 +434,17 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
             else:
                 tensors_by_device[dev] = tuple(t.to(dev) for t in tensors)
 
+        # Release PyTorch's cached (but unused) GPU memory so that it is
+        # available to non-PyTorch allocators (e.g. cudaMalloc used by cuTENSOR).
+        try:
+            import torch as _torch
+            for dev in devices:
+                if 'cuda' in dev:
+                    with _torch.cuda.device(dev):
+                        _torch.cuda.empty_cache()
+        except ImportError:
+            pass
+
         # Build worker list: one (device, stream_context) per device.
         _workers = []  # list of (device, stream_context)
         _all_streams = []
