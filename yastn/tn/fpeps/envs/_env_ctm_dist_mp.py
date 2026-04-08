@@ -318,33 +318,34 @@ def _update_core_D_(ctmrg_mp_context, env, move: str, opts_svd: dict, **kwargs):
         # blocking wait for all stage-1 to complete
         for _ in range(len(sites_proj)):
             i,site, (half1_d, half2_d) = stage1_queue.get()
-            h1,h2= from_dict(half1_d).clone(), from_dict(half2_d).clone()
+            h1,h2= from_dict(half1_d), from_dict(half2_d)
             del half1_d, half2_d
             tl,tr,bl,br= corner_sites(site)
 
+            h1_d, h2_d = h1.to_dict(level=1), h2.to_dict(level=1)
             if move in 'h':
                 opts_svd["D_blocks"]= svd_predict_spec(tr, "hrb", br, "hrt", h1.s[1])
                 task_queue.put( ("projectors_move_MP_",
-                                 ( i, site, 'rh', h1.to_dict(level=1), h2.to_dict(level=1),
+                                 ( i, site, 'rh', h1_d, h2_d,
                                    env.config.default_device, opts_svd), kwargs) )
                 opts_svd["D_blocks"]= svd_predict_spec(tl, "hlb", bl, "hlt", h1.s[0])
                 task_queue.put( ("projectors_move_MP_",
-                                 ( i, site, 'lh', h1.to_dict(level=1), h2.to_dict(level=1),
+                                 ( i, site, 'lh', h1_d, h2_d,
                                    env.config.default_device, opts_svd), kwargs) )
             elif move in 'v':
                 opts_svd["D_block"]= svd_predict_spec(tl, "vtr", tr, "vtl", h1.s[1])
                 task_queue.put( ("projectors_move_MP_",
-                                 ( i, site, 'tv', h1.to_dict(level=1), h2.to_dict(level=1),
+                                 ( i, site, 'tv', h1_d, h2_d,
                                    env.config.default_device, opts_svd), kwargs) )
                 opts_svd["D_block"]= svd_predict_spec(bl, "vbr", br, "vbl", h1.s[0])
                 task_queue.put( ("projectors_move_MP_",
-                                 ( i, site, 'bv', h1.to_dict(level=1), h2.to_dict(level=1),
+                                 ( i, site, 'bv', h1_d, h2_d,
                                    env.config.default_device, opts_svd), kwargs) )
             del h1, h2
 
         for _ in range(len(sites_proj)*2):
             i,site,proj_pair,(p1_d,p2_d)= stage2_queue.get()
-            p1,p2= from_dict(p1_d).clone(), from_dict(p2_d).clone()
+            p1,p2= from_dict(p1_d), from_dict(p2_d)
             del p1_d, p2_d
             tl,tr,bl,br= corner_sites(site)
             if proj_pair=='rh':
@@ -382,7 +383,7 @@ def _update_core_D_(ctmrg_mp_context, env, move: str, opts_svd: dict, **kwargs):
         for i,_s in enumerate(site_group):
             for _mv in moves:
                 _i, site, mv, tmp_env_ts_d = stage1_queue.get()
-                tmp_env_ts= tuple(from_dict(t_d).clone() for t_d in tmp_env_ts_d)
+                tmp_env_ts= tuple(from_dict(t_d) for t_d in tmp_env_ts_d)
                 del tmp_env_ts_d
                 if mv=='l':
                     env[site].l, env[site].tl, env[site].bl= tmp_env_ts
@@ -449,8 +450,8 @@ def projectors_move_MP_(out_queue, device, i, site, proj_pair, h1_d, h2_d,
         Options for SVD truncation.
     """
     profiling_mode= kwargs.get("profiling_mode", None)
-    h1= from_dict(h1_d).to(device=device,non_blocking=True).clone()
-    h2= from_dict(h2_d).to(device=device,non_blocking=True).clone()
+    h1= from_dict(h1_d).to(device=device,non_blocking=True)
+    h2= from_dict(h2_d).to(device=device,non_blocking=True)
     del h1_d, h2_d
 
     if profiling_mode in ["NVTX",]: h1.config.backend.cuda.nvtx.range_push(f"{proj_pair}")

@@ -425,6 +425,8 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
     multi_device = devices is not None
 
     if multi_device:
+        import torch as _torch
+
         # Pre-move input tensors to each target device once.
         # .to(device) is autograd-tracked: backward sends gradients back.
         tensors_by_device = {}
@@ -436,41 +438,33 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
 
         # Release PyTorch's cached (but unused) GPU memory so that it is
         # available to non-PyTorch allocators (e.g. cudaMalloc used by cuTENSOR).
-        try:
-            import torch as _torch
-            for dev in devices:
-                if 'cuda' in dev:
-                    with _torch.cuda.device(dev):
-                        _torch.cuda.empty_cache()
-        except ImportError:
-            pass
+        for dev in devices:
+            if 'cuda' in dev:
+                with _torch.cuda.device(dev):
+                    _torch.cuda.empty_cache()
 
         # Build worker list: one (device, stream_context) per device.
         _workers = []  # list of (device, stream_context)
         _all_streams = []
-        try:
-            import torch as _torch
-            if _torch.cuda.is_available():
-                cuda_devices = [d for d in devices if d.startswith('cuda')]
-                for dev in cuda_devices:
-                    s = _torch.cuda.Stream(device=dev)
-                    _all_streams.append(s)
-                    _workers.append((dev, _torch.cuda.stream(s)))
-                # Ensure pre-moved tensors are visible to non-default streams:
-                # record an event on each device's default stream and have
-                # every worker stream on that device wait on it.
-                for dev in cuda_devices:
-                    with _torch.cuda.device(dev):
-                        ev = _torch.cuda.current_stream().record_event()
-                    for s in _all_streams:
-                        if str(s.device) == dev:
-                            s.wait_event(ev)
-                # CPU devices get no CUDA stream.
-                for dev in devices:
-                    if not dev.startswith('cuda'):
-                        _workers.append((dev, nullcontext()))
-        except ImportError:
-            pass
+        if _torch.cuda.is_available():
+            cuda_devices = [d for d in devices if d.startswith('cuda')]
+            for dev in cuda_devices:
+                s = _torch.cuda.Stream(device=dev)
+                _all_streams.append(s)
+                _workers.append((dev, _torch.cuda.stream(s)))
+            # Ensure pre-moved tensors are visible to non-default streams:
+            # record an event on each device's default stream and have
+            # every worker stream on that device wait on it.
+            for dev in cuda_devices:
+                with _torch.cuda.device(dev):
+                    ev = _torch.cuda.current_stream().record_event()
+                for s in _all_streams:
+                    if str(s.device) == dev:
+                        s.wait_event(ev)
+            # CPU devices get no CUDA stream.
+            for dev in devices:
+                if not dev.startswith('cuda'):
+                    _workers.append((dev, nullcontext()))
         if not _workers:
             # Fallback when torch/CUDA is unavailable.
             for dev in devices:
