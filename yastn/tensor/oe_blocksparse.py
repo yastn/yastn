@@ -424,6 +424,19 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
 
     multi_device = devices is not None
 
+    # Detect whether a non-PyTorch allocator (e.g. cuTENSOR) is in use.
+    # When true, we periodically release PyTorch's cached GPU memory so that
+    # cudaMalloc (used by cuTENSOR) can reclaim freed blocks.
+    _uses_external_allocator = getattr(tensors[0].config.backend, 'BACKEND_ID', '') == 'torch_cpp'
+
+    def _release_cuda_cache(devs):
+        r"""Release PyTorch's cached-but-unused GPU memory on *devs*."""
+        import torch as _torch
+        for d in devs:
+            if 'cuda' in str(d):
+                with _torch.cuda.device(d):
+                    _torch.cuda.empty_cache()
+
     if multi_device:
         import torch as _torch
 
@@ -438,10 +451,8 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
 
         # Release PyTorch's cached (but unused) GPU memory so that it is
         # available to non-PyTorch allocators (e.g. cudaMalloc used by cuTENSOR).
-        for dev in devices:
-            if 'cuda' in dev:
-                with _torch.cuda.device(dev):
-                    _torch.cuda.empty_cache()
+        if _uses_external_allocator:
+            _release_cuda_cache(devices)
 
         # Build worker list: one (device, stream_context) per device.
         _workers = []  # list of (device, stream_context)
@@ -556,6 +567,11 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
                     masked_tensors[k] = _filter_tensor_blocks(masked_tensors[k], trim_k)
         return ncon(masked_tensors, ncon_igs, conjs=ncon_conjs, order=ncon_order, swap=ncon_swap)
 
+    # How often to release PyTorch's cache for external allocators (cuTENSOR).
+    # Every _CACHE_RELEASE_INTERVAL combos that actually produce a contraction,
+    # we call empty_cache() so cudaMalloc can reclaim freed intermediates.
+    _CACHE_RELEASE_INTERVAL = 8
+
     def _process_combos(assigned, iter_tensors, dev, stream_ctx):
         r"""Process a list of (n, sl_map, output_pos_key) entries on one device.
 
@@ -565,6 +581,7 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
         """
         local_partials = {}
         _cfg = iter_tensors[0].config
+        contractions_since_release = 0
         for n, sl_map, output_pos_key in assigned:
             with stream_ctx:
                 if _cfg.profile:
@@ -601,7 +618,20 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
                 local_partials[output_pos_key] = partial if prev is None else prev + partial
 
                 if _cfg.profile: _cfg.backend.nvtx.range_pop()
+
+                # Periodically release PyTorch's cache so cuTENSOR can
+                # cudaMalloc from freed intermediate buffers.
+                if _uses_external_allocator:
+                    contractions_since_release += 1
+                    if contractions_since_release >= _CACHE_RELEASE_INTERVAL:
+                        _release_cuda_cache([dev] if dev is not None else [original_device])
+                        contractions_since_release = 0
         return local_partials
+
+    # Release PyTorch's cache before the combo loop so cuTENSOR has
+    # memory available from the start (single-device path included).
+    if _uses_external_allocator and not multi_device:
+        _release_cuda_cache([original_device])
 
     output_pos_partials = {}
 
