@@ -149,10 +149,12 @@ def _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b, s_c):
         raise YastnError('Bond dimensions do not match.')
 
     meta_dot, struct_c, slices_c = _meta_tensordot_f2m(struct_a, slices_a, struct_b, slices_b)
-    data = a.config.backend.dot(data_a, data_b, meta_dot, struct_c.size)
+    config = a.config
+    data = config.backend.dot(data_a, data_b, meta_dot, struct_c.size)
+    del data_a, data_b
 
-    meta_unmerge, struct_c, slices_c = _meta_unmerge_matrix(a.config, struct_c, slices_c, ls_l, ls_r, s_c)
-    data = _unmerge(a.config, data, meta_unmerge)
+    meta_unmerge, struct_c, slices_c = _meta_unmerge_matrix(config, struct_c, slices_c, ls_l, ls_r, s_c)
+    data = _unmerge(config, data, meta_unmerge)
     return data, struct_c, slices_c
 
 

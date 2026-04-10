@@ -102,7 +102,7 @@ def einsum(subscripts, *operands, order=None, swap=None) -> 'Tensor':
     return ncon(ts, inds, conjs=conjs, swap=swap)
 
 
-def ncon(ts, inds, conjs=None, order=None, swap=None) -> 'Tensor':
+def ncon(ts, inds, conjs=None, order=None, swap=None, release_cuda_cache=False) -> 'Tensor':
     r"""
     Execute series of tensor contractions.
 
@@ -167,16 +167,19 @@ def ncon(ts, inds, conjs=None, order=None, swap=None) -> 'Tensor':
     #
     commands = _meta_ncon(inds, order, swap)
     #
-    ts = _execute_commands(ts, commands)
+    ts = _execute_commands(ts, commands, release_cuda_cache=release_cuda_cache)
     assert len(ts) == 1, "Sanity check"
     return ts.popitem()[1]
 
 
-def _execute_commands(ts, commands):
+def _execute_commands(ts, commands, release_cuda_cache=False):
     for command in commands:
         if command[0] == 'tensordot':
             tout, (t1, t2), axes = command[1:]
             ts[tout] = tensordot(ts.pop(t1), ts.pop(t2), axes=axes)
+            if release_cuda_cache:
+                import torch
+                torch.cuda.empty_cache()
         elif command[0] == 'swap_gate':
             tout, tin, axes = command[1:]
             ts[tout] = swap_gate(ts.pop(tin), axes=axes)

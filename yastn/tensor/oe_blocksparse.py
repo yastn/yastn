@@ -189,7 +189,8 @@ def _build_mask_tensor(sliced_leg, full_leg, config, device=None):
 
 
 def _iteration_checkpointed(tensors, sl_map, tensor_unroll_info, mask_cache, index_groups,
-                            out_ig, optimize, unroll_labels, pf_trim=None, swap=None) -> Tensor:
+                            out_ig, optimize, unroll_labels, pf_trim=None, swap=None,
+                            release_cuda_cache=False) -> Tensor:
     r"""
     Run one unroll-loop iteration under ``torch.utils.checkpoint``.
 
@@ -258,7 +259,8 @@ def _iteration_checkpointed(tensors, sl_map, tensor_unroll_info, mask_cache, ind
         ts, inds, conjs, order, ncon_swap = _convert_path_to_ncon_args(
             *interleaved, optimize=optimize, swap=swap
         )
-        partial = ncon(ts, inds, conjs=conjs, order=order, swap=ncon_swap)
+        partial = ncon(ts, inds, conjs=conjs, order=order, swap=ncon_swap,
+                       release_cuda_cache=release_cuda_cache)
 
         # Capture output structure so it can be read back outside checkpoint().
         p_data, p_meta = split_data_and_meta(partial.to_dict(level=0), squeeze=True)
@@ -267,7 +269,7 @@ def _iteration_checkpointed(tensors, sl_map, tensor_unroll_info, mask_cache, ind
 
     assert hasattr(tensors[0].config.backend, "checkpoint"), "Backend does not support checkpointing"
     checkpoint = tensors[0].config.backend.checkpoint
-    result_data = checkpoint(_fn, *input_datas, use_reentrant=False)
+    result_data = checkpoint(_fn, *input_datas, use_reentrant=True)
     return Tensor.from_dict(combine_data_and_meta(result_data, _out_meta[0]))
 
 
@@ -425,9 +427,11 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
     multi_device = devices is not None
 
     # Detect whether a non-PyTorch allocator (e.g. cuTENSOR) is in use.
-    # When true, we periodically release PyTorch's cached GPU memory so that
-    # cudaMalloc (used by cuTENSOR) can reclaim freed blocks.
     _uses_external_allocator = getattr(tensors[0].config.backend, 'BACKEND_ID', '') == 'torch_cpp'
+
+    # On any CUDA device, periodically release PyTorch's cached GPU memory
+    # to prevent allocator fragmentation that can cause OOM.
+    _needs_cache_release = _uses_external_allocator or 'cuda' in str(original_device)
 
     def _release_cuda_cache(devs):
         r"""Release PyTorch's cached-but-unused GPU memory on *devs*."""
@@ -556,6 +560,7 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
             return _iteration_checkpointed(
                 base_tensors, sl_map, tensor_unroll_info, mask_cache, index_groups,
                 out_ig, optimize, unroll_labels, pf_trim=pf_trim, swap=swap,
+                release_cuda_cache=_needs_cache_release,
             )
 
         target_device = base_tensors[0].device if multi_device and base_tensors is not tensors else original_device
@@ -565,12 +570,15 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
                 trim_k = pf_trim.get(k)
                 if trim_k is not None and len(trim_k) < len(masked_tensors[k].struct.t):
                     masked_tensors[k] = _filter_tensor_blocks(masked_tensors[k], trim_k)
-        return ncon(masked_tensors, ncon_igs, conjs=ncon_conjs, order=ncon_order, swap=ncon_swap)
+        return ncon(masked_tensors, ncon_igs, conjs=ncon_conjs, order=ncon_order, swap=ncon_swap,
+                    release_cuda_cache=_needs_cache_release)
 
     # How often to release PyTorch's cache for external allocators (cuTENSOR).
     # Every _CACHE_RELEASE_INTERVAL combos that actually produce a contraction,
     # we call empty_cache() so cudaMalloc can reclaim freed intermediates.
-    _CACHE_RELEASE_INTERVAL = 8
+    # Interval of 1 prevents cache fragmentation that can cause OOM with
+    # large intermediates even when total free memory is sufficient.
+    _CACHE_RELEASE_INTERVAL = 1
 
     def _process_combos(assigned, iter_tensors, dev, stream_ctx):
         r"""Process a list of (n, sl_map, output_pos_key) entries on one device.
@@ -619,19 +627,18 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
 
                 if _cfg.profile: _cfg.backend.nvtx.range_pop()
 
-                # Periodically release PyTorch's cache so cuTENSOR can
-                # cudaMalloc from freed intermediate buffers.
-                if _uses_external_allocator:
+                # Periodically release PyTorch's cached-but-unused GPU memory
+                # to prevent allocator fragmentation.
+                if _needs_cache_release:
                     contractions_since_release += 1
                     if contractions_since_release >= _CACHE_RELEASE_INTERVAL:
                         _release_cuda_cache([dev] if dev is not None else [original_device])
                         contractions_since_release = 0
         return local_partials
 
-    # Release PyTorch's cache before the combo loop so cuTENSOR has
-    # memory available from the start (single-device path included).
-    if _uses_external_allocator and not multi_device:
-        _release_cuda_cache([original_device])
+    # Release PyTorch's cache before the combo loop.
+    if _needs_cache_release:
+        _release_cuda_cache(devices if multi_device else [original_device])
 
     output_pos_partials = {}
 
