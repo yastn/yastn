@@ -989,7 +989,14 @@ def _get_contraction_path_cached(
     :param who: string id for logging identifying this optimal contraction path search
     """
     optimizer = kwargs.pop("optimizer", None)
-    if optimizer in [None, "default", "dynamic-programming"]:
+    if optimizer in [None, "default"]:
+        # opt_einsum's own "auto": optimal for small networks, greedy for larger.
+        # DynamicProgramming was previously the default but blows up on ~25-tensor
+        # PEPS windows (minutes to an hour per call) while producing paths only
+        # fractionally better than greedy. Users can still opt in explicitly via
+        # optimizer="dynamic-programming".
+        optimizer = "auto"
+    elif optimizer == "dynamic-programming":
         optimizer = oe.DynamicProgramming(
             minimize="flops",  # 'size' optimize for largest intermediate tensor size, 'flops' for computation complexity
             search_outer=False,  # search through outer products as well

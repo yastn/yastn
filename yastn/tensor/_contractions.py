@@ -271,24 +271,28 @@ def _common_inds(t_a, t_b, nin_a : tuple[int], nin_b : tuple[int], ndimn_a, ndim
 
     # Encode multi-column charges to 1D keys for fast set membership via np.isin
     ncols = ca.shape[1]
-    if ncols > 0 and lta > 0 and ltb > 0:
-        all_vals = np.vstack([ca, cb])
-        mins = all_vals.min(axis=0)
-        ca_s = ca - mins
-        cb_s = cb - mins
-        maxes = np.maximum(ca_s.max(axis=0), cb_s.max(axis=0)) + 1
-        mults = np.ones(ncols, dtype=np.int64)
-        for i in range(1, ncols):
-            mults[i] = mults[i - 1] * maxes[i - 1]
-        keys_a = ca_s @ mults
-        keys_b = cb_s @ mults
-        unique_b = np.unique(keys_b)
-        unique_a = np.unique(keys_a)
-        mask_a = np.isin(keys_a, unique_b)
-        mask_b = np.isin(keys_b, unique_a)
-    else:
-        mask_a = np.ones(lta, dtype=bool)
-        mask_b = np.ones(ltb, dtype=bool)
+    if lta == 0 or ltb == 0:
+        # An empty operand has no charges, so nothing on the other side can match.
+        ia = None if lta == 0 else ()
+        ib = None if ltb == 0 else ()
+        return ia, ib
+    if ncols == 0:
+        # No symmetry: single () charge, all blocks match.
+        return None, None
+    all_vals = np.vstack([ca, cb])
+    mins = all_vals.min(axis=0)
+    ca_s = ca - mins
+    cb_s = cb - mins
+    maxes = np.maximum(ca_s.max(axis=0), cb_s.max(axis=0)) + 1
+    mults = np.ones(ncols, dtype=np.int64)
+    for i in range(1, ncols):
+        mults[i] = mults[i - 1] * maxes[i - 1]
+    keys_a = ca_s @ mults
+    keys_b = cb_s @ mults
+    unique_b = np.unique(keys_b)
+    unique_a = np.unique(keys_a)
+    mask_a = np.isin(keys_a, unique_b)
+    mask_b = np.isin(keys_b, unique_a)
 
     ia = None if mask_a.all() else tuple(np.where(mask_a)[0].tolist())
     ib = None if mask_b.all() else tuple(np.where(mask_b)[0].tolist())
