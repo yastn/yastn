@@ -144,28 +144,71 @@ def _meta_merge_to_matrix(config, struct, slices, axes, inds):
     t_old = struct.t if inds is None else [struct.t[ii] for ii in inds]
     D_old = struct.D if inds is None else [struct.D[ii] for ii in inds]
     sl_old = slices if inds is None else [slices[ii] for ii in inds]
-    tset = np.array(t_old, dtype=np.int64).reshape((len(t_old), len(struct.s), config.sym.NSYM))
-    Dset = np.array(D_old, dtype=np.int64).reshape(len(D_old), len(struct.s))
-    t, teff, ls = [], [], []
+    lt = len(t_old)
+    nsym = config.sym.NSYM
+    tset = np.array(t_old, dtype=np.int64).reshape((lt, len(struct.s), nsym))
+    Dset = np.array(D_old, dtype=np.int64).reshape(lt, len(struct.s))
+    teff_np, tlegs_np, ls = [], [], []
     for n in (0, 1):
         ta = tset[:, axes[n], :]
         Da = Dset[:, axes[n]]
-        Deff = np.prod(Da, axis=1, dtype=np.int64).tolist()
-        Da = [tuple(x) for x in Da.tolist()]
+        Deff = np.prod(Da, axis=1, dtype=np.int64)
         s = tuple(struct.s[ii] for ii in axes[n])
-        ta_eff = [tuple(x) for x in config.sym.fuse(ta, s, s_eff[n]).tolist()]
-        ta = [tuple(x) for x in ta.reshape(len(ta), len(s) * config.sym.NSYM).tolist()]
-        teff.append(ta_eff)
-        t.append(ta)
-        ls.append(_leg_structure_merge(ta_eff, ta, Deff, Da))
+        ta_eff = config.sym.fuse(ta, s, s_eff[n])
+        ta_flat = ta.reshape(lt, len(s) * nsym)
 
-    smeta = sorted((tel, ter, tl, tr, slo.slcs[0], Do)
-                   for tel, ter, tl, tr, slo, Do in zip(teff[0], teff[1], t[0], t[1], sl_old, D_old))
+        # Deduplicate in numpy before converting to Python tuples
+        if lt > 0:
+            combined = np.hstack([ta_eff, ta_flat, Deff.reshape(-1, 1), Da])
+            ncols_c = combined.shape[1]
+            mins_c = combined.min(axis=0)
+            shifted_c = combined - mins_c
+            maxes_c = shifted_c.max(axis=0) + 1
+            mults_c = np.ones(ncols_c, dtype=np.int64)
+            for i in range(ncols_c - 2, -1, -1):
+                mults_c[i] = mults_c[i + 1] * maxes_c[i + 1]
+            _, first_idx = np.unique(shifted_c @ mults_c, return_index=True)
+            u_teff = [tuple(ta_eff[i].tolist()) for i in first_idx]
+            u_tlegs = [tuple(ta_flat[i].tolist()) for i in first_idx]
+            u_deff = Deff[first_idx].tolist()
+            u_dlegs = [tuple(Da[i].tolist()) for i in first_idx]
+        else:
+            u_teff, u_tlegs, u_deff, u_dlegs = [], [], [], []
+
+        teff_np.append(ta_eff)
+        tlegs_np.append(ta_flat)
+        ls.append(_leg_structure_merge(u_teff, u_tlegs, u_deff, u_dlegs))
+
+    # Sort by (effective charges, original charges) using numpy 1D key encoding
+    if lt > 0:
+        all_cols = np.hstack([teff_np[0], teff_np[1], tlegs_np[0], tlegs_np[1]])
+        ncols = all_cols.shape[1]
+        mins = all_cols.min(axis=0)
+        shifted = all_cols - mins
+        maxes = shifted.max(axis=0) + 1
+        mults = np.ones(ncols, dtype=np.int64)
+        for i in range(ncols - 2, -1, -1):
+            mults[i] = mults[i + 1] * maxes[i + 1]
+        sort_keys = shifted @ mults
+        sort_order = np.argsort(sort_keys, kind='stable')
+        eff_ncols = teff_np[0].shape[1] + teff_np[1].shape[1]
+        eff_keys = shifted[:, :eff_ncols] @ mults[:eff_ncols]
+        eff_sorted = eff_keys[sort_order]
+        boundaries = np.concatenate([[0], np.where(np.diff(eff_sorted) != 0)[0] + 1, [lt]])
+    else:
+        sort_order = np.arange(0, dtype=np.int64)
+        boundaries = np.array([0])
+
+    ls_t_dicts = [{t: i for i, t in enumerate(ls_n.t)} for ls_n in ls]
 
     meta_mrg, t_new, D_new, slices_new, Dlow = [], [], [], [], 0
-    for (tel, ter), gr in groupby(smeta, key=itemgetter(0, 1)):
-        ind0 = ls[0].t.index(tel)
-        ind1 = ls[1].t.index(ter)
+    for g in range(len(boundaries) - 1):
+        group_inds = sort_order[boundaries[g]:boundaries[g + 1]]
+        first = int(group_inds[0])
+        tel = tuple(teff_np[0][first].tolist())
+        ter = tuple(teff_np[1][first].tolist())
+        ind0 = ls_t_dicts[0][tel]
+        ind1 = ls_t_dicts[1][ter]
         tn = tel + ter
         t_new.append(tn)
         D0, D1 = ls[0].D[ind0], ls[1].D[ind1]
@@ -174,14 +217,12 @@ def _meta_merge_to_matrix(config, struct, slices, axes, inds):
         Dhigh = Dlow + Dp
         slices_new.append(_slc(((Dlow, Dhigh),), (D0, D1), Dp))
         Dlow = Dhigh
-        try:
-            _, _, tl, tr, slo, Do = next(gr)
-            for d0, d1 in product(ls[0].dec[ind0], ls[1].dec[ind1]):
-                if d0.t == tl and d1.t == tr:
-                    meta_mrg.append((tn, slo, Do, (d0.Dslc, d1.Dslc), (d0.Dprod, d1.Dprod)))
-                    _, _, tl, tr, slo, Do = next(gr)
-        except StopIteration:
-            pass
+        dec_dict = {(d0.t, d1.t): (d0, d1) for d0, d1 in product(ls[0].dec[ind0], ls[1].dec[ind1])}
+        for idx in group_inds.tolist():
+            tl = tuple(tlegs_np[0][idx].tolist())
+            tr = tuple(tlegs_np[1][idx].tolist())
+            d0, d1 = dec_dict[(tl, tr)]
+            meta_mrg.append((tn, sl_old[idx].slcs[0], D_old[idx], (d0.Dslc, d1.Dslc), (d0.Dprod, d1.Dprod)))
     struct_new = struct._replace(t=tuple(t_new), D=tuple(D_new), s=tuple(s_eff), size=Dlow)
     slices_new = tuple(slices_new)
     return struct_new, slices_new, tuple(meta_mrg), ls[0], ls[1]
@@ -344,33 +385,55 @@ def _meta_fuse_hard(config, struct, slices, axes, inds):
             dec = ((_DecRecord((), (0, 1), 1, (1,)),),)
             lls.append(_LegSlices(t, D, dec))
 
-    teff_split = list(tuple(map(tuple, x)) for x in teff.tolist())
-    if len(axes) > 0:
-        told_split = list(zip(*[tset[:, a, :].reshape(lt, len(a) * nsym).tolist() for a in axes]))
-        told_split = list((tuple(map(tuple, x)) for x in told_split))
-    else:
-        told_split = t_old
-    teff = list(map(tuple, teff.reshape(lt, len(axes) * nsym).tolist()))
+    naxes = len(axes)
+    teff_flat = teff.reshape(lt, naxes * nsym)
+    told_arrays = [tset[:, a, :].reshape(lt, len(a) * nsym) for a in axes] if naxes > 0 else []
 
-    smeta = sorted((tes, tn, tos, slo.slcs[0], Do) for tes, tn, tos, slo, Do
-                   in zip(teff_split, teff, told_split, sl_old, D_old))
+    # Sort by (effective charges, original charges) using numpy 1D key encoding
+    if lt > 0 and naxes > 0:
+        told_combined = np.hstack(told_arrays) if told_arrays else np.empty((lt, 0), dtype=np.int64)
+        all_cols = np.hstack([teff_flat, told_combined])
+        ncols = all_cols.shape[1]
+        mins = all_cols.min(axis=0)
+        shifted = all_cols - mins
+        maxes = shifted.max(axis=0) + 1
+        mults = np.ones(ncols, dtype=np.int64)
+        for i in range(ncols - 2, -1, -1):
+            mults[i] = mults[i + 1] * maxes[i + 1]
+        sort_keys = shifted @ mults
+        sort_order = np.argsort(sort_keys, kind='stable')
+        # Group boundaries by effective charge key only
+        eff_ncols = teff_flat.shape[1]
+        eff_keys = shifted[:, :eff_ncols] @ mults[:eff_ncols]
+        eff_sorted = eff_keys[sort_order]
+        boundaries = np.concatenate([[0], np.where(np.diff(eff_sorted) != 0)[0] + 1, [lt]])
+    else:
+        sort_order = np.arange(lt, dtype=np.int64)
+        boundaries = np.array([0, lt]) if lt > 0 else np.array([0])
+
+    # Pre-build index dicts for O(1) lookup instead of O(n) .index()
+    ls_t_dicts = [{t: i for i, t in enumerate(ls.t)} for ls in lls]
 
     meta_mrg, t_new, D_new = [], [], []
-    for (tes, tn), gr in groupby(smeta, key=itemgetter(0, 1)):
-        ind = tuple(ls.t.index(te) for ls, te in zip(lls, tes))
-        decs = tuple(ls.dec[ii] for ls, ii in zip(lls, ind))
+    for g in range(len(boundaries) - 1):
+        group_inds = sort_order[boundaries[g]:boundaries[g + 1]]
+        first = int(group_inds[0])
+        tes = tuple(tuple(teff[first, n, :].tolist()) for n in range(naxes))
+        tn = tuple(teff_flat[first].tolist())
+
+        ind = tuple(ls_t_dicts[n][tes[n]] for n in range(naxes))
+        decs = tuple(lls[n].dec[ind[n]] for n in range(naxes))
         t_new.append(tn)
-        D_new.append(tuple(ls.D[ii] for ls, ii in zip(lls, ind)))
-        try:
-            _, _, tos, slo, Do = next(gr)
-            for de in product(*decs):
-                if tuple(d.t for d in de) == tos:
-                    sub_slc = tuple(d.Dslc for d in de)
-                    Dsln = tuple(d.Dprod for d in de)
-                    meta_mrg.append((tn, slo, Do, sub_slc, Dsln))
-                    _, _, tos, slo, Do = next(gr)
-        except StopIteration:
-            pass
+        D_new.append(tuple(lls[n].D[ind[n]] for n in range(naxes)))
+
+        # Dict-based decoration matching: O(1) per block instead of scanning product
+        dec_dict = {tuple(d.t for d in de): de for de in product(*decs)}
+        for idx in group_inds.tolist():
+            tos = tuple(tuple(told_arrays[n][idx].tolist()) for n in range(naxes))
+            de = dec_dict[tos]
+            sub_slc = tuple(d.Dslc for d in de)
+            Dsln = tuple(d.Dprod for d in de)
+            meta_mrg.append((tn, sl_old[idx].slcs[0], D_old[idx], sub_slc, Dsln))
     Dp_new = np.prod(D_new, axis=1, dtype=np.int64).tolist() if D_new else []
     struct_new = struct._replace(t=tuple(t_new), D=tuple(D_new), s=s_eff, size=sum(Dp_new))
     slices_new = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dp_new), Dp_new, D_new))

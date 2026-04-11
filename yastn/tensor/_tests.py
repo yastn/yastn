@@ -177,10 +177,16 @@ def _get_tD_legs(struct):
     lt, ndim_n, nsym = len(struct.t), len(struct.s), len(struct.n)
     tset = np.array(struct.t, dtype=np.int64).reshape(lt, ndim_n, nsym)
     Dset = np.array(struct.D, dtype=np.int64).reshape(lt, ndim_n)
-    tD_legs = [sorted(set((tuple(t), D) for t, D in zip(tset[:, n, :].tolist(), Dset[:, n].tolist()))) for n in range(ndim_n)]
-    tD_dict = [dict(tD) for tD in tD_legs]
-    if any(len(x) != len(y) for x, y in zip(tD_legs, tD_dict)):
-        raise YastnError('Bond dimensions related to some charge are not consistent.')
-    tlegs = [tuple(tD.keys()) for tD in tD_dict]
-    Dlegs = [tuple(tD.values()) for tD in tD_dict]
+    tlegs, Dlegs, tD_dict = [], [], []
+    for n in range(ndim_n):
+        tD = np.hstack([tset[:, n, :], Dset[:, (n,)]])
+        unique_tD = np.unique(tD, axis=0)
+        t_n = tuple(tuple(int(v) for v in row[:-1]) for row in unique_tD)
+        D_n = tuple(int(row[-1]) for row in unique_tD)
+        d = dict(zip(t_n, D_n))
+        if len(d) != len(unique_tD):
+            raise YastnError('Bond dimensions related to some charge are not consistent.')
+        tlegs.append(t_n)
+        Dlegs.append(D_n)
+        tD_dict.append(d)
     return tlegs, Dlegs, tD_dict

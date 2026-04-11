@@ -263,20 +263,35 @@ def _common_inds(t_a, t_b, nin_a : tuple[int], nin_b : tuple[int], ndimn_a, ndim
         t_b : Sequence[Sequence[int]]
             (usually) charges of non-zero blocks in some other operand
     """
-    t_a = np.array(t_a, dtype=np.int64).reshape((len(t_a), ndimn_a, nsym)) # array for block charges as: block x <num-of-(native)modes(=legs)> x <order-of-sym-group>
-    t_b = np.array(t_b, dtype=np.int64).reshape((len(t_b), ndimn_b, nsym))
-    t_a = t_a[:, nin_a, :].reshape(len(t_a), len(nin_a) * nsym).tolist() # narrowed to contracted modes, and serialize <num-of-ingoing-modes(=legs)> x <order-of-sym-group> to 1D
-    t_b = t_b[:, nin_b, :].reshape(len(t_b), len(nin_b) * nsym).tolist()
-    la = [tuple(x) for x in t_a]
-    lb = [tuple(x) for x in t_b]
-    sa = set(la)
-    sb = set(lb)
-    ia = tuple(ii for ii, el in enumerate(la) if el in sb) # matching <ingoing-block-sectors>_of-a with <ingoing-block-sectors>_of-b
-    ib = tuple(ii for ii, el in enumerate(lb) if el in sa)
-    if len(ia) == len(la): # all <ingoing-block-sectors>_of-a appear among sectors of b
-        ia = None
-    if len(ib) == len(lb): # all <ingoing-block-sectors>_of-b appear among sectors of a
-        ib = None
+    lta, ltb = len(t_a), len(t_b)
+    ta = np.array(t_a, dtype=np.int64).reshape((lta, ndimn_a, nsym))
+    tb = np.array(t_b, dtype=np.int64).reshape((ltb, ndimn_b, nsym))
+    ca = ta[:, nin_a, :].reshape(lta, len(nin_a) * nsym)
+    cb = tb[:, nin_b, :].reshape(ltb, len(nin_b) * nsym)
+
+    # Encode multi-column charges to 1D keys for fast set membership via np.isin
+    ncols = ca.shape[1]
+    if ncols > 0 and lta > 0 and ltb > 0:
+        all_vals = np.vstack([ca, cb])
+        mins = all_vals.min(axis=0)
+        ca_s = ca - mins
+        cb_s = cb - mins
+        maxes = np.maximum(ca_s.max(axis=0), cb_s.max(axis=0)) + 1
+        mults = np.ones(ncols, dtype=np.int64)
+        for i in range(1, ncols):
+            mults[i] = mults[i - 1] * maxes[i - 1]
+        keys_a = ca_s @ mults
+        keys_b = cb_s @ mults
+        unique_b = np.unique(keys_b)
+        unique_a = np.unique(keys_a)
+        mask_a = np.isin(keys_a, unique_b)
+        mask_b = np.isin(keys_b, unique_a)
+    else:
+        mask_a = np.ones(lta, dtype=bool)
+        mask_b = np.ones(ltb, dtype=bool)
+
+    ia = None if mask_a.all() else tuple(np.where(mask_a)[0].tolist())
+    ib = None if mask_b.all() else tuple(np.where(mask_b)[0].tolist())
     return ia, ib
 
 
@@ -306,45 +321,93 @@ def _meta_tensordot_fc(struct_a, slices_a, struct_b, slices_b):
     lta, ndima = len(struct_a.t), len(struct_a.s)
     ta = np.array(struct_a.t, dtype=np.int64).reshape((lta, ndima, nsym))
     Da = np.array(struct_a.D, dtype=np.int64).reshape((lta, ndima))
-    tao = ta[:, :-1, :].reshape(lta, (ndima - 1) * nsym).tolist()
-    tac = ta[:, -1, :].tolist()
+    tao = ta[:, :-1, :].reshape(lta, (ndima - 1) * nsym)
+    tac = ta[:, -1, :]
     Dao = Da[:, :-1]
-    Daop = np.prod(Dao, axis=1, dtype=np.int64).tolist()
-    Dao = Dao.tolist()
-    Dac = Da[:, -1].tolist()
-    struct_a_resorted = sorted(((tuple(tc), tuple(to), Dc, Dop, tuple(Do), sl.slcs[0])
-                                for tc, to, Dc, Dop, Do, sl in zip(tac, tao, Dac, Daop, Dao, slices_a)))
+    Daop = np.prod(Dao, axis=1, dtype=np.int64)
+    Dac = Da[:, -1]
 
     ltb, ndimb = len(struct_b.t), len(struct_b.s)
     tb = np.array(struct_b.t, dtype=np.int64).reshape((ltb, ndimb, nsym))
     Db = np.array(struct_b.D, dtype=np.int64).reshape((ltb, ndimb))
-
-    tbo = tb[:, 1:, :].reshape(ltb, (ndimb - 1) * nsym).tolist()
-    tbc = tb[:, 0, :].tolist()
+    tbo = tb[:, 1:, :].reshape(ltb, (ndimb - 1) * nsym)
+    tbc = tb[:, 0, :]
     Dbo = Db[:, 1:]
-    Dbop = np.prod(Dbo, axis=1, dtype=np.int64).tolist()
-    Dbo = Dbo.tolist()
-    Dbc = Db[:, 0].tolist()
-    struct_b_resorted = [(tuple(tc), tuple(to), Dc, Dop, tuple(Do), sl.slcs[0])
-                         for tc, to, Dc, Dop, Do, sl in zip(tbc, tbo, Dbc, Dbop, Dbo, slices_b)]
+    Dbop = np.prod(Dbo, axis=1, dtype=np.int64)
+    Dbc = Db[:, 0]
 
-    struct_a_resorted = groupby(struct_a_resorted, key=itemgetter(0))
-    struct_b_resorted = groupby(struct_b_resorted, key=itemgetter(0))
+    # Group blocks by contracted charge using numpy
+    _, inv_a, count_a = np.unique(tac, return_inverse=True, return_counts=True, axis=0)
+    arg_a = np.argsort(inv_a, kind='stable')
+    _, inv_b, count_b = np.unique(tbc, return_inverse=True, return_counts=True, axis=0)
+    arg_b = np.argsort(inv_b, kind='stable')
 
-    meta = []
-    for (tar, group_ta), (tbl, group_tb) in zip(struct_a_resorted, struct_b_resorted):
-        assert tar == tbl, "Sanity check."
-        for (_, toa, Dca, Dopa, Doa, sla), (_, tob, Dcb, Dopb, Dob, slb) in product(group_ta, group_tb):
-            meta.append((toa + tob, Doa + Dob, Dopa * Dopb, (Dopa, Dopb), sla, (Dopa, Dca), slb, (Dcb, Dopb)))
+    # Cross product of blocks sharing the same contracted charge
+    count_ab = count_a * count_b
+    sum_count_ab = sum(count_ab)
+    ind_a = np.zeros(sum_count_ab, dtype=np.int64)
+    ind_b = np.zeros(sum_count_ab, dtype=np.int64)
+    start_a, start_b, start_ab = 0, 0, 0
+    for da, db, dab in zip(count_a, count_b, count_ab):
+        stop_a, stop_b, stop_ab = start_a + da, start_b + db, start_ab + dab
+        ind_a[start_ab:stop_ab].reshape(da, db)[:, :] = arg_a[start_a:stop_a].reshape(da, 1)
+        ind_b[start_ab:stop_ab].reshape(da, db)[:, :] = arg_b[start_b:stop_b].reshape(1, db)
+        start_a, start_b, start_ab = stop_a, stop_b, stop_ab
 
-    meta = sorted(meta)
-    t_c = tuple(x[0] for x in meta)
-    D_c = tuple(x[1] for x in meta)
-    Dp_c = tuple(x[2] for x in meta)
-    slices_c = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dp_c), Dp_c, D_c))
-    meta_dot = tuple((sl.slcs[0], *mt[3:]) for sl, mt in zip(slices_c, meta))
+    if sum_count_ab > 0:
+        # Sort output entries by combined key of unique output charges
+        tao_u, tao_fi, tao_inv = np.unique(tao, return_index=True, return_inverse=True, axis=0)
+        tbo_u, tbo_fi, tbo_inv = np.unique(tbo, return_index=True, return_inverse=True, axis=0)
+        n_bo = len(tbo_u)
+        combined_key = tao_inv[ind_a].astype(np.int64) * n_bo + tbo_inv[ind_b]
+        sort_order = np.argsort(combined_key, kind='stable')
+
+        ind_a_s = ind_a[sort_order].tolist()
+        ind_b_s = ind_b[sort_order].tolist()
+
+        # Per-block lookup tables (pre-expanded to avoid double indirection in hot loop)
+        tao_u_t = tuple(map(tuple, tao_u.tolist()))
+        tbo_u_t = tuple(map(tuple, tbo_u.tolist()))
+        Dao_u_t = tuple(map(tuple, Dao[tao_fi].tolist()))
+        Dbo_u_t = tuple(map(tuple, Dbo[tbo_fi].tolist()))
+        tao_inv_l = tao_inv.tolist()
+        tbo_inv_l = tbo_inv.tolist()
+        tao_blk = [tao_u_t[i] for i in tao_inv_l]
+        tbo_blk = [tbo_u_t[i] for i in tbo_inv_l]
+        Dao_blk = [Dao_u_t[i] for i in tao_inv_l]
+        Dbo_blk = [Dbo_u_t[i] for i in tbo_inv_l]
+
+        Daop_l = Daop.tolist()
+        Dbop_l = Dbop.tolist()
+        Dac_l = Dac.tolist()
+        Dbc_l = Dbc.tolist()
+        sla_l = [sl.slcs[0] for sl in slices_a]
+        slb_l = [sl.slcs[0] for sl in slices_b]
+        # Pre-compute per-block reshape tuples for meta_dot
+        reshape_a_l = [(Daop_l[i], Dac_l[i]) for i in range(lta)]
+        reshape_b_l = [(Dbc_l[i], Dbop_l[i]) for i in range(ltb)]
+    else:
+        ind_a_s = ind_b_s = []
+        tao_blk = tbo_blk = Dao_blk = Dbo_blk = []
+        Daop_l = Dbop_l = Dac_l = Dbc_l = []
+        sla_l = slb_l = []
+        reshape_a_l = reshape_b_l = []
+
+    t_c = tuple(tao_blk[ia] + tbo_blk[ib] for ia, ib in zip(ind_a_s, ind_b_s))
+    D_c = tuple(Dao_blk[ia] + Dbo_blk[ib] for ia, ib in zip(ind_a_s, ind_b_s))
+    Dp_c = [Daop_l[ia] * Dbop_l[ib] for ia, ib in zip(ind_a_s, ind_b_s)]
+
+    acc_Dp = tuple(accumulate(Dp_c, initial=0))
+    slc_c = tuple(zip(acc_Dp, acc_Dp[1:]))
+    slices_c = tuple(_slc((sl,), ds, dp) for sl, dp, ds in zip(slc_c, Dp_c, D_c))
+
+    meta_dot = tuple(
+        (sl, (Daop_l[ia], Dbop_l[ib]), sla_l[ia], reshape_a_l[ia], slb_l[ib], reshape_b_l[ib])
+        for sl, ia, ib in zip(slc_c, ind_a_s, ind_b_s)
+    )
+
     s_c = struct_a.s[:-1] + struct_b.s[1:]
-    struct_c = _struct(s=s_c, t=t_c, D=D_c, size=sum(Dp_c))
+    struct_c = _struct(s=s_c, t=t_c, D=D_c, size=acc_Dp[-1] if Dp_c else 0)
     return meta_dot, struct_c, slices_c
 
 
@@ -423,17 +486,34 @@ def _meta_tensordot_nf(struct_a, slices_a, struct_b, slices_b, ind_a, ind_b, nou
         ind_b[start_ab: stop_ab].reshape(da, db)[:, :] = arg_tDbc[start_b: stop_b].reshape(1, db)
         start_a, start_b, start_ab = stop_a, stop_b, stop_ab
 
-    tc = np.hstack([tao[ind_a], tbo[ind_b]])
-    utc, uind, invs, cnts = np.unique(tc, return_index=True, return_inverse=True, return_counts=True, axis=0)
+    # Unique output charges via 1D combined key (avoids expensive 2D np.unique on wide arrays)
+    if sum_count_ab > 0:
+        tao_u, tao_fi, tao_inv = np.unique(tao, return_index=True, return_inverse=True, axis=0)
+        tbo_u, tbo_fi, tbo_inv = np.unique(tbo, return_index=True, return_inverse=True, axis=0)
+        n_bo = len(tbo_u)
+        combined_key = tao_inv[ind_a].astype(np.int64) * n_bo + tbo_inv[ind_b]
+        ukeys, invs, cnts = np.unique(combined_key, return_inverse=True, return_counts=True)
 
-    uind_a, uind_b = ind_a[uind], ind_b[uind]
-    uDc = np.hstack([Dao[uind_a], Dbo[uind_b]])
-    uDcp2 = np.column_stack([Daop[uind_a], Dbop[uind_b]])
+        # Build output metadata from small per-unique-charge lookup tables
+        oa_idx = (ukeys // n_bo).tolist()
+        ob_idx = (ukeys % n_bo).tolist()
+        tao_u_t = tuple(map(tuple, tao_u.tolist()))
+        tbo_u_t = tuple(map(tuple, tbo_u.tolist()))
+        Dao_u_t = tuple(map(tuple, Dao[tao_fi].tolist()))
+        Dbo_u_t = tuple(map(tuple, Dbo[tbo_fi].tolist()))
+        Daop_u = Daop[tao_fi].tolist()
+        Dbop_u = Dbop[tbo_fi].tolist()
+    else:
+        invs = np.empty(0, dtype=np.intp)
+        cnts = np.empty(0, dtype=np.intp)
+        oa_idx = ob_idx = ()
+        tao_u_t = tbo_u_t = Dao_u_t = Dbo_u_t = ()
+        Daop_u = Dbop_u = ()
 
-    c_Dp = np.prod(uDcp2, axis=1, dtype=np.int64).tolist()
-    c_t = tuple(map(tuple, utc.tolist()))
-    c_D = tuple(map(tuple, uDc.tolist()))
-    c_Dp2 = tuple(map(tuple, uDcp2.tolist()))
+    c_t = tuple(tao_u_t[a] + tbo_u_t[b] for a, b in zip(oa_idx, ob_idx))
+    c_D = tuple(Dao_u_t[a] + Dbo_u_t[b] for a, b in zip(oa_idx, ob_idx))
+    c_Dp = [Daop_u[a] * Dbop_u[b] for a, b in zip(oa_idx, ob_idx)]
+    c_Dp2 = tuple((Daop_u[a], Dbop_u[b]) for a, b in zip(oa_idx, ob_idx))
 
     acc_Dp = tuple(accumulate(c_Dp, initial=0))
     slc_c = tuple(zip(acc_Dp, acc_Dp[1:]))
