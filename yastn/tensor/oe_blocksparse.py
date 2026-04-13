@@ -188,6 +188,30 @@ def _build_mask_tensor(sliced_leg, full_leg, config, device=None):
     return mask_tensor
 
 
+def _ncon_checkpointed(tensors, inds, conjs, order, swap):
+    r"""Run a single ``ncon`` call under ``torch.utils.checkpoint``.
+
+    Used when ``checkpoint_loop=True`` but ``unroll is None``, so there is
+    no combo loop — just one full contraction to checkpoint.
+    """
+    input_datas, input_metas = zip(
+        *(split_data_and_meta(t.to_dict(level=0), squeeze=True) for t in tensors)
+    )
+    _out_meta = [None]
+
+    def _fn(*datas):
+        reconst = [Tensor.from_dict(combine_data_and_meta(d, m))
+                   for d, m in zip(datas, input_metas)]
+        result = ncon(reconst, inds, conjs=conjs, order=order, swap=swap)
+        r_data, r_meta = split_data_and_meta(result.to_dict(level=0), squeeze=True)
+        _out_meta[0] = r_meta
+        return r_data
+
+    checkpoint = tensors[0].config.backend.checkpoint
+    result_data = checkpoint(_fn, *input_datas, use_reentrant=True)
+    return Tensor.from_dict(combine_data_and_meta(result_data, _out_meta[0]))
+
+
 def _iteration_checkpointed(tensors, sl_map, tensor_unroll_info, mask_cache, index_groups,
                             out_ig, optimize, unroll_labels, pf_trim=None, swap=None,
                             release_cuda_cache=False) -> Tensor:
@@ -1228,6 +1252,8 @@ def contract_with_unroll_compute_constants(*args, **kwargs):
     if unroll is None:
         # convert to ncon call
         ts, inds, conjs, order, ncon_swap = _convert_path_to_ncon_args(*args, swap=swap, **kwargs)
+        if checkpoint_loop:
+            return _ncon_checkpointed(ts, inds, conjs, order, ncon_swap)
         return ncon(ts, inds, conjs=conjs, order=order, swap=ncon_swap)
 
     path = kwargs.pop("optimize", None)
@@ -1381,6 +1407,8 @@ def contract_with_unroll(*args, **kwargs):
     if unroll is None:
         # convert to ncon call
         ts, inds, conjs, order, ncon_swap = _convert_path_to_ncon_args(*args, swap=swap, **kwargs)
+        if checkpoint_loop:
+            return _ncon_checkpointed(ts, inds, conjs, order, ncon_swap)
         return ncon(ts, inds, conjs=conjs, order=order, swap=ncon_swap)
 
     if isinstance(unroll, dict):
