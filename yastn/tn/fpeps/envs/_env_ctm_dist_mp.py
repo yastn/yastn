@@ -318,7 +318,7 @@ def _update_core_D_(ctmrg_mp_context, env, move: str, opts_svd: dict, **kwargs):
         # blocking wait for all stage-1 to complete
         for _ in range(len(sites_proj)):
             i,site, (half1_d, half2_d) = stage1_queue.get()
-            h1,h2= from_dict(half1_d), from_dict(half2_d)
+            h1,h2= from_dict(half1_d).clone(), from_dict(half2_d).clone()
             del half1_d, half2_d
             tl,tr,bl,br= corner_sites(site)
 
@@ -345,7 +345,7 @@ def _update_core_D_(ctmrg_mp_context, env, move: str, opts_svd: dict, **kwargs):
 
         for _ in range(len(sites_proj)*2):
             i,site,proj_pair,(p1_d,p2_d)= stage2_queue.get()
-            p1,p2= from_dict(p1_d), from_dict(p2_d)
+            p1,p2= from_dict(p1_d).clone(), from_dict(p2_d).clone()
             del p1_d, p2_d
             tl,tr,bl,br= corner_sites(site)
             if proj_pair=='rh':
@@ -383,7 +383,7 @@ def _update_core_D_(ctmrg_mp_context, env, move: str, opts_svd: dict, **kwargs):
         for i,_s in enumerate(site_group):
             for _mv in moves:
                 _i, site, mv, tmp_env_ts_d = stage1_queue.get()
-                tmp_env_ts= tuple(from_dict(t_d) for t_d in tmp_env_ts_d)
+                tmp_env_ts= tuple(from_dict(t_d).clone() for t_d in tmp_env_ts_d)
                 del tmp_env_ts_d
                 if mv=='l':
                     env[site].l, env[site].tl, env[site].bl= tmp_env_ts
