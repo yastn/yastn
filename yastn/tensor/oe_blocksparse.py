@@ -1366,7 +1366,10 @@ def contract_with_unroll_compute_constants(*args, **kwargs):
             c_ts, c_inds, c_conjs, c_order, c_ncon_swap = _convert_path_to_ncon_args(
                 *comp_interleaved, optimize=comp_path, swap=c_swap
             )
-            pre_contracted.append((ncon(c_ts, c_inds, conjs=c_conjs, order=c_order, swap=c_ncon_swap), list(comp_out_ig)))
+            if checkpoint_loop:
+                pre_contracted.append((_ncon_checkpointed(c_ts, c_inds, c_conjs, c_order, c_ncon_swap), list(comp_out_ig)))
+            else:
+                pre_contracted.append((ncon(c_ts, c_inds, conjs=c_conjs, order=c_order, swap=c_ncon_swap), list(comp_out_ig)))
 
     # Rebuild the reduced network: variable tensors + one tensor per constant component.
     reduced_interleaved = []
