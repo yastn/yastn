@@ -998,6 +998,43 @@ def get_contraction_path(*tn_to_contract, unroll=None,
     return res
 
 
+# Time budget for the DynamicProgramming path search. If DP does not finish
+# within this many seconds, fall back to opt_einsum's "random-greedy".
+_DP_SEARCH_TIMEOUT_S = 120
+
+
+def _run_with_timeout(func, timeout):
+    r"""Run ``func()`` in a daemon thread, returning ``(result, timed_out)``.
+
+    If ``func`` does not return within ``timeout`` seconds, returns
+    ``(None, True)`` and lets the background thread finish on its own (it
+    cannot be safely interrupted in Python, but it is daemonic so it will
+    not block interpreter shutdown). Exceptions raised by ``func`` are
+    re-raised in the caller.
+    """
+    import threading
+    result = [None]
+    exc = [None]
+    done = threading.Event()
+
+    def _worker():
+        try:
+            result[0] = func()
+        except BaseException as e:  # noqa: BLE001 — re-raised below
+            exc[0] = e
+        finally:
+            done.set()
+
+    t = threading.Thread(target=_worker, daemon=True)
+    t.start()
+    finished = done.wait(timeout)
+    if not finished:
+        return None, True
+    if exc[0] is not None:
+        raise exc[0]
+    return result[0], False
+
+
 @lru_cache(maxsize=128)
 def _get_contraction_path_cached(
     expr, shapes, unrolled=(), names=None, who=None, **kwargs
@@ -1013,19 +1050,16 @@ def _get_contraction_path_cached(
     :param who: string id for logging identifying this optimal contraction path search
     """
     optimizer = kwargs.pop("optimizer", None)
-    if optimizer in [None, "default"]:
-        # opt_einsum's own "auto": optimal for small networks, greedy for larger.
-        # DynamicProgramming was previously the default but blows up on ~25-tensor
-        # PEPS windows (minutes to an hour per call) while producing paths only
-        # fractionally better than greedy. Users can still opt in explicitly via
-        # optimizer="dynamic-programming".
-        optimizer = "auto"
-    elif optimizer == "dynamic-programming":
+    # Default is DynamicProgramming (better peak memory on typical PEPS networks);
+    # if the search exceeds the budget we fall back to opt_einsum's "random-greedy".
+    _dp_with_timeout = False
+    if optimizer in [None, "default", "dp", "dynamic-programming"]:
         optimizer = oe.DynamicProgramming(
             minimize="flops",  # 'size' optimize for largest intermediate tensor size, 'flops' for computation complexity
             search_outer=False,  # search through outer products as well
             cost_cap=True,  # don't use cost-capping strategy
         )
+        _dp_with_timeout = True
 
     # pre-process shapes, by dropping negative values (unrolled index) and last tuple,
     # which holds shapes of output tensor
@@ -1033,9 +1067,27 @@ def _get_contraction_path_cached(
     path = kwargs.pop("path", None)
     kwargs.pop("shapes", False)
     if not path:
-        path, path_info = oe.contract_path(
-            expr, *shapes_unrolled, optimize=optimizer, shapes=True, **kwargs
-        )  # ,use_blas=)
+        if _dp_with_timeout:
+            def _search():
+                return oe.contract_path(
+                    expr, *shapes_unrolled, optimize=optimizer, shapes=True, **kwargs
+                )
+            res, timed_out = _run_with_timeout(_search, _DP_SEARCH_TIMEOUT_S)
+            if timed_out:
+                log.warning(
+                    f"{who} DynamicProgramming path search exceeded "
+                    f"{_DP_SEARCH_TIMEOUT_S}s; falling back to optimizer='random-greedy'."
+                )
+                optimizer = "random-greedy"
+                path, path_info = oe.contract_path(
+                    expr, *shapes_unrolled, optimize=optimizer, shapes=True, **kwargs
+                )
+            else:
+                path, path_info = res
+        else:
+            path, path_info = oe.contract_path(
+                expr, *shapes_unrolled, optimize=optimizer, shapes=True, **kwargs
+            )  # ,use_blas=)
 
     path_info, mem_list = _get_contraction_path_info(
         path, expr, *shapes_unrolled, unrolled=unrolled, names=names, shapes=True
