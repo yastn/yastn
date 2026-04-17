@@ -451,11 +451,11 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
     multi_device = devices is not None
 
     # Detect whether a non-PyTorch allocator (e.g. cuTENSOR) is in use.
+    # Only then do we need to release PyTorch's caching allocator so the external
+    # allocator can reclaim the freed memory. For pure PyTorch on CUDA, the
+    # caching allocator handles reuse internally and empty_cache() is a net loss.
     _uses_external_allocator = getattr(tensors[0].config.backend, 'BACKEND_ID', '') == 'torch_cpp'
-
-    # On any CUDA device, periodically release PyTorch's cached GPU memory
-    # to prevent allocator fragmentation that can cause OOM.
-    _needs_cache_release = _uses_external_allocator or 'cuda' in str(original_device)
+    _needs_cache_release = _uses_external_allocator
 
     def _release_cuda_cache(devs):
         r"""Release PyTorch's cached-but-unused GPU memory on *devs*."""
@@ -691,9 +691,22 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
             futures = [pool.submit(_process_combos, *wa) for wa in worker_args]
             worker_results = [f.result() for f in futures]
 
-        # Synchronize all streams before cross-device gather.
+        # GPU-side event ordering: each worker stream's endpoint is waited on
+        # by (a) its own device's default stream — so the next caller on that
+        # device is ordered after this call; and (b) the original device's
+        # default stream — so the cross-device gather below is ordered.
+        # One event per stream suffices: both waits mark the same point.
+        _orig_is_cuda = str(original_device).startswith('cuda')
+        _curr_orig = _torch.cuda.current_stream(original_device) if _orig_is_cuda else None
         for s in _all_streams:
-            s.synchronize()
+            ev = s.record_event()
+            _torch.cuda.current_stream(s.device).wait_event(ev)
+            if _orig_is_cuda and str(s.device) != str(original_device):
+                _curr_orig.wait_event(ev)
+        if not _orig_is_cuda:
+            # CPU original device: CPU-side sync so gather sees completed GPU work.
+            for s in _all_streams:
+                s.synchronize()
 
         # Gather worker partials back to the original device.
         for wa, local_partials in zip(worker_args, worker_results):
