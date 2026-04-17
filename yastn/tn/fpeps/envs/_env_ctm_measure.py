@@ -1078,7 +1078,7 @@ def _build_separate_unfused(env, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, b
     return tuple(args), swap_pairs
 
 
-def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint_loop=False, separate_layers=False, optimizer="default", devices=None) -> float:
+def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint_loop=False, separate_layers=False, optimizer="default", devices=None, precomputed_norm=None, return_norm=False) -> float:
     r"""
     Memory-efficient version of :meth:`measure_nsite_exact` using opt_einsum
     contraction path optimization, optional block-sparse index unrolling,
@@ -1224,13 +1224,16 @@ def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint
         translated_unroll = _translate_unroll(unroll, Nx, Ny)
         build_fn = _build_separate_unfused if separate_layers else _build_interleaved_unfused
 
-        # norm contraction (no operators)
-        tn_no, swap_no = build_fn(
-            self, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, bl, br)
-        path_no, _ = get_contraction_path(*tn_no, unroll=translated_unroll, **path_opts)
-        val_no = contract_with_unroll(
-            *tn_no, optimize=path_no, unroll=translated_unroll,
-            checkpoint_loop=checkpoint_loop, swap=swap_no, devices=devices).to_number()
+        # norm contraction (no operators) — skip if caller supplied it
+        if precomputed_norm is not None:
+            val_no = precomputed_norm
+        else:
+            tn_no, swap_no = build_fn(
+                self, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, bl, br)
+            path_no, _ = get_contraction_path(*tn_no, unroll=translated_unroll, **path_opts)
+            val_no = contract_with_unroll(
+                *tn_no, optimize=path_no, unroll=translated_unroll,
+                checkpoint_loop=checkpoint_loop, swap=swap_no, devices=devices).to_number()
 
         # insert operators and charge swaps (in-place on DoublePepsTensor)
         axes_string_x = ['b3', 'k4', 'k1']
@@ -1300,12 +1303,15 @@ def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint
             args.append(())
             return tuple(args)
 
-        realized_no = {s: _drop(t) for s, t in tens.items()}
-        tn_no = _build_interleaved_fused(realized_no)
-        path_no, _ = get_contraction_path(*tn_no, unroll=unroll)
-        val_no = contract_with_unroll(
-            *tn_no, optimize=path_no, unroll=unroll,
-            checkpoint_loop=checkpoint_loop, devices=devices).to_number()
+        if precomputed_norm is not None:
+            val_no = precomputed_norm
+        else:
+            realized_no = {s: _drop(t) for s, t in tens.items()}
+            tn_no = _build_interleaved_fused(realized_no)
+            path_no, _ = get_contraction_path(*tn_no, unroll=unroll)
+            val_no = contract_with_unroll(
+                *tn_no, optimize=path_no, unroll=unroll,
+                checkpoint_loop=checkpoint_loop, devices=devices).to_number()
 
         for y in range(miny, maxy + 1):
             for x in range(minx, maxx + 1):
@@ -1320,4 +1326,7 @@ def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint
             *tn_op, optimize=path_op, unroll=unroll,
             checkpoint_loop=checkpoint_loop, devices=devices).to_number()
 
-    return sign * val_op / val_no
+    result = sign * val_op / val_no
+    if return_norm:
+        return result, val_no
+    return result
