@@ -88,6 +88,13 @@ def to(a, device=None, dtype=None, **kwargs) -> 'Tensor':
     if dtype in (None, a.yastn_dtype) and device in (None, a.device):
         return a
     data = a.config.backend.move_to(a._data, dtype=dtype, device=device, **kwargs)
+    if device is not None:
+        # Record the resolved concrete device (e.g. 'cuda:1') rather than the
+        # caller's possibly-generic argument ('cuda'), so later allocations
+        # that reuse this config — e.g. match_ancilla's identity spawn inside
+        # measure_1site — land on the same GPU as the moved tensor.
+        config = a.config._replace(default_device=a.config.backend.get_device(data))
+        return a._replace(data=data, config=config)
     return a._replace(data=data)
 
 

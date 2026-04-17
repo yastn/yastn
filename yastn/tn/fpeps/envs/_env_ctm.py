@@ -156,8 +156,8 @@ class EnvCTM():
         Data of environment tensors in the new environment is indepedent
         from the originals.
         """
-        #TODO Ket ?
-        env = type(self)(psi=self.psi.bra.to(device=device, dtype=dtype, **kwargs), init=None)
+        #TODO Bra ?
+        env = type(self)(psi=self.psi.ket.to(device=device, dtype=dtype, **kwargs), init=None)
         env.env = self.env.to(device=device, dtype=dtype, **kwargs)
         env.proj = self.proj.to(device=device, dtype=dtype, **kwargs)
         return env
@@ -578,7 +578,7 @@ class EnvCTM():
 
                 if "torch" in env.config.backend.BACKEND_ID:
                     inputs_t, inputs_meta = split_data_and_meta(env.to_dict(level=0))
-                    
+
                     checkpoint_F = env.config.backend.checkpoint
                     out_meta, *out_data = checkpoint_F(f_update_core_, d, inputs_meta, *inputs_t, \
                                       **{'use_reentrant': use_reentrant, 'debug': False})
