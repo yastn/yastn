@@ -208,7 +208,7 @@ def _ncon_checkpointed(tensors, inds, conjs, order, swap):
         return r_data
 
     checkpoint = tensors[0].config.backend.checkpoint
-    result_data = checkpoint(_fn, *input_datas, use_reentrant=True)
+    result_data = checkpoint(_fn, *input_datas, use_reentrant=False)
     return Tensor.from_dict(combine_data_and_meta(result_data, _out_meta[0]))
 
 
@@ -293,7 +293,7 @@ def _iteration_checkpointed(tensors, sl_map, tensor_unroll_info, mask_cache, ind
 
     assert hasattr(tensors[0].config.backend, "checkpoint"), "Backend does not support checkpointing"
     checkpoint = tensors[0].config.backend.checkpoint
-    result_data = checkpoint(_fn, *input_datas, use_reentrant=True)
+    result_data = checkpoint(_fn, *input_datas, use_reentrant=False)
     return Tensor.from_dict(combine_data_and_meta(result_data, _out_meta[0]))
 
 
@@ -709,17 +709,28 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
                 s.synchronize()
 
         # Gather worker partials back to the original device.
+        # .pop() releases each worker-side ref as soon as it's accumulated,
+        # so the worker's partial doesn't linger until the loop ends.
         for wa, local_partials in zip(worker_args, worker_results):
             dev = wa[2]
-            for key, partial in local_partials.items():
+            for key in list(local_partials.keys()):
+                partial = local_partials.pop(key)
                 if dev != original_device:
                     partial = partial.to(original_device)
                 prev = output_pos_partials.get(key)
                 output_pos_partials[key] = partial if prev is None else prev + partial
+        del worker_results
     else:
         # --- Single-device sequential path ---
         assigned = [(n, sl_map, opk) for n, (sl_map, opk) in enumerate(combo_entries)]
         output_pos_partials = _process_combos(assigned, tensors, None, nullcontext())
+
+    # Replicas and mask cache are no longer needed; freeing them before
+    # yastn_block cuts peak memory by one full input replica per extra
+    # device plus every cached mask.
+    if multi_device:
+        del tensors_by_device
+    del mask_cache
 
     if not output_unroll_info:
         result = output_pos_partials.get((), None)
@@ -1028,7 +1039,7 @@ def _get_contraction_path_cached(
     optimizer = kwargs.pop("optimizer", None)
     if optimizer in [None, "default", "dp", "dynamic-programming"]:
         optimizer = oe.DynamicProgramming(
-            minimize="flops",  # 'size' optimize for largest intermediate tensor size, 'flops' for computation complexity
+            minimize="write",  # 'size' optimize for largest intermediate tensor size, 'flops' for computation complexity
             search_outer=False,  # search through outer products as well
             cost_cap=True,  # don't use cost-capping strategy
         )
@@ -1411,10 +1422,23 @@ def contract_with_unroll(*args, **kwargs):
     kwargs.pop("verbosity", None)
     unroll = kwargs.pop("unroll", None)
     swap = kwargs.pop("swap", None)
+    devices = kwargs.pop("devices", None)
     unroll = _validate_and_resolve_unroll(*args, unroll=unroll)
 
     if unroll is None:
-        # convert to ncon call
+        tensors_orig = args[0: 2 * (len(args) // 2): 2]
+        original_device = tensors_orig[0].device if tensors_orig else None
+        target_dev = None
+        if devices:
+            devs = devices if isinstance(devices, (list, tuple)) else [devices]
+            devs = [str(d) for d in devs]
+            if devs and devs[0] != str(original_device):
+                target_dev = devs[0]
+        if target_dev is not None:
+            new_args = list(args)
+            for i in range(0, 2 * (len(args) // 2), 2):
+                new_args[i] = new_args[i].to(target_dev)
+            args = tuple(new_args)
         ts, inds, conjs, order, ncon_swap = _convert_path_to_ncon_args(*args, swap=swap, **kwargs)
         if checkpoint_loop:
             return _ncon_checkpointed(ts, inds, conjs, order, ncon_swap)
@@ -1425,7 +1449,8 @@ def contract_with_unroll(*args, **kwargs):
         path = kwargs.pop("optimize", None)
         assert path is not None, "optimize (contraction path) must be provided"
         return _contract_with_sliced_unroll(*args, unroll=unroll, optimize=path,
-                                            checkpoint_loop=checkpoint_loop, swap=swap, **kwargs)
+                                            checkpoint_loop=checkpoint_loop, swap=swap,
+                                            devices=devices, **kwargs)
 
     raise NotImplementedError(
         "contract_with_unroll: unsupported unroll type. "
