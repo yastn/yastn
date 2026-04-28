@@ -496,14 +496,6 @@ def test_svd_exceptions(config_kwargs):
         _ = yastn.svd(a, axes=((0, 1), 2), policy='lowrank')
         # lowrank policy in svd requires passing argument D_block
 
-    S = yastn.svd(a, axes=((0, 1), 2), compute_uv=False)
-    with pytest.raises(yastn.YastnError):
-        _ = yastn.truncation_mask(1j * S, tol=1e-10)
-        # Truncation_mask requires S to be real and diagonal
-    with pytest.raises(yastn.YastnError):
-        _ = yastn.truncation_mask_multiplets(1j * S, tol=1e-10)
-        # Truncation_mask requires S to be real and diagonal
-
 
 if __name__ == '__main__':
     pytest.main([__file__, "-vs", "--durations=0", "--backend", "np", '--device', "cpu", "--tensordot_policy", "no_fusion"])

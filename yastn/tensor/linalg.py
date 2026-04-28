@@ -634,10 +634,12 @@ def truncation_mask_multiplets(S, tol=0, D_total=float('inf'),
     return Smask
 
 
-def truncation_mask(S, tol=0, tol_block=0,
+def truncation_mask(S, which='LR',
+                    tol=float('-inf'), tol_block=float('-inf'),
                     D_block=float('inf'), D_total=float('inf'),
                     truncate_multiplets=False,
-                    mask_f=None, **kwargs) -> yastn.Tensor[bool]:
+                    mask_f=None,
+                    **kwargs) -> yastn.Tensor[bool]:
     """
     Generate mask tensor based on diagonal and real tensor ``S``.
     It can be then used for truncation.
@@ -649,6 +651,13 @@ def truncation_mask(S, tol=0, tol_block=0,
     ----------
     S: yastn.Tensor
         Diagonal tensor with spectrum.
+
+    which: str
+        Which values to keep from [``'LM'``, ``'LR'``, ``'SR'``, ``'SM'``]:
+        ``'LR'`` : largest real part (the default),
+        ``'LM'`` : largest magnitude,
+        ``'SR'`` : smallest real part,
+        ``'SM'`` : smallest magnitude.
 
     tol: float
         relative tolerance.
@@ -663,6 +672,7 @@ def truncation_mask(S, tol=0, tol_block=0,
         maximum number of elements kept per block.
         It is also possible to provide a dictionary mapping charges to maximal number of elements in the charge sector.
 
+
     truncate_multiplets: bool
         If ``True``, enlarge the truncation range specified by other arguments by shifting
         the cut to the largest gap between to-be-truncated singular values across all blocks.
@@ -671,14 +681,16 @@ def truncation_mask(S, tol=0, tol_block=0,
         The default is ``False``.
 
     mask_f: None | function[yastn.Tensor] -> yastn.Tensor
-        Custom mask function. The default is None.
-        If provided, it overrides the default function and all other parameters are ignored.
+        It is possible to provide a custom mask function, which gives a mechanism to pass such a function
+        to many algorithms where the truncation_mask is called.
+        If provided, it overrides the default function, and all other parameters are ignored.
+        The default is None.
     """
     if mask_f is not None:
         return mask_f(S)
 
-    if not (S.isdiag and S.yastn_dtype == "float64"):
-        raise YastnError("truncation_mask() requires S to be real and diagonal.")
+    if not S.isdiag:
+        raise YastnError("truncation_mask() requires S to be diagonal.")
 
     verbosity = kwargs.get('verbosity', 0)
     if verbosity > 2:
@@ -686,40 +698,50 @@ def truncation_mask(S, tol=0, tol_block=0,
         logger.info(f"{fname} tol {tol} tol_block {tol_block} D_total {D_total}")
         logger.info(f"{fname} D_block {D_block}")
 
+    if which in ["SR", "SM"] and (tol != -float('inf') or tol_block != -float('inf')):
+        raise YastnError("Truncation by tolerance with which='SR' or 'SM' is not supported."
+            + "Set tol and tol_block to -inf or use mask_f for custom truncation mask if needed.")
+
+
     # makes a copy for partial truncations; also detaches from autograd computation graph
+    backend = S.config.backend
     S = S.copy()
     Smask = S.copy()
-    Smask._data = Smask._data > -float('inf') # all True
+    Smask._data = abs(Smask._data) > -float('inf') # all True
 
     if truncate_multiplets:
-        tol_block, D_block = 0, float('inf')
+        tol_block, D_block = float('-inf'), float('inf')
+
+    tol_null = float('-inf') if isinstance(tol_block, dict) else tol_block
+    D_null = 0 if isinstance(D_block, dict) else D_block
 
     nsym = S.config.sym.NSYM
-    tol_null = 0. if isinstance(tol_block, dict) else tol_block
-    D_null = 0 if isinstance(D_block, dict) else D_block
     for t, sl in zip(S.struct.t, S.slices):
         t = t[:nsym]
         tol_rel = tol_block[t] if (isinstance(tol_block, dict) and t in tol_block) else tol_null
-        above_tol = S.data[slice(*sl.slcs[0])] > tol_rel * S.config.backend.max_abs(S.data[slice(*sl.slcs[0])])
-        D_tol = S.config.backend.sum_elements(above_tol).item()
+        slc = slice(*sl.slcs[0])
+
+        above_tol = S.data[slc] > tol_rel * backend.max_abs(S.data[slc])
+        D_tol = backend.sum_elements(above_tol).item()
         D_bl = D_block[t] if (isinstance(D_block, dict) and t in D_block) else D_null
         D_bl = min(D_bl, D_tol)
+
         if 0 < D_bl < sl.Dp:  # block truncation
-            inds = S.config.backend.argsort(S.data[slice(*sl.slcs[0])])
-            Smask._data[slice(*sl.slcs[0])][inds[:-D_bl]] = False
+            inds = backend.eigs_which(S.data[slc], which)
+            Smask._data[slc][inds[D_bl:]] = False
         elif D_bl == 0:
-            Smask._data[slice(*sl.slcs[0])] = False
+            Smask._data[slc] = False
 
     temp_data = S._data * Smask.data
-    above_tol = temp_data > tol * S.config.backend.max_abs(temp_data)
-    D_tol = S.config.backend.sum_elements(above_tol).item()
+    above_tol = temp_data > tol * backend.max_abs(temp_data)
+    D_tol = backend.sum_elements(above_tol).item()
     D_total = min(D_total, D_tol)
 
     if D_total == 0:
         Smask._data[:] = False
         return Smask
 
-    inds = S.config.backend.argsort(temp_data)
+    inds = backend.argsort(temp_data)
 
     if truncate_multiplets and D_total < len(inds):
         gap = -1
@@ -1114,20 +1136,10 @@ def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank',
     """
     S, U = eigh(a, axes=axes, sU=sU, Uaxis=Uaxis, which=which, policy=policy)
 
-    # # truncation mask assumes positive values in _S and select largest elements
-    # if which in ["SR", "SM"] and (tol in [-float('inf')]) and not (tol_block in [-float('inf')]):
-    #     raise YastnError("Truncation by tolerance with which='SR' or 'SM' is not supported."
-    #         +"Set tol and tol_block to -inf or use mask_f for custom truncation mask if needed.")
-
-    _S = abs(S) if which in ["SM", "LM"] else S
-    if which in ["SM", "SR"]:
-        _S = - _S
-
-    Smask = truncation_mask(_S, tol=tol, tol_block=tol_block,
+    Smask = truncation_mask(S, which=which, tol=tol, tol_block=tol_block,
                         D_block=D_block, D_total=D_total,
                         truncate_multiplets=truncate_multiplets, mask_f=mask_f)
     S, U = Smask.apply_mask(S, U, axes=(0, Uaxis))
-
     return S, U
 
 

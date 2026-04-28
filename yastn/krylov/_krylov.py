@@ -192,11 +192,11 @@ def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=Fals
             Number of desired eigenvalues and eigenvectors. The default is 1.
 
         which: str
-            One of [``‘LM’``, ``‘LR’``, ``‘SR’``] specifying which `k` eigenvectors and eigenvalues to find:
-            ``‘LM’`` : largest magnitude,
-            ``‘SM’`` : smallest magnitude,
-            ``‘LR’`` : largest real part,
-            ``‘SR’`` : smallest real part.
+            One of [``'LM'``, ``'LR'``, ``'SM'``, ``'SR'``] specifying which `k` eigenvectors and eigenvalues to find:
+            ``'LM'`` : largest magnitude,
+            ``'SM'`` : smallest magnitude,
+            ``'LR'`` : largest real part,
+            ``'SR'`` : smallest real part.
 
         ncv: int
             Dimension of the employed Krylov space. The default is 10.
@@ -327,11 +327,11 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
             Tolerance for singular values. Zero (default) means machine precision.
 
         which: str
-            One of [``‘LM’``, ``‘LR’``, ``‘SR’``] specifying which `D_total` singular vectors and singular values to find:
-            ``‘LM’`` : largest magnitude,
-            ``‘SM’`` : smallest magnitude,
-            ``‘LR’`` : largest real part,
-            ``‘SR’`` : smallest real part.
+            One of [``'LM'``, ``'LR'``, ``'SM'``, ``'SR'``] specifying which `D_total` singular vectors and singular values to find:
+            ``'LM'`` : largest magnitude,
+            ``'SM'`` : smallest magnitude,
+            ``'LR'`` : largest real part,
+            ``'SR'`` : smallest real part.
 
         Additional kwargs:
 
