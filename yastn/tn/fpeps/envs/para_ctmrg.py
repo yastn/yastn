@@ -333,7 +333,14 @@ def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, move='t', proj_dict=Non
             site_ = site
 
         if site_ is not None:
-            jobs.append((site_, move))
+            if move in 'h':
+                jobs.append((site_, 'l'))
+                jobs.append((site_, 'r'))
+            elif move in 'v':
+                jobs.append((site_, 't'))
+                jobs.append((site_, 'b'))
+            else:
+                jobs.append((site_, move))
 
     gathered_result_ = ray.get([BuildProjector.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task).remote(*job, env_remote, opts_svd_ctm, cfg) for job in jobs])
 
@@ -377,28 +384,46 @@ def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, move='t', proj_dict=Non
                          canonical_site(env, env.nn_site(site, (1, 1)))))
 
     updated_ctm_tensors = []
-    updated_ctm_tensors = ray.get([UpdateSite.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, num_returns=1).remote(*job, env_remote, cfg, move, proj_dict_remote) for job in jobs])
+    if move in "lrtb":
+        updated_ctm_tensors = ray.get([UpdateSite.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, num_returns=1).remote(*job, env_remote, cfg, move, proj_dict_remote) for job in jobs])
+    elif move in "h":
+        updated_ctm_tensors = ray.get([UpdateSite.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, num_returns=1).remote(*job, env_remote, cfg, move_, proj_dict_remote) for move_ in ['l', 'r'] for job in jobs])
+    elif move in "v":
+        updated_ctm_tensors = ray.get([UpdateSite.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, num_returns=1).remote(*job, env_remote, cfg, move_, proj_dict_remote) for move_ in ['t', 'b'] for job in jobs])
 
     proj_dict.clear()
 
     ii = 0
     for result in updated_ctm_tensors:
-        site_ = sites_to_be_updated[ii]
-        if move in "vt":
+        site_ = sites_to_be_updated[ii % len(sites_to_be_updated)]
+        if move in 'h':
+            if ii < len(sites_to_be_updated):
+                move_ = 'l'
+            else:
+                move_ = 'r'
+        elif move in 'v':
+            if ii < len(sites_to_be_updated):
+                move_ = 't'
+            else:
+                move_ = 'b'
+        else:
+            move_ = move
+        print(move, move_, ii)
+        if move_ in "vt":
             env[site_].t = from_dict(config=cfg, d = result[0])
-        if move in "vb":
+        if move_ in "vb":
             env[site_].b = from_dict(config=cfg, d = result[1])
-        if move in "hl":
+        if move_ in "hl":
             env[site_].l = from_dict(config=cfg, d = result[0])
-        if move in "hr":
+        if move_ in "hr":
             env[site_].r = from_dict(config=cfg, d = result[1])
-        if move in 'hvtl':
+        if move_ in 'hvtl':
             env[site_].tl = from_dict(config=cfg, d = result[2])
-        if move in 'hvtr':
+        if move_ in 'hvtr':
             env[site_].tr = from_dict(config=cfg, d = result[3])
-        if move in 'hvbl':
+        if move_ in 'hvbl':
             env[site_].bl = from_dict(config=cfg, d = result[4])
-        if move in 'hvbr':
+        if move_ in 'hvbr':
             env[site_].br = from_dict(config=cfg, d = result[5])
 
         ii = ii + 1
