@@ -6,12 +6,6 @@ from .._peps import Peps
 from .._geometry import Site, SquareLattice
 from ...._from_dict import from_dict
 import ray
-import psutil
-
-def get_taskset_cpu_count():
-    proc = psutil.Process()
-    affinity = proc.cpu_affinity()
-    return len(affinity)
 
 import os
 os.environ.update({
@@ -21,9 +15,9 @@ os.environ.update({
     'RAY_enable_memory_plasma_logging': '1',
     'RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO': '0'})
 
-def CreateCTMJobBundle(env:EnvCTM, cpus_per_task=4):
+def CreateCTMJobBundle(env:EnvCTM, total_cpus, cpus_per_task=4):
 
-    n_tasks_per_batch = get_taskset_cpu_count() // cpus_per_task
+    n_tasks_per_batch = total_cpus // cpus_per_task
 
     Lx = env.psi.geometry.Nx
     Ly = env.psi.geometry.Ny
@@ -473,9 +467,6 @@ def MeasureNN(bond, env, op0, op1):
 
 def ParaMeasure(env, funcs, argss, kwargss, cpus_per_task=4, gpus_per_task=0):
 
-    if not ray.is_initialized():
-        ray.init(num_cpus=get_taskset_cpu_count(), ignore_reinit_error=True, namespace='Measure')
-
     env_remote = ray.put(env)
 
     list_of_results = ray.get([Measure.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task).remote(env_remote, funcs[ii], argss[ii], kwargss[ii]) for ii in range(len(funcs))])
@@ -483,9 +474,6 @@ def ParaMeasure(env, funcs, argss, kwargss, cpus_per_task=4, gpus_per_task=0):
     return list_of_results
 
 def ParaMeasure1Site(env, op, cpus_per_task=4, gpus_per_task=0):
-
-    if not ray.is_initialized():
-        ray.init(num_cpus=get_taskset_cpu_count(), ignore_reinit_error=True, namespace='Measure1Site')
 
     psi = env.psi
     env_remote = ray.put(env)
@@ -495,9 +483,6 @@ def ParaMeasure1Site(env, op, cpus_per_task=4, gpus_per_task=0):
     return result
 
 def ParaMeasureNN(env, op0, op1, cpus_per_task=4, gpus_per_task=0):
-
-    if not ray.is_initialized():
-        ray.init(num_cpus=get_taskset_cpu_count(), ignore_reinit_error=True, namespace='MeasureNN')
 
     psi = env.psi
     list_of_dicts = []
@@ -512,8 +497,5 @@ def ParaMeasureNN(env, op0, op1, cpus_per_task=4, gpus_per_task=0):
 
 
 def PARActmrg_(env:EnvCTM, max_sweeps=50, iterator_step=1, opts_svd_ctm=None, corner_tol=None, ctm_jobs_hv=None, moves='hv', cpus_per_task=1, gpus_per_task=0):
-    if ray.is_initialized():
-        ray.shutdown()
-    ray.init(num_cpus=get_taskset_cpu_count(), ignore_reinit_error=True, namespace='BuilidProjector')
     tmp = _ctmrg_(env, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, cpus_per_task=cpus_per_task, gpus_per_task=gpus_per_task, ctm_jobs_hv=ctm_jobs_hv, moves=moves)
     return tmp if iterator_step else next(tmp)
