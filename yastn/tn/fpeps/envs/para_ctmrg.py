@@ -6,6 +6,7 @@ from .._peps import Peps
 from .._geometry import Site, SquareLattice
 from ...._from_dict import from_dict
 import ray
+import time
 
 import os
 os.environ.update({
@@ -342,7 +343,7 @@ def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, move='t', proj_dict=Non
             else:
                 jobs.append((site_, move))
 
-    gathered_result_ = ray.get([BuildProjector.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task).remote(*job, env_remote, opts_svd_ctm, cfg) for job in jobs])
+    gathered_result_ = ray.get([BuildProjector.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, name=f"BuildProjector{job}").remote(*job, env_remote, opts_svd_ctm, cfg) for job in jobs])
 
     if proj_dict is None:
         proj_dict = {}
@@ -385,11 +386,11 @@ def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, move='t', proj_dict=Non
 
     updated_ctm_tensors = []
     if move in "lrtb":
-        updated_ctm_tensors = ray.get([UpdateSite.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, num_returns=1).remote(*job, env_remote, cfg, move, proj_dict_remote) for job in jobs])
+        updated_ctm_tensors = ray.get([UpdateSite.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, num_returns=1, name=f"UpdateSite {job[0]} {move}").remote(*job, env_remote, cfg, move, proj_dict_remote) for job in jobs])
     elif move in "h":
-        updated_ctm_tensors = ray.get([UpdateSite.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, num_returns=1).remote(*job, env_remote, cfg, move_, proj_dict_remote) for move_ in ['l', 'r'] for job in jobs])
+        updated_ctm_tensors = ray.get([UpdateSite.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, num_returns=1, name=f"UpdateSite {job[0]} {move_}").remote(*job, env_remote, cfg, move_, proj_dict_remote) for move_ in ['l', 'r'] for job in jobs])
     elif move in "v":
-        updated_ctm_tensors = ray.get([UpdateSite.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, num_returns=1).remote(*job, env_remote, cfg, move_, proj_dict_remote) for move_ in ['t', 'b'] for job in jobs])
+        updated_ctm_tensors = ray.get([UpdateSite.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, num_returns=1, name=f"UpdateSite {job[0]} {move_}").remote(*job, env_remote, cfg, move_, proj_dict_remote) for move_ in ['t', 'b'] for job in jobs])
 
     proj_dict.clear()
 
@@ -493,7 +494,7 @@ def ParaMeasure(env, funcs, argss, kwargss, cpus_per_task=4, gpus_per_task=0):
 
     env_remote = ray.put(env)
 
-    list_of_results = ray.get([Measure.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task).remote(env_remote, funcs[ii], argss[ii], kwargss[ii]) for ii in range(len(funcs))])
+    list_of_results = ray.get([Measure.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, name=f"Measure {ii}").remote(env_remote, funcs[ii], argss[ii], kwargss[ii]) for ii in range(len(funcs))])
 
     return list_of_results
 
@@ -501,7 +502,7 @@ def ParaMeasure1Site(env, op, cpus_per_task=4, gpus_per_task=0):
 
     psi = env.psi
     env_remote = ray.put(env)
-    list_of_dicts = ray.get([Measure1Site.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task).remote(site, env_remote, op) for site in env.psi.sites()])
+    list_of_dicts = ray.get([Measure1Site.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, name=f"Measure1Site {site}").remote(site, env_remote, op) for site in env.psi.sites()])
 
     result = {k: v for d in list_of_dicts for k, v in d.items()}
     return result
@@ -513,8 +514,8 @@ def ParaMeasureNN(env, op0, op1, cpus_per_task=4, gpus_per_task=0):
 
     env_remote = ray.put(env)
 
-    list_of_dicts += ray.get([MeasureNN.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task).remote(bond, env_remote, op0, op1) for bond in psi.bonds(dirn='h')])
-    list_of_dicts += ray.get([MeasureNN.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task).remote(bond, env_remote, op0, op1) for bond in psi.bonds(dirn='v')])
+    list_of_dicts += ray.get([MeasureNN.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, name=f"MeasureNN {bond}").remote(bond, env_remote, op0, op1) for bond in psi.bonds(dirn='h')])
+    list_of_dicts += ray.get([MeasureNN.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, name=f"MeasureNN {bond}").remote(bond, env_remote, op0, op1) for bond in psi.bonds(dirn='v')])
 
     result = {k: v for d in list_of_dicts for k, v in d.items()}
     return result
