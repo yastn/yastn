@@ -532,7 +532,7 @@ class Measure1Site(CPUAssign):
     def __init__(self, cpu_ids):
         super().__init__(cpu_ids)
 
-    def Do(site, env, op):
+    def Do(self, site, env, op):
         return {site: env.measure_1site(op, site=site)}
 
 @ray.remote(num_cpus=4, num_gpus=0)
@@ -541,7 +541,7 @@ class Measure(CPUAssign):
     def __init__(self, cpu_ids):
         super().__init__(cpu_ids)
 
-    def Do(env, func_name:str, args:tuple, kwargs:dict):
+    def Do(self, env, func_name:str, args:tuple, kwargs:dict):
         func = getattr(_env_ctm_measure, func_name)
         return func(env, *args, **kwargs)
 
@@ -551,14 +551,14 @@ class MeasureNN(CPUAssign):
     def __init__(self, cpu_ids):
         super().__init__(cpu_ids)
 
-    def Do(bond, env, op0, op1):
+    def Do(self, bond, env, op0, op1):
         return {bond: env.measure_nn(op0, op1, bond)}
 
 def ParaMeasure(env, funcs, argss, kwargss, cpus_per_task=4, gpus_per_task=0, cpu_list=None):
 
     env_remote = ray.put(env)
 
-    actors = [Measure.options(cpus_per_task=cpus_per_task, gpus_per_task=gpus_per_task, name=f"Measure {ii}").remote(GetCPUChunk(cpu_list, ii, cpus_per_task)) for ii in range(len(funcs))]
+    actors = [Measure.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, name=f"Measure {ii}").remote(GetCPUChunk(cpu_list, ii, cpus_per_task)) for ii in range(len(funcs))]
 
     list_of_results = ray.get([actors[ii].Do.remote(env_remote, funcs[ii], argss[ii], kwargss[ii]) for ii in range(len(funcs))])
     for actor in actors:
