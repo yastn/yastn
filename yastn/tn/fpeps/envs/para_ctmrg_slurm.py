@@ -9,12 +9,7 @@ import ray
 import time
 
 import os
-os.environ.update({
-    'RAY_object_store_memory_lock': '0',
-    'RAY_object_store_memory': '100000000000',
-    'RAY_plasma_unlimited': '1',
-    'RAY_enable_memory_plasma_logging': '1',
-    'RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO': '0'})
+os.environ["RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO"] = "0"
 
 
 def CreateCTMJobBundle(env:EnvCTM, total_cpus, cpus_per_task=4):
@@ -39,9 +34,9 @@ class CPUAssign:
         if cpu_ids is not None:
             os.sched_setaffinity(0, cpu_ids)
             n = len(cpu_ids)
-            os.environ["OMP_NUM_THREADS"] = str(n)
-            os.environ["MKL_NUM_THREADS"] = str(n)
-            os.environ["OPENBLAS_NUM_THREADS"] = str(n)
+            # os.environ["OMP_NUM_THREADS"] = str(n)
+            # os.environ["MKL_NUM_THREADS"] = str(n)
+            # os.environ["OPENBLAS_NUM_THREADS"] = str(n)
 
             self.cpu_ids = cpu_ids
 
@@ -377,7 +372,7 @@ def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, move='t', proj_dict=Non
     gathered_result_ = ray.get(todo)
 
     for actor in actors:
-        ray.kill(actor)
+        ray.kill(actor, no_restart=True)
     actors.clear()
 
     if proj_dict is None:
@@ -433,7 +428,7 @@ def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, move='t', proj_dict=Non
     updated_ctm_tensors = ray.get(todo)
 
     for actor in actors:
-        ray.kill(actor)
+        ray.kill(actor, no_restart=True)
     actors.clear()
 
     proj_dict.clear()
@@ -559,7 +554,7 @@ def ParaMeasure(env, funcs, argss, kwargss, cpus_per_task=4, gpus_per_task=0, cp
     list_of_results = ray.get(todo)
 
     for actor in actors:
-        ray.kill(actor)
+        ray.kill(actor, no_restart=True)
     actors.clear()
 
     return list_of_results
@@ -574,7 +569,7 @@ def ParaMeasure1Site(env, op, cpus_per_task=4, gpus_per_task=0, cpu_list=None, n
     list_of_dicts = ray.get(todo)
 
     for actor in actors:
-        ray.kill(actor)
+        ray.kill(actor, no_restart=True)
     actors.clear()
 
     result = {k: v for d in list_of_dicts for k, v in d.items()}
@@ -592,7 +587,7 @@ def ParaMeasureNN(env, op0, op1, cpus_per_task=4, gpus_per_task=0, cpu_list=None
     list_of_dicts = ray.get(todo)
 
     for actor in actors:
-        ray.kill(actor)
+        ray.kill(actor, no_restart=True)
     actors.clear()
 
     result = {k: v for d in list_of_dicts for k, v in d.items()}
