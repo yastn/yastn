@@ -408,7 +408,6 @@ def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, move='t', proj_dict=Non
                 move_ = 'b'
         else:
             move_ = move
-        print(move, move_, ii)
         if move_ in "vt":
             env[site_].t = from_dict(config=cfg, d = result[0])
         if move_ in "vb":
