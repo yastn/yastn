@@ -340,7 +340,7 @@ def canonical_site(env, site):
     else:
         return env.psi.sites()[site_index]
 
-def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, move='t', proj_dict=None, sites_to_be_updated=None, cpus_per_task=4, gpus_per_task=0, cpu_list=None):
+def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, move='t', proj_dict=None, sites_to_be_updated=None, cpus_per_task=4, gpus_per_task=0, cpu_list=None, num_of_actors=1):
 
     # Build projectors
 
@@ -372,9 +372,10 @@ def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, move='t', proj_dict=Non
             else:
                 jobs.append((site_, move))
 
-    actors = [BuildProjector.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, name=f"BuildProjector{jobs[ii]}").remote(GetCPUChunk(cpu_list, ii, cpus_per_task)) for ii in range(len(jobs))]
+    actors = [BuildProjector.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, name=f"BuildProjector{ii}").remote(GetCPUChunk(cpu_list, ii, cpus_per_task)) for ii in range(num_of_actors)]
+    todo = [actors[ii % num_of_actors].Do.remote(*jobs[ii], env_remote, opts_svd_ctm, cfg) for ii in range(len(jobs))]
+    gathered_result_ = ray.get(todo)
 
-    gathered_result_ = ray.get([actors[ii].Do.remote(*jobs[ii], env_remote, opts_svd_ctm, cfg) for ii in range(len(jobs))])
     for actor in actors:
         ray.kill(actor)
     actors.clear()
@@ -419,7 +420,8 @@ def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, move='t', proj_dict=Non
                          canonical_site(env, env.nn_site(site, (1, 1)))))
 
 
-    actors = []
+    actors = [BuildProjector.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, name=f"BuildProjector{ii}").remote(GetCPUChunk(cpu_list, ii, cpus_per_task)) for ii in range(num_of_actors)]
+
     if move in "lrtb":
         actors = [UpdateSite.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, name=f"UpdateSite {jobs[ii][0]} {move}").remote(GetCPUChunk(cpu_list, ii, cpus_per_task)) for ii in range(len(jobs))]
     elif move in "h":
@@ -430,11 +432,12 @@ def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, move='t', proj_dict=Non
 
     updated_ctm_tensors = []
     if move in "lrtb":
-        updated_ctm_tensors = ray.get([actors[ii].Do.remote(*jobs[ii], env_remote, cfg, move, proj_dict_remote) for ii in range(len(jobs))])
+        todo = [actors[ii % num_of_actors].Do.remote(*jobs[ii], env_remote, cfg, move, proj_dict_remote) for ii in range(len(jobs))]
     elif move in "h":
-        updated_ctm_tensors = ray.get([actors[ii + (move_ in 'rb') * len(jobs)].Do.remote(*jobs[ii], env_remote, cfg, move_, proj_dict_remote) for move_ in ['l', 'r'] for ii in range(len(jobs))])
+        todo = [actors[(ii + (0 if move_ in 'l' else len(jobs))) % num_of_actors].Do.remote(*jobs[ii], env_remote, cfg, move_, proj_dict_remote) for move_ in ['l', 'r'] for ii in range(len(jobs))]
     elif move in "v":
-        updated_ctm_tensors = ray.get([actors[ii + (move_ in 'rb') * len(jobs)].Do.remote(*jobs[ii], env_remote, cfg, move_, proj_dict_remote) for move_ in ['t', 'b'] for ii in range(len(jobs))])
+        todo = [actors[(ii + (0 if move_ in 't' else len(jobs))) % num_of_actors].Do.remote(*jobs[ii], env_remote, cfg, move_, proj_dict_remote) for move_ in ['t', 'b'] for ii in range(len(jobs))]
+    updated_ctm_tensors = ray.get(todo)
 
     for actor in actors:
         ray.kill(actor)
@@ -477,7 +480,7 @@ def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, move='t', proj_dict=Non
         ii = ii + 1
 
 
-def _ctmrg_(env:EnvCTM, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, ctm_jobs_hv=None, moves='hv', cpus_per_task=4, gpus_per_task=0, cpu_list=None):
+def _ctmrg_(env:EnvCTM, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, ctm_jobs_hv=None, moves='hv', cpus_per_task=4, gpus_per_task=0, cpu_list=None, num_of_actors=1):
 
     if ctm_jobs_hv is None:
         # ctm_jobs_hor, ctm_jobs_ver = CreateCTMJobBundle(env, cpus_per_task=cpus_per_task)
@@ -497,18 +500,18 @@ def _ctmrg_(env:EnvCTM, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, ctm
                 # if n_tasks_per_batch >= psi.geometry.Ny:
                 for ctm_jobs in ctm_jobs_ver:
                     if ctm_jobs_hv is None:
-                        ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, move=move, cpus_per_task=cpus_per_task, gpus_per_task=gpus_per_task, cpu_list=cpu_list)
+                        ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, move=move, cpus_per_task=cpus_per_task, gpus_per_task=gpus_per_task, cpu_list=cpu_list, num_of_actors=num_of_actors)
                     else:
-                        ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, move=move, sites_to_be_updated=ctm_jobs, cpus_per_task=cpus_per_task, gpus_per_task=gpus_per_task, cpu_list=cpu_list)
+                        ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, move=move, sites_to_be_updated=ctm_jobs, cpus_per_task=cpus_per_task, gpus_per_task=gpus_per_task, cpu_list=cpu_list, num_of_actors=num_of_actors)
 
             if move in 'hlr':
 
                 # if n_tasks_per_batch >= psi.geometry.Nx:
                 for ctm_jobs in ctm_jobs_hor:
                     if ctm_jobs_hv is None:
-                        ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, move=move, cpus_per_task=cpus_per_task, gpus_per_task=gpus_per_task, cpu_list=cpu_list)
+                        ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, move=move, cpus_per_task=cpus_per_task, gpus_per_task=gpus_per_task, cpu_list=cpu_list, num_of_actors=num_of_actors)
                     else:
-                        ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, move=move, sites_to_be_updated=ctm_jobs, cpus_per_task=cpus_per_task, gpus_per_task=gpus_per_task, cpu_list=cpu_list)
+                        ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, move=move, sites_to_be_updated=ctm_jobs, cpus_per_task=cpus_per_task, gpus_per_task=gpus_per_task, cpu_list=cpu_list, num_of_actors=num_of_actors)
 
         if corner_tol is not None:
             # Evaluate convergence of CTM by computing the difference of environment corner spectra between consecutive CTM steps.
@@ -554,26 +557,28 @@ class MeasureNN(CPUAssign):
     def Do(self, bond, env, op0, op1):
         return {bond: env.measure_nn(op0, op1, bond)}
 
-def ParaMeasure(env, funcs, argss, kwargss, cpus_per_task=4, gpus_per_task=0, cpu_list=None):
+def ParaMeasure(env, funcs, argss, kwargss, cpus_per_task=4, gpus_per_task=0, cpu_list=None, num_of_actors=1):
 
     env_remote = ray.put(env)
 
-    actors = [Measure.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, name=f"Measure {ii}").remote(GetCPUChunk(cpu_list, ii, cpus_per_task)) for ii in range(len(funcs))]
+    actors = [Measure.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, name=f"Measure {ii}").remote(GetCPUChunk(cpu_list, ii, cpus_per_task)) for ii in range(num_of_actors)]
+    todo = [actors[ii % num_of_actors].Do.remote(env_remote, funcs[ii], argss[ii], kwargss[ii]) for ii in range(len(funcs))]
+    list_of_results = ray.get(todo)
 
-    list_of_results = ray.get([actors[ii].Do.remote(env_remote, funcs[ii], argss[ii], kwargss[ii]) for ii in range(len(funcs))])
     for actor in actors:
         ray.kill(actor)
     actors.clear()
 
     return list_of_results
 
-def ParaMeasure1Site(env, op, cpus_per_task=4, gpus_per_task=0, cpu_list=None):
+def ParaMeasure1Site(env, op, cpus_per_task=4, gpus_per_task=0, cpu_list=None, num_of_actors=1):
 
     env_remote = ray.put(env)
 
     sites = env.psi.sites()
-    actors = [Measure1Site.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, name=f"Measure1Site ii").remote(GetCPUChunk(cpu_list, ii, cpus_per_task)) for ii in range(len(sites))]
-    list_of_dicts = ray.get([actors[ii].Do.remote(sites[ii], env_remote, op) for ii in range(len(sites))])
+    actors = [Measure1Site.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, name=f"Measure1Site ii").remote(GetCPUChunk(cpu_list, ii, cpus_per_task)) for ii in range(num_of_actors)]
+    todo = [actors[ii % num_of_actors].Do.remote(sites[ii], env_remote, op) for ii in range(len(sites))]
+    list_of_dicts = ray.get(todo)
 
     for actor in actors:
         ray.kill(actor)
@@ -582,24 +587,25 @@ def ParaMeasure1Site(env, op, cpus_per_task=4, gpus_per_task=0, cpu_list=None):
     result = {k: v for d in list_of_dicts for k, v in d.items()}
     return result
 
-def ParaMeasureNN(env, op0, op1, cpus_per_task=4, gpus_per_task=0, cpu_list=None):
+def ParaMeasureNN(env, op0, op1, cpus_per_task=4, gpus_per_task=0, cpu_list=None, num_of_actors=1):
 
     psi = env.psi
 
     env_remote = ray.put(env)
 
     bonds = psi.bonds()
-    actors = [MeasureNN.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, name=f"MeasureNN {bonds[ii]}").remote(GetCPUChunk(cpu_list, ii, cpus_per_task)) for ii in range(len(bonds))]
+    actors = [MeasureNN.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, name=f"MeasureNN {bonds[ii]}").remote(GetCPUChunk(cpu_list, ii, cpus_per_task)) for ii in range(num_of_actors)]
+    todo = [actors[ii % num_of_actors].Do.remote(bonds[ii], env_remote, op0, op1) for ii in len(bonds)]
+    list_of_dicts = ray.get(todo)
 
     for actor in actors:
         ray.kill(actor)
     actors.clear()
-    list_of_dicts = ray.get([actors[ii].remote(bonds[ii], env_remote, op0, op1) for ii in len(bonds)])
 
     result = {k: v for d in list_of_dicts for k, v in d.items()}
     return result
 
 
-def PARActmrg_(env:EnvCTM, max_sweeps=50, iterator_step=1, opts_svd_ctm=None, corner_tol=None, ctm_jobs_hv=None, moves='hv', cpus_per_task=1, gpus_per_task=0, cpu_list=None):
-    tmp = _ctmrg_(env, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, cpus_per_task=cpus_per_task, gpus_per_task=gpus_per_task, ctm_jobs_hv=ctm_jobs_hv, moves=moves, cpu_list=cpu_list)
+def PARActmrg_(env:EnvCTM, max_sweeps=50, iterator_step=1, opts_svd_ctm=None, corner_tol=None, ctm_jobs_hv=None, moves='hv', cpus_per_task=1, gpus_per_task=0, cpu_list=None, num_of_actors=1):
+    tmp = _ctmrg_(env, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, cpus_per_task=cpus_per_task, gpus_per_task=gpus_per_task, ctm_jobs_hv=ctm_jobs_hv, moves=moves, cpu_list=cpu_list, num_of_actors=num_of_actors)
     return tmp if iterator_step else next(tmp)
