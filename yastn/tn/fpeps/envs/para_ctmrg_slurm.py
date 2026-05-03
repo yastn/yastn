@@ -420,15 +420,8 @@ def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, move='t', proj_dict=Non
                          canonical_site(env, env.nn_site(site, (1, 1)))))
 
 
-    actors = [BuildProjector.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, name=f"BuildProjector{ii}").remote(GetCPUChunk(cpu_list, ii, cpus_per_task)) for ii in range(num_of_actors)]
 
-    if move in "lrtb":
-        actors = [UpdateSite.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, name=f"UpdateSite {jobs[ii][0]} {move}").remote(GetCPUChunk(cpu_list, ii, cpus_per_task)) for ii in range(len(jobs))]
-    elif move in "h":
-        actors = [UpdateSite.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, name=f"UpdateSite {jobs[ii][0]} {move_}").remote(GetCPUChunk(cpu_list, ii, cpus_per_task)) for move_ in ['l', 'r'] for ii in range(len(jobs))]
-    elif move in 'v':
-        actors = [UpdateSite.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, name=f"UpdateSite {jobs[ii][0]} {move_}").remote(GetCPUChunk(cpu_list, ii, cpus_per_task)) for move_ in ['t', 'b'] for ii in range(len(jobs))]
-
+    actors = [UpdateSite.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, name=f"UpdateSite {ii}").remote(GetCPUChunk(cpu_list, ii, cpus_per_task)) for ii in range(num_of_actors)]
 
     updated_ctm_tensors = []
     if move in "lrtb":
