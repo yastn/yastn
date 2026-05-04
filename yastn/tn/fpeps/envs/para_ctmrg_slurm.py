@@ -40,14 +40,21 @@ class CPUAssign:
 
             self.cpu_ids = cpu_ids
 
+    @classmethod
+    def GetCPUChunk(cpu_list, ii, cpus_per_task):
+        if cpu_list is None:
+            return None
+        else:
+            return [cpu_list[(ii*cpus_per_task + j) % len(cpu_list)] for j in range(cpus_per_task)]
+
 
 @ray.remote(num_cpus=4, num_gpus=0)
-class BuildProjector(CPUAssign):
+class EnvCTMActor(CPUAssign):
 
     def __init__(self, cpu_ids):
         super().__init__(cpu_ids)
 
-    def Do(self, site, move, env, opts_svd_ctm, cfg, method='2x2'):
+    def BuildProjector(self, site, move, env, opts_svd_ctm, cfg, method='2x2'):
 
         sites = [env.nn_site(site, d=d) for d in ((0, 0), (0, 1), (1, 0), (1, 1))]
         if None in sites:
@@ -78,13 +85,18 @@ class BuildProjector(CPUAssign):
 
         return result_dict
 
-@ray.remote(num_cpus=4, num_gpus=0)
-class UpdateSite(CPUAssign):
+    def MeasureNN(self, bond, env, op0, op1):
+        return {bond: env.measure_nn(op0, op1, bond)}
 
-    def __init__(self, cpu_ids):
-        super().__init__(cpu_ids)
+    def Measure1Site(self, site, env, op):
+        return {site: env.measure_1site(op, site=site)}
 
-    def Do(self, site, site_t_or_l, site_b_or_r, site_tl, site_tr, site_bl, site_br, env, cfg, move, proj_dict):
+
+    def Measure(self, env, func_name:str, args:tuple, kwargs:dict):
+        func = getattr(_env_ctm_measure, func_name)
+        return func(env, *args, **kwargs)
+
+    def UpdateSite(self, site, site_t_or_l, site_b_or_r, site_tl, site_tr, site_bl, site_br, env, cfg, move, proj_dict):
 
         env_tmp = EnvCTM(env.psi, init=None)
 
@@ -335,10 +347,10 @@ def canonical_site(env, site):
     else:
         return env.psi.sites()[site_index]
 
-def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, move='t', proj_dict=None, sites_to_be_updated=None, cpus_per_task=4, gpus_per_task=0, cpu_list=None, num_of_actors=1):
+def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, move='t', proj_dict=None, sites_to_be_updated=None, actors=[]):
 
     # Build projectors
-
+    num_of_actors = len(actors)
     env_remote = ray.put(env)
 
     jobs = []
@@ -367,13 +379,8 @@ def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, move='t', proj_dict=Non
             else:
                 jobs.append((site_, move))
 
-    actors = [BuildProjector.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, name=f"BuildProjector{ii}").remote(GetCPUChunk(cpu_list, ii, cpus_per_task)) for ii in range(num_of_actors)]
-    todo = [actors[ii % num_of_actors].Do.remote(*jobs[ii], env_remote, opts_svd_ctm, cfg) for ii in range(len(jobs))]
+    todo = [actors[ii % num_of_actors].BuildProjector.remote(*jobs[ii], env_remote, opts_svd_ctm, cfg) for ii in range(len(jobs))]
     gathered_result_ = ray.get(todo)
-
-    for actor in actors:
-        ray.kill(actor, no_restart=True)
-    actors.clear()
 
     if proj_dict is None:
         proj_dict = {}
@@ -414,22 +421,14 @@ def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, move='t', proj_dict=Non
                          canonical_site(env, env.nn_site(site, (1, -1))),
                          canonical_site(env, env.nn_site(site, (1, 1)))))
 
-
-
-    actors = [UpdateSite.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, name=f"UpdateSite {ii}").remote(GetCPUChunk(cpu_list, ii, cpus_per_task)) for ii in range(num_of_actors)]
-
     updated_ctm_tensors = []
     if move in "lrtb":
-        todo = [actors[ii % num_of_actors].Do.remote(*jobs[ii], env_remote, cfg, move, proj_dict_remote) for ii in range(len(jobs))]
+        todo = [actors[ii % num_of_actors].UpdateSite.remote(*jobs[ii], env_remote, cfg, move, proj_dict_remote) for ii in range(len(jobs))]
     elif move in "h":
-        todo = [actors[(ii + (0 if move_ in 'l' else len(jobs))) % num_of_actors].Do.remote(*jobs[ii], env_remote, cfg, move_, proj_dict_remote) for move_ in ['l', 'r'] for ii in range(len(jobs))]
+        todo = [actors[(ii + (0 if move_ in 'l' else len(jobs))) % num_of_actors].UpdateSite.remote(*jobs[ii], env_remote, cfg, move_, proj_dict_remote) for move_ in ['l', 'r'] for ii in range(len(jobs))]
     elif move in "v":
-        todo = [actors[(ii + (0 if move_ in 't' else len(jobs))) % num_of_actors].Do.remote(*jobs[ii], env_remote, cfg, move_, proj_dict_remote) for move_ in ['t', 'b'] for ii in range(len(jobs))]
+        todo = [actors[(ii + (0 if move_ in 't' else len(jobs))) % num_of_actors].UpdateSite.remote(*jobs[ii], env_remote, cfg, move_, proj_dict_remote) for move_ in ['t', 'b'] for ii in range(len(jobs))]
     updated_ctm_tensors = ray.get(todo)
-
-    for actor in actors:
-        ray.kill(actor, no_restart=True)
-    actors.clear()
 
     proj_dict.clear()
 
@@ -468,7 +467,7 @@ def ParaUpdateCTM_(env:EnvCTM, sites, opts_svd_ctm, cfg, move='t', proj_dict=Non
         ii = ii + 1
 
 
-def _ctmrg_(env:EnvCTM, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, ctm_jobs_hv=None, moves='hv', cpus_per_task=4, gpus_per_task=0, cpu_list=None, num_of_actors=1):
+def _ctmrg_(env:EnvCTM, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, ctm_jobs_hv=None, moves='hv', actors=[]):
 
     if ctm_jobs_hv is None:
         # ctm_jobs_hor, ctm_jobs_ver = CreateCTMJobBundle(env, cpus_per_task=cpus_per_task)
@@ -488,18 +487,18 @@ def _ctmrg_(env:EnvCTM, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, ctm
                 # if n_tasks_per_batch >= psi.geometry.Ny:
                 for ctm_jobs in ctm_jobs_ver:
                     if ctm_jobs_hv is None:
-                        ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, move=move, cpus_per_task=cpus_per_task, gpus_per_task=gpus_per_task, cpu_list=cpu_list, num_of_actors=num_of_actors)
+                        ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, move=move, actors = actors)
                     else:
-                        ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, move=move, sites_to_be_updated=ctm_jobs, cpus_per_task=cpus_per_task, gpus_per_task=gpus_per_task, cpu_list=cpu_list, num_of_actors=num_of_actors)
+                        ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, move=move, sites_to_be_updated=ctm_jobs, actors = actors)
 
             if move in 'hlr':
 
                 # if n_tasks_per_batch >= psi.geometry.Nx:
                 for ctm_jobs in ctm_jobs_hor:
                     if ctm_jobs_hv is None:
-                        ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, move=move, cpus_per_task=cpus_per_task, gpus_per_task=gpus_per_task, cpu_list=cpu_list, num_of_actors=num_of_actors)
+                        ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, move=move, actors = actors)
                     else:
-                        ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, move=move, sites_to_be_updated=ctm_jobs, cpus_per_task=cpus_per_task, gpus_per_task=gpus_per_task, cpu_list=cpu_list, num_of_actors=num_of_actors)
+                        ParaUpdateCTM_(env, ctm_jobs, opts_svd_ctm, cfg, move=move, sites_to_be_updated=ctm_jobs, actors = actors)
 
         if corner_tol is not None:
             # Evaluate convergence of CTM by computing the difference of environment corner spectra between consecutive CTM steps.
@@ -514,86 +513,47 @@ def _ctmrg_(env:EnvCTM, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, ctm
 
         if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
             yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
+
     yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
 
-
-@ray.remote(num_cpus=4, num_gpus=0)
-class Measure1Site(CPUAssign):
-
-    def __init__(self, cpu_ids):
-        super().__init__(cpu_ids)
-
-    def Do(self, site, env, op):
-        return {site: env.measure_1site(op, site=site)}
-
-@ray.remote(num_cpus=4, num_gpus=0)
-class Measure(CPUAssign):
-
-    def __init__(self, cpu_ids):
-        super().__init__(cpu_ids)
-
-    def Do(self, env, func_name:str, args:tuple, kwargs:dict):
-        func = getattr(_env_ctm_measure, func_name)
-        return func(env, *args, **kwargs)
-
-@ray.remote(num_cpus=4, num_gpus=0)
-class MeasureNN(CPUAssign):
-
-    def __init__(self, cpu_ids):
-        super().__init__(cpu_ids)
-
-    def Do(self, bond, env, op0, op1):
-        return {bond: env.measure_nn(op0, op1, bond)}
-
-def ParaMeasure(env, funcs, argss, kwargss, cpus_per_task=4, gpus_per_task=0, cpu_list=None, num_of_actors=1):
+def ParaMeasure(env, funcs, argss, kwargss, actors=[]):
 
     env_remote = ray.put(env)
 
-    actors = [Measure.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, name=f"Measure {ii}").remote(GetCPUChunk(cpu_list, ii, cpus_per_task)) for ii in range(num_of_actors)]
-    todo = [actors[ii % num_of_actors].Do.remote(env_remote, funcs[ii], argss[ii], kwargss[ii]) for ii in range(len(funcs))]
+    num_of_actors = len(actors)
+    todo = [actors[ii % num_of_actors].Measure.remote(env_remote, funcs[ii], argss[ii], kwargss[ii]) for ii in range(len(funcs))]
     list_of_results = ray.get(todo)
-
-    for actor in actors:
-        ray.kill(actor, no_restart=True)
-    actors.clear()
 
     return list_of_results
 
-def ParaMeasure1Site(env, op, cpus_per_task=4, gpus_per_task=0, cpu_list=None, num_of_actors=1):
+def ParaMeasure1Site(env, op, actors=[]):
 
     env_remote = ray.put(env)
 
     sites = env.psi.sites()
-    actors = [Measure1Site.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, name=f"Measure1Site ii").remote(GetCPUChunk(cpu_list, ii, cpus_per_task)) for ii in range(num_of_actors)]
-    todo = [actors[ii % num_of_actors].Do.remote(sites[ii], env_remote, op) for ii in range(len(sites))]
+    num_of_actors = len(actors)
+    todo = [actors[ii % num_of_actors].Measure1Site.remote(sites[ii], env_remote, op) for ii in range(len(sites))]
     list_of_dicts = ray.get(todo)
-
-    for actor in actors:
-        ray.kill(actor, no_restart=True)
-    actors.clear()
 
     result = {k: v for d in list_of_dicts for k, v in d.items()}
     return result
 
-def ParaMeasureNN(env, op0, op1, cpus_per_task=4, gpus_per_task=0, cpu_list=None, num_of_actors=1):
+def ParaMeasureNN(env, op0, op1, actors=[]):
 
     psi = env.psi
 
     env_remote = ray.put(env)
 
     bonds = psi.bonds()
-    actors = [MeasureNN.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, name=f"MeasureNN {bonds[ii]}").remote(GetCPUChunk(cpu_list, ii, cpus_per_task)) for ii in range(num_of_actors)]
-    todo = [actors[ii % num_of_actors].Do.remote(bonds[ii], env_remote, op0, op1) for ii in len(bonds)]
+    num_of_actors = len(actors)
+    # actors = [MeasureNN.options(num_cpus=cpus_per_task, num_gpus=gpus_per_task, name=f"MeasureNN {bonds[ii]}").remote(GetCPUChunk(cpu_list, ii, cpus_per_task)) for ii in range(num_of_actors)]
+    todo = [actors[ii % num_of_actors].MeasureNN.remote(bonds[ii], env_remote, op0, op1) for ii in len(bonds)]
     list_of_dicts = ray.get(todo)
-
-    for actor in actors:
-        ray.kill(actor, no_restart=True)
-    actors.clear()
 
     result = {k: v for d in list_of_dicts for k, v in d.items()}
     return result
 
 
-def PARActmrg_(env:EnvCTM, max_sweeps=50, iterator_step=1, opts_svd_ctm=None, corner_tol=None, ctm_jobs_hv=None, moves='hv', cpus_per_task=1, gpus_per_task=0, cpu_list=None, num_of_actors=1):
-    tmp = _ctmrg_(env, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, cpus_per_task=cpus_per_task, gpus_per_task=gpus_per_task, ctm_jobs_hv=ctm_jobs_hv, moves=moves, cpu_list=cpu_list, num_of_actors=num_of_actors)
+def PARActmrg_(env:EnvCTM, max_sweeps=50, iterator_step=1, opts_svd_ctm=None, corner_tol=None, ctm_jobs_hv=None, moves='hv', actors=[]):
+    tmp = _ctmrg_(env, max_sweeps, iterator_step, corner_tol, opts_svd_ctm, ctm_jobs_hv=ctm_jobs_hv, moves=moves, actors=actors)
     return tmp if iterator_step else next(tmp)
