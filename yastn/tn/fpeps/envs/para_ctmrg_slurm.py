@@ -40,7 +40,7 @@ class CPUAssign:
 
             self.cpu_ids = cpu_ids
 
-    @classmethod
+    @staticmethod
     def GetCPUChunk(cpu_list, ii, cpus_per_task):
         if cpu_list is None:
             return None
@@ -329,13 +329,6 @@ def SubWindow(env_psi: Peps | EnvCTM, site, top=1, left=1, bottom=1, right=1, on
 
     else:
         return psi_part, site0, Lx, Ly
-
-
-def GetCPUChunk(cpu_list, ii, cpus_per_task):
-    if cpu_list is None:
-        return None
-    else:
-        return [cpu_list[(ii*cpus_per_task + j) % len(cpu_list)] for j in range(cpus_per_task)]
 
 
 def canonical_site(env, site):
