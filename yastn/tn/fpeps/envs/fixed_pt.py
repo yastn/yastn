@@ -777,6 +777,18 @@ class FixedPoint(torch.autograd.Function):
             Sequence[Tensor]: raw environment data for the backward pass.
         """
 
+        # Pin main-process current CUDA device to where env tensors live.
+        # MP workers each set their own current device; the main process
+        # also runs CUDA ops here (gauge-fixing fp CTM step, etc.), and
+        # tapp_torch (torch_cpp backend) launches kernels on the current
+        # device — mismatch causes "illegal memory access" when devices[0]
+        # is not cuda:0.
+        if fwd_devices:
+            _dev0 = fwd_devices[0]
+            if isinstance(_dev0, str) and _dev0.startswith("cuda"):
+                import torch
+                torch.cuda.set_device(_dev0)
+
         # 1. Converge the environment using CTMRG
         ctm_env_out, converged, *FixedPoint.ctm_log, FixedPoint.t_ctm, FixedPoint.t_check = FixedPoint.get_converged_env(
             env,

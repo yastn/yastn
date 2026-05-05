@@ -198,7 +198,10 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
     order_b = nin_b + nout_b
     nsym = a.config.sym.NSYM
 
-    if a.config.backend.BACKEND_ID == 'torch_cpp' and struct_c.t and 0 < len(struct_c.s) < 9 and 0 < len(a.struct.s) < 9 and 0 < len(b.struct.s) < 9:
+    # tapp_torch.tensordot_bs is CUDA-only; on CPU we must fall through to
+    # the PyTorch path (transpose_dot_sum) even when the backend is torch_cpp.
+    _on_cuda = 'cuda' in str(a.data.device)
+    if a.config.backend.BACKEND_ID == 'torch_cpp' and _on_cuda and struct_c.t and 0 < len(struct_c.s) < 9 and 0 < len(a.struct.s) < 9 and 0 < len(b.struct.s) < 9:
         # NOTE nout_a, nin_a, nout_b, nin_b use ndim_n or ndim ?
         #      *) when default_fusion='meta', they are wrt. native legs. The charges of non-zero blocks are also wrt. to native legs.
 

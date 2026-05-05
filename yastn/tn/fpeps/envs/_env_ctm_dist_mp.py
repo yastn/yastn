@@ -409,6 +409,12 @@ def _ctmrg_worker_mp(i:int, devices:Sequence[str],
     Executes the function with given arguments and puts the result on done_queue.
     """
     device= devices[i % len(devices)]
+    # tapp_torch (torch_cpp backend) launches kernels on the *current*
+    # CUDA device; with spawn, each worker starts with no context, so we
+    # must pin it to its assigned device before any CUDA op.
+    if isinstance(device, str) and device.startswith("cuda"):
+        import torch
+        torch.cuda.set_device(device)
     while True:
         task = task_queue.get()
         if task is None:
