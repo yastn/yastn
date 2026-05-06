@@ -354,7 +354,97 @@ def _apply_meta_mask(tensor, mask_t, mask_D, axis):
     return tensor._replace(struct=struct, slices=slices)
 
 
-def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False, swap=None, devices=None, **kwargs):
+def _meta_combo_check(masked_meta_tensors, tensor_unroll_info, unroll_labels, pf_inds, nsym):
+    r"""Skip + ``ncon_prefilter`` check on already-mask-applied metadata tensors.
+
+    Returns ``(survives, pf_trim)``: ``survives`` is False when any unrolled
+    tensor lost all blocks or when ``ncon_prefilter`` returns ``None``;
+    ``pf_trim`` is the filter dict (or ``None`` for ``nsym == 0``) to be
+    consumed by ``_contract_single_combo``.
+    """
+    for k in range(len(masked_meta_tensors)):
+        if any((k, u) in tensor_unroll_info for u in unroll_labels) and not masked_meta_tensors[k].struct.t:
+            return False, None
+    if pf_inds is None:
+        return True, None
+    ts_meta = {k: (masked_meta_tensors[k].struct.t, masked_meta_tensors[k].ndim_n,
+                   masked_meta_tensors[k].trans, masked_meta_tensors[k].mfs)
+               for k in range(len(masked_meta_tensors))}
+    pf_trim = ncon_prefilter(ts_meta, pf_inds, nsym)
+    return (pf_trim is not None), pf_trim
+
+
+def _metadata_filter_combos(tensors, index_groups, out_ig, unroll, optimize, swap=None):
+    r"""Run the metadata-only prefilter for every combo and return the
+    indices that survive (i.e. would not be skipped inside the contraction
+    loop of :func:`_contract_with_sliced_unroll`).
+
+    Mirrors the per-combo skip / ``ncon_prefilter`` checks but operates only
+    on tensor metadata (struct, dims, charges) — no GPU work, no data ops.
+
+    Used by the multiprocess dispatcher to filter and load-balance combos
+    before assigning them to workers, so workers don't receive zero-output
+    no-ops.
+
+    Parameters
+    ----------
+    tensors : Sequence[yastn.Tensor]
+    index_groups : Sequence[Sequence[Hashable]]
+        One per-tensor user index label sequence.
+    out_ig : Sequence[Hashable]
+        Output index group.
+    unroll : dict[Hashable, list[SlicedLeg]]
+    optimize : list[tuple[int, int]]
+        Pairwise contraction path.
+    swap : optional, forwarded to :func:`_convert_path_to_ncon_args`.
+
+    Returns
+    -------
+    list[int]
+        Combo indices (in canonical ``itertools.product`` order over
+        ``unroll`` values) that survive metadata prefiltering.
+    """
+    unroll_labels = list(unroll.keys())
+    if not unroll_labels:
+        return [0]
+
+    tensor_unroll_info = {}
+    for k, (T, ig) in enumerate(zip(tensors, index_groups)):
+        ig_list = list(ig)
+        ig_index = {label: idx for idx, label in enumerate(ig_list)}
+        for u in unroll_labels:
+            if u in ig_index:
+                tensor_unroll_info[(k, u)] = ig_index[u]
+
+    _template_interleaved = []
+    for T, ig in zip(tensors, index_groups):
+        _template_interleaved.append(T)
+        _template_interleaved.append(ig)
+    _template_interleaved.append(out_ig)
+    _, ncon_igs, _, _, _ = _convert_path_to_ncon_args(
+        *_template_interleaved, optimize=optimize, swap=swap)
+    nsym = tensors[0].config.sym.NSYM
+    _pf_inds = tuple(_clear_axes(*ncon_igs)) if nsym > 0 else None
+
+    surviving = []
+    for n, combo in enumerate(product(*(unroll[u] for u in unroll_labels))):
+        sl_map = dict(zip(unroll_labels, combo))
+        masked = list(tensors)
+        for k in range(len(tensors)):
+            for u in unroll_labels:
+                if (k, u) not in tensor_unroll_info:
+                    continue
+                user_ax = tensor_unroll_info[(k, u)]
+                masked[k] = _apply_meta_mask(masked[k], sl_map[u].t, sl_map[u].D, user_ax)
+        survives, _ = _meta_combo_check(masked, tensor_unroll_info, unroll_labels, _pf_inds, nsym)
+        if survives:
+            surviving.append(n)
+    return surviving
+
+
+def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False, swap=None, devices=None,
+                                  _combo_indices=None, _return_partials=False,
+                                  mp_workers_per_device=0, **kwargs):
     r"""
     Contract a tensor network with block-sparse index unrolling.
 
@@ -401,6 +491,16 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
     """
     assert len(args) % 2 == 1, \
         "_contract_with_sliced_unroll requires explicit output index group"
+
+    # Multiprocess dispatch: when workers-per-device > 0 and we're not already
+    # in worker mode, hand off to the multiprocess module which uses a custom
+    # autograd.Function so backward works through workers.
+    if mp_workers_per_device > 0 and _combo_indices is None and not _return_partials:
+        from ._oe_blocksparse_mp import _contract_with_sliced_unroll_mp
+        return _contract_with_sliced_unroll_mp(
+            *args, unroll=unroll, optimize=optimize,
+            checkpoint_loop=checkpoint_loop, swap=swap, devices=devices,
+            mp_workers_per_device=mp_workers_per_device, **kwargs)
 
     tensors = args[0 : 2 * (len(args) // 2) : 2]
     index_groups = list(args[1 : 2 * (len(args) // 2) : 2])
@@ -579,6 +679,17 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
         output_pos_key = tuple(sl_to_idx[u][id(sl_map[u])] for u in output_unroll_labels)
         combo_entries.append((sl_map, output_pos_key))
 
+    # Worker-mode: process only the assigned subset of combos. Used by the
+    # multiprocess dispatcher in _oe_blocksparse_mp; not for end users.
+    # Track the global combo index alongside each entry so that profiling
+    # output (and any downstream identification) refers to the original
+    # position in product(*unroll[u]), not the worker-local position.
+    if _combo_indices is not None:
+        combo_indices = list(_combo_indices)
+        combo_entries = [combo_entries[i] for i in combo_indices]
+    else:
+        combo_indices = list(range(len(combo_entries)))
+
     def _contract_single_combo(base_tensors, sl_map, pf_trim=None, use_checkpoint=False):
         if use_checkpoint:
             return _iteration_checkpointed(
@@ -624,25 +735,11 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
 
                 # --- Metadata-only masks for skip / prefilter decisions ---
                 masked_meta_tensors = _apply_masks_for_combo_meta(iter_tensors, sl_map)
-                skip = False
-                for k in range(len(iter_tensors)):
-                    if any((k, u) in tensor_unroll_info for u in unroll_labels) and not masked_meta_tensors[k].struct.t:
-                        skip = True
-                        break
-                if skip:
+                survives, pf_trim = _meta_combo_check(
+                    masked_meta_tensors, tensor_unroll_info, unroll_labels, _pf_inds, nsym)
+                if not survives:
                     if _cfg.profile: _cfg.backend.nvtx.range_pop()
                     continue
-
-                # --- Prefilter: skip cross-tensor zeros ---
-                pf_trim = None
-                if _pf_inds is not None:
-                    ts_meta = {k: (masked_meta_tensors[k].struct.t, masked_meta_tensors[k].ndim_n,
-                                   masked_meta_tensors[k].trans, masked_meta_tensors[k].mfs)
-                               for k in range(len(masked_meta_tensors))}
-                    pf_trim = ncon_prefilter(ts_meta, _pf_inds, nsym)
-                    if pf_trim is None:
-                        if _cfg.profile: _cfg.backend.nvtx.range_pop()
-                        continue
 
                 partial = _contract_single_combo(iter_tensors, sl_map, pf_trim=pf_trim, use_checkpoint=checkpoint_loop)
 
@@ -677,8 +774,8 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
 
         n_workers = len(_workers)
         worker_assigned = [[] for _ in range(n_workers)]
-        for n, (sl_map, output_pos_key) in enumerate(combo_entries):
-            worker_assigned[n % n_workers].append((n, sl_map, output_pos_key))
+        for pos, (n, (sl_map, output_pos_key)) in enumerate(zip(combo_indices, combo_entries)):
+            worker_assigned[pos % n_workers].append((n, sl_map, output_pos_key))
 
         # Build per-worker args: (assigned_combos, tensors, device, stream_ctx).
         worker_args = []
@@ -722,7 +819,7 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
         del worker_results
     else:
         # --- Single-device sequential path ---
-        assigned = [(n, sl_map, opk) for n, (sl_map, opk) in enumerate(combo_entries)]
+        assigned = [(n, sl_map, opk) for n, (sl_map, opk) in zip(combo_indices, combo_entries)]
         output_pos_partials = _process_combos(assigned, tensors, None, nullcontext())
 
     # Replicas and mask cache are no longer needed; freeing them before
@@ -731,6 +828,11 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
     if multi_device:
         del tensors_by_device
     del mask_cache
+
+    # Worker-mode: return raw partials so the parent can sum across workers
+    # before assembling. Skips block() / drop_leg_history() entirely.
+    if _return_partials:
+        return output_pos_partials
 
     if not output_unroll_info:
         result = output_pos_partials.get((), None)
