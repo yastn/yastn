@@ -27,7 +27,7 @@ from ._legs import Leg, LegMeta, legs_union, _legs_mask_needed
 from ._merging import _embed_tensor
 from ._tests import YastnError
 from ..sym import sym_none
-from .._split_combine_dict import split_data_and_meta, combine_data_and_meta
+from .._split_combine_dict import combine_data_and_meta
 
 __all__ = ['save_to_dict', 'save_to_hdf5', 'requires_grad']
 
@@ -64,8 +64,8 @@ def to_dict(a, level=2, meta=None, resolve_ops=False) -> dict:
         See example at :ref:`examples/tensor/decomposition:combining with scipy.sparse.linalg.eigs`.
     """
     if resolve_ops:
-        return a.consume_transpose().to_dict(level=level, meta=meta, resolve_ops=False)        
-    
+        return a.consume_transpose().to_dict(level=level, meta=meta, resolve_ops=False)
+
     if level >= 1:
         config = a.config._asdict()
         config['sym'] = config['sym'].SYM_ID
@@ -183,15 +183,15 @@ def print_properties(a, file=None) -> Never:
           ``'p'`` hard-fusion (product), ``'s'`` blocking (sum).
     """
     print("symmetry     :", a.config.sym.SYM_ID, file=file)
-    print("signature    :", a.struct.s, file=file)  # signature
-    print("charge       :", a.struct.n, file=file)  # total charge of tensor
+    print("signature    :", a.s, file=file)  # signature
+    print("charge       :", a.n, file=file)  # total charge of tensor
     print("isdiag       :", a.isdiag, file=file)
     print("dim meta     :", a.ndim, file=file)  # number of meta legs
     print("dim native   :", a.ndim_n, file=file)  # number of native legs
     print("shape meta   :", a.get_shape(native=False), file=file)
     print("shape native :", a.get_shape(native=True), file=file)
-    print("no. blocks   :", len(a.struct.t), file=file)  # number of blocks
-    print("size         :", a.struct.size, file=file)  # total number of elements in all blocks
+    print("no. blocks   :", a.num_blocks, file=file)  # number of blocks
+    print("size         :", a.size, file=file)  # total number of elements in all blocks
     st = {i: leg.history() for i, leg in enumerate(a.get_legs())}
     print("legs fusions :", st, "\n", file=file)
 
@@ -200,9 +200,9 @@ def __str__(a) -> str:
     legs = a.get_legs()
     ts = tuple(leg.t for leg in legs)
     Ds = tuple(leg.D for leg in legs)
-    s = f"{a.config.sym.SYM_ID} s= {a.struct.s} n= {a.struct.n}\n"
-    s += f"leg charges  : {ts}\n"
-    s += f"dimensions   : {Ds}"
+    s = f"{a.config.sym.SYM_ID} s= {a.s} n= {a.n}\n"
+    s += f"leg charges : {ts}\n"
+    s += f"dimensions  : {Ds}"
     return s
 
 
@@ -224,7 +224,7 @@ def print_blocks_shape(a, file=None) -> str:
     """
     Print shapes of blocks as a sequence of block's charge followed by its shape.
     """
-    for t, D in zip(a.struct.t, a.struct.D):
+    for t, D in zip(a.get_blocks_charge(), a.get_blocks_shape()):
         print(f"{t} {D}", file=file)
 
 
@@ -274,14 +274,19 @@ def get_blocks_charge(a) -> Sequence[Sequence[int]]:
     In case of product of abelian symmetries, for each block the individual symmetry
     charges are flattened into a single tuple.
     """
-    return a.struct.t
+    if a.trans == tuple(range(a.ndim_n)):
+        return a.struct.t
+    nsym = a.config.sym.NSYM
+    return tuple(tuple(tt[nsym * i + j] for i in a.trans for j in range(nsym)) for tt in a.struct.t)
 
 
 def get_blocks_shape(a) -> Sequence[Sequence[int]]:
     """
     Shapes of all native blocks.
     """
-    return a.struct.D
+    if a.trans == tuple(range(a.ndim_n)):
+        return a.struct.D
+    return tuple(tuple(DD[i] for i in a.trans) for DD in a.struct.D)
 
 
 def get_shape(a, axes=None, native=False) ->  int | Sequence[int]:
@@ -334,7 +339,7 @@ def __getitem__(a, key) -> numpy.ndarray | torch.tensor:
 def __contains__(a, key) -> bool:
     key = tuple(_flatten(key)) if (hasattr(key,'__iter__') or hasattr(key,'__next__')) else (key,)
     if a.isdiag:
-        return key in a.struct.t or (key+key) in a.struct.t
+        return key in a.struct.t or (key + key) in a.struct.t
     return key in a.struct.t
 
 ##################################################

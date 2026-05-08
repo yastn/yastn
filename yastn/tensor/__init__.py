@@ -360,6 +360,10 @@ class Tensor:
     def shape(self) -> tuple[int]:
         return self.get_shape()
 
+    @property
+    def num_blocks(self) -> int:
+        return len(self.struct.t)
+
 
 def _convert_lists_to_tuples(nested_iterable):
     if isinstance(nested_iterable, list):
