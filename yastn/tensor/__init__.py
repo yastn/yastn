@@ -288,7 +288,7 @@ class Tensor:
         In case of direct product of abelian symmetries,
         total charge for each symmetry, accumulated in a tuple.
         """
-        return self.struct.n
+        return self.get_tensor_charge()
 
     @property
     def ndim(self) -> int:

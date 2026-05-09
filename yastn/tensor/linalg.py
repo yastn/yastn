@@ -562,82 +562,88 @@ def truncation_mask_multiplets(S, tol=0, D_total=float('inf'),
     hermitian: bool = False
         If true, blocks related by hermitian conjugation are truncated equally.
     """
-    if not (S.isdiag and S.yastn_dtype == "float64"):
-        raise YastnError("Truncation_mask requires S to be real and diagonal.")
+    # if not (S.isdiag and S.yastn_dtype == "float64"):
+    #     raise YastnError("Truncation_mask requires S to be real and diagonal.")
 
-    verbosity = kwargs.get('verbosity', 0)
-    if verbosity>2:
-        fname = sys._getframe().f_code.co_name
-        tol_block = kwargs.get('tol_block', "N/A")
-        logger.info(f"{fname} tol {tol} tol_block {tol_block} D_total {D_total}")
+    # verbosity = kwargs.get('verbosity', 0)
+    # if verbosity>2:
+    #     fname = sys._getframe().f_code.co_name
+    #     tol_block = kwargs.get('tol_block', "N/A")
+    #     logger.info(f"{fname} tol {tol} tol_block {tol_block} D_total {D_total}")
 
-    # makes a copy for partial truncations; also detaches from autograd computation graph
-    Smask = S.copy()
-    Smask._data = Smask.data > float('inf') # all False ?
-    S_global_max = None
+    # # makes a copy for partial truncations; also detaches from autograd computation graph
+    # Smask = S.copy()
+    # Smask._data = Smask.data > float('inf') # all False ?
+    # S_global_max = None
 
-    # find all multiplets in the spectrum
-    # 0) convert to plain dense numpy vector and sort in descending order
-    # s = S.config.backend.to_numpy(S.data)
-    # inds = np.argsort(s)[::-1].copy() # make descending
-    # s = s[inds]
-    # s, inds = torch.sort(S.data.detach(), descending=True)
-    backend = S.config.backend
-    inds = backend.argsort(-S.copy().data)
-    s = S.data[inds]
+    # # find all multiplets in the spectrum
+    # # 0) convert to plain dense numpy vector and sort in descending order
+    # # s = S.config.backend.to_numpy(S.data)
+    # # inds = np.argsort(s)[::-1].copy() # make descending
+    # # s = s[inds]
+    # # s, inds = torch.sort(S.data.detach(), descending=True)
+    # backend = S.config.backend
+    # inds = backend.argsort(-S.copy().data)
+    # s = S.data[inds]
 
-    S_global_max = s[0]
-    D_trunc = min(sum(s > (S_global_max * tol)), D_total)
-    if D_trunc >= len(s):
-        # no truncation
-        Smask._data = S.data > -float('inf') # all True ?
-        return Smask
+    # S_global_max = s[0]
+    # D_trunc = min(sum(s > (S_global_max * tol)), D_total)
+    # if D_trunc >= len(s):
+    #     # no truncation
+    #     Smask._data = S.data > -float('inf') # all True ?
+    #     return Smask
 
-    # compute gaps and normalize by magnitude of (abs) larger value.
-    # value of gaps[i] gives gap between i-th and i+1 the element of s
-    maxgap = backend.maximum(backend.absolute(s[:-1]), backend.absolute(s[1:])) + 1.0e-16
-    gaps = backend.absolute(s[:-1] - s[1:]) / maxgap
+    # # compute gaps and normalize by magnitude of (abs) larger value.
+    # # value of gaps[i] gives gap between i-th and i+1 the element of s
+    # maxgap = backend.maximum(backend.absolute(s[:-1]), backend.absolute(s[1:])) + 1.0e-16
+    # gaps = backend.absolute(s[:-1] - s[1:]) / maxgap
 
-    # find nearest multiplet boundary, keeping at most D_trunc elements
-    # i-th element of gaps gives gap between i-th and (i+1)-th element of s
-    # Note, s[:D_trunc] selects D_trunc values: from 0th to (D_trunc-1)-th element
-    for i in range(D_trunc - 1, -1, -1):
-        if gaps[i] > eps_multiplet:
-            D_trunc = i+1
-            break
+    # # find nearest multiplet boundary, keeping at most D_trunc elements
+    # # i-th element of gaps gives gap between i-th and (i+1)-th element of s
+    # # Note, s[:D_trunc] selects D_trunc values: from 0th to (D_trunc-1)-th element
+    # for i in range(D_trunc - 1, -1, -1):
+    #     if gaps[i] > eps_multiplet:
+    #         D_trunc = i+1
+    #         break
 
-    Smask._data[inds[:D_trunc]] = True
+    # Smask._data[inds[:D_trunc]] = True
 
-    # check blocks related by Hermitian symmetry and truncate to equal length
-    if not hermitian:
-        return Smask
-    active_sectors = filter(lambda x: any(Smask[x]), Smask.struct.t)
-    for t in active_sectors:
-        tn = np.array(t, dtype=np.int64).reshape((1, 1, -1))
-        tn = tuple(S.config.sym.fuse(tn, (1,), -1).ravel().tolist())
-        if t == tn:
-            continue
+    # # check blocks related by Hermitian symmetry and truncate to equal length
+    # if not hermitian:
+    #     return Smask
+    # active_sectors = filter(lambda x: any(Smask[x]), Smask.struct.t)
+    # for t in active_sectors:
+    #     tn = np.array(t, dtype=np.int64).reshape((1, 1, -1))
+    #     tn = tuple(S.config.sym.fuse(tn, (1,), -1).ravel().tolist())
+    #     if t == tn:
+    #         continue
 
-        common_size = min(len(Smask[t]), len(Smask[tn]))
-        # if related blocks do not have equal length
-        if common_size > len(Smask[t]):
-            # assert sum(Smask[t][common_size:]) <= 0 ,\
-            #     "Symmetry-related blocks do not match"
-            Smask[t][common_size:] = False
-        if common_size > len(Smask[tn]):
-            # assert sum(Smask[tn][common_size:])<=0,\
-            #     "Symmetry-related blocks do not match"
-            Smask[tn][common_size:] = False
+    #     common_size = min(len(Smask[t]), len(Smask[tn]))
+    #     # if related blocks do not have equal length
+    #     if common_size > len(Smask[t]):
+    #         # assert sum(Smask[t][common_size:]) <= 0 ,\
+    #         #     "Symmetry-related blocks do not match"
+    #         Smask[t][common_size:] = False
+    #     if common_size > len(Smask[tn]):
+    #         # assert sum(Smask[tn][common_size:])<=0,\
+    #         #     "Symmetry-related blocks do not match"
+    #         Smask[tn][common_size:] = False
 
-        if not all(Smask[t][:common_size] == Smask[tn][:common_size]):
-            Smask[t][:common_size] = Smask[tn][:common_size] = Smask[t][:common_size] & Smask[tn][:common_size]
-    return Smask
+    #     if not all(Smask[t][:common_size] == Smask[tn][:common_size]):
+    #         Smask[t][:common_size] = Smask[tn][:common_size] = Smask[t][:common_size] & Smask[tn][:common_size]
+    # return Smask
+    return truncation_mask(S, which='LR',
+                    tol=tol, D_total=D_total,
+                    eps_multiplet=eps_multiplet,
+                    hermitian=hermitian)
 
 
 def truncation_mask(S, which='LR',
                     tol=float('-inf'), tol_block=float('-inf'),
                     D_block=float('inf'), D_total=float('inf'),
                     truncate_multiplets=False,
+                    eps_multiplet=None,
+                    hermitian=False,
                     mask_f=None,
                     **kwargs) -> yastn.Tensor[bool]:
     """
@@ -672,7 +678,6 @@ def truncation_mask(S, which='LR',
         maximum number of elements kept per block.
         It is also possible to provide a dictionary mapping charges to maximal number of elements in the charge sector.
 
-
     truncate_multiplets: bool
         If ``True``, enlarge the truncation range specified by other arguments by shifting
         the cut to the largest gap between to-be-truncated singular values across all blocks.
@@ -680,9 +685,18 @@ def truncation_mask(S, which='LR',
         If ``True``, ``tol_block`` and ``D_block`` are ignored, as ``truncate_multiplets`` is a global condition.
         The default is ``False``.
 
+    eps_multiplet: float
+        relative tolerance on multiplet splitting. If relative difference between
+        two consecutive elements of ``S`` is larger than ``eps_multiplet``, these
+        elements are not considered as part of the same multiplet.
+
+    hermitian: bool
+        If True, blocks related by hermitian conjugation are truncated equally.
+        The default is False.
+
     mask_f: None | function[yastn.Tensor] -> yastn.Tensor
-        It is possible to provide a custom mask function, which gives a mechanism to pass such a function
-        to many algorithms where the truncation_mask is called.
+        It is possible to provide a custom mask function, which provides a mechanism to pass such a function
+        to many tensor network algorithms where the function truncation_mask is being called.
         If provided, it overrides the default function, and all other parameters are ignored.
         The default is None.
     """
@@ -741,19 +755,58 @@ def truncation_mask(S, which='LR',
         Smask._data[:] = False
         return Smask
 
-    inds = backend.argsort(temp_data)
+    inds = backend.eigs_which(temp_data, which)
 
     if truncate_multiplets and D_total < len(inds):
         gap = -1
         for p in range(D_total, len(inds)):
-            gap_p = abs(S._data[inds[-p]] - S._data[inds[-p - 1]])
+            gap_p = abs(S._data[inds[p]] - S._data[inds[p - 1]])
             if gap_p > gap:
                 D_total = p
                 gap = gap_p
-            if gap > abs(S._data[inds[-p]]):
+            if gap > abs(S._data[inds[p - 1]]):
                 break
 
-    Smask._data[inds[:-D_total]] = False
+    if eps_multiplet is not None:
+        # compute gaps and normalize by magnitude of (abs) larger value.
+        # value of gaps[i] gives gap between i-th and i+1 the element of s
+        s = S.data[inds]
+        maxgap = backend.maximum(backend.absolute(s[:-1]), backend.absolute(s[1:])) + 1.0e-16
+        gaps = backend.absolute(s[:-1] - s[1:]) / maxgap
+
+        # find nearest multiplet boundary, keeping at most D_trunc elements
+        # i-th element of gaps gives gap between i-th and (i+1)-th element of s
+        # Note, s[:D_trunc] selects D_trunc values: from 0th to (D_trunc-1)-th element
+        for i in range(D_total - 1, -1, -1):
+            if gaps[i] > eps_multiplet:
+                D_total = i+1
+                break
+
+    Smask._data[inds[D_total:]] = False
+
+
+    # check blocks related by Hermitian symmetry and truncate to equal length
+    if hermitian:
+        active_sectors = filter(lambda x: any(Smask[x]), Smask.struct.t)
+        for t in active_sectors:
+            tn = S.config.sym.conj_charge(t)
+            if t == tn:
+                continue
+
+            common_size = min(len(Smask[t]), len(Smask[tn]))
+            # if related blocks do not have equal length
+            if common_size > len(Smask[t]):
+                # assert sum(Smask[t][common_size:]) <= 0 ,\
+                #     "Symmetry-related blocks do not match"
+                Smask[t][common_size:] = False
+            if common_size > len(Smask[tn]):
+                # assert sum(Smask[tn][common_size:])<=0,\
+                #     "Symmetry-related blocks do not match"
+                Smask[tn][common_size:] = False
+
+            if not all(Smask[t][:common_size] == Smask[tn][:common_size]):
+                Smask[t][:common_size] = Smask[tn][:common_size] = Smask[t][:common_size] & Smask[tn][:common_size]
+
     return Smask
 
 

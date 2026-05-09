@@ -90,3 +90,17 @@ class sym_abelian(metaclass=sym_meta):
         charges = np.array(charges, dtype=np.int64).reshape(1, len(charges), cls.NSYM)
         new_charge = cls.fuse(charges, signatures, new_signature)
         return tuple(new_charge.reshape(cls.NSYM).tolist())
+
+    @classmethod
+    def conj_charge(cls, charge) -> tuple[int, ...]:
+        r"""
+        Auxiliary function for calculating conjugated charge.
+        It employs :meth:`fuse` function and returns resulting charge as a tuple of integers.
+
+        Parameters
+        ----------
+        charge: tuple[int, ...]
+            Charge to conjugate.
+        """
+        charge = np.array(charge, dtype=np.int64).reshape((1, 1, cls.NSYM))
+        return tuple(cls.fuse(charge, (1,), -1).reshape(cls.NSYM).tolist())

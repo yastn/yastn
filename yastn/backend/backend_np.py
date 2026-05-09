@@ -476,7 +476,7 @@ def eigh(data, meta=None, sizes=(1, 1)):
 
 def eigh_lowrank(data, meta, sizes, thresh=None, **kwargs):
     # TODO user-defined threshold
-    _which_map= {'LM': 'LM', 'SM': 'SM', 'LR': 'LA',  'SR': 'SA'} 
+    _which_map= {'LM': 'LM', 'SM': 'SM', 'LR': 'LA',  'SR': 'SA'}
     _which = kwargs.get('which', 'LM')
     real_dtype = data.real.dtype if np.iscomplexobj(data) else data.dtype
     Sdata = np.zeros((sizes[0],), dtype=real_dtype)
@@ -488,14 +488,14 @@ def eigh_lowrank(data, meta, sizes, thresh=None, **kwargs):
         if k < n - 1 and n * n > 5000:
             try:
                 S, U = scipy.sparse.linalg.eigsh(block, k=k, which=_which_map[_which],
-                    M=None, sigma=None, v0=None, ncv=None, maxiter=None, tol=0, 
-                    return_eigenvectors=kwargs.get("return_eigenvectors", True), 
+                    M=None, sigma=None, v0=None, ncv=None, maxiter=None, tol=0,
+                    return_eigenvectors=kwargs.get("return_eigenvectors", True),
                     Minv=None, OPinv=None, mode='normal',) #rng=None)
             except scipy.sparse.linalg.ArpackError as e:
                 raise e
                 # S, U = scipy.linalg.eigh(block)
         else:
-            S, U = scipy.linalg.eigh(block) # always returns result sorted in ascending order ('SA') 
+            S, U = scipy.linalg.eigh(block) # always returns result sorted in ascending order ('SA')
         # sort in case of non-default order
         # see https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.eigsh.html
         if not (_which in ['SR'] and  kwargs.get("return_eigenvectors", True)):
@@ -531,12 +531,12 @@ def maximum(x1, x2):
     return np.maximum(x1, x2)
 
 def eigs_which(val, which):
+    if which == 'LR':
+        return (-val.real).argsort()
     if which == 'LM':
         return (-abs(val)).argsort()
     if which == 'SM':
         return abs(val).argsort()
-    if which == 'LR':
-        return (-val.real).argsort()
     # elif which == 'SR':
     return (val.real).argsort()
 

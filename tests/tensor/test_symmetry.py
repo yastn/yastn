@@ -129,7 +129,7 @@ def test_symmetry():
 
 
 def test_add_charges():
-    """ tests auxiliary symmetry function: add_charges. """
+    """ tests auxiliary symmetry function: add_charges, conj_charge. """
     assert sym_none.add_charges((), (), ()) == ()
     #
     assert sym_Z2.add_charges((1,), (1,), (0,), (1,)) == (1,)
@@ -152,6 +152,11 @@ def test_add_charges():
     charge = sym_U1xU1xZ2.add_charges((1, 0, 1), (-1, 1, 0), (1, -2, 1))
     assert charge == (1, -1, 0)
     assert all(isinstance(x, int) for x in charge)
+    #
+    assert sym_U1.conj_charge((1,)) == (-1,)
+    assert sym_Z2.conj_charge((1,)) == (1,)
+    assert sym_Z3.conj_charge((1,)) == (2,)
+    assert sym_U1xU1xZ2.conj_charge((-1, 2, 0)) == (1, -2, 0)
 
 
 if __name__ == '__main__':

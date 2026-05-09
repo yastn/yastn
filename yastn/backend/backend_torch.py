@@ -30,8 +30,8 @@ from ._backend_torch_backwards import kernel_transpose, kernel_transpose_and_mer
 
 
 __all__= ['DTYPE', 'get_dtype', 'get_yastn_dtype',
-    'nvtx', 'cuda_is_available', 'get_device', 'move_to', 
-    'grad', 'requires_grad_', 'requires_grad', 'detach', 'detach_', 'clone', 'copy', 'checkpoint', 
+    'nvtx', 'cuda_is_available', 'get_device', 'move_to',
+    'grad', 'requires_grad_', 'requires_grad', 'detach', 'detach_', 'clone', 'copy', 'checkpoint',
     'random_seed', 'randint',
     'to_numpy', 'get_shape', 'get_size', 'diag_create', 'diag_get', 'real', 'is_complex', 'conj',
     'imag', 'max_abs', 'maximum', 'norm_matrix', 'delete', 'insert',
@@ -427,7 +427,7 @@ def eigh_lowrank(data, meta, sizes, thresh=None, **kwargs):
     import numpy as np
     import scipy
 
-    _which_map= {'LM': 'LM', 'SM': 'SM', 'LR': 'LA',  'SR': 'SA'} 
+    _which_map= {'LM': 'LM', 'SM': 'SM', 'LR': 'LA',  'SR': 'SA'}
     _which = kwargs.get('which', 'LM')
     data_device= data.device
     data = data.cpu().numpy() if data.is_cuda else data.numpy()
@@ -441,14 +441,14 @@ def eigh_lowrank(data, meta, sizes, thresh=None, **kwargs):
         if k < n - 1 and n * n > 5000:
             try:
                 S, U = scipy.sparse.linalg.eigsh(block, k=k, which=_which_map[_which],
-                    M=None, sigma=None, v0=None, ncv=None, maxiter=None, tol=0, 
-                    return_eigenvectors=kwargs.get("return_eigenvectors", True), 
+                    M=None, sigma=None, v0=None, ncv=None, maxiter=None, tol=0,
+                    return_eigenvectors=kwargs.get("return_eigenvectors", True),
                     Minv=None, OPinv=None, mode='normal',) #rng=None)
             except scipy.sparse.linalg.ArpackError as e:
                 raise e
                 # S, U = scipy.linalg.eigh(block)
         else:
-            S, U = scipy.linalg.eigh(block) # always returns result sorted in ascending order ('SA') 
+            S, U = scipy.linalg.eigh(block) # always returns result sorted in ascending order ('SA')
         # sort in case of non-default order
         # see https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.eigsh.html
         if not (_which in ['SR'] and  kwargs.get("return_eigenvectors", True)):
@@ -495,12 +495,12 @@ def argsort(data):
 
 @torch.no_grad()
 def eigs_which(val, which):
+    if which == 'LR':
+        return (-real(val)).argsort()
     if which == 'LM':
         return (-abs(val)).argsort()
     if which == 'SM':
         return abs(val).argsort()
-    if which == 'LR':
-        return (-real(val)).argsort()
     #if which == 'SR':
     return (real(val)).argsort()
 
