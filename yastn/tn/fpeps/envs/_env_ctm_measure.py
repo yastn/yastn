@@ -1078,122 +1078,36 @@ def _build_separate_unfused(env, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, b
     return tuple(args), swap_pairs
 
 
-def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint_loop=False, separate_layers=False, optimizer="default", devices=None, mp_workers_per_device=0, precomputed_norm=None, return_norm=False) -> float:
-    r"""
-    Memory-efficient version of :meth:`measure_nsite_exact` using opt_einsum
-    contraction path optimization, optional block-sparse index unrolling,
-    and checkpointing.
+def _measure_nsite_exact_oe_impl(self, *operators, sites, unroll, checkpoint_loop, separate_layers, optimizer, devices, mp_workers_per_device, mode):
+    r"""Shared implementation for the three OE measurement wrappers.
 
-    For ``DoublePepsTensor`` PEPS, ket and bra are pre-contracted on
-    the physical leg with fermionic crossings applied via
-    ``swap_gate``, producing 8-leg site tensors whose ket/bra
-    sub-legs are kept separate (no ``fuse_legs``).  Edge middle legs
-    are unfused to match.
+    ``mode`` is one of:
 
-    For single-layer PEPS, falls back to the fused double-layer approach.
-
-    Parameters
-    ----------
-    operators : Sequence[yastn.Tensor]
-        List of local operators to calculate <O0_s0 O1_s1 ...>.
-
-    sites : Sequence[tuple[int, int]]
-        A list of sites [s0, s1, ...] matching corresponding operators.
-
-    unroll : dict or None
-        Dict mapping bond labels to ``int`` (uniform slice size) or
-        ``list[SlicedLeg]``.  Slicing a bond partitions its charge sectors
-        so the full contraction is split into a loop of smaller partial
-        contractions, reducing peak memory.
-
-        Bond labels are tuples that identify edges in the tensor network.
-        The window has ``Nx`` rows (indexed ``i = 0 … Nx-1``) and ``Ny``
-        columns (indexed ``j = 0 … Ny-1``).  Row/column indices refer to
-        positions *within the window*, not absolute lattice coordinates.
-
-        All bond labels use ``(row, col)`` ordering, consistent with
-        the yastn site convention ``(x, y) = (row, col)``.
-
-        **Horizontal bonds** ``('h', i, j)`` — run left-to-right between
-        columns ``j`` and ``j+1`` at row ``i``::
-
-                   j=-1             j=0               j=1          j=Ny-1    j=Ny
-                    :               :                 :             :         :
-            i=-1   TL --h,-1,-1-- T[0] --h,-1,0-- T[1] -- ... -- h,-1,Ny-1 -- TR
-                    |               |               |               |         |
-                 v,0,-1             v,0,0          v,0,1          v,0,Ny-1   v,0,Ny
-                    |               |               |               |         |
-            i=0    L[0]-h,0,-1------*---h,0,0-------*--- ... --h,0,Ny-1------R[0]
-                    |               |               |               |         |
-                 v,1,-1             v,1,0          v,1,1          v,1,Ny-1  v,1,Ny
-                    |               |               |               |         |
-            i=1    L[1]-h,1,-1------*---h,1,0-------*--- ... --h,1,Ny-1------R[1]
-                    :               :                :              :         :
-                    |               |                |              |         |
-                 v,Nx,-1             v,Nx,0          v,Nx,1       v,Nx,Ny-1  v,Nx,Ny
-                    |               |                |              |         |
-            i=Nx   BL --h,Nx,-1-- B[0] --h,Nx,0-- B[1] -- ... -- h,Nx,Ny-1 -- BR
-
-        where ``*`` marks a PEPS site, ``TL/TR/BL/BR`` are CTM corners,
-        ``T/B/L/R`` are CTM edges.
-
-        ``i = -1`` and ``i = Nx`` are boundary rows (chi bonds between
-        edge tensors and corners).  ``i = 0 … Nx-1`` are PEPS rows
-        (physical bonds).  ``j = -1`` is the left-boundary column.
-
-        **Vertical bonds** ``('v', i, j)`` — run top-to-bottom in column ``j``
-        between rows ``i-1`` and ``i``.
-
-        Conventions:
-            ``i = 0`` connects the top row (``T[j]`` or corner) to the first
-            PEPS row; ``i = Nx`` connects the last PEPS row to the bottom row
-            (``B[j]`` or corner); ``i = 1 … Nx-1`` are interior vertical bonds.
-            ``j = -1`` is the left boundary column; ``j = Ny`` is the right
-            boundary column; ``j = 0 … Ny-1`` are PEPS columns.
-
-        For ``DoublePepsTensor`` PEPS, PEPS-row bonds (``('h', i, j)``
-        with ``0 <= i < Nx`` and all ``('v', i, j)``) are automatically
-        split into ket/bra sub-labels by ``_translate_unroll``.
-        Boundary (chi) bonds are kept as-is.
-
-        **Example** — 2×3 window (``Nx=2, Ny=3``)::
-
-            # unroll the horizontal bond between columns 0 and 1
-            # at the first PEPS row, one charge sector at a time:
-            unroll = {('h', 0, 0): 1}
-
-            # unroll the vertical bond in column 1 between rows 0 and 1:
-            unroll = {('v', 1, 1): 1}
-
-            # unroll multiple bonds simultaneously:
-            unroll = {('h', 0, 0): 1, ('v', 1, 1): 1}
-
-            # unroll a left-boundary vertical (chi) bond:
-            unroll = {('v', 0, -1): 1}
-
-    checkpoint_loop : bool
-        If ``True`` and *unroll* is not ``None``, each unroll iteration is
-        wrapped in :func:`torch.utils.checkpoint.checkpoint`, trading
-        recomputation for lower peak memory.
-
-    separate_layers : bool
-        If ``True`` and the PEPS uses ``DoublePepsTensor`` (double-layer),
-        keep ket and bra as separate 5-leg tensors in the ncon network
-        instead of pre-contracting them into 8-leg tensors.  This doubles
-        the tensor count but gives ``opt_einsum`` more freedom to optimize
-        the contraction order.  Default is ``False`` (pre-contracted path).
+    * ``"both"`` -- contract norm and numerator, return ``sign * val_op / val_no``.
+    * ``"norm"`` -- contract only the norm <psi|psi> over the bounding window of
+      ``sites``; ``operators`` is ignored.
+    * ``"numerator"`` -- contract only ``sign * val_op`` (no division by norm).
     """
-    if sites is None or len(operators) != len(sites):
-        raise YastnError("Number of operators and sites should match.")
+    if mode not in ('both', 'norm', 'numerator'):
+        raise YastnError(f"unknown mode: {mode!r}")
 
-    # unpack operators if operators provided as a Lattice or dict
-    operators = [op[site] if not isinstance(op, Tensor) else op
-                 for op, site in zip(operators, sites)]
+    if mode == 'norm':
+        if sites is None or len(sites) == 0:
+            raise YastnError("mode='norm' requires non-empty `sites`.")
+        sign = None
+        ops = {}
+    else:
+        if sites is None or len(operators) != len(sites):
+            raise YastnError("Number of operators and sites should match.")
 
-    sign = sign_canonical_order(*operators, sites=sites, f_ordered=self.f_ordered)
-    ops = {}
-    for n, op in zip(sites, operators):
-        ops[n] = ops[n] @ op if n in ops else op
+        # unpack operators if operators provided as a Lattice or dict
+        operators = [op[site] if not isinstance(op, Tensor) else op
+                     for op, site in zip(operators, sites)]
+
+        sign = sign_canonical_order(*operators, sites=sites, f_ordered=self.f_ordered)
+        ops = {}
+        for n, op in zip(sites, operators):
+            ops[n] = ops[n] @ op if n in ops else op
 
     minx = min(site[0] for site in sites)
     miny = min(site[1] for site in sites)
@@ -1224,10 +1138,7 @@ def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint
         translated_unroll = _translate_unroll(unroll, Nx, Ny)
         build_fn = _build_separate_unfused if separate_layers else _build_interleaved_unfused
 
-        # norm contraction (no operators) — skip if caller supplied it
-        if precomputed_norm is not None:
-            val_no = precomputed_norm
-        else:
+        if mode in ('norm', 'both'):
             tn_no, swap_no = build_fn(
                 self, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, bl, br)
             path_no, _ = get_contraction_path(*tn_no, unroll=translated_unroll, **path_opts)
@@ -1235,6 +1146,8 @@ def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint
                 *tn_no, optimize=path_no, unroll=translated_unroll,
                 checkpoint_loop=checkpoint_loop, swap=swap_no, devices=devices,
                 mp_workers_per_device=mp_workers_per_device).to_number()
+            if mode == 'norm':
+                return val_no
 
         # insert operators and charge swaps (in-place on DoublePepsTensor)
         axes_string_x = ['b3', 'k4', 'k1']
@@ -1305,9 +1218,7 @@ def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint
             args.append(())
             return tuple(args)
 
-        if precomputed_norm is not None:
-            val_no = precomputed_norm
-        else:
+        if mode in ('norm', 'both'):
             realized_no = {s: _drop(t) for s, t in tens.items()}
             tn_no = _build_interleaved_fused(realized_no)
             path_no, _ = get_contraction_path(*tn_no, unroll=unroll)
@@ -1315,6 +1226,8 @@ def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint
                 *tn_no, optimize=path_no, unroll=unroll,
                 checkpoint_loop=checkpoint_loop, devices=devices,
                 mp_workers_per_device=mp_workers_per_device).to_number()
+            if mode == 'norm':
+                return val_no
 
         for y in range(miny, maxy + 1):
             for x in range(minx, maxx + 1):
@@ -1330,7 +1243,86 @@ def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint
             checkpoint_loop=checkpoint_loop, devices=devices,
             mp_workers_per_device=mp_workers_per_device).to_number()
 
-    result = sign * val_op / val_no
-    if return_norm:
-        return result, val_no
-    return result
+    if mode == 'numerator':
+        return sign * val_op
+    return sign * val_op / val_no
+
+
+def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint_loop=False, separate_layers=False, optimizer="default", devices=None, mp_workers_per_device=0) -> float:
+    r"""
+    Memory-efficient version of :meth:`measure_nsite_exact` using opt_einsum
+    contraction path optimization, optional block-sparse index unrolling,
+    and checkpointing.
+
+    For ``DoublePepsTensor`` PEPS, ket and bra are pre-contracted on
+    the physical leg with fermionic crossings applied via
+    ``swap_gate``, producing 8-leg site tensors whose ket/bra
+    sub-legs are kept separate (no ``fuse_legs``).  Edge middle legs
+    are unfused to match.
+
+    For single-layer PEPS, falls back to the fused double-layer approach.
+
+    Returns ``<psi| O0_s0 ... |psi> / <psi|psi>``.  See
+    :func:`measure_nsite_norm_exact_oe` for the norm-only contraction and
+    :func:`measure_nsite_numerator_exact_oe` for the unnormalized numerator
+    -- callers that share a single norm across multiple numerator
+    evaluations should use those split functions to control the autograd
+    graph lifetime explicitly.
+
+    Parameters
+    ----------
+    operators : Sequence[yastn.Tensor]
+        List of local operators to calculate <O0_s0 O1_s1 ...>.
+
+    sites : Sequence[tuple[int, int]]
+        A list of sites [s0, s1, ...] matching corresponding operators.
+
+    unroll : dict or None
+        Dict mapping bond labels to ``int`` (uniform slice size) or
+        ``list[SlicedLeg]``.  See module docs for the bond-label scheme.
+
+    checkpoint_loop : bool
+        If ``True`` and ``unroll`` is not ``None``, each unroll iteration
+        is wrapped in :func:`torch.utils.checkpoint.checkpoint`, trading
+        recomputation for lower peak memory.
+
+    separate_layers : bool
+        If ``True`` and the PEPS uses ``DoublePepsTensor``, keep ket and
+        bra as separate 5-leg tensors in the ncon network instead of
+        pre-contracting them into 8-leg tensors.
+    """
+    return _measure_nsite_exact_oe_impl(
+        self, *operators, sites=sites, unroll=unroll,
+        checkpoint_loop=checkpoint_loop, separate_layers=separate_layers,
+        optimizer=optimizer, devices=devices,
+        mp_workers_per_device=mp_workers_per_device, mode='both')
+
+
+def measure_nsite_norm_exact_oe(self, *, sites, unroll=None, checkpoint_loop=False, separate_layers=False, optimizer="default", devices=None, mp_workers_per_device=0):
+    """Contract only the norm <psi|psi> over the bounding window of ``sites``.
+
+    Same contraction backend, options, and bond-label scheme as
+    :func:`measure_nsite_exact_oe`; ``operators`` is omitted.  Use this
+    when sharing a single norm value across multiple numerator
+    evaluations (see :func:`measure_nsite_numerator_exact_oe`).
+    """
+    return _measure_nsite_exact_oe_impl(
+        self, sites=sites, unroll=unroll,
+        checkpoint_loop=checkpoint_loop, separate_layers=separate_layers,
+        optimizer=optimizer, devices=devices,
+        mp_workers_per_device=mp_workers_per_device, mode='norm')
+
+
+def measure_nsite_numerator_exact_oe(self, *operators, sites, unroll=None, checkpoint_loop=False, separate_layers=False, optimizer="default", devices=None, mp_workers_per_device=0):
+    """Contract only the unnormalized numerator ``sign * <psi| O0_s0 ... |psi>``.
+
+    Same contraction backend, options, and bond-label scheme as
+    :func:`measure_nsite_exact_oe`; the result is *not* divided by the
+    norm.  The caller is responsible for dividing by ``<psi|psi>``
+    (typically obtained via :func:`measure_nsite_norm_exact_oe`).
+    """
+    return _measure_nsite_exact_oe_impl(
+        self, *operators, sites=sites, unroll=unroll,
+        checkpoint_loop=checkpoint_loop, separate_layers=separate_layers,
+        optimizer=optimizer, devices=devices,
+        mp_workers_per_device=mp_workers_per_device, mode='numerator')

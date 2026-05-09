@@ -1020,6 +1020,7 @@ class EnvCTM():
 
     from ._env_ctm_measure import measure_1site, measure_nn, measure_2x2, measure_line, \
         measure_nsite, measure_2site, measure_nsite_exact, measure_nsite_exact_oe, \
+        measure_nsite_norm_exact_oe, measure_nsite_numerator_exact_oe, \
         sample, transfer_matrix_spectrum
 
 
