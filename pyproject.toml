@@ -35,7 +35,7 @@ exclude = ["docs*", "tests*", "experimental*"]
 [project.optional-dependencies]
 test = ["pytest", "pytest-cov", "pytest-randomly"]
 docbuild = ["sphinx", "sphinxcontrib-napoleon", "pydata-sphinx-theme"]
-torch = ["torch>=2.4"]
+torch = ["torch>=2.10"]
 
 [tool.setuptools_scm]
 write_to = "yastn/_version.py"
