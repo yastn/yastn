@@ -956,7 +956,36 @@ def _build_interleaved_unfused(env, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr
     return tuple(args), swap_pairs
 
 
-def _build_separate_unfused(env, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, bl, br):
+def _compress_bond_side(i, j, proj_name):
+    """Return (bond1, bond2, side) for the half-projector at (i, j),
+    where bond1 (dim=chi) and bond2 (dim=D) are the two bonds that
+    get compressed.
+    """
+
+    if proj_name[-1] == 't':
+        if proj_name[-2] == 'l':
+            return ('v', i, j-1), ('v', i, j), 'b'
+        else: # 'r'
+            return ('v', i, j+1), ('v', i, j), 'b'
+
+    if proj_name[-1] == 'b':
+        if proj_name[-2] == 'l':
+            return ('v', i+1, j-1), ('v', i+1, j), 't'
+        else: # 'r'
+            return ('v', i+1, j+1), ('v', i+1, j), 't'
+    if proj_name[-1] == 'l':
+        if proj_name[-2] == 't':
+            return ('h', i-1, j-1), ('h', i, j-1), 'r'
+        else: # 'b'
+            return ('h', i+1, j-1), ('h', i, j-1), 'r'
+
+    if proj_name[-1] == 'r':
+        if proj_name[-2] == 't':
+            return ('h', i-1, j), ('h', i, j), 'l'
+        else: # 'b'
+            return ('h', i+1, j), ('h', i, j), 'l'
+
+def _build_separate_unfused(env, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, bl, br, projectors=None):
     r"""
     Assemble the full patch tensor network with separate ket and bra
     tensors (5-leg each) per site.
@@ -975,6 +1004,72 @@ def _build_separate_unfused(env, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, b
 
     args = []
     swap_pairs = []
+
+    if projectors is None:
+        projectors = {}
+
+    # Normalize each value to a tuple of slot strings so a site can carry
+    # several half-projectors (e.g. {site: ('hrt', 'hrb')}).
+    projectors = {
+        site: (slots,) if isinstance(slots, str) else tuple(slots)
+        for site, slots in projectors.items()
+    }
+
+    # Consistency check on the projectors: every half must have its partner.
+    # Partner is found by flipping the face char ('t' <-> 'b', 'l' <-> 'r')
+    # and stepping one site in the direction the face points to (= slot[-1]).
+    _PARTNER_FACE = {'t': 'b', 'b': 't', 'l': 'r', 'r': 'l'}
+    for site, slots in projectors.items():
+        for slot in slots:
+            partner_slot = slot[:-1] + _PARTNER_FACE[slot[-1]]
+            partner_site = env.nn_site(site, slot[-1])
+            if partner_slot not in projectors.get(partner_site, ()):
+                raise YastnError(
+                    f"projector half {slot}@{site} is missing its partner "
+                    f"{partner_slot}@{partner_site}.")
+
+
+    # --- build a rename table for the insertion of projectors.
+    # rename is keyed by (label, i_tensor, j_tensor) so only the endpoint of
+    # the bond on the absorbed side gets renamed; the other endpoint keeps
+    # the original label and connects to the partner half-projector.
+    def _bond_endpoint(bond, side):
+        """(i, j) of the bond's endpoint on the given side."""
+        if bond[0] == 'v':
+            return (bond[1] - 1, bond[2]) if side == 't' else (bond[1], bond[2])
+        # bond[0] == 'h'
+        return (bond[1], bond[2]) if side == 'l' else (bond[1], bond[2] + 1)
+
+    rename = {}  # (label, i, j) -> renamed label
+
+    def _register_rename(key, new_label, slot, site):
+        if key in rename and rename[key] != new_label:
+            raise YastnError(
+                f"projector {slot}@{site} conflicts with another projector "
+                f"trying to rename the same bond endpoint {key}.")
+        rename[key] = new_label
+
+    proj_inserts = []  # tensors to append at the end
+    for site, slots in projectors.items():
+        for proj_name in slots:
+            i, j = site[0] - minx, site[1] - miny
+            env_bond, D2_bond, side = _compress_bond_side(i, j, proj_name)
+            new_env_bond = env_bond + (side,)
+            new_ket_bond = D2_bond + ('k', side)
+            new_bra_bond = D2_bond + ('b', side)
+
+            i_env, j_env = _bond_endpoint(env_bond, side)
+            i_d2, j_d2 = _bond_endpoint(D2_bond, side)
+            _register_rename((env_bond, i_env, j_env), new_env_bond, proj_name, site)
+            _register_rename((D2_bond + ('k',), i_d2, j_d2), new_ket_bond, proj_name, site)
+            _register_rename((D2_bond + ('b',), i_d2, j_d2), new_bra_bond, proj_name, site)
+
+            proj = getattr(env.proj[site], proj_name)
+            proj_inserts.append((proj.unfuse_legs(axes=(1,)),
+                                 [new_env_bond, new_ket_bond, new_bra_bond,
+                                  ('proj',) + env_bond]))
+    def _tag(label, i, j):
+        return rename.get((label, i, j), label)
 
     # --- Collect peps_legs for edge padding (same as interleaved path) ---
     peps_legs = {}
@@ -1004,34 +1099,44 @@ def _build_separate_unfused(env, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, b
             )
 
     # --- Corners (identical to interleaved) ---
-    args += [env[tl].tl, [('v', 0, -1), ('h', -1, -1)]]
-    args += [env[bl].bl, [('h', Nx, -1), ('v', Nx, -1)]]
-    args += [env[tr].tr, [('h', -1, Ny - 1), ('v', 0, Ny)]]
-    args += [env[br].br, [('v', Nx, Ny), ('h', Nx, Ny - 1)]]
+    # Each corner sits at one of the four "fake-site" positions outside the patch:
+    #   TL = (-1, -1)   TR = (-1, Ny)   BL = (Nx, -1)   BR = (Nx, Ny)
+    args += [env[tl].tl,
+             [_tag(('v', 0, -1), -1, -1), _tag(('h', -1, -1), -1, -1)]]
+    args += [env[bl].bl,
+             [_tag(('h', Nx, -1), Nx, -1), _tag(('v', Nx, -1), Nx, -1)]]
+    args += [env[tr].tr,
+             [_tag(('h', -1, Ny - 1), -1, Ny), _tag(('v', 0, Ny), -1, Ny)]]
+    args += [env[br].br,
+             [_tag(('v', Nx, Ny), Nx, Ny), _tag(('h', Nx, Ny - 1), Nx, Ny)]]
 
-    # --- Left edges ---
+    # --- Left edges --- left-edge[i] sits at (i, -1)
     for i in range(Nx):
         k_legs, b_legs = peps_legs[(i, 0)]
         args += [_uf_middle_padded(env[Site(minx + i, miny)].l, k_legs[1], b_legs[1]),
-                 [('v', i + 1, -1), ('h', i, -1, 'k'), ('h', i, -1, 'b'), ('v', i, -1)]]
+                 [_tag(('v', i + 1, -1), i, -1), _tag(('h', i, -1, 'k'), i, -1),
+                  _tag(('h', i, -1, 'b'), i, -1), _tag(('v', i, -1), i, -1)]]
 
-    # --- Right edges ---
+    # --- Right edges --- right-edge[i] sits at (i, Ny)
     for i in range(Nx):
         k_legs, b_legs = peps_legs[(i, Ny - 1)]
         args += [_uf_middle_padded(env[Site(minx + i, maxy)].r, k_legs[3], b_legs[3]),
-                 [('v', i, Ny), ('h', i, Ny - 1, 'k'), ('h', i, Ny - 1, 'b'), ('v', i + 1, Ny)]]
+                 [_tag(('v', i, Ny), i, Ny), _tag(('h', i, Ny - 1, 'k'), i, Ny),
+                  _tag(('h', i, Ny - 1, 'b'), i, Ny), _tag(('v', i + 1, Ny), i, Ny)]]
 
-    # --- Top edges ---
+    # --- Top edges --- top-edge[j] sits at (-1, j)
     for j in range(Ny):
         k_legs, b_legs = peps_legs[(0, j)]
         args += [_uf_middle_padded(env[Site(minx, miny + j)].t, k_legs[0], b_legs[0]),
-                 [('h', -1, j - 1), ('v', 0, j, 'k'), ('v', 0, j, 'b'), ('h', -1, j)]]
+                 [_tag(('h', -1, j - 1), -1, j), _tag(('v', 0, j, 'k'), -1, j),
+                  _tag(('v', 0, j, 'b'), -1, j), _tag(('h', -1, j), -1, j)]]
 
-    # --- Bottom edges ---
+    # --- Bottom edges --- bottom-edge[j] sits at (Nx, j)
     for j in range(Ny):
         k_legs, b_legs = peps_legs[(Nx - 1, j)]
         args += [_uf_middle_padded(env[Site(maxx, miny + j)].b, k_legs[2], b_legs[2]),
-                 [('h', Nx, j), ('v', Nx, j, 'k'), ('v', Nx, j, 'b'), ('h', Nx, j - 1)]]
+                 [_tag(('h', Nx, j), Nx, j), _tag(('v', Nx, j, 'k'), Nx, j),
+                  _tag(('v', Nx, j, 'b'), Nx, j), _tag(('h', Nx, j - 1), Nx, j)]]
 
     # --- PEPS sites: separate ket (5-leg) and bra (5-leg) ---
     def _bond_labels(i, j):
@@ -1059,26 +1164,34 @@ def _build_separate_unfused(env, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, b
 
             # Ket tensor: 4 bond legs + physical
             args += [Ak,
-                     [lbls[0] + ('k',), lbls[1] + ('k',),
-                      lbls[2] + ('k',), lbls[3] + ('k',), ('p', i, j)]]
+                     [_tag(lbls[0] + ('k',), i, j), _tag(lbls[1] + ('k',), i, j),
+                      _tag(lbls[2] + ('k',), i, j), _tag(lbls[3] + ('k',), i, j),
+                      ('p', i, j)]]
 
             # Bra tensor: 4 bond legs + physical (shared physical label)
             args += [Ab_c,
-                     [lbls[0] + ('b',), lbls[1] + ('b',),
-                      lbls[2] + ('b',), lbls[3] + ('b',), ('p', i, j)]]
+                     [_tag(lbls[0] + ('b',), i, j), _tag(lbls[1] + ('b',), i, j),
+                      _tag(lbls[2] + ('b',), i, j), _tag(lbls[3] + ('b',), i, j),
+                      ('p', i, j)]]
 
             # Inter-tensor swap pairs (ket × bra fermionic crossings)
             # In canonical order: l_k × t_b and b_k × r_b
             # inv[d] = position of canonical direction d after transpose
             inv = [dpt.trans.index(d) for d in range(4)]
-            swap_pairs.append((lbls[inv[1]] + ('k',), lbls[inv[0]] + ('b',)))  # l_k × t_b
-            swap_pairs.append((lbls[inv[2]] + ('k',), lbls[inv[3]] + ('b',)))  # b_k × r_b
+            swap_pairs.append((_tag(lbls[inv[1]] + ('k',), i, j),
+                               _tag(lbls[inv[0]] + ('b',), i, j)))  # l_k × t_b
+            swap_pairs.append((_tag(lbls[inv[2]] + ('k',), i, j),
+                               _tag(lbls[inv[3]] + ('b',), i, j)))  # b_k × r_b
+
+    # --- Inserted half-projectors (compressed bonds) ---
+    for proj_t, proj_lbls in proj_inserts:
+        args += [proj_t, proj_lbls]
 
     args.append(())  # scalar output
     return tuple(args), swap_pairs
 
 
-def _measure_nsite_exact_oe_impl(self, *operators, sites, unroll, checkpoint_loop, separate_layers, optimizer, devices, mp_workers_per_device, mode):
+def _measure_nsite_exact_oe_impl(self, *operators, sites, unroll, checkpoint_loop, separate_layers, optimizer, devices, mp_workers_per_device, mode, projectors=None):
     r"""Shared implementation for the three OE measurement wrappers.
 
     ``mode`` is one of:
@@ -1087,6 +1200,84 @@ def _measure_nsite_exact_oe_impl(self, *operators, sites, unroll, checkpoint_loo
     * ``"norm"`` -- contract only the norm <psi|psi> over the bounding window of
       ``sites``; ``operators`` is ignored.
     * ``"numerator"`` -- contract only ``sign * val_op`` (no division by norm).
+
+    Bond-label scheme
+    -----------------
+
+    The contraction builds a tensor network over a ``Nx`` × ``Ny`` window
+    enclosing the requested ``sites``.  Every edge of that network carries a
+    tuple label.  These labels are what callers refer to when passing an
+    ``unroll`` dict, and what the patch-building helpers
+    (``_build_interleaved_unfused``, ``_build_separate_unfused``,
+    ``_build_interleaved_fused``) emit.
+
+    Coordinates ``i`` (row, ``0 … Nx-1``) and ``j`` (column, ``0 … Ny-1``)
+    are *window-local*, not absolute lattice positions, and follow the
+    yastn ``Site(x, y) = (row, col)`` convention.
+
+    **Horizontal bonds** ``('h', i, j)`` -- run left-to-right between
+    columns ``j`` and ``j+1`` at row ``i``::
+
+               j=-1            j=0             j=1          j=Ny-1     j=Ny
+                :              :               :             :          :
+        i=-1   TL --h,-1,-1-- T[0] --h,-1,0-- T[1] -- ... -- h,-1,Ny-1 -- TR
+                |              |               |             |          |
+             v,0,-1         v,0,0           v,0,1        v,0,Ny-1     v,0,Ny
+                |              |               |             |          |
+        i=0    L[0]-h,0,-1-----*---h,0,0-------*--- ... --h,0,Ny-1-----R[0]
+                |              |               |             |          |
+             v,1,-1         v,1,0           v,1,1        v,1,Ny-1     v,1,Ny
+                |              |               |             |          |
+        i=1    L[1]-h,1,-1-----*---h,1,0-------*--- ... --h,1,Ny-1-----R[1]
+                :              :               :             :          :
+                |              |               |             |          |
+             v,Nx,-1        v,Nx,0          v,Nx,1       v,Nx,Ny-1    v,Nx,Ny
+                |              |               |             |          |
+        i=Nx   BL --h,Nx,-1-- B[0] --h,Nx,0-- B[1] -- ... -- h,Nx,Ny-1 -- BR
+
+    where ``*`` marks a PEPS site, ``TL/TR/BL/BR`` are CTM corners, and
+    ``T/B/L/R`` are CTM edges.
+
+    For horizontal bonds: ``i = -1`` and ``i = Nx`` are boundary rows
+    (chi bonds between edge tensors and corners); ``i = 0 … Nx-1`` are
+    PEPS rows (physical bonds); ``j = -1`` is the left-boundary column
+    and ``j = Ny - 1`` the right-boundary column for the chi bonds
+    attached to the side edges.
+
+    **Vertical bonds** ``('v', i, j)`` -- run top-to-bottom in column
+    ``j`` between rows ``i-1`` and ``i``:
+
+    - ``i = 0`` connects the top row (``T[j]`` / corner) to the first
+      PEPS row.
+    - ``i = Nx`` connects the last PEPS row to the bottom row
+      (``B[j]`` / corner).
+    - ``i = 1 … Nx-1`` are interior vertical bonds.
+    - ``j = -1`` is the left-boundary column; ``j = Ny`` is the right-
+      boundary column; ``j = 0 … Ny-1`` are PEPS columns.
+
+    **Ket / bra split** -- for ``DoublePepsTensor`` PEPS in the unfused
+    builds, every *PEPS-row* bond (i.e. ``('h', i, j)`` with
+    ``0 <= i < Nx`` and *all* ``('v', i, j)``) carries two labels,
+    ``(*, 'k')`` for the ket layer and ``(*, 'b')`` for the bra layer.
+    ``_translate_unroll`` automatically expands an un-qualified label
+    into both layers; a layer-qualified label like ``('v', 1, 1, 'k')``
+    slices only the ket side.  Boundary (chi) bonds are kept
+    single-label.
+
+    **Examples** -- 2 × 3 window (``Nx = 2``, ``Ny = 3``)::
+
+        # unroll the horizontal bond between columns 0 and 1
+        # at the first PEPS row, one charge sector at a time:
+        unroll = {('h', 0, 0): 1}
+
+        # unroll the vertical bond in column 1 between rows 0 and 1:
+        unroll = {('v', 1, 1): 1}
+
+        # unroll multiple bonds simultaneously:
+        unroll = {('h', 0, 0): 1, ('v', 1, 1): 1}
+
+        # unroll a left-boundary vertical (chi) bond:
+        unroll = {('v', 0, -1): 1}
     """
     if mode not in ('both', 'norm', 'numerator'):
         raise YastnError(f"unknown mode: {mode!r}")
@@ -1137,10 +1328,14 @@ def _measure_nsite_exact_oe_impl(self, *operators, sites, unroll, checkpoint_loo
         path_opts = {"optimizer": optimizer}
         translated_unroll = _translate_unroll(unroll, Nx, Ny)
         build_fn = _build_separate_unfused if separate_layers else _build_interleaved_unfused
+        if projectors is not None and not separate_layers:
+            raise YastnError("projectors-based compression requires separate_layers=True.")
+        build_kwargs = {'projectors': projectors} if separate_layers else {}
 
         if mode in ('norm', 'both'):
             tn_no, swap_no = build_fn(
-                self, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, bl, br)
+                self, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, bl, br,
+                **build_kwargs)
             path_no, _ = get_contraction_path(*tn_no, unroll=translated_unroll, **path_opts)
             val_no = contract_with_unroll(
                 *tn_no, optimize=path_no, unroll=translated_unroll,
@@ -1173,9 +1368,11 @@ def _measure_nsite_exact_oe_impl(self, *operators, sites, unroll, checkpoint_loo
                         tens[Site(minx, miny)].add_charge_swaps_(
                             ops[site].n, axes=['k2', 'k4'])
 
-        # operator contraction
+        # operator contraction (use the same projectors as the norm so the
+        # ratio is consistent and both paths benefit from the compression)
         tn_op, swap_op = build_fn(
-            self, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, bl, br)
+            self, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, bl, br,
+            **build_kwargs)
         path_op, _ = get_contraction_path(*tn_op, unroll=translated_unroll, **path_opts)
         val_op = contract_with_unroll(
             *tn_op, optimize=path_op, unroll=translated_unroll,
@@ -1248,7 +1445,7 @@ def _measure_nsite_exact_oe_impl(self, *operators, sites, unroll, checkpoint_loo
     return sign * val_op / val_no
 
 
-def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint_loop=False, separate_layers=False, optimizer="default", devices=None, mp_workers_per_device=0) -> float:
+def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint_loop=False, separate_layers=False, optimizer="default", devices=None, mp_workers_per_device=0, projectors=None) -> float:
     r"""
     Memory-efficient version of :meth:`measure_nsite_exact` using opt_einsum
     contraction path optimization, optional block-sparse index unrolling,
@@ -1279,7 +1476,7 @@ def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint
 
     unroll : dict or None
         Dict mapping bond labels to ``int`` (uniform slice size) or
-        ``list[SlicedLeg]``.  See module docs for the bond-label scheme.
+        ``list[SlicedLeg]``.  See :func:`_measure_nsite_exact_oe_impl` for the bond-label scheme.
 
     checkpoint_loop : bool
         If ``True`` and ``unroll`` is not ``None``, each unroll iteration
@@ -1295,34 +1492,50 @@ def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint
         self, *operators, sites=sites, unroll=unroll,
         checkpoint_loop=checkpoint_loop, separate_layers=separate_layers,
         optimizer=optimizer, devices=devices,
-        mp_workers_per_device=mp_workers_per_device, mode='both')
+        mp_workers_per_device=mp_workers_per_device, mode='both',
+        projectors=projectors)
 
 
-def measure_nsite_norm_exact_oe(self, *, sites, unroll=None, checkpoint_loop=False, separate_layers=False, optimizer="default", devices=None, mp_workers_per_device=0):
+def measure_nsite_norm_exact_oe(self, *, sites, unroll=None, checkpoint_loop=False, separate_layers=False, optimizer="default", devices=None, mp_workers_per_device=0, projectors=None):
     """Contract only the norm <psi|psi> over the bounding window of ``sites``.
 
-    Same contraction backend, options, and bond-label scheme as
-    :func:`measure_nsite_exact_oe`; ``operators`` is omitted.  Use this
-    when sharing a single norm value across multiple numerator
-    evaluations (see :func:`measure_nsite_numerator_exact_oe`).
+    Same contraction backend and options as :func:`measure_nsite_exact_oe`,
+    with ``operators`` omitted.  See :func:`_measure_nsite_exact_oe_impl`
+    for the bond-label scheme.  Use this when sharing a single norm value
+    across multiple numerator evaluations (see
+    :func:`measure_nsite_numerator_exact_oe`).
     """
     return _measure_nsite_exact_oe_impl(
         self, sites=sites, unroll=unroll,
         checkpoint_loop=checkpoint_loop, separate_layers=separate_layers,
         optimizer=optimizer, devices=devices,
-        mp_workers_per_device=mp_workers_per_device, mode='norm')
+        mp_workers_per_device=mp_workers_per_device, mode='norm',
+        projectors=projectors)
 
 
-def measure_nsite_numerator_exact_oe(self, *operators, sites, unroll=None, checkpoint_loop=False, separate_layers=False, optimizer="default", devices=None, mp_workers_per_device=0):
+def measure_nsite_numerator_exact_oe(self, *operators, sites, unroll=None, checkpoint_loop=False, separate_layers=False, optimizer="default", devices=None, mp_workers_per_device=0, projectors=None):
     """Contract only the unnormalized numerator ``sign * <psi| O0_s0 ... |psi>``.
 
-    Same contraction backend, options, and bond-label scheme as
-    :func:`measure_nsite_exact_oe`; the result is *not* divided by the
-    norm.  The caller is responsible for dividing by ``<psi|psi>``
-    (typically obtained via :func:`measure_nsite_norm_exact_oe`).
+    Same contraction backend and options as :func:`measure_nsite_exact_oe`;
+    the result is *not* divided by the norm.  See
+    :func:`_measure_nsite_exact_oe_impl` for the bond-label scheme.  The
+    caller is responsible for dividing by ``<psi|psi>`` (typically
+    obtained via :func:`measure_nsite_norm_exact_oe`).
     """
     return _measure_nsite_exact_oe_impl(
         self, *operators, sites=sites, unroll=unroll,
         checkpoint_loop=checkpoint_loop, separate_layers=separate_layers,
         optimizer=optimizer, devices=devices,
-        mp_workers_per_device=mp_workers_per_device, mode='numerator')
+        mp_workers_per_device=mp_workers_per_device, mode='numerator',
+        projectors=projectors)
+
+
+def _eval_projectors(env, move, opts_svd):
+    """Construct the projectors using the converged env.
+
+    ``opts_svd`` carries the truncation options (notably ``D_total``);
+    it is passed through to ``_update_projectors_`` unchanged.
+    """
+    for site in env.sites():
+        env._update_projectors_(site, move, opts_svd, method='2x2')
+
