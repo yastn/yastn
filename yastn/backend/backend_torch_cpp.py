@@ -199,7 +199,6 @@ def kernel_tensordot_bs(
         c_struct_t, c_slices, profile)
     if profile: nvtx.range_pop()
 
-    if profile: nvtx.range_push(f"ops.tensordot_bs")
     # TODO type promotion should be handled by cutensor
     if a.dtype != dtype:
         a = a.to(dtype=dtype)
@@ -213,7 +212,9 @@ def kernel_tensordot_bs(
         return r_nout
 
     modes_out= _remap_nout_(nout_a,0) + _remap_nout_(nout_b,len(nout_a))
+    if profile: nvtx.mark(f"kernel_tensordot_bs_remap_modes_out")
 
+    if profile: nvtx.range_push(f"ops.tensordot_bs")
     if NSYM==0:
         a_shaped= a.reshape( list([m[0] for m in a_D_per_mode]) )
         b_shaped= b.reshape( list([m[0] for m in b_D_per_mode]) )
