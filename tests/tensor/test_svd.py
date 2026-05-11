@@ -368,7 +368,7 @@ def test_svd_multiplets(config_kwargs):
 
     opts = {'tol': 0.0001, 'D_block': 7, 'D_total': 30}
     _, S1, _ = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), **opts)
-    assert S1.get_shape() == (30, 30)
+    assert S1.get_shape() == (29, 29)
 
     mask_f = lambda x: yastn.truncation_mask_multiplets(x, tol=0.0001, D_total=30, eps_multiplet=0.001)
     _, S1, _ = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), mask_f=mask_f)

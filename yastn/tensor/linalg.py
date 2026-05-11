@@ -709,55 +709,50 @@ def truncation_mask(S, which='LR',
     verbosity = kwargs.get('verbosity', 0)
     if verbosity > 2:
         fname = sys._getframe().f_code.co_name
-        logger.info(f"{fname} tol {tol} tol_block {tol_block} D_total {D_total}")
-        logger.info(f"{fname} D_block {D_block}")
+        logger.info(f"{fname} {tol=} {tol_block=} {D_total=} {D_block=}")
+        logger.info(f"{fname} {truncate_multiplets=} {eps_multiplet=} {hermitian=}")
 
     if which in ["SR", "SM"] and (tol != -float('inf') or tol_block != -float('inf')):
         raise YastnError("Truncation by tolerance with which='SR' or 'SM' is not supported."
             + "Set tol and tol_block to -inf or use mask_f for custom truncation mask if needed.")
 
-
     # makes a copy for partial truncations; also detaches from autograd computation graph
     backend = S.config.backend
-    S = S.copy()
-    Smask = S.copy()
-    Smask._data = abs(Smask._data) > -float('inf') # all True
+    Smask = abs(S.detach()) > float('-inf')
+    nsym = S.config.sym.NSYM
 
-    if truncate_multiplets:
+    if truncate_multiplets or eps_multiplet:
         tol_block, D_block = float('-inf'), float('inf')
 
-    tol_null = float('-inf') if isinstance(tol_block, dict) else tol_block
-    D_null = 0 if isinstance(D_block, dict) else D_block
+    if tol_block != float('-inf') or D_block != float('inf'):
+        tol_null = float('-inf') if isinstance(tol_block, dict) else tol_block
+        D_null = 0 if isinstance(D_block, dict) else D_block
 
-    nsym = S.config.sym.NSYM
-    for t, sl in zip(S.struct.t, S.slices):
-        t = t[:nsym]
-        tol_rel = tol_block[t] if (isinstance(tol_block, dict) and t in tol_block) else tol_null
-        slc = slice(*sl.slcs[0])
+        for t, sl in zip(S.struct.t, S.slices):
+            t = t[:nsym]
+            tol_rel = tol_block[t] if (isinstance(tol_block, dict) and t in tol_block) else tol_null
+            slc = slice(*sl.slcs[0])
 
-        above_tol = S.data[slc] > tol_rel * backend.max_abs(S.data[slc])
-        D_tol = backend.sum_elements(above_tol).item()
-        D_bl = D_block[t] if (isinstance(D_block, dict) and t in D_block) else D_null
-        D_bl = min(D_bl, D_tol)
+            above_tol = S.data[slc] > tol_rel * backend.max_abs(S.data[slc])
+            D_tol = backend.sum_elements(above_tol).item()
+            D_bl = D_block[t] if (isinstance(D_block, dict) and t in D_block) else D_null
+            D_bl = min(D_bl, D_tol)
 
-        if 0 < D_bl < sl.Dp:  # block truncation
-            inds = backend.eigs_which(S.data[slc], which)
-            Smask._data[slc][inds[D_bl:]] = False
-        elif D_bl == 0:
-            Smask._data[slc] = False
+            if 0 < D_bl < sl.Dp:  # block truncation
+                inds = backend.eigs_which(S.data[slc], which)
+                Smask._data[slc][inds[D_bl:]] = False
+            elif D_bl == 0:
+                Smask._data[slc] = False
 
-    temp_data = S._data * Smask.data
-    above_tol = temp_data > tol * backend.max_abs(temp_data)
-    D_tol = backend.sum_elements(above_tol).item()
-    D_total = min(D_total, D_tol)
+    above_tol = S.data > tol * backend.max_abs(S.data)
+    D_total = min(D_total, backend.sum_elements(above_tol).item())
 
-    if D_total == 0:
-        Smask._data[:] = False
+    if D_total >= len(S.data):
         return Smask
 
-    inds = backend.eigs_which(temp_data, which)
+    inds = backend.eigs_which(S.data, which)
 
-    if truncate_multiplets and D_total < len(inds):
+    if truncate_multiplets:
         gap = -1
         for p in range(D_total, len(inds)):
             gap_p = abs(S._data[inds[p]] - S._data[inds[p - 1]])
@@ -784,28 +779,42 @@ def truncation_mask(S, which='LR',
 
     Smask._data[inds[D_total:]] = False
 
-
     # check blocks related by Hermitian symmetry and truncate to equal length
     if hermitian:
-        active_sectors = filter(lambda x: any(Smask[x]), Smask.struct.t)
-        for t in active_sectors:
-            tn = S.config.sym.conj_charge(t)
-            if t == tn:
-                continue
+        considered_t = set()
+        for it, t in enumerate(Smask.struct.t):
+            if any(Smask[t]):  # active_sectors
+                t = t[:nsym]
+                tc = S.config.sym.conj_charge(t)
 
-            common_size = min(len(Smask[t]), len(Smask[tn]))
-            # if related blocks do not have equal length
-            if common_size > len(Smask[t]):
-                # assert sum(Smask[t][common_size:]) <= 0 ,\
-                #     "Symmetry-related blocks do not match"
-                Smask[t][common_size:] = False
-            if common_size > len(Smask[tn]):
-                # assert sum(Smask[tn][common_size:])<=0,\
-                #     "Symmetry-related blocks do not match"
-                Smask[tn][common_size:] = False
+                if t == tc or t in considered_t:
+                    continue
 
-            if not all(Smask[t][:common_size] == Smask[tn][:common_size]):
-                Smask[t][:common_size] = Smask[tn][:common_size] = Smask[t][:common_size] & Smask[tn][:common_size]
+                if tc + tc not in Smask.struct.t:
+                    Smask[t][:] = False
+                    continue
+
+                considered_t.update(t, tc)
+
+                lt, ltc = len(Smask[t]), len(Smask[tc])
+                common_size = min(lt, ltc)
+
+                slc_t = S.struct.slc[it]
+                inds_t = backend.eigs_which(S.data[slc], which)
+
+                slc_tc = S.struct.slc[S.struct.t.index(tc + tc)]
+                inds_tc = backend.eigs_which(S.data[slc_tc], which)
+
+                St = Smask.data[slc_t]
+                Stc = Smask.data[slc_tc]
+
+                # if related blocks do not have equal length
+                if common_size < lt:
+                    St[inds_t[common_size:]] = False
+                if common_size < ltc:
+                    Stc[inds_tc[common_size:]] = False
+
+                St[inds_t[:common_size]] = Stc[inds_tc[:common_size]] = St[inds_t[:common_size]] & Stc[inds_tc[:common_size]]
 
     return Smask
 
