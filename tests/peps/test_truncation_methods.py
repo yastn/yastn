@@ -63,7 +63,7 @@ def test_truncation_methods(config_kwargs, initialization, opts_svd_evolution):
         logging.info('ntu error mean: %.2e' % ntu_error_mean)
 
 
-    opts_svd_ctm = {'D_total': 24, 'tol': 1e-8, 'truncate_multiplets': True}
+    opts_svd_ctm = {'D_total': 24, 'tol': 1e-8, 'largest_gap': True}
     corner_tol = 1e-5
     max_sweeps = 50
 

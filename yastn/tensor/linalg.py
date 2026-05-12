@@ -49,7 +49,7 @@ def norm(a, p='fro') -> Number:
 def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
         Uaxis=-1, Vaxis=0, policy='fullrank', fix_signs=False, svd_on_cpu=False,
         tol=0, tol_block=0, D_block=float('inf'), D_total=float('inf'),
-        truncate_multiplets=False, mask_f=None, **kwargs) -> tuple[yastn.Tensor, yastn.Tensor, yastn.Tensor]:
+        largest_gap=False, mask_f=None, **kwargs) -> tuple[yastn.Tensor, yastn.Tensor, yastn.Tensor]:
     r"""
     Split tensor using exact singular value decomposition (SVD) into :math:`a = U S V`,
     where the columns of `U` and the rows of `V` form orthonormal bases
@@ -98,7 +98,7 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
     D_total: int
         largest total number of singular values to keep.
 
-    truncate_multiplets: bool
+    largest_gap: bool
         If ``True``, enlarge the truncation range specified by other arguments by shifting
         the cut to the largest gap between to-be-truncated singular values across all blocks.
         It provides a heuristic mechanism to avoid truncating part of a multiplet.
@@ -117,7 +117,7 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
                   fix_signs=fix_signs, svd_on_cpu=svd_on_cpu, **kwargs)
     Smask = truncation_mask(S, tol=tol, tol_block=tol_block,
                             D_block=D_block, D_total=D_total,
-                            truncate_multiplets=truncate_multiplets,
+                            largest_gap=largest_gap,
                             mask_f=mask_f)
 
     U, S, V = Smask.apply_mask(U, S, V, axes=(-1, 0, 0))
@@ -641,7 +641,7 @@ def truncation_mask_multiplets(S, tol=0, D_total=float('inf'),
 def truncation_mask(S, which='LR',
                     tol=float('-inf'), tol_block=float('-inf'),
                     D_block=float('inf'), D_total=float('inf'),
-                    truncate_multiplets=False,
+                    largest_gap=False,
                     eps_multiplet=None,
                     hermitian=False,
                     mask_f=None,
@@ -678,11 +678,11 @@ def truncation_mask(S, which='LR',
         maximum number of elements kept per block.
         It is also possible to provide a dictionary mapping charges to maximal number of elements in the charge sector.
 
-    truncate_multiplets: bool
+    largest_gap: bool
         If ``True``, enlarge the truncation range specified by other arguments by shifting
         the cut to the largest gap between to-be-truncated singular values across all blocks.
         It provides a heuristic mechanism to avoid truncating part of a multiplet.
-        If ``True``, ``tol_block`` and ``D_block`` are ignored, as ``truncate_multiplets`` is a global condition.
+        If ``True``, ``tol_block`` and ``D_block`` are ignored, as ``largest_gap`` is a global condition.
         The default is ``False``.
 
     eps_multiplet: float
@@ -710,7 +710,7 @@ def truncation_mask(S, which='LR',
     if verbosity > 2:
         fname = sys._getframe().f_code.co_name
         logger.info(f"{fname} {tol=} {tol_block=} {D_total=} {D_block=}")
-        logger.info(f"{fname} {truncate_multiplets=} {eps_multiplet=} {hermitian=}")
+        logger.info(f"{fname} {largest_gap=} {eps_multiplet=} {hermitian=}")
 
     if which in ["SR", "SM"] and (tol != -float('inf') or tol_block != -float('inf')):
         raise YastnError("Truncation by tolerance with which='SR' or 'SM' is not supported."
@@ -721,7 +721,7 @@ def truncation_mask(S, which='LR',
     Smask = abs(S.detach()) > float('-inf')
     nsym = S.config.sym.NSYM
 
-    if truncate_multiplets or eps_multiplet:
+    if largest_gap or eps_multiplet:
         tol_block, D_block = float('-inf'), float('inf')
 
     if tol_block != float('-inf') or D_block != float('inf'):
@@ -752,7 +752,7 @@ def truncation_mask(S, which='LR',
 
     inds = backend.eigs_which(S.data, which)
 
-    if truncate_multiplets:
+    if largest_gap:
         gap = -1
         for p in range(D_total, len(inds)):
             gap_p = abs(S._data[inds[p]] - S._data[inds[p - 1]])
@@ -1144,7 +1144,7 @@ def _meta_eigh_lowrank(config, struct, slices, sU, D_block):
 
 def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank',
                          tol=0, tol_block=0, D_block=float('inf'), D_total=float('inf'),
-                         truncate_multiplets=False, mask_f=None, **kwargs) -> tuple[yastn.Tensor, yastn.Tensor]:
+                         largest_gap=False, mask_f=None, **kwargs) -> tuple[yastn.Tensor, yastn.Tensor]:
     r"""
     Split symmetric tensor using exact eigenvalue decomposition, :math:`a= USU^{\dagger}``.
     Optionally, truncate the resulting decomposition.
@@ -1200,7 +1200,7 @@ def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank',
 
     Smask = truncation_mask(S, which=which, tol=tol, tol_block=tol_block,
                         D_block=D_block, D_total=D_total,
-                        truncate_multiplets=truncate_multiplets, mask_f=mask_f)
+                        largest_gap=largest_gap, mask_f=mask_f)
     S, U = Smask.apply_mask(S, U, axes=(0, Uaxis))
     return S, U
 

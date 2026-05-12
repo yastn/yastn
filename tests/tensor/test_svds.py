@@ -161,35 +161,6 @@ def test_svds_U1_multiplets(config_kwargs, dtype):
     assert S1.get_blocks_charge() == ((-1, -1), (0, 0), (1, 1))
     assert S1.s[0] == -1 and U1.n == (0,) and V1.n == a.n and S1.get_shape() == (opts['D_total'],)*2
 
-    #
-    # Different truncation options.
-    # opts = {'tol': 0.02, 'D_block': 5, 'D_total': 100}
-    # _, S1, _ = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), sU=1, **opts)
-    # assert S1.get_shape() == (11, 11)
-
-    # #
-    # # tol_block decides on block truncation tolerance with respect to largest singular value of each block
-    # opts = {'tol': 0, 'tol_block': 0.2, 'D_total': 100}
-    # _, S1, _ = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), sU=1, **opts)
-    # assert S1.get_shape() == (9, 9)
-
-    # #
-    # # We can specify D_block and tol_block for each charge sector independently
-    # opts = {'D_block': {(0,): 2, (-1,): 3}, 'tol_block': {(0,): 0.6, (-1,): 0.1}}
-    # _, S1, _ = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), sU=-1, **opts)
-    # assert S1.get_shape() == (4, 4)
-
-    # #
-    # # Here use truncate_multiplets option to shift the cut to largest D to retain multiplet
-    # opts = {'D_total': 10, "truncate_multiplets": True}
-    # _, S1, _ = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), sU=-1, **opts)
-    # assert S1.get_shape() == (12, 12)
-
-    # #
-    # # Empty tensor
-    # opts = {'D_total': 0}
-    # _, S2, _ = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), nU=False, sU=-1, **opts)
-    # assert S2.norm() < 1e-12 and S2.size == 0
 
 
 @pytest.mark.parametrize('part_of_multiplet', [1,2])
@@ -222,11 +193,10 @@ def test_svds_U1_truncate_multiplets(config_kwargs,part_of_multiplet):
     # up to a total of D_total singular values, with at most D_block singular values for each charge sector.
     #
     # There is a multiplet boundary at D=12, so 13th singular triple is part of a multiplet
-    opts = {'reltol': 0.01, 'D_block': 100, 'D_total': 12+part_of_multiplet, 'truncate_multiplets': True}
+    opts = {'reltol': 0.01, 'D_block': 100, 'D_total': 12+part_of_multiplet, 'largest_gap': True}
     U1, S1, V1 = yastn.svds(a, axes=((0, 1), (2, 3)), sU=-1, nU=True, **opts)
     assert S1.get_blocks_charge() == ((-2, -2), (-1, -1), (0, 0))
     assert S1.s[0] == 1 and U1.n == a.n and V1.n == (0,) and S1.get_shape() == (12,)*2
-
     #
     # svd_with_truncation is a shorthand for
     U, S, V = yastn.svd(a, axes=((0, 1), (2, 3)), sU=-1,) # nU=True

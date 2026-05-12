@@ -31,8 +31,8 @@ def eighs_combine(a,D_block,which='SR'):
     S_full, U_full = yastn.linalg.eigh_with_truncation(a2, axes=((0, 1), (2, 3)), which=which, D_block=D_block,
                         sU=1, Uaxis=-1, policy='fullrank',
                         tol=_tol, tol_block=_tol_block, D_total=float('inf'),
-                        truncate_multiplets=False, mask_f=None)
-    
+                        largest_gap=False, mask_f=None)
+
     assert yastn.norm(S - S_full) < tol
     US = yastn.tensordot(U, S, axes=(2, 0))
     USU = yastn.tensordot(US, U, axes=(2, 2), conj=(0, 1))
@@ -43,12 +43,12 @@ def eighs_combine(a,D_block,which='SR'):
     assert S.is_consistent()
 
     # changes signature of new leg; and position of new leg
-    S, U = yastn.linalg.eigh(a2, axes=((0, 1), (2, 3)), Uaxis=0, sU=-1, which=which, 
+    S, U = yastn.linalg.eigh(a2, axes=((0, 1), (2, 3)), Uaxis=0, sU=-1, which=which,
                              policy='block_lanczos', D_block=D_block)
     S_full, U_full = yastn.linalg.eigh_with_truncation(a2, axes=((0, 1), (2, 3)), which=which, D_block=D_block,
                         sU=-1, Uaxis=0, policy='fullrank',
                         tol=_tol, tol_block=_tol_block, D_total=float('inf'),
-                        truncate_multiplets=False, mask_f=None)
+                        largest_gap=False, mask_f=None)
 
     assert yastn.norm(S - S_full) < tol
     US = yastn.tensordot(S, U, axes=(0, 0))

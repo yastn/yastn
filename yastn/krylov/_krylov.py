@@ -372,7 +372,7 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
             D_block: int = float('inf')
                 largest number of singular values to keep in a single block. Default is to keep all.
 
-            truncate_multiplets: bool = False
+            largest_gap: bool = False
                 If ``True``, enlarge the truncation range specified by other arguments by shifting
                 the cut to the largest gap between to-be-truncated singular values across all blocks.
                 It provides a heuristic mechanism to avoid truncating part of a multiplet.
@@ -530,7 +530,7 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
             # 2) identify charge sectors that contain the degenerate subspace
             mask= C > 1.0e-14
             if np.sum(mask)>1: # it's a part of a multiplet
-                if kwargs.get('truncate_multiplets',False): continue
+                if kwargs.get('largest_gap',False): continue
                 YastnError('Last singular triple is part of a multiplet without well-defined charge')
         U_sorted[ index_to_charge[ np.argmax(np.abs(U[:, i])) ] ].append(i)
 
@@ -581,7 +581,7 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
     # Additional truncation
     Smask = truncation_mask(symS, tol=kwargs.get('reltol',0), tol_block=kwargs.get('reltol_block',0),
                             D_block=kwargs.get('D_block',float('inf')), D_total=k,
-                            truncate_multiplets=kwargs.get('truncate_multiplets',False),
+                            largest_gap=kwargs.get('largest_gap',False),
                             mask_f=kwargs.get('mask_f',None))
     symU, symS, symVh = Smask.apply_mask(symU, symS, symVh, axes=(-1, 0, 0))
 
