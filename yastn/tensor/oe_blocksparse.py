@@ -896,63 +896,49 @@ def _convert_path_to_ncon_args(*args, **kwargs):
 def _model_shape_as_dense(t: Tensor):
     return tuple(sum(s.D) for s in t.get_legs())
 
-def _preprocess_interleaved_to_expr_and_shapes(*args, unroll=[]):
-    r"""Casts interleaved einsum input into default format, stripping
-    away unrolled indices if any.
-    Collects shapes of the input and output tensors, labeling shapes
-    of unrolled indices as negative values.
-    Collects shapes of unrolled indices.
+def _preprocess_interleaved_to_expr_and_shapes(*args, unroll_dims=None):
+    r"""Cast interleaved einsum input into default einsum format and collect
+    per-leg shape proxies used by the contraction-path cost model.
 
-    This functions preprocesses the input for _get_contraction_path_cached
-    allowing for caching.
+    Unrolled indices are kept in the expression; their leg dimension is
+    overridden by ``unroll_dims`` so the cost model reflects the per-combo
+    slice size rather than the full leg.
 
     :param args: input to einsum in interleaved format
-    :param unroll: indices to unroll
+    :param unroll_dims: dict mapping unrolled label -> representative slice dim
+                        (typically ``max(sum(sl.D))`` over the slice list)
     """
-    # assert that unroll indices are contracted over, i.e. appear at least twice for
-    # at least two different tensors
-    if len(unroll) > 0:
-        assert not any(
-            [sum([u_i in x for x in (args[1::2] + (args[-1],))]) < 2 for u_i in unroll]
-        ), "Invalid choice of unrolled index"
+    unroll_dims = unroll_dims or {}
 
-    # cast interleaved format to default einsum while dropping unrolled indices
-    #
-    # the interleaved format has a) even number of elements, if the (i) the result is a scalar
-    #                               or (ii) tensor sorted in default index order
-    #                            b) odd number of elements if the result is a tensor and order of output indices
-    #                               is explicitly specified
+    if unroll_dims:
+        all_igs = args[1::2] + (args[-1],)
+        for u in unroll_dims:
+            assert sum(u in ig for ig in all_igs) >= 2, \
+                f"Invalid unrolled index {u}: must appear in >=2 index groups"
+
     to_ints = set([i for ig in args[1::2] for i in ig])
     to_ints = {i: idx for idx, i in enumerate(to_ints)}
 
     expr = ",".join(
-        [
-            "".join(["" if y in unroll else oe.get_symbol(to_ints[y]) for y in x])
-            for x in args[1::2]
-        ]
+        ["".join(oe.get_symbol(to_ints[y]) for y in x) for x in args[1::2]]
     )
-    expr += "->" + "".join(
-        ["" if y in unroll else oe.get_symbol(to_ints[y]) for y in args[-1]]
-    )
+    expr += "->" + "".join(oe.get_symbol(to_ints[y]) for y in args[-1])
 
-    # NOTE shapes are used in performance model for contraction path search
-    #      Here, we use shapes of t.to_dense() as proxy for block-sparse tensor shape
-    #
-    # assign shape to each index label
+    # Per-label dim from t.to_dense() shape, then override unrolled labels
+    # with the representative per-combo slice dim.
     i_to_s = {
         i: s
         for ig, t in zip(args[1::2], args[0 : 2 * (len(args) // 2) : 2])
         for i, s in zip(ig, _model_shape_as_dense(t))
     }
+    i_to_s.update(unroll_dims)
 
-    # create shapes information, labeling shapes on unrolled dimensions as negative
     shapes = tuple(
-        tuple(i_to_s[i] if not (i in unroll) else -i_to_s[i] for i in ig)
+        tuple(i_to_s[i] for i in ig)
         for ig in args[1::2] + (args[-1],)
     )
-    unrolled_shapes = tuple(i_to_s[i] for i in unroll)
 
-    return expr, shapes, unrolled_shapes
+    return expr, shapes
 
 @lru_cache(maxsize=128)
 def _log_input_mem_size(shapes : tuple[tuple[int]],names=None,who=None,**kwargs):
@@ -1005,34 +991,19 @@ def get_contraction_path(*tn_to_contract, unroll=None,
         )
 
     if isinstance(unroll, dict) and unroll:
-        tensors_orig = tn_to_contract[0 : 2 * (len(tn_to_contract) // 2) : 2]
-        igs = list(tn_to_contract[1 : 2 * (len(tn_to_contract) // 2) : 2])
-        out_ig = tn_to_contract[-1]
-
-        rep_tensors = list(tensors_orig)
-        for k, (t, ig) in enumerate(zip(tensors_orig, igs)):
-            for label, sliced_legs in unroll.items():
-                if label in ig:
-                    user_ax = list(ig).index(label)
-                    full_leg = rep_tensors[k].get_legs(user_ax)
-                    rep_sl = max(sliced_legs, key=lambda sl: sum(sl.D))
-                    mask_t = _build_mask_tensor(rep_sl, full_leg, rep_tensors[k].config)
-                    candidate = mask_t.apply_mask(rep_tensors[k], axes=user_ax)
-                    if candidate.struct.t:          # non-empty after masking
-                        rep_tensors[k] = candidate  # else keep current (fallback)
-
-        rep_args = []
-        for t, ig in zip(rep_tensors, igs):
-            rep_args.extend([t, ig])
-        rep_args.append(out_ig)
-        tn_for_path = tuple(rep_args)
-        unroll_for_path = list(unroll.keys())
+        # Per-combo dim along each unrolled axis = total D of the
+        # representative (largest) slice. The cost model sees this dim
+        # in place of the full leg, so the path it picks reflects the
+        # work actually done inside one iteration of the unroll loop.
+        unroll_dims = {
+            label: max(sum(sl.D) for sl in sliced_legs)
+            for label, sliced_legs in unroll.items()
+        }
     else:
-        tn_for_path = tn_to_contract
-        unroll_for_path = []
+        unroll_dims = None
 
-    expr, shapes, unrolled_shapes = _preprocess_interleaved_to_expr_and_shapes(
-        *tn_for_path, unroll=unroll_for_path
+    expr, shapes = _preprocess_interleaved_to_expr_and_shapes(
+        *tn_to_contract, unroll_dims=unroll_dims
     )
 
     # TODO only shapes are used in performance model for contraction path search
@@ -1040,23 +1011,25 @@ def get_contraction_path(*tn_to_contract, unroll=None,
     #      Better alternatives ?
     t0= time.perf_counter()
     res= _get_contraction_path_cached(
-        expr, shapes, unrolled=unrolled_shapes, names=names, who=who, **kwargs
+        expr, shapes, names=names, who=who, **kwargs
     )
     t1= time.perf_counter()
-    log.info(f"{who} contraction path search took {t1-t0} [s]")
+    log.info(f"{who} contraction path search"
+             + (f" (unroll dims {unroll_dims})" if unroll_dims else "")
+             + f" took {t1-t0} [s]")
     return res
 
 
 @lru_cache(maxsize=128)
 def _get_contraction_path_cached(
-    expr, shapes, unrolled=(), names=None, who=None, **kwargs
+    expr, shapes, names=None, who=None, **kwargs
 ):
     r"""Cachable function finding optimal contraction path for tensor network contraction
     specified in default einsum format with shapes only.
 
     :param expr: input to einsum in default format
-    :param shapes: shapes of tensors to be contracted
-    :param unrolled: shapes of unrolled indices
+    :param shapes: shapes of tensors to be contracted; last entry is the output shape.
+                   Unrolled axes are encoded directly as the per-combo slice dim.
     :param names: string labels for tensors used for more readable logging. The order of
                   names has to follow order of tensors as they appear in ``tn_to_contract``
     :param who: string id for logging identifying this optimal contraction path search
@@ -1069,22 +1042,19 @@ def _get_contraction_path_cached(
             cost_cap=True,  # don't use cost-capping strategy
         )
 
-    # pre-process shapes, by dropping negative values (unrolled index) and last tuple,
-    # which holds shapes of output tensor
-    shapes_unrolled = tuple(tuple(x for x in s if x > 0) for s in shapes[:-1])
+    in_shapes = shapes[:-1]
     path = kwargs.pop("path", None)
     kwargs.pop("shapes", False)
     if not path:
         path, path_info = oe.contract_path(
-            expr, *shapes_unrolled, optimize=optimizer, shapes=True, **kwargs
+            expr, *in_shapes, optimize=optimizer, shapes=True, **kwargs
         )  # ,use_blas=)
 
     path_info, mem_list = _get_contraction_path_info(
-        path, expr, *shapes_unrolled, unrolled=unrolled, names=names, shapes=True
+        path, expr, *in_shapes, names=names, shapes=True
     )
     log.info(
         f"{who} optimizer {optimizer}"
-        + (f" unrolled {unrolled}" if len(unrolled) > 0 else "")
         + f"\n{path}\n{path_info}\npeak-mem {max(mem_list):4.3e} mem {[f'{x:4.3e}' for x in mem_list]}"
     )
     return path, path_info
@@ -1098,7 +1068,6 @@ def _get_contraction_path_info(path, *operands, **kwargs):
                   names has to follow the order of tensors as they appear in ``operands``
     """
     names = kwargs.pop("names", None)
-    unrolled = kwargs.pop("unrolled", ())
 
     unknown_kwargs = set(kwargs) - _VALID_CONTRACT_KWARGS
     if len(unknown_kwargs):
