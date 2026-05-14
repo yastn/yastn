@@ -476,12 +476,16 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
         stored, trading extra forward computation for lower peak memory.
         Default: ``False``.
     devices : list[str], optional
-        List of device strings (e.g. ``['cuda:0', 'cuda:1']``) for
-        dispatching loop iterations round-robin across multiple devices.
-        Input tensors are pre-moved to each device once (autograd-preserving);
-        partials are accumulated per-device and gathered back to the original
-        device after the loop.  ``None`` (default) runs everything on the
-        original device.
+        Device strings (e.g. ``['cuda:0', 'cuda:1']``) to dispatch combos
+        across. Requires ``mp_workers_per_device >= 1`` — multi-device
+        dispatch goes through the :mod:`_oe_blocksparse_mp` worker pool.
+        ``None`` (default) runs serially on the original device.
+        ``devices=[X]`` with ``mp_workers_per_device==1`` runs serially
+        on ``X`` (no worker spawn), restoring the output to the input
+        device on return.
+    mp_workers_per_device : int, optional
+        Number of worker processes per device in the multiprocess pool.
+        Default 0 disables MP and requires ``devices=None``.
     **kwargs :
         Forwarded to ``ncon``.
 
@@ -492,15 +496,55 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
     assert len(args) % 2 == 1, \
         "_contract_with_sliced_unroll requires explicit output index group"
 
-    # Multiprocess dispatch: when workers-per-device > 0 and we're not already
-    # in worker mode, hand off to the multiprocess module which uses a custom
-    # autograd.Function so backward works through workers.
-    if mp_workers_per_device > 0 and _combo_indices is None and not _return_partials:
-        from ._oe_blocksparse_mp import _contract_with_sliced_unroll_mp
-        return _contract_with_sliced_unroll_mp(
-            *args, unroll=unroll, optimize=optimize,
-            checkpoint_loop=checkpoint_loop, swap=swap, devices=devices,
-            mp_workers_per_device=mp_workers_per_device, **kwargs)
+    # ---- Dispatch routing ----
+    # devices=None                                       -> serial on tensors[0].device
+    # devices=[X] where X == tensors[0].device           -> serial (demoted)
+    # devices=[X] + mp_workers_per_device==1             -> serial on X (move + restore)
+    # devices=[...] + mp_workers_per_device==0           -> error
+    # otherwise                                          -> multiprocess pool
+    # Worker-mode calls (_combo_indices set or _return_partials) skip routing.
+    _restore_device = None
+    if devices is not None and _combo_indices is None and not _return_partials:
+        if not isinstance(devices, (list, tuple)):
+            devices = [devices]
+        devices = list(dict.fromkeys(str(d) for d in devices))
+        if len(devices) == 0:
+            devices = None
+
+    if devices is not None and _combo_indices is None and not _return_partials:
+        _orig_device = str(args[0].device)
+        # Demote first: a same-device singleton is equivalent to devices=None
+        # and must NOT trip the mp_workers_per_device check below.
+        if len(devices) == 1 and devices[0] == _orig_device:
+            devices = None
+
+    if devices is not None and _combo_indices is None and not _return_partials:
+        if mp_workers_per_device == 0:
+            raise ValueError(
+                f"Multi-device dispatch (devices={devices}) requires "
+                "mp_workers_per_device >= 1.")
+
+        if len(devices) == 1 and mp_workers_per_device == 1:
+            # Single device + single worker: spawning a process buys nothing.
+            # Run serial on the target device; restore output to original.
+            target = devices[0]
+            new_args = list(args)
+            for i in range(0, 2 * (len(args) // 2), 2):
+                new_args[i] = new_args[i].to(target)
+            args = tuple(new_args)
+            _restore_device = _orig_device
+            devices = None
+        else:
+            from ._oe_blocksparse_mp import _contract_with_sliced_unroll_mp
+            # NOTE: the MP path runs each worker's forward under torch.no_grad()
+            # and replays it on backward (checkpoint pattern). So once we route
+            # here, backward recomputes the forward regardless of
+            # checkpoint_loop — checkpoint_loop=False does NOT preserve a live
+            # autograd graph across worker boundaries.
+            return _contract_with_sliced_unroll_mp(
+                *args, unroll=unroll, optimize=optimize,
+                checkpoint_loop=checkpoint_loop, swap=swap, devices=devices,
+                mp_workers_per_device=mp_workers_per_device, **kwargs)
 
     tensors = args[0 : 2 * (len(args) // 2) : 2]
     index_groups = list(args[1 : 2 * (len(args) // 2) : 2])
@@ -538,17 +582,7 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
     # Contracted-only unroll labels are not in this list.
     output_unroll_labels = [u for _, (u, _) in sorted(output_unroll_info.items())]
 
-    # --- Multi-device setup ---
-    # Normalize devices; None means single-device (original behavior).
     original_device = tensors[0].device
-    if devices is not None:
-        if not isinstance(devices, (list, tuple)):
-            devices = [devices]
-        devices = list(dict.fromkeys(str(d) for d in devices))  # deduplicate, preserve order
-        if len(devices) == 0 or (len(devices) == 1 and devices[0] == original_device):
-            devices = None
-
-    multi_device = devices is not None
 
     # Detect whether a non-PyTorch allocator (e.g. cuTENSOR) is in use.
     # Only then do we need to release PyTorch's caching allocator so the external
@@ -565,54 +599,9 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
                 with _torch.cuda.device(d):
                     _torch.cuda.empty_cache()
 
-    if multi_device:
-        import torch as _torch
-
-        # Pre-move input tensors to each target device once.
-        # .to(device) is autograd-tracked: backward sends gradients back.
-        tensors_by_device = {}
-        for dev in devices:
-            if dev == original_device:
-                tensors_by_device[dev] = tensors
-            else:
-                tensors_by_device[dev] = tuple(t.to(dev) for t in tensors)
-
-        # Release PyTorch's cached (but unused) GPU memory so that it is
-        # available to non-PyTorch allocators (e.g. cudaMalloc used by cuTENSOR).
-        if _uses_external_allocator:
-            _release_cuda_cache(devices)
-
-        # Build worker list: one (device, stream_context) per device.
-        _workers = []  # list of (device, stream_context)
-        _all_streams = []
-        if _torch.cuda.is_available():
-            cuda_devices = [d for d in devices if d.startswith('cuda')]
-            for dev in cuda_devices:
-                s = _torch.cuda.Stream(device=dev)
-                _all_streams.append(s)
-                _workers.append((dev, _torch.cuda.stream(s)))
-            # Ensure pre-moved tensors are visible to non-default streams:
-            # record an event on each device's default stream and have
-            # every worker stream on that device wait on it.
-            for dev in cuda_devices:
-                with _torch.cuda.device(dev):
-                    ev = _torch.cuda.current_stream().record_event()
-                for s in _all_streams:
-                    if str(s.device) == dev:
-                        s.wait_event(ev)
-            # CPU devices get no CUDA stream.
-            for dev in devices:
-                if not dev.startswith('cuda'):
-                    _workers.append((dev, nullcontext()))
-        if not _workers:
-            # Fallback when torch/CUDA is unavailable.
-            for dev in devices:
-                _workers.append((dev, nullcontext()))
-
     # --- Pre-compute mask tensors for all (tensor, label, sliced_leg) triples ---
     # Avoids rebuilding identical masks on every loop iteration.
     # Key: (tensor_index, label, id(sliced_leg)) -> mask Tensor
-    # For multi-device: also cache per-device copies.
     mask_cache = {}
     for (k, u), (user_ax, full_leg) in tensor_unroll_info.items():
         cfg = tensors[k].config
@@ -620,10 +609,6 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
         for sl in unroll[u]:
             mask_t = _build_mask_tensor(sl, full_leg, cfg, device=dev0)
             mask_cache[(k, u, id(sl), dev0)] = mask_t
-            if multi_device:
-                for dev in devices:
-                    if dev != dev0:
-                        mask_cache[(k, u, id(sl), dev)] = mask_t.to(dev)
 
     # --- Pre-compute ncon structural args (index-only, independent of tensor data) ---
     # Build a template interleaved list to derive ncon indices, conjs, order, swap.
@@ -669,9 +654,6 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
     # Cartesian product over SlicedLeg choices, one per unroll label.
     # Partials are grouped by their position along output-unrolled axes.
     # Contracted-only unroll combos accumulate into the same key via +.
-    #
-    # With multi-device: accumulate per-device first (no cross-device sync
-    # in the loop), then gather to original_device after the loop.
     combos = list(product(*(unroll[u] for u in unroll_labels)))
     combo_entries = []
     for combo in combos:
@@ -698,8 +680,7 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
                 release_cuda_cache=_needs_cache_release,
             )
 
-        target_device = base_tensors[0].device if multi_device and base_tensors is not tensors else original_device
-        masked_tensors = _apply_masks_for_combo(base_tensors, sl_map, target_device)
+        masked_tensors = _apply_masks_for_combo(base_tensors, sl_map, original_device)
         if pf_trim is not None:
             for k in range(len(masked_tensors)):
                 trim_k = pf_trim.get(k)
@@ -759,74 +740,11 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
 
     # Release PyTorch's cache before the combo loop.
     if _needs_cache_release:
-        _release_cuda_cache(devices if multi_device else [original_device])
+        _release_cuda_cache([original_device])
 
-    output_pos_partials = {}
+    assigned = [(n, sl_map, opk) for n, (sl_map, opk) in zip(combo_indices, combo_entries)]
+    output_pos_partials = _process_combos(assigned, tensors, None, nullcontext())
 
-    if multi_device:
-        # --- Threaded multi-device dispatch ---
-        # Round-robin combo entries across all workers (not just devices).
-        # Each worker thread processes its assigned combos sequentially on
-        # its own CUDA stream.  CUDA kernels release the GIL, so while one
-        # worker's kernel runs, another worker can do Python metadata prep —
-        # pipelining Python overhead with GPU execution.
-        from concurrent.futures import ThreadPoolExecutor
-
-        n_workers = len(_workers)
-        worker_assigned = [[] for _ in range(n_workers)]
-        for pos, (n, (sl_map, output_pos_key)) in enumerate(zip(combo_indices, combo_entries)):
-            worker_assigned[pos % n_workers].append((n, sl_map, output_pos_key))
-
-        # Build per-worker args: (assigned_combos, tensors, device, stream_ctx).
-        worker_args = []
-        for w_idx, (dev, stream_ctx) in enumerate(_workers):
-            if not worker_assigned[w_idx]:
-                continue
-            worker_args.append((worker_assigned[w_idx], tensors_by_device[dev], dev, stream_ctx))
-
-        with ThreadPoolExecutor(max_workers=len(worker_args)) as pool:
-            futures = [pool.submit(_process_combos, *wa) for wa in worker_args]
-            worker_results = [f.result() for f in futures]
-
-        # GPU-side event ordering: each worker stream's endpoint is waited on
-        # by (a) its own device's default stream — so the next caller on that
-        # device is ordered after this call; and (b) the original device's
-        # default stream — so the cross-device gather below is ordered.
-        # One event per stream suffices: both waits mark the same point.
-        _orig_is_cuda = str(original_device).startswith('cuda')
-        _curr_orig = _torch.cuda.current_stream(original_device) if _orig_is_cuda else None
-        for s in _all_streams:
-            ev = s.record_event()
-            _torch.cuda.current_stream(s.device).wait_event(ev)
-            if _orig_is_cuda and str(s.device) != str(original_device):
-                _curr_orig.wait_event(ev)
-        if not _orig_is_cuda:
-            # CPU original device: CPU-side sync so gather sees completed GPU work.
-            for s in _all_streams:
-                s.synchronize()
-
-        # Gather worker partials back to the original device.
-        # .pop() releases each worker-side ref as soon as it's accumulated,
-        # so the worker's partial doesn't linger until the loop ends.
-        for wa, local_partials in zip(worker_args, worker_results):
-            dev = wa[2]
-            for key in list(local_partials.keys()):
-                partial = local_partials.pop(key)
-                if dev != original_device:
-                    partial = partial.to(original_device)
-                prev = output_pos_partials.get(key)
-                output_pos_partials[key] = partial if prev is None else prev + partial
-        del worker_results
-    else:
-        # --- Single-device sequential path ---
-        assigned = [(n, sl_map, opk) for n, (sl_map, opk) in zip(combo_indices, combo_entries)]
-        output_pos_partials = _process_combos(assigned, tensors, None, nullcontext())
-
-    # Replicas and mask cache are no longer needed; freeing them before
-    # yastn_block cuts peak memory by one full input replica per extra
-    # device plus every cached mask.
-    if multi_device:
-        del tensors_by_device
     del mask_cache
 
     # Worker-mode: return raw partials so the parent can sum across workers
@@ -838,6 +756,8 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
         result = output_pos_partials.get((), None)
         if result is None and combo_entries:
             raise YastnError("No valid charge sectors found for contraction.")
+        if result is not None and _restore_device is not None:
+            result = result.to(_restore_device)
         return result
 
     if not output_pos_partials and combo_entries:
@@ -852,7 +772,10 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
     result = yastn_block(output_pos_partials, common_legs=common_legs_axes)
     # block() records fusion history in hfs, making the result incompatible
     # with plain ncon outputs.  Drop it so the caller gets an ordinary tensor.
-    return result.drop_leg_history()
+    result = result.drop_leg_history()
+    if _restore_device is not None:
+        result = result.to(_restore_device)
+    return result
 
 
 def _validate_and_resolve_unroll(*args,
