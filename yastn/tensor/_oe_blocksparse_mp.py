@@ -53,8 +53,11 @@ def _deserialize_yastn(d, config):
     return Tensor.from_dict(d, config=config)
 
 
-def _build_cache_key(input_dicts, unroll, ig_list, out_ig, optimize, swap):
-    """Stable key for the assembly-info cache."""
+def _build_cache_key(input_dicts, unroll, ig_list, out_ig, optimize, swap, per_combo_path):
+    """Stable key for the assembly-info cache. ``per_combo_path`` participates
+    because cached entries carry ``dim_overrides_per_combo`` only when it was
+    True at insertion time; reusing a False-time entry for a True-time call
+    would leave workers with a missing payload."""
     input_keys = []
     for d in input_dicts:
         st = d['struct']
@@ -68,7 +71,7 @@ def _build_cache_key(input_dicts, unroll, ig_list, out_ig, optimize, swap):
     ))
     return (tuple(input_keys), unroll_key,
             tuple(tuple(ig) for ig in ig_list), tuple(out_ig),
-            str(optimize), str(swap))
+            str(optimize), str(swap), bool(per_combo_path))
 
 
 def _compute_common_legs_axes(partials_dict, unroll, out_ig):
@@ -107,6 +110,23 @@ def _per_device_input_replicas(input_data_tensors, worker_devs, original_device)
             continue
         data_per_dev[dev] = [d.detach().to(dev) for d in input_data_tensors]
     return data_per_dev
+
+
+def _patch_worker_kwargs(ncon_kwargs, assigned, pf_trim_per_combo, dim_overrides_per_combo):
+    """Build a per-worker copy of ncon_kwargs carrying just this worker's
+    slice of precomputed prefilter data, so the worker's
+    ``_contract_with_sliced_unroll`` can skip re-running ``_meta_combo_check``
+    / ``_post_trim_label_dims`` for combos the parent already prefiltered."""
+    if pf_trim_per_combo is None and dim_overrides_per_combo is None:
+        return ncon_kwargs
+    patched = dict(ncon_kwargs)
+    if pf_trim_per_combo is not None:
+        patched['_precomputed_pf_trim'] = {n: pf_trim_per_combo[n]
+                                           for n in assigned if n in pf_trim_per_combo}
+    if dim_overrides_per_combo is not None:
+        patched['_precomputed_dim_overrides'] = {n: dim_overrides_per_combo[n]
+                                                  for n in assigned if n in dim_overrides_per_combo}
+    return patched
 
 
 def _zero_fill_to_full(partial, full_struct_dict, cfg):
@@ -319,6 +339,9 @@ class _MultiprocSlicedUnrollFunction(torch.autograd.Function):
         data_per_dev = _per_device_input_replicas(
             input_data_tensors, pool.worker_devs, original_device)
 
+        pf_trim_per_combo = meta.get('pf_trim_per_combo')
+        dim_overrides_per_combo = meta.get('dim_overrides_per_combo')
+
         # Dispatch forward to workers
         for w_idx in range(pool.n_workers):
             assigned = worker_assignments[w_idx]
@@ -328,9 +351,11 @@ class _MultiprocSlicedUnrollFunction(torch.autograd.Function):
             serialized_inputs = [
                 {**m, 'data': data} for data, m in zip(data_per_dev[dev], input_meta_list)
             ]
+            worker_kwargs = _patch_worker_kwargs(
+                ncon_kwargs, assigned, pf_trim_per_combo, dim_overrides_per_combo)
             pool.cmd_qs[w_idx].put((
                 'forward', txn_id, serialized_inputs, ig_list, out_ig,
-                unroll, optimize, swap, ncon_kwargs, assigned, None,
+                unroll, optimize, swap, worker_kwargs, assigned, None,
                 per_key_struct, meta['checkpoint_loop'],
             ))
 
@@ -374,7 +399,9 @@ class _MultiprocSlicedUnrollFunction(torch.autograd.Function):
             full_struct = _meta_only(assembled.to_dict(level=1))
             pool._struct_cache[meta['cache_key']] = (per_key_struct, full_struct,
                                                      common_legs_axes,
-                                                     meta['surviving'])
+                                                     meta['surviving'],
+                                                     meta['pf_trim_per_combo'],
+                                                     meta['dim_overrides_per_combo'])
             # Update meta in place so backward (and the wrap step in
             # _contract_with_sliced_unroll_mp) see the populated struct.
             meta['per_key_struct'] = per_key_struct
@@ -474,6 +501,8 @@ class _MultiprocSlicedUnrollFunction(torch.autograd.Function):
         # input-sized buffer per remote device — which can OOM on tight
         # remote GPUs while not buying the IPC dedup that helps in forward.
         txn_id = pool.allocate_txn()
+        pf_trim_per_combo = meta.get('pf_trim_per_combo')
+        dim_overrides_per_combo = meta.get('dim_overrides_per_combo')
         for w_idx in range(pool.n_workers):
             assigned = worker_assignments[w_idx]
             if not assigned:
@@ -482,9 +511,11 @@ class _MultiprocSlicedUnrollFunction(torch.autograd.Function):
             for data, m in zip(input_data_tensors, input_meta_list):
                 d = {**m, 'data': data.detach()}
                 serialized_inputs.append(d)
+            worker_kwargs = _patch_worker_kwargs(
+                ncon_kwargs, assigned, pf_trim_per_combo, dim_overrides_per_combo)
             pool.cmd_qs[w_idx].put((
                 'backward', txn_id, serialized_inputs, ig_list, out_ig,
-                unroll, optimize, swap, ncon_kwargs, assigned, grad_per_key,
+                unroll, optimize, swap, worker_kwargs, assigned, grad_per_key,
                 per_key_struct, meta['checkpoint_loop'],
             ))
 
@@ -540,24 +571,25 @@ def _contract_with_sliced_unroll_mp(*args, unroll, optimize, checkpoint_loop=Fal
 
     pool = _get_or_create_pool(devices, mp_workers_per_device, parent_config)
 
-    # Cache: (per_key_struct, full_struct, common_legs_axes, surviving_combos)
+    per_combo_path = bool(kwargs.get("per_combo_path", False))
+    # Cache: (per_key_struct, full_struct, common_legs_axes, surviving_combos,
+    #         pf_trim_per_combo, dim_overrides_per_combo)
     cache_key = _build_cache_key([t.to_dict(level=1) for t in tensors],
-                                 unroll, ig_list, out_ig, optimize, swap)
+                                 unroll, ig_list, out_ig, optimize, swap, per_combo_path)
     cached = pool._struct_cache.get(cache_key)
     if cached is not None:
-        per_key_struct, full_struct, common_legs_axes, surviving = cached
+        # Cache holds prefilter results too, so workers always get the
+        # precomputed payload without re-running _metadata_filter_combos.
+        (per_key_struct, full_struct, common_legs_axes,
+         surviving, pf_trim_per_combo, dim_overrides_per_combo) = cached
     else:
-        # Raw mode: workers will return non-zero-filled partials; Function.forward
-        # will assemble via yastn '+', extract struct, populate cache.
         per_key_struct = None
         full_struct = None
         common_legs_axes = None
-        # Metadata-only prefilter: drop combos that produce zero output before
-        # dispatch, so workers receive only real work and round-robin gives
-        # balanced load even when many combos are no-ops.
         from .oe_blocksparse import _metadata_filter_combos
-        surviving = _metadata_filter_combos(
-            tensors, ig_list, out_ig, unroll, optimize, swap)
+        surviving, pf_trim_per_combo, dim_overrides_per_combo = _metadata_filter_combos(
+            tensors, ig_list, out_ig, unroll, optimize, swap,
+            collect_dim_overrides=per_combo_path)
 
     # Distribute SURVIVING combo indices round-robin across workers
     worker_assignments = [[] for _ in range(pool.n_workers)]
@@ -589,6 +621,8 @@ def _contract_with_sliced_unroll_mp(*args, unroll, optimize, checkpoint_loop=Fal
         'cache_key': cache_key,
         'surviving': surviving,
         'checkpoint_loop': checkpoint_loop,
+        'pf_trim_per_combo': pf_trim_per_combo,
+        'dim_overrides_per_combo': dim_overrides_per_combo,
     }
 
     out_data = _MultiprocSlicedUnrollFunction.apply(*input_data_tensors, meta)
