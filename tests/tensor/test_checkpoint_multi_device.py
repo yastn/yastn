@@ -78,7 +78,7 @@ def test_checkpoint_multidev_charge_sector(config_kwargs, devices):
     result = yastn.contract_with_unroll(
         A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), ('i', 'l'),
         unroll={'j': sliced_j}, optimize=path,
-        checkpoint_loop=True, devices=devices,
+        checkpoint_loop=True, devices=devices, mp_workers_per_device=1,
     )
     assert result.device == cfg.default_device
     assert float(yastn.norm(result - expected)) < tol
@@ -106,7 +106,7 @@ def test_checkpoint_multidev_intra_sector(config_kwargs, devices):
     result = yastn.contract_with_unroll(
         A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), ('i', 'l'),
         unroll={'j': _split_leg_intra(leg_j)}, optimize=path,
-        checkpoint_loop=True, devices=devices,
+        checkpoint_loop=True, devices=devices, mp_workers_per_device=1,
     )
     assert result.device == cfg.default_device
     assert float(yastn.norm(result - expected)) < tol
@@ -132,7 +132,7 @@ def test_checkpoint_multidev_uniform(config_kwargs, devices):
     result = yastn.contract_with_unroll(
         A, ('i', 'j'), B, ('j', 'k'), ('i', 'k'),
         unroll={'j': 2}, optimize=path,
-        checkpoint_loop=True, devices=devices,
+        checkpoint_loop=True, devices=devices, mp_workers_per_device=1,
     )
     assert result.device == cfg.default_device
     assert float(yastn.norm(result - expected)) < tol
@@ -163,7 +163,7 @@ def test_checkpoint_multidev_compute_constants(config_kwargs, devices):
     result = contract_with_unroll_compute_constants(
         A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), D, ('l', 'm'), ('i', 'm'),
         unroll={'j': sliced_j}, optimize=path,
-        checkpoint_loop=True, devices=devices,
+        checkpoint_loop=True, devices=devices, mp_workers_per_device=1,
     )
     assert result.device == cfg.default_device
     assert float(yastn.norm(result - expected)) < tol
@@ -192,7 +192,7 @@ def test_multidev_no_checkpoint(config_kwargs, devices):
     result = yastn.contract_with_unroll(
         A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), ('i', 'l'),
         unroll={'j': sliced_j}, optimize=path,
-        checkpoint_loop=False, devices=devices,
+        checkpoint_loop=False, devices=devices, mp_workers_per_device=1,
     )
     assert result.device == cfg.default_device
     assert float(yastn.norm(result - expected)) < tol
@@ -224,7 +224,7 @@ def test_checkpoint_multidev_multi_index(config_kwargs, devices):
             'k': yastn.make_sliced_legs(leg_k),
         },
         optimize=path,
-        checkpoint_loop=True, devices=devices,
+        checkpoint_loop=True, devices=devices, mp_workers_per_device=1,
     )
     assert result.device == cfg.default_device
     assert float(yastn.norm(result - expected)) < tol
@@ -251,7 +251,7 @@ def test_checkpoint_multidev_output_unroll(config_kwargs, devices):
         A, ('i', 'j'), B, ('j', 'k'), ('i', 'k'),
         unroll={'i': yastn.make_sliced_legs(leg_i)},
         optimize=path,
-        checkpoint_loop=True, devices=devices,
+        checkpoint_loop=True, devices=devices, mp_workers_per_device=1,
     )
     assert float(yastn.norm(result - expected)) < tol
 
@@ -292,7 +292,7 @@ def test_backward_checkpoint_multidev(config_kwargs, devices):
     result = yastn.contract_with_unroll(
         A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), ('i', 'l'),
         unroll={'j': yastn.make_sliced_legs(leg_j)}, optimize=path,
-        checkpoint_loop=True, devices=devices,
+        checkpoint_loop=True, devices=devices, mp_workers_per_device=1,
     )
     result.norm().backward()
 
@@ -331,7 +331,7 @@ def test_backward_multidev_no_checkpoint(config_kwargs, devices):
     result = yastn.contract_with_unroll(
         A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), ('i', 'l'),
         unroll={'j': yastn.make_sliced_legs(leg_j)}, optimize=path,
-        checkpoint_loop=False, devices=devices,
+        checkpoint_loop=False, devices=devices, mp_workers_per_device=1,
     )
     result.norm().backward()
 
@@ -370,7 +370,7 @@ def test_backward_checkpoint_multidev_intra_sector(config_kwargs, devices):
     result = yastn.contract_with_unroll(
         A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), ('i', 'l'),
         unroll={'j': _split_leg_intra(leg_j)}, optimize=path,
-        checkpoint_loop=True, devices=devices,
+        checkpoint_loop=True, devices=devices, mp_workers_per_device=1,
     )
     result.norm().backward()
 
@@ -414,7 +414,7 @@ def test_backward_checkpoint_multidev_compute_constants(config_kwargs, devices):
     result = contract_with_unroll_compute_constants(
         A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), D, ('l', 'm'), ('i', 'm'),
         unroll={'j': yastn.make_sliced_legs(leg_j)}, optimize=path,
-        checkpoint_loop=True, devices=devices,
+        checkpoint_loop=True, devices=devices, mp_workers_per_device=1,
     )
     result.norm().backward()
 
@@ -458,7 +458,7 @@ def test_backward_checkpoint_multidev_multi_index(config_kwargs, devices):
             'k': yastn.make_sliced_legs(leg_k),
         },
         optimize=path,
-        checkpoint_loop=True, devices=devices,
+        checkpoint_loop=True, devices=devices, mp_workers_per_device=1,
     )
     result.norm().backward()
 

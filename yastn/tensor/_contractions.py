@@ -227,7 +227,7 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
         b_D_per_mode = [l[1] for l in legs_b]
 
         # legs_a, legs_b
-        data = a.config.backend.kernel_tensordot_bs(
+        data = a.config.backend.kernel_tensordot_bs_v2(
             a.data, b.data,
             a.config.sym.NSYM,
             a_blocks_t,

@@ -170,6 +170,176 @@ def _meta_tapp_torch_tensordot_bs(
         c_numSectionsPerMode, c_sectionExtents, c_coords, c_strides, c_offsets
 
 
+def _meta_tapp_torch_tensordot_bs_v2(
+        NSYM: int,
+        a_struct_t, a_slices, a_t_per_mode, a_D_per_mode,
+        nout_a, nin_a,
+        b_struct_t, b_slices, b_t_per_mode, b_D_per_mode,
+        nout_b, nin_b,
+        c_struct_t, c_slices,
+        profile=False):
+    r"""
+    Like _meta_tapp_torch_tensordot_bs but returns blocks/strides/offsets as
+    int64 CPU Tensors (via torch.from_numpy, zero-copy) instead of Python lists.
+    This eliminates the per-element IValue boxing overhead when dispatching
+    through tensordot_bs_v2's custom_op registration.
+    """
+    def _merge_t_v1(a_idx, b_idx):
+        a_list = a_t_per_mode[a_idx]
+        b_list = b_t_per_mode[b_idx]
+        result = []
+        i, j = 0, 0
+        while i < len(a_list) and j < len(b_list):
+            if a_list[i] < b_list[j]:
+                result.append(a_list[i]); i += 1
+            elif a_list[i] > b_list[j]:
+                result.append(b_list[j]); j += 1
+            else:
+                result.append(a_list[i]); i += 1; j += 1
+        result.extend(a_list[i:])
+        result.extend(b_list[j:])
+        return result
+
+    filled_a_t_per_mode = list(a_t_per_mode)
+    filled_b_t_per_mode = list(b_t_per_mode)
+    for ia, ib in zip(nin_a, nin_b):
+        if filled_a_t_per_mode[ia] == filled_b_t_per_mode[ib]:
+            continue
+        merged_t = _merge_t_v1(ia, ib)
+        filled_a_t_per_mode[ia] = merged_t
+        filled_b_t_per_mode[ib] = merged_t
+    filled_c_t_per_mode = [a_t_per_mode[i] for i in nout_a] + [b_t_per_mode[i] for i in nout_b]
+    if profile: nvtx.mark("kernel_tensordot_bs_v2 _merge_t done")
+
+    filled_a_D_per_mode = [None] * len(nout_a + nin_a)
+    filled_b_D_per_mode = [None] * len(nout_b + nin_b)
+    filled_c_D_per_mode = [None] * len(nout_a + nout_b)
+    for i_c, i in enumerate(nout_a):
+        filled_c_D_per_mode[i_c] = filled_a_D_per_mode[i] = a_D_per_mode[i]
+    for i_c, i in enumerate(nout_b):
+        filled_c_D_per_mode[i_c + len(nout_a)] = filled_b_D_per_mode[i] = b_D_per_mode[i]
+    for i_a, i_b in zip(nin_a, nin_b):
+        _tmp_a = dict(zip(a_t_per_mode[i_a], a_D_per_mode[i_a]))
+        _tmp_b = dict(zip(b_t_per_mode[i_b], b_D_per_mode[i_b]))
+        _tmp = _tmp_a | _tmp_b
+        filled_a_D_per_mode[i_a] = [_tmp[t] for t in filled_a_t_per_mode[i_a]]
+        filled_b_D_per_mode[i_b] = [_tmp[t] for t in filled_b_t_per_mode[i_b]]
+    if profile: nvtx.mark("kernel_tensordot_bs_v2 filled_*_D_per_mode done")
+
+    def normalize_ts(filled_t_per_mode):
+        res = []
+        for t_mode in filled_t_per_mode:
+            tm = np.asarray(t_mode)
+            floor = np.min(tm, axis=0)
+            idx2i = np.empty(np.max(tm, axis=0) - floor + 1, dtype=np.int64)
+            for i, idx in enumerate(tm):
+                idx2i[tuple(idx - floor)] = i
+            res.append((floor, list(accumulate(np.max(tm, axis=0) - floor + 1, operator.mul)), idx2i))
+        return res
+
+    def _blocksparse_coords_v3_np(struct_t, filled_t_per_mode):
+        """Returns a contiguous int64 numpy array (no .tolist() call)."""
+        ts = np.array(struct_t).reshape(len(struct_t), len(filled_t_per_mode), max(1, NSYM))
+        n  = normalize_ts(filled_t_per_mode)
+        ts -= np.stack([f[0] for f in n])
+        B  = np.empty(ts.shape[:2], dtype=np.int64)
+        for mode in range(len(filled_t_per_mode)):
+            B[:, mode] = n[mode][2][tuple(ts[:, mode, i] for i in range(max(1, NSYM)))]
+        return np.ascontiguousarray(B.reshape(-1))
+
+    a_coords_np = _blocksparse_coords_v3_np(a_struct_t, filled_a_t_per_mode)
+    b_coords_np = _blocksparse_coords_v3_np(b_struct_t, filled_b_t_per_mode)
+    c_coords_np = _blocksparse_coords_v3_np(c_struct_t, filled_c_t_per_mode)
+    if profile: nvtx.mark("kernel_tensordot_bs_v2 _blocksparse_coords done")
+
+    def _offsets_and_strides_np(slices):
+        """Returns (offsets_np, strides_np) as contiguous int64 numpy arrays."""
+        S = np.empty((len(slices), len(slices[0].D)), dtype=np.int64)
+        S[:, -1] = 1
+        Ds = np.asarray(tuple(b.D for b in slices))
+        np.cumprod(Ds[:, -1:0:-1], axis=-1, out=S[:, :len(slices[0].D)-1][:, ::-1])
+        offsets = np.array([s.slcs[0][0] for s in slices], dtype=np.int64)
+        return offsets, np.ascontiguousarray(S.reshape(-1))
+
+    a_offsets_np, a_strides_np = _offsets_and_strides_np(a_slices)
+    b_offsets_np, b_strides_np = _offsets_and_strides_np(b_slices)
+    c_offsets_np, c_strides_np = _offsets_and_strides_np(c_slices)
+    if profile: nvtx.mark("kernel_tensordot_bs_v2 strides_and_offsets done")
+
+    def _convert_extents(filled_D_per_mode):
+        numSectionsPerMode  = [len(m) for m in filled_D_per_mode]
+        sectionExtents_flat = sum([list(m) for m in filled_D_per_mode], start=[])
+        return numSectionsPerMode, sectionExtents_flat
+
+    a_numSectionsPerMode, a_sectionExtents = _convert_extents(filled_a_D_per_mode)
+    b_numSectionsPerMode, b_sectionExtents = _convert_extents(filled_b_D_per_mode)
+    c_numSectionsPerMode, c_sectionExtents = _convert_extents(filled_c_D_per_mode)
+    if profile: nvtx.mark("kernel_tensordot_bs_v2 _convert_extents done")
+
+    # Zero-copy numpy→torch (shares memory; arrays stay alive via tensor refcount)
+    to_t = torch.from_numpy
+    return (a_numSectionsPerMode, a_sectionExtents,
+            to_t(a_coords_np), to_t(a_strides_np), to_t(a_offsets_np),
+            b_numSectionsPerMode, b_sectionExtents,
+            to_t(b_coords_np), to_t(b_strides_np), to_t(b_offsets_np),
+            c_numSectionsPerMode, c_sectionExtents,
+            to_t(c_coords_np), to_t(c_strides_np), to_t(c_offsets_np))
+
+
+def kernel_tensordot_bs_v2(
+        a: torch.Tensor, b: torch.Tensor,
+        NSYM: int,
+        a_struct_t, a_slices, a_t_per_mode, a_D_per_mode,
+        nout_a, nin_a,
+        b_struct_t, b_slices, b_t_per_mode, b_D_per_mode,
+        nout_b, nin_b,
+        c_size, c_struct_t, c_slices,
+        profile=False
+    ):
+    dtype = torch.promote_types(a.dtype, b.dtype)
+    if c_size == 0:
+        return torch.zeros(c_size, dtype=dtype, device=a.device)
+
+    if profile: nvtx.range_push("_meta_tensordot_bs_v2")
+    (a_numSPM, a_sE, a_blocks, a_strides, a_offsets,
+     b_numSPM, b_sE, b_blocks, b_strides, b_offsets,
+     c_numSPM, c_sE, c_blocks, c_strides, c_offsets) = _meta_tapp_torch_tensordot_bs_v2(
+        NSYM,
+        a_struct_t, a_slices, a_t_per_mode, a_D_per_mode, nout_a, nin_a,
+        b_struct_t, b_slices, b_t_per_mode, b_D_per_mode, nout_b, nin_b,
+        c_struct_t, c_slices, profile)
+    if profile: nvtx.range_pop()
+
+    if a.dtype != dtype:
+        a = a.to(dtype=dtype)
+    if b.dtype != dtype:
+        b = b.to(dtype=dtype)
+
+    def _remap_nout_(nout, offset):
+        r_nout = [None] * len(nout)
+        for n, i in enumerate(np.argsort(nout)):
+            r_nout[i] = n + offset
+        return r_nout
+
+    modes_out = _remap_nout_(nout_a, 0) + _remap_nout_(nout_b, len(nout_a))
+    if profile: nvtx.mark("kernel_tensordot_bs_v2 remap_modes_out")
+
+    if profile: nvtx.range_push("ops.tensordot_bs_v2")
+    if NSYM == 0:
+        a_shaped = a.reshape(list([m[0] for m in a_D_per_mode]))
+        b_shaped = b.reshape(list([m[0] for m in b_D_per_mode]))
+        res = torch.ops.tapp_torch.tensordot(a_shaped, b_shaped, nin_a, nin_b, modes_out)
+        res = res.reshape(-1)
+    else:
+        res = torch.ops.tapp_torch.tensordot_bs_v2(a, b, nin_a, nin_b,
+            a_numSPM, a_sE, a_blocks, a_strides, a_offsets,
+            b_numSPM, b_sE, b_blocks, b_strides, b_offsets,
+            c_numSPM, c_sE, c_blocks, c_strides, c_offsets,
+            modes_out)
+    if profile: nvtx.range_pop()
+    return res
+
+
 def kernel_tensordot_bs(
         a: torch.Tensor, b: torch.Tensor,
         NSYM: int,
