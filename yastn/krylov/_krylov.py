@@ -228,7 +228,7 @@ def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=Fals
 
     T = backend.square_matrix_from_dict(H, m, device=v0.device)
     val, vr = backend.eigh(T) if hermitian else backend.eig(T)
-    ind = backend.eigs_which(val, which)
+    ind = backend.argsort_which(val, which)
 
     val, vr = val[ind], vr[:, ind]
     Y = []
@@ -372,11 +372,25 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
             D_block: int = float('inf')
                 largest number of singular values to keep in a single block. Default is to keep all.
 
-            largest_gap: bool = False
+            largest_gap: bool
                 If ``True``, enlarge the truncation range specified by other arguments by shifting
                 the cut to the largest gap between to-be-truncated singular values across all blocks.
                 It provides a heuristic mechanism to avoid truncating part of a multiplet.
+                If ``True``, ``tol_block`` and ``D_block`` are ignored, as ``largest_gap`` is a global condition.
                 The default is ``False``.
+
+            eps_multiplet: float
+                Relative tolerance on multiplet splitting. If relative difference between
+                two consecutive elements of ``S`` is larger than ``eps_multiplet``, these
+                elements are not considered as part of the same multiplet.
+                Partially truncated multiplets are truncated down.
+                The default is None, when this scheme is not used.
+                If ``True``, ``tol_block`` and ``D_block`` are ignored, as ``eps_multiplet`` is a global condition.
+                Cannot be used together with largest_gap scheme.
+
+            hermitian: bool
+                If True, blocks related by hermitian conjugation are truncated equally, truncating down to the intersecting part.
+                The default is False.
 
             mask_f: function[yastn.Tensor] -> yastn.Tensor
                 custom truncation-mask function.
@@ -579,10 +593,13 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
     symVh= symVh.unfuse_legs(axes=1)
 
     # Additional truncation
-    Smask = truncation_mask(symS, tol=kwargs.get('reltol',0), tol_block=kwargs.get('reltol_block',0),
-                            D_block=kwargs.get('D_block',float('inf')), D_total=k,
-                            largest_gap=kwargs.get('largest_gap',False),
-                            mask_f=kwargs.get('mask_f',None))
+    Smask = truncation_mask(symS,
+                            tol=kwargs.get('reltol', float('-inf')), tol_block=kwargs.get('reltol_block', float('-inf')),
+                            D_total=k, D_block=kwargs.get('D_block', float('inf')),
+                            largest_gap=kwargs.get('largest_gap', False),
+                            eps_multiplet=kwargs.get('eps_multiplet', None),
+                            hermitian=kwargs.get('hermitian', None),
+                            mask_f=kwargs.get('mask_f', None))
     symU, symS, symVh = Smask.apply_mask(symU, symS, symVh, axes=(-1, 0, 0))
 
     symU = symU.moveaxis(source=-1, destination=Uaxis)

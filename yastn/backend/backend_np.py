@@ -415,7 +415,7 @@ def eig(data, meta=None, sizes=(1, 1), **kwargs):
         if any( np.abs(np.sum(_V.T * _U, axis=0) - 1) > tol ):
             raise ValueError("Biorthonormalization of left/right eigenvector pairs failed.")
 
-        s_order= eigs_which(S, which=kwargs.get('which', 'LM'))
+        s_order= argsort_which(S, which=kwargs.get('which', 'LM'))
         Udata[slice(*slU)].reshape(DU)[:] = _U[:,s_order]
         Sdata[slice(*slS)] = S[s_order]
         Vdata[slice(*slV)].reshape(DV)[:] = _V[s_order,:]
@@ -428,7 +428,7 @@ def eigvals(data, meta, sizeS, **kwargs):
     for (sl, D, _, _, slS, _, _) in meta:
         S = scipy.linalg.eigvals(data[slice(*sl)].reshape(D), b=None, overwrite_a=False,
                                      check_finite=True, homogeneous_eigvals=False)
-        Sdata[slice(*slS)]= S[eigs_which(S, which=kwargs.get('which', 'LM'))]
+        Sdata[slice(*slS)]= S[argsort_which(S, which=kwargs.get('which', 'LM'))]
     return Sdata
 
 
@@ -499,7 +499,7 @@ def eigh_lowrank(data, meta, sizes, thresh=None, **kwargs):
         # sort in case of non-default order
         # see https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.eigsh.html
         if not (_which in ['SR'] and  kwargs.get("return_eigenvectors", True)):
-            arg_b = eigs_which(S, _which)
+            arg_b = argsort_which(S, _which)
             S,U = S[arg_b[:k]], U[:,arg_b[:k]]
         else:
             S,U = S[:k], U[:,:k]
@@ -530,7 +530,7 @@ def argsort(data):
 def maximum(x1, x2):
     return np.maximum(x1, x2)
 
-def eigs_which(val, which):
+def argsort_which(val, which):
     if which == 'LR':
         return (-val.real).argsort()
     if which == 'LM':

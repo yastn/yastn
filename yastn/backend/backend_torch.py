@@ -40,7 +40,7 @@ __all__= ['DTYPE', 'get_dtype', 'get_yastn_dtype',
     'trace', 'rsqrt', 'reciprocal', 'exp', 'sqrt', 'absolute', 'permute_dims',
     'fix_svd_signs', 'svdvals', 'svd_lowrank', 'svd', 'svd_randomized', 'svds_scipy',
     'eigh', 'qr', 'pinv', 'eig', 'eigh_lowrank', 'eigvals',
-    'argsort', 'eigs_which', 'allclose',
+    'argsort', 'argsort_which', 'allclose',
     'add', 'sub', 'apply_mask', 'vdot', 'diag_1dto2d', 'diag_2dto1d',
     'dot', 'dot_diag', 'transpose_dot_sum',
     'merge_to_dense', 'merge_super_blocks', 'is_independent',
@@ -414,7 +414,7 @@ def eig(data, meta=None, sizes=(1, 1), **kwargs):
         if any( torch.abs(torch.sum(V.T * U, axis=0) - 1) > tol ):
             raise ValueError("Biorthonormalization of left/right eigenvector pairs failed.")
 
-        s_order= eigs_which(S, which=kwargs.get('which', 'LM'))
+        s_order= argsort_which(S, which=kwargs.get('which', 'LM'))
         Udata[slice(*slU)].reshape(DU)[:] = U[:,s_order]
         Sdata[slice(*slS)] = S[s_order]
         Vdata[slice(*slV)].reshape(DV)[:] = V[s_order,:]
@@ -452,7 +452,7 @@ def eigh_lowrank(data, meta, sizes, thresh=None, **kwargs):
         # sort in case of non-default order
         # see https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.eigsh.html
         if not (_which in ['SR'] and  kwargs.get("return_eigenvectors", True)):
-            arg_b = eigs_which(S, _which)
+            arg_b = argsort_which(S, _which)
             S,U = S[arg_b[:k]], U[:,arg_b[:k]]
         else:
             S,U = S[:k], U[:,:k]
@@ -468,7 +468,7 @@ def eigvals(data, meta, sizeS, **kwargs):
     Sdata = torch.empty((sizeS,), dtype=dtype, device=data.device)
     for (sl, D, _, _, slS, _, _) in meta:
         S = torch.linalg.eigvals(data[slice(*sl)].reshape(D))
-        Sdata[slice(*slS)]= S[eigs_which(S, which=kwargs.get('which', 'LM'))]
+        Sdata[slice(*slS)]= S[argsort_which(S, which=kwargs.get('which', 'LM'))]
     return Sdata
 
 
@@ -494,7 +494,7 @@ def argsort(data):
 
 
 @torch.no_grad()
-def eigs_which(val, which):
+def argsort_which(val, which):
     if which == 'LR':
         return (-real(val)).argsort()
     if which == 'LM':
