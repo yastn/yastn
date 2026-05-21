@@ -14,6 +14,7 @@
 # ==============================================================================
 """Support of torch as a data structure used by yastn."""
 from itertools import accumulate, groupby
+from functools import lru_cache
 import operator
 from typing import Sequence, Union
 import numpy as np
@@ -170,6 +171,7 @@ def _meta_tapp_torch_tensordot_bs(
         c_numSectionsPerMode, c_sectionExtents, c_coords, c_strides, c_offsets
 
 
+@lru_cache(maxsize=1024)
 def _meta_tapp_torch_tensordot_bs_v2(
         NSYM: int,
         a_struct_t, a_slices, a_t_per_mode, a_D_per_mode,
