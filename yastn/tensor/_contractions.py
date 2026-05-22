@@ -191,31 +191,41 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
     if a.config.profile: a.config.backend.nvtx.range_push(f"_tensordot_nf")
     ind_a, ind_b = _common_inds(a.struct.t, b.struct.t, nin_a, nin_b, a.ndim_n, b.ndim_n, a.config.sym.NSYM)
     if a.config.profile: a.config.backend.nvtx.range_push(f"_meta_tensordot_nf")
-    meta_dot, reshape_a, reshape_b, struct_c, slices_c, legs_a, legs_b = _meta_tensordot_nf(a.struct, a.slices, b.struct, b.slices,
-                                                                            ind_a, ind_b, nout_a, nin_a, nin_b, nout_b)
+    meta_dot, ta_np, reshape_a, tb_np, reshape_b, tc_np, struct_c, slices_c, legs_a, legs_b = _meta_tensordot_nf(a.struct, a.slices, b.struct, b.slices,
+                                                                                ind_a, ind_b, nout_a, nin_a, nin_b, nout_b, variant="v3")
+    #     meta_dot, reshape_a, reshape_b, struct_c, slices_c, legs_a, legs_b = _meta_tensordot_nf(a.struct, a.slices, b.struct, b.slices,
+    #                                                                             ind_a, ind_b, nout_a, nin_a, nin_b, nout_b)
     if a.config.profile: a.config.backend.nvtx.range_pop()
+    
+    _on_cuda = 'cuda' in str(a.data.device)
+    ALLOW_CUTEN= a.config.backend.BACKEND_ID == 'torch_cpp' and _on_cuda \
+        and struct_c.t and 0 < len(struct_c.s) < 9 and 0 < len(a.struct.s) < 9 and 0 < len(b.struct.s) < 9
+    
     order_a = nout_a + nin_a
     order_b = nin_b + nout_b
     nsym = a.config.sym.NSYM
 
     # tapp_torch.tensordot_bs is CUDA-only; on CPU we must fall through to
     # the PyTorch path (transpose_dot_sum) even when the backend is torch_cpp.
-    _on_cuda = 'cuda' in str(a.data.device)
-    if a.config.backend.BACKEND_ID == 'torch_cpp' and _on_cuda and struct_c.t and 0 < len(struct_c.s) < 9 and 0 < len(a.struct.s) < 9 and 0 < len(b.struct.s) < 9:
+    if ALLOW_CUTEN:
         # NOTE nout_a, nin_a, nout_b, nin_b use ndim_n or ndim ?
         #      *) when default_fusion='meta', they are wrt. native legs. The charges of non-zero blocks are also wrt. to native legs.
 
-        a_blocks_t, b_blocks_t, c_blocks_t = a.struct.t, b.struct.t, struct_c.t
+        # a_blocks_t, b_blocks_t, c_blocks_t = a.struct.t, b.struct.t, struct_c.t
+        a_blocks_t, b_blocks_t, c_blocks_t = ta_np, tb_np, tc_np
         a_slices, b_slices = a.slices, b.slices
         if nsym == 0:
             # if no symmetry, create single block for each tensor for syntax compatibility
-            a_blocks_t, b_blocks_t, c_blocks_t= ((0,) * a.ndim_n,), ((0,) * b.ndim_n,), ((0,) * (len(nout_a) + len(nout_b)),)
+            # a_blocks_t, b_blocks_t, c_blocks_t= ((0,) * a.ndim_n,), ((0,) * b.ndim_n,), ((0,) * (len(nout_a) + len(nout_b)),)
+            a_blocks_t, b_blocks_t, c_blocks_t= np.zeros((1, a.ndim_n), dtype=np.int64), \
+                np.zeros((1, b.ndim_n), dtype=np.int64), \
+                np.zeros((1, len(nout_a) + len(nout_b)), dtype=np.int64)
         else: # take only subset of blocks that are involved in the contraction
             if ind_a:  # ind_a and/or ind_b is None if all blocks of a are involved
-                a_blocks_t = tuple(a.struct.t[i] for i in ind_a)
+                a_blocks_t = ta_np #tuple(a.struct.t[i] for i in ind_a)
                 a_slices = tuple(a.slices[i] for i in ind_a)
             if ind_b:
-                b_blocks_t = tuple(b.struct.t[i] for i in ind_b)
+                b_blocks_t = tb_np #tuple(b.struct.t[i] for i in ind_b)
                 b_slices = tuple(b.slices[i] for i in ind_b)
 
         if a.config.profile: a.config.backend.nvtx.range_push(f"kernel_tensordot_bs")
@@ -419,7 +429,7 @@ def _meta_tensordot_fc(struct_a, slices_a, struct_b, slices_b):
 
 
 @lru_cache(maxsize=1024)
-def _meta_tensordot_nf(struct_a, slices_a, struct_b, slices_b, ind_a, ind_b, nout_a, nin_a, nin_b, nout_b):
+def _meta_tensordot_nf(struct_a, slices_a, struct_b, slices_b, ind_a, ind_b, nout_a, nin_a, nin_b, nout_b, variant="default"):
     nsym = len(struct_a.n)
 
     ta = struct_a.t if ind_a is None else [struct_a.t[ii] for ii in ind_a]
@@ -536,6 +546,12 @@ def _meta_tensordot_nf(struct_a, slices_a, struct_b, slices_b, ind_a, ind_b, nou
 
     s_c = tuple(struct_a.s[i] for i in nout_a) + tuple(struct_b.s[i] for i in nout_b)
     struct_c = _struct(s=s_c, t=c_t, D=c_D, size=acc_Dp[-1])
+    if variant in ["v3",]:
+        # For fast post-process: return metadata in numpy format 
+        ata= ata.reshape((lta, -1 if lta>0 else 0))
+        atb= atb.reshape((ltb, -1 if ltb>0 else 0))
+        atc= np.array(c_t, dtype=np.int64).reshape((len(c_t), -1)) if len(c_t)>0 else np.empty((0, 0), dtype=np.int64)
+        return meta_dot, ata, reshape_a, atb, reshape_b, atc, struct_c, slices_c, legs_a, legs_b
     return meta_dot, reshape_a, reshape_b, struct_c, slices_c, legs_a, legs_b
 
 
