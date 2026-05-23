@@ -141,20 +141,40 @@ def _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b, s_c):
     Perform tensordot by fuse_to_matrix:
     merging tensors to matrices, executing dot, and unmerging outgoing legs.
     """
+    config = a.config
+    if config.profile: config.backend.nvtx.range_push("_tensordot_f2m")
+    if config.profile: config.backend.nvtx.range_push("_common_inds")
     ind_a, ind_b = _common_inds(a.struct.t, b.struct.t, nin_a, nin_b, a.ndim_n, b.ndim_n, a.config.sym.NSYM)
+    if config.profile: config.backend.nvtx.range_pop()
+
+    if config.profile: config.backend.nvtx.range_push("_merge_to_matrix_a")
     data_a, struct_a, slices_a, ls_l, ls_ac = _merge_to_matrix(a, (nout_a, nin_a), ind_a)
+    if config.profile: config.backend.nvtx.range_pop()
+
+    if config.profile: config.backend.nvtx.range_push("_merge_to_matrix_b")
     data_b, struct_b, slices_b, ls_bc, ls_r = _merge_to_matrix(b, (nin_b, nout_b), ind_b)
+    if config.profile: config.backend.nvtx.range_pop()
 
     if ls_ac != ls_bc:
         raise YastnError('Bond dimensions do not match.')
 
+    if config.profile: config.backend.nvtx.range_push("_meta_tensordot_f2m")
     meta_dot, struct_c, slices_c = _meta_tensordot_f2m(struct_a, slices_a, struct_b, slices_b)
-    config = a.config
+    if config.profile: config.backend.nvtx.range_pop()
+
+    if config.profile: config.backend.nvtx.range_push("kernel_tensordot_f2m")
     data = config.backend.dot(data_a, data_b, meta_dot, struct_c.size)
+    if config.profile: config.backend.nvtx.range_pop()
     del data_a, data_b
 
+    if config.profile: config.backend.nvtx.range_push("_meta_unmerge_matrix")
     meta_unmerge, struct_c, slices_c = _meta_unmerge_matrix(config, struct_c, slices_c, ls_l, ls_r, s_c)
+    if config.profile: config.backend.nvtx.range_pop()
+
+    if config.profile: config.backend.nvtx.range_push("_unmerge_f2m")
     data = _unmerge(config, data, meta_unmerge)
+    if config.profile: config.backend.nvtx.range_pop()
+    if config.profile: config.backend.nvtx.range_pop()  # _tensordot_f2m
     return data, struct_c, slices_c
 
 
@@ -163,24 +183,38 @@ def _tensordot_fc(a, b, nout_a, nin_a, nin_b, nout_b):
     Perform tensordot by fuse_contracted: merging contracted legs, and executing dot.
     Outgoing legs are not merged so unmerge is not needed.
     """
+    config = a.config
+    if config.profile: config.backend.nvtx.range_push("_tensordot_fc")
+    if config.profile: config.backend.nvtx.range_push("_common_inds")
     ind_a, ind_b = _common_inds(a.struct.t, b.struct.t, nin_a, nin_b, a.ndim_n, b.ndim_n, a.config.sym.NSYM)
+    if config.profile: config.backend.nvtx.range_pop()
 
+    if config.profile: config.backend.nvtx.range_push("_merge_contracted_a")
     axes_a = tuple((x,) for x in nout_a) + (nin_a,)
     order_a = nout_a + nin_a
     struct_a, slices_a, meta_mrg_a, t_a, D_a = _meta_fuse_hard(a.config, a.struct, a.slices, axes_a, ind_a)
     data_a = _transpose_and_merge(a.config, a._data, order_a, struct_a, slices_a, meta_mrg_a)
+    if config.profile: config.backend.nvtx.range_pop()
 
+    if config.profile: config.backend.nvtx.range_push("_merge_contracted_b")
     axes_b = (nin_b,) + tuple((x,) for x in nout_b)
     order_b = nin_b + nout_b
     struct_b, slices_b, meta_mrg_b, t_b, D_b = _meta_fuse_hard(b.config, b.struct, b.slices, axes_b, ind_b)
     data_b = _transpose_and_merge(b.config, b._data, order_b, struct_b, slices_b, meta_mrg_b)
+    if config.profile: config.backend.nvtx.range_pop()
 
     if not all(D_a[ia] == D_b[ib] for ia, ib in zip(nin_a, nin_b)):
         raise YastnError('Bond dimensions do not match.')
     assert all(t_a[ia] == t_b[ib] for ia, ib in zip(nin_a, nin_b)), "Sanity check."
 
+    if config.profile: config.backend.nvtx.range_push("_meta_tensordot_fc")
     meta_dot, struct_c, slices_c = _meta_tensordot_fc(struct_a, slices_a, struct_b, slices_b)
-    data = a.config.backend.dot(data_a, data_b, meta_dot, struct_c.size)
+    if config.profile: config.backend.nvtx.range_pop()
+
+    if config.profile: config.backend.nvtx.range_push("kernel_tensordot_fc")
+    data = config.backend.dot(data_a, data_b, meta_dot, struct_c.size)
+    if config.profile: config.backend.nvtx.range_pop()
+    if config.profile: config.backend.nvtx.range_pop()  # _tensordot_fc
     return data, struct_c, slices_c
 
 
@@ -218,7 +252,7 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
                 b_blocks_t = tuple(b.struct.t[i] for i in ind_b)
                 b_slices = tuple(b.slices[i] for i in ind_b)
 
-        if a.config.profile: a.config.backend.nvtx.range_push(f"kernel_tensordot_bs")
+        if a.config.profile: a.config.backend.nvtx.range_push("kernel_tensordot_bs")
         #a_legs, b_legs= a.get_legs( native=True ), b.get_legs( native=True )
         a_t_per_mode = [l[0] for l in legs_a] if nsym > 0 else [((0,),)] * a.ndim_n
         a_D_per_mode = [l[1] for l in legs_a]
@@ -246,8 +280,10 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
         )
         if a.config.profile: a.config.backend.nvtx.range_pop()
     else:
+        if a.config.profile: a.config.backend.nvtx.range_push("kernel_transpose_dot_sum")
         data = a.config.backend.transpose_dot_sum(a.data, b.data, meta_dot,
                                               reshape_a, reshape_b, order_a, order_b, struct_c.size)
+        if a.config.profile: a.config.backend.nvtx.range_pop()
     if a.config.profile: a.config.backend.nvtx.range_pop()
     return data, struct_c, slices_c
 

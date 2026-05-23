@@ -38,6 +38,7 @@ def _config_descriptor(config):
         'default_fusion': config.default_fusion,
         'force_fusion': config.force_fusion,
         'tensordot_policy': config.tensordot_policy,
+        'profile': config.profile,
     }
 
 
@@ -185,6 +186,7 @@ def _worker_main(rank, gpu_dev, config_desc, cmd_q, res_q):
                 interleaved.append(out_ig)
 
                 if cmd == 'forward':
+                    if cfg.profile: cfg.backend.nvtx.range_push("yastn")
                     with torch.no_grad():
                         partials = _contract_with_sliced_unroll(
                             *interleaved, unroll=unroll, optimize=optimize, swap=swap,
@@ -194,6 +196,8 @@ def _worker_main(rank, gpu_dev, config_desc, cmd_q, res_q):
                             checkpoint_loop=checkpoint_loop,
                             **ncon_kwargs,
                         )
+                    if cfg.profile: cfg.backend.nvtx.range_pop()
+
                     if per_key_struct is None:
                         # Raw mode (cache miss): no zero-fill — different
                         # workers may produce partials with different charge
@@ -209,6 +213,7 @@ def _worker_main(rank, gpu_dev, config_desc, cmd_q, res_q):
                             out[k] = _serialize_yastn(full_p)
                     res_q.put(('forward_done', rank, txn_id, out))
                 else:  # backward
+                    if cfg.profile: cfg.backend.nvtx.range_push("yastn")
                     partials = _contract_with_sliced_unroll(
                         *interleaved, unroll=unroll, optimize=optimize, swap=swap,
                         _combo_indices=assigned_indices,
@@ -232,8 +237,9 @@ def _worker_main(rank, gpu_dev, config_desc, cmd_q, res_q):
                     if out_tensors:
                         torch.autograd.backward(out_tensors, grad_tensors)
                     grads = [t._data.grad.detach() if t._data.grad is not None
-                             else torch.zeros_like(t._data.detach())
-                             for t in inputs]
+                                else torch.zeros_like(t._data.detach())
+                                for t in inputs]
+                    if cfg.profile: cfg.backend.nvtx.range_pop()
                     res_q.put(('backward_done', rank, txn_id, grads))
         except Exception:
             import traceback
