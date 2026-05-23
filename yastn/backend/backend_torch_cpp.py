@@ -239,7 +239,7 @@ def _meta_tapp_torch_tensordot_bs_v2(
             res.append((floor, list(accumulate(np.max(tm, axis=0) - floor + 1, operator.mul)), idx2i))
         return res
 
-    def _blocksparse_coords_v3_np(struct_t, filled_t_per_mode):
+    def _blocksparse_coords_v4_np(struct_t, filled_t_per_mode):
         """Returns a contiguous int64 numpy array (no .tolist() call)."""
         # ts = np.array(struct_t).reshape(len(struct_t), len(filled_t_per_mode), max(1, NSYM))
         ts = struct_t.reshape(len(struct_t), len(filled_t_per_mode), max(1, NSYM))
@@ -251,9 +251,9 @@ def _meta_tapp_torch_tensordot_bs_v2(
         ts += np.stack([f[0] for f in n]) # reset, since struct_t persists outside of _meta_tapp_torch_tensordot_bs_v2
         return np.ascontiguousarray(B.reshape(-1))
 
-    a_coords_np = _blocksparse_coords_v3_np(a_struct_t, filled_a_t_per_mode)
-    b_coords_np = _blocksparse_coords_v3_np(b_struct_t, filled_b_t_per_mode)
-    c_coords_np = _blocksparse_coords_v3_np(c_struct_t, filled_c_t_per_mode)
+    a_coords_np = _blocksparse_coords_v4_np(a_struct_t, filled_a_t_per_mode)
+    b_coords_np = _blocksparse_coords_v4_np(b_struct_t, filled_b_t_per_mode)
+    c_coords_np = _blocksparse_coords_v4_np(c_struct_t, filled_c_t_per_mode)
     if profile: nvtx.mark("kernel_tensordot_bs_v2 _blocksparse_coords done")
 
     def _offsets_and_strides_np(slices):
@@ -264,10 +264,19 @@ def _meta_tapp_torch_tensordot_bs_v2(
         np.cumprod(Ds[:, -1:0:-1], axis=-1, out=S[:, :len(slices[0].D)-1][:, ::-1])
         offsets = np.array([s.slcs[0][0] for s in slices], dtype=np.int64)
         return offsets, np.ascontiguousarray(S.reshape(-1))
+    
+    def _offsets_and_strides_np_v3(slices):
+        """
+        slices: np.array of shape (num_blocks, 2 + num_modes). Each row corresponds to a block and contains [offset, total block size, D1, D2, ...].
+        Returns (offsets_np, strides_np) as contiguous int64 numpy arrays.
+        """
+        strides= np.cumulative_prod(slices[:,-1:2:-1], axis=-1, include_initial=True)[:,::-1]
+        offsets = slices[:, 0].astype(np.int64) # assuming the first column of slices is the offset
+        return offsets, np.ascontiguousarray(strides.reshape(-1))
 
-    a_offsets_np, a_strides_np = _offsets_and_strides_np(a_slices)
-    b_offsets_np, b_strides_np = _offsets_and_strides_np(b_slices)
-    c_offsets_np, c_strides_np = _offsets_and_strides_np(c_slices)
+    a_offsets_np, a_strides_np = _offsets_and_strides_np_v3(a_slices)
+    b_offsets_np, b_strides_np = _offsets_and_strides_np_v3(b_slices)
+    c_offsets_np, c_strides_np = _offsets_and_strides_np_v3(c_slices)
     if profile: nvtx.mark("kernel_tensordot_bs_v2 strides_and_offsets done")
 
     def _convert_extents(filled_D_per_mode):

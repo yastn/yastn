@@ -16,6 +16,7 @@
 import os
 from functools import reduce
 from itertools import product, accumulate
+import warnings
 import numbers
 from operator import mul, itemgetter
 
@@ -123,7 +124,10 @@ def make_config(**kwargs) -> _config:
             raise YastnError("sym encoded as string only supports: 'dense', 'Z2', 'Z3', 'U1', 'U1xU1', 'U1xU1xZ2'.")
 
     if "profile" not in kwargs:
-        kwargs["profile"] = bool(int(os.getenv("YASTN_PROFILE","0")))
+        try:
+            kwargs["profile"] = bool(int(os.getenv("YASTN_PROFILE","0")))
+        except ValueError:
+            warnings.warn("Environment variable YASTN_PROFILE must be 0 or 1 if set. Using default value 0 (False).")
 
     return _config(**{a: kwargs[a] for a in _config._fields if a in kwargs})
 

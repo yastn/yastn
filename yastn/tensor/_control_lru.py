@@ -14,14 +14,27 @@
 # ==============================================================================
 """ Dynamical changing of lru_cache maxsize. """
 from functools import lru_cache
-
-from . import _algebra, _merging, _contractions, _einsum
+import os
+import warnings
 
 __all__ = ['clear_cache', 'get_cache_info', 'set_cache_maxsize']
+
+def _get_tensordot_max_cache_size():
+    val = os.environ.get("YASTN_TENSORDOT_MAX_CACHE_SIZE", "1024")
+    try:
+        v = int(val)
+        if v < 1:
+            raise ValueError
+        return v
+    except Exception:
+        warnings.warn("Environment variable YASTN_TENSORDOT_MAX_CACHE_SIZE must be a positive integer. Using default size 1024.")
+        return 1024
+YASTN_TENSORDOT_MAX_CACHE_SIZE = _get_tensordot_max_cache_size()
 
 
 def set_cache_maxsize(maxsize=0):
     """Change maxsize of lru_cache to reuse some metadata."""
+    from . import _algebra, _merging, _contractions, _einsum
     _contractions._meta_broadcast = lru_cache(maxsize)(_contractions._meta_broadcast.__wrapped__)
     _contractions._meta_tensordot_f2m = lru_cache(maxsize)(_contractions._meta_tensordot_f2m.__wrapped__)
     _contractions._meta_tensordot_fc = lru_cache(maxsize)(_contractions._meta_tensordot_fc.__wrapped__)
@@ -44,6 +57,7 @@ def set_cache_maxsize(maxsize=0):
 
 def clear_cache():
     """Change maxsize of lru_cache to reuse some metadata."""
+    from . import _algebra, _merging, _contractions, _einsum
     _contractions._meta_broadcast.cache_clear()
     _contractions._meta_tensordot_f2m.cache_clear()
     _contractions._meta_tensordot_fc.cache_clear()
@@ -66,6 +80,7 @@ def clear_cache():
 
 def get_cache_info():
     """Return statistics of lru_caches used in yastn."""
+    from . import _algebra, _merging, _contractions, _einsum
     return {"merge_to_matrix": _merging._meta_merge_to_matrix.cache_info(),
             "unmerge_from_matrix": _merging._meta_unmerge_matrix.cache_info(),
             "fuse_hard": _merging._meta_fuse_hard.cache_info(),
