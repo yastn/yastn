@@ -21,7 +21,7 @@ from operator import itemgetter
 import numpy as np
 
 from ._auxiliary import _slc, _clear_axes, _unpack_axes, _join_contiguous_slices
-from ._contractions import ncon
+from ._einsum import ncon
 from ._legs import LegMeta, Leg, leg_product
 from ._merging import _Fusion
 from ._tests import YastnError, _test_axes_all

@@ -20,8 +20,7 @@ from .._doublePepsTensor import DoublePepsTensor
 from .._gates_auxiliary import clear_operator_input, clear_projectors
 from .._geometry import Site
 from ... import mps
-from ....operators import sign_canonical_order
-from ....tensor import Tensor, YastnError, add as tensor_add
+from ....tensor import Tensor, YastnError, add as tensor_add, sign_canonical_order
 
 
 class EnvWindow:

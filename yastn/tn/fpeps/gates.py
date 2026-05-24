@@ -16,8 +16,8 @@ from typing import Sequence
 
 import numpy as np
 
-from ._gates_auxiliary import fkron, Gate
-from ...tensor import exp, ncon, eigh
+from ._gates_auxiliary import Gate
+from ...tensor import exp, ncon, eigh, fkron
 
 
 def Gate_local(G, site):
