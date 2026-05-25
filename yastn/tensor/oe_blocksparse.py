@@ -1394,6 +1394,7 @@ def contract_with_unroll(*args, **kwargs):
         :func:`torch.utils.checkpoint.checkpoint`, avoiding storage of masking
         and ncon intermediates across all iterations simultaneously.
     """
+    _cfg = args[0].config
     checkpoint_loop = kwargs.pop("checkpoint_loop", False)
     who = kwargs.pop("who", None)
     kwargs.pop("verbosity", None)
@@ -1405,7 +1406,7 @@ def contract_with_unroll(*args, **kwargs):
     optimize = kwargs.pop("optimize", None)
     if optimize is None:
         path_search_kwargs = {k: kwargs[k] for k in ("optimizer", "memory_limit", "names")
-                              if k in kwargs}
+                                if k in kwargs}
         if who is not None:
             path_search_kwargs["who"] = who
         optimize, _ = get_contraction_path(*args, unroll=unroll, **path_search_kwargs)

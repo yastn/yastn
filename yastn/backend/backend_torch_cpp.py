@@ -14,6 +14,7 @@
 # ==============================================================================
 """Support of torch as a data structure used by yastn."""
 from itertools import accumulate, groupby
+from functools import lru_cache
 import operator
 from typing import Sequence, Union
 import numpy as np
@@ -170,6 +171,7 @@ def _meta_tapp_torch_tensordot_bs(
         c_numSectionsPerMode, c_sectionExtents, c_coords, c_strides, c_offsets
 
 
+# @lru_cache(maxsize=1024)
 def _meta_tapp_torch_tensordot_bs_v2(
         NSYM: int,
         a_struct_t, a_slices, a_t_per_mode, a_D_per_mode,
@@ -239,12 +241,14 @@ def _meta_tapp_torch_tensordot_bs_v2(
 
     def _blocksparse_coords_v3_np(struct_t, filled_t_per_mode):
         """Returns a contiguous int64 numpy array (no .tolist() call)."""
-        ts = np.array(struct_t).reshape(len(struct_t), len(filled_t_per_mode), max(1, NSYM))
+        # ts = np.array(struct_t).reshape(len(struct_t), len(filled_t_per_mode), max(1, NSYM))
+        ts = struct_t.reshape(len(struct_t), len(filled_t_per_mode), max(1, NSYM))
         n  = normalize_ts(filled_t_per_mode)
         ts -= np.stack([f[0] for f in n])
         B  = np.empty(ts.shape[:2], dtype=np.int64)
         for mode in range(len(filled_t_per_mode)):
             B[:, mode] = n[mode][2][tuple(ts[:, mode, i] for i in range(max(1, NSYM)))]
+        ts += np.stack([f[0] for f in n]) # reset, since struct_t persists outside of _meta_tapp_torch_tensordot_bs_v2
         return np.ascontiguousarray(B.reshape(-1))
 
     a_coords_np = _blocksparse_coords_v3_np(a_struct_t, filled_a_t_per_mode)

@@ -38,6 +38,7 @@ def _config_descriptor(config):
         'default_fusion': config.default_fusion,
         'force_fusion': config.force_fusion,
         'tensordot_policy': config.tensordot_policy,
+        'profile': config.profile,
     }
 
 
@@ -194,6 +195,7 @@ def _worker_main(rank, gpu_dev, config_desc, cmd_q, res_q):
                             checkpoint_loop=checkpoint_loop,
                             **ncon_kwargs,
                         )
+
                     if per_key_struct is None:
                         # Raw mode (cache miss): no zero-fill — different
                         # workers may produce partials with different charge
@@ -232,8 +234,8 @@ def _worker_main(rank, gpu_dev, config_desc, cmd_q, res_q):
                     if out_tensors:
                         torch.autograd.backward(out_tensors, grad_tensors)
                     grads = [t._data.grad.detach() if t._data.grad is not None
-                             else torch.zeros_like(t._data.detach())
-                             for t in inputs]
+                                else torch.zeros_like(t._data.detach())
+                                for t in inputs]
                     res_q.put(('backward_done', rank, txn_id, grads))
         except Exception:
             import traceback
