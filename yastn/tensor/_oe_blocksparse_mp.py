@@ -19,9 +19,12 @@ Supports both:
   mode to split ``grad_out_data`` back into per-key gradients before shipping.
 """
 import atexit
+import logging
 import torch
 import torch.multiprocessing as _mp
 
+
+log = logging.getLogger(__name__)
 
 # Module-level pool registry: (devices_tuple, mp_workers_per_device,
 # config_descriptor_hash) -> _PersistentWorkerPool
@@ -147,10 +150,18 @@ def _zero_fill_to_full(partial, full_struct_dict, cfg):
     return zero_tensor + partial
 
 
-def _worker_main(rank, gpu_dev, config_desc, cmd_q, res_q):
+def _worker_main(rank, gpu_dev, config_desc, cmd_q, res_q,
+                 log_queue=None, log_level=logging.INFO, logger_levels=None):
     """Worker process entry point. Loops on cmd_q until 'shutdown'."""
-    import os, sys
     import torch
+    # Route this worker's logging (notably get_contraction_path path-info
+    # reports at INFO level) through the parent's QueueListener. Spawn-mode
+    # children inherit no logging config, so without this every log.info call
+    # in a worker is silently dropped.
+    from .._mp_logging import install_worker_log_handler
+    install_worker_log_handler(log_queue, log_level,
+                               tag=f"oe_mp rank {rank} dev {gpu_dev}",
+                               logger_levels=logger_levels)
     if str(gpu_dev).startswith('cuda'):
         gpu_idx = int(str(gpu_dev).split(':')[1])
         torch.cuda.set_device(gpu_idx)
@@ -160,6 +171,7 @@ def _worker_main(rank, gpu_dev, config_desc, cmd_q, res_q):
     # reconstructed from IPC are placed on the right device (Tensor.from_dict
     # honors config.default_device).
     cfg = make_config(**{**config_desc, 'default_device': str(gpu_dev)})
+    log.info("worker ready")
 
     while True:
         try:
@@ -245,6 +257,8 @@ def _worker_main(rank, gpu_dev, config_desc, cmd_q, res_q):
 
 class _PersistentWorkerPool:
     def __init__(self, devices, n_per_device, config_desc):
+        from .._mp_logging import (
+            start_parent_log_listener, parent_log_level, snapshot_logger_levels)
         ctx = _mp.get_context('spawn')
         self.devices = list(devices)
         self.n_per_device = n_per_device
@@ -253,6 +267,14 @@ class _PersistentWorkerPool:
         self.res_q = ctx.Queue()
         self.procs = []
         self._next_txn = 0
+        # Multiprocess-safe logging: parent owns the only real handler via a
+        # QueueListener; workers push records onto self.log_queue. When this
+        # pool is created inside another pool's worker, that worker's own
+        # QueueHandler is reused as the listener target, forwarding records up
+        # the chain. See yastn._mp_logging.
+        self.log_queue, self.log_listener = start_parent_log_listener(ctx)
+        log_level = parent_log_level()
+        logger_levels = snapshot_logger_levels()
         rank = 0
         self.worker_devs = []
         for dev in self.devices:
@@ -260,7 +282,8 @@ class _PersistentWorkerPool:
                 cmd_q = ctx.Queue()
                 p = ctx.Process(
                     target=_worker_main,
-                    args=(rank, dev, config_desc, cmd_q, self.res_q),
+                    args=(rank, dev, config_desc, cmd_q, self.res_q,
+                          self.log_queue, log_level, logger_levels),
                     daemon=False,
                 )
                 p.start()
@@ -285,6 +308,10 @@ class _PersistentWorkerPool:
             p.join(timeout=10)
             if p.is_alive():
                 p.terminate()
+        # Stop the listener only after workers are joined, so any record they
+        # emitted has been enqueued before the listener drains and stops.
+        from .._mp_logging import stop_parent_log_listener
+        stop_parent_log_listener(self.log_listener)
 
 
 def _get_or_create_pool(devices, n_per_device, config):
@@ -554,10 +581,8 @@ def _contract_with_sliced_unroll_mp(*args, unroll, optimize, checkpoint_loop=Fal
                                     **kwargs):
     """Multiprocess dispatcher for _contract_with_sliced_unroll. Supports both
     single-key (no output unroll) and multi-key (output-unrolled) cases."""
-    import os
-    print(f"[mp_unroll pid={os.getpid()}] entered with "
-          f"mp_workers_per_device={mp_workers_per_device} "
-          f"devices={devices} n_unroll_labels={len(unroll)}", flush=True)
+    log.info("mp_unroll dispatch: mp_workers_per_device=%s devices=%s "
+             "n_unroll_labels=%d", mp_workers_per_device, devices, len(unroll))
     tensors = args[0:2 * (len(args) // 2):2]
     ig_list = list(args[1:2 * (len(args) // 2):2])
     out_ig = args[-1]

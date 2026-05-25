@@ -1036,10 +1036,14 @@ def _get_contraction_path_cached(
     path_info, mem_list = _get_contraction_path_info(
         path, expr, *in_shapes, names=names, shapes=True
     )
-    log.info(
-        f"{who} optimizer {optimizer}"
-        + f"\n{path}\n{path_info}\npeak-mem {max(mem_list):4.3e} mem {[f'{x:4.3e}' for x in mem_list]}"
-    )
+    # Concise summary at INFO; full PathInfo table only at DEBUG (opt-in via
+    # raising this module's logger to DEBUG, e.g. --log_oe_path).
+    log.info(f"{who} optimizer {optimizer} peak-mem {max(mem_list):4.3e}")
+    if log.isEnabledFor(logging.DEBUG):
+        log.debug(
+            f"{who} optimizer {optimizer}"
+            + f"\n{path}\n{path_info}\npeak-mem {max(mem_list):4.3e} mem {[f'{x:4.3e}' for x in mem_list]}"
+        )
     return path, path_info
 
 

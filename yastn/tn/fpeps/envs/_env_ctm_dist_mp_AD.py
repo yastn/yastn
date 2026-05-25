@@ -84,6 +84,8 @@ class _DistCTMPool:
     def __init__(self, devices, config_desc):
         import sys
         import torch.multiprocessing as _mp
+        from yastn.yastn._mp_logging import (
+            start_parent_log_listener, parent_log_level, snapshot_logger_levels)
 
         mctx = _mp.get_context('spawn')
         self.devices = list(devices)
@@ -94,13 +96,20 @@ class _DistCTMPool:
         self._results = {}
         self._lock = threading.Lock()
 
+        # Multiprocess-safe logging: parent owns the only real handler via a
+        # QueueListener; workers push records onto self.log_queue. See
+        # yastn._mp_logging.
+        self.log_queue, self.log_listener = start_parent_log_listener(mctx)
+        log_level = parent_log_level()
+        logger_levels = snapshot_logger_levels()
         parent_sys_path = list(sys.path)
         for rank, dev in enumerate(self.devices):
             cmd_q = mctx.Queue()
             p = mctx.Process(
                 target=_worker_main,
                 args=(rank, dev, config_desc, cmd_q, self.res_q,
-                      parent_sys_path),
+                      parent_sys_path, self.log_queue, log_level,
+                      logger_levels),
                 daemon=False,
             )
             p.start()
@@ -173,6 +182,10 @@ class _DistCTMPool:
             p.join(timeout=10)
             if p.is_alive():
                 p.terminate()
+        # Stop the listener only after workers are joined, so any record they
+        # emitted has been enqueued before the listener drains and stops.
+        from yastn.yastn._mp_logging import stop_parent_log_listener
+        stop_parent_log_listener(self.log_listener)
 
 
 def get_or_create_pool(devices, config):
@@ -439,12 +452,21 @@ def _recv_payload(p, device=None):
 # Worker entrypoint
 # ===========================================================================
 
-def _worker_main(rank, device, config_desc, cmd_q, res_q, parent_sys_path):
-    import os, sys, torch
+def _worker_main(rank, device, config_desc, cmd_q, res_q, parent_sys_path,
+                 log_queue=None, log_level=logging.INFO, logger_levels=None):
+    import sys, torch
 
     for p in reversed(parent_sys_path):
         if p and p not in sys.path:
             sys.path.insert(0, p)
+
+    # Route this worker's logging through the parent's QueueListener. Spawn-mode
+    # children inherit no logging config, so without this every log.info call
+    # in a worker is silently dropped.
+    from yastn.yastn._mp_logging import install_worker_log_handler
+    install_worker_log_handler(log_queue, log_level,
+                               tag=f"dist_ctm_AD rank {rank} dev {device}",
+                               logger_levels=logger_levels)
 
     if str(device).startswith('cuda'):
         gpu_idx = int(str(device).split(':')[1])
@@ -453,8 +475,7 @@ def _worker_main(rank, device, config_desc, cmd_q, res_q, parent_sys_path):
     from yastn.yastn.tensor._initialize import make_config
     cfg = make_config(**{**config_desc, 'default_device': str(device)})
 
-    print(f"[dist_ctm_AD pid={os.getpid()} rank={rank} dev={device}] worker ready",
-          flush=True)
+    log.info("worker ready")
 
     # Holds activations for in-flight forwards until their matching
     # backward runs. graph_id (= forward txn) -> (input_leaves, outputs).
