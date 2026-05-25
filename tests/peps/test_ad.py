@@ -20,7 +20,6 @@ import numpy as np
 import yastn
 import yastn.tn.fpeps as fpeps
 from yastn.tn.fpeps.envs.rdm import rdm1x1
-import yastn.tn.mps as mps
 
 
 @pytest.fixture
@@ -158,22 +157,20 @@ def prepare_RVB(additional_imports):
 
     def cost_function_RVB(elems, slice, max_sweeps, ctm_init='dl', fix_signs=False, truncate_multiplets_mode='truncate',
                           checkpoint_move=False):
-        A0= A.clone()
+        A0 = A.clone()
         A0._data[slice]= elems
 
-        g= fpeps.SquareLattice(dims=(1,1), boundary='infinite')
+        g = fpeps.SquareLattice(dims=(1,1), boundary='infinite')
         psi = fpeps.Peps(g, tensors=dict(zip(g.sites(), [A0, ])))
 
         if truncate_multiplets_mode == 'expand':
-            truncation_f= None
+            opts_svd = {"D_total": 64, 'fix_signs': fix_signs, "largest_gap": True}
         elif truncate_multiplets_mode == 'truncate':
-            def truncation_f(S):
-                return yastn.linalg.truncation_mask_multiplets(S, keep_multiplets=True, D_total=64,\
-                    tol=1.0e-8, tol_block=0.0, eps_multiplet=1.0e-8)
+            opts_svd = {"D_total": 64, 'fix_signs': fix_signs, 'tol': 1e-8, 'eps_multiplet': 1e-8}
 
         env = fpeps.EnvCTM(psi, init=ctm_init)
-        info = env.ctmrg_(opts_svd = {"D_total": 64, 'fix_signs': fix_signs}, max_sweeps=max_sweeps,
-                            truncation_f=truncation_f, use_qr=False, checkpoint_move=checkpoint_move)
+        info = env.ctmrg_(opts_svd=opts_svd, max_sweeps=max_sweeps,
+                          use_qr=False, checkpoint_move=checkpoint_move)
         r1x1, r1x1_norm= rdm1x1( (0,0), psi, env)
         return r1x1[(-1,-1)].trace().real
 
@@ -190,20 +187,18 @@ def cost_function_f(yastn_cfg, g, A, elems, slices : dict[tuple[int],tuple[slice
         tensors_loc[k]._data[slices[k][1]]= elems[slices[k][0]]
 
     psi = fpeps.Peps(g, tensors=tensors_loc)
-    chi= 20
+    chi = 20
 
     if truncate_multiplets_mode == 'expand':
-        truncation_f= None
+        opts_svd = {"D_total": chi, 'fix_signs': fix_signs, "largest_gap": True}
     elif truncate_multiplets_mode == 'truncate':
-        def truncation_f(S):
-            return yastn.linalg.truncation_mask_multiplets(S, keep_multiplets=True, D_total=chi,\
-                tol=1.0e-8, tol_block=0.0, eps_multiplet=1.0e-8)
+        opts_svd = {"D_total": chi, 'fix_signs': fix_signs, 'tol': 1e-8, 'eps_multiplet': 1e-8}
 
     env_leg = yastn.Leg(yastn_cfg, s=1, t=(0, 1), D=(chi//2, chi//2))
     env = fpeps.EnvCTM(psi, init=ctm_init, leg=env_leg)
 
-    info = env.ctmrg_(opts_svd = {"D_total": chi, 'fix_signs': fix_signs}, max_sweeps=max_sweeps,
-                        corner_tol=1.0e-8, truncation_f=truncation_f, use_qr=False, checkpoint_move=checkpoint_move)
+    info = env.ctmrg_(opts_svd=opts_svd, max_sweeps=max_sweeps,
+                      corner_tol=1e-8, use_qr=False, checkpoint_move=checkpoint_move)
     print(f"CTM {info}")
 
     # sum of traces of even sectors across 1x1 RDMs
@@ -380,7 +375,7 @@ def test_3x3_D1_Z2_spinlessf_ctmsteps1(ctm_init, fix_signs, truncate_multiplets_
 @pytest.mark.skipif( "not config.getoption('long_tests')", reason="long duration tests are skipped" )
 @pytest.mark.parametrize("ctm_init", ['dl', 'eye'])
 @pytest.mark.parametrize("truncate_multiplets_mode", ["truncate", "expand"])
-@pytest.mark.parametrize("checkpoint_move", ['nonreentrant',False])
+@pytest.mark.parametrize("checkpoint_move", ['nonreentrant', False])
 def test_3x3_D1_Z2_spinlessf_conv(ctm_init, truncate_multiplets_mode, checkpoint_move, additional_imports):
     config_kwargs, torch, gradcheck= additional_imports
     A0, _, cost_function= prepare_3x3(additional_imports)

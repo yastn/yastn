@@ -46,10 +46,23 @@ def norm(a, p='fro') -> Number:
     return a.config.backend.norm(a._data, p)
 
 
-def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
-        Uaxis=-1, Vaxis=0, policy='fullrank', fix_signs=False, svd_on_cpu=False,
-        tol=0, tol_block=0, D_block=float('inf'), D_total=float('inf'),
-        largest_gap=False, mask_f=None, **kwargs) -> tuple[yastn.Tensor, yastn.Tensor, yastn.Tensor]:
+def svd_with_truncation(a, axes=(0, 1),
+                        sU=1,
+                        nU=True,
+                        Uaxis=-1,
+                        Vaxis=0,
+                        policy='fullrank',
+                        fix_signs=False,
+                        svd_on_cpu=False,
+                        tol=float('-inf'),
+                        tol_block=float('-inf'),
+                        D_total=float('inf'),
+                        D_block=float('inf'),
+                        largest_gap=False,
+                        eps_multiplet=None,
+                        hermitian=False,
+                        mask_f=None,
+                        **kwargs) -> tuple[yastn.Tensor, yastn.Tensor, yastn.Tensor]:
     r"""
     Split tensor using exact singular value decomposition (SVD) into :math:`a = U S V`,
     where the columns of `U` and the rows of `V` form orthonormal bases
@@ -82,31 +95,43 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
         and for ``"lowrank"`` use randomized/truncated SVD and requires providing ``D_block`` or ``k_block`` in ``kwargs``.
 
     tol: float
-        relative tolerance of singular values below which to truncate across all blocks.
+        Relative tolerance with respect to the largest absolut value element of ``S``.
 
     tol_block: float
-        relative tolerance of singular values below which to truncate within individual blocks.
-
-    D_block: int | dict
-        largest number of singular values to keep in a single block.
-        It is also possible to provide a dictionary mapping charges to maximal number of elements in the charge sector.
-
-    k_block: None (default) | int | dict
-        When ``policy='lowrank'``, number of singular values to compute in each block.
-        If ``D_block`` is provided, it is used instead to determine number of singular values to compute.
+        Relative tolerance per block.
 
     D_total: int
-        largest total number of singular values to keep.
+        Maximum number of elements kept across all blocks.
+
+    D_block: int | dict
+        Maximum number of elements kept per block.
+        It is also possible to provide a dictionary mapping charges to maximal number of elements in the charge sector.
 
     largest_gap: bool
         If ``True``, enlarge the truncation range specified by other arguments by shifting
         the cut to the largest gap between to-be-truncated singular values across all blocks.
         It provides a heuristic mechanism to avoid truncating part of a multiplet.
+        If ``True``, ``tol_block`` and ``D_block`` are ignored, as ``largest_gap`` is a global condition.
         The default is ``False``.
 
-    mask_f: function[yastn.Tensor] -> yastn.Tensor
-        custom truncation-mask function.
-        If provided, it overrides all other truncation-related arguments.
+    eps_multiplet: float
+        Relative tolerance on multiplet splitting. If relative difference between
+        two consecutive elements of ``S`` is larger than ``eps_multiplet``, these
+        elements are not considered as part of the same multiplet.
+        Partially truncated multiplets are truncated down.
+        The default is None, when this scheme is not used.
+        If ``True``, ``tol_block`` and ``D_block`` are ignored, as ``eps_multiplet`` is a global condition.
+        Cannot be used together with largest_gap scheme.
+
+    hermitian: bool
+        If True, blocks related by hermitian conjugation are truncated equally, truncating down to the intersecting part.
+        The default is False.
+
+    mask_f: None | function[yastn.Tensor] -> yastn.Tensor
+        It is possible to provide a custom mask function, which provides a mechanism to pass such a function
+        to many tensor network algorithms where the function truncation_mask is being called.
+        If provided, it overrides the default function, and all other parameters are ignored.
+        The default is None.
 
     Returns
     -------
@@ -118,15 +143,12 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
     Smask = truncation_mask(S, tol=tol, tol_block=tol_block,
                             D_block=D_block, D_total=D_total,
                             largest_gap=largest_gap,
-                            mask_f=mask_f)
+                            eps_multiplet=eps_multiplet,
+                            hermitian=hermitian,
+                            mask_f=mask_f,
+                            verbosity=verbosity)
 
     U, S, V = Smask.apply_mask(U, S, V, axes=(-1, 0, 0))
-    if verbosity > 2:
-        fname = sys._getframe().f_code.co_name
-        logger.info(f"{fname} truncation_mask tol {tol} tol_block {tol_block} D_total {D_total}")
-        logger.info(f"truncation_mask D_block {D_block}")
-        logger.info(f"{fname} S {S.get_legs(0)}")
-
     U = U.moveaxis(source=-1, destination=Uaxis)
     V = V.moveaxis(source=0, destination=Vaxis)
     return U, S, V
@@ -636,9 +658,9 @@ def truncation_mask_multiplets(S, tol=0, D_total=float('inf'),
     #         Smask[t][:common_size] = Smask[tn][:common_size] = Smask[t][:common_size] & Smask[tn][:common_size]
     # return Smask
     return truncation_mask(S, which='LR',
-                    tol=tol, D_total=D_total,
-                    eps_multiplet=eps_multiplet,
-                    hermitian=hermitian)
+                           tol=tol, D_total=D_total,
+                           eps_multiplet=eps_multiplet,
+                           hermitian=hermitian)
 
 
 def truncation_mask(S, which='LR',
@@ -723,11 +745,11 @@ def truncation_mask(S, which='LR',
             + "Set tol and tol_block to -inf or use mask_f for custom truncation mask if needed.")
 
     if (largest_gap or eps_multiplet) and  (tol_block != float('-inf') or D_block != float('inf')):
-        raise YastnError("Truncation by block cannot be used when multiplet schmes are invoked."
+        raise YastnError("Truncation by block cannot be used when multiplet-related schmes are invoked."
             + "Set D_block to the default float('inf') and tol_block to the default float('-inf').")
 
     if largest_gap and eps_multiplet:
-        raise YastnError("Truncation multiplets cannot perform schemes: largest_gap and eps_multiplets."
+        raise YastnError("Truncation multiplets cannot perform both schemes largest_gap and eps_multiplets simultaneously."
                          + "Switch one off by providing the default value.")
 
     backend = S.config.backend
@@ -755,15 +777,12 @@ def truncation_mask(S, which='LR',
                 Smask._data[slc][inds[D_bl:]] = False
             elif D_bl == 0:
                 Smask._data[slc] = False
-
+    #
     above_tol = S.data > tol * backend.max_abs(S.data)
     D_total = min(D_total, backend.sum_elements(above_tol).item())
-
-    if D_total >= len(S.data):
-        return Smask
-
+    #
     inds = backend.argsort_which(S.data, which)
-
+    #
     if largest_gap:
         gap = -1
         for p in range(D_total, len(inds)):
@@ -773,8 +792,8 @@ def truncation_mask(S, which='LR',
                 gap = gap_p
             if gap > abs(S._data[inds[p - 1]]):
                 break
-
-    if eps_multiplet is not None:
+    #
+    if eps_multiplet is not None and D_total < len(S.data):
         # compute gaps and normalize by magnitude of (abs) larger value.
         # value of gaps[i] gives gap between i-th and i+1 the element of s
         s = S.data[inds]
@@ -788,45 +807,43 @@ def truncation_mask(S, which='LR',
             if gaps[i] > eps_multiplet:
                 D_total = i+1
                 break
-
+    #
     Smask._data[inds[D_total:]] = False
-
+    #
     # check blocks related by Hermitian symmetry and truncate to equal length
     if hermitian:
-        considered_t = set()
+        considered_t = []
         for it, t in enumerate(Smask.struct.t):
-            if any(Smask[t]):  # active_sectors
-                t = t[:nsym]
-                tc = S.config.sym.conj_charge(t)
-
-                if t == tc or t in considered_t:
-                    continue
-
-                if tc + tc not in Smask.struct.t:
-                    Smask[t][:] = False
-                    continue
-
-                considered_t.update(t, tc)
-
-                lt, ltc = len(Smask[t]), len(Smask[tc])
-                common_size = min(lt, ltc)
-
-                slc_t = S.struct.slc[it]
-                inds_t = backend.argsort_which(S.data[slc], which)
-
-                slc_tc = S.struct.slc[S.struct.t.index(tc + tc)]
-                inds_tc = backend.argsort_which(S.data[slc_tc], which)
-
-                St = Smask.data[slc_t]
-                Stc = Smask.data[slc_tc]
-
-                # if related blocks do not have equal length
-                if common_size < lt:
-                    St[inds_t[common_size:]] = False
-                if common_size < ltc:
-                    Stc[inds_tc[common_size:]] = False
-
-                St[inds_t[:common_size]] = Stc[inds_tc[:common_size]] = St[inds_t[:common_size]] & Stc[inds_tc[:common_size]]
+            t = t[:nsym]
+            tc = S.config.sym.conj_charge(t)
+            #
+            if t == tc or t in considered_t:
+                continue
+            #
+            slc_t = S.slices[it].slcs[0]
+            try:
+                itc = S.struct.t.index(tc + tc)
+            except ValueError:  # conjugated sector nor in Sdata
+                Smask.data[slc_t] = False
+                continue
+            slc_tc = S.slices[itc].slcs[0]
+            #
+            considered_t.append(t)
+            considered_t.append(tc)
+            lt, ltc = len(Smask[t]), len(Smask[tc])
+            common_size = min(lt, ltc)
+            inds_t = backend.argsort_which(S.data[slc_t], which)
+            inds_tc = backend.argsort_which(S.data[slc_tc], which)
+            St = Smask.data[slc_t]
+            Stc = Smask.data[slc_tc]
+            #
+            # if related blocks do not have equal length
+            if common_size < lt:
+                St[inds_t[common_size:]] = False
+            if common_size < ltc:
+                Stc[inds_tc[common_size:]] = False
+            #
+            St[inds_t[:common_size]] = Stc[inds_tc[:common_size]] = St[inds_t[:common_size]] & Stc[inds_tc[:common_size]]
 
     return Smask
 

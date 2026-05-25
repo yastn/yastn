@@ -83,28 +83,24 @@ def cost_U1_c4v_2x2(additional_imports, g, A, elems, slices : dict[tuple[int],tu
 
         # 3. proceed with YASTN's CTMRG implementation
         # 3.1 possibly re-initialize the environment
+
+        opts_svd = {"policy": projector_svd_method,
+                    "D_total": CHI,
+                    "tol": 1e-8,
+                    "fix_signs": fix_signs,
+                    "svds_thresh": 0.1,
+                    "verbosity": 3}
+
         if truncate_multiplets_mode == 'expand':
-            truncation_f= None
+            opts_svd["largest_gap"] = True
         elif truncate_multiplets_mode == 'truncate':
-            def truncation_f(S):
-                return yastn.linalg.truncation_mask_multiplets(S, keep_multiplets=True, D_total=CHI,\
-                    tol=1.0e-8, tol_block=0.0, eps_multiplet=1.0e-8)
+            opts_svd["eps_multiplet"] = 1e-8
 
         with torch.no_grad():
             env = fpeps.EnvCTM(psi, init=ctm_init)
 
-        # 3.2 setup and run CTMRG
-        options_svd={
-            "policy": projector_svd_method,
-            "D_total": CHI, 'D_block': CHI, "tol": 1.0e-8,
-            'fix_signs': fix_signs,
-            "eps_multiplet": 1.0e-8,
-            "svds_thresh": 0.1,
-            "verbosity": 3
-        }
-
-        info = env.ctmrg_(opts_svd = options_svd, max_sweeps=max_sweeps,
-                        corner_tol=1.0e-8, truncation_f=truncation_f, use_qr=False, checkpoint_move=checkpoint_move)
+        info = env.ctmrg_(opts_svd=opts_svd, max_sweeps=max_sweeps,
+                          corner_tol=1e-8, use_qr=False, checkpoint_move=checkpoint_move)
         log.info(f"WARM-UP: Number of ctm steps: {info}")
 
         r1x1,norm= rdm1x1( (0,0), psi, env)
@@ -146,28 +142,33 @@ def cost_U1_c4v_2x2_fp(additional_imports, g, A, elems, slices : dict[tuple[int]
 
     # 3. proceed with YASTN's CTMRG implementation
     # 3.1 possibly re-initialize the environment
+
+    opts_svd = {"policy": projector_svd_method,
+                "D_total": CHI,
+                "tol": 1e-8,
+                "fix_signs": fix_signs,
+                "svds_thresh": 0.1,
+                "verbosity": 3}
+
     if truncate_multiplets_mode == 'expand':
-        truncation_f= None
+        opts_svd["largest_gap"] = True
     elif truncate_multiplets_mode == 'truncate':
-        def truncation_f(S):
-            return yastn.linalg.truncation_mask_multiplets(S, keep_multiplets=True, D_total=CHI,\
-                tol=1.0e-8, tol_block=0.0, eps_multiplet=1.0e-8)
+        opts_svd["eps_multiplet"] = 1e-8
 
     with torch.no_grad():
         env = fpeps.EnvCTM(psi, init=ctm_init)
 
     # 3.2 setup and run CTMRG
-    options_svd={
-        'policy': projector_svd_method,
-        "D_total": CHI, "D_block": CHI,
-        "tol": 1.0e-8, "eps_multiplet": 1.0e-8,
-        "svds_thresh": 0.1
-    }
+
     method = '2x1' if 'qr' in projector_svd_method else '2x2'
-    env = fp_ctmrg(env, \
-        ctm_opts_fwd= {'opts_svd': options_svd, 'corner_tol': 1.0e-8, 'max_sweeps': max_sweeps, \
-            'method': method, 'use_qr': False, }, \
-        ctm_opts_fp= {'opts_svd': {'policy': 'fullrank'}})
+    env = fp_ctmrg(env,
+                   ctm_opts_fwd={'opts_svd': opts_svd,
+                                 'corner_tol': 1.0e-8,
+                                 'max_sweeps': max_sweeps,
+                                 'method': method,
+                                 'use_qr': False},
+                   ctm_opts_fp={'opts_svd': {'policy': 'fullrank'}}
+                  )
 
     # 3.4 evaluate loss
     r1x1,norm= rdm1x1( (0,0), psi, env)
@@ -185,42 +186,45 @@ def cost_U1_c4v_1x1_fp(additional_imports, g, A, elems, slices : dict[tuple[int]
     for k in tensors_loc.keys():
         tensors_loc[k]._data[slices[k][1]]= elems[slices[k][0]]
 
-    A0= _symmetrize_normalize(tensors_loc[(0,0)])
+    A0 = _symmetrize_normalize(tensors_loc[(0,0)])
     psi = fpeps.Peps(g, tensors={(0,0): A0})
 
+    opts_svd = {"policy": "block_arnoldi",
+                "D_total": CHI,
+                "k_block": CHI,
+                "tol": 1e-8,
+                "fix_signs": fix_signs,
+                "svds_thresh": 0.1,
+                "verbosity": 3}
+
     if truncate_multiplets_mode == 'expand':
-        truncation_f= None
+        opts_svd["largest_gap"] = True
     elif truncate_multiplets_mode == 'truncate':
-        def truncation_f(S):
-            return yastn.linalg.truncation_mask_multiplets(S, keep_multiplets=True, D_total=CHI,\
-                tol=1.0e-8, tol_block=0.0, eps_multiplet=1.0e-8)
+        opts_svd["eps_multiplet"] = 1e-8
 
     with torch.no_grad():
         envc4v = fpeps.EnvCTM_c4v(psi, init=ctm_init)
 
     # 3.1.1 post-init CTM steps (allow expansion of the environment in case of qr policy)
     if projector_svd_method=='qr':
-        options_svd_pre_init= {
-            "policy": "block_arnoldi",
-            "D_total": CHI, 'D_block': CHI, "tol": 1.0e-8,
-            'fix_signs': fix_signs
-        }
         with torch.no_grad():
-            info = envc4v.ctmrg_(opts_svd = options_svd_pre_init, max_sweeps=max_sweeps, method='2x2',
-                        corner_tol=leg_charge_conv_check, truncation_f=truncation_f, use_qr=False, checkpoint_move=checkpoint_move)
+            info = envc4v.ctmrg_(opts_svd=opts_svd, max_sweeps=max_sweeps, method='2x2',
+                                 corner_tol=leg_charge_conv_check, use_qr=False,
+                                 checkpoint_move=checkpoint_move)
             log.info(f"WARM-UP: Number of ctm steps: {info}")
 
     # 3.2 setup and run CTMRG
     method = '2x1' if 'qr' in projector_svd_method else '2x2'
-    options_svd={
-        "policy": projector_svd_method,
-        "D_total": CHI, 'D_block': CHI, "tol": 1.0e-8,
-        "eps_multiplet": 1.0e-8, "truncation_f": truncation_f, "svds_thresh": 0.1
-        }
-    envc4v = fp_ctmrg_c4v(envc4v, \
-        ctm_opts_fwd= {'opts_svd': options_svd, 'corner_tol': 1.0e-8, 'max_sweeps': max_sweeps, \
-            'method': method, 'use_qr': False}, \
-        ctm_opts_fp= { 'opts_svd': {'policy': 'fullrank'}})
+
+    opts_svd["policy"] = projector_svd_method
+    envc4v = fp_ctmrg_c4v(envc4v,
+                          ctm_opts_fwd={'opts_svd': opts_svd,
+                                        'corner_tol': 1.0e-8,
+                                        'max_sweeps': max_sweeps,
+                                        'method': method,
+                                        'use_qr': False},
+                          ctm_opts_fp={'opts_svd': {'policy': 'fullrank'}}
+                          )
 
     # 3.4 evaluate loss
     # sum of traces of even sectors across 1x1 RDMs
@@ -243,60 +247,60 @@ def prepare_1x1(additional_imports, cost_f):
     A = {tuple(d['parameters_key_to_id'][coord]): yastn.Tensor.from_dict(d_ten, config=yastn_cfg_U1)
                                  for coord,d_ten in d['parameters'].items()}
 
-    cost_function_1x1 = lambda *args, **kwargs : cost_f(additional_imports, g,A, *args, **kwargs)
+    cost_function_1x1 = lambda *args, **kwargs : cost_f(additional_imports, g, A, *args, **kwargs)
 
     return A, None, cost_function_1x1
 
-CHI= 47
-REF_D3_U1_c4v_2x2_grad=[
-.23087385162275018,
-0.11677319328717085,
-0.1167731932639163,
-0.04498240676206066,
-0.1167731932871714,
-0.04530136605315259,
-0.044982406762061014,
-0.001816910648229041,
-0.11677319326391573,
-0.04498240676206139,
-0.04530136605684913,
-0.0018169106632112636,
-0.04498240676206072,
-0.0018169106482296988,
-0.0018169106632108987,
--0.022717432774250257,
--0.06375239660966917,
--0.061729995145950504,
--0.056286383006252334,
--0.05394747201413554,
--0.06172999514595074,
--0.058040079687778856,
--0.0539474720141358,
--0.05043516255238746,
--0.06375239660571597,
--0.061729995142423805,
--0.06172999514242368,
--0.05804007969633242,
--0.05628638299120915,
--0.05394747200020278,
--0.053947472000202584,
--0.05043516254851273,
--0.06375239660966861,
--0.05628638300625197,
--0.06172999514595072,
--0.0539474720141358,
--0.061729995145950387,
--0.05394747201413551,
--0.05804007968777912,
--0.050435162552387745,
--0.06375239660571588,
--0.06172999514242386,
--0.0562863829912091,
--0.05394747200020284,
--0.06172999514242326,
--0.05804007969633217,
--0.05394747200020229,
--0.05043516254851257]
+CHI = 47
+REF_D3_U1_c4v_2x2_grad = [
+    0.23087385162275018,
+    0.11677319328717085,
+    0.1167731932639163,
+    0.04498240676206066,
+    0.1167731932871714,
+    0.04530136605315259,
+    0.044982406762061014,
+    0.001816910648229041,
+    0.11677319326391573,
+    0.04498240676206139,
+    0.04530136605684913,
+    0.0018169106632112636,
+    0.04498240676206072,
+    0.0018169106482296988,
+    0.0018169106632108987,
+    -0.022717432774250257,
+    -0.06375239660966917,
+    -0.061729995145950504,
+    -0.056286383006252334,
+    -0.05394747201413554,
+    -0.06172999514595074,
+    -0.058040079687778856,
+    -0.0539474720141358,
+    -0.05043516255238746,
+    -0.06375239660571597,
+    -0.061729995142423805,
+    -0.06172999514242368,
+    -0.05804007969633242,
+    -0.05628638299120915,
+    -0.05394747200020278,
+    -0.053947472000202584,
+    -0.05043516254851273,
+    -0.06375239660966861,
+    -0.05628638300625197,
+    -0.06172999514595072,
+    -0.0539474720141358,
+    -0.061729995145950387,
+    -0.05394747201413551,
+    -0.05804007968777912,
+    -0.050435162552387745,
+    -0.06375239660571588,
+    -0.06172999514242386,
+    -0.0562863829912091,
+    -0.05394747200020284,
+    -0.06172999514242326,
+    -0.05804007969633217,
+    -0.05394747200020229,
+    -0.05043516254851257]
 
 ##### U(1) 1x1 c4v #####
 # @pytest.mark.skipif( "not config.getoption('long_tests')", reason="long duration tests are skipped" )
@@ -344,22 +348,24 @@ def test_D3_U1_c4v_2x2_fp(ctm_init, truncate_multiplets_mode, projector_svd_meth
 
 @pytest.mark.parametrize("ctm_init", ['dl', 'eye'])
 @pytest.mark.parametrize("truncate_multiplets_mode", ["truncate", "expand"])
-@pytest.mark.parametrize("projector_svd_method", ["fullrank", "block_arnoldi", "block_propack"]) #"qr",
+@pytest.mark.parametrize("projector_svd_method", ["block_propack", "fullrank", "block_arnoldi", "qr"]) # "qr",
 def test_D3_U1_c4v_1x1_fp(ctm_init, truncate_multiplets_mode, projector_svd_method, additional_imports):
     """
     Test fp gradients for explicit U(1) and C4v symmetric single-site ansatz
     for environments evaluated from C4v-symmetric CTM.
     """
-    config_kwargs, torch, gradcheck = additional_imports
-    A, A_grad_expected, cost_f= prepare_1x1(additional_imports, cost_U1_c4v_1x1_fp)
-    test_elems= A[(0,0)]._data.clone()
-    slices= { (0,0): (slice(0,len(test_elems)), slice(0,len(test_elems))) }
+    A, A_grad_expected, cost_f = prepare_1x1(additional_imports, cost_U1_c4v_1x1_fp)
+    test_elems = A[(0,0)]._data.clone()
+    slices = {(0, 0): (slice(0, len(test_elems)), slice(0, len(test_elems)))}
     test_elems.requires_grad_()
 
-    loc_cost_f= lambda x : cost_f(x, slices, 50, ctm_init=ctm_init, \
-        fix_signs=True, truncate_multiplets_mode=truncate_multiplets_mode, projector_svd_method=projector_svd_method)
+    loc_cost_f = lambda x: cost_f(x, slices, 50,
+                                  ctm_init=ctm_init,
+                                  fix_signs=True,
+                                  truncate_multiplets_mode=truncate_multiplets_mode,
+                                  projector_svd_method=projector_svd_method)
 
-    l0= loc_cost_f(test_elems)
+    l0 = loc_cost_f(test_elems)
     l0.backward()
 
     assert np.allclose(np.asarray(REF_D3_U1_c4v_2x2_grad), test_elems.grad.numpy(force=True), rtol=1e-03, atol=1e-05)

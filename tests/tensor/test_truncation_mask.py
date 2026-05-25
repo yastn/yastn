@@ -50,6 +50,17 @@ def test_svd_multiplets(config_kwargs):
     Smask = yastn.truncation_mask(S, D_total=0)
     assert yastn.trace(Smask).item() == 0
 
+    with pytest.raises(yastn.YastnError,
+                       match="Truncation by tolerance with which='SR' or 'SM' is not supported."):
+        yastn.truncation_mask(S, which="SR", tol=1e-2)
+
+    with pytest.raises(yastn.YastnError,
+                       match="Truncation by block cannot be used when multiplet-related schmes are invoked."):
+        yastn.truncation_mask(S, tol_block=1e-2, largest_gap=True)
+
+    with pytest.raises(yastn.YastnError,
+                       match="Truncation multiplets cannot perform both schemes largest_gap and eps_multiplets simultaneously."):
+        yastn.truncation_mask(S, eps_multiplet=1e-2, largest_gap=True)
 
 
 if __name__ == '__main__':
