@@ -51,7 +51,7 @@ class EnvBP():
             None, 'eye'. Initialization scheme, see :meth:`yastn.tn.fpeps.EnvBP.reset_`.
 
         which: str
-            Type of environment from 'BP', 'NN+BP', 'NNN+BP'
+            Type of environment from 'BP', 'NN+BP', 'NNN+BP', 'Ladder+BP'
         """
         self.geometry = psi.geometry
         for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "f_ordered", "nn_bond_dirn"]:
@@ -71,8 +71,8 @@ class EnvBP():
         return self._which
 
     def _set_which(self, which):
-        if which not in ('NNN+BP', 'NN+BP', 'BP'):
-            raise YastnError(f" Type of EnvBP bond_metric {which=} not recognized.")
+        if which not in ('NNN+BP', 'NN+BP', 'BP') and "ladder" not in which.lower():
+            raise YastnError(f"Type of EnvBP bond_metric {which=} not recognized.")
         self._which = which
 
     which = property(fget=_get_which, fset=_set_which)
@@ -389,6 +389,23 @@ class EnvBP():
                       ║       ║        ║       ║
                       b       b        b       b
 
+
+            If which == 'Ladder+BP':
+
+                      t        t
+                      ║        ║
+                l══(-2 +0)══(-2 +1)══r
+                      ║        ║
+                l══(-1 +0)══(-1 +1)══r
+                      ║        ║
+                l═════Q0══   ══Q1════r
+                      ║        ║
+                l══(+1 +0)══(+1 +1)══l
+                      ║        ║
+                l══(+2 +0)══(+2 +1)══l
+                      ║        ║
+                      b        b
+
         """
         if dirn in ("h", "lr") and self.which == "BP":
             assert self.psi.nn_site(s0, (0, 1)) == s1
@@ -526,6 +543,78 @@ class EnvBP():
             vecb = tensordot(vecb, cbl @ ebl, axes=((2, 3), (0, 1)))
             g = tensordot(vect, vecb, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
             return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
+
+        #
+        if dirn in ("h", "lr") and "ladder" in self.which.lower():
+            digits = ''.join(c for c in self.which if c.isdigit())
+            nn = int(digits) if digits else 2
+
+            assert self.psi.nn_site(s0, (0, 1)) == s1
+            sites = []
+            for ii in range(1, nn + 1):
+                sites.extend([(-ii, 0), (-ii, 1), (ii, 0), (ii, 1)])
+
+            m = {d: self.psi.nn_site(s0, d=d) for d in sites}
+            mm = dict(m)  # for testing for None
+            tensors_from_psi(m, self.psi)
+            m = {k: (v.ket if isinstance(v, DoublePepsTensor) else v) for k, v in m.items()}
+
+            ctl = cor_tl(m[-nn, 0]) if mm[-nn, 0] is None else cor_tl(m[-nn, 0], ht=self[mm[-nn, 0]].t, hl=self[mm[-nn, 0]].l)
+            ctr = cor_tr(m[-nn, 1]) if mm[-nn, 1] is None else cor_tr(m[-nn, 1], ht=self[mm[-nn, 1]].t, hr=self[mm[-nn, 1]].r)
+            cbr = cor_br(m[ nn, 1]) if mm[ nn, 1] is None else cor_br(m[ nn, 1], hb=self[mm[ nn, 1]].b, hr=self[mm[ nn, 1]].r)
+            cbl = cor_bl(m[ nn, 0]) if mm[ nn, 0] is None else cor_bl(m[ nn, 0], hb=self[mm[ nn, 0]].b, hl=self[mm[ nn, 0]].l)
+
+            env_tl = {ii: edge_l(m[-ii, 0]) if mm[-ii, 0] is None else edge_l(m[-ii, 0], hl=self[mm[-ii, 0]].l) for ii in range(1, nn)}
+            env_tr = {ii: edge_r(m[-ii, 1]) if mm[-ii, 1] is None else edge_r(m[-ii, 1], hr=self[mm[-ii, 1]].r) for ii in range(1, nn)}
+            env_br = {ii: edge_r(m[ ii, 1]) if mm[ ii, 1] is None else edge_r(m[ ii, 1], hr=self[mm[ ii, 1]].r) for ii in range(1, nn)}
+            env_bl = {ii: edge_l(m[ ii, 0]) if mm[ ii, 0] is None else edge_l(m[ ii, 0], hl=self[mm[ ii, 0]].l) for ii in range(1, nn)}
+
+            env_l = edge_l(Q0, hl=self[s0].l)  # [bl bl'] [rr rr'] [tl tl']
+            env_r = edge_r(Q1, hr=self[s1].r)  # [tr tr'] [ll ll'] [br br']
+
+            et = ctl @ ctr
+            eb = cbr @ cbl
+            for ii in range(1, nn):
+                et = ncon([et, env_tl[ii], env_tr[ii]], [[1, 3], [-0, 2, 1], [3, 2, -1]])
+                eb = ncon([eb, env_br[ii], env_bl[ii]], [[1, 3], [-0, 2, 1], [3, 2, -1]])
+            g = ncon([eb, env_l, et, env_r], [[3, 2], [2, -0, 1], [1, 4], [4, -1, 3]])
+
+        if dirn in ("v", "tb") and "ladder" in self.which.lower():
+            digits = ''.join(c for c in self.which if c.isdigit())
+            nn = int(digits) if digits else 2
+
+            assert self.psi.nn_site(s0, (1, 0)) == s1
+            sites = []
+            for ii in range(1, nn + 1):
+                sites.extend([(0, -ii), (1, -ii), (0, ii), (1, ii)])
+
+            m = {d: self.psi.nn_site(s0, d=d) for d in sites}
+            mm = dict(m)  # for testing for None
+            tensors_from_psi(m, self.psi)
+            m = {k: (v.ket if isinstance(v, DoublePepsTensor) else v) for k, v in m.items()}
+
+            env_t = edge_t(Q0, ht=self[s0].t)  # [lt lt'] [bb bb'] [rt rt']
+            env_b = edge_b(Q1, hb=self[s1].b)  # [rb rb'] [tt tt'] [lb lb']
+
+            cbl = cor_bl(m[1, -nn]) if mm[1, -nn] is None else cor_bl(m[1, -nn], hb=self[mm[1, -nn]].b, hl=self[mm[1, -nn]].l)
+            ctl = cor_tl(m[0, -nn]) if mm[0, -nn] is None else cor_tl(m[0, -nn], ht=self[mm[0, -nn]].t, hl=self[mm[0, -nn]].l)
+            ctr = cor_tr(m[0,  nn]) if mm[0,  nn] is None else cor_tr(m[0,  nn], ht=self[mm[0,  nn]].t, hr=self[mm[0,  nn]].r)
+            cbr = cor_br(m[1,  nn]) if mm[1,  nn] is None else cor_br(m[1,  nn], hb=self[mm[1,  nn]].b, hr=self[mm[1,  nn]].r)
+
+            env_tl = {ii: edge_t(m[0, -ii]) if mm[0, -ii] is None else edge_t(m[0, -ii], ht=self[mm[0, -ii]].t) for ii in range(1, nn)}
+            env_bl = {ii: edge_b(m[1, -ii]) if mm[1, -ii] is None else edge_b(m[1, -ii], hb=self[mm[1, -ii]].b) for ii in range(1, nn)}
+            env_tr = {ii: edge_t(m[0,  ii]) if mm[0,  ii] is None else edge_t(m[0,  ii], ht=self[mm[0,  ii]].t) for ii in range(1, nn)}
+            env_br = {ii: edge_b(m[1,  ii]) if mm[1,  ii] is None else edge_b(m[1,  ii], hb=self[mm[1,  ii]].b) for ii in range(1, nn)}
+
+            el = cbl @ ctl
+            er = ctr @ cbr
+            for ii in range(1, nn):
+                el = ncon([el, env_bl[ii], env_tl[ii]], [[1, 3], [-0, 2, 1], [3, 2, -1]])
+                er = ncon([er, env_tr[ii], env_br[ii]], [[1, 3], [-0, 2, 1], [3, 2, -1]])
+            g = ncon([el, env_t, er, env_b], [[4, 1], [1, -0, 2], [2, 3], [3, -1, 4]])
+
+        return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
+
 
     def apply_patch(self):
         self.env.apply_patch()

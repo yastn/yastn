@@ -14,7 +14,7 @@
 # ==============================================================================
 from ._env_contractions import *
 from .._evolution import BondMetric
-from ....tensor import tensordot, YastnError
+from ....tensor import tensordot, YastnError, ncon
 
 
 class EnvNTU:
@@ -35,20 +35,14 @@ class EnvNTU:
         """
         self.psi = psi
         self._set_which(which)
-        self._dict_gs = {'NN': self._g_NN,
-                         'NN+': self._g_NNp,
-                         'NN++': self._g_NNpp,
-                         'NNN': self._g_NNN,
-                         'NNN+': self._g_NNNp,
-                         'NNN++': self._g_NNNpp
-                        }
 
     def _get_which(self):
         return self._which
 
     def _set_which(self, which):
-        if which not in ('NN', 'NN+', 'NN++', 'NNN', 'NNN+', 'NNN++'):
-            raise YastnError(f" Type of EnvNTU {which=} not recognized.")
+        if which not in ('NN', 'NN+', 'NN++', 'NNN', 'NNN+', 'NNN++') and "ladder" not in which.lower():
+            raise YastnError(f"Type of EnvNTU bond_metric {which=} not recognized.")
+
         self._which = which
 
     which = property(fget=_get_which, fset=_set_which)
@@ -154,7 +148,21 @@ class EnvNTU:
                     (+3 -2)┈(+3 -1)┈(+3 +0)┈┈(+3 +1)┈(+3 +2)┈(+3 +3)
 
         """
-        return self._dict_gs[self.which](Q0, Q1, s0, s1, dirn)
+        if self.which == 'NN':
+            return self._g_NN(Q0, Q1, s0, s1, dirn)
+        if self.which == 'NN+':
+            return self._g_NNp(Q0, Q1, s0, s1, dirn)
+        if self.which == 'NN++':
+            return self._g_NNpp(Q0, Q1, s0, s1, dirn)
+        if self.which == 'NNN':
+            return self._g_NNN(Q0, Q1, s0, s1, dirn)
+        if self.which == 'NNN+':
+            return self._g_NNNp(Q0, Q1, s0, s1, dirn)
+        if self.which == 'NNN++':
+            return self._g_NNNpp(Q0, Q1, s0, s1, dirn)
+        if 'ladder' in self.which.lower():
+            return self._g_Ladder(Q0, Q1, s0, s1, dirn)
+        raise YastnError(f" Type of EnvNTU which={self.which} not recognized.")
 
 
     def _g_NN(self, Q0, Q1, s0, s1, dirn):
@@ -749,4 +757,92 @@ class EnvNTU:
             vecb = tensordot(vecb, cbl @ ebl, axes=((2, 3), (0, 1)))
 
             g = tensordot(vect, vecb, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
+        return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
+
+
+    def _g_Ladder(self, Q0, Q1, s0, s1, dirn):
+        r"""
+        Calculates metric tensor within "NTU-NN" approximation.
+
+        For dirn == 'h':
+
+                (-2 +0)══(-2 +1)
+                   ║        ║
+                (-1 +0)══(-1 +1)
+                   ║        ║
+        (+0 -1)════Q0══   ══Q1═══(+0 +2)
+                   ║        ║
+                (+1 +0)══(+1 +1)
+                   ║        ║
+                (+2 +0)══(+2 +1)
+
+        For dirn == 'v':
+
+                          (-1 +0)
+                             ║
+         (+0 -2)══(+0 -1)═══0Q0═══(+0 +1)══(+0 +2)
+            ║        ║       ╳       ║        ║
+         (+1 -2)══(+1 -1)═══1Q1═══(+1 +1)══(+1 +2)
+                             ║
+                          (+2 +0)
+        """
+        digits = ''.join(c for c in self.which if c.isdigit())
+        nn = int(digits) if digits else 2
+
+        if dirn in ("h", "lr"):
+            assert self.psi.nn_site(s0, (0, 1)) == s1
+            sites = [(0, -1), (0, 2)]
+            for ii in range(1, nn + 1):
+                sites.extend([(-ii, 0), (-ii, 1), (ii, 0), (ii, 1)])
+
+            m = {d: self.psi.nn_site(s0, d=d) for d in sites}
+            tensors_from_psi(m, self.psi)
+
+            env_l = edge_l(Q0, hair_l(m[0, -1]))  # [bl bl'] [rr rr'] [tl tl']
+            env_r = edge_r(Q1, hair_r(m[0,  2]))  # [tr tr'] [ll ll'] [br br']
+
+            ctl = cor_tl(m[-nn, 0])
+            ctr = cor_tr(m[-nn, 1])
+            cbr = cor_br(m[ nn, 1])
+            cbl = cor_bl(m[ nn, 0])
+
+            env_tl = {ii: edge_l(m[-ii, 0]) for ii in range(1, nn)}
+            env_tr = {ii: edge_r(m[-ii, 1]) for ii in range(1, nn)}
+            env_br = {ii: edge_r(m[ ii, 1]) for ii in range(1, nn)}
+            env_bl = {ii: edge_l(m[ ii, 0]) for ii in range(1, nn)}
+
+            et = ctl @ ctr
+            eb = cbr @ cbl
+            for ii in range(1, nn):
+                et = ncon([et, env_tl[ii], env_tr[ii]], [[1, 3], [-0, 2, 1], [3, 2, -1]])
+                eb = ncon([eb, env_br[ii], env_bl[ii]], [[1, 3], [-0, 2, 1], [3, 2, -1]])
+            g = ncon([eb, env_l, et, env_r], [[3, 2], [2, -0, 1], [1, 4], [4, -1, 3]])
+
+        else: # dirn == "v":
+            assert self.psi.nn_site(s0, (1, 0)) == s1
+            sites = [(-1, 0), (2, 0)]
+            for ii in range(1, nn + 1):
+                sites.extend([(0, -ii), (1, -ii), (0, ii), (1, ii)])
+
+            m = {d: self.psi.nn_site(s0, d=d) for d in sites}
+            tensors_from_psi(m, self.psi)
+            env_t = edge_t(Q0, hair_t(m[-1, 0]))  # [lt lt'] [bb bb'] [rt rt']
+            env_b = edge_b(Q1, hair_b(m[ 2, 0]))  # [rb rb'] [tt tt'] [lb lb']
+
+            env_tl = {ii: edge_t(m[0, -ii]) for ii in range(1, nn)}
+            env_bl = {ii: edge_b(m[1, -ii]) for ii in range(1, nn)}
+            env_tr = {ii: edge_t(m[0,  ii]) for ii in range(1, nn)}
+            env_br = {ii: edge_b(m[1,  ii]) for ii in range(1, nn)}
+            cbl = cor_bl(m[1, -nn])
+            ctl = cor_tl(m[0, -nn])
+            ctr = cor_tr(m[0,  nn])
+            cbr = cor_br(m[1,  nn])
+
+            el = cbl @ ctl
+            er = ctr @ cbr
+            for ii in range(1, nn):
+                el = ncon([el, env_bl[ii], env_tl[ii]], [[1, 3], [-0, 2, 1], [3, 2, -1]])
+                er = ncon([er, env_tr[ii], env_br[ii]], [[1, 3], [-0, 2, 1], [3, 2, -1]])
+            g = ncon([el, env_t, er, env_b], [[4, 1], [1, -0, 2], [2, 3], [3, -1, 4]])
+
         return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
