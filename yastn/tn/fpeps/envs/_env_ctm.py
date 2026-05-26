@@ -578,7 +578,7 @@ class EnvCTM():
 
                 if "torch" in env.config.backend.BACKEND_ID:
                     inputs_t, inputs_meta = split_data_and_meta(env.to_dict(level=0))
-                    
+
                     checkpoint_F = env.config.backend.checkpoint
                     out_meta, *out_data = checkpoint_F(f_update_core_, d, inputs_meta, *inputs_t, \
                                       **{'use_reentrant': use_reentrant, 'debug': False})
@@ -859,7 +859,7 @@ class EnvCTM():
                     dict_bond_dimension[site, corners_id[ii]].append(temp_D)
         return [dict_bond_dimension, dict_symmetric_sector]
 
-    def iterate_(env, opts_svd=None, moves='hv', method='2x2 corner', max_sweeps=1, iterator=False, corner_tol=None, truncation_f: Callable = None, **kwargs):
+    def iterate_(env, opts_svd=None, moves='hv', method='2x2 corner', max_sweeps=1, iterator=False, corner_tol=None, **kwargs):
         r"""
         Perform CTMRG updates :meth:`yastn.tn.fpeps.EnvCTM.update_` until convergence.
         Convergence can be measured based on singular values of CTM environment corner tensors.
@@ -901,11 +901,6 @@ class EnvCTM():
             The default is ``None``, in which case convergence is not checked and it is up to user to implement
             convergence check.
 
-        truncation_f:
-            Custom projector truncation function with signature ``truncation_f(S: Tensor)->Tensor``, consuming
-            rank-1 tensor with singular values. If provided, truncation parameters passed to SVD decomposition
-            are ignored.
-
         checkpoint_move: str | bool
             Whether to use checkpointing for the CTM updates. The default is ``False``.
             Otherwise, in case of PyTorch backend it can be set to 'reentrant' for reentrant checkpointing
@@ -930,7 +925,6 @@ class EnvCTM():
         kwargs["iterator_step"] = kwargs.get("iterator_step", int(iterator))
         if ("checkpoint_move" in kwargs) and ("torch" in env.config.backend.BACKEND_ID):
             assert kwargs["checkpoint_move"] in ['reentrant', 'nonreentrant', False], f"Invalid choice for {kwargs['checkpoint_move']}"
-        kwargs["truncation_f"] = truncation_f
         kwargs["iterator_step"] = kwargs.get("iterator_step", int(iterator))
         tmp = env._ctmrg_iterator_(opts_svd=opts_svd, moves=moves, method=method, max_sweeps=max_sweeps, corner_tol=corner_tol, **kwargs)
         return tmp if kwargs["iterator_step"] else next(tmp)
@@ -1232,8 +1226,6 @@ def proj_corners(r0, r1, opts_svd, **kwargs):
     rr = tensordot(r0, r1, axes=(1, 1))
 
     opts_svd = dict(opts_svd)
-    if 'truncation_f' in kwargs:
-        opts_svd['mask_f'] = kwargs['truncation_f']
     opts_svd['fix_signs'] = opts_svd.get('fix_signs', True)
     verbosity = opts_svd.get('verbosity', 0)
     # only verbosity from opts_svd is to be passed down to svd_with_truncation
