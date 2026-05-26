@@ -172,6 +172,23 @@ class _DistCTMPool:
             with self._lock:
                 self._results[r_txn] = msg[1:]
 
+    def empty_cache(self, total_timeout=120.0):
+        """Tell every worker to return its cached-but-unused GPU blocks to the
+        driver; block until all acknowledge.
+
+        Call when the pool is idle (e.g. after a FP backward's stage work and
+        its ``drop_graphs`` -- which the worker, processing its cmd_q in FIFO
+        order, will have applied before this command). Errors per worker are
+        swallowed so a slow/dead worker can't break the optimization loop.
+        """
+        txns = [self.submit(rank, ('empty_cache',))
+                for rank in range(self.n_workers)]
+        for txn in txns:
+            try:
+                self.wait(txn, total_timeout=total_timeout)
+            except Exception:
+                pass
+
     def shutdown(self):
         for q in self.cmd_qs:
             try:
@@ -207,6 +224,24 @@ def get_or_create_pool(devices, config):
         _pool = _DistCTMPool(list(devices), desc)
         _pool._key = key
     return _pool
+
+
+def release_pool_cache():
+    """Return the CTM worker pool's cached-but-unused GPU blocks to the CUDA
+    driver. No-op when the pool was never created (single-device serial path).
+
+    PyTorch's caching allocator is per-process and never returns freed blocks
+    to the driver on its own, so a FP backward's peak stays reserved in each
+    worker and squats across optimization steps -- OOMing the next step's
+    forward (which runs in other processes sharing the GPU). Call this when the
+    workers are idle, e.g. at the end of ``FixedPoint.backward``.
+    """
+    global _pool
+    if _pool is not None:
+        try:
+            _pool.empty_cache()
+        except Exception:
+            pass
 
 
 @atexit.register
@@ -494,6 +529,19 @@ def _worker_main(rank, device, config_desc, cmd_q, res_q, parent_sys_path,
             # deliberately do not put on res_q.
             for gid in args[0]:
                 saved_graphs.pop(gid, None)
+            continue
+        if cmd == 'empty_cache':
+            # Return this worker's cached-but-unused GPU blocks to the driver.
+            # Issued when the worker is idle (after the FP backward's stage
+            # work + drop_graphs), so the next step's forward -- which runs in
+            # other processes sharing this GPU -- does not OOM against this
+            # backward's still-reserved peak. Main waits on the ack.
+            try:
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except Exception:
+                pass
+            res_q.put((txn, 'empty_cache_done'))
             continue
         try:
             if cmd.endswith('_fwd'):

@@ -725,8 +725,6 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
 
     output_pos_partials = _process_combos(assigned, tensors, None, nullcontext())
 
-    del mask_cache
-
     # Worker-mode: parent sums across workers and assembles itself.
     if _return_partials:
         return output_pos_partials

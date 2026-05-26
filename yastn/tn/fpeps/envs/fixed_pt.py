@@ -956,6 +956,22 @@ class FixedPoint(torch.autograd.Function):
         time1 = time.perf_counter()
         log.info(f"{type(ctx).__name__}.backward t_gradsum {time1-time0} [s], steps {step+1}")
 
+        # Multi-device path only: the Neumann stage-backwards ran in the CTM
+        # worker pool, which is now idle (all stages done, drop_graphs issued)
+        # but still holds this backward's peak (fullrank-SVD activations) in
+        # each worker's per-process caching allocator. Return it to the driver
+        # so the next optimization step's forward -- CTM convergence + energy
+        # eval, in other processes sharing these GPUs -- does not OOM against
+        # it. release_pool_cache() is a no-op on the single-device path (no
+        # pool); the serial backward ran in main, whose cache the optimizer's
+        # own empty_cache between steps reclaims.
+        if _use_autograd_grad:
+            try:
+                from ._env_ctm_dist_mp_AD import release_pool_cache
+                release_pool_cache()
+            except Exception:
+                pass
+
         # with torch.enable_grad():
         #     dA = torch.autograd.grad(FixedPoint.fixed_point_iter(ctx.env, ctx.sigma_dict, ctx.opts_svd, ctx.slices, env_data, psi_data), psi_data, grad_outputs=dA)
 
