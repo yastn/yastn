@@ -1,0 +1,21 @@
+FROM nvcr.io/nvidia/pytorch:26.03-py3
+
+# Install cuTENSOR 2.6.0 (multi-arch: x86_64 and sbsa/arm64)
+RUN if [ "$(uname -m)" = "x86_64" ]; then \
+        CUTENSOR_DIR="linux-x86_64"; TARGETS_DIR="x86_64-linux"; \
+    else \
+        CUTENSOR_DIR="linux-sbsa"; TARGETS_DIR="sbsa-linux"; \
+    fi && \
+    CUTENSOR_PKG="libcutensor-${CUTENSOR_DIR}-2.6.0.4_cuda13-archive.tar.xz" && \
+    wget -q "https://developer.download.nvidia.com/compute/cutensor/redist/libcutensor/${CUTENSOR_DIR}/${CUTENSOR_PKG}" && \
+    tar -xf "${CUTENSOR_PKG}" -C "${CUDA_HOME}/targets/${TARGETS_DIR}" --strip-components=1 && \
+    rm "${CUTENSOR_PKG}"
+
+ENV CUTENSOR_ROOT=${CUDA_HOME}
+
+# Clone yastn
+RUN git clone --depth 1 --recurse-submodules --shallow-submodules https://github.com/yastn/yastn.git /opt/yastn
+
+# Install TAPP-torch
+RUN cd /opt/yastn/third_party/TAPP-torch && git fetch origin && git checkout -B main origin/main && \
+    export TAPP_CUTENSOR_BINDINGS="ON" && pip install -v --no-build-isolation -e .
