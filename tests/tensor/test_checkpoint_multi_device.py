@@ -12,7 +12,6 @@ Usage standalone:
 """
 import pytest
 import yastn
-from yastn.tensor.oe_blocksparse import contract_with_unroll_compute_constants
 
 tol = 1e-10
 tol_ad = 1e-6
@@ -132,37 +131,6 @@ def test_checkpoint_multidev_uniform(config_kwargs, devices):
     result = yastn.contract_with_unroll(
         A, ('i', 'j'), B, ('j', 'k'), ('i', 'k'),
         unroll={'j': 2}, optimize=path,
-        checkpoint_loop=True, devices=devices, mp_workers_per_device=1,
-    )
-    assert result.device == cfg.default_device
-    assert float(yastn.norm(result - expected)) < tol
-
-
-# ---------------------------------------------------------------------------
-# 4. Forward: compute_constants + checkpoint + multi-device
-# ---------------------------------------------------------------------------
-@multidev_test
-def test_checkpoint_multidev_compute_constants(config_kwargs, devices):
-    cfg = yastn.make_config(sym='U1', **config_kwargs)
-    leg_i = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_j = yastn.Leg(cfg, s=1, t=(0, 1), D=(3, 3))
-    leg_k = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_l = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_m = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    A = yastn.rand(config=cfg, legs=[leg_i, leg_j.conj()], n=0)
-    B = yastn.rand(config=cfg, legs=[leg_j, leg_k.conj()], n=0)
-    C = yastn.rand(config=cfg, legs=[leg_k, leg_l.conj()], n=0)
-    D = yastn.rand(config=cfg, legs=[leg_l, leg_m.conj()], n=0)
-
-    path, _ = yastn.get_contraction_path(
-        A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), D, ('l', 'm'), ('i', 'm')
-    )
-    expected = yastn.ncon([A, B, C, D], [[-1, 1], [1, 2], [2, 3], [3, -2]])
-    sliced_j = yastn.make_sliced_legs(leg_j)
-
-    result = contract_with_unroll_compute_constants(
-        A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), D, ('l', 'm'), ('i', 'm'),
-        unroll={'j': sliced_j}, optimize=path,
         checkpoint_loop=True, devices=devices, mp_workers_per_device=1,
     )
     assert result.device == cfg.default_device
@@ -375,51 +343,6 @@ def test_backward_checkpoint_multidev_intra_sector(config_kwargs, devices):
     result.norm().backward()
 
     _check_grad([A, B, C], [ref_A, ref_B, ref_C], label="ckpt+multidev-intra")
-
-
-# ---------------------------------------------------------------------------
-# 11. Backward: compute_constants + checkpoint + multi-device
-# ---------------------------------------------------------------------------
-@multidev_test
-def test_backward_checkpoint_multidev_compute_constants(config_kwargs, devices):
-    """Gradients with compute_constants + checkpoint + multi-device."""
-    cfg = yastn.make_config(sym='U1', **config_kwargs)
-    leg_i = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_j = yastn.Leg(cfg, s=1, t=(0, 1), D=(3, 3))
-    leg_k = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_l = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_m = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-
-    A = yastn.rand(config=cfg, legs=[leg_i, leg_j.conj()], n=0)
-    B = yastn.rand(config=cfg, legs=[leg_j, leg_k.conj()], n=0)
-    C = yastn.rand(config=cfg, legs=[leg_k, leg_l.conj()], n=0)
-    D = yastn.rand(config=cfg, legs=[leg_l, leg_m.conj()], n=0)
-
-    ref_A, ref_B, ref_C, ref_D = A.clone(), B.clone(), C.clone(), D.clone()
-    ref_A.requires_grad_(True)
-    ref_B.requires_grad_(True)
-    ref_C.requires_grad_(True)
-    ref_D.requires_grad_(True)
-    ref_result = yastn.ncon([ref_A, ref_B, ref_C, ref_D],
-                            [[-1, 1], [1, 2], [2, 3], [3, -2]])
-    ref_result.norm().backward()
-
-    A.requires_grad_(True)
-    B.requires_grad_(True)
-    C.requires_grad_(True)
-    D.requires_grad_(True)
-    path, _ = yastn.get_contraction_path(
-        A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), D, ('l', 'm'), ('i', 'm')
-    )
-    result = contract_with_unroll_compute_constants(
-        A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), D, ('l', 'm'), ('i', 'm'),
-        unroll={'j': yastn.make_sliced_legs(leg_j)}, optimize=path,
-        checkpoint_loop=True, devices=devices, mp_workers_per_device=1,
-    )
-    result.norm().backward()
-
-    _check_grad([A, B, C, D], [ref_A, ref_B, ref_C, ref_D],
-                label="ckpt+multidev-cc")
 
 
 # ---------------------------------------------------------------------------

@@ -544,7 +544,9 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
                 return _contract_with_sliced_unroll_mp(
                     *args, unroll=unroll, optimize=optimize,
                     checkpoint_loop=checkpoint_loop, swap=swap, devices=devices,
-                    mp_workers_per_device=mp_workers_per_device, **kwargs)
+                    mp_workers_per_device=mp_workers_per_device,
+                    per_combo_path=per_combo_path,
+                    combo_path_kwargs=combo_path_kwargs, **kwargs)
 
     tensors = args[0 : 2 * (len(args) // 2) : 2]
     index_groups = list(args[1 : 2 * (len(args) // 2) : 2])
@@ -622,7 +624,7 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
     else:
         _combo_expr = None
 
-    def _path_for_combo(sl_map, dim_overrides):
+    def _path_for_combo(dim_overrides):
         # Short-circuit: nothing to per-combo-tune when no axis is unrolled
         # or when dim_overrides wasn't collected (degenerate / cache-quirk).
         if not per_combo_path or not unroll_labels or not dim_overrides:
@@ -673,7 +675,7 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
         assigned.append((n, sl_map, opk))
 
     def _contract_single_combo(base_tensors, sl_map, pf_trim=None, use_checkpoint=False, dim_overrides=None):
-        combo_path = _path_for_combo(sl_map, dim_overrides=dim_overrides)
+        combo_path = _path_for_combo(dim_overrides)
         cur_igs, cur_conjs, cur_order, cur_swap = _ncon_args_for_path(combo_path)
 
         def _do_contract(masked_input):
@@ -1216,169 +1218,6 @@ def _get_contraction_path_info(path, *operands, **kwargs):
     )
 
     return path_print, mem_list
-
-
-def contract_with_unroll_compute_constants(*args, **kwargs):
-    r"""Like :func:`contract_with_unroll`, but tensors that carry no unrolled
-    index (constants) are contracted together once before the loop starts.
-    Only the smaller variable sub-network is re-evaluated on every iteration,
-    avoiding repeated work.
-
-    Constant tensors that are disconnected in the network (share no index) are
-    pre-contracted independently, keeping each intermediate small.
-
-    :param args: interleaved format ``(T1, ig1, T2, ig2, ..., out_ig)``
-    :param unroll: Mapping[Hashable,Union[Sequence[SlicedLeg],int]] or None
-        specifying indices to unroll and how to slice them.
-    :param optimize: contraction path for the full network
-    :param checkpoint_loop: if True, each unrolled loop iteration is wrapped in
-        :func:`torch.utils.checkpoint.checkpoint`.
-    """
-    checkpoint_loop = kwargs.pop("checkpoint_loop", False)
-    who = kwargs.pop("who", None)
-    kwargs.pop("verbosity", None)
-    path_search_kwargs = {k: kwargs[k] for k in ("optimizer", "memory_limit")
-                          if k in kwargs}
-    if who is not None:
-        path_search_kwargs["who"] = who
-    unroll = kwargs.pop("unroll", None)
-    swap = kwargs.pop("swap", None)
-    unroll = _validate_and_resolve_unroll(*args, unroll=unroll)
-
-    if unroll is None:
-        ts, inds, conjs, order, ncon_swap = _convert_path_to_ncon_args(*args, swap=swap, **kwargs)
-        do = lambda x: ncon(x, inds, conjs=conjs, order=order, swap=ncon_swap)
-        return _checkpointed_call(ts, do) if checkpoint_loop else do(ts)
-
-    path = kwargs.pop("optimize", None)
-    assert path is not None, "optimize (contraction path) must be provided"
-
-    tensors = args[0 : 2 * (len(args) // 2) : 2]
-    index_groups = list(args[1 : 2 * (len(args) // 2) : 2])
-    out_ig = args[-1]
-    unroll_labels = set(unroll.keys())
-
-    # Partition tensors into constants (no unrolled index) and variables.
-    const_mask = [not any(u in ig for u in unroll_labels) for ig in index_groups]
-
-    var_tensors = [t for t, c in zip(tensors, const_mask) if not c]
-    var_igs     = [list(ig) for ig, c in zip(index_groups, const_mask) if not c]
-    var_and_out = set(i for ig in var_igs for i in ig) | set(out_ig)
-
-    # If any swap crosses the variable/constant boundary (one label appears
-    # only in constants, the other only in variables), the pre-contraction
-    # cannot handle it because one label would disappear.  Fall back.
-    const_only_labels = set(
-        i for ig, c in zip(index_groups, const_mask) if c for i in ig
-    ) - var_and_out
-    has_cross_boundary_swap = False
-    if swap is not None:
-        for sw_pair in swap:
-            in_const = sum(v in const_only_labels for v in sw_pair)
-            if 0 < in_const < len(sw_pair):
-                has_cross_boundary_swap = True
-                break
-
-    if not any(const_mask) or has_cross_boundary_swap:
-        # Nothing to pre-compute, or swaps cross the boundary; delegate directly.
-        return _contract_with_sliced_unroll(*args, unroll=unroll, optimize=path,
-                                            checkpoint_loop=checkpoint_loop, swap=swap, **kwargs)
-
-    # Find connected components of the constant sub-network via Union-Find.
-    # Two constant tensors are connected if they share at least one index.
-    # Each component is contracted independently, keeping intermediates small.
-    const_positions = [k for k, c in enumerate(const_mask) if c]
-    parent = {k: k for k in const_positions}
-
-    def _find(x):
-        while parent[x] != x:
-            parent[x] = parent[parent[x]]
-            x = parent[x]
-        return x
-
-    index_to_first = {}
-    for k in const_positions:
-        for idx in index_groups[k]:
-            if idx in index_to_first:
-                px, py = _find(k), _find(index_to_first[idx])
-                if px != py:
-                    parent[px] = py
-            else:
-                index_to_first[idx] = k
-
-    comps = {}
-    for k in const_positions:
-        root = _find(k)
-        comps.setdefault(root, []).append(k)
-
-    # Split swaps between constant components and the reduced network.
-    # A swap (a, b) goes to a constant component if both labels belong to it.
-    comp_index_sets = {}
-    for root, positions in comps.items():
-        comp_index_sets[root] = set(
-            i for k in positions for i in index_groups[k]
-        )
-    comp_swaps = {root: [] for root in comps}  # swaps assigned to each component
-    reduced_swap = []  # swaps for the reduced network
-    if swap is not None:
-        for sw_pair in swap:
-            assigned = False
-            for root, idx_set in comp_index_sets.items():
-                if all(v in idx_set for v in sw_pair):
-                    comp_swaps[root].append(sw_pair)
-                    assigned = True
-                    break
-            if not assigned:
-                reduced_swap.append(sw_pair)
-    reduced_swap = reduced_swap or None
-
-    # Pre-contract each component once, outside the loop.
-    pre_contracted = []  # list of (tensor, ig)
-    for comp_root, comp in comps.items():
-        comp_tensors = [tensors[k] for k in comp]
-        comp_igs     = [list(index_groups[k]) for k in comp]
-        c_swap = comp_swaps[comp_root] or None
-
-        # Output indices: those that feed into the variable network or the final output.
-        seen = set()
-        comp_out_ig = []
-        for ig in comp_igs:
-            for i in ig:
-                if i in var_and_out and i not in seen:
-                    comp_out_ig.append(i)
-                    seen.add(i)
-        comp_out_ig = tuple(comp_out_ig)
-
-        if len(comp) == 1 and c_swap is None:
-            pre_contracted.append((comp_tensors[0], comp_igs[0]))
-        else:
-            comp_interleaved = []
-            for t, ig in zip(comp_tensors, comp_igs):
-                comp_interleaved.extend([t, ig])
-            comp_interleaved.append(comp_out_ig)
-            comp_path, _ = get_contraction_path(*comp_interleaved, **path_search_kwargs)
-            c_ts, c_inds, c_conjs, c_order, c_ncon_swap = _convert_path_to_ncon_args(
-                *comp_interleaved, optimize=comp_path, swap=c_swap
-            )
-            do = lambda x: ncon(x, c_inds, conjs=c_conjs, order=c_order, swap=c_ncon_swap)
-            result = _checkpointed_call(c_ts, do) if checkpoint_loop else do(c_ts)
-            pre_contracted.append((result, list(comp_out_ig)))
-
-    # Rebuild the reduced network: variable tensors + one tensor per constant component.
-    reduced_interleaved = []
-    for t, ig in zip(var_tensors, var_igs):
-        reduced_interleaved.extend([t, ig])
-    for t, ig in pre_contracted:
-        reduced_interleaved.extend([t, ig])
-    reduced_interleaved.append(out_ig)
-
-    # Find a contraction path for the reduced network (strip unrolled dims from shape model).
-    reduced_path, _ = get_contraction_path(*reduced_interleaved, unroll=unroll, **path_search_kwargs)
-
-    return _contract_with_sliced_unroll(
-        *reduced_interleaved, unroll=unroll, optimize=reduced_path,
-        checkpoint_loop=checkpoint_loop, swap=reduced_swap, **kwargs
-    )
 
 
 def contract_with_unroll(*args, **kwargs):

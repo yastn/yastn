@@ -236,7 +236,6 @@ def release_pool_cache():
     forward (which runs in other processes sharing the GPU). Call this when the
     workers are idle, e.g. at the end of ``FixedPoint.backward``.
     """
-    global _pool
     if _pool is not None:
         try:
             _pool.empty_cache()

@@ -23,7 +23,7 @@ from .._geometry import Site, is_bond, is_site
 from ... import mps
 from ....initialize import rand
 from ....tensor import YastnError, Tensor, tensordot, vdot, split_data_and_meta, combine_data_and_meta, sign_canonical_order
-from ....tensor.oe_blocksparse import get_contraction_path, contract_with_unroll
+from ....tensor.oe_blocksparse import contract_with_unroll
 
 
 def measure_1site(self, O, site=None) -> dict:
@@ -1191,7 +1191,7 @@ def _build_separate_unfused(env, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, b
     return tuple(args), swap_pairs
 
 
-def _measure_nsite_exact_oe_impl(self, *operators, sites, unroll, checkpoint_loop, separate_layers, optimizer, devices, mp_workers_per_device, mode, projectors=None):
+def _measure_nsite_exact_oe_impl(self, *operators, sites, unroll, checkpoint_loop, separate_layers, optimizer, devices, mp_workers_per_device, mode, projectors=None, per_combo_path=False, combo_path_kwargs=None):
     r"""Shared implementation for the three OE measurement wrappers.
 
     ``mode`` is one of:
@@ -1323,9 +1323,22 @@ def _measure_nsite_exact_oe_impl(self, *operators, sites, unroll, checkpoint_loo
 
     is_double_layer = isinstance(tens[tl], DoublePepsTensor)
 
+    # Per-combo path search (opt-in): default its path-search kwargs to the same
+    # optimizer used for the shared path, so callers only need to flip the flag.
+    if per_combo_path and combo_path_kwargs is None:
+        combo_path_kwargs = {"optimizer": optimizer}
+
+    def _pc(active_unroll):
+        # per_combo_path only applies when an unroll is present (it tunes the
+        # path per slice-combo). Omit the kwargs otherwise, so they don't reach
+        # contract_with_unroll's no-unroll branch (which would forward them to
+        # _convert_path_to_ncon_args and raise).
+        if per_combo_path and active_unroll:
+            return {"per_combo_path": True, "combo_path_kwargs": combo_path_kwargs}
+        return {}
+
     if is_double_layer:
         # --- Unfused path for double-layer PEPS ---
-        path_opts = {"optimizer": optimizer}
         translated_unroll = _translate_unroll(unroll, Nx, Ny)
         build_fn = _build_separate_unfused if separate_layers else _build_interleaved_unfused
         if projectors is not None and not separate_layers:
@@ -1336,11 +1349,11 @@ def _measure_nsite_exact_oe_impl(self, *operators, sites, unroll, checkpoint_loo
             tn_no, swap_no = build_fn(
                 self, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, bl, br,
                 **build_kwargs)
-            path_no, _ = get_contraction_path(*tn_no, unroll=translated_unroll, **path_opts)
             val_no = contract_with_unroll(
-                *tn_no, optimize=path_no, unroll=translated_unroll,
+                *tn_no, unroll=translated_unroll, optimizer=optimizer,
                 checkpoint_loop=checkpoint_loop, swap=swap_no, devices=devices,
-                mp_workers_per_device=mp_workers_per_device).to_number()
+                mp_workers_per_device=mp_workers_per_device,
+                **_pc(translated_unroll)).to_number()
             if mode == 'norm':
                 return val_no
 
@@ -1373,11 +1386,11 @@ def _measure_nsite_exact_oe_impl(self, *operators, sites, unroll, checkpoint_loo
         tn_op, swap_op = build_fn(
             self, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, bl, br,
             **build_kwargs)
-        path_op, _ = get_contraction_path(*tn_op, unroll=translated_unroll, **path_opts)
         val_op = contract_with_unroll(
-            *tn_op, optimize=path_op, unroll=translated_unroll,
+            *tn_op, unroll=translated_unroll, optimizer=optimizer,
             checkpoint_loop=checkpoint_loop, swap=swap_op, devices=devices,
-            mp_workers_per_device=mp_workers_per_device).to_number()
+            mp_workers_per_device=mp_workers_per_device,
+            **_pc(translated_unroll)).to_number()
 
         for s in window:
             tens[s].del_operator_()
@@ -1418,11 +1431,11 @@ def _measure_nsite_exact_oe_impl(self, *operators, sites, unroll, checkpoint_loo
         if mode in ('norm', 'both'):
             realized_no = {s: _drop(t) for s, t in tens.items()}
             tn_no = _build_interleaved_fused(realized_no)
-            path_no, _ = get_contraction_path(*tn_no, unroll=unroll)
             val_no = contract_with_unroll(
-                *tn_no, optimize=path_no, unroll=unroll,
+                *tn_no, unroll=unroll,
                 checkpoint_loop=checkpoint_loop, devices=devices,
-                mp_workers_per_device=mp_workers_per_device).to_number()
+                mp_workers_per_device=mp_workers_per_device,
+                **_pc(unroll)).to_number()
             if mode == 'norm':
                 return val_no
 
@@ -1434,18 +1447,18 @@ def _measure_nsite_exact_oe_impl(self, *operators, sites, unroll, checkpoint_loo
 
         realized_op = {s: _drop(t) for s, t in tens.items()}
         tn_op = _build_interleaved_fused(realized_op)
-        path_op, _ = get_contraction_path(*tn_op, unroll=unroll)
         val_op = contract_with_unroll(
-            *tn_op, optimize=path_op, unroll=unroll,
+            *tn_op, unroll=unroll,
             checkpoint_loop=checkpoint_loop, devices=devices,
-            mp_workers_per_device=mp_workers_per_device).to_number()
+            mp_workers_per_device=mp_workers_per_device,
+            **_pc(unroll)).to_number()
 
     if mode == 'numerator':
         return sign * val_op
     return sign * val_op / val_no
 
 
-def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint_loop=False, separate_layers=False, optimizer="default", devices=None, mp_workers_per_device=0, projectors=None) -> float:
+def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint_loop=False, separate_layers=False, optimizer="default", devices=None, mp_workers_per_device=0, projectors=None, per_combo_path=False, combo_path_kwargs=None) -> float:
     r"""
     Memory-efficient version of :meth:`measure_nsite_exact` using opt_einsum
     contraction path optimization, optional block-sparse index unrolling,
@@ -1493,10 +1506,11 @@ def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint
         checkpoint_loop=checkpoint_loop, separate_layers=separate_layers,
         optimizer=optimizer, devices=devices,
         mp_workers_per_device=mp_workers_per_device, mode='both',
-        projectors=projectors)
+        projectors=projectors, per_combo_path=per_combo_path,
+        combo_path_kwargs=combo_path_kwargs)
 
 
-def measure_nsite_norm_exact_oe(self, *, sites, unroll=None, checkpoint_loop=False, separate_layers=False, optimizer="default", devices=None, mp_workers_per_device=0, projectors=None):
+def measure_nsite_norm_exact_oe(self, *, sites, unroll=None, checkpoint_loop=False, separate_layers=False, optimizer="default", devices=None, mp_workers_per_device=0, projectors=None, per_combo_path=False, combo_path_kwargs=None):
     """Contract only the norm <psi|psi> over the bounding window of ``sites``.
 
     Same contraction backend and options as :func:`measure_nsite_exact_oe`,
@@ -1510,10 +1524,11 @@ def measure_nsite_norm_exact_oe(self, *, sites, unroll=None, checkpoint_loop=Fal
         checkpoint_loop=checkpoint_loop, separate_layers=separate_layers,
         optimizer=optimizer, devices=devices,
         mp_workers_per_device=mp_workers_per_device, mode='norm',
-        projectors=projectors)
+        projectors=projectors, per_combo_path=per_combo_path,
+        combo_path_kwargs=combo_path_kwargs)
 
 
-def measure_nsite_numerator_exact_oe(self, *operators, sites, unroll=None, checkpoint_loop=False, separate_layers=False, optimizer="default", devices=None, mp_workers_per_device=0, projectors=None):
+def measure_nsite_numerator_exact_oe(self, *operators, sites, unroll=None, checkpoint_loop=False, separate_layers=False, optimizer="default", devices=None, mp_workers_per_device=0, projectors=None, per_combo_path=False, combo_path_kwargs=None):
     """Contract only the unnormalized numerator ``sign * <psi| O0_s0 ... |psi>``.
 
     Same contraction backend and options as :func:`measure_nsite_exact_oe`;
@@ -1527,7 +1542,8 @@ def measure_nsite_numerator_exact_oe(self, *operators, sites, unroll=None, check
         checkpoint_loop=checkpoint_loop, separate_layers=separate_layers,
         optimizer=optimizer, devices=devices,
         mp_workers_per_device=mp_workers_per_device, mode='numerator',
-        projectors=projectors)
+        projectors=projectors, per_combo_path=per_combo_path,
+        combo_path_kwargs=combo_path_kwargs)
 
 
 def _eval_projectors(env, move, opts_svd):

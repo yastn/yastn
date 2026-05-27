@@ -755,207 +755,6 @@ def test_partial_block_structure(config_kwargs):
 
 
 # ---------------------------------------------------------------------------
-# 8. contract_with_unroll_compute_constants
-# ---------------------------------------------------------------------------
-
-from yastn.tensor.oe_blocksparse import contract_with_unroll_compute_constants
-
-
-def test_cwu_cc_no_constants(config_kwargs):
-    """All tensors have the unrolled index: no constants to pre-compute.
-    Falls back to _contract_with_sliced_unroll; result matches ncon."""
-    cfg = yastn.make_config(sym='U1', **config_kwargs)
-    leg_i = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_j = yastn.Leg(cfg, s=1, t=(0, 1), D=(3, 3))
-    leg_k = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    A = yastn.rand(config=cfg, legs=[leg_i, leg_j.conj()], n=0)
-    B = yastn.rand(config=cfg, legs=[leg_j, leg_k.conj()], n=0)
-
-    path, _ = yastn.get_contraction_path(A, ('i', 'j'), B, ('j', 'k'), ('i', 'k'))
-    expected = yastn.ncon([A, B], [[-1, 1], [1, -2]])
-
-    result = contract_with_unroll_compute_constants(
-        A, ('i', 'j'), B, ('j', 'k'), ('i', 'k'),
-        unroll={'j': yastn.make_sliced_legs(leg_j)},
-        optimize=path,
-    )
-    assert yastn.norm(result - expected) < tol
-
-
-def test_cwu_cc_one_constant(config_kwargs):
-    """One constant tensor (no unrolled index), two variable tensors.
-    Result matches both ncon and contract_with_unroll."""
-    cfg = yastn.make_config(sym='U1', **config_kwargs)
-    leg_i = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_j = yastn.Leg(cfg, s=1, t=(0, 1), D=(3, 3))
-    leg_k = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_l = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    A = yastn.rand(config=cfg, legs=[leg_i, leg_j.conj()], n=0)  # variable
-    B = yastn.rand(config=cfg, legs=[leg_j, leg_k.conj()], n=0)  # variable
-    C = yastn.rand(config=cfg, legs=[leg_k, leg_l.conj()], n=0)  # constant
-
-    path, _ = yastn.get_contraction_path(
-        A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), ('i', 'l')
-    )
-    expected = yastn.ncon([A, B, C], [[-1, 1], [1, 2], [2, -2]])
-
-    result_cc = contract_with_unroll_compute_constants(
-        A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), ('i', 'l'),
-        unroll={'j': yastn.make_sliced_legs(leg_j)},
-        optimize=path,
-    )
-    result_cu = yastn.contract_with_unroll(
-        A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), ('i', 'l'),
-        unroll={'j': yastn.make_sliced_legs(leg_j)},
-        optimize=path,
-    )
-    assert yastn.norm(result_cc - expected) < tol
-    assert yastn.norm(result_cc - result_cu) < tol
-
-    # Also works with intra-sector slicing on the unrolled index
-    result_is = contract_with_unroll_compute_constants(
-        A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), ('i', 'l'),
-        unroll={'j': _split_leg_intra(leg_j)},
-        optimize=path,
-    )
-    assert yastn.norm(result_is - expected) < tol
-
-
-def test_cwu_cc_connected_constants(config_kwargs):
-    """Two constants that share an index form one connected component and are
-    pre-contracted together once before the loop.
-    Network: A(i,j) x B(j,k) x C(k,l) x D(l,m) -> (i,m)
-    Unroll j: A, B are variable; C, D are constant and share index l."""
-    cfg = yastn.make_config(sym='U1', **config_kwargs)
-    leg_i = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_j = yastn.Leg(cfg, s=1, t=(0, 1), D=(3, 3))
-    leg_k = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_l = yastn.Leg(cfg, s=1, t=(0, 1), D=(3, 3))
-    leg_m = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    A = yastn.rand(config=cfg, legs=[leg_i, leg_j.conj()], n=0)  # variable
-    B = yastn.rand(config=cfg, legs=[leg_j, leg_k.conj()], n=0)  # variable
-    C = yastn.rand(config=cfg, legs=[leg_k, leg_l.conj()], n=0)  # constant
-    D = yastn.rand(config=cfg, legs=[leg_l, leg_m.conj()], n=0)  # constant, shares l with C
-
-    path, _ = yastn.get_contraction_path(
-        A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), D, ('l', 'm'), ('i', 'm')
-    )
-    expected = yastn.ncon([A, B, C, D], [[-1, 1], [1, 2], [2, 3], [3, -2]])
-
-    result_cc = contract_with_unroll_compute_constants(
-        A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), D, ('l', 'm'), ('i', 'm'),
-        unroll={'j': yastn.make_sliced_legs(leg_j)},
-        optimize=path,
-    )
-    result_cu = yastn.contract_with_unroll(
-        A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), D, ('l', 'm'), ('i', 'm'),
-        unroll={'j': yastn.make_sliced_legs(leg_j)},
-        optimize=path,
-    )
-    assert yastn.norm(result_cc - expected) < tol
-    assert yastn.norm(result_cc - result_cu) < tol
-
-
-def test_cwu_cc_disconnected_constants(config_kwargs):
-    """Two constant tensors with no shared index form two separate components
-    and are pre-contracted independently (no large outer product intermediate).
-    Network: A(i,j) x B(j,k) x C(k,l) x D(m,n) -> (i,l,m,n)
-    Unroll j: A, B variable; C and D are constants in separate components."""
-    cfg = yastn.make_config(sym='U1', **config_kwargs)
-    leg_i = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_j = yastn.Leg(cfg, s=1, t=(0, 1), D=(3, 3))
-    leg_k = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_l = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_m = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_n = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    A = yastn.rand(config=cfg, legs=[leg_i, leg_j.conj()], n=0)  # variable
-    B = yastn.rand(config=cfg, legs=[leg_j, leg_k.conj()], n=0)  # variable
-    C = yastn.rand(config=cfg, legs=[leg_k, leg_l.conj()], n=0)  # constant, component 1
-    D = yastn.rand(config=cfg, legs=[leg_m, leg_n.conj()], n=0)  # constant, component 2
-
-    path, _ = yastn.get_contraction_path(
-        A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), D, ('m', 'n'),
-        ('i', 'l', 'm', 'n'),
-    )
-    expected = yastn.ncon([A, B, C, D], [[-1, 1], [1, 2], [2, -2], [-3, -4]])
-
-    result_cc = contract_with_unroll_compute_constants(
-        A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), D, ('m', 'n'),
-        ('i', 'l', 'm', 'n'),
-        unroll={'j': yastn.make_sliced_legs(leg_j)},
-        optimize=path,
-    )
-    result_cu = yastn.contract_with_unroll(
-        A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), D, ('m', 'n'),
-        ('i', 'l', 'm', 'n'),
-        unroll={'j': yastn.make_sliced_legs(leg_j)},
-        optimize=path,
-    )
-    assert yastn.norm(result_cc - expected) < tol
-    assert yastn.norm(result_cc - result_cu) < tol
-
-
-def test_cwu_cc_three_constant_components(config_kwargs):
-    """Three constant components: one 2-tensor connected pair (C×D) and two
-    single-tensor components (E, F). All pre-contracted independently."""
-    cfg = yastn.make_config(sym='U1', **config_kwargs)
-    leg_i = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_j = yastn.Leg(cfg, s=1, t=(0, 1), D=(3, 3))
-    leg_k = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_l = yastn.Leg(cfg, s=1, t=(0, 1), D=(3, 3))
-    leg_m = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_p = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_q = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_r = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_s = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    A = yastn.rand(config=cfg, legs=[leg_i, leg_j.conj()], n=0)  # variable
-    B = yastn.rand(config=cfg, legs=[leg_j, leg_k.conj()], n=0)  # variable
-    C = yastn.rand(config=cfg, legs=[leg_k, leg_l.conj()], n=0)  # constant \
-    D = yastn.rand(config=cfg, legs=[leg_l, leg_m.conj()], n=0)  # constant /  component 1 (C-D chain)
-    E = yastn.rand(config=cfg, legs=[leg_p, leg_q.conj()], n=0)  # constant, component 2
-    F = yastn.rand(config=cfg, legs=[leg_r, leg_s.conj()], n=0)  # constant, component 3
-
-    path, _ = yastn.get_contraction_path(
-        A, ('i', 'j'), B, ('j', 'k'),
-        C, ('k', 'l'), D, ('l', 'm'),
-        E, ('p', 'q'), F, ('r', 's'),
-        ('i', 'm', 'p', 'q', 'r', 's'),
-    )
-    expected = yastn.ncon(
-        [A, B, C, D, E, F],
-        [[-1, 1], [1, 2], [2, 3], [3, -2], [-3, -4], [-5, -6]],
-    )
-
-    result_cc = contract_with_unroll_compute_constants(
-        A, ('i', 'j'), B, ('j', 'k'),
-        C, ('k', 'l'), D, ('l', 'm'),
-        E, ('p', 'q'), F, ('r', 's'),
-        ('i', 'm', 'p', 'q', 'r', 's'),
-        unroll={'j': yastn.make_sliced_legs(leg_j)},
-        optimize=path,
-    )
-    assert yastn.norm(result_cc - expected) < tol
-
-
-def test_cwu_cc_list_unroll_raises(config_kwargs):
-    """Passing unroll as a list raises ValueError (empty) or NotImplementedError (non-empty)."""
-    cfg = yastn.make_config(sym='U1', **config_kwargs)
-    (A, B), _ = _u1_chain(cfg, 2, 3, 2)
-    with pytest.raises(AssertionError):
-        contract_with_unroll_compute_constants(
-            A, ('i', 'j'), B, ('j', 'k'), ('i', 'k'),
-            unroll=[],
-            optimize=[(0, 1)],
-        )
-    with pytest.raises(AssertionError):
-        contract_with_unroll_compute_constants(
-            A, ('i', 'j'), B, ('j', 'k'), ('i', 'k'),
-            unroll=['j'],
-            optimize=[(0, 1)],
-        )
-
-
-# ---------------------------------------------------------------------------
 # 9. Sliced-size path adaptation
 # ---------------------------------------------------------------------------
 
@@ -1034,39 +833,6 @@ def test_path_sliced_result_correct(config_kwargs):
     assert yastn.norm(result - expected) < tol
 
 
-def test_cwu_cc_path_uses_sliced_sizes(config_kwargs):
-    """
-    contract_with_unroll_compute_constants with the fixed reduced_path call
-    (passing unroll dict instead of list) gives the correct result.
-
-    Network: A(i,j) x B(j,k) x C(k,l) x D(l,m) -> (i,m)
-    Unroll j: A, B are variable; C, D are constant and share index l.
-    The reduced network path is now computed with sliced sizes via the dict path.
-    """
-    cfg = yastn.make_config(sym='U1', **config_kwargs)
-    leg_i = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_j = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 5))  # unequal sectors
-    leg_k = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_l = yastn.Leg(cfg, s=1, t=(0, 1), D=(3, 3))
-    leg_m = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    A = yastn.rand(config=cfg, legs=[leg_i, leg_j.conj()], n=0)  # variable
-    B = yastn.rand(config=cfg, legs=[leg_j, leg_k.conj()], n=0)  # variable
-    C = yastn.rand(config=cfg, legs=[leg_k, leg_l.conj()], n=0)  # constant
-    D = yastn.rand(config=cfg, legs=[leg_l, leg_m.conj()], n=0)  # constant, shares l with C
-
-    path, _ = yastn.get_contraction_path(
-        A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), D, ('l', 'm'), ('i', 'm')
-    )
-    expected = yastn.ncon([A, B, C, D], [[-1, 1], [1, 2], [2, 3], [3, -2]])
-
-    result = contract_with_unroll_compute_constants(
-        A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), D, ('l', 'm'), ('i', 'm'),
-        unroll={'j': yastn.make_sliced_legs(leg_j)},
-        optimize=path,
-    )
-    assert yastn.norm(result - expected) < tol
-
-
 # ---------------------------------------------------------------------------
 # 10. checkpoint_loop option
 # ---------------------------------------------------------------------------
@@ -1074,7 +840,7 @@ def test_cwu_cc_path_uses_sliced_sizes(config_kwargs):
 @torch_test
 def test_checkpoint_loop(config_kwargs):
     """
-    contract_with_unroll and contract_with_unroll_compute_constants with
+    contract_with_unroll with
     checkpoint_loop=True produce the same result as without checkpointing.
 
     On the torch backend this exercises per-iteration torch.utils.checkpoint
@@ -1102,13 +868,6 @@ def test_checkpoint_loop(config_kwargs):
         unroll={'j': sliced_j}, optimize=path, checkpoint_loop=True,
     )
     assert yastn.norm(result_cu - expected) < tol
-
-    # contract_with_unroll_compute_constants with checkpoint_loop
-    result_cc = contract_with_unroll_compute_constants(
-        A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), ('i', 'l'),
-        unroll={'j': sliced_j}, optimize=path, checkpoint_loop=True,
-    )
-    assert yastn.norm(result_cc - expected) < tol
 
     # Also test with intra-sector slicing on the unrolled index
     leg_j2 = yastn.Leg(cfg, s=1, t=(0, 1), D=(4, 4))
@@ -1208,7 +967,7 @@ def test_swap_diagram3(config_kwargs):
     swap: [(B,H),(B,E),(B,F),(D,H),(I,F),(I,E),(D,I)]
 
     Tests: no unroll, charge-sector unroll on A, intra-sector slicing on B,
-    uniform slicing on H, and contract_with_unroll_compute_constants.
+    uniform slicing on H.
     """
     cfg = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
     l = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 3))
@@ -1276,22 +1035,6 @@ def test_swap_diagram3(config_kwargs):
     )
     assert (r4 - ref).norm() < tol * den
 
-    # contract_with_unroll_compute_constants:
-    # unroll 'A' (connects a↔b) → c, d, e, f are constants
-    r5 = contract_with_unroll_compute_constants(
-        *il_args, optimize=path, swap=sw,
-        unroll={'A': yastn.make_sliced_legs(l)},
-    )
-    assert (r5 - ref).norm() < tol * den
-
-    # compute_constants with swap on constants:
-    # unroll 'A'; swap (I,F),(I,E),(D,I) live on constants c,d,e
-    r6 = contract_with_unroll_compute_constants(
-        *il_args, optimize=path, swap=sw,
-        unroll={'A': _split_leg_intra(l)},
-    )
-    assert (r6 - ref).norm() < tol * den
-
 
 def test_swap_diagram4_scalar(config_kwargs):
     """Scalar fermionic network from test_einsum_scalar_swap_order:
@@ -1306,7 +1049,7 @@ def test_swap_diagram4_scalar(config_kwargs):
     swap: [(P,T),(P,U),(R,X),(S,X)]
 
     Tests: no unroll, charge-sector, intra-sector, uniform slicing, multi-index
-    unroll, and contract_with_unroll_compute_constants.
+    unroll.
     """
     cfg = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
     l = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 3))
@@ -1372,27 +1115,3 @@ def test_swap_diagram4_scalar(config_kwargs):
                 'X': _split_leg_intra(l)},
     )
     assert (r4 - ref).norm() < tol * den
-
-    # contract_with_unroll_compute_constants:
-    # unroll 'P' (connects A↔B) → C, D, E, F are constants
-    # swaps (R,X) and (S,X) cross the variable/constant boundary
-    r5 = contract_with_unroll_compute_constants(
-        *il_args, optimize=path, swap=sw,
-        unroll={'P': yastn.make_sliced_legs(l)},
-    )
-    assert (r5 - ref).norm() < tol * den
-
-    # compute_constants with intra-sector slicing
-    r6 = contract_with_unroll_compute_constants(
-        *il_args, optimize=path, swap=sw,
-        unroll={'P': _split_leg_intra(l)},
-    )
-    assert (r6 - ref).norm() < tol * den
-
-    # compute_constants: unroll 'Q' (connects A↔C) →
-    # B is variable (shares P with A), D, E, F are constants sharing V,W,X
-    r7 = contract_with_unroll_compute_constants(
-        *il_args, optimize=path, swap=sw,
-        unroll={'Q': 2},
-    )
-    assert (r7 - ref).norm() < tol * den
