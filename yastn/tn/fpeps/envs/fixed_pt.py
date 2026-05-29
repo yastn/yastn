@@ -853,6 +853,14 @@ class FixedPoint(torch.autograd.Function):
         ctx.ctm_opts_fp = _ctm_opts_fp
         ctx.phase_dict = phase_dict
 
+        # Release cache after forward to prepare space for energy eval
+        if 'fp_devices' in _ctm_opts_fp:
+            try:
+                from ._env_ctm_dist_mp_AD import release_pool_cache
+                release_pool_cache()
+            except Exception:
+                pass
+
         # Note: one of the ouput of forward must be torch tensor to trigger backward
         env_t_data, env_t_meta = split_data_and_meta(env_dict['env'])
         env_1d, env_slices = _concat_data(env_t_data)
