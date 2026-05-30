@@ -884,7 +884,6 @@ class FixedPoint(torch.autograd.Function):
         _psi_data, _psi_meta = split_data_and_meta(env_dict['psi'])
 
         prev_grad_tmp = None
-        diff_ave = 1.0
 
         # When fp_devices is set, the FP CTM step uses our distributed
         # AD-aware implementation (workers) -- but torch.func.vjp wraps
@@ -931,36 +930,47 @@ class FixedPoint(torch.autograd.Function):
             time1 = time.perf_counter()
             log.info(f"{type(ctx).__name__}.backward t_vjp {time1-time0} [s]")
 
-        alpha = 0.4
+        # Neumann series for the implicit-function-theorem gradient. It
+        # converges only when the spectral radius of df/dC is < 1; we monitor
+        # the increment grad_diff = ||grad_tmp_k - grad_tmp_{k-1}|| of the
+        # running A-space gradient estimate.
+        #
+        # Track the smallest grad_diff seen and the dA
+        # that produced it; once grad_diff fails to improve for `patience`
+        # consecutive steps the series is no longer contracting -> stop and
+        # return that best estimate, not the diverged tail.
+        patience = ctx.ctm_opts_fp.get('neumann_patience', 10)
+        best_grad_diff = float('inf')
+        best_dA = dA
+        stall = 0
         time0 = time.perf_counter()
         for step in range(ctx.ctm_opts_fp['max_sweeps']):
             grads = dfdC_vjp(grads)
-            # with torch.enable_grad():
-            #     grads = torch.autograd.grad(FixedPoint.fixed_point_iter(ctx.env, ctx.env_gauge, ctx.opts_svd, ctx.slices, env_data, psi_data), env_data, grad_outputs=grads)
             if all([torch.norm(grad, p=torch.inf) < ctx.ctm_opts_fp["corner_tol"] for grad in grads]):
                 break
-            else:
-                dA = tuple(dA[i] + grads[i] for i in range(len(grads)))
+            dA = tuple(dA[i] + grads[i] for i in range(len(grads)))
 
             grad_tmp = torch.cat(dfdA_vjp(dA)[0])
             if prev_grad_tmp is not None:
-                grad_diff = torch.norm(grad_tmp[0] - prev_grad_tmp[0])
+                grad_diff = torch.norm(grad_tmp - prev_grad_tmp).item()
                 print("full grad diff", grad_diff)
                 if grad_diff < ctx.ctm_opts_fp["corner_tol"]:
-                    # print("The norm of the full grad diff is below 1e-10.")
+                    best_dA = dA
                     log.log(logging.INFO, f"Fixed_pt: The norm of the full grad diff is below {ctx.ctm_opts_fp['corner_tol']}.")
                     break
 
-                if grad_diff > 2*diff_ave:
-                    # print("Full grad diff is no longer decreasing!")
-                    log.log(logging.INFO, f"Fixed_pt: Full grad diff is no longer decreasing.")
-                    break
-
-                diff_ave = alpha*grad_diff + (1-alpha)*diff_ave if diff_ave is not None else grad_diff
+                if grad_diff < best_grad_diff:
+                    best_grad_diff, best_dA, stall = grad_diff, dA, 0
+                else:
+                    stall += 1
+                    if stall >= patience:
+                        log.log(logging.INFO, f"Fixed_pt: Full grad diff stopped decreasing for {patience} steps "
+                                              f"(best {best_grad_diff:.3e} at the kept estimate); stopping Neumann.")
+                        break
 
             prev_grad_tmp = grad_tmp
 
-        dA = dfdA_vjp(dA)[0]
+        dA = dfdA_vjp(best_dA)[0]
         time1 = time.perf_counter()
         log.info(f"{type(ctx).__name__}.backward t_gradsum {time1-time0} [s], steps {step+1}")
 
