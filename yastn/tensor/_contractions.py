@@ -262,7 +262,7 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
     
     ALLOW_CUTEN= a.config.backend.BACKEND_ID == 'torch_cpp' and ('cuda' in str(a.data.device)) \
         and ((ind_a is None or len(ind_a)>0) and (ind_b is None or len(ind_b)>0)) \
-        and 0 < (len(nout_a)+len(nout_b)) < 9 and 0 < len(a.struct.s) < 9 and 0 < len(b.struct.s) < 9 # TODO: remove the last condition when the kernel supports more ranks
+        and 0 < (len(nout_a)+len(nout_b)) < 33 and 0 < len(a.struct.s) < 33 and 0 < len(b.struct.s) < 33 # TODO: remove the last condition when the kernel supports more ranks
     
     # tapp_torch.tensordot_bs is CUDA-only; on CPU we must fall through to
     # the PyTorch path (transpose_dot_sum) even when the backend is torch_cpp.
