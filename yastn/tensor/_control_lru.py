@@ -39,6 +39,7 @@ def set_cache_maxsize(maxsize=0):
     _contractions._meta_tensordot_f2m = lru_cache(maxsize)(_contractions._meta_tensordot_f2m.__wrapped__)
     _contractions._meta_tensordot_fc = lru_cache(maxsize)(_contractions._meta_tensordot_fc.__wrapped__)
     _contractions._meta_tensordot_nf = lru_cache(maxsize)(_contractions._meta_tensordot_nf.__wrapped__)
+    _contractions._meta_tensordot_nf_np = lru_cache(maxsize)(_contractions._meta_tensordot_nf_np.__wrapped__)
     _contractions._meta_mask = lru_cache(maxsize)(_contractions._meta_mask.__wrapped__)
     _contractions._common_inds = lru_cache(maxsize)(_contractions._common_inds.__wrapped__)
     _contractions._meta_swap_gate = lru_cache(maxsize)(_contractions._meta_swap_gate.__wrapped__)
