@@ -40,7 +40,7 @@ __all__= ['DTYPE', 'get_dtype', 'get_yastn_dtype',
     'trace', 'rsqrt', 'reciprocal', 'exp', 'sqrt', 'absolute', 'permute_dims',
     'fix_svd_signs', 'svdvals', 'svd_lowrank', 'svd', 'svd_randomized', 'svds_scipy',
     'eigh', 'qr', 'pinv', 'eig', 'eigh_lowrank', 'eigvals',
-    'argsort', 'argsort_which', 'allclose',
+    'argsort', 'argsort_which', 'argmax', 'flip', 'allclose',
     'add', 'sub', 'apply_mask', 'vdot', 'diag_1dto2d', 'diag_2dto1d',
     'dot', 'dot_diag', 'transpose_dot_sum',
     'merge_to_dense', 'merge_super_blocks', 'is_independent',
@@ -139,8 +139,10 @@ def imag(x):
 def max_abs(x):
     return x.abs().max() if x.numel() > 0 else torch.tensor(0, device=x.device)
 
+
 def maximum(input, output):
     return torch.maximum(input, output)
+
 
 def norm_matrix(x):
     return torch.linalg.norm(x)
@@ -486,6 +488,16 @@ def qr(data, meta, sizes):
 
 def pinv(A, rcond=None, hermitian=False, out=None, atol=None, rtol=None):
     return torch.linalg.pinv(A, atol=atol, rtol=rtol if not rtol is None else rcond, hermitian=hermitian, out=out)
+
+
+@torch.no_grad()
+def flip(data):
+    return torch.flip(data.ravel(), dims=(0,))
+
+
+@torch.no_grad()
+def argmax(data):
+    return torch.argmax(data)
 
 
 @torch.no_grad()

@@ -17,50 +17,107 @@
 import pytest
 import yastn
 
+tol = 1e-12
+
 
 def test_svd_multiplets(config_kwargs):
-
-    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
-    S = yastn.Tensor(config_U1, isdiag=True)
     #
-    # fixing singular values for testing
-    v00 = [1, 1, 0.1001, 0.1000, 0.1000, 0.0999, 0.001001, 0.001000] + [0] * 16
-    S.set_block(ts=(0, 0), Ds=24, val=v00)
+    # fixing tensor for testing
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    S0 = yastn.Tensor(config_U1, isdiag=True)
+    S1 = yastn.Tensor(config_U1, isdiag=True)
+    v0  = [1, -1, 0.1001, 0.1000, 0.1000, 0.0999, 0.001001, 0.001000, 0, 0, 0]
+    vp1 = [1,  1, 0.1000, 0.1000, 0.0010, 0]
+    vm1 = [1, -0.98, 0.1000, -0.0999, 0]
+    vm2 = [-0.1000, -0.0998, 0.0010]
+    S0.set_block(ts=(0, 0), Ds=11, val=v0)
+    S0.set_block(ts=(1, 1), Ds=6, val=vp1)
+    S0.set_block(ts=(-1, -1), Ds=5, val=vm1)
+    S0.set_block(ts=(-2, -2), Ds=3, val=vm2)
+    #
+    v0  = [-1, 0.001001, 1, 0.001000, 0, 0, 0, 0.1001, 0.1000, 0.1000, 0.0999]
+    vp1 = [1, -0.0999, 0, -0.98, 0.1000]
+    vm1 = [1, 0.0010, 1, 0.1000, 0.1000, 0]
+    vm2 = [-0.0998, 0.0010, -0.1000]
+    S1.set_block(ts=(0, 0), Ds=11, val=v0)
+    S1.set_block(ts=(1, 1), Ds=5, val=vp1)
+    S1.set_block(ts=(-1, -1), Ds=6, val=vm1)
+    S1.set_block(ts=(-2, -2), Ds=3, val=vm2)
+    #
+    Db0 = {(0,): 3, (1,): 4,  (-2,): 5}
+    tb0 = {(0,): 0.01, (-1,): 0.5, (-2,): 0.1}
+    Db1 = {(0,): 3, (-1,): 4, (-2,): 5}
+    tb1 = {(0,): 0.01, (1,): 0.5,  (-2,): 0.1}
 
-    v11 = [1, 1, 0.1001, 0.1000, 0.0999, 0.001000, 0.000999] + [0] * 10
-    S.set_block(ts=(1, 1), Ds=17, val=v11)
-    S.set_block(ts=(-1, -1), Ds=17, val=v11)
-
-    v22 = [1, 1, 0.1001, 0.1000, 0.001000, 0]
-    S.set_block(ts=(2, 2), Ds=6, val=v22)
-    S.set_block(ts=(-2, -2), Ds=6, val=v22)
-
-    Smask = yastn.truncation_mask(S, tol=0.0001, D_block=7, D_total=30)
-    assert yastn.trace(Smask).item() == 29
-
-    Smask = yastn.truncation_mask(S, tol=0.0001, D_total=30, eps_multiplet=0.001)
-    assert yastn.trace(Smask).item() == 24
-
-    Smask = yastn.truncation_mask(S, tol=0.0001, largest_gap=True)
-    assert yastn.trace(Smask).item() == 32
-
-    Smask = yastn.truncation_mask(S, D_total=17, largest_gap=True)
-    assert yastn.trace(Smask).item() == 24
-
-    Smask = yastn.truncation_mask(S, D_total=0)
-    assert yastn.trace(Smask).item() == 0
-
-    with pytest.raises(yastn.YastnError,
-                       match="Truncation by tolerance with which='SR' or 'SM' is not supported."):
-        yastn.truncation_mask(S, which="SR", tol=1e-2)
-
-    with pytest.raises(yastn.YastnError,
-                       match="Truncation by block cannot be used when multiplet-related schmes are invoked."):
-        yastn.truncation_mask(S, tol_block=1e-2, largest_gap=True)
-
-    with pytest.raises(yastn.YastnError,
-                       match="Truncation multiplets cannot perform both schemes largest_gap and eps_multiplets simultaneously."):
-        yastn.truncation_mask(S, eps_multiplet=1e-2, largest_gap=True)
+    for S, Db, tb in [(S0, Db0, tb0), (S1, Db1, tb1)]:
+        #
+        #  D_total
+        Smask = yastn.truncation_mask(S, which='LM', D_total=12)
+        assert sum(Smask.data) == 12 and abs(sum(Smask.data * S.data).item() - 2.4201) < tol
+        Smask = yastn.truncation_mask(S, which='LR', D_total=12)
+        assert sum(Smask.data) == 12 and abs(sum(Smask.data * S.data).item() - 4.701001) < tol
+        Smask = yastn.truncation_mask(S, which='SM', D_total=13)
+        assert sum(Smask.data) == 13 and abs(sum(Smask.data * S.data).item() - 0.004201) < tol
+        Smask = yastn.truncation_mask(S, which='SR', D_total=11)
+        assert sum(Smask.data) == 11 and abs(sum(Smask.data * S.data).item() + 2.2787) < tol
+        #
+        #  tol
+        Smask = yastn.truncation_mask(S, which='LM', tol=0.09999999)
+        assert sum(Smask.data) == 13 and abs(sum(Smask.data * S.data).item() - 2.5201) < tol
+        Smask = yastn.truncation_mask(S, which='LR', tol=0.09999999)
+        assert sum(Smask.data) == 10 and abs(sum(Smask.data * S.data).item() - 4.6001) < tol
+        #
+        #  D_block
+        Smask = yastn.truncation_mask(S, which='LM', D_block=5)
+        assert sum(Smask.data) == 18 and abs(sum(Smask.data * S.data).item() - 2.3224) < tol
+        Smask = yastn.truncation_mask(S, which='SR', D_block=Db)
+        assert sum(Smask.data) == 10 and abs(sum(Smask.data * S.data).item() + 0.9978) < tol
+        #
+        #  tol_block
+        Smask = yastn.truncation_mask(S, which='LM', tol_block=0.09999999)
+        assert sum(Smask.data) == 14 and abs(sum(Smask.data * S.data).item() - 2.4203) < tol
+        Smask = yastn.truncation_mask(S, which='LR', tol_block=tb)
+        assert sum(Smask.data) == 6 and abs(sum(Smask.data * S.data).item() - 2.4000) < tol
+        #
+        #  hermitian
+        Smask = yastn.truncation_mask(S, which='LR', tol=0.09999999, hermitian=True)
+        assert sum(Smask.data) == 8 and abs(sum(Smask.data * S.data).item() - 4.4001) < tol
+        #
+        #  largest_gap
+        Smask = yastn.truncation_mask(S, which='LM', D_total=12, largest_gap=True)
+        assert sum(Smask.data) == 16 and abs(sum(Smask.data * S.data).item() - 2.4203) < tol
+        Smask = yastn.truncation_mask(S, which='LR', D_total=12, largest_gap=True)
+        assert sum(Smask.data) == 15 and abs(sum(Smask.data * S.data).item() - 4.704001) < tol
+        Smask = yastn.truncation_mask(S, which='LR', D_total=15, largest_gap=True)
+        assert sum(Smask.data) == 15 and abs(sum(Smask.data * S.data).item() - 4.704001) < tol
+        #
+        #  eps_multiplet
+        Smask = yastn.truncation_mask(S, which='LM', D_total=12, eps_multiplet=1e-2)
+        assert sum(Smask.data) == 6 and abs(sum(Smask.data * S.data).item() - 2.0200) < tol
+        Smask = yastn.truncation_mask(S, which='LM', D_total=6, eps_multiplet=1e-2)
+        assert sum(Smask.data) == 6 and abs(sum(Smask.data * S.data).item() - 2.0200) < tol
+        Smask = yastn.truncation_mask(S, which='LR', D_total=17, eps_multiplet=1e-6)
+        assert sum(Smask.data) == 15 and abs(sum(Smask.data * S.data).item() - 4.704001) < tol
+        #
+        with pytest.raises(yastn.YastnError,
+                        match="Truncation by tolerance with which='SR' or 'SM' is not supported."):
+            yastn.truncation_mask(S, which="SR", tol=1e-2)
+        #
+        with pytest.raises(yastn.YastnError,
+                        match="Truncation by tolerance with which='SR' or 'SM' is not supported."):
+            yastn.truncation_mask(S, which="SM", tol=1e-2)
+        #
+        with pytest.raises(yastn.YastnError,
+                        match="Truncation by block cannot be used when multiplet-related schmes are invoked."):
+            yastn.truncation_mask(S, tol_block=1e-2, largest_gap=True)
+        #
+        with pytest.raises(yastn.YastnError,
+                        match="Only which = 'LM' or 'LR' are supported when multiplet-related schmes are invoked."):
+            yastn.truncation_mask(S, which='SR', eps_multiplet=1e-2)
+        #
+        with pytest.raises(yastn.YastnError,
+                        match="Truncation multiplets cannot perform both schemes largest_gap and eps_multiplets simultaneously."):
+            yastn.truncation_mask(S, eps_multiplet=1e-2, largest_gap=True)
 
 
 if __name__ == '__main__':

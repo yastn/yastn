@@ -396,7 +396,7 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
                 custom truncation-mask function.
                 If provided, it overrides all other truncation-related arguments.
     """
-    k= kwargs.get('D_total', k)
+    k = max(kwargs.get('D_total', 1), k)
     return_singular_vectors= kwargs.get('compute_uv', return_singular_vectors)
     sU= kwargs.get('sU', 1)
     nU= kwargs.get('nU', True)
@@ -593,12 +593,13 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
     symVh= symVh.unfuse_legs(axes=1)
 
     # Additional truncation
+
     Smask = truncation_mask(symS,
                             tol=kwargs.get('reltol', float('-inf')), tol_block=kwargs.get('reltol_block', float('-inf')),
-                            D_total=k, D_block=kwargs.get('D_block', float('inf')),
+                            D_total=kwargs.get('D_total', k), D_block=kwargs.get('D_block', float('inf')),
                             largest_gap=kwargs.get('largest_gap', False),
                             eps_multiplet=kwargs.get('eps_multiplet', None),
-                            hermitian=kwargs.get('hermitian', None),
+                            hermitian=kwargs.get('hermitian', False),
                             mask_f=kwargs.get('mask_f', None))
     symU, symS, symVh = Smask.apply_mask(symU, symS, symVh, axes=(-1, 0, 0))
 

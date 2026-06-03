@@ -748,29 +748,34 @@ def truncation_mask(S, which='LR',
         raise YastnError("Truncation by block cannot be used when multiplet-related schmes are invoked."
             + "Set D_block to the default float('inf') and tol_block to the default float('-inf').")
 
+    if (largest_gap or eps_multiplet) and which not in ['LM', 'LR']:
+        raise YastnError("Only which = 'LM' or 'LR' are supported when multiplet-related schmes are invoked.")
+
     if largest_gap and eps_multiplet:
         raise YastnError("Truncation multiplets cannot perform both schemes largest_gap and eps_multiplets simultaneously."
                          + "Switch one off by providing the default value.")
 
     backend = S.config.backend
     nsym = S.config.sym.NSYM
+    f_which = {'LR': backend.real, 'LM': backend.absolute}
+    ff = f_which.get(which, None)
 
     # makes a copy for partial truncations; also detaches from autograd computation graph
-    Smask = abs(S.detach()) > float('-inf')
+    Smask = abs(S.detach()) > float('-inf')  # all True
 
     if tol_block != float('-inf') or D_block != float('inf'):
-        tol_null = float('-inf') if isinstance(tol_block, dict) else tol_block
+        tol_null = float('inf') if isinstance(tol_block, dict) else tol_block
         D_null = 0 if isinstance(D_block, dict) else D_block
 
         for t, sl in zip(S.struct.t, S.slices):
             t = t[:nsym]
-            tol_rel = tol_block[t] if (isinstance(tol_block, dict) and t in tol_block) else tol_null
             slc = slice(*sl.slcs[0])
-
-            above_tol = S.data[slc] > tol_rel * backend.max_abs(S.data[slc])
-            D_tol = backend.sum_elements(above_tol).item()
             D_bl = D_block[t] if (isinstance(D_block, dict) and t in D_block) else D_null
-            D_bl = min(D_bl, D_tol)
+            if which in ['LR', 'LM']:
+                tol_rel = tol_block[t] if (isinstance(tol_block, dict) and t in tol_block) else tol_null
+                above_tol = ff(S.data[slc]) > tol_rel * backend.max_abs(S.data[slc])
+                D_tol = backend.sum_elements(above_tol).item()
+                D_bl = min(D_bl, D_tol)
 
             if 0 < D_bl < sl.Dp:  # block truncation
                 inds = backend.argsort_which(S.data[slc], which)
@@ -778,35 +783,24 @@ def truncation_mask(S, which='LR',
             elif D_bl == 0:
                 Smask._data[slc] = False
     #
-    above_tol = S.data > tol * backend.max_abs(S.data)
-    D_total = min(D_total, backend.sum_elements(above_tol).item())
+    D_total = min(D_total, len(S.data))
+    if which in ['LR', 'LM']:
+        above_tol = ff(S.data) > tol * backend.max_abs(S.data)
+        D_total = min(D_total, backend.sum_elements(above_tol).item())
     #
     inds = backend.argsort_which(S.data, which)
     #
     if largest_gap:
-        gap = -1
-        for p in range(D_total, len(inds)):
-            gap_p = abs(S._data[inds[p]] - S._data[inds[p - 1]])
-            if gap_p > gap:
-                D_total = p
-                gap = gap_p
-            if gap > abs(S._data[inds[p - 1]]):
-                break
+        s = ff(S._data[inds[D_total - 1:]])
+        gaps = abs(s[:-1] - s[1:]) * (s[0] * s[:-1] > 0)  # (s[0] * ...) does not allow sign change
+        D_total += backend.argmax(gaps).item()
     #
     if eps_multiplet is not None and D_total < len(S.data):
-        # compute gaps and normalize by magnitude of (abs) larger value.
-        # value of gaps[i] gives gap between i-th and i+1 the element of s
-        s = S.data[inds]
-        maxgap = backend.maximum(backend.absolute(s[:-1]), backend.absolute(s[1:])) + 1.0e-16
-        gaps = backend.absolute(s[:-1] - s[1:]) / maxgap
-
-        # find nearest multiplet boundary, keeping at most D_trunc elements
-        # i-th element of gaps gives gap between i-th and (i+1)-th element of s
-        # Note, s[:D_trunc] selects D_trunc values: from 0th to (D_trunc-1)-th element
-        for i in range(D_total - 1, -1, -1):
-            if gaps[i] > eps_multiplet:
-                D_total = i+1
-                break
+        s = ff(S._data[inds[:D_total + 1]])
+        maxgap = backend.maximum(abs(s[:-1]), abs(s[1:])) + 1.0e-16
+        normalized_gaps = abs(s[:-1] - s[1:]) * (s[0] * s[:-1] > 0) / maxgap  # (s[0] * ...) does not allow sign change
+        relevant_gaps = (normalized_gaps > eps_multiplet) * 1  # * 1 to change dtype
+        D_total -= backend.argmax(backend.flip(relevant_gaps)).item() # + (D_total == len(S.data) and any(relevant_gaps)) # if D_total == len(S.data)
     #
     Smask._data[inds[D_total:]] = False
     #
@@ -820,17 +814,17 @@ def truncation_mask(S, which='LR',
             if t == tc or t in considered_t:
                 continue
             #
-            slc_t = S.slices[it].slcs[0]
+            slc_t = slice(*S.slices[it].slcs[0])
             try:
                 itc = S.struct.t.index(tc + tc)
-            except ValueError:  # conjugated sector nor in Sdata
+            except ValueError:  # conjugated sector not in S
                 Smask.data[slc_t] = False
                 continue
-            slc_tc = S.slices[itc].slcs[0]
+            slc_tc = slice(*S.slices[itc].slcs[0])
             #
             considered_t.append(t)
             considered_t.append(tc)
-            lt, ltc = len(Smask[t]), len(Smask[tc])
+            lt, ltc = S.struct.D[it][0], S.struct.D[itc][0]
             common_size = min(lt, ltc)
             inds_t = backend.argsort_which(S.data[slc_t], which)
             inds_tc = backend.argsort_which(S.data[slc_tc], which)

@@ -168,8 +168,6 @@ def test_svds_U1_truncate_multiplets(config_kwargs,part_of_multiplet):
     """
     Test truncation, when explicit preservation of multiplets is requested
     """
-    if part_of_multiplet == 2:
-        pytest.xfail("Will fail to resolve degeneracies due to partial multiplet.")
     #
     # Start with random tensor with 4 legs.
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
@@ -178,7 +176,6 @@ def test_svds_U1_truncate_multiplets(config_kwargs,part_of_multiplet):
             yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(2, 3, 4)),
             yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(2, 3, 4))]
     a = yastn.rand(config=config_U1, n=1, legs=legs)
-
     #
     # Fixing singular values for testing.
     # Create new tensor *a* that will be used for testing.
@@ -187,26 +184,30 @@ def test_svds_U1_truncate_multiplets(config_kwargs,part_of_multiplet):
     Sr.set_block(ts=(-1, -1), Ds=12, val=[2**(-ii - 2) for ii in range(12)])
     Sr.set_block(ts=(0, 0), Ds=25, val=[2**(-ii - 1) for ii in range(25)])
 
-    print()
-    for i, x in enumerate(np.sort(Sr.data)):
-        print(i, x)
     a = yastn.ncon([Ur, Sr, Vr], [(-1, -2, 1), (1, 2), (2, -3, -4)])
-
     #
     # Opts for truncation; truncates below (global) relative tolerance reltol with respect to largest singular value
     # up to a total of D_total singular values, with at most D_block singular values for each charge sector.
     #
     # There is a multiplet boundary at D=12, so 13th singular triple is part of a multiplet
-    opts = {'D_total': 12 + part_of_multiplet, }
+    if part_of_multiplet == 2:
+        pytest.xfail("Will fail to resolve degeneracies due to partial multiplet.")
+        opts = {'reltol': 0.01, 'D_total': 12+part_of_multiplet, 'eps_multiplet': 1e-3}
+    else:
+        opts = {'reltol': 0.01, 'k': 15, 'D_total': 12+part_of_multiplet, 'eps_multiplet': 1e-3}
+        # bigger k not cutting multiplet will allow for unique truncation
+
     U1, S1, V1 = yastn.svds(a, axes=((0, 1), (2, 3)), sU=-1, nU=True, **opts)
     assert S1.get_blocks_charge() == ((-2, -2), (-1, -1), (0, 0))
-    assert S1.s[0] == 1 and U1.n == a.n and V1.n == (0,) and S1.get_shape() == (12,)*2
+    print(S1.data)
+    assert S1.s[0] == 1 and U1.n == a.n and V1.n == (0,) and S1.get_shape() == (12,) * 2
     #
     # svd_with_truncation is a shorthand for
     U, S, V = yastn.svd(a, axes=((0, 1), (2, 3)), sU=-1,) # nU=True
     mask = yastn.linalg.truncation_mask(S, **opts)
     U1p, S1p, V1p = mask.apply_mask(U, S, V, axes=(2, 0, 0))
-    assert all((x - y).norm() < 1e-12 for x, y in ((S1, S1p), (U1 @ S1 @ V1, U1p @ S1p @ V1p)))
+    assert (S1 - S1p).norm() < 1e-12
+    assert (U1 @ S1 @ V1 - U1p @ S1p @ V1p).norm() < 1e-12
 
 
 @pytest.mark.parametrize('dtype', ['float64', 'complex128'])
