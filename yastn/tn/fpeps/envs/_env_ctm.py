@@ -960,11 +960,15 @@ class EnvCTM():
         """
         Evaluate convergence of CTM by computing the difference of environment corner spectra between consecutive CTM steps.
         """
-        corner_sv = env.calculate_corner_svd()
-        max_dsv = max(spec_diff(history[-1][k], corner_sv[k]) for k in corner_sv) if history else float('Nan')
-        corner_sv['max_dsv'] = max_dsv
-        history.append(corner_sv)
-        converged = (corner_tol is not None) and (max_dsv < corner_tol)
+        if hasattr(corner_tol, '__call__'):
+            converged, history = corner_tol(env, history)
+            max_dsv = 0
+        else:
+            corner_sv = env.calculate_corner_svd()
+            max_dsv = max(spec_diff(history[-1][k], corner_sv[k]) for k in corner_sv) if history else float('Nan')
+            corner_sv['max_dsv'] = max_dsv
+            history.append(corner_sv)
+            converged = (corner_tol is not None) and (max_dsv < corner_tol)
         return converged, max_dsv, history
 
     def is_consistent(env, verbosity = 2):

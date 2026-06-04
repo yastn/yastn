@@ -348,7 +348,7 @@ def test_D3_U1_c4v_2x2_fp(ctm_init, truncate_multiplets_mode, projector_svd_meth
 
 @pytest.mark.parametrize("ctm_init", ['dl', 'eye'])
 @pytest.mark.parametrize("truncate_multiplets_mode", ["truncate", "expand"])
-@pytest.mark.parametrize("projector_svd_method", ["block_propack", "fullrank", "block_arnoldi", "qr"]) # "qr",
+@pytest.mark.parametrize("projector_svd_method", ["block_propack", "fullrank", "block_arnoldi", "qr"])
 def test_D3_U1_c4v_1x1_fp(ctm_init, truncate_multiplets_mode, projector_svd_method, additional_imports):
     """
     Test fp gradients for explicit U(1) and C4v symmetric single-site ansatz

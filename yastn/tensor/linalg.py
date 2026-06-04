@@ -790,12 +790,12 @@ def truncation_mask(S, which='LR',
     #
     inds = backend.argsort_which(S.data, which)
     #
-    if largest_gap:
+    if largest_gap and D_total < len(S.data):
         s = ff(S._data[inds[D_total - 1:]])
         gaps = abs(s[:-1] - s[1:]) * (s[0] * s[:-1] > 0)  # (s[0] * ...) does not allow sign change
         D_total += backend.argmax(gaps).item()
     #
-    if eps_multiplet is not None and D_total < len(S.data):
+    if eps_multiplet is not None and 0 < D_total < len(S.data):
         s = ff(S._data[inds[:D_total + 1]])
         maxgap = backend.maximum(abs(s[:-1]), abs(s[1:])) + 1.0e-16
         normalized_gaps = abs(s[:-1] - s[1:]) * (s[0] * s[:-1] > 0) / maxgap  # (s[0] * ...) does not allow sign change
