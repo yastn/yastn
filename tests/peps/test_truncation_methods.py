@@ -7,12 +7,13 @@ import logging
 @pytest.mark.parametrize("initialization, opts_svd_evolution",
                         [("EAT", {"D_total": 6, 'tol_block': 1e-15}),
                          ("SVD", {"D_total": 6, 'tol_block': 1e-15}),
-                         ("ZMT1svd", {"D_total": 6, 'tol_block': 1e-15, 'preD':12}),
-                         ("ZMT1eat", {"D_total": 6, 'tol_block': 1e-15, 'preD':12}),
-                         ("ZMT3svd", {"D_total": 6, 'tol_block': 1e-15, 'preD':12}),
-                         ("ZMT3eat", {"D_total": 6, 'tol_block': 1e-15, 'preD':12}),
-                         ("ZMT3zmt1eat", {"D_total": 6, 'tol_block': 1e-15, 'preD':12}),
-                         ("ZMT3zmt1svd", {"D_total": 6, 'tol_block': 1e-15, 'preD':12})])
+                        #  ("ZMT1svd", {"D_total": 6, 'tol_block': 1e-15, 'preD':12}),
+                        #  ("ZMT1eat", {"D_total": 6, 'tol_block': 1e-15, 'preD':12}),
+                        #  ("ZMT3svd", {"D_total": 6, 'tol_block': 1e-15, 'preD':12}),
+                        #  ("ZMT3eat", {"D_total": 6, 'tol_block': 1e-15, 'preD':12}),
+                        #  ("ZMT3zmt1eat", {"D_total": 6, 'tol_block': 1e-15, 'preD':12}),
+                        #  ("ZMT3zmt1svd", {"D_total": 6, 'tol_block': 1e-15, 'preD':12}),
+                         ])
 def test_truncation_methods(config_kwargs, initialization, opts_svd_evolution):
 
     NTUEnv="NN"

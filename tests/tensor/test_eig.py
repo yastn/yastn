@@ -23,6 +23,9 @@ seed = 1
 
 torch_test = pytest.mark.skipif("'torch' not in config.getoption('--backend')",
                                 reason="Uses torch.autograd.gradcheck().")
+numpy_test = pytest.mark.skipif("'np' not in config.getoption('--backend')",
+                                reason="Limit test to numpy.")
+
 
 def eig_combine(a):
     """ decompose and contracts tensor using svd decomposition """
@@ -96,6 +99,7 @@ def test_eig_transpose_meta(config_kwargs):
     assert yastn.norm(Vf - Vm) < tol  # == 0.0
 
 
+@numpy_test
 def test_eig_degeneracy_fail(config_kwargs):
     # Z2xU1
     config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)

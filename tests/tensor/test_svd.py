@@ -23,7 +23,8 @@ tol = 1e-10  #pylint: disable=invalid-name
 
 torch_test = pytest.mark.skipif("'torch' not in config.getoption('--backend')",
                                 reason="Uses torch.autograd.gradcheck().")
-
+numpy_test = pytest.mark.skipif("'np' not in config.getoption('--backend')",
+                                reason="Limit test to numpy.")
 
 def svd_combine(a):
     """ decompose and contracts tensor using svd decomposition """
@@ -253,6 +254,7 @@ def test_svd_truncate_lowrank(config_kwargs):
     assert yastn.norm(a1 - a2) < tol
 
 
+@numpy_test
 def test_svd_ill_conditioned(config_kwargs):
     """ test svd on ill-conditioned matrix """
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)

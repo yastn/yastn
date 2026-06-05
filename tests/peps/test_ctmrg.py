@@ -295,7 +295,7 @@ def test_1x1_D1_Z2_spinlessf_conv(ctm_init, fix_signs, truncate_multiplets_mode,
     print(f"CTM {info}")
 
     # sum of traces of even sectors across 1x1 RDMs
-    loss = sum( rdm1x1( c, psi, env)[0][(0,0)].trace() for c in psi.sites() )
+    loss = sum(rdm1x1( c, psi, env)[0][(0,0)].trace() for c in psi.sites()).item()
     assert np.allclose([0.22923524,], [loss,], rtol=1e-06, atol=1e-06)
 
 
