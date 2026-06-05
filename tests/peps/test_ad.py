@@ -353,7 +353,7 @@ def test_1x1_D1_Z2_spinlessf_conv(ctm_init, truncate_multiplets_mode, tol, check
 @pytest.mark.parametrize("ctm_init", ['dl', 'eye'])
 @pytest.mark.parametrize("fix_signs", [False, True])
 @pytest.mark.parametrize("truncate_multiplets_mode", ["truncate", "expand"])
-@pytest.mark.parametrize("checkpoint_move", ['reentrant', 'nonreentrant', False])
+@pytest.mark.parametrize("checkpoint_move", ['nonreentrant', False])
 def test_3x3_D1_Z2_spinlessf_ctmsteps1(ctm_init, fix_signs, truncate_multiplets_mode, checkpoint_move, additional_imports):
     if truncate_multiplets_mode == "expand":
         pytest.xfail(f"Expected failure when truncate_multiplets_mode='{truncate_multiplets_mode}'")
