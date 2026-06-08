@@ -74,7 +74,7 @@ def test_spinless_infinite_approx(config_kwargs):
             assert env_MPS.which == k
             Gs[k] = env_MPS.bond_metric(QA, QB, s0, s1, dirn).g
 
-        for k in ['NN+BP', 'NNN+BP', 'Ladder+BP', 'Ladder1+BP', 'Ladder2+BP', 'Ladder3+BP']:
+        for k in ['NN+BP', 'NNN+BP', 'Ladder+BP', 'Ladder1+BP', 'Ladder2+BP', 'Ladder3+BP', 'L4+BP']:
             env_BP.which = k
             assert env_BP.which == k
             Gs[k] = env_BP.bond_metric(QA, QB, s0, s1, dirn).g
@@ -103,6 +103,9 @@ def test_spinless_infinite_approx(config_kwargs):
         assert (Gs['Ladder1+BP'] - Gs['NN+BP']).norm() < 1e-6
         assert (Gs['Ladder2'] - Gs['Ladder3']).norm() < 1e-4
         assert (Gs['Ladder2+BP'] - Gs['Ladder3+BP']).norm() < 1e-4
+        assert (Gs['NN+BP'] - Gs['L4+BP']).norm() < 1e-3
+        assert (Gs['FU'] - Gs['L4+BP']).norm() < 1e-3
+
 
     with pytest.raises(yastn.YastnError):
         fpeps.EnvApproximate(psi, which="some")

@@ -71,7 +71,7 @@ class EnvBP():
         return self._which
 
     def _set_which(self, which):
-        if which not in ('NNN+BP', 'NN+BP', 'BP') and "ladder" not in which.lower():
+        if which not in ('BP', 'L4+BP', 'NN+BP', 'NNN+BP') and "ladder" not in which.lower():
             raise YastnError(f"Type of EnvBP bond_metric {which=} not recognized.")
         self._which = which
 
@@ -406,6 +406,18 @@ class EnvBP():
                       ║        ║
                       b        b
 
+            If which == 'L4+BP':
+
+                    t        t
+                    ║        ║
+              l══(-1 +0)══(-1 +1)══r           t        t              t        t
+                    ║        ║                 ║        ║              ║        ║
+              l═════Q0══   ══Q1════r  +  l═════Q0══   ══Q1════r  -  l══Q0══   ══Q1══r
+                    ║        ║                 ║        ║              ║        ║
+                    b        b           l══(+1 +0)══(+1 +1)══l        b        b
+                                               ║        ║
+                                               b        b
+
         """
         if dirn in ("h", "lr") and self.which == "BP":
             assert self.psi.nn_site(s0, (0, 1)) == s1
@@ -419,20 +431,75 @@ class EnvBP():
             vecb = hair_b(Q1, hl=self[s1].l, hb=self[s1].b, hr=self[s1].r).T
             return BipartiteBondMetric(gL=vect, gR=vecb)  # (bb' bb,  tt tt')
 
-        if dirn in ("h", "lr") and self.which == "NN+BP":
+        if dirn in ("h", "lr") and self.which == "L4+BP":
             assert self.psi.nn_site(s0, (0, 1)) == s1
-
-            m = {d: self.psi.nn_site(s0, d=d) for d in [(-1,0), (0,-1), (1,0), (1,1), (0,2), (-1,1)]}
+            m = {d: self.psi.nn_site(s0, d=d) for d in [(-1,0), (1,0), (1,1), (-1,1)]}
             mm = dict(m)  # for testing for None
             tensors_from_psi(m, self.psi)
             m = {k: (v.ket if isinstance(v, DoublePepsTensor) else v) for k, v in m.items()}
 
+            env_bl = cor_bl(Q0, hl=self[s0].l, hb=self[s0].b)
+            env_br = cor_br(Q1, hr=self[s1].r, hb=self[s1].b)
+            sm = mm[-1, 0]
+            ctl = cor_tl(m[-1, 0]) if sm is None else cor_tl(m[-1, 0], ht=self[sm].t, hl=self[sm].l)
+            sm = mm[-1, 1]
+            ctr = cor_tr(m[-1, 1]) if sm is None else cor_tr(m[-1, 1], ht=self[sm].t, hr=self[sm].r)
+            gt = env_bl @ ctl @ ctr @ env_br
+
+            env_tl = cor_tl(Q0, hl=self[s0].l, ht=self[s0].t)
+            env_tr = cor_tr(Q1, hr=self[s1].r, ht=self[s1].t)
+            sm = mm[ 1, 1]
+            cbr = cor_br(m[ 1, 1]) if sm is None else cor_br(m[ 1, 1], hb=self[sm].b, hr=self[sm].r)
+            sm = mm[ 1, 0]
+            cbl = cor_bl(m[ 1, 0]) if sm is None else cor_bl(m[ 1, 0], hb=self[sm].b, hl=self[sm].l)
+            gb = env_tl.T @ cbl.T @ cbr.T @ env_tr.T
+
+            vecl = hair_l(Q0, ht=self[s0].t, hl=self[s0].l, hb=self[s0].b)
+            vecr = hair_r(Q1, ht=self[s1].t, hb=self[s1].b, hr=self[s1].r)
+            g0 = tensordot(vecl, vecr, axes= ((), ()))
+
+            g = (gt + gb).unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))) - g0.fuse_legs(axes=((0, 2), (1, 3)))
+            return BondMetric(g=g)
+
+        if dirn in ("v", "tb") and self.which == "L4+BP":
+            assert self.psi.nn_site(s0, (1, 0)) == s1
+            m = {d: self.psi.nn_site(s0, d=d) for d in [(0,-1), (1,-1), (1,1), (0,1)]}
+            mm = dict(m)  # for testing for None
+            tensors_from_psi(m, self.psi)
+            m = {k: (v.ket if isinstance(v, DoublePepsTensor) else v) for k, v in m.items()}
+
+            env_tl = cor_tl(Q0, ht=self[s0].t, hl=self[s0].l)
+            env_bl = cor_bl(Q1, hb=self[s1].b, hl=self[s1].l)
+            sm = mm[0,  1]
+            ctr = cor_tr(m[0,  1]) if sm is None else cor_tr(m[0,  1], ht=self[sm].t, hr=self[sm].r)
+            sm = mm[1,  1]
+            cbr = cor_br(m[1,  1]) if sm is None else cor_br(m[1,  1], hb=self[sm].b, hr=self[sm].r)
+            gr = env_tl @ ctr @ cbr @ env_bl
+
+            env_tr = cor_tr(Q0, ht=self[s0].t, hr=self[s0].r)
+            env_br = cor_br(Q1, hb=self[s1].b, hr=self[s1].r)
+            sm = mm[1, -1]
+            cbl = cor_bl(m[1, -1]) if sm is None else cor_bl(m[1, -1], hb=self[sm].b, hl=self[sm].l)
             sm = mm[0, -1]
-            env_hl = hair_l(m[0, -1]) if sm is None else hair_l(m[0, -1], ht=self[sm].t, hl=self[sm].l, hb=self[sm].b)
-            sm = mm[0, 2]
-            env_hr = hair_r(m[0,  2]) if sm is None else hair_r(m[0,  2], ht=self[sm].t, hb=self[sm].b, hr=self[sm].r)
-            env_l = edge_l(Q0, hl=env_hl)  # [bl bl'] [rr rr'] [tl tl']
-            env_r = edge_r(Q1, hr=env_hr)  # [tr tr'] [ll ll'] [br br']
+            ctl = cor_tl(m[0, -1]) if sm is None else cor_tl(m[0, -1], ht=self[sm].t, hl=self[sm].l)
+            gl = env_tr.T @ ctl.T @ cbl.T @ env_br.T
+
+            vect = hair_t(Q0, ht=self[s0].t, hl=self[s0].l, hr=self[s0].r)
+            vecb = hair_b(Q1, hl=self[s1].l, hb=self[s1].b, hr=self[s1].r)
+            g0 = tensordot(vect, vecb, axes= ((), ()))
+
+            g = (gr + gl).unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))) - g0.fuse_legs(axes=((0, 2), (1, 3)))
+            return BondMetric(g=g)
+
+        if dirn in ("h", "lr") and self.which == "NN+BP":
+            assert self.psi.nn_site(s0, (0, 1)) == s1
+            m = {d: self.psi.nn_site(s0, d=d) for d in [(-1,0), (1,0), (1,1), (-1,1)]}
+            mm = dict(m)  # for testing for None
+            tensors_from_psi(m, self.psi)
+            m = {k: (v.ket if isinstance(v, DoublePepsTensor) else v) for k, v in m.items()}
+
+            env_l = edge_l(Q0, hl=self[s0].l)  # [bl bl'] [rr rr'] [tl tl']
+            env_r = edge_r(Q1, hr=self[s1].r)  # [tr tr'] [ll ll'] [br br']
 
             sm = mm[-1, 0]
             ctl = cor_tl(m[-1, 0]) if sm is None else cor_tl(m[-1, 0], ht=self[sm].t, hl=self[sm].l)
@@ -448,17 +515,13 @@ class EnvBP():
 
         if dirn in ("v", "tb") and self.which == "NN+BP":
             assert self.psi.nn_site(s0, (1, 0)) == s1
-            m = {d: self.psi.nn_site(s0, d=d) for d in [(-1,0), (0,-1), (1,-1), (2,0), (1,1), (0,1)]}
+            m = {d: self.psi.nn_site(s0, d=d) for d in [(0,-1), (1,-1), (1,1), (0,1)]}
             mm = dict(m)  # for testing for None
             tensors_from_psi(m, self.psi)
             m = {k: (v.ket if isinstance(v, DoublePepsTensor) else v) for k, v in m.items()}
 
-            sm = mm[-1, 0]
-            env_ht = hair_t(m[-1, 0]) if sm is None else hair_t(m[-1, 0], ht=self[sm].t, hl=self[sm].l, hr=self[sm].r)
-            sm = mm[2, 0]
-            env_hb = hair_b(m[ 2, 0]) if sm is None else hair_b(m[ 2, 0], hl=self[sm].l, hb=self[sm].b, hr=self[sm].r)
-            env_t = edge_t(Q0, ht=env_ht)  # [lt lt'] [bb bb'] [rt rt']
-            env_b = edge_b(Q1, hb=env_hb)  # [rb rb'] [tt tt'] [lb lb']
+            env_t = edge_t(Q0, ht=self[s0].t)  # [lt lt'] [bb bb'] [rt rt']
+            env_b = edge_b(Q1, hb=self[s1].b)  # [rb rb'] [tt tt'] [lb lb']
 
             sm = mm[1, -1]
             cbl = cor_bl(m[1, -1]) if sm is None else cor_bl(m[1, -1], hb=self[sm].b, hl=self[sm].l)
@@ -544,7 +607,6 @@ class EnvBP():
             g = tensordot(vect, vecb, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
             return BondMetric(g=g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))))
 
-        #
         if dirn in ("h", "lr") and "ladder" in self.which.lower():
             digits = ''.join(c for c in self.which if c.isdigit())
             nn = int(digits) if digits else 2
