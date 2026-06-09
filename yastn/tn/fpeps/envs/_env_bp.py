@@ -440,24 +440,28 @@ class EnvBP():
 
             env_bl = cor_bl(Q0, hl=self[s0].l, hb=self[s0].b)
             env_br = cor_br(Q1, hr=self[s1].r, hb=self[s1].b)
-            sm = mm[-1, 0]
-            ctl = cor_tl(m[-1, 0]) if sm is None else cor_tl(m[-1, 0], ht=self[sm].t, hl=self[sm].l)
-            sm = mm[-1, 1]
-            ctr = cor_tr(m[-1, 1]) if sm is None else cor_tr(m[-1, 1], ht=self[sm].t, hr=self[sm].r)
-            gt = env_bl @ ctl @ ctr @ env_br
-
             env_tl = cor_tl(Q0, hl=self[s0].l, ht=self[s0].t)
             env_tr = cor_tr(Q1, hr=self[s1].r, ht=self[s1].t)
+
+            sm = mm[-1, 0]
+            ctl = cor_tl(m[-1, 0]) if sm is None else cor_tl(m[-1, 0], ht=self[sm].t, hl=self[sm].l)
+            wtl = 1 if sm is None else (self[sm].b.fuse_legs(axes=[(1, 0)]) @ ctl @ self[sm].r.fuse_legs(axes=[(1, 0)])).to_number()
+            sm = mm[-1, 1]
+            ctr = cor_tr(m[-1, 1]) if sm is None else cor_tr(m[-1, 1], ht=self[sm].t, hr=self[sm].r)
+            wtr = 1 if sm is None else (self[sm].l.fuse_legs(axes=[(1, 0)]) @ ctr @ self[sm].b.fuse_legs(axes=[(1, 0)])).to_number()
             sm = mm[ 1, 1]
             cbr = cor_br(m[ 1, 1]) if sm is None else cor_br(m[ 1, 1], hb=self[sm].b, hr=self[sm].r)
+            wbr = 1 if sm is None else (self[sm].t.fuse_legs(axes=[(1, 0)]) @ cbr @ self[sm].l.fuse_legs(axes=[(1, 0)])).to_number()
             sm = mm[ 1, 0]
             cbl = cor_bl(m[ 1, 0]) if sm is None else cor_bl(m[ 1, 0], hb=self[sm].b, hl=self[sm].l)
-            gb = env_tl.T @ cbl.T @ cbr.T @ env_tr.T
+            wbl = 1 if sm is None else (self[sm].r.fuse_legs(axes=[(1, 0)]) @ cbl @ self[sm].t.fuse_legs(axes=[(1, 0)])).to_number()
 
             vecl = hair_l(Q0, ht=self[s0].t, hl=self[s0].l, hb=self[s0].b)
             vecr = hair_r(Q1, ht=self[s1].t, hb=self[s1].b, hr=self[s1].r)
-            g0 = tensordot(vecl, vecr, axes= ((), ()))
 
+            gt = (env_bl @ ctl @ ctr @ env_br) * (wbr * wbl)
+            gb = (env_tl.T @ cbl.T @ cbr.T @ env_tr.T) * (wtr * wtl)
+            g0 = tensordot(vecl, vecr, axes= ((), ())) * (wbr * wbl * wtr * wtl)
             g = (gt + gb).unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))) - g0.fuse_legs(axes=((0, 2), (1, 3)))
             return BondMetric(g=g)
 
@@ -470,24 +474,28 @@ class EnvBP():
 
             env_tl = cor_tl(Q0, ht=self[s0].t, hl=self[s0].l)
             env_bl = cor_bl(Q1, hb=self[s1].b, hl=self[s1].l)
-            sm = mm[0,  1]
-            ctr = cor_tr(m[0,  1]) if sm is None else cor_tr(m[0,  1], ht=self[sm].t, hr=self[sm].r)
-            sm = mm[1,  1]
-            cbr = cor_br(m[1,  1]) if sm is None else cor_br(m[1,  1], hb=self[sm].b, hr=self[sm].r)
-            gr = env_tl @ ctr @ cbr @ env_bl
-
             env_tr = cor_tr(Q0, ht=self[s0].t, hr=self[s0].r)
             env_br = cor_br(Q1, hb=self[s1].b, hr=self[s1].r)
+
+            sm = mm[0,  1]
+            ctr = cor_tr(m[0,  1]) if sm is None else cor_tr(m[0,  1], ht=self[sm].t, hr=self[sm].r)
+            wtr = 1 if sm is None else (self[sm].l.fuse_legs(axes=[(1, 0)]) @ ctr @ self[sm].b.fuse_legs(axes=[(1, 0)])).to_number()
+            sm = mm[1,  1]
+            cbr = cor_br(m[1,  1]) if sm is None else cor_br(m[1,  1], hb=self[sm].b, hr=self[sm].r)
+            wbr = 1 if sm is None else (self[sm].t.fuse_legs(axes=[(1, 0)]) @ cbr @ self[sm].l.fuse_legs(axes=[(1, 0)])).to_number()
             sm = mm[1, -1]
             cbl = cor_bl(m[1, -1]) if sm is None else cor_bl(m[1, -1], hb=self[sm].b, hl=self[sm].l)
+            wbl = 1 if sm is None else (self[sm].r.fuse_legs(axes=[(1, 0)]) @ cbl @ self[sm].t.fuse_legs(axes=[(1, 0)])).to_number()
             sm = mm[0, -1]
             ctl = cor_tl(m[0, -1]) if sm is None else cor_tl(m[0, -1], ht=self[sm].t, hl=self[sm].l)
-            gl = env_tr.T @ ctl.T @ cbl.T @ env_br.T
+            wtl = 1 if sm is None else (self[sm].b.fuse_legs(axes=[(1, 0)]) @ ctl @ self[sm].r.fuse_legs(axes=[(1, 0)])).to_number()
 
             vect = hair_t(Q0, ht=self[s0].t, hl=self[s0].l, hr=self[s0].r)
             vecb = hair_b(Q1, hl=self[s1].l, hb=self[s1].b, hr=self[s1].r)
-            g0 = tensordot(vect, vecb, axes= ((), ()))
 
+            gr = env_tl @ ctr @ cbr @ env_bl * (wbl * wtl)
+            gl = env_tr.T @ ctl.T @ cbl.T @ env_br.T * (wbr * wtr)
+            g0 = tensordot(vect, vecb, axes= ((), ())) * (wbr * wbl * wtr * wtl)
             g = (gr + gl).unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2))) - g0.fuse_legs(axes=((0, 2), (1, 3)))
             return BondMetric(g=g)
 
