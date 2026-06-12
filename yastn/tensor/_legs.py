@@ -14,7 +14,7 @@
 # ==============================================================================
 """ class yastn.Leg """
 from __future__ import annotations
-from typing import Sequence
+from typing import NamedTuple, Sequence
 from dataclasses import dataclass
 from itertools import product, groupby
 from operator import itemgetter
@@ -27,6 +27,8 @@ from ._tests import YastnError
 from ..sym import sym_none
 
 __all__ = ['Leg', 'LegMeta', 'legs_union', 'gaussian_leg', 'leg_product', 'undo_leg_product']
+
+
 
 
 @dataclass(frozen=True, repr=False)

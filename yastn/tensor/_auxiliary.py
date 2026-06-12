@@ -20,7 +20,7 @@ import numpy as np
 
 from ..sym import sym_none
 
-__all__ = ['_config', '_struct', 'sign_canonical_order', 'swap_charges']
+__all__ = ['_config', '_struct', 'sign_canonical_order', 'swap_charges', 'LegBasic', 'legs_from_struct']
 
 
 class _struct(NamedTuple):
@@ -159,3 +159,24 @@ def sign_canonical_order(*operators, sites=None, f_ordered=None) -> int:
     if len(charges_0) == 0:
         return 1
     return swap_charges(charges_0, charges_1, operators[0].config.fermionic)
+
+
+class LegBasic(NamedTuple):
+    s: int = 1  # leg signature in (1, -1)
+    t: tuple = ()  # leg charges
+    D: tuple = ()  # and their dimensions
+
+    def conj(self):
+        return LegBasic(s=-self.s, t=self.t, D=self.D)
+
+
+def legs_from_struct(struct):
+    nsym = len(struct.n)
+    ndim = len(struct.s)
+    legs = []
+    for i in range(ndim):
+        tDn = {tn[i * nsym: (i + 1) * nsym]: Dn[i] for tn, Dn in zip(struct.t, struct.D)}
+        tDn = dict(sorted(tDn.items()))
+        leg = LegBasic(s=struct.s[i], t=tuple(tDn.keys()), D=tuple(tDn.values()))
+        legs.append(leg)
+    return tuple(legs)

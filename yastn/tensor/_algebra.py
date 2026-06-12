@@ -17,7 +17,7 @@ from __future__ import annotations
 from functools import lru_cache
 from itertools import accumulate
 
-from ._auxiliary import _slc, _join_contiguous_slices
+from ._auxiliary import _slc, _join_contiguous_slices, legs_from_struct
 from ._legs import legs_union
 from ._merging import _embed_tensor
 from ._tests import YastnError, _test_can_be_combined, _get_tD_legs, _unpack_trans_test_axes_pair
@@ -32,9 +32,9 @@ def __add__(a, b) -> 'Tensor':
     Signatures and total charges of two tensors should match.
     """
     (a, b), hfs = _pre_addition(a, b)
-    metas, struct, slices = _meta_addition(((a.struct, a.slices), (b.struct, b.slices)), a.isdiag)
+    metas, struct, slices, legs = _meta_addition(((a.struct, a.slices, a.legs), (b.struct, b.slices, b.legs)), a.isdiag)
     data = a.config.backend.add((a._data, b._data), metas, struct.size)
-    return a._replace(hfs=hfs, struct=struct, slices=slices, data=data)
+    return a._replace(hfs=hfs, struct=struct, slices=slices, data=data, legs=legs)
 
 
 def __sub__(a, b) -> 'Tensor':
@@ -44,9 +44,9 @@ def __sub__(a, b) -> 'Tensor':
     Signatures and total charges of two tensors should match.
     """
     (a, b), hfs = _pre_addition(a, b)
-    meta, struct, slices = _meta_addition(((a.struct, a.slices), (b.struct, b.slices)), a.isdiag)
+    meta, struct, slices, legs = _meta_addition(((a.struct, a.slices, a.legs), (b.struct, b.slices, b.legs)), a.isdiag)
     data = a.config.backend.sub(a._data, b._data, meta, struct.size)
-    return a._replace(hfs=hfs, struct=struct, slices=slices, data=data)
+    return a._replace(hfs=hfs, struct=struct, slices=slices, data=data, legs=legs)
 
 
 def add(*tensors, amplitudes=None, **kwargs):
@@ -73,12 +73,12 @@ def add(*tensors, amplitudes=None, **kwargs):
         return tensors[0]
 
     tensors, hfs = _pre_addition(*tensors)
-    datas = tuple((a.struct, a.slices) for a in tensors)
+    datas = tuple((a.struct, a.slices, a.legs) for a in tensors)
     a = tensors[0]
-    metas, struct, slices = _meta_addition(datas, a.isdiag)
+    metas, struct, slices, legs = _meta_addition(datas, a.isdiag)
     datas = [v._data for v in tensors]
     data = a.config.backend.add(datas, metas, struct.size)
-    return a._replace(hfs=hfs, struct=struct, slices=slices, data=data)
+    return a._replace(hfs=hfs, struct=struct, slices=slices, data=data, legs=legs)
 
 
 def _pre_addition(*tensors):
@@ -123,10 +123,10 @@ def _meta_addition(datas, isdiag):
         return metas, *datas[0]
 
     check_structure = False
-    struct_0, slices_0 = datas[0]
+    struct_0, slices_0, legs_0 = datas[0]
     temp = list((t, D, sl.Dp) for t, D, sl in zip(struct_0.t, struct_0.D, slices_0))
 
-    for struct_1, slices_1 in datas[1:]:
+    for struct_1, slices_1, legs_1 in datas[1:]:
         temp0 = temp
         temp1 = list((t, D, sl.Dp) for t, D, sl in zip(struct_1.t, struct_1.D, slices_1))
         i0, i1, temp = 0, 0, []
@@ -176,7 +176,7 @@ def _meta_addition(datas, isdiag):
             mto.append(slco.slcs[0])
 
     metas = []
-    for struct, slices in datas:
+    for struct, slices, legs in datas:
         itn, islcn = iter(t_new), iter(slices_new)
         mtn, mto = [], []
         for to, slco in zip(struct.t, slices):
@@ -186,7 +186,8 @@ def _meta_addition(datas, isdiag):
             update_meta(mtn, mto, slcn, slco)
         metas.append(_join_contiguous_slices(mtn, mto))
 
-    return tuple(metas), struct_new, slices_new
+    legs = legs_from_struct(struct_new)
+    return tuple(metas), struct_new, slices_new, legs
 
 
 def allclose(a, b, rtol=1e-13, atol=1e-13) -> bool:

@@ -22,7 +22,7 @@ from warnings import warn
 
 import numpy as np
 
-from ._auxiliary import _clear_axes, _unpack_axes, _struct, _slc, _flatten
+from ._auxiliary import _clear_axes, _unpack_axes, _struct, _slc, _flatten, legs_from_struct
 from ._legs import Leg, LegMeta, legs_union, _legs_mask_needed
 from ._merging import _embed_tensor
 from ._tests import YastnError
@@ -73,29 +73,32 @@ def to_dict(a, level=2, meta=None, resolve_ops=False) -> dict:
         hfs = tuple(hf._asdict() for hf in a.hfs)
         struct = a.struct._asdict()
         slices = [tuple(slc) for slc in a.slices]
+        legs = tuple(leg._asdict() for leg in a.legs)
     else:
         config = a.config
         hfs = a.hfs
         struct = a.struct
         slices = a.slices
+        legs = a.legs
 
     data = a.data if level < 2 else a.config.backend.to_numpy(a.data)
 
     # dict_ver=2: Tensor has field 'trans'
     d = {'type': type(a).__name__,
-         'dict_ver': 2,
+         'dict_ver': 3,
          'level': level,
          'config': config,
          'data': data,
          'struct': struct,
          'slices': slices,
+         'legs': legs,
          'trans': a.trans,
          'isdiag': a.isdiag,
          'hfs': hfs,
          'mfs': a.mfs}
 
     if meta is not None:
-        if not all(meta[k] == d[k] for k in ['type', 'dict_ver', 'config', 'struct', 'slices', 'trans', 'isdiag', 'hfs', 'mfs']):
+        if not all(meta[k] == d[k] for k in ['type', 'dict_ver', 'config', 'struct', 'legs', 'slices', 'trans', 'isdiag', 'hfs', 'mfs']):
             size = meta['struct'].size if hasattr(meta['struct'], 'size') else meta['struct']['size']
             tmp = a.config.backend.zeros(size, dtype=a.yastn_dtype, device=a.device)
             ap = type(a).from_dict(combine_data_and_meta(tmp, meta))
@@ -104,7 +107,7 @@ def to_dict(a, level=2, meta=None, resolve_ops=False) -> dict:
             except YastnError as e:
                 raise YastnError("Tensor is inconsistent with meta: " + str(e))
             d = a.to_dict(level=level)
-            if not all(meta[k] == d[k] for k in ['type', 'dict_ver', 'config', 'struct', 'slices', 'isdiag', 'hfs', 'mfs']):
+            if not all(meta[k] == d[k] for k in ['type', 'dict_ver', 'config', 'struct', 'slices', 'legs', 'isdiag', 'hfs', 'mfs']):
                 raise YastnError("Tensor is inconsistent with meta.")
     return d
 
@@ -530,8 +533,9 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False) -> 'Tensor':
     Dp = reduce(mul, Dtot, 1)
     c_struct = _struct(s=c_s, n=(), diag=a.isdiag, t=c_t, D=c_D, size=Dp)
     c_slices = (_slc(((0, Dp),), c_D[0], Dp),)
+    c_legs = legs_from_struct(c_struct)
     data = a.config.backend.merge_to_dense(a._data, Dtot, meta)
-    return a._replace(config=config_dense, struct=c_struct, slices=c_slices, data=data, mfs=None, hfs=None)
+    return a._replace(config=config_dense, struct=c_struct, slices=c_slices, data=data, mfs=None, hfs=None, legs=c_legs)
 
 
 def zero_of_dtype(a):

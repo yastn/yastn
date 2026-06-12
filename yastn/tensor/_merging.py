@@ -21,7 +21,7 @@ from typing import NamedTuple
 
 import numpy as np
 
-from ._auxiliary import _slc, _flatten, _clear_axes, _unpack_legs
+from ._auxiliary import _slc, _flatten, _clear_axes, _unpack_legs, legs_from_struct
 from ._tests import YastnError, _test_axes_all, _get_tD_legs
 
 __all__ = ['fuse_legs', 'unfuse_legs', 'fuse_meta_to_hard', '_Fusion', '_slc']
@@ -298,7 +298,8 @@ def _fuse_legs_hard(a, axes, order):
             hfs.append(a.hfs[axis[0]])
         else:  # len(axis) == 0
             hfs.append(_Fusion(tree=(1,), op='o', s=(struct.s[n],), t=(), D=()))
-    return a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, data=data, trans=None)
+    legs = legs_from_struct(struct)
+    return a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, data=data, trans=None, legs=legs)
 
 
 @lru_cache(maxsize=1024)
@@ -480,8 +481,8 @@ def unfuse_legs(a, axes) -> 'Tensor':
                 trans[ii] = newax
                 newax += 1
                 ii += 1
-
-        return a._replace(struct=struct, slices=slices, mfs=tuple(mfs), hfs=hfs, data=data, trans=trans)
+        legs = legs_from_struct(struct)
+        return a._replace(struct=struct, slices=slices, mfs=tuple(mfs), hfs=hfs, data=data, trans=trans, legs=legs)
     return a._replace(mfs=tuple(mfs))
 
 
@@ -634,7 +635,8 @@ def _embed_tensor(a, legs, legs_new):
                 mask_D = tuple(mask_tD.values())
                 meta, struct, slices, axis, ndim = _meta_mask(a.struct, a.slices, a.isdiag, mask_t, mask_D, axis)
                 data = a.config.backend.embed_mask(a._data, mask, meta, struct.size, axis, ndim)
-                a = a._replace(struct=struct, slices=slices, data=data, hfs=hfs)
+                legs = legs_from_struct(struct)
+                a = a._replace(struct=struct, slices=slices, data=data, hfs=hfs, legs=legs)
     return a
 
 #  =========== auxiliary functions handling fusion logic ======================

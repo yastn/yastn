@@ -21,7 +21,7 @@ import sys
 
 import numpy as np
 
-from ._auxiliary import _struct, _slc, _clear_axes, _unpack_axes
+from ._auxiliary import _struct, _slc, _clear_axes, _unpack_axes, legs_from_struct
 from ._merging import _merge_to_matrix, _meta_unmerge_matrix, _unmerge
 from ._merging import _Fusion, _leg_struct_trivial
 from ._tests import YastnError, _test_axes_all
@@ -318,7 +318,8 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
 
     Smfs = ((1,), (1,))
     Shfs = (_Fusion(s=(-sU,)), _Fusion(s=(sU,)))
-    S = a._replace(struct=Sstruct, slices=Sslices, data=Sdata, mfs=Smfs, hfs=Shfs, trans=None)
+    Slegs = legs_from_struct(Sstruct)
+    S = a._replace(struct=Sstruct, slices=Sslices, data=Sdata, mfs=Smfs, hfs=Shfs, trans=None, legs=Slegs)
 
     if not compute_uv:
         return S
@@ -328,14 +329,16 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     Udata = _unmerge(a.config, Udata, Umeta_unmerge)
     Umfs = tuple(a.mfs[ii] for ii in out_ml) + ((1,),)
     Uhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(s=(sU,)),)
-    U = a._replace(struct=Ustruct, slices=Uslices, data=Udata, mfs=Umfs, hfs=Uhfs, trans=None)
+    Ulegs = legs_from_struct(Ustruct)
+    U = a._replace(struct=Ustruct, slices=Uslices, data=Udata, mfs=Umfs, hfs=Uhfs, trans=None, legs=Ulegs)
 
     Vs = (-sU,) + tuple(a.struct.s[ii] for ii in out_hr)
     Vmeta_unmerge, Vstruct, Vslices = _meta_unmerge_matrix(a.config, Vstruct, Vslices, ls_s, ls_r, Vs)
     Vdata = _unmerge(a.config, Vdata, Vmeta_unmerge)
     Vmfs = ((1,),) + tuple(a.mfs[ii] for ii in out_mr)
     Vhfs = (_Fusion(s=(-sU,)),) + tuple(a.hfs[ii] for ii in out_hr)
-    V = a._replace(struct=Vstruct, slices=Vslices, data=Vdata, mfs=Vmfs, hfs=Vhfs, trans=None)
+    Vlegs = legs_from_struct(Vstruct)
+    V = a._replace(struct=Vstruct, slices=Vslices, data=Vdata, mfs=Vmfs, hfs=Vhfs, trans=None, legs=Vlegs)
 
     U = U.moveaxis(source=-1, destination=Uaxis)
     V = V.moveaxis(source=0, destination=Vaxis)
@@ -477,7 +480,8 @@ def eig(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
 
     Smfs = ((1,), (1,))
     Shfs = (_Fusion(s=(-sU,)), _Fusion(s=(sU,)))
-    S = a._replace(struct=Sstruct, slices=Sslices, data=Sdata, mfs=Smfs, hfs=Shfs, trans=None)
+    Slegs = legs_from_struct(Sstruct)
+    S = a._replace(struct=Sstruct, slices=Sslices, data=Sdata, mfs=Smfs, hfs=Shfs, trans=None, legs=Slegs)
 
     if not compute_uv:
         return S
@@ -487,14 +491,16 @@ def eig(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     Udata = _unmerge(a.config, Udata, Umeta_unmerge)
     Umfs = tuple(a.mfs[ii] for ii in out_ml) + ((1,),)
     Uhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(s=(sU,)),)
-    U = a._replace(struct=Ustruct, slices=Uslices, data=Udata, mfs=Umfs, hfs=Uhfs, trans=None)
+    Ulegs = legs_from_struct(Ustruct)
+    U = a._replace(struct=Ustruct, slices=Uslices, data=Udata, mfs=Umfs, hfs=Uhfs, trans=None, legs=Ulegs)
 
     Vs = (-sU,) + tuple(a.struct.s[ii] for ii in out_hr)
     Vmeta_unmerge, Vstruct, Vslices = _meta_unmerge_matrix(a.config, Vstruct, Vslices, ls_s, ls_r, Vs)
     Vdata = _unmerge(a.config, Vdata, Vmeta_unmerge)
     Vmfs = ((1,),) + tuple(a.mfs[ii] for ii in out_mr)
     Vhfs = (_Fusion(s=(-sU,)),) + tuple(a.hfs[ii] for ii in out_hr)
-    V = a._replace(struct=Vstruct, slices=Vslices, data=Vdata, mfs=Vmfs, hfs=Vhfs, trans=None)
+    Vlegs = legs_from_struct(Vstruct)
+    V = a._replace(struct=Vstruct, slices=Vslices, data=Vdata, mfs=Vmfs, hfs=Vhfs, trans=None, legs=Vlegs)
 
     U = U.moveaxis(source=-1, destination=Uaxis)
     V = V.moveaxis(source=0, destination=Vaxis)
@@ -885,14 +891,17 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0) -> tuple[yastn.Tensor, yastn.Ten
     Qdata = _unmerge(a.config, Qdata, Qmeta_unmerge)
     Qmfs = tuple(a.mfs[ii] for ii in out_ml) + ((1,),)
     Qhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(s=(sQ,)),)
-    Q = a._replace(struct=Qstruct, slices=Qslices, data=Qdata, mfs=Qmfs, hfs=Qhfs, trans=None)
+    Qlegs = legs_from_struct(Qstruct)
+    Q = a._replace(struct=Qstruct, slices=Qslices, data=Qdata, mfs=Qmfs, hfs=Qhfs, trans=None, legs=Qlegs)
 
     Rs = (-sQ,) + tuple(a.struct.s[lg] for lg in out_hr)
     Rmeta_unmerge, Rstruct, Rslices = _meta_unmerge_matrix(a.config, Rstruct, Rslices, ls, ls_r, Rs)
     Rdata = _unmerge(a.config, Rdata, Rmeta_unmerge)
     Rmfs = ((1,),) + tuple(a.mfs[ii] for ii in out_mr)
     Rhfs = (_Fusion(s=(-sQ,)),) + tuple(a.hfs[ii] for ii in out_hr)
-    R = a._replace(struct=Rstruct, slices=Rslices, data=Rdata, mfs=Rmfs, hfs=Rhfs, trans=None)
+    Rlegs = legs_from_struct(Rstruct)
+
+    R = a._replace(struct=Rstruct, slices=Rslices, data=Rdata, mfs=Rmfs, hfs=Rhfs, trans=None, legs=Rlegs)
 
     Q = Q.moveaxis(source=-1, destination=Qaxis)
     R = R.moveaxis(source=0, destination=Raxis)
@@ -1044,11 +1053,13 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank', **kwargs) -> tu
     Udata = _unmerge(a.config, Udata, Umeta_unmerge)
     Umfs = tuple(a.mfs[ii] for ii in out_ml) + ((1,),)
     Uhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(s=(sU,)),)
-    U = a._replace(struct=Ustruct, slices=Uslices, data=Udata, mfs=Umfs, hfs=Uhfs, trans=None)
+    Ulegs = legs_from_struct(Ustruct)
+    U = a._replace(struct=Ustruct, slices=Uslices, data=Udata, mfs=Umfs, hfs=Uhfs, trans=None, legs=Ulegs)
 
     Smfs = ((1,), (1,))
     Shfs = (_Fusion(s=(-sU,)), _Fusion(s=(sU,)))
-    S = a._replace(struct=Sstruct, slices=Sslices, data=Sdata, mfs=Smfs, hfs=Shfs, trans=None)
+    Slegs = legs_from_struct(Sstruct)
+    S = a._replace(struct=Sstruct, slices=Sslices, data=Sdata, mfs=Smfs, hfs=Shfs, trans=None, legs=Slegs)
 
     # sort in case of non-default order
     if policy in ['fullrank'] and which != 'SR':

@@ -22,7 +22,7 @@ from operator import itemgetter
 
 import numpy as np
 
-from ._auxiliary import _struct, _slc, _clear_axes, _unpack_axes, _join_contiguous_slices, sign_canonical_order
+from ._auxiliary import _struct, _slc, _clear_axes, _unpack_axes, _join_contiguous_slices, sign_canonical_order, legs_from_struct
 from ._merging import _merge_to_matrix, _unmerge, _meta_unmerge_matrix, _meta_fuse_hard
 from ._merging import _transpose_and_merge, _mask_tensors_leg_intersection, _meta_mask
 from ._tests import YastnError, _test_can_be_combined, _unpack_trans_test_axes_pair
@@ -122,7 +122,8 @@ def tensordot(a, b, axes, conj=(0, 0)) -> 'Tensor':
         raise YastnError("Tensordot policy not recognized. It should be 'fuse_to_matrix', 'fuse_contracted', or 'no_fusion'.")
 
     struct_c = struct_c._replace(n=n_c)
-    return a._replace(data=data, struct=struct_c, slices=slices_c, mfs=mfs_c, hfs=hfs_c, trans=None)
+    legs = legs_from_struct(struct_c)
+    return a._replace(data=data, struct=struct_c, slices=slices_c, mfs=mfs_c, hfs=hfs_c, trans=None, legs=legs)
 
 
 def _tensordot_diag(a, b, in_b, destination):
@@ -494,7 +495,8 @@ def broadcast(a, *args, axes=0) -> 'Tensor' | tuple['Tensor']:
         else:
             b_ndim = b.ndim_n
         data = b.config.backend.dot_diag(a._data, b._data, meta, struct.size, ax, b_ndim)
-        results.append(b._replace(struct=struct, slices=slices, data=data))
+        legs = legs_from_struct(struct)
+        results.append(b._replace(struct=struct, slices=slices, data=data, legs=legs))
     return results if multiple_axes else results.pop()
 
 
@@ -570,7 +572,8 @@ def apply_mask(a, *args, axes=0) -> 'Tensor' | tuple['Tensor']:
 
         meta, struct, slices, ax, ndim = _meta_mask(b.struct, b.slices, b.isdiag, mask_t, mask_D, ax)
         data = a.config.backend.apply_mask(b._data, mask, meta, struct.size, ax, ndim)
-        results.append(b._replace(struct=struct, slices=slices, data=data))
+        legs = legs_from_struct(struct)
+        results.append(b._replace(struct=struct, slices=slices, data=data, legs=legs))
     return results.pop() if len(results) == 1 else results
 
 
@@ -685,9 +688,10 @@ def trace(a, axes=(0, 1)) -> 'Tensor':
         a = a._replace(hfs=a_hfs)
 
     meta, struct, slices = _meta_trace(a.struct, a.slices, nin_0, nin_1, out)
+    legs = legs_from_struct(struct)
     data = a.config.backend.trace(a._data, order, meta, struct.size)
 
-    return a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, data=data, trans=None)
+    return a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, data=data, trans=None, legs=legs)
 
 
 @lru_cache(maxsize=1024)

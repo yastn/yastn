@@ -117,6 +117,11 @@ class Tensor:
                     raise YastnError("Tensor charge of a diagonal tensor should be 0.")
             self.struct = _struct(s=s, n=n, diag=bool(isdiag))
         #
+        if "legs" in kwargs:
+            self.legs = tuple(kwargs['legs'])
+        else:
+            self.legs = tuple(LegBasic(s=s_l, t=(), D=()) for s_l in s)
+        #
         self.slices = kwargs.get('slices', ())
         #
         # self.mfs and self.trans describe logical/meta transformation of legs
@@ -170,7 +175,7 @@ class Tensor:
 
     def _replace(self, **kwargs) -> Tensor:
         """ Creates a shallow copy replacing fields specified in kwargs. """
-        for arg in ('config', 'struct', 'mfs', 'hfs', 'data', 'slices', 'trans'):
+        for arg in ('config', 'struct', 'mfs', 'hfs', 'data', 'slices', 'trans', 'legs'):
             if arg not in kwargs:
                 kwargs[arg] = getattr(self, arg)
         return Tensor(**kwargs)
@@ -200,8 +205,9 @@ class Tensor:
 
             slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(c_Dp), c_Dp, cd['D']))
             struct = _struct(s=cd['s'], n=cd['n'], diag=c_isdiag, t=cd['t'], D=cd['D'], size=sum(c_Dp))
+            legs = legs_from_struct(struct)
             hfs = tuple(_Fusion(**hf) for hf in cd['hfs'])
-            c = Tensor(config=config, struct=struct, slices=slices, hfs=hfs, mfs=cd['mfs'])
+            c = Tensor(config=config, struct=struct, slices=slices, hfs=hfs, mfs=cd['mfs'], legs=legs)
             if 'SYM_ID' in d and c.config.sym.SYM_ID != d['SYM_ID'].replace('(','').replace(')',''):  # for backward compatibility matching U1 and U(1)
                 raise YastnError("Symmetry rule in config do not match loaded one.")
             if 'fermionic' in d and c.config.fermionic != d['fermionic']:
@@ -248,8 +254,43 @@ class Tensor:
                 d['data'] = d['config'].backend.to_tensor(d['data'], dtype=dtype, device=d['config'].default_device)
 
             return cls(**d)
-        else:
-            raise YastnError(f"Tensor.to_dict with dict_ver = {d['dict_ver']} not supported")
+
+        if d['dict_ver'] == 3:  # d from method to_dict (single version as of now)
+
+            if d['type'] != 'Tensor':
+                raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
+
+            if d['level'] >= 1 or config is not None:
+                d = d.copy()
+
+            if config is not None:
+                if (d['config']['sym'] if isinstance(d['config'], dict) else d['config'].sym.SYM_ID)  != config.sym.SYM_ID:
+                    raise YastnError("Symmetry rule in config does not match the one in stored in d.")
+                if (d['config']['fermionic'] if isinstance(d['config'], dict) else d['config'].fermionic) != config.fermionic:
+                    raise YastnError("Fermionic statistics in config does not match the one in stored in d.")
+                d['config'] = config
+
+            if d['level'] >= 1:
+                for k in ['struct', 'slices', 'hfs', 'mfs', 'legs']:
+                    d[k] = _convert_lists_to_tuples(d[k])
+                if not isinstance(d['config'], _config):
+                    d['config'] = make_config(**d['config'])
+                d['hfs'] = tuple(_Fusion(**hf) for hf in d['hfs'])
+                d['struct'] = _struct(**d['struct'])
+                d['slices'] = tuple(_slc(*x) for x in d['slices'])
+                d['legs'] = tuple(LegBasic(**x) for x in d['legs'])
+
+            if d['level'] >= 2 or config is not None:
+                dtype = d['config'].default_dtype
+                if hasattr(d['data'], 'dtype'):
+                    if 'complex128' in str(d['data'].dtype):
+                        dtype = 'complex128'
+                    if 'float64' in str(d['data'].dtype):
+                        dtype = 'float64'
+                d['data'] = d['config'].backend.to_tensor(d['data'], dtype=dtype, device=d['config'].default_device)
+
+            return cls(**d)
+        raise YastnError(f"Tensor.to_dict with dict_ver = {d['dict_ver']} not supported")
 
 
     @property

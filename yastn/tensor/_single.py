@@ -20,10 +20,10 @@ from operator import itemgetter
 
 import numpy as np
 
-from ._auxiliary import _slc, _clear_axes, _unpack_axes, _join_contiguous_slices
+from ._auxiliary import _slc, _clear_axes, _unpack_axes, _join_contiguous_slices, LegBasic, legs_from_struct
 from ._einsum import ncon
-from ._legs import LegMeta, Leg, leg_product
 from ._merging import _Fusion
+from ._legs import LegMeta, Leg, leg_product
 from ._tests import YastnError, _test_axes_all
 
 __all__ = ['conj', 'conj_blocks', 'consume_transpose',
@@ -144,7 +144,8 @@ def conj(a) -> 'Tensor':
     struct = a.struct._replace(s=news, n=newn)
     hfs = tuple(hf.conj() for hf in a.hfs)
     data = a.config.backend.conj(a._data)
-    return a._replace(hfs=hfs, struct=struct, data=data)
+    legs = tuple(leg.conj() for leg in a.legs)
+    return a._replace(hfs=hfs, struct=struct, data=data, legs=legs)
 
 
 def conj_blocks(a) -> 'Tensor':
@@ -170,7 +171,8 @@ def flip_signature(a) -> 'Tensor':
     news = tuple(-x for x in a.struct.s)
     struct = a.struct._replace(s=news, n=newn)
     hfs = tuple(hf.conj() for hf in a.hfs)
-    return a._replace(hfs=hfs, struct=struct)
+    legs = tuple(leg.conj() for leg in a.legs)
+    return a._replace(hfs=hfs, struct=struct, legs=legs)
 
 
 def flip_charges(a, axes=None) -> 'Tensor':
@@ -223,7 +225,8 @@ def flip_charges(a, axes=None) -> 'Tensor':
     meta_embed = tuple((sl_n, sl_n[1] - sl_n[0], sl_o, sl_o[1] - sl_o[0], 0) for sl_n, sl_o in meta_embed)
     mask = {0: slice(None)}
     data = a.config.backend.embed_mask(a._data, mask, meta_embed, struct.size, 0, 0)
-    return a._replace(struct=struct, slices=slices, data=data, hfs=hfs)
+    legs = legs_from_struct(struct)
+    return a._replace(struct=struct, slices=slices, data=data, hfs=hfs, legs=legs)
 
 
 def switch_signature(a, axes: Union[Sequence[int],int,str] = ()) -> 'Tensor':
@@ -340,10 +343,11 @@ def consume_transpose(a) -> 'Tensor':
 
     slices = tuple(_slc((x,), y, z) for x, y, z in zip(c_sl, c_D, c_Dp))
     struct = a.struct._replace(s=c_s, t=c_t, D=c_D)
+    legs = tuple(a.legs[i] for i in a.trans)
     meta = tuple((sln.slcs[0], sln.D, mt[2].slcs[0], mt[2].D) for sln, mt, in zip(slices, meta))
 
     data = a._data if a.isdiag else a.config.backend.transpose(a._data, a.trans, meta)
-    return a._replace(hfs=hfs, struct=struct, slices=slices, data=data, trans=no_trans)
+    return a._replace(hfs=hfs, struct=struct, slices=slices, data=data, trans=no_trans, legs=legs)
 
 
 def moveaxis(a, source, destination) -> 'Tensor':
@@ -459,8 +463,8 @@ def add_leg(a, axis=-1, s=-1, t=None, leg=None) -> 'Tensor':
     struct = a.struct._replace(t=newt, D=newD, s=news, n=newn)
     slices = tuple(_slc(x.slcs, y, x.Dp) for x, y in zip(a.slices, newD))
     hfs = a.hfs[:haxis] + (hfsa,) + a.hfs[haxis:]
-
-    return a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, trans=trans)
+    legs = a.legs[:haxis] + (LegBasic(s=s, t=(t,), D=(1,)),) + a.legs[haxis:]
+    return a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, trans=trans, legs=legs)
 
 
 def remove_leg(a, axis=-1) -> 'Tensor':
@@ -512,7 +516,8 @@ def remove_leg(a, axis=-1) -> 'Tensor':
         struct = a.struct._replace(t=newt, D=newD, s=news, n=newn)
         slices = tuple(_slc(x.slcs, y, x.Dp) for x, y in zip(a.slices, newD))
         hfs = a.hfs[:haxis] + a.hfs[haxis + 1:]
-        a = a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, trans=trans)
+        legs = a.legs[:haxis] + a.legs[haxis + 1:]
+        a = a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, trans=trans, legs=legs)
     return a
 
 
@@ -570,4 +575,5 @@ def remove_zero_blocks(a, rtol=1e-12, atol=0) -> 'Tensor':
     mask = {0: slice(None)}
     meta = [(sln, sln[1] - sln[0], slo, slo[1] - slo[0], 0) for sln, slo in zip(c_sl, old_sl)]
     data = a.config.backend.apply_mask(a._data, mask, meta, size, 0, 0)
-    return a._replace(struct=struct, slices=slices, data=data)
+    legs = legs_from_struct(struct)
+    return a._replace(struct=struct, slices=slices, data=data, legs=legs)
