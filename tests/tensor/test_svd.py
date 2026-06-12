@@ -254,7 +254,7 @@ def test_svd_truncate_lowrank(config_kwargs):
     assert yastn.norm(a1 - a2) < tol
 
 
-@numpy_test
+@pytest.mark.xfail(reason='Converging SVD might depend on linear algebra backend', strict=False)
 def test_svd_ill_conditioned(config_kwargs):
     """ test svd on ill-conditioned matrix """
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)

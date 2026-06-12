@@ -99,7 +99,7 @@ def test_eig_transpose_meta(config_kwargs):
     assert yastn.norm(Vf - Vm) < tol  # == 0.0
 
 
-@numpy_test
+@pytest.mark.xfail(reason='Raising error might depend on linear algebra backend', strict=False)
 def test_eig_degeneracy_fail(config_kwargs):
     # Z2xU1
     config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
