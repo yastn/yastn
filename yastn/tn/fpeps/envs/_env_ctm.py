@@ -1055,7 +1055,7 @@ def update_extended_2x2_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwarg
     use_qr = kwargs.get("use_qr", True)
     kwargs["profiling_mode"]= env.profiling_mode
     psh = env.proj
-    svd_predict_spec= lambda s0,p0,s1,p1,sign: opts_svd.get('D_block', float('inf')) \
+    svd_predict_spec= lambda s0,p0,s1,p1,sign: opts_svd.get('k_block', opts_svd.get('D_block', float('inf'))) \
         if psh is None or (getattr(psh[s0],p0) is None or getattr(psh[s1],p1) is None) else \
         env._partial_svd_predict_spec(getattr(psh[s0],p0).get_legs(-1), getattr(psh[s1],p1).get_legs(-1), sign)
 
@@ -1236,6 +1236,7 @@ def proj_corners(r0, r1, opts_svd, **kwargs):
     kwargs.pop('verbosity', None)
     profiling_mode= kwargs.get('profiling_mode', None)
 
+    # import pdb; pdb.set_trace()
     if profiling_mode in ["NVTX",]:
         rr.config.backend.cuda.nvtx.range_push(f"svd_with_truncation")
         u, s, v = rr.svd_with_truncation(axes=(0, 1), sU=r0.s[1], **opts_svd, **kwargs)
