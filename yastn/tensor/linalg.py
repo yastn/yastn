@@ -46,10 +46,23 @@ def norm(a, p='fro') -> Number:
     return a.config.backend.norm(a._data, p)
 
 
-def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
-        Uaxis=-1, Vaxis=0, policy='fullrank', fix_signs=False, svd_on_cpu=False,
-        tol=0, tol_block=0, D_block=float('inf'), D_total=float('inf'),
-        truncate_multiplets=False, mask_f=None, **kwargs) -> tuple[yastn.Tensor, yastn.Tensor, yastn.Tensor]:
+def svd_with_truncation(a, axes=(0, 1),
+                        sU=1,
+                        nU=True,
+                        Uaxis=-1,
+                        Vaxis=0,
+                        policy='fullrank',
+                        fix_signs=False,
+                        svd_on_cpu=False,
+                        tol=float('-inf'),
+                        tol_block=float('-inf'),
+                        D_total=float('inf'),
+                        D_block=float('inf'),
+                        largest_gap=False,
+                        eps_multiplet=None,
+                        hermitian=False,
+                        mask_f=None,
+                        **kwargs) -> tuple[yastn.Tensor, yastn.Tensor, yastn.Tensor]:
     r"""
     Split tensor using exact singular value decomposition (SVD) into :math:`a = U S V`,
     where the columns of `U` and the rows of `V` form orthonormal bases
@@ -82,31 +95,43 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
         and for ``"lowrank"`` use randomized/truncated SVD and requires providing ``D_block`` or ``k_block`` in ``kwargs``.
 
     tol: float
-        relative tolerance of singular values below which to truncate across all blocks.
+        Relative tolerance with respect to the largest absolut value element of ``S``.
 
     tol_block: float
-        relative tolerance of singular values below which to truncate within individual blocks.
-
-    D_block: int | dict
-        largest number of singular values to keep in a single block.
-        It is also possible to provide a dictionary mapping charges to maximal number of elements in the charge sector.
-
-    k_block: None (default) | int | dict
-        When ``policy='lowrank'``, number of singular values to compute in each block.
-        If ``D_block`` is provided, it is used instead to determine number of singular values to compute.
+        Relative tolerance per block.
 
     D_total: int
-        largest total number of singular values to keep.
+        Maximum number of elements kept across all blocks.
 
-    truncate_multiplets: bool
+    D_block: int | dict
+        Maximum number of elements kept per block.
+        It is also possible to provide a dictionary mapping charges to maximal number of elements in the charge sector.
+
+    largest_gap: bool
         If ``True``, enlarge the truncation range specified by other arguments by shifting
         the cut to the largest gap between to-be-truncated singular values across all blocks.
         It provides a heuristic mechanism to avoid truncating part of a multiplet.
+        If ``True``, ``tol_block`` and ``D_block`` are ignored, as ``largest_gap`` is a global condition.
         The default is ``False``.
 
-    mask_f: function[yastn.Tensor] -> yastn.Tensor
-        custom truncation-mask function.
-        If provided, it overrides all other truncation-related arguments.
+    eps_multiplet: float
+        Relative tolerance on multiplet splitting. If relative difference between
+        two consecutive elements of ``S`` is larger than ``eps_multiplet``, these
+        elements are not considered as part of the same multiplet.
+        Partially truncated multiplets are truncated down.
+        The default is None, when this scheme is not used.
+        If ``True``, ``tol_block`` and ``D_block`` are ignored, as ``eps_multiplet`` is a global condition.
+        Cannot be used together with largest_gap scheme.
+
+    hermitian: bool
+        If True, blocks related by hermitian conjugation are truncated equally, truncating down to the intersecting part.
+        The default is False.
+
+    mask_f: None | function[yastn.Tensor] -> yastn.Tensor
+        It is possible to provide a custom mask function, which provides a mechanism to pass such a function
+        to many tensor network algorithms where the function truncation_mask is being called.
+        If provided, it overrides the default function, and all other parameters are ignored.
+        The default is None.
 
     Returns
     -------
@@ -117,16 +142,13 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
                   fix_signs=fix_signs, svd_on_cpu=svd_on_cpu, **kwargs)
     Smask = truncation_mask(S, tol=tol, tol_block=tol_block,
                             D_block=D_block, D_total=D_total,
-                            truncate_multiplets=truncate_multiplets,
-                            mask_f=mask_f)
+                            largest_gap=largest_gap,
+                            eps_multiplet=eps_multiplet,
+                            hermitian=hermitian,
+                            mask_f=mask_f,
+                            verbosity=verbosity)
 
     U, S, V = Smask.apply_mask(U, S, V, axes=(-1, 0, 0))
-    if verbosity > 2:
-        fname = sys._getframe().f_code.co_name
-        logger.info(f"{fname} truncation_mask tol {tol} tol_block {tol_block} D_total {D_total}")
-        logger.info(f"truncation_mask D_block {D_block}")
-        logger.info(f"{fname} S {S.get_legs(0)}")
-
     U = U.moveaxis(source=-1, destination=Uaxis)
     V = V.moveaxis(source=0, destination=Vaxis)
     return U, S, V
@@ -505,10 +527,10 @@ def _find_gaps(S, tol=0, eps_multiplet=1e-13, which='LM'):
         ``'SR'`` : smallest real part.
 
     Returns
-    ------
+    -------
         gaps: numpy.ndarray
             gaps[i] gives normalized gap as absolute value of difference between i-th and i+1
-            element of S wrt. to order 'which', normalized by largest overall gap.
+            element of S with respect to the order 'which', normalized by largest overall gap.
     """
     # if isinstance(S, yastn.Tensor):
     if hasattr(S, 'is_diag') and hasattr(S, 'ndim'):
@@ -543,6 +565,9 @@ def truncation_mask_multiplets(S, tol=0, D_total=float('inf'),
     degenerate multiplets. This is achieved by truncating the spectrum
     at the boundary between multiplets.
 
+    !!! This method is deprecated and can be removed at some point; !!!
+    Use linalg.truncation_mask() that now include those truncation schemes.
+
     Parameters
     ----------
     S: yastn.Tensor
@@ -562,176 +587,258 @@ def truncation_mask_multiplets(S, tol=0, D_total=float('inf'),
     hermitian: bool = False
         If true, blocks related by hermitian conjugation are truncated equally.
     """
-    if not (S.isdiag and S.yastn_dtype == "float64"):
-        raise YastnError("Truncation_mask requires S to be real and diagonal.")
+    # if not (S.isdiag and S.yastn_dtype == "float64"):
+    #     raise YastnError("Truncation_mask requires S to be real and diagonal.")
 
-    verbosity = kwargs.get('verbosity', 0)
-    if verbosity>2:
-        fname = sys._getframe().f_code.co_name
-        tol_block = kwargs.get('tol_block', "N/A")
-        logger.info(f"{fname} tol {tol} tol_block {tol_block} D_total {D_total}")
+    # verbosity = kwargs.get('verbosity', 0)
+    # if verbosity>2:
+    #     fname = sys._getframe().f_code.co_name
+    #     tol_block = kwargs.get('tol_block', "N/A")
+    #     logger.info(f"{fname} tol {tol} tol_block {tol_block} D_total {D_total}")
 
-    # makes a copy for partial truncations; also detaches from autograd computation graph
-    Smask = S.copy()
-    Smask._data = Smask.data > float('inf') # all False ?
-    S_global_max = None
+    # # makes a copy for partial truncations; also detaches from autograd computation graph
+    # Smask = S.copy()
+    # Smask._data = Smask.data > float('inf') # all False ?
+    # S_global_max = None
 
-    # find all multiplets in the spectrum
-    # 0) convert to plain dense numpy vector and sort in descending order
-    # s = S.config.backend.to_numpy(S.data)
-    # inds = np.argsort(s)[::-1].copy() # make descending
-    # s = s[inds]
-    # s, inds = torch.sort(S.data.detach(), descending=True)
-    backend = S.config.backend
-    inds = backend.argsort(-S.copy().data)
-    s = S.data[inds]
+    # # find all multiplets in the spectrum
+    # # 0) convert to plain dense numpy vector and sort in descending order
+    # # s = S.config.backend.to_numpy(S.data)
+    # # inds = np.argsort(s)[::-1].copy() # make descending
+    # # s = s[inds]
+    # # s, inds = torch.sort(S.data.detach(), descending=True)
+    # backend = S.config.backend
+    # inds = backend.argsort(-S.copy().data)
+    # s = S.data[inds]
 
-    S_global_max = s[0]
-    D_trunc = min(sum(s > (S_global_max * tol)), D_total)
-    if D_trunc >= len(s):
-        # no truncation
-        Smask._data = S.data > -float('inf') # all True ?
-        return Smask
+    # S_global_max = s[0]
+    # D_trunc = min(sum(s > (S_global_max * tol)), D_total)
+    # if D_trunc >= len(s):
+    #     # no truncation
+    #     Smask._data = S.data > -float('inf') # all True ?
+    #     return Smask
 
-    # compute gaps and normalize by magnitude of (abs) larger value.
-    # value of gaps[i] gives gap between i-th and i+1 the element of s
-    maxgap = backend.maximum(backend.absolute(s[:-1]), backend.absolute(s[1:])) + 1.0e-16
-    gaps = backend.absolute(s[:-1] - s[1:]) / maxgap
+    # # compute gaps and normalize by magnitude of (abs) larger value.
+    # # value of gaps[i] gives gap between i-th and i+1 the element of s
+    # maxgap = backend.maximum(backend.absolute(s[:-1]), backend.absolute(s[1:])) + 1.0e-16
+    # gaps = backend.absolute(s[:-1] - s[1:]) / maxgap
 
-    # find nearest multiplet boundary, keeping at most D_trunc elements
-    # i-th element of gaps gives gap between i-th and (i+1)-th element of s
-    # Note, s[:D_trunc] selects D_trunc values: from 0th to (D_trunc-1)-th element
-    for i in range(D_trunc - 1, -1, -1):
-        if gaps[i] > eps_multiplet:
-            D_trunc = i+1
-            break
+    # # find nearest multiplet boundary, keeping at most D_trunc elements
+    # # i-th element of gaps gives gap between i-th and (i+1)-th element of s
+    # # Note, s[:D_trunc] selects D_trunc values: from 0th to (D_trunc-1)-th element
+    # for i in range(D_trunc - 1, -1, -1):
+    #     if gaps[i] > eps_multiplet:
+    #         D_trunc = i+1
+    #         break
 
-    Smask._data[inds[:D_trunc]] = True
+    # Smask._data[inds[:D_trunc]] = True
 
-    # check blocks related by Hermitian symmetry and truncate to equal length
-    if not hermitian:
-        return Smask
-    active_sectors = filter(lambda x: any(Smask[x]), Smask.struct.t)
-    for t in active_sectors:
-        tn = np.array(t, dtype=np.int64).reshape((1, 1, -1))
-        tn = tuple(S.config.sym.fuse(tn, (1,), -1).ravel().tolist())
-        if t == tn:
-            continue
+    # # check blocks related by Hermitian symmetry and truncate to equal length
+    # if not hermitian:
+    #     return Smask
+    # active_sectors = filter(lambda x: any(Smask[x]), Smask.struct.t)
+    # for t in active_sectors:
+    #     tn = np.array(t, dtype=np.int64).reshape((1, 1, -1))
+    #     tn = tuple(S.config.sym.fuse(tn, (1,), -1).ravel().tolist())
+    #     if t == tn:
+    #         continue
 
-        common_size = min(len(Smask[t]), len(Smask[tn]))
-        # if related blocks do not have equal length
-        if common_size > len(Smask[t]):
-            # assert sum(Smask[t][common_size:]) <= 0 ,\
-            #     "Symmetry-related blocks do not match"
-            Smask[t][common_size:] = False
-        if common_size > len(Smask[tn]):
-            # assert sum(Smask[tn][common_size:])<=0,\
-            #     "Symmetry-related blocks do not match"
-            Smask[tn][common_size:] = False
+    #     common_size = min(len(Smask[t]), len(Smask[tn]))
+    #     # if related blocks do not have equal length
+    #     if common_size > len(Smask[t]):
+    #         # assert sum(Smask[t][common_size:]) <= 0 ,\
+    #         #     "Symmetry-related blocks do not match"
+    #         Smask[t][common_size:] = False
+    #     if common_size > len(Smask[tn]):
+    #         # assert sum(Smask[tn][common_size:])<=0,\
+    #         #     "Symmetry-related blocks do not match"
+    #         Smask[tn][common_size:] = False
 
-        if not all(Smask[t][:common_size] == Smask[tn][:common_size]):
-            Smask[t][:common_size] = Smask[tn][:common_size] = Smask[t][:common_size] & Smask[tn][:common_size]
-    return Smask
+    #     if not all(Smask[t][:common_size] == Smask[tn][:common_size]):
+    #         Smask[t][:common_size] = Smask[tn][:common_size] = Smask[t][:common_size] & Smask[tn][:common_size]
+    # return Smask
+    return truncation_mask(S, which='LR',
+                           tol=tol, D_total=D_total,
+                           eps_multiplet=eps_multiplet,
+                           hermitian=hermitian)
 
 
-def truncation_mask(S, tol=0, tol_block=0,
-                    D_block=float('inf'), D_total=float('inf'),
-                    truncate_multiplets=False,
-                    mask_f=None, **kwargs) -> yastn.Tensor[bool]:
+def truncation_mask(S, which='LR',
+                    tol=float('-inf'),
+                    tol_block=float('-inf'),
+                    D_total=float('inf'),
+                    D_block=float('inf'),
+                    largest_gap=False,
+                    eps_multiplet=None,
+                    hermitian=False,
+                    mask_f=None,
+                    **kwargs) -> yastn.Tensor[bool]:
     """
-    Generate mask tensor based on diagonal and real tensor ``S``.
-    It can be then used for truncation.
-
-    Per block options ``D_block`` and ``tol_block`` govern truncation within individual blocks,
-    keeping at most ``D_block`` values which are larger than relative cutoff ``tol_block``.
+    Generate mask tensor based on diagonal tensor ``S``.
+    The mask can be then used for truncation.
 
     Parameters
     ----------
     S: yastn.Tensor
         Diagonal tensor with spectrum.
 
+    which: str
+        Which values to keep from [``'LM'``, ``'LR'``, ``'SR'``, ``'SM'``]:
+        ``'LR'`` : largest real part (the default),
+        ``'LM'`` : largest magnitude,
+        ``'SR'`` : smallest real part,
+        ``'SM'`` : smallest magnitude.
+
     tol: float
-        relative tolerance.
+        Relative tolerance with respect to the largest absolut value element of ``S``.
 
     tol_block: float
-        relative tolerance per block.
+        Relative tolerance per block.
 
     D_total: int
-        maximum number of elements kept across all blocks.
+        Maximum number of elements kept across all blocks.
 
     D_block: int | dict
-        maximum number of elements kept per block.
+        Maximum number of elements kept per block.
         It is also possible to provide a dictionary mapping charges to maximal number of elements in the charge sector.
 
-    truncate_multiplets: bool
+    largest_gap: bool
         If ``True``, enlarge the truncation range specified by other arguments by shifting
         the cut to the largest gap between to-be-truncated singular values across all blocks.
         It provides a heuristic mechanism to avoid truncating part of a multiplet.
-        If ``True``, ``tol_block`` and ``D_block`` are ignored, as ``truncate_multiplets`` is a global condition.
+        If ``True``, ``tol_block`` and ``D_block`` are ignored, as ``largest_gap`` is a global condition.
         The default is ``False``.
 
+    eps_multiplet: float
+        Relative tolerance on multiplet splitting. If relative difference between
+        two consecutive elements of ``S`` is larger than ``eps_multiplet``, these
+        elements are not considered as part of the same multiplet.
+        Partially truncated multiplets are truncated down.
+        The default is None, when this scheme is not used.
+        If ``True``, ``tol_block`` and ``D_block`` are ignored, as ``eps_multiplet`` is a global condition.
+        Cannot be used together with largest_gap scheme.
+
+    hermitian: bool
+        If True, blocks related by hermitian conjugation are truncated equally, truncating down to the intersecting part.
+        The default is False.
+
     mask_f: None | function[yastn.Tensor] -> yastn.Tensor
-        Custom mask function. The default is None.
-        If provided, it overrides the default function and all other parameters are ignored.
+        It is possible to provide a custom mask function, which provides a mechanism to pass such a function
+        to many tensor network algorithms where the function truncation_mask is being called.
+        If provided, it overrides the default function, and all other parameters are ignored.
+        The default is None.
     """
     if mask_f is not None:
         return mask_f(S)
 
-    if not (S.isdiag and S.yastn_dtype == "float64"):
-        raise YastnError("truncation_mask() requires S to be real and diagonal.")
+    if not S.isdiag:
+        raise YastnError("truncation_mask() requires S to be diagonal.")
 
     verbosity = kwargs.get('verbosity', 0)
     if verbosity > 2:
         fname = sys._getframe().f_code.co_name
-        logger.info(f"{fname} tol {tol} tol_block {tol_block} D_total {D_total}")
-        logger.info(f"{fname} D_block {D_block}")
+        logger.info(f"{fname} {tol=} {tol_block=} {D_total=} {D_block=}")
+        logger.info(f"{fname} {largest_gap=} {eps_multiplet=} {hermitian=}")
+
+    if which in ["SR", "SM"] and (tol != -float('inf') or tol_block != -float('inf')):
+        raise YastnError("Truncation by tolerance with which='SR' or 'SM' is not supported."
+            + "Set tol and tol_block to -inf or use mask_f for custom truncation mask if needed.")
+
+    if (largest_gap or eps_multiplet) and  (tol_block != float('-inf') or D_block != float('inf')):
+        raise YastnError("Truncation by block cannot be used when multiplet-related schmes are invoked."
+            + "Set D_block to the default float('inf') and tol_block to the default float('-inf').")
+
+    if (largest_gap or eps_multiplet) and which not in ['LM', 'LR']:
+        raise YastnError("Only which = 'LM' or 'LR' are supported when multiplet-related schmes are invoked.")
+
+    if largest_gap and eps_multiplet:
+        raise YastnError("Truncation multiplets cannot perform both schemes largest_gap and eps_multiplets simultaneously."
+                         + "Switch one off by providing the default value.")
+
+    backend = S.config.backend
+    nsym = S.config.sym.NSYM
+    f_which = {'LR': backend.real, 'LM': backend.absolute}
+    ff = f_which.get(which, None)
 
     # makes a copy for partial truncations; also detaches from autograd computation graph
-    S = S.copy()
-    Smask = S.copy()
-    Smask._data = Smask._data > -float('inf') # all True
+    Smask = abs(S.detach()) > float('-inf')  # all True
 
-    if truncate_multiplets:
-        tol_block, D_block = 0, float('inf')
+    if tol_block != float('-inf') or D_block != float('inf'):
+        tol_null = float('inf') if isinstance(tol_block, dict) else tol_block
+        D_null = 0 if isinstance(D_block, dict) else D_block
 
-    nsym = S.config.sym.NSYM
-    tol_null = 0. if isinstance(tol_block, dict) else tol_block
-    D_null = 0 if isinstance(D_block, dict) else D_block
-    for t, sl in zip(S.struct.t, S.slices):
-        t = t[:nsym]
-        tol_rel = tol_block[t] if (isinstance(tol_block, dict) and t in tol_block) else tol_null
-        above_tol = S.data[slice(*sl.slcs[0])] > tol_rel * S.config.backend.max_abs(S.data[slice(*sl.slcs[0])])
-        D_tol = S.config.backend.sum_elements(above_tol).item()
-        D_bl = D_block[t] if (isinstance(D_block, dict) and t in D_block) else D_null
-        D_bl = min(D_bl, D_tol)
-        if 0 < D_bl < sl.Dp:  # block truncation
-            inds = S.config.backend.argsort(S.data[slice(*sl.slcs[0])])
-            Smask._data[slice(*sl.slcs[0])][inds[:-D_bl]] = False
-        elif D_bl == 0:
-            Smask._data[slice(*sl.slcs[0])] = False
+        for t, sl in zip(S.struct.t, S.slices):
+            t = t[:nsym]
+            slc = slice(*sl.slcs[0])
+            D_bl = D_block[t] if (isinstance(D_block, dict) and t in D_block) else D_null
+            if which in ['LR', 'LM']:
+                tol_rel = tol_block[t] if (isinstance(tol_block, dict) and t in tol_block) else tol_null
+                above_tol = ff(S.data[slc]) > tol_rel * backend.max_abs(S.data[slc])
+                D_tol = backend.sum_elements(above_tol).item()
+                D_bl = min(D_bl, D_tol)
 
-    temp_data = S._data * Smask.data
-    above_tol = temp_data > tol * S.config.backend.max_abs(temp_data)
-    D_tol = S.config.backend.sum_elements(above_tol).item()
-    D_total = min(D_total, D_tol)
+            if 0 < D_bl < sl.Dp:  # block truncation
+                inds = backend.argsort_which(S.data[slc], which)
+                Smask._data[slc][inds[D_bl:]] = False
+            elif D_bl == 0:
+                Smask._data[slc] = False
+    #
+    D_total = min(D_total, len(S.data))
+    if which in ['LR', 'LM']:
+        above_tol = ff(S.data) > tol * backend.max_abs(S.data)
+        D_total = min(D_total, backend.sum_elements(above_tol).item())
+    #
+    inds = backend.argsort_which(S.data, which)
+    #
+    if largest_gap and D_total < len(S.data):
+        s = ff(S._data[inds[D_total - 1:]])
+        gaps = abs(s[:-1] - s[1:]) * (s[0] * s[:-1] > 0)  # (s[0] * ...) does not allow sign change
+        D_total += backend.argmax(gaps).item()
+    #
+    if eps_multiplet is not None and 0 < D_total < len(S.data):
+        s = ff(S._data[inds[:D_total + 1]])
+        maxgap = backend.maximum(abs(s[:-1]), abs(s[1:])) + 1.0e-16
+        normalized_gaps = abs(s[:-1] - s[1:]) * (s[0] * s[:-1] > 0) / maxgap  # (s[0] * ...) does not allow sign change
+        relevant_gaps = (normalized_gaps > eps_multiplet) * 1  # * 1 to change dtype
+        D_total -= backend.argmax(backend.flip(relevant_gaps)).item() # + (D_total == len(S.data) and any(relevant_gaps)) # if D_total == len(S.data)
+    #
+    Smask._data[inds[D_total:]] = False
+    #
+    # check blocks related by Hermitian symmetry and truncate to equal length
+    if hermitian:
+        considered_t = []
+        for it, t in enumerate(Smask.struct.t):
+            t = t[:nsym]
+            tc = S.config.sym.conj_charge(t)
+            #
+            if t == tc or t in considered_t:
+                continue
+            #
+            slc_t = slice(*S.slices[it].slcs[0])
+            try:
+                itc = S.struct.t.index(tc + tc)
+            except ValueError:  # conjugated sector not in S
+                Smask.data[slc_t] = False
+                continue
+            slc_tc = slice(*S.slices[itc].slcs[0])
+            #
+            considered_t.append(t)
+            considered_t.append(tc)
+            lt, ltc = S.struct.D[it][0], S.struct.D[itc][0]
+            common_size = min(lt, ltc)
+            inds_t = backend.argsort_which(S.data[slc_t], which)
+            inds_tc = backend.argsort_which(S.data[slc_tc], which)
+            St = Smask.data[slc_t]
+            Stc = Smask.data[slc_tc]
+            #
+            # if related blocks do not have equal length
+            if common_size < lt:
+                St[inds_t[common_size:]] = False
+            if common_size < ltc:
+                Stc[inds_tc[common_size:]] = False
+            #
+            St[inds_t[:common_size]] = Stc[inds_tc[:common_size]] = St[inds_t[:common_size]] & Stc[inds_tc[:common_size]]
 
-    if D_total == 0:
-        Smask._data[:] = False
-        return Smask
-
-    inds = S.config.backend.argsort(temp_data)
-
-    if truncate_multiplets and D_total < len(inds):
-        gap = -1
-        for p in range(D_total, len(inds)):
-            gap_p = abs(S._data[inds[-p]] - S._data[inds[-p - 1]])
-            if gap_p > gap:
-                D_total = p
-                gap = gap_p
-            if gap > abs(S._data[inds[-p]]):
-                break
-
-    Smask._data[inds[:-D_total]] = False
     return Smask
 
 
@@ -840,7 +947,7 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank', **kwargs) -> tu
         Specify two groups of legs between which to perform eigh, as well as their final order.
 
     sU: int
-        signature of connecting leg in `U` equall 1 or -1. The default is 1.
+        signature of connecting leg in `U` equal 1 or -1. The default is 1.
 
     Uaxis: int
         specify which leg of `U` is the new connecting leg. By default, it is the last leg.
@@ -948,7 +1055,7 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank', **kwargs) -> tu
         nsym = a.config.sym.NSYM
         blocks_U = U.get_blocks_charge()
         for b in S.get_blocks_charge():
-            arg_b = a.config.backend.eigs_which(S[b], which)
+            arg_b = a.config.backend.argsort_which(S[b], which)
             S[b] = S[b][arg_b]
             slice_U = tuple([slice(None),] * (U.ndim_n - 1) + [arg_b,])
             for b_U in blocks_U: # suboptimal since U may have more blocks
@@ -1060,15 +1167,15 @@ def _meta_eigh_lowrank(config, struct, slices, sU, D_block):
 
 def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank',
                          tol=0, tol_block=0, D_block=float('inf'), D_total=float('inf'),
-                         truncate_multiplets=False, mask_f=None, **kwargs) -> tuple[yastn.Tensor, yastn.Tensor]:
+                         largest_gap=False, mask_f=None, **kwargs) -> tuple[yastn.Tensor, yastn.Tensor]:
     r"""
-    Split symmetric tensor using exact eigenvalue decomposition, :math:`a= USU^{\dagger}``.
+    Split symmetric tensor using exact eigenvalue decomposition, :math:`a= USU^{\dagger}`.
     Optionally, truncate the resulting decomposition.
 
     Tensor is expected to be symmetric (hermitian) with total charge 0.
     Truncation can be based on relative tolerance, bond dimension of each block,
     and total bond dimension across all blocks (whichever gives smaller total dimension).
-    Truncate based on tolerance only if some eigenvalues are positive -- than all negative ones are discarded.
+    Truncate based on tolerance only if some eigenvalues are positive -- then all negative ones are discarded.
 
     Parameters
     ----------
@@ -1076,7 +1183,7 @@ def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank',
         Specify two groups of legs between which to perform eigh, as well as their final order.
 
     sU: int
-        signature of connecting leg in `U` equall 1 or -1. The default is 1.
+        signature of connecting leg in `U` equal 1 or -1. The default is 1.
 
     Uaxis: int
         specify which leg of `U` is the new connecting leg. By default, it is the last leg.
@@ -1114,20 +1221,10 @@ def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank',
     """
     S, U = eigh(a, axes=axes, sU=sU, Uaxis=Uaxis, which=which, policy=policy)
 
-    # # truncation mask assumes positive values in _S and select largest elements
-    # if which in ["SR", "SM"] and (tol in [-float('inf')]) and not (tol_block in [-float('inf')]):
-    #     raise YastnError("Truncation by tolerance with which='SR' or 'SM' is not supported."
-    #         +"Set tol and tol_block to -inf or use mask_f for custom truncation mask if needed.")
-
-    _S = abs(S) if which in ["SM", "LM"] else S
-    if which in ["SM", "SR"]:
-        _S = - _S
-
-    Smask = truncation_mask(_S, tol=tol, tol_block=tol_block,
+    Smask = truncation_mask(S, which=which, tol=tol, tol_block=tol_block,
                         D_block=D_block, D_total=D_total,
-                        truncate_multiplets=truncate_multiplets, mask_f=mask_f)
+                        largest_gap=largest_gap, mask_f=mask_f)
     S, U = Smask.apply_mask(S, U, axes=(0, Uaxis))
-
     return S, U
 
 

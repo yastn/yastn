@@ -121,7 +121,7 @@ def random_mps(I, n=None, D_total=8, sigma=1, distribution=(-1, 1), dtype='float
     I: MpsMpoOBC
         MPS or MPO that defines local Hilbert spaces.
     n: int | tuple[int] | Sequence[number] | Sequence[tulpe[numbers]] | None
-        Total charge of MPS, which equalls the charge on the first virtual leg of MPS.
+        Total charge of MPS, which equals the charge on the first virtual leg of MPS.
         Virtual charge bond dimensions along the MPS are drawn from a normal distribution with specified mean.
         ``n`` can be a list that provides the means for all virtual legs (with zero charge on the last leg).
         If ``n`` is a single charge, the means change linearly along the chain from ``n`` to 0.

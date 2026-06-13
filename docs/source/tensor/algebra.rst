@@ -122,10 +122,10 @@ See examples at :ref:`examples/tensor/decomposition:decompositions of symmetric 
 .. autofunction:: yastn.linalg.svd
 .. autofunction:: yastn.linalg.svd_with_truncation
 .. autofunction:: yastn.linalg.qr
+.. autofunction:: yastn.linalg.eig
 .. autofunction:: yastn.linalg.eigh
 .. autofunction:: yastn.linalg.eigh_with_truncation
 .. autofunction:: yastn.linalg.truncation_mask
-.. autofunction:: yastn.linalg.truncation_mask_multiplets
 .. autofunction:: yastn.linalg.entropy
 
 .. _tensor-aux:

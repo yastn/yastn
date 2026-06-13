@@ -128,7 +128,7 @@ def test_syntax_basic_algebra(config_kwargs):
     # individual operations. This happens for linear combination of multiple tensors
     #
     tensor = yastn.add(a, b, a, b, amplitudes=(1, -1, 2, 1))
-    tensor = yastn.add(a, b, a, b)  # all amplitudes equall to one.
+    tensor = yastn.add(a, b, a, b)  # all amplitudes equal to one.
 
     #
     # element-wise exponentiation, absolute value, reciprocal i.e. x -> 1/x,
@@ -346,6 +346,7 @@ def test_syntax_noDocs(config_kwargs):
     tensor = a.to(dtype='complex128')
     # get info
     a.print_properties()
+    a.print_blocks_shape()
     a.get_rank()
     a.size
     a.get_tensor_charge()
@@ -358,6 +359,7 @@ def test_syntax_noDocs(config_kwargs):
     a.get_shape(axes=2)
     a.get_dtype()
     a.dtype
+    a.num_blocks
 
     # leg retrival
     legs = a.get_legs()

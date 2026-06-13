@@ -733,7 +733,7 @@ class FixedPoint(torch.autograd.Function):
                     opts_svd=opts_svd, corner_tol=None, **kwargs)
         elif len(fwd_devices) > 1:
             ctm_itr = iterate_D_(env, opts_svd=opts_svd, moves='hv', method='2x2', max_sweeps=max_sweeps,
-                        iterator_step=1, corner_tol=corner_tol, truncation_f=None, use_qr=False, checkpoint_move=False,
+                        iterator_step=1, corner_tol=corner_tol, use_qr=False, checkpoint_move=False,
                         devices=fwd_devices)
 
         for sweep in range(max_sweeps):

@@ -37,7 +37,7 @@ def _validate_devices_list(devices: list[str] | None) -> None:
         raise YastnError("At least two devices must be provided for distributed CTM.")
 
 
-def iterate_D_(env, opts_svd=None, moves='hv', method='2x2', max_sweeps=1, iterator=False, corner_tol=None, truncation_f: Callable = None, **kwargs):
+def iterate_D_(env, opts_svd=None, moves='hv', method='2x2', max_sweeps=1, iterator=False, corner_tol=None, **kwargs):
         r"""
         Perform CTMRG updates :meth:`yastn.tn.fpeps.EnvCTM.update_` until convergence.
         Convergence can be measured based on singular values of CTM environment corner tensors.
@@ -79,11 +79,6 @@ def iterate_D_(env, opts_svd=None, moves='hv', method='2x2', max_sweeps=1, itera
             The default is ``None``, in which case convergence is not checked and it is up to user to implement
             convergence check.
 
-        truncation_f:
-            Custom projector truncation function with signature ``truncation_f(S: Tensor)->Tensor``, consuming
-            rank-1 tensor with singular values. If provided, truncation parameters passed to SVD decomposition
-            are ignored.
-
         checkpoint_move: str | bool
             Whether to use checkpointing for the CTM updates. The default is ``False``.
             Otherwise, in case of PyTorch backend it can be set to 'reentrant' for reentrant checkpointing
@@ -108,7 +103,6 @@ def iterate_D_(env, opts_svd=None, moves='hv', method='2x2', max_sweeps=1, itera
         if "checkpoint_move" in kwargs:
             if "torch" in env.config.backend.BACKEND_ID:
                 assert kwargs["checkpoint_move"] in ['reentrant', 'nonreentrant', False], f"Invalid choice for {kwargs['checkpoint_move']}"
-        kwargs["truncation_f"] = truncation_f
         kwargs["iterator_step"] = kwargs.get("iterator_step", int(iterator))
         tmp = _ctmrg_iterator_D_(env, opts_svd, moves, method, max_sweeps, corner_tol, **kwargs)
         return tmp if kwargs["iterator_step"] else next(tmp)

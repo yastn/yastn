@@ -415,7 +415,7 @@ def eig(data, meta=None, sizes=(1, 1), **kwargs):
         if any( np.abs(np.sum(_V.T * _U, axis=0) - 1) > tol ):
             raise ValueError("Biorthonormalization of left/right eigenvector pairs failed.")
 
-        s_order= eigs_which(S, which=kwargs.get('which', 'LM'))
+        s_order= argsort_which(S, which=kwargs.get('which', 'LM'))
         Udata[slice(*slU)].reshape(DU)[:] = _U[:,s_order]
         Sdata[slice(*slS)] = S[s_order]
         Vdata[slice(*slV)].reshape(DV)[:] = _V[s_order,:]
@@ -428,7 +428,7 @@ def eigvals(data, meta, sizeS, **kwargs):
     for (sl, D, _, _, slS, _, _) in meta:
         S = scipy.linalg.eigvals(data[slice(*sl)].reshape(D), b=None, overwrite_a=False,
                                      check_finite=True, homogeneous_eigvals=False)
-        Sdata[slice(*slS)]= S[eigs_which(S, which=kwargs.get('which', 'LM'))]
+        Sdata[slice(*slS)]= S[argsort_which(S, which=kwargs.get('which', 'LM'))]
     return Sdata
 
 
@@ -476,7 +476,7 @@ def eigh(data, meta=None, sizes=(1, 1)):
 
 def eigh_lowrank(data, meta, sizes, thresh=None, **kwargs):
     # TODO user-defined threshold
-    _which_map= {'LM': 'LM', 'SM': 'SM', 'LR': 'LA',  'SR': 'SA'} 
+    _which_map= {'LM': 'LM', 'SM': 'SM', 'LR': 'LA',  'SR': 'SA'}
     _which = kwargs.get('which', 'LM')
     real_dtype = data.real.dtype if np.iscomplexobj(data) else data.dtype
     Sdata = np.zeros((sizes[0],), dtype=real_dtype)
@@ -488,18 +488,18 @@ def eigh_lowrank(data, meta, sizes, thresh=None, **kwargs):
         if k < n - 1 and n * n > 5000:
             try:
                 S, U = scipy.sparse.linalg.eigsh(block, k=k, which=_which_map[_which],
-                    M=None, sigma=None, v0=None, ncv=None, maxiter=None, tol=0, 
-                    return_eigenvectors=kwargs.get("return_eigenvectors", True), 
+                    M=None, sigma=None, v0=None, ncv=None, maxiter=None, tol=0,
+                    return_eigenvectors=kwargs.get("return_eigenvectors", True),
                     Minv=None, OPinv=None, mode='normal',) #rng=None)
             except scipy.sparse.linalg.ArpackError as e:
                 raise e
                 # S, U = scipy.linalg.eigh(block)
         else:
-            S, U = scipy.linalg.eigh(block) # always returns result sorted in ascending order ('SA') 
+            S, U = scipy.linalg.eigh(block) # always returns result sorted in ascending order ('SA')
         # sort in case of non-default order
         # see https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.eigsh.html
         if not (_which in ['SR'] and  kwargs.get("return_eigenvectors", True)):
-            arg_b = eigs_which(S, _which)
+            arg_b = argsort_which(S, _which)
             S,U = S[arg_b[:k]], U[:,arg_b[:k]]
         else:
             S,U = S[:k], U[:,:k]
@@ -523,6 +523,11 @@ def qr(data, meta, sizes):
 def pinv(a, rcond=None, hermitian=False, out=None, atol=None, rtol=None):
     return np.linalg.pinv(a, rcond=rtol if not rtol is None else rcond, hermitian=hermitian)
 
+def flip(data):
+    return np.flip(data.ravel(), axis=0)
+
+def argmax(data):
+    return np.argmax(data)
 
 def argsort(data):
     return np.argsort(data)
@@ -530,13 +535,13 @@ def argsort(data):
 def maximum(x1, x2):
     return np.maximum(x1, x2)
 
-def eigs_which(val, which):
+def argsort_which(val, which):
+    if which == 'LR':
+        return (-val.real).argsort()
     if which == 'LM':
         return (-abs(val)).argsort()
     if which == 'SM':
         return abs(val).argsort()
-    if which == 'LR':
-        return (-val.real).argsort()
     # elif which == 'SR':
     return (val.real).argsort()
 

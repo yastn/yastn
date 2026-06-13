@@ -116,6 +116,29 @@ def test_transpose_basic(config_kwargs):
     run_moveaxis(a, ad, source=-1, destination=-3, result_D=(19, 10, 14, 18), result_s=(-1, 1, -1, 1))
 
 
+def test_transpose_output(config_kwargs):
+    config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
+    legs = [yastn.Leg(config_Z2xU1, t=((0, 1),), D=(2,), s=1),
+            yastn.Leg(config_Z2xU1, t=((1, 0),), D=(3,), s=1),
+            yastn.Leg(config_Z2xU1, t=((1, 1),), D=(4,), s=-1)]
+    #
+    b = yastn.rand(config=config_Z2xU1, legs=legs)
+    assert b.get_shape() == (2, 3, 4)
+    assert b.size == 24
+    assert b.get_blocks_charge() == ((0, 1, 1, 0, 1, 1),)
+    assert b.get_blocks_shape() == ((2, 3, 4),)
+    assert b.get_legs() == tuple(legs)
+    assert b.s == (1, 1, -1)
+    #
+    b = b.transpose(axes=(1, 2, 0))
+    #
+    assert b.get_shape() == (3, 4, 2)
+    assert b.get_blocks_charge() == ((1, 0, 1, 1, 0, 1),)
+    assert b.get_blocks_shape() == ((3, 4, 2),)
+    assert b.get_legs() == tuple(legs[i] for i in [1, 2, 0])
+    assert b.s == (1, -1, 1)
+
+
 def test_transpose_diag(config_kwargs):
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.eye(config=config_U1, t=(-1, 0, 2), D=(2, 2 ,4))
@@ -169,5 +192,6 @@ def test_transpose_backward(config_kwargs, consume):
 
 
 if __name__ == '__main__':
+    test_transpose_output({})
     # pytest.main([__file__, "-vs", "--durations=0"])
-    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])
+    # pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])

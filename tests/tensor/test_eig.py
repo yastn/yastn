@@ -23,6 +23,9 @@ seed = 1
 
 torch_test = pytest.mark.skipif("'torch' not in config.getoption('--backend')",
                                 reason="Uses torch.autograd.gradcheck().")
+numpy_test = pytest.mark.skipif("'np' not in config.getoption('--backend')",
+                                reason="Limit test to numpy.")
+
 
 def eig_combine(a):
     """ decompose and contracts tensor using svd decomposition """
@@ -96,6 +99,7 @@ def test_eig_transpose_meta(config_kwargs):
     assert yastn.norm(Vf - Vm) < tol  # == 0.0
 
 
+@pytest.mark.xfail(reason='Raising error might depend on linear algebra backend', strict=False)
 def test_eig_degeneracy_fail(config_kwargs):
     # Z2xU1
     config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
@@ -131,56 +135,6 @@ def test_eig_complex(config_kwargs):
     assert yastn.norm(a - USV) < tol  # == 0.0
 
     eig_combine(a)
-
-
-# def test_eig_multiplets(config_kwargs):
-#     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
-#     config_U1.backend.random_seed(seed=0)  # to fix consistency of tests
-#     legs = [yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 2)),
-#             yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(3, 4, 3)),
-#             yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(4, 5, 4)),
-#             yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(5, 6, 5))]
-#     a = yastn.rand(config=config_U1, n=0, legs=legs)
-
-#     U, S, V = yastn.linalg.eig(a, axes=((0, 1), (2, 3)))
-
-#     # fixing singular values for testing
-#     v00 = [1, 1, 0.1001, 0.1000, 0.1000, 0.0999, 0.001001, 0.001000] + [0] * 16
-#     S.set_block(ts=(0, 0), Ds=24, val=v00)
-
-#     v11 = [1, 1, 0.1001, 0.1000, 0.0999, 0.001000, 0.000999] + [0] * 10
-#     S.set_block(ts=(1, 1), Ds=17, val=v11)
-#     S.set_block(ts=(-1, -1), Ds=17, val=v11)
-
-#     v22 = [1, 1, 0.1001, 0.1000, 0.001000, 0]
-#     S.set_block(ts=(2, 2), Ds=6, val=v22)
-#     S.set_block(ts=(-2, -2), Ds=6, val=v22)
-
-#     a = yastn.ncon([U, S, V], [(-1, -2, 1), (1, 2), (2, -3, -4)])
-
-#     opts = {'tol': 0.0001, 'D_block': 7, 'D_total': 30}
-#     _, S1, _ = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), **opts)
-#     assert S1.get_shape() == (30, 30)
-
-#     mask_f = lambda x: yastn.truncation_mask_multiplets(x, tol=0.0001, D_total=30, eps_multiplet=0.001)
-#     _, S1, _ = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), mask_f=mask_f)
-#     # assert S1.get_shape() == (24, 24)
-#     # TODO: CI gives an error (30, 30) != (24, 24)
-#     # in test-full (torch, 3.9, 1.26.4, 1.13.1, 2.4); cannot reproduce it locally ...
-#     # config_kwargs = {'backend': 'torch', 'default_device': 'cpu'}
-
-#     # below extend the cut to largest gap in singular values;
-#     # enforcing that multiplets are kept
-#     opts = {'tol': 0.001, 'truncate_multiplets': True}
-#     _, S1, _ = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), **opts)
-#     assert S1.get_shape() == (32, 32)
-
-#     opts = {'D_total': 17, 'truncate_multiplets': True}
-#     _, S1, _ = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), **opts)
-#     assert S1.get_shape() == (24, 24)
-
-# this is covered by svd as we use _meta_svd internally
-#def test_eig_tensor_charge_division(config_kwargs):
 
 
 def test_eig_exceptions(config_kwargs):

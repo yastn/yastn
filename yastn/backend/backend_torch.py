@@ -30,8 +30,8 @@ from ._backend_torch_backwards import kernel_transpose, kernel_transpose_and_mer
 
 
 __all__= ['DTYPE', 'get_dtype', 'get_yastn_dtype',
-    'nvtx', 'cuda_is_available', 'get_device', 'move_to', 
-    'grad', 'requires_grad_', 'requires_grad', 'detach', 'detach_', 'clone', 'copy', 'checkpoint', 
+    'nvtx', 'cuda_is_available', 'get_device', 'move_to',
+    'grad', 'requires_grad_', 'requires_grad', 'detach', 'detach_', 'clone', 'copy', 'checkpoint',
     'random_seed', 'randint',
     'to_numpy', 'get_shape', 'get_size', 'diag_create', 'diag_get', 'real', 'is_complex', 'conj',
     'imag', 'max_abs', 'maximum', 'norm_matrix', 'delete', 'insert',
@@ -40,7 +40,7 @@ __all__= ['DTYPE', 'get_dtype', 'get_yastn_dtype',
     'trace', 'rsqrt', 'reciprocal', 'exp', 'sqrt', 'absolute', 'permute_dims',
     'fix_svd_signs', 'svdvals', 'svd_lowrank', 'svd', 'svd_randomized', 'svds_scipy',
     'eigh', 'qr', 'pinv', 'eig', 'eigh_lowrank', 'eigvals',
-    'argsort', 'eigs_which', 'allclose',
+    'argsort', 'argsort_which', 'argmax', 'flip', 'allclose',
     'add', 'sub', 'apply_mask', 'vdot', 'diag_1dto2d', 'diag_2dto1d',
     'dot', 'dot_diag', 'transpose_dot_sum',
     'merge_to_dense', 'merge_super_blocks', 'is_independent',
@@ -139,8 +139,10 @@ def imag(x):
 def max_abs(x):
     return x.abs().max() if x.numel() > 0 else torch.tensor(0, device=x.device)
 
+
 def maximum(input, output):
     return torch.maximum(input, output)
+
 
 def norm_matrix(x):
     return torch.linalg.norm(x)
@@ -414,7 +416,7 @@ def eig(data, meta=None, sizes=(1, 1), **kwargs):
         if any( torch.abs(torch.sum(V.T * U, axis=0) - 1) > tol ):
             raise ValueError("Biorthonormalization of left/right eigenvector pairs failed.")
 
-        s_order= eigs_which(S, which=kwargs.get('which', 'LM'))
+        s_order= argsort_which(S, which=kwargs.get('which', 'LM'))
         Udata[slice(*slU)].reshape(DU)[:] = U[:,s_order]
         Sdata[slice(*slS)] = S[s_order]
         Vdata[slice(*slV)].reshape(DV)[:] = V[s_order,:]
@@ -427,7 +429,7 @@ def eigh_lowrank(data, meta, sizes, thresh=None, **kwargs):
     import numpy as np
     import scipy
 
-    _which_map= {'LM': 'LM', 'SM': 'SM', 'LR': 'LA',  'SR': 'SA'} 
+    _which_map= {'LM': 'LM', 'SM': 'SM', 'LR': 'LA',  'SR': 'SA'}
     _which = kwargs.get('which', 'LM')
     data_device= data.device
     data = data.cpu().numpy() if data.is_cuda else data.numpy()
@@ -441,18 +443,18 @@ def eigh_lowrank(data, meta, sizes, thresh=None, **kwargs):
         if k < n - 1 and n * n > 5000:
             try:
                 S, U = scipy.sparse.linalg.eigsh(block, k=k, which=_which_map[_which],
-                    M=None, sigma=None, v0=None, ncv=None, maxiter=None, tol=0, 
-                    return_eigenvectors=kwargs.get("return_eigenvectors", True), 
+                    M=None, sigma=None, v0=None, ncv=None, maxiter=None, tol=0,
+                    return_eigenvectors=kwargs.get("return_eigenvectors", True),
                     Minv=None, OPinv=None, mode='normal',) #rng=None)
             except scipy.sparse.linalg.ArpackError as e:
                 raise e
                 # S, U = scipy.linalg.eigh(block)
         else:
-            S, U = scipy.linalg.eigh(block) # always returns result sorted in ascending order ('SA') 
+            S, U = scipy.linalg.eigh(block) # always returns result sorted in ascending order ('SA')
         # sort in case of non-default order
         # see https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.eigsh.html
         if not (_which in ['SR'] and  kwargs.get("return_eigenvectors", True)):
-            arg_b = eigs_which(S, _which)
+            arg_b = argsort_which(S, _which)
             S,U = S[arg_b[:k]], U[:,arg_b[:k]]
         else:
             S,U = S[:k], U[:,:k]
@@ -468,7 +470,7 @@ def eigvals(data, meta, sizeS, **kwargs):
     Sdata = torch.empty((sizeS,), dtype=dtype, device=data.device)
     for (sl, D, _, _, slS, _, _) in meta:
         S = torch.linalg.eigvals(data[slice(*sl)].reshape(D))
-        Sdata[slice(*slS)]= S[eigs_which(S, which=kwargs.get('which', 'LM'))]
+        Sdata[slice(*slS)]= S[argsort_which(S, which=kwargs.get('which', 'LM'))]
     return Sdata
 
 
@@ -489,18 +491,28 @@ def pinv(A, rcond=None, hermitian=False, out=None, atol=None, rtol=None):
 
 
 @torch.no_grad()
+def flip(data):
+    return torch.flip(data.ravel(), dims=(0,))
+
+
+@torch.no_grad()
+def argmax(data):
+    return torch.argmax(data)
+
+
+@torch.no_grad()
 def argsort(data):
     return torch.argsort(data)
 
 
 @torch.no_grad()
-def eigs_which(val, which):
+def argsort_which(val, which):
+    if which == 'LR':
+        return (-real(val)).argsort()
     if which == 'LM':
         return (-abs(val)).argsort()
     if which == 'SM':
         return abs(val).argsort()
-    if which == 'LR':
-        return (-real(val)).argsort()
     #if which == 'SR':
     return (real(val)).argsort()
 
