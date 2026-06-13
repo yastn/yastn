@@ -720,14 +720,29 @@ def truncation_mask(S, tol=0, tol_block=0,
         return Smask
 
     inds = S.config.backend.argsort(temp_data)
-
-    if truncate_multiplets and D_total < len(inds):
+    if isinstance(truncate_multiplets, bool):
+        if truncate_multiplets and D_total < len(inds):
+            gap = -1
+            for p in range(D_total, len(inds)):
+                gap_p = abs(S._data[inds[-p]] - S._data[inds[-p - 1]])
+                if gap_p > gap:
+                    D_total = p
+                    gap = gap_p
+                if gap > abs(S._data[inds[-p]]):
+                    break
+    elif truncate_multiplets == "remove" and D_total < len(inds):
         gap = -1
         for p in range(D_total, len(inds)):
             gap_p = abs(S._data[inds[-p]] - S._data[inds[-p - 1]])
             if gap_p > gap:
                 D_total = p
                 gap = gap_p
+            if gap > abs(S._data[inds[-p]]):
+                break
+        for p in range(D_total - 1, 0, -1):
+            gap_p = abs(S._data[inds[-p]] - S._data[inds[-p - 1]])
+            if gap_p > gap:
+                D_total = p
             if gap > abs(S._data[inds[-p]]):
                 break
 
