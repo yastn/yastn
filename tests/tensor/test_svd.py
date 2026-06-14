@@ -259,6 +259,10 @@ def test_svd_truncate(config_kwargs):
     _, S1, _ = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), sU=-1, **opts)
     assert S1.get_shape() == (12, 12)
 
+    opts = {'D_total': 10, "truncate_multiplets": "remove"}
+    _, S1, _ = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), sU=-1, **opts)
+    assert S1.get_shape() == (9, 9)
+
     #
     # Empty tensor
     opts = {'D_total': 0}
@@ -379,14 +383,22 @@ def test_svd_multiplets(config_kwargs):
 
     # below extend the cut to largest gap in singular values;
     # enforcing that multiplets are kept
+
     opts = {'tol': 0.001, 'truncate_multiplets': True}
     _, S1, _ = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), **opts)
     assert S1.get_shape() == (32, 32)
+
+    opts = {'tol': 0.001, 'truncate_multiplets': 'remove'}
+    _, S1, _ = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), **opts)
+    assert S1.get_shape() == (24, 24)
 
     opts = {'D_total': 17, 'truncate_multiplets': True}
     _, S1, _ = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), **opts)
     assert S1.get_shape() == (24, 24)
 
+    opts = {'D_total': 17, 'truncate_multiplets': 'remove'}
+    _, S1, _ = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), **opts)
+    assert S1.get_shape() == (10, 10)
 
 def test_svd_tensor_charge_division(config_kwargs):
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)

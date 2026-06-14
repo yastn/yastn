@@ -691,7 +691,10 @@ def truncation_mask(S, tol=0, tol_block=0,
     Smask = S.copy()
     Smask._data = Smask._data > -float('inf') # all True
 
-    if truncate_multiplets:
+    if isinstance(truncate_multiplets, bool):
+        if truncate_multiplets:
+            tol_block, D_block = 0, float('inf')
+    elif truncate_multiplets == 'remove':
         tol_block, D_block = 0, float('inf')
 
     nsym = S.config.sym.NSYM
@@ -735,7 +738,6 @@ def truncation_mask(S, tol=0, tol_block=0,
         for p in range(D_total, len(inds)):
             gap_p = abs(S._data[inds[-p]] - S._data[inds[-p - 1]])
             if gap_p > gap:
-                D_total = p
                 gap = gap_p
             if gap > abs(S._data[inds[-p]]):
                 break
@@ -743,7 +745,6 @@ def truncation_mask(S, tol=0, tol_block=0,
             gap_p = abs(S._data[inds[-p]] - S._data[inds[-p - 1]])
             if gap_p > gap:
                 D_total = p
-            if gap > abs(S._data[inds[-p]]):
                 break
 
     Smask._data[inds[:-D_total]] = False
