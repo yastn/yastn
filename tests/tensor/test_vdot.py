@@ -180,7 +180,7 @@ def test_vdot_exceptions(config_kwargs):
         a = yastn.rand(config=config_U1, legs=[leg, leg.conj(), leg, leg])
         leg2 = yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(3, 4, 5))
         b = yastn.rand(config=config_U1, legs=[leg, leg.conj(), leg, leg2])
-        yastn.vdot(a, b)  # Bond dimensions do not match.
+        yastn.vdot(a, b)  # Bond dimensions of some charges do not match.
 
 
 def test_hf_intersect_exceptions(config_kwargs):

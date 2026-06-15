@@ -25,10 +25,11 @@ from operator import itemgetter
 import numpy as np
 
 from .tensor import Tensor, YastnError, ncon
-from .tensor._auxiliary import _struct, _slc, _clear_axes, _unpack_legs, legs_from_struct
+from .tensor._auxiliary import _struct, _slc, _clear_axes, _unpack_legs, legs_from_struct, test_all_blocks
 from .tensor._legs import Leg, LegMeta, legs_union, _legs_mask_needed
 from .tensor._merging import _Fusion, _embed_tensor, _combine_hfs_sum
 from .tensor._tests import _test_can_be_combined
+from .tensor._initialize import embed_
 from ._split_combine_dict import combine_data_and_meta
 
 __all__ = ['rand', 'rand_like', 'randR', 'randC', 'zeros', 'ones', 'eye', 'block',
@@ -427,7 +428,10 @@ def block(tensors, common_legs=None) -> Tensor:
     meta_new = tuple((x, y, z.slcs[0]) for x, y, z in zip(c_t, c_D, c_slices))
     data = tn0.config.backend.merge_super_blocks(tensors, meta_new, meta_block, c_struct.size)
     c_legs = legs_from_struct(c_struct)
-    return tn0._replace(struct=c_struct, slices=c_slices, data=data, hfs=tuple(hfs), legs=c_legs)
+    out = tn0._replace(struct=c_struct, slices=c_slices, data=data, hfs=tuple(hfs), legs=c_legs)
+    embed_(out, c_legs)
+    test_all_blocks(out)
+    return out
 
 
 def _sum_legs_hfs(legs):

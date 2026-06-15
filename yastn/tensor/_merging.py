@@ -21,8 +21,9 @@ from typing import NamedTuple
 
 import numpy as np
 
-from ._auxiliary import _slc, _flatten, _clear_axes, _unpack_legs, legs_from_struct
+from ._auxiliary import _slc, _flatten, _clear_axes, _unpack_legs, legs_from_struct, test_all_blocks
 from ._tests import YastnError, _test_axes_all, _get_tD_legs
+from ._initialize import embed_
 
 __all__ = ['fuse_legs', 'unfuse_legs', 'fuse_meta_to_hard', '_Fusion', '_slc']
 
@@ -299,8 +300,9 @@ def _fuse_legs_hard(a, axes, order):
         else:  # len(axis) == 0
             hfs.append(_Fusion(tree=(1,), op='o', s=(struct.s[n],), t=(), D=()))
     legs = legs_from_struct(struct)
-    return a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, data=data, trans=None, legs=legs)
-
+    out = a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, data=data, trans=None, legs=legs)
+    test_all_blocks(out)
+    return out
 
 @lru_cache(maxsize=1024)
 def _meta_fuse_hard(config, struct, slices, axes, inds):
@@ -482,9 +484,12 @@ def unfuse_legs(a, axes) -> 'Tensor':
                 newax += 1
                 ii += 1
         legs = legs_from_struct(struct)
-        return a._replace(struct=struct, slices=slices, mfs=tuple(mfs), hfs=hfs, data=data, trans=trans, legs=legs)
-    return a._replace(mfs=tuple(mfs))
-
+        out = a._replace(struct=struct, slices=slices, mfs=tuple(mfs), hfs=hfs, data=data, trans=trans, legs=legs)
+        embed_(out, out.legs)
+        test_all_blocks(out)
+        return out
+    out = a._replace(mfs=tuple(mfs))
+    return out
 
 @lru_cache(maxsize=1024)
 def _meta_unfuse_hard(config, struct, slices, axes, hfs):
@@ -637,6 +642,7 @@ def _embed_tensor(a, legs, legs_new):
                 data = a.config.backend.embed_mask(a._data, mask, meta, struct.size, axis, ndim)
                 legs = legs_from_struct(struct)
                 a = a._replace(struct=struct, slices=slices, data=data, hfs=hfs, legs=legs)
+    test_all_blocks(a)
     return a
 
 #  =========== auxiliary functions handling fusion logic ======================
@@ -783,7 +789,7 @@ def _masks_hfs_intersection(sym, ts, Ds, hfs):
         ma0 = {t: np.ones(D, dtype=bool) for t, D in zip(ts[0], Ds[0]) if t in teff}
         ma1 = {t: np.ones(D, dtype=bool) for t, D in zip(ts[1], Ds[1]) if t in teff}
         if any(ma0[t].size != ma1[t].size for t in teff):
-            raise YastnError('Bond dimensions do not match.')
+            raise YastnError('Bond dimensions of some charges do not match.')
         return ma0, ma1, hfs
 
     msks = [[{t: np.ones(D, dtype=bool) for t, D in zip(hf.t[i], hf.D[i])} for i, l in enumerate(tree[1:]) if l == 1]

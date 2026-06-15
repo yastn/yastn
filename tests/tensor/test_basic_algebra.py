@@ -288,17 +288,17 @@ def test_algebra_exceptions(config_kwargs):
         b = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1])
         _ = a + b
     with pytest.raises(yastn.YastnError,
-                       match="Bond dimensions do not match."):
+                       match="Bond dimensions of some charges do not match."):
         a = yastn.rand(config=config_U1, legs=[leg1, leg1.conj(), leg1])
         b = yastn.rand(config=config_U1, legs=[leg1, leg2.conj(), leg1])
         _ = a + b
     with pytest.raises(yastn.YastnError,
-                       match="Bond dimensions do not match."):
+                       match="Bond dimensions of some charges do not match."):
         a = yastn.rand(config=config_U1, legs=[leg1, leg1.conj(), leg1])
         b = yastn.rand(config=config_U1, legs=[leg1, leg3.conj(), leg1])
         _ = a + b
     with pytest.raises(yastn.YastnError,
-                       match="Bond dimensions related to some charge are not consistent."):
+                       match="Bond dimensions of some charges do not match."):
         # Here, individual blocks between a na b are consistent, but cannot form consistent sum.
         a = yastn.Tensor(config=config_U1, s=(1, -1, 1, -1))
         a.set_block(ts=(1, 1, 0, 0), Ds=(2, 2, 1, 1), val='normal')
@@ -349,7 +349,7 @@ def test_hf_union_exceptions(config_kwargs):
         a = a.fuse_legs(axes=((0, 2), 1), mode='hard')
         b = b.fuse_legs(axes=((0, 2), 1), mode='hard')
         _ = a + b
-        # Bond dimensions do not match.
+        # Bond dimensions of some charges do not match.
     with pytest.raises(yastn.YastnError):
         a = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1.conj(), leg2.conj()])
         b = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2.conj(), leg1, leg2.conj()])

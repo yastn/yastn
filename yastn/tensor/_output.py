@@ -22,7 +22,8 @@ from warnings import warn
 
 import numpy as np
 
-from ._auxiliary import _clear_axes, _unpack_axes, _struct, _slc, _flatten, legs_from_struct
+from ._auxiliary import _clear_axes, _unpack_axes, _struct, _slc, _flatten, legs_from_struct, LegBasic, test_all_blocks
+from ._initialize import embed_
 from ._legs import Leg, LegMeta, legs_union, _legs_mask_needed
 from ._merging import _embed_tensor
 from ._tests import YastnError
@@ -303,9 +304,27 @@ def get_shape(a, axes=None, native=False) ->  int | Sequence[int]:
     """
     if axes is None:
         axes = tuple(range(a.ndim_n if native else a.ndim))
+    return_int = False
     if isinstance(axes, int):
-        return sum(a.get_legs(axes, native=native).D)
-    return tuple(sum(leg.D) for leg in a.get_legs(axes, native=native))
+        axes = [axes]
+        return_int = True
+
+    legs_n = []  # native legs
+    legs_m = []  # number of legs forming LegMeta
+    for leg in a.get_legs(axes, native=native):
+        if isinstance(leg, LegMeta):
+            legs_n.extend(leg.legs)
+            legs_m.append(len(leg.legs))
+        else:
+            legs_n.append(leg)
+            legs_m.append(1)
+    Dtot_n = tuple(sum(leg.D) for leg in legs_n)
+    Dtot_a, i = [], 0
+    for dd in legs_m:
+        Dtot_a.append(reduce(mul, Dtot_n[i: i+dd], 1))
+        i += dd
+    Dtot_a = tuple(Dtot_a)
+    return Dtot_a[0] if return_int else Dtot_a
 
 
 def get_dtype(a) -> numpy.dtype | torch.dtype:
@@ -483,7 +502,6 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False) -> 'Tensor':
         values of block's charges.
     """
     config_dense = a.config._replace(sym=sym_none)
-    #
     a = a.consume_transpose()
     #
     legs_a = list(a.get_legs(native=native))
@@ -498,14 +516,22 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False) -> 'Tensor':
         for n, leg in legs_new.items():
             legs_a[n] = leg
 
-    Dtot = tuple(sum(leg.D) for leg in legs_a)
+    legs_n = []  # native legs
+    legs_m = []  # number of legs forming LegMeta
+    for leg in legs_a:
+        if isinstance(leg, LegMeta):
+            legs_n.extend(leg.legs)
+            legs_m.append(len(leg.legs))
+        else:
+            legs_n.append(leg)
+            legs_m.append(1)
 
     if ndim_a == 0:  # scalar
         meta = [(slice(*sl.slcs[0]), ()) for sl in a.slices]
     else:
         step = -1 if reverse else 1
         tD = []
-        for leg in legs_a:
+        for leg in legs_n:
             Dlow, tDn = 0, {}
             for tn, Dn in zip(leg.t[::step], leg.D[::step]):
                 Dhigh = Dlow + Dn
@@ -513,28 +539,33 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False) -> 'Tensor':
                 Dlow = Dhigh
             tD.append(tDn)
 
-        axes = tuple((n,) for n in range(ndim_a))
-        if not native:
-            axes = tuple(_unpack_axes(a.mfs, *axes))
-
         lt, nsym = len(a.struct.t), len(a.struct.n)
         tset = np.array(a.struct.t, dtype=np.int64).reshape(lt, a.ndim_n, nsym)
-        tset_ax = list(zip(*[tset[:, ax, :].reshape(lt, len(ax) * nsym).tolist() for ax in axes]))
+        tset_ax = list(zip(*[tset[:, ax, :].reshape(lt, nsym).tolist() for ax in range(a.ndim_n)]))
         meta = [(slice(*t_sl.slcs[0]), tuple(tDn[tuple(tt)] for tDn, tt in zip(tD, t_ax))) for t_sl, t_ax in zip(a.slices, tset_ax)]
 
+    Dtot_n = tuple(sum(leg.D) for leg in legs_n)
+    Dtot_a, i = [], 0
+    for dd in legs_m:
+        Dtot_a.append(reduce(mul, Dtot_n[i: i+dd], 1))
+        i += dd
+    Dtot_a = tuple(Dtot_a)
+
+    Dtot = Dtot_n if native else Dtot_a
     c_s = a.get_signature(native)
     c_t = ((),)
     c_D = (Dtot,)
 
     if a.isdiag:
         Dtot = Dtot[:1]
+        Dtot_n = Dtot_n[:-1]
         meta = [(sl, D[:1]) for sl, D in meta]
 
     Dp = reduce(mul, Dtot, 1)
     c_struct = _struct(s=c_s, n=(), diag=a.isdiag, t=c_t, D=c_D, size=Dp)
     c_slices = (_slc(((0, Dp),), c_D[0], Dp),)
     c_legs = legs_from_struct(c_struct)
-    data = a.config.backend.merge_to_dense(a._data, Dtot, meta)
+    data = a.config.backend.merge_to_dense(a._data, Dtot_n, meta)
     return a._replace(config=config_dense, struct=c_struct, slices=c_slices, data=data, mfs=None, hfs=None, legs=c_legs)
 
 

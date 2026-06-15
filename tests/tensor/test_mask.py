@@ -125,7 +125,7 @@ def test_mask_exceptions(config_kwargs):
         _ = a.apply_mask(bhf, axes=1)
         # Second tensor`s leg specified by axes cannot be fused.
     # with pytest.raises(yastn.YastnError):
-        # _ = a.apply_mask(b, axes=1)  # Bond dimensions do not match.
+        # _ = a.apply_mask(b, axes=1)  # Bond dimensions of some charges do not match.
     with pytest.raises(yastn.YastnError):
         _, _ = a.apply_mask(b, b, axes=[2, 2, 1])
         # There should be exactly one axis for each tensor to be projected.

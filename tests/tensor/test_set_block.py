@@ -100,7 +100,7 @@ def test_Z2xU1(config_kwargs):
     assert ((0, 0), (0, 0), (0, 0)) in a
     a.set_block(ts=((0, 0), (0, 0), (0, 0)), Ds=(1, 5, 4), val=np.sqrt(np.arange(20)))
     assert pytest.approx(a.norm().item() ** 2, rel=tol) == 294  # sum(range(20)) == 190
-    assert a.get_shape() == (26, 30)
+    assert a.get_shape() == (72, 30)
     assert a.get_shape(native=True) == (9, 8, 30)
 
     # 3-dim tensor

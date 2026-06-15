@@ -212,7 +212,7 @@ def test_trace_exceptions(config_kwargs):
                        match="Signatures do not match."):
         a.trace(axes=((1, 3), (2, 4)))
     with pytest.raises(yastn.YastnError,
-                       match="Bond dimensions do not match."):
+                       match="Bond dimensions of some charges do not match."):
         a.trace(axes=((0, 1, 2), (3, 4, 5)))
     with pytest.raises(yastn.YastnError,
                        match="Indicated axes of two tensors have different number of meta-fused legs or sub-fusions order."):
@@ -253,5 +253,5 @@ def test_trace_backward(config_kwargs):
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])
-    # pytest.main([__file__, "-vs", "--durations=0"])
+    #pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])
+    pytest.main([__file__, "-vs", "--durations=0"])

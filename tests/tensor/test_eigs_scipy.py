@@ -61,7 +61,7 @@ def test_eigs_simple(config_kwargs):
     va = [yastn.Tensor.from_dict(yastn.combine_data_and_meta(x, meta)) for x in va1d.T]
     # We can remove zero blocks now, as there are eigenvectors with well defined charge
     # (though we might get superposition of symmetry sectors in case of degeneracy).
-    va = [x.remove_zero_blocks() for x in va]
+    # va = [x.remove_zero_blocks() for x in va]
 
     # we can also limit ourselves directly to eigenvectors with desired charge, here n=0.
     legs = [a.get_legs(0).conj(),
@@ -120,14 +120,14 @@ def test_eigs_mismatches(config_kwargs):
     wy1, vy1d = eigs(ff, v0=r1d, k=5, which='LM', tol=1e-10)  # scipy going though yastn.tensor
 
     # transform eigenvectors into yastn tensors
-    vy = [yastn.Tensor.from_dict(yastn.combine_data_and_meta(x, meta)) for x in vy1d.T]
-    # remove zero blocks and checks if that was correct
-    vyr = [yastn.remove_zero_blocks(a, rtol=1e-12) for a in vy]
-    assert all((yastn.norm(x - y) < tol for x, y in zip(vy, vyr)))
-    # display charges of eigenvectors (only charge on last leg)
-    print(vy[0].get_legs(2))
-    print(vyr[0].get_legs(2))
-    # for others there might be superposition between +1 and -1
+    # vy = [yastn.Tensor.from_dict(yastn.combine_data_and_meta(x, meta)) for x in vy1d.T]
+    # # remove zero blocks and checks if that was correct
+    # vyr = [yastn.remove_zero_blocks(a, rtol=1e-12) for a in vy]
+    # assert all((yastn.norm(x - y) < tol for x, y in zip(vy, vyr)))
+    # # display charges of eigenvectors (only charge on last leg)
+    # print(vy[0].get_legs(2))
+    # print(vyr[0].get_legs(2))
+    # # for others there might be superposition between +1 and -1
 
 
 if __name__ == '__main__':

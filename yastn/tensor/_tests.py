@@ -180,7 +180,7 @@ def _get_tD_legs(struct):
     tD_legs = [sorted(set((tuple(t), D) for t, D in zip(tset[:, n, :].tolist(), Dset[:, n].tolist()))) for n in range(ndim_n)]
     tD_dict = [dict(tD) for tD in tD_legs]
     if any(len(x) != len(y) for x, y in zip(tD_legs, tD_dict)):
-        raise YastnError('Bond dimensions related to some charge are not consistent.')
+        raise YastnError('Bond dimensions of some charges do not match.')
     tlegs = [tuple(tD.keys()) for tD in tD_dict]
     Dlegs = [tuple(tD.values()) for tD in tD_dict]
     return tlegs, Dlegs, tD_dict

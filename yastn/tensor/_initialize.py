@@ -15,13 +15,13 @@
 """ Methods creating a new yastn.Tensor """
 import os
 from functools import reduce
-from itertools import product, accumulate
+from itertools import product, accumulate, batched
 import numbers
 from operator import mul, itemgetter
 
 import numpy as np
 
-from ._auxiliary import _flatten, _slc, _config, legs_from_struct
+from ._auxiliary import _flatten, _slc, _config, legs_from_struct, get_structure, test_all_blocks
 from ._tests import YastnError, _test_tD_consistency, _test_struct_types
 from ..backend import backend_np
 from ..sym import sym_none, sym_U1, sym_Z2, sym_Z3, sym_U1xU1, sym_U1xU1xZ2
@@ -249,9 +249,14 @@ def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
     a.slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(a_Dp), a_Dp, a_D))
     a.struct = a.struct._replace(t=a_t, D=a_D, size=Dsize)
     a.legs = legs_from_struct(a.struct)
+
+    ts, Ds, slices, size, legs = get_structure(a.config.sym, a.legs, a.struct.n, a.isdiag)
+    assert a.legs == legs
+
     a._data = _init_block(a.config, Dsize, val, dtype=a.yastn_dtype, device=a.device)
     _test_tD_consistency(a.struct)
     _test_struct_types(a.struct)
+    test_all_blocks(a)
 
 
 def set_block(a, ts=(), Ds=None, val='zeros'):
@@ -277,23 +282,25 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
         Otherwise any tensor-like format such as nested list, numpy.ndarray, etc.,
         can be used provided it is supported by :doc:`tensor's backend </tensor/configuration>`.
     """
+    if a.trans != tuple(range(a.ndim_n)):
+        raise YastnError("Setting block of transpoded tensor is not supported.")
     ts = np.array(ts, dtype=np.int64).ravel()
-    if a.isdiag and len(ts) == a.config.sym.NSYM:
+    nsym = a.config.sym.NSYM
+    if a.isdiag and len(ts) == nsym:
         ts = np.hstack([ts, ts])
-    if len(ts) != a.ndim_n * a.config.sym.NSYM:
+    if len(ts) != a.ndim_n * nsym:
         raise YastnError('Size of ts is not consistent with tensor rank and the number of symmetry sectors.')
 
-    ats = ts.reshape((1, a.ndim_n, a.config.sym.NSYM))
-    if not np.all(a.config.sym.fuse(ats, a.struct.s, 1) == a.struct.n):
+    ats = ts.reshape((1, a.ndim_n, nsym))
+    if not np.all(a.config.sym.fuse(ats, a.s_n, 1) == a.n):
         raise YastnError('Charges ts are not consistent with the symmetry rules: f(t @ s) == n')
 
     ts = tuple(ts.tolist())
+    tss = tuple(ts[i * nsym: (i+1) * nsym] for i in range(a.ndim_n))
 
     if Ds is None:  # attempt to read Ds from existing blocks.
-        ats = ats.tolist()[0]
-        legs = a.get_legs(range(a.ndim_n), native=True)
         try:
-            Ds = tuple(leg.D[leg.t.index(tuple(tl))] for tl, leg in zip(ats, legs))
+            Ds = tuple(leg[tt] for leg, tt in zip(a.legs, tss))
         except ValueError as err:
             raise YastnError('Provided Ds. Cannot infer all bond dimensions from existing blocks.') from err
     else:  # Ds was provided
@@ -306,24 +313,63 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
 
     if a.isdiag and Ds[0] != Ds[1]:
         raise YastnError("Diagonal tensor requires the same bond dimensions on both legs.")
+
+    if any(tt in leg and leg[tt] != DD for leg, tt, DD in zip(a.legs, tss, Ds)):
+        raise YastnError("Provided Ds is not consistent with dimensions of existing legs.")
+
+    if any(tt not in leg for leg, tt in zip(a.legs, tss)) or len(a.legs) == 0:
+        new_legs = tuple(leg.add_charge(tt, DD) for leg, tt, DD in zip(a.legs, tss, Ds) )
+        embed_(a, new_legs)
+
     Dsize = Ds[0] if a.isdiag else reduce(mul, Ds, 1)
-
-    ind = sum(t < ts for t in a.struct.t)
-    ind2 = ind
-    if ind < len(a.struct.t) and a.struct.t[ind] == ts:
-        ind2 += 1
-        a._data = a.config.backend.delete(a._data, a.slices[ind].slcs[0])
-
-    pos = sum(x.Dp for x in a.slices[:ind])
     new_block = _init_block(a.config, Dsize, val, dtype=a.yastn_dtype, device=a.device)
-    a._data = a.config.backend.insert(a._data, pos, new_block)
-    a_t = a.struct.t[:ind] + (ts,) + a.struct.t[ind2:]
-    a_D = a.struct.D[:ind] + (Ds,) + a.struct.D[ind2:]
-    a_Dp = [x.Dp for x in a.slices[:ind]] + [Dsize] + [x.Dp for x in a.slices[ind2:]]
-    a.slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(a_Dp), a_Dp, a_D))
-    a.struct = a.struct._replace(t=a_t, D=a_D, size=sum(a_Dp))
-    a.legs = legs_from_struct(a.struct)
-    _test_tD_consistency(a.struct)
+
+    t_new, D_new, slices_new, size_new, legs_new = get_structure(a.config.sym, a.legs, a.struct.n, a.isdiag)
+    i = 0
+    ats = ats.reshape((a.ndim_n, nsym))
+    while i < len(t_new):
+        if np.array_equal(t_new[i], ats):
+            break
+        i += 1
+    slc = slices_new[i].slcs[0]
+    a.data[slice(*slc)] = new_block
+
+
+def embed_(a, legs_new):
+    t_old = np.array(a.struct.t, dtype=np.int64).reshape((len(a.struct.t), len(a.struct.s), a.config.sym.NSYM))
+    slices_old = a.slices
+    t_new, D_new, slices_new, size_new, legs_new = get_structure(a.config.sym, legs_new, a.struct.n, a.isdiag)
+
+    meta, i, j, sni, soi = [], 0, 0, None, None
+    while i < len(t_old) and j < len(t_new):
+        if np.array_equal(t_old[i], t_new[j]):
+            if soi is None:
+                sni, soi = slices_new[j].slcs[0][0], slices_old[i].slcs[0][0]
+            i += 1
+            j += 1
+        else:
+            if soi is not None:
+                snf, sof = slices_new[j-1].slcs[0][1], slices_old[i-1].slcs[0][1]
+                meta.append(((sni, snf), (soi, sof)))
+            sni, soi = None, None
+            j += 1
+    if soi is not None:
+        snf, sof = slices_new[j-1].slcs[0][1], slices_old[i-1].slcs[0][1]
+        meta.append(((sni, snf), (soi, sof)))
+
+
+    newdata = a.config.backend.embed_blocks(a.data, meta, size_new)
+
+    tnew = tuple(map(tuple, t_new.reshape(len(t_new), a.ndim_n * a.config.sym.NSYM).tolist()))
+    Dnew = tuple(map(tuple, D_new.reshape(len(D_new), a.ndim_n).tolist()))
+    Dp = [x[0] for x in Dnew] if a.isdiag else np.prod(D_new, axis=1, dtype=np.int64).tolist()
+    slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dp), Dp, Dnew))
+
+    a._data = newdata
+    a.slices = slices
+    a.struct = a.struct._replace(t=tnew, D=Dnew, size=size_new)
+    a.legs = legs_new
+
 
 
 def _init_block(config, Dsize, val, dtype, device):

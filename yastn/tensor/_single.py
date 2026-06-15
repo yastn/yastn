@@ -20,7 +20,7 @@ from operator import itemgetter
 
 import numpy as np
 
-from ._auxiliary import _slc, _clear_axes, _unpack_axes, _join_contiguous_slices, LegBasic, legs_from_struct
+from ._auxiliary import _slc, _clear_axes, _unpack_axes, _join_contiguous_slices, LegBasic, legs_from_struct, test_all_blocks
 from ._einsum import ncon
 from ._merging import _Fusion
 from ._legs import LegMeta, Leg, leg_product
@@ -28,7 +28,7 @@ from ._tests import YastnError, _test_axes_all
 
 __all__ = ['conj', 'conj_blocks', 'consume_transpose',
            'flip_signature', 'flip_charges', 'switch_signature',
-           'transpose', 'moveaxis', 'move_leg', 'diag', 'remove_zero_blocks',
+           'transpose', 'moveaxis', 'move_leg', 'diag',
            'add_leg', 'remove_leg', 'copy', 'clone', 'detach', 'to',
            'requires_grad_', 'grad', 'drop_leg_history', 'shallow_copy']
 
@@ -226,8 +226,9 @@ def flip_charges(a, axes=None) -> 'Tensor':
     mask = {0: slice(None)}
     data = a.config.backend.embed_mask(a._data, mask, meta_embed, struct.size, 0, 0)
     legs = legs_from_struct(struct)
-    return a._replace(struct=struct, slices=slices, data=data, hfs=hfs, legs=legs)
-
+    out = a._replace(struct=struct, slices=slices, data=data, hfs=hfs, legs=legs)
+    test_all_blocks(out)
+    return out
 
 def switch_signature(a, axes: Union[Sequence[int],int,str] = ()) -> 'Tensor':
     r"""
@@ -551,29 +552,3 @@ def diag(a) -> 'Tensor':
         meta = tuple((x.slcs[0], y.slcs[0], y.D) for x, y in zip(slices, a.slices))
         data = a.config.backend.diag_2dto1d(a._data, meta, struct.size)
     return a._replace(struct=struct, slices=slices, data=data, trans=None)
-
-
-def remove_zero_blocks(a, rtol=1e-12, atol=0) -> 'Tensor':
-    r"""
-    Remove blocks where all elements are below a cutoff.
-
-    Cutoff is a combination of absolute tolerance and
-    relative tolerance with respect to maximal element in the tensor.
-    """
-    cutoff = atol + rtol * a.norm(p='inf')
-    meta = [(t, D, sl) for t, D, sl in zip(a.struct.t, a.struct.D, a.slices) \
-             if a.config.backend.max_abs(a._data[slice(*sl.slcs[0])]) > cutoff]
-    c_t = tuple(mt[0] for mt in meta)
-    c_D = tuple(mt[1] for mt in meta)
-    old_sl = tuple(mt[2] for mt in meta)
-    c_Dp = tuple(x.Dp for x in old_sl)
-    old_sl = tuple(x.slcs[0] for x in old_sl)
-    slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(c_Dp), c_Dp, c_D))
-    c_sl = tuple(x.slcs[0] for x in slices)
-    size = sum(c_Dp)
-    struct = a.struct._replace(t=c_t, D=c_D, size=size)
-    mask = {0: slice(None)}
-    meta = [(sln, sln[1] - sln[0], slo, slo[1] - slo[0], 0) for sln, slo in zip(c_sl, old_sl)]
-    data = a.config.backend.apply_mask(a._data, mask, meta, size, 0, 0)
-    legs = legs_from_struct(struct)
-    return a._replace(struct=struct, slices=slices, data=data, legs=legs)

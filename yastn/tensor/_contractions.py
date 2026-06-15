@@ -22,10 +22,11 @@ from operator import itemgetter
 
 import numpy as np
 
-from ._auxiliary import _struct, _slc, _clear_axes, _unpack_axes, _join_contiguous_slices, sign_canonical_order, legs_from_struct
+from ._auxiliary import _struct, _slc, _clear_axes, _unpack_axes, _join_contiguous_slices, sign_canonical_order, legs_from_struct, test_all_blocks
 from ._merging import _merge_to_matrix, _unmerge, _meta_unmerge_matrix, _meta_fuse_hard
 from ._merging import _transpose_and_merge, _mask_tensors_leg_intersection, _meta_mask
 from ._tests import YastnError, _test_can_be_combined, _unpack_trans_test_axes_pair
+from ._initialize import embed_
 
 __all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'broadcast', 'apply_mask', 'SpecialTensor', 'fkron']
 
@@ -123,8 +124,10 @@ def tensordot(a, b, axes, conj=(0, 0)) -> 'Tensor':
 
     struct_c = struct_c._replace(n=n_c)
     legs = legs_from_struct(struct_c)
-    return a._replace(data=data, struct=struct_c, slices=slices_c, mfs=mfs_c, hfs=hfs_c, trans=None, legs=legs)
-
+    out = a._replace(data=data, struct=struct_c, slices=slices_c, mfs=mfs_c, hfs=hfs_c, trans=None, legs=legs)
+    embed_(out, out.legs)
+    test_all_blocks(out)
+    return out
 
 def _tensordot_diag(a, b, in_b, destination):
     r""" Executes broadcast and then transpose into order expected by tensordot. """
@@ -147,7 +150,7 @@ def _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b, s_c):
     data_b, struct_b, slices_b, ls_bc, ls_r = _merge_to_matrix(b, (nin_b, nout_b), ind_b)
 
     if ls_ac != ls_bc:
-        raise YastnError('Bond dimensions do not match.')
+        raise YastnError('Bond dimensions of some charges do not match.')
 
     meta_dot, struct_c, slices_c = _meta_tensordot_f2m(struct_a, slices_a, struct_b, slices_b)
     data = a.config.backend.dot(data_a, data_b, meta_dot, struct_c.size)
@@ -175,7 +178,7 @@ def _tensordot_fc(a, b, nout_a, nin_a, nin_b, nout_b):
     data_b = _transpose_and_merge(b.config, b._data, order_b, struct_b, slices_b, meta_mrg_b)
 
     if not all(D_a[ia] == D_b[ib] for ia, ib in zip(nin_a, nin_b)):
-        raise YastnError('Bond dimensions do not match.')
+        raise YastnError('Bond dimensions of some charges do not match.')
     assert all(t_a[ia] == t_b[ib] for ia, ib in zip(nin_a, nin_b)), "Sanity check."
 
     meta_dot, struct_c, slices_c = _meta_tensordot_fc(struct_a, slices_a, struct_b, slices_b)
@@ -405,7 +408,7 @@ def _meta_tensordot_nf(struct_a, slices_a, struct_b, slices_b, ind_a, ind_b, nou
     arg_tDbc = np.argsort(inv_tDbc)
 
     if not np.array_equal(unique_tDac, unique_tDbc):
-        raise YastnError('Bond dimensions do not match.')
+        raise YastnError('Bond dimensions of some charges do not match.')
 
     # blocks are enumerated consistent with slices_a,b
     reshape_a = tuple(zip(slices_a, Da, Daop, Dacp)) # narrowed to contracted blocks
@@ -497,6 +500,7 @@ def broadcast(a, *args, axes=0) -> 'Tensor' | tuple['Tensor']:
         data = b.config.backend.dot_diag(a._data, b._data, meta, struct.size, ax, b_ndim)
         legs = legs_from_struct(struct)
         results.append(b._replace(struct=struct, slices=slices, data=data, legs=legs))
+        test_all_blocks(results[-1])
     return results if multiple_axes else results.pop()
 
 
@@ -512,7 +516,7 @@ def _meta_broadcast(b_struct, b_slices, a_struct, a_slices, axis):
                  for tb, slb, Db, ib in zip(b_struct.t, b_slices, b_struct.D, ind_tb) if ib in ind_ta)
 
     if any(Db[axis] != sla[1] - sla[0] for _, _, Db, _, sla in meta):
-        raise YastnError("Bond dimensions do not match.")
+        raise YastnError("Bond dimensions of some charges do not match.")
 
     if len(meta) < len(b_struct.t):
         c_t = tuple(mt[0] for mt in meta)
@@ -574,6 +578,7 @@ def apply_mask(a, *args, axes=0) -> 'Tensor' | tuple['Tensor']:
         data = a.config.backend.apply_mask(b._data, mask, meta, struct.size, ax, ndim)
         legs = legs_from_struct(struct)
         results.append(b._replace(struct=struct, slices=slices, data=data, legs=legs))
+        test_all_blocks(results[-1])
     return results.pop() if len(results) == 1 else results
 
 
@@ -639,7 +644,7 @@ def _meta_vdot(struct_a, slices_a, struct_b, slices_b):
     while ia < len(struct_a.t) and ib < len(struct_b.t):
         if struct_a.t[ia] == struct_b.t[ib]:
             if struct_a.D[ia] != struct_b.D[ib]:
-                raise YastnError('Bond dimensions do not match.')
+                raise YastnError('Bond dimensions of some charges do not match.')
             slcs_a.append(slices_a[ia].slcs[0])
             slcs_b.append(slices_b[ib].slcs[0])
             ia += 1
@@ -691,8 +696,9 @@ def trace(a, axes=(0, 1)) -> 'Tensor':
     legs = legs_from_struct(struct)
     data = a.config.backend.trace(a._data, order, meta, struct.size)
 
-    return a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, data=data, trans=None, legs=legs)
-
+    out = a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, data=data, trans=None, legs=legs)
+    test_all_blocks(out)
+    return out
 
 @lru_cache(maxsize=1024)
 def _meta_trace(struct, slices, nin_0, nin_1, out):
@@ -713,7 +719,7 @@ def _meta_trace(struct, slices, nin_0, nin_1, out):
 
     ind = (np.all(t0 == t1, axis=1)).nonzero()[0]
     if not np.all(D0[ind] == D1[ind]):
-        raise YastnError('Bond dimensions do not match.')
+        raise YastnError('Bond dimensions of some charges do not match.')
     tn = tuple(map(tuple, tn[ind].tolist()))
     Dn = tuple(map(tuple, Dn[ind].tolist()))
     Dnp = Dnp[ind].tolist()

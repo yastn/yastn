@@ -17,7 +17,9 @@ from __future__ import annotations
 from functools import lru_cache
 from itertools import accumulate
 
-from ._auxiliary import _slc, _join_contiguous_slices, legs_from_struct
+import numpy as np
+
+from ._auxiliary import _slc, _join_contiguous_slices, legs_from_struct, get_structure, test_all_blocks
 from ._legs import legs_union
 from ._merging import _embed_tensor
 from ._tests import YastnError, _test_can_be_combined, _get_tD_legs, _unpack_trans_test_axes_pair
@@ -32,10 +34,11 @@ def __add__(a, b) -> 'Tensor':
     Signatures and total charges of two tensors should match.
     """
     (a, b), hfs = _pre_addition(a, b)
-    metas, struct, slices, legs = _meta_addition(((a.struct, a.slices, a.legs), (b.struct, b.slices, b.legs)), a.isdiag)
+    metas, struct, slices, legs = _meta_addition(a.config.sym, ((a.struct, a.slices, a.legs), (b.struct, b.slices, b.legs)), a.isdiag)
     data = a.config.backend.add((a._data, b._data), metas, struct.size)
-    return a._replace(hfs=hfs, struct=struct, slices=slices, data=data, legs=legs)
-
+    out = a._replace(hfs=hfs, struct=struct, slices=slices, data=data, legs=legs)
+    # test_all_blocks(out)
+    return out
 
 def __sub__(a, b) -> 'Tensor':
     """
@@ -44,10 +47,11 @@ def __sub__(a, b) -> 'Tensor':
     Signatures and total charges of two tensors should match.
     """
     (a, b), hfs = _pre_addition(a, b)
-    meta, struct, slices, legs = _meta_addition(((a.struct, a.slices, a.legs), (b.struct, b.slices, b.legs)), a.isdiag)
+    meta, struct, slices, legs = _meta_addition(a.config.sym, ((a.struct, a.slices, a.legs), (b.struct, b.slices, b.legs)), a.isdiag)
     data = a.config.backend.sub(a._data, b._data, meta, struct.size)
-    return a._replace(hfs=hfs, struct=struct, slices=slices, data=data, legs=legs)
-
+    out = a._replace(hfs=hfs, struct=struct, slices=slices, data=data, legs=legs)
+    # test_all_blocks(out)
+    return out
 
 def add(*tensors, amplitudes=None, **kwargs):
     r"""
@@ -75,11 +79,12 @@ def add(*tensors, amplitudes=None, **kwargs):
     tensors, hfs = _pre_addition(*tensors)
     datas = tuple((a.struct, a.slices, a.legs) for a in tensors)
     a = tensors[0]
-    metas, struct, slices, legs = _meta_addition(datas, a.isdiag)
+    metas, struct, slices, legs = _meta_addition(tensors[0].config.sym, datas, a.isdiag)
     datas = [v._data for v in tensors]
     data = a.config.backend.add(datas, metas, struct.size)
-    return a._replace(hfs=hfs, struct=struct, slices=slices, data=data, legs=legs)
-
+    out = a._replace(hfs=hfs, struct=struct, slices=slices, data=data, legs=legs)
+    # test_all_blocks(out)
+    return out
 
 def _pre_addition(*tensors):
     """
@@ -113,7 +118,7 @@ def _pre_addition(*tensors):
 
 
 @lru_cache(maxsize=1024)
-def _meta_addition(datas, isdiag):
+def _meta_addition(sym, datas, isdiag):
     """ meta-information for backend and new tensor charges and dimensions. """
 
     if all(datas[0] == data for data in datas[1:]):
@@ -122,72 +127,120 @@ def _meta_addition(datas, isdiag):
         metas = tuple(meta for _ in range(len(datas)))
         return metas, *datas[0]
 
-    check_structure = False
-    struct_0, slices_0, legs_0 = datas[0]
-    temp = list((t, D, sl.Dp) for t, D, sl in zip(struct_0.t, struct_0.D, slices_0))
+    ndim = len(datas[0][2])  # nlegs
+    legs = []
+    for n in range(ndim):
+        leg = datas[0][2][n]
+        for data in datas[1:]:
+            try:
+                leg = leg.union(data[2][n])
+            except ValueError as err:
+                if not isdiag:
+                    raise YastnError('Bond dimensions of some charges do not match.')
+        legs.append(leg)
+    legs = tuple(legs)
 
-    for struct_1, slices_1, legs_1 in datas[1:]:
-        temp0 = temp
-        temp1 = list((t, D, sl.Dp) for t, D, sl in zip(struct_1.t, struct_1.D, slices_1))
-        i0, i1, temp = 0, 0, []
-        while i0 < len(temp0) and i1 < len(temp1):
-            t0, D0, Dp0 = temp0[i0]
-            t1, D1, Dp1 = temp1[i1]
-            if t0 == t1:
-                if isdiag:
-                    temp.append((t0, max(D0, D1), max(Dp0, Dp1)))
+    if not isdiag:
+        t_new, D_new, slices_new, size_new, legs_new = get_structure(sym, legs, datas[0][0].n, isdiag)
+        metas = []
+        for data in datas:
+            meta = []
+            ta, Da, sla, sizea, legsa = get_structure(sym, data[2], data[0].n, isdiag)
+
+            meta, i, j, sni, soi = [], 0, 0, None, None
+            while i < len(ta) and j < len(t_new):
+                if np.array_equal(ta[i], t_new[j]):
+                    if soi is None:
+                        sni, soi = slices_new[j].slcs[0][0], sla[i].slcs[0][0]
+                    i += 1
+                    j += 1
                 else:
-                    if D0 != D1:
-                        raise YastnError('Bond dimensions do not match.')
-                    temp.append((t0, D0, Dp0))
-                i0 += 1
-                i1 += 1
-            elif t0 < t1:
-                temp.append((t0, D0, Dp0))
-                i0 += 1
-                check_structure = True
-            else:
-                temp.append((t1, D1, Dp1))
-                i1 += 1
-                check_structure = True
-        if i0 < len(temp0) or i1 < len(temp1):
-            check_structure = True
-        for t0, D0, Dp0 in temp0[i0:]:
-            temp.append((t0, D0, Dp0))
-        for t1, D1, Dp1 in temp1[i1:]:
-            temp.append((t1, D1, Dp1))
+                    if soi is not None:
+                        snf, sof = slices_new[j-1].slcs[0][1], sla[i-1].slcs[0][1]
+                        meta.append(((sni, snf), (soi, sof)))
+                    sni, soi = None, None
+                    j += 1
+            if soi is not None:
+                snf, sof = slices_new[j-1].slcs[0][1], sla[i-1].slcs[0][1]
+                meta.append(((sni, snf), (soi, sof)))
+            metas.append(tuple(meta))
 
-    t_new, D_new, Dp_new = zip(*temp) if len(temp) > 0 else ((), (), ())
-    slices_new = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dp_new), Dp_new, D_new))
-    struct_new = struct_0._replace(t=t_new, D=D_new, size=sum(Dp_new))
 
-    if check_structure:
-        _get_tD_legs(struct_new)
+        tnew = tuple(map(tuple, t_new.reshape(len(t_new), ndim * sym.NSYM).tolist()))
+        Dnew = tuple(map(tuple, D_new.reshape(len(D_new), ndim).tolist()))
+        Dp = [x[0] for x in Dnew] if isdiag else np.prod(D_new, axis=1, dtype=np.int64).tolist()
+        slices_new = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dp), Dp, Dnew))
+        struct_new = datas[0][0]._replace(t=tnew, D=Dnew, size=size_new)
 
-    if isdiag:
-        def update_meta(mtn, mto, slcn, slco):
-            start = slcn.slcs[0][0]
-            stop = start + slco.Dp
-            mtn.append((start, stop))
-            mto.append(slco.slcs[0])
+        return tuple(metas), struct_new, slices_new, legs_new
     else:
-        def update_meta(mtn, mto, slcn, slco):
-            mtn.append(slcn.slcs[0])
-            mto.append(slco.slcs[0])
 
-    metas = []
-    for struct, slices, legs in datas:
-        itn, islcn = iter(t_new), iter(slices_new)
-        mtn, mto = [], []
-        for to, slco in zip(struct.t, slices):
-            tn, slcn = next(itn), next(islcn)
-            while to != tn:
+        check_structure = False
+        struct_0, slices_0, legs_0 = datas[0]
+        temp = list((t, D, sl.Dp) for t, D, sl in zip(struct_0.t, struct_0.D, slices_0))
+
+        for struct_1, slices_1, legs_1 in datas[1:]:
+            temp0 = temp
+            temp1 = list((t, D, sl.Dp) for t, D, sl in zip(struct_1.t, struct_1.D, slices_1))
+            i0, i1, temp = 0, 0, []
+            while i0 < len(temp0) and i1 < len(temp1):
+                t0, D0, Dp0 = temp0[i0]
+                t1, D1, Dp1 = temp1[i1]
+                if t0 == t1:
+                    if isdiag:
+                        temp.append((t0, max(D0, D1), max(Dp0, Dp1)))
+                    else:
+                        if D0 != D1:
+                            raise YastnError('Bond dimensions of some charges do not match.')
+                        temp.append((t0, D0, Dp0))
+                    i0 += 1
+                    i1 += 1
+                elif t0 < t1:
+                    temp.append((t0, D0, Dp0))
+                    i0 += 1
+                    check_structure = True
+                else:
+                    temp.append((t1, D1, Dp1))
+                    i1 += 1
+                    check_structure = True
+            if i0 < len(temp0) or i1 < len(temp1):
+                check_structure = True
+            for t0, D0, Dp0 in temp0[i0:]:
+                temp.append((t0, D0, Dp0))
+            for t1, D1, Dp1 in temp1[i1:]:
+                temp.append((t1, D1, Dp1))
+
+        t_new, D_new, Dp_new = zip(*temp) if len(temp) > 0 else ((), (), ())
+        slices_new = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dp_new), Dp_new, D_new))
+        struct_new = struct_0._replace(t=t_new, D=D_new, size=sum(Dp_new))
+
+        if check_structure:
+            _get_tD_legs(struct_new)
+
+        if isdiag:
+            def update_meta(mtn, mto, slcn, slco):
+                start = slcn.slcs[0][0]
+                stop = start + slco.Dp
+                mtn.append((start, stop))
+                mto.append(slco.slcs[0])
+        else:
+            def update_meta(mtn, mto, slcn, slco):
+                mtn.append(slcn.slcs[0])
+                mto.append(slco.slcs[0])
+
+        metas = []
+        for struct, slices, legs in datas:
+            itn, islcn = iter(t_new), iter(slices_new)
+            mtn, mto = [], []
+            for to, slco in zip(struct.t, slices):
                 tn, slcn = next(itn), next(islcn)
-            update_meta(mtn, mto, slcn, slco)
-        metas.append(_join_contiguous_slices(mtn, mto))
+                while to != tn:
+                    tn, slcn = next(itn), next(islcn)
+                update_meta(mtn, mto, slcn, slco)
+            metas.append(_join_contiguous_slices(mtn, mto))
 
-    legs = legs_from_struct(struct_new)
-    return tuple(metas), struct_new, slices_new, legs
+        legs = legs_from_struct(struct_new)
+        return tuple(metas), struct_new, slices_new, legs
 
 
 def allclose(a, b, rtol=1e-13, atol=1e-13) -> bool:

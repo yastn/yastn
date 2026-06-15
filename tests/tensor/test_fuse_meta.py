@@ -86,20 +86,20 @@ def test_get_shapes(config_kwargs):
     assert b.get_shape() == (3, 5, 7, 9, 11, 13)
 
     a = a.fuse_legs(axes=[0, (1, 2, 3)], mode='meta')
-    assert a.get_shape() == a.to_numpy().shape == (3, 28389)
+    assert a.get_shape() == a.to_numpy().shape == (3, 45045)
     assert a.get_signature() == (-1, -1)
 
     b = a.to_nonsymmetric()
-    assert b.get_shape() == (3, 28389)
+    assert b.get_shape() == (3, 45045)
     b = a.to_nonsymmetric(native=True)
     assert b.get_shape() == (3, 5, 7, 9, 11, 13)
 
     a = a.fuse_legs(axes=[(0, 1)], mode='meta')
-    assert a.get_shape() == a.to_numpy().shape == (a.size,)
+    assert a.get_shape() == a.to_numpy().shape == (135135,)
     assert a.get_signature() == (-1,)
 
     b = a.to_nonsymmetric()
-    assert b.get_shape() == (a.size,)
+    assert b.get_shape() == (135135,)
     b = a.to_nonsymmetric(native=True)
     assert b.get_shape() == (3, 5, 7, 9, 11, 13)
 

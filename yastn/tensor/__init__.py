@@ -63,6 +63,7 @@ __all__.extend(_output.__all__)
 __all__.extend(_single.__all__)
 __all__.extend(_tests.__all__)
 __all__.extend(linalg.__all__)
+__all__.append('LegBasic')
 
 
 class Tensor:
@@ -93,7 +94,7 @@ class Tensor:
         else:
             dev = kwargs.get('device', self.config.default_device)
             dty = kwargs.get('dtype', self.config.default_dtype)
-            self._data = self.config.backend.zeros((0,), dtype=dty, device=dev)
+            self._data = self.config.backend.zeros((1,), dtype=dty, device=dev)
         #
         try:
             self.struct = kwargs['struct']
@@ -158,7 +159,7 @@ class Tensor:
     from ._algebra import __lt__, __gt__, __le__, __ge__, __truediv__, __pow__, allclose
     from ._algebra import __abs__, real, imag, sqrt, rsqrt, reciprocal, exp, bitwise_not
     from ._single import conj, conj_blocks, flip_signature, flip_charges, switch_signature, transpose, moveaxis, move_leg, diag
-    from ._single import grad, requires_grad_, remove_zero_blocks, add_leg, remove_leg, drop_leg_history
+    from ._single import grad, requires_grad_, add_leg, remove_leg, drop_leg_history
     from ._single import copy, shallow_copy, clone, detach, detach_, to, consume_transpose
     from ._output import print_properties, __str__, __repr__, print_blocks_shape, is_complex
     from ._output import get_blocks_charge, get_blocks_shape, get_legs

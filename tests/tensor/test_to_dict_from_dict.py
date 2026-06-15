@@ -261,7 +261,7 @@ def test_to_dict_exceptions(config_kwargs):
         bf = b.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
         _ = bf.to_dict(meta=af_meta)
     with pytest.raises(yastn.YastnError,
-                       match="Tensor is inconsistent with meta: Bond dimensions do not match."):
+                       match="Tensor is inconsistent with meta: Bond dimensions of some charges do not match."):
         b = yastn.Tensor(config=config_U1, s=(-1, 1, 1, 1))
         b.set_block(ts=(2, 0, 1, 1), Ds=(2, 3, 3, 4))
         _ = b.to_dict(meta=a_meta)

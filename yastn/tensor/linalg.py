@@ -21,7 +21,7 @@ import sys
 
 import numpy as np
 
-from ._auxiliary import _struct, _slc, _clear_axes, _unpack_axes, legs_from_struct
+from ._auxiliary import _struct, _slc, _clear_axes, _unpack_axes, legs_from_struct, test_all_blocks
 from ._merging import _merge_to_matrix, _meta_unmerge_matrix, _unmerge
 from ._merging import _Fusion, _leg_struct_trivial
 from ._tests import YastnError, _test_axes_all
@@ -342,6 +342,9 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
 
     U = U.moveaxis(source=-1, destination=Uaxis)
     V = V.moveaxis(source=0, destination=Vaxis)
+    test_all_blocks(U)
+    test_all_blocks(S)
+    test_all_blocks(V)
     return U, S, V
 
 
@@ -504,6 +507,9 @@ def eig(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
 
     U = U.moveaxis(source=-1, destination=Uaxis)
     V = V.moveaxis(source=0, destination=Vaxis)
+    test_all_blocks(U)
+    test_all_blocks(S)
+    test_all_blocks(V)
     return U, S, V
 
 
@@ -905,6 +911,9 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0) -> tuple[yastn.Tensor, yastn.Ten
 
     Q = Q.moveaxis(source=-1, destination=Qaxis)
     R = R.moveaxis(source=0, destination=Raxis)
+
+    test_all_blocks(Q)
+    test_all_blocks(R)
     return Q, R
 
 
@@ -1075,6 +1084,8 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank', **kwargs) -> tu
                     U[b_U] = U[b_U][slice_U]
 
     U = U.moveaxis(source=-1, destination=Uaxis)
+    test_all_blocks(U)
+    test_all_blocks(S)
     return S, U
 
 

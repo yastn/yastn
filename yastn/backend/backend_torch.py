@@ -593,6 +593,13 @@ def embed_mask(Adata, mask, meta, Dsize, axis, a_ndim):
     return kernel_embed_mask.apply(Adata, mask, meta, Dsize, axis, a_ndim)
 
 
+def embed_blocks(Adata, meta, Dsize):
+    newdata = torch.zeros(Dsize, dtype=Adata.dtype, device=Adata.device)
+    for sln, sla in meta:
+        newdata[slice(*sln)] = Adata[slice(*sla)]
+    return newdata
+
+
 def transpose(data, axes, meta_transpose):
     return kernel_transpose.apply(data, axes, meta_transpose)
 
