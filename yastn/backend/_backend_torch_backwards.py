@@ -254,14 +254,15 @@ class kernel_negate_blocks(torch.autograd.Function):
 
     @staticmethod
     def _sign(slices : Sequence[Sequence[int]], n, device):
-        # int8 * n + bool * n mem cost
+        # 2 * (int8 * n) + bool * n mem cost
         # 
         sl = torch.as_tensor(slices, dtype=torch.long, device=device)  # (N, 2)
         delta = torch.zeros(n + 1, dtype=torch.int8, device=device)
         delta.index_put_((sl[:, 0],), torch.tensor(1, dtype=torch.int8, device=device), accumulate=True)
         delta.index_put_((sl[:, 1],), torch.tensor(-1, dtype=torch.int8, device=device), accumulate=True)
-        inside = delta.cumsum(0)[:n] != 0          # bool mask of negated entries
-        return 1 - 2 * inside.to(device=device)    # +1 / -1, shape (n,)
+        delta.cumsum_(0)              # in-place cumulative sum, shape (n+1,)
+        delta.mul_(-2).add_(1)        # +1 / -1, shape (n,)
+        return delta[:n]
     
     @staticmethod
     def forward(Adata, slices):
