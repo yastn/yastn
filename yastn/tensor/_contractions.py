@@ -1049,6 +1049,8 @@ def swap_gate(a, axes, charge=None) -> 'Tensor':
         return a
     nsym = a.config.sym.NSYM
     fss = (True,) * nsym if a.config.fermionic is True else a.config.fermionic
+    
+    if a.config.profile: a.config.backend.nvtx.range_push("_meta_swap_gate")
     if charge is None:
         axes = tuple(_clear_axes(*axes))  # swapped groups of legs
         axes = _unpack_axes(a.mfs, *axes)
@@ -1064,10 +1066,13 @@ def swap_gate(a, axes, charge=None) -> 'Tensor':
         axes, = _unpack_axes(a.mfs, axes)
         axes = tuple(a.trans[ax] for ax in axes)
         negate_slices = _meta_swap_gate_charge(a.struct.t, a.slices, charges, a.ndim_n, nsym, axes, fss)
-    
+    if a.config.profile: a.config.backend.nvtx.range_pop()
+
     if not negate_slices: # empty Sequence
         return a
+    if a.config.profile: a.config.backend.nvtx.range_push("swap_negate_blocks")
     newdata = a.config.backend.negate_blocks(a._data, negate_slices)
+    if a.config.profile: a.config.backend.nvtx.range_pop()
     return a._replace(data=newdata)
 
 
