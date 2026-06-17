@@ -76,6 +76,21 @@ def test_vdot_basic(config_kwargs):
     vdot_vs_numpy(c, b)
 
 
+def test_vdot_diag(config_kwargs):
+    """ basic tests for various symmetries. """
+    # dense
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    leg_a = yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(1, 2, 3))
+    leg_b = yastn.Leg(config_U1, s=1, t=(0, 1, 2, 3), D=(1, 2, 3, 4))
+    a = yastn.eye(config=config_U1, legs=leg_a)
+    b = yastn.ones(config=config_U1, legs=[leg_b, leg_b.conj()])
+    #
+    assert abs(vdot_vs_numpy(a, b) - 5) < tol
+    assert abs(vdot_vs_numpy(b, a) - 5) < tol
+    assert abs(vdot_vs_numpy(a, a) - 6) < tol
+    assert abs(vdot_vs_numpy(b, b) - 30) < tol
+
+
 def test_vdot_fuse_hard(config_kwargs):
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)

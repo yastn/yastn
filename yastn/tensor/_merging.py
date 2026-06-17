@@ -375,7 +375,8 @@ def _meta_fuse_hard(config, struct, slices, axes, inds):
         except StopIteration:
             pass
     Dp_new = np.prod(D_new, axis=1, dtype=np.int64).tolist() if D_new else []
-    struct_new = struct._replace(t=tuple(t_new), D=tuple(D_new), s=s_eff, size=sum(Dp_new))
+    size = sum(Dp_new) if ndim_n > 0 else 1
+    struct_new = struct._replace(t=tuple(t_new), D=tuple(D_new), s=s_eff, size=size)
     slices_new = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dp_new), Dp_new, D_new))
     return struct_new, slices_new, meta_mrg, t_in, D_in
 

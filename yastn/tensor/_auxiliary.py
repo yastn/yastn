@@ -24,6 +24,14 @@ from ..sym import sym_none
 __all__ = ['_config', '_struct', 'sign_canonical_order', 'swap_charges', 'LegBasic', 'legs_from_struct']
 
 
+class _structure(NamedTuple):
+    t: np.array = None  # leg signatures
+    D: np.array = None  # tensor charge
+    slc: np.array = None  # isdiag
+    size: int = 0  # list of block charges
+    nblocks: int = 0  # list of block shapes
+    legs: tuple = ()  # total data size
+
 class _struct(NamedTuple):
     s: tuple = ()  # leg signatures
     n: tuple = ()  # tensor charge
@@ -224,11 +232,14 @@ class LegBasic(NamedTuple):
         tD0, tD1 = self.tD, other.tD
         return not (self.s != sgn * other.s or any(tD0[k] != tD1[k] for k in tD0.keys() & tD1.keys()))
 
-    def union(self, other) -> LegBasic:
-        if not self.are_consistent(other, sgn=1):
+    def union(self, other, isdiag=False) -> LegBasic:
+        if not isdiag and not self.are_consistent(other, sgn=1):
             raise ValueError("Cannot take an union of inconsistent legs")
         tD0, tD1 = self.tD, other.tD
-        tD = sorted({**tD0, **tD1}.items())
+        if isdiag:  # takes larger dimension for common charge
+            tD = [(k, max(tD0.get(k, 0), tD1.get(k, 0))) for k in sorted(tD0.keys() | tD1.keys())]
+        else:
+            tD = sorted({**tD0, **tD1}.items())
         return LegBasic(s=self.s, t=tuple(x[0] for x in tD), D=tuple(x[1] for x in tD))
 
     def intersection(self, other) -> LegBasic:
@@ -258,28 +269,25 @@ def get_structure(sym, legs, n, isdiag=False):
     """
     nsym = sym.NSYM
     ndim = len(legs)
-    s = np.array([leg.s for leg in legs], dtype=np.int64)
-    tas = [np.array(leg.t, dtype=np.int64).reshape(len(leg.t), nsym) for leg in legs]
-    Das = [np.array(leg.D, dtype=np.int64).reshape(len(leg.D)) for leg in legs]
-    if ndim > 0:
-        indices = np.indices([len(leg.t) for leg in legs]).reshape(ndim, -1).T
-    else:
-        indices = np.zeros((1, ndim), dtype=np.int64)
-    comb_t = np.empty((len(indices), ndim, nsym), dtype=np.int64)
-    comb_D = np.empty((len(indices), ndim), dtype=np.int64)
-    for i, ta in enumerate(tas):
-        comb_t[:, i, :] = ta[indices[:, i], :]
-    for i, Da in enumerate(Das):
-        comb_D[:, i] = Da[indices[:, i]]
-    ind = np.all(sym.fuse(comb_t, s, 1) == n, axis=1)
-    tset = comb_t[ind]
-    Dset = comb_D[ind]
-    nblocks = len(tset)
-    Dp = Dset[:, 0] if isdiag else np.prod(Dset, axis=1, dtype=np.int64)
-    size = np.sum(Dp, dtype=np.int64).item()
-    slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dp), Dp, Dset))
+    s = tuple(leg.s for leg in legs)
+    taxes = tuple(leg.t for leg in legs)
+    tblocks, iblocks = get_structure_charges(sym, taxes, s, n)
 
-    tDset = np.concatenate((tset, Dset.reshape(nblocks, ndim, 1)), axis=2)
+    Dblocks = np.empty(iblocks.shape, dtype=np.int64)
+    for i, leg in enumerate(legs):
+        Dax = np.array(leg.D, dtype=np.int64)
+        Dblocks[:, i] = Dax[iblocks[:, i]]
+
+    nblocks = len(iblocks)
+    #
+    slices = np.zeros((nblocks, 2), dtype=np.int64)
+    Dp = Dblocks[:, 0] if isdiag else np.prod(Dblocks, axis=1, dtype=np.int64)
+    np.cumsum(Dp, out=slices[:, 1])
+    slices[1:, 0] = slices[:-1, 1]
+    size = np.sum(Dp, dtype=np.int64).item()
+    #
+    # recalculate legs, in case some leg charges do not appear in any block
+    tDset = np.concatenate((tblocks, Dblocks.reshape(nblocks, ndim, 1)), axis=2)
     new_legs = []
     for i in range(ndim):
         utDs = sorted(np.unique(tDset[:, i, :], axis=0).tolist())
@@ -287,10 +295,43 @@ def get_structure(sym, legs, n, isdiag=False):
         Dl = tuple(x[nsym] for x in utDs)
         leg = LegBasic(s=s[i], t=tl, D=Dl)
         new_legs.append(leg)
+    #
+    return _structure(t=tblocks, D=Dblocks, slc=slices, size=size, nblocks=nblocks, legs=tuple(new_legs))
 
-    return tset, Dset, slices, size, tuple(new_legs)
+
+def get_structure_charges(sym, taxes, s, n):
+    nsym = sym.NSYM
+    ndim = len(taxes)
+    if ndim > 0:
+        indices = np.indices([len(tax) for tax in taxes]).reshape(ndim, -1).T
+    else:
+        indices = np.zeros((1, ndim), dtype=np.int64)
+
+    comb_t = np.empty((len(indices), ndim, nsym), dtype=np.int64)
+    for i, tax in enumerate(taxes):
+        tax = np.array(tax, dtype=np.int64).reshape(len(tax), nsym)
+        comb_t[:, i, :] = tax[indices[:, i], :]
+
+    s = np.array(s, dtype=np.int64)
+    ind = np.all(sym.fuse(comb_t, s, 1) == n, axis=1)
+
+    tblocks = comb_t[ind]
+    iblocks = indices[ind]
+    return tblocks, iblocks
+
 
 
 def test_all_blocks(a):
-    tset, Dset, slices, size, legs =  get_structure(a.config.sym, a.legs, a.n, isdiag=a.isdiag)
+    tset, Dset, slices, size, nblocks, legs = get_structure(a.config.sym, a.legs, a.n, isdiag=a.isdiag)
     assert len(tset) == len(a.struct.t) or len(a.struct.t) == 0 or len(tset) == 0
+
+
+def update_old_struct(struct, st_new):
+    ndim = len(st_new.legs)
+    nsym = len(struct.n)
+    tnew = tuple(map(tuple, st_new.t.reshape(st_new.nblocks, ndim * nsym).tolist()))
+    Dnew = tuple(map(tuple, st_new.D.reshape(st_new.nblocks, ndim).tolist()))
+    Dp = (st_new.slc[:, 1] - st_new.slc[:, 0]).tolist()
+    slices_new = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dp), Dp, Dnew))
+    struct_new = struct._replace(t=tnew, D=Dnew, size=st_new.size)
+    return struct_new, slices_new

@@ -22,7 +22,7 @@ from operator import itemgetter
 
 import numpy as np
 
-from ._auxiliary import _struct, _slc, _clear_axes, _unpack_axes, _join_contiguous_slices, sign_canonical_order, legs_from_struct, test_all_blocks
+from ._auxiliary import _struct, _slc, _clear_axes, _unpack_axes, _join_contiguous_slices, sign_canonical_order, legs_from_struct, test_all_blocks, get_structure
 from ._merging import _merge_to_matrix, _unmerge, _meta_unmerge_matrix, _meta_fuse_hard
 from ._merging import _transpose_and_merge, _mask_tensors_leg_intersection, _meta_mask
 from ._tests import YastnError, _test_can_be_combined, _unpack_trans_test_axes_pair
@@ -591,7 +591,8 @@ def _apply_mask_axes(a, naxes, masks):
             mask_D = tuple(mask_tD.values())
             meta, struct, slices, axis, ndim = _meta_mask(a.struct, a.slices, a.isdiag, mask_t, mask_D, axis)
             data = a.config.backend.apply_mask(a._data, mask, meta, struct.size, axis, ndim)
-            a = a._replace(struct=struct, slices=slices, data=data)
+            legs = legs_from_struct(struct)
+            a = a._replace(struct=struct, slices=slices, data=data, legs=legs)
     return a
 
 
@@ -610,12 +611,16 @@ def vdot(a, b, conj=(1, 0)) -> Number:
     """
     # axes = (tuple(range(a.ndim)), tuple(range(b.ndim)))
     # return tensordot(a, b, axes=axes, conj=conj).to_number()
-
     _test_can_be_combined(a, b)
     if conj[0] == 1:
         a = a.conj()
     if conj[1] == 1:
         b = b.conj()
+
+    if a.isdiag and not b.isdiag:
+        a = a.diag()
+    if b.isdiag and not a.isdiag:
+        b = b.diag()
 
     if a.trans != b.trans:
         a = a.consume_transpose()
@@ -631,7 +636,7 @@ def vdot(a, b, conj=(1, 0)) -> Number:
             b = _apply_mask_axes(b, nin_b, msk_b)
             a = a._replace(hfs=a_hfs)
             b = b._replace(hfs=b_hfs)
-        meta_vdot = _meta_vdot(a.struct, a.slices, b.struct, b.slices)
+        meta_vdot = _meta_vdot(a.config.sym, a.legs, b.legs, a.n, b.n, a.isdiag, b.isdiag)
     else:
         meta_vdot = ()
 
@@ -639,17 +644,27 @@ def vdot(a, b, conj=(1, 0)) -> Number:
 
 
 @lru_cache(maxsize=1024)
-def _meta_vdot(struct_a, slices_a, struct_b, slices_b):
+def _meta_vdot(sym, legs_a, legs_b, n_a, n_b, isdiag_a, isdiag_b):
+    st_a = get_structure(sym, legs_a, n_a, isdiag_a)
+    st_b = get_structure(sym, legs_b, n_b, isdiag_b)
+
+    slc_a = st_a.slc.tolist()
+    slc_b = st_b.slc.tolist()
+    ta = st_a.t.reshape(st_a.nblocks, len(legs_a) * len(n_a))
+    tb = st_b.t.reshape(st_b.nblocks, len(legs_b) * len(n_b))
+
+    if not all(leg_a.are_consistent(leg_b, sgn=-1) for leg_a, leg_b in zip(legs_a, legs_b)):
+        raise YastnError('Bond dimensions of some charges do not match.')
+
     ia, ib, slcs_a, slcs_b = 0, 0, [], []
-    while ia < len(struct_a.t) and ib < len(struct_b.t):
-        if struct_a.t[ia] == struct_b.t[ib]:
-            if struct_a.D[ia] != struct_b.D[ib]:
-                raise YastnError('Bond dimensions of some charges do not match.')
-            slcs_a.append(slices_a[ia].slcs[0])
-            slcs_b.append(slices_b[ib].slcs[0])
+    while ia < len(ta) and ib < len(tb):
+        diff = np.flatnonzero(ta[ia] != tb[ib])
+        if len(diff) == 0:
+            slcs_a.append(slc_a[ia])
+            slcs_b.append(slc_b[ib])
             ia += 1
             ib += 1
-        elif struct_a.t[ia] < struct_b.t[ib]:
+        elif ta[ia, diff[0]] < tb[ib, diff[0]]:
             ia += 1
         else:
             ib += 1
@@ -685,15 +700,15 @@ def trace(a, axes=(0, 1)) -> 'Tensor':
     if a.isdiag:
         struct = a.struct._replace(s=(), diag=False, t=((),), D=((),), size=1)
         data = a.config.backend.sum_elements(a._data)
-        return a._replace(struct=struct, slices=(_slc(((0, 1),), (), 1),), mfs=mfs, hfs=hfs, isdiag=False, data=data, trans=None)
+        return a._replace(struct=struct, slices=(_slc(((0, 1),), (), 1),), mfs=mfs, hfs=hfs, isdiag=False, data=data, trans=None, legs=())
 
     if mask_needed:
         msk_0, msk_1, a_hfs, _ = _mask_tensors_leg_intersection(a, a, nin_0, nin_1)
         a = _apply_mask_axes(a, nin_0 + nin_1, msk_0 + msk_1)
         a = a._replace(hfs=a_hfs)
 
-    meta, struct, slices = _meta_trace(a.struct, a.slices, nin_0, nin_1, out)
-    legs = legs_from_struct(struct)
+    test_all_blocks(a)
+    meta, struct, slices, legs = _meta_trace(a.config.sym, a.legs, a.n, nin_0, nin_1, out)
     data = a.config.backend.trace(a._data, order, meta, struct.size)
 
     out = a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, data=data, trans=None, legs=legs)
@@ -701,17 +716,16 @@ def trace(a, axes=(0, 1)) -> 'Tensor':
     return out
 
 @lru_cache(maxsize=1024)
-def _meta_trace(struct, slices, nin_0, nin_1, out):
+def _meta_trace(sym, legs, n, nin_0, nin_1, out):
     r""" meta-information for backend and struct of traced tensor. """
-    lt, nsym = len(struct.t), len(struct.n)
-    tset = np.array(struct.t, dtype=np.int64).reshape((lt, len(struct.s), nsym))
-    Dset = np.array(struct.D, dtype=np.int64).reshape((lt, len(struct.s)))
-    t0 = tset[:, nin_0, :].reshape(lt, len(nin_0) * nsym)
-    t1 = tset[:, nin_1, :].reshape(lt, len(nin_1) * nsym)
-    tn = tset[:, out, :].reshape(lt, len(out) * nsym)
-    D0 = Dset[:, nin_0]
-    D1 = Dset[:, nin_1]
-    Dn = Dset[:, out]
+    st = get_structure(sym, legs, n, isdiag=False)
+    nsym = len(n)
+    t0 = st.t[:, nin_0, :].reshape(st.nblocks, len(nin_0) * nsym)
+    t1 = st.t[:, nin_1, :].reshape(st.nblocks, len(nin_1) * nsym)
+    tn = st.t[:, out, :].reshape(st.nblocks, len(out) * nsym)
+    D0 = st.D[:, nin_0]
+    D1 = st.D[:, nin_1]
+    Dn = st.D[:, out]
     Dnp = np.prod(Dn, axis=1, dtype=np.int64)
     pD0 = np.prod(D0, axis=1, dtype=np.int64)
     pD1 = np.prod(D1, axis=1, dtype=np.int64)
@@ -723,9 +737,11 @@ def _meta_trace(struct, slices, nin_0, nin_1, out):
     tn = tuple(map(tuple, tn[ind].tolist()))
     Dn = tuple(map(tuple, Dn[ind].tolist()))
     Dnp = Dnp[ind].tolist()
-    slo = tuple(slices[n].slcs[0] for n in ind)
-    Do = tuple(struct.D[n] for n in ind)
+    slo = st.slc[ind].tolist()
+    Do = tuple(map(tuple, st.D[ind].tolist()))
     Drsh = tuple(map(tuple, Drsh[ind].tolist()))
+
+    legs_new = tuple(legs[ax] for ax in out)
 
     pre_meta = sorted(zip(tn, Dn, Dnp, slo, Do, Drsh), key=itemgetter(0))
 
@@ -737,9 +753,13 @@ def _meta_trace(struct, slices, nin_0, nin_1, out):
         c_slices.append(_slc(((start, stop),), Dn, Dnp))
         meta_trace.append(((start, stop), tuple(mt[3:] for mt in group)))
         start = stop
-    c_s = tuple(struct.s[i] for i in out)
-    c_struct = _struct(s=c_s, n=struct.n, t=tuple(c_t), D=tuple(c_D), size=start)
-    return tuple(meta_trace), c_struct, tuple(c_slices)
+    c_s = tuple(legs[ax].s for ax in out)
+    size = start if len(c_s) > 0 else 1
+    c_struct = _struct(s=c_s, n=n, t=tuple(c_t), D=tuple(c_D), size=size)
+    legs_new = legs_from_struct(c_struct)
+    st_new = get_structure(sym, legs_new, n, isdiag=False)
+    assert (st_new.nblocks == len(c_t) or len(legs_new) == 0)
+    return tuple(meta_trace), c_struct, tuple(c_slices), legs_new
 
 
 def swap_gate(a, axes, charge=None) -> 'Tensor':

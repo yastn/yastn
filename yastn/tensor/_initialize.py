@@ -250,7 +250,7 @@ def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
     a.struct = a.struct._replace(t=a_t, D=a_D, size=Dsize)
     a.legs = legs_from_struct(a.struct)
 
-    ts, Ds, slices, size, legs = get_structure(a.config.sym, a.legs, a.struct.n, a.isdiag)
+    ts, Ds, slices, size, nblocks, legs = get_structure(a.config.sym, a.legs, a.struct.n, a.isdiag)
     assert a.legs == legs
 
     a._data = _init_block(a.config, Dsize, val, dtype=a.yastn_dtype, device=a.device)
@@ -324,50 +324,51 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
     Dsize = Ds[0] if a.isdiag else reduce(mul, Ds, 1)
     new_block = _init_block(a.config, Dsize, val, dtype=a.yastn_dtype, device=a.device)
 
-    t_new, D_new, slices_new, size_new, legs_new = get_structure(a.config.sym, a.legs, a.struct.n, a.isdiag)
+    t_new, D_new, slices_new, size_new, nblocks, legs_new = get_structure(a.config.sym, a.legs, a.struct.n, a.isdiag)
     i = 0
     ats = ats.reshape((a.ndim_n, nsym))
     while i < len(t_new):
         if np.array_equal(t_new[i], ats):
             break
         i += 1
-    slc = slices_new[i].slcs[0]
+    slc = slices_new[i]
     a.data[slice(*slc)] = new_block
 
 
 def embed_(a, legs_new):
     t_old = np.array(a.struct.t, dtype=np.int64).reshape((len(a.struct.t), len(a.struct.s), a.config.sym.NSYM))
     slices_old = a.slices
-    t_new, D_new, slices_new, size_new, legs_new = get_structure(a.config.sym, legs_new, a.struct.n, a.isdiag)
+
+    st_new = get_structure(a.config.sym, legs_new, a.struct.n, a.isdiag)
 
     meta, i, j, sni, soi = [], 0, 0, None, None
-    while i < len(t_old) and j < len(t_new):
-        if np.array_equal(t_old[i], t_new[j]):
+    while i < len(t_old) and j < st_new.nblocks:
+        if np.array_equal(t_old[i], st_new.t[j]):
             if soi is None:
-                sni, soi = slices_new[j].slcs[0][0], slices_old[i].slcs[0][0]
+                sni, soi = st_new.slc[j, 0], slices_old[i].slcs[0][0]
             i += 1
             j += 1
         else:
             if soi is not None:
-                snf, sof = slices_new[j-1].slcs[0][1], slices_old[i-1].slcs[0][1]
+                snf, sof = st_new.slc[j - 1, 1], slices_old[i-1].slcs[0][1]
                 meta.append(((sni, snf), (soi, sof)))
             sni, soi = None, None
             j += 1
     if soi is not None:
-        snf, sof = slices_new[j-1].slcs[0][1], slices_old[i-1].slcs[0][1]
+        snf, sof = st_new.slc[j - 1, 1], slices_old[i-1].slcs[0][1]
         meta.append(((sni, snf), (soi, sof)))
 
 
-    newdata = a.config.backend.embed_blocks(a.data, meta, size_new)
+    newdata = a.config.backend.embed_blocks(a.data, meta, st_new.size)
 
-    tnew = tuple(map(tuple, t_new.reshape(len(t_new), a.ndim_n * a.config.sym.NSYM).tolist()))
-    Dnew = tuple(map(tuple, D_new.reshape(len(D_new), a.ndim_n).tolist()))
-    Dp = [x[0] for x in Dnew] if a.isdiag else np.prod(D_new, axis=1, dtype=np.int64).tolist()
+    tnew = tuple(map(tuple, st_new.t.reshape(st_new.nblocks, a.ndim_n * a.config.sym.NSYM).tolist()))
+    Dnew = tuple(map(tuple, st_new.D.reshape(st_new.nblocks, a.ndim_n).tolist()))
+    Dp = (st_new.slc[:, 1] - st_new.slc[:, 0]).tolist()
     slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dp), Dp, Dnew))
 
     a._data = newdata
     a.slices = slices
-    a.struct = a.struct._replace(t=tnew, D=Dnew, size=size_new)
+    a.struct = a.struct._replace(t=tnew, D=Dnew, size=st_new.size)
     a.legs = legs_new
 
 
