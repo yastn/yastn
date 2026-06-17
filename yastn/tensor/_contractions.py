@@ -1064,7 +1064,9 @@ def swap_gate(a, axes, charge=None) -> 'Tensor':
         axes, = _unpack_axes(a.mfs, axes)
         axes = tuple(a.trans[ax] for ax in axes)
         negate_slices = _meta_swap_gate_charge(a.struct.t, a.slices, charges, a.ndim_n, nsym, axes, fss)
-
+    
+    if not negate_slices: # empty Sequence
+        return a
     newdata = a.config.backend.negate_blocks(a._data, negate_slices)
     return a._replace(data=newdata)
 

@@ -15,6 +15,7 @@
 """Support of torch as a data structure used by yastn."""
 from itertools import groupby
 from types import SimpleNamespace
+from typing import Sequence
 import numpy as np
 import torch
 
@@ -250,12 +251,21 @@ class kernel_transpose_dot_sum(torch.autograd.Function):
 
 
 class kernel_negate_blocks(torch.autograd.Function):
+
+    @staticmethod
+    def _sign(slices : Sequence[Sequence[int]], n, device):
+        # int8 * n + bool * n mem cost
+        # 
+        sl = torch.as_tensor(slices, dtype=torch.long, device=device)  # (N, 2)
+        delta = torch.zeros(n + 1, dtype=torch.int8, device=device)
+        delta.index_put_((sl[:, 0],), torch.tensor(1, dtype=torch.int8, device=device), accumulate=True)
+        delta.index_put_((sl[:, 1],), torch.tensor(-1, dtype=torch.int8, device=device), accumulate=True)
+        inside = delta.cumsum(0)[:n] != 0          # bool mask of negated entries
+        return 1 - 2 * inside.to(device=device)    # +1 / -1, shape (n,)
+    
     @staticmethod
     def forward(Adata, slices):
-        newdata = Adata.clone()
-        for slc in slices:
-            newdata[slice(*slc)] *= -1
-        return newdata
+        return Adata * kernel_negate_blocks._sign(slices, Adata.numel(), Adata.device)
 
     @staticmethod
     def setup_context(ctx, inputs, output):
@@ -264,11 +274,7 @@ class kernel_negate_blocks(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, Cdata_b):
-        slices = ctx.slices
-        Adata_b = Cdata_b.clone()
-        for slc in slices:
-            Adata_b[slice(*slc)] *= -1
-        return Adata_b, None
+        return Cdata_b * kernel_negate_blocks._sign(ctx.slices, Cdata_b.numel(), Cdata_b.device), None
 
 
 class kernel_apply_mask(torch.autograd.Function):
