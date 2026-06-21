@@ -21,8 +21,8 @@ import sys
 
 import numpy as np
 
-from ._auxiliary import _struct, _slc, _clear_axes, _unpack_axes, legs_from_struct, test_all_blocks
-from ._merging import _merge_to_matrix, _meta_unmerge_matrix, _unmerge
+from ._auxiliary import _struct, _slc, _clear_axes, _unpack_axes, legs_from_struct, test_all_blocks, get_structure, update_old_struct
+from ._merging import _merge_to_matrix, _meta_unmerge_matrix2, _unmerge
 from ._merging import _Fusion, _leg_struct_trivial
 from ._tests import YastnError, _test_axes_all
 
@@ -254,7 +254,9 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     out_hl = tuple(a.trans[ax] for ax in out_hl)
     out_hr = tuple(a.trans[ax] for ax in out_hr)
     #
-    data, struct, slices, ls_l, ls_r = _merge_to_matrix(a, (out_hl, out_hr))
+    data, legs_ma, ls_l, ls_r, legs_group = _merge_to_matrix(a, (out_hl, out_hr))
+    st_ma = get_structure(a.config.sym, legs_ma, a.n, a.isdiag)
+    struct, slices = update_old_struct(a.struct, st_ma)
     #
     if svd_on_cpu:
         device = a.config.backend.get_device(data)
@@ -325,7 +327,8 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         return S
 
     Us = tuple(a.struct.s[ii] for ii in out_hl) + (sU,)
-    Umeta_unmerge, Ustruct, Uslices = _meta_unmerge_matrix(a.config, Ustruct, Uslices, ls_l, ls_s, Us)
+    Ulegs = (*legs_group[0], Slegs[0])
+    Umeta_unmerge, Ustruct, Uslices = _meta_unmerge_matrix2(a.config, Ustruct, Uslices, ls_l, ls_s, Us)
     Udata = _unmerge(a.config, Udata, Umeta_unmerge)
     Umfs = tuple(a.mfs[ii] for ii in out_ml) + ((1,),)
     Uhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(s=(sU,)),)
@@ -333,7 +336,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     U = a._replace(struct=Ustruct, slices=Uslices, data=Udata, mfs=Umfs, hfs=Uhfs, trans=None, legs=Ulegs)
 
     Vs = (-sU,) + tuple(a.struct.s[ii] for ii in out_hr)
-    Vmeta_unmerge, Vstruct, Vslices = _meta_unmerge_matrix(a.config, Vstruct, Vslices, ls_s, ls_r, Vs)
+    Vmeta_unmerge, Vstruct, Vslices = _meta_unmerge_matrix2(a.config, Vstruct, Vslices, ls_s, ls_r, Vs)
     Vdata = _unmerge(a.config, Vdata, Vmeta_unmerge)
     Vmfs = ((1,),) + tuple(a.mfs[ii] for ii in out_mr)
     Vhfs = (_Fusion(s=(-sU,)),) + tuple(a.hfs[ii] for ii in out_hr)
@@ -463,7 +466,10 @@ def eig(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     out_hl = tuple(a.trans[ax] for ax in out_hl)
     out_hr = tuple(a.trans[ax] for ax in out_hr)
     #
-    data, struct, slices, ls_l, ls_r = _merge_to_matrix(a, (out_hl, out_hr))
+    data, legs_ma, ls_l, ls_r, legs_group = _merge_to_matrix(a, (out_hl, out_hr))
+    st_ma = get_structure(a.config.sym, legs_ma, a.n, a.isdiag)
+    struct, slices = update_old_struct(a.struct, st_ma)
+
     if ls_l != ls_r:
         raise YastnError("Legs of effective square blocks do not match.")
 
@@ -490,7 +496,7 @@ def eig(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         return S
 
     Us = tuple(a.struct.s[ii] for ii in out_hl) + (sU,)
-    Umeta_unmerge, Ustruct, Uslices = _meta_unmerge_matrix(a.config, Ustruct, Uslices, ls_l, ls_s, Us)
+    Umeta_unmerge, Ustruct, Uslices = _meta_unmerge_matrix2(a.config, Ustruct, Uslices, ls_l, ls_s, Us)
     Udata = _unmerge(a.config, Udata, Umeta_unmerge)
     Umfs = tuple(a.mfs[ii] for ii in out_ml) + ((1,),)
     Uhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(s=(sU,)),)
@@ -498,7 +504,7 @@ def eig(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     U = a._replace(struct=Ustruct, slices=Uslices, data=Udata, mfs=Umfs, hfs=Uhfs, trans=None, legs=Ulegs)
 
     Vs = (-sU,) + tuple(a.struct.s[ii] for ii in out_hr)
-    Vmeta_unmerge, Vstruct, Vslices = _meta_unmerge_matrix(a.config, Vstruct, Vslices, ls_s, ls_r, Vs)
+    Vmeta_unmerge, Vstruct, Vslices = _meta_unmerge_matrix2(a.config, Vstruct, Vslices, ls_s, ls_r, Vs)
     Vdata = _unmerge(a.config, Vdata, Vmeta_unmerge)
     Vmfs = ((1,),) + tuple(a.mfs[ii] for ii in out_mr)
     Vhfs = (_Fusion(s=(-sU,)),) + tuple(a.hfs[ii] for ii in out_hr)
@@ -884,7 +890,10 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0) -> tuple[yastn.Tensor, yastn.Ten
     out_hl = tuple(a.trans[ax] for ax in out_hl)
     out_hr = tuple(a.trans[ax] for ax in out_hr)
 
-    data, struct, slices, ls_l, ls_r = _merge_to_matrix(a, (out_hl, out_hr))
+    data, legs_ma, ls_l, ls_r, legs_group = _merge_to_matrix(a, (out_hl, out_hr))
+    st_ma = get_structure(a.config.sym, legs_ma, a.n, a.isdiag)
+    struct, slices = update_old_struct(a.struct, st_ma)
+
     meta, Qstruct, Qslices, Rstruct, Rslices = _meta_qr(a.config, struct, slices, sQ)
 
     sizes = tuple(x.size for x in (Qstruct, Rstruct))
@@ -893,7 +902,7 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0) -> tuple[yastn.Tensor, yastn.Ten
     ls = _leg_struct_trivial(Rstruct, axis=0)
 
     Qs = tuple(a.struct.s[lg] for lg in out_hl) + (sQ,)
-    Qmeta_unmerge, Qstruct, Qslices = _meta_unmerge_matrix(a.config, Qstruct, Qslices, ls_l, ls, Qs)
+    Qmeta_unmerge, Qstruct, Qslices = _meta_unmerge_matrix2(a.config, Qstruct, Qslices, ls_l, ls, Qs)
     Qdata = _unmerge(a.config, Qdata, Qmeta_unmerge)
     Qmfs = tuple(a.mfs[ii] for ii in out_ml) + ((1,),)
     Qhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(s=(sQ,)),)
@@ -901,7 +910,7 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0) -> tuple[yastn.Tensor, yastn.Ten
     Q = a._replace(struct=Qstruct, slices=Qslices, data=Qdata, mfs=Qmfs, hfs=Qhfs, trans=None, legs=Qlegs)
 
     Rs = (-sQ,) + tuple(a.struct.s[lg] for lg in out_hr)
-    Rmeta_unmerge, Rstruct, Rslices = _meta_unmerge_matrix(a.config, Rstruct, Rslices, ls, ls_r, Rs)
+    Rmeta_unmerge, Rstruct, Rslices = _meta_unmerge_matrix2(a.config, Rstruct, Rslices, ls, ls_r, Rs)
     Rdata = _unmerge(a.config, Rdata, Rmeta_unmerge)
     Rmfs = ((1,),) + tuple(a.mfs[ii] for ii in out_mr)
     Rhfs = (_Fusion(s=(-sQ,)),) + tuple(a.hfs[ii] for ii in out_hr)
@@ -1013,7 +1022,9 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank', **kwargs) -> tu
     if not all(x == 0 for x in a.struct.n):
         raise YastnError('eigh requires tensor charge to be zero.')
 
-    data, struct, slices, ls_l, ls_r = _merge_to_matrix(a, (out_hl, out_hr))
+    data, legs_ma, ls_l, ls_r, legs_group = _merge_to_matrix(a, (out_hl, out_hr))
+    st_ma = get_structure(a.config.sym, legs_ma, a.n, a.isdiag)
+    struct, slices = update_old_struct(a.struct, st_ma)
 
     #
     # 3.1 Set minimal number of eigenpairs to solve for in each block.
@@ -1058,7 +1069,7 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank', **kwargs) -> tu
     ls_s = _leg_struct_trivial(Sstruct, axis=1)
 
     Us = tuple(a.struct.s[lg] for lg in out_hl) + (sU,)
-    Umeta_unmerge, Ustruct, Uslices = _meta_unmerge_matrix(a.config, Ustruct, Uslices, ls_l, ls_s, Us)
+    Umeta_unmerge, Ustruct, Uslices = _meta_unmerge_matrix2(a.config, Ustruct, Uslices, ls_l, ls_s, Us)
     Udata = _unmerge(a.config, Udata, Umeta_unmerge)
     Umfs = tuple(a.mfs[ii] for ii in out_ml) + ((1,),)
     Uhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(s=(sU,)),)

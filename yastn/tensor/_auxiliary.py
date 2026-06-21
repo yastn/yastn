@@ -31,6 +31,7 @@ class _structure(NamedTuple):
     size: int = 0  # list of block charges
     nblocks: int = 0  # list of block shapes
     legs: tuple = ()  # total data size
+    n: tuple = ()  # tensor charge
 
 class _struct(NamedTuple):
     s: tuple = ()  # leg signatures
@@ -296,7 +297,7 @@ def get_structure(sym, legs, n, isdiag=False):
         leg = LegBasic(s=s[i], t=tl, D=Dl)
         new_legs.append(leg)
     #
-    return _structure(t=tblocks, D=Dblocks, slc=slices, size=size, nblocks=nblocks, legs=tuple(new_legs))
+    return _structure(t=tblocks, D=Dblocks, slc=slices, size=size, nblocks=nblocks, legs=tuple(new_legs), n=n)
 
 
 def get_structure_charges(sym, taxes, s, n):
@@ -320,18 +321,28 @@ def get_structure_charges(sym, taxes, s, n):
     return tblocks, iblocks
 
 
+def get_sub_slices(st, st_full):
+    inds = np.zeros(st.nblocks, dtype=np.int64)
+    ic = 0
+    for it, tt in enumerate(st.t):
+        while not np.array_equal(tt, st_full.t[ic]):
+            ic += 1
+        inds[it] = ic
+    return st_full.slc[inds]
+
 
 def test_all_blocks(a):
-    tset, Dset, slices, size, nblocks, legs = get_structure(a.config.sym, a.legs, a.n, isdiag=a.isdiag)
+    tset, Dset, slices, size, nblocks, legs, _ = get_structure(a.config.sym, a.legs, a.n, isdiag=a.isdiag)
     assert len(tset) == len(a.struct.t) or len(a.struct.t) == 0 or len(tset) == 0
 
 
 def update_old_struct(struct, st_new):
     ndim = len(st_new.legs)
     nsym = len(struct.n)
+    s = tuple(leg.s for leg in st_new.legs)
     tnew = tuple(map(tuple, st_new.t.reshape(st_new.nblocks, ndim * nsym).tolist()))
     Dnew = tuple(map(tuple, st_new.D.reshape(st_new.nblocks, ndim).tolist()))
     Dp = (st_new.slc[:, 1] - st_new.slc[:, 0]).tolist()
     slices_new = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dp), Dp, Dnew))
-    struct_new = struct._replace(t=tnew, D=Dnew, size=st_new.size)
+    struct_new = struct._replace(s=s, t=tnew, D=Dnew, size=st_new.size, n=st_new.n)
     return struct_new, slices_new

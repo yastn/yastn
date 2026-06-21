@@ -250,7 +250,7 @@ def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
     a.struct = a.struct._replace(t=a_t, D=a_D, size=Dsize)
     a.legs = legs_from_struct(a.struct)
 
-    ts, Ds, slices, size, nblocks, legs = get_structure(a.config.sym, a.legs, a.struct.n, a.isdiag)
+    ts, Ds, slices, size, nblocks, legs, _ = get_structure(a.config.sym, a.legs, a.struct.n, a.isdiag)
     assert a.legs == legs
 
     a._data = _init_block(a.config, Dsize, val, dtype=a.yastn_dtype, device=a.device)
@@ -324,7 +324,7 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
     Dsize = Ds[0] if a.isdiag else reduce(mul, Ds, 1)
     new_block = _init_block(a.config, Dsize, val, dtype=a.yastn_dtype, device=a.device)
 
-    t_new, D_new, slices_new, size_new, nblocks, legs_new = get_structure(a.config.sym, a.legs, a.struct.n, a.isdiag)
+    t_new, D_new, slices_new, size_new, nblocks, legs_new, _ = get_structure(a.config.sym, a.legs, a.struct.n, a.isdiag)
     i = 0
     ats = ats.reshape((a.ndim_n, nsym))
     while i < len(t_new):

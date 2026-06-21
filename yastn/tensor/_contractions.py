@@ -22,7 +22,8 @@ from operator import itemgetter
 
 import numpy as np
 
-from ._auxiliary import _struct, _slc, _clear_axes, _unpack_axes, _join_contiguous_slices, sign_canonical_order, legs_from_struct, test_all_blocks, get_structure
+from ._auxiliary import _struct, _slc, _clear_axes, _unpack_axes, _join_contiguous_slices, sign_canonical_order
+from ._auxiliary import legs_from_struct, test_all_blocks, get_structure, update_old_struct, get_sub_slices
 from ._merging import _merge_to_matrix, _unmerge, _meta_unmerge_matrix, _meta_fuse_hard
 from ._merging import _transpose_and_merge, _mask_tensors_leg_intersection, _meta_mask
 from ._tests import YastnError, _test_can_be_combined, _unpack_trans_test_axes_pair
@@ -114,18 +115,24 @@ def tensordot(a, b, axes, conj=(0, 0)) -> 'Tensor':
         b = b._replace(hfs=b_hfs)
 
     if a.config.tensordot_policy == 'fuse_to_matrix':
-        data, struct_c, slices_c = _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b, s_c)
+        data, st_out = _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b, s_c)
+        struct_c, slices_c = update_old_struct(a.struct, st_out)
+        out = a._replace(data=data, struct=struct_c, slices=slices_c, mfs=mfs_c, hfs=hfs_c, trans=None, legs=st_out.legs)
     elif a.config.tensordot_policy == 'fuse_contracted':
         data, struct_c, slices_c = _tensordot_fc(a, b, nout_a, nin_a, nin_b, nout_b)
+        struct_c = struct_c._replace(n=n_c)
+        legs = legs_from_struct(struct_c)
+        out = a._replace(data=data, struct=struct_c, slices=slices_c, mfs=mfs_c, hfs=hfs_c, trans=None, legs=legs)
+        embed_(out, out.legs)
     elif a.config.tensordot_policy == 'no_fusion':
         data, struct_c, slices_c = _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b)
+        struct_c = struct_c._replace(n=n_c)
+        legs = legs_from_struct(struct_c)
+        out = a._replace(data=data, struct=struct_c, slices=slices_c, mfs=mfs_c, hfs=hfs_c, trans=None, legs=legs)
+        embed_(out, out.legs)
     else:
         raise YastnError("Tensordot policy not recognized. It should be 'fuse_to_matrix', 'fuse_contracted', or 'no_fusion'.")
 
-    struct_c = struct_c._replace(n=n_c)
-    legs = legs_from_struct(struct_c)
-    out = a._replace(data=data, struct=struct_c, slices=slices_c, mfs=mfs_c, hfs=hfs_c, trans=None, legs=legs)
-    embed_(out, out.legs)
     test_all_blocks(out)
     return out
 
@@ -145,19 +152,26 @@ def _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b, s_c):
     Perform tensordot by fuse_to_matrix:
     merging tensors to matrices, executing dot, and unmerging outgoing legs.
     """
-    ind_a, ind_b = _common_inds(a.struct.t, b.struct.t, nin_a, nin_b, a.ndim_n, b.ndim_n, a.config.sym.NSYM)
-    data_a, struct_a, slices_a, ls_l, ls_ac = _merge_to_matrix(a, (nout_a, nin_a), ind_a)
-    data_b, struct_b, slices_b, ls_bc, ls_r = _merge_to_matrix(b, (nin_b, nout_b), ind_b)
+    # ind_a, ind_b = _common_inds(a.struct.t, b.struct.t, nin_a, nin_b, a.ndim_n, b.ndim_n, a.config.sym.NSYM)
+    legs_a, legs_b = list(a.legs), list(b.legs)
+    for ia, ib in zip(nin_a, nin_b):
+        try:
+            leg = legs_a[ia].intersection(legs_b[ib].conj())
+        except ValueError:
+            raise YastnError('Bond dimensions of some charges do not match.')
+        legs_a[ia] = leg
+        legs_b[ib] = leg.conj()
 
-    if ls_ac != ls_bc:
-        raise YastnError('Bond dimensions of some charges do not match.')
+    data_a, legs_ma, ls_l, _, legs_group_a = _merge_to_matrix(a, (nout_a, nin_a), tuple(legs_a))
+    data_b, legs_mb, _, ls_r, legs_group_b = _merge_to_matrix(b, (nin_b, nout_b), tuple(legs_b))
 
-    meta_dot, struct_c, slices_c = _meta_tensordot_f2m(struct_a, slices_a, struct_b, slices_b)
-    data = a.config.backend.dot(data_a, data_b, meta_dot, struct_c.size)
+    meta_dot, st_c = _meta_tensordot_f2m(a.config.sym, legs_ma, a.n, a.isdiag, legs_mb, b.n, b.isdiag)
+    data = a.config.backend.dot(data_a, data_b, meta_dot, st_c.size)
 
-    meta_unmerge, struct_c, slices_c = _meta_unmerge_matrix(a.config, struct_c, slices_c, ls_l, ls_r, s_c)
-    data = _unmerge(a.config, data, meta_unmerge)
-    return data, struct_c, slices_c
+    legs_out = legs_group_a[0] + legs_group_b[1]
+    meta_unmerge, st_out = _meta_unmerge_matrix(a.config.sym, st_c.legs, st_c.n, ls_l, ls_r, legs_out)
+    data = _unmerge(a.config, data, meta_unmerge, size=st_out.size)
+    return data, st_out
 
 
 def _tensordot_fc(a, b, nout_a, nin_a, nin_b, nout_b):
@@ -169,12 +183,12 @@ def _tensordot_fc(a, b, nout_a, nin_a, nin_b, nout_b):
 
     axes_a = tuple((x,) for x in nout_a) + (nin_a,)
     order_a = nout_a + nin_a
-    struct_a, slices_a, meta_mrg_a, t_a, D_a = _meta_fuse_hard(a.config, a.struct, a.slices, axes_a, ind_a)
+    struct_a, slices_a, meta_mrg_a, t_a, D_a = _meta_fuse_hard(a.config.sym, a.struct, a.slices, a.legs, a.n, a.isdiag, axes_a, ind_a)
     data_a = _transpose_and_merge(a.config, a._data, order_a, struct_a, slices_a, meta_mrg_a)
 
     axes_b = (nin_b,) + tuple((x,) for x in nout_b)
     order_b = nin_b + nout_b
-    struct_b, slices_b, meta_mrg_b, t_b, D_b = _meta_fuse_hard(b.config, b.struct, b.slices, axes_b, ind_b)
+    struct_b, slices_b, meta_mrg_b, t_b, D_b = _meta_fuse_hard(b.config.sym, b.struct, b.slices, b.legs, b.n, b.isdiag, axes_b, ind_b)
     data_b = _transpose_and_merge(b.config, b._data, order_b, struct_b, slices_b, meta_mrg_b)
 
     if not all(D_a[ia] == D_b[ib] for ia, ib in zip(nin_a, nin_b)):
@@ -283,23 +297,38 @@ def _common_inds(t_a, t_b, nin_a : tuple[int], nin_b : tuple[int], ndimn_a, ndim
 
 
 @lru_cache(maxsize=1024)
-def _meta_tensordot_f2m(struct_a, slices_a, struct_b, slices_b):
-    nsym = len(struct_a.n)
-    struct_a_resorted = sorted(((t[nsym:], t, D, sl.slcs[0]) for t, D, sl in zip(struct_a.t, struct_a.D, slices_a)))
-    struct_b_resorted = ((t[:nsym], t, D, sl.slcs[0]) for t, D, sl in zip(struct_b.t, struct_b.D, slices_b))
-    meta = []
-    for (tar, ta, Da, sla), (tbl, tb, Db, slb) in zip(struct_a_resorted, struct_b_resorted):
-        assert tar == tbl, "Sanity check."
-        meta.append((ta[:nsym] + tb[nsym:], (Da[0], Db[1]), sla, Da, slb, Db))
-    meta = sorted(meta)
-    t_c = tuple(x[0] for x in meta)
-    D_c = tuple(x[1] for x in meta)
-    Dp_c = tuple(D[0] * D[1] for D in D_c)
-    slices_c = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dp_c), Dp_c, D_c))
-    meta_dot = tuple((sl.slcs[0], *mt[1:]) for sl, mt in zip(slices_c, meta))
-    s_c = (struct_a.s[0], struct_b.s[1])
-    struct_c = _struct(s=s_c, t=t_c, D=D_c, size=sum(Dp_c))
-    return meta_dot, struct_c, slices_c
+def _meta_tensordot_f2m(sym, legs_a, n_a, isdiag_a, legs_b, n_b, isdiag_b):
+    assert not isdiag_a, "Sanity check"
+    assert not isdiag_b, "Sanity check"
+    #
+    st_a_full = get_structure(sym, legs_a, n_a, isdiag_a)
+    st_b_full = get_structure(sym, legs_b, n_b, isdiag_b)
+    #
+    leg = legs_a[1].intersection(legs_b[0].conj())
+    if legs_a[1] == leg:
+        st_a = st_a_full
+        slc_a = st_a_full.slc
+    else:
+        legs_a = (legs_a[0], leg)
+        st_a = get_structure(sym, legs_a, n_a, isdiag_a)
+        slc_a = get_sub_slices(st_a, st_a_full)
+    #
+    if legs_b[0] == leg.conj():
+        st_b = st_b_full
+        slc_b = st_b_full.slc
+    else:
+        legs_b = (leg.conj(), legs_b[1])
+        st_b = get_structure(sym, legs_b, n_b, isdiag_b)
+        slc_b = get_sub_slices(st_b, st_b_full)
+    #
+    legs_c = (st_a.legs[0], st_b.legs[1])
+    n_c = sym.add_charges(n_a, n_b)
+    st_c = get_structure(sym, legs_c, n_c, isdiag=False)
+    #
+    Dslc_a = {tuple(t[0]): (sl, D) for t, sl, D in zip(st_a.t, slc_a, st_a.D)}
+    Dslc_b = {tuple(t[1]): (sl, D) for t, sl, D in zip(st_b.t, slc_b, st_b.D)}
+    meta = [(sln, Dn, *Dslc_a[tuple(tn[0])], *Dslc_b[tuple(tn[1])]) for tn, Dn, sln in zip(st_c.t, st_c.D, st_c.slc)]
+    return meta, st_c
 
 
 @lru_cache(maxsize=1024)
@@ -490,46 +519,50 @@ def broadcast(a, *args, axes=0) -> 'Tensor' | tuple['Tensor']:
         if b.hfs[ax].tree != (1,):
             raise YastnError('Second tensor`s leg specified in axes cannot be fused.')
 
-        meta, struct, slices = _meta_broadcast(b.struct, b.slices, a.struct, a.slices, ax)
-
-        if b.isdiag:
-            b_ndim, ax = (1, 0)
-            meta = tuple((sln, slb, Db[0], sla) for sln, slb, Db, sla in meta)
-        else:
-            b_ndim = b.ndim_n
-        data = b.config.backend.dot_diag(a._data, b._data, meta, struct.size, ax, b_ndim)
-        legs = legs_from_struct(struct)
+        meta, legs, st_c, ax, ndim = _meta_broadcast(a.config.sym, b.legs, b.n, b.isdiag, a.legs, a.n, a.isdiag, ax)
+        data = b.config.backend.dot_diag(a._data, b._data, meta, st_c.size, ax, ndim)
+        struct, slices = update_old_struct(b.struct, st_c)
         results.append(b._replace(struct=struct, slices=slices, data=data, legs=legs))
-        test_all_blocks(results[-1])
     return results if multiple_axes else results.pop()
 
 
 @lru_cache(maxsize=1024)
-def _meta_broadcast(b_struct, b_slices, a_struct, a_slices, axis):
+def _meta_broadcast(sym, legs_b, n_b, isdiag_b, legs_a, n_a, isdiag_a, axis):
     r""" meta information for backend, and new tensor structure for brodcast. """
-    nsym = len(a_struct.n)
-    ind_tb = tuple(x[axis * nsym: (axis + 1) * nsym] for x in b_struct.t)
-    ind_ta = tuple(x[:nsym] for x in a_struct.t)
-    sl_a = dict(zip(ind_ta, a_slices))
+    st_a = get_structure(sym, legs_a, n_a, isdiag=isdiag_a)
+    st_b = get_structure(sym, legs_b, n_b, isdiag=isdiag_b)
 
-    meta = tuple((tb, slb.slcs[0], Db, slb.Dp, sl_a[ib].slcs[0])
-                 for tb, slb, Db, ib in zip(b_struct.t, b_slices, b_struct.D, ind_tb) if ib in ind_ta)
-
-    if any(Db[axis] != sla[1] - sla[0] for _, _, Db, _, sla in meta):
+    leg_b = legs_b[axis]
+    leg_a = legs_a[0] if legs_a[0].s == leg_b.s else legs_a[0].conj()  # .conj() to match signature
+    try:
+        leg_c = leg_b.intersection(leg_a)
+    except ValueError:
         raise YastnError("Bond dimensions of some charges do not match.")
-
-    if len(meta) < len(b_struct.t):
-        c_t = tuple(mt[0] for mt in meta)
-        c_D = tuple(mt[2] for mt in meta)
-        c_Dp = tuple(mt[3] for mt in meta)
-        c_slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(c_Dp), c_Dp, c_D))
-        c_struct = b_struct._replace(t=c_t, D=c_D, size=sum(c_Dp))
+    legs_c = legs_b[:axis] + (leg_c,) + legs_b[axis + 1:]
+    #
+    st_c = get_structure(sym, legs_c, n_b, isdiag=isdiag_b)
+    legs_c = st_c.legs
+    #
+    sl_a = dict(zip(map(tuple, st_a.t[:, 0, :]), map(tuple, st_a.slc)))
+    if isdiag_b:
+        D_b = st_b.D[:, 0]
+        axis = 0
+        ndim = 1
     else:
-        c_struct = b_struct
-        c_slices = b_slices
+        D_b = st_b.D
+        ndim = len(legs_c)
+    #
+    meta, ib, ic = [], 0, 0
+    while ib < st_b.nblocks and ic < st_c.nblocks:
+        if np.array_equal(st_b.t[ib], st_c.t[ic]):
+            itb = tuple(st_b.t[ib, axis, :])
+            meta.append((st_c.slc[ic], st_b.slc[ib], D_b[ib], sl_a[itb]))
+            ib += 1
+            ic += 1
+        else:
+            ib += 1
 
-    meta = tuple((sln.slcs[0], slb, Db, sla) for (_, slb, Db, _, sla), sln in zip(meta, c_slices))
-    return meta, c_struct, c_slices
+    return meta, legs_c, st_c, axis, ndim
 
 
 def apply_mask(a, *args, axes=0) -> 'Tensor' | tuple['Tensor']:
@@ -574,11 +607,10 @@ def apply_mask(a, *args, axes=0) -> 'Tensor' | tuple['Tensor']:
         if b.hfs[ax].tree != (1,):
             raise YastnError('Second tensor`s leg specified by axes cannot be fused.')
 
-        meta, struct, slices, ax, ndim = _meta_mask(b.struct, b.slices, b.isdiag, mask_t, mask_D, ax)
-        data = a.config.backend.apply_mask(b._data, mask, meta, struct.size, ax, ndim)
-        legs = legs_from_struct(struct)
+        meta, legs, st, ax, ndim = _meta_mask(b.config.sym, b.legs, b.n, b.isdiag, mask_t, mask_D, ax)
+        data = a.config.backend.apply_mask(b._data, mask, meta, st.size, ax, ndim)
+        struct, slices = update_old_struct(b.struct, st)
         results.append(b._replace(struct=struct, slices=slices, data=data, legs=legs))
-        test_all_blocks(results[-1])
     return results.pop() if len(results) == 1 else results
 
 
@@ -589,9 +621,9 @@ def _apply_mask_axes(a, naxes, masks):
             mask_tD = {k: len(v) for k, v in mask.items() if len(v) > 0}
             mask_t = tuple(mask_tD.keys())
             mask_D = tuple(mask_tD.values())
-            meta, struct, slices, axis, ndim = _meta_mask(a.struct, a.slices, a.isdiag, mask_t, mask_D, axis)
-            data = a.config.backend.apply_mask(a._data, mask, meta, struct.size, axis, ndim)
-            legs = legs_from_struct(struct)
+            meta, legs, st, axis, ndim = _meta_mask(a.config.sym, a.legs, a.n, a.isdiag, mask_t, mask_D, axis)
+            data = a.config.backend.apply_mask(a._data, mask, meta, st.size, axis, ndim)
+            struct, slices = update_old_struct(a.struct, st)
             a = a._replace(struct=struct, slices=slices, data=data, legs=legs)
     return a
 
