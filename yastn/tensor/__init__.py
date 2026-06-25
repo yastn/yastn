@@ -21,10 +21,7 @@ In principle, any number of symmetries can be used, including dense tensor with 
 An instance of a Tensor is specified by a list of blocks (dense tensors) labeled by symmetries' charges on each leg.
 """
 from __future__ import annotations
-from itertools import accumulate
 from typing import Sequence
-
-import numpy as np
 
 from .._split_combine_dict import *
 from ._algebra import *
@@ -116,12 +113,8 @@ class Tensor:
                     raise YastnError("Diagonal tensor should have s equal (1, -1) or (-1, 1).")
                 if any(x != 0 for x in n):
                     raise YastnError("Tensor charge of a diagonal tensor should be 0.")
-            self.struct = _struct(s=s, n=n, diag=bool(isdiag))
-        #
-        if "legs" in kwargs:
-            self.legs = tuple(kwargs['legs'])
-        else:
-            self.legs = tuple(LegBasic(s=s_l, t=(), D=()) for s_l in s)
+            legs = tuple(LegBasic(s=s_l, t=(), D=()) for s_l in s)
+            self.struct = _struct(legs=legs, s=s, n=n, diag=bool(isdiag))
         #
         self.slices = kwargs.get('slices', ())
         #
@@ -136,20 +129,20 @@ class Tensor:
         try:
             self._trans = tuple(self._trans)
         except TypeError:
-            self._trans = tuple(range(len(self.struct.s)))
+            self._trans = tuple(range(self.ndim_n))
         #
         # fusion tree for each leg: encodes number of fused legs e.g. 5 2 1 1 3 1 2 1 1 = ((1, 1), (1, (1, 1)))
         self.mfs = kwargs.get('mfs', None)
         try:
             self.mfs = tuple(self.mfs)
         except TypeError:
-            self.mfs = ((1,),) * len(self.struct.s)
+            self.mfs = ((1,),) * self.ndim_n
         #
         self.hfs = kwargs.get('hfs', None)
         try:
             self.hfs = tuple(self.hfs)
         except TypeError:
-            self.hfs = tuple(_Fusion(s=(x,)) for x in self.struct.s)
+            self.hfs = tuple(_Fusion(s=(x,)) for x in self.s_n)
 
     # pylint: disable=C0415
     from ._initialize import set_block, _fill_tensor, __setitem__
@@ -167,7 +160,7 @@ class Tensor:
     from ._output import get_shape, get_signature, get_dtype
     from ._output import get_tensor_charge, get_rank
     from ._output import to_number, to_dense, to_numpy, to_raw_tensor, to_nonsymmetric
-    from ._output import save_to_hdf5, save_to_dict, to_dict
+    from ._output import to_dict
     from ._tests import is_consistent, are_independent
     from ._merging import fuse_legs, unfuse_legs, fuse_meta_to_hard
     from ._krylov import expand_krylov_space
@@ -176,7 +169,7 @@ class Tensor:
 
     def _replace(self, **kwargs) -> Tensor:
         """ Creates a shallow copy replacing fields specified in kwargs. """
-        for arg in ('config', 'struct', 'mfs', 'hfs', 'data', 'slices', 'trans', 'legs'):
+        for arg in ('config', 'struct', 'mfs', 'hfs', 'data', 'slices', 'trans'):
             if arg not in kwargs:
                 kwargs[arg] = getattr(self, arg)
         return Tensor(**kwargs)
@@ -196,27 +189,6 @@ class Tensor:
             :ref:`YASTN configuration <tensor/configuration:yastn  configuration>`
             If provided, overrides configuration stored in `d`.
         """
-        #
-        if 'dict_ver' not in d:  # d from a legacy method save_to_dict
-            if config is None:
-                raise YastnError("Legacy save_to_dict format requires config.")
-            c_isdiag = bool(d['isdiag'])
-            c_Dp = [x[0] for x in d['D']] if c_isdiag else np.prod(d['D'], axis=1, dtype=np.int64).tolist()
-            cd = _convert_lists_to_tuples({'s': d['s'], 'n': d['n'], 't': d['t'], 'D': d['D'], 'hfs': d['hfs'], 'mfs': d['mfs']})
-
-            slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(c_Dp), c_Dp, cd['D']))
-            struct = _struct(s=cd['s'], n=cd['n'], diag=c_isdiag, t=cd['t'], D=cd['D'], size=sum(c_Dp))
-            legs = legs_from_struct(struct)
-            hfs = tuple(_Fusion(**hf) for hf in cd['hfs'])
-            c = Tensor(config=config, struct=struct, slices=slices, hfs=hfs, mfs=cd['mfs'], legs=legs)
-            if 'SYM_ID' in d and c.config.sym.SYM_ID != d['SYM_ID'].replace('(','').replace(')',''):  # for backward compatibility matching U1 and U(1)
-                raise YastnError("Symmetry rule in config do not match loaded one.")
-            if 'fermionic' in d and c.config.fermionic != d['fermionic']:
-                raise YastnError("Fermionic statistics in config do not match loaded one.")
-            dtype = dtype=d['_d'].dtype.name if hasattr(d['_d'], 'dtype') else config.default_dtype
-            c._data = c.config.backend.to_tensor(d['_d'], dtype=dtype, device=c.device)
-            c.is_consistent()
-            return c
         #
         if d['dict_ver'] in [1, 2]:  # d from method to_dict (single version as of now)
 
@@ -243,6 +215,7 @@ class Tensor:
                     d['config'] = make_config(**d['config'])
                 d['hfs'] = tuple(_Fusion(**hf) for hf in d['hfs'])
                 d['struct'] = _struct(**d['struct'])
+                d['struct'] = d['struct']._replace(legs=legs_from_struct(d['struct']))
                 d['slices'] = tuple(_slc(*x) for x in d['slices'])
 
             if d['level'] >= 2 or config is not None:
@@ -265,21 +238,21 @@ class Tensor:
                 d = d.copy()
 
             if config is not None:
-                if (d['config']['sym'] if isinstance(d['config'], dict) else d['config'].sym.SYM_ID)  != config.sym.SYM_ID:
+                if (d['config']['sym'] if isinstance(d['config'], dict) else d['config'].sym.SYM_ID) != config.sym.SYM_ID:
                     raise YastnError("Symmetry rule in config does not match the one in stored in d.")
                 if (d['config']['fermionic'] if isinstance(d['config'], dict) else d['config'].fermionic) != config.fermionic:
                     raise YastnError("Fermionic statistics in config does not match the one in stored in d.")
                 d['config'] = config
 
             if d['level'] >= 1:
-                for k in ['struct', 'slices', 'hfs', 'mfs', 'legs']:
+                for k in ['struct', 'slices', 'hfs', 'mfs']:
                     d[k] = _convert_lists_to_tuples(d[k])
                 if not isinstance(d['config'], _config):
                     d['config'] = make_config(**d['config'])
                 d['hfs'] = tuple(_Fusion(**hf) for hf in d['hfs'])
+                d['struct']['legs'] = tuple(LegBasic(**xx) for xx in d['struct']['legs'])
                 d['struct'] = _struct(**d['struct'])
                 d['slices'] = tuple(_slc(*x) for x in d['slices'])
-                d['legs'] = tuple(LegBasic(**x) for x in d['legs'])
 
             if d['level'] >= 2 or config is not None:
                 dtype = d['config'].default_dtype
@@ -293,12 +266,15 @@ class Tensor:
             return cls(**d)
         raise YastnError(f"Tensor.to_dict with dict_ver = {d['dict_ver']} not supported")
 
+    @property
+    def legs(self) -> Sequence[int]:
+        r""" Transpose between logical legs and data spaces. """
+        return self.struct.legs
 
     @property
     def trans(self) -> Sequence[int]:
         r""" Transpose between logical legs and data spaces. """
         return self._trans
-
 
     @property
     def s(self) -> Sequence[int]:
@@ -308,8 +284,11 @@ class Tensor:
         Legs (spaces) fused together by :meth:`yastn.Tensor.fuse` are treated as a single leg.
         The signature of each fused leg is given by the first native leg in the fused space.
         """
-        return self.get_signature(native=False)
-
+        inds, n = [], 0
+        for mf in self.mfs:
+            inds.append(self.trans[n])
+            n += mf[0]
+        return tuple(self.struct.legs[ind].s for ind in inds)
 
     @property
     def s_n(self) -> Sequence[int]:
@@ -319,8 +298,7 @@ class Tensor:
         This includes legs (spaces) which have been fused together
         by :meth:`yastn.fuse_legs` using ``mode='meta'``.
         """
-        return self.get_signature(native=True)
-
+        return tuple(self.struct.legs[ind].s for ind in self.trans)
 
     @property
     def n(self) -> Sequence[int]:
@@ -349,7 +327,7 @@ class Tensor:
         It distinguishes legs (spaces) which were fused
         by :meth:`yastn.fuse_legs` using ``mode='meta'``.
         """
-        return len(self.struct.s)
+        return len(self.struct.legs)
 
     @property
     def isdiag(self) -> bool:
@@ -405,7 +383,6 @@ class Tensor:
     @property
     def num_blocks(self) -> int:
         return len(self.struct.t)
-
 
 def _convert_lists_to_tuples(nested_iterable):
     if isinstance(nested_iterable, list):

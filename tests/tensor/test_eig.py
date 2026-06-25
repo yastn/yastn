@@ -152,4 +152,4 @@ def test_eig_exceptions(config_kwargs):
         # lowrank policy in svd requires passing argument D_block
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])
+    pytest.main([__file__, "-vs", "--durations=0"]) #, "--backend", "torch"])

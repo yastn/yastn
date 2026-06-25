@@ -141,11 +141,11 @@ def conj(a) -> 'Tensor':
     """
     newn = a.config.sym.add_charges(a.struct.n, new_signature=-1)
     news = tuple(-x for x in a.struct.s)
-    struct = a.struct._replace(s=news, n=newn)
+    legs = tuple(leg.conj() for leg in a.legs)
+    struct = a.struct._replace(s=news, legs=legs, n=newn)
     hfs = tuple(hf.conj() for hf in a.hfs)
     data = a.config.backend.conj(a._data)
-    legs = tuple(leg.conj() for leg in a.legs)
-    return a._replace(hfs=hfs, struct=struct, data=data, legs=legs)
+    return a._replace(hfs=hfs, struct=struct, data=data)
 
 
 def conj_blocks(a) -> 'Tensor':
@@ -169,10 +169,10 @@ def flip_signature(a) -> 'Tensor':
     """
     newn = a.config.sym.add_charges(a.struct.n, new_signature=-1)
     news = tuple(-x for x in a.struct.s)
-    struct = a.struct._replace(s=news, n=newn)
-    hfs = tuple(hf.conj() for hf in a.hfs)
     legs = tuple(leg.conj() for leg in a.legs)
-    return a._replace(hfs=hfs, struct=struct, legs=legs)
+    struct = a.struct._replace(s=news, n=newn, legs=legs)
+    hfs = tuple(hf.conj() for hf in a.hfs)
+    return a._replace(hfs=hfs, struct=struct)
 
 
 def flip_charges(a, axes=None) -> 'Tensor':
@@ -226,7 +226,8 @@ def flip_charges(a, axes=None) -> 'Tensor':
     mask = {0: slice(None)}
     data = a.config.backend.embed_mask(a._data, mask, meta_embed, struct.size, 0, 0)
     legs = legs_from_struct(struct)
-    out = a._replace(struct=struct, slices=slices, data=data, hfs=hfs, legs=legs)
+    struct = a.struct._replace(s=snew, t=tnew, D=Dnew, legs=legs)
+    out = a._replace(struct=struct, slices=slices, data=data, hfs=hfs)
     test_all_blocks(out)
     return out
 
@@ -343,12 +344,12 @@ def consume_transpose(a) -> 'Tensor':
     c_sl = tuple((stop - dp, stop) for stop, dp in zip(accumulate(c_Dp), c_Dp))
 
     slices = tuple(_slc((x,), y, z) for x, y, z in zip(c_sl, c_D, c_Dp))
-    struct = a.struct._replace(s=c_s, t=c_t, D=c_D)
     legs = tuple(a.legs[i] for i in a.trans)
+    struct = a.struct._replace(s=c_s, legs=legs, t=c_t, D=c_D)
     meta = tuple((sln.slcs[0], sln.D, mt[2].slcs[0], mt[2].D) for sln, mt, in zip(slices, meta))
 
     data = a._data if a.isdiag else a.config.backend.transpose(a._data, a.trans, meta)
-    return a._replace(hfs=hfs, struct=struct, slices=slices, data=data, trans=no_trans, legs=legs)
+    return a._replace(hfs=hfs, struct=struct, slices=slices, data=data, trans=no_trans)
 
 
 def moveaxis(a, source, destination) -> 'Tensor':
@@ -461,11 +462,11 @@ def add_leg(a, axis=-1, s=-1, t=None, leg=None) -> 'Tensor':
     newn = a.config.sym.add_charges(a.struct.n, t, signatures=(1, s))
     newt = tuple(x[:haxis * nsym] + t + x[haxis * nsym:] for x in a.struct.t)
     newD = tuple(x[:haxis] + (1,) + x[haxis:] for x in a.struct.D)
-    struct = a.struct._replace(t=newt, D=newD, s=news, n=newn)
+    legs = a.legs[:haxis] + (LegBasic(s=s, t=(t,), D=(1,)),) + a.legs[haxis:]
+    struct = a.struct._replace(t=newt, D=newD, s=news, n=newn, legs=legs)
     slices = tuple(_slc(x.slcs, y, x.Dp) for x, y in zip(a.slices, newD))
     hfs = a.hfs[:haxis] + (hfsa,) + a.hfs[haxis:]
-    legs = a.legs[:haxis] + (LegBasic(s=s, t=(t,), D=(1,)),) + a.legs[haxis:]
-    return a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, trans=trans, legs=legs)
+    return a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, trans=trans)
 
 
 def remove_leg(a, axis=-1) -> 'Tensor':
@@ -514,11 +515,11 @@ def remove_leg(a, axis=-1) -> 'Tensor':
         newn = a.config.sym.add_charges(a.struct.n, t, signatures=(-1, a.struct.s[haxis]), new_signature=-1)
         newt = tuple(x[: haxis * nsym] + x[(haxis + 1) * nsym:] for x in a.struct.t)
         newD = tuple(x[: haxis] + x[haxis + 1:] for x in a.struct.D)
-        struct = a.struct._replace(t=newt, D=newD, s=news, n=newn)
+        legs = a.legs[:haxis] + a.legs[haxis + 1:]
+        struct = a.struct._replace(t=newt, D=newD, s=news, n=newn, legs=legs)
         slices = tuple(_slc(x.slcs, y, x.Dp) for x, y in zip(a.slices, newD))
         hfs = a.hfs[:haxis] + a.hfs[haxis + 1:]
-        legs = a.legs[:haxis] + a.legs[haxis + 1:]
-        a = a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, trans=trans, legs=legs)
+        a = a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, trans=trans)
     return a
 
 

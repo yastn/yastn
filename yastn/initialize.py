@@ -30,10 +30,8 @@ from .tensor._legs import Leg, LegMeta, legs_union, _legs_mask_needed
 from .tensor._merging import _Fusion, _embed_tensor, _combine_hfs_sum
 from .tensor._tests import _test_can_be_combined
 from .tensor._initialize import embed_
-from ._split_combine_dict import combine_data_and_meta
 
-__all__ = ['rand', 'rand_like', 'randR', 'randC', 'zeros', 'ones', 'eye', 'block',
-           'load_from_dict', 'load_from_hdf5', 'Method']
+__all__ = ['rand', 'rand_like', 'randR', 'randC', 'zeros', 'ones', 'eye', 'block', 'Method']
 
 
 def _fill(config=None, legs=(), n=None, isdiag=False, val='rand', **kwargs):
@@ -275,56 +273,40 @@ def eye(config=None, legs=(), isdiag=True, **kwargs) -> Tensor:
         return tmp
 
 
-def load_from_dict(config=None, d=None) -> Tensor:
-    """
-    Create tensor from the dictionary :code:`d`.
+# def load_from_hdf5(config, file, path) -> Tensor:
+#     """
+#     Create tensor from hdf5 file.
 
-    !!! This method is deprecated; use to_dict(). !!!
+#     Parameters
+#     ----------
+#     config: module | _config(NamedTuple)
+#         :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
+#     file:
+#         pointer to opened HDF5 file.
+#     path:
+#         path inside the file which contains the state.
+#     """
+#     g = file.get(path)
+#     c_isdiag = bool(g.get('isdiag')[:][0])
+#     c_n = tuple(g.get('n')[:].tolist())
+#     c_s = tuple(g.get('s')[:].tolist())
+#     c_t = tuple(tuple(x) for x in g.get('ts')[:].tolist())
+#     c_D = tuple(tuple(x) for x in g.get('Ds')[:].tolist())
+#     c_Dp = [x[0] for x in c_D] if c_isdiag else np.prod(c_D, axis=1, dtype=np.int64).tolist()
+#     slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(c_Dp), c_Dp, c_D))
+#     struct = _struct(s=c_s, n=c_n, diag=c_isdiag, t=c_t, D=c_D, size=sum(c_Dp))
+#     legs = legs_from_struct(struct)
+#     struct = _struct(s=c_s, n=c_n, diag=c_isdiag, t=c_t, D=c_D, size=sum(c_Dp), legs=legs)
 
-    Parameters
-    ----------
-    config: module | _config(NamedTuple)
-        :ref:`YASTN configuration <tensor/configuration:yastn  configuration>`
-    d: dict
-        Tensor stored in form of a dictionary. Typically provided by an output
-        of :meth:`yastn.Tensor.save_to_dict`.
-    """
-    return Tensor.from_dict(d, config)
+#     mfs = literal_eval(tuple(file.get(path+'/mfs').keys())[0])
+#     hfs = tuple(_Fusion(*hf) if isinstance(hf, tuple) else _Fusion(**hf) \
+#                 for hf in literal_eval(tuple(g.get('hfs').keys())[0]))
+#     c = Tensor(config=config, struct=struct, slices=slices, mfs=mfs, hfs=hfs)
 
-
-def load_from_hdf5(config, file, path) -> Tensor:
-    """
-    Create tensor from hdf5 file.
-
-    Parameters
-    ----------
-    config: module | _config(NamedTuple)
-        :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
-    file:
-        pointer to opened HDF5 file.
-    path:
-        path inside the file which contains the state.
-    """
-    g = file.get(path)
-    c_isdiag = bool(g.get('isdiag')[:][0])
-    c_n = tuple(g.get('n')[:].tolist())
-    c_s = tuple(g.get('s')[:].tolist())
-    c_t = tuple(tuple(x) for x in g.get('ts')[:].tolist())
-    c_D = tuple(tuple(x) for x in g.get('Ds')[:].tolist())
-    c_Dp = [x[0] for x in c_D] if c_isdiag else np.prod(c_D, axis=1, dtype=np.int64).tolist()
-    slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(c_Dp), c_Dp, c_D))
-    struct = _struct(s=c_s, n=c_n, diag=c_isdiag, t=c_t, D=c_D, size=sum(c_Dp))
-    legs = legs_from_struct(struct)
-
-    mfs = literal_eval(tuple(file.get(path+'/mfs').keys())[0])
-    hfs = tuple(_Fusion(*hf) if isinstance(hf, tuple) else _Fusion(**hf) \
-                for hf in literal_eval(tuple(g.get('hfs').keys())[0]))
-    c = Tensor(config=config, struct=struct, slices=slices, mfs=mfs, hfs=hfs, legs=legs)
-
-    vmat = g.get('matrix')[:]
-    c._data = c.config.backend.to_tensor(vmat, dtype=vmat.dtype.name, device=c.device)
-    c.is_consistent()
-    return c
+#     vmat = g.get('matrix')[:]
+#     c._data = c.config.backend.to_tensor(vmat, dtype=vmat.dtype.name, device=c.device)
+#     c.is_consistent()
+#     return c
 
 
 def block(tensors, common_legs=None) -> Tensor:
@@ -368,9 +350,9 @@ def block(tensors, common_legs=None) -> Tensor:
 
     for tn in tensors.values():
         _test_can_be_combined(tn, tn0)
-        if tn.struct.s != tn0.struct.s:
+        if tn.s_n != tn0.s_n:
             raise YastnError('Signatures of blocked tensors are inconsistent.')
-        if tn.struct.n != tn0.struct.n:
+        if tn.n != tn0.n:
             raise YastnError('Tensor charges of blocked tensors are inconsistent.')
         if tn.isdiag:
             raise YastnError('Block does not support diagonal tensors. Use .diag() first.')
@@ -424,11 +406,12 @@ def block(tensors, common_legs=None) -> Tensor:
     c_D = tuple(D for _, D in meta_new)
     c_Dp = np.prod(c_D, axis=1, dtype=np.int64).tolist() if len(c_D) > 0 else ()
     c_slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(c_Dp), c_Dp, c_D))
-    c_struct = _struct(n=a.struct.n, s=a.struct.s, t=c_t, D=c_D, size=sum(c_Dp))
+    c_struct = _struct(n=a.n, s=a.s_n, t=c_t, D=c_D, size=sum(c_Dp))
     meta_new = tuple((x, y, z.slcs[0]) for x, y, z in zip(c_t, c_D, c_slices))
     data = tn0.config.backend.merge_super_blocks(tensors, meta_new, meta_block, c_struct.size)
     c_legs = legs_from_struct(c_struct)
-    out = tn0._replace(struct=c_struct, slices=c_slices, data=data, hfs=tuple(hfs), legs=c_legs)
+    c_struct = _struct(n=a.n, s=a.s_n, t=c_t, D=c_D, size=sum(c_Dp), legs=c_legs)
+    out = tn0._replace(struct=c_struct, slices=c_slices, data=data, hfs=tuple(hfs))
     embed_(out, c_legs)
     test_all_blocks(out)
     return out

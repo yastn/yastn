@@ -19,7 +19,7 @@ from itertools import accumulate
 
 import numpy as np
 
-from ._auxiliary import _slc, get_structure, test_all_blocks, update_old_struct
+from ._auxiliary import _slc, get_blocks, test_all_blocks, update_old_struct
 from ._legs import legs_union
 from ._merging import _embed_tensor
 from ._tests import YastnError, _test_can_be_combined, _unpack_trans_test_axes_pair
@@ -37,7 +37,7 @@ def __add__(a, b) -> 'Tensor':
     metas, st_new = _meta_addition(a.config.sym, (a.legs, b.legs), a.n, a.isdiag)
     struct, slices = update_old_struct(a.struct, st_new)
     data = a.config.backend.add((a._data, b._data), metas, st_new.size)
-    out = a._replace(hfs=hfs, struct=struct, slices=slices, data=data, legs=st_new.legs)
+    out = a._replace(hfs=hfs, struct=struct, slices=slices, data=data)
     return out
 
 def __sub__(a, b) -> 'Tensor':
@@ -50,7 +50,7 @@ def __sub__(a, b) -> 'Tensor':
     metas, st_new = _meta_addition(a.config.sym, (a.legs, b.legs), a.n, a.isdiag)
     struct, slices = update_old_struct(a.struct, st_new)
     data = a.config.backend.sub(a._data, b._data, metas, st_new.size)
-    out = a._replace(hfs=hfs, struct=struct, slices=slices, data=data, legs=st_new.legs)
+    out = a._replace(hfs=hfs, struct=struct, slices=slices, data=data)
     return out
 
 def add(*tensors, amplitudes=None, **kwargs):
@@ -83,7 +83,7 @@ def add(*tensors, amplitudes=None, **kwargs):
     datas = [v._data for v in tensors]
     data = a.config.backend.add(datas, metas, st_new.size)
     struct, slices = update_old_struct(a.struct, st_new)
-    out = a._replace(hfs=hfs, struct=struct, slices=slices, data=data, legs=st_new.legs)
+    out = a._replace(hfs=hfs, struct=struct, slices=slices, data=data)
     return out
 
 def _pre_addition(*tensors):
@@ -122,7 +122,7 @@ def _meta_addition(sym, legss, a_n, isdiag):
     """ meta-information for backend and new tensor charges and dimensions. """
 
     if all(legss[0] == legs for legs in legss[1:]):
-        st_new = get_structure(sym, legss[0], a_n, isdiag)
+        st_new = get_blocks(sym, legss[0], a_n, isdiag)
         Dsize = st_new.size
         meta = (((0, Dsize), (0, Dsize)),)
         metas = (meta, ) * len(legss)
@@ -139,12 +139,12 @@ def _meta_addition(sym, legss, a_n, isdiag):
                 raise YastnError('Bond dimensions of some charges do not match.')
         legs_new.append(leg)
     legs_new = tuple(legs_new)
-    st_new = get_structure(sym, legs_new, a_n, isdiag)
+    st_new = get_blocks(sym, legs_new, a_n, isdiag)
 
     metas = []
     for legs in legss:
         meta = []
-        st_old = get_structure(sym, legs, a_n, isdiag)
+        st_old = get_blocks(sym, legs, a_n, isdiag)
         meta, i, j, sn0, so0 = [], 0, 0, None, None
         if not isdiag:
             while i < st_old.nblocks and j < st_new.nblocks:

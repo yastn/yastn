@@ -15,7 +15,6 @@
 from __future__ import annotations
 from itertools import pairwise
 from typing import NamedTuple
-from warnings import warn
 
 from tqdm import tqdm
 
@@ -141,27 +140,6 @@ class EnvBP():
             env.env = Lattice.from_dict(d['env'], config=config)
             return env
 
-    def save_to_dict(self) -> dict:
-        r"""
-        Serialize EnvBP into a dictionary.
-
-        !!! This method is deprecated; use to_dict() instead !!!
-        """
-        warn('This method is deprecated; use to_dict() instead.', DeprecationWarning, stacklevel=2)
-
-        psi = self.psi
-        if isinstance(psi, Peps2Layers):
-            psi = psi.ket
-
-        d = {'class': 'EnvBP',
-             'psi': psi.save_to_dict(),
-             'data': {}}
-
-        for site in self.sites():
-            d_local = {dirn: getattr(self[site], dirn).save_to_dict()
-                       for dirn in ['t', 'l', 'b', 'r']}
-            d['data'][site] = d_local
-        return d
 
     def reset_(self, init='eye'):
         r"""

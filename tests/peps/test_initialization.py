@@ -66,14 +66,12 @@ def test_save_load_copy(config_kwargs):
         vecs = {site: yastn.rand(config, s=(1,), D=(3,)) for site in geometry.sites()}
         psi = fpeps.product_peps(geometry, vecs)
 
-        d = psi.save_to_dict()
-        psi2 = fpeps.load_from_dict(config, d)
-        psi3 = psi.copy()
-        psi4 = psi.clone()
-        psi5 = psi.shallow_copy()
+        psi1 = psi.copy()
+        psi2 = psi.clone()
+        psi3 = psi.shallow_copy()
 
         for site in psi.sites():
-            for phi in [psi2, psi3, psi4, psi5]:
+            for phi in [psi1, psi2, psi3]:
                 phi.geometry == psi.geometry
                 assert (phi[site] - psi[site]).norm() < tol
 

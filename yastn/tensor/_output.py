@@ -18,11 +18,10 @@ from functools import reduce
 from numbers import Number
 from operator import mul
 from typing import Sequence
-from warnings import warn
 
 import numpy as np
 
-from ._auxiliary import _clear_axes, _unpack_axes, _struct, _slc, _flatten, legs_from_struct, LegBasic, test_all_blocks
+from ._auxiliary import _clear_axes, _unpack_axes, _struct, _slc, _flatten, legs_from_struct, get_blocks
 from ._initialize import embed_
 from ._legs import Leg, LegMeta, legs_union, _legs_mask_needed
 from ._merging import _embed_tensor
@@ -30,7 +29,7 @@ from ._tests import YastnError
 from ..sym import sym_none
 from .._split_combine_dict import combine_data_and_meta
 
-__all__ = ['save_to_dict', 'save_to_hdf5', 'requires_grad']
+__all__ = ['requires_grad']
 
 
 def to_dict(a, level=2, meta=None, resolve_ops=False) -> dict:
@@ -73,14 +72,13 @@ def to_dict(a, level=2, meta=None, resolve_ops=False) -> dict:
         config['backend'] = config['backend'].BACKEND_ID
         hfs = tuple(hf._asdict() for hf in a.hfs)
         struct = a.struct._asdict()
+        struct['legs'] = tuple(leg._asdict() for leg in struct['legs'])
         slices = [tuple(slc) for slc in a.slices]
-        legs = tuple(leg._asdict() for leg in a.legs)
     else:
         config = a.config
         hfs = a.hfs
         struct = a.struct
         slices = a.slices
-        legs = a.legs
 
     data = a.data if level < 2 else a.config.backend.to_numpy(a.data)
 
@@ -92,14 +90,13 @@ def to_dict(a, level=2, meta=None, resolve_ops=False) -> dict:
          'data': data,
          'struct': struct,
          'slices': slices,
-         'legs': legs,
          'trans': a.trans,
          'isdiag': a.isdiag,
          'hfs': hfs,
          'mfs': a.mfs}
 
     if meta is not None:
-        if not all(meta[k] == d[k] for k in ['type', 'dict_ver', 'config', 'struct', 'legs', 'slices', 'trans', 'isdiag', 'hfs', 'mfs']):
+        if not all(meta[k] == d[k] for k in ['type', 'dict_ver', 'config', 'struct', 'slices', 'trans', 'isdiag', 'hfs', 'mfs']):
             size = meta['struct'].size if hasattr(meta['struct'], 'size') else meta['struct']['size']
             tmp = a.config.backend.zeros(size, dtype=a.yastn_dtype, device=a.device)
             ap = type(a).from_dict(combine_data_and_meta(tmp, meta))
@@ -108,59 +105,33 @@ def to_dict(a, level=2, meta=None, resolve_ops=False) -> dict:
             except YastnError as e:
                 raise YastnError("Tensor is inconsistent with meta: " + str(e))
             d = a.to_dict(level=level)
-            if not all(meta[k] == d[k] for k in ['type', 'dict_ver', 'config', 'struct', 'slices', 'legs', 'isdiag', 'hfs', 'mfs']):
+            if not all(meta[k] == d[k] for k in ['type', 'dict_ver', 'config', 'struct', 'slices', 'isdiag', 'hfs', 'mfs']):
                 raise YastnError("Tensor is inconsistent with meta.")
     return d
 
 
-def save_to_dict(a) -> dict:
-    r"""
-    Export YASTN tensor to dictionary containing all the information needed to recreate the tensor.
+# def save_to_hdf5(a, file, path) -> None:
+#     """
+#     Export tensor into hdf5 type file.
 
-    Allows saving the tensor, e.g., with :func:`numpy.save`.
+#     Complementary function is :meth:`yastn.load_from_hdf5`.
 
-    Complementary function is :meth:`yastn.load_from_dict`.
-
-    !!! This method is deprecated; use to_dict(). !!!
-
-    Parameters
-    ----------
-    a: yastn.Tensor
-        tensor to export.
-    """
-    warn('This method is deprecated; use to_dict() instead.', DeprecationWarning, stacklevel=2)
-    a = a.consume_transpose()
-    _d = a.config.backend.to_numpy(a._data).copy()
-    hfs = [hf._asdict() for hf in a.hfs]
-    return {'type': type(a).__name__,
-            '_d': _d, 's': a.struct.s, 'n': a.struct.n,
-            't': a.struct.t, 'D': a.struct.D, 'isdiag': a.isdiag,
-            'mfs': a.mfs, 'hfs': hfs,
-            'SYM_ID': a.config.sym.SYM_ID, 'fermionic': a.config.fermionic}
-
-
-def save_to_hdf5(a, file, path) -> None:
-    """
-    Export tensor into hdf5 type file.
-
-    Complementary function is :meth:`yastn.load_from_hdf5`.
-
-    Parameters
-    ----------
-    a : yastn.Tensor
-        tensor to export.
-    """
-    a = a.consume_transpose()
-    _d = a.config.backend.to_numpy(a._data)
-    hfs = tuple(tuple(hf) for hf in a.hfs)
-    file.create_dataset(path+'/isdiag', data=[int(a.isdiag)])
-    file.create_group(path+'/mfs/'+str(a.mfs))
-    file.create_group(path+'/hfs/'+str(hfs))
-    file.create_dataset(path+'/n', data=a.struct.n)
-    file.create_dataset(path+'/s', data=a.struct.s)
-    file.create_dataset(path+'/ts', data=a.struct.t)
-    file.create_dataset(path+'/Ds', data=a.struct.D)
-    file.create_dataset(path+'/matrix', data=_d)
+#     Parameters
+#     ----------
+#     a : yastn.Tensor
+#         tensor to export.
+#     """
+#     a = a.consume_transpose()
+#     _d = a.config.backend.to_numpy(a._data)
+#     hfs = tuple(tuple(hf) for hf in a.hfs)
+#     file.create_dataset(path+'/isdiag', data=[int(a.isdiag)])
+#     file.create_group(path+'/mfs/'+str(a.mfs))
+#     file.create_group(path+'/hfs/'+str(hfs))
+#     file.create_dataset(path+'/n', data=a.struct.n)
+#     file.create_dataset(path+'/s', data=a.struct.s)
+#     file.create_dataset(path+'/ts', data=a.struct.t)
+#     file.create_dataset(path+'/Ds', data=a.struct.D)
+#     file.create_dataset(path+'/matrix', data=_d)
 
 
 ############################
@@ -252,14 +223,7 @@ def get_signature(a, native=False) -> Sequence[int]:
 
     If ``native=True``, ignore fusion with ``mode=meta`` and return the signature of tensors's native legs, see :attr:`yastn.Tensor.s_n`.
     """
-    if native:
-        return tuple(a.struct.s[ind] for ind in a.trans)
-    else:
-        inds, n = [], 0
-        for mf in a.mfs:
-            inds.append(a.trans[n])
-            n += mf[0]
-        return tuple(a.struct.s[ind] for ind in inds)
+    return a.s_n if native else a.s
 
 
 def get_rank(a, native=False) -> int:
@@ -384,8 +348,6 @@ def get_legs(a, axes=None, native=False) -> yastn.Leg | Sequence[yastn.Leg]:
         The default is ``False``.
     """
     legs = []
-    tset = np.array(a.struct.t, dtype=np.int64).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
-    Dset = np.array(a.struct.D, dtype=np.int64).reshape((len(a.struct.D), len(a.struct.s)))
     if axes is None:
         axes = tuple(range(a.ndim if not native else a.ndim_n))
     multiple_legs = hasattr(axes, '__iter__')
@@ -399,16 +361,14 @@ def get_legs(a, axes=None, native=False) -> yastn.Leg | Sequence[yastn.Leg]:
 
         legs_ax = []
         for i in nax:
-            tseta = tset[:, i, :].reshape(len(tset), a.config.sym.NSYM).tolist()
-            Dseta = Dset[:, i].tolist()
-            tDn = {tuple(tn): Dn for tn, Dn in zip(tseta, Dseta)}
-            tDn = dict(sorted(tDn.items()))
-            leg = Leg(a.config, s=a.struct.s[i], t=tuple(tDn.keys()), D=tuple(tDn.values()), hf=a.hfs[i])
+            leg = Leg(a.config, s=a.struct.legs[i].s, t=a.struct.legs[i].t, D=a.struct.legs[i].D, hf=a.hfs[i])
             legs_ax.append(leg)
 
         if not native and a.mfs[ax][0] > 1:
-            tseta = tset[:, nax, :].reshape(len(tset), len(nax) * a.config.sym.NSYM).tolist()
-            Dseta = np.prod(Dset[:, nax], axis=1, dtype=np.int64).tolist()
+            st = get_blocks(a.config.sym, a.struct.legs, a.n, a.isdiag)
+
+            tseta = st.t[:, nax, :].reshape(st.nblocks, len(nax) * a.config.sym.NSYM).tolist()
+            Dseta = np.prod(st.D[:, nax], axis=1, dtype=np.int64).tolist()
             tDn = {tuple(tn): Dn for tn, Dn in zip(tseta, Dseta)}
             tDn = dict(sorted(tDn.items()))
             t, D = tuple(tDn.keys()), tuple(tDn.values())
@@ -565,8 +525,9 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False) -> 'Tensor':
     c_struct = _struct(s=c_s, n=(), diag=a.isdiag, t=c_t, D=c_D, size=Dp)
     c_slices = (_slc(((0, Dp),), c_D[0], Dp),)
     c_legs = legs_from_struct(c_struct)
+    c_struct = _struct(s=c_s, n=(), diag=a.isdiag, t=c_t, D=c_D, size=Dp, legs=c_legs)
     data = a.config.backend.merge_to_dense(a._data, Dtot_n, meta)
-    return a._replace(config=config_dense, struct=c_struct, slices=c_slices, data=data, mfs=None, hfs=None, legs=c_legs)
+    return a._replace(config=config_dense, struct=c_struct, slices=c_slices, data=data, mfs=None, hfs=None, trans=None)
 
 
 def zero_of_dtype(a):

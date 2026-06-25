@@ -21,7 +21,7 @@ from operator import mul, itemgetter
 
 import numpy as np
 
-from ._auxiliary import _flatten, _slc, _config, legs_from_struct, get_structure, test_all_blocks
+from ._auxiliary import _flatten, _slc, _config, legs_from_struct, get_blocks, test_all_blocks
 from ._tests import YastnError, _test_tD_consistency, _test_struct_types
 from ..backend import backend_np
 from ..sym import sym_none, sym_U1, sym_Z2, sym_Z3, sym_U1xU1, sym_U1xU1xZ2
@@ -222,7 +222,7 @@ def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
         comb_t = list(_flatten(comb_t))
         comb_t = np.array(comb_t, dtype=np.int64).reshape((lcomb_t, a.ndim_n, a.config.sym.NSYM))
         comb_D = np.array(comb_D, dtype=np.int64).reshape((lcomb_t, a.ndim_n))
-        ind = np.all(a.config.sym.fuse(comb_t, a.struct.s, 1) == a.struct.n, axis=1)
+        ind = np.all(a.config.sym.fuse(comb_t, a.s_n, 1) == a.struct.n, axis=1)
         tset = comb_t[ind]
         Dset = comb_D[ind]
 
@@ -248,9 +248,10 @@ def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
 
     a.slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(a_Dp), a_Dp, a_D))
     a.struct = a.struct._replace(t=a_t, D=a_D, size=Dsize)
-    a.legs = legs_from_struct(a.struct)
+    legs = legs_from_struct(a.struct)
+    a.struct = a.struct._replace(t=a_t, D=a_D, size=Dsize, legs=legs)
 
-    ts, Ds, slices, size, nblocks, legs, _ = get_structure(a.config.sym, a.legs, a.struct.n, a.isdiag)
+    ts, Ds, slices, size, nblocks, legs, _ = get_blocks(a.config.sym, a.legs, a.struct.n, a.isdiag)
     assert a.legs == legs
 
     a._data = _init_block(a.config, Dsize, val, dtype=a.yastn_dtype, device=a.device)
@@ -324,7 +325,7 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
     Dsize = Ds[0] if a.isdiag else reduce(mul, Ds, 1)
     new_block = _init_block(a.config, Dsize, val, dtype=a.yastn_dtype, device=a.device)
 
-    t_new, D_new, slices_new, size_new, nblocks, legs_new, _ = get_structure(a.config.sym, a.legs, a.struct.n, a.isdiag)
+    t_new, D_new, slices_new, size_new, nblocks, legs_new, _ = get_blocks(a.config.sym, a.legs, a.struct.n, a.isdiag)
     i = 0
     ats = ats.reshape((a.ndim_n, nsym))
     while i < len(t_new):
@@ -336,10 +337,10 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
 
 
 def embed_(a, legs_new):
-    t_old = np.array(a.struct.t, dtype=np.int64).reshape((len(a.struct.t), len(a.struct.s), a.config.sym.NSYM))
+    t_old = np.array(a.struct.t, dtype=np.int64).reshape((len(a.struct.t), a.ndim_n, a.config.sym.NSYM))
     slices_old = a.slices
 
-    st_new = get_structure(a.config.sym, legs_new, a.struct.n, a.isdiag)
+    st_new = get_blocks(a.config.sym, legs_new, a.struct.n, a.isdiag)
 
     meta, i, j, sni, soi = [], 0, 0, None, None
     while i < len(t_old) and j < st_new.nblocks:
@@ -368,9 +369,7 @@ def embed_(a, legs_new):
 
     a._data = newdata
     a.slices = slices
-    a.struct = a.struct._replace(t=tnew, D=Dnew, size=st_new.size)
-    a.legs = legs_new
-
+    a.struct = a.struct._replace(t=tnew, D=Dnew, size=st_new.size, legs=legs_new)
 
 
 def _init_block(config, Dsize, val, dtype, device):

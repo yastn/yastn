@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-""" Tensor.to_dict() Tensor.from_dict() yastn.save_to_hdf5() yastn.load_from_hdf5(). """
+""" Tensor.to_dict() Tensor.from_dict() """
 import os
 import numpy as np
 import pytest
@@ -138,40 +138,40 @@ def check_to_numpy(a1, config):
     """ save/load to numpy and tests consistency."""
     d1 = a1.to_dict()
     a2 = 2 * a1  # second tensor to be saved
-    d2 = a2.save_to_dict()
+    d2 = a2.to_dict()
     data = {'tensor1': d1, 'tensor2': d2}  # two tensors to be saved
     np.save('tmp.npy', data)
     ldata = np.load('tmp.npy', allow_pickle=True).item()
     os.remove('tmp.npy')
 
     b1 = yastn.from_dict(ldata['tensor1'], config=config)
-    b2 = yastn.load_from_dict(d=ldata['tensor2'], config=config)
+    b2 = yastn.from_dict(ldata['tensor2'], config=config)
 
     assert all(yastn.norm(a - b) < 1e-12 for a, b in [(a1, b1), (a2, b2)])
     assert all(b.is_consistent for b in (b1, b2))
     assert all(yastn.are_independent(a, b) for a, b in [(a1, b1), (a2, b2)])
     are_identical_tensors(a1, b1)
-    are_identical_tensors(a2.consume_transpose(), b2)
+    are_identical_tensors(a2, b2)
 
 
-def check_to_hdf5(a, *args):
-    """ Test if two Tensor-s have the same values. """
-    h5py = pytest.importorskip("h5py")
-    try:
-        os.remove("tmp.h5")
-    except OSError:
-        pass
-    with h5py.File('tmp.h5', 'w') as f:
-        a.save_to_hdf5(f, './')
-    with h5py.File('tmp.h5', 'r') as f:
-        b = yastn.load_from_hdf5(a.config, f, './')
-    os.remove("tmp.h5")
-    b.is_consistent()
-    assert yastn.are_independent(a, b)
-    are_identical_tensors(a.consume_transpose(), b)
+# def check_to_hdf5(a, *args):
+#     """ Test if two Tensor-s have the same values. """
+#     h5py = pytest.importorskip("h5py")
+#     try:
+#         os.remove("tmp.h5")
+#     except OSError:
+#         pass
+#     with h5py.File('tmp.h5', 'w') as f:
+#         a.save_to_hdf5(f, './')
+#     with h5py.File('tmp.h5', 'r') as f:
+#         b = yastn.load_from_hdf5(a.config, f, './')
+#     os.remove("tmp.h5")
+#     b.is_consistent()
+#     assert yastn.are_independent(a, b)
+#     are_identical_tensors(a.consume_transpose(), b)
 
 
-@pytest.mark.parametrize("test_f", [check_to_numpy, check_to_hdf5])
+@pytest.mark.parametrize("test_f", [check_to_numpy])  # ,check_to_hdf5
 def test_save_load(config_kwargs, test_f):
     """ test exporting tensor to native python data-structure,
         that allows robust saving/loading with np.save/load."""
@@ -268,4 +268,4 @@ def test_to_dict_exceptions(config_kwargs):
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])
+    pytest.main([__file__, "-vs", "--durations=0"])

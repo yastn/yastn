@@ -27,12 +27,12 @@ def conj_vs_numpy(a, expected_n):
     d = a.conj_blocks()
     assert all(x.is_consistent() for x in (b, c, d))
 
-    assert all(x.struct.n == expected_n for x in (b, c))
-    assert a.struct.n == d.struct.n
+    assert all(x.n == expected_n for x in (b, c))
+    assert a.n == d.n
 
-    assert all(sa + sb == 0 for sa, sb in zip(a.struct.s, b.struct.s))
-    assert all(sa + sc == 0 for sa, sc in zip(a.struct.s, c.struct.s))
-    assert a.struct.s == d.struct.s
+    assert all(sa + sb == 0 for sa, sb in zip(a.s_n, b.s_n))
+    assert all(sa + sc == 0 for sa, sc in zip(a.s_n, c.s_n))
+    assert a.s_n == d.s_n
 
     na, nb, nc, nd = a.to_numpy(), b.to_numpy(), c.to_numpy(), d.to_numpy()
     assert np.linalg.norm(na.conj() - nb) < tol
@@ -73,9 +73,9 @@ def test_conj_hard_fusion(config_kwargs):
     b = a.conj()
     c = a.flip_signature()
     d = a.conj_blocks()
-    assert all(sa + sb == 0 for sa, sb in zip(a.struct.s, b.struct.s))
-    assert all(sa + sc == 0 for sa, sc in zip(a.struct.s, c.struct.s))
-    assert a.struct.s == d.struct.s
+    assert all(sa + sb == 0 for sa, sb in zip(a.s_n, b.s_n))
+    assert all(sa + sc == 0 for sa, sc in zip(a.s_n, c.s_n))
+    assert a.s_n == d.s_n
 
     assert all(sa + sb == 0 for hfa, hfb in zip(a.hfs, b.hfs) for sa, sb in zip(hfa.s, hfb.s))
     assert all(sa + sc == 0 for hfa, hfc in zip(a.hfs, c.hfs) for sa, sc in zip(hfa.s, hfc.s))

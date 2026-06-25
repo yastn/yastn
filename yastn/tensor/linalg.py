@@ -17,11 +17,12 @@ from __future__ import annotations
 from itertools import accumulate
 import logging
 from numbers import Number
+from warnings import warn
 import sys
 
 import numpy as np
 
-from ._auxiliary import _struct, _slc, _clear_axes, _unpack_axes, legs_from_struct, test_all_blocks, get_structure, update_old_struct
+from ._auxiliary import _struct, _slc, _clear_axes, _unpack_axes, legs_from_struct, test_all_blocks, get_blocks, update_old_struct
 from ._merging import _merge_to_matrix, _meta_unmerge_matrix2, _unmerge
 from ._merging import _Fusion, _leg_struct_trivial
 from ._tests import YastnError, _test_axes_all
@@ -255,7 +256,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     out_hr = tuple(a.trans[ax] for ax in out_hr)
     #
     data, legs_ma, ls_l, ls_r, legs_group = _merge_to_matrix(a, (out_hl, out_hr))
-    st_ma = get_structure(a.config.sym, legs_ma, a.n, a.isdiag)
+    st_ma = get_blocks(a.config.sym, legs_ma, a.n, a.isdiag)
     struct, slices = update_old_struct(a.struct, st_ma)
     #
     if svd_on_cpu:
@@ -285,7 +286,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         logger.info(f"{fname} D_block {kwargs.get('D_block', 'NA')}")
         logger.info(f"{fname} minD {minD}")
 
-    meta, Ustruct, Uslices, Sstruct, Sslices, Vstruct, Vslices = _meta_svd(a.config, struct, slices, minD, sU, nU)
+    meta, Ustruct, Uslices, Sstruct, Sslices, Vstruct, Vslices = _meta_svd(a.config.sym, struct, slices, legs_ma, a.n, a.isdiag, minD, sU, nU)
     sizes = tuple(x.size for x in (Ustruct, Sstruct, Vstruct))
 
     if compute_uv and policy == 'fullrank':
@@ -321,7 +322,8 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     Smfs = ((1,), (1,))
     Shfs = (_Fusion(s=(-sU,)), _Fusion(s=(sU,)))
     Slegs = legs_from_struct(Sstruct)
-    S = a._replace(struct=Sstruct, slices=Sslices, data=Sdata, mfs=Smfs, hfs=Shfs, trans=None, legs=Slegs)
+    Sstruct = Sstruct._replace(legs=Slegs)
+    S = a._replace(struct=Sstruct, slices=Sslices, data=Sdata, mfs=Smfs, hfs=Shfs, trans=None)
 
     if not compute_uv:
         return S
@@ -333,7 +335,8 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     Umfs = tuple(a.mfs[ii] for ii in out_ml) + ((1,),)
     Uhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(s=(sU,)),)
     Ulegs = legs_from_struct(Ustruct)
-    U = a._replace(struct=Ustruct, slices=Uslices, data=Udata, mfs=Umfs, hfs=Uhfs, trans=None, legs=Ulegs)
+    Ustruct = Ustruct._replace(legs=Ulegs)
+    U = a._replace(struct=Ustruct, slices=Uslices, data=Udata, mfs=Umfs, hfs=Uhfs, trans=None)
 
     Vs = (-sU,) + tuple(a.struct.s[ii] for ii in out_hr)
     Vmeta_unmerge, Vstruct, Vslices = _meta_unmerge_matrix2(a.config, Vstruct, Vslices, ls_s, ls_r, Vs)
@@ -341,7 +344,8 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     Vmfs = ((1,),) + tuple(a.mfs[ii] for ii in out_mr)
     Vhfs = (_Fusion(s=(-sU,)),) + tuple(a.hfs[ii] for ii in out_hr)
     Vlegs = legs_from_struct(Vstruct)
-    V = a._replace(struct=Vstruct, slices=Vslices, data=Vdata, mfs=Vmfs, hfs=Vhfs, trans=None, legs=Vlegs)
+    Vstruct = Vstruct._replace(legs=Vlegs)
+    V = a._replace(struct=Vstruct, slices=Vslices, data=Vdata, mfs=Vmfs, hfs=Vhfs, trans=None)
 
     U = U.moveaxis(source=-1, destination=Uaxis)
     V = V.moveaxis(source=0, destination=Vaxis)
@@ -351,20 +355,22 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     return U, S, V
 
 
-def _meta_svd(config, struct, slices, minD, sU, nU):
+def _meta_svd(sym, struct, slices, legs, charge, isdiag, minD, sU, nU):
     """
     meta and struct for svd
     U has signature = (struct.s[0], sU)
     S has signature = (-sU, sU)
     V has signature = (-sU, struct.s[1])
-    if nU than U carries struct.n, otherwise V.
+    if nU than U carries tensor charge, otherwise V.
 
     Returns
     -------
-        tuple[tuple[ slice, shape, slice in U, shape in U, slice in S, slice in V, shape in V ]]
+        tuple[tuple[slice, shape, slice in U, shape in U, slice in S, slice in V, shape in V ]]
     """
-    n0 = config.sym.zero()
-    nsym = config.sym.NSYM
+    n0 = sym.zero()
+    nsym = sym.NSYM
+
+    st = get_blocks(sym, legs, charge, isdiag)
 
     if any(D == 0 for D in minD):
         at = tuple(x for x, mD in zip(struct.t, minD) if mD > 0)
@@ -377,12 +383,12 @@ def _meta_svd(config, struct, slices, minD, sU, nU):
         t_con = tuple(x[nsym:] for x in struct.t)
     elif nU: # and -sQ == struct.s[1]
         t_con = np.array(struct.t, dtype=np.int64).reshape((len(struct.t), 2, nsym))
-        t_con = tuple(map(tuple, config.sym.fuse(t_con[:, 1:, :], (1,), -1).tolist()))
+        t_con = tuple(map(tuple, sym.fuse(t_con[:, 1:, :], (1,), -1).tolist()))
     elif sU == -struct.s[0]: # and nV (not nU)
         t_con = tuple(x[:nsym] for x in struct.t)
-    else: # not nU and sU == struct.s[0]
+    else: # nV (not nU) and sU == struct.s[0]
         t_con = np.array(struct.t, dtype=np.int64).reshape((len(struct.t), 2, nsym))
-        t_con = tuple(map(tuple, config.sym.fuse(t_con[:, :1, :], (1,), -1).tolist()))
+        t_con = tuple(map(tuple, sym.fuse(t_con[:, :1, :], (1,), -1).tolist()))
     Un, Vn = (struct.n, n0) if nU else (n0, struct.n)
 
     Ut = tuple(x[:nsym] + y for x, y in zip(struct.t, t_con))
@@ -467,7 +473,7 @@ def eig(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     out_hr = tuple(a.trans[ax] for ax in out_hr)
     #
     data, legs_ma, ls_l, ls_r, legs_group = _merge_to_matrix(a, (out_hl, out_hr))
-    st_ma = get_structure(a.config.sym, legs_ma, a.n, a.isdiag)
+    st_ma = get_blocks(a.config.sym, legs_ma, a.n, a.isdiag)
     struct, slices = update_old_struct(a.struct, st_ma)
 
     if ls_l != ls_r:
@@ -475,7 +481,7 @@ def eig(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
 
     minD = tuple(min(ds) for ds in struct.D)
 
-    meta, Ustruct, Uslices, Sstruct, Sslices, Vstruct, Vslices = _meta_svd(a.config, struct, slices, minD, sU, nU)
+    meta, Ustruct, Uslices, Sstruct, Sslices, Vstruct, Vslices = _meta_svd(a.config.sym, struct, slices, legs_ma, a.n, a.isdiag, minD, sU, nU)
     sizes = tuple(x.size for x in (Ustruct, Sstruct, Vstruct))
 
     if compute_uv and policy == 'fullrank':
@@ -490,7 +496,8 @@ def eig(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     Smfs = ((1,), (1,))
     Shfs = (_Fusion(s=(-sU,)), _Fusion(s=(sU,)))
     Slegs = legs_from_struct(Sstruct)
-    S = a._replace(struct=Sstruct, slices=Sslices, data=Sdata, mfs=Smfs, hfs=Shfs, trans=None, legs=Slegs)
+    Sstruct = Sstruct._replace(legs=Slegs)
+    S = a._replace(struct=Sstruct, slices=Sslices, data=Sdata, mfs=Smfs, hfs=Shfs, trans=None)
 
     if not compute_uv:
         return S
@@ -501,7 +508,8 @@ def eig(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     Umfs = tuple(a.mfs[ii] for ii in out_ml) + ((1,),)
     Uhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(s=(sU,)),)
     Ulegs = legs_from_struct(Ustruct)
-    U = a._replace(struct=Ustruct, slices=Uslices, data=Udata, mfs=Umfs, hfs=Uhfs, trans=None, legs=Ulegs)
+    Ustruct = Ustruct._replace(legs=Ulegs)
+    U = a._replace(struct=Ustruct, slices=Uslices, data=Udata, mfs=Umfs, hfs=Uhfs, trans=None)
 
     Vs = (-sU,) + tuple(a.struct.s[ii] for ii in out_hr)
     Vmeta_unmerge, Vstruct, Vslices = _meta_unmerge_matrix2(a.config, Vstruct, Vslices, ls_s, ls_r, Vs)
@@ -509,7 +517,8 @@ def eig(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     Vmfs = ((1,),) + tuple(a.mfs[ii] for ii in out_mr)
     Vhfs = (_Fusion(s=(-sU,)),) + tuple(a.hfs[ii] for ii in out_hr)
     Vlegs = legs_from_struct(Vstruct)
-    V = a._replace(struct=Vstruct, slices=Vslices, data=Vdata, mfs=Vmfs, hfs=Vhfs, trans=None, legs=Vlegs)
+    Vstruct = Vstruct._replace(legs=Vlegs)
+    V = a._replace(struct=Vstruct, slices=Vslices, data=Vdata, mfs=Vmfs, hfs=Vhfs, trans=None)
 
     U = U.moveaxis(source=-1, destination=Uaxis)
     V = V.moveaxis(source=0, destination=Vaxis)
@@ -675,6 +684,8 @@ def truncation_mask_multiplets(S, tol=0, D_total=float('inf'),
     #     if not all(Smask[t][:common_size] == Smask[tn][:common_size]):
     #         Smask[t][:common_size] = Smask[tn][:common_size] = Smask[t][:common_size] & Smask[tn][:common_size]
     # return Smask
+    warn('This method is deprecated; use truncation_mask() instead.', DeprecationWarning, stacklevel=2)
+
     return truncation_mask(S, which='LR',
                            tol=tol, D_total=D_total,
                            eps_multiplet=eps_multiplet,
@@ -891,7 +902,7 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0) -> tuple[yastn.Tensor, yastn.Ten
     out_hr = tuple(a.trans[ax] for ax in out_hr)
 
     data, legs_ma, ls_l, ls_r, legs_group = _merge_to_matrix(a, (out_hl, out_hr))
-    st_ma = get_structure(a.config.sym, legs_ma, a.n, a.isdiag)
+    st_ma = get_blocks(a.config.sym, legs_ma, a.n, a.isdiag)
     struct, slices = update_old_struct(a.struct, st_ma)
 
     meta, Qstruct, Qslices, Rstruct, Rslices = _meta_qr(a.config, struct, slices, sQ)
@@ -907,7 +918,8 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0) -> tuple[yastn.Tensor, yastn.Ten
     Qmfs = tuple(a.mfs[ii] for ii in out_ml) + ((1,),)
     Qhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(s=(sQ,)),)
     Qlegs = legs_from_struct(Qstruct)
-    Q = a._replace(struct=Qstruct, slices=Qslices, data=Qdata, mfs=Qmfs, hfs=Qhfs, trans=None, legs=Qlegs)
+    Qstruct = Qstruct._replace(legs=Qlegs)
+    Q = a._replace(struct=Qstruct, slices=Qslices, data=Qdata, mfs=Qmfs, hfs=Qhfs, trans=None)
 
     Rs = (-sQ,) + tuple(a.struct.s[lg] for lg in out_hr)
     Rmeta_unmerge, Rstruct, Rslices = _meta_unmerge_matrix2(a.config, Rstruct, Rslices, ls, ls_r, Rs)
@@ -915,8 +927,9 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0) -> tuple[yastn.Tensor, yastn.Ten
     Rmfs = ((1,),) + tuple(a.mfs[ii] for ii in out_mr)
     Rhfs = (_Fusion(s=(-sQ,)),) + tuple(a.hfs[ii] for ii in out_hr)
     Rlegs = legs_from_struct(Rstruct)
+    Rstruct = Rstruct._replace(legs=Rlegs)
 
-    R = a._replace(struct=Rstruct, slices=Rslices, data=Rdata, mfs=Rmfs, hfs=Rhfs, trans=None, legs=Rlegs)
+    R = a._replace(struct=Rstruct, slices=Rslices, data=Rdata, mfs=Rmfs, hfs=Rhfs, trans=None)
 
     Q = Q.moveaxis(source=-1, destination=Qaxis)
     R = R.moveaxis(source=0, destination=Raxis)
@@ -1023,7 +1036,7 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank', **kwargs) -> tu
         raise YastnError('eigh requires tensor charge to be zero.')
 
     data, legs_ma, ls_l, ls_r, legs_group = _merge_to_matrix(a, (out_hl, out_hr))
-    st_ma = get_structure(a.config.sym, legs_ma, a.n, a.isdiag)
+    st_ma = get_blocks(a.config.sym, legs_ma, a.n, a.isdiag)
     struct, slices = update_old_struct(a.struct, st_ma)
 
     #
@@ -1074,12 +1087,14 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank', **kwargs) -> tu
     Umfs = tuple(a.mfs[ii] for ii in out_ml) + ((1,),)
     Uhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(s=(sU,)),)
     Ulegs = legs_from_struct(Ustruct)
-    U = a._replace(struct=Ustruct, slices=Uslices, data=Udata, mfs=Umfs, hfs=Uhfs, trans=None, legs=Ulegs)
+    Ustruct = Ustruct._replace(legs=Ulegs)
+    U = a._replace(struct=Ustruct, slices=Uslices, data=Udata, mfs=Umfs, hfs=Uhfs, trans=None)
 
     Smfs = ((1,), (1,))
     Shfs = (_Fusion(s=(-sU,)), _Fusion(s=(sU,)))
     Slegs = legs_from_struct(Sstruct)
-    S = a._replace(struct=Sstruct, slices=Sslices, data=Sdata, mfs=Smfs, hfs=Shfs, trans=None, legs=Slegs)
+    Sstruct = Sstruct._replace(legs=Slegs)
+    S = a._replace(struct=Sstruct, slices=Sslices, data=Sdata, mfs=Smfs, hfs=Shfs, trans=None)
 
     # sort in case of non-default order
     if policy in ['fullrank'] and which != 'SR':

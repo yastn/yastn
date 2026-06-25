@@ -24,7 +24,7 @@ from ..sym import sym_none
 __all__ = ['_config', '_struct', 'sign_canonical_order', 'swap_charges', 'LegBasic', 'legs_from_struct']
 
 
-class _structure(NamedTuple):
+class _blocks(NamedTuple):
     t: np.array = None  # leg signatures
     D: np.array = None  # tensor charge
     slc: np.array = None  # isdiag
@@ -35,6 +35,7 @@ class _structure(NamedTuple):
 
 class _struct(NamedTuple):
     s: tuple = ()  # leg signatures
+    legs: tuple = ()  # tuple[LegBasic]
     n: tuple = ()  # tensor charge
     diag: bool = False  # isdiag
     t: tuple = ()  # list of block charges
@@ -263,7 +264,7 @@ def legs_from_struct(struct):
     return tuple(legs)
 
 
-def get_structure(sym, legs, n, isdiag=False):
+def get_blocks(sym, legs, n, isdiag=False):
     """
     Generate all allowed block charges, their dimensions, slices, total size and trimed legs.
     Assume that legs have sorted charges
@@ -272,7 +273,7 @@ def get_structure(sym, legs, n, isdiag=False):
     ndim = len(legs)
     s = tuple(leg.s for leg in legs)
     taxes = tuple(leg.t for leg in legs)
-    tblocks, iblocks = get_structure_charges(sym, taxes, s, n)
+    tblocks, iblocks, icharges = get_blocks_charges(sym, taxes, s, n)
 
     Dblocks = np.empty(iblocks.shape, dtype=np.int64)
     for i, leg in enumerate(legs):
@@ -288,19 +289,17 @@ def get_structure(sym, legs, n, isdiag=False):
     size = np.sum(Dp, dtype=np.int64).item()
     #
     # recalculate legs, in case some leg charges do not appear in any block
-    tDset = np.concatenate((tblocks, Dblocks.reshape(nblocks, ndim, 1)), axis=2)
     new_legs = []
-    for i in range(ndim):
-        utDs = sorted(np.unique(tDset[:, i, :], axis=0).tolist())
-        tl = tuple(tuple(x[:nsym]) for x in utDs)
-        Dl = tuple(x[nsym] for x in utDs)
-        leg = LegBasic(s=s[i], t=tl, D=Dl)
+    for leg, inds in zip(legs, icharges):
+        tl = tuple(leg.t[i] for i in inds)
+        Dl = tuple(leg.D[i] for i in inds)
+        leg = LegBasic(s=leg.s, t=tl, D=Dl)
         new_legs.append(leg)
     #
-    return _structure(t=tblocks, D=Dblocks, slc=slices, size=size, nblocks=nblocks, legs=tuple(new_legs), n=n)
+    return _blocks(t=tblocks, D=Dblocks, slc=slices, size=size, nblocks=nblocks, legs=tuple(new_legs), n=n)
 
 
-def get_structure_charges(sym, taxes, s, n):
+def get_blocks_charges(sym, taxes, s, n):
     nsym = sym.NSYM
     ndim = len(taxes)
     if ndim > 0:
@@ -318,7 +317,8 @@ def get_structure_charges(sym, taxes, s, n):
 
     tblocks = comb_t[ind]
     iblocks = indices[ind]
-    return tblocks, iblocks
+    icharges = [sorted(np.unique(iblocks[:, i]).tolist()) for i in range(ndim)]
+    return tblocks, iblocks, icharges
 
 
 def get_sub_slices(st, st_full):
@@ -332,7 +332,7 @@ def get_sub_slices(st, st_full):
 
 
 def test_all_blocks(a):
-    tset, Dset, slices, size, nblocks, legs, _ = get_structure(a.config.sym, a.legs, a.n, isdiag=a.isdiag)
+    tset, Dset, slices, size, nblocks, legs, _ = get_blocks(a.config.sym, a.legs, a.n, isdiag=a.isdiag)
     assert len(tset) == len(a.struct.t) or len(a.struct.t) == 0 or len(tset) == 0
 
 
@@ -344,5 +344,5 @@ def update_old_struct(struct, st_new):
     Dnew = tuple(map(tuple, st_new.D.reshape(st_new.nblocks, ndim).tolist()))
     Dp = (st_new.slc[:, 1] - st_new.slc[:, 0]).tolist()
     slices_new = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dp), Dp, Dnew))
-    struct_new = struct._replace(s=s, t=tnew, D=Dnew, size=st_new.size, n=st_new.n)
+    struct_new = struct._replace(legs = st_new.legs, s=s, t=tnew, D=Dnew, size=st_new.size, n=st_new.n)
     return struct_new, slices_new

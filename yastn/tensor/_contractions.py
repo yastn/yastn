@@ -23,7 +23,7 @@ from operator import itemgetter
 import numpy as np
 
 from ._auxiliary import _struct, _slc, _clear_axes, _unpack_axes, _join_contiguous_slices, sign_canonical_order
-from ._auxiliary import legs_from_struct, test_all_blocks, get_structure, update_old_struct, get_sub_slices
+from ._auxiliary import legs_from_struct, test_all_blocks, get_blocks, update_old_struct, get_sub_slices
 from ._merging import _merge_to_matrix, _unmerge, _meta_unmerge_matrix, _meta_fuse_hard
 from ._merging import _transpose_and_merge, _mask_tensors_leg_intersection, _meta_mask
 from ._tests import YastnError, _test_can_be_combined, _unpack_trans_test_axes_pair
@@ -102,7 +102,7 @@ def tensordot(a, b, axes, conj=(0, 0)) -> 'Tensor':
     nout_b = tuple(ii for ii in b.trans if ii not in nin_b)  # outgoing native legs
 
     n_c = a.config.sym.add_charges(a.struct.n, b.struct.n)
-    s_c = tuple(a.struct.s[i1] for i1 in nout_a) + tuple(b.struct.s[i2] for i2 in nout_b)
+    s_c = tuple(a.s_n[i1] for i1 in nout_a) + tuple(b.s_n[i2] for i2 in nout_b)
     mfs_c = tuple(a.mfs[ii] for ii in range(a.ndim) if ii not in in_a)
     mfs_c += tuple(b.mfs[ii] for ii in range(b.ndim) if ii not in in_b)
     hfs_c = tuple(a.hfs[ii] for ii in nout_a) + tuple(b.hfs[ii] for ii in nout_b)
@@ -116,24 +116,15 @@ def tensordot(a, b, axes, conj=(0, 0)) -> 'Tensor':
 
     if a.config.tensordot_policy == 'fuse_to_matrix':
         data, st_out = _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b, s_c)
-        struct_c, slices_c = update_old_struct(a.struct, st_out)
-        out = a._replace(data=data, struct=struct_c, slices=slices_c, mfs=mfs_c, hfs=hfs_c, trans=None, legs=st_out.legs)
     elif a.config.tensordot_policy == 'fuse_contracted':
-        data, struct_c, slices_c = _tensordot_fc(a, b, nout_a, nin_a, nin_b, nout_b)
-        struct_c = struct_c._replace(n=n_c)
-        legs = legs_from_struct(struct_c)
-        out = a._replace(data=data, struct=struct_c, slices=slices_c, mfs=mfs_c, hfs=hfs_c, trans=None, legs=legs)
-        embed_(out, out.legs)
+        data, st_out = _tensordot_fc(a, b, nout_a, nin_a, nin_b, nout_b)
     elif a.config.tensordot_policy == 'no_fusion':
-        data, struct_c, slices_c = _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b)
-        struct_c = struct_c._replace(n=n_c)
-        legs = legs_from_struct(struct_c)
-        out = a._replace(data=data, struct=struct_c, slices=slices_c, mfs=mfs_c, hfs=hfs_c, trans=None, legs=legs)
-        embed_(out, out.legs)
+        data, st_out = _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b)
     else:
         raise YastnError("Tensordot policy not recognized. It should be 'fuse_to_matrix', 'fuse_contracted', or 'no_fusion'.")
 
-    test_all_blocks(out)
+    struct_c, slices_c = update_old_struct(a.struct, st_out)
+    out = a._replace(data=data, struct=struct_c, slices=slices_c, mfs=mfs_c, hfs=hfs_c, trans=None)
     return out
 
 def _tensordot_diag(a, b, in_b, destination):
@@ -152,7 +143,6 @@ def _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b, s_c):
     Perform tensordot by fuse_to_matrix:
     merging tensors to matrices, executing dot, and unmerging outgoing legs.
     """
-    # ind_a, ind_b = _common_inds(a.struct.t, b.struct.t, nin_a, nin_b, a.ndim_n, b.ndim_n, a.config.sym.NSYM)
     legs_a, legs_b = list(a.legs), list(b.legs)
     for ia, ib in zip(nin_a, nin_b):
         try:
@@ -179,35 +169,42 @@ def _tensordot_fc(a, b, nout_a, nin_a, nin_b, nout_b):
     Perform tensordot by fuse_contracted: merging contracted legs, and executing dot.
     Outgoing legs are not merged so unmerge is not needed.
     """
-    ind_a, ind_b = _common_inds(a.struct.t, b.struct.t, nin_a, nin_b, a.ndim_n, b.ndim_n, a.config.sym.NSYM)
-
+    legs_a, legs_b = list(a.legs), list(b.legs)
+    for ia, ib in zip(nin_a, nin_b):
+        try:
+            leg = legs_a[ia].intersection(legs_b[ib].conj())
+        except ValueError:
+            raise YastnError('Bond dimensions of some charges do not match.')
+        legs_a[ia] = leg
+        legs_b[ib] = leg.conj()
+    legs_a, legs_b = tuple(legs_a), tuple(legs_b)
+    #
     axes_a = tuple((x,) for x in nout_a) + (nin_a,)
     order_a = nout_a + nin_a
-    struct_a, slices_a, meta_mrg_a, t_a, D_a = _meta_fuse_hard(a.config.sym, a.struct, a.slices, a.legs, a.n, a.isdiag, axes_a, ind_a)
-    data_a = _transpose_and_merge(a.config, a._data, order_a, struct_a, slices_a, meta_mrg_a)
+    meta_mrg_a, legs_a_new, legs_a_old = _meta_fuse_hard(a.config.sym, a.legs, a.n, a.isdiag, axes_a, legs_a, empty_first_axis_s_conj=False)
+    data_a = _transpose_and_merge(a.config, a._data, order_a, legs_a_new, a.n, a.isdiag, meta_mrg_a)
 
     axes_b = (nin_b,) + tuple((x,) for x in nout_b)
     order_b = nin_b + nout_b
-    struct_b, slices_b, meta_mrg_b, t_b, D_b = _meta_fuse_hard(b.config.sym, b.struct, b.slices, b.legs, b.n, b.isdiag, axes_b, ind_b)
-    data_b = _transpose_and_merge(b.config, b._data, order_b, struct_b, slices_b, meta_mrg_b)
+    meta_mrg_b, legs_b_new, legs_b_old = _meta_fuse_hard(b.config.sym, b.legs, b.n, b.isdiag, axes_b, legs_b, empty_first_axis_s_conj=True)
+    data_b = _transpose_and_merge(b.config, b._data, order_b, legs_b_new, b.n, b.isdiag, meta_mrg_b)
 
-    if not all(D_a[ia] == D_b[ib] for ia, ib in zip(nin_a, nin_b)):
-        raise YastnError('Bond dimensions of some charges do not match.')
-    assert all(t_a[ia] == t_b[ib] for ia, ib in zip(nin_a, nin_b)), "Sanity check."
+    meta_dot, st_c = _meta_tensordot_fc(a.config.sym, legs_a_new, a.n, a.isdiag, legs_b_new, b.n, b.isdiag)
+    data = a.config.backend.dot(data_a, data_b, meta_dot, st_c.size)
 
-    meta_dot, struct_c, slices_c = _meta_tensordot_fc(struct_a, slices_a, struct_b, slices_b)
-    data = a.config.backend.dot(data_a, data_b, meta_dot, struct_c.size)
-    return data, struct_c, slices_c
+    return data, st_c
 
 
 def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
     r"""
     Perform tensordot directly: permute blocks and execute dot accumulating results into result blocks.
     """
+
+
     if a.config.profile: a.config.backend.nvtx.range_push(f"_tensordot_nf")
     ind_a, ind_b = _common_inds(a.struct.t, b.struct.t, nin_a, nin_b, a.ndim_n, b.ndim_n, a.config.sym.NSYM)
     if a.config.profile: a.config.backend.nvtx.range_push(f"_meta_tensordot_nf")
-    meta_dot, reshape_a, reshape_b, struct_c, slices_c, legs_a, legs_b = _meta_tensordot_nf(a.struct, a.slices, b.struct, b.slices,
+    meta_dot, reshape_a, reshape_b, st_c = _meta_tensordot_nf(a.config.sym, a.struct, a.slices, a.legs, a.n, a.isdiag, b.struct, b.slices, b.legs, b.n, b.isdiag,
                                                                             ind_a, ind_b, nout_a, nin_a, nin_b, nout_b)
     if a.config.profile: a.config.backend.nvtx.range_pop()
     order_a = nout_a + nin_a
@@ -260,9 +257,9 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
         if a.config.profile: a.config.backend.nvtx.range_pop()
     else:
         data = a.config.backend.transpose_dot_sum(a.data, b.data, meta_dot,
-                                              reshape_a, reshape_b, order_a, order_b, struct_c.size)
+                                              reshape_a, reshape_b, order_a, order_b, st_c.size)
     if a.config.profile: a.config.backend.nvtx.range_pop()
-    return data, struct_c, slices_c
+    return data, st_c
 
 
 @lru_cache(maxsize=1024)
@@ -301,8 +298,8 @@ def _meta_tensordot_f2m(sym, legs_a, n_a, isdiag_a, legs_b, n_b, isdiag_b):
     assert not isdiag_a, "Sanity check"
     assert not isdiag_b, "Sanity check"
     #
-    st_a_full = get_structure(sym, legs_a, n_a, isdiag_a)
-    st_b_full = get_structure(sym, legs_b, n_b, isdiag_b)
+    st_a_full = get_blocks(sym, legs_a, n_a, isdiag_a)
+    st_b_full = get_blocks(sym, legs_b, n_b, isdiag_b)
     #
     leg = legs_a[1].intersection(legs_b[0].conj())
     if legs_a[1] == leg:
@@ -310,7 +307,7 @@ def _meta_tensordot_f2m(sym, legs_a, n_a, isdiag_a, legs_b, n_b, isdiag_b):
         slc_a = st_a_full.slc
     else:
         legs_a = (legs_a[0], leg)
-        st_a = get_structure(sym, legs_a, n_a, isdiag_a)
+        st_a = get_blocks(sym, legs_a, n_a, isdiag_a)
         slc_a = get_sub_slices(st_a, st_a_full)
     #
     if legs_b[0] == leg.conj():
@@ -318,12 +315,12 @@ def _meta_tensordot_f2m(sym, legs_a, n_a, isdiag_a, legs_b, n_b, isdiag_b):
         slc_b = st_b_full.slc
     else:
         legs_b = (leg.conj(), legs_b[1])
-        st_b = get_structure(sym, legs_b, n_b, isdiag_b)
+        st_b = get_blocks(sym, legs_b, n_b, isdiag_b)
         slc_b = get_sub_slices(st_b, st_b_full)
     #
     legs_c = (st_a.legs[0], st_b.legs[1])
     n_c = sym.add_charges(n_a, n_b)
-    st_c = get_structure(sym, legs_c, n_c, isdiag=False)
+    st_c = get_blocks(sym, legs_c, n_c, isdiag=False)
     #
     Dslc_a = {tuple(t[0]): (sl, D) for t, sl, D in zip(st_a.t, slc_a, st_a.D)}
     Dslc_b = {tuple(t[1]): (sl, D) for t, sl, D in zip(st_b.t, slc_b, st_b.D)}
@@ -332,155 +329,316 @@ def _meta_tensordot_f2m(sym, legs_a, n_a, isdiag_a, legs_b, n_b, isdiag_b):
 
 
 @lru_cache(maxsize=1024)
-def _meta_tensordot_fc(struct_a, slices_a, struct_b, slices_b):
-    nsym = len(struct_a.n)
-    lta, ndima = len(struct_a.t), len(struct_a.s)
-    ta = np.array(struct_a.t, dtype=np.int64).reshape((lta, ndima, nsym))
-    Da = np.array(struct_a.D, dtype=np.int64).reshape((lta, ndima))
-    tao = ta[:, :-1, :].reshape(lta, (ndima - 1) * nsym).tolist()
-    tac = ta[:, -1, :].tolist()
-    Dao = Da[:, :-1]
-    Daop = np.prod(Dao, axis=1, dtype=np.int64).tolist()
-    Dao = Dao.tolist()
-    Dac = Da[:, -1].tolist()
-    struct_a_resorted = sorted(((tuple(tc), tuple(to), Dc, Dop, tuple(Do), sl.slcs[0])
-                                for tc, to, Dc, Dop, Do, sl in zip(tac, tao, Dac, Daop, Dao, slices_a)))
+def _meta_tensordot_fc(sym, legs_a, n_a, isdiag_a, legs_b, n_b, isdiag_b):
 
-    ltb, ndimb = len(struct_b.t), len(struct_b.s)
-    tb = np.array(struct_b.t, dtype=np.int64).reshape((ltb, ndimb, nsym))
-    Db = np.array(struct_b.D, dtype=np.int64).reshape((ltb, ndimb))
+    assert not isdiag_a, "Sanity check"
+    assert not isdiag_b, "Sanity check"
+    #
+    st_a_full = get_blocks(sym, legs_a, n_a, isdiag_a)
+    st_b_full = get_blocks(sym, legs_b, n_b, isdiag_b)
+    #
+    leg = legs_a[-1].intersection(legs_b[0].conj())
+    if legs_a[-1] == leg:
+        st_a = st_a_full
+        slc_a = st_a_full.slc
+    else:
+        legs_a = (*legs_a[:-1], leg)
+        st_a = get_blocks(sym, legs_a, n_a, isdiag_a)
+        slc_a = get_sub_slices(st_a, st_a_full)
+    #
+    if legs_b[0] == leg.conj():
+        st_b = st_b_full
+        slc_b = st_b_full.slc
+    else:
+        legs_b = (leg.conj(), *legs_b[1:])
+        st_b = get_blocks(sym, legs_b, n_b, isdiag_b)
+        slc_b = get_sub_slices(st_b, st_b_full)
 
-    tbo = tb[:, 1:, :].reshape(ltb, (ndimb - 1) * nsym).tolist()
-    tbc = tb[:, 0, :].tolist()
-    Dbo = Db[:, 1:]
-    Dbop = np.prod(Dbo, axis=1, dtype=np.int64).tolist()
-    Dbo = Dbo.tolist()
-    Dbc = Db[:, 0].tolist()
-    struct_b_resorted = [(tuple(tc), tuple(to), Dc, Dop, tuple(Do), sl.slcs[0])
-                         for tc, to, Dc, Dop, Do, sl in zip(tbc, tbo, Dbc, Dbop, Dbo, slices_b)]
+    legs_c = (*st_a.legs[:-1], *st_b.legs[1:])
+    n_c = sym.add_charges(n_a, n_b)
+    st_c = get_blocks(sym, legs_c, n_c, isdiag=False)
+    legs_c = st_c.legs
+    #
+    slDoc_a = np.empty((st_a.nblocks, 4), dtype=np.int64)
+    slDoc_a[:, :2] = slc_a
+    slDoc_a[:, 2] = np.prod(st_a.D[:, :-1], axis=1, dtype=np.int64)
+    slDoc_a[:, 3] = st_a.D[:, -1]
+    slDoc_b = np.empty((st_b.nblocks, 4), dtype=np.int64)
+    slDoc_b[:, :2] = slc_b
+    slDoc_b[:, 2] = np.prod(st_b.D[:, 1:], axis=1, dtype=np.int64)
+    slDoc_b[:, 3] = st_b.D[:, 0]
+    #
+    unique_a, inv_a = np.unique(st_a.t[:, -1, :], return_inverse=True, axis=0)
+    unique_b, inv_b = np.unique(st_b.t[:,  0, :], return_inverse=True, axis=0)
+    uas = {tuple(ta): ia for ia, ta in enumerate(unique_a)}
+    ubs = {tuple(tb): ib for ib, tb in enumerate(unique_b)}
+    #
+    meta_dot = []
+    for k in uas.keys() & ubs.keys():
+        inda = np.argwhere(inv_a == uas[k]).ravel()
+        indb = np.argwhere(inv_b == ubs[k]).ravel()
+        t_a = st_a.t[inda, :-1, :]
+        t_b = st_b.t[indb, 1:, :]
+        slD_a = slDoc_a[inda, :]
+        slD_b = slDoc_b[indb, :]
+        #
+        indices = np.indices([len(t_a), len(t_b)]).reshape(2, -1).T
+        comb_t = np.empty((len(indices), len(legs_a) + len(legs_b) - 2, sym.NSYM), dtype=np.int64)
+        comb_t[:, :len(legs_a)-1, :] = t_a[indices[:, 0], :, :]
+        comb_t[:, len(legs_a)-1:, :] = t_b[indices[:, 1], :, :]
+        comb_slD = np.empty((len(indices), 2, 4), dtype=np.int64)
+        comb_slD[:, 0, :] = slD_a[indices[:, 0], :]
+        comb_slD[:, 1, :] = slD_b[indices[:, 1], :]
+        #
+        ic = 0
+        for tt, slD in zip(comb_t, comb_slD):
+            while not np.array_equal(tt, st_c.t[ic]):
+                ic += 1
+            meta_dot.append((st_c.slc[ic], slD[:, 2], slD[0, :2], (slD[0, 2], slD[0, 3]), slD[1, :2], (slD[1, 3], slD[1, 2])))
 
-    struct_a_resorted = groupby(struct_a_resorted, key=itemgetter(0))
-    struct_b_resorted = groupby(struct_b_resorted, key=itemgetter(0))
-
-    meta = []
-    for (tar, group_ta), (tbl, group_tb) in zip(struct_a_resorted, struct_b_resorted):
-        assert tar == tbl, "Sanity check."
-        for (_, toa, Dca, Dopa, Doa, sla), (_, tob, Dcb, Dopb, Dob, slb) in product(group_ta, group_tb):
-            meta.append((toa + tob, Doa + Dob, Dopa * Dopb, (Dopa, Dopb), sla, (Dopa, Dca), slb, (Dcb, Dopb)))
-
-    meta = sorted(meta)
-    t_c = tuple(x[0] for x in meta)
-    D_c = tuple(x[1] for x in meta)
-    Dp_c = tuple(x[2] for x in meta)
-    slices_c = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dp_c), Dp_c, D_c))
-    meta_dot = tuple((sl.slcs[0], *mt[3:]) for sl, mt in zip(slices_c, meta))
-    s_c = struct_a.s[:-1] + struct_b.s[1:]
-    struct_c = _struct(s=s_c, t=t_c, D=D_c, size=sum(Dp_c))
-    return meta_dot, struct_c, slices_c
+    return meta_dot, st_c
 
 
 @lru_cache(maxsize=1024)
-def _meta_tensordot_nf(struct_a, slices_a, struct_b, slices_b, ind_a, ind_b, nout_a, nin_a, nin_b, nout_b):
+def _meta_tensordot_nf(sym, struct_a, slices_a, legs_a, n_a, isdiag_a,
+                            struct_b, slices_b, legs_b, n_b, isdiag_b,
+                            ind_a, ind_b, nout_a, nin_a, nin_b, nout_b):
+    #
+    st_a_full = get_blocks(sym, legs_a, n_a, isdiag_a)
+    st_b_full = get_blocks(sym, legs_b, n_b, isdiag_b)
+    #
+    legs_a_new, legs_b_new = list(legs_a), list(legs_b)
+    for ia, ib in zip(nin_a, nin_b):
+        try:
+            leg = legs_a[ia].intersection(legs_b[ib].conj())
+        except ValueError:
+            raise YastnError('Bond dimensions of some charges do not match.')
+        legs_a_new[ia] = leg
+        legs_b_new[ib] = leg.conj()
+    legs_a_new, legs_b_new = tuple(legs_a_new), tuple(legs_b_new)
+
+    if legs_a_new == legs_a:
+        st_a = st_a_full
+        slc_a = st_a_full.slc
+    else:
+        st_a = get_blocks(sym, legs_a_new, n_a, isdiag_a)
+        slc_a = get_sub_slices(st_a, st_a_full)
+        legs_a = st_a.legs
+    #
+    if legs_b_new == legs_b:
+        st_b = st_b_full
+        slc_b = st_b_full.slc
+    else:
+        st_b = get_blocks(sym, legs_b_new, n_b, isdiag_b)
+        slc_b = get_sub_slices(st_b, st_b_full)
+        legs_b = st_b.legs
+
+    legs_c = (*(legs_a[ax] for ax in nout_a), *(legs_b[ax] for ax in nout_b))
+    n_c = sym.add_charges(n_a, n_b)
+    st_c = get_blocks(sym, legs_c, n_c, isdiag=False)
+    legs_c = st_c.legs
+
     nsym = len(struct_a.n)
 
-    ta = struct_a.t if ind_a is None else [struct_a.t[ii] for ii in ind_a]
-    Da = struct_a.D if ind_a is None else [struct_a.D[ii] for ii in ind_a]
-    slices_a = [sl.slcs[0] for sl in slices_a] if ind_a is None else [slices_a[ii].slcs[0] for ii in ind_a] # narrow struct and slice information to relevant blocks
-                                                                                                            # i.e. ones, which are contracted with existing (non-zero) blocks in b
-
-    lta, ndima = len(ta), len(struct_a.s)
-    ata = np.array(ta, dtype=np.int64).reshape((lta, ndima, nsym)) # array for block charges as: block x <num-of-(native)modes(=legs)> x <order-of-sym-group>
-    aDa = np.array(Da, dtype=np.int64).reshape((lta, ndima))       # array for block dimensions
-    tao = ata[:, nout_a, :].reshape(lta, len(nout_a) * nsym)       # narrowed to contracted modes, and serialize <num-of-ingoing-modes(=legs)> x <order-of-sym-group> to 1D
-    tac = ata[:, nin_a, :].reshape(lta, len(nin_a) * nsym)         # narrowed to outgoing modes, and serialize <num-of-ingoing-modes(=legs)> x <order-of-sym-group> to 1D
-    Dao = aDa[:, nout_a]  # narrow sector sizes
-    Dac = aDa[:, nin_a]
+    lta, ndima = st_a.nblocks, len(legs_a)
+    tao = st_a.t[:, nout_a, :]      # narrowed to contracted modes, and serialize <num-of-ingoing-modes(=legs)> x <order-of-sym-group> to 1D
+    tac = st_a.t[:, nin_a, :].reshape(lta, len(nin_a) * nsym)         # narrowed to outgoing modes, and serialize <num-of-ingoing-modes(=legs)> x <order-of-sym-group> to 1D
+    Dao = st_a.D[:, nout_a]  # narrow sector sizes
+    Dac = st_a.D[:, nin_a]
     Daop = np.prod(Dao, axis=1, dtype=np.int64) # total size of outgoing sectors (per block)
     Dacp = np.prod(Dac, axis=1, dtype=np.int64) # total size of contracted sectors (per block)
+    #
+    unique_tac, inv_tac, count_tac = np.unique(tac, return_inverse=True, return_counts=True, axis=0) # if more blocks of a contribute to given contracted sector (in b)
+    arg_tac = np.argsort(inv_tac)
 
-    legs_a = []
-    for i in range(ndima):
-        tai = np.hstack([ata[:, i, :], aDa[:, (i,)]])
-        unique_tai = sorted(np.unique(tai, axis=0).tolist())
-        ti = tuple(tuple(x[:-1]) for x in unique_tai)
-        Di = tuple(x[-1] for x in unique_tai)
-        legs_a.append((ti, Di))
-
-    tDac = np.hstack([tac, Dac])
-    unique_tDac, inv_tDac, count_tDac = np.unique(tDac, return_inverse=True, return_counts=True, axis=0) # if more blocks of a contribute to given contracted sector (in b)
-    arg_tDac = np.argsort(inv_tDac)
-
-    tb = struct_b.t if ind_b is None else [struct_b.t[ii] for ii in ind_b]
-    Db = struct_b.D if ind_b is None else [struct_b.D[ii] for ii in ind_b]
-    slices_b = [sl.slcs[0] for sl in slices_b] if ind_b is None else [slices_b[ii].slcs[0] for ii in ind_b]
-
-    ltb, ndimb = len(tb), len(struct_b.s)
-    atb = np.array(tb, dtype=np.int64).reshape((ltb, ndimb, nsym))
-    aDb = np.array(Db, dtype=np.int64).reshape((ltb, ndimb))
-    tbo = atb[:, nout_b, :].reshape(ltb, len(nout_b) * nsym)
-    tbc = atb[:, nin_b, :].reshape(ltb, len(nin_b) * nsym)
-    Dbo = aDb[:, nout_b]
-    Dbc = aDb[:, nin_b]
+    ltb, ndimb = st_b.nblocks, len(legs_b)
+    tbo = st_b.t[:, nout_b, :]
+    tbc = st_b.t[:, nin_b, :].reshape(ltb, len(nin_b) * nsym)
+    Dbo = st_b.D[:, nout_b]
+    Dbc = st_b.D[:, nin_b]
     Dbop = np.prod(Dbo, axis=1, dtype=np.int64)
     Dbcp = np.prod(Dbc, axis=1, dtype=np.int64)
+    #
+    unique_tbc, inv_tbc, count_tbc = np.unique(tbc, return_inverse=True, return_counts=True, axis=0)
+    arg_tbc = np.argsort(inv_tbc)
+    #
+    reshape_a = tuple(zip(slc_a, st_a.D, Daop, Dacp)) # narrowed to contracted blocks
+    reshape_b = tuple(zip(slc_b, st_b.D, Dbcp, Dbop))
+    #
+    uas = {tuple(ta): ia for ia, ta in enumerate(unique_tac)}
+    ubs = {tuple(tb): ib for ib, tb in enumerate(unique_tbc)}
+    #
+    D1 = np.prod(st_c.D[:, :len(nout_a)], axis=1, dtype=np.int64)
+    D2 = np.prod(st_c.D[:, len(nout_a):], axis=1, dtype=np.int64)
+    meta_dot = {tuple(slc): ((d1, d2), [])  for slc, d1, d2 in zip(st_c.slc, D1, D2)}
 
-    legs_b = []
-    for i in range(ndimb):
-        tbi = np.hstack([atb[:, i, :], aDb[:, (i,)]])
-        unique_tbi = sorted(np.unique(tbi, axis=0).tolist())
-        ti = tuple(tuple(x[:-1]) for x in unique_tbi)
-        Di = tuple(x[-1] for x in unique_tbi)
-        legs_b.append((ti, Di))
+    for k in uas.keys() & ubs.keys():
+        inda = np.argwhere(inv_tac == uas[k]).ravel()
+        indb = np.argwhere(inv_tbc == ubs[k]).ravel()
+        t_a = tao[inda, :]
+        t_b = tbo[indb, :]
+        #
+        indices = np.indices([len(t_a), len(t_b)]).reshape(2, -1).T
+        comb_t = np.empty((len(indices), len(nout_a) + len(nout_b), sym.NSYM), dtype=np.int64)
+        comb_t[:, :len(nout_a), :] = t_a[indices[:, 0], :, :]
+        comb_t[:, len(nout_a):, :] = t_b[indices[:, 1], :, :]
+        comb_ii = np.empty((len(indices), 2), dtype=np.int64)
+        comb_ii[:, 0] = inda[indices[:, 0]]
+        comb_ii[:, 1] = indb[indices[:, 1]]
+        #
+        ic = 0
+        for tt, ii in zip(comb_t, comb_ii):
+            while not np.array_equal(tt, st_c.t[ic]):
+                ic += 1
+            meta_dot[tuple(st_c.slc[ic])][1].append(ii)
+            ic = 0
 
-    tDbc = np.hstack([tbc, Dbc])
-    unique_tDbc, inv_tDbc, count_tDbc = np.unique(tDbc, return_inverse=True, return_counts=True, axis=0)
-    arg_tDbc = np.argsort(inv_tDbc)
+    meta_dot = list((slc, dds, gr) for slc, (dds, gr) in meta_dot.items() if gr)
+    return meta_dot, reshape_a, reshape_b, st_c
 
-    if not np.array_equal(unique_tDac, unique_tDbc):
-        raise YastnError('Bond dimensions of some charges do not match.')
 
-    # blocks are enumerated consistent with slices_a,b
-    reshape_a = tuple(zip(slices_a, Da, Daop, Dacp)) # narrowed to contracted blocks
-    reshape_b = tuple(zip(slices_b, Db, Dbcp, Dbop))
+# @lru_cache(maxsize=1024)
+# def _meta_tensordot_nf(sym, struct_a, slices_a, legs_a, n_a, isdiag_a,
+#                             struct_b, slices_b, legs_b, n_b, isdiag_b,
+#                             ind_a, ind_b, nout_a, nin_a, nin_b, nout_b):
+#     #
+#     st_a_full = get_blocks(sym, legs_a, n_a, isdiag_a)
+#     st_b_full = get_blocks(sym, legs_b, n_b, isdiag_b)
+#     #
+#     legs_a_new, legs_b_new = list(legs_a), list(legs_b)
+#     for ia, ib in zip(nin_a, nin_b):
+#         try:
+#             leg = legs_a[ia].intersection(legs_b[ib].conj())
+#         except ValueError:
+#             raise YastnError('Bond dimensions of some charges do not match.')
+#         legs_a_new[ia] = leg
+#         legs_b_new[ib] = leg.conj()
+#     legs_a_new, legs_b_new = tuple(legs_a_new), tuple(legs_b_new)
 
-    count_ab = count_tDac * count_tDbc
-    sum_count_ab = sum(count_ab)
-    ind_a = np.zeros(sum_count_ab, dtype=np.int64)
-    ind_b = np.zeros(sum_count_ab, dtype=np.int64)
-    start_a, start_b, start_ab = 0, 0, 0
-    for da, db, dab in zip(count_tDac, count_tDbc, count_ab):
-        stop_a, stop_b, stop_ab = start_a + da, start_b + db, start_ab + dab
-        ind_a[start_ab: stop_ab].reshape(da, db)[:, :] = arg_tDac[start_a: stop_a].reshape(da, 1)
-        ind_b[start_ab: stop_ab].reshape(da, db)[:, :] = arg_tDbc[start_b: stop_b].reshape(1, db)
-        start_a, start_b, start_ab = stop_a, stop_b, stop_ab
+#     if legs_a_new == legs_a:
+#         st_a = st_a_full
+#         slc_a = st_a_full.slc
+#     else:
+#         st_a = get_blocks(sym, legs_a_new, n_a, isdiag_a)
+#         slc_a = get_sub_slices(st_a, st_a_full)
+#         legs_a = st_a.legs
+#     #
+#     if legs_b_new == legs_b:
+#         st_b = st_b_full
+#         slc_b = st_b_full.slc
+#     else:
+#         st_b = get_blocks(sym, legs_b_new, n_b, isdiag_b)
+#         slc_b = get_sub_slices(st_b, st_b_full)
+#         legs_b = st_b.legs
 
-    tc = np.hstack([tao[ind_a], tbo[ind_b]])
-    utc, uind, invs, cnts = np.unique(tc, return_index=True, return_inverse=True, return_counts=True, axis=0)
+#     legs_c = (*(legs_a[ax] for ax in nout_a), *(legs_b[ax] for ax in nout_b))
+#     n_c = sym.add_charges(n_a, n_b)
+#     st_c = get_blocks(sym, legs_c, n_c, isdiag=False)
+#     legs_c = st_c.legs
 
-    uind_a, uind_b = ind_a[uind], ind_b[uind]
-    uDc = np.hstack([Dao[uind_a], Dbo[uind_b]])
-    uDcp2 = np.column_stack([Daop[uind_a], Dbop[uind_b]])
+#     nsym = len(struct_a.n)
 
-    c_Dp = np.prod(uDcp2, axis=1, dtype=np.int64).tolist()
-    c_t = tuple(map(tuple, utc.tolist()))
-    c_D = tuple(map(tuple, uDc.tolist()))
-    c_Dp2 = tuple(map(tuple, uDcp2.tolist()))
+#     ta = struct_a.t if ind_a is None else [struct_a.t[ii] for ii in ind_a]
+#     Da = struct_a.D if ind_a is None else [struct_a.D[ii] for ii in ind_a]
+#     slices_a = [sl.slcs[0] for sl in slices_a] if ind_a is None else [slices_a[ii].slcs[0] for ii in ind_a] # narrow struct and slice information to relevant blocks
+#                                                                                                             # i.e. ones, which are contracted with existing (non-zero) blocks in b
 
-    acc_Dp = tuple(accumulate(c_Dp, initial=0))
-    slc_c = tuple(zip(acc_Dp, acc_Dp[1:]))
-    slices_c = tuple(_slc((sl,), ds, dp) for sl, dp, ds in zip(slc_c, c_Dp, c_D))
+#     lta, ndima = len(ta), len(struct_a.s)
+#     ata = np.array(ta, dtype=np.int64).reshape((lta, ndima, nsym)) # array for block charges as: block x <num-of-(native)modes(=legs)> x <order-of-sym-group>
+#     aDa = np.array(Da, dtype=np.int64).reshape((lta, ndima))       # array for block dimensions
+#     tao = ata[:, nout_a, :].reshape(lta, len(nout_a) * nsym)       # narrowed to contracted modes, and serialize <num-of-ingoing-modes(=legs)> x <order-of-sym-group> to 1D
+#     tac = ata[:, nin_a, :].reshape(lta, len(nin_a) * nsym)         # narrowed to outgoing modes, and serialize <num-of-ingoing-modes(=legs)> x <order-of-sym-group> to 1D
+#     Dao = aDa[:, nout_a]  # narrow sector sizes
+#     Dac = aDa[:, nin_a]
+#     Daop = np.prod(Dao, axis=1, dtype=np.int64) # total size of outgoing sectors (per block)
+#     Dacp = np.prod(Dac, axis=1, dtype=np.int64) # total size of contracted sectors (per block)
 
-    ind_ab = np.column_stack([ind_a, ind_b])
-    arg_invs = np.argsort(invs)
-    ind_ab = ind_ab[arg_invs].tolist()
-    # ind_ab: indices of blocks in a and b to multiply; consistent with enumeration of reshape_a,b
-    acc_cnts = tuple(accumulate(cnts, initial=0))
-    groups_tab = (ind_ab[i: f] for i, f in zip(acc_cnts, acc_cnts[1:]))
-    meta_dot = list(zip(slc_c, c_Dp2, groups_tab))
+#     legs_a = []
+#     for i in range(ndima):
+#         tai = np.hstack([ata[:, i, :], aDa[:, (i,)]])
+#         unique_tai = sorted(np.unique(tai, axis=0).tolist())
+#         ti = tuple(tuple(x[:-1]) for x in unique_tai)
+#         Di = tuple(x[-1] for x in unique_tai)
+#         legs_a.append((ti, Di))
 
-    s_c = tuple(struct_a.s[i] for i in nout_a) + tuple(struct_b.s[i] for i in nout_b)
-    struct_c = _struct(s=s_c, t=c_t, D=c_D, size=acc_Dp[-1])
-    return meta_dot, reshape_a, reshape_b, struct_c, slices_c, legs_a, legs_b
+#     tDac = np.hstack([tac, Dac])
+#     unique_tDac, inv_tDac, count_tDac = np.unique(tDac, return_inverse=True, return_counts=True, axis=0) # if more blocks of a contribute to given contracted sector (in b)
+#     arg_tDac = np.argsort(inv_tDac)
+
+#     tb = struct_b.t if ind_b is None else [struct_b.t[ii] for ii in ind_b]
+#     Db = struct_b.D if ind_b is None else [struct_b.D[ii] for ii in ind_b]
+#     slices_b = [sl.slcs[0] for sl in slices_b] if ind_b is None else [slices_b[ii].slcs[0] for ii in ind_b]
+
+#     ltb, ndimb = len(tb), len(struct_b.s)
+#     atb = np.array(tb, dtype=np.int64).reshape((ltb, ndimb, nsym))
+#     aDb = np.array(Db, dtype=np.int64).reshape((ltb, ndimb))
+#     tbo = atb[:, nout_b, :].reshape(ltb, len(nout_b) * nsym)
+#     tbc = atb[:, nin_b, :].reshape(ltb, len(nin_b) * nsym)
+#     Dbo = aDb[:, nout_b]
+#     Dbc = aDb[:, nin_b]
+#     Dbop = np.prod(Dbo, axis=1, dtype=np.int64)
+#     Dbcp = np.prod(Dbc, axis=1, dtype=np.int64)
+
+#     legs_b = []
+#     for i in range(ndimb):
+#         tbi = np.hstack([atb[:, i, :], aDb[:, (i,)]])
+#         unique_tbi = sorted(np.unique(tbi, axis=0).tolist())
+#         ti = tuple(tuple(x[:-1]) for x in unique_tbi)
+#         Di = tuple(x[-1] for x in unique_tbi)
+#         legs_b.append((ti, Di))
+
+#     tDbc = np.hstack([tbc, Dbc])
+#     unique_tDbc, inv_tDbc, count_tDbc = np.unique(tDbc, return_inverse=True, return_counts=True, axis=0)
+#     arg_tDbc = np.argsort(inv_tDbc)
+
+#     # if not np.array_equal(unique_tDac, unique_tDbc):
+#     #     raise YastnError('Bond dimensions of some charges do not match.')
+
+#     # blocks are enumerated consistent with slices_a,b
+#     reshape_a = tuple(zip(slices_a, Da, Daop, Dacp)) # narrowed to contracted blocks
+#     reshape_b = tuple(zip(slices_b, Db, Dbcp, Dbop))
+
+#     count_ab = count_tDac * count_tDbc
+#     sum_count_ab = sum(count_ab)
+#     ind_a = np.zeros(sum_count_ab, dtype=np.int64)
+#     ind_b = np.zeros(sum_count_ab, dtype=np.int64)
+#     start_a, start_b, start_ab = 0, 0, 0
+#     for da, db, dab in zip(count_tDac, count_tDbc, count_ab):
+#         stop_a, stop_b, stop_ab = start_a + da, start_b + db, start_ab + dab
+#         ind_a[start_ab: stop_ab].reshape(da, db)[:, :] = arg_tDac[start_a: stop_a].reshape(da, 1)
+#         ind_b[start_ab: stop_ab].reshape(da, db)[:, :] = arg_tDbc[start_b: stop_b].reshape(1, db)
+#         start_a, start_b, start_ab = stop_a, stop_b, stop_ab
+
+#     tc = np.hstack([tao[ind_a], tbo[ind_b]])
+#     utc, uind, invs, cnts = np.unique(tc, return_index=True, return_inverse=True, return_counts=True, axis=0)
+
+#     uind_a, uind_b = ind_a[uind], ind_b[uind]
+#     uDc = np.hstack([Dao[uind_a], Dbo[uind_b]])
+#     uDcp2 = np.column_stack([Daop[uind_a], Dbop[uind_b]])
+
+#     c_Dp = np.prod(uDcp2, axis=1, dtype=np.int64).tolist()
+#     c_t = tuple(map(tuple, utc.tolist()))
+#     c_D = tuple(map(tuple, uDc.tolist()))
+#     c_Dp2 = tuple(map(tuple, uDcp2.tolist()))
+
+#     acc_Dp = tuple(accumulate(c_Dp, initial=0))
+#     slc_c = tuple(zip(acc_Dp, acc_Dp[1:]))
+#     slices_c = tuple(_slc((sl,), ds, dp) for sl, dp, ds in zip(slc_c, c_Dp, c_D))
+
+#     ind_ab = np.column_stack([ind_a, ind_b])
+#     arg_invs = np.argsort(invs)
+#     ind_ab = ind_ab[arg_invs].tolist()
+#     # ind_ab: indices of blocks in a and b to multiply; consistent with enumeration of reshape_a,b
+#     acc_cnts = tuple(accumulate(cnts, initial=0))
+#     groups_tab = (ind_ab[i: f] for i, f in zip(acc_cnts, acc_cnts[1:]))
+#     meta_dot = list(zip(slc_c, c_Dp2, groups_tab))
+
+#     s_c = tuple(struct_a.s[i] for i in nout_a) + tuple(struct_b.s[i] for i in nout_b)
+#     struct_c = _struct(s=s_c, t=c_t, D=c_D, size=acc_Dp[-1], n=n_c)
+
+#     legs_c2 = legs_from_struct(struct_c)
+#     assert legs_c2 == legs_c
+#     return meta_dot, reshape_a, reshape_b, struct_c, slices_c, legs_a, legs_b
 
 
 def broadcast(a, *args, axes=0) -> 'Tensor' | tuple['Tensor']:
@@ -522,15 +680,15 @@ def broadcast(a, *args, axes=0) -> 'Tensor' | tuple['Tensor']:
         meta, legs, st_c, ax, ndim = _meta_broadcast(a.config.sym, b.legs, b.n, b.isdiag, a.legs, a.n, a.isdiag, ax)
         data = b.config.backend.dot_diag(a._data, b._data, meta, st_c.size, ax, ndim)
         struct, slices = update_old_struct(b.struct, st_c)
-        results.append(b._replace(struct=struct, slices=slices, data=data, legs=legs))
+        results.append(b._replace(struct=struct, slices=slices, data=data))
     return results if multiple_axes else results.pop()
 
 
 @lru_cache(maxsize=1024)
 def _meta_broadcast(sym, legs_b, n_b, isdiag_b, legs_a, n_a, isdiag_a, axis):
     r""" meta information for backend, and new tensor structure for brodcast. """
-    st_a = get_structure(sym, legs_a, n_a, isdiag=isdiag_a)
-    st_b = get_structure(sym, legs_b, n_b, isdiag=isdiag_b)
+    st_a = get_blocks(sym, legs_a, n_a, isdiag=isdiag_a)
+    st_b = get_blocks(sym, legs_b, n_b, isdiag=isdiag_b)
 
     leg_b = legs_b[axis]
     leg_a = legs_a[0] if legs_a[0].s == leg_b.s else legs_a[0].conj()  # .conj() to match signature
@@ -540,7 +698,7 @@ def _meta_broadcast(sym, legs_b, n_b, isdiag_b, legs_a, n_a, isdiag_a, axis):
         raise YastnError("Bond dimensions of some charges do not match.")
     legs_c = legs_b[:axis] + (leg_c,) + legs_b[axis + 1:]
     #
-    st_c = get_structure(sym, legs_c, n_b, isdiag=isdiag_b)
+    st_c = get_blocks(sym, legs_c, n_b, isdiag=isdiag_b)
     legs_c = st_c.legs
     #
     sl_a = dict(zip(map(tuple, st_a.t[:, 0, :]), map(tuple, st_a.slc)))
@@ -610,7 +768,7 @@ def apply_mask(a, *args, axes=0) -> 'Tensor' | tuple['Tensor']:
         meta, legs, st, ax, ndim = _meta_mask(b.config.sym, b.legs, b.n, b.isdiag, mask_t, mask_D, ax)
         data = a.config.backend.apply_mask(b._data, mask, meta, st.size, ax, ndim)
         struct, slices = update_old_struct(b.struct, st)
-        results.append(b._replace(struct=struct, slices=slices, data=data, legs=legs))
+        results.append(b._replace(struct=struct, slices=slices, data=data))
     return results.pop() if len(results) == 1 else results
 
 
@@ -624,7 +782,7 @@ def _apply_mask_axes(a, naxes, masks):
             meta, legs, st, axis, ndim = _meta_mask(a.config.sym, a.legs, a.n, a.isdiag, mask_t, mask_D, axis)
             data = a.config.backend.apply_mask(a._data, mask, meta, st.size, axis, ndim)
             struct, slices = update_old_struct(a.struct, st)
-            a = a._replace(struct=struct, slices=slices, data=data, legs=legs)
+            a = a._replace(struct=struct, slices=slices, data=data)
     return a
 
 
@@ -677,8 +835,8 @@ def vdot(a, b, conj=(1, 0)) -> Number:
 
 @lru_cache(maxsize=1024)
 def _meta_vdot(sym, legs_a, legs_b, n_a, n_b, isdiag_a, isdiag_b):
-    st_a = get_structure(sym, legs_a, n_a, isdiag_a)
-    st_b = get_structure(sym, legs_b, n_b, isdiag_b)
+    st_a = get_blocks(sym, legs_a, n_a, isdiag_a)
+    st_b = get_blocks(sym, legs_b, n_b, isdiag_b)
 
     slc_a = st_a.slc.tolist()
     slc_b = st_b.slc.tolist()
@@ -730,9 +888,9 @@ def trace(a, axes=(0, 1)) -> 'Tensor':
     hfs = tuple(a.hfs[ax] for ax in out)
 
     if a.isdiag:
-        struct = a.struct._replace(s=(), diag=False, t=((),), D=((),), size=1)
+        struct = a.struct._replace(s=(), legs=(), diag=False, t=((),), D=((),), size=1)
         data = a.config.backend.sum_elements(a._data)
-        return a._replace(struct=struct, slices=(_slc(((0, 1),), (), 1),), mfs=mfs, hfs=hfs, isdiag=False, data=data, trans=None, legs=())
+        return a._replace(struct=struct, slices=(_slc(((0, 1),), (), 1),), mfs=mfs, hfs=hfs, isdiag=False, data=data, trans=None)
 
     if mask_needed:
         msk_0, msk_1, a_hfs, _ = _mask_tensors_leg_intersection(a, a, nin_0, nin_1)
@@ -743,14 +901,14 @@ def trace(a, axes=(0, 1)) -> 'Tensor':
     meta, struct, slices, legs = _meta_trace(a.config.sym, a.legs, a.n, nin_0, nin_1, out)
     data = a.config.backend.trace(a._data, order, meta, struct.size)
 
-    out = a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, data=data, trans=None, legs=legs)
+    out = a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, data=data, trans=None)
     test_all_blocks(out)
     return out
 
 @lru_cache(maxsize=1024)
 def _meta_trace(sym, legs, n, nin_0, nin_1, out):
     r""" meta-information for backend and struct of traced tensor. """
-    st = get_structure(sym, legs, n, isdiag=False)
+    st = get_blocks(sym, legs, n, isdiag=False)
     nsym = len(n)
     t0 = st.t[:, nin_0, :].reshape(st.nblocks, len(nin_0) * nsym)
     t1 = st.t[:, nin_1, :].reshape(st.nblocks, len(nin_1) * nsym)
@@ -789,8 +947,7 @@ def _meta_trace(sym, legs, n, nin_0, nin_1, out):
     size = start if len(c_s) > 0 else 1
     c_struct = _struct(s=c_s, n=n, t=tuple(c_t), D=tuple(c_D), size=size)
     legs_new = legs_from_struct(c_struct)
-    st_new = get_structure(sym, legs_new, n, isdiag=False)
-    assert (st_new.nblocks == len(c_t) or len(legs_new) == 0)
+    c_struct = _struct(s=c_s, n=n, t=tuple(c_t), D=tuple(c_D), size=size, legs=legs_new)
     return tuple(meta_trace), c_struct, tuple(c_slices), legs_new
 
 
