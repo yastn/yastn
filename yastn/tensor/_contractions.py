@@ -751,7 +751,8 @@ def apply_mask(a, *args, axes=0) -> 'Tensor' | tuple['Tensor']:
     results = []
 
     nsym = a.config.sym.NSYM
-    mask = {t[:nsym]: a.config.backend.to_mask(a._data[slice(*sl.slcs[0])]) for t, sl in zip(a.struct.t, a.slices)}
+    bl_a = get_blocks(a.config.sym, a.legs, a.n, a.isdiag)
+    mask = {tuple(t[0].tolist()): a.config.backend.to_mask(a._data[slice(*sl)]) for t, sl in zip(bl_a.t, bl_a.slc)}
     mask_t = tuple(mask.keys())
     mask_D = tuple(len(v) for v in mask.values())
 
@@ -888,7 +889,7 @@ def trace(a, axes=(0, 1)) -> 'Tensor':
     hfs = tuple(a.hfs[ax] for ax in out)
 
     if a.isdiag:
-        struct = a.struct._replace(s=(), legs=(), diag=False, t=((),), D=((),), size=1)
+        struct = a.struct._replace(s=(), legs=(), isdiag=False, t=((),), D=((),), size=1)
         data = a.config.backend.sum_elements(a._data)
         return a._replace(struct=struct, slices=(_slc(((0, 1),), (), 1),), mfs=mfs, hfs=hfs, isdiag=False, data=data, trans=None)
 
@@ -985,7 +986,7 @@ def swap_gate(a, axes, charge=None) -> 'Tensor':
         axes = tuple(_clear_axes(*axes))  # swapped groups of legs
         axes = _unpack_axes(a.mfs, *axes)
         axes = tuple(tuple(a.trans[ax] for ax in axs) for axs in axes)
-        negate_slices = _meta_swap_gate(a.struct.t, a.slices, a.ndim_n, nsym, axes, fss)
+        negate_slices = _meta_swap_gate(a.config.sym, a.struct, axes, fss)
     else:
         axes, = _clear_axes(axes)  # swapped groups of legs
         if isinstance(charge[0], int):
@@ -995,57 +996,54 @@ def swap_gate(a, axes, charge=None) -> 'Tensor':
             charges += t * a.mfs[ax][0]
         axes, = _unpack_axes(a.mfs, axes)
         axes = tuple(a.trans[ax] for ax in axes)
-        negate_slices = _meta_swap_gate_charge(a.struct.t, a.slices, charges, a.ndim_n, nsym, axes, fss)
+        negate_slices = _meta_swap_gate_charge(a.config.sym, a.struct, charges, axes, fss)
 
     newdata = a.config.backend.negate_blocks(a._data, negate_slices)
     return a._replace(data=newdata)
 
 
 @lru_cache(maxsize=1024)
-def _meta_swap_gate(tset, slices, ndim, nsym, axes, fss):
+def _meta_swap_gate(sym, struct, axes, fss):
     r""" Calculate which blocks to negate. """
-    lt = len(tset)
-    tset = np.array(tset, dtype=np.int64).reshape((lt, ndim, nsym))
-    iaxes = iter(axes)
-    tp = np.zeros(lt, dtype=np.int64)
+    bl = get_blocks(sym, struct.legs, struct.n, struct.isdiag)
+    tp = np.zeros(bl.nblocks, dtype=np.int64)
     if len(axes) % 2 == 1:
         raise YastnError('Odd number of elements in axes. Elements of axes should come in pairs.')
+    iaxes = iter(axes)
     for l1, l2 in zip(*(iaxes, iaxes)):
-        t1 = np.sum(tset[:, l1, :], axis=1, dtype=np.int64) % 2
-        t2 = np.sum(tset[:, l2, :], axis=1, dtype=np.int64) % 2
+        t1 = np.sum(bl.t[:, l1, :], axis=1, dtype=np.int64) % 2
+        t2 = np.sum(bl.t[:, l2, :], axis=1, dtype=np.int64) % 2
         tp += np.sum(t1[:, fss] * t2[:, fss], axis=1, dtype=np.int64)
     tp = tp % 2
-    return _slices_to_negate(tp, slices)
+    return _slices_to_negate(tp, bl.slc)
 
 
 @lru_cache(maxsize=1024)
-def _meta_swap_gate_charge(tset, slices, charges, ndim, nsym, axes, fss):
+def _meta_swap_gate_charge(sym, struct, charges, axes, fss):
+    #tset, slices, charges, ndim, nsym, axes, fss):
     r""" Calculate which blocks to negate. """
-    tset = np.array(tset, dtype=np.int64).reshape((len(tset), ndim, nsym))
-    tp = tset[:, axes, :]
+    bl = get_blocks(sym, struct.legs, struct.n, struct.isdiag)
+    tp = bl.t[:, axes, :]
     try:
-        charges = np.array(charges, dtype=np.int64).reshape(1, len(axes), nsym) % 2
+        charges = np.array(charges, dtype=np.int64).reshape(1, len(axes), sym.NSYM) % 2
     except ValueError:
         raise YastnError(f'Length or number of charges does not match sym.NSYM or axes.')
     tp = np.sum(tp[:, :, fss] * charges[:, :, fss], axis=(1, 2), dtype=np.int64) % 2
-    return _slices_to_negate(tp, slices)
+    return _slices_to_negate(tp, bl.slc)
 
 
-def _slices_to_negate(tp, slices):
-    negate = tuple(slc.slcs[0] for slc, negate in zip(slices, tp) if negate)
-    if not negate:
-        return negate
-
-    joined_negate = []
-    start, stop = negate[0]
-    for next_start, next_stop in negate[1:]:
-        if stop == next_start:
-            stop = next_stop
-        else:
-            joined_negate.append((start, stop))
-            start, stop = next_start, next_stop
-    joined_negate.append((start, stop))
-    return tuple(joined_negate)
+def _slices_to_negate(tp, slc):
+    inds = np.where(tp)[0]
+    if len(inds) == 0:
+        return []
+    slc = slc[inds]
+    inds = np.where(slc[1:, 0] - slc[:-1, 1] > 0)[0]
+    joined_slc = np.zeros((len(inds) + 1, 2), dtype=np.int64)
+    joined_slc[0, 0] = slc[0, 0]
+    joined_slc[1:, 0] = slc[inds+1, 0]
+    joined_slc[:-1, 1] = slc[inds, 1]
+    joined_slc[-1, 1] = slc[-1, 1]
+    return joined_slc
 
 
 def fkron(*operators, sites=None, application_order=None):

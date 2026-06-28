@@ -124,16 +124,7 @@ def is_consistent(a):
     3) block dimensions are consistent (this requires config.test=True)
     """
 
-    Dtot = 0
-    for slc in a.slices:
-        Dtot += slc.Dp
-        assert slc.D[0] == slc.Dp if a.isdiag else reduce(mul, slc.D, 1) == slc.Dp
-
-    assert a.config.backend.get_shape(a._data) == (Dtot,)
-    assert a.struct.size == Dtot
-
-    assert len(a.struct.t) == len(a.struct.D)
-    assert len(a.struct.t) == len(a.slices)
+    assert a.config.backend.get_shape(a._data) == (a.struct.size,)
 
     for i in range(len(a.struct.t) - 1):
         assert a.struct.t[i] < a.struct.t[i + 1]
@@ -161,7 +152,7 @@ def _test_struct_types(struct):
     assert all(isinstance(x, int) for x in struct.s)
     assert isinstance(struct.n, tuple)
     assert all(isinstance(x, int) for x in struct.n)
-    assert isinstance(struct.diag, bool)
+    assert isinstance(struct.isdiag, bool)
     assert isinstance(struct.t, tuple)
     assert all(isinstance(x, tuple) for x in struct.t)
     assert all(isinstance(y, int) for x in struct.t for y in x)

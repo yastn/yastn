@@ -32,12 +32,12 @@ class _blocks(NamedTuple):
     nblocks: int = 0  # list of block shapes
     legs: tuple = ()  # total data size
     n: tuple = ()  # tensor charge
-
+    isdiag: bool = False  # isdiag
 class _struct(NamedTuple):
     s: tuple = ()  # leg signatures
     legs: tuple = ()  # tuple[LegBasic]
     n: tuple = ()  # tensor charge
-    diag: bool = False  # isdiag
+    isdiag: bool = False  # isdiag
     t: tuple = ()  # list of block charges
     D: tuple = ()  # list of block shapes
     size: int = 0  # total data size
@@ -269,8 +269,6 @@ def get_blocks(sym, legs, n, isdiag=False):
     Generate all allowed block charges, their dimensions, slices, total size and trimed legs.
     Assume that legs have sorted charges
     """
-    nsym = sym.NSYM
-    ndim = len(legs)
     s = tuple(leg.s for leg in legs)
     taxes = tuple(leg.t for leg in legs)
     tblocks, iblocks, icharges = get_blocks_charges(sym, taxes, s, n)
@@ -296,7 +294,7 @@ def get_blocks(sym, legs, n, isdiag=False):
         leg = LegBasic(s=leg.s, t=tl, D=Dl)
         new_legs.append(leg)
     #
-    return _blocks(t=tblocks, D=Dblocks, slc=slices, size=size, nblocks=nblocks, legs=tuple(new_legs), n=n)
+    return _blocks(t=tblocks, D=Dblocks, slc=slices, size=size, nblocks=nblocks, legs=tuple(new_legs), n=n, isdiag=isdiag)
 
 
 def get_blocks_charges(sym, taxes, s, n):
@@ -332,7 +330,7 @@ def get_sub_slices(st, st_full):
 
 
 def test_all_blocks(a):
-    tset, Dset, slices, size, nblocks, legs, _ = get_blocks(a.config.sym, a.legs, a.n, isdiag=a.isdiag)
+    tset, Dset, slices, size, nblocks, legs, _, _ = get_blocks(a.config.sym, a.legs, a.n, isdiag=a.isdiag)
     assert len(tset) == len(a.struct.t) or len(a.struct.t) == 0 or len(tset) == 0
 
 
@@ -346,3 +344,72 @@ def update_old_struct(struct, st_new):
     slices_new = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dp), Dp, Dnew))
     struct_new = struct._replace(legs = st_new.legs, s=s, t=tnew, D=Dnew, size=st_new.size, n=st_new.n)
     return struct_new, slices_new
+
+
+def struct_from_blocks(bl):
+    ndim = len(bl.legs)
+    nsym = len(bl.n)
+    #
+    s = tuple(leg.s for leg in bl.legs)
+    tnew = tuple(map(tuple, bl.t.reshape(bl.nblocks, ndim * nsym).tolist()))
+    Dnew = tuple(map(tuple, bl.D.reshape(bl.nblocks, ndim).tolist()))
+    Dp = (bl.slc[:, 1] - bl.slc[:, 0]).tolist()
+    slices_new = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dp), Dp, Dnew))
+    struct_new = _struct(s=s, legs=bl.legs, n=bl.n, isdiag=bl.isdiag, t=tnew, D=Dnew, size=bl.size)
+    return struct_new, slices_new
+
+
+def find_row(tset, tt):
+    rs, *cs = tset.shape
+    cp = np.prod(cs, dtype=np.int64)
+    if cp == 0 and rs == 1 and tt.size == 0:
+        return 0
+    elif cp > 0 and rs > 0:
+        tset = tset.reshape(rs, cp)
+        tt = tt.reshape(cp)
+        struct_dt = np.dtype([('', tset.dtype)] * cp)
+        tset_view = np.ascontiguousarray(tset).view(struct_dt).ravel()
+        tt_view = np.ascontiguousarray(tt).view(struct_dt).ravel()
+        ind = np.searchsorted(tset_view, tt_view)[0]
+        if ind < len(tset) and np.array_equal(tset[ind], tt):
+            return ind
+    raise ValueError()
+
+
+def argsort_t(tset):
+    rs, *cs = tset.shape
+    cp = np.prod(cs, dtype=np.int64)
+    if rs == 0:
+        return np.array([], dtype=np.int64)
+    if cp == 0 and rs == 1:
+        return np.array([0], dtype=np.int64)
+    tset = tset.reshape(rs, cp)
+    struct_dt = np.dtype([('', tset.dtype)] * cp)
+    tset_view = np.ascontiguousarray(tset).view(struct_dt).ravel()
+    return np.argsort(tset_view)
+
+
+def find_indices(tset1, tset2, both=True):
+    rs1, *cs1 = tset1.shape
+    rs2, *cs2 = tset2.shape
+    assert cs1 == cs2, "Sanity check."
+    cp = np.prod(cs1, dtype=np.int64)
+    if cp == 0 and rs1 == 1 and rs2 == 1:
+        ind1 = ind2 = np.array([0], dtype=np.int64)
+    elif cp > 0 and rs1 > 0 and rs2 > 0:
+        tset1 = tset1.reshape(rs1, cp)
+        tset2 = tset2.reshape(rs2, cp)
+        struct_dt = np.dtype([('', tset1.dtype)] * cp)
+        tset1_view = np.ascontiguousarray(tset1).view(struct_dt).ravel()
+        tset2_view = np.ascontiguousarray(tset2).view(struct_dt).ravel()
+
+        ind1 = np.searchsorted(tset1_view, tset2_view)
+        mask = ind1 < rs1
+        safe_ind = np.where(mask, ind1, 0)
+        mask = mask & (tset1_view[safe_ind] == tset2_view)
+        ind1 = ind1[mask]
+        if both:
+            ind2 = np.flatnonzero(mask)
+    else:
+        ind1 = ind2 = np.array([], dtype=np.int64)
+    return (ind1, ind2) if both else ind1

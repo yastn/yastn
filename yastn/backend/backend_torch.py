@@ -612,22 +612,21 @@ def unmerge(data, meta):
     return kernel_unmerge.apply(data, meta)
 
 
+
 def merge_to_dense(data, Dtot, meta):
     newdata = torch.zeros(Dtot, dtype=data.dtype, device=data.device)
     for (sl, Dss) in meta:
-        newdata[tuple(slice(*Ds) for Ds in Dss)] = data[sl].reshape(tuple(Ds[1] - Ds[0] for Ds in Dss))
+        newdata[tuple(slice(*Ds) for Ds in Dss)] = data[slice(*sl)].reshape(tuple(Ds[1] - Ds[0] for Ds in Dss))
     return newdata.ravel()
 
 
-def merge_super_blocks(pos_tens, meta_new, meta_block, Dsize):
+def merge_super_blocks(pos_tens, meta, size):
     dtype = reduce(torch.promote_types, (a._data.dtype for a in pos_tens.values()))
     device = next(iter(pos_tens.values()))._data.device
-    newdata = torch.zeros(Dsize, dtype=dtype, device=device)
-    for (tn, Dn, sln), (t1, gr) in zip(meta_new, groupby(meta_block, key=lambda x: x[0])):
-        assert tn == t1
-        for (_, slo, Do, pos, Dslc) in gr:
-            slcs = tuple(slice(*x) for x in Dslc)
-            newdata[slice(*sln)].reshape(Dn)[slcs] = pos_tens[pos]._data[slice(*slo)].reshape(Do)
+    newdata = torch.zeros(size, dtype=dtype, device=device)
+    for sln, Dn, pa, slo, Do, Dslcs in meta:
+        slcs = tuple(slice(*x) for x in Dslcs)
+        newdata[slice(*sln)].reshape(Dn)[slcs] = pos_tens[pa]._data[slice(*slo)].reshape(Do)
     return newdata
 
 

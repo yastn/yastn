@@ -114,7 +114,8 @@ class Tensor:
                 if any(x != 0 for x in n):
                     raise YastnError("Tensor charge of a diagonal tensor should be 0.")
             legs = tuple(LegBasic(s=s_l, t=(), D=()) for s_l in s)
-            self.struct = _struct(legs=legs, s=s, n=n, diag=bool(isdiag))
+            size = self._data.size
+            self.struct = _struct(legs=legs, s=s, n=n, isdiag=bool(isdiag), size=size)
         #
         self.slices = kwargs.get('slices', ())
         #
@@ -214,6 +215,7 @@ class Tensor:
                 if not isinstance(d['config'], _config):
                     d['config'] = make_config(**d['config'])
                 d['hfs'] = tuple(_Fusion(**hf) for hf in d['hfs'])
+                d['struct']['isdiag'] = d['struct'].pop('diag')
                 d['struct'] = _struct(**d['struct'])
                 d['struct'] = d['struct']._replace(legs=legs_from_struct(d['struct']))
                 d['slices'] = tuple(_slc(*x) for x in d['slices'])
@@ -332,7 +334,7 @@ class Tensor:
     @property
     def isdiag(self) -> bool:
         """ Return ``True`` if the tensor is diagonal. """
-        return self.struct.diag
+        return self.struct.isdiag
 
     @property
     def requires_grad(self) -> bool:

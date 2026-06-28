@@ -402,17 +402,13 @@ def test_auxiliary():
     assert meta == (((0, 30), (10, 40)), ((40, 50), (40, 50)))
 
     # _slices_to_negate
-    slices = (yastn.tensor._auxiliary._slc(((0, 10),)),
-              yastn.tensor._auxiliary._slc(((10, 20),)),
-              yastn.tensor._auxiliary._slc(((20, 30),)),
-              yastn.tensor._auxiliary._slc(((30, 40),)))
-
+    slices = np.array([[0, 10], [10, 20], [20, 30], [30, 40]])
     negate_slices = yastn.tensor._contractions._slices_to_negate([0, 0, 0, 0], slices)
-    assert negate_slices == ()
+    assert negate_slices == []
     negate_slices = yastn.tensor._contractions._slices_to_negate([0, 1, 1, 0], slices)
-    assert negate_slices == ((10, 30),)
+    assert negate_slices.tolist() == [[10, 30]]
     negate_slices = yastn.tensor._contractions._slices_to_negate([1, 0, 1, 1], slices)
-    assert negate_slices == ((0, 10), (20, 40))
+    assert negate_slices.tolist() == [[0, 10], [20, 40]]
 
 
 if __name__ == '__main__':

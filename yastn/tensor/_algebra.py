@@ -15,11 +15,10 @@
 """ Linear operations and operations on a single yastn.Tensor. """
 from __future__ import annotations
 from functools import lru_cache
-from itertools import accumulate
 
 import numpy as np
 
-from ._auxiliary import _slc, get_blocks, test_all_blocks, update_old_struct
+from ._auxiliary import _slc, get_blocks, struct_from_blocks, update_old_struct
 from ._legs import legs_union
 from ._merging import _embed_tensor
 from ._tests import YastnError, _test_can_be_combined, _unpack_trans_test_axes_pair
@@ -34,10 +33,9 @@ def __add__(a, b) -> 'Tensor':
     Signatures and total charges of two tensors should match.
     """
     (a, b), hfs = _pre_addition(a, b)
-    metas, st_new = _meta_addition(a.config.sym, (a.legs, b.legs), a.n, a.isdiag)
-    struct, slices = update_old_struct(a.struct, st_new)
-    data = a.config.backend.add((a._data, b._data), metas, st_new.size)
-    out = a._replace(hfs=hfs, struct=struct, slices=slices, data=data)
+    metas, size, struct_new, slices_new = _meta_addition(a.config.sym, a.struct, b.struct)
+    data = a.config.backend.add((a._data, b._data), metas, size)
+    out = a._replace(hfs=hfs, struct=struct_new, slices=slices_new if slices_new is not None else a.slices, data=data)
     return out
 
 def __sub__(a, b) -> 'Tensor':
@@ -47,10 +45,9 @@ def __sub__(a, b) -> 'Tensor':
     Signatures and total charges of two tensors should match.
     """
     (a, b), hfs = _pre_addition(a, b)
-    metas, st_new = _meta_addition(a.config.sym, (a.legs, b.legs), a.n, a.isdiag)
-    struct, slices = update_old_struct(a.struct, st_new)
-    data = a.config.backend.sub(a._data, b._data, metas, st_new.size)
-    out = a._replace(hfs=hfs, struct=struct, slices=slices, data=data)
+    metas, size, struct_new, slices_new = _meta_addition(a.config.sym, a.struct, b.struct)
+    data = a.config.backend.sub(a._data, b._data, metas, size)
+    out = a._replace(hfs=hfs, struct=struct_new, slices=slices_new if slices_new is not None else a.slices, data=data)
     return out
 
 def add(*tensors, amplitudes=None, **kwargs):
@@ -77,13 +74,10 @@ def add(*tensors, amplitudes=None, **kwargs):
         return tensors[0]
 
     tensors, hfs = _pre_addition(*tensors)
-    legss = tuple(a.legs for a in tensors)
-    a = tensors[0]
-    metas, st_new = _meta_addition(a.config.sym, legss, a.n, a.isdiag)
-    datas = [v._data for v in tensors]
-    data = a.config.backend.add(datas, metas, st_new.size)
-    struct, slices = update_old_struct(a.struct, st_new)
-    out = a._replace(hfs=hfs, struct=struct, slices=slices, data=data)
+    structs = [a.struct for a in tensors]
+    metas, size, struct_new, slices_new = _meta_addition(tensors[0].config.sym, *structs)
+    data = tensors[0].config.backend.add([v._data for v in tensors], metas, size)
+    out = tensors[0]._replace(hfs=hfs, struct=struct_new, slices=slices_new if slices_new is not None else tensors[0].slices, data=data)
     return out
 
 def _pre_addition(*tensors):
@@ -118,59 +112,59 @@ def _pre_addition(*tensors):
 
 
 @lru_cache(maxsize=1024)
-def _meta_addition(sym, legss, a_n, isdiag):
+def _meta_addition(sym, *structs):
     """ meta-information for backend and new tensor charges and dimensions. """
+    charge, isdiag = structs[0].n, structs[0].isdiag  # consistent for all structures
+    if all(structs[0].legs == struct.legs for struct in structs[1:]):
+        bl_new = get_blocks(sym, structs[0].legs, charge, isdiag)
+        size = bl_new.size
+        meta = (((0, size), (0, size)),)
+        metas = (meta,) * len(structs)
+        return metas, size, structs[0], None
 
-    if all(legss[0] == legs for legs in legss[1:]):
-        st_new = get_blocks(sym, legss[0], a_n, isdiag)
-        Dsize = st_new.size
-        meta = (((0, Dsize), (0, Dsize)),)
-        metas = (meta, ) * len(legss)
-        return metas, st_new
-
-    ndim = len(legss[0])  # nlegs
+    ndim = len(structs[0].legs)  # nlegs
     legs_new = []
     for n in range(ndim):
-        leg = legss[0][n]
-        for legs in legss[1:]:
+        leg = structs[0].legs[n]
+        for struct in structs[1:]:
             try:
-                leg = leg.union(legs[n], isdiag=isdiag)
+                leg = leg.union(struct.legs[n], isdiag=isdiag)
             except ValueError:
                 raise YastnError('Bond dimensions of some charges do not match.')
         legs_new.append(leg)
     legs_new = tuple(legs_new)
-    st_new = get_blocks(sym, legs_new, a_n, isdiag)
+    bl_new = get_blocks(sym, legs_new, charge, isdiag)
 
     metas = []
-    for legs in legss:
+    for struct in structs:
         meta = []
-        st_old = get_blocks(sym, legs, a_n, isdiag)
+        bl_old = get_blocks(sym, struct.legs, charge, isdiag)
         meta, i, j, sn0, so0 = [], 0, 0, None, None
         if not isdiag:
-            while i < st_old.nblocks and j < st_new.nblocks:
-                if np.array_equal(st_old.t[i], st_new.t[j]):
+            while i < bl_old.nblocks and j < bl_new.nblocks:
+                if np.array_equal(bl_old.t[i], bl_new.t[j]):
                     if so0 is None:
-                        sn0 = st_new.slc[j, 0]
-                        so0 = st_old.slc[i, 0]
+                        sn0 = bl_new.slc[j, 0]
+                        so0 = bl_old.slc[i, 0]
                     i += 1
                     j += 1
                 else:
                     if so0 is not None:
-                        sn1 = st_new.slc[j - 1, 1]
-                        so1 = st_old.slc[i - 1, 1]
+                        sn1 = bl_new.slc[j - 1, 1]
+                        so1 = bl_old.slc[i - 1, 1]
                         meta.append(((sn0, sn1), (so0, so1)))
                     sn0, so0 = None, None
                     j += 1
             if so0 is not None:
-                sn1 = st_new.slc[j - 1, 1]
-                so1 = st_old.slc[i - 1, 1]
+                sn1 = bl_new.slc[j - 1, 1]
+                so1 = bl_old.slc[i - 1, 1]
                 meta.append(((sn0, sn1), (so0, so1)))
         else:  # if isdiag: embed smaller dimensions into larger ones
-            while i < st_old.nblocks and j < st_new.nblocks:
-                if np.array_equal(st_old.t[i], st_new.t[j]):
-                    sn0 = st_new.slc[j, 0]
-                    so0 = st_old.slc[i, 0]
-                    d = min(st_new.slc[j, 1] - st_new.slc[j, 0], st_old.slc[i, 1] - st_old.slc[i, 0])
+            while i < bl_old.nblocks and j < bl_new.nblocks:
+                if np.array_equal(bl_old.t[i], bl_new.t[j]):
+                    sn0 = bl_new.slc[j, 0]
+                    so0 = bl_old.slc[i, 0]
+                    d = min(bl_new.slc[j, 1] - bl_new.slc[j, 0], bl_old.slc[i, 1] - bl_old.slc[i, 0])
                     meta.append(((sn0, sn0 + d), (so0, so0 + d)))
                     i += 1
                     j += 1
@@ -178,7 +172,9 @@ def _meta_addition(sym, legss, a_n, isdiag):
                     j += 1
         metas.append(tuple(meta))
 
-    return tuple(metas), st_new
+    struct_new, slices_new = struct_from_blocks(bl_new)
+
+    return tuple(metas), bl_new.size, struct_new, slices_new
 
 
 def allclose(a, b, rtol=1e-13, atol=1e-13) -> bool:

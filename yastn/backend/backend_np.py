@@ -684,18 +684,16 @@ def unmerge(data, meta, size):
 def merge_to_dense(data, Dtot, meta):
     newdata = np.zeros(Dtot, dtype=data.dtype)
     for (sl, Dss) in meta:
-        newdata[tuple(slice(*Ds) for Ds in Dss)] = data[sl].reshape(tuple(Ds[1] - Ds[0] for Ds in Dss))
+        newdata[tuple(slice(*Ds) for Ds in Dss)] = data[slice(*sl)].reshape(tuple(Ds[1] - Ds[0] for Ds in Dss))
     return newdata.reshape(-1)
 
 
-def merge_super_blocks(pos_tens, meta_new, meta_block, Dsize):
+def merge_super_blocks(pos_tens, meta, size):
     dtype = reduce(np.promote_types, (a._data.dtype for a in pos_tens.values()))
-    newdata = np.zeros(Dsize, dtype=dtype)
-    for (tn, Dn, sln), (t1, gr) in zip(meta_new, groupby(meta_block, key=lambda x: x[0])):
-        assert tn == t1
-        for (_, slo, Do, pos, Dslc) in gr:
-            slcs = tuple(slice(*x) for x in Dslc)
-            newdata[slice(*sln)].reshape(Dn)[slcs] = pos_tens[pos]._data[slice(*slo)].reshape(Do)
+    newdata = np.zeros(size, dtype=dtype)
+    for sln, Dn, pa, slo, Do, Dslcs in meta:
+        slcs = tuple(slice(*x) for x in Dslcs)
+        newdata[slice(*sln)].reshape(Dn)[slcs] = pos_tens[pa]._data[slice(*slo)].reshape(Do)
     return newdata
 
 

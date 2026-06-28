@@ -22,7 +22,7 @@ import sys
 
 import numpy as np
 
-from ._auxiliary import _struct, _slc, _clear_axes, _unpack_axes, legs_from_struct, test_all_blocks, get_blocks, update_old_struct
+from ._auxiliary import _struct, _slc, _clear_axes, _unpack_axes, legs_from_struct, test_all_blocks, get_blocks, update_old_struct, find_row
 from ._merging import _merge_to_matrix, _meta_unmerge_matrix2, _unmerge
 from ._merging import _Fusion, _leg_struct_trivial
 from ._tests import YastnError, _test_axes_all
@@ -411,9 +411,9 @@ def _meta_svd(sym, struct, slices, legs, charge, isdiag, minD, sU, nU):
 
     meta = tuple((sl.slcs[0], d, slu.slcs[0], du, Sdict[ts], Vdict[tv], dv) for sl, d, slu, du, ts, tv, dv in meta)
 
-    Ustruct = _struct(s=(struct.s[0], sU), n=Un, diag=False, t=Ut, D=UD, size=sum(UDp))
-    Sstruct = _struct(s=(-sU, sU), n=n0, diag=True, t=St, D=SD, size=sum(SDp))
-    Vstruct = _struct(s=(-sU, struct.s[1]), n=Vn, diag=False, t=Vt, D=VD, size=sum(VDp))
+    Ustruct = _struct(s=(struct.s[0], sU), n=Un, isdiag=False, t=Ut, D=UD, size=sum(UDp))
+    Sstruct = _struct(s=(-sU, sU), n=n0, isdiag=True, t=St, D=SD, size=sum(SDp))
+    Vstruct = _struct(s=(-sU, struct.s[1]), n=Vn, isdiag=False, t=Vt, D=VD, size=sum(VDp))
     return meta, Ustruct, Usl, Sstruct, Ssl, Vstruct, Vsl
 
 
@@ -796,21 +796,23 @@ def truncation_mask(S, which='LR',
         tol_null = float('inf') if isinstance(tol_block, dict) else tol_block
         D_null = 0 if isinstance(D_block, dict) else D_block
 
-        for t, sl in zip(S.struct.t, S.slices):
-            t = t[:nsym]
-            slc = slice(*sl.slcs[0])
-            D_bl = D_block[t] if (isinstance(D_block, dict) and t in D_block) else D_null
+        start = 0
+        for tt, DD in zip(S.legs[0].t, S.legs[0].D):
+            finish = start + DD
+            slc = slice(start, finish)
+            D_bl = D_block[tt] if (isinstance(D_block, dict) and tt in D_block) else D_null
             if which in ['LR', 'LM']:
-                tol_rel = tol_block[t] if (isinstance(tol_block, dict) and t in tol_block) else tol_null
+                tol_rel = tol_block[tt] if (isinstance(tol_block, dict) and tt in tol_block) else tol_null
                 above_tol = ff(S.data[slc]) > tol_rel * backend.max_abs(S.data[slc])
                 D_tol = backend.sum_elements(above_tol).item()
                 D_bl = min(D_bl, D_tol)
 
-            if 0 < D_bl < sl.Dp:  # block truncation
+            if 0 < D_bl < DD:  # block truncation
                 inds = backend.argsort_which(S.data[slc], which)
                 Smask._data[slc][inds[D_bl:]] = False
             elif D_bl == 0:
                 Smask._data[slc] = False
+            start = finish
     #
     D_total = min(D_total, len(S.data))
     if which in ['LR', 'LM']:
@@ -836,24 +838,25 @@ def truncation_mask(S, which='LR',
     # check blocks related by Hermitian symmetry and truncate to equal length
     if hermitian:
         considered_t = []
-        for it, t in enumerate(Smask.struct.t):
-            t = t[:nsym]
-            tc = S.config.sym.conj_charge(t)
+        bl = get_blocks(S.config.sym, Smask.legs, Smask.n, Smask.isdiag)
+        for tt, DD, sl in zip(bl.t, bl.D, bl.slc):
+            tt = tuple(tt[0].tolist())
+            tc = S.config.sym.conj_charge(tt)
             #
-            if t == tc or t in considered_t:
+            if tt == tc or tt in considered_t:
                 continue
             #
-            slc_t = slice(*S.slices[it].slcs[0])
+            slc_t = slice(*sl)
             try:
-                itc = S.struct.t.index(tc + tc)
+                itc = find_row(bl.t, np.array(tc + tc, dtype=np.int64))
             except ValueError:  # conjugated sector not in S
                 Smask.data[slc_t] = False
                 continue
-            slc_tc = slice(*S.slices[itc].slcs[0])
+            slc_tc = slice(*bl.slc[itc])
             #
-            considered_t.append(t)
+            considered_t.append(tt)
             considered_t.append(tc)
-            lt, ltc = S.struct.D[it][0], S.struct.D[itc][0]
+            lt, ltc = DD[0], bl.D[itc, 0]
             common_size = min(lt, ltc)
             inds_t = backend.argsort_which(S.data[slc_t], which)
             inds_tc = backend.argsort_which(S.data[slc_tc], which)
@@ -1159,8 +1162,8 @@ def _meta_eigh(config, struct, slices, sU, minD):
     meta = tuple((sl.slcs[0], d, slu.slcs[0], du, Sdict[ts]) for sl, d, slu, du, ts in meta)
 
     # Ustruct = struct._replace(t=Ut, s=(struct.s[0], sU))
-    Ustruct = _struct(s=(struct.s[0], sU), n=n0, diag=False, t=Ut, D=UD, size=sum(UDp))
-    Sstruct = _struct(s=(-sU, sU), n=n0, diag=True, t=St, D=SD, size=sum(SDp))
+    Ustruct = _struct(s=(struct.s[0], sU), n=n0, isdiag=False, t=Ut, D=UD, size=sum(UDp))
+    Sstruct = _struct(s=(-sU, sU), n=n0, isdiag=True, t=St, D=SD, size=sum(SDp))
     # import pdb; pdb.set_trace()
     return meta, Sstruct, Ssl, Ustruct, Usl
 
@@ -1196,7 +1199,7 @@ def _meta_eigh_lowrank(config, struct, slices, sU, D_block):
     SDp_s = ks_s
     Ssl = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(SDp_s), SDp_s, SD_s))
     Sdict = {ts: sl.slcs[0] for ts, sl in zip(St_s, Ssl)}
-    Sstruct = _struct(s=(-sU, sU), n=n0, diag=True, t=St_s, D=SD_s, size=sum(SDp_s))
+    Sstruct = _struct(s=(-sU, sU), n=n0, isdiag=True, t=St_s, D=SD_s, size=sum(SDp_s))
 
     # Ustruct: D=(n, k) per block in input order, stored in a separate buffer
     UD = tuple((d[0], k) for d, k in zip(struct.D, ks))
@@ -1204,7 +1207,7 @@ def _meta_eigh_lowrank(config, struct, slices, sU, D_block):
     Uk_cumul = tuple(accumulate(Uk_sizes))
     Uk_starts = (0,) + Uk_cumul[:-1]
     Uslices = tuple(_slc(((s, e),), dk, dp) for s, e, dk, dp in zip(Uk_starts, Uk_cumul, UD, Uk_sizes))
-    Ustruct = _struct(s=(struct.s[0], sU), n=struct.n, diag=False, t=Ut, D=UD, size=sum(Uk_sizes))
+    Ustruct = _struct(s=(struct.s[0], sU), n=struct.n, isdiag=False, t=Ut, D=UD, size=sum(Uk_sizes))
 
     # meta: (input_sl, input_D, U_sl, U_D, S_sl) in input block order
     meta = tuple((sl.slcs[0], d, usl.slcs[0], dk, Sdict[ts])

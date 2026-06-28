@@ -21,7 +21,7 @@ from typing import Sequence
 
 import numpy as np
 
-from ._auxiliary import _clear_axes, _unpack_axes, _struct, _slc, _flatten, legs_from_struct, get_blocks
+from ._auxiliary import _clear_axes, _unpack_axes, _struct, _slc, _flatten, legs_from_struct, get_blocks, find_row
 from ._initialize import embed_
 from ._legs import Leg, LegMeta, legs_union, _legs_mask_needed
 from ._merging import _embed_tensor
@@ -314,19 +314,27 @@ def __getitem__(a, key) -> numpy.ndarray | torch.tensor:
     try:
         key = np.array(key, dtype=np.int64).reshape(a.ndim_n, a.config.sym.NSYM)
         reverse_trans = np.argsort(a.trans)
-        ukey = tuple(key[reverse_trans, :].ravel().tolist())
-        ind = a.struct.t.index(ukey)
+        ukey = key[reverse_trans, :].ravel()
+        bl = get_blocks(a.config.sym, a.struct.legs, a.struct.n, a.isdiag)
+        ind = find_row(bl.t, ukey)
     except ValueError as exc:
         raise YastnError('Tensor does not have the block specified by key.') from exc
-    x = a._data[slice(*a.slices[ind].slcs[0])]
+    x = a._data[slice(*bl.slc[ind])]
     return x if a.isdiag else a.config.backend.permute_dims(x.reshape(a.struct.D[ind]), a.trans)
 
 
 def __contains__(a, key) -> bool:
     key = tuple(_flatten(key)) if (hasattr(key,'__iter__') or hasattr(key,'__next__')) else (key,)
-    if a.isdiag:
-        return key in a.struct.t or (key + key) in a.struct.t
-    return key in a.struct.t
+    if a.isdiag and len(key) == a.config.sym.NSYM:
+        key = key + key
+    key = np.array(key, dtype=np.int64)
+    try:
+        bl = get_blocks(a.config.sym, a.struct.legs, a.struct.n, a.isdiag)
+        _ = find_row(bl.t, key)
+        return True
+    except ValueError:
+        return False
+
 
 ##################################################
 #    output tensors info - advanced structure    #
@@ -365,10 +373,10 @@ def get_legs(a, axes=None, native=False) -> yastn.Leg | Sequence[yastn.Leg]:
             legs_ax.append(leg)
 
         if not native and a.mfs[ax][0] > 1:
-            st = get_blocks(a.config.sym, a.struct.legs, a.n, a.isdiag)
+            bl = get_blocks(a.config.sym, a.struct.legs, a.n, a.isdiag)
 
-            tseta = st.t[:, nax, :].reshape(st.nblocks, len(nax) * a.config.sym.NSYM).tolist()
-            Dseta = np.prod(st.D[:, nax], axis=1, dtype=np.int64).tolist()
+            tseta = bl.t[:, nax, :].reshape(bl.nblocks, len(nax) * a.config.sym.NSYM).tolist()
+            Dseta = np.prod(bl.D[:, nax], axis=1, dtype=np.int64).tolist()
             tDn = {tuple(tn): Dn for tn, Dn in zip(tseta, Dseta)}
             tDn = dict(sorted(tDn.items()))
             t, D = tuple(tDn.keys()), tuple(tDn.values())
@@ -487,7 +495,7 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False) -> 'Tensor':
             legs_m.append(1)
 
     if ndim_a == 0:  # scalar
-        meta = [(slice(*sl.slcs[0]), ()) for sl in a.slices]
+        meta = [((None,), ())]
     else:
         step = -1 if reverse else 1
         tD = []
@@ -499,10 +507,9 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False) -> 'Tensor':
                 Dlow = Dhigh
             tD.append(tDn)
 
-        lt, nsym = len(a.struct.t), len(a.struct.n)
-        tset = np.array(a.struct.t, dtype=np.int64).reshape(lt, a.ndim_n, nsym)
-        tset_ax = list(zip(*[tset[:, ax, :].reshape(lt, nsym).tolist() for ax in range(a.ndim_n)]))
-        meta = [(slice(*t_sl.slcs[0]), tuple(tDn[tuple(tt)] for tDn, tt in zip(tD, t_ax))) for t_sl, t_ax in zip(a.slices, tset_ax)]
+        bl = get_blocks(a.config.sym, a.legs, a.n, a.isdiag)
+        tset_ax = list(zip(*[bl.t[:, ax, :].reshape(bl.nblocks, a.config.sym.NSYM).tolist() for ax in range(a.ndim_n)]))
+        meta = [(sl, tuple(tDn[tuple(tt)] for tDn, tt in zip(tD, t_ax))) for sl, t_ax in zip(bl.slc, tset_ax)]
 
     Dtot_n = tuple(sum(leg.D) for leg in legs_n)
     Dtot_a, i = [], 0
@@ -522,10 +529,10 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False) -> 'Tensor':
         meta = [(sl, D[:1]) for sl, D in meta]
 
     Dp = reduce(mul, Dtot, 1)
-    c_struct = _struct(s=c_s, n=(), diag=a.isdiag, t=c_t, D=c_D, size=Dp)
+    c_struct = _struct(s=c_s, n=(), isdiag=a.isdiag, t=c_t, D=c_D, size=Dp)
     c_slices = (_slc(((0, Dp),), c_D[0], Dp),)
     c_legs = legs_from_struct(c_struct)
-    c_struct = _struct(s=c_s, n=(), diag=a.isdiag, t=c_t, D=c_D, size=Dp, legs=c_legs)
+    c_struct = _struct(s=c_s, n=(), isdiag=a.isdiag, t=c_t, D=c_D, size=Dp, legs=c_legs)
     data = a.config.backend.merge_to_dense(a._data, Dtot_n, meta)
     return a._replace(config=config_dense, struct=c_struct, slices=c_slices, data=data, mfs=None, hfs=None, trans=None)
 
@@ -563,7 +570,7 @@ def item(a) -> float:
 
     For empty tensor returns :math:`0`.
     """
-    size = a.size
+    size = a._data.size
     if size == 1:
         return a.config.backend.item(a._data)
     if size == 0:

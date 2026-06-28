@@ -54,7 +54,7 @@ def test_get_blocks(config_kwargs):
     leg1 = yastn.LegBasic(s=1, t=((-1,), (1,)), D=(4, 5))
     leg2 = yastn.LegBasic(s=1, t=((0,), (1,)), D=(6, 7))
 
-    tset, Dset, slices, size, nblocks, legs, charge = yastn.tensor._auxiliary.get_blocks(config_U1.sym, (leg0, leg1, leg2), (0,), isdiag=False)
+    tset, Dset, slices, size, nblocks, legs, charge, isdiag = yastn.tensor._auxiliary.get_blocks(config_U1.sym, (leg0, leg1, leg2), (0,), isdiag=False)
     print(tset)
     print(Dset)
     print(slices)
@@ -67,7 +67,7 @@ def test_get_blocks(config_kwargs):
     leg1 = yastn.LegBasic(s=1, t=((-1, -1), (1, -1)), D=(4, 5))
     leg2 = yastn.LegBasic(s=1, t=((0, 0), (1, 0)), D=(6, 7))
 
-    tset, Dset, slices, size, nblocks, legs, charge = yastn.tensor._auxiliary.get_blocks(config_U1.sym, (leg0, leg1, leg2), (0, 0), isdiag=False)
+    tset, Dset, slices, size, nblocks, legs, charge, isdiag = yastn.tensor._auxiliary.get_blocks(config_U1.sym, (leg0, leg1, leg2), (0, 0), isdiag=False)
     print(tset)
     print(Dset)
     print(slices)
@@ -80,7 +80,7 @@ def test_get_blocks(config_kwargs):
     leg1 = yastn.LegBasic(s=1, t=((),), D=(4,))
     leg2 = yastn.LegBasic(s=1, t=((),), D=(6,))
 
-    tset, Dset, slices, size, nblocks, legs, charge = yastn.tensor._auxiliary.get_blocks(config_U1.sym, (leg0, leg1, leg2), (), isdiag=False)
+    tset, Dset, slices, size, nblocks, legs, charge, isdiag = yastn.tensor._auxiliary.get_blocks(config_U1.sym, (leg0, leg1, leg2), (), isdiag=False)
     print(tset.shape)
     print(Dset)
     print(slices)

@@ -15,13 +15,13 @@
 """ Methods creating a new yastn.Tensor """
 import os
 from functools import reduce
-from itertools import product, accumulate, batched
+from itertools import product, accumulate
 import numbers
 from operator import mul, itemgetter
 
 import numpy as np
 
-from ._auxiliary import _flatten, _slc, _config, legs_from_struct, get_blocks, test_all_blocks
+from ._auxiliary import _flatten, _slc, _config, legs_from_struct, get_blocks, test_all_blocks, find_row, find_indices, update_old_struct
 from ._tests import YastnError, _test_tD_consistency, _test_struct_types
 from ..backend import backend_np
 from ..sym import sym_none, sym_U1, sym_Z2, sym_Z3, sym_U1xU1, sym_U1xU1xZ2
@@ -142,13 +142,14 @@ def __setitem__(a, key, newvalue):
     """
     try:
         key = np.array(key, dtype=np.int64).reshape(a.ndim_n, a.config.sym.NSYM)
-        reverse_trans = tuple(np.argsort(a.trans).tolist())
-        ukey = tuple(key[reverse_trans, :].ravel().tolist())
-        ind = a.struct.t.index(ukey)
+        reverse_trans = np.argsort(a.trans)
+        ukey = key[reverse_trans, :].ravel()
+        bl = get_blocks(a.config.sym, a.struct.legs, a.struct.n, a.isdiag)
+        ind = find_row(bl.t, ukey)
     except ValueError as exc:
-        raise YastnError('Tensor does not have a block specified by the key.') from exc
-    slc = slice(*a.slices[ind].slcs[0])
-    Dt = a.struct.D[ind]
+        raise YastnError('Tensor does not have the block specified by key.') from exc
+    slc = slice(*bl.slc[ind])
+    Dt = bl.D[ind]
     Dr = tuple(Dt[ax] for ax in a.trans)
     if not a.isdiag:
         newvalue = a.config.backend.permute_dims(newvalue.reshape(Dr), reverse_trans)
@@ -251,7 +252,7 @@ def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
     legs = legs_from_struct(a.struct)
     a.struct = a.struct._replace(t=a_t, D=a_D, size=Dsize, legs=legs)
 
-    ts, Ds, slices, size, nblocks, legs, _ = get_blocks(a.config.sym, a.legs, a.struct.n, a.isdiag)
+    ts, Ds, slices, size, nblocks, legs, _, _ = get_blocks(a.config.sym, a.legs, a.struct.n, a.isdiag)
     assert a.legs == legs
 
     a._data = _init_block(a.config, Dsize, val, dtype=a.yastn_dtype, device=a.device)
@@ -295,6 +296,7 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
     ats = ts.reshape((1, a.ndim_n, nsym))
     if not np.all(a.config.sym.fuse(ats, a.s_n, 1) == a.n):
         raise YastnError('Charges ts are not consistent with the symmetry rules: f(t @ s) == n')
+    ats = ats[0]
 
     ts = tuple(ts.tolist())
     tss = tuple(ts[i * nsym: (i+1) * nsym] for i in range(a.ndim_n))
@@ -318,58 +320,29 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
     if any(tt in leg and leg[tt] != DD for leg, tt, DD in zip(a.legs, tss, Ds)):
         raise YastnError("Provided Ds is not consistent with dimensions of existing legs.")
 
-    if any(tt not in leg for leg, tt in zip(a.legs, tss)) or len(a.legs) == 0:
+    if any(tt not in leg for leg, tt in zip(a.legs, tss)):
         new_legs = tuple(leg.add_charge(tt, DD) for leg, tt, DD in zip(a.legs, tss, Ds) )
         embed_(a, new_legs)
 
     Dsize = Ds[0] if a.isdiag else reduce(mul, Ds, 1)
     new_block = _init_block(a.config, Dsize, val, dtype=a.yastn_dtype, device=a.device)
 
-    t_new, D_new, slices_new, size_new, nblocks, legs_new, _ = get_blocks(a.config.sym, a.legs, a.struct.n, a.isdiag)
-    i = 0
-    ats = ats.reshape((a.ndim_n, nsym))
-    while i < len(t_new):
-        if np.array_equal(t_new[i], ats):
-            break
-        i += 1
-    slc = slices_new[i]
+    bl = get_blocks(a.config.sym, a.legs, a.struct.n, a.isdiag)
+    ind = find_row(bl.t, ats)
+    slc = bl.slc[ind]
     a.data[slice(*slc)] = new_block
 
 
 def embed_(a, legs_new):
-    t_old = np.array(a.struct.t, dtype=np.int64).reshape((len(a.struct.t), a.ndim_n, a.config.sym.NSYM))
-    slices_old = a.slices
-
-    st_new = get_blocks(a.config.sym, legs_new, a.struct.n, a.isdiag)
-
-    meta, i, j, sni, soi = [], 0, 0, None, None
-    while i < len(t_old) and j < st_new.nblocks:
-        if np.array_equal(t_old[i], st_new.t[j]):
-            if soi is None:
-                sni, soi = st_new.slc[j, 0], slices_old[i].slcs[0][0]
-            i += 1
-            j += 1
-        else:
-            if soi is not None:
-                snf, sof = st_new.slc[j - 1, 1], slices_old[i-1].slcs[0][1]
-                meta.append(((sni, snf), (soi, sof)))
-            sni, soi = None, None
-            j += 1
-    if soi is not None:
-        snf, sof = st_new.slc[j - 1, 1], slices_old[i-1].slcs[0][1]
-        meta.append(((sni, snf), (soi, sof)))
-
-
-    newdata = a.config.backend.embed_blocks(a.data, meta, st_new.size)
-
-    tnew = tuple(map(tuple, st_new.t.reshape(st_new.nblocks, a.ndim_n * a.config.sym.NSYM).tolist()))
-    Dnew = tuple(map(tuple, st_new.D.reshape(st_new.nblocks, a.ndim_n).tolist()))
-    Dp = (st_new.slc[:, 1] - st_new.slc[:, 0]).tolist()
-    slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dp), Dp, Dnew))
-
-    a._data = newdata
+    bl_old = get_blocks(a.config.sym, a.legs, a.struct.n, a.isdiag)
+    bl_new = get_blocks(a.config.sym, legs_new, a.struct.n, a.isdiag)
+    ind1, ind2 = find_indices(bl_new.t, bl_old.t)
+    meta = [(sln, slo) for sln, slo in zip(bl_new.slc[ind1], bl_old.slc[ind2])]
+    newdata = a.config.backend.embed_blocks(a.data, meta, bl_new.size)
+    struct, slices = update_old_struct(a.struct, bl_new)
     a.slices = slices
-    a.struct = a.struct._replace(t=tnew, D=Dnew, size=st_new.size, legs=legs_new)
+    a.struct = struct
+    a._data = newdata
 
 
 def _init_block(config, Dsize, val, dtype, device):
