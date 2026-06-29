@@ -93,13 +93,14 @@ def _assert_biorthogonal(P_L, Pbar_L, tol=tol):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("N", [1, 2, 3])
-def test_biorthogonalize_left_dense_self(config_kwargs, N):
+@pytest.mark.parametrize("dtype", ["float64","complex128"])
+def test_biorthogonalize_left_dense_self(config_kwargs, N, dtype):
     """Dense uMPS: biorthogonalize a random MPS against itself (self-case).
 
     When both top and bottom layers are the same MPS the biorthogonality
     condition reduces to a left-isometry condition.
     """
-    cfg = yastn.make_config(sym='none', **config_kwargs)
+    cfg = yastn.make_config(sym='none', **config_kwargs, default_dtype=dtype)
     D, d = 3, 2 # bond dim, physical dim (matches dense Spin-1)
     umps = _make_dense_umps(N, D, d, cfg, seed=42)
 
@@ -116,9 +117,10 @@ def test_biorthogonalize_left_dense_self(config_kwargs, N):
 
 
 @pytest.mark.parametrize("N", [1, 2, 3])
-def test_biorthogonalize_left_dense_different(config_kwargs, N):
+@pytest.mark.parametrize("dtype", ["float64","complex128"])
+def test_biorthogonalize_left_dense_different(config_kwargs, N, dtype):
     """Dense uMPS: biorthogonalize two independently drawn random MPS."""
-    cfg = yastn.make_config(sym='none', **config_kwargs)
+    cfg = yastn.make_config(sym='none', **config_kwargs, default_dtype=dtype)
     D, d = 3, 2
     umps_top = _make_dense_umps(N, D, d, cfg, seed=42)
     umps_bot = _make_dense_umps(N, D, d, cfg, seed=99).conj()
@@ -136,9 +138,10 @@ def test_biorthogonalize_left_dense_different(config_kwargs, N):
 
 
 @pytest.mark.parametrize("N", [1,])
-def test_biorthogonalize_left_dense_differentDs(config_kwargs, N):
+@pytest.mark.parametrize("dtype", ["float64","complex128"])
+def test_biorthogonalize_left_dense_differentDs(config_kwargs, N, dtype):
     """Dense uMPS: biorthogonalize two independently drawn random MPS."""
-    cfg = yastn.make_config(sym='none', **config_kwargs)
+    cfg = yastn.make_config(sym='none', **config_kwargs, default_dype=dtype)
     D, d = 3, 2
     umps_top = _make_dense_umps(N, D, d, cfg, seed=42)
     umps_bot = _make_dense_umps(N, D+1, d, cfg, seed=99).conj()

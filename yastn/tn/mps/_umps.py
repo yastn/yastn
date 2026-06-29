@@ -15,11 +15,12 @@
 
 from typing import Sequence, Union
 from ...tensor import Leg, ncon, Tensor, tensordot
-from ...initialize import rand, eye, block
+from ...initialize import rand, randC, eye, block
 from ..._from_dict import from_dict 
 from ...tensor import combine_data_and_meta, split_data_and_meta
 from . import Mps
 
+import numpy as np
 from scipy.sparse.linalg import LinearOperator
 from scipy.sparse.linalg import eigs
 
@@ -127,7 +128,7 @@ def eigs_implicit(umps:Union[Mps,Sequence["Tensor"]],
 
     if V0 is None:
         # initial guess
-        V0= rand(umps[0].config, legs=[
+        V0= randC(umps[0].config, legs=[
             umps[0].get_legs(axes=0) if umps_conj is None else umps_conj[0].get_legs(axes=0).conj(),
             umps[0].get_legs(axes=0).conj(), 
         ])
@@ -138,7 +139,7 @@ def eigs_implicit(umps:Union[Mps,Sequence["Tensor"]],
             dtype=str(v.dtype),
             device=cfg.default_device),
             meta=V0_meta))
-        MV= apply_transfer_matrix(umps,V,umps_conj=umps_conj)
+        MV= apply_transfer_matrix(umps,V,umps_conj=umps_conj).consume_transpose()
         MV_data, MV_meta= split_data_and_meta(MV.to_dict(level=2))
         return MV_data[0]
 
@@ -150,7 +151,7 @@ def eigs_implicit(umps:Union[Mps,Sequence["Tensor"]],
     
     vals, vecs= eigs(T, k=k, v0=V0_data, return_eigenvectors=True, **kwargs)
     if 'float' in cfg.default_dtype:
-        if sum(abs(vecs.imag))==0:
+        if np.sum(abs(vecs.imag))==0:
             vecs= vecs.real
         elif umps_conj is not None:
             # possibly mixed transfer matrix. No guarantee on real eigenvector
@@ -489,6 +490,7 @@ def biorthogonalize_left(umps_top:Union[Mps,Sequence["Tensor"]],
     
     U_L, S_L, V_Ldag= evecs.remove_leg(0).svd(axes=(0, 1), sU=1, nU=True, compute_uv=True,
         Uaxis=-1, Vaxis=0, policy='fullrank', fix_signs=False)
+    print(S_L._data)
 
     # --(U_L √Σ)(√Σ-1 U_L†) -- U_L S_L V_L† -- (V_L √Σ-1) (√Σ V_L†)
     #    C_DL                                              C_LU 
@@ -503,6 +505,11 @@ def biorthogonalize_left(umps_top:Union[Mps,Sequence["Tensor"]],
 
     Delta, n_iter= float('inf'), 0
     while Delta>eps and n_iter < max_iter:
+        I_approx= P_L.tensordot(Pbar_L, axes=((0, 1), (0, 1)))*(1/eval)
+        Delta= (I_approx - eye(I_approx.config, legs=I_approx.get_legs(), isdiag=False)).norm()
+        log.info(f"[biorthogonalize_left] Iteration {n_iter}: eval = {eval}, ||I_approx - I|| = {Delta}")
+        if Delta <= eps: break
+
         eval, evecs= eigs_implicit([P_L], umps_conj=[Pbar_L], k=1, eigenvectors=True, **eigs_kwargs)
         
         U_L, S_L, V_Ldag= evecs.remove_leg(0).svd(axes=(0, 1), sU=-1, nU=True, compute_uv=True,
@@ -522,10 +529,6 @@ def biorthogonalize_left(umps_top:Union[Mps,Sequence["Tensor"]],
         C_DL= C_DL @ Y_DL
         
         # check biorthogonality of P_L and Pbar_L
-        I_approx= P_L.tensordot(Pbar_L, axes=((0, 1), (0, 1)))*(1/eval)
-        Delta= (I_approx - eye(I_approx.config, legs=I_approx.get_legs(), isdiag=False)).norm()
-        log.info(f"[biorthogonalize_left] Iteration {n_iter}: eval = {eval}, ||I_approx - I|| = {Delta}")
-        
         n_iter += 1
 
     passed,res= verify_biorth(umps_top, umps_bottom, P_L, Pbar_L, C_LU, C_DL, tol=eps)
