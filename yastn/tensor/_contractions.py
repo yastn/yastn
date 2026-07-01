@@ -123,8 +123,8 @@ def tensordot(a, b, axes, conj=(0, 0)) -> 'Tensor':
     else:
         raise YastnError("Tensordot policy not recognized. It should be 'fuse_to_matrix', 'fuse_contracted', or 'no_fusion'.")
 
-    struct_c, slices_c = update_old_struct(st_out)
-    out = a._replace(data=data, struct=struct_c, mfs=mfs_c, hfs=hfs_c, trans=None)
+    struct = update_old_struct(st_out)
+    out = a._replace(data=data, struct=struct, mfs=mfs_c, hfs=hfs_c, trans=None)
     return out
 
 def _tensordot_diag(a, b, in_b, destination):
@@ -199,10 +199,6 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
     r"""
     Perform tensordot directly: permute blocks and execute dot accumulating results into result blocks.
     """
-
-
-    if a.config.profile: a.config.backend.nvtx.range_push(f"_tensordot_nf")
-    ind_a, ind_b = _common_inds(a.struct.t, b.struct.t, nin_a, nin_b, a.ndim_n, b.ndim_n, a.config.sym.NSYM)
     if a.config.profile: a.config.backend.nvtx.range_push(f"_meta_tensordot_nf")
     meta_dot, reshape_a, reshape_b, st_c = _meta_tensordot_nf(a.config.sym, a.legs, a.n, a.isdiag, b.legs, b.n, b.isdiag,
                                                                             nout_a, nin_a, nin_b, nout_b)
@@ -260,37 +256,6 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
                                               reshape_a, reshape_b, order_a, order_b, st_c.size)
     if a.config.profile: a.config.backend.nvtx.range_pop()
     return data, st_c
-
-
-@lru_cache(maxsize=1024)
-def _common_inds(t_a, t_b, nin_a : tuple[int], nin_b : tuple[int], ndimn_a, ndimn_b, nsym):
-    r"""
-    Return row indices of nparray ``a`` that are in ``b``, and vice versa. Outputs tuples.
-    In other words: Return indices of blocks from ``t_a`` and ``t_b``, which participate in
-        a contraction specified by ``nin_a`` and ``nin_b``.
-
-    Parameters
-    ----------
-        t_a : Sequence[Sequence[int]]
-            (usually) charges of non-zero blocks in some operand
-        t_b : Sequence[Sequence[int]]
-            (usually) charges of non-zero blocks in some other operand
-    """
-    t_a = np.array(t_a, dtype=np.int64).reshape((len(t_a), ndimn_a, nsym)) # array for block charges as: block x <num-of-(native)modes(=legs)> x <order-of-sym-group>
-    t_b = np.array(t_b, dtype=np.int64).reshape((len(t_b), ndimn_b, nsym))
-    t_a = t_a[:, nin_a, :].reshape(len(t_a), len(nin_a) * nsym).tolist() # narrowed to contracted modes, and serialize <num-of-ingoing-modes(=legs)> x <order-of-sym-group> to 1D
-    t_b = t_b[:, nin_b, :].reshape(len(t_b), len(nin_b) * nsym).tolist()
-    la = [tuple(x) for x in t_a]
-    lb = [tuple(x) for x in t_b]
-    sa = set(la)
-    sb = set(lb)
-    ia = tuple(ii for ii, el in enumerate(la) if el in sb) # matching <ingoing-block-sectors>_of-a with <ingoing-block-sectors>_of-b
-    ib = tuple(ii for ii, el in enumerate(lb) if el in sa)
-    if len(ia) == len(la): # all <ingoing-block-sectors>_of-a appear among sectors of b
-        ia = None
-    if len(ib) == len(lb): # all <ingoing-block-sectors>_of-b appear among sectors of a
-        ib = None
-    return ia, ib
 
 
 @lru_cache(maxsize=1024)
@@ -679,7 +644,7 @@ def broadcast(a, *args, axes=0) -> 'Tensor' | tuple['Tensor']:
 
         meta, legs, st_c, ax, ndim = _meta_broadcast(a.config.sym, b.legs, b.n, b.isdiag, a.legs, a.n, a.isdiag, ax)
         data = b.config.backend.dot_diag(a._data, b._data, meta, st_c.size, ax, ndim)
-        struct, slices = update_old_struct(st_c)
+        struct = update_old_struct(st_c)
         results.append(b._replace(struct=struct, data=data))
     return results if multiple_axes else results.pop()
 
@@ -768,7 +733,7 @@ def apply_mask(a, *args, axes=0) -> 'Tensor' | tuple['Tensor']:
 
         meta, legs, st, ax, ndim = _meta_mask(b.config.sym, b.legs, b.n, b.isdiag, mask_t, mask_D, ax)
         data = a.config.backend.apply_mask(b._data, mask, meta, st.size, ax, ndim)
-        struct, slices = update_old_struct(st)
+        struct = update_old_struct(st)
         results.append(b._replace(struct=struct, data=data))
     return results.pop() if len(results) == 1 else results
 
@@ -782,7 +747,7 @@ def _apply_mask_axes(a, naxes, masks):
             mask_D = tuple(mask_tD.values())
             meta, legs, st, axis, ndim = _meta_mask(a.config.sym, a.legs, a.n, a.isdiag, mask_t, mask_D, axis)
             data = a.config.backend.apply_mask(a._data, mask, meta, st.size, axis, ndim)
-            struct, slices = update_old_struct(st)
+            struct = update_old_struct(st)
             a = a._replace(struct=struct, data=data)
     return a
 
@@ -889,7 +854,7 @@ def trace(a, axes=(0, 1)) -> 'Tensor':
     hfs = tuple(a.hfs[ax] for ax in out)
 
     if a.isdiag:
-        struct = a.struct._replace(s=(), legs=(), isdiag=False, t=((),), D=((),), size=1)
+        struct = _struct(legs=(), n=a.n, isdiag=False)
         data = a.config.backend.sum_elements(a._data)
         return a._replace(struct=struct, mfs=mfs, hfs=hfs, isdiag=False, data=data, trans=None)
 
@@ -945,7 +910,7 @@ def _meta_trace(sym, legs, n, nin_0, nin_1, out):
     size = start if len(c_s) > 0 else 1
 
     legs_new = legs_from_dict_v2({'n': n, 's': c_s, 't': c_t, 'D': c_D})
-    c_struct = _struct(s=c_s, n=n, t=tuple(c_t), D=tuple(c_D), size=size, legs=legs_new)
+    c_struct = _struct(legs=legs_new, n=n, isdiag=False)
     return tuple(meta_trace), c_struct, size
 
 

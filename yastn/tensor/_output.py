@@ -80,7 +80,6 @@ def to_dict(a, level=2, meta=None, resolve_ops=False) -> dict:
 
     data = a.data if level < 2 else a.config.backend.to_numpy(a.data)
 
-    # dict_ver=2: Tensor has field 'trans'
     d = {'type': type(a).__name__,
          'dict_ver': 3,
          'level': level,
@@ -88,21 +87,20 @@ def to_dict(a, level=2, meta=None, resolve_ops=False) -> dict:
          'data': data,
          'struct': struct,
          'trans': a.trans,
-         'isdiag': a.isdiag,
          'hfs': hfs,
-         'mfs': a.mfs}
+         'mfs': a.mfs,
+         'size': a.size}
 
     if meta is not None:
-        if not all(meta[k] == d[k] for k in ['type', 'dict_ver', 'config', 'struct', 'trans', 'isdiag', 'hfs', 'mfs']):
-            size = meta['struct'].size if hasattr(meta['struct'], 'size') else meta['struct']['size']
-            tmp = a.config.backend.zeros(size, dtype=a.yastn_dtype, device=a.device)
+        if not all(meta[k] == d[k] for k in ['type', 'dict_ver', 'config', 'struct', 'trans', 'hfs', 'mfs']):
+            tmp = a.config.backend.zeros(meta['size'], dtype=a.yastn_dtype, device=a.device)
             ap = type(a).from_dict(combine_data_and_meta(tmp, meta))
             try:
                 a = a + ap  # fill-in zero blocks
             except YastnError as e:
                 raise YastnError("Tensor is inconsistent with meta: " + str(e))
             d = a.to_dict(level=level)
-            if not all(meta[k] == d[k] for k in ['type', 'dict_ver', 'config', 'struct', 'isdiag', 'hfs', 'mfs']):
+            if not all(meta[k] == d[k] for k in ['type', 'dict_ver', 'config', 'struct', 'trans', 'hfs', 'mfs']):
                 raise YastnError("Tensor is inconsistent with meta.")
     return d
 
@@ -239,19 +237,18 @@ def get_blocks_charge(a) -> Sequence[Sequence[int]]:
     In case of product of abelian symmetries, for each block the individual symmetry
     charges are flattened into a single tuple.
     """
-    if a.trans == tuple(range(a.ndim_n)):
-        return a.struct.t
-    nsym = a.config.sym.NSYM
-    return tuple(tuple(tt[nsym * i + j] for i in a.trans for j in range(nsym)) for tt in a.struct.t)
+    bl = get_blocks(a.config.sym, a.struct.legs, a.struct.n, a.struct.isdiag)
+    tset = bl.t[:, a.trans, :].reshape(bl.nblocks, a.ndim_n * a.config.sym.NSYM)
+    return tuple(map(tuple, tset.tolist()))
 
 
 def get_blocks_shape(a) -> Sequence[Sequence[int]]:
     """
     Shapes of all native blocks.
     """
-    if a.trans == tuple(range(a.ndim_n)):
-        return a.struct.D
-    return tuple(tuple(DD[i] for i in a.trans) for DD in a.struct.D)
+    bl = get_blocks(a.config.sym, a.struct.legs, a.struct.n, a.struct.isdiag)
+    Dset = bl.D[:, a.trans]
+    return tuple(map(tuple, Dset.tolist()))
 
 
 def get_shape(a, axes=None, native=False) ->  int | Sequence[int]:
@@ -313,11 +310,11 @@ def __getitem__(a, key) -> numpy.ndarray | torch.tensor:
         reverse_trans = np.argsort(a.trans)
         ukey = key[reverse_trans, :].ravel()
         bl = get_blocks(a.config.sym, a.struct.legs, a.struct.n, a.isdiag)
-        ind = find_index(bl.t, ukey)
+        ind = find_index(bl.t, ukey, sorted=True)
     except ValueError as exc:
         raise YastnError('Tensor does not have the block specified by key.') from exc
     x = a._data[slice(*bl.slc[ind])]
-    return x if a.isdiag else a.config.backend.permute_dims(x.reshape(a.struct.D[ind]), a.trans)
+    return x if a.isdiag else a.config.backend.permute_dims(x, bl.D[ind], a.trans)
 
 
 def __contains__(a, key) -> bool:
@@ -327,7 +324,7 @@ def __contains__(a, key) -> bool:
     key = np.array(key, dtype=np.int64)
     try:
         bl = get_blocks(a.config.sym, a.struct.legs, a.struct.n, a.isdiag)
-        _ = find_index(bl.t, key)
+        _ = find_index(bl.t, key, sorted=True)
         return True
     except ValueError:
         return False
@@ -415,7 +412,8 @@ def to_dense(a, legs=None, native=False, reverse=False) -> numpy.ndarray | torch
     """
     c = a.to_nonsymmetric(legs, native, reverse)
     x = c.config.backend.clone(c._data)
-    x = c.config.backend.diag_create(x) if c.isdiag else x.reshape(c.struct.D[0])
+    D = tuple(leg.D[0] for leg in c.legs)
+    x = c.config.backend.diag_create(x) if c.isdiag else x.reshape(D)
     return x
 
 
@@ -434,8 +432,10 @@ def to_raw_tensor(a) -> numpy.ndarray | torch.tensor:
 
     The type of the returned tensor depends on the backend, i.e. ``numpy.ndarray`` or ``torch.tensor``.
     """
-    if len(a.struct.D) == 1:
-        return a._data.reshape(a.struct.D[0])
+    bl = get_blocks(a.config.sym, a.struct.legs, a.struct.n, a.struct.isdiag)
+    if len(bl.D) == 1:
+        Dblock = tuple(bl.D[0])
+        return a._data.reshape(Dblock)
     raise YastnError('Only tensor with a single block can be converted to raw tensor.')
 
 
@@ -525,9 +525,8 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False) -> 'Tensor':
         Dtot_n = Dtot_n[:-1]
         meta = [(sl, D[:1]) for sl, D in meta]
 
-    Dp = reduce(mul, Dtot, 1)
     c_legs = legs_from_dict_v2({"s": c_s, "n": (), "t": c_t, "D": c_D})
-    c_struct = _struct(s=c_s, n=(), isdiag=a.isdiag, t=c_t, D=c_D, size=Dp, legs=c_legs)
+    c_struct = _struct(legs=c_legs, n=(), isdiag=a.isdiag)
     data = a.config.backend.merge_to_dense(a._data, Dtot_n, meta)
     return a._replace(config=config_dense, struct=c_struct, data=data, mfs=None, hfs=None, trans=None)
 
@@ -565,7 +564,7 @@ def item(a) -> float:
 
     For empty tensor returns :math:`0`.
     """
-    size = a._data.size
+    size = a.config.backend.get_size(a._data)
     if size == 1:
         return a.config.backend.item(a._data)
     if size == 0:

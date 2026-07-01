@@ -265,7 +265,8 @@ def eye(config=None, legs=(), isdiag=True, **kwargs) -> Tensor:
         return tmp.fuse_legs(axes=axes)
     else:
         tmp = _fill(config=config, legs=legs, val='zeros', **kwargs)
-        for t, D in zip(tmp.struct.t, tmp.struct.D):
+        bl = get_blocks(tmp.config.sym, tmp.struct.legs, tmp.struct.n, tmp.struct.isdiag)
+        for t, D in zip(bl.t, bl.D):
             blk = tmp[t]
             for i in range(min(D)):
                 blk[i, i] = 1
@@ -405,7 +406,7 @@ def block(tensors, common_legs=None) -> Tensor:
             meta.append((sln, Dn, pa, sla, Da, Dslcs))
 
     data = tn0.config.backend.merge_super_blocks(tensors, meta, bl_new.size)
-    struct, slices = update_old_struct(bl_new)
+    struct = update_old_struct(bl_new)
     out = tn0._replace(struct=struct, data=data, hfs=tuple(hfs))
     return out
 

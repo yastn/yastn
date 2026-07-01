@@ -23,7 +23,7 @@ import numpy as np
 
 from ._auxiliary import _flatten, _clear_axes, _unpack_legs, get_blocks, update_old_struct, get_sub_slices
 from ._legbasic import LegBasic
-from ._tests import YastnError, _test_axes_all, _get_tD_legs
+from ._tests import YastnError, _test_axes_all
 
 __all__ = ['fuse_legs', 'unfuse_legs', 'fuse_meta_to_hard', '_Fusion']
 
@@ -302,7 +302,7 @@ def _fuse_legs_hard(a, axes, order):
             hfs.append(_Fusion(tree=(1,), op='o', s=(legs_new[n].s,), t=(), D=()))
 
     st = get_blocks(a.config.sym, legs_new, a.n, a.isdiag)
-    struct, slices = update_old_struct(st)
+    struct = update_old_struct(st)
     out = a._replace(mfs=mfs, hfs=hfs, struct=struct, data=data, trans=None)
     return out
 
@@ -484,7 +484,7 @@ def unfuse_legs(a, axes) -> 'Tensor':
                 newax += 1
                 ii += 1
 
-        struct, slices = update_old_struct(st)
+        struct = update_old_struct(st)
         out = a._replace(struct=struct, mfs=tuple(mfs), hfs=hfs, data=data, trans=trans)
         return out
     out = a._replace(mfs=tuple(mfs))
@@ -620,11 +620,9 @@ def _mask_nonzero(mask):
 def _mask_tensors_leg_intersection(a, b, axa, axb):
     r""" masks to get the intersecting parts of legs from two tensors a and b, for legs axa, axb. """
     msk_a, msk_b = [], []
-    tla, Dla, _ = _get_tD_legs(a.struct)
-    tlb, Dlb, _ = _get_tD_legs(b.struct)
     a_hfs, b_hfs = list(a.hfs), list(b.hfs)
     for i1, i2 in zip(axa, axb):
-        ma, mb, axes_hfs = _masks_hfs_intersection(a.config.sym, (tla[i1], tlb[i2]), (Dla[i1], Dlb[i2]), (a.hfs[i1], b.hfs[i2]))
+        ma, mb, axes_hfs = _masks_hfs_intersection(a.config.sym, (a.legs[i1].t, b.legs[i2].t), (a.legs[i1].D, b.legs[i2].D), (a.hfs[i1], b.hfs[i2]))
         msk_a.append(_mask_nonzero(ma))
         msk_b.append(_mask_nonzero(mb))
         a_hfs[i1], b_hfs[i2] = axes_hfs[0], axes_hfs[1]
@@ -656,7 +654,7 @@ def _embed_tensor(a, legs, legs_new):
                 mask_D = tuple(mask_tD.values())
                 meta, legs, st, axis, ndim = _meta_mask(a.config.sym, a.legs, a.n, a.isdiag, mask_t, mask_D, axis)
                 data = a.config.backend.embed_mask(a._data, mask, meta, st.size, axis, ndim)
-                struct, slices = update_old_struct(st)
+                struct = update_old_struct(st)
                 a = a._replace(struct=struct, data=data, hfs=hfs)
     return a
 

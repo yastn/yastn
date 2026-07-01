@@ -577,15 +577,15 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
     bl_symU = get_blocks(sym, symU.legs, symU.n, symU.isdiag)
 
     for c in bl_symU.t:
-        i_col_sector = find_index(bl_Amat.t[:, 0, :], c[0])
+        i_col_sector = find_index(bl_Amat.t[:, 0, :], c[0], sorted=True)
         c_col_sector = bl_Amat.t[i_col_sector, 1, :]
         inds = U_sorted[tuple(c[0])]
         if len(inds) < 1:
             continue
-        i_row_sector = find_index(bl_rowA.t[:, 0, :], c[0])
+        i_row_sector = find_index(bl_rowA.t[:, 0, :], c[0], sorted=True)
         symU[c[0], c[1]] = U[slice(*bl_rowA.slc[i_row_sector]), inds]
         symS[c[1], c[1]] = S[inds].real
-        i_col_sector = find_index(bl_colA.t[:, 1, :], np.array(c_col_sector, dtype=np.int64))
+        i_col_sector = find_index(bl_colA.t[:, 1, :], c_col_sector, sorted=False)
         symVh[c[1], c_col_sector] = Vh[inds, slice(*bl_colA.slc[i_col_sector])]
 
     # fix relative phases of singular vectors
@@ -593,9 +593,9 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
         bl_symVh = get_blocks(sym, symVh.legs, symVh.n, symVh.isdiag)
         meta_fix = []
         for c, slU, DU in zip(bl_symU.t, bl_symU.slc, bl_symU.D):
-            i_col_sector = find_index(bl_Amat.t[:, 0, :], c[0])
+            i_col_sector = find_index(bl_Amat.t[:, 0, :], c[0], sorted=True)
             c_col_sector = bl_Amat.t[i_col_sector, 1, :]
-            i_symVh_sector = find_index(bl_symVh.t, [c[1], c_col_sector])
+            i_symVh_sector = find_index(bl_symVh.t, [c[1], c_col_sector], sorted=True)
             slVh = bl_symVh.slc[i_symVh_sector]
             DVh = bl_symVh.D[i_symVh_sector]
             meta_fix.append((None, None, slU, DU, None, slVh, DVh))

@@ -18,7 +18,7 @@ from typing import Sequence, Union
 
 import numpy as np
 
-from ._auxiliary import _clear_axes, _unpack_axes, _join_contiguous_slices, get_blocks, update_old_struct, argsort_t
+from ._auxiliary import _clear_axes, _struct, _unpack_axes, _join_contiguous_slices, get_blocks, update_old_struct, argsort_t
 from ._einsum import ncon
 from ._legbasic import LegBasic
 from ._legs import LegMeta, Leg, leg_product
@@ -139,9 +139,9 @@ def conj(a) -> 'Tensor':
     Follows the behavior of the :code:`backend.conj()` when it comes to creating a new copy of the data.
     """
     newn = a.config.sym.add_charges(a.struct.n, new_signature=-1)
-    news = tuple(-x for x in a.struct.s)
+
     legs = tuple(leg.conj() for leg in a.legs)
-    struct = a.struct._replace(s=news, legs=legs, n=newn)
+    struct = _struct(legs=legs, n=newn, isdiag=a.isdiag)
     hfs = tuple(hf.conj() for hf in a.hfs)
     data = a.config.backend.conj(a._data)
     return a._replace(hfs=hfs, struct=struct, data=data)
@@ -167,9 +167,8 @@ def flip_signature(a) -> 'Tensor':
     Creates a shallow copy of the data.
     """
     newn = a.config.sym.add_charges(a.struct.n, new_signature=-1)
-    news = tuple(-x for x in a.struct.s)
     legs = tuple(leg.conj() for leg in a.legs)
-    struct = a.struct._replace(s=news, n=newn, legs=legs)
+    struct = _struct(legs=legs, n=newn, isdiag=a.isdiag)
     hfs = tuple(hf.conj() for hf in a.hfs)
     return a._replace(hfs=hfs, struct=struct)
 
@@ -217,7 +216,7 @@ def flip_charges(a, axes=None) -> 'Tensor':
     assert np.array_equal(t_flip[inds], bl_new.t), "Sanity check."
     meta_embed = tuple((sln, sln[1] - sln[0], slo, slo[1] - slo[0]) for sln, slo in zip(bl_new.slc, bl_old.slc[inds]))
     data = a.config.backend.embed_transpose(a._data, None, meta_embed, bl_new.size)  # used for embeding
-    struct, slices = update_old_struct(bl_new)
+    struct = update_old_struct(bl_new)
     out = a._replace(struct=struct, data=data, hfs=hfs_new)
     return out
 
@@ -284,7 +283,7 @@ def drop_leg_history(a, axes=None) -> 'Tensor':
             axes = (axes,)
     uaxes, = _unpack_axes(a.mfs, axes)
     uaxes = tuple(a.trans[ax] for ax in uaxes)
-    hfs = tuple(_Fusion(s=(a.struct.s[n],)) if n in uaxes else a.hfs[n] for n in range(a.ndim_n))
+    hfs = tuple(_Fusion(s=(a.legs[n].s,)) if n in uaxes else a.hfs[n] for n in range(a.ndim_n))
     return a._replace(hfs=hfs)
 
 
@@ -326,7 +325,7 @@ def consume_transpose(a) -> 'Tensor':
     inds = argsort_t(bl_old.t[:, order, :])
     meta = [(sln, Dn, slo, Do) for sln, Dn, slo, Do in zip(bl_new.slc, bl_new.D, bl_old.slc[inds], bl_old.D[inds])]
 
-    struct, slices = update_old_struct(bl_new)
+    struct = update_old_struct(bl_new)
 
     data = a._data if a.isdiag else a.config.backend.embed_transpose(a._data, a.trans, meta, bl_new.size)
     return a._replace(hfs=new_hfs, struct=struct, data=data, trans=no_trans)
@@ -438,13 +437,9 @@ def add_leg(a, axis=-1, s=-1, t=None, leg=None) -> 'Tensor':
             raise YastnError('len(t) does not match the number of symmetry charges.')
         t = a.config.sym.add_charges(t, signatures=(s,), new_signature=s)
 
-    news = a.struct.s[:haxis] + (s,) + a.struct.s[haxis:]
     newn = a.config.sym.add_charges(a.struct.n, t, signatures=(1, s))
-    newt = tuple(x[:haxis * nsym] + t + x[haxis * nsym:] for x in a.struct.t)
-    newD = tuple(x[:haxis] + (1,) + x[haxis:] for x in a.struct.D)
     legs = a.legs[:haxis] + (LegBasic(s=s, t=(t,), D=(1,)),) + a.legs[haxis:]
-    struct = a.struct._replace(t=newt, D=newD, s=news, n=newn, legs=legs)
-    slices = ()
+    struct = _struct(legs=legs, n=newn, isdiag=a.isdiag)
     hfs = a.hfs[:haxis] + (hfsa,) + a.hfs[haxis:]
     return a._replace(mfs=mfs, hfs=hfs, struct=struct, trans=trans)
 
@@ -468,7 +463,6 @@ def remove_leg(a, axis=-1) -> 'Tensor':
         raise YastnError('Cannot remove axis of a scalar tensor.')
 
     axis = axis % a.ndim
-    nsym = a.config.sym.NSYM
     mfs = a.mfs[:axis] + a.mfs[axis + 1:]
     remove = a.mfs[axis][0]
     uaxis = sum(a.mfs[ii][0] for ii in range(axis))  # unpack mfs
@@ -482,21 +476,14 @@ def remove_leg(a, axis=-1) -> 'Tensor':
             if v > haxis:
                 trans[k] = v - 1
 
-        if len(a.struct.t) > 0:
-            t = a.struct.t[0][haxis * nsym: (haxis + 1) * nsym]
-        else:
-            t = a.config.sym.zero()
-
-        if any(x[haxis] != 1 for x in a.struct.D) or any(x[haxis * nsym: (haxis + 1) * nsym] != t for x in a.struct.t):
+        leg = a.legs[haxis]
+        if len(leg.t) > 1 or (leg.D and leg.D[0] != 1):
             raise YastnError('Axis to be removed must have single charge of dimension one.')
+        t = leg.t[0] if leg.t else a.config.sym.zero()
 
-        new_s = a.struct.s[:haxis] + a.struct.s[haxis + 1:]
-        new_n = a.config.sym.add_charges(a.struct.n, t, signatures=(-1, a.struct.s[haxis]), new_signature=-1)
-        new_t = tuple(x[: haxis * nsym] + x[(haxis + 1) * nsym:] for x in a.struct.t)
-        new_D = tuple(x[: haxis] + x[haxis + 1:] for x in a.struct.D)
+        new_n = a.config.sym.add_charges(a.struct.n, t, signatures=(-1, a.legs[haxis].s), new_signature=-1)
         new_legs = a.legs[:haxis] + a.legs[haxis + 1:]
-        struct = a.struct._replace(t=new_t, D=new_D, s=new_s, n=new_n, legs=new_legs)
-        slices = ()
+        struct = _struct(legs=new_legs, n=new_n, isdiag=a.isdiag)
         hfs = a.hfs[:haxis] + a.hfs[haxis + 1:]
         a = a._replace(mfs=mfs, hfs=hfs, struct=struct, trans=trans)
     return a
@@ -523,13 +510,12 @@ def diag(a) -> 'Tensor':
         new_legs == new_legs[::-1]
     #
     bl_new = get_blocks(a.config.sym, a.legs, a.n, not a.isdiag)
-    new_s = tuple(leg.s for leg in new_legs)
-    struct = a.struct._replace(isdiag=not a.isdiag, size=bl_new.size, s=new_s, legs=new_legs)
+    struct = _struct(legs=new_legs, n=a.n, isdiag=not a.isdiag)
 
     if a.isdiag:  # isdiag=True -> isdiag=False
         meta = tuple((sl_new, sl_old) for sl_new, sl_old in zip(bl_new.slc, bl.slc))
-        data = a.config.backend.diag_1dto2d(a._data, meta, struct.size)
+        data = a.config.backend.diag_1dto2d(a._data, meta, bl_new.size)
     else:  # isdiag=False -> isdiag=True
         meta = tuple((sl_new, sl_old, DD) for sl_new, sl_old, DD in zip(bl_new.slc, bl.slc, bl.D))
-        data = a.config.backend.diag_2dto1d(a._data, meta, struct.size)
+        data = a.config.backend.diag_2dto1d(a._data, meta, bl_new.size)
     return a._replace(struct=struct, data=data, trans=None)

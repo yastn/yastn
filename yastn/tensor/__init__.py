@@ -115,8 +115,7 @@ class Tensor:
                 if any(x != 0 for x in n):
                     raise YastnError("Tensor charge of a diagonal tensor should be 0.")
             legs = tuple(LegBasic(s=s_l, t=(), D=()) for s_l in s)
-            size = self._data.size
-            self.struct = _struct(legs=legs, s=s, n=n, isdiag=bool(isdiag), size=size)
+            self.struct = _struct(legs=legs, n=n, isdiag=bool(isdiag))
         #
         # self.mfs and self.trans describe logical/meta transformation of legs
         # 1) at the highest level, self.mfs is a logical fusion of legs,
@@ -212,10 +211,9 @@ class Tensor:
             if not isinstance(d['config'], _config):
                 d['config'] = make_config(**d['config'])
             d['hfs'] = tuple(_Fusion(**hf) for hf in d['hfs'])
-            d['struct']['isdiag'] = d['struct'].pop('diag')
-            d['struct']['legs'] = legs_from_dict_v2(d['struct'])
-            d['struct'] = _struct(**d['struct'])
-
+            legs = legs_from_dict_v2(d['struct'])
+            d['struct'] = _struct(legs=legs, n=d['struct']['n'], isdiag=d['struct']['diag'])
+            # TODO: write embedding in case some blocks storred in _v2 are missing.
             dtype = d['config'].default_dtype
             if hasattr(d['data'], 'dtype'):
                 if 'complex128' in str(d['data'].dtype):
@@ -247,8 +245,8 @@ class Tensor:
                 if not isinstance(d['config'], _config):
                     d['config'] = make_config(**d['config'])
                 d['hfs'] = tuple(_Fusion(**hf) for hf in d['hfs'])
-                d['struct']['legs'] = tuple(LegBasic(**xx) for xx in d['struct']['legs'])
-                d['struct'] = _struct(**d['struct'])
+                legs = tuple(LegBasic(**xx) for xx in d['struct']['legs'])
+                d['struct'] = _struct(legs=legs, n=d['struct']['n'], isdiag=d['struct']['isdiag'])
 
             if d['level'] >= 2 or config is not None:
                 dtype = d['config'].default_dtype
@@ -258,6 +256,7 @@ class Tensor:
                     if 'float64' in str(d['data'].dtype):
                         dtype = 'float64'
                 d['data'] = d['config'].backend.to_tensor(d['data'], dtype=dtype, device=d['config'].default_device)
+            assert d['config'].backend.get_size(d['data']) == d['size'], "Sanity check. Stored sizes does not match data size."
 
             return cls(**d)
         raise YastnError(f"Tensor.to_dict with dict_ver = {d['dict_ver']} not supported")
@@ -338,7 +337,7 @@ class Tensor:
     @property
     def size(self) -> int:
         """ Total number of elements in all non-empty blocks of the tensor. """
-        return self.struct.size
+        return self.config.backend.get_size(self._data)
 
     @property
     def device(self) -> str:
@@ -378,7 +377,8 @@ class Tensor:
 
     @property
     def num_blocks(self) -> int:
-        return len(self.struct.t)
+        bl = get_blocks(self.config.sym, self.struct.legs, self.struct.n, self.struct.isdiag)
+        return bl.nblocks
 
 def _convert_lists_to_tuples(nested_iterable):
     if isinstance(nested_iterable, list):

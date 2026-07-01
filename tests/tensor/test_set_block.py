@@ -150,7 +150,7 @@ def test_set_block_transpose(config_kwargs):
     at = a.transpose(axes=(3, 2, 0, 1))
     block1 = at[(1, 2, -2, -1)]
     assert block1.shape == (5, 4, 2, 3)
-    block0t = config_U1.backend.permute_dims(block0, axes=(3, 2, 0, 1))
+    block0t = config_U1.backend.permute_dims(block0, block0.shape, axes=(3, 2, 0, 1))
     assert config_U1.backend.allclose(block0t, block1, rtol=1e-12, atol=1e-12)
     #
     # set block of a.transpose, and check that it is properly assigned in a

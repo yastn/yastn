@@ -160,8 +160,9 @@ def expm(x):
     return torch.matrix_exp(x)
 
 
-def permute_dims(x, axes):
-    return torch.permute(x, axes)
+def permute_dims(x, old_shape, axes):
+    old_shape = tuple(old_shape)
+    return torch.permute(x.reshape(old_shape), axes)
 
 
 #########################

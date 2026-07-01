@@ -694,7 +694,7 @@ def get_contraction_path(*tn_to_contract, unroll=None,
                     rep_sl = max(sliced_legs, key=lambda sl: sum(sl.D))
                     mask_t = _build_mask_tensor(rep_sl, full_leg, rep_tensors[k].config)
                     candidate = mask_t.apply_mask(rep_tensors[k], axes=user_ax)
-                    if candidate.struct.t:          # non-empty after masking
+                    if candidate.size > 0:     # non-empty after masking
                         rep_tensors[k] = candidate  # else keep current (fallback)
 
         rep_args = []

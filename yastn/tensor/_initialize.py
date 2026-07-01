@@ -21,9 +21,9 @@ from operator import mul, itemgetter
 
 import numpy as np
 
-from ._auxiliary import _flatten, _config, get_blocks, find_index, find_matching_indices, update_old_struct
+from ._auxiliary import _struct, _flatten, _config, get_blocks, find_index, find_matching_indices, update_old_struct
 from ._legbasic import legs_from_dict_v2
-from ._tests import YastnError, _test_tD_consistency, _test_struct_types
+from ._tests import YastnError, _test_struct_types
 from ..backend import backend_np
 from ..sym import sym_none, sym_U1, sym_Z2, sym_Z3, sym_U1xU1, sym_U1xU1xZ2
 
@@ -146,14 +146,14 @@ def __setitem__(a, key, newvalue):
         reverse_trans = np.argsort(a.trans)
         ukey = key[reverse_trans, :].ravel()
         bl = get_blocks(a.config.sym, a.struct.legs, a.struct.n, a.isdiag)
-        ind = find_index(bl.t, ukey)
+        ind = find_index(bl.t, ukey, sorted=True)
     except ValueError as exc:
         raise YastnError('Tensor does not have the block specified by key.') from exc
     slc = slice(*bl.slc[ind])
     Dt = bl.D[ind]
     Dr = tuple(Dt[ax] for ax in a.trans)
     if not a.isdiag:
-        newvalue = a.config.backend.permute_dims(newvalue.reshape(Dr), reverse_trans)
+        newvalue = a.config.backend.permute_dims(newvalue, Dr, reverse_trans)
     a._data[slc] = newvalue.reshape(-1)
 
 
@@ -249,10 +249,8 @@ def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
         a_t, a_D = (), ()
 
     legs = legs_from_dict_v2({"s": a.s_n, "n": a.n, 't': a_t, "D": a_D})
-    a.struct = a.struct._replace(t=a_t, D=a_D, size=Dsize, legs=legs)
-
+    a.struct = _struct(legs=legs, n=a.n, isdiag=a.isdiag)
     a._data = _init_block(a.config, Dsize, val, dtype=a.yastn_dtype, device=a.device)
-    _test_tD_consistency(a.struct)
     _test_struct_types(a.struct)
 
 
@@ -323,7 +321,7 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
     new_block = _init_block(a.config, Dsize, val, dtype=a.yastn_dtype, device=a.device)
 
     bl = get_blocks(a.config.sym, a.legs, a.struct.n, a.isdiag)
-    ind = find_index(bl.t, ats)
+    ind = find_index(bl.t, ats, sorted=True)
     slc = bl.slc[ind]
     a.data[slice(*slc)] = new_block
 
@@ -335,7 +333,7 @@ def embed_(a, legs_new):
     sln, slo = bl_new.slc[ind1], bl_old.slc[ind2]
     meta = list(zip(sln, sln[:, 1] - sln[:, 0], slo, slo[:, 1] - slo[:, 0]))
     newdata = a.config.backend.embed_transpose(a.data, None, meta, bl_new.size)
-    struct, slices = update_old_struct(bl_new)
+    struct = update_old_struct(bl_new)
     a.struct = struct
     a._data = newdata
 

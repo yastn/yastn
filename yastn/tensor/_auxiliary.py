@@ -21,7 +21,7 @@ import numpy as np
 
 from ..sym import sym_none
 
-__all__ = ['_config', '_struct', 'sign_canonical_order', 'swap_charges']
+__all__ = ['_config', '_struct', 'get_blocks', 'sign_canonical_order', 'swap_charges']
 
 
 class _blocks(NamedTuple):
@@ -36,13 +36,9 @@ class _blocks(NamedTuple):
 
 
 class _struct(NamedTuple):
-    s: tuple = ()  # leg signatures
     legs: tuple = ()  # tuple[LegBasic]
     n: tuple = ()  # tensor charge
     isdiag: bool = False  # isdiag
-    t: tuple = ()  # list of block charges
-    D: tuple = ()  # list of block shapes
-    size: int = 0  # total data size
 
 
 class _config(NamedTuple):
@@ -234,17 +230,11 @@ def get_sub_slices(st, st_full):
 
 
 def update_old_struct(st_new):
-    ndim = len(st_new.legs)
-    nsym = len(st_new.n)
-    s = tuple(leg.s for leg in st_new.legs)
-    tnew = tuple(map(tuple, st_new.t.reshape(st_new.nblocks, ndim * nsym).tolist()))
-    Dnew = tuple(map(tuple, st_new.D.reshape(st_new.nblocks, ndim).tolist()))
-    slices_new = ()
-    struct_new = _struct(legs = st_new.legs, s=s, t=tnew, D=Dnew, size=st_new.size, n=st_new.n, isdiag=st_new.isdiag)
-    return struct_new, slices_new
+    struct_new = _struct(legs=st_new.legs, n=st_new.n, isdiag=st_new.isdiag)
+    return struct_new
 
 
-def find_index(tset, tt):
+def find_index(tset, tt, sorted=True):
     rs, *cs = tset.shape
     cp = np.prod(cs, dtype=np.int64)
     if not isinstance(tt, np.ndarray):
@@ -257,9 +247,14 @@ def find_index(tset, tt):
         struct_dt = np.dtype([('', tset.dtype)] * cp)
         tset_view = np.ascontiguousarray(tset).view(struct_dt).ravel()
         tt_view = np.ascontiguousarray(tt).view(struct_dt).ravel()
-        ind = np.searchsorted(tset_view, tt_view)[0]
-        if ind < len(tset) and np.array_equal(tset[ind], tt):
-            return ind
+        if not sorted:
+            ind = np.where(tset_view == tt_view)[0]
+            if len(ind) == 1:
+                return ind[0]
+        else:
+            ind = np.searchsorted(tset_view, tt_view)[0]
+            if ind < len(tset) and np.array_equal(tset[ind], tt):
+                return ind
     raise ValueError()
 
 

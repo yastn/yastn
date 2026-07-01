@@ -27,7 +27,6 @@ def set_cache_maxsize(maxsize=0):
     _contractions._meta_tensordot_fc = lru_cache(maxsize)(_contractions._meta_tensordot_fc.__wrapped__)
     _contractions._meta_tensordot_nf = lru_cache(maxsize)(_contractions._meta_tensordot_nf.__wrapped__)
     _contractions._meta_mask = lru_cache(maxsize)(_contractions._meta_mask.__wrapped__)
-    _contractions._common_inds = lru_cache(maxsize)(_contractions._common_inds.__wrapped__)
     _contractions._meta_swap_gate = lru_cache(maxsize)(_contractions._meta_swap_gate.__wrapped__)
     _contractions._meta_swap_gate_charge = lru_cache(maxsize)(_contractions._meta_swap_gate_charge.__wrapped__)
     _contractions._meta_trace = lru_cache(maxsize)(_contractions._meta_trace.__wrapped__)
@@ -49,7 +48,6 @@ def clear_cache():
     _contractions._meta_tensordot_fc.cache_clear()
     _contractions._meta_tensordot_nf.cache_clear()
     _contractions._meta_mask.cache_clear()
-    _contractions._common_inds.cache_clear()
     _contractions._meta_swap_gate.cache_clear()
     _contractions._meta_swap_gate_charge.cache_clear()
     _contractions._meta_trace.cache_clear()
@@ -75,7 +73,6 @@ def get_cache_info():
             "tensordot_f2m": _contractions._meta_tensordot_f2m.cache_info(),
             "tensordot_fc": _contractions._meta_tensordot_fc.cache_info(),
             "tensordot_nf": _contractions._meta_tensordot_nf.cache_info(),
-            "tensordot_common_inds": _contractions._common_inds.cache_info(),
             "broadcast": _contractions._meta_broadcast.cache_info(),
             "mask": _contractions._meta_mask.cache_info(),
             "trace": _contractions._meta_trace.cache_info(),

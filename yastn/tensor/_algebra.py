@@ -33,7 +33,7 @@ def __add__(a, b) -> 'Tensor':
     Signatures and total charges of two tensors should match.
     """
     (a, b), hfs = _pre_addition(a, b)
-    metas, size, struct_new, slices_new = _meta_addition(a.config.sym, a.struct, b.struct)
+    metas, size, struct_new = _meta_addition(a.config.sym, a.struct, b.struct)
     data = a.config.backend.add((a._data, b._data), metas, size)
     out = a._replace(hfs=hfs, struct=struct_new, data=data)
     return out
@@ -45,7 +45,7 @@ def __sub__(a, b) -> 'Tensor':
     Signatures and total charges of two tensors should match.
     """
     (a, b), hfs = _pre_addition(a, b)
-    metas, size, struct_new, slices_new = _meta_addition(a.config.sym, a.struct, b.struct)
+    metas, size, struct_new = _meta_addition(a.config.sym, a.struct, b.struct)
     data = a.config.backend.sub(a._data, b._data, metas, size)
     out = a._replace(hfs=hfs, struct=struct_new, data=data)
     return out
@@ -75,7 +75,7 @@ def add(*tensors, amplitudes=None, **kwargs):
 
     tensors, hfs = _pre_addition(*tensors)
     structs = [a.struct for a in tensors]
-    metas, size, struct_new, slices_new = _meta_addition(tensors[0].config.sym, *structs)
+    metas, size, struct_new = _meta_addition(tensors[0].config.sym, *structs)
     data = tensors[0].config.backend.add([v._data for v in tensors], metas, size)
     out = tensors[0]._replace(hfs=hfs, struct=struct_new, data=data)
     return out
@@ -120,7 +120,7 @@ def _meta_addition(sym, *structs):
         size = bl_new.size
         meta = (((0, size), (0, size)),)
         metas = (meta,) * len(structs)
-        return metas, size, structs[0], None
+        return metas, size, structs[0]
 
     ndim = len(structs[0].legs)  # nlegs
     legs_new = []
@@ -172,9 +172,9 @@ def _meta_addition(sym, *structs):
                     j += 1
         metas.append(tuple(meta))
 
-    struct_new, slices_new = update_old_struct(bl_new)
+    struct_new = update_old_struct(bl_new)
 
-    return tuple(metas), bl_new.size, struct_new, slices_new
+    return tuple(metas), bl_new.size, struct_new
 
 
 def allclose(a, b, rtol=1e-13, atol=1e-13) -> bool:
@@ -247,7 +247,7 @@ def __ge__(a, number) -> 'Tensor[bool]':
 def __mul__(a, number) -> 'Tensor':
     """ Multiply tensor by a number, use: `number * tensor`. """
     data = a._data * number
-    if a.config.backend.get_size(data) != a.struct.size:
+    if a.config.backend.get_size(data) != a.config.backend.get_size(a._data):
         raise YastnError("Multiplication cannot change data size; broadcasting not supported.")
     return a._replace(data=data)
 
@@ -273,7 +273,7 @@ def __neg__(a) -> 'Tensor':
 def __pow__(a, exponent) -> 'Tensor':
     """ Element-wise exponent of tensor, use: `tensor ** exponent`. """
     data = a._data ** exponent
-    if a.config.backend.get_size(data) != a.struct.size:
+    if a.config.backend.get_size(data) != a.config.backend.get_size(a._data):
         raise YastnError("Exponent cannot change data size; broadcasting not supported.")
     return a._replace(data=data)
 
@@ -281,9 +281,8 @@ def __pow__(a, exponent) -> 'Tensor':
 def __truediv__(a, number) -> 'Tensor':
     """ Divide tensor by a scalar, use: `tensor / number`. """
     data = a._data / number
-    if a.config.backend.get_size(data) != a.struct.size:
+    if a.config.backend.get_size(data) != a.config.backend.get_size(a._data):
         raise YastnError("truediv cannot change data size; broadcasting not supported.")
-
     return a._replace(data=data)
 
 
