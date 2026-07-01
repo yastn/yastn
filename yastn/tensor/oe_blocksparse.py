@@ -27,6 +27,7 @@ try:
 except:
     _VALID_CONTRACT_KWARGS = {'optimize', 'memory_limit', 'einsum_call', 'use_blas', 'shapes'}
 from . import Tensor, ncon, split_data_and_meta, combine_data_and_meta
+from ._auxiliary import get_blocks
 from ._legs import Leg
 
 try:
@@ -213,30 +214,29 @@ def _expand_partial_output(partial, sl_map, output_unroll_info):
     -------
     yastn.Tensor  with full-sized blocks on the output-unrolled axes.
     """
-    if not partial.struct.t:
+    bl = get_blocks(partial.config.sym, partial.struct.legs, partial.struct.n, partial.struct.isdiag)
+    if bl.t.size == 0:
         return partial  # empty tensor: nothing to expand
 
     config = partial.config
     backend = config.backend
-    nsym = config.sym.NSYM
     ndim = partial.ndim_n
     dtype = partial.yastn_dtype
     device = partial.device
+    s = tuple(leg.s for leg in partial.struct.legs)
 
-    expanded = Tensor(config=config, s=partial.struct.s, n=partial.struct.n)
+    expanded = Tensor(config=config, s=s, n=partial.struct.n)
 
-    for i, block_ct in enumerate(partial.struct.t):
+    for block_ct, partial_D, slc in zip(bl.t, bl.D, bl.slc):
         # Slice block data in the native backend format (no numpy conversion)
-        start, stop = partial.slices[i].slcs[0]
-        partial_D = partial.struct.D[i]
-        block_data = partial._data[start:stop].reshape(partial_D)
+        block_data = partial._data[slc[0]: slc[1]].reshape(partial_D)
 
         # Build full block shape and the embedding slice tuple
         full_shape = list(partial_D)
         out_slices = [slice(None)] * ndim
 
         for out_ax, (u, full_leg) in output_unroll_info.items():
-            ci = tuple(block_ct[out_ax * nsym : (out_ax + 1) * nsym])
+            ci = tuple(block_ct[out_ax])
             if ci in full_leg.tD:
                 full_shape[out_ax] = full_leg.tD[ci]
                 out_slices[out_ax] = sl_map[u].slices.get(ci, slice(None))
@@ -464,7 +464,7 @@ def _validate_and_resolve_unroll(*args,
         unroll=None) \
             -> Mapping[Hashable,Union[Sequence[SlicedLeg],int]]:
     r"""
-    Validates the ``unroll`` argument and resolves any integer values 
+    Validates the ``unroll`` argument and resolves any integer values
     to lists of :class:`SlicedLeg` objects via uniform slicing of the corresponding leg in the input tensors.
 
     :param unroll: Mapping[Hashable,Union[Sequence[SlicedLeg],int]] or None
@@ -484,7 +484,7 @@ def _validate_and_resolve_unroll(*args,
             assert v > 0, "unroll integer value must be positive"
             # Find the leg with label k in the network and slice it uniformly
             found = False
-            for t, ig in zip(args[0 : 2 * (len(args) // 2) : 2], 
+            for t, ig in zip(args[0 : 2 * (len(args) // 2) : 2],
                              args[1 : 2 * (len(args) // 2) : 2]):
                 if k in ig:
                     user_ax = list(ig).index(k)
@@ -643,7 +643,7 @@ def _log_input_mem_size(shapes : tuple[tuple[int]],names=None,who=None,**kwargs)
         log.info(f"{who} total size {sum(np.asarray(t).prod() for t in shapes)}")
 
 
-def get_contraction_path(*tn_to_contract, unroll=None, 
+def get_contraction_path(*tn_to_contract, unroll=None,
                          names:Sequence[str]=None, who:str=None, **kwargs)-> tuple[Sequence[tuple[int]], PathInfo]:
     r"""Returns optimal contraction path for tensor network contraction specified in interleaved
     format. Takes into account unrolled indices if any.
@@ -659,7 +659,7 @@ def get_contraction_path(*tn_to_contract, unroll=None,
     Returns
     -------
     path : Sequence[tuple[int]]
-        Optimal contraction path as a sequence of tuples specifying which pair of tensors to contract at each step. 
+        Optimal contraction path as a sequence of tuples specifying which pair of tensors to contract at each step.
         The path is in terms of positions in current list of tensors, which is shrinking at each step.
     path_info : opt_einsum.contract.PathInfo
          Detailed information about the contraction path, including shapes and memory usage of intermediate tensors.

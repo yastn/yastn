@@ -30,6 +30,7 @@ from ._contractions import *
 from ._control_lru import *
 from ._einsum import *
 from ._initialize import *
+from ._legbasic import *
 from ._legs import *
 from ._merging import *
 from ._output import *
@@ -54,13 +55,13 @@ __all__.extend(_contractions.__all__)
 __all__.extend(_control_lru.__all__)
 __all__.extend(_einsum.__all__)
 __all__.extend(_initialize.__all__)
+__all__.extend(_legbasic.__all__)
 __all__.extend(_legs.__all__)
 __all__.extend(_merging.__all__)
 __all__.extend(_output.__all__)
 __all__.extend(_single.__all__)
 __all__.extend(_tests.__all__)
 __all__.extend(linalg.__all__)
-__all__.append('LegBasic')
 
 
 class Tensor:
@@ -117,8 +118,6 @@ class Tensor:
             size = self._data.size
             self.struct = _struct(legs=legs, s=s, n=n, isdiag=bool(isdiag), size=size)
         #
-        self.slices = kwargs.get('slices', ())
-        #
         # self.mfs and self.trans describe logical/meta transformation of legs
         # 1) at the highest level, self.mfs is a logical fusion of legs,
         # where a group of consecutive legs is treated as a single leg
@@ -170,7 +169,7 @@ class Tensor:
 
     def _replace(self, **kwargs) -> Tensor:
         """ Creates a shallow copy replacing fields specified in kwargs. """
-        for arg in ('config', 'struct', 'mfs', 'hfs', 'data', 'slices', 'trans'):
+        for arg in ('config', 'struct', 'mfs', 'hfs', 'data', 'trans'):
             if arg not in kwargs:
                 kwargs[arg] = getattr(self, arg)
         return Tensor(**kwargs)
@@ -199,8 +198,7 @@ class Tensor:
             if d['type'] != 'Tensor':
                 raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
 
-            if d['level'] >= 1 or config is not None:
-                d = d.copy()
+            d = d.copy()
 
             if config is not None:
                 if (d['config']['sym'] if isinstance(d['config'], dict) else d['config'].sym.SYM_ID)  != config.sym.SYM_ID:
@@ -209,25 +207,22 @@ class Tensor:
                     raise YastnError("Fermionic statistics in config does not match the one in stored in d.")
                 d['config'] = config
 
-            if d['level'] >= 1:
-                for k in ['struct', 'slices', 'hfs', 'mfs']:
-                    d[k] = _convert_lists_to_tuples(d[k])
-                if not isinstance(d['config'], _config):
-                    d['config'] = make_config(**d['config'])
-                d['hfs'] = tuple(_Fusion(**hf) for hf in d['hfs'])
-                d['struct']['isdiag'] = d['struct'].pop('diag')
-                d['struct'] = _struct(**d['struct'])
-                d['struct'] = d['struct']._replace(legs=legs_from_struct(d['struct']))
-                d['slices'] = tuple(_slc(*x) for x in d['slices'])
+            for k in ['struct', 'slices', 'hfs', 'mfs']:
+                d[k] = _convert_lists_to_tuples(d[k])
+            if not isinstance(d['config'], _config):
+                d['config'] = make_config(**d['config'])
+            d['hfs'] = tuple(_Fusion(**hf) for hf in d['hfs'])
+            d['struct']['isdiag'] = d['struct'].pop('diag')
+            d['struct']['legs'] = legs_from_dict_v2(d['struct'])
+            d['struct'] = _struct(**d['struct'])
 
-            if d['level'] >= 2 or config is not None:
-                dtype = d['config'].default_dtype
-                if hasattr(d['data'], 'dtype'):
-                    if 'complex128' in str(d['data'].dtype):
-                        dtype = 'complex128'
-                    if 'float64' in str(d['data'].dtype):
-                        dtype = 'float64'
-                d['data'] = d['config'].backend.to_tensor(d['data'], dtype=dtype, device=d['config'].default_device)
+            dtype = d['config'].default_dtype
+            if hasattr(d['data'], 'dtype'):
+                if 'complex128' in str(d['data'].dtype):
+                    dtype = 'complex128'
+                if 'float64' in str(d['data'].dtype):
+                    dtype = 'float64'
+            d['data'] = d['config'].backend.to_tensor(d['data'], dtype=dtype, device=d['config'].default_device)
 
             return cls(**d)
 
@@ -247,14 +242,13 @@ class Tensor:
                 d['config'] = config
 
             if d['level'] >= 1:
-                for k in ['struct', 'slices', 'hfs', 'mfs']:
+                for k in ['struct', 'hfs', 'mfs']:
                     d[k] = _convert_lists_to_tuples(d[k])
                 if not isinstance(d['config'], _config):
                     d['config'] = make_config(**d['config'])
                 d['hfs'] = tuple(_Fusion(**hf) for hf in d['hfs'])
                 d['struct']['legs'] = tuple(LegBasic(**xx) for xx in d['struct']['legs'])
                 d['struct'] = _struct(**d['struct'])
-                d['slices'] = tuple(_slc(*x) for x in d['slices'])
 
             if d['level'] >= 2 or config is not None:
                 dtype = d['config'].default_dtype

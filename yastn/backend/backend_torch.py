@@ -26,7 +26,7 @@ from .linalg.torch_eig_sym import SYMEIG
 from ._backend_torch_backwards import kernel_svd, kernel_svds_scipy
 from ._backend_torch_backwards import kernel_dot, kernel_transpose_dot_sum, kernel_negate_blocks
 from ._backend_torch_backwards import kernel_apply_mask, kernel_embed_mask
-from ._backend_torch_backwards import kernel_transpose, kernel_transpose_and_merge, kernel_unmerge
+from ._backend_torch_backwards import kernel_embed_transpose, kernel_transpose_and_merge, kernel_unmerge
 
 
 __all__= ['DTYPE', 'get_dtype', 'get_yastn_dtype',
@@ -593,15 +593,8 @@ def embed_mask(Adata, mask, meta, Dsize, axis, a_ndim):
     return kernel_embed_mask.apply(Adata, mask, meta, Dsize, axis, a_ndim)
 
 
-def embed_blocks(Adata, meta, Dsize):
-    newdata = torch.zeros(Dsize, dtype=Adata.dtype, device=Adata.device)
-    for sln, sla in meta:
-        newdata[slice(*sln)] = Adata[slice(*sla)]
-    return newdata
-
-
-def transpose(data, axes, meta_transpose):
-    return kernel_transpose.apply(data, axes, meta_transpose)
+def embed_transpose(data, axes, meta_transpose, size):
+    return kernel_embed_transpose.apply(data, axes, meta_transpose, size)
 
 
 def transpose_and_merge(data, order, meta_new, meta_mrg, Dsize):

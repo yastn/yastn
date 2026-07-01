@@ -648,15 +648,8 @@ def embed_mask(Adata, mask, meta, Dsize, axis, a_ndim):
     return newdata
 
 
-def embed_blocks(Adata, meta, Dsize):
-    newdata = np.zeros(Dsize, dtype=Adata.dtype)
-    for sln, sla in meta:
-        newdata[slice(*sln)] = Adata[slice(*sla)]
-    return newdata
-
-
-def transpose(data, axes, meta_transpose):
-    newdata = np.empty_like(data)
+def embed_transpose(data, axes, meta_transpose, size):
+    newdata = np.zeros(size, dtype=data.dtype)
     for sln, Dn, slo, Do in meta_transpose:
         newdata[slice(*sln)].reshape(Dn)[:] = data[slice(*slo)].reshape(Do).transpose(axes)
     return newdata

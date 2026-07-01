@@ -15,13 +15,14 @@
 """ Methods creating a new yastn.Tensor """
 import os
 from functools import reduce
-from itertools import product, accumulate
+from itertools import product
 import numbers
 from operator import mul, itemgetter
 
 import numpy as np
 
-from ._auxiliary import _flatten, _slc, _config, legs_from_struct, get_blocks, test_all_blocks, find_row, find_indices, update_old_struct
+from ._auxiliary import _flatten, _config, get_blocks, find_index, find_matching_indices, update_old_struct
+from ._legbasic import legs_from_dict_v2
 from ._tests import YastnError, _test_tD_consistency, _test_struct_types
 from ..backend import backend_np
 from ..sym import sym_none, sym_U1, sym_Z2, sym_Z3, sym_U1xU1, sym_U1xU1xZ2
@@ -145,7 +146,7 @@ def __setitem__(a, key, newvalue):
         reverse_trans = np.argsort(a.trans)
         ukey = key[reverse_trans, :].ravel()
         bl = get_blocks(a.config.sym, a.struct.legs, a.struct.n, a.isdiag)
-        ind = find_row(bl.t, ukey)
+        ind = find_index(bl.t, ukey)
     except ValueError as exc:
         raise YastnError('Tensor does not have the block specified by key.') from exc
     slc = slice(*bl.slc[ind])
@@ -241,24 +242,18 @@ def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
     if len(tset) > 0:
         tset = tset.reshape(len(tset), a.ndim_n * a.config.sym.NSYM).tolist()
         Dset = Dset.tolist()
-        meta = [(tuple(ts), tuple(Ds), dp) for ts, Ds, dp in zip(tset, Dset, Dp)]
+        meta = [(tuple(ts), tuple(Ds)) for ts, Ds in zip(tset, Dset)]
         meta = sorted(meta, key=itemgetter(0))
-        a_t, a_D, a_Dp = zip(*meta)
+        a_t, a_D = zip(*meta)
     else:
-        a_t, a_D, a_Dp = (), (), ()
+        a_t, a_D = (), ()
 
-    a.slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(a_Dp), a_Dp, a_D))
-    a.struct = a.struct._replace(t=a_t, D=a_D, size=Dsize)
-    legs = legs_from_struct(a.struct)
+    legs = legs_from_dict_v2({"s": a.s_n, "n": a.n, 't': a_t, "D": a_D})
     a.struct = a.struct._replace(t=a_t, D=a_D, size=Dsize, legs=legs)
-
-    ts, Ds, slices, size, nblocks, legs, _, _ = get_blocks(a.config.sym, a.legs, a.struct.n, a.isdiag)
-    assert a.legs == legs
 
     a._data = _init_block(a.config, Dsize, val, dtype=a.yastn_dtype, device=a.device)
     _test_tD_consistency(a.struct)
     _test_struct_types(a.struct)
-    test_all_blocks(a)
 
 
 def set_block(a, ts=(), Ds=None, val='zeros'):
@@ -328,7 +323,7 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
     new_block = _init_block(a.config, Dsize, val, dtype=a.yastn_dtype, device=a.device)
 
     bl = get_blocks(a.config.sym, a.legs, a.struct.n, a.isdiag)
-    ind = find_row(bl.t, ats)
+    ind = find_index(bl.t, ats)
     slc = bl.slc[ind]
     a.data[slice(*slc)] = new_block
 
@@ -336,11 +331,11 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
 def embed_(a, legs_new):
     bl_old = get_blocks(a.config.sym, a.legs, a.struct.n, a.isdiag)
     bl_new = get_blocks(a.config.sym, legs_new, a.struct.n, a.isdiag)
-    ind1, ind2 = find_indices(bl_new.t, bl_old.t)
-    meta = [(sln, slo) for sln, slo in zip(bl_new.slc[ind1], bl_old.slc[ind2])]
-    newdata = a.config.backend.embed_blocks(a.data, meta, bl_new.size)
-    struct, slices = update_old_struct(a.struct, bl_new)
-    a.slices = slices
+    ind1, ind2 = find_matching_indices(bl_new.t, bl_old.t)
+    sln, slo = bl_new.slc[ind1], bl_old.slc[ind2]
+    meta = list(zip(sln, sln[:, 1] - sln[:, 0], slo, slo[:, 1] - slo[:, 0]))
+    newdata = a.config.backend.embed_transpose(a.data, None, meta, bl_new.size)
+    struct, slices = update_old_struct(bl_new)
     a.struct = struct
     a._data = newdata
 

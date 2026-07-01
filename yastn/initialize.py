@@ -24,7 +24,8 @@ from operator import itemgetter
 import numpy as np
 
 from .tensor import Tensor, YastnError, ncon
-from .tensor._auxiliary import _clear_axes, _unpack_legs, LegBasic, get_blocks, find_indices, update_old_struct
+from .tensor._auxiliary import _clear_axes, _unpack_legs, get_blocks, find_matching_indices, update_old_struct
+from .tensor._legbasic import LegBasic
 from .tensor._legs import Leg, LegMeta, legs_union, _legs_mask_needed
 from .tensor._merging import _embed_tensor, _combine_hfs_sum
 from .tensor._tests import _test_can_be_combined
@@ -398,14 +399,14 @@ def block(tensors, common_legs=None) -> Tensor:
     meta = []
     for pa, a in tensors.items():
         bl_a = get_blocks(sym, a.legs, a.n, a.isdiag)
-        indc, inda = find_indices(bl_new.t, bl_a.t)
+        indc, inda = find_matching_indices(bl_new.t, bl_a.t)
         for sln, Dn, ta, sla, Da in zip(bl_new.slc[indc], bl_new.D[indc], bl_a.t[inda], bl_a.slc[inda], bl_a.D[inda]):
             Dslcs = tuple(tDslc[tuple(ta[n].tolist())][pa[n]] for n, tDslc in enumerate(ltDslc))
             meta.append((sln, Dn, pa, sla, Da, Dslcs))
 
     data = tn0.config.backend.merge_super_blocks(tensors, meta, bl_new.size)
-    struct, slices = update_old_struct(tn0.struct, bl_new)
-    out = tn0._replace(struct=struct, slices=slices, data=data, hfs=tuple(hfs))
+    struct, slices = update_old_struct(bl_new)
+    out = tn0._replace(struct=struct, data=data, hfs=tuple(hfs))
     return out
 
 

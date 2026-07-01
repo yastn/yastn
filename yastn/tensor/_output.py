@@ -21,8 +21,8 @@ from typing import Sequence
 
 import numpy as np
 
-from ._auxiliary import _clear_axes, _unpack_axes, _struct, _slc, _flatten, legs_from_struct, get_blocks, find_row
-from ._initialize import embed_
+from ._auxiliary import _clear_axes, _unpack_axes, _struct, _flatten, get_blocks, find_index
+from ._legbasic import legs_from_dict_v2
 from ._legs import Leg, LegMeta, legs_union, _legs_mask_needed
 from ._merging import _embed_tensor
 from ._tests import YastnError
@@ -73,12 +73,10 @@ def to_dict(a, level=2, meta=None, resolve_ops=False) -> dict:
         hfs = tuple(hf._asdict() for hf in a.hfs)
         struct = a.struct._asdict()
         struct['legs'] = tuple(leg._asdict() for leg in struct['legs'])
-        slices = [tuple(slc) for slc in a.slices]
     else:
         config = a.config
         hfs = a.hfs
         struct = a.struct
-        slices = a.slices
 
     data = a.data if level < 2 else a.config.backend.to_numpy(a.data)
 
@@ -89,14 +87,13 @@ def to_dict(a, level=2, meta=None, resolve_ops=False) -> dict:
          'config': config,
          'data': data,
          'struct': struct,
-         'slices': slices,
          'trans': a.trans,
          'isdiag': a.isdiag,
          'hfs': hfs,
          'mfs': a.mfs}
 
     if meta is not None:
-        if not all(meta[k] == d[k] for k in ['type', 'dict_ver', 'config', 'struct', 'slices', 'trans', 'isdiag', 'hfs', 'mfs']):
+        if not all(meta[k] == d[k] for k in ['type', 'dict_ver', 'config', 'struct', 'trans', 'isdiag', 'hfs', 'mfs']):
             size = meta['struct'].size if hasattr(meta['struct'], 'size') else meta['struct']['size']
             tmp = a.config.backend.zeros(size, dtype=a.yastn_dtype, device=a.device)
             ap = type(a).from_dict(combine_data_and_meta(tmp, meta))
@@ -105,7 +102,7 @@ def to_dict(a, level=2, meta=None, resolve_ops=False) -> dict:
             except YastnError as e:
                 raise YastnError("Tensor is inconsistent with meta: " + str(e))
             d = a.to_dict(level=level)
-            if not all(meta[k] == d[k] for k in ['type', 'dict_ver', 'config', 'struct', 'slices', 'isdiag', 'hfs', 'mfs']):
+            if not all(meta[k] == d[k] for k in ['type', 'dict_ver', 'config', 'struct', 'isdiag', 'hfs', 'mfs']):
                 raise YastnError("Tensor is inconsistent with meta.")
     return d
 
@@ -316,7 +313,7 @@ def __getitem__(a, key) -> numpy.ndarray | torch.tensor:
         reverse_trans = np.argsort(a.trans)
         ukey = key[reverse_trans, :].ravel()
         bl = get_blocks(a.config.sym, a.struct.legs, a.struct.n, a.isdiag)
-        ind = find_row(bl.t, ukey)
+        ind = find_index(bl.t, ukey)
     except ValueError as exc:
         raise YastnError('Tensor does not have the block specified by key.') from exc
     x = a._data[slice(*bl.slc[ind])]
@@ -330,7 +327,7 @@ def __contains__(a, key) -> bool:
     key = np.array(key, dtype=np.int64)
     try:
         bl = get_blocks(a.config.sym, a.struct.legs, a.struct.n, a.isdiag)
-        _ = find_row(bl.t, key)
+        _ = find_index(bl.t, key)
         return True
     except ValueError:
         return False
@@ -529,12 +526,10 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False) -> 'Tensor':
         meta = [(sl, D[:1]) for sl, D in meta]
 
     Dp = reduce(mul, Dtot, 1)
-    c_struct = _struct(s=c_s, n=(), isdiag=a.isdiag, t=c_t, D=c_D, size=Dp)
-    c_slices = (_slc(((0, Dp),), c_D[0], Dp),)
-    c_legs = legs_from_struct(c_struct)
+    c_legs = legs_from_dict_v2({"s": c_s, "n": (), "t": c_t, "D": c_D})
     c_struct = _struct(s=c_s, n=(), isdiag=a.isdiag, t=c_t, D=c_D, size=Dp, legs=c_legs)
     data = a.config.backend.merge_to_dense(a._data, Dtot_n, meta)
-    return a._replace(config=config_dense, struct=c_struct, slices=c_slices, data=data, mfs=None, hfs=None, trans=None)
+    return a._replace(config=config_dense, struct=c_struct, data=data, mfs=None, hfs=None, trans=None)
 
 
 def zero_of_dtype(a):

@@ -13,9 +13,6 @@
 # limitations under the License.
 # ==============================================================================
 """ Testing and controls. """
-from functools import reduce
-from operator import mul
-
 import numpy as np
 
 from ._auxiliary import _flatten, _unpack_axes, _struct

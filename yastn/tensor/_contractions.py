@@ -22,12 +22,12 @@ from operator import itemgetter
 
 import numpy as np
 
-from ._auxiliary import _struct, _slc, _clear_axes, _unpack_axes, _join_contiguous_slices, sign_canonical_order
-from ._auxiliary import legs_from_struct, test_all_blocks, get_blocks, update_old_struct, get_sub_slices
+from ._auxiliary import _struct, _clear_axes, _unpack_axes, _join_contiguous_slices, sign_canonical_order
+from ._auxiliary import get_blocks, update_old_struct, get_sub_slices
+from ._legbasic import legs_from_dict_v2
 from ._merging import _merge_to_matrix, _unmerge, _meta_unmerge_matrix, _meta_fuse_hard
 from ._merging import _transpose_and_merge, _mask_tensors_leg_intersection, _meta_mask
 from ._tests import YastnError, _test_can_be_combined, _unpack_trans_test_axes_pair
-from ._initialize import embed_
 
 __all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'broadcast', 'apply_mask', 'SpecialTensor', 'fkron']
 
@@ -123,8 +123,8 @@ def tensordot(a, b, axes, conj=(0, 0)) -> 'Tensor':
     else:
         raise YastnError("Tensordot policy not recognized. It should be 'fuse_to_matrix', 'fuse_contracted', or 'no_fusion'.")
 
-    struct_c, slices_c = update_old_struct(a.struct, st_out)
-    out = a._replace(data=data, struct=struct_c, slices=slices_c, mfs=mfs_c, hfs=hfs_c, trans=None)
+    struct_c, slices_c = update_old_struct(st_out)
+    out = a._replace(data=data, struct=struct_c, mfs=mfs_c, hfs=hfs_c, trans=None)
     return out
 
 def _tensordot_diag(a, b, in_b, destination):
@@ -204,8 +204,8 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
     if a.config.profile: a.config.backend.nvtx.range_push(f"_tensordot_nf")
     ind_a, ind_b = _common_inds(a.struct.t, b.struct.t, nin_a, nin_b, a.ndim_n, b.ndim_n, a.config.sym.NSYM)
     if a.config.profile: a.config.backend.nvtx.range_push(f"_meta_tensordot_nf")
-    meta_dot, reshape_a, reshape_b, st_c = _meta_tensordot_nf(a.config.sym, a.struct, a.slices, a.legs, a.n, a.isdiag, b.struct, b.slices, b.legs, b.n, b.isdiag,
-                                                                            ind_a, ind_b, nout_a, nin_a, nin_b, nout_b)
+    meta_dot, reshape_a, reshape_b, st_c = _meta_tensordot_nf(a.config.sym, a.legs, a.n, a.isdiag, b.legs, b.n, b.isdiag,
+                                                                            nout_a, nin_a, nin_b, nout_b)
     if a.config.profile: a.config.backend.nvtx.range_pop()
     order_a = nout_a + nin_a
     order_b = nin_b + nout_b
@@ -400,9 +400,9 @@ def _meta_tensordot_fc(sym, legs_a, n_a, isdiag_a, legs_b, n_b, isdiag_b):
 
 
 @lru_cache(maxsize=1024)
-def _meta_tensordot_nf(sym, struct_a, slices_a, legs_a, n_a, isdiag_a,
-                            struct_b, slices_b, legs_b, n_b, isdiag_b,
-                            ind_a, ind_b, nout_a, nin_a, nin_b, nout_b):
+def _meta_tensordot_nf(sym, legs_a, n_a, isdiag_a,
+                            legs_b, n_b, isdiag_b,
+                            nout_a, nin_a, nin_b, nout_b):
     #
     st_a_full = get_blocks(sym, legs_a, n_a, isdiag_a)
     st_b_full = get_blocks(sym, legs_b, n_b, isdiag_b)
@@ -438,7 +438,7 @@ def _meta_tensordot_nf(sym, struct_a, slices_a, legs_a, n_a, isdiag_a,
     st_c = get_blocks(sym, legs_c, n_c, isdiag=False)
     legs_c = st_c.legs
 
-    nsym = len(struct_a.n)
+    nsym = sym.NSYM
 
     lta, ndima = st_a.nblocks, len(legs_a)
     tao = st_a.t[:, nout_a, :]      # narrowed to contracted modes, and serialize <num-of-ingoing-modes(=legs)> x <order-of-sym-group> to 1D
@@ -679,8 +679,8 @@ def broadcast(a, *args, axes=0) -> 'Tensor' | tuple['Tensor']:
 
         meta, legs, st_c, ax, ndim = _meta_broadcast(a.config.sym, b.legs, b.n, b.isdiag, a.legs, a.n, a.isdiag, ax)
         data = b.config.backend.dot_diag(a._data, b._data, meta, st_c.size, ax, ndim)
-        struct, slices = update_old_struct(b.struct, st_c)
-        results.append(b._replace(struct=struct, slices=slices, data=data))
+        struct, slices = update_old_struct(st_c)
+        results.append(b._replace(struct=struct, data=data))
     return results if multiple_axes else results.pop()
 
 
@@ -768,8 +768,8 @@ def apply_mask(a, *args, axes=0) -> 'Tensor' | tuple['Tensor']:
 
         meta, legs, st, ax, ndim = _meta_mask(b.config.sym, b.legs, b.n, b.isdiag, mask_t, mask_D, ax)
         data = a.config.backend.apply_mask(b._data, mask, meta, st.size, ax, ndim)
-        struct, slices = update_old_struct(b.struct, st)
-        results.append(b._replace(struct=struct, slices=slices, data=data))
+        struct, slices = update_old_struct(st)
+        results.append(b._replace(struct=struct, data=data))
     return results.pop() if len(results) == 1 else results
 
 
@@ -782,8 +782,8 @@ def _apply_mask_axes(a, naxes, masks):
             mask_D = tuple(mask_tD.values())
             meta, legs, st, axis, ndim = _meta_mask(a.config.sym, a.legs, a.n, a.isdiag, mask_t, mask_D, axis)
             data = a.config.backend.apply_mask(a._data, mask, meta, st.size, axis, ndim)
-            struct, slices = update_old_struct(a.struct, st)
-            a = a._replace(struct=struct, slices=slices, data=data)
+            struct, slices = update_old_struct(st)
+            a = a._replace(struct=struct, data=data)
     return a
 
 
@@ -891,19 +891,17 @@ def trace(a, axes=(0, 1)) -> 'Tensor':
     if a.isdiag:
         struct = a.struct._replace(s=(), legs=(), isdiag=False, t=((),), D=((),), size=1)
         data = a.config.backend.sum_elements(a._data)
-        return a._replace(struct=struct, slices=(_slc(((0, 1),), (), 1),), mfs=mfs, hfs=hfs, isdiag=False, data=data, trans=None)
+        return a._replace(struct=struct, mfs=mfs, hfs=hfs, isdiag=False, data=data, trans=None)
 
     if mask_needed:
         msk_0, msk_1, a_hfs, _ = _mask_tensors_leg_intersection(a, a, nin_0, nin_1)
         a = _apply_mask_axes(a, nin_0 + nin_1, msk_0 + msk_1)
         a = a._replace(hfs=a_hfs)
 
-    test_all_blocks(a)
-    meta, struct, slices, legs = _meta_trace(a.config.sym, a.legs, a.n, nin_0, nin_1, out)
-    data = a.config.backend.trace(a._data, order, meta, struct.size)
+    meta, struct, size = _meta_trace(a.config.sym, a.legs, a.n, nin_0, nin_1, out)
+    data = a.config.backend.trace(a._data, order, meta, size)
 
-    out = a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, data=data, trans=None)
-    test_all_blocks(out)
+    out = a._replace(mfs=mfs, hfs=hfs, struct=struct, data=data, trans=None)
     return out
 
 @lru_cache(maxsize=1024)
@@ -936,20 +934,19 @@ def _meta_trace(sym, legs, n, nin_0, nin_1, out):
 
     pre_meta = sorted(zip(tn, Dn, Dnp, slo, Do, Drsh), key=itemgetter(0))
 
-    start, c_t, c_D, c_slices, meta_trace = 0, [], [], [], []
+    start, c_t, c_D, meta_trace = 0, [], [], []
     for (tn, Dn, Dnp), group in groupby(pre_meta, key=itemgetter(0, 1, 2)):
         c_t.append(tn)
         c_D.append(Dn)
         stop = start + Dnp
-        c_slices.append(_slc(((start, stop),), Dn, Dnp))
         meta_trace.append(((start, stop), tuple(mt[3:] for mt in group)))
         start = stop
     c_s = tuple(legs[ax].s for ax in out)
     size = start if len(c_s) > 0 else 1
-    c_struct = _struct(s=c_s, n=n, t=tuple(c_t), D=tuple(c_D), size=size)
-    legs_new = legs_from_struct(c_struct)
+
+    legs_new = legs_from_dict_v2({'n': n, 's': c_s, 't': c_t, 'D': c_D})
     c_struct = _struct(s=c_s, n=n, t=tuple(c_t), D=tuple(c_D), size=size, legs=legs_new)
-    return tuple(meta_trace), c_struct, tuple(c_slices), legs_new
+    return tuple(meta_trace), c_struct, size
 
 
 def swap_gate(a, axes, charge=None) -> 'Tensor':

@@ -310,26 +310,27 @@ class kernel_embed_mask(torch.autograd.Function):
         return Adata_b, None, None, None, None, None, None
 
 
-class kernel_transpose(torch.autograd.Function):
+class kernel_embed_transpose(torch.autograd.Function):
     @staticmethod
-    def forward(data, axes, meta_transpose):
-        newdata = torch.zeros_like(data)
+    def forward(data, axes, meta_transpose, size):
+        newdata = torch.zeros((size,), dtype=data.dtype, device=data.device)
         for sln, Dn, slo, Do in meta_transpose:
             newdata[slice(*sln)].view(Dn)[:] = data[slice(*slo)].view(Do).permute(axes)
         return newdata
 
     def setup_context(ctx, inputs, output):
-        data, axes, meta_transpose = inputs
+        data, axes, meta_transpose, size_new = inputs
         ctx.axes = axes
         ctx.meta_transpose = meta_transpose
+        ctx.size_old = data.size
 
     @staticmethod
     def backward(ctx, data_b):
         axes = ctx.axes
         inv_axes = tuple(np.argsort(axes))
         meta_transpose = ctx.meta_transpose
-
-        newdata_b = torch.zeros_like(data_b)
+        size_old = ctx.size_old
+        newdata_b = torch.zeros((size_old,), dtype=data_b.dtype, device=data_b.device)
         for sln, Dn, slo, Do in meta_transpose:
             newdata_b[slice(*slo)].view(Do)[:] = data_b[slice(*sln)].view(Dn).permute(inv_axes)
         return newdata_b, None, None

@@ -15,15 +15,14 @@
 """ Linear operations and operations on a single yastn.Tensor. """
 from __future__ import annotations
 from typing import Sequence, Union
-from itertools import accumulate
-from operator import itemgetter
 
 import numpy as np
 
-from ._auxiliary import _slc, _clear_axes, _unpack_axes, _join_contiguous_slices, LegBasic, legs_from_struct, test_all_blocks, get_blocks, update_old_struct, argsort_t
+from ._auxiliary import _clear_axes, _unpack_axes, _join_contiguous_slices, get_blocks, update_old_struct, argsort_t
 from ._einsum import ncon
-from ._merging import _Fusion
+from ._legbasic import LegBasic
 from ._legs import LegMeta, Leg, leg_product
+from ._merging import _Fusion
 from ._tests import YastnError, _test_axes_all
 
 __all__ = ['conj', 'conj_blocks', 'consume_transpose',
@@ -209,19 +208,17 @@ def flip_charges(a, axes=None) -> 'Tensor':
             raise YastnError('Flipping charges of hard-fused leg is not supported.')
         hfs_new[ax] = hfs_new[ax].conj()
         leg = a.legs[ax]
-        tD = sorted((a.config.sym.conj_charge(tt), DD) for tt, DD in zip(leg.t, leg.D))
-        legs_new[ax] = LegBasic(s=-leg.s, t=tuple(x[0] for x in tD), D=tuple(x[1] for x in tD))
+        legs_new[ax] = leg.conj_charges(a.config.sym)
         t_flip[:, ax, :] = a.config.sym.fuse(t_flip[:, (ax,), :], (leg.s,), -leg.s)
 
     legs_new = tuple(legs_new)
     bl_new = get_blocks(a.config.sym, legs_new, a.n, a.isdiag)
     inds = argsort_t(t_flip)
     assert np.array_equal(t_flip[inds], bl_new.t), "Sanity check."
-    meta_embed = tuple((sl_n, sl_n[1] - sl_n[0], sl_o, sl_o[1] - sl_o[0], 0) for sl_n, sl_o in zip(bl_new.slc, bl_old.slc[inds]))
-    mask = {0: slice(None)}
-    data = a.config.backend.embed_mask(a._data, mask, meta_embed, bl_new.size, 0, 0)
-    struct, slices = update_old_struct(a.struct, bl_new)
-    out = a._replace(struct=struct, slices=slices, data=data, hfs=hfs_new)
+    meta_embed = tuple((sln, sln[1] - sln[0], slo, slo[1] - slo[0]) for sln, slo in zip(bl_new.slc, bl_old.slc[inds]))
+    data = a.config.backend.embed_transpose(a._data, None, meta_embed, bl_new.size)  # used for embeding
+    struct, slices = update_old_struct(bl_new)
+    out = a._replace(struct=struct, data=data, hfs=hfs_new)
     return out
 
 
@@ -329,10 +326,10 @@ def consume_transpose(a) -> 'Tensor':
     inds = argsort_t(bl_old.t[:, order, :])
     meta = [(sln, Dn, slo, Do) for sln, Dn, slo, Do in zip(bl_new.slc, bl_new.D, bl_old.slc[inds], bl_old.D[inds])]
 
-    struct, slices = update_old_struct(a.struct, bl_new)
+    struct, slices = update_old_struct(bl_new)
 
-    data = a._data if a.isdiag else a.config.backend.transpose(a._data, a.trans, meta)
-    return a._replace(hfs=new_hfs, struct=struct, slices=slices, data=data, trans=no_trans)
+    data = a._data if a.isdiag else a.config.backend.embed_transpose(a._data, a.trans, meta, bl_new.size)
+    return a._replace(hfs=new_hfs, struct=struct, data=data, trans=no_trans)
 
 
 def moveaxis(a, source, destination) -> 'Tensor':
@@ -447,9 +444,9 @@ def add_leg(a, axis=-1, s=-1, t=None, leg=None) -> 'Tensor':
     newD = tuple(x[:haxis] + (1,) + x[haxis:] for x in a.struct.D)
     legs = a.legs[:haxis] + (LegBasic(s=s, t=(t,), D=(1,)),) + a.legs[haxis:]
     struct = a.struct._replace(t=newt, D=newD, s=news, n=newn, legs=legs)
-    slices = tuple(_slc(x.slcs, y, x.Dp) for x, y in zip(a.slices, newD))
+    slices = ()
     hfs = a.hfs[:haxis] + (hfsa,) + a.hfs[haxis:]
-    return a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, trans=trans)
+    return a._replace(mfs=mfs, hfs=hfs, struct=struct, trans=trans)
 
 
 def remove_leg(a, axis=-1) -> 'Tensor':
@@ -499,9 +496,9 @@ def remove_leg(a, axis=-1) -> 'Tensor':
         new_D = tuple(x[: haxis] + x[haxis + 1:] for x in a.struct.D)
         new_legs = a.legs[:haxis] + a.legs[haxis + 1:]
         struct = a.struct._replace(t=new_t, D=new_D, s=new_s, n=new_n, legs=new_legs)
-        slices = tuple(_slc(x.slcs, y, x.Dp) for x, y in zip(a.slices, new_D))
+        slices = ()
         hfs = a.hfs[:haxis] + a.hfs[haxis + 1:]
-        a = a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, trans=trans)
+        a = a._replace(mfs=mfs, hfs=hfs, struct=struct, trans=trans)
     return a
 
 
@@ -529,13 +526,10 @@ def diag(a) -> 'Tensor':
     new_s = tuple(leg.s for leg in new_legs)
     struct = a.struct._replace(isdiag=not a.isdiag, size=bl_new.size, s=new_s, legs=new_legs)
 
-    Dp = tuple(x.Dp ** 2 for x in a.slices) if a.isdiag else tuple(D[0] for D in a.struct.D)
-    slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dp), Dp, a.struct.D))
-
     if a.isdiag:  # isdiag=True -> isdiag=False
         meta = tuple((sl_new, sl_old) for sl_new, sl_old in zip(bl_new.slc, bl.slc))
         data = a.config.backend.diag_1dto2d(a._data, meta, struct.size)
     else:  # isdiag=False -> isdiag=True
         meta = tuple((sl_new, sl_old, DD) for sl_new, sl_old, DD in zip(bl_new.slc, bl.slc, bl.D))
         data = a.config.backend.diag_2dto1d(a._data, meta, struct.size)
-    return a._replace(struct=struct, slices=slices, data=data, trans=None)
+    return a._replace(struct=struct, data=data, trans=None)

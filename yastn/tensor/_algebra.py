@@ -18,7 +18,7 @@ from functools import lru_cache
 
 import numpy as np
 
-from ._auxiliary import _slc, get_blocks, struct_from_blocks, update_old_struct
+from ._auxiliary import get_blocks, update_old_struct
 from ._legs import legs_union
 from ._merging import _embed_tensor
 from ._tests import YastnError, _test_can_be_combined, _unpack_trans_test_axes_pair
@@ -35,7 +35,7 @@ def __add__(a, b) -> 'Tensor':
     (a, b), hfs = _pre_addition(a, b)
     metas, size, struct_new, slices_new = _meta_addition(a.config.sym, a.struct, b.struct)
     data = a.config.backend.add((a._data, b._data), metas, size)
-    out = a._replace(hfs=hfs, struct=struct_new, slices=slices_new if slices_new is not None else a.slices, data=data)
+    out = a._replace(hfs=hfs, struct=struct_new, data=data)
     return out
 
 def __sub__(a, b) -> 'Tensor':
@@ -47,7 +47,7 @@ def __sub__(a, b) -> 'Tensor':
     (a, b), hfs = _pre_addition(a, b)
     metas, size, struct_new, slices_new = _meta_addition(a.config.sym, a.struct, b.struct)
     data = a.config.backend.sub(a._data, b._data, metas, size)
-    out = a._replace(hfs=hfs, struct=struct_new, slices=slices_new if slices_new is not None else a.slices, data=data)
+    out = a._replace(hfs=hfs, struct=struct_new, data=data)
     return out
 
 def add(*tensors, amplitudes=None, **kwargs):
@@ -77,7 +77,7 @@ def add(*tensors, amplitudes=None, **kwargs):
     structs = [a.struct for a in tensors]
     metas, size, struct_new, slices_new = _meta_addition(tensors[0].config.sym, *structs)
     data = tensors[0].config.backend.add([v._data for v in tensors], metas, size)
-    out = tensors[0]._replace(hfs=hfs, struct=struct_new, slices=slices_new if slices_new is not None else tensors[0].slices, data=data)
+    out = tensors[0]._replace(hfs=hfs, struct=struct_new, data=data)
     return out
 
 def _pre_addition(*tensors):
@@ -172,7 +172,7 @@ def _meta_addition(sym, *structs):
                     j += 1
         metas.append(tuple(meta))
 
-    struct_new, slices_new = struct_from_blocks(bl_new)
+    struct_new, slices_new = update_old_struct(bl_new)
 
     return tuple(metas), bl_new.size, struct_new, slices_new
 
