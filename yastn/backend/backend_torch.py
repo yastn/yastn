@@ -45,7 +45,7 @@ __all__= ['DTYPE', 'get_dtype', 'get_yastn_dtype',
     'dot', 'dot_diag', 'transpose_dot_sum',
     'merge_to_dense', 'merge_super_blocks', 'is_independent',
     'apply_mask', 'embed_mask',
-    'transpose', 'transpose_and_merge', 'unmerge',
+    'embed_transpose', 'transpose_and_merge', 'unmerge',
     'negate_blocks', 'bitwise_not']
 
 
