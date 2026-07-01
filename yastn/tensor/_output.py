@@ -14,10 +14,11 @@
 # ==============================================================================
 """ Methods outputting data from yastn.Tensor. """
 from __future__ import annotations
+
 from functools import reduce
 from numbers import Number
 from operator import mul
-from typing import Sequence
+from typing import Sequence, TYPE_CHECKING
 
 import numpy as np
 
@@ -28,6 +29,9 @@ from ._merging import _embed_tensor
 from ._tests import YastnError
 from ..sym import sym_none
 from .._split_combine_dict import combine_data_and_meta
+
+if TYPE_CHECKING:
+    from . import Tensor
 
 __all__ = ['requires_grad']
 
@@ -134,7 +138,7 @@ def to_dict(a, level=2, meta=None, resolve_ops=False) -> dict:
 ############################
 
 
-def print_properties(a, file=None) -> Never:
+def print_properties(a, file=None):
     """
     Print a number of properties of the tensor:
 
@@ -285,14 +289,14 @@ def get_shape(a, axes=None, native=False) ->  int | Sequence[int]:
     return Dtot_a[0] if return_int else Dtot_a
 
 
-def get_dtype(a) -> numpy.dtype | torch.dtype:
+def get_dtype(a) -> 'numpy.dtype' | 'torch.dtype':
     """
     ``dtype`` of tensor data used by the backend.
     """
     return a.config.backend.get_dtype(a._data)
 
 
-def __getitem__(a, key) -> numpy.ndarray | torch.tensor:
+def __getitem__(a, key) -> 'numpy.ndarray' | 'torch.tensor':
     """
     Block corresponding to a given charge combination.
 
@@ -335,7 +339,7 @@ def __contains__(a, key) -> bool:
 ##################################################
 
 
-def get_legs(a, axes=None, native=False) -> yastn.Leg | Sequence[yastn.Leg]:
+def get_legs(a, axes=None, native=False) -> Leg | Sequence[Leg]:
     r"""
     Return a leg or a set of legs of the tensor ``a``.
 
@@ -386,7 +390,7 @@ def get_legs(a, axes=None, native=False) -> yastn.Leg | Sequence[yastn.Leg]:
 #   Down-casting tensors   #
 ############################
 
-def to_dense(a, legs=None, native=False, reverse=False) -> numpy.ndarray | torch.tensor:
+def to_dense(a, legs=None, native=False, reverse=False) -> 'numpy.ndarray' | 'torch.tensor':
     r"""
     Create dense tensor corresponding to the symmetric tensor.
 
@@ -417,7 +421,7 @@ def to_dense(a, legs=None, native=False, reverse=False) -> numpy.ndarray | torch
     return x
 
 
-def to_numpy(a, legs=None, native=False, reverse=False) -> numpy.ndarray:
+def to_numpy(a, legs=None, native=False, reverse=False) -> 'numpy.ndarray':
     r"""
     Create dense :class:`numpy.ndarray`` corresponding to the symmetric tensor.
     See :func:`yastn.to_dense`.
@@ -425,7 +429,7 @@ def to_numpy(a, legs=None, native=False, reverse=False) -> numpy.ndarray:
     return a.config.backend.to_numpy(a.to_dense(legs, native, reverse))
 
 
-def to_raw_tensor(a) -> numpy.ndarray | torch.tensor:
+def to_raw_tensor(a) -> 'numpy.ndarray' | 'torch.tensor':
     """
     If the symmetric tensor has just a single non-empty block, return raw tensor representing
     that block.

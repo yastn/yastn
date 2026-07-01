@@ -14,7 +14,8 @@
 # ==============================================================================
 """ Linear operations and operations on a single yastn.Tensor. """
 from __future__ import annotations
-from typing import Sequence, Union
+
+from typing import Sequence, TYPE_CHECKING, Union
 
 import numpy as np
 
@@ -24,6 +25,9 @@ from ._legbasic import LegBasic
 from ._legs import LegMeta, Leg, leg_product
 from ._merging import _Fusion
 from ._tests import YastnError, _test_axes_all
+
+if TYPE_CHECKING:
+    from . import Tensor
 
 __all__ = ['conj', 'conj_blocks', 'consume_transpose',
            'flip_signature', 'flip_charges', 'switch_signature',

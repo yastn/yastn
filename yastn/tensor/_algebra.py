@@ -14,14 +14,19 @@
 # ==============================================================================
 """ Linear operations and operations on a single yastn.Tensor. """
 from __future__ import annotations
+
 from functools import lru_cache
+from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ._auxiliary import get_blocks, update_old_struct
+from ._auxiliary import _struct, get_blocks
 from ._legs import legs_union
 from ._merging import _embed_tensor
 from ._tests import YastnError, _test_can_be_combined, _unpack_trans_test_axes_pair
+
+if TYPE_CHECKING:
+    from . import Tensor
 
 __all__ = ['add', 'real', 'imag', 'sqrt', 'rsqrt', 'reciprocal', 'exp', 'bitwise_not', 'allclose']
 
@@ -50,7 +55,7 @@ def __sub__(a, b) -> 'Tensor':
     out = a._replace(hfs=hfs, struct=struct_new, data=data)
     return out
 
-def add(*tensors, amplitudes=None, **kwargs):
+def add(*tensors, amplitudes=None, **kwargs) -> 'Tensor':
     r"""
     Linear combination of tensors with given amplitudes, :math:`\sum_i amplitudes[i] tensors[i]`.
 
@@ -172,8 +177,7 @@ def _meta_addition(sym, *structs):
                     j += 1
         metas.append(tuple(meta))
 
-    struct_new = update_old_struct(bl_new)
-
+    struct_new = _struct(legs=bl_new.legs, n=bl_new.n, isdiag=bl_new.isdiag)
     return tuple(metas), bl_new.size, struct_new
 
 
@@ -182,7 +186,7 @@ def allclose(a, b, rtol=1e-13, atol=1e-13) -> bool:
     Check if `a` and `b` are identical within a desired tolerance.
     To be :code:`True`, all tensors' blocks and merge history have to be identical.
     If this condition is satisfied, execute :code:`backend.allclose` function
-    to compare tensors’ data.
+    to compare tensors' data.
 
     Note that if two tensors differ by zero blocks, the function returns :code:`False`.
     To resolve such differences, use :code:`(a - b).norm() < tol`

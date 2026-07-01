@@ -14,11 +14,13 @@
 # ==============================================================================
 """ Contractions of yastn tensors """
 from __future__ import annotations
+
 import abc
 from functools import lru_cache
-from itertools import groupby, accumulate, product
+from itertools import groupby
 from numbers import Number
 from operator import itemgetter
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -28,6 +30,9 @@ from ._legbasic import legs_from_dict_v2
 from ._merging import _merge_to_matrix, _unmerge, _meta_unmerge_matrix, _meta_fuse_hard
 from ._merging import _transpose_and_merge, _mask_tensors_leg_intersection, _meta_mask
 from ._tests import YastnError, _test_can_be_combined, _unpack_trans_test_axes_pair
+
+if TYPE_CHECKING:
+    from . import Tensor
 
 __all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'broadcast', 'apply_mask', 'SpecialTensor', 'fkron']
 

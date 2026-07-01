@@ -14,16 +14,20 @@
 # ==============================================================================
 r""" Support for merging blocks in yastn.Tensor """
 from __future__ import annotations
+
 from functools import lru_cache
 from itertools import groupby, product
 from operator import itemgetter
-from typing import NamedTuple
+from typing import NamedTuple, TYPE_CHECKING
 
 import numpy as np
 
 from ._auxiliary import _flatten, _clear_axes, _unpack_legs, get_blocks, update_old_struct, get_sub_slices
 from ._legbasic import LegBasic
 from ._tests import YastnError, _test_axes_all
+
+if TYPE_CHECKING:
+    from . import Tensor
 
 __all__ = ['fuse_legs', 'unfuse_legs', 'fuse_meta_to_hard', '_Fusion']
 
@@ -489,6 +493,7 @@ def unfuse_legs(a, axes) -> 'Tensor':
         return out
     out = a._replace(mfs=tuple(mfs))
     return out
+
 
 @lru_cache(maxsize=1024)
 def _meta_unfuse_hard(sym, legs_a, n_a, isdiag_a, axes, hfs):

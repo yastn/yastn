@@ -14,10 +14,12 @@
 # ==============================================================================
 """ Linalg methods for yastn.Tensor. """
 from __future__ import annotations
+
 import logging
-from numbers import Number
-from warnings import warn
 import sys
+from numbers import Number
+from typing import TYPE_CHECKING
+from warnings import warn
 
 import numpy as np
 
@@ -26,6 +28,8 @@ from ._legbasic import LegBasic
 from ._merging import _Fusion, _merge_to_matrix, _unmerge, _meta_unmerge_matrix, _LegSlices_trivial
 from ._tests import YastnError, _test_axes_all
 
+if TYPE_CHECKING:
+    from . import Tensor
 
 __all__ = ['qr', 'norm', 'entropy', 'truncation_mask', 'truncation_mask_multiplets',
            'svd', 'svd_with_truncation', 'eig', 'eigh', 'eigh_with_truncation']
@@ -63,7 +67,7 @@ def svd_with_truncation(a, axes=(0, 1),
                         eps_multiplet=None,
                         hermitian=False,
                         mask_f=None,
-                        **kwargs) -> tuple[yastn.Tensor, yastn.Tensor, yastn.Tensor]:
+                        **kwargs) -> tuple['Tensor', 'Tensor', 'Tensor']:
     r"""
     Split tensor using exact singular value decomposition (SVD) into :math:`a = U S V`,
     where the columns of `U` and the rows of `V` form orthonormal bases
@@ -157,7 +161,7 @@ def svd_with_truncation(a, axes=(0, 1),
 
 def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         Uaxis=-1, Vaxis=0, policy='fullrank',
-        fix_signs=False, svd_on_cpu=False, thresh=0.1, **kwargs) -> tuple[yastn.Tensor, yastn.Tensor, yastn.Tensor] | yastn.Tensor:
+        fix_signs=False, svd_on_cpu=False, thresh=0.1, **kwargs) -> tuple['Tensor', 'Tensor', 'Tensor'] | 'Tensor':
     r"""
     Split tensor into :math:`a = U S V` using exact singular value decomposition (SVD),
     where the columns of `U` and the rows of `V` form orthonormal bases
@@ -379,7 +383,17 @@ def _meta_svd(sym, legs, charge, isdiag, sU, nU, k_block):
     inds = argsort_t(bl_U.t[:, 1, :])
     ind_a = find_matching_indices(bl_a.t[:, 0, :], bl_U.t[:, 0, :], both=False)
     ind_a = ind_a[inds]  # in case some blocks are eliminated by zero dimensions in minD
-    meta = list(zip(bl_a.slc[ind_a], bl_a.D[ind_a], bl_U.slc[inds], bl_U.D[inds], bl_S.slc, bl_V.slc, bl_V.D))
+
+    meta = np.hstack([bl_a.slc[ind_a], bl_a.D[ind_a], bl_U.slc[inds], bl_U.D[inds], bl_S.slc, bl_V.slc, bl_V.D], dtype=np.int64)
+    meta_dt = np.dtype([
+        ('slo', np.int64, (2,)),
+        ('Do',  np.int64, (2,)),
+        ('slU', np.int64, (2,)),
+        ('DU',  np.int64, (2,)),
+        ('slS', np.int64, (2,)),
+        ('slV', np.int64, (2,)),
+        ('DV',  np.int64, (2,))])
+    meta = meta.view(meta_dt).reshape(-1)
     sizes = (bl_U.size, bl_S.size, bl_V.size)
     return meta, bl_U.legs, bl_S.legs, bl_V.legs, n_U, n_V, sizes
 
@@ -487,7 +501,7 @@ def eig(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
 
 
 def truncation_mask_multiplets(S, tol=0, D_total=float('inf'),
-                               eps_multiplet=1e-13, hermitian=False, **kwargs) -> yastn.Tensor[bool]:
+                               eps_multiplet=1e-13, hermitian=False, **kwargs) -> 'Tensor[bool]':
     """
     Generate a mask tensor from real positive spectrum ``S``, while preserving
     degenerate multiplets. This is achieved by truncating the spectrum
@@ -531,7 +545,7 @@ def truncation_mask(S, which='LR',
                     eps_multiplet=None,
                     hermitian=False,
                     mask_f=None,
-                    **kwargs) -> yastn.Tensor[bool]:
+                    **kwargs) -> 'Tensor[bool]':
     """
     Generate mask tensor based on diagonal tensor ``S``.
     The mask can be then used for truncation.
@@ -704,7 +718,7 @@ def truncation_mask(S, which='LR',
     return Smask
 
 
-def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0) -> tuple[yastn.Tensor, yastn.Tensor]:
+def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0) -> tuple['Tensor', 'Tensor']:
     r"""
     Split tensor using reduced QR decomposition, such that :math:`a = Q R`,
     with :math:`QQ^\dagger=I`. The charge of `R` is zero. The charge of ``a`` is carried by `Q`.
@@ -787,7 +801,7 @@ def _meta_qr(sym, legs, charge, isdiag, sQ):
     return meta, legsQ, legsR, sizes
 
 
-def eigh(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank', **kwargs) -> tuple[yastn.Tensor, yastn.Tensor]:
+def eigh(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank', **kwargs) -> tuple['Tensor', 'Tensor']:
     r"""
     Split symmetric tensor using exact eigenvalue decomposition, :math:`a= USU^{\dagger}`.
 
@@ -949,7 +963,7 @@ def _meta_eigh(sym, legs, charge, isdiag, sU, k_block):
 
 def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank',
                          tol=0, tol_block=0, D_block=float('inf'), D_total=float('inf'),
-                         largest_gap=False, mask_f=None, **kwargs) -> tuple[yastn.Tensor, yastn.Tensor]:
+                         largest_gap=False, mask_f=None, **kwargs) -> tuple['Tensor', 'Tensor']:
     r"""
     Split symmetric tensor using exact eigenvalue decomposition, :math:`a= USU^{\dagger}`.
     Optionally, truncate the resulting decomposition.

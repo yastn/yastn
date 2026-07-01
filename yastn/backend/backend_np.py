@@ -332,11 +332,11 @@ def svd(data, meta, sizes, **kwargs):
     Udata = np.empty((sizes[0],), dtype=data.dtype)
     Sdata = np.empty((sizes[1],), dtype=real_dtype)
     Vdata = np.empty((sizes[2],), dtype=data.dtype)
-    for (sl, D, slU, DU, slS, slV, DV) in meta:
-        U, S, V = safe_svd(data[slice(*sl)].reshape(D))
-        Udata[slice(*slU)].reshape(DU)[:] = U
-        Sdata[slice(*slS)] = S
-        Vdata[slice(*slV)].reshape(DV)[:] = V
+    for x in meta:
+        U, S, V = safe_svd(data[slice(*x['slo'])].reshape(x['Do']))
+        Udata[slice(*x['slU'])].reshape(x['DU'])[:] = U
+        Sdata[slice(*x['slS'])] = S
+        Vdata[slice(*x['slV'])].reshape(x['DV'])[:] = V
     return Udata, Sdata, Vdata
 
 
@@ -370,8 +370,8 @@ def eig(data, meta=None, sizes=(1, 1), **kwargs):
     Udata = np.empty((sizes[0],), dtype=dtype)
     Sdata = np.empty((sizes[1],), dtype=dtype)
     Vdata = np.empty((sizes[2],), dtype=dtype)
-    for (sl, D, slU, DU, slS, slV, DV) in meta:
-        S, V, U = scipy.linalg.eig(data[slice(*sl)].reshape(D), left=True, right=True)
+    for x in meta:
+        S, V, U = scipy.linalg.eig(data[slice(*x['slo'])].reshape(x['Do']), left=True, right=True)
         #
         # in general diag(U.H @ U) = 1 but not U.H @ U = I, i.e. right eigenvectors are not orthogonal
         # same is true for left eigenvectors V, diag(V.H @ V) = 1 but not V.H @ V = I
@@ -416,9 +416,9 @@ def eig(data, meta=None, sizes=(1, 1), **kwargs):
             raise ValueError("Biorthonormalization of left/right eigenvector pairs failed.")
 
         s_order= argsort_which(S, which=kwargs.get('which', 'LM'))
-        Udata[slice(*slU)].reshape(DU)[:] = _U[:,s_order]
-        Sdata[slice(*slS)] = S[s_order]
-        Vdata[slice(*slV)].reshape(DV)[:] = _V[s_order,:]
+        Udata[slice(*x['slU'])].reshape(x['DU'])[:] = _U[:,s_order]
+        Sdata[slice(*x['slS'])] = S[s_order]
+        Vdata[slice(*x['slV'])].reshape(x['DV'])[:] = _V[s_order,:]
     return Udata, Sdata, Vdata
 
 

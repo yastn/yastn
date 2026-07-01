@@ -14,9 +14,9 @@
 # ==============================================================================
 """ Methods creating a new yastn.Tensor """
 import os
+import numbers
 from functools import reduce
 from itertools import product
-import numbers
 from operator import mul, itemgetter
 
 import numpy as np

@@ -14,6 +14,7 @@
 # ==============================================================================
 """ class yastn.Leg """
 from __future__ import annotations
+
 from typing import NamedTuple
 
 __all__ = ['LegBasic', 'legs_from_dict_v2']

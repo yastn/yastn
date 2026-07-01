@@ -14,7 +14,8 @@
 # ==============================================================================
 """ Auxiliary functions used by yastn.Tensor. """
 from __future__ import annotations
-from itertools import accumulate, chain, product
+
+from itertools import accumulate, chain
 from typing import NamedTuple
 
 import numpy as np

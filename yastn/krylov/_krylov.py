@@ -14,6 +14,7 @@
 # ==============================================================================
 """ Building Krylov space. """
 from __future__ import annotations
+from typing import TYPE_CHECKING
 from itertools import islice
 from typing import Sequence, TypeVar
 

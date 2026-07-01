@@ -14,10 +14,11 @@
 # ==============================================================================
 """ class yastn.Leg """
 from __future__ import annotations
-from typing import Sequence
+
 from dataclasses import dataclass
 from itertools import product, groupby
 from operator import itemgetter
+from typing import Sequence
 
 import numpy as np
 

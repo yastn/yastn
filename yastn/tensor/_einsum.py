@@ -14,7 +14,9 @@
 # ==============================================================================
 """ Support for einsum and ncon. """
 from __future__ import annotations
+
 from functools import lru_cache
+from typing import TYPE_CHECKING
 
 from ._auxiliary import _clear_axes, _flatten
 from ._contractions import tensordot, trace, swap_gate
@@ -22,6 +24,8 @@ from ._tests import YastnError
 
 __all__ = ['ncon', 'einsum']
 
+if TYPE_CHECKING:
+    from . import Tensor
 
 def einsum(subscripts, *operands, order=None, swap=None) -> 'Tensor':
     r"""
