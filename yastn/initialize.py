@@ -24,7 +24,7 @@ from operator import itemgetter
 import numpy as np
 
 from .tensor import Tensor, YastnError, ncon
-from .tensor._auxiliary import _clear_axes, _unpack_legs, get_blocks, find_matching_indices, update_old_struct
+from .tensor._auxiliary import _clear_axes, _unpack_legs, get_blocks, find_matching_indices
 from .tensor._legbasic import LegBasic
 from .tensor._legs import Leg, LegMeta, legs_union, _legs_mask_needed
 from .tensor._merging import _embed_tensor, _combine_hfs_sum
@@ -265,7 +265,7 @@ def eye(config=None, legs=(), isdiag=True, **kwargs) -> Tensor:
         return tmp.fuse_legs(axes=axes)
     else:
         tmp = _fill(config=config, legs=legs, val='zeros', **kwargs)
-        bl = get_blocks(tmp.config.sym, tmp.struct.legs, tmp.struct.n, tmp.struct.isdiag)
+        bl = get_blocks(tmp.config.sym, tmp.struct)
         for t, D in zip(bl.t, bl.D):
             blk = tmp[t]
             for i in range(min(D)):
@@ -389,8 +389,7 @@ def block(tensors, common_legs=None) -> Tensor:
         DDn = tuple(ltDtot_leg[t] for t in ttn)
         legs_new.append(LegBasic(s=tn0.legs[n].s, t=ttn, D=DDn))
 
-    legs_new = tuple(legs_new)
-    bl_new = get_blocks(sym, legs_new, tn0.n, tn0.isdiag)
+    bl_new = get_blocks(sym, tn0.struct._replace(legs=tuple(legs_new)))
 
     for pa in tensors.keys():
         if any(_legs_mask_needed(ulegs[n][pa[n]], leg) for n, leg in enumerate(legs_tn[pa])):
@@ -399,15 +398,14 @@ def block(tensors, common_legs=None) -> Tensor:
 
     meta = []
     for pa, a in tensors.items():
-        bl_a = get_blocks(sym, a.legs, a.n, a.isdiag)
+        bl_a = get_blocks(sym, a.struct)
         indc, inda = find_matching_indices(bl_new.t, bl_a.t)
         for sln, Dn, ta, sla, Da in zip(bl_new.slc[indc], bl_new.D[indc], bl_a.t[inda], bl_a.slc[inda], bl_a.D[inda]):
             Dslcs = tuple(tDslc[tuple(ta[n].tolist())][pa[n]] for n, tDslc in enumerate(ltDslc))
             meta.append((sln, Dn, pa, sla, Da, Dslcs))
 
     data = tn0.config.backend.merge_super_blocks(tensors, meta, bl_new.size)
-    struct = update_old_struct(bl_new)
-    out = tn0._replace(struct=struct, data=data, hfs=tuple(hfs))
+    out = tn0._replace(struct=bl_new.struct, data=data, hfs=tuple(hfs))
     return out
 
 

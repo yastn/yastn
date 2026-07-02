@@ -471,7 +471,7 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
 
     U_sorted = {}
     index_to_charge = []
-    bl_rowA = get_blocks(sym, rowA.legs, rowA.n, rowA.isdiag)
+    bl_rowA = get_blocks(sym, rowA.struct)
     for c_block, slc in zip(bl_rowA.t.tolist(), bl_rowA.slc.tolist()):
         c_sector = tuple(c_block[0])
         index_to_charge += [c_sector] * (slc[1] - slc[0])
@@ -479,13 +479,13 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
 
     # charge density per sector for multiplet of dim d located at i-d+1:i+1
     def n_occ(i, d):
-        bl_rowA = get_blocks(sym, rowA.legs, rowA.n, rowA.isdiag)
+        bl_rowA = get_blocks(sym, rowA.struct)
         return np.asarray([[np.linalg.norm(U[slice(*slc), i - m]) ** 2 for slc in bl_rowA.slc] for m in range(d)])
 
     # overlap matrix for single non-zero charge sector, iterate over subspace
     # with ascending index (compatible with slicing of U below)
     def overlaps_per_sector(c_sec, d):
-        bl_rowA = get_blocks(sym, rowA.legs, rowA.n, rowA.isdiag)
+        bl_rowA = get_blocks(sym, rowA.struct)
         ic = find_index(bl_rowA.t, np.array(c_sec, dtype=np.int64))
         ic_slc = bl_rowA.slc[ic]
         overlaps= np.asarray([[U[slice(*ic_slc), i + 1 - d + m_row].conj() @ U[slice(*ic_slc), i + 1 - d + m_col]
@@ -507,7 +507,7 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
 
             # 1) find components of degen. subspace and compute charge density per charge sector C_secs
             C = n_occ(i, d)
-            bl_rowA = get_blocks(sym, rowA.legs, rowA.n, rowA.isdiag)
+            bl_rowA = get_blocks(sym, rowA.struct)
             C_secs = np.asarray([[tuple(c.ravel().tolist()) for c in bl_rowA.t] for m in range(d)])
             assert np.allclose(np.sum(C, axis=1), 1, rtol=1.0e-14,  atol=1.0e-14), 'Degenerate subspace not properly separated'
 
@@ -572,10 +572,10 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
     symVh = zeros(config=A.config, legs=(leg_internal.conj(), cols), n=(Amat.n if not nU else None), dtype=Amat.yastn_dtype)
 
     # embed singular triples into blocks of symmetric tensors in descending order of magnitude
-    bl_rowA = get_blocks(sym, rowA.legs, rowA.n, rowA.isdiag)
-    bl_colA = get_blocks(sym, colA.legs, colA.n, colA.isdiag)
-    bl_Amat = get_blocks(sym, Amat.legs, Amat.n, Amat.isdiag)
-    bl_symU = get_blocks(sym, symU.legs, symU.n, symU.isdiag)
+    bl_rowA = get_blocks(sym, rowA.struct)
+    bl_colA = get_blocks(sym, colA.struct)
+    bl_Amat = get_blocks(sym, Amat.struct)
+    bl_symU = get_blocks(sym, symU.struct)
 
     for c in bl_symU.t:
         i_col_sector = find_index(bl_Amat.t[:, 0, :], c[0], sorted=True)
@@ -591,7 +591,7 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
 
     # fix relative phases of singular vectors
     if fix_signs:
-        bl_symVh = get_blocks(sym, symVh.legs, symVh.n, symVh.isdiag)
+        bl_symVh = get_blocks(sym, symVh.struct)
         meta_fix = []
         for c, slU, DU in zip(bl_symU.t, bl_symU.slc, bl_symU.D):
             i_col_sector = find_index(bl_Amat.t[:, 0, :], c[0], sorted=True)

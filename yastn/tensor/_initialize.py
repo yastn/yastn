@@ -21,7 +21,7 @@ from operator import mul, itemgetter
 
 import numpy as np
 
-from ._auxiliary import _struct, _flatten, _config, get_blocks, find_index, find_matching_indices, update_old_struct
+from ._auxiliary import _struct, _flatten, _config, get_blocks, find_index, find_matching_indices
 from ._legbasic import legs_from_dict_v2
 from ._tests import YastnError, _test_struct_types
 from ..backend import backend_np
@@ -145,7 +145,7 @@ def __setitem__(a, key, newvalue):
         key = np.array(key, dtype=np.int64).reshape(a.ndim_n, a.config.sym.NSYM)
         reverse_trans = np.argsort(a.trans)
         ukey = key[reverse_trans, :].ravel()
-        bl = get_blocks(a.config.sym, a.struct.legs, a.struct.n, a.isdiag)
+        bl = get_blocks(a.config.sym, a.struct)
         ind = find_index(bl.t, ukey, sorted=True)
     except ValueError as exc:
         raise YastnError('Tensor does not have the block specified by key.') from exc
@@ -320,21 +320,20 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
     Dsize = Ds[0] if a.isdiag else reduce(mul, Ds, 1)
     new_block = _init_block(a.config, Dsize, val, dtype=a.yastn_dtype, device=a.device)
 
-    bl = get_blocks(a.config.sym, a.legs, a.struct.n, a.isdiag)
+    bl = get_blocks(a.config.sym, a.struct)
     ind = find_index(bl.t, ats, sorted=True)
     slc = bl.slc[ind]
     a.data[slice(*slc)] = new_block
 
 
 def embed_(a, legs_new):
-    bl_old = get_blocks(a.config.sym, a.legs, a.struct.n, a.isdiag)
-    bl_new = get_blocks(a.config.sym, legs_new, a.struct.n, a.isdiag)
+    bl_old = get_blocks(a.config.sym, a.struct)
+    bl_new = get_blocks(a.config.sym, a.struct._replace(legs=legs_new))
     ind1, ind2 = find_matching_indices(bl_new.t, bl_old.t)
     sln, slo = bl_new.slc[ind1], bl_old.slc[ind2]
     meta = list(zip(sln, sln[:, 1] - sln[:, 0], slo, slo[:, 1] - slo[:, 0]))
     newdata = a.config.backend.embed_transpose(a.data, None, meta, bl_new.size)
-    struct = update_old_struct(bl_new)
-    a.struct = struct
+    a.struct = bl_new.struct
     a._data = newdata
 
 

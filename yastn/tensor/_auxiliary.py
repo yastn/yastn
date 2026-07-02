@@ -15,6 +15,7 @@
 """ Auxiliary functions used by yastn.Tensor. """
 from __future__ import annotations
 
+from functools import lru_cache
 from itertools import accumulate, chain
 from typing import NamedTuple
 
@@ -23,23 +24,6 @@ import numpy as np
 from ..sym import sym_none
 
 __all__ = ['_config', '_struct', 'get_blocks', 'sign_canonical_order', 'swap_charges']
-
-
-class _blocks(NamedTuple):
-    t: np.array = None  # leg signatures
-    D: np.array = None  # tensor charge
-    slc: np.array = None  # isdiag
-    size: int = 0  # list of block charges
-    nblocks: int = 0  # list of block shapes
-    legs: tuple = ()  # total data size
-    n: tuple = ()  # tensor charge
-    isdiag: bool = False  # isdiag
-
-
-class _struct(NamedTuple):
-    legs: tuple = ()  # tuple[LegBasic]
-    n: tuple = ()  # tensor charge
-    isdiag: bool = False  # isdiag
 
 
 class _config(NamedTuple):
@@ -52,6 +36,21 @@ class _config(NamedTuple):
     force_fusion: str = None
     tensordot_policy: str = 'fuse_contracted'
     profile: bool = False
+
+
+class _struct(NamedTuple):
+    legs: tuple = ()  # tuple[LegBasic]
+    n: tuple = ()  # tensor charge
+    isdiag: bool = False  # isdiag
+
+
+class _blocks(NamedTuple):
+    t: np.array = None  # list of block charges nblocks x ndim_n x nsym
+    D: np.array = None  # list of block shapes  nblocks x ndim_n
+    slc: np.array = None  # list of block slices nblocks x 2
+    size: int = 0  # data size
+    nblocks: int = 0  # number of blocks
+    struct: _struct = _struct() # updated structure
 
 
 def _flatten(nested_iterator):
@@ -165,39 +164,42 @@ def sign_canonical_order(*operators, sites=None, f_ordered=None) -> int:
     return swap_charges(charges_0, charges_1, operators[0].config.fermionic)
 
 
-def get_blocks(sym, legs, n, isdiag=False):
+@lru_cache(maxsize=1024)
+def get_blocks(sym, struct) -> _blocks:
     """
     Generate all allowed block charges, their dimensions, slices, total size and trimed legs.
     Assume that legs have sorted charges
     """
-    s = tuple(leg.s for leg in legs)
-    taxes = tuple(leg.t for leg in legs)
-    tblocks, iblocks, icharges = get_blocks_charges(sym, taxes, s, n)
+    s = tuple(leg.s for leg in struct.legs)
+    taxes = tuple(leg.t for leg in struct.legs)
+    tblocks, iblocks, icharges = get_blocks_charges(sym, taxes, s, struct.n)
 
     Dblocks = np.empty(iblocks.shape, dtype=np.int64)
-    for i, leg in enumerate(legs):
+    for i, leg in enumerate(struct.legs):
         Dax = np.array(leg.D, dtype=np.int64)
         Dblocks[:, i] = Dax[iblocks[:, i]]
 
     nblocks = len(iblocks)
     #
     slices = np.zeros((nblocks, 2), dtype=np.int64)
-    Dp = Dblocks[:, 0] if isdiag else np.prod(Dblocks, axis=1, dtype=np.int64)
+    Dp = Dblocks[:, 0] if struct.isdiag else np.prod(Dblocks, axis=1, dtype=np.int64)
     np.cumsum(Dp, out=slices[:, 1])
     slices[1:, 0] = slices[:-1, 1]
     size = np.sum(Dp, dtype=np.int64).item()
     #
     # recalculate legs, in case some leg charges do not appear in any block
     new_legs = []
-    for leg, inds in zip(legs, icharges):
+    for leg, inds in zip(struct.legs, icharges):
         tl = tuple(leg.t[i] for i in inds)
         Dl = tuple(leg.D[i] for i in inds)
         leg = type(leg)(s=leg.s, t=tl, D=Dl)
         new_legs.append(leg)
+    new_struct = _struct(legs=tuple(new_legs), n=struct.n, isdiag=struct.isdiag)
     #
-    return _blocks(t=tblocks, D=Dblocks, slc=slices, size=size, nblocks=nblocks, legs=tuple(new_legs), n=n, isdiag=isdiag)
+    return _blocks(t=tblocks, D=Dblocks, slc=slices, size=size, nblocks=nblocks, struct=new_struct)
 
 
+@lru_cache(maxsize=1024)
 def get_blocks_charges(sym, taxes, s, n):
     nsym = sym.NSYM
     ndim = len(taxes)
@@ -228,11 +230,6 @@ def get_sub_slices(st, st_full):
             ic += 1
         inds[it] = ic
     return st_full.slc[inds]
-
-
-def update_old_struct(st_new):
-    struct_new = _struct(legs=st_new.legs, n=st_new.n, isdiag=st_new.isdiag)
-    return struct_new
 
 
 def find_index(tset, tt, sorted=True):

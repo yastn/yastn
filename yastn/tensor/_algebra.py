@@ -119,9 +119,8 @@ def _pre_addition(*tensors):
 @lru_cache(maxsize=1024)
 def _meta_addition(sym, *structs):
     """ meta-information for backend and new tensor charges and dimensions. """
-    charge, isdiag = structs[0].n, structs[0].isdiag  # consistent for all structures
-    if all(structs[0].legs == struct.legs for struct in structs[1:]):
-        bl_new = get_blocks(sym, structs[0].legs, charge, isdiag)
+    if all(structs[0] == struct for struct in structs[1:]):
+        bl_new = get_blocks(sym, structs[0])
         size = bl_new.size
         meta = (((0, size), (0, size)),)
         metas = (meta,) * len(structs)
@@ -133,19 +132,20 @@ def _meta_addition(sym, *structs):
         leg = structs[0].legs[n]
         for struct in structs[1:]:
             try:
-                leg = leg.union(struct.legs[n], isdiag=isdiag)
+                leg = leg.union(struct.legs[n], isdiag=structs[0].isdiag)
             except ValueError:
                 raise YastnError('Bond dimensions of some charges do not match.')
         legs_new.append(leg)
-    legs_new = tuple(legs_new)
-    bl_new = get_blocks(sym, legs_new, charge, isdiag)
+
+    struct_new = _struct(legs=tuple(legs_new), n=structs[0].n, isdiag=structs[0].isdiag)
+    bl_new = get_blocks(sym, struct_new)
 
     metas = []
     for struct in structs:
         meta = []
-        bl_old = get_blocks(sym, struct.legs, charge, isdiag)
+        bl_old = get_blocks(sym, struct)
         meta, i, j, sn0, so0 = [], 0, 0, None, None
-        if not isdiag:
+        if not struct.isdiag:
             while i < bl_old.nblocks and j < bl_new.nblocks:
                 if np.array_equal(bl_old.t[i], bl_new.t[j]):
                     if so0 is None:
@@ -177,8 +177,7 @@ def _meta_addition(sym, *structs):
                     j += 1
         metas.append(tuple(meta))
 
-    struct_new = _struct(legs=bl_new.legs, n=bl_new.n, isdiag=bl_new.isdiag)
-    return tuple(metas), bl_new.size, struct_new
+    return tuple(metas), bl_new.size, bl_new.struct
 
 
 def allclose(a, b, rtol=1e-13, atol=1e-13) -> bool:

@@ -19,7 +19,7 @@ from typing import Sequence, TYPE_CHECKING, Union
 
 import numpy as np
 
-from ._auxiliary import _clear_axes, _struct, _unpack_axes, _join_contiguous_slices, get_blocks, update_old_struct, argsort_t
+from ._auxiliary import _clear_axes, _struct, _unpack_axes, _join_contiguous_slices, get_blocks, argsort_t
 from ._einsum import ncon
 from ._legbasic import LegBasic
 from ._legs import LegMeta, Leg, leg_product
@@ -201,7 +201,7 @@ def flip_charges(a, axes=None) -> 'Tensor':
     uaxes, = _unpack_axes(a.mfs, axes)
     uaxes = tuple(a.trans[ax] for ax in uaxes)
 
-    bl_old = get_blocks(a.config.sym, a.legs, a.n, a.isdiag)
+    bl_old = get_blocks(a.config.sym, a.struct)
     legs_new = list(a.legs)
     hfs_new = list(a.hfs)
     t_flip = bl_old.t.copy()
@@ -215,13 +215,12 @@ def flip_charges(a, axes=None) -> 'Tensor':
         t_flip[:, ax, :] = a.config.sym.fuse(t_flip[:, (ax,), :], (leg.s,), -leg.s)
 
     legs_new = tuple(legs_new)
-    bl_new = get_blocks(a.config.sym, legs_new, a.n, a.isdiag)
+    bl_new = get_blocks(a.config.sym, a.struct._replace(legs=legs_new))
     inds = argsort_t(t_flip)
     assert np.array_equal(t_flip[inds], bl_new.t), "Sanity check."
     meta_embed = tuple((sln, sln[1] - sln[0], slo, slo[1] - slo[0]) for sln, slo in zip(bl_new.slc, bl_old.slc[inds]))
     data = a.config.backend.embed_transpose(a._data, None, meta_embed, bl_new.size)  # used for embeding
-    struct = update_old_struct(bl_new)
-    out = a._replace(struct=struct, data=data, hfs=hfs_new)
+    out = a._replace(struct=bl_new.struct, data=data, hfs=hfs_new)
     return out
 
 
@@ -324,15 +323,12 @@ def consume_transpose(a) -> 'Tensor':
     new_hfs = tuple(a.hfs[ii] for ii in a.trans)
     new_legs = tuple(a.legs[i] for i in a.trans)
 
-    bl_old = get_blocks(a.config.sym, a.legs, a.n, a.isdiag)
-    bl_new = get_blocks(a.config.sym, new_legs, a.n, a.isdiag)
+    bl_old = get_blocks(a.config.sym, a.struct)
+    bl_new = get_blocks(a.config.sym, a.struct._replace(legs=new_legs))
     inds = argsort_t(bl_old.t[:, order, :])
     meta = [(sln, Dn, slo, Do) for sln, Dn, slo, Do in zip(bl_new.slc, bl_new.D, bl_old.slc[inds], bl_old.D[inds])]
-
-    struct = update_old_struct(bl_new)
-
     data = a._data if a.isdiag else a.config.backend.embed_transpose(a._data, a.trans, meta, bl_new.size)
-    return a._replace(hfs=new_hfs, struct=struct, data=data, trans=no_trans)
+    return a._replace(hfs=new_hfs, struct=bl_new.struct, data=data, trans=no_trans)
 
 
 def moveaxis(a, source, destination) -> 'Tensor':
@@ -497,7 +493,7 @@ def diag(a) -> 'Tensor':
     """
     Select diagonal of 2D tensor and output it as a diagonal tensor, or vice versa.
     """
-    bl = get_blocks(a.config.sym, a.legs, a.n, a.isdiag)
+    bl = get_blocks(a.config.sym, a.struct)
     if not a.isdiag:  # isdiag=False -> isdiag=True
         if a.ndim_n != 2 or a.struct.legs[0].s == a.struct.legs[1].s:
             raise YastnError('Diagonal tensor requires 2 legs with opposite signatures.')
@@ -513,8 +509,7 @@ def diag(a) -> 'Tensor':
     if a.trans == (1, 0):  # sufficient for the transpose, to have consistent signature flow
         new_legs == new_legs[::-1]
     #
-    bl_new = get_blocks(a.config.sym, a.legs, a.n, not a.isdiag)
-    struct = _struct(legs=new_legs, n=a.n, isdiag=not a.isdiag)
+    bl_new = get_blocks(a.config.sym, a.struct._replace(isdiag=not a.isdiag))
 
     if a.isdiag:  # isdiag=True -> isdiag=False
         meta = tuple((sl_new, sl_old) for sl_new, sl_old in zip(bl_new.slc, bl.slc))
@@ -522,4 +517,4 @@ def diag(a) -> 'Tensor':
     else:  # isdiag=False -> isdiag=True
         meta = tuple((sl_new, sl_old, DD) for sl_new, sl_old, DD in zip(bl_new.slc, bl.slc, bl.D))
         data = a.config.backend.diag_2dto1d(a._data, meta, bl_new.size)
-    return a._replace(struct=struct, data=data, trans=None)
+    return a._replace(struct=bl_new.struct, data=data, trans=None)

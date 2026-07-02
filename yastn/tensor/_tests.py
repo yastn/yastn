@@ -109,7 +109,7 @@ def is_consistent(a):
     2) tset follow symmetry rule f(s@t)==n
     3) block dimensions are consistent (this requires config.test=True)
     """
-    bl = get_blocks(a.config.sym, a.legs, a.n, a.isdiag)
+    bl = get_blocks(a.config.sym, a.struct)
     assert a.config.backend.get_shape(a._data) == (bl.size,)
 
     for leg, hf in zip(a.legs, a.hfs):

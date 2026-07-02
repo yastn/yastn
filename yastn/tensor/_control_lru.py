@@ -15,7 +15,7 @@
 """ Dynamical changing of lru_cache maxsize. """
 from functools import lru_cache
 
-from . import _algebra, _merging, _contractions, _einsum
+from . import _algebra, _merging, _contractions, _einsum, _auxiliary
 
 __all__ = ['clear_cache', 'get_cache_info', 'set_cache_maxsize']
 
@@ -39,6 +39,8 @@ def set_cache_maxsize(maxsize=0):
     _merging._meta_fuse_hard = lru_cache(maxsize)(_merging._meta_fuse_hard.__wrapped__)
     _merging._meta_unfuse_hard = lru_cache(maxsize)(_merging._meta_unfuse_hard.__wrapped__)
     _algebra._meta_addition = lru_cache(maxsize)(_algebra._meta_addition.__wrapped__)
+    _auxiliary.get_blocks = lru_cache(maxsize)(_auxiliary.get_blocks.__wrapped__)
+    _auxiliary.get_blocks_charges = lru_cache(maxsize)(_auxiliary.get_blocks_charges.__wrapped__)
 
 
 def clear_cache():
@@ -60,6 +62,8 @@ def clear_cache():
     _merging._meta_fuse_hard.cache_clear()
     _merging._meta_unfuse_hard.cache_clear()
     _algebra._meta_addition.cache_clear()
+    _auxiliary.get_blocks.cache_clear()
+    _auxiliary.get_blocks_charges.cache_clear()
 
 
 def get_cache_info():
@@ -80,4 +84,7 @@ def get_cache_info():
             "swap_gate": _contractions._meta_swap_gate.cache_info(),
             "swap_gate_charge": _contractions._meta_swap_gate_charge.cache_info(),
             "ncon": _einsum._meta_ncon.cache_info(),
-            "addition": _algebra._meta_addition.cache_info()}
+            "addition": _algebra._meta_addition.cache_info(),
+            "get_blocks": _auxiliary.get_blocks.cache_info(),
+            "get_blocks_charges": _auxiliary.get_blocks_charges.cache_info(),
+            }

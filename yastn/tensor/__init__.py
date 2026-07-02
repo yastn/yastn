@@ -376,8 +376,8 @@ class Tensor:
         return self.get_shape()
 
     @property
-    def num_blocks(self) -> int:
-        bl = get_blocks(self.config.sym, self.struct.legs, self.struct.n, self.struct.isdiag)
+    def nblocks(self) -> int:
+        bl = get_blocks(self.config.sym, self.struct)
         return bl.nblocks
 
 def _convert_lists_to_tuples(nested_iterable):

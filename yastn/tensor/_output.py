@@ -164,7 +164,7 @@ def print_properties(a, file=None):
     print("dim native   :", a.ndim_n, file=file)  # number of native legs
     print("shape meta   :", a.get_shape(native=False), file=file)
     print("shape native :", a.get_shape(native=True), file=file)
-    print("no. blocks   :", a.num_blocks, file=file)  # number of blocks
+    print("no. blocks   :", a.nblocks, file=file)  # number of blocks
     print("size         :", a.size, file=file)  # total number of elements in all blocks
     st = {i: leg.history() for i, leg in enumerate(a.get_legs())}
     print("legs fusions :", st, "\n", file=file)
@@ -241,7 +241,7 @@ def get_blocks_charge(a) -> Sequence[Sequence[int]]:
     In case of product of abelian symmetries, for each block the individual symmetry
     charges are flattened into a single tuple.
     """
-    bl = get_blocks(a.config.sym, a.struct.legs, a.struct.n, a.struct.isdiag)
+    bl = get_blocks(a.config.sym, a.struct)
     tset = bl.t[:, a.trans, :].reshape(bl.nblocks, a.ndim_n * a.config.sym.NSYM)
     return tuple(map(tuple, tset.tolist()))
 
@@ -250,7 +250,7 @@ def get_blocks_shape(a) -> Sequence[Sequence[int]]:
     """
     Shapes of all native blocks.
     """
-    bl = get_blocks(a.config.sym, a.struct.legs, a.struct.n, a.struct.isdiag)
+    bl = get_blocks(a.config.sym, a.struct)
     Dset = bl.D[:, a.trans]
     return tuple(map(tuple, Dset.tolist()))
 
@@ -313,7 +313,7 @@ def __getitem__(a, key) -> 'numpy.ndarray' | 'torch.tensor':
         key = np.array(key, dtype=np.int64).reshape(a.ndim_n, a.config.sym.NSYM)
         reverse_trans = np.argsort(a.trans)
         ukey = key[reverse_trans, :].ravel()
-        bl = get_blocks(a.config.sym, a.struct.legs, a.struct.n, a.isdiag)
+        bl = get_blocks(a.config.sym, a.struct)
         ind = find_index(bl.t, ukey, sorted=True)
     except ValueError as exc:
         raise YastnError('Tensor does not have the block specified by key.') from exc
@@ -327,7 +327,7 @@ def __contains__(a, key) -> bool:
         key = key + key
     key = np.array(key, dtype=np.int64)
     try:
-        bl = get_blocks(a.config.sym, a.struct.legs, a.struct.n, a.isdiag)
+        bl = get_blocks(a.config.sym, a.struct)
         _ = find_index(bl.t, key, sorted=True)
         return True
     except ValueError:
@@ -371,7 +371,7 @@ def get_legs(a, axes=None, native=False) -> Leg | Sequence[Leg]:
             legs_ax.append(leg)
 
         if not native and a.mfs[ax][0] > 1:
-            bl = get_blocks(a.config.sym, a.struct.legs, a.n, a.isdiag)
+            bl = get_blocks(a.config.sym, a.struct)
 
             tseta = bl.t[:, nax, :].reshape(bl.nblocks, len(nax) * a.config.sym.NSYM).tolist()
             Dseta = np.prod(bl.D[:, nax], axis=1, dtype=np.int64).tolist()
@@ -436,7 +436,7 @@ def to_raw_tensor(a) -> 'numpy.ndarray' | 'torch.tensor':
 
     The type of the returned tensor depends on the backend, i.e. ``numpy.ndarray`` or ``torch.tensor``.
     """
-    bl = get_blocks(a.config.sym, a.struct.legs, a.struct.n, a.struct.isdiag)
+    bl = get_blocks(a.config.sym, a.struct)
     if len(bl.D) == 1:
         Dblock = tuple(bl.D[0])
         return a._data.reshape(Dblock)
@@ -508,7 +508,7 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False) -> 'Tensor':
                 Dlow = Dhigh
             tD.append(tDn)
 
-        bl = get_blocks(a.config.sym, a.legs, a.n, a.isdiag)
+        bl = get_blocks(a.config.sym, a.struct)
         tset_ax = list(zip(*[bl.t[:, ax, :].reshape(bl.nblocks, a.config.sym.NSYM).tolist() for ax in range(a.ndim_n)]))
         meta = [(sl, tuple(tDn[tuple(tt)] for tDn, tt in zip(tD, t_ax))) for sl, t_ax in zip(bl.slc, tset_ax)]
 

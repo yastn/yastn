@@ -48,46 +48,6 @@ def test_leg_basic(config_kwargs):
     leg3.add_charge((0,), 5) == yastn.LegBasic(s=1, t=((0,),), D=(5,))
 
 
-def test_get_blocks(config_kwargs):
-    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
-    leg0 = yastn.LegBasic(s=1, t=((-1,), (0,), (1,)), D=(1, 2, 3))
-    leg1 = yastn.LegBasic(s=1, t=((-1,), (1,)), D=(4, 5))
-    leg2 = yastn.LegBasic(s=1, t=((0,), (1,)), D=(6, 7))
-
-    tset, Dset, slices, size, nblocks, legs, charge, isdiag = yastn.tensor._auxiliary.get_blocks(config_U1.sym, (leg0, leg1, leg2), (0,), isdiag=False)
-    print(tset)
-    print(Dset)
-    print(slices)
-    print(size)
-    print(legs)
-    print(charge)
-
-    config_U1 = yastn.make_config(sym='U1xU1', **config_kwargs)
-    leg0 = yastn.LegBasic(s=1, t=((-1, 1), (0, 1), (1, 1)), D=(1, 2, 3))
-    leg1 = yastn.LegBasic(s=1, t=((-1, -1), (1, -1)), D=(4, 5))
-    leg2 = yastn.LegBasic(s=1, t=((0, 0), (1, 0)), D=(6, 7))
-
-    tset, Dset, slices, size, nblocks, legs, charge, isdiag = yastn.tensor._auxiliary.get_blocks(config_U1.sym, (leg0, leg1, leg2), (0, 0), isdiag=False)
-    print(tset)
-    print(Dset)
-    print(slices)
-    print(size)
-    print(legs)
-    print(charge)
-
-    config_U1 = yastn.make_config(sym='none', **config_kwargs)
-    leg0 = yastn.LegBasic(s=1, t=((),), D=(1,))
-    leg1 = yastn.LegBasic(s=1, t=((),), D=(4,))
-    leg2 = yastn.LegBasic(s=1, t=((),), D=(6,))
-
-    tset, Dset, slices, size, nblocks, legs, charge, isdiag = yastn.tensor._auxiliary.get_blocks(config_U1.sym, (leg0, leg1, leg2), (), isdiag=False)
-    print(tset.shape)
-    print(Dset)
-    print(slices)
-    print(size)
-    print(legs)
-    print(charge)
-
 def test_leg(config_kwargs):
     """ basic operations with yastn.Leg"""
     # U1
@@ -350,5 +310,4 @@ def test_leg_exceptions(config_kwargs):
 
 
 if __name__ == '__main__':
-   test_get_blocks({})
-   #pytest.main([__file__, "-vs", "--durations=0"])
+    pytest.main([__file__, "-vs", "--durations=0"])

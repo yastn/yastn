@@ -214,7 +214,7 @@ def _expand_partial_output(partial, sl_map, output_unroll_info):
     -------
     yastn.Tensor  with full-sized blocks on the output-unrolled axes.
     """
-    bl = get_blocks(partial.config.sym, partial.struct.legs, partial.struct.n, partial.struct.isdiag)
+    bl = get_blocks(partial.config.sym, partial.struct)
     if bl.t.size == 0:
         return partial  # empty tensor: nothing to expand
 

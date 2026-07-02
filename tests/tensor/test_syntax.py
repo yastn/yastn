@@ -359,7 +359,7 @@ def test_syntax_noDocs(config_kwargs):
     a.get_shape(axes=2)
     a.get_dtype()
     a.dtype
-    a.num_blocks
+    a.nblocks
 
     # leg retrival
     legs = a.get_legs()
