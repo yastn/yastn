@@ -23,7 +23,7 @@ import numpy as np
 
 from ._auxiliary import _struct, _flatten, _config, get_blocks, find_index, find_matching_indices
 from ._legbasic import legs_from_dict_v2
-from ._tests import YastnError, _test_struct_types
+from ._tests import YastnError
 from ..backend import backend_np
 from ..sym import sym_none, sym_U1, sym_Z2, sym_Z3, sym_U1xU1, sym_U1xU1xZ2
 
@@ -197,10 +197,10 @@ def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
         if a.isdiag and len(D) == 1:
             D = D + D
         D = tuple(x if x else (0,) for x in D)  # replace () with (0,)
+        D = tuple(x if isinstance(x, tuple) else (x,) for x in D)
         if len(D) != a.ndim_n:
             raise YastnError("Number of elements in D does not match tensor rank.")
-        tset = np.zeros((1, a.ndim_n, a.config.sym.NSYM))
-        Dset = np.array(D, dtype=np.int64).reshape(1, a.ndim_n)
+        t = (((),),) * a.ndim_n
     else:  # a.config.sym.NSYM >= 1
         D = (D,) if (a.ndim_n == 1 or a.isdiag) and isinstance(D[0], numbers.Number) else D
         t = (t,) if (a.ndim_n == 1 or a.isdiag) and isinstance(t[0], numbers.Number) else t
@@ -218,40 +218,21 @@ def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
             if len(x) != len(y):
                 raise YastnError("Elements of t and D do not match")
 
-        comb_D = list(product(*D))
-        comb_t = list(product(*t))
-        lcomb_t = len(comb_t)
-        comb_t = list(_flatten(comb_t))
-        comb_t = np.array(comb_t, dtype=np.int64).reshape((lcomb_t, a.ndim_n, a.config.sym.NSYM))
-        comb_D = np.array(comb_D, dtype=np.int64).reshape((lcomb_t, a.ndim_n))
-        ind = np.all(a.config.sym.fuse(comb_t, a.s_n, 1) == a.struct.n, axis=1)
-        tset = comb_t[ind]
-        Dset = comb_D[ind]
+    legs = []
+    for leg, tt, DD in zip(a.struct.legs, t, D):
+        tt = map(tuple, np.array(tt, dtype=np.int64).reshape(len(tt), a.config.sym.NSYM).tolist())
+        DD = np.array(DD, dtype=np.int64).reshape(len(DD)).tolist()
+        tD = dict(sorted(zip(tt, DD)))
+        legs.append(leg._replace(t=tuple(tD.keys()), D=tuple(tD.values())))
+    struct = a.struct._replace(legs=tuple(legs))
+    bl = get_blocks(a.config.sym, struct)
 
-    # eliminate zero blocks
-    ind_nonzero = np.all(Dset, axis=1)
-    tset = tset[ind_nonzero]
-    Dset = Dset[ind_nonzero]
-
-    if a.isdiag and np.any(Dset[:, 0] != Dset[:, 1]):
+    if a.isdiag and bl.struct.legs[0] != bl.struct.legs[1].conj():
         raise YastnError("Diagonal tensor requires the same bond dimensions on both legs.")
-    Dp = Dset[:, 0] if a.isdiag else np.prod(Dset, axis=1, dtype=np.int64)
-    Dp = Dp.tolist()
-    Dsize = sum(Dp)
 
-    if len(tset) > 0:
-        tset = tset.reshape(len(tset), a.ndim_n * a.config.sym.NSYM).tolist()
-        Dset = Dset.tolist()
-        meta = [(tuple(ts), tuple(Ds)) for ts, Ds in zip(tset, Dset)]
-        meta = sorted(meta, key=itemgetter(0))
-        a_t, a_D = zip(*meta)
-    else:
-        a_t, a_D = (), ()
-
-    legs = legs_from_dict_v2({"s": a.s_n, "n": a.n, 't': a_t, "D": a_D})
-    a.struct = _struct(legs=legs, n=a.n, isdiag=a.isdiag)
-    a._data = _init_block(a.config, Dsize, val, dtype=a.yastn_dtype, device=a.device)
-    _test_struct_types(a.struct)
+    a.struct = bl.struct
+    a._data = _init_block(a.config, bl.size, val, dtype=a.yastn_dtype, device=a.device)
+    a.is_consistent()
 
 
 def set_block(a, ts=(), Ds=None, val='zeros'):

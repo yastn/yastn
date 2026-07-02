@@ -16,6 +16,7 @@
 import numpy as np
 
 from ._auxiliary import _flatten, _unpack_axes, _struct, get_blocks
+from ._legbasic import LegBasic
 
 __all__ = ['are_independent', 'is_consistent', 'YastnError']
 
@@ -103,11 +104,6 @@ def are_independent(a, b, independent=True):
 def is_consistent(a):
     """
     Test if yastn tensor does not contain inconsistent structures
-
-    Check that:
-    1) tset and Dset correspond to A
-    2) tset follow symmetry rule f(s@t)==n
-    3) block dimensions are consistent (this requires config.test=True)
     """
     bl = get_blocks(a.config.sym, a.struct)
     assert a.config.backend.get_shape(a._data) == (bl.size,)
@@ -120,12 +116,17 @@ def is_consistent(a):
         assert len(hf.tree) == len(hf.D) + 1
         assert all(y in ('p', 's') if x > 1 else 'n' for x, y in zip(hf.tree, hf.op))
     # test that all elements of tensor are python int types
-    _test_struct_types(a.struct)
+    assert isinstance(a.struct, _struct)
+    assert isinstance(a.struct.legs, tuple)
+    for leg in a.struct.legs:
+        assert isinstance(leg, LegBasic)
+        assert isinstance(leg.s, int)
+        assert leg.s in (-1, 1)
+        assert isinstance(leg.t, tuple)
+        assert isinstance(leg.D, tuple)
+        assert all(isinstance(x, int) for tt in leg.t for x in tt)
+        assert all(isinstance(x, int) for x in leg.D)
+    assert isinstance(a.struct.n, tuple)
+    assert all(isinstance(x, int) for x in a.struct.n)
+    assert isinstance(a.struct.isdiag, bool)
     return True
-
-
-def _test_struct_types(struct):
-    assert isinstance(struct, _struct)
-    assert isinstance(struct.n, tuple)
-    assert all(isinstance(x, int) for x in struct.n)
-    assert isinstance(struct.isdiag, bool)

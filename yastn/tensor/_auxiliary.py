@@ -21,6 +21,7 @@ from typing import NamedTuple
 
 import numpy as np
 
+from ._legbasic import LegBasic
 from ..sym import sym_none
 
 __all__ = ['_config', '_struct', 'get_blocks', 'sign_canonical_order', 'swap_charges']
@@ -170,13 +171,16 @@ def get_blocks(sym, struct) -> _blocks:
     Generate all allowed block charges, their dimensions, slices, total size and trimed legs.
     Assume that legs have sorted charges
     """
-    s = tuple(leg.s for leg in struct.legs)
-    taxes = tuple(leg.t for leg in struct.legs)
-    tblocks, iblocks, icharges = get_blocks_charges(sym, taxes, s, struct.n)
+    # enforce int type, remove d=0 sectors
+    saxes = tuple(int(leg.s) for leg in struct.legs)
+    taxes = tuple(tuple(tuple(map(int, tt)) for tt, d in zip(leg.t, leg.D) if d > 0) for leg in struct.legs)
+    Daxes = tuple(tuple(int(d) for d in leg.D if d > 0) for leg in struct.legs)
+
+    tblocks, iblocks, icharges = get_blocks_charges(sym, taxes, saxes, struct.n)
 
     Dblocks = np.empty(iblocks.shape, dtype=np.int64)
-    for i, leg in enumerate(struct.legs):
-        Dax = np.array(leg.D, dtype=np.int64)
+    for i, Dax in enumerate(Daxes):
+        Dax = np.array(Dax, dtype=np.int64)
         Dblocks[:, i] = Dax[iblocks[:, i]]
 
     nblocks = len(iblocks)
@@ -189,10 +193,10 @@ def get_blocks(sym, struct) -> _blocks:
     #
     # recalculate legs, in case some leg charges do not appear in any block
     new_legs = []
-    for leg, inds in zip(struct.legs, icharges):
-        tl = tuple(leg.t[i] for i in inds)
-        Dl = tuple(leg.D[i] for i in inds)
-        leg = type(leg)(s=leg.s, t=tl, D=Dl)
+    for s, tax, Dax, inds in zip(saxes, taxes, Daxes, icharges):
+        tl = tuple(tax[i] for i in inds)
+        Dl = tuple(Dax[i] for i in inds)
+        leg = LegBasic(s=s, t=tl, D=Dl)
         new_legs.append(leg)
     new_struct = _struct(legs=tuple(new_legs), n=struct.n, isdiag=struct.isdiag)
     #

@@ -202,8 +202,7 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
     Perform tensordot directly: permute blocks and execute dot accumulating results into result blocks.
     """
     if a.config.profile: a.config.backend.nvtx.range_push(f"_meta_tensordot_nf")
-    meta_dot, reshape_a, reshape_b, st_c = _meta_tensordot_nf(a.config.sym, a.legs, a.n, a.isdiag, b.legs, b.n, b.isdiag,
-                                                                            nout_a, nin_a, nin_b, nout_b)
+    meta_dot, reshape_a, reshape_b, size_c, struct_c = _meta_tensordot_nf(a.config.sym, a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
     if a.config.profile: a.config.backend.nvtx.range_pop()
     order_a = nout_a + nin_a
     order_b = nin_b + nout_b
@@ -255,9 +254,9 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
         if a.config.profile: a.config.backend.nvtx.range_pop()
     else:
         data = a.config.backend.transpose_dot_sum(a.data, b.data, meta_dot,
-                                              reshape_a, reshape_b, order_a, order_b, st_c.size)
+                                              reshape_a, reshape_b, order_a, order_b, size_c)
     if a.config.profile: a.config.backend.nvtx.range_pop()
-    return data, st_c
+    return data, struct_c
 
 
 @lru_cache(maxsize=1024)
@@ -368,43 +367,42 @@ def _meta_tensordot_fc(sym, struct_a, struct_b):
 @lru_cache(maxsize=1024)
 def _meta_tensordot_nf(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b):
     #
-    st_a_full = get_blocks(sym, legs_a, n_a, isdiag_a)
-    st_b_full = get_blocks(sym, legs_b, n_b, isdiag_b)
+    st_a_full = get_blocks(sym, struct_a)
+    st_b_full = get_blocks(sym, struct_b)
     #
-    legs_a_new, legs_b_new = list(legs_a), list(legs_b)
+    legs_a_new, legs_b_new = list(struct_a.legs), list(struct_b.legs)
     for ia, ib in zip(nin_a, nin_b):
         try:
-            leg = legs_a[ia].intersection(legs_b[ib].conj())
+            leg = legs_a_new[ia].intersection(legs_b_new[ib].conj())
         except ValueError:
             raise YastnError('Bond dimensions of some charges do not match.')
         legs_a_new[ia] = leg
         legs_b_new[ib] = leg.conj()
     legs_a_new, legs_b_new = tuple(legs_a_new), tuple(legs_b_new)
 
-    if legs_a_new == legs_a:
+    if legs_a_new == struct_a.legs:
         st_a = st_a_full
         slc_a = st_a_full.slc
     else:
-        st_a = get_blocks(sym, legs_a_new, n_a, isdiag_a)
+        st_a = get_blocks(sym, struct_a._replace(legs=legs_a_new))
         slc_a = get_sub_slices(st_a, st_a_full)
-        legs_a = st_a.legs
+    struct_a = st_a.struct
     #
-    if legs_b_new == legs_b:
+    if legs_b_new == struct_b.legs:
         st_b = st_b_full
         slc_b = st_b_full.slc
     else:
-        st_b = get_blocks(sym, legs_b_new, n_b, isdiag_b)
+        st_b = get_blocks(sym, struct_b._replace(legs=legs_b_new))
         slc_b = get_sub_slices(st_b, st_b_full)
-        legs_b = st_b.legs
+    struct_b = st_b.struct
 
-    legs_c = (*(legs_a[ax] for ax in nout_a), *(legs_b[ax] for ax in nout_b))
-    n_c = sym.add_charges(n_a, n_b)
-    st_c = get_blocks(sym, legs_c, n_c, isdiag=False)
-    legs_c = st_c.legs
+    legs_c = (*(struct_a.legs[ax] for ax in nout_a), *(struct_b.legs[ax] for ax in nout_b))
+    n_c = sym.add_charges(struct_a.n, struct_b.n)
+    struct_c = _struct(legs=legs_c, n=n_c, isdiag=False)
+    st_c = get_blocks(sym, struct_c)
 
     nsym = sym.NSYM
-
-    lta, ndima = st_a.nblocks, len(legs_a)
+    lta, ndima = st_a.nblocks, len(legs_a_new)
     tao = st_a.t[:, nout_a, :]      # narrowed to contracted modes, and serialize <num-of-ingoing-modes(=legs)> x <order-of-sym-group> to 1D
     tac = st_a.t[:, nin_a, :].reshape(lta, len(nin_a) * nsym)         # narrowed to outgoing modes, and serialize <num-of-ingoing-modes(=legs)> x <order-of-sym-group> to 1D
     Dao = st_a.D[:, nout_a]  # narrow sector sizes
@@ -415,7 +413,7 @@ def _meta_tensordot_nf(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b):
     unique_tac, inv_tac, count_tac = np.unique(tac, return_inverse=True, return_counts=True, axis=0) # if more blocks of a contribute to given contracted sector (in b)
     arg_tac = np.argsort(inv_tac)
 
-    ltb, ndimb = st_b.nblocks, len(legs_b)
+    ltb, ndimb = st_b.nblocks, len(legs_b_new)
     tbo = st_b.t[:, nout_b, :]
     tbc = st_b.t[:, nin_b, :].reshape(ltb, len(nin_b) * nsym)
     Dbo = st_b.D[:, nout_b]
@@ -458,7 +456,7 @@ def _meta_tensordot_nf(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b):
             ic = 0
 
     meta_dot = list((slc, dds, gr) for slc, (dds, gr) in meta_dot.items() if gr)
-    return meta_dot, reshape_a, reshape_b, st_c
+    return meta_dot, reshape_a, reshape_b, st_c.size, st_c.struct
 
 
 # @lru_cache(maxsize=1024)
