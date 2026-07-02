@@ -415,7 +415,7 @@ def eig(data, meta=None, sizes=(1, 1), **kwargs):
         if any( np.abs(np.sum(_V.T * _U, axis=0) - 1) > tol ):
             raise ValueError("Biorthonormalization of left/right eigenvector pairs failed.")
 
-        s_order= argsort_which(S, which=kwargs.get('which', 'LM'))
+        s_order = argsort_which(S, which=kwargs.get('which', 'LM'))
         Udata[slice(*x['slU'])].reshape(x['DU'])[:] = _U[:,s_order]
         Sdata[slice(*x['slS'])] = S[s_order]
         Vdata[slice(*x['slV'])].reshape(x['DV'])[:] = _V[s_order,:]
@@ -463,13 +463,13 @@ def eigh(data, meta=None, sizes=(1, 1)):
     Sdata = np.zeros((sizes[0],), dtype=real_dtype)
     Udata = np.zeros((sizes[1],), dtype=data.dtype)
     if meta is not None:
-        for (sl, D, slU, DU, slS) in meta:
+        for x in meta:
             try:
-                S, U = scipy.linalg.eigh(data[slice(*sl)].reshape(D))
+                S, U = scipy.linalg.eigh(data[slice(*x['slo'])].reshape(x['Do']))
             except scipy.linalg.LinAlgError:  # pragma: no cover
-                S, U = np.linalg.eigh(data[slice(*sl)].reshape(D))
-            Sdata[slice(*slS)] = S
-            Udata[slice(*slU)].reshape(DU)[:] = U
+                S, U = np.linalg.eigh(data[slice(*x['slo'])].reshape(x['Do']))
+            Sdata[slice(*x['slS'])] = S
+            Udata[slice(*x['slU'])].reshape(x['DU'])[:] = U
         return Sdata, Udata
     return np.linalg.eigh(data)  # S, U
 
@@ -511,12 +511,12 @@ def eigh_lowrank(data, meta, sizes, thresh=None, **kwargs):
 def qr(data, meta, sizes):
     Qdata = np.empty((sizes[0],), dtype=data.dtype)
     Rdata = np.empty((sizes[1],), dtype=data.dtype)
-    for (sl, D, slQ, DQ, slR, DR) in meta:
-        Q, R = scipy.linalg.qr(data[slice(*sl)].reshape(D), mode='economic')
+    for x in meta:
+        Q, R = scipy.linalg.qr(data[slice(*x['slo'])].reshape(x['Do']), mode='economic')
         sR = np.sign(np.real(np.diag(R)))
         sR[sR == 0] = 1
-        Qdata[slice(*slQ)].reshape(DQ)[:] = Q * sR  # positive diag of R
-        Rdata[slice(*slR)].reshape(DR)[:] = sR.reshape([-1, 1]) * R
+        Qdata[slice(*x['slQ'])].reshape(x['DQ'])[:] = Q * sR  # positive diag of R
+        Rdata[slice(*x['slR'])].reshape(x['DR'])[:] = sR.reshape([-1, 1]) * R
     return Qdata, Rdata
 
 

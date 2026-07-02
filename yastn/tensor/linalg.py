@@ -785,7 +785,15 @@ def _meta_qr(sym, struct, sQ):
     bl_R = get_blocks(sym, struct_R)
     inds = argsort_t(bl_Q.t[:, 1, :])
 
-    meta = list(zip(bl_a.slc[inds], bl_a.D[inds], bl_Q.slc[inds], bl_Q.D[inds], bl_R.slc, bl_R.D))
+    meta_dt = np.dtype([
+        ('slo', np.int64, (2,)),
+        ('Do',  np.int64, (2,)),
+        ('slQ', np.int64, (2,)),
+        ('DQ',  np.int64, (2,)),
+        ('slR', np.int64, (2,)),
+        ('DR',  np.int64, (2,))])
+    meta = np.hstack([bl_a.slc[inds], bl_a.D[inds], bl_Q.slc[inds], bl_Q.D[inds], bl_R.slc, bl_R.D], dtype=np.int64)
+    meta = meta.view(meta_dt).reshape(-1)
     sizes = (bl_Q.size, bl_R.size)
     return meta, sizes, bl_Q.struct, bl_R.struct
 
@@ -943,7 +951,15 @@ def _meta_eigh(sym, struct, sU, k_block):
 
     inds_a = find_matching_indices(bl_a.t[:, 0, :], bl_U.t[:, 0, :], both=False)
     inds_a = inds_a[inds]  # in case some blocks in a are eliminated by zero dimenion in minD
-    meta = list(zip(bl_a.slc[inds_a], bl_a.D[inds_a], bl_U.slc[inds], bl_U.D[inds], bl_S.slc))
+
+    meta_dt = np.dtype([
+        ('slo', np.int64, (2,)),
+        ('Do',  np.int64, (2,)),
+        ('slU', np.int64, (2,)),
+        ('DU',  np.int64, (2,)),
+        ('slS', np.int64, (2,))])
+    meta = np.hstack([bl_a.slc[inds_a], bl_a.D[inds_a], bl_U.slc[inds], bl_U.D[inds], bl_S.slc])
+    meta = meta.view(meta_dt).reshape(-1)
     sizes = (bl_S.size, bl_U.size)
     return meta, sizes, bl_U.struct, bl_S.struct
 
