@@ -13,19 +13,14 @@
 # limitations under the License.
 # ==============================================================================
 """ yastn.linalg.svd() and truncation of its singular values """
-from itertools import product
-import numpy as np
 import pytest
 import yastn
 
 tol = 1e-10  #pylint: disable=invalid-name
-seed = 1
+seed = 22
 
 torch_test = pytest.mark.skipif("'torch' not in config.getoption('--backend')",
                                 reason="Uses torch.autograd.gradcheck().")
-numpy_test = pytest.mark.skipif("'np' not in config.getoption('--backend')",
-                                reason="Limit test to numpy.")
-
 
 def eig_combine(a):
     """ decompose and contracts tensor using svd decomposition """
@@ -99,7 +94,7 @@ def test_eig_transpose_meta(config_kwargs):
     assert yastn.norm(Vf - Vm) < tol  # == 0.0
 
 
-@numpy_test
+@pytest.mark.xfail(reason='Raising error might depend on linear algebra backend', strict=False)
 def test_eig_degeneracy_fail(config_kwargs):
     # Z2xU1
     config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)

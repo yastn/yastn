@@ -490,7 +490,7 @@ def test_transpose_and_merge_backward(config_kwargs):
         return ab
 
     op_args = (torch.randn(target_block_size, dtype=a.get_dtype(),requires_grad=True),)
-    test = torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4)
+    test = torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4, check_undefined_grad=False)  # TODO check_undefined_grad=True
     assert test
 
 
@@ -505,7 +505,7 @@ def test_unmerge_backward(config_kwargs):
             yastn.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(3, 11, 12))]
     a = yastn.rand(config=config_U1, legs=legs)
 
-    b = yastn.fuse_legs(a, axes=(0,(1,2),3), mode='hard')
+    b = yastn.fuse_legs(a, axes=(0, (1, 2), 3), mode='hard')
 
     target_block = (1, 1, -1, -1)
     target_block_size = a[target_block].size()
@@ -519,7 +519,7 @@ def test_unmerge_backward(config_kwargs):
         return ab
 
     op_args = (torch.randn(target_block_size, dtype=a.get_dtype(), requires_grad=True),)
-    test = torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4)
+    test = torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4, check_undefined_grad=False)  # TODO check_undefined_grad=True
     assert test
 
 

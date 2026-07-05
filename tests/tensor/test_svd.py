@@ -320,15 +320,15 @@ def test_svd_backward_truncate(config_kwargs):
     for dtype in ["float64", "complex128"]:
         a = yastn.rand(config=config_U1, s=(-1, -1, 1, 1),
                       t=[(0, 1), (0, 1), (0, 1), (0, 1)],
-                      D=[(2, 3), (4, 5), (4, 3), (2, 1)], dtype=dtype)
+                      D=[(2, 3), (3, 2), (1, 2), (2, 1)], dtype=dtype)
 
         b = yastn.rand(config=config_U1, s=(-1, -1),
                       t=[(0, 1), (0, 1)],
-                      D=[(4, 3), (2, 1)], dtype=dtype)
+                      D=[(1, 2), (2, 1)], dtype=dtype)
 
         c = yastn.rand(config=config_U1, s=(1, 1),
                       t=[(0, 1), (0, 1)],
-                      D=[(2, 3), (4, 5)], dtype=dtype)
+                      D=[(2, 3), (3, 2)], dtype=dtype)
 
         def test_f(data):
             a._data=data

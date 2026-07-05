@@ -206,4 +206,4 @@ def test_conj_Z2xU1(config_kwargs):
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0"])
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])

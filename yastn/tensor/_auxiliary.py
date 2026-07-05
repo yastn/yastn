@@ -100,7 +100,7 @@ def _join_contiguous_slices(slcs_a, slcs_b):
             tmp_a = sl_a
             tmp_b = sl_b
     meta.append((tmp_a, tmp_b))
-    return tuple(meta)
+    return meta
 
 
 def swap_charges(charges_0, charges_1, fss) -> int:
@@ -224,16 +224,6 @@ def get_blocks_charges(sym, taxes, s, n):
     iblocks = indices[ind]
     icharges = [sorted(np.unique(iblocks[:, i]).tolist()) for i in range(ndim)]
     return tblocks, iblocks, icharges
-
-
-def get_sub_slices(st, st_full):
-    inds = np.zeros(st.nblocks, dtype=np.int64)
-    ic = 0
-    for it, tt in enumerate(st.t):
-        while not np.array_equal(tt, st_full.t[ic]):
-            ic += 1
-        inds[it] = ic
-    return st_full.slc[inds]
 
 
 def find_index(tset, tt, sorted=True):

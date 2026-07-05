@@ -22,7 +22,7 @@ from typing import NamedTuple, TYPE_CHECKING
 
 import numpy as np
 
-from ._auxiliary import _struct, _flatten, _clear_axes, _unpack_legs, get_blocks, get_sub_slices
+from ._auxiliary import _struct, _flatten, _clear_axes, _unpack_legs, get_blocks, find_matching_indices
 from ._legbasic import LegBasic
 from ._tests import YastnError, _test_axes_all
 
@@ -82,19 +82,16 @@ class _Fusion(NamedTuple):
 def _merge_to_matrix(a, axes, legs_sub=None):
     r""" Main function merging tensor into effective block matrix. """
     order = axes[0] + axes[1]
-    meta_mrg, struct_new, ls_l, ls_r, legs_old = _meta_merge_to_matrix(a.config.sym, a.struct, axes, legs_sub)
-    data = _transpose_and_merge(a.config, a._data, order, struct_new, meta_mrg)
+    meta_mrg, size, struct_new, ls_l, ls_r, legs_old = _meta_merge_to_matrix(a.config.sym, a.struct, axes, legs_sub)
+    data = _transpose_and_merge(a.config, a._data, order, meta_mrg, size)
     return data, struct_new, ls_l, ls_r, legs_old
 
 
-def _transpose_and_merge(config, data, order, struct_new, meta_mrg):
-    bl = get_blocks(config.sym, struct_new)
-    tset = bl.t.reshape(bl.nblocks, len(struct_new.legs) * config.sym.NSYM)
-    meta_new = [(tuple(x), y, z) for x, y, z in zip(tset, bl.D, bl.slc)]
+def _transpose_and_merge(config, data, order, meta_mrg, size):
     # if inds is None and tuple(range(len(order))) == order and struct.size == len(data) \
     #    and _no_change_in_transpose_and_merge(meta_mrg, meta_new, struct.size):
     #     return data
-    return config.backend.transpose_and_merge(data, order, meta_new, meta_mrg, bl.size)
+    return config.backend.transpose_and_merge(data, order, meta_mrg, size)
 
 
 def _no_change_in_transpose_and_merge(meta_mrg, meta_new, Dsize):
@@ -119,9 +116,7 @@ def _no_change_in_transpose_and_merge(meta_mrg, meta_new, Dsize):
     return True
 
 
-def _unmerge(config, data, meta, size=None):
-    if size is None:
-        size = meta[-1][0][1] if len(meta) > 0 else 0
+def _unmerge(config, data, meta, size):
     #assert len(data) == Dsize, "This should not have happened"
     #if _no_change_in_unmerge(meta):
     #    return data
@@ -157,7 +152,7 @@ def _meta_merge_to_matrix(sym, struct, axes, legs_sub):
     else:
         struct_sub = _struct(legs=legs_sub, n=struct.n, isdiag=struct.isdiag)
         st = get_blocks(sym, struct_sub)
-        slc = get_sub_slices(st, st_full)
+        slc = st_full.slc[find_matching_indices(st_full.t, st.t, both=False)]
 
     struct = st.struct
     t, teff, ls, legs_old = [], [], [], []
@@ -176,25 +171,41 @@ def _meta_merge_to_matrix(sym, struct, axes, legs_sub):
 
     legs_new = tuple(LegBasic(s=s, t=ll.t, D=ll.D) for s, ll in zip(s_eff, ls))
     struct_new = _struct(legs=legs_new, n=struct.n, isdiag=struct.isdiag)
+    bl_new = get_blocks(sym, struct_new)
 
     smeta = sorted((tel, ter, tl, tr, slo, tuple(Do))
                    for tel, ter, tl, tr, slo, Do in zip(teff[0], teff[1], t[0], t[1], slc, st.D.tolist()))
 
     meta_mrg = []
-    for (tel, ter), gr in groupby(smeta, key=itemgetter(0, 1)):
+    for tn, sln, Dn, ((tel, ter), gr) in zip(bl_new.t, bl_new.slc, bl_new.D, groupby(smeta, key=itemgetter(0, 1))):
         ind0 = ls[0].t.index(tel)
         ind1 = ls[1].t.index(ter)
-        tn = tel + ter
+        assert tuple(tn.ravel()) == tel + ter
         try:
             _, _, tl, tr, slo, Do = next(gr)
             for d0, d1 in product(ls[0].dec[ind0], ls[1].dec[ind1]):
                 if d0.t == tl and d1.t == tr:
-                    meta_mrg.append((tn, slo, Do, (d0.Dslc, d1.Dslc), (d0.Dprod, d1.Dprod)))
+                    meta_mrg.append((*sln, *Dn, *slo, *Do, *d0.Dslc, *d1.Dslc, d0.Dprod, d1.Dprod))
                     _, _, tl, tr, slo, Do = next(gr)
         except StopIteration:
             pass
 
-    return meta_mrg, struct_new, ls[0], ls[1], legs_old
+    ndimo = len(struct.legs)
+    meta_mrg = np.array(meta_mrg, dtype=np.int64).reshape(len(meta_mrg), 12 + ndimo)
+
+    xx = np.array([[0, 1], [1, 1], [0, 1], [0, 1], [0, 1], [1, 1]], dtype=np.int64).reshape(1, 12)
+    if np.array_equal(xx, meta_mrg):
+        print('aa')
+
+    meta_dt = np.dtype([
+        ('sln', np.int64, (2,)),
+        ('Dn',  np.int64, (2,)),
+        ('slo', np.int64, (2,)),
+        ('Do',  np.int64, (ndimo,)),
+        ('Dslc', np.int64, (2, 2)),
+        ('Drsh', np.int64, (2,))])
+    meta_mrg = meta_mrg.view(meta_dt).reshape(-1)
+    return meta_mrg, bl_new.size, bl_new.struct, ls[0], ls[1], legs_old
 
 def _LegSlices_trivial(leg):
     r""" Trivial LegSlices for unfused leg. """
@@ -293,8 +304,9 @@ def _fuse_legs_hard(a, axes, order):
     """
     order = tuple(a.trans[ax] for ax in order)
     axes = tuple(tuple(a.trans[ax] for ax in group) for group in axes)
-    meta_mrg, struct_new, legs_old = _meta_fuse_hard(a.config.sym, a.struct, axes)
-    data = _transpose_and_merge(a.config, a._data, order, struct_new, meta_mrg)
+    meta_mrg, size, struct_new, legs_old = _meta_fuse_hard(a.config.sym, a.struct, axes)
+
+    data = _transpose_and_merge(a.config, a._data, order, meta_mrg, size)
     mfs = ((1,),) * len(struct_new.legs)
     hfs = []
     for n, axs in enumerate(axes):
@@ -323,7 +335,7 @@ def _meta_fuse_hard(sym, struct, axes, legs_sub=None, empty_first_axis_s_conj=Fa
         slc = st.slc
     else:
         st = get_blocks(sym, struct._replace(legs=legs_sub))
-        slc = get_sub_slices(st, st_full)
+        slc = st_full.slc[find_matching_indices(st_full.t, st.t, both=False)]
     struct = st.struct
     #
     slegs = tuple(tuple(struct.legs[n].s for n in axis) for axis in axes)
@@ -354,6 +366,7 @@ def _meta_fuse_hard(sym, struct, axes, legs_sub=None, empty_first_axis_s_conj=Fa
 
     legs_new = tuple(LegBasic(s=s, t=ll.t, D=ll.D) for s, ll in zip(s_eff, lls))
     struct_new = struct._replace(legs=legs_new)
+    bl_new = get_blocks(sym, struct_new)
 
     teff_split = list(tuple(map(tuple, x)) for x in teff.tolist())
     if len(axes) > 0:
@@ -367,23 +380,38 @@ def _meta_fuse_hard(sym, struct, axes, legs_sub=None, empty_first_axis_s_conj=Fa
                    in zip(teff_split, teff, told_split, slc, st.D))
 
     meta_mrg, t_new, D_new = [], [], []
-    for (tes, tn), gr in groupby(smeta, key=itemgetter(0, 1)):
+
+    for tn, sln, Dn, ((tes, tn2), gr) in zip(bl_new.t, bl_new.slc, bl_new.D, groupby(smeta, key=itemgetter(0, 1))):
+
         ind = tuple(ls.t.index(te) for ls, te in zip(lls, tes))
         decs = tuple(ls.dec[ii] for ls, ii in zip(lls, ind))
         t_new.append(tn)
+        assert tuple(tn.ravel()) == tn2
         D_new.append(tuple(ls.D[ii] for ls, ii in zip(lls, ind)))
         try:
             _, _, tos, slo, Do = next(gr)
             for de in product(*decs):
                 if tuple(d.t for d in de) == tos:
-                    sub_slc = tuple(d.Dslc for d in de)
+                    sub_slc = tuple(x for d in de for x in d.Dslc)
                     Dsln = tuple(d.Dprod for d in de)
-                    meta_mrg.append((tn, slo, Do, sub_slc, Dsln))
+                    meta_mrg.append((*sln, *Dn, *slo, *Do, *sub_slc, *Dsln))
                     _, _, tos, slo, Do = next(gr)
         except StopIteration:
             pass
 
-    return meta_mrg, struct_new, legs_old
+    ndimo = len(struct.legs)
+    ndimn = len(struct_new.legs)
+    meta_mrg = np.array(meta_mrg, dtype=np.int64).reshape(len(meta_mrg), 4 + 4 * ndimn + ndimo)
+
+    meta_dt = np.dtype([
+        ('sln', np.int64, (2,)),
+        ('Dn',  np.int64, (ndimn,)),
+        ('slo', np.int64, (2,)),
+        ('Do',  np.int64, (ndimo,)),
+        ('Dslc', np.int64, (ndimn, 2)),
+        ('Drsh', np.int64, (ndimn,))])
+    meta_mrg = meta_mrg.view(meta_dt).reshape(-1)
+    return meta_mrg, bl_new.size, bl_new.struct, legs_old
 
 
 def fuse_meta_to_hard(a):
@@ -528,16 +556,29 @@ def _meta_unfuse_hard(sym, struct, axes, hfs):
         decs = tuple(tuple(ls.dec[ii]) for ls, ii in zip(lls, ind))
         for tt in product(*decs):
             tn = sum((x.t for x in tt), ())
-            sub_slc = tuple(x.Dslc for x in tt)
+            sub_slc = tuple(y for x in tt for y in x.Dslc)
 
             Dsln = tuple(x.Dprod for x in tt)
-            meta.append((tn, Dsln, slo, Do, sub_slc))
+            meta.append((tn, *Dsln, *slo, *Do, *sub_slc))
 
     meta2, ic = [], 0
     for x in sorted(meta, key=itemgetter(0)):
         while x[0] != tuple(st_new.t[ic].ravel()):
             ic += 1
-        meta2.append((tuple(st_new.slc[ic]), *x[1:]))
+        meta2.append((*st_new.slc[ic], *x[1:]))
+
+    ndimn = len(lls)
+    ndimo = len(st_old.struct.legs)
+    meta2 = np.array(meta2, dtype=np.int64).reshape(len(meta2), 4 + 3 * ndimn + ndimo)
+
+    meta_dt = np.dtype([
+        ('sln', np.int64, (2,)),
+        ('Dn',  np.int64, (ndimn,)),
+        ('slo', np.int64, (2,)),
+        ('Do',  np.int64, (ndimo,)),
+        ('sub_slc', np.int64, (ndimn, 2))])
+    meta2 = meta2.view(meta_dt).reshape(-1)
+
 
     return meta2, st_new.size, st_new.struct, tuple(nlegs_unfused), tuple(hfs_new)
 
@@ -563,7 +604,18 @@ def _meta_unmerge_matrix(sym, struct_in, ls0, ls1, struct_out):
     for tn, Dsln, slo, Do, sub_slc in sorted(meta, key=itemgetter(0)):
         while tn != t_out[ic]:
             ic += 1
-        meta_unmerge.append((slc_out[ic], Dsln, slo, Do, sub_slc))
+        meta_unmerge.append((*slc_out[ic], *Dsln, *slo, *Do, *sub_slc[0], *sub_slc[1]))
+
+    ndimo = len(st_a.struct.legs)
+    meta_unmerge = np.array(meta_unmerge, dtype=np.int64).reshape(len(meta_unmerge), 10 + ndimo)
+
+    meta_dt = np.dtype([
+        ('sln', np.int64, (2,)),
+        ('Dn',  np.int64, (2,)),
+        ('slo', np.int64, (2,)),
+        ('Do',  np.int64, (ndimo,)),
+        ('sub_slc', np.int64, (2, 2))])
+    meta_unmerge = meta_unmerge.view(meta_dt).reshape(-1)
 
     return meta_unmerge, st_c.size, st_c.struct
 
@@ -593,19 +645,27 @@ def _meta_mask(sym, struct, mask_t, mask_D, axis):
 
     st_c = get_blocks(sym, struct._replace(legs=legs_c))
 
-    D_a = st_a.D[:, 0] if struct.isdiag else st_a.D
-    D_c = st_c.D[:, 0] if struct.isdiag else st_c.D
+    D_a = st_a.D[:, :1] if struct.isdiag else st_a.D
+    D_c = st_c.D[:, :1] if struct.isdiag else st_c.D
 
     meta, ia, ic = [], 0, 0
     while ia < st_a.nblocks and ic < st_c.nblocks:
         if np.array_equal(st_a.t[ia], st_c.t[ic]):
-            tax = tuple(st_a.t[ia, axis, :])
-            meta.append((st_c.slc[ic], D_c[ic], st_a.slc[ia], D_a[ia], tax))
+            meta.append((*st_c.slc[ic], *D_c[ic], *st_a.slc[ia], *D_a[ia], *st_a.t[ia, axis, :]))
             ia += 1
             ic += 1
         else:
             ia += 1
 
+    ndima = len(struct.legs) - struct.isdiag
+    meta = np.array(meta, dtype=np.int64).reshape(len(meta), 4 + 2 * ndima + sym.NSYM)
+    meta_dt = np.dtype([
+        ('sln', np.int64, (2,)),
+        ('Dn', np.int64, (ndima,)),
+        ('sla', np.int64, (2,)),
+        ('Da', np.int64, (ndima,)),
+        ('tm', np.int64, (sym.NSYM,))])
+    meta = meta.view(meta_dt).reshape(-1)
     return meta, st_c.size, st_c.struct, axis, ndim
 
 

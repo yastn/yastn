@@ -218,8 +218,15 @@ def flip_charges(a, axes=None) -> 'Tensor':
     bl_new = get_blocks(a.config.sym, a.struct._replace(legs=legs_new))
     inds = argsort_t(t_flip)
     assert np.array_equal(t_flip[inds], bl_new.t), "Sanity check."
-    meta_embed = tuple((sln, sln[1] - sln[0], slo, slo[1] - slo[0]) for sln, slo in zip(bl_new.slc, bl_old.slc[inds]))
-    data = a.config.backend.embed_transpose(a._data, None, meta_embed, bl_new.size)  # used for embeding
+    sln, slo = bl_new.slc, bl_old.slc[inds]
+    meta = np.column_stack([sln, sln[:, 1] - sln[:, 0], slo, slo[:, 1] - slo[:, 0]])
+    meta_dt = np.dtype([
+        ('sln', np.int64, (2,)),
+        ('Dn', np.int64, (1,)),
+        ('slo', np.int64, (2,)),
+        ('Do', np.int64, (1,))])
+    meta = meta.view(meta_dt).reshape(-1)
+    data = a.config.backend.embed_transpose(a._data, [0], meta, bl_new.size)  # used for embeding
     out = a._replace(struct=bl_new.struct, data=data, hfs=hfs_new)
     return out
 
@@ -326,7 +333,14 @@ def consume_transpose(a) -> 'Tensor':
     bl_old = get_blocks(a.config.sym, a.struct)
     bl_new = get_blocks(a.config.sym, a.struct._replace(legs=new_legs))
     inds = argsort_t(bl_old.t[:, order, :])
-    meta = [(sln, Dn, slo, Do) for sln, Dn, slo, Do in zip(bl_new.slc, bl_new.D, bl_old.slc[inds], bl_old.D[inds])]
+    meta = np.hstack([bl_new.slc, bl_new.D, bl_old.slc[inds], bl_old.D[inds]])
+    ndim = len(new_legs)
+    meta_dt = np.dtype([
+        ('sln', np.int64, (2,)),
+        ('Dn', np.int64, (ndim,)),
+        ('slo', np.int64, (2,)),
+        ('Do', np.int64, (ndim,))])
+    meta = meta.view(meta_dt).reshape(-1)
     data = a._data if a.isdiag else a.config.backend.embed_transpose(a._data, a.trans, meta, bl_new.size)
     return a._replace(hfs=new_hfs, struct=bl_new.struct, data=data, trans=no_trans)
 
@@ -512,9 +526,18 @@ def diag(a) -> 'Tensor':
     bl_new = get_blocks(a.config.sym, a.struct._replace(isdiag=not a.isdiag))
 
     if a.isdiag:  # isdiag=True -> isdiag=False
-        meta = tuple((sl_new, sl_old) for sl_new, sl_old in zip(bl_new.slc, bl.slc))
+        meta = np.hstack([bl_new.slc, bl.slc])
+        meta_dt = np.dtype([
+                ('sln', np.int64, (2,)),
+                ('slo',  np.int64, (2,))])
+        meta = meta.view(meta_dt).reshape(-1)
         data = a.config.backend.diag_1dto2d(a._data, meta, bl_new.size)
     else:  # isdiag=False -> isdiag=True
-        meta = tuple((sl_new, sl_old, DD) for sl_new, sl_old, DD in zip(bl_new.slc, bl.slc, bl.D))
+        meta = np.hstack([bl_new.slc, bl.slc, bl.D])
+        meta_dt = np.dtype([
+                ('sln', np.int64, (2,)),
+                ('slo',  np.int64, (2,)),
+                ('Do',  np.int64, (2,))])
+        meta = meta.view(meta_dt).reshape(-1)
         data = a.config.backend.diag_2dto1d(a._data, meta, bl_new.size)
     return a._replace(struct=bl_new.struct, data=data, trans=None)

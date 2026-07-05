@@ -13,7 +13,6 @@
 # limitations under the License.
 # ==============================================================================
 """Support of numpy as a data structure used by yastn."""
-from itertools import groupby
 from functools import reduce
 import warnings
 import numpy as np
@@ -241,10 +240,8 @@ def conj(data):
 
 def trace(data, order, meta, Dsize):
     newdata = np.zeros(Dsize, dtype=data.dtype)
-    for (sln, list_sln) in meta:
-        tmp = newdata[slice(*sln)]
-        for slo, Do, Drsh in list_sln:
-            tmp += np.trace(data[slice(*slo)].reshape(Do).transpose(order).reshape(Drsh))
+    for (sln, slo, Do, Drsh) in meta:
+        newdata[slice(*sln)] += np.trace(data[slice(*slo)].reshape(Do).transpose(order).reshape(Drsh))
     return newdata
 
 
@@ -332,11 +329,11 @@ def svd(data, meta, sizes, **kwargs):
     Udata = np.empty((sizes[0],), dtype=data.dtype)
     Sdata = np.empty((sizes[1],), dtype=real_dtype)
     Vdata = np.empty((sizes[2],), dtype=data.dtype)
-    for x in meta:
-        U, S, V = safe_svd(data[slice(*x['slo'])].reshape(x['Do']))
-        Udata[slice(*x['slU'])].reshape(x['DU'])[:] = U
-        Sdata[slice(*x['slS'])] = S
-        Vdata[slice(*x['slV'])].reshape(x['DV'])[:] = V
+    for slo, Do, slU, DU, slS, slV, DV in meta:
+        U, S, V = safe_svd(data[slice(*slo)].reshape(Do))
+        Udata[slice(*slU)].reshape(DU)[:] = U
+        Sdata[slice(*slS)] = S
+        Vdata[slice(*slV)].reshape(DV)[:] = V
     return Udata, Sdata, Vdata
 
 
@@ -370,8 +367,8 @@ def eig(data, meta=None, sizes=(1, 1), **kwargs):
     Udata = np.empty((sizes[0],), dtype=dtype)
     Sdata = np.empty((sizes[1],), dtype=dtype)
     Vdata = np.empty((sizes[2],), dtype=dtype)
-    for x in meta:
-        S, V, U = scipy.linalg.eig(data[slice(*x['slo'])].reshape(x['Do']), left=True, right=True)
+    for slo, Do, slU, DU, slS, slV, DV in meta:
+        S, V, U = scipy.linalg.eig(data[slice(*slo)].reshape(Do), left=True, right=True)
         #
         # in general diag(U.H @ U) = 1 but not U.H @ U = I, i.e. right eigenvectors are not orthogonal
         # same is true for left eigenvectors V, diag(V.H @ V) = 1 but not V.H @ V = I
@@ -416,9 +413,9 @@ def eig(data, meta=None, sizes=(1, 1), **kwargs):
             raise ValueError("Biorthonormalization of left/right eigenvector pairs failed.")
 
         s_order = argsort_which(S, which=kwargs.get('which', 'LM'))
-        Udata[slice(*x['slU'])].reshape(x['DU'])[:] = _U[:,s_order]
-        Sdata[slice(*x['slS'])] = S[s_order]
-        Vdata[slice(*x['slV'])].reshape(x['DV'])[:] = _V[s_order,:]
+        Udata[slice(*slU)].reshape(DU)[:] = _U[:,s_order]
+        Sdata[slice(*slS)] = S[s_order]
+        Vdata[slice(*slV)].reshape(DV)[:] = _V[s_order,:]
     return Udata, Sdata, Vdata
 
 
@@ -463,13 +460,13 @@ def eigh(data, meta=None, sizes=(1, 1)):
     Sdata = np.zeros((sizes[0],), dtype=real_dtype)
     Udata = np.zeros((sizes[1],), dtype=data.dtype)
     if meta is not None:
-        for x in meta:
+        for slo, Do, slU, DU, slS in meta:
             try:
-                S, U = scipy.linalg.eigh(data[slice(*x['slo'])].reshape(x['Do']))
+                S, U = scipy.linalg.eigh(data[slice(*slo)].reshape(Do))
             except scipy.linalg.LinAlgError:  # pragma: no cover
-                S, U = np.linalg.eigh(data[slice(*x['slo'])].reshape(x['Do']))
-            Sdata[slice(*x['slS'])] = S
-            Udata[slice(*x['slU'])].reshape(x['DU'])[:] = U
+                S, U = np.linalg.eigh(data[slice(*x['slo'])].reshape(Do))
+            Sdata[slice(*slS)] = S
+            Udata[slice(*slU)].reshape(DU)[:] = U
         return Sdata, Udata
     return np.linalg.eigh(data)  # S, U
 
@@ -511,12 +508,12 @@ def eigh_lowrank(data, meta, sizes, thresh=None, **kwargs):
 def qr(data, meta, sizes):
     Qdata = np.empty((sizes[0],), dtype=data.dtype)
     Rdata = np.empty((sizes[1],), dtype=data.dtype)
-    for x in meta:
-        Q, R = scipy.linalg.qr(data[slice(*x['slo'])].reshape(x['Do']), mode='economic')
+    for slo, Do, slQ, DQ, slR, DR in meta:
+        Q, R = scipy.linalg.qr(data[slice(*slo)].reshape(Do), mode='economic')
         sR = np.sign(np.real(np.diag(R)))
         sR[sR == 0] = 1
-        Qdata[slice(*x['slQ'])].reshape(x['DQ'])[:] = Q * sR  # positive diag of R
-        Rdata[slice(*x['slR'])].reshape(x['DR'])[:] = sR.reshape([-1, 1]) * R
+        Qdata[slice(*slQ)].reshape(DQ)[:] = Q * sR  # positive diag of R
+        Rdata[slice(*slR)].reshape(DR)[:] = sR.reshape([-1, 1]) * R
     return Qdata, Rdata
 
 
@@ -559,8 +556,8 @@ def add(datas, metas, Dsize):
     dtype = reduce(np.promote_types, (data.dtype for data in datas))
     newdata = np.zeros(Dsize, dtype=dtype)
     for data, meta in zip(datas, metas):
-        for sl_c, sl_a in meta:
-            newdata[slice(*sl_c)] += data[slice(*sl_a)]
+        for sln, slo in meta:
+            newdata[slice(*sln)] += data[slice(*slo)]
     return newdata
 
 
@@ -585,7 +582,7 @@ def vdot(Adata, Bdata, meta):
 def dot(Adata, Bdata, meta_dot, Dsize):
     dtype = np.promote_types(Adata.dtype, Bdata.dtype)
     newdata = np.zeros(Dsize, dtype=dtype)
-    for (slc, Dc, sla, Da, slb, Db) in meta_dot:
+    for slc, Dc, sla, Da, slb, Db in meta_dot:
         np.dot(Adata[slice(*sla)].reshape(Da),
                Bdata[slice(*slb)].reshape(Db),
                out=newdata[slice(*slc)].reshape(Dc))
@@ -597,12 +594,8 @@ def transpose_dot_sum(Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border
     newdata = np.zeros(Dsize, dtype=dtype)
     Ad = tuple(Adata[slice(*sl)].reshape(Di).transpose(Aorder).reshape(Dl, Dr) for sl, Di, Dl, Dr in Areshape)
     Bd = tuple(Bdata[slice(*sl)].reshape(Di).transpose(Border).reshape(Dl, Dr) for sl, Di, Dl, Dr in Breshape)
-    for (sl, Dslc, list_tab) in meta_dot:
-        block = newdata[slice(*sl)].reshape(Dslc)
-        ta, tb = list_tab[0]
-        np.dot(Ad[ta], Bd[tb], out=block)
-        for ta, tb in list_tab[1:]:
-            block += np.dot(Ad[ta], Bd[tb])
+    for sln, Dn, ta, tb in meta_dot:
+        newdata[slice(*sln)].reshape(Dn)[:] += np.dot(Ad[ta], Bd[tb])
     return newdata
 
 
@@ -633,7 +626,7 @@ def apply_mask(Adata, mask, meta, Dsize, axis, a_ndim):
     slc2 = (slice(None),) * (a_ndim - (axis + 1))
     newdata = np.empty(Dsize, dtype=Adata.dtype)
     for sln, Dn, sla, Da, tm in meta:
-        slcs = slc1 + (mask[tm],) + slc2
+        slcs = slc1 + (mask[*tm],) + slc2
         newdata[slice(*sln)].reshape(Dn)[:] = Adata[slice(*sla)].reshape(Da)[slcs]
     return newdata
 
@@ -643,7 +636,7 @@ def embed_mask(Adata, mask, meta, Dsize, axis, a_ndim):
     slc2 = (slice(None),) * (a_ndim - (axis + 1))
     newdata = np.zeros(Dsize, dtype=Adata.dtype)
     for sln, Dn, sla, Da, tm in meta:
-        slcs = slc1 + (mask[tm],) + slc2
+        slcs = slc1 + (mask[*tm],) + slc2
         newdata[slice(*sln)].reshape(Dn)[slcs] = Adata[slice(*sla)].reshape(Da)
     return newdata
 
@@ -655,14 +648,12 @@ def embed_transpose(data, axes, meta_transpose, size):
     return newdata
 
 
-def transpose_and_merge(data, order, meta_new, meta_mrg, Dsize):
-    newdata = np.zeros(Dsize, dtype=data.dtype)
-    for (tn, Dn, sln), (t1, gr) in zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])):
-        assert tn == t1
+def transpose_and_merge(data, order, meta_mrg, size):
+    newdata = np.empty(size, dtype=data.dtype)
+    for sln, Dn, slo, Do, Dslc, Drsh in meta_mrg:
         temp = newdata[slice(*sln)].reshape(Dn)
-        for (_, slo, Do, Dslc, Drsh) in gr:
-            slcs = tuple(slice(*x) for x in Dslc)
-            temp[slcs] = data[slice(*slo)].reshape(Do).transpose(order).reshape(Drsh)
+        slcs = tuple(slice(*x) for x in Dslc)
+        temp[slcs] = data[slice(*slo)].reshape(Do).transpose(order).reshape(Drsh)
     return newdata
 
 
@@ -676,8 +667,8 @@ def unmerge(data, meta, size):
 
 def merge_to_dense(data, Dtot, meta):
     newdata = np.zeros(Dtot, dtype=data.dtype)
-    for (sl, Dss) in meta:
-        newdata[tuple(slice(*Ds) for Ds in Dss)] = data[slice(*sl)].reshape(tuple(Ds[1] - Ds[0] for Ds in Dss))
+    for (slo, Dss) in meta:
+        newdata[tuple(slice(*Ds) for Ds in Dss)] = data[slice(*slo)].reshape(tuple(Ds[1] - Ds[0] for Ds in Dss))
     return newdata.reshape(-1)
 
 

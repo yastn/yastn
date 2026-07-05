@@ -229,6 +229,7 @@ def _expand_partial_output(partial, sl_map, output_unroll_info):
 
     for block_ct, partial_D, slc in zip(bl.t, bl.D, bl.slc):
         # Slice block data in the native backend format (no numpy conversion)
+        partial_D = tuple(partial_D)
         block_data = partial._data[slc[0]: slc[1]].reshape(partial_D)
 
         # Build full block shape and the embedding slice tuple

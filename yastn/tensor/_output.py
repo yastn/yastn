@@ -496,7 +496,7 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False) -> 'Tensor':
             legs_m.append(1)
 
     if ndim_a == 0:  # scalar
-        meta = [((None,), ())]
+        meta = [((0, 1), ())]
     else:
         step = -1 if reverse else 1
         tD = []
@@ -528,6 +528,15 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False) -> 'Tensor':
         Dtot = Dtot[:1]
         Dtot_n = Dtot_n[:-1]
         meta = [(sl, D[:1]) for sl, D in meta]
+
+
+    meta = [list(_flatten(x)) for x in meta]
+    ndim = a.ndim_n - a.isdiag
+    meta = np.array(meta, dtype=np.int64).reshape(len(meta), 2 + 2 * ndim)
+    meta_dt = np.dtype([
+        ('slo', np.int64, (2,)),
+        ('Dss',  np.int64, (ndim, 2))])
+    meta = meta.view(meta_dt).reshape(-1)
 
     c_legs = legs_from_dict_v2({"s": c_s, "n": (), "t": c_t, "D": c_D})
     c_struct = _struct(legs=c_legs, n=(), isdiag=a.isdiag)

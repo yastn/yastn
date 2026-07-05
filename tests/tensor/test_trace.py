@@ -237,7 +237,7 @@ def test_trace_backward(config_kwargs):
     import torch
 
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
-    leg0 =  yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(5, 6, 7))
+    leg0 =  yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 4))
     a = yastn.rand(config=config_U1, legs=[leg0, leg0, leg0.conj(), leg0.conj()])
 
     target_block = (0, 0, 0, 0)
@@ -253,5 +253,5 @@ def test_trace_backward(config_kwargs):
 
 
 if __name__ == '__main__':
-    #pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])
-    pytest.main([__file__, "-vs", "--durations=0"])
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])
+    # pytest.main([__file__, "-vs", "--durations=0"])

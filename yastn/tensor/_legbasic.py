@@ -72,6 +72,9 @@ class LegBasic(NamedTuple):
     def __str__(self):
         return (f"LegBasic(s={self.s}, t={self.t}, D={self.D})")
 
+    def __repr__(a) -> str:
+        return str(a)
+
     @property
     def tD(self) -> dict[tuple, int]:
         r"""

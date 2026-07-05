@@ -294,9 +294,9 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
     if any(tt in leg and leg[tt] != DD for leg, tt, DD in zip(a.legs, tss, Ds)):
         raise YastnError("Provided Ds is not consistent with dimensions of existing legs.")
 
-    if any(tt not in leg for leg, tt in zip(a.legs, tss)):
-        new_legs = tuple(leg.add_charge(tt, DD) for leg, tt, DD in zip(a.legs, tss, Ds) )
-        embed_(a, new_legs)
+    #if any(tt not in leg for leg, tt in zip(a.legs, tss)):
+    new_legs = tuple(leg.add_charge(tt, DD) for leg, tt, DD in zip(a.legs, tss, Ds) )
+    embed_(a, new_legs)  # will make a data copy
 
     Dsize = Ds[0] if a.isdiag else reduce(mul, Ds, 1)
     new_block = _init_block(a.config, Dsize, val, dtype=a.yastn_dtype, device=a.device)
@@ -312,8 +312,14 @@ def embed_(a, legs_new):
     bl_new = get_blocks(a.config.sym, a.struct._replace(legs=legs_new))
     ind1, ind2 = find_matching_indices(bl_new.t, bl_old.t)
     sln, slo = bl_new.slc[ind1], bl_old.slc[ind2]
-    meta = list(zip(sln, sln[:, 1] - sln[:, 0], slo, slo[:, 1] - slo[:, 0]))
-    newdata = a.config.backend.embed_transpose(a.data, None, meta, bl_new.size)
+    meta = np.column_stack([sln, sln[:, 1] - sln[:, 0], slo, slo[:, 1] - slo[:, 0]])
+    meta_dt = np.dtype([
+        ('sln', np.int64, (2,)),
+        ('Dn', np.int64, (1,)),
+        ('slo', np.int64, (2,)),
+        ('Do', np.int64, (1,))])
+    meta = meta.view(meta_dt).reshape(-1)
+    newdata = a.config.backend.embed_transpose(a.data, [0], meta, bl_new.size)
     a.struct = bl_new.struct
     a._data = newdata
 

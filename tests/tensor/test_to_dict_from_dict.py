@@ -113,9 +113,11 @@ def test_to_dict_backward(config_kwargs):
     target_block_size = a[target_block].size()
 
     def test_f(block):
-        a[target_block] = block
+        # a[target_block] = block  # TODO
+        a.set_block(ts=target_block, val=block)
         r1d, _ = yastn.split_data_and_meta(a.to_dict(level=0, meta=meta))
         c = yastn.Tensor.from_dict(yastn.combine_data_and_meta(r1d, meta))
+
         res = c.norm()
         return res
 
@@ -123,12 +125,15 @@ def test_to_dict_backward(config_kwargs):
         a[target_block] = block
         af = a.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
         r1d, _ = yastn.split_data_and_meta(af.to_dict(level=0, meta=metaf))
-        c = yastn.Tensor.from_dict(yastn.combine_data_and_meta(r1d, meta))
+        c = yastn.Tensor.from_dict(yastn.combine_data_and_meta(r1d, metaf))
         res = c.norm()
         return res
 
+    torch.autograd.set_detect_anomaly(True)
+
     op_args = (torch.randn(target_block_size, dtype=a.get_dtype(), requires_grad=True),)
     assert torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4, check_undefined_grad=False)
+
 
     op_args = (torch.randn(target_block_size, dtype=a.get_dtype(), requires_grad=True),)
     assert torch.autograd.gradcheck(test_ff, op_args, eps=1e-6, atol=1e-4, check_undefined_grad=False)
@@ -268,4 +273,4 @@ def test_to_dict_exceptions(config_kwargs):
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0"])
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])

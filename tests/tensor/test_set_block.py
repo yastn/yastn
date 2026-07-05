@@ -245,4 +245,4 @@ def test_set_block_exceptions(config_kwargs):
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0"])
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])

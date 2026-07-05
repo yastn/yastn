@@ -141,6 +141,9 @@ def _meta_addition(sym, *structs):
     bl_new = get_blocks(sym, struct_new)
 
     metas = []
+    meta_dt = np.dtype([
+        ('sln', np.int64, (2,)),
+        ('slo', np.int64, (2,))])
     for struct in structs:
         meta = []
         bl_old = get_blocks(sym, struct)
@@ -175,9 +178,10 @@ def _meta_addition(sym, *structs):
                     j += 1
                 else:
                     j += 1
-        metas.append(tuple(meta))
+        meta = np.array(meta, dtype=np.int64).reshape(len(meta), 4)
+        metas.append(meta.view(meta_dt).reshape(-1))
 
-    return tuple(metas), bl_new.size, bl_new.struct
+    return metas, bl_new.size, bl_new.struct
 
 
 def allclose(a, b, rtol=1e-13, atol=1e-13) -> bool:
