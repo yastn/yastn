@@ -161,7 +161,7 @@ def _meta_merge_to_matrix(sym, struct, axes, legs_sub):
         Da = st.D[:, axes[n]]
         Deff = np.prod(Da, axis=1, dtype=np.int64).tolist()
         Da = [tuple(x) for x in Da.tolist()]
-        s = tuple(struct.legs[ii].s for ii in axes[n])   # TODO: struct_sub.legs ?
+        s = tuple(struct.legs[ii].s for ii in axes[n])
         ta_eff = [tuple(x) for x in sym.fuse(ta, s, s_eff[n]).tolist()]
         ta = [tuple(x) for x in ta.reshape(len(ta), len(s) * sym.NSYM).tolist()]
         teff.append(ta_eff)

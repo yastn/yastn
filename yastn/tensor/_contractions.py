@@ -104,10 +104,8 @@ def tensordot(a, b, axes, conj=(0, 0)) -> 'Tensor':
     nout_a = tuple(ii for ii in a.trans if ii not in nin_a)  # outgoing native legs
     nout_b = tuple(ii for ii in b.trans if ii not in nin_b)  # outgoing native legs
 
-    n_c = a.config.sym.add_charges(a.struct.n, b.struct.n)
-    s_c = tuple(a.s_n[i1] for i1 in nout_a) + tuple(b.s_n[i2] for i2 in nout_b)
-    mfs_c = tuple(a.mfs[ii] for ii in range(a.ndim) if ii not in in_a)
-    mfs_c += tuple(b.mfs[ii] for ii in range(b.ndim) if ii not in in_b)
+    mfs_c = tuple(a.mfs[ii] for ii in range(a.ndim) if ii not in in_a) + \
+            tuple(b.mfs[ii] for ii in range(b.ndim) if ii not in in_b)
     hfs_c = tuple(a.hfs[ii] for ii in nout_a) + tuple(b.hfs[ii] for ii in nout_b)
 
     if mask_needed:
@@ -117,7 +115,9 @@ def tensordot(a, b, axes, conj=(0, 0)) -> 'Tensor':
         a = a._replace(hfs=a_hfs)
         b = b._replace(hfs=b_hfs)
 
-    if a.config.tensordot_policy == 'fuse_to_matrix':
+    if a.config.backend.BACKEND_ID == 'torch_cpp' and all(0 < x < 16 for x in (a.nmin_n, b.ndim_n, len(hfs_c))):
+        data, struct_out = _tensordot_cutensor(a, b, nout_a, nin_a, nin_b, nout_b)
+    elif a.config.tensordot_policy == 'fuse_to_matrix':
         data, struct_out = _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b)
     elif a.config.tensordot_policy == 'fuse_contracted':
         data, struct_out = _tensordot_fc(a, b, nout_a, nin_a, nin_b, nout_b)
@@ -206,11 +206,13 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
     if a.config.profile: a.config.backend.nvtx.range_pop()
     order_a = nout_a + nin_a
     order_b = nin_b + nout_b
-    nsym = a.config.sym.NSYM
+    data = a.config.backend.transpose_dot_sum(a.data, b.data, meta_dot,
+                                              reshape_a, reshape_b, order_a, order_b, size_c)
+    if a.config.profile: a.config.backend.nvtx.range_pop()
+    return data, struct_c
 
-    if a.config.backend.BACKEND_ID == 'torch_cpp' and struct_c.t and 0 < len(struct_c.s) < 9 and 0 < len(a.struct.s) < 9 and 0 < len(b.struct.s) < 9:
-        # NOTE nout_a, nin_a, nout_b, nin_b use ndim_n or ndim ?
-        #      *) when default_fusion='meta', they are wrt. native legs. The charges of non-zero blocks are also wrt. to native legs.
+
+def _tensordot_cutensor(a, b, nout_a, nin_a, nin_b, nout_b):
 
         a_blocks_t, b_blocks_t, c_blocks_t = a.struct.t, b.struct.t, struct_c.t
         a_slices, b_slices = a.slices, b.slices
@@ -252,11 +254,6 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
             a.config.profile
         )
         if a.config.profile: a.config.backend.nvtx.range_pop()
-    else:
-        data = a.config.backend.transpose_dot_sum(a.data, b.data, meta_dot,
-                                              reshape_a, reshape_b, order_a, order_b, size_c)
-    if a.config.profile: a.config.backend.nvtx.range_pop()
-    return data, struct_c
 
 
 @lru_cache(maxsize=1024)

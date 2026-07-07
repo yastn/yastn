@@ -81,7 +81,7 @@ def _meta_tapp_torch_tensordot_bs(
         filled_b_t_per_mode[ib]= merged_t
     filled_c_t_per_mode= [ a_t_per_mode[i] for i in nout_a ] + [ b_t_per_mode[i] for i in nout_b ]
     if profile: nvtx.mark("kernel_tensordot_bs _merge_t done")
-    
+
     filled_a_D_per_mode= [None]*len(nout_a+nin_a)
     filled_b_D_per_mode= [None]*len(nout_b+nin_b)
     filled_c_D_per_mode= [None]*len(nout_a+nout_b)
@@ -99,8 +99,8 @@ def _meta_tapp_torch_tensordot_bs(
 
     # II. Domain-agnostic indexing of block coordinates
     #
-    # The blocks are indexed by their charges. However, cutensor expects non-negative integers as block coordinates. 
-    # Here we convert the charge-based coordinates to unsigned-int block coordinates. 
+    # The blocks are indexed by their charges. However, cutensor expects non-negative integers as block coordinates.
+    # Here we convert the charge-based coordinates to unsigned-int block coordinates.
     # The conversion is done in two steps:
     #   1) For each mode, we shift the coordinates such that the minimum coordinate becomes zero.
     #   2) For each mode, we raise the coordinates by the base equal to the number of unique coordinates in that mode.
@@ -141,8 +141,8 @@ def _meta_tapp_torch_tensordot_bs(
 
     # III. Compute offsets and strides for each block
     #
-    # The offsets and strides are needed to map the block-sparse coordinates to the respective locations in the 1D tensors a, b, c. 
-    # 
+    # The offsets and strides are needed to map the block-sparse coordinates to the respective locations in the 1D tensors a, b, c.
+    #
     def _offsets_and_strides(slices):
         S= np.empty( (len(slices),len(slices[0].D)), dtype=np.int64 )
         S[:,-1]=1
