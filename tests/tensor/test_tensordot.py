@@ -399,8 +399,7 @@ def test_tensordot_exceptions(config_kwargs):
 
 
 if __name__ == '__main__':
-    test_dot_basic_U1({"backend": "torch_cpp", "default_device": "cuda"})
-    # pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch_cpp", "--device", "cuda"])
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch_cpp", "--device", "cuda"])
     # pytest.main([__file__, "-vs", "--durations=0", "--tensordot_policy", "fuse_to_matrix"])
     # pytest.main([__file__, "-vs", "--durations=0", "--tensordot_policy", "fuse_contracted"])
     # pytest.main([__file__, "-vs", "--durations=0", "--tensordot_policy", "no_fusion"])

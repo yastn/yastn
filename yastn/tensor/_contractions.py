@@ -115,7 +115,10 @@ def tensordot(a, b, axes, conj=(0, 0)) -> 'Tensor':
         a = a._replace(hfs=a_hfs)
         b = b._replace(hfs=b_hfs)
 
-    if a.config.backend.BACKEND_ID == 'torch_cpp' and all(0 < x < 16 for x in (a.ndim_n, b.ndim_n, len(hfs_c))):
+    if a.config.tensordot_policy not in ['fuse_to_matrix', 'fuse_contracted', 'no_fusion']:
+        raise YastnError("Tensordot policy not recognized. It should be 'fuse_to_matrix', 'fuse_contracted', or 'no_fusion'.")
+
+    if a.config.backend.BACKEND_ID == 'torch_cpp' and all(0 < x < 8 for x in (a.ndim_n, b.ndim_n, len(hfs_c))):
         data, struct_out = _tensordot_cutensor(a, b, nout_a, nin_a, nin_b, nout_b)
     elif a.config.tensordot_policy == 'fuse_to_matrix':
         data, struct_out = _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b)
@@ -123,8 +126,6 @@ def tensordot(a, b, axes, conj=(0, 0)) -> 'Tensor':
         data, struct_out = _tensordot_fc(a, b, nout_a, nin_a, nin_b, nout_b)
     elif a.config.tensordot_policy == 'no_fusion':
         data, struct_out = _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b)
-    else:
-        raise YastnError("Tensordot policy not recognized. It should be 'fuse_to_matrix', 'fuse_contracted', or 'no_fusion'.")
 
     out = a._replace(data=data, struct=struct_out, mfs=mfs_c, hfs=hfs_c, trans=None)
     return out
@@ -211,14 +212,22 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
     if a.config.profile: a.config.backend.nvtx.range_pop()
     return data, struct_c
 
+def _remap_nout_(nout, offset):
+    r_nout = [None] * len(nout)
+    for n, i in enumerate(np.argsort(nout)):
+        r_nout[i] = n + offset
+    return r_nout
 
 def _tensordot_cutensor(a, b, nout_a, nin_a, nin_b, nout_b):
     if a.config.profile: a.config.backend.nvtx.range_push(f"_meta_tensordot_cutensor")
     struct_c, size_c, *metas = _meta_tensordot_cutensor(a.config.sym, a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
     if a.config.profile: a.config.backend.nvtx.range_pop()
     if size_c == 0:
-        return a.config.backend.zeros((0,), dtype=a.data.dtype, device=a.data.device)
-    modes_out = list(range(len(nout_a) + len(nout_b)))
+        data = a.config.backend.zeros((0,), dtype=a.yastn_dtype, device=a.data.device)
+        return data, struct_c
+
+    modes_out = _remap_nout_(nout_a, 0) + _remap_nout_(nout_b, len(nout_a))
+
     if a.config.profile: a.config.backend.nvtx.range_push(f"ops.tensordot_bs")
     if a.config.sym.NSYM == 0:
         data = a.config.backend.tensordot_dense(a.data, b.data, metas[1], metas[6], nin_a, nin_b, modes_out)
@@ -247,33 +256,6 @@ def _get_strides(Dset):
     for i in range(s1 - 1, 0, -1):
         S[:, i - 1] =  S[:, i] * Dset[:, i]
     return S
-
-
-def _meta_tensordot_cutensor(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b):
-    bl_a, slc_a, bl_b, slc_b, bl_c = _match_legs_tensordot(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b)
-    tas, a_coords = _int_block_coordinates(sym, bl_a.struct)
-    assert np.array_equal(tas, bl_a.t)
-    tbs, b_coords = _int_block_coordinates(sym, bl_b.struct)
-    assert np.array_equal(tbs, bl_b.t)
-    tcs, c_coords = _int_block_coordinates(sym, bl_c.struct)
-    assert np.array_equal(tcs, bl_c.t)
-
-    a_numSectionsPerMode, a_sectionExtents = _get_extends(bl_a.struct.legs)
-    b_numSectionsPerMode, b_sectionExtents = _get_extends(bl_b.struct.legs)
-    c_numSectionsPerMode, c_sectionExtents = _get_extends(bl_c.struct.legs)
-
-    a_strides = _get_strides(bl_a.D).reshape(-1).tolist()
-    b_strides = _get_strides(bl_b.D).reshape(-1).tolist()
-    c_strides = _get_strides(bl_c.D).reshape(-1).tolist()
-
-    a_offsets = slc_a[:, 0].tolist()
-    b_offsets = slc_b[:, 0].tolist()
-    c_offsets = bl_c.slc[:, 0].tolist()
-
-    return (bl_c.struct, bl_c.size,
-            a_numSectionsPerMode, a_sectionExtents, a_coords, a_strides, a_offsets,
-            b_numSectionsPerMode, b_sectionExtents, b_coords, b_strides, b_offsets,
-            c_numSectionsPerMode, c_sectionExtents, c_coords, c_strides, c_offsets)
 
 
 @lru_cache(maxsize=1024)
@@ -536,44 +518,71 @@ def _meta_tensordot_nf(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b):
 #     return meta_dot, reshape_a, reshape_b, struct_c, slices_c, legs_a, legs_b
 
 
-def _match_legs_tensordot(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b):
+@lru_cache(maxsize=1024)
+def _meta_tensordot_cutensor(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b):
+    bl_a, slc_a, bl_b, slc_b, bl_c = _match_legs_tensordot(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b)
+    _, a_coords = _int_block_coordinates(sym, bl_a.struct)
+    _, b_coords = _int_block_coordinates(sym, bl_b.struct)
+    _, c_coords = _int_block_coordinates(sym, bl_c.struct)
 
+    a_numSectionsPerMode, a_sectionExtents = _get_extends(bl_a.struct.legs)
+    b_numSectionsPerMode, b_sectionExtents = _get_extends(bl_b.struct.legs)
+    c_numSectionsPerMode, c_sectionExtents = _get_extends(bl_c.struct.legs)
+
+    a_strides = _get_strides(bl_a.D).reshape(-1).tolist()
+    b_strides = _get_strides(bl_b.D).reshape(-1).tolist()
+    c_strides = _get_strides(bl_c.D).reshape(-1).tolist()
+
+    a_offsets = slc_a[:, 0].tolist()
+    b_offsets = slc_b[:, 0].tolist()
+    c_offsets = bl_c.slc[:, 0].tolist()
+
+    return (bl_c.struct, bl_c.size,
+            a_numSectionsPerMode, a_sectionExtents, a_coords, a_strides, a_offsets,
+            b_numSectionsPerMode, b_sectionExtents, b_coords, b_strides, b_offsets,
+            c_numSectionsPerMode, c_sectionExtents, c_coords, c_strides, c_offsets)
+
+
+def _match_legs_tensordot(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b):
     assert not struct_a.isdiag, "Sanity check"
     assert not struct_b.isdiag, "Sanity check"
-
-    bl_a_full = get_blocks(sym, struct_a)
-    bl_b_full = get_blocks(sym, struct_b)
-    #
-    legs_a_new, legs_b_new = list(struct_a.legs), list(struct_b.legs)
-    for ia, ib in zip(nin_a, nin_b):
-        try:
-            leg = legs_a_new[ia].intersection(legs_b_new[ib].conj())
-        except ValueError:
-            raise YastnError('Bond dimensions of some charges do not match.')
-        legs_a_new[ia] = leg
-        legs_b_new[ib] = leg.conj()
-    legs_a_new, legs_b_new = tuple(legs_a_new), tuple(legs_b_new)
-
-    if legs_a_new == struct_a.legs:
-        bl_a = bl_a_full
-        slc_a = bl_a_full.slc
-    else:
-        bl_a = get_blocks(sym, struct_a._replace(legs=legs_a_new))
-        slc_a = bl_a_full.slc[find_matching_indices(bl_a_full.t, bl_a.t, both=False)]
-    struct_a = bl_a.struct
-    #
-    if legs_b_new == struct_b.legs:
-        bl_b = bl_b_full
-        slc_b = bl_b_full.slc
-    else:
-        bl_b = get_blocks(sym, struct_b._replace(legs=legs_b_new))
-        slc_b = bl_b_full.slc[find_matching_indices(bl_b_full.t, bl_b.t, both=False)]
-    struct_b = bl_b.struct
-
-    legs_c = (*(struct_a.legs[ax] for ax in nout_a), *(struct_b.legs[ax] for ax in nout_b))
     n_c = sym.add_charges(struct_a.n, struct_b.n)
-    struct_c = _struct(legs=legs_c, n=n_c, isdiag=False)
-    bl_c = get_blocks(sym, struct_c)
+    bl_a = bl_a_full = get_blocks(sym, struct_a)
+    bl_b = bl_b_full = get_blocks(sym, struct_b)
+    #
+    legs_a_new, legs_b_new = list(bl_a.struct.legs), list(bl_b.struct.legs)
+    while True:
+        for ia, ib in zip(nin_a, nin_b):
+            try:
+                leg = bl_a.struct.legs[ia].intersection(bl_b.struct.legs[ib].conj())
+            except ValueError:
+                raise YastnError('Bond dimensions of some charges do not match.')
+            legs_a_new[ia] = leg
+            legs_b_new[ib] = leg.conj()
+
+        struct_a_new = struct_a._replace(legs=tuple(legs_a_new))
+        struct_b_new = struct_b._replace(legs=tuple(legs_b_new))
+        bl_a = get_blocks(sym, struct_a_new)
+        bl_b = get_blocks(sym, struct_b_new)
+
+        legs_c = (*(struct_a_new.legs[ax] for ax in nout_a), *(struct_b_new.legs[ax] for ax in nout_b))
+        struct_c = _struct(legs=legs_c, n=n_c, isdiag=False)
+        bl_c = get_blocks(sym, struct_c)
+
+        if bl_a.struct == struct_a_new and bl_b.struct == struct_b_new and bl_c.struct == struct_c:
+            break
+
+        for ii, ax in enumerate(nout_a):
+            legs_a_new[ax] = bl_c.struct.legs[ii].intersection(bl_a.struct.legs[ax])
+        for ii, ax in enumerate(nout_b, start=len(nout_a)):
+            legs_b_new[ax] = bl_c.struct.legs[ii].intersection(bl_b.struct.legs[ax])
+
+    slc_a = bl_a_full.slc if struct_a_new == struct_a else \
+            bl_a_full.slc[find_matching_indices(bl_a_full.t, bl_a.t, both=False)]
+
+    slc_b = bl_b_full.slc if struct_b_new == struct_b else \
+            bl_b_full.slc[find_matching_indices(bl_b_full.t, bl_b.t, both=False)]
+
     return bl_a, slc_a, bl_b, slc_b, bl_c
 
 
