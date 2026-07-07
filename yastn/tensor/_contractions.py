@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ._auxiliary import _struct, _clear_axes, _unpack_axes, _join_contiguous_slices, sign_canonical_order, get_blocks, find_matching_indices, argsort_t
+from ._auxiliary import _struct, _clear_axes, _unpack_axes, _join_contiguous_slices, sign_canonical_order, get_blocks, get_blocks_charges, find_matching_indices, argsort_t
 from ._merging import _merge_to_matrix, _unmerge, _meta_unmerge_matrix, _meta_fuse_hard
 from ._merging import _transpose_and_merge, _mask_tensors_leg_intersection, _meta_mask
 from ._tests import YastnError, _test_can_be_combined, _unpack_trans_test_axes_pair
@@ -213,47 +213,67 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
 
 
 def _tensordot_cutensor(a, b, nout_a, nin_a, nin_b, nout_b):
+    if a.config.profile: a.config.backend.nvtx.range_push(f"_meta_tensordot_cutensor")
+    struct_c, *metas = _meta_tensordot_nf(a.config.sym, a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
+    if a.config.profile: a.config.backend.nvtx.range_pop()
+    modes_out = list(range(len(nout_a) + len(nout_b)))
+    if struct_c.size == 0:
+        return a.config.backend.zeros((0,), dtype=a.data.dtype, device=a.data.device)
+    if a.config.profile: a.config.backend.nvtx.range_push(f"ops.tensordot_bs")
+    if a.config.sym.NSYM == 0:
+        data = a.config.backend.tensordot_dense(a.data, b.data, metas[2], metas[7], nin_a, nin_b, modes_out)
+    else:
+        data = a.config.backend.tensordot_bs(a.data, b.data, nin_a, nin_b, *metas, modes_out)
+    if a.config.profile: a.config.backend.nvtx.range_pop()
+    return data, struct_c
 
-        a_blocks_t, b_blocks_t, c_blocks_t = a.struct.t, b.struct.t, struct_c.t
-        a_slices, b_slices = a.slices, b.slices
-        if nsym == 0:
-            # if no symmetry, create single block for each tensor for syntax compatibility
-            a_blocks_t, b_blocks_t, c_blocks_t= ((0,) * a.ndim_n,), ((0,) * b.ndim_n,), ((0,) * (len(nout_a) + len(nout_b)),)
-        else: # take only subset of blocks that are involved in the contraction
-            if ind_a:  # ind_a and/or ind_b is None if all blocks of a are involved
-                a_blocks_t = tuple(a.struct.t[i] for i in ind_a)
-                a_slices = tuple(a.slices[i] for i in ind_a)
-            if ind_b:
-                b_blocks_t = tuple(b.struct.t[i] for i in ind_b)
-                b_slices = tuple(b.slices[i] for i in ind_b)
 
-        if a.config.profile: a.config.backend.nvtx.range_push(f"kernel_tensordot_bs")
-        #a_legs, b_legs= a.get_legs( native=True ), b.get_legs( native=True )
-        a_t_per_mode = [l[0] for l in legs_a] if nsym > 0 else [((0,),)] * a.ndim_n
-        a_D_per_mode = [l[1] for l in legs_a]
+def _int_block_coordinates(sym, struct):
+    saxes = tuple(leg.s for leg in struct.legs)
+    taxes = tuple(leg.t for leg in struct.legs)
+    tblocks, iblocks, _ = get_blocks_charges(sym, taxes, saxes, struct.n)
+    return tblocks, iblocks.reshape(-1).tolist()
 
-        b_t_per_mode = [l[0] for l in legs_b] if nsym > 0 else [((0,),)] * b.ndim_n
-        b_D_per_mode = [l[1] for l in legs_b]
 
-        # legs_a, legs_b
-        data = a.config.backend.kernel_tensordot_bs(
-            a.data, b.data,
-            a.config.sym.NSYM,
-            a_blocks_t,
-            a_slices,
-            a_t_per_mode,
-            a_D_per_mode,
-            nout_a, nin_a,
-            b_blocks_t,
-            b_slices,
-            b_t_per_mode,
-            b_D_per_mode,
-            nout_b, nin_b,
-            struct_c.size, c_blocks_t,
-            slices_c,
-            a.config.profile
-        )
-        if a.config.profile: a.config.backend.nvtx.range_pop()
+def _get_extends(legs):
+    numSectionsPerMode = [len(leg.D) for leg in legs]
+    sectionExtents = [DD for leg in legs for DD in leg.D]
+    return numSectionsPerMode, sectionExtents
+
+
+def _get_strides(Dset):
+    s0, s1 = Dset.shape
+    S = np.ones((s0, s1), dtype=np.int64)
+    for i in range(s1 - 1, 0, -1):
+        S[:, i - 1] =  S[:, i] * Dset[:, i]
+    return S
+
+
+def _meta_tensordot_cutensor(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b):
+    bl_a, slc_a, bl_b, slc_b, bl_c = _match_legs_tensordot(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b)
+    tas, a_coords = _int_block_coordinates(sym, bl_a.struct)
+    assert np.array_equal(tas, bl_a.t)
+    tbs, b_coords = _int_block_coordinates(sym, bl_b.struct)
+    assert np.array_equal(tbs, bl_b.t)
+    tcs, c_coords = _int_block_coordinates(sym, bl_c.struct)
+    assert np.array_equal(tcs, bl_c.t)
+
+    a_numSectionsPerMode, a_sectionExtents = _get_extends(bl_a.struct.legs)
+    b_numSectionsPerMode, b_sectionExtents = _get_extends(bl_b.struct.legs)
+    c_numSectionsPerMode, c_sectionExtents = _get_extends(bl_c.struct.legs)
+
+    a_strides = _get_strides(bl_a.D).reshape(-1).tolist()
+    b_strides = _get_strides(bl_b.D).reshape(-1).tolist()
+    c_strides = _get_strides(bl_c.D).reshape(-1).tolist()
+
+    a_offsets = slc_a[:, 0].tolist()
+    b_offsets = slc_b[:, 0].tolist()
+    c_offsets = bl_c.slc[:, 0].tolist()
+
+    return (bl_c.struct,
+            a_numSectionsPerMode, a_sectionExtents, a_coords, a_strides, a_offsets,
+            b_numSectionsPerMode, b_sectionExtents, b_coords, b_strides, b_offsets,
+            c_numSectionsPerMode, c_sectionExtents, c_coords, c_strides, c_offsets)
 
 
 @lru_cache(maxsize=1024)
