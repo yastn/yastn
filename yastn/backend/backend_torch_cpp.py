@@ -15,6 +15,7 @@
 """Support of torch as a data structure used by yastn."""
 import torch
 from .backend_torch import *
+import tapp_torch
 
 BACKEND_ID = "torch_cpp"
 
@@ -36,4 +37,4 @@ def tensordot_dense(Adata, Bdata, DA, DB, nin_a, nin_b, modes_out):
         Bdata = Bdata.to(dtype=dtype)
     Adata = Adata.reshape(DA)
     Bdata = Bdata.reshape(DB)
-    return torch.ops.tapp_torch.tensordot(Adata, Bdata, nin_a, nin_b, modes_out).ravel()
+    return torch.ops.tapp_torch.tensordot(Adata, Bdata, nin_a, nin_b, modes_out).reshape(-1)

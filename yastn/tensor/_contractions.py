@@ -115,7 +115,7 @@ def tensordot(a, b, axes, conj=(0, 0)) -> 'Tensor':
         a = a._replace(hfs=a_hfs)
         b = b._replace(hfs=b_hfs)
 
-    if a.config.backend.BACKEND_ID == 'torch_cpp' and all(0 < x < 16 for x in (a.nmin_n, b.ndim_n, len(hfs_c))):
+    if a.config.backend.BACKEND_ID == 'torch_cpp' and all(0 < x < 16 for x in (a.ndim_n, b.ndim_n, len(hfs_c))):
         data, struct_out = _tensordot_cutensor(a, b, nout_a, nin_a, nin_b, nout_b)
     elif a.config.tensordot_policy == 'fuse_to_matrix':
         data, struct_out = _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b)
@@ -214,16 +214,16 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
 
 def _tensordot_cutensor(a, b, nout_a, nin_a, nin_b, nout_b):
     if a.config.profile: a.config.backend.nvtx.range_push(f"_meta_tensordot_cutensor")
-    struct_c, *metas = _meta_tensordot_nf(a.config.sym, a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
+    struct_c, size_c, *metas = _meta_tensordot_cutensor(a.config.sym, a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
     if a.config.profile: a.config.backend.nvtx.range_pop()
-    modes_out = list(range(len(nout_a) + len(nout_b)))
-    if struct_c.size == 0:
+    if size_c == 0:
         return a.config.backend.zeros((0,), dtype=a.data.dtype, device=a.data.device)
+    modes_out = list(range(len(nout_a) + len(nout_b)))
     if a.config.profile: a.config.backend.nvtx.range_push(f"ops.tensordot_bs")
     if a.config.sym.NSYM == 0:
-        data = a.config.backend.tensordot_dense(a.data, b.data, metas[2], metas[7], nin_a, nin_b, modes_out)
+        data = a.config.backend.tensordot_dense(a.data, b.data, metas[1], metas[6], nin_a, nin_b, modes_out)
     else:
-        data = a.config.backend.tensordot_bs(a.data, b.data, nin_a, nin_b, *metas, modes_out)
+        data = a.config.backend.tensordot_bs(a.data, b.data, list(nin_a), list(nin_b), *metas, modes_out)
     if a.config.profile: a.config.backend.nvtx.range_pop()
     return data, struct_c
 
@@ -270,7 +270,7 @@ def _meta_tensordot_cutensor(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout
     b_offsets = slc_b[:, 0].tolist()
     c_offsets = bl_c.slc[:, 0].tolist()
 
-    return (bl_c.struct,
+    return (bl_c.struct, bl_c.size,
             a_numSectionsPerMode, a_sectionExtents, a_coords, a_strides, a_offsets,
             b_numSectionsPerMode, b_sectionExtents, b_coords, b_strides, b_offsets,
             c_numSectionsPerMode, c_sectionExtents, c_coords, c_strides, c_offsets)
