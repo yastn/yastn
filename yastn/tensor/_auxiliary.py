@@ -222,7 +222,7 @@ def get_blocks_charges(sym, taxes, s, n):
 
     tblocks = comb_t[ind]
     iblocks = indices[ind]
-    icharges = [sorted(np.unique(iblocks[:, i]).tolist()) for i in range(ndim)]
+    icharges = [np.unique(iblocks[:, i]).tolist() for i in range(ndim)]
     return tblocks, iblocks, icharges
 
 

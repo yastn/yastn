@@ -118,7 +118,7 @@ def tensordot(a, b, axes, conj=(0, 0)) -> 'Tensor':
     if a.config.tensordot_policy not in ['fuse_to_matrix', 'fuse_contracted', 'no_fusion']:
         raise YastnError("Tensordot policy not recognized. It should be 'fuse_to_matrix', 'fuse_contracted', or 'no_fusion'.")
 
-    if a.config.backend.BACKEND_ID == 'torch_cpp' and all(0 < x < 8 for x in (a.ndim_n, b.ndim_n, len(hfs_c))):
+    if a.config.backend.BACKEND_ID == 'torch_cpp' and all(0 < x < 32 for x in (a.ndim_n, b.ndim_n, len(hfs_c))):
         data, struct_out = _tensordot_cutensor(a, b, nout_a, nin_a, nin_b, nout_b)
     elif a.config.tensordot_policy == 'fuse_to_matrix':
         data, struct_out = _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b)
@@ -370,13 +370,19 @@ def _meta_tensordot_nf(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b):
     #
     D1 = np.prod(bl_c.D[:, :len(nout_a)], axis=1, dtype=np.int64)
     D2 = np.prod(bl_c.D[:, len(nout_a):], axis=1, dtype=np.int64)
-    meta_dot = {tuple(slc): ((d1, d2), [])  for slc, d1, d2 in zip(bl_c.slc, D1, D2)}
+    meta_dot = {tuple(slc): ((d1, d2), []) for slc, d1, d2 in zip(bl_c.slc, D1, D2)}
 
     for k in uas.keys() & ubs.keys():
         inda = np.argwhere(inv_tac == uas[k]).ravel()
         indb = np.argwhere(inv_tbc == ubs[k]).ravel()
         t_a = tao[inda, :]
         t_b = tbo[indb, :]
+        arg_ta = argsort_t(t_a)
+        t_a = t_a[arg_ta]
+        inda = inda[arg_ta]
+        arg_tb = argsort_t(t_b)
+        t_b = t_b[arg_tb]
+        indb = indb[arg_tb]
         #
         indices = np.indices([len(t_a), len(t_b)]).reshape(2, -1).T
         comb_t = np.empty((len(indices), len(nout_a) + len(nout_b), sym.NSYM), dtype=np.int64)
@@ -386,12 +392,9 @@ def _meta_tensordot_nf(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b):
         comb_ii[:, 0] = inda[indices[:, 0]]
         comb_ii[:, 1] = indb[indices[:, 1]]
         #
-        ic = 0
-        for tt, ii in zip(comb_t, comb_ii):
-            while not np.array_equal(tt, bl_c.t[ic]):
-                ic += 1
+        ics = find_matching_indices(bl_c.t, comb_t, both=False)
+        for ic, ii in zip(ics, comb_ii):
             meta_dot[tuple(bl_c.slc[ic])][1].append(ii)
-            ic = 0
 
     meta = []
     for slc, (dds, gr) in meta_dot.items():
