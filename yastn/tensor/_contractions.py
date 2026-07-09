@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ._auxiliary import _struct, _clear_axes, _unpack_axes, _join_contiguous_slices, sign_canonical_order, get_blocks, get_blocks_charges, find_matching_indices, argsort_t
+from ._auxiliary import _struct, _clear_axes, _unpack_axes, _join_contiguous_slices, sign_canonical_order, get_blocks, get_blocks_charges, find_matching_indices, argsort_t, find_index
 from ._merging import _merge_to_matrix, _unmerge, _meta_unmerge_matrix, _meta_fuse_hard
 from ._merging import _transpose_and_merge, _mask_tensors_leg_intersection, _meta_mask
 from ._tests import YastnError, _test_can_be_combined, _unpack_trans_test_axes_pair
@@ -865,52 +865,56 @@ def trace(a, axes=(0, 1)) -> 'Tensor':
 @lru_cache(maxsize=1024)
 def _meta_trace(sym, struct, nin_0, nin_1, out):
     r""" meta-information for backend and struct of traced tensor. """
-    st = get_blocks(sym, struct)
-    nsym = len(struct.n)
-    t0 = st.t[:, nin_0, :].reshape(st.nblocks, len(nin_0) * nsym)
-    t1 = st.t[:, nin_1, :].reshape(st.nblocks, len(nin_1) * nsym)
-    tn = st.t[:, out, :].reshape(st.nblocks, len(out) * nsym)
-    D0 = st.D[:, nin_0]
-    D1 = st.D[:, nin_1]
-    Dn = st.D[:, out]
-    Dnp = np.prod(Dn, axis=1, dtype=np.int64)
-    pD0 = np.prod(D0, axis=1, dtype=np.int64)
-    pD1 = np.prod(D1, axis=1, dtype=np.int64)
-    Drsh = np.column_stack([pD0, pD1, Dnp])
 
+    bl = bl_full = get_blocks(sym, struct)
+    #
+    legs_part = list(bl.struct.legs)
+    while True:
+        for ia, ib in zip(nin_0, nin_1):
+            try:
+                leg = bl.struct.legs[ia].intersection(bl.struct.legs[ib].conj())
+            except ValueError:
+                raise YastnError('Bond dimensions of some charges do not match.')
+            legs_part[ia] = leg
+            legs_part[ib] = leg.conj()
+
+        struct_part = struct._replace(legs=tuple(legs_part))
+        bl = get_blocks(sym, struct_part)
+
+        struct_c = struct._replace(legs=tuple(bl.struct.legs[ax] for ax in out))
+        bl_c = get_blocks(sym, struct_c)
+
+        if bl.struct == struct_part and bl_c.struct == struct_c:
+            break
+
+        for ii, ax in enumerate(out):
+            legs_part[ax] = bl_c.struct.legs[ii].intersection(bl.struct.legs[ax])
+
+    slo = bl_full.slc if struct_part == struct else \
+          bl_full.slc[find_matching_indices(bl_full.t, bl.t, both=False)]
+
+    t0 = bl.t[:, nin_0, :].reshape(bl.nblocks, len(nin_0) * sym.NSYM)
+    t1 = bl.t[:, nin_1, :].reshape(bl.nblocks, len(nin_1) * sym.NSYM)
     ind = (np.all(t0 == t1, axis=1)).nonzero()[0]
-    if not np.all(D0[ind] == D1[ind]):
-        raise YastnError('Bond dimensions of some charges do not match.')
-    tn = tuple(map(tuple, tn[ind].tolist()))
-    Dn = tuple(map(tuple, Dn[ind].tolist()))
-    Dnp = Dnp[ind].tolist()
-    slo = st.slc[ind].tolist()
-    Do = tuple(map(tuple, st.D[ind].tolist()))
-    Drsh = tuple(map(tuple, Drsh[ind].tolist()))
 
-    struct_new = struct._replace(legs=tuple(struct.legs[ax] for ax in out))
+    tn = bl.t[ind][:, out, :]
+    slo = slo[ind]
+    Do = bl.D[ind]
+    Dnp = np.prod(Do[:, out], axis=1, dtype=np.int64)
+    pD0 = np.prod(Do[:, nin_0], axis=1, dtype=np.int64)
+    pD1 = np.prod(Do[:, nin_1], axis=1, dtype=np.int64)
 
-    pre_meta = sorted(zip(tn, Dn, Dnp, slo, Do, Drsh), key=itemgetter(0))
+    ii = np.array([find_index(bl_c.t, x) for x in tn], dtype=np.int64)  # TODO: direct numpy function?
+    sln = bl_c.slc[ii]
 
-    start, c_t, c_D, meta = 0, [], [], []
-    for (tn, Dn, Dnp), group in groupby(pre_meta, key=itemgetter(0, 1, 2)):
-        c_t.append(tn)
-        c_D.append(Dn)
-        stop = start + Dnp
-        for _, _, _, slo, Do, Drsh in group:
-            meta.append((start, stop, *slo, *Do, *Drsh))
-        start = stop
-    size = start if len(out) > 0 else 1
-
-    ndimo = len(struct.legs)
-    meta = np.array(meta, dtype=np.int64).reshape(len(meta), 7 + ndimo)
+    meta = np.column_stack([sln, slo, Do, pD0, pD1, Dnp])  # sln, slo, Do, Drsh
     meta_dt = np.dtype([
         ('sln', np.int64, (2,)),
         ('slo', np.int64, (2,)),
-        ('Do',  np.int64, (ndimo,)),
+        ('Do',  np.int64, (len(struct.legs),)),
         ('Drsh',  np.int64, (3,))])
     meta = meta.view(meta_dt).reshape(-1)
-    return meta, size, struct_new
+    return meta, bl_c.size, struct_c
 
 
 def swap_gate(a, axes, charge=None) -> 'Tensor':
