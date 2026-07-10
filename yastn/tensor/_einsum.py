@@ -176,7 +176,7 @@ def ncon(ts, inds, conjs=None, order=None, swap=None) -> 'Tensor':
     commands = _meta_ncon(inds, order, swap)
     #
     ts = _execute_commands(ts, commands)
-    assert len(ts) == 1, "Sanity check"
+    assert len(ts) == 1, "Sanity check. Contact developers."
     return ts.popitem()[1]
 
 

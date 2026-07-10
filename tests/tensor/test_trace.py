@@ -91,6 +91,15 @@ def test_trace_basic(config_kwargs):
     b = trace_vs_numpy(a, axes=(0, 2))
     assert b.norm() < tol  # == 0
 
+    leg4 = yastn.Leg(config_U1, s=1, t=(-2, -1, 1), D=(2, 1, 2))
+    leg5 = yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(1, 2, 3))
+    legs = (leg4.conj(), leg5.conj(), leg4.conj(), leg5, leg4, leg5)
+    a = yastn.ones(config=config_U1, legs=legs)
+    assert a.get_legs() == legs
+    b = trace_vs_numpy(a, axes=((0, 4), (5, 1)))
+    leg0 = yastn.Leg(config_U1, s=1, t=(-1, 1), D=(1, 2))
+    assert b.get_legs() == (leg0.conj(), leg0)
+
     # Z2xU1
     config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
     leg1 = yastn.Leg(config_Z2xU1, s=1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(6, 4, 9, 6))

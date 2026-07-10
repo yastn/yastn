@@ -17,14 +17,13 @@ from __future__ import annotations
 
 import abc
 from functools import lru_cache
-from itertools import groupby
 from numbers import Number
-from operator import itemgetter
 from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ._auxiliary import _struct, _clear_axes, _unpack_axes, _join_contiguous_slices, sign_canonical_order, get_blocks, get_blocks_charges, find_matching_indices, argsort_t, find_index
+from ._auxiliary import _struct, _clear_axes, _unpack_axes, sign_canonical_order, _compress_slices
+from ._auxiliary import find_matching_indices, argsort_t, get_blocks, get_blocks_charges
 from ._merging import _merge_to_matrix, _unmerge, _meta_unmerge_matrix, _meta_fuse_hard
 from ._merging import _transpose_and_merge, _mask_tensors_leg_intersection, _meta_mask
 from ._tests import YastnError, _test_can_be_combined, _unpack_trans_test_axes_pair
@@ -212,11 +211,13 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
     if a.config.profile: a.config.backend.nvtx.range_pop()
     return data, struct_c
 
+
 def _remap_nout_(nout, offset):
     r_nout = [None] * len(nout)
     for n, i in enumerate(np.argsort(nout)):
         r_nout[i] = n + offset
     return r_nout
+
 
 def _tensordot_cutensor(a, b, nout_a, nin_a, nin_b, nout_b):
     if a.config.profile: a.config.backend.nvtx.range_push(f"_meta_tensordot_cutensor")
@@ -547,8 +548,8 @@ def _meta_tensordot_cutensor(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout
 
 
 def _match_legs_tensordot(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b):
-    assert not struct_a.isdiag, "Sanity check"
-    assert not struct_b.isdiag, "Sanity check"
+    assert not struct_a.isdiag, "Sanity check. Contact developers."
+    assert not struct_b.isdiag, "Sanity check. Contact developers."
     n_c = sym.add_charges(struct_a.n, struct_b.n)
     bl_a = bl_a_full = get_blocks(sym, struct_a)
     bl_b = bl_b_full = get_blocks(sym, struct_b)
@@ -643,38 +644,33 @@ def _meta_broadcast(sym, struct_a, struct_b, axis):
         leg_c = leg_b.intersection(leg_a)
     except ValueError:
         raise YastnError("Bond dimensions of some charges do not match.")
-
     legs_c = struct_b.legs[:axis] + (leg_c,) + struct_b.legs[axis + 1:]
     bl_c = get_blocks(sym, struct_b._replace(legs=legs_c))
+    bl_aa = get_blocks(sym, struct_a._replace(legs=(leg_c, leg_c.conj())))
     #
-    sl_a = dict(zip(map(tuple, bl_a.t[:, 0, :]), map(tuple, bl_a.slc)))
+    inds_c = find_matching_indices(bl_b.t, bl_c.t, both=False)
+    inds_a = find_matching_indices(bl_a.t, bl_aa.t, both=False)
+    slc_aa = bl_a.slc[inds_a]
+    #
     if struct_b.isdiag:
-        D_b = bl_b.D[:, :1]
+        D_b = bl_b.D[:, 0]
         axis = 0
-        ndim = 1
+        ndimb = 1
     else:
         D_b = bl_b.D
-        ndim = len(struct_b.legs)
+        ndimb = len(struct_b.legs)
     #
-    meta, ib, ic = [], 0, 0
-    while ib < bl_b.nblocks and ic < bl_c.nblocks:
-        if np.array_equal(bl_b.t[ib], bl_c.t[ic]):
-            itb = tuple(bl_b.t[ib, axis, :])
-            meta.append((*bl_c.slc[ic], *bl_b.slc[ib], *D_b[ib], *sl_a[itb]))
-            ib += 1
-            ic += 1
-        else:
-            ib += 1
-
-    ndimb = len(struct_b.legs) - struct_b.isdiag
-    meta = np.array(meta, dtype=np.int64).reshape(len(meta), 6 + ndimb)
+    unique_tax, inv_tax = np.unique(bl_c.t[:, axis, :], return_inverse=True, axis=0)
+    assert np.array_equal(bl_aa.t[:, 0, :], unique_tax), "Sanity check. Contact developers."
+    #
+    meta = np.column_stack([bl_c.slc, bl_b.slc[inds_c], D_b[inds_c], slc_aa[inv_tax]])
     meta_dt = np.dtype([
         ('sln', np.int64, (2,)),
         ('slb',  np.int64, (2,)),
         ('Db', np.int64, (ndimb,)),
         ('sla',  np.int64, (2,))])
     meta = meta.view(meta_dt).reshape(-1)
-    return meta, bl_c.size, bl_c.struct, axis, ndim
+    return meta, bl_c.size, bl_c.struct, axis, ndimb
 
 
 def apply_mask(a, *args, axes=0) -> 'Tensor' | tuple['Tensor']:
@@ -787,32 +783,13 @@ def vdot(a, b, conj=(1, 0)) -> Number:
 
 @lru_cache(maxsize=1024)
 def _meta_vdot(sym, struct_a, struct_b):
-    bl_a = get_blocks(sym, struct_a)
-    bl_b = get_blocks(sym, struct_b)
-
-    slc_a = bl_a.slc.tolist()
-    slc_b = bl_b.slc.tolist()
-    ta = bl_a.t.reshape(bl_a.nblocks, len(struct_a.legs) * len(struct_a.n))
-    tb = bl_b.t.reshape(bl_b.nblocks, len(struct_b.legs) * len(struct_b.n))
-
     if not all(leg_a.are_consistent(leg_b, sgn=-1) for leg_a, leg_b in zip(struct_a.legs, struct_b.legs)):
         raise YastnError('Bond dimensions of some charges do not match.')
-
-    ia, ib, slcs_a, slcs_b = 0, 0, [], []
-    while ia < len(ta) and ib < len(tb):
-        diff = np.flatnonzero(ta[ia] != tb[ib])
-        if len(diff) == 0:
-            slcs_a.append(slc_a[ia])
-            slcs_b.append(slc_b[ib])
-            ia += 1
-            ib += 1
-        elif ta[ia, diff[0]] < tb[ib, diff[0]]:
-            ia += 1
-        else:
-            ib += 1
-    meta = _join_contiguous_slices(slcs_a, slcs_b)
-
-    meta = np.array(meta, dtype=np.int64).reshape(len(meta), 4)
+    bl_a = get_blocks(sym, struct_a)
+    bl_b = get_blocks(sym, struct_b)
+    ind_a, ind_b = find_matching_indices(bl_a.t, bl_b.t)
+    meta = np.column_stack([bl_a.slc[ind_a], bl_b.slc[ind_b]])
+    meta = _compress_slices(meta)
     meta_dt = np.dtype([
         ('sla', np.int64, (2,)),
         ('slb', np.int64, (2,))])
@@ -904,10 +881,10 @@ def _meta_trace(sym, struct, nin_0, nin_1, out):
     pD0 = np.prod(Do[:, nin_0], axis=1, dtype=np.int64)
     pD1 = np.prod(Do[:, nin_1], axis=1, dtype=np.int64)
 
-    ii = np.array([find_index(bl_c.t, x) for x in tn], dtype=np.int64)  # TODO: direct numpy function?
-    sln = bl_c.slc[ii]
+    unique_tn, inv_tn = np.unique(tn, return_inverse=True, axis=0)
+    assert len(tn) == 0 or np.array_equal(bl_c.t, unique_tn), "Sanity check. Contact developers."
 
-    meta = np.column_stack([sln, slo, Do, pD0, pD1, Dnp])  # sln, slo, Do, Drsh
+    meta = np.column_stack([bl_c.slc[inv_tn], slo, Do, pD0, pD1, Dnp])  # sln, slo, Do, Drsh;  Drsh = (pD0, pD1, Dnp)
     meta_dt = np.dtype([
         ('sln', np.int64, (2,)),
         ('slo', np.int64, (2,)),
@@ -980,7 +957,8 @@ def _meta_swap_gate(sym, struct, axes, fss):
         t2 = np.sum(bl.t[:, l2, :], axis=1, dtype=np.int64) % 2
         tp += np.sum(t1[:, fss] * t2[:, fss], axis=1, dtype=np.int64)
     tp = tp % 2
-    return _slices_to_negate(tp, bl.slc)
+    inds = np.where(tp)[0]
+    return _compress_slices(bl.slc[inds])
 
 
 @lru_cache(maxsize=1024)
@@ -994,21 +972,8 @@ def _meta_swap_gate_charge(sym, struct, charges, axes, fss):
     except ValueError:
         raise YastnError(f'Length or number of charges does not match sym.NSYM or axes.')
     tp = np.sum(tp[:, :, fss] * charges[:, :, fss], axis=(1, 2), dtype=np.int64) % 2
-    return _slices_to_negate(tp, bl.slc)
-
-
-def _slices_to_negate(tp, slc):
     inds = np.where(tp)[0]
-    if len(inds) == 0:
-        return []
-    slc = slc[inds]
-    inds = np.where(slc[1:, 0] - slc[:-1, 1] > 0)[0]
-    joined_slc = np.zeros((len(inds) + 1, 2), dtype=np.int64)
-    joined_slc[0, 0] = slc[0, 0]
-    joined_slc[1:, 0] = slc[inds+1, 0]
-    joined_slc[:-1, 1] = slc[inds, 1]
-    joined_slc[-1, 1] = slc[-1, 1]
-    return joined_slc
+    return _compress_slices(bl.slc[inds])
 
 
 def fkron(*operators, sites=None, application_order=None):

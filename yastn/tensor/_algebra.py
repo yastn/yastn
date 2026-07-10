@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ._auxiliary import _struct, get_blocks
+from ._auxiliary import _struct, get_blocks, find_matching_indices, _compress_slices
 from ._legs import legs_union
 from ._merging import _embed_tensor
 from ._tests import YastnError, _test_can_be_combined, _unpack_trans_test_axes_pair
@@ -43,6 +43,7 @@ def __add__(a, b) -> 'Tensor':
     out = a._replace(hfs=hfs, struct=struct_new, data=data)
     return out
 
+
 def __sub__(a, b) -> 'Tensor':
     """
     Subtract two tensors, use: :math:`a - b`.
@@ -54,6 +55,7 @@ def __sub__(a, b) -> 'Tensor':
     data = a.config.backend.sub(a._data, b._data, metas, size)
     out = a._replace(hfs=hfs, struct=struct_new, data=data)
     return out
+
 
 def add(*tensors, amplitudes=None, **kwargs) -> 'Tensor':
     r"""
@@ -84,6 +86,7 @@ def add(*tensors, amplitudes=None, **kwargs) -> 'Tensor':
     data = tensors[0].config.backend.add([v._data for v in tensors], metas, size)
     out = tensors[0]._replace(hfs=hfs, struct=struct_new, data=data)
     return out
+
 
 def _pre_addition(*tensors):
     """
@@ -145,40 +148,14 @@ def _meta_addition(sym, *structs):
         ('sln', np.int64, (2,)),
         ('slo', np.int64, (2,))])
     for struct in structs:
-        meta = []
         bl_old = get_blocks(sym, struct)
-        meta, i, j, sn0, so0 = [], 0, 0, None, None
-        if not struct.isdiag:
-            while i < bl_old.nblocks and j < bl_new.nblocks:
-                if np.array_equal(bl_old.t[i], bl_new.t[j]):
-                    if so0 is None:
-                        sn0 = bl_new.slc[j, 0]
-                        so0 = bl_old.slc[i, 0]
-                    i += 1
-                    j += 1
-                else:
-                    if so0 is not None:
-                        sn1 = bl_new.slc[j - 1, 1]
-                        so1 = bl_old.slc[i - 1, 1]
-                        meta.append(((sn0, sn1), (so0, so1)))
-                    sn0, so0 = None, None
-                    j += 1
-            if so0 is not None:
-                sn1 = bl_new.slc[j - 1, 1]
-                so1 = bl_old.slc[i - 1, 1]
-                meta.append(((sn0, sn1), (so0, so1)))
-        else:  # if isdiag: embed smaller dimensions into larger ones
-            while i < bl_old.nblocks and j < bl_new.nblocks:
-                if np.array_equal(bl_old.t[i], bl_new.t[j]):
-                    sn0 = bl_new.slc[j, 0]
-                    so0 = bl_old.slc[i, 0]
-                    d = min(bl_new.slc[j, 1] - bl_new.slc[j, 0], bl_old.slc[i, 1] - bl_old.slc[i, 0])
-                    meta.append(((sn0, sn0 + d), (so0, so0 + d)))
-                    i += 1
-                    j += 1
-                else:
-                    j += 1
-        meta = np.array(meta, dtype=np.int64).reshape(len(meta), 4)
+        ind_n, ind_o = find_matching_indices(bl_new.t, bl_old.t)
+        meta = np.column_stack([bl_new.slc[ind_n], bl_old.slc[ind_o]])
+        if struct.isdiag:
+            dd = np.minimum(meta[:, 1] - meta[:, 0], meta[:, 3] - meta[:, 2])
+            meta[:, 1] = meta[:, 0] + dd
+            meta[:, 3] = meta[:, 2] + dd
+        meta = _compress_slices(meta)
         metas.append(meta.view(meta_dt).reshape(-1))
 
     return metas, bl_new.size, bl_new.struct

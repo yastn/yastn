@@ -102,6 +102,22 @@ def _join_contiguous_slices(slcs_a, slcs_b):
     meta.append((tmp_a, tmp_b))
     return meta
 
+def _compress_slices(meta):
+    if len(meta) == 0:
+        return meta
+    s1, s2 = meta.shape
+    c2 = s2 // 2
+    slcs = meta.reshape(s1, c2, 2).transpose((1, 0, 2))
+    inds = np.any(slcs[:, 1:, 0] != slcs[:, :-1, 1], axis=0)
+    mask = np.ones((s1, 2), dtype=np.bool)
+    mask[1:, 0] = inds
+    mask[:-1, 1] = inds
+    mask = mask.reshape(2 * s1)
+    n1 = np.sum(inds) + 1
+    slcs = slcs.reshape(c2, 2 * s1)
+    joined_slcs = slcs[:, mask].reshape(c2, n1, 2).transpose((1, 0, 2))
+    return np.ascontiguousarray(joined_slcs.reshape(n1, s2))
+
 
 def swap_charges(charges_0, charges_1, fss) -> int:
     """ Calculates a sign accumulated while swapping lists of charges. """
@@ -266,7 +282,7 @@ def argsort_t(tset):
 def find_matching_indices(tset1, tset2, both=True):
     rs1, *cs1 = tset1.shape
     rs2, *cs2 = tset2.shape
-    assert cs1 == cs2, "Sanity check."
+    assert cs1 == cs2, "Sanity check. Contact developers."
     cp = np.prod(cs1, dtype=np.int64)
     if cp == 0 and rs1 == 1 and rs2 == 1:
         ind1 = ind2 = np.array([0], dtype=np.int64)

@@ -390,25 +390,23 @@ def test_hf_union_exceptions(config_kwargs):
 
 def test_auxiliary():
     """ test some auxiliary functions that join slices. """
-    # _join_contiguous_slices
+    # _compress_slices
     slc1 = ((0, 10), (10, 20), (30, 40), (40, 50))
     slc2 = ((0, 10), (10, 20), (20, 30), (40, 50))
-    meta = yastn.tensor._auxiliary._join_contiguous_slices(slc1, slc2)
-    assert meta == [((0, 20), (0, 20)), ((30, 40), (20, 30)), ((40, 50), (40, 50))]
-
-    slc1 = ((0, 10), (10, 20), (20, 30), (40, 50))
-    slc2 = ((10, 20), (20, 30), (30, 40), (40, 50))
-    meta = yastn.tensor._auxiliary._join_contiguous_slices(slc1, slc2)
-    assert meta == [((0, 30), (10, 40)), ((40, 50), (40, 50))]
-
-    # _slices_to_negate
-    slices = np.array([[0, 10], [10, 20], [20, 30], [30, 40]])
-    negate_slices = yastn.tensor._contractions._slices_to_negate([0, 0, 0, 0], slices)
-    assert negate_slices == []
-    negate_slices = yastn.tensor._contractions._slices_to_negate([0, 1, 1, 0], slices)
-    assert negate_slices.tolist() == [[10, 30]]
-    negate_slices = yastn.tensor._contractions._slices_to_negate([1, 0, 1, 1], slices)
-    assert negate_slices.tolist() == [[0, 10], [20, 40]]
+    meta = np.column_stack([slc1, slc2])
+    meta2 = yastn.tensor._auxiliary._compress_slices(meta)
+    ref = np.array([(0, 20, 0, 20), (30, 40, 20, 30), (40, 50, 40, 50)])
+    assert np.allclose(meta2, ref)
+    #
+    slices = np.array([])
+    slices2 = yastn.tensor._auxiliary._compress_slices(slices)
+    assert slices2.tolist() == []
+    slices = np.array([[10, 20], [20, 30]])
+    slices2 = yastn.tensor._auxiliary._compress_slices(slices)
+    assert slices2.tolist() == [[10, 30]]
+    slices = np.array([[0, 10], [20, 30], [30, 40]])
+    slices2 = yastn.tensor._auxiliary._compress_slices(slices)
+    assert slices2.tolist() == [[0, 10], [20, 40]]
 
 
 if __name__ == '__main__':

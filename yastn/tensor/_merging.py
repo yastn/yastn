@@ -141,7 +141,7 @@ def _no_change_in_unmerge(meta):
 @lru_cache(maxsize=1024)
 def _meta_merge_to_matrix(sym, struct, axes, legs_sub):
     r""" Meta information for backend needed to merge tensor into effective block matrix. """
-    assert not struct.isdiag, "Sanity check"
+    assert not struct.isdiag, "Sanity check. Contact developers."
     s_eff = [struct.legs[axes[0][0]].s if len(axes[0]) > 0 else 1,
              struct.legs[axes[1][0]].s if len(axes[1]) > 0 else -1]
 
@@ -327,7 +327,7 @@ def _fuse_legs_hard(a, axes, order):
 @lru_cache(maxsize=1024)
 def _meta_fuse_hard(sym, struct, axes, legs_sub=None, empty_first_axis_s_conj=False):
     r""" Meta information for backend needed to hard-fuse some legs. """
-    assert not struct.isdiag, "Sanity check"
+    assert not struct.isdiag, "Sanity check. Contact developers."
     #
     st_full = get_blocks(sym, struct)
     if legs_sub is None or legs_sub == struct.legs:
@@ -527,7 +527,7 @@ def unfuse_legs(a, axes) -> 'Tensor':
 @lru_cache(maxsize=1024)
 def _meta_unfuse_hard(sym, struct, axes, hfs):
     r""" Meta information for backend needed to hard-unfuse some legs. """
-    assert not struct.isdiag, "Sanity check"
+    assert not struct.isdiag, "Sanity check. Contact developers."
 
     lls, hfs_new, nlegs_unfused = [], [], []
     legs_new = []
@@ -706,7 +706,7 @@ def _embed_tensor(a, legs, legs_new):
     legs_new, _ = _unpack_legs(legs_new)
 
     hfs = tuple(lb.hf for lb in legs_new)
-    assert a.ndim_n == len(hfs), "Sanity check"
+    assert a.ndim_n == len(hfs), "Sanity check. Contact developers."
 
     for axis, (la, lb) in enumerate(zip(legs, legs_new)):
         if la.hf != lb.hf:  # mask needed
@@ -897,7 +897,7 @@ def _masks_hfs_intersection(sym, ts, Ds, hfs):
         tt = [tuple(t1.pop(it) for _ in range(no)) for t1 in t]
         DD = [tuple(D1.pop(it) for _ in range(no)) for D1 in D]
         mss = [[msk.pop(io) for _ in range(no)] for msk in msks]
-        assert op[it - 1] in 'sp', 'Sanity check'
+        assert op[it - 1] in 'sp', 'Sanity check. Contact developers.'
         if op[it - 1] == 'p':
             lss = [_leg_structure_combine_charges_prod(sym, tt1, DD1, ss1, t1[it - 1], s1[it - 1])
                    for tt1, DD1, ss1, t1, s1 in zip(tt, DD, ss, t, s)]
@@ -947,7 +947,7 @@ def _mask_embed_in_union(sym, t0, hf0, hfu):
         t_in = tuple(tus.pop(it) for _ in range(no))
         D_in = tuple(Dus.pop(it) for _ in range(no))
         ms_in = [msk.pop(io) for _ in range(no)]
-        assert op[it - 1] in 'sp', 'Sanity check'
+        assert op[it - 1] in 'sp', 'Sanity check. Contact developers.'
         if op[it - 1] == 'p':
             ls = _leg_structure_combine_charges_prod(sym, t_in, D_in, s_in, tus[it - 1], ss[it - 1])
             ma = _merge_masks_prod(sym, ls, ms_in)
@@ -1019,7 +1019,7 @@ def _hfs_union(sym, ts, hfs):
         # it - 1 is the index of new fused space in the tree
         t_out = tss[it - 1]
         s_out = s[it - 1]
-        assert op[it - 1] in 'sp', 'Sanity check'
+        assert op[it - 1] in 'sp', 'Sanity check. Contact developers.'
         # Perform fusion and collect results for new lowest leaf
         if op[it - 1] == 'p':
             ls = _leg_structure_combine_charges_prod(sym, t_in, D_in, s_in, t_out, s_out)

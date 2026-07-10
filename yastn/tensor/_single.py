@@ -19,7 +19,7 @@ from typing import Sequence, TYPE_CHECKING, Union
 
 import numpy as np
 
-from ._auxiliary import _clear_axes, _struct, _unpack_axes, _join_contiguous_slices, get_blocks, argsort_t
+from ._auxiliary import _clear_axes, _struct, _unpack_axes, get_blocks, argsort_t
 from ._einsum import ncon
 from ._legbasic import LegBasic
 from ._legs import LegMeta, Leg, leg_product
@@ -217,7 +217,7 @@ def flip_charges(a, axes=None) -> 'Tensor':
     legs_new = tuple(legs_new)
     bl_new = get_blocks(a.config.sym, a.struct._replace(legs=legs_new))
     inds = argsort_t(t_flip)
-    assert np.array_equal(t_flip[inds], bl_new.t), "Sanity check."
+    assert np.array_equal(t_flip[inds], bl_new.t), "Sanity check. Contact developers.."
     sln, slo = bl_new.slc, bl_old.slc[inds]
     meta = np.column_stack([sln, sln[:, 1] - sln[:, 0], slo, slo[:, 1] - slo[:, 0]])
     meta_dt = np.dtype([
