@@ -17,6 +17,19 @@ Supports both:
   ``{key: partial_data}`` for each key they touched; parent assembles via
   ``yastn_block`` and, in backward, re-runs the block step in autograd-enabled
   mode to split ``grad_out_data`` back into per-key gradients before shipping.
+
+IPC safety: torch.multiprocessing's storage-sharing reduction transports the
+raw storage but silently DROPS the lazy conjugate/negation view bits set by
+``x.conj()`` / ``torch._neg_view(x)``, so a lazy-conj bra tensor would arrive
+un-conjugated in the worker — wrong values, no error. Every tensor crossing a
+process boundary, in either direction (inputs, results, gradients), must
+therefore go through ``_ipc_data``, which materializes those bits first.
+
+Failure handling: workers post a ``boot_err`` message if they die during
+startup, and the parent collects results via ``_pool_result``, which polls
+``res_q`` with a worker-liveness check — a worker killed mid-flight (OOM
+killer, segfault) raises a RuntimeError with its exitcode instead of leaving
+the parent deadlocked on the queue.
 """
 import atexit
 import logging
@@ -45,10 +58,21 @@ def _config_descriptor(config):
     }
 
 
+def _ipc_data(t):
+    """Detach AND materialize lazy conj/neg bits before crossing a process
+    boundary. torch.multiprocessing's storage-sharing reduction transports the
+    raw storage but DROPS the conjugate/negative view bits, so a lazy
+    ``x.conj()`` (e.g. a bra tensor) silently arrives un-conjugated in the
+    worker — wrong values, no error. ``resolve_conj``/``resolve_neg`` are
+    no-ops when the bits are unset."""
+    return t.detach().resolve_conj().resolve_neg()
+
+
 def _serialize_yastn(t):
-    """yastn.Tensor -> dict for IPC. Data is detached; metadata is picklable."""
+    """yastn.Tensor -> dict for IPC. Data is detached and conj/neg-resolved
+    (see ``_ipc_data``); metadata is picklable."""
     d = t.to_dict(level=1)
-    d['data'] = d['data'].detach()
+    d['data'] = _ipc_data(d['data'])
     return d
 
 
@@ -108,11 +132,11 @@ def _per_device_input_replicas(input_data_tensors, worker_devs, original_device)
     creating N independent copies inside ``Tensor.from_dict``.
     """
     original_device = str(original_device)
-    data_per_dev = {original_device: [d.detach() for d in input_data_tensors]}
+    data_per_dev = {original_device: [_ipc_data(d) for d in input_data_tensors]}
     for dev in {str(d) for d in worker_devs}:
         if dev == original_device:
             continue
-        data_per_dev[dev] = [d.detach().to(dev) for d in input_data_tensors]
+        data_per_dev[dev] = [_ipc_data(d).to(dev) for d in input_data_tensors]
     return data_per_dev
 
 
@@ -154,23 +178,30 @@ def _worker_main(rank, gpu_dev, config_desc, cmd_q, res_q,
                  log_queue=None, log_level=logging.INFO, logger_levels=None):
     """Worker process entry point. Loops on cmd_q until 'shutdown'."""
     import torch
-    # Route this worker's logging (notably get_contraction_path path-info
-    # reports at INFO level) through the parent's QueueListener. Spawn-mode
-    # children inherit no logging config, so without this every log.info call
-    # in a worker is silently dropped.
-    from .._mp_logging import install_worker_log_handler
-    install_worker_log_handler(log_queue, log_level,
-                               tag=f"oe_mp rank {rank} dev {gpu_dev}",
-                               logger_levels=logger_levels)
-    if str(gpu_dev).startswith('cuda'):
-        gpu_idx = int(str(gpu_dev).split(':')[1])
-        torch.cuda.set_device(gpu_idx)
-    from ._initialize import make_config
-    from .oe_blocksparse import _contract_with_sliced_unroll
-    # Override default_device to this worker's assigned GPU so yastn tensors
-    # reconstructed from IPC are placed on the right device (Tensor.from_dict
-    # honors config.default_device).
-    cfg = make_config(**{**config_desc, 'default_device': str(gpu_dev)})
+    try:
+        # Route this worker's logging (notably get_contraction_path path-info
+        # reports at INFO level) through the parent's QueueListener. Spawn-mode
+        # children inherit no logging config, so without this every log.info
+        # call in a worker is silently dropped.
+        from .._mp_logging import install_worker_log_handler
+        install_worker_log_handler(log_queue, log_level,
+                                   tag=f"oe_mp rank {rank} dev {gpu_dev}",
+                                   logger_levels=logger_levels)
+        if str(gpu_dev).startswith('cuda'):
+            gpu_idx = int(str(gpu_dev).split(':')[1])
+            torch.cuda.set_device(gpu_idx)
+        from ._initialize import make_config
+        from .oe_blocksparse import _contract_with_sliced_unroll
+        # Override default_device to this worker's assigned GPU so yastn
+        # tensors reconstructed from IPC are placed on the right device
+        # (Tensor.from_dict honors config.default_device).
+        cfg = make_config(**{**config_desc, 'default_device': str(gpu_dev)})
+    except Exception:
+        # Report boot failure instead of dying silently — a dead worker that
+        # never posts to res_q would leave the parent blocked forever.
+        import traceback
+        res_q.put(('boot_err', rank, None, traceback.format_exc()))
+        return
     log.info("worker ready")
 
     while True:
@@ -245,7 +276,7 @@ def _worker_main(rank, gpu_dev, config_desc, cmd_q, res_q,
                         grad_tensors.append(g)
                     if out_tensors:
                         torch.autograd.backward(out_tensors, grad_tensors)
-                    grads = [t._data.grad.detach() if t._data.grad is not None
+                    grads = [_ipc_data(t._data.grad) if t._data.grad is not None
                                 else torch.zeros_like(t._data.detach())
                                 for t in inputs]
                     res_q.put(('backward_done', rank, txn_id, grads))
@@ -312,6 +343,25 @@ class _PersistentWorkerPool:
         # emitted has been enqueued before the listener drains and stops.
         from .._mp_logging import stop_parent_log_listener
         stop_parent_log_listener(self.log_listener)
+
+
+def _pool_result(pool, timeout=60.0):
+    """``res_q.get()`` with a liveness check. A worker that died without
+    posting (OOM kill, segfault, boot failure) would otherwise leave the
+    parent blocked on the queue forever — surface it as an error instead.
+    Loops indefinitely while all workers are alive, so long contractions are
+    not affected by the poll timeout."""
+    from queue import Empty
+    while True:
+        try:
+            return pool.res_q.get(timeout=timeout)
+        except Empty:
+            dead = [i for i, p in enumerate(pool.procs) if not p.is_alive()]
+            if dead:
+                codes = [pool.procs[i].exitcode for i in dead]
+                raise RuntimeError(
+                    f"_oe_blocksparse_mp: worker(s) {dead} died without reporting "
+                    f"(exitcodes {codes}); aborting instead of deadlocking on res_q.")
 
 
 def _get_or_create_pool(devices, n_per_device, config):
@@ -391,7 +441,7 @@ class _MultiprocSlicedUnrollFunction(torch.autograd.Function):
         n_active = sum(1 for a in worker_assignments if a)
         per_worker_partials = []  # list of {key: serialized yastn dict}
         for _ in range(n_active):
-            msg = pool.res_q.get()
+            msg = _pool_result(pool)
             if msg[0] != 'forward_done':
                 raise RuntimeError(f"worker forward failed: {msg}")
             _, _rank, _txn, partials_dict = msg
@@ -504,7 +554,7 @@ class _MultiprocSlicedUnrollFunction(torch.autograd.Function):
         # leaves to split grad_out_data back into per-key chunks.
         if common_legs_axes is None:
             # Single-key: per-key grad is grad_out_data unchanged
-            grad_per_key = {(): grad_out_data.detach()}
+            grad_per_key = {(): _ipc_data(grad_out_data)}
         else:
             from . import Tensor
             from ..initialize import block as yastn_block
@@ -518,7 +568,7 @@ class _MultiprocSlicedUnrollFunction(torch.autograd.Function):
                 assembled = yastn_block(per_key_tensors, common_legs=common_legs_axes)
                 assembled = assembled.drop_leg_history()
                 assembled._data.backward(grad_out_data.detach())
-            grad_per_key = {k: leaves[k].grad.detach() for k in merged_keys
+            grad_per_key = {k: _ipc_data(leaves[k].grad) for k in merged_keys
                             if leaves[k].grad is not None}
 
         # Dispatch backward to workers with per-key grads.
@@ -538,7 +588,7 @@ class _MultiprocSlicedUnrollFunction(torch.autograd.Function):
                 continue
             serialized_inputs = []
             for data, m in zip(input_data_tensors, input_meta_list):
-                d = {**m, 'data': data.detach()}
+                d = {**m, 'data': _ipc_data(data)}
                 serialized_inputs.append(d)
             worker_kwargs = _patch_worker_kwargs(
                 ncon_kwargs, assigned, pf_trim_per_combo, dim_overrides_per_combo)
@@ -551,7 +601,7 @@ class _MultiprocSlicedUnrollFunction(torch.autograd.Function):
         n_active = sum(1 for a in worker_assignments if a)
         per_worker_input_grads = []
         for _ in range(n_active):
-            msg = pool.res_q.get()
+            msg = _pool_result(pool)
             if msg[0] != 'backward_done':
                 raise RuntimeError(f"worker backward failed: {msg}")
             _, _rank, _txn, grads = msg

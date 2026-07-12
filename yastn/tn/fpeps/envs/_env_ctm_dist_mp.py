@@ -28,6 +28,28 @@ from ....tensor import Tensor, YastnError, qr
 logger = logging.getLogger(__name__)
 
 
+def _ipc_dict(d):
+    """Materialize lazy conj/neg view bits on every torch data tensor inside a
+    ``to_dict(level=1)`` payload before it crosses a process boundary.
+
+    torch.multiprocessing's queue reduction ships the raw storage but DROPS
+    the lazy conjugate/negation view bits set by ``x.conj()`` /
+    ``torch._neg_view(x)``, so e.g. a lazily-conjugated bra tensor would
+    silently arrive un-conjugated in the receiving process — wrong values, no
+    error. ``detach``/``to(device)`` on an already-resident tensor do NOT
+    clear these bits. Recurses into nested DoublePepsTensor payloads
+    (``bra``/``ket``/``op``). No-op for numpy-backed data.
+    """
+    data = d.get('data', None)
+    if data is not None and hasattr(data, 'resolve_conj'):
+        d['data'] = data.detach().resolve_conj().resolve_neg()
+    for k in ('bra', 'ket', 'op'):
+        sub = d.get(k, None)
+        if isinstance(sub, dict):
+            _ipc_dict(sub)
+    return d
+
+
 def _validate_devices_list(devices: list[str] | None) -> None:
     if devices is None:
         raise YastnError("Devices list must be provided for distributed CTM.")
@@ -307,7 +329,7 @@ def _update_core_D_(ctmrg_mp_context, env, move: str, opts_svd: dict, **kwargs):
         # Stage 1: compute enlarged corners and halfs
         for i,site in enumerate(sites_proj):
             tl,tr,bl,br= tuple(env.nn_site(site, d=d) for d in ((0, 0), (0, 1), (1, 0), (1, 1)))
-            ts_d= tuple(t.detach().to_dict(level=1) for t in (
+            ts_d= tuple(_ipc_dict(t.detach().to_dict(level=1)) for t in (
                 env[tl].l, env[tl].tl, env[tl].t, env.psi[tl],
                 env[bl].b, env[bl].bl, env[bl].l, env.psi[bl],
                 env[tr].t, env[tr].tr, env[tr].r, env.psi[tr],
@@ -322,7 +344,7 @@ def _update_core_D_(ctmrg_mp_context, env, move: str, opts_svd: dict, **kwargs):
             del half1_d, half2_d
             tl,tr,bl,br= corner_sites(site)
 
-            h1_d, h2_d = h1.to_dict(level=1), h2.to_dict(level=1)
+            h1_d, h2_d = _ipc_dict(h1.to_dict(level=1)), _ipc_dict(h2.to_dict(level=1))
             if move in 'h':
                 opts_svd["D_blocks"]= svd_predict_spec(tr, "hrb", br, "hrt", h1.s[1])
                 task_queue.put( ("projectors_move_MP_",
@@ -374,7 +396,7 @@ def _update_core_D_(ctmrg_mp_context, env, move: str, opts_svd: dict, **kwargs):
         for i,site in enumerate(site_group):
             for mv in moves:
                 job_ts= update_env_fetch_args(site, env, mv)
-                job_ts_d= tuple(t.detach().to_dict(level=1) if isinstance(t,(Tensor,DoublePepsTensor)) else t for t in job_ts)
+                job_ts_d= tuple(_ipc_dict(t.detach().to_dict(level=1)) if isinstance(t,(Tensor,DoublePepsTensor)) else t for t in job_ts)
                 task_queue.put( ("update_env_move_MP_",
                     (i, site, mv, env.config.default_device, job_ts_d), \
                         {'profiling_mode': kwargs.get('profiling_mode', None)}) )
@@ -471,7 +493,7 @@ def projectors_move_MP_(out_queue, device, i, site, proj_pair, h1_d, h2_d,
         res= projectors_move_bv(h1, h2, opt_svd, **kwargs)
     else:
         raise ValueError(f"projectors_move_MP_ invalid proj_pair {proj_pair}")
-    res= tuple(r.to(device=ret_device).to_dict(level=1) for r in res)
+    res= tuple(_ipc_dict(r.to(device=ret_device).to_dict(level=1)) for r in res)
     out_queue.put( (i, site, proj_pair, res) )
     if profiling_mode in ["NVTX",]: h1.config.backend.cuda.nvtx.range_pop()
     del h1, h2, res
@@ -550,7 +572,7 @@ def projectors_stage1(out_queue, device,
         cor_ll, cor_rr= halves_4x4_tvb(ts)
         res+= (cor_ll, cor_rr)
     del ts
-    res= tuple(r.to_dict(level=1) for r in res)
+    res= tuple(_ipc_dict(r.to_dict(level=1)) for r in res)
     out_queue.put( (i, site, res) )
     if profiling_mode in ["NVTX",]: _config.backend.cuda.nvtx.range_pop()
     del cor_tt, cor_bb, cor_ll, cor_rr, res
@@ -582,7 +604,7 @@ def update_env_move_MP_(out_queue, device, i, site, move, ret_device, args_d, **
 
     if profiling_mode in ["NVTX",]: args[0].config.backend.cuda.nvtx.range_push(f"{site} {move}")
     res= update_env_dir(move, *args)
-    res= tuple(r.detach().to(device=ret_device).to_dict(level=1) for r in res)
+    res= tuple(_ipc_dict(r.detach().to(device=ret_device).to_dict(level=1)) for r in res)
 
     out_queue.put( (i, site, move, res) )
     if profiling_mode in ["NVTX",]: args[0].config.backend.cuda.nvtx.range_pop()

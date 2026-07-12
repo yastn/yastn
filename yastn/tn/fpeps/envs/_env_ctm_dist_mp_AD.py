@@ -435,8 +435,14 @@ def _send_payload(t):
           can recycle the sender's tensor mid-flight and corrupt the
           receiver's view).
 
-    ``resolve_conj()`` clears the complex-conjugate flag (some reducer
-    paths refuse it).  Producer-stream ordering is handled by
+    ``resolve_conj()``/``resolve_neg()`` materialize the lazy
+    conjugate/negation view bits.  This is required for correctness,
+    not just reducer compatibility: torch.multiprocessing's reduction
+    ships the raw storage but DROPS these bits, so a lazy ``x.conj()``
+    (or neg view) would silently arrive un-conjugated (un-negated) in
+    the receiver.  ``contiguous()`` does NOT clear them — it is a
+    no-op on an already-contiguous view — so they must be resolved
+    explicitly.  Producer-stream ordering is handled by
     torch.multiprocessing's CUDA reducer: when the tensor is pickled
     for the queue, the reducer records an event on the producer's
     current stream and ships the IPC event handle alongside the
@@ -445,7 +451,7 @@ def _send_payload(t):
     required.
     """
     import torch
-    t = t.detach().resolve_conj()
+    t = t.detach().resolve_conj().resolve_neg()
     if t.is_cuda:
         return t.contiguous()
     return t.cpu().numpy()

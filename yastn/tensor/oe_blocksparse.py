@@ -503,11 +503,11 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
         "_contract_with_sliced_unroll requires explicit output index group"
 
     # ---- Dispatch routing ----
-    # devices=None                              -> serial on tensors[0].device
-    # devices=[X] where X == tensors[0].device  -> serial (demoted)
-    # devices=[X] + mp_workers_per_device==1    -> serial on X (move + restore)
-    # devices=[...] + mp_workers_per_device==0  -> error
-    # otherwise                                 -> multiprocess pool
+    # devices=None                                    -> serial on tensors[0].device
+    # devices=[X] == tensors[0].device, workers <= 1  -> serial (demoted)
+    # devices=[X] != tensors[0].device, workers == 1  -> serial on X (move + restore)
+    # devices=[...] + mp_workers_per_device==0        -> error
+    # otherwise (incl. same-device pool, workers>=2)  -> multiprocess pool
     # Worker-mode calls (_combo_indices / _return_partials) skip routing.
     _restore_device = None
     if devices is not None and _combo_indices is None and not _return_partials:
@@ -515,9 +515,13 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
             devices = [devices]
         devices = list(dict.fromkeys(str(d) for d in devices))
         _orig_device = str(args[0].device)
-        # Same-device singleton is equivalent to devices=None — demote so it
-        # doesn't trip the mp_workers_per_device check below.
-        if len(devices) == 0 or (len(devices) == 1 and devices[0] == _orig_device):
+        # Same-device singleton with <=1 worker is equivalent to devices=None —
+        # demote so it doesn't trip the mp_workers_per_device check below.
+        # With mp_workers_per_device >= 2 a same-device singleton is a
+        # legitimate request for a local worker POOL (e.g. devices=['cpu'],
+        # mp_workers_per_device=8 on a many-core CPU node) — do NOT demote.
+        if len(devices) == 0 or (len(devices) == 1 and devices[0] == _orig_device
+                                 and mp_workers_per_device <= 1):
             devices = None
 
         if devices is not None:
