@@ -387,7 +387,7 @@ def block(tensors, common_legs=None) -> Tensor:
 
         ttn = tuple(sorted(ltDtot_leg.keys()))
         DDn = tuple(ltDtot_leg[t] for t in ttn)
-        legs_new.append(LegBasic(s=tn0.legs[n].s, t=ttn, D=DDn))
+        legs_new.append(LegBasic(s=tn0.struct.legs[n].s, t=ttn, D=DDn))
 
     bl_new = get_blocks(sym, tn0.struct._replace(legs=tuple(legs_new)))
 

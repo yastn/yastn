@@ -144,7 +144,7 @@ def conj(a) -> 'Tensor':
     """
     newn = a.config.sym.add_charges(a.struct.n, new_signature=-1)
 
-    legs = tuple(leg.conj() for leg in a.legs)
+    legs = tuple(leg.conj() for leg in a.struct.legs)
     struct = _struct(legs=legs, n=newn, isdiag=a.isdiag)
     hfs = tuple(hf.conj() for hf in a.hfs)
     data = a.config.backend.conj(a._data)
@@ -171,7 +171,7 @@ def flip_signature(a) -> 'Tensor':
     Creates a shallow copy of the data.
     """
     newn = a.config.sym.add_charges(a.struct.n, new_signature=-1)
-    legs = tuple(leg.conj() for leg in a.legs)
+    legs = tuple(leg.conj() for leg in a.struct.legs)
     struct = _struct(legs=legs, n=newn, isdiag=a.isdiag)
     hfs = tuple(hf.conj() for hf in a.hfs)
     return a._replace(hfs=hfs, struct=struct)
@@ -202,7 +202,7 @@ def flip_charges(a, axes=None) -> 'Tensor':
     uaxes = tuple(a.trans[ax] for ax in uaxes)
 
     bl_old = get_blocks(a.config.sym, a.struct)
-    legs_new = list(a.legs)
+    legs_new = list(a.struct.legs)
     hfs_new = list(a.hfs)
     t_flip = bl_old.t.copy()
 
@@ -210,7 +210,7 @@ def flip_charges(a, axes=None) -> 'Tensor':
         if hfs_new[ax].is_fused():
             raise YastnError('Flipping charges of hard-fused leg is not supported.')
         hfs_new[ax] = hfs_new[ax].conj()
-        leg = a.legs[ax]
+        leg = a.struct.legs[ax]
         legs_new[ax] = leg.conj_charges(a.config.sym)
         t_flip[:, ax, :] = a.config.sym.fuse(t_flip[:, (ax,), :], (leg.s,), -leg.s)
 
@@ -293,7 +293,7 @@ def drop_leg_history(a, axes=None) -> 'Tensor':
             axes = (axes,)
     uaxes, = _unpack_axes(a.mfs, axes)
     uaxes = tuple(a.trans[ax] for ax in uaxes)
-    hfs = tuple(_Fusion(s=(a.legs[n].s,)) if n in uaxes else a.hfs[n] for n in range(a.ndim_n))
+    hfs = tuple(_Fusion(s=(a.struct.legs[n].s,)) if n in uaxes else a.hfs[n] for n in range(a.ndim_n))
     return a._replace(hfs=hfs)
 
 
@@ -328,7 +328,7 @@ def consume_transpose(a) -> 'Tensor':
         return a
     order = np.array(a.trans, dtype=np.int64)
     new_hfs = tuple(a.hfs[ii] for ii in a.trans)
-    new_legs = tuple(a.legs[i] for i in a.trans)
+    new_legs = tuple(a.struct.legs[ii] for ii in a.trans)
 
     bl_old = get_blocks(a.config.sym, a.struct)
     bl_new = get_blocks(a.config.sym, a.struct._replace(legs=new_legs))
@@ -452,7 +452,7 @@ def add_leg(a, axis=-1, s=-1, t=None, leg=None) -> 'Tensor':
         t = a.config.sym.add_charges(t, signatures=(s,), new_signature=s)
 
     newn = a.config.sym.add_charges(a.struct.n, t, signatures=(1, s))
-    legs = a.legs[:haxis] + (LegBasic(s=s, t=(t,), D=(1,)),) + a.legs[haxis:]
+    legs = a.struct.legs[:haxis] + (LegBasic(s=s, t=(t,), D=(1,)),) + a.struct.legs[haxis:]
     struct = _struct(legs=legs, n=newn, isdiag=a.isdiag)
     hfs = a.hfs[:haxis] + (hfsa,) + a.hfs[haxis:]
     return a._replace(mfs=mfs, hfs=hfs, struct=struct, trans=trans)
@@ -490,13 +490,13 @@ def remove_leg(a, axis=-1) -> 'Tensor':
             if v > haxis:
                 trans[k] = v - 1
 
-        leg = a.legs[haxis]
+        leg = a.struct.legs[haxis]
         if len(leg.t) > 1 or (leg.D and leg.D[0] != 1):
             raise YastnError('Axis to be removed must have single charge of dimension one.')
         t = leg.t[0] if leg.t else a.config.sym.zero()
 
-        new_n = a.config.sym.add_charges(a.struct.n, t, signatures=(-1, a.legs[haxis].s), new_signature=-1)
-        new_legs = a.legs[:haxis] + a.legs[haxis + 1:]
+        new_n = a.config.sym.add_charges(a.struct.n, t, signatures=(-1, a.struct.legs[haxis].s), new_signature=-1)
+        new_legs = a.struct.legs[:haxis] + a.struct.legs[haxis + 1:]
         struct = _struct(legs=new_legs, n=new_n, isdiag=a.isdiag)
         hfs = a.hfs[:haxis] + a.hfs[haxis + 1:]
         a = a._replace(mfs=mfs, hfs=hfs, struct=struct, trans=trans)

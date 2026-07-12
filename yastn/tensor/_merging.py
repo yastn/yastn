@@ -681,7 +681,7 @@ def _mask_tensors_leg_intersection(a, b, axa, axb):
     msk_a, msk_b = [], []
     a_hfs, b_hfs = list(a.hfs), list(b.hfs)
     for i1, i2 in zip(axa, axb):
-        ma, mb, axes_hfs = _masks_hfs_intersection(a.config.sym, (a.legs[i1].t, b.legs[i2].t), (a.legs[i1].D, b.legs[i2].D), (a.hfs[i1], b.hfs[i2]))
+        ma, mb, axes_hfs = _masks_hfs_intersection(a.config.sym, (a.struct.legs[i1].t, b.struct.legs[i2].t), (a.struct.legs[i1].D, b.struct.legs[i2].D), (a.hfs[i1], b.hfs[i2]))
         msk_a.append(_mask_nonzero(ma))
         msk_b.append(_mask_nonzero(mb))
         a_hfs[i1], b_hfs[i2] = axes_hfs[0], axes_hfs[1]

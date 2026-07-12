@@ -146,7 +146,7 @@ def _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b):
     Perform tensordot by fuse_to_matrix:
     merging tensors to matrices, executing dot, and unmerging outgoing legs.
     """
-    legs_a, legs_b = list(a.legs), list(b.legs)
+    legs_a, legs_b = list(a.struct.legs), list(b.struct.legs)
     for ia, ib in zip(nin_a, nin_b):
         try:
             leg = legs_a[ia].intersection(legs_b[ib].conj())
@@ -172,7 +172,7 @@ def _tensordot_fc(a, b, nout_a, nin_a, nin_b, nout_b):
     Perform tensordot by fuse_contracted: merging contracted legs, and executing dot.
     Outgoing legs are not merged so unmerge is not needed.
     """
-    legs_a, legs_b = list(a.legs), list(b.legs)
+    legs_a, legs_b = list(a.struct.legs), list(b.struct.legs)
     for ia, ib in zip(nin_a, nin_b):
         try:
             leg = legs_a[ia].intersection(legs_b[ib].conj())

@@ -275,7 +275,7 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
 
     if Ds is None:  # attempt to read Ds from existing blocks.
         try:
-            Ds = tuple(leg[tt] for leg, tt in zip(a.legs, tss))
+            Ds = tuple(leg[tt] for leg, tt in zip(a.struct.legs, tss))
         except ValueError as err:
             raise YastnError('Provided Ds. Cannot infer all bond dimensions from existing blocks.') from err
     else:  # Ds was provided
@@ -289,11 +289,11 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
     if a.isdiag and Ds[0] != Ds[1]:
         raise YastnError("Diagonal tensor requires the same bond dimensions on both legs.")
 
-    if any(tt in leg and leg[tt] != DD for leg, tt, DD in zip(a.legs, tss, Ds)):
+    if any(tt in leg and leg[tt] != DD for leg, tt, DD in zip(a.struct.legs, tss, Ds)):
         raise YastnError("Provided Ds is not consistent with dimensions of existing legs.")
 
-    #if any(tt not in leg for leg, tt in zip(a.legs, tss)):
-    new_legs = tuple(leg.add_charge(tt, DD) for leg, tt, DD in zip(a.legs, tss, Ds) )
+    #if any(tt not in leg for leg, tt in zip(a.struct.legs, tss)):
+    new_legs = tuple(leg.add_charge(tt, DD) for leg, tt, DD in zip(a.struct.legs, tss, Ds) )
     embed_(a, new_legs)  # will make a data copy
 
     Dsize = Ds[0] if a.isdiag else reduce(mul, Ds, 1)

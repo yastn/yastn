@@ -632,7 +632,7 @@ def truncation_mask(S, which='LR',
         D_null = 0 if isinstance(D_block, dict) else D_block
 
         start = 0
-        for tt, DD in zip(S.legs[0].t, S.legs[0].D):
+        for tt, DD in zip(S.struct.legs[0].t, S.struct.legs[0].D):
             finish = start + DD
             slc = slice(start, finish)
             D_bl = D_block[tt] if (isinstance(D_block, dict) and tt in D_block) else D_null

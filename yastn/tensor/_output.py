@@ -416,7 +416,7 @@ def to_dense(a, legs=None, native=False, reverse=False) -> 'numpy.ndarray' | 'to
     """
     c = a.to_nonsymmetric(legs, native, reverse)
     x = c.config.backend.clone(c._data)
-    D = tuple(leg.D[0] for leg in c.legs)
+    D = tuple(leg.D[0] for leg in c.struct.legs)
     x = c.config.backend.diag_create(x) if c.isdiag else x.reshape(D)
     return x
 

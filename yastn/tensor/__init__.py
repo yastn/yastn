@@ -262,11 +262,6 @@ class Tensor:
         raise YastnError(f"Tensor.to_dict with dict_ver = {d['dict_ver']} not supported")
 
     @property
-    def legs(self) -> Sequence[int]:
-        r""" Transpose between logical legs and data spaces. """
-        return self.struct.legs
-
-    @property
     def trans(self) -> Sequence[int]:
         r""" Transpose between logical legs and data spaces. """
         return self._trans

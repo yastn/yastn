@@ -66,7 +66,7 @@ def _unpack_trans_test_axes_pair(a, b, sgn=1, axes=None):
     haxes = (tuple(a.trans[ax] for ax in ua),
              tuple(b.trans[ax] for ax in ub))
 
-    if not all(a.legs[i1].s == sgn * b.legs[i2].s for i1, i2 in zip(*haxes)):
+    if not all(a.struct.legs[i1].s == sgn * b.struct.legs[i2].s for i1, i2 in zip(*haxes)):
         raise YastnError('Signatures do not match.')
 
     if any(a.mfs[i1] != b.mfs[i2] for i1, i2 in zip(*axes)):
@@ -108,7 +108,7 @@ def is_consistent(a):
     bl = get_blocks(a.config.sym, a.struct)
     assert a.config.backend.get_shape(a._data) == (bl.size,)
 
-    for leg, hf in zip(a.legs, a.hfs):
+    for leg, hf in zip(a.struct.legs, a.hfs):
         assert leg.s == hf.s[0]
         assert len(hf.tree) == len(hf.op)
         assert len(hf.tree) == len(hf.s)

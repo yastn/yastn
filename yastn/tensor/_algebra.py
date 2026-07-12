@@ -179,7 +179,7 @@ def allclose(a, b, rtol=1e-13, atol=1e-13) -> bool:
     rtol, atol: float
         Desired relative and absolute precision.
     """
-    if a.legs != b.legs or a.hfs != b.hfs or a.mfs != b.mfs or a.trans != b.trans:
+    if a.struct != b.struct or a.hfs != b.hfs or a.mfs != b.mfs or a.trans != b.trans:
         return False
     return a.config.backend.allclose(a._data, b._data, rtol, atol)
 
