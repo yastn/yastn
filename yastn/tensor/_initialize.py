@@ -16,13 +16,11 @@
 import os
 import numbers
 from functools import reduce
-from itertools import product
-from operator import mul, itemgetter
+from operator import mul
 
 import numpy as np
 
-from ._auxiliary import _struct, _flatten, _config, get_blocks, find_index, find_matching_indices
-from ._legbasic import legs_from_dict_v2
+from ._auxiliary import _config, get_blocks, find_index, find_matching_indices
 from ._tests import YastnError
 from ..backend import backend_np
 from ..sym import sym_none, sym_U1, sym_Z2, sym_Z3, sym_U1xU1, sym_U1xU1xZ2

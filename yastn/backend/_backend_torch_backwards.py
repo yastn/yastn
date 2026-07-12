@@ -145,8 +145,8 @@ class kernel_transpose_dot_sum(torch.autograd.Function):
         if dtype != data_B.dtype:
             data_B = data_B.to(dtype=dtype)
         data_C = torch.zeros((size_C,), dtype=dtype, device=data_A.device)
-        At = {ii: data_A[slice(*sl)].view(tuple(Di)).permute(order_A).reshape(Dl, Dr) for ii, (sl, Di, Dl, Dr) in enumerate(reshape_A)}
-        Bt = {ii: data_B[slice(*sl)].view(tuple(Di)).permute(order_B).reshape(Dl, Dr) for ii, (sl, Di, Dl, Dr) in enumerate(reshape_B)}
+        At = {ii: data_A[slice(*slo)].view(tuple(Do)).permute(order_A).reshape(Dl, Dr) for ii, (slo, Do, Dl, Dr) in enumerate(reshape_A)}
+        Bt = {ii: data_B[slice(*slo)].view(tuple(Do)).permute(order_B).reshape(Dl, Dr) for ii, (slo, Do, Dl, Dr) in enumerate(reshape_B)}
         for sln, Dn, ta, tb in meta:
             data_C[slice(*sln)].view(tuple(Dn))[:] += At[ta] @ Bt[tb]
         return data_C
@@ -169,8 +169,8 @@ class kernel_transpose_dot_sum(torch.autograd.Function):
         inv_order_A = tuple(np.argsort(ctx.order_A))
         inv_order_B = tuple(np.argsort(ctx.order_B))
 
-        At = {ii: data_A[slice(*sl)].view(tuple(Di)).permute(ctx.order_A).reshape(Dl, Dr) for ii, (sl, Di, Dl, Dr) in enumerate(ctx.reshape_A)}
-        Bt = {ii: data_B[slice(*sl)].view(tuple(Di)).permute(ctx.order_B).reshape(Dl, Dr) for ii, (sl, Di, Dl, Dr) in enumerate(ctx.reshape_B)}
+        At = {ii: data_A[slice(*slo)].view(tuple(Do)).permute(ctx.order_A).reshape(Dl, Dr) for ii, (slo, Do, Dl, Dr) in enumerate(ctx.reshape_A)}
+        Bt = {ii: data_B[slice(*slo)].view(tuple(Do)).permute(ctx.order_B).reshape(Dl, Dr) for ii, (slo, Do, Dl, Dr) in enumerate(ctx.reshape_B)}
         At_b = {ii: torch.zeros_like(v) for ii, v in At.items()}
         Bt_b = {ii: torch.zeros_like(v) for ii, v in Bt.items()}
 

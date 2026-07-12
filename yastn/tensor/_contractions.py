@@ -259,6 +259,21 @@ def _get_strides(Dset):
     return S
 
 
+def _indices_from_counts(count_a, count_b):
+    nn = np.sum(count_a * count_b, dtype=np.int64)
+    ind_a = np.empty(nn, dtype=np.int64)
+    ind_b = np.empty(nn, dtype=np.int64)
+    ia, ib, ic = 0, 0, 0
+    for ca, cb in zip(count_a, count_b):
+        cab = ca * cb
+        ind_a[ic: ic + cab].reshape(ca, cb)[:] = np.arange(ia, ia + ca).reshape(ca, 1)
+        ind_b[ic: ic + cab].reshape(ca, cb)[:] = np.arange(ib, ib + cb).reshape(1, cb)
+        ia += ca
+        ib += cb
+        ic += cab
+    return ind_a, ind_b
+
+
 @lru_cache(maxsize=1024)
 def _meta_tensordot_f2m(sym, struct_a, struct_b):
     #
@@ -288,44 +303,33 @@ def _meta_tensordot_fc(sym, struct_a, struct_b):
     nin_b, nout_b = [0], list(range(1, ndimb))
     bl_a, slc_a, bl_b, slc_b, bl_c = _match_legs_tensordot(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b)
     #
-    slDoc_a = np.empty((bl_a.nblocks, 4), dtype=np.int64)
-    slDoc_a[:, :2] = slc_a
-    slDoc_a[:, 2] = np.prod(bl_a.D[:, :-1], axis=1, dtype=np.int64)
-    slDoc_a[:, 3] = bl_a.D[:, -1]
-    slDoc_b = np.empty((bl_b.nblocks, 4), dtype=np.int64)
-    slDoc_b[:, :2] = slc_b
-    slDoc_b[:, 2] = np.prod(bl_b.D[:, 1:], axis=1, dtype=np.int64)
-    slDoc_b[:, 3] = bl_b.D[:, 0]
+    Do_a = np.prod(bl_a.D[:, :-1], axis=1, dtype=np.int64)
+    Dc_a = bl_a.D[:, -1]
+    Dc_b = bl_b.D[:, 0]
+    Do_b = np.prod(bl_b.D[:, 1:], axis=1, dtype=np.int64)
     #
-    unique_a, inv_a = np.unique(bl_a.t[:, -1, :], return_inverse=True, axis=0)
-    unique_b, inv_b = np.unique(bl_b.t[:,  0, :], return_inverse=True, axis=0)
-    uas = {tuple(ta): ia for ia, ta in enumerate(unique_a)}
-    ubs = {tuple(tb): ib for ib, tb in enumerate(unique_b)}
+    unique_a, inv_a, count_a = np.unique(bl_a.t[:, -1, :], return_inverse=True, return_counts=True, axis=0)
+    unique_b, inv_b, count_b = np.unique(bl_b.t[:,  0, :], return_inverse=True, return_counts=True, axis=0)
+    assert np.array_equal(unique_a, unique_b), "Sanity check. Contact developers."
+    arg_a = np.argsort(inv_a, stable=True)
+    arg_b = np.argsort(inv_b, stable=True)
     #
-    meta = []
-    for k in uas.keys() & ubs.keys():
-        inda = np.argwhere(inv_a == uas[k]).ravel()
-        indb = np.argwhere(inv_b == ubs[k]).ravel()
-        t_a = bl_a.t[inda, :-1, :]
-        t_b = bl_b.t[indb, 1:, :]
-        slD_a = slDoc_a[inda, :]
-        slD_b = slDoc_b[indb, :]
-        #
-        indices = np.indices([len(t_a), len(t_b)]).reshape(2, -1).T
-        comb_t = np.empty((len(indices), len(struct_a.legs) + len(struct_b.legs) - 2, sym.NSYM), dtype=np.int64)
-        comb_t[:, :len(struct_a.legs)-1, :] = t_a[indices[:, 0], :, :]
-        comb_t[:, len(struct_a.legs)-1:, :] = t_b[indices[:, 1], :, :]
-        comb_slD = np.empty((len(indices), 2, 4), dtype=np.int64)
-        comb_slD[:, 0, :] = slD_a[indices[:, 0], :]
-        comb_slD[:, 1, :] = slD_b[indices[:, 1], :]
-        #
-        ic = 0
-        for tt, slD in zip(comb_t, comb_slD):
-            while not np.array_equal(tt, bl_c.t[ic]):
-                ic += 1
-            meta.append((bl_c.slc[ic], slD[:, 2], slD[0, :2], (slD[0, 2], slD[0, 3]), slD[1, :2], (slD[1, 3], slD[1, 2])))
-
-    meta = np.array(meta, dtype=np.int64).reshape(len(meta), 12)
+    ind_a, ind_b = _indices_from_counts(count_a, count_b)
+    ind_a = arg_a[ind_a]
+    ind_b = arg_b[ind_b]
+    #
+    tn = np.column_stack([bl_a.t[ind_a, :-1, :], bl_b.t[ind_b, 1:, :]])
+    ind_tn = find_matching_indices(bl_c.t, tn, both=False)
+    slc_c = bl_c.slc[ind_tn]
+    #
+    slc_a = slc_a[ind_a]
+    Do_a = Do_a[ind_a]
+    Dc_a = Dc_a[ind_a]
+    slc_b = slc_b[ind_b]
+    Dc_b = Dc_b[ind_b]
+    Do_b = Do_b[ind_b]
+    #
+    meta = np.column_stack([slc_c, Do_a, Do_b, slc_a, Do_a, Dc_a, slc_b, Dc_b, Do_b])
     meta_dt = np.dtype([
         ('slc', np.int64, (2,)),
         ('Dc',  np.int64, (2,)),
@@ -340,186 +344,62 @@ def _meta_tensordot_fc(sym, struct_a, struct_b):
 @lru_cache(maxsize=1024)
 def _meta_tensordot_nf(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b):
     #
-    nsym = sym.NSYM
     bl_a, slc_a, bl_b, slc_b, bl_c = _match_legs_tensordot(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b)
-
-    tao = bl_a.t[:, nout_a, :]      # narrowed to contracted modes, and serialize <num-of-ingoing-modes(=legs)> x <order-of-sym-group> to 1D
-    tac = bl_a.t[:, nin_a, :].reshape(bl_a.nblocks, len(nin_a) * nsym)         # narrowed to outgoing modes, and serialize <num-of-ingoing-modes(=legs)> x <order-of-sym-group> to 1D
-    Dao = bl_a.D[:, nout_a]  # narrow sector sizes
-    Dac = bl_a.D[:, nin_a]
-    Daop = np.prod(Dao, axis=1, dtype=np.int64) # total size of outgoing sectors (per block)
-    Dacp = np.prod(Dac, axis=1, dtype=np.int64) # total size of contracted sectors (per block)
     #
-    unique_tac, inv_tac, count_tac = np.unique(tac, return_inverse=True, return_counts=True, axis=0) # if more blocks of a contribute to given contracted sector (in b)
-    # arg_tac = np.argsort(inv_tac)
-
+    Daop = np.prod(bl_a.D[:, nout_a], axis=1, dtype=np.int64)
+    Dacp = np.prod(bl_a.D[:, nin_a], axis=1, dtype=np.int64)
+    unique_a, inv_a, count_a = np.unique(bl_a.t[:, nin_a, :], return_inverse=True, return_counts=True, axis=0) # if more blocks of a contribute to given contracted sector (in b)
+    arg_a = np.argsort(inv_a)
+    #
+    Dbop = np.prod(bl_b.D[:, nout_b], axis=1, dtype=np.int64)
+    Dbcp = np.prod(bl_b.D[:, nin_b], axis=1, dtype=np.int64)
+    unique_b, inv_b, count_b = np.unique(bl_b.t[:, nin_b, :], return_inverse=True, return_counts=True, axis=0)
+    arg_b = np.argsort(inv_b)
+    #
+    # padding count_a and count_b with zero to allign matching charges
+    unique_ab = np.unique(np.vstack([unique_a, unique_b]), axis=0)
+    in_a = find_matching_indices(unique_ab, unique_a, both=False)
+    in_b = find_matching_indices(unique_ab, unique_b, both=False)
+    count_a2 = np.zeros(len(unique_ab), dtype=np.int64)
+    count_a2[in_a] = count_a
+    count_b2 = np.zeros(len(unique_ab), dtype=np.int64)
+    count_b2[in_b] = count_b
+    #
+    ind_a, ind_b = _indices_from_counts(count_a2, count_b2)
+    ind_a = arg_a[ind_a]
+    ind_b = arg_b[ind_b]
+    #
+    tao = bl_a.t[:, nout_a, :]
     tbo = bl_b.t[:, nout_b, :]
-    tbc = bl_b.t[:, nin_b, :].reshape(bl_b.nblocks, len(nin_b) * nsym)
-    Dbo = bl_b.D[:, nout_b]
-    Dbc = bl_b.D[:, nin_b]
-    Dbop = np.prod(Dbo, axis=1, dtype=np.int64)
-    Dbcp = np.prod(Dbc, axis=1, dtype=np.int64)
+    tn = np.column_stack([tao[ind_a], tbo[ind_b]])
+    unique_c, inv_c = np.unique(tn, return_inverse=True, axis=0)
+    ind_c = find_matching_indices(bl_c.t, unique_c, both=False)
+    slc_c = bl_c.slc[ind_c][inv_c]
     #
-    unique_tbc, inv_tbc, count_tbc = np.unique(tbc, return_inverse=True, return_counts=True, axis=0)
-    # arg_tbc = np.argsort(inv_tbc)
-    #
-    reshape_a = tuple(zip(slc_a, bl_a.D, Daop, Dacp)) # narrowed to contracted blocks
-    reshape_b = tuple(zip(slc_b, bl_b.D, Dbcp, Dbop))
-    #
-    uas = {tuple(ta): ia for ia, ta in enumerate(unique_tac)}
-    ubs = {tuple(tb): ib for ib, tb in enumerate(unique_tbc)}
-    #
-    D1 = np.prod(bl_c.D[:, :len(nout_a)], axis=1, dtype=np.int64)
-    D2 = np.prod(bl_c.D[:, len(nout_a):], axis=1, dtype=np.int64)
-    meta_dot = {tuple(slc): ((d1, d2), []) for slc, d1, d2 in zip(bl_c.slc, D1, D2)}
-
-    for k in uas.keys() & ubs.keys():
-        inda = np.argwhere(inv_tac == uas[k]).ravel()
-        indb = np.argwhere(inv_tbc == ubs[k]).ravel()
-        t_a = tao[inda, :]
-        t_b = tbo[indb, :]
-        arg_ta = argsort_t(t_a)
-        t_a = t_a[arg_ta]
-        inda = inda[arg_ta]
-        arg_tb = argsort_t(t_b)
-        t_b = t_b[arg_tb]
-        indb = indb[arg_tb]
-        #
-        indices = np.indices([len(t_a), len(t_b)]).reshape(2, -1).T
-        comb_t = np.empty((len(indices), len(nout_a) + len(nout_b), sym.NSYM), dtype=np.int64)
-        comb_t[:, :len(nout_a), :] = t_a[indices[:, 0], :, :]
-        comb_t[:, len(nout_a):, :] = t_b[indices[:, 1], :, :]
-        comb_ii = np.empty((len(indices), 2), dtype=np.int64)
-        comb_ii[:, 0] = inda[indices[:, 0]]
-        comb_ii[:, 1] = indb[indices[:, 1]]
-        #
-        ics = find_matching_indices(bl_c.t, comb_t, both=False)
-        for ic, ii in zip(ics, comb_ii):
-            meta_dot[tuple(bl_c.slc[ic])][1].append(ii)
-
-    meta = []
-    for slc, (dds, gr) in meta_dot.items():
-        for ta, tb in gr:
-            meta.append((*slc, *dds, ta, tb))
-
-    meta = np.array(meta, dtype=np.int64).reshape(len(meta), 6)
+    meta = np.column_stack([slc_c, Daop[ind_a], Dbop[ind_b], ind_a, ind_b])
     meta_dt = np.dtype([
         ('sln', np.int64, (2,)),
         ('Dn',  np.int64, (2,)),
         ('ta', np.int64),
         ('tb', np.int64)])
     meta = meta.view(meta_dt).reshape(-1)
+    #
+    ra_dt = np.dtype([
+        ('slo', np.int64, (2,)),
+        ('Do',  np.int64, (len(struct_a.legs),)),
+        ('Dl', np.int64),
+        ('Dr', np.int64)])
+    reshape_a = np.column_stack([slc_a, bl_a.D, Daop, Dacp])
+    reshape_a = reshape_a.view(ra_dt).reshape(-1)
+    #
+    rb_dt = np.dtype([
+        ('slo', np.int64, (2,)),
+        ('Do',  np.int64, (len(struct_b.legs),)),
+        ('Dl', np.int64),
+        ('Dr', np.int64)])
+    reshape_b = np.column_stack([slc_b, bl_b.D, Dbcp, Dbop])
+    reshape_b = reshape_b.view(rb_dt).reshape(-1)
     return meta, reshape_a, reshape_b, bl_c.size, bl_c.struct
-
-
-# @lru_cache(maxsize=1024)
-# def _meta_tensordot_nf(sym, struct_a, slices_a, legs_a, n_a, isdiag_a,
-#                             struct_b, slices_b, legs_b, n_b, isdiag_b,
-#                             ind_a, ind_b, nout_a, nin_a, nin_b, nout_b):
-
-#     nsym = len(struct_a.n)
-
-#     ta = struct_a.t if ind_a is None else [struct_a.t[ii] for ii in ind_a]
-#     Da = struct_a.D if ind_a is None else [struct_a.D[ii] for ii in ind_a]
-#     slices_a = [sl.slcs[0] for sl in slices_a] if ind_a is None else [slices_a[ii].slcs[0] for ii in ind_a] # narrow struct and slice information to relevant blocks
-#                                                                                                             # i.e. ones, which are contracted with existing (non-zero) blocks in b
-
-#     lta, ndima = len(ta), len(struct_a.s)
-#     ata = np.array(ta, dtype=np.int64).reshape((lta, ndima, nsym)) # array for block charges as: block x <num-of-(native)modes(=legs)> x <order-of-sym-group>
-#     aDa = np.array(Da, dtype=np.int64).reshape((lta, ndima))       # array for block dimensions
-#     tao = ata[:, nout_a, :].reshape(lta, len(nout_a) * nsym)       # narrowed to contracted modes, and serialize <num-of-ingoing-modes(=legs)> x <order-of-sym-group> to 1D
-#     tac = ata[:, nin_a, :].reshape(lta, len(nin_a) * nsym)         # narrowed to outgoing modes, and serialize <num-of-ingoing-modes(=legs)> x <order-of-sym-group> to 1D
-#     Dao = aDa[:, nout_a]  # narrow sector sizes
-#     Dac = aDa[:, nin_a]
-#     Daop = np.prod(Dao, axis=1, dtype=np.int64) # total size of outgoing sectors (per block)
-#     Dacp = np.prod(Dac, axis=1, dtype=np.int64) # total size of contracted sectors (per block)
-
-#     legs_a = []
-#     for i in range(ndima):
-#         tai = np.hstack([ata[:, i, :], aDa[:, (i,)]])
-#         unique_tai = sorted(np.unique(tai, axis=0).tolist())
-#         ti = tuple(tuple(x[:-1]) for x in unique_tai)
-#         Di = tuple(x[-1] for x in unique_tai)
-#         legs_a.append((ti, Di))
-
-#     tDac = np.hstack([tac, Dac])
-#     unique_tDac, inv_tDac, count_tDac = np.unique(tDac, return_inverse=True, return_counts=True, axis=0) # if more blocks of a contribute to given contracted sector (in b)
-#     arg_tDac = np.argsort(inv_tDac)
-
-#     tb = struct_b.t if ind_b is None else [struct_b.t[ii] for ii in ind_b]
-#     Db = struct_b.D if ind_b is None else [struct_b.D[ii] for ii in ind_b]
-#     slices_b = [sl.slcs[0] for sl in slices_b] if ind_b is None else [slices_b[ii].slcs[0] for ii in ind_b]
-
-#     ltb, ndimb = len(tb), len(struct_b.s)
-#     atb = np.array(tb, dtype=np.int64).reshape((ltb, ndimb, nsym))
-#     aDb = np.array(Db, dtype=np.int64).reshape((ltb, ndimb))
-#     tbo = atb[:, nout_b, :].reshape(ltb, len(nout_b) * nsym)
-#     tbc = atb[:, nin_b, :].reshape(ltb, len(nin_b) * nsym)
-#     Dbo = aDb[:, nout_b]
-#     Dbc = aDb[:, nin_b]
-#     Dbop = np.prod(Dbo, axis=1, dtype=np.int64)
-#     Dbcp = np.prod(Dbc, axis=1, dtype=np.int64)
-
-#     legs_b = []
-#     for i in range(ndimb):
-#         tbi = np.hstack([atb[:, i, :], aDb[:, (i,)]])
-#         unique_tbi = sorted(np.unique(tbi, axis=0).tolist())
-#         ti = tuple(tuple(x[:-1]) for x in unique_tbi)
-#         Di = tuple(x[-1] for x in unique_tbi)
-#         legs_b.append((ti, Di))
-
-#     tDbc = np.hstack([tbc, Dbc])
-#     unique_tDbc, inv_tDbc, count_tDbc = np.unique(tDbc, return_inverse=True, return_counts=True, axis=0)
-#     arg_tDbc = np.argsort(inv_tDbc)
-
-#     # if not np.array_equal(unique_tDac, unique_tDbc):
-#     #     raise YastnError('Bond dimensions of some charges do not match.')
-
-#     # blocks are enumerated consistent with slices_a,b
-#     reshape_a = tuple(zip(slices_a, Da, Daop, Dacp)) # narrowed to contracted blocks
-#     reshape_b = tuple(zip(slices_b, Db, Dbcp, Dbop))
-
-#     count_ab = count_tDac * count_tDbc
-#     sum_count_ab = sum(count_ab)
-#     ind_a = np.zeros(sum_count_ab, dtype=np.int64)
-#     ind_b = np.zeros(sum_count_ab, dtype=np.int64)
-#     start_a, start_b, start_ab = 0, 0, 0
-#     for da, db, dab in zip(count_tDac, count_tDbc, count_ab):
-#         stop_a, stop_b, stop_ab = start_a + da, start_b + db, start_ab + dab
-#         ind_a[start_ab: stop_ab].reshape(da, db)[:, :] = arg_tDac[start_a: stop_a].reshape(da, 1)
-#         ind_b[start_ab: stop_ab].reshape(da, db)[:, :] = arg_tDbc[start_b: stop_b].reshape(1, db)
-#         start_a, start_b, start_ab = stop_a, stop_b, stop_ab
-
-#     tc = np.hstack([tao[ind_a], tbo[ind_b]])
-#     utc, uind, invs, cnts = np.unique(tc, return_index=True, return_inverse=True, return_counts=True, axis=0)
-
-#     uind_a, uind_b = ind_a[uind], ind_b[uind]
-#     uDc = np.hstack([Dao[uind_a], Dbo[uind_b]])
-#     uDcp2 = np.column_stack([Daop[uind_a], Dbop[uind_b]])
-
-#     c_Dp = np.prod(uDcp2, axis=1, dtype=np.int64).tolist()
-#     c_t = tuple(map(tuple, utc.tolist()))
-#     c_D = tuple(map(tuple, uDc.tolist()))
-#     c_Dp2 = tuple(map(tuple, uDcp2.tolist()))
-
-#     acc_Dp = tuple(accumulate(c_Dp, initial=0))
-#     slc_c = tuple(zip(acc_Dp, acc_Dp[1:]))
-#     slices_c = tuple(_slc((sl,), ds, dp) for sl, dp, ds in zip(slc_c, c_Dp, c_D))
-
-#     ind_ab = np.column_stack([ind_a, ind_b])
-#     arg_invs = np.argsort(invs)
-#     ind_ab = ind_ab[arg_invs].tolist()
-#     # ind_ab: indices of blocks in a and b to multiply; consistent with enumeration of reshape_a,b
-#     acc_cnts = tuple(accumulate(cnts, initial=0))
-#     groups_tab = (ind_ab[i: f] for i, f in zip(acc_cnts, acc_cnts[1:]))
-#     meta_dot = list(zip(slc_c, c_Dp2, groups_tab))
-
-#     s_c = tuple(struct_a.s[i] for i in nout_a) + tuple(struct_b.s[i] for i in nout_b)
-#     struct_c = _struct(s=s_c, t=c_t, D=c_D, size=acc_Dp[-1], n=n_c)
-
-#     legs_c2 = legs_from_struct(struct_c)
-#     assert legs_c2 == legs_c
-#     return meta_dot, reshape_a, reshape_b, struct_c, slices_c, legs_a, legs_b
 
 
 @lru_cache(maxsize=1024)

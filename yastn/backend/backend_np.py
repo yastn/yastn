@@ -592,8 +592,8 @@ def dot(Adata, Bdata, meta_dot, Dsize):
 def transpose_dot_sum(Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border, Dsize):
     dtype = np.promote_types(Adata.dtype, Bdata.dtype)
     newdata = np.zeros(Dsize, dtype=dtype)
-    Ad = tuple(Adata[slice(*sl)].reshape(Di).transpose(Aorder).reshape(Dl, Dr) for sl, Di, Dl, Dr in Areshape)
-    Bd = tuple(Bdata[slice(*sl)].reshape(Di).transpose(Border).reshape(Dl, Dr) for sl, Di, Dl, Dr in Breshape)
+    Ad = {ii: Adata[slice(*slo)].reshape(Do).transpose(Aorder).reshape(Dl, Dr) for ii, (slo, Do, Dl, Dr) in enumerate(Areshape)}
+    Bd = {ii: Bdata[slice(*slo)].reshape(Do).transpose(Border).reshape(Dl, Dr) for ii, (slo, Do, Dl, Dr) in enumerate(Breshape)}
     for sln, Dn, ta, tb in meta_dot:
         newdata[slice(*sln)].reshape(Dn)[:] += np.dot(Ad[ta], Bd[tb])
     return newdata

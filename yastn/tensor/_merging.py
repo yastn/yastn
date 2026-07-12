@@ -192,11 +192,6 @@ def _meta_merge_to_matrix(sym, struct, axes, legs_sub):
 
     ndimo = len(struct.legs)
     meta_mrg = np.array(meta_mrg, dtype=np.int64).reshape(len(meta_mrg), 12 + ndimo)
-
-    xx = np.array([[0, 1], [1, 1], [0, 1], [0, 1], [0, 1], [1, 1]], dtype=np.int64).reshape(1, 12)
-    if np.array_equal(xx, meta_mrg):
-        print('aa')
-
     meta_dt = np.dtype([
         ('sln', np.int64, (2,)),
         ('Dn',  np.int64, (2,)),
