@@ -1049,11 +1049,13 @@ def swap_gate(a, axes, charge=None) -> 'Tensor':
         return a
     nsym = a.config.sym.NSYM
     fss = (True,) * nsym if a.config.fermionic is True else a.config.fermionic
+    
+    if a.config.profile: a.config.backend.nvtx.range_push("_meta_swap_gate")
     if charge is None:
         axes = tuple(_clear_axes(*axes))  # swapped groups of legs
         axes = _unpack_axes(a.mfs, *axes)
         axes = tuple(tuple(a.trans[ax] for ax in axs) for axs in axes)
-        negate_slices = _meta_swap_gate(a.struct.t, a.slices, a.ndim_n, nsym, axes, fss)
+        negate_slices = _meta_swap_gate(a.struct.t, a.slices, a.ndim_n, nsym, axes, fss, backend=a.config.backend.BACKEND_ID)
     else:
         axes, = _clear_axes(axes)  # swapped groups of legs
         if isinstance(charge[0], int):
@@ -1063,14 +1065,19 @@ def swap_gate(a, axes, charge=None) -> 'Tensor':
             charges += t * a.mfs[ax][0]
         axes, = _unpack_axes(a.mfs, axes)
         axes = tuple(a.trans[ax] for ax in axes)
-        negate_slices = _meta_swap_gate_charge(a.struct.t, a.slices, charges, a.ndim_n, nsym, axes, fss)
+        negate_slices = _meta_swap_gate_charge(a.struct.t, a.slices, charges, a.ndim_n, nsym, axes, fss, backend=a.config.backend.BACKEND_ID)
+    if a.config.profile: a.config.backend.nvtx.range_pop()
 
+    if len(negate_slices)<1: # empty Sequence
+        return a
+    if a.config.profile: a.config.backend.nvtx.range_push("swap_negate_blocks")
     newdata = a.config.backend.negate_blocks(a._data, negate_slices)
+    if a.config.profile: a.config.backend.nvtx.range_pop()
     return a._replace(data=newdata)
 
 
 @lru_cache(maxsize=1024)
-def _meta_swap_gate(tset, slices, ndim, nsym, axes, fss):
+def _meta_swap_gate(tset, slices, ndim, nsym, axes, fss, backend=None):
     r""" Calculate which blocks to negate. """
     lt = len(tset)
     tset = np.array(tset, dtype=np.int64).reshape((lt, ndim, nsym))
@@ -1083,11 +1090,13 @@ def _meta_swap_gate(tset, slices, ndim, nsym, axes, fss):
         t2 = np.sum(tset[:, l2, :], axis=1, dtype=np.int64) % 2
         tp += np.sum(t1[:, fss] * t2[:, fss], axis=1, dtype=np.int64)
     tp = tp % 2
+    if backend in ['torch', 'torch_cpp']:
+        return _slices_to_negate_np(tp, slices)
     return _slices_to_negate(tp, slices)
 
 
 @lru_cache(maxsize=1024)
-def _meta_swap_gate_charge(tset, slices, charges, ndim, nsym, axes, fss):
+def _meta_swap_gate_charge(tset, slices, charges, ndim, nsym, axes, fss, backend=None):
     r""" Calculate which blocks to negate. """
     tset = np.array(tset, dtype=np.int64).reshape((len(tset), ndim, nsym))
     tp = tset[:, axes, :]
@@ -1096,6 +1105,8 @@ def _meta_swap_gate_charge(tset, slices, charges, ndim, nsym, axes, fss):
     except ValueError:
         raise YastnError(f'Length or number of charges does not match sym.NSYM or axes.')
     tp = np.sum(tp[:, :, fss] * charges[:, :, fss], axis=(1, 2), dtype=np.int64) % 2
+    if backend in ['torch', 'torch_cpp']:
+        return _slices_to_negate_np(tp, slices)
     return _slices_to_negate(tp, slices)
 
 
@@ -1114,6 +1125,12 @@ def _slices_to_negate(tp, slices):
             start, stop = next_start, next_stop
     joined_negate.append((start, stop))
     return tuple(joined_negate)
+
+
+def _slices_to_negate_np(tp, slices):
+    idx = np.flatnonzero(tp)
+    if idx.size==0: return []
+    return np.fromiter( (b for i in idx for b in slices[i].slcs[0]), dtype=np.int64, count=2*idx.size ).reshape(-1,2)
 
 
 def fkron(*operators, sites=None, application_order=None):

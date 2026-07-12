@@ -119,13 +119,17 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
                             D_block=D_block, D_total=D_total,
                             truncate_multiplets=truncate_multiplets,
                             mask_f=mask_f)
-
+    
+    normalized_total= (S/S.norm(p='inf')).trace().to_number()
     U, S, V = Smask.apply_mask(U, S, V, axes=(-1, 0, 0))
-    if verbosity > 2:
+    if verbosity > 1:
         fname = sys._getframe().f_code.co_name
         logger.info(f"{fname} truncation_mask tol {tol} tol_block {tol_block} D_total {D_total}")
-        logger.info(f"truncation_mask D_block {D_block}")
-        logger.info(f"{fname} S {S.get_legs(0)}")
+        normalized_total_truncated= (S/S.norm(p='inf')).trace().to_number()
+        logger.info(f"{fname} disc. weight {normalized_total-normalized_total_truncated}")
+        if verbosity > 2:
+            logger.info(f"truncation_mask D_block {D_block}")
+            logger.info(f"{fname} S {S.get_legs(0)}")
 
     U = U.moveaxis(source=-1, destination=Uaxis)
     V = V.moveaxis(source=0, destination=Vaxis)
