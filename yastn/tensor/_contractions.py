@@ -238,27 +238,6 @@ def _tensordot_cutensor(a, b, nout_a, nin_a, nin_b, nout_b):
     return data, struct_c
 
 
-def _int_block_coordinates(sym, struct):
-    saxes = tuple(leg.s for leg in struct.legs)
-    taxes = tuple(leg.t for leg in struct.legs)
-    tblocks, iblocks, _ = get_blocks_charges(sym, taxes, saxes, struct.n)
-    return tblocks, iblocks.reshape(-1).tolist()
-
-
-def _get_extends(legs):
-    numSectionsPerMode = [len(leg.D) for leg in legs]
-    sectionExtents = [DD for leg in legs for DD in leg.D]
-    return numSectionsPerMode, sectionExtents
-
-
-def _get_strides(Dset):
-    s0, s1 = Dset.shape
-    S = np.ones((s0, s1), dtype=np.int64)
-    for i in range(s1 - 1, 0, -1):
-        S[:, i - 1] =  S[:, i] * Dset[:, i]
-    return S
-
-
 def _indices_from_counts(count_a, count_b):
     nn = np.sum(count_a * count_b, dtype=np.int64)
     ind_a = np.empty(nn, dtype=np.int64)
@@ -402,24 +381,39 @@ def _meta_tensordot_nf(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b):
     return meta, reshape_a, reshape_b, bl_c.size, bl_c.struct
 
 
+def _convert_bl_for_cutensor(sym, bl, slc=None):
+    # extends
+    numSectionsPerMode = [len(leg.D) for leg in bl.struct.legs]
+    sectionExtents = [DD for leg in bl.struct.legs for DD in leg.D]
+    #
+    # block_coordinates
+    saxes = tuple(leg.s for leg in bl.struct.legs)
+    taxes = tuple(leg.t for leg in bl.struct.legs)
+    _, iblocks, _ = get_blocks_charges(sym, taxes, saxes, bl.struct.n)
+    coords = iblocks.reshape(-1).tolist()
+    #
+    # strides
+    s0, s1 = bl.D.shape
+    strides = np.ones((s0, s1), dtype=np.int64)
+    for i in range(s1 - 1, 0, -1):
+        strides[:, i - 1] =  strides[:, i] * bl.D[:, i]
+    strides = strides.reshape(-1).tolist()
+    #
+    # offsets
+    if slc is None:
+        slc = bl.slc
+    offsets = slc[:, 0].tolist()
+    #
+    return numSectionsPerMode, sectionExtents, coords, strides, offsets
+
+
 @lru_cache(maxsize=1024)
 def _meta_tensordot_cutensor(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b):
     bl_a, slc_a, bl_b, slc_b, bl_c = _match_legs_tensordot(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b)
-    _, a_coords = _int_block_coordinates(sym, bl_a.struct)
-    _, b_coords = _int_block_coordinates(sym, bl_b.struct)
-    _, c_coords = _int_block_coordinates(sym, bl_c.struct)
 
-    a_numSectionsPerMode, a_sectionExtents = _get_extends(bl_a.struct.legs)
-    b_numSectionsPerMode, b_sectionExtents = _get_extends(bl_b.struct.legs)
-    c_numSectionsPerMode, c_sectionExtents = _get_extends(bl_c.struct.legs)
-
-    a_strides = _get_strides(bl_a.D).reshape(-1).tolist()
-    b_strides = _get_strides(bl_b.D).reshape(-1).tolist()
-    c_strides = _get_strides(bl_c.D).reshape(-1).tolist()
-
-    a_offsets = slc_a[:, 0].tolist()
-    b_offsets = slc_b[:, 0].tolist()
-    c_offsets = bl_c.slc[:, 0].tolist()
+    a_numSectionsPerMode, a_sectionExtents, a_coords, a_strides, a_offsets = _convert_bl_for_cutensor(sym, bl_a, slc_a)
+    b_numSectionsPerMode, b_sectionExtents, b_coords, b_strides, b_offsets = _convert_bl_for_cutensor(sym, bl_b, slc_b)
+    c_numSectionsPerMode, c_sectionExtents, c_coords, c_strides, c_offsets = _convert_bl_for_cutensor(sym, bl_c)
 
     return (bl_c.struct, bl_c.size,
             a_numSectionsPerMode, a_sectionExtents, a_coords, a_strides, a_offsets,
