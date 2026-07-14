@@ -233,7 +233,8 @@ def _tensordot_cutensor(a, b, nout_a, nin_a, nin_b, nout_b):
     if a.config.sym.NSYM == 0:
         data = a.config.backend.tensordot_dense(a.data, b.data, metas[1], metas[6], nin_a, nin_b, modes_out)
     else:
-        data = a.config.backend.tensordot_bs(a.data, b.data, list(nin_a), list(nin_b), *metas, modes_out)
+        # data = a.config.backend.tensordot_bs(a.data, b.data, list(nin_a), list(nin_b), *metas, modes_out)
+        data = a.config.backend.tensordot_bs_v2(a.data, b.data, list(nin_a), list(nin_b), *metas, modes_out)
     if a.config.profile: a.config.backend.nvtx.range_pop()
     return data, struct_c
 
@@ -382,7 +383,7 @@ def _meta_tensordot_nf(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b):
 
 
 def _convert_bl_for_cutensor(sym, bl, slc=None):
-    # extends
+    # extents
     numSectionsPerMode = [len(leg.D) for leg in bl.struct.legs]
     sectionExtents = [DD for leg in bl.struct.legs for DD in leg.D]
     #
@@ -390,19 +391,19 @@ def _convert_bl_for_cutensor(sym, bl, slc=None):
     saxes = tuple(leg.s for leg in bl.struct.legs)
     taxes = tuple(leg.t for leg in bl.struct.legs)
     _, iblocks, _ = get_blocks_charges(sym, taxes, saxes, bl.struct.n)
-    coords = iblocks.reshape(-1).tolist()
+    coords = np.ascontiguousarray(iblocks.reshape(-1))
     #
     # strides
     s0, s1 = bl.D.shape
     strides = np.ones((s0, s1), dtype=np.int64)
     for i in range(s1 - 1, 0, -1):
         strides[:, i - 1] =  strides[:, i] * bl.D[:, i]
-    strides = strides.reshape(-1).tolist()
+    strides = np.ascontiguousarray(strides.reshape(-1))
     #
     # offsets
     if slc is None:
         slc = bl.slc
-    offsets = slc[:, 0].tolist()
+    offsets = np.ascontiguousarray(slc[:, 0])
     #
     return numSectionsPerMode, sectionExtents, coords, strides, offsets
 
