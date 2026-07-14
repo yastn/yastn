@@ -83,6 +83,32 @@ def apply_transfer_matrix(
     return vNAA
 
 
+def get_transfer_matrix(
+        umps: Union[Mps,Sequence["Tensor"]],
+        umps_conj: Union[Mps,Sequence["Tensor"]] = None
+    ) -> "yastn.Tensor":
+    """
+    ::
+    
+                     -2 --A --- 1 1 -- A --- 4 4 -- A --- 7 ... -> -4
+             TM =         3            6            9
+                     -1 --A+ -- 2 2 -- A+ -- 5 5 -- A+ -- 8 ... -> -3
+    """
+    if umps_conj is None:
+        umps_conj= [umps[n] for n in range(len(umps))]
+        conjs= [0,]+sum([[1,0] for n in range(len(umps))], [])
+    else:
+        conjs= None
+    ts= sum([[umps_conj[n],umps[n]] for n in range(len(umps))], [])
+    idxs= sum([ [[-1+3*n, 3*(n+1), -1+3*(n+1)],[-2+3*n,3*(n+1),-2+3*(n+1)] ] for n in range(len(umps))], [])
+    idxs[-2][-1]= -3
+    idxs[-1][-1]= -4
+
+    vNAA= ncon(ts,idxs,conjs=conjs)
+    vNAA= vNAA.fuse_legs(axes=((1,0),(3,2)))
+    return vNAA
+
+
 def eigs_implicit(umps:Union[Mps,Sequence["Tensor"]], 
                   umps_conj:Union[Mps,Sequence["Tensor"]]=None, 
                   k=1, eigenvectors=False, V0:"Tensor"=None,
@@ -145,6 +171,7 @@ def eigs_implicit(umps:Union[Mps,Sequence["Tensor"]],
 
     T= LinearOperator((V0.size,V0.size), matvec=_mv, 
                       dtype=cfg.default_dtype if (umps_conj is None) else 'complex128')
+
     if not eigenvectors:
         vals= eigs(T, k=k, v0=V0_data, return_eigenvectors=False, **kwargs)
         return vals, None
