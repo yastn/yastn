@@ -1074,21 +1074,27 @@ def contract_with_unroll(*args, **kwargs):
         and ncon intermediates across all iterations simultaneously.
     """
     checkpoint_loop = kwargs.pop("checkpoint_loop", False)
-    kwargs.pop("who", None)
+    who= kwargs.pop("who", None)
     kwargs.pop("verbosity", None)
     unroll = kwargs.pop("unroll", None)
     unroll = _validate_and_resolve_unroll(*args, unroll=unroll)
 
+    optimize = kwargs.pop("optimize", None)
+    if optimize is None:
+        path_search_kwargs = {k: kwargs[k] for k in ("optimizer", "memory_limit", "names")
+                                if k in kwargs}
+        if who is not None:
+            path_search_kwargs["who"] = who
+        optimize, _ = get_contraction_path(*args, unroll=unroll, **path_search_kwargs)
+
     if unroll is None:
         # convert to ncon call
-        ts, inds, conjs, order= _convert_path_to_ncon_args(*args,**kwargs)
+        ts, inds, conjs, order= _convert_path_to_ncon_args(*args,optimize=optimize,**kwargs)
         return ncon(ts, inds, conjs=conjs, order=order)
 
     if isinstance(unroll, dict):
         # block-sparse sliced unrolling: unroll is {label: [SlicedLeg, ...]}
-        path = kwargs.pop("optimize", None)
-        assert path is not None, "optimize (contraction path) must be provided"
-        return _contract_with_sliced_unroll(*args, unroll=unroll, optimize=path,
+        return _contract_with_sliced_unroll(*args, unroll=unroll, optimize=optimize,
                                             checkpoint_loop=checkpoint_loop, **kwargs)
 
     raise NotImplementedError(
