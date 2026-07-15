@@ -9,6 +9,7 @@ def pytest_addoption(parser):
     parser.addoption("--quickstart", help='execute quickstarts', action='store_true', dest="quickstart", default=False)
     parser.addoption("--long_tests", help='run long duration tests', action='store_true', default=False)
     parser.addoption("--ray", help='tests using ray', action='store_true', default=False)
+    parser.addoption("--devices", help='comma-separated device list for multi-device tests, e.g. cuda:0,cuda:1,cuda:2', default=None, action='store')
 
 
 @pytest.fixture
