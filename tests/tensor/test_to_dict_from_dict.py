@@ -215,6 +215,22 @@ def test_save_load(config_kwargs, test_f):
     test_f(a, config_U1)
 
 
+def test_old_to_dict(config_kwargs):
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    for fn in ['inputs/tensor_to_dict_v0.npy',
+               'inputs/tensor_to_dict_v2.npy']:
+        fname = os.path.join(os.path.dirname(__file__), fn)
+        d = np.load(fname, allow_pickle=True).item()
+        a = yastn.from_dict(d['a'], config_U1)
+        U = yastn.from_dict(d['U'], config_U1)
+        S = yastn.from_dict(d['S'], config_U1)
+        V = yastn.from_dict(d['V'], config_U1)
+
+        assert (U @ S @ V - a).norm() < 1e-12
+        SS = a.svd(axes=((0, 1), 2), compute_uv=False)
+        assert (SS - S).norm() < 1e-12
+
+
 def test_to_dict_exceptions(config_kwargs):
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
 

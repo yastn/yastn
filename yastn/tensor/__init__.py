@@ -23,6 +23,8 @@ An instance of a Tensor is specified by a list of blocks (dense tensors) labeled
 from __future__ import annotations
 from typing import Sequence
 
+import numpy as np
+
 from .._split_combine_dict import *
 from ._algebra import *
 from ._auxiliary import *
@@ -189,6 +191,21 @@ class Tensor:
             If provided, overrides configuration stored in `d`.
         """
         #
+        if 'dict_ver' not in d:  # old save_to_dict()
+            d = {'type': 'Tensor',
+                 'dict_ver': 1,
+                 'data': d['_d'],
+                 'hfs': d['hfs'],
+                 'mfs': d['mfs'],
+                 'config': {'sym': d['SYM_ID'],
+                            'fermionic': d['fermionic']},
+                 'struct': {'s': d['s'],
+                            'n': d['n'],
+                            't': d['t'],
+                            'D': d['D'],
+                            'diag': d['isdiag']}
+                }
+
         if d['dict_ver'] in [1, 2]:  # d from method to_dict (single version as of now)
 
             if 'trans' not in d:  # to handle dict_ver==1 with no trans
@@ -207,21 +224,47 @@ class Tensor:
                 d['config'] = config
 
             for k in ['struct', 'slices', 'hfs', 'mfs']:
-                d[k] = _convert_lists_to_tuples(d[k])
+                if k in d:
+                    d[k] = _convert_lists_to_tuples(d[k])
             if not isinstance(d['config'], _config):
                 d['config'] = make_config(**d['config'])
             d['hfs'] = tuple(_Fusion(**hf) for hf in d['hfs'])
-            legs = legs_from_dict_v2(d['struct'])
+            old_struct = d['struct']
+            legs = legs_from_dict_v2(old_struct)
             d['struct'] = _struct(legs=legs, n=d['struct']['n'], isdiag=d['struct']['diag'])
-            # TODO: write embedding in case some blocks storred in _v2 are missing.
             dtype = d['config'].default_dtype
             if hasattr(d['data'], 'dtype'):
                 if 'complex128' in str(d['data'].dtype):
                     dtype = 'complex128'
                 if 'float64' in str(d['data'].dtype):
                     dtype = 'float64'
-            d['data'] = d['config'].backend.to_tensor(d['data'], dtype=dtype, device=d['config'].default_device)
+            data = d['config'].backend.to_tensor(d['data'], dtype=dtype, device=d['config'].default_device)
+            bl_new = get_blocks(d['config'].sym, d['struct'])
+            t_old = np.array(old_struct['t'], dtype=np.int64)
+            t_old = t_old.reshape(len(t_old), len(bl_new.struct.legs), len(bl_new.struct.n))
+            if 'slices' in d:
+                slc_old = np.array([x[0][0] for x in d['slices']], dtype=np.int64)
+            else:
+                D_old = np.array(old_struct['D'], dtype=np.int64)
+                if d['struct'].isdiag:
+                    Dp = D_old[:, 0]
+                else:
+                    Dp = np.prod(D_old, axis=1, dtype=np.int64)
+                slc_old = np.zeros((len(Dp), 2), dtype=np.int64)
+                slc_old[:, 1] = np.cumsum(Dp)
+                slc_old[1:, 0] = slc_old[:-1, 1]
 
+            ind1, ind2 = find_matching_indices(bl_new.t, t_old)
+            sln, slo = bl_new.slc[ind1], slc_old[ind2]
+            meta = np.column_stack([sln, sln[:, 1] - sln[:, 0], slo, slo[:, 1] - slo[:, 0]])
+            meta_dt = np.dtype([
+                ('sln', np.int64, (2,)),
+                ('Dn', np.int64, (1,)),
+                ('slo', np.int64, (2,)),
+                ('Do', np.int64, (1,))])
+            meta = meta.view(meta_dt).reshape(-1)
+            newdata = d['config'].backend.embed_transpose(data, [0], meta, bl_new.size)
+            d['data'] = newdata
             return cls(**d)
 
         if d['dict_ver'] == 3:  # d from method to_dict (single version as of now)
