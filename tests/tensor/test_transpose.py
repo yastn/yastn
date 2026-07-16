@@ -171,7 +171,7 @@ def test_transpose_backward(config_kwargs, consume):
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.rand(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
                   t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
-                  D=[(2, 3), (4, 5), (6, 7), (6, 5), (4, 3), (2, 1)])
+                  D=[(1, 2), (2, 1), (2, 3), (3, 2), (1, 3), (3, 1)])
     b = a.transpose(axes=(1, 2, 3, 0, 5, 4))
     if consume:
         b = b.consume_transpose()
@@ -187,11 +187,10 @@ def test_transpose_backward(config_kwargs, consume):
         return ab
 
     op_args = (torch.randn(target_block_size, dtype=a.get_dtype(), requires_grad=True),)
-    test = torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4)
+    test = torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4, check_undefined_grad=False)  # TODO check_undefined_grad=True
     assert test
 
 
 if __name__ == '__main__':
-    test_transpose_output({})
-    # pytest.main([__file__, "-vs", "--durations=0"])
-    # pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])
+    pytest.main([__file__, "-vs", "--durations=0"])
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])

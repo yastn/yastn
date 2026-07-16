@@ -15,8 +15,7 @@
 from __future__ import annotations
 import logging
 import sys
-from typing import NamedTuple, Callable, Sequence
-from warnings import warn
+from typing import NamedTuple, Sequence
 
 from ._env_contractions import identity_boundary, corner2x2, append_vec_tl, append_vec_br
 from ._env_dataclasses import EnvCTM_local, EnvCTM_projectors
@@ -156,8 +155,8 @@ class EnvCTM():
         Data of environment tensors in the new environment is indepedent
         from the originals.
         """
-        #TODO Ket ?
-        env = type(self)(psi=self.psi.bra.to(device=device, dtype=dtype, **kwargs), init=None)
+        #TODO Bra ?
+        env = type(self)(psi=self.psi.ket.to(device=device, dtype=dtype, **kwargs), init=None)
         env.env = self.env.to(device=device, dtype=dtype, **kwargs)
         env.proj = self.proj.to(device=device, dtype=dtype, **kwargs)
         return env
@@ -236,26 +235,6 @@ class EnvCTM():
         self.env = Lattice.from_dict(d['env'])
         self.proj = Lattice.from_dict(d['proj'])
 
-    def save_to_dict(self) -> dict:
-        r"""
-        Serialize EnvCTM into a dictionary.
-
-        !!! This method is deprecated; use to_dict() instead !!!
-        """
-        warn('This method is deprecated; use to_dict() instead.', DeprecationWarning, stacklevel=2)
-
-        psi = self.psi
-        if isinstance(psi, Peps2Layers):
-            psi = psi.ket
-
-        d = {'class': type(self).__name__,
-             'psi': psi.save_to_dict(),
-             'data': {}}
-        for site in self.sites():
-            d_local = {dirn: getattr(self[site], dirn).save_to_dict()
-                       for dirn in self[site].fields()}
-            d['data'][site] = d_local
-        return d
 
     def reset_(self, init='rand', leg=None, **kwargs):
         r"""
@@ -1017,7 +996,9 @@ class EnvCTM():
         return len(not_consistent) == 0
 
     from ._env_ctm_measure import measure_1site, measure_nn, measure_2x2, measure_line, \
-        measure_nsite, measure_2site, measure_nsite_exact, sample, transfer_matrix_spectrum
+        measure_nsite, measure_2site, measure_nsite_exact, measure_nsite_exact_oe, \
+        measure_nsite_norm_exact_oe, measure_nsite_numerator_exact_oe, \
+        sample, transfer_matrix_spectrum
 
 
 def legs_consistent_(out, env_legs, i0, l0, i1, l1):

@@ -14,13 +14,19 @@
 # ==============================================================================
 """ Linear operations and operations on a single yastn.Tensor. """
 from __future__ import annotations
-from functools import lru_cache
-from itertools import accumulate
 
-from ._auxiliary import _slc, _join_contiguous_slices
+from functools import lru_cache
+from typing import TYPE_CHECKING
+
+import numpy as np
+
+from ._auxiliary import _struct, get_blocks, find_matching_indices, _compress_slices
 from ._legs import legs_union
 from ._merging import _embed_tensor
-from ._tests import YastnError, _test_can_be_combined, _get_tD_legs, _unpack_trans_test_axes_pair
+from ._tests import YastnError, _test_can_be_combined, _unpack_trans_test_axes_pair
+
+if TYPE_CHECKING:
+    from . import Tensor
 
 __all__ = ['add', 'real', 'imag', 'sqrt', 'rsqrt', 'reciprocal', 'exp', 'bitwise_not', 'allclose']
 
@@ -32,9 +38,10 @@ def __add__(a, b) -> 'Tensor':
     Signatures and total charges of two tensors should match.
     """
     (a, b), hfs = _pre_addition(a, b)
-    metas, struct, slices = _meta_addition(((a.struct, a.slices), (b.struct, b.slices)), a.isdiag)
-    data = a.config.backend.add((a._data, b._data), metas, struct.size)
-    return a._replace(hfs=hfs, struct=struct, slices=slices, data=data)
+    metas, size, struct_new = _meta_addition(a.config.sym, a.struct, b.struct)
+    data = a.config.backend.add((a._data, b._data), metas, size)
+    out = a._replace(hfs=hfs, struct=struct_new, data=data)
+    return out
 
 
 def __sub__(a, b) -> 'Tensor':
@@ -44,12 +51,13 @@ def __sub__(a, b) -> 'Tensor':
     Signatures and total charges of two tensors should match.
     """
     (a, b), hfs = _pre_addition(a, b)
-    meta, struct, slices = _meta_addition(((a.struct, a.slices), (b.struct, b.slices)), a.isdiag)
-    data = a.config.backend.sub(a._data, b._data, meta, struct.size)
-    return a._replace(hfs=hfs, struct=struct, slices=slices, data=data)
+    metas, size, struct_new = _meta_addition(a.config.sym, a.struct, b.struct)
+    data = a.config.backend.sub(a._data, b._data, metas, size)
+    out = a._replace(hfs=hfs, struct=struct_new, data=data)
+    return out
 
 
-def add(*tensors, amplitudes=None, **kwargs):
+def add(*tensors, amplitudes=None, **kwargs) -> 'Tensor':
     r"""
     Linear combination of tensors with given amplitudes, :math:`\sum_i amplitudes[i] tensors[i]`.
 
@@ -73,12 +81,11 @@ def add(*tensors, amplitudes=None, **kwargs):
         return tensors[0]
 
     tensors, hfs = _pre_addition(*tensors)
-    datas = tuple((a.struct, a.slices) for a in tensors)
-    a = tensors[0]
-    metas, struct, slices = _meta_addition(datas, a.isdiag)
-    datas = [v._data for v in tensors]
-    data = a.config.backend.add(datas, metas, struct.size)
-    return a._replace(hfs=hfs, struct=struct, slices=slices, data=data)
+    structs = [a.struct for a in tensors]
+    metas, size, struct_new = _meta_addition(tensors[0].config.sym, *structs)
+    data = tensors[0].config.backend.add([v._data for v in tensors], metas, size)
+    out = tensors[0]._replace(hfs=hfs, struct=struct_new, data=data)
+    return out
 
 
 def _pre_addition(*tensors):
@@ -113,80 +120,45 @@ def _pre_addition(*tensors):
 
 
 @lru_cache(maxsize=1024)
-def _meta_addition(datas, isdiag):
+def _meta_addition(sym, *structs):
     """ meta-information for backend and new tensor charges and dimensions. """
+    if all(structs[0] == struct for struct in structs[1:]):
+        bl_new = get_blocks(sym, structs[0])
+        size = bl_new.size
+        meta = (((0, size), (0, size)),)
+        metas = (meta,) * len(structs)
+        return metas, size, structs[0]
 
-    if all(datas[0] == data for data in datas[1:]):
-        Dsize = datas[0][0].size
-        meta = (((0, Dsize), (0, Dsize)),)
-        metas = tuple(meta for _ in range(len(datas)))
-        return metas, *datas[0]
+    ndim = len(structs[0].legs)  # nlegs
+    legs_new = []
+    for n in range(ndim):
+        leg = structs[0].legs[n]
+        for struct in structs[1:]:
+            try:
+                leg = leg.union(struct.legs[n], isdiag=structs[0].isdiag)
+            except ValueError:
+                raise YastnError('Bond dimensions of some charges do not match.')
+        legs_new.append(leg)
 
-    check_structure = False
-    struct_0, slices_0 = datas[0]
-    temp = list((t, D, sl.Dp) for t, D, sl in zip(struct_0.t, struct_0.D, slices_0))
-
-    for struct_1, slices_1 in datas[1:]:
-        temp0 = temp
-        temp1 = list((t, D, sl.Dp) for t, D, sl in zip(struct_1.t, struct_1.D, slices_1))
-        i0, i1, temp = 0, 0, []
-        while i0 < len(temp0) and i1 < len(temp1):
-            t0, D0, Dp0 = temp0[i0]
-            t1, D1, Dp1 = temp1[i1]
-            if t0 == t1:
-                if isdiag:
-                    temp.append((t0, max(D0, D1), max(Dp0, Dp1)))
-                else:
-                    if D0 != D1:
-                        raise YastnError('Bond dimensions do not match.')
-                    temp.append((t0, D0, Dp0))
-                i0 += 1
-                i1 += 1
-            elif t0 < t1:
-                temp.append((t0, D0, Dp0))
-                i0 += 1
-                check_structure = True
-            else:
-                temp.append((t1, D1, Dp1))
-                i1 += 1
-                check_structure = True
-        if i0 < len(temp0) or i1 < len(temp1):
-            check_structure = True
-        for t0, D0, Dp0 in temp0[i0:]:
-            temp.append((t0, D0, Dp0))
-        for t1, D1, Dp1 in temp1[i1:]:
-            temp.append((t1, D1, Dp1))
-
-    t_new, D_new, Dp_new = zip(*temp) if len(temp) > 0 else ((), (), ())
-    slices_new = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dp_new), Dp_new, D_new))
-    struct_new = struct_0._replace(t=t_new, D=D_new, size=sum(Dp_new))
-
-    if check_structure:
-        _get_tD_legs(struct_new)
-
-    if isdiag:
-        def update_meta(mtn, mto, slcn, slco):
-            start = slcn.slcs[0][0]
-            stop = start + slco.Dp
-            mtn.append((start, stop))
-            mto.append(slco.slcs[0])
-    else:
-        def update_meta(mtn, mto, slcn, slco):
-            mtn.append(slcn.slcs[0])
-            mto.append(slco.slcs[0])
+    struct_new = _struct(legs=tuple(legs_new), n=structs[0].n, isdiag=structs[0].isdiag)
+    bl_new = get_blocks(sym, struct_new)
 
     metas = []
-    for struct, slices in datas:
-        itn, islcn = iter(t_new), iter(slices_new)
-        mtn, mto = [], []
-        for to, slco in zip(struct.t, slices):
-            tn, slcn = next(itn), next(islcn)
-            while to != tn:
-                tn, slcn = next(itn), next(islcn)
-            update_meta(mtn, mto, slcn, slco)
-        metas.append(_join_contiguous_slices(mtn, mto))
+    meta_dt = np.dtype([
+        ('sln', np.int64, (2,)),
+        ('slo', np.int64, (2,))])
+    for struct in structs:
+        bl_old = get_blocks(sym, struct)
+        ind_n, ind_o = find_matching_indices(bl_new.t, bl_old.t)
+        meta = np.column_stack([bl_new.slc[ind_n], bl_old.slc[ind_o]])
+        if struct.isdiag:
+            dd = np.minimum(meta[:, 1] - meta[:, 0], meta[:, 3] - meta[:, 2])
+            meta[:, 1] = meta[:, 0] + dd
+            meta[:, 3] = meta[:, 2] + dd
+        meta = _compress_slices(meta)
+        metas.append(meta.view(meta_dt).reshape(-1))
 
-    return tuple(metas), struct_new, slices_new
+    return metas, bl_new.size, bl_new.struct
 
 
 def allclose(a, b, rtol=1e-13, atol=1e-13) -> bool:
@@ -194,7 +166,7 @@ def allclose(a, b, rtol=1e-13, atol=1e-13) -> bool:
     Check if `a` and `b` are identical within a desired tolerance.
     To be :code:`True`, all tensors' blocks and merge history have to be identical.
     If this condition is satisfied, execute :code:`backend.allclose` function
-    to compare tensors’ data.
+    to compare tensors' data.
 
     Note that if two tensors differ by zero blocks, the function returns :code:`False`.
     To resolve such differences, use :code:`(a - b).norm() < tol`
@@ -207,7 +179,7 @@ def allclose(a, b, rtol=1e-13, atol=1e-13) -> bool:
     rtol, atol: float
         Desired relative and absolute precision.
     """
-    if a.struct != b.struct or a.slices != b.slices or a.hfs != b.hfs or a.mfs != b.mfs or a.trans != b.trans:
+    if a.struct != b.struct or a.hfs != b.hfs or a.mfs != b.mfs or a.trans != b.trans:
         return False
     return a.config.backend.allclose(a._data, b._data, rtol, atol)
 
@@ -259,7 +231,7 @@ def __ge__(a, number) -> 'Tensor[bool]':
 def __mul__(a, number) -> 'Tensor':
     """ Multiply tensor by a number, use: `number * tensor`. """
     data = a._data * number
-    if a.config.backend.get_size(data) != a.struct.size:
+    if a.config.backend.get_size(data) != a.config.backend.get_size(a._data):
         raise YastnError("Multiplication cannot change data size; broadcasting not supported.")
     return a._replace(data=data)
 
@@ -285,7 +257,7 @@ def __neg__(a) -> 'Tensor':
 def __pow__(a, exponent) -> 'Tensor':
     """ Element-wise exponent of tensor, use: `tensor ** exponent`. """
     data = a._data ** exponent
-    if a.config.backend.get_size(data) != a.struct.size:
+    if a.config.backend.get_size(data) != a.config.backend.get_size(a._data):
         raise YastnError("Exponent cannot change data size; broadcasting not supported.")
     return a._replace(data=data)
 
@@ -293,9 +265,8 @@ def __pow__(a, exponent) -> 'Tensor':
 def __truediv__(a, number) -> 'Tensor':
     """ Divide tensor by a scalar, use: `tensor / number`. """
     data = a._data / number
-    if a.config.backend.get_size(data) != a.struct.size:
+    if a.config.backend.get_size(data) != a.config.backend.get_size(a._data):
         raise YastnError("truediv cannot change data size; broadcasting not supported.")
-
     return a._replace(data=data)
 
 

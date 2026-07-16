@@ -196,12 +196,6 @@ def test_ncon_einsum_exceptions(config_kwargs):
                        match="Indices of legs to contract do not match."):
         _ = yastn.ncon([a, a], [(1, 2, -1), (1, 1, -2)])
     with pytest.raises(yastn.YastnError,
-                       match="Likely inefficient order of contractions. Do all traces before tensordot."):
-        _ = yastn.ncon([a, a], [(3, 3, 2), (1, 1, 2)], conjs=[0, 1])
-    with pytest.raises(yastn.YastnError,
-                       match="Likely inefficient order of contractions. Do all traces before tensordot."):
-        _ = yastn.ncon([a, a, a], [(1, 2, 3), (1, 3, 4), (2, 4, -0)], conjs=[0, 1, 0])
-    with pytest.raises(yastn.YastnError,
                        match="Repeated non-positive"): # (outgoing) index is ambiguous.
         yastn.ncon([a], [(-1, -1, -0)])
     with pytest.raises(yastn.YastnError,
@@ -235,6 +229,50 @@ def test_ncon_einsum_exceptions(config_kwargs):
     with pytest.raises(yastn.YastnError,
                        match="Order does not cover all contracted indices."):
         yastn.einsum('klm, *klm->', a, a, order='kl')
+
+
+def test_ncon_trace_fallback_value(config_kwargs, capsys):
+    r"""Trace fallback should still give the same value as an explicit swapped trace."""
+    config_Z2 = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
+    l = yastn.Leg(config_Z2, s=1, t=(0, 1), D=(1, 1))
+    lc = l.conj()
+
+    A = yastn.rand(config=config_Z2, n=0, legs=[l, lc])
+    B = yastn.rand(config=config_Z2, n=1, legs=[l])
+    C = yastn.rand(config=config_Z2, n=1, legs=[lc])
+
+    x = yastn.ncon([A, B, C], [(1, 1), (2,), (2,)], swap=[(1, 2)])
+    captured = capsys.readouterr()
+    assert "fallback resolver activated" in captured.out
+
+    ref = yastn.trace(A.swap_gate(axes=(0, 1)), axes=(0, 1)).item()
+    ref *= yastn.tensordot(B, C, axes=(0, 0)).item()
+    assert abs(x.item() - ref) < tol
+
+def test_ncon_trace_fallback_multiple_pairs_value(config_kwargs, capsys):
+    r"""Fallback should handle multiple deferred trace pairs and still produce the right value."""
+    config_Z2 = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
+    l = yastn.Leg(config_Z2, s=1, t=(0, 1), D=(1, 1))
+    lc = l.conj()
+
+    A = yastn.rand(config=config_Z2, n=0, legs=[l, lc, l, lc])
+    B = yastn.rand(config=config_Z2, n=1, legs=[l])
+    C = yastn.rand(config=config_Z2, n=1, legs=[lc])
+    D = yastn.rand(config=config_Z2, n=1, legs=[l])
+    E = yastn.rand(config=config_Z2, n=1, legs=[lc])
+
+    x = yastn.ncon([A, B, C, D, E],
+                   [(1, 1, 2, 2), (3,), (3,), (4,), (4,)],
+                   swap=[(1, 3), (2, 4)])
+    captured = capsys.readouterr()
+    assert "fallback resolver activated" in captured.out
+
+    ref = A.swap_gate(axes=(0, 1)).swap_gate(axes=(2, 3))
+    ref = yastn.trace(ref, axes=(0, 1))
+    ref = yastn.trace(ref, axes=(0, 1)).item()
+    ref *= yastn.tensordot(B, C, axes=(0, 0)).item()
+    ref *= yastn.tensordot(D, E, axes=(0, 0)).item()
+    assert abs(x.item() - ref) < tol
 
 
 def test_ncon_einsum_swaps(config_kwargs):
@@ -342,4 +380,9 @@ def test_einsum_scalar_swap_order(config_kwargs):
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0"])
+    pytest.main([__file__, "-vs", "--durations=0", "--tensordot_policy", "fuse_to_matrix"])
+    pytest.main([__file__, "-vs", "--durations=0", "--tensordot_policy", "fuse_contracted"])
+    pytest.main([__file__, "-vs", "--durations=0", "--tensordot_policy", "no_fusion"])
+    #pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--tensordot_policy", "fuse_to_matrix"])
+    #pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--tensordot_policy", "fuse_contracted"])
+    #pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--tensordot_policy", "no_fusion"])

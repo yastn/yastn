@@ -161,19 +161,6 @@ class EnvBoundaryMPS():
             env.info[k] = v.copy()
         return env
 
-    def save_to_dict(self) -> dict:
-        r"""
-        Serialize EnvBoundaryMPS into a dictionary.
-        """
-        psi = self.psi
-        if isinstance(psi, Peps2Layers):
-            psi = psi.ket
-
-        d = {'class': 'EnvBoundaryMPS', 'psi': psi.save_to_dict()}
-        d['env'] = {k: v.save_to_dict() for k, v in self._env.items()}
-        d['info'] = {k: v.copy() for k, v in self.info.items()}
-        return d
-
     def boundary_mps(self, n, dirn):
         return self._env[n, dirn]
 

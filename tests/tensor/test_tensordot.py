@@ -360,7 +360,7 @@ def test_tensordot_exceptions(config_kwargs):
         _ = yastn.tensordot(a, b, axes=((0, 1), (0, 0)), conj=(1, 0))
         # Repeated axis in axes[0] or axes[1].
     with pytest.raises(yastn.YastnError,
-                       match="Bond dimensions do not match."):
+                       match="Bond dimensions of some charges do not match."):
         _ = yastn.tensordot(a, b, axes=((2, 3), (2, 3)), conj=(1, 0))
     with pytest.raises(yastn.YastnError,
                        match="Indicated axes of two tensors have different number of meta-fused legs or sub-fusions order."):
@@ -383,7 +383,7 @@ def test_tensordot_exceptions(config_kwargs):
         bf = b.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
         _ = yastn.tensordot(af, bf, axes=((1,), (1,)), conj=(1, 0))
     with pytest.raises(yastn.YastnError,
-                       match="Bond dimensions do not match."):
+                       match="Bond dimensions of some charges do not match."):
         af = a.fuse_legs(axes=(1, 3, (0, 2)), mode='hard')
         bf = b.fuse_legs(axes=(1, 3, (0, 2)), mode='hard')
         _ = yastn.tensordot(af, bf, axes=((1, 2), (1, 2)), conj=(1, 0))
@@ -399,6 +399,7 @@ def test_tensordot_exceptions(config_kwargs):
 
 
 if __name__ == '__main__':
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch_cpp", "--device", "cuda"])
     pytest.main([__file__, "-vs", "--durations=0", "--tensordot_policy", "fuse_to_matrix"])
     pytest.main([__file__, "-vs", "--durations=0", "--tensordot_policy", "fuse_contracted"])
     pytest.main([__file__, "-vs", "--durations=0", "--tensordot_policy", "no_fusion"])

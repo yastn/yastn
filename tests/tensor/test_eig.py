@@ -13,19 +13,14 @@
 # limitations under the License.
 # ==============================================================================
 """ yastn.linalg.svd() and truncation of its singular values """
-from itertools import product
-import numpy as np
 import pytest
 import yastn
 
 tol = 1e-10  #pylint: disable=invalid-name
-seed = 1
+seed = 22
 
 torch_test = pytest.mark.skipif("'torch' not in config.getoption('--backend')",
                                 reason="Uses torch.autograd.gradcheck().")
-numpy_test = pytest.mark.skipif("'np' not in config.getoption('--backend')",
-                                reason="Limit test to numpy.")
-
 
 def eig_combine(a):
     """ decompose and contracts tensor using svd decomposition """
@@ -152,4 +147,4 @@ def test_eig_exceptions(config_kwargs):
         # lowrank policy in svd requires passing argument D_block
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])
+    pytest.main([__file__, "-vs", "--durations=0"]) #, "--backend", "torch"])

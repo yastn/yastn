@@ -63,29 +63,3 @@ def product_peps(geometry, vectors) -> Peps:
     if any(psi[site] is None for site in psi.sites()):
         raise YastnError("product_peps did not initialize some PEPS tensor")
     return psi
-
-
-def load_from_dict(config, d) -> Peps:
-    r"""
-    Create PEPS-related object from dictionary.
-    Works for :class:`yastn.tn.fpeps.Peps`, :class:`yastn.tn.fpeps.EnvCTM`, :class:`yastn.tn.fpeps.EnvBP`.
-
-    Parameters
-    ----------
-    config: module | _config(NamedTuple)
-        :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
-
-    in_dict: dict
-        dictionary containing serialized PEPS-related object, i.e.,
-        a result of :meth:`yastn.tn.fpeps.Peps.save_to_dict`, or
-        :meth:`yastn.tn.fpeps.EnvCTM.save_to_dict`.
-    """
-    if 'class' in d:
-        if d['class'] == 'EnvCTM':
-            return EnvCTM.from_dict(d, config)
-        if d['class'] == 'EnvBP':
-            return EnvBP.from_dict(d, config)
-        if d['class'] == 'EnvBoundaryMPS':
-            return EnvBoundaryMPS.from_dict(d, config)
-    # otherwise assume class == 'Peps'
-    return Peps.from_dict(d, config)

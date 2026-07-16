@@ -258,7 +258,7 @@ class EnvParent(metaclass=abc.ABCMeta):
             _, R0 = qr(AL, axes=(0, 1), sQ=1)
             _, R1 = qr(AR, axes=(1, 0), Raxis=1, sQ=-1)
             S = svd(R0 @ R1, compute_uv=False)
-            if any(S[t][-1] > opts_svd['tol'] * 1.1 for t in S.struct.t):
+            if any(S[t][-1] > opts_svd['tol'] * 1.1 for t in S.get_blocks_charge()):
                 return True  # Schmidt values below expected tolerance
 
         return False  # no hint for using 2-site update

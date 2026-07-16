@@ -31,19 +31,6 @@ def compare_envs(env0, env1):
     assert env0._env.keys() == env1._env.keys()
     assert env0.info.keys() == env1.info.keys()
 
-def run_save_load(env):
-    # test save, load
-
-    config = env.psi.config
-
-    d = env.save_to_dict()
-    compare_envs(env, fpeps.load_from_dict(config, d))
-
-    for level in [0, 1, 2]:
-        d = env.to_dict(level=level)
-        compare_envs(env, fpeps.EnvBoundaryMPS.from_dict(d))
-        compare_envs(env, yastn.from_dict(yastn.combine_data_and_meta(*yastn.split_data_and_meta(d))))
-
 
 @pytest.mark.parametrize("boundary", ["obc", "cylinder"])
 def test_mpsboundary_measure(config_kwargs, boundary):
@@ -174,7 +161,10 @@ def test_finite_spinless_boundary_mps_ctmrg(config_kwargs):
 
     mpsenv = fpeps.EnvBoundaryMPS(psi, opts_svd=opts_svd_ctm, setup='tlbr')
 
-    run_save_load(mpsenv)
+    for level in [0, 1, 2]:
+        d = mpsenv.to_dict(level=level)
+        compare_envs(mpsenv, fpeps.EnvBoundaryMPS.from_dict(d))
+        compare_envs(mpsenv, yastn.from_dict(yastn.combine_data_and_meta(*yastn.split_data_and_meta(d))))
 
     for ny in range(psi.Ny):
         vR0 = env.boundary_mps(n=ny, dirn='r')

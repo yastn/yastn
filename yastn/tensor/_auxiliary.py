@@ -13,29 +13,18 @@
 # limitations under the License.
 # ==============================================================================
 """ Auxiliary functions used by yastn.Tensor. """
+from __future__ import annotations
+
+from functools import lru_cache
 from itertools import accumulate, chain
 from typing import NamedTuple
 
 import numpy as np
 
+from ._legbasic import LegBasic
 from ..sym import sym_none
 
-__all__ = ['_config', '_struct', 'sign_canonical_order', 'swap_charges']
-
-
-class _struct(NamedTuple):
-    s: tuple = ()  # leg signatures
-    n: tuple = ()  # tensor charge
-    diag: bool = False  # isdiag
-    t: tuple = ()  # list of block charges
-    D: tuple = ()  # list of block shapes
-    size: int = 0  # total data size
-
-
-class _slc(NamedTuple):
-    slcs: tuple = ()  # slice
-    D: tuple = ()  # reshape
-    Dp: int = 0  # product of D
+__all__ = ['_config', '_struct', 'get_blocks', 'sign_canonical_order', 'swap_charges', 'find_matching_indices']
 
 
 class _config(NamedTuple):
@@ -48,6 +37,21 @@ class _config(NamedTuple):
     force_fusion: str = None
     tensordot_policy: str = 'fuse_contracted'
     profile: bool = False
+
+
+class _struct(NamedTuple):
+    legs: tuple = ()  # tuple[LegBasic]
+    n: tuple = ()  # tensor charge
+    isdiag: bool = False  # isdiag
+
+
+class _blocks(NamedTuple):
+    t: np.array = None  # list of block charges nblocks x ndim_n x nsym
+    D: np.array = None  # list of block shapes  nblocks x ndim_n
+    slc: np.array = None  # list of block slices nblocks x 2
+    size: int = 0  # data size
+    nblocks: int = 0  # number of blocks
+    struct: _struct = _struct() # updated structure
 
 
 def _flatten(nested_iterator):
@@ -81,22 +85,21 @@ def _unpack_legs(legs):
     return tuple(ulegs), tuple(mfs)
 
 
-def _join_contiguous_slices(slcs_a, slcs_b):
-    if not slcs_a:
-        return ()
-    meta = []
-    tmp_a = slcs_a[0]
-    tmp_b = slcs_b[0]
-    for sl_a, sl_b in zip(slcs_a[1:], slcs_b[1:]):
-        if tmp_a[1] == sl_a[0] and tmp_b[1] == sl_b[0]:
-            tmp_a = (tmp_a[0], sl_a[1])
-            tmp_b = (tmp_b[0], sl_b[1])
-        else:
-            meta.append((tmp_a, tmp_b))
-            tmp_a = sl_a
-            tmp_b = sl_b
-    meta.append((tmp_a, tmp_b))
-    return tuple(meta)
+def _compress_slices(meta):
+    if len(meta) == 0:
+        return meta
+    s1, s2 = meta.shape
+    c2 = s2 // 2
+    slcs = meta.reshape(s1, c2, 2).transpose((1, 0, 2))
+    inds = np.any(slcs[:, 1:, 0] != slcs[:, :-1, 1], axis=0)
+    mask = np.ones((s1, 2), dtype=np.bool)
+    mask[1:, 0] = inds
+    mask[:-1, 1] = inds
+    mask = mask.reshape(2 * s1)
+    n1 = np.sum(inds) + 1
+    slcs = slcs.reshape(c2, 2 * s1)
+    joined_slcs = slcs[:, mask].reshape(c2, n1, 2).transpose((1, 0, 2))
+    return np.ascontiguousarray(joined_slcs.reshape(n1, s2))
 
 
 def swap_charges(charges_0, charges_1, fss) -> int:
@@ -159,3 +162,127 @@ def sign_canonical_order(*operators, sites=None, f_ordered=None) -> int:
     if len(charges_0) == 0:
         return 1
     return swap_charges(charges_0, charges_1, operators[0].config.fermionic)
+
+
+@lru_cache(maxsize=1024)
+def get_blocks(sym, struct) -> _blocks:
+    """
+    Generate all allowed block charges, their dimensions, slices, total size and trimed legs.
+    Assume that legs have sorted charges
+    """
+    # enforce int type, remove d=0 sectors
+    saxes = tuple(int(leg.s) for leg in struct.legs)
+    taxes = tuple(tuple(tuple(map(int, tt)) for tt, d in zip(leg.t, leg.D) if d > 0) for leg in struct.legs)
+    Daxes = tuple(tuple(int(d) for d in leg.D if d > 0) for leg in struct.legs)
+
+    tblocks, iblocks, icharges = get_blocks_charges(sym, taxes, saxes, struct.n)
+
+    Dblocks = np.empty(iblocks.shape, dtype=np.int64)
+    for i, Dax in enumerate(Daxes):
+        Dax = np.array(Dax, dtype=np.int64)
+        Dblocks[:, i] = Dax[iblocks[:, i]]
+
+    nblocks = len(iblocks)
+    #
+    slices = np.zeros((nblocks, 2), dtype=np.int64)
+    Dp = Dblocks[:, 0] if struct.isdiag else np.prod(Dblocks, axis=1, dtype=np.int64)
+    np.cumsum(Dp, out=slices[:, 1])
+    slices[1:, 0] = slices[:-1, 1]
+    size = np.sum(Dp, dtype=np.int64).item()
+    #
+    # recalculate legs, in case some leg charges do not appear in any block
+    new_legs = []
+    for s, tax, Dax, inds in zip(saxes, taxes, Daxes, icharges):
+        tl = tuple(tax[i] for i in inds)
+        Dl = tuple(Dax[i] for i in inds)
+        leg = LegBasic(s=s, t=tl, D=Dl)
+        new_legs.append(leg)
+    new_struct = _struct(legs=tuple(new_legs), n=struct.n, isdiag=struct.isdiag)
+    #
+    return _blocks(t=tblocks, D=Dblocks, slc=slices, size=size, nblocks=nblocks, struct=new_struct)
+
+
+@lru_cache(maxsize=1024)
+def get_blocks_charges(sym, taxes, s, n):
+    nsym = sym.NSYM
+    ndim = len(taxes)
+    if ndim > 0:
+        indices = np.indices([len(tax) for tax in taxes]).reshape(ndim, -1).T
+    else:
+        indices = np.zeros((1, ndim), dtype=np.int64)
+
+    comb_t = np.empty((len(indices), ndim, nsym), dtype=np.int64)
+    for i, tax in enumerate(taxes):
+        tax = np.array(tax, dtype=np.int64).reshape(len(tax), nsym)
+        comb_t[:, i, :] = tax[indices[:, i], :]
+
+    s = np.array(s, dtype=np.int64)
+    ind = np.all(sym.fuse(comb_t, s, 1) == n, axis=1)
+
+    tblocks = comb_t[ind]
+    iblocks = indices[ind]
+    icharges = [np.unique(iblocks[:, i]).tolist() for i in range(ndim)]
+    return tblocks, iblocks, icharges
+
+
+def find_index(tset, tt, sorted=True):
+    rs, *cs = tset.shape
+    cp = np.prod(cs, dtype=np.int64)
+    if not isinstance(tt, np.ndarray):
+        tt = np.array(tt, dtype=np.int64)
+    if cp == 0 and rs == 1 and tt.size == 0:
+        return 0
+    elif cp > 0 and rs > 0:
+        tset = tset.reshape(rs, cp)
+        tt = tt.reshape(cp)
+        struct_dt = np.dtype([('', tset.dtype)] * cp)
+        tset_view = np.ascontiguousarray(tset).view(struct_dt).ravel()
+        tt_view = np.ascontiguousarray(tt).view(struct_dt).ravel()
+        if not sorted:
+            ind = np.where(tset_view == tt_view)[0]
+            if len(ind) == 1:
+                return ind[0]
+        else:
+            ind = np.searchsorted(tset_view, tt_view)[0]
+            if ind < len(tset) and np.array_equal(tset[ind], tt):
+                return ind
+    raise ValueError()
+
+
+def argsort_t(tset):
+    rs, *cs = tset.shape
+    cp = np.prod(cs, dtype=np.int64)
+    if rs == 0:
+        return np.array([], dtype=np.int64)
+    if cp == 0 and rs == 1:
+        return np.array([0], dtype=np.int64)
+    tset = tset.reshape(rs, cp)
+    struct_dt = np.dtype([('', tset.dtype)] * cp)
+    tset_view = np.ascontiguousarray(tset).view(struct_dt).ravel()
+    return np.argsort(tset_view)
+
+
+def find_matching_indices(tset1, tset2, both=True):
+    rs1, *cs1 = tset1.shape
+    rs2, *cs2 = tset2.shape
+    assert cs1 == cs2, "Sanity check. Contact developers."
+    cp = np.prod(cs1, dtype=np.int64)
+    if cp == 0 and rs1 == 1 and rs2 == 1:
+        ind1 = ind2 = np.array([0], dtype=np.int64)
+    elif cp > 0 and rs1 > 0 and rs2 > 0:
+        tset1 = tset1.reshape(rs1, cp)
+        tset2 = tset2.reshape(rs2, cp)
+        struct_dt = np.dtype([('', tset1.dtype)] * cp)
+        tset1_view = np.ascontiguousarray(tset1).view(struct_dt).ravel()
+        tset2_view = np.ascontiguousarray(tset2).view(struct_dt).ravel()
+
+        ind1 = np.searchsorted(tset1_view, tset2_view)
+        mask = ind1 < rs1
+        safe_ind = np.where(mask, ind1, 0)
+        mask = mask & (tset1_view[safe_ind] == tset2_view)
+        ind1 = ind1[mask]
+        if both:
+            ind2 = np.flatnonzero(mask)
+    else:
+        ind1 = ind2 = np.array([], dtype=np.int64)
+    return (ind1, ind2) if both else ind1

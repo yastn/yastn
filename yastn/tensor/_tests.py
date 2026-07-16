@@ -13,12 +13,10 @@
 # limitations under the License.
 # ==============================================================================
 """ Testing and controls. """
-from functools import reduce
-from operator import mul
-
 import numpy as np
 
-from ._auxiliary import _flatten, _unpack_axes, _struct
+from ._auxiliary import _flatten, _unpack_axes, _struct, get_blocks
+from ._legbasic import LegBasic
 
 __all__ = ['are_independent', 'is_consistent', 'YastnError']
 
@@ -37,17 +35,6 @@ def _test_can_be_combined(a, b):
         raise YastnError('Two tensors have different assigment of fermionic statistics.')
     if a.config.backend.BACKEND_ID != b.config.backend.BACKEND_ID:
         raise YastnError('Two tensors have different backends.')
-
-
-def _test_tD_consistency(struct):
-    tset = np.array(struct.t, dtype=np.int64).reshape((len(struct.t), len(struct.s), len(struct.n)))
-    Dset = np.array(struct.D, dtype=np.int64).reshape((len(struct.D), len(struct.s)))
-    for i in range(len(struct.s)):
-        ti = list(map(tuple, tset[:, i, :].reshape(len(tset), len(struct.n)).tolist()))
-        Di = Dset[:, i].tolist()
-        tDi = list(zip(ti, Di))
-        if len(set(ti)) != len(set(tDi)):
-            raise YastnError('Inconsistent assignment of bond dimension to some charge.')
 
 
 def _unpack_trans_test_axes_pair(a, b, sgn=1, axes=None):
@@ -79,7 +66,7 @@ def _unpack_trans_test_axes_pair(a, b, sgn=1, axes=None):
     haxes = (tuple(a.trans[ax] for ax in ua),
              tuple(b.trans[ax] for ax in ub))
 
-    if not all(a.struct.s[i1] == sgn * b.struct.s[i2] for i1, i2 in zip(*haxes)):
+    if not all(a.struct.legs[i1].s == sgn * b.struct.legs[i2].s for i1, i2 in zip(*haxes)):
         raise YastnError('Signatures do not match.')
 
     if any(a.mfs[i1] != b.mfs[i2] for i1, i2 in zip(*axes)):
@@ -117,70 +104,29 @@ def are_independent(a, b, independent=True):
 def is_consistent(a):
     """
     Test if yastn tensor does not contain inconsistent structures
-
-    Check that:
-    1) tset and Dset correspond to A
-    2) tset follow symmetry rule f(s@t)==n
-    3) block dimensions are consistent (this requires config.test=True)
     """
+    bl = get_blocks(a.config.sym, a.struct)
+    assert a.config.backend.get_shape(a._data) == (bl.size,)
 
-    Dtot = 0
-    for slc in a.slices:
-        Dtot += slc.Dp
-        assert slc.D[0] == slc.Dp if a.isdiag else reduce(mul, slc.D, 1) == slc.Dp
-
-    assert a.config.backend.get_shape(a._data) == (Dtot,)
-    assert a.struct.size == Dtot
-
-    assert len(a.struct.t) == len(a.struct.D)
-    assert len(a.struct.t) == len(a.slices)
-
-    for i in range(len(a.struct.t) - 1):
-        assert a.struct.t[i] < a.struct.t[i + 1]
-
-    tset = np.array(a.struct.t, dtype=np.int64).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
-    sa = np.array(a.struct.s, dtype=np.int64)
-    na = np.array(a.struct.n, dtype=np.int64)
-    assert np.all(a.config.sym.fuse(tset, sa, 1) == na), 'charges of some block do not satisfy symmetry condition'
-    _test_tD_consistency(a.struct)
-    for s, hf in zip(a.struct.s, a.hfs):
-        assert s == hf.s[0]
+    for leg, hf in zip(a.struct.legs, a.hfs):
+        assert leg.s == hf.s[0]
         assert len(hf.tree) == len(hf.op)
         assert len(hf.tree) == len(hf.s)
         assert len(hf.tree) == len(hf.t) + 1
         assert len(hf.tree) == len(hf.D) + 1
         assert all(y in ('p', 's') if x > 1 else 'n' for x, y in zip(hf.tree, hf.op))
     # test that all elements of tensor are python int types
-    _test_struct_types(a.struct)
+    assert isinstance(a.struct, _struct)
+    assert isinstance(a.struct.legs, tuple)
+    for leg in a.struct.legs:
+        assert isinstance(leg, LegBasic)
+        assert isinstance(leg.s, int)
+        assert leg.s in (-1, 1)
+        assert isinstance(leg.t, tuple)
+        assert isinstance(leg.D, tuple)
+        assert all(isinstance(x, int) for tt in leg.t for x in tt)
+        assert all(isinstance(x, int) for x in leg.D)
+    assert isinstance(a.struct.n, tuple)
+    assert all(isinstance(x, int) for x in a.struct.n)
+    assert isinstance(a.struct.isdiag, bool)
     return True
-
-
-def _test_struct_types(struct):
-    assert isinstance(struct, _struct)
-    assert isinstance(struct.s, tuple)
-    assert all(isinstance(x, int) for x in struct.s)
-    assert isinstance(struct.n, tuple)
-    assert all(isinstance(x, int) for x in struct.n)
-    assert isinstance(struct.diag, bool)
-    assert isinstance(struct.t, tuple)
-    assert all(isinstance(x, tuple) for x in struct.t)
-    assert all(isinstance(y, int) for x in struct.t for y in x)
-    assert isinstance(struct.D, tuple)
-    assert all(isinstance(x, tuple) for x in struct.D)
-    assert all(isinstance(y, int) for x in struct.D for y in x)
-    assert isinstance(struct.D, tuple)
-    assert isinstance(struct.size, int)
-
-
-def _get_tD_legs(struct):
-    """ different views on struct.t and struct.D """
-    lt, ndim_n, nsym = len(struct.t), len(struct.s), len(struct.n)
-    tset = np.array(struct.t, dtype=np.int64).reshape(lt, ndim_n, nsym)
-    Dset = np.array(struct.D, dtype=np.int64).reshape(lt, ndim_n)
-    tD_legs = [sorted(set((tuple(t), D) for t, D in zip(tset[:, n, :].tolist(), Dset[:, n].tolist()))) for n in range(ndim_n)]
-    tD_dict = [dict(tD) for tD in tD_legs]
-    if any(len(x) != len(y) for x, y in zip(tD_legs, tD_dict)):
-        raise YastnError('Bond dimensions related to some charge are not consistent.')
-    tlegs = [tuple(tD.keys()) for tD in tD_dict]
-    Dlegs = [tuple(tD.values()) for tD in tD_dict]
-    return tlegs, Dlegs, tD_dict

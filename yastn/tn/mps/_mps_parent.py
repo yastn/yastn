@@ -14,9 +14,8 @@
 # ==============================================================================
 """ MpsMpoParent structure and basic methods common for OBC and PBC. """
 from __future__ import annotations
-from numbers import Number, Integral
+from numbers import Integral
 from typing import Iterator, Sequence
-from warnings import warn
 
 from ...tensor import YastnError, Tensor, Leg
 from ...tn.fpeps._doublePepsTensor import DoublePepsTensor
@@ -292,30 +291,6 @@ class _MpsMpoParent:
         return [self.A[n].get_legs(axes=1) for n in self.sweep(to='last')]
 
 
-    def save_to_dict(self) -> dict[str, dict | Number]:
-        r"""
-        Serialize MPS/MPO into a dictionary.
-
-        !!! This method is deprecated; use to_dict() instead !!!
-
-        Each element represents serialized :class:`yastn.Tensor`
-        (see, :meth:`yastn.Tensor.save_to_dict`) of the MPS/MPO.
-        Absorbs central block if it exists.
-        """
-        warn('This method is deprecated; use to_dict() instead.', DeprecationWarning, stacklevel=2)
-
-        psi = self.shallow_copy()
-        psi.absorb_central_()  # make sure central block is eliminated
-        out_dict = {
-            'N': psi.N,
-            'nr_phys': psi.nr_phys,
-            'factor': psi.factor, #.item(),
-            'A': {}
-        }
-        for n in psi.sweep(to='last'):
-            out_dict['A'][n] = psi[n].save_to_dict()
-        return out_dict
-
     def save_to_hdf5(self, file, my_address):
         r"""
         Save MPS/MPO into a HDF5 file.
@@ -370,16 +345,6 @@ class _MpsMpoParent:
         De-serializes MPS or MPO from the dictionary ``d``.
         See :meth:`yastn.Tensor.from_dict` for further description.
         """
-        if 'dict_ver' not in d:  # d from a legacy method save_to_dict
-            nr_phys = d['nr_phys']
-            N = d['N'] if 'N' in d else len(d['A'])  # backwards compatibility
-            out_mps = cls(N, nr_phys=nr_phys)
-            if 'factor' in d:  # backwards compatibility
-                out_mps.factor = d['factor']
-            for n in range(out_mps.N):
-                out_mps.A[n] = Tensor.from_dict(d=d['A'][n], config=config)
-            return out_mps
-
         if d['dict_ver'] == 1:
             if cls.__name__ != d['type']:
                 raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")

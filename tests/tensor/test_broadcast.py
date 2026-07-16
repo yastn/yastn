@@ -170,7 +170,7 @@ def test_broadcast_exceptions(config_kwargs):
         _ = a.broadcast(bhf, axes=1)
         # Second tensor`s leg specified by axes cannot be fused.
     with pytest.raises(yastn.YastnError):
-        a.broadcast(b, axes=1)  # Bond dimensions do not match.
+        a.broadcast(b, axes=1)  # Bond dimensions of some charges do not match.
     with pytest.raises(yastn.YastnError):
         _, _ = a.broadcast(b, b, axes=(1, 1, 1))
         # There should be exactly one axes for each tensor to be projected.

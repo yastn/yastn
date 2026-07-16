@@ -84,7 +84,7 @@ def test_syntax_create_empty_tensor_and_fill(config_kwargs):
     # sector 2 on 3rd leg throws an error.
     #
     with pytest.raises(yastn.YastnError,
-                       match="Inconsistent assignment of bond dimension to some charge."):
+                       match="Provided Ds is not consistent with dimensions of existing legs."):
         d.set_block(ts=(2, 1, 2, 1), Ds=(3, 3, 10, 2), val='rand')
 
 
@@ -120,7 +120,7 @@ def test_syntax_basic_algebra(config_kwargs):
     c = yastn.ones(config=config_U1, legs=legs)
 
     with pytest.raises(yastn.YastnError,
-                       match="Bond dimensions do not match."):
+                       match="Bond dimensions of some charges do not match."):
         tensor = a + c
 
     #
@@ -359,7 +359,7 @@ def test_syntax_noDocs(config_kwargs):
     a.get_shape(axes=2)
     a.get_dtype()
     a.dtype
-    a.num_blocks
+    a.nblocks
 
     # leg retrival
     legs = a.get_legs()
