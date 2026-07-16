@@ -387,7 +387,7 @@ def _meta_svd(sym, struct, sU, nU, k_block):
         ('slS', np.int64, (2,)),
         ('slV', np.int64, (2,)),
         ('DV',  np.int64, (2,))])
-    meta = np.hstack([bl_a.slc[ind_a], bl_a.D[ind_a], bl_U.slc[inds], bl_U.D[inds], bl_S.slc, bl_V.slc, bl_V.D], dtype=np.int64)
+    meta = np.hstack([bl_a.slc[ind_a], bl_a.D[ind_a], bl_U.slc[inds], bl_U.D[inds], bl_S.slc, bl_V.slc, bl_V.D]).astype(np.int64, copy=False)
     meta = meta.view(meta_dt).reshape(-1)
     sizes = (bl_U.size, bl_S.size, bl_V.size)
     return meta, sizes, bl_U.struct, bl_S.struct, bl_V.struct
@@ -792,7 +792,7 @@ def _meta_qr(sym, struct, sQ):
         ('DQ',  np.int64, (2,)),
         ('slR', np.int64, (2,)),
         ('DR',  np.int64, (2,))])
-    meta = np.hstack([bl_a.slc[inds], bl_a.D[inds], bl_Q.slc[inds], bl_Q.D[inds], bl_R.slc, bl_R.D], dtype=np.int64)
+    meta = np.hstack([bl_a.slc[inds], bl_a.D[inds], bl_Q.slc[inds], bl_Q.D[inds], bl_R.slc, bl_R.D]).astype(np.int64, copy=False)
     meta = meta.view(meta_dt).reshape(-1)
     sizes = (bl_Q.size, bl_R.size)
     return meta, sizes, bl_Q.struct, bl_R.struct
