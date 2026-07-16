@@ -57,23 +57,32 @@ def _deserialize_yastn(d, config):
     return Tensor.from_dict(d, config=config)
 
 
+def _freeze(obj):
+    """Recursively turn dicts and lists into hashable tuples."""
+    if isinstance(obj, dict):
+        return tuple((k, _freeze(v)) for k, v in sorted(obj.items()))
+    if isinstance(obj, (list, tuple)):
+        return tuple(_freeze(v) for v in obj)
+    return obj
+
+
 def _build_cache_key(input_dicts, unroll, ig_list, out_ig, optimize, swap, per_combo_path):
     """Stable key for the assembly-info cache. ``per_combo_path`` participates
     because cached entries carry ``dim_overrides_per_combo`` only when it was
     True at insertion time; reusing a False-time entry for a True-time call
-    would leave workers with a missing payload."""
-    input_keys = []
-    for d in input_dicts:
-        st = d['struct']
-        if isinstance(st, dict):
-            input_keys.append((st.get('s'), tuple(map(tuple, st.get('t', ()))),
-                               tuple(map(tuple, st.get('D', ()))), st.get('n')))
-        else:
-            input_keys.append((st.s, st.t, st.D, st.n))
+    would leave workers with a missing payload.
+
+    Each input contributes all of its serialized metadata (leg-first struct,
+    pending transpose, fusion history) except the data buffer — all of it
+    determines the contraction's block structure, so any difference must miss
+    the cache."""
+    input_keys = tuple(
+        _freeze({k: v for k, v in d.items() if k != 'data'}) for d in input_dicts
+    )
     unroll_key = tuple(sorted(
         (str(k), tuple((sl.t, sl.D) for sl in sls)) for k, sls in unroll.items()
     ))
-    return (tuple(input_keys), unroll_key,
+    return (input_keys, unroll_key,
             tuple(tuple(ig) for ig in ig_list), tuple(out_ig),
             str(optimize), str(swap), bool(per_combo_path))
 
@@ -390,12 +399,16 @@ class _MultiprocSlicedUnrollFunction(torch.autograd.Function):
 
         n_active = sum(1 for a in worker_assignments if a)
         per_worker_partials = []  # list of {key: serialized yastn dict}
-        for _ in range(n_active):
+        while len(per_worker_partials) < n_active:
             msg = pool.res_q.get()
-            if msg[0] != 'forward_done':
+            kind, _rank, _txn, payload = msg
+            if _txn != txn_id:
+                # leftover from an earlier transaction that raised mid-drain
+                log.warning("discarding stale %s message from txn %s", kind, _txn)
+                continue
+            if kind != 'forward_done':
                 raise RuntimeError(f"worker forward failed: {msg}")
-            _, _rank, _txn, partials_dict = msg
-            per_worker_partials.append(partials_dict)
+            per_worker_partials.append(payload)
 
         if per_key_struct is None:
             # Cache-miss path: workers returned RAW partials. Merge via yastn '+'
@@ -550,12 +563,16 @@ class _MultiprocSlicedUnrollFunction(torch.autograd.Function):
 
         n_active = sum(1 for a in worker_assignments if a)
         per_worker_input_grads = []
-        for _ in range(n_active):
+        while len(per_worker_input_grads) < n_active:
             msg = pool.res_q.get()
-            if msg[0] != 'backward_done':
+            kind, _rank, _txn, payload = msg
+            if _txn != txn_id:
+                # leftover from an earlier transaction that raised mid-drain
+                log.warning("discarding stale %s message from txn %s", kind, _txn)
+                continue
+            if kind != 'backward_done':
                 raise RuntimeError(f"worker backward failed: {msg}")
-            _, _rank, _txn, grads = msg
-            per_worker_input_grads.append(grads)
+            per_worker_input_grads.append(payload)
 
         # Sum per-input grads across workers. Workers may live on different
         # GPUs, so gather each contribution to the original (input) device
