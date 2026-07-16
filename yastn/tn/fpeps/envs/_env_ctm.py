@@ -155,8 +155,8 @@ class EnvCTM():
         Data of environment tensors in the new environment is indepedent
         from the originals.
         """
-        #TODO Ket ?
-        env = type(self)(psi=self.psi.bra.to(device=device, dtype=dtype, **kwargs), init=None)
+        #TODO Bra ?
+        env = type(self)(psi=self.psi.ket.to(device=device, dtype=dtype, **kwargs), init=None)
         env.env = self.env.to(device=device, dtype=dtype, **kwargs)
         env.proj = self.proj.to(device=device, dtype=dtype, **kwargs)
         return env
@@ -996,7 +996,9 @@ class EnvCTM():
         return len(not_consistent) == 0
 
     from ._env_ctm_measure import measure_1site, measure_nn, measure_2x2, measure_line, \
-        measure_nsite, measure_2site, measure_nsite_exact, sample, transfer_matrix_spectrum
+        measure_nsite, measure_2site, measure_nsite_exact, measure_nsite_exact_oe, \
+        measure_nsite_norm_exact_oe, measure_nsite_numerator_exact_oe, \
+        sample, transfer_matrix_spectrum
 
 
 def legs_consistent_(out, env_legs, i0, l0, i1, l1):
