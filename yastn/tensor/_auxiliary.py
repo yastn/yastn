@@ -24,7 +24,7 @@ import numpy as np
 from ._legbasic import LegBasic
 from ..sym import sym_none
 
-__all__ = ['_config', '_struct', 'get_blocks', 'sign_canonical_order', 'swap_charges']
+__all__ = ['_config', '_struct', 'get_blocks', 'sign_canonical_order', 'swap_charges', 'find_matching_indices']
 
 
 class _config(NamedTuple):
