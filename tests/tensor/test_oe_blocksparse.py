@@ -15,9 +15,27 @@
 """Tests for yastn.get_contraction_path and yastn.contract_with_unroll."""
 import pytest
 import yastn
+import yastn.tensor.oe_blocksparse as oe_blocksparse
 from opt_einsum.contract import PathInfo
+from yastn.tensor._einsum import ncon_prefilter
+from yastn.tensor.oe_blocksparse import _filter_tensor_blocks
+from yastn.tensor._auxiliary import get_blocks
 
 tol = 1e-10
+
+
+def _struct_t(t):
+    """leg_first: nested block-charge tuples for ncon_prefilter (from get_blocks)."""
+    bl = get_blocks(t.config.sym, t.struct)
+    return tuple(tuple(map(tuple, blk)) for blk in bl.t.tolist())
+
+
+def _nblocks(t):
+    return get_blocks(t.config.sym, t.struct).nblocks
+
+
+def _data_size(t):
+    return get_blocks(t.config.sym, t.struct).size
 
 torch_test = pytest.mark.skipif("'torch' not in config.getoption('--backend')",
                                 reason="Uses torch.utils.checkpoint.")
@@ -295,6 +313,381 @@ def test_sliced_unroll_output_index(config_kwargs):
     assert yastn.norm(result_both - expected) < tol
 
 
+def test_prefilter_meta_fused_axes(config_kwargs):
+    """Prefilter expands meta-fused user axes before comparing block charges."""
+    cfg = yastn.make_config(sym='U1', **config_kwargs)
+
+    leg_u0 = yastn.Leg(cfg, s=1, t=(1,), D=(1,))
+    leg_u1 = yastn.Leg(cfg, s=1, t=(0,), D=(1,))
+    leg_v = yastn.Leg(cfg, s=1, t=(1,), D=(1,))
+
+    a = yastn.ones(config=cfg, legs=[leg_u0, leg_u1, leg_v.conj()], n=0)
+    af = a.fuse_legs(axes=((0, 1), 2), mode='meta')
+    b = yastn.ones(config=cfg, legs=[leg_v], n=1)
+
+    expected = yastn.ncon([af, b], [(-1, 1), (1,)])
+    assert float(expected.norm()) > tol
+
+    ts_meta = {
+        1: (_struct_t(b), b.ndim_n, b.trans, b.mfs),
+        0: (_struct_t(af), af.ndim_n, af.trans, af.mfs),
+    }
+    trim = ncon_prefilter(ts_meta, ((-1, 1), (1,)), cfg.sym.NSYM)
+
+    assert trim is not None
+    assert trim[0] in (None, frozenset({0}))
+    assert trim[1] in (None, frozenset({0}))
+
+
+def test_prefilter_nonzero_output_trims_blocks(config_kwargs):
+    """Prefilter keeps non-zero contractions and trims blocks that cannot match."""
+    cfg = yastn.make_config(sym='U1', **config_kwargs)
+
+    leg_i = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
+    leg_j_full = yastn.Leg(cfg, s=1, t=(0, 1), D=(3, 3))
+    leg_j_partial = yastn.Leg(cfg, s=1, t=(0,), D=(3,))
+    leg_k = yastn.Leg(cfg, s=1, t=(0,), D=(2,))
+
+    a = yastn.rand(config=cfg, legs=[leg_i, leg_j_full.conj()], n=0)
+    b = yastn.rand(config=cfg, legs=[leg_j_partial, leg_k.conj()], n=0)
+
+    trim = ncon_prefilter(
+        {
+            0: (_struct_t(a), a.ndim_n, a.trans, a.mfs),
+            1: (_struct_t(b), b.ndim_n, b.trans, b.mfs),
+        },
+        ((-1, 1), (1, -2)),
+        cfg.sym.NSYM,
+    )
+
+    assert trim is not None
+    assert trim[0] is not None and len(trim[0]) < _nblocks(a)
+    assert trim[1] is None or len(trim[1]) == _nblocks(b)
+
+
+def test_output_unroll_all_prefiltered_zero(config_kwargs):
+    """All-skipped output-unrolled slices should raise a no-valid-charges error."""
+    cfg = yastn.make_config(sym='U1', **config_kwargs)
+
+    leg_i = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 1))
+    leg_j_left = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 1))
+    leg_j_right = yastn.Leg(cfg, s=1, t=(2,), D=(1,))
+    leg_k = yastn.Leg(cfg, s=1, t=(0,), D=(1,))
+
+    a = yastn.ones(config=cfg, legs=[leg_i, leg_j_left.conj()], n=0)
+    b = yastn.ones(config=cfg, legs=[leg_j_right, leg_k.conj()], n=2)
+
+    expected = yastn.ncon([a, b], [[-1, 1], [1, -2]])
+    assert float(expected.norm()) < tol
+
+    unroll = {'i': yastn.make_sliced_legs(leg_i)}
+    path, _ = yastn.get_contraction_path(
+        a, ('i', 'j'), b, ('j', 'k'), ('i', 'k'), unroll=unroll
+    )
+
+    with pytest.raises(yastn.YastnError, match="No valid charge sectors found"):
+        yastn.contract_with_unroll(
+            a, ('i', 'j'), b, ('j', 'k'), ('i', 'k'),
+            unroll=unroll, optimize=path,
+        )
+
+
+def test_output_unroll_partial_prefiltered_zero(config_kwargs):
+    """Skipping an output-unroll position should preserve the numerical result."""
+    cfg = yastn.make_config(sym='U1', **config_kwargs)
+
+    leg_i = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 1))
+    leg_j_full = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 1))
+    leg_j0 = yastn.Leg(cfg, s=1, t=(0,), D=(1,))
+    leg_k = yastn.Leg(cfg, s=1, t=(0,), D=(1,))
+
+    a = yastn.ones(config=cfg, legs=[leg_i, leg_j_full.conj()], n=0)
+    b = yastn.ones(config=cfg, legs=[leg_j0, leg_k.conj()], n=0)
+
+    expected = yastn.ncon([a, b], [[-1, 1], [1, -2]])
+
+    unroll = {'i': yastn.make_sliced_legs(leg_i)}
+    path, _ = yastn.get_contraction_path(
+        a, ('i', 'j'), b, ('j', 'k'), ('i', 'k'), unroll=unroll
+    )
+
+    result = yastn.contract_with_unroll(
+        a, ('i', 'j'), b, ('j', 'k'), ('i', 'k'),
+        unroll=unroll, optimize=path,
+    )
+
+    assert float((result - expected).norm()) < tol
+
+
+def test_output_unroll_backfills_skipped_zero_positions(config_kwargs, monkeypatch):
+    """Skipping one output position should preserve the numerical result."""
+    cfg = yastn.make_config(sym='U1', **config_kwargs)
+
+    leg_i = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 1))
+    leg_j = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 1))
+    leg_k = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 1))
+
+    a = yastn.ones(config=cfg, legs=[leg_i, leg_j.conj()], n=0)
+    b = yastn.ones(config=cfg, legs=[leg_j, leg_k.conj()], n=0)
+    a[(1, 1)] *= 0  # output sector i=1 should survive as an explicit zero block
+
+    expected = yastn.ncon([a, b], [[-1, 1], [1, -2]])
+    assert expected.get_legs(axes=0).t == ((0,), (1,))
+
+    original_prefilter = oe_blocksparse.ncon_prefilter
+
+    def fake_prefilter(ts_meta, inds, nsym):
+        # Simulate prefilter skipping the i=1 output slice while keeping i=0.
+        i_charges = {t[:nsym] for t in ts_meta[0][0]}
+        if i_charges == {(1,)}:
+            return None
+        return original_prefilter(ts_meta, inds, nsym)
+
+    monkeypatch.setattr(oe_blocksparse, "ncon_prefilter", fake_prefilter)
+
+    unroll = {'i': yastn.make_sliced_legs(leg_i)}
+    path, _ = yastn.get_contraction_path(
+        a, ('i', 'j'), b, ('j', 'k'), ('i', 'k'), unroll=unroll
+    )
+
+    result = yastn.contract_with_unroll(
+        a, ('i', 'j'), b, ('j', 'k'), ('i', 'k'),
+        unroll=unroll, optimize=path,
+    )
+
+    assert float((result - expected).norm()) < tol
+
+
+def test_contracted_unroll_all_skipped_raises(config_kwargs, monkeypatch):
+    """All skipped contracted-only slices should raise a no-valid-charges error."""
+    cfg = yastn.make_config(sym='U1', **config_kwargs)
+
+    leg_i = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 1))
+    leg_j = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 1))
+    leg_k = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 1))
+
+    a = yastn.ones(config=cfg, legs=[leg_i, leg_j.conj()], n=0) * 0
+    b = yastn.ones(config=cfg, legs=[leg_j, leg_k.conj()], n=0) * 0
+
+    monkeypatch.setattr(oe_blocksparse, "ncon_prefilter", lambda *args, **kwargs: None)
+
+    unroll = {'j': yastn.make_sliced_legs(leg_j)}
+    path, _ = yastn.get_contraction_path(
+        a, ('i', 'j'), b, ('j', 'k'), ('i', 'k'), unroll=unroll
+    )
+    with pytest.raises(yastn.YastnError, match="No valid charge sectors found"):
+        yastn.contract_with_unroll(
+            a, ('i', 'j'), b, ('j', 'k'), ('i', 'k'),
+            unroll=unroll, optimize=path,
+        )
+
+
+def test_contracted_unroll_mixed_skipped_preserves_numeric_result(config_kwargs, monkeypatch):
+    """Mixed surviving and skipped contracted-only slices should preserve the numeric result."""
+    cfg = yastn.make_config(sym='U1', **config_kwargs)
+
+    leg_i = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 1))
+    leg_j = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 1))
+    leg_x = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 1))
+    leg_k = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 1))
+
+    a = yastn.zeros(config=cfg, legs=[leg_i, leg_x.conj(), leg_j], n=0)
+    a.set_block(ts=(0, 0, 0), Ds=(1, 1, 1), val='zeros')
+    a.set_block(ts=(0, 1, 1), Ds=(1, 1, 1), val='zeros')
+    a.set_block(ts=(1, 1, 0), Ds=(1, 1, 1), val='zeros')
+
+    b = yastn.zeros(config=cfg, legs=[leg_j.conj(), leg_k], n=0)
+    b.set_block(ts=(0, 0), Ds=(1, 1), val='zeros')
+    b.set_block(ts=(1, 1), Ds=(1, 1), val='zeros')
+
+    expected = yastn.ncon([a, b], [[-1, -2, 1], [1, -3]])
+
+    original_prefilter = oe_blocksparse.ncon_prefilter
+
+    def fake_prefilter(ts_meta, inds, nsym):
+        j_charges = {t[2 * nsym: 3 * nsym] for t in ts_meta[0][0]}
+        if j_charges == {(1,)}:
+            return None
+        return original_prefilter(ts_meta, inds, nsym)
+
+    monkeypatch.setattr(oe_blocksparse, "ncon_prefilter", fake_prefilter)
+
+    unroll = {'j': yastn.make_sliced_legs(leg_j)}
+    path, _ = yastn.get_contraction_path(
+        a, ('i', 'x', 'j'), b, ('j', 'k'), ('i', 'x', 'k'), unroll=unroll
+    )
+
+    result = yastn.contract_with_unroll(
+        a, ('i', 'x', 'j'), b, ('j', 'k'), ('i', 'x', 'k'),
+        unroll=unroll, optimize=path,
+    )
+
+    assert float((result - expected).norm()) < tol
+
+
+def test_output_unroll_missing_positions_preserve_numeric_result(config_kwargs, monkeypatch):
+    """Fully skipped output positions should still preserve the numeric result."""
+    cfg = yastn.make_config(sym='U1', **config_kwargs)
+
+    leg_i = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 1))
+    leg_x = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 1))
+    leg_j = yastn.Leg(cfg, s=1, t=(0, 1, 2), D=(1, 1, 1))
+    leg_k = yastn.Leg(cfg, s=1, t=(0, 1, 2), D=(1, 1, 1))
+
+    a = yastn.ones(config=cfg, legs=[leg_i, leg_x, leg_j.conj()], n=0) * 0
+    b = yastn.ones(config=cfg, legs=[leg_j, leg_k.conj()], n=0) * 0
+
+    expected = yastn.ncon([a, b], [[-1, -2, 1], [1, -3]])
+
+    original_prefilter = oe_blocksparse.ncon_prefilter
+
+    def fake_prefilter(ts_meta, inds, nsym):
+        i_charges = {t[:nsym] for t in ts_meta[0][0]}
+        if i_charges == {(0,)}:
+            return None
+        return original_prefilter(ts_meta, inds, nsym)
+
+    monkeypatch.setattr(oe_blocksparse, "ncon_prefilter", fake_prefilter)
+
+    unroll = {
+        'i': yastn.make_sliced_legs(leg_i),
+        'j': yastn.make_sliced_legs(leg_j),
+    }
+    path, _ = yastn.get_contraction_path(
+        a, ('i', 'x', 'j'), b, ('j', 'k'), ('i', 'x', 'k'), unroll=unroll
+    )
+    result = yastn.contract_with_unroll(
+        a, ('i', 'x', 'j'), b, ('j', 'k'), ('i', 'x', 'k'),
+        unroll=unroll, optimize=path,
+    )
+
+    assert float((result - expected).norm()) < tol
+
+
+def test_output_unroll_surviving_position_preserves_numeric_result(config_kwargs, monkeypatch):
+    """Skipped contracted slices should not change the surviving numeric result."""
+    cfg = yastn.make_config(sym='U1', **config_kwargs)
+
+    leg_i = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 1))
+    leg_j = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 1))
+    leg_x = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 1))
+    leg_k = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 1))
+
+    a = yastn.zeros(config=cfg, legs=[leg_i, leg_x.conj(), leg_j], n=0)
+    a.set_block(ts=(0, 0, 0), Ds=(1, 1, 1), val='zeros')
+    a.set_block(ts=(0, 1, 1), Ds=(1, 1, 1), val='zeros')
+    a.set_block(ts=(1, 1, 0), Ds=(1, 1, 1), val='zeros')
+
+    b = yastn.zeros(config=cfg, legs=[leg_j.conj(), leg_k], n=0)
+    b.set_block(ts=(0, 0), Ds=(1, 1), val='zeros')
+    b.set_block(ts=(1, 1), Ds=(1, 1), val='zeros')
+
+    expected = yastn.ncon([a, b], [[-1, -2, 1], [1, -3]])
+
+    original_prefilter = oe_blocksparse.ncon_prefilter
+
+    def fake_prefilter(ts_meta, inds, nsym):
+        i_charges = {t[:nsym] for t in ts_meta[0][0]}
+        j_charges = {t[2 * nsym: 3 * nsym] for t in ts_meta[0][0]}
+        if i_charges == {(0,)} and j_charges == {(1,)}:
+            return None
+        return original_prefilter(ts_meta, inds, nsym)
+
+    monkeypatch.setattr(oe_blocksparse, "ncon_prefilter", fake_prefilter)
+
+    unroll = {
+        'i': yastn.make_sliced_legs(leg_i),
+        'j': yastn.make_sliced_legs(leg_j),
+    }
+    path, _ = yastn.get_contraction_path(
+        a, ('i', 'x', 'j'), b, ('j', 'k'), ('i', 'x', 'k'), unroll=unroll
+    )
+    result = yastn.contract_with_unroll(
+        a, ('i', 'x', 'j'), b, ('j', 'k'), ('i', 'x', 'k'),
+        unroll=unroll, optimize=path,
+    )
+
+    assert float((result - expected).norm()) < tol
+
+
+def test_checkpoint_loop_applies_prefilter_trim(config_kwargs, monkeypatch):
+    """Checkpointed iterations should receive prefilter trims for in-checkpoint application."""
+    cfg = yastn.make_config(sym='U1', **config_kwargs)
+    if not hasattr(cfg.backend, "checkpoint"):
+        pytest.skip("Uses torch.utils.checkpoint.")
+
+    leg_i = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 1))
+    leg_j_full = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 1))
+    leg_j0 = yastn.Leg(cfg, s=1, t=(0,), D=(1,))
+    leg_k = yastn.Leg(cfg, s=1, t=(0,), D=(1,))
+
+    a = yastn.ones(config=cfg, legs=[leg_i, leg_j_full.conj()], n=0)
+    b = yastn.ones(config=cfg, legs=[leg_j0, leg_k.conj()], n=0)
+
+    # leg_first: the checkpointed iteration runs _contract_single_combo ->
+    # _checkpointed_call(base_tensors, _do_contract); the prefilter trim is
+    # applied by _filter_tensor_blocks *inside* _do_contract, i.e. within the
+    # checkpointed region (recomputed on backward). Validate that the trim is
+    # applied while execution is inside _checkpointed_call.
+    in_checkpoint = {'active': False}
+    trims_under_checkpoint = []
+
+    original_ckpt = oe_blocksparse._checkpointed_call
+    def wrapped_ckpt(tensors, do_contract):
+        in_checkpoint['active'] = True
+        try:
+            return original_ckpt(tensors, do_contract)
+        finally:
+            in_checkpoint['active'] = False
+
+    original_filter = oe_blocksparse._filter_tensor_blocks
+    def wrapped_filter(tensor, block_indices):
+        if in_checkpoint['active']:
+            trims_under_checkpoint.append(block_indices)
+        return original_filter(tensor, block_indices)
+
+    def fake_prefilter(ts_meta, inds, nsym):
+        trim = {tid: None for tid in ts_meta}
+        trim[0] = frozenset({0})
+        return trim
+
+    monkeypatch.setattr(oe_blocksparse, "_checkpointed_call", wrapped_ckpt)
+    monkeypatch.setattr(oe_blocksparse, "_filter_tensor_blocks", wrapped_filter)
+    monkeypatch.setattr(oe_blocksparse, "ncon_prefilter", fake_prefilter)
+
+    unroll = {'j': yastn.make_sliced_legs(leg_j_full)}
+    path, _ = yastn.get_contraction_path(
+        a, ('i', 'j'), b, ('j', 'k'), ('i', 'k'), unroll=unroll
+    )
+
+    result = yastn.contract_with_unroll(
+        a, ('i', 'j'), b, ('j', 'k'), ('i', 'k'),
+        unroll=unroll, optimize=path, checkpoint_loop=True,
+    )
+
+    expected = yastn.ncon([a, b], [[-1, 1], [1, -2]])
+
+    # the prefilter trim was applied *under* checkpointing, not just anywhere
+    assert frozenset({0}) in trims_under_checkpoint
+    assert result.get_legs(axes=0) == expected.get_legs(axes=0)
+    assert float((result - expected).norm()) < tol
+
+
+def test_filter_tensor_blocks_compacts_data_for_swap(config_kwargs):
+    """Trimmed tensors must remain structurally consistent under swap_gate."""
+    cfg = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
+    leg = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
+    tensor = yastn.rand(config=cfg, n=0, legs=[leg, leg.conj()])
+
+    trimmed = _filter_tensor_blocks(tensor, frozenset({0}))
+    assert _data_size(trimmed) == trimmed.config.backend.get_size(trimmed._data)
+    assert trimmed.is_consistent()
+
+    swapped = trimmed.swap_gate(axes=(0, 1))
+    assert _data_size(swapped) == swapped.config.backend.get_size(swapped._data)
+    assert swapped.is_consistent()
+
+
 # ---------------------------------------------------------------------------
 # 7. Block-structure diagnostics
 # ---------------------------------------------------------------------------
@@ -365,7 +758,7 @@ def test_partial_block_structure(config_kwargs):
     )
     assert yastn.norm(result2 - expected2) < tol
 
-    # --- (c) empty partial from incompatible (j,k) charges ---
+    # --- (c) no valid charge sectors for an incompatible (j,k) slice ---
     leg_j3 = yastn.Leg(cfg, s=1, t=(0, 1), D=(4, 4))
     leg_k3 = yastn.Leg(cfg, s=1, t=(0, 1), D=(3, 3))
     leg_l3 = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
@@ -379,218 +772,17 @@ def test_partial_block_structure(config_kwargs):
     # (j=sector0, k=sector1) is incompatible with B3 (n=0 requires j==k)
     sl_j0 = yastn.SlicedLeg(t=[(0,)], D=[4])
     sl_k1 = yastn.SlicedLeg(t=[(1,)], D=[3])
-    p_incompatible = yastn.contract_with_unroll(
-        A3, ('i', 'j'), B3, ('j', 'k'), C3, ('k', 'l'), ('i', 'l'),
-        unroll={'j': [sl_j0], 'k': [sl_k1]}, optimize=path3,
-    )
-    assert len(p_incompatible.get_blocks_charge()) == 0, "Incompatible charges → empty partial"
+    with pytest.raises(yastn.YastnError, match="No valid charge sectors found"):
+        yastn.contract_with_unroll(
+            A3, ('i', 'j'), B3, ('j', 'k'), C3, ('k', 'l'), ('i', 'l'),
+            unroll={'j': [sl_j0], 'k': [sl_k1]}, optimize=path3,
+        )
     result3 = yastn.contract_with_unroll(
         A3, ('i', 'j'), B3, ('j', 'k'), C3, ('k', 'l'), ('i', 'l'),
         unroll={'j': yastn.make_sliced_legs(leg_j3), 'k': yastn.make_sliced_legs(leg_k3)},
         optimize=path3,
     )
     assert yastn.norm(result3 - expected3) < tol
-
-
-# ---------------------------------------------------------------------------
-# 8. contract_with_unroll_compute_constants
-# ---------------------------------------------------------------------------
-
-from yastn.tensor.oe_blocksparse import contract_with_unroll_compute_constants
-
-
-def test_cwu_cc_no_constants(config_kwargs):
-    """All tensors have the unrolled index: no constants to pre-compute.
-    Falls back to _contract_with_sliced_unroll; result matches ncon."""
-    cfg = yastn.make_config(sym='U1', **config_kwargs)
-    leg_i = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_j = yastn.Leg(cfg, s=1, t=(0, 1), D=(3, 3))
-    leg_k = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    A = yastn.rand(config=cfg, legs=[leg_i, leg_j.conj()], n=0)
-    B = yastn.rand(config=cfg, legs=[leg_j, leg_k.conj()], n=0)
-
-    path, _ = yastn.get_contraction_path(A, ('i', 'j'), B, ('j', 'k'), ('i', 'k'))
-    expected = yastn.ncon([A, B], [[-1, 1], [1, -2]])
-
-    result = contract_with_unroll_compute_constants(
-        A, ('i', 'j'), B, ('j', 'k'), ('i', 'k'),
-        unroll={'j': yastn.make_sliced_legs(leg_j)},
-        optimize=path,
-    )
-    assert yastn.norm(result - expected) < tol
-
-
-def test_cwu_cc_one_constant(config_kwargs):
-    """One constant tensor (no unrolled index), two variable tensors.
-    Result matches both ncon and contract_with_unroll."""
-    cfg = yastn.make_config(sym='U1', **config_kwargs)
-    leg_i = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_j = yastn.Leg(cfg, s=1, t=(0, 1), D=(3, 3))
-    leg_k = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_l = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    A = yastn.rand(config=cfg, legs=[leg_i, leg_j.conj()], n=0)  # variable
-    B = yastn.rand(config=cfg, legs=[leg_j, leg_k.conj()], n=0)  # variable
-    C = yastn.rand(config=cfg, legs=[leg_k, leg_l.conj()], n=0)  # constant
-
-    path, _ = yastn.get_contraction_path(
-        A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), ('i', 'l')
-    )
-    expected = yastn.ncon([A, B, C], [[-1, 1], [1, 2], [2, -2]])
-
-    result_cc = contract_with_unroll_compute_constants(
-        A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), ('i', 'l'),
-        unroll={'j': yastn.make_sliced_legs(leg_j)},
-        optimize=path,
-    )
-    result_cu = yastn.contract_with_unroll(
-        A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), ('i', 'l'),
-        unroll={'j': yastn.make_sliced_legs(leg_j)},
-        optimize=path,
-    )
-    assert yastn.norm(result_cc - expected) < tol
-    assert yastn.norm(result_cc - result_cu) < tol
-
-    # Also works with intra-sector slicing on the unrolled index
-    result_is = contract_with_unroll_compute_constants(
-        A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), ('i', 'l'),
-        unroll={'j': _split_leg_intra(leg_j)},
-        optimize=path,
-    )
-    assert yastn.norm(result_is - expected) < tol
-
-
-def test_cwu_cc_connected_constants(config_kwargs):
-    """Two constants that share an index form one connected component and are
-    pre-contracted together once before the loop.
-    Network: A(i,j) x B(j,k) x C(k,l) x D(l,m) -> (i,m)
-    Unroll j: A, B are variable; C, D are constant and share index l."""
-    cfg = yastn.make_config(sym='U1', **config_kwargs)
-    leg_i = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_j = yastn.Leg(cfg, s=1, t=(0, 1), D=(3, 3))
-    leg_k = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_l = yastn.Leg(cfg, s=1, t=(0, 1), D=(3, 3))
-    leg_m = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    A = yastn.rand(config=cfg, legs=[leg_i, leg_j.conj()], n=0)  # variable
-    B = yastn.rand(config=cfg, legs=[leg_j, leg_k.conj()], n=0)  # variable
-    C = yastn.rand(config=cfg, legs=[leg_k, leg_l.conj()], n=0)  # constant
-    D = yastn.rand(config=cfg, legs=[leg_l, leg_m.conj()], n=0)  # constant, shares l with C
-
-    path, _ = yastn.get_contraction_path(
-        A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), D, ('l', 'm'), ('i', 'm')
-    )
-    expected = yastn.ncon([A, B, C, D], [[-1, 1], [1, 2], [2, 3], [3, -2]])
-
-    result_cc = contract_with_unroll_compute_constants(
-        A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), D, ('l', 'm'), ('i', 'm'),
-        unroll={'j': yastn.make_sliced_legs(leg_j)},
-        optimize=path,
-    )
-    result_cu = yastn.contract_with_unroll(
-        A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), D, ('l', 'm'), ('i', 'm'),
-        unroll={'j': yastn.make_sliced_legs(leg_j)},
-        optimize=path,
-    )
-    assert yastn.norm(result_cc - expected) < tol
-    assert yastn.norm(result_cc - result_cu) < tol
-
-
-def test_cwu_cc_disconnected_constants(config_kwargs):
-    """Two constant tensors with no shared index form two separate components
-    and are pre-contracted independently (no large outer product intermediate).
-    Network: A(i,j) x B(j,k) x C(k,l) x D(m,n) -> (i,l,m,n)
-    Unroll j: A, B variable; C and D are constants in separate components."""
-    cfg = yastn.make_config(sym='U1', **config_kwargs)
-    leg_i = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_j = yastn.Leg(cfg, s=1, t=(0, 1), D=(3, 3))
-    leg_k = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_l = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_m = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_n = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    A = yastn.rand(config=cfg, legs=[leg_i, leg_j.conj()], n=0)  # variable
-    B = yastn.rand(config=cfg, legs=[leg_j, leg_k.conj()], n=0)  # variable
-    C = yastn.rand(config=cfg, legs=[leg_k, leg_l.conj()], n=0)  # constant, component 1
-    D = yastn.rand(config=cfg, legs=[leg_m, leg_n.conj()], n=0)  # constant, component 2
-
-    path, _ = yastn.get_contraction_path(
-        A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), D, ('m', 'n'),
-        ('i', 'l', 'm', 'n'),
-    )
-    expected = yastn.ncon([A, B, C, D], [[-1, 1], [1, 2], [2, -2], [-3, -4]])
-
-    result_cc = contract_with_unroll_compute_constants(
-        A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), D, ('m', 'n'),
-        ('i', 'l', 'm', 'n'),
-        unroll={'j': yastn.make_sliced_legs(leg_j)},
-        optimize=path,
-    )
-    result_cu = yastn.contract_with_unroll(
-        A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), D, ('m', 'n'),
-        ('i', 'l', 'm', 'n'),
-        unroll={'j': yastn.make_sliced_legs(leg_j)},
-        optimize=path,
-    )
-    assert yastn.norm(result_cc - expected) < tol
-    assert yastn.norm(result_cc - result_cu) < tol
-
-
-def test_cwu_cc_three_constant_components(config_kwargs):
-    """Three constant components: one 2-tensor connected pair (C×D) and two
-    single-tensor components (E, F). All pre-contracted independently."""
-    cfg = yastn.make_config(sym='U1', **config_kwargs)
-    leg_i = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_j = yastn.Leg(cfg, s=1, t=(0, 1), D=(3, 3))
-    leg_k = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_l = yastn.Leg(cfg, s=1, t=(0, 1), D=(3, 3))
-    leg_m = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_p = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_q = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_r = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_s = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    A = yastn.rand(config=cfg, legs=[leg_i, leg_j.conj()], n=0)  # variable
-    B = yastn.rand(config=cfg, legs=[leg_j, leg_k.conj()], n=0)  # variable
-    C = yastn.rand(config=cfg, legs=[leg_k, leg_l.conj()], n=0)  # constant \
-    D = yastn.rand(config=cfg, legs=[leg_l, leg_m.conj()], n=0)  # constant /  component 1 (C-D chain)
-    E = yastn.rand(config=cfg, legs=[leg_p, leg_q.conj()], n=0)  # constant, component 2
-    F = yastn.rand(config=cfg, legs=[leg_r, leg_s.conj()], n=0)  # constant, component 3
-
-    path, _ = yastn.get_contraction_path(
-        A, ('i', 'j'), B, ('j', 'k'),
-        C, ('k', 'l'), D, ('l', 'm'),
-        E, ('p', 'q'), F, ('r', 's'),
-        ('i', 'm', 'p', 'q', 'r', 's'),
-    )
-    expected = yastn.ncon(
-        [A, B, C, D, E, F],
-        [[-1, 1], [1, 2], [2, 3], [3, -2], [-3, -4], [-5, -6]],
-    )
-
-    result_cc = contract_with_unroll_compute_constants(
-        A, ('i', 'j'), B, ('j', 'k'),
-        C, ('k', 'l'), D, ('l', 'm'),
-        E, ('p', 'q'), F, ('r', 's'),
-        ('i', 'm', 'p', 'q', 'r', 's'),
-        unroll={'j': yastn.make_sliced_legs(leg_j)},
-        optimize=path,
-    )
-    assert yastn.norm(result_cc - expected) < tol
-
-
-def test_cwu_cc_list_unroll_raises(config_kwargs):
-    """Passing unroll as a list raises ValueError (empty) or NotImplementedError (non-empty)."""
-    cfg = yastn.make_config(sym='U1', **config_kwargs)
-    (A, B), _ = _u1_chain(cfg, 2, 3, 2)
-    with pytest.raises(AssertionError):
-        contract_with_unroll_compute_constants(
-            A, ('i', 'j'), B, ('j', 'k'), ('i', 'k'),
-            unroll=[],
-            optimize=[(0, 1)],
-        )
-    with pytest.raises(AssertionError):
-        contract_with_unroll_compute_constants(
-            A, ('i', 'j'), B, ('j', 'k'), ('i', 'k'),
-            unroll=['j'],
-            optimize=[(0, 1)],
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -672,39 +864,6 @@ def test_path_sliced_result_correct(config_kwargs):
     assert yastn.norm(result - expected) < tol
 
 
-def test_cwu_cc_path_uses_sliced_sizes(config_kwargs):
-    """
-    contract_with_unroll_compute_constants with the fixed reduced_path call
-    (passing unroll dict instead of list) gives the correct result.
-
-    Network: A(i,j) x B(j,k) x C(k,l) x D(l,m) -> (i,m)
-    Unroll j: A, B are variable; C, D are constant and share index l.
-    The reduced network path is now computed with sliced sizes via the dict path.
-    """
-    cfg = yastn.make_config(sym='U1', **config_kwargs)
-    leg_i = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_j = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 5))  # unequal sectors
-    leg_k = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    leg_l = yastn.Leg(cfg, s=1, t=(0, 1), D=(3, 3))
-    leg_m = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
-    A = yastn.rand(config=cfg, legs=[leg_i, leg_j.conj()], n=0)  # variable
-    B = yastn.rand(config=cfg, legs=[leg_j, leg_k.conj()], n=0)  # variable
-    C = yastn.rand(config=cfg, legs=[leg_k, leg_l.conj()], n=0)  # constant
-    D = yastn.rand(config=cfg, legs=[leg_l, leg_m.conj()], n=0)  # constant, shares l with C
-
-    path, _ = yastn.get_contraction_path(
-        A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), D, ('l', 'm'), ('i', 'm')
-    )
-    expected = yastn.ncon([A, B, C, D], [[-1, 1], [1, 2], [2, 3], [3, -2]])
-
-    result = contract_with_unroll_compute_constants(
-        A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), D, ('l', 'm'), ('i', 'm'),
-        unroll={'j': yastn.make_sliced_legs(leg_j)},
-        optimize=path,
-    )
-    assert yastn.norm(result - expected) < tol
-
-
 # ---------------------------------------------------------------------------
 # 10. checkpoint_loop option
 # ---------------------------------------------------------------------------
@@ -712,7 +871,7 @@ def test_cwu_cc_path_uses_sliced_sizes(config_kwargs):
 @torch_test
 def test_checkpoint_loop(config_kwargs):
     """
-    contract_with_unroll and contract_with_unroll_compute_constants with
+    contract_with_unroll with
     checkpoint_loop=True produce the same result as without checkpointing.
 
     On the torch backend this exercises per-iteration torch.utils.checkpoint
@@ -741,13 +900,6 @@ def test_checkpoint_loop(config_kwargs):
     )
     assert yastn.norm(result_cu - expected) < tol
 
-    # contract_with_unroll_compute_constants with checkpoint_loop
-    result_cc = contract_with_unroll_compute_constants(
-        A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), ('i', 'l'),
-        unroll={'j': sliced_j}, optimize=path, checkpoint_loop=True,
-    )
-    assert yastn.norm(result_cc - expected) < tol
-
     # Also test with intra-sector slicing on the unrolled index
     leg_j2 = yastn.Leg(cfg, s=1, t=(0, 1), D=(4, 4))
     A2 = yastn.rand(config=cfg, legs=[leg_i, leg_j2.conj()], n=0)
@@ -764,3 +916,233 @@ def test_checkpoint_loop(config_kwargs):
     assert yastn.norm(result_is - expected2) < tol
 
 
+# ---------------------------------------------------------------------------
+# 11. Swap-gate propagation through contract_with_unroll
+#
+# Diagrams translated from test_ncon_einsum_swaps in test_ncon_einsum.py,
+# using larger bond dimensions D=(2,3) for meaningful slicing tests.
+# ---------------------------------------------------------------------------
+
+
+def test_swap_diagram1(config_kwargs):
+    """Diagram 1 from test_ncon_einsum_swaps: 2-tensor full contraction.
+
+    ncon([a, b], ((1, 2), (2, 1)), swap=[(1, 2)])
+
+    Interleaved:  a, (p, q), b, (q, p), ()
+    swap: [(p, q)]
+
+    Tests: no unroll, charge-sector unroll, intra-sector slicing,
+    uniform slicing on each contracted index.
+    """
+    cfg = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
+    l = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 3))
+    lc = l.conj()
+    a = yastn.rand(config=cfg, legs=[l, lc])
+    b = yastn.rand(config=cfg, legs=[l, lc])
+
+    ref = yastn.ncon([a, b], ((1, 2), (2, 1)), swap=[(1, 2)])
+    path, _ = yastn.get_contraction_path(a, ('p', 'q'), b, ('q', 'p'), ())
+
+    # No unroll
+    r0 = yastn.contract_with_unroll(
+        a, ('p', 'q'), b, ('q', 'p'), (),
+        optimize=path, swap=[('p', 'q')],
+    )
+    assert (r0 - ref).norm() < tol
+
+    # Charge-sector unrolling on 'p'
+    r1 = yastn.contract_with_unroll(
+        a, ('p', 'q'), b, ('q', 'p'), (),
+        optimize=path, swap=[('p', 'q')],
+        unroll={'p': yastn.make_sliced_legs(l)},
+    )
+    assert (r1 - ref).norm() < tol
+
+    # Intra-sector slicing on 'q'
+    r2 = yastn.contract_with_unroll(
+        a, ('p', 'q'), b, ('q', 'p'), (),
+        optimize=path, swap=[('p', 'q')],
+        unroll={'q': _split_leg_intra(lc)},
+    )
+    assert (r2 - ref).norm() < tol
+
+    # Uniform slicing on 'p'
+    r3 = yastn.contract_with_unroll(
+        a, ('p', 'q'), b, ('q', 'p'), (),
+        optimize=path, swap=[('p', 'q')],
+        unroll={'p': 2},
+    )
+    assert (r3 - ref).norm() < tol
+
+    # Unroll both contracted indices
+    r4 = yastn.contract_with_unroll(
+        a, ('p', 'q'), b, ('q', 'p'), (),
+        optimize=path, swap=[('p', 'q')],
+        unroll={'p': yastn.make_sliced_legs(l), 'q': yastn.make_sliced_legs(lc)},
+    )
+    assert (r4 - ref).norm() < tol
+
+
+def test_swap_diagram3(config_kwargs):
+    """Diagram 3 from test_ncon_einsum_swaps: 6-tensor scalar contraction
+    with 7 swaps and parity-odd tensors (all n=1).
+
+    ncon([a, b, c, d, e, f],
+         ((1, 2, 4, 11), (3, 5, 6, 8, 1), (7, 9, 2, 3),
+          (10, 4, 6, 5, 7), (12, 8, 9, 10), (11, 12)),
+         swap=((2,8),(2,5),(2,6),(4,8),(9,6),(9,5),(4,9)))
+
+    Interleaved labels — mapping ncon ints to letters:
+      1->A, 2->B, 3->C, 4->D, 5->E, 6->F, 7->G, 8->H, 9->I, 10->J, 11->K, 12->L
+    swap: [(B,H),(B,E),(B,F),(D,H),(I,F),(I,E),(D,I)]
+
+    Tests: no unroll, charge-sector unroll on A, intra-sector slicing on B,
+    uniform slicing on H.
+    """
+    cfg = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
+    l = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 3))
+    lc = l.conj()
+
+    a = yastn.rand(config=cfg, n=1, legs=[l, l, l, l])
+    b = yastn.rand(config=cfg, n=1, legs=[l, l, l, l, lc])
+    c = yastn.rand(config=cfg, n=1, legs=[l, l, lc, lc])
+    d = yastn.rand(config=cfg, n=1, legs=[l, lc, lc, lc, lc])
+    e = yastn.rand(config=cfg, n=1, legs=[l, lc, lc, lc])
+    f = yastn.rand(config=cfg, n=1, legs=[lc, lc])
+
+    ref = yastn.ncon(
+        [a, b, c, d, e, f],
+        ((1, 2, 4, 11), (3, 5, 6, 8, 1), (7, 9, 2, 3),
+         (10, 4, 6, 5, 7), (12, 8, 9, 10), (11, 12)),
+        swap=((2, 8), (2, 5), (2, 6), (4, 8), (9, 6), (9, 5), (4, 9)),
+    )
+
+    il_args = (
+        a, ('A', 'B', 'D', 'K'),
+        b, ('C', 'E', 'F', 'H', 'A'),
+        c, ('G', 'I', 'B', 'C'),
+        d, ('J', 'D', 'F', 'E', 'G'),
+        e, ('L', 'H', 'I', 'J'),
+        f, ('K', 'L'),
+        (),
+    )
+    sw = [('B', 'H'), ('B', 'E'), ('B', 'F'), ('D', 'H'),
+          ('I', 'F'), ('I', 'E'), ('D', 'I')]
+
+    path, _ = yastn.get_contraction_path(*il_args)
+    den = max(ref.norm().item(), 1.0)
+
+    # No unroll
+    r0 = yastn.contract_with_unroll(*il_args, optimize=path, swap=sw)
+    assert (r0 - ref).norm() < tol * den
+
+    # Charge-sector unrolling on 'A' (connects a↔b)
+    r1 = yastn.contract_with_unroll(
+        *il_args, optimize=path, swap=sw,
+        unroll={'A': yastn.make_sliced_legs(l)},
+    )
+    assert (r1 - ref).norm() < tol * den
+
+    # Intra-sector slicing on 'B' (connects a↔c, appears in 3 swaps)
+    r2 = yastn.contract_with_unroll(
+        *il_args, optimize=path, swap=sw,
+        unroll={'B': _split_leg_intra(l)},
+    )
+    assert (r2 - ref).norm() < tol * den
+
+    # Uniform slicing on 'H' (connects b↔e, appears in 2 swaps)
+    r3 = yastn.contract_with_unroll(
+        *il_args, optimize=path, swap=sw,
+        unroll={'H': 2},
+    )
+    assert (r3 - ref).norm() < tol * den
+
+    # Unroll two indices simultaneously
+    r4 = yastn.contract_with_unroll(
+        *il_args, optimize=path, swap=sw,
+        unroll={'A': yastn.make_sliced_legs(l),
+                'H': yastn.make_sliced_legs(l)},
+    )
+    assert (r4 - ref).norm() < tol * den
+
+
+def test_swap_diagram4_scalar(config_kwargs):
+    """Scalar fermionic network from test_einsum_scalar_swap_order:
+    6 tensors, all n=0, 4 swaps, scalar output.
+
+    ncon((A, B, C, D, E, F),
+         ((9,1,2,3), (9,2,3), (1,4,5,8), (7,8), (4,6), (5,6,7)),
+         swap=[(9,4),(9,5),(2,8),(3,8)])
+
+    Interleaved labels:
+      9->P, 1->Q, 2->R, 3->S, 4->T, 5->U, 6->V, 7->W, 8->X
+    swap: [(P,T),(P,U),(R,X),(S,X)]
+
+    Tests: no unroll, charge-sector, intra-sector, uniform slicing, multi-index
+    unroll.
+    """
+    cfg = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
+    l = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 3))
+    lc = l.conj()
+
+    A = yastn.rand(config=cfg, n=0, legs=[l, l, l, l])
+    B = yastn.rand(config=cfg, n=0, legs=[lc, lc, lc])
+    C = yastn.rand(config=cfg, n=0, legs=[lc, l, l, l])
+    D = yastn.rand(config=cfg, n=0, legs=[l, lc])
+    E = yastn.rand(config=cfg, n=0, legs=[lc, lc])
+    F = yastn.rand(config=cfg, n=0, legs=[lc, l, lc])
+
+    ref = yastn.ncon(
+        (A, B, C, D, E, F),
+        ((9, 1, 2, 3), (9, 2, 3), (1, 4, 5, 8), (7, 8), (4, 6), (5, 6, 7)),
+        swap=[(9, 4), (9, 5), (2, 8), (3, 8)],
+        order=(9, 2, 3, 1, 4, 5, 6, 7, 8),
+    )
+
+    il_args = (
+        A, ('P', 'Q', 'R', 'S'),
+        B, ('P', 'R', 'S'),
+        C, ('Q', 'T', 'U', 'X'),
+        D, ('W', 'X'),
+        E, ('T', 'V'),
+        F, ('U', 'V', 'W'),
+        (),
+    )
+    sw = [('P', 'T'), ('P', 'U'), ('R', 'X'), ('S', 'X')]
+
+    path, _ = yastn.get_contraction_path(*il_args)
+    den = max(ref.norm().item(), 1.0)
+
+    # No unroll
+    r0 = yastn.contract_with_unroll(*il_args, optimize=path, swap=sw)
+    assert (r0 - ref).norm() < tol * den
+
+    # Charge-sector unrolling on 'P' (connects A↔B, appears in 2 swaps)
+    r1 = yastn.contract_with_unroll(
+        *il_args, optimize=path, swap=sw,
+        unroll={'P': yastn.make_sliced_legs(l)},
+    )
+    assert (r1 - ref).norm() < tol * den
+
+    # Intra-sector slicing on 'R' (connects A↔B, appears in swap (R,X))
+    r2 = yastn.contract_with_unroll(
+        *il_args, optimize=path, swap=sw,
+        unroll={'R': _split_leg_intra(l)},
+    )
+    assert (r2 - ref).norm() < tol * den
+
+    # Uniform slicing on 'X' (connects C↔D, appears in 2 swaps)
+    r3 = yastn.contract_with_unroll(
+        *il_args, optimize=path, swap=sw,
+        unroll={'X': 2},
+    )
+    assert (r3 - ref).norm() < tol * den
+
+    # Two indices unrolled simultaneously
+    r4 = yastn.contract_with_unroll(
+        *il_args, optimize=path, swap=sw,
+        unroll={'P': yastn.make_sliced_legs(l),
+                'X': _split_leg_intra(l)},
+    )
+    assert (r4 - ref).norm() < tol * den
