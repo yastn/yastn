@@ -442,7 +442,16 @@ def fast_env_T_gauge_multi_sites(config, T_olds, T_news):
     def normalize_QR(Q, R):
         # make the diagonal entries of R matrix positive
         R_sign = R.diag()
-        R_sign._data = R_sign._data.conj()/abs(R_sign._data)
+        d = R_sign._data
+        absd = abs(d)
+        # Exact zeros can sit on R's diagonal: leg-first materializes every
+        # symmetry-allowed block and qr keeps the zero ones (svd/eigh drop them via
+        # `nonzero`; _meta_qr has no such filter). A zero has no defined phase -- use
+        # 1, not 0, so R_sign stays unitary and Q @ R_sign.H remains an isometry.
+        # clamp_min keeps the discarded branch of `where` free of 0/0 = NaN.
+        tiny = torch.finfo(absd.dtype).tiny
+        phase = torch.where(absd > 0, d.conj() / absd.clamp_min(tiny), torch.ones_like(d))
+        R_sign._data = phase
         return Q@R_sign.H, R_sign@R
 
 
