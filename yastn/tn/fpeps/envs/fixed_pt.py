@@ -790,17 +790,19 @@ class FixedPoint(torch.autograd.Function):
             Sequence[Tensor]: raw environment data for the backward pass.
         """
 
-        # Pin main-process current CUDA device to where env tensors live.
-        # MP workers each set their own current device; the main process
-        # also runs CUDA ops here (gauge-fixing fp CTM step, etc.), and
-        # tapp_torch (torch_cpp backend) launches kernels on the current
-        # device — mismatch causes "illegal memory access" when devices[0]
-        # is not cuda:0.
-        if devices:
-            _dev0 = devices[0]
-            if isinstance(_dev0, str) and _dev0.startswith("cuda"):
-                import torch
-                torch.cuda.set_device(_dev0)
+        # Pin main-process current CUDA device to where the ENV TENSORS live
+        # (env.config.default_device), NOT devices[0]. The MP workers each set
+        # their own current device; the main process also runs CUDA ops here
+        # (gauge-fixing fp CTM step, etc.), and tapp_torch (torch_cpp backend)
+        # launches kernels on the current device -- a mismatch causes "illegal
+        # memory access". When the main/home device is decoupled from the CTM
+        # worker pool (e.g. env on cuda:0, workers on cuda:1-3), devices[0] is
+        # NOT the env device, so we must pin to the env's own device. When they
+        # coincide (default) this is identical to the old devices[0] pin.
+        _env_dev = getattr(env.config, "default_device", None)
+        if isinstance(_env_dev, str) and _env_dev.startswith("cuda"):
+            import torch
+            torch.cuda.set_device(_env_dev)
 
         # 1. Converge the environment using CTMRG
         ctm_env_out, converged, *FixedPoint.ctm_log, FixedPoint.t_ctm, FixedPoint.t_check = FixedPoint.get_converged_env(
@@ -836,9 +838,13 @@ class FixedPoint(torch.autograd.Function):
 
         # 3. Find the gauge transformation
         t0 = time.perf_counter()
-        env_gauge, phase_dict = find_gauge_multi_sites(env_converged, ctm_env_out, verbose=True)
-        if env_gauge is None:
+        # find_gauge_multi_sites returns a bare None (not a 2-tuple) when no gauge is
+        # found, so the None check has to happen BEFORE the unpack -- otherwise it is
+        # the unpack that fails, with a TypeError that hides the real diagnostic.
+        _gauge = find_gauge_multi_sites(env_converged, ctm_env_out, verbose=True)
+        if _gauge is None:
             raise NoFixedPointError(code=1, message="No fixed point found: fail to find the gauge matrix!")
+        env_gauge, phase_dict = _gauge
         t1 = time.perf_counter()
         log.info(f"{type(ctx).__name__}.forward FP gauge-fixing t {t1-t0} [s]")
 
