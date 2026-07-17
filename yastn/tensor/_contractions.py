@@ -291,8 +291,8 @@ def _meta_tensordot_fc(sym, struct_a, struct_b):
     unique_a, inv_a, count_a = np.unique(bl_a.t[:, -1, :], return_inverse=True, return_counts=True, axis=0)
     unique_b, inv_b, count_b = np.unique(bl_b.t[:,  0, :], return_inverse=True, return_counts=True, axis=0)
     assert np.array_equal(unique_a, unique_b), "Sanity check. Contact developers."
-    arg_a = np.argsort(inv_a, stable=True)
-    arg_b = np.argsort(inv_b, stable=True)
+    arg_a = np.argsort(inv_a, kind='stable')
+    arg_b = np.argsort(inv_b, kind='stable')
     #
     ind_a, ind_b = _indices_from_counts(count_a, count_b)
     ind_a = arg_a[ind_a]

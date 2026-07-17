@@ -287,6 +287,11 @@ def svd_lowrank(data, meta, sizes, **kwargs):
     return svds_scipy(data, meta, sizes, None, 'arpack', **kwargs)
 
 
+def nonzero_blocks(data, slcs):
+    """ Per-slice flags: whether data[slice] has any nonzero element. """
+    return tuple(bool(data[slice(*sl)].any()) for sl in slcs)
+
+
 def dtype_to_complex(data):
     """ type promotion to complex. """
     tmp = 1j * np.array(1, dtype=data.dtype)
@@ -464,7 +469,7 @@ def eigh(data, meta=None, sizes=(1, 1)):
             try:
                 S, U = scipy.linalg.eigh(data[slice(*slo)].reshape(Do))
             except scipy.linalg.LinAlgError:  # pragma: no cover
-                S, U = np.linalg.eigh(data[slice(*x['slo'])].reshape(Do))
+                S, U = np.linalg.eigh(data[slice(*slo)].reshape(Do))
             Sdata[slice(*slS)] = S
             Udata[slice(*slU)].reshape(DU)[:] = U
         return Sdata, Udata
@@ -626,7 +631,7 @@ def apply_mask(Adata, mask, meta, Dsize, axis, a_ndim):
     slc2 = (slice(None),) * (a_ndim - (axis + 1))
     newdata = np.empty(Dsize, dtype=Adata.dtype)
     for sln, Dn, sla, Da, tm in meta:
-        slcs = slc1 + (mask[*tm],) + slc2
+        slcs = slc1 + (mask[tuple(tm)],) + slc2
         newdata[slice(*sln)].reshape(Dn)[:] = Adata[slice(*sla)].reshape(Da)[slcs]
     return newdata
 
@@ -636,7 +641,7 @@ def embed_mask(Adata, mask, meta, Dsize, axis, a_ndim):
     slc2 = (slice(None),) * (a_ndim - (axis + 1))
     newdata = np.zeros(Dsize, dtype=Adata.dtype)
     for sln, Dn, sla, Da, tm in meta:
-        slcs = slc1 + (mask[*tm],) + slc2
+        slcs = slc1 + (mask[tuple(tm)],) + slc2
         newdata[slice(*sln)].reshape(Dn)[slcs] = Adata[slice(*sla)].reshape(Da)
     return newdata
 

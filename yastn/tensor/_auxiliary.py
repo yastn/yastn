@@ -92,7 +92,7 @@ def _compress_slices(meta):
     c2 = s2 // 2
     slcs = meta.reshape(s1, c2, 2).transpose((1, 0, 2))
     inds = np.any(slcs[:, 1:, 0] != slcs[:, :-1, 1], axis=0)
-    mask = np.ones((s1, 2), dtype=np.bool)
+    mask = np.ones((s1, 2), dtype=bool)
     mask[1:, 0] = inds
     mask[:-1, 1] = inds
     mask = mask.reshape(2 * s1)

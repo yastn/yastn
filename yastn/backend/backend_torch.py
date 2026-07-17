@@ -40,7 +40,7 @@ __all__= ['DTYPE', 'get_dtype', 'get_yastn_dtype',
     'expm', 'first_element', 'item', 'sum_elements', 'norm', 'entropy',
     'zeros', 'ones', 'rand', 'to_tensor', 'to_mask', 'square_matrix_from_dict',
     'trace', 'rsqrt', 'reciprocal', 'exp', 'sqrt', 'absolute', 'permute_dims',
-    'fix_svd_signs', 'svdvals', 'svd_lowrank', 'svd', 'svd_randomized', 'svds_scipy',
+    'fix_svd_signs', 'svdvals', 'svd_lowrank', 'svd', 'svd_randomized', 'svds_scipy', 'nonzero_blocks',
     'eigh', 'qr', 'pinv', 'eig', 'eigh_lowrank', 'eigvals',
     'argsort', 'argsort_which', 'argmax', 'flip', 'allclose',
     'add', 'sub', 'apply_mask', 'vdot', 'diag_1dto2d', 'diag_2dto1d',
@@ -313,6 +313,11 @@ def svd_lowrank(data, meta, sizes, **kwargs):
     return svds_scipy(data, meta, sizes, solver='arpack', **kwargs)
 
 
+def nonzero_blocks(data, slcs):
+    """ Per-slice flags: whether data[slice] has any nonzero element. """
+    return tuple(bool(data[slice(*sl)].any()) for sl in slcs)
+
+
 def dtype_to_complex(data):
     """ type promotion to complex. """
     tmp = 1j * torch.tensor(1, dtype=data.dtype)
@@ -433,6 +438,7 @@ def eigh_lowrank(data, meta, sizes, thresh=None, **kwargs):
     # TODO cupyx implementation of eigsh for GPU
     import numpy as np
     import scipy
+    from .backend_np import argsort_which as np_argsort_which
 
     _which_map= {'LM': 'LM', 'SM': 'SM', 'LR': 'LA',  'SR': 'SA'}
     _which = kwargs.get('which', 'LM')
@@ -460,7 +466,7 @@ def eigh_lowrank(data, meta, sizes, thresh=None, **kwargs):
         # sort in case of non-default order
         # see https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.eigsh.html
         if not (_which in ['SR'] and  kwargs.get("return_eigenvectors", True)):
-            arg_b = argsort_which(S, _which)
+            arg_b = np_argsort_which(S, _which)  # S, U are numpy here
             S,U = S[arg_b[:k]], U[:,arg_b[:k]]
         else:
             S,U = S[:k], U[:,:k]

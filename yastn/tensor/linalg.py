@@ -279,7 +279,8 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         logger.info(f"{fname} D_block {kwargs.get('D_block', 'NA')}")
         logger.info(f"{fname} k_block {k_block}")
 
-    meta, sizes, struct_Um, struct_S, struct_Vm = _meta_svd(sym, struct_am, sU, nU, k_block)
+    nonzero = _nonzero_sectors(a.config.backend, data, sym, struct_am)
+    meta, sizes, struct_Um, struct_S, struct_Vm = _meta_svd(sym, struct_am, sU, nU, k_block, nonzero=nonzero)
     ls_s = _LegSlices_trivial(struct_S.legs[0])
 
     if compute_uv and policy == 'fullrank':
@@ -336,7 +337,22 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     return U, S, V
 
 
-def _meta_svd(sym, struct, sU, nU, k_block):
+def _nonzero_sectors(backend, data, sym, struct):
+    """
+    Per-block flags of a merged matrix: True if the block has any nonzero element,
+    aligned with the block order of ``get_blocks(sym, struct)``.
+
+    Returns None when all blocks are nonzero and there is nothing to filter.
+    For an all-zero matrix every sector is dropped, giving empty U, S, V.
+    """
+    bl = get_blocks(sym, struct)
+    flags = backend.nonzero_blocks(data, bl.slc)
+    if all(flags):
+        return None
+    return flags
+
+
+def _meta_svd(sym, struct, sU, nU, k_block, nonzero=None):
     """
     meta and struct for svd
     U has signature = (legs[0].s, sU)
@@ -352,6 +368,12 @@ def _meta_svd(sym, struct, sU, nU, k_block):
 
     ax0 = 1 if nU else 0
     minD = {tuple(tt): min(DD) for tt, DD in zip(bl_a.t[:, ax0, :].tolist(), bl_a.D)}
+    if nonzero is not None:
+        # exclude exactly-zero blocks from the decomposition;
+        # their sectors reappear as zero blocks in any product with U, S, V.
+        for tt, nz in zip(bl_a.t[:, ax0, :].tolist(), nonzero):
+            if not nz:
+                minD[tuple(tt)] = 0
     if k_block is not None:
         if isinstance(k_block, dict):
             sector_minD = min(k_block.values())  # TODO: control default for sectors not present in k_block
@@ -387,7 +409,7 @@ def _meta_svd(sym, struct, sU, nU, k_block):
         ('slS', np.int64, (2,)),
         ('slV', np.int64, (2,)),
         ('DV',  np.int64, (2,))])
-    meta = np.hstack([bl_a.slc[ind_a], bl_a.D[ind_a], bl_U.slc[inds], bl_U.D[inds], bl_S.slc, bl_V.slc, bl_V.D], dtype=np.int64)
+    meta = np.hstack([bl_a.slc[ind_a], bl_a.D[ind_a], bl_U.slc[inds], bl_U.D[inds], bl_S.slc, bl_V.slc, bl_V.D]).astype(np.int64, copy=False)
     meta = meta.view(meta_dt).reshape(-1)
     sizes = (bl_U.size, bl_S.size, bl_V.size)
     return meta, sizes, bl_U.struct, bl_S.struct, bl_V.struct
@@ -792,7 +814,7 @@ def _meta_qr(sym, struct, sQ):
         ('DQ',  np.int64, (2,)),
         ('slR', np.int64, (2,)),
         ('DR',  np.int64, (2,))])
-    meta = np.hstack([bl_a.slc[inds], bl_a.D[inds], bl_Q.slc[inds], bl_Q.D[inds], bl_R.slc, bl_R.D], dtype=np.int64)
+    meta = np.hstack([bl_a.slc[inds], bl_a.D[inds], bl_Q.slc[inds], bl_Q.D[inds], bl_R.slc, bl_R.D]).astype(np.int64, copy=False)
     meta = meta.view(meta_dt).reshape(-1)
     sizes = (bl_Q.size, bl_R.size)
     return meta, sizes, bl_Q.struct, bl_R.struct
@@ -879,7 +901,12 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank', **kwargs) -> tu
     if ls_l != ls_r:
         raise YastnError("Tensor likely is not hermitian. Legs of effective square blocks do not match.")
 
-    meta, sizes, struct_Um, struct_S = _meta_eigh(sym, struct_am, sU, k_block)
+    # filter zero blocks only for the partial-spectrum solver; 'fullrank' keeps
+    # them so that U remains a complete eigenbasis (with eigenvalue-0 sectors).
+    nonzero = None
+    if policy == 'block_lanczos':
+        nonzero = _nonzero_sectors(a.config.backend, data, sym, struct_am)
+    meta, sizes, struct_Um, struct_S = _meta_eigh(sym, struct_am, sU, k_block, nonzero=nonzero)
     ls = _LegSlices_trivial(struct_Um.legs[1])
 
     if policy == 'fullrank':
@@ -920,7 +947,7 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank', **kwargs) -> tu
     return S, U
 
 
-def _meta_eigh(sym, struct, sU, k_block):
+def _meta_eigh(sym, struct, sU, k_block, nonzero=None):
     """
     meta and struct for eigh
     U has signature = (legs[0].s, sU)
@@ -930,6 +957,12 @@ def _meta_eigh(sym, struct, sU, k_block):
 
     n0 = sym.zero()
     minD = {tuple(tt): min(DD) for tt, DD in zip(bl_a.t[:, 1, :].tolist(), bl_a.D)}
+    if nonzero is not None:
+        # exclude exactly-zero blocks; their eigenpairs (all with eigenvalue 0)
+        # are dropped, consistent with a partial-spectrum solve.
+        for tt, nz in zip(bl_a.t[:, 1, :].tolist(), nonzero):
+            if not nz:
+                minD[tuple(tt)] = 0
     if k_block is not None:
         if isinstance(k_block, dict):
             sector_minD = min(k_block.values())  # TODO: control default for sectors not present in k_block

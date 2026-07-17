@@ -72,7 +72,7 @@ def snapshot_logger_levels():
     Handed to spawn workers alongside the root level so they replay the
     parent's *per-logger* configuration on top of the root level -- e.g. a
     single module bumped to ``DEBUG`` (``--log_oe_path`` raises
-    ``yastn.yastn.tensor.oe_blocksparse``) becomes visible in workers too,
+    ``yastn.tensor.oe_blocksparse``) becomes visible in workers too,
     while everything else stays at the root level. Returns a plain dict
     (picklable for ``Process`` args).
     """

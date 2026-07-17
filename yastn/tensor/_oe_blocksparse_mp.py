@@ -20,6 +20,8 @@ Supports both:
 """
 import atexit
 import logging
+import queue as _queue
+from collections import OrderedDict
 import torch
 import torch.multiprocessing as _mp
 
@@ -29,6 +31,14 @@ log = logging.getLogger(__name__)
 # Module-level pool registry: (devices_tuple, mp_workers_per_device,
 # config_descriptor_hash) -> _PersistentWorkerPool
 _pool_registry = {}
+
+# Bound the per-pool assembly-recipe cache so long, shape-evolving runs don't
+# accumulate one entry per distinct structure without limit (LRU eviction).
+_STRUCT_CACHE_MAXSIZE = 512
+
+# How often a result-drain waits before checking whether an assigned worker has
+# died without posting (turns an infinite res_q.get() hang into an error).
+_WORKER_POLL_SECONDS = 30.0
 
 
 def _config_descriptor(config):
@@ -57,47 +67,148 @@ def _deserialize_yastn(d, config):
     return Tensor.from_dict(d, config=config)
 
 
-def _build_cache_key(input_dicts, unroll, ig_list, out_ig, optimize, swap, per_combo_path):
-    """Stable key for the assembly-info cache. ``per_combo_path`` participates
-    because cached entries carry ``dim_overrides_per_combo`` only when it was
-    True at insertion time; reusing a False-time entry for a True-time call
-    would leave workers with a missing payload."""
-    input_keys = []
-    for d in input_dicts:
-        st = d['struct']
-        if isinstance(st, dict):
-            input_keys.append((st.get('s'), tuple(map(tuple, st.get('t', ()))),
-                               tuple(map(tuple, st.get('D', ()))), st.get('n')))
-        else:
-            input_keys.append((st.s, st.t, st.D, st.n))
+def _struct_identity(t):
+    """Hashable, allocation-free structural fingerprint of a tensor under the
+    leg-first model: its ``struct`` (legs / n / isdiag), any pending transpose,
+    and its meta/hard fusion histories. These are exactly the fields ``to_dict``
+    compares for structural equality, and each is already a hashable
+    NamedTuple/tuple in memory (``get_blocks`` and the ``_meta_*`` routines
+    lru_cache on ``struct`` / ``hfs``), so no ``to_dict``/serialization
+    round-trip is needed to key on structure.
+
+    Lossless: two tensors share this identity iff they are structurally
+    identical, so a dict/lru keyed on it cannot false-hit — unlike the earlier
+    key, which projected the serialized struct down and could collide."""
+    return (t.struct, t.trans, t.hfs, t.mfs)
+
+
+def _build_cache_key(tensors, unroll, ig_list, out_ig, optimize, swap, per_combo_path):
+    """Stable, cheap key for the assembly-info cache, built from in-memory
+    hashable metadata (no ``to_dict``/``_freeze`` round-trip). ``per_combo_path``
+    participates because cached entries carry ``dim_overrides_per_combo`` only
+    when it was True at insertion time; reusing a False-time entry for a
+    True-time call would leave workers with a missing payload.
+
+    Each input contributes its full leg-first structural fingerprint, so any
+    difference in leg structure, pending transpose or fusion history misses the
+    cache. Config/sym are fixed per pool, so they need not enter the key."""
+    input_keys = tuple(_struct_identity(t) for t in tensors)
     unroll_key = tuple(sorted(
         (str(k), tuple((sl.t, sl.D) for sl in sls)) for k, sls in unroll.items()
     ))
-    return (tuple(input_keys), unroll_key,
+    return (input_keys, unroll_key,
             tuple(tuple(ig) for ig in ig_list), tuple(out_ig),
             str(optimize), str(swap), bool(per_combo_path))
 
 
-def _compute_common_legs_axes(partials_dict, unroll, out_ig):
-    """Return (common_legs_axes, ndim_out) for yastn_block of partials, or
-    (None, None) if no output-unrolled labels (single-key case).
-    Mirrors the assembly logic in _contract_with_sliced_unroll.
-    """
-    out_ig_list = list(out_ig)
-    blocked_axes = sorted(
-        out_ig_list.index(u) for u in unroll.keys() if u in out_ig_list
-    )
-    if not blocked_axes:
-        return None, None
-    if not partials_dict:
-        return None, None
-    first_partial = next(iter(partials_dict.values()))
-    ndim_out = first_partial.ndim_n
-    return [ax for ax in range(ndim_out) if ax not in blocked_axes], ndim_out
-
-
 def _meta_only(yastn_dict):
     return {k: v for k, v in yastn_dict.items() if k != 'data'}
+
+
+def _zeros_meta(config, legs, n):
+    """Serialized ``to_dict(level=1)`` metadata (minus ``data``) for
+    ``zeros(legs, n)`` WITHOUT allocating the full block-data buffer.
+
+    ``zeros`` -> ``_fill_tensor`` computes the struct via ``get_blocks`` (pure
+    metadata) and only then allocates ``_init_block(bl.size)``. We stop before
+    that allocation: the ``Tensor`` shell already carries a 1-element placeholder
+    buffer, so a large output costs no full-size zero buffer per cache miss."""
+    from . import Tensor
+    from ._auxiliary import _unpack_legs, get_blocks
+    ulegs, mfs = _unpack_legs(legs)
+    s = tuple(lg.s for lg in ulegs)
+    hfs = tuple(lg.hf for lg in ulegs)
+    a = Tensor(config=config, s=s, n=n, isdiag=False, mfs=mfs, hfs=hfs)
+    legs_tD = tuple(lb._replace(t=lg.t, D=lg.D) for lb, lg in zip(a.struct.legs, ulegs))
+    bl = get_blocks(config.sym, a.struct._replace(legs=legs_tD))
+    a.struct = bl.struct
+    d = _meta_only(a.to_dict(level=1))
+    d['size'] = bl.size  # to_dict read size from the 1-element placeholder buffer
+    return d
+
+
+def _derive_output_structs(tensors, ig_list, out_ig, unroll, surviving, config):
+    """Derive ``(per_key_struct, full_struct, common_legs_axes)`` from input
+    legs alone — NO block contraction on data.
+
+    In a tensor-network contraction the output legs are exactly the free
+    (uncontracted) input legs gathered in ``out_ig`` order; an output-unrolled
+    leg is additionally restricted to its per-key slice.
+
+    Single-key (no output-unrolled leg): the output struct is the full gathered
+    legs, built metadata-only via :func:`_zeros_meta` (no data buffer).
+
+    Multi-key (output-unrolled): build a zero skeleton per *surviving* output
+    key and assemble them with the *same* ``block`` + ``drop_leg_history`` the
+    forward pass uses, so ``full_struct`` matches the assembled ``out_data``
+    exactly — including when an output slice has no surviving combo (absent from
+    both). Abelian charge conservation gives the output charge as the fused
+    input charge.
+
+    Skeletons are in canonical form (identity pending-transpose). ``ncon`` may
+    return a value-identical result carrying a *lazy* transpose, so a worker
+    partial's native ``struct``/``trans`` can differ while ``get_legs`` and the
+    value agree — a representation choice, not a correctness difference; yastn
+    arithmetic aligns them when the worker zero-fills to this struct. (No
+    per-operand conjugation is assumed, which the dispatcher does not pass.)"""
+    from ..initialize import zeros as yastn_zeros
+    from ._legs import Leg
+    sym = config.sym
+    out_ig_list = list(out_ig)
+
+    # Each output label is a free leg carried by exactly one (tensor, axis).
+    label_src = {}
+    for k, ig in enumerate(ig_list):
+        for a, lbl in enumerate(ig):
+            if lbl in out_ig_list:
+                label_src[lbl] = (k, a)
+    out_legs_full = [tensors[k].get_legs(a) for k, a in (label_src[L] for L in out_ig_list)]
+
+    n_out = sym.add_charges(*(t.struct.n for t in tensors))
+
+    unroll_labels = list(unroll.keys())
+    sizes = [len(unroll[u]) for u in unroll_labels]
+    label_pos = {u: i for i, u in enumerate(unroll_labels)}
+    output_unroll_axes = {out_ig_list.index(u): u for u in unroll_labels if u in out_ig_list}
+    blocked_axes = sorted(output_unroll_axes.keys())
+    ndim_out = len(out_ig_list)
+    common_legs_axes = ([ax for ax in range(ndim_out) if ax not in blocked_axes]
+                        if blocked_axes else None)
+
+    if common_legs_axes is None:
+        # Single-key: metadata-only, no full zero buffer (the large-output case).
+        d = _zeros_meta(config, out_legs_full, n_out)
+        return {(): d}, d, None
+
+    def _unravel(n):
+        # combo index -> per-unroll-label slice index, in itertools.product order
+        # (last label varies fastest); avoids materializing the full product.
+        idx = [0] * len(sizes)
+        for i in range(len(sizes) - 1, -1, -1):
+            idx[i] = n % sizes[i]
+            n //= sizes[i]
+        return idx
+
+    # Multi-key: a zero skeleton per surviving output key, assembled via the
+    # SAME block()+drop_leg_history the forward pass uses so full_struct matches
+    # out_data exactly.
+    per_key_tensors = {}
+    for n in surviving:
+        idx = _unravel(n)
+        opk = tuple(idx[label_pos[output_unroll_axes[ax]]] for ax in blocked_axes)
+        if opk in per_key_tensors:
+            continue
+        legs = list(out_legs_full)
+        for i, ax in enumerate(blocked_axes):
+            sl = unroll[output_unroll_axes[ax]][opk[i]]
+            legs[ax] = Leg(sym=config, s=out_legs_full[ax].s, t=sl.t, D=sl.D)
+        per_key_tensors[opk] = yastn_zeros(config=config, legs=legs, n=n_out)
+
+    per_key_struct = {opk: _meta_only(t.to_dict(level=1)) for opk, t in per_key_tensors.items()}
+    from ..initialize import block as yastn_block
+    assembled = yastn_block(per_key_tensors, common_legs=common_legs_axes).drop_leg_history()
+    full_struct = _meta_only(assembled.to_dict(level=1))
+    return per_key_struct, full_struct, common_legs_axes
 
 
 def _per_device_input_replicas(input_data_tensors, worker_devs, original_device):
@@ -139,9 +250,11 @@ def _zero_fill_to_full(partial, full_struct_dict, cfg):
     Used by workers to align per-key partial sums to the cached per-key struct.
     """
     from . import Tensor
-    full_size = (full_struct_dict['struct']['size']
-                 if isinstance(full_struct_dict['struct'], dict)
-                 else full_struct_dict['struct'].size)
+    # Leg-first: to_dict(level=1) serializes the struct as {'legs','n','isdiag'}
+    # (no 'size' — it is derived on demand via get_blocks) and emits the total
+    # data size at the top level as full_struct_dict['size'] (== a.size). The
+    # old struct['size']/struct.size lookups both went stale under leg-first.
+    full_size = full_struct_dict['size']
     zeros_data = torch.zeros(full_size,
                              dtype=partial._data.dtype,
                              device=partial._data.device)
@@ -150,10 +263,29 @@ def _zero_fill_to_full(partial, full_struct_dict, cfg):
     return zero_tensor + partial
 
 
+def _install_parent_death_signal():
+    """Linux: ask the kernel to SIGTERM this worker if the parent dies, so a
+    parent killed by signal (no atexit -> _shutdown_all_pools never runs) does
+    not leak non-daemon workers holding CUDA contexts. Best-effort / no-op
+    elsewhere."""
+    try:
+        import os, signal, ctypes
+        PR_SET_PDEATHSIG = 1
+        libc = ctypes.CDLL("libc.so.6", use_errno=True)
+        libc.prctl(PR_SET_PDEATHSIG, signal.SIGTERM)
+        # Race: if the parent already died before prctl, we were reparented and
+        # will never get the signal — exit now.
+        if os.getppid() == 1:
+            os._exit(1)
+    except Exception:
+        pass
+
+
 def _worker_main(rank, gpu_dev, config_desc, cmd_q, res_q,
                  log_queue=None, log_level=logging.INFO, logger_levels=None):
     """Worker process entry point. Loops on cmd_q until 'shutdown'."""
     import torch
+    _install_parent_death_signal()
     # Route this worker's logging (notably get_contraction_path path-info
     # reports at INFO level) through the parent's QueueListener. Spawn-mode
     # children inherit no logging config, so without this every log.info call
@@ -208,19 +340,13 @@ def _worker_main(rank, gpu_dev, config_desc, cmd_q, res_q,
                             **ncon_kwargs,
                         )
 
-                    if per_key_struct is None:
-                        # Raw mode (cache miss): no zero-fill — different
-                        # workers may produce partials with different charge
-                        # sectors. Parent handles via yastn '+'.
-                        out = {k: _serialize_yastn(v) for k, v in partials.items()}
-                    else:
-                        # Zero-fill mode (cache hit): all workers' per-key
-                        # tensors share identical shape so parent can sum
-                        # raw data tensors without yastn '+'.
-                        out = {}
-                        for k, p in partials.items():
-                            full_p = _zero_fill_to_full(p, per_key_struct[k], cfg)
-                            out[k] = _serialize_yastn(full_p)
+                    # Zero-fill each partial to its per-key output struct so all
+                    # workers' per-key tensors share identical shape and the
+                    # parent sums raw data tensors directly (no yastn '+').
+                    out = {}
+                    for k, p in partials.items():
+                        full_p = _zero_fill_to_full(p, per_key_struct[k], cfg)
+                        out[k] = _serialize_yastn(full_p)
                     res_q.put(('forward_done', rank, txn_id, out))
                 else:  # backward
                     partials = _contract_with_sliced_unroll(
@@ -292,7 +418,38 @@ class _PersistentWorkerPool:
                 self.worker_devs.append(dev)
                 rank += 1
         self.n_workers = rank
-        self._struct_cache = {}
+        self._struct_cache = OrderedDict()
+
+    def cache_get(self, key):
+        """LRU read of the assembly-recipe cache."""
+        try:
+            self._struct_cache.move_to_end(key)
+            return self._struct_cache[key]
+        except KeyError:
+            return None
+
+    def cache_put(self, key, value):
+        """LRU write; evict the oldest entry past the size bound."""
+        self._struct_cache[key] = value
+        self._struct_cache.move_to_end(key)
+        while len(self._struct_cache) > _STRUCT_CACHE_MAXSIZE:
+            self._struct_cache.popitem(last=False)
+
+    def get_result(self, active_worker_idxs):
+        """Blocking get from ``res_q`` with a liveness guard: if no message
+        arrives within ``_WORKER_POLL_SECONDS`` and an assigned worker has died
+        (CUDA OOM kill, segfault) without posting, raise instead of hanging
+        forever. Legitimately long contractions just keep waiting."""
+        while True:
+            try:
+                return self.res_q.get(timeout=_WORKER_POLL_SECONDS)
+            except _queue.Empty:
+                dead = [(i, self.procs[i].exitcode) for i in active_worker_idxs
+                        if not self.procs[i].is_alive()]
+                if dead:
+                    raise RuntimeError(
+                        f"MP worker(s) died before posting results "
+                        f"(rank, exitcode): {dead} — likely CUDA OOM kill or segfault")
 
     def allocate_txn(self):
         self._next_txn += 1
@@ -333,9 +490,11 @@ def _shutdown_all_pools():
 class _MultiprocSlicedUnrollFunction(torch.autograd.Function):
     """Custom autograd.Function dispatching unrolled combos to a worker pool.
 
-    Inputs: (*input_data_tensors, meta_bundle).
-    Forward: workers compute per-key partials (no_grad); parent merges per key,
-    optionally calls yastn_block, returns assembled out_data.
+    Inputs: (*input_data_tensors, meta_bundle). The per-key output structs are
+    derived from input legs upfront (see _derive_output_structs), so:
+    Forward: workers compute per-key partials (no_grad) and zero-fill each to its
+    per-key struct; parent sums raw data per key, optionally calls yastn_block,
+    returns assembled out_data.
     Backward: parent re-runs yastn_block on saved merged data with autograd
     enabled, extracts per-key grads via local backward, ships per-key grads to
     workers; workers re-run their combos with autograd, call per-key partial
@@ -389,86 +548,48 @@ class _MultiprocSlicedUnrollFunction(torch.autograd.Function):
             ))
 
         n_active = sum(1 for a in worker_assignments if a)
+        active_idxs = [i for i, a in enumerate(worker_assignments) if a]
         per_worker_partials = []  # list of {key: serialized yastn dict}
-        for _ in range(n_active):
-            msg = pool.res_q.get()
-            if msg[0] != 'forward_done':
+        while len(per_worker_partials) < n_active:
+            msg = pool.get_result(active_idxs)
+            kind, _rank, _txn, payload = msg
+            if _txn != txn_id:
+                # leftover from an earlier transaction that raised mid-drain
+                log.warning("discarding stale %s message from txn %s", kind, _txn)
+                continue
+            if kind != 'forward_done':
                 raise RuntimeError(f"worker forward failed: {msg}")
-            _, _rank, _txn, partials_dict = msg
-            per_worker_partials.append(partials_dict)
+            per_worker_partials.append(payload)
 
-        if per_key_struct is None:
-            # Cache-miss path: workers returned RAW partials. Merge via yastn '+'
-            # which handles charge-sector union across workers, then derive
-            # struct from the merged result and populate the cache so future
-            # calls hit the zero-fill fast path.
-            from . import Tensor
-            merged_yastn = {}
-            for w_partials in per_worker_partials:
-                for key, ydict in w_partials.items():
-                    t = Tensor.from_dict(ydict, config=parent_config)
-                    if key in merged_yastn:
-                        merged_yastn[key] = merged_yastn[key] + t
-                    else:
-                        merged_yastn[key] = t
-            if not merged_yastn:
-                from . import YastnError
-                raise YastnError("No valid charge sectors found for contraction.")
-
-            common_legs_axes, _ndim = _compute_common_legs_axes(merged_yastn, unroll, out_ig)
-            if common_legs_axes is None:
-                assembled = merged_yastn[()]
-            else:
-                from ..initialize import block as yastn_block
-                assembled = yastn_block(merged_yastn, common_legs=common_legs_axes)
-                assembled = assembled.drop_leg_history()
-
-            per_key_struct = {k: _meta_only(v.to_dict(level=1))
-                              for k, v in merged_yastn.items()}
-            full_struct = _meta_only(assembled.to_dict(level=1))
-            pool._struct_cache[meta['cache_key']] = (per_key_struct, full_struct,
-                                                     common_legs_axes,
-                                                     meta['surviving'],
-                                                     meta['pf_trim_per_combo'],
-                                                     meta['dim_overrides_per_combo'])
-            # Update meta in place so backward (and the wrap step in
-            # _contract_with_sliced_unroll_mp) see the populated struct.
-            meta['per_key_struct'] = per_key_struct
-            meta['common_legs_axes'] = common_legs_axes
-            meta['full_struct'] = full_struct
-
-            merged_keys = sorted(merged_yastn.keys())
-            merged_data = {k: merged_yastn[k]._data for k in merged_keys}
-            out_data = assembled._data
+        # Workers zero-filled each partial to its per-key output struct, so all
+        # per-key tensors share shape and we sum raw torch data tensors directly
+        # (gathering each worker's contribution back to the original device).
+        merged_data = {}
+        for w_partials in per_worker_partials:
+            for key, ydict in w_partials.items():
+                d = ydict['data']
+                if str(d.device) != str(original_device):
+                    d = d.to(original_device)
+                if key in merged_data:
+                    merged_data[key] = merged_data[key] + d
+                else:
+                    merged_data[key] = d
+        if not merged_data:
+            from . import YastnError
+            raise YastnError("No valid charge sectors found for contraction.")
+        merged_keys = sorted(merged_data.keys())
+        if common_legs_axes is None:
+            out_data = merged_data[()]
         else:
-            # Cache-hit path: workers zero-filled, all per-key tensors share
-            # shape so we can sum raw torch data tensors directly.
-            merged_data = {}
-            for w_partials in per_worker_partials:
-                for key, ydict in w_partials.items():
-                    d = ydict['data']
-                    if str(d.device) != str(original_device):
-                        d = d.to(original_device)
-                    if key in merged_data:
-                        merged_data[key] = merged_data[key] + d
-                    else:
-                        merged_data[key] = d
-            if not merged_data:
-                from . import YastnError
-                raise YastnError("No valid charge sectors found for contraction.")
-            merged_keys = sorted(merged_data.keys())
-            if common_legs_axes is None:
-                out_data = merged_data[()]
-            else:
-                from . import Tensor
-                from ..initialize import block as yastn_block
-                per_key_tensors = {}
-                for k in merged_keys:
-                    tdict = {**per_key_struct[k], 'data': merged_data[k]}
-                    per_key_tensors[k] = Tensor.from_dict(tdict, config=parent_config)
-                assembled = yastn_block(per_key_tensors, common_legs=common_legs_axes)
-                assembled = assembled.drop_leg_history()
-                out_data = assembled._data
+            from . import Tensor
+            from ..initialize import block as yastn_block
+            per_key_tensors = {}
+            for k in merged_keys:
+                tdict = {**per_key_struct[k], 'data': merged_data[k]}
+                per_key_tensors[k] = Tensor.from_dict(tdict, config=parent_config)
+            assembled = yastn_block(per_key_tensors, common_legs=common_legs_axes)
+            assembled = assembled.drop_leg_history()
+            out_data = assembled._data
 
         ctx.save_for_backward(*input_data_tensors,
                               *(merged_data[k] for k in merged_keys))
@@ -549,13 +670,18 @@ class _MultiprocSlicedUnrollFunction(torch.autograd.Function):
             ))
 
         n_active = sum(1 for a in worker_assignments if a)
+        active_idxs = [i for i, a in enumerate(worker_assignments) if a]
         per_worker_input_grads = []
-        for _ in range(n_active):
-            msg = pool.res_q.get()
-            if msg[0] != 'backward_done':
+        while len(per_worker_input_grads) < n_active:
+            msg = pool.get_result(active_idxs)
+            kind, _rank, _txn, payload = msg
+            if _txn != txn_id:
+                # leftover from an earlier transaction that raised mid-drain
+                log.warning("discarding stale %s message from txn %s", kind, _txn)
+                continue
+            if kind != 'backward_done':
                 raise RuntimeError(f"worker backward failed: {msg}")
-            _, _rank, _txn, grads = msg
-            per_worker_input_grads.append(grads)
+            per_worker_input_grads.append(payload)
 
         # Sum per-input grads across workers. Workers may live on different
         # GPUs, so gather each contribution to the original (input) device
@@ -601,22 +727,25 @@ def _contract_with_sliced_unroll_mp(*args, unroll, optimize, checkpoint_loop=Fal
     per_combo_path = bool(kwargs.get("per_combo_path", False))
     # Cache: (per_key_struct, full_struct, common_legs_axes, surviving_combos,
     #         pf_trim_per_combo, dim_overrides_per_combo)
-    cache_key = _build_cache_key([t.to_dict(level=1) for t in tensors],
+    cache_key = _build_cache_key(tensors,
                                  unroll, ig_list, out_ig, optimize, swap, per_combo_path)
-    cached = pool._struct_cache.get(cache_key)
+    cached = pool.cache_get(cache_key)
     if cached is not None:
         # Cache holds prefilter results too, so workers always get the
         # precomputed payload without re-running _metadata_filter_combos.
         (per_key_struct, full_struct, common_legs_axes,
          surviving, pf_trim_per_combo, dim_overrides_per_combo) = cached
     else:
-        per_key_struct = None
-        full_struct = None
-        common_legs_axes = None
         from .oe_blocksparse import _metadata_filter_combos
         surviving, pf_trim_per_combo, dim_overrides_per_combo = _metadata_filter_combos(
             tensors, ig_list, out_ig, unroll, optimize, swap,
             collect_dim_overrides=per_combo_path)
+        # Derive the assembly structs from input legs (no data contraction);
+        # workers always zero-fill and the cache is a pure performance memo.
+        per_key_struct, full_struct, common_legs_axes = _derive_output_structs(
+            tensors, ig_list, out_ig, unroll, surviving, parent_config)
+        pool.cache_put(cache_key, (per_key_struct, full_struct, common_legs_axes,
+                                   surviving, pf_trim_per_combo, dim_overrides_per_combo))
 
     # Distribute SURVIVING combo indices round-robin across workers
     worker_assignments = [[] for _ in range(pool.n_workers)]
@@ -645,15 +774,13 @@ def _contract_with_sliced_unroll_mp(*args, unroll, optimize, checkpoint_loop=Fal
         'full_struct': full_struct,
         'parent_config': parent_config,
         'original_device': original_device,
-        'cache_key': cache_key,
-        'surviving': surviving,
         'checkpoint_loop': checkpoint_loop,
         'pf_trim_per_combo': pf_trim_per_combo,
         'dim_overrides_per_combo': dim_overrides_per_combo,
     }
 
     out_data = _MultiprocSlicedUnrollFunction.apply(*input_data_tensors, meta)
-    # Function.forward populates meta['full_struct'] on cache miss.
+    # full_struct is derived from input legs in the dispatcher (above).
     full_struct = meta['full_struct']
     from . import Tensor
     return Tensor.from_dict({**full_struct, 'data': out_data}, config=parent_config)
