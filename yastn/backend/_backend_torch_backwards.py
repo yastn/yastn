@@ -14,12 +14,27 @@
 # ==============================================================================
 """Support of torch as a data structure used by yastn."""
 from types import SimpleNamespace
+from typing import Sequence
 import numpy as np
 import torch
 
 from .linalg.torch_svd_gesdd import SVDGESDD
 from .linalg.torch_svds_scipy import SVDS_SCIPY
 # from .linalg.torch_eig_arnoldi import SYMARNOLDI, SYMARNOLDI_2C
+
+
+def _project_grad_dtype(grad, target_dtype):
+    """Cast an accumulated gradient back to the dtype of its input operand.
+
+    Backward passes promote to a common dtype (e.g. real+complex -> complex);
+    the gradient of a lower-dtype input must be projected back to it, taking the
+    real part when the input is real but the promoted gradient is complex.
+    """
+    if grad.dtype == target_dtype:
+        return grad
+    if grad.is_complex() and not torch.empty((), dtype=target_dtype).is_complex():
+        grad = grad.real
+    return grad.to(dtype=target_dtype)
 
 
 class kernel_svd(torch.autograd.Function):
@@ -117,6 +132,7 @@ class kernel_dot(torch.autograd.Function):
         # adjoint of block-sparse matrix-matrix multiplication A.B = C
         # A_b = C_b.B^T ; B_b = A^T . C_b
         data_A, data_B = ctx.saved_tensors
+        data_A_dtype, data_B_dtype = data_A.dtype, data_B.dtype
         dtype = torch.promote_types(data_A.dtype, data_B.dtype)
         data_A_b = torch.zeros_like(data_A, dtype=dtype)
         data_B_b = torch.zeros_like(data_B, dtype=dtype)
@@ -133,6 +149,9 @@ class kernel_dot(torch.autograd.Function):
             A = data_A[slice(*sla)].view(Da)
             Ab += Cb @ B.adjoint()  #  += is for fuse_contracted
             Bb += A.adjoint() @ Cb
+        # project gradients back to each input's dtype (real+complex mixes)
+        data_A_b = _project_grad_dtype(data_A_b, data_A_dtype)
+        data_B_b = _project_grad_dtype(data_B_b, data_B_dtype)
         return data_A_b, data_B_b, None, None
 
 
@@ -166,8 +185,17 @@ class kernel_transpose_dot_sum(torch.autograd.Function):
         # adjoint of block-sparse matrix-matrix multiplication A . B = C
         # A_b = C_b . B^T ; B_b = A^T . C_b
         data_A, data_B = ctx.saved_tensors
+        data_A_dtype, data_B_dtype = data_A.dtype, data_B.dtype
+        promoted_dtype = torch.promote_types(torch.promote_types(data_A_dtype, data_B_dtype), data_C_b.dtype)
         inv_order_A = tuple(np.argsort(ctx.order_A))
         inv_order_B = tuple(np.argsort(ctx.order_B))
+
+        if promoted_dtype != data_A.dtype:
+            data_A = data_A.to(dtype=promoted_dtype)
+        if promoted_dtype != data_B.dtype:
+            data_B = data_B.to(dtype=promoted_dtype)
+        if promoted_dtype != data_C_b.dtype:
+            data_C_b = data_C_b.to(dtype=promoted_dtype)
 
         At = {ii: data_A[slice(*slo)].view(tuple(Do)).permute(ctx.order_A).reshape(Dl, Dr) for ii, (slo, Do, Dl, Dr) in enumerate(ctx.reshape_A)}
         Bt = {ii: data_B[slice(*slo)].view(tuple(Do)).permute(ctx.order_B).reshape(Dl, Dr) for ii, (slo, Do, Dl, Dr) in enumerate(ctx.reshape_B)}
@@ -197,19 +225,32 @@ class kernel_transpose_dot_sum(torch.autograd.Function):
                 return torch.zeros((size_in,), dtype=dtype, device=device).scatter(0, all_idx, all_val)
             return torch.zeros((size_in,), dtype=dtype, device=device)
 
-        data_A_b = build_grad(At_b, ctx.reshape_A, ctx.order_A, inv_order_A, data_A.numel(), data_A.dtype, data_A.device)
-        data_B_b = build_grad(Bt_b, ctx.reshape_B, ctx.order_B, inv_order_B, data_B.numel(), data_B.dtype, data_B.device)
+        data_A_b = build_grad(At_b, ctx.reshape_A, ctx.order_A, inv_order_A, data_A.numel(), promoted_dtype, data_A.device)
+        data_B_b = build_grad(Bt_b, ctx.reshape_B, ctx.order_B, inv_order_B, data_B.numel(), promoted_dtype, data_B.device)
+        # project gradients back to each input's dtype (real+complex mixes)
+        data_A_b = _project_grad_dtype(data_A_b, data_A_dtype)
+        data_B_b = _project_grad_dtype(data_B_b, data_B_dtype)
 
         return data_A_b, data_B_b, None, None, None, None, None, None
 
 
 class kernel_negate_blocks(torch.autograd.Function):
+    
+    @staticmethod
+    def _sign(slices : Sequence[Sequence[int]], n, device):
+        # 2 * (int8 * n) + bool * n mem cost
+        #
+        sl = torch.as_tensor(slices, dtype=torch.long, device=device)  # (N, 2)
+        delta = torch.zeros(n + 1, dtype=torch.int8, device=device)
+        delta.index_put_((sl[:, 0],), torch.tensor(1, dtype=torch.int8, device=device), accumulate=True)
+        delta.index_put_((sl[:, 1],), torch.tensor(-1, dtype=torch.int8, device=device), accumulate=True)
+        delta.cumsum_(0)              # in-place cumulative sum, shape (n+1,)
+        delta.mul_(-2).add_(1)        # +1 / -1, shape (n,)
+        return delta[:n]
+    
     @staticmethod
     def forward(data_in, slices):
-        newdata = data_in.clone()
-        for slc in slices:
-            newdata[slice(*slc)] *= -1
-        return newdata
+        return data_in * kernel_negate_blocks._sign(slices, data_in.numel(), data_in.device)
 
     @staticmethod
     def setup_context(ctx, inputs, output):
@@ -218,10 +259,7 @@ class kernel_negate_blocks(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, data_out_b):
-        data_in_b = data_out_b.clone()
-        for slc in ctx.slices:
-            data_in_b[slice(*slc)] *= -1
-        return data_in_b, None
+        return data_out_b * kernel_negate_blocks._sign(ctx.slices, data_out_b.numel(), data_out_b.device), None
 
 
 class kernel_apply_mask(torch.autograd.Function):
