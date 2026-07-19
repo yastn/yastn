@@ -39,10 +39,43 @@ class _config(NamedTuple):
     profile: bool = False
 
 
+class HashedMask:
+    __slots__ = ('_arr', '_hash')
+    _NONE_HASH = hash(None)
+
+    def __init__(self, arr):
+        if arr is None:
+            self._arr = None
+            self._hash = self._NONE_HASH
+        else:
+            arr.flags.writeable = False
+            self._arr = arr
+            self._hash = hash(arr.data.tobytes())
+
+    @property
+    def array(self) -> np.ndarray | None:
+        return self._arr
+
+    def __hash__(self) -> int:
+        return self._hash
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, HashedMask):
+            return False
+        if self is other:
+            return True
+        if self._hash != other._hash:
+            return False
+        if self._arr is None or other._arr is None:
+            return self._arr is other._arr
+        return np.array_equal(self._arr, other._arr)
+
+
 class _struct(NamedTuple):
     legs: tuple = ()  # tuple[LegBasic]
     n: tuple = ()  # tensor charge
     isdiag: bool = False  # isdiag
+    mask: HashedMask = HashedMask(None)  #
 
 
 class _blocks(NamedTuple):
