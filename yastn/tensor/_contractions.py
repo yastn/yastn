@@ -233,7 +233,6 @@ def _tensordot_cutensor(a, b, nout_a, nin_a, nin_b, nout_b):
     if a.config.sym.NSYM == 0:
         data = a.config.backend.tensordot_dense(a.data, b.data, metas[1], metas[6], nin_a, nin_b, modes_out)
     else:
-        # data = a.config.backend.tensordot_bs(a.data, b.data, list(nin_a), list(nin_b), *metas, modes_out)
         data = a.config.backend.tensordot_bs_v2(a.data, b.data, list(nin_a), list(nin_b), *metas, modes_out)
     if a.config.profile: a.config.backend.nvtx.range_pop()
     return data, struct_c
