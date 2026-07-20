@@ -208,7 +208,7 @@ def get_blocks(sym, struct) -> _blocks:
     taxes = tuple(tuple(tuple(map(int, tt)) for tt, d in zip(leg.t, leg.D) if d > 0) for leg in struct.legs)
     Daxes = tuple(tuple(int(d) for d in leg.D if d > 0) for leg in struct.legs)
 
-    tblocks, iblocks, icharges = get_blocks_charges(sym, taxes, saxes, struct.n)
+    tblocks, iblocks, icharges = get_blocks_charges_mask(sym, taxes, saxes, struct.n, struct.mask)
 
     Dblocks = np.empty(iblocks.shape, dtype=np.int64)
     for i, Dax in enumerate(Daxes):
@@ -230,13 +230,20 @@ def get_blocks(sym, struct) -> _blocks:
         Dl = tuple(Dax[i] for i in inds)
         leg = LegBasic(s=s, t=tl, D=Dl)
         new_legs.append(leg)
-    new_struct = _struct(legs=tuple(new_legs), n=struct.n, isdiag=struct.isdiag)
+    new_struct = _struct(legs=tuple(new_legs), n=struct.n, isdiag=struct.isdiag, mask=struct.mask)
     #
     return _blocks(t=tblocks, D=Dblocks, slc=slices, size=size, nblocks=nblocks, struct=new_struct)
 
 
+def get_blocks_indices(sym, struct) -> _blocks:
+    saxes = tuple(leg.s for leg in struct.legs)
+    taxes = tuple(leg.t for leg in struct.legs)
+    _, iblocks, _ = get_blocks_charges_mask(sym, taxes, saxes, struct.n, struct.mask)
+    return iblocks
+
+
 @lru_cache(maxsize=1024)
-def get_blocks_charges(sym, taxes, s, n):
+def get_blocks_charges_all(sym, taxes, s, n):
     nsym = sym.NSYM
     ndim = len(taxes)
     if ndim > 0:
@@ -254,7 +261,19 @@ def get_blocks_charges(sym, taxes, s, n):
 
     tblocks = comb_t[ind]
     iblocks = indices[ind]
-    icharges = [np.unique(iblocks[:, i]).tolist() for i in range(ndim)]
+
+    return tblocks, iblocks
+
+
+@lru_cache(maxsize=1024)
+def get_blocks_charges_mask(sym, taxes, s, n, mask):
+    tblocks, iblocks = get_blocks_charges_all(sym, taxes, s, n)
+
+    if mask.array is not None:
+        tblocks = tblocks[mask.array]
+        iblocks = iblocks[mask.array]
+
+    icharges = [np.unique(iblocks[:, i]).tolist() for i in range(len(taxes))]
     return tblocks, iblocks, icharges
 
 

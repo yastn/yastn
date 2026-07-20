@@ -41,7 +41,8 @@ def set_cache_maxsize(maxsize=0):
     _merging._meta_unfuse_hard = lru_cache(maxsize)(_merging._meta_unfuse_hard.__wrapped__)
     _algebra._meta_addition = lru_cache(maxsize)(_algebra._meta_addition.__wrapped__)
     _auxiliary.get_blocks = lru_cache(maxsize)(_auxiliary.get_blocks.__wrapped__)
-    _auxiliary.get_blocks_charges = lru_cache(maxsize)(_auxiliary.get_blocks_charges.__wrapped__)
+    _auxiliary.get_blocks_charges_all = lru_cache(maxsize)(_auxiliary.get_blocks_charges_all.__wrapped__)
+    _auxiliary.get_blocks_charges_mask = lru_cache(maxsize)(_auxiliary.get_blocks_charges_mask.__wrapped__)
 
 
 def clear_cache():
@@ -65,7 +66,8 @@ def clear_cache():
     _merging._meta_unfuse_hard.cache_clear()
     _algebra._meta_addition.cache_clear()
     _auxiliary.get_blocks.cache_clear()
-    _auxiliary.get_blocks_charges.cache_clear()
+    _auxiliary.get_blocks_charges_all.cache_clear()
+    _auxiliary.get_blocks_charges_mask.cache_clear()
 
 
 def get_cache_info():
@@ -89,5 +91,6 @@ def get_cache_info():
             "ncon": _einsum._meta_ncon.cache_info(),
             "addition": _algebra._meta_addition.cache_info(),
             "get_blocks": _auxiliary.get_blocks.cache_info(),
-            "get_blocks_charges": _auxiliary.get_blocks_charges.cache_info(),
+            "get_blocks_charges_all": _auxiliary.get_blocks_charges_all.cache_info(),
+            "get_blocks_charges_mask": _auxiliary.get_blocks_charges_mask.cache_info(),
             }

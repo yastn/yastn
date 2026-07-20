@@ -21,7 +21,7 @@ from operator import mul
 
 import numpy as np
 
-from ._auxiliary import _config, get_blocks, find_index, find_matching_indices
+from ._auxiliary import _config, get_blocks, find_index, find_matching_indices, HashedMask
 from ._tests import YastnError
 from ..backend import backend_np
 from ..sym import sym_none, sym_U1, sym_Z2, sym_Z3, sym_U1xU1, sym_U1xU1xZ2
@@ -231,6 +231,11 @@ def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
 
     if a.isdiag and bl.struct.legs[0] != bl.struct.legs[1].conj():
         raise YastnError("Diagonal tensor requires the same bond dimensions on both legs.")
+
+    # mask = np.random.randint(2, size=bl.nblocks).astype(bool).reshape(-1)
+    # mask[:1] = True
+    # struct = bl.struct._replace(mask=HashedMask(mask))
+    # bl = get_blocks(a.config.sym, struct)
 
     a.struct = bl.struct
     a._data = _init_block(a.config, bl.size, val, dtype=a.yastn_dtype, device=a.device)
