@@ -24,8 +24,8 @@ from yastn.tn.fpeps.envs.rdm import rdm1x1
 
 @pytest.fixture
 def additional_imports(config_kwargs):
-    if not config_kwargs["backend"] in ["torch", "torch_cpp"]:
-        pytest.skip("Backend with AD support is required: [torch, torch_cpp]")
+    if not config_kwargs["backend"] in ["torch", "torch_cutensor"]:
+        pytest.skip("Backend with AD support is required: [torch, torch_cutensor]")
         return config_kwargs, None, None
     else:
         import torch

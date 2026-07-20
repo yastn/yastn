@@ -91,10 +91,6 @@ def make_config(**kwargs) -> _config:
             * ``'fuse_to_matrix'`` Tensordot involves suitable permutation of each tensor while performing a fusion of each tensor into a sequence of matrices and calling matrix-matrix multiplication. Postprocessing includes unfusioning the remaining legs in the result, which often copy data adding extra overhead.
             * ``'fuse_contracted'`` Tensordot involves suitable permutation of each tensor while performing a fusion of to-be-contracted legs of each tensor and calling multiplication. It involves a larger number of multiplication calls for smaller objects, but unfusing the legs of the result is not needed.
             * ``'no_fusion'`` Tensordot involves suitable permutation of tensor blocks and calling matrix-matrix multiplication for a potentially large number of small objects. Resulting contributions to new blocks get added. However, overheads of initial fusion (copying data) can sometimes be avoided in this approach.
-    profile : bool
-        If ``True``, enables profiling of tensor operations in backends supporting it.
-        Currently, only PyTorch backend with NVTX support is available.
-        Default is ``False``. If YASTN_PROFILE=1 is set in the environment, overrides this argument to ``True``.
 
     Example
     -------
@@ -108,9 +104,9 @@ def make_config(**kwargs) -> _config:
     elif kwargs["backend"] == 'torch':
         from ..backend import backend_torch
         kwargs["backend"] = backend_torch
-    elif kwargs["backend"] == 'torch_cpp':
-        from ..backend import backend_torch_cpp  # pragma: no cover
-        kwargs["backend"] = backend_torch_cpp  # pragma: no cover
+    elif kwargs["backend"] == 'torch_cutensor':
+        from ..backend import backend_torch_cutensor  # pragma: no cover
+        kwargs["backend"] = backend_torch_cutensor  # pragma: no cover
     elif isinstance(kwargs["backend"], str):
         raise YastnError("backend encoded as string only supports: 'np', 'torch'")
 
@@ -121,12 +117,6 @@ def make_config(**kwargs) -> _config:
             kwargs["sym"] = _syms[kwargs["sym"]]
         except KeyError:
             raise YastnError("sym encoded as string only supports: 'dense', 'Z2', 'Z3', 'U1', 'U1xU1', 'U1xU1xZ2'.")
-
-    if "profile" not in kwargs:
-        try:
-            kwargs["profile"] = bool(int(os.getenv("YASTN_PROFILE","0")))
-        except ValueError:
-            warnings.warn("Environment variable YASTN_PROFILE must be 0 or 1 if set. Using default value 0 (False).")
 
     return _config(**{a: kwargs[a] for a in _config._fields if a in kwargs})
 

@@ -17,9 +17,11 @@ from typing import Sequence, Union
 import numpy as np
 import torch
 import tapp_torch
+from .._profile import nsys_profile
 from .backend_torch import *
 
-BACKEND_ID = "torch_cpp"
+
+BACKEND_ID = "torch_cutensor"
 
 
 def tensordot_bs(Adata, Bdata, *args):
@@ -30,7 +32,7 @@ def tensordot_bs(Adata, Bdata, *args):
         Bdata = Bdata.to(dtype=dtype)
     return torch.ops.tapp_torch.tensordot_bs(Adata, Bdata, *args)
 
-
+@nsys_profile
 def tensordot_dense(Adata, Bdata, DA, DB, nin_a, nin_b, modes_out):
     dtype = torch.promote_types(Bdata.dtype, Adata.dtype)
     if Adata.dtype != dtype:
@@ -42,6 +44,7 @@ def tensordot_dense(Adata, Bdata, DA, DB, nin_a, nin_b, modes_out):
     return torch.ops.tapp_torch.tensordot(Adata, Bdata, nin_a, nin_b, modes_out).reshape(-1)
 
 
+@nsys_profile
 def tensordot_bs_v2(
     a: torch.Tensor, b: torch.Tensor,
     nin_a: Sequence[int], nin_b: Sequence[int],

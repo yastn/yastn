@@ -28,6 +28,7 @@ try:
 except:
     _VALID_CONTRACT_KWARGS = {'optimize', 'memory_limit', 'einsum_call', 'use_blas', 'shapes'}
 from . import Tensor, ncon, split_data_and_meta, combine_data_and_meta
+from .._profile import nvtx
 from ..initialize import block as yastn_block
 from ._legs import Leg
 from ._einsum import ncon_prefilter
@@ -601,11 +602,11 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
 
     original_device = tensors[0].device
 
-    # External allocators (e.g. cuTENSOR via torch_cpp) need PyTorch's
+    # External allocators (e.g. cuTENSOR via torch_cutensor) need PyTorch's
     # caching allocator released so they can reclaim freed memory; pure
     # PyTorch on CUDA already reuses internally and empty_cache() is a
     # net loss.
-    _needs_cache_release = getattr(tensors[0].config.backend, 'BACKEND_ID', '') == 'torch_cpp'
+    _needs_cache_release = getattr(tensors[0].config.backend, 'BACKEND_ID', '') == 'torch_cutensor'
 
     def _release_cuda_cache(devs):
         r"""Release PyTorch's cached-but-unused GPU memory on *devs*."""
@@ -730,11 +731,11 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
         _cfg = iter_tensors[0].config
         for n, sl_map, output_pos_key in assigned:
             with stream_ctx:
-                if _cfg.profile:
+                if nvtx.enabled:
                     tag = f"_contract_with_sliced_unroll {n}"
                     if dev is not None:
                         tag += f" [device={dev}]"
-                    _cfg.backend.nvtx.range_push(tag)
+                    nvtx.range_push(tag)
 
                 pf_trim = pf_trim_per_combo[n]
                 combo_dim_overrides = (dim_overrides_per_combo[n]
@@ -746,7 +747,7 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
                 prev = local_partials.get(output_pos_key)
                 local_partials[output_pos_key] = partial if prev is None else prev + partial
 
-                if _cfg.profile: _cfg.backend.nvtx.range_pop()
+                if nvtx.enabled: nvtx.range_pop()
 
                 # Release per-combo cache to keep cuTENSOR / external allocators
                 # from fragmenting when intermediates churn (no-op for pure torch).

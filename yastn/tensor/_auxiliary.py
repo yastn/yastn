@@ -17,10 +17,12 @@ from __future__ import annotations
 
 from functools import lru_cache
 from itertools import accumulate, chain
-from typing import NamedTuple
+from math import prod
+from typing import NamedTuple, Sequence
 
 import numpy as np
 
+from .._profile import nsys_profile
 from ._legbasic import LegBasic
 from ..sym import sym_none
 
@@ -36,7 +38,6 @@ class _config(NamedTuple):
     default_fusion: str = 'hard'
     force_fusion: str = None
     tensordot_policy: str = 'fuse_contracted'
-    profile: bool = False
 
 
 class HashedMask:
@@ -198,6 +199,7 @@ def sign_canonical_order(*operators, sites=None, f_ordered=None) -> int:
 
 
 @lru_cache(maxsize=1024)
+@nsys_profile
 def get_blocks(sym, struct) -> _blocks:
     """
     Generate all allowed block charges, their dimensions, slices, total size and trimed legs.
@@ -208,7 +210,7 @@ def get_blocks(sym, struct) -> _blocks:
     taxes = tuple(tuple(tuple(map(int, tt)) for tt, d in zip(leg.t, leg.D) if d > 0) for leg in struct.legs)
     Daxes = tuple(tuple(int(d) for d in leg.D if d > 0) for leg in struct.legs)
 
-    tblocks, iblocks, icharges = get_blocks_charges_mask(sym, taxes, saxes, struct.n, struct.mask)
+    tblocks, iblocks, icharges, mask = get_blocks_charges_mask(sym, taxes, saxes, struct.n, struct.mask)
 
     Dblocks = np.empty(iblocks.shape, dtype=np.int64)
     for i, Dax in enumerate(Daxes):
@@ -230,7 +232,7 @@ def get_blocks(sym, struct) -> _blocks:
         Dl = tuple(Dax[i] for i in inds)
         leg = LegBasic(s=s, t=tl, D=Dl)
         new_legs.append(leg)
-    new_struct = _struct(legs=tuple(new_legs), n=struct.n, isdiag=struct.isdiag, mask=struct.mask)
+    new_struct = _struct(legs=tuple(new_legs), n=struct.n, isdiag=struct.isdiag, mask=mask)
     #
     return _blocks(t=tblocks, D=Dblocks, slc=slices, size=size, nblocks=nblocks, struct=new_struct)
 
@@ -238,29 +240,95 @@ def get_blocks(sym, struct) -> _blocks:
 def get_blocks_indices(sym, struct) -> _blocks:
     saxes = tuple(leg.s for leg in struct.legs)
     taxes = tuple(leg.t for leg in struct.legs)
-    _, iblocks, _ = get_blocks_charges_mask(sym, taxes, saxes, struct.n, struct.mask)
+    _, iblocks, _, _ = get_blocks_charges_mask(sym, taxes, saxes, struct.n, struct.mask)
     return iblocks
 
 
+_SPLIT_MIN = 4096
+
+
+def _product_indices(sizes):
+    """ Indices of the cartesian product of ``range(n)``, in lexicographic (C) order. """
+    if len(sizes) == 0:
+        return np.zeros((1, 0), dtype=np.int64)
+    return np.indices(sizes, dtype=np.int64).reshape(len(sizes), -1).T
+
+
+def _row_view(a):
+    """ 1d structured view of the rows of a 2d array, so that rows can be sorted and searched. """
+    a = np.ascontiguousarray(a)
+    return a.view([(f'f{i}', a.dtype) for i in range(a.shape[1])]).ravel()
+
+
+def _group_charges(sym, tarr, s, axes):
+    """ Cartesian product of charges on ``axes``: indices, charges, and what they fuse to. """
+    indices = _product_indices([len(tarr[i]) for i in axes])
+    t = np.empty((len(indices), len(axes), sym.NSYM), dtype=np.int64)
+    for i, ax in enumerate(axes):
+        t[:, i, :] = tarr[ax][indices[:, i], :]
+    return indices, t, sym.fuse(t, np.array([s[ax] for ax in axes], dtype=np.int64), 1)
+
+
 @lru_cache(maxsize=1024)
-def get_blocks_charges_all(sym, taxes, s, n):
+@nsys_profile
+def get_blocks_charges_all(sym, taxes: Sequence[Sequence[int]], s: Sequence[int], n: Sequence[int]):
+    """
+    Params
+    ------
+    taxes: List of lists of charges for each leg
+    """
     nsym = sym.NSYM
     ndim = len(taxes)
-    if ndim > 0:
-        indices = np.indices([len(tax) for tax in taxes]).reshape(ndim, -1).T
+    sizes = [len(tax) for tax in taxes]
+
+    if 0 in sizes:  # a leg carrying no charges admits no blocks
+        return (np.zeros((0, ndim, nsym), dtype=np.int64),
+                np.zeros((0, ndim), dtype=np.int64))
+
+    tarr = tuple(np.array(tax, dtype=np.int64).reshape(len(tax), nsym) for tax in taxes)
+
+    # Enumerating every combination of charges costs prod(sizes), i.e. exponentially many in the
+    # rank, while only a small fraction of them fuses to n. Instead, split the legs into two
+    # groups of comparable size, enumerate each group on its own -- about sqrt(prod(sizes))
+    # combinations each -- and join the two groups on the charge they have to share.
+    h = ndim if nsym == 0 or prod(sizes) <= _SPLIT_MIN else \
+        min((max(prod(sizes[:c]), prod(sizes[c:])), c) for c in range(ndim + 1))[1]
+
+    lind, lt, lfused = _group_charges(sym, tarr, s, range(h))
+
+    if h == ndim:  # a single group, so filter it directly
+        ind = np.all(lfused == np.array(n, dtype=np.int64), axis=1)
+        tblocks, iblocks = lt[ind], lind[ind]
+    elif sym.add_charges(n) != tuple(n):
+        # fused charges are canonical representatives of their sector, so a non-canonical n
+        # is matched by none of them
+        tblocks = np.zeros((0, ndim, nsym), dtype=np.int64)
+        iblocks = np.zeros((0, ndim), dtype=np.int64)
     else:
-        indices = np.zeros((1, ndim), dtype=np.int64)
+        rind, rt, rfused = _group_charges(sym, tarr, s, range(h, ndim))
 
-    comb_t = np.empty((len(indices), ndim, nsym), dtype=np.int64)
-    for i, tax in enumerate(taxes):
-        tax = np.array(tax, dtype=np.int64).reshape(len(tax), nsym)
-        comb_t[:, i, :] = tax[indices[:, i], :]
+        # charge the first group has to carry to complete each combination of the second, n - r
+        nt = np.broadcast_to(np.array(n, dtype=np.int64), (len(rfused), nsym))
+        rneed = sym.fuse(np.stack([nt, rfused], axis=1), np.array([1, -1], dtype=np.int64), 1)
 
-    s = np.array(s, dtype=np.int64)
-    ind = np.all(sym.fuse(comb_t, s, 1) == n, axis=1)
+        # join the groups on that charge, keeping the lexicographic order of the indices
+        order = np.argsort(_row_view(rneed), kind='stable')
+        rkeys = _row_view(rneed[order])
+        lkeys = _row_view(lfused)
+        lo = np.searchsorted(rkeys, lkeys, side='left')
+        counts = np.searchsorted(rkeys, lkeys, side='right') - lo
 
-    tblocks = comb_t[ind]
-    iblocks = indices[ind]
+        nblocks = int(counts.sum())
+        starts = np.zeros(len(counts), dtype=np.int64)
+        np.cumsum(counts[:-1], out=starts[1:])
+        # ragged gather: for each row of the first group, its matches in their original order
+        lsel = np.repeat(np.arange(len(lind), dtype=np.int64), counts)
+        rsel = order[np.repeat(lo - starts, counts) + np.arange(nblocks, dtype=np.int64)]
+
+        iblocks = np.empty((nblocks, ndim), dtype=np.int64)
+        iblocks[:, :h], iblocks[:, h:] = lind[lsel], rind[rsel]
+        tblocks = np.empty((nblocks, ndim, nsym), dtype=np.int64)
+        tblocks[:, :h], tblocks[:, h:] = lt[lsel], rt[rsel]
 
     return tblocks, iblocks
 
@@ -273,8 +341,16 @@ def get_blocks_charges_mask(sym, taxes, s, n, mask):
         tblocks = tblocks[mask.array]
         iblocks = iblocks[mask.array]
 
+        icharges = [np.unique(iblocks[:, i]).tolist() for i in range(len(taxes))]
+        taxes_new = tuple(tuple(tax[i] for i in inds) for tax, inds in zip(taxes, icharges))
+        if taxes_new != taxes:
+            tblocks_old = tblocks
+            tblocks, iblocks = get_blocks_charges_all(sym, taxes_new, s, n)
+            inds = find_matching_indices(tblocks_old, tblocks, both=False)
+            mask = HashedMask(mask.array[inds])
+
     icharges = [np.unique(iblocks[:, i]).tolist() for i in range(len(taxes))]
-    return tblocks, iblocks, icharges
+    return tblocks, iblocks, icharges, mask
 
 
 def find_index(tset, tt, sorted=True):
@@ -314,6 +390,7 @@ def argsort_t(tset):
     return np.argsort(tset_view)
 
 
+@nsys_profile
 def find_matching_indices(tset1, tset2, both=True):
     rs1, *cs1 = tset1.shape
     rs2, *cs2 = tset2.shape
