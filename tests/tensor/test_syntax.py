@@ -313,8 +313,8 @@ def test_syntax_noDocs(config_kwargs):
         cfg_U1 = yastn.make_config(sym=yastn.sym.sym_U1, backend=yastn.backend.backend_np, default_device=config_U1.default_device)
     elif config_U1.backend.BACKEND_ID == 'torch':
         cfg_U1 = yastn.make_config(sym=yastn.sym.sym_U1, backend=yastn.backend.backend_torch, default_device=config_U1.default_device)
-    elif config_U1.backend.BACKEND_ID == 'torch_cpp':
-        cfg_U1 = yastn.make_config(sym=yastn.sym.sym_U1, backend=yastn.backend.backend_torch_cpp, default_device=config_U1.default_device)
+    elif config_U1.backend.BACKEND_ID == 'torch_cutensor':
+        cfg_U1 = yastn.make_config(sym=yastn.sym.sym_U1, backend=yastn.backend.backend_torch_cutensor, default_device=config_U1.default_device)
     else:
         raise RuntimeError('Unsupported backend')
 

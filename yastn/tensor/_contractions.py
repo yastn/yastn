@@ -18,10 +18,12 @@ from __future__ import annotations
 import abc
 from functools import lru_cache
 from numbers import Number
+import os
 from typing import TYPE_CHECKING
 
 import numpy as np
 
+from .._profile import nsys_profile
 from ._auxiliary import _struct, _clear_axes, _unpack_axes, sign_canonical_order, _compress_slices
 from ._auxiliary import find_matching_indices, argsort_t, get_blocks, get_blocks_charges
 from ._merging import _merge_to_matrix, _unmerge, _meta_unmerge_matrix, _meta_fuse_hard
@@ -117,7 +119,7 @@ def tensordot(a, b, axes, conj=(0, 0)) -> 'Tensor':
     if a.config.tensordot_policy not in ['fuse_to_matrix', 'fuse_contracted', 'no_fusion']:
         raise YastnError("Tensordot policy not recognized. It should be 'fuse_to_matrix', 'fuse_contracted', or 'no_fusion'.")
 
-    if a.config.backend.BACKEND_ID == 'torch_cpp' and all(0 < x < 32 for x in (a.ndim_n, b.ndim_n, len(hfs_c))):
+    if a.config.backend.BACKEND_ID == 'torch_cutensor' and all(0 < x < 33 for x in (a.ndim_n, b.ndim_n)) and len(hfs_c)<33:
         data, struct_out = _tensordot_cutensor(a, b, nout_a, nin_a, nin_b, nout_b)
     elif a.config.tensordot_policy == 'fuse_to_matrix':
         data, struct_out = _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b)
@@ -197,18 +199,16 @@ def _tensordot_fc(a, b, nout_a, nin_a, nin_b, nout_b):
     return data, struct_c
 
 
+@nsys_profile
 def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
     r"""
     Perform tensordot directly: permute blocks and execute dot accumulating results into result blocks.
     """
-    if a.config.profile: a.config.backend.nvtx.range_push(f"_meta_tensordot_nf")
     meta_dot, reshape_a, reshape_b, size_c, struct_c = _meta_tensordot_nf(a.config.sym, a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
-    if a.config.profile: a.config.backend.nvtx.range_pop()
     order_a = nout_a + nin_a
     order_b = nin_b + nout_b
     data = a.config.backend.transpose_dot_sum(a.data, b.data, meta_dot,
                                               reshape_a, reshape_b, order_a, order_b, size_c)
-    if a.config.profile: a.config.backend.nvtx.range_pop()
     return data, struct_c
 
 
@@ -219,22 +219,30 @@ def _remap_nout_(nout, offset):
     return r_nout
 
 
+@nsys_profile
 def _tensordot_cutensor(a, b, nout_a, nin_a, nin_b, nout_b):
-    if a.config.profile: a.config.backend.nvtx.range_push(f"_meta_tensordot_cutensor")
     struct_c, size_c, *metas = _meta_tensordot_cutensor(a.config.sym, a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
-    if a.config.profile: a.config.backend.nvtx.range_pop()
     if size_c == 0:
         data = a.config.backend.zeros((0,), dtype=a.yastn_dtype, device=a.data.device)
         return data, struct_c
 
+    dot_product= len(nout_a)+len(nout_b) == 0
+    if dot_product:
+        assert all(len(x)==1 for x in metas[-5:-1]), "Unexpected output tensor meta (dot product)."
+        # infer if extra mode was attached to a or b
+        if len(nin_a)+len(nout_a)+1 == len(metas[0]): # a_numSectionsPerMode + 1
+            nout_a=modes_out= [len(metas[0])-1]
+        elif len(nin_b)+len(nout_b)+1 == len(metas[5]):
+            nout_b=modes_out= [len(metas[5])-1]
+        else:
+            raise YastnError("Unexpected input tensor meta (dot product).")
+
     modes_out = _remap_nout_(nout_a, 0) + _remap_nout_(nout_b, len(nout_a))
 
-    if a.config.profile: a.config.backend.nvtx.range_push(f"ops.tensordot_bs")
     if a.config.sym.NSYM == 0:
         data = a.config.backend.tensordot_dense(a.data, b.data, metas[1], metas[6], nin_a, nin_b, modes_out)
     else:
         data = a.config.backend.tensordot_bs_v2(a.data, b.data, list(nin_a), list(nin_b), *metas, modes_out)
-    if a.config.profile: a.config.backend.nvtx.range_pop()
     return data, struct_c
 
 
@@ -321,6 +329,7 @@ def _meta_tensordot_fc(sym, struct_a, struct_b):
 
 
 @lru_cache(maxsize=1024)
+@nsys_profile
 def _meta_tensordot_nf(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b):
     #
     bl_a, slc_a, bl_b, slc_b, bl_c = _match_legs_tensordot(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b)
@@ -380,16 +389,24 @@ def _meta_tensordot_nf(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b):
     reshape_b = reshape_b.view(rb_dt).reshape(-1)
     return meta, reshape_a, reshape_b, bl_c.size, bl_c.struct
 
-
-def _convert_bl_for_cutensor(sym, bl, slc=None):
+@nsys_profile
+def _convert_bl_for_cutensor(sym, bl, slc=None, dot_product=False):
+    """
+    Params
+    ------
+    dot_product: if True, add a dummy mode of size 1, 
+                 which is needed for cutensor API to perform dot product.
+    """
     # extents
-    numSectionsPerMode = [len(leg.D) for leg in bl.struct.legs]
-    sectionExtents = [DD for leg in bl.struct.legs for DD in leg.D]
+    numSectionsPerMode = [len(leg.D) for leg in bl.struct.legs] + ([1] if dot_product else [])
+    sectionExtents = [DD for leg in bl.struct.legs for DD in leg.D] + ([1] if dot_product else [])
     #
     # block_coordinates
     saxes = tuple(leg.s for leg in bl.struct.legs)
     taxes = tuple(leg.t for leg in bl.struct.legs)
     _, iblocks, _ = get_blocks_charges(sym, taxes, saxes, bl.struct.n)
+    if dot_product:
+        iblocks = np.column_stack([iblocks, np.zeros((len(iblocks), 1), dtype=np.int64)])
     coords = np.ascontiguousarray(iblocks.reshape(-1))
     #
     # strides
@@ -397,6 +414,8 @@ def _convert_bl_for_cutensor(sym, bl, slc=None):
     strides = np.ones((s0, s1), dtype=np.int64)
     for i in range(s1 - 1, 0, -1):
         strides[:, i - 1] =  strides[:, i] * bl.D[:, i]
+    if dot_product:
+        strides = np.column_stack([strides, np.ones((s0, 1), dtype=np.int64)])
     strides = np.ascontiguousarray(strides.reshape(-1))
     #
     # offsets
@@ -408,12 +427,22 @@ def _convert_bl_for_cutensor(sym, bl, slc=None):
 
 
 @lru_cache(maxsize=1024)
+@nsys_profile
 def _meta_tensordot_cutensor(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b):
     bl_a, slc_a, bl_b, slc_b, bl_c = _match_legs_tensordot(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b)
 
-    a_numSectionsPerMode, a_sectionExtents, a_coords, a_strides, a_offsets = _convert_bl_for_cutensor(sym, bl_a, slc_a)
-    b_numSectionsPerMode, b_sectionExtents, b_coords, b_strides, b_offsets = _convert_bl_for_cutensor(sym, bl_b, slc_b)
-    c_numSectionsPerMode, c_sectionExtents, c_coords, c_strides, c_offsets = _convert_bl_for_cutensor(sym, bl_c)
+    # dot product, which cannot be simply dispatched to vdot
+    #              and either one of operands is (effectively) zero
+    if not (len(slc_a)>0 and len(slc_b)>0):
+        return bl_c.struct, 0, *([None]*15)
+    else:
+        dot_product= len(nout_a)+len(nout_b) == 0
+        a_numSectionsPerMode, a_sectionExtents, a_coords, a_strides, a_offsets = \
+            _convert_bl_for_cutensor(sym, bl_a, slc_a, dot_product=(dot_product and len(slc_a)<len(slc_b)))
+        b_numSectionsPerMode, b_sectionExtents, b_coords, b_strides, b_offsets = \
+            _convert_bl_for_cutensor(sym, bl_b, slc_b, dot_product=(dot_product and len(slc_a)>=len(slc_b)))
+        c_numSectionsPerMode, c_sectionExtents, c_coords, c_strides, c_offsets = \
+            _convert_bl_for_cutensor(sym, bl_c, dot_product=dot_product)
 
     return (bl_c.struct, bl_c.size,
             a_numSectionsPerMode, a_sectionExtents, a_coords, a_strides, a_offsets,
@@ -421,6 +450,7 @@ def _meta_tensordot_cutensor(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout
             c_numSectionsPerMode, c_sectionExtents, c_coords, c_strides, c_offsets)
 
 
+@nsys_profile
 def _match_legs_tensordot(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b):
     assert not struct_a.isdiag, "Sanity check. Contact developers."
     assert not struct_b.isdiag, "Sanity check. Contact developers."
@@ -768,6 +798,7 @@ def _meta_trace(sym, struct, nin_0, nin_1, out):
     return meta, bl_c.size, struct_c
 
 
+@nsys_profile
 def swap_gate(a, axes, charge=None) -> 'Tensor':
     r"""
     Return tensor after application of a swap gate.

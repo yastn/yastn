@@ -117,6 +117,16 @@ def test_dot_basic_dense3(config_kwargs):
     tensordot_vs_numpy(a, b, axes=((), ()), conj=(0, 0), dtype=dtype)
 
 
+def test_dot_basic_dense4(config_kwargs):
+    """ test tensordot for different symmetries. """
+    # dense
+    config_dense = yastn.make_config(sym='none', **config_kwargs)
+    config_dense.backend.random_seed(1)
+    dtype = 'float64'
+    a = yastn.rand(config=config_dense, s=(-1, 1, -1), D=(2, 4, 5), dtype=dtype)
+    b = yastn.rand(config=config_dense, s=(1, -1, 1), D=(2, 4, 5), dtype=dtype)
+    c1 = tensordot_vs_numpy(a, b, axes=((0, 1, 2), (0, 1, 2)), conj=(0, 0), dtype=dtype) 
+
 def test_dot_basic_U1(config_kwargs):
     """ test tensordot for different symmetries. """
     # U1
@@ -207,6 +217,22 @@ def test_dot_basic_U1_3(config_kwargs):
                      D=((1, 3), (2, 2, 3), (10, 1, 2), (10, 1)),
                      n=1, dtype=dtype)
     tensordot_vs_numpy(a, b, axes=((0, 1), (0, 1)), conj=(0, 1), dtype=dtype)
+
+
+def test_dot_basic_U1_4(config_kwargs):
+    """ tensor x tensor -> scalar [not dispatch to vdot]"""
+    # U1
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    dtype = 'float64'
+    a = yastn.rand(config=config_U1, s=(-1, 1, -1),
+                     t=((-1,0,1,), (-2,-1,0,1), (-1,0,1,2),),
+                     D=((2, 2, 2), (2, 2, 2, 2), (2,2,2,2,),),
+                     n=0, dtype=dtype)
+    b = yastn.rand(config=config_U1, s=(1, -1, 1),
+                     t=((-1,0,1,), (-1,0,1,2), (-2,-1,0,1),),
+                     D=((2, 2, 2), (2, 2, 2, 2), (2,2,2,2,),),
+                     n=0, dtype=dtype)
+    tensordot_vs_numpy(a, b, axes=((0,1,2), (0,1,2)), conj=(0, 0), dtype=dtype)
 
 
 def test_dot_basic_Z2xU1(config_kwargs):
@@ -399,7 +425,7 @@ def test_tensordot_exceptions(config_kwargs):
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch_cpp", "--device", "cuda"])
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch_cutensor", "--device", "cuda"])
     pytest.main([__file__, "-vs", "--durations=0", "--tensordot_policy", "fuse_to_matrix"])
     pytest.main([__file__, "-vs", "--durations=0", "--tensordot_policy", "fuse_contracted"])
     pytest.main([__file__, "-vs", "--durations=0", "--tensordot_policy", "no_fusion"])
