@@ -50,8 +50,7 @@ def _config_descriptor(config):
         'fermionic': config.fermionic,
         'default_fusion': config.default_fusion,
         'force_fusion': config.force_fusion,
-        'tensordot_policy': config.tensordot_policy,
-        'profile': config.profile,
+        'tensordot_policy': config.tensordot_policy
     }
 
 

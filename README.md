@@ -82,6 +82,10 @@ To execute the tests on a GPU
 pytest -v --backend torch --device cuda
 ```
 
+#### Profiling
+
+Inject NVIDIA's Nsight profiling symbols via `YASTN_PROFILE=1` environment variable
+
 ### Citing YASTN
 
 If you find this package useful for a project published in an academic journal, you can consider citing the [release paper](https://scipost.org/SciPostPhysCodeb.52),

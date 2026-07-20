@@ -802,7 +802,7 @@ class FixedPoint(torch.autograd.Function):
         # Pin main-process current CUDA device to where the ENV TENSORS live
         # (env.config.default_device), NOT devices[0]. The MP workers each set
         # their own current device; the main process also runs CUDA ops here
-        # (gauge-fixing fp CTM step, etc.), and tapp_torch (torch_cpp backend)
+        # (gauge-fixing fp CTM step, etc.), and tapp_torch (torch_cutensor backend)
         # launches kernels on the current device -- a mismatch causes "illegal
         # memory access". When the main/home device is decoupled from the CTM
         # worker pool (e.g. env on cuda:0, workers on cuda:1-3), devices[0] is

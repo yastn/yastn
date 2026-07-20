@@ -21,6 +21,7 @@ from typing import NamedTuple
 
 import numpy as np
 
+from .._profile import nsys_profile
 from ._legbasic import LegBasic
 from ..sym import sym_none
 
@@ -36,7 +37,6 @@ class _config(NamedTuple):
     default_fusion: str = 'hard'
     force_fusion: str = None
     tensordot_policy: str = 'fuse_contracted'
-    profile: bool = False
 
 
 class _struct(NamedTuple):
@@ -165,6 +165,7 @@ def sign_canonical_order(*operators, sites=None, f_ordered=None) -> int:
 
 
 @lru_cache(maxsize=1024)
+@nsys_profile
 def get_blocks(sym, struct) -> _blocks:
     """
     Generate all allowed block charges, their dimensions, slices, total size and trimed legs.
@@ -203,6 +204,7 @@ def get_blocks(sym, struct) -> _blocks:
 
 
 @lru_cache(maxsize=1024)
+@nsys_profile
 def get_blocks_charges(sym, taxes, s, n):
     nsym = sym.NSYM
     ndim = len(taxes)
@@ -262,6 +264,7 @@ def argsort_t(tset):
     return np.argsort(tset_view)
 
 
+@nsys_profile
 def find_matching_indices(tset1, tset2, both=True):
     rs1, *cs1 = tset1.shape
     rs2, *cs2 = tset2.shape
