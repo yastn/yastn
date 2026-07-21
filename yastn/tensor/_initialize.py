@@ -21,7 +21,7 @@ from operator import mul
 
 import numpy as np
 
-from ._auxiliary import _config, get_blocks, find_index, find_matching_indices, HashedMask
+from ._auxiliary import _config, get_blocks, get_trimmed_struct, find_index, find_matching_indices, HashedMask
 from ._tests import YastnError
 from ..backend import backend_np
 from ..sym import sym_none, sym_U1, sym_Z2, sym_Z3, sym_U1xU1, sym_U1xU1xZ2
@@ -216,18 +216,20 @@ def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
         DD = np.array(DD, dtype=np.int64).reshape(len(DD)).tolist()
         tD = dict(sorted(zip(tt, DD)))
         legs.append(leg._replace(t=tuple(tD.keys()), D=tuple(tD.values())))
-    struct = a.struct._replace(legs=tuple(legs))
-    bl = get_blocks(a.config.sym, struct)
 
-    if a.isdiag and bl.struct.legs[0] != bl.struct.legs[1].conj():
+    struct = a.struct._replace(legs=tuple(legs))
+    struct = get_trimmed_struct(a.config.sym, struct)
+    if a.isdiag and struct.legs[0] != struct.legs[1].conj():
         raise YastnError("Diagonal tensor requires the same bond dimensions on both legs.")
 
+    # bl = get_blocks(a.config.sym, struct)
     # mask = np.random.randint(2, size=bl.nblocks).astype(bool).reshape(-1)
     # mask[:1] = True
-    # struct = bl.struct._replace(mask=HashedMask(mask))
-    # bl = get_blocks(a.config.sym, struct)
+    # struct = struct._replace(mask=HashedMask(mask))
+    # struct = get_trimmed_struct(a.config.sym, struct)
 
-    a.struct = bl.struct
+    bl = get_blocks(a.config.sym, struct)
+    a.struct = struct
     a._data = _init_block(a.config, bl.size, val, dtype=a.yastn_dtype, device=a.device)
     a.is_consistent()
 
@@ -293,6 +295,9 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
 
     #if any(tt not in leg for leg, tt in zip(a.struct.legs, tss)):
     new_legs = tuple(leg.add_charge(tt, DD) for leg, tt, DD in zip(a.struct.legs, tss, Ds) )
+
+
+
     embed_(a, new_legs)  # will make a data copy
 
     Dsize = Ds[0] if a.isdiag else reduce(mul, Ds, 1)
@@ -306,7 +311,10 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
 
 def embed_(a, legs_new):
     bl_old = get_blocks(a.config.sym, a.struct)
-    bl_new = get_blocks(a.config.sym, a.struct._replace(legs=legs_new))
+
+    struct_new = a.struct._replace(legs=legs_new, mask=HashedMask(None))
+    bl_new = get_blocks(a.config.sym, struct_new)
+
     ind1, ind2 = find_matching_indices(bl_new.t, bl_old.t)
     sln, slo = bl_new.slc[ind1], bl_old.slc[ind2]
     meta = np.column_stack([sln, sln[:, 1] - sln[:, 0], slo, slo[:, 1] - slo[:, 0]])
@@ -317,7 +325,7 @@ def embed_(a, legs_new):
         ('Do', np.int64, (1,))])
     meta = meta.view(meta_dt).reshape(-1)
     newdata = a.config.backend.embed_transpose(a.data, [0], meta, bl_new.size)
-    a.struct = bl_new.struct
+    a.struct = struct_new
     a._data = newdata
 
 

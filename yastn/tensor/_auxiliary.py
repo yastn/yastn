@@ -85,7 +85,7 @@ class _blocks(NamedTuple):
     slc: np.array = None  # list of block slices nblocks x 2
     size: int = 0  # data size
     nblocks: int = 0  # number of blocks
-    struct: _struct = _struct() # updated structure
+    coords: np.array = None  # list of block coordinates
 
 
 def _flatten(nested_iterator):
@@ -199,22 +199,21 @@ def sign_canonical_order(*operators, sites=None, f_ordered=None) -> int:
 
 
 @lru_cache(maxsize=1024)
-@nsys_profile
 def get_blocks(sym, struct) -> _blocks:
     """
-    Generate all allowed block charges, their dimensions, slices, total size and trimed legs.
-    Assume that legs have sorted charges
+    Generate all allowed block charges, their dimensions, slices, coordinates and total size.
     """
-    # enforce int type, remove d=0 sectors
-    saxes = tuple(int(leg.s) for leg in struct.legs)
-    taxes = tuple(tuple(tuple(map(int, tt)) for tt, d in zip(leg.t, leg.D) if d > 0) for leg in struct.legs)
-    Daxes = tuple(tuple(int(d) for d in leg.D if d > 0) for leg in struct.legs)
+    saxes = tuple(leg.s for leg in struct.legs)
+    taxes = tuple(leg.t for leg in struct.legs)
+    tblocks, iblocks = get_blocks_charges_all(sym, taxes, saxes, struct.n)
 
-    tblocks, iblocks, icharges, mask = get_blocks_charges_mask(sym, taxes, saxes, struct.n, struct.mask)
+    if struct.mask.array is not None:
+        tblocks = tblocks[struct.mask.array]
+        iblocks = iblocks[struct.mask.array]
 
     Dblocks = np.empty(iblocks.shape, dtype=np.int64)
-    for i, Dax in enumerate(Daxes):
-        Dax = np.array(Dax, dtype=np.int64)
+    for i, leg in enumerate(struct.legs):
+        Dax = np.array(leg.D, dtype=np.int64)
         Dblocks[:, i] = Dax[iblocks[:, i]]
 
     nblocks = len(iblocks)
@@ -225,26 +224,44 @@ def get_blocks(sym, struct) -> _blocks:
     slices[1:, 0] = slices[:-1, 1]
     size = np.sum(Dp, dtype=np.int64).item()
     #
-    # recalculate legs, in case some leg charges do not appear in any block
-    new_legs = []
-    for s, tax, Dax, inds in zip(saxes, taxes, Daxes, icharges):
-        tl = tuple(tax[i] for i in inds)
-        Dl = tuple(Dax[i] for i in inds)
-        leg = LegBasic(s=s, t=tl, D=Dl)
-        new_legs.append(leg)
-    new_struct = _struct(legs=tuple(new_legs), n=struct.n, isdiag=struct.isdiag, mask=mask)
+    return _blocks(t=tblocks, D=Dblocks, slc=slices, size=size, nblocks=nblocks, coords=iblocks)
+
+
+def get_trimmed_struct(sym, struct, sub_legs=None):
+    saxes = tuple(int(leg.s) for leg in struct.legs)
+    # taxes_full = tuple(leg.t for leg in struct.legs)
+    taxes_full = tuple(tuple(tt for tt, d in zip(leg.t, leg.D) if d > 0) for leg in struct.legs)
+    # taxes_full = tuple(tuple(tuple(map(int, tt)) for tt, d in zip(leg.t, leg.D) if d > 0) for leg in struct.legs)
+    if sub_legs is None:
+        taxes_sub = taxes_full
+    else:
+        taxes_sub = tuple(leg.t for leg in sub_legs)
+        # taxes_sub = tuple(tuple(tuple(map(int, tt)) for tt, d in zip(leg.t, leg.D) if d > 0) for leg in sub_legs)
+    taxes_new, mask_sub = get_trimmed_struct_engine(sym, taxes_full, saxes, struct.n, struct.mask, taxes_sub)
+    legs_new = tuple(leg.trim(tax) for leg, tax in zip(struct.legs, taxes_new))
+    return _struct(legs=tuple(legs_new), n=struct.n, isdiag=struct.isdiag, mask=mask_sub)
+
+
+@lru_cache(maxsize=1024)
+def get_trimmed_struct_engine(sym, taxes_full, saxes, n, mask, taxes_sub):
     #
-    return _blocks(t=tblocks, D=Dblocks, slc=slices, size=size, nblocks=nblocks, struct=new_struct)
+    tblocks_full, _ = get_blocks_charges_all(sym, taxes_full, saxes, n)
+    if mask.array is not None:
+        tblocks_full = tblocks_full[mask.array]
+    #
+    tblocks_sub, iblocks_sub = get_blocks_charges_all(sym, taxes_sub, saxes, n)
+    inds_sub = find_matching_indices(tblocks_sub, tblocks_full, both=False)
+    iblocks_sub = iblocks_sub[inds_sub]
+    icharges_sub = [np.unique(iblocks_sub[:, i]).tolist() for i in range(len(taxes_sub))]
+    taxes_new = tuple(tuple(tax[i] for i in inds) for tax, inds in zip(taxes_sub, icharges_sub))
 
+    if taxes_new != taxes_sub:
+        return get_trimmed_struct_engine(sym, taxes_full, saxes, n, mask, taxes_new)
 
-def get_blocks_indices(sym, struct) -> _blocks:
-    saxes = tuple(leg.s for leg in struct.legs)
-    taxes = tuple(leg.t for leg in struct.legs)
-    _, iblocks, _, _ = get_blocks_charges_mask(sym, taxes, saxes, struct.n, struct.mask)
-    return iblocks
-
-
-_SPLIT_MIN = 4096
+    mask_sub = np.zeros(len(tblocks_sub), dtype=bool)
+    mask_sub[inds_sub] = True
+    mask_sub = HashedMask(mask_sub)
+    return taxes_new, mask_sub
 
 
 def _product_indices(sizes):
@@ -277,6 +294,7 @@ def get_blocks_charges_all(sym, taxes: Sequence[Sequence[int]], s: Sequence[int]
     ------
     taxes: List of lists of charges for each leg
     """
+    _SPLIT_MIN = 4096
     nsym = sym.NSYM
     ndim = len(taxes)
     sizes = [len(tax) for tax in taxes]
@@ -331,26 +349,6 @@ def get_blocks_charges_all(sym, taxes: Sequence[Sequence[int]], s: Sequence[int]
         tblocks[:, :h], tblocks[:, h:] = lt[lsel], rt[rsel]
 
     return tblocks, iblocks
-
-
-@lru_cache(maxsize=1024)
-def get_blocks_charges_mask(sym, taxes, s, n, mask):
-    tblocks, iblocks = get_blocks_charges_all(sym, taxes, s, n)
-
-    if mask.array is not None:
-        tblocks = tblocks[mask.array]
-        iblocks = iblocks[mask.array]
-
-        icharges = [np.unique(iblocks[:, i]).tolist() for i in range(len(taxes))]
-        taxes_new = tuple(tuple(tax[i] for i in inds) for tax, inds in zip(taxes, icharges))
-        if taxes_new != taxes:
-            tblocks_old = tblocks
-            tblocks, iblocks = get_blocks_charges_all(sym, taxes_new, s, n)
-            inds = find_matching_indices(tblocks_old, tblocks, both=False)
-            mask = HashedMask(mask.array[inds])
-
-    icharges = [np.unique(iblocks[:, i]).tolist() for i in range(len(taxes))]
-    return tblocks, iblocks, icharges, mask
 
 
 def find_index(tset, tt, sorted=True):

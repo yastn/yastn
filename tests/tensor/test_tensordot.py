@@ -125,7 +125,7 @@ def test_dot_basic_dense4(config_kwargs):
     dtype = 'float64'
     a = yastn.rand(config=config_dense, s=(-1, 1, -1), D=(2, 4, 5), dtype=dtype)
     b = yastn.rand(config=config_dense, s=(1, -1, 1), D=(2, 4, 5), dtype=dtype)
-    c1 = tensordot_vs_numpy(a, b, axes=((0, 1, 2), (0, 1, 2)), conj=(0, 0), dtype=dtype) 
+    c1 = tensordot_vs_numpy(a, b, axes=((0, 1, 2), (0, 1, 2)), conj=(0, 0), dtype=dtype)
 
 def test_dot_basic_U1(config_kwargs):
     """ test tensordot for different symmetries. """

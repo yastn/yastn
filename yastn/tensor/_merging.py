@@ -22,7 +22,7 @@ from typing import NamedTuple, TYPE_CHECKING
 
 import numpy as np
 
-from ._auxiliary import _struct, _flatten, _clear_axes, _unpack_legs, get_blocks, find_matching_indices
+from ._auxiliary import _struct, _flatten, _clear_axes, _unpack_legs, get_blocks, find_matching_indices, get_trimmed_struct
 from ._legbasic import LegBasic
 from ._tests import YastnError, _test_axes_all
 
@@ -150,7 +150,7 @@ def _meta_merge_to_matrix(sym, struct, axes, legs_sub):
         st = st_full
         slc = st.slc
     else:
-        struct_sub = _struct(legs=legs_sub, n=struct.n, isdiag=struct.isdiag)
+        struct_sub = get_trimmed_struct(struct, legs_sub)
         st = get_blocks(sym, struct_sub)
         slc = st_full.slc[find_matching_indices(st_full.t, st.t, both=False)]
 
@@ -171,6 +171,7 @@ def _meta_merge_to_matrix(sym, struct, axes, legs_sub):
 
     legs_new = tuple(LegBasic(s=s, t=ll.t, D=ll.D) for s, ll in zip(s_eff, ls))
     struct_new = _struct(legs=legs_new, n=struct.n, isdiag=struct.isdiag)
+    struct_new = get_trimmed_struct(sym, struct_new)
     bl_new = get_blocks(sym, struct_new)
 
     smeta = sorted((tel, ter, tl, tr, slo, tuple(Do))
@@ -200,7 +201,7 @@ def _meta_merge_to_matrix(sym, struct, axes, legs_sub):
         ('Dslc', np.int64, (2, 2)),
         ('Drsh', np.int64, (2,))])
     meta_mrg = meta_mrg.view(meta_dt).reshape(-1)
-    return meta_mrg, bl_new.size, bl_new.struct, ls[0], ls[1], legs_old
+    return meta_mrg, bl_new.size, struct_new, ls[0], ls[1], legs_old
 
 def _LegSlices_trivial(leg):
     r""" Trivial LegSlices for unfused leg. """
@@ -329,9 +330,9 @@ def _meta_fuse_hard(sym, struct, axes, legs_sub=None, empty_first_axis_s_conj=Fa
         st = st_full
         slc = st.slc
     else:
-        st = get_blocks(sym, struct._replace(legs=legs_sub))
+        struct = get_trimmed_struct(struct, legs_sub)
+        st = get_blocks(sym, struct)
         slc = st_full.slc[find_matching_indices(st_full.t, st.t, both=False)]
-    struct = st.struct
     #
     slegs = tuple(tuple(struct.legs[n].s for n in axis) for axis in axes)
     s_eff = [struct.legs[axis[0]].s if axis else -1 for axis in axes]
@@ -360,7 +361,9 @@ def _meta_fuse_hard(sym, struct, axes, legs_sub=None, empty_first_axis_s_conj=Fa
             lls.append(_LegSlices(t, D, dec))
 
     legs_new = tuple(LegBasic(s=s, t=ll.t, D=ll.D) for s, ll in zip(s_eff, lls))
-    struct_new = struct._replace(legs=legs_new)
+
+    struct_new = _struct(legs=legs_new, n=struct.n, isdiag=struct.isdiag)
+    struct_new = get_trimmed_struct(sym, struct_new)
     bl_new = get_blocks(sym, struct_new)
 
     teff_split = list(tuple(map(tuple, x)) for x in teff.tolist())
@@ -406,7 +409,7 @@ def _meta_fuse_hard(sym, struct, axes, legs_sub=None, empty_first_axis_s_conj=Fa
         ('Dslc', np.int64, (ndimn, 2)),
         ('Drsh', np.int64, (ndimn,))])
     meta_mrg = meta_mrg.view(meta_dt).reshape(-1)
-    return meta_mrg, bl_new.size, bl_new.struct, legs_old
+    return meta_mrg, bl_new.size, struct_new, legs_old
 
 
 def fuse_meta_to_hard(a):
@@ -540,7 +543,11 @@ def _meta_unfuse_hard(sym, struct, axes, hfs):
             hfs_new.append(hf)
 
     st_old = get_blocks(sym, struct)
-    st_new = get_blocks(sym, struct._replace(legs=tuple(legs_new)))
+
+
+    struct_new = _struct(legs=legs_new, n=struct.n, isdiag=struct.isdiag)
+    struct_new = get_trimmed_struct(sym, struct_new)
+    st_new = get_blocks(sym, struct_new)
 
     meta = []
     old_t = st_old.t.tolist()
@@ -563,7 +570,7 @@ def _meta_unfuse_hard(sym, struct, axes, hfs):
         meta2.append((*st_new.slc[ic], *x[1:]))
 
     ndimn = len(lls)
-    ndimo = len(st_old.struct.legs)
+    ndimo = len(struct.legs)
     meta2 = np.array(meta2, dtype=np.int64).reshape(len(meta2), 4 + 3 * ndimn + ndimo)
 
     meta_dt = np.dtype([
@@ -575,12 +582,13 @@ def _meta_unfuse_hard(sym, struct, axes, hfs):
     meta2 = meta2.view(meta_dt).reshape(-1)
 
 
-    return meta2, st_new.size, st_new.struct, tuple(nlegs_unfused), tuple(hfs_new)
+    return meta2, st_new.size, struct_new, tuple(nlegs_unfused), tuple(hfs_new)
 
 @lru_cache(maxsize=1024)
 def _meta_unmerge_matrix(sym, struct_in, ls0, ls1, struct_out):
     #
     st_a = get_blocks(sym, struct_in)
+    struct_out = get_trimmed_struct(struct_out)
     st_c = get_blocks(sym, struct_out)
     #
     meta = []
@@ -612,7 +620,7 @@ def _meta_unmerge_matrix(sym, struct_in, ls0, ls1, struct_out):
         ('sub_slc', np.int64, (2, 2))])
     meta_unmerge = meta_unmerge.view(meta_dt).reshape(-1)
 
-    return meta_unmerge, st_c.size, st_c.struct
+    return meta_unmerge, st_c.size, struct_out
 
 
 #  =========== masks ======================
@@ -638,7 +646,10 @@ def _meta_mask(sym, struct, mask_t, mask_D, axis):
         legs_c = struct.legs[:axis] + (leg_c,) + struct.legs[axis + 1:]
         ndim = len(legs_c)
 
-    st_c = get_blocks(sym, struct._replace(legs=legs_c))
+
+    struct_c = _struct(legs=legs_c, n=struct.n, isdiag=struct.isdiag)
+    struct_c = get_trimmed_struct(sym, struct_c)
+    st_c = get_blocks(sym, struct_c)
 
     D_a = st_a.D[:, :1] if struct.isdiag else st_a.D
     D_c = st_c.D[:, :1] if struct.isdiag else st_c.D
@@ -661,7 +672,7 @@ def _meta_mask(sym, struct, mask_t, mask_D, axis):
         ('Da', np.int64, (ndima,)),
         ('tm', np.int64, (sym.NSYM,))])
     meta = meta.view(meta_dt).reshape(-1)
-    return meta, st_c.size, st_c.struct, axis, ndim
+    return meta, st_c.size, struct_c, axis, ndim
 
 
 def _mask_nonzero(mask):

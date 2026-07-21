@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ._auxiliary import _struct, get_blocks, find_matching_indices, _compress_slices
+from ._auxiliary import _struct, get_blocks, find_matching_indices, _compress_slices, get_trimmed_struct
 from ._legs import legs_union
 from ._merging import _embed_tensor
 from ._tests import YastnError, _test_can_be_combined, _unpack_trans_test_axes_pair
@@ -126,7 +126,7 @@ def _meta_addition(sym, *structs):
         bl_new = get_blocks(sym, structs[0])
         size = bl_new.size
         meta = (((0, size), (0, size)),)
-        metas = (meta,) * len(structs)
+        metas = [meta] * len(structs)
         return metas, size, structs[0]
 
     ndim = len(structs[0].legs)  # nlegs
@@ -141,12 +141,14 @@ def _meta_addition(sym, *structs):
         legs_new.append(leg)
 
     struct_new = _struct(legs=tuple(legs_new), n=structs[0].n, isdiag=structs[0].isdiag)
+    struct_new = get_trimmed_struct(sym, struct_new)
     bl_new = get_blocks(sym, struct_new)
 
-    metas = []
     meta_dt = np.dtype([
         ('sln', np.int64, (2,)),
         ('slo', np.int64, (2,))])
+
+    metas = []
     for struct in structs:
         bl_old = get_blocks(sym, struct)
         ind_n, ind_o = find_matching_indices(bl_new.t, bl_old.t)
@@ -158,7 +160,7 @@ def _meta_addition(sym, *structs):
         meta = _compress_slices(meta)
         metas.append(meta.view(meta_dt).reshape(-1))
 
-    return metas, bl_new.size, bl_new.struct
+    return metas, bl_new.size, struct_new
 
 
 def allclose(a, b, rtol=1e-13, atol=1e-13) -> bool:

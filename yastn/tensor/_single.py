@@ -331,6 +331,9 @@ def consume_transpose(a) -> 'Tensor':
     new_legs = tuple(a.struct.legs[ii] for ii in a.trans)
 
     bl_old = get_blocks(a.config.sym, a.struct)
+    struct_new = a.struct._replace(legs=new_legs)
+    bl_new = get_blocks(a.config.sym, struct_new)
+
     bl_new = get_blocks(a.config.sym, a.struct._replace(legs=new_legs))
     inds = argsort_t(bl_old.t[:, order, :])
     meta = np.hstack([bl_new.slc, bl_new.D, bl_old.slc[inds], bl_old.D[inds]])
@@ -342,7 +345,7 @@ def consume_transpose(a) -> 'Tensor':
         ('Do', np.int64, (ndim,))])
     meta = meta.view(meta_dt).reshape(-1)
     data = a._data if a.isdiag else a.config.backend.embed_transpose(a._data, a.trans, meta, bl_new.size)
-    return a._replace(hfs=new_hfs, struct=bl_new.struct, data=data, trans=no_trans)
+    return a._replace(hfs=new_hfs, struct=struct_new, data=data, trans=no_trans)
 
 
 def moveaxis(a, source, destination) -> 'Tensor':

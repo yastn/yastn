@@ -18,14 +18,13 @@ from __future__ import annotations
 import abc
 from functools import lru_cache
 from numbers import Number
-import os
 from typing import TYPE_CHECKING
 
 import numpy as np
 
 from .._profile import nsys_profile
 from ._auxiliary import _struct, _clear_axes, _unpack_axes, sign_canonical_order, _compress_slices
-from ._auxiliary import find_matching_indices, argsort_t, get_blocks, get_blocks_indices, HashedMask
+from ._auxiliary import find_matching_indices, argsort_t, get_blocks, HashedMask
 from ._merging import _merge_to_matrix, _unmerge, _meta_unmerge_matrix, _meta_fuse_hard
 from ._merging import _transpose_and_merge, _mask_tensors_leg_intersection, _meta_mask
 from ._tests import YastnError, _test_can_be_combined, _unpack_trans_test_axes_pair

@@ -103,6 +103,10 @@ class LegBasic(NamedTuple):
         t = tuple(sorted(tD0.keys() & tD1.keys()))
         return LegBasic(s=self.s, t=t, D=tuple(tD0[k] for k in t))
 
+    def trim(self, tsub) -> LegBasic:
+        tD = self.tD
+        return LegBasic(s=self.s, t=tuple(tsub), D=tuple(tD[k] for k in tsub))
+
 
 def legs_from_dict_v2(struct):
     nsym = len(struct['n'])
