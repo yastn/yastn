@@ -210,6 +210,7 @@ def sign_canonical_order(*operators, sites=None, f_ordered=None) -> int:
 
 
 @lru_cache(maxsize=1024)
+@nsys_profile
 def get_blocks(sym, struct) -> _blocks:
     """
     Generate all allowed block charges, their dimensions, slices, coordinates and total size.
@@ -238,6 +239,7 @@ def get_blocks(sym, struct) -> _blocks:
     return _blocks(t=tblocks, D=Dblocks, slc=slices, size=size, nblocks=nblocks, coords=iblocks)
 
 
+@nsys_profile
 def get_trimmed_struct(sym, struct, sub_legs=None):
     saxes = tuple(int(leg.s) for leg in struct.legs)
     # taxes_full = tuple(leg.t for leg in struct.legs)
@@ -254,6 +256,7 @@ def get_trimmed_struct(sym, struct, sub_legs=None):
 
 
 @lru_cache(maxsize=1024)
+@nsys_profile
 def get_trimmed_struct_engine(sym, taxes_full, saxes, n, mask, taxes_sub):
     #
     tblocks_full, _ = get_blocks_charges_all(sym, taxes_full, saxes, n)
