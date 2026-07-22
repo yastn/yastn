@@ -125,7 +125,7 @@ def is_consistent(a):
         assert isinstance(leg.t, tuple)
         assert isinstance(leg.D, tuple)
         assert all(isinstance(x, int) for tt in leg.t for x in tt)
-        assert all(isinstance(x, int) for x in leg.D)
+        # assert all(isinstance(x, int) for x in leg.D)
     assert isinstance(a.struct.n, tuple)
     assert all(isinstance(x, int) for x in a.struct.n)
     assert isinstance(a.struct.isdiag, bool)

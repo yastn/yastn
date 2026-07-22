@@ -150,11 +150,11 @@ def _meta_merge_to_matrix(sym, struct, axes, legs_sub):
         st = st_full
         slc = st.slc
     else:
-        struct_sub = get_trimmed_struct(struct, legs_sub)
+        struct_sub = get_trimmed_struct(sym, struct, legs_sub)
         st = get_blocks(sym, struct_sub)
         slc = st_full.slc[find_matching_indices(st_full.t, st.t, both=False)]
+        struct = struct_sub
 
-    struct = st.struct
     t, teff, ls, legs_old = [], [], [], []
     for n in (0, 1):
         ta = st.t[:, axes[n], :]
@@ -330,7 +330,7 @@ def _meta_fuse_hard(sym, struct, axes, legs_sub=None, empty_first_axis_s_conj=Fa
         st = st_full
         slc = st.slc
     else:
-        struct = get_trimmed_struct(struct, legs_sub)
+        struct = get_trimmed_struct(sym, struct, legs_sub)
         st = get_blocks(sym, struct)
         slc = st_full.slc[find_matching_indices(st_full.t, st.t, both=False)]
     #
@@ -588,7 +588,7 @@ def _meta_unfuse_hard(sym, struct, axes, hfs):
 def _meta_unmerge_matrix(sym, struct_in, ls0, ls1, struct_out):
     #
     st_a = get_blocks(sym, struct_in)
-    struct_out = get_trimmed_struct(struct_out)
+    struct_out = get_trimmed_struct(sym, struct_out)
     st_c = get_blocks(sym, struct_out)
     #
     meta = []
@@ -609,7 +609,7 @@ def _meta_unmerge_matrix(sym, struct_in, ls0, ls1, struct_out):
             ic += 1
         meta_unmerge.append((*slc_out[ic], *Dsln, *slo, *Do, *sub_slc[0], *sub_slc[1]))
 
-    ndimo = len(st_a.struct.legs)
+    ndimo = len(struct_in.legs)
     meta_unmerge = np.array(meta_unmerge, dtype=np.int64).reshape(len(meta_unmerge), 10 + ndimo)
 
     meta_dt = np.dtype([

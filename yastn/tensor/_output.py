@@ -77,6 +77,7 @@ def to_dict(a, level=2, meta=None, resolve_ops=False) -> dict:
         hfs = tuple(hf._asdict() for hf in a.hfs)
         struct = a.struct._asdict()
         struct['legs'] = tuple(leg._asdict() for leg in struct['legs'])
+        struct['mask'] = struct['mask'].tolist()
     else:
         config = a.config
         hfs = a.hfs

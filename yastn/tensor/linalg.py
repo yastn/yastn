@@ -23,7 +23,7 @@ from warnings import warn
 
 import numpy as np
 
-from ._auxiliary import _struct, _clear_axes, _unpack_axes, get_blocks, find_index, argsort_t, find_matching_indices
+from ._auxiliary import _struct, _clear_axes, _unpack_axes, get_blocks, find_index, argsort_t, find_matching_indices, get_trimmed_struct
 from ._legbasic import LegBasic
 from ._merging import _Fusion, _merge_to_matrix, _unmerge, _meta_unmerge_matrix, _LegSlices_trivial
 from ._tests import YastnError, _test_axes_all
@@ -393,6 +393,10 @@ def _meta_svd(sym, struct, sU, nU, k_block, nonzero=None):
     struct_S = _struct(legs=(legU.conj(), legU), n=n0, isdiag=True)
     struct_V = _struct(legs=(legU.conj(), struct.legs[1]), n=n0 if nU else struct.n, isdiag=False)
 
+    struct_U = get_trimmed_struct(sym, struct_U)
+    struct_S = get_trimmed_struct(sym, struct_S)
+    struct_V = get_trimmed_struct(sym, struct_V)
+
     bl_U = get_blocks(sym, struct_U)
     bl_S = get_blocks(sym, struct_S)
     bl_V = get_blocks(sym, struct_V)
@@ -412,7 +416,7 @@ def _meta_svd(sym, struct, sU, nU, k_block, nonzero=None):
     meta = np.hstack([bl_a.slc[ind_a], bl_a.D[ind_a], bl_U.slc[inds], bl_U.D[inds], bl_S.slc, bl_V.slc, bl_V.D]).astype(np.int64, copy=False)
     meta = meta.view(meta_dt).reshape(-1)
     sizes = (bl_U.size, bl_S.size, bl_V.size)
-    return meta, sizes, bl_U.struct, bl_S.struct, bl_V.struct
+    return meta, sizes, struct_U, struct_S, struct_V
 
 
 def eig(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
@@ -817,7 +821,7 @@ def _meta_qr(sym, struct, sQ):
     meta = np.hstack([bl_a.slc[inds], bl_a.D[inds], bl_Q.slc[inds], bl_Q.D[inds], bl_R.slc, bl_R.D]).astype(np.int64, copy=False)
     meta = meta.view(meta_dt).reshape(-1)
     sizes = (bl_Q.size, bl_R.size)
-    return meta, sizes, bl_Q.struct, bl_R.struct
+    return meta, sizes, struct_Q, struct_R
 
 
 def eigh(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank', **kwargs) -> tuple['Tensor', 'Tensor']:
@@ -978,6 +982,10 @@ def _meta_eigh(sym, struct, sU, k_block, nonzero=None):
     #
     struct_U = _struct(legs=(struct.legs[0], legU), n=n0, isdiag=False)
     struct_S = _struct(legs=(legU.conj(), legU), n=n0, isdiag=True)
+
+    struct_U = get_trimmed_struct(sym, struct_U)
+    struct_S = get_trimmed_struct(sym, struct_S)
+
     bl_U = get_blocks(sym, struct_U)
     bl_S = get_blocks(sym, struct_S)
     inds = argsort_t(bl_U.t[:, 1, :])
@@ -994,7 +1002,7 @@ def _meta_eigh(sym, struct, sU, k_block, nonzero=None):
     meta = np.hstack([bl_a.slc[inds_a], bl_a.D[inds_a], bl_U.slc[inds], bl_U.D[inds], bl_S.slc])
     meta = meta.view(meta_dt).reshape(-1)
     sizes = (bl_S.size, bl_U.size)
-    return meta, sizes, bl_U.struct, bl_S.struct
+    return meta, sizes, struct_U, struct_S
 
 
 def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank',

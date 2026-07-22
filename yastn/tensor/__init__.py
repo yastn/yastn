@@ -241,7 +241,7 @@ class Tensor:
             data = d['config'].backend.to_tensor(d['data'], dtype=dtype, device=d['config'].default_device)
             bl_new = get_blocks(d['config'].sym, d['struct'])
             t_old = np.array(old_struct['t'], dtype=np.int64)
-            t_old = t_old.reshape(len(t_old), len(bl_new.struct.legs), len(bl_new.struct.n))
+            t_old = t_old.reshape(len(t_old), len(d['struct'].legs), len(d['struct'].n))
             if 'slices' in d:
                 slc_old = np.array([x[0][0] for x in d['slices']], dtype=np.int64)
             else:
@@ -289,7 +289,8 @@ class Tensor:
                     d['config'] = make_config(**d['config'])
                 d['hfs'] = tuple(_Fusion(**hf) for hf in d['hfs'])
                 legs = tuple(LegBasic(**xx) for xx in d['struct']['legs'])
-                d['struct'] = _struct(legs=legs, n=d['struct']['n'], isdiag=d['struct']['isdiag'])
+                mask = HashedMask(d['struct']['mask'])
+                d['struct'] = _struct(legs=legs, n=d['struct']['n'], isdiag=d['struct']['isdiag'], mask=mask)
 
             if d['level'] >= 2 or config is not None:
                 dtype = d['config'].default_dtype

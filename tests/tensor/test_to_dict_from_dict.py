@@ -289,4 +289,5 @@ def test_to_dict_exceptions(config_kwargs):
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])
+    test_to_dict_embed({})
+    #pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])

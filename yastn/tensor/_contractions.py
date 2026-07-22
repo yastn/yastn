@@ -24,7 +24,7 @@ import numpy as np
 
 from .._profile import nsys_profile
 from ._auxiliary import _struct, _clear_axes, _unpack_axes, sign_canonical_order, _compress_slices
-from ._auxiliary import find_matching_indices, argsort_t, get_blocks, HashedMask
+from ._auxiliary import find_matching_indices, argsort_t, get_blocks, HashedMask, get_trimmed_struct
 from ._merging import _merge_to_matrix, _unmerge, _meta_unmerge_matrix, _meta_fuse_hard
 from ._merging import _transpose_and_merge, _mask_tensors_leg_intersection, _meta_mask
 from ._tests import YastnError, _test_can_be_combined, _unpack_trans_test_axes_pair
@@ -265,7 +265,7 @@ def _meta_tensordot_f2m(sym, struct_a, struct_b):
     #
     nout_a, nin_a = [0], [1]
     nin_b, nout_b = [0], [1]
-    bl_a, slc_a, bl_b, slc_b, bl_c = _match_legs_tensordot(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b)
+    bl_a, slc_a, bl_b, slc_b, bl_c, struct_c = _match_legs_tensordot(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b)
     #
     inds = argsort_t(bl_a.t[:, 1, :])
     #
@@ -278,7 +278,7 @@ def _meta_tensordot_f2m(sym, struct_a, struct_b):
         ('Db',  np.int64, (2,))])
     meta = np.hstack([bl_c.slc[inds], bl_c.D[inds], slc_a[inds], bl_a.D[inds], slc_b, bl_b.D], dtype=np.int64)
     meta = meta.view(meta_dt).reshape(-1)
-    return meta, bl_c.size, bl_c.struct
+    return meta, bl_c.size, struct_c
 
 
 @lru_cache(maxsize=1024)
@@ -287,7 +287,7 @@ def _meta_tensordot_fc(sym, struct_a, struct_b):
     ndima, ndimb = len(struct_a.legs), len(struct_b.legs)
     nout_a, nin_a = list(range(ndima - 1)), [ndima - 1]
     nin_b, nout_b = [0], list(range(1, ndimb))
-    bl_a, slc_a, bl_b, slc_b, bl_c = _match_legs_tensordot(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b)
+    bl_a, slc_a, bl_b, slc_b, bl_c, struct_c = _match_legs_tensordot(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b)
     #
     Do_a = np.prod(bl_a.D[:, :-1], axis=1, dtype=np.int64)
     Dc_a = bl_a.D[:, -1]
@@ -324,14 +324,14 @@ def _meta_tensordot_fc(sym, struct_a, struct_b):
         ('slb', np.int64, (2,)),
         ('Db',  np.int64, (2,))])
     meta = meta.view(meta_dt).reshape(-1)
-    return meta, bl_c.size, bl_c.struct
+    return meta, bl_c.size, struct_c
 
 
 @lru_cache(maxsize=1024)
 @nsys_profile
 def _meta_tensordot_nf(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b):
     #
-    bl_a, slc_a, bl_b, slc_b, bl_c = _match_legs_tensordot(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b)
+    bl_a, slc_a, bl_b, slc_b, bl_c, struct_c = _match_legs_tensordot(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b)
     #
     Daop = np.prod(bl_a.D[:, nout_a], axis=1, dtype=np.int64)
     Dacp = np.prod(bl_a.D[:, nin_a], axis=1, dtype=np.int64)
@@ -392,10 +392,10 @@ def _meta_tensordot_nf(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b):
         ('Dr', np.int64)])
     reshape_b = np.column_stack([slc_b, bl_b.D, Dbcp, Dbop])
     reshape_b = reshape_b.view(rb_dt).reshape(-1)
-    return meta, reshape_a, reshape_b, bl_c.size, bl_c.struct
+    return meta, reshape_a, reshape_b, bl_c.size, struct_c
 
 @nsys_profile
-def _convert_bl_for_cutensor(sym, bl, slc=None, dot_product=False):
+def _convert_bl_for_cutensor(struct, bl, slc=None, dot_product=False):
     """
     Params
     ------
@@ -403,14 +403,11 @@ def _convert_bl_for_cutensor(sym, bl, slc=None, dot_product=False):
                  which is needed for cutensor API to perform dot product.
     """
     # extents
-    numSectionsPerMode = [len(leg.D) for leg in bl.struct.legs] + ([1] if dot_product else [])
-    sectionExtents = [DD for leg in bl.struct.legs for DD in leg.D] + ([1] if dot_product else [])
+    numSectionsPerMode = [len(leg.D) for leg in struct.legs] + ([1] if dot_product else [])
+    sectionExtents = [DD for leg in struct.legs for DD in leg.D] + ([1] if dot_product else [])
     #
     # block_coordinates
-    iblocks = get_blocks_indices(sym, bl.struct)
-    # saxes = tuple(leg.s for leg in bl.struct.legs)
-    # taxes = tuple(leg.t for leg in bl.struct.legs)
-    # _, iblocks, _ = get_blocks_charges(sym, taxes, saxes, bl.struct.n)
+    iblocks = bl.coords
     if dot_product:
         iblocks = np.column_stack([iblocks, np.zeros((len(iblocks), 1), dtype=np.int64)])
     coords = np.ascontiguousarray(iblocks.reshape(-1))
@@ -435,22 +432,22 @@ def _convert_bl_for_cutensor(sym, bl, slc=None, dot_product=False):
 @lru_cache(maxsize=1024)
 @nsys_profile
 def _meta_tensordot_cutensor(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b):
-    bl_a, slc_a, bl_b, slc_b, bl_c = _match_legs_tensordot(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b)
+    bl_a, slc_a, struct_a, bl_b, slc_b, struct_b, bl_c, struct_c = _match_legs_tensordot(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b)
 
     # dot product, which cannot be simply dispatched to vdot
     #              and either one of operands is (effectively) zero
-    if not (len(slc_a)>0 and len(slc_b)>0):
-        return bl_c.struct, 0, *([None]*15)
+    if not (len(slc_a) > 0 and len(slc_b) > 0):
+        return struct_c, 0, *([None] * 15)
     else:
-        dot_product= len(nout_a)+len(nout_b) == 0
+        dot_product = len(nout_a) + len(nout_b) == 0
         a_numSectionsPerMode, a_sectionExtents, a_coords, a_strides, a_offsets = \
-            _convert_bl_for_cutensor(sym, bl_a, slc_a, dot_product=(dot_product and len(slc_a)<len(slc_b)))
+            _convert_bl_for_cutensor(struct_a, bl_a, slc_a, dot_product=(dot_product and len(slc_a) < len(slc_b)))
         b_numSectionsPerMode, b_sectionExtents, b_coords, b_strides, b_offsets = \
-            _convert_bl_for_cutensor(sym, bl_b, slc_b, dot_product=(dot_product and len(slc_a)>=len(slc_b)))
+            _convert_bl_for_cutensor(struct_b, bl_b, slc_b, dot_product=(dot_product and len(slc_a) >= len(slc_b)))
         c_numSectionsPerMode, c_sectionExtents, c_coords, c_strides, c_offsets = \
-            _convert_bl_for_cutensor(sym, bl_c, dot_product=dot_product)
+            _convert_bl_for_cutensor(struct_c, bl_c, dot_product=dot_product)
 
-    return (bl_c.struct, bl_c.size,
+    return (struct_c, bl_c.size,
             a_numSectionsPerMode, a_sectionExtents, a_coords, a_strides, a_offsets,
             b_numSectionsPerMode, b_sectionExtents, b_coords, b_strides, b_offsets,
             c_numSectionsPerMode, c_sectionExtents, c_coords, c_strides, c_offsets)
@@ -461,43 +458,52 @@ def _match_legs_tensordot(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b)
     assert not struct_a.isdiag, "Sanity check. Contact developers."
     assert not struct_b.isdiag, "Sanity check. Contact developers."
     n_c = sym.add_charges(struct_a.n, struct_b.n)
-    bl_a = bl_a_full = get_blocks(sym, struct_a)
-    bl_b = bl_b_full = get_blocks(sym, struct_b)
     #
-    legs_a_new, legs_b_new = list(bl_a.struct.legs), list(bl_b.struct.legs)
+    struct_a_0, struct_b_0 = struct_a, struct_b
+    legs_a_new, legs_b_new = list(struct_a.legs), list(struct_b.legs)
     while True:
         for ia, ib in zip(nin_a, nin_b):
             try:
-                leg = bl_a.struct.legs[ia].intersection(bl_b.struct.legs[ib].conj())
+                leg = struct_a_0.legs[ia].intersection(struct_b_0.legs[ib].conj())
             except ValueError:
                 raise YastnError('Bond dimensions of some charges do not match.')
             legs_a_new[ia] = leg
             legs_b_new[ib] = leg.conj()
 
-        struct_a_new = struct_a._replace(legs=tuple(legs_a_new))
-        struct_b_new = struct_b._replace(legs=tuple(legs_b_new))
-        bl_a = get_blocks(sym, struct_a_new)
-        bl_b = get_blocks(sym, struct_b_new)
+        struct_a_1 = get_trimmed_struct(sym, struct_a_0, legs_a_new)
+        struct_b_1 = get_trimmed_struct(sym, struct_b_0, legs_b_new)
 
-        legs_c = (*(struct_a_new.legs[ax] for ax in nout_a), *(struct_b_new.legs[ax] for ax in nout_b))
-        struct_c = _struct(legs=legs_c, n=n_c, isdiag=False)
-        bl_c = get_blocks(sym, struct_c)
+        legs_c = (*(struct_a_1.legs[ax] for ax in nout_a), *(struct_b_1.legs[ax] for ax in nout_b))
+        struct_c_0 = _struct(legs=legs_c, n=n_c, isdiag=False)
+        struct_c_1 = get_trimmed_struct(sym, struct_c_0)
 
-        if bl_a.struct == struct_a_new and bl_b.struct == struct_b_new and bl_c.struct == struct_c:
+        if struct_a_0 == struct_a_1 and struct_b_0 == struct_b_1 and struct_c_0 == struct_c_1:
             break
 
+        struct_a_0 = struct_a_1
+        struct_b_0 = struct_b_1
         for ii, ax in enumerate(nout_a):
-            legs_a_new[ax] = bl_c.struct.legs[ii].intersection(bl_a.struct.legs[ax])
+            legs_a_new[ax] = struct_c_1.legs[ii].intersection(struct_a_1.legs[ax])
         for ii, ax in enumerate(nout_b, start=len(nout_a)):
-            legs_b_new[ax] = bl_c.struct.legs[ii].intersection(bl_b.struct.legs[ax])
+            legs_b_new[ax] = struct_c_1.legs[ii].intersection(struct_b_1.legs[ax])
 
-    slc_a = bl_a_full.slc if struct_a_new == struct_a else \
-            bl_a_full.slc[find_matching_indices(bl_a_full.t, bl_a.t, both=False)]
+    bl_a = bl_a_full = get_blocks(sym, struct_a)
+    bl_b = bl_b_full = get_blocks(sym, struct_b)
+    bl_c = get_blocks(sym, struct_c_1)
 
-    slc_b = bl_b_full.slc if struct_b_new == struct_b else \
-            bl_b_full.slc[find_matching_indices(bl_b_full.t, bl_b.t, both=False)]
+    if struct_a_1 == struct_a:
+        slc_a = bl_a_full.slc
+    else:
+        bl_a = get_blocks(sym, struct_a_1)
+        slc_a = bl_a_full.slc[find_matching_indices(bl_a_full.t, bl_a.t, both=False)]
 
-    return bl_a, slc_a, bl_b, slc_b, bl_c
+    if struct_b_1 == struct_b:
+        slc_b = bl_b_full.slc
+    else:
+        bl_b = get_blocks(sym, struct_b_1)
+        slc_b = bl_b_full.slc[find_matching_indices(bl_b_full.t, bl_b.t, both=False)]
+
+    return bl_a, slc_a, bl_b, slc_b, bl_c, struct_c_1
 
 
 def broadcast(a, *args, axes=0) -> 'Tensor' | tuple['Tensor']:
@@ -545,8 +551,8 @@ def broadcast(a, *args, axes=0) -> 'Tensor' | tuple['Tensor']:
 @lru_cache(maxsize=1024)
 def _meta_broadcast(sym, struct_a, struct_b, axis):
     r""" meta information for backend, and new tensor structure for brodcast. """
-    bl_a = get_blocks(sym, struct_a)
-    bl_b = get_blocks(sym, struct_b)
+    bl_a_full = get_blocks(sym, struct_a)
+    bl_b_full = get_blocks(sym, struct_b)
 
     leg_b = struct_b.legs[axis]
     leg_a = struct_a.legs[0] if struct_a.legs[0].s == leg_b.s else struct_a.legs[0].conj()  # .conj() to match signature
@@ -555,32 +561,35 @@ def _meta_broadcast(sym, struct_a, struct_b, axis):
     except ValueError:
         raise YastnError("Bond dimensions of some charges do not match.")
     legs_c = struct_b.legs[:axis] + (leg_c,) + struct_b.legs[axis + 1:]
-    bl_c = get_blocks(sym, struct_b._replace(legs=legs_c))
-    bl_aa = get_blocks(sym, struct_a._replace(legs=(leg_c, leg_c.conj())))
+
+    struct_c = get_trimmed_struct(sym, struct_b, legs_c)
+    struct_aa = get_trimmed_struct(sym, struct_a, (leg_c, leg_c.conj()))
+    bl_c = get_blocks(sym, struct_c)
+    bl_a = get_blocks(sym, struct_aa)
     #
-    inds_c = find_matching_indices(bl_b.t, bl_c.t, both=False)
-    inds_a = find_matching_indices(bl_a.t, bl_aa.t, both=False)
-    slc_aa = bl_a.slc[inds_a]
+    inds_c = find_matching_indices(bl_b_full.t, bl_c.t, both=False)
+    inds_a = find_matching_indices(bl_a_full.t, bl_a.t, both=False)
+    slc_a = bl_a_full.slc[inds_a]
     #
     if struct_b.isdiag:
-        D_b = bl_b.D[:, 0]
+        D_b = bl_b_full.D[:, 0]
         axis = 0
         ndimb = 1
     else:
-        D_b = bl_b.D
+        D_b = bl_b_full.D
         ndimb = len(struct_b.legs)
     #
     unique_tax, inv_tax = np.unique(bl_c.t[:, axis, :], return_inverse=True, axis=0)
-    assert np.array_equal(bl_aa.t[:, 0, :], unique_tax), "Sanity check. Contact developers."
+    assert np.array_equal(bl_a.t[:, 0, :], unique_tax), "Sanity check. Contact developers."
     #
-    meta = np.column_stack([bl_c.slc, bl_b.slc[inds_c], D_b[inds_c], slc_aa[inv_tax]])
+    meta = np.column_stack([bl_c.slc, bl_b_full.slc[inds_c], D_b[inds_c], slc_a[inv_tax]])
     meta_dt = np.dtype([
         ('sln', np.int64, (2,)),
         ('slb',  np.int64, (2,)),
         ('Db', np.int64, (ndimb,)),
         ('sla',  np.int64, (2,))])
     meta = meta.view(meta_dt).reshape(-1)
-    return meta, bl_c.size, bl_c.struct, axis, ndimb
+    return meta, bl_c.size, struct_c, axis, ndimb
 
 
 def apply_mask(a, *args, axes=0) -> 'Tensor' | tuple['Tensor']:
@@ -752,33 +761,39 @@ def trace(a, axes=(0, 1)) -> 'Tensor':
 @lru_cache(maxsize=1024)
 def _meta_trace(sym, struct, nin_0, nin_1, out):
     r""" meta-information for backend and struct of traced tensor. """
-
     bl = bl_full = get_blocks(sym, struct)
     #
-    legs_part = list(bl.struct.legs)
+    legs_part = list(struct.legs)
+    struct_0 = struct
     while True:
         for ia, ib in zip(nin_0, nin_1):
             try:
-                leg = bl.struct.legs[ia].intersection(bl.struct.legs[ib].conj())
+                leg = struct_0.legs[ia].intersection(struct_0.legs[ib].conj())
             except ValueError:
                 raise YastnError('Bond dimensions of some charges do not match.')
             legs_part[ia] = leg
             legs_part[ib] = leg.conj()
 
-        struct_part = struct._replace(legs=tuple(legs_part))
-        bl = get_blocks(sym, struct_part)
+        struct_1 = get_trimmed_struct(sym, struct_0, legs_part)
+        bl = get_blocks(sym, struct_1)
 
-        struct_c = struct._replace(legs=tuple(bl.struct.legs[ax] for ax in out))
-        bl_c = get_blocks(sym, struct_c)
+        struct_c_0 = _struct(legs=tuple(struct_1.legs[ax] for ax in out), n=struct.n, isdiag=struct.isdiag)
+        struct_c_1 = get_trimmed_struct(sym, struct_c_0)
 
-        if bl.struct == struct_part and bl_c.struct == struct_c:
+        if struct_0 == struct_1 and struct_c_0 == struct_c_1:
             break
 
+        struct_0 = struct_1
         for ii, ax in enumerate(out):
-            legs_part[ax] = bl_c.struct.legs[ii].intersection(bl.struct.legs[ax])
+            legs_part[ax] = struct_c_1.legs[ii].intersection(struct_1.legs[ax])
 
-    slo = bl_full.slc if struct_part == struct else \
-          bl_full.slc[find_matching_indices(bl_full.t, bl.t, both=False)]
+    bl_c = get_blocks(sym, struct_c_1)
+
+    if struct_1 == struct:
+        slo = bl_full.slc
+    else:
+        bl = get_blocks(sym, struct_1)
+        slo = bl_full.slc[find_matching_indices(bl_full.t, bl.t, both=False)]
 
     t0 = bl.t[:, nin_0, :].reshape(bl.nblocks, len(nin_0) * sym.NSYM)
     t1 = bl.t[:, nin_1, :].reshape(bl.nblocks, len(nin_1) * sym.NSYM)
@@ -801,7 +816,7 @@ def _meta_trace(sym, struct, nin_0, nin_1, out):
         ('Do',  np.int64, (len(struct.legs),)),
         ('Drsh',  np.int64, (3,))])
     meta = meta.view(meta_dt).reshape(-1)
-    return meta, bl_c.size, struct_c
+    return meta, bl_c.size, struct_c_1
 
 
 @nsys_profile

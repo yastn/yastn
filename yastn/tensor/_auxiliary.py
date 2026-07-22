@@ -23,10 +23,9 @@ from typing import NamedTuple, Sequence
 import numpy as np
 
 from .._profile import nsys_profile
-from ._legbasic import LegBasic
 from ..sym import sym_none
 
-__all__ = ['_config', '_struct', 'get_blocks', 'sign_canonical_order', 'swap_charges', 'find_matching_indices']
+__all__ = ['_config', '_struct', 'get_blocks', 'sign_canonical_order', 'swap_charges', 'find_matching_indices', 'HashedMask']
 
 
 class _config(NamedTuple):
@@ -49,6 +48,8 @@ class HashedMask:
             self._arr = None
             self._hash = self._NONE_HASH
         else:
+            if isinstance(arr, (tuple, list)):
+                arr = np.array(arr, dtype=bool)
             arr.flags.writeable = False
             self._arr = arr
             self._hash = hash(arr.data.tobytes())
@@ -56,6 +57,9 @@ class HashedMask:
     @property
     def array(self) -> np.ndarray | None:
         return self._arr
+
+    def tolist(self) -> np.ndarray | None:
+        return self._arr if self._arr is None else self._arr.tolist()
 
     def __hash__(self) -> int:
         return self._hash
@@ -77,6 +81,13 @@ class _struct(NamedTuple):
     n: tuple = ()  # tensor charge
     isdiag: bool = False  # isdiag
     mask: HashedMask = HashedMask(None)  #
+
+    def replace(self, **kwargs):
+        if 'mask' in kwargs and not isinstance(kwargs['mask'], HashedMask):
+            kwargs['mask'] = HashedMask(kwargs['mask'])
+        if 'legs' in kwargs and not isinstance(kwargs['legs'], tuple):
+            kwargs['legs'] = tuple(kwargs['legs'])
+        return self._replace(**kwargs)
 
 
 class _blocks(NamedTuple):
@@ -230,13 +241,13 @@ def get_blocks(sym, struct) -> _blocks:
 def get_trimmed_struct(sym, struct, sub_legs=None):
     saxes = tuple(int(leg.s) for leg in struct.legs)
     # taxes_full = tuple(leg.t for leg in struct.legs)
-    taxes_full = tuple(tuple(tt for tt, d in zip(leg.t, leg.D) if d > 0) for leg in struct.legs)
-    # taxes_full = tuple(tuple(tuple(map(int, tt)) for tt, d in zip(leg.t, leg.D) if d > 0) for leg in struct.legs)
+    # taxes_full = tuple(tuple(tt for tt, d in zip(leg.t, leg.D) if d > 0) for leg in struct.legs)
+    taxes_full = tuple(tuple(tuple(map(int, tt)) for tt, d in zip(leg.t, leg.D) if d > 0) for leg in struct.legs)
     if sub_legs is None:
         taxes_sub = taxes_full
     else:
-        taxes_sub = tuple(leg.t for leg in sub_legs)
-        # taxes_sub = tuple(tuple(tuple(map(int, tt)) for tt, d in zip(leg.t, leg.D) if d > 0) for leg in sub_legs)
+        # taxes_sub = tuple(leg.t for leg in sub_legs)
+        taxes_sub = tuple(tuple(tuple(map(int, tt)) for tt, d in zip(leg.t, leg.D) if d > 0) for leg in sub_legs)
     taxes_new, mask_sub = get_trimmed_struct_engine(sym, taxes_full, saxes, struct.n, struct.mask, taxes_sub)
     legs_new = tuple(leg.trim(tax) for leg, tax in zip(struct.legs, taxes_new))
     return _struct(legs=tuple(legs_new), n=struct.n, isdiag=struct.isdiag, mask=mask_sub)
@@ -258,9 +269,13 @@ def get_trimmed_struct_engine(sym, taxes_full, saxes, n, mask, taxes_sub):
     if taxes_new != taxes_sub:
         return get_trimmed_struct_engine(sym, taxes_full, saxes, n, mask, taxes_new)
 
-    mask_sub = np.zeros(len(tblocks_sub), dtype=bool)
-    mask_sub[inds_sub] = True
-    mask_sub = HashedMask(mask_sub)
+    if mask.array is not None:
+        mask_sub = np.zeros(len(tblocks_sub), dtype=bool)
+        mask_sub[inds_sub] = True
+        mask_sub = HashedMask(mask_sub)
+    else:
+        mask_sub = mask
+
     return taxes_new, mask_sub
 
 

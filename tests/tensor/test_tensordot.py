@@ -425,10 +425,10 @@ def test_tensordot_exceptions(config_kwargs):
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch_cutensor", "--device", "cuda"])
+    # pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch_cutensor", "--device", "cuda"])
     pytest.main([__file__, "-vs", "--durations=0", "--tensordot_policy", "fuse_to_matrix"])
-    pytest.main([__file__, "-vs", "--durations=0", "--tensordot_policy", "fuse_contracted"])
-    pytest.main([__file__, "-vs", "--durations=0", "--tensordot_policy", "no_fusion"])
-    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--tensordot_policy", "fuse_to_matrix"])
-    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--tensordot_policy", "fuse_contracted"])
-    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--tensordot_policy", "no_fusion"])
+    # pytest.main([__file__, "-vs", "--durations=0", "--tensordot_policy", "fuse_contracted"])
+    # pytest.main([__file__, "-vs", "--durations=0", "--tensordot_policy", "no_fusion"])
+    # pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--tensordot_policy", "fuse_to_matrix"])
+    # pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--tensordot_policy", "fuse_contracted"])
+    # pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--tensordot_policy", "no_fusion"])

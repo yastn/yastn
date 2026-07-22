@@ -19,7 +19,7 @@ from typing import Sequence, TYPE_CHECKING, Union
 
 import numpy as np
 
-from ._auxiliary import _clear_axes, _struct, _unpack_axes, get_blocks, argsort_t
+from ._auxiliary import _clear_axes, _unpack_axes, get_blocks, argsort_t
 from ._einsum import ncon
 from ._legbasic import LegBasic
 from ._legs import LegMeta, Leg, leg_product
@@ -142,10 +142,9 @@ def conj(a) -> 'Tensor':
 
     Follows the behavior of the :code:`backend.conj()` when it comes to creating a new copy of the data.
     """
-    newn = a.config.sym.add_charges(a.struct.n, new_signature=-1)
-
-    legs = tuple(leg.conj() for leg in a.struct.legs)
-    struct = _struct(legs=legs, n=newn, isdiag=a.isdiag)
+    new_n = a.config.sym.add_charges(a.struct.n, new_signature=-1)
+    new_legs = tuple(leg.conj() for leg in a.struct.legs)
+    struct = a.struct.replace(legs=new_legs, n=new_n)
     hfs = tuple(hf.conj() for hf in a.hfs)
     data = a.config.backend.conj(a._data)
     return a._replace(hfs=hfs, struct=struct, data=data)
@@ -170,9 +169,9 @@ def flip_signature(a) -> 'Tensor':
 
     Creates a shallow copy of the data.
     """
-    newn = a.config.sym.add_charges(a.struct.n, new_signature=-1)
-    legs = tuple(leg.conj() for leg in a.struct.legs)
-    struct = _struct(legs=legs, n=newn, isdiag=a.isdiag)
+    new_n = a.config.sym.add_charges(a.struct.n, new_signature=-1)
+    new_legs = tuple(leg.conj() for leg in a.struct.legs)
+    struct = a.struct.replace(legs=new_legs, n=new_n)
     hfs = tuple(hf.conj() for hf in a.hfs)
     return a._replace(hfs=hfs, struct=struct)
 
@@ -201,21 +200,29 @@ def flip_charges(a, axes=None) -> 'Tensor':
     uaxes, = _unpack_axes(a.mfs, axes)
     uaxes = tuple(a.trans[ax] for ax in uaxes)
 
-    bl_old = get_blocks(a.config.sym, a.struct)
-    legs_new = list(a.struct.legs)
+    new_legs = list(a.struct.legs)
     hfs_new = list(a.hfs)
-    t_flip = bl_old.t.copy()
 
+    bl_all = get_blocks(a.config.sym, a.struct.replace(mask=None))
+    t_flip = bl_all.t.copy()
     for ax in uaxes:
         if hfs_new[ax].is_fused():
             raise YastnError('Flipping charges of hard-fused leg is not supported.')
         hfs_new[ax] = hfs_new[ax].conj()
         leg = a.struct.legs[ax]
-        legs_new[ax] = leg.conj_charges(a.config.sym)
+        new_legs[ax] = leg.conj_charges(a.config.sym)
         t_flip[:, ax, :] = a.config.sym.fuse(t_flip[:, (ax,), :], (leg.s,), -leg.s)
 
-    legs_new = tuple(legs_new)
-    bl_new = get_blocks(a.config.sym, a.struct._replace(legs=legs_new))
+    if a.struct.mask.array is None:
+        struct_new = a.struct.replace(legs=new_legs)
+    else:
+        inds_all = argsort_t(t_flip)
+        mask_new = a.struct.mask.array[inds_all]
+        struct_new = a.struct.replace(legs=new_legs, mask=mask_new)
+        t_flip = t_flip[a.struct.mask.array]
+
+    bl_old = get_blocks(a.config.sym, a.struct)
+    bl_new = get_blocks(a.config.sym, struct_new)
     inds = argsort_t(t_flip)
     assert np.array_equal(t_flip[inds], bl_new.t), "Sanity check. Contact developers.."
     sln, slo = bl_new.slc, bl_old.slc[inds]
@@ -227,7 +234,7 @@ def flip_charges(a, axes=None) -> 'Tensor':
         ('Do', np.int64, (1,))])
     meta = meta.view(meta_dt).reshape(-1)
     data = a.config.backend.embed_transpose(a._data, [0], meta, bl_new.size)  # used for embeding
-    out = a._replace(struct=bl_new.struct, data=data, hfs=hfs_new)
+    out = a._replace(struct=struct_new, data=data, hfs=hfs_new)
     return out
 
 
@@ -330,11 +337,16 @@ def consume_transpose(a) -> 'Tensor':
     new_hfs = tuple(a.hfs[ii] for ii in a.trans)
     new_legs = tuple(a.struct.legs[ii] for ii in a.trans)
 
-    bl_old = get_blocks(a.config.sym, a.struct)
-    struct_new = a.struct._replace(legs=new_legs)
-    bl_new = get_blocks(a.config.sym, struct_new)
+    if a.struct.mask.array is None:
+        struct_new = a.struct.replace(legs=new_legs)
+    else:
+        bl_all = get_blocks(a.config.sym, a.struct.replace(mask=None))
+        inds_all = argsort_t(bl_all.t[:, order, :])
+        mask_new = a.struct.mask.array[inds_all]
+        struct_new = a.struct.replace(legs=new_legs, mask=mask_new)
 
-    bl_new = get_blocks(a.config.sym, a.struct._replace(legs=new_legs))
+    bl_new = get_blocks(a.config.sym, struct_new)
+    bl_old = get_blocks(a.config.sym, a.struct)
     inds = argsort_t(bl_old.t[:, order, :])
     meta = np.hstack([bl_new.slc, bl_new.D, bl_old.slc[inds], bl_old.D[inds]])
     ndim = len(new_legs)
@@ -456,7 +468,7 @@ def add_leg(a, axis=-1, s=-1, t=None, leg=None) -> 'Tensor':
 
     newn = a.config.sym.add_charges(a.struct.n, t, signatures=(1, s))
     legs = a.struct.legs[:haxis] + (LegBasic(s=s, t=(t,), D=(1,)),) + a.struct.legs[haxis:]
-    struct = _struct(legs=legs, n=newn, isdiag=a.isdiag)
+    struct = a.struct.replace(legs=legs, n=newn)
     hfs = a.hfs[:haxis] + (hfsa,) + a.hfs[haxis:]
     return a._replace(mfs=mfs, hfs=hfs, struct=struct, trans=trans)
 
@@ -500,7 +512,7 @@ def remove_leg(a, axis=-1) -> 'Tensor':
 
         new_n = a.config.sym.add_charges(a.struct.n, t, signatures=(-1, a.struct.legs[haxis].s), new_signature=-1)
         new_legs = a.struct.legs[:haxis] + a.struct.legs[haxis + 1:]
-        struct = _struct(legs=new_legs, n=new_n, isdiag=a.isdiag)
+        struct = a.struct.replace(legs=new_legs, n=new_n)
         hfs = a.hfs[:haxis] + a.hfs[haxis + 1:]
         a = a._replace(mfs=mfs, hfs=hfs, struct=struct, trans=trans)
     return a
@@ -526,7 +538,8 @@ def diag(a) -> 'Tensor':
     if a.trans == (1, 0):  # sufficient for the transpose, to have consistent signature flow
         new_legs == new_legs[::-1]
     #
-    bl_new = get_blocks(a.config.sym, a.struct._replace(isdiag=not a.isdiag))
+    struct_new = a.struct._replace(isdiag=not a.isdiag)
+    bl_new = get_blocks(a.config.sym, struct_new)
 
     if a.isdiag:  # isdiag=True -> isdiag=False
         meta = np.hstack([bl_new.slc, bl.slc])
@@ -543,4 +556,4 @@ def diag(a) -> 'Tensor':
                 ('Do',  np.int64, (2,))])
         meta = meta.view(meta_dt).reshape(-1)
         data = a.config.backend.diag_2dto1d(a._data, meta, bl_new.size)
-    return a._replace(struct=bl_new.struct, data=data, trans=None)
+    return a._replace(struct=struct_new, data=data, trans=None)

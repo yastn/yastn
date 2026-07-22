@@ -21,7 +21,7 @@ from operator import mul
 
 import numpy as np
 
-from ._auxiliary import _config, get_blocks, get_trimmed_struct, find_index, find_matching_indices, HashedMask
+from ._auxiliary import _config, get_blocks, get_trimmed_struct, find_index, find_matching_indices
 from ._tests import YastnError
 from ..backend import backend_np
 from ..sym import sym_none, sym_U1, sym_Z2, sym_Z3, sym_U1xU1, sym_U1xU1xZ2
@@ -222,12 +222,6 @@ def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
     if a.isdiag and struct.legs[0] != struct.legs[1].conj():
         raise YastnError("Diagonal tensor requires the same bond dimensions on both legs.")
 
-    # bl = get_blocks(a.config.sym, struct)
-    # mask = np.random.randint(2, size=bl.nblocks).astype(bool).reshape(-1)
-    # mask[:1] = True
-    # struct = struct._replace(mask=HashedMask(mask))
-    # struct = get_trimmed_struct(a.config.sym, struct)
-
     bl = get_blocks(a.config.sym, struct)
     a.struct = struct
     a._data = _init_block(a.config, bl.size, val, dtype=a.yastn_dtype, device=a.device)
@@ -296,8 +290,6 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
     #if any(tt not in leg for leg, tt in zip(a.struct.legs, tss)):
     new_legs = tuple(leg.add_charge(tt, DD) for leg, tt, DD in zip(a.struct.legs, tss, Ds) )
 
-
-
     embed_(a, new_legs)  # will make a data copy
 
     Dsize = Ds[0] if a.isdiag else reduce(mul, Ds, 1)
@@ -312,7 +304,7 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
 def embed_(a, legs_new):
     bl_old = get_blocks(a.config.sym, a.struct)
 
-    struct_new = a.struct._replace(legs=legs_new, mask=HashedMask(None))
+    struct_new = a.struct.replace(legs=legs_new, mask=None)
     bl_new = get_blocks(a.config.sym, struct_new)
 
     ind1, ind2 = find_matching_indices(bl_new.t, bl_old.t)
