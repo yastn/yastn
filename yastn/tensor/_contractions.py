@@ -24,7 +24,7 @@ import numpy as np
 
 from .._profile import nsys_profile
 from ._auxiliary import _struct, _clear_axes, _unpack_axes, sign_canonical_order, _compress_slices
-from ._auxiliary import find_matching_indices, argsort_t, get_blocks, HashedMask, get_trimmed_struct
+from ._auxiliary import find_matching_indices, argsort_t, get_blocks, get_trimmed_struct
 from ._merging import _merge_to_matrix, _unmerge, _meta_unmerge_matrix, _meta_fuse_hard
 from ._merging import _transpose_and_merge, _mask_tensors_leg_intersection, _meta_mask
 from ._tests import YastnError, _test_can_be_combined, _unpack_trans_test_axes_pair
@@ -362,12 +362,15 @@ def _meta_tensordot_nf(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b):
     unique_c, inv_c = np.unique(tn, return_inverse=True, axis=0)
     #
     ind_c = find_matching_indices(bl_c.t, unique_c, both=False)
-    slc_c = bl_c.slc[ind_c][inv_c]
-    # mask = np.zeros(bl_c.nblocks, dtype=bool)
-    # mask[ind_c] = True
-    # struct_c = bl_c.struct._replace(mask=HashedMask(mask))
-    # bl_c = get_blocks(sym, struct_c)
-    # slc_c = bl_c.slc[inv_c]
+    slc_ca = bl_c.slc[ind_c][inv_c]
+    #
+    mask = np.zeros(bl_c.nblocks, dtype=bool)
+    mask[ind_c] = True
+    struct_c = struct_c.replace(mask=mask)
+    bl_c = get_blocks(sym, struct_c)
+    slc_c = bl_c.slc[inv_c]
+    if not np.array_equal(slc_c, slc_ca):
+        print('aaa')
     #
     meta = np.column_stack([slc_c, Daop[ind_a], Dbop[ind_b], ind_a, ind_b])
     meta_dt = np.dtype([

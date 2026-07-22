@@ -654,7 +654,7 @@ def embed_transpose(data, axes, meta_transpose, size):
 
 
 def transpose_and_merge(data, order, meta_mrg, size):
-    newdata = np.empty(size, dtype=data.dtype)
+    newdata = np.zeros(size, dtype=data.dtype)
     for sln, Dn, slo, Do, Dslc, Drsh in meta_mrg:
         temp = newdata[slice(*sln)].reshape(Dn)
         slcs = tuple(slice(*x) for x in Dslc)
