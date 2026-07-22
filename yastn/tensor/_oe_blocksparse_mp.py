@@ -25,6 +25,7 @@ from collections import OrderedDict
 import torch
 import torch.multiprocessing as _mp
 
+from ._auxiliary import get_trimmed_struct
 
 log = logging.getLogger(__name__)
 
@@ -119,8 +120,10 @@ def _zeros_meta(config, legs, n):
     hfs = tuple(lg.hf for lg in ulegs)
     a = Tensor(config=config, s=s, n=n, isdiag=False, mfs=mfs, hfs=hfs)
     legs_tD = tuple(lb._replace(t=lg.t, D=lg.D) for lb, lg in zip(a.struct.legs, ulegs))
-    bl = get_blocks(config.sym, a.struct._replace(legs=legs_tD))
-    a.struct = bl.struct
+
+    struct_new = get_trimmed_struct(config.sym, a.struct, legs_tD)
+    bl = get_blocks(config.sym, struct_new)
+    a.struct = struct_new
     d = _meta_only(a.to_dict(level=1))
     d['size'] = bl.size  # to_dict read size from the 1-element placeholder buffer
     return d

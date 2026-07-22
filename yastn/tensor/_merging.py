@@ -377,25 +377,20 @@ def _meta_fuse_hard(sym, struct, axes, legs_sub=None, empty_first_axis_s_conj=Fa
     smeta = sorted((tes, tn, tos, slo, Do) for tes, tn, tos, slo, Do
                    in zip(teff_split, teff, told_split, slc, st.D))
 
-    meta_mrg, t_new, D_new = [], [], []
-
-    for tn, sln, Dn, ((tes, tn2), gr) in zip(bl_new.t, bl_new.slc, bl_new.D, groupby(smeta, key=itemgetter(0, 1))):
+    meta_mrg = []
+    ic = 0
+    for tes, tn, tos, slo, Do in smeta:
+        while tuple(bl_new.t[ic].ravel()) != tn:
+            ic += 1
+        sln, Dn = bl_new.slc[ic], bl_new.D[ic]
 
         ind = tuple(ls.t.index(te) for ls, te in zip(lls, tes))
         decs = tuple(ls.dec[ii] for ls, ii in zip(lls, ind))
-        t_new.append(tn)
-        assert tuple(tn.ravel()) == tn2
-        D_new.append(tuple(ls.D[ii] for ls, ii in zip(lls, ind)))
-        try:
-            _, _, tos, slo, Do = next(gr)
-            for de in product(*decs):
-                if tuple(d.t for d in de) == tos:
-                    sub_slc = tuple(x for d in de for x in d.Dslc)
-                    Dsln = tuple(d.Dprod for d in de)
-                    meta_mrg.append((*sln, *Dn, *slo, *Do, *sub_slc, *Dsln))
-                    _, _, tos, slo, Do = next(gr)
-        except StopIteration:
-            pass
+        for de in product(*decs):
+            if tuple(d.t for d in de) == tos:
+                sub_slc = tuple(x for d in de for x in d.Dslc)
+                Dsln = tuple(d.Dprod for d in de)
+                meta_mrg.append((*sln, *Dn, *slo, *Do, *sub_slc, *Dsln))
 
     ndimo = len(struct.legs)
     ndimn = len(struct_new.legs)

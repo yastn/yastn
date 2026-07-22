@@ -32,7 +32,7 @@ from .._profile import nvtx
 from ..initialize import block as yastn_block
 from ._legs import Leg
 from ._einsum import ncon_prefilter
-from ._auxiliary import _clear_axes, get_blocks
+from ._auxiliary import _clear_axes, get_blocks, get_trimmed_struct
 from ._contractions import _apply_mask_axes
 from ._merging import _meta_mask, _mask_nonzero
 from ._tests import YastnError
@@ -255,7 +255,7 @@ def _filter_tensor_blocks(tensor, block_indices):
     if not indices:
         # zero contraction: strip all charges from every native leg
         empty_legs = tuple(leg._replace(t=(), D=()) for leg in tensor.struct.legs)
-        new_struct = tensor.struct._replace(legs=empty_legs)
+        new_struct = get_trimmed_struct(sym, tensor.struct, empty_legs)
         return tensor._replace(struct=new_struct, data=tensor._data[:0])
 
     ndim_n = len(tensor.struct.legs)
@@ -287,7 +287,8 @@ def _meta_filter_struct(sym, struct, kept_indices):
     bl = get_blocks(sym, struct)
     if not kept_indices:
         empty_legs = tuple(leg._replace(t=(), D=()) for leg in struct.legs)
-        return struct._replace(legs=empty_legs)
+        return get_trimmed_struct(sym, struct, empty_legs)
+
     if len(kept_indices) >= bl.nblocks:
         return struct
     indices = sorted(kept_indices)
@@ -298,7 +299,7 @@ def _meta_filter_struct(sym, struct, kept_indices):
         new_t = tuple(t for t in leg.t if t in surviving)
         new_D = tuple(d for t, d in zip(leg.t, leg.D) if t in surviving)
         new_legs.append(leg._replace(t=new_t, D=new_D))
-    return struct._replace(legs=tuple(new_legs))
+    return get_trimmed_struct(sym, struct, tuple(new_legs))
 
 
 def _post_trim_label_dims(masked_meta_tensors, index_groups, pf_trim):

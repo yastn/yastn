@@ -799,7 +799,6 @@ def trace(a, axes=(0, 1)) -> 'Tensor':
 @lru_cache(maxsize=1024)
 def _meta_trace(sym, struct, nin_0, nin_1, out):
     r""" meta-information for backend and struct of traced tensor. """
-    bl = bl_full = get_blocks(sym, struct)
     #
     legs_part = list(struct.legs)
     struct_0 = struct
@@ -825,13 +824,8 @@ def _meta_trace(sym, struct, nin_0, nin_1, out):
         for ii, ax in enumerate(out):
             legs_part[ax] = struct_c_1.legs[ii].intersection(struct_1.legs[ax])
 
+    bl, slo = get_blocks_and_subslices(sym, struct_1, struct)
     bl_c = get_blocks(sym, struct_c_1)
-
-    if struct_1 == struct:
-        slo = bl_full.slc
-    else:
-        bl = get_blocks(sym, struct_1)
-        slo = bl_full.slc[find_matching_indices(bl_full.t, bl.t, both=False)]
 
     t0 = bl.t[:, nin_0, :].reshape(bl.nblocks, len(nin_0) * sym.NSYM)
     t1 = bl.t[:, nin_1, :].reshape(bl.nblocks, len(nin_1) * sym.NSYM)
@@ -845,9 +839,8 @@ def _meta_trace(sym, struct, nin_0, nin_1, out):
     pD1 = np.prod(Do[:, nin_1], axis=1, dtype=np.int64)
 
     unique_tn, inv_tn = np.unique(tn, return_inverse=True, axis=0)
-    assert len(tn) == 0 or np.array_equal(bl_c.t, unique_tn), "Sanity check. Contact developers."
-
-    meta = np.column_stack([bl_c.slc[inv_tn], slo, Do, pD0, pD1, Dnp])  # sln, slo, Do, Drsh;  Drsh = (pD0, pD1, Dnp)
+    ind = find_matching_indices(bl_c.t, unique_tn, both=False)
+    meta = np.column_stack([bl_c.slc[ind][inv_tn], slo, Do, pD0, pD1, Dnp])  # sln, slo, Do, Drsh;  Drsh = (pD0, pD1, Dnp)
     meta_dt = np.dtype([
         ('sln', np.int64, (2,)),
         ('slo', np.int64, (2,)),
