@@ -18,6 +18,7 @@ Supports both:
   ``yastn_block`` and, in backward, re-runs the block step in autograd-enabled
   mode to split ``grad_out_data`` back into per-key gradients before shipping.
 """
+import os
 import atexit
 import logging
 import queue as _queue
@@ -301,6 +302,7 @@ def _worker_main(rank, gpu_dev, config_desc, cmd_q, res_q,
         torch.cuda.set_device(gpu_idx)
     from ._initialize import make_config
     from .oe_blocksparse import _contract_with_sliced_unroll
+    from ._control_lru import get_cache_info
     # Override default_device to this worker's assigned GPU so yastn tensors
     # reconstructed from IPC are placed on the right device (Tensor.from_dict
     # honors config.default_device).
@@ -314,6 +316,10 @@ def _worker_main(rank, gpu_dev, config_desc, cmd_q, res_q,
             break
         cmd = msg[0]
         if cmd == 'shutdown':
+            if os.getenv('YASTN_PROFILE', '0') == '1':
+                msg= f"oe_mp rank {rank} dev {gpu_dev} cache info:\n"
+                msg+=f"\n".join([ " ".join(map(str,rec)) for rec in get_cache_info().items() ])
+                print(msg)
             break
         try:
             if cmd in ('forward', 'backward'):

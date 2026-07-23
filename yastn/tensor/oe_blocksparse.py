@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 import logging
+import os
 from functools import lru_cache
 from contextlib import nullcontext
 from itertools import product, accumulate
@@ -647,11 +648,11 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
         # Short-circuit: nothing to per-combo-tune when no axis is unrolled
         # or when dim_overrides wasn't collected (degenerate / cache-quirk).
         if not per_combo_path or not unroll_labels or not dim_overrides:
-            return optimize
+            return optimize, None
         shapes = tuple(tuple(dim_overrides[lbl] for lbl in seq)
                        for seq in _all_label_seqs)
-        path, _ = _get_contraction_path_cached(_combo_expr, shapes, **_combo_path_kwargs)
-        return path
+        path, path_info = _get_contraction_path_cached(_combo_expr, shapes, **_combo_path_kwargs)
+        return path, path_info
 
     # Single-process: run the prefilter once. Worker mode: the MP parent has
     # already prefiltered and passes the result via _precomputed_*, so the
@@ -694,9 +695,14 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
         opk = tuple(sl_to_idx[u][id(sl_map[u])] for u in output_unroll_labels)
         assigned.append((n, sl_map, opk))
 
-    def _contract_single_combo(base_tensors, sl_map, pf_trim=None, use_checkpoint=False, dim_overrides=None):
-        combo_path = _path_for_combo(dim_overrides)
+    def _contract_single_combo(base_tensors, sl_map, pf_trim=None, use_checkpoint=False, dim_overrides=None, tag=None):
+        combo_path, path_info = _path_for_combo(dim_overrides)
         cur_igs, cur_conjs, cur_order, cur_swap = _ncon_args_for_path(combo_path)
+        # if os.environ.get("YASTN_PROFILE","0") == "1":
+        #     msg=f"_contract_single_combo {tag}\n"
+        #     msg+=f"combo_path ncon {cur_igs} swaps {len(cur_swap)} {cur_swap}\n"
+        #     msg+=str(path_info)
+        #     print(msg)
 
         def _do_contract(masked_input):
             masked = _apply_masks_for_combo(masked_input, sl_map, masked_input[0].device)
@@ -719,10 +725,10 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
         _cfg = iter_tensors[0].config
         for n, sl_map, output_pos_key in assigned:
             with stream_ctx:
+                tag = f"_contract_with_sliced_unroll {n}"
+                if dev is not None:
+                    tag += f" [device={dev}]"
                 if nvtx.enabled:
-                    tag = f"_contract_with_sliced_unroll {n}"
-                    if dev is not None:
-                        tag += f" [device={dev}]"
                     nvtx.range_push(tag)
 
                 pf_trim = pf_trim_per_combo[n]
@@ -730,7 +736,8 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
                                        if dim_overrides_per_combo is not None else None)
                 partial = _contract_single_combo(iter_tensors, sl_map, pf_trim=pf_trim,
                                                  use_checkpoint=checkpoint_loop,
-                                                 dim_overrides=combo_dim_overrides)
+                                                 dim_overrides=combo_dim_overrides,
+                                                 tag=tag)
 
                 prev = local_partials.get(output_pos_key)
                 local_partials[output_pos_key] = partial if prev is None else prev + partial
