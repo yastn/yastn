@@ -17,7 +17,6 @@ import os
 from functools import lru_cache
 from contextlib import nullcontext
 from itertools import product, accumulate
-import gc, subprocess
 import time
 from typing import Hashable, Mapping, Sequence, Union
 
@@ -458,6 +457,7 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
                                   per_combo_path=False, combo_path_kwargs=None,
                                   _precomputed_pf_trim=None,
                                   _precomputed_dim_overrides=None,
+                                  oom_retry:bool|None=None,
                                   **kwargs):
     r"""
     Contract a tensor network with block-sparse index unrolling.
@@ -510,6 +510,13 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
         Forwarded to :func:`_get_contraction_path_cached` when
         ``per_combo_path=True``. Keys may include ``optimizer``,
         ``memory_limit``, ``names``, ``who``.
+    oom_retry : bool, optional
+        If True, on torch, retry a single OOM failure.
+        This is a workaround for caching-allocator fragmentation that appears
+        under expandable_segments:False. Enable it only where that regime is
+        effectively forced: a torch/CUDA backend on a system lacking the
+        pidfd_open syscall, where multi-device MP must run under expandable_segments:False.
+        Set globally via env variable ``YASTN_OE_OOM_RETRY"="1"`` or per-call via this argument (priority).
     **kwargs :
         Forwarded to ``ncon``.
 
@@ -588,12 +595,12 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
 
     original_device = tensors[0].device
 
+    # torch+CUDA specific
     # External allocators (e.g. cuTENSOR via torch_cutensor) need PyTorch's
     # caching allocator released so they can reclaim freed memory; pure
     # PyTorch on CUDA already reuses internally and empty_cache() is a
     # net loss.
     _needs_cache_release = getattr(tensors[0].config.backend, 'BACKEND_ID', '') == 'torch_cutensor'
-
     def _release_cuda_cache(devs):
         r"""Release PyTorch's cached-but-unused GPU memory on *devs*."""
         import torch as _torch
@@ -601,6 +608,12 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
             if 'cuda' in str(d):
                 with _torch.cuda.device(d):
                     _torch.cuda.empty_cache()
+
+    _torch_cuda_backend = ('torch' in getattr(tensors[0].config.backend, 'BACKEND_ID', '')
+                           and 'cuda' in str(original_device))
+    _oom_retry = _torch_cuda_backend and (oom_retry or (os.environ.get("YASTN_OE_OOM_RETRY", "0") == "1"))\
+        and (oom_retry is not False)
+    import pdb; pdb.set_trace()
 
     # Build mask tensors once per (tensor, label, sliced_leg, device) so the
     # combo loop just looks them up.
@@ -712,7 +725,7 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
                     if trim_k is not None:
                         masked[k] = _filter_tensor_blocks(masked[k], trim_k)
             return ncon(masked, cur_igs, conjs=cur_conjs, order=cur_order, swap=cur_swap,
-                        release_cuda_cache=_needs_cache_release)
+                        release_cuda_cache=_needs_cache_release, oom_retry=_oom_retry)
 
         return _checkpointed_call(base_tensors, _do_contract) if use_checkpoint else _do_contract(base_tensors)
 

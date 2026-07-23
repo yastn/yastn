@@ -110,7 +110,8 @@ def einsum(subscripts, *operands, order=None, swap=None) -> 'Tensor':
     return ncon(ts, inds, conjs=conjs, swap=swap)
 
 
-def ncon(ts, inds, conjs=None, order=None, swap=None, release_cuda_cache=False) -> 'Tensor':
+def ncon(ts, inds, conjs=None, order=None, swap=None, release_cuda_cache=False,
+         oom_retry=False) -> 'Tensor':
     r"""
     Execute series of tensor contractions.
 
@@ -118,6 +119,14 @@ def ncon(ts, inds, conjs=None, order=None, swap=None, release_cuda_cache=False) 
     ----------
     ts: Sequence[yastn.Tensor]
         list of tensors to be contracted.
+
+    oom_retry: bool
+        If ``True`` (torch/CUDA backends), each contraction op is retried once
+        after :func:`torch.cuda.empty_cache` when it raises a CUDA out-of-memory
+        error. This reclaims reserved-but-unallocated (fragmented) cache back to
+        the driver so a large contiguous allocation can succeed. The blocking
+        ``empty_cache`` only runs on the rare OOM path; the common path is
+        untouched. Default: ``False``.
 
     inds: Sequence[Sequence[int]]
         each inner tuple labels legs of respective tensor with integers.
@@ -175,22 +184,58 @@ def ncon(ts, inds, conjs=None, order=None, swap=None, release_cuda_cache=False) 
     #
     commands = _meta_ncon(inds, order, swap)
     #
-    ts = _execute_commands(ts, commands, release_cuda_cache=release_cuda_cache)
+    ts = _execute_commands(ts, commands, release_cuda_cache=release_cuda_cache,
+                           oom_retry=oom_retry)
     assert len(ts) == 1, "Sanity check. Contact developers."
     return ts.popitem()[1]
 
 
-def _execute_commands(ts, commands, release_cuda_cache=False):
+# TODO? Import from backend
+def _run_op_oom_retry(fn, oom_retry, retries=1):
+    r"""Run ``fn()``; on a CUDA out-of-memory error, release torch's cached-but-
+    unused (fragmented) memory back to the driver and retry, up to ``retries``
+    extra times.
+
+    Operands must be captured by ``fn`` as live locals so they survive the
+    ``empty_cache`` (which only frees fully-unused segments) and are available
+    for the retry. Non-OOM errors — and OOM on the final attempt — propagate.
+    ``oom_retry=False`` is a transparent pass-through (no torch import), keeping
+    non-CUDA backends unaffected.
+
+    ``empty_cache`` runs *after* the ``except`` block returns, not inside it: on
+    leaving the handler the interpreter drops its active-exception state, so the
+    traceback that pinned the failed attempt's frames (and their intermediate
+    CUDA tensors) is released and those blocks are freed by refcounting. No
+    ``gc.collect()`` is needed — nothing here is held in a reference cycle — so
+    we avoid a full-heap sweep on the (rare) OOM path.
+    """
+    if not oom_retry:
+        return fn()
+    import torch
+    for attempt in range(retries + 1):
+        try:
+            return fn()
+        except RuntimeError as e:  # torch.cuda.OutOfMemoryError is a RuntimeError
+            if attempt == retries or 'out of memory' not in str(e).lower():
+                raise
+        # Outside the handler: exception (+ its traceback) is gone, failed
+        # intermediates freed. Reclaim them and the fragmented free pool.
+        torch.cuda.empty_cache()
+
+
+def _execute_commands(ts, commands, release_cuda_cache=False, oom_retry=False):
     for command in commands:
         if command[0] == 'tensordot':
             tout, (t1, t2), axes = command[1:]
-            ts[tout] = tensordot(ts.pop(t1), ts.pop(t2), axes=axes)
+            a, b = ts.pop(t1), ts.pop(t2)
+            ts[tout] = _run_op_oom_retry(lambda: tensordot(a, b, axes=axes), oom_retry)
             if release_cuda_cache:
                 import torch
                 torch.cuda.empty_cache()
         elif command[0] == 'swap_gate':
             tout, tin, axes = command[1:]
-            ts[tout] = swap_gate(ts.pop(tin), axes=axes)
+            a = ts.pop(tin)
+            ts[tout] = _run_op_oom_retry(lambda: swap_gate(a, axes=axes), oom_retry)
         elif command[0] == 'parity_sign':
             # Correction for jump-move on potentially parity-odd tensor.
             # If the jumped tensor has odd parity, apply (-1)^{n_d}
@@ -198,14 +243,18 @@ def _execute_commands(ts, commands, release_cuda_cache=False):
             jumped_ten, d_ten, d_legs = command[1:]
             charge = ts[jumped_ten].n
             if any(charge):
-                ts[d_ten] = swap_gate(ts[d_ten], axes=d_legs, charge=charge)
+                a = ts[d_ten]
+                ts[d_ten] = _run_op_oom_retry(
+                    lambda: swap_gate(a, axes=d_legs, charge=charge), oom_retry)
         elif command[0] == 'trace':
             tout, tin, axes = command[1:]
-            ts[tout] = trace(ts.pop(tin), axes=axes)
+            a = ts.pop(tin)
+            ts[tout] = _run_op_oom_retry(lambda: trace(a, axes=axes), oom_retry)
         else:
             assert command[0] == 'transpose', "Sanity check"
             tout, tin, axes = command[1:]
-            ts[tout] = ts.pop(tin).transpose(axes=axes)
+            a = ts.pop(tin)
+            ts[tout] = _run_op_oom_retry(lambda: a.transpose(axes=axes), oom_retry)
     return ts
 
 
