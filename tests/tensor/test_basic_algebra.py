@@ -50,7 +50,8 @@ def combine_tests(a, b):
     # additionally tests norm
 
 
-def test_algebra_basic(config_kwargs):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_algebra_basic(config_kwargs, remove_blocks):
     """ test basic algebra for various symmetries """
     # dense
     config_dense = yastn.make_config(sym='none', **config_kwargs)
@@ -74,9 +75,10 @@ def test_algebra_basic(config_kwargs):
     leg2 = yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9))
     leg3 = yastn.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(10, 11, 12))
 
-    a = yastn.rand(config=config_U1, legs=[leg0a, leg1, leg2, leg3], dtype='float64')
-    b = yastn.rand(config=config_U1, legs=[leg0b, leg1, leg2, leg3], dtype='float64')
+    a = yastn.rand(config=config_U1, legs=[leg0a, leg1, leg2, leg3], dtype='float64', remove_blocks=remove_blocks)
+    b = yastn.rand(config=config_U1, legs=[leg0b, leg1, leg2, leg3], dtype='float64', remove_blocks=remove_blocks)
     combine_tests(a, b)
+    combine_tests(b, a)
     #
     # test with transpose
     a = a.transpose((3, 1, 0, 2))
@@ -102,8 +104,6 @@ def test_algebra_basic(config_kwargs):
     assert pytest.approx(r7.norm().item(), rel=tol) == 5 * np.sqrt(5)
     assert pytest.approx(r7.norm(p='inf').item(), rel=tol) == 2
 
-
-
     # Z2xU1
     config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
     leg0a = yastn.Leg(config_Z2xU1, s=-1, t=[(0, 0), (0, 2), (1, 2)], D=[1, 2, 4])
@@ -114,9 +114,10 @@ def test_algebra_basic(config_kwargs):
     leg3a = yastn.Leg(config_Z2xU1, s=1, t=[(0, 0), (0, 2)], D=[4, 7])
     leg3b = yastn.Leg(config_Z2xU1, s=1, t=[(0, 0)], D=[4])
 
-    a = yastn.randC(config=config_Z2xU1, legs=[leg0a, leg1, leg2a, leg3a])
-    b = yastn.randC(config=config_Z2xU1, legs=[leg0b, leg1, leg2b, leg3b])
+    a = yastn.randC(config=config_Z2xU1, legs=[leg0a, leg1, leg2a, leg3a], remove_blocks=remove_blocks)
+    b = yastn.randC(config=config_Z2xU1, legs=[leg0b, leg1, leg2b, leg3b], remove_blocks=remove_blocks)
     combine_tests(a, b)
+    combine_tests(b, a)
 
 
 def test_add_diagonal(config_kwargs):
@@ -203,7 +204,8 @@ def algebra_hf(f, a, b, hf_axes1=(0, (1, 2), 3)):
     assert all(x.is_consistent() for x in (fc, fcf, ffc, ffcf, fffc, uffc, uufc, uuuc))
 
 
-def test_algebra_fuse_hard(config_kwargs):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_algebra_fuse_hard(config_kwargs, remove_blocks):
     """ execute tests of additions after hard fusion for several tensors. """
     # U1 with 4 legs
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
@@ -213,7 +215,8 @@ def test_algebra_fuse_hard(config_kwargs):
     a.set_block(ts=(1, 1, 0, 0), Ds=(3, 6, 8, 11))
     b = yastn.rand(config=config_U1, s=(1, -1, -1, 1),
                 t=((-1, 0, 1), (-1, 0, 1), (-1, 0, 1), (-2, 0, 2)),
-                D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
+                D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)),
+                remove_blocks=remove_blocks)
     c = yastn.rand(config=config_U1, s=(1, -1, -1, 1),
                 t=((1,), (1,), (0, 1), (0, 1)),
                 D=((3,), (6,), (8, 9), (11, 12)))
@@ -226,9 +229,12 @@ def test_algebra_fuse_hard(config_kwargs):
     t1, t2, t3 = (-1, 0, 1), (-2, 0, 2), (-3, 0, 3)
     Da, Db, Dc = (1, 3, 2), (3, 3, 4), (5, 3, 6)
     a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1, 1),
-                t=(t1, t1, t2, t2, t3, t3), D=(Da, Db, Db, Da, Da, Db))
+                t=(t1, t1, t2, t2, t3, t3), D=(Da, Db, Db, Da, Da, Db),
+                remove_blocks=remove_blocks)
     b = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1, 1),
-                t=(t2, t2, t3, t3, t1, t1), D=(Db, Dc, Da, Dc, Da, Db))
+                t=(t2, t2, t3, t3, t1, t1), D=(Db, Dc, Da, Dc, Da, Db),
+                remove_blocks=remove_blocks)
+
     algebra_hf(lambda x, y: x / 0.5 + y * 3, a, b, hf_axes1=((0, 1), (2, 3), (4, 5)))
     b.set_block(ts=(2, 2, 1, -2, -3, 0), Ds=(4, 6, 1, 1, 1, 3), val='normal')
     algebra_hf(lambda x, y: x - 3 * y, a, b, hf_axes1=((0, 1), (2, 3), (4, 5)))
@@ -237,8 +243,10 @@ def test_algebra_fuse_hard(config_kwargs):
     config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
     leg1 = yastn.Leg(config_Z2xU1, s=1, t=[(0, -1), (0, 1), (1, -1), (1, 1)], D=[1, 2, 3, 4])
     leg2 = yastn.Leg(config_Z2xU1, s=1, t=[(0, 0), (0, 1), (1, 1)], D=[5, 2, 4])
-    a = yastn.rand(config=config_Z2xU1, legs=[leg2.conj(), leg2, leg1, leg1.conj()])
-    b = yastn.rand(config=config_Z2xU1, legs=[leg1, leg1.conj(), leg2.conj(), leg2])
+    a = yastn.rand(config=config_Z2xU1, legs=[leg2.conj(), leg2, leg1, leg1.conj()],
+                   remove_blocks=remove_blocks)
+    b = yastn.rand(config=config_Z2xU1, legs=[leg1, leg1.conj(), leg2.conj(), leg2],
+                   remove_blocks=remove_blocks)
 
     algebra_hf(lambda x, y: x / 0.5 + y * 3, a, b.conj())
 

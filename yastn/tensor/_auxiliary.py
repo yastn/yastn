@@ -44,7 +44,7 @@ class HashedMask:
     _NONE_HASH = hash(None)
 
     def __init__(self, arr):
-        if arr is None:
+        if arr is None or sum(arr) == len(arr):  # no mask, or all True
             self._arr = None
             self._hash = self._NONE_HASH
         else:

@@ -149,7 +149,7 @@ def __setitem__(a, key, newvalue):
     a._data[slc] = newvalue.reshape(-1)
 
 
-def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
+def _fill_tensor(a, t=(), D=(), val='rand', remove_blocks=0):  # dtype = None
     r"""
     Create all allowed blocks based on signature ``s``, total charge ``n``,
     and a set of charge sectors ``t`` for each leg of the tensor.
@@ -217,12 +217,24 @@ def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
         tD = dict(sorted(zip(tt, DD)))
         legs.append(leg._replace(t=tuple(tD.keys()), D=tuple(tD.values())))
 
-    struct = a.struct._replace(legs=tuple(legs))
+    struct = a.struct.replace(legs=legs, mask=None)
     struct = get_trimmed_struct(a.config.sym, struct)
+    bl = get_blocks(a.config.sym, struct)
+
     if a.isdiag and struct.legs[0] != struct.legs[1].conj():
         raise YastnError("Diagonal tensor requires the same bond dimensions on both legs.")
 
-    bl = get_blocks(a.config.sym, struct)
+    if remove_blocks and a.config.sym.NSYM > 0:  # attempts to remove some blocks, without changing the legs
+        mask = np.ones(bl.nblocks, dtype=bool)
+        for _ in range(remove_blocks):
+            ii = np.random.randint(bl.nblocks)
+            mask[ii] = False
+            tset = bl.t[mask]
+            if any(len(np.unique(tset[:, ax, :], axis=0)) != len(leg.t) for ax, leg in enumerate(struct.legs)):
+                mask[ii] = True
+        struct = struct.replace(mask=mask)
+        bl = get_blocks(a.config.sym, struct)
+
     a.struct = struct
     a._data = _init_block(a.config, bl.size, val, dtype=a.yastn_dtype, device=a.device)
     a.is_consistent()

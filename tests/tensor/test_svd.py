@@ -50,7 +50,8 @@ def svd_combine(a):
     assert yastn.norm(S - onlyS) < tol
 
 
-def test_svd_basic(config_kwargs):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_svd_basic(config_kwargs, remove_blocks):
     """ test svd decomposition for various symmetries """
     # dense
     config_dense = yastn.make_config(sym='none', **config_kwargs)
@@ -63,7 +64,7 @@ def test_svd_basic(config_kwargs):
             yastn.Leg(config_U1, s=-1, t=(-2, 0, 2), D=(5, 6, 7)),
             yastn.Leg(config_U1, s=1, t=(-2, -1, 0, 1, 2), D=(6, 5, 4, 3, 2)),
             yastn.Leg(config_U1, s=1, t=(0, 1), D=(2, 3))]
-    a = yastn.rand(config=config_U1, n=1, legs=legs)
+    a = yastn.rand(config=config_U1, n=1, legs=legs, remove_blocks=remove_blocks)
     svd_combine(a)
 
     # Z2xU1
@@ -72,7 +73,7 @@ def test_svd_basic(config_kwargs):
             yastn.Leg(config_Z2xU1, s=-1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(5, 4, 3, 2)),
             yastn.Leg(config_Z2xU1, s=1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(2, 1, 3, 3)),
             yastn.Leg(config_Z2xU1, s=1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(1, 2, 3, 4))]
-    a = yastn.ones(config=config_Z2xU1, legs=legs)
+    a = yastn.ones(config=config_Z2xU1, legs=legs, remove_blocks=remove_blocks)
     svd_combine(a)
 
     # test svd of empty Tensor
@@ -292,7 +293,8 @@ def test_svd_tensor_charge_division(config_kwargs):
 
 
 @torch_test
-def test_svd_backward_basic(config_kwargs):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_svd_backward_basic(config_kwargs, remove_blocks):
     import torch
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
@@ -300,7 +302,8 @@ def test_svd_backward_basic(config_kwargs):
         for p in ['inf', 'fro']:
             a = yastn.rand(config=config_U1, s=(-1, -1, 1, 1),
                     t=[(0, 1), (0, 1), (0, 1), (0, 1)],
-                    D=[(2, 3), (4, 5), (4, 3), (2, 1)], dtype=dtype)
+                    D=[(2, 3), (4, 5), (4, 3), (2, 1)], dtype=dtype,
+                    remove_blocks=remove_blocks)
 
             def test_f(data):
                 a._data=data
@@ -313,14 +316,16 @@ def test_svd_backward_basic(config_kwargs):
 
 
 @torch_test
-def test_svd_backward_truncate(config_kwargs):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_svd_backward_truncate(config_kwargs, remove_blocks):
     import torch
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     for dtype in ["float64", "complex128"]:
         a = yastn.rand(config=config_U1, s=(-1, -1, 1, 1),
                       t=[(0, 1), (0, 1), (0, 1), (0, 1)],
-                      D=[(2, 3), (3, 2), (1, 2), (2, 1)], dtype=dtype)
+                      D=[(2, 3), (3, 2), (1, 2), (2, 1)], dtype=dtype,
+                      remove_blocks=remove_blocks)
 
         b = yastn.rand(config=config_U1, s=(-1, -1),
                       t=[(0, 1), (0, 1)],
@@ -345,12 +350,14 @@ def test_svd_backward_truncate(config_kwargs):
 
 
 @torch_test
-def test_svd_arnoldi(config_kwargs):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_svd_arnoldi(config_kwargs, remove_blocks):
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     for dtype in ["float64", "complex128"]:
         a = yastn.rand(config=config_U1, s=(-1, -1, 1, 1),
                        t=[(0, 1), (0, 1), (0, 1), (0, 1)],
-                       D=[(2, 3), (4, 5), (4, 3), (2, 1)], dtype=dtype)
+                       D=[(2, 3), (4, 5), (4, 3), (2, 1)], dtype=dtype,
+                       remove_blocks=remove_blocks)
         U0, S0, V0 = yastn.svd(a, policy='block_arnoldi', D_block=1, axes=((0, 1), (2, 3)), fix_signs=True)
         U1, S1, V1 = yastn.svd_with_truncation(a, D_block=1, axes=((0, 1), (2, 3)), fix_signs=True)
         assert (S0 - S1).norm() < tol
@@ -379,4 +386,4 @@ def test_svd_exceptions(config_kwargs):
 
 if __name__ == '__main__':
     pytest.main([__file__, "-vs", "--durations=0", "--backend", "np", '--device', "cpu", "--tensordot_policy", "no_fusion"])
-    # pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])
+    #pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch_cutensor", '--device', "cuda"])

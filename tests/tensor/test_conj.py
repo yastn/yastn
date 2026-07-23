@@ -63,11 +63,13 @@ def test_conj_basic(config_kwargs):
     conj_vs_numpy(a, expected_n=(1, -2))
 
 
-def test_conj_hard_fusion(config_kwargs):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_conj_hard_fusion(config_kwargs, remove_blocks):
     config_Z2 = yastn.make_config(sym='Z2', **config_kwargs)
     a = yastn.randC(config=config_Z2, s=(1, -1, 1, -1, 1, -1),
                   t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
-                  D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
+                  D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)],
+                  remove_blocks=remove_blocks)
     a = a.fuse_legs(axes=((0, 1), (2, 3), (4, 5)))
     a = a.fuse_legs(axes=((0, 1), 2))
     b = a.conj()
@@ -82,10 +84,12 @@ def test_conj_hard_fusion(config_kwargs):
     assert all(hfa.s == hfd.s for hfa, hfd in zip(a.hfs, d.hfs))
 
 
-def test_flip_charges(config_kwargs):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_flip_charges(config_kwargs, remove_blocks):
     config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
     leg = yastn.Leg(config_Z2xU1, s=1, t=((0, 1), (1, 0), (0, -1)), D=(2, 3, 2))
-    a = yastn.rand(config=config_Z2xU1, legs=[leg, leg, leg.conj(), leg.conj()])
+    a = yastn.rand(config=config_Z2xU1, legs=[leg, leg, leg.conj(), leg.conj()],
+                   remove_blocks=remove_blocks)
     b = a.flip_charges()
     #
     c = a.transpose(axes=(1, 3, 0, 2)).flip_charges(axes=(0, 3))
@@ -112,10 +116,12 @@ def test_flip_charges(config_kwargs):
         # Cannot flip charges of a diagonal tensor. Use diag() first.
 
 
-def test_switch_signature(config_kwargs):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_switch_signature(config_kwargs, remove_blocks):
     config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
     leg = yastn.Leg(config_Z2xU1, s=1, t=((0, 1), (1, 0), (0, -1)), D=(2, 3, 2))
-    a = yastn.rand(config=config_Z2xU1, legs=[leg, leg, leg.conj(), leg.conj()])
+    a = yastn.rand(config=config_Z2xU1, legs=[leg, leg, leg.conj(), leg.conj()],
+                   remove_blocks=remove_blocks)
     b = a.switch_signature(axes='all')
     #
     c = a.transpose(axes=(1, 3, 0, 2)).switch_signature(axes=(0, 3))
@@ -148,7 +154,6 @@ def test_switch_signature(config_kwargs):
         f = yastn.rand(config_Z2xU1, legs=leg, isdiag=True)
         f.switch_signature(axes='all')
         # Cannot flip charges of a diagonal tensor. Use diag() first.
-
 
 
 def test_conj_Z2xU1(config_kwargs):

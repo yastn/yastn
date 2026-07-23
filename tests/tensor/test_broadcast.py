@@ -61,7 +61,8 @@ def test_broadcast_dense(config_kwargs):
     assert all(yastn.norm(r1 - x) < tol for x in [r2, r3])
 
 
-def test_broadcast_U1(config_kwargs):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_broadcast_U1(config_kwargs, remove_blocks):
     """ test broadcast on U1 tensors """
 
     config = yastn.make_config(sym='U1', **config_kwargs)
@@ -75,7 +76,7 @@ def test_broadcast_U1(config_kwargs):
     a1 = a.diag()
     assert a.get_shape() == a1.get_shape() == (15, 15)
 
-    b = yastn.rand(config=config, legs=[leg1.conj(), leg2, leg3, leg4.conj()])
+    b = yastn.rand(config=config, legs=[leg1.conj(), leg2, leg3, leg4.conj()], remove_blocks=remove_blocks)
     assert b.get_shape() == (6, 15, 24, 33)
 
     # broadcast via tensordot
@@ -86,7 +87,7 @@ def test_broadcast_U1(config_kwargs):
     assert all(x.is_consistent() for x in [r1, r2, r3, r4])
     assert all(yastn.norm(r1 - x) < tol for x in [r2, r3, r4])
 
-    c = yastn.rand(config=config, legs=[leg1.conj(), leg2, leg3, leg3.conj()])
+    c = yastn.rand(config=config, legs=[leg1.conj(), leg2, leg3, leg3.conj()], remove_blocks=remove_blocks)
 
     # broadcast with trace
     r1 = a1.tensordot(c, axes=((0, 1), (3, 2)))
