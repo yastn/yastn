@@ -525,6 +525,44 @@ def test_contracted_unroll_mixed_skipped_preserves_numeric_result(config_kwargs,
     assert float((result - expected).norm()) < tol
 
 
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_contracted_unroll_mixed_skipped_preserves_numeric_result2(config_kwargs, monkeypatch, remove_blocks):
+    """Mixed surviving and skipped contracted-only slices should preserve the numeric result."""
+    cfg = yastn.make_config(sym='U1', **config_kwargs)
+
+    leg_i = yastn.Leg(cfg, s=1, t=(-1, 0, 1), D=(1, 2, 3))
+    leg_j = yastn.Leg(cfg, s=1, t=(-1, 0, 1), D=(1, 2, 3))
+    leg_x = yastn.Leg(cfg, s=1, t=(-1, 0, 1), D=(1, 2, 3))
+    leg_k = yastn.Leg(cfg, s=1, t=(-1, 0, 1), D=(1, 2, 3))
+
+    a = yastn.rand(config=cfg, legs=[leg_i, leg_x.conj(), leg_j], n=0, remove_blocks=remove_blocks)
+    b = yastn.rand(config=cfg, legs=[leg_j.conj(), leg_k], n=0, remove_blocks=remove_blocks)
+
+    expected = yastn.ncon([a, b], [[-1, -2, 1], [1, -3]])
+
+    original_prefilter = oe_blocksparse.ncon_prefilter
+
+    def fake_prefilter(ts_meta, inds, nsym):
+        j_charges = {t[2 * nsym: 3 * nsym] for t in ts_meta[0][0]}
+        if j_charges == {(1,)}:
+            return None
+        return original_prefilter(ts_meta, inds, nsym)
+
+    monkeypatch.setattr(oe_blocksparse, "ncon_prefilter", fake_prefilter)
+
+    unroll = {'j': yastn.make_sliced_legs(leg_j)}
+    path, _ = yastn.get_contraction_path(
+        a, ('i', 'x', 'j'), b, ('j', 'k'), ('i', 'x', 'k'), unroll=unroll
+    )
+
+    result = yastn.contract_with_unroll(
+        a, ('i', 'x', 'j'), b, ('j', 'k'), ('i', 'x', 'k'),
+        unroll=unroll, optimize=path,
+    )
+
+    assert float((result - expected).norm()) < tol
+
+
 def test_output_unroll_missing_positions_preserve_numeric_result(config_kwargs, monkeypatch):
     """Fully skipped output positions should still preserve the numeric result."""
     cfg = yastn.make_config(sym='U1', **config_kwargs)
@@ -1146,3 +1184,12 @@ def test_swap_diagram4_scalar(config_kwargs):
                 'X': _split_leg_intra(l)},
     )
     assert (r4 - ref).norm() < tol * den
+
+
+if __name__ == '__main__':
+    pytest.main([__file__, "-vs", "--durations=0", "--tensordot_policy", "fuse_to_matrix"])
+    pytest.main([__file__, "-vs", "--durations=0", "--tensordot_policy", "fuse_contracted"])
+    pytest.main([__file__, "-vs", "--durations=0", "--tensordot_policy", "no_fusion"])
+    #pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--tensordot_policy", "fuse_to_matrix"])
+    #pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--tensordot_policy", "fuse_contracted"])
+    #pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--tensordot_policy", "no_fusion"])

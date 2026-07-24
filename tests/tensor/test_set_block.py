@@ -71,14 +71,15 @@ def test_U1(config_kwargs):
     assert np.linalg.norm(np.diag(np.diag(npa)) - npa) < tol  # == 0.0
 
 
-def test_Z2xU1(config_kwargs):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_Z2xU1(config_kwargs, remove_blocks):
     """ initialization of tensor with more complicated symmetry indexed by 2 numbers"""
     config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
     # 3-dim tensor
     legs = [yastn.Leg(config_Z2xU1, s=-1, t=[(0, 0), (1, 0), (0, 2), (1, 2)], D=[1, 2, 2, 4]),
             yastn.Leg(config_Z2xU1, s=1, t=[(0, -2), (0, 2)], D=[1, 2]),
             yastn.Leg(config_Z2xU1, s=1, t=[(0, -2), (0, 0), (0, 2), (1, -2), (1, 0), (1, 2)], D=[2, 4, 6, 3, 6, 9])]
-    a = yastn.ones(config=config_Z2xU1, legs=legs)
+    a = yastn.ones(config=config_Z2xU1, legs=legs, remove_blocks=remove_blocks)
     assert a.get_shape() == (9, 3, 30)
     assert pytest.approx(a.norm().item() ** 2, rel=tol) == a.size == 104
 

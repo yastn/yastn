@@ -47,7 +47,8 @@ def run_qr_combine(a):
     check_diag_R_nonnegative(R2.fuse_legs(axes=((0, 1), 2), mode='hard'))
 
 
-def test_qr_basic(config_kwargs):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_qr_basic(config_kwargs, remove_blocks):
     """ test qr decomposition for various symmetries """
     # dense
     config_dense = yastn.make_config(sym='none', **config_kwargs)
@@ -60,7 +61,7 @@ def test_qr_basic(config_kwargs):
             yastn.Leg(config_U1, s=-1, t=(-2, 0, 2), D=(5, 6, 7)),
             yastn.Leg(config_U1, s=1, t=(-2, -1, 0, 1, 2), D=(6, 5, 4, 3, 2)),
             yastn.Leg(config_U1, s=1, t=(0, 1), D=(2, 3))]
-    a = yastn.rand(config=config_U1, legs=legs, n=1)
+    a = yastn.rand(config=config_U1, legs=legs, n=1, remove_blocks=remove_blocks)
     run_qr_combine(a)
 
     # Z2xU1
@@ -69,7 +70,7 @@ def test_qr_basic(config_kwargs):
             yastn.Leg(config_Z2xU1, s=1, t=[(0, 0), (0, 2), (1, 0), (1, 2)], D=(5, 4, 3, 2)),
             yastn.Leg(config_Z2xU1, s=-1, t=[(0, 0), (0, 2), (1, 0), (1, 2)], D=(3, 4, 5, 6)),
             yastn.Leg(config_Z2xU1, s=-1, t=[(0, 0), (0, 2), (1, 0), (1, 2)], D=(1, 2, 3, 4))]
-    a = yastn.ones(config=config_Z2xU1, legs=legs)
+    a = yastn.ones(config=config_Z2xU1, legs=legs, remove_blocks=remove_blocks)
     run_qr_combine(a)
 
     # test qr of empty Tensor
@@ -96,12 +97,14 @@ def test_qr_Z3(config_kwargs):
             assert all(R.config.backend.diag_get(R.imag()[t]) == 0)
 
 
-def test_qr_transpose_meta(config_kwargs):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_qr_transpose_meta(config_kwargs, remove_blocks):
     """ test qr decomposition with meta-fuse and transpose """
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1,),
                   t=((0, 1), (0, 1), (0, 1), (0, 1), (0, 1)),
-                  D=((1, 2), (3, 4), (5, 6), (7, 8), (9, 10)))
+                  D=((1, 2), (3, 4), (5, 6), (7, 8), (9, 10)),
+                  remove_blocks=remove_blocks)
     #
     af = a.fuse_legs(axes=(2, (0, 1), (4, 3)), mode='meta')
     assert af.trans == (2, 0, 1, 4, 3)

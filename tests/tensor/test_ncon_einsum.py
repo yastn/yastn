@@ -87,7 +87,8 @@ def test_ncon_einsum_syntax(config_kwargs):
     assert yastn.norm(f3 - f) < 1e-12
 
 
-def test_ncon_einsum_basic(config_kwargs):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_ncon_einsum_basic(config_kwargs, remove_blocks):
     """ tests of ncon executing a series of tensor contractions. """
     config_dense = yastn.make_config(sym='none', **config_kwargs)
     a = yastn.rand(s=(1, 1, 1), D=(20, 3, 1), config=config_dense, dtype='complex128')
@@ -140,13 +141,17 @@ def test_ncon_einsum_basic(config_kwargs):
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.rand(config=config_U1, s=[-1, 1, -1], n=0,
-                  D=((20, 10), (3, 3), (1, 1)), t=((1, 0), (1, 0), (1, 0)))
+                  D=((20, 10), (3, 3), (1, 1)), t=((1, 0), (1, 0), (1, 0)),
+                  remove_blocks=remove_blocks)
     b = yastn.rand(config=config_U1, s=[1, 1, 1], n=1,
-                  D=((4, 4), (2, 2), (20, 10)), t=((1, 0), (1, 0), (1, 0)))
+                  D=((4, 4), (2, 2), (20, 10)), t=((1, 0), (1, 0), (1, 0)),
+                  remove_blocks=remove_blocks)
     c = yastn.rand(config=config_U1, s=[1, 1, 1, -1], n=1,
-                  D=((20, 10), (30, 20), (10, 5), (10, 5)), t=((1, 0), (1, 0), (1, 0), (1, 0)))
+                  D=((20, 10), (30, 20), (10, 5), (10, 5)), t=((1, 0), (1, 0), (1, 0), (1, 0)),
+                  remove_blocks=remove_blocks)
     d = yastn.rand(config=config_U1, s=[1, 1, -1, -1], n=0,
-                  D=((30, 20), (10, 5), (20, 10), (10, 5)), t=((1, 0), (1, 0), (1, 0), (1, 0)))
+                  D=((30, 20), (10, 5), (20, 10), (10, 5)), t=((1, 0), (1, 0), (1, 0), (1, 0)),
+                  remove_blocks=remove_blocks)
 
     e = yastn.ncon([a, b], [[1, -1, -3], [-0, -2, 1]])
     assert e.get_shape() == (8, 6, 4, 2)
@@ -249,6 +254,7 @@ def test_ncon_trace_fallback_value(config_kwargs, capsys):
     ref *= yastn.tensordot(B, C, axes=(0, 0)).item()
     assert abs(x.item() - ref) < tol
 
+
 def test_ncon_trace_fallback_multiple_pairs_value(config_kwargs, capsys):
     r"""Fallback should handle multiple deferred trace pairs and still produce the right value."""
     config_Z2 = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
@@ -275,7 +281,8 @@ def test_ncon_trace_fallback_multiple_pairs_value(config_kwargs, capsys):
     assert abs(x.item() - ref) < tol
 
 
-def test_ncon_einsum_swaps(config_kwargs):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_ncon_einsum_swaps(config_kwargs, remove_blocks):
     """ tests of ncon executing a series of tensor contractions. """
     config_Z2 = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
     l = yastn.Leg(config_Z2, s=1, t=(0, 1), D=(1, 1))
@@ -295,9 +302,9 @@ def test_ncon_einsum_swaps(config_kwargs):
     assert (y - r).norm() < tol * r.norm()
     #
     # second diagram
-    a = yastn.rand(config=config_Z2, legs=[l, l, lc, l, lc])
-    b = yastn.rand(config=config_Z2, legs=[l, lc, l])
-    c = yastn.rand(config=config_Z2, legs=[l, lc, l])
+    a = yastn.rand(config=config_Z2, legs=[l, l, lc, l, lc], remove_blocks=remove_blocks)
+    b = yastn.rand(config=config_Z2, legs=[l, lc, l], remove_blocks=remove_blocks)
+    c = yastn.rand(config=config_Z2, legs=[l, lc, l], remove_blocks=remove_blocks)
     #
     x = yastn.ncon([a, b, c, c], ((1, 4, 2, -0, 1), (2, 3, -1), (3, 4, -2), (-3, -4, -5)), swap=((-0, 3), (-0, 1), (-1, -2), (-3, -5), (-4, -2)))
     y = yastn.einsum('adbAa,bcB,cdC,DEF->ABCDEF', a, b, c, c, swap='Ac,Aa,BC,CE,DF')
@@ -317,12 +324,12 @@ def test_ncon_einsum_swaps(config_kwargs):
     assert (y - r).norm() < tol * r.norm()
     #
     # third diagram to test different contraction orders
-    a = yastn.rand(config=config_Z2, n=1, legs=[l, l, l, l])
-    b = yastn.rand(config=config_Z2, n=1, legs=[l, l, l, l, lc])
-    c = yastn.rand(config=config_Z2, n=1, legs=[l, l, lc, lc])
-    d = yastn.rand(config=config_Z2, n=1, legs=[l, lc, lc, lc, lc])
-    e = yastn.rand(config=config_Z2, n=1, legs=[l, lc, lc, lc])
-    f = yastn.rand(config=config_Z2, n=1, legs=[lc, lc])
+    a = yastn.rand(config=config_Z2, n=1, legs=[l, l, l, l], remove_blocks=remove_blocks)
+    b = yastn.rand(config=config_Z2, n=1, legs=[l, l, l, l, lc], remove_blocks=remove_blocks)
+    c = yastn.rand(config=config_Z2, n=1, legs=[l, l, lc, lc], remove_blocks=remove_blocks)
+    d = yastn.rand(config=config_Z2, n=1, legs=[l, lc, lc, lc, lc], remove_blocks=remove_blocks)
+    e = yastn.rand(config=config_Z2, n=1, legs=[l, lc, lc, lc], remove_blocks=remove_blocks)
+    f = yastn.rand(config=config_Z2, n=1, legs=[lc, lc], remove_blocks=remove_blocks)
     #
     # reference
     r = yastn.tensordot(a, b, axes=(0, 4))
@@ -348,18 +355,19 @@ def test_ncon_einsum_swaps(config_kwargs):
         assert (y - r).norm() < tol * r.norm()
 
 
-def test_einsum_scalar_swap_order(config_kwargs):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_einsum_scalar_swap_order(config_kwargs, remove_blocks):
     r"""Scalar fermionic einsum should be invariant to contraction order."""
     config_Z2 = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
     l = yastn.Leg(config_Z2, s=1, t=(0, 1), D=(2, 2))
     lc = l.conj()
 
-    A = yastn.rand(config=config_Z2, n=0, legs=[l, l, l, l])
-    B = yastn.rand(config=config_Z2, n=0, legs=[lc, lc, lc])
-    C = yastn.rand(config=config_Z2, n=0, legs=[lc, l, l, l])
-    D = yastn.rand(config=config_Z2, n=0, legs=[l, lc])
-    E = yastn.rand(config=config_Z2, n=0, legs=[lc, lc])
-    F = yastn.rand(config=config_Z2, n=0, legs=[lc, l, lc])
+    A = yastn.rand(config=config_Z2, n=0, legs=[l, l, l, l], remove_blocks=remove_blocks)
+    B = yastn.rand(config=config_Z2, n=0, legs=[lc, lc, lc], remove_blocks=remove_blocks)
+    C = yastn.rand(config=config_Z2, n=0, legs=[lc, l, l, l], remove_blocks=remove_blocks)
+    D = yastn.rand(config=config_Z2, n=0, legs=[l, lc], remove_blocks=remove_blocks)
+    E = yastn.rand(config=config_Z2, n=0, legs=[lc, lc], remove_blocks=remove_blocks)
+    F = yastn.rand(config=config_Z2, n=0, legs=[lc, l, lc], remove_blocks=remove_blocks)
 
     inds = ((9,1,2,3), (9, 2,3), (1,4,5,8), (7,8), (4,6), (5,6,7))
     orders = [[9,2,3,1,4,5,6,7,8], [4,5,6,7,8,9,2,3,1], [8,1,6,4,5,7,9,2,3]]
@@ -380,9 +388,9 @@ def test_einsum_scalar_swap_order(config_kwargs):
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0", "--tensordot_policy", "fuse_to_matrix"])
-    pytest.main([__file__, "-vs", "--durations=0", "--tensordot_policy", "fuse_contracted"])
-    pytest.main([__file__, "-vs", "--durations=0", "--tensordot_policy", "no_fusion"])
+    # pytest.main([__file__, "--durations=0", "--tensordot_policy", "fuse_to_matrix"])
+    # pytest.main([__file__, "--durations=0", "--tensordot_policy", "fuse_contracted"])
+    pytest.main([__file__, "--durations=0", "--tensordot_policy", "no_fusion"])
     #pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--tensordot_policy", "fuse_to_matrix"])
     #pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--tensordot_policy", "fuse_contracted"])
     #pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--tensordot_policy", "no_fusion"])

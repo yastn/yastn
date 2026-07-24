@@ -29,15 +29,16 @@ def are_identical_tensors(a, b):
     assert np.allclose(a.to_numpy(), b.to_numpy())
 
 
-@pytest.mark.parametrize("resolve_ops", [True,False])
-def test_to_from_dict(resolve_ops, config_kwargs):
+@pytest.mark.parametrize("resolve_ops", [True, False])
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_to_from_dict(resolve_ops, config_kwargs, remove_blocks):
     config = yastn.make_config(sym='U1', **config_kwargs)
     legs = [yastn.Leg(config, s=1, t=(0, 1, 2), D= (3, 5, 2)),
             yastn.Leg(config, s=-1, t=(0, 1, 3), D= (1, 2, 3)),
             yastn.Leg(config, s=1, t=(-1, 0, 1), D= (2, 3, 4)),
             yastn.Leg(config, s=1, t=(-1, 0, 1), D= (4, 3, 2))]
 
-    a = yastn.rand(config, legs=legs)
+    a = yastn.rand(config, legs=legs, remove_blocks=remove_blocks)
     a = a.fuse_legs(axes=(0, (1, 2), 3), mode='hard')
     a = a.fuse_legs(axes=(0, (1, 2)), mode='meta')
 
@@ -289,5 +290,4 @@ def test_to_dict_exceptions(config_kwargs):
 
 
 if __name__ == '__main__':
-    test_to_dict_embed({})
-    #pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])

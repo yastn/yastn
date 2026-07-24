@@ -125,19 +125,23 @@ def test_dot_basic_dense4(config_kwargs):
     dtype = 'float64'
     a = yastn.rand(config=config_dense, s=(-1, 1, -1), D=(2, 4, 5), dtype=dtype)
     b = yastn.rand(config=config_dense, s=(1, -1, 1), D=(2, 4, 5), dtype=dtype)
-    c1 = tensordot_vs_numpy(a, b, axes=((0, 1, 2), (0, 1, 2)), conj=(0, 0), dtype=dtype)
+    c = tensordot_vs_numpy(a, b, axes=((0, 1, 2), (0, 1, 2)), conj=(0, 0), dtype=dtype)
 
-def test_dot_basic_U1(config_kwargs):
+
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_dot_basic_U1(config_kwargs, remove_blocks):
     """ test tensordot for different symmetries. """
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     dtype = 'float64'
     a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1),
                   t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
-                  D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)), dtype=dtype)
+                  D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)), dtype=dtype,
+                  remove_blocks=remove_blocks)
     b = yastn.rand(config=config_U1, s=(1, -1, 1),
                   t=((-1, 1, 2), (-1, 1, 2), (-1, 0, 1)),
-                  D=((1, 2, 3), (4, 5, 6), (10, 7, 11)), dtype=dtype)
+                  D=((1, 2, 3), (4, 5, 6), (10, 7, 11)), dtype=dtype,
+                  remove_blocks=remove_blocks)
     tensordot_vs_numpy(a, b, axes=((0, 1), (0, 1)), conj=(0, 0), dtype=dtype)
     tensordot_vs_numpy(a, b, axes=((1, 3), (1, 2)), conj=(0, 0), dtype=dtype)
 
@@ -159,10 +163,12 @@ def test_dot_basic_U1(config_kwargs):
     # corner cases
     a = yastn.rand(config=config_U1, s=(-1, 1, 1),
                   t=((-1, 1, 0), (-1, 1, 0), (-1, 1, 0)),
-                  D=((1, 2, 3), (3, 2, 1), (1, 2, 2)), dtype=dtype)
+                  D=((1, 2, 3), (3, 2, 1), (1, 2, 2)), dtype=dtype,
+                  remove_blocks=remove_blocks)
     b = yastn.rand(config=config_U1, s=(-1, 1, 1),
                   t=((-2, 2), (-1, 1, -3), (-1, 1, -3)),
-                  D=((1, 2), (3, 2, 1), (1, 2, 2)), dtype=dtype)
+                  D=((1, 2), (3, 2, 1), (1, 2, 2)), dtype=dtype,
+                  remove_blocks=remove_blocks)
     # some charges are missing
     assert a.size > 0 and b.size > 0
     tensordot_vs_numpy(b, a, axes=((2,), (0,)), conj=(0, 0), dtype=dtype)
@@ -178,22 +184,26 @@ def test_dot_basic_U1(config_kwargs):
     assert yastn.norm(c1.conj() - c2.transpose(axes=(3, 4, 5, 0, 1, 2))) < tol[dtype]
 
 
-def test_dot_basic_U1_2(config_kwargs):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_dot_basic_U1_2(config_kwargs, remove_blocks):
     """ test tensordot for different symmetries. """
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     dtype = 'float64'
     a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1),
                   t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
-                  D=((1, 2, 2), (2, 2, 2), (2, 2, 2), (2, 2, 2)), dtype=dtype)
+                  D=((1, 2, 2), (2, 2, 2), (2, 2, 2), (2, 2, 2)), dtype=dtype,
+                  remove_blocks=remove_blocks)
     b = yastn.rand(config=config_U1, s=(1, -1, 1),
                   t=((-1, 1, 2), (-1, 1, 2), (-1, 0, 1)),
-                  D=((1, 2, 2), (2, 2, 2), (2, 2, 2)), dtype=dtype)
+                  D=((1, 2, 2), (2, 2, 2), (2, 2, 2)), dtype=dtype,
+                  remove_blocks=remove_blocks)
     tensordot_vs_numpy(a, b, axes=((0, 1), (0, 1)), conj=(0, 0), dtype=dtype)
     tensordot_vs_numpy(a, b, axes=((1, 3), (1, 2)), conj=(0, 0), dtype=dtype)
 
 
-def test_dot_basic_U1_3(config_kwargs):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_dot_basic_U1_3(config_kwargs, remove_blocks):
     """ BUG cutensor 2.3.1 """
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
@@ -201,25 +211,30 @@ def test_dot_basic_U1_3(config_kwargs):
     a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1),
                      t=((1,2,3,), (1,2,3,), (-1,0,), (1,)),
                      D=((1, 2, 3), (2, 2, 3), (11, 10), (1,)),
-                     n=-2, dtype=dtype)
+                     n=-2, dtype=dtype,
+                     remove_blocks=remove_blocks)
     b = yastn.rand(config=config_U1, s=(-1, 1, 1, -1),
                      t=((1,3,), (1,2,3,), (0,1,2,), (0,1)),
                      D=((1, 3), (2, 2, 3), (10, 2, 2), (11, 1)),
-                     n=1, dtype=dtype)
+                     n=1, dtype=dtype,
+                     remove_blocks=remove_blocks)
     tensordot_vs_numpy(a, b, axes=((0, 1), (0, 1)), conj=(0, 1), dtype=dtype)
 
     a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1),
                      t=((1,2,3,), (1,2,3,), (-1,0,), (1,)),
                      D=((1, 2, 3), (2, 2, 3), (11, 10), (1,)),
-                     n=-2, dtype=dtype)
+                     n=-2, dtype=dtype,
+                     remove_blocks=remove_blocks)
     b = yastn.rand(config=config_U1, s=(-1, 1, 1, -1),
                      t=((1,3,), (1,2,3,), (0,1,2,), (0,1)),
                      D=((1, 3), (2, 2, 3), (10, 1, 2), (10, 1)),
-                     n=1, dtype=dtype)
+                     n=1, dtype=dtype,
+                     remove_blocks=remove_blocks)
     tensordot_vs_numpy(a, b, axes=((0, 1), (0, 1)), conj=(0, 1), dtype=dtype)
 
 
-def test_dot_basic_U1_4(config_kwargs):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_dot_basic_U1_4(config_kwargs, remove_blocks):
     """ tensor x tensor -> scalar [not dispatch to vdot]"""
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
@@ -227,15 +242,18 @@ def test_dot_basic_U1_4(config_kwargs):
     a = yastn.rand(config=config_U1, s=(-1, 1, -1),
                      t=((-1,0,1,), (-2,-1,0,1), (-1,0,1,2),),
                      D=((2, 2, 2), (2, 2, 2, 2), (2,2,2,2,),),
-                     n=0, dtype=dtype)
+                     n=0, dtype=dtype,
+                     remove_blocks=remove_blocks)
     b = yastn.rand(config=config_U1, s=(1, -1, 1),
                      t=((-1,0,1,), (-1,0,1,2), (-2,-1,0,1),),
                      D=((2, 2, 2), (2, 2, 2, 2), (2,2,2,2,),),
-                     n=0, dtype=dtype)
+                     n=0, dtype=dtype,
+                     remove_blocks=remove_blocks)
     tensordot_vs_numpy(a, b, axes=((0,1,2), (0,1,2)), conj=(0, 0), dtype=dtype)
 
 
-def test_dot_basic_Z2xU1(config_kwargs):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_dot_basic_Z2xU1(config_kwargs, remove_blocks):
     """ test tensordot for different symmetries. """
     # Z2xU1
     config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
@@ -244,10 +262,12 @@ def test_dot_basic_Z2xU1(config_kwargs):
     dtype = 'float64'
     a = yastn.rand(config=config_Z2xU1, s=(-1, 1, 1, -1),
                   t=(t1, t1, t1, t1),
-                  D=((1, 2, 2, 4), (9, 4, 3, 2), (5, 6, 7, 8), (7, 8, 9, 10)), dtype=dtype)
+                  D=((1, 2, 2, 4), (9, 4, 3, 2), (5, 6, 7, 8), (7, 8, 9, 10)), dtype=dtype,
+                  remove_blocks=remove_blocks)
     b = yastn.rand(config=config_Z2xU1, s=(1, -1, 1),
                   t=(t1, t1, t2),
-                  D=((1, 2, 2, 4), (9, 4, 3, 2), (5, 6, 7, 8,)), dtype=dtype)
+                  D=((1, 2, 2, 4), (9, 4, 3, 2), (5, 6, 7, 8,)), dtype=dtype,
+                  remove_blocks=remove_blocks)
 
     tensordot_vs_numpy(a, b, axes=((0, 1), (0, 1)), conj=(0, 0), dtype=dtype)
     tensordot_vs_numpy(b, a, axes=((1, 0), (1, 0)), conj=(0, 0), dtype=dtype)
@@ -302,7 +322,8 @@ def tensordot_hf(a, b, hf_axes1, dtype):
     assert all(yastn.norm(c - x) < tol[dtype] for x in (fc, ffc))
 
 
-def test_tensordot_fuse_hard(config_kwargs):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_tensordot_fuse_hard(config_kwargs, remove_blocks):
     """ test tensordot combined with hard-fusion."""
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     dtype = 'float64'
@@ -310,19 +331,23 @@ def test_tensordot_fuse_hard(config_kwargs):
     t1, t2, t3 = (-1, 0, 1), (-2, 0, 2), (-3, 0, 3)
     D1, D2, D3 = (1, 3, 2), (3, 3, 4), (5, 3, 6)
     a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1, 1),
-                t=(t1, t1, t2, t2, t3, t3), D=(D1, D2, D2, D1, D1, D2), dtype=dtype)
+                t=(t1, t1, t2, t2, t3, t3), D=(D1, D2, D2, D1, D1, D2), dtype=dtype,
+                remove_blocks=remove_blocks)
     b = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1, 1),
-                t=(t2, t2, t3, t3, t1, t1), D=(D2, D3, D1, D3, D1, D2), dtype=dtype)
+                t=(t2, t2, t3, t3, t1, t1), D=(D2, D3, D1, D3, D1, D2), dtype=dtype,
+                remove_blocks=remove_blocks)
     tensordot_hf(a, b, hf_axes1=(0, (4, 3, 1), (5, 2)), dtype=dtype)
     tensordot_hf(a, b, hf_axes1=(0, (4, 3, 1, 5), 2), dtype=dtype)
     #
     # other corner case; no matching charges
     a = yastn.rand(config=config_U1, s=(1, 1, 1),
                   t=((-1, 1, 0), (-1, 1, 0), (-1, 1, 0)),
-                  D=((1, 2, 3), (1, 2, 3), (1, 2, 3)), dtype=dtype)
+                  D=((1, 2, 3), (1, 2, 3), (1, 2, 3)), dtype=dtype,
+                  remove_blocks=remove_blocks)
     b = yastn.rand(config=config_U1, s=(-1, -1, -1),
                   t=((-2, 2), (-1, 1), (-1, 1, -3)),
-                  D=((4, 4), (1, 2), (1, 2, 5)), dtype=dtype)
+                  D=((4, 4), (1, 2), (1, 2, 5)), dtype=dtype,
+                  remove_blocks=remove_blocks)
     c = tensordot_vs_numpy(a, b, axes=((1, 2), (0, 1)), conj=(0, 0), dtype=dtype)
     af = a.fuse_legs(axes=(0, (1, 2)), mode='hard')
     bf = b.fuse_legs(axes=((0, 1), 2), mode='hard')

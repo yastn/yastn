@@ -25,8 +25,8 @@ import numpy as np
 from .._profile import nsys_profile
 from ._auxiliary import _struct, _clear_axes, _unpack_axes, sign_canonical_order, _compress_slices
 from ._auxiliary import find_matching_indices, argsort_t, get_blocks, get_trimmed_struct
-from ._merging import _merge_to_matrix, _unmerge, _meta_unmerge_matrix, _meta_fuse_hard
-from ._merging import _transpose_and_merge, _mask_tensors_leg_intersection, _meta_mask
+from ._merging import _combine_hfs_prod, _unmerge, _meta_fuse_hard, _Fusion
+from ._merging import _transpose_and_merge, _mask_tensors_leg_intersection, _meta_mask, _meta_unfuse_hard
 from ._tests import YastnError, _test_can_be_combined, _unpack_trans_test_axes_pair
 
 if TYPE_CHECKING:
@@ -147,24 +147,50 @@ def _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b):
     Perform tensordot by fuse_to_matrix:
     merging tensors to matrices, executing dot, and unmerging outgoing legs.
     """
-    legs_a, legs_b = list(a.struct.legs), list(b.struct.legs)
-    for ia, ib in zip(nin_a, nin_b):
-        try:
-            leg = legs_a[ia].intersection(legs_b[ib].conj())
-        except ValueError:
-            raise YastnError('Bond dimensions of some charges do not match.')
-        legs_a[ia] = leg
-        legs_b[ib] = leg.conj()
+    struct_a_sub, struct_b_sub, struct_c2 = _match_legs_tensordot(a.config.sym, a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
 
-    data_a, struct_am, ls_l, _, legs_group_a = _merge_to_matrix(a, (nout_a, nin_a), tuple(legs_a))
-    data_b, struct_bm, _, ls_r, legs_group_b = _merge_to_matrix(b, (nin_b, nout_b), tuple(legs_b))
+    axes_a = (nout_a, nin_a) if nout_a else (nin_a,)
+    order_a = nout_a + nin_a
+    meta_mrg_a, size_a, struct_am, legs_group_a = _meta_fuse_hard(a.config.sym, a.struct, axes_a, struct_a_sub.legs, empty_first_axis_s_conj=False)
+    data_a = _transpose_and_merge(a.config, a._data, order_a, meta_mrg_a, size_a)
 
-    meta_dot, size_c, struct_c = _meta_tensordot_f2m(a.config.sym, struct_am, struct_bm)
+    axes_b = (nin_b, nout_b) if nout_b else (nin_b,)
+    order_b = nin_b + nout_b
+    meta_mrg_b, size_b, struct_bm, legs_group_b = _meta_fuse_hard(b.config.sym, b.struct, axes_b, struct_b_sub.legs, empty_first_axis_s_conj=True)
+    data_b = _transpose_and_merge(b.config, b._data, order_b, meta_mrg_b, size_b)
+
+    hfs = []
+    axes_hf = []
+    if len(nout_a) > 1:
+        axes_hf.append(0)
+        t_in = tuple(leg.t for leg in legs_group_a[0])
+        D_in = tuple(leg.D for leg in legs_group_a[0])
+        hfs_axs = tuple(a.hfs[ax] for ax in nout_a)
+        hfs.append(_combine_hfs_prod(hfs_axs, t_in, D_in, struct_am.legs[0].s))
+    elif len(nout_a) == 1:
+        hfs.append(a.hfs[nout_a[0]])
+
+    if len(nout_b) > 1:
+        axes_hf.append( int(len(nout_a) > 0) )
+        t_in = tuple(leg.t for leg in legs_group_b[1])
+        D_in = tuple(leg.D for leg in legs_group_b[1])
+        hfs_axs = tuple(b.hfs[ax] for ax in nout_b)
+        hfs.append(_combine_hfs_prod(hfs_axs, t_in, D_in, struct_bm.legs[1].s))
+    elif len(nout_b) == 1:
+        hfs.append(b.hfs[nout_b[0]])
+
+    hfs = tuple(hfs)
+
+    meta_dot, size_c, struct_c = _meta_tensordot_fc(a.config.sym, struct_am, struct_bm)
     data = a.config.backend.dot(data_a, data_b, meta_dot, size_c)
 
-    struct_out = struct_c._replace(legs=(*legs_group_a[0], *legs_group_b[1]))
-    meta_unmerge, size_out, struct_out = _meta_unmerge_matrix(a.config.sym, struct_c, ls_l, ls_r, struct_out)
-    data = _unmerge(a.config, data, meta_unmerge, size=size_out)
+    if axes_hf:
+        meta_unmerge, size_out, struct_out, _, _ = _meta_unfuse_hard(a.config.sym, struct_c, tuple(axes_hf), hfs)
+        data = _unmerge(a.config, data, meta_unmerge, size_out)
+        assert np.array_equal(meta_unmerge, meta_unmerge)
+    else:
+        struct_out = struct_c
+
     return data, struct_out
 
 
@@ -173,27 +199,21 @@ def _tensordot_fc(a, b, nout_a, nin_a, nin_b, nout_b):
     Perform tensordot by fuse_contracted: merging contracted legs, and executing dot.
     Outgoing legs are not merged so unmerge is not needed.
     """
-    legs_a, legs_b = list(a.struct.legs), list(b.struct.legs)
-    for ia, ib in zip(nin_a, nin_b):
-        try:
-            leg = legs_a[ia].intersection(legs_b[ib].conj())
-        except ValueError:
-            raise YastnError('Bond dimensions of some charges do not match.')
-        legs_a[ia] = leg
-        legs_b[ib] = leg.conj()
-    legs_a, legs_b = tuple(legs_a), tuple(legs_b)
+    struct_a_sub, struct_b_sub, struct_c2 = _match_legs_tensordot(a.config.sym, a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
     #
     axes_a = tuple((x,) for x in nout_a) + (nin_a,)
     order_a = nout_a + nin_a
-    meta_mrg_a, size_a, struct_a_new, legs_a_old = _meta_fuse_hard(a.config.sym, a.struct, axes_a, legs_a, empty_first_axis_s_conj=False)
+    meta_mrg_a, size_a, struct_a_new, legs_a_old = _meta_fuse_hard(a.config.sym, a.struct, axes_a, struct_a_sub.legs, empty_first_axis_s_conj=False)
     data_a = _transpose_and_merge(a.config, a._data, order_a, meta_mrg_a, size_a)
 
     axes_b = (nin_b,) + tuple((x,) for x in nout_b)
     order_b = nin_b + nout_b
-    meta_mrg_b, size_b, struct_b_new, legs_b_old = _meta_fuse_hard(b.config.sym, b.struct, axes_b, legs_b, empty_first_axis_s_conj=True)
+    meta_mrg_b, size_b, struct_b_new, legs_b_old = _meta_fuse_hard(b.config.sym, b.struct, axes_b, struct_b_sub.legs, empty_first_axis_s_conj=True)
     data_b = _transpose_and_merge(b.config, b._data, order_b, meta_mrg_b, size_b)
 
     meta_dot, size_c, struct_c = _meta_tensordot_fc(a.config.sym, struct_a_new, struct_b_new)
+
+    #assert struct_c2 == struct_c
     data = a.config.backend.dot(data_a, data_b, meta_dot, size_c)
     return data, struct_c
 
@@ -263,8 +283,9 @@ def _indices_from_counts(count_a, count_b):
 @lru_cache(maxsize=1024)
 def _meta_tensordot_f2m(sym, struct_a, struct_b):
     #
-    nout_a, nin_a = [0], [1]
-    nin_b, nout_b = [0], [1]
+    ndima, ndimb = len(struct_a.legs), len(struct_b.legs)
+    nout_a, nin_a = list(range(ndima - 1)), [ndima - 1]
+    nin_b, nout_b = [0], list(range(1, ndimb))
     struct_a_sub, struct_b_sub, struct_c = _match_legs_tensordot(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b)
     bl_a, slc_a = get_blocks_and_subslices(sym, struct_a_sub, struct_a)
     bl_b, slc_b = get_blocks_and_subslices(sym, struct_b_sub, struct_b)
