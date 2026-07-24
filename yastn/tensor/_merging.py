@@ -305,19 +305,27 @@ def _fuse_legs_hard(a, axes, order):
     data = _transpose_and_merge(a.config, a._data, order, meta_mrg, size)
     mfs = ((1,),) * len(struct_new.legs)
     hfs = []
-    for n, axs in enumerate(axes):
-        if len(axs) > 1:
-            t_in = tuple(leg.t for leg in legs_old[n])
-            D_in = tuple(leg.D for leg in legs_old[n])
-            hfs_axs = tuple(a.hfs[ax] for ax in axs)
-            hfs.append(_combine_hfs_prod(hfs_axs, t_in, D_in, struct_new.legs[n].s))
-        elif len(axs) == 1:
-            hfs.append(a.hfs[axs[0]])
-        else:  # len(axis) == 0
-            hfs.append(_Fusion(tree=(1,), op='o', s=(struct_new.legs[n].s,), t=(), D=()))
-
+    for n, (axs, legs) in enumerate(zip(axes, legs_old)):
+        t_in = tuple(leg.t for leg in legs)
+        D_in = tuple(leg.D for leg in legs)
+        hfs_axs = tuple(a.hfs[ax] for ax in axs)
+        hfs.append(_combine_hfs_prod(hfs_axs, t_in, D_in, struct_new.legs[n].s))
     out = a._replace(mfs=mfs, hfs=hfs, struct=struct_new, data=data, trans=None)
     return out
+
+def _merge_to_matrix2(a, axes, struct_sub=None, empty_first_axis_s_conj=False):
+    order = axes[0] + axes[1]
+    sub_legs = struct_sub.legs if struct_sub is not None else None
+    meta_mrg, size, struct_mrg, legs_group = _meta_fuse_hard(a.config.sym, a.struct, axes, sub_legs,
+                                                             empty_first_axis_s_conj=empty_first_axis_s_conj)
+    data = _transpose_and_merge(a.config, a._data, order, meta_mrg, size)
+    hfs = []
+    for n, legs in enumerate(legs_group):
+        t_in = tuple(leg.t for leg in legs)
+        D_in = tuple(leg.D for leg in legs)
+        hfs_axs = tuple(_Fusion(s=(leg.s,)) for leg in legs)
+        hfs.append(_combine_hfs_prod(hfs_axs, t_in, D_in, struct_mrg.legs[n].s))
+    return data, struct_mrg, hfs
 
 
 @lru_cache(maxsize=1024)
@@ -781,6 +789,10 @@ def _leg_structure_merge(teff, tlegs, Deff, Dlegs):
 def _combine_hfs_prod(hfs, t_in, D_in, s_out):
     r""" Combine _Fusion(s) forming product of space, adding charges and dimensions present on the fused legs. """
     axes = list(range(len(hfs)))
+    if len(axes) == 0:
+        return _Fusion(s=(s_out,))
+    if len(axes) == 1:
+        return hfs[0]
     tfl, Dfl, sfl = [], [], [s_out]
     opfl = 'p'  # product
     treefl = [sum(hfs[n].tree[0] for n in axes)]

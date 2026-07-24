@@ -147,7 +147,7 @@ def _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b):
     Perform tensordot by fuse_to_matrix:
     merging tensors to matrices, executing dot, and unmerging outgoing legs.
     """
-    struct_a_sub, struct_b_sub, struct_c2 = _match_legs_tensordot(a.config.sym, a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
+    struct_a_sub, struct_b_sub, _ = _match_legs_tensordot(a.config.sym, a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
 
     axes_a = (nout_a, nin_a) if nout_a else (nin_a,)
     order_a = nout_a + nin_a
@@ -178,6 +178,8 @@ def _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b):
         hfs.append(_combine_hfs_prod(hfs_axs, t_in, D_in, struct_bm.legs[1].s))
     elif len(nout_b) == 1:
         hfs.append(b.hfs[nout_b[0]])
+    else:
+        print('aaaa')
 
     hfs = tuple(hfs)
 
@@ -199,7 +201,7 @@ def _tensordot_fc(a, b, nout_a, nin_a, nin_b, nout_b):
     Perform tensordot by fuse_contracted: merging contracted legs, and executing dot.
     Outgoing legs are not merged so unmerge is not needed.
     """
-    struct_a_sub, struct_b_sub, struct_c2 = _match_legs_tensordot(a.config.sym, a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
+    struct_a_sub, struct_b_sub, _ = _match_legs_tensordot(a.config.sym, a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
     #
     axes_a = tuple((x,) for x in nout_a) + (nin_a,)
     order_a = nout_a + nin_a
@@ -213,7 +215,6 @@ def _tensordot_fc(a, b, nout_a, nin_a, nin_b, nout_b):
 
     meta_dot, size_c, struct_c = _meta_tensordot_fc(a.config.sym, struct_a_new, struct_b_new)
 
-    #assert struct_c2 == struct_c
     data = a.config.backend.dot(data_a, data_b, meta_dot, size_c)
     return data, struct_c
 
