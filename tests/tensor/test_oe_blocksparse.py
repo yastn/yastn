@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 """Tests for yastn.get_contraction_path and yastn.contract_with_unroll."""
+import numpy as np
 import pytest
 import yastn
 import yastn.tensor.oe_blocksparse as oe_blocksparse
@@ -419,45 +420,6 @@ def test_output_unroll_partial_prefiltered_zero(config_kwargs):
     assert float((result - expected).norm()) < tol
 
 
-def test_output_unroll_backfills_skipped_zero_positions(config_kwargs, monkeypatch):
-    """Skipping one output position should preserve the numerical result."""
-    cfg = yastn.make_config(sym='U1', **config_kwargs)
-
-    leg_i = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 1))
-    leg_j = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 1))
-    leg_k = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 1))
-
-    a = yastn.ones(config=cfg, legs=[leg_i, leg_j.conj()], n=0)
-    b = yastn.ones(config=cfg, legs=[leg_j, leg_k.conj()], n=0)
-    a[(1, 1)] *= 0  # output sector i=1 should survive as an explicit zero block
-
-    expected = yastn.ncon([a, b], [[-1, 1], [1, -2]])
-    assert expected.get_legs(axes=0).t == ((0,), (1,))
-
-    original_prefilter = oe_blocksparse.ncon_prefilter
-
-    def fake_prefilter(ts_meta, inds, nsym):
-        # Simulate prefilter skipping the i=1 output slice while keeping i=0.
-        i_charges = {t[:nsym] for t in ts_meta[0][0]}
-        if i_charges == {(1,)}:
-            return None
-        return original_prefilter(ts_meta, inds, nsym)
-
-    monkeypatch.setattr(oe_blocksparse, "ncon_prefilter", fake_prefilter)
-
-    unroll = {'i': yastn.make_sliced_legs(leg_i)}
-    path, _ = yastn.get_contraction_path(
-        a, ('i', 'j'), b, ('j', 'k'), ('i', 'k'), unroll=unroll
-    )
-
-    result = yastn.contract_with_unroll(
-        a, ('i', 'j'), b, ('j', 'k'), ('i', 'k'),
-        unroll=unroll, optimize=path,
-    )
-
-    assert float((result - expected).norm()) < tol
-
-
 def test_contracted_unroll_all_skipped_raises(config_kwargs, monkeypatch):
     """All skipped contracted-only slices should raise a no-valid-charges error."""
     cfg = yastn.make_config(sym='U1', **config_kwargs)
@@ -482,169 +444,179 @@ def test_contracted_unroll_all_skipped_raises(config_kwargs, monkeypatch):
         )
 
 
-def test_contracted_unroll_mixed_skipped_preserves_numeric_result(config_kwargs, monkeypatch):
-    """Mixed surviving and skipped contracted-only slices should preserve the numeric result."""
+def test_contracted_unroll_natural_skips_preserve_numeric_result(config_kwargs, monkeypatch):
+    """Slices skipped by the metadata pipeline itself must preserve the numeric result.
+
+    Unrolling j gives three combos, each with a different fate: j=0 carries real
+    weight and survives; for j=1 both sliced tensors keep blocks, but a's j=1
+    blocks have x = i + 1 in {1, 2} while b's only j=1 block has x=0, so no
+    (j, x) charge pair matches and ncon_prefilter detects a zero combo; b has no
+    j=2 blocks at all, so that combo is dropped by the empty-slice check before
+    the prefilter runs. No behavior is faked: the monkeypatch only spies.
+    """
     cfg = yastn.make_config(sym='U1', **config_kwargs)
 
-    leg_i = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 1))
-    leg_j = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 1))
-    leg_x = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 1))
-    leg_k = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 1))
+    leg_i = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 3))
+    leg_x = yastn.Leg(cfg, s=1, t=(0, 1, 2), D=(2, 2, 2))
+    leg_j = yastn.Leg(cfg, s=1, t=(0, 1, 2), D=(2, 2, 2))
 
-    a = yastn.zeros(config=cfg, legs=[leg_i, leg_x.conj(), leg_j], n=0)
-    a.set_block(ts=(0, 0, 0), Ds=(1, 1, 1), val='zeros')
-    a.set_block(ts=(0, 1, 1), Ds=(1, 1, 1), val='zeros')
-    a.set_block(ts=(1, 1, 0), Ds=(1, 1, 1), val='zeros')
+    a = yastn.rand(config=cfg, legs=[leg_i, leg_x.conj(), leg_j], n=0)  # x = i + j
+    b = yastn.Tensor(config=cfg, s=(-1, 1, 1), n=0)  # legs (j, x, k); k = j - x
+    b.set_block(ts=(0, 0, 0), Ds=(2, 2, 3), val='rand')
+    b.set_block(ts=(1, 0, 1), Ds=(2, 2, 2), val='rand')
 
-    b = yastn.zeros(config=cfg, legs=[leg_j.conj(), leg_k], n=0)
-    b.set_block(ts=(0, 0), Ds=(1, 1), val='zeros')
-    b.set_block(ts=(1, 1), Ds=(1, 1), val='zeros')
-
-    expected = yastn.ncon([a, b], [[-1, -2, 1], [1, -3]])
+    expected = yastn.ncon([a, b], [[-1, 1, 2], [2, 1, -2]])
+    assert float(expected.norm()) > tol
 
     original_prefilter = oe_blocksparse.ncon_prefilter
+    calls = []
 
-    def fake_prefilter(ts_meta, inds, nsym):
-        j_charges = {t[2 * nsym: 3 * nsym] for t in ts_meta[0][0]}
-        if j_charges == {(1,)}:
-            return None
-        return original_prefilter(ts_meta, inds, nsym)
+    def spy(ts_meta, inds, nsym):
+        out = original_prefilter(ts_meta, inds, nsym)
+        calls.append(({blk[2] for blk in ts_meta[0][0]}, out is None))
+        return out
 
-    monkeypatch.setattr(oe_blocksparse, "ncon_prefilter", fake_prefilter)
+    monkeypatch.setattr(oe_blocksparse, "ncon_prefilter", spy)
 
     unroll = {'j': yastn.make_sliced_legs(leg_j)}
     path, _ = yastn.get_contraction_path(
-        a, ('i', 'x', 'j'), b, ('j', 'k'), ('i', 'x', 'k'), unroll=unroll
+        a, ('i', 'x', 'j'), b, ('j', 'x', 'k'), ('i', 'k'), unroll=unroll
     )
-
     result = yastn.contract_with_unroll(
-        a, ('i', 'x', 'j'), b, ('j', 'k'), ('i', 'x', 'k'),
+        a, ('i', 'x', 'j'), b, ('j', 'x', 'k'), ('i', 'k'),
         unroll=unroll, optimize=path,
     )
 
+    assert ({(0,)}, False) in calls  # j=0 combo survived the prefilter
+    assert ({(1,)}, True) in calls  # j=1 combo prefiltered to zero
+    assert all(js != {(2,)} for js, _ in calls)  # j=2 combo dropped before the prefilter
     assert float((result - expected).norm()) < tol
 
 
 @pytest.mark.parametrize('remove_blocks', [0, 5])
-def test_contracted_unroll_mixed_skipped_preserves_numeric_result2(config_kwargs, monkeypatch, remove_blocks):
-    """Mixed surviving and skipped contracted-only slices should preserve the numeric result."""
+def test_contracted_unroll_removed_blocks_preserves_numeric_result(config_kwargs, remove_blocks):
+    """Unroll must stay exact when a tensor misses some of its allowed blocks.
+    """
     cfg = yastn.make_config(sym='U1', **config_kwargs)
+    leg = yastn.Leg(cfg, s=1, t=(-1, 0, 1), D=(1, 2, 3))
 
-    leg_i = yastn.Leg(cfg, s=1, t=(-1, 0, 1), D=(1, 2, 3))
-    leg_j = yastn.Leg(cfg, s=1, t=(-1, 0, 1), D=(1, 2, 3))
-    leg_x = yastn.Leg(cfg, s=1, t=(-1, 0, 1), D=(1, 2, 3))
-    leg_k = yastn.Leg(cfg, s=1, t=(-1, 0, 1), D=(1, 2, 3))
-
-    a = yastn.rand(config=cfg, legs=[leg_i, leg_x.conj(), leg_j], n=0, remove_blocks=remove_blocks)
-    b = yastn.rand(config=cfg, legs=[leg_j.conj(), leg_k], n=0)
+    a = yastn.rand(config=cfg, legs=[leg, leg.conj(), leg], n=0, remove_blocks=remove_blocks)
+    b = yastn.rand(config=cfg, legs=[leg.conj(), leg], n=0)
 
     expected = yastn.ncon([a, b], [[-1, -2, 1], [1, -3]])
 
-    original_prefilter = oe_blocksparse.ncon_prefilter
-
-    def fake_prefilter(ts_meta, inds, nsym):
-        j_charges = {t[2 * nsym: 3 * nsym] for t in ts_meta[0][0]}
-        if j_charges == {(1,)}:
-            return None
-        return original_prefilter(ts_meta, inds, nsym)
-
-    monkeypatch.setattr(oe_blocksparse, "ncon_prefilter", fake_prefilter)
-
-    unroll = {'j': yastn.make_sliced_legs(leg_j)}
+    unroll = {'j': yastn.make_sliced_legs(leg)}
     path, _ = yastn.get_contraction_path(
         a, ('i', 'x', 'j'), b, ('j', 'k'), ('i', 'x', 'k'), unroll=unroll
     )
-
     result = yastn.contract_with_unroll(
         a, ('i', 'x', 'j'), b, ('j', 'k'), ('i', 'x', 'k'),
         unroll=unroll, optimize=path,
     )
-
     assert float((result - expected).norm()) < tol
 
 
 def test_output_unroll_missing_positions_preserve_numeric_result(config_kwargs, monkeypatch):
-    """Fully skipped output positions should still preserve the numeric result."""
+    """Output positions with no valid combos are dropped; numerics are preserved.
+
+    'i' is unrolled over a leg with an extra charge sector (2,) that a does not
+    carry, so every (i=2, j) combo masks a to zero blocks and is dropped by the
+    empty-slice check before the prefilter runs — the i=2 output position gets
+    no partial at all. Off-diagonal (i, j) combos are empty the same way
+    (a's blocks sit at i = j), so the prefilter only ever sees the two
+    surviving diagonal combos. The monkeypatch only spies.
+    """
     cfg = yastn.make_config(sym='U1', **config_kwargs)
+    leg_i = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 3))
+    leg_i_ext = yastn.Leg(cfg, s=1, t=(0, 1, 2), D=(2, 3, 2))
+    leg_j = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
 
-    leg_i = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 1))
-    leg_x = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 1))
-    leg_j = yastn.Leg(cfg, s=1, t=(0, 1, 2), D=(1, 1, 1))
-    leg_k = yastn.Leg(cfg, s=1, t=(0, 1, 2), D=(1, 1, 1))
+    a = yastn.rand(config=cfg, legs=[leg_i, leg_j.conj()], n=0)  # blocks (0,0), (1,1)
+    b = yastn.rand(config=cfg, legs=[leg_j, leg_j.conj()], n=0)
 
-    a = yastn.ones(config=cfg, legs=[leg_i, leg_x, leg_j.conj()], n=0) * 0
-    b = yastn.ones(config=cfg, legs=[leg_j, leg_k.conj()], n=0) * 0
-
-    expected = yastn.ncon([a, b], [[-1, -2, 1], [1, -3]])
+    expected = yastn.ncon([a, b], [[-1, 1], [1, -2]])
+    assert float(expected.norm()) > tol
 
     original_prefilter = oe_blocksparse.ncon_prefilter
+    calls = []
 
-    def fake_prefilter(ts_meta, inds, nsym):
-        i_charges = {t[:nsym] for t in ts_meta[0][0]}
-        if i_charges == {(0,)}:
-            return None
-        return original_prefilter(ts_meta, inds, nsym)
+    def spy(ts_meta, inds, nsym):
+        out = original_prefilter(ts_meta, inds, nsym)
+        calls.append(({blk[0] for blk in ts_meta[0][0]}, out is None))
+        return out
 
-    monkeypatch.setattr(oe_blocksparse, "ncon_prefilter", fake_prefilter)
+    monkeypatch.setattr(oe_blocksparse, "ncon_prefilter", spy)
 
     unroll = {
-        'i': yastn.make_sliced_legs(leg_i),
+        'i': yastn.make_sliced_legs(leg_i_ext),
         'j': yastn.make_sliced_legs(leg_j),
     }
     path, _ = yastn.get_contraction_path(
-        a, ('i', 'x', 'j'), b, ('j', 'k'), ('i', 'x', 'k'), unroll=unroll
+        a, ('i', 'j'), b, ('j', 'k'), ('i', 'k'), unroll=unroll
     )
     result = yastn.contract_with_unroll(
-        a, ('i', 'x', 'j'), b, ('j', 'k'), ('i', 'x', 'k'),
+        a, ('i', 'j'), b, ('j', 'k'), ('i', 'k'),
         unroll=unroll, optimize=path,
     )
 
+    assert ({(0,)}, False) in calls and ({(1,)}, False) in calls
+    assert all(i_c != {(2,)} for i_c, _ in calls)  # i=2 combos never reached the prefilter
+    assert result.get_legs(axes=0).t == ((0,), (1,))
     assert float((result - expected).norm()) < tol
 
 
 def test_output_unroll_surviving_position_preserves_numeric_result(config_kwargs, monkeypatch):
-    """Skipped contracted slices should not change the surviving numeric result."""
+    """Naturally skipped combos must not disturb the surviving output positions.
+
+    i (output) and j (contracted) are unrolled together; x is also contracted.
+    Charge conservation puts a's blocks at x = i + j, while b carries only
+    (j=0, x=0) and (j=1, x=2). The (i=0, j=0) and (i=1, j=1) combos match and
+    survive; (i=0, j=1) and (i=1, j=0) keep blocks on both sides but share no
+    (j, x) charge pair, so ncon_prefilter detects the zero combos naturally.
+    Each output position thus mixes one surviving and one skipped combo. The
+    monkeypatch only spies.
+    """
     cfg = yastn.make_config(sym='U1', **config_kwargs)
+    leg_i = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 3))
+    leg_x = yastn.Leg(cfg, s=1, t=(0, 1, 2), D=(2, 2, 2))
+    leg_j = yastn.Leg(cfg, s=1, t=(0, 1), D=(2, 2))
 
-    leg_i = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 1))
-    leg_j = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 1))
-    leg_x = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 1))
-    leg_k = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 1))
+    a = yastn.rand(config=cfg, legs=[leg_i, leg_x.conj(), leg_j], n=0)  # x = i + j
+    b = yastn.Tensor(config=cfg, s=(-1, 1, 1), n=0)  # legs (j, x, k); k = j - x
+    b.set_block(ts=(0, 0, 0), Ds=(2, 2, 3), val='rand')
+    b.set_block(ts=(1, 2, -1), Ds=(2, 2, 2), val='rand')
 
-    a = yastn.zeros(config=cfg, legs=[leg_i, leg_x.conj(), leg_j], n=0)
-    a.set_block(ts=(0, 0, 0), Ds=(1, 1, 1), val='zeros')
-    a.set_block(ts=(0, 1, 1), Ds=(1, 1, 1), val='zeros')
-    a.set_block(ts=(1, 1, 0), Ds=(1, 1, 1), val='zeros')
-
-    b = yastn.zeros(config=cfg, legs=[leg_j.conj(), leg_k], n=0)
-    b.set_block(ts=(0, 0), Ds=(1, 1), val='zeros')
-    b.set_block(ts=(1, 1), Ds=(1, 1), val='zeros')
-
-    expected = yastn.ncon([a, b], [[-1, -2, 1], [1, -3]])
+    expected = yastn.ncon([a, b], [[-1, 1, 2], [2, 1, -2]])
+    assert float(expected.norm()) > tol
 
     original_prefilter = oe_blocksparse.ncon_prefilter
+    calls = []
 
-    def fake_prefilter(ts_meta, inds, nsym):
-        i_charges = {t[:nsym] for t in ts_meta[0][0]}
-        j_charges = {t[2 * nsym: 3 * nsym] for t in ts_meta[0][0]}
-        if i_charges == {(0,)} and j_charges == {(1,)}:
-            return None
-        return original_prefilter(ts_meta, inds, nsym)
+    def spy(ts_meta, inds, nsym):
+        out = original_prefilter(ts_meta, inds, nsym)
+        i_charges = {blk[0] for blk in ts_meta[0][0]}
+        j_charges = {blk[2] for blk in ts_meta[0][0]}
+        calls.append(((i_charges, j_charges), out is None))
+        return out
 
-    monkeypatch.setattr(oe_blocksparse, "ncon_prefilter", fake_prefilter)
+    monkeypatch.setattr(oe_blocksparse, "ncon_prefilter", spy)
 
     unroll = {
         'i': yastn.make_sliced_legs(leg_i),
         'j': yastn.make_sliced_legs(leg_j),
     }
     path, _ = yastn.get_contraction_path(
-        a, ('i', 'x', 'j'), b, ('j', 'k'), ('i', 'x', 'k'), unroll=unroll
+        a, ('i', 'x', 'j'), b, ('j', 'x', 'k'), ('i', 'k'), unroll=unroll
     )
     result = yastn.contract_with_unroll(
-        a, ('i', 'x', 'j'), b, ('j', 'k'), ('i', 'x', 'k'),
+        a, ('i', 'x', 'j'), b, ('j', 'x', 'k'), ('i', 'k'),
         unroll=unroll, optimize=path,
     )
 
+    assert (({(0,)}, {(0,)}), False) in calls  # surviving combos
+    assert (({(1,)}, {(1,)}), False) in calls
+    assert (({(0,)}, {(1,)}), True) in calls  # naturally skipped combos
+    assert (({(1,)}, {(0,)}), True) in calls
     assert float((result - expected).norm()) < tol
 
 

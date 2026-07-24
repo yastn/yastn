@@ -22,7 +22,7 @@ from typing import NamedTuple, TYPE_CHECKING
 
 import numpy as np
 
-from ._auxiliary import _struct, _flatten, _clear_axes, _unpack_legs, get_blocks, find_matching_indices, get_trimmed_struct
+from ._auxiliary import _struct, _flatten, _clear_axes, _unpack_legs, get_blocks, get_blocks_charges_all, find_matching_indices, get_trimmed_struct
 from ._legbasic import LegBasic
 from ._tests import YastnError, _test_axes_all
 
@@ -643,6 +643,15 @@ def _meta_mask(sym, struct, mask_t, mask_D, axis):
 
 
     struct_c = _struct(legs=legs_c, n=struct.n, isdiag=struct.isdiag)
+    if struct.mask.array is not None:
+        # blocks removed from struct must stay removed in struct_c; the pairing
+        # loop below and downstream slices assume st_c blocks are a subset of st_a
+        taxes_c = tuple(leg.t for leg in legs_c)
+        saxes_c = tuple(leg.s for leg in legs_c)
+        tblocks_c, _ = get_blocks_charges_all(sym, taxes_c, saxes_c, struct.n)
+        keep = np.zeros(len(tblocks_c), dtype=bool)
+        keep[find_matching_indices(tblocks_c, st_a.t, both=False)] = True
+        struct_c = struct_c.replace(mask=keep)
     struct_c = get_trimmed_struct(sym, struct_c)
     st_c = get_blocks(sym, struct_c)
 
@@ -657,6 +666,7 @@ def _meta_mask(sym, struct, mask_t, mask_D, axis):
             ic += 1
         else:
             ia += 1
+    assert ic == st_c.nblocks, "Sanity check."
 
     ndima = len(struct.legs) - struct.isdiag
     meta = np.array(meta, dtype=np.int64).reshape(len(meta), 4 + 2 * ndima + sym.NSYM)
