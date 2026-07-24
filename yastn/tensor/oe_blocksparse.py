@@ -613,7 +613,6 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
                            and 'cuda' in str(original_device))
     _oom_retry = _torch_cuda_backend and (oom_retry or (os.environ.get("YASTN_OE_OOM_RETRY", "0") == "1"))\
         and (oom_retry is not False)
-    import pdb; pdb.set_trace()
 
     # Build mask tensors once per (tensor, label, sliced_leg, device) so the
     # combo loop just looks them up.
