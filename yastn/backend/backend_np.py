@@ -621,6 +621,10 @@ def negate_blocks(Adata, slices):
     return newdata
 
 
+def gather_slices(Adata, slices):
+    return np.concatenate([Adata[slice(*slc)] for slc in slices])
+
+
 #####################################################
 #     block merging, truncations and un-merging     #
 #####################################################
