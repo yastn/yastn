@@ -235,7 +235,7 @@ class kernel_transpose_dot_sum(torch.autograd.Function):
 
 
 class kernel_negate_blocks(torch.autograd.Function):
-    
+
     @staticmethod
     def _sign(slices : Sequence[Sequence[int]], n, device):
         # 2 * (int8 * n) + bool * n mem cost
@@ -247,7 +247,7 @@ class kernel_negate_blocks(torch.autograd.Function):
         delta.cumsum_(0)              # in-place cumulative sum, shape (n+1,)
         delta.mul_(-2).add_(1)        # +1 / -1, shape (n,)
         return delta[:n]
-    
+
     @staticmethod
     def forward(data_in, slices):
         return data_in * kernel_negate_blocks._sign(slices, data_in.numel(), data_in.device)
@@ -267,7 +267,7 @@ class kernel_apply_mask(torch.autograd.Function):
     def forward(data_in, mask, meta, size_out, axis, ndim):
         slc0 = (slice(None),) * axis
         slc2 = (slice(None),) * (ndim - (axis + 1))
-        data_out = torch.empty((size_out,), dtype=data_in.dtype, device=data_in.device)
+        data_out = torch.zeros((size_out,), dtype=data_in.dtype, device=data_in.device)
         for sln, Dn, sla, Da, tm in meta:
             slcs = slc0 + (mask[tuple(tm)],) + slc2
             data_out[slice(*sln)].view(tuple(Dn))[:] = data_in[slice(*sla)].view(tuple(Da))[slcs]

@@ -489,6 +489,7 @@ def test_transpose_and_merge_backward(config_kwargs, remove_blocks):
     b = yastn.fuse_legs(a, axes=((0, 1), 2, 3), mode='hard')
 
     target_block = (1, 1, -1, -1)
+    a.set_block(target_block, val='rand')  # in case remove_blocks eliminated it
     target_block_size = a[target_block].size()
 
     def test_f(block):

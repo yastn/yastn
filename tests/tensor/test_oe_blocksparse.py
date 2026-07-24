@@ -536,7 +536,7 @@ def test_contracted_unroll_mixed_skipped_preserves_numeric_result2(config_kwargs
     leg_k = yastn.Leg(cfg, s=1, t=(-1, 0, 1), D=(1, 2, 3))
 
     a = yastn.rand(config=cfg, legs=[leg_i, leg_x.conj(), leg_j], n=0, remove_blocks=remove_blocks)
-    b = yastn.rand(config=cfg, legs=[leg_j.conj(), leg_k], n=0, remove_blocks=remove_blocks)
+    b = yastn.rand(config=cfg, legs=[leg_j.conj(), leg_k], n=0)
 
     expected = yastn.ncon([a, b], [[-1, -2, 1], [1, -3]])
 
