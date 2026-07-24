@@ -592,6 +592,10 @@ def negate_blocks(Adata, slices):
     return kernel_negate_blocks.apply(Adata, slices)
 
 
+def gather_slices(Adata, slices):
+    return torch.cat([Adata[slice(*slc)] for slc in slices])
+
+
 #####################################################
 #     block merging, truncations and un-merging     #
 #####################################################

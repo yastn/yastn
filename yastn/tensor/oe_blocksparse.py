@@ -33,8 +33,7 @@ from ..initialize import block as yastn_block
 from ._legs import Leg
 from ._einsum import ncon_prefilter
 from ._auxiliary import _clear_axes, get_blocks, get_trimmed_struct
-from ._contractions import _apply_mask_axes
-from ._merging import _meta_mask, _mask_nonzero
+from ._merging import _meta_mask
 from ._tests import YastnError
 
 log = logging.getLogger(__name__)
@@ -223,22 +222,13 @@ def _checkpointed_call(tensors, do_contract):
 
 def _filter_tensor_blocks(tensor, block_indices):
     r"""
-    Restrict ``tensor`` to the charge sectors spanned by ``block_indices``.
+    Restrict ``tensor`` to exactly the blocks in ``block_indices``.
 
-    leg_first note
-    --------------
-    On leg_first a tensor's block set is *fully determined by its legs*:
-    :func:`get_blocks` enumerates every symmetry-allowed charge combination and
-    ``_data`` is dense over them.  An arbitrary subset of blocks (as returned by
-    :func:`ncon_prefilter`) is therefore **not directly representable**.  We
-    instead restrict every native leg to the *union* of charge sectors that
-    appear in the retained blocks and drop the other sectors with
-    :func:`_apply_mask_axes` (which rebuilds ``struct``/``_data``/``hfs``
-    consistently).  The regenerated block set is a charge-wise subset of the
-    original, so the result is **always correct**; it is at worst a *superset*
-    of ``block_indices`` (leg-sector granularity is coarser than an exact,
-    joint-charge index subset).  Any reintroduced block that has no contraction
-    partner simply contributes zero downstream.
+    leg_first: the kept subset is recorded in ``struct.mask`` over the
+    leg-derived block enumeration (``get_trimmed_struct`` also drops leg
+    charges that no kept block uses and re-expresses the mask over the trimmed
+    enumeration), and ``_data`` is compacted to the kept blocks' segments,
+    whose canonical order a subset preserves.
 
     ``block_indices`` index into ``get_blocks(sym, tensor.struct).t`` order
     (the same order fed to :func:`ncon_prefilter`).  ``None`` keeps all blocks.
@@ -258,22 +248,16 @@ def _filter_tensor_blocks(tensor, block_indices):
         new_struct = get_trimmed_struct(sym, tensor.struct, empty_legs)
         return tensor._replace(struct=new_struct, data=tensor._data[:0])
 
-    ndim_n = len(tensor.struct.legs)
-    kept_t = bl.t[indices]                        # (nkept, ndim_n, nsym)
-
-    masks = []
-    for ax, leg in enumerate(tensor.struct.legs):
-        surviving = {tuple(map(int, c)) for c in kept_t[:, ax, :]}
-        if len(surviving) >= len(leg.t):
-            masks.append(None)                    # nothing dropped on this leg
-            continue
-        bmask = {t: (np.ones(d, dtype=bool) if t in surviving else np.zeros(d, dtype=bool))
-                 for t, d in zip(leg.t, leg.D)}
-        masks.append(_mask_nonzero(bmask))
-
-    if all(m is None for m in masks):
-        return tensor
-    return _apply_mask_axes(tensor, tuple(range(ndim_n)), masks)
+    # lift kept indices onto the full leg-derived enumeration that struct.mask
+    # is defined over (present blocks are its True positions)
+    mask_arr = tensor.struct.mask.array
+    nfull = bl.nblocks if mask_arr is None else len(mask_arr)
+    present = np.arange(nfull) if mask_arr is None else np.flatnonzero(mask_arr)
+    keep = np.zeros(nfull, dtype=bool)
+    keep[present[indices]] = True
+    new_struct = get_trimmed_struct(sym, tensor.struct.replace(mask=keep))
+    data = tensor.config.backend.gather_slices(tensor._data, bl.slc[indices])
+    return tensor._replace(struct=new_struct, data=data)
 
 
 def _meta_filter_struct(sym, struct, kept_indices):
