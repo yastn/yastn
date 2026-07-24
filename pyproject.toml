@@ -34,7 +34,7 @@ exclude = ["docs*", "tests*", "experimental*"]
 
 [project.optional-dependencies]
 test = ["pytest", "pytest-cov", "pytest-randomly", "numpy!=2.4.5"]
-docbuild = ["sphinx", "sphinxcontrib-napoleon", "pydata-sphinx-theme"]
+docbuild = ["sphinx", "sphinxcontrib-napoleon", "pydata-sphinx-theme", "graphviz", ]
 torch = ["torch>=2.10"]
 
 [tool.setuptools_scm]

@@ -35,8 +35,17 @@ extensions = [
     'sphinx.ext.autosectionlabel',
     'sphinx.ext.viewcode',
     'sphinx.ext.napoleon',
-    'sphinx.ext.mathjax'
+    'sphinx.ext.mathjax',
+    'sphinx.ext.graphviz',
 ]
+
+# -- graphviz (sphinx.ext.graphviz) ------------------------------------------
+# Render implementation graphs (e.g. the sliced/unrolled contraction engine in
+# tensor/large_contractions) as inline SVG. Requires the Graphviz ``dot``
+# executable on PATH at build time (e.g. ``conda install graphviz`` or
+# ``apt-get install graphviz``); set ``graphviz_dot`` to an explicit path if it
+# is installed elsewhere.
+graphviz_output_format = 'svg'
 autoclass_content = 'both'
 #autodoc_class_signature = "separated"
 

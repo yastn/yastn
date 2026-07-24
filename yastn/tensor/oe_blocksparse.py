@@ -39,6 +39,19 @@ from ._tests import YastnError
 log = logging.getLogger(__name__)
 
 
+@lru_cache(maxsize=8)
+def _cache_release_level(raw):
+    r"""Parse ``YASTN_OE_CUDA_CACHE_RELEASE_LEVEL`` robustly. If invalid, warn and pass 0."""
+    if not raw:
+        return 0
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        log.warning("Ignoring invalid YASTN_OE_CUDA_CACHE_RELEASE_LEVEL=%r "
+                    "(expected integer); using 0.", raw)
+        return 0
+
+
 class SlicedLeg:
     r"""
     Describes a subset of a YASTN tensor leg: a selection of charge sectors,
@@ -600,7 +613,16 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
     # caching allocator released so they can reclaim freed memory; pure
     # PyTorch on CUDA already reuses internally and empty_cache() is a
     # net loss.
-    _needs_cache_release = getattr(tensors[0].config.backend, 'BACKEND_ID', '') == 'torch_cutensor'
+    #
+    # YASTN_OE_CUDA_CACHE_RELEASE_LEVEL (default 0) tunes how often the blocking
+    # empty_cache runs. A release point tagged `level` fires only when the env
+    # value is >= level, so higher = more frequent (and more blocking):
+    #   0 = never; 
+    #   1 = once per _contract_with_sliced_unroll, before processing combos; 
+    #   2 = + after processing each combo; 3 = + per tensordot.
+    _needs_cache_release = lambda level: \
+        getattr(tensors[0].config.backend, 'BACKEND_ID', '') == 'torch_cutensor' \
+        and _cache_release_level(os.getenv("YASTN_OE_CUDA_CACHE_RELEASE_LEVEL")) >= level
     def _release_cuda_cache(devs):
         r"""Release PyTorch's cached-but-unused GPU memory on *devs*."""
         import torch as _torch
@@ -724,7 +746,7 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
                     if trim_k is not None:
                         masked[k] = _filter_tensor_blocks(masked[k], trim_k)
             return ncon(masked, cur_igs, conjs=cur_conjs, order=cur_order, swap=cur_swap,
-                        release_cuda_cache=_needs_cache_release, oom_retry=_oom_retry)
+                        release_cuda_cache=_needs_cache_release(3), oom_retry=_oom_retry)
 
         return _checkpointed_call(base_tensors, _do_contract) if use_checkpoint else _do_contract(base_tensors)
 
@@ -758,11 +780,11 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
 
                 # Release per-combo cache to keep cuTENSOR / external allocators
                 # from fragmenting when intermediates churn (no-op for pure torch).
-                if _needs_cache_release:
+                if _needs_cache_release(2):
                     _release_cuda_cache([dev] if dev is not None else [original_device])
         return local_partials
 
-    if _needs_cache_release:
+    if _needs_cache_release(1):
         _release_cuda_cache([original_device])
 
     output_pos_partials = _process_combos(assigned, tensors, None, nullcontext())
