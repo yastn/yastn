@@ -79,13 +79,6 @@ class _Fusion(NamedTuple):
 #  =========== merging blocks ======================
 
 
-def _merge_to_matrix(a, axes, legs_sub=None):
-    r""" Main function merging tensor into effective block matrix. """
-    order = axes[0] + axes[1]
-    meta_mrg, size, struct_new, ls_l, ls_r, legs_old = _meta_merge_to_matrix(a.config.sym, a.struct, axes, legs_sub)
-    data = _transpose_and_merge(a.config, a._data, order, meta_mrg, size)
-    return data, struct_new, ls_l, ls_r, legs_old
-
 
 def _transpose_and_merge(config, data, order, meta_mrg, size):
     # if inds is None and tuple(range(len(order))) == order and struct.size == len(data) \
@@ -116,6 +109,14 @@ def _no_change_in_transpose_and_merge(meta_mrg, meta_new, Dsize):
     return True
 
 
+def _unmerge_matrix(config, data, struct, axes, hfsm):
+    axes_trim = tuple(ax for ax in axes if hfsm[ax].tree[0] > 1)
+    if axes_trim:
+        meta, size, struct, _, _ = _meta_unfuse_hard(config.sym, struct, axes, hfsm)
+        data = config.backend.unmerge(data, meta, size)
+    return data, struct
+
+
 def _unmerge(config, data, meta, size):
     #assert len(data) == Dsize, "This should not have happened"
     #if _no_change_in_unmerge(meta):
@@ -136,77 +137,6 @@ def _no_change_in_unmerge(meta):
     if sl_last[1] != sln[1]:
         return False
     return True
-
-
-@lru_cache(maxsize=1024)
-def _meta_merge_to_matrix(sym, struct, axes, legs_sub):
-    r""" Meta information for backend needed to merge tensor into effective block matrix. """
-    assert not struct.isdiag, "Sanity check. Contact developers."
-    s_eff = [struct.legs[axes[0][0]].s if len(axes[0]) > 0 else 1,
-             struct.legs[axes[1][0]].s if len(axes[1]) > 0 else -1]
-
-    st_full = get_blocks(sym, struct)
-    if legs_sub is None or legs_sub == struct.legs:
-        st = st_full
-        slc = st.slc
-    else:
-        struct_sub = get_trimmed_struct(sym, struct, legs_sub)
-        st = get_blocks(sym, struct_sub)
-        slc = st_full.slc[find_matching_indices(st_full.t, st.t, both=False)]
-        struct = struct_sub
-
-    t, teff, ls, legs_old = [], [], [], []
-    for n in (0, 1):
-        ta = st.t[:, axes[n], :]
-        Da = st.D[:, axes[n]]
-        Deff = np.prod(Da, axis=1, dtype=np.int64).tolist()
-        Da = [tuple(x) for x in Da.tolist()]
-        s = tuple(struct.legs[ii].s for ii in axes[n])
-        ta_eff = [tuple(x) for x in sym.fuse(ta, s, s_eff[n]).tolist()]
-        ta = [tuple(x) for x in ta.reshape(len(ta), len(s) * sym.NSYM).tolist()]
-        teff.append(ta_eff)
-        t.append(ta)
-        ls.append(_leg_structure_merge(ta_eff, ta, Deff, Da))
-        legs_old.append(tuple(struct.legs[ax] for ax in axes[n]))
-
-    legs_new = tuple(LegBasic(s=s, t=ll.t, D=ll.D) for s, ll in zip(s_eff, ls))
-    struct_new = _struct(legs=legs_new, n=struct.n, isdiag=struct.isdiag)
-    struct_new = get_trimmed_struct(sym, struct_new)
-    bl_new = get_blocks(sym, struct_new)
-
-    smeta = sorted((tel, ter, tl, tr, slo, tuple(Do))
-                   for tel, ter, tl, tr, slo, Do in zip(teff[0], teff[1], t[0], t[1], slc, st.D.tolist()))
-
-    meta_mrg = []
-    for tn, sln, Dn, ((tel, ter), gr) in zip(bl_new.t, bl_new.slc, bl_new.D, groupby(smeta, key=itemgetter(0, 1))):
-        ind0 = ls[0].t.index(tel)
-        ind1 = ls[1].t.index(ter)
-        assert tuple(tn.ravel()) == tel + ter
-        try:
-            _, _, tl, tr, slo, Do = next(gr)
-            for d0, d1 in product(ls[0].dec[ind0], ls[1].dec[ind1]):
-                if d0.t == tl and d1.t == tr:
-                    meta_mrg.append((*sln, *Dn, *slo, *Do, *d0.Dslc, *d1.Dslc, d0.Dprod, d1.Dprod))
-                    _, _, tl, tr, slo, Do = next(gr)
-        except StopIteration:
-            pass
-
-    ndimo = len(struct.legs)
-    meta_mrg = np.array(meta_mrg, dtype=np.int64).reshape(len(meta_mrg), 12 + ndimo)
-    meta_dt = np.dtype([
-        ('sln', np.int64, (2,)),
-        ('Dn',  np.int64, (2,)),
-        ('slo', np.int64, (2,)),
-        ('Do',  np.int64, (ndimo,)),
-        ('Dslc', np.int64, (2, 2)),
-        ('Drsh', np.int64, (2,))])
-    meta_mrg = meta_mrg.view(meta_dt).reshape(-1)
-    return meta_mrg, bl_new.size, struct_new, ls[0], ls[1], legs_old
-
-def _LegSlices_trivial(leg):
-    r""" Trivial LegSlices for unfused leg. """
-    dec = tuple((_DecRecord(tt, (0, DD), DD, (DD,)),) for tt, DD in zip(leg.t, leg.D))
-    return _LegSlices(leg.t, leg.D, dec)
 
 
 #  =========== fuse legs ======================
@@ -313,7 +243,8 @@ def _fuse_legs_hard(a, axes, order):
     out = a._replace(mfs=mfs, hfs=hfs, struct=struct_new, data=data, trans=None)
     return out
 
-def _merge_to_matrix2(a, axes, struct_sub=None, empty_first_axis_s_conj=False):
+
+def _merge_to_matrix(a, axes, struct_sub=None, empty_first_axis_s_conj=False):
     order = axes[0] + axes[1]
     sub_legs = struct_sub.legs if struct_sub is not None else None
     meta_mrg, size, struct_mrg, legs_group = _meta_fuse_hard(a.config.sym, a.struct, axes, sub_legs,

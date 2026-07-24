@@ -31,7 +31,6 @@ def test_cache(config_kwargs):
 
     yastn.set_cache_maxsize(maxsize=10)
     cache_info = yastn.get_cache_info()
-    assert cache_info["merge_to_matrix"] == (0, 0, 10, 0)
 
     for _ in range(100):
         a.svd(axes=((0, 1), (2, 3)))
@@ -43,11 +42,9 @@ def test_cache(config_kwargs):
         b.broadcast(a, axes=3)
 
     cache_info = yastn.get_cache_info()
-    assert cache_info["merge_to_matrix"] == (297, 3, 10, 3)
     assert cache_info["broadcast"] == (99, 1, 10, 1)
     yastn.clear_cache()
     cache_info = yastn.get_cache_info()
-    assert cache_info["merge_to_matrix"] == (0, 0, 10, 0)
     assert cache_info["broadcast"] == (0, 0, 10, 0)
 
 

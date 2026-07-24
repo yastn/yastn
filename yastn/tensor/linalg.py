@@ -25,7 +25,7 @@ import numpy as np
 
 from ._auxiliary import _struct, _clear_axes, _unpack_axes, get_blocks, find_index, argsort_t, find_matching_indices, get_trimmed_struct
 from ._legbasic import LegBasic
-from ._merging import _Fusion, _merge_to_matrix, _unmerge, _meta_unmerge_matrix, _LegSlices_trivial
+from ._merging import _Fusion, _merge_to_matrix, _unmerge_matrix
 from ._tests import YastnError, _test_axes_all
 
 if TYPE_CHECKING:
@@ -261,7 +261,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     out_hl = tuple(a.trans[ax] for ax in out_hl)
     out_hr = tuple(a.trans[ax] for ax in out_hr)
     #
-    data, struct_am, ls_l, ls_r, legs_groups = _merge_to_matrix(a, (out_hl, out_hr))
+    data, struct_am, hfsm = _merge_to_matrix(a, (out_hl, out_hr))
     #
     if svd_on_cpu:
         device = a.config.backend.get_device(data)
@@ -281,7 +281,6 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
 
     nonzero = _nonzero_sectors(a.config.backend, data, sym, struct_am)
     meta, sizes, struct_Um, struct_S, struct_Vm = _meta_svd(sym, struct_am, sU, nU, k_block, nonzero=nonzero)
-    ls_s = _LegSlices_trivial(struct_S.legs[0])
 
     if compute_uv and policy == 'fullrank':
         Udata, Sdata, Vdata = a.config.backend.svd(data, meta, sizes, diagnostics=kwargs.get('diagnostics', None))
@@ -318,16 +317,14 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     if not compute_uv:
         return S
 
-    struct_U = _struct(legs=(*legs_groups[0], struct_Um.legs[1]), n=struct_Um.n, isdiag=False)
-    Umeta_unmerge, size_U, struct_U = _meta_unmerge_matrix(sym, struct_Um, ls_l, ls_s, struct_U)
-    Udata = _unmerge(a.config, Udata, Umeta_unmerge, size=size_U)
+    hfsUm = (hfsm[0], _Fusion(s=(sU,)))
+    Udata, struct_U = _unmerge_matrix(a.config, Udata, struct_Um, (0,), hfsUm)
     Umfs = tuple(a.mfs[ii] for ii in out_ml) + ((1,),)
     Uhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(s=(sU,)),)
     U = a._replace(struct=struct_U, data=Udata, mfs=Umfs, hfs=Uhfs, trans=None)
 
-    struct_V = _struct(legs=(struct_Vm.legs[0], *legs_groups[1]), n=struct_Vm.n, isdiag=False)
-    Vmeta_unmerge, size_V, struct_V = _meta_unmerge_matrix(sym, struct_Vm, ls_s, ls_r, struct_V)
-    Vdata = _unmerge(a.config, Vdata, Vmeta_unmerge, size=size_V)
+    hfsVm = (_Fusion(s=(-sU,)), hfsm[1])
+    Vdata, struct_V = _unmerge_matrix(a.config, Vdata, struct_Vm, (1,), hfsVm)
     Vmfs = ((1,),) + tuple(a.mfs[ii] for ii in out_mr)
     Vhfs = (_Fusion(s=(-sU,)),) + tuple(a.hfs[ii] for ii in out_hr)
     V = a._replace(struct=struct_V, data=Vdata, mfs=Vmfs, hfs=Vhfs, trans=None)
@@ -475,14 +472,13 @@ def eig(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     out_hl = tuple(a.trans[ax] for ax in out_hl)
     out_hr = tuple(a.trans[ax] for ax in out_hr)
     #
-    data, struct_am, ls_l, ls_r, legs_group = _merge_to_matrix(a, (out_hl, out_hr))
+    data, struct_am, hfsm = _merge_to_matrix(a, (out_hl, out_hr))
     #
-    if ls_l != ls_r:
-        raise YastnError("Legs of effective square blocks do not match.")
+    #if hfsm[0] != hfsm[1].conj():  # TODO
+    #    raise YastnError("Legs of effective square blocks do not match.")
 
     k_block = None
     meta, sizes, struct_Um, struct_S, struct_Vm = _meta_svd(sym, struct_am, sU, nU, k_block)
-    ls_s = _LegSlices_trivial(struct_S.legs[0])
 
     if compute_uv and policy == 'fullrank':
         Udata, Sdata, Vdata = a.config.backend.eig(data, meta, sizes, which=which, diagnostics=kwargs.get('diagnostics', None))
@@ -498,16 +494,14 @@ def eig(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     if not compute_uv:
         return S
 
-    struct_U = struct_Um._replace(legs=(*legs_group[0], struct_Um.legs[1]))
-    Umeta_unmerge, size_U, struct_U = _meta_unmerge_matrix(sym, struct_Um, ls_l, ls_s, struct_U)
-    Udata = _unmerge(a.config, Udata, Umeta_unmerge, size=size_U)
+    hfsUm = (hfsm[0], _Fusion(s=(sU,)))
+    Udata, struct_U = _unmerge_matrix(a.config, Udata, struct_Um, (0,), hfsUm)
     Umfs = tuple(a.mfs[ii] for ii in out_ml) + ((1,),)
     Uhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(s=(sU,)),)
     U = a._replace(struct=struct_U, data=Udata, mfs=Umfs, hfs=Uhfs, trans=None)
 
-    struct_V = struct_Vm._replace(legs=(struct_Vm.legs[0], *legs_group[1]))
-    Vmeta_unmerge, size_V, struct_V = _meta_unmerge_matrix(sym, struct_Vm, ls_s, ls_r, struct_V)
-    Vdata = _unmerge(a.config, Vdata, Vmeta_unmerge, size=size_V)
+    hfsVm = (_Fusion(s=(-sU,)), hfsm[1])
+    Vdata, struct_V = _unmerge_matrix(a.config, Vdata, struct_Vm, (1,), hfsVm)
     Vmfs = ((1,),) + tuple(a.mfs[ii] for ii in out_mr)
     Vhfs = (_Fusion(s=(-sU,)),) + tuple(a.hfs[ii] for ii in out_hr)
     V = a._replace(struct=struct_V, data=Vdata, mfs=Vmfs, hfs=Vhfs, trans=None)
@@ -766,22 +760,19 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0) -> tuple['Tensor', 'Tensor']:
     out_hl = tuple(a.trans[ax] for ax in out_hl)
     out_hr = tuple(a.trans[ax] for ax in out_hr)
 
-    data, struct_am, ls_l, ls_r, legs_group = _merge_to_matrix(a, (out_hl, out_hr))
-    meta, sizes, struct_Qm, struct_Rm = _meta_qr(a.config.sym, struct_am, sQ)
-    ls = _LegSlices_trivial(struct_Qm.legs[1])
+    data, struct_am, hfsm = _merge_to_matrix(a, (out_hl, out_hr))
 
+    meta, sizes, struct_Qm, struct_Rm = _meta_qr(a.config.sym, struct_am, sQ)
     Qdata, Rdata = a.config.backend.qr(data, meta, sizes)
 
-    struct_Q = struct_Qm._replace(legs=(*legs_group[0], struct_Qm.legs[1]))
-    Qmeta_unmerge, size_Q, struct_Q = _meta_unmerge_matrix(sym, struct_Qm, ls_l, ls, struct_Q)
-    Qdata = _unmerge(a.config, Qdata, Qmeta_unmerge, size=size_Q)
+    hfsQm = (hfsm[0], _Fusion(s=(sQ,)))
+    Qdata, struct_Q = _unmerge_matrix(a.config, Qdata, struct_Qm, (0,), hfsQm)
     Qmfs = tuple(a.mfs[ii] for ii in out_ml) + ((1,),)
     Qhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(s=(sQ,)),)
     Q = a._replace(struct=struct_Q, data=Qdata, mfs=Qmfs, hfs=Qhfs, trans=None)
 
-    struct_R = struct_Rm._replace(legs=(struct_Rm.legs[0], *legs_group[1]))
-    Rmeta_unmerge, size_R, struct_R = _meta_unmerge_matrix(sym, struct_Rm, ls, ls_r, struct_R)
-    Rdata = _unmerge(a.config, Rdata, Rmeta_unmerge, size=size_R)
+    hfsRm = (_Fusion(s=(-sQ,)), hfsm[1])
+    Rdata, struct_R = _unmerge_matrix(a.config, Rdata, struct_Rm, (1,), hfsRm)
     Rmfs = ((1,),) + tuple(a.mfs[ii] for ii in out_mr)
     Rhfs = (_Fusion(s=(-sQ,)),) + tuple(a.hfs[ii] for ii in out_hr)
     R = a._replace(struct=struct_R, data=Rdata, mfs=Rmfs, hfs=Rhfs, trans=None)
@@ -886,7 +877,7 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank', **kwargs) -> tu
         raise YastnError('eigh requires tensor charge to be zero.')
     #
     # 2. merge to block, square matrix
-    data, struct_am, ls_l, ls_r, legs_group = _merge_to_matrix(a, (out_hl, out_hr))
+    data, struct_am, hfsm = _merge_to_matrix(a, (out_hl, out_hr))
     #
     # 3.1 Set minimal number of eigenpairs to solve for in each block.
     #     Used by block-wise sparse solvers and ignored by 'fullrank' policy.
@@ -902,8 +893,8 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank', **kwargs) -> tu
         logger.info(f"{fname} D_block {kwargs.get('D_block', 'NA')}")
         logger.info(f"{fname} k_block {k_block}")
 
-    if ls_l != ls_r:
-        raise YastnError("Tensor likely is not hermitian. Legs of effective square blocks do not match.")
+    # if hfsm[0] != hfsm[1] or struct_am.legs[0] != struct_am.legs[1]:  # TODO
+    #    raise YastnError("Tensor likely is not hermitian. Legs of effective square blocks do not match.")
 
     # filter zero blocks only for the partial-spectrum solver; 'fullrank' keeps
     # them so that U remains a complete eigenbasis (with eigenvalue-0 sectors).
@@ -911,7 +902,6 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank', **kwargs) -> tu
     if policy == 'block_lanczos':
         nonzero = _nonzero_sectors(a.config.backend, data, sym, struct_am)
     meta, sizes, struct_Um, struct_S = _meta_eigh(sym, struct_am, sU, k_block, nonzero=nonzero)
-    ls = _LegSlices_trivial(struct_Um.legs[1])
 
     if policy == 'fullrank':
         Sdata, Udata = a.config.backend.eigh(data, meta, sizes)
@@ -923,9 +913,8 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank', **kwargs) -> tu
     else:
         raise YastnError("eigh() policy should be 'fullrank' or 'block_lanczos'.")
 
-    struct_U = struct_Um._replace(legs=(*legs_group[0], struct_Um.legs[1]))
-    Umeta_unmerge, size_U, struct_U = _meta_unmerge_matrix(sym, struct_Um, ls_l, ls, struct_U)
-    Udata = _unmerge(a.config, Udata, Umeta_unmerge, size=size_U)
+    hfsUm = (hfsm[0], _Fusion(s=(sU,)))
+    Udata, struct_U = _unmerge_matrix(a.config, Udata, struct_Um, (0,), hfsUm)
     Umfs = tuple(a.mfs[ii] for ii in out_ml) + ((1,),)
     Uhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(s=(sU,)),)
     U = a._replace(struct=struct_U, data=Udata, mfs=Umfs, hfs=Uhfs, trans=None)
