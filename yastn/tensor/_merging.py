@@ -76,69 +76,6 @@ class _Fusion(NamedTuple):
         return self.tree[0] > 1
 
 
-#  =========== merging blocks ======================
-
-
-
-def _transpose_and_merge(config, data, order, meta_mrg, size):
-    # if inds is None and tuple(range(len(order))) == order and struct.size == len(data) \
-    #    and _no_change_in_transpose_and_merge(meta_mrg, meta_new, struct.size):
-    #     return data
-    return config.backend.transpose_and_merge(data, order, meta_mrg, size)
-
-
-def _no_change_in_transpose_and_merge(meta_mrg, meta_new, Dsize):
-    r""" Assumes C ordering on backend reshape. """
-    low = 0
-    if Dsize in (0, 1):
-        return True
-    for _, slo, _, _, _ in meta_mrg:
-        if slo[0] != low:
-            return False
-        low = slo[1]
-    if low != Dsize:
-        return False
-    for (_, Dn, _), (_, gr) in zip(meta_new, groupby(meta_mrg, key=itemgetter(0))):
-        low = 0
-        for _, _, _, Dslc, _ in gr:
-            if Dslc[0][0] != low:
-                return False
-            low = Dslc[0][1]
-        if low != Dn[0]:
-            return False
-    return True
-
-
-def _unmerge_matrix(config, data, struct, axes, hfsm):
-    axes_trim = tuple(ax for ax in axes if hfsm[ax].tree[0] > 1)
-    if axes_trim:
-        meta, size, struct, _, _ = _meta_unfuse_hard(config.sym, struct, axes, hfsm)
-        data = config.backend.unmerge(data, meta, size)
-    return data, struct
-
-
-def _unmerge(config, data, meta, size):
-    #assert len(data) == Dsize, "This should not have happened"
-    #if _no_change_in_unmerge(meta):
-    #    return data
-    return config.backend.unmerge(data, meta, size)
-
-
-def _no_change_in_unmerge(meta):
-    local_low, Dn_last, sl_last, sln = 0, 0, (0, 0), (0, 0)
-    for sln, Dn, slo, _, sub_slc in meta:
-        if slo != sl_last:  # new group
-            if (slo[0] != sl_last[1]) or (local_low != Dn_last):
-                return False
-            sl_last, Dn_last, local_low = slo, Dn[0], 0
-        if local_low != sub_slc[0][0]:
-            return False
-        local_low = sub_slc[0][1]
-    if sl_last[1] != sln[1]:
-        return False
-    return True
-
-
 #  =========== fuse legs ======================
 
 
@@ -231,36 +168,35 @@ def _fuse_legs_hard(a, axes, order):
     order = tuple(a.trans[ax] for ax in order)
     axes = tuple(tuple(a.trans[ax] for ax in group) for group in axes)
     meta_mrg, size, struct_new, legs_old = _meta_fuse_hard(a.config.sym, a.struct, axes)
+    data = a.config.backend.transpose_and_merge(a._data, order, meta_mrg, size)
 
-    data = _transpose_and_merge(a.config, a._data, order, meta_mrg, size)
     mfs = ((1,),) * len(struct_new.legs)
     hfs = []
-    for n, (axs, legs) in enumerate(zip(axes, legs_old)):
+    for leg_new, axs, legs in zip(struct_new.legs, axes, legs_old):
         t_in = tuple(leg.t for leg in legs)
         D_in = tuple(leg.D for leg in legs)
         hfs_axs = tuple(a.hfs[ax] for ax in axs)
-        hfs.append(_combine_hfs_prod(hfs_axs, t_in, D_in, struct_new.legs[n].s))
+        hfs.append(_combine_hfs_prod(hfs_axs, t_in, D_in, leg_new.s))
     out = a._replace(mfs=mfs, hfs=hfs, struct=struct_new, data=data, trans=None)
     return out
 
 
-def _merge_to_matrix(a, axes, struct_sub=None, empty_first_axis_s_conj=False):
-    order = axes[0] + axes[1]
+def _fuse_blocks(config, data, struct, axes, struct_sub=None, connector_first=True):
+    order = sum(axes, start=())
     sub_legs = struct_sub.legs if struct_sub is not None else None
-    meta_mrg, size, struct_mrg, legs_group = _meta_fuse_hard(a.config.sym, a.struct, axes, sub_legs,
-                                                             empty_first_axis_s_conj=empty_first_axis_s_conj)
-    data = _transpose_and_merge(a.config, a._data, order, meta_mrg, size)
+    meta_mrg, size, struct_mrg, legs_group = _meta_fuse_hard(config.sym, struct, axes, sub_legs, connector_first)
+    data = config.backend.transpose_and_merge(data, order, meta_mrg, size)
     hfs = []
-    for n, legs in enumerate(legs_group):
+    for leg_new, legs in zip(struct_mrg.legs, legs_group):
         t_in = tuple(leg.t for leg in legs)
         D_in = tuple(leg.D for leg in legs)
         hfs_axs = tuple(_Fusion(s=(leg.s,)) for leg in legs)
-        hfs.append(_combine_hfs_prod(hfs_axs, t_in, D_in, struct_mrg.legs[n].s))
-    return data, struct_mrg, hfs
+        hfs.append(_combine_hfs_prod(hfs_axs, t_in, D_in, leg_new.s))
+    return data, struct_mrg, tuple(hfs)
 
 
 @lru_cache(maxsize=1024)
-def _meta_fuse_hard(sym, struct, axes, legs_sub=None, empty_first_axis_s_conj=False):
+def _meta_fuse_hard(sym, struct, axes, legs_sub=None, connector_first=True):
     r""" Meta information for backend needed to hard-fuse some legs. """
     assert not struct.isdiag, "Sanity check. Contact developers."
     #
@@ -274,9 +210,9 @@ def _meta_fuse_hard(sym, struct, axes, legs_sub=None, empty_first_axis_s_conj=Fa
         slc = st_full.slc[find_matching_indices(st_full.t, st.t, both=False)]
     #
     slegs = tuple(tuple(struct.legs[n].s for n in axis) for axis in axes)
-    s_eff = [struct.legs[axis[0]].s if axis else -1 for axis in axes]
-    if axes and not axes[0] and empty_first_axis_s_conj: s_eff[0] = -s_eff[0]
-    s_eff = tuple(s_eff)
+    s_eff = tuple(ss[0] if ss else -1 for ss in slegs)
+    if axes and not axes[0] and connector_first:
+        s_eff = (1,) + s_eff[1:]
     #
     teff = np.zeros((st.nblocks, len(s_eff), sym.NSYM), dtype=np.int64)
     for n, axs in enumerate(axes):
@@ -433,8 +369,7 @@ def unfuse_legs(a, axes) -> 'Tensor':
             raise YastnError('Cannot unfuse a leg obtained as a result of yastn.block()')
         ui += a.mfs[mi][0]
     if axes_hf:
-        meta, size, struct, nlegs, hfs = _meta_unfuse_hard(a.config.sym, a.struct, tuple(axes_hf), tuple(a.hfs))
-        data = _unmerge(a.config, a._data, meta, size)
+        data, struct, nlegs, hfs = _unfuse_blocks(a.config, a._data, a.struct, tuple(axes_hf), tuple(a.hfs), return_hfs=True)
 
         for unfused, n in zip(nlegs[::-1], axes_mf[::-1]):
             mfs = mfs[:n] + [(1,)] * unfused + mfs[n+1:]
@@ -454,6 +389,16 @@ def unfuse_legs(a, axes) -> 'Tensor':
         return out
     out = a._replace(mfs=tuple(mfs))
     return out
+
+
+def _unfuse_blocks(config, data, struct, axes, hfsm, return_hfs=False):
+    axes_trim = tuple(ax for ax in axes if hfsm[ax].tree[0] > 1)
+    if axes_trim:
+        meta, size, struct, nlegs, hfs = _meta_unfuse_hard(config.sym, struct, axes_trim, hfsm)
+        data = config.backend.unmerge(data, meta, size)
+    if return_hfs:
+        return data, struct, nlegs, hfs
+    return data, struct
 
 
 @lru_cache(maxsize=1024)
@@ -477,7 +422,6 @@ def _meta_unfuse_hard(sym, struct, axes, hfs):
             hfs_new.append(hf)
 
     st_old = get_blocks(sym, struct)
-
 
     struct_new = _struct(legs=legs_new, n=struct.n, isdiag=struct.isdiag)
     struct_new = get_trimmed_struct(sym, struct_new)
@@ -514,47 +458,19 @@ def _meta_unfuse_hard(sym, struct, axes, hfs):
         ('Do',  np.int64, (ndimo,)),
         ('sub_slc', np.int64, (ndimn, 2))])
     meta2 = meta2.view(meta_dt).reshape(-1)
-
-
     return meta2, st_new.size, struct_new, tuple(nlegs_unfused), tuple(hfs_new)
 
-@lru_cache(maxsize=1024)
-def _meta_unmerge_matrix(sym, struct_in, ls0, ls1, struct_out):
-    #
-    st_a = get_blocks(sym, struct_in)
-    struct_out = get_trimmed_struct(sym, struct_out)
-    st_c = get_blocks(sym, struct_out)
-    #
-    meta = []
-    for to, slo, Do in zip(st_a.t, st_a.slc, st_a.D):
-        ind0 = ls0.t.index(tuple(to[0]))
-        ind1 = ls1.t.index(tuple(to[1]))
-        for d0, d1 in product(ls0.dec[ind0], ls1.dec[ind1]):
-            tn = d0.t + d1.t
-            sub_slc = (d0.Dslc, d1.Dslc)
-            Dsln = (d0.Dprod, d1.Dprod)
-            meta.append((tn, Dsln, slo, Do, sub_slc))
 
-    t_out = list(map(tuple, st_c.t.reshape(st_c.nblocks, len(struct_out.legs) * sym.NSYM)))
-    slc_out = st_c.slc.tolist()
-    meta_unmerge, ic = [], 0
-    for tn, Dsln, slo, Do, sub_slc in sorted(meta, key=itemgetter(0)):
-        while tn != t_out[ic]:
-            ic += 1
-        meta_unmerge.append((*slc_out[ic], *Dsln, *slo, *Do, *sub_slc[0], *sub_slc[1]))
 
-    ndimo = len(struct_in.legs)
-    meta_unmerge = np.array(meta_unmerge, dtype=np.int64).reshape(len(meta_unmerge), 10 + ndimo)
+#  =========== merging blocks ======================
 
-    meta_dt = np.dtype([
-        ('sln', np.int64, (2,)),
-        ('Dn',  np.int64, (2,)),
-        ('slo', np.int64, (2,)),
-        ('Do',  np.int64, (ndimo,)),
-        ('sub_slc', np.int64, (2, 2))])
-    meta_unmerge = meta_unmerge.view(meta_dt).reshape(-1)
 
-    return meta_unmerge, st_c.size, struct_out
+def _transpose_and_merge(config, data, order, meta_mrg, size):
+    # if inds is None and tuple(range(len(order))) == order and struct.size == len(data) \
+    #    and _no_change_in_transpose_and_merge(meta_mrg, meta_new, struct.size):
+    #     return data
+    return config.backend.transpose_and_merge(data, order, meta_mrg, size)
+
 
 
 #  =========== masks ======================

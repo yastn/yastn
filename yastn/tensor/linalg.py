@@ -25,7 +25,7 @@ import numpy as np
 
 from ._auxiliary import _struct, _clear_axes, _unpack_axes, get_blocks, find_index, argsort_t, find_matching_indices, get_trimmed_struct
 from ._legbasic import LegBasic
-from ._merging import _Fusion, _merge_to_matrix, _unmerge_matrix
+from ._merging import _Fusion, _fuse_blocks, _unfuse_blocks
 from ._tests import YastnError, _test_axes_all
 
 if TYPE_CHECKING:
@@ -261,7 +261,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     out_hl = tuple(a.trans[ax] for ax in out_hl)
     out_hr = tuple(a.trans[ax] for ax in out_hr)
     #
-    data, struct_am, hfsm = _merge_to_matrix(a, (out_hl, out_hr))
+    data, struct_am, hfsm = _fuse_blocks(a.config, a._data, a.struct, (out_hl, out_hr))
     #
     if svd_on_cpu:
         device = a.config.backend.get_device(data)
@@ -318,13 +318,13 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         return S
 
     hfsUm = (hfsm[0], _Fusion(s=(sU,)))
-    Udata, struct_U = _unmerge_matrix(a.config, Udata, struct_Um, (0,), hfsUm)
+    Udata, struct_U = _unfuse_blocks(a.config, Udata, struct_Um, (0,), hfsUm)
     Umfs = tuple(a.mfs[ii] for ii in out_ml) + ((1,),)
     Uhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(s=(sU,)),)
     U = a._replace(struct=struct_U, data=Udata, mfs=Umfs, hfs=Uhfs, trans=None)
 
     hfsVm = (_Fusion(s=(-sU,)), hfsm[1])
-    Vdata, struct_V = _unmerge_matrix(a.config, Vdata, struct_Vm, (1,), hfsVm)
+    Vdata, struct_V = _unfuse_blocks(a.config, Vdata, struct_Vm, (1,), hfsVm)
     Vmfs = ((1,),) + tuple(a.mfs[ii] for ii in out_mr)
     Vhfs = (_Fusion(s=(-sU,)),) + tuple(a.hfs[ii] for ii in out_hr)
     V = a._replace(struct=struct_V, data=Vdata, mfs=Vmfs, hfs=Vhfs, trans=None)
@@ -472,7 +472,7 @@ def eig(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     out_hl = tuple(a.trans[ax] for ax in out_hl)
     out_hr = tuple(a.trans[ax] for ax in out_hr)
     #
-    data, struct_am, hfsm = _merge_to_matrix(a, (out_hl, out_hr))
+    data, struct_am, hfsm = _fuse_blocks(a.config, a._data, a.struct, (out_hl, out_hr))
     #
     #if hfsm[0] != hfsm[1].conj():  # TODO
     #    raise YastnError("Legs of effective square blocks do not match.")
@@ -495,13 +495,13 @@ def eig(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         return S
 
     hfsUm = (hfsm[0], _Fusion(s=(sU,)))
-    Udata, struct_U = _unmerge_matrix(a.config, Udata, struct_Um, (0,), hfsUm)
+    Udata, struct_U = _unfuse_blocks(a.config, Udata, struct_Um, (0,), hfsUm)
     Umfs = tuple(a.mfs[ii] for ii in out_ml) + ((1,),)
     Uhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(s=(sU,)),)
     U = a._replace(struct=struct_U, data=Udata, mfs=Umfs, hfs=Uhfs, trans=None)
 
     hfsVm = (_Fusion(s=(-sU,)), hfsm[1])
-    Vdata, struct_V = _unmerge_matrix(a.config, Vdata, struct_Vm, (1,), hfsVm)
+    Vdata, struct_V = _unfuse_blocks(a.config, Vdata, struct_Vm, (1,), hfsVm)
     Vmfs = ((1,),) + tuple(a.mfs[ii] for ii in out_mr)
     Vhfs = (_Fusion(s=(-sU,)),) + tuple(a.hfs[ii] for ii in out_hr)
     V = a._replace(struct=struct_V, data=Vdata, mfs=Vmfs, hfs=Vhfs, trans=None)
@@ -760,19 +760,19 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0) -> tuple['Tensor', 'Tensor']:
     out_hl = tuple(a.trans[ax] for ax in out_hl)
     out_hr = tuple(a.trans[ax] for ax in out_hr)
 
-    data, struct_am, hfsm = _merge_to_matrix(a, (out_hl, out_hr))
+    data, struct_am, hfsm = _fuse_blocks(a.config, a._data, a.struct, (out_hl, out_hr))
 
     meta, sizes, struct_Qm, struct_Rm = _meta_qr(a.config.sym, struct_am, sQ)
     Qdata, Rdata = a.config.backend.qr(data, meta, sizes)
 
     hfsQm = (hfsm[0], _Fusion(s=(sQ,)))
-    Qdata, struct_Q = _unmerge_matrix(a.config, Qdata, struct_Qm, (0,), hfsQm)
+    Qdata, struct_Q = _unfuse_blocks(a.config, Qdata, struct_Qm, (0,), hfsQm)
     Qmfs = tuple(a.mfs[ii] for ii in out_ml) + ((1,),)
     Qhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(s=(sQ,)),)
     Q = a._replace(struct=struct_Q, data=Qdata, mfs=Qmfs, hfs=Qhfs, trans=None)
 
     hfsRm = (_Fusion(s=(-sQ,)), hfsm[1])
-    Rdata, struct_R = _unmerge_matrix(a.config, Rdata, struct_Rm, (1,), hfsRm)
+    Rdata, struct_R = _unfuse_blocks(a.config, Rdata, struct_Rm, (1,), hfsRm)
     Rmfs = ((1,),) + tuple(a.mfs[ii] for ii in out_mr)
     Rhfs = (_Fusion(s=(-sQ,)),) + tuple(a.hfs[ii] for ii in out_hr)
     R = a._replace(struct=struct_R, data=Rdata, mfs=Rmfs, hfs=Rhfs, trans=None)
@@ -877,7 +877,7 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank', **kwargs) -> tu
         raise YastnError('eigh requires tensor charge to be zero.')
     #
     # 2. merge to block, square matrix
-    data, struct_am, hfsm = _merge_to_matrix(a, (out_hl, out_hr))
+    data, struct_am, hfsm = _fuse_blocks(a.config, a._data, a.struct, (out_hl, out_hr))
     #
     # 3.1 Set minimal number of eigenpairs to solve for in each block.
     #     Used by block-wise sparse solvers and ignored by 'fullrank' policy.
@@ -914,7 +914,7 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank', **kwargs) -> tu
         raise YastnError("eigh() policy should be 'fullrank' or 'block_lanczos'.")
 
     hfsUm = (hfsm[0], _Fusion(s=(sU,)))
-    Udata, struct_U = _unmerge_matrix(a.config, Udata, struct_Um, (0,), hfsUm)
+    Udata, struct_U = _unfuse_blocks(a.config, Udata, struct_Um, (0,), hfsUm)
     Umfs = tuple(a.mfs[ii] for ii in out_ml) + ((1,),)
     Uhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(s=(sU,)),)
     U = a._replace(struct=struct_U, data=Udata, mfs=Umfs, hfs=Uhfs, trans=None)

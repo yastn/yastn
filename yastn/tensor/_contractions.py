@@ -25,8 +25,7 @@ import numpy as np
 from .._profile import nsys_profile
 from ._auxiliary import _struct, _clear_axes, _unpack_axes, sign_canonical_order, _compress_slices
 from ._auxiliary import find_matching_indices, argsort_t, get_blocks, get_trimmed_struct
-from ._merging import _combine_hfs_prod, _unmerge, _meta_fuse_hard, _Fusion
-from ._merging import _transpose_and_merge, _mask_tensors_leg_intersection, _meta_mask, _meta_unfuse_hard
+from ._merging import _unfuse_blocks, _fuse_blocks, _mask_tensors_leg_intersection, _meta_mask
 from ._tests import YastnError, _test_can_be_combined, _unpack_trans_test_axes_pair
 
 if TYPE_CHECKING:
@@ -148,52 +147,25 @@ def _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b):
     merging tensors to matrices, executing dot, and unmerging outgoing legs.
     """
     struct_a_sub, struct_b_sub, _ = _match_legs_tensordot(a.config.sym, a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
-
+    #
     axes_a = (nout_a, nin_a) if nout_a else (nin_a,)
-    order_a = nout_a + nin_a
-    meta_mrg_a, size_a, struct_am, legs_group_a = _meta_fuse_hard(a.config.sym, a.struct, axes_a, struct_a_sub.legs, empty_first_axis_s_conj=False)
-    data_a = _transpose_and_merge(a.config, a._data, order_a, meta_mrg_a, size_a)
-
+    data_am, struct_am, hfs_am = _fuse_blocks(a.config, a._data, a.struct, axes_a, struct_a_sub, connector_first=False)
     axes_b = (nin_b, nout_b) if nout_b else (nin_b,)
-    order_b = nin_b + nout_b
-    meta_mrg_b, size_b, struct_bm, legs_group_b = _meta_fuse_hard(b.config.sym, b.struct, axes_b, struct_b_sub.legs, empty_first_axis_s_conj=True)
-    data_b = _transpose_and_merge(b.config, b._data, order_b, meta_mrg_b, size_b)
-
-    hfs = []
-    axes_hf = []
-    if len(nout_a) > 1:
-        axes_hf.append(0)
-        t_in = tuple(leg.t for leg in legs_group_a[0])
-        D_in = tuple(leg.D for leg in legs_group_a[0])
-        hfs_axs = tuple(a.hfs[ax] for ax in nout_a)
-        hfs.append(_combine_hfs_prod(hfs_axs, t_in, D_in, struct_am.legs[0].s))
-    elif len(nout_a) == 1:
-        hfs.append(a.hfs[nout_a[0]])
-
-    if len(nout_b) > 1:
-        axes_hf.append( int(len(nout_a) > 0) )
-        t_in = tuple(leg.t for leg in legs_group_b[1])
-        D_in = tuple(leg.D for leg in legs_group_b[1])
-        hfs_axs = tuple(b.hfs[ax] for ax in nout_b)
-        hfs.append(_combine_hfs_prod(hfs_axs, t_in, D_in, struct_bm.legs[1].s))
-    elif len(nout_b) == 1:
-        hfs.append(b.hfs[nout_b[0]])
-    else:
-        print('aaaa')
-
-    hfs = tuple(hfs)
-
-    meta_dot, size_c, struct_c = _meta_tensordot_fc(a.config.sym, struct_am, struct_bm)
-    data = a.config.backend.dot(data_a, data_b, meta_dot, size_c)
-
-    if axes_hf:
-        meta_unmerge, size_out, struct_out, _, _ = _meta_unfuse_hard(a.config.sym, struct_c, tuple(axes_hf), hfs)
-        data = _unmerge(a.config, data, meta_unmerge, size_out)
-        assert np.array_equal(meta_unmerge, meta_unmerge)
-    else:
-        struct_out = struct_c
-
-    return data, struct_out
+    data_bm, struct_bm, hfs_bm = _fuse_blocks(b.config, b._data, b.struct, axes_b, struct_b_sub, connector_first=True)
+    #
+    hfs_cm, axes_cm = [], []
+    if nout_a:
+        hfs_cm.append(hfs_am[0])
+        axes_cm.append(0)
+    if nout_b:
+        hfs_cm.append(hfs_bm[-1])
+        axes_cm.append(len(axes_cm))
+    #
+    meta_dot, size_cm, struct_cm = _meta_tensordot_fc(a.config.sym, struct_am, struct_bm)
+    data_cm = a.config.backend.dot(data_am, data_bm, meta_dot, size_cm)
+    #
+    data_c, struct_c = _unfuse_blocks(a.config, data_cm, struct_cm, tuple(axes_cm), tuple(hfs_cm))
+    return data_c, struct_c
 
 
 def _tensordot_fc(a, b, nout_a, nin_a, nin_b, nout_b):
@@ -204,18 +176,12 @@ def _tensordot_fc(a, b, nout_a, nin_a, nin_b, nout_b):
     struct_a_sub, struct_b_sub, _ = _match_legs_tensordot(a.config.sym, a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
     #
     axes_a = tuple((x,) for x in nout_a) + (nin_a,)
-    order_a = nout_a + nin_a
-    meta_mrg_a, size_a, struct_a_new, legs_a_old = _meta_fuse_hard(a.config.sym, a.struct, axes_a, struct_a_sub.legs, empty_first_axis_s_conj=False)
-    data_a = _transpose_and_merge(a.config, a._data, order_a, meta_mrg_a, size_a)
-
+    data_am, struct_am, _ = _fuse_blocks(a.config, a._data, a.struct, axes_a, struct_a_sub, connector_first=False)
     axes_b = (nin_b,) + tuple((x,) for x in nout_b)
-    order_b = nin_b + nout_b
-    meta_mrg_b, size_b, struct_b_new, legs_b_old = _meta_fuse_hard(b.config.sym, b.struct, axes_b, struct_b_sub.legs, empty_first_axis_s_conj=True)
-    data_b = _transpose_and_merge(b.config, b._data, order_b, meta_mrg_b, size_b)
-
-    meta_dot, size_c, struct_c = _meta_tensordot_fc(a.config.sym, struct_a_new, struct_b_new)
-
-    data = a.config.backend.dot(data_a, data_b, meta_dot, size_c)
+    data_bm, struct_bm, _ = _fuse_blocks(b.config, b._data, b.struct, axes_b, struct_b_sub, connector_first=True)
+    #
+    meta_dot, size_c, struct_c = _meta_tensordot_fc(a.config.sym, struct_am, struct_bm)
+    data = a.config.backend.dot(data_am, data_bm, meta_dot, size_c)
     return data, struct_c
 
 
