@@ -115,7 +115,8 @@ def fp_ctmrg_c4v(env: EnvCTM_c4v, \
         EnvCTM_c4v: Environment at fixed point.
         Sequence[Tensor]: raw environment data for the backward pass.
     """
-    raw_peps_params= tuple( env.psi.ket[s]._data for s in env.psi.ket.sites() )
+    ket = env.psi.ket
+    raw_peps_params= tuple( ket[s]._data for s in sorted(ket.sites(), key=ket.site2index) )
     env_converged, env_t_meta, env_slices, env_1d = FixedPoint_c4v.apply(env, ctm_opts_fwd, ctm_opts_fp, *raw_peps_params)
     env_t_dict = _assemble_dict_from_1d(env_t_meta, env_1d, env_slices)
     env_converged.env = Lattice.from_dict(env_t_dict)
