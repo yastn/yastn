@@ -15,6 +15,7 @@
 """ Auxiliary functions used by yastn.Tensor. """
 from __future__ import annotations
 
+import hashlib
 from functools import lru_cache
 from itertools import accumulate, chain
 from math import prod
@@ -25,7 +26,7 @@ import numpy as np
 from .._profile import nsys_profile
 from ..sym import sym_none
 
-__all__ = ['_config', '_struct', 'get_blocks', 'sign_canonical_order', 'swap_charges', 'find_matching_indices', 'HashedMask']
+__all__ = ['_config', '_struct', 'get_blocks', 'hash_blocks', 'sign_canonical_order', 'swap_charges', 'find_matching_indices', 'HashedMask']
 
 
 class _config(NamedTuple):
@@ -97,6 +98,27 @@ class _blocks(NamedTuple):
     size: int = 0  # data size
     nblocks: int = 0  # number of blocks
     coords: np.array = None  # list of block coordinates
+
+
+def hash_blocks(bl, out=str) -> str | bytes:
+    """
+    Persistent, cross-process hash of a NamedTuple whose fields are either
+    hashable Python objects or numpy arrays (e.g. :class:`_blocks`).
+
+    The digest is stable across interpreter runs. Array fields are hashed by
+    content together with their shape and dtype; contiguity is canonicalized so
+    that equivalent C-/F-ordered arrays yield the same digest.
+    """
+    h = hashlib.blake2b()
+    for v in bl:
+        if isinstance(v, np.ndarray):
+            v = np.ascontiguousarray(v)
+            h.update(str(v.shape).encode())
+            h.update(v.dtype.str.encode())
+            h.update(v.tobytes())
+        else:
+            h.update(repr(v).encode())
+    return h.hexdigest() if out is str else h.digest()
 
 
 def _flatten(nested_iterator):
@@ -431,3 +453,35 @@ def find_matching_indices(tset1, tset2, both=True):
     else:
         ind1 = ind2 = np.array([], dtype=np.int64)
     return (ind1, ind2) if both else ind1
+
+
+@nsys_profile
+def locate_rows(tset, query):
+    """
+    Index of each row of ``query`` within ``tset``, or ``len(tset)`` when the row is absent.
+
+    ``tset`` must have unique rows sorted in the same (per-column, lexicographic) order
+    produced by ``np.unique(..., axis=0)``; ``query`` may contain arbitrary/repeated rows.
+    Unlike :func:`find_matching_indices`, the result has one entry per row of ``query``
+    (misses flagged with the sentinel ``len(tset)``), so it maps rows to their class id.
+    """
+    rs, *cs = tset.shape
+    rq, *cq = query.shape
+    assert cs == cq, "Sanity check. Contact developers."
+    cp = np.prod(cs, dtype=np.int64)
+    if rs == 0:  # empty tset: every query row is absent
+        return np.full(rq, rs, dtype=np.int64)
+    if cp == 0:  # zero-width rows collapse to a single (empty) class present in tset
+        return np.zeros(rq, dtype=np.int64)
+    tset = tset.reshape(rs, cp)
+    query = query.reshape(rq, cp)
+    struct_dt = np.dtype([('', tset.dtype)] * cp)
+    tset_view = np.ascontiguousarray(tset).view(struct_dt).ravel()
+    query_view = np.ascontiguousarray(query).view(struct_dt).ravel()
+
+    ids = np.searchsorted(tset_view, query_view)
+    hit = ids < rs
+    safe_ind = np.where(hit, ids, 0)
+    hit &= tset_view[safe_ind] == query_view
+    ids[~hit] = rs  # sentinel for rows absent from tset
+    return ids

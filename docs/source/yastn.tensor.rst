@@ -28,6 +28,7 @@ API: yastn and yastn.Tensor
    tensor/operators
    tensor/access
    tensor/algebra
+   tensor/large_contractions
    tensor/output
    tensor/autograd
    tensor/krylov

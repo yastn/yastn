@@ -201,6 +201,13 @@ def test_dot_basic_U1_2(config_kwargs, remove_blocks):
     tensordot_vs_numpy(a, b, axes=((0, 1), (0, 1)), conj=(0, 0), dtype=dtype)
     tensordot_vs_numpy(a, b, axes=((1, 3), (1, 2)), conj=(0, 0), dtype=dtype)
 
+    # transpose
+    ref= a.tensordot(b, axes=((0, 1), (0, 1)))
+    a_t= a.transpose(axes=(1, 0, 2, 3))
+    tensordot_vs_numpy(a_t, b, axes=((1, 0), (0, 1)), conj=(0, 0), dtype=dtype)
+    res= a_t.tensordot(b, axes=((1, 0), (0, 1)))
+    assert yastn.norm(ref - res) < tol[dtype]
+
 
 @pytest.mark.parametrize('remove_blocks', [0, 5])
 def test_dot_basic_U1_3(config_kwargs, remove_blocks):

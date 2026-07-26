@@ -18,6 +18,7 @@ Supports both:
   ``yastn_block`` and, in backward, re-runs the block step in autograd-enabled
   mode to split ``grad_out_data`` back into per-key gradients before shipping.
 """
+import os
 import atexit
 import logging
 import queue as _queue
@@ -40,6 +41,34 @@ _STRUCT_CACHE_MAXSIZE = 512
 # How often a result-drain waits before checking whether an assigned worker has
 # died without posting (turns an infinite res_q.get() hang into an error).
 _WORKER_POLL_SECONDS = 30.0
+
+
+def _apply_allocator_conf(conf):
+    r"""Apply torch CUDACachingAllocator settings once, at worker startup, so the
+    whole worker lifetime runs under them (a block-sparse worker only ever runs
+    contractions). 
+
+    See https://docs.pytorch.org/docs/2.13/notes/cuda.html#memory-management
+
+    Only runtime-mutable knobs take effect — ``garbage_collection_threshold``,
+    ``max_split_size_mb``, ``roundup_*``; ``backend`` / ``expandable_segments``
+    are fixed at allocator init and cannot be changed here. An explicit
+    ``conf`` (threaded from ``contract_with_unroll(alloc_conf=...)``) wins;
+    otherwise ``YASTN_OE_ALLOC_CONF`` from the environment (inherited by the
+    spawned worker) is used. Failures are logged, not fatal."""
+    conf = conf or os.environ.get('YASTN_OE_ALLOC_CONF')
+    if not conf:
+        return
+    try:
+        import torch
+        if not torch.cuda.is_available():
+            return
+        setfn = (getattr(torch._C, '_accelerator_setAllocatorSettings', None)
+                 or torch.cuda.memory._set_allocator_settings)
+        setfn(conf)
+        log.info("worker applied torch CUDACachingAllocator conf: %s", conf)
+    except Exception as e:
+        log.warning("worker could not apply torch CUDACachingAllocator conf %r: %s", conf, e)
 
 
 def _config_descriptor(config):
@@ -284,7 +313,8 @@ def _install_parent_death_signal():
 
 
 def _worker_main(rank, gpu_dev, config_desc, cmd_q, res_q,
-                 log_queue=None, log_level=logging.INFO, logger_levels=None):
+                 log_queue=None, log_level=logging.INFO, logger_levels=None,
+                 alloc_conf=None):
     """Worker process entry point. Loops on cmd_q until 'shutdown'."""
     import torch
     _install_parent_death_signal()
@@ -299,8 +329,10 @@ def _worker_main(rank, gpu_dev, config_desc, cmd_q, res_q,
     if str(gpu_dev).startswith('cuda'):
         gpu_idx = int(str(gpu_dev).split(':')[1])
         torch.cuda.set_device(gpu_idx)
+        _apply_allocator_conf(alloc_conf)
     from ._initialize import make_config
     from .oe_blocksparse import _contract_with_sliced_unroll
+    from ._control_lru import get_cache_info
     # Override default_device to this worker's assigned GPU so yastn tensors
     # reconstructed from IPC are placed on the right device (Tensor.from_dict
     # honors config.default_device).
@@ -314,6 +346,10 @@ def _worker_main(rank, gpu_dev, config_desc, cmd_q, res_q,
             break
         cmd = msg[0]
         if cmd == 'shutdown':
+            if os.getenv('YASTN_PROFILE', '0') == '1':
+                msg= f"oe_mp rank {rank} dev {gpu_dev} cache info:\n"
+                msg+=f"\n".join([ " ".join(map(str,rec)) for rec in get_cache_info().items() ])
+                print(msg)
             break
         try:
             if cmd in ('forward', 'backward'):
@@ -384,13 +420,14 @@ def _worker_main(rank, gpu_dev, config_desc, cmd_q, res_q,
 
 
 class _PersistentWorkerPool:
-    def __init__(self, devices, n_per_device, config_desc):
+    def __init__(self, devices, n_per_device, config_desc, alloc_conf=None):
         from .._mp_logging import (
             start_parent_log_listener, parent_log_level, snapshot_logger_levels)
         ctx = _mp.get_context('spawn')
         self.devices = list(devices)
         self.n_per_device = n_per_device
         self.config_desc = config_desc
+        self.alloc_conf = alloc_conf
         self.cmd_qs = []
         self.res_q = ctx.Queue()
         self.procs = []
@@ -411,7 +448,8 @@ class _PersistentWorkerPool:
                 p = ctx.Process(
                     target=_worker_main,
                     args=(rank, dev, config_desc, cmd_q, self.res_q,
-                          self.log_queue, log_level, logger_levels),
+                          self.log_queue, log_level, logger_levels,
+                          self.alloc_conf),
                     daemon=False,
                 )
                 p.start()
@@ -473,12 +511,14 @@ class _PersistentWorkerPool:
         stop_parent_log_listener(self.log_listener)
 
 
-def _get_or_create_pool(devices, n_per_device, config):
+def _get_or_create_pool(devices, n_per_device, config, alloc_conf=None):
     desc = _config_descriptor(config)
+    # alloc_conf participates in the key: workers bake it in at spawn, so a
+    # different value must get its own pool rather than reuse existing workers.
     key = (tuple(str(d) for d in devices), int(n_per_device),
-           tuple(sorted(desc.items())))
+           tuple(sorted(desc.items())), alloc_conf)
     if key not in _pool_registry:
-        _pool_registry[key] = _PersistentWorkerPool(devices, n_per_device, desc)
+        _pool_registry[key] = _PersistentWorkerPool(devices, n_per_device, desc, alloc_conf)
     return _pool_registry[key]
 
 
@@ -711,6 +751,7 @@ def _contract_with_sliced_unroll_mp(*args, unroll, optimize, checkpoint_loop=Fal
     single-key (no output unroll) and multi-key (output-unrolled) cases."""
     log.info("mp_unroll dispatch: mp_workers_per_device=%s devices=%s "
              "n_unroll_labels=%d", mp_workers_per_device, devices, len(unroll))
+    alloc_conf = kwargs.pop('alloc_conf', None)
     tensors = args[0:2 * (len(args) // 2):2]
     ig_list = list(args[1:2 * (len(args) // 2):2])
     out_ig = args[-1]
@@ -724,7 +765,7 @@ def _contract_with_sliced_unroll_mp(*args, unroll, optimize, checkpoint_loop=Fal
             devices = [devices]
         devices = list(dict.fromkeys(str(d) for d in devices))
 
-    pool = _get_or_create_pool(devices, mp_workers_per_device, parent_config)
+    pool = _get_or_create_pool(devices, mp_workers_per_device, parent_config, alloc_conf)
 
     per_combo_path = bool(kwargs.get("per_combo_path", False))
     # Cache: (per_key_struct, full_struct, common_legs_axes, surviving_combos,
