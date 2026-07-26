@@ -209,7 +209,7 @@ def _remap_nout_(nout, offset):
 @nsys_profile
 def _tensordot_cutensor(a, b, nout_a, nin_a, nin_b, nout_b):
     struct_c, size_c, hash_a, hash_b, hash_c, *metas = \
-        _meta_tensordot_cutensor(a.config.sym, a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
+        _meta_tensordot_cutensor(a.config.sym, a.struct, b.struct, nout_a, nin_a, nin_b, nout_b, a.data.device)
     if size_c == 0:
         data = a.config.backend.zeros((0,), dtype=a.yastn_dtype, device=a.data.device)
         return data, struct_c
@@ -501,10 +501,14 @@ def _match_legs_tensordot(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b)
 _META_CUTENSOR_VERSION = int(os.environ.get("YASTN_META_CUTENSOR_V", "2"))
 
 
-def _meta_tensordot_cutensor(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b):
-    """ Dispatch to the preserved-original (v1) or optimized (v2) cutensor meta builder. """
+def _meta_tensordot_cutensor(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b, device=None):
+    """ Dispatch to the preserved-original (v1), optimized CPU (v2) or GPU (v3) cutensor meta
+    builder. ``device`` (the first operand's data device) is used only by v3. """
     if _META_CUTENSOR_VERSION == 1:
         return _meta_tensordot_cutensor_v1(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b)
+    if _META_CUTENSOR_VERSION == 3:
+        from ._contractions_cutensor import _meta_tensordot_cutensor_v3  # lazy: avoids import cycle
+        return _meta_tensordot_cutensor_v3(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b, device)
     from ._contractions_cutensor import _meta_tensordot_cutensor_v2  # lazy: avoids import cycle
     return _meta_tensordot_cutensor_v2(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b)
 

@@ -28,6 +28,8 @@ def set_cache_maxsize(maxsize=0):
     _contractions._meta_tensordot_nf = lru_cache(maxsize)(_contractions._meta_tensordot_nf.__wrapped__)
     _contractions._meta_tensordot_cutensor_v1 = lru_cache(maxsize)(_contractions._meta_tensordot_cutensor_v1.__wrapped__)
     _contractions_cutensor._meta_tensordot_cutensor_v2 = lru_cache(maxsize)(_contractions_cutensor._meta_tensordot_cutensor_v2.__wrapped__)
+    _contractions_cutensor._meta_tensordot_cutensor_v3 = lru_cache(maxsize)(_contractions_cutensor._meta_tensordot_cutensor_v3.__wrapped__)
+    _contractions_cutensor._get_trimmed_struct_engine_gpu = lru_cache(maxsize)(_contractions_cutensor._get_trimmed_struct_engine_gpu.__wrapped__)
     _contractions._meta_mask = lru_cache(maxsize)(_contractions._meta_mask.__wrapped__)
     _contractions._meta_swap_gate = lru_cache(maxsize)(_contractions._meta_swap_gate.__wrapped__)
     _contractions._meta_swap_gate_charge = lru_cache(maxsize)(_contractions._meta_swap_gate_charge.__wrapped__)
@@ -52,6 +54,8 @@ def clear_cache():
     _contractions._meta_tensordot_nf.cache_clear()
     _contractions._meta_tensordot_cutensor_v1.cache_clear()
     _contractions_cutensor._meta_tensordot_cutensor_v2.cache_clear()
+    _contractions_cutensor._meta_tensordot_cutensor_v3.cache_clear()
+    _contractions_cutensor._get_trimmed_struct_engine_gpu.cache_clear()
     _contractions._meta_mask.cache_clear()
     _contractions._meta_swap_gate.cache_clear()
     _contractions._meta_swap_gate_charge.cache_clear()
@@ -79,6 +83,8 @@ def get_cache_info():
             "tensordot_nf": _contractions._meta_tensordot_nf.cache_info(),
             "tensordot_cutensor_v1": _contractions._meta_tensordot_cutensor_v1.cache_info(),
             "tensordot_cutensor_v2": _contractions_cutensor._meta_tensordot_cutensor_v2.cache_info(),
+            "tensordot_cutensor_v3": _contractions_cutensor._meta_tensordot_cutensor_v3.cache_info(),
+            "get_trimmed_struct_engine_gpu": _contractions_cutensor._get_trimmed_struct_engine_gpu.cache_info(),
             "broadcast": _contractions._meta_broadcast.cache_info(),
             "mask": _contractions._meta_mask.cache_info(),
             "trace": _contractions._meta_trace.cache_info(),
