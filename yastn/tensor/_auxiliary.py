@@ -15,6 +15,7 @@
 """ Auxiliary functions used by yastn.Tensor. """
 from __future__ import annotations
 
+import hashlib
 from functools import lru_cache
 from itertools import accumulate, chain
 from math import prod
@@ -25,7 +26,7 @@ import numpy as np
 from .._profile import nsys_profile
 from ..sym import sym_none
 
-__all__ = ['_config', '_struct', 'get_blocks', 'sign_canonical_order', 'swap_charges', 'find_matching_indices', 'HashedMask']
+__all__ = ['_config', '_struct', 'get_blocks', 'hash_blocks', 'sign_canonical_order', 'swap_charges', 'find_matching_indices', 'HashedMask']
 
 
 class _config(NamedTuple):
@@ -97,6 +98,27 @@ class _blocks(NamedTuple):
     size: int = 0  # data size
     nblocks: int = 0  # number of blocks
     coords: np.array = None  # list of block coordinates
+
+
+def hash_blocks(bl, out=str) -> str | bytes:
+    """
+    Persistent, cross-process hash of a NamedTuple whose fields are either
+    hashable Python objects or numpy arrays (e.g. :class:`_blocks`).
+
+    The digest is stable across interpreter runs. Array fields are hashed by
+    content together with their shape and dtype; contiguity is canonicalized so
+    that equivalent C-/F-ordered arrays yield the same digest.
+    """
+    h = hashlib.blake2b()
+    for v in bl:
+        if isinstance(v, np.ndarray):
+            v = np.ascontiguousarray(v)
+            h.update(str(v.shape).encode())
+            h.update(v.dtype.str.encode())
+            h.update(v.tobytes())
+        else:
+            h.update(repr(v).encode())
+    return h.hexdigest() if out is str else h.digest()
 
 
 def _flatten(nested_iterator):

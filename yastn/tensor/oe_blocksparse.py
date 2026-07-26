@@ -28,7 +28,7 @@ try:
 except:
     _VALID_CONTRACT_KWARGS = {'optimize', 'memory_limit', 'einsum_call', 'use_blas', 'shapes'}
 from . import Tensor, ncon, split_data_and_meta, combine_data_and_meta
-from .._profile import nvtx
+from .._profile import nvtx, nsys_profile
 from ..initialize import block as yastn_block
 from ._legs import Leg
 from ._einsum import ncon_prefilter
@@ -670,6 +670,7 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
     sl_to_idx = {u: {id(sl): i for i, sl in enumerate(unroll[u])}
                  for u in output_unroll_labels}
 
+    @nsys_profile
     def _apply_masks_for_combo(base_tensors, sl_map, target_device):
         masked = list(base_tensors)
         for k in range(len(base_tensors)):

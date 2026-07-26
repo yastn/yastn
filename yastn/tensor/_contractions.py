@@ -18,13 +18,13 @@ from __future__ import annotations
 import abc
 from functools import lru_cache
 from numbers import Number
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 import numpy as np
 
 from .._profile import nsys_profile
 from ._auxiliary import _struct, _clear_axes, _unpack_axes, sign_canonical_order, _compress_slices
-from ._auxiliary import find_matching_indices, argsort_t, get_blocks, get_trimmed_struct
+from ._auxiliary import find_matching_indices, argsort_t, get_blocks, hash_blocks, get_trimmed_struct
 from ._merging import _combine_hfs_prod, _unmerge, _meta_fuse_hard, _Fusion
 from ._merging import _transpose_and_merge, _mask_tensors_leg_intersection, _meta_mask, _meta_unfuse_hard
 from ._tests import YastnError, _test_can_be_combined, _unpack_trans_test_axes_pair
@@ -241,7 +241,8 @@ def _remap_nout_(nout, offset):
 
 @nsys_profile
 def _tensordot_cutensor(a, b, nout_a, nin_a, nin_b, nout_b):
-    struct_c, size_c, *metas = _meta_tensordot_cutensor(a.config.sym, a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
+    struct_c, size_c, hash_a, hash_b, hash_c, *metas = \
+        _meta_tensordot_cutensor(a.config.sym, a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
     if size_c == 0:
         data = a.config.backend.zeros((0,), dtype=a.yastn_dtype, device=a.data.device)
         return data, struct_c
@@ -262,7 +263,9 @@ def _tensordot_cutensor(a, b, nout_a, nin_a, nin_b, nout_b):
     if a.config.sym.NSYM == 0:
         data = a.config.backend.tensordot_dense(a.data, b.data, metas[1], metas[6], nin_a, nin_b, modes_out)
     else:
-        data = a.config.backend.tensordot_bs_v2(a.data, b.data, list(nin_a), list(nin_b), *metas, modes_out)
+        # each 64-byte blake2b digest -> 8 int64; stacked into a (3, 8) array
+        hashes_int64 = np.hstack([np.frombuffer(h, dtype=np.int64) for h in (hash_a, hash_b, hash_c)]).tolist()
+        data = a.config.backend.tensordot_bs_v2(a.data, b.data, list(nin_a), list(nin_b), *metas, modes_out, hashes_int64)
     return data, struct_c
 
 
@@ -425,6 +428,12 @@ def _meta_tensordot_nf(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b):
     reshape_b = reshape_b.view(rb_dt).reshape(-1)
     return meta, reshape_a, reshape_b, bl_c.size, struct_c
 
+class _cutensor_meta(NamedTuple):
+    numSectionsPerMode: np.ndarray
+    sectionExtents: np.ndarray
+    coords: np.ndarray
+    strides: np.ndarray
+
 @nsys_profile
 def _convert_bl_for_cutensor(struct, bl, slc=None, dot_product=False):
     """
@@ -503,7 +512,7 @@ def _meta_tensordot_cutensor(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout
     # dot product, which cannot be simply dispatched to vdot
     #              and either one of operands is (effectively) zero
     if not (len(slc_a) > 0 and len(slc_b) > 0):
-        return struct_c, 0, *([None] * 15)
+        return struct_c, 0, *([None] * 18)
     else:
         dot_product = len(nout_a) + len(nout_b) == 0
         a_numSectionsPerMode, a_sectionExtents, a_coords, a_strides, a_offsets = \
@@ -513,7 +522,11 @@ def _meta_tensordot_cutensor(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout
         c_numSectionsPerMode, c_sectionExtents, c_coords, c_strides, c_offsets = \
             _convert_bl_for_cutensor(struct_c, bl_c, dot_product=dot_product)
 
-    return (struct_c, bl_c.size,
+        h_a, h_b, h_c = hash_blocks(_cutensor_meta(a_numSectionsPerMode, a_sectionExtents, a_coords, a_strides), out=bytes),\
+                    hash_blocks(_cutensor_meta(b_numSectionsPerMode, b_sectionExtents, b_coords, b_strides), out=bytes),\
+                    hash_blocks(_cutensor_meta(c_numSectionsPerMode, c_sectionExtents, c_coords, c_strides), out=bytes)
+
+    return (struct_c, bl_c.size, h_a, h_b, h_c,
             a_numSectionsPerMode, a_sectionExtents, a_coords, a_strides, a_offsets,
             b_numSectionsPerMode, b_sectionExtents, b_coords, b_strides, b_offsets,
             c_numSectionsPerMode, c_sectionExtents, c_coords, c_strides, c_offsets)
