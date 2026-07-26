@@ -88,7 +88,7 @@ def test_eigh_basic(config_kwargs,which):
 
     # test eigh of empty Tensor
     for config in [config_dense, config_U1, config_Z2xU1]:
-        a = yastn.Tensor(config, s=(1, -1, 1, -1))
+        a = yastn.Tensor(config, s=(1, -1, -1, 1))
         S, U = yastn.linalg.eigh(a, axes=((0, 1), (2, 3)), policy='block_lanczos', D_block=1)
         assert S.size == U.size == 0
 
@@ -125,3 +125,6 @@ def test_eigh_Z3(config_kwargs,which):
         assert yastn.norm(a - U @ S @ U.transpose(axes=(1, 0)).conj()) < tol  # == 0.0
         assert U.is_consistent()
         assert S.is_consistent()
+
+if __name__ == '__main__':
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])

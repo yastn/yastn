@@ -474,8 +474,8 @@ def eig(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     #
     data, struct_am, hfsm = _fuse_blocks(a.config, a._data, a.struct, (out_hl, out_hr))
     #
-    #if hfsm[0] != hfsm[1].conj():  # TODO
-    #    raise YastnError("Legs of effective square blocks do not match.")
+    if hfsm[0] != hfsm[1].conj() or struct_am.legs[0] != struct_am.legs[1].conj():
+        raise YastnError("Legs of effective square blocks do not match.")
 
     k_block = None
     meta, sizes, struct_Um, struct_S, struct_Vm = _meta_svd(sym, struct_am, sU, nU, k_block)
@@ -893,8 +893,8 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank', **kwargs) -> tu
         logger.info(f"{fname} D_block {kwargs.get('D_block', 'NA')}")
         logger.info(f"{fname} k_block {k_block}")
 
-    # if hfsm[0] != hfsm[1] or struct_am.legs[0] != struct_am.legs[1]:  # TODO
-    #    raise YastnError("Tensor likely is not hermitian. Legs of effective square blocks do not match.")
+    if hfsm[0] != hfsm[1].conj() or struct_am.legs[0] != struct_am.legs[1].conj():
+        raise YastnError("Tensor likely is not hermitian. Legs of effective square blocks do not match.")
 
     # filter zero blocks only for the partial-spectrum solver; 'fullrank' keeps
     # them so that U remains a complete eigenbasis (with eigenvalue-0 sectors).

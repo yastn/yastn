@@ -162,38 +162,34 @@ def test_hard_split(config_kwargs, remove_blocks):
                   D=((1, 2), (3, 4), (5, 6), (7, 8), (9, 10)),
                   remove_blocks=remove_blocks)
 
-    af = a.fuse_legs(axes=(0, (2, 1), (3, 4)), mode='hard')
-    af = af.fuse_legs(axes=((0, 1), 2), mode='hard')
+    af = a.fuse_legs(axes=(0, (2, 1), (3, 4)), mode='hard').fuse_legs(axes=((0, 1), 2), mode='hard')
     Uf, Sf, Vf = yastn.linalg.svd(af, axes=(0, 1))
 
-    U, S, V = yastn.linalg.svd(a, axes=((0, 1, 2), (3, 4)))
-    U = U.fuse_legs(axes=(0, (2, 1), 3), mode='hard')
-    U = U.fuse_legs(axes=((0, 1), 2), mode='hard')
-    V = V.fuse_legs(axes=(0, (1, 2)), mode='hard')
+    Uu, Su, Vu = yastn.linalg.svd(a, axes=((0, 1, 2), (3, 4)))
+    Uuf = Uu.fuse_legs(axes=(0, (2, 1), 3), mode='hard').fuse_legs(axes=((0, 1), 2), mode='hard')
+    Vuf = Vu.fuse_legs(axes=(0, (1, 2)), mode='hard')
 
-    US = yastn.tensordot(U, S, axes=(1, 0))
-    a2 = yastn.tensordot(US, V, axes=(1, 0))
+    a2 = Uuf @ Su @ Vuf
     assert yastn.norm(af - a2) < tol  # == 0.0
-    USf = yastn.tensordot(Uf, Sf, axes=(1, 0))
-    a3 = yastn.tensordot(USf, Vf, axes=(1, 0))
+    a3 =  Uf @ Sf @ Vf
     assert yastn.norm(af - a3) < tol  # == 0.0
-    a3 = a3.unfuse_legs(axes=0)
-    a3 = a3.unfuse_legs(axes=(1, 2)).moveaxis(source=2, destination=1)
-    assert yastn.norm(a - a3) < tol  # == 0.0
+    a4 = a3.unfuse_legs(axes=0).unfuse_legs(axes=(1, 2)).moveaxis(source=2, destination=1)
+    assert yastn.norm(a - a4) < tol  # == 0.0
 
     Qf, Rf = yastn.linalg.qr(af, axes=(0, 1))
-    Q, R = yastn.linalg.qr(a, axes=((0, 1, 2), (3, 4)))
-    Q = Q.fuse_legs(axes=(0, (2, 1), 3), mode='hard')
-    Q = Q.fuse_legs(axes=((0, 1), 2), mode='hard')
-    assert yastn.norm(Q - Qf) < tol  # == 0.0
-    Rf = Rf.unfuse_legs(axes=1)
-    assert yastn.norm(R - Rf) < tol  # == 0.0
+    Qfu = Qf.unfuse_legs(axes=0).unfuse_legs(axes=1).transpose(axes=(0, 2, 1, 3))
+    Rfu = Rf.unfuse_legs(axes=1)
+    assert yastn.norm(a - Qfu @ Rfu) < tol  # == 0.0
+    Qu, Ru = yastn.linalg.qr(a, axes=((0, 1, 2), (3, 4)))
+    Quf = Qu.fuse_legs(axes=(0, (2, 1), 3), mode='hard').fuse_legs(axes=((0, 1), 2), mode='hard')
+    Ruf = Ru.fuse_legs(axes=(0, (1, 2)), mode='hard')
+    assert yastn.norm(af - Quf @ Ruf) < tol  # == 0.0
 
-    aH = yastn.tensordot(af, af, axes=(1, 1), conj=(0, 1))
+    aH = yastn.tensordot(af, af.conj(), axes=(1, 1))
     Vf, Uf = yastn.linalg.eigh(aH, axes=(0, 1))
     Uf = Uf.unfuse_legs(axes=0)
     UVf = yastn.tensordot(Uf, Vf, axes=(2, 0))
-    aH2 = yastn.tensordot(UVf, Uf, axes=(2, 2), conj=(0, 1))
+    aH2 = yastn.tensordot(UVf, Uf.conj(), axes=(2, 2))
     aH = aH.unfuse_legs(axes=(0, 1))
     assert yastn.norm(aH2 - aH) < tol  # == 0.0
 
@@ -312,10 +308,10 @@ def test_hard_dot_sparse(config_kwargs):
     xx = yastn.rand(config=aa.config, legs=[leg, leg.conj()])
 
     yastn.tensordot(xx, aa, axes=(1, 0))
-    yastn.tensordot(xx, aa, axes=(0, 0), conj = (1, 0))
+    yastn.tensordot(xx.conj(), aa, axes=(0, 0))
 
-    c = yastn.tensordot(a, b, axes=((0, 1), (0, 1)), conj=(1, 0))
-    cc = yastn.tensordot(aa, bb, axes=(0, 0), conj=(1, 0))
+    c = yastn.tensordot(a.conj(), b, axes=((0, 1), (0, 1)))
+    cc = yastn.tensordot(aa.conj(), bb, axes=(0, 0))
     assert yastn.norm(c -  cc) < tol
 
     aat = aa.fuse_legs(axes=((1, 2), 0), mode='hard').conj()
@@ -621,5 +617,4 @@ def test_initialize_eye(config_kwargs):
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0", "--tensordot_policy", "no_fusion"])
-    # pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])
