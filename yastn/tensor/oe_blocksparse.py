@@ -632,6 +632,8 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
     _combo_path_kwargs = dict(combo_path_kwargs or {})
     if isinstance(_combo_path_kwargs.get("names"), list):
         _combo_path_kwargs["names"] = tuple(_combo_path_kwargs["names"])
+    if isinstance(_combo_path_kwargs.get("optimizer_kwargs"), dict):
+        _combo_path_kwargs["optimizer_kwargs"] = tuple(sorted(_combo_path_kwargs["optimizer_kwargs"].items()))
 
     # expr depends only on index labels — build it once; per-combo `shapes`
     # is assembled directly from dim_overrides below.
@@ -960,6 +962,18 @@ def get_contraction_path(*tn_to_contract, unroll=None,
     :param names: string labels for tensors used for more readable logging. The order of
                   names has to follow order of tensors as they appear in ``tn_to_contract``
     :param who: string id for logging identifying this optimal contraction path search
+    :param optimizer: str or ``opt_einsum.paths.PathOptimizer``, optional
+        The optimizer to use for contraction path search. See
+        https://optimized-einsum.readthedocs.io/en/stable/optimal_path.html for details.
+        Options are:
+        - None (or 'default', 'dp', 'dynamic-programming'): use the default ``DynamicProgramming`` optimizer
+        - user-provided ``PathOptimizer`` instance
+    :param optimizer_kwargs: dict, optional
+        Additional keyword arguments to pass to the optimizer. For the default ``DynamicProgramming`` optimizer,
+        you can specify ``minimize``, ``search_outer``, and ``cost_cap``. Where ``minimize`` can be
+        - 'write' (default) total amount of data written to memory
+        - 'flops' total number of floating point operations
+        - 'size' maximum size of any intermediate tensor
 
     Returns
     -------
@@ -980,6 +994,8 @@ def get_contraction_path(*tn_to_contract, unroll=None,
     # documented form names=['A', 'B', ...] is a list — normalise to tuple.
     if isinstance(names, list):
         names = tuple(names)
+    if isinstance(kwargs.get("optimizer_kwargs"), dict):
+        kwargs["optimizer_kwargs"] = tuple(sorted(kwargs["optimizer_kwargs"].items()))
 
     # TODO how to report block-sparse memory footprint & shape
     #      Here, we pass shape of the underlying 1D data array
@@ -1023,10 +1039,10 @@ def get_contraction_path(*tn_to_contract, unroll=None,
 
 @lru_cache(maxsize=128)
 def _get_contraction_path_cached(
-    expr, shapes, names=None, who=None, **kwargs
+    expr, shapes, names=None, who=None, optimizer=None, optimizer_kwargs=(), **kwargs
 ):
     r"""Cachable function finding optimal contraction path for tensor network contraction
-    specified in default einsum format with shapes only.
+    specified in default einsum format with shapes only. All arguments must be hashable (lru_cache).
 
     :param expr: input to einsum in default format
     :param shapes: shapes of tensors to be contracted; last entry is the output shape.
@@ -1034,14 +1050,14 @@ def _get_contraction_path_cached(
     :param names: string labels for tensors used for more readable logging. The order of
                   names has to follow order of tensors as they appear in ``tn_to_contract``
     :param who: string id for logging identifying this optimal contraction path search
+    :param optimizer_kwargs: tuple of ``(key, value)`` items with kwargs for the optimizer
+                             to be created; overlaid on the built-in defaults (caller values win)
     """
-    optimizer = kwargs.pop("optimizer", None)
+    default_optimizer_kwargs = {'dp': {'minimize': 'write', 'search_outer': False, 'cost_cap': True}}
     if optimizer in [None, "default", "dp", "dynamic-programming"]:
-        optimizer = oe.DynamicProgramming(
-            minimize="write",  # 'size' optimize for largest intermediate tensor size, 'flops' for computation complexity
-            search_outer=False,  # search through outer products as well
-            cost_cap=True,  # don't use cost-capping strategy
-        )
+        # Merge caller-supplied kwargs over the defaults; optimizer_kwargs wins on conflicts.
+        dp_kwargs = {**default_optimizer_kwargs.get("dp", {}), **dict(optimizer_kwargs)}
+        optimizer = oe.DynamicProgramming(**dp_kwargs)
 
     in_shapes = shapes[:-1]
     path = kwargs.pop("path", None)
@@ -1264,8 +1280,8 @@ def contract_with_unroll(*args, **kwargs):
 
     optimize = kwargs.pop("optimize", None)
     if optimize is None:
-        path_search_kwargs = {k: kwargs[k] for k in ("optimizer", "memory_limit", "names")
-                                if k in kwargs}
+        path_search_kwargs = {k: kwargs[k] for k in ("optimizer", "optimizer_kwargs",
+                                "memory_limit", "names") if k in kwargs}
         if who is not None:
             path_search_kwargs["who"] = who
         optimize, _ = get_contraction_path(*args, unroll=unroll, **path_search_kwargs)

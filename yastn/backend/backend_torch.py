@@ -48,7 +48,7 @@ __all__= ['DTYPE', 'get_dtype', 'get_yastn_dtype',
     'merge_to_dense', 'merge_super_blocks', 'is_independent',
     'apply_mask', 'embed_mask',
     'embed_transpose', 'transpose_and_merge', 'unmerge',
-    'negate_blocks', 'bitwise_not']
+    'negate_blocks', 'gather_slices', 'bitwise_not']
 
 
 torch.random.seed()
