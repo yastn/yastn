@@ -453,3 +453,35 @@ def find_matching_indices(tset1, tset2, both=True):
     else:
         ind1 = ind2 = np.array([], dtype=np.int64)
     return (ind1, ind2) if both else ind1
+
+
+@nsys_profile
+def locate_rows(tset, query):
+    """
+    Index of each row of ``query`` within ``tset``, or ``len(tset)`` when the row is absent.
+
+    ``tset`` must have unique rows sorted in the same (per-column, lexicographic) order
+    produced by ``np.unique(..., axis=0)``; ``query`` may contain arbitrary/repeated rows.
+    Unlike :func:`find_matching_indices`, the result has one entry per row of ``query``
+    (misses flagged with the sentinel ``len(tset)``), so it maps rows to their class id.
+    """
+    rs, *cs = tset.shape
+    rq, *cq = query.shape
+    assert cs == cq, "Sanity check. Contact developers."
+    cp = np.prod(cs, dtype=np.int64)
+    if rs == 0:  # empty tset: every query row is absent
+        return np.full(rq, rs, dtype=np.int64)
+    if cp == 0:  # zero-width rows collapse to a single (empty) class present in tset
+        return np.zeros(rq, dtype=np.int64)
+    tset = tset.reshape(rs, cp)
+    query = query.reshape(rq, cp)
+    struct_dt = np.dtype([('', tset.dtype)] * cp)
+    tset_view = np.ascontiguousarray(tset).view(struct_dt).ravel()
+    query_view = np.ascontiguousarray(query).view(struct_dt).ravel()
+
+    ids = np.searchsorted(tset_view, query_view)
+    hit = ids < rs
+    safe_ind = np.where(hit, ids, 0)
+    hit &= tset_view[safe_ind] == query_view
+    ids[~hit] = rs  # sentinel for rows absent from tset
+    return ids
