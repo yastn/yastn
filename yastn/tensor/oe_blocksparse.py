@@ -465,6 +465,7 @@ def _metadata_filter_combos(tensors, index_groups, out_ig, unroll, optimize, swa
 
 
 def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False, swap=None, devices=None,
+                                  distributed=False, distributed_group=None,
                                   _combo_indices=None, _return_partials=False,
                                   mp_workers_per_device=0,
                                   per_combo_path=False, combo_path_kwargs=None,
@@ -541,12 +542,27 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
         "_contract_with_sliced_unroll requires explicit output index group"
 
     # ---- Dispatch routing ----
+    # distributed=True                          -> SPMD over torch.distributed
     # devices=None                              -> serial on tensors[0].device
     # devices=[X] where X == tensors[0].device  -> serial (demoted)
     # devices=[X] + mp_workers_per_device==1    -> serial on X (move + restore)
     # devices=[...] + mp_workers_per_device==0  -> error
     # otherwise                                 -> multiprocess pool
     # Worker-mode calls (_combo_indices / _return_partials) skip routing.
+
+    # Distributed (multi-node) SPMD path takes precedence over the single-node
+    # `devices`/MP routing. Only worthwhile with world_size > 1; a degenerate
+    # single-rank group falls through to the serial/MP logic below.
+    if distributed and _combo_indices is None and not _return_partials:
+        from ._oe_blocksparse_dist import (_contract_with_sliced_unroll_dist,
+                                           _dist_world_size)
+        if _dist_world_size(distributed_group) > 1:
+            return _contract_with_sliced_unroll_dist(
+                *args, unroll=unroll, optimize=optimize,
+                checkpoint_loop=checkpoint_loop, swap=swap,
+                group=distributed_group, per_combo_path=per_combo_path,
+                combo_path_kwargs=combo_path_kwargs, oom_retry=oom_retry, **kwargs)
+
     _restore_device = None
     if devices is not None and _combo_indices is None and not _return_partials:
         if not isinstance(devices, (list, tuple)):
@@ -1310,6 +1326,14 @@ def contract_with_unroll(*args, **kwargs):
     :param checkpoint_loop: if True, each unrolled loop iteration is wrapped in
         :func:`torch.utils.checkpoint.checkpoint`, avoiding storage of masking
         and ncon intermediates across all iterations simultaneously.
+    :param distributed: if True, dispatch the unrolled-combo sum across an
+        already-initialised ``torch.distributed`` process group (SPMD, one rank
+        per GPU, scales across nodes via NCCL). Every rank must reach this call
+        with a structurally identical copy of the inputs. Requires a dict
+        ``unroll`` and a torch backend; ``devices``/``mp_workers_per_device``
+        are ignored. See :mod:`._oe_blocksparse_dist`. A single-rank group falls
+        back to serial. Optional ``distributed_group`` selects a non-default
+        process group.
     """
     _cfg = args[0].config
     checkpoint_loop = kwargs.pop("checkpoint_loop", False)
@@ -1318,6 +1342,8 @@ def contract_with_unroll(*args, **kwargs):
     unroll = kwargs.pop("unroll", None)
     swap = kwargs.pop("swap", None)
     devices = kwargs.pop("devices", None)
+    distributed = kwargs.pop("distributed", False)
+    distributed_group = kwargs.pop("distributed_group", None)
     unroll = _validate_and_resolve_unroll(*args, unroll=unroll)
 
     optimize = kwargs.pop("optimize", None)
@@ -1351,7 +1377,8 @@ def contract_with_unroll(*args, **kwargs):
         # block-sparse sliced unrolling: unroll is {label: [SlicedLeg, ...]}
         return _contract_with_sliced_unroll(*args, unroll=unroll, optimize=optimize,
                                             checkpoint_loop=checkpoint_loop, swap=swap,
-                                            devices=devices, **kwargs)
+                                            devices=devices, distributed=distributed,
+                                            distributed_group=distributed_group, **kwargs)
 
     raise NotImplementedError(
         "contract_with_unroll: unsupported unroll type. "

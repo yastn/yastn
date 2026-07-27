@@ -150,7 +150,13 @@ def _zeros_meta(config, legs, n):
     a = Tensor(config=config, s=s, n=n, isdiag=False, mfs=mfs, hfs=hfs)
     legs_tD = tuple(lb._replace(t=lg.t, D=lg.D) for lb, lg in zip(a.struct.legs, ulegs))
 
-    struct_new = get_trimmed_struct(config.sym, a.struct, legs_tD)
+    # ``Tensor(config, s, n)`` starts with EMPTY struct legs (t=(), D=()), so
+    # trimming ``a.struct`` against ``legs_tD`` would intersect the requested
+    # charges with nothing and drop every block. Inject the full charges into
+    # the struct first, then let ``get_trimmed_struct`` (sub_legs=None) keep the
+    # complete charge-conserving block set.
+    struct_full = a.struct._replace(legs=legs_tD)
+    struct_new = get_trimmed_struct(config.sym, struct_full)
     bl = get_blocks(config.sym, struct_new)
     a.struct = struct_new
     d = _meta_only(a.to_dict(level=1))
