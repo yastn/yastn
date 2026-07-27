@@ -252,24 +252,33 @@ def _meta_fuse_hard(sym, struct, axes, legs_sub=None, connector_first=True):
     smeta = sorted((tes, tn, tos, slo, Do) for tes, tn, tos, slo, Do
                    in zip(teff_split, teff, told_split, slc, st.D))
 
-    meta_mrg = []
-    ic = 0
+    meta, tnew = [], []
+    # ic = 0
     for tes, tn, tos, slo, Do in smeta:
-        while tuple(bl_new.t[ic].ravel()) != tn:
-            ic += 1
-        sln, Dn = bl_new.slc[ic], bl_new.D[ic]
+        # while tuple(bl_new.t[ic].ravel()) != tn:
+        #     ic += 1
+        # sln, Dn = bl_new.slc[ic], bl_new.D[ic]
 
         ind = tuple(ls.t.index(te) for ls, te in zip(lls, tes))
         decs = tuple(ls.dec[ii] for ls, ii in zip(lls, ind))
-        for de in product(*decs):
-            if tuple(d.t for d in de) == tos:
-                sub_slc = tuple(x for d in de for x in d.Dslc)
-                Dsln = tuple(d.Dprod for d in de)
-                meta_mrg.append((*sln, *Dn, *slo, *Do, *sub_slc, *Dsln))
+
+        jjj = tuple([d.t for d in dd].index(tt) for tt, dd in zip(tos, decs))
+        de = [dd[jj] for jj, dd in zip(jjj, decs)]
+        sub_slc = tuple(x for d in de for x in d.Dslc)
+        Dsln = tuple(d.Dprod for d in de)
+        tnew.append(tn)
+        meta.append((*slo, *Do, *sub_slc, *Dsln))
 
     ndimo = len(struct.legs)
     ndimn = len(struct_new.legs)
-    meta_mrg = np.array(meta_mrg, dtype=np.int64).reshape(len(meta_mrg), 4 + 4 * ndimn + ndimo)
+    meta = np.array(meta, dtype=np.int64).reshape(len(meta), 2 + 3 * ndimn + ndimo)
+    tnew = np.array(tnew, dtype=np.int64).reshape(len(tnew), ndimn, sym.NSYM)
+    ind = find_matching_indices(bl_new.t, tnew, both=False)  # tnew is not sorted
+
+    ind_u, inv_c = np.unique(ind, return_inverse=True)
+    struct_new = struct_new.mask_from_ind(bl_new.nblocks, ind_u)
+    bl_new = get_blocks(sym, struct_new)
+    meta = np.column_stack([bl_new.slc[inv_c], bl_new.D[inv_c], meta])
 
     meta_dt = np.dtype([
         ('sln', np.int64, (2,)),
@@ -278,8 +287,8 @@ def _meta_fuse_hard(sym, struct, axes, legs_sub=None, connector_first=True):
         ('Do',  np.int64, (ndimo,)),
         ('Dslc', np.int64, (ndimn, 2)),
         ('Drsh', np.int64, (ndimn,))])
-    meta_mrg = meta_mrg.view(meta_dt).reshape(-1)
-    return meta_mrg, bl_new.size, struct_new, legs_old
+    meta = meta.view(meta_dt).reshape(-1)
+    return meta, bl_new.size, struct_new, legs_old
 
 
 def fuse_meta_to_hard(a):
