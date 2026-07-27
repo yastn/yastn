@@ -18,13 +18,13 @@ from __future__ import annotations
 import abc
 from functools import lru_cache
 from numbers import Number
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 import numpy as np
 
-from .._profile import nsys_profile
+from .._profile import nsys_profile, nvtx_range
 from ._auxiliary import _struct, _clear_axes, _unpack_axes, sign_canonical_order, _compress_slices
-from ._auxiliary import find_matching_indices, argsort_t, get_blocks, get_trimmed_struct
+from ._auxiliary import find_matching_indices, locate_rows, argsort_t, get_blocks, hash_blocks, get_trimmed_struct
 from ._merging import _unfuse_blocks, _fuse_blocks, _mask_tensors_leg_intersection, _meta_mask
 from ._tests import YastnError, _test_can_be_combined, _unpack_trans_test_axes_pair
 
@@ -210,7 +210,8 @@ def _remap_nout_(nout, offset):
 
 @nsys_profile
 def _tensordot_cutensor(a, b, nout_a, nin_a, nin_b, nout_b):
-    struct_c, size_c, *metas = _meta_tensordot_cutensor(a.config.sym, a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
+    struct_c, size_c, hash_a, hash_b, hash_c, *metas = \
+        _meta_tensordot_cutensor(a.config.sym, a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
     if size_c == 0:
         data = a.config.backend.zeros((0,), dtype=a.yastn_dtype, device=a.data.device)
         return data, struct_c
@@ -231,7 +232,9 @@ def _tensordot_cutensor(a, b, nout_a, nin_a, nin_b, nout_b):
     if a.config.sym.NSYM == 0:
         data = a.config.backend.tensordot_dense(a.data, b.data, metas[1], metas[6], nin_a, nin_b, modes_out)
     else:
-        data = a.config.backend.tensordot_bs_v2(a.data, b.data, list(nin_a), list(nin_b), *metas, modes_out)
+        # each 64-byte blake2b digest -> 8 int64; stacked into a (3, 8) array
+        hashes_int64 = np.hstack([np.frombuffer(h, dtype=np.int64) for h in (hash_a, hash_b, hash_c)]).tolist()
+        data = a.config.backend.tensordot_bs_v2(a.data, b.data, list(nin_a), list(nin_b), *metas, modes_out, hashes_int64)
     return data, struct_c
 
 
@@ -398,6 +401,13 @@ def _meta_tensordot_nf(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b):
     return meta, reshape_a, reshape_b, bl_c.size, struct_c
 
 
+class _cutensor_meta(NamedTuple):
+    numSectionsPerMode: np.ndarray
+    sectionExtents: np.ndarray
+    coords: np.ndarray
+    strides: np.ndarray
+
+
 @nsys_profile
 def _convert_bl_for_cutensor(struct, bl, slc=None, dot_product=False):
     """
@@ -441,40 +451,55 @@ def _meta_tensordot_cutensor(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout
     bl_a, slc_a = get_blocks_and_subslices(sym, struct_a_sub, struct_a)
     bl_b, slc_b = get_blocks_and_subslices(sym, struct_b_sub, struct_b)
     bl_c = get_blocks(sym, struct_c)
-    #
-    unique_a, inv_a, count_a = np.unique(bl_a.t[:, nin_a, :], return_inverse=True, return_counts=True, axis=0) # if more blocks of a contribute to given contracted sector (in b)
-    arg_a = np.argsort(inv_a)
-    #
-    unique_b, inv_b, count_b = np.unique(bl_b.t[:, nin_b, :], return_inverse=True, return_counts=True, axis=0)
-    arg_b = np.argsort(inv_b)
+
+    with nvtx_range("unique out blocks"):
+        unique_a, inv_a, count_a = np.unique(bl_a.t[:, nin_a, :], return_inverse=True, return_counts=True, axis=0) # if more blocks of a contribute to given contracted sector (in b)
+        arg_a = np.argsort(inv_a)
+        #
+        unique_b, inv_b, count_b = np.unique(bl_b.t[:, nin_b, :], return_inverse=True, return_counts=True, axis=0)
+        arg_b = np.argsort(inv_b)
     #
     # padding count_a and count_b with zero to allign matching charges
-    unique_ab = np.unique(np.vstack([unique_a, unique_b]), axis=0)
-    in_a = find_matching_indices(unique_ab, unique_a, both=False)
-    in_b = find_matching_indices(unique_ab, unique_b, both=False)
-    count_a2 = np.zeros(len(unique_ab), dtype=np.int64)
-    count_a2[in_a] = count_a
-    count_b2 = np.zeros(len(unique_ab), dtype=np.int64)
-    count_b2[in_b] = count_b
+    with nvtx_range("align charge indices"):
+        unique_ab = np.unique(np.vstack([unique_a, unique_b]), axis=0)
+        in_a = find_matching_indices(unique_ab, unique_a, both=False)
+        in_b = find_matching_indices(unique_ab, unique_b, both=False)
+        count_a2 = np.zeros(len(unique_ab), dtype=np.int64)
+        count_a2[in_a] = count_a
+        count_b2 = np.zeros(len(unique_ab), dtype=np.int64)
+        count_b2[in_b] = count_b
+        #
+        ind_a, ind_b = _indices_from_counts(count_a2, count_b2)
+        ind_a = arg_a[ind_a]
+        ind_b = arg_b[ind_b]
     #
-    ind_a, ind_b = _indices_from_counts(count_a2, count_b2)
-    ind_a = arg_a[ind_a]
-    ind_b = arg_b[ind_b]
-    #
-    tao = bl_a.t[:, nout_a, :]
-    tbo = bl_b.t[:, nout_b, :]
-    tn = np.column_stack([tao[ind_a], tbo[ind_b]])
-    unique_c = np.unique(tn, axis=0)
-    #
-    ind_c = find_matching_indices(bl_c.t, unique_c, both=False)
-    struct_c = struct_c.mask_from_ind(bl_c.nblocks, ind_c)
-    struct_c = get_trimmed_struct(sym, struct_c)
-    bl_c = get_blocks(sym, struct_c)
+    with nvtx_range("mask c"):
+        # A candidate output block of bl_c is produced iff its (out_a, out_b) charge tuple
+        # arises from some matched (a, b) pair. Encode each out_a / out_b tuple as a small
+        # integer id (one class per distinct tuple among the blocks) and reduce the per-pair
+        # test to 1-D int64 operations. This avoids building and sorting the ~nn wide rows
+        # that column_stack + np.unique(axis=0) would otherwise require (nn = matched pairs).
+        na, nb, nsym = len(nout_a), len(nout_b), bl_a.t.shape[2]  # explicit widths: bl_*.nblocks may be 0
+        ua, id_a = np.unique(bl_a.t[:, nout_a, :].reshape(bl_a.nblocks, na * nsym), axis=0, return_inverse=True)
+        ub, id_b = np.unique(bl_b.t[:, nout_b, :].reshape(bl_b.nblocks, nb * nsym), axis=0, return_inverse=True)
+        id_a, id_b, n_b = id_a.reshape(-1), id_b.reshape(-1), len(ub)
+        #
+        keys = np.unique(id_a[ind_a] * n_b + id_b[ind_b])  # produced (out_a, out_b) classes
+        #
+        # struct_c legs are ordered (out_a from nout_a, then out_b from nout_b), so bl_c.t
+        # splits into its out_a (:na) and out_b (na:) columns aligned with ua / ub above
+        cid_a = locate_rows(ua, bl_c.t[:, :na, :].reshape(bl_c.nblocks, na * nsym))
+        cid_b = locate_rows(ub, bl_c.t[:, na:, :].reshape(bl_c.nblocks, nb * nsym))
+        c_keys = np.where((cid_a < len(ua)) & (cid_b < n_b), cid_a * n_b + cid_b, -1)
+        #
+        mask = np.isin(c_keys, keys)  # -1 sentinel (tuple absent from a/b blocks) never matches
+        struct_c = struct_c.replace(mask=mask)
+        bl_c = get_blocks(sym, struct_c)
     #
     # dot product, which cannot be simply dispatched to vdot
     #              and either one of operands is (effectively) zero
     if not (len(slc_a) > 0 and len(slc_b) > 0):
-        return struct_c, 0, *([None] * 15)
+        return struct_c, 0, *([None] * 18)
     else:
         dot_product = len(nout_a) + len(nout_b) == 0
         a_numSectionsPerMode, a_sectionExtents, a_coords, a_strides, a_offsets = \
@@ -484,7 +509,11 @@ def _meta_tensordot_cutensor(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout
         c_numSectionsPerMode, c_sectionExtents, c_coords, c_strides, c_offsets = \
             _convert_bl_for_cutensor(struct_c, bl_c, dot_product=dot_product)
 
-    return (struct_c, bl_c.size,
+        h_a, h_b, h_c = hash_blocks(_cutensor_meta(a_numSectionsPerMode, a_sectionExtents, a_coords, a_strides), out=bytes),\
+                    hash_blocks(_cutensor_meta(b_numSectionsPerMode, b_sectionExtents, b_coords, b_strides), out=bytes),\
+                    hash_blocks(_cutensor_meta(c_numSectionsPerMode, c_sectionExtents, c_coords, c_strides), out=bytes)
+
+    return (struct_c, bl_c.size, h_a, h_b, h_c,
             a_numSectionsPerMode, a_sectionExtents, a_coords, a_strides, a_offsets,
             b_numSectionsPerMode, b_sectionExtents, b_coords, b_strides, b_offsets,
             c_numSectionsPerMode, c_sectionExtents, c_coords, c_strides, c_offsets)

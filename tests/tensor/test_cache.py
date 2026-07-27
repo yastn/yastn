@@ -13,8 +13,10 @@
 # limitations under the License.
 # ==============================================================================
 """ changing tests controls and size of lru_cache in some auxiliary functions """
+import numpy as np
 import pytest
 import yastn
+from yastn.tensor._auxiliary import get_blocks, hash_blocks
 
 tol = 1e-12  #pylint: disable=invalid-name
 
@@ -46,6 +48,35 @@ def test_cache(config_kwargs):
     yastn.clear_cache()
     cache_info = yastn.get_cache_info()
     assert cache_info["broadcast"] == (0, 0, 10, 0)
+
+
+def test_hash_blocks(config_kwargs):
+    config = yastn.make_config(sym='U1', **config_kwargs)
+    a = yastn.rand(config=config, s=(1, -1),
+                   t=((0, 1, 2), (0, 1, 2)),
+                   D=((2, 3, 4), (2, 3, 4)))
+    bl = get_blocks(a.config.sym, a.struct)
+
+    h = hash_blocks(bl)
+    # blake2b hexdigest: 128 hex chars, deterministic across processes
+    assert isinstance(h, str) and len(h) == 128
+
+    # stable: recomputing the same blocks gives the same digest
+    assert hash_blocks(get_blocks(a.config.sym, a.struct)) == h
+
+    # contiguity is canonicalized: an F-ordered copy yields the same digest
+    bl_f = bl._replace(t=np.asfortranarray(bl.t))
+    assert hash_blocks(bl_f) == h
+
+    # a change in any field changes the digest
+    assert hash_blocks(bl._replace(size=bl.size + 1)) != h
+    assert hash_blocks(bl._replace(t=bl.t + 1)) != h
+
+    # distinct tensor structure -> distinct digest
+    b = yastn.rand(config=config, s=(1, -1),
+                   t=((0, 1), (0, 1)),
+                   D=((2, 3), (2, 3)))
+    assert hash_blocks(get_blocks(b.config.sym, b.struct)) != h
 
 
 if __name__ == '__main__':

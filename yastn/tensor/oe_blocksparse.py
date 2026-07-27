@@ -13,10 +13,10 @@
 # limitations under the License.
 # ==============================================================================
 import logging
+import os
 from functools import lru_cache
 from contextlib import nullcontext
 from itertools import product, accumulate
-import gc, subprocess
 import time
 from typing import Hashable, Mapping, Sequence, Union
 
@@ -28,7 +28,7 @@ try:
 except:
     _VALID_CONTRACT_KWARGS = {'optimize', 'memory_limit', 'einsum_call', 'use_blas', 'shapes'}
 from . import Tensor, ncon, split_data_and_meta, combine_data_and_meta
-from .._profile import nvtx
+from .._profile import nvtx, nsys_profile
 from ..initialize import block as yastn_block
 from ._legs import Leg
 from ._einsum import ncon_prefilter
@@ -37,6 +37,19 @@ from ._merging import _meta_mask
 from ._tests import YastnError
 
 log = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=8)
+def _cache_release_level(raw):
+    r"""Parse ``YASTN_OE_CUDA_CACHE_RELEASE_LEVEL`` robustly. If invalid, warn and pass 0."""
+    if not raw:
+        return 0
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        log.warning("Ignoring invalid YASTN_OE_CUDA_CACHE_RELEASE_LEVEL=%r "
+                    "(expected integer); using 0.", raw)
+        return 0
 
 
 class SlicedLeg:
@@ -457,6 +470,7 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
                                   per_combo_path=False, combo_path_kwargs=None,
                                   _precomputed_pf_trim=None,
                                   _precomputed_dim_overrides=None,
+                                  oom_retry:bool|None=None,
                                   **kwargs):
     r"""
     Contract a tensor network with block-sparse index unrolling.
@@ -509,6 +523,13 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
         Forwarded to :func:`_get_contraction_path_cached` when
         ``per_combo_path=True``. Keys may include ``optimizer``,
         ``memory_limit``, ``names``, ``who``.
+    oom_retry : bool, optional
+        If True, on torch, retry a single OOM failure.
+        This is a workaround for caching-allocator fragmentation that appears
+        under expandable_segments:False. Enable it only where that regime is
+        effectively forced: a torch/CUDA backend on a system lacking the
+        pidfd_open syscall, where multi-device MP must run under expandable_segments:False.
+        Set globally via env variable ``YASTN_OE_OOM_RETRY"="1"`` or per-call via this argument (priority).
     **kwargs :
         Forwarded to ``ncon``.
 
@@ -587,12 +608,21 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
 
     original_device = tensors[0].device
 
+    # torch+CUDA specific
     # External allocators (e.g. cuTENSOR via torch_cutensor) need PyTorch's
     # caching allocator released so they can reclaim freed memory; pure
     # PyTorch on CUDA already reuses internally and empty_cache() is a
     # net loss.
-    _needs_cache_release = getattr(tensors[0].config.backend, 'BACKEND_ID', '') == 'torch_cutensor'
-
+    #
+    # YASTN_OE_CUDA_CACHE_RELEASE_LEVEL (default 0) tunes how often the blocking
+    # empty_cache runs. A release point tagged `level` fires only when the env
+    # value is >= level, so higher = more frequent (and more blocking):
+    #   0 = never; 
+    #   1 = once per _contract_with_sliced_unroll, before processing combos; 
+    #   2 = + after processing each combo; 3 = + per tensordot.
+    _needs_cache_release = lambda level: \
+        getattr(tensors[0].config.backend, 'BACKEND_ID', '') == 'torch_cutensor' \
+        and _cache_release_level(os.getenv("YASTN_OE_CUDA_CACHE_RELEASE_LEVEL")) >= level
     def _release_cuda_cache(devs):
         r"""Release PyTorch's cached-but-unused GPU memory on *devs*."""
         import torch as _torch
@@ -600,6 +630,11 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
             if 'cuda' in str(d):
                 with _torch.cuda.device(d):
                     _torch.cuda.empty_cache()
+
+    _torch_cuda_backend = ('torch' in getattr(tensors[0].config.backend, 'BACKEND_ID', '')
+                           and 'cuda' in str(original_device))
+    _oom_retry = _torch_cuda_backend and (oom_retry or (os.environ.get("YASTN_OE_OOM_RETRY", "0") == "1"))\
+        and (oom_retry is not False)
 
     # Build mask tensors once per (tensor, label, sliced_leg, device) so the
     # combo loop just looks them up.
@@ -647,11 +682,11 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
         # Short-circuit: nothing to per-combo-tune when no axis is unrolled
         # or when dim_overrides wasn't collected (degenerate / cache-quirk).
         if not per_combo_path or not unroll_labels or not dim_overrides:
-            return optimize
+            return optimize, None
         shapes = tuple(tuple(dim_overrides[lbl] for lbl in seq)
                        for seq in _all_label_seqs)
-        path, _ = _get_contraction_path_cached(_combo_expr, shapes, **_combo_path_kwargs)
-        return path
+        path, path_info = _get_contraction_path_cached(_combo_expr, shapes, **_combo_path_kwargs)
+        return path, path_info
 
     # Single-process: run the prefilter once. Worker mode: the MP parent has
     # already prefiltered and passes the result via _precomputed_*, so the
@@ -670,6 +705,7 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
     sl_to_idx = {u: {id(sl): i for i, sl in enumerate(unroll[u])}
                  for u in output_unroll_labels}
 
+    @nsys_profile
     def _apply_masks_for_combo(base_tensors, sl_map, target_device):
         masked = list(base_tensors)
         for k in range(len(base_tensors)):
@@ -693,9 +729,14 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
         opk = tuple(sl_to_idx[u][id(sl_map[u])] for u in output_unroll_labels)
         assigned.append((n, sl_map, opk))
 
-    def _contract_single_combo(base_tensors, sl_map, pf_trim=None, use_checkpoint=False, dim_overrides=None):
-        combo_path = _path_for_combo(dim_overrides)
+    def _contract_single_combo(base_tensors, sl_map, pf_trim=None, use_checkpoint=False, dim_overrides=None, tag=None):
+        combo_path, path_info = _path_for_combo(dim_overrides)
         cur_igs, cur_conjs, cur_order, cur_swap = _ncon_args_for_path(combo_path)
+        # if os.environ.get("YASTN_PROFILE","0") == "1":
+        #     msg=f"_contract_single_combo {tag}\n"
+        #     msg+=f"combo_path ncon {cur_igs} swaps {len(cur_swap)} {cur_swap}\n"
+        #     msg+=str(path_info)
+        #     print(msg)
 
         def _do_contract(masked_input):
             masked = _apply_masks_for_combo(masked_input, sl_map, masked_input[0].device)
@@ -705,7 +746,7 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
                     if trim_k is not None:
                         masked[k] = _filter_tensor_blocks(masked[k], trim_k)
             return ncon(masked, cur_igs, conjs=cur_conjs, order=cur_order, swap=cur_swap,
-                        release_cuda_cache=_needs_cache_release)
+                        release_cuda_cache=_needs_cache_release(3), oom_retry=_oom_retry)
 
         return _checkpointed_call(base_tensors, _do_contract) if use_checkpoint else _do_contract(base_tensors)
 
@@ -718,10 +759,10 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
         _cfg = iter_tensors[0].config
         for n, sl_map, output_pos_key in assigned:
             with stream_ctx:
+                tag = f"_contract_with_sliced_unroll {n}"
+                if dev is not None:
+                    tag += f" [device={dev}]"
                 if nvtx.enabled:
-                    tag = f"_contract_with_sliced_unroll {n}"
-                    if dev is not None:
-                        tag += f" [device={dev}]"
                     nvtx.range_push(tag)
 
                 pf_trim = pf_trim_per_combo[n]
@@ -729,7 +770,8 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
                                        if dim_overrides_per_combo is not None else None)
                 partial = _contract_single_combo(iter_tensors, sl_map, pf_trim=pf_trim,
                                                  use_checkpoint=checkpoint_loop,
-                                                 dim_overrides=combo_dim_overrides)
+                                                 dim_overrides=combo_dim_overrides,
+                                                 tag=tag)
 
                 prev = local_partials.get(output_pos_key)
                 local_partials[output_pos_key] = partial if prev is None else prev + partial
@@ -738,11 +780,11 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
 
                 # Release per-combo cache to keep cuTENSOR / external allocators
                 # from fragmenting when intermediates churn (no-op for pure torch).
-                if _needs_cache_release:
+                if _needs_cache_release(2):
                     _release_cuda_cache([dev] if dev is not None else [original_device])
         return local_partials
 
-    if _needs_cache_release:
+    if _needs_cache_release(1):
         _release_cuda_cache([original_device])
 
     output_pos_partials = _process_combos(assigned, tensors, None, nullcontext())

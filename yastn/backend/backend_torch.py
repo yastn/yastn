@@ -601,12 +601,72 @@ def gather_slices(Adata, slices):
 #####################################################
 
 
+@torch.no_grad()
+def _mask_flat_index(mask, meta, axis, ndim, device, size_large, small_is_out):
+    r"""
+    Build a single flat index mapping each element of the compressed (``small``)
+    tensor to its source position in the full (``large``) tensor, so that the
+    whole block-sparse mask becomes one gather. The mask selects a subset along
+    ``axis``; ``small`` and ``large`` blocks differ only in that dimension
+    (``Mn = len(mask)`` vs ``Ma``). For a small-block C-order coordinate
+    ``(l, j, r)`` the source large flat index is ``l_start + (l*Ma + m[j])*R + r``.
+
+    Reused by both ``apply_mask`` (small=out, large=in) and ``embed_mask``
+    (small=in, large=out). Scratch runs in ``int32`` when the large tensor fits,
+    with the final index cast to ``int64`` as ``index_select``/``index_add`` need.
+    """
+    nb = len(meta)
+    if nb == 0:
+        return torch.empty(0, dtype=torch.long, device=device)
+    if small_is_out:                 # apply_mask: small=out, large=in
+        D_s, D_l, l_start = meta['Dn'], meta['Da'], meta['sla'][:, 0]
+    else:                            # embed_mask: small=in, large=out
+        D_s, D_l, l_start = meta['Da'], meta['Dn'], meta['sln'][:, 0]
+    # per-block scalars (host numpy); empty-slice prod == 1 covers axis==0 / diag
+    L  = D_s[:, :axis].prod(1)
+    Mn = D_s[:, axis]
+    Ma = D_l[:, axis]
+    R  = D_s[:, axis + 1:].prod(1)
+    Ln = (L * Mn * R).astype(np.int64)                 # small-block sizes
+    soff = np.zeros(nb, np.int64); np.cumsum(Ln[:-1], out=soff[1:])
+    moff = np.zeros(nb, np.int64); np.cumsum(Mn[:-1], out=moff[1:])   # mask concat offsets
+
+    # concatenated mask indices (dedup H2D copies over distinct axis-charges)
+    uniq = {t: torch.as_tensor(v, dtype=torch.long, device=device) for t, v in mask.items()}
+    mask_cat = torch.cat([uniq[tuple(t)] for t in meta['tm']])
+
+    S   = int(Ln.sum())
+    idt = torch.int32 if size_large < 2 ** 31 else torch.int64        # scratch dtype guard
+    Lnt = torch.as_tensor(Ln, device=device)
+    rep = lambda a, dt=idt: torch.repeat_interleave(
+        torch.as_tensor(a, dtype=dt, device=device), Lnt)            # per-position expand
+
+    r = torch.arange(S, dtype=idt, device=device)
+    r -= rep(soff)                                     # r = local offset within small block
+    Rp = rep(R)
+    q  = torch.div(r, Rp, rounding_mode='floor')       # q = local // R
+    r -= q * Rp;                       del Rp          # r = local % R
+    Mnp  = rep(Mn)
+    lidx = torch.div(q, Mnp, rounding_mode='floor')    # lidx = q // Mn
+    q -= lidx * Mnp;                   del Mnp         # q = j
+    moffp = rep(moff, torch.int64); moffp += q; del q  # int64 for gather index
+    mval = mask_cat[moffp];            del moffp
+    lidx *= rep(Ma); lidx += mval;     del mval        # lidx = lidx*Ma + m[j]
+    lidx *= rep(R);  lidx += r;        del r           # (..)*R + r
+    lidx += rep(l_start)                               # + large base
+    return lidx.to(torch.int64)                        # index_select/index_add need int64
+
+
 def apply_mask(Adata, mask, meta, Dsize, axis, a_ndim):
-    return kernel_apply_mask.apply(Adata, mask, meta, Dsize, axis, a_ndim)
+    # single-gather fast path; kernel_apply_mask kept as reference fallback
+    idx = _mask_flat_index(mask, meta, axis, a_ndim, Adata.device, Adata.numel(), small_is_out=True)
+    return Adata.index_select(0, idx)
 
 
 def embed_mask(Adata, mask, meta, Dsize, axis, a_ndim):
-    return kernel_embed_mask.apply(Adata, mask, meta, Dsize, axis, a_ndim)
+    # single-scatter fast path; kernel_embed_mask kept as reference fallback
+    idx = _mask_flat_index(mask, meta, axis, a_ndim, Adata.device, Dsize, small_is_out=False)
+    return Adata.new_zeros(Dsize).index_add(0, idx, Adata)
 
 
 def embed_transpose(data, axes, meta_transpose, size):
