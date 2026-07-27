@@ -148,21 +148,24 @@ def _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b):
     """
     struct_a_sub, struct_b_sub, _ = _match_legs_tensordot(a.config.sym, a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
     #
-    axes_a = (nout_a, nin_a) if nout_a else (nin_a,)
-    data_am, struct_am, hfs_am = _fuse_blocks(a.config, a._data, a.struct, axes_a, struct_a_sub, connector_first=False)
-    axes_b = (nin_b, nout_b) if nout_b else (nin_b,)
-    data_bm, struct_bm, hfs_bm = _fuse_blocks(b.config, b._data, b.struct, axes_b, struct_b_sub, connector_first=True)
+    data_am, struct_am, hfs_am = _fuse_blocks(a.config, a._data, a.struct, (nout_a, nin_a), struct_a_sub, connector_first=False)
+    data_bm, struct_bm, hfs_bm = _fuse_blocks(b.config, b._data, b.struct, (nin_b, nout_b), struct_b_sub, connector_first=True)
     #
-    hfs_cm, axes_cm = [], []
+    meta_dot, size_cm, struct_cm = _meta_tensordot_f2m(a.config.sym, struct_am, struct_bm)
+    if not nout_a and not nout_b:
+        size_cm = 1
+    data_cm = a.config.backend.dot(data_am, data_bm, meta_dot, size_cm)
+    #
+    hfs_cm, axes_cm, legs_cm = [], [], []
     if nout_a:
         hfs_cm.append(hfs_am[0])
         axes_cm.append(0)
+        legs_cm.append(struct_cm.legs[0])
     if nout_b:
         hfs_cm.append(hfs_bm[-1])
         axes_cm.append(len(axes_cm))
-    #
-    meta_dot, size_cm, struct_cm = _meta_tensordot_fc(a.config.sym, struct_am, struct_bm)
-    data_cm = a.config.backend.dot(data_am, data_bm, meta_dot, size_cm)
+        legs_cm.append(struct_cm.legs[1])
+    struct_cm = struct_cm.replace(legs=legs_cm)
     #
     data_c, struct_c = _unfuse_blocks(a.config, data_cm, struct_cm, tuple(axes_cm), tuple(hfs_cm))
     return data_c, struct_c
@@ -250,15 +253,14 @@ def _indices_from_counts(count_a, count_b):
 @lru_cache(maxsize=1024)
 def _meta_tensordot_f2m(sym, struct_a, struct_b):
     #
-    ndima, ndimb = len(struct_a.legs), len(struct_b.legs)
-    nout_a, nin_a = list(range(ndima - 1)), [ndima - 1]
-    nin_b, nout_b = [0], list(range(1, ndimb))
+    nout_a, nin_a = (0,), (1,)
+    nin_b, nout_b = (0,), (1,)
     struct_a_sub, struct_b_sub, struct_c = _match_legs_tensordot(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b)
     bl_a, slc_a = get_blocks_and_subslices(sym, struct_a_sub, struct_a)
     bl_b, slc_b = get_blocks_and_subslices(sym, struct_b_sub, struct_b)
     bl_c = get_blocks(sym, struct_c)
     #
-    inds = argsort_t(bl_a.t[:, 1, :])
+    inds = argsort_t(bl_a.t[:, -1, :])
     #
     meta_dt = np.dtype([
         ('slc', np.int64, (2,)),
@@ -276,8 +278,8 @@ def _meta_tensordot_f2m(sym, struct_a, struct_b):
 def _meta_tensordot_fc(sym, struct_a, struct_b):
     #
     ndima, ndimb = len(struct_a.legs), len(struct_b.legs)
-    nout_a, nin_a = list(range(ndima - 1)), [ndima - 1]
-    nin_b, nout_b = [0], list(range(1, ndimb))
+    nout_a, nin_a = tuple(range(ndima - 1)), (ndima - 1,)
+    nin_b, nout_b = (0,), tuple(range(1, ndimb))
     struct_a_sub, struct_b_sub, struct_c = _match_legs_tensordot(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b)
     bl_a, slc_a = get_blocks_and_subslices(sym, struct_a_sub, struct_a)
     bl_b, slc_b = get_blocks_and_subslices(sym, struct_b_sub, struct_b)
@@ -300,7 +302,14 @@ def _meta_tensordot_fc(sym, struct_a, struct_b):
     #
     tn = np.column_stack([bl_a.t[ind_a, :-1, :], bl_b.t[ind_b, 1:, :]])
     ind_tn = find_matching_indices(bl_c.t, tn, both=False)
-    slc_c = bl_c.slc[ind_tn]
+    #
+    arg_tn = np.argsort(ind_tn)  # tn are not ordered
+    ind_a = ind_a[arg_tn]
+    ind_b = ind_b[arg_tn]
+    #
+    struct_c = struct_c.mask_from_ind(bl_c.nblocks, ind_tn)
+    struct_c = get_trimmed_struct(sym, struct_c)
+    bl_c = get_blocks(sym, struct_c)
     #
     slc_a = slc_a[ind_a]
     Do_a = Do_a[ind_a]
@@ -309,7 +318,7 @@ def _meta_tensordot_fc(sym, struct_a, struct_b):
     Dc_b = Dc_b[ind_b]
     Do_b = Do_b[ind_b]
     #
-    meta = np.column_stack([slc_c, Do_a, Do_b, slc_a, Do_a, Dc_a, slc_b, Dc_b, Do_b])
+    meta = np.column_stack([bl_c.slc, Do_a, Do_b, slc_a, Do_a, Dc_a, slc_b, Dc_b, Do_b])
     meta_dt = np.dtype([
         ('slc', np.int64, (2,)),
         ('Dc',  np.int64, (2,)),
@@ -359,14 +368,11 @@ def _meta_tensordot_nf(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b):
     unique_c, inv_c = np.unique(tn, return_inverse=True, axis=0)
     #
     ind_c = find_matching_indices(bl_c.t, unique_c, both=False)
-    #
-    mask = np.zeros(bl_c.nblocks, dtype=bool)
-    mask[ind_c] = True
-    struct_c = struct_c.replace(mask=mask)
+    struct_c = struct_c.mask_from_ind(bl_c.nblocks, ind_c)
+    # struct_c = get_trimmed_struct(sym, struct_c)
     bl_c = get_blocks(sym, struct_c)
-    slc_c = bl_c.slc[inv_c]
     #
-    meta = np.column_stack([slc_c, Daop[ind_a], Dbop[ind_b], ind_a, ind_b])
+    meta = np.column_stack([bl_c.slc[inv_c], Daop[ind_a], Dbop[ind_b], ind_a, ind_b])
     meta_dt = np.dtype([
         ('sln', np.int64, (2,)),
         ('Dn',  np.int64, (2,)),
@@ -390,6 +396,7 @@ def _meta_tensordot_nf(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b):
     reshape_b = np.column_stack([slc_b, bl_b.D, Dbcp, Dbop])
     reshape_b = reshape_b.view(rb_dt).reshape(-1)
     return meta, reshape_a, reshape_b, bl_c.size, struct_c
+
 
 @nsys_profile
 def _convert_bl_for_cutensor(struct, bl, slc=None, dot_product=False):
@@ -457,13 +464,11 @@ def _meta_tensordot_cutensor(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout
     tao = bl_a.t[:, nout_a, :]
     tbo = bl_b.t[:, nout_b, :]
     tn = np.column_stack([tao[ind_a], tbo[ind_b]])
-    unique_c, inv_c = np.unique(tn, return_inverse=True, axis=0)
+    unique_c = np.unique(tn, axis=0)
     #
     ind_c = find_matching_indices(bl_c.t, unique_c, both=False)
-    #
-    mask = np.zeros(bl_c.nblocks, dtype=bool)
-    mask[ind_c] = True
-    struct_c = struct_c.replace(mask=mask)
+    struct_c = struct_c.mask_from_ind(bl_c.nblocks, ind_c)
+    struct_c = get_trimmed_struct(sym, struct_c)
     bl_c = get_blocks(sym, struct_c)
     #
     # dot product, which cannot be simply dispatched to vdot
@@ -485,6 +490,7 @@ def _meta_tensordot_cutensor(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout
             c_numSectionsPerMode, c_sectionExtents, c_coords, c_strides, c_offsets)
 
 
+@lru_cache(maxsize=1024)
 @nsys_profile
 def _match_legs_tensordot(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b):
     assert not struct_a.isdiag, "Sanity check. Contact developers."
@@ -828,14 +834,19 @@ def _meta_trace(sym, struct, nin_0, nin_1, out):
 
     unique_tn, inv_tn = np.unique(tn, return_inverse=True, axis=0)
     ind = find_matching_indices(bl_c.t, unique_tn, both=False)
-    meta = np.column_stack([bl_c.slc[ind][inv_tn], slo, Do, pD0, pD1, Dnp])  # sln, slo, Do, Drsh;  Drsh = (pD0, pD1, Dnp)
+
+    struct_c = struct_c_1.mask_from_ind(bl_c.nblocks, ind)
+    bl_c = get_blocks(sym, struct_c)
+    sln = bl_c.slc[inv_tn]
+
+    meta = np.column_stack([sln, slo, Do, pD0, pD1, Dnp])  # sln, slo, Do, Drsh;  Drsh = (pD0, pD1, Dnp)
     meta_dt = np.dtype([
         ('sln', np.int64, (2,)),
         ('slo', np.int64, (2,)),
         ('Do',  np.int64, (len(struct.legs),)),
         ('Drsh',  np.int64, (3,))])
     meta = meta.view(meta_dt).reshape(-1)
-    return meta, bl_c.size, struct_c_1
+    return meta, bl_c.size, struct_c
 
 
 @nsys_profile

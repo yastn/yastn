@@ -54,6 +54,22 @@ def test_mask_basic(config_kwargs):
     assert (d2 - d0).norm() < tol
     assert (c2 - c).norm() < tol
 
+    # mask with transpose and meta
+    af = a.fuse_legs(axes=(3, (1, 0), 2), mode='meta')
+    assert af.trans == (3, 1, 0, 2)
+    rfa = b.apply_mask(af, axes=2)
+    assert rfa.trans == (3, 1, 0, 2)
+    ra = b.apply_mask(a, axes=2)
+    raf = ra.fuse_legs(axes=(3, (1, 0), 2), mode='meta')
+    assert (raf - rfa).norm() < tol
+
+    # broadcast with transposed diag -- transpose is ignored
+    bt = b.T
+    assert bt.trans == (1, 0)
+    r1 = b.broadcast(a, axes=2)
+    r2 = bt.broadcast(a, axes=2)
+    assert (r1 - r2).norm() < tol
+
     # Z2xU1 symmetry
     config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
     legs = [yastn.Leg(config_Z2xU1, s=-1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(6, 3, 9, 6)),
@@ -85,21 +101,37 @@ def test_mask_basic(config_kwargs):
     assert ble.apply_mask(bgt, axes=1).trace() < tol  # == 0.
 
 
-    # mask with transpose and meta
-    # bf = b.fuse_legs(axes=(3, (1, 0), 2), mode='meta')
-    # assert bf.trans == (3, 1, 0, 2)
-    # rfb = a.broadcast(bf, axes=2)
-    # assert rfb.trans == (3, 1, 0, 2)
-    # rb = a.broadcast(b, axes=2)
-    # rbf = rb.fuse_legs(axes=(3, (1, 0), 2), mode='meta')
-    # assert (rbf - rfb).norm() < tol
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_mask_vs_broadcast_vs_tensordot(config_kwargs, remove_blocks):
+    """ contract 4-leg tensor with 2-leg mask using apply_mask, broadcast, tensordot, diag, trace. """
+    #
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    legs = [yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(1, 2, 3)),
+            yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(1, 2, 3)),
+            yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(1, 2, 3)),
+            yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(1, 2, 3))]
 
-    # # broadcast with transposed diag -- transpose is ignored
-    # at = a.T
-    # assert at.trans == (1, 0)
-    # r1 = a.broadcast(b, axes=2)
-    # r2 = at.broadcast(b, axes=2)
-    # assert (r1 - r2).norm() < tol
+    a = yastn.rand(config=config_U1, legs=legs, remove_blocks=remove_blocks)
+
+    leg_diag = yastn.Leg(config_U1, s=-1, t=(0, 1, 2), D=(2, 3, 4))
+    b = yastn.randR(config=config_U1, legs=leg_diag, isdiag=True)
+    b = (b > 0)  # create a mask eliminating roughly half of the elements
+    #
+    c1 = yastn.tensordot(a, b, axes=((1, 3), (0, 1)))
+    #
+    c2 = yastn.tensordot(a, b.diag(), axes=((1, 3), (0, 1)))
+    #
+    tmp = b.apply_mask(a, axes=1)
+    tmp = b.apply_mask(tmp, axes=3)
+    c3 = tmp.trace(axes=(1, 3))
+    #
+    tmp = b.broadcast(a, axes=1)
+    tmp = b.broadcast(tmp, axes=3)
+    c4 = tmp.trace(axes=(1, 3))
+    #
+    assert (c1 - c2).norm() < tol
+    assert (c1 - c3).norm() < tol
+    assert (c1 - c4).norm() < tol
 
 
 def test_mask_exceptions(config_kwargs):
@@ -161,4 +193,6 @@ def test_mask_backward(config_kwargs):
 
 if __name__ == '__main__':
     pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])
-    #pytest.main([__file__, "-vs", "--durations=0"])
+    pytest.main([__file__, "-vs", "--durations=0", "--tensordot_policy", "no_fusion"])
+    pytest.main([__file__, "-vs", "--durations=0", "--tensordot_policy", "fuse_to_matrix"])
+    pytest.main([__file__, "-vs", "--durations=0", "--tensordot_policy", "fuse_contracted"])

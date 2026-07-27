@@ -22,7 +22,7 @@ from typing import NamedTuple, TYPE_CHECKING
 
 import numpy as np
 
-from ._auxiliary import _struct, _flatten, _clear_axes, _unpack_legs, get_blocks, get_blocks_charges_all, find_matching_indices, get_trimmed_struct
+from ._auxiliary import _struct, _flatten, _clear_axes, _unpack_legs, get_blocks, find_matching_indices, get_trimmed_struct
 from ._legbasic import LegBasic
 from ._tests import YastnError, _test_axes_all
 
@@ -409,7 +409,7 @@ def _meta_unfuse_hard(sym, struct, axes, hfs):
     lls, hfs_new, nlegs_unfused = [], [], []
     legs_new = []
     for n, hf in enumerate(hfs):
-        if n in axes:
+        if n in axes and hf.tree[0] > 1:
             t_part, D_part, s_part, hfs_part = _unfuse_Fusion(hf)
             legs_new.extend(LegBasic(s=s, t=t, D=D) for s, t, D in zip(s_part, t_part, D_part))
             lls.append(_leg_structure_combine_charges_prod(sym, t_part, D_part, s_part, struct.legs[n].t, struct.legs[n].s))
@@ -421,56 +421,45 @@ def _meta_unfuse_hard(sym, struct, axes, hfs):
             lls.append(_LegSlices(struct.legs[n].t, struct.legs[n].D, dec))
             hfs_new.append(hf)
 
-    st_old = get_blocks(sym, struct)
+    bl_old = get_blocks(sym, struct)
 
     struct_new = _struct(legs=legs_new, n=struct.n, isdiag=struct.isdiag)
     struct_new = get_trimmed_struct(sym, struct_new)
-    st_new = get_blocks(sym, struct_new)
+    bl_new = get_blocks(sym, struct_new)
 
-    meta = []
-    old_t = st_old.t.tolist()
-    old_slc = map(tuple, st_old.slc)
+    tnew, meta = [], []
 
-    for to, slo, Do in zip(old_t, old_slc, st_old.D):
+    old_t = bl_old.t.tolist()
+    old_slc = map(tuple, bl_old.slc)
+
+    for to, slo, Do in zip(old_t, old_slc, bl_old.D):
         ind = tuple(ls.t.index(tuple(to[n])) for n, ls in enumerate(lls))
         decs = tuple(tuple(ls.dec[ii]) for ls, ii in zip(lls, ind))
         for tt in product(*decs):
             tn = sum((x.t for x in tt), ())
             sub_slc = tuple(y for x in tt for y in x.Dslc)
-
             Dsln = tuple(x.Dprod for x in tt)
-            meta.append((tn, *Dsln, *slo, *Do, *sub_slc))
+            tnew.append(tn)
+            meta.append((*Dsln, *slo, *Do, *sub_slc))
 
-    meta2, ic = [], 0
-    for x in sorted(meta, key=itemgetter(0)):
-        while x[0] != tuple(st_new.t[ic].ravel()):
-            ic += 1
-        meta2.append((*st_new.slc[ic], *x[1:]))
-
-    ndimn = len(lls)
     ndimo = len(struct.legs)
-    meta2 = np.array(meta2, dtype=np.int64).reshape(len(meta2), 4 + 3 * ndimn + ndimo)
+    meta = np.array(meta, dtype=np.int64).reshape(len(meta), 2 + 4 * ndimo)
+    tnew = np.array(tnew, dtype=np.int64).reshape(len(tnew), len(legs_new), sym.NSYM)
+    ind_c = find_matching_indices(bl_new.t, tnew, both=False)  # tnew is not sorted
+    arg_c = np.argsort(ind_c)
+
+    struct_new = struct_new.mask_from_ind(bl_new.nblocks, ind_c)
+    bl_new = get_blocks(sym, struct_new)
+    meta = np.column_stack([bl_new.slc, meta[arg_c]])
 
     meta_dt = np.dtype([
         ('sln', np.int64, (2,)),
-        ('Dn',  np.int64, (ndimn,)),
+        ('Dn',  np.int64, (ndimo,)),
         ('slo', np.int64, (2,)),
         ('Do',  np.int64, (ndimo,)),
-        ('sub_slc', np.int64, (ndimn, 2))])
-    meta2 = meta2.view(meta_dt).reshape(-1)
-    return meta2, st_new.size, struct_new, tuple(nlegs_unfused), tuple(hfs_new)
-
-
-
-#  =========== merging blocks ======================
-
-
-def _transpose_and_merge(config, data, order, meta_mrg, size):
-    # if inds is None and tuple(range(len(order))) == order and struct.size == len(data) \
-    #    and _no_change_in_transpose_and_merge(meta_mrg, meta_new, struct.size):
-    #     return data
-    return config.backend.transpose_and_merge(data, order, meta_mrg, size)
-
+        ('sub_slc', np.int64, (ndimo, 2))])
+    meta = meta.view(meta_dt).reshape(-1)
+    return meta, bl_new.size, struct_new, tuple(nlegs_unfused), tuple(hfs_new)
 
 
 #  =========== masks ======================
@@ -479,8 +468,6 @@ def _transpose_and_merge(config, data, order, meta_mrg, size):
 @lru_cache(maxsize=1024)
 def _meta_mask(sym, struct, mask_t, mask_D, axis):
     r""" meta information for backend, and new tensor structure for mask."""
-    st_a = get_blocks(sym, struct)
-
     leg_a = struct.legs[axis]
     mask_tD = {t: D for t, D in sorted(zip(mask_t, mask_D)) if D > 0 and t in leg_a}
     leg_c = LegBasic(s=leg_a.s, t=tuple(mask_tD.keys()), D=tuple(mask_tD.values()))
@@ -496,43 +483,24 @@ def _meta_mask(sym, struct, mask_t, mask_D, axis):
         legs_c = struct.legs[:axis] + (leg_c,) + struct.legs[axis + 1:]
         ndim = len(legs_c)
 
+    struct_c = get_trimmed_struct(sym, struct, legs_c)
+    bl_c = get_blocks(sym, struct_c)
+    D_c = bl_c.D[:, :1] if struct.isdiag else bl_c.D
 
-    struct_c = _struct(legs=legs_c, n=struct.n, isdiag=struct.isdiag)
-    if struct.mask.array is not None:
-        # blocks removed from struct must stay removed in struct_c; the pairing
-        # loop below and downstream slices assume st_c blocks are a subset of st_a
-        taxes_c = tuple(leg.t for leg in legs_c)
-        saxes_c = tuple(leg.s for leg in legs_c)
-        tblocks_c, _ = get_blocks_charges_all(sym, taxes_c, saxes_c, struct.n)
-        keep = np.zeros(len(tblocks_c), dtype=bool)
-        keep[find_matching_indices(tblocks_c, st_a.t, both=False)] = True
-        struct_c = struct_c.replace(mask=keep)
-    struct_c = get_trimmed_struct(sym, struct_c)
-    st_c = get_blocks(sym, struct_c)
+    bl_a = get_blocks(sym, struct)
+    D_a = bl_a.D[:, :1] if struct.isdiag else bl_a.D
+    taxis = bl_a.t[:, axis, :]
 
-    D_a = st_a.D[:, :1] if struct.isdiag else st_a.D
-    D_c = st_c.D[:, :1] if struct.isdiag else st_c.D
-
-    meta, ia, ic = [], 0, 0
-    while ia < st_a.nblocks and ic < st_c.nblocks:
-        if np.array_equal(st_a.t[ia], st_c.t[ic]):
-            meta.append((*st_c.slc[ic], *D_c[ic], *st_a.slc[ia], *D_a[ia], *st_a.t[ia, axis, :]))
-            ia += 1
-            ic += 1
-        else:
-            ia += 1
-    assert ic == st_c.nblocks, "Sanity check."
-
-    ndima = len(struct.legs) - struct.isdiag
-    meta = np.array(meta, dtype=np.int64).reshape(len(meta), 4 + 2 * ndima + sym.NSYM)
+    ind_a = find_matching_indices(bl_a.t, bl_c.t, both=False)
+    meta = np.column_stack([bl_c.slc, D_c, bl_a.slc[ind_a], D_a[ind_a], taxis[ind_a]])
     meta_dt = np.dtype([
         ('sln', np.int64, (2,)),
-        ('Dn', np.int64, (ndima,)),
+        ('Dn', np.int64, (ndim,)),
         ('sla', np.int64, (2,)),
-        ('Da', np.int64, (ndima,)),
+        ('Da', np.int64, (ndim,)),
         ('tm', np.int64, (sym.NSYM,))])
     meta = meta.view(meta_dt).reshape(-1)
-    return meta, st_c.size, struct_c, axis, ndim
+    return meta, bl_c.size, struct_c, axis, ndim
 
 
 def _mask_nonzero(mask):

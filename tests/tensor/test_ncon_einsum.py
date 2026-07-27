@@ -162,7 +162,7 @@ def test_ncon_einsum_basic(config_kwargs, remove_blocks):
 
     f = yastn.ncon([a, b, c, d], [[4, -2, -0], [-3, -1, 5], [4, 3, 1, 1], [3, 2, 5, 2]],
                   conjs=(0, 1, 0, 1))
-    assert f.get_shape() == (2, 4, 6, 8)
+    assert remove_blocks or f.get_shape() == (2, 4, 6, 8)  # remove_blocks can eliminate some leg charges in the outcome
     g = yastn.ncon([a, a, a, b], [[1, 2, 3], [1, 2, 3], [4, -2, -0], [-3, -1, 4]],
                   conjs=(0, 1, 1, 1))
     assert g.get_shape() == (2, 4, 6, 8)
@@ -355,7 +355,7 @@ def test_ncon_einsum_swaps(config_kwargs, remove_blocks):
         assert (y - r).norm() < tol * r.norm()
 
 
-@pytest.mark.parametrize('remove_blocks', [0, 5])
+@pytest.mark.parametrize('remove_blocks', [0, 20])
 def test_einsum_scalar_swap_order(config_kwargs, remove_blocks):
     r"""Scalar fermionic einsum should be invariant to contraction order."""
     config_Z2 = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
@@ -388,9 +388,9 @@ def test_einsum_scalar_swap_order(config_kwargs, remove_blocks):
 
 
 if __name__ == '__main__':
-    # pytest.main([__file__, "--durations=0", "--tensordot_policy", "fuse_to_matrix"])
+    pytest.main([__file__, "--durations=0", "--tensordot_policy", "fuse_to_matrix"])
     # pytest.main([__file__, "--durations=0", "--tensordot_policy", "fuse_contracted"])
-    pytest.main([__file__, "--durations=0", "--tensordot_policy", "no_fusion"])
+    # pytest.main([__file__, "--durations=0", "--tensordot_policy", "no_fusion"])
     #pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--tensordot_policy", "fuse_to_matrix"])
     #pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--tensordot_policy", "fuse_contracted"])
     #pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--tensordot_policy", "no_fusion"])
