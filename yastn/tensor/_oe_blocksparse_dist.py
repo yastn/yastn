@@ -52,6 +52,7 @@ import logging
 
 import torch
 import torch.distributed as dist
+from .._profile import nsys_profile
 
 log = logging.getLogger(__name__)
 
@@ -80,6 +81,7 @@ def _dist_ready(group=None):
     return dist.get_rank(group=group), dist.get_world_size(group=group)
 
 
+@nsys_profile
 def _combo_costs(tensors, ig_list, out_ig, surviving, dim_overrides_per_combo):
     """Per-combo compute-effort estimate (opt_einsum ``opt_cost``, i.e. FLOPs),
     computed from metadata only — no GPU work.
@@ -104,7 +106,7 @@ def _combo_costs(tensors, ig_list, out_ig, surviving, dim_overrides_per_combo):
         do = (dim_overrides_per_combo or {}).get(n) or {}
         try:
             _, shapes = _preprocess_interleaved_to_expr_and_shapes(*template, dim_overrides=do)
-            _, info = _get_contraction_path_cached(expr, shapes)
+            path, info = _get_contraction_path_cached(expr, shapes)
             costs[n] = float(info.opt_cost)
         except Exception as e:  # noqa: BLE001 — cost is advisory; fall back to unit
             log.debug("combo %s cost estimate failed (%s); using unit cost", n, e)

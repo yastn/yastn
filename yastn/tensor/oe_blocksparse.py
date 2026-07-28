@@ -411,7 +411,7 @@ def _meta_combo_check(masked_meta_tensors, tensor_unroll_info, unroll_labels, pf
     pf_trim = ncon_prefilter(ts_meta, pf_inds, nsym)
     return (pf_trim is not None), pf_trim
 
-
+@nsys_profile
 def _metadata_filter_combos(tensors, index_groups, out_ig, unroll, optimize, swap=None,
                              collect_dim_overrides=False):
     r"""Run the metadata-only prefilter over every combo of ``unroll``.
