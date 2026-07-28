@@ -181,10 +181,10 @@ def _fuse_legs_hard(a, axes, order):
     return out
 
 
-def _fuse_blocks(config, data, struct, axes, struct_sub=None, connector_first=True):
+def _fuse_blocks(config, data, struct, axes, struct_sub=None, connector_first=True, lazy_threshold=None):
     order = sum(axes, start=())
     sub_legs = struct_sub.legs if struct_sub is not None else None
-    meta_mrg, size, struct_mrg, legs_group = _meta_fuse_hard(config.sym, struct, axes, sub_legs, connector_first)
+    meta_mrg, size, struct_mrg, legs_group = _meta_fuse_hard(config.sym, struct, axes, sub_legs, connector_first, lazy_threshold)
     data = config.backend.transpose_and_merge(data, order, meta_mrg, size)
     hfs = []
     for leg_new, legs in zip(struct_mrg.legs, legs_group):
@@ -196,7 +196,7 @@ def _fuse_blocks(config, data, struct, axes, struct_sub=None, connector_first=Tr
 
 
 @lru_cache(maxsize=1024)
-def _meta_fuse_hard(sym, struct, axes, legs_sub=None, connector_first=True):
+def _meta_fuse_hard(sym, struct, axes, legs_sub=None, connector_first=True, lazy_threshold=None):
     r""" Meta information for backend needed to hard-fuse some legs. """
     assert not struct.isdiag, "Sanity check. Contact developers."
     #
@@ -274,11 +274,19 @@ def _meta_fuse_hard(sym, struct, axes, legs_sub=None, connector_first=True):
     meta = np.array(meta, dtype=np.int64).reshape(len(meta), 2 + 3 * ndimn + ndimo)
     tnew = np.array(tnew, dtype=np.int64).reshape(len(tnew), ndimn, sym.NSYM)
     ind = find_matching_indices(bl_new.t, tnew, both=False)  # tnew is not sorted
-
     ind_u, inv_c = np.unique(ind, return_inverse=True)
-    struct_new = struct_new.mask_from_ind(bl_new.nblocks, ind_u)
-    bl_new = get_blocks(sym, struct_new)
-    meta = np.column_stack([bl_new.slc[inv_c], bl_new.D[inv_c], meta])
+
+    if lazy_threshold and bl_new.nblocks and len(ind_u) / bl_new.nblocks < lazy_threshold:
+        struct_new = struct_new.mask_from_ind(bl_new.nblocks, ind_u)
+        bl_new = get_blocks(sym, struct_new)
+        slc_new = bl_new.slc
+        D_new = bl_new.D
+    else:
+        slc_new = bl_new.slc[ind_u]
+        D_new = bl_new.D[ind_u]
+
+
+    meta = np.column_stack([slc_new[inv_c], D_new[inv_c], meta])
 
     meta_dt = np.dtype([
         ('sln', np.int64, (2,)),
@@ -400,10 +408,10 @@ def unfuse_legs(a, axes) -> 'Tensor':
     return out
 
 
-def _unfuse_blocks(config, data, struct, axes, hfsm, return_hfs=False):
+def _unfuse_blocks(config, data, struct, axes, hfsm, return_hfs=False, lazy_threshold=None):
     axes_trim = tuple(ax for ax in axes if hfsm[ax].tree[0] > 1)
     if axes_trim:
-        meta, size, struct, nlegs, hfs = _meta_unfuse_hard(config.sym, struct, axes_trim, hfsm)
+        meta, size, struct, nlegs, hfs = _meta_unfuse_hard(config.sym, struct, axes_trim, hfsm, lazy_threshold)
         data = config.backend.unmerge(data, meta, size)
     if return_hfs:
         return data, struct, nlegs, hfs
@@ -411,7 +419,7 @@ def _unfuse_blocks(config, data, struct, axes, hfsm, return_hfs=False):
 
 
 @lru_cache(maxsize=1024)
-def _meta_unfuse_hard(sym, struct, axes, hfs):
+def _meta_unfuse_hard(sym, struct, axes, hfs, lazy_threshold=None):
     r""" Meta information for backend needed to hard-unfuse some legs. """
     assert not struct.isdiag, "Sanity check. Contact developers."
 
@@ -455,11 +463,14 @@ def _meta_unfuse_hard(sym, struct, axes, hfs):
     meta = np.array(meta, dtype=np.int64).reshape(len(meta), 2 + 4 * ndimo)
     tnew = np.array(tnew, dtype=np.int64).reshape(len(tnew), len(legs_new), sym.NSYM)
     ind_c = find_matching_indices(bl_new.t, tnew, both=False)  # tnew is not sorted
-    arg_c = np.argsort(ind_c)
 
-    struct_new = struct_new.mask_from_ind(bl_new.nblocks, ind_c)
-    bl_new = get_blocks(sym, struct_new)
-    meta = np.column_stack([bl_new.slc, meta[arg_c]])
+    if lazy_threshold and bl_new.nblocks and len(ind_c) / bl_new.nblocks < lazy_threshold:
+        struct_new = struct_new.mask_from_ind(bl_new.nblocks, ind_c)
+        bl_new = get_blocks(sym, struct_new)
+        arg_c = np.argsort(ind_c)
+        meta = np.column_stack([bl_new.slc, meta[arg_c]])
+    else:
+        meta = np.column_stack([bl_new.slc[ind_c], meta])
 
     meta_dt = np.dtype([
         ('sln', np.int64, (2,)),

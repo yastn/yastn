@@ -38,6 +38,11 @@ class _config(NamedTuple):
     default_fusion: str = 'hard'
     force_fusion: str = None
     tensordot_policy: str = 'fuse_contracted'
+    lazy_threshold: float = 0.5
+    # 0 does not use lazy;
+    # 1 uses lazy whenever possible;
+    # for (0, 1) uses lazy when the fraction of
+    # eliminated blocks exceeds lazy_threshold
 
 
 class HashedMask:

@@ -58,7 +58,7 @@ def __matmul__(a, b) -> 'Tensor':
     return tensordot(a, b, axes=(a.ndim - 1, 0))
 
 
-def tensordot(a, b, axes, conj=(0, 0)) -> 'Tensor':
+def tensordot(a, b, axes, conj=(0, 0), lazy_threshold=None) -> 'Tensor':
     r"""
     Compute tensor dot product of two tensors along specified axes.
 
@@ -117,14 +117,17 @@ def tensordot(a, b, axes, conj=(0, 0)) -> 'Tensor':
     if a.config.tensordot_policy not in ['fuse_to_matrix', 'fuse_contracted', 'no_fusion']:
         raise YastnError("Tensordot policy not recognized. It should be 'fuse_to_matrix', 'fuse_contracted', or 'no_fusion'.")
 
+    if lazy_threshold is None:
+        lazy_threshold = a.config.lazy_threshold
+
     if a.config.backend.BACKEND_ID == 'torch_cutensor' and all(0 < x < 33 for x in (a.ndim_n, b.ndim_n)) and len(hfs_c)<33:
-        data, struct_out = _tensordot_cutensor(a, b, nout_a, nin_a, nin_b, nout_b)
+        data, struct_out = _tensordot_cutensor(a, b, nout_a, nin_a, nin_b, nout_b, lazy_threshold)
     elif a.config.tensordot_policy == 'fuse_to_matrix':
-        data, struct_out = _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b)
+        data, struct_out = _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b, lazy_threshold)
     elif a.config.tensordot_policy == 'fuse_contracted':
-        data, struct_out = _tensordot_fc(a, b, nout_a, nin_a, nin_b, nout_b)
+        data, struct_out = _tensordot_fc(a, b, nout_a, nin_a, nin_b, nout_b, lazy_threshold)
     elif a.config.tensordot_policy == 'no_fusion':
-        data, struct_out = _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b)
+        data, struct_out = _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b, lazy_threshold)
 
     out = a._replace(data=data, struct=struct_out, mfs=mfs_c, hfs=hfs_c, trans=None)
     return out
@@ -141,15 +144,17 @@ def _tensordot_diag(a, b, in_b, destination):
     raise YastnError('Outer product with diagonal tensor not supported. Use yastn.diag() first.')  # if len(in_a) == 0
 
 
-def _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b):
+def _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b, lazy_threshold):
     r"""
     Perform tensordot by fuse_to_matrix:
     merging tensors to matrices, executing dot, and unmerging outgoing legs.
     """
     struct_a_sub, struct_b_sub, _ = _match_legs_tensordot(a.config.sym, a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
     #
-    data_am, struct_am, hfs_am = _fuse_blocks(a.config, a._data, a.struct, (nout_a, nin_a), struct_a_sub, connector_first=False)
-    data_bm, struct_bm, hfs_bm = _fuse_blocks(b.config, b._data, b.struct, (nin_b, nout_b), struct_b_sub, connector_first=True)
+    data_am, struct_am, hfs_am = _fuse_blocks(a.config, a._data, a.struct, (nout_a, nin_a), struct_a_sub,
+                                              connector_first=False, lazy_threshold=lazy_threshold)
+    data_bm, struct_bm, hfs_bm = _fuse_blocks(b.config, b._data, b.struct, (nin_b, nout_b), struct_b_sub,
+                                              connector_first=True, lazy_threshold=lazy_threshold)
     #
     meta_dot, size_cm, struct_cm = _meta_tensordot_f2m(a.config.sym, struct_am, struct_bm)
     if not nout_a and not nout_b:
@@ -167,11 +172,12 @@ def _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b):
         legs_cm.append(struct_cm.legs[1])
     struct_cm = struct_cm.replace(legs=legs_cm)
     #
-    data_c, struct_c = _unfuse_blocks(a.config, data_cm, struct_cm, tuple(axes_cm), tuple(hfs_cm))
+    data_c, struct_c = _unfuse_blocks(a.config, data_cm, struct_cm, tuple(axes_cm), tuple(hfs_cm),
+                                      lazy_threshold=lazy_threshold)
     return data_c, struct_c
 
 
-def _tensordot_fc(a, b, nout_a, nin_a, nin_b, nout_b):
+def _tensordot_fc(a, b, nout_a, nin_a, nin_b, nout_b, lazy_threshold):
     r"""
     Perform tensordot by fuse_contracted: merging contracted legs, and executing dot.
     Outgoing legs are not merged so unmerge is not needed.
@@ -179,21 +185,25 @@ def _tensordot_fc(a, b, nout_a, nin_a, nin_b, nout_b):
     struct_a_sub, struct_b_sub, _ = _match_legs_tensordot(a.config.sym, a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
     #
     axes_a = tuple((x,) for x in nout_a) + (nin_a,)
-    data_am, struct_am, _ = _fuse_blocks(a.config, a._data, a.struct, axes_a, struct_a_sub, connector_first=False)
+    data_am, struct_am, _ = _fuse_blocks(a.config, a._data, a.struct, axes_a, struct_a_sub, connector_first=False,
+                                         lazy_threshold=lazy_threshold)
     axes_b = (nin_b,) + tuple((x,) for x in nout_b)
-    data_bm, struct_bm, _ = _fuse_blocks(b.config, b._data, b.struct, axes_b, struct_b_sub, connector_first=True)
+    data_bm, struct_bm, _ = _fuse_blocks(b.config, b._data, b.struct, axes_b, struct_b_sub, connector_first=True,
+                                         lazy_threshold=lazy_threshold)
     #
-    meta_dot, size_c, struct_c = _meta_tensordot_fc(a.config.sym, struct_am, struct_bm)
+    meta_dot, size_c, struct_c = _meta_tensordot_fc(a.config.sym, struct_am, struct_bm,
+                                                    lazy_threshold=lazy_threshold)
     data = a.config.backend.dot(data_am, data_bm, meta_dot, size_c)
     return data, struct_c
 
 
 @nsys_profile
-def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b):
+def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b, lazy_threshold):
     r"""
     Perform tensordot directly: permute blocks and execute dot accumulating results into result blocks.
     """
-    meta_dot, reshape_a, reshape_b, size_c, struct_c = _meta_tensordot_nf(a.config.sym, a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
+    meta_dot, reshape_a, reshape_b, size_c, struct_c = _meta_tensordot_nf(a.config.sym, a.struct, b.struct, nout_a, nin_a, nin_b, nout_b,
+                                                                          lazy_threshold=lazy_threshold)
     order_a = nout_a + nin_a
     order_b = nin_b + nout_b
     data = a.config.backend.transpose_dot_sum(a.data, b.data, meta_dot,
@@ -209,9 +219,11 @@ def _remap_nout_(nout, offset):
 
 
 @nsys_profile
-def _tensordot_cutensor(a, b, nout_a, nin_a, nin_b, nout_b):
+def _tensordot_cutensor(a, b, nout_a, nin_a, nin_b, nout_b, lazy_threshold):
     struct_c, size_c, hash_a, hash_b, hash_c, *metas = \
-        _meta_tensordot_cutensor(a.config.sym, a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
+        _meta_tensordot_cutensor(a.config.sym, a.struct, b.struct, nout_a, nin_a, nin_b, nout_b,
+                                 lazy_threshold)
+
     if size_c == 0:
         data = a.config.backend.zeros((0,), dtype=a.yastn_dtype, device=a.data.device)
         return data, struct_c
@@ -278,7 +290,7 @@ def _meta_tensordot_f2m(sym, struct_a, struct_b):
 
 
 @lru_cache(maxsize=1024)
-def _meta_tensordot_fc(sym, struct_a, struct_b):
+def _meta_tensordot_fc(sym, struct_a, struct_b, lazy_threshold):
     #
     ndima, ndimb = len(struct_a.legs), len(struct_b.legs)
     nout_a, nin_a = tuple(range(ndima - 1)), (ndima - 1,)
@@ -306,13 +318,16 @@ def _meta_tensordot_fc(sym, struct_a, struct_b):
     tn = np.column_stack([bl_a.t[ind_a, :-1, :], bl_b.t[ind_b, 1:, :]])
     ind_tn = find_matching_indices(bl_c.t, tn, both=False)
     #
-    arg_tn = np.argsort(ind_tn)  # tn are not ordered
-    ind_a = ind_a[arg_tn]
-    ind_b = ind_b[arg_tn]
-    #
-    struct_c = struct_c.mask_from_ind(bl_c.nblocks, ind_tn)
-    struct_c = get_trimmed_struct(sym, struct_c)
-    bl_c = get_blocks(sym, struct_c)
+    if lazy_threshold and bl_c.nblocks and len(ind_tn) / bl_c.nblocks < lazy_threshold:
+        arg_tn = np.argsort(ind_tn)  # tn are not ordered
+        ind_a = ind_a[arg_tn]
+        ind_b = ind_b[arg_tn]
+        struct_c = struct_c.mask_from_ind(bl_c.nblocks, ind_tn)
+        struct_c = get_trimmed_struct(sym, struct_c)
+        bl_c = get_blocks(sym, struct_c)
+        slc_c = bl_c.slc
+    else:
+        slc_c = bl_c.slc[ind_tn]
     #
     slc_a = slc_a[ind_a]
     Do_a = Do_a[ind_a]
@@ -321,7 +336,7 @@ def _meta_tensordot_fc(sym, struct_a, struct_b):
     Dc_b = Dc_b[ind_b]
     Do_b = Do_b[ind_b]
     #
-    meta = np.column_stack([bl_c.slc, Do_a, Do_b, slc_a, Do_a, Dc_a, slc_b, Dc_b, Do_b])
+    meta = np.column_stack([slc_c, Do_a, Do_b, slc_a, Do_a, Dc_a, slc_b, Dc_b, Do_b])
     meta_dt = np.dtype([
         ('slc', np.int64, (2,)),
         ('Dc',  np.int64, (2,)),
@@ -335,7 +350,7 @@ def _meta_tensordot_fc(sym, struct_a, struct_b):
 
 @lru_cache(maxsize=1024)
 @nsys_profile
-def _meta_tensordot_nf(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b):
+def _meta_tensordot_nf(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b, lazy_threshold):
     #
     struct_a_sub, struct_b_sub, struct_c = _match_legs_tensordot(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b)
     bl_a, slc_a = get_blocks_and_subslices(sym, struct_a_sub, struct_a)
@@ -371,11 +386,15 @@ def _meta_tensordot_nf(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b):
     unique_c, inv_c = np.unique(tn, return_inverse=True, axis=0)
     #
     ind_c = find_matching_indices(bl_c.t, unique_c, both=False)
-    struct_c = struct_c.mask_from_ind(bl_c.nblocks, ind_c)
-    # struct_c = get_trimmed_struct(sym, struct_c)
-    bl_c = get_blocks(sym, struct_c)
+    if lazy_threshold and bl_c.nblocks and len(ind_c) / bl_c.nblocks < lazy_threshold:
+        struct_c = struct_c.mask_from_ind(bl_c.nblocks, ind_c)
+        struct_c = get_trimmed_struct(sym, struct_c)
+        bl_c = get_blocks(sym, struct_c)
+        slc_c = bl_c.slc
+    else:
+        slc_c = bl_c.slc[ind_c]
     #
-    meta = np.column_stack([bl_c.slc[inv_c], Daop[ind_a], Dbop[ind_b], ind_a, ind_b])
+    meta = np.column_stack([slc_c[inv_c], Daop[ind_a], Dbop[ind_b], ind_a, ind_b])
     meta_dt = np.dtype([
         ('sln', np.int64, (2,)),
         ('Dn',  np.int64, (2,)),
@@ -445,56 +464,58 @@ def _convert_bl_for_cutensor(struct, bl, slc=None, dot_product=False):
 
 @lru_cache(maxsize=1024)
 @nsys_profile
-def _meta_tensordot_cutensor(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b):
+def _meta_tensordot_cutensor(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b, lazy_threshold):
     #
     struct_a_sub, struct_b_sub, struct_c = _match_legs_tensordot(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b)
     bl_a, slc_a = get_blocks_and_subslices(sym, struct_a_sub, struct_a)
     bl_b, slc_b = get_blocks_and_subslices(sym, struct_b_sub, struct_b)
     bl_c = get_blocks(sym, struct_c)
 
-    with nvtx_range("unique out blocks"):
-        unique_a, inv_a, count_a = np.unique(bl_a.t[:, nin_a, :], return_inverse=True, return_counts=True, axis=0) # if more blocks of a contribute to given contracted sector (in b)
-        arg_a = np.argsort(inv_a)
+    if lazy_threshold and bl_c.nblocks:
+        with nvtx_range("unique out blocks"):
+            unique_a, inv_a, count_a = np.unique(bl_a.t[:, nin_a, :], return_inverse=True, return_counts=True, axis=0) # if more blocks of a contribute to given contracted sector (in b)
+            arg_a = np.argsort(inv_a)
+            #
+            unique_b, inv_b, count_b = np.unique(bl_b.t[:, nin_b, :], return_inverse=True, return_counts=True, axis=0)
+            arg_b = np.argsort(inv_b)
         #
-        unique_b, inv_b, count_b = np.unique(bl_b.t[:, nin_b, :], return_inverse=True, return_counts=True, axis=0)
-        arg_b = np.argsort(inv_b)
-    #
-    # padding count_a and count_b with zero to allign matching charges
-    with nvtx_range("align charge indices"):
-        unique_ab = np.unique(np.vstack([unique_a, unique_b]), axis=0)
-        in_a = find_matching_indices(unique_ab, unique_a, both=False)
-        in_b = find_matching_indices(unique_ab, unique_b, both=False)
-        count_a2 = np.zeros(len(unique_ab), dtype=np.int64)
-        count_a2[in_a] = count_a
-        count_b2 = np.zeros(len(unique_ab), dtype=np.int64)
-        count_b2[in_b] = count_b
+        # padding count_a and count_b with zero to allign matching charges
+        with nvtx_range("align charge indices"):
+            unique_ab = np.unique(np.vstack([unique_a, unique_b]), axis=0)
+            in_a = find_matching_indices(unique_ab, unique_a, both=False)
+            in_b = find_matching_indices(unique_ab, unique_b, both=False)
+            count_a2 = np.zeros(len(unique_ab), dtype=np.int64)
+            count_a2[in_a] = count_a
+            count_b2 = np.zeros(len(unique_ab), dtype=np.int64)
+            count_b2[in_b] = count_b
+            #
+            ind_a, ind_b = _indices_from_counts(count_a2, count_b2)
+            ind_a = arg_a[ind_a]
+            ind_b = arg_b[ind_b]
         #
-        ind_a, ind_b = _indices_from_counts(count_a2, count_b2)
-        ind_a = arg_a[ind_a]
-        ind_b = arg_b[ind_b]
-    #
-    with nvtx_range("mask c"):
-        # A candidate output block of bl_c is produced iff its (out_a, out_b) charge tuple
-        # arises from some matched (a, b) pair. Encode each out_a / out_b tuple as a small
-        # integer id (one class per distinct tuple among the blocks) and reduce the per-pair
-        # test to 1-D int64 operations. This avoids building and sorting the ~nn wide rows
-        # that column_stack + np.unique(axis=0) would otherwise require (nn = matched pairs).
-        na, nb, nsym = len(nout_a), len(nout_b), bl_a.t.shape[2]  # explicit widths: bl_*.nblocks may be 0
-        ua, id_a = np.unique(bl_a.t[:, nout_a, :].reshape(bl_a.nblocks, na * nsym), axis=0, return_inverse=True)
-        ub, id_b = np.unique(bl_b.t[:, nout_b, :].reshape(bl_b.nblocks, nb * nsym), axis=0, return_inverse=True)
-        id_a, id_b, n_b = id_a.reshape(-1), id_b.reshape(-1), len(ub)
-        #
-        keys = np.unique(id_a[ind_a] * n_b + id_b[ind_b])  # produced (out_a, out_b) classes
-        #
-        # struct_c legs are ordered (out_a from nout_a, then out_b from nout_b), so bl_c.t
-        # splits into its out_a (:na) and out_b (na:) columns aligned with ua / ub above
-        cid_a = locate_rows(ua, bl_c.t[:, :na, :].reshape(bl_c.nblocks, na * nsym))
-        cid_b = locate_rows(ub, bl_c.t[:, na:, :].reshape(bl_c.nblocks, nb * nsym))
-        c_keys = np.where((cid_a < len(ua)) & (cid_b < n_b), cid_a * n_b + cid_b, -1)
-        #
-        mask = np.isin(c_keys, keys)  # -1 sentinel (tuple absent from a/b blocks) never matches
-        struct_c = struct_c.replace(mask=mask)
-        bl_c = get_blocks(sym, struct_c)
+        with nvtx_range("mask c"):
+            # A candidate output block of bl_c is produced iff its (out_a, out_b) charge tuple
+            # arises from some matched (a, b) pair. Encode each out_a / out_b tuple as a small
+            # integer id (one class per distinct tuple among the blocks) and reduce the per-pair
+            # test to 1-D int64 operations. This avoids building and sorting the ~nn wide rows
+            # that column_stack + np.unique(axis=0) would otherwise require (nn = matched pairs).
+            na, nb, nsym = len(nout_a), len(nout_b), bl_a.t.shape[2]  # explicit widths: bl_*.nblocks may be 0
+            ua, id_a = np.unique(bl_a.t[:, nout_a, :].reshape(bl_a.nblocks, na * nsym), axis=0, return_inverse=True)
+            ub, id_b = np.unique(bl_b.t[:, nout_b, :].reshape(bl_b.nblocks, nb * nsym), axis=0, return_inverse=True)
+            id_a, id_b, n_b = id_a.reshape(-1), id_b.reshape(-1), len(ub)
+            #
+            keys = np.unique(id_a[ind_a] * n_b + id_b[ind_b])  # produced (out_a, out_b) classes
+            #
+            # struct_c legs are ordered (out_a from nout_a, then out_b from nout_b), so bl_c.t
+            # splits into its out_a (:na) and out_b (na:) columns aligned with ua / ub above
+            cid_a = locate_rows(ua, bl_c.t[:, :na, :].reshape(bl_c.nblocks, na * nsym))
+            cid_b = locate_rows(ub, bl_c.t[:, na:, :].reshape(bl_c.nblocks, nb * nsym))
+            c_keys = np.where((cid_a < len(ua)) & (cid_b < n_b), cid_a * n_b + cid_b, -1)
+            #
+            mask = np.isin(c_keys, keys)  # -1 sentinel (tuple absent from a/b blocks) never matches
+            if sum(mask) / bl_c.nblocks < lazy_threshold:
+                struct_c = struct_c.replace(mask=mask)
+                bl_c = get_blocks(sym, struct_c)
     #
     # dot product, which cannot be simply dispatched to vdot
     #              and either one of operands is (effectively) zero
@@ -567,7 +588,7 @@ def get_blocks_and_subslices(sym, struct_sub, struct_full):
     return bl, slc
 
 
-def broadcast(a, *args, axes=0) -> 'Tensor' | tuple['Tensor']:
+def broadcast(a, *args, axes=0, lazy_threshold=None) -> 'Tensor' | tuple['Tensor']:
     r"""
     Compute tensordot product of diagonal tensor ``a`` with tensors in ``args``.
 
@@ -777,7 +798,7 @@ def _meta_vdot(sym, struct_a, struct_b):
     return meta
 
 
-def trace(a, axes=(0, 1)) -> 'Tensor':
+def trace(a, axes=(0, 1), lazy_threshold=None) -> 'Tensor':
     r"""
     Compute trace of legs specified by axes.
 
@@ -812,7 +833,10 @@ def trace(a, axes=(0, 1)) -> 'Tensor':
         a = _apply_mask_axes(a, nin_0 + nin_1, msk_0 + msk_1)
         a = a._replace(hfs=a_hfs)
 
-    meta, size, struct = _meta_trace(a.config.sym, a.struct, nin_0, nin_1, out)
+    if lazy_threshold is None:
+        lazy_threshold = a.config.lazy_threshold
+
+    meta, size, struct = _meta_trace(a.config.sym, a.struct, nin_0, nin_1, out, lazy_threshold)
     data = a.config.backend.trace(a._data, order, meta, size)
 
     out = a._replace(mfs=mfs, hfs=hfs, struct=struct, data=data, trans=None)
@@ -820,7 +844,7 @@ def trace(a, axes=(0, 1)) -> 'Tensor':
 
 
 @lru_cache(maxsize=1024)
-def _meta_trace(sym, struct, nin_0, nin_1, out):
+def _meta_trace(sym, struct, nin_0, nin_1, out, lazy_threshold):
     r""" meta-information for backend and struct of traced tensor. """
     #
     legs_part = list(struct.legs)
@@ -864,18 +888,21 @@ def _meta_trace(sym, struct, nin_0, nin_1, out):
     unique_tn, inv_tn = np.unique(tn, return_inverse=True, axis=0)
     ind = find_matching_indices(bl_c.t, unique_tn, both=False)
 
-    struct_c = struct_c_1.mask_from_ind(bl_c.nblocks, ind)
-    bl_c = get_blocks(sym, struct_c)
-    sln = bl_c.slc[inv_tn]
+    if lazy_threshold and bl_c.nblocks and len(ind) / bl_c.nblocks < lazy_threshold:
+        struct_c_1 = struct_c_1.mask_from_ind(bl_c.nblocks, ind)
+        bl_c = get_blocks(sym, struct_c_1)
+        sln = bl_c.slc
+    else:
+        sln = bl_c.slc[ind]
 
-    meta = np.column_stack([sln, slo, Do, pD0, pD1, Dnp])  # sln, slo, Do, Drsh;  Drsh = (pD0, pD1, Dnp)
+    meta = np.column_stack([sln[inv_tn], slo, Do, pD0, pD1, Dnp])  # sln, slo, Do, Drsh;  Drsh = (pD0, pD1, Dnp)
     meta_dt = np.dtype([
         ('sln', np.int64, (2,)),
         ('slo', np.int64, (2,)),
         ('Do',  np.int64, (len(struct.legs),)),
         ('Drsh',  np.int64, (3,))])
     meta = meta.view(meta_dt).reshape(-1)
-    return meta, bl_c.size, struct_c
+    return meta, bl_c.size, struct_c_1
 
 
 @nsys_profile
