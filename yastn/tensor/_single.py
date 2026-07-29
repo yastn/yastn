@@ -36,6 +36,14 @@ __all__ = ['conj', 'conj_blocks', 'consume_transpose',
            'requires_grad_', 'grad', 'drop_leg_history', 'shallow_copy']
 
 
+def remove_random_blocks(self):
+    pass
+
+
+def remove_zeros_blocks(self):
+    pass
+
+
 def shallow_copy(a) -> 'Tensor':
     r"""
     Return a shallow copy of the tensor.

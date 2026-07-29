@@ -38,6 +38,12 @@ class _config(NamedTuple):
     default_fusion: str = 'hard'
     force_fusion: str = None
     tensordot_policy: str = 'fuse_contracted'
+    meta_tensordot_policy: str = 'auto'
+    lazy_threshold: float= None
+    # 0 does not use lazy, default for cutensor backend;
+    # 1 uses lazy whenever possible;
+    # for (0, 1) uses lazy when the fraction of
+    # eliminated blocks exceeds lazy_threshold
 
 
 class HashedMask:
@@ -81,7 +87,7 @@ class _struct(NamedTuple):
     legs: tuple = ()  # tuple[LegBasic]
     n: tuple = ()  # tensor charge
     isdiag: bool = False  # isdiag
-    mask: HashedMask = HashedMask(None)  #
+    mask: HashedMask = HashedMask(None)
 
     def replace(self, **kwargs):
         if 'mask' in kwargs and not isinstance(kwargs['mask'], HashedMask):
@@ -89,6 +95,11 @@ class _struct(NamedTuple):
         if 'legs' in kwargs and not isinstance(kwargs['legs'], tuple):
             kwargs['legs'] = tuple(kwargs['legs'])
         return self._replace(**kwargs)
+
+    def mask_from_ind(self, nblocks, ind):
+        mask = np.zeros(nblocks, dtype=bool)
+        mask[ind] = True
+        return self.replace(mask=mask)
 
 
 class _blocks(NamedTuple):
@@ -273,7 +284,8 @@ def get_trimmed_struct(sym, struct, sub_legs=None):
         # taxes_sub = tuple(leg.t for leg in sub_legs)
         taxes_sub = tuple(tuple(tuple(map(int, tt)) for tt, d in zip(leg.t, leg.D) if d > 0) for leg in sub_legs)
     taxes_new, mask_sub = get_trimmed_struct_engine(sym, taxes_full, saxes, struct.n, struct.mask, taxes_sub)
-    legs_new = tuple(leg.trim(tax) for leg, tax in zip(struct.legs, taxes_new))
+    legs_old = struct.legs if sub_legs is None else sub_legs  # use sub_legs to update bond dims e.g. in mask
+    legs_new = tuple(leg.trim(tax) for leg, tax in zip(legs_old, taxes_new))
     return _struct(legs=tuple(legs_new), n=struct.n, isdiag=struct.isdiag, mask=mask_sub)
 
 

@@ -485,18 +485,18 @@ def test_transpose_and_merge_backward(config_kwargs, remove_blocks):
     b = yastn.fuse_legs(a, axes=((0, 1), 2, 3), mode='hard')
 
     target_block = (1, 1, -1, -1)
-    a.set_block(target_block, val='rand')  # in case remove_blocks eliminated it
-    target_block_size = a[target_block].size()
+    if target_block in a:  # can be removed by remove_blocks
+        target_block_size = a[target_block].size()
 
-    def test_f(block):
-        a.set_block(ts=target_block, val=block)
-        tmp_a = yastn.fuse_legs(a, axes=((0, 1), 2, 3), mode='hard')
-        ab = yastn.vdot(b, tmp_a)
-        return ab
+        def test_f(block):
+            a.set_block(ts=target_block, val=block)
+            tmp_a = yastn.fuse_legs(a, axes=((0, 1), 2, 3), mode='hard')
+            ab = yastn.vdot(b, tmp_a)
+            return ab
 
-    op_args = (torch.randn(target_block_size, dtype=a.get_dtype(),requires_grad=True),)
-    test = torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4, check_undefined_grad=False)  # TODO check_undefined_grad=True
-    assert test
+        op_args = (torch.randn(target_block_size, dtype=a.get_dtype(),requires_grad=True),)
+        test = torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4, check_undefined_grad=False)  # TODO check_undefined_grad=True
+        assert test
 
 
 @torch_test
@@ -514,19 +514,20 @@ def test_unmerge_backward(config_kwargs, remove_blocks):
     b = yastn.fuse_legs(a, axes=(0, (1, 2), 3), mode='hard')
 
     target_block = (1, 1, -1, -1)
-    target_block_size = a[target_block].size()
+    if target_block in a:  # can be removed by remove_blocks
+        target_block_size = a[target_block].size()
 
-    def test_f(block):
-        a.set_block(ts=target_block, val=block)
-        tmp_a = yastn.fuse_legs(a, axes=((0, 1, 2), 3), mode='hard')
-        tmp_a = yastn.unfuse_legs(tmp_a, axes=0)
-        tmp_a = yastn.fuse_legs(tmp_a, axes=(0, (1, 2), 3), mode='hard')
-        ab = yastn.vdot(b, tmp_a)
-        return ab
+        def test_f(block):
+            a.set_block(ts=target_block, val=block)
+            tmp_a = yastn.fuse_legs(a, axes=((0, 1, 2), 3), mode='hard')
+            tmp_a = yastn.unfuse_legs(tmp_a, axes=0)
+            tmp_a = yastn.fuse_legs(tmp_a, axes=(0, (1, 2), 3), mode='hard')
+            ab = yastn.vdot(b, tmp_a)
+            return ab
 
-    op_args = (torch.randn(target_block_size, dtype=a.get_dtype(), requires_grad=True),)
-    test = torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4, check_undefined_grad=False)  # TODO check_undefined_grad=True
-    assert test
+        op_args = (torch.randn(target_block_size, dtype=a.get_dtype(), requires_grad=True),)
+        test = torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4, check_undefined_grad=False)  # TODO check_undefined_grad=True
+        assert test
 
 
 @pytest.mark.parametrize('remove_blocks', [0, 5])

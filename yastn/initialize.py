@@ -125,7 +125,8 @@ def randR(config=None, distribution=(-1, 1), legs=(), n=None, isdiag=False, **kw
         kwargs['dtype'] = 'float64'
     if kwargs['dtype'] == 'complex64':
         kwargs['dtype'] = 'float32'
-    return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='rand', distribution=distribution, **kwargs)
+    val = distribution if distribution == 'normal' else ('rand', distribution)
+    return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val=val, **kwargs)
 
 
 def randC(config=None, distribution=(-1, 1), legs=(), n=None, isdiag=False, **kwargs) -> Tensor:
