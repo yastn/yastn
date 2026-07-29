@@ -439,6 +439,60 @@ def argsort_t(tset):
     return np.argsort(tset_view)
 
 
+def _encode_rows_shared(tsets):
+    """
+    Order-preserving int64 keys for the rows of each 2-D array in ``tsets`` (all sharing the
+    same number of columns), computed over the shared per-column value set so that equal rows
+    across arrays receive equal keys. Returns a list of 1-D int64 key arrays (one per input),
+    or ``None`` if the mixed-radix key space would overflow int64.
+
+    The encoding is monotonic w.r.t. the per-column lexicographic order used by
+    ``np.unique(..., axis=0)`` and by a ``[('', dt)] * ncols`` structured-dtype view (column 0
+    most significant, numeric per column). Hence an input already sorted in that order yields
+    an ascending key array, so ``np.searchsorted`` on it stays valid. Charge blocks are small
+    integers with few distinct values per column, so the key space usually fits comfortably.
+    """
+    cp = tsets[0].shape[1]
+    sizes = [len(t) for t in tsets]
+    if cp == 0:  # zero-width rows: a single (empty) class
+        keys = np.zeros(sum(sizes), dtype=np.int64)
+    else:
+        stacked = np.concatenate(tsets, axis=0) if len(tsets) > 1 else tsets[0]
+        ranks, radices, prod = [], [], 1
+        for j in range(cp):
+            u, inv = np.unique(stacked[:, j], return_inverse=True)  # per-column ranks preserve order
+            ranks.append(inv.reshape(-1))
+            radices.append(len(u))
+            prod *= len(u)
+            if prod >= (1 << 62):
+                return None
+        keys = np.zeros(sum(sizes), dtype=np.int64)
+        w = 1
+        for j in range(cp - 1, -1, -1):  # column 0 carries the largest weight (most significant)
+            keys += ranks[j] * w
+            w *= radices[j]
+    out, off = [], 0
+    for s in sizes:
+        out.append(keys[off: off + s])
+        off += s
+    return out
+
+
+def _row_keys_pair(t1, t2):
+    """
+    A comparable-and-searchsortable 1-D key per row of ``t1`` / ``t2`` (same #columns).
+    Uses the fast order-preserving int64 encoding, falling back to a structured-dtype view
+    of the raw rows when the int64 key space would overflow. In both cases keys of ``t1`` and
+    ``t2`` share an ordering, and ``t1`` sorted by rows implies its keys are ascending.
+    """
+    enc = _encode_rows_shared([t1, t2])
+    if enc is not None:
+        return enc[0], enc[1]
+    struct_dt = np.dtype([('', t1.dtype)] * t1.shape[1])
+    return (np.ascontiguousarray(t1).view(struct_dt).ravel(),
+            np.ascontiguousarray(t2).view(struct_dt).ravel())
+
+
 @nsys_profile
 def find_matching_indices(tset1, tset2, both=True):
     rs1, *cs1 = tset1.shape
@@ -448,16 +502,11 @@ def find_matching_indices(tset1, tset2, both=True):
     if cp == 0 and rs1 == 1 and rs2 == 1:
         ind1 = ind2 = np.array([0], dtype=np.int64)
     elif cp > 0 and rs1 > 0 and rs2 > 0:
-        tset1 = tset1.reshape(rs1, cp)
-        tset2 = tset2.reshape(rs2, cp)
-        struct_dt = np.dtype([('', tset1.dtype)] * cp)
-        tset1_view = np.ascontiguousarray(tset1).view(struct_dt).ravel()
-        tset2_view = np.ascontiguousarray(tset2).view(struct_dt).ravel()
-
-        ind1 = np.searchsorted(tset1_view, tset2_view)
+        v1, v2 = _row_keys_pair(tset1.reshape(rs1, cp), tset2.reshape(rs2, cp))
+        ind1 = np.searchsorted(v1, v2)
         mask = ind1 < rs1
         safe_ind = np.where(mask, ind1, 0)
-        mask = mask & (tset1_view[safe_ind] == tset2_view)
+        mask = mask & (v1[safe_ind] == v2)
         ind1 = ind1[mask]
         if both:
             ind2 = np.flatnonzero(mask)
@@ -466,33 +515,3 @@ def find_matching_indices(tset1, tset2, both=True):
     return (ind1, ind2) if both else ind1
 
 
-@nsys_profile
-def locate_rows(tset, query):
-    """
-    Index of each row of ``query`` within ``tset``, or ``len(tset)`` when the row is absent.
-
-    ``tset`` must have unique rows sorted in the same (per-column, lexicographic) order
-    produced by ``np.unique(..., axis=0)``; ``query`` may contain arbitrary/repeated rows.
-    Unlike :func:`find_matching_indices`, the result has one entry per row of ``query``
-    (misses flagged with the sentinel ``len(tset)``), so it maps rows to their class id.
-    """
-    rs, *cs = tset.shape
-    rq, *cq = query.shape
-    assert cs == cq, "Sanity check. Contact developers."
-    cp = np.prod(cs, dtype=np.int64)
-    if rs == 0:  # empty tset: every query row is absent
-        return np.full(rq, rs, dtype=np.int64)
-    if cp == 0:  # zero-width rows collapse to a single (empty) class present in tset
-        return np.zeros(rq, dtype=np.int64)
-    tset = tset.reshape(rs, cp)
-    query = query.reshape(rq, cp)
-    struct_dt = np.dtype([('', tset.dtype)] * cp)
-    tset_view = np.ascontiguousarray(tset).view(struct_dt).ravel()
-    query_view = np.ascontiguousarray(query).view(struct_dt).ravel()
-
-    ids = np.searchsorted(tset_view, query_view)
-    hit = ids < rs
-    safe_ind = np.where(hit, ids, 0)
-    hit &= tset_view[safe_ind] == query_view
-    ids[~hit] = rs  # sentinel for rows absent from tset
-    return ids
