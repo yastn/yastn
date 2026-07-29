@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, NamedTuple, Union
 
 import numpy as np
 
-from .._profile import nsys_profile, nvtx_range
+from .._profile import nsys_profile, nvtx_range, active_flop_tracer
 from ._auxiliary import _encode_rows_shared, _row_keys_pair, _struct, _clear_axes, _unpack_axes, sign_canonical_order, _compress_slices
 from ._auxiliary import find_matching_indices, argsort_t, get_blocks, hash_blocks, get_trimmed_struct
 from ._merging import _unfuse_blocks, _fuse_blocks, _mask_tensors_leg_intersection, _meta_mask
@@ -122,7 +122,9 @@ def tensordot(a, b, axes, conj=(0, 0), lazy_threshold=None) -> 'Tensor':
     if lazy_threshold is None:
         lazy_threshold = a.config.lazy_threshold
 
-    if a.config.backend.BACKEND_ID == 'torch_cutensor' and all(0 < x < 33 for x in (a.ndim_n, b.ndim_n)) and len(hfs_c)<33:
+    if active_flop_tracer() is not None:  # tracing forces the metadata GEMM-decomposition path
+        data, struct_out = _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b, lazy_threshold)
+    elif a.config.backend.BACKEND_ID == 'torch_cutensor' and all(0 < x < 33 for x in (a.ndim_n, b.ndim_n)) and len(hfs_c)<33:
         data, struct_out = _tensordot_cutensor(a, b, nout_a, nin_a, nin_b, nout_b, lazy_threshold)
     elif a.config.tensordot_policy == 'fuse_to_matrix':
         data, struct_out = _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b, lazy_threshold)
@@ -206,11 +208,34 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b, lazy_threshold):
     """
     meta_dot, reshape_a, reshape_b, size_c, struct_c = _meta_tensordot_nf(a.config.sym, a.struct, b.struct, nout_a, nin_a, nin_b, nout_b,
                                                                           lazy_threshold=lazy_threshold)
+    tracer = active_flop_tracer()
+    if tracer is not None:  # metadata-only tracing: accumulate FLOPs, skip the data GEMM
+        gemm, acc = _flops_tensordot_nf(meta_dot, reshape_a, 'complex' in a.yastn_dtype)
+        tracer.gemm += gemm
+        tracer.sum += acc
+        data = a.config.backend.zeros((0,), dtype=a.yastn_dtype, device=a.data.device)
+        return data, struct_c
     order_a = nout_a + nin_a
     order_b = nin_b + nout_b
     data = a.config.backend.transpose_dot_sum(a.data, b.data, meta_dot,
                                               reshape_a, reshape_b, order_a, order_b, size_c)
     return data, struct_c
+
+
+def _flops_tensordot_nf(meta_dot, reshape_a, iscomplex=False):
+    r"""
+    FLOPs performed by :func:`transpose_dot_sum` for this meta: the block GEMMs and the ``+=``
+    accumulation. Each ``meta_dot`` entry is a dense ``(M x K) . (K x N)`` GEMM accumulated into
+    an ``(M x N)`` output block, with ``M, N = meta_dot['Dn']`` and ``K = reshape_a['Dr'][ta]``.
+    Returns ``(gemm_flops, sum_flops)``.
+    """
+    if len(meta_dot) == 0:
+        return 0, 0
+    mn = meta_dot['Dn'][:, 0] * meta_dot['Dn'][:, 1]
+    K = reshape_a['Dr'][meta_dot['ta']]
+    macs = int((mn * K).sum())   # multiply-accumulate ops of the block GEMMs
+    elems = int(mn.sum())        # elements touched by the += accumulation
+    return (8 * macs, 2 * elems) if iscomplex else (2 * macs, elems)
 
 
 def _remap_nout_(nout, offset):
@@ -809,7 +834,10 @@ def _apply_mask_axes(a, naxes, masks):
             mask_t = tuple(mask_tD.keys())
             mask_D = tuple(mask_tD.values())
             meta, size_c, struct_c, axis, ndim = _meta_mask(a.config.sym, a.struct, mask_t, mask_D, axis)
-            data = a.config.backend.apply_mask(a._data, mask, meta, size_c, axis, ndim)
+            if active_flop_tracer() is not None:  # tracing: keep the struct change, skip the data op
+                data = a.config.backend.zeros((0,), dtype=a.yastn_dtype, device=a.data.device)
+            else:
+                data = a.config.backend.apply_mask(a._data, mask, meta, size_c, axis, ndim)
             a = a._replace(struct=struct_c, data=data)
     return a
 
@@ -902,9 +930,12 @@ def trace(a, axes=(0, 1), lazy_threshold=None) -> 'Tensor':
     mfs = tuple(a.mfs[i] for i in range(a.ndim) if i not in in_0 + in_1)
     hfs = tuple(a.hfs[ax] for ax in out)
 
+    tracing = active_flop_tracer() is not None
+
     if a.isdiag:
         struct = _struct(legs=(), n=a.n, isdiag=False)
-        data = a.config.backend.sum_elements(a._data)
+        data = a.config.backend.zeros((0,), dtype=a.yastn_dtype, device=a.data.device) \
+            if tracing else a.config.backend.sum_elements(a._data)
         return a._replace(struct=struct, mfs=mfs, hfs=hfs, isdiag=False, data=data, trans=None)
 
     if mask_needed:
@@ -916,7 +947,8 @@ def trace(a, axes=(0, 1), lazy_threshold=None) -> 'Tensor':
         lazy_threshold = a.config.lazy_threshold
 
     meta, size, struct = _meta_trace(a.config.sym, a.struct, nin_0, nin_1, out, lazy_threshold)
-    data = a.config.backend.trace(a._data, order, meta, size)
+    data = a.config.backend.zeros((0,), dtype=a.yastn_dtype, device=a.data.device) \
+        if tracing else a.config.backend.trace(a._data, order, meta, size)
 
     out = a._replace(mfs=mfs, hfs=hfs, struct=struct, data=data, trans=None)
     return out
@@ -1011,8 +1043,8 @@ def swap_gate(a, axes, charge=None) -> 'Tensor':
         In this case, there is no application of a swap gates between legs specified in axes.
         One can provide list of charges corresponding to each axes, of a single charge to be applied to all axes.
     """
-    if not a.config.fermionic:
-        return a
+    if not a.config.fermionic or active_flop_tracer() is not None:
+        return a  # tracing: swap_gate only negates block signs (struct unchanged) -> no-op
     nsym = a.config.sym.NSYM
     fss = (True,) * nsym if a.config.fermionic is True else a.config.fermionic
     if charge is None:

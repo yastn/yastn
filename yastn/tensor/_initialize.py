@@ -131,7 +131,7 @@ def make_config(**kwargs) -> _config:
         except KeyError:
             raise YastnError("sym encoded as string only supports: 'dense', 'Z2', 'Z3', 'U1', 'U1xU1', 'U1xU1xZ2'.")
 
-    if "lazy_threshold" not in kwargs:
+    if kwargs.get("lazy_threshold", None) is None:
         if kwargs["backend"].BACKEND_ID in ["torch_cutensor",]:
             kwargs["lazy_threshold"] = 0
         else:

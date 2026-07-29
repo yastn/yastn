@@ -387,6 +387,119 @@ def test_einsum_scalar_swap_order(config_kwargs, remove_blocks):
     _assert_all_orders()
 
 
+# ------------------------------------------------------------------ #
+#  FLOP tracing (yastn.trace_flops): metadata-only, no_fusion path    #
+# ------------------------------------------------------------------ #
+# FLOP tracing forces the 'no_fusion' tensordot path, which decomposes a
+# contraction into the minimal set of block GEMMs and therefore counts the
+# minimal number of FLOPs. The tests below fix tensordot_policy='no_fusion'
+# so the traced result can be compared against a real (data-carrying) run.
+
+
+def _nf_kwargs(config_kwargs):
+    """config_kwargs pinned to the no_fusion tensordot path (see note above)."""
+    if config_kwargs['backend'] == 'torch_cutensor':
+        pytest.skip("FLOP tracing tests target the no_fusion path; "
+                    "the torch_cutensor backend routes tensordot to cuTENSOR.")
+    return {**config_kwargs, 'tensordot_policy': 'no_fusion'}
+
+
+def test_flop_tracing_tensordot(config_kwargs):
+    """ Single tensordot traced in metadata-only mode: analytic FLOP counts for dense and
+    U1, invariant under lazy_threshold, with an empty output carrying the correct struct. """
+    kw = _nf_kwargs(config_kwargs)
+
+    # --- dense (sym='none'): a single GEMM (m,k).(k,n) ---
+    # real: gemm = 2*m*n*k, sum = m*n;  complex: gemm = 8*m*n*k, sum = 2*m*n
+    config_dense = yastn.make_config(sym='none', **kw)
+    m, k, n = 5, 7, 4
+    for dtype, cplx in [('float64', False), ('complex128', True)]:
+        a = yastn.rand(config=config_dense, dtype=dtype,
+                       legs=[yastn.Leg(config_dense, s=1, D=(m,)), yastn.Leg(config_dense, s=-1, D=(k,))])
+        b = yastn.rand(config=config_dense, dtype=dtype,
+                       legs=[yastn.Leg(config_dense, s=1, D=(k,)), yastn.Leg(config_dense, s=-1, D=(n,))])
+        exp_gemm = (8 if cplx else 2) * m * n * k
+        exp_sum = (2 if cplx else 1) * m * n
+        for lazy in (0, 1.0):
+            ref = yastn.tensordot(a, b, axes=(1, 0), lazy_threshold=lazy)
+            with yastn.trace_flops() as tr:
+                out = yastn.tensordot(a, b, axes=(1, 0), lazy_threshold=lazy)
+            assert (tr.gemm, tr.sum, tr.total) == (exp_gemm, exp_sum, exp_gemm + exp_sum)
+            assert out.struct == ref.struct
+            assert out.config.backend.get_size(out.data) == 0
+
+    # --- U1: one block GEMM per matching charge sector ---
+    # a=[la, lc*], b=[lc, lb], contract lc. Matching sectors give (M, K, N):
+    #   charge -1: (2, 3, 2);   charge 0: (3, 2, 4);   charge 1: (4, 5, 3)
+    config_U1 = yastn.make_config(sym='U1', **kw)
+    la = yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 4))
+    lc = yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(3, 2, 5))
+    lb = yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(2, 4, 3))
+    a = yastn.rand(config=config_U1, legs=[la, lc.conj()])
+    b = yastn.rand(config=config_U1, legs=[lc, lb])
+    exp_gemm = 2 * (2 * 3 * 2 + 3 * 2 * 4 + 4 * 5 * 3)  # = 192
+    exp_sum = (2 * 2 + 3 * 4 + 4 * 3)                   # = 28
+    for lazy in (0, 1.0):
+        ref = yastn.tensordot(a, b, axes=(1, 0), lazy_threshold=lazy)
+        with yastn.trace_flops() as tr:
+            out = yastn.tensordot(a, b, axes=(1, 0), lazy_threshold=lazy)
+        assert (tr.gemm, tr.sum) == (exp_gemm, exp_sum)  # FLOPs invariant under lazy_threshold
+        assert out.struct == ref.struct
+        assert out.config.backend.get_size(out.data) == 0
+
+
+def test_flop_tracing_lazy_vs_nonlazy(config_kwargs):
+    """ Outer-product-like U1 tensordot where lazy_threshold changes the output structure:
+    the traced FLOP count is identical, but the lazy output (only produced blocks) is
+    strictly smaller than the non-lazy output (all symmetry-allowed blocks, incl. zeros). """
+    kw = _nf_kwargs(config_kwargs)
+    config_U1 = yastn.make_config(sym='U1', **kw)
+    t = (-1, 0, 1)
+    lx = yastn.Leg(config_U1, s=1, t=(0,), D=(1,))  # trivial contracted leg -> outer-product-like
+    free = lambda: yastn.Leg(config_U1, s=1, t=t, D=(2, 2, 2))
+    a = yastn.rand(config=config_U1, legs=[free(), free(), lx.conj()])  # (la, lb, x)
+    b = yastn.rand(config=config_U1, legs=[lx, free(), free()])         # (x, lc, ld)
+
+    flops, ref_sizes = {}, {}
+    for lazy in (0, 1.0):
+        ref = yastn.tensordot(a, b, axes=(2, 0), lazy_threshold=lazy)
+        with yastn.trace_flops() as tr:
+            out = yastn.tensordot(a, b, axes=(2, 0), lazy_threshold=lazy)
+        assert out.struct == ref.struct
+        assert out.config.backend.get_size(out.data) == 0
+        flops[lazy] = (tr.gemm, tr.sum)
+        ref_sizes[lazy] = ref.config.backend.get_size(ref.data)
+    # FLOPs are the same set of block GEMMs regardless of how the output is stored ...
+    assert flops[0] == flops[1.0]
+    # ... but lazy keeps only the produced blocks, so its output is strictly smaller.
+    assert ref_sizes[1.0] < ref_sizes[0]
+
+
+def test_flop_tracing_ncon(config_kwargs):
+    """ FLOP tracing through a full ncon network: the traced result matches a real run's
+    struct/mfs/hfs while carrying empty data, for both non-lazy and lazy configs. """
+    if config_kwargs['backend'] == 'torch_cutensor':
+        pytest.skip("FLOP tracing tests target the no_fusion path; "
+                    "the torch_cutensor backend routes tensordot to cuTENSOR.")
+    t = (0, 1)
+    inds = ((-1, 1), (1, 2), (2, -2))  # matrix chain t1-t2-t3
+    for lazy in (0, 1.0):
+        config_U1 = yastn.make_config(sym='U1',
+                                      **{**config_kwargs, 'tensordot_policy': 'no_fusion', 'lazy_threshold': lazy})
+        l = yastn.Leg(config_U1, s=1, t=t, D=(2, 3))
+        lc = yastn.Leg(config_U1, s=1, t=t, D=(2, 2))
+        t1 = yastn.rand(config=config_U1, legs=[l, lc.conj()])
+        t2 = yastn.rand(config=config_U1, legs=[lc, lc.conj()])
+        t3 = yastn.rand(config=config_U1, legs=[lc, l.conj()])
+        ref = yastn.ncon([t1, t2, t3], inds)
+        with yastn.trace_flops() as tr:
+            out = yastn.ncon([t1, t2, t3], inds)
+        assert out.struct == ref.struct
+        assert out.mfs == ref.mfs and out.hfs == ref.hfs
+        assert out.config.backend.get_size(out.data) == 0
+        assert tr.total > 0
+
+
 if __name__ == '__main__':
     pytest.main([__file__, "--durations=0", "--tensordot_policy", "fuse_to_matrix"])
     # pytest.main([__file__, "--durations=0", "--tensordot_policy", "fuse_contracted"])
