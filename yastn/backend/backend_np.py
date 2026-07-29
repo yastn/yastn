@@ -27,6 +27,8 @@ DTYPE = {'float32': np.float32,
          'float64': np.float64,
          'complex64': np.complex64,
          'complex128': np.complex128,
+         'int32': np.int32,
+         'int64': np.int64,
          'bool': bool}
 
 
@@ -273,6 +275,57 @@ def absolute(data):
 
 def bitwise_not(data):
     return np.bitwise_not(data)
+
+
+##############################################################
+#   low-level integer/index array primitives (numpy-aligned) #
+#   backend-agnostic building blocks for the GPU meta path   #
+##############################################################
+
+
+def unique(x, return_inverse=False, return_counts=False):
+    return np.unique(x, return_inverse=return_inverse, return_counts=return_counts)
+
+
+def searchsorted(a, v):
+    return np.searchsorted(a, v)
+
+
+def isin(a, b):
+    return np.isin(a, b)
+
+
+def nonzero(x):
+    """ numpy-aligned: tuple of index arrays, one per dimension. """
+    return np.nonzero(x)
+
+
+def cumsum(x, axis=0):
+    return np.cumsum(x, axis=axis)
+
+
+def concatenate(seq, axis=0):
+    return np.concatenate(tuple(seq), axis=axis)
+
+
+def repeat(x, repeats):
+    return np.repeat(x, repeats)
+
+
+def where(condition, x, y):
+    return np.where(condition, x, y)
+
+
+def zeros_like(x):
+    return np.zeros_like(x)
+
+
+def full_like(x, fill_value):
+    return np.full_like(x, fill_value)
+
+
+def arange(*args, device='cpu'):
+    return np.arange(*args)
 
 
 def safe_svd(a):

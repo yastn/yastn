@@ -48,7 +48,9 @@ __all__= ['DTYPE', 'get_dtype', 'get_yastn_dtype',
     'merge_to_dense', 'merge_super_blocks', 'is_independent',
     'apply_mask', 'embed_mask',
     'embed_transpose', 'transpose_and_merge', 'unmerge',
-    'negate_blocks', 'gather_slices', 'bitwise_not']
+    'negate_blocks', 'gather_slices', 'bitwise_not',
+    'unique', 'searchsorted', 'isin', 'nonzero', 'cumsum', 'concatenate',
+    'repeat', 'where', 'zeros_like', 'full_like', 'arange']
 
 
 torch.random.seed()
@@ -57,6 +59,8 @@ DTYPE = {'float32': torch.float32,
          'float64': torch.float64,
          'complex64': torch.complex64,
          'complex128': torch.complex128,
+         'int32': torch.int32,
+         'int64': torch.int64,
          'bool': torch.bool}
 
 
@@ -77,7 +81,7 @@ def is_complex(x):
     return x.is_complex()
 
 
-def get_device(x):
+def get_device(x)->str:
     return str(x.device)
 
 
@@ -307,6 +311,58 @@ def absolute(data):
 
 def bitwise_not(data):
     return torch.bitwise_not(data)
+
+
+##############################################################
+#   low-level integer/index array primitives (numpy-aligned) #
+#   backend-agnostic building blocks for the GPU meta path   #
+##############################################################
+
+
+def unique(x, return_inverse=False, return_counts=False):
+    return torch.unique(x, return_inverse=return_inverse, return_counts=return_counts)
+
+
+def searchsorted(a, v):
+    return torch.searchsorted(a, v)
+
+
+def isin(a, b):
+    return torch.isin(a, b)
+
+
+def nonzero(x):
+    """ numpy-aligned: tuple of index arrays, one per dimension. """
+    return torch.nonzero(x, as_tuple=True)
+
+
+def cumsum(x, axis=0):
+    return torch.cumsum(x, dim=axis)
+
+
+def concatenate(seq, axis=0):
+    return torch.cat(tuple(seq), dim=axis)
+
+
+def repeat(x, repeats):
+    """ numpy-aligned np.repeat: element-wise repeat (torch.repeat_interleave). """
+    return torch.repeat_interleave(x, repeats)
+
+
+def where(condition, x, y):
+    return torch.where(condition, x, y)
+
+
+def zeros_like(x):
+    return torch.zeros_like(x)
+
+
+def full_like(x, fill_value):
+    return torch.full_like(x, fill_value)
+
+
+def arange(*args, device='cpu'):
+    return torch.arange(*args, device=device)
 
 
 def svd_lowrank(data, meta, sizes, **kwargs):

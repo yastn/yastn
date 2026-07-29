@@ -23,7 +23,7 @@ import numpy as np
 
 from ._auxiliary import _config, get_blocks, get_trimmed_struct, find_index, find_matching_indices
 from ._tests import YastnError
-from ..backend import backend_np
+from ..backend import backend_np, import_backend
 from ..sym import sym_none, sym_U1, sym_Z2, sym_Z3, sym_U1xU1, sym_U1xU1xZ2
 
 __all__ = ['make_config']
@@ -92,6 +92,22 @@ def make_config(**kwargs) -> _config:
             * ``'fuse_contracted'`` Tensordot involves suitable permutation of each tensor while performing a fusion of to-be-contracted legs of each tensor and calling multiplication. It involves a larger number of multiplication calls for smaller objects, but unfusing the legs of the result is not needed.
             * ``'no_fusion'`` Tensordot involves suitable permutation of tensor blocks and calling matrix-matrix multiplication for a potentially large number of small objects. Resulting contributions to new blocks get added. However, overheads of initial fusion (copying data) can sometimes be avoided in this approach.
 
+    lazy_threshold: float = 0 if backend is cuTensor, else 0.5
+        Not all symmetry-allowed blocks need to be present in "lazy" tensor. Hence, when computing a contractions with "lazy" tensors, 
+        not all blocks allowed by the symmetry need to exist in the resulting tensor. 
+        If the fraction (retained blocks / all allowed blocks)  > ``lazy_threshold``, then blocks are initialized lazily, 
+        i.e., only when they are needed. On ``cuTensor`` backend, defaults to 0, otherwise 0.5
+        Impact:
+            Decreases memory usage and flop count in contractions. The block-sparsity algebra is more expensive.
+        Revelant scenarious:
+            Outer-product-like contractions, where number of legs of resulting tensor is larger than the number of legs of the input tensors. 
+            In such cases, the number of allowed blocks can be much larger than the number of retained blocks.
+
+    meta_tensordot_policy: str = "cpu"|"gpu"|"auto"
+        Block-sparsity algorithm used by :meth:`yastn.tensordot`. The default is ``'auto'``,
+        which uses the optimized GPU algorithm if available, otherwise the CPU algorithm.
+        When "auto" can be also overriden by setting the environment variable ``YASTN_META_CUTENSOR`` to ``"GPU"`` or ``"CPU"``.
+
     Example
     -------
 
@@ -99,16 +115,13 @@ def make_config(**kwargs) -> _config:
 
         config = yastn.make_config(backend='np', sym='U1')
     """
-    if "backend" not in kwargs or kwargs["backend"] == 'np':
+    if "backend" not in kwargs:
         kwargs["backend"] = backend_np
-    elif kwargs["backend"] == 'torch':
-        from ..backend import backend_torch
-        kwargs["backend"] = backend_torch
-    elif kwargs["backend"] == 'torch_cutensor':
-        from ..backend import backend_torch_cutensor  # pragma: no cover
-        kwargs["backend"] = backend_torch_cutensor  # pragma: no cover
     elif isinstance(kwargs["backend"], str):
-        raise YastnError("backend encoded as string only supports: 'np', 'torch'")
+        try:
+            kwargs["backend"] = import_backend(kwargs["backend"])
+        except ValueError:
+            raise YastnError("backend encoded as string only supports: 'np', 'torch'")
 
     if "sym" not in kwargs:
         kwargs["sym"] = sym_none
@@ -117,6 +130,12 @@ def make_config(**kwargs) -> _config:
             kwargs["sym"] = _syms[kwargs["sym"]]
         except KeyError:
             raise YastnError("sym encoded as string only supports: 'dense', 'Z2', 'Z3', 'U1', 'U1xU1', 'U1xU1xZ2'.")
+
+    if "lazy_threshold" not in kwargs:
+        if kwargs["backend"].BACKEND_ID in ["torch_cutensor",]:
+            kwargs["lazy_threshold"] = 0
+        else:
+            kwargs["lazy_threshold"] = 0.5
 
     return _config(**{a: kwargs[a] for a in _config._fields if a in kwargs})
 
