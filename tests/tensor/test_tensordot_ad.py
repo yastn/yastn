@@ -133,11 +133,11 @@ def test_tensordot_fuse_hard_backward_0(config_kwargs, dtype, remove_blocks):
     D1 = (1, 1, 1)
     #
     a = yastn.rand(config=config_U1, s=(-1, 1, 1),
-                t=(t1, t1, t1), D=(D1, D1, D1), dtype=dtype,
-                remove_blocks=remove_blocks)
+                t=(t1, t1, t1), D=(D1, D1, D1), dtype=dtype)
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     b = yastn.rand(config=config_U1, s=(1, 1, 1),
-                t=(t1, t1, t1), D=(D1, D1, D1), dtype=dtype,
-                remove_blocks=remove_blocks)
+                t=(t1, t1, t1), D=(D1, D1, D1), dtype=dtype)
+    b = b.remove_random_blocks(number=remove_blocks, keep_legs=True)
 
     _test_tensordot_grad(a, b.conj(), axes=((2, 1), (1, 2)), dtype=dtype)
 
@@ -270,11 +270,11 @@ def test_tensordot_fuse_hard_backward_2(config_kwargs, remove_blocks):
     #
     dtype = 'float64'
     a = yastn.rand(config=config_U1, s=(-1, 1, 1),
-                t=(t1, t1, t2), D=(D1, D2, D1), dtype=dtype,
-                remove_blocks=remove_blocks)
+                t=(t1, t1, t2), D=(D1, D2, D1), dtype=dtype)
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     b = yastn.rand(config=config_U1, s=(1, 1, 1),
-                t=(t1, t1, t2), D=(D1, D2, D1), dtype=dtype,
-                remove_blocks=remove_blocks)
+                t=(t1, t1, t2), D=(D1, D2, D1), dtype=dtype)
+    b = b.remove_random_blocks(number=remove_blocks, keep_legs=True)
 
     _test_tensordot_grad(a, b.conj(), axes=((2, 1), (0, 1)), dtype=dtype)
 
@@ -291,11 +291,11 @@ def test_tensordot_fuse_hard_backward_mixed_dtype(config_kwargs, remove_blocks):
     D2 = (2, 2, 2)
 
     a = yastn.rand(config=config_U1, s=(-1, 1, 1),
-                t=(t1, t1, t2), D=(D1, D2, D1), dtype='float64',
-                remove_blocks=remove_blocks)
+                t=(t1, t1, t2), D=(D1, D2, D1), dtype='float64')
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     b = yastn.rand(config=config_U1, s=(1, 1, 1),
-                t=(t1, t1, t2), D=(D1, D2, D1), dtype='complex128',
-                remove_blocks=remove_blocks)
+                t=(t1, t1, t2), D=(D1, D2, D1), dtype='complex128')
+    b = b.remove_random_blocks(number=remove_blocks, keep_legs=True)
 
     _test_tensordot_grad_mixed_dtype(a, b.conj(), axes=((2, 1), (0, 1)))
 
@@ -316,11 +316,11 @@ def test_tensordot_fuse_hard_backward_22(config_kwargs, remove_blocks):
     #
     dtype = 'float64'
     a = yastn.rand(config=config_U1, s=(-1, 1, 1),
-                t=(t1, t1, t1), D=(D1, D2, D1), dtype=dtype,
-                remove_blocks=remove_blocks)
+                t=(t1, t1, t1), D=(D1, D2, D1), dtype=dtype)
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     b = yastn.rand(config=config_U1, s=(1, -1, 1),
-                t=(t1, t1, t1), D=(D1, D2, D1), dtype=dtype,
-                remove_blocks=remove_blocks)
+                t=(t1, t1, t1), D=(D1, D2, D1), dtype=dtype)
+    b = b.remove_random_blocks(number=remove_blocks, keep_legs=True)
 
     _test_tensordot_grad(a, b, axes=((0, 1), (0, 1)), dtype=dtype)
 
@@ -340,11 +340,11 @@ def test_tensordot_fuse_hard_backward_23(config_kwargs, remove_blocks):
     #
     dtype = 'float64'
     a = yastn.rand(config=config_U1, s=(-1, 1, 1),
-                t=(t1, t1, t2), D=(D1, D2, D1), dtype=dtype,
-                remove_blocks=remove_blocks)
+                t=(t1, t1, t2), D=(D1, D2, D1), dtype=dtype)
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     b = yastn.rand(config=config_U1, s=(1, -1, 1),
-                t=(t1, t1, t2), D=(D1, D2, D1), dtype=dtype,
-                remove_blocks=remove_blocks)
+                t=(t1, t1, t2), D=(D1, D2, D1), dtype=dtype)
+    b = b.remove_random_blocks(number=remove_blocks, keep_legs=True)
 
     _test_tensordot_grad(a, b, axes=((0, 1), (0, 1)), dtype=dtype)
 
@@ -364,11 +364,11 @@ def test_tensordot_fuse_hard_backward_3(config_kwargs, dtype, remove_blocks):
     D1, D2 = (2, 2, 2), (2, 2, 2),
 
     a = yastn.rand(config=config_U1, s=(-1, 1, 1),
-                t=(t1, t1, t2), D=(D1, D2, D2), dtype=dtype,
-                remove_blocks=remove_blocks)
+                t=(t1, t1, t2), D=(D1, D2, D2), dtype=dtype)
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     b = yastn.rand(config=config_U1, s=(1, 1, 1),
-                t=(t1, t1, t2), D=(D1, D2, D2), dtype=dtype,
-                remove_blocks=remove_blocks)
+                t=(t1, t1, t2), D=(D1, D2, D2), dtype=dtype)
+    b = b.remove_random_blocks(number=remove_blocks, keep_legs=True)
 
     _test_tensordot_grad(a, b.conj(), axes=((2, 1), (1, 0)), dtype=dtype)
 
@@ -406,11 +406,11 @@ def test_tensordot_fuse_hard_backward_4(config_kwargs, extent, remove_blocks):
     #
     dtype = 'float64'
     a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1, 1),
-                t=(t1, t1, t2, t2, t3, t3), D=(D1, D2, D2, D1, D1, D2), dtype=dtype,
-                remove_blocks=remove_blocks)
+                t=(t1, t1, t2, t2, t3, t3), D=(D1, D2, D2, D1, D1, D2), dtype=dtype)
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     b = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1, 1),
-                t=(t2, t2, t3, t3, t1, t1), D=(D2, D3, D1, D3, D1, D2), dtype=dtype,
-                remove_blocks=remove_blocks)
+                t=(t2, t2, t3, t3, t1, t1), D=(D2, D3, D1, D3, D1, D2), dtype=dtype)
+    b = b.remove_random_blocks(number=remove_blocks, keep_legs=True)
 
     axes = ((1, 5, 2, 3), (1, 4, 2, 0))
     _test_tensordot_grad(a, b.conj(), axes=axes, dtype=dtype)
@@ -461,13 +461,12 @@ def test_tensordot_fuse_hard_gradcheck(config_kwargs, dtype, remove_blocks):
     t1, t2, t3 = (-1, 0, 1), (-2, 0, 2), (-3, 0, 3)
     D1, D2, D3 = (1, 2, 2), (2, 2, 1), (1, 2, 1)
     #
-
     a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1, 1),
-                t=(t1, t1, t2, t2, t3, t3), D=(D1, D2, D2, D1, D1, D2), dtype=dtype,
-                remove_blocks=remove_blocks)
+                t=(t1, t1, t2, t2, t3, t3), D=(D1, D2, D2, D1, D1, D2), dtype=dtype)
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     b = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1, 1),
-                t=(t2, t2, t3, t3, t1, t1), D=(D2, D3, D1, D3, D1, D2), dtype=dtype,
-                remove_blocks=remove_blocks)
+                t=(t2, t2, t3, t3, t1, t1), D=(D2, D3, D1, D3, D1, D2), dtype=dtype)
+    b = b.remove_random_blocks(number=remove_blocks, keep_legs=True)
     fb = yastn.fuse_legs(b, axes=(0, (4, 3, 1), (5, 2)), mode='hard')
     ffb = yastn.fuse_legs(fb, axes=(0, (2, 1)), mode='hard')
 
@@ -508,20 +507,20 @@ def test_tensordot_gradcheck(config_kwargs, dtype, remove_blocks):
 
     a = yastn.rand(config=config_U1, s=(-1, -1, 1, 1),
                 t=[(0, 1), (0, 1), (0, 1), (0, 1)],
-                D=[(2, 3), (4, 5), (4, 3), (2, 1)], dtype=dtype,
-                remove_blocks=remove_blocks)
+                D=[(2, 3), (4, 5), (4, 3), (2, 1)], dtype=dtype)
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     b1 = yastn.rand(config=config_U1, s=(1, 1, -1, -1),  # charges match exactly
                 t=[(0, 1), (0, 1), (0, 1), (0, 1)],
-                D=[(2, 3), (4, 5), (4, 3), (2, 1)], dtype=dtype,
-                remove_blocks=remove_blocks)
+                D=[(2, 3), (4, 5), (4, 3), (2, 1)], dtype=dtype)
+    b1 = b1.remove_random_blocks(number=remove_blocks, keep_legs=True)
     b2 = yastn.rand(config=config_U1, s=(1, 1, -1, -1),  # some block mismatches
                 t=[(0, 2), (1, 2), (0, 1, 2), (0, 1, 2)],
-                D=[(2, 3), (5, 6), (4, 3, 4), (2, 1, 3)], dtype=dtype,
-                remove_blocks=remove_blocks)
+                D=[(2, 3), (5, 6), (4, 3, 4), (2, 1, 3)], dtype=dtype)
+    b2 = b2.remove_random_blocks(number=remove_blocks, keep_legs=True)
     b3 = yastn.rand(config=config_U1, s=(1, 1, -1, -1),  # no matching blocks in a @ b
                 t=[(0, 2), (-1, 2), (-1,  2), (0, 1, 2)],
-                D=[(2, 3), (5, 6), (4, 4), (2, 1, 3)], dtype=dtype,
-                remove_blocks=remove_blocks)
+                D=[(2, 3), (5, 6), (4, 4), (2, 1, 3)], dtype=dtype)
+    b3 = b3.remove_random_blocks(number=remove_blocks, keep_legs=True)
 
     for b in [b1, b2, b3]:
         target_block = (0, 1, 1, 0)

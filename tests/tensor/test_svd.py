@@ -64,7 +64,8 @@ def test_svd_basic(config_kwargs, remove_blocks):
             yastn.Leg(config_U1, s=-1, t=(-2, 0, 2), D=(5, 6, 7)),
             yastn.Leg(config_U1, s=1, t=(-2, -1, 0, 1, 2), D=(6, 5, 4, 3, 2)),
             yastn.Leg(config_U1, s=1, t=(0, 1), D=(2, 3))]
-    a = yastn.rand(config=config_U1, n=1, legs=legs, remove_blocks=remove_blocks)
+    a = yastn.rand(config=config_U1, n=1, legs=legs)
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     svd_combine(a)
 
     # Z2xU1
@@ -73,7 +74,8 @@ def test_svd_basic(config_kwargs, remove_blocks):
             yastn.Leg(config_Z2xU1, s=-1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(5, 4, 3, 2)),
             yastn.Leg(config_Z2xU1, s=1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(2, 1, 3, 3)),
             yastn.Leg(config_Z2xU1, s=1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(1, 2, 3, 4))]
-    a = yastn.ones(config=config_Z2xU1, legs=legs, remove_blocks=remove_blocks)
+    a = yastn.ones(config=config_Z2xU1, legs=legs)
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     svd_combine(a)
 
     # test svd of empty Tensor
@@ -302,8 +304,8 @@ def test_svd_backward_basic(config_kwargs, remove_blocks):
         for p in ['inf', 'fro']:
             a = yastn.rand(config=config_U1, s=(-1, -1, 1, 1),
                     t=[(0, 1), (0, 1), (0, 1), (0, 1)],
-                    D=[(2, 3), (4, 5), (4, 3), (2, 1)], dtype=dtype,
-                    remove_blocks=remove_blocks)
+                    D=[(2, 3), (2, 2), (1, 2), (2, 1)], dtype=dtype)
+            a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
 
             def test_f(data):
                 a._data=data
@@ -324,8 +326,8 @@ def test_svd_backward_truncate(config_kwargs, remove_blocks):
     for dtype in ["float64", "complex128"]:
         a = yastn.rand(config=config_U1, s=(-1, -1, 1, 1),
                       t=[(0, 1), (0, 1), (0, 1), (0, 1)],
-                      D=[(2, 3), (3, 2), (1, 2), (2, 1)], dtype=dtype,
-                      remove_blocks=remove_blocks)
+                      D=[(2, 3), (2, 2), (1, 2), (2, 1)], dtype=dtype)
+        a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
 
         b = yastn.rand(config=config_U1, s=(-1, -1),
                       t=[(0, 1), (0, 1)],
@@ -333,11 +335,11 @@ def test_svd_backward_truncate(config_kwargs, remove_blocks):
 
         c = yastn.rand(config=config_U1, s=(1, 1),
                       t=[(0, 1), (0, 1)],
-                      D=[(2, 3), (3, 2)], dtype=dtype)
+                      D=[(2, 2), (2, 2)], dtype=dtype)
 
         def test_f(data):
             a._data=data
-            U, S, Vh = a.svd_with_truncation(axes=([0, 1], [2, 3]), D_total=10)
+            U, S, Vh = a.svd_with_truncation(axes=([0, 1], [2, 3]), D_total=8)
             r = c.tensordot(U, axes=([0, 1], [0, 1]))
             r = r.tensordot(S, axes=(0, 0))
             r = r.tensordot(Vh, axes=(0, 0))
@@ -356,8 +358,8 @@ def test_svd_arnoldi(config_kwargs, remove_blocks):
     for dtype in ["float64", "complex128"]:
         a = yastn.rand(config=config_U1, s=(-1, -1, 1, 1),
                        t=[(0, 1), (0, 1), (0, 1), (0, 1)],
-                       D=[(2, 3), (4, 5), (4, 3), (2, 1)], dtype=dtype,
-                       remove_blocks=remove_blocks)
+                       D=[(2, 3), (4, 5), (4, 3), (2, 1)], dtype=dtype)
+        a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
         U0, S0, V0 = yastn.svd(a, policy='block_arnoldi', D_block=1, axes=((0, 1), (2, 3)), fix_signs=True)
         U1, S1, V1 = yastn.svd_with_truncation(a, D_block=1, axes=((0, 1), (2, 3)), fix_signs=True)
         assert (S0 - S1).norm() < tol
@@ -385,5 +387,5 @@ def test_svd_exceptions(config_kwargs):
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0", "--backend", "np", '--device', "cpu", "--tensordot_policy", "no_fusion"])
-    #pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch_cutensor", '--device', "cuda"])
+    # pytest.main([__file__, "-vs", "--durations=0", "--backend", "np", '--device', "cpu", "--tensordot_policy", "no_fusion"])
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])

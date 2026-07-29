@@ -500,7 +500,8 @@ def test_contracted_unroll_removed_blocks_preserves_numeric_result(config_kwargs
     cfg = yastn.make_config(sym='U1', **config_kwargs)
     leg = yastn.Leg(cfg, s=1, t=(-1, 0, 1), D=(1, 2, 3))
 
-    a = yastn.rand(config=cfg, legs=[leg, leg.conj(), leg], n=0, remove_blocks=remove_blocks)
+    a = yastn.rand(config=cfg, legs=[leg, leg.conj(), leg], n=0)
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     b = yastn.rand(config=cfg, legs=[leg.conj(), leg], n=0)
 
     expected = yastn.ncon([a, b], [[-1, -2, 1], [1, -3]])

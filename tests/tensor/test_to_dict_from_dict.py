@@ -38,7 +38,8 @@ def test_to_from_dict(resolve_ops, config_kwargs, remove_blocks):
             yastn.Leg(config, s=1, t=(-1, 0, 1), D= (2, 3, 4)),
             yastn.Leg(config, s=1, t=(-1, 0, 1), D= (4, 3, 2))]
 
-    a = yastn.rand(config, legs=legs, remove_blocks=remove_blocks)
+    a = yastn.rand(config, legs=legs)
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     a = a.fuse_legs(axes=(0, (1, 2), 3), mode='hard')
     a = a.fuse_legs(axes=(0, (1, 2)), mode='meta')
 

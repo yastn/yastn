@@ -19,7 +19,7 @@ from typing import Sequence, TYPE_CHECKING, Union
 
 import numpy as np
 
-from ._auxiliary import _clear_axes, _unpack_axes, get_blocks, argsort_t, _compress_slices
+from ._auxiliary import _clear_axes, _unpack_axes, get_blocks, argsort_t, _compress_slices, get_trimmed_struct, find_matching_indices
 from ._einsum import ncon
 from ._legbasic import LegBasic
 from ._legs import LegMeta, Leg, leg_product
@@ -33,15 +33,102 @@ __all__ = ['conj', 'conj_blocks', 'consume_transpose',
            'flip_signature', 'flip_charges', 'switch_signature',
            'transpose', 'moveaxis', 'move_leg', 'diag',
            'add_leg', 'remove_leg', 'copy', 'clone', 'detach', 'to',
-           'requires_grad_', 'grad', 'drop_leg_history', 'shallow_copy']
+           'requires_grad_', 'grad', 'drop_leg_history', 'shallow_copy',
+           'remove_random_blocks', 'remove_zero_blocks']
 
 
-def remove_random_blocks(self):
-    pass
+def remove_random_blocks(a, number, keep_legs=True) -> 'Tensor':
+    r"""
+    Randomly remove a number of blocks from a tensor.
+
+    The function attempts to remove ``number`` blocks from the tensor structure, selecting them randomly.
+    If ``keep_legs`` is ``True``, any attempted removal that would change the
+    tensor legs is rejected. The number of actually removed blocks can be
+    smaller than requested. If no blocks are removed, the original tensor is
+    returned. Otherwise, a new tensor with updated structure and copied data is
+    returned.
+
+    The function is useful mostly for testing.
+
+    Parameters
+    ----------
+    number: int
+        Number of attempts to remove random block.
+    keep_legs: bool
+        If True, ensures that tensor legs are not changed,
+        i.e. all leg charges appear in some blocks. The default is True.
+    """
+    if number <= 0 or a.config.sym.NSYM == 0:
+        return a
+    bl = get_blocks(a.config.sym, a.struct)
+    mask = np.ones(bl.nblocks, dtype=bool)
+    for _ in range(number):
+        ind = np.random.randint(bl.nblocks)
+        mask[ind] = False
+        if keep_legs:
+            tset = bl.t[mask]
+            if any(len(np.unique(tset[:, ax, :], axis=0)) != len(leg.t) for ax, leg in enumerate(a.struct.legs)):
+                mask[ind] = True
+
+    if a.struct.mask.array is not None:
+        inds = np.where(a.struct.mask.array)[0]
+        inds = inds[mask]
+        mask = np.zeros(len(a.struct.mask.array), dtype=bool)
+        mask[inds] = True
+
+    struct_new = a.struct.replace(mask=mask)
+    if not keep_legs:
+        struct_new = get_trimmed_struct(a.config.sym, struct_new)
+    if struct_new == a.struct:
+        return a
+
+    bl_new = get_blocks(a.config.sym, struct_new)
+    inds = find_matching_indices(bl.t, bl_new.t, both=False)
+    meta = _compress_slices(np.column_stack([bl_new.slc, bl.slc[inds]]))
+    meta_dt = np.dtype([
+        ('sln', np.int64, (2,)),
+        ('slo', np.int64, (2,))])
+    meta = meta.view(meta_dt).reshape(-1)
+    data = a.config.backend.embed_slices(a._data, meta, bl_new.size)
+    return a._replace(struct=struct_new, data=data)
 
 
-def remove_zeros_blocks(self):
-    pass
+def remove_zero_blocks(a, rtol=1e-12, atol=0) -> 'Tensor':
+    r"""
+    Remove blocks where all elements are below a cutoff.
+
+    Cutoff is a combination of absolut tolerance and
+    relative tolerance with respect to maximal element in the tensor.
+    """
+    cutoff = atol + rtol * a.norm(p='inf')
+
+    bl = get_blocks(a.config.sym, a.struct)
+    inds = [ind for ind, slc in enumerate(bl.slc)
+            if a.config.backend.max_abs(a._data[slice(*slc)]) > cutoff]
+    inds = np.array(inds, dtype=np.int64)
+    mask = np.zeros(bl.nblocks, dtype=bool)
+    mask[inds] = True
+
+    if a.struct.mask.array is not None:
+        inds = np.where(a.struct.mask.array)[0]
+        inds = inds[mask]
+        mask = np.zeros(len(a.struct.mask.array), dtype=bool)
+        mask[inds] = True
+
+    struct_new = a.struct.replace(mask=mask)
+    struct_new = get_trimmed_struct(a.config.sym, struct_new)
+    if struct_new == a.struct:
+        return a
+
+    bl_new = get_blocks(a.config.sym, struct_new)
+    inds = find_matching_indices(bl.t, bl_new.t, both=False)
+    meta = _compress_slices(np.column_stack([bl_new.slc, bl.slc[inds]]))
+    meta_dt = np.dtype([
+        ('sln', np.int64, (2,)),
+        ('slo', np.int64, (2,))])
+    meta = meta.view(meta_dt).reshape(-1)
+    data = a.config.backend.embed_slices(a._data, meta, bl_new.size)
+    return a._replace(struct=struct_new, data=data)
 
 
 def shallow_copy(a) -> 'Tensor':

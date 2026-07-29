@@ -81,7 +81,8 @@ def test_Z2xU1(config_kwargs, remove_blocks):
     legs = [yastn.Leg(config_Z2xU1, s=-1, t=[(0, 0), (1, 0), (0, 2), (1, 2)], D=[1, 2, 2, 4]),
             yastn.Leg(config_Z2xU1, s=1, t=[(0, -2), (0, 2)], D=[1, 2]),
             yastn.Leg(config_Z2xU1, s=1, t=[(0, -2), (0, 0), (0, 2), (1, -2), (1, 0), (1, 2)], D=[2, 4, 6, 3, 6, 9])]
-    a = yastn.ones(config=config_Z2xU1, legs=legs, remove_blocks=remove_blocks)
+    a = yastn.ones(config=config_Z2xU1, legs=legs)
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     assert a.get_shape() == (9, 3, 30)
     assert pytest.approx(a.norm().item() ** 2, rel=tol) == a.size == 104
 

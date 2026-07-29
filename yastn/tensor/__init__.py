@@ -155,6 +155,7 @@ class Tensor:
     from ._single import conj, conj_blocks, flip_signature, flip_charges, switch_signature, transpose, moveaxis, move_leg, diag
     from ._single import grad, requires_grad_, add_leg, remove_leg, drop_leg_history
     from ._single import copy, shallow_copy, clone, detach, detach_, to, consume_transpose
+    from ._single import remove_random_blocks, remove_zero_blocks
     from ._output import print_properties, __str__, __repr__, print_blocks_shape, is_complex
     from ._output import get_blocks_charge, get_blocks_shape, get_legs
     from ._output import zero_of_dtype, item, __getitem__, __contains__

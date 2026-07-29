@@ -129,15 +129,20 @@ def test_block_embed_fuse(config_kwargs, remove_blocks):
     leg1 = yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(3, 1, 4))
     leg1a = yastn.Leg(config_U1, s=1, t=(-1, 0, 4), D=(3, 1, 5))
     leg2 = yastn.Leg(config_U1, s=1, t=(-2, 0, 2), D=(3, 1, 2))
-    a = yastn.rand(config=config_U1, legs=[leg1, leg1, leg2.conj(), leg2.conj()], remove_blocks=remove_blocks)
-    b = yastn.rand(config=config_U1, legs=[leg2, leg2, leg1a.conj(), leg1.conj()], remove_blocks=remove_blocks)
+    a = yastn.rand(config=config_U1, legs=[leg1, leg1, leg2.conj(), leg2.conj()])
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
+    b = yastn.rand(config=config_U1, legs=[leg2, leg2, leg1a.conj(), leg1.conj()])
+    b = b.remove_random_blocks(number=remove_blocks, keep_legs=True)
+
     run_block_embed_fuse(a, b)
 
     config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
     leg1 = yastn.Leg(config_Z2xU1, s=1, t=((0, -1), (0, 1), (1, 0)), D=(2, 3, 4))
     leg2 = yastn.Leg(config_Z2xU1, s=1, t=((1, -1), (1, 1), (0, 0)), D=(5, 6, 7))
-    a = yastn.rand(config=config_Z2xU1, legs=[leg1, leg2, leg2.conj(), leg1.conj()], remove_blocks=remove_blocks)
-    b = yastn.rand(config=config_Z2xU1, legs=[leg2, leg1, leg1.conj(), leg2.conj()], remove_blocks=remove_blocks)
+    a = yastn.rand(config=config_Z2xU1, legs=[leg1, leg2, leg2.conj(), leg1.conj()])
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
+    b = yastn.rand(config=config_Z2xU1, legs=[leg2, leg1, leg1.conj(), leg2.conj()])
+    b = b.remove_random_blocks(number=remove_blocks, keep_legs=True)
     run_block_embed_fuse(a, b)
 
     # adds extra block to a and b and run test again

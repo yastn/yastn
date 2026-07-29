@@ -58,7 +58,7 @@ def _fill(config=None, legs=(), n=None, isdiag=False, val='rand', **kwargs):
             raise YastnError('Diagonal tensor cannot be initialized with fused legs.')
 
     a = Tensor(config=config, s=s, n=n, isdiag=isdiag, mfs=mfs, hfs=hfs, **kwargs)
-    a._fill_tensor(t=t, D=D, val=val, remove_blocks=kwargs.get('remove_blocks', 0))
+    a._fill_tensor(t=t, D=D, val=val)
     return a
 
 
