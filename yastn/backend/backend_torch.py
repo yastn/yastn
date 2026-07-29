@@ -32,7 +32,7 @@ from ._backend_torch_backwards import kernel_embed_transpose, kernel_transpose_a
 
 
 __all__= ['DTYPE', 'get_dtype', 'get_yastn_dtype',
-    'nvtx', 'cuda_is_available', 'get_device', 'move_to',
+    'nvtx', 'cuda_is_available', 'get_device', 'is_cpu_device', 'move_to',
     'grad', 'requires_grad_', 'requires_grad', 'detach', 'detach_', 'clone', 'copy', 'checkpoint',
     'random_seed', 'randint',
     'to_numpy', 'get_shape', 'get_size', 'diag_create', 'diag_get', 'real', 'is_complex', 'conj',
@@ -83,6 +83,13 @@ def is_complex(x):
 
 def get_device(x)->str:
     return str(x.device)
+
+
+def is_cpu_device(device) -> bool:
+    """ Whether ``device`` refers to a host (CPU) device. Unset device (None/'') counts as CPU. """
+    if not device:
+        return True
+    return torch.device(device).type == 'cpu'
 
 
 def random_seed(seed):

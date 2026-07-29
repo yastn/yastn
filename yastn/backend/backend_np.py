@@ -52,6 +52,11 @@ def get_device(x):
     return 'cpu'
 
 
+def is_cpu_device(device) -> bool:
+    """ NumPy arrays live on the host; unset/cpu device counts as CPU. """
+    return not device or 'cpu' in str(device).lower()
+
+
 def random_seed(seed):
     rng['rng'] = np.random.default_rng(seed)
 

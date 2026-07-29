@@ -28,6 +28,7 @@ from ._auxiliary import _encode_rows_shared, _row_keys_pair, _struct, _clear_axe
 from ._auxiliary import find_matching_indices, argsort_t, get_blocks, hash_blocks, get_trimmed_struct
 from ._merging import _unfuse_blocks, _fuse_blocks, _mask_tensors_leg_intersection, _meta_mask
 from ._tests import YastnError, _test_can_be_combined, _unpack_trans_test_axes_pair
+from ..backend import import_backend
 
 if TYPE_CHECKING:
     from . import Tensor
@@ -530,7 +531,8 @@ def _meta_tensordot_cutensor(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout
     """ Dispatch to the optimized CPU or GPU _meta_tensordot_cutensor builder. 
     ``device`` (the first operand's data device) is used only by GPU. """
     
-    if policy in ["gpu",] or ((policy in ["auto"] and device) or _META_CUTENSOR_VERSION in ["gpu",]):
+    if policy in ["gpu",] or ((policy in ["auto"] and not import_backend(backend_id).is_cpu_device(device)) \
+                              or _META_CUTENSOR_VERSION in ["gpu",]):
         from ._contractions_cutensor import _meta_tensordot_cutensor_gpu  # lazy: avoids import cycle
         meta= _meta_tensordot_cutensor_gpu(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b, 
                     lazy_threshold=lazy_threshold, device=device, backend_id=backend_id)

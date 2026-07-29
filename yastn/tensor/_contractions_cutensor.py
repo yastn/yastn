@@ -284,9 +284,9 @@ def _get_blocks_and_subslices_gpu(sym, struct_sub, struct_full, device, backend)
 @nsys_profile
 def _meta_tensordot_cutensor_gpu(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b, 
                                  lazy_threshold:float=None, device:str=None, backend_id:str=None):
-    if device in [None, ""] or "cpu" in device.lower():
-        raise ValueError("GPU device is required for _meta_tensordot_cutensor_gpu.")
     backend = import_backend(backend_id)
+    if backend.is_cpu_device(device):
+        raise ValueError("GPU device is required for _meta_tensordot_cutensor_gpu.")
     struct_a_sub, struct_b_sub, struct_c = \
         _match_legs_tensordot_gpu(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b, device, backend_id)
     bl_a, slc_a = _get_blocks_and_subslices_gpu(sym, struct_a_sub, struct_a, device, backend)
