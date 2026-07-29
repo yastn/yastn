@@ -48,9 +48,11 @@ def test_U1(config_kwargs):
     assert (-2, 0, -2, 0) in c
     assert c.get_shape() == (6, 3, 6, 1)
     assert pytest.approx(c.norm().item() ** 2, rel=tol) == 29
+    assert c.nblocks == 5
     c.set_block(ts=(2, 0, 0, 2), Ds=(3, 1, 2, 3), val='ones')  # adds a new block changing tensor shape
     assert c.get_shape() == (6, 3, 6, 4)
     assert pytest.approx(c.norm().item() ** 2, rel=tol) == 47
+    assert c.nblocks == 6
 
     # 0-dim tensor
     a = yastn.ones(config=config_U1)  # s=() # t=(), D=()

@@ -331,7 +331,7 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
     mask[inds] = True
     ind = find_index(bl_new.t, ats)
     mask[ind] = True
-    struct_new.replace(mask=mask)
+    struct_new = struct_new.replace(mask=mask)
     bl_new = get_blocks(a.config.sym, struct_new)
     #
     ind1, ind2 = find_matching_indices(bl_new.t, bl_old.t)
@@ -347,6 +347,7 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
     #
     Dsize = Ds[0] if a.isdiag else reduce(mul, Ds, 1)
     new_block = _init_block(a.config, Dsize, val, dtype=a.yastn_dtype, device=a.device)
+    ind = find_index(bl_new.t, ats)
     slc = bl_new.slc[ind]
     a._data[slice(*slc)] = new_block
 
