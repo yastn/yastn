@@ -19,7 +19,7 @@ from typing import Sequence, TYPE_CHECKING, Union
 
 import numpy as np
 
-from ._auxiliary import _clear_axes, _unpack_axes, get_blocks, argsort_t
+from ._auxiliary import _clear_axes, _unpack_axes, get_blocks, argsort_t, _compress_slices
 from ._einsum import ncon
 from ._legbasic import LegBasic
 from ._legs import LegMeta, Leg, leg_product
@@ -233,15 +233,12 @@ def flip_charges(a, axes=None) -> 'Tensor':
     bl_new = get_blocks(a.config.sym, struct_new)
     inds = argsort_t(t_flip)
     assert np.array_equal(t_flip[inds], bl_new.t), "Sanity check. Contact developers.."
-    sln, slo = bl_new.slc, bl_old.slc[inds]
-    meta = np.column_stack([sln, sln[:, 1] - sln[:, 0], slo, slo[:, 1] - slo[:, 0]])
+    meta = _compress_slices(np.column_stack([bl_new.slc, bl_old.slc[inds]]))
     meta_dt = np.dtype([
         ('sln', np.int64, (2,)),
-        ('Dn', np.int64, (1,)),
-        ('slo', np.int64, (2,)),
-        ('Do', np.int64, (1,))])
+        ('slo', np.int64, (2,))])
     meta = meta.view(meta_dt).reshape(-1)
-    data = a.config.backend.embed_transpose(a._data, [0], meta, bl_new.size)  # used for embeding
+    data = a.config.backend.embed_slices(a._data, meta, bl_new.size)
     out = a._replace(struct=struct_new, data=data, hfs=hfs_new)
     return out
 

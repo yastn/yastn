@@ -348,6 +348,28 @@ class kernel_embed_transpose(torch.autograd.Function):
         return data_in_b, None, None, None
 
 
+class kernel_embed_slices(torch.autograd.Function):
+    @staticmethod
+    def forward(data_in, meta, size_out):
+        data_out = torch.zeros((size_out,), dtype=data_in.dtype, device=data_in.device)
+        for sln, slo in meta:
+            data_out[slice(*sln)] = data_in[slice(*slo)]
+        return data_out
+
+    @staticmethod
+    def setup_context(ctx, inputs, output):
+        data_in, meta, _ = inputs
+        ctx.meta = meta
+        ctx.size_in = data_in.numel()
+
+    @staticmethod
+    def backward(ctx, data_out_b):
+        data_in_b = torch.zeros((ctx.size_in,), dtype=data_out_b.dtype, device=data_out_b.device)
+        for sln, slo in ctx.meta:
+            data_in_b[slice(*slo)] = data_out_b[slice(*sln)]
+        return data_in_b, None, None
+
+
 class kernel_transpose_and_merge(torch.autograd.Function):
     @staticmethod
     def forward(data_in, order, meta, size_out):

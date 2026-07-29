@@ -29,6 +29,7 @@ from ._backend_torch_backwards import kernel_svd, kernel_svds_scipy
 from ._backend_torch_backwards import kernel_dot, kernel_transpose_dot_sum, kernel_negate_blocks
 from ._backend_torch_backwards import kernel_apply_mask, kernel_embed_mask
 from ._backend_torch_backwards import kernel_embed_transpose, kernel_transpose_and_merge, kernel_unmerge
+from ._backend_torch_backwards import kernel_embed_slices
 
 
 __all__= ['DTYPE', 'get_dtype', 'get_yastn_dtype',
@@ -734,6 +735,10 @@ def embed_mask(Adata, mask, meta, Dsize, axis, a_ndim):
 
 def embed_transpose(data, axes, meta_transpose, size):
    return kernel_embed_transpose.apply(data, axes, meta_transpose, size)
+
+
+def embed_slices(data, meta, size):
+   return kernel_embed_slices.apply(data, meta, size)
 
 
 def transpose_and_merge(data, order, meta_mrg, size):

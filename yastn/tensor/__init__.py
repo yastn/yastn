@@ -255,15 +255,12 @@ class Tensor:
                 slc_old[1:, 0] = slc_old[:-1, 1]
 
             ind1, ind2 = find_matching_indices(bl_new.t, t_old)
-            sln, slo = bl_new.slc[ind1], slc_old[ind2]
-            meta = np.column_stack([sln, sln[:, 1] - sln[:, 0], slo, slo[:, 1] - slo[:, 0]])
+            meta = _compress_slices(np.column_stack([bl_new.slc[ind1], slc_old[ind2]]))
             meta_dt = np.dtype([
                 ('sln', np.int64, (2,)),
-                ('Dn', np.int64, (1,)),
-                ('slo', np.int64, (2,)),
-                ('Do', np.int64, (1,))])
+                ('slo', np.int64, (2,))])
             meta = meta.view(meta_dt).reshape(-1)
-            newdata = d['config'].backend.embed_transpose(data, [0], meta, bl_new.size)
+            newdata = d['config'].backend.embed_slices(data, meta, bl_new.size)
             d['data'] = newdata
             return cls(**d)
 
