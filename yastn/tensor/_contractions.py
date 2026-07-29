@@ -386,33 +386,40 @@ def _meta_tensordot_nf(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b, la
     #
     Daop = np.prod(bl_a.D[:, nout_a], axis=1, dtype=np.int64)
     Dacp = np.prod(bl_a.D[:, nin_a], axis=1, dtype=np.int64)
-    unique_a, inv_a, count_a = np.unique(bl_a.t[:, nin_a, :], return_inverse=True, return_counts=True, axis=0) # if more blocks of a contribute to given contracted sector (in b)
+    unique_a, inv_a, count_a = unique_rows(bl_a.t[:, nin_a, :], return_inverse=True, return_counts=True) # if more blocks of a contribute to given contracted sector (in b)
     arg_a = np.argsort(inv_a)
     #
     Dbop = np.prod(bl_b.D[:, nout_b], axis=1, dtype=np.int64)
     Dbcp = np.prod(bl_b.D[:, nin_b], axis=1, dtype=np.int64)
-    unique_b, inv_b, count_b = np.unique(bl_b.t[:, nin_b, :], return_inverse=True, return_counts=True, axis=0)
+    unique_b, inv_b, count_b = unique_rows(bl_b.t[:, nin_b, :], return_inverse=True, return_counts=True)
     arg_b = np.argsort(inv_b)
     #
-    # padding count_a and count_b with zero to allign matching charges
-    unique_ab = np.unique(np.vstack([unique_a, unique_b]), axis=0)
-    in_a = find_matching_indices(unique_ab, unique_a, both=False)
-    in_b = find_matching_indices(unique_ab, unique_b, both=False)
-    count_a2 = np.zeros(len(unique_ab), dtype=np.int64)
-    count_a2[in_a] = count_a
-    count_b2 = np.zeros(len(unique_ab), dtype=np.int64)
-    count_b2[in_b] = count_b
+    # align matching contracted charges (counts padded with zeros); (ind_a, ind_b) list every matching (a, b) pair
+    ind_a, ind_b = _matched_pair_indices(unique_a, count_a, arg_a, unique_b, count_b, arg_b)
     #
-    ind_a, ind_b = _indices_from_counts(count_a2, count_b2)
-    ind_a = arg_a[ind_a]
-    ind_b = arg_b[ind_b]
+    # Produced (out_a, out_b) output-block classes via 1-D int64 keys, avoiding the ~nn wide rows that
+    # column_stack + np.unique(axis=0) would build (nn = matched pairs). Encode each out_a / out_b tuple
+    # as a small class id and reduce the per-pair test to id_a * n_b + id_b. Since unique_rows returns
+    # classes in per-column lexicographic order, this key sorts by (out_a, out_b) exactly as np.unique
+    # of the wide rows did, so inv_c (and hence slc_c[inv_c]) is preserved.
+    na, nb, nsym = len(nout_a), len(nout_b), bl_a.t.shape[2]  # explicit widths: bl_*.nblocks may be 0
+    ua, id_a = unique_rows(bl_a.t[:, nout_a, :].reshape(bl_a.nblocks, na * nsym), return_inverse=True)
+    ub, id_b = unique_rows(bl_b.t[:, nout_b, :].reshape(bl_b.nblocks, nb * nsym), return_inverse=True)
+    id_a, id_b, n_b = id_a.reshape(-1), id_b.reshape(-1), len(ub)
     #
-    tao = bl_a.t[:, nout_a, :]
-    tbo = bl_b.t[:, nout_b, :]
-    tn = np.column_stack([tao[ind_a], tbo[ind_b]])
-    unique_c, inv_c = np.unique(tn, return_inverse=True, axis=0)
+    pk = id_a[ind_a] * n_b + id_b[ind_b]                     # per-pair output-class key
+    unique_keys, inv_c = np.unique(pk, return_inverse=True)  # inv_c: output-class id of each matched pair
+    inv_c = inv_c.reshape(-1)
     #
-    ind_c = find_matching_indices(bl_c.t, unique_c, both=False)
+    # struct_c legs are ordered (out_a from nout_a, then out_b from nout_b), so bl_c.t splits into its
+    # out_a (:na) and out_b (na:) columns aligned with ua / ub; map each produced class -> c-block index
+    cid_a = locate_rows(ua, bl_c.t[:, :na, :].reshape(bl_c.nblocks, na * nsym))
+    cid_b = locate_rows(ub, bl_c.t[:, na:, :].reshape(bl_c.nblocks, nb * nsym))
+    c_keys = np.where((cid_a < len(ua)) & (cid_b < n_b), cid_a * n_b + cid_b, -1)
+    order = np.argsort(c_keys, kind='stable')
+    ind_c = order[np.searchsorted(c_keys[order], unique_keys)]  # unique_keys subset of c_keys by fixpoint trimming
+    assert len(unique_keys) == 0 or np.array_equal(c_keys[ind_c], unique_keys), "Sanity check. Contact developers."
+    #
     if lazy_threshold and bl_c.nblocks and len(ind_c) / bl_c.nblocks < lazy_threshold:
         struct_c = struct_c.mask_from_ind(bl_c.nblocks, ind_c)
         struct_c = get_trimmed_struct(sym, struct_c)
