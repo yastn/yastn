@@ -229,14 +229,23 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b, lazy_threshold):
 def _flops_tensordot_nf(meta_dot, reshape_a, iscomplex=False):
     r"""
     FLOPs performed by :func:`transpose_dot_sum` for this meta: the block GEMMs and the ``+=``
-    accumulation. Each ``meta_dot`` entry is a dense ``(M x K) . (K x N)`` GEMM accumulated into
-    an ``(M x N)`` output block, with ``M, N = meta_dot['Dn']`` and ``K = reshape_a['Dr'][ta]``.
+    accumulation. Each ``meta_dot`` entry ``(sln, Dn, ta, tb)`` is a dense ``(M x K) . (K x N)``
+    GEMM accumulated into an ``(M x N)`` output block, with ``M, N = Dn`` and ``K`` the shared
+    dimension ``Dr`` of a-block ``ta`` (``reshape_a`` entry ``(slo, Do, Dl, Dr)``).
     Returns ``(gemm_flops, sum_flops)``.
     """
+    # Ad = {ii: Adata[slo].reshape(Do).transpose(Aorder).reshape(Dl, Dr) for ii, (slo, Do, Dl, Dr) in enumerate(Areshape)}
+    # Bd = {ii: Bdata[slo].reshape(Do).transpose(Border).reshape(Dl, Dr) for ii, (slo, Do, Dl, Dr) in enumerate(Breshape)}
+    # for sln, Dn, ta, tb in meta_dot:
+    #     newdata[sln].reshape(Dn)[:] += np.dot(Ad[ta], Bd[tb])
+
     if len(meta_dot) == 0:
         return 0, 0
-    mn = meta_dot['Dn'][:, 0] * meta_dot['Dn'][:, 1]
-    K = reshape_a['Dr'][meta_dot['ta']]
+    Dn = np.array([m[1] for m in meta_dot], dtype=np.int64)   # (nblocks, 2) of (M, N)
+    ta = np.array([m[2] for m in meta_dot], dtype=np.int64)   # a-block index per GEMM
+    Dr = np.array([r[3] for r in reshape_a], dtype=np.int64)  # shared dim K per a-block
+    mn = Dn[:, 0] * Dn[:, 1]
+    K = Dr[ta]
     macs = int((mn * K).sum())   # multiply-accumulate ops of the block GEMMs
     elems = int(mn.sum())        # elements touched by the += accumulation
     return (8 * macs, 2 * elems) if iscomplex else (2 * macs, elems)
