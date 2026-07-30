@@ -61,7 +61,8 @@ def test_qr_basic(config_kwargs, remove_blocks):
             yastn.Leg(config_U1, s=-1, t=(-2, 0, 2), D=(5, 6, 7)),
             yastn.Leg(config_U1, s=1, t=(-2, -1, 0, 1, 2), D=(6, 5, 4, 3, 2)),
             yastn.Leg(config_U1, s=1, t=(0, 1), D=(2, 3))]
-    a = yastn.rand(config=config_U1, legs=legs, n=1, remove_blocks=remove_blocks)
+    a = yastn.rand(config=config_U1, legs=legs, n=1)
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     run_qr_combine(a)
 
     # Z2xU1
@@ -70,7 +71,8 @@ def test_qr_basic(config_kwargs, remove_blocks):
             yastn.Leg(config_Z2xU1, s=1, t=[(0, 0), (0, 2), (1, 0), (1, 2)], D=(5, 4, 3, 2)),
             yastn.Leg(config_Z2xU1, s=-1, t=[(0, 0), (0, 2), (1, 0), (1, 2)], D=(3, 4, 5, 6)),
             yastn.Leg(config_Z2xU1, s=-1, t=[(0, 0), (0, 2), (1, 0), (1, 2)], D=(1, 2, 3, 4))]
-    a = yastn.ones(config=config_Z2xU1, legs=legs, remove_blocks=remove_blocks)
+    a = yastn.ones(config=config_Z2xU1, legs=legs)
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     run_qr_combine(a)
 
     # test qr of empty Tensor
@@ -103,8 +105,8 @@ def test_qr_transpose_meta(config_kwargs, remove_blocks):
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1,),
                   t=((0, 1), (0, 1), (0, 1), (0, 1), (0, 1)),
-                  D=((1, 2), (3, 4), (5, 6), (7, 8), (9, 10)),
-                  remove_blocks=remove_blocks)
+                  D=((1, 2), (3, 4), (5, 6), (7, 8), (9, 10)))
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     #
     af = a.fuse_legs(axes=(2, (0, 1), (4, 3)), mode='meta')
     assert af.trans == (2, 0, 1, 4, 3)

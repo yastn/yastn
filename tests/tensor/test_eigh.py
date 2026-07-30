@@ -20,6 +20,21 @@ import yastn
 tol = 1e-9  #pylint: disable=invalid-name
 
 
+def test_eigh_block_lanczos_zero_block(config_kwargs):
+    """Block Lanczos does not pass an all-zero sector to ARPACK."""
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    leg = yastn.Leg(config_U1, s=1, t=(0, 1), D=(72, 72))
+    a = yastn.rand(config=config_U1, legs=[leg.conj(), leg])
+    a = a + a.transpose(axes=(1, 0)).conj()
+    a.set_block(ts=(0, 0), val='zeros')
+
+    S, U = yastn.eigh(a, axes=(0, 1), policy='block_lanczos', D_block=1)
+
+    assert S.get_blocks_charge() == ((1, 1),)
+    assert U.is_consistent()
+    assert S.is_consistent()
+
+
 def eigh_combine(a,which='SR'):
     """ decompose and contracts Hermitian tensor using eigh decomposition """
     a2 = yastn.tensordot(a, a, axes=((0, 1), (0, 1)), conj=(0, 1))  # makes Hermitian matrix from a

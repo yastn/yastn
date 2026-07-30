@@ -248,7 +248,7 @@ def conj(data):
 def trace(data, order, meta, Dsize):
     newdata = np.zeros(Dsize, dtype=data.dtype)
     for (sln, slo, Do, Drsh) in meta:
-        newdata[slice(*sln)] += np.trace(data[slice(*slo)].reshape(Do).transpose(order).reshape(Drsh))
+        newdata[sln] += np.trace(data[slo].reshape(Do).transpose(order).reshape(Drsh))
     return newdata
 
 
@@ -362,28 +362,28 @@ def svds_scipy(data, meta, sizes, thresh=None, solver='arpack', **kwargs):
     Sdata = np.empty((sizes[1],), dtype=real_dtype)
     Vdata = np.empty((sizes[2],), dtype=data.dtype)
     for (sl, D, slU, DU, slS, slV, DV) in meta:
-        k = slS[1] - slS[0]
+        k = slS.stop - slS.start
         # Is block too small for iterative svd ?
         # TODO user defined threshold
         # the second condition is heuristic estimate when performing dense svd should be faster.
-        if (k < min(D) - 1 and D[0] * D[1] > 5000) or (not(thresh is None) and min(D)*thresh > k):
+        if (k < min(D) - 1 and D[0] * D[1] > 5000) or (not(thresh is None) and min(D) * thresh > k):
             if solver == 'arpack':
                 try:
-                    U, S, V = scipy.sparse.linalg.svds(data[slice(*sl)].reshape(D), k=k, ncv=min(5 * k, min(D) - 1),
+                    U, S, V = scipy.sparse.linalg.svds(data[sl].reshape(D), k=k, ncv=min(5 * k, min(D) - 1),
                                                     which='LM', maxiter=20 * min(D), solver='arpack')
                 except scipy.sparse.linalg.ArpackError:
-                    U, S, V = scipy.sparse.linalg.svds(data[slice(*sl)].reshape(D), k=k,
+                    U, S, V = scipy.sparse.linalg.svds(data[sl].reshape(D), k=k,
                                                     which='LM', maxiter=20 * k, solver='propack')
             if solver == 'propack':
-                U, S, V = scipy.sparse.linalg.svds(data[slice(*sl)].reshape(D), k=k,
+                U, S, V = scipy.sparse.linalg.svds(data[sl].reshape(D), k=k,
                                                     which='LM', maxiter=20 * k, solver='propack')
             ord = np.argsort(-S)
             U, S, V = U[:, ord], S[ord], V[ord, :]
         else:
-            U, S, V = safe_svd(data[slice(*sl)].reshape(D))
-        Udata[slice(*slU)].reshape(DU)[:] = U[:, :k]
-        Sdata[slice(*slS)] = S[:k]
-        Vdata[slice(*slV)].reshape(DV)[:] = V[:k, :]
+            U, S, V = safe_svd(data[sl].reshape(D))
+        Udata[slU].reshape(DU)[:] = U[:, :k]
+        Sdata[slS] = S[:k]
+        Vdata[slV].reshape(DV)[:] = V[:k, :]
     return Udata, Sdata, Vdata
 
 
@@ -393,10 +393,10 @@ def svd(data, meta, sizes, **kwargs):
     Sdata = np.empty((sizes[1],), dtype=real_dtype)
     Vdata = np.empty((sizes[2],), dtype=data.dtype)
     for slo, Do, slU, DU, slS, slV, DV in meta:
-        U, S, V = safe_svd(data[slice(*slo)].reshape(Do))
-        Udata[slice(*slU)].reshape(DU)[:] = U
-        Sdata[slice(*slS)] = S
-        Vdata[slice(*slV)].reshape(DV)[:] = V
+        U, S, V = safe_svd(data[slo].reshape(Do))
+        Udata[slU].reshape(DU)[:] = U
+        Sdata[slS] = S
+        Vdata[slV].reshape(DV)[:] = V
     return Udata, Sdata, Vdata
 
 
@@ -407,19 +407,19 @@ def eig_lowrank(data, meta, sizes, **kwargs):
     Sdata = np.empty((sizes[1],), dtype=dtype)
     Vdata = np.empty((sizes[2],), dtype=dtype)
     for (sl, D, slU, DU, slS, slV, DV) in meta:
-        k = slS[1] - slS[0]
+        k = slS.stop - slS.start
         if k < min(D) - 1 and D[0] * D[1] > 5000:
             # the second condition is heuristic estimate when performing dense eig should be faster.
             try:
-                S, U= scipy.sparse.linalg.eigs(data[slice(*sl)].reshape(D), k=k, M=None, sigma=None,
+                S, U = scipy.sparse.linalg.eigs(data[sl].reshape(D), k=k, M=None, sigma=None,
                     which=which, v0=None, ncv=None, maxiter=None, tol=0, return_eigenvectors=True, Minv=None, OPinv=None, OPpart=None)
             except scipy.sparse.linalg.ArpackError as e:
                 raise e
         else:
-            S, V, U = scipy.linalg.eig(data[slice(*sl)].reshape(D), left=True, right=True)
-        Udata[slice(*slU)].reshape(DU)[:] = U[:, :k]
-        Sdata[slice(*slS)] = S[:k]
-        Vdata[slice(*slV)].reshape(DV)[:] = V[:k, :]
+            S, V, U = scipy.linalg.eig(data[sl].reshape(D), left=True, right=True)
+        Udata[slU].reshape(DU)[:] = U[:, :k]
+        Sdata[slS] = S[:k]
+        Vdata[slV].reshape(DV)[:] = V[:k, :]
     return Udata, Sdata, Vdata
 
 
@@ -431,7 +431,7 @@ def eig(data, meta=None, sizes=(1, 1), **kwargs):
     Sdata = np.empty((sizes[1],), dtype=dtype)
     Vdata = np.empty((sizes[2],), dtype=dtype)
     for slo, Do, slU, DU, slS, slV, DV in meta:
-        S, V, U = scipy.linalg.eig(data[slice(*slo)].reshape(Do), left=True, right=True)
+        S, V, U = scipy.linalg.eig(data[slo].reshape(Do), left=True, right=True)
         #
         # in general diag(U.H @ U) = 1 but not U.H @ U = I, i.e. right eigenvectors are not orthogonal
         # same is true for left eigenvectors V, diag(V.H @ V) = 1 but not V.H @ V = I
@@ -472,13 +472,13 @@ def eig(data, meta=None, sizes=(1, 1), **kwargs):
             except (scipy.linalg.LinAlgError, np.linalg.LinAlgError) as e:
                 raise ValueError("Biorthonormalization of left/right eigenvector pairs failed.") from e
 
-        if any( np.abs(np.sum(_V.T * _U, axis=0) - 1) > tol ):
+        if any(np.abs(np.sum(_V.T * _U, axis=0) - 1) > tol):
             raise ValueError("Biorthonormalization of left/right eigenvector pairs failed.")
 
         s_order = argsort_which(S, which=kwargs.get('which', 'LM'))
-        Udata[slice(*slU)].reshape(DU)[:] = _U[:,s_order]
-        Sdata[slice(*slS)] = S[s_order]
-        Vdata[slice(*slV)].reshape(DV)[:] = _V[s_order,:]
+        Udata[slU].reshape(DU)[:] = _U[:,s_order]
+        Sdata[slS] = S[s_order]
+        Vdata[slV].reshape(DV)[:] = _V[s_order,:]
     return Udata, Sdata, Vdata
 
 
@@ -486,9 +486,9 @@ def eigvals(data, meta, sizeS, **kwargs):
     dtype = dtype_to_complex(data)
     Sdata = np.empty((sizeS,), dtype=dtype)
     for (sl, D, _, _, slS, _, _) in meta:
-        S = scipy.linalg.eigvals(data[slice(*sl)].reshape(D), b=None, overwrite_a=False,
+        S = scipy.linalg.eigvals(data[sl].reshape(D), b=None, overwrite_a=False,
                                      check_finite=True, homogeneous_eigvals=False)
-        Sdata[slice(*slS)]= S[argsort_which(S, which=kwargs.get('which', 'LM'))]
+        Sdata[slS]= S[argsort_which(S, which=kwargs.get('which', 'LM'))]
     return Sdata
 
 
@@ -497,19 +497,19 @@ def svdvals(data, meta, sizeS, **kwargs):
     Sdata = np.empty((sizeS,), dtype=real_dtype)
     for (sl, D, _, _, slS, _, _) in meta:
         try:
-            S = scipy.linalg.svd(data[slice(*sl)].reshape(D), full_matrices=False, compute_uv=False)
+            S = scipy.linalg.svd(data[sl].reshape(D), full_matrices=False, compute_uv=False)
         except scipy.linalg.LinAlgError:  # pragma: no cover
-            S = scipy.linalg.svd(data[slice(*sl)].reshape(D), full_matrices=False, compute_uv=False, lapack_driver='gesvd')
-        Sdata[slice(*slS)] = S
+            S = scipy.linalg.svd(data[sl].reshape(D), full_matrices=False, compute_uv=False, lapack_driver='gesvd')
+        Sdata[slS] = S
     return Sdata
 
 
 def fix_svd_signs(Udata, Vdata, meta):
     Uamp = (abs(Udata) * (2 ** 40)).astype(np.int64)
     for (_, _, slU, DU, _, slV, DV) in meta:
-        Utemp = Udata[slice(*slU)].reshape(DU)
-        Vtemp = Vdata[slice(*slV)].reshape(DV)
-        Utemp_amp = Uamp[slice(*slU)].reshape(DU)
+        Utemp = Udata[slU].reshape(DU)
+        Vtemp = Vdata[slV].reshape(DV)
+        Utemp_amp = Uamp[slU].reshape(DU)
         ii = np.argmax(Utemp_amp, axis=0).reshape(1, -1)
         phase = np.take_along_axis(Utemp, ii, axis=0)
         phase /= abs(phase)
@@ -525,11 +525,11 @@ def eigh(data, meta=None, sizes=(1, 1)):
     if meta is not None:
         for slo, Do, slU, DU, slS in meta:
             try:
-                S, U = scipy.linalg.eigh(data[slice(*slo)].reshape(Do))
+                S, U = scipy.linalg.eigh(data[slo].reshape(Do))
             except scipy.linalg.LinAlgError:  # pragma: no cover
-                S, U = np.linalg.eigh(data[slice(*slo)].reshape(Do))
-            Sdata[slice(*slS)] = S
-            Udata[slice(*slU)].reshape(DU)[:] = U
+                S, U = np.linalg.eigh(data[slo].reshape(Do))
+            Sdata[slS] = S
+            Udata[slU].reshape(DU)[:] = U
         return Sdata, Udata
     return np.linalg.eigh(data)  # S, U
 
@@ -542,9 +542,9 @@ def eigh_lowrank(data, meta, sizes, thresh=None, **kwargs):
     Sdata = np.zeros((sizes[0],), dtype=real_dtype)
     Udata = np.zeros((sizes[1],), dtype=data.dtype)
     for (sl, D, slU, DU, slS) in meta:
-        k = slS[1] - slS[0]
+        k = slS.stop - slS.start
         n = D[0]
-        block = data[slice(*sl)].reshape(D)
+        block = data[sl].reshape(D)
         if k < n - 1 and n * n > 5000:
             try:
                 S, U = scipy.sparse.linalg.eigsh(block, k=k, which=_which_map[_which],
@@ -563,8 +563,8 @@ def eigh_lowrank(data, meta, sizes, thresh=None, **kwargs):
             S,U = S[arg_b[:k]], U[:,arg_b[:k]]
         else:
             S,U = S[:k], U[:,:k]
-        Sdata[slice(*slS)] = S
-        Udata[slice(*slU)].reshape(DU)[:] = U
+        Sdata[slS] = S
+        Udata[slU].reshape(DU)[:] = U
     return Sdata, Udata
 
 
@@ -572,11 +572,11 @@ def qr(data, meta, sizes):
     Qdata = np.empty((sizes[0],), dtype=data.dtype)
     Rdata = np.empty((sizes[1],), dtype=data.dtype)
     for slo, Do, slQ, DQ, slR, DR in meta:
-        Q, R = scipy.linalg.qr(data[slice(*slo)].reshape(Do), mode='economic')
+        Q, R = scipy.linalg.qr(data[slo].reshape(Do), mode='economic')
         sR = np.sign(np.real(np.diag(R)))
         sR[sR == 0] = 1
-        Qdata[slice(*slQ)].reshape(DQ)[:] = Q * sR  # positive diag of R
-        Rdata[slice(*slR)].reshape(DR)[:] = sR.reshape([-1, 1]) * R
+        Qdata[slQ].reshape(DQ)[:] = Q * sR  # positive diag of R
+        Rdata[slR].reshape(DR)[:] = sR.reshape([-1, 1]) * R
     return Qdata, Rdata
 
 
@@ -620,7 +620,7 @@ def add(datas, metas, Dsize):
     newdata = np.zeros(Dsize, dtype=dtype)
     for data, meta in zip(datas, metas):
         for sln, slo in meta:
-            newdata[slice(*sln)] += data[slice(*slo)]
+            newdata[sln] += data[slo]
     return newdata
 
 
@@ -628,9 +628,9 @@ def sub(Adata, Bdata, meta, Dsize):
     dtype = np.promote_types(Adata.dtype, Bdata.dtype)
     newdata = np.zeros(Dsize, dtype=dtype)
     for sl_c, sl_a in meta[0]:
-        newdata[slice(*sl_c)] += Adata[slice(*sl_a)]
+        newdata[sl_c] += Adata[sl_a]
     for sl_c, sl_b in meta[1]:
-        newdata[slice(*sl_c)] -= Bdata[slice(*sl_b)]
+        newdata[sl_c] -= Bdata[sl_b]
     return newdata
 
 
@@ -638,7 +638,7 @@ def vdot(Adata, Bdata, meta):
     dtype = np.promote_types(Adata.dtype, Bdata.dtype)
     tmp = np.empty(len(meta), dtype=dtype)
     for ii, (sla, slb) in enumerate(meta):
-        tmp[ii] = np.dot(Adata[slice(*sla)], Bdata[slice(*slb)])
+        tmp[ii] = np.dot(Adata[sla], Bdata[slb])
     return np.sum(tmp)
 
 
@@ -646,19 +646,19 @@ def dot(Adata, Bdata, meta_dot, Dsize):
     dtype = np.promote_types(Adata.dtype, Bdata.dtype)
     newdata = np.zeros(Dsize, dtype=dtype)
     for slc, Dc, sla, Da, slb, Db in meta_dot:
-        np.dot(Adata[slice(*sla)].reshape(Da),
-               Bdata[slice(*slb)].reshape(Db),
-               out=newdata[slice(*slc)].reshape(Dc))
+        np.dot(Adata[sla].reshape(Da),
+               Bdata[slb].reshape(Db),
+               out=newdata[slc].reshape(Dc))
     return newdata
 
 
 def transpose_dot_sum(Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border, Dsize):
     dtype = np.promote_types(Adata.dtype, Bdata.dtype)
     newdata = np.zeros(Dsize, dtype=dtype)
-    Ad = {ii: Adata[slice(*slo)].reshape(Do).transpose(Aorder).reshape(Dl, Dr) for ii, (slo, Do, Dl, Dr) in enumerate(Areshape)}
-    Bd = {ii: Bdata[slice(*slo)].reshape(Do).transpose(Border).reshape(Dl, Dr) for ii, (slo, Do, Dl, Dr) in enumerate(Breshape)}
+    Ad = {ii: Adata[slo].reshape(Do).transpose(Aorder).reshape(Dl, Dr) for ii, (slo, Do, Dl, Dr) in enumerate(Areshape)}
+    Bd = {ii: Bdata[slo].reshape(Do).transpose(Border).reshape(Dl, Dr) for ii, (slo, Do, Dl, Dr) in enumerate(Breshape)}
     for sln, Dn, ta, tb in meta_dot:
-        newdata[slice(*sln)].reshape(Dn)[:] += np.dot(Ad[ta], Bd[tb])
+        newdata[sln].reshape(Dn)[:] += np.dot(Ad[ta], Bd[tb])
     return newdata
 
 
@@ -668,7 +668,7 @@ def dot_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
     dtype = np.promote_types(Adata.dtype, Bdata.dtype)
     newdata = np.empty(Dsize, dtype=dtype)
     for sln, slb, Db, sla in meta:
-        newdata[slice(*sln)].reshape(Db)[:] = Adata[slice(*sla)].reshape(dim) * Bdata[slice(*slb)].reshape(Db)
+        newdata[sln].reshape(Db)[:] = Adata[sla].reshape(dim) * Bdata[slb].reshape(Db)
     return newdata
 
 
@@ -711,24 +711,28 @@ def embed_mask(Adata, mask, meta, Dsize, axis, a_ndim):
 def embed_transpose(data, axes, meta_transpose, size):
     newdata = np.zeros(size, dtype=data.dtype)
     for sln, Dn, slo, Do in meta_transpose:
-        newdata[slice(*sln)].reshape(Dn)[:] = data[slice(*slo)].reshape(Do).transpose(axes)
+        newdata[sln].reshape(Dn)[:] = data[slo].reshape(Do).transpose(axes)
+    return newdata
+
+
+def embed_slices(data, meta, size):
+    newdata = np.zeros(size, dtype=data.dtype)
+    for sln, slo in meta:
+        newdata[sln] = data[slo]
     return newdata
 
 
 def transpose_and_merge(data, order, meta_mrg, size):
     newdata = np.zeros(size, dtype=data.dtype)
-    for sln, Dn, slo, Do, Dslc, Drsh in meta_mrg:
-        temp = newdata[slice(*sln)].reshape(Dn)
-        slcs = tuple(slice(*x) for x in Dslc)
-        temp[slcs] = data[slice(*slo)].reshape(Do).transpose(order).reshape(Drsh)
+    for sln, Dn, slo, Do, ssln, Drsh in meta_mrg:
+        newdata[sln].reshape(Dn)[ssln] = data[slo].reshape(Do).transpose(order).reshape(Drsh)
     return newdata
 
 
 def unmerge(data, meta, size):
     newdata = np.zeros(size, dtype=data.dtype)
-    for sln, Dn, slo, Do, sub_slc in meta:
-        slcs = tuple(slice(*x) for x in sub_slc)
-        newdata[slice(*sln)].reshape(Dn)[:] = data[slice(*slo)].reshape(Do)[slcs]
+    for sln, Dn, slo, Do, sslo in meta:
+        newdata[sln].reshape(Dn)[:] = data[slo].reshape(Do)[sslo]
     return newdata
 
 
@@ -751,14 +755,14 @@ def merge_super_blocks(pos_tens, meta, size):
 def diag_1dto2d(Adata, meta, Dsize):
     newdata = np.zeros(Dsize, dtype=Adata.dtype)
     for sln, slo in meta:
-        newdata[slice(*sln)] = np.diag(Adata[slice(*slo)]).ravel()
+        newdata[sln] = np.diag(Adata[slo]).ravel()
     return newdata
 
 
 def diag_2dto1d(Adata, meta, Dsize):
     newdata = np.zeros(Dsize, dtype=Adata.dtype)
     for sln, slo, Do in meta:
-        newdata[slice(*sln)] = np.diag(Adata[slice(*slo)].reshape(Do))
+        newdata[sln] = np.diag(Adata[slo].reshape(Do))
     return newdata
 
 

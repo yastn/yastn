@@ -23,7 +23,7 @@ import scipy.sparse.linalg as spla
 
 from ..initialize import zeros
 from ..tensor import YastnError, Leg, LegMeta, einsum, truncation_mask, Tensor
-from ..tensor._auxiliary import _clear_axes, _unpack_axes, get_blocks, find_index
+from ..tensor._auxiliary import _clear_axes, _unpack_axes, get_blocks, find_index, convert_to_tuples_and_slices
 from ..tensor._tests import _test_axes_all
 from .._split_combine_dict import split_data_and_meta, combine_data_and_meta
 
@@ -599,7 +599,7 @@ def svds(A : Tensor, axes=(0, 1), k=1, ncv=None, tol=0, which='LM', v0=None, max
             i_symVh_sector = find_index(bl_symVh.t, [c[1], c_col_sector], sorted=True)
             slVh = bl_symVh.slc[i_symVh_sector]
             DVh = bl_symVh.D[i_symVh_sector]
-            meta_fix.append((None, None, slU, DU, None, slVh, DVh))
+            meta_fix.append((None, None, slice(*slU), tuple(DU), None, slice(*slVh), tuple(DVh)))
         symU._data, symVh._data = A.config.backend.fix_svd_signs(symU._data, symVh._data, meta_fix)
 
     # Additional truncation

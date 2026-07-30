@@ -61,16 +61,20 @@ def test_vdot_basic(config_kwargs, remove_blocks):
               yastn.Leg(config_U1, s=1, t=[-1], D=[4]),
               yastn.Leg(config_U1, s=1, t=[1], D=[9]),
               yastn.Leg(config_U1, s=-1, t=[2], D=[12])]
-    a = yastn.rand(config=config_U1, legs=legs_a, remove_blocks=remove_blocks)
-    b = yastn.rand(config=config_U1, legs=legs_b, remove_blocks=remove_blocks)
+    a = yastn.rand(config=config_U1, legs=legs_a)
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
+    b = yastn.rand(config=config_U1, legs=legs_b)
+    b = b.remove_random_blocks(number=remove_blocks, keep_legs=True)
     c = yastn.rand(config=config_U1, legs=legs_c)
     vdot_vs_numpy(a, b)
     vdot_vs_numpy(a, c)
     vdot_vs_numpy(c, b)
 
     # U1 complex
-    a = yastn.rand(config=config_U1, legs=legs_a, dtype='complex128', remove_blocks=remove_blocks)
-    b = yastn.rand(config=config_U1, legs=legs_b, dtype='complex128', remove_blocks=remove_blocks)
+    a = yastn.rand(config=config_U1, legs=legs_a, dtype='complex128')
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
+    b = yastn.rand(config=config_U1, legs=legs_b, dtype='complex128')
+    b = b.remove_random_blocks(number=remove_blocks, keep_legs=True)
     c = yastn.rand(config=config_U1, legs=legs_c, dtype='complex128')
     vdot_vs_numpy(a, b)
     vdot_vs_numpy(a, c)
@@ -99,11 +103,11 @@ def test_vdot_fuse_hard(config_kwargs, remove_blocks):
     t1, t2, t3 = (-1, 0, 1), (-2, 0, 2), (-3, 0, 3)
     D1, D2, D3 = (1, 3, 2), (3, 3, 4), (5, 3, 6)
     a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1, 1),
-                t=(t1, t1, t2, t2, t3, t3), D=(D1, D2, D2, D1, D1, D2),
-                remove_blocks=remove_blocks)
+                t=(t1, t1, t2, t2, t3, t3), D=(D1, D2, D2, D1, D1, D2))
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     b = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1, 1),
-                t=(t2, t2, t3, t3, t1, t1), D=(D2, D3, D1, D3, D1, D2),
-                remove_blocks=remove_blocks)
+                t=(t2, t2, t3, t3, t1, t1), D=(D2, D3, D1, D3, D1, D2))
+    b = b.remove_random_blocks(number=remove_blocks, keep_legs=True)
     vdot_hf(a, b, hf_axes1=((0, 1), (2, 3), (4, 5)))
     vdot_hf(a, b, hf_axes1=(0, (4, 3, 1), (5, 2)))
 
@@ -114,10 +118,10 @@ def test_vdot_fuse_hard(config_kwargs, remove_blocks):
     config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
     t1, t2 = [(0, -1), (0, 1), (1, -1), (1, 1)],  [(0, 0), (0, 1), (1, 1)]
     D1, D2 = (1, 2, 3, 4), (5, 2, 4)
-    a2 = yastn.rand(config=config_Z2xU1, s=(-1, 1, 1, -1), t=(t2, t2, t1, t1), D=(D2, D2, D1, D1),
-                    remove_blocks=remove_blocks)
-    b2 = yastn.rand(config=config_Z2xU1, s=(-1, 1, 1, -1), t=(t1, t1, t2, t2), D=(D1, D1, D2, D2),
-                    remove_blocks=remove_blocks)
+    a2 = yastn.rand(config=config_Z2xU1, s=(-1, 1, 1, -1), t=(t2, t2, t1, t1), D=(D2, D2, D1, D1))
+    a2 = a2.remove_random_blocks(number=remove_blocks, keep_legs=True)
+    b2 = yastn.rand(config=config_Z2xU1, s=(-1, 1, 1, -1), t=(t1, t1, t2, t2), D=(D1, D1, D2, D2))
+    b2 = b2.remove_random_blocks(number=remove_blocks, keep_legs=True)
     vdot_hf(a2, b2, hf_axes1=(0, (2, 3), 1))
     a2.set_block(ts=(((1, 2), (1, 2), (1, 2), (1, 2))), Ds=(6, 6, 6, 6), val='rand')
     a2.set_block(ts=(((1, -1), (1, -1), (1, -1), (1, -1))), Ds=(3, 3, 3, 3), val='rand')

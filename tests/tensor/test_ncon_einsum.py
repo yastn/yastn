@@ -141,17 +141,18 @@ def test_ncon_einsum_basic(config_kwargs, remove_blocks):
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.rand(config=config_U1, s=[-1, 1, -1], n=0,
-                  D=((20, 10), (3, 3), (1, 1)), t=((1, 0), (1, 0), (1, 0)),
-                  remove_blocks=remove_blocks)
+                  D=((20, 10), (3, 3), (1, 1)), t=((1, 0), (1, 0), (1, 0)))
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     b = yastn.rand(config=config_U1, s=[1, 1, 1], n=1,
-                  D=((4, 4), (2, 2), (20, 10)), t=((1, 0), (1, 0), (1, 0)),
-                  remove_blocks=remove_blocks)
+                  D=((4, 4), (2, 2), (20, 10)), t=((1, 0), (1, 0), (1, 0)))
+    b = b.remove_random_blocks(number=remove_blocks, keep_legs=True)
     c = yastn.rand(config=config_U1, s=[1, 1, 1, -1], n=1,
-                  D=((20, 10), (30, 20), (10, 5), (10, 5)), t=((1, 0), (1, 0), (1, 0), (1, 0)),
-                  remove_blocks=remove_blocks)
+                  D=((20, 10), (30, 20), (10, 5), (10, 5)), t=((1, 0), (1, 0), (1, 0), (1, 0)))
+    c = c.remove_random_blocks(number=remove_blocks, keep_legs=True)
     d = yastn.rand(config=config_U1, s=[1, 1, -1, -1], n=0,
-                  D=((30, 20), (10, 5), (20, 10), (10, 5)), t=((1, 0), (1, 0), (1, 0), (1, 0)),
-                  remove_blocks=remove_blocks)
+                  D=((30, 20), (10, 5), (20, 10), (10, 5)), t=((1, 0), (1, 0), (1, 0), (1, 0)))
+    d = d.remove_random_blocks(number=remove_blocks, keep_legs=True)
+
 
     e = yastn.ncon([a, b], [[1, -1, -3], [-0, -2, 1]])
     assert e.get_shape() == (8, 6, 4, 2)
@@ -302,9 +303,13 @@ def test_ncon_einsum_swaps(config_kwargs, remove_blocks):
     assert (y - r).norm() < tol * r.norm()
     #
     # second diagram
-    a = yastn.rand(config=config_Z2, legs=[l, l, lc, l, lc], remove_blocks=remove_blocks)
-    b = yastn.rand(config=config_Z2, legs=[l, lc, l], remove_blocks=remove_blocks)
-    c = yastn.rand(config=config_Z2, legs=[l, lc, l], remove_blocks=remove_blocks)
+    a = yastn.rand(config=config_Z2, legs=[l, l, lc, l, lc])
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
+    b = yastn.rand(config=config_Z2, legs=[l, lc, l])
+    b = b.remove_random_blocks(number=remove_blocks, keep_legs=True)
+    c = yastn.rand(config=config_Z2, legs=[l, lc, l])
+    c = c.remove_random_blocks(number=remove_blocks, keep_legs=True)
+
     #
     x = yastn.ncon([a, b, c, c], ((1, 4, 2, -0, 1), (2, 3, -1), (3, 4, -2), (-3, -4, -5)), swap=((-0, 3), (-0, 1), (-1, -2), (-3, -5), (-4, -2)))
     y = yastn.einsum('adbAa,bcB,cdC,DEF->ABCDEF', a, b, c, c, swap='Ac,Aa,BC,CE,DF')
@@ -324,12 +329,18 @@ def test_ncon_einsum_swaps(config_kwargs, remove_blocks):
     assert (y - r).norm() < tol * r.norm()
     #
     # third diagram to test different contraction orders
-    a = yastn.rand(config=config_Z2, n=1, legs=[l, l, l, l], remove_blocks=remove_blocks)
-    b = yastn.rand(config=config_Z2, n=1, legs=[l, l, l, l, lc], remove_blocks=remove_blocks)
-    c = yastn.rand(config=config_Z2, n=1, legs=[l, l, lc, lc], remove_blocks=remove_blocks)
-    d = yastn.rand(config=config_Z2, n=1, legs=[l, lc, lc, lc, lc], remove_blocks=remove_blocks)
-    e = yastn.rand(config=config_Z2, n=1, legs=[l, lc, lc, lc], remove_blocks=remove_blocks)
-    f = yastn.rand(config=config_Z2, n=1, legs=[lc, lc], remove_blocks=remove_blocks)
+    a = yastn.rand(config=config_Z2, n=1, legs=[l, l, l, l])
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
+    b = yastn.rand(config=config_Z2, n=1, legs=[l, l, l, l, lc])
+    b = b.remove_random_blocks(number=remove_blocks, keep_legs=True)
+    c = yastn.rand(config=config_Z2, n=1, legs=[l, l, lc, lc])
+    c = c.remove_random_blocks(number=remove_blocks, keep_legs=True)
+    d = yastn.rand(config=config_Z2, n=1, legs=[l, lc, lc, lc, lc])
+    d = d.remove_random_blocks(number=remove_blocks, keep_legs=True)
+    e = yastn.rand(config=config_Z2, n=1, legs=[l, lc, lc, lc])
+    e = e.remove_random_blocks(number=remove_blocks, keep_legs=True)
+    f = yastn.rand(config=config_Z2, n=1, legs=[lc, lc])
+    f = f.remove_random_blocks(number=remove_blocks, keep_legs=True)
     #
     # reference
     r = yastn.tensordot(a, b, axes=(0, 4))
@@ -362,12 +373,18 @@ def test_einsum_scalar_swap_order(config_kwargs, remove_blocks):
     l = yastn.Leg(config_Z2, s=1, t=(0, 1), D=(2, 2))
     lc = l.conj()
 
-    A = yastn.rand(config=config_Z2, n=0, legs=[l, l, l, l], remove_blocks=remove_blocks)
-    B = yastn.rand(config=config_Z2, n=0, legs=[lc, lc, lc], remove_blocks=remove_blocks)
-    C = yastn.rand(config=config_Z2, n=0, legs=[lc, l, l, l], remove_blocks=remove_blocks)
-    D = yastn.rand(config=config_Z2, n=0, legs=[l, lc], remove_blocks=remove_blocks)
-    E = yastn.rand(config=config_Z2, n=0, legs=[lc, lc], remove_blocks=remove_blocks)
-    F = yastn.rand(config=config_Z2, n=0, legs=[lc, l, lc], remove_blocks=remove_blocks)
+    A = yastn.rand(config=config_Z2, n=0, legs=[l, l, l, l])
+    A = A.remove_random_blocks(number=remove_blocks, keep_legs=True)
+    B = yastn.rand(config=config_Z2, n=0, legs=[lc, lc, lc])
+    B = B.remove_random_blocks(number=remove_blocks, keep_legs=True)
+    C = yastn.rand(config=config_Z2, n=0, legs=[lc, l, l, l])
+    C = C.remove_random_blocks(number=remove_blocks, keep_legs=True)
+    D = yastn.rand(config=config_Z2, n=0, legs=[l, lc])
+    D = D.remove_random_blocks(number=remove_blocks, keep_legs=True)
+    E = yastn.rand(config=config_Z2, n=0, legs=[lc, lc])
+    E = E.remove_random_blocks(number=remove_blocks, keep_legs=True)
+    F = yastn.rand(config=config_Z2, n=0, legs=[lc, l, lc])
+    F = F.remove_random_blocks(number=remove_blocks, keep_legs=True)
 
     inds = ((9,1,2,3), (9, 2,3), (1,4,5,8), (7,8), (4,6), (5,6,7))
     orders = [[9,2,3,1,4,5,6,7,8], [4,5,6,7,8,9,2,3,1], [8,1,6,4,5,7,9,2,3]]
