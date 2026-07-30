@@ -19,7 +19,8 @@ from typing import Sequence, TYPE_CHECKING, Union
 
 import numpy as np
 
-from ._auxiliary import _clear_axes, _unpack_axes, get_blocks, argsort_t, _compress_slices, get_trimmed_struct, find_matching_indices
+from ._auxiliary import _clear_axes, _unpack_axes, get_blocks, argsort_t, get_trimmed_struct, find_matching_indices
+from ._auxiliary import convert_to_tuples_and_slices, _compress_slices
 from ._einsum import ncon
 from ._legbasic import LegBasic
 from ._legs import LegMeta, Leg, leg_product
@@ -89,6 +90,7 @@ def remove_random_blocks(a, number, keep_legs=True) -> 'Tensor':
         ('sln', np.int64, (2,)),
         ('slo', np.int64, (2,))])
     meta = meta.view(meta_dt).reshape(-1)
+    meta = convert_to_tuples_and_slices(meta)
     data = a.config.backend.embed_slices(a._data, meta, bl_new.size)
     return a._replace(struct=struct_new, data=data)
 
@@ -127,6 +129,7 @@ def remove_zero_blocks(a, rtol=1e-12, atol=0) -> 'Tensor':
         ('sln', np.int64, (2,)),
         ('slo', np.int64, (2,))])
     meta = meta.view(meta_dt).reshape(-1)
+    meta = convert_to_tuples_and_slices(meta)
     data = a.config.backend.embed_slices(a._data, meta, bl_new.size)
     return a._replace(struct=struct_new, data=data)
 
@@ -325,6 +328,7 @@ def flip_charges(a, axes=None) -> 'Tensor':
         ('sln', np.int64, (2,)),
         ('slo', np.int64, (2,))])
     meta = meta.view(meta_dt).reshape(-1)
+    meta = convert_to_tuples_and_slices(meta)
     data = a.config.backend.embed_slices(a._data, meta, bl_new.size)
     out = a._replace(struct=struct_new, data=data, hfs=hfs_new)
     return out
@@ -437,18 +441,22 @@ def consume_transpose(a) -> 'Tensor':
         mask_new = a.struct.mask.array[inds_all]
         struct_new = a.struct.replace(legs=new_legs, mask=mask_new)
 
-    bl_new = get_blocks(a.config.sym, struct_new)
-    bl_old = get_blocks(a.config.sym, a.struct)
-    inds = argsort_t(bl_old.t[:, order, :])
-    meta = np.hstack([bl_new.slc, bl_new.D, bl_old.slc[inds], bl_old.D[inds]])
-    ndim = len(new_legs)
-    meta_dt = np.dtype([
-        ('sln', np.int64, (2,)),
-        ('Dn', np.int64, (ndim,)),
-        ('slo', np.int64, (2,)),
-        ('Do', np.int64, (ndim,))])
-    meta = meta.view(meta_dt).reshape(-1)
-    data = a._data if a.isdiag else a.config.backend.embed_transpose(a._data, a.trans, meta, bl_new.size)
+    if a.isdiag:
+        data = a._data
+    else:
+        bl_new = get_blocks(a.config.sym, struct_new)
+        bl_old = get_blocks(a.config.sym, a.struct)
+        inds = argsort_t(bl_old.t[:, order, :])
+        meta = np.hstack([bl_new.slc, bl_new.D, bl_old.slc[inds], bl_old.D[inds]])
+        ndim = len(new_legs)
+        meta_dt = np.dtype([
+            ('sln', np.int64, (2,)),
+            ('Dn', np.int64, (ndim,)),
+            ('slo', np.int64, (2,)),
+            ('Do', np.int64, (ndim,))])
+        meta = meta.view(meta_dt).reshape(-1)
+        meta = convert_to_tuples_and_slices(meta)
+        data = a.config.backend.embed_transpose(a._data, a.trans, meta, bl_new.size)
     return a._replace(hfs=new_hfs, struct=struct_new, data=data, trans=no_trans)
 
 
@@ -639,6 +647,7 @@ def diag(a) -> 'Tensor':
                 ('sln', np.int64, (2,)),
                 ('slo',  np.int64, (2,))])
         meta = meta.view(meta_dt).reshape(-1)
+        meta = convert_to_tuples_and_slices(meta)
         data = a.config.backend.diag_1dto2d(a._data, meta, bl_new.size)
     else:  # isdiag=False -> isdiag=True
         meta = np.hstack([bl_new.slc, bl.slc, bl.D])
@@ -647,5 +656,6 @@ def diag(a) -> 'Tensor':
                 ('slo',  np.int64, (2,)),
                 ('Do',  np.int64, (2,))])
         meta = meta.view(meta_dt).reshape(-1)
+        meta = convert_to_tuples_and_slices(meta)
         data = a.config.backend.diag_2dto1d(a._data, meta, bl_new.size)
     return a._replace(struct=struct_new, data=data, trans=None)

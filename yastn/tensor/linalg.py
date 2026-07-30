@@ -23,7 +23,8 @@ from warnings import warn
 
 import numpy as np
 
-from ._auxiliary import _struct, _clear_axes, _unpack_axes, get_blocks, find_index, argsort_t, find_matching_indices, get_trimmed_struct
+from ._auxiliary import _struct, _clear_axes, _unpack_axes, get_blocks, find_index, argsort_t
+from ._auxiliary import convert_to_tuples_and_slices, find_matching_indices, get_trimmed_struct
 from ._legbasic import LegBasic
 from ._merging import _Fusion, _fuse_blocks, _unfuse_blocks
 from ._tests import YastnError, _test_axes_all
@@ -412,6 +413,7 @@ def _meta_svd(sym, struct, sU, nU, k_block, nonzero=None):
         ('DV',  np.int64, (2,))])
     meta = np.hstack([bl_a.slc[ind_a], bl_a.D[ind_a], bl_U.slc[inds], bl_U.D[inds], bl_S.slc, bl_V.slc, bl_V.D]).astype(np.int64, copy=False)
     meta = meta.view(meta_dt).reshape(-1)
+    meta = convert_to_tuples_and_slices(meta)
     sizes = (bl_U.size, bl_S.size, bl_V.size)
     return meta, sizes, struct_U, struct_S, struct_V
 
@@ -811,6 +813,7 @@ def _meta_qr(sym, struct, sQ):
         ('DR',  np.int64, (2,))])
     meta = np.hstack([bl_a.slc[inds], bl_a.D[inds], bl_Q.slc[inds], bl_Q.D[inds], bl_R.slc, bl_R.D]).astype(np.int64, copy=False)
     meta = meta.view(meta_dt).reshape(-1)
+    meta = convert_to_tuples_and_slices(meta)
     sizes = (bl_Q.size, bl_R.size)
     return meta, sizes, struct_Q, struct_R
 
@@ -990,6 +993,7 @@ def _meta_eigh(sym, struct, sU, k_block, nonzero=None):
         ('slS', np.int64, (2,))])
     meta = np.hstack([bl_a.slc[inds_a], bl_a.D[inds_a], bl_U.slc[inds], bl_U.D[inds], bl_S.slc])
     meta = meta.view(meta_dt).reshape(-1)
+    meta = convert_to_tuples_and_slices(meta)
     sizes = (bl_S.size, bl_U.size)
     return meta, sizes, struct_U, struct_S
 

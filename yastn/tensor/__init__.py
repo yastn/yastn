@@ -261,6 +261,7 @@ class Tensor:
                 ('sln', np.int64, (2,)),
                 ('slo', np.int64, (2,))])
             meta = meta.view(meta_dt).reshape(-1)
+            meta = convert_to_tuples_and_slices(meta)
             newdata = d['config'].backend.embed_slices(data, meta, bl_new.size)
             d['data'] = newdata
             return cls(**d)

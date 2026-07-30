@@ -285,9 +285,8 @@ def conj(data):
 def trace(data, order, meta, Dsize):
     newdata = torch.zeros(Dsize, dtype=data.dtype, device=data.device)
     for sln, slo, Do, Drsh in meta:
-        Do, Drsh = tuple(Do), tuple(Drsh)
-        tmp_sln = data[slice(*slo)].reshape(Do).permute(order).reshape(Drsh)
-        newdata[slice(*sln)] = newdata[slice(*sln)] + torch.sum(torch.diagonal(tmp_sln, dim1=0, dim2=1), dim=-1)
+        tmp_sln = data[slo].reshape(Do).permute(order).reshape(Drsh)
+        newdata[sln] = newdata[sln] + torch.sum(torch.diagonal(tmp_sln, dim1=0, dim2=1), dim=-1)
     return newdata
 
 
@@ -396,7 +395,7 @@ def svdvals(data, meta, sizeS, **kwargss):
     real_dtype = data.real.dtype if data.is_complex() else data.dtype
     Sdata = torch.zeros((sizeS,), dtype=real_dtype, device=data.device)
     for (slo, Do, _, _, slS, _, _) in meta:
-        Sdata[slice(*slS)] = torch.linalg.svdvals(data[slice(*slo)].view(tuple(Do)))
+        Sdata[slS] = torch.linalg.svdvals(data[slo].view(Do))
     return Sdata
 
 
@@ -410,13 +409,12 @@ def svd_randomized(data, meta, sizes, q=None, niter=3, **kwargs):
     Sdata = torch.zeros((sizes[1],), dtype=real_dtype, device=data.device)
     Vdata = torch.zeros((sizes[2],), dtype=data.dtype, device=data.device)
     for slo, Do, slU, DU, slS, slV, DV in meta:
-        k = slS[1] - slS[0]
-        Do, DU, DV = tuple(Do), tuple(DU), tuple(DV)
+        k = slS.stop - slS.start
         q = max(k, min(2 * k, *Do))
-        U, S, V = torch.svd_lowrank(data[slice(*slo)].view(Do), q=q, niter=niter)
-        Udata[slice(*slU)].reshape(DU)[:] = U[:,:k]
-        Sdata[slice(*slS)] = S[:k]
-        Vdata[slice(*slV)].reshape(DV)[:] = V[:,:k].t().conj()
+        U, S, V = torch.svd_lowrank(data[slo].view(Do), q=q, niter=niter)
+        Udata[slU].reshape(DU)[:] = U[:,:k]
+        Sdata[slS] = S[:k]
+        Vdata[slV].reshape(DV)[:] = V[:,:k].t().conj()
     return Udata, Sdata, Vdata
 
 
@@ -429,15 +427,14 @@ def fix_svd_signs(Udata, Vhdata, meta):
     Vhd = torch.empty_like(Vhdata)
     Uamp = (abs(Udata) * (2**40)).to(dtype=torch.int64)
     for (_, _, slU, DU, _, slV, DV) in meta:
-        DU, DV = tuple(DU), tuple(DV)
-        Utemp = Udata[slice(*slU)].reshape(DU)
-        Vtemp = Vhdata[slice(*slV)].reshape(DV)
-        Utemp_amp = Uamp[slice(*slU)].reshape(DU)
+        Utemp = Udata[slU].reshape(DU)
+        Vtemp = Vhdata[slV].reshape(DV)
+        Utemp_amp = Uamp[slU].reshape(DU)
         ii = torch.argmax(Utemp_amp, dim=0, keepdims=True)
         phase = torch.take_along_dim(Utemp, ii, dim=0)
         phase = phase / abs(phase)
-        Ud[slice(*slU)].reshape(DU)[:] = Utemp * phase.conj().reshape(1, -1)
-        Vhd[slice(*slV)].reshape(DV)[:] = Vtemp * phase.reshape(-1, 1)
+        Ud[slU].reshape(DU)[:] = Utemp * phase.conj().reshape(1, -1)
+        Vhd[slV].reshape(DV)[:] = Vtemp * phase.reshape(-1, 1)
     return Ud, Vhd
 
 
@@ -452,9 +449,9 @@ def eigh(data, meta=None, sizes=(1, 1), order_by_magnitude=False, ad_decomp_reg=
         else:
             f = lambda x: torch.linalg.eigh(x)
         for slo, Do, slU, DU, slS in meta:
-            S, U = f(data[slice(*slo)].view(tuple(Do)))
-            Sdata[slice(*slS)] = S
-            Udata[slice(*slU)].view(tuple(DU))[:] = U
+            S, U = f(data[slo].view(Do))
+            Sdata[slS] = S
+            Udata[slU].view(DU)[:] = U
         return Sdata, Udata
     return torch.linalg.eigh(data)  # S, U
 
@@ -470,8 +467,7 @@ def eig(data, meta=None, sizes=(1, 1), **kwargs):
     Sdata = torch.empty((sizes[1],), dtype=dtype, device=data.device)
     Vdata = torch.empty((sizes[2],), dtype=dtype, device=data.device)
     for slo, Do, slU, DU, slS, slV, DV in meta:
-        Do, DU, DV = tuple(Do), tuple(DU), tuple(DV)
-        S, U = torch.linalg.eig(data[slice(*slo)].reshape(Do))
+        S, U = torch.linalg.eig(data[slo].reshape(Do))
         #
         # in general diag(U.H @ U) = 1 but not U.H @ U = I, i.e. right eigenvectors are not orthogonal
         #
@@ -491,9 +487,9 @@ def eig(data, meta=None, sizes=(1, 1), **kwargs):
             raise ValueError("Biorthonormalization of left/right eigenvector pairs failed.")
 
         s_order= argsort_which(S, which=kwargs.get('which', 'LM'))
-        Udata[slice(*slU)].reshape(DU)[:] = U[:,s_order]
-        Sdata[slice(*slS)] = S[s_order]
-        Vdata[slice(*slV)].reshape(DV)[:] = V[s_order,:]
+        Udata[slU].reshape(DU)[:] = U[:,s_order]
+        Sdata[slS] = S[s_order]
+        Vdata[slV].reshape(DV)[:] = V[s_order,:]
     return Udata, Sdata, Vdata
 
 
@@ -512,10 +508,9 @@ def eigh_lowrank(data, meta, sizes, thresh=None, **kwargs):
     Sdata = np.zeros((sizes[0],), dtype=real_dtype)
     Udata = np.zeros((sizes[1],), dtype=data.dtype)
     for slo, Do, slU, DU, slS in meta:
-        k = slS[1] - slS[0]
-        Do, DU = tuple(Do), tuple(DU)
+        k = slS.stop - slS.start
         n = Do[0]
-        block = data[slice(*slo)].reshape(Do)
+        block = data[slo].reshape(Do)
         if k < n - 1 and n * n > 5000:
             try:
                 S, U = scipy.sparse.linalg.eigsh(block, k=k, which=_which_map[_which],
@@ -534,8 +529,8 @@ def eigh_lowrank(data, meta, sizes, thresh=None, **kwargs):
             S,U = S[arg_b[:k]], U[:,arg_b[:k]]
         else:
             S,U = S[:k], U[:,:k]
-        Sdata[slice(*slS)] = S
-        Udata[slice(*slU)].reshape(DU)[:] = U
+        Sdata[slS] = S
+        Udata[slU].reshape(DU)[:] = U
     Sdata = torch.from_numpy(Sdata).to(device=data_device)
     Udata = torch.from_numpy(Udata).to(device=data_device)
     return Sdata, Udata
@@ -545,8 +540,8 @@ def eigvals(data, meta, sizeS, **kwargs):
     dtype = dtype_to_complex(data)
     Sdata = torch.empty((sizeS,), dtype=dtype, device=data.device)
     for slo, Do, _, _, slS, _, _ in meta:
-        S = torch.linalg.eigvals(data[slice(*slo)].reshape(tuple(Do)))
-        Sdata[slice(*slS)] = S[argsort_which(S, which=kwargs.get('which', 'LM'))]
+        S = torch.linalg.eigvals(data[slo].reshape(Do))
+        Sdata[slS] = S[argsort_which(S, which=kwargs.get('which', 'LM'))]
     return Sdata
 
 
@@ -554,11 +549,11 @@ def qr(data, meta, sizes):
     Qdata = torch.zeros((sizes[0],), dtype=data.dtype, device=data.device)
     Rdata = torch.zeros((sizes[1],), dtype=data.dtype, device=data.device)
     for slo, Do, slQ, DQ, slR, DR in meta:
-        Q, R = torch.linalg.qr(data[slice(*slo)].view(tuple(Do)))
+        Q, R = torch.linalg.qr(data[slo].view(Do))
         sR = torch.sign(real(R.diag()))
         sR[sR == 0] = 1
-        Qdata[slice(*slQ)].view(tuple(DQ))[:] = Q * sR  # positive diag of R
-        Rdata[slice(*slR)].view(tuple(DR))[:] = sR.reshape([-1, 1]) * R
+        Qdata[slQ].view(DQ)[:] = Q * sR  # positive diag of R
+        Rdata[slR].view(DR)[:] = sR.reshape([-1, 1]) * R
     return Qdata, Rdata
 
 
@@ -608,7 +603,7 @@ def add(datas, metas, Dsize):
     newdata = torch.zeros(Dsize, dtype=dtype, device=datas[0].device)
     for data, meta in zip(datas, metas):
         for sl_c, sl_a in meta:
-            newdata[slice(*sl_c)] = newdata[slice(*sl_c)] + data[slice(*sl_a)]
+            newdata[sl_c] = newdata[sl_c] + data[sl_a]
     return newdata
 
 
@@ -616,9 +611,9 @@ def sub(Adata, Bdata, metas, Dsize):
     dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
     newdata = torch.zeros(Dsize, dtype=dtype, device=Adata.device)
     for sl_c, sl_a in metas[0]:
-        newdata[slice(*sl_c)] = newdata[slice(*sl_c)] + Adata[slice(*sl_a)]
+        newdata[sl_c] = newdata[sl_c] + Adata[sl_a]
     for sl_c, sl_b in metas[1]:
-        newdata[slice(*sl_c)] = newdata[slice(*sl_c)] - Bdata[slice(*sl_b)]
+        newdata[sl_c] = newdata[sl_c] - Bdata[sl_b]
     return newdata
 
 
@@ -630,7 +625,7 @@ def vdot(Adata, Bdata, meta):
         Bdata = Bdata.to(dtype=dtype)
     tmp = torch.empty(len(meta), dtype=dtype, device=Adata.device)
     for ii, (sla, slb) in enumerate(meta):
-        tmp[ii] = torch.dot(Adata[slice(*sla)], Bdata[slice(*slb)])
+        tmp[ii] = torch.dot(Adata[sla], Bdata[slb])
     return torch.sum(tmp)
 
 
@@ -648,7 +643,7 @@ def dot_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
     dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
     newdata = torch.empty(Dsize, dtype=dtype, device=Adata.device)
     for sln, slb, Db, sla in meta:
-        newdata[slice(*sln)].reshape(tuple(Db))[:] = Adata[slice(*sla)].reshape(dim) * Bdata[slice(*slb)].reshape(tuple(Db))
+        newdata[sln].reshape(Db)[:] = Adata[sla].reshape(dim) * Bdata[slb].reshape(Db)
     return newdata
 
 
@@ -770,14 +765,14 @@ def merge_super_blocks(pos_tens, meta, size):
 def diag_1dto2d(data, meta, Dsize):
     newdata = torch.zeros(Dsize, dtype=data.dtype, device=data.device)
     for sln, slo in meta:
-        newdata[slice(*sln)] = torch.diag(data[slice(*slo)]).ravel()
+        newdata[sln] = torch.diag(data[slo]).ravel()
     return newdata
 
 
 def diag_2dto1d(data, meta, Dsize):
     newdata = torch.zeros(Dsize, dtype=data.dtype, device=data.device)
     for sln, slo, Do in meta:
-        torch.diag(data[slice(*slo)].reshape(tuple(Do)), out=newdata[slice(*sln)])
+        torch.diag(data[slo].reshape(tuple(Do)), out=newdata[sln])
     return newdata
 
 

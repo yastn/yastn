@@ -21,7 +21,8 @@ from operator import mul
 
 import numpy as np
 
-from ._auxiliary import _config, get_blocks, get_trimmed_struct, find_index, find_matching_indices, _compress_slices
+from ._auxiliary import _config, get_blocks, get_trimmed_struct, find_index, find_matching_indices
+from ._auxiliary import convert_to_tuples_and_slices, _compress_slices
 from ._tests import YastnError
 from ..backend import backend_np, import_backend
 from ..sym import sym_none, sym_U1, sym_Z2, sym_Z3, sym_U1xU1, sym_U1xU1xZ2
@@ -329,6 +330,7 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
         ('sln', np.int64, (2,)),
         ('slo', np.int64, (2,))])
     meta = meta.view(meta_dt).reshape(-1)
+    meta = convert_to_tuples_and_slices(meta)
     newdata = a.config.backend.embed_slices(a.data, meta, bl_new.size)
     #
     a.struct = struct_new

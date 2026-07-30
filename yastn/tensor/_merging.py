@@ -22,7 +22,8 @@ from typing import NamedTuple, TYPE_CHECKING
 
 import numpy as np
 
-from ._auxiliary import _struct, _flatten, _clear_axes, _unpack_legs, get_blocks, find_matching_indices, get_trimmed_struct
+from ._auxiliary import _struct, _flatten, _clear_axes, _unpack_legs, get_blocks
+from ._auxiliary import find_matching_indices, get_trimmed_struct, convert_to_tuples_and_slices
 from ._legbasic import LegBasic
 from ._tests import YastnError, _test_axes_all
 
@@ -293,9 +294,10 @@ def _meta_fuse_hard(sym, struct, axes, legs_sub=None, connector_first=True, lazy
         ('Dn',  np.int64, (ndimn,)),
         ('slo', np.int64, (2,)),
         ('Do',  np.int64, (ndimo,)),
-        ('Dslc', np.int64, (ndimn, 2)),
-        ('Drsh', np.int64, (ndimn,))])
+        ('ssln', np.int64, (ndimn, 2)),
+        ('Dns', np.int64, (ndimn,))])
     meta = meta.view(meta_dt).reshape(-1)
+    meta = convert_to_tuples_and_slices(meta)
     return meta, bl_new.size, struct_new, legs_old
 
 
@@ -477,8 +479,9 @@ def _meta_unfuse_hard(sym, struct, axes, hfs, lazy_threshold=None):
         ('Dn',  np.int64, (ndimo,)),
         ('slo', np.int64, (2,)),
         ('Do',  np.int64, (ndimo,)),
-        ('sub_slc', np.int64, (ndimo, 2))])
+        ('sslo', np.int64, (ndimo, 2))])
     meta = meta.view(meta_dt).reshape(-1)
+    meta = convert_to_tuples_and_slices(meta)
     return meta, bl_new.size, struct_new, tuple(nlegs_unfused), tuple(hfs_new)
 
 
@@ -520,6 +523,7 @@ def _meta_mask(sym, struct, mask_t, mask_D, axis):
         ('Da', np.int64, (ndim,)),
         ('tm', np.int64, (sym.NSYM,))])
     meta = meta.view(meta_dt).reshape(-1)
+    # meta = convert_to_tuples_and_slices(meta)
     return meta, bl_c.size, struct_c, axis, ndim
 
 

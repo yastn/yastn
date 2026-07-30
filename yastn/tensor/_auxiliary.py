@@ -26,7 +26,8 @@ import numpy as np
 from .._profile import nsys_profile
 from ..sym import sym_none
 
-__all__ = ['_config', '_struct', 'get_blocks', 'hash_blocks', 'sign_canonical_order', 'swap_charges', 'find_matching_indices', 'HashedMask', '_compress_slices']
+__all__ = ['_config', '_struct', 'get_blocks', 'hash_blocks', 'sign_canonical_order', 'swap_charges',
+           'find_matching_indices', 'HashedMask', '_compress_slices', 'convert_to_tuples_and_slices']
 
 
 class _config(NamedTuple):
@@ -514,3 +515,18 @@ def find_matching_indices(tset1, tset2, both=True):
     else:
         ind1 = ind2 = np.array([], dtype=np.int64)
     return (ind1, ind2) if both else ind1
+
+
+def convert_to_tuples_and_slices(arr):
+    tmp = []
+    for name in arr.dtype.names:
+        col = arr[name].tolist()
+        if "ssl" in name:
+            tmp.append([tuple(slice(*x) for x in xs) for xs in col])
+        elif "sl" in name:
+            tmp.append([slice(*x) for x in col])
+        elif arr[name].ndim > 1:
+            tmp.append([tuple(x) for x in col])
+        else:
+            tmp.append(col)
+    return list(zip(*tmp))

@@ -19,13 +19,13 @@ import abc
 import os
 from functools import lru_cache
 from numbers import Number
-from typing import TYPE_CHECKING, NamedTuple, Union
+from typing import TYPE_CHECKING, NamedTuple
 
 import numpy as np
 
 from .._profile import nsys_profile, nvtx_range
 from ._auxiliary import _encode_rows_shared, _row_keys_pair, _struct, _clear_axes, _unpack_axes, sign_canonical_order, _compress_slices
-from ._auxiliary import find_matching_indices, argsort_t, get_blocks, hash_blocks, get_trimmed_struct
+from ._auxiliary import find_matching_indices, argsort_t, get_blocks, hash_blocks, get_trimmed_struct, convert_to_tuples_and_slices
 from ._merging import _unfuse_blocks, _fuse_blocks, _mask_tensors_leg_intersection, _meta_mask
 from ._tests import YastnError, _test_can_be_combined, _unpack_trans_test_axes_pair
 from ..backend import import_backend
@@ -223,8 +223,8 @@ def _remap_nout_(nout, offset):
 @nsys_profile
 def _tensordot_cutensor(a, b, nout_a, nin_a, nin_b, nout_b, lazy_threshold):
     struct_c, size_c, hash_a, hash_b, hash_c, *metas = \
-        _meta_tensordot_cutensor(a.config.sym, a.struct, b.struct, nout_a, nin_a, nin_b, nout_b, 
-            lazy_threshold=lazy_threshold, policy=a.config.meta_tensordot_policy, 
+        _meta_tensordot_cutensor(a.config.sym, a.struct, b.struct, nout_a, nin_a, nin_b, nout_b,
+            lazy_threshold=lazy_threshold, policy=a.config.meta_tensordot_policy,
             device=a.device, backend_id=a.config.backend.BACKEND_ID)
     if size_c == 0:
         data = a.config.backend.zeros((0,), dtype=a.yastn_dtype, device=a.device)
@@ -288,6 +288,7 @@ def _meta_tensordot_f2m(sym, struct_a, struct_b):
         ('Db',  np.int64, (2,))])
     meta = np.hstack([bl_c.slc[inds], bl_c.D[inds], slc_a[inds], bl_a.D[inds], slc_b, bl_b.D], dtype=np.int64)
     meta = meta.view(meta_dt).reshape(-1)
+    meta = convert_to_tuples_and_slices(meta)
     return meta, bl_c.size, struct_c
 
 
@@ -347,6 +348,7 @@ def _meta_tensordot_fc(sym, struct_a, struct_b, lazy_threshold):
         ('slb', np.int64, (2,)),
         ('Db',  np.int64, (2,))])
     meta = meta.view(meta_dt).reshape(-1)
+    meta = convert_to_tuples_and_slices(meta)
     return meta, bl_c.size, struct_c
 
 
@@ -403,6 +405,7 @@ def _meta_tensordot_nf(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b, la
         ('ta', np.int64),
         ('tb', np.int64)])
     meta = meta.view(meta_dt).reshape(-1)
+    meta = convert_to_tuples_and_slices(meta)
     #
     ra_dt = np.dtype([
         ('slo', np.int64, (2,)),
@@ -411,6 +414,7 @@ def _meta_tensordot_nf(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b, la
         ('Dr', np.int64)])
     reshape_a = np.column_stack([slc_a, bl_a.D, Daop, Dacp])
     reshape_a = reshape_a.view(ra_dt).reshape(-1)
+    reshape_a = convert_to_tuples_and_slices(reshape_a)
     #
     rb_dt = np.dtype([
         ('slo', np.int64, (2,)),
@@ -419,6 +423,7 @@ def _meta_tensordot_nf(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b, la
         ('Dr', np.int64)])
     reshape_b = np.column_stack([slc_b, bl_b.D, Dbcp, Dbop])
     reshape_b = reshape_b.view(rb_dt).reshape(-1)
+    reshape_b = convert_to_tuples_and_slices(reshape_b)
     return meta, reshape_a, reshape_b, bl_c.size, struct_c
 
 
@@ -525,16 +530,16 @@ def _match_legs_tensordot(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b)
 _META_CUTENSOR_VERSION = os.environ.get("YASTN_META_CUTENSOR", "AUTO").lower()
 
 
-def _meta_tensordot_cutensor(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b, 
+def _meta_tensordot_cutensor(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b,
                              lazy_threshold:float=None, policy:str=None,
                              device:str=None, backend_id:str=None):
-    """ Dispatch to the optimized CPU or GPU _meta_tensordot_cutensor builder. 
+    """ Dispatch to the optimized CPU or GPU _meta_tensordot_cutensor builder.
     ``device`` (the first operand's data device) is used only by GPU. """
-    
+
     if policy in ["gpu",] or ((policy in ["auto"] and not import_backend(backend_id).is_cpu_device(device)) \
                               or _META_CUTENSOR_VERSION in ["gpu",]):
         from ._contractions_cutensor import _meta_tensordot_cutensor_gpu  # lazy: avoids import cycle
-        meta= _meta_tensordot_cutensor_gpu(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b, 
+        meta= _meta_tensordot_cutensor_gpu(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b,
                     lazy_threshold=lazy_threshold, device=device, backend_id=backend_id)
         if meta is not None:
             return meta
@@ -600,7 +605,7 @@ def _meta_tensordot_cutensor_cpu(sym, struct_a, struct_b, nout_a, nin_a, nin_b, 
     bl_a, slc_a = get_blocks_and_subslices(sym, struct_a_sub, struct_a)
     bl_b, slc_b = get_blocks_and_subslices(sym, struct_b_sub, struct_b)
     bl_c = get_blocks(sym, struct_c)
-    
+
     if lazy_threshold and bl_c.nblocks:
         with nvtx_range("unique in blocks"):
             unique_a, inv_a, count_a = unique_rows(bl_a.t[:, nin_a, :], return_inverse=True, return_counts=True) # if more blocks of a contribute to given contracted sector (in b)
@@ -633,7 +638,7 @@ def _meta_tensordot_cutensor_cpu(sym, struct_a, struct_b, nout_a, nin_a, nin_b, 
             mask = np.isin(c_keys, keys)  # -1 sentinel (tuple absent from a/b blocks) never matches
             struct_c = struct_c.replace(mask=mask)
             bl_c = get_blocks(sym, struct_c)
-    
+
     # dot product, which cannot be simply dispatched to vdot
     #              and either one of operands is (effectively) zero
     if not (len(slc_a) > 0 and len(slc_b) > 0):
@@ -750,6 +755,7 @@ def _meta_broadcast(sym, struct_a, struct_b, axis):
         ('Db', np.int64, (ndimb,)),
         ('sla',  np.int64, (2,))])
     meta = meta.view(meta_dt).reshape(-1)
+    meta = convert_to_tuples_and_slices(meta)
     return meta, bl_c.size, struct_c, axis, ndimb
 
 
@@ -874,6 +880,7 @@ def _meta_vdot(sym, struct_a, struct_b):
         ('sla', np.int64, (2,)),
         ('slb', np.int64, (2,))])
     meta = meta.view(meta_dt).reshape(-1)
+    meta = convert_to_tuples_and_slices(meta)
     return meta
 
 
@@ -981,6 +988,7 @@ def _meta_trace(sym, struct, nin_0, nin_1, out, lazy_threshold):
         ('Do',  np.int64, (len(struct.legs),)),
         ('Drsh',  np.int64, (3,))])
     meta = meta.view(meta_dt).reshape(-1)
+    meta = convert_to_tuples_and_slices(meta)
     return meta, bl_c.size, struct_c_1
 
 

@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ._auxiliary import _struct, get_blocks, find_matching_indices, _compress_slices, get_trimmed_struct
+from ._auxiliary import _struct, get_blocks, find_matching_indices, _compress_slices, get_trimmed_struct, convert_to_tuples_and_slices
 from ._legs import legs_union
 from ._merging import _embed_tensor
 from ._tests import YastnError, _test_can_be_combined, _unpack_trans_test_axes_pair
@@ -125,7 +125,7 @@ def _meta_addition(sym, *structs):
     if all(structs[0] == struct for struct in structs[1:]):
         bl_new = get_blocks(sym, structs[0])
         size = bl_new.size
-        meta = (((0, size), (0, size)),)
+        meta = ((slice(0, size), slice(0, size)),)
         metas = [meta] * len(structs)
         return metas, size, structs[0]
 
@@ -158,7 +158,9 @@ def _meta_addition(sym, *structs):
             meta[:, 1] = meta[:, 0] + dd
             meta[:, 3] = meta[:, 2] + dd
         meta = _compress_slices(meta)
-        metas.append(meta.view(meta_dt).reshape(-1))
+        meta = meta.view(meta_dt).reshape(-1)
+        meta = convert_to_tuples_and_slices(meta)
+        metas.append(meta)
 
     return metas, bl_new.size, struct_new
 
