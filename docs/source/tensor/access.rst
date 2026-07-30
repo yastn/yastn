@@ -4,8 +4,8 @@ Accessing YASTN tensors
 Direct access to blocks
 -----------------------
 
-Blocks of YASTN tensor can be simply accessed in the same way as
-standard dictionary. See example at :ref:`examples/tensor/init:Direct access to blocks`.
+Blocks of a YASTN tensor can be accessed in the same way as a
+standard dictionary. See the example at :ref:`examples/tensor/init:Direct access to blocks`.
 
 .. automethod:: yastn.Tensor.__getitem__
 

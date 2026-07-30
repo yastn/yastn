@@ -6,9 +6,9 @@ Basic algebra operations with symmetric tensors
 
 See examples at :ref:`examples/tensor/algebra:basic algebra operations`.
 
-Symmetric tensors can be added and multiplied by a scalar
-through usual operations ``+``, ``-``, ``*``, ``/``.
-Element-wise raising to a power is done by the standard power operation ``**``.
+Symmetric tensors can be added to and multiplied by a scalar
+through the usual operations ``+``, ``-``, ``*``, and ``/``.
+Element-wise raising to a power is done with the standard power operation ``**``.
 
 Simple element-wise operations
 ------------------------------
@@ -43,13 +43,13 @@ Tensor contractions
 
 See examples at :ref:`examples/tensor/algebra:tensor contractions`.
 
-Tensor contractions are the main building block of tensor network algorithms.
-Functions below facilitate the computation of
+Tensor contractions are the main building blocks of tensor network algorithms.
+The functions below facilitate the computation of
 
-	* `Trace`: :math:`B_{jl}= \sum_{i} T_{ijil}` or using Einstein's summation convention
-	  for repeated indices :math:`B_{jl} = T_{ijil}`.
+	* `Trace`: :math:`B_{jl}= \sum_{i} T_{ijil}` or, using Einstein's summation convention,
+	  repeated indices as :math:`B_{jl} = T_{ijil}`.
 	* `Contractions`: in the usual form :math:`C_{abc} = A_{aijb}{\times}B_{cij}` and also
-	  outer products :math:`M_{abkl} = A_{ak}{\times}B_{bl}`
+	  outer products :math:`M_{abkl} = A_{ak}{\times}B_{bl}`.
 
 or composition of such operations over several tensors.
 
@@ -97,6 +97,7 @@ Fusion can be used to vary compression between (unfused) symmetric tensors with 
 .. automethod:: yastn.Tensor.remove_leg
 .. automethod:: yastn.Tensor.drop_leg_history
 
+
 Conjugation of symmetric tensors
 --------------------------------
 
@@ -132,6 +133,11 @@ See examples at :ref:`examples/tensor/decomposition:decompositions of symmetric 
 
 Auxiliary
 --------
+
+Eliminating individual blocks
+
+.. automethod:: yastn.Tensor.remove_zero_blocks
+.. automethod:: yastn.Tensor.remove_random_blocks
 
 Methods called by :doc:`Krylov-based algorithms</tensor/krylov>`.
 

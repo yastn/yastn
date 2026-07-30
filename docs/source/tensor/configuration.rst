@@ -13,12 +13,12 @@ All YASTN tensors have to be provided with **configuration**, which defines:
 
 The configuration can be provided as a Python module,
 `types.SimpleNamespace <https://docs.python.org/3/library/types.html#types.SimpleNamespace>`_,
-`typing.NamedTuple <https://docs.python.org/3/library/typing.html#typing.NamedTuple>`_ or similar which defines following members
+`typing.NamedTuple <https://docs.python.org/3/library/typing.html#typing.NamedTuple>`_, or similar, which defines the following members.
 
 * required: ``backend``, ``sym``,
 * optional: ``default_device``, ``default_dtype``, ``fermionic``, ``default_fusion``,  ``force_fusion``.
 
-The configuration can be conveninently generated using
+The configuration can be conveniently generated using
 
 .. autofunction:: yastn.make_config
 

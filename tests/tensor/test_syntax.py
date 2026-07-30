@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-""" List supported operations on  yastn.Tensor (not all arguments are shown). """
+"""List supported operations on yastn.Tensor (not all arguments are shown)."""
 import pytest
 import yastn
 
@@ -28,14 +28,14 @@ def test_syntax_tensor_creation_operations(config_kwargs):
     # or outgoing for (-).
     #
     # The symmetry, U1, is specified in config_U1. We specify the charge
-    # sectors on all legs by tuple t, with its first member, t[0], defining charge
-    # sectors on the first leg, t[1] on second leg and so on.
+    # sectors on all legs by the tuple t, whose first member, t[0], defines the
+    # charge sectors on the first leg, t[1] on the second leg, and so on.
     # The corresponding dimensions of each charge sector are specified by tuple D
     # with analogous structure as t.
     #
-    # Then, upon creation, all blocks which respect charge conservation will be
-    # initialized and filled with either random numbers, ones, or zeros in the examples
-    # below.
+    # Upon creation, all blocks that respect charge conservation are
+    # initialized and filled with either random numbers, ones, or zeros in the
+    # examples below.
     #
     # The dtype of the tensor elements as well as the device on which its data
     # reside is given in config_U1.
@@ -51,11 +51,13 @@ def test_syntax_tensor_creation_operations(config_kwargs):
     c = yastn.zeros(config=config_U1, legs=[leg1, leg2, leg3, leg4])
 
     #
-    # The identity tensor behaves as rank-2 tensor with automatic signature (1, -1)
-    # or (-1, 1). It is enough to provide charge sectors and their dimensions
-    # for single leg, the data for other leg is inferred automatically.
+    # The identity tensor behaves like a rank-2 tensor with an automatic signature
+    # (1, -1) or (-1, 1). It is enough to provide the charge sectors and their
+    # dimensions for a single leg; the data for the other leg is inferred automatically.
     #
-    e = yastn.eye(config=config_U1,legs=leg1)
+    d = yastn.rand(config=config_U1, legs=leg1, isdiag=True)
+    e = yastn.eye(config=config_U1, legs=leg1)
+
 
 def test_syntax_create_empty_tensor_and_fill(config_kwargs):
     #
@@ -76,12 +78,12 @@ def test_syntax_create_empty_tensor_and_fill(config_kwargs):
     d.set_block(ts=(2, 0, 2, 0), Ds=(3, 3, 9, 2), val='rand')
 
     #
-    # Once the dimension is assigned to charge sector on a leg of the tensor
-    # attempt to create block with different dimension will raise an error.
-    # In the example above sector with charge 2 on 3rd leg has dimension 9.
+    # Once the dimension is assigned to a charge sector on a leg of the tensor,
+    # attempting to create a block with a different dimension will raise an error.
+    # In the example above, the sector with charge 2 on the third leg has dimension 9.
     #
-    # Attempting to create new block with different dimension for the same
-    # sector 2 on 3rd leg throws an error.
+    # Attempting to create a new block with a different dimension for the same
+    # sector 2 on the third leg throws an error.
     #
     with pytest.raises(yastn.YastnError,
                        match="Provided Ds is not consistent with dimensions of existing legs."):
@@ -148,11 +150,14 @@ def test_syntax_basic_algebra(config_kwargs):
     tensor = abs(a).rsqrt(cutoff=1e-12)
     tensor = yastn.rsqrt(abs(a), cutoff=1e-12)
 
+    tensor = a.real()
+    tensor = a.imag()
+
 
 def test_syntax_tensor_export_import_operations(config_kwargs):
     #
-    # First, we crate a random U1 symmetric tensor
-    # Such tensor is stored as dict of non-zero blocks, indexed by charges
+    # First, create a random U1-symmetric tensor.
+    # Such a tensor is stored as a dictionary of non-zero blocks indexed by charge.
     #
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     legs = [yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(1, 2, 3)),
@@ -166,13 +171,12 @@ def test_syntax_tensor_export_import_operations(config_kwargs):
     dictionary = a.to_dict()
     tensor = yastn.from_dict(d=dictionary, config=config_U1)  # providing config is optional
     #
-    # By applying methods split_data_and_meta and combine_data_and_meta
-    # we can further serialize symmetric tensors into 1-D vector,
-    # holding raw-data of blocks and dictionary, meta, which holds
-    # the symmetric structure of the tensors.
+    # By applying split_data_and_meta and combine_data_and_meta,
+    # we can further serialize symmetric tensors into a 1-D vector containing the
+    # raw data of the blocks and a metadata dictionary describing the tensor structure.
     #
     vector, meta = yastn.split_data_and_meta(a.to_dict(level=0), squeeze=True)
-    # assure that tensor structures is embeded in provided meta
+    # Ensure that the tensor structure is embedded in the provided metadata.
     vector, meta = yastn.split_data_and_meta(a.to_dict(level=0, meta=meta), squeeze=True)
     tensor = yastn.Tensor.from_dict(yastn.combine_data_and_meta(vector, meta))
 
@@ -187,13 +191,13 @@ def test_syntax_block_access(config_kwargs):
     a = yastn.rand(config=config_U1, legs=legs)
 
     #
-    # Directly access block with charges (1, 2, 1).
+    # Directly access the block with charges (1, 2, 1).
     #
     a[(1, 2, 1)]
     assert a[(1, 2, 1)].shape == (3, 6, 8)
 
     #
-    # Cannot access non-existing block.
+    # Cannot access a non-existing block.
     #
     with pytest.raises(yastn.YastnError,
                        match="Tensor does not have the block specified by key."):
@@ -236,8 +240,8 @@ def test_syntax_contraction(config_kwargs):
     b = yastn.ones(config=config_U1, legs=[leg1, leg2, leg3, leg4])
     c = yastn.rand(config=config_U1, legs=[leg4.conj(), leg3, leg2.conj()])
 
-    # Contract a and b by two indices. The a tensor is conjugated, which
-    # reverses the signature on its indices
+    # Contract a and b over two indices. The tensor a is conjugated, which
+    # reverses the signature on its indices.
     #       __           _                ___
     #  0->-|a*|->-1 1->-|b|->-0 =    0->-|a*b|->-0->2
     #  3->-|__|->-2 2->-|_|->-3   1<-3->-|___|->-3
@@ -282,13 +286,13 @@ def test_syntax_contraction(config_kwargs):
     # |  |->-2 2->-| |
     # |__|-<-3 3-<-|_|
     tensor = a.conj().tensordot(b, axes=((0, 1, 2, 3), (0, 1, 2, 3)))
-    assert isinstance(tensor,yastn.Tensor)
+    assert isinstance(tensor, yastn.Tensor)
     #
     # Such single element symmetric Tensor can be converted to a single-element
     # tensor of the backend type, or even further to python scalar.
     number = tensor.to_number()
     python_scalar = tensor.item()
-    assert isinstance(python_scalar,float)
+    assert isinstance(python_scalar, float)
 
     # A shorthand function for computing dot products is vdot
     number = yastn.vdot(a, b)
@@ -340,6 +344,7 @@ def test_syntax_noDocs(config_kwargs):
     tensor = yastn.clone(a)
     tensor = a.detach()
     tensor = yastn.detach(a)
+    tensor = a.shallow_copy()
 
     # to
     tensor = a.to(device='cpu')
@@ -393,6 +398,9 @@ def test_syntax_noDocs(config_kwargs):
     except NameError:
         pass
 
+    mask = yastn.truncation_mask(S, D_total=2)
+    U = yastn.apply_mask(mask, U, axes=2)
+
     Q, R = yastn.linalg.qr(a, axes=((0, 1), (2, 3)))
     Q, R = yastn.qr(a, axes=((0, 1), (2, 3)))
     Q, R = a.qr(axes=((0, 1), (2, 3)))
@@ -401,8 +409,18 @@ def test_syntax_noDocs(config_kwargs):
     D, U = yastn.eigh_with_truncation(a2, axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block=2)  # here with truncation
     D, U = a2.eigh_with_truncation(axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block=2)  # here with truncation
 
+    U, S, V = yastn.eig(a2, axes=((0, 1), (2, 3)))
+
     # utils
     entropy = yastn.entropy(S ** 2)
+
+    # diag
+
+    S_matrix = yastn.diag(S)
+    S_diag = yastn.diag(S_matrix)
+
+    # comparison based on existing blocks (extra zero blocks make a difference)
+    assert yastn.allclose(S, S_diag)
 
     # linalg
     number = a.norm()
@@ -410,19 +428,26 @@ def test_syntax_noDocs(config_kwargs):
     number = yastn.linalg.norm(a, p='inf')
 
     number = yastn.norm(a - b)
-    number = yastn.norm(a - b)
+    number = (a - b).norm()
     number = yastn.linalg.norm(a - b)
-    number = yastn.norm(a - b)
 
     # fuse
     tensor = a.fuse_legs(axes=(0, (1, 3), 2))
     tensor = tensor.unfuse_legs(axes=1)
 
-    tensor = yastn.fuse_legs(a, axes=(0, (1, 3), 2))
-    tensor = yastn.unfuse_legs(tensor, axes=(0, (1, 3), 2))
-
     # block
     tensor = yastn.block({(0, 0): a, (0, 1): b, (1, 0): b}, common_legs=(1, 2))
+
+    # adding and removing trivial one-dimensional leg
+    tensor = a.add_leg(axis=-1, s=-1, t=(0,))
+    tensor = tensor.remove_leg(axis=-1)
+
+    # fermionic swap-gate
+    tensor = yastn.swap_gate(a, axes=((0, 1), (2, 3)))
+
+    # eliminating individual blocks
+    tensor = a.remove_zero_blocks()
+    tensor = a.remove_random_blocks(number=1, keep_legs=True)
 
     # tests
     a.is_consistent()
