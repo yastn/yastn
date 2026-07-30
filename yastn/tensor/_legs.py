@@ -141,7 +141,7 @@ class Leg:
 
     def history(self) -> str:
         """
-        Show linearized representation of Leg fusion history.
+        Return a linearized representation of the leg fusion history.
 
         ::
 
@@ -158,7 +158,7 @@ class Leg:
         return _str_tree(self.hf.tree, self.hf.op)
 
     def is_fused(self) -> bool:
-        """ Return :code:`True` if the leg is a result of fusion, and :code:`False` if it is elementary. """
+        """Return ``True`` if the leg is the result of fusion and ``False`` if it is elementary."""
         return self.hf.tree[0] > 1
 
     def unfuse_leg(self):

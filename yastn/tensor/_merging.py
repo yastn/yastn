@@ -22,7 +22,8 @@ from typing import NamedTuple, TYPE_CHECKING
 
 import numpy as np
 
-from ._auxiliary import _struct, _flatten, _clear_axes, _unpack_legs, get_blocks, find_matching_indices, get_trimmed_struct
+from ._auxiliary import _struct, _flatten, _clear_axes, _unpack_legs, get_blocks
+from ._auxiliary import find_matching_indices, get_trimmed_struct, convert_to_tuples_and_slices
 from ._legbasic import LegBasic
 from ._tests import YastnError, _test_axes_all
 
@@ -33,14 +34,14 @@ __all__ = ['fuse_legs', 'unfuse_legs', 'fuse_meta_to_hard', '_Fusion']
 
 
 class _LegSlices(NamedTuple):
-    r""" Immutable structure with information how to decompose a leg. """
+    r"""Immutable structure describing how to decompose a leg."""
     t: tuple = ()  # list of effective charges
     D: tuple = ()  # list of their bond dimensions
     dec: tuple = ()  # and their decompositions
 
 
 class _DecRecord(NamedTuple):
-    r""" Single record in _LegSlices.dec[i]"""
+    r"""A single record in ``_LegSlices.dec[i]``."""
     t: tuple = ()  # charge
     Dslc: tuple = (None, None)  # slice
     Dprod: int = 0  # size of slice, equal to product of Drsh
@@ -162,8 +163,9 @@ def fuse_legs(a, axes, mode=None) -> 'Tensor':
 
 def _fuse_legs_hard(a, axes, order):
     r"""
-    Function performing hard fusion. axes are for native legs and are cleaned outside.
-    a.trans is accounted for here
+    Perform hard fusion for the specified native legs.
+
+    The transpose mapping is accounted for in this routine.
     """
     order = tuple(a.trans[ax] for ax in order)
     axes = tuple(tuple(a.trans[ax] for ax in group) for group in axes)
@@ -197,7 +199,7 @@ def _fuse_blocks(config, data, struct, axes, struct_sub=None, connector_first=Tr
 
 @lru_cache(maxsize=1024)
 def _meta_fuse_hard(sym, struct, axes, legs_sub=None, connector_first=True, lazy_threshold=None):
-    r""" Meta information for backend needed to hard-fuse some legs. """
+    r"""Prepare backend metadata for hard-fusing the selected legs."""
     assert not struct.isdiag, "Sanity check. Contact developers."
     #
     st_full = get_blocks(sym, struct)
@@ -293,14 +295,15 @@ def _meta_fuse_hard(sym, struct, axes, legs_sub=None, connector_first=True, lazy
         ('Dn',  np.int64, (ndimn,)),
         ('slo', np.int64, (2,)),
         ('Do',  np.int64, (ndimo,)),
-        ('Dslc', np.int64, (ndimn, 2)),
-        ('Drsh', np.int64, (ndimn,))])
+        ('ssln', np.int64, (ndimn, 2)),
+        ('Dns', np.int64, (ndimn,))])
     meta = meta.view(meta_dt).reshape(-1)
+    meta = convert_to_tuples_and_slices(meta)
     return meta, bl_new.size, struct_new, legs_old
 
 
 def fuse_meta_to_hard(a):
-    r""" Changes all meta fusions into hard fusions. If there are no meta fusions, return self. """
+    r"""Convert all meta fusions into hard fusions and return the updated tensor."""
     while any(mf != (1,) for mf in a.mfs):
         axes, new_mfs = _consume_mfs_lowest(a.mfs)
         order = tuple(range(a.ndim_n))
@@ -420,7 +423,7 @@ def _unfuse_blocks(config, data, struct, axes, hfsm, return_hfs=False, lazy_thre
 
 @lru_cache(maxsize=1024)
 def _meta_unfuse_hard(sym, struct, axes, hfs, lazy_threshold=None):
-    r""" Meta information for backend needed to hard-unfuse some legs. """
+    r"""Prepare backend metadata for hard-unfusing the selected legs."""
     assert not struct.isdiag, "Sanity check. Contact developers."
 
     lls, hfs_new, nlegs_unfused = [], [], []
@@ -477,8 +480,9 @@ def _meta_unfuse_hard(sym, struct, axes, hfs, lazy_threshold=None):
         ('Dn',  np.int64, (ndimo,)),
         ('slo', np.int64, (2,)),
         ('Do',  np.int64, (ndimo,)),
-        ('sub_slc', np.int64, (ndimo, 2))])
+        ('sslo', np.int64, (ndimo, 2))])
     meta = meta.view(meta_dt).reshape(-1)
+    meta = convert_to_tuples_and_slices(meta)
     return meta, bl_new.size, struct_new, tuple(nlegs_unfused), tuple(hfs_new)
 
 
@@ -487,7 +491,7 @@ def _meta_unfuse_hard(sym, struct, axes, hfs, lazy_threshold=None):
 
 @lru_cache(maxsize=1024)
 def _meta_mask(sym, struct, mask_t, mask_D, axis):
-    r""" meta information for backend, and new tensor structure for mask."""
+    r"""Prepare backend metadata and the resulting tensor structure for masking."""
     leg_a = struct.legs[axis]
     mask_tD = {t: D for t, D in sorted(zip(mask_t, mask_D)) if D > 0 and t in leg_a}
     leg_c = LegBasic(s=leg_a.s, t=tuple(mask_tD.keys()), D=tuple(mask_tD.values()))
@@ -520,13 +524,14 @@ def _meta_mask(sym, struct, mask_t, mask_D, axis):
         ('Da', np.int64, (ndim,)),
         ('tm', np.int64, (sym.NSYM,))])
     meta = meta.view(meta_dt).reshape(-1)
+    # meta = convert_to_tuples_and_slices(meta)
     return meta, bl_c.size, struct_c, axis, ndim
 
 
 def _mask_nonzero(mask):
     r"""
-    Change boolean masks into masks of indices.
-    Fow trivial mask with all true, return None.
+    Convert boolean masks into index masks.
+    For a trivial mask with all values ``True``, return ``None``.
     """
     if all(np.all(v) for v in mask.values()):
         return None
@@ -536,7 +541,7 @@ def _mask_nonzero(mask):
 
 
 def _mask_tensors_leg_intersection(a, b, axa, axb):
-    r""" masks to get the intersecting parts of legs from two tensors a and b, for legs axa, axb. """
+    r"""Return masks for the intersecting parts of the selected legs of two tensors."""
     msk_a, msk_b = [], []
     a_hfs, b_hfs = list(a.hfs), list(b.hfs)
     for i1, i2 in zip(axa, axb):
@@ -550,9 +555,10 @@ def _mask_tensors_leg_intersection(a, b, axa, axb):
 
 def _embed_tensor(a, legs, legs_new):
     r"""
-    Embed tensor to fill in zero block in fusion mismatch.
-    here legs are contained in legs_new that result from legs_union
-    legs_new is a dict = {n: leg}
+    Embed a tensor to fill in zero blocks when fusion structures do not match.
+
+    The provided leg information is taken from ``legs_new`` as a mapping
+    ``{n: leg}`` produced by ``legs_union``.
     """
 
     legs_new = [legs_new[n] if n in legs_new else legs[n] for n in range(len(legs))]
@@ -616,7 +622,7 @@ def _leg_structure_combine_charges_sum(t_in, D_in, pos=None):
 
 
 def _leg_structure_merge(teff, tlegs, Deff, Dlegs):
-    r""" LegDecomposition for merging into a single leg. """
+    r"""Build the decomposition structure for merging several legs into one."""
     tt = sorted(set(zip(teff, tlegs, Deff, Dlegs)))
     t, D, dec = [], [], []
     for te, grp in groupby(tt, key=itemgetter(0)):
@@ -632,7 +638,7 @@ def _leg_structure_merge(teff, tlegs, Deff, Dlegs):
 
 
 def _combine_hfs_prod(hfs, t_in, D_in, s_out):
-    r""" Combine _Fusion(s) forming product of space, adding charges and dimensions present on the fused legs. """
+    r"""Combine fusion-history objects for a product of spaces."""
     axes = list(range(len(hfs)))
     if len(axes) == 0:
         return _Fusion(s=(s_out,))
@@ -653,7 +659,7 @@ def _combine_hfs_prod(hfs, t_in, D_in, s_out):
 
 
 def _combine_hfs_sum(hfs, t_in, D_in, s_out):
-    r""" Combine _Fusion(s) forming direct sum of space. """
+    r"""Combine fusion-history objects for a direct sum of spaces."""
     if len(hfs) == 1:
         return hfs[0]
     tfl, Dfl, sfl = [], [], [s_out]
@@ -675,7 +681,7 @@ def _combine_hfs_sum(hfs, t_in, D_in, s_out):
 
 
 def _merge_masks_prod(sym, ls, ms):
-    r""" Perform product of spaces / leg fusion, Combining masks using information from LegSlices. """
+    r"""Combine masks for a product of spaces using the leg-slice decomposition."""
     msk = {tt: np.ones(Dt, dtype=bool) for tt, Dt in zip(ls.t, ls.D)}
     nsym = sym.NSYM
     for tt, dect in zip(ls.t, ls.dec):
@@ -689,7 +695,7 @@ def _merge_masks_prod(sym, ls, ms):
 
 
 def _merge_masks_sum(ls, ms):
-    r""" Perform sum of spaces / blocking of legs, combining masks using information from LegSlices. """
+    r"""Combine masks for a direct sum of spaces using the leg-slice decomposition."""
     msk = {tt: np.ones(Dt, dtype=bool) for tt, Dt in zip(ls.t, ls.D)}
     for tt, dect in zip(ls.t, ls.dec):
         for rec in dect:
@@ -698,7 +704,7 @@ def _merge_masks_sum(ls, ms):
 
 
 def _mask_falsify_mismatches_(ms1, ms2):
-    r""" Multiply masks by False for indices that are not in both dictionaries ms1 and ms2. """
+    r"""Set mask entries to ``False`` for indices that are not present in both dictionaries."""
     set1, set2 = set(ms1), set(ms2)
     for t in set1 - set2:
         ms1[t] *= False

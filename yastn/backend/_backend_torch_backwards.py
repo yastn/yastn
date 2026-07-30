@@ -46,11 +46,10 @@ class kernel_svd(torch.autograd.Function):
         Vhdata = torch.empty((sizes[2],), dtype=data_in.dtype, device=data_in.device)
         reg = torch.as_tensor(ad_decomp_reg, dtype=real_dtype, device=data_in.device)
         for slo, Do, slU, DU, slS, slV, DV in meta:
-            Do, DU, DV = tuple(Do), tuple(DU), tuple(DV)
-            U, S, Vh = SVDGESDD.forward(data_in[slice(*slo)].view(Do), reg, fullrank_uv, diagnostics)
-            Udata[slice(*slU)].reshape(DU)[:] = U
-            Sdata[slice(*slS)] = S
-            Vhdata[slice(*slV)].reshape(DV)[:] = Vh
+            U, S, Vh = SVDGESDD.forward(data_in[slo].view(Do), reg, fullrank_uv, diagnostics)
+            Udata[slU].reshape(DU)[:] = U
+            Sdata[slS] = S
+            Vhdata[slV].reshape(DV)[:] = Vh
         return Udata, Sdata, Vhdata
 
     @staticmethod
@@ -71,11 +70,9 @@ class kernel_svd(torch.autograd.Function):
         Smax = Sdata.max()
         data_b= torch.zeros((ctx.size_in,), dtype=Udata.dtype, device=Udata.device)
         for slo, Do, slU, DU, slS, slV, DV in ctx.meta:
-            Do, DU, DV = tuple(Do), tuple(DU), tuple(DV)
             loc_ctx = SimpleNamespace(diagnostics=ctx.diagnostics,
-                saved_tensors = (Udata[slice(*slU)].view(DU), Sdata[slice(*slS)], Vhdata[slice(*slV)].view(DV), reg, Smax))
-            data_b[slice(*slo)].view(Do)[:], _, _, _ = SVDGESDD.backward(loc_ctx, \
-                Udata_b[slice(*slU)].view(DU), Sdata_b[slice(*slS)], Vhdata_b[slice(*slV)].view(DV))
+                saved_tensors = (Udata[slU].view(DU), Sdata[slS], Vhdata[slV].view(DV), reg, Smax))
+            data_b[slo].view(Do)[:], _, _, _ = SVDGESDD.backward(loc_ctx, Udata_b[slU].view(DU), Sdata_b[slS], Vhdata_b[slV].view(DV))
         return data_b, None, None, None, None, None
 
 
@@ -87,12 +84,11 @@ class kernel_svds_scipy(torch.autograd.Function):
         Sdata = torch.empty((sizes[1],), dtype=real_dtype, device=data_in.device)
         Vhdata = torch.empty((sizes[2],), dtype=data_in.dtype, device=data_in.device)
         for slo, Do, slU, DU, slS, slV, DV in meta:
-            Do, DU, DV = tuple(Do), tuple(DU), tuple(DV)
-            k = slS[1] - slS[0]
-            U, S, V = SVDS_SCIPY.apply(data_in[slice(*slo)].view(Do), k, thresh, solver, **kwargs)
-            Udata[slice(*slU)].reshape(DU)[:] = U
-            Sdata[slice(*slS)] = S
-            Vhdata[slice(*slV)].reshape(DV)[:] = V
+            k = slS.stop - slS.start
+            U, S, V = SVDS_SCIPY.apply(data_in[slo].view(Do), k, thresh, solver, **kwargs)
+            Udata[slU].reshape(DU)[:] = U
+            Sdata[slS] = S
+            Vhdata[slV].reshape(DV)[:] = V
 
         ctx.save_for_backward(Udata, Sdata, Vhdata)
         ctx.meta = meta
@@ -117,8 +113,7 @@ class kernel_dot(torch.autograd.Function):
             data_B = data_B.to(dtype=dtype)
         newdata = torch.zeros((size_C,), dtype=dtype, device=data_A.device)
         for slc, Dc, sla, Da, slb, Db in meta:
-            Dc, Da, Db = tuple(Dc), tuple(Da), tuple(Db)
-            newdata[slice(*slc)].view(Dc)[:] = data_A[slice(*sla)].view(Da) @ data_B[slice(*slb)].view(Db)
+            newdata[slc].view(Dc)[:] = data_A[sla].view(Da) @ data_B[slb].view(Db)
         return newdata
 
     @staticmethod
@@ -141,12 +136,11 @@ class kernel_dot(torch.autograd.Function):
         if dtype != data_B.dtype:
             data_B = data_B.to(dtype=dtype)
         for slc, Dc, sla, Da, slb, Db in ctx.meta:
-            Dc, Da, Db = tuple(Dc), tuple(Da), tuple(Db)
-            Ab = data_A_b[slice(*sla)].view(Da)
-            Bb = data_B_b[slice(*slb)].view(Db)
-            Cb = data_C_b[slice(*slc)].view(Dc)
-            B = data_B[slice(*slb)].view(Db)
-            A = data_A[slice(*sla)].view(Da)
+            Ab = data_A_b[sla].view(Da)
+            Bb = data_B_b[slb].view(Db)
+            Cb = data_C_b[slc].view(Dc)
+            B = data_B[slb].view(Db)
+            A = data_A[sla].view(Da)
             Ab += Cb @ B.adjoint()  #  += is for fuse_contracted
             Bb += A.adjoint() @ Cb
         # project gradients back to each input's dtype (real+complex mixes)
@@ -164,10 +158,10 @@ class kernel_transpose_dot_sum(torch.autograd.Function):
         if dtype != data_B.dtype:
             data_B = data_B.to(dtype=dtype)
         data_C = torch.zeros((size_C,), dtype=dtype, device=data_A.device)
-        At = {ii: data_A[slice(*slo)].view(tuple(Do)).permute(order_A).reshape(Dl, Dr) for ii, (slo, Do, Dl, Dr) in enumerate(reshape_A)}
-        Bt = {ii: data_B[slice(*slo)].view(tuple(Do)).permute(order_B).reshape(Dl, Dr) for ii, (slo, Do, Dl, Dr) in enumerate(reshape_B)}
+        At = {ii: data_A[slo].view(Do).permute(order_A).reshape(Dl, Dr) for ii, (slo, Do, Dl, Dr) in enumerate(reshape_A)}
+        Bt = {ii: data_B[slo].view(Do).permute(order_B).reshape(Dl, Dr) for ii, (slo, Do, Dl, Dr) in enumerate(reshape_B)}
         for sln, Dn, ta, tb in meta:
-            data_C[slice(*sln)].view(tuple(Dn))[:] += At[ta] @ Bt[tb]
+            data_C[sln].view(Dn)[:] += At[ta] @ Bt[tb]
         return data_C
 
     @staticmethod
@@ -197,13 +191,13 @@ class kernel_transpose_dot_sum(torch.autograd.Function):
         if promoted_dtype != data_C_b.dtype:
             data_C_b = data_C_b.to(dtype=promoted_dtype)
 
-        At = {ii: data_A[slice(*slo)].view(tuple(Do)).permute(ctx.order_A).reshape(Dl, Dr) for ii, (slo, Do, Dl, Dr) in enumerate(ctx.reshape_A)}
-        Bt = {ii: data_B[slice(*slo)].view(tuple(Do)).permute(ctx.order_B).reshape(Dl, Dr) for ii, (slo, Do, Dl, Dr) in enumerate(ctx.reshape_B)}
+        At = {ii: data_A[slo].view(Do).permute(ctx.order_A).reshape(Dl, Dr) for ii, (slo, Do, Dl, Dr) in enumerate(ctx.reshape_A)}
+        Bt = {ii: data_B[slo].view(Do).permute(ctx.order_B).reshape(Dl, Dr) for ii, (slo, Do, Dl, Dr) in enumerate(ctx.reshape_B)}
         At_b = {ii: torch.zeros_like(v) for ii, v in At.items()}
         Bt_b = {ii: torch.zeros_like(v) for ii, v in Bt.items()}
 
         for sln, Dn, ta, tb in ctx.meta:
-            tmp = data_C_b[slice(*sln)].view(tuple(Dn))
+            tmp = data_C_b[sln].view(Dn)
             At_b[ta] += tmp @ Bt[tb].adjoint()
             Bt_b[tb] += At[ta].adjoint() @ tmp
 
@@ -300,8 +294,8 @@ class kernel_embed_mask(torch.autograd.Function):
         slc2 = (slice(None),) * (ndim - (axis + 1))
         data_out = torch.zeros((size_out,), dtype=data_in.dtype, device=data_in.device)
         for sln, Dn, sla, Da, tm in meta:
-            slcs = slc0 + (mask[tuple(tm)],) + slc2
-            data_out[slice(*sln)].view(tuple(Dn))[slcs] = data_in[slice(*sla)].view(tuple(Da))
+            slcs = slc0 + (mask[tm],) + slc2
+            data_out[sln].view(Dn)[slcs] = data_in[sla].view(Da)
         return data_out
 
     def setup_context(ctx, inputs, output):
@@ -319,8 +313,8 @@ class kernel_embed_mask(torch.autograd.Function):
         slc2 = (slice(None),) * (ctx.ndim - (ctx.axis + 1))
         data_in_b = torch.zeros((ctx.size_in,), dtype=data_out_b.dtype, device=data_out_b.device)
         for sln, Dn, sla, Da, tm in ctx.meta:
-            slcs = slc0 + (mask[tuple(tm)],) + slc2
-            data_in_b[slice(*sla)].view(tuple(Da))[:] = data_out_b[slice(*sln)].view(tuple(Dn))[slcs]
+            slcs = slc0 + (mask[tm],) + slc2
+            data_in_b[sla].view(Da)[:] = data_out_b[sln].view(Dn)[slcs]
         return data_in_b, None, None, None, None, None
 
 
@@ -329,7 +323,7 @@ class kernel_embed_transpose(torch.autograd.Function):
     def forward(data_in, order, meta, size_out):
         data_out = torch.zeros((size_out,), dtype=data_in.dtype, device=data_in.device)
         for sln, Dn, slo, Do in meta:
-            data_out[slice(*sln)].view(tuple(Dn))[:] = data_in[slice(*slo)].view(tuple(Do)).permute(order)
+            data_out[sln].view(Dn)[:] = data_in[slo].view(Do).permute(order)
         return data_out
 
     @staticmethod
@@ -344,7 +338,7 @@ class kernel_embed_transpose(torch.autograd.Function):
         inv_order = tuple(np.argsort(ctx.order))
         data_in_b = torch.zeros((ctx.size_in,), dtype=data_out_b.dtype, device=data_out_b.device)
         for sln, Dn, slo, Do in ctx.meta:
-            data_in_b[slice(*slo)].view(tuple(Do))[:] = data_out_b[slice(*sln)].view(tuple(Dn)).permute(inv_order)
+            data_in_b[slo].view(Do)[:] = data_out_b[sln].view(Dn).permute(inv_order)
         return data_in_b, None, None, None
 
 
@@ -353,7 +347,7 @@ class kernel_embed_slices(torch.autograd.Function):
     def forward(data_in, meta, size_out):
         data_out = torch.zeros((size_out,), dtype=data_in.dtype, device=data_in.device)
         for sln, slo in meta:
-            data_out[slice(*sln)] = data_in[slice(*slo)]
+            data_out[sln] = data_in[slo]
         return data_out
 
     @staticmethod
@@ -366,7 +360,7 @@ class kernel_embed_slices(torch.autograd.Function):
     def backward(ctx, data_out_b):
         data_in_b = torch.zeros((ctx.size_in,), dtype=data_out_b.dtype, device=data_out_b.device)
         for sln, slo in ctx.meta:
-            data_in_b[slice(*slo)] = data_out_b[slice(*sln)]
+            data_in_b[slo] = data_out_b[sln]
         return data_in_b, None, None
 
 
@@ -374,10 +368,8 @@ class kernel_transpose_and_merge(torch.autograd.Function):
     @staticmethod
     def forward(data_in, order, meta, size_out):
         data_out = torch.zeros((size_out,), dtype=data_in.dtype, device=data_in.device)
-        for sln, Dn, slo, Do, Dslc, Drsh in meta:
-            Dn, Do, Drsh = tuple(Dn), tuple(Do), tuple(Drsh)
-            slcs = tuple(slice(*x) for x in Dslc)
-            data_out[slice(*sln)].reshape(Dn)[slcs] = data_in[slice(*slo)].reshape(Do).permute(order).reshape(Drsh)
+        for sln, Dn, slo, Do, ssln, Dns in meta:
+            data_out[sln].reshape(Dn)[ssln] = data_in[slo].reshape(Do).permute(order).reshape(Dns)
         return data_out
 
     @staticmethod
@@ -391,11 +383,9 @@ class kernel_transpose_and_merge(torch.autograd.Function):
     def backward(ctx, data_out_b):
         inv_order = tuple(np.argsort(ctx.order))
         data_in_b = torch.zeros((ctx.size_in,), dtype=data_out_b.dtype, device=data_out_b.device)
-        for sln, Dn, slo, Do, Dslc, _ in ctx.meta:
-            Dn, Do = tuple(Dn), tuple(Do)
-            slcs = tuple(slice(*x) for x in Dslc)
+        for sln, Dn, slo, Do, ssln, _ in ctx.meta:
             inv_Do = tuple(Do[n] for n in ctx.order)
-            data_in_b[slice(*slo)].view(Do)[:] = data_out_b[slice(*sln)].view(Dn)[slcs].view(inv_Do).permute(inv_order)
+            data_in_b[slo].view(Do)[:] = data_out_b[sln].view(Dn)[ssln].view(inv_Do).permute(inv_order)
         return data_in_b, None, None, None
 
 
@@ -403,9 +393,8 @@ class kernel_unmerge(torch.autograd.Function):
     @staticmethod
     def forward(data_in, meta, size_out):
         data_out = torch.zeros((size_out,), dtype=data_in.dtype, device=data_in.device)
-        for sln, Dn, slo, Do, sub_slc in meta:
-            slcs = tuple(slice(*x) for x in sub_slc)
-            data_out[slice(*sln)].view(tuple(Dn))[:] = data_in[slice(*slo)].view(tuple(Do))[slcs]
+        for sln, Dn, slo, Do, sslo in meta:
+            data_out[sln].view(Dn)[:] = data_in[slo].view(tuple(Do))[sslo]
         return data_out
 
     @staticmethod
@@ -417,7 +406,6 @@ class kernel_unmerge(torch.autograd.Function):
     @staticmethod
     def backward(ctx, data_out_b):
         data_in_b = torch.zeros((ctx.size_in,), dtype=data_out_b.dtype, device=data_out_b.device)
-        for sln, Dn, slo, Do, sub_slc in ctx.meta:
-            slcs = tuple(slice(*x) for x in sub_slc)
-            data_in_b[slice(*slo)].view(tuple(Do))[slcs] = data_out_b[slice(*sln)].view(tuple(Dn))
+        for sln, Dn, slo, Do, sslo in ctx.meta:
+            data_in_b[slo].view(Do)[sslo] = data_out_b[sln].view(Dn)
         return data_in_b, None, None
