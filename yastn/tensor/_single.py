@@ -97,10 +97,10 @@ def remove_random_blocks(a, number, keep_legs=True) -> 'Tensor':
 
 def remove_zero_blocks(a, rtol=1e-12, atol=0) -> 'Tensor':
     r"""
-    Remove blocks where all elements are below a cutoff.
+    Remove blocks whose entries are below a cutoff.
 
-    Cutoff is a combination of absolut tolerance and
-    relative tolerance with respect to maximal element in the tensor.
+    The cutoff combines an absolute tolerance and a relative tolerance with respect
+    to the largest element of the tensor.
     """
     cutoff = atol + rtol * a.norm(p='inf')
 

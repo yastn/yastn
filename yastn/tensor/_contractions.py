@@ -38,10 +38,11 @@ __all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'broadcast', 'apply_mask',
 
 class SpecialTensor(metaclass=abc.ABCMeta):
     """
-    A parent class to create a special tensor-like object.
+    A parent class for creating tensor-like objects with custom contraction behavior.
 
-    ``yastn.tensordot(a, b, axes)`` check if ``a`` or ``b`` is an instance of SpecialTensor
-    and calls ``a.tensordo(b, axes)`` or ``b.tensordo(a, axes, reverse=True)``
+    ``yastn.tensordot(a, b, axes)`` checks whether ``a`` or ``b`` is an instance of
+    ``SpecialTensor`` and dispatches to ``a.tensordot(b, axes)`` or
+    ``b.tensordot(a, axes, reverse=True)``.
     """
 
     @abc.abstractmethod
@@ -51,11 +52,10 @@ class SpecialTensor(metaclass=abc.ABCMeta):
 
 def __matmul__(a, b) -> 'Tensor':
     r"""
-    The operation ``A @ B`` uses ``@`` operator to compute tensor dot product.
-    The operation contracts the last axis of ``self``, i.e., ``a``,
-    with the first axis of ``b``.
+    Compute the tensor dot product using the ``@`` operator.
 
-    It is equivalent to ``yastn.tensordot(a, b, axes=(a.ndim - 1, 0))``.
+    The operation contracts the last leg of the first tensor with the first leg of the
+    second tensor. It is equivalent to ``yastn.tensordot(a, b, axes=(a.ndim - 1, 0))``.
     """
     return tensordot(a, b, axes=(a.ndim - 1, 0))
 
@@ -136,7 +136,7 @@ def tensordot(a, b, axes, conj=(0, 0), lazy_threshold=None) -> 'Tensor':
 
 
 def _tensordot_diag(a, b, in_b, destination):
-    r""" Executes broadcast and then transpose into order expected by tensordot. """
+    r"""Perform the diagonal-tensor special case of tensordot by broadcasting and transposing."""
     if len(in_b) == 1:
         c = a.broadcast(b, axes=in_b[0])
         return c.moveaxis(source=in_b, destination=destination)
@@ -148,8 +148,10 @@ def _tensordot_diag(a, b, in_b, destination):
 
 def _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b, lazy_threshold):
     r"""
-    Perform tensordot by fuse_to_matrix:
-    merging tensors to matrices, executing dot, and unmerging outgoing legs.
+    Perform tensordot using the ``fuse_to_matrix`` strategy.
+
+    The tensors are merged into matrices, the contraction is executed, and the
+    remaining outgoing legs are unmerged.
     """
     struct_a_sub, struct_b_sub, _ = _match_legs_tensordot(a.config.sym, a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
     #
@@ -181,8 +183,10 @@ def _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b, lazy_threshold):
 
 def _tensordot_fc(a, b, nout_a, nin_a, nin_b, nout_b, lazy_threshold):
     r"""
-    Perform tensordot by fuse_contracted: merging contracted legs, and executing dot.
-    Outgoing legs are not merged so unmerge is not needed.
+    Perform tensordot using the ``fuse_contracted`` strategy.
+
+    The contracted legs are merged before the dot product is executed, while the
+    outgoing legs remain separate.
     """
     struct_a_sub, struct_b_sub, _ = _match_legs_tensordot(a.config.sym, a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
     #
@@ -202,7 +206,7 @@ def _tensordot_fc(a, b, nout_a, nin_a, nin_b, nout_b, lazy_threshold):
 @nsys_profile
 def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b, lazy_threshold):
     r"""
-    Perform tensordot directly: permute blocks and execute dot accumulating results into result blocks.
+    Perform tensordot directly by permuting blocks and accumulating the result.
     """
     meta_dot, reshape_a, reshape_b, size_c, struct_c = _meta_tensordot_nf(a.config.sym, a.struct, b.struct, nout_a, nin_a, nin_b, nout_b,
                                                                           lazy_threshold=lazy_threshold)
@@ -716,7 +720,7 @@ def broadcast(a, *args, axes=0, lazy_threshold=None) -> 'Tensor' | tuple['Tensor
 
 @lru_cache(maxsize=1024)
 def _meta_broadcast(sym, struct_a, struct_b, axis):
-    r""" meta information for backend, and new tensor structure for brodcast. """
+    r"""Prepare backend metadata and the resulting tensor structure for broadcast."""
     bl_a_full = get_blocks(sym, struct_a)
     bl_b_full = get_blocks(sym, struct_b)
 
@@ -808,7 +812,7 @@ def apply_mask(a, *args, axes=0) -> 'Tensor' | tuple['Tensor']:
 
 
 def _apply_mask_axes(a, naxes, masks):
-    r""" Auxlliary function applying mask tensors to native legs. """
+    r"""Apply mask tensors to the specified native legs of a tensor."""
     for axis, mask in zip(naxes, masks):
         if mask is not None:
             mask_tD = {k: len(v) for k, v in mask.items() if len(v) > 0}
@@ -1077,8 +1081,7 @@ def _meta_swap_gate_charge(sym, struct, charges, axes, fss):
 
 def fkron(*operators, sites=None, application_order=None):
     """
-    Returns a Kronecker product of operators,
-    including swap-gate (fermionic string) to handle fermionic operators.
+    Return a Kronecker product of operators, including fermionic swap-gates.
 
     Parameters
     ----------

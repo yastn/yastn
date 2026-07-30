@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import hashlib
 from functools import lru_cache
-from itertools import accumulate, chain
+from itertools import accumulate, chain, starmap
 from math import prod
 from typing import NamedTuple, Sequence
 
@@ -522,11 +522,11 @@ def convert_to_tuples_and_slices(arr):
     for name in arr.dtype.names:
         col = arr[name].tolist()
         if "ssl" in name:
-            tmp.append([tuple(slice(*x) for x in xs) for xs in col])
+            tmp.append([tuple(starmap(slice, xs)) for xs in col])
         elif "sl" in name:
-            tmp.append([slice(*x) for x in col])
+            tmp.append(list(starmap(slice, col)))
         elif arr[name].ndim > 1:
-            tmp.append([tuple(x) for x in col])
+            tmp.append(list(map(tuple, col)))
         else:
             tmp.append(col)
     return list(zip(*tmp))

@@ -44,7 +44,7 @@ _syms = {"dense": sym_none,
 #                 default_fusion='hard', force_fusion=None, tensordot_policy='fuse_contracted', **kwargs):
 def make_config(**kwargs) -> _config:
     r"""
-    Create structure with YASTN configuration
+    Create a YASTN configuration object.
 
     Parameters
     ----------

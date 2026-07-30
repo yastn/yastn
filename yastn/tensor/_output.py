@@ -182,38 +182,28 @@ def __str__(a) -> str:
 
 
 def __repr__(a) -> str:
-    """
-    Return string representation of the tensor.
-    """
+    """Return the string representation of the tensor."""
     return __str__(a)
 
 
 def requires_grad(a) -> bool:
-    """
-    Return ``True`` if tensor data have autograd enabled.
-    """
+    """Return ``True`` if the tensor data have autograd enabled."""
     return a.config.backend.requires_grad(a._data)
 
 
 def print_blocks_shape(a, file=None) -> str:
-    """
-    Print shapes of blocks as a sequence of block's charge followed by its shape.
-    """
+    """Print the shape of each block as a charge/shape pair."""
     for t, D in zip(a.get_blocks_charge(), a.get_blocks_shape()):
         print(f"{t} {D}", file=file)
 
 
 def is_complex(a) -> bool:
-    """
-    Return ``True`` if tensor data are complex.
-    """
+    """Return ``True`` if the tensor data are complex."""
     return a.config.backend.is_complex(a._data)
 
 
 def get_tensor_charge(a) -> Sequence[int]:
-    """
-    Return :attr:`yastn.Tensor.n`.
-    """
+    """Return the tensor total charge, equivalent to :attr:`yastn.Tensor.n`."""
     return a.struct.n
 
 

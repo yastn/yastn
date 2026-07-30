@@ -89,9 +89,7 @@ def add(*tensors, amplitudes=None, **kwargs) -> 'Tensor':
 
 
 def _pre_addition(*tensors):
-    """
-    Test and prepare tensors before addition.
-    """
+    """Test and prepare tensors before addition."""
     for ten in tensors[1:]:
         _test_can_be_combined(tensors[0], ten)
 
@@ -121,7 +119,7 @@ def _pre_addition(*tensors):
 
 @lru_cache(maxsize=1024)
 def _meta_addition(sym, *structs):
-    """ meta-information for backend and new tensor charges and dimensions. """
+    """Prepare backend metadata and the resulting tensor structure for addition."""
     if all(structs[0] == struct for struct in structs[1:]):
         bl_new = get_blocks(sym, structs[0])
         size = bl_new.size

@@ -29,10 +29,10 @@ if TYPE_CHECKING:
 
 def einsum(subscripts, *operands, order=None, swap=None) -> 'Tensor':
     r"""
-    Execute series of tensor contractions.
+    Execute a series of tensor contractions.
 
-    Covering trace, tensordot (including outer products), and transpose.
-    Follows notation of :meth:`np.einsum` as close as possible.
+    This covers trace, tensordot (including outer products), and transpose operations.
+    It follows the notation of :meth:`np.einsum` as closely as possible.
 
     Parameters
     ----------
@@ -113,7 +113,7 @@ def einsum(subscripts, *operands, order=None, swap=None) -> 'Tensor':
 def ncon(ts, inds, conjs=None, order=None, swap=None, release_cuda_cache=False,
          oom_retry=False) -> 'Tensor':
     r"""
-    Execute series of tensor contractions.
+    Execute a series of tensor contractions.
 
     Parameters
     ----------
