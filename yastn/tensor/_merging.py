@@ -21,6 +21,7 @@ from operator import itemgetter
 from typing import NamedTuple, TYPE_CHECKING
 
 import numpy as np
+from yastn._profile import nsys_profile
 
 from ._auxiliary import _struct, _flatten, _clear_axes, _unpack_legs, get_blocks
 from ._auxiliary import find_matching_indices, get_trimmed_struct, convert_to_tuples_and_slices
@@ -183,6 +184,7 @@ def _fuse_legs_hard(a, axes, order):
     return out
 
 
+@nsys_profile
 def _fuse_blocks(config, data, struct, axes, struct_sub=None, connector_first=True, lazy_threshold=None):
     order = sum(axes, start=())
     sub_legs = struct_sub.legs if struct_sub is not None else None
@@ -198,6 +200,7 @@ def _fuse_blocks(config, data, struct, axes, struct_sub=None, connector_first=Tr
 
 
 @lru_cache(maxsize=1024)
+@nsys_profile
 def _meta_fuse_hard(sym, struct, axes, legs_sub=None, connector_first=True, lazy_threshold=None):
     r"""Prepare backend metadata for hard-fusing the selected legs."""
     assert not struct.isdiag, "Sanity check. Contact developers."
@@ -314,6 +317,7 @@ def fuse_meta_to_hard(a):
 #  =========== unfuse legs ======================
 
 
+@nsys_profile
 def unfuse_legs(a, axes) -> 'Tensor':
     r"""
     Unfuse legs, reverting one layer of fusion.
@@ -411,6 +415,7 @@ def unfuse_legs(a, axes) -> 'Tensor':
     return out
 
 
+@nsys_profile
 def _unfuse_blocks(config, data, struct, axes, hfsm, return_hfs=False, lazy_threshold=None):
     axes_trim = tuple(ax for ax in axes if hfsm[ax].tree[0] > 1)
     if axes_trim:
@@ -422,6 +427,7 @@ def _unfuse_blocks(config, data, struct, axes, hfsm, return_hfs=False, lazy_thre
 
 
 @lru_cache(maxsize=1024)
+@nsys_profile
 def _meta_unfuse_hard(sym, struct, axes, hfs, lazy_threshold=None):
     r"""Prepare backend metadata for hard-unfusing the selected legs."""
     assert not struct.isdiag, "Sanity check. Contact developers."
