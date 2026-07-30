@@ -27,6 +27,7 @@ from ._auxiliary import _struct, _clear_axes, _unpack_axes, get_blocks, find_ind
 from ._legbasic import LegBasic
 from ._merging import _Fusion, _fuse_blocks, _unfuse_blocks
 from ._tests import YastnError, _test_axes_all
+from ._single import remove_zero_blocks
 
 if TYPE_CHECKING:
     from . import Tensor
@@ -248,6 +249,9 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         from ..krylov._krylov import svds
         if 'k_block' not in kwargs:
             raise YastnError(policy + " policy in svd requires passing argument k_block.")
+        # Sparse global SVD cannot initialize an all-zero sector. Its partial
+        # result is allowed to omit such sectors.
+        a = remove_zero_blocks(a)
         # WIP: BUG for SVDS
         k_block = min(kwargs['k_block'], min(a.get_shape(axes=0), a.get_shape(axes=1)))
         U, S, Vh = svds(a, axes=axes, sU=sU, nU=nU, k=k_block, ncv=None, tol=0, which='LM', solver='arpack')
@@ -272,6 +276,10 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         if 'k_block' not in kwargs:
             raise YastnError(policy + " policy in svd requires passing argument D_block or k_block.")
         k_block = kwargs['k_block']
+        # A partial solver must not receive an exactly-zero effective block.
+        # Keep this after fusion: fusion can introduce structural zero blocks.
+        am = remove_zero_blocks(a._replace(struct=struct_am, data=data))
+        data, struct_am = am._data, am.struct
 
     if verbosity > 2:
         fname = sys._getframe().f_code.co_name
@@ -279,8 +287,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         logger.info(f"{fname} D_block {kwargs.get('D_block', 'NA')}")
         logger.info(f"{fname} k_block {k_block}")
 
-    nonzero = _nonzero_sectors(a.config.backend, data, sym, struct_am)
-    meta, sizes, struct_Um, struct_S, struct_Vm = _meta_svd(sym, struct_am, sU, nU, k_block, nonzero=nonzero)
+    meta, sizes, struct_Um, struct_S, struct_Vm = _meta_svd(sym, struct_am, sU, nU, k_block)
 
     if compute_uv and policy == 'fullrank':
         Udata, Sdata, Vdata = a.config.backend.svd(data, meta, sizes, diagnostics=kwargs.get('diagnostics', None))
@@ -334,22 +341,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     return U, S, V
 
 
-def _nonzero_sectors(backend, data, sym, struct):
-    """
-    Per-block flags of a merged matrix: True if the block has any nonzero element,
-    aligned with the block order of ``get_blocks(sym, struct)``.
-
-    Returns None when all blocks are nonzero and there is nothing to filter.
-    For an all-zero matrix every sector is dropped, giving empty U, S, V.
-    """
-    bl = get_blocks(sym, struct)
-    flags = backend.nonzero_blocks(data, bl.slc)
-    if all(flags):
-        return None
-    return flags
-
-
-def _meta_svd(sym, struct, sU, nU, k_block, nonzero=None):
+def _meta_svd(sym, struct, sU, nU, k_block):
     """
     meta and struct for svd
     U has signature = (legs[0].s, sU)
@@ -365,12 +357,6 @@ def _meta_svd(sym, struct, sU, nU, k_block, nonzero=None):
 
     ax0 = 1 if nU else 0
     minD = {tuple(tt): min(DD) for tt, DD in zip(bl_a.t[:, ax0, :].tolist(), bl_a.D)}
-    if nonzero is not None:
-        # exclude exactly-zero blocks from the decomposition;
-        # their sectors reappear as zero blocks in any product with U, S, V.
-        for tt, nz in zip(bl_a.t[:, ax0, :].tolist(), nonzero):
-            if not nz:
-                minD[tuple(tt)] = 0
     if k_block is not None:
         if isinstance(k_block, dict):
             sector_minD = min(k_block.values())  # TODO: control default for sectors not present in k_block
@@ -886,6 +872,10 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank', **kwargs) -> tu
         if 'k_block' not in kwargs:
             raise YastnError(policy + " policy in eighs requires passing argument D_block.")
         k_block = kwargs['k_block']
+        # A partial solver must not receive an exactly-zero effective block.
+        # Keep this after fusion: fusion can introduce structural zero blocks.
+        am = remove_zero_blocks(a._replace(struct=struct_am, data=data))
+        data, struct_am = am._data, am.struct
 
     if verbosity > 2:
         fname = sys._getframe().f_code.co_name
@@ -896,12 +886,7 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank', **kwargs) -> tu
     if hfsm[0] != hfsm[1].conj() or struct_am.legs[0] != struct_am.legs[1].conj():
         raise YastnError("Tensor likely is not hermitian. Legs of effective square blocks do not match.")
 
-    # filter zero blocks only for the partial-spectrum solver; 'fullrank' keeps
-    # them so that U remains a complete eigenbasis (with eigenvalue-0 sectors).
-    nonzero = None
-    if policy == 'block_lanczos':
-        nonzero = _nonzero_sectors(a.config.backend, data, sym, struct_am)
-    meta, sizes, struct_Um, struct_S = _meta_eigh(sym, struct_am, sU, k_block, nonzero=nonzero)
+    meta, sizes, struct_Um, struct_S = _meta_eigh(sym, struct_am, sU, k_block)
 
     if policy == 'fullrank':
         Sdata, Udata = a.config.backend.eigh(data, meta, sizes)
@@ -940,7 +925,7 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank', **kwargs) -> tu
     return S, U
 
 
-def _meta_eigh(sym, struct, sU, k_block, nonzero=None):
+def _meta_eigh(sym, struct, sU, k_block):
     """
     meta and struct for eigh
     U has signature = (legs[0].s, sU)
@@ -950,12 +935,6 @@ def _meta_eigh(sym, struct, sU, k_block, nonzero=None):
 
     n0 = sym.zero()
     minD = {tuple(tt): min(DD) for tt, DD in zip(bl_a.t[:, 1, :].tolist(), bl_a.D)}
-    if nonzero is not None:
-        # exclude exactly-zero blocks; their eigenpairs (all with eigenvalue 0)
-        # are dropped, consistent with a partial-spectrum solve.
-        for tt, nz in zip(bl_a.t[:, 1, :].tolist(), nonzero):
-            if not nz:
-                minD[tuple(tt)] = 0
     if k_block is not None:
         if isinstance(k_block, dict):
             sector_minD = min(k_block.values())  # TODO: control default for sectors not present in k_block
