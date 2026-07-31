@@ -16,7 +16,7 @@ The configuration can be provided as a Python module,
 `typing.NamedTuple <https://docs.python.org/3/library/typing.html#typing.NamedTuple>`_, or similar, which defines the following members.
 
 * required: ``backend``, ``sym``,
-* optional: ``default_device``, ``default_dtype``, ``fermionic``, ``default_fusion``,  ``force_fusion``.
+* optional: ``default_device``, ``default_dtype``, ``fermionic``, ``default_fusion``,  ``force_fusion``, ``tensordot_policy``, ``meta_tensordot_policy``, ``lazy_threshold``.
 
 The configuration can be conveniently generated using
 

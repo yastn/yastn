@@ -223,7 +223,7 @@ def test_svd_lowrank_basic(config_kwargs):
 
 
 def test_svd_truncate_lowrank(config_kwargs):
-    """ check lowrank combined with truncation. """
+    """Check SVD and lowrank SVD combined with truncation."""
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     legs = [yastn.Leg(config_U1, s=1, t=(0, 1), D=(5, 6)),
             yastn.Leg(config_U1, s=1, t=(-1, 0), D=(5, 6)),
@@ -231,25 +231,32 @@ def test_svd_truncate_lowrank(config_kwargs):
             yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(2, 3, 4))]
     a = yastn.rand(config=config_U1, n=1, legs=legs)
 
+    # Decompose the tensor and build a reference tensor from the factors.
     U, S, V = yastn.linalg.svd(a, axes=((0, 1), (2, 3)), sU=-1)
 
-    # fixing singular values for testing
+    # Fix the singular values explicitly so that truncation behavior is
+    # deterministic and easy to reason about in the test.
     S.set_block(ts=(-2, -2), Ds=4, val=[2**(-ii - 6) for ii in range(4)])
     S.set_block(ts=(-1, -1), Ds=12, val=[2**(-ii - 2) for ii in range(12)])
     S.set_block(ts=(0, 0), Ds=25, val=[2**(-ii - 1) for ii in range(25)])
 
     a = yastn.ncon([U, S, V], [(-1, -2, 1), (1, 2), (2, -3, -4)])
 
+    # First check that global truncation reduces the spectrum to the
+    # requested total bond dimension. Here low-rank SVD driver is used.
     opts = {'tol': 0.01, 'D_block': 100, 'D_total': 12}
     _, S2, _ = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), sU=-1, **opts, policy='lowrank')
     assert S2.get_shape() == (12, 12)
 
+    # Then verify that truncation by charge produces the same result when
+    # the left and right factors are split with different charge conventions.
     opts = {'D_block': {(0,): 2, (-1,): 0}, 'policy': 'lowrank'}
     U1, S1, V1 = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), nU=True, sU=-1, **opts)
     assert S1.get_shape() == (2, 2)
     a1 = U1 @ S1 @ V1
 
-    # truncation by charge requires some care to properly assign charges, given nU and sU.
+    # Truncation by charge requires care when assigning charges to the
+    # new factors, especially for different values of nU and sU.
     opts = {'D_block': {(1,): 2}, 'policy': 'lowrank'}
     U2, S2, V2 = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), nU=False, sU=-1, **opts)
     assert S1.get_shape() == (2, 2)

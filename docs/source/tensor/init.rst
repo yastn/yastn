@@ -9,7 +9,7 @@ In this case, only their rank (specified through a tuple of signatures)
 and symmetry need to be known when initializing such empty symmetric tensors.
 The data, in the form of non-zero blocks, can be added at a later time.
 
-See examples at :ref:`examples/tensor/init:create empty tensor and fill it block by block`.
+See examples at :ref:`examples/tensor/init:Create an empty tensor and fill it block by block`.
 
 .. autoclass:: yastn.Tensor
 
@@ -35,7 +35,7 @@ of these sectors, or by passing a list of legs.
 Copying and cloning with autograd
 ---------------------------------
 
-See examples at :ref:`examples/tensor/init:clone, detach or copy tensors`.
+See examples at :ref:`examples/tensor/init:Clone, detach, or copy tensors`.
 
 YASTN follows the semantics of PyTorch with regards to creating
 differentiable *clones* or non-differentiable *copies* of symmetric

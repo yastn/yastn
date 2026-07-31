@@ -16,7 +16,7 @@ SVD decompositions and truncation
 The example below demonstrates SVD-based decomposition and truncation of a symmetric tensor.
 
 .. literalinclude:: /../../tests/tensor/test_svd.py
-   :pyobject: test_svd_truncate
+   :pyobject: test_svd_truncate_lowrank
 
 
 QR decompositions

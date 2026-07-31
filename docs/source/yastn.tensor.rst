@@ -44,3 +44,4 @@ Examples: basics of usage
    examples/tensor/init
    examples/tensor/algebra
    examples/tensor/decomposition
+   examples/tensor/other
