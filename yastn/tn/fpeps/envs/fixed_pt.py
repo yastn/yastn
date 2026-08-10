@@ -805,9 +805,12 @@ class FixedPoint(torch.autograd.Function):
 
         # 3. Find the gauge transformation
         t0 = time.perf_counter()
-        env_gauge, phase_dict = find_gauge_multi_sites(env_converged, ctm_env_out, verbose=True)
-        if env_gauge is None:
+        gauge_result = find_gauge_multi_sites(
+            env_converged, ctm_env_out, verbose=True
+        )
+        if gauge_result is None:
             raise NoFixedPointError(code=1, message="No fixed point found: fail to find the gauge matrix!")
+        env_gauge, phase_dict = gauge_result
         t1 = time.perf_counter()
         log.info(f"{type(ctx).__name__}.forward FP gauge-fixing t {t1-t0} [s]")
 
