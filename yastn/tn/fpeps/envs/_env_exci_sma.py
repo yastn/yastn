@@ -18,6 +18,35 @@ def contract_window(bra, tms, ket, i0, i1, opts_svd, opts_var):
 
     return mps.vdot(bra, tms[i1], vec)
 
+
+def contract_window_split_at(bra, tms, ket, i0, i1, i_split, opts_svd, opts_var):
+    """
+    Contract <bra| M_i1 ... M_i0 |ket> with M_i_split kept out of compression.
+
+    This is useful for AD tangent-space matrix columns: the differentiated bra
+    tensor is placed only inside M_i_split, while all compressed prefix/suffix
+    MPSs are built without that tensor. The resulting scalar is therefore a
+    linear functional of the bra tensor, unlike differentiating through the full
+    adaptive compression sweep.
+    """
+    if not i0 <= i_split <= i1:
+        raise YastnError(f"{i_split=} not within contraction window [{i0}, {i1}]")
+
+    vec = ket
+    for n in range(i0, i_split):
+        vec_next = mps.zipper(tms[n], vec, opts_svd=opts_svd, normalize=False)
+        mps.compression_(vec_next, (tms[n], vec), method='1site', normalize=False, **opts_var)
+        vec = vec_next
+
+    bra_eff = bra
+    for n in range(i1, i_split, -1):
+        op_h = tms[n].H
+        bra_next = mps.zipper(op_h, bra_eff, opts_svd=opts_svd, normalize=False)
+        mps.compression_(bra_next, (op_h, bra_eff), method='1site', normalize=False, **opts_var)
+        bra_eff = bra_next
+
+    return mps.vdot(bra_eff, tms[i_split], vec)
+
 class EnvExciSMA:
     """ EnvWindowSMA class for expectation values within PEPS with CTM boundary. """
 
@@ -150,7 +179,7 @@ class EnvExciSMA:
         raise YastnError(f"{dirn=} not recognized. Should be 't', 'h' 'b', 'r', 'v', or 'l'.")
 
 
-    def measure_exci(self, *operators, exci_bra=None, exci_ket=None, site_bra=None, site_ket=None, sites_op=None, dirn='tb', opts_svd=None, opts_var=None):
+    def measure_exci(self, *operators, exci_bra=None, exci_ket=None, site_bra=None, site_ket=None, sites_op=None, dirn='tb', opts_svd=None, opts_var=None, split_bra=False):
 
         sites = [site_bra, site_ket] + sites_op
 
@@ -211,7 +240,11 @@ class EnvExciSMA:
             for jj in range(ny0, ny):
                 tens[nx0, jj].add_charge_swaps_(op.n, axes=['b0', 'k2', 'k4'])
 
-        val_op = contract_window(bra, tms, ket, i0, i1, opts_svd, opts_var)
+        if split_bra:
+            i_split = site_bra[1] if dirn == 'lr' else site_bra[0]
+            val_op = contract_window_split_at(bra, tms, ket, i0, i1, i_split, opts_svd, opts_var)
+        else:
+            val_op = contract_window(bra, tms, ket, i0, i1, opts_svd, opts_var)
         return sign * val_op / val_no
 
     def measure_exci_ops(self, *operators, exci_psi=None, sites_op=None, opts_svd=None, opts_var=None):
