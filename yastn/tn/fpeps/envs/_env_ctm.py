@@ -1402,6 +1402,14 @@ def _distribute_si_rank_with_capacity(capacities, rank):
             if dimension > 0}
 
 
+def _si_shared_capacity(r0, r1):
+    """Total rank simultaneously available to both SI rangefinders."""
+    x_capacity = r1.get_legs(0).tD
+    y_capacity = r0.get_legs(0).tD
+    return sum(min(x_capacity[charge], y_capacity[charge])
+               for charge in x_capacity.keys() & y_capacity.keys())
+
+
 def initialize_si_bases(r0, r1, rank, charges=None):
     r"""Initialize compatible column-isometric SI bases from Gaussian noise.
 
@@ -1472,11 +1480,25 @@ def si_bases_compatible(r0, r1, X, Y):
     """Whether recycled bases are compatible with the current corners."""
     if X is None or Y is None:
         return False
+
+    def is_compatible_subspace(basis_leg, corner_leg):
+        """A refined basis may intentionally contain only selected sectors."""
+        return (basis_leg.s == corner_leg.s
+                and all(charge in corner_leg.tD
+                        and corner_leg.tD[charge] == dimension
+                        for charge, dimension in basis_leg.tD.items()))
+
     try:
         return (
-            X.get_legs(0) == r1.get_legs(0).conj()
-            and Y.get_legs(1) == r0.get_legs(0).conj()
+            is_compatible_subspace(
+                X.get_legs(0), r1.get_legs(0).conj())
+            and is_compatible_subspace(
+                Y.get_legs(1), r0.get_legs(0).conj())
             and X.get_legs(1) == Y.get_legs(0).conj()
+            and X.dtype == r1.dtype
+            and Y.dtype == r0.dtype
+            and X.device == r1.device
+            and Y.device == r0.device
         )
     except (AttributeError, IndexError):
         return False
@@ -1698,7 +1720,13 @@ def proj_corners(r0, r1, opts_svd, opts_si=None, X=None, Y=None,
     si_enabled = opts_si is not None and opts_si.get('enabled', False)
     X_new = Y_new = None
     if si_enabled:
-        rank = _si_rank(opts_svd, opts_si)
+        # An eye-initialized CTM starts below its requested chi and grows over
+        # the first updates.  During that growth the enlarged corners may not
+        # yet accommodate chi + p rangefinder columns.  Use every currently
+        # available shared direction; changed corner legs will invalidate and
+        # enlarge the recycled bases on subsequent updates.
+        rank = min(_si_rank(opts_svd, opts_si),
+                   _si_shared_capacity(r0, r1))
         if not si_bases_compatible(r0, r1, X, Y):
             X, Y = initialize_si_bases(r0, r1, rank)
         elif opts_si.get('correct', False):
