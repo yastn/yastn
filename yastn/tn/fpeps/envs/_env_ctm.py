@@ -1324,6 +1324,7 @@ def _si_rank(opts_svd, opts_si):
 
 
 def _distribute_si_rank(charges, rank):
+    # basic distribution of rank over charge sectors, ignoring sector capacities
     """Distribute an SI rank evenly, filling remainders by charge order.
     Parameters
     ----------
@@ -1354,7 +1355,54 @@ def _distribute_si_rank(charges, rank):
 
     return charges_map
 
-def initialize_si_bases(r0, r1, rank, charges= None):
+
+def _distribute_si_rank_with_capacity(capacities, rank):
+    # TODO check if this actually needed. The left and right legs should match.
+    r"""Distribute a shared SI rank without exceeding sector capacities.
+
+    The returned mapping defines the auxiliary leg used by both SI bases, so
+    ``X`` and ``Y`` always contain exactly the same charges and the same number
+    of vectors in every charge sector. The allocation always has the requested
+    oversampled rank; insufficient shared capacity is an error.
+    """
+    if not isinstance(rank, int) or isinstance(rank, bool) or rank <= 0:
+        raise YastnError("SI rank must be a positive integer.")
+
+    capacities = {charge: dimension
+                  for charge, dimension in capacities.items()
+                  if dimension > 0}
+    if not capacities:
+        raise YastnError("SI bases have no common non-empty charge sectors.")
+
+    total_capacity = sum(capacities.values())
+    if rank > total_capacity:
+        raise YastnError(
+            f"Requested SI rank {rank} exceeds total shared capacity "
+            f"{total_capacity}; cannot construct an auxiliary leg of "
+            f"dimension chi + oversampling.")
+
+    def charge_order(charge):
+        return tuple((abs(q), q < 0) for q in charge)
+
+    ordered_charges = sorted(capacities, key=charge_order)
+    allocation = {charge: 0 for charge in ordered_charges}
+    remaining = rank
+
+    # Round-robin allocation is even whenever capacities permit it. Once a
+    # small sector is full, its remaining share is assigned to larger sectors.
+    while remaining:
+        for charge in ordered_charges:
+            if allocation[charge] < capacities[charge]:
+                allocation[charge] += 1
+                remaining -= 1
+                if remaining == 0:
+                    break
+
+    return {charge: dimension for charge, dimension in allocation.items()
+            if dimension > 0}
+
+
+def initialize_si_bases(r0, r1, rank, charges=None):
     r"""Initialize compatible column-isometric SI bases from Gaussian noise.
 
     The auxiliary rank is spread as uniformly as possible over charge sectors
@@ -1368,25 +1416,39 @@ def initialize_si_bases(r0, r1, rank, charges= None):
     if r0.config.sym.SYM_ID != r1.config.sym.SYM_ID:
         raise YastnError("SI corner tensors must use the same symmetry.")
 
-    x_input = r1.get_legs(1).conj() # right leg of r1
+    x_input = r1.get_legs(0).conj() # right leg of r1
     y_input = r0.get_legs(0).conj() # left leg of r0
     x_capacity = x_input.tD
     y_capacity = y_input.tD
-    assert x_capacity.keys() == y_capacity.keys(), "ctmrg tensors require to have matching charge sectors."
+    common_charges = set(x_capacity) & set(y_capacity)
+    shared_capacity = {
+        charge: min(x_capacity[charge], y_capacity[charge])
+        for charge in common_charges
+    }
+
     if charges is None:
-        charges = set(x_capacity.keys())
-        charge_mapping_x = _distribute_si_rank(charges, rank)
+        charge_mapping = _distribute_si_rank_with_capacity(
+            shared_capacity, rank)
     else:
-        charge_mapping_x = dict(charges)
-        unknown_charges = set(charge_mapping_x) - set(x_capacity)
+        charge_mapping = dict(charges)
+        unknown_charges = set(charge_mapping) - common_charges
         if unknown_charges:
-            raise YastnError(f"Unknown SI charge sectors: {unknown_charges}.")
+            raise YastnError(
+                f"SI charge sectors are not shared by both bases: "
+                f"{unknown_charges}.")
         if any(not isinstance(dimension, int) or isinstance(dimension, bool)
                or dimension <= 0
-               for dimension in charge_mapping_x.values()):
+               for dimension in charge_mapping.values()):
             raise YastnError("SI charge-sector dimensions must be positive integers.")
-        for charge, dimension in charge_mapping_x.items():
-            capacity = min(x_capacity[charge], y_capacity[charge])
+        if not charge_mapping:
+            raise YastnError("SI charge-sector mapping cannot be empty.")
+        mapped_rank = sum(charge_mapping.values())
+        if mapped_rank != rank:
+            raise YastnError(
+                f"Explicit SI charge-sector dimensions sum to {mapped_rank}, "
+                f"but requested SI rank is {rank}.")
+        for charge, dimension in charge_mapping.items():
+            capacity = shared_capacity[charge]
             if dimension > capacity:
                 raise YastnError(
                     f"SI dimension {dimension} exceeds capacity {capacity} "
@@ -1394,8 +1456,8 @@ def initialize_si_bases(r0, r1, rank, charges= None):
     x_aux = Leg(
         r1.config,
         s=-x_input.s,
-        t=tuple(charge_mapping_x.keys()),
-        D=tuple(charge_mapping_x.values()),
+        t=tuple(charge_mapping.keys()),
+        D=tuple(charge_mapping.values()),
     )
 
     X = rand(r1.config, legs=(x_input, x_aux), distribution='normal')
@@ -1412,7 +1474,7 @@ def si_bases_compatible(r0, r1, X, Y):
         return False
     try:
         return (
-            X.get_legs(0) == r1.get_legs(1).conj()
+            X.get_legs(0) == r1.get_legs(0).conj()
             and Y.get_legs(1) == r0.get_legs(0).conj()
             and X.get_legs(1) == Y.get_legs(0).conj()
         )
@@ -1533,13 +1595,15 @@ def si_refinment_asvr(r0, r1, X, Y, opts_svd, opts_si):
 def si_refinment_cwo(r0, r1, X, Y, opts_svd, opts_si, charges=None):
     """Estimate an SI charge distribution from the oversampled X and Y."""
     for charge in r0.get_legs(0).tD.keys():
-        if charge not in r1.get_legs(1).tD:
+        if charge not in r1.get_legs(0).tD:
             raise YastnError(f"Charge {charge} is present in r0 but not in r1.")
     chip = _si_rank(opts_svd, opts_si)
     oversampled_sector_values = {}
     for charge in r0.get_legs(0).tD.keys():
-        capacity = min(r0.get_legs(0).tD[charge],
-                       r1.get_legs(1).tD[charge])
+        capacity = min(
+            r0.get_legs(0).tD[charge],
+            r1.get_legs(0).tD[charge],
+        )
         sector_rank = min(chip, capacity)
         X_charge, Y_charge = initialize_si_bases(
             r0, r1, sector_rank, charges={charge: sector_rank})
@@ -1560,6 +1624,24 @@ def si_refinment_cwo(r0, r1, X, Y, opts_svd, opts_si, charges=None):
         raise YastnError("CWO refinement found no singular values.")
     return initialize_si_bases(r0, r1, chip, charges=charge_mapping)
 
+def _apply_corner_product(r0, r1, X):
+    r"""Apply A = tensordot(r0, r1, axes=(1, 1)) to X.
+
+    r0 has indices (a, k), r1 has indices (b, k), and X has
+    indices (b, p). The result has indices (a, p).
+    """
+    tmp = tensordot(r1, X, axes=(0, 0))       # (k, p)
+    return tensordot(r0, tmp, axes=(1, 0))    # (a, p)
+
+
+def _apply_corner_product_h(r0, r1, Z):
+    r"""Apply A.H to Z without explicitly constructing A.
+
+    Z has indices (a, p). The result has indices (b, p).
+    """
+    tmp = tensordot(r0.conj(), Z, axes=(0, 0))      # (k*, p)
+    return tensordot(r1.conj(), tmp, axes=(1, 0))   # (b*, p)
+
 def si_projector_svd(r0, r1, X, Y, opts_svd, opts_si,
                      return_spectrum=False):
     """Approximate the SVD of ``r0 @ r1.T`` using recycled subspaces."""
@@ -1568,8 +1650,14 @@ def si_projector_svd(r0, r1, X, Y, opts_svd, opts_si,
     X_old, Yh_old = X, Y.H
 
     for _ in range(niter):
-        X, _ = qr((r1.H @ (r0.H @ (r0 @(r1 @ X)))), axes=(0, 1), sQ=X.s[1])
-        Yh, _ = qr((r0 @ (r1 @ (r1.H @(r0.H @ Y.H)))), axes=(0, 1), sQ=Y.H.s[1])
+        AX = _apply_corner_product(r0, r1, X)
+        X_next = _apply_corner_product_h(r0, r1, AX)
+        X, _ = qr(X_next, axes=(0, 1), sQ=X.s[1])
+
+        Yh = Y.H
+        AHY = _apply_corner_product_h(r0, r1, Yh)
+        Yh_next = _apply_corner_product(r0, r1, AHY)
+        Yh, _ = qr(Yh_next, axes=(0, 1), sQ=Yh.s[1])
 
         error = max(si_subspace_error(X, X_old),
                     si_subspace_error(Yh, Yh_old))
@@ -1579,7 +1667,7 @@ def si_projector_svd(r0, r1, X, Y, opts_svd, opts_si,
             break
         X_old, Yh_old = X, Yh
 
-    rho = Y @ r0 @ r1 @ X
+    rho = Y @ _apply_corner_product(r0, r1, X)
     us, sall, vs = rho.svd(axes=(0, 1), sU=rho.s[1], fix_signs=True)
 
     X_new = X @ vs.H
@@ -1597,7 +1685,7 @@ def si_projector_svd(r0, r1, X, Y, opts_svd, opts_si,
 def proj_corners(r0, r1, opts_svd, opts_si=None, X=None, Y=None,
                  return_si_state=False, **kwargs):
     r""" Projectors in between r0 @ r1.T corners. """
-
+    # TODO: r1 matrix is defined as (right, left)
     opts_svd = dict(opts_svd)
     if 'truncation_f' in kwargs:
         opts_svd['mask_f'] = kwargs['truncation_f']
