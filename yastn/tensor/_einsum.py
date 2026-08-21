@@ -14,14 +14,18 @@
 # ==============================================================================
 """ Support for einsum and ncon. """
 from __future__ import annotations
+
 from functools import lru_cache
+from typing import TYPE_CHECKING
 
 from ._auxiliary import _clear_axes, _flatten, _unpack_axes
 from ._contractions import tensordot, trace, swap_gate
 from ._tests import YastnError
 
-__all__ = ['ncon', 'einsum', 'ncon_prefilter']
+__all__ = ['ncon', 'einsum']
 
+if TYPE_CHECKING:
+    from . import Tensor
 
 def einsum(subscripts, *operands, order=None, swap=None) -> 'Tensor':
     r"""
@@ -37,7 +41,7 @@ def einsum(subscripts, *operands, order=None, swap=None) -> 'Tensor':
     operands: Sequence[yastn.Tensor]
 
     order: str
-        Specify order in which repeated indices from subscript are contracted.
+        Specify order in which repeated indices from subscipt are contracted.
         By default it follows alphabetic order.
 
     Example
@@ -86,7 +90,11 @@ def einsum(subscripts, *operands, order=None, swap=None) -> 'Tensor':
         raise YastnError('Repeated index after ->')
 
     if order is None:
-        order = ''.join(sorted(set(v for v in sin.replace(',', '') if sin.count(v) > 1)))
+        order = []
+        for v in sin.replace(',', ''):
+            if sin.count(v) > 1:
+                order.append(v)
+        order = ''.join(sorted(order))
     din = {v: i + 1 for i, v in enumerate(order)}
     dout = {v: -i for i, v in enumerate(sout)}
     d = {**din, **dout}
@@ -168,7 +176,7 @@ def ncon(ts, inds, conjs=None, order=None, swap=None, release_cuda_cache=False) 
     commands = _meta_ncon(inds, order, swap)
     #
     ts = _execute_commands(ts, commands, release_cuda_cache=release_cuda_cache)
-    assert len(ts) == 1, "Sanity check"
+    assert len(ts) == 1, "Sanity check. Contact developers."
     return ts.popitem()[1]
 
 
@@ -449,11 +457,16 @@ def ncon_prefilter(ts_meta, inds, nsym):
         ``{tensor_pos: (struct_t, ndim_n, trans, mfs)}`` for each input tensor.
         Keys must be the positional tensor indices ``0, 1, ..., len(inds) - 1``
         matching the order of ``inds``.
-        ``struct_t`` is the tuple-of-tuples block charges in native order,
-        ``ndim_n`` is the number of native dimensions,
-        ``trans`` is the user-to-native axis permutation (``None`` = identity),
-        and ``mfs`` records meta-fused user-axis structure. For backward
-        compatibility, ``mfs`` may be omitted for unfused inputs.
+
+        leg_first: ``struct_t`` is the **nested** block-charge sequence in
+        native order, ``struct_t[block_idx][native_leg]`` -> charge tuple
+        (length ``nsym``); ``len(struct_t)`` is the number of blocks.  Build it
+        from ``get_blocks(sym, struct).t`` (e.g.
+        ``tuple(tuple(map(tuple, blk)) for blk in bl.t.tolist())``).
+        ``ndim_n`` is the number of native dimensions, ``trans`` is the
+        user-to-native axis permutation (``None`` = identity), and ``mfs``
+        records meta-fused user-axis structure (may be omitted for unfused
+        inputs).
     inds : tuple[tuple[int, ...], ...]
         ncon index notation.  Positive labels = contracted (matching pairs),
         non-positive labels = output legs.
@@ -514,9 +527,10 @@ def ncon_prefilter(ts_meta, inds, nsym):
         return tuple(trans[ax] for ax in native) if trans else native
 
     def block_charge_key(struct_t, block_idx, native_axes):
+        # leg_first: struct_t[block_idx][na] is already a per-leg charge tuple.
         t = struct_t[block_idx]
         return tuple(
-            tuple(t[na * nsym: (na + 1) * nsym] for na in axes)
+            tuple(t[na] for na in axes)
             for axes in native_axes
         )
 
@@ -568,7 +582,7 @@ def ncon_prefilter(ts_meta, inds, nsym):
                 t = st[i]
                 if all(
                     len(axes1) == len(axes2) and all(
-                        t[na1 * nsym: (na1 + 1) * nsym] == t[na2 * nsym: (na2 + 1) * nsym]
+                        t[na1] == t[na2]
                         for na1, na2 in zip(axes1, axes2)
                     )
                     for axes1, axes2 in nat_pairs

@@ -115,9 +115,6 @@ def fp_ctmrg_c4v(env: EnvCTM_c4v, \
         EnvCTM_c4v: Environment at fixed point.
         Sequence[Tensor]: raw environment data for the backward pass.
     """
-    # Order leaves by site2index to match the backward's dA order (see the detailed
-    # note in fixed_pt.py:fp_ctmrg). C4v is single-unique-site so this is an identity
-    # here, but it keeps the apply-input / returned-gradient layout invariant explicit.
     ket = env.psi.ket
     raw_peps_params= tuple( ket[s]._data for s in sorted(ket.sites(), key=ket.site2index) )
     env_converged, env_t_meta, env_slices, env_1d = FixedPoint_c4v.apply(env, ctm_opts_fwd, ctm_opts_fp, *raw_peps_params)

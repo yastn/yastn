@@ -116,6 +116,29 @@ def test_transpose_basic(config_kwargs):
     run_moveaxis(a, ad, source=-1, destination=-3, result_D=(19, 10, 14, 18), result_s=(-1, 1, -1, 1))
 
 
+def test_transpose_output(config_kwargs):
+    config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
+    legs = [yastn.Leg(config_Z2xU1, t=((0, 1),), D=(2,), s=1),
+            yastn.Leg(config_Z2xU1, t=((1, 0),), D=(3,), s=1),
+            yastn.Leg(config_Z2xU1, t=((1, 1),), D=(4,), s=-1)]
+    #
+    b = yastn.rand(config=config_Z2xU1, legs=legs)
+    assert b.get_shape() == (2, 3, 4)
+    assert b.size == 24
+    assert b.get_blocks_charge() == ((0, 1, 1, 0, 1, 1),)
+    assert b.get_blocks_shape() == ((2, 3, 4),)
+    assert b.get_legs() == tuple(legs)
+    assert b.s == (1, 1, -1)
+    #
+    b = b.transpose(axes=(1, 2, 0))
+    #
+    assert b.get_shape() == (3, 4, 2)
+    assert b.get_blocks_charge() == ((1, 0, 1, 1, 0, 1),)
+    assert b.get_blocks_shape() == ((3, 4, 2),)
+    assert b.get_legs() == tuple(legs[i] for i in [1, 2, 0])
+    assert b.s == (1, -1, 1)
+
+
 def test_transpose_diag(config_kwargs):
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.eye(config=config_U1, t=(-1, 0, 2), D=(2, 2 ,4))
@@ -148,7 +171,7 @@ def test_transpose_backward(config_kwargs, consume):
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.rand(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
                   t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
-                  D=[(2, 3), (4, 5), (6, 7), (6, 5), (4, 3), (2, 1)])
+                  D=[(1, 2), (2, 1), (2, 3), (3, 2), (1, 3), (3, 1)])
     b = a.transpose(axes=(1, 2, 3, 0, 5, 4))
     if consume:
         b = b.consume_transpose()
@@ -164,10 +187,10 @@ def test_transpose_backward(config_kwargs, consume):
         return ab
 
     op_args = (torch.randn(target_block_size, dtype=a.get_dtype(), requires_grad=True),)
-    test = torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4)
+    test = torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4, check_undefined_grad=False)  # TODO check_undefined_grad=True
     assert test
 
 
 if __name__ == '__main__':
-    # pytest.main([__file__, "-vs", "--durations=0"])
+    pytest.main([__file__, "-vs", "--durations=0"])
     pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])

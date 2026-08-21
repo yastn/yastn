@@ -14,21 +14,24 @@
 # ==============================================================================
 """ Linear operations and operations on a single yastn.Tensor. """
 from __future__ import annotations
-from typing import Sequence, Union
-from itertools import accumulate
-from operator import itemgetter
+
+from typing import Sequence, TYPE_CHECKING, Union
 
 import numpy as np
 
-from ._auxiliary import _slc, _clear_axes, _unpack_axes, _join_contiguous_slices
+from ._auxiliary import _clear_axes, _struct, _unpack_axes, get_blocks, argsort_t
 from ._einsum import ncon
+from ._legbasic import LegBasic
 from ._legs import LegMeta, Leg, leg_product
 from ._merging import _Fusion
 from ._tests import YastnError, _test_axes_all
 
+if TYPE_CHECKING:
+    from . import Tensor
+
 __all__ = ['conj', 'conj_blocks', 'consume_transpose',
            'flip_signature', 'flip_charges', 'switch_signature',
-           'transpose', 'moveaxis', 'move_leg', 'diag', 'remove_zero_blocks',
+           'transpose', 'moveaxis', 'move_leg', 'diag',
            'add_leg', 'remove_leg', 'copy', 'clone', 'detach', 'to',
            'requires_grad_', 'grad', 'drop_leg_history', 'shallow_copy']
 
@@ -147,8 +150,9 @@ def conj(a) -> 'Tensor':
     Follows the behavior of the :code:`backend.conj()` when it comes to creating a new copy of the data.
     """
     newn = a.config.sym.add_charges(a.struct.n, new_signature=-1)
-    news = tuple(-x for x in a.struct.s)
-    struct = a.struct._replace(s=news, n=newn)
+
+    legs = tuple(leg.conj() for leg in a.struct.legs)
+    struct = _struct(legs=legs, n=newn, isdiag=a.isdiag)
     hfs = tuple(hf.conj() for hf in a.hfs)
     data = a.config.backend.conj(a._data)
     return a._replace(hfs=hfs, struct=struct, data=data)
@@ -174,8 +178,8 @@ def flip_signature(a) -> 'Tensor':
     Creates a shallow copy of the data.
     """
     newn = a.config.sym.add_charges(a.struct.n, new_signature=-1)
-    news = tuple(-x for x in a.struct.s)
-    struct = a.struct._replace(s=news, n=newn)
+    legs = tuple(leg.conj() for leg in a.struct.legs)
+    struct = _struct(legs=legs, n=newn, isdiag=a.isdiag)
     hfs = tuple(hf.conj() for hf in a.hfs)
     return a._replace(hfs=hfs, struct=struct)
 
@@ -204,33 +208,34 @@ def flip_charges(a, axes=None) -> 'Tensor':
     uaxes, = _unpack_axes(a.mfs, axes)
     uaxes = tuple(a.trans[ax] for ax in uaxes)
 
-    snew = list(a.struct.s)
-    hfs = list(a.hfs)
-    lt, ndim_n, nsym = len(a.struct.t), len(a.struct.s), len(a.struct.n)
-    tnew = np.array(a.struct.t, dtype=np.int64).reshape(lt, ndim_n, nsym)
+    bl_old = get_blocks(a.config.sym, a.struct)
+    legs_new = list(a.struct.legs)
+    hfs_new = list(a.hfs)
+    t_flip = bl_old.t.copy()
+
     for ax in uaxes:
-        if hfs[ax].is_fused():
+        if hfs_new[ax].is_fused():
             raise YastnError('Flipping charges of hard-fused leg is not supported.')
-        s = snew[ax]
-        tnew[:, ax, :] = a.config.sym.fuse(tnew[:, (ax,), :], (s,), -s)
-        snew[ax] = -s
-        hfs[ax] = hfs[ax].conj()
-    snew = tuple(snew)
-    hfs = tuple(hfs)
-    tnew = tuple(map(tuple, tnew.reshape(lt, ndim_n * nsym).tolist()))
-    meta = sorted((x, y, z.Dp, z.slcs[0]) for x, y, z in zip(tnew, a.struct.D, a.slices))
-    tnew, Dnew, Dpnew, slold = zip(*meta) if len(meta) > 0 else ((), (), (), ())
+        hfs_new[ax] = hfs_new[ax].conj()
+        leg = a.struct.legs[ax]
+        legs_new[ax] = leg.conj_charges(a.config.sym)
+        t_flip[:, ax, :] = a.config.sym.fuse(t_flip[:, (ax,), :], (leg.s,), -leg.s)
 
-    slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dpnew), Dpnew, Dnew))
-    struct = a.struct._replace(s=snew, t=tnew, D=Dnew)
-
-    slnew = tuple(sl.slcs[0] for sl in slices)
-    meta_embed = _join_contiguous_slices(slnew, slold)
-    # add redundant information, to use a general backend function embed_mask
-    meta_embed = tuple((sl_n, sl_n[1] - sl_n[0], sl_o, sl_o[1] - sl_o[0], 0) for sl_n, sl_o in meta_embed)
-    mask = {0: slice(None)}
-    data = a.config.backend.embed_mask(a._data, mask, meta_embed, struct.size, 0, 0)
-    return a._replace(struct=struct, slices=slices, data=data, hfs=hfs)
+    legs_new = tuple(legs_new)
+    bl_new = get_blocks(a.config.sym, a.struct._replace(legs=legs_new))
+    inds = argsort_t(t_flip)
+    assert np.array_equal(t_flip[inds], bl_new.t), "Sanity check. Contact developers.."
+    sln, slo = bl_new.slc, bl_old.slc[inds]
+    meta = np.column_stack([sln, sln[:, 1] - sln[:, 0], slo, slo[:, 1] - slo[:, 0]])
+    meta_dt = np.dtype([
+        ('sln', np.int64, (2,)),
+        ('Dn', np.int64, (1,)),
+        ('slo', np.int64, (2,)),
+        ('Do', np.int64, (1,))])
+    meta = meta.view(meta_dt).reshape(-1)
+    data = a.config.backend.embed_transpose(a._data, [0], meta, bl_new.size)  # used for embeding
+    out = a._replace(struct=bl_new.struct, data=data, hfs=hfs_new)
+    return out
 
 
 def switch_signature(a, axes: Union[Sequence[int],int,str] = ()) -> 'Tensor':
@@ -295,7 +300,7 @@ def drop_leg_history(a, axes=None) -> 'Tensor':
             axes = (axes,)
     uaxes, = _unpack_axes(a.mfs, axes)
     uaxes = tuple(a.trans[ax] for ax in uaxes)
-    hfs = tuple(_Fusion(s=(a.struct.s[n],)) if n in uaxes else a.hfs[n] for n in range(a.ndim_n))
+    hfs = tuple(_Fusion(s=(a.struct.legs[n].s,)) if n in uaxes else a.hfs[n] for n in range(a.ndim_n))
     return a._replace(hfs=hfs)
 
 
@@ -329,28 +334,22 @@ def consume_transpose(a) -> 'Tensor':
     if a.trans == no_trans:
         return a
     order = np.array(a.trans, dtype=np.int64)
-    hfs = tuple(a.hfs[ii] for ii in a.trans)
-    c_s = tuple(a.struct.s[ii] for ii in a.trans)
-    lt, ndim_n, nsym = len(a.struct.t), len(a.struct.s), len(a.struct.n)
+    new_hfs = tuple(a.hfs[ii] for ii in a.trans)
+    new_legs = tuple(a.struct.legs[ii] for ii in a.trans)
 
-    tset = np.array(a.struct.t, dtype=np.int64).reshape(lt, ndim_n, nsym)
-    Dset = np.array(a.struct.D, dtype=np.int64).reshape(lt, ndim_n)
-    newt = tuple(map(tuple, tset[:, order, :].reshape(lt, ndim_n * nsym).tolist()))
-    newD = tuple(map(tuple, Dset[:, order].tolist()))
-
-    meta = sorted(zip(newt, newD, a.slices), key=itemgetter(0))
-
-    c_t = tuple(mt[0] for mt in meta)
-    c_D = tuple(mt[1] for mt in meta)
-    c_Dp = tuple(mt[2].Dp for mt in meta)
-    c_sl = tuple((stop - dp, stop) for stop, dp in zip(accumulate(c_Dp), c_Dp))
-
-    slices = tuple(_slc((x,), y, z) for x, y, z in zip(c_sl, c_D, c_Dp))
-    struct = a.struct._replace(s=c_s, t=c_t, D=c_D)
-    meta = tuple((sln.slcs[0], sln.D, mt[2].slcs[0], mt[2].D) for sln, mt, in zip(slices, meta))
-
-    data = a._data if a.isdiag else a.config.backend.transpose(a._data, a.trans, meta)
-    return a._replace(hfs=hfs, struct=struct, slices=slices, data=data, trans=no_trans)
+    bl_old = get_blocks(a.config.sym, a.struct)
+    bl_new = get_blocks(a.config.sym, a.struct._replace(legs=new_legs))
+    inds = argsort_t(bl_old.t[:, order, :])
+    meta = np.hstack([bl_new.slc, bl_new.D, bl_old.slc[inds], bl_old.D[inds]])
+    ndim = len(new_legs)
+    meta_dt = np.dtype([
+        ('sln', np.int64, (2,)),
+        ('Dn', np.int64, (ndim,)),
+        ('slo', np.int64, (2,)),
+        ('Do', np.int64, (ndim,))])
+    meta = meta.view(meta_dt).reshape(-1)
+    data = a._data if a.isdiag else a.config.backend.embed_transpose(a._data, a.trans, meta, bl_new.size)
+    return a._replace(hfs=new_hfs, struct=bl_new.struct, data=data, trans=no_trans)
 
 
 def moveaxis(a, source, destination) -> 'Tensor':
@@ -459,15 +458,11 @@ def add_leg(a, axis=-1, s=-1, t=None, leg=None) -> 'Tensor':
             raise YastnError('len(t) does not match the number of symmetry charges.')
         t = a.config.sym.add_charges(t, signatures=(s,), new_signature=s)
 
-    news = a.struct.s[:haxis] + (s,) + a.struct.s[haxis:]
     newn = a.config.sym.add_charges(a.struct.n, t, signatures=(1, s))
-    newt = tuple(x[:haxis * nsym] + t + x[haxis * nsym:] for x in a.struct.t)
-    newD = tuple(x[:haxis] + (1,) + x[haxis:] for x in a.struct.D)
-    struct = a.struct._replace(t=newt, D=newD, s=news, n=newn)
-    slices = tuple(_slc(x.slcs, y, x.Dp) for x, y in zip(a.slices, newD))
+    legs = a.struct.legs[:haxis] + (LegBasic(s=s, t=(t,), D=(1,)),) + a.struct.legs[haxis:]
+    struct = _struct(legs=legs, n=newn, isdiag=a.isdiag)
     hfs = a.hfs[:haxis] + (hfsa,) + a.hfs[haxis:]
-
-    return a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, trans=trans)
+    return a._replace(mfs=mfs, hfs=hfs, struct=struct, trans=trans)
 
 
 def remove_leg(a, axis=-1) -> 'Tensor':
@@ -489,13 +484,11 @@ def remove_leg(a, axis=-1) -> 'Tensor':
         raise YastnError('Cannot remove axis of a scalar tensor.')
 
     axis = axis % a.ndim
-
     mfs = a.mfs[:axis] + a.mfs[axis + 1:]
     remove = a.mfs[axis][0]
     uaxis = sum(a.mfs[ii][0] for ii in range(axis))  # unpack mfs
 
     trans = list(a.trans)
-    nsym = a.config.sym.NSYM
 
     for _ in range(remove):
         haxis = trans[uaxis]
@@ -504,22 +497,16 @@ def remove_leg(a, axis=-1) -> 'Tensor':
             if v > haxis:
                 trans[k] = v - 1
 
-        if len(a.struct.t) > 0:
-            t = a.struct.t[0][haxis * nsym: (haxis + 1) * nsym]
-        else:
-            t = a.config.sym.zero()
-
-        if any(x[haxis] != 1 for x in a.struct.D) or any(x[haxis * nsym: (haxis + 1) * nsym] != t for x in a.struct.t):
+        leg = a.struct.legs[haxis]
+        if len(leg.t) > 1 or (leg.D and leg.D[0] != 1):
             raise YastnError('Axis to be removed must have single charge of dimension one.')
+        t = leg.t[0] if leg.t else a.config.sym.zero()
 
-        news = a.struct.s[:haxis] + a.struct.s[haxis + 1:]
-        newn = a.config.sym.add_charges(a.struct.n, t, signatures=(-1, a.struct.s[haxis]), new_signature=-1)
-        newt = tuple(x[: haxis * nsym] + x[(haxis + 1) * nsym:] for x in a.struct.t)
-        newD = tuple(x[: haxis] + x[haxis + 1:] for x in a.struct.D)
-        struct = a.struct._replace(t=newt, D=newD, s=news, n=newn)
-        slices = tuple(_slc(x.slcs, y, x.Dp) for x, y in zip(a.slices, newD))
+        new_n = a.config.sym.add_charges(a.struct.n, t, signatures=(-1, a.struct.legs[haxis].s), new_signature=-1)
+        new_legs = a.struct.legs[:haxis] + a.struct.legs[haxis + 1:]
+        struct = _struct(legs=new_legs, n=new_n, isdiag=a.isdiag)
         hfs = a.hfs[:haxis] + a.hfs[haxis + 1:]
-        a = a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, trans=trans)
+        a = a._replace(mfs=mfs, hfs=hfs, struct=struct, trans=trans)
     return a
 
 
@@ -527,54 +514,37 @@ def diag(a) -> 'Tensor':
     """
     Select diagonal of 2D tensor and output it as a diagonal tensor, or vice versa.
     """
+    bl = get_blocks(a.config.sym, a.struct)
     if not a.isdiag:  # isdiag=False -> isdiag=True
-        if a.ndim_n != 2 or sum(a.struct.s) != 0:
+        if a.ndim_n != 2 or a.struct.legs[0].s == a.struct.legs[1].s:
             raise YastnError('Diagonal tensor requires 2 legs with opposite signatures.')
-        if any(x != 0 for x in a.struct.n):
+        if a.n != a.config.sym.zero():
             raise YastnError('Diagonal tensor requires zero tensor charge.')
         if any(mf != (1,) for mf in a.mfs) or any(hf.tree != (1,) for hf in a.hfs):
             raise YastnError('Diagonal tensor cannot have fused legs.')
-        if any(d0 != d1 for d0, d1 in a.struct.D):
+        if np.any(bl.D[:, 0] != bl.D[:, 1]):
             raise YastnError('yastn.diag() allowed only for square blocks.')
         #     isdiag=True -> isdiag=False                    isdiag=False -> isdiag=True
-    Dp = tuple(x.Dp ** 2 for x in a.slices) if a.isdiag else tuple(D[0] for D in a.struct.D)
     #
-    news = a.struct.s
+    new_legs = a.struct.legs
     if a.trans == (1, 0):  # sufficient for the transpose, to have consistent signature flow
-        news == news[::-1]
+        new_legs == new_legs[::-1]
     #
-    slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dp), Dp, a.struct.D))
-    struct = a.struct._replace(diag=not a.isdiag, size=sum(Dp), s=news)
+    bl_new = get_blocks(a.config.sym, a.struct._replace(isdiag=not a.isdiag))
 
     if a.isdiag:  # isdiag=True -> isdiag=False
-        meta = tuple((x.slcs[0], y.slcs[0]) for x, y in zip(slices, a.slices))
-        data = a.config.backend.diag_1dto2d(a._data, meta, struct.size)
+        meta = np.hstack([bl_new.slc, bl.slc])
+        meta_dt = np.dtype([
+                ('sln', np.int64, (2,)),
+                ('slo',  np.int64, (2,))])
+        meta = meta.view(meta_dt).reshape(-1)
+        data = a.config.backend.diag_1dto2d(a._data, meta, bl_new.size)
     else:  # isdiag=False -> isdiag=True
-        meta = tuple((x.slcs[0], y.slcs[0], y.D) for x, y in zip(slices, a.slices))
-        data = a.config.backend.diag_2dto1d(a._data, meta, struct.size)
-    return a._replace(struct=struct, slices=slices, data=data, trans=None)
-
-
-def remove_zero_blocks(a, rtol=1e-12, atol=0) -> 'Tensor':
-    r"""
-    Remove blocks where all elements are below a cutoff.
-
-    Cutoff is a combination of absolute tolerance and
-    relative tolerance with respect to maximal element in the tensor.
-    """
-    cutoff = atol + rtol * a.norm(p='inf')
-    meta = [(t, D, sl) for t, D, sl in zip(a.struct.t, a.struct.D, a.slices) \
-             if a.config.backend.max_abs(a._data[slice(*sl.slcs[0])]) > cutoff]
-    c_t = tuple(mt[0] for mt in meta)
-    c_D = tuple(mt[1] for mt in meta)
-    old_sl = tuple(mt[2] for mt in meta)
-    c_Dp = tuple(x.Dp for x in old_sl)
-    old_sl = tuple(x.slcs[0] for x in old_sl)
-    slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(c_Dp), c_Dp, c_D))
-    c_sl = tuple(x.slcs[0] for x in slices)
-    size = sum(c_Dp)
-    struct = a.struct._replace(t=c_t, D=c_D, size=size)
-    mask = {0: slice(None)}
-    meta = [(sln, sln[1] - sln[0], slo, slo[1] - slo[0], 0) for sln, slo in zip(c_sl, old_sl)]
-    data = a.config.backend.apply_mask(a._data, mask, meta, size, 0, 0)
-    return a._replace(struct=struct, slices=slices, data=data)
+        meta = np.hstack([bl_new.slc, bl.slc, bl.D])
+        meta_dt = np.dtype([
+                ('sln', np.int64, (2,)),
+                ('slo',  np.int64, (2,)),
+                ('Do',  np.int64, (2,))])
+        meta = meta.view(meta_dt).reshape(-1)
+        data = a.config.backend.diag_2dto1d(a._data, meta, bl_new.size)
+    return a._replace(struct=bl_new.struct, data=data, trans=None)

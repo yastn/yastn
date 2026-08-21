@@ -442,7 +442,16 @@ def fast_env_T_gauge_multi_sites(config, T_olds, T_news):
     def normalize_QR(Q, R):
         # make the diagonal entries of R matrix positive
         R_sign = R.diag()
-        R_sign._data = R_sign._data.conj()/abs(R_sign._data)
+        d = R_sign._data
+        absd = abs(d)
+        # Exact zeros can sit on R's diagonal: leg-first materializes every
+        # symmetry-allowed block and qr keeps the zero ones (svd/eigh drop them via
+        # `nonzero`; _meta_qr has no such filter). A zero has no defined phase -- use
+        # 1, not 0, so R_sign stays unitary and Q @ R_sign.H remains an isometry.
+        # clamp_min keeps the discarded branch of `where` free of 0/0 = NaN.
+        tiny = torch.finfo(absd.dtype).tiny
+        phase = torch.where(absd > 0, d.conj() / absd.clamp_min(tiny), torch.ones_like(d))
+        R_sign._data = phase
         return Q@R_sign.H, R_sign@R
 
 
@@ -635,15 +644,6 @@ def fp_ctmrg(env: EnvCTM, \
     # Single device: leave ctm_opts_fp untouched (serial path).
     if devices is not None and len(devices) > 1:
         ctm_opts_fp = {**ctm_opts_fp, 'fp_devices': list(devices)}
-    # NOTE order MUST match the backward's gradient order. FixedPoint.backward
-    # returns dA in the order of _psi_data = split_data_and_meta(env.to_dict()['psi']),
-    # which walks _site_data with sorted() keys, i.e. sorted by site2index (the unique
-    # tensor label). ket.sites() instead yields the unique-site *coordinate* order. The
-    # two coincide only when the sorted representatives already run in label order; for
-    # patterns where they don't (e.g. 3x3_2_3_N9_second_shift2) the gradient tuple would
-    # be permuted relative to these leaves -- crashing on a shape mismatch when a permuted
-    # pair differs in block size, or (worse) silently mis-assigning grads when it doesn't.
-    # Order the leaves by site2index so apply-inputs and returned dA are the same layout.
     ket = env.psi.ket
     raw_peps_params= tuple( ket[s]._data for s in sorted(ket.sites(), key=ket.site2index) )
     env, env_t_meta, env_slices, env_1d = FixedPoint.apply(env, ctm_opts_fwd, ctm_opts_fp, devices, *raw_peps_params)
@@ -742,44 +742,10 @@ class FixedPoint(torch.autograd.Function):
         opts_svd=None,
         corner_tol=1e-8,
         devices=None,
-        stuck_block=0,
-        stuck_window=3,
-        stuck_factor=2.0,
-        stuck_min_sweeps=60,
         **kwargs
     ):
-        r"""
-        Run the forward CTMRG loop until the corner spectra stop changing
-        (``corner_tol``) or ``max_sweeps`` is reached.
-
-        Early no-fixed-point detection (``stuck_block > 0``)
-        ----------------------------------------------------
-        A CTM solve that will never converge is not distinguishable from a slow
-        one by |delta_C| alone: on marginal states |delta_C| oscillates over a
-        decade sweep-to-sweep, so the raw running minimum is pinned by lucky
-        outliers. What DOES separate them is the running minimum over BLOCKS of
-        sweeps: a converging solve drives it down geometrically, a stuck one
-        leaves it flat (or rising).
-
-        The rule: after ``stuck_min_sweeps``, at the end of every block of
-        ``stuck_block`` sweeps, the block minimum must have improved by at least
-        a factor ``stuck_factor`` relative to ``stuck_window`` blocks earlier.
-        If it has not, the solve is declared non-convergent and the loop stops,
-        leaving ``converged=False`` -- which the caller turns into
-        ``NoFixedPointError``, and the optimizer's existing handler recovers by
-        perturbing the state.
-
-        Defaults (10 / 3 / 2.0 / 60) were calibrated by replaying the detector
-        over 395 recorded solves from the alpha=1 int_factor=0.6 runs
-        (8 logs, 364 converged + 31 stuck): they catch 31/31 stuck solves with
-        ZERO false kills, saving ~11960 sweeps. The ``stuck_min_sweeps`` guard
-        matters: every false kill in the scan happened at sweep 40, on solves
-        that were slow (226-399 sweeps) but did converge. ``stuck_block=0``
-        disables the check entirely.
-        """
         t_ctm, t_check = 0.0, 0.0
         converged, conv_history = False, []
-        blk_mins, blk_count = [], 0
         if devices is None:
             devices = [env.config.default_device]
         if len(devices) == 1:
@@ -807,27 +773,6 @@ class FixedPoint(torch.autograd.Function):
 
             if converged:
                 break
-
-            # Early no-fixed-point detection (see docstring). max_dsv is NaN on
-            # the first sweep (no history to diff against) -- skip it so it
-            # cannot poison a block minimum.
-            if stuck_block and max_dsv == max_dsv:
-                if blk_count % stuck_block == 0:
-                    blk_mins.append(max_dsv)
-                else:
-                    blk_mins[-1] = min(blk_mins[-1], max_dsv)
-                blk_count += 1
-                if (blk_count % stuck_block == 0 and len(blk_mins) > stuck_window
-                        and len(conv_history) >= stuck_min_sweeps):
-                    ref = blk_mins[-1 - stuck_window]
-                    if blk_mins[-1] > ref / stuck_factor:
-                        log.log(logging.INFO,
-                                f"CTM STUCK: block-min |delta_C| {blk_mins[-1]:.3e} vs "
-                                f"{ref:.3e} {stuck_window * stuck_block} sweeps earlier "
-                                f"(< {stuck_factor}x improvement) at sweep {len(conv_history)}; "
-                                f"declaring no fixed point.")
-                        converged = False
-                        break
 
         log.info(f"CTM: convergence: {converged}, sweeps {sweep+1}, t_ctm {t_ctm} [s], t_check {t_check} [s]\n"
                 +f"history {[r['max_dsv'] for r in conv_history]}.")
@@ -858,7 +803,7 @@ class FixedPoint(torch.autograd.Function):
         # Pin main-process current CUDA device to where the ENV TENSORS live
         # (env.config.default_device), NOT devices[0]. The MP workers each set
         # their own current device; the main process also runs CUDA ops here
-        # (gauge-fixing fp CTM step, etc.), and tapp_torch (torch_cpp backend)
+        # (gauge-fixing fp CTM step, etc.), and tapp_torch (torch_cutensor backend)
         # launches kernels on the current device -- a mismatch causes "illegal
         # memory access". When the main/home device is decoupled from the CTM
         # worker pool (e.g. env on cuda:0, workers on cuda:1-3), devices[0] is
@@ -903,9 +848,13 @@ class FixedPoint(torch.autograd.Function):
 
         # 3. Find the gauge transformation
         t0 = time.perf_counter()
-        env_gauge, phase_dict = find_gauge_multi_sites(env_converged, ctm_env_out, verbose=True)
-        if env_gauge is None:
+        # find_gauge_multi_sites returns a bare None (not a 2-tuple) when no gauge is
+        # found, so the None check has to happen BEFORE the unpack -- otherwise it is
+        # the unpack that fails, with a TypeError that hides the real diagnostic.
+        _gauge = find_gauge_multi_sites(env_converged, ctm_env_out, verbose=True)
+        if _gauge is None:
             raise NoFixedPointError(code=1, message="No fixed point found: fail to find the gauge matrix!")
+        env_gauge, phase_dict = _gauge
         t1 = time.perf_counter()
         log.info(f"{type(ctx).__name__}.forward FP gauge-fixing t {t1-t0} [s]")
 

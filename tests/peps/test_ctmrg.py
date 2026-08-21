@@ -280,26 +280,24 @@ def test_1x1_D1_Z2_spinlessf_conv(ctm_init, fix_signs, truncate_multiplets_mode,
                                  for coord,d_ten in d['parameters'].items() }
 
     psi = fpeps.Peps(g, tensors=A)
-    chi= 20
+    chi = 20
 
     if truncate_multiplets_mode == 'expand':
-        truncation_f= None
+        opts_svd = {"D_total": chi, 'fix_signs': fix_signs, "largest_gap": True}
     elif truncate_multiplets_mode == 'truncate':
-        def truncation_f(S):
-            return yastn.linalg.truncation_mask_multiplets(S, keep_multiplets=True, D_total=chi,\
-                tol=1.0e-8, tol_block=0.0, eps_multiplet=1.0e-8)
+        opts_svd = {"D_total": chi, 'fix_signs': fix_signs, 'tol': 1e-8, 'eps_multiplet': 1e-8}
 
-    env_leg = yastn.Leg(yastn_cfg_Z2, s=1, t=(0, 1), D=(chi//2, chi//2))
+    env_leg = yastn.Leg(yastn_cfg_Z2, s=1, t=(0, 1), D=(chi // 2, chi // 2))
     env = fpeps.EnvCTM(psi, init=ctm_init, leg=env_leg)
 
-    info = env.ctmrg_(opts_svd = {"D_total": chi, 'fix_signs': fix_signs}, max_sweeps=35,
-                        corner_tol=1.0e-8, truncation_f=truncation_f, use_qr=False, checkpoint_move=checkpoint_move)
+    info = env.ctmrg_(opts_svd=opts_svd, max_sweeps=35,
+                      corner_tol=1.0e-8, use_qr=False, checkpoint_move=checkpoint_move)
     print(f"CTM {info}")
 
     # sum of traces of even sectors across 1x1 RDMs
-    loss= sum( rdm1x1( c, psi, env)[0][(0,0)].trace() for c in psi.sites() )
+    loss = sum(rdm1x1( c, psi, env)[0][(0,0)].trace() for c in psi.sites()).item()
     assert np.allclose([0.22923524,], [loss,], rtol=1e-06, atol=1e-06)
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"]) #,  "--long_tests", ])
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--long_tests"])

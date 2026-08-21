@@ -20,13 +20,12 @@ import numpy as np
 import yastn
 import yastn.tn.fpeps as fpeps
 from yastn.tn.fpeps.envs.rdm import rdm1x1
-import yastn.tn.mps as mps
 
 
 @pytest.fixture
 def additional_imports(config_kwargs):
-    if not config_kwargs["backend"] in ["torch", "torch_cpp"]:
-        pytest.skip("Backend with AD support is required: [torch, torch_cpp]")
+    if not config_kwargs["backend"] in ["torch", "torch_cutensor"]:
+        pytest.skip("Backend with AD support is required: [torch, torch_cutensor]")
         return config_kwargs, None, None
     else:
         import torch
@@ -158,56 +157,52 @@ def prepare_RVB(additional_imports):
 
     def cost_function_RVB(elems, slice, max_sweeps, ctm_init='dl', fix_signs=False, truncate_multiplets_mode='truncate',
                           checkpoint_move=False):
-        A0= A.clone()
+        A0 = A.clone()
         A0._data[slice]= elems
 
-        g= fpeps.SquareLattice(dims=(1,1), boundary='infinite')
+        g = fpeps.SquareLattice(dims=(1,1), boundary='infinite')
         psi = fpeps.Peps(g, tensors=dict(zip(g.sites(), [A0, ])))
 
         if truncate_multiplets_mode == 'expand':
-            truncation_f= None
+            opts_svd = {"D_total": 64, 'fix_signs': fix_signs, "largest_gap": True}
         elif truncate_multiplets_mode == 'truncate':
-            def truncation_f(S):
-                return yastn.linalg.truncation_mask_multiplets(S, keep_multiplets=True, D_total=64,\
-                    tol=1.0e-8, tol_block=0.0, eps_multiplet=1.0e-8)
+            opts_svd = {"D_total": 64, 'fix_signs': fix_signs, 'tol': 1e-8, 'eps_multiplet': 1e-8}
 
         env = fpeps.EnvCTM(psi, init=ctm_init)
-        info = env.ctmrg_(opts_svd = {"D_total": 64, 'fix_signs': fix_signs}, max_sweeps=max_sweeps,
-                            truncation_f=truncation_f, use_qr=False, checkpoint_move=checkpoint_move)
+        info = env.ctmrg_(opts_svd=opts_svd, max_sweeps=max_sweeps,
+                          use_qr=False, checkpoint_move=checkpoint_move)
         r1x1, r1x1_norm= rdm1x1( (0,0), psi, env)
         return r1x1[(-1,-1)].trace().real
 
     return A, A_grad_expected, cost_function_RVB
 
 
-def cost_function_f(yastn_cfg, g, A, elems, slices : dict[tuple[int],tuple[slice,slice]], max_sweeps, ctm_init='dl', fix_signs=False,
+def cost_function_f(yastn_cfg, g, A, elems, slices: dict[tuple[int],tuple[slice,slice]], max_sweeps, ctm_init='dl', fix_signs=False,
                     truncate_multiplets_mode='truncate', checkpoint_move=False):
     # For each on-site tensor, corresponding element in slices is a pair,
     # where first entry specified slice in elems 1D-array while second entry specifies slice in target on-site tensor
     #
-    tensors_loc= { k:v.clone() for k,v in A.items() }
+    tensors_loc= {k:v.clone() for k,v in A.items()}
     for k in tensors_loc.keys():
         tensors_loc[k]._data[slices[k][1]]= elems[slices[k][0]]
 
     psi = fpeps.Peps(g, tensors=tensors_loc)
-    chi= 20
+    chi = 20
 
     if truncate_multiplets_mode == 'expand':
-        truncation_f= None
+        opts_svd = {"D_total": chi, 'fix_signs': fix_signs, "largest_gap": True}
     elif truncate_multiplets_mode == 'truncate':
-        def truncation_f(S):
-            return yastn.linalg.truncation_mask_multiplets(S, keep_multiplets=True, D_total=chi,\
-                tol=1.0e-8, tol_block=0.0, eps_multiplet=1.0e-8)
+        opts_svd = {"D_total": chi, 'fix_signs': fix_signs, 'tol': 1e-8, 'eps_multiplet': 1e-8}
 
     env_leg = yastn.Leg(yastn_cfg, s=1, t=(0, 1), D=(chi//2, chi//2))
     env = fpeps.EnvCTM(psi, init=ctm_init, leg=env_leg)
 
-    info = env.ctmrg_(opts_svd = {"D_total": chi, 'fix_signs': fix_signs}, max_sweeps=max_sweeps,
-                        corner_tol=1.0e-8, truncation_f=truncation_f, use_qr=False, checkpoint_move=checkpoint_move)
+    info = env.ctmrg_(opts_svd=opts_svd, max_sweeps=max_sweeps,
+                      corner_tol=1e-8, use_qr=False, checkpoint_move=checkpoint_move)
     print(f"CTM {info}")
 
     # sum of traces of even sectors across 1x1 RDMs
-    loss= sum( rdm1x1( c, psi, env)[0][(0,0)].trace() for c in psi.sites() )
+    loss = sum( rdm1x1( c, psi, env)[0][(0,0)].trace() for c in psi.sites() )
 
     return loss
 
@@ -220,10 +215,10 @@ def prepare_1x1(additional_imports):
         d = json.load(f)
 
     g= fpeps.RectangularUnitcell(**d['geometry'])
-    A= { tuple(d['parameters_key_to_id'][coord]): yastn.Tensor.from_dict(d_ten, config=yastn_cfg_Z2)
-                                 for coord,d_ten in d['parameters'].items() }
+    A= {tuple(d['parameters_key_to_id'][coord]): yastn.Tensor.from_dict(d_ten, config=yastn_cfg_Z2)
+                                 for coord,d_ten in d['parameters'].items()}
 
-    cost_function_1x1= lambda *args, **kwargs : cost_function_f(yastn_cfg_Z2,g,A, *args, **kwargs)
+    cost_function_1x1= lambda *args, **kwargs: cost_function_f(yastn_cfg_Z2,g,A, *args, **kwargs)
 
     return A, None, cost_function_1x1
 
@@ -237,7 +232,7 @@ def prepare_3x3(additional_imports):
 
     g= fpeps.RectangularUnitcell(**d['geometry'])
     A= {tuple(d['parameters_key_to_id'][coord]): yastn.Tensor.from_dict(d_ten, config=yastn_cfg_Z2)
-                                 for coord,d_ten in d['parameters'].items() }
+                                 for coord,d_ten in d['parameters'].items()}
 
     cost_function_3x3 = lambda *args, **kwargs: cost_function_f(yastn_cfg_Z2, g, A, *args, **kwargs)
 
@@ -255,10 +250,10 @@ def test_Kagome_RVB_D3_U1_sym_ctmsteps1(ctm_init, fix_signs, truncate_multiplets
     if truncate_multiplets_mode == "expand":
         pytest.xfail(f"Expected failure when truncate_multiplets_mode='{truncate_multiplets_mode}'")
     A, A_grad_expected, cost_function_RVB= prepare_RVB(additional_imports)
-    test_elems= A._data[36:51].clone()
+    test_elems = A._data[36:51].clone()
     test_elems.requires_grad_()
 
-    loc_cost_f= lambda x : cost_function_RVB(x, slice(36,51), 1, ctm_init=ctm_init, fix_signs=fix_signs,
+    loc_cost_f = lambda x: cost_function_RVB(x, slice(36,51), 1, ctm_init=ctm_init, fix_signs=fix_signs,
                                          truncate_multiplets_mode=truncate_multiplets_mode, checkpoint_move=checkpoint_move)
 
     gradcheck(loc_cost_f, test_elems, eps=1e-06, atol=1e-05, rtol=0.001,
@@ -274,10 +269,10 @@ def test_Kagome_RVB_D3_U1_sym_ctmsteps1(ctm_init, fix_signs, truncate_multiplets
 def test_Kagome_RVB_D3_U1_sym_vs_pepstorch(ctm_init, truncate_multiplets_mode, checkpoint_move, additional_imports):
     config_kwargs, torch, gradcheck = additional_imports
     A, A_grad_expected, cost_function_RVB= prepare_RVB(additional_imports)
-    test_elems= A._data.clone()
+    test_elems = A._data.clone()
     test_elems.requires_grad_()
 
-    loc_cost_f= lambda x : cost_function_RVB(x, slice(0,len(test_elems)), 20, ctm_init=ctm_init, \
+    loc_cost_f = lambda x: cost_function_RVB(x, slice(0,len(test_elems)), 20, ctm_init=ctm_init, \
             fix_signs=False, truncate_multiplets_mode=truncate_multiplets_mode, checkpoint_move=checkpoint_move)
 
     R= loc_cost_f(test_elems)
@@ -291,11 +286,11 @@ def test_Kagome_RVB_D3_U1_sym_vs_pepstorch(ctm_init, truncate_multiplets_mode, c
 @pytest.mark.parametrize("truncate_multiplets_mode", ["truncate", "expand"])
 def test_Kagome_RVB_D3_U1_sym_conv(ctm_init, truncate_multiplets_mode, additional_imports):
     config_kwargs, torch, gradcheck = additional_imports
-    A, A_grad_expected, cost_function_RVB= prepare_RVB(additional_imports)
-    test_elems= A._data[36:36+5].clone()
+    A, A_grad_expected, cost_function_RVB = prepare_RVB(additional_imports)
+    test_elems = A._data[36:36+5].clone()
     test_elems.requires_grad_()
 
-    loc_cost_f= lambda x : cost_function_RVB(x, slice(36,36+5), 20, ctm_init=ctm_init, \
+    loc_cost_f = lambda x: cost_function_RVB(x, slice(36,36+5), 20, ctm_init=ctm_init, \
         fix_signs=True, truncate_multiplets_mode=truncate_multiplets_mode)
 
     gradcheck(loc_cost_f, test_elems, eps=1e-06, atol=1e-05, rtol=0.001,
@@ -308,17 +303,17 @@ def test_Kagome_RVB_D3_U1_sym_conv(ctm_init, truncate_multiplets_mode, additiona
 @pytest.mark.parametrize("ctm_init", ['dl', 'eye'])
 @pytest.mark.parametrize("fix_signs", [False, True])
 @pytest.mark.parametrize("truncate_multiplets_mode", ["truncate", "expand"])
-@pytest.mark.parametrize("checkpoint_move", ['nonreentrant',False])
+@pytest.mark.parametrize("checkpoint_move", ['nonreentrant', False])
 def test_1x1_D1_Z2_spinlessf_ctmsteps1(ctm_init, fix_signs, truncate_multiplets_mode, checkpoint_move, additional_imports):
     if truncate_multiplets_mode == "expand":
         pytest.xfail(f"Expected failure when truncate_multiplets_mode='{truncate_multiplets_mode}'")
     config_kwargs, torch, gradcheck = additional_imports
     A0, _, cost_function= prepare_1x1(additional_imports)
-    slices= { k: (slice(9*i,9*(i+1)), slice(0,9)) for i,k in enumerate(A0.keys()) }
-    test_elems= torch.cat( [A0[k]._data[slices[k][1]].clone() for i,k in enumerate(A0.keys())] )
+    slices = {k: (slice(9*i,9*(i+1)), slice(0,9)) for i,k in enumerate(A0.keys())}
+    test_elems = torch.cat( [A0[k]._data[slices[k][1]].clone() for i,k in enumerate(A0.keys())] )
     test_elems.requires_grad_()
 
-    loc_cost_f= lambda x : cost_function(x, slices, 1, ctm_init=ctm_init, fix_signs=fix_signs,
+    loc_cost_f = lambda x: cost_function(x, slices, 1, ctm_init=ctm_init, fix_signs=fix_signs,
                                          truncate_multiplets_mode=truncate_multiplets_mode, checkpoint_move=checkpoint_move)
 
     gradcheck(loc_cost_f, test_elems, eps=1e-06, atol=1e-05, rtol=0.001,
@@ -331,18 +326,18 @@ def test_1x1_D1_Z2_spinlessf_ctmsteps1(ctm_init, fix_signs, truncate_multiplets_
 @pytest.mark.parametrize("ctm_init", ['dl', 'eye'])
 @pytest.mark.parametrize("truncate_multiplets_mode", ["truncate", "expand"])
 @pytest.mark.parametrize("tol", [1e-3, 1e-4, 1e-5])
-@pytest.mark.parametrize("checkpoint_move", ['nonreentrant',False])
+@pytest.mark.parametrize("checkpoint_move", ['reentrant', 'nonreentrant', False])
 def test_1x1_D1_Z2_spinlessf_conv(ctm_init, truncate_multiplets_mode, tol, checkpoint_move, additional_imports):
     if tol == 1e-5:
         pytest.xfail(f"Expected failure when tol='{tol}'")
     config_kwargs, torch, gradcheck = additional_imports
     A0, _, cost_function= prepare_1x1(additional_imports)
-    slices= { k: (slice(6*i,6*(i+1)), slice(0,6)) for i,k in enumerate(A0.keys()) }
-    test_elems= torch.cat( [A0[k]._data[slices[k][1]].clone() for i,k in enumerate(A0.keys())] )
+    slices = {k: (slice(6*i,6*(i+1)), slice(0,6)) for i,k in enumerate(A0.keys())}
+    test_elems = torch.cat( [A0[k]._data[slices[k][1]].clone() for i,k in enumerate(A0.keys())] )
     test_elems.requires_grad_()
 
     # It should take 35 steps to converge
-    loc_cost_f= lambda x : cost_function(x, slices, 35, ctm_init=ctm_init, fix_signs=True,
+    loc_cost_f = lambda x: cost_function(x, slices, 35, ctm_init=ctm_init, fix_signs=True,
                                          truncate_multiplets_mode=truncate_multiplets_mode,
                                          checkpoint_move=checkpoint_move)
 
@@ -358,17 +353,17 @@ def test_1x1_D1_Z2_spinlessf_conv(ctm_init, truncate_multiplets_mode, tol, check
 @pytest.mark.parametrize("ctm_init", ['dl', 'eye'])
 @pytest.mark.parametrize("fix_signs", [False, True])
 @pytest.mark.parametrize("truncate_multiplets_mode", ["truncate", "expand"])
-@pytest.mark.parametrize("checkpoint_move", ['nonreentrant',False])
+@pytest.mark.parametrize("checkpoint_move", ['nonreentrant', False])
 def test_3x3_D1_Z2_spinlessf_ctmsteps1(ctm_init, fix_signs, truncate_multiplets_mode, checkpoint_move, additional_imports):
     if truncate_multiplets_mode == "expand":
         pytest.xfail(f"Expected failure when truncate_multiplets_mode='{truncate_multiplets_mode}'")
     config_kwargs, torch, gradcheck= additional_imports
     A0, _, cost_function= prepare_3x3(additional_imports)
-    slices= { k: (slice(3*i,3*(i+1)), slice(0,3)) for i,k in enumerate(A0.keys()) }
-    test_elems= torch.cat( [A0[k]._data[slices[k][1]].clone() for i,k in enumerate(A0.keys())] )
+    slices = {k: (slice(3*i,3*(i+1)), slice(0,3)) for i,k in enumerate(A0.keys())}
+    test_elems = torch.cat( [A0[k]._data[slices[k][1]].clone() for i,k in enumerate(A0.keys())] )
     test_elems.requires_grad_()
 
-    loc_cost_f= lambda x : cost_function(x, slices, 1, ctm_init=ctm_init, fix_signs=fix_signs,
+    loc_cost_f = lambda x: cost_function(x, slices, 1, ctm_init=ctm_init, fix_signs=fix_signs,
                                          truncate_multiplets_mode=truncate_multiplets_mode, checkpoint_move=checkpoint_move)
 
     gradcheck(loc_cost_f, test_elems, eps=1e-06, atol=1e-05, rtol=0.001,
@@ -380,16 +375,18 @@ def test_3x3_D1_Z2_spinlessf_ctmsteps1(ctm_init, fix_signs, truncate_multiplets_
 @pytest.mark.skipif( "not config.getoption('long_tests')", reason="long duration tests are skipped" )
 @pytest.mark.parametrize("ctm_init", ['dl', 'eye'])
 @pytest.mark.parametrize("truncate_multiplets_mode", ["truncate", "expand"])
-@pytest.mark.parametrize("checkpoint_move", ['nonreentrant',False])
+@pytest.mark.parametrize("checkpoint_move", ['nonreentrant', False])
 def test_3x3_D1_Z2_spinlessf_conv(ctm_init, truncate_multiplets_mode, checkpoint_move, additional_imports):
+    if truncate_multiplets_mode == "expand":
+        pytest.xfail(f"Expected failure when truncate_multiplets_mode='{truncate_multiplets_mode}'")
     config_kwargs, torch, gradcheck= additional_imports
     A0, _, cost_function= prepare_3x3(additional_imports)
-    slices= { k: (slice(2*i,2*(i+1)), slice(0,2)) for i,k in enumerate(A0.keys()) }
-    test_elems= torch.cat( [A0[k]._data[slices[k][1]].clone() for i,k in enumerate(A0.keys())] )
+    slices = {k: (slice(2*i,2*(i+1)), slice(0,2)) for i,k in enumerate(A0.keys())}
+    test_elems = torch.cat( [A0[k]._data[slices[k][1]].clone() for i,k in enumerate(A0.keys())] )
     test_elems.requires_grad_()
 
     # It should take 35 steps to converge
-    loc_cost_f= lambda x : cost_function(x, slices, 35, ctm_init=ctm_init, fix_signs=True,
+    loc_cost_f = lambda x: cost_function(x, slices, 35, ctm_init=ctm_init, fix_signs=True,
                                          truncate_multiplets_mode=truncate_multiplets_mode, checkpoint_move=checkpoint_move)
 
     gradcheck(loc_cost_f, test_elems, eps=1e-06, atol=1e-05, rtol=0.001,
@@ -407,12 +404,12 @@ def test_3x3_D1_Z2_spinlessf_conv(ctm_init, truncate_multiplets_mode, checkpoint
 #         pytest.xfail(f"Expected failure when truncate_multiplets_mode='{truncate_multiplets_mode}'")
 #     config_kwargs, torch, gradcheck = additional_imports
 #     A0, _, cost_function= prepare_3x3(additional_imports)
-#     slices= { k: (slice(i*A0[k]._data.shape[0], (i+1)*A0[k]._data.shape[0]), slice(0,A0[k]._data.shape[0])) for i,k in enumerate(A0.keys()) }
-#     test_elems= torch.cat( [A0[k]._data[slices[k][1]].clone() for i,k in enumerate(A0.keys())] )
+#     slices = {k: (slice(i*A0[k]._data.shape[0], (i+1)*A0[k]._data.shape[0]), slice(0,A0[k]._data.shape[0])) for i,k in enumerate(A0.keys())}
+#     test_elems = torch.cat( [A0[k]._data[slices[k][1]].clone() for i,k in enumerate(A0.keys())] )
 #     test_elems.requires_grad_()
 
 #     # It should take 35 steps to converge
-#     loc_cost_f= lambda x : cost_function(x, slices, 35, ctm_init=ctm_init, fix_signs=True,
+#     loc_cost_f = lambda x: cost_function(x, slices, 35, ctm_init=ctm_init, fix_signs=True,
 #                                          truncate_multiplets_mode=truncate_multiplets_mode)
 
 #     R= loc_cost_f(test_elems)

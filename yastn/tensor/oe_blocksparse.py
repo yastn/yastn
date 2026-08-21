@@ -28,11 +28,13 @@ try:
 except:
     _VALID_CONTRACT_KWARGS = {'optimize', 'memory_limit', 'einsum_call', 'use_blas', 'shapes'}
 from . import Tensor, ncon, split_data_and_meta, combine_data_and_meta
+from .._profile import nvtx
 from ..initialize import block as yastn_block
 from ._legs import Leg
 from ._einsum import ncon_prefilter
-from ._auxiliary import _clear_axes, _slc
-from ._merging import _meta_mask
+from ._auxiliary import _clear_axes, get_blocks
+from ._contractions import _apply_mask_axes
+from ._merging import _meta_mask, _mask_nonzero
 from ._tests import YastnError
 
 log = logging.getLogger(__name__)
@@ -221,62 +223,82 @@ def _checkpointed_call(tensors, do_contract):
 
 def _filter_tensor_blocks(tensor, block_indices):
     r"""
-    Return a compact tensor retaining only the specified blocks.
+    Restrict ``tensor`` to the charge sectors spanned by ``block_indices``.
 
-    The retained blocks are packed into a new contiguous data buffer so the
-    returned tensor preserves the invariant ``len(_data) == struct.size``.
+    leg_first note
+    --------------
+    On leg_first a tensor's block set is *fully determined by its legs*:
+    :func:`get_blocks` enumerates every symmetry-allowed charge combination and
+    ``_data`` is dense over them.  An arbitrary subset of blocks (as returned by
+    :func:`ncon_prefilter`) is therefore **not directly representable**.  We
+    instead restrict every native leg to the *union* of charge sectors that
+    appear in the retained blocks and drop the other sectors with
+    :func:`_apply_mask_axes` (which rebuilds ``struct``/``_data``/``hfs``
+    consistently).  The regenerated block set is a charge-wise subset of the
+    original, so the result is **always correct**; it is at worst a *superset*
+    of ``block_indices`` (leg-sector granularity is coarser than an exact,
+    joint-charge index subset).  Any reintroduced block that has no contraction
+    partner simply contributes zero downstream.
 
-    Parameters
-    ----------
-    tensor : yastn.Tensor
-    block_indices : frozenset[int] | None
-        Indices into ``tensor.struct.t`` to retain.
-        ``None`` means keep all blocks.
-
-    Returns
-    -------
-    yastn.Tensor
+    ``block_indices`` index into ``get_blocks(sym, tensor.struct).t`` order
+    (the same order fed to :func:`ncon_prefilter`).  ``None`` keeps all blocks.
     """
-    if block_indices is None or len(block_indices) == len(tensor.struct.t):
+    if block_indices is None:
+        return tensor
+
+    sym = tensor.config.sym
+    bl = get_blocks(sym, tensor.struct)
+    if bl.nblocks == 0 or len(block_indices) >= bl.nblocks:
         return tensor
 
     indices = sorted(block_indices)
     if not indices:
-        return tensor._replace(struct=tensor.struct._replace(t=(), D=(), size=0),
-                               slices=(), data=tensor._data[:0])
+        # zero contraction: strip all charges from every native leg
+        empty_legs = tuple(leg._replace(t=(), D=()) for leg in tensor.struct.legs)
+        new_struct = tensor.struct._replace(legs=empty_legs)
+        return tensor._replace(struct=new_struct, data=tensor._data[:0])
 
-    new_t = tuple(tensor.struct.t[i] for i in indices)
-    new_D = tuple(tensor.struct.D[i] for i in indices)
-    new_Dp = tuple(tensor.slices[i].Dp for i in indices)
-    new_slices = tuple(
-        _slc(((stop - dp, stop),), ds, dp)
-        for stop, dp, ds in zip(accumulate(new_Dp), new_Dp, new_D)
-    )
-    new_size = sum(new_Dp)
-    new_struct = tensor.struct._replace(t=new_t, D=new_D, size=new_size)
-    new_data = tensor.config.backend.zeros(new_size, dtype=tensor.yastn_dtype, device=tensor.device)
-    for new_slc, old_idx in zip(new_slices, indices):
-        old_slc = tensor.slices[old_idx].slcs[0]
-        new_data[slice(*new_slc.slcs[0])] = tensor._data[slice(*old_slc)]
+    ndim_n = len(tensor.struct.legs)
+    kept_t = bl.t[indices]                        # (nkept, ndim_n, nsym)
 
-    return tensor._replace(struct=new_struct, slices=new_slices, data=new_data)
+    masks = []
+    for ax, leg in enumerate(tensor.struct.legs):
+        surviving = {tuple(map(int, c)) for c in kept_t[:, ax, :]}
+        if len(surviving) >= len(leg.t):
+            masks.append(None)                    # nothing dropped on this leg
+            continue
+        bmask = {t: (np.ones(d, dtype=bool) if t in surviving else np.zeros(d, dtype=bool))
+                 for t, d in zip(leg.t, leg.D)}
+        masks.append(_mask_nonzero(bmask))
+
+    if all(m is None for m in masks):
+        return tensor
+    return _apply_mask_axes(tensor, tuple(range(ndim_n)), masks)
 
 
-def _meta_filter_struct(struct, kept_indices):
+def _meta_filter_struct(sym, struct, kept_indices):
     r"""Return a copy of ``struct`` retaining only the listed block indices.
 
-    Metadata-only — does not touch ``slices`` or any data buffer. Intended
-    for transient tensors used to inspect post-trim leg structure (see
-    :func:`_post_trim_label_dims`).
+    Metadata-only — no data buffer.  leg_first: block indices index into
+    ``get_blocks(sym, struct).t``; since the block set is derived from the
+    legs, we restrict each native leg to the charge sectors spanned by the
+    kept blocks (see :func:`_filter_tensor_blocks`).
     """
+    bl = get_blocks(sym, struct)
     if not kept_indices:
-        return struct._replace(t=(), D=(), size=0)
-    if len(kept_indices) == len(struct.t):
+        empty_legs = tuple(leg._replace(t=(), D=()) for leg in struct.legs)
+        return struct._replace(legs=empty_legs)
+    if len(kept_indices) >= bl.nblocks:
         return struct
     indices = sorted(kept_indices)
-    new_t = tuple(struct.t[i] for i in indices)
-    new_D = tuple(struct.D[i] for i in indices)
-    return struct._replace(t=new_t, D=new_D)
+    kept_t = bl.t[indices]
+    new_legs = []
+    for ax, leg in enumerate(struct.legs):
+        surviving = {tuple(map(int, c)) for c in kept_t[:, ax, :]}
+        new_t = tuple(t for t in leg.t if t in surviving)
+        new_D = tuple(d for t, d in zip(leg.t, leg.D) if t in surviving)
+        new_legs.append(leg._replace(t=new_t, D=new_D))
+    return struct._replace(legs=tuple(new_legs))
 
 
 def _post_trim_label_dims(masked_meta_tensors, index_groups, pf_trim):
@@ -293,10 +315,11 @@ def _post_trim_label_dims(masked_meta_tensors, index_groups, pf_trim):
     label_dim_per_charge = {}
     label_surviving = {}
     for k, (mt, ig) in enumerate(zip(masked_meta_tensors, index_groups)):
+        sym = mt.config.sym
         kept = pf_trim.get(k) if pf_trim is not None else None
-        if kept is not None and len(kept) < len(mt.struct.t):
-            mt = mt._replace(struct=_meta_filter_struct(mt.struct, kept))
-        if not mt.struct.t:
+        if kept is not None and len(kept) < get_blocks(sym, mt.struct).nblocks:
+            mt = mt._replace(struct=_meta_filter_struct(sym, mt.struct, kept))
+        if get_blocks(sym, mt.struct).nblocks == 0:
             continue
         for ax, u in enumerate(ig):
             leg = mt.get_legs(ax)
@@ -358,8 +381,11 @@ def _apply_meta_mask(tensor, mask_t, mask_D, axis):
     ax = tensor.trans[ax]
     if tensor.hfs[ax].tree != (1,):
         raise ValueError('Second tensor`s leg specified by axes cannot be fused.')
-    _, struct, slices, _, _ = _meta_mask(tensor.struct, tensor.slices, tensor.isdiag, mask_t, mask_D, ax)
-    return tensor._replace(struct=struct, slices=slices)
+    # leg_first: _meta_mask(sym, struct, mask_t, mask_D, axis) -> (..., struct_c, ...).
+    # Restricting an unfused native leg's charges leaves mfs/hfs/trans valid; the
+    # meta tensor's stale _data is never read (only struct/legs via get_blocks/get_legs).
+    _, _, struct_c, _, _ = _meta_mask(tensor.config.sym, tensor.struct, mask_t, mask_D, ax)
+    return tensor._replace(struct=struct_c)
 
 
 def _meta_combo_check(masked_meta_tensors, tensor_unroll_info, unroll_labels, pf_inds, nsym):
@@ -370,12 +396,18 @@ def _meta_combo_check(masked_meta_tensors, tensor_unroll_info, unroll_labels, pf
     ``pf_trim`` is the filter dict (or ``None`` for ``nsym == 0``) to be
     consumed by ``_contract_single_combo``.
     """
+    # leg_first: block charges come from get_blocks(sym, struct); build the
+    # nested-tuple struct_t once per tensor for ncon_prefilter (and reuse its
+    # nblocks for the empty-block skip check).
+    sym = masked_meta_tensors[0].config.sym
+    bls = [get_blocks(sym, mt.struct) for mt in masked_meta_tensors]
     for k in range(len(masked_meta_tensors)):
-        if any((k, u) in tensor_unroll_info for u in unroll_labels) and not masked_meta_tensors[k].struct.t:
+        if any((k, u) in tensor_unroll_info for u in unroll_labels) and bls[k].nblocks == 0:
             return False, None
     if pf_inds is None:
         return True, None
-    ts_meta = {k: (masked_meta_tensors[k].struct.t, masked_meta_tensors[k].ndim_n,
+    ts_meta = {k: (tuple(tuple(map(tuple, blk)) for blk in bls[k].t.tolist()),
+                   masked_meta_tensors[k].ndim_n,
                    masked_meta_tensors[k].trans, masked_meta_tensors[k].mfs)
                for k in range(len(masked_meta_tensors))}
     pf_trim = ncon_prefilter(ts_meta, pf_inds, nsym)
@@ -503,11 +535,11 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
         "_contract_with_sliced_unroll requires explicit output index group"
 
     # ---- Dispatch routing ----
-    # devices=None                                    -> serial on tensors[0].device
-    # devices=[X] == tensors[0].device, workers <= 1  -> serial (demoted)
-    # devices=[X] != tensors[0].device, workers == 1  -> serial on X (move + restore)
-    # devices=[...] + mp_workers_per_device==0        -> error
-    # otherwise (incl. same-device pool, workers>=2)  -> multiprocess pool
+    # devices=None                              -> serial on tensors[0].device
+    # devices=[X] where X == tensors[0].device  -> serial (demoted)
+    # devices=[X] + mp_workers_per_device==1    -> serial on X (move + restore)
+    # devices=[...] + mp_workers_per_device==0  -> error
+    # otherwise                                 -> multiprocess pool
     # Worker-mode calls (_combo_indices / _return_partials) skip routing.
     _restore_device = None
     if devices is not None and _combo_indices is None and not _return_partials:
@@ -515,13 +547,9 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
             devices = [devices]
         devices = list(dict.fromkeys(str(d) for d in devices))
         _orig_device = str(args[0].device)
-        # Same-device singleton with <=1 worker is equivalent to devices=None —
-        # demote so it doesn't trip the mp_workers_per_device check below.
-        # With mp_workers_per_device >= 2 a same-device singleton is a
-        # legitimate request for a local worker POOL (e.g. devices=['cpu'],
-        # mp_workers_per_device=8 on a many-core CPU node) — do NOT demote.
-        if len(devices) == 0 or (len(devices) == 1 and devices[0] == _orig_device
-                                 and mp_workers_per_device <= 1):
+        # Same-device singleton is equivalent to devices=None — demote so it
+        # doesn't trip the mp_workers_per_device check below.
+        if len(devices) == 0 or (len(devices) == 1 and devices[0] == _orig_device):
             devices = None
 
         if devices is not None:
@@ -574,11 +602,11 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
 
     original_device = tensors[0].device
 
-    # External allocators (e.g. cuTENSOR via torch_cpp) need PyTorch's
+    # External allocators (e.g. cuTENSOR via torch_cutensor) need PyTorch's
     # caching allocator released so they can reclaim freed memory; pure
     # PyTorch on CUDA already reuses internally and empty_cache() is a
     # net loss.
-    _needs_cache_release = getattr(tensors[0].config.backend, 'BACKEND_ID', '') == 'torch_cpp'
+    _needs_cache_release = getattr(tensors[0].config.backend, 'BACKEND_ID', '') == 'torch_cutensor'
 
     def _release_cuda_cache(devs):
         r"""Release PyTorch's cached-but-unused GPU memory on *devs*."""
@@ -686,7 +714,8 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
             masked = _apply_masks_for_combo(masked_input, sl_map, masked_input[0].device)
             if pf_trim is not None:
                 for k, trim_k in pf_trim.items():
-                    if trim_k is not None and len(trim_k) < len(masked[k].struct.t):
+                    # _filter_tensor_blocks handles trim_k=None and full-trim internally.
+                    if trim_k is not None:
                         masked[k] = _filter_tensor_blocks(masked[k], trim_k)
             return ncon(masked, cur_igs, conjs=cur_conjs, order=cur_order, swap=cur_swap,
                         release_cuda_cache=_needs_cache_release)
@@ -702,11 +731,11 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
         _cfg = iter_tensors[0].config
         for n, sl_map, output_pos_key in assigned:
             with stream_ctx:
-                if _cfg.profile:
+                if nvtx.enabled:
                     tag = f"_contract_with_sliced_unroll {n}"
                     if dev is not None:
                         tag += f" [device={dev}]"
-                    _cfg.backend.nvtx.range_push(tag)
+                    nvtx.range_push(tag)
 
                 pf_trim = pf_trim_per_combo[n]
                 combo_dim_overrides = (dim_overrides_per_combo[n]
@@ -718,7 +747,7 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
                 prev = local_partials.get(output_pos_key)
                 local_partials[output_pos_key] = partial if prev is None else prev + partial
 
-                if _cfg.profile: _cfg.backend.nvtx.range_pop()
+                if nvtx.enabled: nvtx.range_pop()
 
                 # Release per-combo cache to keep cuTENSOR / external allocators
                 # from fragmenting when intermediates churn (no-op for pure torch).

@@ -20,6 +20,34 @@ import yastn
 tol = 1e-12  #pylint: disable=invalid-name
 
 
+def test_leg_basic(config_kwargs):
+    # LegBasic should strictly use tuples for charges
+    leg0 = yastn.LegBasic(s=1, t=((-1,), (0,), (1,)), D=(2, 3, 4))
+    leg1 = yastn.LegBasic(s=1, t=((-1,), (1,), (2,)), D=(2, 3, 4))
+    leg2 = yastn.LegBasic(s=1, t=((-2,), (0,), (2,)), D=(2, 3, 4))
+    leg3 = yastn.LegBasic(s=1)
+    #
+    legc = leg0.conj()
+    assert leg0.s == -legc.s
+    assert leg0.tD == legc.tD
+    #
+    assert not leg0.are_consistent(leg1, sgn=1)
+    assert leg0.are_consistent(leg2, sgn=1)
+    assert leg2.are_consistent(legc)
+    assert (-1,) in leg0 and (-2,) not in leg0
+    #
+    leg02u = leg0.union(leg2)
+    assert leg02u == yastn.LegBasic(s=1, t=((-2,), (-1,), (0,), (1,), (2,)), D=(2, 2, 3, 4, 4))
+    leg02i = leg0.intersection(leg2)
+    assert leg02i == yastn.LegBasic(s=1, t=((0,),), D=(3,))
+    assert leg0.union(leg3) == leg0
+    assert leg0.intersection(leg3) == leg3
+    #
+    leg2.add_charge((1,), 5) == yastn.LegBasic(s=1, t=((-2,), (0,), (1,), (2,)), D=(2, 3, 5, 4))
+    leg2.add_charge((0,), 5) == yastn.LegBasic(s=1, t=((-2,), (0,), (2,)), D=(2, 5, 4))
+    leg3.add_charge((0,), 5) == yastn.LegBasic(s=1, t=((0,),), D=(5,))
+
+
 def test_leg(config_kwargs):
     """ basic operations with yastn.Leg"""
     # U1
@@ -282,4 +310,4 @@ def test_leg_exceptions(config_kwargs):
 
 
 if __name__ == '__main__':
-   pytest.main([__file__, "-vs", "--durations=0"])
+    pytest.main([__file__, "-vs", "--durations=0"])

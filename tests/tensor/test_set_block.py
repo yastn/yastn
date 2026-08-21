@@ -100,7 +100,7 @@ def test_Z2xU1(config_kwargs):
     assert ((0, 0), (0, 0), (0, 0)) in a
     a.set_block(ts=((0, 0), (0, 0), (0, 0)), Ds=(1, 5, 4), val=np.sqrt(np.arange(20)))
     assert pytest.approx(a.norm().item() ** 2, rel=tol) == 294  # sum(range(20)) == 190
-    assert a.get_shape() == (26, 30)
+    assert a.get_shape() == (72, 30)
     assert a.get_shape(native=True) == (9, 8, 30)
 
     # 3-dim tensor
@@ -150,7 +150,7 @@ def test_set_block_transpose(config_kwargs):
     at = a.transpose(axes=(3, 2, 0, 1))
     block1 = at[(1, 2, -2, -1)]
     assert block1.shape == (5, 4, 2, 3)
-    block0t = config_U1.backend.permute_dims(block0, axes=(3, 2, 0, 1))
+    block0t = config_U1.backend.permute_dims(block0, block0.shape, axes=(3, 2, 0, 1))
     assert config_U1.backend.allclose(block0t, block1, rtol=1e-12, atol=1e-12)
     #
     # set block of a.transpose, and check that it is properly assigned in a
@@ -245,4 +245,4 @@ def test_set_block_exceptions(config_kwargs):
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0"])
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])

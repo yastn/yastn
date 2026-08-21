@@ -145,10 +145,10 @@ def gate_nn_tJ(J, tu, td, muu0, muu1, mud0, mud1, step, I, cu, cpu, cd, cpd, bon
       - tu * fkron(cpu, cu, sites=(1, 0)) \
       - td * fkron(cpd, cd, sites=(0, 1)) \
       - td * fkron(cpd, cd, sites=(1, 0)) \
-      - muu0 * fkron(cpu @ cu, I, sites=(0, 1)) \
-      - muu1 * fkron(I, cpu @ cu, sites=(0, 1)) \
-      - mud0 * fkron(cpd @ cd, I, sites=(0, 1)) \
-      - mud1 * fkron(I, cpd @ cd, sites=(0, 1)) \
+      - muu0 * fkron(nu, I, sites=(0, 1)) \
+      - muu1 * fkron(I, nu, sites=(0, 1)) \
+      - mud0 * fkron(nd, I, sites=(0, 1)) \
+      - mud1 * fkron(I, nd, sites=(0, 1)) \
 
     return gate_nn_exp(step, I, H, bond)
 

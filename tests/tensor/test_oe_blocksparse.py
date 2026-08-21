@@ -19,8 +19,23 @@ import yastn.tensor.oe_blocksparse as oe_blocksparse
 from opt_einsum.contract import PathInfo
 from yastn.tensor._einsum import ncon_prefilter
 from yastn.tensor.oe_blocksparse import _filter_tensor_blocks
+from yastn.tensor._auxiliary import get_blocks
 
 tol = 1e-10
+
+
+def _struct_t(t):
+    """leg_first: nested block-charge tuples for ncon_prefilter (from get_blocks)."""
+    bl = get_blocks(t.config.sym, t.struct)
+    return tuple(tuple(map(tuple, blk)) for blk in bl.t.tolist())
+
+
+def _nblocks(t):
+    return get_blocks(t.config.sym, t.struct).nblocks
+
+
+def _data_size(t):
+    return get_blocks(t.config.sym, t.struct).size
 
 torch_test = pytest.mark.skipif("'torch' not in config.getoption('--backend')",
                                 reason="Uses torch.utils.checkpoint.")
@@ -314,8 +329,8 @@ def test_prefilter_meta_fused_axes(config_kwargs):
     assert float(expected.norm()) > tol
 
     ts_meta = {
-        1: (b.struct.t, b.ndim_n, b.trans, b.mfs),
-        0: (af.struct.t, af.ndim_n, af.trans, af.mfs),
+        1: (_struct_t(b), b.ndim_n, b.trans, b.mfs),
+        0: (_struct_t(af), af.ndim_n, af.trans, af.mfs),
     }
     trim = ncon_prefilter(ts_meta, ((-1, 1), (1,)), cfg.sym.NSYM)
 
@@ -338,16 +353,16 @@ def test_prefilter_nonzero_output_trims_blocks(config_kwargs):
 
     trim = ncon_prefilter(
         {
-            0: (a.struct.t, a.ndim_n, a.trans, a.mfs),
-            1: (b.struct.t, b.ndim_n, b.trans, b.mfs),
+            0: (_struct_t(a), a.ndim_n, a.trans, a.mfs),
+            1: (_struct_t(b), b.ndim_n, b.trans, b.mfs),
         },
         ((-1, 1), (1, -2)),
         cfg.sym.NSYM,
     )
 
     assert trim is not None
-    assert trim[0] is not None and len(trim[0]) < len(a.struct.t)
-    assert trim[1] is None or len(trim[1]) == len(b.struct.t)
+    assert trim[0] is not None and len(trim[0]) < _nblocks(a)
+    assert trim[1] is None or len(trim[1]) == _nblocks(b)
 
 
 def test_output_unroll_all_prefiltered_zero(config_kwargs):
@@ -609,19 +624,35 @@ def test_checkpoint_loop_applies_prefilter_trim(config_kwargs, monkeypatch):
     a = yastn.ones(config=cfg, legs=[leg_i, leg_j_full.conj()], n=0)
     b = yastn.ones(config=cfg, legs=[leg_j0, leg_k.conj()], n=0)
 
-    original_checkpointed = oe_blocksparse._iteration_checkpointed
-    seen_pf_trim = []
+    # leg_first: the checkpointed iteration runs _contract_single_combo ->
+    # _checkpointed_call(base_tensors, _do_contract); the prefilter trim is
+    # applied by _filter_tensor_blocks *inside* _do_contract, i.e. within the
+    # checkpointed region (recomputed on backward). Validate that the trim is
+    # applied while execution is inside _checkpointed_call.
+    in_checkpoint = {'active': False}
+    trims_under_checkpoint = []
 
-    def wrapped_checkpointed(*args, **kwargs):
-        seen_pf_trim.append(kwargs.get('pf_trim'))
-        return original_checkpointed(*args, **kwargs)
+    original_ckpt = oe_blocksparse._checkpointed_call
+    def wrapped_ckpt(tensors, do_contract):
+        in_checkpoint['active'] = True
+        try:
+            return original_ckpt(tensors, do_contract)
+        finally:
+            in_checkpoint['active'] = False
+
+    original_filter = oe_blocksparse._filter_tensor_blocks
+    def wrapped_filter(tensor, block_indices):
+        if in_checkpoint['active']:
+            trims_under_checkpoint.append(block_indices)
+        return original_filter(tensor, block_indices)
 
     def fake_prefilter(ts_meta, inds, nsym):
         trim = {tid: None for tid in ts_meta}
         trim[0] = frozenset({0})
         return trim
 
-    monkeypatch.setattr(oe_blocksparse, "_iteration_checkpointed", wrapped_checkpointed)
+    monkeypatch.setattr(oe_blocksparse, "_checkpointed_call", wrapped_ckpt)
+    monkeypatch.setattr(oe_blocksparse, "_filter_tensor_blocks", wrapped_filter)
     monkeypatch.setattr(oe_blocksparse, "ncon_prefilter", fake_prefilter)
 
     unroll = {'j': yastn.make_sliced_legs(leg_j_full)}
@@ -636,8 +667,8 @@ def test_checkpoint_loop_applies_prefilter_trim(config_kwargs, monkeypatch):
 
     expected = yastn.ncon([a, b], [[-1, 1], [1, -2]])
 
-    assert seen_pf_trim
-    assert seen_pf_trim[0][0] == frozenset({0})
+    # the prefilter trim was applied *under* checkpointing, not just anywhere
+    assert frozenset({0}) in trims_under_checkpoint
     assert result.get_legs(axes=0) == expected.get_legs(axes=0)
     assert float((result - expected).norm()) < tol
 
@@ -649,11 +680,11 @@ def test_filter_tensor_blocks_compacts_data_for_swap(config_kwargs):
     tensor = yastn.rand(config=cfg, n=0, legs=[leg, leg.conj()])
 
     trimmed = _filter_tensor_blocks(tensor, frozenset({0}))
-    assert trimmed.struct.size == trimmed.config.backend.get_size(trimmed._data)
+    assert _data_size(trimmed) == trimmed.config.backend.get_size(trimmed._data)
     assert trimmed.is_consistent()
 
     swapped = trimmed.swap_gate(axes=(0, 1))
-    assert swapped.struct.size == swapped.config.backend.get_size(swapped._data)
+    assert _data_size(swapped) == swapped.config.backend.get_size(swapped._data)
     assert swapped.is_consistent()
 
 

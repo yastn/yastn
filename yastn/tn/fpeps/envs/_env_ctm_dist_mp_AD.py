@@ -84,7 +84,7 @@ class _DistCTMPool:
     def __init__(self, devices, config_desc):
         import sys
         import torch.multiprocessing as _mp
-        from yastn.yastn._mp_logging import (
+        from ...._mp_logging import (
             start_parent_log_listener, parent_log_level, snapshot_logger_levels)
 
         mctx = _mp.get_context('spawn')
@@ -201,7 +201,7 @@ class _DistCTMPool:
                 p.terminate()
         # Stop the listener only after workers are joined, so any record they
         # emitted has been enqueued before the listener drains and stops.
-        from yastn.yastn._mp_logging import stop_parent_log_listener
+        from ...._mp_logging import stop_parent_log_listener
         stop_parent_log_listener(self.log_listener)
 
 
@@ -306,10 +306,11 @@ _CACHE_LIMIT = 8192
 
 
 def _shape_key(t):
-    """Hashable identifier for a yastn.Tensor's structural meta. Two
-    Tensors with the same struct/slices/hfs/mfs share the same level=1
-    meta dict (modulo the data field), so they share a cache entry."""
-    return (t.struct, t.slices, t.hfs, t.mfs)
+    """Hashable identifier for a yastn.Tensor's structural meta. On leg_first
+    the block layout (slices) is fully determined by ``struct`` (the legs);
+    together with trans/hfs/mfs this fixes the level=1 meta dict (modulo the
+    data field), so Tensors with the same key share a cache entry."""
+    return (t.struct, t.trans, t.hfs, t.mfs)
 
 
 def _split_tensor(t):
@@ -360,9 +361,9 @@ def _serialize_args(args):
         ('Tensor', meta) -- consumes 1 data tensor
         ('DPT', extra, bra_meta, ket_meta) -- consumes 2 (bra, ket)
     """
-    from yastn.yastn.tensor import Tensor
-    from yastn.yastn.tn.fpeps._doublePepsTensor import DoublePepsTensor
-    from yastn.yastn.tn.fpeps import Site
+    from ....tensor import Tensor
+    from .._doublePepsTensor import DoublePepsTensor
+    from .. import Site
 
     skeleton = []
     flat_data = []
@@ -388,8 +389,8 @@ def _serialize_args(args):
 
 def _deserialize_args(skeleton, flat_data, cfg):
     """Rebuild args from skeleton + flat data tensors (on worker side)."""
-    from yastn.yastn.tensor import Tensor
-    from yastn.yastn.tn.fpeps._doublePepsTensor import DoublePepsTensor
+    from ....tensor import Tensor
+    from .._doublePepsTensor import DoublePepsTensor
 
     args = []
     di = 0
@@ -435,14 +436,8 @@ def _send_payload(t):
           can recycle the sender's tensor mid-flight and corrupt the
           receiver's view).
 
-    ``resolve_conj()``/``resolve_neg()`` materialize the lazy
-    conjugate/negation view bits.  This is required for correctness,
-    not just reducer compatibility: torch.multiprocessing's reduction
-    ships the raw storage but DROPS these bits, so a lazy ``x.conj()``
-    (or neg view) would silently arrive un-conjugated (un-negated) in
-    the receiver.  ``contiguous()`` does NOT clear them — it is a
-    no-op on an already-contiguous view — so they must be resolved
-    explicitly.  Producer-stream ordering is handled by
+    ``resolve_conj()`` clears the complex-conjugate flag (some reducer
+    paths refuse it).  Producer-stream ordering is handled by
     torch.multiprocessing's CUDA reducer: when the tensor is pickled
     for the queue, the reducer records an event on the producer's
     current stream and ships the IPC event handle alongside the
@@ -451,7 +446,7 @@ def _send_payload(t):
     required.
     """
     import torch
-    t = t.detach().resolve_conj().resolve_neg()
+    t = t.detach().resolve_conj()
     if t.is_cuda:
         return t.contiguous()
     return t.cpu().numpy()
@@ -503,7 +498,7 @@ def _worker_main(rank, device, config_desc, cmd_q, res_q, parent_sys_path,
     # Route this worker's logging through the parent's QueueListener. Spawn-mode
     # children inherit no logging config, so without this every log.info call
     # in a worker is silently dropped.
-    from yastn.yastn._mp_logging import install_worker_log_handler
+    from ...._mp_logging import install_worker_log_handler
     install_worker_log_handler(log_queue, log_level,
                                tag=f"dist_ctm_AD rank {rank} dev {device}",
                                logger_levels=logger_levels)
@@ -512,7 +507,7 @@ def _worker_main(rank, device, config_desc, cmd_q, res_q, parent_sys_path,
         gpu_idx = int(str(device).split(':')[1])
         torch.cuda.set_device(gpu_idx)
 
-    from yastn.yastn.tensor._initialize import make_config
+    from ....tensor._initialize import make_config
     cfg = make_config(**{**config_desc, 'default_device': str(device)})
 
     log.info("worker ready")
@@ -585,10 +580,10 @@ def _stage12_compute(args, extra):
     -- one per stage, both alive in worker memory -- and the IPC
     round-trip that shipped halves between the stages.
     """
-    from yastn.yastn.tn.fpeps.envs._env_contractions import (
+    from ._env_contractions import (
         halves_4x4_lhr, halves_4x4_tvb,
     )
-    from yastn.yastn.tn.fpeps.envs._env_ctm_dist_mp import (
+    from ._env_ctm_dist_mp import (
         projectors_move_rh, projectors_move_lh,
         projectors_move_tv, projectors_move_bv,
     )
@@ -620,7 +615,7 @@ def _stage3_compute(args, extra):
     Returns whatever update_env_dir returns (a tuple of yastn Tensors,
     possibly with None entries for boundary cases).
     """
-    from yastn.yastn.tn.fpeps.envs._env_contractions import update_env_dir
+    from ._env_contractions import update_env_dir
     return update_env_dir(extra['move'], *args)
 
 
@@ -743,8 +738,8 @@ def _stage_bwd_via_saved(args, saved_graphs, device):
 # ===========================================================================
 
 def _find_ref_config(args):
-    from yastn.yastn.tensor import Tensor
-    from yastn.yastn.tn.fpeps._doublePepsTensor import DoublePepsTensor
+    from ....tensor import Tensor
+    from .._doublePepsTensor import DoublePepsTensor
     for a in args:
         if isinstance(a, Tensor):
             return a.config
@@ -846,7 +841,7 @@ def _stage_apply_batched(pool, stage, jobs):
     main skips the ``_BatchedFn.apply`` wrap entirely.
     """
     import torch
-    from yastn.yastn.tensor import Tensor
+    from ....tensor import Tensor
 
     autograd_enabled = torch.is_grad_enabled()
 
@@ -961,7 +956,7 @@ def update_core_AD_(env, move, opts_svd, devices, **kwargs):
     have ``_data`` carrying autograd tracking, so backward through
     ``env``'s output env tensors flows to the original input tensors.
     """
-    from yastn.yastn.tn.fpeps.envs._env_contractions import (
+    from ._env_contractions import (
         update_env_fetch_args,
     )
 
@@ -1120,7 +1115,7 @@ def iterate_AD_(env, opts_svd, moves='hv', method='2x2', max_sweeps=1,
     cleanup so workers don't accumulate activations across sweeps.
     """
     import torch
-    from yastn.yastn.tn.fpeps.envs._env_ctm import CTMRG_out
+    from ._env_ctm import CTMRG_out
 
     if devices is None or len(devices) < 1:
         raise ValueError("iterate_AD_ requires devices=...")

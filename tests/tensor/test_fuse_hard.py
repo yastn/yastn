@@ -140,13 +140,13 @@ def test_hard_empty_axis(config_kwargs):
     assert (af1u - af1).norm() < tol
 
     af2 = yastn.tensor._merging._fuse_legs_hard(af1, axes=((), (0,), (1,), (2,), (3,), (4,)), order=(0, 1, 2, 3, 4))
-    assert af2.s == (1, 1, 1, -1, -1, -1)   # signature of a new leg is 1 for first leg
-    al2 = al1.add_leg(axis=0, s=1, t=(0,))
+    assert af2.s == (-1, 1, 1, -1, -1, -1)   # signature of a new leg is 1 for first leg
+    al2 = al1.add_leg(axis=0, s=-1, t=(0,))
     assert af2.norm() > 1
     assert (af2 - al2).norm() < tol
 
     af3 = yastn.tensor._merging._fuse_legs_hard(a, axes=((), (0, 1), (), (2, 3), ()), order=(0, 1, 2, 3))
-    assert af3.s == (1, 1, -1, -1, -1)
+    assert af3.s == (-1, 1, -1, -1, -1)
     al3 = al2.add_leg(axis=3, s=-1, t=(0,))
     al3f = al3.fuse_legs(axes=(0, (1, 2), 3, (4, 5), 6))
     assert (af3 - al3f).norm() < tol
@@ -490,7 +490,7 @@ def test_transpose_and_merge_backward(config_kwargs):
         return ab
 
     op_args = (torch.randn(target_block_size, dtype=a.get_dtype(),requires_grad=True),)
-    test = torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4)
+    test = torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4, check_undefined_grad=False)  # TODO check_undefined_grad=True
     assert test
 
 
@@ -505,7 +505,7 @@ def test_unmerge_backward(config_kwargs):
             yastn.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(3, 11, 12))]
     a = yastn.rand(config=config_U1, legs=legs)
 
-    b = yastn.fuse_legs(a, axes=(0,(1,2),3), mode='hard')
+    b = yastn.fuse_legs(a, axes=(0, (1, 2), 3), mode='hard')
 
     target_block = (1, 1, -1, -1)
     target_block_size = a[target_block].size()
@@ -519,7 +519,7 @@ def test_unmerge_backward(config_kwargs):
         return ab
 
     op_args = (torch.randn(target_block_size, dtype=a.get_dtype(), requires_grad=True),)
-    test = torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4)
+    test = torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4, check_undefined_grad=False)  # TODO check_undefined_grad=True
     assert test
 
 

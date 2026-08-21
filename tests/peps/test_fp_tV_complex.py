@@ -45,31 +45,30 @@ def cost_function_f(additional_imports, yastn_cfg, g, A, elems, slices : dict[tu
     # For each on-site tensor, corresponding element in slices is a pair,
     # where first entry specified slice in elems 1D-array while second entry specifies slice in target on-site tensor
     #
-    tensors_loc= { k:v.clone() for k,v in A.items() }
+    tensors_loc = {k: v.clone() for k, v in A.items()}
     for k in tensors_loc.keys():
         if k in slices:
-            tensors_loc[k]._data[slices[k][1]]= elems[slices[k][0]]
+            tensors_loc[k]._data[slices[k][1]] = elems[slices[k][0]]
 
     psi = fpeps.Peps(g, tensors=tensors_loc)
-    chi= 20
-
+    chi = 20
+    opts_svd = {"D_total": chi,
+                "tol": 1e-8,
+                "fix_signs": fix_signs}
     if truncate_multiplets_mode == 'expand':
-        truncation_f= None
+        opts_svd["largest_gap"] = True
     elif truncate_multiplets_mode == 'truncate':
-        def truncation_f(S):
-            return yastn.linalg.truncation_mask_multiplets(S, keep_multiplets=True, D_total=chi,\
-                tol=1.0e-8, tol_block=0.0, eps_multiplet=1.0e-8)
+        opts_svd["eps_multiplet"] = 1e-8
 
-    env_leg = yastn.Leg(yastn_cfg, s=1, t=(0, 1), D=(chi//2, chi//2))
+    env_leg = yastn.Leg(yastn_cfg, s=1, t=(0, 1), D=(chi // 2, chi // 2))
     env = fpeps.EnvCTM(psi, init=ctm_init, leg=env_leg)
 
-    info = env.ctmrg_(opts_svd = {"D_total": chi, 'fix_signs': fix_signs}, max_sweeps=max_sweeps,
-                        corner_tol=1.0e-8, truncation_f=truncation_f, use_qr=False, checkpoint_move=checkpoint_move)
+    info = env.ctmrg_(opts_svd=opts_svd, max_sweeps=max_sweeps,
+                      corner_tol=1.0e-8, use_qr=False, checkpoint_move=checkpoint_move)
     print(f"CTM {info}")
 
     # sum of traces of even sectors across 1x1 RDMs
-    loss= sum( rdm1x1( c, psi, env)[0][(0,0)].trace() for c in psi.sites() )
-
+    loss = sum(rdm1x1(c, psi, env)[0][(0, 0)].trace() for c in psi.sites())
     return loss.real
 
 def cost_function_fp(additional_imports, yastn_cfg, g, A, elems, slices : dict[tuple[int],tuple[slice,slice]], max_sweeps,\
@@ -78,44 +77,46 @@ def cost_function_fp(additional_imports, yastn_cfg, g, A, elems, slices : dict[t
     # For each on-site tensor, corresponding element in slices is a pair,
     # where first entry specified slice in elems 1D-array while second entry specifies slice in target on-site tensor
     #
-    tensors_loc= { k:v.clone() for k,v in A.items() }
+    tensors_loc = {k: v.clone() for k, v in A.items()}
     for k in tensors_loc.keys():
         if k in slices:
             tensors_loc[k]._data[slices[k][1]]= elems[slices[k][0]]
 
     psi = fpeps.Peps(g, tensors=tensors_loc)
-    chi= 20
+    chi = 20
 
-    if truncate_multiplets_mode == 'expand':
-        truncation_f= None
-    elif truncate_multiplets_mode == 'truncate':
-        def truncation_f(S):
-            return yastn.linalg.truncation_mask_multiplets(S, keep_multiplets=True, D_total=chi,\
-                tol=1.0e-8, tol_block=0.0, eps_multiplet=1.0e-8)
-
-    env_leg = yastn.Leg(yastn_cfg, s=1, t=(0, 1), D=(chi//2, chi//2))
+    env_leg = yastn.Leg(yastn_cfg, s=1, t=(0, 1), D=(chi // 2, chi // 2))
     env = fpeps.EnvCTM(psi, init=ctm_init, leg=env_leg)
 
-    options_svd={
-        'policy': projector_svd_method,
-        "D_total": chi, "D_block": chi,
-        "tol": 1.0e-8, "eps_multiplet": 1.0e-8,
-        "svds_thresh": 0.1
-    }
-    env = fp_ctmrg(env, \
-        ctm_opts_fwd= {'opts_svd': options_svd, 'corner_tol': 1.0e-8, 'max_sweeps': max_sweeps, \
-            'method': "2x2", 'use_qr': False, }, \
-        ctm_opts_fp= {'opts_svd': {'policy': 'fullrank'}})
+    opts_svd = {"policy": projector_svd_method,
+                "D_total": chi,
+                "tol": 1e-8,
+                "fix_signs": fix_signs,
+                "svds_thresh": 0.1,
+                "verbosity": 3}
 
+    if truncate_multiplets_mode == 'expand':
+        opts_svd["largest_gap"] = True
+    elif truncate_multiplets_mode == 'truncate':
+        opts_svd["eps_multiplet"] = 1e-8
+
+    env = fp_ctmrg(env,
+                   ctm_opts_fwd={'opts_svd': opts_svd,
+                                 'corner_tol': 1.0e-8,
+                                 'max_sweeps': max_sweeps,
+                                 'method': "2x2",
+                                 'use_qr': False, },
+                   ctm_opts_fp={'opts_svd': {'policy': 'fullrank'}}
+                   )
+    #
     # sum of traces of even sectors across 1x1 RDMs
-    loss= sum( rdm1x1( c, psi, env)[0][(0,0)].trace() for c in psi.sites() )
-
+    loss = sum(rdm1x1(c, psi, env)[0][(0, 0)].trace() for c in psi.sites())
     return loss.real
 
 
 def prepare_1x1(additional_imports, cost_f):
     config_kwargs, _, _ = additional_imports
-    yastn_cfg_Z2= yastn.make_config(sym='Z2', fermionic=True, default_dtype="complex128", **config_kwargs)
+    yastn_cfg_Z2 = yastn.make_config(sym='Z2', fermionic=True, default_dtype="complex128", **config_kwargs)
     json_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'inputs', 'D1_1x1_Z2_spinlessf_honeycomb_complex.json')
     def complex_decoder(dct):
         if "real" in dct and "imag" in dct:
@@ -125,18 +126,18 @@ def prepare_1x1(additional_imports, cost_f):
     with open(json_file_path,'r') as f:
         d = json.load(f, object_hook=complex_decoder)
 
-    g= fpeps.RectangularUnitcell(**d['geometry'])
-    A= { tuple(d['parameters_key_to_id'][coord]): yastn.from_dict(d_ten, config=yastn_cfg_Z2)
-                                 for coord,d_ten in d['parameters'].items() }
+    g = fpeps.RectangularUnitcell(**d['geometry'])
+    A = {tuple(d['parameters_key_to_id'][coord]): yastn.from_dict(d_ten, config=yastn_cfg_Z2)
+                                 for coord, d_ten in d['parameters'].items()}
 
-    cost_function_1x1= lambda *args, **kwargs : cost_f(additional_imports, yastn_cfg_Z2,g,A, *args, **kwargs)
+    cost_function_1x1 = lambda *args, **kwargs : cost_f(additional_imports, yastn_cfg_Z2,g,A, *args, **kwargs)
 
     return A, None, cost_function_1x1
 
 
 def prepare_3x3(additional_imports, cost_f):
     config_kwargs, _, _ = additional_imports
-    yastn_cfg_Z2= yastn.make_config(sym='Z2', fermionic=True, default_dtype='complex128', **config_kwargs)
+    yastn_cfg_Z2 = yastn.make_config(sym='Z2', fermionic=True, default_dtype='complex128', **config_kwargs)
     json_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'inputs', 'D1_3x3_Z2_spinlessf_honeycomb_complex.json')
     def complex_decoder(dct):
         if "real" in dct and "imag" in dct:
@@ -146,11 +147,11 @@ def prepare_3x3(additional_imports, cost_f):
     with open(json_file_path,'r') as f:
         d = json.load(f, object_hook=complex_decoder)
 
-    g= fpeps.RectangularUnitcell(**d['geometry'])
-    A= { tuple(d['parameters_key_to_id'][coord]): yastn.from_dict(d_ten, config=yastn_cfg_Z2)
-                                 for coord,d_ten in d['parameters'].items() }
+    g = fpeps.RectangularUnitcell(**d['geometry'])
+    A = {tuple(d['parameters_key_to_id'][coord]): yastn.from_dict(d_ten, config=yastn_cfg_Z2)
+                                 for coord, d_ten in d['parameters'].items()}
 
-    cost_function_3x3= lambda *args, **kwargs : cost_f(additional_imports, yastn_cfg_Z2,g,A, *args, **kwargs)
+    cost_function_3x3 = lambda *args, **kwargs: cost_f(additional_imports, yastn_cfg_Z2,g, A, *args, **kwargs)
 
     return A, None, cost_function_3x3
 
@@ -177,17 +178,17 @@ REF_1x1_D1_Z2_spinlessf_complex_grad=[
 @pytest.mark.parametrize("checkpoint_move", ['nonreentrant',False])
 def test_1x1_D1_Z2_spinlessf_conv(ctm_init, truncate_multiplets_mode, tol, checkpoint_move, additional_imports):
     config_kwargs, torch, gradcheck = additional_imports
-    A0, _, cost_function= prepare_1x1(additional_imports, cost_function_f)
-    test_elems= A0[(0,0)]._data.clone()
+    A0, _, cost_function = prepare_1x1(additional_imports, cost_function_f)
+    test_elems = A0[(0, 0)]._data.clone()
     test_elems.requires_grad_()
-    slices= { (0,0): (slice(0,len(test_elems)), slice(0,len(test_elems))) }
+    slices = {(0, 0): (slice(0, len(test_elems)), slice(0, len(test_elems)))}
 
     # It should take 35 steps to converge
-    loc_cost_f= lambda x : cost_function(x, slices, 50, ctm_init=ctm_init, fix_signs=True,
+    loc_cost_f = lambda x : cost_function(x, slices, 50, ctm_init=ctm_init, fix_signs=True,
                                          truncate_multiplets_mode=truncate_multiplets_mode,
                                          checkpoint_move=checkpoint_move)
 
-    l0= loc_cost_f(test_elems)
+    l0 = loc_cost_f(test_elems)
     l0.backward()
 
     assert np.allclose(np.asarray(REF_1x1_D1_Z2_spinlessf_complex_grad), test_elems.grad.numpy(force=True), rtol=1e-03, atol=1e-05)
@@ -197,15 +198,15 @@ def test_1x1_D1_Z2_spinlessf_conv(ctm_init, truncate_multiplets_mode, tol, check
 @pytest.mark.parametrize("projector_svd_method", ["fullrank", "block_arnoldi", "block_propack"])
 def test_1x1_D1_Z2_spinlessf_fp(ctm_init, truncate_multiplets_mode, projector_svd_method, additional_imports):
     config_kwargs, torch, gradcheck = additional_imports
-    A, A_grad_expected, cost_f= prepare_1x1(additional_imports, cost_function_fp)
-    test_elems= A[(0,0)]._data.clone()
-    slices= { (0,0): (slice(0,len(test_elems)), slice(0,len(test_elems))) }
+    A, A_grad_expected, cost_f = prepare_1x1(additional_imports, cost_function_fp)
+    test_elems = A[(0, 0)]._data.clone()
+    slices = {(0, 0): (slice(0, len(test_elems)), slice(0, len(test_elems)))}
     test_elems.requires_grad_()
 
-    loc_cost_f= lambda x : cost_f(x, slices, max_sweeps=50, ctm_init=ctm_init, \
+    loc_cost_f = lambda x : cost_f(x, slices, max_sweeps=50, ctm_init=ctm_init, \
         fix_signs=True, truncate_multiplets_mode=truncate_multiplets_mode, projector_svd_method=projector_svd_method)
 
-    l0= loc_cost_f(test_elems)
+    l0 = loc_cost_f(test_elems)
     l0.backward()
 
     assert np.allclose(np.asarray(REF_1x1_D1_Z2_spinlessf_complex_grad), test_elems.grad.numpy(force=True), rtol=1e-03, atol=1e-05)
@@ -251,8 +252,8 @@ REF_3x3_D1_Z2_spinlessf_complex_grad=[
 @pytest.mark.parametrize("checkpoint_move", ['nonreentrant',False])
 def test_3x3_D1_Z2_spinlessf_conv(ctm_init, truncate_multiplets_mode, checkpoint_move, additional_imports):
     config_kwargs, torch, gradcheck = additional_imports
-    A0, _, cost_function= prepare_3x3(additional_imports, cost_function_f)
-    test_elems= torch.cat([A0[loc]._data.clone() for loc in A0.keys()])
+    A0, _, cost_function = prepare_3x3(additional_imports, cost_function_f)
+    test_elems = torch.cat([A0[loc]._data.clone() for loc in A0.keys()])
     slices, start = {}, 0
     for loc in A0.keys():
         slices[loc] = (slice(start, start + len(A0[loc]._data)), slice(0, len(A0[loc]._data)))
@@ -260,11 +261,11 @@ def test_3x3_D1_Z2_spinlessf_conv(ctm_init, truncate_multiplets_mode, checkpoint
     test_elems.requires_grad_()
 
     # It should take 35 steps to converge
-    loc_cost_f= lambda x : cost_function(x, slices, 50, ctm_init=ctm_init, fix_signs=True,
+    loc_cost_f = lambda x : cost_function(x, slices, 50, ctm_init=ctm_init, fix_signs=True,
                                          truncate_multiplets_mode=truncate_multiplets_mode,
                                          checkpoint_move=checkpoint_move)
 
-    l0= loc_cost_f(test_elems)
+    l0 = loc_cost_f(test_elems)
     l0.backward()
     assert np.allclose(np.asarray(REF_3x3_D1_Z2_spinlessf_complex_grad), test_elems.grad.numpy(force=True), rtol=1e-03, atol=1e-05)
 
@@ -273,23 +274,23 @@ def test_3x3_D1_Z2_spinlessf_conv(ctm_init, truncate_multiplets_mode, checkpoint
 @pytest.mark.parametrize("projector_svd_method", ["fullrank", "block_arnoldi", "block_propack"])
 def test_3x3_D1_Z2_spinlessf_fp(ctm_init, truncate_multiplets_mode, projector_svd_method, additional_imports):
     config_kwargs, torch, gradcheck = additional_imports
-    A, A_grad_expected, cost_f= prepare_3x3(additional_imports, cost_function_fp)
+    A, A_grad_expected, cost_f = prepare_3x3(additional_imports, cost_function_fp)
 
-    test_elems= torch.cat([A[loc]._data.clone() for loc in A.keys()])
+    test_elems = torch.cat([A[loc]._data.clone() for loc in A.keys()])
     slices, start = {}, 0
     for loc in A.keys():
         slices[loc] = (slice(start, start + len(A[loc]._data)), slice(0, len(A[loc]._data)))
         start += len(A[loc]._data)
     test_elems.requires_grad_()
 
-    loc_cost_f= lambda x : cost_f(x, slices, max_sweeps=50, ctm_init=ctm_init, \
+    loc_cost_f = lambda x : cost_f(x, slices, max_sweeps=50, ctm_init=ctm_init, \
         fix_signs=True, truncate_multiplets_mode=truncate_multiplets_mode, projector_svd_method=projector_svd_method)
 
-    l0= loc_cost_f(test_elems)
+    l0 = loc_cost_f(test_elems)
     l0.backward()
 
     assert np.allclose(np.asarray(REF_3x3_D1_Z2_spinlessf_complex_grad), test_elems.grad.numpy(force=True), rtol=1e-03, atol=1e-05)
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--long_tests", "--device", "cuda"])
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--long_tests"]) #, "--device", "cuda"])

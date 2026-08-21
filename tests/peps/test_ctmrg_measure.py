@@ -25,9 +25,6 @@ tol = 1e-12  #pylint: disable=invalid-name
 def run_ctm_save_load_copy(env):
     # test save, load, copy, clone,
 
-    config = env.psi.config
-    d = env.save_to_dict()
-
     env_copy = env.copy()
     env_clone = env.clone()
     env_shallow = env.shallow_copy()

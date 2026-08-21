@@ -15,8 +15,7 @@
 from __future__ import annotations
 import logging
 import sys
-from typing import NamedTuple, Callable, Sequence
-from warnings import warn
+from typing import NamedTuple, Sequence
 
 from ._env_contractions import identity_boundary, corner2x2, append_vec_tl, append_vec_br
 from ._env_dataclasses import EnvCTM_local, EnvCTM_projectors
@@ -236,26 +235,6 @@ class EnvCTM():
         self.env = Lattice.from_dict(d['env'])
         self.proj = Lattice.from_dict(d['proj'])
 
-    def save_to_dict(self) -> dict:
-        r"""
-        Serialize EnvCTM into a dictionary.
-
-        !!! This method is deprecated; use to_dict() instead !!!
-        """
-        warn('This method is deprecated; use to_dict() instead.', DeprecationWarning, stacklevel=2)
-
-        psi = self.psi
-        if isinstance(psi, Peps2Layers):
-            psi = psi.ket
-
-        d = {'class': type(self).__name__,
-             'psi': psi.save_to_dict(),
-             'data': {}}
-        for site in self.sites():
-            d_local = {dirn: getattr(self[site], dirn).save_to_dict()
-                       for dirn in self[site].fields()}
-            d['data'][site] = d_local
-        return d
 
     def reset_(self, init='rand', leg=None, **kwargs):
         r"""
@@ -859,7 +838,7 @@ class EnvCTM():
                     dict_bond_dimension[site, corners_id[ii]].append(temp_D)
         return [dict_bond_dimension, dict_symmetric_sector]
 
-    def iterate_(env, opts_svd=None, moves='hv', method='2x2 corner', max_sweeps=1, iterator=False, corner_tol=None, truncation_f: Callable = None, **kwargs):
+    def iterate_(env, opts_svd=None, moves='hv', method='2x2 corner', max_sweeps=1, iterator=False, corner_tol=None, **kwargs):
         r"""
         Perform CTMRG updates :meth:`yastn.tn.fpeps.EnvCTM.update_` until convergence.
         Convergence can be measured based on singular values of CTM environment corner tensors.
@@ -901,11 +880,6 @@ class EnvCTM():
             The default is ``None``, in which case convergence is not checked and it is up to user to implement
             convergence check.
 
-        truncation_f:
-            Custom projector truncation function with signature ``truncation_f(S: Tensor)->Tensor``, consuming
-            rank-1 tensor with singular values. If provided, truncation parameters passed to SVD decomposition
-            are ignored.
-
         checkpoint_move: str | bool
             Whether to use checkpointing for the CTM updates. The default is ``False``.
             Otherwise, in case of PyTorch backend it can be set to 'reentrant' for reentrant checkpointing
@@ -930,7 +904,6 @@ class EnvCTM():
         kwargs["iterator_step"] = kwargs.get("iterator_step", int(iterator))
         if ("checkpoint_move" in kwargs) and ("torch" in env.config.backend.BACKEND_ID):
             assert kwargs["checkpoint_move"] in ['reentrant', 'nonreentrant', False], f"Invalid choice for {kwargs['checkpoint_move']}"
-        kwargs["truncation_f"] = truncation_f
         kwargs["iterator_step"] = kwargs.get("iterator_step", int(iterator))
         tmp = env._ctmrg_iterator_(opts_svd=opts_svd, moves=moves, method=method, max_sweeps=max_sweeps, corner_tol=corner_tol, **kwargs)
         return tmp if kwargs["iterator_step"] else next(tmp)
@@ -966,11 +939,15 @@ class EnvCTM():
         """
         Evaluate convergence of CTM by computing the difference of environment corner spectra between consecutive CTM steps.
         """
-        corner_sv = env.calculate_corner_svd()
-        max_dsv = max(spec_diff(history[-1][k], corner_sv[k]) for k in corner_sv) if history else float('Nan')
-        corner_sv['max_dsv'] = max_dsv
-        history.append(corner_sv)
-        converged = (corner_tol is not None) and (max_dsv < corner_tol)
+        if hasattr(corner_tol, '__call__'):
+            converged, history = corner_tol(env, history)
+            max_dsv = 0
+        else:
+            corner_sv = env.calculate_corner_svd()
+            max_dsv = max(spec_diff(history[-1][k], corner_sv[k]) for k in corner_sv) if history else float('Nan')
+            corner_sv['max_dsv'] = max_dsv
+            history.append(corner_sv)
+            converged = (corner_tol is not None) and (max_dsv < corner_tol)
         return converged, max_dsv, history
 
     def is_consistent(env, verbosity = 2):
@@ -1059,7 +1036,7 @@ def update_extended_2x2_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwarg
     use_qr = kwargs.get("use_qr", True)
     kwargs["profiling_mode"]= env.profiling_mode
     psh = env.proj
-    svd_predict_spec= lambda s0,p0,s1,p1,sign: opts_svd.get('D_block', float('inf')) \
+    svd_predict_spec= lambda s0,p0,s1,p1,sign: opts_svd.get('k_block', opts_svd.get('D_block', float('inf'))) \
         if psh is None or (getattr(psh[s0],p0) is None or getattr(psh[s1],p1) is None) else \
         env._partial_svd_predict_spec(getattr(psh[s0],p0).get_legs(-1), getattr(psh[s1],p1).get_legs(-1), sign)
 
@@ -1234,14 +1211,13 @@ def proj_corners(r0, r1, opts_svd, **kwargs):
     rr = tensordot(r0, r1, axes=(1, 1))
 
     opts_svd = dict(opts_svd)
-    if 'truncation_f' in kwargs:
-        opts_svd['mask_f'] = kwargs['truncation_f']
     opts_svd['fix_signs'] = opts_svd.get('fix_signs', True)
     verbosity = opts_svd.get('verbosity', 0)
     # only verbosity from opts_svd is to be passed down to svd_with_truncation
     kwargs.pop('verbosity', None)
     profiling_mode= kwargs.get('profiling_mode', None)
 
+    # import pdb; pdb.set_trace()
     if profiling_mode in ["NVTX",]:
         rr.config.backend.cuda.nvtx.range_push(f"svd_with_truncation")
         u, s, v = rr.svd_with_truncation(axes=(0, 1), sU=r0.s[1], **opts_svd, **kwargs)

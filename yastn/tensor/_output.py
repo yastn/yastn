@@ -14,22 +14,26 @@
 # ==============================================================================
 """ Methods outputting data from yastn.Tensor. """
 from __future__ import annotations
+
 from functools import reduce
 from numbers import Number
 from operator import mul
-from typing import Sequence
-from warnings import warn
+from typing import Sequence, TYPE_CHECKING
 
 import numpy as np
 
-from ._auxiliary import _clear_axes, _unpack_axes, _struct, _slc, _flatten
+from ._auxiliary import _clear_axes, _unpack_axes, _struct, _flatten, get_blocks, find_index
+from ._legbasic import legs_from_dict_v2
 from ._legs import Leg, LegMeta, legs_union, _legs_mask_needed
 from ._merging import _embed_tensor
 from ._tests import YastnError
 from ..sym import sym_none
-from .._split_combine_dict import split_data_and_meta, combine_data_and_meta
+from .._split_combine_dict import combine_data_and_meta
 
-__all__ = ['save_to_dict', 'save_to_hdf5', 'requires_grad']
+if TYPE_CHECKING:
+    from . import Tensor
+
+__all__ = ['requires_grad']
 
 
 def to_dict(a, level=2, meta=None, resolve_ops=False) -> dict:
@@ -64,99 +68,69 @@ def to_dict(a, level=2, meta=None, resolve_ops=False) -> dict:
         See example at :ref:`examples/tensor/decomposition:combining with scipy.sparse.linalg.eigs`.
     """
     if resolve_ops:
-        return a.consume_transpose().to_dict(level=level, meta=meta, resolve_ops=False)        
-    
+        return a.consume_transpose().to_dict(level=level, meta=meta, resolve_ops=False)
+
     if level >= 1:
         config = a.config._asdict()
         config['sym'] = config['sym'].SYM_ID
         config['backend'] = config['backend'].BACKEND_ID
         hfs = tuple(hf._asdict() for hf in a.hfs)
         struct = a.struct._asdict()
-        slices = [tuple(slc) for slc in a.slices]
+        struct['legs'] = tuple(leg._asdict() for leg in struct['legs'])
     else:
         config = a.config
         hfs = a.hfs
         struct = a.struct
-        slices = a.slices
 
     data = a.data if level < 2 else a.config.backend.to_numpy(a.data)
 
-    # dict_ver=2: Tensor has field 'trans'
     d = {'type': type(a).__name__,
-         'dict_ver': 2,
+         'dict_ver': 3,
          'level': level,
          'config': config,
          'data': data,
          'struct': struct,
-         'slices': slices,
          'trans': a.trans,
-         'isdiag': a.isdiag,
          'hfs': hfs,
-         'mfs': a.mfs}
+         'mfs': a.mfs,
+         'size': a.size}
 
     if meta is not None:
-        if not all(meta[k] == d[k] for k in ['type', 'dict_ver', 'config', 'struct', 'slices', 'trans', 'isdiag', 'hfs', 'mfs']):
-            size = meta['struct'].size if hasattr(meta['struct'], 'size') else meta['struct']['size']
-            tmp = a.config.backend.zeros(size, dtype=a.yastn_dtype, device=a.device)
+        if not all(meta[k] == d[k] for k in ['type', 'dict_ver', 'config', 'struct', 'trans', 'hfs', 'mfs']):
+            tmp = a.config.backend.zeros(meta['size'], dtype=a.yastn_dtype, device=a.device)
             ap = type(a).from_dict(combine_data_and_meta(tmp, meta))
             try:
                 a = a + ap  # fill-in zero blocks
             except YastnError as e:
                 raise YastnError("Tensor is inconsistent with meta: " + str(e))
             d = a.to_dict(level=level)
-            if not all(meta[k] == d[k] for k in ['type', 'dict_ver', 'config', 'struct', 'slices', 'isdiag', 'hfs', 'mfs']):
+            if not all(meta[k] == d[k] for k in ['type', 'dict_ver', 'config', 'struct', 'trans', 'hfs', 'mfs']):
                 raise YastnError("Tensor is inconsistent with meta.")
     return d
 
 
-def save_to_dict(a) -> dict:
-    r"""
-    Export YASTN tensor to dictionary containing all the information needed to recreate the tensor.
+# def save_to_hdf5(a, file, path) -> None:
+#     """
+#     Export tensor into hdf5 type file.
 
-    Allows saving the tensor, e.g., with :func:`numpy.save`.
+#     Complementary function is :meth:`yastn.load_from_hdf5`.
 
-    Complementary function is :meth:`yastn.load_from_dict`.
-
-    !!! This method is deprecated; use to_dict(). !!!
-
-    Parameters
-    ----------
-    a: yastn.Tensor
-        tensor to export.
-    """
-    warn('This method is deprecated; use to_dict() instead.', DeprecationWarning, stacklevel=2)
-    a = a.consume_transpose()
-    _d = a.config.backend.to_numpy(a._data).copy()
-    hfs = [hf._asdict() for hf in a.hfs]
-    return {'type': type(a).__name__,
-            '_d': _d, 's': a.struct.s, 'n': a.struct.n,
-            't': a.struct.t, 'D': a.struct.D, 'isdiag': a.isdiag,
-            'mfs': a.mfs, 'hfs': hfs,
-            'SYM_ID': a.config.sym.SYM_ID, 'fermionic': a.config.fermionic}
-
-
-def save_to_hdf5(a, file, path) -> None:
-    """
-    Export tensor into hdf5 type file.
-
-    Complementary function is :meth:`yastn.load_from_hdf5`.
-
-    Parameters
-    ----------
-    a : yastn.Tensor
-        tensor to export.
-    """
-    a = a.consume_transpose()
-    _d = a.config.backend.to_numpy(a._data)
-    hfs = tuple(tuple(hf) for hf in a.hfs)
-    file.create_dataset(path+'/isdiag', data=[int(a.isdiag)])
-    file.create_group(path+'/mfs/'+str(a.mfs))
-    file.create_group(path+'/hfs/'+str(hfs))
-    file.create_dataset(path+'/n', data=a.struct.n)
-    file.create_dataset(path+'/s', data=a.struct.s)
-    file.create_dataset(path+'/ts', data=a.struct.t)
-    file.create_dataset(path+'/Ds', data=a.struct.D)
-    file.create_dataset(path+'/matrix', data=_d)
+#     Parameters
+#     ----------
+#     a : yastn.Tensor
+#         tensor to export.
+#     """
+#     a = a.consume_transpose()
+#     _d = a.config.backend.to_numpy(a._data)
+#     hfs = tuple(tuple(hf) for hf in a.hfs)
+#     file.create_dataset(path+'/isdiag', data=[int(a.isdiag)])
+#     file.create_group(path+'/mfs/'+str(a.mfs))
+#     file.create_group(path+'/hfs/'+str(hfs))
+#     file.create_dataset(path+'/n', data=a.struct.n)
+#     file.create_dataset(path+'/s', data=a.struct.s)
+#     file.create_dataset(path+'/ts', data=a.struct.t)
+#     file.create_dataset(path+'/Ds', data=a.struct.D)
+#     file.create_dataset(path+'/matrix', data=_d)
 
 
 ############################
@@ -164,7 +138,7 @@ def save_to_hdf5(a, file, path) -> None:
 ############################
 
 
-def print_properties(a, file=None) -> Never:
+def print_properties(a, file=None):
     """
     Print a number of properties of the tensor:
 
@@ -183,15 +157,15 @@ def print_properties(a, file=None) -> Never:
           ``'p'`` hard-fusion (product), ``'s'`` blocking (sum).
     """
     print("symmetry     :", a.config.sym.SYM_ID, file=file)
-    print("signature    :", a.struct.s, file=file)  # signature
-    print("charge       :", a.struct.n, file=file)  # total charge of tensor
+    print("signature    :", a.s, file=file)  # signature
+    print("charge       :", a.n, file=file)  # total charge of tensor
     print("isdiag       :", a.isdiag, file=file)
     print("dim meta     :", a.ndim, file=file)  # number of meta legs
     print("dim native   :", a.ndim_n, file=file)  # number of native legs
     print("shape meta   :", a.get_shape(native=False), file=file)
     print("shape native :", a.get_shape(native=True), file=file)
-    print("no. blocks   :", len(a.struct.t), file=file)  # number of blocks
-    print("size         :", a.struct.size, file=file)  # total number of elements in all blocks
+    print("no. blocks   :", a.nblocks, file=file)  # number of blocks
+    print("size         :", a.size, file=file)  # total number of elements in all blocks
     st = {i: leg.history() for i, leg in enumerate(a.get_legs())}
     print("legs fusions :", st, "\n", file=file)
 
@@ -200,9 +174,9 @@ def __str__(a) -> str:
     legs = a.get_legs()
     ts = tuple(leg.t for leg in legs)
     Ds = tuple(leg.D for leg in legs)
-    s = f"{a.config.sym.SYM_ID} s= {a.struct.s} n= {a.struct.n}\n"
-    s += f"leg charges  : {ts}\n"
-    s += f"dimensions   : {Ds}"
+    s = f"{a.config.sym.SYM_ID} s= {a.s} n= {a.n}\n"
+    s += f"leg charges : {ts}\n"
+    s += f"dimensions  : {Ds}"
     return s
 
 
@@ -224,7 +198,7 @@ def print_blocks_shape(a, file=None) -> str:
     """
     Print shapes of blocks as a sequence of block's charge followed by its shape.
     """
-    for t, D in zip(a.struct.t, a.struct.D):
+    for t, D in zip(a.get_blocks_charge(), a.get_blocks_shape()):
         print(f"{t} {D}", file=file)
 
 
@@ -248,14 +222,7 @@ def get_signature(a, native=False) -> Sequence[int]:
 
     If ``native=True``, ignore fusion with ``mode=meta`` and return the signature of tensors's native legs, see :attr:`yastn.Tensor.s_n`.
     """
-    if native:
-        return tuple(a.struct.s[ind] for ind in a.trans)
-    else:
-        inds, n = [], 0
-        for mf in a.mfs:
-            inds.append(a.trans[n])
-            n += mf[0]
-        return tuple(a.struct.s[ind] for ind in inds)
+    return a.s_n if native else a.s
 
 
 def get_rank(a, native=False) -> int:
@@ -274,14 +241,18 @@ def get_blocks_charge(a) -> Sequence[Sequence[int]]:
     In case of product of abelian symmetries, for each block the individual symmetry
     charges are flattened into a single tuple.
     """
-    return a.struct.t
+    bl = get_blocks(a.config.sym, a.struct)
+    tset = bl.t[:, a.trans, :].reshape(bl.nblocks, a.ndim_n * a.config.sym.NSYM)
+    return tuple(map(tuple, tset.tolist()))
 
 
 def get_blocks_shape(a) -> Sequence[Sequence[int]]:
     """
     Shapes of all native blocks.
     """
-    return a.struct.D
+    bl = get_blocks(a.config.sym, a.struct)
+    Dset = bl.D[:, a.trans]
+    return tuple(map(tuple, Dset.tolist()))
 
 
 def get_shape(a, axes=None, native=False) ->  int | Sequence[int]:
@@ -295,19 +266,37 @@ def get_shape(a, axes=None, native=False) ->  int | Sequence[int]:
     """
     if axes is None:
         axes = tuple(range(a.ndim_n if native else a.ndim))
+    return_int = False
     if isinstance(axes, int):
-        return sum(a.get_legs(axes, native=native).D)
-    return tuple(sum(leg.D) for leg in a.get_legs(axes, native=native))
+        axes = [axes]
+        return_int = True
+
+    legs_n = []  # native legs
+    legs_m = []  # number of legs forming LegMeta
+    for leg in a.get_legs(axes, native=native):
+        if isinstance(leg, LegMeta):
+            legs_n.extend(leg.legs)
+            legs_m.append(len(leg.legs))
+        else:
+            legs_n.append(leg)
+            legs_m.append(1)
+    Dtot_n = tuple(sum(leg.D) for leg in legs_n)
+    Dtot_a, i = [], 0
+    for dd in legs_m:
+        Dtot_a.append(reduce(mul, Dtot_n[i: i+dd], 1))
+        i += dd
+    Dtot_a = tuple(Dtot_a)
+    return Dtot_a[0] if return_int else Dtot_a
 
 
-def get_dtype(a) -> numpy.dtype | torch.dtype:
+def get_dtype(a) -> 'numpy.dtype' | 'torch.dtype':
     """
     ``dtype`` of tensor data used by the backend.
     """
     return a.config.backend.get_dtype(a._data)
 
 
-def __getitem__(a, key) -> numpy.ndarray | torch.tensor:
+def __getitem__(a, key) -> 'numpy.ndarray' | 'torch.tensor':
     """
     Block corresponding to a given charge combination.
 
@@ -323,26 +312,34 @@ def __getitem__(a, key) -> numpy.ndarray | torch.tensor:
     try:
         key = np.array(key, dtype=np.int64).reshape(a.ndim_n, a.config.sym.NSYM)
         reverse_trans = np.argsort(a.trans)
-        ukey = tuple(key[reverse_trans, :].ravel().tolist())
-        ind = a.struct.t.index(ukey)
+        ukey = key[reverse_trans, :].ravel()
+        bl = get_blocks(a.config.sym, a.struct)
+        ind = find_index(bl.t, ukey, sorted=True)
     except ValueError as exc:
         raise YastnError('Tensor does not have the block specified by key.') from exc
-    x = a._data[slice(*a.slices[ind].slcs[0])]
-    return x if a.isdiag else a.config.backend.permute_dims(x.reshape(a.struct.D[ind]), a.trans)
+    x = a._data[slice(*bl.slc[ind])]
+    return x if a.isdiag else a.config.backend.permute_dims(x, bl.D[ind], a.trans)
 
 
 def __contains__(a, key) -> bool:
     key = tuple(_flatten(key)) if (hasattr(key,'__iter__') or hasattr(key,'__next__')) else (key,)
-    if a.isdiag:
-        return key in a.struct.t or (key+key) in a.struct.t
-    return key in a.struct.t
+    if a.isdiag and len(key) == a.config.sym.NSYM:
+        key = key + key
+    key = np.array(key, dtype=np.int64)
+    try:
+        bl = get_blocks(a.config.sym, a.struct)
+        _ = find_index(bl.t, key, sorted=True)
+        return True
+    except ValueError:
+        return False
+
 
 ##################################################
 #    output tensors info - advanced structure    #
 ##################################################
 
 
-def get_legs(a, axes=None, native=False) -> yastn.Leg | Sequence[yastn.Leg]:
+def get_legs(a, axes=None, native=False) -> Leg | Sequence[Leg]:
     r"""
     Return a leg or a set of legs of the tensor ``a``.
 
@@ -357,8 +354,6 @@ def get_legs(a, axes=None, native=False) -> yastn.Leg | Sequence[yastn.Leg]:
         The default is ``False``.
     """
     legs = []
-    tset = np.array(a.struct.t, dtype=np.int64).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
-    Dset = np.array(a.struct.D, dtype=np.int64).reshape((len(a.struct.D), len(a.struct.s)))
     if axes is None:
         axes = tuple(range(a.ndim if not native else a.ndim_n))
     multiple_legs = hasattr(axes, '__iter__')
@@ -372,16 +367,14 @@ def get_legs(a, axes=None, native=False) -> yastn.Leg | Sequence[yastn.Leg]:
 
         legs_ax = []
         for i in nax:
-            tseta = tset[:, i, :].reshape(len(tset), a.config.sym.NSYM).tolist()
-            Dseta = Dset[:, i].tolist()
-            tDn = {tuple(tn): Dn for tn, Dn in zip(tseta, Dseta)}
-            tDn = dict(sorted(tDn.items()))
-            leg = Leg(a.config, s=a.struct.s[i], t=tuple(tDn.keys()), D=tuple(tDn.values()), hf=a.hfs[i])
+            leg = Leg(a.config, s=a.struct.legs[i].s, t=a.struct.legs[i].t, D=a.struct.legs[i].D, hf=a.hfs[i])
             legs_ax.append(leg)
 
         if not native and a.mfs[ax][0] > 1:
-            tseta = tset[:, nax, :].reshape(len(tset), len(nax) * a.config.sym.NSYM).tolist()
-            Dseta = np.prod(Dset[:, nax], axis=1, dtype=np.int64).tolist()
+            bl = get_blocks(a.config.sym, a.struct)
+
+            tseta = bl.t[:, nax, :].reshape(bl.nblocks, len(nax) * a.config.sym.NSYM).tolist()
+            Dseta = np.prod(bl.D[:, nax], axis=1, dtype=np.int64).tolist()
             tDn = {tuple(tn): Dn for tn, Dn in zip(tseta, Dseta)}
             tDn = dict(sorted(tDn.items()))
             t, D = tuple(tDn.keys()), tuple(tDn.values())
@@ -397,7 +390,7 @@ def get_legs(a, axes=None, native=False) -> yastn.Leg | Sequence[yastn.Leg]:
 #   Down-casting tensors   #
 ############################
 
-def to_dense(a, legs=None, native=False, reverse=False) -> numpy.ndarray | torch.tensor:
+def to_dense(a, legs=None, native=False, reverse=False) -> 'numpy.ndarray' | 'torch.tensor':
     r"""
     Create dense tensor corresponding to the symmetric tensor.
 
@@ -423,11 +416,12 @@ def to_dense(a, legs=None, native=False, reverse=False) -> numpy.ndarray | torch
     """
     c = a.to_nonsymmetric(legs, native, reverse)
     x = c.config.backend.clone(c._data)
-    x = c.config.backend.diag_create(x) if c.isdiag else x.reshape(c.struct.D[0])
+    D = tuple(leg.D[0] for leg in c.struct.legs)
+    x = c.config.backend.diag_create(x) if c.isdiag else x.reshape(D)
     return x
 
 
-def to_numpy(a, legs=None, native=False, reverse=False) -> numpy.ndarray:
+def to_numpy(a, legs=None, native=False, reverse=False) -> 'numpy.ndarray':
     r"""
     Create dense :class:`numpy.ndarray`` corresponding to the symmetric tensor.
     See :func:`yastn.to_dense`.
@@ -435,15 +429,17 @@ def to_numpy(a, legs=None, native=False, reverse=False) -> numpy.ndarray:
     return a.config.backend.to_numpy(a.to_dense(legs, native, reverse))
 
 
-def to_raw_tensor(a) -> numpy.ndarray | torch.tensor:
+def to_raw_tensor(a) -> 'numpy.ndarray' | 'torch.tensor':
     """
     If the symmetric tensor has just a single non-empty block, return raw tensor representing
     that block.
 
     The type of the returned tensor depends on the backend, i.e. ``numpy.ndarray`` or ``torch.tensor``.
     """
-    if len(a.struct.D) == 1:
-        return a._data.reshape(a.struct.D[0])
+    bl = get_blocks(a.config.sym, a.struct)
+    if len(bl.D) == 1:
+        Dblock = tuple(bl.D[0])
+        return a._data.reshape(Dblock)
     raise YastnError('Only tensor with a single block can be converted to raw tensor.')
 
 
@@ -475,7 +471,6 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False) -> 'Tensor':
         values of block's charges.
     """
     config_dense = a.config._replace(sym=sym_none)
-    #
     a = a.consume_transpose()
     #
     legs_a = list(a.get_legs(native=native))
@@ -490,14 +485,22 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False) -> 'Tensor':
         for n, leg in legs_new.items():
             legs_a[n] = leg
 
-    Dtot = tuple(sum(leg.D) for leg in legs_a)
+    legs_n = []  # native legs
+    legs_m = []  # number of legs forming LegMeta
+    for leg in legs_a:
+        if isinstance(leg, LegMeta):
+            legs_n.extend(leg.legs)
+            legs_m.append(len(leg.legs))
+        else:
+            legs_n.append(leg)
+            legs_m.append(1)
 
     if ndim_a == 0:  # scalar
-        meta = [(slice(*sl.slcs[0]), ()) for sl in a.slices]
+        meta = [((0, 1), ())]
     else:
         step = -1 if reverse else 1
         tD = []
-        for leg in legs_a:
+        for leg in legs_n:
             Dlow, tDn = 0, {}
             for tn, Dn in zip(leg.t[::step], leg.D[::step]):
                 Dhigh = Dlow + Dn
@@ -505,28 +508,40 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False) -> 'Tensor':
                 Dlow = Dhigh
             tD.append(tDn)
 
-        axes = tuple((n,) for n in range(ndim_a))
-        if not native:
-            axes = tuple(_unpack_axes(a.mfs, *axes))
+        bl = get_blocks(a.config.sym, a.struct)
+        tset_ax = list(zip(*[bl.t[:, ax, :].reshape(bl.nblocks, a.config.sym.NSYM).tolist() for ax in range(a.ndim_n)]))
+        meta = [(sl, tuple(tDn[tuple(tt)] for tDn, tt in zip(tD, t_ax))) for sl, t_ax in zip(bl.slc, tset_ax)]
 
-        lt, nsym = len(a.struct.t), len(a.struct.n)
-        tset = np.array(a.struct.t, dtype=np.int64).reshape(lt, a.ndim_n, nsym)
-        tset_ax = list(zip(*[tset[:, ax, :].reshape(lt, len(ax) * nsym).tolist() for ax in axes]))
-        meta = [(slice(*t_sl.slcs[0]), tuple(tDn[tuple(tt)] for tDn, tt in zip(tD, t_ax))) for t_sl, t_ax in zip(a.slices, tset_ax)]
+    Dtot_n = tuple(sum(leg.D) for leg in legs_n)
+    Dtot_a, i = [], 0
+    for dd in legs_m:
+        Dtot_a.append(reduce(mul, Dtot_n[i: i+dd], 1))
+        i += dd
+    Dtot_a = tuple(Dtot_a)
 
+    Dtot = Dtot_n if native else Dtot_a
     c_s = a.get_signature(native)
     c_t = ((),)
     c_D = (Dtot,)
 
     if a.isdiag:
         Dtot = Dtot[:1]
+        Dtot_n = Dtot_n[:-1]
         meta = [(sl, D[:1]) for sl, D in meta]
 
-    Dp = reduce(mul, Dtot, 1)
-    c_struct = _struct(s=c_s, n=(), diag=a.isdiag, t=c_t, D=c_D, size=Dp)
-    c_slices = (_slc(((0, Dp),), c_D[0], Dp),)
-    data = a.config.backend.merge_to_dense(a._data, Dtot, meta)
-    return a._replace(config=config_dense, struct=c_struct, slices=c_slices, data=data, mfs=None, hfs=None)
+
+    meta = [list(_flatten(x)) for x in meta]
+    ndim = a.ndim_n - a.isdiag
+    meta = np.array(meta, dtype=np.int64).reshape(len(meta), 2 + 2 * ndim)
+    meta_dt = np.dtype([
+        ('slo', np.int64, (2,)),
+        ('Dss',  np.int64, (ndim, 2))])
+    meta = meta.view(meta_dt).reshape(-1)
+
+    c_legs = legs_from_dict_v2({"s": c_s, "n": (), "t": c_t, "D": c_D})
+    c_struct = _struct(legs=c_legs, n=(), isdiag=a.isdiag)
+    data = a.config.backend.merge_to_dense(a._data, Dtot_n, meta)
+    return a._replace(config=config_dense, struct=c_struct, data=data, mfs=None, hfs=None, trans=None)
 
 
 def zero_of_dtype(a):
@@ -562,7 +577,7 @@ def item(a) -> float:
 
     For empty tensor returns :math:`0`.
     """
-    size = a.size
+    size = a.config.backend.get_size(a._data)
     if size == 1:
         return a.config.backend.item(a._data)
     if size == 0:

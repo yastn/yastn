@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import numpy as np
 from ._mps_obc import Mpo, Mps, MpsMpoOBC
-from ...initialize import load_from_hdf5 as load_from_hdf5_tensor
 from ...initialize import rand
 from ...operators import Qdit
 from ...tensor import Leg, YastnError, gaussian_leg
@@ -121,7 +120,7 @@ def random_mps(I, n=None, D_total=8, sigma=1, distribution=(-1, 1), dtype='float
     I: MpsMpoOBC
         MPS or MPO that defines local Hilbert spaces.
     n: int | tuple[int] | Sequence[number] | Sequence[tulpe[numbers]] | None
-        Total charge of MPS, which equalls the charge on the first virtual leg of MPS.
+        Total charge of MPS, which equals the charge on the first virtual leg of MPS.
         Virtual charge bond dimensions along the MPS are drawn from a normal distribution with specified mean.
         ``n`` can be a list that provides the means for all virtual legs (with zero charge on the last leg).
         If ``n`` is a single charge, the means change linearly along the chain from ``n`` to 0.
@@ -257,49 +256,33 @@ def random_dense_mpo(N, D, d, **kwargs) -> MpsMpoOBC:
     return random_mpo(I, D_total=D)
 
 
-def load_from_dict(config, in_dict) -> MpsMpoOBC:
-    r"""
-    Create MPS/MPO from dictionary.
+# def load_from_hdf5(config, file, my_address) -> MpsMpoOBC:
+#     r"""
+#     Create MPS/MPO from HDF5 file.
 
-    Parameters
-    ----------
-    config: module | _config(NamedTuple)
-        :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
+#     Parameters
+#     ----------
+#     config: module | _config(NamedTuple)
+#         :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
 
-    in_dict: dict
-        dictionary containing serialized MPS/MPO, i.e.,
-        a result of :meth:`yastn.tn.mps.MpsMpoOBC.save_to_dict`.
-    """
-    return MpsMpoOBC.from_dict(in_dict, config)
+#     file: File
+#         A `pointer` to a file opened by the user
 
+#     my_address: str
+#         Name of a group in the file, where the Mps is saved, e.g., './state/'
+#     """
 
-def load_from_hdf5(config, file, my_address) -> MpsMpoOBC:
-    r"""
-    Create MPS/MPO from HDF5 file.
+#     nr_phys = int(file[my_address].get('nr_phys')[()])
+#     N = file[my_address].get('N')
+#     N = len(file[my_address+'/A'].keys()) if N is None else int(N[()])
+#     out_Mps = MpsMpoOBC(N, nr_phys=nr_phys)
 
-    Parameters
-    ----------
-    config: module | _config(NamedTuple)
-        :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
-
-    file: File
-        A `pointer` to a file opened by the user
-
-    my_address: str
-        Name of a group in the file, where the Mps is saved, e.g., './state/'
-    """
-
-    nr_phys = int(file[my_address].get('nr_phys')[()])
-    N = file[my_address].get('N')
-    N = len(file[my_address+'/A'].keys()) if N is None else int(N[()])
-    out_Mps = MpsMpoOBC(N, nr_phys=nr_phys)
-
-    factor = file[my_address].get('factor')
-    if factor:
-        out_Mps.factor = factor[()]
-    for n in range(out_Mps.N):
-        out_Mps.A[n] = load_from_hdf5_tensor(config, file, my_address+'/A/'+str(n))
-    return out_Mps
+#     factor = file[my_address].get('factor')
+#     if factor:
+#         out_Mps.factor = factor[()]
+#     for n in range(out_Mps.N):
+#         out_Mps.A[n] = load_from_hdf5_tensor(config, file, my_address+'/A/'+str(n))
+#     return out_Mps
 
 
 def mps_from_tensor(ten, nr_phys=1, canonize='last', opts_svd=None) -> MpsMpoOBC:

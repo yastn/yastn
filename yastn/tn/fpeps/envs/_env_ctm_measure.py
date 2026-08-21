@@ -24,6 +24,7 @@ from ... import mps
 from ....initialize import rand
 from ....tensor import YastnError, Tensor, tensordot, vdot, split_data_and_meta, combine_data_and_meta, sign_canonical_order
 from ....tensor.oe_blocksparse import contract_with_unroll
+from ....tensor._auxiliary import get_blocks
 
 
 def measure_1site(self, O, site=None) -> dict:
@@ -783,16 +784,17 @@ def _pad_unfused_edge(edge_uf, peps_ket_leg, peps_bra_leg, ket_ax=1, bra_ax=2):
     peps_ket_tD = dict(zip(peps_ket_leg.t, peps_ket_leg.D))
     peps_bra_tD = dict(zip(peps_bra_leg.t, peps_bra_leg.D))
 
-    # Collect existing chi charge pairs
+    # Collect existing chi charge pairs (leg_first: block charges are derived
+    # from the legs via get_blocks; existing_blocks kept as flat charge tuples
+    # to match ts_flat below — set_block ravels ts, so flat form is correct for
+    # any NSYM).
     nsym = edge_uf.config.sym.NSYM
     chi_pairs = set()
-    for block_t in edge_uf.struct.t:
-        charges = tuple(
-            tuple(block_t[ax * nsym:(ax + 1) * nsym]) for ax in range(ndim)
-        )
+    existing_blocks = set()
+    for blk in get_blocks(edge_uf.config.sym, edge_uf.struct).t.tolist():
+        charges = tuple(tuple(c) for c in blk)   # per-native-leg charge tuples
         chi_pairs.add(tuple(charges[ax] for ax in other_axes))
-
-    existing_blocks = set(edge_uf.struct.t)
+        existing_blocks.add(tuple(x for c in charges for x in c))
 
     def _infer_missing_charge(chi_combo, known_charge, known_ax, unknown_ax):
         """Infer the charge on unknown_ax from the symmetry constraint."""

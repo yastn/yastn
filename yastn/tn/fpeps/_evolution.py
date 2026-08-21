@@ -291,7 +291,6 @@ def initial_truncation_ZMT1(R0, R1, fgf, opts_svd, fRR, RRgRR, pinv_cutoffs, pre
     G = tensordot(R1.conj(), G, axes=(1, 1))
     G = tensordot(R0.conj(), G, axes=(0, 1))
     Gremove = G.unfuse_legs(axes=2)
-    Gremove.remove_zero_blocks()
     Gremove = Gremove.fuse_legs(axes=((0, 2), (1, 3)))
     _, S, _ = svd_with_truncation(Gremove, axes=(0, 1), policy='lowrank', D_block=2, D_total=2)
     S = np.diag(S.to_numpy())
@@ -483,7 +482,6 @@ def initial_truncation_ZMT3(R0, R1, fgf, opts_svd:dict, fRR, RRgRR, pinv_cutoffs
     G = tensordot(R1.conj(), G, axes=(1, 1))
     G = tensordot(R0.conj(), G, axes=(0, 1))
     Gremove = G.unfuse_legs(axes=2)
-    Gremove.remove_zero_blocks()
     Gremove = Gremove.fuse_legs(axes=((0, 2), (1, 3)))
     _, S, _ = svd_with_truncation(Gremove, axes=(0, 1), policy='lowrank', D_block=2, D_total=2)
     S = np.diag(S.to_numpy())
@@ -532,7 +530,6 @@ def initial_truncation_ZMT3(R0, R1, fgf, opts_svd:dict, fRR, RRgRR, pinv_cutoffs
 
         D_total = D_total - 1
 
-        R.remove_zero_blocks()
         U, S, Vh = svd_with_truncation(R, sU=R.s[1], D_total=D_total)
         S = S.sqrt()
         U, Vh = S.broadcast(U, Vh, axes=(1, 0))
@@ -778,8 +775,7 @@ def initial_truncation_EAT(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs):
     G = fgf.unfuse_legs(axes=(0, 1))
     #
     # rank-1 approximation
-    Gremove = G.remove_zero_blocks()
-    G0, S, G1 = svd_with_truncation(Gremove, axes=((0, 2), (3, 1)), policy='lowrank', D_block=1, D_total=1)
+    G0, S, G1 = svd_with_truncation(G, axes=((0, 2), (3, 1)), policy='lowrank', D_block=1, D_total=1)
     fid = (S.norm() / G.norm()).item()
     eat_metric_error = (max(0., 1 - fid ** 2)) ** 0.5
     #

@@ -53,7 +53,7 @@ or just clone and add YASTN root to your Python import path to successfully ``im
 
 To enable `cuTensor`-accelerated backend, get `TAPP_torch` via git
 ```
-git submodules update --init --recursive
+git submodule update --init --recursive
 ```
 then go to `third_party\TAPP-torch` and follow installation instructions therein.
 
@@ -81,6 +81,10 @@ To execute the tests on a GPU
 ```
 pytest -v --backend torch --device cuda
 ```
+
+#### Profiling
+
+Inject NVIDIA's Nsight profiling symbols via `YASTN_PROFILE=1` environment variable
 
 ### Citing YASTN
 

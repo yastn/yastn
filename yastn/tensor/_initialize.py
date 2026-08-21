@@ -14,16 +14,15 @@
 # ==============================================================================
 """ Methods creating a new yastn.Tensor """
 import os
-from functools import reduce
-from itertools import product, accumulate
 import warnings
 import numbers
-from operator import mul, itemgetter
+from functools import reduce
+from operator import mul
 
 import numpy as np
 
-from ._auxiliary import _flatten, _slc, _config
-from ._tests import YastnError, _test_tD_consistency, _test_struct_types
+from ._auxiliary import _config, get_blocks, find_index, find_matching_indices
+from ._tests import YastnError
 from ..backend import backend_np
 from ..sym import sym_none, sym_U1, sym_Z2, sym_Z3, sym_U1xU1, sym_U1xU1xZ2
 
@@ -92,10 +91,6 @@ def make_config(**kwargs) -> _config:
             * ``'fuse_to_matrix'`` Tensordot involves suitable permutation of each tensor while performing a fusion of each tensor into a sequence of matrices and calling matrix-matrix multiplication. Postprocessing includes unfusioning the remaining legs in the result, which often copy data adding extra overhead.
             * ``'fuse_contracted'`` Tensordot involves suitable permutation of each tensor while performing a fusion of to-be-contracted legs of each tensor and calling multiplication. It involves a larger number of multiplication calls for smaller objects, but unfusing the legs of the result is not needed.
             * ``'no_fusion'`` Tensordot involves suitable permutation of tensor blocks and calling matrix-matrix multiplication for a potentially large number of small objects. Resulting contributions to new blocks get added. However, overheads of initial fusion (copying data) can sometimes be avoided in this approach.
-    profile : bool
-        If ``True``, enables profiling of tensor operations in backends supporting it.
-        Currently, only PyTorch backend with NVTX support is available.
-        Default is ``False``. If YASTN_PROFILE=1 is set in the environment, overrides this argument to ``True``.
 
     Example
     -------
@@ -109,9 +104,9 @@ def make_config(**kwargs) -> _config:
     elif kwargs["backend"] == 'torch':
         from ..backend import backend_torch
         kwargs["backend"] = backend_torch
-    elif kwargs["backend"] == 'torch_cpp':
-        from ..backend import backend_torch_cpp  # pragma: no cover
-        kwargs["backend"] = backend_torch_cpp  # pragma: no cover
+    elif kwargs["backend"] == 'torch_cutensor':
+        from ..backend import backend_torch_cutensor  # pragma: no cover
+        kwargs["backend"] = backend_torch_cutensor  # pragma: no cover
     elif isinstance(kwargs["backend"], str):
         raise YastnError("backend encoded as string only supports: 'np', 'torch'")
 
@@ -122,12 +117,6 @@ def make_config(**kwargs) -> _config:
             kwargs["sym"] = _syms[kwargs["sym"]]
         except KeyError:
             raise YastnError("sym encoded as string only supports: 'dense', 'Z2', 'Z3', 'U1', 'U1xU1', 'U1xU1xZ2'.")
-
-    if "profile" not in kwargs:
-        try:
-            kwargs["profile"] = bool(int(os.getenv("YASTN_PROFILE","0")))
-        except ValueError:
-            warnings.warn("Environment variable YASTN_PROFILE must be 0 or 1 if set. Using default value 0 (False).")
 
     return _config(**{a: kwargs[a] for a in _config._fields if a in kwargs})
 
@@ -146,16 +135,17 @@ def __setitem__(a, key, newvalue):
     """
     try:
         key = np.array(key, dtype=np.int64).reshape(a.ndim_n, a.config.sym.NSYM)
-        reverse_trans = tuple(np.argsort(a.trans).tolist())
-        ukey = tuple(key[reverse_trans, :].ravel().tolist())
-        ind = a.struct.t.index(ukey)
+        reverse_trans = np.argsort(a.trans)
+        ukey = key[reverse_trans, :].ravel()
+        bl = get_blocks(a.config.sym, a.struct)
+        ind = find_index(bl.t, ukey, sorted=True)
     except ValueError as exc:
-        raise YastnError('Tensor does not have a block specified by the key.') from exc
-    slc = slice(*a.slices[ind].slcs[0])
-    Dt = a.struct.D[ind]
+        raise YastnError('Tensor does not have the block specified by key.') from exc
+    slc = slice(*bl.slc[ind])
+    Dt = bl.D[ind]
     Dr = tuple(Dt[ax] for ax in a.trans)
     if not a.isdiag:
-        newvalue = a.config.backend.permute_dims(newvalue.reshape(Dr), reverse_trans)
+        newvalue = a.config.backend.permute_dims(newvalue, Dr, reverse_trans)
     a._data[slc] = newvalue.reshape(-1)
 
 
@@ -199,10 +189,10 @@ def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
         if a.isdiag and len(D) == 1:
             D = D + D
         D = tuple(x if x else (0,) for x in D)  # replace () with (0,)
+        D = tuple(x if isinstance(x, tuple) else (x,) for x in D)
         if len(D) != a.ndim_n:
             raise YastnError("Number of elements in D does not match tensor rank.")
-        tset = np.zeros((1, a.ndim_n, a.config.sym.NSYM))
-        Dset = np.array(D, dtype=np.int64).reshape(1, a.ndim_n)
+        t = (((),),) * a.ndim_n
     else:  # a.config.sym.NSYM >= 1
         D = (D,) if (a.ndim_n == 1 or a.isdiag) and isinstance(D[0], numbers.Number) else D
         t = (t,) if (a.ndim_n == 1 or a.isdiag) and isinstance(t[0], numbers.Number) else t
@@ -220,41 +210,21 @@ def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
             if len(x) != len(y):
                 raise YastnError("Elements of t and D do not match")
 
-        comb_D = list(product(*D))
-        comb_t = list(product(*t))
-        lcomb_t = len(comb_t)
-        comb_t = list(_flatten(comb_t))
-        comb_t = np.array(comb_t, dtype=np.int64).reshape((lcomb_t, a.ndim_n, a.config.sym.NSYM))
-        comb_D = np.array(comb_D, dtype=np.int64).reshape((lcomb_t, a.ndim_n))
-        ind = np.all(a.config.sym.fuse(comb_t, a.struct.s, 1) == a.struct.n, axis=1)
-        tset = comb_t[ind]
-        Dset = comb_D[ind]
+    legs = []
+    for leg, tt, DD in zip(a.struct.legs, t, D):
+        tt = map(tuple, np.array(tt, dtype=np.int64).reshape(len(tt), a.config.sym.NSYM).tolist())
+        DD = np.array(DD, dtype=np.int64).reshape(len(DD)).tolist()
+        tD = dict(sorted(zip(tt, DD)))
+        legs.append(leg._replace(t=tuple(tD.keys()), D=tuple(tD.values())))
+    struct = a.struct._replace(legs=tuple(legs))
+    bl = get_blocks(a.config.sym, struct)
 
-    # eliminate zero blocks
-    ind_nonzero = np.all(Dset, axis=1)
-    tset = tset[ind_nonzero]
-    Dset = Dset[ind_nonzero]
-
-    if a.isdiag and np.any(Dset[:, 0] != Dset[:, 1]):
+    if a.isdiag and bl.struct.legs[0] != bl.struct.legs[1].conj():
         raise YastnError("Diagonal tensor requires the same bond dimensions on both legs.")
-    Dp = Dset[:, 0] if a.isdiag else np.prod(Dset, axis=1, dtype=np.int64)
-    Dp = Dp.tolist()
-    Dsize = sum(Dp)
 
-    if len(tset) > 0:
-        tset = tset.reshape(len(tset), a.ndim_n * a.config.sym.NSYM).tolist()
-        Dset = Dset.tolist()
-        meta = [(tuple(ts), tuple(Ds), dp) for ts, Ds, dp in zip(tset, Dset, Dp)]
-        meta = sorted(meta, key=itemgetter(0))
-        a_t, a_D, a_Dp = zip(*meta)
-    else:
-        a_t, a_D, a_Dp = (), (), ()
-
-    a.slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(a_Dp), a_Dp, a_D))
-    a.struct = a.struct._replace(t=a_t, D=a_D, size=Dsize)
-    a._data = _init_block(a.config, Dsize, val, dtype=a.yastn_dtype, device=a.device)
-    _test_tD_consistency(a.struct)
-    _test_struct_types(a.struct)
+    a.struct = bl.struct
+    a._data = _init_block(a.config, bl.size, val, dtype=a.yastn_dtype, device=a.device)
+    a.is_consistent()
 
 
 def set_block(a, ts=(), Ds=None, val='zeros'):
@@ -280,23 +250,26 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
         Otherwise any tensor-like format such as nested list, numpy.ndarray, etc.,
         can be used provided it is supported by :doc:`tensor's backend </tensor/configuration>`.
     """
+    if a.trans != tuple(range(a.ndim_n)):
+        raise YastnError("Setting block of transpoded tensor is not supported.")
     ts = np.array(ts, dtype=np.int64).ravel()
-    if a.isdiag and len(ts) == a.config.sym.NSYM:
+    nsym = a.config.sym.NSYM
+    if a.isdiag and len(ts) == nsym:
         ts = np.hstack([ts, ts])
-    if len(ts) != a.ndim_n * a.config.sym.NSYM:
+    if len(ts) != a.ndim_n * nsym:
         raise YastnError('Size of ts is not consistent with tensor rank and the number of symmetry sectors.')
 
-    ats = ts.reshape((1, a.ndim_n, a.config.sym.NSYM))
-    if not np.all(a.config.sym.fuse(ats, a.struct.s, 1) == a.struct.n):
+    ats = ts.reshape((1, a.ndim_n, nsym))
+    if not np.all(a.config.sym.fuse(ats, a.s_n, 1) == a.n):
         raise YastnError('Charges ts are not consistent with the symmetry rules: f(t @ s) == n')
+    ats = ats[0]
 
     ts = tuple(ts.tolist())
+    tss = tuple(ts[i * nsym: (i+1) * nsym] for i in range(a.ndim_n))
 
     if Ds is None:  # attempt to read Ds from existing blocks.
-        ats = ats.tolist()[0]
-        legs = a.get_legs(range(a.ndim_n), native=True)
         try:
-            Ds = tuple(leg.D[leg.t.index(tuple(tl))] for tl, leg in zip(ats, legs))
+            Ds = tuple(leg[tt] for leg, tt in zip(a.struct.legs, tss))
         except ValueError as err:
             raise YastnError('Provided Ds. Cannot infer all bond dimensions from existing blocks.') from err
     else:  # Ds was provided
@@ -309,23 +282,38 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
 
     if a.isdiag and Ds[0] != Ds[1]:
         raise YastnError("Diagonal tensor requires the same bond dimensions on both legs.")
+
+    if any(tt in leg and leg[tt] != DD for leg, tt, DD in zip(a.struct.legs, tss, Ds)):
+        raise YastnError("Provided Ds is not consistent with dimensions of existing legs.")
+
+    #if any(tt not in leg for leg, tt in zip(a.struct.legs, tss)):
+    new_legs = tuple(leg.add_charge(tt, DD) for leg, tt, DD in zip(a.struct.legs, tss, Ds) )
+    embed_(a, new_legs)  # will make a data copy
+
     Dsize = Ds[0] if a.isdiag else reduce(mul, Ds, 1)
-
-    ind = sum(t < ts for t in a.struct.t)
-    ind2 = ind
-    if ind < len(a.struct.t) and a.struct.t[ind] == ts:
-        ind2 += 1
-        a._data = a.config.backend.delete(a._data, a.slices[ind].slcs[0])
-
-    pos = sum(x.Dp for x in a.slices[:ind])
     new_block = _init_block(a.config, Dsize, val, dtype=a.yastn_dtype, device=a.device)
-    a._data = a.config.backend.insert(a._data, pos, new_block)
-    a_t = a.struct.t[:ind] + (ts,) + a.struct.t[ind2:]
-    a_D = a.struct.D[:ind] + (Ds,) + a.struct.D[ind2:]
-    a_Dp = [x.Dp for x in a.slices[:ind]] + [Dsize] + [x.Dp for x in a.slices[ind2:]]
-    a.slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(a_Dp), a_Dp, a_D))
-    a.struct = a.struct._replace(t=a_t, D=a_D, size=sum(a_Dp))
-    _test_tD_consistency(a.struct)
+
+    bl = get_blocks(a.config.sym, a.struct)
+    ind = find_index(bl.t, ats, sorted=True)
+    slc = bl.slc[ind]
+    a.data[slice(*slc)] = new_block
+
+
+def embed_(a, legs_new):
+    bl_old = get_blocks(a.config.sym, a.struct)
+    bl_new = get_blocks(a.config.sym, a.struct._replace(legs=legs_new))
+    ind1, ind2 = find_matching_indices(bl_new.t, bl_old.t)
+    sln, slo = bl_new.slc[ind1], bl_old.slc[ind2]
+    meta = np.column_stack([sln, sln[:, 1] - sln[:, 0], slo, slo[:, 1] - slo[:, 0]])
+    meta_dt = np.dtype([
+        ('sln', np.int64, (2,)),
+        ('Dn', np.int64, (1,)),
+        ('slo', np.int64, (2,)),
+        ('Do', np.int64, (1,))])
+    meta = meta.view(meta_dt).reshape(-1)
+    newdata = a.config.backend.embed_transpose(a.data, [0], meta, bl_new.size)
+    a.struct = bl_new.struct
+    a._data = newdata
 
 
 def _init_block(config, Dsize, val, dtype, device):

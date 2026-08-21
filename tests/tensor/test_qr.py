@@ -26,7 +26,7 @@ def run_qr_combine(a):
 
     def check_diag_R_nonnegative(R):
         """ checks that diagonal of R is selected to be non-negative """
-        for t in R.struct.t:
+        for t in R.get_blocks_charge():
             assert all(R.config.backend.diag_get(R.real()[t]) >= 0)
             assert all(R.config.backend.diag_get(R.imag()[t]) == 0)
 
@@ -91,7 +91,7 @@ def test_qr_Z3(config_kwargs):
         assert yastn.norm(a - Q @ R) < tol  # == 0.0
         assert Q.is_consistent()
         assert R.is_consistent()
-        for t in R.struct.t:
+        for t in R.get_blocks_charge():
             assert all(R.config.backend.diag_get(R.real()[t]) >= 0)
             assert all(R.config.backend.diag_get(R.imag()[t]) == 0)
 
