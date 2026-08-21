@@ -644,6 +644,15 @@ def fp_ctmrg(env: EnvCTM, \
     # Single device: leave ctm_opts_fp untouched (serial path).
     if devices is not None and len(devices) > 1:
         ctm_opts_fp = {**ctm_opts_fp, 'fp_devices': list(devices)}
+    # NOTE order MUST match the backward's gradient order. FixedPoint.backward
+    # returns dA in the order of _psi_data = split_data_and_meta(env.to_dict()['psi']),
+    # which walks _site_data with sorted() keys, i.e. sorted by site2index (the unique
+    # tensor label). ket.sites() instead yields the unique-site *coordinate* order. The
+    # two coincide only when the sorted representatives already run in label order; for
+    # patterns where they don't (e.g. 3x3_2_3_N9_second_shift2) the gradient tuple would
+    # be permuted relative to these leaves -- crashing on a shape mismatch when a permuted
+    # pair differs in block size, or (worse) silently mis-assigning grads when it doesn't.
+    # Order the leaves by site2index so apply-inputs and returned dA are the same layout.
     ket = env.psi.ket
     raw_peps_params= tuple( ket[s]._data for s in sorted(ket.sites(), key=ket.site2index) )
     env, env_t_meta, env_slices, env_1d = FixedPoint.apply(env, ctm_opts_fwd, ctm_opts_fp, devices, *raw_peps_params)
