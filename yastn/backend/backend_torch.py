@@ -32,6 +32,7 @@ from ._backend_torch_backwards import kernel_dot, kernel_transpose_dot_sum, kern
 from ._backend_torch_backwards import kernel_apply_mask, kernel_embed_mask
 from ._backend_torch_backwards import kernel_embed_transpose, kernel_transpose_and_merge, kernel_unmerge
 from ._backend_torch_backwards import kernel_transpose_and_merge_scatter, pack_transpose_and_merge_params
+from ._backend_torch_backwards import kernel_unmerge_scatter
 from ._backend_torch_backwards import kernel_embed_slices
 
 
@@ -775,6 +776,22 @@ def transpose_and_merge(data, order, meta_mrg, size):
 
 
 def unmerge(data, meta, size):
+    r"""
+    Unfuse (split) fused blocks into the 1D buffer. On CPU uses the per-block loop kernel. On GPU
+    uses the gather/index-map kernel by default; env ``YASTN_FUSE_SCATTER_CHUNK`` controls it as in
+    :func:`transpose_and_merge` (unset -> single tile; positive int -> tiled; ``0`` -> force loop).
+    """
+    if data.is_cuda:
+        chunk = _fuse_scatter_chunk()
+        if chunk != 0 and len(meta) > 0:   # 0 forces the loop even on GPU, empty meta is always a loop
+            ndimo = len(meta[0][1])        # len(Dn)
+            # unmerge is the order=identity, source/dest-swapped case of transpose_and_merge; relabel
+            # meta (sln,Dn,slo,Do,sslo) -> merge meta so build_source_to_dest maps each DEST position
+            # to its SOURCE flat index (gather_idx).
+            merge_meta = [(slo, Do, sln, Dn, sslo, Dn) for (sln, Dn, slo, Do, sslo) in meta]
+            params = pack_transpose_and_merge_params(tuple(range(ndimo)), merge_meta, size, data.device)
+            if params['contiguous']:       # dense dest tiles [0,size); else fall back to loop
+                return kernel_unmerge_scatter.apply(data, params, size, chunk)
     return kernel_unmerge.apply(data, meta, size)
 
 

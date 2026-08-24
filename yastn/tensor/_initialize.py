@@ -89,14 +89,14 @@ def make_config(**kwargs) -> _config:
     tensordot_policy: str
         Contraction approach used by :meth:`yastn.tensordot`
 
-            * ``'fuse_to_matrix'`` Tensordot involves suitable permutation of each tensor while performing a fusion of each tensor into a sequence of matrices and calling matrix-matrix multiplication. Postprocessing includes unfusioning the remaining legs in the result, which often copy data adding extra overhead.
+            * ``'fuse_to_matrix'`` Tensordot involves suitable permutation of each tensor while performing a fusion of each tensor into a sequence of matrices and calling matrix-matrix multiplication. Postprocessing includes unfusing the remaining legs in the result, which often copy data adding extra overhead.
             * ``'fuse_contracted'`` Tensordot involves suitable permutation of each tensor while performing a fusion of to-be-contracted legs of each tensor and calling multiplication. It involves a larger number of multiplication calls for smaller objects, but unfusing the legs of the result is not needed.
             * ``'no_fusion'`` Tensordot involves suitable permutation of tensor blocks and calling matrix-matrix multiplication for a potentially large number of small objects. Resulting contributions to new blocks get added. However, overheads of initial fusion (copying data) can sometimes be avoided in this approach.
 
     lazy_threshold: float = 0 if backend is cuTensor, else 0.5
         Not all symmetry-allowed blocks need to be present in "lazy" tensor. Hence, when computing a contractions with "lazy" tensors,
         not all blocks allowed by the symmetry need to exist in the resulting tensor.
-        If the fraction (retained blocks / all allowed blocks)  > ``lazy_threshold``, then blocks are initialized lazily,
+        If the fraction (retained blocks / all allowed blocks) < ``lazy_threshold``, then blocks are initialized lazily,
         i.e., only when they are needed. On ``cuTensor`` backend, defaults to 0, otherwise 0.5
         Impact:
             Decreases memory usage and flop count in contractions. The block-sparsity algebra is more expensive.

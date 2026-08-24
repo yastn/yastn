@@ -551,3 +551,42 @@ class kernel_unmerge(torch.autograd.Function):
         for sln, Dn, slo, Do, sslo in ctx.meta:
             data_in_b[slo].view(Do)[sslo] = data_out_b[sln].view(Dn)
         return data_in_b, None, None
+
+
+class kernel_unmerge_scatter(torch.autograd.Function):
+    r"""
+    Index-map variant of :class:`kernel_unmerge`. Unmerge is a pure dest->source gather (no permute,
+    dense dest), so a single ``data_in[gather_idx]`` replaces the per-block sub-block-copy loop. The
+    index is built on the fly on the GPU (uncached) by reusing :func:`build_source_to_dest` with a
+    meta relabeled to the ``order = identity`` case (see ``backend_torch.unmerge``). ``chunk`` tiles
+    the dest range so the transient int64 index buffer is bounded by ``chunk`` rather than ``size_out``.
+    """
+    @staticmethod
+    def forward(data_in, params, size_out, chunk):
+        data_out = torch.empty((size_out,), dtype=data_in.dtype, device=data_in.device)
+        dev = data_in.device
+        step = size_out if not chunk else chunk
+        for lo in range(0, size_out, step):
+            hi = min(lo + step, size_out)
+            gidx = build_source_to_dest(params, lo, hi, dev)   # dest [lo,hi) -> source flat index
+            data_out[lo:hi] = data_in[gidx]
+        return data_out
+
+    @staticmethod
+    def setup_context(ctx, inputs, output):
+        data_in, params, _, chunk = inputs
+        ctx.params = params
+        ctx.chunk = chunk
+        ctx.size_in = data_in.numel()
+
+    @staticmethod
+    def backward(ctx, data_out_b):
+        params, chunk, dev = ctx.params, ctx.chunk, data_out_b.device
+        size_out = data_out_b.numel()
+        data_in_b = torch.zeros((ctx.size_in,), dtype=data_out_b.dtype, device=dev)
+        step = size_out if not chunk else chunk
+        for lo in range(0, size_out, step):
+            hi = min(lo + step, size_out)
+            gidx = build_source_to_dest(params, lo, hi, dev)   # adjoint of a gather = scatter-add
+            data_in_b.scatter_add_(0, gidx, data_out_b[lo:hi])
+        return data_in_b, None, None, None
