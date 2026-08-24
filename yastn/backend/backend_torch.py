@@ -13,6 +13,8 @@
 # limitations under the License.
 # ==============================================================================
 """Support of torch as a data structure used by yastn."""
+import os
+import warnings
 from itertools import groupby
 from functools import reduce
 import numpy as np
@@ -29,6 +31,7 @@ from ._backend_torch_backwards import kernel_svd, kernel_svds_scipy
 from ._backend_torch_backwards import kernel_dot, kernel_transpose_dot_sum, kernel_negate_blocks
 from ._backend_torch_backwards import kernel_apply_mask, kernel_embed_mask
 from ._backend_torch_backwards import kernel_embed_transpose, kernel_transpose_and_merge, kernel_unmerge
+from ._backend_torch_backwards import kernel_transpose_and_merge_scatter, pack_transpose_and_merge_params
 from ._backend_torch_backwards import kernel_embed_slices
 
 
@@ -736,7 +739,38 @@ def embed_slices(data, meta, size):
    return kernel_embed_slices.apply(data, meta, size)
 
 
+def _fuse_scatter_chunk():
+    r"""
+    Read env ``YASTN_FUSE_SCATTER_CHUNK`` controlling the GPU ``transpose_and_merge`` path:
+    unset -> ``None`` (scatter, single tile); ``0`` -> force the per-block loop even on GPU;
+    a positive int -> scatter with that tile size. Invalid values warn and are ignored (``None``).
+    """
+    env = os.environ.get('YASTN_FUSE_SCATTER_CHUNK')
+    if env is None:
+        return None
+    try:
+        val = int(env)
+    except ValueError:
+        val = -1
+    if val < 0:
+        warnings.warn(f"Ignoring YASTN_FUSE_SCATTER_CHUNK={env!r}: expected a non-negative integer.")
+        return None
+    return val   # 0 => force loop; positive => scatter tile size
+
+
 def transpose_and_merge(data, order, meta_mrg, size):
+    r"""
+    Transpose-and-merge source blocks into the fused 1D buffer. On CPU uses the per-block loop
+    kernel. On GPU uses the scatter/index-map kernel by default; env ``YASTN_FUSE_SCATTER_CHUNK``
+    controls it: unset -> single-tile scatter; positive int -> tiled scatter that bounds the
+    transient index buffer; Partial coverage (source blocks not tiling ``[0, size)``) is handled inside the kernel 
+    via a sentinel sink. ``0`` -> force the loop even on GPU. 
+    """
+    if data.is_cuda:
+        chunk = _fuse_scatter_chunk()
+        if chunk != 0 and len(meta_mrg)>0:   # 0 forces the loop even on GPU, empty meta_mrg is always a loop
+            params = pack_transpose_and_merge_params(order, meta_mrg, data.numel(), data.device)
+            return kernel_transpose_and_merge_scatter.apply(data, params, size, chunk)
     return kernel_transpose_and_merge.apply(data, order, meta_mrg, size)
 
 

@@ -18,6 +18,8 @@ from typing import Sequence
 import numpy as np
 import torch
 
+from .._profile import nsys_profile
+
 from .linalg.torch_svd_gesdd import SVDGESDD
 from .linalg.torch_svds_scipy import SVDS_SCIPY
 # from .linalg.torch_eig_arnoldi import SYMARNOLDI, SYMARNOLDI_2C
@@ -386,6 +388,146 @@ class kernel_transpose_and_merge(torch.autograd.Function):
         for sln, Dn, slo, Do, ssln, _ in ctx.meta:
             inv_Do = tuple(Do[n] for n in ctx.order)
             data_in_b[slo].view(Do)[:] = data_out_b[sln].view(Dn)[ssln].view(inv_Do).permute(inv_order)
+        return data_in_b, None, None, None
+
+
+def _strides1(D):
+    r"""Row-major inner strides: out[d] = prod(D[d+1:]); out[-1] == 1."""
+    out = [1] * len(D)
+    acc = 1
+    for d in range(len(D) - 1, -1, -1):
+        out[d] = acc
+        acc *= D[d]
+    return out
+
+
+@nsys_profile
+def pack_transpose_and_merge_params(order, meta, size_in, device):
+    r"""
+    Precompute small per-block parameter tensors for the scatter/index-map variant of
+    ``transpose_and_merge``. ``order`` is the single global permutation shared by all blocks,
+    so each source element's destination flat index is pure integer arithmetic.
+
+    Blocks are sorted by their source start so that ``searchsorted`` maps a global source
+    position to its block. ``params['contiguous']`` records whether the source blocks tile
+    ``[0, size_in)`` exactly. When they do not (e.g. the sub-legs ``struct_sub`` path of
+    ``_fuse_blocks``, which fuses only a subset of source blocks), some source positions belong
+    to no block; :class:`kernel_transpose_and_merge_scatter` then routes those to a sentinel sink.
+    """
+    if not meta:
+        return None
+    order = tuple(order)
+    inv_order = tuple(int(x) for x in np.argsort(order))
+    ndimo = len(order)
+    ndimn = len(meta[0][1])
+
+    rows = []
+    for sln, Dn, slo, Do, ssln, Dns in meta:
+        sDo1 = _strides1(Do)
+        sP1 = _strides1(tuple(Do[o] for o in order))          # strides of permuted source shape
+        wperm = [sP1[inv_order[d]] for d in range(ndimo)]     # weight of X[d] in i_perm
+        rows.append((slo.start, slo.stop, list(Do), wperm, sDo1,
+                     list(Dns), _strides1(Dns), [s.start for s in ssln], _strides1(Dn), sln.start))
+    rows.sort(key=lambda r: r[0])
+
+    covered, contiguous = 0, True                             # do the source blocks tile [0, size_in)?
+    for r in rows:
+        if r[0] != covered:
+            contiguous = False
+            break
+        covered = r[1]
+    contiguous = contiguous and covered == size_in
+
+    col = lambda i: torch.tensor([r[i] for r in rows], dtype=torch.int64, device=device)
+    return {'ndimo': ndimo, 'ndimn': ndimn, 'contiguous': contiguous,
+            'slo_start': col(0), 'slo_stop': col(1),
+            'Do': col(2), 'wperm': col(3), 'sDo1': col(4),
+            'Dns': col(5), 'sDns1': col(6), 'ssln_start': col(7), 'sDn1': col(8),
+            'sln_start': col(9)}
+
+
+@nsys_profile
+def build_source_to_dest(params, lo, hi, device, sentinel=None):
+    r"""
+    Vectorized destination flat index for source positions ``[lo, hi)`` (int64, on ``device``).
+
+    With ``sentinel is None`` (contiguous coverage) every position lands in a block. With an int
+    ``sentinel`` (partial coverage) source positions that fall in a gap between blocks are routed
+    to ``sentinel`` (the caller's sink slot) rather than a wrong block.
+    """
+    ndimo, ndimn = params['ndimo'], params['ndimn']
+    g = torch.arange(lo, hi, dtype=torch.int64, device=device)
+    b = torch.searchsorted(params['slo_start'], g, right=True) - 1
+    bc = b.clamp_min(0) if sentinel is not None else b        # keep gather indices valid for gaps
+
+    Do, wperm, sDo1 = params['Do'][bc], params['wperm'][bc], params['sDo1'][bc]
+    Dns, sDns1 = params['Dns'][bc], params['sDns1'][bc]
+    ssln_start, sDn1 = params['ssln_start'][bc], params['sDn1'][bc]
+
+    l = g - params['slo_start'][bc]
+    i_perm = torch.zeros_like(g)                              # decode Do, permute, reshape(Dns)
+    for d in range(ndimo):
+        i_perm += ((l // sDo1[:, d]) % Do[:, d]) * wperm[:, d]
+
+    i_dest = params['sln_start'][bc].clone()                  # reshape(Dns) -> +ssln offset -> encode Dn
+    for e in range(ndimn):
+        i_dest += ((i_perm // sDns1[:, e]) % Dns[:, e] + ssln_start[:, e]) * sDn1[:, e]
+
+    if sentinel is not None:                                  # gap elements -> sink
+        in_block = (b >= 0) & (g < params['slo_stop'][bc])
+        i_dest = torch.where(in_block, i_dest, i_dest.new_full((), sentinel))
+    return i_dest
+
+
+class kernel_transpose_and_merge_scatter(torch.autograd.Function):
+    r"""
+    Index-map variant of :class:`kernel_transpose_and_merge`. Collapses the per-block permute-copy
+    loop into a single ``scatter_`` driven by a source->destination index map built on the fly on
+    the GPU (uncached). ``chunk`` tiles the source range so the transient int64 index buffer is
+    bounded by ``chunk`` rather than ``size_in`` (``None`` => single tile over the whole array).
+
+    When ``params['contiguous']`` is ``False`` (partial coverage, e.g. the sub-legs contraction
+    path) source positions with no destination are routed to a one-element sink appended to the
+    output; the sink is dropped on return and contributes zero gradient.
+    """
+    @staticmethod
+    @nsys_profile("kernel_transpose_and_merge_scatter")
+    def forward(data_in, params, size_out, chunk):
+        size_in, dev = data_in.numel(), data_in.device
+        contiguous = params['contiguous']
+        sentinel = None if contiguous else size_out           # gaps -> sink slot at index size_out
+        data_out = torch.zeros((size_out + (0 if contiguous else 1),),
+                               dtype=data_in.dtype, device=dev)
+        step = size_in if not chunk else chunk
+        for lo in range(0, size_in, step):
+            hi = min(lo + step, size_in)
+            s2d = build_source_to_dest(params, lo, hi, dev, sentinel)
+            data_out.scatter_(0, s2d, data_in[lo:hi])
+        return data_out if contiguous else data_out[:size_out]   # slice is a view, no copy
+
+    @staticmethod
+    def setup_context(ctx, inputs, output):
+        data_in, params, size_out, chunk = inputs
+        ctx.params = params
+        ctx.chunk = chunk
+        ctx.size_in = data_in.numel()
+        ctx.size_out = size_out
+
+    @staticmethod
+    def backward(ctx, data_out_b):
+        params, chunk, size_in, dev = ctx.params, ctx.chunk, ctx.size_in, data_out_b.device
+        contiguous, size_out = params['contiguous'], ctx.size_out
+        sentinel = None if contiguous else size_out
+        data_in_b = torch.empty((size_in,), dtype=data_out_b.dtype, device=dev)
+        step = size_in if not chunk else chunk
+        for lo in range(0, size_in, step):
+            hi = min(lo + step, size_in)
+            s2d = build_source_to_dest(params, lo, hi, dev, sentinel)
+            if contiguous:
+                data_in_b[lo:hi] = data_out_b[s2d]           # adjoint of a permutation = gather
+            else:                                            # clamp sentinel in-range, zero gap grads
+                g = data_out_b[s2d.clamp_max(size_out - 1)]
+                data_in_b[lo:hi] = g.masked_fill_(s2d >= size_out, 0)
         return data_in_b, None, None, None
 
 

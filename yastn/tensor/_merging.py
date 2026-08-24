@@ -21,7 +21,7 @@ from operator import itemgetter
 from typing import NamedTuple, TYPE_CHECKING
 
 import numpy as np
-from yastn._profile import nsys_profile
+from .._profile import nsys_profile
 
 from ._auxiliary import _struct, _flatten, _clear_axes, _unpack_legs, get_blocks
 from ._auxiliary import find_matching_indices, get_trimmed_struct, convert_to_tuples_and_slices
