@@ -987,7 +987,8 @@ def _compress_bond_side(i, j, proj_name):
         else: # 'b'
             return ('h', i+1, j), ('h', i, j), 'l'
 
-def _build_separate_unfused(env, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, bl, br, projectors=None):
+def _build_separate_unfused(env, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, bl, br,
+                            projectors=None, probe=None, open_cut=None):
     r"""
     Assemble the full patch tensor network with separate ket and bra
     tensors (5-leg each) per site.
@@ -1001,7 +1002,30 @@ def _build_separate_unfused(env, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, b
     Edge tensors, corners, and boundary bonds are identical to
     ``_build_interleaved_unfused``.
 
-    Returns ``(tn_args, swap_pairs)`` for use with ncon / opt_einsum.
+    Parameters
+    ----------
+    probe : (site, slot, tensor) or None
+        Insert ``tensor`` as a *single* half-projector at ``(site, slot)``,
+        using the same rename + append logic as ordinary ``projectors``
+        entries but without requiring its partner.  The tensor must be in
+        the stored 3-leg projector form ``(env chi, fused ket-D x bra-D,
+        thin)``; it is ``unfuse_legs(axes=(1,))``-ed on insertion.  Used by
+        the randomized range-finding measurement (sketching): the probe is
+        one half of an interior-cut projector pair, the partner side stays
+        open so the contraction returns the window map ``Y = M . Omega``.
+    open_cut : (site, slot) or None
+        Do **not** rename the bond endpoints of this half-projector slot;
+        the would-be-severed labels ``[env_bond, D2_bond+('k',),
+        D2_bond+('b',), ('proj',)+env_bond]`` (from ``_compress_bond_side``)
+        are left open in the network and returned to the caller as the
+        output spec.  When given, the returned tuple becomes
+        ``(tn_args, swap_pairs, open_labels)``; otherwise the existing
+        2-tuple ``(tn_args, swap_pairs)`` (scalar ``()`` output) is kept,
+        so existing callers are untouched.
+
+    Returns ``(tn_args, swap_pairs)`` -- or ``(tn_args, swap_pairs,
+    open_labels)`` when ``open_cut`` is given -- for use with ncon /
+    opt_einsum.
     """
 
     args = []
@@ -1070,6 +1094,44 @@ def _build_separate_unfused(env, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, b
             proj_inserts.append((proj.unfuse_legs(axes=(1,)),
                                  [new_env_bond, new_ket_bond, new_bra_bond,
                                   ('proj',) + env_bond]))
+
+    # --- Probe insertion: one half-projector with no partner required ---
+    # Same rename + append logic as the loop above, but the tensor is given
+    # explicitly (``probe=(site, slot, tensor)``) instead of being read from
+    # ``env.proj``.  Used by the sketching measurement: the probe closes one
+    # side of an interior cut while the partner side is left open (see
+    # ``open_cut``), so a single window contraction returns the cut's map.
+    if probe is not None:
+        probe_site, probe_slot, probe_tensor = probe
+        i, j = probe_site[0] - minx, probe_site[1] - miny
+        env_bond, D2_bond, side = _compress_bond_side(i, j, probe_slot)
+        new_env_bond = env_bond + (side,)
+        new_ket_bond = D2_bond + ('k', side)
+        new_bra_bond = D2_bond + ('b', side)
+
+        i_env, j_env = _bond_endpoint(env_bond, side)
+        i_d2, j_d2 = _bond_endpoint(D2_bond, side)
+        _register_rename((env_bond, i_env, j_env), new_env_bond, probe_slot, probe_site)
+        _register_rename((D2_bond + ('k',), i_d2, j_d2), new_ket_bond, probe_slot, probe_site)
+        _register_rename((D2_bond + ('b',), i_d2, j_d2), new_bra_bond, probe_slot, probe_site)
+
+        proj_inserts.append((probe_tensor.unfuse_legs(axes=(1,)),
+                             [new_env_bond, new_ket_bond, new_bra_bond,
+                              ('proj',) + env_bond]))
+
+    # --- Open-cut output spec: labels left open at a half-projector slot ---
+    # No rename is registered for this slot; its bond endpoints keep their
+    # original labels (the severed-bond labels exactly), which become the
+    # network's open output legs.  Together with the probe's thin label
+    # ``('proj',) + env_bond`` these are the 4 output legs of the cut map.
+    open_labels = None
+    if open_cut is not None:
+        open_site, open_slot = open_cut
+        i, j = open_site[0] - minx, open_site[1] - miny
+        env_bond, D2_bond, _side = _compress_bond_side(i, j, open_slot)
+        open_labels = [env_bond, D2_bond + ('k',), D2_bond + ('b',),
+                       ('proj',) + env_bond]
+
     def _tag(label, i, j):
         return rename.get((label, i, j), label)
 
@@ -1189,6 +1251,9 @@ def _build_separate_unfused(env, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, b
     for proj_t, proj_lbls in proj_inserts:
         args += [proj_t, proj_lbls]
 
+    if open_labels is not None:
+        args.append(tuple(open_labels))  # open (non-scalar) output spec
+        return tuple(args), swap_pairs, open_labels
     args.append(())  # scalar output
     return tuple(args), swap_pairs
 
@@ -1546,6 +1611,149 @@ def measure_nsite_numerator_exact_oe(self, *operators, sites, unroll=None, check
         mp_workers_per_device=mp_workers_per_device, mode='numerator',
         projectors=projectors, per_combo_path=per_combo_path,
         combo_path_kwargs=combo_path_kwargs)
+
+
+def measure_nsite_cut_map_oe(self, *operators, sites, probe_site, probe_slot, probe,
+                             open_site, open_slot, projectors=None, unroll=None,
+                             checkpoint_loop=False, optimizer="default", devices=None,
+                             mp_workers_per_device=0, per_combo_path=False,
+                             combo_path_kwargs=None):
+    r"""
+    Contract a 3x3 measurement window with a probe tensor closing one side of
+    an interior cut and the partner side's legs open, returning the cut map
+    ``Y = M . Omega`` as a 4-leg tensor.
+
+    With ``operators`` empty this contracts the norm window; with operators
+    given it contracts the numerator window (fermionic charge swaps included,
+    same as :func:`measure_nsite_numerator_exact_oe`).  The ``probe`` tensor
+    (stored 3-leg projector form: env chi, fused ket-D x bra-D, thin) is
+    inserted at ``(probe_site, probe_slot)`` exactly as one half-projector;
+    the would-be-severed bond labels of ``(open_site, open_slot)`` -- env
+    bond, ``D2_bond + ('k',)``, ``D2_bond + ('b',)`` -- plus the probe's thin
+    label ``('proj',) + env_bond`` are left open in the network and are the 4
+    output legs of the returned tensor (env, ket, bra, thin, in that order).
+    Other interior cuts are compressed by the ordinary ``projectors`` dict.
+
+    Always uses the separate-layers (unfused, ``DoublePepsTensor``) build;
+    the window must be double-layer or an error is raised.
+
+    Parameters
+    ----------
+    operators : Sequence[yastn.Tensor]
+        Local operators to insert (one per site).  Empty contracts the norm
+        window.
+    sites : Sequence[tuple[int, int]]
+        Sites of the window, matching ``operators`` when given.
+    probe_site, probe_slot
+        Lattice site and slot name ('hrt', 'hrb', 'hlt', 'hlb', ...) of the
+        inserted probe.
+    probe : yastn.Tensor
+        Probe tensor in stored 3-leg projector form.
+    open_site, open_slot
+        Lattice site and slot name whose severed-bond labels are left open
+        as the output spec.
+    projectors : dict or None
+        Ordinary ``{site: slot(s)}`` projector dict for the *other* cuts
+        (partner-pair consistency enforced as usual).
+
+    Returns
+    -------
+    yastn.Tensor
+        The 4-leg cut map ``Y``, with leg order (env chi, ket D, bra D, thin).
+    """
+    if sites is None or len(sites) == 0:
+        raise YastnError("measure_nsite_cut_map_oe requires non-empty `sites`.")
+
+    if len(operators) == 0:
+        sign = None
+        ops = {}
+    else:
+        if len(operators) != len(sites):
+            raise YastnError("Number of operators and sites should match.")
+        operators = [op[site] if not isinstance(op, Tensor) else op
+                     for op, site in zip(operators, sites)]
+        sign = sign_canonical_order(*operators, sites=sites, f_ordered=self.f_ordered)
+        ops = {}
+        for n, op in zip(sites, operators):
+            ops[n] = ops[n] @ op if n in ops else op
+
+    minx = min(site[0] for site in sites)
+    miny = min(site[1] for site in sites)
+    maxx = max(site[0] for site in sites)
+    maxy = max(site[1] for site in sites)
+
+    if minx == maxx and self.nn_site((minx, miny), 'b') is None:
+        minx -= 1
+    if miny == maxy and self.nn_site((minx, miny), 'r') is None:
+        miny -= 1
+
+    Nx = maxx - minx + 1
+    Ny = maxy - miny + 1
+
+    tl = Site(minx, miny)
+    tr = Site(minx, maxy)
+    br = Site(maxx, maxy)
+    bl = Site(maxx, miny)
+    window = [Site(x, y) for x in range(minx, maxx + 1)
+                         for y in range(miny, maxy + 1)]
+    tens = {site: self.psi[site] for site in window}
+
+    if not isinstance(tens[tl], DoublePepsTensor):
+        raise YastnError("measure_nsite_cut_map_oe requires separate layers; "
+                         "the window must use DoublePepsTensor.")
+
+    if per_combo_path and combo_path_kwargs is None:
+        combo_path_kwargs = {"optimizer": optimizer}
+
+    def _pc(active_unroll):
+        if per_combo_path and active_unroll:
+            return {"per_combo_path": True, "combo_path_kwargs": combo_path_kwargs}
+        return {}
+
+    translated_unroll = _translate_unroll(unroll, Nx, Ny)
+
+    # insert operators and charge swaps (in-place on DoublePepsTensor)
+    axes_string_x = ['b3', 'k4', 'k1']
+    axes_string_y = ['k2', 'k4', 'b0']
+    for y in range(miny, maxy + 1):
+        for x in range(minx, maxx + 1):
+            site = Site(x, y)
+            if site in ops:
+                tens[site].set_operator_(ops[site])
+                if x > minx:
+                    tens[site].add_charge_swaps_(ops[site].n, axes='k1')
+                    for x1 in range(x - 1, minx, -1):
+                        tens[Site(x1, y)].add_charge_swaps_(
+                            ops[site].n, axes=axes_string_x)
+                    tens[Site(minx, y)].add_charge_swaps_(
+                        ops[site].n, axes=['b3', 'k4'])
+                if y > miny:
+                    tens[Site(minx, y)].add_charge_swaps_(
+                        ops[site].n, axes='b0')
+                    for y1 in range(y - 1, miny, -1):
+                        tens[Site(minx, y1)].add_charge_swaps_(
+                            ops[site].n, axes=axes_string_y)
+                    tens[Site(minx, miny)].add_charge_swaps_(
+                        ops[site].n, axes=['k2', 'k4'])
+
+    try:
+        tn_op, swap_op, open_labels = _build_separate_unfused(
+            self, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, bl, br,
+            projectors=projectors, probe=(probe_site, probe_slot, probe),
+            open_cut=(open_site, open_slot))
+        Y = contract_with_unroll(
+            *tn_op, unroll=translated_unroll, optimizer=optimizer,
+            checkpoint_loop=checkpoint_loop, swap=swap_op, devices=devices,
+            mp_workers_per_device=mp_workers_per_device,
+            **_pc(translated_unroll))
+    finally:
+        for s in window:
+            tens[s].del_operator_()
+            tens[s].del_charge_swaps_()
+
+    if sign is not None:
+        Y = sign * Y
+    return Y
 
 
 def _eval_projectors(env, move, opts_svd):
