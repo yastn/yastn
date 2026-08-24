@@ -1,6 +1,8 @@
 Decompositions of symmetric tensors
 ===================================
 
+The examples below demonstrate common decomposition routines for symmetric tensors.
+
 .. code-block:: python
 
    import yastn
@@ -11,14 +13,16 @@ Decompositions of symmetric tensors
 SVD decompositions and truncation
 ---------------------------------
 
+The example below demonstrates SVD-based decomposition and truncation of a symmetric tensor.
+
 .. literalinclude:: /../../tests/tensor/test_svd.py
-   :pyobject: test_svd_truncate
+   :pyobject: test_svd_truncate_lowrank
 
 
 QR decompositions
 -----------------
 
-The function below takes tensor :code:`a` with 4 legs, decompose it using QR and contracts the resulting Q and R tensors back into :code:`a`.
+The example below takes a tensor :code:`a` with four legs, decomposes it using QR, and contracts the resulting Q and R tensors back into :code:`a`.
 
 .. literalinclude:: /../../tests/tensor/test_qr.py
    :pyobject: run_qr_combine
@@ -27,8 +31,8 @@ The function below takes tensor :code:`a` with 4 legs, decompose it using QR and
 Combining with scipy.sparse.linalg.eigs
 ---------------------------------------
 
-Calculate the dominant eigenvector of a transfer matrix by employing the Krylov-base eigs method available in SciPy.
-Tensor operations can be similarly passed to other SciPy methods, though this is limited to the NumPy backend.
+Calculate the dominant eigenvector of a transfer matrix by employing the Krylov-based eigs method available in SciPy.
+Tensor operations can be passed to other SciPy methods in a similar way, although this is currently limited to the NumPy backend.
 
 .. code-block:: python
 

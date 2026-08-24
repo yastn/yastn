@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-""" yastn.linalg.svd() and truncation of its singular values """
+"""Tests for yastn.linalg.svd() and truncation of its singular values."""
 import os
 from itertools import product
 import numpy as np
@@ -27,7 +27,7 @@ numpy_test = pytest.mark.skipif("'np' not in config.getoption('--backend')",
                                 reason="Limit test to numpy.")
 
 def svd_combine(a):
-    """ decompose and contracts tensor using svd decomposition """
+    """Decompose and contract a tensor using an SVD decomposition."""
     U, S, V = yastn.linalg.svd(a, axes=((3, 1), (2, 0)), sU=-1)
     US = yastn.tensordot(U, S, axes=(2, 0))
     USV = yastn.tensordot(US, V, axes=(2, 0))
@@ -38,7 +38,7 @@ def svd_combine(a):
     onlyS = yastn.linalg.svd(a, axes=((3, 1), (2, 0)), sU=-1, compute_uv=False)
     assert yastn.norm(S - onlyS) < tol
 
-    # changes signature of new leg; and position of new leg
+    # Change the signature of the new leg and its placement.
     U, S, V = yastn.linalg.svd(a, axes=((3, 1), (2, 0)), sU=1, nU=False, Uaxis=0, Vaxis=-1, fix_signs=True)
     US = yastn.tensordot(S, U, axes=(0, 0))
     USV = yastn.tensordot(US, V, axes=(0, 2))
@@ -52,7 +52,7 @@ def svd_combine(a):
 
 @pytest.mark.parametrize('remove_blocks', [0, 5])
 def test_svd_basic(config_kwargs, remove_blocks):
-    """ test svd decomposition for various symmetries """
+    """Test SVD decomposition for various symmetries."""
     # dense
     config_dense = yastn.make_config(sym='none', **config_kwargs)
     a = yastn.rand(config=config_dense, s=(-1, 1, -1, 1), D=[11, 12, 13, 21])
@@ -100,7 +100,7 @@ def test_svd_Z3(config_kwargs):
 
 
 def test_svd_complex(config_kwargs):
-    """ test svd decomposition and dtype propagation """
+    """Test SVD decomposition and dtype propagation."""
     # dense
     config_dense = yastn.make_config(sym='none', **config_kwargs)
     a = yastn.rand(config=config_dense, s=(-1, 1, -1, 1), D=[11, 12, 13, 21], dtype='complex128')
@@ -122,7 +122,7 @@ def test_svd_complex(config_kwargs):
 
 
 def test_svd_transpose_meta(config_kwargs):
-    """ test svd decomposition with meta-fuse and transpose """
+    """Test SVD decomposition with meta-fusion and transposition."""
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1,),
                   t=((0, 1), (0, 1), (0, 1), (0, 1), (0, 1)),
@@ -162,8 +162,8 @@ def test_svd_sparse(config_kwargs):
 
 def test_svd_fix_signs(config_kwargs):
     """
-    Check fixing phases of columns in U.
-    Make largest-magnitude element in each column real and positive
+    Check the fixing of phases of the columns in U.
+    Make the largest-magnitude element in each column real and positive.
     """
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     U = yastn.Tensor(config=config_U1, s=(-1, 1), dtype='complex128')
@@ -191,20 +191,20 @@ def test_svd_fix_signs(config_kwargs):
 
 
 def test_svd_lowrank_basic(config_kwargs):
-    """ check lowrank svd vs full-rank svd with truncation. """
+    """Check low-rank SVD versus full-rank SVD with truncation."""
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     leg = yastn.Leg(config_U1, s=1, t=(0, 1, 2, 3, 4, 5), D=(1, 2, 4, 8, 64, 128))
     config_U1.backend.random_seed(seed=0)  # fix seed for testing
     for dtype in ['float64', 'complex128']:
         a = yastn.rand(config=config_U1, legs=[leg.conj(), leg], dtype=dtype)
         #
-        # fixing singular values for testing;
-        # svd_lowrank might be unstable for random matrices!
+        # Fix the singular values for testing; low-rank SVD can be unstable
+        # for random matrices.
         U, S, V = yastn.linalg.svd(a)
         S = yastn.exp(-S)
         a = U @ (S / S.norm()) @ V
         #
-        # actual test
+        # Run the actual test.
         U1, S1, V1 = yastn.linalg.svd_with_truncation(a, D_block=3, fix_signs=True)
         U2, S2, V2 = yastn.linalg.svd(a, D_block=3, policy='lowrank', fix_signs=True)
         assert (S1 - S2).norm() < tol
@@ -223,7 +223,7 @@ def test_svd_lowrank_basic(config_kwargs):
 
 
 def test_svd_truncate_lowrank(config_kwargs):
-    """ check lowrank combined with truncation. """
+    """Check SVD and lowrank SVD combined with truncation."""
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     legs = [yastn.Leg(config_U1, s=1, t=(0, 1), D=(5, 6)),
             yastn.Leg(config_U1, s=1, t=(-1, 0), D=(5, 6)),
@@ -231,25 +231,32 @@ def test_svd_truncate_lowrank(config_kwargs):
             yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(2, 3, 4))]
     a = yastn.rand(config=config_U1, n=1, legs=legs)
 
+    # Decompose the tensor and build a reference tensor from the factors.
     U, S, V = yastn.linalg.svd(a, axes=((0, 1), (2, 3)), sU=-1)
 
-    # fixing singular values for testing
+    # Fix the singular values explicitly so that truncation behavior is
+    # deterministic and easy to reason about in the test.
     S.set_block(ts=(-2, -2), Ds=4, val=[2**(-ii - 6) for ii in range(4)])
     S.set_block(ts=(-1, -1), Ds=12, val=[2**(-ii - 2) for ii in range(12)])
     S.set_block(ts=(0, 0), Ds=25, val=[2**(-ii - 1) for ii in range(25)])
 
     a = yastn.ncon([U, S, V], [(-1, -2, 1), (1, 2), (2, -3, -4)])
 
+    # First check that global truncation reduces the spectrum to the
+    # requested total bond dimension. Here low-rank SVD driver is used.
     opts = {'tol': 0.01, 'D_block': 100, 'D_total': 12}
     _, S2, _ = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), sU=-1, **opts, policy='lowrank')
     assert S2.get_shape() == (12, 12)
 
+    # Then verify that truncation by charge produces the same result when
+    # the left and right factors are split with different charge conventions.
     opts = {'D_block': {(0,): 2, (-1,): 0}, 'policy': 'lowrank'}
     U1, S1, V1 = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), nU=True, sU=-1, **opts)
     assert S1.get_shape() == (2, 2)
     a1 = U1 @ S1 @ V1
 
-    # truncation by charge requires some care to properly assign charges, given nU and sU.
+    # Truncation by charge requires care when assigning charges to the
+    # new factors, especially for different values of nU and sU.
     opts = {'D_block': {(1,): 2}, 'policy': 'lowrank'}
     U2, S2, V2 = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), nU=False, sU=-1, **opts)
     assert S1.get_shape() == (2, 2)

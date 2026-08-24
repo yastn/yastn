@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-""" yastn.to_dict() yastn.from_dict() yastn.split_data_and_meta()
-    yastn.combine_data_and_meta(), in combination with scipy LinearOperator and eigs """
+"""Tests for yastn.to_dict(), yastn.from_dict(), yastn.split_data_and_meta(), and
+yastn.combine_data_and_meta() together with SciPy's LinearOperator and eigs."""
 import numpy as np
 import pytest
 from scipy.sparse.linalg import eigs, LinearOperator
@@ -34,20 +34,21 @@ def test_eigs_simple(config_kwargs):
     a = yastn.rand(config=config_U1, legs=legs)  # e.g., it could be an MPS tensor
     a, _ = yastn.qr(a, axes=((0, 1), 2), sQ=-1)  # orthonormalize
 
-    # Dense transfer matrix build from a; reference solution
+    # Build the dense transfer matrix from a as a reference solution.
     tm = yastn.ncon([a, a.conj()], [(-1, 1, -3), (-2, 1, -4)])
     tm = tm.fuse_legs(axes=((2, 3), (0, 1)), mode='hard')
     tmn = tm.to_numpy()
     w_ref, v_ref = eigs(tmn, k=1, which='LM')  # use scipy.sparse.linalg.eigs
 
-    # Initializing random tensor matching tm from left.
-    # We add an extra 3-rd leg carrying charges -1, 0, 1
-    # to calculate eigs over those 3 subspaces in one go.
+    # Initialize a random tensor matching the transfer matrix from the left.
+    # Add an extra third leg carrying charges -1, 0, and 1 to solve the
+    # eigensystem over these three subspaces in one go.
     legs = [a.get_legs(0).conj(),
             a.get_legs(0),
             yastn.Leg(a.config, s=1, t=(-1, 0, 1), D=(1, 1, 1))]
     v0 = yastn.rand(config=a.config, legs=legs)
-    # Define a wrapper that goes r1d -> yastn.tensor -> tm @ yastn.tensor -> r1d
+    # Define a wrapper that maps a 1-D vector to a YASTN tensor, applies the
+    # transfer-matrix action, and returns a 1-D vector.
     r1d, meta = yastn.split_data_and_meta(v0.to_dict(level=0), squeeze=True)
     def f(x):
         t = yastn.Tensor.from_dict(yastn.combine_data_and_meta(x, meta))
@@ -55,15 +56,16 @@ def test_eigs_simple(config_kwargs):
         t3, _ = yastn.split_data_and_meta(t2.to_dict(level=0, meta=meta), squeeze=True)
         return t3
     ff = LinearOperator(shape=(len(r1d), len(r1d)), matvec=f, dtype=np.float64)
-    # scipy.sparse.linalg.eigs that goes though yastn symmetric tensor.
+    # Apply SciPy's sparse eigensolver to a YASTN symmetric tensor.
     wa, va1d = eigs(ff, v0=r1d, k=1, which='LM', tol=1e-10)
-    # Transform eigenvectors into yastn tensors
+    # Transform the eigenvectors into YASTN tensors.
     va = [yastn.Tensor.from_dict(yastn.combine_data_and_meta(x, meta)) for x in va1d.T]
-    # We can remove zero blocks now, as there are eigenvectors with well defined charge
-    # (though we might get superposition of symmetry sectors in case of degeneracy).
+    # Remove zero blocks now; some eigenvectors have well-defined charge,
+    # although a superposition of symmetry sectors may appear in degenerate cases.
     va = [x.remove_zero_blocks() for x in va]
 
-    # we can also limit ourselves directly to eigenvectors with desired charge, here n=0.
+    # We can also restrict the search directly to eigenvectors with the desired
+    # charge, here n=0.
     legs = [a.get_legs(0).conj(),
             a.get_legs(0)]
     v0 = yastn.rand(config=a.config, legs=legs, n=0)
@@ -86,7 +88,7 @@ def test_eigs_simple(config_kwargs):
 @numpy_test
 def test_eigs_mismatches(config_kwargs):
     #
-    # here define a problem in a way that there are some mismatches in legs to be resolved
+    # Define a problem such that there are some leg mismatches to be resolved.
     #
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     leg0 = yastn.Leg(config_U1, s=1, t=(-2, -1, 0, 1), D=(1, 2, 3 ,4))
@@ -94,12 +96,12 @@ def test_eigs_mismatches(config_kwargs):
     leg2 = yastn.Leg(config_U1, s=1, t=(-1, 0, 1, 2), D=(2, 3 ,4, 5))
 
     a = yastn.rand(config=config_U1, legs=(leg0, leg1, leg2.conj()), n=0)
-    # will be treated as mps tensor
+    # will be treated as an MPS tensor.
 
     # dense transfer matrix build from a -- here a has some un-matching blocks between first and last legs
     tm = yastn.ncon([a, a], [(-1, 1, -3), (-2, 1, -4)], conjs=(0, 1))
     tm = tm.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
-    # make sure to fill-in zero blocks, as in this example tm is not a square matrix
+    # Make sure to fill in zero blocks, as in this example tm is not a square matrix.
     legs_for_tm = {0: tm.get_legs(1).conj(), 1: tm.get_legs(0).conj()}
     tmn = tm.to_numpy(legs=legs_for_tm)
     wn, vn = eigs(tmn, k=5, which='LM')  # scipy
@@ -116,18 +118,18 @@ def test_eigs_mismatches(config_kwargs):
         return t3
     ff = LinearOperator(shape=(len(r1d), len(r1d)), matvec=f, dtype=np.float64)
 
-    # eigs going though yastn.tensor
+    # Run eigs through the YASTN tensor interface.
     wy1, vy1d = eigs(ff, v0=r1d, k=5, which='LM', tol=1e-10)  # scipy going though yastn.tensor
 
     # transform eigenvectors into yastn tensors
     vy = [yastn.Tensor.from_dict(yastn.combine_data_and_meta(x, meta)) for x in vy1d.T]
-    # remove zero blocks and checks if that was correct
+    # Remove zero blocks and verify that this was done correctly.
     vyr = [yastn.remove_zero_blocks(a, rtol=1e-12) for a in vy]
     assert all((yastn.norm(x - y) < tol for x, y in zip(vy, vyr)))
-    # display charges of eigenvectors (only charge on last leg)
+    # Display the charges of the eigenvectors (only the charge on the last leg).
     print(vy[0].get_legs(2))
     print(vyr[0].get_legs(2))
-    # for others there might be superposition between +1 and -1
+    # For the others, a superposition between +1 and -1 may appear.
 
 
 if __name__ == '__main__':

@@ -1,9 +1,9 @@
 Specifying symmetry
 ===================
 
-YASTN specifies symmetry through any object that is a plain Python module or class which defines
+YASTN specifies symmetry through any object that is a plain Python module or class, which defines
 
-    #. ``SYM_ID`` string label specyfying the symmetry
+    #. ``SYM_ID`` string label specifying the symmetry
 
     #. ``NSYM`` number of elements in the charge vector. For example, NSYM=1
        for :math:`U(1)` or :math:`Z_2` group. For product groups such
