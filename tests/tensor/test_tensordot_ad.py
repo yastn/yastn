@@ -17,6 +17,8 @@ import numpy as np
 import pytest
 import yastn
 
+# On cuda, run every test under scatter / tiled / forced-loop fuse paths (see conftest.py).
+pytestmark = pytest.mark.usefixtures("fuse_scatter_path")
 
 tol = {"float64": 1e-12, "complex128": 1e-12,  #pylint: disable=invalid-name
        "float32": 1e-6, "complex64": 1e-6}  #pylint: disable=invalid-name
@@ -450,6 +452,7 @@ def test_tensordot_fuse_hard_Z2xU1(config_kwargs):
 
 
 @torch_test
+@pytest.mark.exclude_fusion_scatter_tiled
 @pytest.mark.parametrize("dtype", ["float64", "complex128", "float32", "complex64"])
 @pytest.mark.parametrize('remove_blocks', [0, 5])
 def test_tensordot_fuse_hard_gradcheck(config_kwargs, dtype, remove_blocks):
@@ -497,6 +500,7 @@ def test_tensordot_fuse_hard_gradcheck(config_kwargs, dtype, remove_blocks):
 
 
 @torch_test
+@pytest.mark.exclude_fusion_scatter_tiled
 @pytest.mark.parametrize("dtype", ["float64", "complex128", "float32", "complex64"])
 @pytest.mark.parametrize('remove_blocks', [0, 5])
 def test_tensordot_gradcheck(config_kwargs, dtype, remove_blocks):

@@ -18,6 +18,9 @@ import pytest
 import yastn
 import re
 
+# On cuda, run every test under scatter / tiled / forced-loop fuse paths (see conftest.py).
+pytestmark = pytest.mark.usefixtures("fuse_scatter_path")
+
 tol = {"float64": 1e-12, "complex128": 1e-12,  #pylint: disable=invalid-name
        "float32": 1e-5, "complex64": 1e-5}  #pylint: disable=invalid-name
 

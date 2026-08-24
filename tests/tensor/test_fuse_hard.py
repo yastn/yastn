@@ -17,6 +17,9 @@ import numpy as np
 import pytest
 import yastn
 
+# On cuda, run every test under scatter / tiled / forced-loop fuse paths (see conftest.py).
+pytestmark = pytest.mark.usefixtures("fuse_scatter_path")
+
 tol = 1e-10  #pylint: disable=invalid-name
 
 torch_test = pytest.mark.skipif("'torch' not in config.getoption('--backend')",
@@ -476,6 +479,7 @@ def test_fuse_hard_dense(config_kwargs):
 
 
 @torch_test
+@pytest.mark.exclude_fusion_scatter_tiled
 @pytest.mark.parametrize('remove_blocks', [0, 5])
 def test_transpose_and_merge_backward(config_kwargs, remove_blocks):
     import torch
@@ -506,6 +510,7 @@ def test_transpose_and_merge_backward(config_kwargs, remove_blocks):
 
 
 @torch_test
+@pytest.mark.exclude_fusion_scatter_tiled
 @pytest.mark.parametrize('remove_blocks', [0, 5])
 def test_unmerge_backward(config_kwargs, remove_blocks):
     import torch
