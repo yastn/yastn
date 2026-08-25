@@ -1,3 +1,6 @@
+20-07-2026
+- renaming torch_cpp to torch_cutensor backend
+
 24-12-2021
 - is_independent for pytorch backend now compares values of pointers
 

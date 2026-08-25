@@ -84,7 +84,7 @@ def test_syntax_create_empty_tensor_and_fill(config_kwargs):
     # sector 2 on 3rd leg throws an error.
     #
     with pytest.raises(yastn.YastnError,
-                       match="Inconsistent assignment of bond dimension to some charge."):
+                       match="Provided Ds is not consistent with dimensions of existing legs."):
         d.set_block(ts=(2, 1, 2, 1), Ds=(3, 3, 10, 2), val='rand')
 
 
@@ -120,7 +120,7 @@ def test_syntax_basic_algebra(config_kwargs):
     c = yastn.ones(config=config_U1, legs=legs)
 
     with pytest.raises(yastn.YastnError,
-                       match="Bond dimensions do not match."):
+                       match="Bond dimensions of some charges do not match."):
         tensor = a + c
 
     #
@@ -128,7 +128,7 @@ def test_syntax_basic_algebra(config_kwargs):
     # individual operations. This happens for linear combination of multiple tensors
     #
     tensor = yastn.add(a, b, a, b, amplitudes=(1, -1, 2, 1))
-    tensor = yastn.add(a, b, a, b)  # all amplitudes equall to one.
+    tensor = yastn.add(a, b, a, b)  # all amplitudes equal to one.
 
     #
     # element-wise exponentiation, absolute value, reciprocal i.e. x -> 1/x,
@@ -313,8 +313,8 @@ def test_syntax_noDocs(config_kwargs):
         cfg_U1 = yastn.make_config(sym=yastn.sym.sym_U1, backend=yastn.backend.backend_np, default_device=config_U1.default_device)
     elif config_U1.backend.BACKEND_ID == 'torch':
         cfg_U1 = yastn.make_config(sym=yastn.sym.sym_U1, backend=yastn.backend.backend_torch, default_device=config_U1.default_device)
-    elif config_U1.backend.BACKEND_ID == 'torch_cpp':
-        cfg_U1 = yastn.make_config(sym=yastn.sym.sym_U1, backend=yastn.backend.backend_torch_cpp, default_device=config_U1.default_device)
+    elif config_U1.backend.BACKEND_ID == 'torch_cutensor':
+        cfg_U1 = yastn.make_config(sym=yastn.sym.sym_U1, backend=yastn.backend.backend_torch_cutensor, default_device=config_U1.default_device)
     else:
         raise RuntimeError('Unsupported backend')
 
@@ -346,6 +346,7 @@ def test_syntax_noDocs(config_kwargs):
     tensor = a.to(dtype='complex128')
     # get info
     a.print_properties()
+    a.print_blocks_shape()
     a.get_rank()
     a.size
     a.get_tensor_charge()
@@ -358,6 +359,7 @@ def test_syntax_noDocs(config_kwargs):
     a.get_shape(axes=2)
     a.get_dtype()
     a.dtype
+    a.nblocks
 
     # leg retrival
     legs = a.get_legs()

@@ -294,3 +294,137 @@ def _update_AA(env, bd, du, opts, opts_svd, normalize=True, subtract_E=False, pr
     AA, info = expmv(f, AA, du, **opts, normalize=normalize, return_info=True)
     env._temp['expmv_ncv'][ibd] = info['ncv']
     env.bra.post_2site_(AA, bd, opts_svd)
+
+
+def _update_A_Kraus(env, n, K, opts_svdK):
+    """ Updates env.bra[n] by applying Kraus operator K and truncating purification leg. """
+    #
+    tmp = env.bra[n].tensordot(K, axes=(1, 1))
+    tmp = tmp.swap_gate(axes=(0, 4))
+    U, S, _ = tmp.svd_with_truncation(axes=((0, 3, 1), (2, 4)), sU=env.bra[n].s[3], **opts_svdK)
+    env.bra.A[n] = U @ (S / S.norm())
+
+
+def tdvp_Kraus_(psi, H, K,
+          times=(0, 0.1), dt=0.1,
+          opts_expmv=None, opts_svd=None, opts_svdK=None,
+          progressbar=False, yield_initial=False):
+    r"""
+    Combine 2-site TDVP with local application of Kraus operators
+    to simulate Lindbladian dynamics in purification picture.
+
+    Parameters
+    ----------
+    psi: Mps
+        Initial state. It is updated during execution.
+        It is first canonized to the first site, if not provided in such a form.
+        Resulting state is also canonized to the first site.
+
+    H: yastn.tn.mps.MpsMpoOBC | Sequence | Callable
+        Evolution generator given either as (sum of) MPO for time-independent problem
+        or as a function returning (sum of) MPO for time-dependent problem, i.e. ``Callable[[float], Mpo]``
+        or ``Callable[[float], Sequence[Mpo]]``, see :meth:`Env()<yastn.tn.mps.Env>`.
+
+    K: Callable
+        Returns rank-3 tensor combined of Kraus operators for (n, t, dt)
+        where n is the site, t is time, and dt is a time-step
+
+    times: float64 or tuple(float64)
+        Initial and final times; can also provide intermediate times for snapshots returned
+        by the iterator. If only the final time is provided, initial time is set to 0.
+
+    dt: double
+        Time step.
+        It is adjusted down to have an integer number of time-steps to reach the next snapshot.
+
+    opts_expmv: dict
+        Options passed to :meth:`yastn.expmv`, in particular whether `H` is hermitian.
+        Unspecified options use default :meth:`yastn.expmv` settings.
+        If there is information from previous time-steps stored under the hood,
+        the initial guess of the size of krylov space opts_expmv['ncv'] is overriden.
+
+    opts_svd: dict
+        Options passed to :meth:`yastn.linalg.svd` used to truncate virtual MPS spaces.
+
+    opts_svdK: dict
+        Options passed to :meth:`yastn.linalg.svd` used to truncate auxiliary purification spaces.
+
+    progressbar: bool
+        Whether to show the progress bar toward the next snapshot. The default is ``False``.
+
+    yield_initial: bool
+        Whether to yield the initial state before performing evolution. The default is ``False``.
+
+    Returns
+    -------
+    TDVP_out(NamedTuple)
+        NamedTuple with fields:
+
+            * ``ti`` initial time of the time-interval.
+            * ``tf`` current time.
+            * ``time_independent`` whether the Hamiltonian is time-independent.
+            * ``dt`` time-step used.
+            * ``steps`` number of time-steps in the last time-interval.
+    """
+    if opts_svd is None or opts_svdK is None:
+        raise YastnError("TDVP: provide opts_svd and opts_svdK")
+
+    if dt <= 0:
+        raise YastnError('TDVP: dt should be positive.')
+    if not hasattr(times, '__iter__'):
+        times = (0, times)
+    if any(t1 - t0 <= 0 for t0, t1 in zip(times[:-1], times[1:])):
+        raise YastnError('TDVP: times should be an ascending tuple.')
+
+    time_independent = not callable(H)
+
+
+    env = None
+    if yield_initial:
+        yield TDVP_out(times[0], times[0], time_independent, dt, 0)
+    # perform time-steps
+    for t0, t1 in zip(times[:-1], times[1:]):
+        steps = int((t1 - t0 - 1e-12) // dt) + 1
+        t, ds = t0, (t1 - t0) / steps
+        rsteps = tqdm(range(steps), desc="TDVP...", disable=not progressbar)
+        for _ in rsteps:
+            t = t + ds / 2
+            Ht = H if time_independent else H(t)
+            Kt = lambda n, dt: K(n, t, dt)
+            envt = env if time_independent else None
+            _tdvp_sweep_2site_Kraus_(psi, Ht, Kt, ds, envt, opts_expmv, opts_svd, opts_svdK)
+            t = t + ds / 2
+        yield TDVP_out(t0, t, time_independent, ds, steps)
+
+
+def _tdvp_sweep_2site_Kraus_(psi, H, K, dt=0.1, env=None, opts_expmv=None, opts_svd=None, opts_svdK=None):
+    r""" Perform sweep with 2-site TDVP update, see :meth:`tdvp` for description. """
+    #
+    u=1j
+    env, opts = _init_tdvp(psi, H, env, opts_expmv, precompute=False)
+
+    n = psi.first
+    _update_A_Kraus(env, n, K(n, 0.5 * dt), opts_svdK)
+    for n in psi.sweep(to='last', dl=1):
+        _update_AA(env, (n, n + 1), -u * 0.5 * dt, opts, opts_svd)
+        psi.absorb_central_(to='last')
+        env.clear_site_(n, n + 1)
+        env.update_env_(n, to='last')
+        if n + 1 != getattr(psi, 'last'):
+            _update_A(env, n + 1, u * 0.5 * dt, opts)
+        _update_A_Kraus(env, n + 1, K(n + 1, 0.5 * dt), opts_svdK)
+
+    n = psi.last
+    _update_A_Kraus(env, psi.last, K(n, 0.5 * dt), opts_svdK)
+    for n in psi.sweep(to='first', dl=1):
+        _update_AA(env, (n, n + 1), -u * 0.5 * dt, opts, opts_svd)
+        psi.absorb_central_(to='first')
+        env.clear_site_(n, n + 1)
+        env.update_env_(n + 1, to='first')
+        if n != getattr(psi, 'first'):
+            _update_A(env, n, u * 0.5 * dt, opts)
+        _update_A_Kraus(env, n, K(n, 0.5 * dt), opts_svdK)
+
+    env.clear_site_(psi.first)
+    env.update_env_(psi.first, to='first')
+    return env

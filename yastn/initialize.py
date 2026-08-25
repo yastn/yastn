@@ -17,22 +17,20 @@ Methods creating new YASTN tensors from scratch and
 importing tensors from different formats such as 1D + metadata or dictionary representation
 """
 from __future__ import annotations
-from ast import literal_eval
 from dataclasses import dataclass
-from itertools import groupby, accumulate
+from itertools import groupby
 from operator import itemgetter
 
 import numpy as np
 
 from .tensor import Tensor, YastnError, ncon
-from .tensor._auxiliary import _struct, _slc, _clear_axes, _unpack_legs
+from .tensor._auxiliary import _clear_axes, _unpack_legs, get_blocks, find_matching_indices
+from .tensor._legbasic import LegBasic
 from .tensor._legs import Leg, LegMeta, legs_union, _legs_mask_needed
-from .tensor._merging import _Fusion, _embed_tensor, _combine_hfs_sum
+from .tensor._merging import _embed_tensor, _combine_hfs_sum
 from .tensor._tests import _test_can_be_combined
-from ._split_combine_dict import combine_data_and_meta
 
-__all__ = ['rand', 'rand_like', 'randR', 'randC', 'zeros', 'ones', 'eye', 'block',
-           'load_from_dict', 'load_from_hdf5', 'Method']
+__all__ = ['rand', 'rand_like', 'randR', 'randC', 'zeros', 'ones', 'eye', 'block', 'Method']
 
 
 def _fill(config=None, legs=(), n=None, isdiag=False, val='rand', **kwargs):
@@ -267,62 +265,48 @@ def eye(config=None, legs=(), isdiag=True, **kwargs) -> Tensor:
         return tmp.fuse_legs(axes=axes)
     else:
         tmp = _fill(config=config, legs=legs, val='zeros', **kwargs)
-        for t, D in zip(tmp.struct.t, tmp.struct.D):
+        bl = get_blocks(tmp.config.sym, tmp.struct)
+        for t, D in zip(bl.t, bl.D):
             blk = tmp[t]
             for i in range(min(D)):
                 blk[i, i] = 1
         return tmp
 
 
-def load_from_dict(config=None, d=None) -> Tensor:
-    """
-    Create tensor from the dictionary :code:`d`.
+# def load_from_hdf5(config, file, path) -> Tensor:
+#     """
+#     Create tensor from hdf5 file.
 
-    !!! This method is deprecated; use to_dict(). !!!
+#     Parameters
+#     ----------
+#     config: module | _config(NamedTuple)
+#         :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
+#     file:
+#         pointer to opened HDF5 file.
+#     path:
+#         path inside the file which contains the state.
+#     """
+#     g = file.get(path)
+#     c_isdiag = bool(g.get('isdiag')[:][0])
+#     c_n = tuple(g.get('n')[:].tolist())
+#     c_s = tuple(g.get('s')[:].tolist())
+#     c_t = tuple(tuple(x) for x in g.get('ts')[:].tolist())
+#     c_D = tuple(tuple(x) for x in g.get('Ds')[:].tolist())
+#     c_Dp = [x[0] for x in c_D] if c_isdiag else np.prod(c_D, axis=1, dtype=np.int64).tolist()
+#     slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(c_Dp), c_Dp, c_D))
+#     struct = _struct(s=c_s, n=c_n, diag=c_isdiag, t=c_t, D=c_D, size=sum(c_Dp))
+#     legs = legs_from_struct(struct)
+#     struct = _struct(s=c_s, n=c_n, diag=c_isdiag, t=c_t, D=c_D, size=sum(c_Dp), legs=legs)
 
-    Parameters
-    ----------
-    config: module | _config(NamedTuple)
-        :ref:`YASTN configuration <tensor/configuration:yastn  configuration>`
-    d: dict
-        Tensor stored in form of a dictionary. Typically provided by an output
-        of :meth:`yastn.Tensor.save_to_dict`.
-    """
-    return Tensor.from_dict(d, config)
+#     mfs = literal_eval(tuple(file.get(path+'/mfs').keys())[0])
+#     hfs = tuple(_Fusion(*hf) if isinstance(hf, tuple) else _Fusion(**hf) \
+#                 for hf in literal_eval(tuple(g.get('hfs').keys())[0]))
+#     c = Tensor(config=config, struct=struct, slices=slices, mfs=mfs, hfs=hfs)
 
-
-def load_from_hdf5(config, file, path) -> Tensor:
-    """
-    Create tensor from hdf5 file.
-
-    Parameters
-    ----------
-    config: module | _config(NamedTuple)
-        :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
-    file:
-        pointer to opened HDF5 file.
-    path:
-        path inside the file which contains the state.
-    """
-    g = file.get(path)
-    c_isdiag = bool(g.get('isdiag')[:][0])
-    c_n = tuple(g.get('n')[:].tolist())
-    c_s = tuple(g.get('s')[:].tolist())
-    c_t = tuple(tuple(x) for x in g.get('ts')[:].tolist())
-    c_D = tuple(tuple(x) for x in g.get('Ds')[:].tolist())
-    c_Dp = [x[0] for x in c_D] if c_isdiag else np.prod(c_D, axis=1, dtype=np.int64).tolist()
-    slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(c_Dp), c_Dp, c_D))
-    struct = _struct(s=c_s, n=c_n, diag=c_isdiag, t=c_t, D=c_D, size=sum(c_Dp))
-
-    mfs = literal_eval(tuple(file.get(path+'/mfs').keys())[0])
-    hfs = tuple(_Fusion(*hf) if isinstance(hf, tuple) else _Fusion(**hf) \
-                for hf in literal_eval(tuple(g.get('hfs').keys())[0]))
-    c = Tensor(config=config, struct=struct, slices=slices, mfs=mfs, hfs=hfs)
-
-    vmat = g.get('matrix')[:]
-    c._data = c.config.backend.to_tensor(vmat, dtype=vmat.dtype.name, device=c.device)
-    c.is_consistent()
-    return c
+#     vmat = g.get('matrix')[:]
+#     c._data = c.config.backend.to_tensor(vmat, dtype=vmat.dtype.name, device=c.device)
+#     c.is_consistent()
+#     return c
 
 
 def block(tensors, common_legs=None) -> Tensor:
@@ -348,6 +332,7 @@ def block(tensors, common_legs=None) -> Tensor:
     # merge_super_blocks do not perform transpose, so we do it here
     tensors = {k: v.consume_transpose() for k, v in tensors.items()}
     tn0 = next(iter(tensors.values()))  # first tensor; used to initialize new objects and retrieve common values
+    sym = tn0.config.sym
     out_s, = ((),) if common_legs is None else _clear_axes(common_legs)
     out_b = tuple(ii for ii in range(tn0.ndim) if ii not in out_s)
 
@@ -366,22 +351,21 @@ def block(tensors, common_legs=None) -> Tensor:
 
     for tn in tensors.values():
         _test_can_be_combined(tn, tn0)
-        if tn.struct.s != tn0.struct.s:
+        if tn.s_n != tn0.s_n:
             raise YastnError('Signatures of blocked tensors are inconsistent.')
-        if tn.struct.n != tn0.struct.n:
+        if tn.n != tn0.n:
             raise YastnError('Tensor charges of blocked tensors are inconsistent.')
         if tn.isdiag:
             raise YastnError('Block does not support diagonal tensors. Use .diag() first.')
 
     legs_tn = {pa: a.get_legs() for pa, a in tensors.items()}
-    ulegs, legs, hfs, ltDtot, ltDslc = [], [], [], [], []
+    ulegs, legs, hfs, ltDtot, ltDslc, legs_new = [], [], [], [], [], []
     for n in range(tn0.ndim_n):
         legs_n = {}
         for pa, ll in legs_tn.items():
             if pa[n] not in legs_n:
-                legs_n[pa[n]] = [ll[n]]
-            else:
-                legs_n[pa[n]].append(ll[n])
+                legs_n[pa[n]] = []
+            legs_n[pa[n]].append(ll[n])
         legs.append(legs_n)
         legs_n = {p: legs_union(*plegs) for p, plegs in legs_n.items()}
         ulegs.append(legs_n)
@@ -389,43 +373,40 @@ def block(tensors, common_legs=None) -> Tensor:
         hfs.append(_sum_legs_hfs([legs_n[p] for p in pn]))
 
         tpD = sorted((t, p, D) for p, leg in legs_n.items() for t, D in zip(leg.t, leg.D))
-        ltDtot.append({})
-        ltDslc.append({})
+        ltDtot_leg, ltDslc_leg = {}, {}
         for t, gr in groupby(tpD, key=itemgetter(0)):
             Dlow, tpDslc = 0, {}
             for _, p, D in gr:
                 Dhigh = Dlow + D
                 tpDslc[p] = (Dlow, Dhigh)
                 Dlow = Dhigh
-            ltDtot[-1][t] = Dhigh
-            ltDslc[-1][t] = tpDslc
+            ltDtot_leg[t] = Dhigh
+            ltDslc_leg[t] = tpDslc
+        ltDtot.append(ltDtot_leg)
+        ltDslc.append(ltDslc_leg)
+
+        ttn = tuple(sorted(ltDtot_leg.keys()))
+        DDn = tuple(ltDtot_leg[t] for t in ttn)
+        legs_new.append(LegBasic(s=tn0.struct.legs[n].s, t=ttn, D=DDn))
+
+    bl_new = get_blocks(sym, tn0.struct._replace(legs=tuple(legs_new)))
 
     for pa in tensors.keys():
         if any(_legs_mask_needed(ulegs[n][pa[n]], leg) for n, leg in enumerate(legs_tn[pa])):
-            legs_new = {n: legs[pa[n]] for n, legs in enumerate(ulegs)}
-            tensors[pa] = _embed_tensor(tensors[pa], legs_tn[pa], legs_new)
+            legs_embed = {n: legs[pa[n]] for n, legs in enumerate(ulegs)}
+            tensors[pa] = _embed_tensor(tensors[pa], legs_tn[pa], legs_embed)
 
-    # all unique blocks
-    # meta_new = {tind: Dtot};  #meta_block = [(tind, pos, Dslc)]
-    meta_new, meta_block = {}, []
-    nsym = tn0.config.sym.NSYM
+    meta = []
     for pa, a in tensors.items():
-        for tind, slind, Dind in zip(a.struct.t, a.slices, a.struct.D):
-            Dslcs = tuple(tDslc[tind[n * nsym: n * nsym + nsym]][pa[n]] for n, tDslc in enumerate(ltDslc))
-            meta_block.append((tind, slind.slcs[0], Dind, pa, Dslcs))
-            if tind not in meta_new:
-                meta_new[tind] = tuple(tDtot[tind[n * nsym: n * nsym + nsym]] for n, tDtot in enumerate(ltDtot))
+        bl_a = get_blocks(sym, a.struct)
+        indc, inda = find_matching_indices(bl_new.t, bl_a.t)
+        for sln, Dn, ta, sla, Da in zip(bl_new.slc[indc], bl_new.D[indc], bl_a.t[inda], bl_a.slc[inda], bl_a.D[inda]):
+            Dslcs = tuple(tDslc[tuple(ta[n].tolist())][pa[n]] for n, tDslc in enumerate(ltDslc))
+            meta.append((sln, Dn, pa, sla, Da, Dslcs))
 
-    meta_block = tuple(sorted(meta_block, key=itemgetter(0)))
-    meta_new = tuple(sorted(meta_new.items()))
-    c_t = tuple(t for t, _ in meta_new)
-    c_D = tuple(D for _, D in meta_new)
-    c_Dp = np.prod(c_D, axis=1, dtype=np.int64).tolist() if len(c_D) > 0 else ()
-    c_slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(c_Dp), c_Dp, c_D))
-    c_struct = _struct(n=a.struct.n, s=a.struct.s, t=c_t, D=c_D, size=sum(c_Dp))
-    meta_new = tuple((x, y, z.slcs[0]) for x, y, z in zip(c_t, c_D, c_slices))
-    data = tn0.config.backend.merge_super_blocks(tensors, meta_new, meta_block, c_struct.size)
-    return tn0._replace(struct=c_struct, slices=c_slices, data=data, hfs=tuple(hfs))
+    data = tn0.config.backend.merge_super_blocks(tensors, meta, bl_new.size)
+    out = tn0._replace(struct=bl_new.struct, data=data, hfs=tuple(hfs))
+    return out
 
 
 def _sum_legs_hfs(legs):

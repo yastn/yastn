@@ -14,9 +14,9 @@
 # ==============================================================================
 from ._doublePepsTensor import DoublePepsTensor
 from ._evolution import evolution_step_, truncate_, accumulated_truncation_error
-from ._gates_auxiliary import Gate, fkron
+from ._gates_auxiliary import Gate
 from ._geometry import Site, Bond, Lattice, SquareLattice, CheckerboardLattice, RectangularUnitcell, TriangularLattice
-from ._initialize import product_peps, load_from_dict
+from ._initialize import product_peps
 from ._peps import Peps, Peps2Layers, add
 from .gates import Gate_nn, Gate_local
 from .envs._env_ctm import EnvCTM

@@ -24,7 +24,7 @@ following the layout specified by the lattice geometry.
                 phys `4th`  bottom `2nd`
 
 .. autoclass:: yastn.tn.fpeps.Peps
-    :members: copy, clone, shallow_copy, save_to_dict, transfer_mpo
+    :members: copy, clone, shallow_copy, transfer_mpo
 
 
 Initializing product PEPS

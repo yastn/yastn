@@ -173,10 +173,10 @@ class DoublePepsTensor(SpecialTensor):
             raise YastnError("DoublePEPSTensor only supports permutations that retain legs' ordering.")
         return DoublePepsTensor(bra=self.bra, ket=self.ket, trans=axes, op=self.op, swaps=self.swaps)
 
-    # def flip_signature(self):
-    #     r""" Conjugate DoublePepsTensor. """
-    #     op_fs = self.op.flip_signature() if self.op is not None else None
-    #     return DoublePepsTensor(bra=self.bra.flip_signature(), ket=self.ket.flip_signature(), trans=self.trans, op=op_fs, swaps=self.swaps)
+    def flip_signature(self):
+        r""" Conjugate DoublePepsTensor. """
+        op_fs = self.op.flip_signature() if self.op is not None else None
+        return DoublePepsTensor(bra=self.bra.flip_signature(), ket=self.ket.flip_signature(), trans=self.trans, op=op_fs, swaps=self.swaps)
 
     def conj(self):
         r""" Conjugate DoublePepsTensor. """
@@ -217,6 +217,11 @@ class DoublePepsTensor(SpecialTensor):
         """
         op_copy = self.op.copy() if self.op is not None else None
         return DoublePepsTensor(bra=self.bra.copy(), ket=self.ket.copy(), trans=self.trans, op=op_copy, swaps=self.swaps)
+
+    def detach(self):
+        r""" Return a detached DoublePepsTensor with constituent tensors detached from the computational graph. """
+        op_detach = self.op.detach() if self.op is not None else None
+        return DoublePepsTensor(bra=self.bra.detach(), ket=self.ket.detach(), trans=self.trans, op=op_detach, swaps=self.swaps)
 
     def to_dict(self, level=2):
         r""" Serialize DoublePepsTensor into a dictionary. """

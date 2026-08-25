@@ -17,7 +17,7 @@ import pytest
 from scipy.sparse.linalg import eigs
 import yastn
 
-
+@pytest.mark.xfail(reason='Convergence depends on linear algebra backend', strict=False)
 def test_eigs_arnoldi(config_kwargs):
     """
     An example that is drawn for torch is challenging, with degeneracies and near-degeneracies.

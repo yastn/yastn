@@ -85,14 +85,3 @@ Using Python's dictionary
 
 .. literalinclude:: /../../tests/mps/test_save_load.py
         :pyobject: test_save_load_mps_dict
-
-Using HDF5 format
-^^^^^^^^^^^^^^^^^
-
-::
-
-    import os
-    import pytest
-
-.. literalinclude:: /../../tests/mps/test_save_load.py
-        :pyobject: test_save_load_mps_hdf5

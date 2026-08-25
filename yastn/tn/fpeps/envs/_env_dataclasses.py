@@ -78,13 +78,13 @@ class dataclasses_common():
                 tests.append(ta.are_independent(tb) == independent)
         return all(tests)
 
-    def to_dict(self, level=2):
+    def to_dict(self, level=2, resolve_ops=False):
         """ Return a dictionary representation of the object. """
         d = {'type': type(self).__name__,
              'dict_ver': 1}
         for k in fields(self):
             if getattr(self, k.name) is not None:
-                d[k.name] = getattr(self, k.name).to_dict(level=level)
+                d[k.name] = getattr(self, k.name).to_dict(level=level, resolve_ops=resolve_ops)
         return d
 
     @classmethod

@@ -63,6 +63,7 @@ or composition of such operations over several tensors.
 .. autofunction:: yastn.einsum
 .. autofunction:: yastn.ncon
 .. autofunction:: yastn.swap_gate
+.. autofunction:: yastn.fkron
 
 
 Transposition
@@ -73,6 +74,7 @@ See examples at :ref:`examples/tensor/algebra:transposition`.
 .. autofunction:: yastn.transpose
 .. autoproperty:: yastn.Tensor.T
 .. autofunction:: yastn.moveaxis
+.. autoproperty:: yastn.Tensor.H
 
 
 Fusion of legs (reshaping)
@@ -120,10 +122,10 @@ See examples at :ref:`examples/tensor/decomposition:decompositions of symmetric 
 .. autofunction:: yastn.linalg.svd
 .. autofunction:: yastn.linalg.svd_with_truncation
 .. autofunction:: yastn.linalg.qr
+.. autofunction:: yastn.linalg.eig
 .. autofunction:: yastn.linalg.eigh
 .. autofunction:: yastn.linalg.eigh_with_truncation
 .. autofunction:: yastn.linalg.truncation_mask
-.. autofunction:: yastn.linalg.truncation_mask_multiplets
 .. autofunction:: yastn.linalg.entropy
 
 .. _tensor-aux:

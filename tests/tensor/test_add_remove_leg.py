@@ -181,10 +181,10 @@ def test_operators_chain(config_kwargs):
     # special case when there are no blocks in the tensor
     a = yastn.Tensor(config=config, s=(1, -1, 1, -1), n=1)
     a = a.remove_leg(axis=1)
-    assert a.struct.s == (1, 1, -1)
+    assert a.s == (1, 1, -1)
     a = a.remove_leg(axis=1)
-    assert a.struct.s == (1, -1)
-    assert a.struct.n == (1,)
+    assert a.s == (1, -1)
+    assert a.n == (1,)
 
 
 def test_add_leg_exceptions(config_kwargs):

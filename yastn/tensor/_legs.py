@@ -14,19 +14,21 @@
 # ==============================================================================
 """ class yastn.Leg """
 from __future__ import annotations
-from typing import Sequence
+
 from dataclasses import dataclass
 from itertools import product, groupby
 from operator import itemgetter
+from typing import Sequence
 
 import numpy as np
 
 from ._auxiliary import _flatten
-from ._merging import _Fusion, _hfs_union, _combine_hfs_prod, _unfuse_Fusion
+from ._merging import _hfs_union, _combine_hfs_prod, _unfuse_Fusion, _Fusion
 from ._tests import YastnError
 from ..sym import sym_none
 
 __all__ = ['Leg', 'LegMeta', 'legs_union', 'gaussian_leg', 'leg_product', 'undo_leg_product']
+
 
 
 @dataclass(frozen=True, repr=False)

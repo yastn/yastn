@@ -15,8 +15,7 @@
 from __future__ import annotations
 import logging
 import sys
-from typing import NamedTuple, Callable, Sequence
-from warnings import warn
+from typing import NamedTuple, Sequence
 
 from ._env_contractions import identity_boundary, corner2x2, append_vec_tl, append_vec_br
 from ._env_dataclasses import EnvCTM_local, EnvCTM_projectors
@@ -167,8 +166,8 @@ class EnvCTM():
         Data of environment tensors in the new environment is indepedent
         from the originals.
         """
-        #TODO Ket ?
-        env = type(self)(psi=self.psi.bra.to(device=device, dtype=dtype, **kwargs), init=None)
+        #TODO Bra ?
+        env = type(self)(psi=self.psi.ket.to(device=device, dtype=dtype, **kwargs), init=None)
         env.env = self.env.to(device=device, dtype=dtype, **kwargs)
         env.proj = self.proj.to(device=device, dtype=dtype, **kwargs)
         env.X = {k: v.to(device=device, dtype=dtype, **kwargs) for k, v in self.X.items()}
@@ -216,7 +215,7 @@ class EnvCTM():
         self.X = {k: v.detach() for k, v in self.X.items()}
         self.Y = {k: v.detach() for k, v in self.Y.items()}
 
-    def to_dict(self, level=2):
+    def to_dict(self, level=2, resolve_ops=False):
         r"""
         Serialize EnvCTM to a dictionary.
         Complementary function is :meth:`yastn.EnvCTM.from_dict` or a general :meth:`yastn.from_dict`.
@@ -232,7 +231,10 @@ class EnvCTM():
                 'si_Y': [dict(site=tuple(site), pair=pair, tensor=t.to_dict(level=level))
                          for (site, pair), t in self.Y.items()],
                 'si_age': [dict(site=tuple(site), pair=pair, age=age)
-                           for (site, pair), age in self._si_age.items()]}
+                           for (site, pair), age in self._si_age.items()],
+                'psi': self.psi.to_dict(level=level, resolve_ops=resolve_ops),
+                'env': self.env.to_dict(level=level, resolve_ops=resolve_ops),
+                'proj': self.proj.to_dict(level=level, resolve_ops=resolve_ops)}
 
     @classmethod
     def from_dict(cls, d, config=None):
@@ -276,26 +278,6 @@ class EnvCTM():
         self._si_age = {(Site(*x['site']), x['pair']): x['age']
                         for x in d.get('si_age', ())}
 
-    def save_to_dict(self) -> dict:
-        r"""
-        Serialize EnvCTM into a dictionary.
-
-        !!! This method is deprecated; use to_dict() instead !!!
-        """
-        warn('This method is deprecated; use to_dict() instead.', DeprecationWarning, stacklevel=2)
-
-        psi = self.psi
-        if isinstance(psi, Peps2Layers):
-            psi = psi.ket
-
-        d = {'class': type(self).__name__,
-             'psi': psi.save_to_dict(),
-             'data': {}}
-        for site in self.sites():
-            d_local = {dirn: getattr(self[site], dirn).save_to_dict()
-                       for dirn in self[site].fields()}
-            d['data'][site] = d_local
-        return d
 
     def reset_(self, init='rand', leg=None, **kwargs):
         r"""
@@ -617,6 +599,10 @@ class EnvCTM():
             opts_svd['tol'] = 1e-14
 
         checkpoint_move = kwargs.get('checkpoint_move', False)
+        if checkpoint_move == 'reentrant':
+            use_reentrant = True
+        elif checkpoint_move == 'nonreentrant':
+            use_reentrant = False
         for d in moves:
             if checkpoint_move:
                 def f_update_core_(move_d, loc_im, *inputs_t):
@@ -628,10 +614,6 @@ class EnvCTM():
                 if "torch" in env.config.backend.BACKEND_ID:
                     inputs_t, inputs_meta = split_data_and_meta(env.to_dict(level=0))
 
-                    if checkpoint_move == 'reentrant':
-                        use_reentrant = True
-                    elif checkpoint_move == 'nonreentrant':
-                        use_reentrant = False
                     checkpoint_F = env.config.backend.checkpoint
                     out_meta, *out_data = checkpoint_F(f_update_core_, d, inputs_meta, *inputs_t, \
                                       **{'use_reentrant': use_reentrant, 'debug': False})
@@ -938,7 +920,7 @@ class EnvCTM():
                     dict_bond_dimension[site, corners_id[ii]].append(temp_D)
         return [dict_bond_dimension, dict_symmetric_sector]
 
-    def iterate_(env, opts_svd=None, moves='hv', method='2x2 corner', max_sweeps=1, iterator=False, corner_tol=None, truncation_f: Callable = None, **kwargs):
+    def iterate_(env, opts_svd=None, moves='hv', method='2x2 corner', max_sweeps=1, iterator=False, corner_tol=None, **kwargs):
         r"""
         Perform CTMRG updates :meth:`yastn.tn.fpeps.EnvCTM.update_` until convergence.
         Convergence can be measured based on singular values of CTM environment corner tensors.
@@ -980,11 +962,6 @@ class EnvCTM():
             The default is ``None``, in which case convergence is not checked and it is up to user to implement
             convergence check.
 
-        truncation_f:
-            Custom projector truncation function with signature ``truncation_f(S: Tensor)->Tensor``, consuming
-            rank-1 tensor with singular values. If provided, truncation parameters passed to SVD decomposition
-            are ignored.
-
         checkpoint_move: str | bool
             Whether to use checkpointing for the CTM updates. The default is ``False``.
             Otherwise, in case of PyTorch backend it can be set to 'reentrant' for reentrant checkpointing
@@ -1009,7 +986,6 @@ class EnvCTM():
         kwargs["iterator_step"] = kwargs.get("iterator_step", int(iterator))
         if ("checkpoint_move" in kwargs) and ("torch" in env.config.backend.BACKEND_ID):
             assert kwargs["checkpoint_move"] in ['reentrant', 'nonreentrant', False], f"Invalid choice for {kwargs['checkpoint_move']}"
-        kwargs["truncation_f"] = truncation_f
         kwargs["iterator_step"] = kwargs.get("iterator_step", int(iterator))
         tmp = env._ctmrg_iterator_(opts_svd=opts_svd, moves=moves, method=method, max_sweeps=max_sweeps, corner_tol=corner_tol, **kwargs)
         return tmp if kwargs["iterator_step"] else next(tmp)
@@ -1045,11 +1021,15 @@ class EnvCTM():
         """
         Evaluate convergence of CTM by computing the difference of environment corner spectra between consecutive CTM steps.
         """
-        corner_sv = env.calculate_corner_svd()
-        max_dsv = max(spec_diff(history[-1][k], corner_sv[k]) for k in corner_sv) if history else float('Nan')
-        corner_sv['max_dsv'] = max_dsv
-        history.append(corner_sv)
-        converged = (corner_tol is not None) and (max_dsv < corner_tol)
+        if hasattr(corner_tol, '__call__'):
+            converged, history = corner_tol(env, history)
+            max_dsv = 0
+        else:
+            corner_sv = env.calculate_corner_svd()
+            max_dsv = max(spec_diff(history[-1][k], corner_sv[k]) for k in corner_sv) if history else float('Nan')
+            corner_sv['max_dsv'] = max_dsv
+            history.append(corner_sv)
+            converged = (corner_tol is not None) and (max_dsv < corner_tol)
         return converged, max_dsv, history
 
     def is_consistent(env, verbosity = 2):
@@ -1098,7 +1078,9 @@ class EnvCTM():
         return len(not_consistent) == 0
 
     from ._env_ctm_measure import measure_1site, measure_nn, measure_2x2, measure_line, \
-        measure_nsite, measure_2site, measure_nsite_exact, sample, transfer_matrix_spectrum
+        measure_nsite, measure_2site, measure_nsite_exact, measure_nsite_exact_oe, \
+        measure_nsite_norm_exact_oe, measure_nsite_numerator_exact_oe, \
+        sample, transfer_matrix_spectrum
 
 
 def legs_consistent_(out, env_legs, i0, l0, i1, l1):
@@ -1136,7 +1118,7 @@ def update_extended_2x2_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwarg
     use_qr = kwargs.get("use_qr", True)
     kwargs["profiling_mode"]= env.profiling_mode
     psh = env.proj
-    svd_predict_spec= lambda s0,p0,s1,p1,sign: opts_svd.get('D_block', float('inf')) \
+    svd_predict_spec= lambda s0,p0,s1,p1,sign: opts_svd.get('k_block', opts_svd.get('D_block', float('inf'))) \
         if psh is None or (getattr(psh[s0],p0) is None or getattr(psh[s1],p1) is None) else \
         env._partial_svd_predict_spec(getattr(psh[s0],p0).get_legs(-1), getattr(psh[s1],p1).get_legs(-1), sign)
 
@@ -1787,8 +1769,6 @@ def proj_corners(r0, r1, opts_svd, opts_si=None, X=None, Y=None,
     # TODO: r1 matrix is defined as (right, left)
     _validate_ctm_corner_pair(r0, r1)
     opts_svd = dict(opts_svd)
-    if 'truncation_f' in kwargs:
-        opts_svd['mask_f'] = kwargs['truncation_f']
     opts_svd['fix_signs'] = opts_svd.get('fix_signs', True)
     verbosity = opts_svd.get('verbosity', 0)
     # only verbosity from opts_svd is to be passed down to svd_with_truncation
@@ -1826,6 +1806,8 @@ def proj_corners(r0, r1, opts_svd, opts_si=None, X=None, Y=None,
                 r0, r1, X, Y, opts_svd, opts_si)
     elif profiling_mode in ["NVTX",]:
         rr = tensordot(r0, r1, axes=(1, 1))
+    # import pdb; pdb.set_trace()
+    if profiling_mode in ["NVTX",]:
         rr.config.backend.cuda.nvtx.range_push(f"svd_with_truncation")
         u, s, v = rr.svd_with_truncation(axes=(0, 1), sU=r0.s[1], **opts_svd, **kwargs)
         rr.config.backend.cuda.nvtx.range_pop()

@@ -194,16 +194,16 @@ class MpoPBC(_MpsMpoParent):
                0     2        2N-2
 
         """
-        ten = self.factor * self.A[self.first]
+        ten = self.A[self.first]
         if self.N == 1:
-            return ten.trace(axes=(0, 2))
+            return self.factor * ten.trace(axes=(0, 2))
         for n in self.sweep(to='last', df=1):
             ind = n + 1 if self.nr_phys == 1 else 2 * n
             if n == self.last:
                 ten = tensordot(ten, self.A[n], axes=((ind, 0), (0, 2)))
             else:
                 ten = tensordot(ten, self.A[n], axes=(ind, 0))
-        return ten
+        return self.factor * ten
 
 
 class MpsMpoOBC(_MpsMpoParent):

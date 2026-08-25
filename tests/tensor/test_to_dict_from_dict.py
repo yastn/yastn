@@ -12,14 +12,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-""" Tensor.to_dict() Tensor.from_dict() yastn.save_to_hdf5() yastn.load_from_hdf5(). """
+""" Tensor.to_dict() Tensor.from_dict() """
 import os
 import numpy as np
 import pytest
 import yastn
 
 
-def test_to_from_dict(config_kwargs):
+def are_identical_tensors(a, b):
+    da, db = a.__dict__, b.__dict__
+    assert da.keys() == db.keys()
+    for k in da:
+        if k != '_data':
+            assert da[k] == db[k]
+    assert type(a.data) == type(b.data)
+    assert np.allclose(a.to_numpy(), b.to_numpy())
+
+
+@pytest.mark.parametrize("resolve_ops", [True,False])
+def test_to_from_dict(resolve_ops, config_kwargs):
     config = yastn.make_config(sym='U1', **config_kwargs)
     legs = [yastn.Leg(config, s=1, t=(0, 1, 2), D= (3, 5, 2)),
             yastn.Leg(config, s=-1, t=(0, 1, 3), D= (1, 2, 3)),
@@ -31,7 +42,7 @@ def test_to_from_dict(config_kwargs):
     a = a.fuse_legs(axes=(0, (1, 2)), mode='meta')
 
     for level, ind in zip([0, 1, 2], [False, False, True]):
-        d = a.to_dict(level=level)
+        d = a.to_dict(level=level,resolve_ops=resolve_ops)
         b = yastn.Tensor.from_dict(d)
         assert b.is_consistent()
 
@@ -50,16 +61,6 @@ def test_to_from_dict(config_kwargs):
         # assert yastn.are_independent(b, c) == ind  # for numpy
         # # assert yastn.are_independent(b, c) == False  # for torch
         # torch.as_tensor and numpy.array have different behavior in creating a copy
-
-
-def are_identical_tensors(a, b):
-    da, db = a.__dict__, b.__dict__
-    assert da.keys() == db.keys()
-    for k in da:
-        if k != '_data':
-            assert da[k] == db[k]
-    assert type(a.data) == type(b.data)
-    assert np.allclose(a.to_numpy(), b.to_numpy())
 
 
 def test_to_dict_embed(config_kwargs):
@@ -112,9 +113,11 @@ def test_to_dict_backward(config_kwargs):
     target_block_size = a[target_block].size()
 
     def test_f(block):
-        a[target_block] = block
+        # a[target_block] = block  # TODO
+        a.set_block(ts=target_block, val=block)
         r1d, _ = yastn.split_data_and_meta(a.to_dict(level=0, meta=meta))
         c = yastn.Tensor.from_dict(yastn.combine_data_and_meta(r1d, meta))
+
         res = c.norm()
         return res
 
@@ -122,12 +125,15 @@ def test_to_dict_backward(config_kwargs):
         a[target_block] = block
         af = a.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
         r1d, _ = yastn.split_data_and_meta(af.to_dict(level=0, meta=metaf))
-        c = yastn.Tensor.from_dict(yastn.combine_data_and_meta(r1d, meta))
+        c = yastn.Tensor.from_dict(yastn.combine_data_and_meta(r1d, metaf))
         res = c.norm()
         return res
 
+    torch.autograd.set_detect_anomaly(True)
+
     op_args = (torch.randn(target_block_size, dtype=a.get_dtype(), requires_grad=True),)
     assert torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4, check_undefined_grad=False)
+
 
     op_args = (torch.randn(target_block_size, dtype=a.get_dtype(), requires_grad=True),)
     assert torch.autograd.gradcheck(test_ff, op_args, eps=1e-6, atol=1e-4, check_undefined_grad=False)
@@ -137,40 +143,40 @@ def check_to_numpy(a1, config):
     """ save/load to numpy and tests consistency."""
     d1 = a1.to_dict()
     a2 = 2 * a1  # second tensor to be saved
-    d2 = a2.save_to_dict()
+    d2 = a2.to_dict()
     data = {'tensor1': d1, 'tensor2': d2}  # two tensors to be saved
     np.save('tmp.npy', data)
     ldata = np.load('tmp.npy', allow_pickle=True).item()
     os.remove('tmp.npy')
 
     b1 = yastn.from_dict(ldata['tensor1'], config=config)
-    b2 = yastn.load_from_dict(d=ldata['tensor2'], config=config)
+    b2 = yastn.from_dict(ldata['tensor2'], config=config)
 
     assert all(yastn.norm(a - b) < 1e-12 for a, b in [(a1, b1), (a2, b2)])
     assert all(b.is_consistent for b in (b1, b2))
     assert all(yastn.are_independent(a, b) for a, b in [(a1, b1), (a2, b2)])
     are_identical_tensors(a1, b1)
-    are_identical_tensors(a2.consume_transpose(), b2)
+    are_identical_tensors(a2, b2)
 
 
-def check_to_hdf5(a, *args):
-    """ Test if two Tensor-s have the same values. """
-    h5py = pytest.importorskip("h5py")
-    try:
-        os.remove("tmp.h5")
-    except OSError:
-        pass
-    with h5py.File('tmp.h5', 'w') as f:
-        a.save_to_hdf5(f, './')
-    with h5py.File('tmp.h5', 'r') as f:
-        b = yastn.load_from_hdf5(a.config, f, './')
-    os.remove("tmp.h5")
-    b.is_consistent()
-    assert yastn.are_independent(a, b)
-    are_identical_tensors(a.consume_transpose(), b)
+# def check_to_hdf5(a, *args):
+#     """ Test if two Tensor-s have the same values. """
+#     h5py = pytest.importorskip("h5py")
+#     try:
+#         os.remove("tmp.h5")
+#     except OSError:
+#         pass
+#     with h5py.File('tmp.h5', 'w') as f:
+#         a.save_to_hdf5(f, './')
+#     with h5py.File('tmp.h5', 'r') as f:
+#         b = yastn.load_from_hdf5(a.config, f, './')
+#     os.remove("tmp.h5")
+#     b.is_consistent()
+#     assert yastn.are_independent(a, b)
+#     are_identical_tensors(a.consume_transpose(), b)
 
 
-@pytest.mark.parametrize("test_f", [check_to_numpy, check_to_hdf5])
+@pytest.mark.parametrize("test_f", [check_to_numpy])  # ,check_to_hdf5
 def test_save_load(config_kwargs, test_f):
     """ test exporting tensor to native python data-structure,
         that allows robust saving/loading with np.save/load."""
@@ -207,6 +213,22 @@ def test_save_load(config_kwargs, test_f):
     a = a.fuse_legs(axes=((0, 2), 1, 3), mode='hard')
     a = a.fuse_legs(axes=((0, 2), 1), mode='meta')
     test_f(a, config_U1)
+
+
+def test_old_to_dict(config_kwargs):
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    for fn in ['inputs/tensor_to_dict_v0.npy',
+               'inputs/tensor_to_dict_v2.npy']:
+        fname = os.path.join(os.path.dirname(__file__), fn)
+        d = np.load(fname, allow_pickle=True).item()
+        a = yastn.from_dict(d['a'], config_U1)
+        U = yastn.from_dict(d['U'], config_U1)
+        S = yastn.from_dict(d['S'], config_U1)
+        V = yastn.from_dict(d['V'], config_U1)
+
+        assert (U @ S @ V - a).norm() < 1e-12
+        SS = a.svd(axes=((0, 1), 2), compute_uv=False)
+        assert (SS - S).norm() < 1e-12
 
 
 def test_to_dict_exceptions(config_kwargs):
@@ -260,7 +282,7 @@ def test_to_dict_exceptions(config_kwargs):
         bf = b.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
         _ = bf.to_dict(meta=af_meta)
     with pytest.raises(yastn.YastnError,
-                       match="Tensor is inconsistent with meta: Bond dimensions do not match."):
+                       match="Tensor is inconsistent with meta: Bond dimensions of some charges do not match."):
         b = yastn.Tensor(config=config_U1, s=(-1, 1, 1, 1))
         b.set_block(ts=(2, 0, 1, 1), Ds=(2, 3, 3, 4))
         _ = b.to_dict(meta=a_meta)

@@ -161,19 +161,6 @@ class EnvBoundaryMPS():
             env.info[k] = v.copy()
         return env
 
-    def save_to_dict(self) -> dict:
-        r"""
-        Serialize EnvBoundaryMPS into a dictionary.
-        """
-        psi = self.psi
-        if isinstance(psi, Peps2Layers):
-            psi = psi.ket
-
-        d = {'class': 'EnvBoundaryMPS', 'psi': psi.save_to_dict()}
-        d['env'] = {k: v.save_to_dict() for k, v in self._env.items()}
-        d['info'] = {k: v.copy() for k, v in self.info.items()}
-        return d
-
     def boundary_mps(self, n, dirn):
         return self._env[n, dirn]
 
@@ -372,7 +359,7 @@ class EnvBoundaryMPS():
             Options passed to :meth:`yastn.linalg.svd` used to truncate virtual spaces of boundary MPSs used in sampling.
             The default is ``None``, in which case take ``D_total`` as the largest dimension from CTM environment.
 
-        opts_svd: dict
+        opts_var: dict
             Options passed to :meth:`yastn.tn.mps.compression_` used in the refining of boundary MPSs.
             The default is ``None``, in which case make 2 variational sweeps.
         """

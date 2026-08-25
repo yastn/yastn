@@ -1,6 +1,0 @@
-See https://docs.pytorch.org/cppdocs/installing.html
-
-Caffe2 uses cmake module FindCUDA (https://cmake.org/cmake/help/latest/module/FindCUDA.html)
-To "guide" it CUDA toolkit installation 
-CUDA_TOOLKIT_ROOT_DIR=<path/to/cuda/toolkit>
-CUDA_BIN_PATH=<path/to/nvcc>

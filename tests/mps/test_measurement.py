@@ -408,14 +408,48 @@ def test_measure_syntax_raises(config_kwargs):
         mps.measure_nsite(psi3, ops.cp(), ket=psi3, sites=(1, 2))
 
 
+@pytest.mark.parametrize("nr_phys", [1, 2])
+def test_rdm(config_kwargs, nr_phys, tol=1e-12):
+    """ Initialize small MPS and measure fermionic correlators. Additionally text measure_2site syntax. """
+
+    ops = yastn.operators.SpinlessFermions(sym='Z2', **config_kwargs)
+    N = 12
+    I = mps.product_mpo(ops.I(), N)
+    c, cp, n = ops.c(), ops.cp(), ops.n()
+    #
+    if nr_phys == 1:
+        psi = mps.random_mps(I, D_total=16, dtype='complex128')
+    else:
+        psi = mps.random_mpo(I, D_total=16, dtype='complex128')
+    psi.canonize_(to='last').canonize_(to='first')
+    #
+    # test 2-point reduced density matrix
+    #
+    for n0, n1 in [(3, 5), (4, 2), (6, 5)]:
+        rho = mps.rdm(psi, n0, n1)
+        tr = yastn.einsum('aabb', rho).item()
+        assert abs(tr - 1) < tol
+        #
+        for c0, c1 in [(c, cp), (cp, c), (cp, cp), (c, c)]:
+            O = yastn.fkron(c0, c1)
+            res = yastn.einsum('abcd,badc', rho, O).item()
+            ref = mps.measure_2site(psi, c0, c1, psi, bonds=(n0, n1))
+            assert abs(res - ref) < 1e-12
+    #
+    # test 4-point reduced density matrix
+    #
+    for n0, n1, n2, n3 in [(3, 5, 7, 9), (7, 5, 3, 9), (11, 8, 3, 7), (5, 3, 7, 1)]:
+        rho = mps.rdm(psi, n0, n1, n2, n3)
+        tr = yastn.einsum('aabbccdd', rho).item()
+        assert abs(tr - 1) < tol
+        #
+        for c0, c1, c2, c3 in [(c, c, cp, cp), (c, cp, c, cp), (cp, c, n, n), (cp, cp, c, cp)]:
+            O = mps.generate_mpo(I, [mps.Hterm(positions=(n0, n1, n2, n3), operators=(c0, c1, c2, c3))])
+            f = yastn.fkron(c0, c1, c2, c3)
+            res = yastn.einsum('abcdefgh,badcfehg', rho, f).item()
+            ref = mps.vdot(psi, O, psi)
+            assert abs(res - ref) < 1e-12
+
+
 if __name__ == '__main__':
     pytest.main([__file__, "-vs", "--durations=0"])
-
-# if __name__ == "__main__":
-#     measure_mps_aklt()
-#     for sym in ['dense', 'Z3', 'U1']:
-#         mps_spectrum_ghz(sym=sym)
-#         test_mpo_spectrum(sym=sym, config=cfg)
-#     for sym in ['Z2', 'U1', 'U1xU1', 'U1xU1xZ2']:
-#         test_measure_fermions_and_unbalanced(sym=sym, config=cfg)
-#     test_measure_syntax_raises()

@@ -16,6 +16,7 @@
 import pytest
 import yastn
 import yastn.tn.fpeps as peps
+from yastn.tensor import sign_canonical_order
 
 tol = 1e-12  #pylint: disable=invalid-name
 
@@ -34,41 +35,41 @@ def test_ordering_sign(config_kwargs):
     #
     ops = yastn.operators.SpinlessFermions(sym='Z2', **config_kwargs)
     c, cp, n = ops.c(), ops.cp(), ops.n()
-    assert  1 == yastn.operators.sign_canonical_order(c, cp, sites=(s0, s1), f_ordered=net.f_ordered)
-    assert -1 == yastn.operators.sign_canonical_order(c, cp, sites=(s2, s1), f_ordered=net.f_ordered)
-    assert  1 == yastn.operators.sign_canonical_order(c, cp, cp, cp, sites=(s3, s3, s2, s2), f_ordered=net.f_ordered)
-    assert -1 == yastn.operators.sign_canonical_order(c, cp, n, cp, sites=(s3, s2, s1, s0), f_ordered=net.f_ordered)
+    assert  1 == sign_canonical_order(c, cp, sites=(s0, s1), f_ordered=net.f_ordered)
+    assert -1 == sign_canonical_order(c, cp, sites=(s2, s1), f_ordered=net.f_ordered)
+    assert  1 == sign_canonical_order(c, cp, cp, cp, sites=(s3, s3, s2, s2), f_ordered=net.f_ordered)
+    assert -1 == sign_canonical_order(c, cp, n, cp, sites=(s3, s2, s1, s0), f_ordered=net.f_ordered)
     # for mps
-    assert -1 == yastn.operators.sign_canonical_order(c, cp, n, cp, sites=(3, 2, 1, 0), f_ordered=lambda s0, s1: s0 <= s1)
-    assert 1 == yastn.operators.sign_canonical_order(c, cp, n, cp, sites=(3, 3, 1, 1), f_ordered=lambda s0, s1: s0 <= s1)
+    assert -1 == sign_canonical_order(c, cp, n, cp, sites=(3, 2, 1, 0), f_ordered=lambda s0, s1: s0 <= s1)
+    assert 1 == sign_canonical_order(c, cp, n, cp, sites=(3, 3, 1, 1), f_ordered=lambda s0, s1: s0 <= s1)
     #
     # spinful fermions with anticommuting spiecies (using U1xU1xZ2 symmetry)
     #
     ops = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', **config_kwargs)
     cu, cpu, nu = ops.c(spin='u'), ops.cp(spin='u'), ops.n(spin='u')
     cd, cpd, nd = ops.c(spin='d'), ops.cp(spin='d'), ops.n(spin='d')
-    assert  1 == yastn.operators.sign_canonical_order(cu, cpd, sites=(s0, s1), f_ordered=net.f_ordered)
-    assert -1 == yastn.operators.sign_canonical_order(cd, cpu, sites=(s2, s1), f_ordered=net.f_ordered)
-    assert  1 == yastn.operators.sign_canonical_order(cd, nu, cd, cu, sites=(s2, s1, s0, s0), f_ordered=net.f_ordered)
-    assert -1 == yastn.operators.sign_canonical_order(cu, nd, nu, cpd, sites=(s1, s3, s2, s0), f_ordered=net.f_ordered)
-    assert  1 == yastn.operators.sign_canonical_order(cu, cpd, cu, cpu, sites=(s3, s3, s2, s2), f_ordered=net.f_ordered)
+    assert  1 == sign_canonical_order(cu, cpd, sites=(s0, s1), f_ordered=net.f_ordered)
+    assert -1 == sign_canonical_order(cd, cpu, sites=(s2, s1), f_ordered=net.f_ordered)
+    assert  1 == sign_canonical_order(cd, nu, cd, cu, sites=(s2, s1, s0, s0), f_ordered=net.f_ordered)
+    assert -1 == sign_canonical_order(cu, nd, nu, cpd, sites=(s1, s3, s2, s0), f_ordered=net.f_ordered)
+    assert  1 == sign_canonical_order(cu, cpd, cu, cpu, sites=(s3, s3, s2, s2), f_ordered=net.f_ordered)
     #
     # spinful fermions with commuting (!) spiecies (using U1xU1 symmetry)
     #
     ops = yastn.operators.SpinfulFermions(sym='U1xU1', **config_kwargs)
     cu, cpu, nu = ops.c(spin='u'), ops.cp(spin='u'), ops.n(spin='u')
     cd, cpd, nd = ops.c(spin='d'), ops.cp(spin='d'), ops.n(spin='d')
-    assert  1 == yastn.operators.sign_canonical_order(cu, cpd, sites=(s0, s1), f_ordered=net.f_ordered)
-    assert  1 == yastn.operators.sign_canonical_order(cd, cpu, sites=(s2, s1), f_ordered=net.f_ordered)
-    assert -1 == yastn.operators.sign_canonical_order(cd, nu, cd, cu, sites=(s2, s1, s0, s0), f_ordered=net.f_ordered)
-    assert  1 == yastn.operators.sign_canonical_order(cu, nd, nu, cpd, sites=(s1, s3, s2, s0), f_ordered=net.f_ordered)
-    assert  1 == yastn.operators.sign_canonical_order(cu, cpd, cu, cpu, sites=(s3, s3, s2, s2), f_ordered=net.f_ordered)
+    assert  1 == sign_canonical_order(cu, cpd, sites=(s0, s1), f_ordered=net.f_ordered)
+    assert  1 == sign_canonical_order(cd, cpu, sites=(s2, s1), f_ordered=net.f_ordered)
+    assert -1 == sign_canonical_order(cd, nu, cd, cu, sites=(s2, s1, s0, s0), f_ordered=net.f_ordered)
+    assert  1 == sign_canonical_order(cu, nd, nu, cpd, sites=(s1, s3, s2, s0), f_ordered=net.f_ordered)
+    assert  1 == sign_canonical_order(cu, cpd, cu, cpu, sites=(s3, s3, s2, s2), f_ordered=net.f_ordered)
     #
     # fermionically-trivial spin operators
     #
     ops = yastn.operators.Spin1(sym='U1', **config_kwargs)
     sp, sm = ops.sp(), ops.sm()
-    assert 1 == yastn.operators.sign_canonical_order(sp, sm, sites=(s2, s1), f_ordered=net.f_ordered)
+    assert 1 == sign_canonical_order(sp, sm, sites=(s2, s1), f_ordered=net.f_ordered)
 
 
 if __name__ == '__main__':
