@@ -1,11 +1,12 @@
 # Copyright 2026 The YASTN Authors. All Rights Reserved.
 # Licensed under the Apache License, Version 2.0 (the "License");
-"""Block-sparse oracle tests for symmetry-aware SI projector refinement."""
+"""Block-sparse oracle and dispatch tests for SI projector refinement."""
 
 import numpy as np
 import pytest
 
 import yastn
+import yastn.tn.fpeps.envs._env_ctm as env_ctm_module
 from yastn.tn.fpeps.envs._env_ctm import (
     initialize_si_bases,
     proj_corners,
@@ -13,6 +14,7 @@ from yastn.tn.fpeps.envs._env_ctm import (
     si_projector_svd,
     si_refinement,
     svd_charge_sector_dimensions,
+    svd_charge_sector_values,
 )
 
 
@@ -61,6 +63,93 @@ def _si_sector_dimensions(r0, r1, X, Y, opts_svd, opts_si):
     return svd_charge_sector_dimensions(s), X, Y
 
 
+def _biased_z2_corners(config):
+    """Corners whose six globally dominant directions are all Z2-even."""
+    return _corners_with_sector_spectra(config, {
+        (0,): (10., 9., 8., 7., 6., 5.),
+        (1,): (4., 3., 2., 1., .5, .25),
+    })
+
+
+def _assert_refined_si_spectrum(r0, r1, X, Y, opts_svd, opts_si):
+    """Check a refined basis against the globally truncated full spectrum."""
+    _, s_si, _, _, _, _ = si_projector_svd(
+        r0, r1, X, Y, opts_svd, opts_si, return_spectrum=True)
+    rho = yastn.tensordot(r0, r1, axes=(1, 1))
+    _, s_full, _ = rho.svd_with_truncation(
+        axes=(0, 1), sU=r0.s[1], **opts_svd)
+    actual = svd_charge_sector_values(s_si)
+    expected = svd_charge_sector_values(s_full)
+    assert actual.keys() == expected.keys()
+    for charge in expected:
+        assert np.allclose(actual[charge], expected[charge],
+                           rtol=1e-10, atol=1e-12)
+
+
+# ---------------------------------------------------------------------------
+# CWO refinement and dispatch
+# ---------------------------------------------------------------------------
+
+
+def test_si_cwo_refinement_finds_globally_dominant_charge_sector(
+        config_kwargs):
+    """CWO must move rank out of weak sectors, including oversampling rank."""
+    config = yastn.make_config(sym='Z2', **config_kwargs)
+    config.backend.random_seed(seed=31)
+    r0, r1 = _biased_z2_corners(config)
+    opts_svd = {'D_total': 4, 'tol': 0, 'fix_signs': True}
+    opts_si = {'oversampling': 2, 'niter': 8, 'tol': 1e-12}
+
+    X, Y = initialize_si_bases(r0, r1, rank=6,
+                               charges={(0,): 3, (1,): 3})
+    X, Y = si_refinement(r0, r1, X, Y, opts_svd, opts_si)
+
+    assert X.get_legs(1).tD == {(0,): 6}
+    assert Y.get_legs(0).tD == {(0,): 6}
+    _assert_refined_si_spectrum(r0, r1, X, Y, opts_svd, opts_si)
+
+
+def test_si_cwo_pipeline_clamps_rank_to_corner_capacity(config_kwargs,
+                                                        monkeypatch):
+    """Explicit CWO correction works while growing below chi + oversampling."""
+    config = yastn.make_config(sym='Z2', **config_kwargs)
+    config.backend.random_seed(seed=34)
+    r0, r1 = _biased_z2_corners(config)
+    opts_svd = {'D_total': 10, 'tol': 0, 'fix_signs': True}
+    opts_si = {'enabled': True, 'oversampling': 4, 'niter': 2,
+               'tol': 1e-12, 'correct': True, 'refinement': 'cwo'}
+    calls = 0
+    original = env_ctm_module.si_refinement
+
+    def counting_cwo(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(env_ctm_module, 'si_refinement', counting_cwo)
+    _, _, X, Y = proj_corners(
+        r0, r1, opts_svd, opts_si=opts_si, return_si_state=True)
+
+    assert calls == 1
+    assert X.get_shape(axes=1) == 12
+    assert Y.get_shape(axes=0) == 12
+    assert X.get_legs(1).tD == {(0,): 6, (1,): 6}
+    assert Y.get_legs(0).tD == {(0,): 6, (1,): 6}
+
+
+def test_si_rejects_unknown_refinement_selector(config_kwargs):
+    """An enabled correction accepts only the documented refinement names."""
+    config = yastn.make_config(sym='Z2', **config_kwargs)
+    r0, r1 = _biased_z2_corners(config)
+    opts_svd = {'D_total': 4, 'tol': 0, 'fix_signs': True}
+    opts_si = {'enabled': True, 'oversampling': 1, 'correct': True,
+               'refinement': 'unknown'}
+
+    with pytest.raises(yastn.YastnError,
+                       match='Unknown SI refinement method'):
+        proj_corners(r0, r1, opts_svd, opts_si=opts_si)
+
+
 @pytest.mark.parametrize(('sym', 'spectra'), [
     ('Z2', {(0,): (12, 9, 6, 3, 2, 1),
             (1,): (11, 10, 8, 4, .5, .25)}),
@@ -100,10 +189,12 @@ def test_cwo_matches_full_svd_for_uneven_multisymmetry_spectra(
     assert actual == _full_sector_dimensions(r0, r1, opts_svd)
 
 
+@pytest.mark.parametrize('refinement', ('cwo', 'asvr'))
 @pytest.mark.parametrize('rank_option', ('D_total', 'D_block'))
 @pytest.mark.parametrize('dtype', ('float64', 'complex128'))
-def test_cwo_handles_single_dense_sector(config_kwargs, rank_option, dtype):
-    """A dense corner has one sector and supports either SI rank option."""
+def test_refinements_handle_single_dense_sector(
+        config_kwargs, refinement, rank_option, dtype):
+    """Each spectral refinement supports dense corners and SI rank options."""
     config = yastn.make_config(sym='none', default_dtype=dtype,
                                **config_kwargs)
     r0, r1 = _corners_with_sector_spectra(
@@ -113,7 +204,8 @@ def test_cwo_handles_single_dense_sector(config_kwargs, rank_option, dtype):
         r0 = (1 + 0.25j) * r0
         r1 = (1 - 0.5j) * r1
     opts_svd = {rank_option: 2, 'tol': 0, 'fix_signs': True}
-    opts_si = {'oversampling': 1, 'niter': 4, 'tol': 1e-12}
+    opts_si = {'oversampling': 1, 'niter': 4, 'tol': 1e-12,
+               'refinement': refinement}
     X, Y = initialize_si_bases(r0, r1, rank=3)
 
     X, _ = si_refinement(r0, r1, X, Y, opts_svd, opts_si)
@@ -194,50 +286,44 @@ def test_cwo_validates_corner_pair_and_rank_options(config_kwargs):
             r0, r1, None, None, {'tol': 0}, {'oversampling': 0})
 
 
-@pytest.mark.parametrize('rank_option', ('D_total', 'D_block'))
-@pytest.mark.parametrize('dtype', ('float64', 'complex128'))
-def test_asvr_handles_single_dense_sector(config_kwargs, rank_option, dtype):
-    """ASVR preserves the only possible allocation for a dense corner."""
-    config = yastn.make_config(sym='none', default_dtype=dtype,
-                               **config_kwargs)
-    r0, r1 = _corners_with_sector_spectra(
-        config, {(): (8., 6., 4., 2.)})
-    if dtype == 'complex128':
-        r0 = (1 + 0.25j) * r0
-        r1 = (1 - 0.5j) * r1
-    opts_svd = {rank_option: 2, 'tol': 0, 'fix_signs': True}
-    opts_si = {'oversampling': 1, 'niter': 4, 'tol': 1e-12,
-               'refinement': 'asvr'}
-    X, Y = initialize_si_bases(r0, r1, rank=3)
-
-    X, _ = si_refinement(r0, r1, X, Y, opts_svd, opts_si)
-
-    assert X.get_legs(1).tD == {(): 3}
+# ---------------------------------------------------------------------------
+# ASVR refinement and missing-sector recovery
+# ---------------------------------------------------------------------------
 
 
-def test_asvr_pipeline_recovers_sector_absent_from_recycled_bases(
-        config_kwargs):
-    """The ASVR selector probes a missing sector before projector truncation."""
+def test_asvr_pipeline_recovers_globally_dominant_missing_sector(
+        config_kwargs, monkeypatch):
+    """The ASVR pipeline recovers a dominant absent sector and confirms it."""
     config = yastn.make_config(sym='Z2', **config_kwargs)
-    config.backend.random_seed(seed=62)
-    spectra = {(0,): (10., 9., 8., 7.),
-               (1,): (4., 3., 2., 1.)}
-    r0, r1 = _corners_with_sector_spectra(config, spectra)
-    opts_svd = {'D_total': 3, 'tol': 0, 'fix_signs': True}
-    opts_si = {'enabled': True, 'oversampling': 1, 'niter': 8,
-               'tol': 1e-13, 'correct': True, 'refinement': 'asvr'}
-    X, Y = initialize_si_bases(
-        r0, r1, rank=4, charges={(1,): 4})
+    config.backend.random_seed(seed=32)
+    r0, r1 = _biased_z2_corners(config)
+    opts_svd = {'D_total': 4, 'tol': 0, 'fix_signs': True}
+    opts_si = {'enabled': True, 'oversampling': 2, 'niter': 8,
+               'tol': 1e-12, 'correct': True,
+               'asvr_iterations': 5, 'refinement': 'asvr'}
 
+    X, Y = initialize_si_bases(r0, r1, rank=6,
+                               charges={(1,): 6})
+    calls = 0
+    original = env_ctm_module.si_projector_svd
+
+    def counting_si_projector_svd(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(env_ctm_module, 'si_projector_svd',
+                        counting_si_projector_svd)
     _, _, X, Y = proj_corners(
         r0, r1, opts_svd, opts_si=opts_si, X=X, Y=Y,
         return_si_state=True)
 
-    assert X.get_legs(1).tD == {(0,): 4}
-    assert Y.get_legs(0).tD == {(0,): 4}
-    actual, _, _ = _si_sector_dimensions(
-        r0, r1, X, Y, opts_svd, opts_si)
-    assert actual == _full_sector_dimensions(r0, r1, opts_svd)
+    assert X.get_legs(1).tD == {(0,): 6}
+    assert Y.get_legs(0).tD == {(0,): 6}
+    # Two ASVR estimates select and confirm the allocation; the third call
+    # constructs the final reduced projector through the public pipeline.
+    assert calls == 3
+    _assert_refined_si_spectrum(r0, r1, X, Y, opts_svd, opts_si)
 
 
 def test_asvr_rejects_rank_too_small_to_probe_every_sector(config_kwargs):
@@ -253,6 +339,30 @@ def test_asvr_rejects_rank_too_small_to_probe_every_sector(config_kwargs):
     with pytest.raises(yastn.YastnError,
                        match='cannot probe every shared charge sector'):
         si_refinement(r0, r1, X, Y, opts_svd, opts_si)
+
+
+# ---------------------------------------------------------------------------
+# RDS refinement and proportional rank allocation
+# ---------------------------------------------------------------------------
+
+
+def test_rds_pipeline_apportions_relative_corner_sector_dimensions(
+        config_kwargs):
+    """The projector pipeline dispatches RDS proportional allocation."""
+    config = yastn.make_config(sym='Z2', **config_kwargs)
+    config.backend.random_seed(seed=33)
+    r0, r1 = _corners_with_sector_spectra(
+        config, {(0,): (2., 1.), (1,): (6., 5., 4., 3., 2., 1.)})
+    opts_svd = {'D_total': 3, 'tol': 0, 'fix_signs': True}
+    opts_si = {'enabled': True, 'oversampling': 1,
+               'niter': 2, 'tol': 1e-12, 'refinement': 'rds'}
+    X0, Y0 = initialize_si_bases(
+        r0, r1, rank=4, charges={(0,): 2, (1,): 2})
+    _, _, X, Y = proj_corners(
+        r0, r1, opts_svd, opts_si={**opts_si, 'correct': True},
+        X=X0, Y=Y0, return_si_state=True)
+    assert X.get_legs(1).tD == {(0,): 1, (1,): 3}
+    assert Y.get_legs(0).tD == {(0,): 1, (1,): 3}
 
 
 @pytest.mark.parametrize(('sym', 'spectra', 'expected'), [
@@ -300,6 +410,40 @@ def test_rds_clamps_requested_rank_to_total_corner_capacity(config_kwargs):
     assert Y.get_shape(axes=0) == 5
     assert X.get_legs(1).tD == {(0,): 2, (1,): 3}
     assert Y.get_legs(0).tD == {(0,): 2, (1,): 3}
+
+
+# ---------------------------------------------------------------------------
+# Recycled-state compatibility and changing symmetry sectors
+# ---------------------------------------------------------------------------
+
+
+def test_si_incompatible_recycled_bases_are_rejected(config_kwargs):
+    """Dimension, sector, dtype, and device changes invalidate SI bases."""
+    config = yastn.make_config(sym='Z2', **config_kwargs)
+    r0, r1 = _biased_z2_corners(config)
+    X, Y = initialize_si_bases(r0, r1, rank=4,
+                               charges={(0,): 2, (1,): 2})
+    assert si_bases_compatible(r0, r1, X, Y)
+
+    # Bases are rejected if a corner's external-leg dimension changes.
+    smaller_r1 = yastn.Tensor(config=config, s=(-1, 1))
+    for charge in (0, 1):
+        smaller_r1.set_block(ts=(charge, charge), Ds=(5, 6), val='rand')
+    assert not si_bases_compatible(r0, smaller_r1, X, Y)
+
+    # Bases are rejected if the available symmetry sectors change.
+    one_sector_r1 = yastn.Tensor(config=config, s=(-1, 1))
+    one_sector_r1.set_block(ts=(0, 0), Ds=(6, 6), val='rand')
+    assert not si_bases_compatible(r0, one_sector_r1, X, Y)
+
+    # Real-valued bases are rejected for complex-valued corners.
+    complex_r0 = r0.to(dtype='complex128')
+    complex_r1 = r1.to(dtype='complex128')
+    assert not si_bases_compatible(complex_r0, complex_r1, X, Y)
+    if 'cuda' in X.device:
+        # On CUDA, bases are rejected if the corners move to CPU.
+        assert not si_bases_compatible(
+            r0.to(device='cpu'), r1.to(device='cpu'), X, Y)
 
 
 def test_sector_change_correction_then_continued_recycling(config_kwargs):

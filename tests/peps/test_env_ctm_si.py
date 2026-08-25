@@ -6,7 +6,7 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
-"""Regression tests for recycled subspace-iteration CTM projectors."""
+"""Unit and environment-state tests for recycled SI-CTM projectors."""
 
 import numpy as np
 import pytest
@@ -98,7 +98,12 @@ def _assert_projectors_equivalent(reference, approximate, tol=2e-8):
         assert error < tol
 
 
-@pytest.mark.parametrize('sym', ['none', 'U1', 'Z2'])
+# ---------------------------------------------------------------------------
+# Projector and reduced-spectrum correctness
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize('sym', ['U1', 'Z2'])
 def test_si_projectors_match_full_svd(config_kwargs, sym):
     """SI and full SVD produce the same projector maps on CTM corner halves."""
     config = yastn.make_config(sym=sym, **config_kwargs)
@@ -121,7 +126,7 @@ def test_si_projectors_match_full_svd(config_kwargs, sym):
     _assert_projectors_equivalent(full, (p0, p1))
 
 
-@pytest.mark.parametrize('sym', ['none', 'U1', 'Z2'])
+@pytest.mark.parametrize('sym', ['U1', 'Z2'])
 def test_si_spectrum_matches_full_svd(config_kwargs, sym):
     """SI iterations recover the leading spectrum from a strict subspace."""
     config = yastn.make_config(sym=sym, **config_kwargs)
@@ -162,6 +167,11 @@ def test_si_spectrum_matches_full_svd(config_kwargs, sym):
     final_error = np.sqrt(final_error)
     assert initial_error > 1e-6
     assert final_error < 1e-4 * initial_error
+
+
+# ---------------------------------------------------------------------------
+# Input validation and recycled-basis rebuilding
+# ---------------------------------------------------------------------------
 
 
 def test_si_rejects_insufficient_corner_capacity(config_kwargs):
@@ -273,6 +283,11 @@ def test_si_rebuilds_recycled_basis_after_fusion_history_change(
     assert initialize_calls == 1
 
 
+# ---------------------------------------------------------------------------
+# Environment state and CTMRG update integration
+# ---------------------------------------------------------------------------
+
+
 def _dense_product_env(config):
     """Seeded nontrivial dense PEPS used by the CTM integration tests."""
     leg = yastn.Leg(config, s=1, D=(2,))
@@ -324,11 +339,8 @@ def test_si_state_copy_clone_detach_to_and_serialization(config_kwargs):
     assert yastn.allclose(env.Y[key], variants[0].Y[key])
 
 
-@pytest.mark.parametrize('method', ['1x2 corner', '2x2 corner'])
-def test_si_ctm_update_methods(config_kwargs, method):
-    """
-    Checks if projectors can be computed for both environments
-    """
+def test_si_ctm_update_1x2_method(config_kwargs):
+    """SI projectors support the 1x2 environment update path."""
     config = yastn.make_config(sym='none', **config_kwargs)
     env = _dense_product_env(config)
     # Grow the eye environment first; 1x2 updates cannot increase chi and
@@ -336,7 +348,7 @@ def test_si_ctm_update_methods(config_kwargs, method):
     env.update_(opts_svd={'D_total': 2}, moves='hv', method='2x2 corner')
     assert env.effective_chi() == 2
     env.update_(
-        opts_svd={'D_total': 2}, moves='hv', method=method,
+        opts_svd={'D_total': 2}, moves='hv', method='1x2 corner',
         opts_si={'enabled': True, 'oversampling': 1, 'niter': 3})
     assert env.is_consistent()
     assert env.X
@@ -345,71 +357,6 @@ def test_si_ctm_update_methods(config_kwargs, method):
     assert env.effective_chi() == 2
     assert any(x.get_shape(axes=1) > 1 for x in env.X.values())
 
-
-@pytest.mark.parametrize('recycle_grad', [False, True])
-def test_si_autograd_recycle_policy(config_kwargs, recycle_grad):
-    """
-    Checks if grad can travel through the environment
-    """
-    if config_kwargs['backend'] != 'torch':
-        pytest.skip('torch backend is required')
-    config = yastn.make_config(sym='none', **config_kwargs)
-    env = _dense_product_env(config)
-    source = env.psi.ket[(0, 0)]
-    source.requires_grad_(True)
-    env.update_(
-        opts_svd={'D_total': 1}, moves='h', method='2x2 corner',
-        opts_si={'enabled': True, 'oversampling': 0, 'niter': 2,
-                 'recycle_grad': recycle_grad})
-    assert all(x.requires_grad == recycle_grad for x in env.X.values())
-    assert all(y.requires_grad == recycle_grad for y in env.Y.values())
-    loss = sum(tensor.norm()
-               for site in env.sites()
-               for tensor in env[site].__dict__.values()
-               if tensor is not None)
-    loss.backward()
-    gradient = source.grad()
-    assert gradient is not None
-    assert np.isfinite(float(gradient.norm()))
-    assert float(gradient.norm()) > 1e-12
-
-
-@pytest.mark.parametrize('checkpoint_move', ['reentrant', 'nonreentrant'])
-def test_si_checkpoint_move(config_kwargs, checkpoint_move, monkeypatch):
-    """
-    checks if reentrant works
-    """
-    if config_kwargs['backend'] != 'torch':
-        pytest.skip('torch backend is required')
-    config = yastn.make_config(sym='none', **config_kwargs)
-    env = _dense_product_env(config)
-    source = env.psi.ket[(0, 0)]
-    source.requires_grad_(True)
-    checkpoint_calls = []
-    original_checkpoint = config.backend.checkpoint
-
-    def recording_checkpoint(function, *args, **kwargs):
-        checkpoint_calls.append(kwargs.get('use_reentrant'))
-        return original_checkpoint(function, *args, **kwargs)
-
-    monkeypatch.setattr(config.backend, 'checkpoint', recording_checkpoint)
-    env.update_(
-        opts_svd={'D_total': 1}, moves='h', method='2x2 corner',
-        checkpoint_move=checkpoint_move,
-        opts_si={'enabled': True, 'oversampling': 0, 'niter': 2})
-    assert env.is_consistent()
-    assert env.X
-    assert checkpoint_calls == [checkpoint_move == 'reentrant']
-    loss = sum(tensor.norm()
-               for site in env.sites()
-               for tensor in env[site].__dict__.values()
-               if tensor is not None)
-    loss.backward()
-    gradient = source.grad()
-    assert gradient is not None
-    assert np.isfinite(float(gradient.norm()))
-    assert float(gradient.norm()) > 1e-12
-
 if __name__ == '__main__':
     config_kwargs = {
         'backend': 'np',
@@ -417,6 +364,6 @@ if __name__ == '__main__':
         'default_fusion': 'hard',
         'tensordot_policy': 'fuse_to_matrix',
     }
-    for sym in ('none', 'U1', 'Z2'):
+    for sym in ('U1', 'Z2'):
         test_si_spectrum_matches_full_svd(config_kwargs, sym)
         print(f'PASSED: test_si_spectrum_matches_full_svd[{sym}]')

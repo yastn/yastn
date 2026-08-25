@@ -1,6 +1,6 @@
 # Copyright 2026 The YASTN Authors. All Rights Reserved.
 # Licensed under the Apache License, Version 2.0 (the "License");
-"""Differentiation oracles for SI-CTMRG on a physical Ising observable."""
+"""Autograd and checkpointing tests for recycled SI-CTMRG."""
 
 import numpy as np
 import pytest
@@ -79,9 +79,13 @@ def _ising_nn_objective(config_kwargs, beta, method, recycled=False,
 
 @pytest.fixture
 def torch_config(config_kwargs):
-    if config_kwargs['backend'] != 'torch':
-        pytest.skip('torch backend is required for SI differentiation tests')
-    return config_kwargs
+    """Use the torch backend independently of pytest's global default."""
+    return {**config_kwargs, 'backend': 'torch'}
+
+
+# ---------------------------------------------------------------------------
+# Physical-observable differentiation oracles
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize('recycled', [False, True],
@@ -145,3 +149,78 @@ def test_recycle_grad_false_detaches_only_basis_history(torch_config):
     value.backward()
     assert beta.grad is not None
     assert np.isfinite(beta.grad.item())
+
+
+# ---------------------------------------------------------------------------
+# Recycled-basis graph policy and checkpointed CTMRG updates
+# ---------------------------------------------------------------------------
+
+
+def _dense_product_env(config):
+    """Seeded dense PEPS used to inspect CTMRG differentiation graphs."""
+    leg = yastn.Leg(config, s=1, D=(2,))
+    physical = yastn.Leg(config, s=1, D=(2,))
+    tensor = yastn.zeros(
+        config, legs=(leg, leg, leg.conj(), leg.conj(), physical))
+    values = np.sin(np.arange(1, 33, dtype=float)).reshape((2,) * 5)
+    tensor.set_block(val=values)
+    geometry = fpeps.SquareLattice(dims=(1, 1), boundary='infinite')
+    psi = fpeps.Peps(geometry, tensors={(0, 0): tensor})
+    return fpeps.EnvCTM(psi, init='eye')
+
+
+@pytest.mark.parametrize('recycle_grad', [False, True])
+def test_si_autograd_recycle_policy(torch_config, recycle_grad):
+    """The recycle_grad option controls whether X/Y retain their graph."""
+    config = yastn.make_config(sym='none', **torch_config)
+    env = _dense_product_env(config)
+    source = env.psi.ket[(0, 0)]
+    source.requires_grad_(True)
+    env.update_(
+        opts_svd={'D_total': 1}, moves='h', method='2x2 corner',
+        opts_si={'enabled': True, 'oversampling': 0, 'niter': 2,
+                 'recycle_grad': recycle_grad})
+    assert all(x.requires_grad == recycle_grad for x in env.X.values())
+    assert all(y.requires_grad == recycle_grad for y in env.Y.values())
+    loss = sum(tensor.norm()
+               for site in env.sites()
+               for tensor in env[site].__dict__.values()
+               if tensor is not None)
+    loss.backward()
+    gradient = source.grad()
+    assert gradient is not None
+    assert np.isfinite(float(gradient.norm()))
+    assert float(gradient.norm()) > 1e-12
+
+
+@pytest.mark.parametrize('checkpoint_move', ['reentrant', 'nonreentrant'])
+def test_si_checkpoint_move(torch_config, checkpoint_move, monkeypatch):
+    """Both torch checkpoint modes preserve SI state and gradients."""
+    config = yastn.make_config(sym='none', **torch_config)
+    env = _dense_product_env(config)
+    source = env.psi.ket[(0, 0)]
+    source.requires_grad_(True)
+    checkpoint_calls = []
+    original_checkpoint = config.backend.checkpoint
+
+    def recording_checkpoint(function, *args, **kwargs):
+        checkpoint_calls.append(kwargs.get('use_reentrant'))
+        return original_checkpoint(function, *args, **kwargs)
+
+    monkeypatch.setattr(config.backend, 'checkpoint', recording_checkpoint)
+    env.update_(
+        opts_svd={'D_total': 1}, moves='h', method='2x2 corner',
+        checkpoint_move=checkpoint_move,
+        opts_si={'enabled': True, 'oversampling': 0, 'niter': 2})
+    assert env.is_consistent()
+    assert env.X
+    assert checkpoint_calls == [checkpoint_move == 'reentrant']
+    loss = sum(tensor.norm()
+               for site in env.sites()
+               for tensor in env[site].__dict__.values()
+               if tensor is not None)
+    loss.backward()
+    gradient = source.grad()
+    assert gradient is not None
+    assert np.isfinite(float(gradient.norm()))
+    assert float(gradient.norm()) > 1e-12
