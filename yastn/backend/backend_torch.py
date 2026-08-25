@@ -798,7 +798,9 @@ def transpose_and_merge(data, order, meta_mrg, size):
             meta_small = [m for m in meta_mrg if m[2].stop - m[2].start < thr]   # slo = m[2]
             if not meta_small:                 # all large -> per-block loop (no index build at all)
                 return kernel_transpose_and_merge.apply(data, order, meta_mrg, size)
-            params = pack_transpose_and_merge_params(order, meta_mrg, data.numel(), data.device)
+            params = pack_transpose_and_merge_params(order, tuple(meta_mrg), data.numel())
+            params['slo_start']= params['slo_start'].to(device=data.device)
+            params['packed']= params['packed'].to(device=data.device)
             if len(meta_small) == len(meta_mrg):   # all small -> lean single-array scatter
                 return kernel_transpose_and_merge_scatter.apply(data, params, size, chunk)
             meta_large = [m for m in meta_mrg if m[2].stop - m[2].start >= thr]
@@ -828,7 +830,9 @@ def unmerge(data, meta, size):
             # meta (sln,Dn,slo,Do,sslo) -> merge meta so _build_dest maps each DEST position to its
             # SOURCE flat index (gather_idx).
             merge_meta = [(slo, Do, sln, Dn, sslo, Dn) for (sln, Dn, slo, Do, sslo) in meta]
-            params = pack_transpose_and_merge_params(tuple(range(ndimo)), merge_meta, size, data.device)
+            params = pack_transpose_and_merge_params(tuple(range(ndimo)), tuple(merge_meta), size)
+            params['slo_start']= params['slo_start'].to(device=data.device)
+            params['packed']= params['packed'].to(device=data.device)
             if not params['contiguous']:   # dense dest expected; else fall back to loop
                 return kernel_unmerge.apply(data, meta, size)
             if len(meta_small) == len(meta):   # all small -> lean gather

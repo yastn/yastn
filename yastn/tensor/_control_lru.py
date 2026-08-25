@@ -16,6 +16,7 @@
 from functools import lru_cache
 
 from . import _algebra, _merging, _contractions, _contractions_cutensor, _einsum, _auxiliary
+from ..backend import _backend_torch_backwards
 
 __all__ = ['clear_cache', 'get_cache_info', 'set_cache_maxsize']
 
@@ -43,6 +44,7 @@ def set_cache_maxsize(maxsize=0):
     _auxiliary.get_blocks = lru_cache(maxsize)(_auxiliary.get_blocks.__wrapped__)
     _auxiliary.get_blocks_charges_all = lru_cache(maxsize)(_auxiliary.get_blocks_charges_all.__wrapped__)
     _auxiliary.get_trimmed_struct_engine = lru_cache(maxsize)(_auxiliary.get_trimmed_struct_engine.__wrapped__)
+    _backend_torch_backwards.pack_transpose_and_merge_params = lru_cache(maxsize)(_backend_torch_backwards.pack_transpose_and_merge_params.__wrapped__)
 
 
 def clear_cache():
@@ -68,6 +70,7 @@ def clear_cache():
     _auxiliary.get_blocks.cache_clear()
     _auxiliary.get_blocks_charges_all.cache_clear()
     _auxiliary.get_trimmed_struct_engine.cache_clear()
+    _backend_torch_backwards.pack_transpose_and_merge_params.cache_clear()
 
 
 def get_cache_info():
@@ -93,4 +96,5 @@ def get_cache_info():
             "get_blocks": _auxiliary.get_blocks.cache_info(),
             "get_blocks_charges_all": _auxiliary.get_blocks_charges_all.cache_info(),
             "get_trimmed_struct_engine": _auxiliary.get_trimmed_struct_engine.cache_info(),
+            "pack_transpose_and_merge_params": _backend_torch_backwards.pack_transpose_and_merge_params.cache_info()
             }

@@ -15,6 +15,7 @@
 """Support of torch as a data structure used by yastn."""
 from types import SimpleNamespace
 from typing import Sequence
+from functools import lru_cache
 import numpy as np
 import torch
 
@@ -401,8 +402,9 @@ def _strides1(D):
     return out
 
 
+@lru_cache(maxsize=1024)
 @nsys_profile
-def pack_transpose_and_merge_params(order, meta, size_in, device):
+def pack_transpose_and_merge_params(order, meta, size_in):
     r"""
     Precompute small per-block parameter tensors for the scatter/index-map variant of
     ``transpose_and_merge``. ``order`` is the single global permutation shared by all blocks,
@@ -443,7 +445,7 @@ def pack_transpose_and_merge_params(order, meta, size_in, device):
     # of ~9; K = 3 + 3*ndimo + 4*ndimn.
     packed = torch.tensor(
         [[r[0], r[1], *r[2], *r[3], *r[4], *r[5], *r[6], *r[7], *r[8], r[9]] for r in rows],
-        dtype=torch.int64, device=device)
+        dtype=torch.int64, device='cpu')
     return {'ndimo': ndimo, 'ndimn': ndimn, 'contiguous': contiguous,
             'slo_start': packed[:, 0].contiguous(),   # separate 1D copy for searchsorted
             'packed': packed}
