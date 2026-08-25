@@ -7,6 +7,7 @@ import pytest
 
 import yastn
 import yastn.tn.fpeps as fpeps
+import yastn.tn.fpeps.envs._env_ctm as env_ctm_module
 
 
 def _differentiable_ising_peps(config, beta):
@@ -182,6 +183,49 @@ def test_si_autograd_recycle_policy(torch_config, recycle_grad):
                  'recycle_grad': recycle_grad})
     assert all(x.requires_grad == recycle_grad for x in env.X.values())
     assert all(y.requires_grad == recycle_grad for y in env.Y.values())
+    loss = sum(tensor.norm()
+               for site in env.sites()
+               for tensor in env[site].__dict__.values()
+               if tensor is not None)
+    loss.backward()
+    gradient = source.grad()
+    assert gradient is not None
+    assert np.isfinite(float(gradient.norm()))
+    assert float(gradient.norm()) > 1e-12
+
+
+def test_recycle_grad_true_backpropagates_through_second_update(
+        torch_config, monkeypatch):
+    """AI-generated test: a second update consumes graph-connected bases."""
+    config = yastn.make_config(sym='none', **torch_config)
+    env = _dense_product_env(config)
+    source = env.psi.ket[(0, 0)]
+    source.requires_grad_(True)
+    opts_svd = {'D_total': 1}
+    opts_si = {'enabled': True, 'oversampling': 0, 'niter': 2,
+               'warmup': 20, 'recycle_grad': True}
+
+    env.update_(opts_svd, moves='h', method='2x2 corner', opts_si=opts_si)
+    assert env.X and all(x.requires_grad for x in env.X.values())
+    assert all(y.requires_grad for y in env.Y.values())
+
+    recycled_inputs = []
+    original_proj_corners = env_ctm_module.proj_corners
+
+    def recording_proj_corners(*args, **kwargs):
+        recycled_inputs.append((kwargs.get('X'), kwargs.get('Y')))
+        return original_proj_corners(*args, **kwargs)
+
+    monkeypatch.setattr(
+        env_ctm_module, 'proj_corners', recording_proj_corners)
+    env.update_(opts_svd, moves='h', method='2x2 corner', opts_si=opts_si)
+
+    assert recycled_inputs
+    assert all(X is not None and Y is not None for X, Y in recycled_inputs)
+    assert all(age == 2 for age in env._si_age.values())
+    assert all(x.requires_grad for x in env.X.values())
+    assert all(y.requires_grad for y in env.Y.values())
+
     loss = sum(tensor.norm()
                for site in env.sites()
                for tensor in env[site].__dict__.values()

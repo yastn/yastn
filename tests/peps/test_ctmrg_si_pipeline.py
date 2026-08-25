@@ -16,6 +16,7 @@ import yastn
 import yastn.tn.fpeps as fpeps
 import yastn.tn.fpeps.envs._env_ctm as env_ctm_module
 from yastn.tn.fpeps.envs._env_ctm import (
+    initialize_si_bases,
     proj_corners,
     si_projector_svd,
     svd_charge_sector_values,
@@ -86,6 +87,23 @@ def _dense_corners_with_spectrum(config, singular_values):
 
 def _projector_matrix(projector):
     return projector.fuse_legs(axes=((0, 1), 2)).to_numpy()
+
+
+def _projector_range_error(reference, approximate, rank_tol=1e-12):
+    """Return the largest gauge-invariant projector-range error."""
+    errors = []
+    for pref, psi in zip(reference, approximate):
+        qref, sref, _ = np.linalg.svd(
+            _projector_matrix(pref), full_matrices=False)
+        qsi, ssi, _ = np.linalg.svd(
+            _projector_matrix(psi), full_matrices=False)
+        rank_ref = np.count_nonzero(sref > rank_tol * sref[0])
+        rank_si = np.count_nonzero(ssi > rank_tol * ssi[0])
+        assert rank_ref == rank_si and rank_ref > 0
+        overlap = qref[:, :rank_ref].conj().T @ qsi[:, :rank_si]
+        error = 1 - np.linalg.norm(overlap, ord='fro') ** 2 / rank_ref
+        errors.append(float(np.clip(error, 0., 1.)))
+    return max(errors)
 
 
 # ---------------------------------------------------------------------------
@@ -168,6 +186,85 @@ def test_projectors_remain_finite_when_cutoff_removes_null_space(
         cutoff=1e-8)
     for projector in projectors:
         assert np.isfinite(_projector_matrix(projector)).all()
+
+
+def test_si_public_path_is_matrix_free_and_uses_reduced_svd(
+        config_kwargs, monkeypatch):
+    """AI-generated test: SI cannot fall through to full construction."""
+    config = yastn.make_config(sym='none', **config_kwargs)
+    config.backend.random_seed(seed=92)
+    dimension = 12
+    rank = 5
+    r0, r1 = _dense_corners_with_spectrum(
+        config, np.geomspace(1., 1e-4, dimension))
+    matrix_shapes = []
+    svd_shapes = []
+    si_calls = 0
+    original_tensordot = env_ctm_module.tensordot
+    original_svd = yastn.Tensor.svd
+    original_si = env_ctm_module.si_projector_svd
+
+    def recording_tensordot(*args, **kwargs):
+        result = original_tensordot(*args, **kwargs)
+        if result.ndim == 2:
+            matrix_shapes.append(tuple(result.get_shape()))
+        return result
+
+    def recording_svd(self, *args, **kwargs):
+        svd_shapes.append(tuple(self.get_shape()))
+        return original_svd(self, *args, **kwargs)
+
+    def recording_si(*args, **kwargs):
+        nonlocal si_calls
+        si_calls += 1
+        return original_si(*args, **kwargs)
+
+    def forbidden_full_svd(*args, **kwargs):
+        pytest.fail("SI path called full svd_with_truncation")
+
+    monkeypatch.setattr(env_ctm_module, 'tensordot', recording_tensordot)
+    monkeypatch.setattr(yastn.Tensor, 'svd', recording_svd)
+    monkeypatch.setattr(env_ctm_module, 'si_projector_svd', recording_si)
+    monkeypatch.setattr(
+        yastn.Tensor, 'svd_with_truncation', forbidden_full_svd)
+
+    p0, p1, X, Y = proj_corners(
+        r0, r1, opts_svd={'D_total': 3, 'tol': 0},
+        opts_si={'enabled': True, 'oversampling': 2,
+                 'niter': 1, 'tol': 0},
+        return_si_state=True)
+
+    assert p0 is not None and p1 is not None
+    assert X is not None and Y is not None
+    assert si_calls == 1
+    assert (dimension, dimension) not in matrix_shapes
+    assert svd_shapes and all(max(shape) <= rank for shape in svd_shapes)
+    assert max(np.prod(shape) for shape in matrix_shapes) <= dimension * rank
+
+
+def test_public_si_starts_approximate_then_converges(config_kwargs):
+    """AI-generated test: strict SI starts approximate, then converges."""
+    config = yastn.make_config(sym='none', **config_kwargs)
+    config.backend.random_seed(seed=93)
+    r0, r1 = _dense_corners_with_spectrum(
+        config, (1., .8, .6, .4, .25, .15, .08, .03))
+    opts_svd = {'D_total': 2, 'tol': 0, 'fix_signs': True}
+    reference = proj_corners(r0, r1, opts_svd)
+
+    initial = proj_corners(
+        r0, r1, opts_svd,
+        opts_si={'enabled': True, 'oversampling': 1,
+                 'niter': 0, 'tol': 0})
+    refined = proj_corners(
+        r0, r1, opts_svd,
+        opts_si={'enabled': True, 'oversampling': 1,
+                 'niter': 24, 'tol': 1e-13})
+
+    initial_error = _projector_range_error(reference, initial)
+    refined_error = _projector_range_error(reference, refined)
+    assert initial_error > 1e-4
+    assert refined_error < 1e-8
+    assert refined_error < 1e-4 * initial_error
 
 
 # ---------------------------------------------------------------------------

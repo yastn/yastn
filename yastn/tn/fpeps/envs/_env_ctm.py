@@ -1410,8 +1410,8 @@ def _ctm_shared_sector_capacity(r0, r1):
     """Return capacities of sectors supported by both CTM corner halves."""
     capacity0 = r0.get_legs(0).tD
     capacity1 = r1.get_legs(0).tD
-    return {charge: capacity0[charge]
-            for charge in capacity0.keys() & capacity1.keys()}
+    return {charge: dimension for charge, dimension in capacity0.items()
+            if charge in capacity1}
 
 
 def initialize_si_bases(r0, r1, rank, charges=None):
@@ -1477,6 +1477,7 @@ def si_bases_compatible(r0, r1, X, Y):
     def is_compatible_subspace(basis_leg, corner_leg):
         """A refined basis may intentionally contain only selected sectors."""
         return (basis_leg.s == corner_leg.s
+                and basis_leg.hf == corner_leg.hf
                 and all(charge in corner_leg.tD
                         and corner_leg.tD[charge] == dimension
                         for charge, dimension in basis_leg.tD.items()))
@@ -1662,8 +1663,13 @@ def _si_refinement_cwo(r0, r1, X, Y, opts_svd, opts_si):
         _, _, _, _, _, sall = si_projector_svd(
             r0, r1, X_charge, Y_charge, opts_svd, opts_si,
             return_spectrum=True)
-        oversampled_sector_values[charge] = (
-            svd_charge_sector_values(sall).get(charge, []))
+        sector_values = list(
+            svd_charge_sector_values(sall).get(charge, ()))
+        # An exactly zero sector can be omitted from the block structure of
+        # the reduced SVD even though its directions remain available on the
+        # CTM legs. Preserve those structural null directions for allocation.
+        sector_values.extend([0.] * (sector_rank - len(sector_values)))
+        oversampled_sector_values[charge] = sector_values
 
     top_values = sorted(
         ((value, charge) for charge, values in oversampled_sector_values.items()
@@ -1756,8 +1762,9 @@ def si_projector_svd(r0, r1, X, Y, opts_svd, opts_si,
     u = Y.H @ us
     v = vs @ X.H
 
-    trunc_opts = {k: opts_svd[k] for k in ('tol', 'tol_block', 'D_block',
-        'D_total', 'truncate_multiplets', 'mask_f') if k in opts_svd}
+    trunc_opts = {k: opts_svd[k] for k in (
+        'tol', 'tol_block', 'D_block', 'D_total', 'largest_gap',
+        'eps_multiplet', 'hermitian', 'mask_f') if k in opts_svd}
     mask = truncation_mask(sall, **trunc_opts)
     u, s, v = mask.apply_mask(u, sall, v, axes=(-1, 0, 0))
     result = (u, s, v, X_new, Y_new)
@@ -1791,29 +1798,18 @@ def proj_corners(r0, r1, opts_svd, opts_si=None, X=None, Y=None,
         if opts_si.get('correct', False):
             X, Y = si_refinement(
                 r0, r1, X, Y, opts_svd, opts_si)
-        try:
-            u, s, v, X_new, Y_new = si_projector_svd(
-                r0, r1, X, Y, opts_svd, opts_si)
-        except YastnError:
-            # Aggregate charge dimensions can stay unchanged while an updated
-            # CTM corner acquires incompatible dimensions inside a hard-fused
-            # leg. In that case a recycled basis cannot be contracted, so
-            # rebuild it for the current corner layout and retry once.
-            if not recycled:
-                raise
-            X, Y = initialize_si_bases(r0, r1, rank)
-            u, s, v, X_new, Y_new = si_projector_svd(
-                r0, r1, X, Y, opts_svd, opts_si)
-    elif profiling_mode in ["NVTX",]:
-        rr = tensordot(r0, r1, axes=(1, 1))
-    # import pdb; pdb.set_trace()
-    if profiling_mode in ["NVTX",]:
-        rr.config.backend.cuda.nvtx.range_push(f"svd_with_truncation")
-        u, s, v = rr.svd_with_truncation(axes=(0, 1), sU=r0.s[1], **opts_svd, **kwargs)
-        rr.config.backend.cuda.nvtx.range_pop()
+        u, s, v, X_new, Y_new = si_projector_svd(
+            r0, r1, X, Y, opts_svd, opts_si)
     else:
         rr = tensordot(r0, r1, axes=(1, 1))
-        u, s, v = rr.svd_with_truncation(axes=(0, 1), sU=r0.s[1], **opts_svd, **kwargs)
+        if profiling_mode in ["NVTX",]:
+            rr.config.backend.cuda.nvtx.range_push("svd_with_truncation")
+            u, s, v = rr.svd_with_truncation(
+                axes=(0, 1), sU=r0.s[1], **opts_svd, **kwargs)
+            rr.config.backend.cuda.nvtx.range_pop()
+        else:
+            u, s, v = rr.svd_with_truncation(
+                axes=(0, 1), sU=r0.s[1], **opts_svd, **kwargs)
 
     if verbosity > 2:
         fname = sys._getframe().f_code.co_name

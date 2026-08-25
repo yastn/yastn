@@ -20,6 +20,7 @@ from yastn.tn.fpeps.envs._env_ctm import (
     proj_corners,
     si_bases_compatible,
     si_projector_svd,
+    si_refinement,
     svd_charge_sector_values,
 )
 
@@ -112,7 +113,7 @@ def test_si_projectors_match_full_svd(config_kwargs, sym):
     # chi + p = 6, strictly below the corner-leg rank of 7.
     opts_svd = {'D_total': 5, 'tol': 0, 'fix_signs': True}
     opts_si = {'enabled': True, 'oversampling': 1,
-               'niter': 12, 'tol': 1e-5}
+               'niter': 24, 'tol': 1e-12, 'correct': True}
     full = proj_corners(r0, r1, opts_svd=opts_svd)
     p0, p1, X, Y = proj_corners(
         r0, r1, opts_svd=opts_svd, opts_si=opts_si,
@@ -126,6 +127,28 @@ def test_si_projectors_match_full_svd(config_kwargs, sym):
     _assert_projectors_equivalent(full, (p0, p1))
 
 
+def test_si_complex_u1_projectors_match_full_svd(config_kwargs):
+    """AI-generated test: complex U1 corners exercise conjugation."""
+    config = yastn.make_config(
+        sym='U1', default_dtype='complex128', **config_kwargs)
+    config.backend.random_seed(seed=19)
+    r0, r1 = _ctm_corner_pair(config, 'U1')
+    r0 = (1 + 0.35j) * r0
+    r1 = (1 - 0.2j) * r1
+    opts_svd = {'D_total': 5, 'tol': 0, 'fix_signs': True}
+    full = proj_corners(r0, r1, opts_svd=opts_svd)
+
+    p0, p1, X, Y = proj_corners(
+        r0, r1, opts_svd=opts_svd,
+        opts_si={'enabled': True, 'oversampling': 1,
+                 'niter': 24, 'tol': 1e-12, 'correct': True},
+        return_si_state=True)
+
+    assert X.dtype == Y.dtype == config.backend.DTYPE['complex128']
+    assert si_bases_compatible(r0, r1, X, Y)
+    _assert_projectors_equivalent(full, (p0, p1), tol=5e-8)
+
+
 @pytest.mark.parametrize('sym', ['U1', 'Z2'])
 def test_si_spectrum_matches_full_svd(config_kwargs, sym):
     """SI iterations recover the leading spectrum from a strict subspace."""
@@ -135,6 +158,7 @@ def test_si_spectrum_matches_full_svd(config_kwargs, sym):
     opts_svd = {'D_total': 5, 'tol': 0, 'fix_signs': True}
     opts_si = {'oversampling': 1, 'niter': 24, 'tol': 1e-12}
     X, Y = initialize_si_bases(r0, r1, rank=6)
+    X, Y = si_refinement(r0, r1, X, Y, opts_svd, opts_si)
     assert X.get_shape(axes=1) < min(r0.get_shape(axes=0),
                                      r1.get_shape(axes=0))
 
@@ -158,10 +182,15 @@ def test_si_spectrum_matches_full_svd(config_kwargs, sym):
     initial_error = 0.0
     final_error = 0.0
     for charge in ref:
+        ref_values = np.asarray(ref[charge])
+        initial_values = np.asarray(initial.get(charge, ()))
+        padded_initial = np.zeros_like(ref_values)
+        common = min(ref_values.size, initial_values.size)
+        padded_initial[:common] = initial_values[:common]
         initial_error += np.linalg.norm(
-            np.asarray(ref[charge]) - np.asarray(initial[charge])) ** 2
+            ref_values - padded_initial) ** 2
         final_error += np.linalg.norm(
-            np.asarray(ref[charge]) - np.asarray(actual[charge])) ** 2
+            ref_values - np.asarray(actual[charge])) ** 2
         assert np.allclose(ref[charge], actual[charge], rtol=2e-8, atol=2e-10)
     initial_error = np.sqrt(initial_error)
     final_error = np.sqrt(final_error)
@@ -259,9 +288,9 @@ def test_si_rebuilds_recycled_basis_after_fusion_history_change(
 
     assert external.tD == r1.get_legs(0).tD
     assert external.hf != r1.get_legs(0).hf
-    # Aggregate compatibility cannot see the changed hard-fusion layout.  The
-    # first contraction must fail and exercise proj_corners' retry path.
-    assert si_bases_compatible(r0, r1_with_new_history, X, Y)
+    # Compatibility includes hard-fusion layout, so rebuilding happens before
+    # entering the reduced SVD rather than by catching an unrelated error.
+    assert not si_bases_compatible(r0, r1_with_new_history, X, Y)
     initialize_calls = 0
     original_initialize = env_ctm_module.initialize_si_bases
 
@@ -281,6 +310,41 @@ def test_si_rebuilds_recycled_basis_after_fusion_history_change(
     assert p0 is not None and p1 is not None
     assert si_bases_compatible(r0, r1_with_new_history, X_new, Y_new)
     assert initialize_calls == 1
+
+
+def test_si_does_not_retry_unrelated_yastn_error(config_kwargs,
+                                                  monkeypatch):
+    """AI-generated test: unrelated SI errors propagate without retries."""
+    config = yastn.make_config(sym='none', **config_kwargs)
+    r0, r1 = _ctm_corner_pair(config, 'none')
+    X, Y = initialize_si_bases(r0, r1, rank=4)
+    assert si_bases_compatible(r0, r1, X, Y)
+    si_calls = 0
+    initialize_calls = 0
+    original_initialize = env_ctm_module.initialize_si_bases
+
+    def failing_si(*args, **kwargs):
+        nonlocal si_calls
+        si_calls += 1
+        raise yastn.YastnError("sentinel SI failure")
+
+    def counting_initialize(*args, **kwargs):
+        nonlocal initialize_calls
+        initialize_calls += 1
+        return original_initialize(*args, **kwargs)
+
+    monkeypatch.setattr(env_ctm_module, 'si_projector_svd', failing_si)
+    monkeypatch.setattr(
+        env_ctm_module, 'initialize_si_bases', counting_initialize)
+
+    with pytest.raises(yastn.YastnError, match="sentinel SI failure"):
+        proj_corners(
+            r0, r1, opts_svd={'D_total': 4},
+            opts_si={'enabled': True, 'oversampling': 0, 'niter': 2},
+            X=X, Y=Y, return_si_state=True)
+
+    assert si_calls == 1
+    assert initialize_calls == 0
 
 
 # ---------------------------------------------------------------------------

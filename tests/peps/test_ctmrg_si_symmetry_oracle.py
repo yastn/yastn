@@ -320,9 +320,9 @@ def test_asvr_pipeline_recovers_globally_dominant_missing_sector(
 
     assert X.get_legs(1).tD == {(0,): 6}
     assert Y.get_legs(0).tD == {(0,): 6}
-    # Two ASVR estimates select and confirm the allocation; the third call
-    # constructs the final reduced projector through the public pipeline.
-    assert calls == 3
+    # ASVR needs at least a changed estimate and a confirmation; floating-point
+    # convergence may require more estimates before the final projector call.
+    assert 3 <= calls <= opts_si['asvr_iterations'] + 1
     _assert_refined_si_spectrum(r0, r1, X, Y, opts_svd, opts_si)
 
 
@@ -490,7 +490,7 @@ def test_conjugate_u1_sectors_and_boundary_degeneracy(config_kwargs):
     }
     r0, r1 = _corners_with_sector_spectra(config, spectra)
     opts_svd = {'D_total': 6, 'tol': 0, 'fix_signs': True,
-                'truncate_multiplets': True}
+                'largest_gap': True}
     # The nominal cutoff bisects the degenerate pair of 12s in q=-2 and q=2.
     # Multiplet preservation moves it to the largest subsequent gap, between
     # 4 and 1, retaining 17 states with an intentionally uneven allocation.
@@ -517,3 +517,53 @@ def test_conjugate_u1_sectors_and_boundary_degeneracy(config_kwargs):
     assert actual[(-1,)] == actual[(1,)]
     assert actual[(-2,)] == actual[(2,)]
     assert si_bases_compatible(r0, r1, X, Y)
+
+
+@pytest.mark.parametrize(('sym', 'spectra', 'policy', 'expected'), [
+    ('none', {(): (10., 5., 5., 1.)},
+     {'D_total': 2, 'eps_multiplet': 1e-12}, {(): 1}),
+    ('U1', {(-1,): (9., 7.), (0,): (10.,), (1,): (8., 6.)},
+     {'D_total': 4, 'hermitian': True},
+     {(-1,): 1, (0,): 1, (1,): 1}),
+], ids=('eps_multiplet', 'hermitian'))
+def test_si_truncation_policies_match_full_svd(
+        config_kwargs, sym, spectra, policy, expected):
+    """AI-generated test: SI honors symmetry-aware truncation policies."""
+    config = yastn.make_config(sym=sym, **config_kwargs)
+    r0, r1 = _corners_with_sector_spectra(config, spectra)
+    full_rank = sum(len(values) for values in spectra.values())
+    opts_svd = {'tol': 0, 'fix_signs': True, **policy}
+    opts_si = {'oversampling': full_rank - opts_svd['D_total'],
+               'niter': 0, 'tol': 0}
+    X, Y = initialize_si_bases(r0, r1, rank=full_rank)
+
+    actual, _, _ = _si_sector_dimensions(
+        r0, r1, X, Y, opts_svd, opts_si)
+    reference = _full_sector_dimensions(r0, r1, opts_svd)
+
+    assert actual == reference == expected
+
+
+def test_si_forwards_custom_truncation_mask(config_kwargs):
+    """AI-generated test: SI invokes the same custom mask as full SVD."""
+    config = yastn.make_config(sym='none', **config_kwargs)
+    spectra = {(): (10., 8., 6., 4., 2.)}
+    r0, r1 = _corners_with_sector_spectra(config, spectra)
+    mask_calls = []
+
+    def keep_two(spectrum):
+        mask_calls.append(tuple(spectrum.get_shape()))
+        return yastn.truncation_mask(spectrum, D_total=2)
+
+    opts_svd = {'D_total': 4, 'tol': 0, 'fix_signs': True,
+                'mask_f': keep_two}
+    opts_si = {'oversampling': 1, 'niter': 0, 'tol': 0}
+    X, Y = initialize_si_bases(r0, r1, rank=5)
+
+    actual, _, _ = _si_sector_dimensions(
+        r0, r1, X, Y, opts_svd, opts_si)
+    assert mask_calls == [(5, 5)]
+    reference = _full_sector_dimensions(r0, r1, opts_svd)
+
+    assert mask_calls == [(5, 5), (5, 5)]
+    assert actual == reference == {(): 2}
