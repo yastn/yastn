@@ -30,29 +30,36 @@ def pytest_configure(config):
         "pathologically slow).")
 
 
-@pytest.fixture(params=['scatter', 'tiled', 'loop'], ids=['scatter', 'tiled', 'loop'])
+@pytest.fixture(params=['scatter', 'tiled', 'hybrid', 'loop'], ids=['scatter', 'tiled', 'hybrid', 'loop'])
 def fuse_scatter_path(request, monkeypatch):
     """Run each opted-in test under the GPU fuse/unfuse code paths, selected live via env
-    ``YASTN_FUSE_SCATTER_CHUNK`` (read on every ``transpose_and_merge``/``unmerge`` call):
+    ``YASTN_FUSE_SCATTER_CHUNK`` / ``YASTN_FUSE_SCATTER_THRESH`` (read on every
+    ``transpose_and_merge``/``unmerge`` call):
 
-    * ``scatter`` -- unset   -> single-tile scatter/gather (GPU default),
-    * ``tiled``   -- ``128`` -> tiled scatter/gather; a small chunk so the (small) test tensors
-      actually cross tile boundaries. **Skipped for ``@pytest.mark.exclude_fusion_scatter_tiled``
-      tests** (e.g. gradcheck), where forward reruns O(numel) times and a small chunk is pathological.
-    * ``loop``    -- ``0``   -> forced per-block loop even on GPU.
+    * ``scatter`` -- both unset -> pure single-tile scatter/gather (all small test blocks < default
+      THRESH 2**16),
+    * ``tiled``   -- CHUNK=128  -> tiled scatter/gather; a small chunk so the (small) test tensors
+      cross tile boundaries. **Skipped for ``@pytest.mark.exclude_fusion_scatter_tiled`` tests**
+      (e.g. gradcheck), where forward reruns O(numel) times and a small chunk is pathological.
+    * ``hybrid``  -- THRESH=64  -> loop the >=64-element blocks, compact-scatter the smaller ones
+      (exercises the large/small split on the small test tensors),
+    * ``loop``    -- CHUNK=0    -> forced per-block loop even on GPU.
 
     Only meaningful on cuda (CPU always uses the loop), so the extra variants are skipped off-cuda.
     Opt in per module with ``pytestmark = pytest.mark.usefixtures("fuse_scatter_path")``.
     """
     if request.config.getoption("--device") != 'cuda':
         if request.param != 'scatter':
-            pytest.skip('YASTN_FUSE_SCATTER_CHUNK path split is a no-op off cuda')
+            pytest.skip('fuse-path split is a no-op off cuda')
         return
     if request.param == 'tiled' and request.node.get_closest_marker('exclude_fusion_scatter_tiled'):
         pytest.skip("'tiled' variant excluded for this test; boundaries covered by unit tests")
-    if request.param == 'scatter':
-        monkeypatch.delenv('YASTN_FUSE_SCATTER_CHUNK', raising=False)
-    elif request.param == 'tiled':
+    monkeypatch.delenv('YASTN_FUSE_SCATTER_CHUNK', raising=False)
+    monkeypatch.delenv('YASTN_FUSE_SCATTER_THRESH', raising=False)
+    if request.param == 'tiled':
         monkeypatch.setenv('YASTN_FUSE_SCATTER_CHUNK', '128')
-    else:  # loop
+    elif request.param == 'hybrid':
+        monkeypatch.setenv('YASTN_FUSE_SCATTER_THRESH', '64')
+    elif request.param == 'loop':
         monkeypatch.setenv('YASTN_FUSE_SCATTER_CHUNK', '0')
+    # 'scatter': both unset -> default THRESH 2**16 -> all (small) test blocks scatter

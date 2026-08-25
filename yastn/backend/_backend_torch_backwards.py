@@ -438,45 +438,72 @@ def pack_transpose_and_merge_params(order, meta, size_in, device):
         covered = r[1]
     contiguous = contiguous and covered == size_in
 
-    col = lambda i: torch.tensor([r[i] for r in rows], dtype=torch.int64, device=device)
+    # one packed [nblocks, K] int64 table (columns: slo_start, slo_stop, Do, wperm, sDo1, Dns,
+    # sDns1, ssln_start, sDn1, sln_start) so _build_dest does a *single* per-element gather instead
+    # of ~9; K = 3 + 3*ndimo + 4*ndimn.
+    packed = torch.tensor(
+        [[r[0], r[1], *r[2], *r[3], *r[4], *r[5], *r[6], *r[7], *r[8], r[9]] for r in rows],
+        dtype=torch.int64, device=device)
     return {'ndimo': ndimo, 'ndimn': ndimn, 'contiguous': contiguous,
-            'slo_start': col(0), 'slo_stop': col(1),
-            'Do': col(2), 'wperm': col(3), 'sDo1': col(4),
-            'Dns': col(5), 'sDns1': col(6), 'ssln_start': col(7), 'sDn1': col(8),
-            'sln_start': col(9)}
+            'slo_start': packed[:, 0].contiguous(),   # separate 1D copy for searchsorted
+            'packed': packed}
 
 
 @nsys_profile
-def build_source_to_dest(params, lo, hi, device, sentinel=None):
+def _build_dest(params, g, sentinel=None):
     r"""
-    Vectorized destination flat index for source positions ``[lo, hi)`` (int64, on ``device``).
+    Vectorized destination flat index for arbitrary source positions ``g`` (int64 tensor).
 
-    With ``sentinel is None`` (contiguous coverage) every position lands in a block. With an int
-    ``sentinel`` (partial coverage) source positions that fall in a gap between blocks are routed
-    to ``sentinel`` (the caller's sink slot) rather than a wrong block.
+    With ``sentinel is None`` every position in ``g`` is assumed to land in a block (contiguous
+    coverage, or ``g`` restricted to real block positions as in the compact/hybrid path). With an
+    int ``sentinel`` source positions that fall in a gap between blocks are routed to ``sentinel``
+    (the caller's sink slot) rather than a wrong block.
     """
     ndimo, ndimn = params['ndimo'], params['ndimn']
-    g = torch.arange(lo, hi, dtype=torch.int64, device=device)
     b = torch.searchsorted(params['slo_start'], g, right=True) - 1
     bc = b.clamp_min(0) if sentinel is not None else b        # keep gather indices valid for gaps
 
-    Do, wperm, sDo1 = params['Do'][bc], params['wperm'][bc], params['sDo1'][bc]
-    Dns, sDns1 = params['Dns'][bc], params['sDns1'][bc]
-    ssln_start, sDn1 = params['ssln_start'][bc], params['sDn1'][bc]
+    P = params['packed'][bc]                                  # [T, K] -- a SINGLE per-element gather
+    o = 2
+    Do, wperm, sDo1 = P[:, o:o+ndimo], P[:, o+ndimo:o+2*ndimo], P[:, o+2*ndimo:o+3*ndimo]
+    o += 3 * ndimo
+    Dns, sDns1 = P[:, o:o+ndimn], P[:, o+ndimn:o+2*ndimn]
+    ssln_start, sDn1 = P[:, o+2*ndimn:o+3*ndimn], P[:, o+3*ndimn:o+4*ndimn]
 
-    l = g - params['slo_start'][bc]
+    l = g - P[:, 0]                                           # slo_start
     i_perm = torch.zeros_like(g)                              # decode Do, permute, reshape(Dns)
     for d in range(ndimo):
         i_perm += ((l // sDo1[:, d]) % Do[:, d]) * wperm[:, d]
 
-    i_dest = params['sln_start'][bc].clone()                  # reshape(Dns) -> +ssln offset -> encode Dn
+    i_dest = P[:, o+4*ndimn].clone()                          # sln_start; reshape(Dns) -> +ssln -> encode Dn
     for e in range(ndimn):
         i_dest += ((i_perm // sDns1[:, e]) % Dns[:, e] + ssln_start[:, e]) * sDn1[:, e]
 
     if sentinel is not None:                                  # gap elements -> sink
-        in_block = (b >= 0) & (g < params['slo_stop'][bc])
+        in_block = (b >= 0) & (g < P[:, 1])                   # slo_stop
         i_dest = torch.where(in_block, i_dest, i_dest.new_full((), sentinel))
     return i_dest
+
+
+def build_source_to_dest(params, lo, hi, device, sentinel=None):
+    r"""Destination flat index for the contiguous source range ``[lo, hi)`` (int64, on ``device``)."""
+    g = torch.arange(lo, hi, dtype=torch.int64, device=device)
+    return _build_dest(params, g, sentinel)
+
+
+def _concat_ranges(starts, stops, device):
+    r"""
+    Concatenate the integer ranges ``[starts[i], stops[i])`` into one int64 tensor (vectorized).
+    ``starts``/``stops`` are int64 tensors on ``device``. Used to enumerate the flat positions of a
+    subset of blocks (the small blocks in the hybrid path) without a per-block Python loop.
+    """
+    lens = stops - starts
+    total = int(lens.sum())
+    if total == 0:
+        return torch.empty((0,), dtype=torch.int64, device=device)
+    out_off = torch.cumsum(lens, 0) - lens                    # start offset of each block in the output
+    blk = torch.repeat_interleave(torch.arange(starts.numel(), device=device), lens)
+    return starts[blk] + (torch.arange(total, device=device) - out_off[blk])
 
 
 class kernel_transpose_and_merge_scatter(torch.autograd.Function):
@@ -590,3 +617,75 @@ class kernel_unmerge_scatter(torch.autograd.Function):
             gidx = build_source_to_dest(params, lo, hi, dev)   # adjoint of a gather = scatter-add
             data_in_b.scatter_add_(0, gidx, data_out_b[lo:hi])
         return data_in_b, None, None, None
+
+
+class kernel_transpose_and_merge_hybrid(torch.autograd.Function):
+    r"""
+    Hybrid of :class:`kernel_transpose_and_merge` (loop) and its scatter variant. Large blocks go
+    through the per-block permute-copy loop (bandwidth-optimal, no index build); the many small
+    blocks go through a single compact scatter over precomputed ``src_small``/``dst_small`` (built
+    only over the small blocks, so no sentinel and only small-block data is touched). Large and small
+    blocks write disjoint regions of the output.
+    """
+    @staticmethod
+    def forward(data_in, order, meta_large, src_small, dst_small, size_out):
+        data_out = torch.zeros((size_out,), dtype=data_in.dtype, device=data_in.device)
+        for sln, Dn, slo, Do, ssln, Dns in meta_large:
+            data_out[sln].reshape(Dn)[ssln] = data_in[slo].reshape(Do).permute(order).reshape(Dns)
+        if src_small.numel() > 0:
+            data_out.scatter_(0, dst_small, data_in[src_small])
+        return data_out
+
+    @staticmethod
+    def setup_context(ctx, inputs, output):
+        data_in, order, meta_large, src_small, dst_small, _ = inputs
+        ctx.order = order
+        ctx.meta_large = meta_large
+        ctx.save_for_backward(src_small, dst_small)
+        ctx.size_in = data_in.numel()
+
+    @staticmethod
+    def backward(ctx, data_out_b):
+        order = ctx.order
+        inv_order = tuple(np.argsort(order))
+        src_small, dst_small = ctx.saved_tensors
+        data_in_b = torch.zeros((ctx.size_in,), dtype=data_out_b.dtype, device=data_out_b.device)
+        for sln, Dn, slo, Do, ssln, _ in ctx.meta_large:
+            inv_Do = tuple(Do[n] for n in order)
+            data_in_b[slo].view(Do)[:] = data_out_b[sln].view(Dn)[ssln].view(inv_Do).permute(inv_order)
+        if src_small.numel() > 0:
+            data_in_b[src_small] = data_out_b[dst_small]     # adjoint of the compact scatter = gather
+        return data_in_b, None, None, None, None, None
+
+
+class kernel_unmerge_hybrid(torch.autograd.Function):
+    r"""
+    Hybrid of :class:`kernel_unmerge` (loop) and its gather variant. Large blocks go through the
+    per-block sub-block-copy loop; the many small blocks go through a single compact gather over
+    precomputed ``dst_small`` (dest positions) / ``gidx_small`` (their source flat indices).
+    """
+    @staticmethod
+    def forward(data_in, meta_large, dst_small, gidx_small, size_out):
+        data_out = torch.zeros((size_out,), dtype=data_in.dtype, device=data_in.device)
+        for sln, Dn, slo, Do, sslo in meta_large:
+            data_out[sln].view(Dn)[:] = data_in[slo].view(tuple(Do))[sslo]
+        if dst_small.numel() > 0:
+            data_out[dst_small] = data_in[gidx_small]
+        return data_out
+
+    @staticmethod
+    def setup_context(ctx, inputs, output):
+        data_in, meta_large, dst_small, gidx_small, _ = inputs
+        ctx.meta_large = meta_large
+        ctx.save_for_backward(dst_small, gidx_small)
+        ctx.size_in = data_in.numel()
+
+    @staticmethod
+    def backward(ctx, data_out_b):
+        dst_small, gidx_small = ctx.saved_tensors
+        data_in_b = torch.zeros((ctx.size_in,), dtype=data_out_b.dtype, device=data_out_b.device)
+        for sln, Dn, slo, Do, sslo in ctx.meta_large:
+            data_in_b[slo].view(Do)[sslo] = data_out_b[sln].view(Dn)
+        if dst_small.numel() > 0:                            # adjoint of the compact gather = scatter-add
+            data_in_b.scatter_add_(0, gidx_small, data_out_b[dst_small])
+        return data_in_b, None, None, None, None

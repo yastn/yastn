@@ -33,6 +33,8 @@ from ._backend_torch_backwards import kernel_apply_mask, kernel_embed_mask
 from ._backend_torch_backwards import kernel_embed_transpose, kernel_transpose_and_merge, kernel_unmerge
 from ._backend_torch_backwards import kernel_transpose_and_merge_scatter, pack_transpose_and_merge_params
 from ._backend_torch_backwards import kernel_unmerge_scatter
+from ._backend_torch_backwards import kernel_transpose_and_merge_hybrid, kernel_unmerge_hybrid
+from ._backend_torch_backwards import _build_dest, _concat_ranges
 from ._backend_torch_backwards import kernel_embed_slices
 
 
@@ -759,39 +761,84 @@ def _fuse_scatter_chunk():
     return val   # 0 => force loop; positive => scatter tile size
 
 
+def _fuse_scatter_thresh():
+    r"""
+    Read env ``YASTN_FUSE_SCATTER_THRESH`` -- the per-block element-count threshold for the hybrid
+    GPU fuse/unfuse path: blocks with >= THRESH elements go through the per-block loop (bandwidth-
+    optimal, no index build), smaller blocks through a compact scatter/gather. Unset -> 2**16
+    (~saturates the A100/H100 memory interface; where the loop launch cost and index-build cost
+    cross over). Invalid values warn and fall back to the default.
+    """
+    env = os.environ.get('YASTN_FUSE_SCATTER_THRESH')
+    if env is None:
+        return 1 << 16
+    try:
+        val = int(env)
+    except ValueError:
+        val = -1
+    if val < 0:
+        warnings.warn(f"Ignoring YASTN_FUSE_SCATTER_THRESH={env!r}: expected a non-negative integer.")
+        return 1 << 16
+    return val
+
+
 def transpose_and_merge(data, order, meta_mrg, size):
     r"""
     Transpose-and-merge source blocks into the fused 1D buffer. On CPU uses the per-block loop
-    kernel. On GPU uses the scatter/index-map kernel by default; env ``YASTN_FUSE_SCATTER_CHUNK``
-    controls it: unset -> single-tile scatter; positive int -> tiled scatter that bounds the
-    transient index buffer; Partial coverage (source blocks not tiling ``[0, size)``) is handled inside the kernel 
-    via a sentinel sink. ``0`` -> force the loop even on GPU. 
+    kernel. On GPU uses a hybrid: large blocks (>= ``YASTN_FUSE_SCATTER_THRESH`` elements) go through
+    the loop, small blocks through a single compact scatter; if all blocks are small it is a pure
+    single-array scatter, if all are large a pure loop. ``YASTN_FUSE_SCATTER_CHUNK=0`` forces the
+    loop; a positive value tiles the all-small scatter. Partial coverage is handled without a sink
+    on the hybrid path (compact indices cover only real blocks).
     """
     if data.is_cuda:
         chunk = _fuse_scatter_chunk()
-        if chunk != 0 and len(meta_mrg)>0:   # 0 forces the loop even on GPU, empty meta_mrg is always a loop
+        if chunk != 0 and len(meta_mrg) > 0:   # 0 forces the loop even on GPU; empty meta is always a loop
+            thr = _fuse_scatter_thresh()
+            meta_small = [m for m in meta_mrg if m[2].stop - m[2].start < thr]   # slo = m[2]
+            if not meta_small:                 # all large -> per-block loop (no index build at all)
+                return kernel_transpose_and_merge.apply(data, order, meta_mrg, size)
             params = pack_transpose_and_merge_params(order, meta_mrg, data.numel(), data.device)
-            return kernel_transpose_and_merge_scatter.apply(data, params, size, chunk)
+            if len(meta_small) == len(meta_mrg):   # all small -> lean single-array scatter
+                return kernel_transpose_and_merge_scatter.apply(data, params, size, chunk)
+            meta_large = [m for m in meta_mrg if m[2].stop - m[2].start >= thr]
+            starts = torch.tensor([m[2].start for m in meta_small], dtype=torch.int64, device=data.device)
+            stops = torch.tensor([m[2].stop for m in meta_small], dtype=torch.int64, device=data.device)
+            src_small = _concat_ranges(starts, stops, data.device)
+            dst_small = _build_dest(params, src_small)   # small source positions always land in-block
+            return kernel_transpose_and_merge_hybrid.apply(data, order, meta_large, src_small, dst_small, size)
     return kernel_transpose_and_merge.apply(data, order, meta_mrg, size)
 
 
 def unmerge(data, meta, size):
     r"""
     Unfuse (split) fused blocks into the 1D buffer. On CPU uses the per-block loop kernel. On GPU
-    uses the gather/index-map kernel by default; env ``YASTN_FUSE_SCATTER_CHUNK`` controls it as in
-    :func:`transpose_and_merge` (unset -> single tile; positive int -> tiled; ``0`` -> force loop).
+    uses the same hybrid split as :func:`transpose_and_merge`, keyed on the unfused (dest) block
+    size: large blocks loop, small blocks go through a compact gather.
     """
     if data.is_cuda:
         chunk = _fuse_scatter_chunk()
-        if chunk != 0 and len(meta) > 0:   # 0 forces the loop even on GPU, empty meta is always a loop
+        if chunk != 0 and len(meta) > 0:   # 0 forces the loop even on GPU; empty meta is always a loop
+            thr = _fuse_scatter_thresh()
+            meta_small = [m for m in meta if m[0].stop - m[0].start < thr]   # sln = m[0] (dest)
+            if not meta_small:                 # all large -> per-block loop (no index build at all)
+                return kernel_unmerge.apply(data, meta, size)
             ndimo = len(meta[0][1])        # len(Dn)
             # unmerge is the order=identity, source/dest-swapped case of transpose_and_merge; relabel
-            # meta (sln,Dn,slo,Do,sslo) -> merge meta so build_source_to_dest maps each DEST position
-            # to its SOURCE flat index (gather_idx).
+            # meta (sln,Dn,slo,Do,sslo) -> merge meta so _build_dest maps each DEST position to its
+            # SOURCE flat index (gather_idx).
             merge_meta = [(slo, Do, sln, Dn, sslo, Dn) for (sln, Dn, slo, Do, sslo) in meta]
             params = pack_transpose_and_merge_params(tuple(range(ndimo)), merge_meta, size, data.device)
-            if params['contiguous']:       # dense dest tiles [0,size); else fall back to loop
+            if not params['contiguous']:   # dense dest expected; else fall back to loop
+                return kernel_unmerge.apply(data, meta, size)
+            if len(meta_small) == len(meta):   # all small -> lean gather
                 return kernel_unmerge_scatter.apply(data, params, size, chunk)
+            meta_large = [m for m in meta if m[0].stop - m[0].start >= thr]
+            starts = torch.tensor([m[0].start for m in meta_small], dtype=torch.int64, device=data.device)
+            stops = torch.tensor([m[0].stop for m in meta_small], dtype=torch.int64, device=data.device)
+            dst_small = _concat_ranges(starts, stops, data.device)   # small dest positions
+            gidx_small = _build_dest(params, dst_small)   # relabeled params map dest -> source
+            return kernel_unmerge_hybrid.apply(data, meta_large, dst_small, gidx_small, size)
     return kernel_unmerge.apply(data, meta, size)
 
 
