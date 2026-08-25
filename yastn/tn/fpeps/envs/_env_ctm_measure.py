@@ -1034,12 +1034,20 @@ def _build_separate_unfused(env, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, b
     if projectors is None:
         projectors = {}
 
-    # Normalize each value to a tuple of slot strings so a site can carry
-    # several half-projectors (e.g. {site: ('hrt', 'hrb')}).
-    projectors = {
-        site: (slots,) if isinstance(slots, str) else tuple(slots)
-        for site, slots in projectors.items()
-    }
+    # Normalize each value to a ``{slot: tensor-or-None}`` dict so a site can
+    # carry several half-projectors (e.g. {site: ('hrt', 'hrb')}).  A value may
+    # instead be a ``{slot: tensor}`` mapping, which supplies the half-projector
+    # directly rather than reading it from ``env.proj``; ``None`` means "read it
+    # from the env".  Both forms iterate and test membership by slot name, so
+    # the partner check and the insertion loop below are shared.
+    def _norm_slots(slots):
+        if isinstance(slots, str):
+            return {slots: None}
+        if isinstance(slots, dict):
+            return dict(slots)
+        return {slot: None for slot in slots}
+
+    projectors = {site: _norm_slots(slots) for site, slots in projectors.items()}
 
     # Consistency check on the projectors: every half must have its partner.
     # Partner is found by flipping the face char ('t' <-> 'b', 'l' <-> 'r')
@@ -1090,7 +1098,9 @@ def _build_separate_unfused(env, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, b
             _register_rename((D2_bond + ('k',), i_d2, j_d2), new_ket_bond, proj_name, site)
             _register_rename((D2_bond + ('b',), i_d2, j_d2), new_bra_bond, proj_name, site)
 
-            proj = getattr(env.proj[site], proj_name)
+            proj = projectors[site][proj_name]
+            if proj is None:
+                proj = getattr(env.proj[site], proj_name)
             proj_inserts.append((proj.unfuse_legs(axes=(1,)),
                                  [new_env_bond, new_ket_bond, new_bra_bond,
                                   ('proj',) + env_bond]))
@@ -1653,8 +1663,10 @@ def measure_nsite_cut_map_oe(self, *operators, sites, probe_site, probe_slot, pr
         Lattice site and slot name whose severed-bond labels are left open
         as the output spec.
     projectors : dict or None
-        Ordinary ``{site: slot(s)}`` projector dict for the *other* cuts
-        (partner-pair consistency enforced as usual).
+        Projector dict for the *other* cuts (partner-pair consistency enforced
+        as usual).  Either ``{site: slot(s)}``, which reads the half-projectors
+        from ``env.proj``, or ``{site: {slot: tensor}}``, which supplies them
+        directly.
 
     Returns
     -------
