@@ -604,8 +604,10 @@ class EnvCTM():
             Supported options are ``oversampling`` (default 5), ``niter``
             (default 1), ``tol`` (default 1e-3), ``warmup`` (default 5 projector updates),
             ``correction_frequency`` (default 0, disabled), ``correct`` to
-            force an immediate spectrum-based sector redistribution, and
-            ``recycle_grad`` (default False).
+            force an immediate sector redistribution, ``refinement``
+            (``'cwo'`` by default, or ``'asvr'``/``'rds'``), and
+            ``recycle_grad`` (default False). ``'rds'`` distributes SI vectors
+            proportionally to the charge-sector dimensions of the corners.
 
         Returns
         -------
@@ -1357,13 +1359,12 @@ def _distribute_si_rank(charges, rank):
 
 
 def _distribute_si_rank_with_capacity(capacities, rank):
-    # TODO check if this actually needed. The left and right legs should match.
-    r"""Distribute a shared SI rank without exceeding sector capacities.
+    r"""Distribute an SI rank without exceeding CTM-leg sector capacities.
 
     The returned mapping defines the auxiliary leg used by both SI bases, so
     ``X`` and ``Y`` always contain exactly the same charges and the same number
     of vectors in every charge sector. The allocation always has the requested
-    oversampled rank; insufficient shared capacity is an error.
+    oversampled rank; insufficient corner-leg capacity is an error.
     """
     if not isinstance(rank, int) or isinstance(rank, bool) or rank <= 0:
         raise YastnError("SI rank must be a positive integer.")
@@ -1372,12 +1373,12 @@ def _distribute_si_rank_with_capacity(capacities, rank):
                   for charge, dimension in capacities.items()
                   if dimension > 0}
     if not capacities:
-        raise YastnError("SI bases have no common non-empty charge sectors.")
+        raise YastnError("The CTM corner leg has no non-empty charge sectors.")
 
     total_capacity = sum(capacities.values())
     if rank > total_capacity:
         raise YastnError(
-            f"Requested SI rank {rank} exceeds total shared capacity "
+            f"Requested SI rank {rank} exceeds CTM corner-leg capacity "
             f"{total_capacity}; cannot construct an auxiliary leg of "
             f"dimension chi + oversampling.")
 
@@ -1402,47 +1403,57 @@ def _distribute_si_rank_with_capacity(capacities, rank):
             if dimension > 0}
 
 
-def _si_shared_capacity(r0, r1):
-    """Total rank simultaneously available to both SI rangefinders."""
-    x_capacity = r1.get_legs(0).tD
-    y_capacity = r0.get_legs(0).tD
-    return sum(min(x_capacity[charge], y_capacity[charge])
-               for charge in x_capacity.keys() & y_capacity.keys())
+def _validate_ctm_corner_pair(r0, r1):
+    """Validate the two closures of a pair of CTM corner halves."""
+    if not isinstance(r0, Tensor) or not isinstance(r1, Tensor):
+        raise YastnError("CTM corner halves must be YASTN tensors.")
+    if r0.ndim != 2 or r1.ndim != 2:
+        raise YastnError("CTM corner halves must be rank-2 tensors.")
+    if r0.config.sym.SYM_ID != r1.config.sym.SYM_ID:
+        raise YastnError("CTM corner halves must use the same symmetry.")
+
+    for axis in (0, 1):
+        leg0 = r0.get_legs(axis)
+        leg1 = r1.get_legs(axis)
+        common_charges = leg0.tD.keys() & leg1.tD.keys()
+        if any(leg0.tD[charge] != leg1.tD[charge]
+               for charge in common_charges):
+            raise YastnError(
+                "CTM corner halves must have matching dimensions in every "
+                "shared charge sector on both loop closures; "
+                f"mismatch on axis {axis}.")
+
+
+def _ctm_shared_sector_capacity(r0, r1):
+    """Return capacities of sectors supported by both CTM corner halves."""
+    capacity0 = r0.get_legs(0).tD
+    capacity1 = r1.get_legs(0).tD
+    return {charge: capacity0[charge]
+            for charge in capacity0.keys() & capacity1.keys()}
 
 
 def initialize_si_bases(r0, r1, rank, charges=None):
     r"""Initialize compatible column-isometric SI bases from Gaussian noise.
 
     The auxiliary rank is spread as uniformly as possible over charge sectors
-    shared by ``r0``'s left leg and ``r1``'s right leg. A sector cannot be
-    assigned more columns than either corner leg has rows in that sector.
+    of the matching external CTM legs. A sector cannot be assigned more
+    columns than that sector has rows.
     """
-    if not isinstance(r0, Tensor) or not isinstance(r1, Tensor):
-        raise YastnError("SI bases require YASTN corner tensors.")
-    if r0.ndim != 2 or r1.ndim != 2:
-        raise YastnError("SI bases require rank-2 corner tensors.")
-    if r0.config.sym.SYM_ID != r1.config.sym.SYM_ID:
-        raise YastnError("SI corner tensors must use the same symmetry.")
+    _validate_ctm_corner_pair(r0, r1)
 
     x_input = r1.get_legs(0).conj() # right leg of r1
     y_input = r0.get_legs(0).conj() # left leg of r0
-    x_capacity = x_input.tD
-    y_capacity = y_input.tD
-    common_charges = set(x_capacity) & set(y_capacity)
-    shared_capacity = {
-        charge: min(x_capacity[charge], y_capacity[charge])
-        for charge in common_charges
-    }
+    sector_capacity = _ctm_shared_sector_capacity(r0, r1)
 
     if charges is None:
         charge_mapping = _distribute_si_rank_with_capacity(
-            shared_capacity, rank)
+            sector_capacity, rank)
     else:
         charge_mapping = dict(charges)
-        unknown_charges = set(charge_mapping) - common_charges
+        unknown_charges = set(charge_mapping) - set(sector_capacity)
         if unknown_charges:
             raise YastnError(
-                f"SI charge sectors are not shared by both bases: "
+                f"SI charge sectors are absent from the CTM corner leg: "
                 f"{unknown_charges}.")
         if any(not isinstance(dimension, int) or isinstance(dimension, bool)
                or dimension <= 0
@@ -1456,7 +1467,7 @@ def initialize_si_bases(r0, r1, rank, charges=None):
                 f"Explicit SI charge-sector dimensions sum to {mapped_rank}, "
                 f"but requested SI rank is {rank}.")
         for charge, dimension in charge_mapping.items():
-            capacity = shared_capacity[charge]
+            capacity = sector_capacity[charge]
             if dimension > capacity:
                 raise YastnError(
                     f"SI dimension {dimension} exceeds capacity {capacity} "
@@ -1595,37 +1606,74 @@ def _distribute_si_rank_proportionally(sector_weights, rank):
             if dimension > 0}
 
 
-def si_refinment_asvr(r0, r1, X, Y, opts_svd, opts_si):
-    """Estimate an SI charge distribution from the dominant spectrum."""
-    for asvr_iteration in range(opts_si.get('asvr_iterations', 5)):
+def _si_refinement_asvr(r0, r1, X, Y, opts_svd, opts_si):
+    """Return a stable SI charge mapping estimated from dominant spectra."""
+    iterations = opts_si.get('asvr_iterations', 5)
+    chip = _si_rank(opts_svd, opts_si)
+    sector_capacity = _ctm_shared_sector_capacity(r0, r1)
+    charge_mapping = dict(X.get_legs(1).tD)
+
+    # A symmetry-preserving subspace iteration cannot generate a charge sector
+    # absent from its input bases. Seed every sector shared by both corners so
+    # that ASVR can compare their spectra before refining the allocation.
+    missing_charges = set(sector_capacity) - set(charge_mapping)
+    if missing_charges:
+        exploratory_mapping = _distribute_si_rank_with_capacity(
+            sector_capacity, chip)
+        unexplored_charges = set(sector_capacity) - set(exploratory_mapping)
+        if unexplored_charges:
+            raise YastnError(
+                "ASVR cannot probe every shared charge sector with SI rank "
+                f"{chip}; increase D_total/D_block or oversampling. Missing "
+                f"sectors: {unexplored_charges}.")
+        charge_mapping = exploratory_mapping
+        X, Y = initialize_si_bases(
+            r0, r1, chip, charges=charge_mapping)
+
+    for asvr_iteration in range(iterations):
         _, _, _, _, _, sall = si_projector_svd(
             r0, r1, X, Y, opts_svd, opts_si, return_spectrum=True)
         sector_values = svd_charge_sector_values(sall)
-        # truncate all spectrum values below the largest smallest sector value, so that the dominant sector would be extended
+        # Keep values above the largest per-sector floor so dominant sectors
+        # receive more columns in the next allocation.
         largest_smallest_sector_value = max(values[-1]
                                             for values in sector_values.values())
         sector_dominant_values = {
             charge: sum(value >= largest_smallest_sector_value for value in values)
             for charge, values in sector_values.items()
         }
-        chip = _si_rank(opts_svd, opts_si)
-        charge_mapping = _distribute_si_rank_proportionally(sector_dominant_values, chip)
-        X, Y = initialize_si_bases(r0, r1, chip, charges=charge_mapping)
+        refined_mapping = _distribute_si_rank_proportionally(
+            sector_dominant_values, chip)
+        if refined_mapping == charge_mapping:
+            break
+        charge_mapping = refined_mapping
+        if asvr_iteration + 1 < iterations:
+            X, Y = initialize_si_bases(
+                r0, r1, chip, charges=charge_mapping)
+    return charge_mapping
 
-    return _distribute_si_rank_proportionally(sector_dominant_values, chip)
 
-def si_refinment_cwo(r0, r1, X, Y, opts_svd, opts_si, charges=None):
-    """Estimate an SI charge distribution from the oversampled X and Y."""
-    for charge in r0.get_legs(0).tD.keys():
-        if charge not in r1.get_legs(0).tD:
-            raise YastnError(f"Charge {charge} is present in r0 but not in r1.")
+def _si_refinement_rds(r0, r1, X, Y, opts_svd, opts_si):
+    r"""Allocate SI rank from the relative sizes of CTM charge sectors.
+
+    The auxiliary rank is distributed proportionally to the dimensions of the
+    charge sectors shared by the external legs of ``r0`` and ``r1``. Integer
+    dimensions are obtained by largest-remainder apportionment, and the result
+    never exceeds a sector's capacity. ``X`` and ``Y`` are accepted to provide
+    the same call signature as the other SI refinement methods.
+    """
+    sector_capacity = _ctm_shared_sector_capacity(r0, r1)
+    rank = min(_si_rank(opts_svd, opts_si), sum(sector_capacity.values()))
+    charge_mapping = _distribute_si_rank_proportionally(
+        sector_capacity, rank)
+    return charge_mapping
+
+
+def _si_refinement_cwo(r0, r1, X, Y, opts_svd, opts_si):
+    """Return an SI charge mapping estimated by per-sector oversampling."""
     chip = _si_rank(opts_svd, opts_si)
     oversampled_sector_values = {}
-    for charge in r0.get_legs(0).tD.keys():
-        capacity = min(
-            r0.get_legs(0).tD[charge],
-            r1.get_legs(0).tD[charge],
-        )
+    for charge, capacity in _ctm_shared_sector_capacity(r0, r1).items():
         sector_rank = min(chip, capacity)
         X_charge, Y_charge = initialize_si_bases(
             r0, r1, sector_rank, charges={charge: sector_rank})
@@ -1644,7 +1692,35 @@ def si_refinment_cwo(r0, r1, X, Y, opts_svd, opts_si, charges=None):
         charge_mapping[charge] = charge_mapping.get(charge, 0) + 1
     if not charge_mapping:
         raise YastnError("CWO refinement found no singular values.")
-    return initialize_si_bases(r0, r1, chip, charges=charge_mapping)
+    return charge_mapping
+
+
+def si_refinement(r0, r1, X, Y, opts_svd, opts_si):
+    r"""Refine and rebuild SI bases with the selected allocation strategy.
+
+    This is the single dispatch point for SI charge-sector refinement. Each
+    strategy returns a charge mapping; basis construction is centralized here
+    so every method has the same public ``(X, Y)`` result.
+    """
+    _validate_ctm_corner_pair(r0, r1)
+    refinement = opts_si.get('refinement', 'cwo')
+    refinements = {
+        'cwo': _si_refinement_cwo,
+        'asvr': _si_refinement_asvr,
+        'rds': _si_refinement_rds,
+    }
+    try:
+        refine = refinements[refinement]
+    except KeyError:
+        raise YastnError(
+            "Unknown SI refinement method "
+            f"{refinement!r}; expected 'cwo', 'asvr', or 'rds'.") from None
+
+    charge_mapping = refine(r0, r1, X, Y, opts_svd, opts_si)
+    rank = sum(charge_mapping.values())
+    return initialize_si_bases(
+        r0, r1, rank, charges=charge_mapping)
+
 
 def _apply_corner_product(r0, r1, X):
     r"""Apply A = tensordot(r0, r1, axes=(1, 1)) to X.
@@ -1667,6 +1743,7 @@ def _apply_corner_product_h(r0, r1, Z):
 def si_projector_svd(r0, r1, X, Y, opts_svd, opts_si,
                      return_spectrum=False):
     """Approximate the SVD of ``r0 @ r1.T`` using recycled subspaces."""
+    _validate_ctm_corner_pair(r0, r1)
     niter = opts_si.get('niter', 5)
     tol = opts_si.get('tol', 1e-3)
     X_old, Yh_old = X, Y.H
@@ -1708,6 +1785,7 @@ def proj_corners(r0, r1, opts_svd, opts_si=None, X=None, Y=None,
                  return_si_state=False, **kwargs):
     r""" Projectors in between r0 @ r1.T corners. """
     # TODO: r1 matrix is defined as (right, left)
+    _validate_ctm_corner_pair(r0, r1)
     opts_svd = dict(opts_svd)
     if 'truncation_f' in kwargs:
         opts_svd['mask_f'] = kwargs['truncation_f']
@@ -1726,13 +1804,26 @@ def proj_corners(r0, r1, opts_svd, opts_si=None, X=None, Y=None,
         # available shared direction; changed corner legs will invalidate and
         # enlarge the recycled bases on subsequent updates.
         rank = min(_si_rank(opts_svd, opts_si),
-                   _si_shared_capacity(r0, r1))
-        if not si_bases_compatible(r0, r1, X, Y):
+                   sum(_ctm_shared_sector_capacity(r0, r1).values()))
+        recycled = si_bases_compatible(r0, r1, X, Y)
+        if not recycled:
             X, Y = initialize_si_bases(r0, r1, rank)
-        elif opts_si.get('correct', False):
-            X, Y = si_refinment_cwo(r0, r1, X, Y, opts_svd, opts_si)
-        u, s, v, X_new, Y_new = si_projector_svd(
-            r0, r1, X, Y, opts_svd, opts_si)
+        if opts_si.get('correct', False):
+            X, Y = si_refinement(
+                r0, r1, X, Y, opts_svd, opts_si)
+        try:
+            u, s, v, X_new, Y_new = si_projector_svd(
+                r0, r1, X, Y, opts_svd, opts_si)
+        except YastnError:
+            # Aggregate charge dimensions can stay unchanged while an updated
+            # CTM corner acquires incompatible dimensions inside a hard-fused
+            # leg. In that case a recycled basis cannot be contracted, so
+            # rebuild it for the current corner layout and retry once.
+            if not recycled:
+                raise
+            X, Y = initialize_si_bases(r0, r1, rank)
+            u, s, v, X_new, Y_new = si_projector_svd(
+                r0, r1, X, Y, opts_svd, opts_si)
     elif profiling_mode in ["NVTX",]:
         rr = tensordot(r0, r1, axes=(1, 1))
         rr.config.backend.cuda.nvtx.range_push(f"svd_with_truncation")
