@@ -462,29 +462,46 @@ def _build_dest(params, g, sentinel=None):
     (the caller's sink slot) rather than a wrong block.
     """
     ndimo, ndimn = params['ndimo'], params['ndimn']
+    packed = params['packed']
     b = torch.searchsorted(params['slo_start'], g, right=True) - 1
     bc = b.clamp_min(0) if sentinel is not None else b        # keep gather indices valid for gaps
 
-    P = params['packed'][bc]                                  # [T, K] -- a SINGLE per-element gather
+    # ``g`` is block-sorted, so ``bc`` has exactly one consecutive run per block. Expand each per-block
+    # column to ``[len(g)]`` with ``repeat_interleave`` one at a time (pipelined) instead of gathering
+    # the whole ``[len(g), K]`` at once -- peak working set is ~6 [len(g)] vectors, not K.
+    blocks, counts = torch.unique_consecutive(bc, return_counts=True)
+    col = lambda i: torch.repeat_interleave(packed[blocks, i], counts)   # column i -> [len(g)]
+
     o = 2
-    Do, wperm, sDo1 = P[:, o:o+ndimo], P[:, o+ndimo:o+2*ndimo], P[:, o+2*ndimo:o+3*ndimo]
-    o += 3 * ndimo
-    Dns, sDns1 = P[:, o:o+ndimn], P[:, o+ndimn:o+2*ndimn]
-    ssln_start, sDn1 = P[:, o+2*ndimn:o+3*ndimn], P[:, o+3*ndimn:o+4*ndimn]
-
-    l = g - P[:, 0]                                           # slo_start
-    i_perm = torch.zeros_like(g)                              # decode Do, permute, reshape(Dns)
+    l = g - col(0)                                           # slo_start
+    i_perm = torch.zeros_like(g)                             # decode Do, permute, reshape(Dns)
     for d in range(ndimo):
-        i_perm += ((l // sDo1[:, d]) % Do[:, d]) * wperm[:, d]
+        i_perm += ((l // col(o + 2*ndimo + d)) % col(o + d)) * col(o + ndimo + d)   # sDo1, Do, wperm
 
-    i_dest = P[:, o+4*ndimn].clone()                          # sln_start; reshape(Dns) -> +ssln -> encode Dn
+    o2 = o + 3 * ndimo
+    i_dest = col(packed.shape[1] - 1).clone()               # sln_start; reshape(Dns) -> +ssln -> encode Dn
     for e in range(ndimn):
-        i_dest += ((i_perm // sDns1[:, e]) % Dns[:, e] + ssln_start[:, e]) * sDn1[:, e]
+        i_dest += ((i_perm // col(o2 + ndimn + e)) % col(o2 + e) + col(o2 + 2*ndimn + e)) * col(o2 + 3*ndimn + e)
 
-    if sentinel is not None:                                  # gap elements -> sink
-        in_block = (b >= 0) & (g < P[:, 1])                   # slo_stop
-        i_dest = torch.where(in_block, i_dest, i_dest.new_full((), sentinel))
+    if sentinel is not None:                                 # gap elements -> sink
+        i_dest = torch.where((b >= 0) & (g < col(1)), i_dest, i_dest.new_full((), sentinel))   # slo_stop
     return i_dest
+
+
+def _build_dest_tiled(params, g, tile, sentinel=None):
+    r"""
+    Tile ``g`` into ``<= tile``-sized contiguous chunks and build the destination index per chunk,
+    bounding the transient working set of :func:`_build_dest` to ``~tile`` regardless of ``len(g)``.
+    ``g`` is block-sorted, so each chunk is still block-sorted (whole blocks, or clipped edge runs).
+    """
+    n = g.numel()
+    if not tile or n <= tile:
+        return _build_dest(params, g, sentinel)
+    out = torch.empty_like(g)
+    for lo in range(0, n, tile):
+        hi = min(lo + tile, n)
+        out[lo:hi] = _build_dest(params, g[lo:hi], sentinel)
+    return out
 
 
 def build_source_to_dest(params, lo, hi, device, sentinel=None):

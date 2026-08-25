@@ -34,7 +34,7 @@ from ._backend_torch_backwards import kernel_embed_transpose, kernel_transpose_a
 from ._backend_torch_backwards import kernel_transpose_and_merge_scatter, pack_transpose_and_merge_params
 from ._backend_torch_backwards import kernel_unmerge_scatter
 from ._backend_torch_backwards import kernel_transpose_and_merge_hybrid, kernel_unmerge_hybrid
-from ._backend_torch_backwards import _build_dest, _concat_ranges
+from ._backend_torch_backwards import _build_dest_tiled, _concat_ranges
 from ._backend_torch_backwards import kernel_embed_slices
 
 
@@ -782,6 +782,9 @@ def _fuse_scatter_thresh():
     return val
 
 
+_DEFAULT_TILE = 1 << 27   # index-build tile when YASTN_FUSE_SCATTER_CHUNK is unset 2** 
+
+
 def transpose_and_merge(data, order, meta_mrg, size):
     r"""
     Transpose-and-merge source blocks into the fused 1D buffer. On CPU uses the per-block loop
@@ -795,19 +798,20 @@ def transpose_and_merge(data, order, meta_mrg, size):
         chunk = _fuse_scatter_chunk()
         if chunk != 0 and len(meta_mrg) > 0:   # 0 forces the loop even on GPU; empty meta is always a loop
             thr = _fuse_scatter_thresh()
+            tile = chunk if chunk else _DEFAULT_TILE   # index-build tile (unset -> bounded default)
             meta_small = [m for m in meta_mrg if m[2].stop - m[2].start < thr]   # slo = m[2]
             if not meta_small:                 # all large -> per-block loop (no index build at all)
                 return kernel_transpose_and_merge.apply(data, order, meta_mrg, size)
             params = pack_transpose_and_merge_params(order, tuple(meta_mrg), data.numel())
             params['slo_start']= params['slo_start'].to(device=data.device)
             params['packed']= params['packed'].to(device=data.device)
-            if len(meta_small) == len(meta_mrg):   # all small -> lean single-array scatter
-                return kernel_transpose_and_merge_scatter.apply(data, params, size, chunk)
+            if len(meta_small) == len(meta_mrg):   # all small -> lean single-array scatter (kernel tiles by `tile`)
+                return kernel_transpose_and_merge_scatter.apply(data, params, size, tile)
             meta_large = [m for m in meta_mrg if m[2].stop - m[2].start >= thr]
             starts = torch.tensor([m[2].start for m in meta_small], dtype=torch.int64, device=data.device)
             stops = torch.tensor([m[2].stop for m in meta_small], dtype=torch.int64, device=data.device)
             src_small = _concat_ranges(starts, stops, data.device)
-            dst_small = _build_dest(params, src_small)   # small source positions always land in-block
+            dst_small = _build_dest_tiled(params, src_small, tile)   # small source positions always land in-block
             return kernel_transpose_and_merge_hybrid.apply(data, order, meta_large, src_small, dst_small, size)
     return kernel_transpose_and_merge.apply(data, order, meta_mrg, size)
 
@@ -822,6 +826,7 @@ def unmerge(data, meta, size):
         chunk = _fuse_scatter_chunk()
         if chunk != 0 and len(meta) > 0:   # 0 forces the loop even on GPU; empty meta is always a loop
             thr = _fuse_scatter_thresh()
+            tile = chunk if chunk else _DEFAULT_TILE   # index-build tile (unset -> bounded default)
             meta_small = [m for m in meta if m[0].stop - m[0].start < thr]   # sln = m[0] (dest)
             if not meta_small:                 # all large -> per-block loop (no index build at all)
                 return kernel_unmerge.apply(data, meta, size)
@@ -835,13 +840,13 @@ def unmerge(data, meta, size):
             params['packed']= params['packed'].to(device=data.device)
             if not params['contiguous']:   # dense dest expected; else fall back to loop
                 return kernel_unmerge.apply(data, meta, size)
-            if len(meta_small) == len(meta):   # all small -> lean gather
-                return kernel_unmerge_scatter.apply(data, params, size, chunk)
+            if len(meta_small) == len(meta):   # all small -> lean gather (kernel tiles by `tile`)
+                return kernel_unmerge_scatter.apply(data, params, size, tile)
             meta_large = [m for m in meta if m[0].stop - m[0].start >= thr]
             starts = torch.tensor([m[0].start for m in meta_small], dtype=torch.int64, device=data.device)
             stops = torch.tensor([m[0].stop for m in meta_small], dtype=torch.int64, device=data.device)
             dst_small = _concat_ranges(starts, stops, data.device)   # small dest positions
-            gidx_small = _build_dest(params, dst_small)   # relabeled params map dest -> source
+            gidx_small = _build_dest_tiled(params, dst_small, tile)   # relabeled params map dest -> source
             return kernel_unmerge_hybrid.apply(data, meta_large, dst_small, gidx_small, size)
     return kernel_unmerge.apply(data, meta, size)
 
