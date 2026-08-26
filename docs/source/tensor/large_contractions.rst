@@ -260,6 +260,19 @@ later large contiguous allocation fails even though the totals look sufficient.
 it cannot cure this class of fragmentation — only ``expandable_segments:True``
 (virtual-memory remapping of partial segments) can.
 
+Two further sets of knobs matter here, documented elsewhere but worth pointing at because
+the unroll loop amplifies both:
+
+* Every :func:`yastn.ncon` inside the loop fuses and unfuses legs, so
+  ``YASTN_FUSE_SCATTER_THRESH`` and ``YASTN_FUSE_SCATTER_CHUNK`` —
+  see :ref:`tensor/algebra:gpu execution: hybrid scatter/loop` — apply to each combo.
+  ``YASTN_FUSE_SCATTER_CHUNK`` is the one to reach for if the *index build* itself is the
+  memory problem, since it bounds that build's scratch allocation.
+* The metadata caches (:ref:`tensor/caching:caching`) are populated per process, so each
+  spawned worker keeps its own. The fusion-index cache holds device-resident tensors;
+  :func:`yastn.clear_cache` releases them if the accumulated indices become significant
+  next to the contraction's own working set.
+
 The knobs below tune allocator behaviour for the ``torch`` / ``torch_cutensor``
 CUDA backends (they are inert on CPU / NumPy):
 

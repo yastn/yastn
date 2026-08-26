@@ -16,13 +16,23 @@
 from functools import lru_cache
 
 from . import _algebra, _merging, _contractions, _contractions_cutensor, _einsum, _auxiliary
-from ..backend import _backend_torch_backwards
+from .._cache_registry import clear_registered, registered_info, set_registered_maxsize
 
 __all__ = ['clear_cache', 'get_cache_info', 'set_cache_maxsize']
 
 
 def set_cache_maxsize(maxsize=0):
-    """Change maxsize of lru_cache to reuse some metadata."""
+    """
+    Rebind every yastn metadata cache with a new ``lru_cache`` ``maxsize``, discarding
+    whatever those caches currently hold.
+
+    Each builder is created with ``maxsize=1024``. Note the default here is ``0``:
+    a bare ``set_cache_maxsize()`` *disables* caching, since ``lru_cache(0)`` stores nothing.
+    Pass ``maxsize=None`` for unbounded caches.
+
+    Caches of backend modules that are not loaded yet are covered too -- the requested size
+    is remembered and applied when such a backend registers (see :mod:`yastn._cache_registry`).
+    """
     _contractions._meta_broadcast = lru_cache(maxsize)(_contractions._meta_broadcast.__wrapped__)
     _contractions._meta_tensordot_f2m = lru_cache(maxsize)(_contractions._meta_tensordot_f2m.__wrapped__)
     _contractions._meta_tensordot_fc = lru_cache(maxsize)(_contractions._meta_tensordot_fc.__wrapped__)
@@ -44,11 +54,16 @@ def set_cache_maxsize(maxsize=0):
     _auxiliary.get_blocks = lru_cache(maxsize)(_auxiliary.get_blocks.__wrapped__)
     _auxiliary.get_blocks_charges_all = lru_cache(maxsize)(_auxiliary.get_blocks_charges_all.__wrapped__)
     _auxiliary.get_trimmed_struct_engine = lru_cache(maxsize)(_auxiliary.get_trimmed_struct_engine.__wrapped__)
-    _backend_torch_backwards.pack_transpose_and_merge_params = lru_cache(maxsize)(_backend_torch_backwards.pack_transpose_and_merge_params.__wrapped__)
+    set_registered_maxsize(maxsize)  # caches of whichever backends are loaded
 
 
 def clear_cache():
-    """Change maxsize of lru_cache to reuse some metadata."""
+    """
+    Drop the contents of every yastn metadata cache, leaving their ``maxsize`` unchanged.
+
+    Besides freeing host memory, this releases the device-resident index tensors that the
+    torch backend's fusion cache pins after its first GPU use.
+    """
     _contractions._meta_broadcast.cache_clear()
     _contractions._meta_tensordot_f2m.cache_clear()
     _contractions._meta_tensordot_fc.cache_clear()
@@ -70,11 +85,17 @@ def clear_cache():
     _auxiliary.get_blocks.cache_clear()
     _auxiliary.get_blocks_charges_all.cache_clear()
     _auxiliary.get_trimmed_struct_engine.cache_clear()
-    _backend_torch_backwards.pack_transpose_and_merge_params.cache_clear()
+    clear_registered()  # caches of whichever backends are loaded
 
 
 def get_cache_info():
-    """Return statistics of lru_caches used in yastn."""
+    """
+    Return statistics of lru_caches used in yastn.
+
+    Backend-side entries (registered via :func:`yastn._cache_registry.register_cache`)
+    are present only for backends that are actually loaded, so the key set depends on
+    which backend is in use.
+    """
     return {"fuse_hard": _merging._meta_fuse_hard.cache_info(),
             "unfuse_hard": _merging._meta_unfuse_hard.cache_info(),
             "intersect_hfs": _merging._masks_hfs_intersection.cache_info(),
@@ -96,5 +117,5 @@ def get_cache_info():
             "get_blocks": _auxiliary.get_blocks.cache_info(),
             "get_blocks_charges_all": _auxiliary.get_blocks_charges_all.cache_info(),
             "get_trimmed_struct_engine": _auxiliary.get_trimmed_struct_engine.cache_info(),
-            "pack_transpose_and_merge_params": _backend_torch_backwards.pack_transpose_and_merge_params.cache_info()
+            **registered_info(),
             }

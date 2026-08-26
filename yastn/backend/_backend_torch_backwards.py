@@ -20,6 +20,7 @@ import numpy as np
 import torch
 
 from .._profile import nsys_profile
+from .._cache_registry import register_cache
 
 from .linalg.torch_svd_gesdd import SVDGESDD
 from .linalg.torch_svds_scipy import SVDS_SCIPY
@@ -402,6 +403,7 @@ def _strides1(D):
     return out
 
 
+@register_cache
 @lru_cache(maxsize=1024)
 @nsys_profile
 def pack_transpose_and_merge_params(order, meta, size_in):

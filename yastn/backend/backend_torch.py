@@ -749,7 +749,7 @@ def _fuse_scatter_chunk():
     a positive int -> scatter with that tile size. Invalid values warn and are ignored (``None``).
     """
     env = os.environ.get('YASTN_FUSE_SCATTER_CHUNK')
-    if env is None:
+    if env in [None, ""]:
         return None
     try:
         val = int(env)
@@ -770,7 +770,7 @@ def _fuse_scatter_thresh():
     cross over). Invalid values warn and fall back to the default.
     """
     env = os.environ.get('YASTN_FUSE_SCATTER_THRESH')
-    if env is None:
+    if env in [None, ""]:
         return 1 << 16
     try:
         val = int(env)

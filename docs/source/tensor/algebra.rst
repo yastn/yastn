@@ -65,6 +65,20 @@ or composition of such operations over several tensors.
 .. autofunction:: yastn.swap_gate
 .. autofunction:: yastn.fkron
 
+.. note::
+
+   Contractions are metadata-heavy: matching blocks between operands and planning the
+   output is pure Python work that :doc:`caching </tensor/caching>` reuses across calls
+   (``tensordot_f2m``, ``tensordot_fc``, ``tensordot_nf``, ``tensordot_cutensor_*``,
+   ``ncon``, ...). In a loop that contracts the same block structure repeatedly, these
+   caches are what keeps the Python cost flat.
+
+   Depending on ``tensordot_policy``, :func:`yastn.tensordot` also fuses legs into matrices
+   before calling into the backend. On a CUDA device that fusion runs through the path
+   described in :ref:`tensor/algebra:gpu execution: hybrid scatter/loop`, so the knobs
+   documented there apply to contractions as well as to explicit
+   :meth:`~yastn.Tensor.fuse_legs` calls.
+
 
 Transposition
 -------------
@@ -96,6 +110,68 @@ Fusion can be used to vary compression between (unfused) symmetric tensors with 
 .. automethod:: yastn.Tensor.add_leg
 .. automethod:: yastn.Tensor.remove_leg
 .. automethod:: yastn.Tensor.drop_leg_history
+
+
+GPU execution: hybrid scatter/loop
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Hard fusion (:meth:`~yastn.Tensor.fuse_legs` with ``mode='hard'``) and its inverse
+:meth:`~yastn.Tensor.unfuse_legs` are not just bookkeeping: they physically transpose and
+copy every block into (or out of) the fused buffer. On the ``torch`` backend this move has
+two implementations, and which one runs is chosen per call.
+
+On **CPU** it is always a loop over blocks, one copy per block.
+
+On **GPU** a per-block loop is a poor fit when a tensor has many small blocks: each block
+costs a kernel launch, and thousands of tiny launches dominate the actual data movement.
+The alternative — building an explicit index map and doing a single ``scatter``/``gather``
+over the whole buffer — pays a one-off cost to construct that map, then moves everything in
+one kernel. Neither wins everywhere: the loop is bandwidth-optimal for large blocks (no
+index build at all), the scatter wins for many small ones.
+
+YASTN therefore **splits each call by block size** rather than choosing globally. Blocks
+with at least ``YASTN_FUSE_SCATTER_THRESH`` elements go through the loop; smaller blocks are
+collected into one compact scatter (fusing) or gather (unfusing). Three regimes fall out:
+
+* **all blocks large** — pure per-block loop; no index map is built,
+* **all blocks small** — a single lean scatter/gather over the whole buffer,
+* **mixed** — the hybrid kernel: the large blocks loop while the small ones ride one
+  scatter built over compact indices that cover only the real blocks.
+
+Unfusing additionally falls back to the loop when the destination blocks do not tile the
+output buffer exactly.
+
+The index maps are keyed on structure and cached, so a repeated fusion pattern builds them
+once — see :ref:`tensor/caching:caching`, entry ``pack_transpose_and_merge_params``. That
+entry holds device-resident tensors; :func:`yastn.clear_cache` releases them.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 32 14 54
+
+   * - Variable
+     - Default
+     - Effect
+   * - ``YASTN_FUSE_SCATTER_THRESH``
+     - ``65536`` (``2**16``)
+     - Per-block element count separating the loop (``>=`` threshold) from the
+       scatter/gather (``<`` threshold). The default is roughly the point at which a single
+       block saturates the memory interface of a datacentre GPU, which is also where the
+       loop's launch cost and the index build cost cross over. Lower it to push more blocks
+       through the loop, raise it to push more through the scatter.
+   * - ``YASTN_FUSE_SCATTER_CHUNK``
+     - unset
+     - Tile size for building the index map. Unset means a single tile of ``2**27``
+       elements. A **positive** value tiles the build, bounding its peak scratch memory.
+       ``0`` is the escape hatch: force the per-block loop even on GPU, which is also the
+       baseline to A/B against when checking whether the scatter path is helping.
+
+Both variables are read on every call, so they can be changed at runtime without
+reimporting YASTN. They have no effect on CPU or on the NumPy backend. A negative or
+non-integer value is reported through :mod:`warnings` and the default is used instead — an
+invalid setting never raises.
+
+All regimes produce bit-identical results; the choice is purely one of performance.
 
 
 Conjugation of symmetric tensors
@@ -132,7 +208,7 @@ See examples at :ref:`examples/tensor/decomposition:decompositions of symmetric 
 .. _tensor-aux:
 
 Auxiliary
---------
+---------
 
 Eliminating individual blocks
 

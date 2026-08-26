@@ -13,6 +13,9 @@
 # limitations under the License.
 # ==============================================================================
 """ changing tests controls and size of lru_cache in some auxiliary functions """
+import pathlib
+import subprocess
+import sys
 import numpy as np
 import pytest
 import yastn
@@ -48,6 +51,52 @@ def test_cache(config_kwargs):
     yastn.clear_cache()
     cache_info = yastn.get_cache_info()
     assert cache_info["broadcast"] == (0, 0, 10, 0)
+
+
+#: Child program for test_import_and_cache_api_without_torch. Runs in a subprocess so the
+#: torch blocker cannot pollute the sys.modules of the test session itself.
+_NO_TORCH_PROGRAM = """
+import sys, importlib.abc
+sys.path.insert(0, %r)
+
+class BlockTorch(importlib.abc.MetaPathFinder):
+    def find_spec(self, name, path, target=None):
+        if name == 'torch' or name.startswith('torch.'):
+            raise ImportError("No module named %%r (simulated)" %% name)
+        return None
+
+sys.meta_path.insert(0, BlockTorch())
+
+import yastn
+config = yastn.make_config(sym='Z2')   # no backend= kwarg -> numpy default
+a = yastn.rand(config=config, s=(-1, 1, 1, -1), t=((0, 1),) * 4,
+               D=((1, 2), (2, 3), (3, 4), (4, 5)))
+a.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
+yastn.tensordot(a, a, axes=((0, 1), (0, 1)), conj=(0, 1))
+
+yastn.set_cache_maxsize(maxsize=10)
+info = yastn.get_cache_info()
+yastn.clear_cache()
+
+assert info["broadcast"].maxsize == 10, info["broadcast"]
+# backend-side caches register themselves; the torch one must be absent here
+assert "pack_transpose_and_merge_params" not in info, sorted(info)
+assert 'torch' not in sys.modules, "the cache API pulled in torch"
+"""
+
+
+def test_import_and_cache_api_without_torch():
+    """
+    ``import yastn`` and the whole cache-control API must work with no torch installed.
+
+    Regression guard: ``_control_lru`` used to import ``_backend_torch_backwards`` at module
+    level, which made torch a hard dependency of ``import yastn``. Backend-side caches now
+    register themselves through :mod:`yastn._cache_registry` when their backend is imported.
+    """
+    root = str(pathlib.Path(yastn.__file__).parents[1])
+    out = subprocess.run([sys.executable, '-c', _NO_TORCH_PROGRAM % root],
+                         capture_output=True, text=True)
+    assert out.returncode == 0, out.stderr
 
 
 def test_hash_blocks(config_kwargs):
