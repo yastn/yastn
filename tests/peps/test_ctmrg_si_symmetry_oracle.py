@@ -109,6 +109,36 @@ def test_si_cwo_refinement_finds_globally_dominant_charge_sector(
     _assert_refined_si_spectrum(r0, r1, X, Y, opts_svd, opts_si)
 
 
+def test_si_refinement_resizes_recycled_bases(config_kwargs, monkeypatch):
+    """A changed allocation retains old columns through isometry recycling."""
+    config = yastn.make_config(sym='Z2', **config_kwargs)
+    config.backend.random_seed(seed=32)
+    r0, r1 = _biased_z2_corners(config)
+    opts_svd = {'D_total': 4, 'tol': 0, 'fix_signs': True}
+    opts_si = {'oversampling': 2, 'niter': 8, 'tol': 1e-12}
+    X0, Y0 = initialize_si_bases(
+        r0, r1, rank=6, charges={(0,): 3, (1,): 3})
+    X0_even = X0[(0, 0)].copy()
+    Yh0_even = Y0.H[(0, 0)].copy()
+    recycle_calls = 0
+    recycle = env_ctm_module.symmetric_isometry_recycle
+
+    def counting_recycle(*args, **kwargs):
+        nonlocal recycle_calls
+        recycle_calls += 1
+        return recycle(*args, **kwargs)
+
+    monkeypatch.setattr(
+        env_ctm_module, 'symmetric_isometry_recycle', counting_recycle)
+    X, Y = si_refinement(r0, r1, X0, Y0, opts_svd, opts_si)
+
+    assert recycle_calls == 2
+    assert X.get_legs(1).tD == {(0,): 6}
+    assert Y.get_legs(0).tD == {(0,): 6}
+    assert np.allclose(X0_even, X[(0, 0)][:, :3])
+    assert np.allclose(Yh0_even, Y.H[(0, 0)][:, :3])
+
+
 def test_si_cwo_pipeline_clamps_rank_to_corner_capacity(config_kwargs,
                                                         monkeypatch):
     """Explicit CWO correction works while growing below chi + oversampling."""
@@ -211,6 +241,23 @@ def test_refinements_handle_single_dense_sector(
     X, _ = si_refinement(r0, r1, X, Y, opts_svd, opts_si)
 
     assert X.get_legs(1).tD == {(): 3}
+
+
+@pytest.mark.parametrize('refinement', ('cwo', 'asvr', 'rds'))
+def test_refinement_reuses_unchanged_dense_bases(config_kwargs, refinement):
+    """A redundant single-sector correction preserves recycled SI bases."""
+    config = yastn.make_config(sym='none', **config_kwargs)
+    r0, r1 = _corners_with_sector_spectra(
+        config, {(): (8., 6., 4., 2.)})
+    opts_svd = {'D_total': 2, 'tol': 0, 'fix_signs': True}
+    opts_si = {'oversampling': 1, 'niter': 2, 'tol': 1e-12,
+               'refinement': refinement}
+    X0, Y0 = initialize_si_bases(r0, r1, rank=3)
+
+    X, Y = si_refinement(r0, r1, X0, Y0, opts_svd, opts_si)
+
+    assert X is X0
+    assert Y is Y0
 
 
 def test_cwo_tied_boundary_preserves_valid_rank(config_kwargs):
