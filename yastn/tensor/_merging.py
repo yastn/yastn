@@ -545,10 +545,9 @@ def _mask_tensors_leg_intersection(a, b, axa, axb):
     msk_a, msk_b = [], []
     a_hfs, b_hfs = list(a.hfs), list(b.hfs)
     for i1, i2 in zip(axa, axb):
-        ma, mb, axes_hfs = _masks_hfs_intersection(a.config.sym, (a.struct.legs[i1].t, b.struct.legs[i2].t), (a.struct.legs[i1].D, b.struct.legs[i2].D), (a.hfs[i1], b.hfs[i2]))
+        ma, mb, a_hfs[i1], b_hfs[i2] = _masks_hfs_intersection(a.config.sym, a.struct.legs[i1], b.struct.legs[i2], a.hfs[i1], b.hfs[i2])
         msk_a.append(_mask_nonzero(ma))
         msk_b.append(_mask_nonzero(mb))
-        a_hfs[i1], b_hfs[i2] = axes_hfs[0], axes_hfs[1]
 
     return msk_a, msk_b, tuple(a_hfs), tuple(b_hfs)
 
@@ -570,7 +569,7 @@ def _embed_tensor(a, legs, legs_new):
 
     for axis, (la, lb) in enumerate(zip(legs, legs_new)):
         if la.hf != lb.hf:  # mask needed
-            mb = _mask_embed_in_union(a.config.sym, la.t, la.hf, lb.hf)
+            mb = _mask_embed_in_union(a.config.sym, la.s, la.t, la.hf, lb.hf)
             mask_tD = {t: len(v) for t, v in mb.items()}
             mask = _mask_nonzero(mb)
             if mask is not None:
@@ -714,25 +713,25 @@ def _mask_falsify_mismatches_(ms1, ms2):
 
 
 @lru_cache(maxsize=1024)
-def _masks_hfs_intersection(sym, ts, Ds, hfs):
+def _masks_hfs_intersection(sym, lega, legb, hfa, hfb):
     r"""
     Calculate two masks that project onto intersection of two spaces.
     ts = tuple[ts0, ts1], where ts0, ts1 are top-layer charges in two intersected legs.
     Ds = tuple[Ds0, Ds1] with corresponding top-lyer bond dimensions.
     hfs = tuple[hfs0, hfs1], where hfs0, hfs1 are hard fusion data for two spaces
     """
-    teff = tuple(sorted(set(ts[0]) & set(ts[1])))
-    tree = list(hfs[0].tree)
+    teff = tuple(sorted(set(lega.t) & set(legb.t)))
+    tree = list(hfa.tree)
 
     if len(tree) == 1:
-        ma0 = {t: np.ones(D, dtype=bool) for t, D in zip(ts[0], Ds[0]) if t in teff}
-        ma1 = {t: np.ones(D, dtype=bool) for t, D in zip(ts[1], Ds[1]) if t in teff}
+        ma0 = {t: np.ones(D, dtype=bool) for t, D in zip(lega.t, lega.D) if t in teff}
+        ma1 = {t: np.ones(D, dtype=bool) for t, D in zip(legb.t, legb.D) if t in teff}
         if any(ma0[t].size != ma1[t].size for t in teff):
             raise YastnError('Bond dimensions of some charges do not match.')
-        return ma0, ma1, hfs
+        return ma0, ma1, hfa, hfb
 
-    msks = [[{t: np.ones(D, dtype=bool) for t, D in zip(hf.t[i], hf.D[i])} for i, l in enumerate(tree[1:]) if l == 1]
-            for hf in hfs]
+    msks = [[{t: np.ones(D, dtype=bool) for t, D in zip(hfa.t[i], hfa.D[i])} for i, l in enumerate(tree[1:]) if l == 1],
+            [{t: np.ones(D, dtype=bool) for t, D in zip(hfb.t[i], hfb.D[i])} for i, l in enumerate(tree[1:]) if l == 1]]
 
     keeped_ts, keeped_Ds = [], []
     for ma0, ma1 in zip(*msks):
@@ -747,10 +746,13 @@ def _masks_hfs_intersection(sym, ts, Ds, hfs):
         _mask_falsify_mismatches_(ma0, ma1)
 
     # lists to be consumed during parsing of the tree
-    op = list(hfs[0].op)
-    s = [list(hf.s) for hf in hfs]
-    t = [[teff] + list(hf.t) for hf in hfs]
-    D = [[()] + list(hf.D) for hf in hfs]
+    op = list(hfa.op)
+    s = [[lega.s] + list(hfa.s[1:]),
+         [legb.s] + list(hfb.s[1:])]  # TODO
+    t = [[teff] + list(hfa.t),
+         [teff] + list(hfb.t)]
+    D = [[()] + list(hfa.D),
+         [()] + list(hfb.D)]
 
     # parse the tree, building masks
     while len(tree) > 1:
@@ -778,11 +780,12 @@ def _masks_hfs_intersection(sym, ts, Ds, hfs):
         keeped_ts.insert(0, reduced_ls.t)
         keeped_Ds.insert(0, reduced_ls.D)
     # Only the final leaf is left in msks[0] and msks[1]
-    new_hfs = [_Fusion(hf.tree, hf.op, hf.s, tuple(keeped_ts[1:]), tuple(keeped_Ds[1:])) for hf in hfs]
-    return msks[0].pop(), msks[1].pop(), new_hfs
+    new_hfa = _Fusion(hfa.tree, hfa.op, hfa.s, tuple(keeped_ts[1:]), tuple(keeped_Ds[1:]))
+    new_hfb = _Fusion(hfb.tree, hfb.op, hfb.s, tuple(keeped_ts[1:]), tuple(keeped_Ds[1:]))
+    return msks[0].pop(), msks[1].pop(), new_hfa, new_hfb
 
 
-def _mask_embed_in_union(sym, t0, hf0, hfu):
+def _mask_embed_in_union(sym, s0, t0, hf0, hfu):
     r"""
     Return a mask to embed hard-fusion hf0 into hfu.
     hf0 should be a subspace of hfu, and consistent with it.
@@ -792,8 +795,8 @@ def _mask_embed_in_union(sym, t0, hf0, hfu):
     """
     # to be consumed during parsing of the tree
     tree = list(hfu.tree)
-    ss = list(hfu.s)
     op = list(hfu.op)
+    ss = [s0] + list(hfu.s[1:])  # TODO
     tus = [t0] + list(hfu.t)
     Dus = [()] + list(hfu.D)
     t0s = [t0] + list(hf0.t)
@@ -827,7 +830,7 @@ def _mask_embed_in_union(sym, t0, hf0, hfu):
     return msk.pop()
 
 
-def _hfs_union(sym, ts, hfs):
+def _hfs_union(legs):
     r"""
     Consumes fusion trees from the bottom, while building the union of fused spaces.
 
@@ -846,6 +849,10 @@ def _hfs_union(sym, ts, hfs):
     tu, Du, hfs
         top-level charges in the union, their corresponding dimensions, _Fusion describing the union.
     """
+    sym = legs[0].sym
+    hfs = [leg.hf for leg in legs]
+    ts = [leg.t for leg in legs]
+
     if any(hfs[0].tree != hf.tree or hfs[0].op != hf.op for hf in hfs):
         raise YastnError("Inconsistent numbers of hard-fused legs or sub-fusions order.")
     if any(hfs[0].s != hf.s for hf in hfs):
@@ -853,7 +860,7 @@ def _hfs_union(sym, ts, hfs):
 
     # to be consumed during parsing of the tree
     tree = list(hfs[0].tree)
-    s = list(hfs[0].s)
+    s = [legs[0].s] + list(hfs[0].s[1:])  # TODO
     op = list(hfs[0].op)
 
     tu, Du, hfu = [], [], []

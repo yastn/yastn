@@ -377,7 +377,7 @@ def legs_union(*legs) -> Leg:
         if any(leg.s != legs[0].s for leg in legs):
             raise YastnError('Provided legs have different signatures.')
         if any(leg.hf != legs[0].hf for leg in legs):
-            t, D, hf = _hfs_union(legs[0].sym, [leg.t for leg in legs], [leg.hf for leg in legs])
+            t, D, hf = _hfs_union(legs)
         else:
             tD = {t: D for leg in legs for t, D in zip(leg.t, leg.D)}
             if any(tD[t] != D for leg in legs for t, D in zip(leg.t, leg.D)):
