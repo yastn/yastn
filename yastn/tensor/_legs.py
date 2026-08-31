@@ -104,7 +104,7 @@ class Leg:
             object.__setattr__(self, "t", tuple(tD.keys()))
             object.__setattr__(self, "D", tuple(tD.values()))
             if self.hf is None:
-                object.__setattr__(self, "hf", _Fusion(s=(self.s,)))
+                object.__setattr__(self, "hf", _Fusion())
             object.__setattr__(self, "_verified", True)
 
     def __str__(self):
@@ -340,7 +340,9 @@ def leg_product(*legs, t_allowed=None) -> Leg:
     hfs = tuple(leg.hf for leg in legs)
     ts = tuple(leg.t for leg in legs)
     Ds = tuple(leg.D for leg in legs)
-    hf = _combine_hfs_prod(hfs, ts, Ds, seff)
+    ss = tuple(leg.s for leg in legs)
+
+    hf = _combine_hfs_prod(hfs, ts, Ds, ss)
     return Leg(sym=sym, s=seff, t=tnew, D=Dnew, hf=hf)
 
 

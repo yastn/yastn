@@ -143,7 +143,7 @@ class Tensor:
         try:
             self.hfs = tuple(self.hfs)
         except TypeError:
-            self.hfs = tuple(_Fusion(s=(x,)) for x in self.s_n)
+            self.hfs = tuple(_Fusion() for _ in self.s_n)
 
     # pylint: disable=C0415
     from ._initialize import set_block, _fill_tensor, __setitem__

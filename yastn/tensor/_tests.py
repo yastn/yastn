@@ -109,9 +109,8 @@ def is_consistent(a):
     assert a.config.backend.get_shape(a._data) == (bl.size,)
 
     for leg, hf in zip(a.struct.legs, a.hfs):
-        assert leg.s == hf.s[0]
         assert len(hf.tree) == len(hf.op)
-        assert len(hf.tree) == len(hf.s)
+        assert len(hf.tree) == len(hf.s) + 1
         assert len(hf.tree) == len(hf.t) + 1
         assert len(hf.tree) == len(hf.D) + 1
         assert all(y in ('p', 's') if x > 1 else 'n' for x, y in zip(hf.tree, hf.op))

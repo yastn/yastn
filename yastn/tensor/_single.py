@@ -396,7 +396,7 @@ def drop_leg_history(a, axes=None) -> 'Tensor':
             axes = (axes,)
     uaxes, = _unpack_axes(a.mfs, axes)
     uaxes = tuple(a.trans[ax] for ax in uaxes)
-    hfs = tuple(_Fusion(s=(a.struct.legs[n].s,)) if n in uaxes else a.hfs[n] for n in range(a.ndim_n))
+    hfs = tuple(_Fusion() if n in uaxes else a.hfs[n] for n in range(a.ndim_n))
     return a._replace(hfs=hfs)
 
 
@@ -540,7 +540,7 @@ def add_leg(a, axis=-1, s=-1, t=None, leg=None) -> 'Tensor':
         t = leg.t[0]
         hfsa = leg.hf
     else:
-        hfsa = _Fusion(s=(s,))
+        hfsa = _Fusion()
 
     if s not in (-1, 1):
         raise YastnError('Signature of the new axis should be 1 or -1.')

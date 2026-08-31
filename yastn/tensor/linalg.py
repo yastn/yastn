@@ -318,22 +318,22 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         Udata, Vdata = a.config.backend.fix_svd_signs(Udata, Vdata, meta)
 
     Smfs = ((1,), (1,))
-    Shfs = (_Fusion(s=(-sU,)), _Fusion(s=(sU,)))
+    Shfs = (_Fusion(), _Fusion())
     S = a._replace(struct=struct_S, data=Sdata, mfs=Smfs, hfs=Shfs, trans=None)
 
     if not compute_uv:
         return S
 
-    hfsUm = (hfsm[0], _Fusion(s=(sU,)))
+    hfsUm = (hfsm[0], _Fusion())
     Udata, struct_U = _unfuse_blocks(a.config, Udata, struct_Um, (0,), hfsUm)
     Umfs = tuple(a.mfs[ii] for ii in out_ml) + ((1,),)
-    Uhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(s=(sU,)),)
+    Uhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(),)
     U = a._replace(struct=struct_U, data=Udata, mfs=Umfs, hfs=Uhfs, trans=None)
 
-    hfsVm = (_Fusion(s=(-sU,)), hfsm[1])
+    hfsVm = (_Fusion(), hfsm[1])
     Vdata, struct_V = _unfuse_blocks(a.config, Vdata, struct_Vm, (1,), hfsVm)
     Vmfs = ((1,),) + tuple(a.mfs[ii] for ii in out_mr)
-    Vhfs = (_Fusion(s=(-sU,)),) + tuple(a.hfs[ii] for ii in out_hr)
+    Vhfs = (_Fusion(),) + tuple(a.hfs[ii] for ii in out_hr)
     V = a._replace(struct=struct_V, data=Vdata, mfs=Vmfs, hfs=Vhfs, trans=None)
 
     U = U.moveaxis(source=-1, destination=Uaxis)
@@ -475,22 +475,22 @@ def eig(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         raise YastnError('eig() policy should in (``fullrank`). compute_uv == False only works with `fullrank`')
 
     Smfs = ((1,), (1,))
-    Shfs = (_Fusion(s=(-sU,)), _Fusion(s=(sU,)))
+    Shfs = (_Fusion(), _Fusion())
     S = a._replace(struct=struct_S, data=Sdata, mfs=Smfs, hfs=Shfs, trans=None)
 
     if not compute_uv:
         return S
 
-    hfsUm = (hfsm[0], _Fusion(s=(sU,)))
+    hfsUm = (hfsm[0], _Fusion())
     Udata, struct_U = _unfuse_blocks(a.config, Udata, struct_Um, (0,), hfsUm)
     Umfs = tuple(a.mfs[ii] for ii in out_ml) + ((1,),)
-    Uhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(s=(sU,)),)
+    Uhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(),)
     U = a._replace(struct=struct_U, data=Udata, mfs=Umfs, hfs=Uhfs, trans=None)
 
-    hfsVm = (_Fusion(s=(-sU,)), hfsm[1])
+    hfsVm = (_Fusion(), hfsm[1])
     Vdata, struct_V = _unfuse_blocks(a.config, Vdata, struct_Vm, (1,), hfsVm)
     Vmfs = ((1,),) + tuple(a.mfs[ii] for ii in out_mr)
-    Vhfs = (_Fusion(s=(-sU,)),) + tuple(a.hfs[ii] for ii in out_hr)
+    Vhfs = (_Fusion(),) + tuple(a.hfs[ii] for ii in out_hr)
     V = a._replace(struct=struct_V, data=Vdata, mfs=Vmfs, hfs=Vhfs, trans=None)
 
     U = U.moveaxis(source=-1, destination=Uaxis)
@@ -751,16 +751,16 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0) -> tuple['Tensor', 'Tensor']:
     meta, sizes, struct_Qm, struct_Rm = _meta_qr(a.config.sym, struct_am, sQ)
     Qdata, Rdata = a.config.backend.qr(data, meta, sizes)
 
-    hfsQm = (hfsm[0], _Fusion(s=(sQ,)))
+    hfsQm = (hfsm[0], _Fusion())
     Qdata, struct_Q = _unfuse_blocks(a.config, Qdata, struct_Qm, (0,), hfsQm)
     Qmfs = tuple(a.mfs[ii] for ii in out_ml) + ((1,),)
-    Qhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(s=(sQ,)),)
+    Qhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(),)
     Q = a._replace(struct=struct_Q, data=Qdata, mfs=Qmfs, hfs=Qhfs, trans=None)
 
-    hfsRm = (_Fusion(s=(-sQ,)), hfsm[1])
+    hfsRm = (_Fusion(), hfsm[1])
     Rdata, struct_R = _unfuse_blocks(a.config, Rdata, struct_Rm, (1,), hfsRm)
     Rmfs = ((1,),) + tuple(a.mfs[ii] for ii in out_mr)
-    Rhfs = (_Fusion(s=(-sQ,)),) + tuple(a.hfs[ii] for ii in out_hr)
+    Rhfs = (_Fusion(),) + tuple(a.hfs[ii] for ii in out_hr)
     R = a._replace(struct=struct_R, data=Rdata, mfs=Rmfs, hfs=Rhfs, trans=None)
 
     Q = Q.moveaxis(source=-1, destination=Qaxis)
@@ -899,14 +899,14 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank', **kwargs) -> tu
     else:
         raise YastnError("eigh() policy should be 'fullrank' or 'block_lanczos'.")
 
-    hfsUm = (hfsm[0], _Fusion(s=(sU,)))
+    hfsUm = (hfsm[0], _Fusion())
     Udata, struct_U = _unfuse_blocks(a.config, Udata, struct_Um, (0,), hfsUm)
     Umfs = tuple(a.mfs[ii] for ii in out_ml) + ((1,),)
-    Uhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(s=(sU,)),)
+    Uhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(),)
     U = a._replace(struct=struct_U, data=Udata, mfs=Umfs, hfs=Uhfs, trans=None)
 
     Smfs = ((1,), (1,))
-    Shfs = (_Fusion(s=(-sU,)), _Fusion(s=(sU,)))
+    Shfs = (_Fusion(), _Fusion())
     S = a._replace(struct=struct_S, data=Sdata, mfs=Smfs, hfs=Shfs, trans=None)
 
     # sort in case of non-default order
