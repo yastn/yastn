@@ -17,6 +17,8 @@ from __future__ import annotations
 
 from typing import NamedTuple
 
+from ._yastnerror import YastnError
+
 __all__ = ['LegBasic', 'legs_from_dict_v2']
 
 class LegBasic(NamedTuple):
@@ -30,6 +32,22 @@ class LegBasic(NamedTuple):
     def conj_charges(self, sym):
         tD = sorted((sym.conj_charge(tt), DD) for tt, DD in zip(self.t, self.D))
         return LegBasic(s=-self.s, t=tuple(x[0] for x in tD), D=tuple(x[1] for x in tD))
+
+    def to_dict(self):
+        r""" Serializes LegBasic to dictionary. """
+        return {'type': type(self).__name__,
+                'dict_ver': 1,
+                's': self.s,
+                't': self.t,
+                'D': self.D}
+
+    @classmethod
+    def from_dict(cls, d):
+        r""" De-serializes LegBasic from the dictionary ``d``. """
+        if d['dict_ver'] == 1:
+            if cls.__name__ != d['type']:
+                raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
+            return cls(s=d['s'], t=d['t'], D=d['D'])
 
     def __getitem__(self, t) -> int:
         r"""
@@ -106,6 +124,16 @@ class LegBasic(NamedTuple):
     def trim(self, tsub) -> LegBasic:
         tD = self.tD
         return LegBasic(s=self.s, t=tuple(tsub), D=tuple(tD[k] for k in tsub))
+
+    def is_consistent(self):
+        assert isinstance(self, LegBasic)
+        assert isinstance(self.s, int)
+        assert self.s in (-1, 1)
+        assert isinstance(self.t, tuple)
+        assert isinstance(self.D, tuple)
+        assert all(isinstance(x, int) for tt in self.t for x in tt)
+        # assert all(isinstance(x, int) for x in self.D)
+        return True
 
 
 def legs_from_dict_v2(struct):

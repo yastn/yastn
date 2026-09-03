@@ -13,16 +13,10 @@
 # limitations under the License.
 # ==============================================================================
 """ Testing and controls. """
-import numpy as np
-
 from ._auxiliary import _flatten, _unpack_axes, _struct, get_blocks
-from ._legbasic import LegBasic
+from ._yastnerror import YastnError
 
 __all__ = ['are_independent', 'is_consistent', 'YastnError']
-
-
-class YastnError(Exception):
-    """Errors raised by yastn."""
 
 
 def _test_can_be_combined(a, b):
@@ -107,25 +101,10 @@ def is_consistent(a):
     """
     bl = get_blocks(a.config.sym, a.struct)
     assert a.config.backend.get_shape(a._data) == (bl.size,)
-
-    for leg, hf in zip(a.struct.legs, a.hfs):
-        assert len(hf.tree) == len(hf.op)
-        assert len(hf.tree) == len(hf.s) + 1
-        assert len(hf.tree) == len(hf.t) + 1
-        assert len(hf.tree) == len(hf.D) + 1
-        assert all(y in ('p', 's') if x > 1 else 'n' for x, y in zip(hf.tree, hf.op))
-    # test that all elements of tensor are python int types
     assert isinstance(a.struct, _struct)
-    assert isinstance(a.struct.legs, tuple)
-    for leg in a.struct.legs:
-        assert isinstance(leg, LegBasic)
-        assert isinstance(leg.s, int)
-        assert leg.s in (-1, 1)
-        assert isinstance(leg.t, tuple)
-        assert isinstance(leg.D, tuple)
-        assert all(isinstance(x, int) for tt in leg.t for x in tt)
-        # assert all(isinstance(x, int) for x in leg.D)
-    assert isinstance(a.struct.n, tuple)
-    assert all(isinstance(x, int) for x in a.struct.n)
-    assert isinstance(a.struct.isdiag, bool)
+    assert a.struct.is_consistent()
+    assert isinstance(a.hfs, tuple)
+    assert all(hf.is_consistent() for hf in a.hfs)
+    assert isinstance(a.mfs, tuple)
+    assert all(isinstance(mf, tuple) and all(isinstance(x, int) for x in mf) for mf in a.mfs)
     return True

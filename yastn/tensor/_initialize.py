@@ -23,7 +23,7 @@ import numpy as np
 
 from ._auxiliary import _config, get_blocks, get_trimmed_struct, find_index, find_matching_indices
 from ._auxiliary import convert_to_tuples_and_slices, _compress_slices
-from ._tests import YastnError
+from ._yastnerror import YastnError
 from ..backend import backend_np, import_backend
 from ..sym import sym_none, sym_U1, sym_Z2, sym_Z3, sym_U1xU1, sym_U1xU1xZ2
 

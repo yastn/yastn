@@ -227,7 +227,7 @@ def test_old_to_dict(config_kwargs):
         U = yastn.from_dict(d['U'], config_U1)
         S = yastn.from_dict(d['S'], config_U1)
         V = yastn.from_dict(d['V'], config_U1)
-
+        assert all(x.is_consistent() for x in [a, U, S, V])
         assert (U @ S @ V - a).norm() < 1e-12
         SS = a.svd(axes=((0, 1), 2), compute_uv=False)
         assert (SS - S).norm() < 1e-12

@@ -23,12 +23,13 @@ from typing import TYPE_CHECKING, NamedTuple
 
 import numpy as np
 
-from .._profile import nsys_profile, nvtx_range
 from ._auxiliary import _encode_rows_shared, _row_keys_pair, _struct, _clear_axes, _unpack_axes, sign_canonical_order, _compress_slices
 from ._auxiliary import find_matching_indices, argsort_t, get_blocks, hash_blocks, get_trimmed_struct, convert_to_tuples_and_slices
 from ._merging import _unfuse_blocks, _fuse_blocks, _mask_tensors_leg_intersection, _meta_mask
-from ._tests import YastnError, _test_can_be_combined, _unpack_trans_test_axes_pair
+from ._tests import _test_can_be_combined, _unpack_trans_test_axes_pair
+from ._yastnerror import YastnError
 from ..backend import import_backend
+from .._profile import nsys_profile, nvtx_range
 
 if TYPE_CHECKING:
     from . import Tensor

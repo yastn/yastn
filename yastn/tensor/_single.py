@@ -25,7 +25,8 @@ from ._einsum import ncon
 from ._legbasic import LegBasic
 from ._legs import LegMeta, Leg, leg_product
 from ._merging import _Fusion
-from ._tests import YastnError, _test_axes_all
+from ._tests import _test_axes_all
+from ._yastnerror import YastnError
 
 if TYPE_CHECKING:
     from . import Tensor

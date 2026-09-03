@@ -25,7 +25,8 @@ import numpy as np
 from ._auxiliary import _struct, _flatten, _clear_axes, _unpack_legs, get_blocks
 from ._auxiliary import find_matching_indices, get_trimmed_struct, convert_to_tuples_and_slices
 from ._legbasic import LegBasic
-from ._tests import YastnError, _test_axes_all
+from ._tests import _test_axes_all
+from ._yastnerror import YastnError
 
 if TYPE_CHECKING:
     from . import Tensor
@@ -66,15 +67,58 @@ class _Fusion(NamedTuple):
     """
     tree: tuple = (1,)  # order of fusions
     op: str = 'o'  # type of node; 'o' original; 'p' product; 's' sum  len(node) = len(tree)
-    s: tuple = ()  # signatures len(s) = len(tree) - 1
-    t: tuple = ()  # fused leg charges at each step len(t) = len(tree) - 1
-    D: tuple = ()  # fused dimensions  at each step len(t) = len(tree) - 1
+    legs: tuple = () # fused legs; len(legs) = len(tree) - 1
+
+    @property
+    def s(self):
+        return tuple(leg.s for leg in self.legs)
+
+    @property
+    def t(self):
+        return tuple(leg.t for leg in self.legs)
+
+    @property
+    def D(self):
+        return tuple(leg.D for leg in self.legs)
 
     def conj(self):
-        return self._replace(s=tuple(-x for x in self.s))
+        legs_conj = tuple(leg.conj() for leg in self.legs)
+        return self._replace(legs=legs_conj)
 
     def is_fused(self):
         return self.tree[0] > 1
+
+    def to_dict(self):
+        r""" Serializes _Fusion to dictionary. """
+        return {'type': type(self).__name__,
+                'dict_ver': 1,
+                'tree': self.tree,
+                'op': self.op,
+                'legs': tuple(leg.to_dict() for leg in self.legs)}
+
+    @classmethod
+    def from_dict(cls, d):
+        r""" De-serializes _Fusion from the dictionary ``d``. """
+        if 'dict_ver' not in d:
+            legs = tuple(LegBasic(s=s, t=t, D=D) for s, t, D in zip(d['s'][1:], d['t'], d['D']))
+            return cls(tree=d['tree'], op=d['op'], legs=legs)
+        if d['dict_ver'] == 1:
+            if cls.__name__ != d['type']:
+                raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
+            return cls(tree=d['tree'], op=d['op'], legs=tuple(LegBasic.from_dict(x) for x in d['legs']))
+
+    def is_consistent(self):
+        assert isinstance(self, _Fusion)
+        assert isinstance(self.tree, tuple)
+        assert isinstance(self.op, str)
+        assert isinstance(self.legs, tuple)
+        assert len(self.tree) == len(self.op)
+        assert len(self.tree) == len(self.legs) + 1
+        assert all(isinstance(x, int) for x in self.tree)
+        assert all(y in ('p', 's') if x > 1 else y == 'o' for x, y in zip(self.tree, self.op))
+        assert all(isinstance(x, LegBasic) for x in self.legs)
+        assert all(x.is_consistent() for x in self.legs)
+        return True
 
 
 #  =========== fuse legs ======================
@@ -657,7 +701,9 @@ def _combine_hfs_prod(hfs, t_in, D_in, s_in):
         sfl.extend(hfs[n].s)
         treefl.extend(hfs[n].tree)
         opfl += hfs[n].op
-    return _Fusion(tree=tuple(treefl), op=opfl, s=tuple(sfl), t=tuple(tfl), D=tuple(Dfl))
+
+    legs = tuple(LegBasic(s=s, t=t, D=D) for s, t, D in zip(sfl, tfl, Dfl))
+    return _Fusion(tree=tuple(treefl), op=opfl, legs=legs)
 
 
 def _combine_hfs_sum(hfs, t_in, D_in, s_in):
@@ -680,7 +726,9 @@ def _combine_hfs_sum(hfs, t_in, D_in, s_in):
         sfl.extend(hf.s)
         treefl.extend(hf.tree[ds:])
         opfl += hf.op[ds:]
-    return _Fusion(tree=tuple(treefl), op=opfl, s=tuple(sfl), t=tuple(tfl), D=tuple(Dfl))
+    legs = tuple(LegBasic(s=s, t=t, D=D) for s, t, D in zip(sfl, tfl, Dfl))
+    return _Fusion(tree=tuple(treefl), op=opfl, legs=legs)
+
 
 
 def _merge_masks_prod(sym, ls, ms):
@@ -784,8 +832,11 @@ def _masks_hfs_intersection(sym, lega, legb, hfa, hfb):
         keeped_ts.insert(0, reduced_ls.t)
         keeped_Ds.insert(0, reduced_ls.D)
     # Only the final leaf is left in msks[0] and msks[1]
-    new_hfa = _Fusion(hfa.tree, hfa.op, hfa.s, tuple(keeped_ts[1:]), tuple(keeped_Ds[1:]))
-    new_hfb = _Fusion(hfb.tree, hfb.op, hfb.s, tuple(keeped_ts[1:]), tuple(keeped_Ds[1:]))
+
+    legsa = tuple(LegBasic(s=s, t=t, D=D) for s, t, D in zip(hfa.s, tuple(keeped_ts[1:]), tuple(keeped_Ds[1:])))
+    legsb = tuple(LegBasic(s=s, t=t, D=D) for s, t, D in zip(hfb.s, tuple(keeped_ts[1:]), tuple(keeped_Ds[1:])))
+    new_hfa = _Fusion(tree=hfa.tree, op=hfa.op, legs=legsa)
+    new_hfb = _Fusion(tree=hfb.tree, op=hfb.op, legs=legsb)
     return msks[0].pop(), msks[1].pop(), new_hfa, new_hfb
 
 
@@ -953,8 +1004,8 @@ def _unfuse_Fusion(hf):
                 tt.append(hf.t[n_init - 1])
                 DD.append(hf.D[n_init - 1])
                 ss.append(hf.s[n_init - 1])
-                hfs.append(_Fusion(tree=hf.tree[n_init: n + 1], op=hf.op[n_init: n + 1],
-                                   s=hf.s[n_init: n], t=hf.t[n_init: n], D=hf.D[n_init: n]))
+                legs = tuple(LegBasic(s=s, t=t, D=D) for s, t, D in zip(hf.s[n_init: n], hf.t[n_init: n], hf.D[n_init: n]))
+                hfs.append(_Fusion(tree=hf.tree[n_init: n + 1], op=hf.op[n_init: n + 1], legs=legs))
                 n_init = n + 1
     return tuple(tt), tuple(DD), tuple(ss), hfs
 

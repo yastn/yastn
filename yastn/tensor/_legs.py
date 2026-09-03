@@ -24,7 +24,7 @@ import numpy as np
 
 from ._auxiliary import _flatten
 from ._merging import _hfs_union, _combine_hfs_prod, _unfuse_Fusion, _Fusion
-from ._tests import YastnError
+from ._yastnerror import YastnError
 from ..sym import sym_none
 
 __all__ = ['Leg', 'LegMeta', 'legs_union', 'gaussian_leg', 'leg_product', 'undo_leg_product']

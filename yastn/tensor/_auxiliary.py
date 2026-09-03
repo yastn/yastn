@@ -23,8 +23,10 @@ from typing import NamedTuple, Sequence
 
 import numpy as np
 
-from .._profile import nsys_profile
 from ..sym import sym_none
+from ._legbasic import LegBasic
+from ._yastnerror import YastnError
+from .._profile import nsys_profile
 
 __all__ = ['_config', '_struct', 'get_blocks', 'hash_blocks', 'sign_canonical_order', 'swap_charges',
            'find_matching_indices', 'HashedMask', '_compress_slices', 'convert_to_tuples_and_slices']
@@ -101,6 +103,34 @@ class _struct(NamedTuple):
         mask = np.zeros(nblocks, dtype=bool)
         mask[ind] = True
         return self.replace(mask=mask)
+
+    def to_dict(self):
+        r""" Serializes _struct to dictionary. """
+        return {'type': type(self).__name__,
+                'dict_ver': 1,
+                'legs': tuple(leg.to_dict() for leg in self.legs),
+                'n': self.n,
+                'isdiag': self.isdiag,
+                'mask': self.mask.array}
+
+    @classmethod
+    def from_dict(cls, d):
+        r""" De-serializes _struct from the dictionary ``d``. """
+        if d['dict_ver'] == 1:
+            if cls.__name__ != d['type']:
+                raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
+            legs = tuple(LegBasic.from_dict(leg) for leg in d['legs'])
+            mask = HashedMask(d['mask'])
+            return cls(legs=legs, n=d['n'], isdiag=d['isdiag'], mask=mask)
+
+    def is_consistent(self):
+        assert isinstance(self, _struct)
+        assert isinstance(self.legs, tuple)
+        assert all(leg.is_consistent() for leg in self.legs)
+        assert isinstance(self.n, tuple)
+        assert all(isinstance(x, int) for x in self.n)
+        assert isinstance(self.isdiag, bool)
+        return True
 
 
 class _blocks(NamedTuple):
