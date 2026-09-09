@@ -213,9 +213,9 @@ def norm(data, p):
 def entropy(data, alpha, tol):
     """ von Neuman or Renyi entropy from svd's"""
     Snorm = torch.sum(data) if len(data) > 0 else 0.
-    if Snorm > 0:
+    if Snorm.abs() > 0:
         data = data / Snorm
-        data = data[data > tol]
+        data = data[data.abs() > tol]
         if alpha == 1:
             return -1 * torch.sum(data * torch.log2(data))
         return torch.log2(torch.sum(data ** alpha)) / (1 - alpha)
@@ -462,7 +462,19 @@ def eigh(data, meta=None, sizes=(1, 1), order_by_magnitude=False, ad_decomp_reg=
     return torch.linalg.eigh(data)  # S, U
 
 
-def eig(data, meta=None, sizes=(1, 1), **kwargs):
+def _biorthogonalize(U, tol=None):
+    r"""
+    Left eigenvectors V (as rows) biorthogonal to right eigenvectors U (as columns), i.e. V @ U = I.
+    For a diagonalizable matrix this is just V = U^{-1}.
+
+    The residual of the inversion grows with the block size and with cond(U), so the raw solve
+    overshoots any fixed tolerance for large or ill-conditioned blocks. One step of Newton-Schulz
+    refinement squares that residual and brings it back to the roundoff floor.
+    """
+    n
+
+
+def eig(data, meta=None, sizes=(1, 1), biorth_tol=None, **kwargs):
     if meta is None:
         return torch.linalg.eig(data)  # S, U
     # NOTE torch.linalg.eig returns right eigenvectors U only, i.e. M U = diag(S) U
@@ -482,15 +494,28 @@ def eig(data, meta=None, sizes=(1, 1), **kwargs):
         # V.H @ M / V.H = S (as rows)
         #
         # Search for left eigenvectors V (rows) via biorthogonality condition V.H @ U = I
+        Id = torch.eye(U.shape[0], dtype=U.dtype, device=U.device)
         try:
-            V= torch.linalg.solve(U.conj().T, torch.eye(len(S), dtype=U.dtype, device=data.device), left=True, out=None)
-            V= V.conj().T
+            V = torch.linalg.solve(U.conj().T, Id, left=True, out=None)
+            V = V.conj().T
         except Exception as e:
             raise ValueError("Biorthonormalization of left/right eigenvector pairs failed.") from e
 
-        tol= 1.0e-12 if data.is_complex() else 1.0e-14
-        if any( torch.abs(torch.sum(V.T * U, axis=0) - 1) > tol ):
-            raise ValueError("Biorthonormalization of left/right eigenvector pairs failed.")
+        eps = torch.finfo(U.dtype).eps
+        err = torch.abs(torch.sum(V.T * U, axis=0) - 1).max()
+        if err > 8 * eps:
+            # V <- V + (I - V @ U) @ V; two matmuls, error is squared so a single step suffices (Newton-Schulz refinement)
+            V = V + (Id - V @ U) @ V
+            err = torch.abs(torch.sum(V.T * U, axis=0) - 1).max()
+
+        if biorth_tol is None:
+            # The attainable residual is O(eps * cond(U)) -- no amount of refinement beats it.
+            # ||U||_1 ||V||_1 upper-bounds cond(U) in O(n^2), reusing the inverse computed above.
+            biorth_tol = 10 * eps * torch.linalg.matrix_norm(U, 1) * torch.linalg.matrix_norm(V, 1)
+        if err > biorth_tol:
+            raise ValueError("Biorthonormalization of left/right eigenvector pairs failed: residual "
+                            f"{err.item():.3e} exceeds tolerance {float(biorth_tol):.3e}. The matrix of right "
+                            "eigenvectors is numerically singular (defective or nearly-defective input).")
 
         s_order= argsort_which(S, which=kwargs.get('which', 'LM'))
         Udata[slU].reshape(DU)[:] = U[:,s_order]

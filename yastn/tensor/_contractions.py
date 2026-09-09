@@ -861,7 +861,7 @@ def _apply_mask_axes(a, naxes, masks):
             mask_D = tuple(mask_tD.values())
             meta, size_c, struct_c, axis, ndim = _meta_mask(a.config.sym, a.struct, mask_t, mask_D, axis)
             if active_flop_tracer() is not None:  # tracing: keep the struct change, skip the data op
-                data = a.config.backend.zeros((0,), dtype=a.yastn_dtype, device=a.data.device)
+                data = a.config.backend.zeros((0,), dtype=a.yastn_dtype, device=a.device)
             else:
                 data = a.config.backend.apply_mask(a._data, mask, meta, size_c, axis, ndim)
             a = a._replace(struct=struct_c, data=data)
