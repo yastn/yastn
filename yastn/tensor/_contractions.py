@@ -217,7 +217,7 @@ def _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b, lazy_threshold):
         gemm, acc = _flops_tensordot_nf(meta_dot, reshape_a, 'complex' in a.yastn_dtype)
         tracer.gemm += gemm
         tracer.sum += acc
-        data = a.config.backend.zeros((0,), dtype=a.yastn_dtype, device=a.data.device)
+        data = a.config.backend.zeros((0,), dtype=a.yastn_dtype, device=a.device)
         return data, struct_c
     order_a = nout_a + nin_a
     order_b = nin_b + nout_b

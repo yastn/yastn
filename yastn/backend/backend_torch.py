@@ -462,18 +462,6 @@ def eigh(data, meta=None, sizes=(1, 1), order_by_magnitude=False, ad_decomp_reg=
     return torch.linalg.eigh(data)  # S, U
 
 
-def _biorthogonalize(U, tol=None):
-    r"""
-    Left eigenvectors V (as rows) biorthogonal to right eigenvectors U (as columns), i.e. V @ U = I.
-    For a diagonalizable matrix this is just V = U^{-1}.
-
-    The residual of the inversion grows with the block size and with cond(U), so the raw solve
-    overshoots any fixed tolerance for large or ill-conditioned blocks. One step of Newton-Schulz
-    refinement squares that residual and brings it back to the roundoff floor.
-    """
-    n
-
-
 def eig(data, meta=None, sizes=(1, 1), biorth_tol=None, **kwargs):
     if meta is None:
         return torch.linalg.eig(data)  # S, U

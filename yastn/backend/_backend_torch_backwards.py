@@ -213,7 +213,7 @@ class kernel_transpose_dot_sum(torch.autograd.Function):
             for grad, (sl, Di, _, _) in zip(blocks_grad.values(), reshape_info):
                 inv_Di = tuple(Di[n] for n in order)
                 values = grad.reshape(inv_Di).permute(inv_order).contiguous().reshape(-1)
-                indices = torch.arange(sl[0], sl[1], dtype=torch.long, device=device)
+                indices = torch.arange(sl.start, sl.stop, dtype=torch.long, device=device)
                 indices_list.append(indices)
                 values_list.append(values)
 
