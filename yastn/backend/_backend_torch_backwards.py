@@ -41,6 +41,22 @@ def _project_grad_dtype(grad, target_dtype):
     return grad.to(dtype=target_dtype)
 
 
+def _blocks_tile(reshape, size):
+    r"""Do the blocks of ``reshape`` tile ``[0, size)`` exactly, i.e. does every element of the flat
+    data belong to some block?
+
+    When they do, a loop that assigns every block covers the whole output and the output buffer does
+    not need zero-initialization. Blocks are expected in increasing order of their slice; an
+    out-of-order ``reshape`` conservatively returns ``False`` (falling back to a zeroed buffer).
+    """
+    covered = 0
+    for slo, *_ in reshape:
+        if slo.start != covered:
+            return False
+        covered = slo.stop
+    return covered == size
+
+
 class kernel_svd(torch.autograd.Function):
     @staticmethod
     def forward(data_in, meta, sizes, fullrank_uv=False, ad_decomp_reg=1.0e-12, diagnostics=None):
@@ -197,34 +213,35 @@ class kernel_transpose_dot_sum(torch.autograd.Function):
 
         At = {ii: data_A[slo].view(Do).permute(ctx.order_A).reshape(Dl, Dr) for ii, (slo, Do, Dl, Dr) in enumerate(ctx.reshape_A)}
         Bt = {ii: data_B[slo].view(Do).permute(ctx.order_B).reshape(Dl, Dr) for ii, (slo, Do, Dl, Dr) in enumerate(ctx.reshape_B)}
-        At_b = {ii: torch.zeros_like(v) for ii, v in At.items()}
-        Bt_b = {ii: torch.zeros_like(v) for ii, v in Bt.items()}
+        # Block accumulators are (Dl, Dr) views into a single buffer laid out like the input:
+        # one allocation and one zero-fill instead of one per block.
+        acc_A = torch.zeros_like(data_A)
+        acc_B = torch.zeros_like(data_B)
+        At_b = {ii: acc_A[slo].view(Dl, Dr) for ii, (slo, Do, Dl, Dr) in enumerate(ctx.reshape_A)}
+        Bt_b = {ii: acc_B[slo].view(Dl, Dr) for ii, (slo, Do, Dl, Dr) in enumerate(ctx.reshape_B)}
 
         for sln, Dn, ta, tb in ctx.meta:
             tmp = data_C_b[sln].view(Dn)
-            At_b[ta] += tmp @ Bt[tb].adjoint()
-            Bt_b[tb] += At[ta].adjoint() @ tmp
+            At_b[ta].addmm_(tmp, Bt[tb].adjoint())   # fused; no temporary per GEMM
+            Bt_b[tb].addmm_(At[ta].adjoint(), tmp)
+        del At, Bt   # permuted copies of the inputs are dead once the GEMMs are done
 
-        # Accumulate gradients
-        # Build gradient tensors using scatter (vmap compatible)
-        def build_grad(blocks_grad, reshape_info, order, inv_order, size_in, dtype, device):
-            indices_list = []
-            values_list = []
-            for grad, (sl, Di, _, _) in zip(blocks_grad.values(), reshape_info):
-                inv_Di = tuple(Di[n] for n in order)
-                values = grad.reshape(inv_Di).permute(inv_order).contiguous().reshape(-1)
-                indices = torch.arange(sl.start, sl.stop, dtype=torch.long, device=device)
-                indices_list.append(indices)
-                values_list.append(values)
+        # Permute each accumulated block back into the input layout. Every block is assigned (blocks
+        # that no meta entry touches carry the zeros of acc_*), so the output needs zero-init only
+        # where the blocks leave gaps in the flat data. Each accumulator is released as soon as its
+        # gradient is built, so the two sides never hold four full-size buffers at once.
+        data_A_b = torch.empty_like(data_A) if _blocks_tile(ctx.reshape_A, data_A.numel()) else torch.zeros_like(data_A)
+        for v, (sl, Di, _, _) in zip(At_b.values(), ctx.reshape_A):
+            inv_Di = tuple(Di[n] for n in ctx.order_A)
+            data_A_b[sl].reshape(Di)[:] = v.reshape(inv_Di).permute(inv_order_A)
+        del acc_A, At_b
 
-            if indices_list:
-                all_idx = torch.cat(indices_list)
-                all_val = torch.cat(values_list)
-                return torch.zeros((size_in,), dtype=dtype, device=device).scatter(0, all_idx, all_val)
-            return torch.zeros((size_in,), dtype=dtype, device=device)
+        data_B_b = torch.empty_like(data_B) if _blocks_tile(ctx.reshape_B, data_B.numel()) else torch.zeros_like(data_B)
+        for v, (sl, Di, _, _) in zip(Bt_b.values(), ctx.reshape_B):
+            inv_Di = tuple(Di[n] for n in ctx.order_B)
+            data_B_b[sl].reshape(Di)[:] = v.reshape(inv_Di).permute(inv_order_B)
+        del acc_B, Bt_b
 
-        data_A_b = build_grad(At_b, ctx.reshape_A, ctx.order_A, inv_order_A, data_A.numel(), promoted_dtype, data_A.device)
-        data_B_b = build_grad(Bt_b, ctx.reshape_B, ctx.order_B, inv_order_B, data_B.numel(), promoted_dtype, data_B.device)
         # project gradients back to each input's dtype (real+complex mixes)
         data_A_b = _project_grad_dtype(data_A_b, data_A_dtype)
         data_B_b = _project_grad_dtype(data_B_b, data_B_dtype)
