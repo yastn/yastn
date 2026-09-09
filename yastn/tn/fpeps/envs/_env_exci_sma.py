@@ -4,7 +4,7 @@ from ... import mps
 from ....tensor import YastnError
 from .._geometry import Site
 from ._env_boundary_mps import _clear_operator_input, clear_projectors
-from ....operators import sign_canonical_order
+from ....operators import sign_canonical_order, swap_charges
 from .._peps import Peps, Peps2Layers
 from .._doublePepsTensor import DoublePepsTensor
 
@@ -179,14 +179,20 @@ class EnvExciSMA:
         raise YastnError(f"{dirn=} not recognized. Should be 't', 'h' 'b', 'r', 'v', or 'l'.")
 
 
-    def measure_exci(self, *operators, exci_bra=None, exci_ket=None, site_bra=None, site_ket=None, sites_op=None, dirn='tb', opts_svd=None, opts_var=None, split_bra=False):
+    def measure_exci(self, *operators, exci_bra=None, exci_ket=None, site_bra=None, site_ket=None,
+                     sites_op=None, dirn='tb', opts_svd=None, opts_var=None, split_bra=False,
+                     normalization=None, return_normalization=False):
 
         sites = [site_bra, site_ket] + sites_op
 
         if sites is None or len(operators) != len(sites_op):
             raise YastnError("Number of operators plus excited tensors and sites should match.")
 
-        sign = sign_canonical_order(*operators, sites=sites_op, f_ordered=self.psi.f_ordered)
+        # Charged excitation tensors are endpoints of the same fermionic
+        # strings as odd local operators in an equivalent neutral correlator.
+        charged_tensors = (exci_bra.conj(),) + operators + (exci_ket,)
+        charged_sites = (site_bra,) + tuple(sites_op) + (site_ket,)
+        sign = sign_canonical_order(*charged_tensors, sites=charged_sites, f_ordered=self.psi.f_ordered)
         ops = {}
         for n, op in zip(sites_op, operators):
             ops[n] = ops[n] @ op if n in ops else op
@@ -227,25 +233,48 @@ class EnvExciSMA:
             dy = self.yrange[0] - self.offset
             tens = {(nx, ny): tm[ny - dy] for nx, tm in tms.items() for ny in range(*self.yrange)}
 
-        val_no = contract_window(bra, tms0, ket, i0, i1, opts_svd, opts_var)
+        val_no = normalization
+        if val_no is None:
+            val_no = contract_window(bra, tms0, ket, i0, i1, opts_svd, opts_var)
 
         nx0, ny0 = self.xrange[0], self.yrange[0]
         for (nx, ny), op in ops.items():
             tens[nx, ny].set_operator_(op)
-            tens[nx, ny].add_charge_swaps_(op.n, axes=('b0' if nx == nx0 else 'k1'))
+
+        ket_crossings = []
+        for (nx, ny), charged_tensor in zip(charged_sites, charged_tensors):
+            charge = charged_tensor.n
+            tens[nx, ny].add_charge_swaps_(charge, axes=('b0' if nx == nx0 else 'k1'))
             for ii in range(nx0 + 1, nx):
-                tens[ii, ny].add_charge_swaps_(op.n, axes=['k1', 'k4', 'b3'])
+                tens[ii, ny].add_charge_swaps_(charge, axes=['k1', 'k4', 'b3'])
+                if (ii, ny) == site_ket:
+                    ket_crossings.append(charge)
             if nx > nx0:
-                tens[nx0, ny].add_charge_swaps_(op.n, axes=['b0', 'k4', 'b3'])
+                tens[nx0, ny].add_charge_swaps_(charge, axes=['b0', 'k4', 'b3'])
+                if (nx0, ny) == site_ket:
+                    ket_crossings.append(charge)
             for jj in range(ny0, ny):
-                tens[nx0, jj].add_charge_swaps_(op.n, axes=['b0', 'k2', 'k4'])
+                tens[nx0, jj].add_charge_swaps_(charge, axes=['b0', 'k2', 'k4'])
+                if (nx0, jj) == site_ket:
+                    ket_crossings.append(charge)
+
+        # The ket excitation has already absorbed its local charged operator.
+        # Compensate strings that cross its physical leg; in the standard
+        # operator path these strings are applied before the local operator.
+        if ket_crossings:
+            sign *= swap_charges(
+                ket_crossings,
+                [exci_ket.n] * len(ket_crossings),
+                exci_ket.config.fermionic,
+            )
 
         if split_bra:
             i_split = site_bra[1] if dirn == 'lr' else site_bra[0]
             val_op = contract_window_split_at(bra, tms, ket, i0, i1, i_split, opts_svd, opts_var)
         else:
             val_op = contract_window(bra, tms, ket, i0, i1, opts_svd, opts_var)
-        return sign * val_op / val_no
+        value = sign * val_op / val_no
+        return (value, val_no) if return_normalization else value
 
     def measure_exci_ops(self, *operators, exci_psi=None, sites_op=None, opts_svd=None, opts_var=None):
         if opts_var is None:
