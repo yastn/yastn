@@ -26,7 +26,7 @@ from ._auxiliary import _clear_axes, _unpack_axes, _struct, _flatten, get_blocks
 from ._legbasic import legs_from_dict_v2
 from ._legs import Leg, LegMeta, legs_union, _legs_mask_needed
 from ._merging import _embed_tensor
-from ._tests import YastnError
+from ._yastnerror import YastnError
 from ..sym import sym_none
 from .._split_combine_dict import combine_data_and_meta
 
@@ -74,10 +74,8 @@ def to_dict(a, level=2, meta=None, resolve_ops=False) -> dict:
         config = a.config._asdict()
         config['sym'] = config['sym'].SYM_ID
         config['backend'] = config['backend'].BACKEND_ID
-        hfs = tuple(hf._asdict() for hf in a.hfs)
-        struct = a.struct._asdict()
-        struct['legs'] = tuple(leg._asdict() for leg in struct['legs'])
-        struct['mask'] = struct['mask'].array
+        hfs = tuple(hf.to_dict() for hf in a.hfs)
+        struct = a.struct.to_dict()
     else:
         config = a.config
         hfs = a.hfs

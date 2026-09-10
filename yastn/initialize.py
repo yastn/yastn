@@ -416,10 +416,8 @@ def block(tensors, common_legs=None) -> Tensor:
 def _sum_legs_hfs(legs):
     """ sum hfs based on info in legs"""
     hfs = [leg.hf for leg in legs]
-    t_in = [leg.t for leg in legs]
-    D_in = [leg.D for leg in legs]
-    s_out = legs[0].s
-    return _combine_hfs_sum(hfs, t_in, D_in, s_out)
+    legs_basic = tuple(leg.basic() for leg in legs)
+    return _combine_hfs_sum(hfs, legs_basic)
 
 
 @dataclass

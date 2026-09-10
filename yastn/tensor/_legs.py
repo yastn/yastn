@@ -23,8 +23,9 @@ from typing import Sequence
 import numpy as np
 
 from ._auxiliary import _flatten
+from ._legbasic import LegBasic
 from ._merging import _hfs_union, _combine_hfs_prod, _unfuse_Fusion, _Fusion
-from ._tests import YastnError
+from ._yastnerror import YastnError
 from ..sym import sym_none
 
 __all__ = ['Leg', 'LegMeta', 'legs_union', 'gaussian_leg', 'leg_product', 'undo_leg_product']
@@ -104,7 +105,7 @@ class Leg:
             object.__setattr__(self, "t", tuple(tD.keys()))
             object.__setattr__(self, "D", tuple(tD.values()))
             if self.hf is None:
-                object.__setattr__(self, "hf", _Fusion(s=(self.s,)))
+                object.__setattr__(self, "hf", _Fusion())
             object.__setattr__(self, "_verified", True)
 
     def __str__(self):
@@ -120,6 +121,9 @@ class Leg:
     def drop_history(self) -> Leg:
         r""" New :class:`yastn.Leg` with no information on merging history. """
         return Leg(self.sym, self.s, self.t, self.D)
+
+    def basic(self) -> LegBasic:
+        return LegBasic(s=self.s, t=self.t, D=self.D)
 
     def __getitem__(self, t) -> int:
         r"""
@@ -338,9 +342,8 @@ def leg_product(*legs, t_allowed=None) -> Leg:
     tnew = tuple(tnew)
     Dnew = tuple(Dnew)
     hfs = tuple(leg.hf for leg in legs)
-    ts = tuple(leg.t for leg in legs)
-    Ds = tuple(leg.D for leg in legs)
-    hf = _combine_hfs_prod(hfs, ts, Ds, seff)
+    legs_basic = tuple(leg.basic() for leg in legs)
+    hf = _combine_hfs_prod(hfs, legs_basic)
     return Leg(sym=sym, s=seff, t=tnew, D=Dnew, hf=hf)
 
 
@@ -357,8 +360,8 @@ def undo_leg_product(leg) -> Sequence[Leg]:
     if hst[0] in ('o', 's'):
         raise YastnError('Leg is not a result of outer_product.')
     # elif hst[0] == 'p':
-    ts, Ds, ss, hfs = _unfuse_Fusion(leg.hf)
-    return tuple(Leg(sym=leg.sym, s=s, t=t, D=D, hf=hf) for s, t, D, hf in zip(ss, ts, Ds, hfs))
+    legs, hfs = _unfuse_Fusion(leg.hf)
+    return tuple(Leg(sym=leg.sym, s=ll.s, t=ll.t, D=ll.D, hf=hf) for ll, hf in zip(legs, hfs))
 
 
 def legs_union(*legs) -> Leg:
@@ -377,7 +380,8 @@ def legs_union(*legs) -> Leg:
         if any(leg.s != legs[0].s for leg in legs):
             raise YastnError('Provided legs have different signatures.')
         if any(leg.hf != legs[0].hf for leg in legs):
-            t, D, hf = _hfs_union(legs[0].sym, [leg.t for leg in legs], [leg.hf for leg in legs])
+            leg, hf = _hfs_union(legs)
+            t, D = leg.t, leg.D
         else:
             tD = {t: D for leg in legs for t, D in zip(leg.t, leg.D)}
             if any(tD[t] != D for leg in legs for t, D in zip(leg.t, leg.D)):
@@ -408,15 +412,14 @@ def are_legs_consistent(leg0, leg1, sgn=-1) -> bool:
     Their dimensions and fusion history have to match.
     """
     if isinstance(leg0, Leg) and isinstance(leg1, Leg):
-        if leg0.s != sgn * leg1.s or \
-           leg0.hf.tree != leg1.hf.tree or \
-           leg0.hf.op != leg1.hf.op or \
-           any(s0 != sgn * s1 for s0, s1 in zip(leg0.hf.s, leg1.hf.s)):
+        if leg0.hf.tree != leg1.hf.tree or \
+           leg0.hf.op != leg1.hf.op:
                 return False
-        tDs0 = [dict(zip(t, D)) for n, t, D in zip(leg0.hf.tree, (leg0.t,) + leg0.hf.t, (leg0.D,) + leg0.hf.D) if n == 1]
-        tDs1 = [dict(zip(t, D)) for n, t, D in zip(leg1.hf.tree, (leg1.t,) + leg1.hf.t, (leg1.D,) + leg1.hf.D) if n == 1]
-        if any(any(tD0[k] != tD1[k] for k in tD0.keys() & tD1.keys()) for tD0, tD1 in zip(tDs0, tDs1)):
-            return False
+        legsa = (leg0.basic(),) + leg0.hf.legs
+        legsb = (leg1.basic(),) + leg1.hf.legs
+        for leafs, l0, l1 in zip(leg0.hf.tree, legsa, legsb):
+            if leafs == 1 and not l0.are_consistent(l1, sgn=sgn):
+                return False
         return True
     if isinstance(leg0, LegMeta) and isinstance(leg1, LegMeta):
         if leg0.mf != leg1.mf:

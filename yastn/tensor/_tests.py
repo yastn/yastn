@@ -13,16 +13,10 @@
 # limitations under the License.
 # ==============================================================================
 """ Testing and controls. """
-import numpy as np
-
 from ._auxiliary import _flatten, _unpack_axes, _struct, get_blocks
-from ._legbasic import LegBasic
+from ._yastnerror import YastnError
 
 __all__ = ['are_independent', 'is_consistent', 'YastnError']
-
-
-class YastnError(Exception):
-    """Errors raised by yastn."""
 
 
 def _test_can_be_combined(a, b):
@@ -76,9 +70,9 @@ def _unpack_trans_test_axes_pair(a, b, sgn=1, axes=None):
     for i1, i2 in zip(*haxes):
         if a.hfs[i1].tree != b.hfs[i2].tree or a.hfs[i1].op != b.hfs[i2].op:
             raise YastnError('Indicated axes of two tensors have different number of hard-fused legs or sub-fusions order.')
-        if any(s1 != sgn * s2 for s1, s2 in zip(a.hfs[i1].s, b.hfs[i2].s)):
+        if any(leg1.s != sgn * leg2.s for leg1, leg2 in zip(a.hfs[i1].legs, b.hfs[i2].legs)):
             raise YastnError('Signatures of hard-fused legs do not match.')
-        if a.hfs[i1].t != b.hfs[i2].t or a.hfs[i1].D != b.hfs[i2].D:
+        if any(leg1.t != leg2.t or leg1.D != leg2.D for leg1, leg2 in zip(a.hfs[i1].legs, b.hfs[i2].legs)):
             mask_needed = True
     return mask_needed, haxes
 
@@ -107,26 +101,10 @@ def is_consistent(a):
     """
     bl = get_blocks(a.config.sym, a.struct)
     assert a.config.backend.get_shape(a._data) == (bl.size,)
-
-    for leg, hf in zip(a.struct.legs, a.hfs):
-        assert leg.s == hf.s[0]
-        assert len(hf.tree) == len(hf.op)
-        assert len(hf.tree) == len(hf.s)
-        assert len(hf.tree) == len(hf.t) + 1
-        assert len(hf.tree) == len(hf.D) + 1
-        assert all(y in ('p', 's') if x > 1 else 'n' for x, y in zip(hf.tree, hf.op))
-    # test that all elements of tensor are python int types
     assert isinstance(a.struct, _struct)
-    assert isinstance(a.struct.legs, tuple)
-    for leg in a.struct.legs:
-        assert isinstance(leg, LegBasic)
-        assert isinstance(leg.s, int)
-        assert leg.s in (-1, 1)
-        assert isinstance(leg.t, tuple)
-        assert isinstance(leg.D, tuple)
-        assert all(isinstance(x, int) for tt in leg.t for x in tt)
-        # assert all(isinstance(x, int) for x in leg.D)
-    assert isinstance(a.struct.n, tuple)
-    assert all(isinstance(x, int) for x in a.struct.n)
-    assert isinstance(a.struct.isdiag, bool)
+    assert a.struct.is_consistent()
+    assert isinstance(a.hfs, tuple)
+    assert all(hf.is_consistent() for hf in a.hfs)
+    assert isinstance(a.mfs, tuple)
+    assert all(isinstance(mf, tuple) and all(isinstance(x, int) for x in mf) for mf in a.mfs)
     return True

@@ -143,7 +143,7 @@ class Tensor:
         try:
             self.hfs = tuple(self.hfs)
         except TypeError:
-            self.hfs = tuple(_Fusion(s=(x,)) for x in self.s_n)
+            self.hfs = tuple(_Fusion() for _ in self.s_n)
 
     # pylint: disable=C0415
     from ._initialize import set_block, _fill_tensor, __setitem__
@@ -229,7 +229,7 @@ class Tensor:
                     d[k] = _convert_lists_to_tuples(d[k])
             if not isinstance(d['config'], _config):
                 d['config'] = make_config(**d['config'])
-            d['hfs'] = tuple(_Fusion(**hf) for hf in d['hfs'])
+            d['hfs'] = tuple(_Fusion.from_dict(hf) for hf in d['hfs'])
             old_struct = d['struct']
             legs = legs_from_dict_v2(old_struct)
             d['struct'] = _struct(legs=legs, n=d['struct']['n'], isdiag=d['struct']['diag'])
@@ -286,10 +286,8 @@ class Tensor:
                     d[k] = _convert_lists_to_tuples(d[k])
                 if not isinstance(d['config'], _config):
                     d['config'] = make_config(**d['config'])
-                d['hfs'] = tuple(_Fusion(**hf) for hf in d['hfs'])
-                legs = tuple(LegBasic(**xx) for xx in d['struct']['legs'])
-                mask = HashedMask(d['struct']['mask'])
-                d['struct'] = _struct(legs=legs, n=d['struct']['n'], isdiag=d['struct']['isdiag'], mask=mask)
+                d['hfs'] = tuple(_Fusion.from_dict(hf) for hf in d['hfs'])
+                d['struct'] = _struct.from_dict(d['struct'])
 
             if d['level'] >= 2 or config is not None:
                 dtype = d['config'].default_dtype
