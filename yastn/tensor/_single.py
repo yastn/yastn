@@ -19,12 +19,14 @@ from typing import Sequence, TYPE_CHECKING, Union
 
 import numpy as np
 
-from ._auxiliary import _clear_axes, _struct, _unpack_axes, get_blocks, argsort_t
+from ._auxiliary import _clear_axes, _unpack_axes, get_blocks, argsort_t, get_trimmed_struct, find_matching_indices
+from ._auxiliary import convert_to_tuples_and_slices, _compress_slices
 from ._einsum import ncon
 from ._legbasic import LegBasic
 from ._legs import LegMeta, Leg, leg_product
 from ._merging import _Fusion
-from ._tests import YastnError, _test_axes_all
+from ._tests import _test_axes_all
+from ._yastnerror import YastnError
 
 if TYPE_CHECKING:
     from . import Tensor
@@ -33,7 +35,104 @@ __all__ = ['conj', 'conj_blocks', 'consume_transpose',
            'flip_signature', 'flip_charges', 'switch_signature',
            'transpose', 'moveaxis', 'move_leg', 'diag',
            'add_leg', 'remove_leg', 'copy', 'clone', 'detach', 'to',
-           'requires_grad_', 'grad', 'drop_leg_history', 'shallow_copy']
+           'requires_grad_', 'grad', 'drop_leg_history', 'shallow_copy',
+           'remove_random_blocks', 'remove_zero_blocks']
+
+
+def remove_random_blocks(a, number, keep_legs=True) -> 'Tensor':
+    r"""
+    Randomly remove a number of blocks from a tensor.
+
+    The function attempts to remove ``number`` blocks from the tensor structure, selecting them randomly.
+    If ``keep_legs`` is ``True``, any attempted removal that would change the
+    tensor legs is rejected. The number of actually removed blocks can be
+    smaller than requested. If no blocks are removed, the original tensor is
+    returned. Otherwise, a new tensor with updated structure and copied data is
+    returned.
+
+    The function is useful mostly for testing.
+
+    Parameters
+    ----------
+    number: int
+        Number of attempts to remove random block.
+    keep_legs: bool
+        If True, ensures that tensor legs are not changed,
+        i.e. all leg charges appear in some blocks. The default is True.
+    """
+    if number <= 0 or a.config.sym.NSYM == 0:
+        return a
+    bl = get_blocks(a.config.sym, a.struct)
+    mask = np.ones(bl.nblocks, dtype=bool)
+    for _ in range(number):
+        ind = np.random.randint(bl.nblocks)
+        mask[ind] = False
+        if keep_legs:
+            tset = bl.t[mask]
+            if any(len(np.unique(tset[:, ax, :], axis=0)) != len(leg.t) for ax, leg in enumerate(a.struct.legs)):
+                mask[ind] = True
+
+    if a.struct.mask.array is not None:
+        inds = np.where(a.struct.mask.array)[0]
+        inds = inds[mask]
+        mask = np.zeros(len(a.struct.mask.array), dtype=bool)
+        mask[inds] = True
+
+    struct_new = a.struct.replace(mask=mask)
+    if not keep_legs:
+        struct_new = get_trimmed_struct(a.config.sym, struct_new)
+    if struct_new == a.struct:
+        return a
+
+    bl_new = get_blocks(a.config.sym, struct_new)
+    inds = find_matching_indices(bl.t, bl_new.t, both=False)
+    meta = _compress_slices(np.column_stack([bl_new.slc, bl.slc[inds]]))
+    meta_dt = np.dtype([
+        ('sln', np.int64, (2,)),
+        ('slo', np.int64, (2,))])
+    meta = meta.view(meta_dt).reshape(-1)
+    meta = convert_to_tuples_and_slices(meta)
+    data = a.config.backend.embed_slices(a._data, meta, bl_new.size)
+    return a._replace(struct=struct_new, data=data)
+
+
+def remove_zero_blocks(a, rtol=1e-12, atol=0) -> 'Tensor':
+    r"""
+    Remove blocks whose entries are below a cutoff.
+
+    The cutoff combines an absolute tolerance and a relative tolerance with respect
+    to the largest element of the tensor.
+    """
+    cutoff = atol + rtol * a.norm(p='inf')
+
+    bl = get_blocks(a.config.sym, a.struct)
+    inds = [ind for ind, slc in enumerate(bl.slc)
+            if a.config.backend.max_abs(a._data[slice(*slc)]) > cutoff]
+    inds = np.array(inds, dtype=np.int64)
+    mask = np.zeros(bl.nblocks, dtype=bool)
+    mask[inds] = True
+
+    if a.struct.mask.array is not None:
+        inds = np.where(a.struct.mask.array)[0]
+        inds = inds[mask]
+        mask = np.zeros(len(a.struct.mask.array), dtype=bool)
+        mask[inds] = True
+
+    struct_new = a.struct.replace(mask=mask)
+    struct_new = get_trimmed_struct(a.config.sym, struct_new)
+    if struct_new == a.struct:
+        return a
+
+    bl_new = get_blocks(a.config.sym, struct_new)
+    inds = find_matching_indices(bl.t, bl_new.t, both=False)
+    meta = _compress_slices(np.column_stack([bl_new.slc, bl.slc[inds]]))
+    meta_dt = np.dtype([
+        ('sln', np.int64, (2,)),
+        ('slo', np.int64, (2,))])
+    meta = meta.view(meta_dt).reshape(-1)
+    meta = convert_to_tuples_and_slices(meta)
+    data = a.config.backend.embed_slices(a._data, meta, bl_new.size)
+    return a._replace(struct=struct_new, data=data)
 
 
 def shallow_copy(a) -> 'Tensor':
@@ -142,10 +241,9 @@ def conj(a) -> 'Tensor':
 
     Follows the behavior of the :code:`backend.conj()` when it comes to creating a new copy of the data.
     """
-    newn = a.config.sym.add_charges(a.struct.n, new_signature=-1)
-
-    legs = tuple(leg.conj() for leg in a.struct.legs)
-    struct = _struct(legs=legs, n=newn, isdiag=a.isdiag)
+    new_n = a.config.sym.add_charges(a.struct.n, new_signature=-1)
+    new_legs = tuple(leg.conj() for leg in a.struct.legs)
+    struct = a.struct.replace(legs=new_legs, n=new_n)
     hfs = tuple(hf.conj() for hf in a.hfs)
     data = a.config.backend.conj(a._data)
     return a._replace(hfs=hfs, struct=struct, data=data)
@@ -170,9 +268,9 @@ def flip_signature(a) -> 'Tensor':
 
     Creates a shallow copy of the data.
     """
-    newn = a.config.sym.add_charges(a.struct.n, new_signature=-1)
-    legs = tuple(leg.conj() for leg in a.struct.legs)
-    struct = _struct(legs=legs, n=newn, isdiag=a.isdiag)
+    new_n = a.config.sym.add_charges(a.struct.n, new_signature=-1)
+    new_legs = tuple(leg.conj() for leg in a.struct.legs)
+    struct = a.struct.replace(legs=new_legs, n=new_n)
     hfs = tuple(hf.conj() for hf in a.hfs)
     return a._replace(hfs=hfs, struct=struct)
 
@@ -201,33 +299,39 @@ def flip_charges(a, axes=None) -> 'Tensor':
     uaxes, = _unpack_axes(a.mfs, axes)
     uaxes = tuple(a.trans[ax] for ax in uaxes)
 
-    bl_old = get_blocks(a.config.sym, a.struct)
-    legs_new = list(a.struct.legs)
+    new_legs = list(a.struct.legs)
     hfs_new = list(a.hfs)
-    t_flip = bl_old.t.copy()
 
+    bl_all = get_blocks(a.config.sym, a.struct.replace(mask=None))
+    t_flip = bl_all.t.copy()
     for ax in uaxes:
         if hfs_new[ax].is_fused():
             raise YastnError('Flipping charges of hard-fused leg is not supported.')
         hfs_new[ax] = hfs_new[ax].conj()
         leg = a.struct.legs[ax]
-        legs_new[ax] = leg.conj_charges(a.config.sym)
+        new_legs[ax] = leg.conj_charges(a.config.sym)
         t_flip[:, ax, :] = a.config.sym.fuse(t_flip[:, (ax,), :], (leg.s,), -leg.s)
 
-    legs_new = tuple(legs_new)
-    bl_new = get_blocks(a.config.sym, a.struct._replace(legs=legs_new))
+    if a.struct.mask.array is None:
+        struct_new = a.struct.replace(legs=new_legs)
+    else:
+        inds_all = argsort_t(t_flip)
+        mask_new = a.struct.mask.array[inds_all]
+        struct_new = a.struct.replace(legs=new_legs, mask=mask_new)
+        t_flip = t_flip[a.struct.mask.array]
+
+    bl_old = get_blocks(a.config.sym, a.struct)
+    bl_new = get_blocks(a.config.sym, struct_new)
     inds = argsort_t(t_flip)
     assert np.array_equal(t_flip[inds], bl_new.t), "Sanity check. Contact developers.."
-    sln, slo = bl_new.slc, bl_old.slc[inds]
-    meta = np.column_stack([sln, sln[:, 1] - sln[:, 0], slo, slo[:, 1] - slo[:, 0]])
+    meta = _compress_slices(np.column_stack([bl_new.slc, bl_old.slc[inds]]))
     meta_dt = np.dtype([
         ('sln', np.int64, (2,)),
-        ('Dn', np.int64, (1,)),
-        ('slo', np.int64, (2,)),
-        ('Do', np.int64, (1,))])
+        ('slo', np.int64, (2,))])
     meta = meta.view(meta_dt).reshape(-1)
-    data = a.config.backend.embed_transpose(a._data, [0], meta, bl_new.size)  # used for embeding
-    out = a._replace(struct=bl_new.struct, data=data, hfs=hfs_new)
+    meta = convert_to_tuples_and_slices(meta)
+    data = a.config.backend.embed_slices(a._data, meta, bl_new.size)
+    out = a._replace(struct=struct_new, data=data, hfs=hfs_new)
     return out
 
 
@@ -293,7 +397,7 @@ def drop_leg_history(a, axes=None) -> 'Tensor':
             axes = (axes,)
     uaxes, = _unpack_axes(a.mfs, axes)
     uaxes = tuple(a.trans[ax] for ax in uaxes)
-    hfs = tuple(_Fusion(s=(a.struct.legs[n].s,)) if n in uaxes else a.hfs[n] for n in range(a.ndim_n))
+    hfs = tuple(_Fusion() if n in uaxes else a.hfs[n] for n in range(a.ndim_n))
     return a._replace(hfs=hfs)
 
 
@@ -330,19 +434,31 @@ def consume_transpose(a) -> 'Tensor':
     new_hfs = tuple(a.hfs[ii] for ii in a.trans)
     new_legs = tuple(a.struct.legs[ii] for ii in a.trans)
 
-    bl_old = get_blocks(a.config.sym, a.struct)
-    bl_new = get_blocks(a.config.sym, a.struct._replace(legs=new_legs))
-    inds = argsort_t(bl_old.t[:, order, :])
-    meta = np.hstack([bl_new.slc, bl_new.D, bl_old.slc[inds], bl_old.D[inds]])
-    ndim = len(new_legs)
-    meta_dt = np.dtype([
-        ('sln', np.int64, (2,)),
-        ('Dn', np.int64, (ndim,)),
-        ('slo', np.int64, (2,)),
-        ('Do', np.int64, (ndim,))])
-    meta = meta.view(meta_dt).reshape(-1)
-    data = a._data if a.isdiag else a.config.backend.embed_transpose(a._data, a.trans, meta, bl_new.size)
-    return a._replace(hfs=new_hfs, struct=bl_new.struct, data=data, trans=no_trans)
+    if a.struct.mask.array is None:
+        struct_new = a.struct.replace(legs=new_legs)
+    else:
+        bl_all = get_blocks(a.config.sym, a.struct.replace(mask=None))
+        inds_all = argsort_t(bl_all.t[:, order, :])
+        mask_new = a.struct.mask.array[inds_all]
+        struct_new = a.struct.replace(legs=new_legs, mask=mask_new)
+
+    if a.isdiag:
+        data = a._data
+    else:
+        bl_new = get_blocks(a.config.sym, struct_new)
+        bl_old = get_blocks(a.config.sym, a.struct)
+        inds = argsort_t(bl_old.t[:, order, :])
+        meta = np.hstack([bl_new.slc, bl_new.D, bl_old.slc[inds], bl_old.D[inds]])
+        ndim = len(new_legs)
+        meta_dt = np.dtype([
+            ('sln', np.int64, (2,)),
+            ('Dn', np.int64, (ndim,)),
+            ('slo', np.int64, (2,)),
+            ('Do', np.int64, (ndim,))])
+        meta = meta.view(meta_dt).reshape(-1)
+        meta = convert_to_tuples_and_slices(meta)
+        data = a.config.backend.embed_transpose(a._data, a.trans, meta, bl_new.size)
+    return a._replace(hfs=new_hfs, struct=struct_new, data=data, trans=no_trans)
 
 
 def moveaxis(a, source, destination) -> 'Tensor':
@@ -425,7 +541,7 @@ def add_leg(a, axis=-1, s=-1, t=None, leg=None) -> 'Tensor':
         t = leg.t[0]
         hfsa = leg.hf
     else:
-        hfsa = _Fusion(s=(s,))
+        hfsa = _Fusion()
 
     if s not in (-1, 1):
         raise YastnError('Signature of the new axis should be 1 or -1.')
@@ -453,7 +569,7 @@ def add_leg(a, axis=-1, s=-1, t=None, leg=None) -> 'Tensor':
 
     newn = a.config.sym.add_charges(a.struct.n, t, signatures=(1, s))
     legs = a.struct.legs[:haxis] + (LegBasic(s=s, t=(t,), D=(1,)),) + a.struct.legs[haxis:]
-    struct = _struct(legs=legs, n=newn, isdiag=a.isdiag)
+    struct = a.struct.replace(legs=legs, n=newn)
     hfs = a.hfs[:haxis] + (hfsa,) + a.hfs[haxis:]
     return a._replace(mfs=mfs, hfs=hfs, struct=struct, trans=trans)
 
@@ -497,7 +613,7 @@ def remove_leg(a, axis=-1) -> 'Tensor':
 
         new_n = a.config.sym.add_charges(a.struct.n, t, signatures=(-1, a.struct.legs[haxis].s), new_signature=-1)
         new_legs = a.struct.legs[:haxis] + a.struct.legs[haxis + 1:]
-        struct = _struct(legs=new_legs, n=new_n, isdiag=a.isdiag)
+        struct = a.struct.replace(legs=new_legs, n=new_n)
         hfs = a.hfs[:haxis] + a.hfs[haxis + 1:]
         a = a._replace(mfs=mfs, hfs=hfs, struct=struct, trans=trans)
     return a
@@ -523,7 +639,8 @@ def diag(a) -> 'Tensor':
     if a.trans == (1, 0):  # sufficient for the transpose, to have consistent signature flow
         new_legs == new_legs[::-1]
     #
-    bl_new = get_blocks(a.config.sym, a.struct._replace(isdiag=not a.isdiag))
+    struct_new = a.struct._replace(isdiag=not a.isdiag)
+    bl_new = get_blocks(a.config.sym, struct_new)
 
     if a.isdiag:  # isdiag=True -> isdiag=False
         meta = np.hstack([bl_new.slc, bl.slc])
@@ -531,6 +648,7 @@ def diag(a) -> 'Tensor':
                 ('sln', np.int64, (2,)),
                 ('slo',  np.int64, (2,))])
         meta = meta.view(meta_dt).reshape(-1)
+        meta = convert_to_tuples_and_slices(meta)
         data = a.config.backend.diag_1dto2d(a._data, meta, bl_new.size)
     else:  # isdiag=False -> isdiag=True
         meta = np.hstack([bl_new.slc, bl.slc, bl.D])
@@ -539,5 +657,6 @@ def diag(a) -> 'Tensor':
                 ('slo',  np.int64, (2,)),
                 ('Do',  np.int64, (2,))])
         meta = meta.view(meta_dt).reshape(-1)
+        meta = convert_to_tuples_and_slices(meta)
         data = a.config.backend.diag_2dto1d(a._data, meta, bl_new.size)
-    return a._replace(struct=bl_new.struct, data=data, trans=None)
+    return a._replace(struct=struct_new, data=data, trans=None)

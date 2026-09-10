@@ -67,7 +67,7 @@ __all__.extend(linalg.__all__)
 
 
 class Tensor:
-    # Class defining a tensor with abelian symmetries, and operations on such tensor(s).
+    # Define a tensor with abelian symmetries and operations on such tensor(s).
 
     def __init__(self, config=None, s=(), n=None, isdiag=False, **kwargs):
         r"""
@@ -143,7 +143,7 @@ class Tensor:
         try:
             self.hfs = tuple(self.hfs)
         except TypeError:
-            self.hfs = tuple(_Fusion(s=(x,)) for x in self.s_n)
+            self.hfs = tuple(_Fusion() for _ in self.s_n)
 
     # pylint: disable=C0415
     from ._initialize import set_block, _fill_tensor, __setitem__
@@ -155,6 +155,7 @@ class Tensor:
     from ._single import conj, conj_blocks, flip_signature, flip_charges, switch_signature, transpose, moveaxis, move_leg, diag
     from ._single import grad, requires_grad_, add_leg, remove_leg, drop_leg_history
     from ._single import copy, shallow_copy, clone, detach, detach_, to, consume_transpose
+    from ._single import remove_random_blocks, remove_zero_blocks
     from ._output import print_properties, __str__, __repr__, print_blocks_shape, is_complex
     from ._output import get_blocks_charge, get_blocks_shape, get_legs
     from ._output import zero_of_dtype, item, __getitem__, __contains__
@@ -169,7 +170,7 @@ class Tensor:
     __iter__ = None  # ensure that the Tensor is not iterable
 
     def _replace(self, **kwargs) -> Tensor:
-        """ Creates a shallow copy replacing fields specified in kwargs. """
+        """Create a shallow copy with the specified fields replaced."""
         for arg in ('config', 'struct', 'mfs', 'hfs', 'data', 'trans'):
             if arg not in kwargs:
                 kwargs[arg] = getattr(self, arg)
@@ -178,7 +179,7 @@ class Tensor:
     @classmethod
     def from_dict(cls, d: dict, config:None | _config=None) -> Tensor:
         """
-        Deserializes tensor from the dictionary ``d``.
+        Deserialize a tensor from the dictionary ``d``.
 
         Parameters
         ----------
@@ -228,7 +229,7 @@ class Tensor:
                     d[k] = _convert_lists_to_tuples(d[k])
             if not isinstance(d['config'], _config):
                 d['config'] = make_config(**d['config'])
-            d['hfs'] = tuple(_Fusion(**hf) for hf in d['hfs'])
+            d['hfs'] = tuple(_Fusion.from_dict(hf) for hf in d['hfs'])
             old_struct = d['struct']
             legs = legs_from_dict_v2(old_struct)
             d['struct'] = _struct(legs=legs, n=d['struct']['n'], isdiag=d['struct']['diag'])
@@ -241,7 +242,7 @@ class Tensor:
             data = d['config'].backend.to_tensor(d['data'], dtype=dtype, device=d['config'].default_device)
             bl_new = get_blocks(d['config'].sym, d['struct'])
             t_old = np.array(old_struct['t'], dtype=np.int64)
-            t_old = t_old.reshape(len(t_old), len(bl_new.struct.legs), len(bl_new.struct.n))
+            t_old = t_old.reshape(len(t_old), len(d['struct'].legs), len(d['struct'].n))
             if 'slices' in d:
                 slc_old = np.array([x[0][0] for x in d['slices']], dtype=np.int64)
             else:
@@ -255,15 +256,13 @@ class Tensor:
                 slc_old[1:, 0] = slc_old[:-1, 1]
 
             ind1, ind2 = find_matching_indices(bl_new.t, t_old)
-            sln, slo = bl_new.slc[ind1], slc_old[ind2]
-            meta = np.column_stack([sln, sln[:, 1] - sln[:, 0], slo, slo[:, 1] - slo[:, 0]])
+            meta = _compress_slices(np.column_stack([bl_new.slc[ind1], slc_old[ind2]]))
             meta_dt = np.dtype([
                 ('sln', np.int64, (2,)),
-                ('Dn', np.int64, (1,)),
-                ('slo', np.int64, (2,)),
-                ('Do', np.int64, (1,))])
+                ('slo', np.int64, (2,))])
             meta = meta.view(meta_dt).reshape(-1)
-            newdata = d['config'].backend.embed_transpose(data, [0], meta, bl_new.size)
+            meta = convert_to_tuples_and_slices(meta)
+            newdata = d['config'].backend.embed_slices(data, meta, bl_new.size)
             d['data'] = newdata
             return cls(**d)
 
@@ -287,9 +286,8 @@ class Tensor:
                     d[k] = _convert_lists_to_tuples(d[k])
                 if not isinstance(d['config'], _config):
                     d['config'] = make_config(**d['config'])
-                d['hfs'] = tuple(_Fusion(**hf) for hf in d['hfs'])
-                legs = tuple(LegBasic(**xx) for xx in d['struct']['legs'])
-                d['struct'] = _struct(legs=legs, n=d['struct']['n'], isdiag=d['struct']['isdiag'])
+                d['hfs'] = tuple(_Fusion.from_dict(hf) for hf in d['hfs'])
+                d['struct'] = _struct.from_dict(d['struct'])
 
             if d['level'] >= 2 or config is not None:
                 dtype = d['config'].default_dtype
@@ -306,13 +304,13 @@ class Tensor:
 
     @property
     def trans(self) -> Sequence[int]:
-        r""" Transpose between logical legs and data spaces. """
+        r"""Return the transpose mapping between logical legs and data-space legs."""
         return self._trans
 
     @property
     def s(self) -> Sequence[int]:
         r"""
-        Signature of tensor's effective legs.
+        Return the signature of the tensor's effective legs.
 
         Legs (spaces) fused together by :meth:`yastn.Tensor.fuse` are treated as a single leg.
         The signature of each fused leg is given by the first native leg in the fused space.
@@ -326,7 +324,7 @@ class Tensor:
     @property
     def s_n(self) -> Sequence[int]:
         r"""
-        Signature of tensor's native legs.
+        Return the signature of the tensor's native legs.
 
         This includes legs (spaces) which have been fused together
         by :meth:`yastn.fuse_legs` using ``mode='meta'``.
@@ -336,7 +334,7 @@ class Tensor:
     @property
     def n(self) -> Sequence[int]:
         r"""
-        Total charge of the tensor.
+        Return the total charge of the tensor.
 
         In case of direct product of abelian symmetries,
         total charge for each symmetry, accumulated in a tuple.
@@ -346,7 +344,7 @@ class Tensor:
     @property
     def ndim(self) -> int:
         r"""
-        Effective rank of the tensor.
+        Return the effective rank of the tensor.
 
         Legs (spaces) fused together by :meth:`yastn.fuse_legs` are treated as single leg.
         """
@@ -355,7 +353,7 @@ class Tensor:
     @property
     def ndim_n(self) -> int:
         r"""
-        Native rank of the tensor.
+        Return the native rank of the tensor.
 
         It distinguishes legs (spaces) which were fused
         by :meth:`yastn.fuse_legs` using ``mode='meta'``.
@@ -364,27 +362,27 @@ class Tensor:
 
     @property
     def isdiag(self) -> bool:
-        """ Return ``True`` if the tensor is diagonal. """
+        """Return ``True`` if the tensor is diagonal."""
         return self.struct.isdiag
 
     @property
     def requires_grad(self) -> bool:
-        """ Return ``True`` if tensor data have autograd enabled. """
+        """Return ``True`` if the tensor data have autograd enabled."""
         return requires_grad(self)
 
     @property
     def size(self) -> int:
-        """ Total number of elements in all non-empty blocks of the tensor. """
+        """Return the total number of elements in all non-empty blocks of the tensor."""
         return self.config.backend.get_size(self._data)
 
     @property
     def device(self) -> str:
-        """ Name of device on which the data resides. """
+        """Return the name of the device on which the data resides."""
         return self.config.backend.get_device(self._data)
 
     @property
     def dtype(self) -> 'numpy.dtype' | 'torch.dtype':
-        """ Datatype ``dtype`` of tensor data used by the ``backend``. """
+        """Return the data type used by the backend for the tensor data."""
         return self.config.backend.get_dtype(self._data)
 
     @property
@@ -396,7 +394,7 @@ class Tensor:
 
     @property
     def data(self) -> 'numpy.array' | 'torch.tensor':
-        """ Return underlying 1D-array storing the elements of the tensor. """
+        """Return the underlying 1D array storing the tensor elements."""
         return self._data
 
     @property

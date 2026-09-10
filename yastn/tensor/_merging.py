@@ -21,10 +21,13 @@ from operator import itemgetter
 from typing import NamedTuple, TYPE_CHECKING
 
 import numpy as np
+from .._profile import nsys_profile
 
-from ._auxiliary import _struct, _flatten, _clear_axes, _unpack_legs, get_blocks, find_matching_indices
+from ._auxiliary import _struct, _flatten, _clear_axes, _unpack_legs, get_blocks, _product_indices
+from ._auxiliary import find_matching_indices, get_trimmed_struct, convert_to_tuples_and_slices
 from ._legbasic import LegBasic
-from ._tests import YastnError, _test_axes_all
+from ._tests import _test_axes_all
+from ._yastnerror import YastnError
 
 if TYPE_CHECKING:
     from . import Tensor
@@ -33,14 +36,14 @@ __all__ = ['fuse_legs', 'unfuse_legs', 'fuse_meta_to_hard', '_Fusion']
 
 
 class _LegSlices(NamedTuple):
-    r""" Immutable structure with information how to decompose a leg. """
+    r"""Immutable structure describing how to decompose a leg."""
     t: tuple = ()  # list of effective charges
     D: tuple = ()  # list of their bond dimensions
     dec: tuple = ()  # and their decompositions
 
 
 class _DecRecord(NamedTuple):
-    r""" Single record in _LegSlices.dec[i]"""
+    r"""A single record in ``_LegSlices.dec[i]``."""
     t: tuple = ()  # charge
     Dslc: tuple = (None, None)  # slice
     Dprod: int = 0  # size of slice, equal to product of Drsh
@@ -65,147 +68,46 @@ class _Fusion(NamedTuple):
     """
     tree: tuple = (1,)  # order of fusions
     op: str = 'o'  # type of node; 'o' original; 'p' product; 's' sum  len(node) = len(tree)
-    s: tuple = (1,)  # signatures len(s) = len(tree)
-    t: tuple = ()  # fused leg charges at each step len(t) = len(tree) - 1
-    D: tuple = ()  # fused dimensions  at each step len(t) = len(tree) - 1
+    legs: tuple = () # fused legs; len(legs) = len(tree) - 1
 
     def conj(self):
-        return self._replace(s=tuple(-x for x in self.s))
+        legs_conj = tuple(leg.conj() for leg in self.legs)
+        return self._replace(legs=legs_conj)
 
     def is_fused(self):
         return self.tree[0] > 1
 
+    def to_dict(self):
+        r""" Serializes _Fusion to dictionary. """
+        return {'type': type(self).__name__,
+                'dict_ver': 1,
+                'tree': self.tree,
+                'op': self.op,
+                'legs': tuple(leg.to_dict() for leg in self.legs)}
 
-#  =========== merging blocks ======================
+    @classmethod
+    def from_dict(cls, d):
+        r""" De-serializes _Fusion from the dictionary ``d``. """
+        if 'dict_ver' not in d:
+            legs = tuple(LegBasic(s=s, t=t, D=D) for s, t, D in zip(d['s'][1:], d['t'], d['D']))
+            return cls(tree=d['tree'], op=d['op'], legs=legs)
+        if d['dict_ver'] == 1:
+            if cls.__name__ != d['type']:
+                raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
+            return cls(tree=d['tree'], op=d['op'], legs=tuple(LegBasic.from_dict(x) for x in d['legs']))
 
-
-def _merge_to_matrix(a, axes, legs_sub=None):
-    r""" Main function merging tensor into effective block matrix. """
-    order = axes[0] + axes[1]
-    meta_mrg, size, struct_new, ls_l, ls_r, legs_old = _meta_merge_to_matrix(a.config.sym, a.struct, axes, legs_sub)
-    data = _transpose_and_merge(a.config, a._data, order, meta_mrg, size)
-    return data, struct_new, ls_l, ls_r, legs_old
-
-
-def _transpose_and_merge(config, data, order, meta_mrg, size):
-    # if inds is None and tuple(range(len(order))) == order and struct.size == len(data) \
-    #    and _no_change_in_transpose_and_merge(meta_mrg, meta_new, struct.size):
-    #     return data
-    return config.backend.transpose_and_merge(data, order, meta_mrg, size)
-
-
-def _no_change_in_transpose_and_merge(meta_mrg, meta_new, Dsize):
-    r""" Assumes C ordering on backend reshape. """
-    low = 0
-    if Dsize in (0, 1):
+    def is_consistent(self):
+        assert isinstance(self, _Fusion)
+        assert isinstance(self.tree, tuple)
+        assert isinstance(self.op, str)
+        assert isinstance(self.legs, tuple)
+        assert len(self.tree) == len(self.op)
+        assert len(self.tree) == len(self.legs) + 1
+        assert all(isinstance(x, int) for x in self.tree)
+        assert all(y in ('p', 's') if x > 1 else y == 'o' for x, y in zip(self.tree, self.op))
+        assert all(isinstance(x, LegBasic) for x in self.legs)
+        assert all(x.is_consistent() for x in self.legs)
         return True
-    for _, slo, _, _, _ in meta_mrg:
-        if slo[0] != low:
-            return False
-        low = slo[1]
-    if low != Dsize:
-        return False
-    for (_, Dn, _), (_, gr) in zip(meta_new, groupby(meta_mrg, key=itemgetter(0))):
-        low = 0
-        for _, _, _, Dslc, _ in gr:
-            if Dslc[0][0] != low:
-                return False
-            low = Dslc[0][1]
-        if low != Dn[0]:
-            return False
-    return True
-
-
-def _unmerge(config, data, meta, size):
-    #assert len(data) == Dsize, "This should not have happened"
-    #if _no_change_in_unmerge(meta):
-    #    return data
-    return config.backend.unmerge(data, meta, size)
-
-
-def _no_change_in_unmerge(meta):
-    local_low, Dn_last, sl_last, sln = 0, 0, (0, 0), (0, 0)
-    for sln, Dn, slo, _, sub_slc in meta:
-        if slo != sl_last:  # new group
-            if (slo[0] != sl_last[1]) or (local_low != Dn_last):
-                return False
-            sl_last, Dn_last, local_low = slo, Dn[0], 0
-        if local_low != sub_slc[0][0]:
-            return False
-        local_low = sub_slc[0][1]
-    if sl_last[1] != sln[1]:
-        return False
-    return True
-
-
-@lru_cache(maxsize=1024)
-def _meta_merge_to_matrix(sym, struct, axes, legs_sub):
-    r""" Meta information for backend needed to merge tensor into effective block matrix. """
-    assert not struct.isdiag, "Sanity check. Contact developers."
-    s_eff = [struct.legs[axes[0][0]].s if len(axes[0]) > 0 else 1,
-             struct.legs[axes[1][0]].s if len(axes[1]) > 0 else -1]
-
-    st_full = get_blocks(sym, struct)
-    if legs_sub is None or legs_sub == struct.legs:
-        st = st_full
-        slc = st.slc
-    else:
-        struct_sub = _struct(legs=legs_sub, n=struct.n, isdiag=struct.isdiag)
-        st = get_blocks(sym, struct_sub)
-        slc = st_full.slc[find_matching_indices(st_full.t, st.t, both=False)]
-
-    struct = st.struct
-    t, teff, ls, legs_old = [], [], [], []
-    for n in (0, 1):
-        ta = st.t[:, axes[n], :]
-        Da = st.D[:, axes[n]]
-        Deff = np.prod(Da, axis=1, dtype=np.int64).tolist()
-        Da = [tuple(x) for x in Da.tolist()]
-        s = tuple(struct.legs[ii].s for ii in axes[n])
-        ta_eff = [tuple(x) for x in sym.fuse(ta, s, s_eff[n]).tolist()]
-        ta = [tuple(x) for x in ta.reshape(len(ta), len(s) * sym.NSYM).tolist()]
-        teff.append(ta_eff)
-        t.append(ta)
-        ls.append(_leg_structure_merge(ta_eff, ta, Deff, Da))
-        legs_old.append(tuple(struct.legs[ax] for ax in axes[n]))
-
-    legs_new = tuple(LegBasic(s=s, t=ll.t, D=ll.D) for s, ll in zip(s_eff, ls))
-    struct_new = _struct(legs=legs_new, n=struct.n, isdiag=struct.isdiag)
-    bl_new = get_blocks(sym, struct_new)
-
-    smeta = sorted((tel, ter, tl, tr, slo, tuple(Do))
-                   for tel, ter, tl, tr, slo, Do in zip(teff[0], teff[1], t[0], t[1], slc, st.D.tolist()))
-
-    meta_mrg = []
-    for tn, sln, Dn, ((tel, ter), gr) in zip(bl_new.t, bl_new.slc, bl_new.D, groupby(smeta, key=itemgetter(0, 1))):
-        ind0 = ls[0].t.index(tel)
-        ind1 = ls[1].t.index(ter)
-        assert tuple(tn.ravel()) == tel + ter
-        try:
-            _, _, tl, tr, slo, Do = next(gr)
-            for d0, d1 in product(ls[0].dec[ind0], ls[1].dec[ind1]):
-                if d0.t == tl and d1.t == tr:
-                    meta_mrg.append((*sln, *Dn, *slo, *Do, *d0.Dslc, *d1.Dslc, d0.Dprod, d1.Dprod))
-                    _, _, tl, tr, slo, Do = next(gr)
-        except StopIteration:
-            pass
-
-    ndimo = len(struct.legs)
-    meta_mrg = np.array(meta_mrg, dtype=np.int64).reshape(len(meta_mrg), 12 + ndimo)
-    meta_dt = np.dtype([
-        ('sln', np.int64, (2,)),
-        ('Dn',  np.int64, (2,)),
-        ('slo', np.int64, (2,)),
-        ('Do',  np.int64, (ndimo,)),
-        ('Dslc', np.int64, (2, 2)),
-        ('Drsh', np.int64, (2,))])
-    meta_mrg = meta_mrg.view(meta_dt).reshape(-1)
-    return meta_mrg, bl_new.size, bl_new.struct, ls[0], ls[1], legs_old
-
-def _LegSlices_trivial(leg):
-    r""" Trivial LegSlices for unfused leg. """
-    dec = tuple((_DecRecord(tt, (0, DD), DD, (DD,)),) for tt, DD in zip(leg.t, leg.D))
-    return _LegSlices(leg.t, leg.D, dec)
 
 
 #  =========== fuse legs ======================
@@ -294,34 +196,43 @@ def fuse_legs(a, axes, mode=None) -> 'Tensor':
 
 def _fuse_legs_hard(a, axes, order):
     r"""
-    Function performing hard fusion. axes are for native legs and are cleaned outside.
-    a.trans is accounted for here
+    Perform hard fusion for the specified native legs.
+
+    The transpose mapping is accounted for in this routine.
     """
     order = tuple(a.trans[ax] for ax in order)
     axes = tuple(tuple(a.trans[ax] for ax in group) for group in axes)
     meta_mrg, size, struct_new, legs_old = _meta_fuse_hard(a.config.sym, a.struct, axes)
+    data = a.config.backend.transpose_and_merge(a._data, order, meta_mrg, size)
 
-    data = _transpose_and_merge(a.config, a._data, order, meta_mrg, size)
     mfs = ((1,),) * len(struct_new.legs)
     hfs = []
-    for n, axs in enumerate(axes):
-        if len(axs) > 1:
-            t_in = tuple(leg.t for leg in legs_old[n])
-            D_in = tuple(leg.D for leg in legs_old[n])
-            hfs_axs = tuple(a.hfs[ax] for ax in axs)
-            hfs.append(_combine_hfs_prod(hfs_axs, t_in, D_in, struct_new.legs[n].s))
-        elif len(axs) == 1:
-            hfs.append(a.hfs[axs[0]])
-        else:  # len(axis) == 0
-            hfs.append(_Fusion(tree=(1,), op='o', s=(struct_new.legs[n].s,), t=(), D=()))
-
+    for axs, legs in zip(axes, legs_old):
+        hfs_axs = tuple(a.hfs[ax] for ax in axs)
+        legs_basic = tuple(leg.basic() for leg in legs)
+        hfs.append(_combine_hfs_prod(hfs_axs, legs_basic))
     out = a._replace(mfs=mfs, hfs=hfs, struct=struct_new, data=data, trans=None)
     return out
 
 
+@nsys_profile
+def _fuse_blocks(config, data, struct, axes, struct_sub=None, connector_first=True, lazy_threshold=None):
+    order = sum(axes, start=())
+    sub_legs = struct_sub.legs if struct_sub is not None else None
+    meta_mrg, size, struct_mrg, legs_group = _meta_fuse_hard(config.sym, struct, axes, sub_legs, connector_first, lazy_threshold)
+    data = config.backend.transpose_and_merge(data, order, meta_mrg, size)
+    hfs = []
+    for legs in legs_group:
+        hfs_axs = tuple(_Fusion() for _ in legs)
+        legs_basic = tuple(LegBasic(s=leg.s, t=leg.t, D=leg.D) for leg in legs)
+        hfs.append(_combine_hfs_prod(hfs_axs, legs_basic))
+    return data, struct_mrg, tuple(hfs)
+
+
 @lru_cache(maxsize=1024)
-def _meta_fuse_hard(sym, struct, axes, legs_sub=None, empty_first_axis_s_conj=False):
-    r""" Meta information for backend needed to hard-fuse some legs. """
+@nsys_profile
+def _meta_fuse_hard(sym, struct, axes, legs_sub=None, connector_first=True, lazy_threshold=None):
+    r"""Prepare backend metadata for hard-fusing the selected legs."""
     assert not struct.isdiag, "Sanity check. Contact developers."
     #
     st_full = get_blocks(sym, struct)
@@ -329,14 +240,14 @@ def _meta_fuse_hard(sym, struct, axes, legs_sub=None, empty_first_axis_s_conj=Fa
         st = st_full
         slc = st.slc
     else:
-        st = get_blocks(sym, struct._replace(legs=legs_sub))
+        struct = get_trimmed_struct(sym, struct, legs_sub)
+        st = get_blocks(sym, struct)
         slc = st_full.slc[find_matching_indices(st_full.t, st.t, both=False)]
-    struct = st.struct
     #
     slegs = tuple(tuple(struct.legs[n].s for n in axis) for axis in axes)
-    s_eff = [struct.legs[axis[0]].s if axis else -1 for axis in axes]
-    if axes and not axes[0] and empty_first_axis_s_conj: s_eff[0] = -s_eff[0]
-    s_eff = tuple(s_eff)
+    s_eff = tuple(ss[0] if ss else -1 for ss in slegs)
+    if axes and not axes[0] and connector_first:
+        s_eff = (1,) + s_eff[1:]
     #
     teff = np.zeros((st.nblocks, len(s_eff), sym.NSYM), dtype=np.int64)
     for n, axs in enumerate(axes):
@@ -347,9 +258,8 @@ def _meta_fuse_hard(sym, struct, axes, legs_sub=None, empty_first_axis_s_conj=Fa
         legs_old.append(tuple(struct.legs[ax] for ax in axes[n]))
         if len(axs) > 1:
             teff_set = tuple(set(map(tuple, teff[:, n, :].tolist())))
-            t_a = tuple(struct.legs[ia].t for ia in axs)
-            D_a = tuple(struct.legs[ia].D for ia in axs)
-            lls.append(_leg_structure_combine_charges_prod(sym, t_a, D_a, slegs[n], teff_set, s_eff[n]))
+            legs_in = tuple(struct.legs[ia] for ia in axs)
+            lls.append(_leg_structure_combine_charges_prod(sym, legs_in, teff_set, s_eff[n]))
         elif len(axs) == 1:
             t, D = struct.legs[axs[0]].t, struct.legs[axs[0]].D
             dec = tuple((_DecRecord(tt, (0, DD), DD, (DD,)),) for tt, DD in zip(t, D))
@@ -360,7 +270,9 @@ def _meta_fuse_hard(sym, struct, axes, legs_sub=None, empty_first_axis_s_conj=Fa
             lls.append(_LegSlices(t, D, dec))
 
     legs_new = tuple(LegBasic(s=s, t=ll.t, D=ll.D) for s, ll in zip(s_eff, lls))
-    struct_new = struct._replace(legs=legs_new)
+
+    struct_new = _struct(legs=legs_new, n=struct.n, isdiag=struct.isdiag)
+    struct_new = get_trimmed_struct(sym, struct_new)
     bl_new = get_blocks(sym, struct_new)
 
     teff_split = list(tuple(map(tuple, x)) for x in teff.tolist())
@@ -374,43 +286,56 @@ def _meta_fuse_hard(sym, struct, axes, legs_sub=None, empty_first_axis_s_conj=Fa
     smeta = sorted((tes, tn, tos, slo, Do) for tes, tn, tos, slo, Do
                    in zip(teff_split, teff, told_split, slc, st.D))
 
-    meta_mrg, t_new, D_new = [], [], []
-
-    for tn, sln, Dn, ((tes, tn2), gr) in zip(bl_new.t, bl_new.slc, bl_new.D, groupby(smeta, key=itemgetter(0, 1))):
+    meta, tnew = [], []
+    # ic = 0
+    for tes, tn, tos, slo, Do in smeta:
+        # while tuple(bl_new.t[ic].ravel()) != tn:
+        #     ic += 1
+        # sln, Dn = bl_new.slc[ic], bl_new.D[ic]
 
         ind = tuple(ls.t.index(te) for ls, te in zip(lls, tes))
         decs = tuple(ls.dec[ii] for ls, ii in zip(lls, ind))
-        t_new.append(tn)
-        assert tuple(tn.ravel()) == tn2
-        D_new.append(tuple(ls.D[ii] for ls, ii in zip(lls, ind)))
-        try:
-            _, _, tos, slo, Do = next(gr)
-            for de in product(*decs):
-                if tuple(d.t for d in de) == tos:
-                    sub_slc = tuple(x for d in de for x in d.Dslc)
-                    Dsln = tuple(d.Dprod for d in de)
-                    meta_mrg.append((*sln, *Dn, *slo, *Do, *sub_slc, *Dsln))
-                    _, _, tos, slo, Do = next(gr)
-        except StopIteration:
-            pass
+
+        jjj = tuple([d.t for d in dd].index(tt) for tt, dd in zip(tos, decs))
+        de = [dd[jj] for jj, dd in zip(jjj, decs)]
+        sub_slc = tuple(x for d in de for x in d.Dslc)
+        Dsln = tuple(d.Dprod for d in de)
+        tnew.append(tn)
+        meta.append((*slo, *Do, *sub_slc, *Dsln))
 
     ndimo = len(struct.legs)
     ndimn = len(struct_new.legs)
-    meta_mrg = np.array(meta_mrg, dtype=np.int64).reshape(len(meta_mrg), 4 + 4 * ndimn + ndimo)
+    meta = np.array(meta, dtype=np.int64).reshape(len(meta), 2 + 3 * ndimn + ndimo)
+    tnew = np.array(tnew, dtype=np.int64).reshape(len(tnew), ndimn, sym.NSYM)
+    ind = find_matching_indices(bl_new.t, tnew, both=False)  # tnew is not sorted
+    ind_u, inv_c = np.unique(ind, return_inverse=True)
+
+    if lazy_threshold and bl_new.nblocks and len(ind_u) / bl_new.nblocks < lazy_threshold:
+        struct_new = struct_new.mask_from_ind(bl_new.nblocks, ind_u)
+        bl_new = get_blocks(sym, struct_new)
+        slc_new = bl_new.slc
+        D_new = bl_new.D
+    else:
+        slc_new = bl_new.slc[ind_u]
+        D_new = bl_new.D[ind_u]
+
+
+    meta = np.column_stack([slc_new[inv_c], D_new[inv_c], meta])
 
     meta_dt = np.dtype([
         ('sln', np.int64, (2,)),
         ('Dn',  np.int64, (ndimn,)),
         ('slo', np.int64, (2,)),
         ('Do',  np.int64, (ndimo,)),
-        ('Dslc', np.int64, (ndimn, 2)),
-        ('Drsh', np.int64, (ndimn,))])
-    meta_mrg = meta_mrg.view(meta_dt).reshape(-1)
-    return meta_mrg, bl_new.size, bl_new.struct, legs_old
+        ('ssln', np.int64, (ndimn, 2)),
+        ('Dns', np.int64, (ndimn,))])
+    meta = meta.view(meta_dt).reshape(-1)
+    meta = convert_to_tuples_and_slices(meta)
+    return meta, bl_new.size, struct_new, legs_old
 
 
 def fuse_meta_to_hard(a):
-    r""" Changes all meta fusions into hard fusions. If there are no meta fusions, return self. """
+    r"""Convert all meta fusions into hard fusions and return the updated tensor."""
     while any(mf != (1,) for mf in a.mfs):
         axes, new_mfs = _consume_mfs_lowest(a.mfs)
         order = tuple(range(a.ndim_n))
@@ -421,6 +346,7 @@ def fuse_meta_to_hard(a):
 #  =========== unfuse legs ======================
 
 
+@nsys_profile
 def unfuse_legs(a, axes) -> 'Tensor':
     r"""
     Unfuse legs, reverting one layer of fusion.
@@ -496,8 +422,7 @@ def unfuse_legs(a, axes) -> 'Tensor':
             raise YastnError('Cannot unfuse a leg obtained as a result of yastn.block()')
         ui += a.mfs[mi][0]
     if axes_hf:
-        meta, size, struct, nlegs, hfs = _meta_unfuse_hard(a.config.sym, a.struct, tuple(axes_hf), tuple(a.hfs))
-        data = _unmerge(a.config, a._data, meta, size)
+        data, struct, nlegs, hfs = _unfuse_blocks(a.config, a._data, a.struct, tuple(axes_hf), tuple(a.hfs), return_hfs=True)
 
         for unfused, n in zip(nlegs[::-1], axes_mf[::-1]):
             mfs = mfs[:n] + [(1,)] * unfused + mfs[n+1:]
@@ -519,18 +444,30 @@ def unfuse_legs(a, axes) -> 'Tensor':
     return out
 
 
+@nsys_profile
+def _unfuse_blocks(config, data, struct, axes, hfsm, return_hfs=False, lazy_threshold=None):
+    axes_trim = tuple(ax for ax in axes if hfsm[ax].tree[0] > 1)
+    if axes_trim:
+        meta, size, struct, nlegs, hfs = _meta_unfuse_hard(config.sym, struct, axes_trim, hfsm, lazy_threshold)
+        data = config.backend.unmerge(data, meta, size)
+    if return_hfs:
+        return data, struct, nlegs, hfs
+    return data, struct
+
+
 @lru_cache(maxsize=1024)
-def _meta_unfuse_hard(sym, struct, axes, hfs):
-    r""" Meta information for backend needed to hard-unfuse some legs. """
+@nsys_profile
+def _meta_unfuse_hard(sym, struct, axes, hfs, lazy_threshold=None):
+    r"""Prepare backend metadata for hard-unfusing the selected legs."""
     assert not struct.isdiag, "Sanity check. Contact developers."
 
     lls, hfs_new, nlegs_unfused = [], [], []
     legs_new = []
     for n, hf in enumerate(hfs):
-        if n in axes:
-            t_part, D_part, s_part, hfs_part = _unfuse_Fusion(hf)
-            legs_new.extend(LegBasic(s=s, t=t, D=D) for s, t, D in zip(s_part, t_part, D_part))
-            lls.append(_leg_structure_combine_charges_prod(sym, t_part, D_part, s_part, struct.legs[n].t, struct.legs[n].s))
+        if n in axes and hf.tree[0] > 1:
+            legs_part, hfs_part = _unfuse_Fusion(hf)
+            legs_new.extend(legs_part)
+            lls.append(_leg_structure_combine_charges_prod(sym, legs_part, struct.legs[n].t, struct.legs[n].s))
             hfs_new.extend(hfs_part)
             nlegs_unfused.append(len(hfs_part))
         else:
@@ -539,80 +476,49 @@ def _meta_unfuse_hard(sym, struct, axes, hfs):
             lls.append(_LegSlices(struct.legs[n].t, struct.legs[n].D, dec))
             hfs_new.append(hf)
 
-    st_old = get_blocks(sym, struct)
-    st_new = get_blocks(sym, struct._replace(legs=tuple(legs_new)))
+    bl_old = get_blocks(sym, struct)
 
-    meta = []
-    old_t = st_old.t.tolist()
-    old_slc = map(tuple, st_old.slc)
+    struct_new = _struct(legs=legs_new, n=struct.n, isdiag=struct.isdiag)
+    struct_new = get_trimmed_struct(sym, struct_new)
+    bl_new = get_blocks(sym, struct_new)
 
-    for to, slo, Do in zip(old_t, old_slc, st_old.D):
+    tnew, meta = [], []
+
+    old_t = bl_old.t.tolist()
+    old_slc = map(tuple, bl_old.slc)
+
+    for to, slo, Do in zip(old_t, old_slc, bl_old.D):
         ind = tuple(ls.t.index(tuple(to[n])) for n, ls in enumerate(lls))
         decs = tuple(tuple(ls.dec[ii]) for ls, ii in zip(lls, ind))
         for tt in product(*decs):
             tn = sum((x.t for x in tt), ())
             sub_slc = tuple(y for x in tt for y in x.Dslc)
-
             Dsln = tuple(x.Dprod for x in tt)
-            meta.append((tn, *Dsln, *slo, *Do, *sub_slc))
+            tnew.append(tn)
+            meta.append((*Dsln, *slo, *Do, *sub_slc))
 
-    meta2, ic = [], 0
-    for x in sorted(meta, key=itemgetter(0)):
-        while x[0] != tuple(st_new.t[ic].ravel()):
-            ic += 1
-        meta2.append((*st_new.slc[ic], *x[1:]))
+    ndimo = len(struct.legs)
+    meta = np.array(meta, dtype=np.int64).reshape(len(meta), 2 + 4 * ndimo)
+    tnew = np.array(tnew, dtype=np.int64).reshape(len(tnew), len(legs_new), sym.NSYM)
+    ind_c = find_matching_indices(bl_new.t, tnew, both=False)  # tnew is not sorted
 
-    ndimn = len(lls)
-    ndimo = len(st_old.struct.legs)
-    meta2 = np.array(meta2, dtype=np.int64).reshape(len(meta2), 4 + 3 * ndimn + ndimo)
-
-    meta_dt = np.dtype([
-        ('sln', np.int64, (2,)),
-        ('Dn',  np.int64, (ndimn,)),
-        ('slo', np.int64, (2,)),
-        ('Do',  np.int64, (ndimo,)),
-        ('sub_slc', np.int64, (ndimn, 2))])
-    meta2 = meta2.view(meta_dt).reshape(-1)
-
-
-    return meta2, st_new.size, st_new.struct, tuple(nlegs_unfused), tuple(hfs_new)
-
-@lru_cache(maxsize=1024)
-def _meta_unmerge_matrix(sym, struct_in, ls0, ls1, struct_out):
-    #
-    st_a = get_blocks(sym, struct_in)
-    st_c = get_blocks(sym, struct_out)
-    #
-    meta = []
-    for to, slo, Do in zip(st_a.t, st_a.slc, st_a.D):
-        ind0 = ls0.t.index(tuple(to[0]))
-        ind1 = ls1.t.index(tuple(to[1]))
-        for d0, d1 in product(ls0.dec[ind0], ls1.dec[ind1]):
-            tn = d0.t + d1.t
-            sub_slc = (d0.Dslc, d1.Dslc)
-            Dsln = (d0.Dprod, d1.Dprod)
-            meta.append((tn, Dsln, slo, Do, sub_slc))
-
-    t_out = list(map(tuple, st_c.t.reshape(st_c.nblocks, len(struct_out.legs) * sym.NSYM)))
-    slc_out = st_c.slc.tolist()
-    meta_unmerge, ic = [], 0
-    for tn, Dsln, slo, Do, sub_slc in sorted(meta, key=itemgetter(0)):
-        while tn != t_out[ic]:
-            ic += 1
-        meta_unmerge.append((*slc_out[ic], *Dsln, *slo, *Do, *sub_slc[0], *sub_slc[1]))
-
-    ndimo = len(st_a.struct.legs)
-    meta_unmerge = np.array(meta_unmerge, dtype=np.int64).reshape(len(meta_unmerge), 10 + ndimo)
+    if lazy_threshold and bl_new.nblocks and len(ind_c) / bl_new.nblocks < lazy_threshold:
+        struct_new = struct_new.mask_from_ind(bl_new.nblocks, ind_c)
+        bl_new = get_blocks(sym, struct_new)
+        arg_c = np.argsort(ind_c)
+        meta = np.column_stack([bl_new.slc, meta[arg_c]])
+    else:
+        meta = np.column_stack([bl_new.slc[ind_c], meta])
 
     meta_dt = np.dtype([
         ('sln', np.int64, (2,)),
-        ('Dn',  np.int64, (2,)),
+        ('Dn',  np.int64, (ndimo,)),
         ('slo', np.int64, (2,)),
         ('Do',  np.int64, (ndimo,)),
-        ('sub_slc', np.int64, (2, 2))])
-    meta_unmerge = meta_unmerge.view(meta_dt).reshape(-1)
-
-    return meta_unmerge, st_c.size, st_c.struct
+        ('sslo', np.int64, (ndimo, 2))])
+    meta = meta.view(meta_dt).reshape(-1)
+    meta = convert_to_tuples_and_slices(meta)
+    return meta, bl_new.size, struct_new, tuple(nlegs_unfused), tuple(hfs_new)
 
 
 #  =========== masks ======================
@@ -620,9 +526,7 @@ def _meta_unmerge_matrix(sym, struct_in, ls0, ls1, struct_out):
 
 @lru_cache(maxsize=1024)
 def _meta_mask(sym, struct, mask_t, mask_D, axis):
-    r""" meta information for backend, and new tensor structure for mask."""
-    st_a = get_blocks(sym, struct)
-
+    r"""Prepare backend metadata and the resulting tensor structure for masking."""
     leg_a = struct.legs[axis]
     mask_tD = {t: D for t, D in sorted(zip(mask_t, mask_D)) if D > 0 and t in leg_a}
     leg_c = LegBasic(s=leg_a.s, t=tuple(mask_tD.keys()), D=tuple(mask_tD.values()))
@@ -638,36 +542,31 @@ def _meta_mask(sym, struct, mask_t, mask_D, axis):
         legs_c = struct.legs[:axis] + (leg_c,) + struct.legs[axis + 1:]
         ndim = len(legs_c)
 
-    st_c = get_blocks(sym, struct._replace(legs=legs_c))
+    struct_c = get_trimmed_struct(sym, struct, legs_c)
+    bl_c = get_blocks(sym, struct_c)
+    D_c = bl_c.D[:, :1] if struct.isdiag else bl_c.D
 
-    D_a = st_a.D[:, :1] if struct.isdiag else st_a.D
-    D_c = st_c.D[:, :1] if struct.isdiag else st_c.D
+    bl_a = get_blocks(sym, struct)
+    D_a = bl_a.D[:, :1] if struct.isdiag else bl_a.D
+    taxis = bl_a.t[:, axis, :]
 
-    meta, ia, ic = [], 0, 0
-    while ia < st_a.nblocks and ic < st_c.nblocks:
-        if np.array_equal(st_a.t[ia], st_c.t[ic]):
-            meta.append((*st_c.slc[ic], *D_c[ic], *st_a.slc[ia], *D_a[ia], *st_a.t[ia, axis, :]))
-            ia += 1
-            ic += 1
-        else:
-            ia += 1
-
-    ndima = len(struct.legs) - struct.isdiag
-    meta = np.array(meta, dtype=np.int64).reshape(len(meta), 4 + 2 * ndima + sym.NSYM)
+    ind_a = find_matching_indices(bl_a.t, bl_c.t, both=False)
+    meta = np.column_stack([bl_c.slc, D_c, bl_a.slc[ind_a], D_a[ind_a], taxis[ind_a]])
     meta_dt = np.dtype([
         ('sln', np.int64, (2,)),
-        ('Dn', np.int64, (ndima,)),
+        ('Dn', np.int64, (ndim,)),
         ('sla', np.int64, (2,)),
-        ('Da', np.int64, (ndima,)),
+        ('Da', np.int64, (ndim,)),
         ('tm', np.int64, (sym.NSYM,))])
     meta = meta.view(meta_dt).reshape(-1)
-    return meta, st_c.size, st_c.struct, axis, ndim
+    # meta = convert_to_tuples_and_slices(meta)
+    return meta, bl_c.size, struct_c, axis, ndim
 
 
 def _mask_nonzero(mask):
     r"""
-    Change boolean masks into masks of indices.
-    Fow trivial mask with all true, return None.
+    Convert boolean masks into index masks.
+    For a trivial mask with all values ``True``, return ``None``.
     """
     if all(np.all(v) for v in mask.values()):
         return None
@@ -677,23 +576,23 @@ def _mask_nonzero(mask):
 
 
 def _mask_tensors_leg_intersection(a, b, axa, axb):
-    r""" masks to get the intersecting parts of legs from two tensors a and b, for legs axa, axb. """
+    r"""Return masks for the intersecting parts of the selected legs of two tensors."""
     msk_a, msk_b = [], []
     a_hfs, b_hfs = list(a.hfs), list(b.hfs)
     for i1, i2 in zip(axa, axb):
-        ma, mb, axes_hfs = _masks_hfs_intersection(a.config.sym, (a.struct.legs[i1].t, b.struct.legs[i2].t), (a.struct.legs[i1].D, b.struct.legs[i2].D), (a.hfs[i1], b.hfs[i2]))
+        ma, mb, a_hfs[i1], b_hfs[i2] = _masks_hfs_intersection(a.config.sym, a.struct.legs[i1], b.struct.legs[i2], a.hfs[i1], b.hfs[i2])
         msk_a.append(_mask_nonzero(ma))
         msk_b.append(_mask_nonzero(mb))
-        a_hfs[i1], b_hfs[i2] = axes_hfs[0], axes_hfs[1]
 
     return msk_a, msk_b, tuple(a_hfs), tuple(b_hfs)
 
 
 def _embed_tensor(a, legs, legs_new):
     r"""
-    Embed tensor to fill in zero block in fusion mismatch.
-    here legs are contained in legs_new that result from legs_union
-    legs_new is a dict = {n: leg}
+    Embed a tensor to fill in zero blocks when fusion structures do not match.
+
+    The provided leg information is taken from ``legs_new`` as a mapping
+    ``{n: leg}`` produced by ``legs_union``.
     """
 
     legs_new = [legs_new[n] if n in legs_new else legs[n] for n in range(len(legs))]
@@ -705,7 +604,7 @@ def _embed_tensor(a, legs, legs_new):
 
     for axis, (la, lb) in enumerate(zip(legs, legs_new)):
         if la.hf != lb.hf:  # mask needed
-            mb = _mask_embed_in_union(a.config.sym, la.t, la.hf, lb.hf)
+            mb = _mask_embed_in_union(a.config.sym, la, la.hf, lb.hf)
             mask_tD = {t: len(v) for t, v in mb.items()}
             mask = _mask_nonzero(mb)
             if mask is not None:
@@ -720,18 +619,35 @@ def _embed_tensor(a, legs, legs_new):
 
 
 @lru_cache(maxsize=1024)
-def _leg_structure_combine_charges_prod(sym, t_in, D_in, s_in, t_out, s_out):
+def _leg_structure_combine_charges_prod(sym, legs_in, t_out, s_out):
     r"""
     Combine effective charges and dimensions from a list of charges and dimensions for a few legs,
     forming product of spaces.
     """
-    comb_t = list(product(*t_in))
-    comb_t = np.array(comb_t, dtype=np.int64).reshape((len(comb_t), len(s_in), sym.NSYM))
-    comb_D = list(product(*D_in))
-    comb_D = np.array(comb_D, dtype=np.int64).reshape((len(comb_D), len(s_in)))
+    shapes = [len(leg.t) for leg in legs_in]
+    t_in = [np.array(leg.t, dtype=np.int64).reshape(ll, sym.NSYM) for leg, ll in zip(legs_in, shapes)]
+    D_in = [np.array(leg.D, dtype=np.int64) for leg in legs_in]
+    s_in = [leg.s for leg in legs_in]
+    nlegs = len(legs_in)
+
+    indices = _product_indices(shapes)
+    comb_t = np.empty((len(indices), nlegs, sym.NSYM), dtype=np.int64)
+    for i, tt in enumerate(t_in):
+        comb_t[:, i, :] = tt[indices[:, i], :]
+
     teff = sym.fuse(comb_t, s_in, s_out)
-    ind = np.array([ii for ii, te in enumerate(teff.tolist()) if tuple(te) in t_out], dtype=np.int64)
-    comb_D, comb_t, teff = comb_D[ind], comb_t[ind], teff[ind]
+
+    t_out = np.array(t_out, dtype=np.int64).reshape(1, len(t_out), sym.NSYM)
+    inds = np.any(np.all(teff.reshape(len(teff), 1, sym.NSYM) == t_out, axis=2), axis=1)
+    inds = np.flatnonzero(inds)
+    indices = indices[inds]
+    comb_t = comb_t[inds]
+    teff = teff[inds]
+
+    comb_D = np.empty((len(indices), nlegs), dtype=np.int64)
+    for i, DD in enumerate(D_in):
+        comb_D[:, i] = DD[indices[:, i]]
+
     Deff = tuple(np.prod(comb_D, axis=1, dtype=np.int64).tolist())
     Dlegs = tuple(map(tuple, comb_D.tolist()))
     teff = tuple(map(tuple, teff.tolist()))
@@ -739,11 +655,14 @@ def _leg_structure_combine_charges_prod(sym, t_in, D_in, s_in, t_out, s_out):
     return _leg_structure_merge(teff, tlegs, Deff, Dlegs)
 
 
-def _leg_structure_combine_charges_sum(t_in, D_in, pos=None):
+def _leg_structure_combine_charges_sum(legs_in, pos=None):
     r"""
     Combine effective charges and dimensions from a list of charges and dimensions for a few legs,
     forming direct sum of spaces.
     """
+    t_in = [leg.t for leg in legs_in]
+    D_in = [leg.D for leg in legs_in]
+
     if pos is None:
         pos = range(len(t_in))
     teff, plegs, Deff, Dlegs = [], [], [], []
@@ -757,7 +676,7 @@ def _leg_structure_combine_charges_sum(t_in, D_in, pos=None):
 
 
 def _leg_structure_merge(teff, tlegs, Deff, Dlegs):
-    r""" LegDecomposition for merging into a single leg. """
+    r"""Build the decomposition structure for merging several legs into one."""
     tt = sorted(set(zip(teff, tlegs, Deff, Dlegs)))
     t, D, dec = [], [], []
     for te, grp in groupby(tt, key=itemgetter(0)):
@@ -772,47 +691,44 @@ def _leg_structure_merge(teff, tlegs, Deff, Dlegs):
     return _LegSlices(tuple(t), tuple(D), tuple(dec))
 
 
-def _combine_hfs_prod(hfs, t_in, D_in, s_out):
-    r""" Combine _Fusion(s) forming product of space, adding charges and dimensions present on the fused legs. """
-    axes = list(range(len(hfs)))
-    tfl, Dfl, sfl = [], [], [s_out]
-    opfl = 'p'  # product
-    treefl = [sum(hfs[n].tree[0] for n in axes)]
-    for n in axes:
-        tfl.append(t_in[n])
-        tfl.extend(hfs[n].t)
-        Dfl.append(D_in[n])
-        Dfl.extend(hfs[n].D)
-        sfl.extend(hfs[n].s)
-        treefl.extend(hfs[n].tree)
-        opfl += hfs[n].op
-    return _Fusion(tree=tuple(treefl), op=opfl, s=tuple(sfl), t=tuple(tfl), D=tuple(Dfl))
-
-
-def _combine_hfs_sum(hfs, t_in, D_in, s_out):
-    r""" Combine _Fusion(s) forming direct sum of space. """
+def _combine_hfs_prod(hfs, legs):
+    r"""Combine fusion-history objects for a product of spaces."""
+    if len(hfs) == 0:
+        return _Fusion()
     if len(hfs) == 1:
         return hfs[0]
-    tfl, Dfl, sfl = [], [], [s_out]
-    opfl = 's'  # sum
-    treefl = [sum(hf.tree[0] for hf in hfs)]
-    for t, D, hf in zip(t_in, D_in, hfs):
+    tree_fused = [sum(hf.tree[0] for hf in hfs)]
+    op_fused = 'p'  # product
+    legs_fused = []
+    for leg, hf in zip(legs, hfs):
+        tree_fused.extend(hf.tree)
+        op_fused += hf.op
+        legs_fused.append(leg)
+        legs_fused.extend(hf.legs)
+    return _Fusion(tree=tuple(tree_fused), op=op_fused, legs=tuple(legs_fused))
+
+
+def _combine_hfs_sum(hfs, legs):
+    r"""Combine fusion-history objects for a direct sum of spaces."""
+    if len(hfs) == 1:
+        return hfs[0]
+    tree_fused = [sum(hf.tree[0] for hf in hfs)]
+    op_fused = 's'  # sum
+    legs_fused = []
+    for hf, leg in zip(hfs, legs):
         if hf.op[0] != 's':
             ds = 0
-            tfl.append(t)
-            Dfl.append(D)
+            legs_fused.append(leg)
         else:  # hf.op[0] == 's':
             ds = 1
-        tfl.extend(hf.t)
-        Dfl.extend(hf.D)
-        sfl.extend(hf.s[ds:])
-        treefl.extend(hf.tree[ds:])
-        opfl += hf.op[ds:]
-    return _Fusion(tree=tuple(treefl), op=opfl, s=tuple(sfl), t=tuple(tfl), D=tuple(Dfl))
+        tree_fused.extend(hf.tree[ds:])
+        op_fused += hf.op[ds:]
+        legs_fused.extend(hf.legs)
+    return _Fusion(tree=tuple(tree_fused), op=op_fused, legs=tuple(legs_fused))
 
 
 def _merge_masks_prod(sym, ls, ms):
-    r""" Perform product of spaces / leg fusion, Combining masks using information from LegSlices. """
+    r"""Combine masks for a product of spaces using the leg-slice decomposition."""
     msk = {tt: np.ones(Dt, dtype=bool) for tt, Dt in zip(ls.t, ls.D)}
     nsym = sym.NSYM
     for tt, dect in zip(ls.t, ls.dec):
@@ -826,7 +742,7 @@ def _merge_masks_prod(sym, ls, ms):
 
 
 def _merge_masks_sum(ls, ms):
-    r""" Perform sum of spaces / blocking of legs, combining masks using information from LegSlices. """
+    r"""Combine masks for a direct sum of spaces using the leg-slice decomposition."""
     msk = {tt: np.ones(Dt, dtype=bool) for tt, Dt in zip(ls.t, ls.D)}
     for tt, dect in zip(ls.t, ls.dec):
         for rec in dect:
@@ -835,7 +751,7 @@ def _merge_masks_sum(ls, ms):
 
 
 def _mask_falsify_mismatches_(ms1, ms2):
-    r""" Multiply masks by False for indices that are not in both dictionaries ms1 and ms2. """
+    r"""Set mask entries to ``False`` for indices that are not present in both dictionaries."""
     set1, set2 = set(ms1), set(ms2)
     for t in set1 - set2:
         ms1[t] *= False
@@ -845,28 +761,28 @@ def _mask_falsify_mismatches_(ms1, ms2):
 
 
 @lru_cache(maxsize=1024)
-def _masks_hfs_intersection(sym, ts, Ds, hfs):
+def _masks_hfs_intersection(sym, lega, legb, hfa, hfb):
     r"""
     Calculate two masks that project onto intersection of two spaces.
     ts = tuple[ts0, ts1], where ts0, ts1 are top-layer charges in two intersected legs.
     Ds = tuple[Ds0, Ds1] with corresponding top-lyer bond dimensions.
     hfs = tuple[hfs0, hfs1], where hfs0, hfs1 are hard fusion data for two spaces
     """
-    teff = tuple(sorted(set(ts[0]) & set(ts[1])))
-    tree = list(hfs[0].tree)
+    teff = tuple(sorted(set(lega.t) & set(legb.t)))
+    tree = list(hfa.tree)
 
     if len(tree) == 1:
-        ma0 = {t: np.ones(D, dtype=bool) for t, D in zip(ts[0], Ds[0]) if t in teff}
-        ma1 = {t: np.ones(D, dtype=bool) for t, D in zip(ts[1], Ds[1]) if t in teff}
+        ma0 = {t: np.ones(D, dtype=bool) for t, D in zip(lega.t, lega.D) if t in teff}
+        ma1 = {t: np.ones(D, dtype=bool) for t, D in zip(legb.t, legb.D) if t in teff}
         if any(ma0[t].size != ma1[t].size for t in teff):
             raise YastnError('Bond dimensions of some charges do not match.')
-        return ma0, ma1, hfs
+        return ma0, ma1, hfa, hfb
 
-    msks = [[{t: np.ones(D, dtype=bool) for t, D in zip(hf.t[i], hf.D[i])} for i, l in enumerate(tree[1:]) if l == 1]
-            for hf in hfs]
+    msk_a = [{t: np.ones(D, dtype=bool) for t, D in zip(hfa.legs[i].t, hfa.legs[i].D)} for i, l in enumerate(tree[1:]) if l == 1]
+    msk_b = [{t: np.ones(D, dtype=bool) for t, D in zip(hfb.legs[i].t, hfb.legs[i].D)} for i, l in enumerate(tree[1:]) if l == 1]
 
     keeped_ts, keeped_Ds = [], []
-    for ma0, ma1 in zip(*msks):
+    for ma0, ma1 in zip(msk_a, msk_b):
         keeped_t, keeped_D = [], []
         for t in set(ma0) & set(ma1):
             if ma0[t].size != ma1[t].size:
@@ -878,42 +794,49 @@ def _masks_hfs_intersection(sym, ts, Ds, hfs):
         _mask_falsify_mismatches_(ma0, ma1)
 
     # lists to be consumed during parsing of the tree
-    op = list(hfs[0].op)
-    s = [list(hf.s) for hf in hfs]
-    t = [[teff] + list(hf.t) for hf in hfs]
-    D = [[()] + list(hf.D) for hf in hfs]
+    op = list(hfa.op)
+    legsa = [lega.trim(teff)] + list(hfa.legs)
+    legsb = [legb.trim(teff)] + list(hfb.legs)
 
     # parse the tree, building masks
     while len(tree) > 1:
         it, io, no = _tree_cut_contiguous_leafs_(tree)
         # Remove original leafs to be fused; collect info for fusion
         del op[it: it + no]
-        ss = [tuple(s1.pop(it) for _ in range(no)) for s1 in s]
-        tt = [tuple(t1.pop(it) for _ in range(no)) for t1 in t]
-        DD = [tuple(D1.pop(it) for _ in range(no)) for D1 in D]
-        mss = [[msk.pop(io) for _ in range(no)] for msk in msks]
+        legs_in_a = tuple(legsa.pop(it) for _ in range(no))
+        legs_in_b = tuple(legsb.pop(it) for _ in range(no))
+        ms_a = [msk_a.pop(io) for _ in range(no)]
+        ms_b = [msk_b.pop(io) for _ in range(no)]
         assert op[it - 1] in 'sp', 'Sanity check. Contact developers.'
         if op[it - 1] == 'p':
-            lss = [_leg_structure_combine_charges_prod(sym, tt1, DD1, ss1, t1[it - 1], s1[it - 1])
-                   for tt1, DD1, ss1, t1, s1 in zip(tt, DD, ss, t, s)]
-            ma = [_merge_masks_prod(sym, ls1, ms1) for ls1, ms1 in zip(lss, mss)]
-            reduced_ls = _leg_structure_combine_charges_prod(sym, tuple(keeped_ts[:no]), tuple(keeped_Ds[:no]), ss[0], t[0][it - 1], s[0][it - 1])
+            ls_a = _leg_structure_combine_charges_prod(sym, legs_in_a, legsa[it - 1].t, legsa[it - 1].s)
+            ls_b = _leg_structure_combine_charges_prod(sym, legs_in_b, legsb[it - 1].t, legsb[it - 1].s)
+            ma = _merge_masks_prod(sym, ls_a, ms_a)
+            mb = _merge_masks_prod(sym, ls_b, ms_b)
+            legs_in = tuple(LegBasic(s=leg.s, t=t, D=D) for leg, t, D in zip(legsa, keeped_ts[:no], tuple(keeped_Ds[:no])))
+            reduced_ls = _leg_structure_combine_charges_prod(sym, legs_in, legsa[it - 1].t, legsa[it - 1].s)
         else:  # op[it - 1] == 's':
-            lss = [_leg_structure_combine_charges_sum(tt1, DD1) for tt1, DD1, in zip(tt, DD)]
-            ma = [_merge_masks_sum(ls1, ms1) for ls1, ms1 in zip(lss, mss)]
-            reduced_ls = _leg_structure_combine_charges_sum(tuple(keeped_ts[:no]), tuple(keeped_Ds[:no]))
-        _mask_falsify_mismatches_(ma[0], ma[1])
-        msks[0].insert(io, ma[0])
-        msks[1].insert(io, ma[1])
+            ls_a = _leg_structure_combine_charges_sum(legs_in_a)
+            ls_b = _leg_structure_combine_charges_sum(legs_in_b)
+            ma = _merge_masks_sum(ls_a, ms_a)
+            mb = _merge_masks_sum(ls_b, ms_b)
+            legs_in = tuple(LegBasic(s=leg.s, t=t, D=D) for leg, t, D in zip(legsa, keeped_ts[:no], tuple(keeped_Ds[:no])))
+            reduced_ls = _leg_structure_combine_charges_sum(legs_in)
+        _mask_falsify_mismatches_(ma, mb)
+        msk_a.insert(io, ma)
+        msk_b.insert(io, mb)
 
         keeped_ts.insert(0, reduced_ls.t)
         keeped_Ds.insert(0, reduced_ls.D)
     # Only the final leaf is left in msks[0] and msks[1]
-    new_hfs = [_Fusion(hf.tree, hf.op, hf.s, tuple(keeped_ts[1:]), tuple(keeped_Ds[1:])) for hf in hfs]
-    return msks[0].pop(), msks[1].pop(), new_hfs
+
+    legs = tuple(LegBasic(s=leg.s, t=t, D=D) for leg, t, D in zip(hfa.legs, tuple(keeped_ts[1:]), tuple(keeped_Ds[1:])))
+    new_hfa = _Fusion(tree=hfa.tree, op=hfa.op, legs=legs)
+    new_hfb = _Fusion(tree=hfb.tree, op=hfb.op, legs=legs)
+    return msk_a.pop(), msk_b.pop(), new_hfa, new_hfb
 
 
-def _mask_embed_in_union(sym, t0, hf0, hfu):
+def _mask_embed_in_union(sym, leg0, hf0, hfu):
     r"""
     Return a mask to embed hard-fusion hf0 into hfu.
     hf0 should be a subspace of hfu, and consistent with it.
@@ -923,13 +846,11 @@ def _mask_embed_in_union(sym, t0, hf0, hfu):
     """
     # to be consumed during parsing of the tree
     tree = list(hfu.tree)
-    ss = list(hfu.s)
     op = list(hfu.op)
-    tus = [t0] + list(hfu.t)
-    Dus = [()] + list(hfu.D)
-    t0s = [t0] + list(hf0.t)
+    legs_u = [leg0] + list(hfu.legs)
+    legs_0 = [leg0] + list(hf0.legs)
 
-    msk = [{t: np.ones(D, dtype=bool) * (t in t0s[i]) for t, D in zip(tus[i], Dus[i])}
+    msk = [{t: np.ones(D, dtype=bool) * (t in legs_0[i].t) for t, D in zip(legs_u[i].t, legs_u[i].D)}
            for i, leafs in enumerate(tree) if leafs == 1]
 
     # parse the tree, building mask
@@ -937,28 +858,26 @@ def _mask_embed_in_union(sym, t0, hf0, hfu):
         it, io, no = _tree_cut_contiguous_leafs_(tree)
         # Remove original leafs to be fused; collect info for fusion
         del op[it: it + no]
-        del t0s[it: it + no]
-        s_in = tuple(ss.pop(it) for _ in range(no))
-        t_in = tuple(tus.pop(it) for _ in range(no))
-        D_in = tuple(Dus.pop(it) for _ in range(no))
+        del legs_0[it: it + no]
         ms_in = [msk.pop(io) for _ in range(no)]
+        legs_in = tuple(legs_u.pop(it) for _ in range(no))
         assert op[it - 1] in 'sp', 'Sanity check. Contact developers.'
         if op[it - 1] == 'p':
-            ls = _leg_structure_combine_charges_prod(sym, t_in, D_in, s_in, tus[it - 1], ss[it - 1])
+            ls = _leg_structure_combine_charges_prod(sym, legs_in, legs_u[it - 1].t, legs_u[it - 1].s)
             ma = _merge_masks_prod(sym, ls, ms_in)
         else:  # op[it - 1] == 's':
-            ls = _leg_structure_combine_charges_sum(t_in, D_in)
+            ls = _leg_structure_combine_charges_sum(legs_in)
             ma = _merge_masks_sum(ls, ms_in)
 
         for t in ma.keys():
-            if t not in t0s[it - 1]:
+            if t not in legs_0[it - 1].t:
                 ma[t] *= False
         msk.insert(io, ma)
     # Only the final leaf is left in msk
     return msk.pop()
 
 
-def _hfs_union(sym, ts, hfs):
+def _hfs_union(legs):
     r"""
     Consumes fusion trees from the bottom, while building the union of fused spaces.
 
@@ -977,56 +896,59 @@ def _hfs_union(sym, ts, hfs):
     tu, Du, hfs
         top-level charges in the union, their corresponding dimensions, _Fusion describing the union.
     """
+    sym = legs[0].sym
+    hfs = [leg.hf for leg in legs]
+    ts = [leg.t for leg in legs]
+
     if any(hfs[0].tree != hf.tree or hfs[0].op != hf.op for hf in hfs):
         raise YastnError("Inconsistent numbers of hard-fused legs or sub-fusions order.")
-    if any(hfs[0].s != hf.s for hf in hfs):
+    if any(leg0.s != leg1.s for hf in hfs for leg0, leg1 in zip(hf.legs, hfs[0].legs)):
         raise YastnError("Inconsistent signatures of fused legs.")
 
     # to be consumed during parsing of the tree
     tree = list(hfs[0].tree)
-    s = list(hfs[0].s)
     op = list(hfs[0].op)
+    ss = [legs[0].s] + [leg.s for leg in hfs[0].legs]
 
-    tu, Du, hfu = [], [], []
+    legsu, hfu = [], []
     for i, leafs in enumerate(tree[1:]):
         if leafs == 1:
-            tDs = [list(zip(hf.t[i], hf.D[i])) for hf in hfs]
-            alltD = {t: D for tD in tDs for t, D in tD}
-            if any(alltD[t] != D for tD in tDs for t, D in tD):
+            leg = hfs[0].legs[i]
+            try:
+                for hf in hfs[1:]:
+                    leg = leg.union(hf.legs[i])
+            except ValueError:
                 raise YastnError('Bond dimensions of fused legs do not match.')
-            alltD = dict(sorted(alltD.items()))
-            tu.append(tuple(alltD.keys()))
-            Du.append(tuple(alltD.values()))
-            hfu.append(_Fusion(s=(s[i + 1],)))  # len(s) == 1 + len(t)
+            legsu.append(leg)
+            hfu.append(_Fusion())
 
     tss = [tuple(sorted({t for tl in ts for t in tl}))]  # len(tss) == len(tree)
-    tss += [tuple(sorted({t for hf in hfs for t in hf.t[i]})) for i in range(len(tree) - 1)]
+    tss += [tuple(sorted({t for hf in hfs for t in hf.legs[i].t})) for i in range(len(tree) - 1)]
 
     while len(tree) > 1:
         it, io, no = _tree_cut_contiguous_leafs_(tree)
         # Remove original leafs to be fused; collect info for fusion
         del op[it: it + no]
         del tss[it: it + no]
-        s_in = tuple(s.pop(it) for _ in range(no))
-        t_in = tuple(tu.pop(io) for _ in range(no))
-        D_in = tuple(Du.pop(io) for _ in range(no))
+        del ss[it: it + no]
+
+        legs_in = tuple(legsu.pop(io) for _ in range(no))
         hf_in = [hfu.pop(io) for _ in range(no)]
         # it - 1 is the index of new fused space in the tree
         t_out = tss[it - 1]
-        s_out = s[it - 1]
+        s_out = ss[it - 1]
         assert op[it - 1] in 'sp', 'Sanity check. Contact developers.'
         # Perform fusion and collect results for new lowest leaf
         if op[it - 1] == 'p':
-            ls = _leg_structure_combine_charges_prod(sym, t_in, D_in, s_in, t_out, s_out)
-            hf = _combine_hfs_prod(hf_in, t_in, D_in, s_out)
+            ls = _leg_structure_combine_charges_prod(sym, legs_in, t_out, s_out)
+            hf = _combine_hfs_prod(hf_in, legs_in)
         else:  # op[it - 1] == 's':
-            ls = _leg_structure_combine_charges_sum(t_in, D_in)
-            hf = _combine_hfs_sum(hf_in, t_in, D_in, s_out)
-        tu.insert(io, ls.t)
-        Du.insert(io, ls.D)
+            ls = _leg_structure_combine_charges_sum(legs_in)
+            hf = _combine_hfs_sum(hf_in, legs_in)
+        legsu.insert(io, LegBasic(s=s_out, t=ls.t, D=ls.D))
         hfu.insert(io, hf)
     # Only the final leaf is left in tu, Du, and hfu
-    return tu.pop(), Du.pop(), hfu.pop()
+    return legsu.pop(), hfu.pop()
 
 
 def _tree_cut_contiguous_leafs_(tree):
@@ -1057,7 +979,7 @@ def _tree_cut_contiguous_leafs_(tree):
 
 def _unfuse_Fusion(hf):
     r""" One layer of unfuse. """
-    tt, DD, ss, hfs = [], [], [], []
+    legs, hfs = [], []
     n_init, cum = 1, 0
     for n in range(1, len(hf.tree)):
         if cum == 0:
@@ -1065,13 +987,10 @@ def _unfuse_Fusion(hf):
         if hf.tree[n] == 1:
             cum -= 1
             if cum == 0:
-                tt.append(hf.t[n_init - 1])
-                DD.append(hf.D[n_init - 1])
-                ss.append(hf.s[n_init])
-                hfs.append(_Fusion(tree=hf.tree[n_init: n + 1], op=hf.op[n_init: n + 1],
-                                   s=hf.s[n_init: n + 1], t=hf.t[n_init: n], D=hf.D[n_init: n]))
+                legs.append(hf.legs[n_init - 1])
+                hfs.append(_Fusion(tree=hf.tree[n_init: n + 1], op=hf.op[n_init: n + 1], legs=hf.legs[n_init: n]))
                 n_init = n + 1
-    return tuple(tt), tuple(DD), tuple(ss), hfs
+    return tuple(legs), hfs
 
 
 def _consume_mfs_lowest(mfs):

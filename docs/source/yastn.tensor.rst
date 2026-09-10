@@ -28,6 +28,8 @@ API: yastn and yastn.Tensor
    tensor/operators
    tensor/access
    tensor/algebra
+   tensor/large_contractions
+   tensor/caching
    tensor/output
    tensor/autograd
    tensor/krylov
@@ -43,3 +45,4 @@ Examples: basics of usage
    examples/tensor/init
    examples/tensor/algebra
    examples/tensor/decomposition
+   examples/tensor/other

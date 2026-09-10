@@ -1,9 +1,9 @@
 Basic tensor initialization and creation operations
 ===================================================
 
-In all examples, start with importing the repository and
-setting configuration options to employ a numpy backend (a default option).
-Other tensor configuration options will take :ref:`default values. <tensor/configuration:YASTN configuration>`
+In all examples, start by importing the library and
+setting configuration options to use a NumPy backend (the default option).
+Other tensor configuration options will take :ref:`their default values. <tensor/configuration:YASTN configuration>`
 
 .. code-block:: python
 
@@ -18,16 +18,16 @@ Create tensors from scratch
 .. literalinclude:: /../../tests/tensor/test_syntax.py
    :pyobject: test_syntax_tensor_creation_operations
 
-Create empty tensor and fill it block by block
-----------------------------------------------
+Create an empty tensor and fill it block by block
+-------------------------------------------------
 
 .. literalinclude:: /../../tests/tensor/test_syntax.py
    :pyobject: test_syntax_create_empty_tensor_and_fill
 
-Clone, detach or copy tensors
------------------------------
+Clone, detach, or copy tensors
+------------------------------
 
-We switch to torch backend for gradient support.
+We switch to the torch backend for gradient support.
 
 .. code-block:: python
 

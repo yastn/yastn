@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-""" yastn.linalg.qr() """
+"""Tests for yastn.linalg.qr()."""
 from itertools import product
 import pytest
 import yastn
@@ -21,11 +21,11 @@ tol = 1e-10  #pylint: disable=invalid-name
 
 
 def run_qr_combine(a):
-    """ decompose and contracts tensor ``a`` using qr decomposition """
+    """Decompose and contract tensor ``a`` using a QR decomposition."""
     assert a.ndim == 4
 
     def check_diag_R_nonnegative(R):
-        """ checks that diagonal of R is selected to be non-negative """
+        """Check that the diagonal of R is chosen to be non-negative."""
         for t in R.get_blocks_charge():
             assert all(R.config.backend.diag_get(R.real()[t]) >= 0)
             assert all(R.config.backend.diag_get(R.imag()[t]) == 0)
@@ -38,7 +38,7 @@ def run_qr_combine(a):
     assert R.is_consistent()
     check_diag_R_nonnegative(R.fuse_legs(axes=(0, (1, 2)), mode='hard'))
 
-    # change signature of new leg; and position of new leg
+    # Change the signature of the new leg and its placement.
     Q2, R2 = yastn.qr(a, axes=((3, 1), (2, 0)), sQ=-1, Qaxis=0, Raxis=-1)
     QR2 = yastn.tensordot(R2, Q2, axes=(2, 0)).transpose(axes=(1, 3, 0, 2))
     assert yastn.norm(a - QR2) < 1e-12  # == 0.0
@@ -47,8 +47,9 @@ def run_qr_combine(a):
     check_diag_R_nonnegative(R2.fuse_legs(axes=((0, 1), 2), mode='hard'))
 
 
-def test_qr_basic(config_kwargs):
-    """ test qr decomposition for various symmetries """
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_qr_basic(config_kwargs, remove_blocks):
+    """Test QR decomposition for various symmetries."""
     # dense
     config_dense = yastn.make_config(sym='none', **config_kwargs)
     a = yastn.rand(config=config_dense, s=(-1, 1, -1, 1), D=[11, 12, 13, 21])
@@ -61,6 +62,7 @@ def test_qr_basic(config_kwargs):
             yastn.Leg(config_U1, s=1, t=(-2, -1, 0, 1, 2), D=(6, 5, 4, 3, 2)),
             yastn.Leg(config_U1, s=1, t=(0, 1), D=(2, 3))]
     a = yastn.rand(config=config_U1, legs=legs, n=1)
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     run_qr_combine(a)
 
     # Z2xU1
@@ -70,6 +72,7 @@ def test_qr_basic(config_kwargs):
             yastn.Leg(config_Z2xU1, s=-1, t=[(0, 0), (0, 2), (1, 0), (1, 2)], D=(3, 4, 5, 6)),
             yastn.Leg(config_Z2xU1, s=-1, t=[(0, 0), (0, 2), (1, 0), (1, 2)], D=(1, 2, 3, 4))]
     a = yastn.ones(config=config_Z2xU1, legs=legs)
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     run_qr_combine(a)
 
     # test qr of empty Tensor
@@ -96,12 +99,14 @@ def test_qr_Z3(config_kwargs):
             assert all(R.config.backend.diag_get(R.imag()[t]) == 0)
 
 
-def test_qr_transpose_meta(config_kwargs):
-    """ test qr decomposition with meta-fuse and transpose """
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_qr_transpose_meta(config_kwargs, remove_blocks):
+    """Test QR decomposition with meta-fusion and transposition."""
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1,),
                   t=((0, 1), (0, 1), (0, 1), (0, 1), (0, 1)),
                   D=((1, 2), (3, 4), (5, 6), (7, 8), (9, 10)))
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     #
     af = a.fuse_legs(axes=(2, (0, 1), (4, 3)), mode='meta')
     assert af.trans == (2, 0, 1, 4, 3)
