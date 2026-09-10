@@ -379,7 +379,7 @@ def get_legs(a, axes=None, native=False) -> Leg | Sequence[Leg]:
 #   Down-casting tensors   #
 ############################
 
-def to_dense(a, legs=None, native=False, reverse=False) -> 'numpy.ndarray' | 'torch.tensor':
+def to_dense(a, legs=None, native=False, key=None, reverse=False) -> 'numpy.ndarray' | 'torch.tensor':
     r"""
     Create dense tensor corresponding to the symmetric tensor.
 
@@ -399,23 +399,27 @@ def to_dense(a, legs=None, native=False, reverse=False) -> 'numpy.ndarray' | 'to
     native: bool
         output native tensor (ignoring meta-fusion of legs).
 
+    key: Callable | None
+        used in sorted(leg.charges, reverse=reverse, key=key) to fix the order of
+        blocks placement in non-symmetric tensor. The default is None,
+        where the order is ascending in values of block's charges.
+
     reverse: bool
-        reverse the order in which blocks are sorted. Default order is ascending in
-        values of block's charges.
+        reverse the order in which blocks are sorted.
     """
-    c = a.to_nonsymmetric(legs, native, reverse)
+    c = a.to_nonsymmetric(legs=legs, native=native, key=key, reverse=reverse)
     x = c.config.backend.clone(c._data)
     D = tuple(leg.D[0] for leg in c.struct.legs)
     x = c.config.backend.diag_create(x) if c.isdiag else x.reshape(D)
     return x
 
 
-def to_numpy(a, legs=None, native=False, reverse=False) -> 'numpy.ndarray':
+def to_numpy(a, legs=None, native=False, key=None, reverse=False) -> 'numpy.ndarray':
     r"""
     Create dense :class:`numpy.ndarray`` corresponding to the symmetric tensor.
     See :func:`yastn.to_dense`.
     """
-    return a.config.backend.to_numpy(a.to_dense(legs, native, reverse))
+    return a.config.backend.to_numpy(a.to_dense(legs=legs, native=native, key=key, reverse=reverse))
 
 
 def to_raw_tensor(a) -> 'numpy.ndarray' | 'torch.tensor':
@@ -432,7 +436,7 @@ def to_raw_tensor(a) -> 'numpy.ndarray' | 'torch.tensor':
     raise YastnError('Only tensor with a single block can be converted to raw tensor.')
 
 
-def to_nonsymmetric(a, legs=None, native=False, reverse=False) -> 'Tensor':
+def to_nonsymmetric(a, legs=None, native=False, key=None, reverse=False) -> 'Tensor':
     r"""
     Create equivalent :class:`yastn.Tensor` with no explicit symmetry. All blocks of the original
     tensor are accumulated into a single block.
@@ -455,9 +459,13 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False) -> 'Tensor':
     native: bool
         output native tensor (ignoring meta-fusion of legs).
 
+    key: Callable | None
+        used in sorted(leg.charges, reverse=reverse, key=key) to fix the order of
+        blocks placement in non-symmetric tensor. The default is None,
+        where the order is ascending in values of block's charges.
+
     reverse: bool
-        reverse the order in which blocks are sorted. Default order is ascending in
-        values of block's charges.
+        reverse the order in which blocks are sorted.
     """
     config_dense = a.config._replace(sym=sym_none)
     a = a.consume_transpose()
@@ -487,11 +495,12 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False) -> 'Tensor':
     if ndim_a == 0:  # scalar
         meta = [((0, 1), ())]
     else:
-        step = -1 if reverse else 1
         tD = []
         for leg in legs_n:
             Dlow, tDn = 0, {}
-            for tn, Dn in zip(leg.t[::step], leg.D[::step]):
+            leg_tD = leg.tD
+            for tn in sorted(leg_tD.keys(), key=key, reverse=reverse):
+                Dn = leg_tD[tn]
                 Dhigh = Dlow + Dn
                 tDn[tn] = (Dlow, Dhigh)
                 Dlow = Dhigh
