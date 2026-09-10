@@ -54,25 +54,33 @@ def _normalized_corner_spectra(env):
     }
 
 
-def _dense_matrix_pair_with_spectrum(singular_values, seed):
-    """Return dense real matrices whose product has a set spectrum."""
+def _dense_matrix_pair_with_spectrum(singular_values, seed, dtype='float64'):
+    """Return dense real or complex matrices whose product has a set spectrum."""
     singular_values = np.asarray(singular_values, dtype=float)
     dimension = singular_values.size
     rng = np.random.default_rng(seed)
-    q_left, _ = np.linalg.qr(rng.standard_normal((dimension, dimension)))
-    q_right, _ = np.linalg.qr(rng.standard_normal((dimension, dimension)))
-    q_shared, _ = np.linalg.qr(rng.standard_normal((dimension, dimension)))
+
+    def gaussian():
+        sample = rng.standard_normal((dimension, dimension))
+        if dtype == 'complex128':
+            sample = sample + 1j * rng.standard_normal((dimension, dimension))
+        return sample
+
+    q_left, _ = np.linalg.qr(gaussian())
+    q_right, _ = np.linalg.qr(gaussian())
+    q_shared, _ = np.linalg.qr(gaussian())
+    # r0 @ r1.T = q_left @ diag(s) @ q_right.T requires q_shared.T @ conj(q_shared) = I.
     r0 = q_left @ q_shared.T
-    r1 = q_right @ np.diag(singular_values) @ q_shared.T
+    r1 = q_right @ np.diag(singular_values) @ q_shared.conj().T
     return r0, r1
 
 
 def _dense_corners_with_spectrum(config, singular_values):
-    """Build real corners with a fused CTM leg and a prescribed spectrum."""
+    """Build corners of ``config.default_dtype`` with a fused CTM leg and a prescribed spectrum."""
     singular_values = np.asarray(singular_values, dtype=float)
     dimension = singular_values.size
     matrix_r0, matrix_r1 = _dense_matrix_pair_with_spectrum(
-        singular_values, seed=41)
+        singular_values, seed=41, dtype=config.default_dtype)
     r0 = yastn.Tensor(config=config, s=(1, 1, -1, 1))
     r1 = yastn.Tensor(config=config, s=(-1, -1, 1, -1))
     r0.set_block(
@@ -115,10 +123,11 @@ def _projector_range_error(reference, approximate, rank_tol=1e-12):
     (1., 1e-2, 1e-4, 1e-8, 1e-12, 1e-14),
     (1., .5, .1, 0., 0., 0.),
 ], ids=('ill_conditioned', 'rank_deficient'))
+@pytest.mark.parametrize("dtype", ["float64", "complex128"])
 def test_si_projector_identity_and_optimal_residual(config_kwargs,
-                                                    singular_values):
+                                                    singular_values, dtype):
     """SI projectors obey Pl Pr=I and attain the optimal rank-chi error."""
-    config = yastn.make_config(sym='none', **config_kwargs)
+    config = yastn.make_config(sym='none', default_dtype=dtype, **config_kwargs)
     config.backend.random_seed(seed=21)
     r0, r1 = _dense_corners_with_spectrum(config, singular_values)
     chi = 3
@@ -243,9 +252,10 @@ def test_si_public_path_is_matrix_free_and_uses_reduced_svd(
     assert max(np.prod(shape) for shape in matrix_shapes) <= dimension * rank
 
 
-def test_public_si_starts_approximate_then_converges(config_kwargs):
+@pytest.mark.parametrize("dtype", ["float64", "complex128"])
+def test_public_si_starts_approximate_then_converges(config_kwargs, dtype):
     """AI-generated test: strict SI starts approximate, then converges."""
-    config = yastn.make_config(sym='none', **config_kwargs)
+    config = yastn.make_config(sym='none', default_dtype=dtype, **config_kwargs)
     config.backend.random_seed(seed=93)
     r0, r1 = _dense_corners_with_spectrum(
         config, (1., .8, .6, .4, .25, .15, .08, .03))

@@ -118,8 +118,8 @@ def test_si_refinement_resizes_recycled_bases(config_kwargs, monkeypatch):
     opts_si = {'oversampling': 2, 'niter': 8, 'tol': 1e-12}
     X0, Y0 = initialize_si_bases(
         r0, r1, rank=6, charges={(0,): 3, (1,): 3})
-    X0_even = X0[(0, 0)].copy()
-    Yh0_even = Y0.H[(0, 0)].copy()
+    X0_even = config.backend.copy(X0[(0, 0)])
+    Yh0_even = config.backend.copy(Y0.H[(0, 0)])
     recycle_calls = 0
     recycle = si_module.symmetric_isometry_recycle
 
