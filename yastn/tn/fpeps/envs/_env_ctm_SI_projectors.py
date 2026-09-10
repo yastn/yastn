@@ -178,7 +178,12 @@ def initialize_si_bases(r0, r1, rank, charges=None):
     return X, Yh.H
 
 def si_bases_compatible(r0, r1, X, Y):
-    """Whether recycled bases are compatible with the current corners."""
+    """Whether recycled bases are compatible with the current corners.
+
+    Beyond matching charge-sector dimensions, the bases must be contractible
+    with the corners: a hard-fused corner leg can keep its aggregate sector
+    dimensions while its sub-leg dimensions or fusion history change.
+    """
     if X is None or Y is None:
         return False
 
@@ -200,6 +205,8 @@ def si_bases_compatible(r0, r1, X, Y):
             and Y.dtype == r0.dtype
             and X.device == r1.device
             and Y.device == r0.device
+            and X.get_legs(0).are_consistent(r1.get_legs(0))
+            and Y.get_legs(1).are_consistent(r0.get_legs(0))
         )
     except (AttributeError, IndexError):
         return False
@@ -812,19 +819,8 @@ def si_proj_corners(r0, r1, opts_svd, opts_si, X=None, Y=None):
     # enlarge the recycled bases on subsequent updates.
     rank = min(_si_rank(opts_svd, opts_si),
                sum(_ctm_shared_sector_capacity(r0, r1).values()))
-    recycled = si_bases_compatible(r0, r1, X, Y)
-    if not recycled:
+    if not si_bases_compatible(r0, r1, X, Y):
         X, Y = initialize_si_bases(r0, r1, rank)
     if opts_si.get('correct', False):
         X, Y = si_refinement(r0, r1, X, Y, opts_svd, opts_si)
-    try:
-        return si_projector_svd(r0, r1, X, Y, opts_svd, opts_si)
-    except YastnError:
-        # Aggregate charge dimensions can stay unchanged while an updated
-        # CTM corner acquires incompatible dimensions inside a hard-fused
-        # leg. In that case a recycled basis cannot be contracted, so
-        # rebuild it for the current corner layout and retry once.
-        if not recycled:
-            raise
-        X, Y = initialize_si_bases(r0, r1, rank)
-        return si_projector_svd(r0, r1, X, Y, opts_svd, opts_si)
+    return si_projector_svd(r0, r1, X, Y, opts_svd, opts_si)

@@ -13,6 +13,7 @@ import pytest
 
 import yastn
 import yastn.tn.fpeps as fpeps
+import yastn.tn.fpeps.envs._env_ctm_SI_projectors as si_module
 from yastn.tn.fpeps._geometry import Site
 from yastn.tn.fpeps.envs._env_ctm_c4v import EnvCTM_c4v
 from yastn.tn.fpeps.envs._env_ctm import proj_corners
@@ -594,6 +595,77 @@ def test_si_recycles_after_fusion_history_change(config_kwargs):
     _assert_projectors_equivalent(reference, (p0, p1))
 
 
+def _hard_fused_u1_corner_pair(config, Da, Db):
+    """U1 corner halves whose external leg is hard-fused from two sub-legs.
+
+    The contracted leg is fused with a trivial leg, as in ``_ctm_corner_pair``,
+    so that projectors unfuse to the rank-3 CTM form.
+    """
+    a = yastn.Leg(config, s=1, t=(0, 1), D=Da)
+    b = yastn.Leg(config, s=1, t=(0, 1), D=Db)
+    k = yastn.Leg(config, s=-1, t=(0, 1, 2), D=(4, 6, 4))
+    one = yastn.Leg(config, s=1, t=(0,), D=(1,))
+    r0 = yastn.rand(config, legs=(a, b, k, one))
+    r1 = yastn.rand(config, legs=(a.conj(), b.conj(), k.conj(), one.conj()))
+    return (r0.fuse_legs(axes=((0, 1), (2, 3))),
+            r1.fuse_legs(axes=((0, 1), (2, 3))))
+
+
+def test_si_rebuilds_basis_after_hard_fused_subleg_change(config_kwargs, monkeypatch):
+    """
+    Swapped sub-leg dimensions keep the aggregate corner sectors but make old
+    bases uncontractible; they are rebuilt before the single SI solve.
+    """
+    config = yastn.make_config(sym='U1', **config_kwargs)
+    config.backend.random_seed(seed=14)
+    r0, r1 = _hard_fused_u1_corner_pair(config, (2, 3), (3, 2))
+    X, Y = initialize_si_bases(r0, r1, rank=6)
+    r0_new, r1_new = _hard_fused_u1_corner_pair(config, (3, 2), (2, 3))
+    assert r0_new.get_legs(0).tD == r0.get_legs(0).tD
+    assert r1_new.get_legs(0).tD == r1.get_legs(0).tD
+    assert not si_bases_compatible(r0_new, r1_new, X, Y)
+
+    calls = []
+    original = si_module.si_projector_svd
+
+    def counting(*args, **kwargs):
+        calls.append(1)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(si_module, 'si_projector_svd', counting)
+    opts_svd = {'D_total': 4, 'tol': 0}
+    opts_si = {'enabled': True, 'oversampling': 2,
+               'niter': 24, 'tol': 1e-12, 'correct': True}
+    reference = proj_corners(r0_new, r1_new, opts_svd)
+    p0, p1, X_new, Y_new = proj_corners(
+        r0_new, r1_new, opts_svd, opts_si=opts_si, X=X, Y=Y,
+        return_si_state=True)
+
+    assert len(calls) == 1
+    assert si_bases_compatible(r0_new, r1_new, X_new, Y_new)
+    _assert_projectors_equivalent(reference, (p0, p1))
+
+
+def test_si_solve_errors_are_not_retried(config_kwargs, monkeypatch):
+    """An SI solve error on recycled bases propagates without a fresh restart."""
+    config = yastn.make_config(sym='U1', **config_kwargs)
+    r0, r1 = _ctm_corner_pair(config, 'U1')
+    X, Y = initialize_si_bases(r0, r1, rank=4)
+    assert si_bases_compatible(r0, r1, X, Y)
+
+    calls = []
+
+    def failing(*args, **kwargs):
+        calls.append(1)
+        raise yastn.YastnError('boom')
+
+    monkeypatch.setattr(si_module, 'si_projector_svd', failing)
+    with pytest.raises(yastn.YastnError, match='boom'):
+        proj_corners(r0, r1, {'D_total': 3},
+                     opts_si={'enabled': True, 'oversampling': 1}, X=X, Y=Y)
+    assert len(calls) == 1
+
+
 # ---------------------------------------------------------------------------
 # Environment state and CTMRG update integration
 # ---------------------------------------------------------------------------
@@ -656,6 +728,52 @@ def test_si_state_copy_clone_detach_to_and_serialization(config_kwargs):
     env.detach_()
     assert yastn.allclose(si_x(env), 2 * si_x(variants[0]))
     assert yastn.allclose(si_y(env), si_y(variants[0]))
+
+
+def test_si_state_follows_patch(config_kwargs):
+    """
+    Patched sites recycle and count their own SI state, and apply_patch commits
+    projector, bases and age from the same site, as Lattice does for env.proj.
+    """
+    config = yastn.make_config(sym='none', **config_kwargs)
+    config.backend.random_seed(seed=13)
+    env = _dense_product_env(config)
+    r0, r1 = _ctm_corner_pair(config, 'none')
+    opts_svd = {'D_total': 3, 'tol': 0}
+    opts_si = {'enabled': True, 'oversampling': 1, 'niter': 2, 'warmup': 100}
+    # On the 1x1 infinite lattice all three sites alias one unit-cell index.
+    s0, s1, alias = Site(0, 0), Site(0, 1), Site(1, 0)
+    name = 'hlb'
+    key = (env.site2index(s0), name)
+
+    def update(site):
+        env._set_projector_pair_(site, name, env.nn_site(site, d='b'), 'hlt',
+                                 r0, r1, opts_svd, opts_si=opts_si)
+        return (getattr(env.proj[site], name),
+                getattr(env.si_X[site], name), getattr(env.si_Y[site], name))
+
+    committed = update(alias)
+    assert env._si_age == {key: 1}
+
+    env.move_to_patch([s0, s1])
+    update(s0)
+    update(s0)
+    # Neither the unpatched alias nor the other patched site sees s0's bases.
+    assert getattr(env.si_X[alias], name) is committed[1]
+    assert getattr(env.si_X[s1], name) is committed[1]
+    assert getattr(env.si_Y[s1], name) is committed[2]
+    assert env._si_age == {key: 1}
+    last = update(s1)
+
+    env.apply_patch()
+    # s1 is patched last: its lineage (1 committed + 1 patched update) wins,
+    # not s0's (3) and not a count over all aliases (4).
+    assert env._si_age == {key: 2}
+    assert not env._si_age_patch
+    for site in (s0, s1, alias):
+        assert getattr(env.proj[site], name) is last[0]
+        assert getattr(env.si_X[site], name) is last[1]
+        assert getattr(env.si_Y[site], name) is last[2]
 
 
 def test_c4v_environment_carries_empty_si_storage(config_kwargs):

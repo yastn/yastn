@@ -21,7 +21,7 @@ from ._env_contractions import identity_boundary, corner2x2, append_vec_tl, appe
 from ._env_ctm_SI_projectors import si_correction_due, si_proj_corners
 from ._env_dataclasses import EnvCTM_local, EnvCTM_projectors
 from .._evolution import BondMetric
-from .._geometry import Site, Lattice
+from .._geometry import Site, Lattice, is_site
 from .._peps import PEPS_CLASSES, Peps2Layers
 from ... import mps
 from ....initialize import rand, ones, eye
@@ -103,10 +103,13 @@ class EnvCTM():
         anchor fields ``hlb``, ``hrb``, ``vtr``, ``vbr`` are ever assigned.
         ``_si_age`` counts SI updates per projector pair; it holds integers,
         not tensors, and is kept separately for that reason.
+        ``_si_age_patch`` holds ``{site: {name: age}}`` for sites moved to a patch,
+        so that ages follow the patched bases; see :meth:`move_to_patch`.
         """
         self.si_X = Lattice(self.geometry, objects={site: EnvCTM_projectors() for site in self.sites()})
         self.si_Y = Lattice(self.geometry, objects={site: EnvCTM_projectors() for site in self.sites()})
         self._si_age = {}
+        self._si_age_patch = {}
 
     def _load_si_(self, d, config=None):
         r""" De-serialize recycled subspace-iteration state; absent in older dictionaries. """
@@ -720,12 +723,15 @@ class EnvCTM():
         The pair is anchored at ``(site0, name0)``, which also addresses the
         recycled bases in ``env.si_X`` / ``env.si_Y``.
         """
-        key = (env.site2index(site0), name0)
+        if site0 in env._si_age_patch:
+            ages, key = env._si_age_patch[site0], name0
+        else:
+            ages, key = env._si_age, (env.site2index(site0), name0)
         opts_si = kwargs.pop('opts_si', None)
         if opts_si is not None and opts_si.get('enabled', False):
             opts_si = dict(opts_si)
             opts_si['correct'] = (opts_si.get('correct', False)
-                                  or si_correction_due(env._si_age.get(key, 0), opts_si))
+                                  or si_correction_due(ages.get(key, 0), opts_si))
         p0, p1, X, Y = proj_corners(
             r0, r1, opts_svd=opts_svd, opts_si=opts_si,
             X=getattr(env.si_X[site0], name0), Y=getattr(env.si_Y[site0], name0),
@@ -736,7 +742,7 @@ class EnvCTM():
             recycle_grad = opts_si.get('recycle_grad', False)
             setattr(env.si_X[site0], name0, X if recycle_grad else X.detach())
             setattr(env.si_Y[site0], name0, Y if recycle_grad else Y.detach())
-            env._si_age[key] = env._si_age.get(key, 0) + 1
+            ages[key] = ages.get(key, 0) + 1
 
     def _trivial_projectors_(env, move, sites):
         r"""
@@ -839,12 +845,30 @@ class EnvCTM():
                 env_tmp[site].br = tmp / tmp.norm(p='inf')
 
     def apply_patch(self):
-        self.env.apply_patch()
-        self.proj.apply_patch()
+        for lattice in (self.env, self.proj, self.si_X, self.si_Y):
+            lattice.apply_patch()
+        # As in Lattice.apply_patch, the last patched site of a unit-cell index
+        # wins, so each committed age stays with the basis and projector it counts.
+        for site, ages in self._si_age_patch.items():
+            index = self.site2index(site)
+            self._si_age = {k: v for k, v in self._si_age.items() if k[0] != index}
+            self._si_age.update(((index, name), age) for name, age in ages.items())
+        self._si_age_patch = {}
 
     def move_to_patch(self, sites):
-        self.env.move_to_patch(sites)
-        self.proj.move_to_patch(sites)
+        r"""
+        Give ``sites`` private copies of environment tensors, projectors and
+        recycled SI state (bases and ages) until :meth:`apply_patch`.
+        """
+        for lattice in (self.env, self.proj, self.si_X, self.si_Y):
+            lattice.move_to_patch(sites)
+        if not sites:
+            return
+        if is_site(sites):
+            sites = [sites]
+        for site in sites:
+            index = self.site2index(site)
+            self._si_age_patch[site] = {name: age for (ind, name), age in self._si_age.items() if ind == index}
 
     def pre_truncation_(env, bond):
         pass
