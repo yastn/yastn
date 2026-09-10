@@ -70,9 +70,9 @@ def _unpack_trans_test_axes_pair(a, b, sgn=1, axes=None):
     for i1, i2 in zip(*haxes):
         if a.hfs[i1].tree != b.hfs[i2].tree or a.hfs[i1].op != b.hfs[i2].op:
             raise YastnError('Indicated axes of two tensors have different number of hard-fused legs or sub-fusions order.')
-        if any(s1 != sgn * s2 for s1, s2 in zip(a.hfs[i1].s, b.hfs[i2].s)):
+        if any(leg1.s != sgn * leg2.s for leg1, leg2 in zip(a.hfs[i1].legs, b.hfs[i2].legs)):
             raise YastnError('Signatures of hard-fused legs do not match.')
-        if a.hfs[i1].t != b.hfs[i2].t or a.hfs[i1].D != b.hfs[i2].D:
+        if any(leg1.t != leg2.t or leg1.D != leg2.D for leg1, leg2 in zip(a.hfs[i1].legs, b.hfs[i2].legs)):
             mask_needed = True
     return mask_needed, haxes
 

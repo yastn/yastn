@@ -79,9 +79,9 @@ def test_conj_hard_fusion(config_kwargs, remove_blocks):
     assert all(sa + sc == 0 for sa, sc in zip(a.s_n, c.s_n))
     assert a.s_n == d.s_n
 
-    assert all(sa + sb == 0 for hfa, hfb in zip(a.hfs, b.hfs) for sa, sb in zip(hfa.s, hfb.s))
-    assert all(sa + sc == 0 for hfa, hfc in zip(a.hfs, c.hfs) for sa, sc in zip(hfa.s, hfc.s))
-    assert all(hfa.s == hfd.s for hfa, hfd in zip(a.hfs, d.hfs))
+    assert all(la.s == - lb.s for hfa, hfb in zip(a.hfs, b.hfs) for la, lb in zip(hfa.legs, hfb.legs))
+    assert all(la.s == - lc.s for hfa, hfc in zip(a.hfs, c.hfs) for la, lc in zip(hfa.legs, hfc.legs))
+    assert all(la.s ==   ld.s for hfa, hfd in zip(a.hfs, d.hfs) for la, ld in zip(hfa.legs, hfd.legs))
 
 
 @pytest.mark.parametrize('remove_blocks', [0, 5])
