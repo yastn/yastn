@@ -356,7 +356,7 @@ def _meta_svd(sym, struct, sU, nU, k_block):
     bl_a = get_blocks(sym, struct)
 
     ax0 = 1 if nU else 0
-    minD = {tuple(tt): min(DD) for tt, DD in zip(bl_a.t[:, ax0, :].tolist(), bl_a.D)}
+    minD = {tuple(tt): min(DD) for tt, DD in zip(bl_a.t[:, ax0, :].tolist(), bl_a.D.tolist())}
     if k_block is not None:
         if isinstance(k_block, dict):
             sector_minD = min(k_block.values())  # TODO: control default for sectors not present in k_block
@@ -775,7 +775,7 @@ def _meta_qr(sym, struct, sQ):
     `Q` has signature ``(legs[0].s, sQ)`` and `R` has signature ``(-sQ, legs[1].s)``.
     """
     bl_a = get_blocks(sym, struct)
-    minD = {tuple(tt): min(DD) for tt, DD in zip(bl_a.t[:, 1, :].tolist(), bl_a.D)}
+    minD = {tuple(tt): min(DD) for tt, DD in zip(bl_a.t[:, 1, :].tolist(), bl_a.D.tolist())}
     ts = tuple(sorted(minD.keys()))
     Ds = tuple(minD[tt] for tt in ts)
     legQ = LegBasic(s=struct.legs[1].s, t=ts, D=Ds)
@@ -935,7 +935,7 @@ def _meta_eigh(sym, struct, sU, k_block):
     bl_a = get_blocks(sym, struct)
 
     n0 = sym.zero()
-    minD = {tuple(tt): min(DD) for tt, DD in zip(bl_a.t[:, 1, :].tolist(), bl_a.D)}
+    minD = {tuple(tt): min(DD) for tt, DD in zip(bl_a.t[:, 1, :].tolist(), bl_a.D.tolist())}
     if k_block is not None:
         if isinstance(k_block, dict):
             sector_minD = min(k_block.values())  # TODO: control default for sectors not present in k_block

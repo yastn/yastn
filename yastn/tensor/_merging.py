@@ -22,7 +22,7 @@ from typing import NamedTuple, TYPE_CHECKING
 
 import numpy as np
 
-from ._auxiliary import _struct, _flatten, _clear_axes, _unpack_legs, get_blocks
+from ._auxiliary import _struct, _flatten, _clear_axes, _unpack_legs, get_blocks, _product_indices
 from ._auxiliary import find_matching_indices, get_trimmed_struct, convert_to_tuples_and_slices
 from ._legbasic import LegBasic
 from ._tests import _test_axes_all
@@ -618,17 +618,30 @@ def _leg_structure_combine_charges_prod(sym, legs_in, t_out, s_out):
     Combine effective charges and dimensions from a list of charges and dimensions for a few legs,
     forming product of spaces.
     """
-    t_in = [leg.t for leg in legs_in]
-    D_in = [leg.D for leg in legs_in]
+    shapes = [len(leg.t) for leg in legs_in]
+    t_in = [np.array(leg.t, dtype=np.int64).reshape(ll, sym.NSYM) for leg, ll in zip(legs_in, shapes)]
+    D_in = [np.array(leg.D, dtype=np.int64) for leg in legs_in]
     s_in = [leg.s for leg in legs_in]
+    nlegs = len(legs_in)
 
-    comb_t = list(product(*t_in))
-    comb_t = np.array(comb_t, dtype=np.int64).reshape((len(comb_t), len(s_in), sym.NSYM))
-    comb_D = list(product(*D_in))
-    comb_D = np.array(comb_D, dtype=np.int64).reshape((len(comb_D), len(s_in)))
+    indices = _product_indices(shapes)
+    comb_t = np.empty((len(indices), nlegs, sym.NSYM), dtype=np.int64)
+    for i, tt in enumerate(t_in):
+        comb_t[:, i, :] = tt[indices[:, i], :]
+
     teff = sym.fuse(comb_t, s_in, s_out)
-    ind = np.array([ii for ii, te in enumerate(teff.tolist()) if tuple(te) in t_out], dtype=np.int64)
-    comb_D, comb_t, teff = comb_D[ind], comb_t[ind], teff[ind]
+
+    t_out = np.array(t_out, dtype=np.int64).reshape(1, len(t_out), sym.NSYM)
+    inds = np.any(np.all(teff.reshape(len(teff), 1, sym.NSYM) == t_out, axis=2), axis=1)
+    inds = np.flatnonzero(inds)
+    indices = indices[inds]
+    comb_t = comb_t[inds]
+    teff = teff[inds]
+
+    comb_D = np.empty((len(indices), nlegs), dtype=np.int64)
+    for i, DD in enumerate(D_in):
+        comb_D[:, i] = DD[indices[:, i]]
+
     Deff = tuple(np.prod(comb_D, axis=1, dtype=np.int64).tolist())
     Dlegs = tuple(map(tuple, comb_D.tolist()))
     teff = tuple(map(tuple, teff.tolist()))

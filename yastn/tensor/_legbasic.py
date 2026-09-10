@@ -93,7 +93,7 @@ class LegBasic(NamedTuple):
     def __repr__(self) -> str:
         return str(self)
 
-    def basic(self):
+    def basic(self) -> LegBasic:
         return self
 
     @property
@@ -135,7 +135,7 @@ class LegBasic(NamedTuple):
         assert isinstance(self.t, tuple)
         assert isinstance(self.D, tuple)
         assert all(isinstance(x, int) for tt in self.t for x in tt)
-        # assert all(isinstance(x, int) for x in self.D)
+        assert all(isinstance(x, int) for x in self.D)
         return True
 
 
