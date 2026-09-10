@@ -20,7 +20,9 @@ import pytest
 
 import yastn
 import yastn.tn.fpeps.envs._env_ctm as env_ctm_module
-from yastn.tn.fpeps.envs._env_ctm import initialize_si_bases, proj_corners
+import yastn.tn.fpeps.envs._env_ctm_SI_projectors as si_module
+from yastn.tn.fpeps.envs._env_ctm import proj_corners
+from yastn.tn.fpeps.envs._env_ctm_SI_projectors import initialize_si_bases
 
 
 pytestmark = pytest.mark.skipif(
@@ -115,8 +117,9 @@ def _install_shape_and_region_probes(monkeypatch, config, records):
         return timed('decomposition', original_svd_truncated,
                      self, *args, **kwargs)
 
-    monkeypatch.setattr(env_ctm_module, 'tensordot', tensordot_probe)
-    monkeypatch.setattr(env_ctm_module, 'qr', qr_probe)
+    for module in (env_ctm_module, si_module):
+        monkeypatch.setattr(module, 'tensordot', tensordot_probe)
+        monkeypatch.setattr(module, 'qr', qr_probe)
     monkeypatch.setattr(tensor_type, 'svd', svd_probe)
     monkeypatch.setattr(tensor_type, 'svd_with_truncation',
                         svd_truncated_probe)

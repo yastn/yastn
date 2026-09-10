@@ -10,6 +10,14 @@ import yastn.tn.fpeps as fpeps
 import yastn.tn.fpeps.envs._env_ctm as env_ctm_module
 
 
+def _si_bases(env, container):
+    """Assigned recycled bases of ``env.si_X``/``env.si_Y``, keyed like ``env._si_age``."""
+    return {(env.site2index(site), name): getattr(projectors, name)
+            for site, projectors in container.items()
+            for name in projectors.fields()
+            if getattr(projectors, name) is not None}
+
+
 def _differentiable_ising_peps(config, beta):
     """One-site Ising PEPS whose bond weights retain beta's torch graph."""
     back = config.backend.torch
@@ -66,9 +74,11 @@ def _ising_nn_objective(config_kwargs, beta, method, recycled=False,
         # the single differentiated update and observable contraction.
         env.psi = fpeps.EnvCTM(psi, init=None).psi
         if method == 'si':
-            assert env.X and env.Y
-            assert all(not x.requires_grad for x in env.X.values())
-            assert all(not y.requires_grad for y in env.Y.values())
+            assert _si_bases(env, env.si_X) and _si_bases(env, env.si_Y)
+            assert all(not x.requires_grad
+                       for x in _si_bases(env, env.si_X).values())
+            assert all(not y.requires_grad
+                       for y in _si_bases(env, env.si_Y).values())
     else:
         psi, spin = _differentiable_ising_peps(config, beta)
         env = fpeps.EnvCTM(psi, init='eye')
@@ -143,9 +153,9 @@ def test_recycle_grad_false_detaches_only_basis_history(torch_config):
     beta = torch.tensor(0.37, dtype=torch.float64, requires_grad=True)
     value, env = _ising_nn_objective(
         torch_config, beta, method='si', recycled=True, return_env=True)
-    assert env.X and env.Y
-    assert all(not x.requires_grad for x in env.X.values())
-    assert all(not y.requires_grad for y in env.Y.values())
+    assert _si_bases(env, env.si_X) and _si_bases(env, env.si_Y)
+    assert all(not x.requires_grad for x in _si_bases(env, env.si_X).values())
+    assert all(not y.requires_grad for y in _si_bases(env, env.si_Y).values())
     assert value.requires_grad
     value.backward()
     assert beta.grad is not None
@@ -181,8 +191,10 @@ def test_si_autograd_recycle_policy(torch_config, recycle_grad):
         opts_svd={'D_total': 1}, moves='h', method='2x2 corner',
         opts_si={'enabled': True, 'oversampling': 0, 'niter': 2,
                  'recycle_grad': recycle_grad})
-    assert all(x.requires_grad == recycle_grad for x in env.X.values())
-    assert all(y.requires_grad == recycle_grad for y in env.Y.values())
+    assert all(x.requires_grad == recycle_grad
+               for x in _si_bases(env, env.si_X).values())
+    assert all(y.requires_grad == recycle_grad
+               for y in _si_bases(env, env.si_Y).values())
     loss = sum(tensor.norm()
                for site in env.sites()
                for tensor in env[site].__dict__.values()
@@ -206,8 +218,9 @@ def test_recycle_grad_true_backpropagates_through_second_update(
                'warmup': 20, 'recycle_grad': True}
 
     env.update_(opts_svd, moves='h', method='2x2 corner', opts_si=opts_si)
-    assert env.X and all(x.requires_grad for x in env.X.values())
-    assert all(y.requires_grad for y in env.Y.values())
+    assert _si_bases(env, env.si_X)
+    assert all(x.requires_grad for x in _si_bases(env, env.si_X).values())
+    assert all(y.requires_grad for y in _si_bases(env, env.si_Y).values())
 
     recycled_inputs = []
     original_proj_corners = env_ctm_module.proj_corners
@@ -223,8 +236,8 @@ def test_recycle_grad_true_backpropagates_through_second_update(
     assert recycled_inputs
     assert all(X is not None and Y is not None for X, Y in recycled_inputs)
     assert all(age == 2 for age in env._si_age.values())
-    assert all(x.requires_grad for x in env.X.values())
-    assert all(y.requires_grad for y in env.Y.values())
+    assert all(x.requires_grad for x in _si_bases(env, env.si_X).values())
+    assert all(y.requires_grad for y in _si_bases(env, env.si_Y).values())
 
     loss = sum(tensor.norm()
                for site in env.sites()
@@ -257,7 +270,7 @@ def test_si_checkpoint_move(torch_config, checkpoint_move, monkeypatch):
         checkpoint_move=checkpoint_move,
         opts_si={'enabled': True, 'oversampling': 0, 'niter': 2})
     assert env.is_consistent()
-    assert env.X
+    assert _si_bases(env, env.si_X)
     assert checkpoint_calls == [checkpoint_move == 'reentrant']
     loss = sum(tensor.norm()
                for site in env.sites()

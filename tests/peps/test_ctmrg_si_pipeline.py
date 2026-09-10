@@ -15,9 +15,9 @@ import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
 import yastn.tn.fpeps.envs._env_ctm as env_ctm_module
-from yastn.tn.fpeps.envs._env_ctm import (
-    initialize_si_bases,
-    proj_corners,
+import yastn.tn.fpeps.envs._env_ctm_SI_projectors as si_module
+from yastn.tn.fpeps.envs._env_ctm import proj_corners
+from yastn.tn.fpeps.envs._env_ctm_SI_projectors import (
     si_projector_svd,
     svd_charge_sector_values,
 )
@@ -200,9 +200,9 @@ def test_si_public_path_is_matrix_free_and_uses_reduced_svd(
     matrix_shapes = []
     svd_shapes = []
     si_calls = 0
-    original_tensordot = env_ctm_module.tensordot
+    original_tensordot = si_module.tensordot
     original_svd = yastn.Tensor.svd
-    original_si = env_ctm_module.si_projector_svd
+    original_si = si_module.si_projector_svd
 
     def recording_tensordot(*args, **kwargs):
         result = original_tensordot(*args, **kwargs)
@@ -223,8 +223,9 @@ def test_si_public_path_is_matrix_free_and_uses_reduced_svd(
         pytest.fail("SI path called full svd_with_truncation")
 
     monkeypatch.setattr(env_ctm_module, 'tensordot', recording_tensordot)
+    monkeypatch.setattr(si_module, 'tensordot', recording_tensordot)
     monkeypatch.setattr(yastn.Tensor, 'svd', recording_svd)
-    monkeypatch.setattr(env_ctm_module, 'si_projector_svd', recording_si)
+    monkeypatch.setattr(si_module, 'si_projector_svd', recording_si)
     monkeypatch.setattr(
         yastn.Tensor, 'svd_with_truncation', forbidden_full_svd)
 
@@ -272,10 +273,19 @@ def test_public_si_starts_approximate_then_converges(config_kwargs):
 # ---------------------------------------------------------------------------
 
 
+def _si_bases(env, container):
+    """Assigned recycled bases of ``env.si_X``/``env.si_Y``, keyed like ``env._si_age``."""
+    return {(env.site2index(site), name): getattr(projectors, name)
+            for site, projectors in container.items()
+            for name in projectors.fields()
+            if getattr(projectors, name) is not None}
+
+
 def _assert_si_bases_are_orthonormal(env, atol=1e-10):
-    for key in env.X:
-        x_overlap = (env.X[key].H @ env.X[key]).to_numpy()
-        y_overlap = (env.Y[key] @ env.Y[key].H).to_numpy()
+    bases_x, bases_y = _si_bases(env, env.si_X), _si_bases(env, env.si_Y)
+    for key in bases_x:
+        x_overlap = (bases_x[key].H @ bases_x[key]).to_numpy()
+        y_overlap = (bases_y[key] @ bases_y[key].H).to_numpy()
         assert np.allclose(x_overlap, np.eye(x_overlap.shape[0]), atol=atol)
         assert np.allclose(y_overlap, np.eye(y_overlap.shape[0]), atol=atol)
 
@@ -301,11 +311,10 @@ def test_si_recycling_state_machine_across_updates(config_kwargs,
                'tol': 1e-8, 'warmup': 20}
 
     env.update_(opts_svd, moves='h', method='2x2 corner', opts_si=opts_si)
-    assert env.X.keys() == env.Y.keys() == env._si_age.keys()
-    assert env.X
-    assert all(env.site2index(site) in env.sites()
-               and pair in {'hlb', 'hrb', 'vtr', 'vbr'}
-               for site, pair in env.X)
+    bases_x = _si_bases(env, env.si_X)
+    assert bases_x.keys() == _si_bases(env, env.si_Y).keys() == env._si_age.keys()
+    assert bases_x
+    assert all(pair in {'hlb', 'hrb', 'vtr', 'vbr'} for _, pair in bases_x)
     assert all(age == 1 for age in env._si_age.values())
     _assert_si_bases_are_orthonormal(env)
 
@@ -314,14 +323,16 @@ def test_si_recycling_state_machine_across_updates(config_kwargs,
     # until chi + p is available before checking object-level recycling.
     target_rank = opts_svd['D_total'] + opts_si['oversampling']
     for _ in range(5):
-        if all(x.get_shape(axes=1) == target_rank for x in env.X.values()):
+        if all(x.get_shape(axes=1) == target_rank
+               for x in _si_bases(env, env.si_X).values()):
             break
         env.update_(opts_svd, moves='h', method='2x2 corner',
                     opts_si=opts_si)
-    assert all(x.get_shape(axes=1) == target_rank for x in env.X.values())
+    assert all(x.get_shape(axes=1) == target_rank
+               for x in _si_bases(env, env.si_X).values())
 
-    recycled_ids = {id(x) for x in env.X.values()} | {
-        id(y) for y in env.Y.values()}
+    recycled_ids = {id(x) for x in _si_bases(env, env.si_X).values()} | {
+        id(y) for y in _si_bases(env, env.si_Y).values()}
     consumed_ids = set()
     original = env_ctm_module.proj_corners
 
@@ -355,16 +366,16 @@ def test_si_warmup_and_periodic_correction_schedule(config_kwargs,
     opts_si = {'enabled': True, 'oversampling': 0, 'niter': 2,
                'warmup': 2, 'correction_frequency': 2}
     correction_ages = []
-    original = env_ctm_module.si_refinement
+    original = si_module.si_refinement
 
     def recording_correction(*args, **kwargs):
         recycled_x = args[2]
-        key = next(key for key, value in env.X.items()
+        key = next(key for key, value in _si_bases(env, env.si_X).items()
                    if value is recycled_x)
         correction_ages.append(env._si_age[key])
         return original(*args, **kwargs)
 
-    monkeypatch.setattr(env_ctm_module, 'si_refinement',
+    monkeypatch.setattr(si_module, 'si_refinement',
                         recording_correction)
     for _ in range(5):
         env.update_(opts_svd, moves='h', method='2x2 corner', opts_si=opts_si)
@@ -394,7 +405,9 @@ def test_new_environment_starts_without_si_recycling_state(config_kwargs):
     two_site_psi = fpeps.Peps(
         geometry, tensors={(0, 0): psi_tensor, (1, 0): psi_tensor})
     other_env = fpeps.EnvCTM(two_site_psi, init='eye')
-    assert not other_env.X and not other_env.Y and not other_env._si_age
+    assert not _si_bases(other_env, other_env.si_X)
+    assert not _si_bases(other_env, other_env.si_Y)
+    assert not other_env._si_age
 
 
 # ---------------------------------------------------------------------------
@@ -433,10 +446,11 @@ def test_si_ctmrg_matches_full_svd_on_ising_peps(config_kwargs):
 
     assert info_full.converged
     assert info_si.converged
-    assert env_si.X.keys() == env_si.Y.keys() == env_si._si_age.keys()
-    assert env_si.X
+    bases_x = _si_bases(env_si, env_si.si_X)
+    assert bases_x.keys() == _si_bases(env_si, env_si.si_Y).keys() == env_si._si_age.keys()
+    assert bases_x
     assert min(env_si._si_age.values()) >= 5
-    assert all(x.get_shape(axes=1) == chi + 4 for x in env_si.X.values())
+    assert all(x.get_shape(axes=1) == chi + 4 for x in bases_x.values())
 
     # Gauge-independent fixed-point data.
     spectra_full = _normalized_corner_spectra(env_full)

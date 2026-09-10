@@ -6,10 +6,10 @@ import numpy as np
 import pytest
 
 import yastn
-import yastn.tn.fpeps.envs._env_ctm as env_ctm_module
-from yastn.tn.fpeps.envs._env_ctm import (
+import yastn.tn.fpeps.envs._env_ctm_SI_projectors as si_module
+from yastn.tn.fpeps.envs._env_ctm import proj_corners
+from yastn.tn.fpeps.envs._env_ctm_SI_projectors import (
     initialize_si_bases,
-    proj_corners,
     si_bases_compatible,
     si_projector_svd,
     si_refinement,
@@ -121,7 +121,7 @@ def test_si_refinement_resizes_recycled_bases(config_kwargs, monkeypatch):
     X0_even = X0[(0, 0)].copy()
     Yh0_even = Y0.H[(0, 0)].copy()
     recycle_calls = 0
-    recycle = env_ctm_module.symmetric_isometry_recycle
+    recycle = si_module.symmetric_isometry_recycle
 
     def counting_recycle(*args, **kwargs):
         nonlocal recycle_calls
@@ -129,7 +129,7 @@ def test_si_refinement_resizes_recycled_bases(config_kwargs, monkeypatch):
         return recycle(*args, **kwargs)
 
     monkeypatch.setattr(
-        env_ctm_module, 'symmetric_isometry_recycle', counting_recycle)
+        si_module, 'symmetric_isometry_recycle', counting_recycle)
     X, Y = si_refinement(r0, r1, X0, Y0, opts_svd, opts_si)
 
     assert recycle_calls == 2
@@ -149,14 +149,14 @@ def test_si_cwo_pipeline_clamps_rank_to_corner_capacity(config_kwargs,
     opts_si = {'enabled': True, 'oversampling': 4, 'niter': 2,
                'tol': 1e-12, 'correct': True, 'refinement': 'cwo'}
     calls = 0
-    original = env_ctm_module.si_refinement
+    original = si_module.si_refinement
 
     def counting_cwo(*args, **kwargs):
         nonlocal calls
         calls += 1
         return original(*args, **kwargs)
 
-    monkeypatch.setattr(env_ctm_module, 'si_refinement', counting_cwo)
+    monkeypatch.setattr(si_module, 'si_refinement', counting_cwo)
     _, _, X, Y = proj_corners(
         r0, r1, opts_svd, opts_si=opts_si, return_si_state=True)
 
@@ -351,16 +351,22 @@ def test_asvr_pipeline_recovers_globally_dominant_missing_sector(
 
     X, Y = initialize_si_bases(r0, r1, rank=6,
                                charges={(1,): 6})
+    # ASVR reads only the reduced spectrum while refining; the projectors are
+    # built once, afterwards. Count both to see the whole pipeline.
     calls = 0
-    original = env_ctm_module.si_projector_svd
+    original_spectrum = si_module._si_spectrum
+    original_projector = si_module.si_projector_svd
 
-    def counting_si_projector_svd(*args, **kwargs):
-        nonlocal calls
-        calls += 1
-        return original(*args, **kwargs)
+    def counting(original):
+        def counted(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            return original(*args, **kwargs)
+        return counted
 
-    monkeypatch.setattr(env_ctm_module, 'si_projector_svd',
-                        counting_si_projector_svd)
+    monkeypatch.setattr(si_module, '_si_spectrum', counting(original_spectrum))
+    monkeypatch.setattr(si_module, 'si_projector_svd',
+                        counting(original_projector))
     _, _, X, Y = proj_corners(
         r0, r1, opts_svd, opts_si=opts_si, X=X, Y=Y,
         return_si_state=True)
