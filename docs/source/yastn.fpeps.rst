@@ -34,6 +34,8 @@ API: yastn.tn.fpeps
    fpeps/evolution
    fpeps/environment_ntu
    fpeps/environment_ctm
+   fpeps/measurement_oe
+   fpeps/fixed_point
    fpeps/environment_mps
    fpeps/environment_bp
 

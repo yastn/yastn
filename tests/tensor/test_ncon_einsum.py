@@ -13,10 +13,96 @@
 # limitations under the License.
 # ==============================================================================
 """ Test yastn.ncon() """
+import random
+import signal
+import sys
 import pytest
 import yastn
+from yastn.tensor._einsum import _meta_ncon
 
 tol = 1e-12  # pylint: disable=invalid-name
+
+
+def _plan(inds, swap, order):
+    """Plan the network; order None means the default (ascending) order."""
+    return _meta_ncon(tuple(tuple(i) for i in inds),
+                      tuple(order) if order is not None else None,
+                      tuple(tuple(s) for s in swap))
+
+
+def _mini_tensors(config, mk, inds, charges):
+    """Random tensors with legs matched per edge label; first occurrence gets a fresh Leg."""
+    legobj = {}
+    ts = []
+    for ind in inds:
+        ll = []
+        for e in ind:
+            if e not in legobj:
+                legobj[e] = mk()
+                ll.append(legobj[e])
+            else:
+                ll.append(legobj[e].conj())
+        ts.append(yastn.rand(config=config, n=charges[len(ts)], legs=ll))
+    return ts
+
+
+def _rand_net(rng, cfg, sym):
+    """Random fermionic network: 3-6 tensors, self-loops, open legs, 1-5 random swaps."""
+    nt = rng.randint(3, 6)
+    # random multigraph with self loops; each tensor 2-5 legs
+    legs = [[] for _ in range(nt)]
+    edges = []
+    eid = 1
+    for t in range(nt):
+        while len(legs[t]) < rng.randint(2, 4):
+            u = rng.randrange(nt)
+            if u == t and rng.random() < 0.7:
+                continue
+            legs[t].append(eid); legs[u].append(eid); edges.append((t, u)); eid += 1
+    # a few open legs
+    nopen = rng.randint(0, 2)
+    for k in range(nopen):
+        t = rng.randrange(nt); legs[t].append(-k)
+    for t in range(nt):
+        rng.shuffle(legs[t])
+    # leg objects: each contracted edge shares a Leg (conj on the other side)
+    if sym == 'Z2':
+        mk = lambda: yastn.Leg(cfg, s=1, t=(0, 1), D=(rng.randint(1, 2), rng.randint(1, 2)))
+    else:
+        mk = lambda: yastn.Leg(cfg, s=1, t=(-1, 0, 1), D=(1, rng.randint(1, 2), 1))
+    legobj = {}
+    ts = []
+    for t in range(nt):
+        ll = []
+        for e in legs[t]:
+            if e not in legobj:
+                legobj[e] = mk(); ll.append(legobj[e])
+            else:
+                ll.append(legobj[e].conj())
+        n = rng.choice([0, 1]) if sym == 'Z2' else rng.choice([-1, 0, 1])
+        ts.append(yastn.rand(config=cfg, n=n, legs=ll))
+    # swaps: random pairs of distinct edges (contracted or open)
+    all_e = list(range(1, eid)) + [-k for k in range(nopen)]
+    swaps = []
+    for _ in range(rng.randint(1, 5)):
+        a, b = rng.sample(all_e, 2)
+        swaps.append((a, b))
+    order = list(range(1, eid)); rng.shuffle(order)
+    return ts, [tuple(l) for l in legs], swaps, order
+
+
+def _max_legs(cmds, inds):
+    nl = {j: len(x) for j, x in enumerate(inds)}
+    mx = max(nl.values())
+    for c in cmds:
+        if c[0].startswith('tensordot'):
+            nl[c[1]] = nl.pop(c[2][0]) + nl.pop(c[2][1]) - 2 * len(c[3][0]) + \
+                (2 * len(c[4]) if c[0] == 'tensordot_psplit' else 0)
+        elif c[0].startswith('trace'):
+            nl[c[1]] = nl.pop(c[2]) - 2 * len(c[3][0]) + \
+                (2 * len(c[4]) if c[0] == 'trace_psplit' else 0)
+        mx = max(mx, max(nl.values()))
+    return mx
 
 
 def test_ncon_einsum_syntax(config_kwargs):
@@ -231,8 +317,8 @@ def test_ncon_einsum_exceptions(config_kwargs):
         yastn.einsum('klm, *klm->', a, a, order='kl')
 
 
-def test_ncon_trace_fallback_value(config_kwargs, capsys):
-    r"""Trace fallback should still give the same value as an explicit swapped trace."""
+def test_ncon_trace_swap_value(config_kwargs):
+    r"""Swapped trace should give the same value as an explicit swapped trace, with no gadget."""
     config_Z2 = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
     l = yastn.Leg(config_Z2, s=1, t=(0, 1), D=(1, 1))
     lc = l.conj()
@@ -241,16 +327,20 @@ def test_ncon_trace_fallback_value(config_kwargs, capsys):
     B = yastn.rand(config=config_Z2, n=1, legs=[l])
     C = yastn.rand(config=config_Z2, n=1, legs=[lc])
 
-    x = yastn.ncon([A, B, C], [(1, 1), (2,), (2,)], swap=[(1, 2)])
-    captured = capsys.readouterr()
-    assert "fallback resolver activated" in captured.out
+    inds = ((1, 1), (2,), (2,))
+    swap = ((1, 2),)
+    plan = _plan(inds, swap, None)
+    assert not any(c[0].endswith('_psplit') for c in plan)  # trace row is the coboundary of {B}
+
+    x = yastn.ncon([A, B, C], inds, swap=swap)
 
     ref = yastn.trace(A.swap_gate(axes=(0, 1)), axes=(0, 1)).item()
     ref *= yastn.tensordot(B, C, axes=(0, 0)).item()
     assert abs(x.item() - ref) < tol
 
-def test_ncon_trace_fallback_multiple_pairs_value(config_kwargs, capsys):
-    r"""Fallback should handle multiple deferred trace pairs and still produce the right value."""
+
+def test_ncon_trace_swap_multiple_pairs_value(config_kwargs):
+    r"""Multiple swapped trace pairs should give the right value with no gadget."""
     config_Z2 = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
     l = yastn.Leg(config_Z2, s=1, t=(0, 1), D=(1, 1))
     lc = l.conj()
@@ -261,11 +351,12 @@ def test_ncon_trace_fallback_multiple_pairs_value(config_kwargs, capsys):
     D = yastn.rand(config=config_Z2, n=1, legs=[l])
     E = yastn.rand(config=config_Z2, n=1, legs=[lc])
 
-    x = yastn.ncon([A, B, C, D, E],
-                   [(1, 1, 2, 2), (3,), (3,), (4,), (4,)],
-                   swap=[(1, 3), (2, 4)])
-    captured = capsys.readouterr()
-    assert "fallback resolver activated" in captured.out
+    inds = ((1, 1, 2, 2), (3,), (3,), (4,), (4,))
+    swap = ((1, 3), (2, 4))
+    plan = _plan(inds, swap, None)
+    assert not any(c[0].endswith('_psplit') for c in plan)  # both trace rows are coboundaries
+
+    x = yastn.ncon([A, B, C, D, E], inds, swap=swap)
 
     ref = A.swap_gate(axes=(0, 1)).swap_gate(axes=(2, 3))
     ref = yastn.trace(ref, axes=(0, 1))
@@ -377,6 +468,144 @@ def test_einsum_scalar_swap_order(config_kwargs):
             assert (v - ref).norm() < tol * den
 
     _assert_all_orders()
+
+
+# entry-23 pattern in miniature: two tensors share two contracted edges while the bad swap's
+# third-party edge lies on a cycle of the remaining network (which the A,B,C,D tensors of the
+# original note cannot close); adding a shared edge 6 between C and D makes edge 5 lie on the
+# cycle C-5-6-D that avoids A and B.
+_IND_CYCLE = ((1, 2, 3), (1, 2, 4), (3, 5, 6), (4, 5, 6))
+_SWAP_CYCLE = ((1, 5),)
+_FORCED_CYCLE = (1, 2, 3, 4, 5, 6)  # contracts A,B over edges 1 and 2 first -> one gadget
+_CLEAN_CYCLE = (3, 4, 5, 6, 1, 2)   # swap (1, 5) only becomes same-tensor at the end -> no gadget
+
+
+def test_ncon_gadget_two_edge_step(config_kwargs):
+    """A step contracting two edges with an obstinate bad swap must use exactly one gadget."""
+    config_Z2 = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
+    mk = lambda: yastn.Leg(config_Z2, s=1, t=(0, 1), D=(1, 1))
+    p_forced = _plan(_IND_CYCLE, _SWAP_CYCLE, _FORCED_CYCLE)
+    gadgets = [c for c in p_forced if c[0].endswith('_psplit')]
+    assert len(gadgets) == 1
+    assert gadgets[0][0] == 'tensordot_psplit'  # one step needs a gadget
+    assert len(gadgets[0][4]) == 1              # exactly one recorded axis
+    p_clean = _plan(_IND_CYCLE, _SWAP_CYCLE, _CLEAN_CYCLE)
+    assert not any(c[0].endswith('_psplit') for c in p_clean)
+    patterns = ((1, 1, 1, 1), (1, 1, 0, 0), (0, 0, 1, 1), (1, 0, 1, 0), (0, 1, 0, 1))
+    for seed, charges in enumerate(patterns):
+        ts = _mini_tensors(config_Z2, mk, _IND_CYCLE, charges)
+        x = yastn.ncon(ts, _IND_CYCLE, swap=_SWAP_CYCLE, order=_FORCED_CYCLE)
+        ref = yastn.ncon(ts, _IND_CYCLE, swap=_SWAP_CYCLE, order=_CLEAN_CYCLE)
+        # agreement with the gadget-free order is the reference
+        assert abs(x.item() - ref.item()) < tol * max(abs(ref.item()), 1e-30)
+
+
+@pytest.mark.parametrize('fermionic', [(False, True), True])
+def test_ncon_gadget_product_symmetry(config_kwargs, fermionic):
+    """The same gadget step with a product symmetry; one or two fermionic charge components."""
+    config = yastn.make_config(sym='U1xU1', fermionic=fermionic, **config_kwargs)
+    tt = tuple((a, b) for a in (-1, 0, 1) for b in (-1, 0, 1))
+    mk = lambda: yastn.Leg(config, s=1, t=tt, D=(1,) * len(tt))
+    for seed in range(3):  # same plans as in test_ncon_gadget_two_edge_step
+        config.backend.random_seed(seed)
+        ts = _mini_tensors(config, mk, _IND_CYCLE, [(0, 0)] * 4)
+        x = yastn.ncon(ts, _IND_CYCLE, swap=_SWAP_CYCLE, order=_FORCED_CYCLE)
+        ref = yastn.ncon(ts, _IND_CYCLE, swap=_SWAP_CYCLE, order=_CLEAN_CYCLE)
+        no_swap = yastn.ncon(ts, _IND_CYCLE, order=_CLEAN_CYCLE)
+        assert abs(ref.item() - no_swap.item()) > 1e-3 * abs(ref.item())  # the swap is not trivial
+        assert abs(x.item() - ref.item()) < tol * max(abs(ref.item()), 1e-30)
+
+
+def test_ncon_order_independence_random(config_kwargs):
+    """Seeded mini-fuzz: random fermionic networks must give order-independent values."""
+    executed = 0
+    gadget_cases = 0
+    for i in range(40):
+        rng = random.Random(i)
+        sym = 'Z2' if i % 2 == 0 else 'U1'
+        cfg = yastn.make_config(sym=sym, fermionic=True, **config_kwargs)
+        ts, inds, swaps, order = _rand_net(rng, cfg, sym)
+        small = []
+        attempts = 0
+        cand = order
+        while len(small) < 3 and attempts < 60:
+            if _max_legs(_plan(inds, swaps, cand), inds) <= 9:
+                small.append(cand)
+            cand = order[:]
+            rng.shuffle(cand)
+            attempts += 1
+        if len(small) < 3:  # no 3 orders with intermediates of <= 9 legs
+            continue
+        plans = [(o, _plan(inds, swaps, o)) for o in small]
+        vals = [yastn.ncon(ts, inds, swap=swaps, order=o) for o, _ in plans]
+        ref = vals[0]
+        den = max(float(ref.norm().item()), 1.0)
+        for v in vals[1:]:
+            assert (v - ref).norm().item() < 1e-10 * den
+        if any(any(c[0].endswith('_psplit') for c in p) for _, p in plans):
+            gadget_cases += 1
+        executed += 1
+    assert executed > 0
+    assert gadget_cases >= 5  # otherwise the test is not exercising the gadget path
+
+
+def test_ncon_no_hang_regression(config_kwargs):
+    """A trace pair with a bad swap against an open leg used to hang the old planner forever."""
+    if sys.platform == 'win32':
+        pytest.skip('signal.alarm is not supported on Windows')
+    config_Z2 = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
+    mk = lambda: yastn.Leg(config_Z2, s=1, t=(0, 1), D=(1, 1))
+    inds = [(-1, 2, 1), (1, 3), (4, 4), (5, 2, 0), (3, 6, 6, 5)]
+    swap = [(5, 1), (6, 0), (3, 1), (6, 1), (0, 4)]
+    ts = _mini_tensors(config_Z2, mk, inds, (0, 1, 0, 1, 0))
+    inds = [tuple(x) for x in inds]
+    order_hang = (4, 3, 1, 2, 5, 6)
+    order_plain = (1, 2, 3, 4, 5, 6)
+
+    class _Timeout(Exception):
+        pass
+
+    def _alarm(*a):
+        raise _Timeout()
+
+    old = signal.signal(signal.SIGALRM, _alarm)
+    try:
+        signal.alarm(30)
+        try:
+            _plan(inds, swap, order_hang)
+        finally:
+            signal.alarm(0)
+    finally:
+        signal.signal(signal.SIGALRM, old)
+
+    va = yastn.ncon(ts, inds, swap=swap, order=order_hang)
+    vb = yastn.ncon(ts, inds, swap=swap, order=order_plain)
+    assert (va - vb).norm().item() < 1e-10 * max(float(va.norm().item()), 1e-30)
+
+
+def test_ncon_gadget_autograd(config_kwargs):
+    """Gradients through the gadget path must equal gradients through a gadget-free order."""
+    if config_kwargs['backend'] != 'torch':
+        pytest.skip('requires torch backend')
+    import torch  # pylint: disable=import-outside-toplevel
+    config_Z2 = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
+    mk = lambda: yastn.Leg(config_Z2, s=1, t=(0, 1), D=(1, 1))
+
+    def grads(order, ts):
+        cts = [t.clone() for t in ts]
+        cts[0].requires_grad_()
+        x = yastn.ncon(cts, _IND_CYCLE, swap=_SWAP_CYCLE, order=order)
+        loss = abs(x) ** 2
+        loss.to_number().backward()
+        return cts[0].grad()
+
+    for _ in range(2):
+        ts = _mini_tensors(config_Z2, mk, _IND_CYCLE, (1, 1, 1, 1))
+        g_forced = grads(_FORCED_CYCLE, ts)
+        g_clean = grads(_CLEAN_CYCLE, ts)
+        assert torch.isfinite(g_forced.data).all().item()
+        assert torch.isfinite(g_clean.data).all().item()
+        assert (g_forced - g_clean).norm().item() <= 1e-8 * max(g_clean.norm().item(), 1e-30)
 
 
 if __name__ == '__main__':

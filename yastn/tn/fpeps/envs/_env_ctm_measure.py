@@ -1,4 +1,4 @@
-# Copyright 2025 The YASTN Authors. All Rights Reserved.
+# Copyright 2026 The YASTN Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,6 +14,7 @@
 # ==============================================================================
 """ Common measure functions for EnvCTM and EnvBoundaryMPS """
 
+import warnings
 import scipy.sparse.linalg as sla
 
 from ._env_window import EnvWindow, _measure_2site, _measure_nsite, _sample
@@ -24,7 +25,8 @@ from ... import mps
 from ....initialize import rand
 from ....tensor import YastnError, Tensor, tensordot, vdot, split_data_and_meta, combine_data_and_meta, sign_canonical_order
 from ....tensor.oe_blocksparse import contract_with_unroll
-from ....tensor._auxiliary import get_blocks
+from ._env_ctm_oe_measure_network import (_translate_unroll, _build_ketbra_contracted, _build_ketbra_separate,
+                                          _window_bounds, _charge_strings, _mpo_bond_swaps, _build_fused)
 
 
 def measure_1site(self, O, site=None) -> dict:
@@ -722,830 +724,111 @@ def sample(env, projectors, number=1, xrange=None, yrange=None, dirn='v', opts_s
                    progressbar=progressbar, return_probabilities=return_probabilities, flatten_one=flatten_one)
 
 
-def _translate_unroll(unroll, Nx, Ny):
-    """Map user-facing fused bond labels to unfused ket/bra sub-labels.
+def _parse_operators(env, operators, sites):
+    """Sort the operators of a measurement into plain operators and MPO tensors.
 
-    Interior PEPS bonds (``('v', i, j)`` with ``0 <= j < Ny`` and
-    ``('h', i, j)`` with ``0 <= i < Nx``) are split into ket/bra
-    sub-labels. Explicit layer-qualified labels ``(..., 'k')`` and
-    ``(..., 'b')`` are kept as-is. Boundary (chi) bonds are kept as-is.
+    Returns ``(ops, bonds, sign)``: ``ops`` maps a site to its operator (plain
+    operators on the same site are multiplied), ``bonds`` maps a site to the
+    network labels of its MPO tensor's bond legs, ``('opb', k)`` between MPO
+    tensors ``k-1`` and ``k`` of the chain (= listing order), and ``sign`` is
+    the sign of bringing plain operators into the lattice's fermionic order.
+    A measurement uses one kind or the other.  MPO tensors must be listed in
+    fermionic order and get ``sign = 1``: they are neutral, and the caller has
+    folded the reordering sign of every term into its coefficient.
     """
-    def _is_interior_peps_bond(label):
-        return (label[0] == 'v' and 0 <= label[2] < Ny) or \
-               (label[0] == 'h' and 0 <= label[1] < Nx)
+    if sites is None or len(operators) != len(sites):
+        raise YastnError("Number of operators and sites should match.")
+    # unpack operators if operators provided as a Lattice or dict
+    operators = [op[site] if not isinstance(op, Tensor) else op for op, site in zip(operators, sites)]
+    ops, bonds = {}, {}
+    nop = len(operators)
+    for k, (site, op) in enumerate(zip(sites, operators)):
+        if op.ndim > 2:
+            labels = (('opb', k),) * (k > 0) + (('opb', k + 1),) * (k < nop - 1)
+            if len(labels) != op.ndim - 2:
+                raise YastnError(f"operator {k} of {nop} carries {op.ndim - 2} bond legs, "
+                                 f"but its position in the chain allows {len(labels)}.")
+            bonds[site] = labels
+        elif site in ops:
+            op = ops[site] @ op
+        ops[site] = op
+    if bonds and (len(bonds) < nop or len(ops) < nop):
+        raise YastnError("MPO tensors: one per site and no plain operators alongside.")
+    if bonds and not all(env.f_ordered(s0, s1) for s0, s1 in zip(sites, sites[1:])):
+        raise YastnError("MPO tensors must be listed in the lattice's fermionic order of their sites.")
+    sign = 1 if bonds else sign_canonical_order(*operators, sites=sites, f_ordered=env.f_ordered)
+    return ops, bonds, sign
 
-    if unroll is None:
-        return None
-    translated = {}
-    for label, val in unroll.items():
-        if len(label) == 4:
-            if label[-1] not in ('k', 'b'):
-                raise YastnError(f"Invalid layer-qualified unroll label {label}; expected trailing 'k' or 'b'.")
-            if not _is_interior_peps_bond(label[:-1]):
-                raise YastnError(f"Layer-qualified unroll label {label} is only valid for PEPS ket/bra bonds.")
-            translated[label] = val
-        elif _is_interior_peps_bond(label):
-            translated[label + ('k',)] = val
-            translated[label + ('b',)] = val
-        else:
-            translated[label] = val
-    return translated
 
+def _contract_window(self, ops, bonds, sites, unroll=None, separate_layers=True, projectors=None, probe=None,
+                     optimizer="default", per_combo_path=False, combo_path_kwargs=None, **kwargs):
+    r"""Contract the window of ``sites`` once, with ``ops, bonds`` from :func:`_parse_operators`.
 
-def _pad_unfused_edge(edge_uf, peps_ket_leg, peps_bra_leg, ket_ax=1, bra_ax=2):
-    r"""
-    Pad an unfused edge tensor with zero blocks so that its ket/bra
-    sub-legs match the PEPS ket/bra legs.
-
-    After CTM expansion with OBC boundary projectors, unfused edge
-    sub-legs can have fewer charge sectors than the PEPS legs.
-    Adding zero blocks for the missing sectors restores compatibility
-    without affecting the contraction result (zero blocks contribute
-    nothing).
+    Empty ``ops`` gives the norm, otherwise the numerator without the
+    reordering sign.  Returns a number, or with ``probe=(site, slot, tensor)``
+    the open cut map.  ``kwargs`` (``checkpoint_loop``, ``devices``,
+    ``mp_workers_per_device``) go to ``contract_with_unroll``.  Bond labels and
+    fermionic signs are described in ``docs/source/fpeps/measurement_oe.rst``.
     """
-    ket_sub = edge_uf.get_legs(axes=ket_ax)
-    bra_sub = edge_uf.get_legs(axes=bra_ax)
-
-    existing_ket_t = set(ket_sub.t)
-    missing_ket_t = set(peps_ket_leg.t) - existing_ket_t
-
-    existing_bra_t = set(bra_sub.t)
-    missing_bra_t = set(peps_bra_leg.t) - existing_bra_t
-
-    if not missing_ket_t and not missing_bra_t:
-        return edge_uf
-
-    legs = edge_uf.get_legs()
-    sigs = edge_uf.s
-    n_total = edge_uf.n
-    ndim = edge_uf.ndim_n
-    other_axes = [ax for ax in range(ndim) if ax != ket_ax and ax != bra_ax]
-
-    peps_ket_tD = dict(zip(peps_ket_leg.t, peps_ket_leg.D))
-    peps_bra_tD = dict(zip(peps_bra_leg.t, peps_bra_leg.D))
-
-    # Collect existing chi charge pairs (leg_first: block charges are derived
-    # from the legs via get_blocks; existing_blocks kept as flat charge tuples
-    # to match ts_flat below — set_block ravels ts, so flat form is correct for
-    # any NSYM).
-    nsym = edge_uf.config.sym.NSYM
-    chi_pairs = set()
-    existing_blocks = set()
-    for blk in get_blocks(edge_uf.config.sym, edge_uf.struct).t.tolist():
-        charges = tuple(tuple(c) for c in blk)   # per-native-leg charge tuples
-        chi_pairs.add(tuple(charges[ax] for ax in other_axes))
-        existing_blocks.add(tuple(x for c in charges for x in c))
-
-    def _infer_missing_charge(chi_combo, known_charge, known_ax, unknown_ax):
-        """Infer the charge on unknown_ax from the symmetry constraint."""
-        mb_list = []
-        for s in range(nsym):
-            partial = sum(sigs[ax] * chi_combo[idx][s]
-                          for idx, ax in enumerate(other_axes))
-            partial += sigs[known_ax] * known_charge[s]
-            remaining = n_total[s] - partial
-            if sigs[unknown_ax] == 0:
-                return None
-            mb_list.append(remaining // sigs[unknown_ax])
-        return tuple(mb_list)
-
-    def _add_zero_block(chi_combo, mk, mb):
-        """Add a zero block for (chi_combo, mk, mb) if it doesn't exist."""
-        D_k = peps_ket_tD[mk]
-        D_b = peps_bra_tD[mb]
-
-        ts_list = [None] * ndim
-        Ds_list = [None] * ndim
-        ts_list[ket_ax] = mk
-        ts_list[bra_ax] = mb
-        Ds_list[ket_ax] = D_k
-        Ds_list[bra_ax] = D_b
-        for idx, ax in enumerate(other_axes):
-            ts_list[ax] = chi_combo[idx]
-            Ds_list[ax] = legs[ax].D[list(legs[ax].t).index(chi_combo[idx])]
-
-        ts_flat = sum(ts_list, ())
-        if ts_flat not in existing_blocks:
-            edge_uf.set_block(ts=ts_flat, Ds=tuple(Ds_list), val='zeros')
-            existing_blocks.add(ts_flat)
-
-    for chi_combo in chi_pairs:
-        for mk in missing_ket_t:
-            mb = _infer_missing_charge(chi_combo, mk, ket_ax, bra_ax)
-            if mb is None or mb not in peps_bra_tD:
-                continue
-            _add_zero_block(chi_combo, mk, mb)
-
-        for mb in missing_bra_t:
-            mk = _infer_missing_charge(chi_combo, mb, bra_ax, ket_ax)
-            if mk is None or mk not in peps_ket_tD:
-                continue
-            _add_zero_block(chi_combo, mk, mb)
-
-    return edge_uf
-
-
-def _uf_middle_padded(edge_tensor, peps_ket_leg, peps_bra_leg):
-    """Unfuse edge middle leg and pad to match PEPS ket/bra legs."""
-    uf = edge_tensor.unfuse_legs(axes=(1,))
-    uf = uf.drop_leg_history(axes=(1, 2))
-    return _pad_unfused_edge(uf, peps_ket_leg, peps_bra_leg)
-
-
-def _build_interleaved_unfused(env, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, bl, br):
-    r"""
-    Assemble the full patch tensor network in interleaved format
-    without ``fuse_layers()``.
-
-    Each ``DoublePepsTensor`` site is contracted on the physical leg
-    to produce an 8-leg tensor (4 ket + 4 bra PEPS legs) with
-    fermionic crossings applied as ``swap_gate``.  This avoids
-    ``fuse_layers()`` which additionally fuses the ket/bra sub-legs.
-
-    Edge middle legs (PEPS-facing, fused as ``[ket, bra]``) are
-    unfused and padded to match the 8-leg site tensors.  Corner legs
-    and edge outer legs (chi bonds) are kept as-is.
-
-    Returns ``(tn_args, swap_pairs)`` where *swap_pairs* contains
-    same-tensor fermionic crossing pairs for ncon.
-    """
-
-    args = []
-    swap_pairs = []
-
-    # --- Pre-contract ket/bra into 8-leg tensors with swap gates ---
-    site_tensors = {}
-    peps_legs = {}
-    for i in range(Nx):
-        for j in range(Ny):
-            s = Site(minx + i, miny + j)
-            dpt = tens[s]
-            Ab, Ak = dpt.Ab_Ak_with_charge_swap()
-
-            if dpt.op is not None:
-                Ak = tensordot(Ak, dpt.op, axes=(4, 1))
-
-            Ab_c = Ab.conj()
-
-            # Contract on physical leg → 8-leg tensor
-            # Ak: (t_k, l_k, b_k, r_k, p), Ab_c: (t_b, l_b, b_b, r_b, p)
-            # Result: (t_k, l_k, b_k, r_k, t_b, l_b, b_b, r_b)
-            tt = tensordot(Ak, Ab_c, axes=(4, 4))
-
-            # Apply fermionic crossings (same as fuse_layers)
-            # swap (l_k, l_b) × t_b and (b_k, b_b) × r_b
-            tt = tt.swap_gate(axes=((1, 5), 4, (2, 6), 7))  # (l_k, l_b) × t_b, (b_k, b_b) × r_b
-
-            # Transpose to interleave: t_k, t_b, l_k, l_b, b_k, b_b, r_k, r_b
-            tt = tt.transpose(axes=(0, 4, 1, 5, 2, 6, 3, 7))
-
-            # Apply DoublePepsTensor transpose (permutes the 4 PEPS directions)
-            trans8 = []
-            for k in dpt.trans:
-                trans8.extend([2 * k, 2 * k + 1])
-            tt = tt.transpose(axes=tuple(trans8)).drop_leg_history()
-
-            site_tensors[(i, j)] = tt
-            peps_legs[(i, j)] = (
-                tuple(tt.get_legs(axes=2 * ax) for ax in range(4)),      # ket
-                tuple(tt.get_legs(axes=2 * ax + 1) for ax in range(4)),  # bra
-            )
-
-    # --- Corners ---
-    args += [env[tl].tl, [('v', 0, -1), ('h', -1, -1)]]
-    args += [env[bl].bl, [('h', Nx, -1), ('v', Nx, -1)]]
-    args += [env[tr].tr, [('h', -1, Ny - 1), ('v', 0, Ny)]]
-    args += [env[br].br, [('v', Nx, Ny), ('h', Nx, Ny - 1)]]
-
-    # --- Left edges ---
-    for i in range(Nx):
-        k_legs, b_legs = peps_legs[(i, 0)]
-        args += [_uf_middle_padded(env[Site(minx + i, miny)].l, k_legs[1], b_legs[1]),
-                 [('v', i + 1, -1), ('h', i, -1, 'k'), ('h', i, -1, 'b'), ('v', i, -1)]]
-
-    # --- Right edges ---
-    for i in range(Nx):
-        k_legs, b_legs = peps_legs[(i, Ny - 1)]
-        args += [_uf_middle_padded(env[Site(minx + i, maxy)].r, k_legs[3], b_legs[3]),
-                 [('v', i, Ny), ('h', i, Ny - 1, 'k'), ('h', i, Ny - 1, 'b'), ('v', i + 1, Ny)]]
-
-    # --- Top edges ---
-    for j in range(Ny):
-        k_legs, b_legs = peps_legs[(0, j)]
-        args += [_uf_middle_padded(env[Site(minx, miny + j)].t, k_legs[0], b_legs[0]),
-                 [('h', -1, j - 1), ('v', 0, j, 'k'), ('v', 0, j, 'b'), ('h', -1, j)]]
-
-    # --- Bottom edges ---
-    for j in range(Ny):
-        k_legs, b_legs = peps_legs[(Nx - 1, j)]
-        args += [_uf_middle_padded(env[Site(maxx, miny + j)].b, k_legs[2], b_legs[2]),
-                 [('h', Nx, j), ('v', Nx, j, 'k'), ('v', Nx, j, 'b'), ('h', Nx, j - 1)]]
-
-    # --- PEPS sites: 8-leg tensors [t_k, t_b, l_k, l_b, b_k, b_b, r_k, r_b] ---
-    def _bond_labels(i, j):
-        return [('v', i, j), ('h', i, j - 1), ('v', i + 1, j), ('h', i, j)]
-
-    for i in range(Nx):
-        for j in range(Ny):
-            lbls = _bond_labels(i, j)
-            args += [site_tensors[(i, j)],
-                     [lbls[0] + ('k',), lbls[0] + ('b',),
-                      lbls[1] + ('k',), lbls[1] + ('b',),
-                      lbls[2] + ('k',), lbls[2] + ('b',),
-                      lbls[3] + ('k',), lbls[3] + ('b',)]]
-
-    args.append(())  # scalar output
-    return tuple(args), swap_pairs
-
-
-def _compress_bond_side(i, j, proj_name):
-    """Return (bond1, bond2, side) for the half-projector at (i, j),
-    where bond1 (dim=chi) and bond2 (dim=D) are the two bonds that
-    get compressed.
-    """
-
-    if proj_name[-1] == 't':
-        if proj_name[-2] == 'l':
-            return ('v', i, j-1), ('v', i, j), 'b'
-        else: # 'r'
-            return ('v', i, j+1), ('v', i, j), 'b'
-
-    if proj_name[-1] == 'b':
-        if proj_name[-2] == 'l':
-            return ('v', i+1, j-1), ('v', i+1, j), 't'
-        else: # 'r'
-            return ('v', i+1, j+1), ('v', i+1, j), 't'
-    if proj_name[-1] == 'l':
-        if proj_name[-2] == 't':
-            return ('h', i-1, j-1), ('h', i, j-1), 'r'
-        else: # 'b'
-            return ('h', i+1, j-1), ('h', i, j-1), 'r'
-
-    if proj_name[-1] == 'r':
-        if proj_name[-2] == 't':
-            return ('h', i-1, j), ('h', i, j), 'l'
-        else: # 'b'
-            return ('h', i+1, j), ('h', i, j), 'l'
-
-def _build_separate_unfused(env, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, bl, br,
-                            projectors=None, probe=None, open_cut=None):
-    r"""
-    Assemble the full patch tensor network with separate ket and bra
-    tensors (5-leg each) per site.
-
-    Unlike ``_build_interleaved_unfused`` which pre-contracts ket and bra
-    on the physical leg into 8-leg tensors, this keeps them separate and
-    connects them via a shared physical-leg label.  Fermionic crossings
-    are split into intra-bra ``swap_gate`` calls (applied before adding
-    to the network) and inter-tensor swap pairs (returned for ncon).
-
-    Edge tensors, corners, and boundary bonds are identical to
-    ``_build_interleaved_unfused``.
-
-    Parameters
-    ----------
-    probe : (site, slot, tensor) or None
-        Insert ``tensor`` as a *single* half-projector at ``(site, slot)``,
-        using the same rename + append logic as ordinary ``projectors``
-        entries but without requiring its partner.  The tensor must be in
-        the stored 3-leg projector form ``(env chi, fused ket-D x bra-D,
-        thin)``; it is ``unfuse_legs(axes=(1,))``-ed on insertion.  Used by
-        the randomized range-finding measurement (sketching): the probe is
-        one half of an interior-cut projector pair, the partner side stays
-        open so the contraction returns the window map ``Y = M . Omega``.
-    open_cut : (site, slot) or None
-        Do **not** rename the bond endpoints of this half-projector slot;
-        the would-be-severed labels ``[env_bond, D2_bond+('k',),
-        D2_bond+('b',), ('proj',)+env_bond]`` (from ``_compress_bond_side``)
-        are left open in the network and returned to the caller as the
-        output spec.  When given, the returned tuple becomes
-        ``(tn_args, swap_pairs, open_labels)``; otherwise the existing
-        2-tuple ``(tn_args, swap_pairs)`` (scalar ``()`` output) is kept,
-        so existing callers are untouched.
-
-    Returns ``(tn_args, swap_pairs)`` -- or ``(tn_args, swap_pairs,
-    open_labels)`` when ``open_cut`` is given -- for use with ncon /
-    opt_einsum.
-    """
-
-    args = []
-    swap_pairs = []
-
-    if projectors is None:
-        projectors = {}
-
-    # Normalize each value to a ``{slot: tensor-or-None}`` dict so a site can
-    # carry several half-projectors (e.g. {site: ('hrt', 'hrb')}).  A value may
-    # instead be a ``{slot: tensor}`` mapping, which supplies the half-projector
-    # directly rather than reading it from ``env.proj``; ``None`` means "read it
-    # from the env".  Both forms iterate and test membership by slot name, so
-    # the partner check and the insertion loop below are shared.
-    def _norm_slots(slots):
-        if isinstance(slots, str):
-            return {slots: None}
-        if isinstance(slots, dict):
-            return dict(slots)
-        return {slot: None for slot in slots}
-
-    projectors = {site: _norm_slots(slots) for site, slots in projectors.items()}
-
-    # Consistency check on the projectors: every half must have its partner.
-    # Partner is found by flipping the face char ('t' <-> 'b', 'l' <-> 'r')
-    # and stepping one site in the direction the face points to (= slot[-1]).
-    _PARTNER_FACE = {'t': 'b', 'b': 't', 'l': 'r', 'r': 'l'}
-    for site, slots in projectors.items():
-        for slot in slots:
-            partner_slot = slot[:-1] + _PARTNER_FACE[slot[-1]]
-            partner_site = env.nn_site(site, slot[-1])
-            if partner_slot not in projectors.get(partner_site, ()):
-                raise YastnError(
-                    f"projector half {slot}@{site} is missing its partner "
-                    f"{partner_slot}@{partner_site}.")
-
-
-    # --- build a rename table for the insertion of projectors.
-    # rename is keyed by (label, i_tensor, j_tensor) so only the endpoint of
-    # the bond on the absorbed side gets renamed; the other endpoint keeps
-    # the original label and connects to the partner half-projector.
-    def _bond_endpoint(bond, side):
-        """(i, j) of the bond's endpoint on the given side."""
-        if bond[0] == 'v':
-            return (bond[1] - 1, bond[2]) if side == 't' else (bond[1], bond[2])
-        # bond[0] == 'h'
-        return (bond[1], bond[2]) if side == 'l' else (bond[1], bond[2] + 1)
-
-    rename = {}  # (label, i, j) -> renamed label
-
-    def _register_rename(key, new_label, slot, site):
-        if key in rename and rename[key] != new_label:
-            raise YastnError(
-                f"projector {slot}@{site} conflicts with another projector "
-                f"trying to rename the same bond endpoint {key}.")
-        rename[key] = new_label
-
-    proj_inserts = []  # tensors to append at the end
-    for site, slots in projectors.items():
-        for proj_name in slots:
-            i, j = site[0] - minx, site[1] - miny
-            env_bond, D2_bond, side = _compress_bond_side(i, j, proj_name)
-            new_env_bond = env_bond + (side,)
-            new_ket_bond = D2_bond + ('k', side)
-            new_bra_bond = D2_bond + ('b', side)
-
-            i_env, j_env = _bond_endpoint(env_bond, side)
-            i_d2, j_d2 = _bond_endpoint(D2_bond, side)
-            _register_rename((env_bond, i_env, j_env), new_env_bond, proj_name, site)
-            _register_rename((D2_bond + ('k',), i_d2, j_d2), new_ket_bond, proj_name, site)
-            _register_rename((D2_bond + ('b',), i_d2, j_d2), new_bra_bond, proj_name, site)
-
-            proj = projectors[site][proj_name]
-            if proj is None:
-                proj = getattr(env.proj[site], proj_name)
-            proj_inserts.append((proj.unfuse_legs(axes=(1,)),
-                                 [new_env_bond, new_ket_bond, new_bra_bond,
-                                  ('proj',) + env_bond]))
-
-    # --- Probe insertion: one half-projector with no partner required ---
-    # Same rename + append logic as the loop above, but the tensor is given
-    # explicitly (``probe=(site, slot, tensor)``) instead of being read from
-    # ``env.proj``.  Used by the sketching measurement: the probe closes one
-    # side of an interior cut while the partner side is left open (see
-    # ``open_cut``), so a single window contraction returns the cut's map.
-    if probe is not None:
-        probe_site, probe_slot, probe_tensor = probe
-        i, j = probe_site[0] - minx, probe_site[1] - miny
-        env_bond, D2_bond, side = _compress_bond_side(i, j, probe_slot)
-        new_env_bond = env_bond + (side,)
-        new_ket_bond = D2_bond + ('k', side)
-        new_bra_bond = D2_bond + ('b', side)
-
-        i_env, j_env = _bond_endpoint(env_bond, side)
-        i_d2, j_d2 = _bond_endpoint(D2_bond, side)
-        _register_rename((env_bond, i_env, j_env), new_env_bond, probe_slot, probe_site)
-        _register_rename((D2_bond + ('k',), i_d2, j_d2), new_ket_bond, probe_slot, probe_site)
-        _register_rename((D2_bond + ('b',), i_d2, j_d2), new_bra_bond, probe_slot, probe_site)
-
-        proj_inserts.append((probe_tensor.unfuse_legs(axes=(1,)),
-                             [new_env_bond, new_ket_bond, new_bra_bond,
-                              ('proj',) + env_bond]))
-
-    # --- Open-cut output spec: labels left open at a half-projector slot ---
-    # No rename is registered for this slot; its bond endpoints keep their
-    # original labels (the severed-bond labels exactly), which become the
-    # network's open output legs.  Together with the probe's thin label
-    # ``('proj',) + env_bond`` these are the 4 output legs of the cut map.
-    open_labels = None
-    if open_cut is not None:
-        open_site, open_slot = open_cut
-        i, j = open_site[0] - minx, open_site[1] - miny
-        env_bond, D2_bond, _side = _compress_bond_side(i, j, open_slot)
-        open_labels = [env_bond, D2_bond + ('k',), D2_bond + ('b',),
-                       ('proj',) + env_bond]
-
-    def _tag(label, i, j):
-        return rename.get((label, i, j), label)
-
-    # --- Collect peps_legs for edge padding (same as interleaved path) ---
-    peps_legs = {}
-    for i in range(Nx):
-        for j in range(Ny):
-            s = Site(minx + i, miny + j)
-            dpt = tens[s]
-            Ab, Ak = dpt.Ab_Ak_with_charge_swap()
-
-            if dpt.op is not None:
-                Ak_tmp = tensordot(Ak, dpt.op, axes=(4, 1))
-            else:
-                Ak_tmp = Ak
-
-            Ab_c_tmp = Ab.conj()
-
-            # Apply intra-bra swap gates (canonical order)
-            Ab_c_tmp = Ab_c_tmp.swap_gate(axes=(0, 1, 2, 3))  # l_b × t_b, b_b × r_b
-
-            # Transpose to position order
-            Ak_t = Ak_tmp.transpose(axes=dpt.trans + (4,)).drop_leg_history()
-            Ab_c_t = Ab_c_tmp.transpose(axes=dpt.trans + (4,)).drop_leg_history()
-
-            peps_legs[(i, j)] = (
-                tuple(Ak_t.get_legs(axes=ax) for ax in range(4)),    # ket
-                tuple(Ab_c_t.get_legs(axes=ax) for ax in range(4)),  # bra
-            )
-
-    # --- Corners (identical to interleaved) ---
-    # Each corner sits at one of the four "fake-site" positions outside the patch:
-    #   TL = (-1, -1)   TR = (-1, Ny)   BL = (Nx, -1)   BR = (Nx, Ny)
-    args += [env[tl].tl,
-             [_tag(('v', 0, -1), -1, -1), _tag(('h', -1, -1), -1, -1)]]
-    args += [env[bl].bl,
-             [_tag(('h', Nx, -1), Nx, -1), _tag(('v', Nx, -1), Nx, -1)]]
-    args += [env[tr].tr,
-             [_tag(('h', -1, Ny - 1), -1, Ny), _tag(('v', 0, Ny), -1, Ny)]]
-    args += [env[br].br,
-             [_tag(('v', Nx, Ny), Nx, Ny), _tag(('h', Nx, Ny - 1), Nx, Ny)]]
-
-    # --- Left edges --- left-edge[i] sits at (i, -1)
-    for i in range(Nx):
-        k_legs, b_legs = peps_legs[(i, 0)]
-        args += [_uf_middle_padded(env[Site(minx + i, miny)].l, k_legs[1], b_legs[1]),
-                 [_tag(('v', i + 1, -1), i, -1), _tag(('h', i, -1, 'k'), i, -1),
-                  _tag(('h', i, -1, 'b'), i, -1), _tag(('v', i, -1), i, -1)]]
-
-    # --- Right edges --- right-edge[i] sits at (i, Ny)
-    for i in range(Nx):
-        k_legs, b_legs = peps_legs[(i, Ny - 1)]
-        args += [_uf_middle_padded(env[Site(minx + i, maxy)].r, k_legs[3], b_legs[3]),
-                 [_tag(('v', i, Ny), i, Ny), _tag(('h', i, Ny - 1, 'k'), i, Ny),
-                  _tag(('h', i, Ny - 1, 'b'), i, Ny), _tag(('v', i + 1, Ny), i, Ny)]]
-
-    # --- Top edges --- top-edge[j] sits at (-1, j)
-    for j in range(Ny):
-        k_legs, b_legs = peps_legs[(0, j)]
-        args += [_uf_middle_padded(env[Site(minx, miny + j)].t, k_legs[0], b_legs[0]),
-                 [_tag(('h', -1, j - 1), -1, j), _tag(('v', 0, j, 'k'), -1, j),
-                  _tag(('v', 0, j, 'b'), -1, j), _tag(('h', -1, j), -1, j)]]
-
-    # --- Bottom edges --- bottom-edge[j] sits at (Nx, j)
-    for j in range(Ny):
-        k_legs, b_legs = peps_legs[(Nx - 1, j)]
-        args += [_uf_middle_padded(env[Site(maxx, miny + j)].b, k_legs[2], b_legs[2]),
-                 [_tag(('h', Nx, j), Nx, j), _tag(('v', Nx, j, 'k'), Nx, j),
-                  _tag(('v', Nx, j, 'b'), Nx, j), _tag(('h', Nx, j - 1), Nx, j)]]
-
-    # --- PEPS sites: separate ket (5-leg) and bra (5-leg) ---
-    def _bond_labels(i, j):
-        return [('v', i, j), ('h', i, j - 1), ('v', i + 1, j), ('h', i, j)]
-
-    for i in range(Nx):
-        for j in range(Ny):
-            s = Site(minx + i, miny + j)
-            dpt = tens[s]
-            Ab, Ak = dpt.Ab_Ak_with_charge_swap()
-
-            if dpt.op is not None:
-                Ak = tensordot(Ak, dpt.op, axes=(4, 1))
-
-            Ab_c = Ab.conj()
-
-            # Apply intra-bra fermionic crossings (canonical order)
-            Ab_c = Ab_c.swap_gate(axes=(1, 0, 2, 3))  # l_b × t_b, b_b × r_b
-
-            # Transpose to position order
-            Ak = Ak.transpose(axes=dpt.trans + (4,)).drop_leg_history()
-            Ab_c = Ab_c.transpose(axes=dpt.trans + (4,)).drop_leg_history()
-
-            lbls = _bond_labels(i, j)
-
-            # Ket tensor: 4 bond legs + physical
-            args += [Ak,
-                     [_tag(lbls[0] + ('k',), i, j), _tag(lbls[1] + ('k',), i, j),
-                      _tag(lbls[2] + ('k',), i, j), _tag(lbls[3] + ('k',), i, j),
-                      ('p', i, j)]]
-
-            # Bra tensor: 4 bond legs + physical (shared physical label)
-            args += [Ab_c,
-                     [_tag(lbls[0] + ('b',), i, j), _tag(lbls[1] + ('b',), i, j),
-                      _tag(lbls[2] + ('b',), i, j), _tag(lbls[3] + ('b',), i, j),
-                      ('p', i, j)]]
-
-            # Inter-tensor swap pairs (ket × bra fermionic crossings)
-            # In canonical order: l_k × t_b and b_k × r_b
-            # inv[d] = position of canonical direction d after transpose
-            inv = [dpt.trans.index(d) for d in range(4)]
-            swap_pairs.append((_tag(lbls[inv[1]] + ('k',), i, j),
-                               _tag(lbls[inv[0]] + ('b',), i, j)))  # l_k × t_b
-            swap_pairs.append((_tag(lbls[inv[2]] + ('k',), i, j),
-                               _tag(lbls[inv[3]] + ('b',), i, j)))  # b_k × r_b
-
-    # --- Inserted half-projectors (compressed bonds) ---
-    for proj_t, proj_lbls in proj_inserts:
-        args += [proj_t, proj_lbls]
-
-    if open_labels is not None:
-        args.append(tuple(open_labels))  # open (non-scalar) output spec
-        return tuple(args), swap_pairs, open_labels
-    args.append(())  # scalar output
-    return tuple(args), swap_pairs
-
-
-def _measure_nsite_exact_oe_impl(self, *operators, sites, unroll, checkpoint_loop, separate_layers, optimizer, devices, mp_workers_per_device, mode, projectors=None, per_combo_path=False, combo_path_kwargs=None):
-    r"""Shared implementation for the three OE measurement wrappers.
-
-    ``mode`` is one of:
-
-    * ``"both"`` -- contract norm and numerator, return ``sign * val_op / val_no``.
-    * ``"norm"`` -- contract only the norm <psi|psi> over the bounding window of
-      ``sites``; ``operators`` is ignored.
-    * ``"numerator"`` -- contract only ``sign * val_op`` (no division by norm).
-
-    Bond-label scheme
-    -----------------
-
-    The contraction builds a tensor network over a ``Nx`` × ``Ny`` window
-    enclosing the requested ``sites``.  Every edge of that network carries a
-    tuple label.  These labels are what callers refer to when passing an
-    ``unroll`` dict, and what the patch-building helpers
-    (``_build_interleaved_unfused``, ``_build_separate_unfused``,
-    ``_build_interleaved_fused``) emit.
-
-    Coordinates ``i`` (row, ``0 … Nx-1``) and ``j`` (column, ``0 … Ny-1``)
-    are *window-local*, not absolute lattice positions, and follow the
-    yastn ``Site(x, y) = (row, col)`` convention.
-
-    **Horizontal bonds** ``('h', i, j)`` -- run left-to-right between
-    columns ``j`` and ``j+1`` at row ``i``::
-
-               j=-1            j=0             j=1          j=Ny-1     j=Ny
-                :              :               :             :          :
-        i=-1   TL --h,-1,-1-- T[0] --h,-1,0-- T[1] -- ... -- h,-1,Ny-1 -- TR
-                |              |               |             |          |
-             v,0,-1         v,0,0           v,0,1        v,0,Ny-1     v,0,Ny
-                |              |               |             |          |
-        i=0    L[0]-h,0,-1-----*---h,0,0-------*--- ... --h,0,Ny-1-----R[0]
-                |              |               |             |          |
-             v,1,-1         v,1,0           v,1,1        v,1,Ny-1     v,1,Ny
-                |              |               |             |          |
-        i=1    L[1]-h,1,-1-----*---h,1,0-------*--- ... --h,1,Ny-1-----R[1]
-                :              :               :             :          :
-                |              |               |             |          |
-             v,Nx,-1        v,Nx,0          v,Nx,1       v,Nx,Ny-1    v,Nx,Ny
-                |              |               |             |          |
-        i=Nx   BL --h,Nx,-1-- B[0] --h,Nx,0-- B[1] -- ... -- h,Nx,Ny-1 -- BR
-
-    where ``*`` marks a PEPS site, ``TL/TR/BL/BR`` are CTM corners, and
-    ``T/B/L/R`` are CTM edges.
-
-    For horizontal bonds: ``i = -1`` and ``i = Nx`` are boundary rows
-    (chi bonds between edge tensors and corners); ``i = 0 … Nx-1`` are
-    PEPS rows (physical bonds); ``j = -1`` is the left-boundary column
-    and ``j = Ny - 1`` the right-boundary column for the chi bonds
-    attached to the side edges.
-
-    **Vertical bonds** ``('v', i, j)`` -- run top-to-bottom in column
-    ``j`` between rows ``i-1`` and ``i``:
-
-    - ``i = 0`` connects the top row (``T[j]`` / corner) to the first
-      PEPS row.
-    - ``i = Nx`` connects the last PEPS row to the bottom row
-      (``B[j]`` / corner).
-    - ``i = 1 … Nx-1`` are interior vertical bonds.
-    - ``j = -1`` is the left-boundary column; ``j = Ny`` is the right-
-      boundary column; ``j = 0 … Ny-1`` are PEPS columns.
-
-    **Ket / bra split** -- for ``DoublePepsTensor`` PEPS in the unfused
-    builds, every *PEPS-row* bond (i.e. ``('h', i, j)`` with
-    ``0 <= i < Nx`` and *all* ``('v', i, j)``) carries two labels,
-    ``(*, 'k')`` for the ket layer and ``(*, 'b')`` for the bra layer.
-    ``_translate_unroll`` automatically expands an un-qualified label
-    into both layers; a layer-qualified label like ``('v', 1, 1, 'k')``
-    slices only the ket side.  Boundary (chi) bonds are kept
-    single-label.
-
-    **Examples** -- 2 × 3 window (``Nx = 2``, ``Ny = 3``)::
-
-        # unroll the horizontal bond between columns 0 and 1
-        # at the first PEPS row, one charge sector at a time:
-        unroll = {('h', 0, 0): 1}
-
-        # unroll the vertical bond in column 1 between rows 0 and 1:
-        unroll = {('v', 1, 1): 1}
-
-        # unroll multiple bonds simultaneously:
-        unroll = {('h', 0, 0): 1, ('v', 1, 1): 1}
-
-        # unroll a left-boundary vertical (chi) bond:
-        unroll = {('v', 0, -1): 1}
-    """
-    if mode not in ('both', 'norm', 'numerator'):
-        raise YastnError(f"unknown mode: {mode!r}")
-
-    if mode == 'norm':
-        if sites is None or len(sites) == 0:
-            raise YastnError("mode='norm' requires non-empty `sites`.")
-        sign = None
-        ops = {}
+    minx, miny, maxx, maxy = _window_bounds(self, sites)
+    Nx, Ny = maxx - minx + 1, maxy - miny + 1
+    tl, tr, br, bl = Site(minx, miny), Site(minx, maxy), Site(maxx, maxy), Site(maxx, miny)
+    geom = (Nx, Ny, minx, miny, maxx, maxy, tl, tr, bl, br)
+    tens = {Site(x, y): self.psi[Site(x, y)] for x in range(minx, maxx + 1) for y in range(miny, maxy + 1)}
+    if unroll and not ops:  # the norm network carries no operator bond legs
+        unroll = {k: v for k, v in unroll.items() if not (isinstance(k, tuple) and k[:1] == ('opb',))} or None
+
+    if not isinstance(tens[tl], DoublePepsTensor):
+        # single-layer PEPS (psi[site] is already a fused 4-leg double-layer tensor):
+        # each 'operator' must be a replacement site tensor of the same kind, i.e.
+        # ket, operator and bra contracted and fused by the caller.  No fermionic
+        # strings can be applied here; same convention as measure_1site / measure_nsite_exact.
+        if bonds or probe:
+            raise YastnError("MPO tensors and cut maps require a DoublePepsTensor PEPS.")
+        tens.update(ops)
+        tn, swap = _build_fused(self, tens, *geom), None
     else:
-        if sites is None or len(operators) != len(sites):
-            raise YastnError("Number of operators and sites should match.")
-
-        # unpack operators if operators provided as a Lattice or dict
-        operators = [op[site] if not isinstance(op, Tensor) else op
-                     for op, site in zip(operators, sites)]
-
-        sign = sign_canonical_order(*operators, sites=sites, f_ordered=self.f_ordered)
-        ops = {}
-        for n, op in zip(sites, operators):
-            ops[n] = ops[n] @ op if n in ops else op
-
-    minx = min(site[0] for site in sites)
-    miny = min(site[1] for site in sites)
-    maxx = max(site[0] for site in sites)
-    maxy = max(site[1] for site in sites)
-
-    if minx == maxx and self.nn_site((minx, miny), 'b') is None:
-        minx -= 1
-    if miny == maxy and self.nn_site((minx, miny), 'r') is None:
-        miny -= 1
-
-    Nx = maxx - minx + 1
-    Ny = maxy - miny + 1
-
-    tl = Site(minx, miny)
-    tr = Site(minx, maxy)
-    br = Site(maxx, maxy)
-    bl = Site(maxx, miny)
-    window = [Site(x, y) for x in range(minx, maxx + 1)
-                         for y in range(miny, maxy + 1)]
-    tens = {site: self.psi[site] for site in window}
-
-    is_double_layer = isinstance(tens[tl], DoublePepsTensor)
-
-    # Per-combo path search (opt-in): default its path-search kwargs to the same
-    # optimizer used for the shared path, so callers only need to flip the flag.
-    if per_combo_path and combo_path_kwargs is None:
-        combo_path_kwargs = {"optimizer": optimizer}
-
-    def _pc(active_unroll):
-        # per_combo_path only applies when an unroll is present (it tunes the
-        # path per slice-combo). Omit the kwargs otherwise, so they don't reach
-        # contract_with_unroll's no-unroll branch (which would forward them to
-        # _convert_path_to_ncon_args and raise).
-        if per_combo_path and active_unroll:
-            return {"per_combo_path": True, "combo_path_kwargs": combo_path_kwargs}
-        return {}
-
-    if is_double_layer:
-        # --- Unfused path for double-layer PEPS ---
-        translated_unroll = _translate_unroll(unroll, Nx, Ny)
-        build_fn = _build_separate_unfused if separate_layers else _build_interleaved_unfused
         if projectors is not None and not separate_layers:
             raise YastnError("projectors-based compression requires separate_layers=True.")
-        build_kwargs = {'projectors': projectors} if separate_layers else {}
+        if bonds and not separate_layers:
+            # The contracted builder absorbs the operator into the site tensor, so the
+            # bare ket leg the MPO bonds cross is no longer a network leg.
+            warnings.warn("MPO tensors need the operator kept as a separate network tensor; "
+                          "using separate_layers=True.", stacklevel=3)
+            separate_layers = True
+        # fresh shells: the operators and strings attached below never touch self.psi
+        tens = {s: DoublePepsTensor(bra=t.bra, ket=t.ket, trans=t.trans) for s, t in tens.items()}
+        crossings = ()
+        if bonds:
+            crossings = _mpo_bond_swaps(tens, ops, bonds, minx, miny)
+        else:
+            _charge_strings(tens, ops, minx, miny)
+        if separate_layers:
+            tn, swap = _build_ketbra_separate(self, tens, *geom, projectors=projectors, op_bonds=bonds,
+                                              bond_crossings=crossings, probe=probe)
+        else:
+            tn, swap = _build_ketbra_contracted(self, tens, *geom)
+        unroll = _translate_unroll(unroll, Nx, Ny)
 
-        if mode in ('norm', 'both'):
-            tn_no, swap_no = build_fn(
-                self, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, bl, br,
-                **build_kwargs)
-            val_no = contract_with_unroll(
-                *tn_no, unroll=translated_unroll, optimizer=optimizer,
-                checkpoint_loop=checkpoint_loop, swap=swap_no, devices=devices,
-                mp_workers_per_device=mp_workers_per_device,
-                **_pc(translated_unroll)).to_number()
-            if mode == 'norm':
-                return val_no
-
-        # insert operators and charge swaps (in-place on DoublePepsTensor)
-        axes_string_x = ['b3', 'k4', 'k1']
-        axes_string_y = ['k2', 'k4', 'b0']
-        for y in range(miny, maxy + 1):
-            for x in range(minx, maxx + 1):
-                site = Site(x, y)
-                if site in ops:
-                    tens[site].set_operator_(ops[site])
-                    if x > minx:
-                        tens[site].add_charge_swaps_(ops[site].n, axes='k1')
-                        for x1 in range(x - 1, minx, -1):
-                            tens[Site(x1, y)].add_charge_swaps_(
-                                ops[site].n, axes=axes_string_x)
-                        tens[Site(minx, y)].add_charge_swaps_(
-                            ops[site].n, axes=['b3', 'k4'])
-                    if y > miny:
-                        tens[Site(minx, y)].add_charge_swaps_(
-                            ops[site].n, axes='b0')
-                        for y1 in range(y - 1, miny, -1):
-                            tens[Site(minx, y1)].add_charge_swaps_(
-                                ops[site].n, axes=axes_string_y)
-                        tens[Site(minx, miny)].add_charge_swaps_(
-                            ops[site].n, axes=['k2', 'k4'])
-
-        # operator contraction (use the same projectors as the norm so the
-        # ratio is consistent and both paths benefit from the compression)
-        tn_op, swap_op = build_fn(
-            self, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, bl, br,
-            **build_kwargs)
-        val_op = contract_with_unroll(
-            *tn_op, unroll=translated_unroll, optimizer=optimizer,
-            checkpoint_loop=checkpoint_loop, swap=swap_op, devices=devices,
-            mp_workers_per_device=mp_workers_per_device,
-            **_pc(translated_unroll)).to_number()
-
-        for s in window:
-            tens[s].del_operator_()
-            tens[s].del_charge_swaps_()
-
-    else:
-        # --- Fused path for single-layer PEPS ---
-        def _drop(t):
-            return t.drop_leg_history() if hasattr(t, 'drop_leg_history') else t
-
-        def _build_interleaved_fused(realized):
-            args = []
-            args += [_drop(self[tl].tl), [('v', 0, -1), ('h', -1, -1)]]
-            args += [_drop(self[bl].bl), [('h', Nx, -1), ('v', Nx, -1)]]
-            args += [_drop(self[tr].tr), [('h', -1, Ny - 1), ('v', 0, Ny)]]
-            args += [_drop(self[br].br), [('v', Nx, Ny), ('h', Nx, Ny - 1)]]
-            for i in range(Nx):
-                args += [_drop(self[Site(minx + i, miny)].l),
-                         [('v', i + 1, -1), ('h', i, -1), ('v', i, -1)]]
-            for i in range(Nx):
-                args += [_drop(self[Site(minx + i, maxy)].r),
-                         [('v', i, Ny), ('h', i, Ny - 1), ('v', i + 1, Ny)]]
-            for j in range(Ny):
-                args += [_drop(self[Site(minx, miny + j)].t),
-                         [('h', -1, j - 1), ('v', 0, j), ('h', -1, j)]]
-            for j in range(Ny):
-                args += [_drop(self[Site(maxx, miny + j)].b),
-                         [('h', Nx, j), ('v', Nx, j), ('h', Nx, j - 1)]]
-            for i in range(Nx):
-                for j in range(Ny):
-                    s = Site(minx + i, miny + j)
-                    args += [realized[s],
-                             [('v', i, j), ('h', i, j - 1),
-                              ('v', i + 1, j), ('h', i, j)]]
-            args.append(())
-            return tuple(args)
-
-        if mode in ('norm', 'both'):
-            realized_no = {s: _drop(t) for s, t in tens.items()}
-            tn_no = _build_interleaved_fused(realized_no)
-            val_no = contract_with_unroll(
-                *tn_no, unroll=unroll,
-                checkpoint_loop=checkpoint_loop, devices=devices,
-                mp_workers_per_device=mp_workers_per_device,
-                **_pc(unroll)).to_number()
-            if mode == 'norm':
-                return val_no
-
-        for y in range(miny, maxy + 1):
-            for x in range(minx, maxx + 1):
-                site = Site(x, y)
-                if site in ops:
-                    tens[site] = ops[site]
-
-        realized_op = {s: _drop(t) for s, t in tens.items()}
-        tn_op = _build_interleaved_fused(realized_op)
-        val_op = contract_with_unroll(
-            *tn_op, unroll=unroll,
-            checkpoint_loop=checkpoint_loop, devices=devices,
-            mp_workers_per_device=mp_workers_per_device,
-            **_pc(unroll)).to_number()
-
-    if mode == 'numerator':
-        return sign * val_op
-    return sign * val_op / val_no
+    if per_combo_path and unroll:  # tunes the path per slice-combo; only meaningful with an unroll
+        kwargs.update(per_combo_path=True,
+                      combo_path_kwargs={"optimizer": optimizer} if combo_path_kwargs is None else combo_path_kwargs)
+    out = contract_with_unroll(*tn, unroll=unroll, swap=swap, optimizer=optimizer, **kwargs)
+    return out if probe else out.to_number()
 
 
-def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint_loop=False, separate_layers=False, optimizer="default", devices=None, mp_workers_per_device=0, projectors=None, per_combo_path=False, combo_path_kwargs=None) -> float:
+def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint_loop=False, separate_layers=True, optimizer="default", devices=None, mp_workers_per_device=0, projectors=None, per_combo_path=False, combo_path_kwargs=None) -> float:
     r"""
     Memory-efficient version of :meth:`measure_nsite_exact` using opt_einsum
     contraction path optimization, optional block-sparse index unrolling,
     and checkpointing.
 
-    For ``DoublePepsTensor`` PEPS, ket and bra are pre-contracted on
-    the physical leg with fermionic crossings applied via
-    ``swap_gate``, producing 8-leg site tensors whose ket/bra
-    sub-legs are kept separate (no ``fuse_legs``).  Edge middle legs
-    are unfused to match.
+    For ``DoublePepsTensor`` PEPS, ket, operator and bra of every site enter
+    the network as separate tensors (``separate_layers=True``, the default),
+    with the fermionic crossings between them as ``ncon`` swap pairs; edge
+    middle legs are unfused to match.  With ``separate_layers=False`` ket and
+    bra are pre-contracted on the physical leg into 8-leg site tensors first,
+    which is possible for plain two-leg operators only.
 
     For single-layer PEPS, falls back to the fused double-layer approach.
 
@@ -1566,7 +849,7 @@ def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint
 
     unroll : dict or None
         Dict mapping bond labels to ``int`` (uniform slice size) or
-        ``list[SlicedLeg]``.  See :func:`_measure_nsite_exact_oe_impl` for the bond-label scheme.
+        ``list[SlicedLeg]``.  See :ref:`oe-bond-labels` for the bond-label scheme.
 
     checkpoint_loop : bool
         If ``True`` and ``unroll`` is not ``None``, each unroll iteration
@@ -1574,198 +857,150 @@ def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint
         recomputation for lower peak memory.
 
     separate_layers : bool
-        If ``True`` and the PEPS uses ``DoublePepsTensor``, keep ket and
-        bra as separate 5-leg tensors in the ncon network instead of
-        pre-contracting them into 8-leg tensors.
+        If ``True`` (default) and the PEPS uses ``DoublePepsTensor``, keep
+        ket, operator and bra as separate tensors in the ncon network; this
+        is required for MPO tensors and gives the path optimizer the most
+        freedom.  ``False`` pre-contracts ket and bra into 8-leg site tensors
+        (plain operators only).
+
+    optimizer : str or opt_einsum.paths.PathOptimizer
+        Contraction-path optimizer passed to :func:`opt_einsum.contract_path`.
+        ``"default"`` (also ``None``, ``"dp"``, ``"dynamic-programming"``) uses
+        ``opt_einsum.DynamicProgramming(minimize="write", search_outer=False,
+        cost_cap=True)``, which minimizes the size of the intermediates.  Any
+        other value accepted by opt_einsum, e.g. ``"greedy"`` or ``"auto"``, is
+        passed through unchanged.
+
+    devices : Sequence[str] or None
+        Devices to spread the contraction over, e.g. ``["cuda:0", "cuda:1"]``.
+        ``None`` (default) contracts on the device of the PEPS tensors.  With
+        ``unroll``, the slice combinations are dispatched across the devices,
+        which needs ``mp_workers_per_device >= 1``; a single device with one
+        worker contracts serially there and moves the result back.  Without
+        ``unroll``, the network is moved to ``devices[0]`` and contracted there.
+
+    mp_workers_per_device : int
+        Number of worker processes per device in the multiprocess pool that contracts the
+        slice combinations.  ``0`` (default) disables multiprocessing and
+        requires ``devices`` to be ``None`` or the PEPS device.
+
+    projectors : dict or None
+        CTM half-projectors to insert into the window, which makes the
+        measurement approximate but cheaper.  Maps a lattice site to one slot
+        name or a tuple of slot names of :class:`EnvCTM_projectors`
+        (``"hlt"``, ``"hlb"``, ``"hrt"``, ``"hrb"``, ``"vtl"``, ``"vtr"``,
+        ``"vbl"``, ``"vbr"``), e.g. ``{site: ("hrt", "hrb")}``, which reads the
+        tensors from ``env.proj[site]``, or to a ``{slot: tensor}`` dict, which
+        supplies them directly (a ``None`` tensor reads that slot from
+        ``env.proj``).  Each half must come with its partner:
+        the slot with the last letter flipped (``t`` with ``b``, ``l`` with
+        ``r``) on the neighbouring site in that letter's direction.  A pair
+        compresses the two parallel bonds of its cut into one thin bond, as a
+        CTM move does.  Requires ``separate_layers=True`` and a
+        ``DoublePepsTensor`` PEPS.  ``None`` (default) inserts nothing.
+
+    per_combo_path : bool
+        Only used with ``unroll``.  If ``True``, search a separate contraction
+        path for every slice combination, tuned to its slice dimensions and
+        cached by shape, instead of reusing one path for all combinations.
+        Default ``False``.
+
+    combo_path_kwargs : dict or None
+        Options of the per-combination path search when
+        ``per_combo_path=True``; keys may include ``optimizer``,
+        ``memory_limit``, ``names`` and ``who``.  ``None`` (default) means
+        ``{"optimizer": optimizer}``.
     """
-    return _measure_nsite_exact_oe_impl(
-        self, *operators, sites=sites, unroll=unroll,
-        checkpoint_loop=checkpoint_loop, separate_layers=separate_layers,
-        optimizer=optimizer, devices=devices,
-        mp_workers_per_device=mp_workers_per_device, mode='both',
-        projectors=projectors, per_combo_path=per_combo_path,
-        combo_path_kwargs=combo_path_kwargs)
+    ops, bonds, sign = _parse_operators(self, operators, sites)
+    kw = dict(unroll=unroll, checkpoint_loop=checkpoint_loop, separate_layers=separate_layers,
+              optimizer=optimizer, devices=devices, mp_workers_per_device=mp_workers_per_device,
+              projectors=projectors, per_combo_path=per_combo_path, combo_path_kwargs=combo_path_kwargs)
+    val_no = _contract_window(self, {}, {}, sites, **kw)
+    return sign * _contract_window(self, ops, bonds, sites, **kw) / val_no
 
 
-def measure_nsite_norm_exact_oe(self, *, sites, unroll=None, checkpoint_loop=False, separate_layers=False, optimizer="default", devices=None, mp_workers_per_device=0, projectors=None, per_combo_path=False, combo_path_kwargs=None):
+def measure_nsite_norm_exact_oe(self, *, sites, unroll=None, checkpoint_loop=False, separate_layers=True, optimizer="default", devices=None, mp_workers_per_device=0, projectors=None, per_combo_path=False, combo_path_kwargs=None):
     """Contract only the norm <psi|psi> over the bounding window of ``sites``.
 
     Same contraction backend and options as :func:`measure_nsite_exact_oe`,
-    with ``operators`` omitted.  See :func:`_measure_nsite_exact_oe_impl`
-    for the bond-label scheme.  Use this when sharing a single norm value
-    across multiple numerator evaluations (see
-    :func:`measure_nsite_numerator_exact_oe`).
+    with ``operators`` omitted; operator-bond labels ``('opb', k)`` in
+    ``unroll`` are ignored.  Use this when sharing a single norm value across
+    multiple numerator evaluations (see :func:`measure_nsite_numerator_exact_oe`).
     """
-    return _measure_nsite_exact_oe_impl(
-        self, sites=sites, unroll=unroll,
-        checkpoint_loop=checkpoint_loop, separate_layers=separate_layers,
-        optimizer=optimizer, devices=devices,
-        mp_workers_per_device=mp_workers_per_device, mode='norm',
-        projectors=projectors, per_combo_path=per_combo_path,
-        combo_path_kwargs=combo_path_kwargs)
+    return _contract_window(self, {}, {}, sites, unroll=unroll, checkpoint_loop=checkpoint_loop,
+                            separate_layers=separate_layers, optimizer=optimizer, devices=devices,
+                            mp_workers_per_device=mp_workers_per_device, projectors=projectors,
+                            per_combo_path=per_combo_path, combo_path_kwargs=combo_path_kwargs)
 
 
-def measure_nsite_numerator_exact_oe(self, *operators, sites, unroll=None, checkpoint_loop=False, separate_layers=False, optimizer="default", devices=None, mp_workers_per_device=0, projectors=None, per_combo_path=False, combo_path_kwargs=None):
+def measure_nsite_numerator_exact_oe(self, *operators, sites, unroll=None, checkpoint_loop=False, separate_layers=True, optimizer="default", devices=None, mp_workers_per_device=0, projectors=None, per_combo_path=False, combo_path_kwargs=None):
     """Contract only the unnormalized numerator ``sign * <psi| O0_s0 ... |psi>``.
 
     Same contraction backend and options as :func:`measure_nsite_exact_oe`;
-    the result is *not* divided by the norm.  See
-    :func:`_measure_nsite_exact_oe_impl` for the bond-label scheme.  The
-    caller is responsible for dividing by ``<psi|psi>`` (typically
-    obtained via :func:`measure_nsite_norm_exact_oe`).
+    the result is *not* divided by the norm.  The caller is responsible for
+    dividing by ``<psi|psi>`` (typically obtained via
+    :func:`measure_nsite_norm_exact_oe`).
     """
-    return _measure_nsite_exact_oe_impl(
-        self, *operators, sites=sites, unroll=unroll,
-        checkpoint_loop=checkpoint_loop, separate_layers=separate_layers,
-        optimizer=optimizer, devices=devices,
-        mp_workers_per_device=mp_workers_per_device, mode='numerator',
-        projectors=projectors, per_combo_path=per_combo_path,
-        combo_path_kwargs=combo_path_kwargs)
+    ops, bonds, sign = _parse_operators(self, operators, sites)
+    return sign * _contract_window(self, ops, bonds, sites, unroll=unroll, checkpoint_loop=checkpoint_loop,
+                                   separate_layers=separate_layers, optimizer=optimizer, devices=devices,
+                                   mp_workers_per_device=mp_workers_per_device, projectors=projectors,
+                                   per_combo_path=per_combo_path, combo_path_kwargs=combo_path_kwargs)
 
 
 def measure_nsite_cut_map_oe(self, *operators, sites, probe_site, probe_slot, probe,
-                             open_site, open_slot, projectors=None, unroll=None,
+                             projectors=None, unroll=None,
                              checkpoint_loop=False, optimizer="default", devices=None,
                              mp_workers_per_device=0, per_combo_path=False,
                              combo_path_kwargs=None):
     r"""
-    Contract a 3x3 measurement window with a probe tensor closing one side of
-    an interior cut and the partner side's legs open, returning the cut map
+    Contract a measurement window with a probe tensor closing one side of an
+    interior cut and the partner side's legs open, returning the cut map
     ``Y = M . Omega`` as a 4-leg tensor.
 
     With ``operators`` empty this contracts the norm window; with operators
-    given it contracts the numerator window (fermionic charge swaps included,
-    same as :func:`measure_nsite_numerator_exact_oe`).  The ``probe`` tensor
-    (stored 3-leg projector form: env chi, fused ket-D x bra-D, thin) is
-    inserted at ``(probe_site, probe_slot)`` exactly as one half-projector;
-    the would-be-severed bond labels of ``(open_site, open_slot)`` -- env
-    bond, ``D2_bond + ('k',)``, ``D2_bond + ('b',)`` -- plus the probe's thin
-    label ``('proj',) + env_bond`` are left open in the network and are the 4
-    output legs of the returned tensor (env, ket, bra, thin, in that order).
-    Other interior cuts are compressed by the ordinary ``projectors`` dict.
+    given it contracts the numerator window (Jordan-Wigner strings or MPO
+    bond crossings included, same as :meth:`measure_nsite_numerator_exact_oe`).  The
+    ``probe`` tensor, in the stored 3-leg projector form (env chi, fused
+    ket-D x bra-D, thin), is inserted at ``(probe_site, probe_slot)`` as one
+    half-projector.  Its partner is not inserted: the severed bonds on the
+    partner side, i.e. the env bond and the ket and bra D bonds, plus the
+    probe's thin label are left open and form the 4 output legs of the
+    returned tensor.  Other interior cuts are compressed by ``projectors``.
 
-    Always uses the separate-layers (unfused, ``DoublePepsTensor``) build;
-    the window must be double-layer or an error is raised.
+    Always uses the separate-layers build; the PEPS must use
+    ``DoublePepsTensor``.
 
     Parameters
     ----------
     operators : Sequence[yastn.Tensor]
-        Local operators to insert (one per site).  Empty contracts the norm
-        window.
+        Local operators, one per site: plain two-leg operators or MPO tensors,
+        under the same rules as :meth:`measure_nsite_numerator_exact_oe`.
+        Empty contracts the norm window.
     sites : Sequence[tuple[int, int]]
         Sites of the window, matching ``operators`` when given.
     probe_site, probe_slot
-        Lattice site and slot name ('hrt', 'hrb', 'hlt', 'hlb', ...) of the
-        inserted probe.
+        Lattice site and slot name (``"hrt"``, ``"hrb"``, ``"hlt"``,
+        ``"hlb"``, ...) of the inserted probe.
     probe : yastn.Tensor
         Probe tensor in stored 3-leg projector form.
-    open_site, open_slot
-        Lattice site and slot name whose severed-bond labels are left open
-        as the output spec.
     projectors : dict or None
-        Projector dict for the *other* cuts (partner-pair consistency enforced
-        as usual).  Either ``{site: slot(s)}``, which reads the half-projectors
-        from ``env.proj``, or ``{site: {slot: tensor}}``, which supplies them
-        directly.
+        Projectors for the *other* cuts, in either form accepted by
+        :meth:`measure_nsite_exact_oe`; partner pairs are enforced as usual.
+    unroll, checkpoint_loop, optimizer, devices, mp_workers_per_device, per_combo_path, combo_path_kwargs
+        As in :meth:`measure_nsite_exact_oe`.
 
     Returns
     -------
     yastn.Tensor
         The 4-leg cut map ``Y``, with leg order (env chi, ket D, bra D, thin).
     """
-    if sites is None or len(sites) == 0:
-        raise YastnError("measure_nsite_cut_map_oe requires non-empty `sites`.")
-
-    if len(operators) == 0:
-        sign = None
-        ops = {}
-    else:
-        if len(operators) != len(sites):
-            raise YastnError("Number of operators and sites should match.")
-        operators = [op[site] if not isinstance(op, Tensor) else op
-                     for op, site in zip(operators, sites)]
-        sign = sign_canonical_order(*operators, sites=sites, f_ordered=self.f_ordered)
-        ops = {}
-        for n, op in zip(sites, operators):
-            ops[n] = ops[n] @ op if n in ops else op
-
-    minx = min(site[0] for site in sites)
-    miny = min(site[1] for site in sites)
-    maxx = max(site[0] for site in sites)
-    maxy = max(site[1] for site in sites)
-
-    if minx == maxx and self.nn_site((minx, miny), 'b') is None:
-        minx -= 1
-    if miny == maxy and self.nn_site((minx, miny), 'r') is None:
-        miny -= 1
-
-    Nx = maxx - minx + 1
-    Ny = maxy - miny + 1
-
-    tl = Site(minx, miny)
-    tr = Site(minx, maxy)
-    br = Site(maxx, maxy)
-    bl = Site(maxx, miny)
-    window = [Site(x, y) for x in range(minx, maxx + 1)
-                         for y in range(miny, maxy + 1)]
-    tens = {site: self.psi[site] for site in window}
-
-    if not isinstance(tens[tl], DoublePepsTensor):
-        raise YastnError("measure_nsite_cut_map_oe requires separate layers; "
-                         "the window must use DoublePepsTensor.")
-
-    if per_combo_path and combo_path_kwargs is None:
-        combo_path_kwargs = {"optimizer": optimizer}
-
-    def _pc(active_unroll):
-        if per_combo_path and active_unroll:
-            return {"per_combo_path": True, "combo_path_kwargs": combo_path_kwargs}
-        return {}
-
-    translated_unroll = _translate_unroll(unroll, Nx, Ny)
-
-    # insert operators and charge swaps (in-place on DoublePepsTensor)
-    axes_string_x = ['b3', 'k4', 'k1']
-    axes_string_y = ['k2', 'k4', 'b0']
-    for y in range(miny, maxy + 1):
-        for x in range(minx, maxx + 1):
-            site = Site(x, y)
-            if site in ops:
-                tens[site].set_operator_(ops[site])
-                if x > minx:
-                    tens[site].add_charge_swaps_(ops[site].n, axes='k1')
-                    for x1 in range(x - 1, minx, -1):
-                        tens[Site(x1, y)].add_charge_swaps_(
-                            ops[site].n, axes=axes_string_x)
-                    tens[Site(minx, y)].add_charge_swaps_(
-                        ops[site].n, axes=['b3', 'k4'])
-                if y > miny:
-                    tens[Site(minx, y)].add_charge_swaps_(
-                        ops[site].n, axes='b0')
-                    for y1 in range(y - 1, miny, -1):
-                        tens[Site(minx, y1)].add_charge_swaps_(
-                            ops[site].n, axes=axes_string_y)
-                    tens[Site(minx, miny)].add_charge_swaps_(
-                        ops[site].n, axes=['k2', 'k4'])
-
-    try:
-        tn_op, swap_op, open_labels = _build_separate_unfused(
-            self, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, bl, br,
-            projectors=projectors, probe=(probe_site, probe_slot, probe),
-            open_cut=(open_site, open_slot))
-        Y = contract_with_unroll(
-            *tn_op, unroll=translated_unroll, optimizer=optimizer,
-            checkpoint_loop=checkpoint_loop, swap=swap_op, devices=devices,
-            mp_workers_per_device=mp_workers_per_device,
-            **_pc(translated_unroll))
-    finally:
-        for s in window:
-            tens[s].del_operator_()
-            tens[s].del_charge_swaps_()
-
-    if sign is not None:
-        Y = sign * Y
-    return Y
+    ops, bonds, sign = _parse_operators(self, operators, sites) if operators else ({}, {}, 1)
+    return sign * _contract_window(self, ops, bonds, sites, probe=(probe_site, probe_slot, probe),
+                                   projectors=projectors, unroll=unroll, checkpoint_loop=checkpoint_loop,
+                                   optimizer=optimizer, devices=devices,
+                                   mp_workers_per_device=mp_workers_per_device,
+                                   per_combo_path=per_combo_path, combo_path_kwargs=combo_path_kwargs)
 
 
 def _eval_projectors(env, move, opts_svd):
@@ -1776,4 +1011,3 @@ def _eval_projectors(env, move, opts_svd):
     """
     for site in env.sites():
         env._update_projectors_(site, move, opts_svd, method='2x2')
-

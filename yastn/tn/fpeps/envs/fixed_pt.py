@@ -620,25 +620,32 @@ def find_gauge_multi_sites(env_old, env, verbose=False):
 
 def fp_ctmrg(env: EnvCTM, \
             ctm_opts_fwd : dict= {'method': "2x2", 'corner_tol': 1e-8, 'max_sweeps': 100, 'opts_svd': {}, 'verbosity': 0},
-            ctm_opts_fp: dict= {'opts_svd': {'policy':'fullrank'}, "verbosity": 0}, devices=None)->tuple[EnvCTM,Sequence[torch.Tensor],Sequence[slice]]:
+            ctm_opts_fp: dict= {'opts_svd': {'policy':'fullrank'}, "verbosity": 0}, devices=None) -> EnvCTM:
     r"""
     Compute the fixed-point environment for the given state using CTMRG.
     First, run CTMRG until convergence then find the gauge transformation guaranteeing element-wise
     convergence of the environment tensors.
 
-    Args:
-        env (EnvCTM): CTM environment
-        ctm_opts_fwd (dict): Options for forward CTMRG convergence.
-        ctm_opts_fp (dict): Options for fixing the gauge transformation.
-        devices (list[str] | None): Device list for the CTM step. With one device,
-            everything runs serially (single-device path). With more than one,
-            forward CTMRG convergence, the FP CTM step, and the Neumann
-            backward all use the AD-aware distributed dispatch on those devices.
-            Default ``None`` falls back to ``[env.config.default_device]``.
+    Parameters
+    ----------
+    env: EnvCTM
+        CTM environment.
+    ctm_opts_fwd: dict
+        Options for forward CTMRG convergence, passed to :meth:`FixedPoint.get_converged_env`.
+    ctm_opts_fp: dict
+        Options for the fixed-point CTMRG step and for fixing the gauge transformation;
+        ``opts_svd`` (currently only ``{'policy': 'fullrank'}``), ``corner_tol`` and ``max_sweeps``
+        of the Neumann series, ``neumann_patience`` (default 10).
+    devices: list[str] | None
+        Device list for the CTM step. With one device everything runs serially.
+        With more than one, forward CTMRG convergence, the FP CTM step and the Neumann
+        backward all use the AD-aware distributed dispatch on those devices.
+        Default ``None`` falls back to ``[env.config.default_device]``.
 
-    Returns:
-        EnvCTM: Environment at fixed point.
-        Sequence[Tensor]: raw environment data for the backward pass.
+    Returns
+    -------
+    EnvCTM
+        Environment at the fixed point, differentiable with respect to the PEPS tensors.
     """
     # Multi-device: route the FP step + backward through the AD path.
     # Single device: leave ctm_opts_fp untouched (serial path).
@@ -761,10 +768,9 @@ class FixedPoint(torch.autograd.Function):
         Run the forward CTMRG loop until the corner spectra stop changing
         (``corner_tol``) or ``max_sweeps`` is reached.
 
-        Early no-fixed-point detection (``stuck_block > 0``)
-        ----------------------------------------------------
+        **Early no-fixed-point detection** (``stuck_block > 0``).
         A CTM solve that will never converge is not distinguishable from a slow
-        one by |delta_C| alone: on marginal states |delta_C| oscillates over a
+        one by ``|delta_C|`` alone: on marginal states ``|delta_C|`` oscillates over a
         decade sweep-to-sweep, so the raw running minimum is pinned by lucky
         outliers. What DOES separate them is the running minimum over BLOCKS of
         sweeps: a converging solve drives it down geometrically, a stuck one
@@ -850,18 +856,25 @@ class FixedPoint(torch.autograd.Function):
         First, run CTMRG until convergence then find the gauge transformation guaranteeing element-wise
         convergence of the environment tensors.
 
-        Args:
-            env (EnvCTM): Current environment to converge.
-            ctm_opts_fwd (dict): Options for forward CTMRG convergence. The options should include:
-                - opts_svd (dict): SVD options for the CTMRG step.
-            ctm_opts_fp (dict): Options for fixed-point CTMRG step and for fixing the gauge transformation.
-                - opts_svd (dict): SVD options for the fixed-point CTMRG step.
-                                   Currently only 'policy': 'fullrank' is supported.
-            state_params (Sequence[Tensor]): tensors of underlying Peps state
+        Parameters
+        ----------
+        env: EnvCTM
+            Current environment to converge.
+        ctm_opts_fwd: dict
+            Options for forward CTMRG convergence, including ``opts_svd`` for the CTMRG step.
+        ctm_opts_fp: dict
+            Options for the fixed-point CTMRG step and for fixing the gauge transformation,
+            including ``opts_svd`` for the fixed-point step; currently only ``'policy': 'fullrank'`` is supported.
+        devices: list[str] | None
+            See :func:`fp_ctmrg`.
+        state_params: Sequence[Tensor]
+            Raw data tensors of the underlying PEPS, ordered by ``site2index``.
 
-        Returns:
-            EnvCTM: Environment at fixed point.
-            Sequence[Tensor]: raw environment data for the backward pass.
+        Returns
+        -------
+        env, env_t_meta, env_slices, env_1d
+            Converged environment, metadata and slices to rebuild its tensors, and the
+            environment data as one flat tensor (the output autograd tracks).
         """
 
         # Pin main-process current CUDA device to where the ENV TENSORS live

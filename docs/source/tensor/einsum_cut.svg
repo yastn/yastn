@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1010 368" width="1010" height="368" font-family="Helvetica, Arial, sans-serif">
+<title>Cut test on the example network</title>
+<rect width="1010" height="368" rx="10" fill="#ffffff"/>
+<text x="250" y="20" fill="#555555" font-size="14" text-anchor="middle" font-style="italic">Y₁ + Y₂ = {x, y} = δC: a cut</text>
+<text x="760" y="20" fill="#555555" font-size="14" text-anchor="middle" font-style="italic">variant: Y₁ + Y₂ = {x}, not a cut</text>
+<g transform="translate(0,28)">
+<path d="M60.0,160.0 L102.6,91.9 Q110.0,80.0 124.0,80.0 L356.0,80.0 Q370.0,80.0 377.4,91.9 L420.0,160.0" fill="none" stroke="#b0b0b0" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M60.0,160.0 L102.6,228.1 Q110.0,240.0 124.0,240.0 L356.0,240.0 Q370.0,240.0 377.4,228.1 L420.0,160.0" fill="none" stroke="#b0b0b0" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M240.0,25.0 L240.0,160.0" fill="none" stroke="#e07000" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M240.0,160.0 L330.0,315.0" fill="none" stroke="#e07000" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M330.0,315.0 L180.0,315.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M240.0,25.0 L456.0,25.0 Q470.0,25.0 470.0,39.0 L470.0,301.0 Q470.0,315.0 456.0,315.0 L330.0,315.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M570.0,160.0 L612.6,91.9 Q620.0,80.0 634.0,80.0 L866.0,80.0 Q880.0,80.0 887.4,91.9 L930.0,160.0" fill="none" stroke="#b0b0b0" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M570.0,160.0 L612.6,228.1 Q620.0,240.0 634.0,240.0 L866.0,240.0 Q880.0,240.0 887.4,228.1 L930.0,160.0" fill="none" stroke="#b0b0b0" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M750.0,25.0 L750.0,160.0" fill="none" stroke="#e07000" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M750.0,160.0 L855.0,165.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M855.0,165.0 L855.0,212.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M750.0,25.0 L841.0,25.0 Q855.0,25.0 855.0,39.0 L855.0,165.0" fill="none" stroke="#ffffff" stroke-width="11"/>
+<path d="M750.0,25.0 L841.0,25.0 Q855.0,25.0 855.0,39.0 L855.0,165.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<rect x="173" y="308" width="14" height="14" fill="#555555"/>
+<circle cx="240.0" cy="80.0" r="5.5" fill="#c62828"/>
+<circle cx="286.5" cy="240.0" r="5.5" fill="#c62828"/>
+<rect x="848" y="205" width="14" height="14" fill="#555555"/>
+<circle cx="750.0" cy="80.0" r="5.5" fill="#c62828"/>
+<circle cx="60" cy="160" r="17" fill="#ffffff" stroke="#b0b0b0" stroke-width="2.2"/>
+<circle cx="420" cy="160" r="17" fill="#ffffff" stroke="#b0b0b0" stroke-width="2.2"/>
+<circle cx="240" cy="25" r="17" fill="#ffffff" stroke="#222222" stroke-width="2.2"/>
+<circle cx="240" cy="160" r="17" fill="#fde3c4" stroke="#222222" stroke-width="2.2"/>
+<circle cx="330" cy="315" r="17" fill="#ffffff" stroke="#222222" stroke-width="2.2"/>
+<circle cx="570" cy="160" r="17" fill="#ffffff" stroke="#b0b0b0" stroke-width="2.2"/>
+<circle cx="930" cy="160" r="17" fill="#ffffff" stroke="#b0b0b0" stroke-width="2.2"/>
+<path d="M750,8 A17,17 0 0 0 750,42 Z" fill="#ffffff"/>
+<path d="M750,8 A17,17 0 0 1 750,42 Z" fill="#fde3c4"/>
+<circle cx="750" cy="25" r="17" fill="none" stroke="#222222" stroke-width="2.2"/>
+<circle cx="750" cy="160" r="17" fill="#ffffff" stroke="#222222" stroke-width="2.2"/>
+<circle cx="855" cy="165" r="17" fill="#ffffff" stroke="#222222" stroke-width="2.2"/>
+<text x="150" y="72" fill="#b0b0b0" font-size="15" text-anchor="middle" font-style="italic">e<tspan dy="4" font-size="10">1</tspan></text>
+<text x="150" y="262" fill="#b0b0b0" font-size="15" text-anchor="middle" font-style="italic">e<tspan dy="4" font-size="10">2</tspan></text>
+<text x="60" y="165" fill="#b0b0b0" font-size="15" text-anchor="middle" font-weight="bold">P</text>
+<text x="420" y="165" fill="#b0b0b0" font-size="15" text-anchor="middle" font-weight="bold">Q</text>
+<text x="168" y="320" fill="#555555" font-size="13" text-anchor="end" >ext</text>
+<text x="248" y="55" fill="#222222" font-size="15" text-anchor="start" font-style="italic">x</text>
+<text x="266" y="192" fill="#222222" font-size="15" text-anchor="start" font-style="italic">y</text>
+<text x="478" y="170" fill="#222222" font-size="15" text-anchor="start" font-style="italic">z</text>
+<text x="255" y="308" fill="#222222" font-size="15" text-anchor="middle" font-style="italic">w</text>
+<text x="240" y="30" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">D</text>
+<text x="240" y="165" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">C</text>
+<text x="330" y="320" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">E</text>
+<text x="660" y="72" fill="#b0b0b0" font-size="15" text-anchor="middle" font-style="italic">e<tspan dy="4" font-size="10">1</tspan></text>
+<text x="660" y="262" fill="#b0b0b0" font-size="15" text-anchor="middle" font-style="italic">e<tspan dy="4" font-size="10">2</tspan></text>
+<text x="570" y="165" fill="#b0b0b0" font-size="15" text-anchor="middle" font-weight="bold">P</text>
+<text x="930" y="165" fill="#b0b0b0" font-size="15" text-anchor="middle" font-weight="bold">Q</text>
+<text x="843" y="217" fill="#555555" font-size="13" text-anchor="end" >ext</text>
+<text x="758" y="55" fill="#222222" font-size="15" text-anchor="start" font-style="italic">x</text>
+<text x="802" y="152" fill="#222222" font-size="15" text-anchor="middle" font-style="italic">y</text>
+<text x="863" y="55" fill="#222222" font-size="15" text-anchor="start" font-style="italic">z</text>
+<text x="863" y="195" fill="#222222" font-size="15" text-anchor="start" font-style="italic">w</text>
+<text x="750" y="30" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">D</text>
+<text x="750" y="165" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">C</text>
+<text x="855" y="170" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">E</text>
+</g>
+</svg>

@@ -85,7 +85,9 @@ def test_ctmrg_measure_product(config_kwargs, boundary):
         assert abs(vals[s1] * vals[s2] - v) < tol
         v = env.measure_nsite_exact(sz, sz, sites=(s1, s2))
         assert abs(vals[s1] * vals[s2] - v) < tol
-        v_oe = env.measure_nsite_exact_oe(sz, sz, sites=(s1, s2))
+        # contracted build: on this all-dimension-1 network the DP path search
+        # prunes nothing, and the larger separate-layers network stalls it
+        v_oe = env.measure_nsite_exact_oe(sz, sz, sites=(s1, s2), separate_layers=False)
         assert abs(v - v_oe) < tol
         s0, op= s_elem[1]
         v_rdm = measure_rdm_2x2(s0,psi,env,op)
@@ -97,7 +99,7 @@ def test_ctmrg_measure_product(config_kwargs, boundary):
     assert abs(vals[s1] * vals[s2] * vals[s3] - v) < tol
     v = env.measure_nsite_exact(sz, sz, sz, sites=(s1, s2, s3))
     assert abs(vals[s1] * vals[s2] * vals[s3] - v) < tol
-    v_oe = env.measure_nsite_exact_oe(sz, sz, sz, sites=(s1, s2, s3))
+    v_oe = env.measure_nsite_exact_oe(sz, sz, sz, sites=(s1, s2, s3), separate_layers=False)
     assert abs(v - v_oe) < tol
     v_rdm= measure_rdm_2x2((1,1),psi,env,(I,sz,sz,sz))
     assert abs(v - v_rdm) < tol
