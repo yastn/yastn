@@ -1,8 +1,8 @@
 Inspecting YASTN tensors
 ========================
 
-Get information about tensor's structure and properties
--------------------------------------------------------
+Get information about a tensor's structure and properties
+---------------------------------------------------------
 
 .. autoproperty:: yastn.Tensor.s
 .. autoproperty:: yastn.Tensor.s_n

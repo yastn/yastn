@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-""" yastn.vdot() yastn.moveaxis() """
+"""Tests for yastn.vdot() and yastn.moveaxis()."""
 import numpy as np
 import pytest
 import yastn
@@ -41,7 +41,7 @@ def run_transpose(a, ad, axes, result_D, result_s):
 
 def test_transpose_syntax(config_kwargs):
     #
-    # Define rank-6 U1-symmetric tensor.
+    # Define a rank-6 U1-symmetric tensor.
     #
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
@@ -61,16 +61,16 @@ def test_transpose_syntax(config_kwargs):
     assert b.get_shape() == (5, 13, 7, 9, 11, 3)
 
     #
-    #  If axes is not provided, reverse the order
-    #  This can be also done using a shorthand self.T
+    # If axes is not provided, reverse the order.
+    # This can also be done with the shorthand self.T.
     a.transpose().get_shape() == (3, 7, 11, 13, 9, 5)
     a.T.get_shape() == (3, 7, 11, 13, 9, 5)
 
     #
-    # Sometimes, instead of writing explicit permutation of all legs
-    # it is more convenient to only specify pairs of legs to switched.
-    # In this example, we reverse the permutation done previously thus
-    # ending up with tensor numerically identical to a.
+    # Sometimes it is more convenient to specify only the pairs of legs to swap
+    # rather than an explicit permutation of all legs. In this example, we
+    # reverse the permutation from the previous step, yielding a tensor
+    # numerically identical to a.
     #
     c = b.moveaxis(source=(1, 2), destination=(2, 4))
     assert c.get_shape() == a.get_shape()
@@ -78,7 +78,7 @@ def test_transpose_syntax(config_kwargs):
 
 
 def test_transpose_basic(config_kwargs):
-    """ test transpose for different symmetries. """
+    """Test transpose for different symmetries."""
     # dense
     config_dense = yastn.make_config(sym='dense', **config_kwargs)
     a = yastn.ones(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
@@ -150,7 +150,7 @@ def test_transpose_diag(config_kwargs):
 
 
 def test_transpose_exceptions(config_kwargs):
-    """ test handling expections """
+    """Test handling of exceptions."""
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
                   t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],

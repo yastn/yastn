@@ -23,10 +23,12 @@ from warnings import warn
 
 import numpy as np
 
-from ._auxiliary import _struct, _clear_axes, _unpack_axes, get_blocks, find_index, argsort_t, find_matching_indices
+from ._auxiliary import _struct, _clear_axes, _unpack_axes, get_blocks, find_index, argsort_t
+from ._auxiliary import convert_to_tuples_and_slices, find_matching_indices, get_trimmed_struct
 from ._legbasic import LegBasic
-from ._merging import _Fusion, _merge_to_matrix, _unmerge, _meta_unmerge_matrix, _LegSlices_trivial
+from ._merging import _Fusion, _fuse_blocks, _unfuse_blocks
 from ._tests import YastnError, _test_axes_all
+from ._single import remove_zero_blocks
 
 if TYPE_CHECKING:
     from . import Tensor
@@ -39,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 def norm(a, p='fro') -> Number:
     r"""
-    Norm of the tensor.
+    Return the norm of the tensor.
 
     Parameters
     ----------
@@ -69,13 +71,12 @@ def svd_with_truncation(a, axes=(0, 1),
                         mask_f=None,
                         **kwargs) -> tuple['Tensor', 'Tensor', 'Tensor']:
     r"""
-    Split tensor using exact singular value decomposition (SVD) into :math:`a = U S V`,
+    Split a tensor using an exact singular value decomposition (SVD) into :math:`a = U S V`,
     where the columns of `U` and the rows of `V` form orthonormal bases
-    and `S` is positive and diagonal matrix.
+    and `S` is a positive diagonal matrix.
 
-    The function allows for optional truncation.
-    Truncation can be based on relative tolerance, bond dimension of each block,
-    and total bond dimension across all blocks (whichever gives smaller total dimension).
+    The function allows optional truncation based on relative tolerance, block-wise bond dimension,
+    and total bond dimension across all blocks (whichever gives the smaller total dimension).
 
     Parameters
     ----------
@@ -84,23 +85,23 @@ def svd_with_truncation(a, axes=(0, 1),
         their final order.
 
     sU: int
-        signature of the new leg in U; equal 1 or -1. The default is 1.
-        V is going to have opposite signature on connecting leg.
+        Signature of the new leg in `U`; equal to `1` or `-1`. The default is `1`.
+        `V` has the opposite signature on the connecting leg.
 
     nU: bool
         Whether or not to attach the charge of  ``a`` to `U`.
         If ``False``, it is attached to `V`. The default is ``True``.
 
     Uaxis, Vaxis: int
-        specify which leg of `U` and `V` tensors are connecting with `S`. By default,
-        it is the last leg of `U` and the first of `V`.
+        Specify which legs of `U` and `V` connect to `S`. By default,
+        these are the last leg of `U` and the first leg of `V`.
 
     policy: str
-        ``"fullrank"`` or ``"lowrank"`` are allowed. For ``"fullrank"`` use standard full (but reduced) SVD,
-        and for ``"lowrank"`` use randomized/truncated SVD and requires providing ``D_block`` or ``k_block`` in ``kwargs``.
+        ``"fullrank"`` or ``"lowrank"`` are allowed. For ``"fullrank"`` use a standard full (but reduced) SVD,
+        while ``"lowrank"`` uses a randomized or truncated SVD and requires ``D_block`` or ``k_block`` in ``kwargs``.
 
     tol: float
-        Relative tolerance with respect to the largest absolut value element of ``S``.
+        Relative tolerance with respect to the largest absolute value element of ``S``.
 
     tol_block: float
         Relative tolerance per block.
@@ -163,9 +164,9 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         Uaxis=-1, Vaxis=0, policy='fullrank',
         fix_signs=False, svd_on_cpu=False, thresh=0.1, **kwargs) -> tuple['Tensor', 'Tensor', 'Tensor'] | 'Tensor':
     r"""
-    Split tensor into :math:`a = U S V` using exact singular value decomposition (SVD),
+    Split a tensor into :math:`a = U S V` using an exact singular value decomposition (SVD),
     where the columns of `U` and the rows of `V` form orthonormal bases
-    and `S` is a positive and diagonal matrix.
+    and `S` is a positive diagonal matrix.
 
     Parameters
     ----------
@@ -190,7 +191,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         it is the last leg of `U` and the first of `V`, in which case ``a = U @ S @ V``.
 
     policy: str
-        Driver for computing SVD or partial SVD
+        Strategy for computing the SVD or a partial SVD.
 
             * (default) ``"fullrank"`` compute full SVD then truncate.
             * ``"lowrank"`` default policy for partial SVD.
@@ -203,10 +204,10 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         kwargs will be passed to those functions for non-default settings.
 
     thresh: float
-        In case of ``policy='block_arnoldi'`` or ``policy='block_propack'``,
-        threshold on minimal block size for applying partial SVD solver instead of full SVD.
+        For ``policy='block_arnoldi'`` or ``policy='block_propack'``, this sets the
+        threshold on the minimal block size for applying a partial SVD solver instead of a full SVD.
         The default is ``thresh=0.1``. If for a matrix of size :math:`N \times N`
-         ``N*thresh`` < requested number of singular triples a full SVD is applied.
+        ``N * thresh`` is smaller than the requested number of singular triples, a full SVD is applied.
 
     fix_signs: bool
         Whether or not to fix phases in `U` and `V`,
@@ -248,6 +249,9 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         from ..krylov._krylov import svds
         if 'k_block' not in kwargs:
             raise YastnError(policy + " policy in svd requires passing argument k_block.")
+        # Sparse global SVD cannot initialize an all-zero sector. Its partial
+        # result is allowed to omit such sectors.
+        a = remove_zero_blocks(a)
         # WIP: BUG for SVDS
         k_block = min(kwargs['k_block'], min(a.get_shape(axes=0), a.get_shape(axes=1)))
         U, S, Vh = svds(a, axes=axes, sU=sU, nU=nU, k=k_block, ncv=None, tol=0, which='LM', solver='arpack')
@@ -261,7 +265,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     out_hl = tuple(a.trans[ax] for ax in out_hl)
     out_hr = tuple(a.trans[ax] for ax in out_hr)
     #
-    data, struct_am, ls_l, ls_r, legs_groups = _merge_to_matrix(a, (out_hl, out_hr))
+    data, struct_am, hfsm = _fuse_blocks(a.config, a._data, a.struct, (out_hl, out_hr))
     #
     if svd_on_cpu:
         device = a.config.backend.get_device(data)
@@ -272,6 +276,10 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         if 'k_block' not in kwargs:
             raise YastnError(policy + " policy in svd requires passing argument D_block or k_block.")
         k_block = kwargs['k_block']
+        # A partial solver must not receive an exactly-zero effective block.
+        # Keep this after fusion: fusion can introduce structural zero blocks.
+        am = remove_zero_blocks(a._replace(struct=struct_am, data=data))
+        data, struct_am = am._data, am.struct
 
     if verbosity > 2:
         fname = sys._getframe().f_code.co_name
@@ -279,9 +287,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         logger.info(f"{fname} D_block {kwargs.get('D_block', 'NA')}")
         logger.info(f"{fname} k_block {k_block}")
 
-    nonzero = _nonzero_sectors(a.config.backend, data, sym, struct_am)
-    meta, sizes, struct_Um, struct_S, struct_Vm = _meta_svd(sym, struct_am, sU, nU, k_block, nonzero=nonzero)
-    ls_s = _LegSlices_trivial(struct_S.legs[0])
+    meta, sizes, struct_Um, struct_S, struct_Vm = _meta_svd(sym, struct_am, sU, nU, k_block)
 
     if compute_uv and policy == 'fullrank':
         Udata, Sdata, Vdata = a.config.backend.svd(data, meta, sizes, diagnostics=kwargs.get('diagnostics', None))
@@ -312,24 +318,22 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         Udata, Vdata = a.config.backend.fix_svd_signs(Udata, Vdata, meta)
 
     Smfs = ((1,), (1,))
-    Shfs = (_Fusion(s=(-sU,)), _Fusion(s=(sU,)))
+    Shfs = (_Fusion(), _Fusion())
     S = a._replace(struct=struct_S, data=Sdata, mfs=Smfs, hfs=Shfs, trans=None)
 
     if not compute_uv:
         return S
 
-    struct_U = _struct(legs=(*legs_groups[0], struct_Um.legs[1]), n=struct_Um.n, isdiag=False)
-    Umeta_unmerge, size_U, struct_U = _meta_unmerge_matrix(sym, struct_Um, ls_l, ls_s, struct_U)
-    Udata = _unmerge(a.config, Udata, Umeta_unmerge, size=size_U)
+    hfsUm = (hfsm[0], _Fusion())
+    Udata, struct_U = _unfuse_blocks(a.config, Udata, struct_Um, (0,), hfsUm)
     Umfs = tuple(a.mfs[ii] for ii in out_ml) + ((1,),)
-    Uhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(s=(sU,)),)
+    Uhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(),)
     U = a._replace(struct=struct_U, data=Udata, mfs=Umfs, hfs=Uhfs, trans=None)
 
-    struct_V = _struct(legs=(struct_Vm.legs[0], *legs_groups[1]), n=struct_Vm.n, isdiag=False)
-    Vmeta_unmerge, size_V, struct_V = _meta_unmerge_matrix(sym, struct_Vm, ls_s, ls_r, struct_V)
-    Vdata = _unmerge(a.config, Vdata, Vmeta_unmerge, size=size_V)
+    hfsVm = (_Fusion(), hfsm[1])
+    Vdata, struct_V = _unfuse_blocks(a.config, Vdata, struct_Vm, (1,), hfsVm)
     Vmfs = ((1,),) + tuple(a.mfs[ii] for ii in out_mr)
-    Vhfs = (_Fusion(s=(-sU,)),) + tuple(a.hfs[ii] for ii in out_hr)
+    Vhfs = (_Fusion(),) + tuple(a.hfs[ii] for ii in out_hr)
     V = a._replace(struct=struct_V, data=Vdata, mfs=Vmfs, hfs=Vhfs, trans=None)
 
     U = U.moveaxis(source=-1, destination=Uaxis)
@@ -337,28 +341,13 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     return U, S, V
 
 
-def _nonzero_sectors(backend, data, sym, struct):
+def _meta_svd(sym, struct, sU, nU, k_block):
     """
-    Per-block flags of a merged matrix: True if the block has any nonzero element,
-    aligned with the block order of ``get_blocks(sym, struct)``.
+    Return metadata and structures for an SVD.
 
-    Returns None when all blocks are nonzero and there is nothing to filter.
-    For an all-zero matrix every sector is dropped, giving empty U, S, V.
-    """
-    bl = get_blocks(sym, struct)
-    flags = backend.nonzero_blocks(data, bl.slc)
-    if all(flags):
-        return None
-    return flags
-
-
-def _meta_svd(sym, struct, sU, nU, k_block, nonzero=None):
-    """
-    meta and struct for svd
-    U has signature = (legs[0].s, sU)
-    S has signature = (-sU, sU)
-    V has signature = (-sU, legs[1].s)
-    if nU than U carries tensor charge, otherwise V.
+    `U` has signature ``(legs[0].s, sU)``, `S` has signature ``(-sU, sU)``,
+    and `V` has signature ``(-sU, legs[1].s)``. If ``nU`` is true, `U` carries
+    the tensor charge; otherwise `V` does.
 
     Returns
     -------
@@ -367,13 +356,7 @@ def _meta_svd(sym, struct, sU, nU, k_block, nonzero=None):
     bl_a = get_blocks(sym, struct)
 
     ax0 = 1 if nU else 0
-    minD = {tuple(tt): min(DD) for tt, DD in zip(bl_a.t[:, ax0, :].tolist(), bl_a.D)}
-    if nonzero is not None:
-        # exclude exactly-zero blocks from the decomposition;
-        # their sectors reappear as zero blocks in any product with U, S, V.
-        for tt, nz in zip(bl_a.t[:, ax0, :].tolist(), nonzero):
-            if not nz:
-                minD[tuple(tt)] = 0
+    minD = {tuple(tt): min(DD) for tt, DD in zip(bl_a.t[:, ax0, :].tolist(), bl_a.D.tolist())}
     if k_block is not None:
         if isinstance(k_block, dict):
             sector_minD = min(k_block.values())  # TODO: control default for sectors not present in k_block
@@ -393,6 +376,10 @@ def _meta_svd(sym, struct, sU, nU, k_block, nonzero=None):
     struct_S = _struct(legs=(legU.conj(), legU), n=n0, isdiag=True)
     struct_V = _struct(legs=(legU.conj(), struct.legs[1]), n=n0 if nU else struct.n, isdiag=False)
 
+    struct_U = get_trimmed_struct(sym, struct_U)
+    struct_S = get_trimmed_struct(sym, struct_S)
+    struct_V = get_trimmed_struct(sym, struct_V)
+
     bl_U = get_blocks(sym, struct_U)
     bl_S = get_blocks(sym, struct_S)
     bl_V = get_blocks(sym, struct_V)
@@ -411,17 +398,18 @@ def _meta_svd(sym, struct, sU, nU, k_block, nonzero=None):
         ('DV',  np.int64, (2,))])
     meta = np.hstack([bl_a.slc[ind_a], bl_a.D[ind_a], bl_U.slc[inds], bl_U.D[inds], bl_S.slc, bl_V.slc, bl_V.D]).astype(np.int64, copy=False)
     meta = meta.view(meta_dt).reshape(-1)
+    meta = convert_to_tuples_and_slices(meta)
     sizes = (bl_U.size, bl_S.size, bl_V.size)
-    return meta, sizes, bl_U.struct, bl_S.struct, bl_V.struct
+    return meta, sizes, struct_U, struct_S, struct_V
 
 
 def eig(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         Uaxis=-1, Vaxis=0, policy='fullrank', which='LM', **kwargs) -> tuple['Tensor', 'Tensor', 'Tensor'] | 'Tensor':
     r"""
-    Split tensor into :math:`a = U S V` using exact eigenvalue decomposition (ED),
+    Split a tensor into :math:`a = U S V` using an exact eigenvalue decomposition (ED),
     where the columns of `U` and the rows of `V` satisfy biorthogonality, i.e. `V @ U = I`,
-    and `S` is the diagonal matrix. Unlike for symmetric/Hermitian case, `U` and `V` are not necessarily related,
-    nor form orthonormal bases.
+    and `S` is a diagonal matrix. Unlike in the symmetric/Hermitian case, `U` and `V`
+    are not necessarily related and need not form orthonormal bases.
 
     Parameters
     ----------
@@ -471,14 +459,13 @@ def eig(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     out_hl = tuple(a.trans[ax] for ax in out_hl)
     out_hr = tuple(a.trans[ax] for ax in out_hr)
     #
-    data, struct_am, ls_l, ls_r, legs_group = _merge_to_matrix(a, (out_hl, out_hr))
+    data, struct_am, hfsm = _fuse_blocks(a.config, a._data, a.struct, (out_hl, out_hr))
     #
-    if ls_l != ls_r:
+    if hfsm[0] != hfsm[1].conj() or struct_am.legs[0] != struct_am.legs[1].conj():
         raise YastnError("Legs of effective square blocks do not match.")
 
     k_block = None
     meta, sizes, struct_Um, struct_S, struct_Vm = _meta_svd(sym, struct_am, sU, nU, k_block)
-    ls_s = _LegSlices_trivial(struct_S.legs[0])
 
     if compute_uv and policy == 'fullrank':
         Udata, Sdata, Vdata = a.config.backend.eig(data, meta, sizes, which=which, diagnostics=kwargs.get('diagnostics', None))
@@ -488,24 +475,22 @@ def eig(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         raise YastnError('eig() policy should in (``fullrank`). compute_uv == False only works with `fullrank`')
 
     Smfs = ((1,), (1,))
-    Shfs = (_Fusion(s=(-sU,)), _Fusion(s=(sU,)))
+    Shfs = (_Fusion(), _Fusion())
     S = a._replace(struct=struct_S, data=Sdata, mfs=Smfs, hfs=Shfs, trans=None)
 
     if not compute_uv:
         return S
 
-    struct_U = struct_Um._replace(legs=(*legs_group[0], struct_Um.legs[1]))
-    Umeta_unmerge, size_U, struct_U = _meta_unmerge_matrix(sym, struct_Um, ls_l, ls_s, struct_U)
-    Udata = _unmerge(a.config, Udata, Umeta_unmerge, size=size_U)
+    hfsUm = (hfsm[0], _Fusion())
+    Udata, struct_U = _unfuse_blocks(a.config, Udata, struct_Um, (0,), hfsUm)
     Umfs = tuple(a.mfs[ii] for ii in out_ml) + ((1,),)
-    Uhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(s=(sU,)),)
+    Uhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(),)
     U = a._replace(struct=struct_U, data=Udata, mfs=Umfs, hfs=Uhfs, trans=None)
 
-    struct_V = struct_Vm._replace(legs=(struct_Vm.legs[0], *legs_group[1]))
-    Vmeta_unmerge, size_V, struct_V = _meta_unmerge_matrix(sym, struct_Vm, ls_s, ls_r, struct_V)
-    Vdata = _unmerge(a.config, Vdata, Vmeta_unmerge, size=size_V)
+    hfsVm = (_Fusion(), hfsm[1])
+    Vdata, struct_V = _unfuse_blocks(a.config, Vdata, struct_Vm, (1,), hfsVm)
     Vmfs = ((1,),) + tuple(a.mfs[ii] for ii in out_mr)
-    Vhfs = (_Fusion(s=(-sU,)),) + tuple(a.hfs[ii] for ii in out_hr)
+    Vhfs = (_Fusion(),) + tuple(a.hfs[ii] for ii in out_hr)
     V = a._replace(struct=struct_V, data=Vdata, mfs=Vmfs, hfs=Vhfs, trans=None)
 
     U = U.moveaxis(source=-1, destination=Uaxis)
@@ -516,9 +501,8 @@ def eig(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
 def truncation_mask_multiplets(S, tol=0, D_total=float('inf'),
                                eps_multiplet=1e-13, hermitian=False, **kwargs) -> 'Tensor[bool]':
     """
-    Generate a mask tensor from real positive spectrum ``S``, while preserving
-    degenerate multiplets. This is achieved by truncating the spectrum
-    at the boundary between multiplets.
+    Generate a mask tensor from a real positive spectrum ``S``, while preserving
+    degenerate multiplets by truncating at the boundary between multiplets.
 
     !!! This method is deprecated and can be removed at some point; !!!
     Use linalg.truncation_mask() that now include those truncation schemes.
@@ -560,8 +544,8 @@ def truncation_mask(S, which='LR',
                     mask_f=None,
                     **kwargs) -> 'Tensor[bool]':
     """
-    Generate mask tensor based on diagonal tensor ``S``.
-    The mask can be then used for truncation.
+    Generate a mask tensor from a diagonal tensor ``S``.
+    The mask can then be used for truncation.
 
     Parameters
     ----------
@@ -733,8 +717,8 @@ def truncation_mask(S, which='LR',
 
 def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0) -> tuple['Tensor', 'Tensor']:
     r"""
-    Split tensor using reduced QR decomposition, such that :math:`a = Q R`,
-    with :math:`QQ^\dagger=I`. The charge of `R` is zero. The charge of ``a`` is carried by `Q`.
+    Split a tensor using a reduced QR decomposition such that :math:`a = Q R`,
+    with :math:`Q Q^\dagger = I`. The charge of `R` is zero, and the charge of ``a`` is carried by `Q`.
 
     Parameters
     ----------
@@ -762,24 +746,21 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0) -> tuple['Tensor', 'Tensor']:
     out_hl = tuple(a.trans[ax] for ax in out_hl)
     out_hr = tuple(a.trans[ax] for ax in out_hr)
 
-    data, struct_am, ls_l, ls_r, legs_group = _merge_to_matrix(a, (out_hl, out_hr))
-    meta, sizes, struct_Qm, struct_Rm = _meta_qr(a.config.sym, struct_am, sQ)
-    ls = _LegSlices_trivial(struct_Qm.legs[1])
+    data, struct_am, hfsm = _fuse_blocks(a.config, a._data, a.struct, (out_hl, out_hr))
 
+    meta, sizes, struct_Qm, struct_Rm = _meta_qr(a.config.sym, struct_am, sQ)
     Qdata, Rdata = a.config.backend.qr(data, meta, sizes)
 
-    struct_Q = struct_Qm._replace(legs=(*legs_group[0], struct_Qm.legs[1]))
-    Qmeta_unmerge, size_Q, struct_Q = _meta_unmerge_matrix(sym, struct_Qm, ls_l, ls, struct_Q)
-    Qdata = _unmerge(a.config, Qdata, Qmeta_unmerge, size=size_Q)
+    hfsQm = (hfsm[0], _Fusion())
+    Qdata, struct_Q = _unfuse_blocks(a.config, Qdata, struct_Qm, (0,), hfsQm)
     Qmfs = tuple(a.mfs[ii] for ii in out_ml) + ((1,),)
-    Qhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(s=(sQ,)),)
+    Qhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(),)
     Q = a._replace(struct=struct_Q, data=Qdata, mfs=Qmfs, hfs=Qhfs, trans=None)
 
-    struct_R = struct_Rm._replace(legs=(struct_Rm.legs[0], *legs_group[1]))
-    Rmeta_unmerge, size_R, struct_R = _meta_unmerge_matrix(sym, struct_Rm, ls, ls_r, struct_R)
-    Rdata = _unmerge(a.config, Rdata, Rmeta_unmerge, size=size_R)
+    hfsRm = (_Fusion(), hfsm[1])
+    Rdata, struct_R = _unfuse_blocks(a.config, Rdata, struct_Rm, (1,), hfsRm)
     Rmfs = ((1,),) + tuple(a.mfs[ii] for ii in out_mr)
-    Rhfs = (_Fusion(s=(-sQ,)),) + tuple(a.hfs[ii] for ii in out_hr)
+    Rhfs = (_Fusion(),) + tuple(a.hfs[ii] for ii in out_hr)
     R = a._replace(struct=struct_R, data=Rdata, mfs=Rmfs, hfs=Rhfs, trans=None)
 
     Q = Q.moveaxis(source=-1, destination=Qaxis)
@@ -789,12 +770,12 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0) -> tuple['Tensor', 'Tensor']:
 
 def _meta_qr(sym, struct, sQ):
     """
-    meta and struct for qr.
-    Q has signature = (legs[0].s, sQ)
-    R has signature = (-sQ, legs[1].s)
+    Return metadata and structures for QR.
+
+    `Q` has signature ``(legs[0].s, sQ)`` and `R` has signature ``(-sQ, legs[1].s)``.
     """
     bl_a = get_blocks(sym, struct)
-    minD = {tuple(tt): min(DD) for tt, DD in zip(bl_a.t[:, 1, :].tolist(), bl_a.D)}
+    minD = {tuple(tt): min(DD) for tt, DD in zip(bl_a.t[:, 1, :].tolist(), bl_a.D.tolist())}
     ts = tuple(sorted(minD.keys()))
     Ds = tuple(minD[tt] for tt in ts)
     legQ = LegBasic(s=struct.legs[1].s, t=ts, D=Ds)
@@ -816,15 +797,16 @@ def _meta_qr(sym, struct, sQ):
         ('DR',  np.int64, (2,))])
     meta = np.hstack([bl_a.slc[inds], bl_a.D[inds], bl_Q.slc[inds], bl_Q.D[inds], bl_R.slc, bl_R.D]).astype(np.int64, copy=False)
     meta = meta.view(meta_dt).reshape(-1)
+    meta = convert_to_tuples_and_slices(meta)
     sizes = (bl_Q.size, bl_R.size)
-    return meta, sizes, bl_Q.struct, bl_R.struct
+    return meta, sizes, struct_Q, struct_R
 
 
 def eigh(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank', **kwargs) -> tuple['Tensor', 'Tensor']:
     r"""
-    Split symmetric tensor using exact eigenvalue decomposition, :math:`a= USU^{\dagger}`.
+    Split a symmetric tensor using an exact eigenvalue decomposition, :math:`a = U S U^\dagger`.
 
-    Tensor is expected to be symmetric (hermitian) with total charge `0`.
+    The tensor is expected to be symmetric (Hermitian) with total charge `0`.
 
     Parameters
     ----------
@@ -882,7 +864,7 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank', **kwargs) -> tu
         raise YastnError('eigh requires tensor charge to be zero.')
     #
     # 2. merge to block, square matrix
-    data, struct_am, ls_l, ls_r, legs_group = _merge_to_matrix(a, (out_hl, out_hr))
+    data, struct_am, hfsm = _fuse_blocks(a.config, a._data, a.struct, (out_hl, out_hr))
     #
     # 3.1 Set minimal number of eigenpairs to solve for in each block.
     #     Used by block-wise sparse solvers and ignored by 'fullrank' policy.
@@ -891,6 +873,10 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank', **kwargs) -> tu
         if 'k_block' not in kwargs:
             raise YastnError(policy + " policy in eighs requires passing argument D_block.")
         k_block = kwargs['k_block']
+        # A partial solver must not receive an exactly-zero effective block.
+        # Keep this after fusion: fusion can introduce structural zero blocks.
+        am = remove_zero_blocks(a._replace(struct=struct_am, data=data))
+        data, struct_am = am._data, am.struct
 
     if verbosity > 2:
         fname = sys._getframe().f_code.co_name
@@ -898,16 +884,10 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank', **kwargs) -> tu
         logger.info(f"{fname} D_block {kwargs.get('D_block', 'NA')}")
         logger.info(f"{fname} k_block {k_block}")
 
-    if ls_l != ls_r:
+    if hfsm[0] != hfsm[1].conj() or struct_am.legs[0] != struct_am.legs[1].conj():
         raise YastnError("Tensor likely is not hermitian. Legs of effective square blocks do not match.")
 
-    # filter zero blocks only for the partial-spectrum solver; 'fullrank' keeps
-    # them so that U remains a complete eigenbasis (with eigenvalue-0 sectors).
-    nonzero = None
-    if policy == 'block_lanczos':
-        nonzero = _nonzero_sectors(a.config.backend, data, sym, struct_am)
-    meta, sizes, struct_Um, struct_S = _meta_eigh(sym, struct_am, sU, k_block, nonzero=nonzero)
-    ls = _LegSlices_trivial(struct_Um.legs[1])
+    meta, sizes, struct_Um, struct_S = _meta_eigh(sym, struct_am, sU, k_block)
 
     if policy == 'fullrank':
         Sdata, Udata = a.config.backend.eigh(data, meta, sizes)
@@ -919,15 +899,14 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank', **kwargs) -> tu
     else:
         raise YastnError("eigh() policy should be 'fullrank' or 'block_lanczos'.")
 
-    struct_U = struct_Um._replace(legs=(*legs_group[0], struct_Um.legs[1]))
-    Umeta_unmerge, size_U, struct_U = _meta_unmerge_matrix(sym, struct_Um, ls_l, ls, struct_U)
-    Udata = _unmerge(a.config, Udata, Umeta_unmerge, size=size_U)
+    hfsUm = (hfsm[0], _Fusion())
+    Udata, struct_U = _unfuse_blocks(a.config, Udata, struct_Um, (0,), hfsUm)
     Umfs = tuple(a.mfs[ii] for ii in out_ml) + ((1,),)
-    Uhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(s=(sU,)),)
+    Uhfs = tuple(a.hfs[ii] for ii in out_hl) + (_Fusion(),)
     U = a._replace(struct=struct_U, data=Udata, mfs=Umfs, hfs=Uhfs, trans=None)
 
     Smfs = ((1,), (1,))
-    Shfs = (_Fusion(s=(-sU,)), _Fusion(s=(sU,)))
+    Shfs = (_Fusion(), _Fusion())
     S = a._replace(struct=struct_S, data=Sdata, mfs=Smfs, hfs=Shfs, trans=None)
 
     # sort in case of non-default order
@@ -947,22 +926,16 @@ def eigh(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank', **kwargs) -> tu
     return S, U
 
 
-def _meta_eigh(sym, struct, sU, k_block, nonzero=None):
+def _meta_eigh(sym, struct, sU, k_block):
     """
-    meta and struct for eigh
-    U has signature = (legs[0].s, sU)
-    S has signature = (-sU, sU)
+    Return metadata and structures for an eigendecomposition.
+
+    `U` has signature ``(legs[0].s, sU)`` and `S` has signature ``(-sU, sU)``.
     """
     bl_a = get_blocks(sym, struct)
 
     n0 = sym.zero()
-    minD = {tuple(tt): min(DD) for tt, DD in zip(bl_a.t[:, 1, :].tolist(), bl_a.D)}
-    if nonzero is not None:
-        # exclude exactly-zero blocks; their eigenpairs (all with eigenvalue 0)
-        # are dropped, consistent with a partial-spectrum solve.
-        for tt, nz in zip(bl_a.t[:, 1, :].tolist(), nonzero):
-            if not nz:
-                minD[tuple(tt)] = 0
+    minD = {tuple(tt): min(DD) for tt, DD in zip(bl_a.t[:, 1, :].tolist(), bl_a.D.tolist())}
     if k_block is not None:
         if isinstance(k_block, dict):
             sector_minD = min(k_block.values())  # TODO: control default for sectors not present in k_block
@@ -978,6 +951,10 @@ def _meta_eigh(sym, struct, sU, k_block, nonzero=None):
     #
     struct_U = _struct(legs=(struct.legs[0], legU), n=n0, isdiag=False)
     struct_S = _struct(legs=(legU.conj(), legU), n=n0, isdiag=True)
+
+    struct_U = get_trimmed_struct(sym, struct_U)
+    struct_S = get_trimmed_struct(sym, struct_S)
+
     bl_U = get_blocks(sym, struct_U)
     bl_S = get_blocks(sym, struct_S)
     inds = argsort_t(bl_U.t[:, 1, :])
@@ -993,18 +970,19 @@ def _meta_eigh(sym, struct, sU, k_block, nonzero=None):
         ('slS', np.int64, (2,))])
     meta = np.hstack([bl_a.slc[inds_a], bl_a.D[inds_a], bl_U.slc[inds], bl_U.D[inds], bl_S.slc])
     meta = meta.view(meta_dt).reshape(-1)
+    meta = convert_to_tuples_and_slices(meta)
     sizes = (bl_S.size, bl_U.size)
-    return meta, sizes, bl_U.struct, bl_S.struct
+    return meta, sizes, struct_U, struct_S
 
 
 def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank',
                          tol=0, tol_block=0, D_block=float('inf'), D_total=float('inf'),
                          largest_gap=False, mask_f=None, **kwargs) -> tuple['Tensor', 'Tensor']:
     r"""
-    Split symmetric tensor using exact eigenvalue decomposition, :math:`a= USU^{\dagger}`.
-    Optionally, truncate the resulting decomposition.
+    Split a symmetric tensor using an exact eigenvalue decomposition, :math:`a = U S U^\dagger`.
+    Optionally truncate the resulting decomposition.
 
-    Tensor is expected to be symmetric (hermitian) with total charge 0.
+    The tensor is expected to be symmetric (Hermitian) with total charge `0`.
     Truncation can be based on relative tolerance, bond dimension of each block,
     and total bond dimension across all blocks (whichever gives smaller total dimension).
     Truncate based on tolerance only if some eigenvalues are positive -- then all negative ones are discarded.
@@ -1062,10 +1040,10 @@ def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, which='LR', policy='fullrank',
 
 def entropy(a, alpha=1, tol=1e-12) -> Number:
     r"""
-    Calculate entropy from probabilities encoded in diagonal tensor ``a``.
+    Compute the entropy from probabilities encoded in the diagonal tensor ``a``.
 
-    Normalizes (sum of) ``a`` to 1, but do not check correctness otherwise.
-    Use base-2 log. For empty or zero tensor, returns ``0``.
+    The sum of ``a`` is normalized to ``1``, but its correctness is not checked otherwise.
+    Base-2 logarithms are used. For an empty or zero tensor, ``0`` is returned.
 
     Parameters
     ----------

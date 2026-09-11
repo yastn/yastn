@@ -21,9 +21,10 @@ from operator import mul
 
 import numpy as np
 
-from ._auxiliary import _config, get_blocks, find_index, find_matching_indices
-from ._tests import YastnError
-from ..backend import backend_np
+from ._auxiliary import _config, get_blocks, get_trimmed_struct, find_index, find_matching_indices
+from ._auxiliary import convert_to_tuples_and_slices, _compress_slices
+from ._yastnerror import YastnError
+from ..backend import backend_np, import_backend
 from ..sym import sym_none, sym_U1, sym_Z2, sym_Z3, sym_U1xU1, sym_U1xU1xZ2
 
 __all__ = ['make_config']
@@ -43,7 +44,7 @@ _syms = {"dense": sym_none,
 #                 default_fusion='hard', force_fusion=None, tensordot_policy='fuse_contracted', **kwargs):
 def make_config(**kwargs) -> _config:
     r"""
-    Create structure with YASTN configuration
+    Create a YASTN configuration object.
 
     Parameters
     ----------
@@ -88,9 +89,25 @@ def make_config(**kwargs) -> _config:
     tensordot_policy: str
         Contraction approach used by :meth:`yastn.tensordot`
 
-            * ``'fuse_to_matrix'`` Tensordot involves suitable permutation of each tensor while performing a fusion of each tensor into a sequence of matrices and calling matrix-matrix multiplication. Postprocessing includes unfusioning the remaining legs in the result, which often copy data adding extra overhead.
+            * ``'fuse_to_matrix'`` Tensordot involves suitable permutation of each tensor while performing a fusion of each tensor into a sequence of matrices and calling matrix-matrix multiplication. Postprocessing includes unfusing the remaining legs in the result, which often copy data adding extra overhead.
             * ``'fuse_contracted'`` Tensordot involves suitable permutation of each tensor while performing a fusion of to-be-contracted legs of each tensor and calling multiplication. It involves a larger number of multiplication calls for smaller objects, but unfusing the legs of the result is not needed.
             * ``'no_fusion'`` Tensordot involves suitable permutation of tensor blocks and calling matrix-matrix multiplication for a potentially large number of small objects. Resulting contributions to new blocks get added. However, overheads of initial fusion (copying data) can sometimes be avoided in this approach.
+
+    lazy_threshold: float = 0 if backend is cuTensor, else 0.5
+        Not all symmetry-allowed blocks need to be present in "lazy" tensor. Hence, when computing a contractions with "lazy" tensors,
+        not all blocks allowed by the symmetry need to exist in the resulting tensor.
+        If the fraction (retained blocks / all allowed blocks) < ``lazy_threshold``, then blocks are initialized lazily,
+        i.e., only when they are needed. On ``cuTensor`` backend, defaults to 0, otherwise 0.5
+        Impact:
+            Decreases memory usage and flop count in contractions. The block-sparsity algebra is more expensive.
+        Revelant scenarious:
+            Outer-product-like contractions, where number of legs of resulting tensor is larger than the number of legs of the input tensors.
+            In such cases, the number of allowed blocks can be much larger than the number of retained blocks.
+
+    meta_tensordot_policy: str = "cpu"|"gpu"|"auto"
+        Block-sparsity algorithm used by :meth:`yastn.tensordot`. The default is ``'auto'``,
+        which uses the optimized GPU algorithm if available, otherwise the CPU algorithm.
+        When "auto" can be also overriden by setting the environment variable ``YASTN_META_CUTENSOR`` to ``"GPU"`` or ``"CPU"``.
 
     Example
     -------
@@ -99,16 +116,13 @@ def make_config(**kwargs) -> _config:
 
         config = yastn.make_config(backend='np', sym='U1')
     """
-    if "backend" not in kwargs or kwargs["backend"] == 'np':
+    if "backend" not in kwargs:
         kwargs["backend"] = backend_np
-    elif kwargs["backend"] == 'torch':
-        from ..backend import backend_torch
-        kwargs["backend"] = backend_torch
-    elif kwargs["backend"] == 'torch_cutensor':
-        from ..backend import backend_torch_cutensor  # pragma: no cover
-        kwargs["backend"] = backend_torch_cutensor  # pragma: no cover
     elif isinstance(kwargs["backend"], str):
-        raise YastnError("backend encoded as string only supports: 'np', 'torch'")
+        try:
+            kwargs["backend"] = import_backend(kwargs["backend"])
+        except ValueError:
+            raise YastnError("backend encoded as string only supports: 'np', 'torch'")
 
     if "sym" not in kwargs:
         kwargs["sym"] = sym_none
@@ -117,6 +131,12 @@ def make_config(**kwargs) -> _config:
             kwargs["sym"] = _syms[kwargs["sym"]]
         except KeyError:
             raise YastnError("sym encoded as string only supports: 'dense', 'Z2', 'Z3', 'U1', 'U1xU1', 'U1xU1xZ2'.")
+
+    if kwargs.get("lazy_threshold", None) is None:
+        if kwargs["backend"].BACKEND_ID in ["torch_cutensor",]:
+            kwargs["lazy_threshold"] = 0
+        else:
+            kwargs["lazy_threshold"] = 0.5
 
     return _config(**{a: kwargs[a] for a in _config._fields if a in kwargs})
 
@@ -216,13 +236,15 @@ def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
         DD = np.array(DD, dtype=np.int64).reshape(len(DD)).tolist()
         tD = dict(sorted(zip(tt, DD)))
         legs.append(leg._replace(t=tuple(tD.keys()), D=tuple(tD.values())))
-    struct = a.struct._replace(legs=tuple(legs))
+
+    struct = a.struct.replace(legs=legs, mask=None)
+    struct = get_trimmed_struct(a.config.sym, struct)
     bl = get_blocks(a.config.sym, struct)
 
-    if a.isdiag and bl.struct.legs[0] != bl.struct.legs[1].conj():
+    if a.isdiag and struct.legs[0] != struct.legs[1].conj():
         raise YastnError("Diagonal tensor requires the same bond dimensions on both legs.")
 
-    a.struct = bl.struct
+    a.struct = struct
     a._data = _init_block(a.config, bl.size, val, dtype=a.yastn_dtype, device=a.device)
     a.is_consistent()
 
@@ -264,8 +286,7 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
         raise YastnError('Charges ts are not consistent with the symmetry rules: f(t @ s) == n')
     ats = ats[0]
 
-    ts = tuple(ts.tolist())
-    tss = tuple(ts[i * nsym: (i+1) * nsym] for i in range(a.ndim_n))
+    tss = tuple(map(tuple, ats.tolist()))
 
     if Ds is None:  # attempt to read Ds from existing blocks.
         try:
@@ -285,35 +306,41 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
 
     if any(tt in leg and leg[tt] != DD for leg, tt, DD in zip(a.struct.legs, tss, Ds)):
         raise YastnError("Provided Ds is not consistent with dimensions of existing legs.")
-
-    #if any(tt not in leg for leg, tt in zip(a.struct.legs, tss)):
-    new_legs = tuple(leg.add_charge(tt, DD) for leg, tt, DD in zip(a.struct.legs, tss, Ds) )
-    embed_(a, new_legs)  # will make a data copy
-
-    Dsize = Ds[0] if a.isdiag else reduce(mul, Ds, 1)
-    new_block = _init_block(a.config, Dsize, val, dtype=a.yastn_dtype, device=a.device)
-
-    bl = get_blocks(a.config.sym, a.struct)
-    ind = find_index(bl.t, ats, sorted=True)
-    slc = bl.slc[ind]
-    a.data[slice(*slc)] = new_block
-
-
-def embed_(a, legs_new):
+    #
+    # embed old data in new data; makes a data copy in the process
+    #
     bl_old = get_blocks(a.config.sym, a.struct)
-    bl_new = get_blocks(a.config.sym, a.struct._replace(legs=legs_new))
+    legs_new = tuple(leg.add_charge(tt, DD) for leg, tt, DD in zip(a.struct.legs, tss, Ds))
+    struct_new = a.struct.replace(legs=legs_new, mask=None)
+    bl_new = get_blocks(a.config.sym, struct_new)
+    #
+    # prepare mask for lazy initialization
+    #
+    inds = find_matching_indices(bl_new.t, bl_old.t, both=False)
+    mask = np.zeros(bl_new.nblocks, dtype=bool)
+    mask[inds] = True
+    ind = find_index(bl_new.t, ats)
+    mask[ind] = True
+    struct_new = struct_new.replace(mask=mask)
+    bl_new = get_blocks(a.config.sym, struct_new)
+    #
     ind1, ind2 = find_matching_indices(bl_new.t, bl_old.t)
-    sln, slo = bl_new.slc[ind1], bl_old.slc[ind2]
-    meta = np.column_stack([sln, sln[:, 1] - sln[:, 0], slo, slo[:, 1] - slo[:, 0]])
+    meta = _compress_slices(np.column_stack([bl_new.slc[ind1], bl_old.slc[ind2]]))
     meta_dt = np.dtype([
         ('sln', np.int64, (2,)),
-        ('Dn', np.int64, (1,)),
-        ('slo', np.int64, (2,)),
-        ('Do', np.int64, (1,))])
+        ('slo', np.int64, (2,))])
     meta = meta.view(meta_dt).reshape(-1)
-    newdata = a.config.backend.embed_transpose(a.data, [0], meta, bl_new.size)
-    a.struct = bl_new.struct
+    meta = convert_to_tuples_and_slices(meta)
+    newdata = a.config.backend.embed_slices(a.data, meta, bl_new.size)
+    #
+    a.struct = struct_new
     a._data = newdata
+    #
+    Dsize = Ds[0] if a.isdiag else reduce(mul, Ds, 1)
+    new_block = _init_block(a.config, Dsize, val, dtype=a.yastn_dtype, device=a.device)
+    ind = find_index(bl_new.t, ats)
+    slc = bl_new.slc[ind]
+    a._data[slice(*slc)] = new_block
 
 
 def _init_block(config, Dsize, val, dtype, device):

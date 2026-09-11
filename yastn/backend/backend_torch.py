@@ -13,6 +13,8 @@
 # limitations under the License.
 # ==============================================================================
 """Support of torch as a data structure used by yastn."""
+import os
+import warnings
 from itertools import groupby
 from functools import reduce
 import numpy as np
@@ -29,10 +31,15 @@ from ._backend_torch_backwards import kernel_svd, kernel_svds_scipy
 from ._backend_torch_backwards import kernel_dot, kernel_transpose_dot_sum, kernel_negate_blocks
 from ._backend_torch_backwards import kernel_apply_mask, kernel_embed_mask
 from ._backend_torch_backwards import kernel_embed_transpose, kernel_transpose_and_merge, kernel_unmerge
+from ._backend_torch_backwards import kernel_transpose_and_merge_scatter, pack_transpose_and_merge_params
+from ._backend_torch_backwards import kernel_unmerge_scatter
+from ._backend_torch_backwards import kernel_transpose_and_merge_hybrid, kernel_unmerge_hybrid
+from ._backend_torch_backwards import _build_dest_tiled, _concat_ranges
+from ._backend_torch_backwards import kernel_embed_slices
 
 
 __all__= ['DTYPE', 'get_dtype', 'get_yastn_dtype',
-    'nvtx', 'cuda_is_available', 'get_device', 'move_to',
+    'nvtx', 'cuda_is_available', 'get_device', 'is_cpu_device', 'move_to',
     'grad', 'requires_grad_', 'requires_grad', 'detach', 'detach_', 'clone', 'copy', 'checkpoint',
     'random_seed', 'randint',
     'to_numpy', 'get_shape', 'get_size', 'diag_create', 'diag_get', 'real', 'is_complex', 'conj',
@@ -46,9 +53,11 @@ __all__= ['DTYPE', 'get_dtype', 'get_yastn_dtype',
     'add', 'sub', 'apply_mask', 'vdot', 'diag_1dto2d', 'diag_2dto1d',
     'dot', 'dot_diag', 'transpose_dot_sum',
     'merge_to_dense', 'merge_super_blocks', 'is_independent',
-    'apply_mask', 'embed_mask',
+    'apply_mask', 'embed_mask', 'embed_slices',
     'embed_transpose', 'transpose_and_merge', 'unmerge',
-    'negate_blocks', 'bitwise_not']
+    'negate_blocks', 'gather_slices', 'bitwise_not',
+    'unique', 'searchsorted', 'isin', 'nonzero', 'cumsum', 'concatenate',
+    'repeat', 'where', 'zeros_like', 'full_like', 'arange']
 
 
 torch.random.seed()
@@ -57,6 +66,8 @@ DTYPE = {'float32': torch.float32,
          'float64': torch.float64,
          'complex64': torch.complex64,
          'complex128': torch.complex128,
+         'int32': torch.int32,
+         'int64': torch.int64,
          'bool': torch.bool}
 
 
@@ -77,8 +88,15 @@ def is_complex(x):
     return x.is_complex()
 
 
-def get_device(x):
+def get_device(x)->str:
     return str(x.device)
+
+
+def is_cpu_device(device) -> bool:
+    """ Whether ``device`` refers to a host (CPU) device. Unset device (None/'') counts as CPU. """
+    if not device:
+        return True
+    return torch.device(device).type == 'cpu'
 
 
 def random_seed(seed):
@@ -195,9 +213,9 @@ def norm(data, p):
 def entropy(data, alpha, tol):
     """ von Neuman or Renyi entropy from svd's"""
     Snorm = torch.sum(data) if len(data) > 0 else 0.
-    if Snorm > 0:
+    if Snorm.abs() > 0:
         data = data / Snorm
-        data = data[data > tol]
+        data = data[data.abs() > tol]
         if alpha == 1:
             return -1 * torch.sum(data * torch.log2(data))
         return torch.log2(torch.sum(data ** alpha)) / (1 - alpha)
@@ -273,9 +291,8 @@ def conj(data):
 def trace(data, order, meta, Dsize):
     newdata = torch.zeros(Dsize, dtype=data.dtype, device=data.device)
     for sln, slo, Do, Drsh in meta:
-        Do, Drsh = tuple(Do), tuple(Drsh)
-        tmp_sln = data[slice(*slo)].reshape(Do).permute(order).reshape(Drsh)
-        newdata[slice(*sln)] = newdata[slice(*sln)] + torch.sum(torch.diagonal(tmp_sln, dim1=0, dim2=1), dim=-1)
+        tmp_sln = data[slo].reshape(Do).permute(order).reshape(Drsh)
+        newdata[sln] = newdata[sln] + torch.sum(torch.diagonal(tmp_sln, dim1=0, dim2=1), dim=-1)
     return newdata
 
 
@@ -309,6 +326,58 @@ def bitwise_not(data):
     return torch.bitwise_not(data)
 
 
+##############################################################
+#   low-level integer/index array primitives (numpy-aligned) #
+#   backend-agnostic building blocks for the GPU meta path   #
+##############################################################
+
+
+def unique(x, return_inverse=False, return_counts=False):
+    return torch.unique(x, return_inverse=return_inverse, return_counts=return_counts)
+
+
+def searchsorted(a, v):
+    return torch.searchsorted(a, v)
+
+
+def isin(a, b):
+    return torch.isin(a, b)
+
+
+def nonzero(x):
+    """ numpy-aligned: tuple of index arrays, one per dimension. """
+    return torch.nonzero(x, as_tuple=True)
+
+
+def cumsum(x, axis=0):
+    return torch.cumsum(x, dim=axis)
+
+
+def concatenate(seq, axis=0):
+    return torch.cat(tuple(seq), dim=axis)
+
+
+def repeat(x, repeats):
+    """ numpy-aligned np.repeat: element-wise repeat (torch.repeat_interleave). """
+    return torch.repeat_interleave(x, repeats)
+
+
+def where(condition, x, y):
+    return torch.where(condition, x, y)
+
+
+def zeros_like(x):
+    return torch.zeros_like(x)
+
+
+def full_like(x, fill_value):
+    return torch.full_like(x, fill_value)
+
+
+def arange(*args, device='cpu'):
+    return torch.arange(*args, device=device)
+
+
 def svd_lowrank(data, meta, sizes, **kwargs):
     return svds_scipy(data, meta, sizes, solver='arpack', **kwargs)
 
@@ -332,7 +401,7 @@ def svdvals(data, meta, sizeS, **kwargss):
     real_dtype = data.real.dtype if data.is_complex() else data.dtype
     Sdata = torch.zeros((sizeS,), dtype=real_dtype, device=data.device)
     for (slo, Do, _, _, slS, _, _) in meta:
-        Sdata[slice(*slS)] = torch.linalg.svdvals(data[slice(*slo)].view(tuple(Do)))
+        Sdata[slS] = torch.linalg.svdvals(data[slo].view(Do))
     return Sdata
 
 
@@ -346,13 +415,12 @@ def svd_randomized(data, meta, sizes, q=None, niter=3, **kwargs):
     Sdata = torch.zeros((sizes[1],), dtype=real_dtype, device=data.device)
     Vdata = torch.zeros((sizes[2],), dtype=data.dtype, device=data.device)
     for slo, Do, slU, DU, slS, slV, DV in meta:
-        k = slS[1] - slS[0]
-        Do, DU, DV = tuple(Do), tuple(DU), tuple(DV)
+        k = slS.stop - slS.start
         q = max(k, min(2 * k, *Do))
-        U, S, V = torch.svd_lowrank(data[slice(*slo)].view(Do), q=q, niter=niter)
-        Udata[slice(*slU)].reshape(DU)[:] = U[:,:k]
-        Sdata[slice(*slS)] = S[:k]
-        Vdata[slice(*slV)].reshape(DV)[:] = V[:,:k].t().conj()
+        U, S, V = torch.svd_lowrank(data[slo].view(Do), q=q, niter=niter)
+        Udata[slU].reshape(DU)[:] = U[:,:k]
+        Sdata[slS] = S[:k]
+        Vdata[slV].reshape(DV)[:] = V[:,:k].t().conj()
     return Udata, Sdata, Vdata
 
 
@@ -365,15 +433,14 @@ def fix_svd_signs(Udata, Vhdata, meta):
     Vhd = torch.empty_like(Vhdata)
     Uamp = (abs(Udata) * (2**40)).to(dtype=torch.int64)
     for (_, _, slU, DU, _, slV, DV) in meta:
-        DU, DV = tuple(DU), tuple(DV)
-        Utemp = Udata[slice(*slU)].reshape(DU)
-        Vtemp = Vhdata[slice(*slV)].reshape(DV)
-        Utemp_amp = Uamp[slice(*slU)].reshape(DU)
+        Utemp = Udata[slU].reshape(DU)
+        Vtemp = Vhdata[slV].reshape(DV)
+        Utemp_amp = Uamp[slU].reshape(DU)
         ii = torch.argmax(Utemp_amp, dim=0, keepdims=True)
         phase = torch.take_along_dim(Utemp, ii, dim=0)
         phase = phase / abs(phase)
-        Ud[slice(*slU)].reshape(DU)[:] = Utemp * phase.conj().reshape(1, -1)
-        Vhd[slice(*slV)].reshape(DV)[:] = Vtemp * phase.reshape(-1, 1)
+        Ud[slU].reshape(DU)[:] = Utemp * phase.conj().reshape(1, -1)
+        Vhd[slV].reshape(DV)[:] = Vtemp * phase.reshape(-1, 1)
     return Ud, Vhd
 
 
@@ -388,14 +455,14 @@ def eigh(data, meta=None, sizes=(1, 1), order_by_magnitude=False, ad_decomp_reg=
         else:
             f = lambda x: torch.linalg.eigh(x)
         for slo, Do, slU, DU, slS in meta:
-            S, U = f(data[slice(*slo)].view(tuple(Do)))
-            Sdata[slice(*slS)] = S
-            Udata[slice(*slU)].view(tuple(DU))[:] = U
+            S, U = f(data[slo].view(Do))
+            Sdata[slS] = S
+            Udata[slU].view(DU)[:] = U
         return Sdata, Udata
     return torch.linalg.eigh(data)  # S, U
 
 
-def eig(data, meta=None, sizes=(1, 1), **kwargs):
+def eig(data, meta=None, sizes=(1, 1), biorth_tol=None, **kwargs):
     if meta is None:
         return torch.linalg.eig(data)  # S, U
     # NOTE torch.linalg.eig returns right eigenvectors U only, i.e. M U = diag(S) U
@@ -406,8 +473,7 @@ def eig(data, meta=None, sizes=(1, 1), **kwargs):
     Sdata = torch.empty((sizes[1],), dtype=dtype, device=data.device)
     Vdata = torch.empty((sizes[2],), dtype=dtype, device=data.device)
     for slo, Do, slU, DU, slS, slV, DV in meta:
-        Do, DU, DV = tuple(Do), tuple(DU), tuple(DV)
-        S, U = torch.linalg.eig(data[slice(*slo)].reshape(Do))
+        S, U = torch.linalg.eig(data[slo].reshape(Do))
         #
         # in general diag(U.H @ U) = 1 but not U.H @ U = I, i.e. right eigenvectors are not orthogonal
         #
@@ -416,20 +482,33 @@ def eig(data, meta=None, sizes=(1, 1), **kwargs):
         # V.H @ M / V.H = S (as rows)
         #
         # Search for left eigenvectors V (rows) via biorthogonality condition V.H @ U = I
+        Id = torch.eye(U.shape[0], dtype=U.dtype, device=U.device)
         try:
-            V= torch.linalg.solve(U.conj().T, torch.eye(len(S), dtype=U.dtype, device=data.device), left=True, out=None)
-            V= V.conj().T
+            V = torch.linalg.solve(U.conj().T, Id, left=True, out=None)
+            V = V.conj().T
         except Exception as e:
             raise ValueError("Biorthonormalization of left/right eigenvector pairs failed.") from e
 
-        tol= 1.0e-12 if data.is_complex() else 1.0e-14
-        if any( torch.abs(torch.sum(V.T * U, axis=0) - 1) > tol ):
-            raise ValueError("Biorthonormalization of left/right eigenvector pairs failed.")
+        eps = torch.finfo(U.dtype).eps
+        err = torch.abs(torch.sum(V.T * U, axis=0) - 1).max()
+        if err > 8 * eps:
+            # V <- V + (I - V @ U) @ V; two matmuls, error is squared so a single step suffices (Newton-Schulz refinement)
+            V = V + (Id - V @ U) @ V
+            err = torch.abs(torch.sum(V.T * U, axis=0) - 1).max()
+
+        if biorth_tol is None:
+            # The attainable residual is O(eps * cond(U)) -- no amount of refinement beats it.
+            # ||U||_1 ||V||_1 upper-bounds cond(U) in O(n^2), reusing the inverse computed above.
+            biorth_tol = 10 * eps * torch.linalg.matrix_norm(U, 1) * torch.linalg.matrix_norm(V, 1)
+        if err > biorth_tol:
+            raise ValueError("Biorthonormalization of left/right eigenvector pairs failed: residual "
+                            f"{err.item():.3e} exceeds tolerance {float(biorth_tol):.3e}. The matrix of right "
+                            "eigenvectors is numerically singular (defective or nearly-defective input).")
 
         s_order= argsort_which(S, which=kwargs.get('which', 'LM'))
-        Udata[slice(*slU)].reshape(DU)[:] = U[:,s_order]
-        Sdata[slice(*slS)] = S[s_order]
-        Vdata[slice(*slV)].reshape(DV)[:] = V[s_order,:]
+        Udata[slU].reshape(DU)[:] = U[:,s_order]
+        Sdata[slS] = S[s_order]
+        Vdata[slV].reshape(DV)[:] = V[s_order,:]
     return Udata, Sdata, Vdata
 
 
@@ -448,10 +527,9 @@ def eigh_lowrank(data, meta, sizes, thresh=None, **kwargs):
     Sdata = np.zeros((sizes[0],), dtype=real_dtype)
     Udata = np.zeros((sizes[1],), dtype=data.dtype)
     for slo, Do, slU, DU, slS in meta:
-        k = slS[1] - slS[0]
-        Do, DU = tuple(Do), tuple(DU)
+        k = slS.stop - slS.start
         n = Do[0]
-        block = data[slice(*slo)].reshape(Do)
+        block = data[slo].reshape(Do)
         if k < n - 1 and n * n > 5000:
             try:
                 S, U = scipy.sparse.linalg.eigsh(block, k=k, which=_which_map[_which],
@@ -470,8 +548,8 @@ def eigh_lowrank(data, meta, sizes, thresh=None, **kwargs):
             S,U = S[arg_b[:k]], U[:,arg_b[:k]]
         else:
             S,U = S[:k], U[:,:k]
-        Sdata[slice(*slS)] = S
-        Udata[slice(*slU)].reshape(DU)[:] = U
+        Sdata[slS] = S
+        Udata[slU].reshape(DU)[:] = U
     Sdata = torch.from_numpy(Sdata).to(device=data_device)
     Udata = torch.from_numpy(Udata).to(device=data_device)
     return Sdata, Udata
@@ -481,8 +559,8 @@ def eigvals(data, meta, sizeS, **kwargs):
     dtype = dtype_to_complex(data)
     Sdata = torch.empty((sizeS,), dtype=dtype, device=data.device)
     for slo, Do, _, _, slS, _, _ in meta:
-        S = torch.linalg.eigvals(data[slice(*slo)].reshape(tuple(Do)))
-        Sdata[slice(*slS)] = S[argsort_which(S, which=kwargs.get('which', 'LM'))]
+        S = torch.linalg.eigvals(data[slo].reshape(Do))
+        Sdata[slS] = S[argsort_which(S, which=kwargs.get('which', 'LM'))]
     return Sdata
 
 
@@ -490,11 +568,11 @@ def qr(data, meta, sizes):
     Qdata = torch.zeros((sizes[0],), dtype=data.dtype, device=data.device)
     Rdata = torch.zeros((sizes[1],), dtype=data.dtype, device=data.device)
     for slo, Do, slQ, DQ, slR, DR in meta:
-        Q, R = torch.linalg.qr(data[slice(*slo)].view(tuple(Do)))
+        Q, R = torch.linalg.qr(data[slo].view(Do))
         sR = torch.sign(real(R.diag()))
         sR[sR == 0] = 1
-        Qdata[slice(*slQ)].view(tuple(DQ))[:] = Q * sR  # positive diag of R
-        Rdata[slice(*slR)].view(tuple(DR))[:] = sR.reshape([-1, 1]) * R
+        Qdata[slQ].view(DQ)[:] = Q * sR  # positive diag of R
+        Rdata[slR].view(DR)[:] = sR.reshape([-1, 1]) * R
     return Qdata, Rdata
 
 
@@ -544,7 +622,7 @@ def add(datas, metas, Dsize):
     newdata = torch.zeros(Dsize, dtype=dtype, device=datas[0].device)
     for data, meta in zip(datas, metas):
         for sl_c, sl_a in meta:
-            newdata[slice(*sl_c)] = newdata[slice(*sl_c)] + data[slice(*sl_a)]
+            newdata[sl_c] = newdata[sl_c] + data[sl_a]
     return newdata
 
 
@@ -552,9 +630,9 @@ def sub(Adata, Bdata, metas, Dsize):
     dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
     newdata = torch.zeros(Dsize, dtype=dtype, device=Adata.device)
     for sl_c, sl_a in metas[0]:
-        newdata[slice(*sl_c)] = newdata[slice(*sl_c)] + Adata[slice(*sl_a)]
+        newdata[sl_c] = newdata[sl_c] + Adata[sl_a]
     for sl_c, sl_b in metas[1]:
-        newdata[slice(*sl_c)] = newdata[slice(*sl_c)] - Bdata[slice(*sl_b)]
+        newdata[sl_c] = newdata[sl_c] - Bdata[sl_b]
     return newdata
 
 
@@ -566,7 +644,7 @@ def vdot(Adata, Bdata, meta):
         Bdata = Bdata.to(dtype=dtype)
     tmp = torch.empty(len(meta), dtype=dtype, device=Adata.device)
     for ii, (sla, slb) in enumerate(meta):
-        tmp[ii] = torch.dot(Adata[slice(*sla)], Bdata[slice(*slb)])
+        tmp[ii] = torch.dot(Adata[sla], Bdata[slb])
     return torch.sum(tmp)
 
 
@@ -584,7 +662,7 @@ def dot_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
     dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
     newdata = torch.empty(Dsize, dtype=dtype, device=Adata.device)
     for sln, slb, Db, sla in meta:
-        newdata[slice(*sln)].reshape(tuple(Db))[:] = Adata[slice(*sla)].reshape(dim) * Bdata[slice(*slb)].reshape(tuple(Db))
+        newdata[sln].reshape(Db)[:] = Adata[sla].reshape(dim) * Bdata[slb].reshape(Db)
     return newdata
 
 
@@ -592,28 +670,197 @@ def negate_blocks(Adata, slices):
     return kernel_negate_blocks.apply(Adata, slices)
 
 
+def gather_slices(Adata, slices):
+    return torch.cat([Adata[slice(*slc)] for slc in slices])
+
+
 #####################################################
 #     block merging, truncations and un-merging     #
 #####################################################
 
 
+@torch.no_grad()
+def _mask_flat_index(mask, meta, axis, ndim, device, size_large, small_is_out):
+    r"""
+    Build a single flat index mapping each element of the compressed (``small``)
+    tensor to its source position in the full (``large``) tensor, so that the
+    whole block-sparse mask becomes one gather. The mask selects a subset along
+    ``axis``; ``small`` and ``large`` blocks differ only in that dimension
+    (``Mn = len(mask)`` vs ``Ma``). For a small-block C-order coordinate
+    ``(l, j, r)`` the source large flat index is ``l_start + (l*Ma + m[j])*R + r``.
+
+    Reused by both ``apply_mask`` (small=out, large=in) and ``embed_mask``
+    (small=in, large=out). Scratch runs in ``int32`` when the large tensor fits,
+    with the final index cast to ``int64`` as ``index_select``/``index_add`` need.
+    """
+    nb = len(meta)
+    if nb == 0:
+        return torch.empty(0, dtype=torch.long, device=device)
+    if small_is_out:                 # apply_mask: small=out, large=in
+        D_s, D_l, l_start = meta['Dn'], meta['Da'], meta['sla'][:, 0]
+    else:                            # embed_mask: small=in, large=out
+        D_s, D_l, l_start = meta['Da'], meta['Dn'], meta['sln'][:, 0]
+    # per-block scalars (host numpy); empty-slice prod == 1 covers axis==0 / diag
+    L  = D_s[:, :axis].prod(1)
+    Mn = D_s[:, axis]
+    Ma = D_l[:, axis]
+    R  = D_s[:, axis + 1:].prod(1)
+    Ln = (L * Mn * R).astype(np.int64)                 # small-block sizes
+    soff = np.zeros(nb, np.int64); np.cumsum(Ln[:-1], out=soff[1:])
+    moff = np.zeros(nb, np.int64); np.cumsum(Mn[:-1], out=moff[1:])   # mask concat offsets
+
+    # concatenated mask indices (dedup H2D copies over distinct axis-charges)
+    uniq = {t: torch.as_tensor(v, dtype=torch.long, device=device) for t, v in mask.items()}
+    mask_cat = torch.cat([uniq[tuple(t)] for t in meta['tm']])
+
+    S   = int(Ln.sum())
+    idt = torch.int32 if size_large < 2 ** 31 else torch.int64        # scratch dtype guard
+    Lnt = torch.as_tensor(Ln, device=device)
+    rep = lambda a, dt=idt: torch.repeat_interleave(
+        torch.as_tensor(a, dtype=dt, device=device), Lnt)            # per-position expand
+
+    r = torch.arange(S, dtype=idt, device=device)
+    r -= rep(soff)                                     # r = local offset within small block
+    Rp = rep(R)
+    q  = torch.div(r, Rp, rounding_mode='floor')       # q = local // R
+    r -= q * Rp;                       del Rp          # r = local % R
+    Mnp  = rep(Mn)
+    lidx = torch.div(q, Mnp, rounding_mode='floor')    # lidx = q // Mn
+    q -= lidx * Mnp;                   del Mnp         # q = j
+    moffp = rep(moff, torch.int64); moffp += q; del q  # int64 for gather index
+    mval = mask_cat[moffp];            del moffp
+    lidx *= rep(Ma); lidx += mval;     del mval        # lidx = lidx*Ma + m[j]
+    lidx *= rep(R);  lidx += r;        del r           # (..)*R + r
+    lidx += rep(l_start)                               # + large base
+    return lidx.to(torch.int64)                        # index_select/index_add need int64
+
+
 def apply_mask(Adata, mask, meta, Dsize, axis, a_ndim):
-    return kernel_apply_mask.apply(Adata, mask, meta, Dsize, axis, a_ndim)
+    # single-gather fast path; kernel_apply_mask kept as reference fallback
+    idx = _mask_flat_index(mask, meta, axis, a_ndim, Adata.device, Adata.numel(), small_is_out=True)
+    return Adata.index_select(0, idx)
 
 
 def embed_mask(Adata, mask, meta, Dsize, axis, a_ndim):
-    return kernel_embed_mask.apply(Adata, mask, meta, Dsize, axis, a_ndim)
+    # single-scatter fast path; kernel_embed_mask kept as reference fallback
+    idx = _mask_flat_index(mask, meta, axis, a_ndim, Adata.device, Dsize, small_is_out=False)
+    return Adata.new_zeros(Dsize).index_add(0, idx, Adata)
 
 
 def embed_transpose(data, axes, meta_transpose, size):
    return kernel_embed_transpose.apply(data, axes, meta_transpose, size)
 
 
+def embed_slices(data, meta, size):
+   return kernel_embed_slices.apply(data, meta, size)
+
+
+def _fuse_scatter_chunk():
+    r"""
+    Read env ``YASTN_FUSE_SCATTER_CHUNK`` controlling the GPU ``transpose_and_merge`` path:
+    unset -> ``None`` (scatter, single tile); ``0`` -> force the per-block loop even on GPU;
+    a positive int -> scatter with that tile size. Invalid values warn and are ignored (``None``).
+    """
+    env = os.environ.get('YASTN_FUSE_SCATTER_CHUNK')
+    if env in [None, ""]:
+        return None
+    try:
+        val = int(env)
+    except ValueError:
+        val = -1
+    if val < 0:
+        warnings.warn(f"Ignoring YASTN_FUSE_SCATTER_CHUNK={env!r}: expected a non-negative integer.")
+        return None
+    return val   # 0 => force loop; positive => scatter tile size
+
+
+def _fuse_scatter_thresh():
+    r"""
+    Read env ``YASTN_FUSE_SCATTER_THRESH`` -- the per-block element-count threshold for the hybrid
+    GPU fuse/unfuse path: blocks with >= THRESH elements go through the per-block loop (bandwidth-
+    optimal, no index build), smaller blocks through a compact scatter/gather. Unset -> 2**16
+    (~saturates the A100/H100 memory interface; where the loop launch cost and index-build cost
+    cross over). Invalid values warn and fall back to the default.
+    """
+    env = os.environ.get('YASTN_FUSE_SCATTER_THRESH')
+    if env in [None, ""]:
+        return 1 << 16
+    try:
+        val = int(env)
+    except ValueError:
+        val = -1
+    if val < 0:
+        warnings.warn(f"Ignoring YASTN_FUSE_SCATTER_THRESH={env!r}: expected a non-negative integer.")
+        return 1 << 16
+    return val
+
+
+_DEFAULT_TILE = 1 << 27   # index-build tile when YASTN_FUSE_SCATTER_CHUNK is unset 2** 
+
+
 def transpose_and_merge(data, order, meta_mrg, size):
+    r"""
+    Transpose-and-merge source blocks into the fused 1D buffer. On CPU uses the per-block loop
+    kernel. On GPU uses a hybrid: large blocks (>= ``YASTN_FUSE_SCATTER_THRESH`` elements) go through
+    the loop, small blocks through a single compact scatter; if all blocks are small it is a pure
+    single-array scatter, if all are large a pure loop. ``YASTN_FUSE_SCATTER_CHUNK=0`` forces the
+    loop; a positive value tiles the all-small scatter. Partial coverage is handled without a sink
+    on the hybrid path (compact indices cover only real blocks).
+    """
+    if data.is_cuda:
+        chunk = _fuse_scatter_chunk()
+        if chunk != 0 and len(meta_mrg) > 0:   # 0 forces the loop even on GPU; empty meta is always a loop
+            thr = _fuse_scatter_thresh()
+            tile = chunk if chunk else _DEFAULT_TILE   # index-build tile (unset -> bounded default)
+            meta_small = [m for m in meta_mrg if m[2].stop - m[2].start < thr]   # slo = m[2]
+            if not meta_small:                 # all large -> per-block loop (no index build at all)
+                return kernel_transpose_and_merge.apply(data, order, meta_mrg, size)
+            params = pack_transpose_and_merge_params(order, tuple(meta_mrg), data.numel())
+            params['slo_start']= params['slo_start'].to(device=data.device)
+            params['packed']= params['packed'].to(device=data.device)
+            if len(meta_small) == len(meta_mrg):   # all small -> lean single-array scatter (kernel tiles by `tile`)
+                return kernel_transpose_and_merge_scatter.apply(data, params, size, tile)
+            meta_large = [m for m in meta_mrg if m[2].stop - m[2].start >= thr]
+            starts = torch.tensor([m[2].start for m in meta_small], dtype=torch.int64, device=data.device)
+            stops = torch.tensor([m[2].stop for m in meta_small], dtype=torch.int64, device=data.device)
+            src_small = _concat_ranges(starts, stops, data.device)
+            dst_small = _build_dest_tiled(params, src_small, tile)   # small source positions always land in-block
+            return kernel_transpose_and_merge_hybrid.apply(data, order, meta_large, src_small, dst_small, size)
     return kernel_transpose_and_merge.apply(data, order, meta_mrg, size)
 
 
 def unmerge(data, meta, size):
+    r"""
+    Unfuse (split) fused blocks into the 1D buffer. On CPU uses the per-block loop kernel. On GPU
+    uses the same hybrid split as :func:`transpose_and_merge`, keyed on the unfused (dest) block
+    size: large blocks loop, small blocks go through a compact gather.
+    """
+    if data.is_cuda:
+        chunk = _fuse_scatter_chunk()
+        if chunk != 0 and len(meta) > 0:   # 0 forces the loop even on GPU; empty meta is always a loop
+            thr = _fuse_scatter_thresh()
+            tile = chunk if chunk else _DEFAULT_TILE   # index-build tile (unset -> bounded default)
+            meta_small = [m for m in meta if m[0].stop - m[0].start < thr]   # sln = m[0] (dest)
+            if not meta_small:                 # all large -> per-block loop (no index build at all)
+                return kernel_unmerge.apply(data, meta, size)
+            ndimo = len(meta[0][1])        # len(Dn)
+            # unmerge is the order=identity, source/dest-swapped case of transpose_and_merge; relabel
+            # meta (sln,Dn,slo,Do,sslo) -> merge meta so _build_dest maps each DEST position to its
+            # SOURCE flat index (gather_idx).
+            merge_meta = [(slo, Do, sln, Dn, sslo, Dn) for (sln, Dn, slo, Do, sslo) in meta]
+            params = pack_transpose_and_merge_params(tuple(range(ndimo)), tuple(merge_meta), size)
+            params['slo_start']= params['slo_start'].to(device=data.device)
+            params['packed']= params['packed'].to(device=data.device)
+            if not params['contiguous']:   # dense dest expected; else fall back to loop
+                return kernel_unmerge.apply(data, meta, size)
+            if len(meta_small) == len(meta):   # all small -> lean gather (kernel tiles by `tile`)
+                return kernel_unmerge_scatter.apply(data, params, size, tile)
+            meta_large = [m for m in meta if m[0].stop - m[0].start >= thr]
+            starts = torch.tensor([m[0].start for m in meta_small], dtype=torch.int64, device=data.device)
+            stops = torch.tensor([m[0].stop for m in meta_small], dtype=torch.int64, device=data.device)
+            dst_small = _concat_ranges(starts, stops, data.device)   # small dest positions
+            gidx_small = _build_dest_tiled(params, dst_small, tile)   # relabeled params map dest -> source
+            return kernel_unmerge_hybrid.apply(data, meta_large, dst_small, gidx_small, size)
     return kernel_unmerge.apply(data, meta, size)
 
 
@@ -638,14 +885,14 @@ def merge_super_blocks(pos_tens, meta, size):
 def diag_1dto2d(data, meta, Dsize):
     newdata = torch.zeros(Dsize, dtype=data.dtype, device=data.device)
     for sln, slo in meta:
-        newdata[slice(*sln)] = torch.diag(data[slice(*slo)]).ravel()
+        newdata[sln] = torch.diag(data[slo]).ravel()
     return newdata
 
 
 def diag_2dto1d(data, meta, Dsize):
     newdata = torch.zeros(Dsize, dtype=data.dtype, device=data.device)
     for sln, slo, Do in meta:
-        torch.diag(data[slice(*slo)].reshape(tuple(Do)), out=newdata[slice(*sln)])
+        torch.diag(data[slo].reshape(tuple(Do)), out=newdata[sln])
     return newdata
 
 

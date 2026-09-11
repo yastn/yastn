@@ -29,8 +29,9 @@ def are_identical_tensors(a, b):
     assert np.allclose(a.to_numpy(), b.to_numpy())
 
 
-@pytest.mark.parametrize("resolve_ops", [True,False])
-def test_to_from_dict(resolve_ops, config_kwargs):
+@pytest.mark.parametrize("resolve_ops", [True, False])
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_to_from_dict(resolve_ops, config_kwargs, remove_blocks):
     config = yastn.make_config(sym='U1', **config_kwargs)
     legs = [yastn.Leg(config, s=1, t=(0, 1, 2), D= (3, 5, 2)),
             yastn.Leg(config, s=-1, t=(0, 1, 3), D= (1, 2, 3)),
@@ -38,6 +39,7 @@ def test_to_from_dict(resolve_ops, config_kwargs):
             yastn.Leg(config, s=1, t=(-1, 0, 1), D= (4, 3, 2))]
 
     a = yastn.rand(config, legs=legs)
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     a = a.fuse_legs(axes=(0, (1, 2), 3), mode='hard')
     a = a.fuse_legs(axes=(0, (1, 2)), mode='meta')
 
@@ -225,7 +227,7 @@ def test_old_to_dict(config_kwargs):
         U = yastn.from_dict(d['U'], config_U1)
         S = yastn.from_dict(d['S'], config_U1)
         V = yastn.from_dict(d['V'], config_U1)
-
+        assert all(x.is_consistent() for x in [a, U, S, V])
         assert (U @ S @ V - a).norm() < 1e-12
         SS = a.svd(axes=((0, 1), 2), compute_uv=False)
         assert (SS - S).norm() < 1e-12

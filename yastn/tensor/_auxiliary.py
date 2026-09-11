@@ -15,18 +15,21 @@
 """ Auxiliary functions used by yastn.Tensor. """
 from __future__ import annotations
 
+import hashlib
 from functools import lru_cache
-from itertools import accumulate, chain
+from itertools import accumulate, chain, starmap
 from math import prod
 from typing import NamedTuple, Sequence
 
 import numpy as np
 
-from .._profile import nsys_profile
-from ._legbasic import LegBasic
 from ..sym import sym_none
+from ._legbasic import LegBasic
+from ._yastnerror import YastnError
+from .._profile import nsys_profile
 
-__all__ = ['_config', '_struct', 'get_blocks', 'sign_canonical_order', 'swap_charges', 'find_matching_indices']
+__all__ = ['_config', '_struct', 'get_blocks', 'hash_blocks', 'sign_canonical_order', 'swap_charges',
+           'find_matching_indices', 'HashedMask', '_compress_slices', 'convert_to_tuples_and_slices']
 
 
 class _config(NamedTuple):
@@ -38,12 +41,96 @@ class _config(NamedTuple):
     default_fusion: str = 'hard'
     force_fusion: str = None
     tensordot_policy: str = 'fuse_contracted'
+    meta_tensordot_policy: str = 'auto'
+    lazy_threshold: float= None
+    # 0 does not use lazy, default for cutensor backend;
+    # 1 uses lazy whenever possible;
+    # for (0, 1) uses lazy when the fraction of
+    # eliminated blocks exceeds lazy_threshold
+
+
+class HashedMask:
+    __slots__ = ('_arr', '_hash')
+    _NONE_HASH = hash(None)
+
+    def __init__(self, arr):
+        if arr is None or sum(arr) == len(arr):  # no mask, or all True
+            self._arr = None
+            self._hash = self._NONE_HASH
+        else:
+            if isinstance(arr, (tuple, list)):
+                arr = np.array(arr, dtype=bool)
+            arr.flags.writeable = False
+            self._arr = arr
+            self._hash = hash(arr.data.tobytes())
+
+    @property
+    def array(self) -> np.ndarray | None:
+        return self._arr
+
+    def tolist(self) -> np.ndarray | None:
+        return self._arr if self._arr is None else self._arr.tolist()
+
+    def __hash__(self) -> int:
+        return self._hash
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, HashedMask):
+            return False
+        if self is other:
+            return True
+        if self._hash != other._hash:
+            return False
+        if self._arr is None or other._arr is None:
+            return self._arr is other._arr
+        return np.array_equal(self._arr, other._arr)
 
 
 class _struct(NamedTuple):
     legs: tuple = ()  # tuple[LegBasic]
     n: tuple = ()  # tensor charge
     isdiag: bool = False  # isdiag
+    mask: HashedMask = HashedMask(None)
+
+    def replace(self, **kwargs):
+        if 'mask' in kwargs and not isinstance(kwargs['mask'], HashedMask):
+            kwargs['mask'] = HashedMask(kwargs['mask'])
+        if 'legs' in kwargs and not isinstance(kwargs['legs'], tuple):
+            kwargs['legs'] = tuple(kwargs['legs'])
+        return self._replace(**kwargs)
+
+    def mask_from_ind(self, nblocks, ind):
+        mask = np.zeros(nblocks, dtype=bool)
+        mask[ind] = True
+        return self.replace(mask=mask)
+
+    def to_dict(self):
+        r""" Serializes _struct to dictionary. """
+        return {'type': type(self).__name__,
+                'dict_ver': 1,
+                'legs': tuple(leg.to_dict() for leg in self.legs),
+                'n': self.n,
+                'isdiag': self.isdiag,
+                'mask': self.mask.array}
+
+    @classmethod
+    def from_dict(cls, d):
+        r""" De-serializes _struct from the dictionary ``d``. """
+        if d['dict_ver'] == 1:
+            if cls.__name__ != d['type']:
+                raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
+            legs = tuple(LegBasic.from_dict(leg) for leg in d['legs'])
+            mask = HashedMask(d['mask'])
+            return cls(legs=legs, n=d['n'], isdiag=d['isdiag'], mask=mask)
+
+    def is_consistent(self):
+        assert isinstance(self, _struct)
+        assert isinstance(self.legs, tuple)
+        assert all(leg.is_consistent() for leg in self.legs)
+        assert isinstance(self.n, tuple)
+        assert all(isinstance(x, int) for x in self.n)
+        assert isinstance(self.isdiag, bool)
+        return True
 
 
 class _blocks(NamedTuple):
@@ -52,7 +139,28 @@ class _blocks(NamedTuple):
     slc: np.array = None  # list of block slices nblocks x 2
     size: int = 0  # data size
     nblocks: int = 0  # number of blocks
-    struct: _struct = _struct() # updated structure
+    coords: np.array = None  # list of block coordinates
+
+
+def hash_blocks(bl, out=str) -> str | bytes:
+    """
+    Persistent, cross-process hash of a NamedTuple whose fields are either
+    hashable Python objects or numpy arrays (e.g. :class:`_blocks`).
+
+    The digest is stable across interpreter runs. Array fields are hashed by
+    content together with their shape and dtype; contiguity is canonicalized so
+    that equivalent C-/F-ordered arrays yield the same digest.
+    """
+    h = hashlib.blake2b()
+    for v in bl:
+        if isinstance(v, np.ndarray):
+            v = np.ascontiguousarray(v)
+            h.update(str(v.shape).encode())
+            h.update(v.dtype.str.encode())
+            h.update(v.tobytes())
+        else:
+            h.update(repr(v).encode())
+    return h.hexdigest() if out is str else h.digest()
 
 
 def _flatten(nested_iterator):
@@ -169,19 +277,19 @@ def sign_canonical_order(*operators, sites=None, f_ordered=None) -> int:
 @nsys_profile
 def get_blocks(sym, struct) -> _blocks:
     """
-    Generate all allowed block charges, their dimensions, slices, total size and trimed legs.
-    Assume that legs have sorted charges
+    Generate all allowed block charges, their dimensions, slices, coordinates and total size.
     """
-    # enforce int type, remove d=0 sectors
-    saxes = tuple(int(leg.s) for leg in struct.legs)
-    taxes = tuple(tuple(tuple(map(int, tt)) for tt, d in zip(leg.t, leg.D) if d > 0) for leg in struct.legs)
-    Daxes = tuple(tuple(int(d) for d in leg.D if d > 0) for leg in struct.legs)
+    saxes = tuple(leg.s for leg in struct.legs)
+    taxes = tuple(leg.t for leg in struct.legs)
+    tblocks, iblocks = get_blocks_charges_all(sym, taxes, saxes, struct.n)
 
-    tblocks, iblocks, icharges = get_blocks_charges(sym, taxes, saxes, struct.n)
+    if struct.mask.array is not None:
+        tblocks = tblocks[struct.mask.array]
+        iblocks = iblocks[struct.mask.array]
 
     Dblocks = np.empty(iblocks.shape, dtype=np.int64)
-    for i, Dax in enumerate(Daxes):
-        Dax = np.array(Dax, dtype=np.int64)
+    for i, leg in enumerate(struct.legs):
+        Dax = np.array(leg.D, dtype=np.int64)
         Dblocks[:, i] = Dax[iblocks[:, i]]
 
     nblocks = len(iblocks)
@@ -192,21 +300,51 @@ def get_blocks(sym, struct) -> _blocks:
     slices[1:, 0] = slices[:-1, 1]
     size = np.sum(Dp, dtype=np.int64).item()
     #
-    # recalculate legs, in case some leg charges do not appear in any block
-    new_legs = []
-    for s, tax, Dax, inds in zip(saxes, taxes, Daxes, icharges):
-        tl = tuple(tax[i] for i in inds)
-        Dl = tuple(Dax[i] for i in inds)
-        leg = LegBasic(s=s, t=tl, D=Dl)
-        new_legs.append(leg)
-    new_struct = _struct(legs=tuple(new_legs), n=struct.n, isdiag=struct.isdiag)
+    return _blocks(t=tblocks, D=Dblocks, slc=slices, size=size, nblocks=nblocks, coords=iblocks)
+
+
+@nsys_profile
+def get_trimmed_struct(sym, struct, sub_legs=None):
+    saxes = tuple(int(leg.s) for leg in struct.legs)
+    # taxes_full = tuple(leg.t for leg in struct.legs)
+    # taxes_full = tuple(tuple(tt for tt, d in zip(leg.t, leg.D) if d > 0) for leg in struct.legs)
+    taxes_full = tuple(tuple(tuple(map(int, tt)) for tt, d in zip(leg.t, leg.D) if d > 0) for leg in struct.legs)
+    if sub_legs is None:
+        taxes_sub = taxes_full
+    else:
+        # taxes_sub = tuple(leg.t for leg in sub_legs)
+        taxes_sub = tuple(tuple(tuple(map(int, tt)) for tt, d in zip(leg.t, leg.D) if d > 0) for leg in sub_legs)
+    taxes_new, mask_sub = get_trimmed_struct_engine(sym, taxes_full, saxes, struct.n, struct.mask, taxes_sub)
+    legs_old = struct.legs if sub_legs is None else sub_legs  # use sub_legs to update bond dims e.g. in mask
+    legs_new = tuple(leg.trim(tax) for leg, tax in zip(legs_old, taxes_new))
+    return _struct(legs=tuple(legs_new), n=struct.n, isdiag=struct.isdiag, mask=mask_sub)
+
+
+@lru_cache(maxsize=1024)
+@nsys_profile
+def get_trimmed_struct_engine(sym, taxes_full, saxes, n, mask, taxes_sub):
     #
-    return _blocks(t=tblocks, D=Dblocks, slc=slices, size=size, nblocks=nblocks, struct=new_struct)
+    tblocks_full, _ = get_blocks_charges_all(sym, taxes_full, saxes, n)
+    if mask.array is not None:
+        tblocks_full = tblocks_full[mask.array]
+    #
+    tblocks_sub, iblocks_sub = get_blocks_charges_all(sym, taxes_sub, saxes, n)
+    inds_sub = find_matching_indices(tblocks_sub, tblocks_full, both=False)
+    iblocks_sub = iblocks_sub[inds_sub]
+    icharges_sub = [np.unique(iblocks_sub[:, i]).tolist() for i in range(len(taxes_sub))]
+    taxes_new = tuple(tuple(tax[i] for i in inds) for tax, inds in zip(taxes_sub, icharges_sub))
 
+    if taxes_new != taxes_sub:
+        return get_trimmed_struct_engine(sym, taxes_full, saxes, n, mask, taxes_new)
 
-# below this many combinations of charges, splitting the legs (see get_blocks_charges)
-# costs more than the enumeration it saves
-_SPLIT_MIN = 4096
+    if mask.array is not None:
+        mask_sub = np.zeros(len(tblocks_sub), dtype=bool)
+        mask_sub[inds_sub] = True
+        mask_sub = HashedMask(mask_sub)
+    else:
+        mask_sub = mask
+
+    return taxes_new, mask_sub
 
 
 def _product_indices(sizes):
@@ -233,20 +371,20 @@ def _group_charges(sym, tarr, s, axes):
 
 @lru_cache(maxsize=1024)
 @nsys_profile
-def get_blocks_charges(sym, taxes: Sequence[Sequence[int]], s: Sequence[int], n: Sequence[int]):
+def get_blocks_charges_all(sym, taxes: Sequence[Sequence[int]], s: Sequence[int], n: Sequence[int]):
     """
     Params
     ------
     taxes: List of lists of charges for each leg
     """
+    _SPLIT_MIN = 4096
     nsym = sym.NSYM
     ndim = len(taxes)
     sizes = [len(tax) for tax in taxes]
 
     if 0 in sizes:  # a leg carrying no charges admits no blocks
         return (np.zeros((0, ndim, nsym), dtype=np.int64),
-                np.zeros((0, ndim), dtype=np.int64),
-                [[] for _ in range(ndim)])
+                np.zeros((0, ndim), dtype=np.int64))
 
     tarr = tuple(np.array(tax, dtype=np.int64).reshape(len(tax), nsym) for tax in taxes)
 
@@ -293,8 +431,7 @@ def get_blocks_charges(sym, taxes: Sequence[Sequence[int]], s: Sequence[int], n:
         tblocks = np.empty((nblocks, ndim, nsym), dtype=np.int64)
         tblocks[:, :h], tblocks[:, h:] = lt[lsel], rt[rsel]
 
-    icharges = [np.unique(iblocks[:, i]).tolist() for i in range(ndim)]
-    return tblocks, iblocks, icharges
+    return tblocks, iblocks
 
 
 def find_index(tset, tt, sorted=True):
@@ -334,6 +471,60 @@ def argsort_t(tset):
     return np.argsort(tset_view)
 
 
+def _encode_rows_shared(tsets):
+    """
+    Order-preserving int64 keys for the rows of each 2-D array in ``tsets`` (all sharing the
+    same number of columns), computed over the shared per-column value set so that equal rows
+    across arrays receive equal keys. Returns a list of 1-D int64 key arrays (one per input),
+    or ``None`` if the mixed-radix key space would overflow int64.
+
+    The encoding is monotonic w.r.t. the per-column lexicographic order used by
+    ``np.unique(..., axis=0)`` and by a ``[('', dt)] * ncols`` structured-dtype view (column 0
+    most significant, numeric per column). Hence an input already sorted in that order yields
+    an ascending key array, so ``np.searchsorted`` on it stays valid. Charge blocks are small
+    integers with few distinct values per column, so the key space usually fits comfortably.
+    """
+    cp = tsets[0].shape[1]
+    sizes = [len(t) for t in tsets]
+    if cp == 0:  # zero-width rows: a single (empty) class
+        keys = np.zeros(sum(sizes), dtype=np.int64)
+    else:
+        stacked = np.concatenate(tsets, axis=0) if len(tsets) > 1 else tsets[0]
+        ranks, radices, prod = [], [], 1
+        for j in range(cp):
+            u, inv = np.unique(stacked[:, j], return_inverse=True)  # per-column ranks preserve order
+            ranks.append(inv.reshape(-1))
+            radices.append(len(u))
+            prod *= len(u)
+            if prod >= (1 << 62):
+                return None
+        keys = np.zeros(sum(sizes), dtype=np.int64)
+        w = 1
+        for j in range(cp - 1, -1, -1):  # column 0 carries the largest weight (most significant)
+            keys += ranks[j] * w
+            w *= radices[j]
+    out, off = [], 0
+    for s in sizes:
+        out.append(keys[off: off + s])
+        off += s
+    return out
+
+
+def _row_keys_pair(t1, t2):
+    """
+    A comparable-and-searchsortable 1-D key per row of ``t1`` / ``t2`` (same #columns).
+    Uses the fast order-preserving int64 encoding, falling back to a structured-dtype view
+    of the raw rows when the int64 key space would overflow. In both cases keys of ``t1`` and
+    ``t2`` share an ordering, and ``t1`` sorted by rows implies its keys are ascending.
+    """
+    enc = _encode_rows_shared([t1, t2])
+    if enc is not None:
+        return enc[0], enc[1]
+    struct_dt = np.dtype([('', t1.dtype)] * t1.shape[1])
+    return (np.ascontiguousarray(t1).view(struct_dt).ravel(),
+            np.ascontiguousarray(t2).view(struct_dt).ravel())
+
+
 @nsys_profile
 def find_matching_indices(tset1, tset2, both=True):
     rs1, *cs1 = tset1.shape
@@ -343,19 +534,29 @@ def find_matching_indices(tset1, tset2, both=True):
     if cp == 0 and rs1 == 1 and rs2 == 1:
         ind1 = ind2 = np.array([0], dtype=np.int64)
     elif cp > 0 and rs1 > 0 and rs2 > 0:
-        tset1 = tset1.reshape(rs1, cp)
-        tset2 = tset2.reshape(rs2, cp)
-        struct_dt = np.dtype([('', tset1.dtype)] * cp)
-        tset1_view = np.ascontiguousarray(tset1).view(struct_dt).ravel()
-        tset2_view = np.ascontiguousarray(tset2).view(struct_dt).ravel()
-
-        ind1 = np.searchsorted(tset1_view, tset2_view)
+        v1, v2 = _row_keys_pair(tset1.reshape(rs1, cp), tset2.reshape(rs2, cp))
+        ind1 = np.searchsorted(v1, v2)
         mask = ind1 < rs1
         safe_ind = np.where(mask, ind1, 0)
-        mask = mask & (tset1_view[safe_ind] == tset2_view)
+        mask = mask & (v1[safe_ind] == v2)
         ind1 = ind1[mask]
         if both:
             ind2 = np.flatnonzero(mask)
     else:
         ind1 = ind2 = np.array([], dtype=np.int64)
     return (ind1, ind2) if both else ind1
+
+
+def convert_to_tuples_and_slices(arr):
+    tmp = []
+    for name in arr.dtype.names:
+        col = arr[name].tolist()
+        if "ssl" in name:
+            tmp.append([tuple(starmap(slice, xs)) for xs in col])
+        elif "sl" in name:
+            tmp.append(list(starmap(slice, col)))
+        elif arr[name].ndim > 1:
+            tmp.append(list(map(tuple, col)))
+        else:
+            tmp.append(col)
+    return list(zip(*tmp))

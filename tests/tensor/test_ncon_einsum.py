@@ -173,7 +173,8 @@ def test_ncon_einsum_syntax(config_kwargs):
     assert yastn.norm(f3 - f) < 1e-12
 
 
-def test_ncon_einsum_basic(config_kwargs):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_ncon_einsum_basic(config_kwargs, remove_blocks):
     """ tests of ncon executing a series of tensor contractions. """
     config_dense = yastn.make_config(sym='none', **config_kwargs)
     a = yastn.rand(s=(1, 1, 1), D=(20, 3, 1), config=config_dense, dtype='complex128')
@@ -227,12 +228,17 @@ def test_ncon_einsum_basic(config_kwargs):
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.rand(config=config_U1, s=[-1, 1, -1], n=0,
                   D=((20, 10), (3, 3), (1, 1)), t=((1, 0), (1, 0), (1, 0)))
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     b = yastn.rand(config=config_U1, s=[1, 1, 1], n=1,
                   D=((4, 4), (2, 2), (20, 10)), t=((1, 0), (1, 0), (1, 0)))
+    b = b.remove_random_blocks(number=remove_blocks, keep_legs=True)
     c = yastn.rand(config=config_U1, s=[1, 1, 1, -1], n=1,
                   D=((20, 10), (30, 20), (10, 5), (10, 5)), t=((1, 0), (1, 0), (1, 0), (1, 0)))
+    c = c.remove_random_blocks(number=remove_blocks, keep_legs=True)
     d = yastn.rand(config=config_U1, s=[1, 1, -1, -1], n=0,
                   D=((30, 20), (10, 5), (20, 10), (10, 5)), t=((1, 0), (1, 0), (1, 0), (1, 0)))
+    d = d.remove_random_blocks(number=remove_blocks, keep_legs=True)
+
 
     e = yastn.ncon([a, b], [[1, -1, -3], [-0, -2, 1]])
     assert e.get_shape() == (8, 6, 4, 2)
@@ -243,7 +249,7 @@ def test_ncon_einsum_basic(config_kwargs):
 
     f = yastn.ncon([a, b, c, d], [[4, -2, -0], [-3, -1, 5], [4, 3, 1, 1], [3, 2, 5, 2]],
                   conjs=(0, 1, 0, 1))
-    assert f.get_shape() == (2, 4, 6, 8)
+    assert remove_blocks or f.get_shape() == (2, 4, 6, 8)  # remove_blocks can eliminate some leg charges in the outcome
     g = yastn.ncon([a, a, a, b], [[1, 2, 3], [1, 2, 3], [4, -2, -0], [-3, -1, 4]],
                   conjs=(0, 1, 1, 1))
     assert g.get_shape() == (2, 4, 6, 8)
@@ -366,7 +372,8 @@ def test_ncon_trace_swap_multiple_pairs_value(config_kwargs):
     assert abs(x.item() - ref) < tol
 
 
-def test_ncon_einsum_swaps(config_kwargs):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_ncon_einsum_swaps(config_kwargs, remove_blocks):
     """ tests of ncon executing a series of tensor contractions. """
     config_Z2 = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
     l = yastn.Leg(config_Z2, s=1, t=(0, 1), D=(1, 1))
@@ -387,8 +394,12 @@ def test_ncon_einsum_swaps(config_kwargs):
     #
     # second diagram
     a = yastn.rand(config=config_Z2, legs=[l, l, lc, l, lc])
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     b = yastn.rand(config=config_Z2, legs=[l, lc, l])
+    b = b.remove_random_blocks(number=remove_blocks, keep_legs=True)
     c = yastn.rand(config=config_Z2, legs=[l, lc, l])
+    c = c.remove_random_blocks(number=remove_blocks, keep_legs=True)
+
     #
     x = yastn.ncon([a, b, c, c], ((1, 4, 2, -0, 1), (2, 3, -1), (3, 4, -2), (-3, -4, -5)), swap=((-0, 3), (-0, 1), (-1, -2), (-3, -5), (-4, -2)))
     y = yastn.einsum('adbAa,bcB,cdC,DEF->ABCDEF', a, b, c, c, swap='Ac,Aa,BC,CE,DF')
@@ -409,11 +420,17 @@ def test_ncon_einsum_swaps(config_kwargs):
     #
     # third diagram to test different contraction orders
     a = yastn.rand(config=config_Z2, n=1, legs=[l, l, l, l])
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     b = yastn.rand(config=config_Z2, n=1, legs=[l, l, l, l, lc])
+    b = b.remove_random_blocks(number=remove_blocks, keep_legs=True)
     c = yastn.rand(config=config_Z2, n=1, legs=[l, l, lc, lc])
+    c = c.remove_random_blocks(number=remove_blocks, keep_legs=True)
     d = yastn.rand(config=config_Z2, n=1, legs=[l, lc, lc, lc, lc])
+    d = d.remove_random_blocks(number=remove_blocks, keep_legs=True)
     e = yastn.rand(config=config_Z2, n=1, legs=[l, lc, lc, lc])
+    e = e.remove_random_blocks(number=remove_blocks, keep_legs=True)
     f = yastn.rand(config=config_Z2, n=1, legs=[lc, lc])
+    f = f.remove_random_blocks(number=remove_blocks, keep_legs=True)
     #
     # reference
     r = yastn.tensordot(a, b, axes=(0, 4))
@@ -439,18 +456,25 @@ def test_ncon_einsum_swaps(config_kwargs):
         assert (y - r).norm() < tol * r.norm()
 
 
-def test_einsum_scalar_swap_order(config_kwargs):
+@pytest.mark.parametrize('remove_blocks', [0, 20])
+def test_einsum_scalar_swap_order(config_kwargs, remove_blocks):
     r"""Scalar fermionic einsum should be invariant to contraction order."""
     config_Z2 = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
     l = yastn.Leg(config_Z2, s=1, t=(0, 1), D=(2, 2))
     lc = l.conj()
 
     A = yastn.rand(config=config_Z2, n=0, legs=[l, l, l, l])
+    A = A.remove_random_blocks(number=remove_blocks, keep_legs=True)
     B = yastn.rand(config=config_Z2, n=0, legs=[lc, lc, lc])
+    B = B.remove_random_blocks(number=remove_blocks, keep_legs=True)
     C = yastn.rand(config=config_Z2, n=0, legs=[lc, l, l, l])
+    C = C.remove_random_blocks(number=remove_blocks, keep_legs=True)
     D = yastn.rand(config=config_Z2, n=0, legs=[l, lc])
+    D = D.remove_random_blocks(number=remove_blocks, keep_legs=True)
     E = yastn.rand(config=config_Z2, n=0, legs=[lc, lc])
+    E = E.remove_random_blocks(number=remove_blocks, keep_legs=True)
     F = yastn.rand(config=config_Z2, n=0, legs=[lc, l, lc])
+    F = F.remove_random_blocks(number=remove_blocks, keep_legs=True)
 
     inds = ((9,1,2,3), (9, 2,3), (1,4,5,8), (7,8), (4,6), (5,6,7))
     orders = [[9,2,3,1,4,5,6,7,8], [4,5,6,7,8,9,2,3,1], [8,1,6,4,5,7,9,2,3]]
@@ -608,10 +632,123 @@ def test_ncon_gadget_autograd(config_kwargs):
         assert (g_forced - g_clean).norm().item() <= 1e-8 * max(g_clean.norm().item(), 1e-30)
 
 
+# ------------------------------------------------------------------ #
+#  FLOP tracing (yastn.trace_flops): metadata-only, no_fusion path    #
+# ------------------------------------------------------------------ #
+# FLOP tracing forces the 'no_fusion' tensordot path, which decomposes a
+# contraction into the minimal set of block GEMMs and therefore counts the
+# minimal number of FLOPs. The tests below fix tensordot_policy='no_fusion'
+# so the traced result can be compared against a real (data-carrying) run.
+
+
+def _nf_kwargs(config_kwargs):
+    """config_kwargs pinned to the no_fusion tensordot path (see note above)."""
+    if config_kwargs['backend'] == 'torch_cutensor':
+        pytest.skip("FLOP tracing tests target the no_fusion path; "
+                    "the torch_cutensor backend routes tensordot to cuTENSOR.")
+    return {**config_kwargs, 'tensordot_policy': 'no_fusion'}
+
+
+def test_flop_tracing_tensordot(config_kwargs):
+    """ Single tensordot traced in metadata-only mode: analytic FLOP counts for dense and
+    U1, invariant under lazy_threshold, with an empty output carrying the correct struct. """
+    kw = _nf_kwargs(config_kwargs)
+
+    # --- dense (sym='none'): a single GEMM (m,k).(k,n) ---
+    # real: gemm = 2*m*n*k, sum = m*n;  complex: gemm = 8*m*n*k, sum = 2*m*n
+    config_dense = yastn.make_config(sym='none', **kw)
+    m, k, n = 5, 7, 4
+    for dtype, cplx in [('float64', False), ('complex128', True)]:
+        a = yastn.rand(config=config_dense, dtype=dtype,
+                       legs=[yastn.Leg(config_dense, s=1, D=(m,)), yastn.Leg(config_dense, s=-1, D=(k,))])
+        b = yastn.rand(config=config_dense, dtype=dtype,
+                       legs=[yastn.Leg(config_dense, s=1, D=(k,)), yastn.Leg(config_dense, s=-1, D=(n,))])
+        exp_gemm = (8 if cplx else 2) * m * n * k
+        exp_sum = (2 if cplx else 1) * m * n
+        for lazy in (0, 1.0):
+            ref = yastn.tensordot(a, b, axes=(1, 0), lazy_threshold=lazy)
+            with yastn.trace_flops() as tr:
+                out = yastn.tensordot(a, b, axes=(1, 0), lazy_threshold=lazy)
+            assert (tr.gemm, tr.sum, tr.total) == (exp_gemm, exp_sum, exp_gemm + exp_sum)
+            assert out.struct == ref.struct
+            assert out.config.backend.get_size(out.data) == 0
+
+    # --- U1: one block GEMM per matching charge sector ---
+    # a=[la, lc*], b=[lc, lb], contract lc. Matching sectors give (M, K, N):
+    #   charge -1: (2, 3, 2);   charge 0: (3, 2, 4);   charge 1: (4, 5, 3)
+    config_U1 = yastn.make_config(sym='U1', **kw)
+    la = yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 4))
+    lc = yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(3, 2, 5))
+    lb = yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(2, 4, 3))
+    a = yastn.rand(config=config_U1, legs=[la, lc.conj()])
+    b = yastn.rand(config=config_U1, legs=[lc, lb])
+    exp_gemm = 2 * (2 * 3 * 2 + 3 * 2 * 4 + 4 * 5 * 3)  # = 192
+    exp_sum = (2 * 2 + 3 * 4 + 4 * 3)                   # = 28
+    for lazy in (0, 1.0):
+        ref = yastn.tensordot(a, b, axes=(1, 0), lazy_threshold=lazy)
+        with yastn.trace_flops() as tr:
+            out = yastn.tensordot(a, b, axes=(1, 0), lazy_threshold=lazy)
+        assert (tr.gemm, tr.sum) == (exp_gemm, exp_sum)  # FLOPs invariant under lazy_threshold
+        assert out.struct == ref.struct
+        assert out.config.backend.get_size(out.data) == 0
+
+
+def test_flop_tracing_lazy_vs_nonlazy(config_kwargs):
+    """ Outer-product-like U1 tensordot where lazy_threshold changes the output structure:
+    the traced FLOP count is identical, but the lazy output (only produced blocks) is
+    strictly smaller than the non-lazy output (all symmetry-allowed blocks, incl. zeros). """
+    kw = _nf_kwargs(config_kwargs)
+    config_U1 = yastn.make_config(sym='U1', **kw)
+    t = (-1, 0, 1)
+    lx = yastn.Leg(config_U1, s=1, t=(0,), D=(1,))  # trivial contracted leg -> outer-product-like
+    free = lambda: yastn.Leg(config_U1, s=1, t=t, D=(2, 2, 2))
+    a = yastn.rand(config=config_U1, legs=[free(), free(), lx.conj()])  # (la, lb, x)
+    b = yastn.rand(config=config_U1, legs=[lx, free(), free()])         # (x, lc, ld)
+
+    flops, ref_sizes = {}, {}
+    for lazy in (0, 1.0):
+        ref = yastn.tensordot(a, b, axes=(2, 0), lazy_threshold=lazy)
+        with yastn.trace_flops() as tr:
+            out = yastn.tensordot(a, b, axes=(2, 0), lazy_threshold=lazy)
+        assert out.struct == ref.struct
+        assert out.config.backend.get_size(out.data) == 0
+        flops[lazy] = (tr.gemm, tr.sum)
+        ref_sizes[lazy] = ref.config.backend.get_size(ref.data)
+    # FLOPs are the same set of block GEMMs regardless of how the output is stored ...
+    assert flops[0] == flops[1.0]
+    # ... but lazy keeps only the produced blocks, so its output is strictly smaller.
+    assert ref_sizes[1.0] < ref_sizes[0]
+
+
+def test_flop_tracing_ncon(config_kwargs):
+    """ FLOP tracing through a full ncon network: the traced result matches a real run's
+    struct/mfs/hfs while carrying empty data, for both non-lazy and lazy configs. """
+    if config_kwargs['backend'] == 'torch_cutensor':
+        pytest.skip("FLOP tracing tests target the no_fusion path; "
+                    "the torch_cutensor backend routes tensordot to cuTENSOR.")
+    t = (0, 1)
+    inds = ((-1, 1), (1, 2), (2, -2))  # matrix chain t1-t2-t3
+    for lazy in (0, 1.0):
+        config_U1 = yastn.make_config(sym='U1',
+                                      **{**config_kwargs, 'tensordot_policy': 'no_fusion', 'lazy_threshold': lazy})
+        l = yastn.Leg(config_U1, s=1, t=t, D=(2, 3))
+        lc = yastn.Leg(config_U1, s=1, t=t, D=(2, 2))
+        t1 = yastn.rand(config=config_U1, legs=[l, lc.conj()])
+        t2 = yastn.rand(config=config_U1, legs=[lc, lc.conj()])
+        t3 = yastn.rand(config=config_U1, legs=[lc, l.conj()])
+        ref = yastn.ncon([t1, t2, t3], inds)
+        with yastn.trace_flops() as tr:
+            out = yastn.ncon([t1, t2, t3], inds)
+        assert out.struct == ref.struct
+        assert out.mfs == ref.mfs and out.hfs == ref.hfs
+        assert out.config.backend.get_size(out.data) == 0
+        assert tr.total > 0
+
+
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0", "--tensordot_policy", "fuse_to_matrix"])
-    pytest.main([__file__, "-vs", "--durations=0", "--tensordot_policy", "fuse_contracted"])
-    pytest.main([__file__, "-vs", "--durations=0", "--tensordot_policy", "no_fusion"])
+    pytest.main([__file__, "--durations=0", "--tensordot_policy", "fuse_to_matrix"])
+    # pytest.main([__file__, "--durations=0", "--tensordot_policy", "fuse_contracted"])
+    # pytest.main([__file__, "--durations=0", "--tensordot_policy", "no_fusion"])
     #pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--tensordot_policy", "fuse_to_matrix"])
     #pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--tensordot_policy", "fuse_contracted"])
     #pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--tensordot_policy", "no_fusion"])

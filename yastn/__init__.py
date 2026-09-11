@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 from . import operators
+from ._profile import trace_flops, active_flop_tracer
 from ._from_dict import from_dict
 from ._split_combine_dict import *
 from .initialize import *

@@ -17,6 +17,9 @@ import numpy as np
 import pytest
 import yastn
 
+# On cuda, run every test under scatter / tiled / forced-loop fuse paths (see conftest.py).
+pytestmark = pytest.mark.usefixtures("fuse_scatter_path")
+
 tol = 1e-10  #pylint: disable=invalid-name
 
 torch_test = pytest.mark.skipif("'torch' not in config.getoption('--backend')",
@@ -140,13 +143,13 @@ def test_hard_empty_axis(config_kwargs):
     assert (af1u - af1).norm() < tol
 
     af2 = yastn.tensor._merging._fuse_legs_hard(af1, axes=((), (0,), (1,), (2,), (3,), (4,)), order=(0, 1, 2, 3, 4))
-    assert af2.s == (-1, 1, 1, -1, -1, -1)   # signature of a new leg is 1 for first leg
-    al2 = al1.add_leg(axis=0, s=-1, t=(0,))
+    assert af2.s == (1, 1, 1, -1, -1, -1)   # signature of a new leg is 1 for first leg
+    al2 = al1.add_leg(axis=0, s=1, t=(0,))
     assert af2.norm() > 1
     assert (af2 - al2).norm() < tol
 
     af3 = yastn.tensor._merging._fuse_legs_hard(a, axes=((), (0, 1), (), (2, 3), ()), order=(0, 1, 2, 3))
-    assert af3.s == (-1, 1, -1, -1, -1)
+    assert af3.s == (1, 1, -1, -1, -1)
     al3 = al2.add_leg(axis=3, s=-1, t=(0,))
     al3f = al3.fuse_legs(axes=(0, (1, 2), 3, (4, 5), 6))
     assert (af3 - al3f).norm() < tol
@@ -154,53 +157,53 @@ def test_hard_empty_axis(config_kwargs):
     assert (af3u - al3).norm() < tol
 
 
-def test_hard_split(config_kwargs):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_hard_split(config_kwargs, remove_blocks):
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1),
                   t=((0, 1), (0, 1), (0, 1), (0, 1), (0, 1)),
                   D=((1, 2), (3, 4), (5, 6), (7, 8), (9, 10)))
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
 
-    af = a.fuse_legs(axes=(0, (2, 1), (3, 4)), mode='hard')
-    af = af.fuse_legs(axes=((0, 1), 2), mode='hard')
+    af = a.fuse_legs(axes=(0, (2, 1), (3, 4)), mode='hard').fuse_legs(axes=((0, 1), 2), mode='hard')
     Uf, Sf, Vf = yastn.linalg.svd(af, axes=(0, 1))
 
-    U, S, V = yastn.linalg.svd(a, axes=((0, 1, 2), (3, 4)))
-    U = U.fuse_legs(axes=(0, (2, 1), 3), mode='hard')
-    U = U.fuse_legs(axes=((0, 1), 2), mode='hard')
-    V = V.fuse_legs(axes=(0, (1, 2)), mode='hard')
+    Uu, Su, Vu = yastn.linalg.svd(a, axes=((0, 1, 2), (3, 4)))
+    Uuf = Uu.fuse_legs(axes=(0, (2, 1), 3), mode='hard').fuse_legs(axes=((0, 1), 2), mode='hard')
+    Vuf = Vu.fuse_legs(axes=(0, (1, 2)), mode='hard')
 
-    US = yastn.tensordot(U, S, axes=(1, 0))
-    a2 = yastn.tensordot(US, V, axes=(1, 0))
+    a2 = Uuf @ Su @ Vuf
     assert yastn.norm(af - a2) < tol  # == 0.0
-    USf = yastn.tensordot(Uf, Sf, axes=(1, 0))
-    a3 = yastn.tensordot(USf, Vf, axes=(1, 0))
+    a3 =  Uf @ Sf @ Vf
     assert yastn.norm(af - a3) < tol  # == 0.0
-    a3 = a3.unfuse_legs(axes=0)
-    a3 = a3.unfuse_legs(axes=(1, 2)).moveaxis(source=2, destination=1)
-    assert yastn.norm(a - a3) < tol  # == 0.0
+    a4 = a3.unfuse_legs(axes=0).unfuse_legs(axes=(1, 2)).moveaxis(source=2, destination=1)
+    assert yastn.norm(a - a4) < tol  # == 0.0
 
     Qf, Rf = yastn.linalg.qr(af, axes=(0, 1))
-    Q, R = yastn.linalg.qr(a, axes=((0, 1, 2), (3, 4)))
-    Q = Q.fuse_legs(axes=(0, (2, 1), 3), mode='hard')
-    Q = Q.fuse_legs(axes=((0, 1), 2), mode='hard')
-    assert yastn.norm(Q - Qf) < tol  # == 0.0
-    Rf = Rf.unfuse_legs(axes=1)
-    assert yastn.norm(R - Rf) < tol  # == 0.0
+    Qfu = Qf.unfuse_legs(axes=0).unfuse_legs(axes=1).transpose(axes=(0, 2, 1, 3))
+    Rfu = Rf.unfuse_legs(axes=1)
+    assert yastn.norm(a - Qfu @ Rfu) < tol  # == 0.0
+    Qu, Ru = yastn.linalg.qr(a, axes=((0, 1, 2), (3, 4)))
+    Quf = Qu.fuse_legs(axes=(0, (2, 1), 3), mode='hard').fuse_legs(axes=((0, 1), 2), mode='hard')
+    Ruf = Ru.fuse_legs(axes=(0, (1, 2)), mode='hard')
+    assert yastn.norm(af - Quf @ Ruf) < tol  # == 0.0
 
-    aH = yastn.tensordot(af, af, axes=(1, 1), conj=(0, 1))
+    aH = yastn.tensordot(af, af.conj(), axes=(1, 1))
     Vf, Uf = yastn.linalg.eigh(aH, axes=(0, 1))
     Uf = Uf.unfuse_legs(axes=0)
     UVf = yastn.tensordot(Uf, Vf, axes=(2, 0))
-    aH2 = yastn.tensordot(UVf, Uf, axes=(2, 2), conj=(0, 1))
+    aH2 = yastn.tensordot(UVf, Uf.conj(), axes=(2, 2))
     aH = aH.unfuse_legs(axes=(0, 1))
     assert yastn.norm(aH2 - aH) < tol  # == 0.0
 
 
-def test_hard_transpose(config_kwargs):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_hard_transpose(config_kwargs, remove_blocks):
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
                   t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
                   D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     assert a.get_shape() == (3, 5, 7, 9, 11, 13)
     #
     at = a.transpose(axes=(3, 4, 2, 1, 0, 5))
@@ -227,7 +230,8 @@ def test_hard_transpose(config_kwargs):
     assert c.trans == (0, 1, 3, 4, 2, 5)
 
 
-def test_hard_dot(config_kwargs):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_hard_dot(config_kwargs, remove_blocks):
     """ integration of hard fusion with dot """
     # Z2 x U1
     config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
@@ -237,9 +241,11 @@ def test_hard_dot(config_kwargs):
             yastn.Leg(config_Z2xU1, s=-1, t=[(0, 0), (0, 2), (1, 0), (1, 2)], D=(5, 6, 7, 8)),
             yastn.Leg(config_Z2xU1, s=-1, t=[(0, 0), (0, 2), (1, 0), (1, 2)], D=(1, 2, 2, 4))]
     a = yastn.rand(config=config_Z2xU1, legs=legs_a)
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
 
     legs_b = [legs_a[n].conj() for n in (0, 1, 4, 3)]
     b = yastn.rand(config=config_Z2xU1, legs=legs_b)
+    b = b.remove_random_blocks(number=remove_blocks, keep_legs=True)
 
     aa = yastn.fuse_legs(a, axes=((0, 3), (4, 1), 2), mode='hard')
     bb = yastn.fuse_legs(b, axes=((0, 3), (2, 1)), mode='hard')
@@ -268,11 +274,13 @@ def test_hard_dot(config_kwargs):
               yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9)),
               yastn.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(10, 11, 12))]
     a = yastn.rand(config=config_U1, legs=legs_a)
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
 
     legs_b = [legs_a[0].conj(),
               legs_a[1].conj(),
               yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(10, 7, 11))]
     b = yastn.rand(config=config_U1, legs=legs_b)
+    b = b.remove_random_blocks(number=remove_blocks, keep_legs=True)
 
     bb = yastn.fuse_legs(b, axes=((0, 1), 2), mode='hard')
     aa =  yastn.fuse_legs(a, axes=((0, 1), 2, 3), mode='hard')
@@ -307,10 +315,10 @@ def test_hard_dot_sparse(config_kwargs):
     xx = yastn.rand(config=aa.config, legs=[leg, leg.conj()])
 
     yastn.tensordot(xx, aa, axes=(1, 0))
-    yastn.tensordot(xx, aa, axes=(0, 0), conj = (1, 0))
+    yastn.tensordot(xx.conj(), aa, axes=(0, 0))
 
-    c = yastn.tensordot(a, b, axes=((0, 1), (0, 1)), conj=(1, 0))
-    cc = yastn.tensordot(aa, bb, axes=(0, 0), conj=(1, 0))
+    c = yastn.tensordot(a.conj(), b, axes=((0, 1), (0, 1)))
+    cc = yastn.tensordot(aa.conj(), bb, axes=(0, 0))
     assert yastn.norm(c -  cc) < tol
 
     aat = aa.fuse_legs(axes=((1, 2), 0), mode='hard').conj()
@@ -414,11 +422,14 @@ def _test_fuse_mix(a):
     assert umha.is_consistent()
 
 
-def test_fuse_mix(config_kwargs):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_fuse_mix(config_kwargs, remove_blocks):
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     a = yastn.randR(config=config_U1, s=(1, -1, 1, 1, -1, 1),
                     t=[(-3, -2), (-2, -1), (-1, 0), (0, 1), (1, 2), (2, 3)],
                     D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
+
     _test_fuse_mix(a)
 
     a = yastn.Tensor(config=config_U1, s=(1, -1, 1, 1, -1, 1))
@@ -468,7 +479,9 @@ def test_fuse_hard_dense(config_kwargs):
 
 
 @torch_test
-def test_transpose_and_merge_backward(config_kwargs):
+@pytest.mark.exclude_fusion_scatter_tiled
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_transpose_and_merge_backward(config_kwargs, remove_blocks):
     import torch
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
@@ -477,25 +490,29 @@ def test_transpose_and_merge_backward(config_kwargs):
             yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(3, 8, 9)),
             yastn.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(3, 11, 12))]
     a = yastn.rand(config=config_U1, legs=legs)
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
 
     b = yastn.fuse_legs(a, axes=((0, 1), 2, 3), mode='hard')
 
     target_block = (1, 1, -1, -1)
-    target_block_size = a[target_block].size()
+    if target_block in a:  # can be removed by remove_blocks
+        target_block_size = a[target_block].size()
 
-    def test_f(block):
-        a.set_block(ts=target_block, val=block)
-        tmp_a = yastn.fuse_legs(a, axes=((0, 1), 2, 3), mode='hard')
-        ab = yastn.vdot(b, tmp_a)
-        return ab
+        def test_f(block):
+            a.set_block(ts=target_block, val=block)
+            tmp_a = yastn.fuse_legs(a, axes=((0, 1), 2, 3), mode='hard')
+            ab = yastn.vdot(b, tmp_a)
+            return ab
 
-    op_args = (torch.randn(target_block_size, dtype=a.get_dtype(),requires_grad=True),)
-    test = torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4, check_undefined_grad=False)  # TODO check_undefined_grad=True
-    assert test
+        op_args = (torch.randn(target_block_size, dtype=a.get_dtype(),requires_grad=True),)
+        test = torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4, check_undefined_grad=False)  # TODO check_undefined_grad=True
+        assert test
 
 
 @torch_test
-def test_unmerge_backward(config_kwargs):
+@pytest.mark.exclude_fusion_scatter_tiled
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_unmerge_backward(config_kwargs, remove_blocks):
     import torch
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
@@ -504,26 +521,29 @@ def test_unmerge_backward(config_kwargs):
             yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(3, 8, 9)),
             yastn.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(3, 11, 12))]
     a = yastn.rand(config=config_U1, legs=legs)
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
 
     b = yastn.fuse_legs(a, axes=(0, (1, 2), 3), mode='hard')
 
     target_block = (1, 1, -1, -1)
-    target_block_size = a[target_block].size()
+    if target_block in a:  # can be removed by remove_blocks
+        target_block_size = a[target_block].size()
 
-    def test_f(block):
-        a.set_block(ts=target_block, val=block)
-        tmp_a = yastn.fuse_legs(a, axes=((0, 1, 2), 3), mode='hard')
-        tmp_a = yastn.unfuse_legs(tmp_a, axes=0)
-        tmp_a = yastn.fuse_legs(tmp_a, axes=(0, (1, 2), 3), mode='hard')
-        ab = yastn.vdot(b, tmp_a)
-        return ab
+        def test_f(block):
+            a.set_block(ts=target_block, val=block)
+            tmp_a = yastn.fuse_legs(a, axes=((0, 1, 2), 3), mode='hard')
+            tmp_a = yastn.unfuse_legs(tmp_a, axes=0)
+            tmp_a = yastn.fuse_legs(tmp_a, axes=(0, (1, 2), 3), mode='hard')
+            ab = yastn.vdot(b, tmp_a)
+            return ab
 
-    op_args = (torch.randn(target_block_size, dtype=a.get_dtype(), requires_grad=True),)
-    test = torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4, check_undefined_grad=False)  # TODO check_undefined_grad=True
-    assert test
+        op_args = (torch.randn(target_block_size, dtype=a.get_dtype(), requires_grad=True),)
+        test = torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4, check_undefined_grad=False)  # TODO check_undefined_grad=True
+        assert test
 
 
-def test_leg_product(config_kwargs):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_leg_product(config_kwargs, remove_blocks):
     config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
     l0 = yastn.Leg(config_Z2xU1, s=-1, t=[(0, -1), (0, 1), (1, -1), (1, 1)], D=(1, 2, 2, 4))
     l1 = yastn.Leg(config_Z2xU1, s=1, t=[(0, 0), (0, 2), (1, 0), (1, 2)], D=(7, 8, 9, 10))
@@ -531,6 +551,7 @@ def test_leg_product(config_kwargs):
     l3 = yastn.Leg(config_Z2xU1, s=-1, t=[(0, 0), (0, 2), (1, 0), (1, 2)], D=(5, 6, 7, 8))
 
     a = yastn.rand(config=config_Z2xU1, legs=[l0, l1, l2, l3])
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
 
     fa = yastn.fuse_legs(a, axes=((0, 1), (2, 3)), mode='hard')
     pfa0 = yastn.leg_product(l0, l1)
@@ -610,5 +631,4 @@ def test_initialize_eye(config_kwargs):
 
 
 if __name__ == '__main__':
-    pytest.main([__file__, "-vs", "--durations=0"])
-    # pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch"])

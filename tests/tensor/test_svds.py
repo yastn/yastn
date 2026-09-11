@@ -21,6 +21,21 @@ tol = 1e-10  #pylint: disable=invalid-name
 torch_test = pytest.mark.skipif("'torch' not in config.getoption('--backend')",
                                 reason="Uses torch.autograd.gradcheck().")
 
+
+def test_svds_zero_block(config_kwargs):
+    """Partial SVD excludes a structurally present but zero-valued sector."""
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    leg = yastn.Leg(config_U1, s=1, t=(0, 1), D=(3, 3))
+    a = yastn.rand(config=config_U1, legs=[leg.conj(), leg])
+    a.set_block(ts=(0, 0), val='zeros')
+
+    U, S, V = yastn.svd(a, policy='block_arnoldi', D_block=1,
+                        svds_thresh=1)
+
+    assert S.get_blocks_charge() == ((1, 1),)
+    assert all(x.is_consistent() for x in (U, S, V))
+
+
 @pytest.mark.parametrize('dtype', ['float64', 'complex128'])
 def test_svds_U1_matrix(config_kwargs, dtype):
     """ check lowrank svd vs full-rank svd with truncation. """

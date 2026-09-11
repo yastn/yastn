@@ -10,6 +10,8 @@ Linear algebra with symmetric tensors
 Basic algebra operations
 ------------------------
 
+The example below demonstrates basic algebraic operations on symmetric tensors.
+
 .. literalinclude:: /../../tests/tensor/test_syntax.py
    :pyobject: test_syntax_basic_algebra
 
@@ -17,12 +19,12 @@ Basic algebra operations
 Tensor contractions
 -------------------
 
-Basic contractions with :meth:`yastn.tensordot`, matrix-multiplication operator ``@``, tracing with :meth:`yastn.trace`
+Basic contractions with :meth:`yastn.tensordot`, the matrix-multiplication operator ``@``, and tracing with :meth:`yastn.trace`.
 
 .. literalinclude:: /../../tests/tensor/test_syntax.py
    :pyobject: test_syntax_contraction
 
-Higher-level interface ``ncon`` (or equivalently ``einsum``) composing simple contractions
+The higher-level interface ``ncon`` (or equivalently ``einsum``) composes simple contractions.
 
 .. literalinclude:: /../../tests/tensor/test_ncon_einsum.py
    :pyobject: test_ncon_einsum_syntax
@@ -38,8 +40,8 @@ Transposition
 Fusion (reshaping)
 ------------------
 
-Following example showcases fusion, in particular its ``'hard'`` mode (the default).
-In this case, the tensor data is reshuffled/resized in memory.
+The following example showcases fusion, in particular its ``'hard'`` mode (the default).
+In this case, the tensor data is reshuffled and resized in memory.
 
 .. literalinclude:: /../../tests/tensor/test_fuse_hard.py
    :pyobject: test_fuse_hard

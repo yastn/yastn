@@ -55,7 +55,7 @@ def tensordot_bs_v2(
     a_offsets: Union[torch.Tensor, np.ndarray], # int64
     b_numSectionsPerMode, b_sectionExtents, b_coords, b_strides, b_offsets,
     c_numSectionsPerMode, c_sectionExtents, c_coords, c_strides, c_offsets,
-    modes_out: Sequence[int]):
+    modes_out: Sequence[int], hashes_int64: Sequence[int]):
 
     # from_numpy is no-copy
     # contiguous is no-op if the tensor is already contiguous
@@ -80,7 +80,7 @@ def tensordot_bs_v2(
     # b_blocks: Tensor, b_strides: Tensor, b_offsets: Tensor,
     # c_numSectionsPerMode: List[int], c_sectionExtents: List[int],
     # c_blocks: Tensor, c_strides: Tensor, c_offsets: Tensor,
-    # modes_out: Optional[List[int]] = None
+    # modes_out: Optional[List[int]] = None, key_flags: int = 0
     #
     # with all but A,B Tensor arguments being CPU Tensors of int64
     #
@@ -88,5 +88,5 @@ def tensordot_bs_v2(
         a_numSectionsPerMode, a_sectionExtents, a_coords, a_strides, a_offsets,
         b_numSectionsPerMode, b_sectionExtents, b_coords, b_strides, b_offsets,
         c_numSectionsPerMode, c_sectionExtents, c_coords, c_strides, c_offsets,
-        modes_out)
+        modes_out, hashes_int64)
     return res

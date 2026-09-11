@@ -1,10 +1,10 @@
 Create Leg (vector space)
 =========================
 
-Tensors are :ref:`multilinear maps from product of vector spaces <theory/tensor/basics:tensors>`.
-In YASTN, the **legs** of the tensor represent individual vector spaces.
+Tensors are :ref:`multilinear maps from a product of vector spaces <theory/tensor/basics:tensors>`.
+In YASTN, the **legs** of a tensor represent individual vector spaces.
 
-The spaces of the :class:`yastn.Tensor` are characterized by a structure :class:`yastn.Leg`.
+The spaces of a :class:`yastn.Tensor` are characterized by the structure :class:`yastn.Leg`.
 
 .. autoclass:: yastn.Leg
     :members: conj, tD, history
