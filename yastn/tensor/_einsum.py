@@ -19,6 +19,7 @@ from functools import lru_cache, partial
 from itertools import product
 from typing import TYPE_CHECKING
 
+from ._algebra import add
 from ._auxiliary import _clear_axes, _flatten, _unpack_axes
 from ._contractions import apply_mask, tensordot, trace, swap_gate
 from ._tests import YastnError
@@ -205,7 +206,7 @@ def _restrict_parity(a, axis, pv):
     fc = _fermionic_components(a.config)
     if not any(all(t[i] % 2 == p for i, p in zip(fc, pv)) for t in leg.t):
         return None
-    m = eye(config=a.config, legs=leg)
+    m = eye(config=a.config, legs=leg, device=a.device)
     for i, p in zip(fc, pv):
         unit = tuple(int(j == i) for j in range(a.config.sym.NSYM))  # charge 1 on component i
         string = m.swap_gate(axes=(0,), charge=unit)
@@ -222,9 +223,15 @@ def _add_parity_pair(r, pv):
 
 
 def _contract_psplit(contract, a, paxes):
-    """contract(a) with the fermionic parities of a's legs `paxes` recorded in trailing (aux, aux') pairs."""
+    """contract(a) with the fermionic parities of a's legs `paxes` recorded in trailing (aux, aux') pairs.
+
+    One contraction per parity sector of the restricted operand.  The parts are summed with
+    ``lazy_threshold=1``: the combinations of (aux, aux') with the other legs that no sector
+    produces are zero, so the result stores only the blocks the parts fill, as many as the
+    contraction without the gadget.  (Tagging the operand and contracting once is not cheaper:
+    the tagged operand would store a zero block for every mismatched pair.)"""
     nf = len(_fermionic_components(a.config))
-    out = None
+    parts = []
     for pvs in product(product((0, 1), repeat=nf), repeat=len(paxes)):
         aa = a
         for ax, pv in zip(paxes, pvs):
@@ -236,13 +243,13 @@ def _contract_psplit(contract, a, paxes):
         r = contract(aa)
         for pv in pvs:
             r = _add_parity_pair(r, pv)
-        out = r if out is None else out + r
-    if out is None:  # every sector empty: fall back to plain contraction, pad zero pairs
+        parts.append(r)
+    if not parts:  # every sector empty: fall back to plain contraction, pad zero pairs
         r = contract(a)
         for _ in paxes:
             r = _add_parity_pair(r, (0,) * nf)
-        out = r
-    return out
+        return r
+    return add(*parts, lazy_threshold=1.0)
 
 
 # TODO? Import from backend

@@ -355,9 +355,15 @@ through its plan, from ``tensordot_psplit`` to the ``trace`` of the pair.
 
 **Several charge components and cost.**  With several fermionic charge components the recorded
 parity is a vector with one entry per fermionic component, and the split runs over all
-:math:`2^{n_f}` of its values.  The sectors are disjoint slices of :math:`P`, so a gadget adds
-contraction calls but no arithmetic.  Which steps need a gadget depends on the contraction
-``order``.
+:math:`2^{n_f}` of its values.  The sectors are disjoint slices of :math:`P`, so the step adds
+contraction calls but no arithmetic.  The parts are added with ``lazy_threshold=1``, so
+:math:`R` stores only the blocks some sector fills, as many as the contraction without the
+gadget; a plain sum would lay out every block its legs allow, including combinations of
+:math:`(\mathrm{aux}, \mathrm{aux}')` with the other legs that no sector produces (about four
+times as many elements for one U(1) fermionic charge in a small test).  Later contractions keep
+this only when ``lazy_threshold`` is set in the configuration; with lazy off they lay out every
+allowed block again until the pair is traced.  Which steps need a gadget depends on the
+contraction ``order``.
 
 
 Examples

@@ -745,6 +745,19 @@ def test_flop_tracing_ncon(config_kwargs):
         assert tr.total > 0
 
 
+def test_ncon_gadget_result_size(config_kwargs):
+    """A gadget step stores no more than the same step without the gadget, and tracing its pair gives that step."""
+    from yastn.tensor._einsum import _contract_psplit  # pylint: disable=import-outside-toplevel
+    config_U1 = yastn.make_config(sym='U1', fermionic=True, **config_kwargs)
+    leg = yastn.Leg(config_U1, s=1, t=(-1, 0, 1, 2), D=(2, 2, 2, 2))
+    P = yastn.rand(config=config_U1, legs=[leg, leg.conj(), leg])
+    Q = yastn.rand(config=config_U1, legs=[leg, leg])
+    plain = yastn.tensordot(P, Q, axes=(1, 0))
+    R = _contract_psplit(lambda p: yastn.tensordot(p, Q, axes=(1, 0)), P, (1,))  # parity of P's leg 1 recorded
+    assert R.size == plain.size
+    assert (yastn.trace(R, axes=(3, 4)) - plain).norm() < tol * plain.norm()
+
+
 if __name__ == '__main__':
     pytest.main([__file__, "--durations=0", "--tensordot_policy", "fuse_to_matrix"])
     # pytest.main([__file__, "--durations=0", "--tensordot_policy", "fuse_contracted"])
