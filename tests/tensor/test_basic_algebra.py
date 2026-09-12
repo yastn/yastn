@@ -430,5 +430,22 @@ def test_auxiliary():
     assert slices2.tolist() == [[0, 10], [20, 40]]
 
 
+def test_add_lazy_threshold(config_kwargs):
+    """ With lazy_threshold, a sum stores only the blocks its terms fill; values are unchanged. """
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    leg = yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(1, 2, 3))
+    x = yastn.rand(config=config_U1, legs=[leg, leg.conj()])
+    y = yastn.rand(config=config_U1, legs=[leg, leg.conj()])
+    # terms differing in the charge of a neutral pair of one-dimensional legs, as in ncon's parity gadget;
+    # the merged legs also allow blocks in which the pair's two charges differ
+    a = x.add_leg(axis=2, s=1, t=(0,)).add_leg(axis=3, s=-1, t=(0,))
+    b = y.add_leg(axis=2, s=1, t=(1,)).add_leg(axis=3, s=-1, t=(1,))
+    dense = yastn.add(a, b, lazy_threshold=0)
+    lazy = yastn.add(a, b, lazy_threshold=1)
+    assert lazy.size == a.size + b.size < dense.size
+    assert (lazy - dense).norm() < tol * dense.norm()
+    assert (a + b - dense).norm() < tol * dense.norm()  # the operator takes lazy_threshold from the config
+
+
 if __name__ == '__main__':
     pytest.main([__file__, "-vs", "--durations=0"])
