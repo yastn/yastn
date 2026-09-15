@@ -27,7 +27,7 @@ from ... import mps
 from ....initialize import rand, ones, eye
 from ....tensor import Tensor, YastnError, Leg, tensordot, qr, ncon
 from ...._split_combine_dict import split_data_and_meta, combine_data_and_meta
-from ...._profile import nvtx_range
+from ...._profile import nvtx_range, nsys_profile
 
 logger = logging.getLogger(__name__)
 
@@ -632,12 +632,14 @@ class EnvCTM():
                 # reconstruct env from output tensors
                 env.update_from_dict_(combine_data_and_meta(out_data, out_meta))
             else:
-                env._update_core_(d, opts_svd, method=method, **kwargs)
+                with nvtx_range(f"_update_core_ {d}"):
+                    env._update_core_(d, opts_svd, method=method, **kwargs)
         return env
 
+    
     def _update_core_(env, move: str, opts_svd: dict, method: str, **kwargs):
         r"""
-        Core function updating CTM environment tensors pefrorming specified move.
+        Core function updating CTM environment tensors peforming specified move.
         """
         assert move in ['h', 'v', 'l', 'r', 't', 'b'], "Invalid move"
         if (move in 'hv') or (len(env.sites()) < env.Nx * env.Ny):
@@ -665,14 +667,16 @@ class EnvCTM():
             #
             # Projectors
             for site in sites_proj:
-                env._update_projectors_(site, move, opts_svd, method, **kwargs)
+                with nvtx_range(f"_update_projectors_ {site}"):
+                    env._update_projectors_(site, move, opts_svd, method, **kwargs)
             # fill (trivial) projectors on edges
             env._trivial_projectors_(move, sites_proj)
             #
             # Update move
             env_tmp = EnvCTM(env.psi, init=None)  # empty environments
             for site in sites:
-                env_tmp._update_env_(site, env, move)
+                with nvtx_range(f"_update_env_ {site}"):
+                    env_tmp._update_env_(site, env, move)
             update_storage_(env, env_tmp)
 
     def update_bond_(env, bond: tuple, opts_svd: dict | None = None, method: str = '2x2 corner', **kwargs):
@@ -716,6 +720,7 @@ class EnvCTM():
             return update_extended_2x2_projectors_(env, *sites, move, opts_svd, **kwargs)
         else:
             raise YastnError(f"CTM update {method=} not recognized. Should contain '1x2' or '2x2'")
+
 
     def _set_projector_pair_(env, site0, name0, site1, name1,
                              r0, r1, opts_svd, **kwargs):
@@ -1178,8 +1183,9 @@ def update_extended_2x2_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwarg
         else:
             h1,h2= cor_tt, cor_bb
 
-        _, r_t = qr(h1, axes=(0, 1)) if use_qr else (None, h1)
-        _, r_b = qr(h2, axes=(1, 0)) if use_qr else (None, h2.T)
+        with nvtx_range(f"qr 2x2proj {move}"):
+            _, r_t = qr(h1, axes=(0, 1)) if use_qr else (None, h1)
+            _, r_b = qr(h2, axes=(1, 0)) if use_qr else (None, h2.T)
         opts_svd["k_block"]= svd_predict_spec(tr, "hrb", br, "hrt", r_t.s[1])
         env._set_projector_pair_(tr, 'hrb', br, 'hrt', r_t, r_b, opts_svd, **kwargs)
 
@@ -1205,8 +1211,9 @@ def update_extended_2x2_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwarg
         else:
             h1,h2= cor_tt, cor_bb
 
-        _, r_t = qr(h1, axes=(1, 0)) if use_qr else (None, h1.T)
-        _, r_b = qr(h2, axes=(0, 1)) if use_qr else (None, h2)
+        with nvtx_range(f"qr 2x2proj {move}"):
+            _, r_t = qr(h1, axes=(1, 0)) if use_qr else (None, h1.T)
+            _, r_b = qr(h2, axes=(0, 1)) if use_qr else (None, h2)
         opts_svd["k_block"]= svd_predict_spec(tl, "hlb", bl, "hlt", r_t.s[1])
         env._set_projector_pair_(tl, 'hlb', bl, 'hlt', r_t, r_b, opts_svd, **kwargs)
 
@@ -1236,8 +1243,9 @@ def update_extended_2x2_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwarg
         else:
             h1,h2= cor_ll, cor_rr
 
-        _, r_l = qr(h1, axes=(0, 1)) if use_qr else (None, h1)
-        _, r_r = qr(h2, axes=(1, 0)) if use_qr else (None, h2.T)
+        with nvtx_range(f"qr 2x2proj {move}"):
+            _, r_l = qr(h1, axes=(0, 1)) if use_qr else (None, h1)
+            _, r_r = qr(h2, axes=(1, 0)) if use_qr else (None, h2.T)
         opts_svd["k_block"]= svd_predict_spec(tl, "vtr", tr, "vtl", r_l.s[1])
         env._set_projector_pair_(tl, 'vtr', tr, 'vtl', r_l, r_r, opts_svd, **kwargs)
 
@@ -1263,8 +1271,9 @@ def update_extended_2x2_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwarg
         else:
             h1,h2= cor_ll, cor_rr
 
-        _, r_l = qr(h1, axes=(1, 0)) if use_qr else (None, h1.T)
-        _, r_r = qr(h2, axes=(0, 1)) if use_qr else (None, h2)
+        with nvtx_range(f"qr 2x2proj {move}"):
+            _, r_l = qr(h1, axes=(1, 0)) if use_qr else (None, h1.T)
+            _, r_r = qr(h2, axes=(0, 1)) if use_qr else (None, h2)
         opts_svd["k_block"]= svd_predict_spec(bl, "vbr", br, "vbl", r_l.s[1])
         env._set_projector_pair_(bl, 'vbr', br, 'vbl', r_l, r_r, opts_svd, **kwargs)
 
