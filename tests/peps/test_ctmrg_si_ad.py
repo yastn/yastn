@@ -9,6 +9,19 @@ import yastn
 import yastn.tn.fpeps as fpeps
 import yastn.tn.fpeps.envs._env_ctm as env_ctm_module
 
+torch = pytest.importorskip("torch")
+pytestmark = pytest.mark.skipif(
+    "config.getoption('--backend') not in ('torch', 'torch_cutensor')",
+    reason="Backend with AD support is required: [torch, torch_cutensor]")
+
+
+def _si_bases(env, container):
+    """Assigned recycled bases of ``env.si_X``/``env.si_Y``, keyed like ``env._si_age``."""
+    return {(env.site2index(site), name): getattr(projectors, name)
+            for site, projectors in container.items()
+            for name in projectors.fields()
+            if getattr(projectors, name) is not None}
+
 
 def _differentiable_ising_peps(config, beta):
     """One-site Ising PEPS whose bond weights retain beta's torch graph."""
@@ -33,8 +46,6 @@ def _differentiable_ising_peps(config, beta):
 def _ising_nn_objective(config_kwargs, beta, method, recycled=False,
                         return_env=False):
     """Evaluate one horizontal correlator with a fixed CTMRG update count."""
-    import torch
-
     config = yastn.make_config(sym='Z2', **config_kwargs)
     config.backend.random_seed(seed=73)
     beta = (beta if isinstance(beta, torch.Tensor)
@@ -66,9 +77,11 @@ def _ising_nn_objective(config_kwargs, beta, method, recycled=False,
         # the single differentiated update and observable contraction.
         env.psi = fpeps.EnvCTM(psi, init=None).psi
         if method == 'si':
-            assert env.X and env.Y
-            assert all(not x.requires_grad for x in env.X.values())
-            assert all(not y.requires_grad for y in env.Y.values())
+            assert _si_bases(env, env.si_X) and _si_bases(env, env.si_Y)
+            assert all(not x.requires_grad
+                       for x in _si_bases(env, env.si_X).values())
+            assert all(not y.requires_grad
+                       for y in _si_bases(env, env.si_Y).values())
     else:
         psi, spin = _differentiable_ising_peps(config, beta)
         env = fpeps.EnvCTM(psi, init='eye')
@@ -78,12 +91,6 @@ def _ising_nn_objective(config_kwargs, beta, method, recycled=False,
     return (value, env) if return_env else value
 
 
-@pytest.fixture
-def torch_config(config_kwargs):
-    """Use the torch backend independently of pytest's global default."""
-    return {**config_kwargs, 'backend': 'torch'}
-
-
 # ---------------------------------------------------------------------------
 # Physical-observable differentiation oracles
 # ---------------------------------------------------------------------------
@@ -91,22 +98,20 @@ def torch_config(config_kwargs):
 
 @pytest.mark.parametrize('recycled', [False, True],
                          ids=('fresh_bases', 'recycled_detached_bases'))
-def test_si_gradient_matches_central_finite_difference(torch_config,
+def test_si_gradient_matches_central_finite_difference(config_kwargs,
                                                        recycled):
     """AD of a physical correlator agrees with a deterministic central FD."""
-    import torch
-
     beta = torch.tensor(0.37, dtype=torch.float64, requires_grad=True)
     value = _ising_nn_objective(
-        torch_config, beta, method='si', recycled=recycled)
+        config_kwargs, beta, method='si', recycled=recycled)
     value.backward()
     gradient_ad = beta.grad.item()
 
     eps = 2e-6
     plus = _ising_nn_objective(
-        torch_config, beta.item() + eps, method='si', recycled=recycled)
+        config_kwargs, beta.item() + eps, method='si', recycled=recycled)
     minus = _ising_nn_objective(
-        torch_config, beta.item() - eps, method='si', recycled=recycled)
+        config_kwargs, beta.item() - eps, method='si', recycled=recycled)
     gradient_fd = ((plus - minus) / (2 * eps)).item()
 
     # Symmetry-related singular values can be nearly degenerate.  The physical
@@ -116,18 +121,16 @@ def test_si_gradient_matches_central_finite_difference(torch_config,
 
 @pytest.mark.parametrize('recycled', [False, True],
                          ids=('fresh_bases', 'recycled_detached_bases'))
-def test_si_gradient_matches_full_svd_ctmrg(torch_config, recycled):
+def test_si_gradient_matches_full_svd_ctmrg(config_kwargs, recycled):
     """SI and full-SVD CTMRG differentiate the same physical correlator."""
-    import torch
-
     beta_si = torch.tensor(0.37, dtype=torch.float64, requires_grad=True)
     value_si = _ising_nn_objective(
-        torch_config, beta_si, method='si', recycled=recycled)
+        config_kwargs, beta_si, method='si', recycled=recycled)
     value_si.backward()
 
     beta_full = torch.tensor(0.37, dtype=torch.float64, requires_grad=True)
     value_full = _ising_nn_objective(
-        torch_config, beta_full, method='full', recycled=recycled)
+        config_kwargs, beta_full, method='full', recycled=recycled)
     value_full.backward()
 
     assert np.isclose(value_si.item(), value_full.item(),
@@ -136,16 +139,14 @@ def test_si_gradient_matches_full_svd_ctmrg(torch_config, recycled):
                       rtol=7e-3, atol=7e-5)
 
 
-def test_recycle_grad_false_detaches_only_basis_history(torch_config):
+def test_recycle_grad_false_detaches_only_basis_history(config_kwargs):
     """Detached X/Y participate in forward SI without retaining their graph."""
-    import torch
-
     beta = torch.tensor(0.37, dtype=torch.float64, requires_grad=True)
     value, env = _ising_nn_objective(
-        torch_config, beta, method='si', recycled=True, return_env=True)
-    assert env.X and env.Y
-    assert all(not x.requires_grad for x in env.X.values())
-    assert all(not y.requires_grad for y in env.Y.values())
+        config_kwargs, beta, method='si', recycled=True, return_env=True)
+    assert _si_bases(env, env.si_X) and _si_bases(env, env.si_Y)
+    assert all(not x.requires_grad for x in _si_bases(env, env.si_X).values())
+    assert all(not y.requires_grad for y in _si_bases(env, env.si_Y).values())
     assert value.requires_grad
     value.backward()
     assert beta.grad is not None
@@ -171,9 +172,9 @@ def _dense_product_env(config):
 
 
 @pytest.mark.parametrize('recycle_grad', [False, True])
-def test_si_autograd_recycle_policy(torch_config, recycle_grad):
+def test_si_autograd_recycle_policy(config_kwargs, recycle_grad):
     """The recycle_grad option controls whether X/Y retain their graph."""
-    config = yastn.make_config(sym='none', **torch_config)
+    config = yastn.make_config(sym='none', **config_kwargs)
     env = _dense_product_env(config)
     source = env.psi.ket[(0, 0)]
     source.requires_grad_(True)
@@ -181,8 +182,10 @@ def test_si_autograd_recycle_policy(torch_config, recycle_grad):
         opts_svd={'D_total': 1}, moves='h', method='2x2 corner',
         opts_si={'enabled': True, 'oversampling': 0, 'niter': 2,
                  'recycle_grad': recycle_grad})
-    assert all(x.requires_grad == recycle_grad for x in env.X.values())
-    assert all(y.requires_grad == recycle_grad for y in env.Y.values())
+    assert all(x.requires_grad == recycle_grad
+               for x in _si_bases(env, env.si_X).values())
+    assert all(y.requires_grad == recycle_grad
+               for y in _si_bases(env, env.si_Y).values())
     loss = sum(tensor.norm()
                for site in env.sites()
                for tensor in env[site].__dict__.values()
@@ -195,9 +198,9 @@ def test_si_autograd_recycle_policy(torch_config, recycle_grad):
 
 
 def test_recycle_grad_true_backpropagates_through_second_update(
-        torch_config, monkeypatch):
+        config_kwargs, monkeypatch):
     """AI-generated test: a second update consumes graph-connected bases."""
-    config = yastn.make_config(sym='none', **torch_config)
+    config = yastn.make_config(sym='none', **config_kwargs)
     env = _dense_product_env(config)
     source = env.psi.ket[(0, 0)]
     source.requires_grad_(True)
@@ -206,8 +209,9 @@ def test_recycle_grad_true_backpropagates_through_second_update(
                'warmup': 20, 'recycle_grad': True}
 
     env.update_(opts_svd, moves='h', method='2x2 corner', opts_si=opts_si)
-    assert env.X and all(x.requires_grad for x in env.X.values())
-    assert all(y.requires_grad for y in env.Y.values())
+    assert _si_bases(env, env.si_X)
+    assert all(x.requires_grad for x in _si_bases(env, env.si_X).values())
+    assert all(y.requires_grad for y in _si_bases(env, env.si_Y).values())
 
     recycled_inputs = []
     original_proj_corners = env_ctm_module.proj_corners
@@ -223,8 +227,8 @@ def test_recycle_grad_true_backpropagates_through_second_update(
     assert recycled_inputs
     assert all(X is not None and Y is not None for X, Y in recycled_inputs)
     assert all(age == 2 for age in env._si_age.values())
-    assert all(x.requires_grad for x in env.X.values())
-    assert all(y.requires_grad for y in env.Y.values())
+    assert all(x.requires_grad for x in _si_bases(env, env.si_X).values())
+    assert all(y.requires_grad for y in _si_bases(env, env.si_Y).values())
 
     loss = sum(tensor.norm()
                for site in env.sites()
@@ -238,9 +242,9 @@ def test_recycle_grad_true_backpropagates_through_second_update(
 
 
 @pytest.mark.parametrize('checkpoint_move', ['reentrant', 'nonreentrant'])
-def test_si_checkpoint_move(torch_config, checkpoint_move, monkeypatch):
+def test_si_checkpoint_move(config_kwargs, checkpoint_move, monkeypatch):
     """Both torch checkpoint modes preserve SI state and gradients."""
-    config = yastn.make_config(sym='none', **torch_config)
+    config = yastn.make_config(sym='none', **config_kwargs)
     env = _dense_product_env(config)
     source = env.psi.ket[(0, 0)]
     source.requires_grad_(True)
@@ -257,7 +261,7 @@ def test_si_checkpoint_move(torch_config, checkpoint_move, monkeypatch):
         checkpoint_move=checkpoint_move,
         opts_si={'enabled': True, 'oversampling': 0, 'niter': 2})
     assert env.is_consistent()
-    assert env.X
+    assert _si_bases(env, env.si_X)
     assert checkpoint_calls == [checkpoint_move == 'reentrant']
     loss = sum(tensor.norm()
                for site in env.sites()

@@ -18,15 +18,16 @@ import sys
 from typing import NamedTuple, Sequence
 
 from ._env_contractions import identity_boundary, corner2x2, append_vec_tl, append_vec_br
+from ._env_ctm_SI_projectors import si_correction_due, si_proj_corners
 from ._env_dataclasses import EnvCTM_local, EnvCTM_projectors
 from .._evolution import BondMetric
-from .._geometry import Site, Lattice
+from .._geometry import Site, Lattice, is_site
 from .._peps import PEPS_CLASSES, Peps2Layers
 from ... import mps
-from ....initialize import rand, rand_like, zeros, ones, eye, block
-from ....sym import sym_none
-from ....tensor import Tensor, YastnError, Leg, tensordot, qr, ncon, truncation_mask
+from ....initialize import rand, ones, eye
+from ....tensor import Tensor, YastnError, Leg, tensordot, qr, ncon
 from ...._split_combine_dict import split_data_and_meta, combine_data_and_meta
+from ...._profile import nvtx_range, nsys_profile
 
 logger = logging.getLogger(__name__)
 
@@ -84,11 +85,7 @@ class EnvCTM():
         self.psi = Peps2Layers(ket=psi, bra=bra) if psi.has_physical() else psi
         self.env = Lattice(self.geometry, objects={site: EnvCTM_local() for site in self.sites()})
         self.proj = Lattice(self.geometry, objects={site: EnvCTM_projectors() for site in self.sites()})
-        # Recycled subspace-iteration bases. Keys are ``(site, pair)``, where
-        # pair is one of ``hlb``, ``hrb``, ``vtr``, or ``vbr``.
-        self.X = {}
-        self.Y = {}
-        self._si_age = {}
+        self._reset_si_()
 
         if init not in (None, 'rand', 'eye', 'dl'):
             raise YastnError(f"{type(self).__name__} {init=} not recognized. Should be 'rand', 'eye', 'dl', or None.")
@@ -96,6 +93,33 @@ class EnvCTM():
             self.reset_(init=init, leg=leg)
 
         self.profiling_mode = None
+
+    def _reset_si_(self):
+        r"""
+        (Re)initialize storage for recycled subspace-iteration bases.
+
+        ``si_X`` and ``si_Y`` mirror ``self.proj``: a :class:`Lattice` of
+        :class:`EnvCTM_projectors`, so the bases follow the same ``site2index``
+        aliasing and inherit copy/clone/detach/to/serialization. Only the four
+        anchor fields ``hlb``, ``hrb``, ``vtr``, ``vbr`` are ever assigned.
+        ``_si_age`` counts SI updates per projector pair; it holds integers,
+        not tensors, and is kept separately for that reason.
+        ``_si_age_patch`` holds ``{site: {name: age}}`` for sites moved to a patch,
+        so that ages follow the patched bases; see :meth:`move_to_patch`.
+        """
+        self.si_X = Lattice(self.geometry, objects={site: EnvCTM_projectors() for site in self.sites()})
+        self.si_Y = Lattice(self.geometry, objects={site: EnvCTM_projectors() for site in self.sites()})
+        self._si_age = {}
+        self._si_age_patch = {}
+
+    def _load_si_(self, d, config=None):
+        r""" De-serialize recycled subspace-iteration state; absent in older dictionaries. """
+        self._reset_si_()
+        if 'si_X' in d:
+            self.si_X = Lattice.from_dict(d['si_X'], config=config)
+            self.si_Y = Lattice.from_dict(d['si_Y'], config=config)
+            self._si_age = {(tuple(x['index']) if isinstance(x['index'], list) else x['index'],
+                             x['pair']): x['age'] for x in d['si_age']}
 
     def __repr__(self) -> str:
         return f"EnvCTM(envs={super().__repr__()},\nproj={self.proj})"
@@ -145,8 +169,8 @@ class EnvCTM():
         env = cls(self.psi, init=None)
         env.env = self.env.copy()
         env.proj = self.proj.copy()
-        env.X = {k: v.copy() for k, v in self.X.items()}
-        env.Y = {k: v.copy() for k, v in self.Y.items()}
+        env.si_X = self.si_X.copy()
+        env.si_Y = self.si_Y.copy()
         env._si_age = self._si_age.copy()
         return env
 
@@ -155,8 +179,8 @@ class EnvCTM():
         env = cls(self.psi, init=None)
         env.env = self.env.shallow_copy()
         env.proj = self.proj.shallow_copy()
-        env.X = self.X.copy()
-        env.Y = self.Y.copy()
+        env.si_X = self.si_X.shallow_copy()
+        env.si_Y = self.si_Y.shallow_copy()
         env._si_age = self._si_age.copy()
         return env
 
@@ -171,8 +195,8 @@ class EnvCTM():
         env = type(self)(psi=self.psi.ket.to(device=device, dtype=dtype, **kwargs), init=None)
         env.env = self.env.to(device=device, dtype=dtype, **kwargs)
         env.proj = self.proj.to(device=device, dtype=dtype, **kwargs)
-        env.X = {k: v.to(device=device, dtype=dtype, **kwargs) for k, v in self.X.items()}
-        env.Y = {k: v.to(device=device, dtype=dtype, **kwargs) for k, v in self.Y.items()}
+        env.si_X = self.si_X.to(device=device, dtype=dtype, **kwargs)
+        env.si_Y = self.si_Y.to(device=device, dtype=dtype, **kwargs)
         env._si_age = self._si_age.copy()
         return env
 
@@ -186,8 +210,8 @@ class EnvCTM():
         env = cls(self.psi.clone(), init=None)
         env.env = self.env.clone()
         env.proj = self.proj.clone()
-        env.X = {k: v.clone() for k, v in self.X.items()}
-        env.Y = {k: v.clone() for k, v in self.Y.items()}
+        env.si_X = self.si_X.clone()
+        env.si_Y = self.si_Y.clone()
         env._si_age = self._si_age.copy()
         return env
 
@@ -201,8 +225,8 @@ class EnvCTM():
         env = cls(self.psi, init=None)
         env.env = self.env.detach()
         env.proj = self.proj.detach()
-        env.X = {k: v.detach() for k, v in self.X.items()}
-        env.Y = {k: v.detach() for k, v in self.Y.items()}
+        env.si_X = self.si_X.detach()
+        env.si_Y = self.si_Y.detach()
         env._si_age = self._si_age.copy()
         return env
 
@@ -213,8 +237,8 @@ class EnvCTM():
         """
         self.env.detach_()
         self.proj.detach_()
-        self.X = {k: v.detach() for k, v in self.X.items()}
-        self.Y = {k: v.detach() for k, v in self.Y.items()}
+        self.si_X.detach_()
+        self.si_Y.detach_()
 
     def to_dict(self, level=2, resolve_ops=False):
         r"""
@@ -224,18 +248,14 @@ class EnvCTM():
         """
         return {'type': type(self).__name__,
                 'dict_ver': 1,
-                'psi': self.psi.to_dict(level=level),
-                'env': self.env.to_dict(level=level),
-                'proj': self.proj.to_dict(level=level),
-                'si_X': [dict(site=tuple(site), pair=pair, tensor=t.to_dict(level=level))
-                         for (site, pair), t in self.X.items()],
-                'si_Y': [dict(site=tuple(site), pair=pair, tensor=t.to_dict(level=level))
-                         for (site, pair), t in self.Y.items()],
-                'si_age': [dict(site=tuple(site), pair=pair, age=age)
-                           for (site, pair), age in self._si_age.items()],
                 'psi': self.psi.to_dict(level=level, resolve_ops=resolve_ops),
                 'env': self.env.to_dict(level=level, resolve_ops=resolve_ops),
-                'proj': self.proj.to_dict(level=level, resolve_ops=resolve_ops)}
+                'proj': self.proj.to_dict(level=level, resolve_ops=resolve_ops),
+                'si_X': self.si_X.to_dict(level=level, resolve_ops=resolve_ops),
+                'si_Y': self.si_Y.to_dict(level=level, resolve_ops=resolve_ops),
+                'si_age': [dict(index=list(index) if isinstance(index, tuple) else index,
+                                pair=pair, age=age)
+                           for (index, pair), age in self._si_age.items()]}
 
     @classmethod
     def from_dict(cls, d, config=None):
@@ -258,12 +278,7 @@ class EnvCTM():
             env = cls(psi, init=None)
             env.env = Lattice.from_dict(d['env'], config=config)
             env.proj = Lattice.from_dict(d['proj'], config=config)
-            env.X = {(Site(*x['site']), x['pair']): Tensor.from_dict(x['tensor'], config=config)
-                     for x in d.get('si_X', ())}
-            env.Y = {(Site(*x['site']), x['pair']): Tensor.from_dict(x['tensor'], config=config)
-                     for x in d.get('si_Y', ())}
-            env._si_age = {(Site(*x['site']), x['pair']): x['age']
-                           for x in d.get('si_age', ())}
+            env._load_si_(d, config=config)
             return env
 
     def update_from_dict_(self, d):
@@ -272,12 +287,7 @@ class EnvCTM():
         self.psi = tmp.psi
         self.env = Lattice.from_dict(d['env'])
         self.proj = Lattice.from_dict(d['proj'])
-        self.X = {(Site(*x['site']), x['pair']): Tensor.from_dict(x['tensor'])
-                  for x in d.get('si_X', ())}
-        self.Y = {(Site(*x['site']), x['pair']): Tensor.from_dict(x['tensor'])
-                  for x in d.get('si_Y', ())}
-        self._si_age = {(Site(*x['site']), x['pair']): x['age']
-                        for x in d.get('si_age', ())}
+        self._load_si_(d)
 
 
     def reset_(self, init='rand', leg=None, **kwargs):
@@ -298,9 +308,7 @@ class EnvCTM():
             Leg signature is fixed to the default values.
         """
         normalize = kwargs.get('normalize', 'inf')
-        self.X.clear()
-        self.Y.clear()
-        self._si_age.clear()
+        self._reset_si_()
 
         if init == 'dl':
             self.reset_(init='eye')
@@ -624,12 +632,14 @@ class EnvCTM():
                 # reconstruct env from output tensors
                 env.update_from_dict_(combine_data_and_meta(out_data, out_meta))
             else:
-                env._update_core_(d, opts_svd, method=method, **kwargs)
+                with nvtx_range(f"_update_core_ {d}"):
+                    env._update_core_(d, opts_svd, method=method, **kwargs)
         return env
 
+    
     def _update_core_(env, move: str, opts_svd: dict, method: str, **kwargs):
         r"""
-        Core function updating CTM environment tensors pefrorming specified move.
+        Core function updating CTM environment tensors peforming specified move.
         """
         assert move in ['h', 'v', 'l', 'r', 't', 'b'], "Invalid move"
         if (move in 'hv') or (len(env.sites()) < env.Nx * env.Ny):
@@ -657,14 +667,16 @@ class EnvCTM():
             #
             # Projectors
             for site in sites_proj:
-                env._update_projectors_(site, move, opts_svd, method, **kwargs)
+                with nvtx_range(f"_update_projectors_ {site}"):
+                    env._update_projectors_(site, move, opts_svd, method, **kwargs)
             # fill (trivial) projectors on edges
             env._trivial_projectors_(move, sites_proj)
             #
             # Update move
             env_tmp = EnvCTM(env.psi, init=None)  # empty environments
             for site in sites:
-                env_tmp._update_env_(site, env, move)
+                with nvtx_range(f"_update_env_ {site}"):
+                    env_tmp._update_env_(site, env, move)
             update_storage_(env, env_tmp)
 
     def update_bond_(env, bond: tuple, opts_svd: dict | None = None, method: str = '2x2 corner', **kwargs):
@@ -709,31 +721,33 @@ class EnvCTM():
         else:
             raise YastnError(f"CTM update {method=} not recognized. Should contain '1x2' or '2x2'")
 
-    def _set_projector_pair_(env, anchor, pair, site0, name0, site1, name1,
+    def _set_projector_pair_(env, site0, name0, site1, name1,
                              r0, r1, opts_svd, **kwargs):
-        """Update a projector pair and its recycled SI bases in place."""
-        key = (anchor, pair)
+        """Update a projector pair and its recycled SI bases in place.
+
+        The pair is anchored at ``(site0, name0)``, which also addresses the
+        recycled bases in ``env.si_X`` / ``env.si_Y``.
+        """
+        if site0 in env._si_age_patch:
+            ages, key = env._si_age_patch[site0], name0
+        else:
+            ages, key = env._si_age, (env.site2index(site0), name0)
         opts_si = kwargs.pop('opts_si', None)
         if opts_si is not None and opts_si.get('enabled', False):
             opts_si = dict(opts_si)
-            age = env._si_age.get(key, 0)
-            warmup = opts_si.get('warmup', 5)
-            frequency = opts_si.get('correction_frequency', 0)
             opts_si['correct'] = (opts_si.get('correct', False)
-                                  or age == warmup
-                                  or (frequency > 0 and age > warmup
-                                      and (age - warmup) % frequency == 0))
+                                  or si_correction_due(ages.get(key, 0), opts_si))
         p0, p1, X, Y = proj_corners(
             r0, r1, opts_svd=opts_svd, opts_si=opts_si,
-            X=env.X.get(key), Y=env.Y.get(key), return_si_state=True,
-            **kwargs)
+            X=getattr(env.si_X[site0], name0), Y=getattr(env.si_Y[site0], name0),
+            return_si_state=True, **kwargs)
         setattr(env.proj[site0], name0, p0)
         setattr(env.proj[site1], name1, p1)
         if X is not None:
             recycle_grad = opts_si.get('recycle_grad', False)
-            env.X[key] = X if recycle_grad else X.detach()
-            env.Y[key] = Y if recycle_grad else Y.detach()
-            env._si_age[key] = env._si_age.get(key, 0) + 1
+            setattr(env.si_X[site0], name0, X if recycle_grad else X.detach())
+            setattr(env.si_Y[site0], name0, Y if recycle_grad else Y.detach())
+            ages[key] = ages.get(key, 0) + 1
 
     def _trivial_projectors_(env, move, sites):
         r"""
@@ -836,12 +850,30 @@ class EnvCTM():
                 env_tmp[site].br = tmp / tmp.norm(p='inf')
 
     def apply_patch(self):
-        self.env.apply_patch()
-        self.proj.apply_patch()
+        for lattice in (self.env, self.proj, self.si_X, self.si_Y):
+            lattice.apply_patch()
+        # As in Lattice.apply_patch, the last patched site of a unit-cell index
+        # wins, so each committed age stays with the basis and projector it counts.
+        for site, ages in self._si_age_patch.items():
+            index = self.site2index(site)
+            self._si_age = {k: v for k, v in self._si_age.items() if k[0] != index}
+            self._si_age.update(((index, name), age) for name, age in ages.items())
+        self._si_age_patch = {}
 
     def move_to_patch(self, sites):
-        self.env.move_to_patch(sites)
-        self.proj.move_to_patch(sites)
+        r"""
+        Give ``sites`` private copies of environment tensors, projectors and
+        recycled SI state (bases and ages) until :meth:`apply_patch`.
+        """
+        for lattice in (self.env, self.proj, self.si_X, self.si_Y):
+            lattice.move_to_patch(sites)
+        if not sites:
+            return
+        if is_site(sites):
+            sites = [sites]
+        for site in sites:
+            index = self.site2index(site)
+            self._si_age_patch[site] = {name: age for (ind, name), age in self._si_age.items() if ind == index}
 
     def pre_truncation_(env, bond):
         pass
@@ -998,11 +1030,7 @@ class EnvCTM():
         iterator_step = kwargs.get("iterator_step", 0)
         max_dsv, converged, history = None, False, []
         for sweep in range(1, max_sweeps + 1):
-            if env.profiling_mode in ["NVTX",]:
-                env.config.backend.cuda.nvtx.range_push(f"update_")
-                env.update_(opts_svd=opts_svd, moves=moves, method=method, **kwargs)
-                env.config.backend.cuda.nvtx.range_pop()
-            else:
+            with nvtx_range("update_"):
                 env.update_(opts_svd=opts_svd, moves=moves, method=method, **kwargs)
 
             # use default CTM convergence check
@@ -1157,8 +1185,7 @@ def update_extended_2x2_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwarg
         _, r_t = qr(h1, axes=(0, 1)) if use_qr else (None, h1)
         _, r_b = qr(h2, axes=(1, 0)) if use_qr else (None, h2.T)
         opts_svd["k_block"]= svd_predict_spec(tr, "hrb", br, "hrt", r_t.s[1])
-        env._set_projector_pair_(tr, 'hrb', tr, 'hrb', br, 'hrt',
-                                 r_t, r_b, opts_svd, **kwargs)
+        env._set_projector_pair_(tr, 'hrb', br, 'hrt', r_t, r_b, opts_svd, **kwargs)
 
     if any(x in move for x in 'lh'):
         sr = psi[tr].get_shape(axes=2)
@@ -1185,8 +1212,7 @@ def update_extended_2x2_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwarg
         _, r_t = qr(h1, axes=(1, 0)) if use_qr else (None, h1.T)
         _, r_b = qr(h2, axes=(0, 1)) if use_qr else (None, h2)
         opts_svd["k_block"]= svd_predict_spec(tl, "hlb", bl, "hlt", r_t.s[1])
-        env._set_projector_pair_(tl, 'hlb', tl, 'hlb', bl, 'hlt',
-                                 r_t, r_b, opts_svd, **kwargs)
+        env._set_projector_pair_(tl, 'hlb', bl, 'hlt', r_t, r_b, opts_svd, **kwargs)
 
     if any(x in move for x in 'tbv'):
         cor_ll = cor_bl @ cor_tl  # l(bottom) l(top)
@@ -1217,8 +1243,7 @@ def update_extended_2x2_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwarg
         _, r_l = qr(h1, axes=(0, 1)) if use_qr else (None, h1)
         _, r_r = qr(h2, axes=(1, 0)) if use_qr else (None, h2.T)
         opts_svd["k_block"]= svd_predict_spec(tl, "vtr", tr, "vtl", r_l.s[1])
-        env._set_projector_pair_(tl, 'vtr', tl, 'vtr', tr, 'vtl',
-                                 r_l, r_r, opts_svd, **kwargs)
+        env._set_projector_pair_(tl, 'vtr', tr, 'vtl', r_l, r_r, opts_svd, **kwargs)
 
     if any(x in move for x in 'bv'):
         st = psi[tl].get_shape(axes=3)
@@ -1245,8 +1270,7 @@ def update_extended_2x2_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwarg
         _, r_l = qr(h1, axes=(1, 0)) if use_qr else (None, h1.T)
         _, r_r = qr(h2, axes=(0, 1)) if use_qr else (None, h2)
         opts_svd["k_block"]= svd_predict_spec(bl, "vbr", br, "vbl", r_l.s[1])
-        env._set_projector_pair_(bl, 'vbr', bl, 'vbr', br, 'vbl',
-                                 r_l, r_r, opts_svd, **kwargs)
+        env._set_projector_pair_(bl, 'vbr', br, 'vbl', r_l, r_r, opts_svd, **kwargs)
 
 
 def update_1x2_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwargs):
@@ -1262,12 +1286,10 @@ def update_1x2_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwargs):
         r_br, r_bl = regularize_1site_corners(cor_br, cor_bl)
 
     if move in 'lh':
-        env._set_projector_pair_(tr, 'hrb', tr, 'hrb', br, 'hrt',
-                                 r_tr, r_br, opts_svd, **kwargs)
+        env._set_projector_pair_(tr, 'hrb', br, 'hrt', r_tr, r_br, opts_svd, **kwargs)
 
     if move in 'rh':
-        env._set_projector_pair_(tl, 'hlb', tl, 'hlb', bl, 'hlt',
-                                 r_tl, r_bl, opts_svd, **kwargs)
+        env._set_projector_pair_(tl, 'hlb', bl, 'hlt', r_tl, r_bl, opts_svd, **kwargs)
 
     if move in 'tbv':
         cor_bl = (env[br].bl @ env[br].l).fuse_legs(axes=((0, 1), 2))
@@ -1278,12 +1300,10 @@ def update_1x2_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwargs):
         r_tr, r_br = regularize_1site_corners(cor_tr, cor_br)
 
     if move in 'tv':
-        env._set_projector_pair_(tl, 'vtr', tl, 'vtr', tr, 'vtl',
-                                 r_tl, r_tr, opts_svd, **kwargs)
+        env._set_projector_pair_(tl, 'vtr', tr, 'vtl', r_tl, r_tr, opts_svd, **kwargs)
 
     if move in 'bv':
-        env._set_projector_pair_(bl, 'vbr', bl, 'vbr', br, 'vbl',
-                                 r_bl, r_br, opts_svd, **kwargs)
+        env._set_projector_pair_(bl, 'vbr', br, 'vbl', r_bl, r_br, opts_svd, **kwargs)
 
 
 def regularize_1site_corners(cor_0, cor_1):
@@ -1296,860 +1316,25 @@ def regularize_1site_corners(cor_0, cor_1):
     r_1 = tensordot((S @ U_1), Q_1, axes=(1, 1))
     return r_0, r_1
 
-def _si_rank(opts_svd, opts_si):
-    """Total size of an SI basis, including oversampling."""
-    oversampling = opts_si.get('oversampling', 5)
-    D_total = opts_svd.get('D_total')
-    if isinstance(D_total, int):
-        return D_total + oversampling
-    D_block = opts_svd.get('D_block')
-    if isinstance(D_block, int):
-        return D_block + oversampling
-    raise YastnError("SI projectors require an integer D_total or D_block in opts_svd.")
-
-
-def _distribute_si_rank(charges, rank):
-    # basic distribution of rank over charge sectors, ignoring sector capacities
-    """Distribute an SI rank evenly, filling remainders by charge order.
-    Parameters
-    ----------
-    charges : list
-        List of charges.
-    rank : int
-        Total number of columns to distribute over charge sectors.
-    Returns
-    -------
-    dict
-        Mapping ``charge -> amount``. Charges are always tuples, including ``()`` for tensors without symmetry and ``(q,)`` for U(1).
-    """
-    if not isinstance(rank, int) or isinstance(rank, bool) or rank <= 0:
-        raise YastnError("SI rank must be a positive integer.")
-
-    full_charge_rank = rank // len(charges)
-    rank_remainder = rank % len(charges)
-
-    def charge_order(charge):
-        # For U(1), this is 0, +1, -1, +2, -2, ... .  The tuple fallback
-        # applies the same convention component by component.
-        return tuple((abs(q), q < 0) for q in charge)
-
-    charge_ordered = sorted(charges, key=charge_order)
-    charges_map = {charge: full_charge_rank for charge in charge_ordered}
-    for i in range(rank_remainder):
-        charges_map[charge_ordered[i]] += 1
-
-    return charges_map
-
-
-def _distribute_si_rank_with_capacity(capacities, rank):
-    r"""Distribute an SI rank without exceeding CTM-leg sector capacities.
-
-    The returned mapping defines the auxiliary leg used by both SI bases, so
-    ``X`` and ``Y`` always contain exactly the same charges and the same number
-    of vectors in every charge sector. The allocation always has the requested
-    oversampled rank; insufficient corner-leg capacity is an error.
-    """
-    if not isinstance(rank, int) or isinstance(rank, bool) or rank <= 0:
-        raise YastnError("SI rank must be a positive integer.")
-
-    capacities = {charge: dimension
-                  for charge, dimension in capacities.items()
-                  if dimension > 0}
-    if not capacities:
-        raise YastnError("The CTM corner leg has no non-empty charge sectors.")
-
-    total_capacity = sum(capacities.values())
-    if rank > total_capacity:
-        raise YastnError(
-            f"Requested SI rank {rank} exceeds CTM corner-leg capacity "
-            f"{total_capacity}; cannot construct an auxiliary leg of "
-            f"dimension chi + oversampling.")
-
-    def charge_order(charge):
-        return tuple((abs(q), q < 0) for q in charge)
-
-    ordered_charges = sorted(capacities, key=charge_order)
-    allocation = {charge: 0 for charge in ordered_charges}
-    remaining = rank
-
-    # Round-robin allocation is even whenever capacities permit it. Once a
-    # small sector is full, its remaining share is assigned to larger sectors.
-    while remaining:
-        for charge in ordered_charges:
-            if allocation[charge] < capacities[charge]:
-                allocation[charge] += 1
-                remaining -= 1
-                if remaining == 0:
-                    break
-
-    return {charge: dimension for charge, dimension in allocation.items()
-            if dimension > 0}
-
-
-def _validate_ctm_corner_pair(r0, r1):
-    """Validate the two closures of a pair of CTM corner halves.
-
-    This function was generated by AI.
-    """
-    if not isinstance(r0, Tensor) or not isinstance(r1, Tensor):
-        raise YastnError("CTM corner halves must be YASTN tensors.")
-    if r0.ndim != 2 or r1.ndim != 2:
-        raise YastnError("CTM corner halves must be rank-2 tensors.")
-    if r0.config.sym.SYM_ID != r1.config.sym.SYM_ID:
-        raise YastnError("CTM corner halves must use the same symmetry.")
-
-    for axis in (0, 1):
-        leg0 = r0.get_legs(axis)
-        leg1 = r1.get_legs(axis)
-        common_charges = leg0.tD.keys() & leg1.tD.keys()
-        if any(leg0.tD[charge] != leg1.tD[charge]
-               for charge in common_charges):
-            raise YastnError(
-                "CTM corner halves must have matching dimensions in every "
-                "shared charge sector on both loop closures; "
-                f"mismatch on axis {axis}.")
-
-
-def _ctm_shared_sector_capacity(r0, r1):
-    """Return capacities of sectors supported by both CTM corner halves."""
-    capacity0 = r0.get_legs(0).tD
-    capacity1 = r1.get_legs(0).tD
-    return {charge: dimension for charge, dimension in capacity0.items()
-            if charge in capacity1}
-
-
-def initialize_si_bases(r0, r1, rank, charges=None):
-    r"""Initialize compatible column-isometric SI bases from Gaussian noise.
-
-    The auxiliary rank is spread as uniformly as possible over charge sectors
-    of the matching external CTM legs. A sector cannot be assigned more
-    columns than that sector has rows.
-    """
-    _validate_ctm_corner_pair(r0, r1)
-
-    x_input = r1.get_legs(0).conj() # right leg of r1
-    y_input = r0.get_legs(0).conj() # left leg of r0
-    sector_capacity = _ctm_shared_sector_capacity(r0, r1)
-
-    if charges is None:
-        charge_mapping = _distribute_si_rank_with_capacity(
-            sector_capacity, rank)
-    else:
-        charge_mapping = dict(charges)
-        unknown_charges = set(charge_mapping) - set(sector_capacity)
-        if unknown_charges:
-            raise YastnError(
-                f"SI charge sectors are absent from the CTM corner leg: "
-                f"{unknown_charges}.")
-        if any(not isinstance(dimension, int) or isinstance(dimension, bool)
-               or dimension <= 0
-               for dimension in charge_mapping.values()):
-            raise YastnError("SI charge-sector dimensions must be positive integers.")
-        if not charge_mapping:
-            raise YastnError("SI charge-sector mapping cannot be empty.")
-        mapped_rank = sum(charge_mapping.values())
-        if mapped_rank != rank:
-            raise YastnError(
-                f"Explicit SI charge-sector dimensions sum to {mapped_rank}, "
-                f"but requested SI rank is {rank}.")
-        for charge, dimension in charge_mapping.items():
-            capacity = sector_capacity[charge]
-            if dimension > capacity:
-                raise YastnError(
-                    f"SI dimension {dimension} exceeds capacity {capacity} "
-                    f"in charge sector {charge}.")
-    x_aux = Leg(
-        r1.config,
-        s=-x_input.s,
-        t=tuple(charge_mapping.keys()),
-        D=tuple(charge_mapping.values()),
-    )
-
-    X = rand(r1.config, legs=(x_input, x_aux), distribution='normal')
-    Yh = rand(r0.config, legs=(y_input.conj(), x_aux),
-              distribution='normal')
-
-    X, _ = qr(X, axes=(0, 1), sQ=x_aux.s)
-    Yh, _ = qr(Yh, axes=(0, 1), sQ=x_aux.s)
-    return X, Yh.H
-
-def si_bases_compatible(r0, r1, X, Y):
-    """Whether recycled bases are compatible with the current corners."""
-    if X is None or Y is None:
-        return False
-
-    def is_compatible_subspace(basis_leg, corner_leg):
-        """A refined basis may intentionally contain only selected sectors."""
-        return (basis_leg.s == corner_leg.s
-                and all(charge in corner_leg.tD
-                        and corner_leg.tD[charge] == dimension
-                        for charge, dimension in basis_leg.tD.items()))
-
-    try:
-        return (
-            is_compatible_subspace(
-                X.get_legs(0), r1.get_legs(0).conj())
-            and is_compatible_subspace(
-                Y.get_legs(1), r0.get_legs(0).conj())
-            and X.get_legs(1) == Y.get_legs(0).conj()
-            and X.dtype == r1.dtype
-            and Y.dtype == r0.dtype
-            and X.device == r1.device
-            and Y.device == r0.device
-        )
-    except (AttributeError, IndexError):
-        return False
-
-def si_subspace_error(Q, Q_old):
-    r"""Mean squared sine of the principal angles between two SI bases.
-
-    Both tensors are expected to be column-isometric.  The expression
-    ``1 - ||Q_old.H @ Q||_F^2 / rank`` is invariant under rotations within
-    either basis, unlike a direct tensor difference.
-    """
-    if Q_old is None or Q.get_legs() != Q_old.get_legs():
-        return float('inf')
-
-    rank = Q.get_shape(axes=1)
-    overlap = Q_old.detach().H @ Q.detach()
-    error = 1.0 - overlap.norm() ** 2 / rank
-    # Roundoff can put the result just outside the mathematical interval.
-    return max(0.0, min(1.0, error.item()))
-
-
-def svd_charge_sector_dimensions(s):
-    r"""Return the number of singular values in every charge sector.
-
-    Parameters
-    ----------
-    s : Tensor
-        Diagonal singular-value tensor returned by :meth:`Tensor.svd`.
-
-    Returns
-    -------
-    dict
-        Mapping ``charge -> amount``. Charges are always tuples, including
-        ``()`` for tensors without symmetry and ``(q,)`` for U(1).
-    """
-    if not isinstance(s, Tensor) or not s.isdiag or s.ndim != 2:
-        raise YastnError("Expected a diagonal rank-2 singular-value tensor.")
-    return dict(s.get_legs(0).tD)
-
-
-def svd_charge_sector_values(s):
-    r"""Return singular values grouped by symmetry-charge sector.
-
-    Parameters
-    ----------
-    s : Tensor
-        Diagonal singular-value tensor returned by :meth:`Tensor.svd`.
-
-    Returns
-    -------
-    dict
-        Mapping ``charge -> list of singular values``. Charges are tuples,
-        including ``()`` without symmetry and ``(q,)`` for U(1).
-    """
-    if not isinstance(s, Tensor) or not s.isdiag or s.ndim != 2:
-        raise YastnError("Expected a diagonal rank-2 singular-value tensor.")
-
-    return {
-        charge: s[charge + charge].tolist()
-        for charge in s.get_legs(0).t
-    }
-
-
-def _distribute_si_rank_proportionally(sector_weights, rank):
-    """Distribute ``rank`` proportionally to nonnegative sector weights."""
-    if not isinstance(rank, int) or isinstance(rank, bool) or rank <= 0:
-        raise YastnError("SI rank must be a positive integer.")
-    if not sector_weights:
-        raise YastnError("Cannot distribute SI rank without charge sectors.")
-    if any(weight < 0 for weight in sector_weights.values()):
-        raise YastnError("Charge-sector weights must be nonnegative.")
-
-    total_weight = sum(sector_weights.values())
-    if total_weight == 0:
-        return _distribute_si_rank(sector_weights, rank)
-
-    charge_mapping = {}
-    fractional_numerators = {}
-    for charge, weight in sector_weights.items():
-        dimension, fractional_numerator = divmod(rank * weight,
-                                                 total_weight)
-        charge_mapping[charge] = dimension
-        fractional_numerators[charge] = fractional_numerator
-
-    remainder = rank - sum(charge_mapping.values())
-    remainder_order = sorted(
-        fractional_numerators,
-        key=fractional_numerators.get,
-        reverse=True)
-    for charge in remainder_order[:remainder]:
-        charge_mapping[charge] += 1
-
-    return {charge: dimension for charge, dimension in charge_mapping.items()
-            if dimension > 0}
-
-
-def _si_refinement_asvr(r0, r1, X, Y, opts_svd, opts_si):
-    """Return a stable SI charge mapping estimated from dominant spectra."""
-    iterations = opts_si.get('asvr_iterations', 5)
-    chip = _si_rank(opts_svd, opts_si)
-    sector_capacity = _ctm_shared_sector_capacity(r0, r1)
-    charge_mapping = dict(X.get_legs(1).tD)
-
-    # A symmetry-preserving subspace iteration cannot generate a charge sector
-    # absent from its input bases. Seed every sector shared by both corners so
-    # that ASVR can compare their spectra before refining the allocation.
-    missing_charges = set(sector_capacity) - set(charge_mapping)
-    if missing_charges:
-        exploratory_mapping = _distribute_si_rank_with_capacity(
-            sector_capacity, chip)
-        unexplored_charges = set(sector_capacity) - set(exploratory_mapping)
-        if unexplored_charges:
-            raise YastnError(
-                "ASVR cannot probe every shared charge sector with SI rank "
-                f"{chip}; increase D_total/D_block or oversampling. Missing "
-                f"sectors: {unexplored_charges}.")
-        charge_mapping = exploratory_mapping
-        X, Y = _recycle_si_bases(
-            r0, r1, X, Y, charge_mapping)
-
-    for asvr_iteration in range(iterations):
-        _, _, _, _, _, sall = si_projector_svd(
-            r0, r1, X, Y, opts_svd, opts_si, return_spectrum=True)
-        sector_values = svd_charge_sector_values(sall)
-        # Keep values above the largest per-sector floor so dominant sectors
-        # receive more columns in the next allocation.
-        largest_smallest_sector_value = max(values[-1]
-                                            for values in sector_values.values())
-        sector_dominant_values = {
-            charge: sum(value >= largest_smallest_sector_value for value in values)
-            for charge, values in sector_values.items()
-        }
-        refined_mapping = _distribute_si_rank_proportionally(
-            sector_dominant_values, chip)
-        if refined_mapping == charge_mapping:
-            break
-        charge_mapping = refined_mapping
-        if asvr_iteration + 1 < iterations:
-            X, Y = _recycle_si_bases(
-                r0, r1, X, Y, charge_mapping)
-    return charge_mapping
-
-
-def _si_refinement_rds(r0, r1, X, Y, opts_svd, opts_si):
-    r"""Allocate SI rank from the relative sizes of CTM charge sectors.
-
-    The auxiliary rank is distributed proportionally to the dimensions of the
-    charge sectors shared by the external legs of ``r0`` and ``r1``. Integer
-    dimensions are obtained by largest-remainder apportionment, and the result
-    never exceeds a sector's capacity. ``X`` and ``Y`` are accepted to provide
-    the same call signature as the other SI refinement methods.
-    """
-    sector_capacity = _ctm_shared_sector_capacity(r0, r1)
-    rank = min(_si_rank(opts_svd, opts_si), sum(sector_capacity.values()))
-    charge_mapping = _distribute_si_rank_proportionally(
-        sector_capacity, rank)
-    return charge_mapping
-
-
-def _si_refinement_cwo(r0, r1, X, Y, opts_svd, opts_si):
-    """Return an SI charge mapping estimated by per-sector oversampling."""
-    chip = _si_rank(opts_svd, opts_si)
-    oversampled_sector_values = {}
-    for charge, capacity in _ctm_shared_sector_capacity(r0, r1).items():
-        sector_rank = min(chip, capacity)
-        X_charge, Y_charge = initialize_si_bases(
-            r0, r1, sector_rank, charges={charge: sector_rank})
-        _, _, _, _, _, sall = si_projector_svd(
-            r0, r1, X_charge, Y_charge, opts_svd, opts_si,
-            return_spectrum=True)
-        sector_values = list(
-            svd_charge_sector_values(sall).get(charge, ()))
-        # An exactly zero sector can be omitted from the block structure of
-        # the reduced SVD even though its directions remain available on the
-        # CTM legs. Preserve those structural null directions for allocation.
-        sector_values.extend([0.] * (sector_rank - len(sector_values)))
-        oversampled_sector_values[charge] = sector_values
-
-    top_values = sorted(
-        ((value, charge) for charge, values in oversampled_sector_values.items()
-         for value in values),
-        key=lambda item: item[0], reverse=True)[:chip]
-    charge_mapping = {}
-    for _, charge in top_values:
-        charge_mapping[charge] = charge_mapping.get(charge, 0) + 1
-    if not charge_mapping:
-        raise YastnError("CWO refinement found no singular values.")
-    return charge_mapping
-
-
-def si_refinement(r0, r1, X, Y, opts_svd, opts_si):
-    r"""Refine and recycle SI bases with the selected allocation strategy.
-
-    This is the single dispatch point for SI charge-sector refinement. Each
-    strategy returns a charge mapping; basis resizing is centralized here so
-    every method retains compatible columns in its public ``(X, Y)`` result.
-    """
-    _validate_ctm_corner_pair(r0, r1)
-    refinement = opts_si.get('refinement', 'cwo')
-    refinements = {
-        'cwo': _si_refinement_cwo,
-        'asvr': _si_refinement_asvr,
-        'rds': _si_refinement_rds,
-    }
-    try:
-        refine = refinements[refinement]
-    except KeyError:
-        raise YastnError(
-            "Unknown SI refinement method "
-            f"{refinement!r}; expected 'cwo', 'asvr', or 'rds'.") from None
-
-    sector_capacity = _ctm_shared_sector_capacity(r0, r1)
-    target_rank = min(_si_rank(opts_svd, opts_si),
-                      sum(sector_capacity.values()))
-    reusable = X is not None and Y is not None
-    if reusable:
-        current_mapping_x = dict(X.get_legs(1).tD)
-        current_mapping_y = dict(Y.get_legs(0).tD)
-
-    # There is no allocation decision to make for a single charge sector.
-    # Keeping an already correctly sized basis avoids both the refinement work
-    # and an unnecessary random restart of a useful recycled subspace.
-    if reusable and len(sector_capacity) == 1:
-        charge = next(iter(sector_capacity))
-        target_mapping = {charge: target_rank}
-        if (current_mapping_x == target_mapping
-                and current_mapping_y == target_mapping):
-            return X, Y
-
-    charge_mapping = refine(r0, r1, X, Y, opts_svd, opts_si)
-    if (reusable and current_mapping_x == charge_mapping
-            and current_mapping_y == charge_mapping):
-        return X, Y
-    return _recycle_si_bases(r0, r1, X, Y, charge_mapping)
-
-
-def _apply_corner_product(r0, r1, X):
-    r"""Apply A = tensordot(r0, r1, axes=(1, 1)) to X.
-
-    r0 has indices (a, k), r1 has indices (b, k), and X has
-    indices (b, p). The result has indices (a, p).
-    """
-    tmp = tensordot(r1, X, axes=(0, 0))       # (k, p)
-    return tensordot(r0, tmp, axes=(1, 0))    # (a, p)
-
-
-def _apply_corner_product_h(r0, r1, Z):
-    r"""Apply A.H to Z without explicitly constructing A.
-
-    Z has indices (a, p). The result has indices (b, p).
-    """
-    tmp = tensordot(r0.conj(), Z, axes=(0, 0))      # (k*, p)
-    return tensordot(r1.conj(), tmp, axes=(1, 0))   # (b*, p)
-
-
-def _validate_isometry(V):
-    """Validate and return the two legs of a resizable isometry.
-
-    This function was generated by AI.
-    """
-    if not isinstance(V, Tensor) or V.ndim != 2 or V.ndim_n != 2 or V.isdiag:
-        raise YastnError("Expected a non-diagonal rank-2 isometry.")
-    legs = V.get_legs()
-    if not all(isinstance(leg, Leg) for leg in legs):
-        raise YastnError("Isometry resizing does not support meta-fused legs.")
-    if legs[1].is_fused():
-        raise YastnError(
-            "The resized isometry leg must not have hard-fusion history.")
-    return legs
-
-
-def _validate_dense_isometry(V):
-    """Validate a dense, single-block isometry and return its dimensions.
-
-    This function was generated by AI.
-    """
-    left_leg, right_leg = _validate_isometry(V)
-    if (V.config.sym.NSYM != 0 or len(right_leg.tD) != 1
-            or V.nblocks != 1):
-        raise YastnError(
-            "Expected a dense isometry with one charge block; use "
-            "symmetric_isometry_recycle for a symmetric isometry.")
-    current_dimension = next(iter(right_leg.tD.values()))
-    return left_leg, right_leg, current_dimension
-
-
-def _validate_isometry_dimension(dim):
-    """Validate a requested dense-isometry dimension.
-
-    This function was generated by AI.
-    """
-    if not isinstance(dim, int) or isinstance(dim, bool) or dim <= 0:
-        raise YastnError("dim must be a positive integer.")
-
-
-def _validate_isometry_addition(V, u, added_leg, added_dimension):
-    """Validate candidate columns supplied for an isometry expansion.
-
-    This function was generated by AI.
-    """
-    if (not isinstance(u, Tensor) or u.ndim != 2 or u.ndim_n != 2
-            or u.isdiag or u.n != V.n
-            or u.get_legs(0) != V.get_legs(0)
-            or u.get_legs(1).s != added_leg.s
-            or u.get_legs(1).tD != added_leg.tD
-            or u.dtype != V.dtype or u.device != V.device):
-        raise YastnError(
-            "u must be a matrix with the isometry's left leg and exactly "
-            f"{added_dimension} additional columns.")
-
-
-def _validated_isometry_result(V, resized, dimension):
-    """Validate and return a resized dense isometry.
-
-    This function was generated by AI.
-    """
-    expected_shape = (V.get_shape(axes=0), dimension)
-    if resized.get_shape() != expected_shape:
-        raise YastnError(
-            f"Failed to construct isometry with shape {expected_shape}.")
-    return resized
-
-
-def _isometry_blocks_by_right_charge(V):
-    """Map each right-leg charge to its tensor block charge and shape."""
-    nsym = V.config.sym.NSYM
-    return {
-        tuple(block_charge[-nsym:]) if nsym else (): (block_charge, shape)
-        for block_charge, shape in zip(V.get_blocks_charge(),
-                                       V.get_blocks_shape())
-    }
-
-
-def _dense_isometry_sector(V, shape, block_charge=None):
-    """Create a dense copy or random isometry for one symmetry sector."""
-    config = V.config._replace(sym=sym_none)
-    legs = tuple(Leg(config, s=leg.s, D=(dimension,))
-                 for leg, dimension in zip(V.get_legs(), shape))
-    if block_charge is None:
-        sector = rand(
-            config, legs=legs, n=(), distribution='normal',
-            dtype=V.yastn_dtype, device=V.device)
-        return qr(sector, axes=(0, 1), sQ=legs[1].s)[0]
-
-    sector = zeros(
-        config, legs=legs, n=(), dtype=V.yastn_dtype, device=V.device)
-    sector[()] = V[block_charge]
-    return sector
-
-
-def _validate_isometry_capacities(target_dimensions, target_blocks):
-    """Check that every target sector fits in its available row space.
-
-    This function was generated by AI.
-    """
-    for charge, dimension in target_dimensions.items():
-        capacity = target_blocks.get(charge, (None, (0, 0)))[1][0]
-        if dimension > capacity:
-            raise YastnError(
-                f"Isometry dimension {dimension} exceeds row-space capacity "
-                f"{capacity} in charge sector {charge}.")
-
-
-def _isometry_target_leg(V, charges):
-    """Create the right leg specified by a charge-to-dimension mapping."""
-    try:
-        charge_dimensions = dict(charges)
-    except (TypeError, ValueError):
-        raise YastnError(
-            "charges must be a mapping from charge to target dimension.") from None
-
-    if any(not isinstance(dimension, int) or isinstance(dimension, bool)
-           or dimension < 0 for dimension in charge_dimensions.values()):
-        raise YastnError(
-            "Isometry charge-sector dimensions must be nonnegative integers.")
-    charge_dimensions = {charge: dimension
-                         for charge, dimension in charge_dimensions.items()
-                         if dimension > 0}
-    if not charge_dimensions:
-        raise YastnError("The resized isometry must have at least one column.")
-
-    right = V.get_legs(1)
-    try:
-        leg = Leg(V.config, s=1,
-                  t=tuple(charge_dimensions),
-                  D=tuple(charge_dimensions.values()))
-        return leg if right.s == 1 else leg.conj()
-    except YastnError as error:
-        raise YastnError(f"Invalid isometry charge distribution: {error}") from None
-
-
-def isometry_expansion(V, dim, u=None):
-    r"""Expand the right leg of a dense, single-block isometry.
-
-    Existing columns are retained. New columns are obtained by projecting
-    ``u`` (or Gaussian noise when ``u`` is omitted) away from the retained
-    subspace and orthonormalizing the residual. ``u`` can contain one or
-    several candidate columns, but it must contain exactly ``dim - V.shape[1]``
-    columns.
-
-    Parameters
-    ----------
-    V : Tensor
-        Rank-2 column isometry to expand.
-    dim : int
-        Target number of columns.
-    u : Tensor, optional
-        Candidate matrix for the additional columns.
-    """
-    left_leg, right_leg, current_dimension = _validate_dense_isometry(V)
-    _validate_isometry_dimension(dim)
-    if dim <= current_dimension:
-        raise YastnError(
-            f"Cannot expand from {current_dimension} to dimension {dim}; "
-            "the target dimension must be larger.")
-    row_dimension = sum(left_leg.D)
-    if dim > row_dimension:
-        raise YastnError(
-            f"Isometry dimension {dim} exceeds row-space capacity "
-            f"{row_dimension}.")
-
-    added_dimension = dim - current_dimension
-    added_leg = Leg(V.config, s=right_leg.s, D=(added_dimension,))
-    if u is None:
-        addition = rand(
-            V.config, legs=(left_leg, added_leg), n=V.n,
-            distribution='normal', dtype=V.yastn_dtype, device=V.device)
-    else:
-        _validate_isometry_addition(V, u, added_leg, added_dimension)
-        addition = u
-
-    addition = addition - V @ (V.H @ addition)
-    # Reorthogonalize to limit roundoff when the candidate columns have a
-    # large component in the span of V.
-    addition = addition - V @ (V.H @ addition)
-    addition, _ = qr(addition, axes=(0, 1), sQ=right_leg.s)
-    if addition.get_shape(axes=1) != added_dimension:
-        raise YastnError(
-            "The requested expansion does not fit in the available row space.")
-
-    expanded = block({(0,): V, (1,): addition},
-                     common_legs=(0,)).drop_leg_history(axes=1)
-    return _validated_isometry_result(V, expanded, dim)
-
-
-def isometry_shrinkage(V, dim):
-    r"""Shrink a dense, single-block isometry to its first ``dim`` columns.
-
-    Parameters
-    ----------
-    V : Tensor
-        Rank-2 column isometry to shrink.
-    dim : int
-        Target number of columns.
-    """
-    _, right_leg, current_dimension = _validate_dense_isometry(V)
-    _validate_isometry_dimension(dim)
-    if dim > current_dimension:
-        raise YastnError(
-            f"Cannot shrink from {current_dimension} to dimension {dim}; "
-            "the target dimension cannot be larger.")
-    if dim == current_dimension:
-        return V
-
-    shrunk_leg = Leg(V.config, s=right_leg.s, D=(dim,))
-    selector = eye(
-        V.config, legs=(right_leg.conj(), shrunk_leg), isdiag=False,
-        dtype=V.yastn_dtype, device=V.device)
-    return _validated_isometry_result(V, V @ selector, dim)
-
-
-def symmetric_isometry_recycle(V, charges, left_leg=None):
-    r"""Resize charge sectors on the right leg of an isometry.
-
-    ``charges`` maps each right-leg charge to its *target* dimension. Sectors
-    omitted from the mapping (or assigned zero) are removed. In each retained
-    sector, leading columns of ``V`` are kept; sectors that grow are completed
-    with orthonormal random columns. Row sectors paired with removed right-leg
-    sectors are dropped by YASTN's canonical block-sparse representation.
-
-    ``left_leg`` can supply a compatible expanded row space. This is useful
-    when a previously removed charge sector has to be introduced again: the
-    old basis no longer carries that row sector, but the current CTM corner
-    does. Existing sectors must have the same row dimensions in both legs.
-
-    This function was generated by AI.
-    """
-    current_left_leg, right_leg = _validate_isometry(V)
-    if left_leg is None:
-        left_leg = current_left_leg
-    elif not isinstance(left_leg, Leg):
-        raise YastnError("left_leg must be a YASTN Leg.")
-
-    common_charges = current_left_leg.tD.keys() & left_leg.tD.keys()
-    if (current_left_leg.s != left_leg.s
-            or any(current_left_leg.tD[charge] != left_leg.tD[charge]
-                   for charge in common_charges)):
-        raise YastnError(
-            "left_leg must preserve dimensions of existing row sectors.")
-    target_leg = _isometry_target_leg(V, charges)
-    current_dimensions = right_leg.tD
-    target_dimensions = target_leg.tD
-    if current_dimensions == target_dimensions:
-        return V
-
-    expansion_sectors = {
-        charge
-        for charge, dimension in target_dimensions.items()
-        if dimension > current_dimensions.get(charge, 0)
-    }
-    shrinkage_sectors = {
-        charge
-        for charge, dimension in current_dimensions.items()
-        if target_dimensions.get(charge, 0) < dimension
-    }
-
-    current_blocks = _isometry_blocks_by_right_charge(V)
-    probe = zeros(
-        V.config, legs=(left_leg, target_leg), n=V.n,
-        dtype=V.yastn_dtype, device=V.device)
-    target_blocks = _isometry_blocks_by_right_charge(probe)
-
-    _validate_isometry_capacities(target_dimensions, target_blocks)
-
-    resized = probe
-    for charge, target_dimension in target_dimensions.items():
-        target_block_charge, target_shape = target_blocks[charge]
-
-        if charge not in current_blocks:
-            # There is no zero-column tensor to pass to isometry_expansion,
-            # so a newly introduced sector is initialized as an isometry.
-            sector = _dense_isometry_sector(V, target_shape)
-        else:
-            current_block_charge, current_shape = current_blocks[charge]
-            sector = _dense_isometry_sector(
-                V, current_shape, current_block_charge)
-
-            if charge in expansion_sectors:
-                sector = isometry_expansion(sector, target_dimension)
-            elif charge in shrinkage_sectors:
-                sector = isometry_shrinkage(sector, target_dimension)
-
-        resized[target_block_charge] = sector.to_raw_tensor()
-
-    if resized.get_legs(1).tD != target_dimensions:
-        raise YastnError("Failed to construct the requested charge distribution.")
-    return resized
-
-
-def _recycle_si_bases(r0, r1, X, Y, charge_mapping):
-    """Resize both SI bases while preserving their compatible columns."""
-    rank = sum(charge_mapping.values())
-    if not si_bases_compatible(r0, r1, X, Y):
-        return initialize_si_bases(
-            r0, r1, rank, charges=charge_mapping)
-
-    X = symmetric_isometry_recycle(
-        X, charge_mapping, left_leg=r1.get_legs(0).conj())
-    Yh = symmetric_isometry_recycle(
-        Y.H, charge_mapping, left_leg=r0.get_legs(0))
-    return X, Yh.H
-
-
-def si_projector_svd(r0, r1, X, Y, opts_svd, opts_si,
-                     return_spectrum=False):
-    """Approximate the SVD of ``r0 @ r1.T`` using recycled subspaces."""
-    _validate_ctm_corner_pair(r0, r1)
-    niter = opts_si.get('niter', 5)
-    tol = opts_si.get('tol', 1e-3)
-    X_old, Yh_old = X, Y.H
-
-    for _ in range(niter):
-        AX = _apply_corner_product(r0, r1, X)
-        X_next = _apply_corner_product_h(r0, r1, AX)
-        X, _ = qr(X_next, axes=(0, 1), sQ=X.s[1])
-
-        Yh = Y.H
-        AHY = _apply_corner_product_h(r0, r1, Yh)
-        Yh_next = _apply_corner_product(r0, r1, AHY)
-        Yh, _ = qr(Yh_next, axes=(0, 1), sQ=Yh.s[1])
-
-        error = max(si_subspace_error(X, X_old),
-                    si_subspace_error(Yh, Yh_old))
-
-        Y = Yh.H
-        if error < tol:
-            break
-        X_old, Yh_old = X, Yh
-
-    rho = Y @ _apply_corner_product(r0, r1, X)
-    us, sall, vs = rho.svd(axes=(0, 1), sU=rho.s[1], fix_signs=True)
-
-    X_new = X @ vs.H
-    Y_new = us.H @ Y
-    u = Y.H @ us
-    v = vs @ X.H
-
-    trunc_opts = {k: opts_svd[k] for k in (
-        'tol', 'tol_block', 'D_block', 'D_total', 'largest_gap',
-        'eps_multiplet', 'hermitian', 'mask_f') if k in opts_svd}
-    mask = truncation_mask(sall, **trunc_opts)
-    u, s, v = mask.apply_mask(u, sall, v, axes=(-1, 0, 0))
-    result = (u, s, v, X_new, Y_new)
-    return result + (sall,) if return_spectrum else result
 
 def proj_corners(r0, r1, opts_svd, opts_si=None, X=None, Y=None,
                  return_si_state=False, **kwargs):
     r""" Projectors in between r0 @ r1.T corners. """
     # TODO: r1 matrix is defined as (right, left)
-    _validate_ctm_corner_pair(r0, r1)
     opts_svd = dict(opts_svd)
     opts_svd['fix_signs'] = opts_svd.get('fix_signs', True)
     verbosity = opts_svd.get('verbosity', 0)
     # only verbosity from opts_svd is to be passed down to svd_with_truncation
     kwargs.pop('verbosity', None)
-    profiling_mode= kwargs.get('profiling_mode', None)
 
     si_enabled = opts_si is not None and opts_si.get('enabled', False)
     X_new = Y_new = None
     if si_enabled:
-        # An eye-initialized CTM starts below its requested chi and grows over
-        # the first updates.  During that growth the enlarged corners may not
-        # yet accommodate chi + p rangefinder columns.  Use every currently
-        # available shared direction; changed corner legs will invalidate and
-        # enlarge the recycled bases on subsequent updates.
-        rank = min(_si_rank(opts_svd, opts_si),
-                   sum(_ctm_shared_sector_capacity(r0, r1).values()))
-        recycled = si_bases_compatible(r0, r1, X, Y)
-        if not recycled:
-            X, Y = initialize_si_bases(r0, r1, rank)
-        if opts_si.get('correct', False):
-            X, Y = si_refinement(
-                r0, r1, X, Y, opts_svd, opts_si)
-        try:
-            u, s, v, X_new, Y_new = si_projector_svd(
-                r0, r1, X, Y, opts_svd, opts_si)
-        except YastnError:
-            # Aggregate charge dimensions can stay unchanged while an updated
-            # CTM corner acquires incompatible dimensions inside a hard-fused
-            # leg. In that case a recycled basis cannot be contracted, so
-            # rebuild it for the current corner layout and retry once.
-            if not recycled:
-                raise
-            X, Y = initialize_si_bases(r0, r1, rank)
-            u, s, v, X_new, Y_new = si_projector_svd(
-                r0, r1, X, Y, opts_svd, opts_si)
+        with nvtx_range("si_proj_corners"):
+            u, s, v, X_new, Y_new = si_proj_corners(r0, r1, opts_svd, opts_si, X, Y)
     else:
         rr = tensordot(r0, r1, axes=(1, 1))
-        if profiling_mode in ["NVTX",]:
-            rr.config.backend.cuda.nvtx.range_push("svd_with_truncation")
-            u, s, v = rr.svd_with_truncation(
-                axes=(0, 1), sU=r0.s[1], **opts_svd, **kwargs)
-            rr.config.backend.cuda.nvtx.range_pop()
-        else:
+        with nvtx_range("svd_with_truncation"):
             u, s, v = rr.svd_with_truncation(
                 axes=(0, 1), sU=r0.s[1], **opts_svd, **kwargs)
 
@@ -2181,207 +1366,3 @@ def update_storage_(old, new):
         for k, v in new[site].__dict__.items():
             if v is not None:
                 setattr(old[site], k, v)
-
-
-def _random_matrix_for_sector_test(sym, sectors, seed):
-    """Create a random block-diagonal matrix for executable tests below."""
-    from ....tensor import make_config
-
-    config = make_config(backend='np', sym=sym)
-    config.backend.random_seed(seed)
-    matrix = Tensor(config=config, s=(1, -1))
-    for charge, dimension in sectors:
-        kwargs = {} if charge is None else {'ts': (charge, charge)}
-        matrix.set_block(Ds=(dimension, dimension), val='rand', **kwargs)
-    return matrix
-
-
-def _charge_counts_for_sector_test(matrix):
-    _, singular_values, _ = matrix.svd(
-        axes=(0, 1), sU=matrix.s[1], fix_signs=True)
-    return svd_charge_sector_dimensions(singular_values)
-
-
-class TestSvdChargeSectorDimensions:
-    """Executable tests for :func:`svd_charge_sector_dimensions`."""
-
-    @staticmethod
-    def plot_z2_singular_values(s_ref, s_si, D_total, plot_path):
-        """Plot full-SVD and SI singular values for both Z2 sectors."""
-        import matplotlib.pyplot as plt
-        import numpy as np
-
-        fig, axes = plt.subplots(1, 2, figsize=(11, 4), sharey=True)
-        for ax, spectrum, title in zip(
-                axes, (s_ref, s_si), ('Full SVD', 'SI')):
-            sector_values = {}
-            for charge in (0, 1):
-                block = (charge, charge)
-                if block not in spectrum.get_blocks_charge():
-                    continue
-                values = np.asarray(spectrum[block]).reshape(-1)
-                values = np.sort(values)[::-1]
-                sector_values[charge] = values
-                ax.semilogy(range(1, len(values) + 1), values,
-                            marker='.', label=f'charge {charge}')
-            all_values = np.concatenate(tuple(sector_values.values()))
-            if 0 < D_total <= len(all_values):
-                cutoff = np.sort(all_values)[::-1][D_total - 1]
-                ax.axhline(cutoff, color='black', linestyle='--', linewidth=1.5,
-                           label=f'D_total cutoff ({cutoff:.3g})')
-            ax.set_title(title)
-            ax.set_xlabel('index within charge sector')
-            ax.grid(True, which='both', alpha=0.3)
-            ax.legend()
-        axes[0].set_ylabel('singular value')
-        fig.suptitle(f'Z2 singular-value spectra (D_total={D_total})')
-        fig.tight_layout()
-        fig.savefig(plot_path, dpi=150)
-        plt.close(fig)
-
-    def test_dense(self):
-        rho = _random_matrix_for_sector_test('none', ((None, 3),), seed=0)
-        counts = _charge_counts_for_sector_test(rho)
-        assert counts == {(): 3}, counts
-
-    def test_u1(self):
-        rho = _random_matrix_for_sector_test(
-            'U1', ((-1, 2), (0, 3), (2, 1)), seed=1)
-        counts = _charge_counts_for_sector_test(rho)
-        assert counts == {(-1,): 2, (0,): 3, (2,): 1}, counts
-
-    def test_z2(self):
-        rho = _random_matrix_for_sector_test('Z2', ((0, 2), (1, 3)), seed=2)
-        counts = _charge_counts_for_sector_test(rho)
-        assert counts == {(0,): 2, (1,): 3}, counts
-
-    @staticmethod
-    def z2_si_sector_distribution(r0_sector_dims, r1_sector_dims,
-                                  x_sector_dims, y_sector_dims,
-                                  D_total=12, scale=1,
-                                  distribution='random', plot_path=None):
-        """Return SI/reference sector distributions and their projector error.
-
-        ``scale`` can be a single number applied to both Z2 sectors or a
-        ``{charge: factor}`` mapping used to bias their singular spectra.
-        ``distribution`` controls the spectrum within each sector and accepts
-        ``'random'``, ``'flat'``, ``'linear'``, ``'exponential'``,
-        ``'powerlaw'``, a callable ``f(dimension, charge)``, or a
-        ``{charge: distribution}`` mapping.
-        """
-        import numpy as np
-
-        if r0_sector_dims != r1_sector_dims:
-            raise ValueError("r0 and r1 must have matching Z2 sector dimensions.")
-        if x_sector_dims != y_sector_dims:
-            raise ValueError("X and Y must have matching SI sector dimensions.")
-
-        sectors = tuple(sorted(r1_sector_dims.items()))
-        config = _random_matrix_for_sector_test('Z2', sectors, seed=3).config
-        rng = np.random.default_rng(3)
-        r1 = Tensor(config=config, s=(1, -1))
-        r0 = Tensor(config=config, s=(1, -1))
-        for charge, dimension in sorted(r0_sector_dims.items()):
-            block = (charge, charge)
-            r0.set_block(ts=block, Ds=(dimension, dimension),
-                         val=np.eye(dimension))
-            factor = scale.get(charge, 1) if isinstance(scale, dict) else scale
-            sector_distribution = (distribution[charge]
-                                   if isinstance(distribution, dict)
-                                   else distribution)
-            if callable(sector_distribution):
-                singular_values = np.asarray(
-                    sector_distribution(dimension, charge))
-            elif sector_distribution == 'flat':
-                singular_values = np.ones(dimension)
-            elif sector_distribution == 'linear':
-                singular_values = np.linspace(1, 1e-2, dimension)
-            elif sector_distribution == 'exponential':
-                singular_values = np.geomspace(1, 1e-8, dimension)
-            elif sector_distribution == 'powerlaw':
-                singular_values = 1 / np.arange(1, dimension + 1)
-            elif sector_distribution == 'random':
-                singular_values = np.sort(rng.random(dimension))[::-1]
-            else:
-                raise ValueError(
-                    f"Unknown singular-value distribution for charge "
-                    f"{charge}: {sector_distribution!r}.")
-            if singular_values.shape != (dimension,):
-                raise ValueError(
-                    "A custom distribution must return one value per dimension.")
-
-            q_left, _ = np.linalg.qr(rng.standard_normal((dimension, dimension)))
-            q_right, _ = np.linalg.qr(rng.standard_normal((dimension, dimension)))
-            matrix = q_left @ np.diag(factor * singular_values) @ q_right.T
-            r1.set_block(ts=block, Ds=matrix.shape, val=matrix)
-
-        biased_rho = r0 @ r1
-        x_leg = Leg(config, s=-1, t=tuple(sorted(x_sector_dims)),
-                    D=tuple(x_sector_dims[q] for q in sorted(x_sector_dims)))
-        y_leg = Leg(config, s=-1, t=tuple(sorted(y_sector_dims)),
-                    D=tuple(y_sector_dims[q] for q in sorted(y_sector_dims)))
-
-        def random_isometry(outer_leg, si_leg):
-            basis = rand(config, legs=(outer_leg, si_leg))
-            return qr(basis, axes=(0, 1), sQ=si_leg.s)[0]
-
-        X = random_isometry(biased_rho.get_legs(1).conj(), x_leg)
-        Yh = random_isometry(biased_rho.get_legs(0), y_leg)
-
-        opts_svd = {'D_total': D_total, 'D_block': float('inf'), 'tol': 0}
-        opts_si = {'niter': 100, 'tol': 1e-12}
-        u_si, s_si, v_si, _, _, s_si_all = si_projector_svd(
-            r0, r1, X, Yh.H, opts_svd, opts_si, return_spectrum=True)
-        _, s_ref_all, _ = biased_rho.svd(
-            axes=(0, 1), sU=biased_rho.s[1], fix_signs=True)
-        u_ref, s_ref, v_ref = biased_rho.svd_with_truncation(
-            axes=(0, 1), sU=biased_rho.s[1], fix_signs=True, **opts_svd)
-
-        si_counts = svd_charge_sector_dimensions(s_si)
-        reference_counts = svd_charge_sector_dimensions(s_ref)
-
-        left_error = (u_si @ u_si.H - u_ref @ u_ref.H).norm().item()
-        right_error = (v_si.H @ v_si - v_ref.H @ v_ref).norm().item()
-        error = max(left_error, right_error)
-
-        if plot_path is not None:
-            TestSvdChargeSectorDimensions.plot_z2_singular_values(
-                s_ref_all, s_si_all, D_total, plot_path)
-
-        return si_counts, reference_counts, error
-
-
-    def test_rejects_nondiagonal(self):
-        rho_u1 = _random_matrix_for_sector_test('U1', ((0, 2),), seed=4)
-        try:
-            svd_charge_sector_dimensions(rho_u1)
-        except YastnError:
-            pass
-        else:
-            raise AssertionError("A non-diagonal tensor should be rejected.")
-
-
-def _test_svd_charge_sector_dimensions():
-    """Run the executable tests for :func:`svd_charge_sector_dimensions`."""
-    tests = TestSvdChargeSectorDimensions()
-    # tests.test_dense()
-    # tests.test_u1()
-    # tests.test_z2()
-    r0_sector_dims =r1_sector_dims = {0: 240, 1: 320}
-
-    x_sector_dims = y_sector_dims ={0: 12, 1: 12}
-    si_counts, reference_counts, error = tests.z2_si_sector_distribution(
-        r0_sector_dims, r1_sector_dims, x_sector_dims, y_sector_dims,
-        D_total=12,
-        scale={0: 10, 1: 1},
-        distribution={0: 'powerlaw', 1: 'exponential'},
-        plot_path='z2_si_singular_values.png')
-    print(f"si_counts={si_counts}, reference_counts={reference_counts}, error={error}")
-    # tests.test_rejects_nondiagonal()
-    print("svd_charge_sector_dimensions tests passed")
-
-
-if __name__ == '__main__':
-    _test_svd_charge_sector_dimensions()
-    # method 1 exact 
-    

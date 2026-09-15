@@ -110,6 +110,7 @@ class EnvCTM_c4v(EnvCTM):
         self.psi = Peps2Layers(ket=psi, bra=bra) if psi.has_physical() else psi
         self.env = Lattice(self.geometry, objects={site: EnvCTM_c4v_local() for site in self.sites()})
         self.proj = Lattice(self.geometry, objects={site: EnvCTM_c4v_projectors() for site in self.sites()})
+        self._reset_si_()  # c4v never recycles SI bases; the containers only keep inherited methods working
 
         if init not in (None, 'eye', 'dl'):
             raise YastnError(f"{type(self).__name__} {init=} not recognized. Should be 'rand', 'eye', 'dl', or None.")
