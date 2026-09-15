@@ -261,9 +261,13 @@ def _build_ketbra_separate(env, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, bl
     network leg of that axis.
 
     ``projectors`` maps a site to one slot name, a sequence of slot names, or a
-    ``{slot: tensor}`` dict; a name (or a ``None`` tensor) reads the
-    half-projector from ``env.proj``, a tensor is inserted as given.  Every
-    half needs its partner.
+    ``{slot: tensor}`` dict, the slots of :class:`EnvCTM_projectors` (``"hlt"``,
+    ``"hlb"``, ``"hrt"``, ``"hrb"``, ``"vtl"``, ``"vtr"``, ``"vbl"``,
+    ``"vbr"``), e.g. ``{site: ("hrt", "hrb")}``; a name (or a ``None`` tensor)
+    reads the half-projector from ``env.proj[site]``, a tensor is inserted as
+    given.  Every half needs its partner.  A pair compresses the two parallel
+    bonds of its cut into one thin bond, as a CTM move does, which makes the
+    measurement approximate but cheaper.  Requires a ``DoublePepsTensor`` PEPS.
 
     ``probe=(site, slot, tensor)`` inserts one half-projector, in the stored
     form ``(env chi, fused ket-D x bra-D, thin)``, without its partner.  The

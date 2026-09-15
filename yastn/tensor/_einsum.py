@@ -46,6 +46,10 @@ def einsum(subscripts, *operands, order=None, swap=None) -> 'Tensor':
         Specify order in which repeated indices from subscipt are contracted.
         By default it follows alphabetic order.
 
+    swap: str
+        Comma-separated pairs of subscript characters identifying pairs of legs
+        where swap gate is applied, e.g., ``swap='ab,cd'``.
+
     Example
     -------
 

@@ -28,10 +28,10 @@ API: yastn and yastn.Tensor
    tensor/operators
    tensor/access
    tensor/algebra
+   tensor/output
+   tensor/_einsum
    tensor/large_contractions
    tensor/caching
-   tensor/_einsum
-   tensor/output
    tensor/autograd
    tensor/krylov
 

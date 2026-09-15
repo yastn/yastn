@@ -842,7 +842,13 @@ def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint
     Parameters
     ----------
     operators : Sequence[yastn.Tensor]
-        List of local operators to calculate <O0_s0 O1_s1 ...>.
+        Local operators of ``<O0_s0 O1_s1 ...>``, one per site: either plain
+        two-leg operators, or the tensors of one MPO, with one bond leg at the
+        two ends of the list and two in the middle.  The two kinds are not
+        mixed in one call.  MPO input requires ``sites`` in the lattice's
+        fermionic order, and applies no reordering sign of its own; build it
+        with :func:`yastn.tn.fpeps.mpo_from_products`, see
+        :ref:`oe-mpo-operators`.
 
     sites : Sequence[tuple[int, int]]
         A list of sites [s0, s1, ...] matching corresponding operators.
@@ -883,21 +889,6 @@ def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint
         Number of worker processes per device in the multiprocess pool that contracts the
         slice combinations.  ``0`` (default) disables multiprocessing and
         requires ``devices`` to be ``None`` or the PEPS device.
-
-    projectors : dict or None
-        CTM half-projectors to insert into the window, which makes the
-        measurement approximate but cheaper.  Maps a lattice site to one slot
-        name or a tuple of slot names of :class:`EnvCTM_projectors`
-        (``"hlt"``, ``"hlb"``, ``"hrt"``, ``"hrb"``, ``"vtl"``, ``"vtr"``,
-        ``"vbl"``, ``"vbr"``), e.g. ``{site: ("hrt", "hrb")}``, which reads the
-        tensors from ``env.proj[site]``, or to a ``{slot: tensor}`` dict, which
-        supplies them directly (a ``None`` tensor reads that slot from
-        ``env.proj``).  Each half must come with its partner:
-        the slot with the last letter flipped (``t`` with ``b``, ``l`` with
-        ``r``) on the neighbouring site in that letter's direction.  A pair
-        compresses the two parallel bonds of its cut into one thin bond, as a
-        CTM move does.  Requires ``separate_layers=True`` and a
-        ``DoublePepsTensor`` PEPS.  ``None`` (default) inserts nothing.
 
     per_combo_path : bool
         Only used with ``unroll``.  If ``True``, search a separate contraction

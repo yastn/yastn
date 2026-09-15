@@ -1,16 +1,59 @@
-Handling swap gates in einsum
-=============================
+Einsum
+======
 
-:meth:`yastn.ncon` and :meth:`yastn.einsum` (which differ only by syntax) contract a
-network of tensors pairwise.  Their ``swap`` argument lists pairs of lines, i.e., legs
-labelled by their ``ncon`` index, that cross in the fermionic order of the network; each pair
-contributes a fermionic swap gate.  This page describes how ``ncon`` places those swap gates,
-including gates on lines that are about to be contracted, so that the result does not depend
-on the order of contractions.
+:meth:`yastn.ncon` and :meth:`yastn.einsum` (which differ only by syntax) contract a network of
+tensors pairwise.  This page describes how they place the fermionic swap gates requested by their
+``swap`` argument, including gates on lines that are about to be contracted, so that the result
+does not depend on the order of contractions.
+
+
+einsum and ncon
+---------------
+
+:meth:`yastn.einsum` follows the notation of :meth:`numpy.einsum`: each tensor gets a string of
+one-letter labels; a letter appearing twice, on two tensors or twice on one tensor, marks a
+contracted line; and the labels after ``->`` fix the outgoing legs.  Without ``->`` the labels
+appearing once are kept, in the order they appear.  A ``*`` in front of a tensor's labels
+conjugates that tensor.
+
+:meth:`yastn.ncon` takes the same network as a list of tensors and a list of integer labels:
+positive labels mark contracted lines, and the non-positive labels ``-0, -1, -2, ...`` mark the
+outgoing legs in that order, while ``conjs`` conjugates individual tensors.  ``einsum`` translates
+its letters into such labels and calls ``ncon``, so the rest of this page speaks of lines labelled
+by their ``ncon`` index.
+
+Two further arguments are used throughout this page.
+
+``order``
+   The sequence in which the contracted lines are consumed: a string of letters for ``einsum``,
+   alphabetic by default, or a sequence of positive labels for ``ncon``, ascending by default.  It
+   selects the contraction path and, with it, how much work the swap gates below need.
+
+``swap``
+   The pairs of lines that cross in the fermionic order of the network, each pair contributing a
+   fermionic swap gate: a comma-separated string of letter pairs for ``einsum``, such as
+   ``swap='ab,cd'``, or a sequence of label pairs for ``ncon``, such as ``swap=[(1, 2)]``.
+
+::
+
+    # matrix multiplication with the first tensor conjugated
+    yastn.einsum('*ij,jk->ik', a, b)
+    yastn.ncon([a, b], [(-0, 1), (1, -1)], conjs=(1, 0))
+
+    # closing two lines, with a swap gate between them
+    yastn.einsum('ij,ji', a, b, swap='ij')
+    yastn.ncon([a, b], [(1, 2), (2, 1)], swap=[(1, 2)])
+
+
+Mechanism
+---------
+
+The rest of this page describes how ``ncon`` places the swap gates.  It is not needed to
+use :meth:`yastn.einsum` or :meth:`yastn.ncon`.
 
 
 Plan and execution
-------------------
+^^^^^^^^^^^^^^^^^^
 
 ``ncon`` first builds a *plan*, a tuple of commands, from the index labels alone, and then
 executes it on the tensors.  The plan never looks at tensor data and is cached, so the same
@@ -41,7 +84,7 @@ result gets the next free number.  Legs are numbered by their position on the cu
 
 
 Swap gates on lines of the network
-----------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 A swap gate between lines :math:`a` and :math:`b` multiplies each block by
 
@@ -70,7 +113,7 @@ drawn across each other with a gap cross without a swap gate.  A blue square lab
 
 
 Jump move
----------
+^^^^^^^^^
 
 A symmetric tensor :math:`T` with legs :math:`l_1, \dots, l_m` satisfies, for any line
 :math:`d`,
@@ -94,7 +137,7 @@ still to be traced, or a gadget pair) appears twice in the product and drops out
 
 
 Resolving the bad swaps of one step
------------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Consider a step contracting tensors :math:`P` and :math:`Q` over lines
 :math:`e_1, \dots, e_K`; for a trace :math:`P = Q`.  Let :math:`H` be the rest of the network:
@@ -181,6 +224,9 @@ class.  Rows that can be emptied together must end up equal, so they must have b
 start.  Conversely, the rows of one class can be emptied together: row jumps first make them
 equal, and column jumps then empty them all.  A trace step has no column jumps, so only the class
 of :math:`\emptyset`, i.e., the rows that are cuts themselves, can be emptied.
+
+The row jumps commute with the column jumps, so only the set of jumps matters, not their order.
+The planner emits all row jumps first and the column jumps afterwards.
 
 **From jumps to a 2-colouring.**  To bring row :math:`k` onto the representative row :math:`r`
 of its class, the planner needs tensors of :math:`H` whose row jumps, all with partner
@@ -293,7 +339,7 @@ The rows that can't be emptied are worked out in :ref:`einsum-cycle` below.
 
 
 Parity gadget
--------------
+^^^^^^^^^^^^^
 
 After the jumps, each row outside the emptied class still holds bad swaps :math:`(e_k, L)`.  No jump
 can empty it, as jumps do not move a row out of its class, and the sign
@@ -367,7 +413,7 @@ contraction ``order``.
 
 
 Examples
---------
+^^^^^^^^
 
 In the three networks below tensors ``A, B, C, D`` have numbers ``0, 1, 2, 3``, the default
 order contracts ``A`` and ``B`` first, and the swap gate is bad in that step.  The value of
@@ -393,7 +439,7 @@ one tensor.  For the second example, with ``Z2`` fermions::
 
 
 One row: column jump
-^^^^^^^^^^^^^^^^^^^^
+""""""""""""""""""""
 
 ``A(1) B(1) C(2) D(2)`` with ``swap=[(1, 2)]``.  The only row, :math:`Y_1 = \{2\}`, is emptied
 by a column jump over ``A`` with partner line 2.  ``A`` has no other legs, so line 2 slides past
@@ -413,7 +459,7 @@ by a column jump over ``A`` with partner line 2.  ``A`` has no other legs, so li
 
 
 Two rows on a tree: row jump and column jump
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+""""""""""""""""""""""""""""""""""""""""""""
 
 ``A(1, 2, 3) B(1, 2, 4) C(3, 5) D(4, 5)`` with ``swap=[(1, 5)]``.  The first step contracts
 :math:`P =` ``A`` and :math:`Q =` ``B`` over lines 1 and 2.  Lines 3 and 4 end on :math:`P` and
@@ -477,7 +523,7 @@ The bad swap is thus replaced by ordinary swap gates on ``B`` and ``C`` and two 
 .. _einsum-cycle:
 
 Two rows on a cycle: parity gadget
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+""""""""""""""""""""""""""""""""""
 
 Adding line 6 between ``C`` and ``D``, ``A(1, 2, 3) B(1, 2, 4) C(3, 5, 6) D(4, 5, 6)``, puts
 line 5 on the cycle ``C-5-D-6``.  A jump over ``C`` or ``D`` toggles lines 5 and 6 together, so
