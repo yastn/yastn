@@ -27,6 +27,7 @@ from ... import mps
 from ....initialize import rand, ones, eye
 from ....tensor import Tensor, YastnError, Leg, tensordot, qr, ncon
 from ...._split_combine_dict import split_data_and_meta, combine_data_and_meta
+from ...._profile import nvtx_range
 
 logger = logging.getLogger(__name__)
 
@@ -1025,11 +1026,7 @@ class EnvCTM():
         iterator_step = kwargs.get("iterator_step", 0)
         max_dsv, converged, history = None, False, []
         for sweep in range(1, max_sweeps + 1):
-            if env.profiling_mode in ["NVTX",]:
-                env.config.backend.cuda.nvtx.range_push(f"update_")
-                env.update_(opts_svd=opts_svd, moves=moves, method=method, **kwargs)
-                env.config.backend.cuda.nvtx.range_pop()
-            else:
+            with nvtx_range("update_"):
                 env.update_(opts_svd=opts_svd, moves=moves, method=method, **kwargs)
 
             # use default CTM convergence check
@@ -1325,20 +1322,15 @@ def proj_corners(r0, r1, opts_svd, opts_si=None, X=None, Y=None,
     verbosity = opts_svd.get('verbosity', 0)
     # only verbosity from opts_svd is to be passed down to svd_with_truncation
     kwargs.pop('verbosity', None)
-    profiling_mode= kwargs.get('profiling_mode', None)
 
     si_enabled = opts_si is not None and opts_si.get('enabled', False)
     X_new = Y_new = None
     if si_enabled:
-        u, s, v, X_new, Y_new = si_proj_corners(r0, r1, opts_svd, opts_si, X, Y)
+        with nvtx_range("si_proj_corners"):
+            u, s, v, X_new, Y_new = si_proj_corners(r0, r1, opts_svd, opts_si, X, Y)
     else:
         rr = tensordot(r0, r1, axes=(1, 1))
-        if profiling_mode in ["NVTX",]:
-            rr.config.backend.cuda.nvtx.range_push("svd_with_truncation")
-            u, s, v = rr.svd_with_truncation(
-                axes=(0, 1), sU=r0.s[1], **opts_svd, **kwargs)
-            rr.config.backend.cuda.nvtx.range_pop()
-        else:
+        with nvtx_range("svd_with_truncation"):
             u, s, v = rr.svd_with_truncation(
                 axes=(0, 1), sU=r0.s[1], **opts_svd, **kwargs)
 
