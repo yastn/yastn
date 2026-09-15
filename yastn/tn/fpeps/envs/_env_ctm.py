@@ -15,10 +15,10 @@
 from __future__ import annotations
 import logging
 import sys
-from typing import NamedTuple, Sequence
+from typing import NamedTuple, Sequence, Union
 
 from ._env_contractions import identity_boundary, corner2x2, append_vec_tl, append_vec_br
-from ._env_ctm_SI_projectors import si_correction_due, si_proj_corners
+from ._env_ctm_SI_projectors import si_correction_due, si_enabled, si_proj_corners
 from ._env_dataclasses import EnvCTM_local, EnvCTM_projectors
 from .._evolution import BondMetric
 from .._geometry import Site, Lattice, is_site
@@ -723,32 +723,40 @@ class EnvCTM():
 
 
     def _set_projector_pair_(env, site0, name0, site1, name1,
-                             r0, r1, opts_svd, **kwargs):
+                             r0: Union[Tensor,tuple[Tensor,Tensor]], r1: Union[Tensor,tuple[Tensor,Tensor]], opts_svd, **kwargs):
         """Update a projector pair and its recycled SI bases in place.
+
+        Without SI, corner halves ``r0`` and ``r1`` are passed to :func:`proj_corners`.
+        With SI enabled in ``opts_si``, they are passed to :func:`si_proj_corners`,
+        which also accepts each half as a tuple of its factors, e.g., a pair of enlarged corners.
 
         The pair is anchored at ``(site0, name0)``, which also addresses the
         recycled bases in ``env.si_X`` / ``env.si_Y``.
         """
+        opts_si = kwargs.pop('opts_si', None)
+        if not si_enabled(opts_si):
+            p0, p1 = proj_corners(r0, r1, opts_svd=opts_svd, **kwargs)
+            setattr(env.proj[site0], name0, p0)
+            setattr(env.proj[site1], name1, p1)
+            return
+
         if site0 in env._si_age_patch:
             ages, key = env._si_age_patch[site0], name0
         else:
             ages, key = env._si_age, (env.site2index(site0), name0)
-        opts_si = kwargs.pop('opts_si', None)
-        if opts_si is not None and opts_si.get('enabled', False):
-            opts_si = dict(opts_si)
-            opts_si['correct'] = (opts_si.get('correct', False)
-                                  or si_correction_due(ages.get(key, 0), opts_si))
-        p0, p1, X, Y = proj_corners(
-            r0, r1, opts_svd=opts_svd, opts_si=opts_si,
-            X=getattr(env.si_X[site0], name0), Y=getattr(env.si_Y[site0], name0),
-            return_si_state=True, **kwargs)
+        opts_si = dict(opts_si)
+        opts_si['correct'] = (opts_si.get('correct', False)
+                              or si_correction_due(ages.get(key, 0), opts_si))
+        with nvtx_range("si_proj_corners"):
+            p0, p1, X, Y = si_proj_corners(r0, r1, opts_svd, opts_si,
+                X=getattr(env.si_X[site0], name0), Y=getattr(env.si_Y[site0], name0),
+                cutoff=kwargs.get('cutoff', 0))
         setattr(env.proj[site0], name0, p0)
         setattr(env.proj[site1], name1, p1)
-        if X is not None:
-            recycle_grad = opts_si.get('recycle_grad', False)
-            setattr(env.si_X[site0], name0, X if recycle_grad else X.detach())
-            setattr(env.si_Y[site0], name0, Y if recycle_grad else Y.detach())
-            ages[key] = ages.get(key, 0) + 1
+        recycle_grad = opts_si.get('recycle_grad', False)
+        setattr(env.si_X[site0], name0, X if recycle_grad else X.detach())
+        setattr(env.si_Y[site0], name0, Y if recycle_grad else Y.detach())
+        ages[key] = ages.get(key, 0) + 1
 
     def _trivial_projectors_(env, move, sites):
         r"""
@@ -1138,14 +1146,15 @@ _for_trivial = (('hlt', 'r', 'l', 'tl', 2, 0, 0),
                 ('vbr', 't', 'b', 'br', 0, 3, 1))
 
 
-def update_extended_2x2_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwargs):
+def update_extended_2x2_projectors_(env, tl: Tensor, tr: Tensor, bl: Tensor, br: Tensor, move, opts_svd, **kwargs):
     r"""
-    Calculate new projectors for CTM moves from 4x4 extended corners
-    which are enlarged to 5x4 if some virtual bond is one.
-    Intended for a hexagonal lattice embedded on a square lattice.
+    Calculate new projectors for CTM moves from 4x4 extended corners.
+    On hexagonal lattice embedded on a square lattice with dummy bonds (D=1), instead 3x2 / 2x3 corners are used.
+    With SI enabled in ``opts_si``, halves are passed on as pairs of enlarged corners, avoiding contraction of the corners into halves.
     """
     psi = env.psi
     use_qr = kwargs.get("use_qr", True)
+    use_si = si_enabled(kwargs.get("opts_si"))
     kwargs["profiling_mode"]= env.profiling_mode
     psh = env.proj
     svd_predict_spec= lambda s0,p0,s1,p1,sign: opts_svd.get('k_block', opts_svd.get('D_block', float('inf'))) \
@@ -1158,8 +1167,8 @@ def update_extended_2x2_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwarg
     cor_br = corner2x2('br', env[br].r, env[br].br, env[br].b, psi[br])
 
     if any(x in move for x in 'lrh'):
-        cor_tt = cor_tl @ cor_tr  # b(left) b(right)
-        cor_bb = cor_br @ cor_bl  # t(right) t(left)
+        cor_tt = (cor_tl, cor_tr) if use_si else cor_tl @ cor_tr  # b(left) b(right)
+        cor_bb = (cor_br, cor_bl) if use_si else cor_br @ cor_bl  # t(right) t(left)
 
     if any(x in move for x in 'rh'):
         sl = psi[tl].get_shape(axes=2)
@@ -1178,15 +1187,15 @@ def update_extended_2x2_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwarg
             cor_lbl = tensordot(cor_lbl, psi[bl], axes=((4, 1), (1, 2)))
             cor_lbl = cor_lbl.fuse_legs(axes=((0, 4), (1, 2, 3)))
 
-            h1 = cor_ltl @ cor_tr  # b(left) b(right)
-            h2 = cor_br @ cor_lbl  # t(right) t(left)
+            h1 = (cor_ltl, cor_tr) if use_si else cor_ltl @ cor_tr  # b(left) b(right)
+            h2 = (cor_br, cor_lbl) if use_si else cor_br @ cor_lbl  # t(right) t(left)
         else:
             h1,h2= cor_tt, cor_bb
 
         with nvtx_range(f"qr 2x2proj {move}"):
-            _, r_t = qr(h1, axes=(0, 1)) if use_qr else (None, h1)
-            _, r_b = qr(h2, axes=(1, 0)) if use_qr else (None, h2.T)
-        opts_svd["k_block"]= svd_predict_spec(tr, "hrb", br, "hrt", r_t.s[1])
+            r_t = h1 if use_si else (qr(h1, axes=(0, 1))[1] if use_qr else h1)
+            r_b = (h2[1].T, h2[0].T) if use_si else (qr(h2, axes=(1, 0))[1] if use_qr else h2.T)
+        opts_svd["k_block"]= svd_predict_spec(tr, "hrb", br, "hrt", (r_t[-1] if use_si else r_t).s[1])
         env._set_projector_pair_(tr, 'hrb', br, 'hrt', r_t, r_b, opts_svd, **kwargs)
 
     if any(x in move for x in 'lh'):
@@ -1206,20 +1215,20 @@ def update_extended_2x2_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwarg
             cor_rbr = tensordot(cor_rbr, psi[br], axes=((3, 2), (2, 3)))
             cor_rbr = cor_rbr.fuse_legs(axes=((0, 1, 3), (2, 4)))
 
-            h1 = cor_tl @ cor_rtr  # b(left) b(right)
-            h2 = cor_rbr @ cor_bl  # t(right) t(left)
+            h1 = (cor_tl, cor_rtr) if use_si else cor_tl @ cor_rtr  # b(left) b(right)
+            h2 = (cor_rbr, cor_bl) if use_si else cor_rbr @ cor_bl  # t(right) t(left)
         else:
             h1,h2= cor_tt, cor_bb
 
         with nvtx_range(f"qr 2x2proj {move}"):
-            _, r_t = qr(h1, axes=(1, 0)) if use_qr else (None, h1.T)
-            _, r_b = qr(h2, axes=(0, 1)) if use_qr else (None, h2)
-        opts_svd["k_block"]= svd_predict_spec(tl, "hlb", bl, "hlt", r_t.s[1])
+            r_t = (h1[1].T, h1[0].T) if use_si else (qr(h1, axes=(1, 0))[1] if use_qr else h1.T)
+            r_b = h2 if use_si else (qr(h2, axes=(0, 1))[1] if use_qr else h2)
+        opts_svd["k_block"]= svd_predict_spec(tl, "hlb", bl, "hlt", (r_t[-1] if use_si else r_t).s[1])
         env._set_projector_pair_(tl, 'hlb', bl, 'hlt', r_t, r_b, opts_svd, **kwargs)
 
     if any(x in move for x in 'tbv'):
-        cor_ll = cor_bl @ cor_tl  # l(bottom) l(top)
-        cor_rr = cor_tr @ cor_br  # r(top) r(bottom)
+        cor_ll = (cor_bl, cor_tl) if use_si else cor_bl @ cor_tl  # l(bottom) l(top)
+        cor_rr = (cor_tr, cor_br) if use_si else cor_tr @ cor_br  # r(top) r(bottom)
 
     if any(x in move for x in 'tv'):
         sb = psi[bl].get_shape(axes=3)
@@ -1238,15 +1247,15 @@ def update_extended_2x2_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwarg
             cor_bbr = tensordot(cor_bbr, psi[br], axes=((3, 1), (2, 3)))
             cor_bbr = cor_bbr.fuse_legs(axes=((0, 3), (1, 2, 4)))
 
-            h1 = cor_bbl @ cor_tl  # l(bottom) l(top)
-            h2 = cor_tr @ cor_bbr  # r(top) r(bottom)
+            h1 = (cor_bbl, cor_tl) if use_si else cor_bbl @ cor_tl  # l(bottom) l(top)
+            h2 = (cor_tr, cor_bbr) if use_si else cor_tr @ cor_bbr  # r(top) r(bottom)
         else:
             h1,h2= cor_ll, cor_rr
 
         with nvtx_range(f"qr 2x2proj {move}"):
-            _, r_l = qr(h1, axes=(0, 1)) if use_qr else (None, h1)
-            _, r_r = qr(h2, axes=(1, 0)) if use_qr else (None, h2.T)
-        opts_svd["k_block"]= svd_predict_spec(tl, "vtr", tr, "vtl", r_l.s[1])
+            r_l = h1 if use_si else (qr(h1, axes=(0, 1))[1] if use_qr else h1)
+            r_r = (h2[1].T, h2[0].T) if use_si else (qr(h2, axes=(1, 0))[1] if use_qr else h2.T)
+        opts_svd["k_block"]= svd_predict_spec(tl, "vtr", tr, "vtl", (r_l[-1] if use_si else r_l).s[1])
         env._set_projector_pair_(tl, 'vtr', tr, 'vtl', r_l, r_r, opts_svd, **kwargs)
 
     if any(x in move for x in 'bv'):
@@ -1266,15 +1275,15 @@ def update_extended_2x2_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwarg
             cor_ttr = tensordot(cor_ttr, psi[tr], axes=((2, 3), (0, 3)))
             cor_ttr = cor_ttr.fuse_legs(axes=((0, 1, 3), (2, 4)))
 
-            h1 = cor_bl @ cor_ttl  # l(bottom) l(top)
-            h2 = cor_ttr @ cor_br  # r(top) r(bottom)
+            h1 = (cor_bl, cor_ttl) if use_si else cor_bl @ cor_ttl  # l(bottom) l(top)
+            h2 = (cor_ttr, cor_br) if use_si else cor_ttr @ cor_br  # r(top) r(bottom)
         else:
             h1,h2= cor_ll, cor_rr
 
         with nvtx_range(f"qr 2x2proj {move}"):
-            _, r_l = qr(h1, axes=(1, 0)) if use_qr else (None, h1.T)
-            _, r_r = qr(h2, axes=(0, 1)) if use_qr else (None, h2)
-        opts_svd["k_block"]= svd_predict_spec(bl, "vbr", br, "vbl", r_l.s[1])
+            r_l = (h1[1].T, h1[0].T) if use_si else (qr(h1, axes=(1, 0))[1] if use_qr else h1.T)
+            r_r = h2 if use_si else (qr(h2, axes=(0, 1))[1] if use_qr else h2)
+        opts_svd["k_block"]= svd_predict_spec(bl, "vbr", br, "vbl", (r_l[-1] if use_si else r_l).s[1])
         env._set_projector_pair_(bl, 'vbr', br, 'vbl', r_l, r_r, opts_svd, **kwargs)
 
 
@@ -1322,9 +1331,8 @@ def regularize_1site_corners(cor_0, cor_1):
     return r_0, r_1
 
 
-def proj_corners(r0, r1, opts_svd, opts_si=None, X=None, Y=None,
-                 return_si_state=False, **kwargs):
-    r""" Projectors in between r0 @ r1.T corners. """
+def proj_corners(r0: Tensor, r1: Tensor, opts_svd, **kwargs)-> tuple[Tensor, Tensor]:
+    r""" Projectors in between r0 @ r1.T corners, from full SVD. """
     # TODO: r1 matrix is defined as (right, left)
     opts_svd = dict(opts_svd)
     opts_svd['fix_signs'] = opts_svd.get('fix_signs', True)
@@ -1332,16 +1340,10 @@ def proj_corners(r0, r1, opts_svd, opts_si=None, X=None, Y=None,
     # only verbosity from opts_svd is to be passed down to svd_with_truncation
     kwargs.pop('verbosity', None)
 
-    si_enabled = opts_si is not None and opts_si.get('enabled', False)
-    X_new = Y_new = None
-    if si_enabled:
-        with nvtx_range("si_proj_corners"):
-            u, s, v, X_new, Y_new = si_proj_corners(r0, r1, opts_svd, opts_si, X, Y)
-    else:
-        rr = tensordot(r0, r1, axes=(1, 1))
-        with nvtx_range("svd_with_truncation"):
-            u, s, v = rr.svd_with_truncation(
-                axes=(0, 1), sU=r0.s[1], **opts_svd, **kwargs)
+    rr = tensordot(r0, r1, axes=(1, 1))
+    with nvtx_range("svd_with_truncation"):
+        u, s, v = rr.svd_with_truncation(
+            axes=(0, 1), sU=r0.s[1], **opts_svd, **kwargs)
 
     if verbosity > 2:
         fname = sys._getframe().f_code.co_name
@@ -1351,8 +1353,6 @@ def proj_corners(r0, r1, opts_svd, opts_si=None, X=None, Y=None,
     rs = s.rsqrt(cutoff=cutoff)
     p0 = tensordot(r1, (rs @ v).conj(), axes=(0, 1)).unfuse_legs(axes=0)
     p1 = tensordot(r0, (u @ rs).conj(), axes=(0, 0)).unfuse_legs(axes=0)
-    if return_si_state:
-        return p0, p1, X_new, Y_new
     return p0, p1
 
 
