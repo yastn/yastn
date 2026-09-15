@@ -204,7 +204,7 @@ def _other_cut_projectors(cuts, idx, done):
     return other
 
 
-def _sketch_cut(env, patch, cuts, idx, op_tuples, opts, done,
+def _sketch_cut(env, patch, cuts, idx, op_sites, opts, done,
                 devices=None, mp_workers_per_device=0):
     """Sketch one interior cut; return its projector pairs without writing.
 
@@ -241,15 +241,18 @@ def _sketch_cut(env, patch, cuts, idx, op_tuples, opts, done,
         env.config, getattr(env.proj[bottom_site], bottom_slot),
         o['oversample'], o['floor'], full=o['rank'] is not None)
 
-    maps = [(), *op_tuples]
+    # Each entry carries its OWN sites: terms sharing a measurement window are
+    # sketched together, and they need not act on the same sites -- only span
+    # the same bounding box. The leading () is the norm map over the window.
+    maps = [((), patch), *op_sites]
 
     def _sketch(pr_site, pr_slot, pr):
         return [env.measure_nsite_cut_map_oe(
-                    *ops, sites=patch,
+                    *ops, sites=sts,
                     probe_site=pr_site, probe_slot=pr_slot, probe=pr,
                     projectors=other_proj, optimizer="dp",
                     devices=devices, mp_workers_per_device=mp_workers_per_device)
-                for ops in maps]
+                for ops, sts in maps]
 
     Ys = _sketch(bottom_site, bottom_slot, probe)
 
@@ -302,13 +305,14 @@ def _sketch_cut(env, patch, cuts, idx, op_tuples, opts, done,
     return _truncate(block({(i,): B for i, B in enumerate(blocks)}, common_legs=(0, 1, 2)))
 
 
-def sketch_projectors_(env, patch, proj, op_tuples, opts,
+def sketch_projectors_(env, patch, proj, op_sites, opts,
                        devices=None, mp_workers_per_device=0):
     """Sketch every cut of the layout ``proj`` and return the new pairs.
 
     ``proj`` is the ``{site: slot(s)}`` layout of the cuts to compress in the
-    window spanned by ``patch``; ``op_tuples`` is the list of operator tuples of
-    every task sharing the patch.  The warm start is read from ``env.proj``,
+    window spanned by ``patch``; ``op_sites`` is the ``(operator tuple, sites)``
+    pair of every task sharing the window -- tasks in one window may act on
+    different sites, so each carries its own.  The warm start is read from ``env.proj``,
     which is never written.
 
     Returns ``{site: {slot: tensor}}`` covering every slot of ``proj``, in the
@@ -337,7 +341,7 @@ def sketch_projectors_(env, patch, proj, op_tuples, opts,
             for idx in range(len(cuts)):
                 # the next cut's sketch closes this one with the fresh pair
                 done.update(_sketch_cut(
-                    env, patch, cuts, idx, op_tuples, opts, done,
+                    env, patch, cuts, idx, op_sites, opts, done,
                     devices=devices,
                     mp_workers_per_device=mp_workers_per_device))
         finally:

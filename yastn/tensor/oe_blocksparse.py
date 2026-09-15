@@ -1130,7 +1130,12 @@ def _get_contraction_path_cached(
     )
     # Concise summary at INFO; full PathInfo table only at DEBUG (opt-in via
     # raising this module's logger to DEBUG, e.g. --log_oe_path).
-    log.info(f"{who} optimizer {optimizer} peak-mem {max(mem_list):4.3e}")
+    # opt_cost is the path's total FLOP estimate; peak-mem is only its largest
+    # intermediate. The two can disagree by orders of magnitude, so a contraction
+    # that looks cheap by peak-mem may still dominate the runtime.
+    _cost = getattr(path_info, "opt_cost", None)
+    log.info(f"{who} optimizer {optimizer} peak-mem {max(mem_list):4.3e}"
+             + (f" opt-cost {_cost:4.3e}" if _cost is not None else ""))
     if log.isEnabledFor(logging.DEBUG):
         log.debug(
             f"{who} optimizer {optimizer}"
