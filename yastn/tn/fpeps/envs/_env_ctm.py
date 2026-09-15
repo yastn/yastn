@@ -18,7 +18,7 @@ import sys
 from typing import NamedTuple, Sequence, Union
 
 from ._env_contractions import identity_boundary, corner2x2, append_vec_tl, append_vec_br
-from ._env_ctm_SI_projectors import si_correction_due, si_enabled, si_proj_corners
+from ._env_ctm_SI_projectors import si_correction_due, si_proj_corners
 from ._env_dataclasses import EnvCTM_local, EnvCTM_projectors
 from .._evolution import BondMetric
 from .._geometry import Site, Lattice, is_site
@@ -733,8 +733,8 @@ class EnvCTM():
         The pair is anchored at ``(site0, name0)``, which also addresses the
         recycled bases in ``env.si_X`` / ``env.si_Y``.
         """
-        opts_si = kwargs.pop('opts_si', None)
-        if not si_enabled(opts_si):
+        opts_si = kwargs.pop('opts_si', {})
+        if not opts_si.get('enabled', False):
             p0, p1 = proj_corners(r0, r1, opts_svd=opts_svd, **kwargs)
             setattr(env.proj[site0], name0, p0)
             setattr(env.proj[site1], name1, p1)
@@ -1154,7 +1154,7 @@ def update_extended_2x2_projectors_(env, tl: Tensor, tr: Tensor, bl: Tensor, br:
     """
     psi = env.psi
     use_qr = kwargs.get("use_qr", True)
-    use_si = si_enabled(kwargs.get("opts_si"))
+    use_si = kwargs.get("opts_si",{}).get('enabled', False)
     kwargs["profiling_mode"]= env.profiling_mode
     psh = env.proj
     svd_predict_spec= lambda s0,p0,s1,p1,sign: opts_svd.get('k_block', opts_svd.get('D_block', float('inf'))) \
