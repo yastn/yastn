@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 690 368" width="690" height="368" font-family="Helvetica, Arial, sans-serif">
+<title>Example: row jump over C with partner e2</title>
+<rect width="690" height="368" rx="10" fill="#ffffff"/>
+<text x="250" y="20" fill="#555555" font-size="14" text-anchor="middle" font-style="italic">1. row jump over C, partner e₂</text>
+<text x="606" y="20" fill="#555555" font-size="14" text-anchor="middle" font-style="italic">rows</text>
+<g transform="translate(0,28)">
+<path d="M60.0,160.0 L102.6,91.9 Q110.0,80.0 124.0,80.0 L356.0,80.0 Q370.0,80.0 377.4,91.9 L420.0,160.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M60.0,160.0 L99.6,124.4 Q110.0,115.0 124.0,115.0 L356.0,115.0 Q370.0,115.0 380.4,124.4 L420.0,160.0" fill="none" stroke="#e07000" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M240.0,25.0 L240.0,160.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M240.0,160.0 L330.0,315.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M330.0,315.0 L180.0,315.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M240.0,25.0 L456.0,25.0 Q470.0,25.0 470.0,39.0 L470.0,301.0 Q470.0,315.0 456.0,315.0 L330.0,315.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<rect x="173" y="308" width="14" height="14" fill="#555555"/>
+<circle cx="240.0" cy="80.0" r="5.5" fill="#c62828"/>
+<circle cx="240.0" cy="115.0" r="5.5" fill="#c62828"/>
+<rect x="144" y="109" width="12" height="12" fill="#1f5fbf"/>
+<rect x="550" y="130" width="28" height="28" fill="#ffffff" stroke="#999999" stroke-width="1"/>
+<circle cx="564.0" cy="144.0" r="5.5" fill="#c62828"/>
+<rect x="578" y="130" width="28" height="28" fill="#ffffff" stroke="#999999" stroke-width="1"/>
+<rect x="606" y="130" width="28" height="28" fill="#ffffff" stroke="#999999" stroke-width="1"/>
+<rect x="634" y="130" width="28" height="28" fill="#ffffff" stroke="#999999" stroke-width="1"/>
+<rect x="550" y="158" width="28" height="28" fill="#fde3c4" stroke="#999999" stroke-width="1"/>
+<circle cx="564.0" cy="172.0" r="5.5" fill="#c62828"/>
+<rect x="578" y="158" width="28" height="28" fill="#fde3c4" stroke="#999999" stroke-width="1"/>
+<rect x="606" y="158" width="28" height="28" fill="#ffffff" stroke="#999999" stroke-width="1"/>
+<rect x="634" y="158" width="28" height="28" fill="#ffffff" stroke="#999999" stroke-width="1"/>
+<circle cx="60" cy="160" r="17" fill="#ffffff" stroke="#222222" stroke-width="2.2"/>
+<circle cx="420" cy="160" r="17" fill="#ffffff" stroke="#222222" stroke-width="2.2"/>
+<circle cx="240" cy="25" r="17" fill="#ffffff" stroke="#222222" stroke-width="2.2"/>
+<circle cx="240" cy="160" r="17" fill="#fde3c4" stroke="#222222" stroke-width="2.2"/>
+<circle cx="330" cy="315" r="17" fill="#ffffff" stroke="#222222" stroke-width="2.2"/>
+<text x="150" y="72" fill="#222222" font-size="15" text-anchor="middle" font-style="italic">e<tspan dy="4" font-size="10">1</tspan></text>
+<text x="330" y="107" fill="#222222" font-size="15" text-anchor="middle" font-style="italic">e<tspan dy="4" font-size="10">2</tspan></text>
+<text x="60" y="165" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">P</text>
+<text x="420" y="165" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">Q</text>
+<text x="168" y="320" fill="#555555" font-size="13" text-anchor="end" >ext</text>
+<text x="248" y="55" fill="#222222" font-size="15" text-anchor="start" font-style="italic">x</text>
+<text x="266" y="192" fill="#222222" font-size="15" text-anchor="start" font-style="italic">y</text>
+<text x="478" y="170" fill="#222222" font-size="15" text-anchor="start" font-style="italic">z</text>
+<text x="255" y="308" fill="#222222" font-size="15" text-anchor="middle" font-style="italic">w</text>
+<text x="240" y="30" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">D</text>
+<text x="240" y="165" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">C</text>
+<text x="330" y="320" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">E</text>
+<text x="150" y="139" fill="#1f5fbf" font-size="14" text-anchor="middle" font-style="italic">P<tspan dy="4" font-size="10">C</tspan></text>
+<text x="564.0" y="122" fill="#222222" font-size="15" text-anchor="middle" font-style="italic">x</text>
+<text x="592.0" y="122" fill="#222222" font-size="15" text-anchor="middle" font-style="italic">y</text>
+<text x="620.0" y="122" fill="#222222" font-size="15" text-anchor="middle" font-style="italic">z</text>
+<text x="648.0" y="122" fill="#222222" font-size="15" text-anchor="middle" font-style="italic">w</text>
+<text x="542" y="149" fill="#222222" font-size="15" text-anchor="end" font-style="italic">e<tspan dy="4" font-size="10">1</tspan></text>
+<text x="542" y="177" fill="#222222" font-size="15" text-anchor="end" font-style="italic">e<tspan dy="4" font-size="10">2</tspan></text>
+</g>
+</svg>

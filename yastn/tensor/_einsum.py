@@ -15,11 +15,13 @@
 """ Support for einsum and ncon. """
 from __future__ import annotations
 
-from functools import lru_cache
+from functools import lru_cache, partial
+from itertools import product
 from typing import TYPE_CHECKING
 
+from ._algebra import add
 from ._auxiliary import _clear_axes, _flatten, _unpack_axes
-from ._contractions import tensordot, trace, swap_gate
+from ._contractions import apply_mask, tensordot, trace, swap_gate
 from ._tests import YastnError
 
 __all__ = ['ncon', 'einsum']
@@ -43,6 +45,10 @@ def einsum(subscripts, *operands, order=None, swap=None) -> 'Tensor':
     order: str
         Specify order in which repeated indices from subscipt are contracted.
         By default it follows alphabetic order.
+
+    swap: str
+        Comma-separated pairs of subscript characters identifying pairs of legs
+        where swap gate is applied, e.g., ``swap='ab,cd'``.
 
     Example
     -------
@@ -190,6 +196,66 @@ def ncon(ts, inds, conjs=None, order=None, swap=None, release_cuda_cache=False,
     return ts.popitem()[1]
 
 
+def _fermionic_components(config):
+    """Indices of the charge components whose parities enter swap gates."""
+    if config.fermionic is True:
+        return tuple(range(config.sym.NSYM))
+    return tuple(i for i, f in enumerate(config.fermionic) if f)
+
+
+def _restrict_parity(a, axis, pv):
+    """Return a with leg `axis` restricted to sectors whose fermionic components have parities pv, or None if empty."""
+    from ..initialize import eye  # deferred: yastn.initialize imports the tensor package
+    leg = a.get_legs(axis)
+    fc = _fermionic_components(a.config)
+    if not any(all(t[i] % 2 == p for i, p in zip(fc, pv)) for t in leg.t):
+        return None
+    m = eye(config=a.config, legs=leg, device=a.device)
+    for i, p in zip(fc, pv):
+        unit = tuple(int(j == i) for j in range(a.config.sym.NSYM))  # charge 1 on component i
+        string = m.swap_gate(axes=(0,), charge=unit)
+        m = (m + string) / 2 if p == 0 else (m - string) / 2
+    return apply_mask(m, a, axes=axis)
+
+
+def _add_parity_pair(r, pv):
+    """Append a charge-neutral pair of one-dimensional legs (aux, aux') carrying the fermionic parities pv."""
+    t = [0] * r.config.sym.NSYM
+    for i, p in zip(_fermionic_components(r.config), pv):
+        t[i] = p
+    return r.add_leg(axis=-1, s=1, t=tuple(t)).add_leg(axis=-1, s=-1, t=tuple(t))
+
+
+def _contract_psplit(contract, a, paxes):
+    """contract(a) with the fermionic parities of a's legs `paxes` recorded in trailing (aux, aux') pairs.
+
+    One contraction per parity sector of the restricted operand.  The parts are summed with
+    ``lazy_threshold=1``: the combinations of (aux, aux') with the other legs that no sector
+    produces are zero, so the result stores only the blocks the parts fill, as many as the
+    contraction without the gadget.  (Tagging the operand and contracting once is not cheaper:
+    the tagged operand would store a zero block for every mismatched pair.)"""
+    nf = len(_fermionic_components(a.config))
+    parts = []
+    for pvs in product(product((0, 1), repeat=nf), repeat=len(paxes)):
+        aa = a
+        for ax, pv in zip(paxes, pvs):
+            aa = _restrict_parity(aa, ax, pv)
+            if aa is None:
+                break
+        if aa is None:
+            continue
+        r = contract(aa)
+        for pv in pvs:
+            r = _add_parity_pair(r, pv)
+        parts.append(r)
+    if not parts:  # every sector empty: fall back to plain contraction, pad zero pairs
+        r = contract(a)
+        for _ in paxes:
+            r = _add_parity_pair(r, (0,) * nf)
+        return r
+    return add(*parts, lazy_threshold=1.0)
+
+
 # TODO? Import from backend
 def _run_op_oom_retry(fn, oom_retry, retries=1):
     r"""Run ``fn()``; on a CUDA out-of-memory error, release torch's cached-but-
@@ -225,13 +291,19 @@ def _run_op_oom_retry(fn, oom_retry, retries=1):
 
 def _execute_commands(ts, commands, release_cuda_cache=False, oom_retry=False):
     for command in commands:
-        if command[0] == 'tensordot':
-            tout, (t1, t2), axes = command[1:]
+        if command[0] in ('tensordot', 'tensordot_psplit'):
+            tout, (t1, t2), axes, *paxes = command[1:]  # paxes: [legs whose parity is recorded] for _psplit
             a, b = ts.pop(t1), ts.pop(t2)
-            ts[tout] = _run_op_oom_retry(lambda: tensordot(a, b, axes=axes), oom_retry)
+            op = partial(tensordot, b=b, axes=axes)
+            ts[tout] = _run_op_oom_retry(lambda: _contract_psplit(op, a, paxes[0]) if paxes else op(a), oom_retry)
             if release_cuda_cache:
                 import torch
                 torch.cuda.empty_cache()
+        elif command[0] in ('trace', 'trace_psplit'):
+            tout, tin, axes, *paxes = command[1:]
+            a = ts.pop(tin)
+            op = partial(trace, axes=axes)
+            ts[tout] = _run_op_oom_retry(lambda: _contract_psplit(op, a, paxes[0]) if paxes else op(a), oom_retry)
         elif command[0] == 'swap_gate':
             tout, tin, axes = command[1:]
             a = ts.pop(tin)
@@ -246,10 +318,6 @@ def _execute_commands(ts, commands, release_cuda_cache=False, oom_retry=False):
                 a = ts[d_ten]
                 ts[d_ten] = _run_op_oom_retry(
                     lambda: swap_gate(a, axes=d_legs, charge=charge), oom_retry)
-        elif command[0] == 'trace':
-            tout, tin, axes = command[1:]
-            a = ts.pop(tin)
-            ts[tout] = _run_op_oom_retry(lambda: trace(a, axes=axes), oom_retry)
         else:
             assert command[0] == 'transpose', "Sanity check"
             tout, tin, axes = command[1:]
@@ -283,32 +351,14 @@ def _meta_ncon(inds, order, swap):
     Main loop
     ---------
     Each iteration pops a matched pair of edges and batches consecutive
-    edges between the same tensor pair.  Before contracting, same-tensor
-    swaps are collected and bad swaps (touching contracted legs) are
-    resolved via ``_resolve_bad_swaps``.  The contraction is one of:
-
-    * **Tensordot** (``ten1 != ten2``): merge two tensors.
-    * **Trace** (``ten1 == ten2``): contract self-loop legs.
-    * **Unresolved fallback**: when ``_resolve_bad_swaps`` cannot move all
-      bad swaps away (partial crossing), contract only the crossed axes
-      and re-insert the rest as trace edges on the merged tensor.
-
-    Deferred trace
-    --------------
-    The jump-move identity is a Z2 tautology for self-loop edges, so
-    ``_resolve_bad_swaps`` cannot resolve bad swaps on trace legs.  When
-    bad swaps remain after resolution, the trace is deferred: its edges
-    are re-inserted with index = max external-edge index of the bad swaps.
-    Once the relevant third-party tensors merge into the trace tensor
-    (turning cross-tensor swaps into same-tensor swaps), the trace
-    executes.  If the merge chain is indirect, the trace re-defers with
-    a progressively higher index until resolved.
-
-    Post-loop
-    ---------
-    Disconnected tensors are combined via outer products.  Remaining
-    same-tensor swaps are applied, and output legs are transposed to the
-    requested order.
+    edges between the same tensor pair into one tensordot (``ten1 != ten2``)
+    or trace (``ten1 == ten2``).  Before it, same-tensor swaps are applied and
+    bad swaps (touching contracted legs) are resolved exactly by
+    ``_resolve_bad_swaps``, with jump moves or parity gadgets.  ``aux_pairs``
+    tracks the live gadget pairs ``[ten, leg_aux, leg_aux']``, traced as soon
+    as no swap touches them (``trace_free_aux``).  The post-loop takes outer
+    products of disconnected tensors, applies the remaining swaps and
+    transposes the output legs.  See ``docs/source/tensor/_einsum.rst``.
     """
     if not all(-256 < x < 256 for x in _flatten(inds)):
         raise YastnError('Ncon requires indices to be between -256 and 256.')
@@ -345,24 +395,57 @@ def _meta_ncon(inds, order, swap):
     ten_out = max(nlegs)
     #
     commands = []
+    aux_pairs = []  # live gadget pairs [ten, leg_aux, leg_aux'] still present
 
-    def _apply_trace_split(ten, imm_axes1, imm_axes2, deferred_pairs):
-        r"""Trace immediate pairs on ten and reinsert deferred pairs as trace edges."""
-        if deferred_pairs:
-            defer_ind = min((e[0] for e in edges
-                             if e[1] == ten and 0 < e[0] < 512), default=511)
-            for npair, (ax1, ax2, ind) in enumerate(deferred_pairs, start=1):
-                d = ind if ind is not None else defer_ind + npair * 0.01
-                edges.append([d, ten, ax1])
-                edges.append([d, ten, ax2])
-        if imm_axes1:
-            commands.append(('trace', ten, ten, (tuple(imm_axes1), tuple(imm_axes2))))
-            axes12 = imm_axes1 + imm_axes2
+    def collect_same_tensor():
+        nonlocal swaps
+        swap_now, swap_later = [], []
+        for sw12 in swaps:
+            sw_now = _swap_on_tensor(*sw12)
+            swap_now.append(sw_now) if sw_now else swap_later.append(sw12)
+        swap_tensors = {}
+        for ten_swap, axes_swap in swap_now:
+            swap_tensors.setdefault(ten_swap, []).extend(axes_swap)
+        for ten_swap, axes_swap in swap_tensors.items():
+            commands.append(('swap_gate', ten_swap, ten_swap, tuple(axes_swap)))
+        swaps = swap_later
+
+    def shift(ten_old, ten_new, dax):
+        """Move the legs of ten_old onto ten_new, leg l -> l + dax(l), in edges, swaps and gadget pairs."""
+        _shift_edges_(edges, ten_old, ten_new, dax)
+        _shift_swaps_(swaps, ten_old, ten_new, dax)
+        _shift_aux_(aux_pairs, ten_old, ten_new, dax)
+
+    def trace_free_aux():
+        """Trace every gadget pair no swap touches any more."""
+        nonlocal aux_pairs
+        touched = {(sw[0], sw[1]) for sw12 in swaps for sws in sw12 for sw in sws}
+        by_ten = {}
+        for ap in aux_pairs:
+            if (ap[0], ap[1]) not in touched and (ap[0], ap[2]) not in touched:
+                by_ten.setdefault(ap[0], []).append(ap)
+        for ten, aps in by_ten.items():
+            ax1 = tuple(ap[1] for ap in aps)
+            ax2 = tuple(ap[2] for ap in aps)
+            commands.append(('trace', ten, ten, (ax1, ax2)))
+            axes12 = ax1 + ax2
             nlegs[ten] -= len(axes12)
-            _shift_edges_(edges, ten, ten, dax=lambda x: -sum(ax < x for ax in axes12))
-            _shift_swaps_(swaps, ten, ten, dax=lambda x: -sum(ax < x for ax in axes12))
-        if deferred_pairs:
-            edges.sort(reverse=True)
+            aux_pairs = [ap for ap in aux_pairs if ap not in aps]
+            shift(ten, ten, lambda x, axes12=axes12: -sum(ax < x for ax in axes12))
+
+    def attach_gadgets(ten_res, base, nsplit):
+        """Replace marker sides [[ten_res, -1-2j], [ten_res, -2-2j]] by real aux legs."""
+        for j in range(nsplit):
+            la, lb = base + 2 * j, base + 2 * j + 1
+            for sw12 in swaps:
+                for sws in sw12:
+                    for sw in sws:
+                        if sw[0] == ten_res and sw[1] == -1 - 2 * j:
+                            sw[1] = la
+                        elif sw[0] == ten_res and sw[1] == -2 - 2 * j:
+                            sw[1] = lb
+            aux_pairs.append([ten_res, la, lb])
+        nlegs[ten_res] += 2 * nsplit
     #
     axes1, axes2 = [], []
     while edges[-1][0] != 512:  # tensordot two tensors, or trace one tensor; 512 is cutoff marking end of contractions
@@ -376,84 +459,34 @@ def _meta_ncon(inds, order, swap):
         axes1.append(leg1)
         axes2.append(leg2)
         if edges[-1][0] == 512 or (edges[-1][1], edges[-2][1]) not in [(ten1, ten2), (ten2, ten1)]:
-            # first collect swaps
-            swap_now, swap_later = [], []
-            for sw12 in swaps:
-                sw_now = _swap_on_tensor(*sw12)
-                swap_now.append(sw_now) if sw_now else swap_later.append(sw12)
-            swap_tensors = {}
-            for ten_swap, axes_swap in swap_now:
-                if ten_swap in swap_tensors:
-                    swap_tensors[ten_swap].extend(axes_swap)
-                else:
-                    swap_tensors[ten_swap] = list(axes_swap)
-            for ten_swap, axes_swap in swap_tensors.items():
-                commands.append(('swap_gate', ten_swap, ten_swap, tuple(axes_swap)))
-            swaps = swap_later
-            #
-            # resolve swaps on contracted legs via jump-moves
+            collect_same_tensor()
             tas = [[ten1, ax] for ax in axes1] + [[ten2, ax] for ax in axes2]
-            unresolved = False
+            psplit = []
             if any(any(ta in sw12[0] or ta in sw12[1] for ta in tas) for sw12 in swaps):
-                new_cmds, swaps, unresolved = _resolve_bad_swaps(
-                    swaps, edges, nlegs, ten1, ten2, axes1, axes2)
+                new_cmds, swaps, psplit = _resolve_bad_swaps(
+                    swaps, edges, nlegs, aux_pairs, ten1, ten2, axes1, axes2)
                 commands.extend(new_cmds)
-            #
-            # contract
-            if unresolved:
-                # Partial crossing: defer crossed legs as trace pairs and
-                # contract the rest in one pass.
-                deferred = sorted(unresolved)
-                deferred_set = set(deferred)
-                if ten1 == ten2:
-                    imm_axes1 = [axes1[k] for k in range(len(axes1)) if k not in deferred_set]
-                    imm_axes2 = [axes2[k] for k in range(len(axes2)) if k not in deferred_set]
-                    deferred_pairs = [(axes1[k], axes2[k], None) for k in deferred]
-                    _apply_trace_split(ten1, imm_axes1, imm_axes2, deferred_pairs)
-                    axes1, axes2 = [], []
-                    continue
-                to_contract = [k for k in range(len(axes1)) if k not in deferred_set]
-                axes1_c = [axes1[k] for k in to_contract]
-                axes2_c = [axes2[k] for k in to_contract]
-                ten_out += 1
-                commands.append(('tensordot', ten_out, (ten1, ten2),
-                                 (tuple(axes1_c), tuple(axes2_c))))
-                nlegs[ten1] -= len(axes1_c)
-                nlegs[ten2] -= len(axes2_c)
-                nlegs_ten1_rem = nlegs[ten1]
-                _shift_edges_(edges, ten1, ten_out,
-                              dax=lambda x: -sum(ax < x for ax in axes1_c))
-                _shift_edges_(edges, ten2, ten_out,
-                              dax=lambda x: nlegs_ten1_rem - sum(ax < x for ax in axes2_c))
-                _shift_swaps_(swaps, ten1, ten_out,
-                              dax=lambda x: -sum(ax < x for ax in axes1_c))
-                _shift_swaps_(swaps, ten2, ten_out,
-                              dax=lambda x: nlegs_ten1_rem - sum(ax < x for ax in axes2_c))
-                nlegs[ten_out] = nlegs.pop(ten1) + nlegs.pop(ten2)
-                # Deferred non-trace pairs become trace pairs on the merged
-                # tensor. Reinsert them through the same delayed-trace path
-                # used elsewhere instead of retrying them immediately.
-                deferred_pairs = []
-                for k in deferred:
-                    new_ax1 = axes1[k] - sum(ax < axes1[k] for ax in axes1_c)
-                    new_ax2 = nlegs_ten1_rem + axes2[k] - sum(ax < axes2[k] for ax in axes2_c)
-                    deferred_pairs.append((new_ax1, new_ax2, None))
-                _apply_trace_split(ten_out, [], [], deferred_pairs)
-            elif ten1 == ten2:  # trace
-                # If _resolve_bad_swaps saw any bad trace pairs, it must have
-                # reported them via `unresolved` already. Reaching this branch
-                # means every current trace pair is safe to execute immediately.
-                _apply_trace_split(ten1, axes1, axes2, [])
+                collect_same_tensor()
+            # a step needing gadgets is '*_psplit' and lists the legs of ten1 whose parity is recorded
+            kind = '_psplit' if psplit else ''
+            paxes = (tuple(axes1[k] for k in psplit),) if psplit else ()
+            if ten1 == ten2:  # trace
+                commands.append(('trace' + kind, ten1, ten1, (tuple(axes1), tuple(axes2))) + paxes)
+                axes12 = axes1 + axes2
+                nlegs[ten1] -= len(axes12)
+                shift(ten1, ten1, lambda x, axes12=axes12: -sum(ax < x for ax in axes12))
+                attach_gadgets(ten1, nlegs[ten1], len(psplit))
             else:  # tensordot
                 ten_out += 1
-                commands.append(('tensordot', ten_out, (ten1, ten2), (tuple(axes1), tuple(axes2))))
+                commands.append(('tensordot' + kind, ten_out, (ten1, ten2), (tuple(axes1), tuple(axes2))) + paxes)
                 nlegs[ten1] -= len(axes1)
                 nlegs[ten2] -= len(axes2)
-                _shift_edges_(edges, ten1, ten_out, dax=lambda x: -sum(ax < x for ax in axes1))
-                _shift_edges_(edges, ten2, ten_out, dax=lambda x: nlegs[ten1] - sum(ax < x for ax in axes2))
-                _shift_swaps_(swaps, ten1, ten_out, dax=lambda x: -sum(ax < x for ax in axes1))
-                _shift_swaps_(swaps, ten2, ten_out, dax=lambda x: nlegs[ten1] - sum(ax < x for ax in axes2))
+                n1 = nlegs[ten1]
+                shift(ten1, ten_out, lambda x, a=tuple(axes1): -sum(ax < x for ax in a))
+                shift(ten2, ten_out, lambda x, a=tuple(axes2), n1=n1: n1 - sum(ax < x for ax in a))
                 nlegs[ten_out] = nlegs.pop(ten1) + nlegs.pop(ten2)
+                attach_gadgets(ten_out, nlegs[ten_out], len(psplit))
+            trace_free_aux()
             axes1, axes2 = [], []
     #
     edges.pop()  # eliminate cutoff element
@@ -463,20 +496,18 @@ def _meta_ncon(inds, order, swap):
     for ten2 in remaining[1:]:  # tensordot
         ten_out += 1
         commands.append(('tensordot', ten_out, (ten1, ten2), ((), ())))
-        _shift_edges_(edges, ten1, ten_out, dax=lambda x: 0)
-        _shift_edges_(edges, ten2, ten_out, dax=lambda x: nlegs[ten1])
-        _shift_swaps_(swaps, ten1, ten_out, dax=lambda x: 0)
-        _shift_swaps_(swaps, ten2, ten_out, dax=lambda x: nlegs[ten1])
+        shift(ten1, ten_out, lambda x: 0)
+        shift(ten2, ten_out, lambda x: nlegs[ten1])
         nlegs[ten_out] = nlegs.pop(ten1) + nlegs.pop(ten2)
         ten1 = ten_out
     #
     if len(edges) != len(set(ind for ind, _, _ in edges)):
         raise YastnError("Repeated non-positive (outgoing) index is ambiguous.")
     #
-    # final swaps
-    axes_swap = tuple(ax for sw12 in swaps for sw in [_swap_on_tensor(*sw12)] if sw for ax in sw[1])
-    if axes_swap:
-        commands.append(('swap_gate', ten_out, ten_out, axes_swap))
+    collect_same_tensor()
+    assert not swaps, "all swaps must be same-tensor on the final tensor"
+    trace_free_aux()
+    assert not aux_pairs
     #
     # final order for transpose
     axes = tuple(leg for _, _, leg in sorted(edges))
@@ -652,415 +683,216 @@ def ncon_prefilter(ts_meta, inds, nsym):
     return result
 
 
-def _resolve_bad_swaps(swaps, edges, nlegs, ten1, ten2, axes1, axes2):
+def _resolve_bad_swaps(swaps, edges, nlegs, aux_pairs, ten1, ten2, axes1, axes2):
     r"""
-    Resolve swap gates that sit on legs about to be contracted.
+    Resolve swap gates that sit on legs about to be contracted, exactly.
 
-    Called before contracting ``ten1`` and ``ten2`` along ``axes1``/``axes2``.
-    A swap is "bad" if it touches any of these contracted legs, because those
-    legs will disappear after the contraction. This function moves every bad
-    swap away from the contracted legs using jump-moves, emitting equivalent
-    ``swap_gate`` and ``parity_sign`` commands that act on surviving legs.
+    Called before contracting ``ten1`` and ``ten2`` along ``axes1``/``axes2``
+    (``ten1 == ten2`` for a trace).  A swap is "bad" if it touches any of the
+    contracted legs.  ``edges`` is the mutable ``[ind, tensor_id, leg]`` list
+    of the planner and ``nlegs`` maps each live tensor to its number of legs;
+    both describe the network before the contraction.  ``aux_pairs`` lists
+    live parity-gadget pairs ``[ten, leg_aux, leg_aux']``; each pair is
+    registered as a self-loop edge so swaps touching it are tracked.
 
-    Data structures
-    ---------------
-    Internally, each edge gets a stable integer ``edge_id``. Two maps are
-    maintained:
-
-    * ``edge_endpoints[edge_id] -> tuple[(tensor, leg), ...]``
-    * ``leg_to_edge[(tensor, leg)] -> edge_id``
-
-    A swap key is a canonical ``(edge_id_a, edge_id_b)`` pair with
-    ``edge_id_a <= edge_id_b``. The Z2 swap set ``z2`` stores these keys;
-    ``toggle`` adds a key if absent or removes it if present.
-
-    Newly added keys are tracked in ``_newly_added`` so that
-    ``collect_same_tensor`` only inspects recent additions rather than
-    scanning all of ``z2``.
-
-    Jump-move identity
-    ------------------
-    For a tensor T with legs {l_1, ..., l_n} and total charge n_T,
-    define parity P_T = n_T mod 2 (componentwise on fermionic charge sectors).
-    A swap between leg l_i of T and an external edge d can be replaced by::
-
-        swap(l_i, d)  =  (-1)^{P_T * n_d}  *  prod_{j != i} swap(l_j, d)
-
-    where n_d is the charge flowing through edge d.  Two identical swaps cancel
-    (Z2 structure), so toggling the same swap twice is a no-op.
-
-    For P_T = 0 (parity-even) the prefactor is 1.
-    For P_T = 1 (parity-odd) the prefactor depends on the charge of d,
-    which is only known at execution time.  A ``parity_sign`` command is
-    emitted so that ``_execute_commands`` can apply the correction.
-
-    Strategy
-    --------------------------
-    Starting from a third-party tensor C, find the leg L of C with the most bad-swaps,
-    and apply jump move to make all contracted legs cross that leg.
-    We then apply jump move to move L to the other side of ten1 (or ten2) [eliminate-move].
-    The choice of ten1 vs ten2 is arbitrary, but we pick the one that generates fewer swap gates.
-    Repeat eliminate-move for the legs of C that cross all contracted legs.
-
-    For the remaining legs of C that cross contracted legs partially, we resolve them by going to the other tensor
-    that share the leg with C and repeat the procedure above. The propagation is done in a DFS manner,
-    and terminates when either all bad swaps associated to the current tensor are resolved, or we encounter an uncontracted leg.
-
-    If the above strategy stalls and some bad swaps still touch the contracted legs, a fallback resolver
-    is invoked. The fallback first looks for a third-party edge that crosses all currently active contracted legs
-    and removes it with the standard step-2 jump. If only partial crossings remain, it defers the non-crossed
-    contracted axes, shrinking the active contraction set until the remaining bad swaps become resolvable. For
-    traces, this fallback simply marks the touched trace pairs for deferral.
-
-
-    Parameters
-    ----------
-    swaps : list
-        List of swap pairs ``[side_A, side_B]`` that were not absorbed as
-        same-tensor swaps by the caller.  Each side is a list of
-        ``[tensor_id, leg_index]`` entries sharing the same edge.
-
-    edges : list
-        Mutable list of ``[edge_index, tensor_id, leg_index]`` triples
-        tracking which legs share each edge.  Modified in place by
-        ``_shift_edges_`` after each contraction.
-
-    nlegs : dict
-        ``{tensor_id: number_of_legs}`` for every tensor currently alive.
-
-    ten1, ten2 : int
-        Tensor ids being contracted.
-
-    axes1, axes2 : list
-        Legs of ten1 and ten2 to be contracted (paired by position).
+    Rows of bad swaps are grouped into classes by the cut test
+    (``coboundary``); the largest class (for a trace, the class of the empty
+    row) is emptied by row and column jumps, and every other row gets a parity
+    gadget.  The algebra is described in ``docs/source/tensor/_einsum.rst``.
 
     Returns
     -------
     commands : list
-        Sequence of ``('swap_gate', ...)`` and ``('parity_sign', ...)``
-        commands to be executed before the contraction.
-
+        ``('swap_gate', ...)`` and ``('parity_sign', ...)`` commands to run
+        before the contraction.
     remaining_swaps : list
-        Swaps still in z2 after resolution (none of them bad when
-        ``unresolved`` is ``False``).
-
-    deferred : False or frozenset
-        ``False`` if all bad swaps were resolved.  Otherwise a
-        ``frozenset`` of axis indices (into ``axes1``/``axes2``) that
-        should be deferred as trace pairs.  The caller should contract
-        the remaining axes and defer these.
+        Swaps still in the Z2 set after resolution, in the format expected by
+        ``_shift_swaps_``.  For a gadget row ``j`` the side that was the
+        contracted leg is the marker ``[[ten1, -1-2j], [ten1, -2-2j]]``,
+        which the planner's ``attach_gadgets`` turns into the real ``(aux,
+        aux')`` legs of the result.
+    psplit : list
+        Sorted positions ``k`` (into ``axes1``) whose contraction needs a
+        parity gadget.
     """
-    deferred_indices = set()
-
-    # Build edge registries:
-    # - edge_endpoints: edge_id -> sorted tuple of (tensor, leg)
-    # - leg_to_edge: (tensor, leg) -> edge_id
-    edge_endpoints = {}
-    leg_to_edge = {}
-    edge_to_id = {}
-    next_edge_id = 0
+    K = len(axes1)
+    is_trace = ten1 == ten2
+    edge_endpoints, leg_to_edge, edge_to_id = {}, {}, {}
 
     def register_edge(endpoints):
-        r"""Register/lookup an edge from endpoints and return its edge_id."""
-        nonlocal next_edge_id
         edge = tuple(sorted(endpoints))
-        edge_id = edge_to_id.get(edge)
-        if edge_id is None:
-            edge_id = next_edge_id
-            next_edge_id += 1
-            edge_to_id[edge] = edge_id
-            edge_endpoints[edge_id] = edge
+        eid = edge_to_id.get(edge)
+        if eid is None:
+            eid = len(edge_to_id)
+            edge_to_id[edge] = eid
+            edge_endpoints[eid] = edge
         for tl in edge:
-            leg_to_edge[tl] = edge_id
-        return edge_id
+            leg_to_edge[tl] = eid
+        return eid
 
-    contracted_edges_by_axis = []
-    for ax1, ax2 in zip(axes1, axes2):
-        contracted_edges_by_axis.append(register_edge(((ten1, ax1), (ten2, ax2))))
-
+    contracted = [register_edge(((ten1, a1), (ten2, a2))) for a1, a2 in zip(axes1, axes2)]
     by_ind = {}
     for ind, t, l in edges:
         if ind != 512:
             by_ind.setdefault(ind, []).append((t, l))
-    for endpoints in by_ind.values():
-        register_edge(endpoints)
+    for eps in by_ind.values():
+        register_edge(eps)
+    for ten, la, lb in aux_pairs:
+        register_edge(((ten, la), (ten, lb)))
 
-    contracted_edges = set(contracted_edges_by_axis)
-
-    def _canonical(edge_a, edge_b):
-        r"""Canonical key for an unordered swap of two edge IDs."""
-        return (edge_a, edge_b) if edge_a <= edge_b else (edge_b, edge_a)
-
-    def _same_tensor(edge_a, edge_b):
-        r"""If edges share a common tensor, return (tensor, (leg_a, leg_b)); else None."""
-        eps_a = edge_endpoints[edge_a]
-        eps_b = edge_endpoints[edge_b]
-        tens_a = {t for t, _ in eps_a}
-        tens_b = {t for t, _ in eps_b}
-        common = tens_a & tens_b
-        if common:
-            t = min(common)
-            la = next(l for tt, l in eps_a if tt == t)
-            lb = next(l for tt, l in eps_b if tt == t)
-            return t, tuple(sorted((la, lb)))
-        return None
+    def canon(a, b):
+        return (a, b) if a <= b else (b, a)
 
     def side_to_edge(side):
-        r"""Map one swap side (list of legs on the same edge) to edge_id."""
-        edge_ids = {leg_to_edge[tuple(tl)] for tl in side}
-        if len(edge_ids) != 1:
+        eids = {leg_to_edge[tuple(tl)] for tl in side}
+        if len(eids) != 1:
             raise YastnError("Inconsistent edge encoding in swap.")
-        return edge_ids.pop()
+        return eids.pop()
 
-    # Build Z2 swap set from input swaps.
     z2 = set()
     for sw12 in swaps:
-        edge_a = side_to_edge(sw12[0])
-        edge_b = side_to_edge(sw12[1])
-        z2.symmetric_difference_update({_canonical(edge_a, edge_b)})
+        z2.symmetric_difference_update({canon(side_to_edge(sw12[0]), side_to_edge(sw12[1]))})
+
+    def third_party(eid):
+        return all(t not in (ten1, ten2) for t, _ in edge_endpoints[eid])
 
     commands = []
-    _newly_added = []  # keys added by toggle, consumed by collect_same_tensor
 
-    def get_pivot_edge(ax_dict):
-        r"""Get the leg of a tensor with maximal bad swaps."""
-        max_cross, ax = max((len(keys), ax) for ax, keys in ax_dict.items())
-        return max_cross, ax
-
-    def get_crossed_axes(contracted_edge, ax_dict):
-        r"""Get all the axes of a tensor that are crossed by a contracted edge."""
-        crossed = set()
-        for ax, keys in ax_dict.items():
-            if any(contracted_edge in key for key, _ in keys):
-                crossed.add(ax)
-        return crossed
-
-    def get_third_party_tensor(active_contracted_edges):
-        r"""Return {tensor: {leg: [(key, partner), ...]}} for non-contracted tensors in bad swaps."""
-        bad = [key for key in z2
-               if key[0] in active_contracted_edges or key[1] in active_contracted_edges]
-        if not bad:
-            return None
-
-        tp = {}
-        for key in bad:
-            for si in (0, 1):
-                for t, l in edge_endpoints[key[si]]:
-                    if t != ten1 and t != ten2:
-                        if t not in tp:
-                            tp[t] = {}
-                        tp[t].setdefault(l, []).append((key, key[1 - si]))
-        return tp
-
-    def _is_bad_key(key):
-        r"""Check if a z2 key belongs to the bad-swap view tracked by tp."""
-        return key[0] in contracted_edges or key[1] in contracted_edges
-
-    def _tp_add_key(tp, key):
-        r"""Insert one z2 key into tp."""
-        if not _is_bad_key(key):
-            return
-        for edge, partner in ((key[0], key[1]), (key[1], key[0])):
-            for t, l in edge_endpoints[edge]:
-                if t != ten1 and t != ten2:
-                    tp.setdefault(t, {}).setdefault(l, []).append((key, partner))
-
-    def _tp_remove_key(tp, key):
-        r"""Remove one z2 key from tp."""
-        if not _is_bad_key(key):
-            return
-        for edge, partner in ((key[0], key[1]), (key[1], key[0])):
-            for t, l in edge_endpoints[edge]:
-                if t != ten1 and t != ten2 and t in tp and l in tp[t]:
-                    tp[t][l] = [item for item in tp[t][l] if item != (key, partner)]
-                    if not tp[t][l]:
-                        del tp[t][l]
-                    if not tp[t]:
-                        del tp[t]
-
-    def _tp_apply_deltas(tp, deltas):
-        r"""Apply a sequence of ('add'|'remove', key) updates to tp."""
-        for op, key in deltas:
-            if op == 'add':
-                _tp_add_key(tp, key)
-            else:
-                _tp_remove_key(tp, key)
-
-    def toggle_with_delta(edge_a, edge_b):
-        r"""Toggle a swap in z2 and return the corresponding delta for tp."""
-        key = _canonical(edge_a, edge_b)
-        if key in z2:
-            z2.discard(key)
-            return 'remove', key
-        z2.add(key)
-        _newly_added.append(key)
-        return 'add', key
-
-    def jump_with_deltas(tid, leg_xs, partner):
-        r"""Apply jump, consuming swap(leg_xs, partner), and return z2 deltas for tp."""
-        if isinstance(leg_xs, int):
-            leg_xs = (leg_xs,)
-        skip = set(leg_xs)
-        deltas = []
-        seen_removed = set()
-        for l in skip:
-            key = _canonical(leg_to_edge[(tid, l)], partner)
-            if key in seen_removed:
-                continue
-            seen_removed.add(key)
-            if key in z2:
+    def same_tensor_cleanup():
+        by_tensor = {}
+        for key in list(z2):
+            ea, eb = key
+            tens_a = {t for t, _ in edge_endpoints[ea]}
+            tens_b = {t for t, _ in edge_endpoints[eb]}
+            common = tens_a & tens_b
+            if common:
+                t = min(common)
+                la = next(l for tt, l in edge_endpoints[ea] if tt == t)
+                lb = next(l for tt, l in edge_endpoints[eb] if tt == t)
                 z2.discard(key)
-                deltas.append(('remove', key))
+                by_tensor.setdefault(t, []).extend(sorted((la, lb)))
+        for t, ax in by_tensor.items():
+            commands.append(('swap_gate', t, t, tuple(ax)))
+
+    def flip(tid, partner):
+        """Toggle (l, partner) for every distinct edge l of tid; sign on partner's first endpoint."""
+        seen = set()
         for l in range(nlegs[tid]):
-            if l not in skip:
-                deltas.append(toggle_with_delta(leg_to_edge[(tid, l)], partner))
+            eid = leg_to_edge[(tid, l)]
+            if eid in seen:      # self-loop / gadget pair: toggled twice -> no-op
+                seen.discard(eid)
+                continue
+            seen.add(eid)
+        for eid in seen:
+            z2.symmetric_difference_update({canon(eid, partner)})
         d_ten, d_leg = edge_endpoints[partner][0]
         commands.append(('parity_sign', tid, d_ten, (d_leg,)))
-        return deltas
 
-    def collect_same_tensor_with_tp(tp):
-        r"""Absorb same-tensor swaps and keep tp synchronized with the surviving z2 state."""
-        by_tensor = {}
-        while _newly_added:
-            key = _newly_added.pop()
-            if key not in z2:
-                continue  # Z2-cancelled since it was added
-            result = _same_tensor(key[0], key[1])
-            if result:
-                z2.discard(key)
-                _tp_remove_key(tp, key)
-                ten_s, axes_s = result
-                by_tensor.setdefault(ten_s, []).extend(axes_s)
-        for ten_s, ax_s in by_tensor.items():
-            commands.append(('swap_gate', ten_s, ten_s, tuple(ax_s)))
+    def rows():
+        return [frozenset(L for key in z2 if contracted[k] in key
+                          for L in key if L != contracted[k] and third_party(L)) for k in range(K)]
 
-    def get_step2_jump_target():
-        r"""Return the tensor/legs used for step-2 jumps, or (None, ()) for traces."""
-        if ten1 == ten2:
-            return None, ()
-        if nlegs[ten1] - len(axes1) <= nlegs[ten2] - len(axes2):
-            return ten1, [axes1[k] for k in range(len(axes1)) if k not in deferred_indices]
-        return ten2, [axes2[k] for k in range(len(axes2)) if k not in deferred_indices]
+    def coboundary(D):
+        """Set of tensors to flip realizing D as a cut of H, or None when D is not a cut."""
+        adj = {}
+        for eid, eps in edge_endpoints.items():
+            if not third_party(eid):
+                continue
+            tens = [t for t, _ in eps]
+            if len(tens) == 1:                       # open leg: private fixed vertex
+                tens = [tens[0], ('inf', eid)]
+            w = 1 if eid in D else 0
+            a, b = tens
+            adj.setdefault(a, []).append((b, w))
+            adj.setdefault(b, []).append((a, w))
+        color, flips = {}, set()
+        for root in adj:
+            if root in color:
+                continue
+            color[root] = 0
+            comp, stack = [root], [root]
+            while stack:
+                u = stack.pop()
+                for v, w in adj[u]:
+                    c = color[u] ^ w
+                    if v in color:
+                        if color[v] != c:
+                            return None
+                    else:
+                        color[v] = c
+                        comp.append(v)
+                        stack.append(v)
+            fixed = [v for v in comp if isinstance(v, tuple) and v[0] == 'inf']
+            ones = [v for v in comp if color[v] == 1]
+            if fixed:
+                fc = {color[v] for v in fixed}
+                if len(fc) > 1:
+                    return None
+                if fc == {1}:
+                    ones = [v for v in comp if color[v] == 0]
+            elif len(ones) > len(comp) - len(ones):
+                ones = [v for v in comp if color[v] == 0]
+            flips.update(v for v in ones if not (isinstance(v, tuple) and v[0] == 'inf'))
+        return flips
 
-    def get_crossed_active_indices(entries, active):
-        r"""Return active contracted-axis indices touched by bad swaps in entries."""
-        crossed = set()
-        for _key, _partner in entries:
-            for side_edge in _key:
-                for k in active:
-                    if side_edge == contracted_edges_by_axis[k]:
-                        crossed.add(k)
-        return crossed
-
-    def run_fallback_resolver():
-        r"""Fallback by deferring active axes until the remaining bad swaps are safe."""
-        active = set(range(len(axes1)))
-        tp = get_third_party_tensor(contracted_edges)
-        if not tp:
-            return
-
-        touched = set()
-        seen_edges = set()
-        for C in tp:
-            for ax in tp[C]:
-                edge = leg_to_edge[(C, ax)]
-                if edge in seen_edges:
-                    continue
-                seen_edges.add(edge)
-                touched |= get_crossed_active_indices(tp[C][ax], active)
-
-        if touched:
-            deferred_indices.update(touched)
-
-    def resolve_tensor_dfs(tp, C, ax, seen_tensors=None):
-        r"""Main resolution path: normalize one tensor and recursively push leftovers outward."""
-        if seen_tensors is None:
-            seen_tensors = set()
-        if C in seen_tensors or C not in tp or ax not in tp[C]:
-            return
-
-        seen_tensors.add(C)
-        num_cross = len(tp[C][ax])
-        if num_cross < len(axes1):
-            for k in range(len(axes1)):
-                if C not in tp:
-                    break
-                crossed_ax = get_crossed_axes(contracted_edges_by_axis[k], tp[C])
-                if ax not in crossed_ax:
-                    # apply jump-move to make the contracted edge cross the pivot leg
-                    deltas = jump_with_deltas(C, tuple(crossed_ax), contracted_edges_by_axis[k])
-                    _tp_apply_deltas(tp, deltas)
-                    collect_same_tensor_with_tp(tp)
-
-        # C is completely resolved
-        if C not in tp:
-            return
-
-        # Once one edge of C crosses every active contracted leg, remove it with step-2.
-        t, ls = get_step2_jump_target()
-
-        num_cross = len(tp[C][ax])
-        edge = leg_to_edge[(C, ax)]
-        while t is not None and num_cross == len(axes1):
-            deltas = jump_with_deltas(t, ls, edge)
-            _tp_apply_deltas(tp, deltas)
-            collect_same_tensor_with_tp(tp)
-            if C not in tp:
+    Y = rows()
+    # class assignment: reference row for each class; trace: reference is the empty row.
+    classes = []  # list of [ref_row_set, [k...]]
+    if is_trace:
+        classes.append([frozenset(), []])
+    for k in range(K):
+        placed = False
+        for cl in classes:
+            if cl[0] is None:
+                continue
+            F = coboundary(Y[k] ^ cl[0])
+            if F is not None:
+                cl[1].append((k, F))
+                placed = True
                 break
+        if not placed:
+            if is_trace:
+                classes.append([None, [(k, None)]])     # unresolvable trace row
             else:
-                num_cross, ax = get_pivot_edge(tp[C])
-                edge = leg_to_edge[(C, ax)]
-
-        # C is completely resolved
-        if C not in tp:
-            return
-
-        # Once a tensor is reached from a given DFS root, do not revisit it
-        # again within that traversal, even through another branch.
-        for bad_ax in tuple(tp[C]): # static snapshot since tp is mutated by the loop
-            if C not in tp:
-                return
-            elif bad_ax not in tp[C]:
-                continue
-
-            num_cross = len(tp[C][bad_ax])
-            if num_cross < len(axes1) and num_cross > 0:
-                bad_edge = leg_to_edge[(C, bad_ax)]
-                eps = edge_endpoints[bad_edge]
-                if len(eps) < 2: # can't propagate further due to the open edge
-                    continue
-                other_side = eps[0] if (C, bad_ax) != eps[0] else eps[1]
-                resolve_tensor_dfs(tp, *other_side, seen_tensors)
-
-    def run_primary_resolver():
-        r"""Drive the DFS-based resolver from each third-party tensor snapshot."""
-        tp = get_third_party_tensor(contracted_edges)
-        if not tp:
-            return
-
-        # Iterate over a stable snapshot because local tp updates can remove tensors on the fly.
-        for C in tuple(tp):
-            if C not in tp:
-                continue
-            _, pivot_ax = get_pivot_edge(tp[C])
-            resolve_tensor_dfs(tp, C, pivot_ax)
-
-    # Phase 1: prefer the direct DFS/jump strategy that tries to eliminate all bad swaps.
-    run_primary_resolver()
-
-    # Phase 2: if any bad swaps remain on contracted legs, fall back to defer-on-partial logic.
-    if get_third_party_tensor(contracted_edges):
-        print("Warning: ncon fallback resolver activated. This may indicate a suboptimal contraction path or a pathological case for the main resolver.")
-        run_fallback_resolver()
-
-
-    # Convert back to list format for the caller (_shift_swaps_ mutates).
-    remaining = [[[list(tl) for tl in edge_endpoints[key[0]]],
-                  [list(tl) for tl in edge_endpoints[key[1]]]]
-                 for key in sorted(z2)]
-    if deferred_indices:
-        return commands, remaining, frozenset(deferred_indices)
-    return commands, remaining, False
+                classes.append([Y[k], [(k, frozenset())]])
+    if is_trace:
+        keep = classes[0]
+    else:
+        keep = max(classes, key=lambda cl: len(cl[1]))
+    psplit = sorted(k for cl in classes if cl is not keep for k, _ in cl[1])
+    # row flips bring every kept row onto the reference row
+    for k, F in keep[1]:
+        for T in F:
+            flip(T, contracted[k])
+    same_tensor_cleanup()
+    # column flips remove the common reference row
+    if not is_trace and keep[1]:
+        if nlegs[ten1] - K <= nlegs[ten2] - K:
+            t = ten1
+        else:
+            t = ten2
+        for L in sorted(keep[0]):
+            flip(t, L)
+        same_tensor_cleanup()
+    Y = rows()
+    for k in range(K):
+        assert (k in psplit) or not Y[k], f"row {k} not resolved: {Y[k]}"
+    # gadgets: (e_k, L) -> (aux_j, L) marker sides
+    marker = {}
+    for j, k in enumerate(psplit):
+        e = contracted[k]
+        marker[e] = [[ten1, -1 - 2 * j], [ten1, -2 - 2 * j]]
+        for key in list(z2):
+            if e in key:
+                L = key[0] if key[1] == e else key[1]
+                assert L != e and third_party(L)
+    remaining = []
+    for key in sorted(z2):
+        sides = []
+        for e in key:
+            sides.append(marker[e] if e in marker else [list(tl) for tl in edge_endpoints[e]])
+        remaining.append(sides)
+    return commands, remaining, psplit
 
 
 def _shift_edges_(edges, ten_old, ten_new, dax):
@@ -1077,6 +909,14 @@ def _shift_swaps_(swaps, ten_old, ten_new, dax):
                 if sw[0] == ten_old:
                     sw[0] = ten_new
                     sw[1] += dax(sw[1])
+
+
+def _shift_aux_(aux_pairs, ten_old, ten_new, dax):
+    for ap in aux_pairs:
+        if ap[0] == ten_old:
+            ap[0] = ten_new
+            ap[1] += dax(ap[1])
+            ap[2] += dax(ap[2])
 
 
 def _swap_on_tensor(sw1, sw2):

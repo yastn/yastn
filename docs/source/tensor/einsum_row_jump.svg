@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 283" width="700" height="283" font-family="Helvetica, Arial, sans-serif">
+<title>Row jump over T with partner line e_k</title>
+<rect width="700" height="283" rx="10" fill="#ffffff"/>
+<text x="170" y="20" fill="#555555" font-size="14" text-anchor="middle" font-style="italic">before</text>
+<text x="540" y="20" fill="#555555" font-size="14" text-anchor="middle" font-style="italic">after the row jump over T</text>
+<g transform="translate(0,28)">
+<path d="M170.0,85.0 L40.0,155.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M170.0,85.0 L170.0,245.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M170.0,85.0 L255.0,15.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M540.0,85.0 L410.0,155.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M540.0,85.0 L540.0,245.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M540.0,85.0 L625.0,15.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M40.0,155.0 L300.0,155.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M410.0,155.0 L441.0,155.0 Q455.0,155.0 455.0,141.0 L455.0,44.0 Q455.0,30.0 469.0,30.0 L636.0,30.0 Q650.0,30.0 650.0,44.0 L650.0,145.0 Q650.0,155.0 660.0,155.0 L670.0,155.0" fill="none" stroke="#e07000" stroke-width="2.2" stroke-linejoin="round"/>
+<circle cx="170.0" cy="155.0" r="5.5" fill="#c62828"/>
+<circle cx="455.0" cy="130.8" r="5.5" fill="#c62828"/>
+<circle cx="606.8" cy="30.0" r="5.5" fill="#c62828"/>
+<rect x="504" y="24" width="12" height="12" fill="#1f5fbf"/>
+<circle cx="40" cy="155" r="17" fill="#ffffff" stroke="#222222" stroke-width="2.2"/>
+<circle cx="300" cy="155" r="17" fill="#ffffff" stroke="#222222" stroke-width="2.2"/>
+<circle cx="410" cy="155" r="17" fill="#ffffff" stroke="#222222" stroke-width="2.2"/>
+<circle cx="670" cy="155" r="17" fill="#ffffff" stroke="#222222" stroke-width="2.2"/>
+<circle cx="170" cy="85" r="17" fill="#ffffff" stroke="#222222" stroke-width="2.2"/>
+<circle cx="540" cy="85" r="17" fill="#fde3c4" stroke="#222222" stroke-width="2.2"/>
+<text x="112" y="108" fill="#222222" font-size="15" text-anchor="middle" font-style="italic">l<tspan dy="4" font-size="10">P</tspan></text>
+<text x="180" y="240" fill="#222222" font-size="15" text-anchor="start" font-style="italic">l<tspan dy="4" font-size="10">1</tspan></text>
+<text x="262" y="22" fill="#222222" font-size="15" text-anchor="start" font-style="italic">l<tspan dy="4" font-size="10">2</tspan></text>
+<text x="40" y="160" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">P</text>
+<text x="300" y="160" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">Q</text>
+<text x="482" y="108" fill="#222222" font-size="15" text-anchor="middle" font-style="italic">l<tspan dy="4" font-size="10">P</tspan></text>
+<text x="550" y="240" fill="#222222" font-size="15" text-anchor="start" font-style="italic">l<tspan dy="4" font-size="10">1</tspan></text>
+<text x="632" y="22" fill="#222222" font-size="15" text-anchor="start" font-style="italic">l<tspan dy="4" font-size="10">2</tspan></text>
+<text x="410" y="160" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">P</text>
+<text x="670" y="160" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">Q</text>
+<text x="240" y="175" fill="#222222" font-size="15" text-anchor="middle" font-style="italic">e<tspan dy="4" font-size="10">k</tspan></text>
+<text x="170" y="90" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">T</text>
+<text x="345" y="150" fill="#222222" font-size="28" text-anchor="middle" >=</text>
+<text x="510" y="20" fill="#1f5fbf" font-size="14" text-anchor="middle" font-style="italic">P<tspan dy="4" font-size="10">T</tspan></text>
+<text x="658" y="100" fill="#222222" font-size="15" text-anchor="start" font-style="italic">e<tspan dy="4" font-size="10">k</tspan></text>
+<text x="540" y="90" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">T</text>
+</g>
+</svg>

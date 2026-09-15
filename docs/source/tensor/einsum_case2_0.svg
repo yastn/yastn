@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 430 303" width="430" height="303" font-family="Helvetica, Arial, sans-serif">
+<title>Case 2, step 0: bad swap (1, 5)</title>
+<rect width="430" height="303" rx="10" fill="#ffffff"/>
+<text x="215" y="20" fill="#555555" font-size="14" text-anchor="middle" font-style="italic">0. bad swap (1, 5)</text>
+<g transform="translate(0,28)">
+<path d="M60.0,50.0 L300.0,50.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M60.0,50.0 L60.0,200.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M300.0,50.0 L300.0,200.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M60.0,200.0 L300.0,200.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M60.0,50.0 L168.8,131.6 Q180.0,140.0 180.0,154.0 L180.0,241.0 Q180.0,255.0 194.0,255.0 L356.0,255.0 Q370.0,255.0 370.0,241.0 L370.0,64.0 Q370.0,50.0 356.0,50.0 L300.0,50.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<circle cx="180.0" cy="200.0" r="5.5" fill="#c62828"/>
+<circle cx="60" cy="50" r="17" fill="#ffffff" stroke="#222222" stroke-width="2.2"/>
+<circle cx="300" cy="50" r="17" fill="#ffffff" stroke="#222222" stroke-width="2.2"/>
+<circle cx="60" cy="200" r="17" fill="#ffffff" stroke="#222222" stroke-width="2.2"/>
+<circle cx="300" cy="200" r="17" fill="#ffffff" stroke="#222222" stroke-width="2.2"/>
+<text x="180" y="42" fill="#555555" font-size="13" text-anchor="middle" >2</text>
+<text x="172" y="172" fill="#555555" font-size="13" text-anchor="end" >1</text>
+<text x="48" y="128" fill="#555555" font-size="13" text-anchor="end" >3</text>
+<text x="312" y="128" fill="#555555" font-size="13" text-anchor="start" >4</text>
+<text x="245" y="193" fill="#555555" font-size="13" text-anchor="middle" >5</text>
+<text x="60" y="55" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">A</text>
+<text x="300" y="55" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">B</text>
+<text x="60" y="205" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">C</text>
+<text x="300" y="205" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">D</text>
+</g>
+</svg>

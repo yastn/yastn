@@ -18,6 +18,7 @@ from ._gates_auxiliary import Gate
 from ._geometry import Site, Bond, Lattice, SquareLattice, CheckerboardLattice, RectangularUnitcell, TriangularLattice
 from ._initialize import product_peps
 from ._peps import Peps, Peps2Layers, add
+from ._mpo_products import canonical_order, sum_of_products, mpo_from_products
 from .gates import Gate_nn, Gate_local
 from .envs._env_ctm import EnvCTM
 from .envs._env_ctm_c4v import EnvCTM_c4v

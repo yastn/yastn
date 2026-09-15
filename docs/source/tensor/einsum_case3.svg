@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 850 328" width="850" height="328" font-family="Helvetica, Arial, sans-serif">
+<title>Case 3: bad swap on a cycle, resolved with a parity gadget</title>
+<rect width="850" height="328" rx="10" fill="#ffffff"/>
+<text x="210" y="20" fill="#555555" font-size="14" text-anchor="middle" font-style="italic">before: swap (1, 5); cycle C-5-D-6</text>
+<text x="640" y="20" fill="#555555" font-size="14" text-anchor="middle" font-style="italic">after: jump over A, gadget on line 2</text>
+<g transform="translate(0,28)">
+<path d="M60.0,50.0 L300.0,50.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M60.0,50.0 L60.0,200.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M300.0,50.0 L300.0,200.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M60.0,200.0 L300.0,200.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M60.0,200.0 L60.0,216.0 Q60.0,230.0 74.0,230.0 L286.0,230.0 Q300.0,230.0 300.0,216.0 L300.0,200.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M60.0,50.0 L168.8,131.6 Q180.0,140.0 180.0,154.0 L180.0,256.0 Q180.0,270.0 194.0,270.0 L356.0,270.0 Q370.0,270.0 370.0,256.0 L370.0,64.0 Q370.0,50.0 356.0,50.0 L300.0,50.0" fill="none" stroke="#ffffff" stroke-width="11"/>
+<path d="M60.0,50.0 L168.8,131.6 Q180.0,140.0 180.0,154.0 L180.0,256.0 Q180.0,270.0 194.0,270.0 L356.0,270.0 Q370.0,270.0 370.0,256.0 L370.0,64.0 Q370.0,50.0 356.0,50.0 L300.0,50.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M630.0,50.0 L524.0,50.0 Q510.0,50.0 510.0,64.0 L510.0,200.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M630.0,50.0 L736.0,50.0 Q750.0,50.0 750.0,64.0 L750.0,200.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M750.0,200.0 L564.0,200.0 Q550.0,200.0 550.0,186.0 L550.0,179.0 Q550.0,165.0 536.0,165.0 L489.0,165.0 Q475.0,165.0 475.0,179.0 L475.0,186.0 Q475.0,200.0 489.0,200.0 L510.0,200.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M510.0,200.0 L510.0,216.0 Q510.0,230.0 524.0,230.0 L736.0,230.0 Q750.0,230.0 750.0,216.0 L750.0,200.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M630.0,50.0 L630.0,256.0 Q630.0,270.0 644.0,270.0 L806.0,270.0 Q820.0,270.0 820.0,256.0 L820.0,29.0 Q820.0,15.0 806.0,15.0 L674.0,15.0 Q660.0,15.0 660.0,29.0 L660.0,50.0" fill="none" stroke="#ffffff" stroke-width="11"/>
+<path d="M630.0,50.0 L630.0,256.0 Q630.0,270.0 644.0,270.0 L806.0,270.0 Q820.0,270.0 820.0,256.0 L820.0,29.0 Q820.0,15.0 806.0,15.0 L674.0,15.0 Q660.0,15.0 660.0,29.0 L660.0,50.0" fill="none" stroke="#7b3fa0" stroke-width="2.2" stroke-linejoin="round"/>
+<circle cx="180.0" cy="200.0" r="5.5" fill="#c62828"/>
+<circle cx="630.0" cy="200.0" r="5.5" fill="#c62828"/>
+<circle cx="510.0" cy="165.0" r="5.5" fill="#c62828"/>
+<rect x="689" y="194" width="12" height="12" fill="#1f5fbf"/>
+<rect x="570.0" y="33.0" width="120" height="34" rx="10" fill="#ffffff" stroke="#222222" stroke-width="2.2"/>
+<circle cx="510" cy="200" r="17" fill="#ffffff" stroke="#222222" stroke-width="2.2"/>
+<circle cx="750" cy="200" r="17" fill="#ffffff" stroke="#222222" stroke-width="2.2"/>
+<circle cx="60" cy="50" r="17" fill="#ffffff" stroke="#222222" stroke-width="2.2"/>
+<circle cx="300" cy="50" r="17" fill="#ffffff" stroke="#222222" stroke-width="2.2"/>
+<circle cx="60" cy="200" r="17" fill="#ffffff" stroke="#222222" stroke-width="2.2"/>
+<circle cx="300" cy="200" r="17" fill="#ffffff" stroke="#222222" stroke-width="2.2"/>
+<text x="180" y="42" fill="#555555" font-size="13" text-anchor="middle" >2</text>
+<text x="190" y="172" fill="#555555" font-size="13" text-anchor="start" >1</text>
+<text x="245" y="248" fill="#555555" font-size="13" text-anchor="middle" >6</text>
+<text x="48" y="128" fill="#555555" font-size="13" text-anchor="end" >3</text>
+<text x="312" y="128" fill="#555555" font-size="13" text-anchor="start" >4</text>
+<text x="245" y="193" fill="#555555" font-size="13" text-anchor="middle" >5</text>
+<text x="415" y="150" fill="#222222" font-size="28" text-anchor="middle" >=</text>
+<text x="695" y="188" fill="#1f5fbf" font-size="14" text-anchor="middle" font-style="italic">P<tspan dy="4" font-size="10">A</tspan></text>
+<text x="638" y="100" fill="#7b3fa0" font-size="14" text-anchor="start" font-style="italic">aux</text>
+<text x="650" y="12" fill="#7b3fa0" font-size="14" text-anchor="end" font-style="italic">aux′</text>
+<text x="695" y="248" fill="#555555" font-size="13" text-anchor="middle" >6</text>
+<text x="498" y="128" fill="#555555" font-size="13" text-anchor="end" >3</text>
+<text x="762" y="128" fill="#555555" font-size="13" text-anchor="start" >4</text>
+<text x="590" y="193" fill="#555555" font-size="13" text-anchor="middle" >5</text>
+<text x="630" y="55" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">AB</text>
+<text x="510" y="205" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">C</text>
+<text x="750" y="205" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">D</text>
+<text x="60" y="55" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">A</text>
+<text x="300" y="55" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">B</text>
+<text x="60" y="205" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">C</text>
+<text x="300" y="205" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">D</text>
+</g>
+</svg>
