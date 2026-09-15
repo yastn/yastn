@@ -30,7 +30,7 @@ from __future__ import annotations
 from ....initialize import rand, zeros, eye, block
 from ....sym import sym_none
 from ....tensor import Tensor, YastnError, Leg, tensordot, qr, truncation_mask
-
+from ...._profile import nsys_profile, nvtx_range
 
 def _si_rank(opts_svd, opts_si):
     """Total size of an SI basis, including oversampling."""
@@ -395,7 +395,7 @@ def _si_refinement_cwo(r0, r1, X, Y, opts_svd, opts_si):
         raise YastnError("CWO refinement found no singular values.")
     return charge_mapping
 
-
+@nsys_profile("si_refinement")
 def si_refinement(r0, r1, X, Y, opts_svd, opts_si):
     r"""Refine and recycle SI bases with the selected allocation strategy.
 
@@ -726,7 +726,8 @@ def _recycle_si_bases(r0, r1, X, Y, charge_mapping):
     return X, Yh.H
 
 
-def _si_reduced_svd(r0, r1, X, Y, opts_si):
+@nsys_profile("_si_reduced_svd")
+def _si_reduced_svd(r0, r1, X, Y, opts_si, spec_only=False):
     r"""Subspace-iterate the bases and decompose the reduced ``rho = Y A X``.
 
     Returns the converged bases together with the decomposition
@@ -739,25 +740,29 @@ def _si_reduced_svd(r0, r1, X, Y, opts_si):
     tol = opts_si.get('tol', 1e-3)
     X_old, Yh_old = X, Y.H
 
-    for _ in range(niter):
-        AX = _apply_corner_product(r0, r1, X)
-        X_next = _apply_corner_product_h(r0, r1, AX)
-        X, _ = qr(X_next, axes=(0, 1), sQ=X.s[1])
+    with nvtx_range("_si_reduced_svd SI"):
+        for _ in range(niter):
+            AX = _apply_corner_product(r0, r1, X)
+            X_next = _apply_corner_product_h(r0, r1, AX)
+            X, _ = qr(X_next, axes=(0, 1), sQ=X.s[1])
 
-        Yh = Y.H
-        AHY = _apply_corner_product_h(r0, r1, Yh)
-        Yh_next = _apply_corner_product(r0, r1, AHY)
-        Yh, _ = qr(Yh_next, axes=(0, 1), sQ=Yh.s[1])
+            Yh = Y.H
+            AHY = _apply_corner_product_h(r0, r1, Yh)
+            Yh_next = _apply_corner_product(r0, r1, AHY)
+            Yh, _ = qr(Yh_next, axes=(0, 1), sQ=Yh.s[1])
 
-        error = max(si_subspace_error(X, X_old),
-                    si_subspace_error(Yh, Yh_old))
+            error = max(si_subspace_error(X, X_old),
+                        si_subspace_error(Yh, Yh_old))
 
-        Y = Yh.H
-        if error < tol:
-            break
-        X_old, Yh_old = X, Yh
+            Y = Yh.H
+            if error < tol:
+                break
+            X_old, Yh_old = X, Yh
 
     rho = Y @ _apply_corner_product(r0, r1, X)
+    if spec_only:
+        sall= rho.svd(axes=(0, 1), sU=rho.s[1], fix_signs=True, compute_uv=False)
+        return X, Y, None, sall, None
     us, sall, vs = rho.svd(axes=(0, 1), sU=rho.s[1], fix_signs=True)
     return X, Y, us, sall, vs
 
@@ -769,9 +774,9 @@ def _si_spectrum(r0, r1, X, Y, opts_si):
     projectors and applying the truncation mask -- work proportional to the
     large CTM legs rather than to the auxiliary rank.
     """
-    return _si_reduced_svd(r0, r1, X, Y, opts_si)[3]
+    return _si_reduced_svd(r0, r1, X, Y, opts_si, spec_only=True)[3]
 
-
+@nsys_profile("si_projector_svd")
 def si_projector_svd(r0, r1, X, Y, opts_svd, opts_si,
                      return_spectrum=False):
     """Approximate the SVD of ``r0 @ r1.T`` using recycled subspaces."""
