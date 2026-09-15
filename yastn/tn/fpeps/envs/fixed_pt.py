@@ -647,8 +647,30 @@ def fp_ctmrg(env: EnvCTM, \
     EnvCTM
         Environment at the fixed point, differentiable with respect to the PEPS tensors.
     """
+    # TEMPORARY (pytorch/pytorch#170834, open; fix deferred upstream by maintainers).
+    # A SINGLE device leaves 'fp_devices' unset, so the backward takes the
+    # torch.func.vjp branch below (_use_autograd_grad keys off its presence).
+    # functorch rejects every op registered via torch.library.register_autograd:
+    # torch builds the wrapper as
+    #     Generated = type(name, (autograd.Function,), {"forward":..., "backward":...})
+    # with no setup_context, so autograd.Function.apply raises. This affects ONLY
+    # custom-op backends (torch_cutensor); the plain 'torch' backend is pure ATen
+    # and single-device works there, so leave it alone.
+    # Duplicating the device restores the torch.autograd.grad path on ONE physical
+    # GPU -- the '--devices <d> <d>' form verified in job 4586706.
+    # REMOVE once torch generates a setup_context.
+    if devices is not None and len(devices) == 1 and \
+            getattr(env.config.backend, 'BACKEND_ID', '') != 'torch':
+        _d = list(devices)[0]
+        log.warning(
+            "backend %r with a single CTM device (%s): the fixed-point backward would "
+            "use torch.func.vjp, which rejects torch.library.register_autograd custom "
+            "ops (pytorch/pytorch#170834). Duplicating the device to keep the "
+            "torch.autograd.grad path. Pass devices=['%s', '%s'] explicitly to silence "
+            "this; a single device is fine on the plain 'torch' backend.",
+            getattr(env.config.backend, 'BACKEND_ID', '?'), _d, _d, _d)
+        devices = [_d, _d]
     # Multi-device: route the FP step + backward through the AD path.
-    # Single device: leave ctm_opts_fp untouched (serial path).
     if devices is not None and len(devices) > 1:
         ctm_opts_fp = {**ctm_opts_fp, 'fp_devices': list(devices)}
     # NOTE order MUST match the backward's gradient order. FixedPoint.backward
