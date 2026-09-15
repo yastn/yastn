@@ -1398,7 +1398,12 @@ def _validate_ctm_corner_pair(r0, r1):
     if r0.config.sym.SYM_ID != r1.config.sym.SYM_ID:
         raise YastnError("CTM corner halves must use the same symmetry.")
 
-    for axis in (0, 1):
+    # ``proj_corners`` forms r0 @ r1.T by contracting axis 1.  Axis 0
+    # remains open and the product is allowed to be rectangular, including
+    # different dimensions in otherwise shared symmetry sectors.  Requiring
+    # equality on axis 0 incorrectly rejects valid symmetry-resolved CTM
+    # corners once the PEPS bond dimension grows beyond one.
+    for axis in (1,):
         leg0 = r0.get_legs(axis)
         leg1 = r1.get_legs(axis)
         common_charges = leg0.tD.keys() & leg1.tD.keys()
@@ -1406,15 +1411,17 @@ def _validate_ctm_corner_pair(r0, r1):
                for charge in common_charges):
             raise YastnError(
                 "CTM corner halves must have matching dimensions in every "
-                "shared charge sector on both loop closures; "
-                f"mismatch on axis {axis}.")
+                "shared charge sector on the contracted closure; "
+                f"mismatch on contracted axis {axis}: "
+                f"left={leg0.tD}, right={leg1.tD}.")
 
 
 def _ctm_shared_sector_capacity(r0, r1):
     """Return capacities of sectors supported by both CTM corner halves."""
     capacity0 = r0.get_legs(0).tD
     capacity1 = r1.get_legs(0).tD
-    return {charge: dimension for charge, dimension in capacity0.items()
+    return {charge: min(dimension, capacity1[charge])
+            for charge, dimension in capacity0.items()
             if charge in capacity1}
 
 
@@ -2105,7 +2112,6 @@ def proj_corners(r0, r1, opts_svd, opts_si=None, X=None, Y=None,
                  return_si_state=False, **kwargs):
     r""" Projectors in between r0 @ r1.T corners. """
     # TODO: r1 matrix is defined as (right, left)
-    _validate_ctm_corner_pair(r0, r1)
     opts_svd = dict(opts_svd)
     opts_svd['fix_signs'] = opts_svd.get('fix_signs', True)
     verbosity = opts_svd.get('verbosity', 0)
@@ -2116,6 +2122,10 @@ def proj_corners(r0, r1, opts_svd, opts_si=None, X=None, Y=None,
     si_enabled = opts_si is not None and opts_si.get('enabled', False)
     X_new = Y_new = None
     if si_enabled:
+        # Recycled explicit subspaces require compatible aggregate legs.  The
+        # exact SVD path below does not: YASTN can contract compatible
+        # hard-fused legs whose aggregate per-charge dimensions differ.
+        _validate_ctm_corner_pair(r0, r1)
         # An eye-initialized CTM starts below its requested chi and grows over
         # the first updates.  During that growth the enlarged corners may not
         # yet accommodate chi + p rangefinder columns.  Use every currently

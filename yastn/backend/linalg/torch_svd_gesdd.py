@@ -12,7 +12,10 @@ def safe_inverse_2(x, eps):
 class SVDGESDD(torch.autograd.Function):
     @staticmethod
     def forward(A, ad_decomp_reg, fullrank_uv, diagnostics):
-        if A.is_cuda:
+        if A.device.type == 'mps':
+            U, S, Vh = torch.linalg.svd(A.cpu(), full_matrices=fullrank_uv)
+            U, S, Vh = U.to(A.device), S.to(A.device), Vh.to(A.device)
+        elif A.is_cuda:
             U, S, Vh = torch.linalg.svd(A, full_matrices=fullrank_uv, driver='gesvd')
         else:
             U, S, Vh = torch.linalg.svd(A, full_matrices=fullrank_uv)
