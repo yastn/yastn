@@ -30,7 +30,134 @@ from __future__ import annotations
 from ....initialize import rand, zeros, eye, block
 from ....sym import sym_none
 from ....tensor import Tensor, YastnError, Leg, tensordot, qr, truncation_mask
+from ....tensor._auxiliary import _struct
+from ....tensor._contractions import _match_legs_tensordot
 from ...._profile import nsys_profile, nvtx_range
+
+
+class _Half:
+    r"""CTM corner half, with legs ``(external, contracted)``.
+
+    Hides whether a half is given as a single tensor or as a pair of enlarged
+    corners whose product it is. ``_Half(r)`` returns the matching
+    specialization, and passes an already built half through.
+    """
+
+    def __new__(cls, r):
+        if isinstance(r, _Half):
+            return r
+        if cls is _Half:
+            cls = _HalfTensor if isinstance(r, Tensor) else _HalfPair
+        return super().__new__(cls)
+
+    def apply_corner_product(self, other, X):
+        r"""Apply ``A = self @ other.T`` to ``X``, indexed as the leg 0 of ``other``."""
+        return self._apply(other._apply_T(X))
+
+    def apply_corner_product_h(self, other, Z):
+        r"""Apply ``A.H``, with ``A = self @ other.T``, to ``Z`` indexed as the leg 0 of ``self``."""
+        return other._apply_conj(self._apply_H(Z))
+
+
+class _HalfTensor(_Half):
+    """Corner half that is already contracted into a single tensor."""
+
+    def __init__(self, r):
+        if r is self:  # __new__ passed an existing half through
+            return
+        self.tensor = r
+
+    @property
+    def config(self):
+        return self.tensor.config
+
+    def get_legs(self, axis):
+        return self.tensor.get_legs(axis)
+
+    def contracted(self):
+        return self.tensor
+
+    def _apply(self, M):  # self @ M
+        return tensordot(self.tensor, M, axes=(1, 0))
+
+    def _apply_T(self, M):  # self.T @ M
+        return tensordot(self.tensor, M, axes=(0, 0))
+
+    def _apply_H(self, M):  # self.H @ M
+        return tensordot(self.tensor.conj(), M, axes=(0, 0))
+
+    def _apply_conj(self, M):  # self.conj() @ M
+        return tensordot(self.tensor.conj(), M, axes=(1, 0))
+
+
+class _HalfPair(_Half):
+    """Corner half given by a pair of enlarged corners, ``r = f0 @ f1``.
+
+    The pair is applied corner by corner, so the half is not formed, which
+    would cost ``O(N^3)`` for two ``N x N`` corners. Only :meth:`contracted`
+    builds it.
+    """
+
+    def __init__(self, r):
+        if r is self:  # __new__ passed an existing half through
+            return
+        self.f0, self.f1 = r
+        self._legs = None
+        self._contracted = None
+
+    @property
+    def config(self):
+        return self.f0.config
+
+    def get_legs(self, axis):
+        r"""Leg of the product of the two corners.
+
+        Sectors annihilated by the contraction are absent from the product,
+        so they are dropped here as well -- SI columns in such sectors would
+        be annihilated on the first application of the half.
+        """
+        if self._legs is None:
+            self._legs = self._product_legs()
+        return self._legs[axis]
+
+    def _product_legs(self):
+        corner_legs = (self.f0.get_legs(0), self.f1.get_legs(1))
+        if self.f0.ndim_n != 2 or self.f1.ndim_n != 2:
+            return corner_legs  # meta-fused corners: keep their raw legs
+        # Native legs, ordered as the effective ones, so that a corner
+        # transposed lazily is described without touching its data.
+        structs = tuple(_struct(legs=tuple(f.struct.legs[i] for i in f.trans),
+                                n=f.struct.n, isdiag=False)
+                        for f in (self.f0, self.f1))
+        # The last output carries the block structure of the product.
+        bl_c = _match_legs_tensordot(self.config.sym, *structs, [0], [1], [0], [1])[-1]
+        return tuple(self._with_charges(leg, basic)
+                     for leg, basic in zip(corner_legs, bl_c.struct.legs))
+
+    @staticmethod
+    def _with_charges(leg, basic):
+        """Corner leg restricted to the charge sectors of the product."""
+        if leg.tD == basic.tD:
+            return leg
+        return Leg(leg.sym, s=basic.s, t=basic.t, D=basic.D, hf=leg.hf)
+
+    def contracted(self):
+        if self._contracted is None:
+            self._contracted = self.f0 @ self.f1
+        return self._contracted
+
+    def _apply(self, M):  # self @ M
+        return tensordot(self.f0, tensordot(self.f1, M, axes=(1, 0)), axes=(1, 0))
+
+    def _apply_T(self, M):  # self.T @ M
+        return tensordot(self.f1, tensordot(self.f0, M, axes=(0, 0)), axes=(0, 0))
+
+    def _apply_H(self, M):  # self.H @ M
+        return tensordot(self.f1.conj(), tensordot(self.f0.conj(), M, axes=(0, 0)), axes=(0, 0))
+
+    def _apply_conj(self, M):  # self.conj() @ M
+        return tensordot(self.f0.conj(), tensordot(self.f1.conj(), M, axes=(1, 0)), axes=(1, 0))
+
 
 def _si_rank(opts_svd, opts_si):
     """Total size of an SI basis, including oversampling."""
@@ -95,21 +222,20 @@ def _distribute_si_rank_with_capacity(capacities, rank):
 
 
 def _validate_ctm_corner_pair(r0, r1):
-    """Validate the two closures of a pair of CTM corner halves."""
-    if not isinstance(r0, Tensor) or not isinstance(r1, Tensor):
-        raise YastnError("CTM corner halves must be YASTN tensors.")
-    if r0.ndim != 2 or r1.ndim != 2:
-        raise YastnError("CTM corner halves must be rank-2 tensors.")
-    if r0.config.sym.SYM_ID != r1.config.sym.SYM_ID:
-        raise YastnError("CTM corner halves must use the same symmetry.")
+    """Validate the two closures of a pair of CTM corner halves.
 
+    The contracted legs are closed on each other, so they have to be
+    contractible. The external legs only carry the SI bases, where matching
+    dimensions of shared charges suffice; their fusion histories may differ,
+    which invalidates recycled bases but not the corners.
+    """
     for axis in (0, 1):
         leg0 = r0.get_legs(axis)
         leg1 = r1.get_legs(axis)
-        common_charges = leg0.tD.keys() & leg1.tD.keys()
-        if any(leg0.tD[charge] != leg1.tD[charge]
-               for charge in common_charges):
-            raise YastnError(
+        tD0, tD1 = leg0.tD, leg1.tD
+        consistent = leg0.are_consistent(leg1) if axis else \
+            all(tD0[charge] == tD1[charge] for charge in tD0.keys() & tD1.keys())
+        if not consistent: raise YastnError(
                 "CTM corner halves must have matching dimensions in every "
                 "shared charge sector on both loop closures; "
                 f"mismatch on axis {axis}.")
@@ -187,6 +313,9 @@ def si_bases_compatible(r0, r1, X, Y):
     if X is None or Y is None:
         return False
 
+    leg0_r0 = r0.get_legs(0)
+    leg0_r1 = r1.get_legs(0)
+
     def is_compatible_subspace(basis_leg, corner_leg):
         """A refined basis may intentionally contain only selected sectors."""
         return (basis_leg.s == corner_leg.s
@@ -196,17 +325,11 @@ def si_bases_compatible(r0, r1, X, Y):
 
     try:
         return (
-            is_compatible_subspace(
-                X.get_legs(0), r1.get_legs(0).conj())
-            and is_compatible_subspace(
-                Y.get_legs(1), r0.get_legs(0).conj())
+            is_compatible_subspace(X.get_legs(0), leg0_r1.conj())
+            and is_compatible_subspace(Y.get_legs(1), leg0_r0.conj())
             and X.get_legs(1) == Y.get_legs(0).conj()
-            and X.dtype == r1.dtype
-            and Y.dtype == r0.dtype
-            and X.device == r1.device
-            and Y.device == r0.device
-            and X.get_legs(0).are_consistent(r1.get_legs(0))
-            and Y.get_legs(1).are_consistent(r0.get_legs(0))
+            and X.get_legs(0).are_consistent(leg0_r1)
+            and Y.get_legs(1).are_consistent(leg0_r0)
         )
     except (AttributeError, IndexError):
         return False
@@ -440,25 +563,6 @@ def si_refinement(r0, r1, X, Y, opts_svd, opts_si):
             and current_mapping_y == charge_mapping):
         return X, Y
     return _recycle_si_bases(r0, r1, X, Y, charge_mapping)
-
-
-def _apply_corner_product(r0, r1, X):
-    r"""Apply A = tensordot(r0, r1, axes=(1, 1)) to X.
-
-    r0 has indices (a, k), r1 has indices (b, k), and X has
-    indices (b, p). The result has indices (a, p).
-    """
-    tmp = tensordot(r1, X, axes=(0, 0))       # (k, p)
-    return tensordot(r0, tmp, axes=(1, 0))    # (a, p)
-
-
-def _apply_corner_product_h(r0, r1, Z):
-    r"""Apply A.H to Z without explicitly constructing A.
-
-    Z has indices (a, p). The result has indices (b, p).
-    """
-    tmp = tensordot(r0.conj(), Z, axes=(0, 0))      # (k*, p)
-    return tensordot(r1.conj(), tmp, axes=(1, 0))   # (b*, p)
 
 
 def _validate_isometry(V):
@@ -732,9 +836,12 @@ def _si_reduced_svd(r0, r1, X, Y, opts_si, spec_only=False):
 
     Returns the converged bases together with the decomposition
     ``us, sall, vs`` of ``rho``. Everything here acts either on the small
-    auxiliary legs or through ``_apply_corner_product``, so the full
+    auxiliary legs or through :meth:`_Half.apply_corner_product`, so the full
     ``r0 @ r1.T`` is never formed.
     """
+    # Halves reach here already built by si_proj_corners, or as tensors from
+    # si_projector_svd and its direct callers.
+    r0, r1 = _Half(r0), _Half(r1)
     _validate_ctm_corner_pair(r0, r1)
     niter = opts_si.get('niter', 5)
     tol = opts_si.get('tol', 1e-3)
@@ -742,13 +849,13 @@ def _si_reduced_svd(r0, r1, X, Y, opts_si, spec_only=False):
 
     with nvtx_range("_si_reduced_svd SI"):
         for _ in range(niter):
-            AX = _apply_corner_product(r0, r1, X)
-            X_next = _apply_corner_product_h(r0, r1, AX)
+            AX = r0.apply_corner_product(r1, X)
+            X_next = r0.apply_corner_product_h(r1, AX)
             X, _ = qr(X_next, axes=(0, 1), sQ=X.s[1])
 
             Yh = Y.H
-            AHY = _apply_corner_product_h(r0, r1, Yh)
-            Yh_next = _apply_corner_product(r0, r1, AHY)
+            AHY = r0.apply_corner_product_h(r1, Yh)
+            Yh_next = r0.apply_corner_product(r1, AHY)
             Yh, _ = qr(Yh_next, axes=(0, 1), sQ=Yh.s[1])
 
             error = max(si_subspace_error(X, X_old),
@@ -759,7 +866,7 @@ def _si_reduced_svd(r0, r1, X, Y, opts_si, spec_only=False):
                 break
             X_old, Yh_old = X, Yh
 
-    rho = Y @ _apply_corner_product(r0, r1, X)
+    rho = Y @ r0.apply_corner_product(r1, X)
     if spec_only:
         sall= rho.svd(axes=(0, 1), sU=rho.s[1], fix_signs=True, compute_uv=False)
         return X, Y, None, sall, None
@@ -816,9 +923,10 @@ def si_proj_corners(r0, r1, opts_svd, opts_si, X=None, Y=None, cutoff=0):
 
     Returns ``u, s, v`` of the truncated decomposition together with the
     refreshed bases ``X_new, Y_new`` to be recycled by the next update.
+
+    Each half is either a tensor or a pair of enlarged corners; see :class:`_Half`.
     """
-    r0= r0 if isinstance(r0,Tensor) else (r0[0]@r0[1])
-    r1= r1 if isinstance(r1,Tensor) else (r1[0]@r1[1])
+    r0, r1 = _Half(r0), _Half(r1)
     _validate_ctm_corner_pair(r0, r1)
     # An eye-initialized CTM starts below its requested chi and grows over
     # the first updates.  During that growth the enlarged corners may not
@@ -831,6 +939,8 @@ def si_proj_corners(r0, r1, opts_svd, opts_si, X=None, Y=None, cutoff=0):
         X, Y = initialize_si_bases(r0, r1, rank)
     if opts_si.get('correct', False):
         X, Y = si_refinement(r0, r1, X, Y, opts_svd, opts_si)
+
+    r0, r1 = r0.contracted(), r1.contracted()
     res= si_projector_svd(r0, r1, X, Y, opts_svd, opts_si)
     u, s, v, X_new, Y_new= res[:5]
 

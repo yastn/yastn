@@ -849,7 +849,7 @@ def _masks_hfs_intersection(sym, ts, Ds, hfs):
     r"""
     Calculate two masks that project onto intersection of two spaces.
     ts = tuple[ts0, ts1], where ts0, ts1 are top-layer charges in two intersected legs.
-    Ds = tuple[Ds0, Ds1] with corresponding top-lyer bond dimensions.
+    Ds = tuple[Ds0, Ds1] with corresponding top-layer bond dimensions.
     hfs = tuple[hfs0, hfs1], where hfs0, hfs1 are hard fusion data for two spaces
     """
     teff = tuple(sorted(set(ts[0]) & set(ts[1])))
