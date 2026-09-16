@@ -16,8 +16,10 @@ import yastn
 import yastn.tn.fpeps as fpeps
 import yastn.tn.fpeps.envs._env_ctm as env_ctm_module
 import yastn.tn.fpeps.envs._env_ctm_SI_projectors as si_module
+from yastn.tn.fpeps._geometry import Site
 from yastn.tn.fpeps.envs._env_ctm import proj_corners
 from yastn.tn.fpeps.envs._env_ctm_SI_projectors import (
+    si_proj_corners,
     si_projector_svd,
     svd_charge_sector_values,
 )
@@ -139,8 +141,7 @@ def test_si_projector_identity_and_optimal_residual(config_kwargs,
     # test would reduce to an exact SVD and would not exercise SI convergence.
     assert chi + opts_si['oversampling'] < len(singular_values)
 
-    p_left, p_right, X, Y = proj_corners(
-        r0, r1, opts_svd, opts_si=opts_si, return_si_state=True)
+    p_left, p_right, X, Y = si_proj_corners(r0, r1, opts_svd, opts_si)
     pl = _projector_matrix(p_left)
     pr = _projector_matrix(p_right)
 
@@ -238,11 +239,9 @@ def test_si_public_path_is_matrix_free_and_uses_reduced_svd(
     monkeypatch.setattr(
         yastn.Tensor, 'svd_with_truncation', forbidden_full_svd)
 
-    p0, p1, X, Y = proj_corners(
-        r0, r1, opts_svd={'D_total': 3, 'tol': 0},
-        opts_si={'enabled': True, 'oversampling': 2,
-                 'niter': 1, 'tol': 0},
-        return_si_state=True)
+    p0, p1, X, Y = si_proj_corners(
+        r0, r1, {'D_total': 3, 'tol': 0},
+        {'enabled': True, 'oversampling': 2, 'niter': 1, 'tol': 0})
 
     assert p0 is not None and p1 is not None
     assert X is not None and Y is not None
@@ -262,14 +261,12 @@ def test_public_si_starts_approximate_then_converges(config_kwargs, dtype):
     opts_svd = {'D_total': 2, 'tol': 0, 'fix_signs': True}
     reference = proj_corners(r0, r1, opts_svd)
 
-    initial = proj_corners(
+    initial = si_proj_corners(
         r0, r1, opts_svd,
-        opts_si={'enabled': True, 'oversampling': 1,
-                 'niter': 0, 'tol': 0})
-    refined = proj_corners(
+        {'enabled': True, 'oversampling': 1, 'niter': 0, 'tol': 0})[:2]
+    refined = si_proj_corners(
         r0, r1, opts_svd,
-        opts_si={'enabled': True, 'oversampling': 1,
-                 'niter': 24, 'tol': 1e-13})
+        {'enabled': True, 'oversampling': 1, 'niter': 24, 'tol': 1e-13})[:2]
 
     initial_error = _projector_range_error(reference, initial)
     refined_error = _projector_range_error(reference, refined)
@@ -307,7 +304,7 @@ def test_si_recycling_state_machine_across_updates(config_kwargs,
     A first CTMRG update initializes orthonormal X/Y bases under matching
     site-and-projector-pair keys and gives each state age one.  After the
     eye-initialized environment has grown to the requested SI rank, the next
-    update must pass every stored basis back to ``proj_corners``, preserve the
+    update must pass every stored basis back to ``si_proj_corners``, preserve the
     set of state keys, increment every age exactly once, and leave the returned
     bases orthonormal.  This exercises SI state management, not CTMRG
     convergence or projector accuracy.
@@ -344,17 +341,17 @@ def test_si_recycling_state_machine_across_updates(config_kwargs,
     recycled_ids = {id(x) for x in _si_bases(env, env.si_X).values()} | {
         id(y) for y in _si_bases(env, env.si_Y).values()}
     consumed_ids = set()
-    original = env_ctm_module.proj_corners
+    original = env_ctm_module.si_proj_corners
 
-    def recording_proj_corners(*args, **kwargs):
+    def recording_si_proj_corners(*args, **kwargs):
         X = kwargs.get('X')
         Y = kwargs.get('Y')
         if X is not None and Y is not None:
             consumed_ids.update((id(X), id(Y)))
         return original(*args, **kwargs)
 
-    monkeypatch.setattr(env_ctm_module, 'proj_corners',
-                        recording_proj_corners)
+    monkeypatch.setattr(env_ctm_module, 'si_proj_corners',
+                        recording_si_proj_corners)
     ages_before = dict(env._si_age)
     env.update_(opts_svd, moves='h', method='2x2 corner', opts_si=opts_si)
 
@@ -393,17 +390,35 @@ def test_si_warmup_and_periodic_correction_schedule(config_kwargs,
     assert set(correction_ages) == {2, 4}
 
 
-def test_si_disabled_path_matches_full_svd(config_kwargs):
+def test_si_disabled_path_matches_full_svd(config_kwargs, monkeypatch):
     """Explicitly disabling SI selects the unchanged full-SVD path."""
     config = yastn.make_config(sym='none', **config_kwargs)
     r0, r1 = _dense_corners_with_spectrum(
         config, (1., .5, .1, 1e-3, 0., 0.))
     opts_svd = {'D_total': 4, 'tol': 0, 'fix_signs': True}
     reference = proj_corners(r0, r1, opts_svd)
-    disabled = proj_corners(
-        r0, r1, opts_svd, opts_si={'enabled': False})
+
+    leg = yastn.Leg(config, s=1, D=(2,))
+    psi = fpeps.Peps(
+        fpeps.SquareLattice(dims=(1, 1), boundary='infinite'),
+        tensors={(0, 0): yastn.rand(
+            config, legs=(leg, leg, leg.conj(), leg.conj()))})
+    env = fpeps.EnvCTM(psi, init=None)
+    site = Site(0, 0)
+    site_b = env.nn_site(site, d='b')
+
+    def forbidden_si(*args, **kwargs):
+        pytest.fail("Disabled SI called si_proj_corners")
+
+    monkeypatch.setattr(env_ctm_module, 'si_proj_corners', forbidden_si)
+    env._set_projector_pair_(site, 'hlb', site_b, 'hlt', r0, r1, opts_svd,
+                             opts_si={'enabled': False})
+    disabled = (env.proj[site].hlb, env.proj[site_b].hlt)
     for actual, expected in zip(disabled, reference):
         assert yastn.allclose(actual, expected)
+    assert not _si_bases(env, env.si_X)
+    assert not _si_bases(env, env.si_Y)
+    assert not env._si_age
 
 
 def test_new_environment_starts_without_si_recycling_state(config_kwargs):

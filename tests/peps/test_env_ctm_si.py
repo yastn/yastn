@@ -22,6 +22,7 @@ from yastn.tn.fpeps.envs._env_ctm_SI_projectors import (
     isometry_expansion,
     isometry_shrinkage,
     si_bases_compatible,
+    si_proj_corners,
     si_projector_svd,
     si_refinement,
     symmetric_isometry_recycle,
@@ -417,9 +418,7 @@ def test_si_projectors_match_full_svd(config_kwargs, sym):
     opts_si = {'enabled': True, 'oversampling': 1,
                'niter': 24, 'tol': 1e-12, 'correct': True}
     full = proj_corners(r0, r1, opts_svd=opts_svd)
-    p0, p1, X, Y = proj_corners(
-        r0, r1, opts_svd=opts_svd, opts_si=opts_si,
-        return_si_state=True)
+    p0, p1, X, Y = si_proj_corners(r0, r1, opts_svd, opts_si)
     assert X.get_shape(axes=1) == 6
     assert Y.get_shape(axes=0) == 6
     assert X.get_shape(axes=1) < min(r0.get_shape(axes=0),
@@ -439,11 +438,10 @@ def test_si_complex_u1_projectors_match_full_svd(config_kwargs):
     opts_svd = {'D_total': 5, 'tol': 0, 'fix_signs': True}
     full = proj_corners(r0, r1, opts_svd=opts_svd)
 
-    p0, p1, X, Y = proj_corners(
-        r0, r1, opts_svd=opts_svd,
-        opts_si={'enabled': True, 'oversampling': 1,
-                 'niter': 24, 'tol': 1e-12, 'correct': True},
-        return_si_state=True)
+    p0, p1, X, Y = si_proj_corners(
+        r0, r1, opts_svd,
+        {'enabled': True, 'oversampling': 1,
+         'niter': 24, 'tol': 1e-12, 'correct': True})
 
     assert X.dtype == Y.dtype == config.backend.DTYPE['complex128']
     assert si_bases_compatible(r0, r1, X, Y)
@@ -528,8 +526,7 @@ def test_si_rejects_mismatched_ctm_corner_halves(config_kwargs):
         with pytest.raises(yastn.YastnError, match=message):
             initialize_si_bases(r0_bad, r1_bad, rank=3)
         with pytest.raises(yastn.YastnError, match=message):
-            proj_corners(r0_bad, r1_bad, opts_svd={'D_total': 3},
-                         opts_si=opts_si)
+            si_proj_corners(r0_bad, r1_bad, {'D_total': 3}, opts_si)
 
     # The precondition belongs to SI alone: the dense path contracts the same
     # halves happily, and must keep doing so.
@@ -545,8 +542,7 @@ def test_si_recycles_after_leg_dimension_change(config_kwargs):
     opts_svd = {'D_total': 4, 'tol': 0}
     opts_si = {'enabled': True, 'oversampling': 2,
                'niter': 24, 'tol': 1e-12, 'correct': True}
-    _, _, X0, Y0 = proj_corners(
-        r0, r1, opts_svd, opts_si=opts_si, return_si_state=True)
+    _, _, X0, Y0 = si_proj_corners(r0, r1, opts_svd, opts_si)
 
     # Change the external spaces while leaving the contracted corner leg valid.
     one = yastn.Leg(config, s=1, D=(1,))
@@ -562,9 +558,8 @@ def test_si_recycles_after_leg_dimension_change(config_kwargs):
     assert not si_bases_compatible(r0_new, r1_new, X0, Y0)
 
     reference = proj_corners(r0_new, r1_new, opts_svd)
-    p0, p1, X1, Y1 = proj_corners(
-        r0_new, r1_new, opts_svd, opts_si=opts_si, X=X0, Y=Y0,
-        return_si_state=True)
+    p0, p1, X1, Y1 = si_proj_corners(
+        r0_new, r1_new, opts_svd, opts_si, X=X0, Y=Y0)
 
     assert si_bases_compatible(r0_new, r1_new, X1, Y1)
     assert X1.get_shape(axes=1) == 6
@@ -587,9 +582,8 @@ def test_si_recycles_after_fusion_history_change(config_kwargs):
     opts_si = {'enabled': True, 'oversampling': 0,
                'niter': 24, 'tol': 1e-12, 'correct': True}
     reference = proj_corners(r0, r1_with_new_history, opts_svd)
-    p0, p1, X_new, Y_new = proj_corners(
-        r0, r1_with_new_history, opts_svd, opts_si=opts_si, X=X, Y=Y,
-        return_si_state=True)
+    p0, p1, X_new, Y_new = si_proj_corners(
+        r0, r1_with_new_history, opts_svd, opts_si, X=X, Y=Y)
 
     assert si_bases_compatible(r0, r1_with_new_history, X_new, Y_new)
     _assert_projectors_equivalent(reference, (p0, p1))
@@ -637,9 +631,8 @@ def test_si_rebuilds_basis_after_hard_fused_subleg_change(config_kwargs, monkeyp
     opts_si = {'enabled': True, 'oversampling': 2,
                'niter': 24, 'tol': 1e-12, 'correct': True}
     reference = proj_corners(r0_new, r1_new, opts_svd)
-    p0, p1, X_new, Y_new = proj_corners(
-        r0_new, r1_new, opts_svd, opts_si=opts_si, X=X, Y=Y,
-        return_si_state=True)
+    p0, p1, X_new, Y_new = si_proj_corners(
+        r0_new, r1_new, opts_svd, opts_si, X=X, Y=Y)
 
     assert len(calls) == 1
     assert si_bases_compatible(r0_new, r1_new, X_new, Y_new)
@@ -661,8 +654,8 @@ def test_si_solve_errors_are_not_retried(config_kwargs, monkeypatch):
 
     monkeypatch.setattr(si_module, 'si_projector_svd', failing)
     with pytest.raises(yastn.YastnError, match='boom'):
-        proj_corners(r0, r1, {'D_total': 3},
-                     opts_si={'enabled': True, 'oversampling': 1}, X=X, Y=Y)
+        si_proj_corners(r0, r1, {'D_total': 3},
+                        {'enabled': True, 'oversampling': 1}, X=X, Y=Y)
     assert len(calls) == 1
 
 

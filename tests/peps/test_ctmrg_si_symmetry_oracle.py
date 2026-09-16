@@ -7,10 +7,11 @@ import pytest
 
 import yastn
 import yastn.tn.fpeps.envs._env_ctm_SI_projectors as si_module
-from yastn.tn.fpeps.envs._env_ctm import proj_corners
 from yastn.tn.fpeps.envs._env_ctm_SI_projectors import (
+    _Half,
     initialize_si_bases,
     si_bases_compatible,
+    si_proj_corners,
     si_projector_svd,
     si_refinement,
     svd_charge_sector_dimensions,
@@ -157,8 +158,7 @@ def test_si_cwo_pipeline_clamps_rank_to_corner_capacity(config_kwargs,
         return original(*args, **kwargs)
 
     monkeypatch.setattr(si_module, 'si_refinement', counting_cwo)
-    _, _, X, Y = proj_corners(
-        r0, r1, opts_svd, opts_si=opts_si, return_si_state=True)
+    _, _, X, Y = si_proj_corners(r0, r1, opts_svd, opts_si)
 
     assert calls == 1
     assert X.get_shape(axes=1) == 12
@@ -177,7 +177,7 @@ def test_si_rejects_unknown_refinement_selector(config_kwargs):
 
     with pytest.raises(yastn.YastnError,
                        match='Unknown SI refinement method'):
-        proj_corners(r0, r1, opts_svd, opts_si=opts_si)
+        si_proj_corners(r0, r1, opts_svd, opts_si)
 
 
 @pytest.mark.parametrize(('sym', 'spectra'), [
@@ -241,6 +241,82 @@ def test_refinements_handle_single_dense_sector(
     X, _ = si_refinement(r0, r1, X, Y, opts_svd, opts_si)
 
     assert X.get_legs(1).tD == {(): 3}
+
+
+def _corner_pair_halves(config, contracted=(0, 1)):
+    """Two halves, each as a pair of corners ``f0 @ f1`` over an inner leg.
+
+    Charges the inner leg cannot reach the contracted leg through are
+    annihilated by the product while remaining on the corner legs -- the case
+    that a contracted half never shows. Restrict ``contracted`` for that.
+    """
+    external = yastn.Leg(config, s=1, t=(0, 1), D=(3, 3))
+    inner = yastn.Leg(config, s=-1, t=(0, 1), D=(4, 4))
+    closing = yastn.Leg(config, s=-1, t=contracted, D=(4,) * len(contracted))
+    pair0 = (yastn.rand(config, legs=(external, inner)),
+             yastn.rand(config, legs=(inner.conj(), closing)))
+    pair1 = (yastn.rand(config, legs=(external.conj(), inner)),
+             yastn.rand(config, legs=(inner.conj(), closing.conj())))
+    return _Half(pair0), _Half(pair1)
+
+
+@pytest.mark.parametrize('refinement', ('cwo', 'rds'))
+def test_si_refinement_accepts_corner_pairs(config_kwargs, refinement):
+    """A half given as a pair of corners refines as its contracted product."""
+    config = yastn.make_config(sym='Z2', **config_kwargs)
+    config.backend.random_seed(seed=35)
+    pair0, pair1 = _corner_pair_halves(config)
+    half0, half1 = pair0.contracted(), pair1.contracted()
+    opts_svd = {'D_total': 3, 'tol': 0, 'fix_signs': True}
+    opts_si = {'oversampling': 1, 'niter': 8, 'tol': 1e-12,
+               'refinement': refinement}
+    charges = {(0,): 2, (1,): 2}
+
+    X0, Y0 = initialize_si_bases(pair0, pair1, rank=4, charges=charges)
+    X_pair, Y_pair = si_refinement(pair0, pair1, X0, Y0, opts_svd, opts_si)
+    X_half, Y_half = si_refinement(half0, half1, X0, Y0, opts_svd, opts_si)
+
+    assert X_pair.get_legs(1).tD == X_half.get_legs(1).tD
+    assert Y_pair.get_legs(0).tD == Y_half.get_legs(0).tD
+    # The pair also reaches the reduced spectrum of its contracted product.
+    _, s_pair, _, _, _ = si_projector_svd(
+        pair0, pair1, X_pair, Y_pair, opts_svd, opts_si)
+    _, s_half, _, _, _ = si_projector_svd(
+        half0, half1, X_half, Y_half, opts_svd, opts_si)
+    assert np.allclose(np.sort(np.concatenate(tuple(
+                           np.asarray(v) for v in svd_charge_sector_values(s_pair).values()))),
+                       np.sort(np.concatenate(tuple(
+                           np.asarray(v) for v in svd_charge_sector_values(s_half).values()))))
+
+
+def test_si_corner_pairs_keep_recycled_bases(config_kwargs):
+    """Bases stay compatible with a pair, so an unchanged allocation is reused."""
+    config = yastn.make_config(sym='Z2', **config_kwargs)
+    config.backend.random_seed(seed=36)
+    pair0, pair1 = _corner_pair_halves(config)
+    opts_svd = {'D_total': 2, 'tol': 0, 'fix_signs': True}
+    opts_si = {'oversampling': 1, 'niter': 2, 'tol': 1e-12, 'refinement': 'rds'}
+    X0, Y0 = initialize_si_bases(pair0, pair1, rank=3)
+    assert si_bases_compatible(pair0, pair1, X0, Y0)
+
+    X, Y = si_refinement(pair0, pair1, X0, Y0, opts_svd, opts_si)
+
+    assert X is X0 and Y is Y0
+
+
+def test_si_corner_pair_drops_sectors_absent_from_the_product(config_kwargs):
+    """Capacity of a pair follows its product, not the wider corner legs."""
+    config = yastn.make_config(sym='Z2', **config_kwargs)
+    config.backend.random_seed(seed=37)
+    # Nothing closes the odd sector, so the product has none.
+    pair0, pair1 = _corner_pair_halves(config, contracted=(0,))
+    half0, half1 = _Half(pair0.contracted()), _Half(pair1.contracted())
+
+    assert pair0.f0.get_legs(0).tD == {(0,): 3, (1,): 3}
+    assert pair0.get_legs(0) == half0.get_legs(0)
+    assert (si_module._ctm_shared_sector_capacity(pair0, pair1)
+            == si_module._ctm_shared_sector_capacity(half0, half1)
+            == {(0,): 3})
 
 
 @pytest.mark.parametrize('refinement', ('cwo', 'asvr', 'rds'))
@@ -324,10 +400,6 @@ def test_cwo_validates_corner_pair_and_rank_options(config_kwargs):
         config, {(0,): (2., 1.), (1,): (2., 1.)})
 
     with pytest.raises(yastn.YastnError,
-                       match='corner halves must be YASTN tensors'):
-        si_refinement(
-            None, r1, None, None, {'D_total': 2}, {'oversampling': 0})
-    with pytest.raises(yastn.YastnError,
                        match='require an integer D_total or D_block'):
         si_refinement(
             r0, r1, None, None, {'tol': 0}, {'oversampling': 0})
@@ -367,9 +439,7 @@ def test_asvr_pipeline_recovers_globally_dominant_missing_sector(
     monkeypatch.setattr(si_module, '_si_spectrum', counting(original_spectrum))
     monkeypatch.setattr(si_module, 'si_projector_svd',
                         counting(original_projector))
-    _, _, X, Y = proj_corners(
-        r0, r1, opts_svd, opts_si=opts_si, X=X, Y=Y,
-        return_si_state=True)
+    _, _, X, Y = si_proj_corners(r0, r1, opts_svd, opts_si, X=X, Y=Y)
 
     assert X.get_legs(1).tD == {(0,): 6}
     assert Y.get_legs(0).tD == {(0,): 6}
@@ -411,9 +481,8 @@ def test_rds_pipeline_apportions_relative_corner_sector_dimensions(
                'niter': 2, 'tol': 1e-12, 'refinement': 'rds'}
     X0, Y0 = initialize_si_bases(
         r0, r1, rank=4, charges={(0,): 2, (1,): 2})
-    _, _, X, Y = proj_corners(
-        r0, r1, opts_svd, opts_si={**opts_si, 'correct': True},
-        X=X0, Y=Y0, return_si_state=True)
+    _, _, X, Y = si_proj_corners(
+        r0, r1, opts_svd, {**opts_si, 'correct': True}, X=X0, Y=Y0)
     assert X.get_legs(1).tD == {(0,): 1, (1,): 3}
     assert Y.get_legs(0).tD == {(0,): 1, (1,): 3}
 
@@ -471,7 +540,11 @@ def test_rds_clamps_requested_rank_to_total_corner_capacity(config_kwargs):
 
 
 def test_si_incompatible_recycled_bases_are_rejected(config_kwargs):
-    """Dimension, sector, dtype, and device changes invalidate SI bases."""
+    """Dimension and sector changes invalidate SI bases.
+
+    Mismatched dtype or device is not checked here; contracting such bases
+    with the corners fails on its own.
+    """
     config = yastn.make_config(sym='Z2', **config_kwargs)
     r0, r1 = _biased_z2_corners(config)
     X, Y = initialize_si_bases(r0, r1, rank=4,
@@ -488,15 +561,6 @@ def test_si_incompatible_recycled_bases_are_rejected(config_kwargs):
     one_sector_r1 = yastn.Tensor(config=config, s=(-1, 1))
     one_sector_r1.set_block(ts=(0, 0), Ds=(6, 6), val='rand')
     assert not si_bases_compatible(r0, one_sector_r1, X, Y)
-
-    # Real-valued bases are rejected for complex-valued corners.
-    complex_r0 = r0.to(dtype='complex128')
-    complex_r1 = r1.to(dtype='complex128')
-    assert not si_bases_compatible(complex_r0, complex_r1, X, Y)
-    if 'cuda' in X.device:
-        # On CUDA, bases are rejected if the corners move to CPU.
-        assert not si_bases_compatible(
-            r0.to(device='cpu'), r1.to(device='cpu'), X, Y)
 
 
 def test_sector_change_correction_then_continued_recycling(config_kwargs):

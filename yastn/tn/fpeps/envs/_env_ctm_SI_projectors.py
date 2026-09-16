@@ -41,6 +41,11 @@ class _Half:
     Hides whether a half is given as a single tensor or as a pair of enlarged
     corners whose product it is. ``_Half(r)`` returns the matching
     specialization, and passes an already built half through.
+
+    Specializations provide ``get_legs(axis)``, ``config``, ``contracted()``,
+    and multiplication of the half with a matrix: ``mm`` for ``self @ M``,
+    together with ``mm_T``, ``mm_H`` and ``mm_conj`` for the transposed,
+    hermitian-conjugated and conjugated half.
     """
 
     def __new__(cls, r):
@@ -49,14 +54,6 @@ class _Half:
         if cls is _Half:
             cls = _HalfTensor if isinstance(r, Tensor) else _HalfPair
         return super().__new__(cls)
-
-    def apply_corner_product(self, other, X):
-        r"""Apply ``A = self @ other.T`` to ``X``, indexed as the leg 0 of ``other``."""
-        return self._apply(other._apply_T(X))
-
-    def apply_corner_product_h(self, other, Z):
-        r"""Apply ``A.H``, with ``A = self @ other.T``, to ``Z`` indexed as the leg 0 of ``self``."""
-        return other._apply_conj(self._apply_H(Z))
 
 
 class _HalfTensor(_Half):
@@ -77,16 +74,16 @@ class _HalfTensor(_Half):
     def contracted(self):
         return self.tensor
 
-    def _apply(self, M):  # self @ M
+    def mm(self, M):  # self @ M
         return tensordot(self.tensor, M, axes=(1, 0))
 
-    def _apply_T(self, M):  # self.T @ M
+    def mm_T(self, M):  # self.T @ M
         return tensordot(self.tensor, M, axes=(0, 0))
 
-    def _apply_H(self, M):  # self.H @ M
+    def mm_H(self, M):  # self.H @ M
         return tensordot(self.tensor.conj(), M, axes=(0, 0))
 
-    def _apply_conj(self, M):  # self.conj() @ M
+    def mm_conj(self, M):  # self.conj() @ M
         return tensordot(self.tensor.conj(), M, axes=(1, 0))
 
 
@@ -146,16 +143,16 @@ class _HalfPair(_Half):
             self._contracted = self.f0 @ self.f1
         return self._contracted
 
-    def _apply(self, M):  # self @ M
+    def mm(self, M):  # self @ M
         return tensordot(self.f0, tensordot(self.f1, M, axes=(1, 0)), axes=(1, 0))
 
-    def _apply_T(self, M):  # self.T @ M
+    def mm_T(self, M):  # self.T @ M
         return tensordot(self.f1, tensordot(self.f0, M, axes=(0, 0)), axes=(0, 0))
 
-    def _apply_H(self, M):  # self.H @ M
+    def mm_H(self, M):  # self.H @ M
         return tensordot(self.f1.conj(), tensordot(self.f0.conj(), M, axes=(0, 0)), axes=(0, 0))
 
-    def _apply_conj(self, M):  # self.conj() @ M
+    def mm_conj(self, M):  # self.conj() @ M
         return tensordot(self.f0.conj(), tensordot(self.f1.conj(), M, axes=(1, 0)), axes=(1, 0))
 
 
@@ -525,7 +522,10 @@ def si_refinement(r0, r1, X, Y, opts_svd, opts_si):
     This is the single dispatch point for SI charge-sector refinement. Each
     strategy returns a charge mapping; basis resizing is centralized here so
     every method retains compatible columns in its public ``(X, Y)`` result.
+
+    Each half is either a tensor or a pair of enlarged corners; see :class:`_Half`.
     """
+    r0, r1 = _Half(r0), _Half(r1)
     _validate_ctm_corner_pair(r0, r1)
     refinement = opts_si.get('refinement', 'cwo')
     refinements = {
@@ -834,14 +834,13 @@ def _recycle_si_bases(r0, r1, X, Y, charge_mapping):
 def _si_reduced_svd(r0, r1, X, Y, opts_si, spec_only=False):
     r"""Subspace-iterate the bases and decompose the reduced ``rho = Y A X``.
 
+    Halves ``r0`` and ``r1`` are :class:`_Half` instances, built by the caller.
+
     Returns the converged bases together with the decomposition
     ``us, sall, vs`` of ``rho``. Everything here acts either on the small
-    auxiliary legs or through :meth:`_Half.apply_corner_product`, so the full
-    ``r0 @ r1.T`` is never formed.
+    auxiliary legs or through the ``mm`` products of the halves, so the full
+    ``A = r0 @ r1.T`` is never formed.
     """
-    # Halves reach here already built by si_proj_corners, or as tensors from
-    # si_projector_svd and its direct callers.
-    r0, r1 = _Half(r0), _Half(r1)
     _validate_ctm_corner_pair(r0, r1)
     niter = opts_si.get('niter', 5)
     tol = opts_si.get('tol', 1e-3)
@@ -849,13 +848,14 @@ def _si_reduced_svd(r0, r1, X, Y, opts_si, spec_only=False):
 
     with nvtx_range("_si_reduced_svd SI"):
         for _ in range(niter):
-            AX = r0.apply_corner_product(r1, X)
-            X_next = r0.apply_corner_product_h(r1, AX)
+            # A = r0 @ r1.T is applied as r0.mm(r1.mm_T(.)), and A.H as r1.mm_conj(r0.mm_H(.)).
+            AX = r0.mm(r1.mm_T(X))
+            X_next = r1.mm_conj(r0.mm_H(AX))
             X, _ = qr(X_next, axes=(0, 1), sQ=X.s[1])
 
             Yh = Y.H
-            AHY = r0.apply_corner_product_h(r1, Yh)
-            Yh_next = r0.apply_corner_product(r1, AHY)
+            AHY = r1.mm_conj(r0.mm_H(Yh))
+            Yh_next = r0.mm(r1.mm_T(AHY))
             Yh, _ = qr(Yh_next, axes=(0, 1), sQ=Yh.s[1])
 
             error = max(si_subspace_error(X, X_old),
@@ -866,7 +866,7 @@ def _si_reduced_svd(r0, r1, X, Y, opts_si, spec_only=False):
                 break
             X_old, Yh_old = X, Yh
 
-    rho = Y @ r0.apply_corner_product(r1, X)
+    rho = Y @ r0.mm(r1.mm_T(X))
     if spec_only:
         sall= rho.svd(axes=(0, 1), sU=rho.s[1], fix_signs=True, compute_uv=False)
         return X, Y, None, sall, None
@@ -886,7 +886,11 @@ def _si_spectrum(r0, r1, X, Y, opts_si):
 @nsys_profile("si_projector_svd")
 def si_projector_svd(r0, r1, X, Y, opts_svd, opts_si,
                      return_spectrum=False, cutoff=0):
-    """Approximate the SVD of ``r0 @ r1.T`` using recycled subspaces."""
+    """Approximate the SVD of ``r0 @ r1.T`` using recycled subspaces.
+
+    Each half is either a tensor or a pair of enlarged corners; see :class:`_Half`.
+    """
+    r0, r1 = _Half(r0), _Half(r1)
     X, Y, us, sall, vs = _si_reduced_svd(r0, r1, X, Y, opts_si)
 
     X_new = X @ vs.H
@@ -898,8 +902,14 @@ def si_projector_svd(r0, r1, X, Y, opts_svd, opts_si,
         'tol', 'tol_block', 'D_block', 'D_total', 'largest_gap',
         'eps_multiplet', 'hermitian', 'mask_f') if k in opts_svd}
     mask = truncation_mask(sall, **trunc_opts)
-
     u, s, v = mask.apply_mask(u, sall, v, axes=(-1, 0, 0)) 
+    
+    # Y_new_trunc, s, X_new_trunc = mask.apply_mask(Y_new, sall, X_new, axes=(0, 0, -1)) 
+    # invsqrt_s= s.rsqrt(cutoff=cutoff)
+    # p0= r1.mm_T(X_new_trunc @ invsqrt_s).unfuse_legs(axes=0)      # = r1.T @ ((X @ vs.H) @ invs)  
+    # p1= r0.mm_T(Y_new_trunc.T @ invsqrt_s).unfuse_legs(axes=0)    # = r0.T @ ((Y @ us.H) @ invs)
+    # result= (p1, s, p0, X_new, Y_new)
+
     result = (u, s, v, X_new, Y_new)
     return result + (sall,) if return_spectrum else result
 
@@ -940,11 +950,16 @@ def si_proj_corners(r0, r1, opts_svd, opts_si, X=None, Y=None, cutoff=0):
     if opts_si.get('correct', False):
         X, Y = si_refinement(r0, r1, X, Y, opts_svd, opts_si)
 
-    r0, r1 = r0.contracted(), r1.contracted()
-    res= si_projector_svd(r0, r1, X, Y, opts_svd, opts_si)
+    res= si_projector_svd(r0, r1, X, Y, opts_svd, opts_si, cutoff=cutoff)
     u, s, v, X_new, Y_new= res[:5]
 
+    # p0 = v
+    # p1 = u
+    # 
+    # r0, r1 = r0.contracted(), r1.contracted()
     rs = s.rsqrt(cutoff=cutoff)
-    p0 = tensordot(r1, (rs @ v).conj(), axes=(0, 1)).unfuse_legs(axes=0)
-    p1 = tensordot(r0, (u @ rs).conj(), axes=(0, 0)).unfuse_legs(axes=0)
+    # p0 = tensordot(r1, (rs @ v).conj(), axes=(0, 1)).unfuse_legs(axes=0)
+    # p1 = tensordot(r0, (u @ rs).conj(), axes=(0, 0)).unfuse_legs(axes=0)
+    p0= r1.mm_T( (rs @ v).H ).unfuse_legs(axes=0)
+    p1= r0.mm_T( (u @ rs).conj() ).unfuse_legs(axes=0)
     return p0, p1, X_new, Y_new
