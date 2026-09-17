@@ -55,6 +55,12 @@ def test_make_config(config_kwargs):
     """ Parameters in yastn.make_config(). """
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     assert config_U1.sym.SYM_ID == 'U1'
+    config_SU2 = yastn.make_config(sym='SU2', **config_kwargs)
+    assert config_SU2.sym.SYM_ID == 'SU2'
+    assert config_SU2.sym.IS_ABELIAN is False
+    config_SU2xU1 = yastn.make_config(sym='SU2xU1', **config_kwargs)
+    assert config_SU2xU1.sym.SYM_ID == 'SU2xU1'
+    assert config_SU2xU1.sym.IS_ABELIAN is False
 
     with pytest.raises(yastn.YastnError):
         yastn.make_config(sym="random_name")

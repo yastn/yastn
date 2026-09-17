@@ -23,6 +23,9 @@ import yastn.sym.sym_none as sym_none
 import yastn.sym.sym_U1xU1 as sym_U1xU1
 import yastn.sym.sym_Z2xU1 as sym_Z2xU1
 import yastn.sym.sym_U1xU1xZ2 as sym_U1xU1xZ2
+import yastn.sym.sym_SU2 as sym_SU2
+import yastn.sym.sym_SU2xU1 as sym_SU2xU1
+from yastn.sym import sym_nonabelian
 
 
 def test_symmetry():
@@ -157,6 +160,51 @@ def test_add_charges():
     assert sym_Z2.conj_charge((1,)) == (1,)
     assert sym_Z3.conj_charge((1,)) == (2,)
     assert sym_U1xU1xZ2.conj_charge((-1, 2, 0)) == (1, -2, 0)
+
+
+def test_su2_category_rules():
+    assert issubclass(sym_SU2, sym_nonabelian)
+    assert str(sym_SU2) == 'SU2'
+    assert sym_SU2.IS_ABELIAN is False
+    assert sym_SU2.zero() == (0,)
+    assert sym_SU2.conj_charge((3,)) == (3,)
+    assert sym_SU2.fusion_outcomes((1,), (1,)) == ((0,), (2,))
+    outcomes = sym_SU2.fusion_outcomes((1,), (1,), (1,), (1,))
+    assert outcomes.count((0,)) == 2
+    assert sym_SU2.fusion_paths(((1,),) * 4, (0,)) == ((0, 1), (2, 1))
+    assert sym_SU2.fusion_multiplicity(((1,),) * 4, (0,)) == 2
+    assert sym_SU2.irrep_dimension((3,)) == 4
+    with pytest.raises(TypeError, match='branches'):
+        sym_SU2.fuse(np.ones((1, 2, 1), dtype=np.int64), (1, 1), 1)
+    with pytest.raises(ValueError, match='non-negative'):
+        sym_SU2.fusion_outcomes((-1,), (1,))
+
+
+def test_su2xu1_category_rules():
+    assert issubclass(sym_SU2xU1, sym_nonabelian)
+    assert str(sym_SU2xU1) == 'SU2xU1'
+    assert sym_SU2xU1.zero() == (0, 0)
+    assert sym_SU2xU1.conj_charge((3, -2)) == (3, 2)
+    assert sym_SU2xU1.fusion_outcomes((1, 2), (1, -1)) == ((0, 1), (2, 1))
+    assert sym_SU2xU1.fusion_paths(((1, 2), (1, -1), (1, 0), (1, 0)), (0, 1)) == (
+        ((0, 1), (1, 1)), ((2, 1), (1, 1)))
+    assert sym_SU2xU1.signed_fusion_outcomes(((1, 2), (1, -1)), (1, -1)) == ((0, 3), (2, 3))
+    assert sym_SU2xU1.irrep_dimension((3, 99)) == 4
+    assert sym_SU2xU1.add_charges((0, 2), (0, -1), signatures=(1, -1)) == (0, 3)
+    with pytest.raises(TypeError, match='branches'):
+        sym_SU2xU1.fuse(np.array([[[1, 2], [1, -1]]]), (1, 1), 1)
+
+
+def test_su2_cg_and_f_move_are_unitary():
+    rt2 = np.sqrt(2.)
+    assert np.isclose(sym_SU2.clebsch_gordan(1, 1, 1, -1, 0, 0), 1 / rt2)
+    assert np.isclose(sym_SU2.clebsch_gordan(1, -1, 1, 1, 0, 0), -1 / rt2)
+
+    # Recoupling three spin halves in the total spin-half sector.
+    channels = (0, 2)
+    F = np.array([[sym_SU2.f_symbol(1, 1, 1, 1, left, right)
+                   for right in channels] for left in channels])
+    assert np.allclose(F @ F.T, np.eye(2), atol=1e-14)
 
 
 if __name__ == '__main__':

@@ -20,7 +20,8 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ._auxiliary import _struct, get_blocks, find_matching_indices, _compress_slices, get_trimmed_struct, convert_to_tuples_and_slices
+from ._auxiliary import _struct, get_blocks, find_matching_indices, find_matching_block_keys
+from ._auxiliary import _compress_slices, get_trimmed_struct, convert_to_tuples_and_slices
 from ._legs import legs_union
 from ._merging import _embed_tensor
 from ._tests import YastnError, _test_can_be_combined, _unpack_trans_test_axes_pair
@@ -149,7 +150,8 @@ def _meta_addition(sym, *structs):
     metas = []
     for struct in structs:
         bl_old = get_blocks(sym, struct)
-        ind_n, ind_o = find_matching_indices(bl_new.t, bl_old.t)
+        ind_n, ind_o = find_matching_block_keys(bl_new.t, bl_new.channels,
+                                                bl_old.t, bl_old.channels)
         meta = np.column_stack([bl_new.slc[ind_n], bl_old.slc[ind_o]])
         if struct.isdiag:
             dd = np.minimum(meta[:, 1] - meta[:, 0], meta[:, 3] - meta[:, 2])

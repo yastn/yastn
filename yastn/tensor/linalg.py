@@ -661,6 +661,28 @@ def truncation_mask(S, which='LR',
         D_total = min(D_total, backend.sum_elements(above_tol).item())
     #
     inds = backend.argsort_which(S.data, which)
+
+    # For a non-Abelian spectrum one reduced singular value represents a full
+    # irrep.  D_total is consistently interpreted as the dense dimension, so
+    # a value in sector j consumes dim(j), never a fraction of a multiplet.
+    if not getattr(S.config.sym, 'IS_ABELIAN', True) and D_total < float('inf'):
+        if largest_gap or eps_multiplet is not None:
+            raise YastnError("SU2 truncation already preserves exact irreps; largest_gap and eps_multiplet are not applicable.")
+        weights = np.concatenate([
+            np.full(D, S.config.sym.irrep_dimension(t), dtype=np.int64)
+            for t, D in zip(S.struct.legs[0].t, S.struct.legs[0].D)
+        ])
+        order = np.asarray(backend.to_numpy(inds), dtype=np.int64)
+        initially_allowed = np.asarray(backend.to_numpy(Smask.data), dtype=bool)
+        keep = np.zeros(len(weights), dtype=bool)
+        used = 0
+        for index in order:
+            cost = int(weights[index])
+            if initially_allowed[index] and used + cost <= D_total:
+                keep[index] = True
+                used += cost
+        Smask._data[:] = backend.to_tensor(keep, dtype='bool', device=S.device)
+        return Smask
     #
     if largest_gap and D_total < len(S.data):
         s = ff(S._data[inds[D_total - 1:]])

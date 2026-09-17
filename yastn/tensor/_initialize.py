@@ -25,7 +25,7 @@ from ._auxiliary import _config, get_blocks, get_trimmed_struct, find_index, fin
 from ._auxiliary import convert_to_tuples_and_slices, _compress_slices
 from ._yastnerror import YastnError
 from ..backend import backend_np, import_backend
-from ..sym import sym_none, sym_U1, sym_Z2, sym_Z3, sym_U1xU1, sym_U1xU1xZ2
+from ..sym import sym_none, sym_U1, sym_Z2, sym_Z3, sym_U1xU1, sym_U1xU1xZ2, sym_SU2, sym_SU2xU1
 
 __all__ = ['make_config']
 
@@ -36,7 +36,9 @@ _syms = {"dense": sym_none,
          "Z2": sym_Z2,
          "Z3": sym_Z3,
          "U1xU1": sym_U1xU1,
-         "U1xU1xZ2": sym_U1xU1xZ2}
+         "U1xU1xZ2": sym_U1xU1xZ2,
+         "SU2": sym_SU2,
+         "SU2xU1": sym_SU2xU1}
 
 
 # def make_config(backend=backend_np, sym=sym_none, default_device='cpu',
@@ -59,11 +61,11 @@ def make_config(**kwargs) -> _config:
         Defaults to NumPy backend.
 
     sym : symmetry module or compatible object or str
-        Specify abelian symmetry. To see how YASTN defines symmetries,
+        Specify symmetry. To see how YASTN defines symmetries,
         see :class:`yastn.sym.sym_abelian`.
         Defaults to ``yastn.sym.sym_none``, effectively a dense tensor.
         For predefined symmetries, takes string input from
-        'none' (or 'dense'), 'Z2', 'Z3', 'U1', 'U1xU1', 'U1xU1xZ2'.
+        'none' (or 'dense'), 'Z2', 'Z3', 'U1', 'U1xU1', 'U1xU1xZ2', 'SU2', 'SU2xU1'.
 
     default_device : str
         Tensors can be stored on various devices as supported by ``backend``
@@ -130,7 +132,7 @@ def make_config(**kwargs) -> _config:
         try:
             kwargs["sym"] = _syms[kwargs["sym"]]
         except KeyError:
-            raise YastnError("sym encoded as string only supports: 'dense', 'Z2', 'Z3', 'U1', 'U1xU1', 'U1xU1xZ2'.")
+            raise YastnError("sym encoded as string only supports: 'dense', 'Z2', 'Z3', 'U1', 'U1xU1', 'U1xU1xZ2', 'SU2', 'SU2xU1'.")
 
     if kwargs.get("lazy_threshold", None) is None:
         if kwargs["backend"].BACKEND_ID in ["torch_cutensor",]:

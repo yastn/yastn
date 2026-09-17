@@ -29,7 +29,8 @@ from ._yastnerror import YastnError
 from .._profile import nsys_profile
 
 __all__ = ['_config', '_struct', 'get_blocks', 'hash_blocks', 'sign_canonical_order', 'swap_charges',
-           'find_matching_indices', 'HashedMask', '_compress_slices', 'convert_to_tuples_and_slices']
+           'find_matching_indices', 'find_matching_block_keys', 'HashedMask', '_compress_slices',
+           'convert_to_tuples_and_slices']
 
 
 class _config(NamedTuple):
@@ -91,12 +92,15 @@ class _struct(NamedTuple):
     n: tuple = ()  # tensor charge
     isdiag: bool = False  # isdiag
     mask: HashedMask = HashedMask(None)
+    channels: tuple = ()  # optional fusion-channel label per unmasked block
 
     def replace(self, **kwargs):
         if 'mask' in kwargs and not isinstance(kwargs['mask'], HashedMask):
             kwargs['mask'] = HashedMask(kwargs['mask'])
         if 'legs' in kwargs and not isinstance(kwargs['legs'], tuple):
             kwargs['legs'] = tuple(kwargs['legs'])
+        if 'channels' in kwargs and not isinstance(kwargs['channels'], tuple):
+            kwargs['channels'] = tuple(kwargs['channels'])
         return self._replace(**kwargs)
 
     def mask_from_ind(self, nblocks, ind):
@@ -107,21 +111,23 @@ class _struct(NamedTuple):
     def to_dict(self):
         r""" Serializes _struct to dictionary. """
         return {'type': type(self).__name__,
-                'dict_ver': 1,
+                'dict_ver': 2,
                 'legs': tuple(leg.to_dict() for leg in self.legs),
                 'n': self.n,
                 'isdiag': self.isdiag,
-                'mask': self.mask.array}
+                'mask': self.mask.array,
+                'channels': self.channels}
 
     @classmethod
     def from_dict(cls, d):
         r""" De-serializes _struct from the dictionary ``d``. """
-        if d['dict_ver'] == 1:
+        if d['dict_ver'] in (1, 2):
             if cls.__name__ != d['type']:
                 raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
             legs = tuple(LegBasic.from_dict(leg) for leg in d['legs'])
             mask = HashedMask(d['mask'])
-            return cls(legs=legs, n=d['n'], isdiag=d['isdiag'], mask=mask)
+            return cls(legs=legs, n=d['n'], isdiag=d['isdiag'], mask=mask,
+                       channels=tuple(d.get('channels', ())))
 
     def is_consistent(self):
         assert isinstance(self, _struct)
@@ -130,6 +136,9 @@ class _struct(NamedTuple):
         assert isinstance(self.n, tuple)
         assert all(isinstance(x, int) for x in self.n)
         assert isinstance(self.isdiag, bool)
+        assert isinstance(self.channels, tuple)
+        assert all(isinstance(path, tuple) and all(isinstance(x, int) for x in path)
+                   for path in self.channels)
         return True
 
 
@@ -140,6 +149,7 @@ class _blocks(NamedTuple):
     size: int = 0  # data size
     nblocks: int = 0  # number of blocks
     coords: np.array = None  # list of block coordinates
+    channels: tuple = ()  # fusion-channel label included in block identity
 
 
 def hash_blocks(bl, out=str) -> str | bytes:
@@ -283,9 +293,31 @@ def get_blocks(sym, struct) -> _blocks:
     taxes = tuple(leg.t for leg in struct.legs)
     tblocks, iblocks = get_blocks_charges_all(sym, taxes, saxes, struct.n)
 
+    if getattr(sym, 'IS_ABELIAN', True):
+        channels = ((),) * len(tblocks)
+    else:
+        expanded_t, expanded_i, channels = [], [], []
+        for charges, coords in zip(tblocks, iblocks):
+            paths = sym.signed_fusion_paths(tuple(map(tuple, charges)), struct.n, saxes)
+            for path in paths:
+                expanded_t.append(charges)
+                expanded_i.append(coords)
+                # Flatten product-symmetry intermediate charges into a stable key.
+                channels.append(tuple(x for charge in path
+                                      for x in (charge if isinstance(charge, tuple) else (charge,))))
+        tblocks = np.asarray(expanded_t, dtype=np.int64).reshape(-1, len(struct.legs), sym.NSYM)
+        iblocks = np.asarray(expanded_i, dtype=np.int64).reshape(-1, len(struct.legs))
+        channels = tuple(channels)
+        if struct.channels:
+            allowed = set(struct.channels)
+            keep = np.fromiter((path in allowed for path in channels), dtype=bool, count=len(channels))
+            tblocks, iblocks = tblocks[keep], iblocks[keep]
+            channels = tuple(path for path, flag in zip(channels, keep) if flag)
+
     if struct.mask.array is not None:
         tblocks = tblocks[struct.mask.array]
         iblocks = iblocks[struct.mask.array]
+        channels = tuple(path for path, keep in zip(channels, struct.mask.array) if keep)
 
     Dblocks = np.empty(iblocks.shape, dtype=np.int64)
     for i, leg in enumerate(struct.legs):
@@ -300,7 +332,8 @@ def get_blocks(sym, struct) -> _blocks:
     slices[1:, 0] = slices[:-1, 1]
     size = np.sum(Dp, dtype=np.int64).item()
     #
-    return _blocks(t=tblocks, D=Dblocks, slc=slices, size=size, nblocks=nblocks, coords=iblocks)
+    return _blocks(t=tblocks, D=Dblocks, slc=slices, size=size, nblocks=nblocks,
+                   coords=iblocks, channels=channels)
 
 
 @nsys_profile
@@ -377,6 +410,9 @@ def get_blocks_charges_all(sym, taxes: Sequence[Sequence[int]], s: Sequence[int]
     ------
     taxes: List of lists of charges for each leg
     """
+    if not getattr(sym, 'IS_ABELIAN', True):
+        return _get_blocks_charges_nonabelian(sym, taxes, s, n)
+
     _SPLIT_MIN = 4096
     nsym = sym.NSYM
     ndim = len(taxes)
@@ -432,6 +468,27 @@ def get_blocks_charges_all(sym, taxes: Sequence[Sequence[int]], s: Sequence[int]
         tblocks[:, :h], tblocks[:, h:] = lt[lsel], rt[rsel]
 
     return tblocks, iblocks
+
+
+def _get_blocks_charges_nonabelian(sym, taxes, signatures, n):
+    """Enumerate irrep combinations admitted by a non-Abelian selection rule.
+
+    Outer multiplicities belong to the tensor fusion tree and are intentionally
+    not duplicated here; this routine only selects external-leg sectors.
+    """
+    nsym, ndim = sym.NSYM, len(taxes)
+    sizes = tuple(len(tax) for tax in taxes)
+    if 0 in sizes:
+        return (np.zeros((0, ndim, nsym), dtype=np.int64),
+                np.zeros((0, ndim), dtype=np.int64))
+    iblocks = _product_indices(sizes)
+    tblocks = np.empty((len(iblocks), ndim, nsym), dtype=np.int64)
+    for axis, tax in enumerate(taxes):
+        values = np.asarray(tax, dtype=np.int64).reshape(len(tax), nsym)
+        tblocks[:, axis, :] = values[iblocks[:, axis]]
+    keep = np.fromiter((sym.can_fuse(tuple(map(tuple, row)), n, signatures=signatures) for row in tblocks),
+                       dtype=bool, count=len(tblocks))
+    return tblocks[keep], iblocks[keep]
 
 
 def find_index(tset, tt, sorted=True):
@@ -545,6 +602,27 @@ def find_matching_indices(tset1, tset2, both=True):
     else:
         ind1 = ind2 = np.array([], dtype=np.int64)
     return (ind1, ind2) if both else ind1
+
+
+def find_matching_block_keys(tset1, channels1, tset2, channels2, both=True):
+    """Match block identities ``(charges, fusion_channel)``.
+
+    Empty channel labels use the original optimized matcher exactly.  The
+    explicit-channel path intentionally favors clarity; channel-bearing block
+    counts are normally small compared with dense block dimensions.
+    """
+    channels1, channels2 = tuple(channels1), tuple(channels2)
+    if not any(channels1) and not any(channels2):
+        return find_matching_indices(tset1, tset2, both=both)
+    rs1, rs2 = len(tset1), len(tset2)
+    lookup = {(tuple(tset1[i].reshape(-1).tolist()), channels1[i]): i for i in range(rs1)}
+    pairs = [(lookup[(tuple(tset2[j].reshape(-1).tolist()), channels2[j])], j)
+             for j in range(rs2)
+             if (tuple(tset2[j].reshape(-1).tolist()), channels2[j]) in lookup]
+    ind1 = np.asarray([x[0] for x in pairs], dtype=np.int64)
+    if both:
+        return ind1, np.asarray([x[1] for x in pairs], dtype=np.int64)
+    return ind1
 
 
 def convert_to_tuples_and_slices(arr):

@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, NamedTuple
 import numpy as np
 
 from ._auxiliary import _encode_rows_shared, _row_keys_pair, _struct, _clear_axes, _unpack_axes, sign_canonical_order, _compress_slices
-from ._auxiliary import find_matching_indices, argsort_t, get_blocks, hash_blocks, get_trimmed_struct, convert_to_tuples_and_slices
+from ._auxiliary import find_matching_indices, find_matching_block_keys, argsort_t, get_blocks, hash_blocks, get_trimmed_struct, convert_to_tuples_and_slices
 from ._merging import _unfuse_blocks, _fuse_blocks, _mask_tensors_leg_intersection, _meta_mask
 from ._tests import _test_can_be_combined, _unpack_trans_test_axes_pair
 from ._yastnerror import YastnError
@@ -123,10 +123,17 @@ def tensordot(a, b, axes, conj=(0, 0), lazy_threshold=None) -> 'Tensor':
     if lazy_threshold is None:
         lazy_threshold = a.config.lazy_threshold
 
+    # A branching fusion category cannot use the Abelian reshape/fuse kernels:
+    # they assume one effective charge per tuple of input charges.  The
+    # no-fusion kernel works directly on reduced blocks and is the common
+    # extension point for SU(2).
+    nonabelian = not getattr(a.config.sym, 'IS_ABELIAN', True)
     if active_flop_tracer() is not None:  # tracing forces the metadata GEMM-decomposition path
         data, struct_out = _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b, lazy_threshold)
     elif a.config.backend.BACKEND_ID == 'torch_cutensor' and all(0 < x < 33 for x in (a.ndim_n, b.ndim_n)) and len(hfs_c)<33:
         data, struct_out = _tensordot_cutensor(a, b, nout_a, nin_a, nin_b, nout_b, lazy_threshold)
+    elif nonabelian:
+        data, struct_out = _tensordot_nf(a, b, nout_a, nin_a, nin_b, nout_b, lazy_threshold)
     elif a.config.tensordot_policy == 'fuse_to_matrix':
         data, struct_out = _tensordot_f2m(a, b, nout_a, nin_a, nin_b, nout_b, lazy_threshold)
     elif a.config.tensordot_policy == 'fuse_contracted':
@@ -444,7 +451,33 @@ def _meta_tensordot_nf(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b, la
     else:
         slc_c = bl_c.slc[ind_c]
     #
-    meta = np.column_stack([slc_c[inv_c], Daop[ind_a], Dbop[ind_b], ind_a, ind_b])
+    if not getattr(sym, 'IS_ABELIAN', True):
+        tn_pairs = np.concatenate((bl_a.t[ind_a][:, nout_a, :],
+                                   bl_b.t[ind_b][:, nout_b, :]), axis=1)
+        proposed = tuple(tuple(bl_a.channels[ia]) + tuple(bl_b.channels[ib])
+                         for ia, ib in zip(ind_a, ind_b))
+        signatures_c = tuple(leg.s for leg in struct_c.legs)
+        channel_pairs = []
+        for charges, candidate in zip(tn_pairs, proposed):
+            paths = sym.signed_fusion_paths(tuple(map(tuple, charges)), struct_c.n, signatures_c)
+            allowed = tuple(tuple(x for charge in path for x in
+                                  (charge if isinstance(charge, tuple) else (charge,)))
+                            for path in paths)
+            if candidate in allowed:
+                channel_pairs.append(candidate)
+            elif len(allowed) == 1:
+                channel_pairs.append(allowed[0])
+            else:
+                raise YastnError("Non-Abelian tensordot requires an F move between fusion trees.")
+        channel_pairs = tuple(channel_pairs)
+        pair_c = find_matching_block_keys(bl_c.t, bl_c.channels,
+                                          tn_pairs, channel_pairs, both=False)
+        if len(pair_c) != len(ind_a):
+            raise YastnError("Cannot match non-Abelian output fusion channels in tensordot.")
+        output_slc = bl_c.slc[pair_c]
+    else:
+        output_slc = slc_c[inv_c]
+    meta = np.column_stack([output_slc, Daop[ind_a], Dbop[ind_b], ind_a, ind_b])
     meta_dt = np.dtype([
         ('sln', np.int64, (2,)),
         ('Dn',  np.int64, (2,)),
@@ -779,8 +812,10 @@ def _meta_broadcast(sym, struct_a, struct_b, axis):
     bl_c = get_blocks(sym, struct_c)
     bl_a = get_blocks(sym, struct_aa)
     #
-    inds_c = find_matching_indices(bl_b_full.t, bl_c.t, both=False)
-    inds_a = find_matching_indices(bl_a_full.t, bl_a.t, both=False)
+    inds_c = find_matching_block_keys(bl_b_full.t, bl_b_full.channels,
+                                      bl_c.t, bl_c.channels, both=False)
+    inds_a = find_matching_block_keys(bl_a_full.t, bl_a_full.channels,
+                                      bl_a.t, bl_a.channels, both=False)
     slc_a = bl_a_full.slc[inds_a]
     #
     if struct_b.isdiag:
@@ -922,7 +957,8 @@ def _meta_vdot(sym, struct_a, struct_b):
         raise YastnError('Bond dimensions of some charges do not match.')
     bl_a = get_blocks(sym, struct_a)
     bl_b = get_blocks(sym, struct_b)
-    ind_a, ind_b = find_matching_indices(bl_a.t, bl_b.t)
+    ind_a, ind_b = find_matching_block_keys(bl_a.t, bl_a.channels,
+                                            bl_b.t, bl_b.channels)
     meta = np.column_stack([bl_a.slc[ind_a], bl_b.slc[ind_b]])
     meta = _compress_slices(meta)
     meta_dt = np.dtype([

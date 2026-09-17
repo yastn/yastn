@@ -20,6 +20,7 @@ from typing import Sequence, TYPE_CHECKING, Union
 import numpy as np
 
 from ._auxiliary import _clear_axes, _unpack_axes, get_blocks, argsort_t, get_trimmed_struct, find_matching_indices
+from ._auxiliary import find_matching_block_keys
 from ._auxiliary import convert_to_tuples_and_slices, _compress_slices
 from ._einsum import ncon
 from ._legbasic import LegBasic
@@ -85,7 +86,7 @@ def remove_random_blocks(a, number, keep_legs=True) -> 'Tensor':
         return a
 
     bl_new = get_blocks(a.config.sym, struct_new)
-    inds = find_matching_indices(bl.t, bl_new.t, both=False)
+    inds = find_matching_block_keys(bl.t, bl.channels, bl_new.t, bl_new.channels, both=False)
     meta = _compress_slices(np.column_stack([bl_new.slc, bl.slc[inds]]))
     meta_dt = np.dtype([
         ('sln', np.int64, (2,)),
@@ -124,7 +125,7 @@ def remove_zero_blocks(a, rtol=1e-12, atol=0) -> 'Tensor':
         return a
 
     bl_new = get_blocks(a.config.sym, struct_new)
-    inds = find_matching_indices(bl.t, bl_new.t, both=False)
+    inds = find_matching_block_keys(bl.t, bl.channels, bl_new.t, bl_new.channels, both=False)
     meta = _compress_slices(np.column_stack([bl_new.slc, bl.slc[inds]]))
     meta_dt = np.dtype([
         ('sln', np.int64, (2,)),

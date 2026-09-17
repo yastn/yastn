@@ -29,6 +29,29 @@ class sym_abelian(metaclass=sym_meta):
     """
     SYM_ID = 'symmetry-name'
     NSYM = len('length-of-charge-vector')
+    IS_ABELIAN = True
+
+    @classmethod
+    def canonical_charge(cls, charge) -> tuple[int, ...]:
+        charge = np.asarray(charge, dtype=np.int64).reshape(1, 1, cls.NSYM)
+        return tuple(cls.fuse(charge, (1,), 1).reshape(cls.NSYM).tolist())
+
+    @classmethod
+    def fusion_outcomes(cls, *charges) -> tuple[tuple[int, ...], ...]:
+        """Uniform fusion-category API; Abelian fusion has one outcome."""
+        return (cls.add_charges(*charges),)
+
+    @classmethod
+    def fusion_multiplicity(cls, charges, target) -> int:
+        return int(cls.add_charges(*charges) == tuple(target))
+
+    @classmethod
+    def can_fuse(cls, charges, target) -> bool:
+        return bool(cls.fusion_multiplicity(charges, target))
+
+    @classmethod
+    def irrep_dimension(cls, charge) -> int:
+        return 1
 
     @classmethod
     def zero(cls) -> tuple[int, ...]:

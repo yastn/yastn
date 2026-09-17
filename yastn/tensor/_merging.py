@@ -24,7 +24,7 @@ import numpy as np
 from .._profile import nsys_profile
 
 from ._auxiliary import _struct, _flatten, _clear_axes, _unpack_legs, get_blocks, _product_indices
-from ._auxiliary import find_matching_indices, get_trimmed_struct, convert_to_tuples_and_slices
+from ._auxiliary import find_matching_indices, find_matching_block_keys, get_trimmed_struct, convert_to_tuples_and_slices
 from ._legbasic import LegBasic
 from ._tests import _test_axes_all
 from ._yastnerror import YastnError
@@ -250,8 +250,38 @@ def _meta_fuse_hard(sym, struct, axes, legs_sub=None, connector_first=True, lazy
         s_eff = (1,) + s_eff[1:]
     #
     teff = np.zeros((st.nblocks, len(s_eff), sym.NSYM), dtype=np.int64)
-    for n, axs in enumerate(axes):
-        teff[:, n, :] = sym.fuse(st.t[:, axs, :], slegs[n], s_eff[n]) if axs else sym.zero()
+    if getattr(sym, 'IS_ABELIAN', True):
+        for n, axs in enumerate(axes):
+            teff[:, n, :] = sym.fuse(st.t[:, axs, :], slegs[n], s_eff[n]) if axs else sym.zero()
+    else:
+        # Resolve branching using the selection rule of the complete output
+        # block. This is exact whenever the source block has a unique fusion
+        # channel (e.g. rank-three intertwiners and binary fusion steps).
+        for ib, block_t in enumerate(st.t):
+            grouped = []
+            for axs, signs, sout in zip(axes, slegs, s_eff):
+                if not axs:
+                    grouped.append((sym.zero(),))
+                else:
+                    charges = tuple(map(tuple, block_t[list(axs), :]))
+                    grouped.append(sym.signed_fusion_outcomes(charges, signs, sout))
+            allowed = [candidate for candidate in product(*grouped)
+                       if sym.can_fuse(candidate, struct.n, signatures=s_eff)]
+            # The canonical tensor basis is left-associated. A fused prefix
+            # therefore has its outgoing irrep explicitly recorded in the
+            # source channel and can be selected without an F move.
+            source_channel = st.channels[ib]
+            for n, axs in enumerate(axes):
+                if len(axs) > 1 and tuple(axs) == tuple(range(len(axs))) and source_channel:
+                    pos = (len(axs) - 2) * sym.NSYM
+                    expected = tuple(source_channel[pos: pos + sym.NSYM])
+                    allowed = [candidate for candidate in allowed if tuple(candidate[n]) == expected]
+            # Repeated candidates are distinct outer-multiplicity channels.
+            if len(allowed) != 1:
+                raise YastnError(
+                    "Non-Abelian hard fusion needs an explicit fusion channel; "
+                    f"block {tuple(map(tuple, block_t))} has {len(allowed)} compatible channels.")
+            teff[ib] = np.asarray(allowed[0], dtype=np.int64)
     #
     lls, legs_old = [], []
     for n, axs in enumerate(axes):
@@ -482,12 +512,12 @@ def _meta_unfuse_hard(sym, struct, axes, hfs, lazy_threshold=None):
     struct_new = get_trimmed_struct(sym, struct_new)
     bl_new = get_blocks(sym, struct_new)
 
-    tnew, meta = [], []
+    tnew, cnew, meta = [], [], []
 
     old_t = bl_old.t.tolist()
     old_slc = map(tuple, bl_old.slc)
 
-    for to, slo, Do in zip(old_t, old_slc, bl_old.D):
+    for to, co, slo, Do in zip(old_t, bl_old.channels, old_slc, bl_old.D):
         ind = tuple(ls.t.index(tuple(to[n])) for n, ls in enumerate(lls))
         decs = tuple(tuple(ls.dec[ii]) for ls, ii in zip(lls, ind))
         for tt in product(*decs):
@@ -495,12 +525,31 @@ def _meta_unfuse_hard(sym, struct, axes, hfs, lazy_threshold=None):
             sub_slc = tuple(y for x in tt for y in x.Dslc)
             Dsln = tuple(x.Dprod for x in tt)
             tnew.append(tn)
+            if not getattr(sym, 'IS_ABELIAN', True):
+                charges = tuple(tuple(tn[i:i + sym.NSYM])
+                                for i in range(0, len(tn), sym.NSYM))
+                signatures = tuple(leg.s for leg in legs_new)
+                paths = sym.signed_fusion_paths(charges, struct.n, signatures)
+                # A binary fusion of the canonical first two legs records the
+                # first intermediate irrep explicitly in the effective leg.
+                if 0 in axes and hfs[0].tree[0] == 2:
+                    expected = tuple(to[0])
+                    paths = tuple(path for path in paths
+                                  if ((path[0],) if isinstance(path[0], int) else tuple(path[0])) == expected)
+                flat_paths = [tuple(x for charge in path for x in
+                                    (charge if isinstance(charge, tuple) else (charge,)))
+                              for path in paths]
+                if len(flat_paths) != 1:
+                    raise YastnError("Cannot reconstruct a unique non-Abelian fusion channel while unfusing.")
+                cnew.append(flat_paths[0])
+            else:
+                cnew.append(())
             meta.append((*Dsln, *slo, *Do, *sub_slc))
 
     ndimo = len(struct.legs)
     meta = np.array(meta, dtype=np.int64).reshape(len(meta), 2 + 4 * ndimo)
     tnew = np.array(tnew, dtype=np.int64).reshape(len(tnew), len(legs_new), sym.NSYM)
-    ind_c = find_matching_indices(bl_new.t, tnew, both=False)  # tnew is not sorted
+    ind_c = find_matching_block_keys(bl_new.t, bl_new.channels, tnew, tuple(cnew), both=False)
 
     if lazy_threshold and bl_new.nblocks and len(ind_c) / bl_new.nblocks < lazy_threshold:
         struct_new = struct_new.mask_from_ind(bl_new.nblocks, ind_c)
@@ -635,14 +684,32 @@ def _leg_structure_combine_charges_prod(sym, legs_in, t_out, s_out):
     for i, tt in enumerate(t_in):
         comb_t[:, i, :] = tt[indices[:, i], :]
 
-    teff = sym.fuse(comb_t, s_in, s_out)
+    if getattr(sym, 'IS_ABELIAN', True):
+        teff = sym.fuse(comb_t, s_in, s_out)
+        rows = [(indices[i], comb_t[i], teff[i]) for i in range(len(indices))]
+    else:
+        rows = []
+        allowed = set(map(tuple, t_out))
+        for index, charges in zip(indices, comb_t):
+            outcomes = sym.signed_fusion_outcomes(tuple(map(tuple, charges)), s_in, s_out)
+            rows.extend((index, charges, np.asarray(out, dtype=np.int64))
+                        for out in outcomes if out in allowed)
+        if rows:
+            indices = np.asarray([row[0] for row in rows], dtype=np.int64)
+            comb_t = np.asarray([row[1] for row in rows], dtype=np.int64)
+            teff = np.asarray([row[2] for row in rows], dtype=np.int64)
+        else:
+            indices = np.zeros((0, nlegs), dtype=np.int64)
+            comb_t = np.zeros((0, nlegs, sym.NSYM), dtype=np.int64)
+            teff = np.zeros((0, sym.NSYM), dtype=np.int64)
 
-    t_out = np.array(t_out, dtype=np.int64).reshape(1, len(t_out), sym.NSYM)
-    inds = np.any(np.all(teff.reshape(len(teff), 1, sym.NSYM) == t_out, axis=2), axis=1)
-    inds = np.flatnonzero(inds)
-    indices = indices[inds]
-    comb_t = comb_t[inds]
-    teff = teff[inds]
+    if getattr(sym, 'IS_ABELIAN', True):
+        t_out = np.array(t_out, dtype=np.int64).reshape(1, len(t_out), sym.NSYM)
+        inds = np.any(np.all(teff.reshape(len(teff), 1, sym.NSYM) == t_out, axis=2), axis=1)
+        inds = np.flatnonzero(inds)
+        indices = indices[inds]
+        comb_t = comb_t[inds]
+        teff = teff[inds]
 
     comb_D = np.empty((len(indices), nlegs), dtype=np.int64)
     for i, DD in enumerate(D_in):
