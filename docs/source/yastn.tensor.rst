@@ -23,6 +23,7 @@ API: yastn and yastn.Tensor
 
    tensor/configuration
    tensor/symmetry
+   tensor/su2
    tensor/leg
    tensor/init
    tensor/operators

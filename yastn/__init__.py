@@ -19,6 +19,7 @@ from .initialize import *
 from .krylov import *
 from .tensor.oe_blocksparse import get_contraction_path, contract_with_unroll, SlicedLeg, make_sliced_legs
 from .tensor import *
+from .su2 import Leg as SU2Leg, SU2U1Leg, SU2Tensor, SU2U1Tensor, tensordot as su2_tensordot
 try:
     from ._version import version as __version__
     from ._version import version_tuple

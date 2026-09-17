@@ -87,6 +87,8 @@ class Tensor:
                 distinguish diagonal tensor as a special case of a tensor.
         """
         self.config = config if isinstance(config, _config) else _config(**{a: getattr(config, a) for a in _config._fields if hasattr(config, a)})
+        if getattr(self.config.sym, 'is_abelian', True) is False:
+            raise TypeError("SU2 is non-abelian; use yastn.SU2Tensor instead of yastn.Tensor.")
 
         if 'data' in kwargs:
             assert (kwargs['data'] is None or kwargs['data'].ndim == 1), "Tensor data should be None or a 1D array."

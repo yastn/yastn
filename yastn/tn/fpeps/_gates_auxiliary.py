@@ -17,6 +17,7 @@ from typing import NamedTuple
 from ._geometry import Lattice
 from ...initialize import eye
 from ...tensor import tensordot, YastnError, Tensor
+from ...su2 import SU2Tensor, tensordot as su2_tensordot
 
 
 class Gate(NamedTuple):
@@ -80,6 +81,17 @@ def apply_gate_onsite(ten, G, dirn=None):
     application of a proper swap gate.
     For a local operator with no auxiliary index, dirn should be None.
     """
+    if isinstance(ten, SU2Tensor) or isinstance(G, SU2Tensor):
+        if not isinstance(ten, SU2Tensor) or not isinstance(G, SU2Tensor):
+            raise YastnError('A SU2 PEPS tensor requires an SU2 gate.')
+        if dirn:
+            raise YastnError(
+                'SU2 gates carrying an auxiliary MPO leg require reduced '
+                'fusion-tree support and are not available in the Abelian PEPS update path.')
+        if ten.ndim != 5 or G.ndim != 2:
+            raise YastnError('A local SU2 PEPS gate must have ranks 5 (site) and 2 (operator).')
+        return su2_tensordot(ten, G, axes=(4, 1))
+
     G = match_ancilla(ten, G, dirn=dirn)
     tmp = tensordot(ten, G, axes=(4, 1))  # t l b r [s a] c
     if not dirn:

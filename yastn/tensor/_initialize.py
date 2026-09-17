@@ -24,7 +24,7 @@ import numpy as np
 from ._auxiliary import _config, get_blocks, find_index, find_matching_indices
 from ._tests import YastnError
 from ..backend import backend_np
-from ..sym import sym_none, sym_U1, sym_Z2, sym_Z3, sym_U1xU1, sym_U1xU1xZ2
+from ..sym import sym_none, sym_U1, sym_Z2, sym_Z3, sym_U1xU1, sym_U1xU1xZ2, sym_SU2, sym_SU2xU1
 
 __all__ = ['make_config']
 
@@ -35,7 +35,9 @@ _syms = {"dense": sym_none,
          "Z2": sym_Z2,
          "Z3": sym_Z3,
          "U1xU1": sym_U1xU1,
-         "U1xU1xZ2": sym_U1xU1xZ2}
+         "U1xU1xZ2": sym_U1xU1xZ2,
+         "SU2": sym_SU2,
+         "SU2xU1": sym_SU2xU1}
 
 
 # def make_config(backend=backend_np, sym=sym_none, default_device='cpu',
@@ -116,7 +118,7 @@ def make_config(**kwargs) -> _config:
         try:
             kwargs["sym"] = _syms[kwargs["sym"]]
         except KeyError:
-            raise YastnError("sym encoded as string only supports: 'dense', 'Z2', 'Z3', 'U1', 'U1xU1', 'U1xU1xZ2'.")
+            raise YastnError("sym encoded as string only supports: 'dense', 'Z2', 'Z3', 'U1', 'U1xU1', 'U1xU1xZ2', 'SU2', 'SU2xU1'.")
 
     return _config(**{a: kwargs[a] for a in _config._fields if a in kwargs})
 

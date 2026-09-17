@@ -14,12 +14,15 @@
 # ==============================================================================
 """ yastn.from_dict() handling imports of all major classes """
 from .tensor import Tensor
+from .su2 import SU2Tensor, SU2U1Tensor
 from .tn.fpeps import Lattice, Peps, Peps2Layers, DoublePepsTensor
 from .tn.fpeps import EnvBoundaryMPS, EnvBP, EnvCTM, EnvCTM_c4v
 from .tn.mps import MpsMpoOBC, MpoPBC
 
 
 types = {"Tensor": Tensor,
+         "SU2Tensor": SU2Tensor,
+         "SU2U1Tensor": SU2U1Tensor,
          "MpsMpoOBC": MpsMpoOBC,
          "MpoPBC": MpoPBC,
          "Lattice": Lattice,
