@@ -247,8 +247,8 @@ def conj(data):
 
 def trace(data, order, meta, Dsize):
     newdata = np.zeros(Dsize, dtype=data.dtype)
-    for (sln, slo, Do, Drsh) in meta:
-        newdata[sln] += np.trace(data[slo].reshape(Do).transpose(order).reshape(Drsh))
+    for (sln, slo, Do, Drsh, coef) in meta:
+        newdata[sln] += coef * np.trace(data[slo].reshape(Do).transpose(order).reshape(Drsh))
     return newdata
 
 
@@ -657,8 +657,10 @@ def transpose_dot_sum(Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border
     newdata = np.zeros(Dsize, dtype=dtype)
     Ad = {ii: Adata[slo].reshape(Do).transpose(Aorder).reshape(Dl, Dr) for ii, (slo, Do, Dl, Dr) in enumerate(Areshape)}
     Bd = {ii: Bdata[slo].reshape(Do).transpose(Border).reshape(Dl, Dr) for ii, (slo, Do, Dl, Dr) in enumerate(Breshape)}
-    for sln, Dn, ta, tb in meta_dot:
-        newdata[sln].reshape(Dn)[:] += np.dot(Ad[ta], Bd[tb])
+    for record in meta_dot:
+        sln, Dn, ta, tb = record[:4]
+        coef = record[4] if len(record) > 4 else 1
+        newdata[sln].reshape(Dn)[:] += coef * np.dot(Ad[ta], Bd[tb])
     return newdata
 
 

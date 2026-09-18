@@ -48,17 +48,23 @@ class SpinfulFermions(meta_operators):
               In that case, creation and annihilation operators of the two species commute.
         """
         if 'fermionic' not in kwargs and isinstance(kwargs['sym'], str):
-            kwargs['fermionic'] = (False, False, True) if kwargs['sym'] == 'U1xU1xZ2' else True
+            if kwargs['sym'] == 'U1xU1xZ2':
+                kwargs['fermionic'] = (False, False, True)
+            elif kwargs['sym'] == 'SU2xU1':
+                kwargs['fermionic'] = (False, True)
+            else:
+                kwargs['fermionic'] = True
         super().__init__(**kwargs)
 
         sym = self._sym
         fer = self.config.fermionic
 
-        if sym not in ('Z2', 'U1', 'U1xU1', 'U1xU1xZ2'):
-            raise YastnError("For SpinfulFermions sym should be in ('Z2', 'U1', 'U1xU1', 'U1xU1xZ2').")
+        if sym not in ('Z2', 'U1', 'U1xU1', 'U1xU1xZ2', 'SU2xU1'):
+            raise YastnError("For SpinfulFermions sym should be in ('Z2', 'U1', 'U1xU1', 'U1xU1xZ2', 'SU2xU1').")
         if (sym == 'U1xU1xZ2' and fer != (False, False, True)) or \
            (sym in ('Z2', 'U1') and fer != True) or \
-           (sym == 'U1xU1' and fer not in (True, (True, True))):
+           (sym == 'U1xU1' and fer not in (True, (True, True))) or \
+           (sym == 'SU2xU1' and fer != (False, True)):
             raise YastnError("For SpinfulFermions config.sym does not match config.fermionic.")
         self.operators = ('I', 'n', 'c', 'cp')
 
@@ -72,9 +78,13 @@ class SpinfulFermions(meta_operators):
             return Leg(self.config, s=1, t=((0, 0, 0), (0, 1, 1), (1, 0, 1), (1, 1, 0)), D=(1, 1, 1 ,1))
         if self._sym == 'U1xU1':  # charges == (occ_u, occ_d)
             return Leg(self.config, s=1, t=((0, 0), (0, 1), (1, 0), (1, 1)), D=(1, 1, 1, 1))
+        if self._sym == 'SU2xU1':  # empty, spin doublet, double occupancy
+            return Leg(self.config, s=1, t=((0, 0), (1, 1), (0, 2)), D=(1, 1, 1))
 
     def vec_n(self, val=(0, 0)) -> Tensor:
         r""" State with occupation given by tuple (nu, nd). """
+        if self._sym == 'SU2xU1':
+            raise YastnError("A spin-resolved basis vector is not SU(2)-invariant.")
         if val == (0, 0):
             if self._sym == 'Z2':  # charges: 0 = (|00>, |11>); 1 = (|10>, |01>)  |occ_u occ_d>
                 vec = Tensor(config=self.config, s=(1,), n=0)
@@ -147,10 +157,40 @@ class SpinfulFermions(meta_operators):
         elif self._sym == 'U1xU1':  # charges == (occ_u, occ_d)
             for t in [(0, 0), (0, 1), (1, 0), (1, 1)]:
                 I.set_block(ts=(t, t), Ds=(1, 1), val=1)
+        elif self._sym == 'SU2xU1':
+            for t in ((0, 0), (1, 1), (0, 2)):
+                I.set_block(ts=(t, t), Ds=(1, 1), val=1)
         return I
+
+    def n_total(self) -> Tensor:
+        """SU(2)-scalar total particle number operator."""
+        if self._sym != 'SU2xU1':
+            return self.n('u') + self.n('d')
+        n = Tensor(config=self.config, s=self.s)
+        n.set_block(ts=((1, 1), (1, 1)), Ds=(1, 1), val=1)
+        n.set_block(ts=((0, 2), (0, 2)), Ds=(1, 1), val=2)
+        return n
+
+    def d(self) -> Tensor:
+        """Double-occupancy projector, an SU(2)-scalar operator."""
+        if self._sym != 'SU2xU1':
+            return self.n('u') @ self.n('d')
+        d = Tensor(config=self.config, s=self.s)
+        d.set_block(ts=((0, 2), (0, 2)), Ds=(1, 1), val=1)
+        return d
+
+    def h(self) -> Tensor:
+        """Projector onto the empty local state."""
+        if self._sym != 'SU2xU1':
+            return self.I() - self.n_total() + self.d()
+        h = Tensor(config=self.config, s=self.s)
+        h.set_block(ts=((0, 0), (0, 0)), Ds=(1, 1), val=1)
+        return h
 
     def n(self, spin='u') -> Tensor:
         r""" Particle number operator, with :code:`spin='u'` for spin-up, and :code:`spin='d'` for spin-down. """
+        if self._sym == 'SU2xU1':
+            raise YastnError("Spin-resolved density is not an SU(2) scalar; use n_total() or d().")
         n = Tensor(config=self.config, s=self.s)
         if spin == 'u':
             if self._sym == 'Z2':  # charges: 0 = (|00>, |11>); 1 = (|10>, |01>)  |occ_u occ_d>
@@ -184,6 +224,8 @@ class SpinfulFermions(meta_operators):
 
     def cp(self, spin='u') -> Tensor:
         r""" Creation operator, with :code:`spin='u'` for spin-up, and :code:`spin='d'` for spin-down. """
+        if self._sym == 'SU2xU1':
+            raise YastnError("A spinor creation component is not an SU(2)-scalar operator.")
         # |ud>; |11> = cu+ cd+ |00>;
         # cu |11> =  |01>; cu |10> = |00>
         # cd |11> = -|10>; cd |01> = |00>
@@ -227,6 +269,8 @@ class SpinfulFermions(meta_operators):
 
     def c(self, spin='u') -> Tensor:
         r""" Annihilation operator, with :code:`spin='u'` for spin-up, and :code:`spin='d'` for spin-down. """
+        if self._sym == 'SU2xU1':
+            raise YastnError("A spinor annihilation component is not an SU(2)-scalar operator.")
         # |ud>; |11> = cu+ cd+ |00>;
         # cu |11> =  |01>; cu |10> = |00>
         # cd |11> = -|10>; cd |01> = |00>

@@ -146,6 +146,64 @@ def test_Heisenberg_gate_SU2(config_kwargs):
     assert np.allclose(fused[(2, 2)], [[np.exp(-J * step / 4)]])
 
 
+def _reconstruct_coupled_gate(gate):
+    full = yastn.ncon(gate.G, [(-0, -1, 1), (-2, -3, 1)])
+    return full.transpose((0, 2, 1, 3)).fuse_legs(((0, 1), (2, 3)), mode='hard')
+
+
+def _matrix_exp(H, step):
+    d, u = np.linalg.eigh(np.asarray(H, dtype=float))
+    return (u * np.exp(-step * d)) @ u.T
+
+
+def test_Hubbard_gate_SU2xU1(config_kwargs):
+    ops = yastn.operators.SpinfulFermions(sym='SU2xU1', **config_kwargs)
+    t, U, mu, step = 0.7, 3.2, -0.15, 0.04
+    gate = fpeps.gates.gate_nn_Hubbard_SU2xU1(t, U, mu, step, ops.I())
+    fused = _reconstruct_coupled_gate(gate)
+    rt2 = np.sqrt(2.0)
+    expected = {
+        (0, 0): [[0]],
+        (1, 1): [[-mu, -t], [-t, -mu]],
+        (0, 2): [[U - 2 * mu, 0, -rt2 * t],
+                 [0, U - 2 * mu, -rt2 * t],
+                 [-rt2 * t, -rt2 * t, -2 * mu]],
+        (2, 2): [[-2 * mu]],
+        (1, 3): [[U - 3 * mu, t], [t, U - 3 * mu]],
+        (0, 4): [[2 * U - 4 * mu]],
+    }
+    for charge, H in expected.items():
+        assert np.allclose(fused[charge + charge], _matrix_exp(H, step), atol=1e-12)
+
+
+def test_local_exp_SU2xU1_is_positive(config_kwargs):
+    """Exponentiating a scalar Hamiltonian must not add fusion-gauge signs."""
+    ops = yastn.operators.SpinfulFermions(sym='SU2xU1', **config_kwargs)
+    identity = ops.I()
+    hamiltonian = 10 * (ops.d() - ops.n_total() / 2 + identity / 4)
+    gate = fpeps.gates.gate_local_exp(0.01, identity, hamiltonian).G[0]
+    expected = {(0, 0): np.exp(-0.025),
+                (1, 1): np.exp(0.025),
+                (0, 2): np.exp(-0.025)}
+    for charge, value in expected.items():
+        assert np.allclose(gate[charge + charge], [[value]])
+
+
+def test_tJ_gate_SU2xU1(config_kwargs):
+    ops = yastn.operators.SpinfulFermions_tJ(sym='SU2xU1', **config_kwargs)
+    J, t, mu0, mu1, step = 0.4, 0.8, -0.1, 0.2, 0.03
+    gate = fpeps.gates.gate_nn_tJ_SU2xU1(J, t, mu0, mu1, step, ops.I())
+    fused = _reconstruct_coupled_gate(gate)
+    expected = {
+        (0, 0): [[0]],
+        (1, 1): [[-mu1, -t], [-t, -mu0]],
+        (0, 2): [[-mu0 - mu1 - J]],
+        (2, 2): [[-mu0 - mu1]],
+    }
+    for charge, H in expected.items():
+        assert np.allclose(fused[charge + charge], _matrix_exp(H, step), atol=1e-12)
+
+
 def test_occupation_gate(config_kwargs):
     """ test fpeps.gates.gate_local_occupation. """
     def check_occupation_gate(ops, mu, ds):

@@ -432,11 +432,14 @@ def consume_transpose(a) -> 'Tensor':
     if a.trans == no_trans:
         return a
     if (not getattr(a.config.sym, 'IS_ABELIAN', True) and a.ndim_n >= 2):
-        from ._merging import _apply_s3_transpose, _has_nontrivial_irreps, _s3_orders
+        from ._merging import (_apply_fusion_tree_transpose, _apply_s3_transpose,
+                               _has_nontrivial_irreps, _s3_orders)
     if (not getattr(a.config.sym, 'IS_ABELIAN', True) and a.ndim_n >= 2
-            and _has_nontrivial_irreps(a) and tuple(a.trans) in _s3_orders(a.ndim_n)):
+            and _has_nontrivial_irreps(a)):
         logical_mfs = a.mfs
-        a = _apply_s3_transpose(a, tuple(a.trans))
+        a = (_apply_s3_transpose(a, tuple(a.trans))
+             if tuple(a.trans) in _s3_orders(a.ndim_n)
+             else _apply_fusion_tree_transpose(a, tuple(a.trans)))
         return a._replace(mfs=logical_mfs, trans=no_trans)
     order = np.array(a.trans, dtype=np.int64)
     new_hfs = tuple(a.hfs[ii] for ii in a.trans)
@@ -568,14 +571,20 @@ def add_leg(a, axis=-1, s=-1, t=None, leg=None) -> 'Tensor':
     trans = trans[:uaxis] + [haxis] + trans[uaxis:]
 
     nsym = a.config.sym.NSYM
-    if t is None:
+    inferred_charge = t is None
+    if inferred_charge:
         t = a.config.sym.add_charges(a.struct.n, signatures=(-1,), new_signature=s)
     else:
         if (isinstance(t, int) and nsym != 1) or (hasattr(t, '__len__') and len(t) != nsym):
             raise YastnError('len(t) does not match the number of symmetry charges.')
         t = a.config.sym.add_charges(t, signatures=(s,), new_signature=s)
 
-    newn = a.config.sym.add_charges(a.struct.n, t, signatures=(1, s))
+    # The inferred one-dimensional leg is defined to absorb the complete
+    # tensor charge.  For a non-Abelian irrep the formal product n x n* can
+    # contain several outcomes, but this operation selects its singlet
+    # channel by construction.
+    newn = (a.config.sym.zero() if inferred_charge else
+            a.config.sym.add_charges(a.struct.n, t, signatures=(1, s)))
     legs = a.struct.legs[:haxis] + (LegBasic(s=s, t=(t,), D=(1,)),) + a.struct.legs[haxis:]
     struct = a.struct.replace(legs=legs, n=newn)
     hfs = a.hfs[:haxis] + (hfsa,) + a.hfs[haxis:]

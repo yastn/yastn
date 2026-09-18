@@ -48,6 +48,7 @@ class _DecRecord(NamedTuple):
     Dslc: tuple = (None, None)  # slice
     Dprod: int = 0  # size of slice, equal to product of Drsh
     Drsh: tuple = ()  # original shape of fused dims in a block
+    channel: tuple = ()  # internal fusion path (non-Abelian product)
 
 
 class _Fusion(NamedTuple):
@@ -202,16 +203,32 @@ def _fuse_legs_hard(a, axes, order):
     """
     order = tuple(a.trans[ax] for ax in order)
     axes = tuple(tuple(a.trans[ax] for ax in group) for group in axes)
-    if (not getattr(a.config.sym, 'IS_ABELIAN', True) and _has_nontrivial_irreps(a) and axes
-            and len(axes[0]) == 2 and tuple(axes[0]) == order[:2]
-            and order in _s3_orders(a.ndim_n) and order != tuple(range(a.ndim_n))):
+    if (not getattr(a.config.sym, 'IS_ABELIAN', True)
+            and sum(len(group) > 1 for group in axes) > 1
+            and all(group for group in axes)):
+        return _fuse_disjoint_nonabelian_groups(a, axes)
+    if (not getattr(a.config.sym, 'IS_ABELIAN', True) and _has_nontrivial_irreps(a)
+            and order != tuple(range(a.ndim_n))):
         group_sizes = tuple(map(len, axes))
-        a = _apply_s3_transpose(a, order)
+        a = (_apply_s3_transpose(a, order) if order in _s3_orders(a.ndim_n)
+             else _apply_fusion_tree_transpose(a, order))
         starts = np.cumsum((0,) + group_sizes)
         axes = tuple(tuple(range(starts[n], starts[n + 1]))
                      for n in range(len(group_sizes)))
         order = tuple(range(a.ndim_n))
-    meta_mrg, size, struct_new, legs_old = _meta_fuse_hard(a.config.sym, a.struct, axes)
+    try:
+        meta_mrg, size, struct_new, legs_old = _meta_fuse_hard(a.config.sym, a.struct, axes)
+    except YastnError as exc:
+        if (not getattr(a.config.sym, 'IS_ABELIAN', True)
+                and "explicit fusion channel" in str(exc)
+                and any(len(group) > 1 for group in axes)):
+            # A non-prefix group is not a subtree of the canonical
+            # left-associated basis.  Materialize that subtree with F/R moves
+            # only when direct fusion is genuinely ambiguous.  Keeping the
+            # direct path for uniquely determined groups preserves the legacy
+            # hard-fusion signature convention used by PEPS environments.
+            return _fuse_disjoint_nonabelian_groups(a, axes)
+        raise
     data = a.config.backend.transpose_and_merge(a._data, order, meta_mrg, size)
 
     mfs = ((1,),) * len(struct_new.legs)
@@ -222,6 +239,38 @@ def _fuse_legs_hard(a, axes, order):
         hfs.append(_combine_hfs_prod(hfs_axs, legs_basic))
     out = a._replace(mfs=mfs, hfs=hfs, struct=struct_new, data=data, trans=None)
     return out
+
+
+def _fuse_disjoint_nonabelian_groups(a, axes):
+    """Build several sibling hard-fusion subtrees one at a time.
+
+    A canonical left-associated flat channel can expose only one requested
+    subtree at a time.  Sequentially moving every group to the prefix and
+    hard-fusing it stores that subtree's outgoing irrep in its effective leg,
+    so no channel information is discarded when the next group is built.
+    """
+    a = a._replace(trans=tuple(range(a.ndim_n)))
+    tokens = [frozenset((i,)) for i in range(a.ndim_n)]
+    desired = [frozenset(group) for group in axes]
+    for group in desired:
+        if len(group) < 2:
+            continue
+        positions = [i for i, token in enumerate(tokens) if token <= group]
+        if frozenset().union(*(tokens[i] for i in positions)) != group:
+            raise YastnError("Overlapping or inconsistent non-Abelian fusion groups.")
+        permutation = tuple(positions + [i for i in range(len(tokens)) if i not in positions])
+        if permutation != tuple(range(len(tokens))):
+            a = _apply_fusion_tree_transpose(a, permutation)
+            tokens = [tokens[i] for i in permutation]
+        k = len(positions)
+        one_group = (tuple(range(k)),) + tuple((i,) for i in range(k, len(tokens)))
+        a = _fuse_legs_hard(a, one_group, tuple(range(len(tokens))))
+        tokens = [group] + tokens[k:]
+
+    final_order = tuple(tokens.index(group) for group in desired)
+    if final_order != tuple(range(len(tokens))):
+        a = _apply_fusion_tree_transpose(a, final_order)
+    return a
 
 
 def _has_nontrivial_irreps(a):
@@ -258,6 +307,98 @@ def _apply_s3_transpose(a, order):
         a = (_r_move_01_and_transpose(a, swap) if move == 'r'
              else _f_move_12_to_23_and_transpose(a, cyclic))
     return a
+
+
+def _apply_fusion_tree_transpose(a, order):
+    """Permute arbitrary leaves of a canonical fusion tree using F/R moves."""
+    order = tuple(order)
+    if order == tuple(range(a.ndim_n)):
+        return a
+    current = list(range(a.ndim_n))
+    for destination, leaf in enumerate(order):
+        source = current.index(leaf)
+        while source > destination:
+            a = _swap_adjacent_fusion_leaves(a, source - 1)
+            current[source - 1], current[source] = current[source], current[source - 1]
+            source -= 1
+    return a
+
+
+def _split_channel(channel, nsym):
+    return tuple(tuple(channel[n:n + nsym])
+                 for n in range(0, len(channel), nsym))
+
+
+def _swap_adjacent_fusion_leaves(a, position):
+    """Exchange leaves ``position`` and ``position + 1`` by ``R`` or ``F^-1 R F``."""
+    sym = a.config.sym
+    ndim = a.ndim_n
+    if not 0 <= position < ndim - 1:
+        raise YastnError("Adjacent fusion-tree swap is outside tensor rank.")
+    order = list(range(ndim))
+    order[position], order[position + 1] = order[position + 1], order[position]
+    order = tuple(order)
+    bl_old = get_blocks(sym, a.struct)
+    legs_new = tuple(a.struct.legs[i] for i in order)
+    struct_new = a.struct.replace(legs=legs_new, channels=(), mask=None)
+    bl_new = get_blocks(sym, struct_new)
+    inverse = tuple(np.argsort(order))
+
+    old_by_charges = {}
+    for index, charges in enumerate(bl_old.t):
+        old_by_charges.setdefault(tuple(charges.reshape(-1).tolist()), []).append(index)
+
+    pieces, keep = [], []
+    for out_index, (charges_new, channel_new_flat) in enumerate(zip(bl_new.t, bl_new.channels)):
+        charges_old = charges_new[np.asarray(inverse)]
+        candidates = old_by_charges.get(tuple(charges_old.reshape(-1).tolist()), ())
+        if not candidates:
+            continue
+        oriented = tuple(sym.canonical_charge(t) if leg.s == 1 else sym.conj_charge(t)
+                         for t, leg in zip(map(tuple, charges_old), a.struct.legs))
+        path_new = _split_channel(channel_new_flat, sym.NSYM)
+        value = None
+        for in_index in candidates:
+            path_old = _split_channel(bl_old.channels[in_index], sym.NSYM)
+            if position == 0:
+                same_tail = path_old == path_new
+                total = path_old[0] if path_old else tuple(a.struct.n)
+                coefficient = (sym.braiding_phase(oriented[0], oriented[1], total)
+                               if same_tail else 0.0)
+                if ndim == 2 and a.struct.legs[0].s != a.struct.legs[1].s:
+                    coefficient = 1.0 if same_tail else 0.0
+            else:
+                # Prefix and suffix channels are unchanged. Only the channel
+                # directly below the exchanged pair can mix.
+                changed = position - 1
+                if (path_old[:changed] != path_new[:changed]
+                        or path_old[changed + 1:] != path_new[changed + 1:]):
+                    continue
+                x = oriented[0] if position == 1 else path_old[position - 2]
+                left, right = oriented[position], oriented[position + 1]
+                y, yp = path_old[changed], path_new[changed]
+                z = path_old[position] if position < ndim - 2 else tuple(a.struct.n)
+                coefficient = 0.0
+                for middle in sym.fusion_outcomes(left, right):
+                    coefficient += (sym.f_symbol(x, left, right, z, y, middle)
+                                    * sym.braiding_phase(left, right, middle)
+                                    * sym.f_symbol(x, right, left, z, yp, middle))
+            if abs(coefficient) < 1e-15:
+                continue
+            block = a._data[slice(*bl_old.slc[in_index])]
+            block = a.config.backend.permute_dims(block, bl_old.D[in_index], order).reshape(-1)
+            term = coefficient * block
+            value = term if value is None else value + term
+        if value is not None:
+            pieces.append(value)
+            keep.append(out_index)
+
+    if len(keep) != bl_new.nblocks:
+        struct_new = struct_new.mask_from_ind(bl_new.nblocks, keep)
+    data = a.config.backend.concatenate(pieces) if pieces else a._data[:0]
+    return a._replace(struct=struct_new, data=data,
+                      hfs=tuple(a.hfs[i] for i in order),
+                      mfs=tuple(a.mfs[i] for i in order), trans=None)
 
 
 def _r_move_01_and_transpose(a, order):
@@ -426,12 +567,20 @@ def _meta_fuse_hard(sym, struct, axes, legs_sub=None, connector_first=True, lazy
                 if len(axs) > 1 and tuple(axs) == tuple(range(len(axs))) and source_channel:
                     pos = (len(axs) - 2) * sym.NSYM
                     expected = tuple(source_channel[pos: pos + sym.NSYM])
+                    if s_eff[n] == -1:
+                        expected = sym.conj_charge(expected)
                     allowed = [candidate for candidate in allowed if tuple(candidate[n]) == expected]
+                    # ``signed_fusion_outcomes`` retains path multiplicities.
+                    # Here that path is already fixed by ``source_channel``;
+                    # repeated outgoing irreps are the same candidate, not an
+                    # unresolved ambiguity.
+                    allowed = list(dict.fromkeys(allowed))
             # Repeated candidates are distinct outer-multiplicity channels.
             if len(allowed) != 1:
                 raise YastnError(
                     "Non-Abelian hard fusion needs an explicit fusion channel; "
-                    f"block {tuple(map(tuple, block_t))} has {len(allowed)} compatible channels.")
+                    f"block {tuple(map(tuple, block_t))} has {len(allowed)} compatible channels; "
+                    f"axes={axes}, source_channel={source_channel}.")
             teff[ib] = np.asarray(allowed[0], dtype=np.int64)
     #
     lls, legs_old = [], []
@@ -464,12 +613,14 @@ def _meta_fuse_hard(sym, struct, axes, legs_sub=None, connector_first=True, lazy
         told_split = tuple(map(tuple, st.t.reshape(st.nblocks, len(struct.legs) * sym.NSYM).tolist()))
     teff = list(map(tuple, teff.reshape(st.nblocks, len(axes) * sym.NSYM).tolist()))
 
-    smeta = sorted((tes, tn, tos, slo, Do) for tes, tn, tos, slo, Do
-                   in zip(teff_split, teff, told_split, slc, st.D))
+    smeta = sorted(((tes, tn, tos, tuple(co), slo, Do)
+                    for tes, tn, tos, co, slo, Do
+                    in zip(teff_split, teff, told_split, st.channels, slc, st.D)),
+                   key=lambda x: (x[0], x[1], x[2], x[3]))
 
-    meta, tnew = [], []
+    meta, tnew, cnew = [], [], []
     # ic = 0
-    for tes, tn, tos, slo, Do in smeta:
+    for tes, tn, tos, co, slo, Do in smeta:
         # while tuple(bl_new.t[ic].ravel()) != tn:
         #     ic += 1
         # sln, Dn = bl_new.slc[ic], bl_new.D[ic]
@@ -477,18 +628,66 @@ def _meta_fuse_hard(sym, struct, axes, legs_sub=None, connector_first=True, lazy
         ind = tuple(ls.t.index(te) for ls, te in zip(lls, tes))
         decs = tuple(ls.dec[ii] for ls, ii in zip(lls, ind))
 
-        jjj = tuple([d.t for d in dd].index(tt) for tt, dd in zip(tos, decs))
+        jjj = []
+        for ng, (tt, dd) in enumerate(zip(tos, decs)):
+            candidates = [ii for ii, d in enumerate(dd) if d.t == tt]
+            axs = axes[ng]
+            if (not getattr(sym, 'IS_ABELIAN', True) and len(axs) > 2
+                    and tuple(axs) == tuple(range(len(axs)))):
+                path_len = (len(axs) - 2) * sym.NSYM
+                wanted = co[:path_len]
+                if s_eff[ng] == -1:
+                    wanted = tuple(x for pos in range(0, path_len, sym.NSYM)
+                                   for x in sym.conj_charge(wanted[pos:pos + sym.NSYM]))
+                candidates = [ii for ii in candidates if dd[ii].channel == wanted]
+            if len(candidates) != 1:
+                raise YastnError(
+                    "Cannot identify a unique hard-fusion decomposition channel: "
+                    f"group={axs}, charges={tt}, source={co}, "
+                    f"paths={tuple(d.channel for d in dd)}.")
+            jjj.append(candidates[0])
+        jjj = tuple(jjj)
         de = [dd[jj] for jj, dd in zip(jjj, decs)]
         sub_slc = tuple(x for d in de for x in d.Dslc)
         Dsln = tuple(d.Dprod for d in de)
         tnew.append(tn)
+        if getattr(sym, 'IS_ABELIAN', True):
+            cnew.append(())
+        else:
+            # A canonical prefix of k leaves contributes k-1 entries to the
+            # old left-associated fusion path.  Its outgoing irrep is now an
+            # external charge, while the untouched suffix remains the fusion
+            # path of the reduced tensor.  Keeping that suffix is essential:
+            # blocks with equal external charges but different channels must
+            # never be merged into the same destination slice.
+            prefix = axes[0] if axes else ()
+            if len(axes) <= 2:
+                # Rank-zero, one, and two invariant tensors have no internal
+                # fusion-path labels.
+                cnew.append(())
+            elif len(prefix) > 1 and tuple(prefix) == tuple(range(len(prefix))):
+                cnew.append(co[(len(prefix) - 1) * sym.NSYM:])
+            else:
+                cnew.append(co)
         meta.append((*slo, *Do, *sub_slc, *Dsln))
 
     ndimo = len(struct.legs)
     ndimn = len(struct_new.legs)
     meta = np.array(meta, dtype=np.int64).reshape(len(meta), 2 + 3 * ndimn + ndimo)
     tnew = np.array(tnew, dtype=np.int64).reshape(len(tnew), ndimn, sym.NSYM)
-    ind = find_matching_indices(bl_new.t, tnew, both=False)  # tnew is not sorted
+    nontrivial_irreps = (not getattr(sym, 'IS_ABELIAN', True)
+                         and any(sym.irrep_dimension(t) > 1
+                                 for leg in struct.legs for t in leg.t))
+    prefix = axes[0] if axes else ()
+    channel_aware = (nontrivial_irreps and
+                     (len(axes) <= 2 or
+                      (len(prefix) > 1 and
+                       tuple(prefix) == tuple(range(len(prefix))))))
+    if not channel_aware:
+        ind = find_matching_indices(bl_new.t, tnew, both=False)  # tnew is not sorted
+    else:
+        ind = find_matching_block_keys(bl_new.t, bl_new.channels,
+                                       tnew, tuple(cnew), both=False)
     ind_u, inv_c = np.unique(ind, return_inverse=True)
 
     if lazy_threshold and bl_new.nblocks and len(ind_u) / bl_new.nblocks < lazy_threshold:
@@ -577,6 +776,16 @@ def unfuse_legs(a, axes) -> 'Tensor':
         raise YastnError('Cannot unfuse legs of a diagonal tensor.')
     if isinstance(axes, int):
         axes = (axes,)
+    axes = tuple(ax % a.ndim for ax in axes)
+    if not getattr(a.config.sym, 'IS_ABELIAN', True):
+        hard_axes = tuple(ax for ax in axes
+                          if a.mfs[ax][0] == 1
+                          and a.hfs[a.trans[ax]].tree[0] > 1)
+        if hard_axes and (len(hard_axes) > 1 or hard_axes[0] != 0):
+            for ax in sorted(hard_axes, reverse=True):
+                a = _unfuse_nonabelian_axis(a, ax)
+            remaining = tuple(ax for ax in axes if ax not in hard_axes)
+            return unfuse_legs(a, remaining) if remaining else a
     ui, mfs, axes_mf, axes_uf, axes_hf = 0, [], [], [], []
     for mi in range(a.ndim):
         hi = a.trans[ui]
@@ -623,6 +832,24 @@ def unfuse_legs(a, axes) -> 'Tensor':
         return out
     out = a._replace(mfs=tuple(mfs))
     return out
+
+
+def _unfuse_nonabelian_axis(a, axis):
+    """Expose one hard-fused subtree at the prefix, unfuse, and restore order."""
+    if axis == 0:
+        return unfuse_legs(a, 0)
+    ndim = a.ndim
+    permutation = (axis,) + tuple(i for i in range(ndim) if i != axis)
+    b = _apply_fusion_tree_transpose(a, permutation)
+    b = unfuse_legs(b, 0)
+    nleaves = b.ndim - ndim + 1
+    others = tuple(i for i in range(ndim) if i != axis)
+    current = tuple(('leaf', i) for i in range(nleaves)) + tuple(('old', i) for i in others)
+    desired = (tuple(('old', i) for i in range(axis)) +
+               tuple(('leaf', i) for i in range(nleaves)) +
+               tuple(('old', i) for i in range(axis + 1, ndim)))
+    restore = tuple(current.index(token) for token in desired)
+    return _apply_fusion_tree_transpose(b, restore)
 
 
 @nsys_profile
@@ -681,15 +908,25 @@ def _meta_unfuse_hard(sym, struct, axes, hfs, lazy_threshold=None):
                                 for i in range(0, len(tn), sym.NSYM))
                 signatures = tuple(leg.s for leg in legs_new)
                 paths = sym.signed_fusion_paths(charges, struct.n, signatures)
-                # A binary fusion of the canonical first two legs records the
-                # first intermediate irrep explicitly in the effective leg.
-                if 0 in axes and hfs[0].tree[0] == 2:
+                if len(legs_new) <= 2:
+                    flat_paths = [()]
+                elif 0 in axes and hfs[0].tree[0] > 1:
                     expected = tuple(to[0])
-                    paths = tuple(path for path in paths
-                                  if ((path[0],) if isinstance(path[0], int) else tuple(path[0])) == expected)
-                flat_paths = [tuple(x for charge in path for x in
-                                    (charge if isinstance(charge, tuple) else (charge,)))
-                              for path in paths]
+                    internal = tt[0].channel
+                    if struct.legs[0].s == -1:
+                        expected = sym.conj_charge(expected)
+                        internal = tuple(
+                            x for pos in range(0, len(internal), sym.NSYM)
+                            for x in sym.conj_charge(internal[pos:pos + sym.NSYM]))
+                    # The decomposition record retains the internal path of
+                    # the fused prefix.  Appending its outgoing irrep and the
+                    # reduced tensor's suffix reconstructs the original
+                    # canonical channel without an ambiguous path search.
+                    flat_paths = [internal + expected + tuple(co)]
+                else:
+                    flat_paths = [tuple(x for charge in path for x in
+                                        (charge if isinstance(charge, tuple) else (charge,)))
+                                  for path in paths]
                 if len(flat_paths) != 1:
                     raise YastnError("Cannot reconstruct a unique non-Abelian fusion channel while unfusing.")
                 cnew.append(flat_paths[0])
@@ -843,16 +1080,23 @@ def _leg_structure_combine_charges_prod(sym, legs_in, t_out, s_out):
         allowed = set(map(tuple, t_out))
         for index, charges in zip(indices, comb_t):
             outcomes = sym.signed_fusion_outcomes(tuple(map(tuple, charges)), s_in, s_out)
-            rows.extend((index, charges, np.asarray(out, dtype=np.int64))
-                        for out in outcomes if out in allowed)
+            for out in dict.fromkeys(outcomes):
+                if out in allowed:
+                    paths = sym.signed_fusion_paths(tuple(map(tuple, charges)), out, s_in, s_out)
+                    rows.extend((index, charges, np.asarray(out, dtype=np.int64),
+                                 tuple(x for charge in path for x in
+                                       (charge if isinstance(charge, tuple) else (charge,))))
+                                for path in paths)
         if rows:
             indices = np.asarray([row[0] for row in rows], dtype=np.int64)
             comb_t = np.asarray([row[1] for row in rows], dtype=np.int64)
             teff = np.asarray([row[2] for row in rows], dtype=np.int64)
+            channels = tuple(row[3] for row in rows)
         else:
             indices = np.zeros((0, nlegs), dtype=np.int64)
             comb_t = np.zeros((0, nlegs, sym.NSYM), dtype=np.int64)
             teff = np.zeros((0, sym.NSYM), dtype=np.int64)
+            channels = ()
 
     if getattr(sym, 'IS_ABELIAN', True):
         t_out = np.array(t_out, dtype=np.int64).reshape(1, len(t_out), sym.NSYM)
@@ -870,7 +1114,8 @@ def _leg_structure_combine_charges_prod(sym, legs_in, t_out, s_out):
     Dlegs = tuple(map(tuple, comb_D.tolist()))
     teff = tuple(map(tuple, teff.tolist()))
     tlegs = tuple(map(tuple, comb_t.reshape(len(comb_t), len(s_in) * sym.NSYM).tolist()))
-    return _leg_structure_merge(teff, tlegs, Deff, Dlegs)
+    return _leg_structure_merge(teff, tlegs, Deff, Dlegs,
+                                channels if not getattr(sym, 'IS_ABELIAN', True) else None)
 
 
 def _leg_structure_combine_charges_sum(legs_in, pos=None):
@@ -893,15 +1138,17 @@ def _leg_structure_combine_charges_sum(legs_in, pos=None):
     return _leg_structure_merge(teff, plegs, Deff, Dlegs)
 
 
-def _leg_structure_merge(teff, tlegs, Deff, Dlegs):
+def _leg_structure_merge(teff, tlegs, Deff, Dlegs, channels=None):
     r"""Build the decomposition structure for merging several legs into one."""
-    tt = sorted(set(zip(teff, tlegs, Deff, Dlegs)))
+    if channels is None:
+        channels = ((),) * len(teff)
+    tt = sorted(set(zip(teff, tlegs, Deff, Dlegs, channels)))
     t, D, dec = [], [], []
     for te, grp in groupby(tt, key=itemgetter(0)):
         Dlow, dect = 0, []
-        for _, tl, De, Dl in grp:
+        for _, tl, De, Dl, channel in grp:
             Dhigh = Dlow + De
-            dect.append(_DecRecord(tl, (Dlow, Dhigh), De, Dl))
+            dect.append(_DecRecord(tl, (Dlow, Dhigh), De, Dl, channel))
             Dlow = Dhigh
         t.append(te)
         D.append(Dhigh)

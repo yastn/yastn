@@ -324,5 +324,14 @@ def test_leg_exceptions(config_kwargs):
         yastn.legs_union(af.get_legs(0), bf.get_legs(0))
 
 
+def test_leg_product_SU2xU1(config_kwargs):
+    config = yastn.make_config(sym='SU2xU1', fermionic=(False, True), **config_kwargs)
+    leg = yastn.Leg(config, t=((0, 0), (1, 1), (0, 2)), D=(1, 1, 1))
+    fused = yastn.leg_product(leg, leg)
+    assert fused.tD == {(0, 0): 1, (0, 2): 3, (0, 4): 1,
+                        (1, 1): 2, (1, 3): 2, (2, 2): 1}
+    assert fused.unfuse_leg() == (leg, leg)
+
+
 if __name__ == '__main__':
     pytest.main([__file__, "-vs", "--durations=0"])

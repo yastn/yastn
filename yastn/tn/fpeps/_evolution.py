@@ -560,8 +560,16 @@ def truncate_optimize_(g, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter, 
         smin = S._data.min()
         info['min_eigenvalue'] = (smin / fgf_norm).item()
         g_error = max(-smin, 0) + nonhermitian
-        info['wrong_eigenvalues'] = (S._data < g_error).sum().item() / len(S._data)
-        S._data[S._data < g_error] = g_error * fix_metric
+        if not getattr(fgf.config.sym, 'IS_ABELIAN', True):
+            # Until the categorical metric is diagonalized, different fusion
+            # channels may carry opposite gauge signs.  Project the genuinely
+            # negative modes without using their magnitude to erase positive
+            # sectors of the same size.
+            wrong = S._data < 0
+        else:
+            wrong = S._data < g_error
+        info['wrong_eigenvalues'] = wrong.sum().item() / len(S._data)
+        S._data[wrong] = g_error * fix_metric
         fgf = U @ S @ U.H
     #
     fRR = (R0 @ R1).fuse_legs(axes=[(0, 1)])

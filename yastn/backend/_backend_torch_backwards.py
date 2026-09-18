@@ -180,8 +180,10 @@ class kernel_transpose_dot_sum(torch.autograd.Function):
         data_C = torch.zeros((size_C,), dtype=dtype, device=data_A.device)
         At = {ii: data_A[slo].view(Do).permute(order_A).reshape(Dl, Dr) for ii, (slo, Do, Dl, Dr) in enumerate(reshape_A)}
         Bt = {ii: data_B[slo].view(Do).permute(order_B).reshape(Dl, Dr) for ii, (slo, Do, Dl, Dr) in enumerate(reshape_B)}
-        for sln, Dn, ta, tb in meta:
-            data_C[sln].view(Dn)[:] += At[ta] @ Bt[tb]
+        for record in meta:
+            sln, Dn, ta, tb = record[:4]
+            coef = record[4] if len(record) > 4 else 1
+            data_C[sln].view(Dn)[:] += coef * (At[ta] @ Bt[tb])
         return data_C
 
     @staticmethod
@@ -220,10 +222,12 @@ class kernel_transpose_dot_sum(torch.autograd.Function):
         At_b = {ii: acc_A[slo].view(Dl, Dr) for ii, (slo, Do, Dl, Dr) in enumerate(ctx.reshape_A)}
         Bt_b = {ii: acc_B[slo].view(Dl, Dr) for ii, (slo, Do, Dl, Dr) in enumerate(ctx.reshape_B)}
 
-        for sln, Dn, ta, tb in ctx.meta:
+        for record in ctx.meta:
+            sln, Dn, ta, tb = record[:4]
+            coef = record[4] if len(record) > 4 else 1
             tmp = data_C_b[sln].view(Dn)
-            At_b[ta].addmm_(tmp, Bt[tb].adjoint())   # fused; no temporary per GEMM
-            Bt_b[tb].addmm_(At[ta].adjoint(), tmp)
+            At_b[ta].addmm_(tmp, Bt[tb].adjoint(), alpha=coef)
+            Bt_b[tb].addmm_(At[ta].adjoint(), tmp, alpha=coef)
         del At, Bt   # permuted copies of the inputs are dead once the GEMMs are done
 
         # Permute each accumulated block back into the input layout. Every block is assigned (blocks

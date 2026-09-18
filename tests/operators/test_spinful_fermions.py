@@ -117,5 +117,23 @@ def test_spinful_fermions(config_kwargs):
     assert all(k in d for k in ('I', 'nu', 'cu', 'cpu', 'nd', 'cd', 'cpd'))
 
 
+def test_spinful_fermions_SU2xU1(config_kwargs):
+    ops = yastn.operators.SpinfulFermions(sym='SU2xU1', **config_kwargs)
+    assert ops.config.fermionic == (False, True)
+    assert ops.space().tD == {(0, 0): 1, (0, 2): 1, (1, 1): 1}
+    assert ops.I().get_blocks_charge() == ((0, 0, 0, 0),
+                                           (0, 2, 0, 2),
+                                           (1, 1, 1, 1))
+    assert ops.n_total()[(1, 1), (1, 1)].item() == pytest.approx(1)
+    assert ops.n_total()[(0, 2), (0, 2)].item() == pytest.approx(2)
+    assert ops.d()[(0, 2), (0, 2)].item() == pytest.approx(1)
+    assert ops.h()[(0, 0), (0, 0)].item() == pytest.approx(1)
+    assert yastn.norm(ops.h() + ops.n_total() - ops.d() - ops.I()) < tol
+    for component in (lambda: ops.n('u'), lambda: ops.c('d'),
+                      lambda: ops.cp('u'), lambda: ops.vec_n((1, 0))):
+        with pytest.raises(yastn.YastnError):
+            component()
+
+
 if __name__ == '__main__':
     pytest.main([__file__, "-vs", "--durations=0"])

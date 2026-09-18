@@ -57,17 +57,50 @@ def match_ancilla(ten, G, dirn=None):
     one = eye(config=ten.config, legs=[leg, leg.conj()], isdiag=False)
     Gnew = tensordot(G, one, axes=((), ()))
 
+    def fuse_two_disjoint_pairs(x, pair0, pair1, tail):
+        """Fuse two sibling subtrees without losing either intermediate irrep.
+
+        A flat left-associated channel can expose only the leading pair.  We
+        therefore fuse that pair first, move the second pair to the leading
+        position, fuse it, and finally restore the requested leg order.  The
+        two resulting hard-fused legs retain both subtree channels.
+        """
+        first = pair0 + tuple(i for i in range(x.ndim) if i not in pair0)
+        x = x.fuse_legs(axes=(pair0,) + tuple(i for i in range(x.ndim) if i not in pair0))
+        # Map original positions through the first permutation/fusion.
+        rest = first[len(pair0):]
+        mapped1 = tuple(1 + rest.index(i) for i in pair1)
+        mapped_tail = tuple(1 + rest.index(i) for i in tail)
+        x = x.fuse_legs(axes=(mapped1, 0) + mapped_tail)
+        return x.transpose(axes=(1, 0) + tuple(range(2, x.ndim)))
+
     if G.ndim == 2:
-        return Gnew.fuse_legs(axes=((0, 2), (1, 3)))
+        out = Gnew.fuse_legs(axes=((0, 2), (1, 3)))
+        if not getattr(ten.config.sym, 'IS_ABELIAN', True):
+            identity = eye(config=ten.config,
+                           legs=(G.get_legs(0), G.get_legs(1)), isdiag=False)
+            metric = tensordot(identity, one, axes=((), ())).fuse_legs(
+                axes=((0, 2), (1, 3)))
+            metric_inv = metric.copy()
+            for key in metric.get_blocks_charge():
+                metric_block = metric[key]
+                metric_inv.set_block(ts=key, Ds=metric_block.shape,
+                                     val=ten.config.backend.pinv(metric_block))
+            out = metric_inv @ out
+        return out
     elif G.ndim == 3:
         if dirn and dirn in 'tl':
             Gnew = Gnew.swap_gate(axes=(2, 3))
+        if not getattr(ten.config.sym, 'IS_ABELIAN', True):
+            return fuse_two_disjoint_pairs(Gnew, (0, 3), (1, 4), (2,))
         return Gnew.fuse_legs(axes=((0, 3), (1, 4), 2))
     elif G.ndim == 4:
         if dirn and dirn[0] in 'tl':
             Gnew = Gnew.swap_gate(axes=(2, 4))
         if dirn and dirn[1] in 'tl':
             Gnew = Gnew.swap_gate(axes=(3, 4))
+        if not getattr(ten.config.sym, 'IS_ABELIAN', True):
+            return fuse_two_disjoint_pairs(Gnew, (0, 4), (1, 5), (2, 3))
         return Gnew.fuse_legs(axes=((0, 4), (1, 5), 2, 3))
 
 
@@ -80,8 +113,24 @@ def apply_gate_onsite(ten, G, dirn=None):
     application of a proper swap gate.
     For a local operator with no auxiliary index, dirn should be None.
     """
-    G = match_ancilla(ten, G, dirn=dirn)
-    tmp = tensordot(ten, G, axes=(4, 1))  # t l b r [s a] c
+    physical_leg = ten.get_legs(axes=-1)
+    if (physical_leg.is_fused()
+            and not getattr(ten.config.sym, 'IS_ABELIAN', True)):
+        # Keep the physical and purification-ancilla subtrees explicit while
+        # applying the gate.  Forming (G x I_anc) first requires two disjoint
+        # hard fusions and used to lose their relative fusion channel.
+        tmp = ten.consume_transpose().unfuse_legs(axes=4)  # t l b r s a
+        tmp = tensordot(tmp, G, axes=(4, 1))  # t l b r a s' c [d]
+        if dirn:
+            auxiliary_axes = tuple(range(6, tmp.ndim))
+            for position, dd in enumerate(dirn):
+                if dd in 'tl':
+                    tmp = tmp.swap_gate(axes=(auxiliary_axes[position], 4))
+        tmp = tmp.fuse_legs(
+            axes=(0, 1, 2, 3, (5, 4)) + tuple(range(6, tmp.ndim)))
+    else:
+        G = match_ancilla(ten, G, dirn=dirn)
+        tmp = tensordot(ten, G, axes=(4, 1))  # t l b r [s a] c
     if not dirn:
         return tmp
 

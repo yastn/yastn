@@ -26,7 +26,9 @@ import numpy as np
 from ._auxiliary import _struct, _clear_axes, _unpack_axes, get_blocks, find_index, argsort_t
 from ._auxiliary import convert_to_tuples_and_slices, find_matching_indices, get_trimmed_struct
 from ._legbasic import LegBasic
-from ._merging import _Fusion, _fuse_blocks, _unfuse_blocks
+from ._merging import (_Fusion, _fuse_blocks, _unfuse_blocks,
+                       _apply_fusion_tree_transpose, _apply_s3_transpose,
+                       _has_nontrivial_irreps, _s3_orders)
 from ._tests import YastnError, _test_axes_all
 from ._single import remove_zero_blocks
 
@@ -264,6 +266,15 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     out_hl, out_hr = _unpack_axes(a.mfs, out_ml, out_mr)
     out_hl = tuple(a.trans[ax] for ax in out_hl)
     out_hr = tuple(a.trans[ax] for ax in out_hr)
+    order = out_hl + out_hr
+    if (not getattr(sym, 'IS_ABELIAN', True) and _has_nontrivial_irreps(a)
+            and order != tuple(range(a.ndim_n))):
+        a = (_apply_s3_transpose(a, order) if order in _s3_orders(a.ndim_n)
+             else _apply_fusion_tree_transpose(a, order))
+        nl = len(out_hl)
+        out_hl = tuple(range(nl))
+        out_hr = tuple(range(nl, a.ndim_n))
+        out_ml, out_mr = out_hl, out_hr
     #
     data, struct_am, hfsm = _fuse_blocks(a.config, a._data, a.struct, (out_hl, out_hr))
     #
@@ -655,23 +666,29 @@ def truncation_mask(S, which='LR',
                 Smask._data[slc] = False
             start = finish
     #
-    D_total = min(D_total, len(S.data))
-    if which in ['LR', 'LM']:
-        above_tol = ff(S.data) > tol * backend.max_abs(S.data)
-        D_total = min(D_total, backend.sum_elements(above_tol).item())
-    #
     inds = backend.argsort_which(S.data, which)
 
     # For a non-Abelian spectrum one reduced singular value represents a full
     # irrep.  D_total is consistently interpreted as the dense dimension, so
     # a value in sector j consumes dim(j), never a fraction of a multiplet.
-    if not getattr(S.config.sym, 'IS_ABELIAN', True) and D_total < float('inf'):
+    if not getattr(S.config.sym, 'IS_ABELIAN', True):
         if largest_gap or eps_multiplet is not None:
             raise YastnError("SU2 truncation already preserves exact irreps; largest_gap and eps_multiplet are not applicable.")
-        weights = np.concatenate([
+        if which in ['LR', 'LM']:
+            above_tol = ff(S.data) > tol * backend.max_abs(S.data)
+            Smask._data[:] = Smask.data * above_tol
+        if D_total == float('inf'):
+            return Smask
+        weighted_sectors = [
             np.full(D, S.config.sym.irrep_dimension(t), dtype=np.int64)
             for t, D in zip(S.struct.legs[0].t, S.struct.legs[0].D)
-        ])
+        ]
+        # An empty spectrum is a valid result for a structurally empty input.
+        # Keep it empty instead of letting numpy.concatenate obscure the
+        # original tensor-network issue with an unrelated ValueError.
+        if not weighted_sectors:
+            return Smask
+        weights = np.concatenate(weighted_sectors)
         order = np.asarray(backend.to_numpy(inds), dtype=np.int64)
         initially_allowed = np.asarray(backend.to_numpy(Smask.data), dtype=bool)
         keep = np.zeros(len(weights), dtype=bool)
@@ -683,6 +700,11 @@ def truncation_mask(S, which='LR',
                 used += cost
         Smask._data[:] = backend.to_tensor(keep, dtype='bool', device=S.device)
         return Smask
+    #
+    D_total = min(D_total, len(S.data))
+    if which in ['LR', 'LM']:
+        above_tol = ff(S.data) > tol * backend.max_abs(S.data)
+        D_total = min(D_total, backend.sum_elements(above_tol).item())
     #
     if largest_gap and D_total < len(S.data):
         s = ff(S._data[inds[D_total - 1:]])
@@ -767,6 +789,15 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0) -> tuple['Tensor', 'Tensor']:
     out_hl, out_hr = _unpack_axes(a.mfs, out_ml, out_mr)
     out_hl = tuple(a.trans[ax] for ax in out_hl)
     out_hr = tuple(a.trans[ax] for ax in out_hr)
+    order = out_hl + out_hr
+    if (not getattr(sym, 'IS_ABELIAN', True) and _has_nontrivial_irreps(a)
+            and order != tuple(range(a.ndim_n))):
+        a = (_apply_s3_transpose(a, order) if order in _s3_orders(a.ndim_n)
+             else _apply_fusion_tree_transpose(a, order))
+        nl = len(out_hl)
+        out_hl = tuple(range(nl))
+        out_hr = tuple(range(nl, a.ndim_n))
+        out_ml, out_mr = out_hl, out_hr
 
     data, struct_am, hfsm = _fuse_blocks(a.config, a._data, a.struct, (out_hl, out_hr))
 

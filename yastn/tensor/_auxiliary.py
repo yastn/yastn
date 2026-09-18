@@ -305,8 +305,8 @@ def get_blocks(sym, struct) -> _blocks:
                 # Flatten product-symmetry intermediate charges into a stable key.
                 channels.append(tuple(x for charge in path
                                       for x in (charge if isinstance(charge, tuple) else (charge,))))
-        tblocks = np.asarray(expanded_t, dtype=np.int64).reshape(-1, len(struct.legs), sym.NSYM)
-        iblocks = np.asarray(expanded_i, dtype=np.int64).reshape(-1, len(struct.legs))
+        tblocks = np.asarray(expanded_t, dtype=np.int64).reshape(len(expanded_t), len(struct.legs), sym.NSYM)
+        iblocks = np.asarray(expanded_i, dtype=np.int64).reshape(len(expanded_i), len(struct.legs))
         channels = tuple(channels)
         if struct.channels:
             allowed = set(struct.channels)
@@ -348,6 +348,23 @@ def get_trimmed_struct(sym, struct, sub_legs=None):
     if (not getattr(sym, 'IS_ABELIAN', True) and sub_legs is None
             and struct.mask.array is not None):
         return struct
+    if (not getattr(sym, 'IS_ABELIAN', True) and sub_legs is not None
+            and struct.mask.array is not None):
+        # Non-Abelian masks enumerate (external charges, fusion channel)
+        # blocks.  Reusing them in the charge-only trimming engine gives a
+        # mask of the wrong length once a contracted leg is intersected.
+        # Build the narrowed unmasked candidate first, then retain precisely
+        # the channel-resolved keys present in the original masked structure.
+        old = get_blocks(sym, struct)
+        candidate = get_trimmed_struct(
+            sym, _struct(legs=tuple(sub_legs), n=struct.n,
+                         isdiag=struct.isdiag, mask=None))
+        new = get_blocks(sym, candidate)
+        old_keys = {(tuple(t.reshape(-1).tolist()), tuple(c))
+                    for t, c in zip(old.t, old.channels)}
+        keep = [i for i, (t, c) in enumerate(zip(new.t, new.channels))
+                if (tuple(t.reshape(-1).tolist()), tuple(c)) in old_keys]
+        return candidate.mask_from_ind(new.nblocks, keep)
     saxes = tuple(int(leg.s) for leg in struct.legs)
     # taxes_full = tuple(leg.t for leg in struct.legs)
     # taxes_full = tuple(tuple(tt for tt, d in zip(leg.t, leg.D) if d > 0) for leg in struct.legs)

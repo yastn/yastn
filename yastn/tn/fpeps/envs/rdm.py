@@ -281,12 +281,19 @@ def rdm1x2(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scala
     vecr = (env1.tr @ env1.r) @ (env1.br @ env1.b)
 
     tmp0 = _append_vec_tl_open(ten0.bra, ten0.ket, vecl)  # x [b b'] y [r r'] [s s']
+    # Non-Abelian fusion histories follow native legs.  Materialize the lazy
+    # permutation before unfusing two separate logical legs, otherwise only
+    # one history can be selected after the first native-axis remapping.
+    if not getattr(tmp0.config.sym, 'IS_ABELIAN', True):
+        tmp0 = tmp0.consume_transpose()
     tmp0 = tmp0.unfuse_legs(axes=(1, 4))  # x b b' y [r r'] s s'
     tmp0 = tmp0.swap_gate(axes=(1, (5, 6)))  # b X s s'
     tmp0 = tmp0.fuse_legs(axes=(0, (1, 2), 3, 4, (5, 6)))  # x [b b'] y [r r'] [s s']
     tmp0 = env0.b.tensordot(tmp0, axes=((2, 1), (0, 1)))
 
     tmp1 = _append_vec_br_open(ten1.bra, ten1.ket, vecr)  # x [t t'] y [l l'] [s s']
+    if not getattr(tmp1.config.sym, 'IS_ABELIAN', True):
+        tmp1 = tmp1.consume_transpose()
     tmp1 = tmp1.unfuse_legs(axes=(1, 4))  # x t t' y [l l'] s s'
     tmp1 = tmp1.swap_gate(axes=(2, (5, 6)))  # t' X s s'
     tmp1 = tmp1.fuse_legs(axes=(0, (1, 2), 3, 4, (5, 6)))  # x [t t'] y [l l'] [s s']

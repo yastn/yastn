@@ -50,6 +50,15 @@ def product_peps(geometry, vectors) -> Peps:
         if v.ndim == 1 and not v.get_legs(axes=0).is_fused():
             v = v.add_leg(s=-1)
         if v.ndim == 2:
+            if not getattr(v.config.sym, 'IS_ABELIAN', True):
+                # A purification is a maximally entangled physical--ancilla
+                # vector.  One reduced coefficient represents dim(j)
+                # magnetic states, hence its canonical amplitude is sqrt(dj).
+                # Operators themselves retain unit blocks; the factor belongs
+                # specifically to the operator-to-vector conversion here.
+                for key in v.get_blocks_charge():
+                    charge = key[:v.config.sym.NSYM]
+                    v[key] = v[key] * v.config.sym.irrep_dimension(charge) ** 0.5
             v = v.fuse_legs(axes=[(0, 1)])
             vectors[k] = v
         if v.ndim > 1:

@@ -27,7 +27,7 @@ class sym_SU2xU1(sym_nonabelian):
         except (TypeError, ValueError) as exc:
             raise ValueError("An SU2xU1 charge must be a (2*j, q) pair.") from exc
         if isinstance(two_j, bool) or not isinstance(two_j, Integral) or two_j < 0:
-            raise ValueError("The SU2 label must be a non-negative integer 2*j.")
+            raise ValueError(f"The SU2 label must be a non-negative integer 2*j; got {charge}.")
         if isinstance(q, bool) or not isinstance(q, Integral):
             raise ValueError("The U1 charge must be an integer.")
         return int(two_j), int(q)
@@ -76,11 +76,10 @@ class sym_SU2xU1(sym_nonabelian):
             return cls.zero()
         if signatures is None:
             signatures = (1,) * len(charges)
-        canonical = tuple(cls.canonical_charge(c) for c in charges)
-        if any(two_j != 0 for two_j, _ in canonical):
-            raise TypeError("Adding non-singlet SU2xU1 tensor charges requires an explicit fusion channel.")
-        q = new_signature * sum(s * charge[1] for s, charge in zip(signatures, canonical))
-        return 0, q
+        outcomes = set(cls.signed_fusion_outcomes(charges, signatures, new_signature))
+        if len(outcomes) == 1:
+            return outcomes.pop()
+        raise TypeError("Adding non-singlet SU2xU1 tensor charges requires an explicit fusion channel.")
 
     @classmethod
     def fusion_isometry(cls, left, right, target=None):

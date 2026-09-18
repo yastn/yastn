@@ -84,6 +84,18 @@ def gate_local_exp(step, I, H, site=None) -> Gate:
     where some blocks are missing in the Hamiltonian.
     """
     H = H + 0 * I
+    if not getattr(H.config.sym, 'IS_ABELIAN', True):
+        # A scalar non-Abelian local operator is already block diagonal in
+        # irrep and multiplicity space.  Exponentiate those dense blocks
+        # directly.  Reconstructing it as S exp(D) S.H currently routes the
+        # eigenvectors through a fusion-tree contraction and can attach an
+        # erroneous gauge sign to non-singlet sectors.
+        G = H.copy()
+        for key in H.get_blocks_charge():
+            block = H[key]
+            G.set_block(ts=key, Ds=block.shape,
+                        val=H.config.backend.expm(-step * block))
+        return Gate_local(G, site)
     D, S = eigh(H, axes = (0, 1))
     D = exp(D, step=-step)
     G = ncon((S, D, S), ([-1, 1], [1, 2], [-3, 2]), conjs=(0, 0, 1))
@@ -162,6 +174,63 @@ def gate_nn_Heisenberg_SU2(J, step, I, bond=None) -> Gate:
                              val=np.exp(-step * energy) * np.eye(dim))
     gate = gate_fused.unfuse_legs(axes=(0, 1)).transpose(axes=(0, 2, 1, 3))
     return decompose_nn_gate(gate, bond)
+
+
+def _gate_nn_from_coupled_blocks(I, blocks, step, bond=None):
+    """Build an invariant two-site gate from Hamiltonian multiplicity blocks."""
+    leg = I.get_legs(axes=0)
+    coupled = leg_product(leg, leg)
+    gate_fused = zeros(config=I.config, legs=(coupled, coupled.conj()))
+    for charge, dim in coupled.tD.items():
+        H = np.asarray(blocks[charge], dtype=float).reshape(dim, dim)
+        eigvals, eigvecs = np.linalg.eigh(H)
+        block = (eigvecs * np.exp(-step * eigvals)) @ eigvecs.T.conj()
+        gate_fused.set_block(ts=charge + charge, Ds=(dim, dim), val=block)
+    gate = gate_fused.unfuse_legs(axes=(0, 1)).transpose(axes=(0, 2, 1, 3))
+    return decompose_nn_gate(gate, bond)
+
+
+def gate_nn_Hubbard_SU2xU1(t, U, mu, step, I, bond=None) -> Gate:
+    r"""Spin-rotation-invariant Hubbard gate in an SU(2)xU(1) basis.
+
+    ``mu`` is spin independent.  The local basis consists of the empty
+    singlet ``(0, 0)``, the singly occupied spinor ``(1, 1)``, and the
+    doubly occupied singlet ``(0, 2)``.
+    """
+    if I.config.sym.SYM_ID != 'SU2xU1' or I.config.fermionic != (False, True):
+        raise YastnError("gate_nn_Hubbard_SU2xU1 requires fermionic=(False, True) SU2xU1 tensors.")
+    if I.get_legs(0).t != ((0, 0), (0, 2), (1, 1)):
+        raise YastnError("Unexpected local Hubbard SU2xU1 space.")
+    rt2 = np.sqrt(2.0)
+    blocks = {
+        (0, 0): [[0.0]],
+        (1, 1): [[-mu, -t], [-t, -mu]],
+        # multiplicity order: |0,D>, |D,0>, two-single-site singlet
+        (0, 2): [[U - 2 * mu, 0, -rt2 * t],
+                 [0, U - 2 * mu, -rt2 * t],
+                 [-rt2 * t, -rt2 * t, -2 * mu]],
+        (2, 2): [[-2 * mu]],
+        # multiplicity order: |D,sigma>, |sigma,D>
+        (1, 3): [[U - 3 * mu, t], [t, U - 3 * mu]],
+        (0, 4): [[2 * U - 4 * mu]],
+    }
+    return _gate_nn_from_coupled_blocks(I, blocks, step, bond)
+
+
+def gate_nn_tJ_SU2xU1(J, t, mu0, mu1, step, I, bond=None) -> Gate:
+    r"""Projected spin-rotation-invariant t-J gate in an SU(2)xU(1) basis."""
+    if I.config.sym.SYM_ID != 'SU2xU1' or I.config.fermionic != (False, True):
+        raise YastnError("gate_nn_tJ_SU2xU1 requires fermionic=(False, True) SU2xU1 tensors.")
+    if I.get_legs(0).t != ((0, 0), (1, 1)):
+        raise YastnError("Unexpected local t-J SU2xU1 space.")
+    blocks = {
+        (0, 0): [[0.0]],
+        # multiplicity order: |0,sigma>, |sigma,0>
+        (1, 1): [[-mu1, -t], [-t, -mu0]],
+        (0, 2): [[-mu0 - mu1 - J]],
+        (2, 2): [[-mu0 - mu1]],
+    }
+    return _gate_nn_from_coupled_blocks(I, blocks, step, bond)
 
 
 def gate_nn_tJ(J, tu, td, muu0, muu1, mud0, mud1, step, I, cu, cpu, cd, cpd, bond=None) -> Gate:

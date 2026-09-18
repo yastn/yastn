@@ -25,7 +25,8 @@ import numpy as np
 
 from ._auxiliary import _encode_rows_shared, _row_keys_pair, _struct, _clear_axes, _unpack_axes, sign_canonical_order, _compress_slices
 from ._auxiliary import find_matching_indices, find_matching_block_keys, argsort_t, get_blocks, hash_blocks, get_trimmed_struct, convert_to_tuples_and_slices
-from ._merging import _unfuse_blocks, _fuse_blocks, _mask_tensors_leg_intersection, _meta_mask
+from ._merging import (_unfuse_blocks, _fuse_blocks, _mask_tensors_leg_intersection, _meta_mask,
+                       _apply_fusion_tree_transpose)
 from ._tests import _test_can_be_combined, _unpack_trans_test_axes_pair
 from ._yastnerror import YastnError
 from ..backend import import_backend
@@ -35,6 +36,62 @@ if TYPE_CHECKING:
     from . import Tensor
 
 __all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'broadcast', 'apply_mask', 'SpecialTensor', 'fkron']
+
+
+@lru_cache(maxsize=4096)
+def _fusion_intertwiner(sym, charges, signatures, total, channel):
+    """Dense normalized CG tree for one reduced non-Abelian block."""
+    oriented = tuple(sym.canonical_charge(t) if s == 1 else sym.conj_charge(t)
+                     for t, s in zip(charges, signatures))
+    if len(oriented) == 1:
+        out = np.eye(sym.irrep_dimension(oriented[0]))
+    else:
+        path = _split_channel_flat(channel, sym.NSYM)
+        targets = path + (tuple(total),)
+        target = targets[0]
+        out = sym.fusion_isometry(oriented[0], oriented[1], target)
+        out = out.reshape((sym.irrep_dimension(target),
+                           sym.irrep_dimension(oriented[0]),
+                           sym.irrep_dimension(oriented[1])))
+        current = targets[0]
+        for right, target in zip(oriented[2:], targets[1:]):
+            cg = sym.fusion_isometry(current, right, target).reshape(
+                sym.irrep_dimension(target), sym.irrep_dimension(current),
+                sym.irrep_dimension(right))
+            out = np.tensordot(cg, out, axes=(1, 0))
+            out = np.moveaxis(out, 1, -1)
+            current = target
+    # Convert dual magnetic bases back to the stored external-leg bases.
+    for axis, (charge, signature) in enumerate(zip(charges, signatures), start=1):
+        if signature == -1:
+            j = charge[0]
+            dual = np.zeros((j + 1, j + 1))
+            for old in range(j + 1):
+                m = -j + 2 * old
+                dual[(j - m) // 2, old] = (-1.) ** ((j - m) // 2)
+            if out.shape[axis] != dual.shape[0]:
+                raise YastnError(f"Dual-basis shape mismatch: charges={charges}, signatures={signatures}, channel={channel}, shape={out.shape}, axis={axis}.")
+            out = np.tensordot(out, dual, axes=(axis, 0))
+            out = np.moveaxis(out, -1, axis)
+    if out.shape[0] == 1:
+        out = out[0]
+    return out
+
+
+def _split_channel_flat(channel, nsym):
+    return tuple(tuple(channel[n:n + nsym]) for n in range(0, len(channel), nsym))
+
+
+def _contraction_recoupling(sym, charges_a, signs_a, total_a, channel_a,
+                            charges_b, signs_b, total_b, channel_b,
+                            nin_a, nin_b, charges_c, signs_c, total_c, channel_c):
+    """Overlap of a glued pair of CG trees with a canonical output tree."""
+    ta = _fusion_intertwiner(sym, tuple(charges_a), tuple(signs_a), tuple(total_a), tuple(channel_a))
+    tb = _fusion_intertwiner(sym, tuple(charges_b), tuple(signs_b), tuple(total_b), tuple(channel_b))
+    glued = np.tensordot(ta, tb, axes=(tuple(nin_a), tuple(nin_b)))
+    tc = _fusion_intertwiner(sym, tuple(charges_c), tuple(signs_c), tuple(total_c), tuple(channel_c))
+    den = np.vdot(tc, tc)
+    return float(np.real_if_close(np.vdot(tc, glued) / den)) if den else 0.0
 
 
 class SpecialTensor(metaclass=abc.ABCMeta):
@@ -94,6 +151,16 @@ def tensordot(a, b, axes, conj=(0, 0), lazy_threshold=None) -> 'Tensor':
         return b.tensordot(a, axes=axes, reverse=True)
 
     in_a, in_b = _clear_axes(*axes)  # contracted meta legs
+    # In a branching category a lazy permutation changes the fusion tree,
+    # not only the dense-axis order.  For an outer product the full channel of
+    # each operand is embedded as a subtree, so materialize both logical
+    # orders before constructing that combined tree.  Contracted products
+    # retain their established channel matching below.
+    if (not in_a and not in_b and
+            not getattr(a.config.sym, 'IS_ABELIAN', True)):
+        from ._single import consume_transpose
+        a = consume_transpose(a)
+        b = consume_transpose(b)
     mask_needed, (nin_a, nin_b) = _unpack_trans_test_axes_pair(a, b, sgn=-1, axes=(in_a, in_b))
     # nin_a and nin_b take into account a.trans and b.trans, respectively
 
@@ -116,6 +183,23 @@ def tensordot(a, b, axes, conj=(0, 0), lazy_threshold=None) -> 'Tensor':
         b = _apply_mask_axes(b, nin_b, msk_b)
         a = a._replace(hfs=a_hfs)
         b = b._replace(hfs=b_hfs)
+
+    # Put every non-Abelian contraction into the canonical gluing geometry:
+    # outgoing-a, contracted-a and contracted-b, outgoing-b.  For Abelian
+    # tensors this is merely a backend transpose; in a branching category it
+    # is the F/R recoupling that exposes the two contracted subtrees.
+    if not getattr(a.config.sym, 'IS_ABELIAN', True):
+        order_a = nout_a + nin_a
+        order_b = nin_b + nout_b
+        if order_a != tuple(range(a.ndim_n)):
+            a = _apply_fusion_tree_transpose(a, order_a)
+        if order_b != tuple(range(b.ndim_n)):
+            b = _apply_fusion_tree_transpose(b, order_b)
+        na, nc, nb = len(nout_a), len(nin_a), len(nout_b)
+        nout_a = tuple(range(na))
+        nin_a = tuple(range(na, na + nc))
+        nin_b = tuple(range(nc))
+        nout_b = tuple(range(nc, nc + nb))
 
     if a.config.tensordot_policy not in ['fuse_to_matrix', 'fuse_contracted', 'no_fusion']:
         raise YastnError("Tensordot policy not recognized. It should be 'fuse_to_matrix', 'fuse_contracted', or 'no_fusion'.")
@@ -441,65 +525,104 @@ def _meta_tensordot_nf(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b, la
     c_keys = np.where((cid_a < len(ua)) & (cid_b < n_b), cid_a * n_b + cid_b, -1)
     order = np.argsort(c_keys, kind='stable')
     ind_c = order[np.searchsorted(c_keys[order], unique_keys)]  # unique_keys subset of c_keys by fixpoint trimming
-    assert len(unique_keys) == 0 or np.array_equal(c_keys[ind_c], unique_keys), "Sanity check. Contact developers."
+    if getattr(sym, 'IS_ABELIAN', True):
+        assert len(unique_keys) == 0 or np.array_equal(c_keys[ind_c], unique_keys), "Sanity check. Contact developers."
     #
-    if lazy_threshold and bl_c.nblocks and len(ind_c) / bl_c.nblocks < lazy_threshold:
+    if (getattr(sym, 'IS_ABELIAN', True) and lazy_threshold and bl_c.nblocks
+            and len(ind_c) / bl_c.nblocks < lazy_threshold):
         struct_c = struct_c.mask_from_ind(bl_c.nblocks, ind_c)
         struct_c = get_trimmed_struct(sym, struct_c)
         bl_c = get_blocks(sym, struct_c)
         slc_c = bl_c.slc
-    else:
+    elif getattr(sym, 'IS_ABELIAN', True):
         slc_c = bl_c.slc[ind_c]
+    else:
+        slc_c = bl_c.slc
     #
     if not getattr(sym, 'IS_ABELIAN', True):
         tn_pairs = np.concatenate((bl_a.t[ind_a][:, nout_a, :],
                                    bl_b.t[ind_b][:, nout_b, :]), axis=1)
-        proposed = tuple(tuple(bl_a.channels[ia]) + tuple(bl_b.channels[ib])
+        # With contracted subtrees exposed, the output left-associated path
+        # consists of the prefix path of a through its complete outgoing
+        # group, followed by b's path after its contracted prefix.
+        cut_a = max(len(nout_a) - 1, 0) * sym.NSYM
+        cut_b = max(len(nin_b) - 1, 0) * sym.NSYM
+        proposed = tuple(tuple(bl_a.channels[ia][:cut_a]) +
+                         tuple(bl_b.channels[ib][cut_b:])
                          for ia, ib in zip(ind_a, ind_b))
         signatures_c = tuple(leg.s for leg in struct_c.legs)
         channel_pairs = []
-        for charges, candidate in zip(tn_pairs, proposed):
+        valid_pairs = []
+        coefficients = []
+        for ipair, (charges, candidate, ia, ib) in enumerate(zip(tn_pairs, proposed, ind_a, ind_b)):
             paths = sym.signed_fusion_paths(tuple(map(tuple, charges)), struct_c.n, signatures_c)
             allowed = tuple(tuple(x for charge in path for x in
                                   (charge if isinstance(charge, tuple) else (charge,)))
                             for path in paths)
             if candidate in allowed:
                 channel_pairs.append(candidate)
-            elif (not nin_a and not nin_b and struct_a.n == sym.zero()
-                  and struct_b.n == sym.zero() and len(nout_a) >= 2):
-                # Outer product of two invariant tensors.  In the canonical
-                # left-associated output tree, the prefix containing every
-                # leg of ``a`` must fuse back to the singlet before the legs
-                # of ``b`` are attached.  This fixes the connecting channel
-                # without an F move (rank-2 x rank-2 is the common fkron
-                # case used to construct invariant lattice Hamiltonians).
-                bridge = len(nout_a) - 2
-                compatible = tuple(path for path in paths
-                                   if len(path) > bridge and path[bridge] == sym.zero())
-                if len(compatible) == 1:
-                    channel_pairs.append(tuple(x for charge in compatible[0] for x in
-                                               (charge if isinstance(charge, tuple) else (charge,))))
-                else:
-                    raise YastnError("Non-Abelian outer product has an ambiguous fusion channel.")
-            elif len(allowed) == 1:
+                valid_pairs.append(ipair)
+                coefficients.append(1.0)
+                continue
+            if len(allowed) == 0:
+                # Matching individual contracted charges is necessary but not
+                # sufficient: their fusion channel can be incompatible. Such
+                # block pairs have an identically zero categorical contraction.
+                continue
+            if len(allowed) == 1:
                 channel_pairs.append(allowed[0])
-            else:
-                raise YastnError("Non-Abelian tensordot requires an F move between fusion trees.")
+                valid_pairs.append(ipair)
+                coefficients.append(1.0)
+                continue
+            charges_a = tuple(map(tuple, bl_a.t[ia]))
+            charges_b = tuple(map(tuple, bl_b.t[ib]))
+            signs_a = tuple(leg.s for leg in struct_a.legs)
+            signs_b = tuple(leg.s for leg in struct_b.legs)
+            for output_channel in allowed:
+                coefficient = _contraction_recoupling(
+                    sym, charges_a, signs_a, struct_a.n, bl_a.channels[ia],
+                    charges_b, signs_b, struct_b.n, bl_b.channels[ib],
+                    nin_a, nin_b, tuple(map(tuple, charges)), signatures_c,
+                    struct_c.n, output_channel)
+                if abs(coefficient) > 1e-14:
+                    channel_pairs.append(output_channel)
+                    valid_pairs.append(ipair)
+                    coefficients.append(coefficient)
         channel_pairs = tuple(channel_pairs)
-        pair_c = find_matching_block_keys(bl_c.t, bl_c.channels,
-                                          tn_pairs, channel_pairs, both=False)
-        if len(pair_c) != len(ind_a):
-            raise YastnError("Cannot match non-Abelian output fusion channels in tensordot.")
+        valid_pairs = np.asarray(valid_pairs, dtype=np.int64)
+        coefficients = np.asarray(coefficients, dtype=np.float64)
+        ind_a = ind_a[valid_pairs]
+        ind_b = ind_b[valid_pairs]
+        tn_pairs = tn_pairs[valid_pairs]
+        output_lookup = {
+            (tuple(charges.reshape(-1).tolist()), tuple(channel)): index
+            for index, (charges, channel) in enumerate(zip(bl_c.t, bl_c.channels))
+        }
+        pair_c = np.asarray([
+            output_lookup.get((tuple(charges.reshape(-1).tolist()), tuple(channel)), -1)
+            for charges, channel in zip(tn_pairs, channel_pairs)
+        ], dtype=np.int64)
+        if np.any(pair_c < 0):
+            raise YastnError(
+                "Cannot match non-Abelian output fusion channels in tensordot. "
+                f"charges={tuple(map(tuple, tn_pairs.reshape(len(tn_pairs), -1)))}, "
+                f"channels={channel_pairs}.")
         output_slc = bl_c.slc[pair_c]
     else:
         output_slc = slc_c[inv_c]
-    meta = np.column_stack([output_slc, Daop[ind_a], Dbop[ind_b], ind_a, ind_b])
+        coefficients = np.ones(len(ind_a), dtype=np.float64)
     meta_dt = np.dtype([
         ('sln', np.int64, (2,)),
         ('Dn',  np.int64, (2,)),
         ('ta', np.int64),
-        ('tb', np.int64)])
-    meta = meta.view(meta_dt).reshape(-1)
+        ('tb', np.int64),
+        ('coef', np.float64)])
+    meta = np.empty(len(ind_a), dtype=meta_dt)
+    meta['sln'] = output_slc
+    meta['Dn'] = np.column_stack((Daop[ind_a], Dbop[ind_b]))
+    meta['ta'] = ind_a
+    meta['tb'] = ind_b
+    meta['coef'] = coefficients
     meta = convert_to_tuples_and_slices(meta)
     #
     ra_dt = np.dtype([
@@ -1021,11 +1144,16 @@ def trace(a, axes=(0, 1), lazy_threshold=None) -> 'Tensor':
 
     tracing = active_flop_tracer() is not None
 
-    if a.isdiag:
+    if a.isdiag and getattr(a.config.sym, 'IS_ABELIAN', True):
         struct = _struct(legs=(), n=a.n, isdiag=False)
         data = a.config.backend.zeros((0,), dtype=a.yastn_dtype, device=a.data.device) \
             if tracing else a.config.backend.sum_elements(a._data)
         return a._replace(struct=struct, mfs=mfs, hfs=hfs, isdiag=False, data=data, trans=None)
+    if a.isdiag:
+        # In a non-Abelian category a closed irrep line evaluates to its
+        # dimension.  The diagonal fast path merely sums reduced entries and
+        # would therefore give, e.g., Tr(I_spinor)=1 instead of 2.
+        a = a.diag()
 
     if mask_needed:
         msk_0, msk_1, a_hfs, _ = _mask_tensors_leg_intersection(a, a, nin_0, nin_1)
@@ -1076,11 +1204,11 @@ def _meta_trace(sym, struct, nin_0, nin_1, out, lazy_threshold):
 
     t0 = bl.t[:, nin_0, :].reshape(bl.nblocks, len(nin_0) * sym.NSYM)
     t1 = bl.t[:, nin_1, :].reshape(bl.nblocks, len(nin_1) * sym.NSYM)
-    ind = (np.all(t0 == t1, axis=1)).nonzero()[0]
+    trace_ind = (np.all(t0 == t1, axis=1)).nonzero()[0]
 
-    tn = bl.t[ind][:, out, :]
-    slo = slo[ind]
-    Do = bl.D[ind]
+    tn = bl.t[trace_ind][:, out, :]
+    slo = slo[trace_ind]
+    Do = bl.D[trace_ind]
     Dnp = np.prod(Do[:, out], axis=1, dtype=np.int64)
     pD0 = np.prod(Do[:, nin_0], axis=1, dtype=np.int64)
     pD1 = np.prod(Do[:, nin_1], axis=1, dtype=np.int64)
@@ -1095,13 +1223,26 @@ def _meta_trace(sym, struct, nin_0, nin_1, out, lazy_threshold):
     else:
         sln = bl_c.slc[ind]
 
-    meta = np.column_stack([sln[inv_tn], slo, Do, pD0, pD1, Dnp])  # sln, slo, Do, Drsh;  Drsh = (pD0, pD1, Dnp)
+    coefficients = np.ones(len(slo), dtype=np.float64)
+    if not getattr(sym, 'IS_ABELIAN', True):
+        # Every explicitly closed representation line contributes its
+        # categorical (here ordinary SU(2)) dimension.  Degeneracy indices
+        # are already traced by the backend and must not enter this factor.
+        for axis in nin_0:
+            coefficients *= np.asarray([sym.irrep_dimension(tuple(t))
+                                        for t in bl.t[trace_ind, axis, :]], dtype=np.float64)
     meta_dt = np.dtype([
         ('sln', np.int64, (2,)),
         ('slo', np.int64, (2,)),
         ('Do',  np.int64, (len(struct.legs),)),
-        ('Drsh',  np.int64, (3,))])
-    meta = meta.view(meta_dt).reshape(-1)
+        ('Drsh',  np.int64, (3,)),
+        ('coef', np.float64)])
+    meta = np.empty(len(slo), dtype=meta_dt)
+    meta['sln'] = sln[inv_tn]
+    meta['slo'] = slo
+    meta['Do'] = Do
+    meta['Drsh'] = np.column_stack((pD0, pD1, Dnp))
+    meta['coef'] = coefficients
     meta = convert_to_tuples_and_slices(meta)
     return meta, bl_c.size, struct_c_1
 

@@ -290,9 +290,9 @@ def conj(data):
 
 def trace(data, order, meta, Dsize):
     newdata = torch.zeros(Dsize, dtype=data.dtype, device=data.device)
-    for sln, slo, Do, Drsh in meta:
+    for sln, slo, Do, Drsh, coef in meta:
         tmp_sln = data[slo].reshape(Do).permute(order).reshape(Drsh)
-        newdata[sln] = newdata[sln] + torch.sum(torch.diagonal(tmp_sln, dim1=0, dim2=1), dim=-1)
+        newdata[sln] = newdata[sln] + coef * torch.sum(torch.diagonal(tmp_sln, dim1=0, dim2=1), dim=-1)
     return newdata
 
 

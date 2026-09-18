@@ -89,6 +89,20 @@ def test_fuse_hard_fermionic_nonabelian(config_kwargs, sym, fermionic):
     assert restored.struct.channels == signed.struct.channels
     assert (restored - signed).norm() < 1e-12
 
+
+def test_fuse_hard_SU2_two_groups_after_recoupling(config_kwargs):
+    """An S3 recoupling must retain every requested fusion group."""
+    config = yastn.make_config(sym='SU2', **config_kwargs)
+    half = yastn.Leg(config, t=(1,), D=(1,))
+    fused_leg = yastn.leg_product(half, half)
+    matrix = yastn.zeros(config=config, legs=(fused_leg, fused_leg.conj()))
+    matrix.set_block(ts=(0, 0), Ds=(1, 1), val=1)
+    matrix.set_block(ts=(2, 2), Ds=(1, 1), val=1)
+    rank4 = matrix.unfuse_legs((0, 1)).transpose((0, 2, 1, 3))
+    restored = rank4.fuse_legs(((0, 1), (2, 3)), mode='hard')
+    assert restored.ndim == 2
+    assert all(leg.is_fused() for leg in restored.get_legs())
+
 # On cuda, run every test under scatter / tiled / forced-loop fuse paths (see conftest.py).
 pytestmark = pytest.mark.usefixtures("fuse_scatter_path")
 

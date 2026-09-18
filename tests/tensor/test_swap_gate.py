@@ -105,6 +105,25 @@ def test_swap_gate_SU2xU1_component_selection(config_kwargs):
     assert all_components.swap_gate(axes=(0, 1)).item() == pytest.approx(-1)
 
 
+def test_swap_gate_SU2xU1_particle_parity_and_groups(config_kwargs):
+    """Only particle-number parity grades SU2xU1, also for fused groups."""
+    config = yastn.make_config(sym='SU2xU1', fermionic=(False, True), **config_kwargs)
+    charges = ((0, 0), (1, 1), (2, 2), (1, 3))
+    leg = yastn.Leg(config, t=charges, D=(1, 1, 1, 1))
+    a = yastn.ones(config=config, legs=(leg, leg, leg.conj(), leg.conj()))
+
+    swapped = a.swap_gate(axes=(0, 1))
+    for key in a.get_blocks_charge():
+        q0, q1 = key[:2], key[2:4]
+        sign = -1 if (q0[1] * q1[1]) % 2 else 1
+        assert np.allclose(swapped[key], sign * a[key])
+
+    grouped = a.swap_gate(axes=((0, 1), (2, 3)))
+    elementary = a.swap_gate(axes=(0, 2, 0, 3, 1, 2, 1, 3))
+    assert yastn.norm(grouped - elementary) < tol
+    assert yastn.norm(grouped.swap_gate(axes=((0, 1), (2, 3))) - a) < tol
+
+
 def apply_operator(psi, c, site):
     """
     Apply operator c on site of psi.

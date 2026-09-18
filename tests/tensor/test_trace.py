@@ -28,6 +28,19 @@ def _run_trace_nonabelian(config_kwargs, sym):
     assert (lhs - a.trace(axes=(0, 2)) - b.trace(axes=(0, 2))).norm() < tol
 
 
+def test_trace_SU2_quantum_dimensions(config_kwargs):
+    """A closed spin-j line evaluates to dim(j), not to one reduced block."""
+    ops = yastn.operators.Spin12(sym='SU2', **config_kwargs)
+    assert ops.I().trace().item() == pytest.approx(2)
+
+
+def test_trace_SU2xU1_quantum_dimensions(config_kwargs):
+    """The Hubbard local space has physical dimension 1 + 2 + 1 = 4."""
+    ops = yastn.operators.SpinfulFermions(sym='SU2xU1', **config_kwargs)
+    assert ops.I().trace().item() == pytest.approx(4)
+    assert ops.n_total().trace().item() == pytest.approx(4)
+
+
 def test_trace_SU2(config_kwargs):
     _run_trace_nonabelian(config_kwargs, 'SU2')
 
