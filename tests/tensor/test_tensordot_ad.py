@@ -16,6 +16,7 @@
 import numpy as np
 import pytest
 import yastn
+from ._nonabelian_utils import matrix_tensor
 
 # On cuda, run every test under scatter / tiled / forced-loop fuse paths (see conftest.py).
 pytestmark = pytest.mark.usefixtures("fuse_scatter_path")
@@ -29,6 +30,18 @@ tol_ad = {"float64": 1e-8, "complex128": 1e-8,  #pylint: disable=invalid-name
 
 torch_test = pytest.mark.skipif("'torch' not in config.getoption('--backend')",
                                 reason="Uses torch.autograd.gradcheck().")
+
+
+@torch_test
+def test_tensordot_ad_SU2(config_kwargs):
+    config = yastn.make_config(sym='SU2', **config_kwargs)
+    _test_tensordot_grad(matrix_tensor(config), matrix_tensor(config), (1, 0), 'float64')
+
+
+@torch_test
+def test_tensordot_ad_SU2xU1(config_kwargs):
+    config = yastn.make_config(sym='SU2xU1', **config_kwargs)
+    _test_tensordot_grad(matrix_tensor(config), matrix_tensor(config), (1, 0), 'float64')
 
 
 def _test_tensordot_grad(a, b, axes, dtype):

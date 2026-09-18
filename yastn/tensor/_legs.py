@@ -330,9 +330,16 @@ def leg_product(*legs, t_allowed=None) -> Leg:
     comb_t = np.array(comb_t, dtype=np.int64).reshape((len(comb_t), len(legs), sym.NSYM))
     comb_D = tuple(product(*(leg.D for leg in legs)))
     comb_D = np.array(comb_D, dtype=np.int64).reshape((len(comb_D), len(legs)))
-    teff = sym.fuse(comb_t, tuple(leg.s for leg in legs), seff).tolist()
     Deff = np.prod(comb_D, axis=1, dtype=np.int64).tolist()
-    tDs = sorted((tuple(x), y) for x, y in zip(teff, Deff))
+    if getattr(sym, 'IS_ABELIAN', True):
+        teff = sym.fuse(comb_t, tuple(leg.s for leg in legs), seff).tolist()
+        tDs = sorted((tuple(x), y) for x, y in zip(teff, Deff))
+    else:
+        signatures = tuple(leg.s for leg in legs)
+        tDs = sorted((out, dim)
+                     for charges, dim in zip(comb_t, Deff)
+                     for out in sym.signed_fusion_outcomes(
+                         tuple(map(tuple, charges)), signatures, seff))
     #
     tnew, Dnew = [], []
     for t, group in groupby(tDs, key=itemgetter(0)):

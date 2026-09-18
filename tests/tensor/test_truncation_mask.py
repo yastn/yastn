@@ -15,7 +15,35 @@
 # ==============================================================================
 """ yastn.truncation_mask() """
 import pytest
+import numpy as np
 import yastn
+
+
+def test_truncation_mask_SU2_counts_complete_irreps(config_kwargs):
+    config = yastn.make_config(sym='SU2', **config_kwargs)
+    leg = yastn.Leg(config, s=1, t=(0, 1, 2), D=(1, 1, 1))
+    spectrum = yastn.zeros(config, legs=(leg, leg.conj()), isdiag=True)
+    spectrum[(0, 0)] = np.array([0.8])
+    spectrum[(1, 1)] = np.array([1.0])
+    spectrum[(2, 2)] = np.array([0.9])
+    mask = spectrum.truncation_mask(D_total=3)
+    assert mask[(1, 1)].item() and mask[(0, 0)].item()
+    assert not mask[(2, 2)].item()
+    assert sum(config.sym.irrep_dimension((j,)) * mask[(j, j)].item()
+               for j in (0, 1, 2)) == 3
+
+
+def test_truncation_mask_SU2xU1_counts_complete_irreps(config_kwargs):
+    config = yastn.make_config(sym='SU2xU1', **config_kwargs)
+    charges = ((0, 0), (1, 0), (2, 0))
+    leg = yastn.Leg(config, s=1, t=charges, D=(1, 1, 1))
+    spectrum = yastn.zeros(config, legs=(leg, leg.conj()), isdiag=True)
+    for charge, value in zip(charges, (0.8, 1.0, 0.9)):
+        spectrum[charge + charge] = np.array([value])
+    mask = spectrum.truncation_mask(D_total=3)
+    assert mask[charges[1] + charges[1]].item()
+    assert mask[charges[0] + charges[0]].item()
+    assert not mask[charges[2] + charges[2]].item()
 
 tol = 1e-12
 

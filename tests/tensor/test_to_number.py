@@ -15,6 +15,21 @@
 """ tensor.to_number() """
 import pytest
 import yastn
+from ._nonabelian_utils import four_leg_tensor
+
+
+def _run_to_number_nonabelian(config_kwargs, sym):
+    a = four_leg_tensor(yastn.make_config(sym=sym, **config_kwargs))
+    scalar = yastn.vdot(a, a)
+    assert scalar.item() == pytest.approx(a.norm() ** 2)
+
+
+def test_to_number_SU2(config_kwargs):
+    _run_to_number_nonabelian(config_kwargs, 'SU2')
+
+
+def test_to_number_SU2xU1(config_kwargs):
+    _run_to_number_nonabelian(config_kwargs, 'SU2xU1')
 
 tol = 1e-12  #pylint: disable=invalid-name
 

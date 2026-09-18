@@ -12,6 +12,7 @@ Usage standalone:
 """
 import pytest
 import yastn
+from ._nonabelian_utils import matrix_tensor
 
 tol = 1e-10
 tol_ad = 1e-6
@@ -52,6 +53,27 @@ def _check_grad(tensors_with_grad, ref_tensors_with_grad, label=""):
         diff = float(yastn.norm(g - g_ref))
         assert diff < tol_ad, \
             f"{label}: gradient mismatch on tensor {i}: {diff}"
+
+
+def _run_checkpoint_nonabelian(config_kwargs, devices, sym):
+    config = yastn.make_config(sym=sym, **config_kwargs)
+    A, B = matrix_tensor(config), matrix_tensor(config)
+    path, _ = yastn.get_contraction_path(A, ('i', 'j'), B, ('j', 'k'), ('i', 'k'))
+    result = yastn.contract_with_unroll(
+        A, ('i', 'j'), B, ('j', 'k'), ('i', 'k'),
+        unroll={'j': yastn.make_sliced_legs(A.get_legs(1))}, optimize=path,
+        checkpoint_loop=True, devices=devices, mp_workers_per_device=1)
+    assert (result - A @ B).norm() < tol
+
+
+@multidev_test
+def test_checkpoint_multidev_SU2(config_kwargs, devices):
+    _run_checkpoint_nonabelian(config_kwargs, devices, 'SU2')
+
+
+@multidev_test
+def test_checkpoint_multidev_SU2xU1(config_kwargs, devices):
+    _run_checkpoint_nonabelian(config_kwargs, devices, 'SU2xU1')
 
 
 # ---------------------------------------------------------------------------

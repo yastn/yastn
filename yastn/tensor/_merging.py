@@ -202,6 +202,15 @@ def _fuse_legs_hard(a, axes, order):
     """
     order = tuple(a.trans[ax] for ax in order)
     axes = tuple(tuple(a.trans[ax] for ax in group) for group in axes)
+    if (not getattr(a.config.sym, 'IS_ABELIAN', True) and _has_nontrivial_irreps(a) and axes
+            and len(axes[0]) == 2 and tuple(axes[0]) == order[:2]
+            and order in _s3_orders(a.ndim_n) and order != tuple(range(a.ndim_n))):
+        group_sizes = tuple(map(len, axes))
+        a = _apply_s3_transpose(a, order)
+        starts = np.cumsum((0,) + group_sizes)
+        axes = tuple(tuple(range(starts[n], starts[n + 1]))
+                     for n in range(len(group_sizes)))
+        order = tuple(range(a.ndim_n))
     meta_mrg, size, struct_new, legs_old = _meta_fuse_hard(a.config.sym, a.struct, axes)
     data = a.config.backend.transpose_and_merge(a._data, order, meta_mrg, size)
 
@@ -213,6 +222,147 @@ def _fuse_legs_hard(a, axes, order):
         hfs.append(_combine_hfs_prod(hfs_axs, legs_basic))
     out = a._replace(mfs=mfs, hfs=hfs, struct=struct_new, data=data, trans=None)
     return out
+
+
+def _has_nontrivial_irreps(a):
+    """Whether any leg carries a representation with a magnetic multiplet."""
+    return any(a.config.sym.irrep_dimension(t) > 1
+               for leg in a.struct.legs for t in leg.t)
+
+
+def _s3_orders(ndim):
+    """Permutations of the first up-to-three leaves, leaving the tail fixed."""
+    tail = tuple(range(3, ndim))
+    if ndim == 2:
+        return ((0, 1), (1, 0))
+    return tuple(head + tail for head in
+                 ((0, 1, 2), (1, 0, 2), (1, 2, 0),
+                  (2, 0, 1), (0, 2, 1), (2, 1, 0)))
+
+
+def _apply_s3_transpose(a, order):
+    """Apply a permutation of the first three leaves as elementary R/F moves."""
+    tail = tuple(range(3, a.ndim_n))
+    head = tuple(order[:3]) if a.ndim_n >= 3 else tuple(order)
+    swap = (1, 0) + tuple(range(2, a.ndim_n))
+    cyclic = (1, 2, 0) + tail
+    words = {
+        (1, 0): ('r',),
+        (1, 0, 2): ('r',),
+        (1, 2, 0): ('f',),
+        (2, 0, 1): ('f', 'f'),
+        (0, 2, 1): ('r', 'f'),
+        (2, 1, 0): ('f', 'r'),
+    }
+    for move in words.get(head, ()):
+        a = (_r_move_01_and_transpose(a, swap) if move == 'r'
+             else _f_move_12_to_23_and_transpose(a, cyclic))
+    return a
+
+
+def _r_move_01_and_transpose(a, order):
+    """Exchange the first two leaves using the CG swap phase."""
+    sym = a.config.sym
+    bl_old = get_blocks(sym, a.struct)
+    legs_new = tuple(a.struct.legs[i] for i in order)
+    struct_new = a.struct.replace(legs=legs_new, channels=(), mask=None)
+    bl_new = get_blocks(sym, struct_new)
+    inverse = tuple(np.argsort(order))
+    old_lookup = {(tuple(t.reshape(-1).tolist()), channel): i
+                  for i, (t, channel) in enumerate(zip(bl_old.t, bl_old.channels))}
+    pieces, keep = [], []
+    for out_i, (charges_new, channel) in enumerate(zip(bl_new.t, bl_new.channels)):
+        charges_old = charges_new[np.asarray(inverse)]
+        key = (tuple(charges_old.reshape(-1).tolist()), channel)
+        in_i = old_lookup.get(key)
+        if in_i is None:
+            continue
+        oriented = tuple(sym.canonical_charge(t) if leg.s == 1 else sym.conj_charge(t)
+                         for t, leg in zip(map(tuple, charges_old), a.struct.legs))
+        total = (tuple(channel[:sym.NSYM]) if a.ndim_n > 2
+                 else tuple(a.struct.n))
+        # A rank-two endomorphism has one incoming and one outgoing leg.  Its
+        # transpose is the ordinary reduced-block transpose; the CG exchange
+        # phase belongs to a fusion vertex (equal orientations), not to the
+        # operator identity/evaluation pairing.
+        if a.ndim_n == 2 and a.struct.legs[0].s != a.struct.legs[1].s:
+            coefficient = 1.0
+        else:
+            coefficient = sym.braiding_phase(oriented[0], oriented[1], total)
+        block = a._data[slice(*bl_old.slc[in_i])]
+        block = a.config.backend.permute_dims(block, bl_old.D[in_i], order).reshape(-1)
+        pieces.append(coefficient * block)
+        keep.append(out_i)
+    if len(keep) != bl_new.nblocks:
+        struct_new = struct_new.mask_from_ind(bl_new.nblocks, keep)
+        bl_new = get_blocks(sym, struct_new)
+    data = a.config.backend.concatenate(pieces) if pieces else a._data[:0]
+    return a._replace(struct=struct_new, data=data,
+                      hfs=tuple(a.hfs[i] for i in order),
+                      mfs=tuple(a.mfs[i] for i in order), trans=None)
+
+
+def _f_move_12_to_23_and_transpose(a, order):
+    """Recouple the first three legs and put ``(j2, j3)`` first.
+
+    This constructs the destination blocks from the permuted legs instead of
+    reusing source channel labels.  That distinction is essential for product
+    symmetries: in SU2xU1 the old channel carries ``q1 + q2`` whereas the new
+    channel carries ``q2 + q3``.
+    """
+    sym = a.config.sym
+    bl_old = get_blocks(sym, a.struct)
+    path_size = (a.ndim_n - 2) * sym.NSYM
+    if a.ndim_n < 3 or any(len(path) != path_size for path in bl_old.channels):
+        raise YastnError("F move requires a canonical left-associated fusion tree.")
+    legs_new = tuple(a.struct.legs[i] for i in order)
+    struct_new = a.struct.replace(legs=legs_new, channels=(), mask=None)
+    bl_new = get_blocks(sym, struct_new)
+    inverse = tuple(np.argsort(order))
+    old_keys = {tuple(charges.reshape(-1).tolist()) for charges in bl_old.t}
+    keep = np.fromiter(
+        (tuple(charges[np.asarray(inverse)].reshape(-1).tolist()) in old_keys
+         for charges in bl_new.t), dtype=bool, count=bl_new.nblocks)
+    if not np.all(keep):
+        struct_new = struct_new.mask_from_ind(bl_new.nblocks, np.flatnonzero(keep))
+        bl_new = get_blocks(sym, struct_new)
+    if any(len(path) != path_size for path in bl_new.channels):
+        raise YastnError("F move produced a non-canonical fusion tree.")
+
+    old_by_charges = {}
+    for i, charges in enumerate(bl_old.t):
+        old_by_charges.setdefault(tuple(charges.reshape(-1).tolist()), []).append(i)
+    pieces = []
+    for out_i, charges_new in enumerate(bl_new.t):
+        charges_old = charges_new[np.asarray(inverse)]
+        key = tuple(charges_old.reshape(-1).tolist())
+        path23 = bl_new.channels[out_i]
+        j23 = tuple(path23[:sym.NSYM])
+        suffix = tuple(path23[sym.NSYM:])
+        J = (tuple(path23[sym.NSYM:2 * sym.NSYM])
+             if a.ndim_n > 3 else tuple(a.struct.n))
+        oriented = tuple(sym.canonical_charge(t) if leg.s == 1 else sym.conj_charge(t)
+                         for t, leg in zip(map(tuple, charges_old), a.struct.legs))
+        j1, j2, j3 = oriented[:3]
+        value = None
+        for in_i in old_by_charges.get(key, ()):
+            path12 = bl_old.channels[in_i]
+            if tuple(path12[sym.NSYM:]) != suffix:
+                continue
+            j12 = tuple(path12[:sym.NSYM])
+            coefficient = (sym.f_symbol(j1, j2, j3, J, j12, j23)
+                           * sym.braiding_phase(j23, j1, J))
+            block = a._data[slice(*bl_old.slc[in_i])]
+            block = a.config.backend.permute_dims(block, bl_old.D[in_i], order).reshape(-1)
+            term = coefficient * block
+            value = term if value is None else value + term
+        if value is None:
+            raise YastnError("Cannot match SU2 fusion channels after leg permutation.")
+        pieces.append(value)
+    data = a.config.backend.concatenate(pieces) if pieces else a._data
+    return a._replace(struct=struct_new, data=data,
+                      hfs=tuple(a.hfs[i] for i in order),
+                      mfs=tuple(a.mfs[i] for i in order), trans=None)
 
 
 @nsys_profile
@@ -242,7 +392,8 @@ def _meta_fuse_hard(sym, struct, axes, legs_sub=None, connector_first=True, lazy
     else:
         struct = get_trimmed_struct(sym, struct, legs_sub)
         st = get_blocks(sym, struct)
-        slc = st_full.slc[find_matching_indices(st_full.t, st.t, both=False)]
+        slc = st_full.slc[find_matching_block_keys(
+            st_full.t, st_full.channels, st.t, st.channels, both=False)]
     #
     slegs = tuple(tuple(struct.legs[n].s for n in axis) for axis in axes)
     s_eff = tuple(ss[0] if ss else -1 for ss in slegs)

@@ -16,8 +16,23 @@
 import numpy as np
 import pytest
 import yastn
+from ._nonabelian_utils import four_leg_tensor
 
 tol = 1e-10  #pylint: disable=invalid-name
+
+
+def _run_fuse_meta_nonabelian(config_kwargs, sym):
+    a = four_leg_tensor(yastn.make_config(sym=sym, **config_kwargs))
+    fused = a.fuse_legs(axes=((0, 1), (2, 3)), mode='meta')
+    assert (fused.unfuse_legs((0, 1)) - a).norm() < tol
+
+
+def test_fuse_meta_SU2(config_kwargs):
+    _run_fuse_meta_nonabelian(config_kwargs, 'SU2')
+
+
+def test_fuse_meta_SU2xU1(config_kwargs):
+    _run_fuse_meta_nonabelian(config_kwargs, 'SU2xU1')
 
 
 def test_fuse(config_kwargs):

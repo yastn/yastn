@@ -15,6 +15,7 @@
 """ yastn.swap_gate() to introduce fermionic statistics. """
 import re
 import pytest
+import numpy as np
 import yastn
 
 tol = 1e-12  #pylint: disable=invalid-name
@@ -64,6 +65,44 @@ def test_swap_gate_basic(config_kwargs):
     a_bosonic = yastn.ones(config=config_Z2, legs=[leg, leg, leg, leg], n=0)
     b_bosonic = a_bosonic.swap_gate(axes=(0, 1))
     assert a_bosonic is b_bosonic
+
+
+@pytest.mark.parametrize('sym, fermionic, charges, odd', [
+    ('SU2', True, ((0,), (1,), (2,)), (1,)),
+    ('SU2xU1', (False, True), ((0, 0), (1, 1), (0, 2)), (1, 1)),
+])
+def test_swap_gate_nonabelian(config_kwargs, sym, fermionic, charges, odd):
+    """Fermionic signs act on degeneracy blocks of non-Abelian irreps."""
+    config = yastn.make_config(sym=sym, fermionic=fermionic, **config_kwargs)
+    leg = yastn.Leg(config, t=charges, D=(1, 2, 1))
+    a = yastn.ones(config=config, legs=(leg, leg.conj()))
+    assert a.nblocks == 3
+
+    b = a.swap_gate(axes=(0, 1))
+    for charge in charges:
+        key = charge + charge if sym == 'SU2' else (charge, charge)
+        sign = -1 if charge == odd else 1
+        assert np.linalg.norm(b[key] - sign * a[key]) < tol
+    assert yastn.norm(b.swap_gate(axes=(0, 1)) - a) < tol
+
+    config_b = yastn.make_config(sym=sym, fermionic=False, **config_kwargs)
+    leg_b = yastn.Leg(config_b, t=charges, D=(1, 2, 1))
+    a_b = yastn.ones(config=config_b, legs=(leg_b, leg_b.conj()))
+    assert a_b.swap_gate(axes=(0, 1)) is a_b
+
+
+def test_swap_gate_SU2xU1_component_selection(config_kwargs):
+    """SU2xU1 can grade particle number independently of the SU(2) label."""
+    charge = ((1, 0),)
+    tensors = []
+    for fermionic in ((False, True), (True, False), True):
+        config = yastn.make_config(sym='SU2xU1', fermionic=fermionic, **config_kwargs)
+        leg = yastn.Leg(config, t=charge, D=(1,))
+        tensors.append(yastn.ones(config=config, legs=(leg, leg.conj())))
+    particle, spin, all_components = tensors
+    assert particle.swap_gate(axes=(0, 1)).item() == pytest.approx(1)
+    assert spin.swap_gate(axes=(0, 1)).item() == pytest.approx(-1)
+    assert all_components.swap_gate(axes=(0, 1)).item() == pytest.approx(-1)
 
 
 def apply_operator(psi, c, site):

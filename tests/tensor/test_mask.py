@@ -15,8 +15,26 @@
 """ Test yastn.mask() """
 import pytest
 import yastn
+from ._nonabelian_utils import matrix_tensor
 
 tol = 1e-12  #pylint: disable=invalid-name
+
+
+def _run_mask_nonabelian(config_kwargs, sym):
+    config = yastn.make_config(sym=sym, **config_kwargs)
+    U, S, _ = matrix_tensor(config).svd(axes=(0, 1))
+    mask = S > 0
+    projected = mask.apply_mask(U, axes=1)
+    assert projected.is_consistent()
+    assert projected.nblocks > 1
+
+
+def test_mask_SU2(config_kwargs):
+    _run_mask_nonabelian(config_kwargs, 'SU2')
+
+
+def test_mask_SU2xU1(config_kwargs):
+    _run_mask_nonabelian(config_kwargs, 'SU2xU1')
 
 
 def test_mask_basic(config_kwargs):

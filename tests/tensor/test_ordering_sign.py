@@ -72,5 +72,24 @@ def test_ordering_sign(config_kwargs):
     assert 1 == sign_canonical_order(sp, sm, sites=(s2, s1), f_ordered=net.f_ordered)
 
 
+@pytest.mark.parametrize('sym, fermionic, odd_charge, even_charge', [
+    ('SU2', True, (1,), (0,)),
+    ('SU2xU1', (False, True), (1, 1), (1, 0)),
+])
+def test_ordering_sign_nonabelian(config_kwargs, sym, fermionic, odd_charge, even_charge):
+    """Canonical-order signs also use total non-Abelian tensor charges."""
+    config = yastn.make_config(sym=sym, fermionic=fermionic, **config_kwargs)
+
+    def charged_tensor(charge):
+        leg = yastn.Leg(config, t=(charge,), D=(2,))
+        return yastn.ones(config=config, legs=(leg,), n=charge)
+
+    odd, even = charged_tensor(odd_charge), charged_tensor(even_charge)
+    ordered = lambda left, right: left <= right
+    assert sign_canonical_order(odd, odd, sites=(0, 1), f_ordered=ordered) == 1
+    assert sign_canonical_order(odd, odd, sites=(1, 0), f_ordered=ordered) == -1
+    assert sign_canonical_order(odd, even, sites=(1, 0), f_ordered=ordered) == 1
+
+
 if __name__ == '__main__':
     pytest.main([__file__, "-vs", "--durations=0"])

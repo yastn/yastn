@@ -17,6 +17,24 @@ import numpy as np
 import pytest
 import yastn
 
+
+def _run_initialization_nonabelian(config_kwargs, sym, charges, expected):
+    config = yastn.make_config(sym=sym, **config_kwargs)
+    leg = yastn.Leg(config, s=1, t=charges, D=(1, 2, 1))
+    a = yastn.rand(config, legs=(leg, leg.conj()))
+    assert a.get_blocks_charge() == expected
+
+
+def test_initialization_SU2(config_kwargs):
+    _run_initialization_nonabelian(
+        config_kwargs, 'SU2', (0, 1, 2), ((0, 0), (1, 1), (2, 2)))
+
+
+def test_initialization_SU2xU1(config_kwargs):
+    _run_initialization_nonabelian(
+        config_kwargs, 'SU2xU1', ((0, -1), (1, 2), (2, 0)),
+        ((0, -1, 0, -1), (1, 2, 1, 2), (2, 0, 2, 0)))
+
 tol = 1e-12  #pylint: disable=invalid-name
 
 

@@ -16,8 +16,24 @@
 import numpy as np
 import pytest
 import yastn
+from ._nonabelian_utils import four_leg_tensor
 
 tol = 1e-12  #pylint: disable=invalid-name
+
+
+def _run_trace_nonabelian(config_kwargs, sym):
+    config = yastn.make_config(sym=sym, **config_kwargs)
+    a, b = four_leg_tensor(config), four_leg_tensor(config)
+    lhs = (a + b).trace(axes=(0, 2))
+    assert (lhs - a.trace(axes=(0, 2)) - b.trace(axes=(0, 2))).norm() < tol
+
+
+def test_trace_SU2(config_kwargs):
+    _run_trace_nonabelian(config_kwargs, 'SU2')
+
+
+def test_trace_SU2xU1(config_kwargs):
+    _run_trace_nonabelian(config_kwargs, 'SU2xU1')
 
 
 def trace_vs_numpy(a, axes):

@@ -16,8 +16,25 @@
 import numpy as np
 import pytest
 import yastn
+from ._nonabelian_utils import matrix_tensor
 
 tol = 1e-12  #pylint: disable=invalid-name
+
+
+def _run_set_block_nonabelian(config_kwargs, sym):
+    a = matrix_tensor(yastn.make_config(sym=sym, **config_kwargs))
+    charge = a.get_blocks_charge()[0]
+    a.set_block(ts=charge, val='zeros')
+    assert np.linalg.norm(a[charge]) == 0
+    assert a.is_consistent()
+
+
+def test_set_block_SU2(config_kwargs):
+    _run_set_block_nonabelian(config_kwargs, 'SU2')
+
+
+def test_set_block_SU2xU1(config_kwargs):
+    _run_set_block_nonabelian(config_kwargs, 'SU2xU1')
 
 
 def test_U1(config_kwargs):

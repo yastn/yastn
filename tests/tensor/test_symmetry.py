@@ -162,7 +162,7 @@ def test_add_charges():
     assert sym_U1xU1xZ2.conj_charge((-1, 2, 0)) == (1, -2, 0)
 
 
-def test_su2_category_rules():
+def test_symmetry_SU2_category_rules():
     assert issubclass(sym_SU2, sym_nonabelian)
     assert str(sym_SU2) == 'SU2'
     assert sym_SU2.IS_ABELIAN is False
@@ -180,7 +180,7 @@ def test_su2_category_rules():
         sym_SU2.fusion_outcomes((-1,), (1,))
 
 
-def test_su2xu1_category_rules():
+def test_symmetry_SU2xU1_category_rules():
     assert issubclass(sym_SU2xU1, sym_nonabelian)
     assert str(sym_SU2xU1) == 'SU2xU1'
     assert sym_SU2xU1.zero() == (0, 0)
@@ -193,9 +193,13 @@ def test_su2xu1_category_rules():
     assert sym_SU2xU1.add_charges((0, 2), (0, -1), signatures=(1, -1)) == (0, 3)
     with pytest.raises(TypeError, match='branches'):
         sym_SU2xU1.fuse(np.array([[[1, 2], [1, -1]]]), (1, 1), 1)
+    assert sym_SU2xU1.f_symbol((1, 2), (1, 2), (1, -2), (1, 2),
+                               (0, 4), (0, 0)) != 0
+    assert sym_SU2xU1.f_symbol((1, 2), (1, 2), (1, -2), (1, 2),
+                               (0, 0), (0, 0)) == 0
 
 
-def test_su2_cg_and_f_move_are_unitary():
+def test_symmetry_SU2_cg_and_f_move_are_unitary():
     rt2 = np.sqrt(2.)
     assert np.isclose(sym_SU2.clebsch_gordan(1, 1, 1, -1, 0, 0), 1 / rt2)
     assert np.isclose(sym_SU2.clebsch_gordan(1, -1, 1, 1, 0, 0), -1 / rt2)
@@ -205,6 +209,14 @@ def test_su2_cg_and_f_move_are_unitary():
     F = np.array([[sym_SU2.f_symbol(1, 1, 1, 1, left, right)
                    for right in channels] for left in channels])
     assert np.allclose(F @ F.T, np.eye(2), atol=1e-14)
+
+    cg = sym_SU2.fusion_isometry(1, 1)
+    coupled = np.concatenate([cg[(0,)], cg[(2,)]], axis=0)
+    assert np.allclose(coupled @ coupled.T, np.eye(4), atol=1e-14)
+    assert np.allclose(coupled.T @ coupled, np.eye(4), atol=1e-14)
+
+    cg_u1 = sym_SU2xU1.fusion_isometry((1, 2), (1, -1), (0, 1))
+    assert np.allclose(cg_u1 @ cg_u1.T, np.eye(1), atol=1e-14)
 
 
 if __name__ == '__main__':

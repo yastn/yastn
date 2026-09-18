@@ -11,6 +11,8 @@ from numbers import Integral
 from functools import lru_cache
 from math import factorial, sqrt
 
+import numpy as np
+
 from .sym_nonabelian import sym_nonabelian
 
 
@@ -153,6 +155,32 @@ class sym_SU2(sym_nonabelian):
         j1, j2, j3, J, j12, j23 = labels
         phase = (-1.) ** ((j1 + j2 + j3 + J) // 2)
         return phase * sqrt((j12 + 1) * (j23 + 1)) * cls.wigner_6j(j1, j2, j12, j3, J, j23)
+
+    @classmethod
+    def braiding_phase(cls, left, right, total):
+        """CG phase for exchanging the two inputs of a fusion vertex."""
+        left, right, total = (cls._label(x) for x in (left, right, total))
+        if not cls._triangle(left, right, total):
+            return 0.0
+        return (-1.) ** ((left + right - total) // 2)
+
+    @classmethod
+    def fusion_isometry(cls, j1, j2, J=None):
+        """CG isometry from product magnetic basis to coupled basis.
+
+        With ``J`` specified, returns an array of shape
+        ``(J + 1, (j1 + 1) * (j2 + 1))``. Without ``J``, returns all allowed
+        output sectors as ``{(J,): matrix}``.
+        """
+        j1, j2 = cls._label(j1), cls._label(j2)
+        if J is None:
+            return {out: cls.fusion_isometry(j1, j2, out) for out in cls.fusion_outcomes(j1, j2)}
+        J = cls._label(J)
+        if (J,) not in cls.fusion_outcomes(j1, j2):
+            raise ValueError(f"Irrep {J} is not present in {j1} x {j2}.")
+        m1s, m2s, Ms = range(-j1, j1 + 1, 2), range(-j2, j2 + 1, 2), range(-J, J + 1, 2)
+        return np.asarray([[cls.clebsch_gordan(j1, m1, j2, m2, J, M)
+                            for m1 in m1s for m2 in m2s] for M in Ms], dtype=float)
 
 
 def _product(values):

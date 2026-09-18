@@ -20,8 +20,25 @@ import numpy as np
 import pytest
 import yastn
 from yastn.tensor._auxiliary import get_blocks, hash_blocks
+from ._nonabelian_utils import four_leg_tensor
 
 tol = 1e-12  #pylint: disable=invalid-name
+
+
+def _run_cache_nonabelian(config_kwargs, sym):
+    a = four_leg_tensor(yastn.make_config(sym=sym, **config_kwargs))
+    yastn.clear_cache()
+    for _ in range(3):
+        a.svd(axes=((0, 1), (2, 3)))
+    assert any(info.hits > 0 for info in yastn.get_cache_info().values())
+
+
+def test_cache_SU2(config_kwargs):
+    _run_cache_nonabelian(config_kwargs, 'SU2')
+
+
+def test_cache_SU2xU1(config_kwargs):
+    _run_cache_nonabelian(config_kwargs, 'SU2xU1')
 
 
 def test_cache(config_kwargs):

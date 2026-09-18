@@ -17,6 +17,21 @@ import numpy as np
 import pytest
 import yastn
 
+
+def _run_leg_nonabelian(config_kwargs, sym, charges):
+    config = yastn.make_config(sym=sym, **config_kwargs)
+    leg = yastn.Leg(config, s=1, t=charges, D=(1, 2, 3))
+    assert leg.conj().conj() == leg
+    assert leg.t == charges
+
+
+def test_leg_SU2(config_kwargs):
+    _run_leg_nonabelian(config_kwargs, 'SU2', ((0,), (1,), (2,)))
+
+
+def test_leg_SU2xU1(config_kwargs):
+    _run_leg_nonabelian(config_kwargs, 'SU2xU1', ((0, 0), (1, 2), (2, 0)))
+
 tol = 1e-12  #pylint: disable=invalid-name
 
 

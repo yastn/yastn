@@ -16,8 +16,64 @@
 import numpy as np
 import pytest
 import yastn
+from yastn.tensor._auxiliary import get_blocks
+from ._nonabelian_utils import four_leg_tensor
 
 tol = 1e-12  #pylint: disable=invalid-name
+
+
+def _run_transpose_first_three(config_kwargs, sym):
+    config = yastn.make_config(sym=sym, **config_kwargs)
+    a = four_leg_tensor(config, D=1)
+    for order in ((1, 0, 2, 3), (1, 2, 0, 3), (2, 0, 1, 3),
+                  (0, 2, 1, 3), (2, 1, 0, 3)):
+        inverse = tuple(np.argsort(order))
+        moved = a.transpose(order).consume_transpose()
+        restored = moved.transpose(inverse).consume_transpose()
+        assert np.isclose(moved.norm(), a.norm(), atol=1e-13)
+        assert (restored - a).norm() < tol
+
+
+def test_transpose_SU2(config_kwargs):
+    _run_transpose_first_three(config_kwargs, 'SU2')
+
+
+def test_transpose_SU2xU1(config_kwargs):
+    _run_transpose_first_three(config_kwargs, 'SU2xU1')
+
+
+def test_transpose_SU2_rank_two_cg_exchange_phase(config_kwargs):
+    config = yastn.make_config(sym='SU2', **config_kwargs)
+    half = yastn.Leg(config, s=1, t=(1,), D=(2,))
+    a = yastn.rand(config, legs=(half, half))
+    moved = a.transpose((1, 0)).consume_transpose()
+    expected = -config.backend.to_numpy(a.data).reshape(2, 2).T.reshape(-1)
+    assert np.allclose(config.backend.to_numpy(moved.data), expected)
+
+
+def test_transpose_SU2_rank_three_f_move(config_kwargs):
+    config = yastn.make_config(sym='SU2', **config_kwargs)
+    half = yastn.Leg(config, s=1, t=(1,), D=(2,))
+    one = yastn.Leg(config, s=1, t=(2,), D=(1,))
+    a = yastn.rand(config, legs=(half, half, one))
+    moved = a.transpose((1, 2, 0)).consume_transpose()
+    assert get_blocks(config.sym, a.struct).channels == ((2,),)
+    assert get_blocks(config.sym, moved.struct).channels == ((1,),)
+    restored = moved.transpose((2, 0, 1)).consume_transpose()
+    assert (restored - a).norm() < tol
+
+
+def test_transpose_SU2xU1_higher_rank_preserves_channel_suffix(config_kwargs):
+    config = yastn.make_config(sym='SU2xU1', **config_kwargs)
+    plus = yastn.Leg(config, s=1, t=((1, 2),), D=(1,))
+    scalar = yastn.Leg(config, s=1, t=((0, 0),), D=(2,))
+    a = yastn.rand(config, legs=(plus, plus, plus.conj(), plus.conj(), scalar))
+    old = get_blocks(config.sym, a.struct).channels
+    moved = a.transpose((1, 2, 0, 3, 4)).consume_transpose()
+    new = get_blocks(config.sym, moved.struct).channels
+    assert {path[4:] for path in old} == {path[4:] for path in new}
+    restored = moved.transpose((2, 0, 1, 3, 4)).consume_transpose()
+    assert (restored - a).norm() < tol
 
 def run_moveaxis(a, ad, source, destination, result_D, result_s):
     newa = a.moveaxis(source=source, destination=destination)

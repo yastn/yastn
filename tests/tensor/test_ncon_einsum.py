@@ -15,6 +15,22 @@
 """ Test yastn.ncon() """
 import pytest
 import yastn
+from ._nonabelian_utils import matrix_tensor
+def _run_ncon_nonabelian(config_kwargs, sym):
+    config = yastn.make_config(sym=sym, **config_kwargs)
+    a = matrix_tensor(config)
+    b = matrix_tensor(config)
+    via_ncon = yastn.ncon([a, b], [(-1, 1), (1, -2)])
+    direct = a @ b
+    assert (via_ncon - direct).norm() < 1e-12
+
+
+def test_ncon_SU2(config_kwargs):
+    _run_ncon_nonabelian(config_kwargs, 'SU2')
+
+
+def test_ncon_SU2xU1(config_kwargs):
+    _run_ncon_nonabelian(config_kwargs, 'SU2xU1')
 
 tol = 1e-12  # pylint: disable=invalid-name
 

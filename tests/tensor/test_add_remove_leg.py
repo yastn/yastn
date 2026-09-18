@@ -15,8 +15,17 @@
 """ yastn.add_leg() yastn.remove_leg() """
 import pytest
 import yastn
+from ._nonabelian_utils import four_leg_tensor
 
 tol = 1e-12  #pylint: disable=invalid-name
+
+
+def test_add_remove_leg_SU2(config_kwargs):
+    _test_add_remove_leg(four_leg_tensor(yastn.make_config(sym='SU2', **config_kwargs)))
+
+
+def test_add_remove_leg_SU2xU1(config_kwargs):
+    _test_add_remove_leg(four_leg_tensor(yastn.make_config(sym='SU2xU1', **config_kwargs)))
 
 
 def _test_add_remove_leg(a):

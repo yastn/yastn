@@ -16,8 +16,24 @@
 import numpy as np
 import pytest
 import yastn
+from ._nonabelian_utils import matrix_tensor
 
 tol = 1e-12  #pylint: disable=invalid-name
+
+
+def _run_entropy_nonabelian(config_kwargs, sym):
+    config = yastn.make_config(sym=sym, **config_kwargs)
+    _, S, _ = matrix_tensor(config).svd(axes=(0, 1))
+    assert yastn.entropy(S) >= 0
+    assert yastn.entropy(S, alpha=2) >= 0
+
+
+def test_entropy_SU2(config_kwargs):
+    _run_entropy_nonabelian(config_kwargs, 'SU2')
+
+
+def test_entropy_SU2xU1(config_kwargs):
+    _run_entropy_nonabelian(config_kwargs, 'SU2xU1')
 
 
 def test_entropy(config_kwargs):

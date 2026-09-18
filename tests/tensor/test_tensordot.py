@@ -16,6 +16,23 @@
 import numpy as np
 import pytest
 import yastn
+from ._nonabelian_utils import matrix_tensor
+
+
+def test_tensordot_SU2_branch_safe_kernel(config_kwargs):
+    config = yastn.make_config(sym='SU2', **config_kwargs)
+    a = matrix_tensor(config)
+    result = a @ a
+    assert result.nblocks > 1
+    assert result.norm() >= 0
+
+
+def test_tensordot_SU2xU1_branch_safe_kernel(config_kwargs):
+    config = yastn.make_config(sym='SU2xU1', **config_kwargs)
+    a = matrix_tensor(config)
+    result = a @ a
+    assert result.nblocks > 1
+    assert result.norm() >= 0
 import re
 
 # On cuda, run every test under scatter / tiled / forced-loop fuse paths (see conftest.py).

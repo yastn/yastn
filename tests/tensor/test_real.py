@@ -16,6 +16,21 @@
 import numpy as np
 import pytest
 import yastn
+from ._nonabelian_utils import four_leg_tensor
+
+
+def _run_real_nonabelian(config_kwargs, sym):
+    config = yastn.make_config(sym=sym, **config_kwargs)
+    a = four_leg_tensor(config) * (2 + 3j)
+    assert (a.real() * 3 - a.imag() * 2).norm() < 1e-12
+
+
+def test_real_SU2(config_kwargs):
+    _run_real_nonabelian(config_kwargs, 'SU2')
+
+
+def test_real_SU2xU1(config_kwargs):
+    _run_real_nonabelian(config_kwargs, 'SU2xU1')
 
 tol = 1e-12  #pylint: disable=invalid-name
 

@@ -16,6 +16,25 @@
 import pytest
 from scipy.sparse.linalg import eigs
 import yastn
+from ._nonabelian_utils import matrix_tensor
+
+
+def _run_eigs_nonabelian(config_kwargs, sym):
+    config = yastn.make_config(sym=sym, **config_kwargs)
+    op = matrix_tensor(config)
+    op = op @ op.H
+    v0 = matrix_tensor(config)
+    values, vectors = yastn.eigs(lambda x: op @ x, v0=v0, k=1, ncv=8, hermitian=True)
+    assert len(values) == len(vectors) == 1
+    assert (op @ vectors[0] - values[0] * vectors[0]).norm() < 1e-8
+
+
+def test_eigs_SU2(config_kwargs):
+    _run_eigs_nonabelian(config_kwargs, 'SU2')
+
+
+def test_eigs_SU2xU1(config_kwargs):
+    _run_eigs_nonabelian(config_kwargs, 'SU2xU1')
 
 @pytest.mark.xfail(reason='Convergence depends on linear algebra backend', strict=False)
 def test_eigs_arnoldi(config_kwargs):

@@ -14,6 +14,7 @@
 # ==============================================================================
 """ Test definitions of two-site gates. """
 import pytest
+import numpy as np
 import yastn
 import yastn.tn.fpeps as fpeps
 
@@ -132,6 +133,17 @@ def test_Heisenberg_gate(config_kwargs):
     check_Heisenberg_gate(ops, J=1, ds=0.02)
     ops = yastn.operators.Spin12(sym='dense', **config_kwargs)
     check_Heisenberg_gate(ops, J=-2, ds=0.05)
+
+
+def test_Heisenberg_gate_SU2(config_kwargs):
+    """SU2 gate has the exact singlet/triplet Boltzmann factors."""
+    ops = yastn.operators.Spin12(sym='SU2', **config_kwargs)
+    J, step = 1.3, 0.07
+    gate = fpeps.gates.gate_nn_Heisenberg_SU2(J, step, ops.I())
+    full = yastn.ncon(gate.G, [(-0, -1, 1), (-2, -3, 1)])
+    fused = full.transpose((0, 2, 1, 3)).fuse_legs(((0, 1), (2, 3)), mode='hard')
+    assert np.allclose(fused[(0, 0)], [[np.exp(3 * J * step / 4)]])
+    assert np.allclose(fused[(2, 2)], [[np.exp(-J * step / 4)]])
 
 
 def test_occupation_gate(config_kwargs):

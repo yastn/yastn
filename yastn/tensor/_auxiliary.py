@@ -338,6 +338,16 @@ def get_blocks(sym, struct) -> _blocks:
 
 @nsys_profile
 def get_trimmed_struct(sym, struct, sub_legs=None):
+    # A non-Abelian mask indexes channel-resolved blocks, while
+    # get_blocks_charges_all() below enumerates charge tuples before their
+    # fusion-path expansion.  Reapplying such a mask to the latter is both
+    # dimensionally wrong and would discard the distinction between two
+    # channels carrying identical external charges.  A masked lazy tensor is
+    # allowed to retain unused leg sectors, so no further leg trimming is
+    # necessary in this case.
+    if (not getattr(sym, 'IS_ABELIAN', True) and sub_legs is None
+            and struct.mask.array is not None):
+        return struct
     saxes = tuple(int(leg.s) for leg in struct.legs)
     # taxes_full = tuple(leg.t for leg in struct.legs)
     # taxes_full = tuple(tuple(tt for tt, d in zip(leg.t, leg.D) if d > 0) for leg in struct.legs)

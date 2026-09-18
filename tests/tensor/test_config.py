@@ -71,6 +71,27 @@ def test_make_config(config_kwargs):
         # backend encoded as string only supports: 'np', 'torch'
 
 
+def test_nonabelian_fermionic_config(config_kwargs):
+    """Non-Abelian configs use the same component-wise statistics as Abelian ones."""
+    config_SU2_b = yastn.make_config(sym='SU2', fermionic=False, **config_kwargs)
+    config_SU2_f = yastn.make_config(sym='SU2', fermionic=True, **config_kwargs)
+    config_SU2_ft = yastn.make_config(sym='SU2', fermionic=(True,), **config_kwargs)
+    assert config_SU2_b.fermionic is False
+    assert config_SU2_f.fermionic is True
+    assert config_SU2_ft.fermionic == (True,)
+
+    # For spinful fermions, particle-number parity is the physical choice;
+    # the SU(2) irrep label remains bosonic.
+    config_SU2xU1 = yastn.make_config(sym='SU2xU1', fermionic=(False, True), **config_kwargs)
+    config_from_list = yastn.make_config(sym='SU2xU1', fermionic=[False, True], **config_kwargs)
+    assert config_SU2xU1.fermionic == (False, True)
+    assert config_from_list.fermionic == (False, True)
+
+    for fermionic in ((True,), (False, True, False), (False, 1), 'particle-number'):
+        with pytest.raises(yastn.YastnError, match='fermionic should be bool'):
+            yastn.make_config(sym='SU2xU1', fermionic=fermionic, **config_kwargs)
+
+
 if __name__ == '__main__':
     # pytest.main([__file__, "-vs", "--durations=0"])
     pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--device", "cuda"])

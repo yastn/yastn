@@ -82,7 +82,10 @@ def make_config(**kwargs) -> _config:
     fermionic : bool or tuple[bool,...]
         Specify behavior of :meth:`yastn.swap_gate` function, allowing to introduce fermionic statistics.
         Allowed values: ``False``, ``True``, or a tuple ``(True, False, ...)`` with one bool for each component
-        charge vector, i.e., of length sym.NSYM. The default is ``False``.
+        charge vector, i.e., of length sym.NSYM. This has identical semantics for Abelian and non-Abelian
+        symmetries. For ``SU2``, ``True`` grades half-integer irreps through the parity of the ``2*j`` label.
+        For spinful ``SU2xU1`` tensors, ``(False, True)`` is typically used so that particle-number parity,
+        rather than the SU(2) irrep label, determines fermionic statistics. The default is ``False``.
     default_fusion: str
         Specify default strategy to handle leg fusion: ``'hard'`` or ``'meta'``. See :meth:`yastn.Tensor.fuse_legs`
         for details. The default is ``'hard'``.
@@ -133,6 +136,21 @@ def make_config(**kwargs) -> _config:
             kwargs["sym"] = _syms[kwargs["sym"]]
         except KeyError:
             raise YastnError("sym encoded as string only supports: 'dense', 'Z2', 'Z3', 'U1', 'U1xU1', 'U1xU1xZ2', 'SU2', 'SU2xU1'.")
+
+    # Fermionic statistics is selected charge component by charge component.
+    # Keep the historical bool interface: ``True`` selects every component,
+    # while a bool tuple can distinguish, e.g., spin and particle-number
+    # labels of SU2xU1.  Canonicalising lists here also makes configurations
+    # hashable and prevents failures much later in cached tensor operations.
+    fermionic = kwargs.get("fermionic", False)
+    if isinstance(fermionic, list):
+        fermionic = tuple(fermionic)
+    if isinstance(fermionic, tuple):
+        if len(fermionic) != kwargs["sym"].NSYM or any(type(x) is not bool for x in fermionic):
+            raise YastnError("fermionic should be bool or a tuple of bools of length sym.NSYM.")
+        kwargs["fermionic"] = fermionic
+    elif type(fermionic) is not bool:
+        raise YastnError("fermionic should be bool or a tuple of bools of length sym.NSYM.")
 
     if kwargs.get("lazy_threshold", None) is None:
         if kwargs["backend"].BACKEND_ID in ["torch_cutensor",]:
@@ -284,7 +302,12 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
         raise YastnError('Size of ts is not consistent with tensor rank and the number of symmetry sectors.')
 
     ats = ts.reshape((1, a.ndim_n, nsym))
-    if not np.all(a.config.sym.fuse(ats, a.s_n, 1) == a.n):
+    if getattr(a.config.sym, 'IS_ABELIAN', True):
+        charges_allowed = np.all(a.config.sym.fuse(ats, a.s_n, 1) == a.n)
+    else:
+        charges_allowed = a.config.sym.can_fuse(tuple(map(tuple, ats[0])), a.n,
+                                                signatures=a.s_n)
+    if not charges_allowed:
         raise YastnError('Charges ts are not consistent with the symmetry rules: f(t @ s) == n')
     ats = ats[0]
 

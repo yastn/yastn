@@ -21,8 +21,30 @@ from opt_einsum.contract import PathInfo
 from yastn.tensor._einsum import ncon_prefilter
 from yastn.tensor.oe_blocksparse import _filter_tensor_blocks
 from yastn.tensor._auxiliary import get_blocks
+from ._nonabelian_utils import matrix_tensor
 
 tol = 1e-10
+
+
+def _run_oe_nonabelian(config_kwargs, sym):
+    config = yastn.make_config(sym=sym, **config_kwargs)
+    A, B, C = (matrix_tensor(config) for _ in range(3))
+    path, info = yastn.get_contraction_path(
+        A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), ('i', 'l'))
+    result = yastn.contract_with_unroll(
+        A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), ('i', 'l'), optimize=path)
+    expected = A @ B @ C
+    assert isinstance(info, PathInfo)
+    assert result.nblocks == expected.nblocks > 1
+    assert (result - expected).norm() < tol
+
+
+def test_oe_blocksparse_SU2(config_kwargs):
+    _run_oe_nonabelian(config_kwargs, 'SU2')
+
+
+def test_oe_blocksparse_SU2xU1(config_kwargs):
+    _run_oe_nonabelian(config_kwargs, 'SU2xU1')
 
 
 def _struct_t(t):

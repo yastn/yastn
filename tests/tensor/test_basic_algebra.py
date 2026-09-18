@@ -16,8 +16,27 @@
 import numpy as np
 import pytest
 import yastn
+from ._nonabelian_utils import four_leg_tensor
 
 tol = 1e-12  #pylint: disable=invalid-name
+
+
+def _run_algebra_nonabelian(config_kwargs, sym):
+    config = yastn.make_config(sym=sym, **config_kwargs)
+    a, b = four_leg_tensor(config), four_leg_tensor(config)
+    c = a + 2 * b
+    assert (c - a - 2 * b).norm() < tol
+    assert (a.conj().conj() - a).norm() < tol
+    assert (a.copy() - a).norm() < tol
+    assert a.are_independent(a.copy())
+
+
+def test_algebra_SU2(config_kwargs):
+    _run_algebra_nonabelian(config_kwargs, 'SU2')
+
+
+def test_algebra_SU2xU1(config_kwargs):
+    _run_algebra_nonabelian(config_kwargs, 'SU2xU1')
 
 
 def algebra_vs_numpy(f, a, b):

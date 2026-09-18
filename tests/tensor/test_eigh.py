@@ -16,8 +16,25 @@
 from itertools import product
 import pytest
 import yastn
+from ._nonabelian_utils import matrix_tensor
 
 tol = 1e-9  #pylint: disable=invalid-name
+
+
+def _run_eigh_nonabelian(config_kwargs, sym):
+    config = yastn.make_config(sym=sym, **config_kwargs)
+    a = matrix_tensor(config)
+    a = a + a.H
+    S, U = yastn.eigh(a, axes=(0, 1))
+    assert (U @ S @ U.H - a).norm() < tol
+
+
+def test_eigh_SU2(config_kwargs):
+    _run_eigh_nonabelian(config_kwargs, 'SU2')
+
+
+def test_eigh_SU2xU1(config_kwargs):
+    _run_eigh_nonabelian(config_kwargs, 'SU2xU1')
 
 
 def test_eigh_block_lanczos_zero_block(config_kwargs):

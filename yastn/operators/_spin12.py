@@ -35,7 +35,7 @@ class Spin12(meta_operators):
         Parameters
         ----------
         sym : str
-            Explicit symmetry to be used. Allowed options are :code:`'dense'`, ``'Z2'``, or ``'U1'``.
+            Explicit symmetry to be used. Allowed options are :code:`'dense'`, ``'Z2'``, ``'U1'``, or ``'SU2'``.
 
         kwargs
             Other YASTN configuration parameters can be provided, see :meth:`yastn.make_config`.
@@ -55,8 +55,8 @@ class Spin12(meta_operators):
         Default configuration sets :code:`fermionic` to :code:`False`.
         """
         super().__init__(**kwargs)
-        if self._sym not in ('dense', 'Z2', 'U1'):
-            raise YastnError("For Spin12 sym should be in ('dense', 'Z2', 'U1').")
+        if self._sym not in ('dense', 'Z2', 'U1', 'SU2'):
+            raise YastnError("For Spin12 sym should be in ('dense', 'Z2', 'U1', 'SU2').")
         if self.config.fermionic != False:
             raise YastnError("For Spin12 config.fermionic should be False.")
         self.operators = ('I', 'x', 'y', 'iy', 'z', 'sx', 'sy', 'isy', 'sz', 'sp', 'sm')
@@ -69,6 +69,8 @@ class Spin12(meta_operators):
             leg = Leg(self.config, s=1, t=(0, 1), D=(1, 1))
         if self._sym == 'U1':
             leg = Leg(self.config, s=1, t=(-1, 1), D=(1, 1))
+        if self._sym == 'SU2':
+            leg = Leg(self.config, s=1, t=(1,), D=(1,))
         return leg
 
     def key(self) -> Callable | None:
@@ -91,6 +93,9 @@ class Spin12(meta_operators):
             I = Tensor(config=self.config, s=self.s, n=0)
             I.set_block(ts=(1, 1), Ds=(1, 1), val=1)
             I.set_block(ts=(-1, -1), Ds=(1, 1), val=1)
+        if self._sym == 'SU2':
+            I = Tensor(config=self.config, s=self.s)
+            I.set_block(ts=(1, 1), Ds=(1, 1), val=1)
         return I
 
     def x(self) -> Tensor:

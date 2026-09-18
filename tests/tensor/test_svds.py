@@ -15,11 +15,27 @@
 import numpy as np
 import pytest
 import yastn
+from ._nonabelian_utils import matrix_tensor
 
 tol = 1e-10  #pylint: disable=invalid-name
 
 torch_test = pytest.mark.skipif("'torch' not in config.getoption('--backend')",
                                 reason="Uses torch.autograd.gradcheck().")
+
+
+def _run_svds_nonabelian(config_kwargs, sym):
+    a = matrix_tensor(yastn.make_config(sym=sym, **config_kwargs), D=(3, 3, 3))
+    U, S, V = yastn.svds(a, D_total=3)
+    assert all(x.is_consistent() for x in (U, S, V))
+    assert S.size > 0
+
+
+def test_svds_SU2(config_kwargs):
+    _run_svds_nonabelian(config_kwargs, 'SU2')
+
+
+def test_svds_SU2xU1(config_kwargs):
+    _run_svds_nonabelian(config_kwargs, 'SU2xU1')
 
 
 def test_svds_zero_block(config_kwargs):

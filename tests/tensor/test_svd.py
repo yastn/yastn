@@ -18,6 +18,24 @@ from itertools import product
 import numpy as np
 import pytest
 import yastn
+from ._nonabelian_utils import four_leg_tensor
+
+
+def _run_svd_nonabelian_multichannel(config_kwargs, sym):
+    config = yastn.make_config(sym=sym, **config_kwargs)
+    a = four_leg_tensor(config)
+    U, S, V = a.svd(axes=((0, 1), (2, 3)))
+    assert ((U @ S) @ V - a).norm() < 1e-12
+    expected = ((0,), (2,)) if sym == 'SU2' else ((0, -4), (2, -4))
+    assert S.get_legs(0).t == expected
+
+
+def test_svd_SU2(config_kwargs):
+    _run_svd_nonabelian_multichannel(config_kwargs, 'SU2')
+
+
+def test_svd_SU2xU1(config_kwargs):
+    _run_svd_nonabelian_multichannel(config_kwargs, 'SU2xU1')
 
 tol = 1e-10  #pylint: disable=invalid-name
 

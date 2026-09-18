@@ -15,6 +15,21 @@
 """ yastn.block() """
 import pytest
 import yastn
+from ._nonabelian_utils import matrix_tensor
+
+
+def _run_block_nonabelian(config_kwargs, sym):
+    a = matrix_tensor(yastn.make_config(sym=sym, **config_kwargs))
+    charge = a.get_blocks_charge()[0]
+    assert a[charge].size > 0
+
+
+def test_block_SU2(config_kwargs):
+    _run_block_nonabelian(config_kwargs, 'SU2')
+
+
+def test_block_SU2xU1(config_kwargs):
+    _run_block_nonabelian(config_kwargs, 'SU2xU1')
 
 tol = 1e-12  #pylint: disable=invalid-name
 

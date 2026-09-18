@@ -15,6 +15,22 @@
 """List supported operations on yastn.Tensor (not all arguments are shown)."""
 import pytest
 import yastn
+from ._nonabelian_utils import four_leg_tensor
+
+
+def _run_syntax_nonabelian(config_kwargs, sym):
+    a = four_leg_tensor(yastn.make_config(sym=sym, **config_kwargs))
+    assert a.ndim == 4 and a.ndim_n == 4
+    assert a.T.T.get_signature() == a.get_signature()
+    assert (a.H.H - a).norm() < 1e-12
+
+
+def test_syntax_SU2(config_kwargs):
+    _run_syntax_nonabelian(config_kwargs, 'SU2')
+
+
+def test_syntax_SU2xU1(config_kwargs):
+    _run_syntax_nonabelian(config_kwargs, 'SU2xU1')
 
 
 def test_syntax_tensor_creation_operations(config_kwargs):

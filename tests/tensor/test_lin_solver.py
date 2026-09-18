@@ -14,10 +14,31 @@
 # ==============================================================================
 import pytest
 import yastn
+from ._nonabelian_utils import matrix_tensor
 
 numtol = 1e-16
 errtol = 1e-12
 pinv_tol = 1e-13
+
+
+def _run_lin_solver_nonabelian(config_kwargs, sym):
+    config = yastn.make_config(sym=sym, **config_kwargs)
+    op = matrix_tensor(config)
+    op = op @ op.H + yastn.eye(config, legs=op.get_legs(0)).diag()
+    b = matrix_tensor(config)
+    x, residual = yastn.lin_solver(lambda v: op @ v, b, b * 0,
+                                   ncv=20, tol=1e-12, pinv_tol=pinv_tol,
+                                   hermitian=True)
+    assert residual < 1e-9
+    assert (op @ x - b).norm() < 1e-8
+
+
+def test_lin_solver_SU2(config_kwargs):
+    _run_lin_solver_nonabelian(config_kwargs, 'SU2')
+
+
+def test_lin_solver_SU2xU1(config_kwargs):
+    _run_lin_solver_nonabelian(config_kwargs, 'SU2xU1')
 
 def test_dense(config_kwargs):
     config = yastn.make_config(sym='none', **config_kwargs)

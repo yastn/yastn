@@ -16,8 +16,24 @@
 import numpy as np
 import pytest
 import yastn
+from ._nonabelian_utils import matrix_tensor
 
 tol = 1e-12  #pylint: disable=invalid-name
+
+
+def _run_to_numpy_nonabelian(config_kwargs, sym):
+    a = matrix_tensor(yastn.make_config(sym=sym, **config_kwargs))
+    dense = a.to_numpy()
+    assert dense.shape == a.get_shape()
+    assert np.allclose(dense, np.asarray(a.to_dense()))
+
+
+def test_to_numpy_SU2(config_kwargs):
+    _run_to_numpy_nonabelian(config_kwargs, 'SU2')
+
+
+def test_to_numpy_SU2xU1(config_kwargs):
+    _run_to_numpy_nonabelian(config_kwargs, 'SU2xU1')
 
 
 def test_to_numpy_basic(config_kwargs):

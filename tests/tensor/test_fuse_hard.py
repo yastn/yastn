@@ -16,6 +16,78 @@
 import numpy as np
 import pytest
 import yastn
+from yastn.tensor._auxiliary import get_blocks
+from ._nonabelian_utils import four_leg_tensor
+
+
+def _run_fuse_hard_multichannel(config_kwargs, sym):
+    config = yastn.make_config(sym=sym, **config_kwargs)
+    a = four_leg_tensor(config, D=1)
+    fused = a.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
+    assert fused.size == a.size
+    assert (fused.unfuse_legs((0, 1)) - a).norm() < 1e-12
+
+
+def test_fuse_hard_multichannel_SU2(config_kwargs):
+    _run_fuse_hard_multichannel(config_kwargs, 'SU2')
+
+
+def test_fuse_hard_multichannel_SU2xU1(config_kwargs):
+    _run_fuse_hard_multichannel(config_kwargs, 'SU2xU1')
+
+
+def test_fuse_hard_SU2_noncanonical_applies_f_move(config_kwargs):
+    config = yastn.make_config(sym='SU2', **config_kwargs)
+    half = yastn.Leg(config, s=1, t=(1,), D=(1,))
+    a = yastn.rand(config, legs=(half,) * 4)
+    channels = (0, 2)
+    F = np.array([[config.sym.f_symbol(1, 1, 1, 1, j12, j23)
+                   * config.sym.braiding_phase(j23, 1, 1)
+                   for j23 in channels] for j12 in channels])
+    fused = a.fuse_legs(axes=((1, 2), 0, 3), mode='hard')
+    assert np.allclose(config.backend.to_numpy(fused.data),
+                       F.T @ config.backend.to_numpy(a.data), atol=1e-13)
+
+
+def test_fuse_hard_SU2xU1_rebuilds_u1_channel(config_kwargs):
+    config = yastn.make_config(sym='SU2xU1', **config_kwargs)
+    plus = yastn.Leg(config, s=1, t=((1, 2),), D=(1,))
+    a = yastn.rand(config, legs=(plus, plus, plus.conj(), plus.conj()))
+    assert get_blocks(config.sym, a.struct).channels == ((0, 4, 1, 2), (2, 4, 1, 2))
+    fused = a.fuse_legs(axes=((1, 2), 0, 3), mode='hard')
+    assert fused.get_legs(0).t == ((0, 0), (2, 0))
+    assert np.isclose(fused.norm(), a.norm(), atol=1e-13)
+
+
+def _run_fuse_hard_abelian_api_order(config_kwargs, sym):
+    config = yastn.make_config(sym=sym, **config_kwargs)
+    a = four_leg_tensor(config)
+    moved = a.transpose((0, 2, 1, 3)).consume_transpose()
+    fused = a.fuse_legs(axes=((0, 2), 1, 3), mode='hard')
+    assert (fused.unfuse_legs(0) - moved).norm() < 1e-12
+
+
+def test_fuse_hard_abelian_api_order_SU2(config_kwargs):
+    _run_fuse_hard_abelian_api_order(config_kwargs, 'SU2')
+
+
+def test_fuse_hard_abelian_api_order_SU2xU1(config_kwargs):
+    _run_fuse_hard_abelian_api_order(config_kwargs, 'SU2xU1')
+
+
+@pytest.mark.parametrize('sym, fermionic', [
+    ('SU2', True),
+    ('SU2xU1', (False, True)),
+])
+def test_fuse_hard_fermionic_nonabelian(config_kwargs, sym, fermionic):
+    """Hard fusion preserves fermionic block signs and fusion channels."""
+    config = yastn.make_config(sym=sym, fermionic=fermionic, **config_kwargs)
+    a = four_leg_tensor(config)
+    signed = a.swap_gate(axes=(0, 1))
+    fused = signed.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
+    restored = fused.unfuse_legs(axes=(0, 1))
+    assert restored.struct.channels == signed.struct.channels
+    assert (restored - signed).norm() < 1e-12
 
 # On cuda, run every test under scatter / tiled / forced-loop fuse paths (see conftest.py).
 pytestmark = pytest.mark.usefixtures("fuse_scatter_path")

@@ -16,8 +16,26 @@
 from itertools import product
 import pytest
 import yastn
+from ._nonabelian_utils import matrix_tensor
 
 tol = 1e-9  #pylint: disable=invalid-name
+
+
+def _run_eighs_nonabelian(config_kwargs, sym):
+    config = yastn.make_config(sym=sym, **config_kwargs)
+    a = matrix_tensor(config, D=(3, 3, 3))
+    a = a + a.H
+    S, U = yastn.eigh(a, axes=(0, 1), policy='block_lanczos', D_block=2)
+    assert S.is_consistent() and U.is_consistent()
+    assert S.get_legs(0).t
+
+
+def test_eighs_SU2(config_kwargs):
+    _run_eighs_nonabelian(config_kwargs, 'SU2')
+
+
+def test_eighs_SU2xU1(config_kwargs):
+    _run_eighs_nonabelian(config_kwargs, 'SU2xU1')
 
 
 def eighs_combine(a,D_block,which='SR'):

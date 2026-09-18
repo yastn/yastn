@@ -18,11 +18,28 @@ import numpy as np
 import pytest
 from scipy.sparse.linalg import eigs, LinearOperator
 import yastn
+from ._nonabelian_utils import matrix_tensor
 
 tol = 1e-8  #pylint: disable=invalid-name
 
 numpy_test = pytest.mark.skipif("'np' not in config.getoption('--backend')",
                                 reason="using scipy procedures for raw data requires np")
+
+
+def _run_split_combine_nonabelian(config_kwargs, sym):
+    a = matrix_tensor(yastn.make_config(sym=sym, **config_kwargs))
+    raw, meta = yastn.split_data_and_meta(a.to_dict(level=0), squeeze=True)
+    restored = yastn.Tensor.from_dict(yastn.combine_data_and_meta(raw, meta))
+    assert restored.nblocks == a.nblocks
+    assert (restored - a).norm() < 1e-12
+
+
+def test_split_combine_SU2(config_kwargs):
+    _run_split_combine_nonabelian(config_kwargs, 'SU2')
+
+
+def test_split_combine_SU2xU1(config_kwargs):
+    _run_split_combine_nonabelian(config_kwargs, 'SU2xU1')
 
 
 @numpy_test

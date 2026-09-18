@@ -16,6 +16,21 @@
 import numpy as np
 import pytest
 import yastn
+from ._nonabelian_utils import four_leg_tensor
+
+
+def _run_diag_nonabelian(config_kwargs, sym):
+    config = yastn.make_config(sym=sym, **config_kwargs)
+    _, S, _ = four_leg_tensor(config).svd(axes=((0, 1), (2, 3)))
+    assert (S.diag().diag() - S).norm() < 1e-12
+
+
+def test_diag_SU2(config_kwargs):
+    _run_diag_nonabelian(config_kwargs, 'SU2')
+
+
+def test_diag_SU2xU1(config_kwargs):
+    _run_diag_nonabelian(config_kwargs, 'SU2xU1')
 
 tol = 1e-12  #pylint: disable=invalid-name
 
@@ -69,4 +84,3 @@ def test_diag_exceptions(config_kwargs):
 
 if __name__ == '__main__':
     pytest.main([__file__, "-vs", "--durations=0"])
-

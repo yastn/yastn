@@ -16,6 +16,22 @@
 import numpy as np
 import pytest
 import yastn
+from ._nonabelian_utils import four_leg_tensor
+
+
+def _run_remove_blocks_nonabelian(config_kwargs, sym):
+    a = four_leg_tensor(yastn.make_config(sym=sym, **config_kwargs), D=1)
+    b = a.remove_random_blocks(number=1, keep_legs=True)
+    assert b.size < a.size
+    assert b.is_consistent()
+
+
+def test_remove_blocks_SU2(config_kwargs):
+    _run_remove_blocks_nonabelian(config_kwargs, 'SU2')
+
+
+def test_remove_blocks_SU2xU1(config_kwargs):
+    _run_remove_blocks_nonabelian(config_kwargs, 'SU2xU1')
 
 tol = 1e-12  #pylint: disable=invalid-name
 

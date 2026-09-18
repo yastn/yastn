@@ -431,6 +431,13 @@ def consume_transpose(a) -> 'Tensor':
     no_trans = tuple(range(a.ndim_n))
     if a.trans == no_trans:
         return a
+    if (not getattr(a.config.sym, 'IS_ABELIAN', True) and a.ndim_n >= 2):
+        from ._merging import _apply_s3_transpose, _has_nontrivial_irreps, _s3_orders
+    if (not getattr(a.config.sym, 'IS_ABELIAN', True) and a.ndim_n >= 2
+            and _has_nontrivial_irreps(a) and tuple(a.trans) in _s3_orders(a.ndim_n)):
+        logical_mfs = a.mfs
+        a = _apply_s3_transpose(a, tuple(a.trans))
+        return a._replace(mfs=logical_mfs, trans=no_trans)
     order = np.array(a.trans, dtype=np.int64)
     new_hfs = tuple(a.hfs[ii] for ii in a.trans)
     new_legs = tuple(a.struct.legs[ii] for ii in a.trans)

@@ -17,7 +17,8 @@ from typing import Sequence
 import numpy as np
 
 from ._gates_auxiliary import Gate
-from ...tensor import exp, ncon, eigh, fkron
+from ...tensor import exp, ncon, eigh, fkron, leg_product, YastnError
+from ...initialize import zeros
 
 
 def Gate_local(G, site):
@@ -43,7 +44,19 @@ def decompose_nn_gate(Gnn, bond=None) -> Gate:
     Auxiliary function to generate Gate by cutting a two-site operator,
     using SVD, into two local operators with the connecting legs.
     """
-    U, S, V = Gnn.svd_with_truncation(axes=((0, 1), (2, 3)), sU=-1, tol=1e-14, Vaxis=2)
+    nonabelian = not getattr(Gnn.config.sym, 'IS_ABELIAN', True)
+    if not nonabelian:
+        axes = ((0, 1), (2, 3))
+    else:
+        # Make the local-pair fusion channel explicit before SVD.  The generic
+        # internal matrix fusion cannot infer this channel after a noncanonical
+        # grouping of four non-Abelian legs.
+        Gnn = Gnn.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
+        axes = (0, 1)
+    U, S, V = Gnn.svd_with_truncation(axes=axes, sU=-1, tol=1e-14, Vaxis=2)
+    if nonabelian:
+        U = U.unfuse_legs(axes=0)
+        V = V.unfuse_legs(axes=0)
     S = S.sqrt()
     return Gate_nn(S.broadcast(U, axes=2), S.broadcast(V, axes=2), bond)
 
@@ -125,6 +138,30 @@ def gate_nn_Heisenberg(J, step, I, Sz, Sp, Sm, bond=None) -> Gate:
       + J * fkron(Sz, Sz)
 
     return gate_nn_exp(step, I, H, bond)
+
+
+def gate_nn_Heisenberg_SU2(J, step, I, bond=None) -> Gate:
+    r"""SU(2)-reduced nearest-neighbor spin-1/2 Heisenberg gate.
+
+    The gate is constructed directly in the coupled two-spin basis.  The
+    singlet and triplet energies are ``-3 J / 4`` and ``J / 4``, respectively.
+    This avoids expressing the scalar Hamiltonian through the non-invariant
+    components ``Sx``, ``Sy`` and ``Sz``.
+    """
+    if I.config.sym.SYM_ID != 'SU2':
+        raise YastnError("gate_nn_Heisenberg_SU2 requires SU2 symmetry.")
+    leg = I.get_legs(axes=0)
+    if leg.t != ((1,),) or leg.D != (1,):
+        raise YastnError("gate_nn_Heisenberg_SU2 requires a single spin-1/2 irrep.")
+    coupled = leg_product(leg, leg)
+    gate_fused = zeros(config=I.config, legs=(coupled, coupled.conj()))
+    for charge, dim in coupled.tD.items():
+        spin = charge[0] / 2
+        energy = 0.5 * J * (spin * (spin + 1) - 1.5)
+        gate_fused.set_block(ts=charge + charge, Ds=(dim, dim),
+                             val=np.exp(-step * energy) * np.eye(dim))
+    gate = gate_fused.unfuse_legs(axes=(0, 1)).transpose(axes=(0, 2, 1, 3))
+    return decompose_nn_gate(gate, bond)
 
 
 def gate_nn_tJ(J, tu, td, muu0, muu1, mud0, mud1, step, I, cu, cpu, cd, cpd, bond=None) -> Gate:

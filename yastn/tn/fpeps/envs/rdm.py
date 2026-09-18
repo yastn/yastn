@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from functools import reduce
 import logging
 from typing import Sequence, Union, TypeVar
 
@@ -21,6 +20,7 @@ from ._env_ctm import EnvCTM
 from .._geometry import Site
 from .._peps import Peps, Peps2Layers
 from ....tensor import ncon, tensordot, Tensor, YastnError
+from ....tensor._auxiliary import swap_charges
 
 log = logging.getLogger(__name__)
 Scalar = TypeVar('Scalar')
@@ -206,6 +206,11 @@ def op_order(Oi, Oj, ordered, fermionic=True):
      #    |       |
 
     return Oi, Oj
+
+
+def _fermionic_exchange(Oi, Oj):
+    """Whether exchanging two operator charges produces a fermionic minus sign."""
+    return swap_charges((Oi.n,), (Oj.n,), Oi.config.fermionic) == -1
 
 
 def rdm1x1(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scalar]:
@@ -747,7 +752,7 @@ def measure_rdm_nn(s0 : Site, dirn : str, psi : Peps, env : EnvCTM, op : Union[S
     ncon_order = ((1, 2, 5), (3, 4, 5), (2, 1, 4, 3))
     def _eval_op(O0, O1):
         ordered = env.f_ordered(s0, s1)
-        fermionic = True if (O0.n[0] and O1.n[0]) else False
+        fermionic = _fermionic_exchange(O0, O1)
         O0, O1 = op_order(O0, O1, ordered, fermionic)
         return ncon([O0, O1, rdm], ncon_order).to_number()
 
@@ -793,7 +798,7 @@ def measure_rdm_diag(s0 : Site, dirn : str, psi : Peps, env : EnvCTM, op : Union
     ncon_order = ((1, 2, 5), (3, 4, 5), (2, 1, 4, 3))
     def _eval_op(O0, O1):
         ordered = env.f_ordered(s0, s1)
-        fermionic = True if (O0.n[0] and O1.n[0]) else False
+        fermionic = _fermionic_exchange(O0, O1)
         O0, O1 = op_order(O0, O1, ordered, fermionic)
         return ncon([O0, O1, rdm], ncon_order).to_number()
 
@@ -837,8 +842,7 @@ def measure_rdm_2x2(s0 : Site, psi : Peps, env : EnvCTM, op : Union[Sequence[Ten
     def _eval_op(O0, O1, O2, O3):
         Os = [O0, O1, O2, O3]
         charges = [O.n for O in Os]
-        charge_sum = reduce(sym.add_charges, charges)
-        if charge_sum != sym.zero():
+        if sym.zero() not in sym.fusion_outcomes(*charges):
             raise YastnError("Non-zero parity charges within the 2x2 measument window!")
         non_zero_charges = 0
         for c in charges:
@@ -852,7 +856,7 @@ def measure_rdm_2x2(s0 : Site, psi : Peps, env : EnvCTM, op : Union[Sequence[Ten
         elif non_zero_charges == 2:
             # one auxiliary leg connecting two ops with non-zero charges
             if O0.n != sym.zero() and O1.n != sym.zero():
-                O0, O1 = op_order(O0, O1, True, True)
+                O0, O1 = op_order(O0, O1, True, _fermionic_exchange(O0, O1))
                 O1 = O1.swap_gate(axes=(1,2))
 
                 ncon_order = ((1, 2, -1), (3, 4, -2), (5, 6), (7, 8), (2, 1, 4, 3, 6, 5, 8, 7))
@@ -860,32 +864,32 @@ def measure_rdm_2x2(s0 : Site, psi : Peps, env : EnvCTM, op : Union[Sequence[Ten
                 return res.trace(axes=(0,1)).to_number()
 
             elif O0.n != sym.zero() and O2.n != sym.zero():
-                O0, O2 = op_order(O0, O2, True, True)
+                O0, O2 = op_order(O0, O2, True, _fermionic_exchange(O0, O2))
 
                 ncon_order = ((1, 2, -1), (3, 4), (5, 6, -2), (7, 8), (2, 1, 4, 3, 6, 5, 8, 7))
                 res = ncon([O0, O1, O2, O3, rdm], ncon_order)
                 return res.trace(axes=(0,1)).to_number()
 
-            elif O0.n != sym.zero() and O3.n[0] != sym.zero():
-                O0, O3 = op_order(O0, O3, True, True)
+            elif O0.n != sym.zero() and O3.n != sym.zero():
+                O0, O3 = op_order(O0, O3, True, _fermionic_exchange(O0, O3))
                 ncon_order = ((1, 2, -1), (3, 4), (5, 6), (7, 8, -2), (2, 1, 4, 3, 6, 5, 8, 7))
                 res = ncon([O0, O1, O2, O3, rdm], ncon_order)
                 return res.trace(axes=(0,1)).to_number()
 
             elif O1.n != sym.zero() and O2.n != sym.zero():
-                O1, O2 = op_order(O1, O2, True, True)
+                O1, O2 = op_order(O1, O2, True, _fermionic_exchange(O1, O2))
                 ncon_order = ((1, 2), (3, 4, -1), (5, 6, -2), (7, 8), (2, 1, 4, 3, 6, 5, 8, 7))
                 res = ncon([O0, O1, O2, O3, rdm], ncon_order)
                 return res.trace(axes=(0,1)).to_number()
 
             elif O1.n != sym.zero() and O3.n != sym.zero():
-                O1, O3 = op_order(O1, O3, True, True)
+                O1, O3 = op_order(O1, O3, True, _fermionic_exchange(O1, O3))
                 ncon_order = ((1, 2), (3, 4, -1), (5, 6), (7, 8, -2), (2, 1, 4, 3, 6, 5, 8, 7))
                 res = ncon([O0, O1, O2, O3, rdm], ncon_order)
                 return res.trace(axes=(0,1)).to_number()
 
             elif O2.n != sym.zero() and O3.n != sym.zero():
-                O2, O3 = op_order(O2, O3, True, True)
+                O2, O3 = op_order(O2, O3, True, _fermionic_exchange(O2, O3))
                 O2 = O2.swap_gate(axes=(0, 2))
                 ncon_order = ((1, 2), (3, 4), (5, 6, -1), (7, 8, -2), (2, 1, 4, 3, 6, 5, 8, 7))
                 res = ncon([O0, O1, O2, O3, rdm], ncon_order)
@@ -893,17 +897,17 @@ def measure_rdm_2x2(s0 : Site, psi : Peps, env : EnvCTM, op : Union[Sequence[Ten
 
         elif non_zero_charges == 4:
             # either O0 + O1 == 0 or O0 + O4==0
-            if sym.add_charges(O0.n, O1.n) == sym.zero():
+            if sym.zero() in sym.fusion_outcomes(O0.n, O1.n):
                 # connecting O0 with O1
-                O0, O1 = op_order(O0, O1, True, True)
-                O2, O3 = op_order(O2, O3, True, True)
+                O0, O1 = op_order(O0, O1, True, _fermionic_exchange(O0, O1))
+                O2, O3 = op_order(O2, O3, True, _fermionic_exchange(O2, O3))
                 O1 = O1.swap_gate(axes=(1, 2))
                 O2 = O2.swap_gate(axes=(0, 2))
                 ncon_order = ((1, 2, -1), (3, 4, -2), (5, 6, -3), (7, 8, -4), (2, 1, 4, 3, 6, 5, 8, 7))
                 res = ncon([O0, O1, O2, O3, rdm], ncon_order)
-            elif sym.add_charges(O0.n, O3.n) == sym.zero():
-                O0, O3 = op_order(O0, O3, True, True)
-                O1, O2 = op_order(O1, O2, True, True)
+            elif sym.zero() in sym.fusion_outcomes(O0.n, O3.n):
+                O0, O3 = op_order(O0, O3, True, _fermionic_exchange(O0, O3))
+                O1, O2 = op_order(O1, O2, True, _fermionic_exchange(O1, O2))
                 ncon_order = ((1, 2, -1), (3, 4, -3), (5, 6, -4), (7, 8, -2), (2, 1, 4, 3, 6, 5, 8, 7))
                 res = ncon([O0, O1, O2, O3, rdm], ncon_order)
                 res = res.swap_gate(axes=(0, 2))

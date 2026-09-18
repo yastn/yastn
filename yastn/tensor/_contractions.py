@@ -465,6 +465,22 @@ def _meta_tensordot_nf(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b, la
                             for path in paths)
             if candidate in allowed:
                 channel_pairs.append(candidate)
+            elif (not nin_a and not nin_b and struct_a.n == sym.zero()
+                  and struct_b.n == sym.zero() and len(nout_a) >= 2):
+                # Outer product of two invariant tensors.  In the canonical
+                # left-associated output tree, the prefix containing every
+                # leg of ``a`` must fuse back to the singlet before the legs
+                # of ``b`` are attached.  This fixes the connecting channel
+                # without an F move (rank-2 x rank-2 is the common fkron
+                # case used to construct invariant lattice Hamiltonians).
+                bridge = len(nout_a) - 2
+                compatible = tuple(path for path in paths
+                                   if len(path) > bridge and path[bridge] == sym.zero())
+                if len(compatible) == 1:
+                    channel_pairs.append(tuple(x for charge in compatible[0] for x in
+                                               (charge if isinstance(charge, tuple) else (charge,))))
+                else:
+                    raise YastnError("Non-Abelian outer product has an ambiguous fusion channel.")
             elif len(allowed) == 1:
                 channel_pairs.append(allowed[0])
             else:
@@ -957,7 +973,16 @@ def _meta_vdot(sym, struct_a, struct_b):
         raise YastnError('Bond dimensions of some charges do not match.')
     bl_a = get_blocks(sym, struct_a)
     bl_b = get_blocks(sym, struct_b)
-    ind_a, ind_b = find_matching_block_keys(bl_a.t, bl_a.channels,
+    channels_a = bl_a.channels
+    if not getattr(sym, 'IS_ABELIAN', True):
+        # The two tensors have opposite leg orientations.  Their fusion trees
+        # therefore carry dual intermediate irreps (visible, for example, as
+        # q -> -q in SU2xU1), although external stored charges are identical.
+        channels_a = tuple(
+            tuple(x for i in range(0, len(path), sym.NSYM)
+                  for x in sym.conj_charge(path[i:i + sym.NSYM]))
+            for path in channels_a)
+    ind_a, ind_b = find_matching_block_keys(bl_a.t, channels_a,
                                             bl_b.t, bl_b.channels)
     meta = np.column_stack([bl_a.slc[ind_a], bl_b.slc[ind_b]])
     meta = _compress_slices(meta)

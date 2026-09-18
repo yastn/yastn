@@ -13,14 +13,42 @@
 # limitations under the License.
 # ==============================================================================
 """ yastn.linalg.svd() and truncation of its singular values """
+import numpy as np
 import pytest
 import yastn
+from ._nonabelian_utils import matrix_tensor
 
 tol = 1e-10  #pylint: disable=invalid-name
 seed = 22
 
 torch_test = pytest.mark.skipif("'torch' not in config.getoption('--backend')",
                                 reason="Uses torch.autograd.gradcheck().")
+
+
+def _assert_same_eigenvalues(left, right):
+    assert left.get_blocks_charge() == right.get_blocks_charge()
+    for charge in left.get_blocks_charge():
+        assert np.allclose(np.sort_complex(left[charge]),
+                           np.sort_complex(right[charge]), atol=tol)
+
+
+def _run_eig_nonabelian(config_kwargs, sym):
+    config = yastn.make_config(sym=sym, **config_kwargs)
+    config.backend.random_seed(seed=seed)
+    a = matrix_tensor(config, D=(2, 3, 4))
+    U, S, V = yastn.eig(a, axes=(0, 1), fix_signs=True)
+    assert U.nblocks == S.nblocks == V.nblocks == a.nblocks
+    assert (U @ S @ V - a).norm() < tol
+    only_S = yastn.eig(a, axes=(0, 1), compute_uv=False)
+    _assert_same_eigenvalues(S, only_S)
+
+
+def test_eig_SU2(config_kwargs):
+    _run_eig_nonabelian(config_kwargs, 'SU2')
+
+
+def test_eig_SU2xU1(config_kwargs):
+    _run_eig_nonabelian(config_kwargs, 'SU2xU1')
 
 def eig_combine(a):
     """ decompose and contracts tensor using svd decomposition """
@@ -32,7 +60,7 @@ def eig_combine(a):
     assert all(x.is_consistent() for x in (a, U, S, V))
 
     onlyS = yastn.linalg.eig(a, axes=((3, 1), (2, 0)), sU=-1, compute_uv=False)
-    assert yastn.norm(S - onlyS) < tol
+    _assert_same_eigenvalues(S, onlyS)
 
     # changes signature of new leg; and position of new leg
     U, S, V = yastn.linalg.eig(a, axes=((3, 1), (2, 0)), sU=1, nU=False, Uaxis=0, Vaxis=-1, fix_signs=True)
@@ -43,7 +71,7 @@ def eig_combine(a):
     assert all(x.is_consistent() for x in (U, S, V))
 
     onlyS = yastn.linalg.eig(a, axes=((3, 1), (2, 0)), sU=1, nU=False, compute_uv=False)
-    assert yastn.norm(S - onlyS) < tol
+    _assert_same_eigenvalues(S, onlyS)
 
 
 def test_eig_basic(config_kwargs):

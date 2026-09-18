@@ -16,8 +16,23 @@
 import numpy as np
 import pytest
 import yastn
+from ._nonabelian_utils import four_leg_tensor
 
 tol = 1e-12  #pylint: disable=invalid-name
+
+
+def _run_broadcast_nonabelian(config_kwargs, sym):
+    config = yastn.make_config(sym=sym, **config_kwargs)
+    U, S, _ = four_leg_tensor(config).svd(axes=((0, 1), (2, 3)))
+    assert (S.broadcast(U, axes=2) - U @ S).norm() < tol
+
+
+def test_broadcast_SU2(config_kwargs):
+    _run_broadcast_nonabelian(config_kwargs, 'SU2')
+
+
+def test_broadcast_SU2xU1(config_kwargs):
+    _run_broadcast_nonabelian(config_kwargs, 'SU2xU1')
 
 
 def test_broadcast_dense(config_kwargs):

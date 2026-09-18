@@ -17,6 +17,24 @@ import numpy as np
 import pytest
 import scipy.linalg
 import yastn
+from ._nonabelian_utils import matrix_tensor
+
+
+def _run_expmv_nonabelian(config_kwargs, sym):
+    config = yastn.make_config(sym=sym, **config_kwargs)
+    op = matrix_tensor(config)
+    op = op @ op.H
+    v = matrix_tensor(config)
+    out = yastn.expmv(lambda x: op @ x, v, tau=0.1, ncv=12, hermitian=True)
+    assert out.is_consistent() and out.nblocks == v.nblocks
+
+
+def test_expmv_SU2(config_kwargs):
+    _run_expmv_nonabelian(config_kwargs, 'SU2')
+
+
+def test_expmv_SU2xU1(config_kwargs):
+    _run_expmv_nonabelian(config_kwargs, 'SU2xU1')
 
 
 def run_expmv(A, v, tau, tol, ncv, hermitian):

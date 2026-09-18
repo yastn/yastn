@@ -16,6 +16,20 @@
 import numpy as np
 import pytest
 import yastn
+from ._nonabelian_utils import four_leg_tensor
+
+
+def _run_conj_nonabelian(config_kwargs, sym):
+    a = four_leg_tensor(yastn.make_config(sym=sym, **config_kwargs))
+    assert (a.conj().conj() - a).norm() < 1e-12
+
+
+def test_conj_SU2(config_kwargs):
+    _run_conj_nonabelian(config_kwargs, 'SU2')
+
+
+def test_conj_SU2xU1(config_kwargs):
+    _run_conj_nonabelian(config_kwargs, 'SU2xU1')
 
 tol = 1e-12  #pylint: disable=invalid-name
 

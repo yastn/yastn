@@ -15,11 +15,31 @@
 """Basic autograd operations."""
 import pytest
 import yastn
+from ._nonabelian_utils import matrix_tensor
 
 tol = 1e-12  #pylint: disable=invalid-name
 
 no_numpy_test = pytest.mark.skipif("'np' in config.getoption('--backend')",
                                    reason="numpy backend does not support autograd")
+
+
+def _run_autograd_nonabelian(config_kwargs, sym):
+    a = matrix_tensor(yastn.make_config(sym=sym, **config_kwargs))
+    a.requires_grad_(True)
+    loss = yastn.vdot(a, a).real
+    loss.backward()
+    grad = a.grad()
+    assert grad is not None and grad.nblocks == a.nblocks > 1
+
+
+@no_numpy_test
+def test_autograd_SU2(config_kwargs):
+    _run_autograd_nonabelian(config_kwargs, 'SU2')
+
+
+@no_numpy_test
+def test_autograd_SU2xU1(config_kwargs):
+    _run_autograd_nonabelian(config_kwargs, 'SU2xU1')
 
 
 @no_numpy_test

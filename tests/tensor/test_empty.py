@@ -16,6 +16,22 @@
 import pytest
 import yastn
 
+
+def _run_empty_nonabelian(config_kwargs, sym):
+    config = yastn.make_config(sym=sym, **config_kwargs)
+    a = yastn.Tensor(config, s=(1, -1))
+    assert a.norm() == 0
+    fused = a.fuse_legs(axes=((0, 1),), mode='hard')
+    assert fused.norm() == 0
+
+
+def test_empty_SU2(config_kwargs):
+    _run_empty_nonabelian(config_kwargs, 'SU2')
+
+
+def test_empty_SU2xU1(config_kwargs):
+    _run_empty_nonabelian(config_kwargs, 'SU2xU1')
+
 tol = 1e-12  #pylint: disable=invalid-name
 
 
