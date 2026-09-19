@@ -324,8 +324,8 @@ def dtype_to_complex(data):
     return tmp.dtype
 
 
-def svd(data, meta, sizes, fullrank_uv=False, ad_decomp_reg=1.0e-12, diagnostics=None, **kwargs):
-    return kernel_svd.apply(data, meta, sizes, fullrank_uv, ad_decomp_reg, diagnostics)
+def svd(data, meta, sizes, fullrank_uv=False, ad_decomp_reg=1.0e-12, diagnostics=None, driver=None, **kwargs):
+    return kernel_svd.apply(data, meta, sizes, fullrank_uv, ad_decomp_reg, driver, diagnostics)
 
 
 def svdvals(data, meta, sizeS, **kwargss):

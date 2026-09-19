@@ -26,6 +26,7 @@ This module is a leaf: it depends on the tensor layer only, never on the CTM
 environment classes that call into it.
 """
 from __future__ import annotations
+from typing import NamedTuple
 
 from ....initialize import rand, zeros, eye, block
 from ....sym import sym_none
@@ -154,6 +155,22 @@ class _HalfPair(_Half):
 
     def mm_conj(self, M):  # self.conj() @ M
         return tensordot(self.f0.conj(), tensordot(self.f1.conj(), M, axes=(1, 0)), axes=(1, 0))
+
+
+class SI_state(NamedTuple):
+    r"""Recycling state of one SI projector pair.
+
+    ``age`` counts how many times the pair has been updated with SI; it drives
+    the correction schedule, see :func:`si_correction_due`.
+    ``niter`` and ``error`` describe the last update alone: the number of power
+    updates it made -- at most the ``niter`` budget of ``opts_si`` -- and the
+    subspace error between the last two X, Y iterates. A pair that has not been
+    updated yet reports ``niter=0`` with an infinite ``error``, since there is
+    no pair of successive subspaces to compare.
+    """
+    age: int = 0
+    niter: int = 0
+    error: float = float('inf')
 
 
 def _si_rank(opts_svd, opts_si):
@@ -837,29 +854,38 @@ def _si_reduced_svd(r0, r1, X, Y, opts_si, spec_only=False):
     Halves ``r0`` and ``r1`` are :class:`_Half` instances, built by the caller.
 
     Returns the converged bases together with the decomposition
-    ``us, sall, vs`` of ``rho``. Everything here acts either on the small
-    auxiliary legs or through the ``mm`` products of the halves, so the full
-    ``A = r0 @ r1.T`` is never formed.
+    ``us, sall, vs`` of ``rho``, followed by an ``info`` dictionary holding the
+    number of power updates performed (``niter``, at most the ``niter`` budget
+    of ``opts_si``) and the subspace ``error`` they reached. Everything here
+    acts either on the small auxiliary legs or through the ``mm`` products of
+    the halves, so the full ``A = r0 @ r1.T`` is never formed.
     """
     _validate_ctm_corner_pair(r0, r1)
     niter = opts_si.get('niter', 5)
     tol = opts_si.get('tol', 1e-3)
     X_old, Yh_old = X, Y.H
+    # With niter=0 the bases are used as they come in; no update is made and no
+    # subspace error is available.
+    n_iter, error = 0, float('inf')
 
     with nvtx_range("_si_reduced_svd SI"):
         for _ in range(niter):
             # A = r0 @ r1.T is applied as r0.mm(r1.mm_T(.)), and A.H as r1.mm_conj(r0.mm_H(.)).
             AX = r0.mm(r1.mm_T(X))
-            X_next = r1.mm_conj(r0.mm_H(AX))
+            X_next = r1.mm(r0.mm_T(AX.conj())).conj() # r1.mm_conj(r0.mm_H(AX))
             X, _ = qr(X_next, axes=(0, 1), sQ=X.s[1])
 
-            Yh = Y.H
-            AHY = r1.mm_conj(r0.mm_H(Yh))
+            # Yh = Y.H
+            AHY = r1.mm(r0.mm_T(Y.T)).conj() # r1.mm_conj(r0.mm_H(Yh))
             Yh_next = r0.mm(r1.mm_T(AHY))
-            Yh, _ = qr(Yh_next, axes=(0, 1), sQ=Yh.s[1])
+            # -Y.s[0] is Y.H.s[1]: the auxiliary leg of Yh, not of Y.  Using
+            # Y.s[0] flips it, and since Y is rebuilt as Yh.H the sign then
+            # alternates every iteration, so no two successive Yh are comparable.
+            Yh, _ = qr(Yh_next, axes=(0, 1), sQ=-Y.s[0])
 
             error = max(si_subspace_error(X, X_old),
                         si_subspace_error(Yh, Yh_old))
+            n_iter += 1
 
             Y = Yh.H
             if error < tol:
@@ -867,11 +893,12 @@ def _si_reduced_svd(r0, r1, X, Y, opts_si, spec_only=False):
             X_old, Yh_old = X, Yh
 
     rho = Y @ r0.mm(r1.mm_T(X))
+    info = {'niter': n_iter, 'error': error}
     if spec_only:
         sall= rho.svd(axes=(0, 1), sU=rho.s[1], fix_signs=True, compute_uv=False)
-        return X, Y, None, sall, None
+        return X, Y, None, sall, None, info
     us, sall, vs = rho.svd(axes=(0, 1), sU=rho.s[1], fix_signs=True)
-    return X, Y, us, sall, vs
+    return X, Y, us, sall, vs, info
 
 
 def _si_spectrum(r0, r1, X, Y, opts_si):
@@ -889,29 +916,35 @@ def si_projector_svd(r0, r1, X, Y, opts_svd, opts_si,
     """Approximate the SVD of ``r0 @ r1.T`` using recycled subspaces.
 
     Each half is either a tensor or a pair of enlarged corners; see :class:`_Half`.
+
+    Always returns the 6-tuple ``u, s, v, X_new, Y_new, info``, where ``info``
+    reports the subspace iteration; see :func:`_si_reduced_svd`.
+
+    With ``return_spectrum``, only the spectrum is computed: ``s`` is then the
+    full, untruncated spectrum of the reduced ``rho``, and ``u``, ``v``,
+    ``X_new`` and ``Y_new`` are all ``None``.  Without ``us`` and ``vs`` there
+    are no projectors, and no rotation of the bases into the SVD gauge, so
+    nothing recyclable is produced.
     """
     r0, r1 = _Half(r0), _Half(r1)
-    X, Y, us, sall, vs = _si_reduced_svd(r0, r1, X, Y, opts_si)
+    if return_spectrum:
+        res = _si_reduced_svd(r0, r1, X, Y, opts_si, spec_only=True)
+        return None, res[3], None, None, None, res[5]
+
+    X, Y, us, sall, vs, info = _si_reduced_svd(r0, r1, X, Y, opts_si)
 
     X_new = X @ vs.H
     Y_new = us.H @ Y
-    u = Y.H @ us
-    v = vs @ X.H
+    u = Y_new.H #Y.H @ us
+    v = X_new.H #vs @ X.H
 
     trunc_opts = {k: opts_svd[k] for k in (
         'tol', 'tol_block', 'D_block', 'D_total', 'largest_gap',
         'eps_multiplet', 'hermitian', 'mask_f') if k in opts_svd}
     mask = truncation_mask(sall, **trunc_opts)
-    u, s, v = mask.apply_mask(u, sall, v, axes=(-1, 0, 0)) 
-    
-    # Y_new_trunc, s, X_new_trunc = mask.apply_mask(Y_new, sall, X_new, axes=(0, 0, -1)) 
-    # invsqrt_s= s.rsqrt(cutoff=cutoff)
-    # p0= r1.mm_T(X_new_trunc @ invsqrt_s).unfuse_legs(axes=0)      # = r1.T @ ((X @ vs.H) @ invs)  
-    # p1= r0.mm_T(Y_new_trunc.T @ invsqrt_s).unfuse_legs(axes=0)    # = r0.T @ ((Y @ us.H) @ invs)
-    # result= (p1, s, p0, X_new, Y_new)
+    u, s, v = mask.apply_mask(u, sall, v, axes=(-1, 0, 0))
 
-    result = (u, s, v, X_new, Y_new)
-    return result + (sall,) if return_spectrum else result
+    return u, s, v, X_new, Y_new, info
 
 
 def si_correction_due(age, opts_si):
@@ -931,8 +964,9 @@ def si_correction_due(age, opts_si):
 def si_proj_corners(r0, r1, opts_svd, opts_si, X=None, Y=None, cutoff=0):
     r"""Truncated SVD of ``r0 @ r1.T`` from recycled subspace-iteration bases.
 
-    Returns ``u, s, v`` of the truncated decomposition together with the
-    refreshed bases ``X_new, Y_new`` to be recycled by the next update.
+    Returns the projector pair ``p0, p1`` of the truncated decomposition,
+    the refreshed bases ``X_new, Y_new`` to be recycled by the next update,
+    and the ``info`` of the subspace iteration; see :func:`_si_reduced_svd`.
 
     Each half is either a tensor or a pair of enlarged corners; see :class:`_Half`.
     """
@@ -951,15 +985,11 @@ def si_proj_corners(r0, r1, opts_svd, opts_si, X=None, Y=None, cutoff=0):
         X, Y = si_refinement(r0, r1, X, Y, opts_svd, opts_si)
 
     res= si_projector_svd(r0, r1, X, Y, opts_svd, opts_si, cutoff=cutoff)
-    u, s, v, X_new, Y_new= res[:5]
+    u, s, v, X_new, Y_new, info= res
 
-    # p0 = v
-    # p1 = u
-    # 
-    # r0, r1 = r0.contracted(), r1.contracted()
     rs = s.rsqrt(cutoff=cutoff)
     # p0 = tensordot(r1, (rs @ v).conj(), axes=(0, 1)).unfuse_legs(axes=0)
     # p1 = tensordot(r0, (u @ rs).conj(), axes=(0, 0)).unfuse_legs(axes=0)
     p0= r1.mm_T( (rs @ v).H ).unfuse_legs(axes=0)
     p1= r0.mm_T( (u @ rs).conj() ).unfuse_legs(axes=0)
-    return p0, p1, X_new, Y_new
+    return p0, p1, X_new, Y_new, info

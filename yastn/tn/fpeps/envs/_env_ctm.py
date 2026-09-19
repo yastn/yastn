@@ -18,7 +18,7 @@ import sys
 from typing import NamedTuple, Sequence, Union
 
 from ._env_contractions import identity_boundary, corner2x2, append_vec_tl, append_vec_br
-from ._env_ctm_SI_projectors import si_correction_due, si_proj_corners
+from ._env_ctm_SI_projectors import si_correction_due, si_proj_corners, SI_state
 from ._env_dataclasses import EnvCTM_local, EnvCTM_projectors
 from .._evolution import BondMetric
 from .._geometry import Site, Lattice, is_site
@@ -102,10 +102,12 @@ class EnvCTM():
         :class:`EnvCTM_projectors`, so the bases follow the same ``site2index``
         aliasing and inherit copy/clone/detach/to/serialization. Only the four
         anchor fields ``hlb``, ``hrb``, ``vtr``, ``vbr`` are ever assigned.
-        ``_si_age`` counts SI updates per projector pair; it holds integers,
-        not tensors, and is kept separately for that reason.
-        ``_si_age_patch`` holds ``{site: {name: age}}`` for sites moved to a patch,
-        so that ages follow the patched bases; see :meth:`move_to_patch`.
+        ``_si_age`` holds a :class:`SI_state` per projector pair, keyed by
+        ``(index, name)``; Only its ``age`` is serialized -- ``niter`` and ``error``
+        describe a single past update and are restored to their defaults.
+        ``_si_age_patch`` holds ``{site: {name: SI_state}}`` for sites moved to
+        a patch, so that the state follows the patched bases; see
+        :meth:`move_to_patch`.
         """
         self.si_X = Lattice(self.geometry, objects={site: EnvCTM_projectors() for site in self.sites()})
         self.si_Y = Lattice(self.geometry, objects={site: EnvCTM_projectors() for site in self.sites()})
@@ -119,7 +121,7 @@ class EnvCTM():
             self.si_X = Lattice.from_dict(d['si_X'], config=config)
             self.si_Y = Lattice.from_dict(d['si_Y'], config=config)
             self._si_age = {(tuple(x['index']) if isinstance(x['index'], list) else x['index'],
-                             x['pair']): x['age'] for x in d['si_age']}
+                             x['pair']): SI_state(age=x['age']) for x in d['si_age']}
 
     def __repr__(self) -> str:
         return f"EnvCTM(envs={super().__repr__()},\nproj={self.proj})"
@@ -254,8 +256,8 @@ class EnvCTM():
                 'si_X': self.si_X.to_dict(level=level, resolve_ops=resolve_ops),
                 'si_Y': self.si_Y.to_dict(level=level, resolve_ops=resolve_ops),
                 'si_age': [dict(index=list(index) if isinstance(index, tuple) else index,
-                                pair=pair, age=age)
-                           for (index, pair), age in self._si_age.items()]}
+                                pair=pair, age=state.age)
+                           for (index, pair), state in self._si_age.items()]}
 
     @classmethod
     def from_dict(cls, d, config=None):
@@ -741,14 +743,15 @@ class EnvCTM():
             return
 
         if site0 in env._si_age_patch:
-            ages, key = env._si_age_patch[site0], name0
+            si_states, key = env._si_age_patch[site0], name0
         else:
-            ages, key = env._si_age, (env.site2index(site0), name0)
+            si_states, key = env._si_age, (env.site2index(site0), name0)
+        si_state = si_states.get(key, SI_state())
         opts_si = dict(opts_si)
         opts_si['correct'] = (opts_si.get('correct', False)
-                              or si_correction_due(ages.get(key, 0), opts_si))
+                              or si_correction_due(si_state.age, opts_si))
         with nvtx_range("si_proj_corners"):
-            p0, p1, X, Y = si_proj_corners(r0, r1, opts_svd, opts_si,
+            p0, p1, X, Y, info = si_proj_corners(r0, r1, opts_svd, opts_si,
                 X=getattr(env.si_X[site0], name0), Y=getattr(env.si_Y[site0], name0),
                 cutoff=kwargs.get('cutoff', 0))
         setattr(env.proj[site0], name0, p0)
@@ -756,7 +759,8 @@ class EnvCTM():
         recycle_grad = opts_si.get('recycle_grad', False)
         setattr(env.si_X[site0], name0, X if recycle_grad else X.detach())
         setattr(env.si_Y[site0], name0, Y if recycle_grad else Y.detach())
-        ages[key] = ages.get(key, 0) + 1
+        # The age accumulates; niter and error describe this update alone.
+        si_states[key] = SI_state(age=si_state.age + 1, **info)
 
     def _trivial_projectors_(env, move, sites):
         r"""
@@ -862,17 +866,17 @@ class EnvCTM():
         for lattice in (self.env, self.proj, self.si_X, self.si_Y):
             lattice.apply_patch()
         # As in Lattice.apply_patch, the last patched site of a unit-cell index
-        # wins, so each committed age stays with the basis and projector it counts.
-        for site, ages in self._si_age_patch.items():
+        # wins, so each committed state stays with the basis and projector it describes.
+        for site, si_states in self._si_age_patch.items():
             index = self.site2index(site)
             self._si_age = {k: v for k, v in self._si_age.items() if k[0] != index}
-            self._si_age.update(((index, name), age) for name, age in ages.items())
+            self._si_age.update(((index, name), si_state) for name, si_state in si_states.items())
         self._si_age_patch = {}
 
     def move_to_patch(self, sites):
         r"""
         Give ``sites`` private copies of environment tensors, projectors and
-        recycled SI state (bases and ages) until :meth:`apply_patch`.
+        recycled SI state (bases and :class:`SI_state`) until :meth:`apply_patch`.
         """
         for lattice in (self.env, self.proj, self.si_X, self.si_Y):
             lattice.move_to_patch(sites)
@@ -882,7 +886,7 @@ class EnvCTM():
             sites = [sites]
         for site in sites:
             index = self.site2index(site)
-            self._si_age_patch[site] = {name: age for (ind, name), age in self._si_age.items() if ind == index}
+            self._si_age_patch[site] = {name: si_state for (ind, name), si_state in self._si_age.items() if ind == index}
 
     def pre_truncation_(env, bond):
         pass

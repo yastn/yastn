@@ -11,9 +11,10 @@ def safe_inverse_2(x, eps):
 
 class SVDGESDD(torch.autograd.Function):
     @staticmethod
-    def forward(A, ad_decomp_reg, fullrank_uv, diagnostics):
+    def forward(A, ad_decomp_reg, fullrank_uv, driver, diagnostics):
         if A.is_cuda:
-            U, S, Vh = torch.linalg.svd(A, full_matrices=fullrank_uv, driver='gesvd')
+            driver= 'gesvd' if driver is None else driver
+            U, S, Vh = torch.linalg.svd(A, full_matrices=fullrank_uv, driver=driver)
         else:
             U, S, Vh = torch.linalg.svd(A, full_matrices=fullrank_uv)
         # A = U @ diag(S) @ Vh
@@ -23,7 +24,7 @@ class SVDGESDD(torch.autograd.Function):
     # inputs is a Tuple of all of the inputs passed to forward.
     # output is the output of the forward().
     def setup_context(ctx, inputs, output):
-        _, ad_decomp_reg, _, diagnostics= inputs
+        _, ad_decomp_reg, _, _, diagnostics= inputs
         U, S, Vh= output
         ctx.save_for_backward(U, S, Vh, ad_decomp_reg)
         ctx.diagnostics= diagnostics
@@ -424,4 +425,4 @@ class SVDGESDD(torch.autograd.Function):
         if diagnostics is not None:
             print(f"{diagnostics} {dA.abs().max()} {sigma.max()}")
 
-        return dA, None, None, None
+        return dA, None, None, None, None
