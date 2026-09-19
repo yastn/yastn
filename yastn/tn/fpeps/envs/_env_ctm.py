@@ -601,6 +601,11 @@ class EnvCTM():
             (``'cwo'`` by default, or ``'asvr'``/``'rds'``), and
             ``recycle_grad`` (default False). ``'rds'`` distributes SI vectors
             proportionally to the charge-sector dimensions of the corners.
+            ``tol`` compares against a subspace error weighted by the singular
+            value of each direction, see :func:`si_subspace_error`, so that
+            oversampled directions at roundoff -- of which there are many once
+            ``D_total + oversampling`` exceeds the numerical rank of the corners
+            -- neither set the error nor decide the iteration count.
 
         Returns
         -------

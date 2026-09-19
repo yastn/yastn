@@ -30,7 +30,7 @@ from typing import NamedTuple
 
 from ....initialize import rand, zeros, eye, block
 from ....sym import sym_none
-from ....tensor import Tensor, YastnError, Leg, tensordot, qr, truncation_mask
+from ....tensor import Tensor, YastnError, Leg, diag, tensordot, qr, truncation_mask
 from ....tensor._auxiliary import _struct
 from ....tensor._contractions import _match_legs_tensordot
 from ...._profile import nsys_profile, nvtx_range
@@ -348,19 +348,59 @@ def si_bases_compatible(r0, r1, X, Y):
     except (AttributeError, IndexError):
         return False
 
-def si_subspace_error(Q, Q_old):
-    r"""Mean squared sine of the principal angles between two SI bases.
+def si_weights_from_triangular(R):
+    r"""Significance of each SI direction, from the ``R`` of its ``QR``.
 
-    Both tensors are expected to be column-isometric.  The expression
-    ``1 - ||Q_old.H @ Q||_F^2 / rank`` is invariant under rotations within
-    either basis, unlike a direct tensor difference.
+    ``R`` is the triangular factor of the power-iterated ``Q R = A.H A Q_old``,
+    so ``|R_ii|`` grows like the squared singular value of direction ``i``.
+    The returned weights are ``sqrt(|R_ii|)``, i.e. proportional to the singular
+    value itself, normalized to a largest weight of one.
+
+    Directions that the halves annihilate come out at roundoff, six or more
+    orders of magnitude below the rest, and so carry essentially no weight.
+
+    Returns ``None`` when ``R`` vanishes identically -- every sampled direction
+    is then annihilated and nothing distinguishes them -- which leaves
+    :func:`si_subspace_error` on its unweighted mean.
+    """
+    w = abs(diag(R.detach())).sqrt()
+    scale = w.norm(p='inf').item()
+    return None if scale == 0 else w / scale
+
+
+def si_subspace_error(Q, Q_old, weights=None):
+    r"""Weighted mean squared sine of the angles between two SI bases.
+
+    Both tensors are expected to be column-isometric. Without ``weights`` this
+    is ``1 - ||Q_old.H @ Q||_F^2 / rank``, the plain mean over all directions.
+
+    ``weights`` -- a diagonal tensor of per-direction significance, see
+    :func:`si_weights_from_triangular` -- instead gives
+    ``1 - ||Q_old.H @ Q @ w||_F^2 / ||w||^2``, that is ``sum_i w_i^2 sin^2(t_i)
+    / sum_i w_i^2``, where ``t_i`` is the angle between direction ``i`` of ``Q``
+    and the span of ``Q_old``.
+
+    Weighing matters because SI oversamples on purpose: once ``chi + p`` exceeds
+    the numerical rank of the halves, the surplus directions are annihilated and
+    the ``QR`` refills them with arbitrary completions that roundoff re-randomizes
+    every iteration. Unweighted, each of them contributes up to ``1 / rank`` to
+    the error forever, so the error floors out well above any useful tolerance
+    and the iteration count ends up decided by roundoff. Weighted, they are
+    suppressed by ``w_i^2`` and the error reports the directions that carry the
+    spectrum.
+
+    Either form vanishes exactly when ``Q`` and ``Q_old`` span the same space,
+    for any gauge within it: ``Q_old.H @ Q`` is then unitary, and
+    ``||U @ w||_F = ||w||`` for unitary ``U``.
     """
     if Q_old is None or Q.get_legs() != Q_old.get_legs():
         return float('inf')
 
-    rank = Q.get_shape(axes=1)
     overlap = Q_old.detach().H @ Q.detach()
-    error = 1.0 - overlap.norm() ** 2 / rank
+    if weights is None:
+        error = 1.0 - overlap.norm() ** 2 / Q.get_shape(axes=1)
+    else:
+        error = 1.0 - (overlap @ weights).norm() ** 2 / weights.norm() ** 2
     # Roundoff can put the result just outside the mathematical interval.
     return max(0.0, min(1.0, error.item()))
 
@@ -873,18 +913,17 @@ def _si_reduced_svd(r0, r1, X, Y, opts_si, spec_only=False):
             # A = r0 @ r1.T is applied as r0.mm(r1.mm_T(.)), and A.H as r1.mm_conj(r0.mm_H(.)).
             AX = r0.mm(r1.mm_T(X))
             X_next = r1.mm(r0.mm_T(AX.conj())).conj() # r1.mm_conj(r0.mm_H(AX))
-            X, _ = qr(X_next, axes=(0, 1), sQ=X.s[1])
+            X, Rx = qr(X_next, axes=(0, 1), sQ=X.s[1])
 
             # Yh = Y.H
             AHY = r1.mm(r0.mm_T(Y.T)).conj() # r1.mm_conj(r0.mm_H(Yh))
             Yh_next = r0.mm(r1.mm_T(AHY))
-            # -Y.s[0] is Y.H.s[1]: the auxiliary leg of Yh, not of Y.  Using
-            # Y.s[0] flips it, and since Y is rebuilt as Yh.H the sign then
-            # alternates every iteration, so no two successive Yh are comparable.
-            Yh, _ = qr(Yh_next, axes=(0, 1), sQ=-Y.s[0])
+            Yh, Ry = qr(Yh_next, axes=(0, 1), sQ=-Y.s[0])
 
-            error = max(si_subspace_error(X, X_old),
-                        si_subspace_error(Yh, Yh_old))
+            # The triangular factors weigh each direction by its significance,
+            # so that oversampled directions at roundoff do not set the error.
+            error = max(si_subspace_error(X, X_old, si_weights_from_triangular(Rx)),
+                        si_subspace_error(Yh, Yh_old, si_weights_from_triangular(Ry)))
             n_iter += 1
 
             Y = Yh.H
