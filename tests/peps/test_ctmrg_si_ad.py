@@ -226,7 +226,7 @@ def test_recycle_grad_true_backpropagates_through_second_update(
 
     assert recycled_inputs
     assert all(X is not None and Y is not None for X, Y in recycled_inputs)
-    assert all(age == 2 for age in env._si_age.values())
+    assert all(si_state.age == 2 for si_state in env._si_age.values())
     assert all(x.requires_grad for x in _si_bases(env, env.si_X).values())
     assert all(y.requires_grad for y in _si_bases(env, env.si_Y).values())
 

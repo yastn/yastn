@@ -16,7 +16,7 @@ import yastn.tn.fpeps as fpeps
 import yastn.tn.fpeps.envs._env_ctm_SI_projectors as si_module
 from yastn.tn.fpeps._geometry import Site
 from yastn.tn.fpeps.envs._env_ctm_c4v import EnvCTM_c4v
-from yastn.tn.fpeps.envs._env_ctm import proj_corners
+from yastn.tn.fpeps.envs._env_ctm import SI_state, proj_corners
 from yastn.tn.fpeps.envs._env_ctm_SI_projectors import (
     initialize_si_bases,
     isometry_expansion,
@@ -28,6 +28,11 @@ from yastn.tn.fpeps.envs._env_ctm_SI_projectors import (
     symmetric_isometry_recycle,
     svd_charge_sector_values,
 )
+
+
+def _si_ages(env):
+    """Ages alone of ``env._si_age``, dropping the per-update niter and error."""
+    return {key: si_state.age for key, si_state in env._si_age.items()}
 
 
 def _si_bases(env, container):
@@ -418,7 +423,7 @@ def test_si_projectors_match_full_svd(config_kwargs, sym):
     opts_si = {'enabled': True, 'oversampling': 1,
                'niter': 24, 'tol': 1e-12, 'correct': True}
     full = proj_corners(r0, r1, opts_svd=opts_svd)
-    p0, p1, X, Y = si_proj_corners(r0, r1, opts_svd, opts_si)
+    p0, p1, X, Y, _ = si_proj_corners(r0, r1, opts_svd, opts_si)
     assert X.get_shape(axes=1) == 6
     assert Y.get_shape(axes=0) == 6
     assert X.get_shape(axes=1) < min(r0.get_shape(axes=0),
@@ -438,7 +443,7 @@ def test_si_complex_u1_projectors_match_full_svd(config_kwargs):
     opts_svd = {'D_total': 5, 'tol': 0, 'fix_signs': True}
     full = proj_corners(r0, r1, opts_svd=opts_svd)
 
-    p0, p1, X, Y = si_proj_corners(
+    p0, p1, X, Y, _ = si_proj_corners(
         r0, r1, opts_svd,
         {'enabled': True, 'oversampling': 1,
          'niter': 24, 'tol': 1e-12, 'correct': True})
@@ -464,10 +469,9 @@ def test_si_spectrum_matches_full_svd(config_kwargs, sym):
     # Guard against accidentally testing a full-rank change of basis: the
     # unrefined random sketch must not already reproduce the reference.
     _, s_initial, _, _, _, _ = si_projector_svd(
-        r0, r1, X, Y, opts_svd, {**opts_si, 'niter': 0},
-        return_spectrum=True)
+        r0, r1, X, Y, opts_svd, {**opts_si, 'niter': 0})
     _, s_si, _, _, _, _ = si_projector_svd(
-        r0, r1, X, Y, opts_svd, opts_si, return_spectrum=True)
+        r0, r1, X, Y, opts_svd, opts_si)
 
     rr = yastn.tensordot(r0, r1, axes=(1, 1))
     _, s_ref, _ = rr.svd_with_truncation(
@@ -542,7 +546,7 @@ def test_si_recycles_after_leg_dimension_change(config_kwargs):
     opts_svd = {'D_total': 4, 'tol': 0}
     opts_si = {'enabled': True, 'oversampling': 2,
                'niter': 24, 'tol': 1e-12, 'correct': True}
-    _, _, X0, Y0 = si_proj_corners(r0, r1, opts_svd, opts_si)
+    _, _, X0, Y0, _ = si_proj_corners(r0, r1, opts_svd, opts_si)
 
     # Change the external spaces while leaving the contracted corner leg valid.
     one = yastn.Leg(config, s=1, D=(1,))
@@ -558,7 +562,7 @@ def test_si_recycles_after_leg_dimension_change(config_kwargs):
     assert not si_bases_compatible(r0_new, r1_new, X0, Y0)
 
     reference = proj_corners(r0_new, r1_new, opts_svd)
-    p0, p1, X1, Y1 = si_proj_corners(
+    p0, p1, X1, Y1, _ = si_proj_corners(
         r0_new, r1_new, opts_svd, opts_si, X=X0, Y=Y0)
 
     assert si_bases_compatible(r0_new, r1_new, X1, Y1)
@@ -582,7 +586,7 @@ def test_si_recycles_after_fusion_history_change(config_kwargs):
     opts_si = {'enabled': True, 'oversampling': 0,
                'niter': 24, 'tol': 1e-12, 'correct': True}
     reference = proj_corners(r0, r1_with_new_history, opts_svd)
-    p0, p1, X_new, Y_new = si_proj_corners(
+    p0, p1, X_new, Y_new, _ = si_proj_corners(
         r0, r1_with_new_history, opts_svd, opts_si, X=X, Y=Y)
 
     assert si_bases_compatible(r0, r1_with_new_history, X_new, Y_new)
@@ -631,7 +635,7 @@ def test_si_rebuilds_basis_after_hard_fused_subleg_change(config_kwargs, monkeyp
     opts_si = {'enabled': True, 'oversampling': 2,
                'niter': 24, 'tol': 1e-12, 'correct': True}
     reference = proj_corners(r0_new, r1_new, opts_svd)
-    p0, p1, X_new, Y_new = si_proj_corners(
+    p0, p1, X_new, Y_new, _ = si_proj_corners(
         r0_new, r1_new, opts_svd, opts_si, X=X, Y=Y)
 
     assert len(calls) == 1
@@ -688,7 +692,7 @@ def test_si_state_copy_clone_detach_to_and_serialization(config_kwargs):
     X, Y = initialize_si_bases(r0, r1, rank=3)
     setattr(env.si_X[site], name, X)
     setattr(env.si_Y[site], name, Y)
-    env._si_age[env.site2index(site), name] = 4
+    env._si_age[env.site2index(site), name] = SI_state(age=4, niter=2, error=1e-9)
 
     def si_x(e):
         return getattr(e.si_X[site], name)
@@ -702,7 +706,12 @@ def test_si_state_copy_clone_detach_to_and_serialization(config_kwargs):
         fpeps.EnvCTM.from_dict(env.to_dict()),
     )
     for other in variants:
-        assert other._si_age == env._si_age
+        # Only the age is serialized: niter and error describe a single past
+        # update, so a round trip restores them to their defaults.
+        expected = (env._si_age if other is not variants[4] else
+                    {key: SI_state(age=si_state.age)
+                     for key, si_state in env._si_age.items()})
+        assert other._si_age == expected
         assert yastn.allclose(si_x(other), si_x(env))
         assert yastn.allclose(si_y(other), si_y(env))
         assert other.si_X is not env.si_X and other.si_Y is not env.si_Y
@@ -746,7 +755,7 @@ def test_si_state_follows_patch(config_kwargs):
                 getattr(env.si_X[site], name), getattr(env.si_Y[site], name))
 
     committed = update(alias)
-    assert env._si_age == {key: 1}
+    assert _si_ages(env) == {key: 1}
 
     env.move_to_patch([s0, s1])
     update(s0)
@@ -755,13 +764,13 @@ def test_si_state_follows_patch(config_kwargs):
     assert getattr(env.si_X[alias], name) is committed[1]
     assert getattr(env.si_X[s1], name) is committed[1]
     assert getattr(env.si_Y[s1], name) is committed[2]
-    assert env._si_age == {key: 1}
+    assert _si_ages(env) == {key: 1}
     last = update(s1)
 
     env.apply_patch()
     # s1 is patched last: its lineage (1 committed + 1 patched update) wins,
     # not s0's (3) and not a count over all aliases (4).
-    assert env._si_age == {key: 2}
+    assert _si_ages(env) == {key: 2}
     assert not env._si_age_patch
     for site in (s0, s1, alias):
         assert getattr(env.proj[site], name) is last[0]
@@ -800,6 +809,6 @@ def test_si_ctm_update_1x2_method(config_kwargs):
     bases_x = _si_bases(env, env.si_X)
     assert bases_x
     assert bases_x.keys() == _si_bases(env, env.si_Y).keys() == env._si_age.keys()
-    assert all(age == 1 for age in env._si_age.values())
+    assert all(si_state.age == 1 for si_state in env._si_age.values())
     assert env.effective_chi() == 2
     assert any(x.get_shape(axes=1) > 1 for x in bases_x.values())

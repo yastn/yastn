@@ -9,6 +9,9 @@ the reduced SVD alone does not detect errors in basis recycling, projector
 routing, or environment updates.
 """
 
+import json
+import os
+
 import numpy as np
 import pytest
 
@@ -23,6 +26,7 @@ from yastn.tn.fpeps.envs._env_ctm_SI_projectors import (
     si_projector_svd,
     svd_charge_sector_values,
 )
+from yastn.tn.fpeps.envs.rdm import rdm1x1
 
 
 def _classical_ising_peps(config, beta=0.5):
@@ -42,6 +46,31 @@ def _classical_ising_peps(config, beta=0.5):
         (spin_vertex, bond, bond), ((-0, -1, 2, 3), (2, -2), (3, -3)))
     geometry = fpeps.SquareLattice(dims=(1, 1), boundary='infinite')
     return fpeps.Peps(geometry, tensors={(0, 0): site}), spin
+
+
+def _load_peps_ad(config, filename):
+    """PEPS stored under ``inputs/`` in the PepsAD JSON layout of peps-torch.
+
+    ``config`` has to match the stored ``sym`` and ``fermionic``, which
+    ``from_dict`` validates.  Complex entries are stored as
+    ``{"real": ..., "imag": ...}``, and a float64 config would drop their
+    imaginary parts, so ``default_dtype`` has to be set explicitly as well.
+    """
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'inputs', filename)
+
+    def complex_decoder(dct):
+        if 'real' in dct and 'imag' in dct:
+            return complex(dct['real'], dct['imag'])
+        return dct
+
+    with open(path) as f:
+        d = json.load(f, object_hook=complex_decoder)
+
+    geometry = fpeps.RectangularUnitcell(**d['geometry'])
+    tensors = {tuple(d['parameters_key_to_id'][coord]):
+               yastn.from_dict(tensor, config=config)
+               for coord, tensor in d['parameters'].items()}
+    return fpeps.Peps(geometry, tensors=tensors)
 
 
 def _normalized_corner_spectra(env):
@@ -116,6 +145,32 @@ def _projector_range_error(reference, approximate, rank_tol=1e-12):
     return max(errors)
 
 
+def _record_si_updates(monkeypatch):
+    """Record the number of power updates made by every ``_si_reduced_svd`` call.
+
+    Each update orthonormalizes both bases, i.e., makes two QR decompositions.
+    """
+    updates = []
+    qr_calls = 0
+    original_qr = si_module.qr
+    original_reduced_svd = si_module._si_reduced_svd
+
+    def counting_qr(*args, **kwargs):
+        nonlocal qr_calls
+        qr_calls += 1
+        return original_qr(*args, **kwargs)
+
+    def recording_reduced_svd(*args, **kwargs):
+        start = qr_calls
+        result = original_reduced_svd(*args, **kwargs)
+        updates.append((qr_calls - start) // 2)
+        return result
+
+    monkeypatch.setattr(si_module, 'qr', counting_qr)
+    monkeypatch.setattr(si_module, '_si_reduced_svd', recording_reduced_svd)
+    return updates
+
+
 # ---------------------------------------------------------------------------
 # Dense projector numerics
 # ---------------------------------------------------------------------------
@@ -141,7 +196,7 @@ def test_si_projector_identity_and_optimal_residual(config_kwargs,
     # test would reduce to an exact SVD and would not exercise SI convergence.
     assert chi + opts_si['oversampling'] < len(singular_values)
 
-    p_left, p_right, X, Y = si_proj_corners(r0, r1, opts_svd, opts_si)
+    p_left, p_right, X, Y, info = si_proj_corners(r0, r1, opts_svd, opts_si)
     pl = _projector_matrix(p_left)
     pr = _projector_matrix(p_right)
 
@@ -149,9 +204,18 @@ def test_si_projector_identity_and_optimal_residual(config_kwargs,
     identity_residual = np.linalg.norm(pr.T @ pl - np.eye(chi))
     assert identity_residual < 2e-9
 
+    # SI reports how far it got.  It does not have to reach ``tol`` here: the
+    # oversampled bases carry surplus columns of roundoff whose directions keep
+    # the reported error above it.
+    assert 1 <= info['niter'] <= opts_si['niter']
+    assert 0. <= info['error'] <= 1.
+
     # Reconstruct the rank-chi environment obtained from the recycled SI
     # subspaces and compare it with the best dense rank-chi approximation.
-    u, s, v, _, _, s_all = si_projector_svd(
+    # The spectrum is requested separately: in spectrum mode the projectors are
+    # not built, so the two modes cannot be had from a single call.
+    u, s, v, _, _, _ = si_projector_svd(r0, r1, X, Y, opts_svd, opts_si)
+    _, s_all, _, _, _, _ = si_projector_svd(
         r0, r1, X, Y, opts_svd, opts_si, return_spectrum=True)
     approximation = (u @ s @ v).to_numpy()
     effective_environment = yastn.tensordot(
@@ -239,7 +303,7 @@ def test_si_public_path_is_matrix_free_and_uses_reduced_svd(
     monkeypatch.setattr(
         yastn.Tensor, 'svd_with_truncation', forbidden_full_svd)
 
-    p0, p1, X, Y = si_proj_corners(
+    p0, p1, X, Y, _ = si_proj_corners(
         r0, r1, {'D_total': 3, 'tol': 0},
         {'enabled': True, 'oversampling': 2, 'niter': 1, 'tol': 0})
 
@@ -273,6 +337,73 @@ def test_public_si_starts_approximate_then_converges(config_kwargs, dtype):
     assert initial_error > 1e-4
     assert refined_error < 1e-8
     assert refined_error < 1e-4 * initial_error
+
+
+def test_si_reports_an_unconverged_budget_of_zero_updates(config_kwargs):
+    """``niter=0`` makes no update, and has to report that instead of failing.
+
+    The bases are then used exactly as they come in, so there is no pair of
+    successive subspaces to compare and no error to report.
+    """
+    config = yastn.make_config(sym='none', **config_kwargs)
+    config.backend.random_seed(seed=93)
+    r0, r1 = _dense_corners_with_spectrum(config, (1., .8, .6, .4, .25, .15))
+    opts_svd = {'D_total': 2, 'tol': 0, 'fix_signs': True}
+    opts_si = {'enabled': True, 'oversampling': 1, 'niter': 0, 'tol': 0}
+
+    *_, info = si_proj_corners(r0, r1, opts_svd, opts_si)
+    assert info == {'niter': 0, 'error': float('inf')}
+
+    # Every entry point has to survive an empty budget, spectrum mode included.
+    X, Y = si_module.initialize_si_bases(r0, r1, 3)
+    assert si_projector_svd(r0, r1, X, Y, opts_svd, opts_si)[-1] == info
+    assert si_projector_svd(r0, r1, X, Y, opts_svd, opts_si,
+                            return_spectrum=True)[-1] == info
+
+
+def test_si_spectrum_mode_returns_the_spectrum_alone(config_kwargs):
+    """``return_spectrum`` builds no projectors and nothing recyclable."""
+    config = yastn.make_config(sym='none', **config_kwargs)
+    config.backend.random_seed(seed=93)
+    r0, r1 = _dense_corners_with_spectrum(config, (1., .8, .6, .4, .25, .15))
+    opts_svd = {'D_total': 2, 'tol': 0, 'fix_signs': True}
+    opts_si = {'enabled': True, 'oversampling': 1, 'niter': 4, 'tol': 1e-13}
+    X, Y = si_module.initialize_si_bases(r0, r1, 3)
+
+    u, s, v, X_new, Y_new, info = si_projector_svd(
+        r0, r1, X, Y, opts_svd, opts_si, return_spectrum=True)
+
+    assert (u, v, X_new, Y_new) == (None, None, None, None)
+    assert info.keys() == {'niter', 'error'}
+    # The spectrum is the untruncated one of the reduced rho, so it keeps every
+    # sampled direction rather than the D_total the mask would retain.
+    assert s.get_shape(axes=0) == 3
+
+
+@pytest.mark.parametrize("dtype", ["float64", "complex128"])
+def test_si_convergence_ignores_roundoff_directions(config_kwargs, monkeypatch, dtype):
+    """SI stops once the directions of a rank-deficient product have converged.
+
+    The oversampled bases exceed the rank of ``r0 @ r1.T``. Their surplus
+    columns carry only roundoff, whose directions change at random between
+    iterations, so they must not keep SI running until ``niter``.
+    """
+    config = yastn.make_config(sym='none', default_dtype=dtype, **config_kwargs)
+    config.backend.random_seed(seed=94)
+    values = (1., .5, .25, .1) + (0.,) * 8
+    r0, r1 = _dense_corners_with_spectrum(config, values)
+    X, Y = si_module.initialize_si_bases(r0, r1, 6)
+    updates = _record_si_updates(monkeypatch)
+
+    s = si_module._si_reduced_svd(
+        si_module._Half(r0), si_module._Half(r1), X, Y,
+        {'niter': 30, 'tol': 1e-10})[3]
+
+    # One update captures the range of the rank-4 product, a second confirms it.
+    assert updates == [2]
+    si_values = np.sort(np.diag(s.to_numpy()))[::-1]
+    assert np.allclose(si_values[:4], values[:4], rtol=1e-10)
+    assert np.all(si_values[4:] < 1e-12)
 
 
 # ---------------------------------------------------------------------------
@@ -322,7 +453,7 @@ def test_si_recycling_state_machine_across_updates(config_kwargs,
     assert bases_x.keys() == _si_bases(env, env.si_Y).keys() == env._si_age.keys()
     assert bases_x
     assert all(pair in {'hlb', 'hrb', 'vtr', 'vbr'} for _, pair in bases_x)
-    assert all(age == 1 for age in env._si_age.values())
+    assert all(si_state.age == 1 for si_state in env._si_age.values())
     _assert_si_bases_are_orthonormal(env)
 
     # Eye initialization grows the CTM progressively.  Bases from this phase
@@ -357,7 +488,7 @@ def test_si_recycling_state_machine_across_updates(config_kwargs,
 
     assert recycled_ids <= consumed_ids
     assert env._si_age.keys() == ages_before.keys()
-    assert all(env._si_age[key] == ages_before[key] + 1
+    assert all(env._si_age[key].age == ages_before[key].age + 1
                for key in ages_before)
     _assert_si_bases_are_orthonormal(env)
 
@@ -379,7 +510,7 @@ def test_si_warmup_and_periodic_correction_schedule(config_kwargs,
         recycled_x = args[2]
         key = next(key for key, value in _si_bases(env, env.si_X).items()
                    if value is recycled_x)
-        correction_ages.append(env._si_age[key])
+        correction_ages.append(env._si_age[key].age)
         return original(*args, **kwargs)
 
     monkeypatch.setattr(si_module, 'si_refinement',
@@ -440,17 +571,89 @@ def test_new_environment_starts_without_si_recycling_state(config_kwargs):
 # ---------------------------------------------------------------------------
 
 
-def test_si_ctmrg_matches_full_svd_on_ising_peps(config_kwargs):
+def _ising_acceptance_state(config_kwargs):
+    """Real-valued classical-Ising PEPS with analytically known correlators."""
+    config = yastn.make_config(sym='Z2', **config_kwargs)
+    psi, spin = _classical_ising_peps(config)
+
+    def check_observables(env_full, env_si):
+        one_full = env_full.measure_1site(spin)[(0, 0)]
+        one_si = env_si.measure_1site(spin)[(0, 0)]
+        nn_full = env_full.measure_nn(spin, spin)
+        nn_si = env_si.measure_nn(spin, spin)
+        assert abs(one_si - one_full) < 2e-8
+        assert nn_full.keys() == nn_si.keys()
+        for bond in nn_full:
+            assert abs(nn_si[bond] - nn_full[bond]) < 2e-6
+
+        # At beta=0.5 the exact nearest-neighbour correlator is 0.872783.
+        assert abs(nn_si[((0, 0), (0, 1))] - 0.872783) < 2e-5
+        assert abs(nn_si[((0, 0), (1, 0))] - 0.872783) < 2e-5
+
+    return config, psi, check_observables
+
+
+def _complex_rdm1x1_check(psi):
+    """Observable check comparing 1x1 RDMs of a complex PEPS in both environments."""
+
+    def check_observables(env_full, env_si):
+        # The 1x1 RDM is gauge invariant and, unlike the CTM norm, insensitive
+        # to the arbitrary normalization of the converged environment.
+        rdm_full, _ = rdm1x1((0, 0), psi, env_full)
+        rdm_si, _ = rdm1x1((0, 0), psi, env_si)
+        assert (rdm_si - rdm_full).norm() < 1e-8
+        assert abs(rdm_full.trace().item() - 1) < 1e-10
+        # SI has to carry the complex phases, not merely complex storage.
+        assert all(x.yastn_dtype == 'complex128'
+                   for x in _si_bases(env_si, env_si.si_X).values())
+
+    return check_observables
+
+
+def _honeycomb_complex_acceptance_state(config_kwargs):
+    """Complex Z2 spinless-fermion honeycomb PEPS.
+
+    The A-B dimer is merged into a single square-lattice tensor, so each virtual
+    leg is Z2 D=(1, 1) and the physical leg is a hard fusion of the two sites
+    with a dim-1 leg carrying the odd parity.
+    """
+    config = yastn.make_config(sym='Z2', fermionic=True,
+                               default_dtype='complex128', **config_kwargs)
+    psi = _load_peps_ad(config, 'D1_1x1_Z2_spinlessf_honeycomb_complex.json')
+    return config, psi, _complex_rdm1x1_check(psi)
+
+
+def _triangular_complex_acceptance_state(config_kwargs):
+    """Complex D=3 spin-1/2 PEPS for the triangular J1-J2 model, without symmetry.
+
+    Variational 1-site state at J2=0.05 from peps-torch
+    (trglC_j20.05_j40_D3ch27_r0_LS_1SITE_iD3n_C4X4cS_ptol8), converted with
+    ``read_ipeps`` and ``PepsAD.from_pt``.  SI runs on a single dense block with
+    double-layer bond dimension D^2 = 9.
+    """
+    config = yastn.make_config(sym='none', default_dtype='complex128', **config_kwargs)
+    psi = _load_peps_ad(config, 'D3_1x1_dense_spin-half_triangular_complex.json')
+    return config, psi, _complex_rdm1x1_check(psi)
+
+
+@pytest.mark.parametrize(
+    'prepare_state',
+    [_ising_acceptance_state,
+     _honeycomb_complex_acceptance_state,
+     _triangular_complex_acceptance_state],
+    ids=('ising', 'honeycomb_complex', 'triangular_complex'))
+def test_si_ctmrg_matches_full_svd_on_reference_peps(config_kwargs, prepare_state):
     """SI and full-SVD CTMRG must give the same fixed-point physics.
 
     This covers a complete sequence of random SI initialization, power/QR
     updates, small SVD, gauge rotation, recycling, projector application, and
     convergence of the environment.  The Ising PEPS is the same nontrivial
-    analytic network used by the standard CTMRG acceptance test.
+    analytic network used by the standard CTMRG acceptance test; the honeycomb
+    state additionally drives the whole loop with complex amplitudes, and the
+    triangular state does so without symmetry at a larger bond dimension.
     """
-    config = yastn.make_config(sym='Z2', **config_kwargs)
+    config, psi, check_observables = prepare_state(config_kwargs)
     config.backend.random_seed(seed=2026)
-    psi, spin = _classical_ising_peps(config)
 
     chi = 12
     opts_svd = {'D_total': chi, 'tol': 0, 'fix_signs': True}
@@ -474,7 +677,7 @@ def test_si_ctmrg_matches_full_svd_on_ising_peps(config_kwargs):
     bases_x = _si_bases(env_si, env_si.si_X)
     assert bases_x.keys() == _si_bases(env_si, env_si.si_Y).keys() == env_si._si_age.keys()
     assert bases_x
-    assert min(env_si._si_age.values()) >= 5
+    assert min(si_state.age for si_state in env_si._si_age.values()) >= 5
     assert all(x.get_shape(axes=1) == chi + 4 for x in bases_x.values())
 
     # Gauge-independent fixed-point data.
@@ -488,15 +691,33 @@ def test_si_ctmrg_matches_full_svd_on_ising_peps(config_kwargs):
                 spectra_si[key][charge], spectra_full[key][charge],
                 rtol=2e-5, atol=2e-8)
 
-    one_full = env_full.measure_1site(spin)[(0, 0)]
-    one_si = env_si.measure_1site(spin)[(0, 0)]
-    nn_full = env_full.measure_nn(spin, spin)
-    nn_si = env_si.measure_nn(spin, spin)
-    assert abs(one_si - one_full) < 2e-8
-    assert nn_full.keys() == nn_si.keys()
-    for bond in nn_full:
-        assert abs(nn_si[bond] - nn_full[bond]) < 2e-6
+    check_observables(env_full, env_si)
 
-    # At beta=0.5 the exact nearest-neighbour correlator is 0.872783.
-    assert abs(nn_si[((0, 0), (0, 1))] - 0.872783) < 2e-5
-    assert abs(nn_si[((0, 0), (1, 0))] - 0.872783) < 2e-5
+
+def test_si_updates_do_not_depend_on_tensordot_policy(config_kwargs, monkeypatch):
+    """Roundoff of a tensordot policy must not decide how long SI iterates.
+
+    The policies contract corners with different floating-point operations.
+    CTMRG amplifies the difference in the gauge of Ising environment directions
+    whose singular values are at roundoff level. As long as SI convergence is
+    judged on directions above the noise floor only, both policies make the
+    same number of power updates in almost every call; judged on all columns,
+    only about 60% of the calls agreed.
+    """
+    opts_si = {'enabled': True, 'oversampling': 4, 'niter': 10,
+               'tol': 1e-3, 'warmup': 5}
+    updates = []
+    for policy in ('fuse_contracted', 'no_fusion'):
+        config, psi, _ = _ising_acceptance_state(
+            {**config_kwargs, 'tensordot_policy': policy})
+        config.backend.random_seed(seed=2026)
+        env = fpeps.EnvCTM(psi, init='eye')
+        updates.append(_record_si_updates(monkeypatch))
+        env.ctmrg_(opts_svd={'D_total': 12, 'tol': 0, 'fix_signs': True},
+                   max_sweeps=40, corner_tol=1e-9, method='2x2 corner',
+                   opts_si=opts_si)
+        monkeypatch.undo()
+
+    assert all(updates)
+    agreement = np.mean([a == b for a, b in zip(*updates)])
+    assert agreement >= 0.95

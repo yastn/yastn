@@ -59,7 +59,7 @@ def _full_sector_dimensions(r0, r1, opts_svd):
 
 
 def _si_sector_dimensions(r0, r1, X, Y, opts_svd, opts_si):
-    _, s, _, X, Y = si_projector_svd(
+    _, s, _, X, Y, _ = si_projector_svd(
         r0, r1, X, Y, opts_svd, opts_si)
     return svd_charge_sector_dimensions(s), X, Y
 
@@ -75,7 +75,7 @@ def _biased_z2_corners(config):
 def _assert_refined_si_spectrum(r0, r1, X, Y, opts_svd, opts_si):
     """Check a refined basis against the globally truncated full spectrum."""
     _, s_si, _, _, _, _ = si_projector_svd(
-        r0, r1, X, Y, opts_svd, opts_si, return_spectrum=True)
+        r0, r1, X, Y, opts_svd, opts_si)
     rho = yastn.tensordot(r0, r1, axes=(1, 1))
     _, s_full, _ = rho.svd_with_truncation(
         axes=(0, 1), sU=r0.s[1], **opts_svd)
@@ -158,7 +158,7 @@ def test_si_cwo_pipeline_clamps_rank_to_corner_capacity(config_kwargs,
         return original(*args, **kwargs)
 
     monkeypatch.setattr(si_module, 'si_refinement', counting_cwo)
-    _, _, X, Y = si_proj_corners(r0, r1, opts_svd, opts_si)
+    _, _, X, Y, _ = si_proj_corners(r0, r1, opts_svd, opts_si)
 
     assert calls == 1
     assert X.get_shape(axes=1) == 12
@@ -279,9 +279,9 @@ def test_si_refinement_accepts_corner_pairs(config_kwargs, refinement):
     assert X_pair.get_legs(1).tD == X_half.get_legs(1).tD
     assert Y_pair.get_legs(0).tD == Y_half.get_legs(0).tD
     # The pair also reaches the reduced spectrum of its contracted product.
-    _, s_pair, _, _, _ = si_projector_svd(
+    _, s_pair, _, _, _, _ = si_projector_svd(
         pair0, pair1, X_pair, Y_pair, opts_svd, opts_si)
-    _, s_half, _, _, _ = si_projector_svd(
+    _, s_half, _, _, _, _ = si_projector_svd(
         half0, half1, X_half, Y_half, opts_svd, opts_si)
     assert np.allclose(np.sort(np.concatenate(tuple(
                            np.asarray(v) for v in svd_charge_sector_values(s_pair).values()))),
@@ -439,7 +439,7 @@ def test_asvr_pipeline_recovers_globally_dominant_missing_sector(
     monkeypatch.setattr(si_module, '_si_spectrum', counting(original_spectrum))
     monkeypatch.setattr(si_module, 'si_projector_svd',
                         counting(original_projector))
-    _, _, X, Y = si_proj_corners(r0, r1, opts_svd, opts_si, X=X, Y=Y)
+    _, _, X, Y, _ = si_proj_corners(r0, r1, opts_svd, opts_si, X=X, Y=Y)
 
     assert X.get_legs(1).tD == {(0,): 6}
     assert Y.get_legs(0).tD == {(0,): 6}
@@ -481,7 +481,7 @@ def test_rds_pipeline_apportions_relative_corner_sector_dimensions(
                'niter': 2, 'tol': 1e-12, 'refinement': 'rds'}
     X0, Y0 = initialize_si_bases(
         r0, r1, rank=4, charges={(0,): 2, (1,): 2})
-    _, _, X, Y = si_proj_corners(
+    _, _, X, Y, _ = si_proj_corners(
         r0, r1, opts_svd, {**opts_si, 'correct': True}, X=X0, Y=Y0)
     assert X.get_legs(1).tD == {(0,): 1, (1,): 3}
     assert Y.get_legs(0).tD == {(0,): 1, (1,): 3}
