@@ -152,6 +152,15 @@ def test_algebra_functions(config_kwargs):
     b = yastn.exp(1j * a)
     assert pytest.approx(b.norm().item(), rel=tol) == np.sqrt(6)
 
+    b = yastn.clip(a, a_min=0.005)
+    assert pytest.approx(b.norm().item(), rel=tol) == np.sqrt(2 * (1 + 0.01 ** 2 + 0.005 ** 2))
+    b = a.clip(a_max=0.05)
+    assert pytest.approx(b.norm().item(), rel=tol) == np.sqrt(2 * (0.05 ** 2 + 0.01 ** 2 + 0.0001 ** 2))
+    b = a.clip(a_min=0.005, a_max=0.05)
+    assert pytest.approx(b.norm().item(), rel=tol) == np.sqrt(2 * (0.05 ** 2 + 0.01 ** 2 + 0.005 ** 2))
+    # clip applies only to non-empty blocks; it does not raise structural zeros to a_min
+    assert yastn.clip(a, a_min=0.005).to_numpy()[0, 1] == 0.
+
     c = a * (4j + 3)
     assert yastn.norm(c.imag() - 4 * a) < tol
     assert yastn.norm(c.real() - 3 * a) < tol
@@ -325,6 +334,18 @@ def test_algebra_exceptions(config_kwargs):
                        match="p should be 'fro', or 'inf'."):
         a = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1], n=0)
         _ = yastn.norm(a, p='wrong_order')
+    with pytest.raises(yastn.YastnError,
+                       match="clip requires at least one of a_min, a_max."):
+        a = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1])
+        _ = yastn.clip(a)
+    with pytest.raises(yastn.YastnError,
+                       match="clip is not supported for complex tensors."):
+        a = yastn.randC(config=config_U1, legs=[leg1.conj(), leg2, leg1])
+        _ = yastn.clip(a, a_min=0.)
+    with pytest.raises(yastn.YastnError,
+                       match="clip is not supported for bool tensors."):
+        a = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1])
+        _ = yastn.clip(a > 0, a_min=0.)
 
 
 

@@ -39,7 +39,7 @@ __all__= ['DTYPE', 'get_dtype', 'get_yastn_dtype',
     'imag', 'max_abs', 'maximum', 'norm_matrix', 'delete', 'insert',
     'expm', 'first_element', 'item', 'sum_elements', 'norm', 'entropy',
     'zeros', 'ones', 'rand', 'to_tensor', 'to_mask', 'square_matrix_from_dict',
-    'trace', 'rsqrt', 'reciprocal', 'exp', 'sqrt', 'absolute', 'permute_dims',
+    'trace', 'rsqrt', 'reciprocal', 'exp', 'sqrt', 'absolute', 'clip', 'permute_dims',
     'fix_svd_signs', 'svdvals', 'svd_lowrank', 'svd', 'svd_randomized', 'svds_scipy', 'nonzero_blocks',
     'eigh', 'qr', 'pinv', 'eig', 'eigh_lowrank', 'eigvals',
     'argsort', 'argsort_which', 'argmax', 'flip', 'allclose',
@@ -307,6 +307,10 @@ def absolute(data):
 
 def bitwise_not(data):
     return torch.bitwise_not(data)
+
+
+def clip(data, a_min=None, a_max=None):
+    return torch.clamp(data, min=a_min, max=a_max)
 
 
 def svd_lowrank(data, meta, sizes, **kwargs):

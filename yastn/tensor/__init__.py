@@ -151,7 +151,7 @@ class Tensor:
     from ._contractions import tensordot, __matmul__, vdot, trace, swap_gate, broadcast, apply_mask
     from ._algebra import __add__, __sub__, __mul__, __rmul__, __array_ufunc__, __neg__, add
     from ._algebra import __lt__, __gt__, __le__, __ge__, __truediv__, __pow__, allclose
-    from ._algebra import __abs__, real, imag, sqrt, rsqrt, reciprocal, exp, bitwise_not
+    from ._algebra import __abs__, real, imag, sqrt, rsqrt, reciprocal, exp, bitwise_not, clip
     from ._single import conj, conj_blocks, flip_signature, flip_charges, switch_signature, transpose, moveaxis, move_leg, diag
     from ._single import grad, requires_grad_, add_leg, remove_leg, drop_leg_history
     from ._single import copy, shallow_copy, clone, detach, detach_, to, consume_transpose
