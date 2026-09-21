@@ -251,7 +251,8 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
         can be used provided it is supported by :doc:`tensor's backend </tensor/configuration>`.
     """
     if a.trans != tuple(range(a.ndim_n)):
-        raise YastnError("Setting block of transpoded tensor is not supported.")
+        raise YastnError("Setting block of tensor with deferred transpose is not supported, " \
+            "consume_transpose() first.")
     ts = np.array(ts, dtype=np.int64).ravel()
     nsym = a.config.sym.NSYM
     if a.isdiag and len(ts) == nsym:

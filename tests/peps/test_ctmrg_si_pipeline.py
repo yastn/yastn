@@ -10,7 +10,9 @@ routing, or environment updates.
 """
 
 import json
+import logging
 import os
+from functools import partial
 
 import numpy as np
 import pytest
@@ -27,6 +29,8 @@ from yastn.tn.fpeps.envs._env_ctm_SI_projectors import (
     svd_charge_sector_values,
 )
 from yastn.tn.fpeps.envs.rdm import rdm1x1
+
+logger = logging.getLogger(__name__)
 
 
 def _classical_ising_peps(config, beta=0.5):
@@ -352,7 +356,7 @@ def test_si_reports_an_unconverged_budget_of_zero_updates(config_kwargs):
     opts_si = {'enabled': True, 'oversampling': 1, 'niter': 0, 'tol': 0}
 
     *_, info = si_proj_corners(r0, r1, opts_svd, opts_si)
-    assert info == {'niter': 0, 'error': float('inf')}
+    assert info['niter']== 0 and info['error'] == float('inf')
 
     # Every entry point has to survive an empty budget, spectrum mode included.
     X, Y = si_module.initialize_si_bases(r0, r1, 3)
@@ -636,6 +640,125 @@ def _triangular_complex_acceptance_state(config_kwargs):
     return config, psi, _complex_rdm1x1_check(psi)
 
 
+# Optimized C4v-A1 iPEPS of the J1-J2 model at J2=0, U(1) internal symmetry,
+# from the SciPost dataset, https://github.com/jurajHasik/j1j2_ipeps_states,
+# (state_1s_A1_U1B_j20.0_D{D}_chi_opt*).  Each file
+# stores only the A-sublattice tensor; the two tilings below are derived from it.
+#
+# Converged 1x1 RDM eigenvalues, at the chi each case runs with.  They are the
+# same for both tilings of a given D, which is what shows the two constructions
+# encode one state.  The staggered magnetization m = (v0 - v1) / 2
+#
+# ``atol_rdm`` gates the SI-against-full-SVD RDM difference of the dense case.
+# It is per-D because that difference grows by about an order with every step
+# in chi -- measured 1.5e-13, 3.6e-09, 2.1e-08, 2.7e-07 for D = 3 to 6 -- so a
+# single value would either fail at D = 6 or test nothing at D = 3.
+_J1J2_REFERENCE = {  # D: (chi, (eigenvalue, eigenvalue), atol_rdm)
+    3: (36, (0.87136209, 0.12863791), 1e-9),              # 0.371362
+    4: (32, (0.83592889546661, 0.16407110453338702), 1e-7), 
+    5: (50, (0.8210197000968025, 0.17898029990319775), 1e-6),
+    6: (36, (0.81693524, 0.18306476), 1e-5),             # 0.316935
+}
+
+
+def _j1j2_sublattice_a(config_kwargs, D):
+    """A-sublattice tensor of the optimized J1-J2 iPEPS with bond dimension D.
+
+    Converted with ``load_from_pepstorch_json_blocksparse`` of yastn_benchmarks
+    and then ``flip_charges(axes=(0, 1, 2))`` + transpose, i.e. ``init_onsite_t``
+    of ``CtmBenchUpdateJ1J2``.  Legs are ``[t, l, b, r, s]`` with signature
+    (-1, -1, 1, 1, -1).
+    """
+    config = yastn.make_config(sym='U1', **config_kwargs)
+    filename = f'D{D}_1x1_c4v_U1_spin-half_j1j2.json'
+    return config, _load_peps_ad(config, filename)[(0, 0)]
+
+
+def _j1j2_u1_acceptance_state(config_kwargs, D):
+    """Bipartite [[A, B], [B, A]] tiling, U(1) symmetric.
+
+    This is ``init_even_unitcell`` of ``CtmBenchUpdateJ1J2``: the B sublattice
+    conjugates every charge and picks up the -i sigma^y phase on the physical
+    leg, so it carries the opposite total charge to A.  The result is the
+    variational J1-J2 ground state.
+
+    ``CheckerboardLattice`` is the same 2x2 unit cell as the benchmark's
+    ``SquareLattice(dims=(2, 2))`` with two unique tensors instead of four
+    sites: identical fixed point, half the runtime.
+    """
+    config, a = _j1j2_sublattice_a(config_kwargs, D)
+    phase = yastn.Tensor(config=config, s=(-1, 1))
+    phase.set_block(ts=(1, 1), Ds=(1, 1), val=[[-1.]])
+    phase.set_block(ts=(-1, -1), Ds=(1, 1), val=[[1.]])
+    b = yastn.tensordot(a.flip_signature().switch_signature(axes='all'),
+                        phase, axes=(4, 1))
+    geometry = fpeps.CheckerboardLattice()
+    psi = fpeps.Peps(geometry, tensors={site: (a, b)[sum(site) % 2]
+                                        for site in geometry.sites()})
+    return config, psi, _j1j2_rdm1x1_check(psi, _J1J2_REFERENCE[D][1])
+
+
+def _j1j2_dense_acceptance_state(config_kwargs, D):
+    """Uniform 1x1 tiling of the same state without symmetry.
+
+    This is ``init_any_unitcell`` of ``CtmBenchUpdateJ1J2``, the branch taken
+    under ``bench_ctm.py -force_dense``; it is dense-only because a uniform
+    tiling is leg-consistent for the charge-blind dense tensor alone.  Flipping
+    the charges before dropping the symmetry reorders the basis so that this
+    tiling represents the same physical state as the bipartite one above --
+    both give the same 1x1 RDM eigenvalues.
+    """
+    _, a = _j1j2_sublattice_a(config_kwargs, D)
+    a1x1 = a.flip_charges(axes=(0, 1, 4)).to_nonsymmetric()
+    dense = a.to_nonsymmetric()
+    dense.set_block(ts=(), Ds=a1x1[()].shape, val=a1x1[()])
+    geometry = fpeps.SquareLattice(dims=(1, 1), boundary='infinite')
+    psi = fpeps.Peps(geometry, tensors={(0, 0): dense})
+    return dense.config, psi, _j1j2_rdm1x1_check(psi, _J1J2_REFERENCE[D][1])
+
+
+def _j1j2_rdm1x1_check(psi, reference_eigenvalues):
+    """1x1 RDM check for the real-valued J1-J2 states.
+
+    The RDM is dominated by its larger eigenvalue (roughly 0.82 against 0.18 at
+    D = 6), so the smaller one is compared relative to its own size rather than
+    through the norm difference, which would barely constrain it.
+    """
+    reference = np.sort(np.asarray(reference_eigenvalues))[::-1]
+
+    def eigenvalues(rdm):
+        return np.sort(np.linalg.eigvalsh(rdm.to_numpy()))[::-1]
+
+    def check_observables(env_si, env_full=None, atol_rdm=None,
+                          rtol_small=None):
+        """Pin the physics of ``env_si``, and compare it with ``env_full``.
+
+        Without ``env_full`` only the reference check runs, which is what the
+        short form of the J1-J2 test needs: it is the SI environment alone that
+        has to reproduce the stored eigenvalues.
+        """
+        for site in psi.sites():
+            rdm_si, _ = rdm1x1(site, psi, env_si)
+            assert abs(rdm_si.trace().item() - 1) < 1e-10
+            values_si = eigenvalues(rdm_si)
+            # Pins the physics itself, not merely SI against full SVD.  The
+            # reference is shared by the bipartite and uniform tilings of a
+            # state, which converge to it from different corner_tol and so
+            # agree with each other only to ~3e-07 at the larger D.
+            assert np.allclose(values_si, reference, atol=1e-6)
+
+            if env_full is None:
+                continue
+            rdm_full, _ = rdm1x1(site, psi, env_full)
+            assert (rdm_si - rdm_full).norm() < atol_rdm
+            assert abs(rdm_full.trace().item() - 1) < 1e-10
+            values_full = eigenvalues(rdm_full)
+            assert np.allclose(values_full, reference, atol=1e-6)
+            assert abs(values_si[-1] - values_full[-1]) < rtol_small * values_full[-1]
+
+    return check_observables
+
+
 @pytest.mark.parametrize(
     'prepare_state',
     [_ising_acceptance_state,
@@ -692,6 +815,129 @@ def test_si_ctmrg_matches_full_svd_on_reference_peps(config_kwargs, prepare_stat
                 rtol=2e-5, atol=2e-8)
 
     check_observables(env_full, env_si)
+
+
+def _j1j2_cases():
+    """(D, chi, form, use_qr) cases of the J1-J2 acceptance test, with gates.
+
+    ``use_qr`` with SI enabled selects the projector route: 
+        * ``implicit_halves = use_si and not use_qr``, so
+        ``use_qr=False`` passes the corners on as pairs 
+        * ``use_qr=True`` passes QR-regularized halves.  
+
+    Only D = 3 and 4 run by default; the D >= 5 cases are gated behind
+    ``--long_tests``, which is also what turns on the full-SVD reference.
+    """
+    long_only = pytest.mark.skipif(
+        "not config.getoption('long_tests')",
+        reason='D >= 5 J1-J2 cases are long duration tests')
+    cases = []
+    for D, (chi, _, atol_rdm) in sorted(_J1J2_REFERENCE.items()):
+        svd_policy = 'block_propack' if D >= 5 else 'fullrank'
+        marks = [long_only] if D >= 5 else []
+        for use_qr in (True, False):
+            tag = 'qr' if use_qr else 'noqr'
+            cases.append(pytest.param(
+                partial(_j1j2_dense_acceptance_state, D=D), chi, use_qr,
+                1e-6, {}, 5e-3, atol_rdm, 1e-3, svd_policy,
+                id=f'j1j2_D{D}_dense_{tag}', marks=marks))
+            cases.append(pytest.param(
+                partial(_j1j2_u1_acceptance_state, D=D), chi, use_qr,
+                1e-8, {'correct': True}, 1e-8, 1e-11, 1e-6, svd_policy,
+                id=f'j1j2_D{D}_U1_{tag}', marks=marks))
+    return cases
+
+
+@pytest.mark.parametrize(
+    'prepare_state, chi, use_qr, corner_tol, extra_opts_si, rtol_spectrum, '
+    'atol_rdm, rtol_small, svd_policy',
+    _j1j2_cases())
+def test_si_ctmrg_matches_full_svd_on_j1j2(
+        request, config_kwargs, prepare_state, chi, use_qr, corner_tol,
+        extra_opts_si, rtol_spectrum, atol_rdm, rtol_small, svd_policy):
+    """SI reproduces full-SVD CTMRG on the optimized J1-J2 iPEPS, D = 3 to 6.
+
+    Larger and more structured than the reference states above: 
+    the U(1) cases have genuinely multi-sector
+    environments whose converged corner spectra span five to seven charges.
+
+    Runs in two forms.  By default only the D = 3 and 4 cases are collected
+    and only SI runs: it has to converge under ``corner_tol`` and to reproduce
+    the ``_J1J2_REFERENCE`` eigenvalues.  Under ``--long_tests`` every case of
+    ``_j1j2_cases`` runs, D = 5 and 6 included, the full-SVD reference is built
+    as well, and the corner spectra and RDMs of the two are compared.
+
+    The two forms are gated differently on purpose.
+
+    The U(1) cases pass ``'correct': True``.  Where SI runs on a U(1) state
+    without it, it does not adjust charge sector distribution. There, 
+    ``converged=True`` as the spectrum is self-consistent within the wrong allocation.
+    """
+    config, psi, check_observables = prepare_state(config_kwargs)
+    config.backend.random_seed(seed=2026)
+
+    opts_svd = {'D_total': chi, 'tol': 1.0e-8, 'fix_signs': True}
+    common = dict(opts_svd=opts_svd, max_sweeps=80, corner_tol=corner_tol,
+                  method='2x2 corner', use_qr=use_qr)
+    oversampling = 5
+
+    # SI runs first so that it sees the clean RNG stream and is reproducible
+    # independently of the full-SVD reference. ctmrg_ logs its own max_dsv progress line
+    # on the root logger. Run with --log-cli-level=INFO to also 
+    # see logs how the recycled bases age.
+    env_si = fpeps.EnvCTM(psi, init='eye')
+    for info_si in env_si.ctmrg_(
+            **common, iterator_step=1,
+            opts_si={'enabled': True, 'oversampling': oversampling, 'niter': 5,
+                     'tol': 1e-6, 'warmup': 5, **extra_opts_si}):
+        logger.info('SI sweep %03d: max_dsv=%s, si_age=%s', info_si.sweeps,
+                    info_si.max_dsv,
+                    {key: si_state
+                     for key, si_state in env_si._si_age.items()})
+
+    assert info_si.converged, f'SI did not converge: {info_si}'
+    bases_x = _si_bases(env_si, env_si.si_X)
+    assert bases_x.keys() == _si_bases(env_si, env_si.si_Y).keys() == env_si._si_age.keys()
+    assert bases_x
+    assert min(si_state.age for si_state in env_si._si_age.values()) >= 5
+    assert all(x.get_shape(axes=1) == chi + oversampling for x in bases_x.values())
+
+    if not request.config.getoption('long_tests'):
+        # Short form: SI alone has to reach the fixed point and reproduce the
+        # stored eigenvalues.
+        check_observables(env_si)
+        return
+
+    env_full = fpeps.EnvCTM(psi, init='eye')
+    # Only the solver may differ from the SI run: the truncation options have
+    # to stay shared.  ``k_block`` is dropped because
+    # the CTM injected it into ``opts_svd`` during the SI run above, and the
+    # reference should not inherit SI's sector hints.  See ``_j1j2_cases`` for
+    # why ``svd_policy`` is per case.
+    opts_svd_full = {key: value for key, value in opts_svd.items()
+                     if key != 'k_block'}
+    opts_svd_full['policy'] = svd_policy
+    info_full = env_full.ctmrg_(**{**common, 'opts_svd': opts_svd_full})
+
+    assert info_full.converged, f'full-SVD reference did not converge: {info_full}'
+
+    # Gauge-independent fixed-point data.  With sector redistribution enabled,
+    # SI reproduces the full-SVD charge allocation exactly on both backends, so
+    # the per-charge spectra line up and can be compared directly.
+    spectra_full = _normalized_corner_spectra(env_full)
+    spectra_si = _normalized_corner_spectra(env_si)
+    assert spectra_full.keys() == spectra_si.keys()
+    for key in spectra_full:
+        assert spectra_full[key].keys() == spectra_si[key].keys()
+        for charge in spectra_full[key]:
+            assert (spectra_si[key][charge].shape
+                    == spectra_full[key][charge].shape)
+            assert np.allclose(
+                spectra_si[key][charge], spectra_full[key][charge],
+                rtol=rtol_spectrum, atol=1e-10)
+
+    check_observables(env_si, env_full, atol_rdm=atol_rdm,
+                      rtol_small=rtol_small)
 
 
 def test_si_updates_do_not_depend_on_tensordot_policy(config_kwargs, monkeypatch):

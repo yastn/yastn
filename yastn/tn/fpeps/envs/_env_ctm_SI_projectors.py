@@ -36,6 +36,15 @@ from ....tensor._contractions import _match_legs_tensordot
 from ...._profile import nsys_profile, nvtx_range
 
 
+#: Smallest singular value, relative to the largest, that the SI convergence
+#: criterion will weigh fully, when the pseudo-inverse ``cutoff`` does not
+#: already say so.  Below it a direction is determined only to about
+#: ``eps * s_1 / s_i`` in angle, so its motion between iterates is roundoff
+#: rather than convergence.
+#:
+SI_WEIGHT_FLOOR = 1e-12
+
+
 class _Half:
     r"""CTM corner half, with legs ``(external, contracted)``.
 
@@ -171,6 +180,7 @@ class SI_state(NamedTuple):
     age: int = 0
     niter: int = 0
     error: float = float('inf')
+    rank: int = 0
 
 
 def _si_rank(opts_svd, opts_si):
@@ -183,6 +193,20 @@ def _si_rank(opts_svd, opts_si):
     if isinstance(D_block, int):
         return D_block + oversampling
     raise YastnError("SI projectors require an integer D_total or D_block in opts_svd.")
+
+
+def _si_truncation_rank(opts_svd):
+    """Number of directions the truncation keeps, or ``None`` if not a plain rank.
+
+    This is the boundary :func:`si_weights_from_triangular` clips at: every
+    direction that survives truncation carries the projectors, while the
+    oversampled tail beyond it does not.
+    """
+    for key in ('D_total', 'D_block'):
+        value = opts_svd.get(key)
+        if isinstance(value, int) and not isinstance(value, bool):
+            return value
+    return None
 
 
 def _charge_order(charge):
@@ -348,16 +372,38 @@ def si_bases_compatible(r0, r1, X, Y):
     except (AttributeError, IndexError):
         return False
 
-def si_weights_from_triangular(R):
+def si_weights_from_triangular(R, rank=None, cutoff=0):
     r"""Significance of each SI direction, from the ``R`` of its ``QR``.
 
     ``R`` is the triangular factor of the power-iterated ``Q R = A.H A Q_old``,
     so ``|R_ii|`` grows like the squared singular value of direction ``i``.
     The returned weights are ``sqrt(|R_ii|)``, i.e. proportional to the singular
-    value itself, normalized to a largest weight of one.
+    value itself.
 
     Directions that the halves annihilate come out at roundoff, six or more
     orders of magnitude below the rest, and so carry essentially no weight.
+
+    ``rank`` -- the number of directions the truncation keeps -- normalizes to
+    the *smallest retained* weight and clips above, so that every retained
+    direction weighs one and only the oversampled tail is suppressed. Without
+    it the weights are normalized to a largest weight of one instead, which
+    makes the criterion blind at the truncation boundary: the error is formed as
+    ``1 - N/D`` with ``N/D`` approaching one, so a direction is resolved only
+    while ``(s_i/s_1)^2`` stays above an ulp, i.e. ``s_i/s_1 > sqrt(eps)``.  On a
+    CTM half spanning nine or more decades that hides the very directions the
+    ``s^-1/2`` of the projectors amplifies most.
+
+    ``cutoff`` is the pseudo-inverse cutoff the projectors will be built with.
+    ``rsqrt`` zeroes every ``s_i <= cutoff``, so such a direction contributes
+    nothing to ``p0``/``p1`` and must not hold the iteration up either; it is
+    the natural floor for the normalization. ``|R_ii|`` carries the squared
+    singular values, so ``sqrt(|R_ii|)`` is on the scale of ``s`` and compares
+    with ``cutoff`` directly.
+
+    The normalization additionally never drops below :data:`SI_WEIGHT_FLOOR`
+    times the largest weight, so that a ``chi`` reaching past what double
+    precision resolves does not hand the iteration count back to roundoff even
+    when no ``cutoff`` is set.
 
     Returns ``None`` when ``R`` vanishes identically -- every sampled direction
     is then annihilated and nothing distinguishes them -- which leaves
@@ -365,7 +411,17 @@ def si_weights_from_triangular(R):
     """
     w = abs(diag(R.detach())).sqrt()
     scale = w.norm(p='inf').item()
-    return None if scale == 0 else w / scale
+    if scale == 0:
+        return None
+    if rank is not None:
+        values = sorted((value
+                         for sector in svd_charge_sector_values(w).values()
+                         for value in sector), reverse=True)
+        retained = max(values[min(rank, len(values)) - 1],
+                       cutoff, SI_WEIGHT_FLOOR * scale)
+        if retained > 0:
+            return (w / retained).clip(a_max=1.)
+    return w / scale
 
 
 def si_subspace_error(Q, Q_old, weights=None):
@@ -888,17 +944,15 @@ def _recycle_si_bases(r0, r1, X, Y, charge_mapping):
 
 
 @nsys_profile("_si_reduced_svd")
-def _si_reduced_svd(r0, r1, X, Y, opts_si, spec_only=False):
-    r"""Subspace-iterate the bases and decompose the reduced ``rho = Y A X``.
+def _si_reduced_svd(r0, r1, X, Y, opts_si, spec_only=False, rank=None, cutoff=0):
+    r"""Subspace-iterate the bases and  ``rho = Y A X``.
 
     Halves ``r0`` and ``r1`` are :class:`_Half` instances, built by the caller.
 
     Returns the converged bases together with the decomposition
     ``us, sall, vs`` of ``rho``, followed by an ``info`` dictionary holding the
     number of power updates performed (``niter``, at most the ``niter`` budget
-    of ``opts_si``) and the subspace ``error`` they reached. Everything here
-    acts either on the small auxiliary legs or through the ``mm`` products of
-    the halves, so the full ``A = r0 @ r1.T`` is never formed.
+    of ``opts_si``) and the subspace ``error`` they reached. 
     """
     _validate_ctm_corner_pair(r0, r1)
     niter = opts_si.get('niter', 5)
@@ -922,8 +976,12 @@ def _si_reduced_svd(r0, r1, X, Y, opts_si, spec_only=False):
 
             # The triangular factors weigh each direction by its significance,
             # so that oversampled directions at roundoff do not set the error.
-            error = max(si_subspace_error(X, X_old, si_weights_from_triangular(Rx)),
-                        si_subspace_error(Yh, Yh_old, si_weights_from_triangular(Ry)))
+            # ``rank`` and ``cutoff`` put that boundary where the projectors
+            # put it -- at the truncation, and at the pseudo-inverse cutoff --
+            # instead of at the largest singular value;
+            # see :func:`si_weights_from_triangular`.
+            error = max(si_subspace_error(X, X_old, si_weights_from_triangular(Rx, rank, cutoff)),
+                        si_subspace_error(Yh, Yh_old, si_weights_from_triangular(Ry, rank, cutoff)))
             n_iter += 1
 
             Y = Yh.H
@@ -942,10 +1000,7 @@ def _si_reduced_svd(r0, r1, X, Y, opts_si, spec_only=False):
 
 def _si_spectrum(r0, r1, X, Y, opts_si):
     r"""Reduced singular values alone, for charge-sector refinement.
-
-    Refinement strategies only read the spectrum, so this skips building the
-    projectors and applying the truncation mask -- work proportional to the
-    large CTM legs rather than to the auxiliary rank.
+    Refinement probes rank sectors against each other rather than building projectors.
     """
     return _si_reduced_svd(r0, r1, X, Y, opts_si, spec_only=True)[3]
 
@@ -966,11 +1021,14 @@ def si_projector_svd(r0, r1, X, Y, opts_svd, opts_si,
     nothing recyclable is produced.
     """
     r0, r1 = _Half(r0), _Half(r1)
+    rank = _si_truncation_rank(opts_svd)
     if return_spectrum:
-        res = _si_reduced_svd(r0, r1, X, Y, opts_si, spec_only=True)
+        res = _si_reduced_svd(r0, r1, X, Y, opts_si, spec_only=True,
+                              rank=rank, cutoff=cutoff)
         return None, res[3], None, None, None, res[5]
 
-    X, Y, us, sall, vs, info = _si_reduced_svd(r0, r1, X, Y, opts_si)
+    X, Y, us, sall, vs, info = _si_reduced_svd(r0, r1, X, Y, opts_si,
+                                               rank=rank, cutoff=cutoff)
 
     X_new = X @ vs.H
     Y_new = us.H @ Y
@@ -1027,8 +1085,7 @@ def si_proj_corners(r0, r1, opts_svd, opts_si, X=None, Y=None, cutoff=0):
     u, s, v, X_new, Y_new, info= res
 
     rs = s.rsqrt(cutoff=cutoff)
-    # p0 = tensordot(r1, (rs @ v).conj(), axes=(0, 1)).unfuse_legs(axes=0)
-    # p1 = tensordot(r0, (u @ rs).conj(), axes=(0, 0)).unfuse_legs(axes=0)
+    info["rank"] = (rs>0).trace().item()
     p0= r1.mm_T( (rs @ v).H ).unfuse_legs(axes=0)
     p1= r0.mm_T( (u @ rs).conj() ).unfuse_legs(axes=0)
     return p0, p1, X_new, Y_new, info

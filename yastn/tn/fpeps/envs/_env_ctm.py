@@ -1158,12 +1158,17 @@ _for_trivial = (('hlt', 'r', 'l', 'tl', 2, 0, 0),
 def update_extended_2x2_projectors_(env, tl: Tensor, tr: Tensor, bl: Tensor, br: Tensor, move, opts_svd, **kwargs):
     r"""
     Calculate new projectors for CTM moves from 4x4 extended corners.
-    On hexagonal lattice embedded on a square lattice with dummy bonds (D=1), instead 3x2 / 2x3 corners are used.
-    With SI enabled in ``opts_si``, halves are passed on as pairs of enlarged corners, avoiding contraction of the corners into halves.
+    
+    * On hexagonal lattice embedded on a square lattice with dummy bonds (D=1), instead 3x2 / 2x3 corners are used.
+    * If ``use_qr`` is True, intermediate QR decomposition is used to regularize the halves of the system 
+    approximated by 2x2 patch embedded in the environment.
+    Otherwise, with SI enabled in ``opts_si``, halves are passed on as pairs of enlarged corners, 
+    avoiding contraction of the corners into halves.
     """
     psi = env.psi
     use_qr = kwargs.get("use_qr", True)
     use_si = kwargs.get("opts_si",{}).get('enabled', False)
+    implicit_halves = use_si and not use_qr
     kwargs["profiling_mode"]= env.profiling_mode
     psh = env.proj
     svd_predict_spec= lambda s0,p0,s1,p1,sign: opts_svd.get('k_block', opts_svd.get('D_block', float('inf'))) \
@@ -1176,8 +1181,8 @@ def update_extended_2x2_projectors_(env, tl: Tensor, tr: Tensor, bl: Tensor, br:
     cor_br = corner2x2('br', env[br].r, env[br].br, env[br].b, psi[br])
 
     if any(x in move for x in 'lrh'):
-        cor_tt = (cor_tl, cor_tr) if use_si else cor_tl @ cor_tr  # b(left) b(right)
-        cor_bb = (cor_br, cor_bl) if use_si else cor_br @ cor_bl  # t(right) t(left)
+        cor_tt = (cor_tl, cor_tr) if implicit_halves else cor_tl @ cor_tr  # b(left) b(right)
+        cor_bb = (cor_br, cor_bl) if implicit_halves else cor_br @ cor_bl  # t(right) t(left)
 
     if any(x in move for x in 'rh'):
         sl = psi[tl].get_shape(axes=2)
@@ -1196,15 +1201,15 @@ def update_extended_2x2_projectors_(env, tl: Tensor, tr: Tensor, bl: Tensor, br:
             cor_lbl = tensordot(cor_lbl, psi[bl], axes=((4, 1), (1, 2)))
             cor_lbl = cor_lbl.fuse_legs(axes=((0, 4), (1, 2, 3)))
 
-            h1 = (cor_ltl, cor_tr) if use_si else cor_ltl @ cor_tr  # b(left) b(right)
-            h2 = (cor_br, cor_lbl) if use_si else cor_br @ cor_lbl  # t(right) t(left)
+            h1 = (cor_ltl, cor_tr) if implicit_halves else cor_ltl @ cor_tr  # b(left) b(right)
+            h2 = (cor_br, cor_lbl) if implicit_halves else cor_br @ cor_lbl  # t(right) t(left)
         else:
             h1,h2= cor_tt, cor_bb
 
         with nvtx_range(f"qr 2x2proj {move}"):
-            r_t = h1 if use_si else (qr(h1, axes=(0, 1))[1] if use_qr else h1)
-            r_b = (h2[1].T, h2[0].T) if use_si else (qr(h2, axes=(1, 0))[1] if use_qr else h2.T)
-        opts_svd["k_block"]= svd_predict_spec(tr, "hrb", br, "hrt", (r_t[-1] if use_si else r_t).s[1])
+            r_t = h1 if implicit_halves else (qr(h1, axes=(0, 1))[1] if use_qr else h1)
+            r_b = (h2[1].T, h2[0].T) if implicit_halves else (qr(h2, axes=(1, 0))[1] if use_qr else h2.T)
+        opts_svd["k_block"]= svd_predict_spec(tr, "hrb", br, "hrt", (r_t[-1] if implicit_halves else r_t).s[1])
         env._set_projector_pair_(tr, 'hrb', br, 'hrt', r_t, r_b, opts_svd, **kwargs)
 
     if any(x in move for x in 'lh'):
@@ -1224,20 +1229,20 @@ def update_extended_2x2_projectors_(env, tl: Tensor, tr: Tensor, bl: Tensor, br:
             cor_rbr = tensordot(cor_rbr, psi[br], axes=((3, 2), (2, 3)))
             cor_rbr = cor_rbr.fuse_legs(axes=((0, 1, 3), (2, 4)))
 
-            h1 = (cor_tl, cor_rtr) if use_si else cor_tl @ cor_rtr  # b(left) b(right)
-            h2 = (cor_rbr, cor_bl) if use_si else cor_rbr @ cor_bl  # t(right) t(left)
+            h1 = (cor_tl, cor_rtr) if implicit_halves else cor_tl @ cor_rtr  # b(left) b(right)
+            h2 = (cor_rbr, cor_bl) if implicit_halves else cor_rbr @ cor_bl  # t(right) t(left)
         else:
             h1,h2= cor_tt, cor_bb
 
         with nvtx_range(f"qr 2x2proj {move}"):
-            r_t = (h1[1].T, h1[0].T) if use_si else (qr(h1, axes=(1, 0))[1] if use_qr else h1.T)
-            r_b = h2 if use_si else (qr(h2, axes=(0, 1))[1] if use_qr else h2)
-        opts_svd["k_block"]= svd_predict_spec(tl, "hlb", bl, "hlt", (r_t[-1] if use_si else r_t).s[1])
+            r_t = (h1[1].T, h1[0].T) if implicit_halves else (qr(h1, axes=(1, 0))[1] if use_qr else h1.T)
+            r_b = h2 if implicit_halves else (qr(h2, axes=(0, 1))[1] if use_qr else h2)
+        opts_svd["k_block"]= svd_predict_spec(tl, "hlb", bl, "hlt", (r_t[-1] if implicit_halves else r_t).s[1])
         env._set_projector_pair_(tl, 'hlb', bl, 'hlt', r_t, r_b, opts_svd, **kwargs)
 
     if any(x in move for x in 'tbv'):
-        cor_ll = (cor_bl, cor_tl) if use_si else cor_bl @ cor_tl  # l(bottom) l(top)
-        cor_rr = (cor_tr, cor_br) if use_si else cor_tr @ cor_br  # r(top) r(bottom)
+        cor_ll = (cor_bl, cor_tl) if implicit_halves else cor_bl @ cor_tl  # l(bottom) l(top)
+        cor_rr = (cor_tr, cor_br) if implicit_halves else cor_tr @ cor_br  # r(top) r(bottom)
 
     if any(x in move for x in 'tv'):
         sb = psi[bl].get_shape(axes=3)
@@ -1256,15 +1261,15 @@ def update_extended_2x2_projectors_(env, tl: Tensor, tr: Tensor, bl: Tensor, br:
             cor_bbr = tensordot(cor_bbr, psi[br], axes=((3, 1), (2, 3)))
             cor_bbr = cor_bbr.fuse_legs(axes=((0, 3), (1, 2, 4)))
 
-            h1 = (cor_bbl, cor_tl) if use_si else cor_bbl @ cor_tl  # l(bottom) l(top)
-            h2 = (cor_tr, cor_bbr) if use_si else cor_tr @ cor_bbr  # r(top) r(bottom)
+            h1 = (cor_bbl, cor_tl) if implicit_halves else cor_bbl @ cor_tl  # l(bottom) l(top)
+            h2 = (cor_tr, cor_bbr) if implicit_halves else cor_tr @ cor_bbr  # r(top) r(bottom)
         else:
             h1,h2= cor_ll, cor_rr
 
         with nvtx_range(f"qr 2x2proj {move}"):
-            r_l = h1 if use_si else (qr(h1, axes=(0, 1))[1] if use_qr else h1)
-            r_r = (h2[1].T, h2[0].T) if use_si else (qr(h2, axes=(1, 0))[1] if use_qr else h2.T)
-        opts_svd["k_block"]= svd_predict_spec(tl, "vtr", tr, "vtl", (r_l[-1] if use_si else r_l).s[1])
+            r_l = h1 if implicit_halves else (qr(h1, axes=(0, 1))[1] if use_qr else h1)
+            r_r = (h2[1].T, h2[0].T) if implicit_halves else (qr(h2, axes=(1, 0))[1] if use_qr else h2.T)
+        opts_svd["k_block"]= svd_predict_spec(tl, "vtr", tr, "vtl", (r_l[-1] if implicit_halves else r_l).s[1])
         env._set_projector_pair_(tl, 'vtr', tr, 'vtl', r_l, r_r, opts_svd, **kwargs)
 
     if any(x in move for x in 'bv'):
@@ -1284,15 +1289,15 @@ def update_extended_2x2_projectors_(env, tl: Tensor, tr: Tensor, bl: Tensor, br:
             cor_ttr = tensordot(cor_ttr, psi[tr], axes=((2, 3), (0, 3)))
             cor_ttr = cor_ttr.fuse_legs(axes=((0, 1, 3), (2, 4)))
 
-            h1 = (cor_bl, cor_ttl) if use_si else cor_bl @ cor_ttl  # l(bottom) l(top)
-            h2 = (cor_ttr, cor_br) if use_si else cor_ttr @ cor_br  # r(top) r(bottom)
+            h1 = (cor_bl, cor_ttl) if implicit_halves else cor_bl @ cor_ttl  # l(bottom) l(top)
+            h2 = (cor_ttr, cor_br) if implicit_halves else cor_ttr @ cor_br  # r(top) r(bottom)
         else:
             h1,h2= cor_ll, cor_rr
 
         with nvtx_range(f"qr 2x2proj {move}"):
-            r_l = (h1[1].T, h1[0].T) if use_si else (qr(h1, axes=(1, 0))[1] if use_qr else h1.T)
-            r_r = h2 if use_si else (qr(h2, axes=(0, 1))[1] if use_qr else h2)
-        opts_svd["k_block"]= svd_predict_spec(bl, "vbr", br, "vbl", (r_l[-1] if use_si else r_l).s[1])
+            r_l = (h1[1].T, h1[0].T) if implicit_halves else (qr(h1, axes=(1, 0))[1] if use_qr else h1.T)
+            r_r = h2 if implicit_halves else (qr(h2, axes=(0, 1))[1] if use_qr else h2)
+        opts_svd["k_block"]= svd_predict_spec(bl, "vbr", br, "vbl", (r_l[-1] if implicit_halves else r_l).s[1])
         env._set_projector_pair_(bl, 'vbr', br, 'vbl', r_l, r_r, opts_svd, **kwargs)
 
 
