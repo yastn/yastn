@@ -112,7 +112,9 @@ class kernel_dot(torch.autograd.Function):
     def setup_context(ctx, inputs, output):
         Adata, Bdata, meta_dot, Dsize = inputs
         ctx.save_for_backward(Adata, Bdata)
+        ctx.save_for_forward(Adata, Bdata)
         ctx.meta_dot= meta_dot
+        ctx.Dsize = Dsize
 
     @staticmethod
     def backward(ctx, Cdata_b):
@@ -137,6 +139,17 @@ class kernel_dot(torch.autograd.Function):
             Bb += A.adjoint() @ Cb
         return Adata_b, Bdata_b, None, None
 
+    @staticmethod
+    def jvp(ctx, Adata_t, Bdata_t, _meta_dot_t, _Dsize_t):
+        Adata, Bdata = ctx.saved_tensors
+        out = None
+        if Adata_t is not None:
+            out = kernel_dot.forward(Adata_t, Bdata, ctx.meta_dot, ctx.Dsize)
+        if Bdata_t is not None:
+            term = kernel_dot.forward(Adata, Bdata_t, ctx.meta_dot, ctx.Dsize)
+            out = term if out is None else out + term
+        return out
+
 
 class kernel_transpose_dot_sum(torch.autograd.Function):
     @staticmethod
@@ -160,11 +173,13 @@ class kernel_transpose_dot_sum(torch.autograd.Function):
     def setup_context(ctx, inputs, output):
         Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border, Dsize = inputs
         ctx.save_for_backward(Adata, Bdata)
+        ctx.save_for_forward(Adata, Bdata)
         ctx.meta_dot = meta_dot
         ctx.Areshape = Areshape
         ctx.Breshape = Breshape
         ctx.Aorder = Aorder
         ctx.Border = Border
+        ctx.Dsize = Dsize
 
     @staticmethod
     def backward(ctx, Cdata_b):
@@ -225,6 +240,19 @@ class kernel_transpose_dot_sum(torch.autograd.Function):
 
         return Adata_b, Bdata_b, None, None, None, None, None, None
 
+    @staticmethod
+    def jvp(ctx, Adata_t, Bdata_t, _meta_dot_t, _Areshape_t, _Breshape_t,
+            _Aorder_t, _Border_t, _Dsize_t):
+        Adata, Bdata = ctx.saved_tensors
+        args = (ctx.meta_dot, ctx.Areshape, ctx.Breshape, ctx.Aorder, ctx.Border, ctx.Dsize)
+        out = None
+        if Adata_t is not None:
+            out = kernel_transpose_dot_sum.forward(Adata_t, Bdata, *args)
+        if Bdata_t is not None:
+            term = kernel_transpose_dot_sum.forward(Adata, Bdata_t, *args)
+            out = term if out is None else out + term
+        return out
+
 
 class kernel_negate_blocks(torch.autograd.Function):
     @staticmethod
@@ -247,6 +275,10 @@ class kernel_negate_blocks(torch.autograd.Function):
             Adata_b[slice(*slc)] *= -1
         return Adata_b, None
 
+    @staticmethod
+    def jvp(ctx, Adata_t, _slices_t):
+        return kernel_negate_blocks.forward(Adata_t, ctx.slices)
+
 
 class kernel_apply_mask(torch.autograd.Function):
     @staticmethod
@@ -266,6 +298,7 @@ class kernel_apply_mask(torch.autograd.Function):
         ctx.axis = axis
         ctx.ndim = ndim
         ctx.size_Adata = Adata.numel()
+        ctx.Dsize = Dsize
 
     @staticmethod
     def backward(ctx, Cdata_b):
@@ -277,6 +310,10 @@ class kernel_apply_mask(torch.autograd.Function):
             slcs = slc0 + (mask[tm],) + slc2
             Adata_b[slice(*sla)].view(Da)[slcs] = Cdata_b[slice(*sln)].view(Dn)
         return Adata_b, None, None, None, None, None, None
+
+    @staticmethod
+    def jvp(ctx, Adata_t, _mask_t, _meta_t, _Dsize_t, _axis_t, _ndim_t):
+        return kernel_apply_mask.forward(Adata_t, ctx.mask, ctx.meta, ctx.Dsize, ctx.axis, ctx.ndim)
 
 
 class kernel_embed_mask(torch.autograd.Function):
@@ -297,6 +334,7 @@ class kernel_embed_mask(torch.autograd.Function):
         ctx.axis = axis
         ctx.ndim = ndim
         ctx.size_Adata = Adata.numel()
+        ctx.Dsize = Dsize
 
     @staticmethod
     def backward(ctx, Cdata_b):
@@ -308,6 +346,10 @@ class kernel_embed_mask(torch.autograd.Function):
             slcs = slc0 + (mask[tm],) + slc2
             Adata_b[slice(*sla)].view(Da)[:] = Cdata_b[slice(*sln)].view(Dn)[slcs]
         return Adata_b, None, None, None, None, None, None
+
+    @staticmethod
+    def jvp(ctx, Adata_t, _mask_t, _meta_t, _Dsize_t, _axis_t, _ndim_t):
+        return kernel_embed_mask.forward(Adata_t, ctx.mask, ctx.meta, ctx.Dsize, ctx.axis, ctx.ndim)
 
 
 class kernel_transpose(torch.autograd.Function):
@@ -333,6 +375,10 @@ class kernel_transpose(torch.autograd.Function):
         for sln, Dn, slo, Do in meta_transpose:
             newdata_b[slice(*slo)].view(Do)[:] = data_b[slice(*sln)].view(Dn).permute(inv_axes)
         return newdata_b, None, None
+
+    @staticmethod
+    def jvp(ctx, data_t, _axes_t, _meta_transpose_t):
+        return kernel_transpose.forward(data_t, ctx.axes, ctx.meta_transpose)
 
 
 class kernel_transpose_and_merge(torch.autograd.Function):
@@ -372,6 +418,7 @@ class kernel_transpose_and_merge(torch.autograd.Function):
         ctx.meta_new = meta_new
         ctx.meta_mrg = meta_mrg
         ctx.D_source = data.numel()
+        ctx.Dsize = Dsize
 
     @staticmethod
     def backward(ctx, data_b):
@@ -390,6 +437,12 @@ class kernel_transpose_and_merge(torch.autograd.Function):
                 inv_Do = tuple(Do[n] for n in order)
                 newdata_b[slice(*slo)].reshape(Do)[:] = tmp_b[slcs].reshape(inv_Do).permute(inv_order)
         return newdata_b, None, None, None, None
+
+    @staticmethod
+    def jvp(ctx, data_t, _order_t, _meta_new_t, _meta_mrg_t, _Dsize_t):
+        return kernel_transpose_and_merge.forward(
+            data_t, ctx.order, ctx.meta_new, ctx.meta_mrg, ctx.Dsize
+        )
 
 
 class kernel_unmerge(torch.autograd.Function):
@@ -424,3 +477,7 @@ class kernel_unmerge(torch.autograd.Function):
             slcs = tuple(slice(*x) for x in sub_slc)
             newdata_b[slice(*slo)].view(Do)[slcs] = data_b[slice(*sln)].view(Dn)
         return newdata_b, None, None, None
+
+    @staticmethod
+    def jvp(ctx, data_t, _meta_t):
+        return kernel_unmerge.forward(data_t, ctx.meta)

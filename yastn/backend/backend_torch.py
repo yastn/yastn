@@ -15,6 +15,8 @@
 """Support of torch as a data structure used by yastn."""
 from itertools import groupby
 from functools import reduce
+from contextlib import contextmanager
+from contextvars import ContextVar
 import torch
 from torch.utils.checkpoint import checkpoint as _checkpoint
 from .linalg.torch_eig_sym import SYMEIG
@@ -34,7 +36,7 @@ __all__= [
     'zeros', 'ones', 'rand', 'to_tensor', 'to_mask', 'square_matrix_from_dict',
     'requires_grad_', 'requires_grad', 'move_to', 'conj',
     'trace', 'rsqrt', 'reciprocal', 'exp', 'sqrt', 'absolute',
-    'svd_lowrank', 'svd', 'eigh', 'qr', 'pinv',
+    'svd_lowrank', 'svd', 'eigh', 'qr', 'pinv', 'forward_ad_decompositions',
     'argsort', 'eigs_which', 'allclose',
     'add', 'sub', 'apply_mask', 'vdot', 'diag_1dto2d', 'diag_2dto1d',
     'dot', 'dot_diag', 'transpose_dot_sum',
@@ -44,10 +46,124 @@ __all__= [
 
 torch.random.seed()
 BACKEND_ID = "torch"
+_forward_ad_decompositions = ContextVar("yastn_forward_ad_decompositions", default=None)
 DTYPE = {'float32': torch.float32,
          'float64': torch.float64,
          'complex64': torch.complex64,
          'complex128': torch.complex128}
+
+
+@contextmanager
+def forward_ad_decompositions(regularization=1.0e-8):
+    """Use rank-aware SVD/QR JVPs inside an explicit forward-AD region."""
+    if regularization <= 0:
+        raise ValueError("forward-AD decomposition regularization must be positive")
+    token = _forward_ad_decompositions.set(float(regularization))
+    try:
+        yield
+    finally:
+        _forward_ad_decompositions.reset(token)
+
+
+def _assemble_forward_ad_blocks(blocks, size, dtype, device):
+    """Assemble ordered block outputs without in-place writes on dual tensors."""
+    segments = []
+    start = 0
+    for sl, block in sorted(blocks, key=lambda item: item[0][0]):
+        if sl[0] > start:
+            segments.append(torch.zeros(sl[0] - start, dtype=dtype, device=device))
+        segments.append(block.reshape(-1))
+        start = sl[1]
+    if start < size:
+        segments.append(torch.zeros(size - start, dtype=dtype, device=device))
+    return torch.cat(segments) if segments else torch.zeros(size, dtype=dtype, device=device)
+
+
+class _SVDForwardAD(torch.autograd.Function):
+    """SVD with a finite JVP at rank loss and inside degenerate subspaces."""
+
+    @staticmethod
+    def forward(A, regularization):
+        driver = 'gesvd' if A.is_cuda else None
+        return torch.linalg.svd(A, full_matrices=False, driver=driver)
+
+    @staticmethod
+    def setup_context(ctx, inputs, output):
+        _, regularization = inputs
+        U, S, Vh = output
+        ctx.save_for_forward(U, S, Vh)
+        ctx.regularization = regularization
+
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        raise RuntimeError("_SVDForwardAD is intended only for forward-mode AD")
+
+    @staticmethod
+    def jvp(ctx, dA, _regularization_t):
+        U, S, Vh = ctx.saved_tensors
+        V = Vh.adjoint()
+        dP = U.adjoint() @ dA @ V
+        smax = S.max().clamp_min(torch.finfo(S.dtype).tiny)
+        cutoff_s = ctx.regularization * smax
+        inv_s = torch.where(S > cutoff_s, S.reciprocal(), torch.zeros_like(S))
+
+        s2 = S.square()
+        gaps = s2[None, :] - s2[:, None]
+        cutoff_gap = ctx.regularization * smax.square()
+        inv_gaps = torch.where(
+            gaps.abs() > cutoff_gap,
+            gaps.reciprocal(),
+            torch.zeros_like(gaps),
+        )
+
+        omega_u = (dP * S[None, :] + dP.adjoint() * S[:, None]) * inv_gaps
+        omega_v = (dP * S[:, None] + dP.adjoint() * S[None, :]) * inv_gaps
+        if dP.is_complex():
+            phase = 0.5j * torch.imag(torch.diag(dP)) * inv_s
+            omega_u = omega_u + torch.diag(phase)
+            omega_v = omega_v - torch.diag(phase)
+
+        dU = U @ omega_u
+        dV = V @ omega_v
+        if U.shape[0] > S.numel():
+            dU = dU + (dA @ V - U @ dP) * inv_s[None, :]
+        if V.shape[0] > S.numel():
+            dV = dV + (dA.adjoint() @ U - V @ dP.adjoint()) * inv_s[None, :]
+        dS = torch.real(torch.diag(dP))
+        return dU, dS, dV.adjoint()
+
+
+class _QRForwardAD(torch.autograd.Function):
+    """Reduced QR with a horizontal, rank-truncated tangent gauge."""
+
+    @staticmethod
+    def forward(A, regularization):
+        Q, R = torch.linalg.qr(A)
+        sR = torch.sign(torch.real(torch.diag(R)))
+        sR = torch.where(sR == 0, torch.ones_like(sR), sR)
+        return Q * sR, sR.reshape([-1, 1]) * R
+
+    @staticmethod
+    def setup_context(ctx, inputs, output):
+        _, regularization = inputs
+        Q, R = output
+        ctx.save_for_forward(Q, R)
+        ctx.regularization = regularization
+
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        raise RuntimeError("_QRForwardAD is intended only for forward-mode AD")
+
+    @staticmethod
+    def jvp(ctx, dA, _regularization_t):
+        Q, R = ctx.saved_tensors
+        projected = Q.adjoint() @ dA
+        if Q.shape[0] == Q.shape[1]:
+            return torch.zeros_like(Q), projected
+
+        Rpinv = torch.linalg.pinv(R, rtol=ctx.regularization)
+        dQ = (dA - Q @ projected) @ Rpinv
+        return dQ, projected
 
 
 def cuda_is_available():
@@ -291,6 +407,22 @@ def svd_lowrank(data, meta, sizes, **kwargs):
 
 
 def svd(data, meta, sizes, fullrank_uv=False, ad_decomp_reg=1.0e-12, diagnostics=None, **kwargs):
+    forward_ad_regularization = _forward_ad_decompositions.get()
+    if forward_ad_regularization is not None:
+        real_dtype = data.real.dtype if data.is_complex() else data.dtype
+        Ublocks, Sblocks, Vhblocks = [], [], []
+        for (sl, D, slU, DU, slS, slV, DV) in meta:
+            A = data[slice(*sl)].view(D)
+            if fullrank_uv:
+                raise NotImplementedError("forward-AD SVD currently supports reduced singular vectors")
+            U, S, Vh = _SVDForwardAD.apply(A, forward_ad_regularization)
+            Ublocks.append((slU, U.reshape(DU)))
+            Sblocks.append((slS, S))
+            Vhblocks.append((slV, Vh.reshape(DV)))
+        Udata = _assemble_forward_ad_blocks(Ublocks, sizes[0], data.dtype, data.device)
+        Sdata = _assemble_forward_ad_blocks(Sblocks, sizes[1], real_dtype, data.device)
+        Vhdata = _assemble_forward_ad_blocks(Vhblocks, sizes[2], data.dtype, data.device)
+        return Udata, Sdata, Vhdata
     return kernel_svd.apply(data, meta, sizes, fullrank_uv, ad_decomp_reg, diagnostics)
 
 
@@ -414,6 +546,18 @@ def eigvals(data, meta, sizeS, **kwargs):
 #     return Qdata, Rdata
 
 def qr(data, meta, sizes):
+    forward_ad_regularization = _forward_ad_decompositions.get()
+    if forward_ad_regularization is not None:
+        Qblocks, Rblocks = [], []
+        for (sl, D, slQ, DQ, slR, DR) in meta:
+            A = data[slice(*sl)].view(D)
+            Q, R = _QRForwardAD.apply(A, forward_ad_regularization)
+            Qblocks.append((slQ, Q.reshape(DQ)))
+            Rblocks.append((slR, R.reshape(DR)))
+        return (
+            _assemble_forward_ad_blocks(Qblocks, sizes[0], data.dtype, data.device),
+            _assemble_forward_ad_blocks(Rblocks, sizes[1], data.dtype, data.device),
+        )
     Qdata = torch.zeros((sizes[0],), dtype=data.dtype, device=data.device)
     Rdata = torch.zeros((sizes[1],), dtype=data.dtype, device=data.device)
     for (sl, D, slQ, DQ, slR, DR) in meta:

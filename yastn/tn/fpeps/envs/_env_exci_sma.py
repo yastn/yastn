@@ -74,6 +74,27 @@ class EnvExciSMA:
     def sites(self):
         return [Site(nx, ny) for ny in range(*self.yrange) for nx in range(*self.xrange)]
 
+    def measure_window_normalization(self, dirn='tb', opts_svd=None, opts_var=None):
+        """Contract the ground-state window normalization once for later reuse."""
+        if opts_var is None:
+            opts_var = {'max_sweeps': 2}
+        if opts_svd is None:
+            rr = self.yrange if dirn == 'lr' else self.xrange
+            D_total = max(max(self[i, d].get_bond_dimensions()) for i in range(*rr) for d in dirn)
+            opts_svd = {'D_total': D_total}
+
+        if dirn == 'lr':
+            i0, i1 = self.yrange[0], self.yrange[1] - 1
+            bra = self[i1, 'r'].conj()
+            tms = {ny: self[ny, 'v'] for ny in range(*self.yrange)}
+            ket = self[i0, 'l']
+        else:
+            i0, i1 = self.xrange[0], self.xrange[1] - 1
+            bra = self[i1, 'b'].conj()
+            tms = {nx: self[nx, 'h'] for nx in range(*self.xrange)}
+            ket = self[i0, 't']
+        return contract_window(bra, tms, ket, i0, i1, opts_svd, opts_var)
+
     def __getitem__(self, ind) -> mps.MpsMpoOBC:
         """
         Boundary MPS build of CTM tensors, or a transfer matrix MPO.
@@ -209,12 +230,13 @@ class EnvExciSMA:
             bra = self[i1, 'r'].conj()
             # tms = {ny: self[ny, 'v'] for ny in range(*self.yrange)}
             tms = {}
-            tms0 = {}
+            tms0 = {} if normalization is None else None
             for ny in range(*self.yrange):
                 t_bra = exci_bra if ny == site_bra[1] else None
                 t_ket = exci_ket if ny == site_ket[1] else None
                 tms[ny] = self[ny, 'v', t_bra, t_ket, site_bra, site_ket]
-                tms0[ny] = self[ny, 'v']
+                if tms0 is not None:
+                    tms0[ny] = self[ny, 'v']
             ket = self[i0, 'l']
             dx = self.xrange[0] - self.offset
             tens = {(nx, ny): tm[nx - dx] for ny, tm in tms.items() for nx in range(*self.xrange)}
@@ -223,12 +245,13 @@ class EnvExciSMA:
             bra = self[i1, 'b'].conj()
             # tms = {nx: self[nx, 'h'] for nx in range(*self.xrange)}
             tms = {}
-            tms0 = {}
+            tms0 = {} if normalization is None else None
             for nx in range(*self.xrange):
                 t_bra = exci_bra if nx == site_bra[0] else None
                 t_ket = exci_ket if nx == site_ket[0] else None
                 tms[nx] = self[nx, 'h', t_bra, t_ket, site_bra, site_ket]
-                tms0[nx] = self[nx, 'h']
+                if tms0 is not None:
+                    tms0[nx] = self[nx, 'h']
             ket = self[i0, 't']
             dy = self.yrange[0] - self.offset
             tens = {(nx, ny): tm[ny - dy] for nx, tm in tms.items() for ny in range(*self.yrange)}
@@ -276,7 +299,21 @@ class EnvExciSMA:
         value = sign * val_op / val_no
         return (value, val_no) if return_normalization else value
 
-    def measure_exci_ops(self, *operators, exci_psi=None, sites_op=None, opts_svd=None, opts_var=None):
+    def measure_exci_ops(self, *operators, exci_psi=None, bra_psi=None, ket_psi=None,
+                         sites_op=None, opts_svd=None, opts_var=None):
+        """Sweep all upper-triangle excitation positions for independent layers.
+
+        ``exci_psi`` is retained as a compatibility alias that supplies both
+        layers.  New callers should pass ``bra_psi`` and ``ket_psi``
+        independently so that a fixed ket sweep can be differentiated with
+        respect to the bra tensors.
+        """
+        if exci_psi is not None:
+            if bra_psi is not None or ket_psi is not None:
+                raise YastnError("Use either exci_psi or independent bra_psi/ket_psi.")
+            bra_psi = ket_psi = exci_psi
+        if bra_psi is None or ket_psi is None:
+            raise YastnError("measure_exci_ops requires both bra_psi and ket_psi.")
         if opts_var is None:
             opts_var = {'max_sweeps': 2}
         if opts_svd is None:
@@ -349,12 +386,12 @@ class EnvExciSMA:
                 vecc, tm, vec = veccs[nx0], tms[nx0], vecs[nx0]
 
                 bra0 = tm[iy0].bra
-                tm[iy0] = DoublePepsTensor(bra=exci_psi[nx0, ny0], ket=tm[iy0].ket, op=tm[iy0].op).transpose(axes=(1, 2, 3, 0))
+                tm[iy0] = DoublePepsTensor(bra=bra_psi[nx0, ny0], ket=tm[iy0].ket, op=tm[iy0].op).transpose(axes=(1, 2, 3, 0))
 
                 # onsite
                 env = mps.Env(vecc.conj(), [tm, vec]).setup_(to='first').setup_(to='last')
                 ket0 = tm[iy0].ket
-                tm[iy0] = DoublePepsTensor(bra=tm[iy0].bra, ket=exci_psi[nx0, ny0], op=tm[iy0].op).transpose(axes=(1, 2, 3, 0))
+                tm[iy0] = DoublePepsTensor(bra=tm[iy0].bra, ket=ket_psi[nx0, ny0], op=tm[iy0].op).transpose(axes=(1, 2, 3, 0))
                 env.update_env_(iy0, to='first')
                 out[(nx0, ny0), (nx0, ny0)] = env.measure(bd=(iy0-1, iy0))
                 tm[iy0] = DoublePepsTensor(bra=tm[iy0].bra, ket=ket0, op=tm[iy0].op).transpose(axes=(1, 2, 3, 0))
@@ -366,7 +403,7 @@ class EnvExciSMA:
                 # same row
                 for iy1, ny1 in enumerate(range(ny0 + 1, self.yrange[1]), start=ny0 - self.yrange[0] + 2):
                     ket0 = tm[iy1].ket
-                    tm[iy1] = DoublePepsTensor(bra=tm[iy1].bra, ket=exci_psi[nx0, ny1], op=tm[iy1].op).transpose(axes=(1, 2, 3, 0))
+                    tm[iy1] = DoublePepsTensor(bra=tm[iy1].bra, ket=ket_psi[nx0, ny1], op=tm[iy1].op).transpose(axes=(1, 2, 3, 0))
                     env.update_env_(iy1, to='first')
                     out[(nx0, ny0), (nx0, ny1)] = env.measure(bd=(iy1-1, iy1))
                     tm[iy1] = DoublePepsTensor(bra=tm[iy1].bra, ket=ket0, op=tm[iy1].op).transpose(axes=(1, 2, 3, 0))
@@ -382,7 +419,7 @@ class EnvExciSMA:
                     env = mps.Env(vecc.conj(), [tm, vec_o0]).setup_(to='last').setup_(to='first')
                     for iy1, ny1 in enumerate(range(*self.yrange), start=1):
                         ket0 = tm[iy1].ket
-                        tm[iy1] = DoublePepsTensor(bra=tm[iy1].bra, ket=exci_psi[nx1, ny1], op=tm[iy1].op).transpose(axes=(1, 2, 3, 0))
+                        tm[iy1] = DoublePepsTensor(bra=tm[iy1].bra, ket=ket_psi[nx1, ny1], op=tm[iy1].op).transpose(axes=(1, 2, 3, 0))
                         env.update_env_(iy1, to='first')
                         out[(nx0, ny0), (nx1, ny1)] = env.measure(bd=(iy1-1, iy1))
                         tm[iy1] = DoublePepsTensor(bra=tm[iy1].bra, ket=ket0, op=tm[iy1].op).transpose(axes=(1, 2, 3, 0))    

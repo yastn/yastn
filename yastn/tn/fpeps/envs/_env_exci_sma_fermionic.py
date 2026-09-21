@@ -86,7 +86,14 @@ class EnvExciSMAFermionic(EnvExciSMA):
 
         return super().__getitem__(ind)
 
-    def measure_exci_ops(self, *operators, exci_psi=None, sites_op=None, opts_svd=None, opts_var=None):
+    def measure_exci_ops(self, *operators, exci_psi=None, bra_psi=None, ket_psi=None,
+                         sites_op=None, opts_svd=None, opts_var=None):
+        if exci_psi is not None:
+            if bra_psi is not None or ket_psi is not None:
+                raise ValueError("Use either exci_psi or independent bra_psi/ket_psi.")
+            bra_psi = ket_psi = exci_psi
+        if bra_psi is None or ket_psi is None:
+            raise ValueError("measure_exci_ops requires both bra_psi and ket_psi.")
         if opts_var is None:
             opts_var = {"max_sweeps": 2}
         if opts_svd is None:
@@ -170,11 +177,11 @@ class EnvExciSMAFermionic(EnvExciSMA):
                 vecc, tm, vec = veccs[nx0], tms[nx0], vecs[nx0]
 
                 bra0 = tm[iy0].bra
-                tm[iy0] = self._replace_layers(tm[iy0], bra=exci_psi[nx0, ny0])
+                tm[iy0] = self._replace_layers(tm[iy0], bra=bra_psi[nx0, ny0])
 
                 env = mps.Env(vecc.conj(), [tm, vec]).setup_(to="first").setup_(to="last")
                 ket0 = tm[iy0].ket
-                tm[iy0] = self._replace_layers(tm[iy0], ket=exci_psi[nx0, ny0])
+                tm[iy0] = self._replace_layers(tm[iy0], ket=ket_psi[nx0, ny0])
                 env.update_env_(iy0, to="first")
                 out[(nx0, ny0), (nx0, ny0)] = env.measure(bd=(iy0 - 1, iy0))
                 tm[iy0] = self._replace_layers(tm[iy0], ket=ket0)
@@ -187,7 +194,7 @@ class EnvExciSMAFermionic(EnvExciSMA):
 
                 for iy1, ny1 in enumerate(range(ny0 + 1, self.yrange[1]), start=ny0 - self.yrange[0] + 2):
                     ket0 = tm[iy1].ket
-                    tm[iy1] = self._replace_layers(tm[iy1], ket=exci_psi[nx0, ny1])
+                    tm[iy1] = self._replace_layers(tm[iy1], ket=ket_psi[nx0, ny1])
                     env.update_env_(iy1, to="first")
                     out[(nx0, ny0), (nx0, ny1)] = env.measure(bd=(iy1 - 1, iy1))
                     tm[iy1] = self._replace_layers(tm[iy1], ket=ket0)
@@ -208,7 +215,7 @@ class EnvExciSMAFermionic(EnvExciSMA):
                     env = mps.Env(vecc.conj(), [tm, vec_o0]).setup_(to="last").setup_(to="first")
                     for iy1, ny1 in enumerate(range(*self.yrange), start=1):
                         ket0 = tm[iy1].ket
-                        tm[iy1] = self._replace_layers(tm[iy1], ket=exci_psi[nx1, ny1])
+                        tm[iy1] = self._replace_layers(tm[iy1], ket=ket_psi[nx1, ny1])
                         env.update_env_(iy1, to="first")
                         out[(nx0, ny0), (nx1, ny1)] = env.measure(bd=(iy1 - 1, iy1))
                         tm[iy1] = self._replace_layers(tm[iy1], ket=ket0)
