@@ -19,6 +19,28 @@ torch_test = pytest.mark.skipif("'torch' not in config.getoption('--backend')",
 
 
 @torch_test
+def test_SVDGESDD_cpu_gesvd_fallback(monkeypatch):
+    import torch
+    from yastn.backend.linalg.torch_svd_gesdd import SVDGESDD
+
+    matrix = torch.tensor(
+        [[1.0 + 0.5j, 2.0 - 0.25j], [3.0 + 0.75j, 4.0 - 1.0j]],
+        dtype=torch.complex128,
+    )
+
+    def fail_gesdd(*args, **kwargs):
+        raise torch._C._LinAlgError("forced CPU GESDD failure")
+
+    monkeypatch.setattr(torch.linalg, "svd", fail_gesdd)
+    with pytest.warns(RuntimeWarning, match="scipy.linalg.svd"):
+        U, S, Vh = SVDGESDD.forward(
+            matrix, torch.tensor(1.0e-12), False, None
+        )
+    reconstructed = U @ torch.diag(S.to(matrix.dtype)) @ Vh
+    assert torch.linalg.vector_norm(reconstructed - matrix) < 1.0e-12
+
+
+@torch_test
 def test_SVDSYMARNOLDI_random():
     import torch
     from yastn.backend.linalg.torch_svds_scipy import SVDSYMARNOLDI

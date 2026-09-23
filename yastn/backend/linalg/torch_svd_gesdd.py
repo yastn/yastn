@@ -13,10 +13,34 @@ def safe_inverse_2(x, eps):
 class SVDGESDD(torch.autograd.Function):
     @staticmethod
     def forward(A, ad_decomp_reg, fullrank_uv, diagnostics):
-        if A.is_cuda:
-            U, S, Vh = torch.linalg.svd(A, full_matrices=fullrank_uv, driver='gesvd')
-        else:
-            U, S, Vh = torch.linalg.svd(A, full_matrices=fullrank_uv)
+        try:
+            if A.is_cuda:
+                U, S, Vh = torch.linalg.svd(A, full_matrices=fullrank_uv, driver='gesvd')
+            else:
+                U, S, Vh = torch.linalg.svd(A, full_matrices=fullrank_uv)
+        except torch._C._LinAlgError:
+            # The CPU torch driver is GESDD and can occasionally fail on the
+            # highly rank-deficient matrices produced by an MPS zipper.  GESVD
+            # is slower but substantially more robust.  The decomposition is
+            # wrapped by this custom autograd function, so its existing manual
+            # backward remains valid when the forward factors come from SciPy.
+            if A.device.type != 'cpu' or not torch.isfinite(A).all():
+                raise
+            import scipy.linalg
+            warnings.warn(
+                "torch.linalg.svd failed to converge; retrying the finite CPU "
+                "matrix with scipy.linalg.svd(lapack_driver='gesvd').",
+                RuntimeWarning,
+            )
+            U_np, S_np, Vh_np = scipy.linalg.svd(
+                A.detach().resolve_conj().numpy(),
+                full_matrices=fullrank_uv,
+                check_finite=False,
+                lapack_driver='gesvd',
+            )
+            U = torch.as_tensor(U_np, dtype=A.dtype, device=A.device)
+            S = torch.as_tensor(S_np, dtype=A.real.dtype, device=A.device)
+            Vh = torch.as_tensor(Vh_np, dtype=A.dtype, device=A.device)
         # A = U @ diag(S) @ Vh
         return U, S, Vh
 
