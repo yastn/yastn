@@ -582,7 +582,7 @@ def test_si_recycles_after_fusion_history_change(config_kwargs):
 
     assert external.tD == r1.get_legs(0).tD
     assert external.hf != r1.get_legs(0).hf
-    opts_svd = {'D_total': 4, 'tol': 0}
+    opts_svd = {'D_total': 4, 'tol': 1e-10}
     opts_si = {'enabled': True, 'oversampling': 0,
                'niter': 24, 'tol': 1e-12, 'correct': True}
     reference = proj_corners(r0, r1_with_new_history, opts_svd)
