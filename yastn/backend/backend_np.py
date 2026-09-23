@@ -275,6 +275,10 @@ def bitwise_not(data):
     return np.bitwise_not(data)
 
 
+def clip(data, a_min=None, a_max=None):
+    return np.clip(data, a_min, a_max)
+
+
 def safe_svd(a):
     try:
         U, S, V = scipy.linalg.svd(a, full_matrices=False)  # , lapack_driver='gesdd'

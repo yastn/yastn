@@ -148,6 +148,9 @@ def test_syntax_basic_algebra(config_kwargs):
     tensor = abs(a).rsqrt(cutoff=1e-12)
     tensor = yastn.rsqrt(abs(a), cutoff=1e-12)
 
+    tensor = a.clip(a_min=0., a_max=1.)
+    tensor = yastn.clip(a, a_min=0., a_max=1.)
+
 
 def test_syntax_tensor_export_import_operations(config_kwargs):
     #

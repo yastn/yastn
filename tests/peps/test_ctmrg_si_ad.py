@@ -214,19 +214,19 @@ def test_recycle_grad_true_backpropagates_through_second_update(
     assert all(y.requires_grad for y in _si_bases(env, env.si_Y).values())
 
     recycled_inputs = []
-    original_proj_corners = env_ctm_module.proj_corners
+    original_si_proj_corners = env_ctm_module.si_proj_corners
 
-    def recording_proj_corners(*args, **kwargs):
+    def recording_si_proj_corners(*args, **kwargs):
         recycled_inputs.append((kwargs.get('X'), kwargs.get('Y')))
-        return original_proj_corners(*args, **kwargs)
+        return original_si_proj_corners(*args, **kwargs)
 
     monkeypatch.setattr(
-        env_ctm_module, 'proj_corners', recording_proj_corners)
+        env_ctm_module, 'si_proj_corners', recording_si_proj_corners)
     env.update_(opts_svd, moves='h', method='2x2 corner', opts_si=opts_si)
 
     assert recycled_inputs
     assert all(X is not None and Y is not None for X, Y in recycled_inputs)
-    assert all(age == 2 for age in env._si_age.values())
+    assert all(si_state.age == 2 for si_state in env._si_age.values())
     assert all(x.requires_grad for x in _si_bases(env, env.si_X).values())
     assert all(y.requires_grad for y in _si_bases(env, env.si_Y).values())
 

@@ -26,11 +26,162 @@ This module is a leaf: it depends on the tensor layer only, never on the CTM
 environment classes that call into it.
 """
 from __future__ import annotations
+from typing import NamedTuple
 
 from ....initialize import rand, zeros, eye, block
 from ....sym import sym_none
-from ....tensor import Tensor, YastnError, Leg, tensordot, qr, truncation_mask
+from ....tensor import Tensor, YastnError, Leg, diag, tensordot, qr, truncation_mask
+from ....tensor._auxiliary import _struct
+from ....tensor._contractions import _match_legs_tensordot
 from ...._profile import nsys_profile, nvtx_range
+
+
+#: Smallest singular value, relative to the largest, that the SI convergence
+#: criterion will weigh fully, when the pseudo-inverse ``cutoff`` does not
+#: already say so.  Below it a direction is determined only to about
+#: ``eps * s_1 / s_i`` in angle, so its motion between iterates is roundoff
+#: rather than convergence.
+#:
+SI_WEIGHT_FLOOR = 1e-12
+
+
+class _Half:
+    r"""CTM corner half, with legs ``(external, contracted)``.
+
+    Hides whether a half is given as a single tensor or as a pair of enlarged
+    corners whose product it is. ``_Half(r)`` returns the matching
+    specialization, and passes an already built half through.
+
+    Specializations provide ``get_legs(axis)``, ``config``, ``contracted()``,
+    and multiplication of the half with a matrix: ``mm`` for ``self @ M``,
+    together with ``mm_T``, ``mm_H`` and ``mm_conj`` for the transposed,
+    hermitian-conjugated and conjugated half.
+    """
+
+    def __new__(cls, r):
+        if isinstance(r, _Half):
+            return r
+        if cls is _Half:
+            cls = _HalfTensor if isinstance(r, Tensor) else _HalfPair
+        return super().__new__(cls)
+
+
+class _HalfTensor(_Half):
+    """Corner half that is already contracted into a single tensor."""
+
+    def __init__(self, r):
+        if r is self:  # __new__ passed an existing half through
+            return
+        self.tensor = r
+
+    @property
+    def config(self):
+        return self.tensor.config
+
+    def get_legs(self, axis):
+        return self.tensor.get_legs(axis)
+
+    def contracted(self):
+        return self.tensor
+
+    def mm(self, M):  # self @ M
+        return tensordot(self.tensor, M, axes=(1, 0))
+
+    def mm_T(self, M):  # self.T @ M
+        return tensordot(self.tensor, M, axes=(0, 0))
+
+    def mm_H(self, M):  # self.H @ M
+        return tensordot(self.tensor.conj(), M, axes=(0, 0))
+
+    def mm_conj(self, M):  # self.conj() @ M
+        return tensordot(self.tensor.conj(), M, axes=(1, 0))
+
+
+class _HalfPair(_Half):
+    """Corner half given by a pair of enlarged corners, ``r = f0 @ f1``.
+
+    The pair is applied corner by corner, so the half is not formed, which
+    would cost ``O(N^3)`` for two ``N x N`` corners. Only :meth:`contracted`
+    builds it.
+    """
+
+    def __init__(self, r):
+        if r is self:  # __new__ passed an existing half through
+            return
+        self.f0, self.f1 = r
+        self._legs = None
+        self._contracted = None
+
+    @property
+    def config(self):
+        return self.f0.config
+
+    def get_legs(self, axis):
+        r"""Leg of the product of the two corners.
+
+        Sectors annihilated by the contraction are absent from the product,
+        so they are dropped here as well -- SI columns in such sectors would
+        be annihilated on the first application of the half.
+        """
+        if self._legs is None:
+            self._legs = self._product_legs()
+        return self._legs[axis]
+
+    def _product_legs(self):
+        corner_legs = (self.f0.get_legs(0), self.f1.get_legs(1))
+        if self.f0.ndim_n != 2 or self.f1.ndim_n != 2:
+            return corner_legs  # meta-fused corners: keep their raw legs
+        # Native legs, ordered as the effective ones, so that a corner
+        # transposed lazily is described without touching its data.
+        structs = tuple(_struct(legs=tuple(f.struct.legs[i] for i in f.trans),
+                                n=f.struct.n, isdiag=False)
+                        for f in (self.f0, self.f1))
+        # The last output carries the block structure of the product.
+        bl_c = _match_legs_tensordot(self.config.sym, *structs, [0], [1], [0], [1])[-1]
+        return tuple(self._with_charges(leg, basic)
+                     for leg, basic in zip(corner_legs, bl_c.struct.legs))
+
+    @staticmethod
+    def _with_charges(leg, basic):
+        """Corner leg restricted to the charge sectors of the product."""
+        if leg.tD == basic.tD:
+            return leg
+        return Leg(leg.sym, s=basic.s, t=basic.t, D=basic.D, hf=leg.hf)
+
+    def contracted(self):
+        if self._contracted is None:
+            self._contracted = self.f0 @ self.f1
+        return self._contracted
+
+    def mm(self, M):  # self @ M
+        return tensordot(self.f0, tensordot(self.f1, M, axes=(1, 0)), axes=(1, 0))
+
+    def mm_T(self, M):  # self.T @ M
+        return tensordot(self.f1, tensordot(self.f0, M, axes=(0, 0)), axes=(0, 0))
+
+    def mm_H(self, M):  # self.H @ M
+        return tensordot(self.f1.conj(), tensordot(self.f0.conj(), M, axes=(0, 0)), axes=(0, 0))
+
+    def mm_conj(self, M):  # self.conj() @ M
+        return tensordot(self.f0.conj(), tensordot(self.f1.conj(), M, axes=(1, 0)), axes=(1, 0))
+
+
+class SI_state(NamedTuple):
+    r"""Recycling state of one SI projector pair.
+
+    ``age`` counts how many times the pair has been updated with SI; it drives
+    the correction schedule, see :func:`si_correction_due`.
+    ``niter`` and ``error`` describe the last update alone: the number of power
+    updates it made -- at most the ``niter`` budget of ``opts_si`` -- and the
+    subspace error between the last two X, Y iterates. A pair that has not been
+    updated yet reports ``niter=0`` with an infinite ``error``, since there is
+    no pair of successive subspaces to compare.
+    """
+    age: int = 0
+    niter: int = 0
+    error: float = float('inf')
+    rank: int = 0
+
 
 def _si_rank(opts_svd, opts_si):
     """Total size of an SI basis, including oversampling."""
@@ -42,6 +193,20 @@ def _si_rank(opts_svd, opts_si):
     if isinstance(D_block, int):
         return D_block + oversampling
     raise YastnError("SI projectors require an integer D_total or D_block in opts_svd.")
+
+
+def _si_truncation_rank(opts_svd):
+    """Number of directions the truncation keeps, or ``None`` if not a plain rank.
+
+    This is the boundary :func:`si_weights_from_triangular` clips at: every
+    direction that survives truncation carries the projectors, while the
+    oversampled tail beyond it does not.
+    """
+    for key in ('D_total', 'D_block'):
+        value = opts_svd.get(key)
+        if isinstance(value, int) and not isinstance(value, bool):
+            return value
+    return None
 
 
 def _charge_order(charge):
@@ -95,21 +260,20 @@ def _distribute_si_rank_with_capacity(capacities, rank):
 
 
 def _validate_ctm_corner_pair(r0, r1):
-    """Validate the two closures of a pair of CTM corner halves."""
-    if not isinstance(r0, Tensor) or not isinstance(r1, Tensor):
-        raise YastnError("CTM corner halves must be YASTN tensors.")
-    if r0.ndim != 2 or r1.ndim != 2:
-        raise YastnError("CTM corner halves must be rank-2 tensors.")
-    if r0.config.sym.SYM_ID != r1.config.sym.SYM_ID:
-        raise YastnError("CTM corner halves must use the same symmetry.")
+    """Validate the two closures of a pair of CTM corner halves.
 
+    The contracted legs are closed on each other, so they have to be
+    contractible. The external legs only carry the SI bases, where matching
+    dimensions of shared charges suffice; their fusion histories may differ,
+    which invalidates recycled bases but not the corners.
+    """
     for axis in (0, 1):
         leg0 = r0.get_legs(axis)
         leg1 = r1.get_legs(axis)
-        common_charges = leg0.tD.keys() & leg1.tD.keys()
-        if any(leg0.tD[charge] != leg1.tD[charge]
-               for charge in common_charges):
-            raise YastnError(
+        tD0, tD1 = leg0.tD, leg1.tD
+        consistent = leg0.are_consistent(leg1) if axis else \
+            all(tD0[charge] == tD1[charge] for charge in tD0.keys() & tD1.keys())
+        if not consistent: raise YastnError(
                 "CTM corner halves must have matching dimensions in every "
                 "shared charge sector on both loop closures; "
                 f"mismatch on axis {axis}.")
@@ -187,6 +351,9 @@ def si_bases_compatible(r0, r1, X, Y):
     if X is None or Y is None:
         return False
 
+    leg0_r0 = r0.get_legs(0)
+    leg0_r1 = r1.get_legs(0)
+
     def is_compatible_subspace(basis_leg, corner_leg):
         """A refined basis may intentionally contain only selected sectors."""
         return (basis_leg.s == corner_leg.s
@@ -196,34 +363,100 @@ def si_bases_compatible(r0, r1, X, Y):
 
     try:
         return (
-            is_compatible_subspace(
-                X.get_legs(0), r1.get_legs(0).conj())
-            and is_compatible_subspace(
-                Y.get_legs(1), r0.get_legs(0).conj())
+            is_compatible_subspace(X.get_legs(0), leg0_r1.conj())
+            and is_compatible_subspace(Y.get_legs(1), leg0_r0.conj())
             and X.get_legs(1) == Y.get_legs(0).conj()
-            and X.dtype == r1.dtype
-            and Y.dtype == r0.dtype
-            and X.device == r1.device
-            and Y.device == r0.device
-            and X.get_legs(0).are_consistent(r1.get_legs(0))
-            and Y.get_legs(1).are_consistent(r0.get_legs(0))
+            and X.get_legs(0).are_consistent(leg0_r1)
+            and Y.get_legs(1).are_consistent(leg0_r0)
         )
     except (AttributeError, IndexError):
         return False
 
-def si_subspace_error(Q, Q_old):
-    r"""Mean squared sine of the principal angles between two SI bases.
+def si_weights_from_triangular(R, rank=None, cutoff=0):
+    r"""Significance of each SI direction, from the ``R`` of its ``QR``.
 
-    Both tensors are expected to be column-isometric.  The expression
-    ``1 - ||Q_old.H @ Q||_F^2 / rank`` is invariant under rotations within
-    either basis, unlike a direct tensor difference.
+    ``R`` is the triangular factor of the power-iterated ``Q R = A.H A Q_old``,
+    so ``|R_ii|`` grows like the squared singular value of direction ``i``.
+    The returned weights are ``sqrt(|R_ii|)``, i.e. proportional to the singular
+    value itself.
+
+    Directions that the halves annihilate come out at roundoff, six or more
+    orders of magnitude below the rest, and so carry essentially no weight.
+
+    ``rank`` -- the number of directions the truncation keeps -- normalizes to
+    the *smallest retained* weight and clips above, so that every retained
+    direction weighs one and only the oversampled tail is suppressed. Without
+    it the weights are normalized to a largest weight of one instead, which
+    makes the criterion blind at the truncation boundary: the error is formed as
+    ``1 - N/D`` with ``N/D`` approaching one, so a direction is resolved only
+    while ``(s_i/s_1)^2`` stays above an ulp, i.e. ``s_i/s_1 > sqrt(eps)``.  On a
+    CTM half spanning nine or more decades that hides the very directions the
+    ``s^-1/2`` of the projectors amplifies most.
+
+    ``cutoff`` is the pseudo-inverse cutoff the projectors will be built with.
+    ``rsqrt`` zeroes every ``s_i <= cutoff``, so such a direction contributes
+    nothing to ``p0``/``p1`` and must not hold the iteration up either; it is
+    the natural floor for the normalization. ``|R_ii|`` carries the squared
+    singular values, so ``sqrt(|R_ii|)`` is on the scale of ``s`` and compares
+    with ``cutoff`` directly.
+
+    The normalization additionally never drops below :data:`SI_WEIGHT_FLOOR`
+    times the largest weight, so that a ``chi`` reaching past what double
+    precision resolves does not hand the iteration count back to roundoff even
+    when no ``cutoff`` is set.
+
+    Returns ``None`` when ``R`` vanishes identically -- every sampled direction
+    is then annihilated and nothing distinguishes them -- which leaves
+    :func:`si_subspace_error` on its unweighted mean.
+    """
+    w = abs(diag(R.detach())).sqrt()
+    scale = w.norm(p='inf').item()
+    if scale == 0:
+        return None
+    if rank is not None:
+        values = sorted((value
+                         for sector in svd_charge_sector_values(w).values()
+                         for value in sector), reverse=True)
+        retained = max(values[min(rank, len(values)) - 1],
+                       cutoff, SI_WEIGHT_FLOOR * scale)
+        if retained > 0:
+            return (w / retained).clip(a_max=1.)
+    return w / scale
+
+
+def si_subspace_error(Q, Q_old, weights=None):
+    r"""Weighted mean squared sine of the angles between two SI bases.
+
+    Both tensors are expected to be column-isometric. Without ``weights`` this
+    is ``1 - ||Q_old.H @ Q||_F^2 / rank``, the plain mean over all directions.
+
+    ``weights`` -- a diagonal tensor of per-direction significance, see
+    :func:`si_weights_from_triangular` -- instead gives
+    ``1 - ||Q_old.H @ Q @ w||_F^2 / ||w||^2``, that is ``sum_i w_i^2 sin^2(t_i)
+    / sum_i w_i^2``, where ``t_i`` is the angle between direction ``i`` of ``Q``
+    and the span of ``Q_old``.
+
+    Weighing matters because SI oversamples on purpose: once ``chi + p`` exceeds
+    the numerical rank of the halves, the surplus directions are annihilated and
+    the ``QR`` refills them with arbitrary completions that roundoff re-randomizes
+    every iteration. Unweighted, each of them contributes up to ``1 / rank`` to
+    the error forever, so the error floors out well above any useful tolerance
+    and the iteration count ends up decided by roundoff. Weighted, they are
+    suppressed by ``w_i^2`` and the error reports the directions that carry the
+    spectrum.
+
+    Either form vanishes exactly when ``Q`` and ``Q_old`` span the same space,
+    for any gauge within it: ``Q_old.H @ Q`` is then unitary, and
+    ``||U @ w||_F = ||w||`` for unitary ``U``.
     """
     if Q_old is None or Q.get_legs() != Q_old.get_legs():
         return float('inf')
 
-    rank = Q.get_shape(axes=1)
     overlap = Q_old.detach().H @ Q.detach()
-    error = 1.0 - overlap.norm() ** 2 / rank
+    if weights is None:
+        error = 1.0 - overlap.norm() ** 2 / Q.get_shape(axes=1)
+    else:
+        error = 1.0 - (overlap @ weights).norm() ** 2 / weights.norm() ** 2
     # Roundoff can put the result just outside the mathematical interval.
     return max(0.0, min(1.0, error.item()))
 
@@ -402,7 +635,10 @@ def si_refinement(r0, r1, X, Y, opts_svd, opts_si):
     This is the single dispatch point for SI charge-sector refinement. Each
     strategy returns a charge mapping; basis resizing is centralized here so
     every method retains compatible columns in its public ``(X, Y)`` result.
+
+    Each half is either a tensor or a pair of enlarged corners; see :class:`_Half`.
     """
+    r0, r1 = _Half(r0), _Half(r1)
     _validate_ctm_corner_pair(r0, r1)
     refinement = opts_si.get('refinement', 'cwo')
     refinements = {
@@ -440,25 +676,6 @@ def si_refinement(r0, r1, X, Y, opts_svd, opts_si):
             and current_mapping_y == charge_mapping):
         return X, Y
     return _recycle_si_bases(r0, r1, X, Y, charge_mapping)
-
-
-def _apply_corner_product(r0, r1, X):
-    r"""Apply A = tensordot(r0, r1, axes=(1, 1)) to X.
-
-    r0 has indices (a, k), r1 has indices (b, k), and X has
-    indices (b, p). The result has indices (a, p).
-    """
-    tmp = tensordot(r1, X, axes=(0, 0))       # (k, p)
-    return tensordot(r0, tmp, axes=(1, 0))    # (a, p)
-
-
-def _apply_corner_product_h(r0, r1, Z):
-    r"""Apply A.H to Z without explicitly constructing A.
-
-    Z has indices (a, p). The result has indices (b, p).
-    """
-    tmp = tensordot(r0.conj(), Z, axes=(0, 0))      # (k*, p)
-    return tensordot(r1.conj(), tmp, axes=(1, 0))   # (b*, p)
 
 
 def _validate_isometry(V):
@@ -727,73 +944,104 @@ def _recycle_si_bases(r0, r1, X, Y, charge_mapping):
 
 
 @nsys_profile("_si_reduced_svd")
-def _si_reduced_svd(r0, r1, X, Y, opts_si, spec_only=False):
-    r"""Subspace-iterate the bases and decompose the reduced ``rho = Y A X``.
+def _si_reduced_svd(r0, r1, X, Y, opts_si, spec_only=False, rank=None, cutoff=0):
+    r"""Subspace-iterate the bases and  ``rho = Y A X``.
+
+    Halves ``r0`` and ``r1`` are :class:`_Half` instances, built by the caller.
 
     Returns the converged bases together with the decomposition
-    ``us, sall, vs`` of ``rho``. Everything here acts either on the small
-    auxiliary legs or through ``_apply_corner_product``, so the full
-    ``r0 @ r1.T`` is never formed.
+    ``us, sall, vs`` of ``rho``, followed by an ``info`` dictionary holding the
+    number of power updates performed (``niter``, at most the ``niter`` budget
+    of ``opts_si``) and the subspace ``error`` they reached. 
     """
     _validate_ctm_corner_pair(r0, r1)
     niter = opts_si.get('niter', 5)
     tol = opts_si.get('tol', 1e-3)
     X_old, Yh_old = X, Y.H
+    # With niter=0 the bases are used as they come in; no update is made and no
+    # subspace error is available.
+    n_iter, error = 0, float('inf')
 
     with nvtx_range("_si_reduced_svd SI"):
         for _ in range(niter):
-            AX = _apply_corner_product(r0, r1, X)
-            X_next = _apply_corner_product_h(r0, r1, AX)
-            X, _ = qr(X_next, axes=(0, 1), sQ=X.s[1])
+            # A = r0 @ r1.T is applied as r0.mm(r1.mm_T(.)), and A.H as r1.mm_conj(r0.mm_H(.)).
+            AX = r0.mm(r1.mm_T(X))
+            X_next = r1.mm(r0.mm_T(AX.conj())).conj() # r1.mm_conj(r0.mm_H(AX))
+            X, Rx = qr(X_next, axes=(0, 1), sQ=X.s[1])
 
-            Yh = Y.H
-            AHY = _apply_corner_product_h(r0, r1, Yh)
-            Yh_next = _apply_corner_product(r0, r1, AHY)
-            Yh, _ = qr(Yh_next, axes=(0, 1), sQ=Yh.s[1])
+            # Yh = Y.H
+            AHY = r1.mm(r0.mm_T(Y.T)).conj() # r1.mm_conj(r0.mm_H(Yh))
+            Yh_next = r0.mm(r1.mm_T(AHY))
+            Yh, Ry = qr(Yh_next, axes=(0, 1), sQ=-Y.s[0])
 
-            error = max(si_subspace_error(X, X_old),
-                        si_subspace_error(Yh, Yh_old))
+            # The triangular factors weigh each direction by its significance,
+            # so that oversampled directions at roundoff do not set the error.
+            # ``rank`` and ``cutoff`` put that boundary where the projectors
+            # put it -- at the truncation, and at the pseudo-inverse cutoff --
+            # instead of at the largest singular value;
+            # see :func:`si_weights_from_triangular`.
+            error = max(si_subspace_error(X, X_old, si_weights_from_triangular(Rx, rank, cutoff)),
+                        si_subspace_error(Yh, Yh_old, si_weights_from_triangular(Ry, rank, cutoff)))
+            n_iter += 1
 
             Y = Yh.H
             if error < tol:
                 break
             X_old, Yh_old = X, Yh
 
-    rho = Y @ _apply_corner_product(r0, r1, X)
+    rho = Y @ r0.mm(r1.mm_T(X))
+    info = {'niter': n_iter, 'error': error}
     if spec_only:
         sall= rho.svd(axes=(0, 1), sU=rho.s[1], fix_signs=True, compute_uv=False)
-        return X, Y, None, sall, None
+        return X, Y, None, sall, None, info
     us, sall, vs = rho.svd(axes=(0, 1), sU=rho.s[1], fix_signs=True)
-    return X, Y, us, sall, vs
+    return X, Y, us, sall, vs, info
 
 
 def _si_spectrum(r0, r1, X, Y, opts_si):
     r"""Reduced singular values alone, for charge-sector refinement.
-
-    Refinement strategies only read the spectrum, so this skips building the
-    projectors and applying the truncation mask -- work proportional to the
-    large CTM legs rather than to the auxiliary rank.
+    Refinement probes rank sectors against each other rather than building projectors.
     """
     return _si_reduced_svd(r0, r1, X, Y, opts_si, spec_only=True)[3]
 
 @nsys_profile("si_projector_svd")
 def si_projector_svd(r0, r1, X, Y, opts_svd, opts_si,
-                     return_spectrum=False):
-    """Approximate the SVD of ``r0 @ r1.T`` using recycled subspaces."""
-    X, Y, us, sall, vs = _si_reduced_svd(r0, r1, X, Y, opts_si)
+                     return_spectrum=False, cutoff=0):
+    """Approximate the SVD of ``r0 @ r1.T`` using recycled subspaces.
+
+    Each half is either a tensor or a pair of enlarged corners; see :class:`_Half`.
+
+    Always returns the 6-tuple ``u, s, v, X_new, Y_new, info``, where ``info``
+    reports the subspace iteration; see :func:`_si_reduced_svd`.
+
+    With ``return_spectrum``, only the spectrum is computed: ``s`` is then the
+    full, untruncated spectrum of the reduced ``rho``, and ``u``, ``v``,
+    ``X_new`` and ``Y_new`` are all ``None``.  Without ``us`` and ``vs`` there
+    are no projectors, and no rotation of the bases into the SVD gauge, so
+    nothing recyclable is produced.
+    """
+    r0, r1 = _Half(r0), _Half(r1)
+    rank = _si_truncation_rank(opts_svd)
+    if return_spectrum:
+        res = _si_reduced_svd(r0, r1, X, Y, opts_si, spec_only=True,
+                              rank=rank, cutoff=cutoff)
+        return None, res[3], None, None, None, res[5]
+
+    X, Y, us, sall, vs, info = _si_reduced_svd(r0, r1, X, Y, opts_si,
+                                               rank=rank, cutoff=cutoff)
 
     X_new = X @ vs.H
     Y_new = us.H @ Y
-    u = Y.H @ us
-    v = vs @ X.H
+    u = Y_new.H #Y.H @ us
+    v = X_new.H #vs @ X.H
 
     trunc_opts = {k: opts_svd[k] for k in (
         'tol', 'tol_block', 'D_block', 'D_total', 'largest_gap',
         'eps_multiplet', 'hermitian', 'mask_f') if k in opts_svd}
     mask = truncation_mask(sall, **trunc_opts)
     u, s, v = mask.apply_mask(u, sall, v, axes=(-1, 0, 0))
-    result = (u, s, v, X_new, Y_new)
-    return result + (sall,) if return_spectrum else result
+
+    return u, s, v, X_new, Y_new, info
 
 
 def si_correction_due(age, opts_si):
@@ -810,12 +1058,16 @@ def si_correction_due(age, opts_si):
                 and (age - warmup) % frequency == 0))
 
 
-def si_proj_corners(r0, r1, opts_svd, opts_si, X=None, Y=None):
+def si_proj_corners(r0, r1, opts_svd, opts_si, X=None, Y=None, cutoff=0):
     r"""Truncated SVD of ``r0 @ r1.T`` from recycled subspace-iteration bases.
 
-    Returns ``u, s, v`` of the truncated decomposition together with the
-    refreshed bases ``X_new, Y_new`` to be recycled by the next update.
+    Returns the projector pair ``p0, p1`` of the truncated decomposition,
+    the refreshed bases ``X_new, Y_new`` to be recycled by the next update,
+    and the ``info`` of the subspace iteration; see :func:`_si_reduced_svd`.
+
+    Each half is either a tensor or a pair of enlarged corners; see :class:`_Half`.
     """
+    r0, r1 = _Half(r0), _Half(r1)
     _validate_ctm_corner_pair(r0, r1)
     # An eye-initialized CTM starts below its requested chi and grows over
     # the first updates.  During that growth the enlarged corners may not
@@ -828,4 +1080,12 @@ def si_proj_corners(r0, r1, opts_svd, opts_si, X=None, Y=None):
         X, Y = initialize_si_bases(r0, r1, rank)
     if opts_si.get('correct', False):
         X, Y = si_refinement(r0, r1, X, Y, opts_svd, opts_si)
-    return si_projector_svd(r0, r1, X, Y, opts_svd, opts_si)
+
+    res= si_projector_svd(r0, r1, X, Y, opts_svd, opts_si, cutoff=cutoff)
+    u, s, v, X_new, Y_new, info= res
+
+    rs = s.rsqrt(cutoff=cutoff)
+    info["rank"] = (rs>0).trace().item()
+    p0= r1.mm_T( (rs @ v).H ).unfuse_legs(axes=0)
+    p1= r0.mm_T( (u @ rs).conj() ).unfuse_legs(axes=0)
+    return p0, p1, X_new, Y_new, info
