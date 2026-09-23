@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from functools import lru_cache, partial
 from itertools import product
+from warnings import warn
 from typing import TYPE_CHECKING
 
 from ._algebra import add
@@ -860,6 +861,10 @@ def _resolve_bad_swaps(swaps, edges, nlegs, aux_pairs, ten1, ten2, axes1, axes2)
     else:
         keep = max(classes, key=lambda cl: len(cl[1]))
     psplit = sorted(k for cl in classes if cl is not keep for k, _ in cl[1])
+    if psplit:
+        what = f"trace of tensor {ten1}" if is_trace else f"contraction of tensors {ten1} and {ten2}"
+        warn(f"ncon: {len(psplit)} bad swap row(s) in the {what} cannot be removed by jump moves; "
+             "a parity gadget is used instead. The diagram is likely to be unphysical. ", stacklevel=4)
     # row flips bring every kept row onto the reference row
     for k, F in keep[1]:
         for T in F:

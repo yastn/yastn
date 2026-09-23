@@ -13,8 +13,8 @@
 # limitations under the License.
 # ==============================================================================
 """ Test yastn.ncon() """
-import random
 import signal
+import warnings
 import sys
 import pytest
 import yastn
@@ -44,65 +44,6 @@ def _mini_tensors(config, mk, inds, charges):
                 ll.append(legobj[e].conj())
         ts.append(yastn.rand(config=config, n=charges[len(ts)], legs=ll))
     return ts
-
-
-def _rand_net(rng, cfg, sym):
-    """Random fermionic network: 3-6 tensors, self-loops, open legs, 1-5 random swaps."""
-    nt = rng.randint(3, 6)
-    # random multigraph with self loops; each tensor 2-5 legs
-    legs = [[] for _ in range(nt)]
-    edges = []
-    eid = 1
-    for t in range(nt):
-        while len(legs[t]) < rng.randint(2, 4):
-            u = rng.randrange(nt)
-            if u == t and rng.random() < 0.7:
-                continue
-            legs[t].append(eid); legs[u].append(eid); edges.append((t, u)); eid += 1
-    # a few open legs
-    nopen = rng.randint(0, 2)
-    for k in range(nopen):
-        t = rng.randrange(nt); legs[t].append(-k)
-    for t in range(nt):
-        rng.shuffle(legs[t])
-    # leg objects: each contracted edge shares a Leg (conj on the other side)
-    if sym == 'Z2':
-        mk = lambda: yastn.Leg(cfg, s=1, t=(0, 1), D=(rng.randint(1, 2), rng.randint(1, 2)))
-    else:
-        mk = lambda: yastn.Leg(cfg, s=1, t=(-1, 0, 1), D=(1, rng.randint(1, 2), 1))
-    legobj = {}
-    ts = []
-    for t in range(nt):
-        ll = []
-        for e in legs[t]:
-            if e not in legobj:
-                legobj[e] = mk(); ll.append(legobj[e])
-            else:
-                ll.append(legobj[e].conj())
-        n = rng.choice([0, 1]) if sym == 'Z2' else rng.choice([-1, 0, 1])
-        ts.append(yastn.rand(config=cfg, n=n, legs=ll))
-    # swaps: random pairs of distinct edges (contracted or open)
-    all_e = list(range(1, eid)) + [-k for k in range(nopen)]
-    swaps = []
-    for _ in range(rng.randint(1, 5)):
-        a, b = rng.sample(all_e, 2)
-        swaps.append((a, b))
-    order = list(range(1, eid)); rng.shuffle(order)
-    return ts, [tuple(l) for l in legs], swaps, order
-
-
-def _max_legs(cmds, inds):
-    nl = {j: len(x) for j, x in enumerate(inds)}
-    mx = max(nl.values())
-    for c in cmds:
-        if c[0].startswith('tensordot'):
-            nl[c[1]] = nl.pop(c[2][0]) + nl.pop(c[2][1]) - 2 * len(c[3][0]) + \
-                (2 * len(c[4]) if c[0] == 'tensordot_psplit' else 0)
-        elif c[0].startswith('trace'):
-            nl[c[1]] = nl.pop(c[2]) - 2 * len(c[3][0]) + \
-                (2 * len(c[4]) if c[0] == 'trace_psplit' else 0)
-        mx = max(mx, max(nl.values()))
-    return mx
 
 
 def test_ncon_einsum_syntax(config_kwargs):
@@ -324,51 +265,32 @@ def test_ncon_einsum_exceptions(config_kwargs):
 
 
 def test_ncon_trace_swap_value(config_kwargs):
-    r"""Swapped trace should give the same value as an explicit swapped trace, with no gadget."""
+    r"""Swapped traces, one pair and several, against explicit swapped traces; no gadget."""
     config_Z2 = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
     l = yastn.Leg(config_Z2, s=1, t=(0, 1), D=(1, 1))
     lc = l.conj()
-
-    A = yastn.rand(config=config_Z2, n=0, legs=[l, lc])
-    B = yastn.rand(config=config_Z2, n=1, legs=[l])
-    C = yastn.rand(config=config_Z2, n=1, legs=[lc])
-
-    inds = ((1, 1), (2,), (2,))
-    swap = ((1, 2),)
-    plan = _plan(inds, swap, None)
-    assert not any(c[0].endswith('_psplit') for c in plan)  # trace row is the coboundary of {B}
-
-    x = yastn.ncon([A, B, C], inds, swap=swap)
-
-    ref = yastn.trace(A.swap_gate(axes=(0, 1)), axes=(0, 1)).item()
-    ref *= yastn.tensordot(B, C, axes=(0, 0)).item()
-    assert abs(x.item() - ref) < tol
-
-
-def test_ncon_trace_swap_multiple_pairs_value(config_kwargs):
-    r"""Multiple swapped trace pairs should give the right value with no gadget."""
-    config_Z2 = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
-    l = yastn.Leg(config_Z2, s=1, t=(0, 1), D=(1, 1))
-    lc = l.conj()
-
-    A = yastn.rand(config=config_Z2, n=0, legs=[l, lc, l, lc])
     B = yastn.rand(config=config_Z2, n=1, legs=[l])
     C = yastn.rand(config=config_Z2, n=1, legs=[lc])
     D = yastn.rand(config=config_Z2, n=1, legs=[l])
     E = yastn.rand(config=config_Z2, n=1, legs=[lc])
+    bc = yastn.tensordot(B, C, axes=(0, 0)).item()
+    de = yastn.tensordot(D, E, axes=(0, 0)).item()
 
-    inds = ((1, 1, 2, 2), (3,), (3,), (4,), (4,))
-    swap = ((1, 3), (2, 4))
-    plan = _plan(inds, swap, None)
-    assert not any(c[0].endswith('_psplit') for c in plan)  # both trace rows are coboundaries
+    # one traced pair, the trace row is the coboundary of {B}
+    A = yastn.rand(config=config_Z2, n=0, legs=[l, lc])
+    inds, swap = ((1, 1), (2,), (2,)), ((1, 2),)
+    assert not any(c[0].endswith('_psplit') for c in _plan(inds, swap, None))
+    x = yastn.ncon([A, B, C], inds, swap=swap)
+    ref = yastn.trace(A.swap_gate(axes=(0, 1)), axes=(0, 1)).item() * bc
+    assert abs(x.item() - ref) < tol
 
+    # two traced pairs, both rows coboundaries
+    A = yastn.rand(config=config_Z2, n=0, legs=[l, lc, l, lc])
+    inds, swap = ((1, 1, 2, 2), (3,), (3,), (4,), (4,)), ((1, 3), (2, 4))
+    assert not any(c[0].endswith('_psplit') for c in _plan(inds, swap, None))
     x = yastn.ncon([A, B, C, D, E], inds, swap=swap)
-
     ref = A.swap_gate(axes=(0, 1)).swap_gate(axes=(2, 3))
-    ref = yastn.trace(ref, axes=(0, 1))
-    ref = yastn.trace(ref, axes=(0, 1)).item()
-    ref *= yastn.tensordot(B, C, axes=(0, 0)).item()
-    ref *= yastn.tensordot(D, E, axes=(0, 0)).item()
+    ref = yastn.trace(yastn.trace(ref, axes=(0, 1)), axes=(0, 1)).item() * bc * de
     assert abs(x.item() - ref) < tol
 
 
@@ -401,17 +323,16 @@ def test_ncon_einsum_swaps(config_kwargs, remove_blocks):
     c = c.remove_random_blocks(number=remove_blocks, keep_legs=True)
 
     #
-    x = yastn.ncon([a, b, c, c], ((1, 4, 2, -0, 1), (2, 3, -1), (3, 4, -2), (-3, -4, -5)), swap=((-0, 3), (-0, 1), (-1, -2), (-3, -5), (-4, -2)))
-    y = yastn.einsum('adbAa,bcB,cdC,DEF->ABCDEF', a, b, c, c, swap='Ac,Aa,BC,CE,DF')
+    x = yastn.ncon([a, b, c, c], ((1, 4, 2, -0, 1), (2, 3, -1), (3, 4, -2), (-3, -4, -5)), swap=((-0, 3), (-1, -2), (-3, -5), (-4, -2), (-4, -5)))
+    y = yastn.einsum('adbAa,bcB,cdC,DEF->ABCDEF', a, b, c, c, swap='Ac,BC,CE,DF,EF')
     #
     # reference
-    d = a.swap_gate(axes=(3, 4))
-    r = yastn.trace(d, axes=(0, 4))
+    r = yastn.trace(a, axes=(0, 4))
     r = yastn.tensordot(r, b, axes=(1, 0))
     r = r.swap_gate(axes=(1, 2))
     r = yastn.tensordot(r, c, axes=((2, 0), (0, 1)))
     r = r.swap_gate(axes=(1, 2))
-    e = c.swap_gate(axes=(0, 2))
+    e = c.swap_gate(axes=(0, 2)).swap_gate(axes=(1, 2))
     r = yastn.tensordot(r, e, axes=((), ()))
     r = r.swap_gate(axes=(2, 4))
     #
@@ -494,26 +415,31 @@ def test_einsum_scalar_swap_order(config_kwargs, remove_blocks):
     _assert_all_orders()
 
 
-# entry-23 pattern in miniature: two tensors share two contracted edges while the bad swap's
-# third-party edge lies on a cycle of the remaining network (which the A,B,C,D tensors of the
-# original note cannot close); adding a shared edge 6 between C and D makes edge 5 lie on the
-# cycle C-5-6-D that avoids A and B.
+# The one network here whose swaps no drawing of the network produces, kept to exercise the parity
+# gadget and the warning it raises.  Edge 5 lies on the cycle C-5-D-6, so a closed curve crossing
+# it must cross edge 6 as well: swap (1, 5) alone is not the crossing set of any picture.  The
+# smallest drawable sets containing (1, 5) hold three crossings, e.g. ((1, 3), (1, 5), (1, 6)), and
+# all 720 orders resolve those by jump moves -- as they do every set read off a drawing.
 _IND_CYCLE = ((1, 2, 3), (1, 2, 4), (3, 5, 6), (4, 5, 6))
 _SWAP_CYCLE = ((1, 5),)
 _FORCED_CYCLE = (1, 2, 3, 4, 5, 6)  # contracts A,B over edges 1 and 2 first -> one gadget
 _CLEAN_CYCLE = (3, 4, 5, 6, 1, 2)   # swap (1, 5) only becomes same-tensor at the end -> no gadget
 
 
-def test_ncon_gadget_two_edge_step(config_kwargs):
-    """A step contracting two edges with an obstinate bad swap must use exactly one gadget."""
+def test_ncon_gadget_and_warning(config_kwargs):
+    """The unresolvable step uses exactly one gadget and warns; an order that avoids it is silent."""
     config_Z2 = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
     mk = lambda: yastn.Leg(config_Z2, s=1, t=(0, 1), D=(1, 1))
-    p_forced = _plan(_IND_CYCLE, _SWAP_CYCLE, _FORCED_CYCLE)
+    _meta_ncon.cache_clear()  # the plan is cached, and so is its warning
+    with pytest.warns(UserWarning, match="cannot be removed by jump moves"):
+        p_forced = _plan(_IND_CYCLE, _SWAP_CYCLE, _FORCED_CYCLE)
     gadgets = [c for c in p_forced if c[0].endswith('_psplit')]
     assert len(gadgets) == 1
     assert gadgets[0][0] == 'tensordot_psplit'  # one step needs a gadget
     assert len(gadgets[0][4]) == 1              # exactly one recorded axis
-    p_clean = _plan(_IND_CYCLE, _SWAP_CYCLE, _CLEAN_CYCLE)
+    with warnings.catch_warnings():             # the order that needs no gadget stays silent
+        warnings.simplefilter("error")
+        p_clean = _plan(_IND_CYCLE, _SWAP_CYCLE, _CLEAN_CYCLE)
     assert not any(c[0].endswith('_psplit') for c in p_clean)
     patterns = ((1, 1, 1, 1), (1, 1, 0, 0), (0, 0, 1, 1), (1, 0, 1, 0), (0, 1, 0, 1))
     for seed, charges in enumerate(patterns):
@@ -540,37 +466,41 @@ def test_ncon_gadget_product_symmetry(config_kwargs, fermionic):
         assert abs(x.item() - ref.item()) < tol * max(abs(ref.item()), 1e-30)
 
 
-def test_ncon_order_independence_random(config_kwargs):
-    """Seeded mini-fuzz: random fermionic networks must give order-independent values."""
-    executed = 0
-    gadget_cases = 0
-    for i in range(40):
-        rng = random.Random(i)
-        sym = 'Z2' if i % 2 == 0 else 'U1'
-        cfg = yastn.make_config(sym=sym, fermionic=True, **config_kwargs)
-        ts, inds, swaps, order = _rand_net(rng, cfg, sym)
-        small = []
-        attempts = 0
-        cand = order
-        while len(small) < 3 and attempts < 60:
-            if _max_legs(_plan(inds, swaps, cand), inds) <= 9:
-                small.append(cand)
-            cand = order[:]
-            rng.shuffle(cand)
-            attempts += 1
-        if len(small) < 3:  # no 3 orders with intermediates of <= 9 legs
-            continue
-        plans = [(o, _plan(inds, swaps, o)) for o in small]
-        vals = [yastn.ncon(ts, inds, swap=swaps, order=o) for o, _ in plans]
+# Typical fermionic diagrams, with the swaps their picture shows.  Each is drawable, so jump moves
+# alone resolve them and the value cannot depend on the contraction order.
+_DIAGRAMS = [
+    # a string from the first tensor to the last, running under the chain and crossing the
+    # physical legs on the way -- the Jordan-Wigner string of a hopping term
+    ("string over a chain", ((-0, 1, 4), (1, 2, -1), (2, 3, -2), (3, -3, 4)), ((4, -1), (4, -2)),
+     [(1, 2, 3, 4), (4, 3, 2, 1), (2, 4, 1, 3)], (0, 0, 0, 1)),
+    # the traced loop of the first tensor drawn around the last one, so it crosses everything
+    # attached to it: the line 3 and the open leg -1
+    ("loop around a tensor", ((1, 1, 2), (2, 3, -0), (3, -1)), ((1, 3), (1, -1)),
+     [(1, 2, 3), (3, 2, 1), (2, 1, 3)], (0, 0, 1)),
+    # two tensors joined by two bonds, with bond 1 routed around the second tensor: on the way it
+    # crosses bond 2 and that tensor's open leg
+    ("bond around a tensor", ((1, 2, -0), (1, 2, -1)), ((1, 2), (1, -1)),
+     [(1, 2), (2, 1)], (1, 0)),
+]
+
+
+def test_ncon_order_independence(config_kwargs):
+    """Typical diagrams: the value does not depend on the order, and no step needs a gadget."""
+    config_Z2 = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
+    mk = lambda: yastn.Leg(config_Z2, s=1, t=(0, 1), D=(1, 2))
+    for name, inds, swap, orders, charges in _DIAGRAMS:
+        ts = _mini_tensors(config_Z2, mk, inds, charges)
+        vals = []
+        for order in orders:
+            assert not any(c[0].endswith('_psplit') for c in _plan(inds, swap, order)), name
+            vals.append(yastn.ncon(ts, inds, swap=swap, order=order))
         ref = vals[0]
         den = max(float(ref.norm().item()), 1.0)
         for v in vals[1:]:
-            assert (v - ref).norm().item() < 1e-10 * den
-        if any(any(c[0].endswith('_psplit') for c in p) for _, p in plans):
-            gadget_cases += 1
-        executed += 1
-    assert executed > 0
-    assert gadget_cases >= 5  # otherwise the test is not exercising the gadget path
+            assert (v - ref).norm().item() < tol * den, name
+        assert den > tol, name  # the diagram is not accidentally zero
+        no_swap = yastn.ncon(ts, inds, order=orders[0])
+        assert (ref - no_swap).norm().item() > 1e-3 * den, name  # the swaps are not trivial
 
 
 def test_ncon_no_hang_regression(config_kwargs):
@@ -580,7 +510,7 @@ def test_ncon_no_hang_regression(config_kwargs):
     config_Z2 = yastn.make_config(sym='Z2', fermionic=True, **config_kwargs)
     mk = lambda: yastn.Leg(config_Z2, s=1, t=(0, 1), D=(1, 1))
     inds = [(-1, 2, 1), (1, 3), (4, 4), (5, 2, 0), (3, 6, 6, 5)]
-    swap = [(5, 1), (6, 0), (3, 1), (6, 1), (0, 4)]
+    swap = [(5, 1), (6, 0), (3, 1), (6, 1), (0, 4), (-1, 4), (2, 6)]  # a drawable set
     ts = _mini_tensors(config_Z2, mk, inds, (0, 1, 0, 1, 0))
     inds = [tuple(x) for x in inds]
     order_hang = (4, 3, 1, 2, 5, 6)

@@ -349,17 +349,21 @@ The plan of the example starts with exactly these two jumps and the swap left on
     ('swap_gate', 3, 3, (0, 2))                  # swap (x, u) on B
     ('tensordot', 5, (0, 1), ((0, 1), (0, 1)))   # P.Q over e_1 and e_2
 
-The rows that can't be emptied are worked out in :ref:`einsum-cycle` below.
+**Unresolvable diagrams.**  A diagram one can draw, with a swap gate at every crossing, is always
+resolvable by jump moves alone, whatever the contraction ``order``.  Open legs are lines running
+out to infinity, so the crossings they make on the way belong in ``swap`` like any other.  A set
+that leaves them out, or that is written down without a drawing behind it, can keep bad swaps that
+survive every jump; the planner warns whenever this happens and falls back on the
+:ref:`parity gadget <tensor/_einsum:parity gadget>`.  :ref:`einsum-cycle` below is such a case.
 
 
 Parity gadget
 ^^^^^^^^^^^^^
 
-After the jumps, each row outside the emptied class still holds bad swaps :math:`(e_k, L)`.  No jump
-can empty it, as jumps do not move a row out of its class, and the sign
-:math:`(-1)^{p(e_k) \cdot p(L)}` of such a swap depends on the parity of the contracted line,
-which the step sums over.  A parity gadget carries that parity past the step; each row outside
-the emptied class gets one.
+A parity gadget is the fallback for the rows that no jump can empty.  The sign
+:math:`(-1)^{p(e_k) \cdot p(L)}` of such a bad swap depends on the parity of the contracted line,
+which the step sums over; the gadget carries that parity past the step.  Each row outside the
+emptied class gets one, and the planner warns whenever it has to use them.
 
 **Splitting by parity.**  The identity on line :math:`e_k` is the sum of the projectors
 :math:`\Pi_p` onto its sectors of parity :math:`p`.  On the sector :math:`p` the swap gate
@@ -542,28 +546,26 @@ Two rows on a cycle: parity gadget
 
 Adding line 6 between ``C`` and ``D``, ``A(1, 2, 3) B(1, 2, 4) C(3, 5, 6) D(4, 5, 6)``, puts
 line 5 on the cycle ``C-5-D-6``.  A jump over ``C`` or ``D`` toggles lines 5 and 6 together, so
-:math:`\{5\}` is not a cut and the two rows fall into different classes.  In the drawing, line 1
-cannot reach ``B`` after crossing line 5 without also crossing line 6.  The two classes have one
-row each, and on the tie the planner empties the class of row 1:
+:math:`\{5\}` is not a cut and the two rows fall into different classes.  No drawing has this
+swap set: line 1 cannot reach ``B`` after crossing line 5 without also crossing line 6.  Each
+class holds one row,
+so one row is emptied and the other pays for a gadget either way.  Taking the class of row 2, the
+empty row, as the emptied class needs no jump at all:
 
-#. a column jump over ``A`` with partner line 5 empties row 1 and turns the bad swap into
-   (2, 5); (3, 5) sits on ``C``;
-#. row 2 gets a gadget: ``A.B`` is contracted separately for each parity of line 2, the parity
-   is recorded on the gadget pair (aux, aux′) of the result ``AB``, and (2, 5) becomes (aux, 5);
+#. row 2 is already empty; no jump is emitted;
+#. row 1 gets a gadget: ``A.B`` is contracted separately for each parity of line 1, the parity
+   is recorded on the gadget pair (aux, aux′) of the result ``AB``, and (1, 5) becomes (aux, 5);
 #. once ``C`` is merged with ``AB``, (aux, 5) sits on one tensor and is applied; the gadget pair
    is traced after the last contraction.
 
 .. figure:: einsum_case3.svg
    :align: center
    :alt: The network with line 1 crossing line 5 and bridging line 6 equals the merged tensor AB
-         with a gadget line aux crossing line 5, a swap gate (3, 5) at C and the parity string
-         of A on line 5.
+         with a gadget line aux crossing line 5.
 
 .. code-block:: python
 
-    ('parity_sign', 0, 2, (1,))                               # column jump over A: P_A on line 5
-    ('swap_gate', 2, 2, (0, 1))                               # swap (3, 5) on C
-    ('tensordot_psplit', 4, (0, 1), ((0, 1), (0, 1)), (1,))   # A.B split by the parity of line 2
+    ('tensordot_psplit', 4, (0, 1), ((0, 1), (0, 1)), (0,))   # A.B split by the parity of line 1
     ('tensordot', 5, (2, 4), ((0,), (0,)))                    # C.AB, legs (5, 6, 4, aux, aux')
     ('swap_gate', 5, 5, (0, 3))                               # swap (5, aux)
     ('tensordot', 6, (3, 5), ((0, 1, 2), (2, 0, 1)))          # D.(C.AB) over lines 4, 5, 6
