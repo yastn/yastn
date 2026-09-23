@@ -102,7 +102,7 @@ lines as legs.  While planning, a pair whose lines end on a common tensor is app
 A pair is a *bad swap* when one of its lines is contracted in the current step and the other
 line touches neither of the two tensors being contracted: after the step the first line is gone
 and the gate has nowhere to go.  Every bad swap is removed exactly before the step, by jump
-moves where possible and by a parity gadget otherwise.
+moves where possible and by a :ref:`parity gadget <tensor/_einsum:parity gadget>` otherwise.
 
 **Diagrams.**  In the figures below circles are tensors and black lines are their legs, labelled
 by the ``ncon`` index.  A red dot marks a swap gate between the two lines crossing there; lines
@@ -140,11 +140,14 @@ Resolving the bad swaps of one step
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Consider a step contracting tensors :math:`P` and :math:`Q` over lines
-:math:`e_1, \dots, e_K`; for a trace :math:`P = Q`.  Let :math:`H` be the rest of the network:
-the other tensors and the lines between them, with every open line ending on a fixed external
-vertex. Lines connecting :math:`P` or :math:`Q` to any of the other tensorsare are not included in :math:`H`,
-because any swap gates there are not bad swap gates. Every bad swap of the step therefore pairs a
-contracted line :math:`e_k` with a line :math:`L` of :math:`H`.  The following notions describe them.
+:math:`e_1, \dots, e_K`; for a trace :math:`P = Q`.  The rest of the network is a graph
+:math:`H = (V, E)`.  Its vertices are the tensors other than :math:`P` and :math:`Q`, the set
+:math:`V`, plus one external vertex :math:`\infty` on which every open line ends.  Its edges
+:math:`E` are the lines with both ends among those vertices.  A line that ends on :math:`P` or
+:math:`Q` is therefore not an edge: a swap gate between it and a contracted line has both lines
+on :math:`P` or :math:`Q` and is applied there, so it is never a bad swap.  Every bad swap of the
+step pairs a contracted line :math:`e_k` with an edge :math:`L \in E`.  The following notions
+describe them.
 
 Symmetric difference
    For sets :math:`A` and :math:`B`, :math:`A + B = (A \cup B) \setminus (A \cap B)` is the set
@@ -153,135 +156,141 @@ Symmetric difference
 
 Rows and columns
    The bad swaps form a table with one row per contracted line :math:`e_k` and one column per
-   line :math:`L` of :math:`H`, with an entry where :math:`\mathrm{swap}(e_k, L)` is present (see
-   :ref:`the example below <einsum-rows>`).  Row :math:`k` is the set of lines
-   :math:`Y_k = \{ L \in H : \mathrm{swap}(e_k, L) \text{ is present} \}`; column :math:`L` is
+   edge :math:`L \in E`, with an entry where :math:`\mathrm{swap}(e_k, L)` is present (see
+   :ref:`the example below <einsum-rows>`).  Row :math:`k` is the set of edges
+   :math:`Y_k = \{ L \in E : \mathrm{swap}(e_k, L) \text{ is present} \}`; column :math:`L` is
    the set of contracted lines whose swap with :math:`L` is present.  The step can proceed once
    every row is empty.
 
 Coboundary
-   For a set :math:`F` of tensors of :math:`H`, :math:`\delta F` is the set of lines of
-   :math:`H` with exactly one end on a tensor of :math:`F`; the external vertex is never in
+   For :math:`F \subseteq V`, the coboundary :math:`\delta F \subseteq E` is the set of edges
+   with exactly one end in :math:`F`; the external vertex :math:`\infty` is never in
    :math:`F`.  For a single tensor, :math:`\delta T = \delta \{T\}` is the set of legs of
-   :math:`T` that are lines of :math:`H`, self-loops excluded. Physically, :math:`\delta F`
+   :math:`T` that are edges of :math:`H`, self-loops excluded. Physically, :math:`\delta F`
    represents the field generated from the source :math:`F`.
 
 Cut
-   A set :math:`D` of lines of :math:`H` is a cut if :math:`D = \delta F` for some set
-   :math:`F` of tensors of :math:`H`.  Equivalently, the tensors of :math:`H` can be coloured
-   with two colours, the external vertex keeping the first, so that the lines joining different
-   colours are exactly those of :math:`D`; the tensors of the second colour then form
-   :math:`F`.  Since :math:`\delta F + \delta F' = \delta (F + F')`, the symmetric difference of
-   two cuts is a cut.
+   A set :math:`\Delta \subseteq E` is a cut if :math:`\Delta = \delta F` for some
+   :math:`F \subseteq V`.  Equivalently, the vertices can be coloured with two colours,
+   :math:`\infty` keeping the first, so that the edges joining different colours are exactly
+   those of :math:`\Delta`; the vertices of the second colour then form :math:`F`.  Since
+   :math:`\delta F + \delta F' = \delta (F + F')`, the symmetric difference of two cuts is a cut.
 
 Class
    Rows :math:`k` and :math:`k'` are in the same class if they differ by a coboundary,
-   :math:`Y_k + Y_{k'} = \delta F` for some set :math:`F` of tensors of :math:`H`, i.e., if
+   :math:`Y_k + Y_{k'} = \delta F` for some :math:`F \subseteq V`, i.e., if
    :math:`Y_k + Y_{k'}` is a cut.  This is an equivalence relation: :math:`\delta \emptyset =
    \emptyset`, the symmetric difference is symmetric, and
    :math:`(Y_k + Y_{k'}) + (Y_{k'} + Y_{k''}) = Y_k + Y_{k''}` is a cut when both terms are.  The
-   class of row :math:`k` consists of the rows :math:`Y_k + D` with :math:`D` a cut.
+   class of row :math:`k` consists of the rows :math:`Y_k + \Delta` with :math:`\Delta` a cut.
 
-Two kinds of jump move change the rows.
+Two kinds of jump move change the rows.  The figure below applies each of them to the same
+configuration, and shows what each does to the table.
 
-**Row jump.**  A jump over a tensor :math:`T` of :math:`H`, with partner line :math:`e_k`,
+**Row jump.**  A jump over a tensor :math:`T \in V`, with partner line :math:`e_k`,
 changes row :math:`k` by the coboundary of :math:`T`, :math:`Y_k \to Y_k + \delta T`.  The swap
 gates it creates between
 :math:`e_k` and the lines from :math:`T` to :math:`P` or :math:`Q` have both lines on
-:math:`P` or :math:`Q`, and are applied there before the step (therefore not included in :math:`delta T`).
+:math:`P` or :math:`Q`, and are applied there before the step (therefore not included in
+:math:`\delta T`).
 
-.. figure:: einsum_row_jump.svg
-   :align: center
-   :alt: Line e_k from P to Q crossing leg l_1 of T equals e_k passing above T, crossing legs
-         l_2 and l_P of T, with the parity string of T on e_k.
-
-   Row jump over :math:`T` with partner :math:`e_k`.  Line :math:`e_k` passes over :math:`T`:
-   the swap :math:`(e_k, l_1)` is traded for :math:`(e_k, l_2)`, :math:`(e_k, l_P)` and the
-   parity string :math:`P_T` on :math:`e_k`.  The swap :math:`(e_k, l_P)` has both lines on
-   :math:`P` and is applied there; row :math:`k` changes by :math:`\delta T = \{l_1, l_2\}`.
-
-**Column jump.**  A jump over :math:`P` (or :math:`Q`), with partner line :math:`L \in H`,
+**Column jump.**  A jump over :math:`P` (or :math:`Q`), with partner edge :math:`L \in E`,
 changes column :math:`L`, toggling :math:`L` in every row at once: :math:`Y_k \to Y_k + \{L\}`
 for all :math:`k`.  It also creates swap
 gates between :math:`L` and the uncontracted legs of :math:`P`, which are ordinary swaps for
 later steps.  For a trace the contracted lines are self-loops of :math:`P`, and a column jump
 changes no row.
 
-.. figure:: einsum_column_jump.svg
+.. figure:: einsum_jump_moves.svg
    :align: center
-   :alt: Line L crossing the contracted line e_1 equals L passing around P, crossing e_2 and the
-         uncontracted leg u of P, with the parity string of P on L.
+   :alt: One configuration with the bad swaps (e1, a) and (e2, b); the same configuration after
+         a row jump over T with partner e2, and after a column jump over P with partner a.
 
-   Column jump over :math:`P` with partner :math:`L`, for :math:`K = 2`.  Line :math:`L` passes
-   over :math:`P`: the swap :math:`(e_1, L)` is traded for :math:`(e_2, L)`, :math:`(u, L)` and
-   the parity string :math:`P_P` on :math:`L`.  :math:`L` leaves row 1 and enters row 2, while
-   :math:`(u, L)` involves the uncontracted leg :math:`u` of :math:`P` and waits for a later step.
+   Either jump on the same configuration.  :math:`P` and :math:`Q` are contracted over
+   :math:`e_1` and :math:`e_2`; :math:`V` holds :math:`S`, :math:`T`, :math:`U`, joined by the edges
+   :math:`a, b, c`, which are the columns of the table.  The line :math:`m` to :math:`Q` and the
+   open leg :math:`u` of :math:`P` end on the contracted tensors, so they get no column.  Left:
+   the bad swaps :math:`(e_1, a)` and :math:`(e_2, b)`.  Middle: the row jump over :math:`T`
+   with partner :math:`e_2` adds :math:`\delta T = \{a, b\}` to row 2 alone, so :math:`e_2`
+   stops crossing :math:`b` and starts crossing :math:`a`; the swap it picks up with :math:`m`
+   has both lines on :math:`Q` and is applied there.  Right: the column jump over :math:`P` with
+   partner :math:`a`, on the same starting configuration, toggles :math:`a` in both rows, and
+   the swap it creates with :math:`u` waits for a later step.
 
-**Which rows can be emptied.**  Row jumps over the tensors of a set :math:`F` change a row by the
-cut :math:`\delta F`, which keeps the row in its class, and a column jump changes all rows by the
-same set, which keeps every :math:`Y_k + Y_{k'}`.  No jump therefore changes which rows share a
-class.  Rows that can be emptied together must end up equal, so they must have been in one class from the
-start.  Conversely, the rows of one class can be emptied together: row jumps first make them
-equal, and column jumps then empty them all.  A trace step has no column jumps, so only the class
-of :math:`\emptyset`, i.e., the rows that are cuts themselves, can be emptied.
+**Which rows can be emptied.**  Row jumps over the tensors of a set :math:`F \subseteq V` change
+a row by the cut :math:`\delta F`, which keeps the row in its class, and a column jump changes
+all rows by the same set, which keeps every :math:`Y_k + Y_{k'}`.  No jump therefore changes
+which rows share a class.  Rows that can be emptied together must end up equal, so they must
+have been in one class from the start.  Conversely, the rows of one class can be emptied
+together: row jumps first make them equal, and column jumps then empty them all.  A trace step
+has no column jumps, so only the class of :math:`\emptyset`, i.e., the rows that are cuts
+themselves, can be emptied.
 
 The row jumps commute with the column jumps, so only the set of jumps matters, not their order.
 The planner emits all row jumps first and the column jumps afterwards.
 
 **From jumps to a 2-colouring.**  To bring row :math:`k` onto the representative row :math:`r`
-of its class, the planner needs tensors of :math:`H` whose row jumps, all with partner
-:math:`e_k`, change row :math:`k` by :math:`D = Y_k + Y_r`.  Jumping over the tensors of a set
-:math:`F` changes the row by :math:`\delta F`. Record the choice of :math:`F` as a colour,
-:math:`c_T = 1` for :math:`T \in F` and :math:`c_T = 0` for other tensors in :math:`H`,
-and give the external vertex of every open line the colour 0, as it cannot be jumped over.
-A line :math:`L` between tensors :math:`S` and :math:`T` lies in
-:math:`\delta F` exactly when :math:`c_S \neq c_T`, so :math:`\delta F = D` becomes one condition
-per line of :math:`H`,
+of its class, the planner needs tensors in :math:`V` whose row jumps, all with partner
+:math:`e_k`, change row :math:`k` by :math:`\Delta = Y_k + Y_r`.  Jumping over the tensors of a set
+:math:`F \subseteq V` changes the row by :math:`\delta F`. Record the choice of :math:`F` as a colour,
+:math:`c_T = 1` for :math:`T \in F` and :math:`c_T = 0` for the other vertices, with
+:math:`c_\infty = 0`, as the external vertex cannot be jumped over.  An edge :math:`L` between
+vertices :math:`S` and :math:`T` lies in :math:`\delta F` exactly when :math:`c_S \neq c_T`, so
+:math:`\delta F = \Delta` becomes one condition per edge,
 
 .. math::
 
-   c_S + c_T \equiv [L \in D] \pmod 2 ,
+   c_S + c_T \equiv [L \in \Delta] \pmod 2 ,
 
-where :math:`[L \in D]` is 1 for :math:`L \in D` and 0 otherwise: the colour has to change
-across the lines of :math:`D` and stay the same across all other lines.  The planner solves these
-conditions by propagating colours along the lines of :math:`H`, starting from one tensor in each
-connected part.  A line whose ends already carry colours that violate its condition shows that
+where :math:`[L \in \Delta]` is 1 for :math:`L \in \Delta` and 0 otherwise: the colour has to change
+across the edges of :math:`\Delta` and stay the same across all other edges.  The planner solves these
+conditions by propagating colours along the edges of :math:`H`, starting from one vertex in each
+connected part.  An edge whose ends already carry colours that violate its condition shows that
 no :math:`F` exists, and row :math:`k` then does not belong to the class.
 Otherwise the colouring is the list of jumps: one row jump with partner
 :math:`e_k` over every tensor of colour 1.  In a connected part with an open line the colours are
 fixed by the external vertex.  In a part without open lines the two colours can be exchanged,
-which replaces the tensors to jump over by all the other tensors of that part; both choices
-change the row by :math:`D`, and the planner takes the one with fewer tensors of colour 1, i.e.,
+which replaces the vertices to jump over by all the others of that part; both choices
+change the row by :math:`\Delta`, and the planner takes the one with fewer vertices of colour 1, i.e.,
 fewer jumps and parity strings (on a tie, the one that keeps the starting tensor at colour 0).
 
 **Example.**  The remaining illustrations follow the first step of ::
 
-    yastn.ncon([P, Q, C, D, E], [(1, 2), (1, 2), (3, 4), (3, 5), (4, 5, 0)], swap=[(1, 3), (2, 4)])
+    yastn.ncon([P, Q, A, B, C], [(1, 2, 6), (1, 2, 7), (3, 4), (3, 5, 6), (4, 5, 0, 7)],
+               swap=[(1, 3), (2, 4)])
 
-which contracts :math:`P` and :math:`Q` over :math:`e_1` and :math:`e_2` (lines 1 and 2).  The
-rest of the network, :math:`H`, has the tensors ``C``, ``D``, ``E``, the lines :math:`x`,
-:math:`y`, :math:`z` (lines 3, 4, 5) and the open line :math:`w` of ``E``.  The two bad swaps
-give the rows :math:`Y_1 = \{x\}` and :math:`Y_2 = \{y\}`.  The colouring for
-:math:`D = Y_1 + Y_2 = \{x, y\}` starts at ``E``, whose colour 0 is fixed by its open line
-:math:`w`.  Line :math:`y \in D` gives :math:`c_C = 1`, line :math:`z \notin D` gives
-:math:`c_D = 0`, and line :math:`x \in D`, between ``C`` and ``D``, is consistent.  Hence
-:math:`D = \delta C` is a cut, and row 2 is brought onto row 1 by a single row jump over ``C``.
+which contracts :math:`P` and :math:`Q` over :math:`e_1` and :math:`e_2` (lines 1 and 2).  In
+:math:`H`, the vertices :math:`V` are ``A``, ``B``, ``C`` and the edges :math:`E` are :math:`x`,
+:math:`y`, :math:`z` (lines 3, 4, 5) together with the open line :math:`w` of ``C``.  The lines :math:`u`
+and :math:`v` (lines 6 and 7) join ``B`` to :math:`P` and ``C`` to :math:`Q`; they end on
+:math:`P` or :math:`Q`, so they are not edges of :math:`H` and have no column in the table of bad
+swaps.  The two bad swaps
+give the rows :math:`Y_1 = \{x\}` and :math:`Y_2 = \{y\}`.
+
+The colouring for :math:`\Delta = Y_1 + Y_2 = \{x, y\}` starts at ``C``, whose colour 0 is fixed by
+its open line :math:`w`.  Edge :math:`y \in \Delta` gives :math:`c_A = 1`, edge
+:math:`z \notin \Delta` gives :math:`c_B = 0`, and edge :math:`x \in \Delta`, between ``A``
+and ``B``, is consistent.  Hence :math:`\Delta = \delta A` is a cut, and row 2 is brought onto row 1
+by the single row jump over ``A`` shown above.
 
 .. figure:: einsum_cut.svg
    :align: center
-   :alt: The example network with tensor C shaded and lines x and y orange; a variant in which
-         line z crosses e_1 without a swap gate and tensor D would need both colours.
+   :alt: The example network with tensor A shaded and lines x and y orange; a variant in which
+         line z crosses e_1 without a swap gate and tensor B would need both colours.
 
-   The tensors of :math:`H` coloured for the cut test; :math:`P`, :math:`Q` and the contracted
-   lines are grey.  Left: colouring ``C`` alone changes the colour exactly across :math:`x` and
-   :math:`y` (orange), so :math:`\{x, y\} = \delta C` is a cut.  Right: had the only bad swap
+   The vertices of :math:`H` coloured for the cut test; :math:`P`, :math:`Q` and the lines ending
+   on them (the contracted lines, :math:`u` and :math:`v`) are grey.  Left: colouring ``A``
+   alone changes the colour exactly across :math:`x` and :math:`y` (orange), so
+   :math:`\{x, y\} = \delta A` is a cut.  Right: had the only bad swap
    been :math:`(e_1, x)`, the rows would differ by :math:`\{x\}`, and the colour would have to
    change across :math:`x` but not across :math:`y` and :math:`z`.  As :math:`x, y, z` form a
-   cycle, ``D`` cannot satisfy both; in the drawing, :math:`z` has to cross :math:`e_1` without
+   cycle, ``B`` cannot satisfy both; in the drawing, :math:`z` has to cross :math:`e_1` without
    a swap gate.
 
 **Recipe.**  The planner groups the rows into classes, each represented by its first row.  Since
-no jump moves a row out of its class, at most one class can be emptied in a step.  The planner
+no jump moves a row out of its class, at most one class can be emptied in a step; with more than
+one class the jumps cannot resolve all the bad swaps of the step, and the rows left over are
+handled by the :ref:`parity gadget <tensor/_einsum:parity gadget>` below.  The planner
 chooses this *emptied class* as the largest one, so that the fewest rows need a gadget (on a tie,
 the class whose first row comes first; for a trace, the class of the empty row, i.e., the rows
 that are cuts), and emits
@@ -291,7 +300,7 @@ that are cuts), and emits
    (:math:`P` on a tie), one for each line of the representative row,
 
 each group followed by ``swap_gate`` commands for the pairs that now sit on one tensor.  Rows
-outside the emptied class get a parity gadget.  Any other row of the class, or any set of lines that
+outside the emptied class get a parity gadget.  Any other row of the class, or any set of edges that
 differs from it by a cut, would serve equally well as the representative: the result is the same,
 and only the number of jumps changes.
 
@@ -307,16 +316,17 @@ and its table of bad swaps after each group of jumps.
 
    The example and its table: row :math:`e_k` has a red dot in column :math:`L` when line
    :math:`L` crosses :math:`e_k` with a swap gate, so :math:`Y_1 = \{x\}` and
-   :math:`Y_2 = \{y\}`.
+   :math:`Y_2 = \{y\}`.  The columns are the edges :math:`x, y, z, w`; the lines
+   :math:`u` and :math:`v`, which end on :math:`P` or :math:`Q`, get none.
 
 .. figure:: einsum_rows_1.svg
    :align: center
-   :alt: Line e_2 now passes above C, crossing x instead of y, with the parity string of C; the
+   :alt: Line e_2 now passes above A, crossing x instead of y, with the parity string of A; the
          table has dots in column x of both rows.
 
-   Row jump over ``C`` (the set :math:`F` of the cut test) with partner :math:`e_2`: line
-   :math:`e_2` passes over ``C``, stops crossing :math:`y`, starts crossing :math:`x` and carries
-   the parity string :math:`P_C`.  In the table, :math:`\delta C = \{x, y\}` is added to row 2
+   Row jump over ``A`` (the set :math:`F` of the cut test) with partner :math:`e_2`: line
+   :math:`e_2` passes over ``A``, stops crossing :math:`y`, starts crossing :math:`x` and carries
+   the parity string :math:`P_A`.  In the table, :math:`\delta A = \{x, y\}` is added to row 2
    (shaded cells), which now equals the representative row 1.
 
 .. figure:: einsum_rows_2.svg
@@ -324,15 +334,19 @@ and its table of bad swaps after each group of jumps.
    :alt: Line x now runs around P, with the parity string of P, and crosses no contracted line;
          the table is empty.
 
-   Column jump over :math:`P` with partner :math:`x`, the only line of the representative row;
-   :math:`P` and :math:`Q` have no uncontracted legs, so the tie goes to :math:`P`.  Line
-   :math:`x` passes around :math:`P` and carries the parity string :math:`P_P`.  In the table,
-   column :math:`x` is toggled in both rows, which are now empty, and the step can proceed.
+   Column jump over :math:`P` with partner :math:`x`, the only edge of the representative row;
+   :math:`P` and :math:`Q` keep one uncontracted leg each, :math:`u` and :math:`v`, so the tie
+   goes to :math:`P`.  Line :math:`x` passes around :math:`P` and carries the parity string
+   :math:`P_P`.  On the way it also crosses :math:`u`, the uncontracted leg of :math:`P`; as
+   :math:`u` and :math:`x` both end on ``B``, that swap is applied there with ``swap_gate`` and
+   never enters the table.  In the table, column :math:`x` is toggled in both rows, which are now
+   empty, and the step can proceed.
 
-The plan of the example starts with exactly these two jumps::
+The plan of the example starts with exactly these two jumps and the swap left on ``B``::
 
-    ('parity_sign', 2, 0, (1,))                  # row jump over C: string P_C on leg 1 of P (e_2)
-    ('parity_sign', 0, 2, (0,))                  # column jump over P: string P_P on leg 0 of C (x)
+    ('parity_sign', 2, 0, (1,))                  # row jump over A: string P_A on leg 1 of P (e_2)
+    ('parity_sign', 0, 2, (0,))                  # column jump over P: string P_P on leg 0 of A (x)
+    ('swap_gate', 3, 3, (0, 2))                  # swap (x, u) on B
     ('tensordot', 5, (0, 1), ((0, 1), (0, 1)))   # P.Q over e_1 and e_2
 
 The rows that can't be emptied are worked out in :ref:`einsum-cycle` below.
@@ -390,8 +404,8 @@ back together, now each with its own sign; the final tensor has no gadget legs.
 
 **Later steps.**  Until it is traced, the pair is a self-loop of the tensor that carries it.  If
 that tensor is :math:`P` or :math:`Q` of a later step, a swap between the pair and a contracted
-line has both lines on that tensor and is applied there.  If it is a tensor of :math:`H`, the pair
-is a line of :math:`H` that no cut contains, so row jumps cannot change whether a row contains it,
+line has both lines on that tensor and is applied there.  If it is a tensor of :math:`V`, the pair
+is an edge that no cut contains, so row jumps cannot change whether a row contains it,
 and a row that the column jumps do not free from it gets a gadget of its own.
 
 **In the plan.**  In ``('tensordot_psplit', out, (P, Q), axes, paxes)`` the last entry lists the
@@ -463,7 +477,8 @@ Two rows on a tree: row jump and column jump
 
 ``A(1, 2, 3) B(1, 2, 4) C(3, 5) D(4, 5)`` with ``swap=[(1, 5)]``.  The first step contracts
 :math:`P =` ``A`` and :math:`Q =` ``B`` over lines 1 and 2.  Lines 3 and 4 end on :math:`P` and
-:math:`Q`, so :math:`H` consists of ``C``, ``D`` and line 5.  The bad swap gives the rows
+:math:`Q`, so :math:`V` holds ``C`` and ``D``, and :math:`E` holds line 5 alone.  The bad swap
+gives the rows
 :math:`Y_1 = \{5\}` and :math:`Y_2 = \emptyset`.  The figures below follow the steps of the
 planner; in each, the partner line of the jump is orange and the tensor jumped over is shaded.
 
@@ -489,7 +504,7 @@ on ``B`` and is applied there with ``swap_gate``.
    After the row jump over ``D``: :math:`Y_1 = Y_2 = \{5\}`.
 
 **Column jumps.**  ``A`` and ``B`` keep one uncontracted leg each, so the column jump is over
-:math:`P =` ``A``, with partner line 5, the only line of the representative row.  Line 5 now
+:math:`P =` ``A``, with partner line 5, the only edge of the representative row.  Line 5 now
 crosses leg 3 of ``A`` instead of legs 1 and 2, and carries the parity string :math:`P_A`: the
 swaps (1, 5) and (2, 5) are removed, and the new swap (3, 5) has both lines on ``C`` and is
 applied there with ``swap_gate``.

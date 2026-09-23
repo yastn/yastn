@@ -4,6 +4,8 @@
 <text x="250" y="20" fill="#555555" font-size="14" text-anchor="middle" font-style="italic">bad swaps (e₁, x) and (e₂, y)</text>
 <text x="606" y="20" fill="#555555" font-size="14" text-anchor="middle" font-style="italic">rows</text>
 <g transform="translate(0,28)">
+<path d="M60.0,160.0 L60.0,22.0 Q60.0,8.0 74.0,8.0 L231.5,8.0 Q240.0,8.0 240.0,16.5 L240.0,25.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M420.0,160.0 L420.0,251.0 Q420.0,265.0 407.8,271.8 L330.0,315.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
 <path d="M60.0,160.0 L102.6,91.9 Q110.0,80.0 124.0,80.0 L356.0,80.0 Q370.0,80.0 377.4,91.9 L420.0,160.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
 <path d="M60.0,160.0 L102.6,228.1 Q110.0,240.0 124.0,240.0 L356.0,240.0 Q370.0,240.0 377.4,228.1 L420.0,160.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
 <path d="M240.0,25.0 L240.0,160.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
@@ -37,14 +39,16 @@
 <text x="266" y="192" fill="#222222" font-size="15" text-anchor="start" font-style="italic">y</text>
 <text x="478" y="170" fill="#222222" font-size="15" text-anchor="start" font-style="italic">z</text>
 <text x="255" y="308" fill="#222222" font-size="15" text-anchor="middle" font-style="italic">w</text>
-<text x="240" y="30" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">D</text>
-<text x="240" y="165" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">C</text>
-<text x="330" y="320" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">E</text>
+<text x="240" y="30" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">B</text>
+<text x="240" y="165" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">A</text>
+<text x="330" y="320" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">C</text>
 <text x="564.0" y="122" fill="#222222" font-size="15" text-anchor="middle" font-style="italic">x</text>
 <text x="592.0" y="122" fill="#222222" font-size="15" text-anchor="middle" font-style="italic">y</text>
 <text x="620.0" y="122" fill="#222222" font-size="15" text-anchor="middle" font-style="italic">z</text>
 <text x="648.0" y="122" fill="#222222" font-size="15" text-anchor="middle" font-style="italic">w</text>
 <text x="542" y="149" fill="#222222" font-size="15" text-anchor="end" font-style="italic">e<tspan dy="4" font-size="10">1</tspan></text>
 <text x="542" y="177" fill="#222222" font-size="15" text-anchor="end" font-style="italic">e<tspan dy="4" font-size="10">2</tspan></text>
+<text x="68" y="60" fill="#222222" font-size="15" text-anchor="start" font-style="italic">u</text>
+<text x="428" y="225" fill="#222222" font-size="15" text-anchor="start" font-style="italic">v</text>
 </g>
 </svg>

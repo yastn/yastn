@@ -234,6 +234,25 @@ contrast, works in the Fock basis throughout, where the matrix elements of the
 same operator are indexed by the *nested word*
 ``(out_0, ..., out_{L-1}, in_{L-1}, ..., in_0)``.
 
+The two words order the same legs differently, i.e. the same number multiplies
+two different basis elements,
+
+.. math::
+
+   \text{interleaved:}\quad
+   |o_0\rangle\langle i_0| \otimes |o_1\rangle\langle i_1| \otimes \cdots
+   \otimes |o_{L-1}\rangle\langle i_{L-1}| ,
+
+.. math::
+
+   \text{Fock:}\quad
+   |o_0 o_1 \cdots o_{L-1}\rangle\langle i_0 i_1 \cdots i_{L-1}| ,
+
+where the Fock bra, the adjoint of :math:`|i_0 i_1 \cdots i_{L-1}\rangle`, meets
+its legs in the reverse order :math:`i_{L-1}, \dots, i_0`.  For fermions the two
+elements differ by the sign of reordering the creation operators; producing that
+sign is the whole task.
+
 Going from one word to the other changes nothing in the tensors.
 :func:`yastn.tn.fpeps.mpo_from_products` returns one set of numbers, and the
 measurement never permutes, conjugates or rescales them.  What changes is only
@@ -241,11 +260,27 @@ the picture we read them in: at which port each leg leaves its tensor, and hence
 in which order the legs are met.  The fermionic order lives in the drawing, not
 in the entries.
 
-So the same tensors are redrawn: every bond leaves its tensor at the upper-left
-port, passes over the top of that tensor and enters the next tensor at the
-lower-left port.  On the way it crosses exactly one line, the ``in`` leg of the
-tensor it left; bonds cross neither each other nor any ``out`` leg.  Bond ``k``
-in the picture carries the network label ``('opb', k)``::
+The interleaved word is the picture the outer product draws.  Every bond runs
+straight from one tensor to the next and crosses nothing, and the legs of a
+tensor are met as the pair ``(out_k, in_k)`` before the next tensor begins::
+
+               i0             i1             i2             i3
+                |              |              |              |
+              +-+--+         +-+--+         +-+--+         +-+--+
+              | M0 |----1----| M1 |----2----| M2 |----3----| M3 |
+              +-+--+         +-+--+         +-+--+         +-+--+
+                |              |              |              |
+               o0             o1             o2             o3
+
+           basis element  |o0><i0| (x) |o1><i1| (x) |o2><i2| (x) |o3><i3|
+           legs met as    o0, i0, o1, i1, o2, i2, o3, i3
+
+The Fock word keeps the same tensors and only re-routes the bonds: every bond
+leaves its tensor at the upper-left port, passes over the top of that tensor and
+enters the next tensor at the lower-left port.  On the way it crosses exactly one
+line, the ``in`` leg of the tensor it left; bonds cross neither each other nor
+any ``out`` leg.  Bond ``k`` in the picture carries the network label
+``('opb', k)``::
 
                i0             i1             i2              i3
                 |              |              |               |
@@ -258,6 +293,9 @@ in the picture carries the network label ``('opb', k)``::
                 |               |               |             |
                o0              o1              o2             o3
 
+           basis element  |o0 o1 o2 o3> <i0 i1 i2 i3|
+           legs met as    o0, o1, o2, o3, i3, i2, i1, i0
+                          (along the bottom, then back along the top)
            X = swap gate between the bond and the in leg it crosses
            1, 2, 3 = network labels ('opb', 1), ('opb', 2), ('opb', 3)
 
