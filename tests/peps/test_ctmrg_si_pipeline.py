@@ -412,6 +412,41 @@ def test_si_convergence_ignores_roundoff_directions(config_kwargs, monkeypatch, 
     assert np.all(si_values[4:] < 1e-12)
 
 
+def test_si_weight_floor_suppresses_unresolvable_directions(config_kwargs):
+    """Directions below ``sqrt(eps)`` are suppressed however large ``rank`` is.
+
+    ``rank`` comes from the requested ``D_total``, which on a CTM half that
+    decays faster than ``chi`` reaches into the roundoff tail. The floor, not
+    ``values[rank-1]``, has to set the boundary there -- otherwise every
+    direction above roundoff clips to a weight of one and the convergence
+    criterion is handed back to roundoff.
+    """
+    config = yastn.make_config(sym='none', **config_kwargs)
+    scales = np.array([1., 1e-3, 1e-6, 1e-9, 1e-12])
+    # Only the diagonal is read; the strict upper triangle stands in for the
+    # off-diagonal content a real QR would leave there.
+    matrix = np.triu(np.full((scales.size, scales.size), 0.3), k=1)
+    np.fill_diagonal(matrix, scales ** 2)
+    R = yastn.Tensor(config=config, s=(1, -1))
+    R.set_block(Ds=matrix.shape, val=matrix)
+
+    assert si_module.SI_WEIGHT_FLOOR == pytest.approx(1.4901161193847656e-08)
+    weights = np.diag(si_module.si_weights_from_triangular(
+        R, rank=scales.size, cutoff=0).to_numpy())
+
+    resolvable = scales >= si_module.SI_WEIGHT_FLOOR
+    assert resolvable.tolist() == [True, True, True, False, False]
+    assert np.allclose(weights[resolvable], 1.)
+    assert np.allclose(weights[~resolvable],
+                       scales[~resolvable] / si_module.SI_WEIGHT_FLOOR)
+
+    # A cutoff above the floor still wins: it is where the projectors put the
+    # boundary, and the floor only guards the case of no cutoff at all.
+    weights = np.diag(si_module.si_weights_from_triangular(
+        R, rank=scales.size, cutoff=1e-4).to_numpy())
+    assert np.allclose(weights, np.clip(scales / 1e-4, None, 1.))
+
+
 # ---------------------------------------------------------------------------
 # Recycling lifecycle, scheduling, fallback, and environment isolation
 # ---------------------------------------------------------------------------
@@ -1020,12 +1055,22 @@ def test_si_ctmrg_matches_full_svd_on_j1j2(
 def test_si_updates_do_not_depend_on_tensordot_policy(config_kwargs, monkeypatch):
     """Roundoff of a tensordot policy must not decide how long SI iterates.
 
-    The policies contract corners with different floating-point operations.
+    The policies contract corners with different floating-point operations, and
     CTMRG amplifies the difference in the gauge of Ising environment directions
-    whose singular values are at roundoff level. As long as SI convergence is
-    judged on directions above the noise floor only, both policies make the
-    same number of power updates in almost every call; judged on all columns,
-    only about 60% of the calls agreed.
+    whose singular values are at roundoff level.  Weighted by
+    :func:`si_weights_from_triangular`, those directions carry no weight, so the
+    convergence criterion sees only what the halves resolve and every policy
+    makes exactly the same power updates -- on every backend, since the same
+    argument makes the count independent of which BLAS forms the contraction.
+
+    A regression in :data:`si_module.SI_WEIGHT_FLOOR` shows up here directly: at
+    a floor below ``sqrt(eps)`` the criterion floors out near its own ``tol`` and
+    the sequences start to disagree on a few percent of the calls.
+
+    ``max_sweeps`` stops the run well before ``corner_tol`` is met (it reaches
+    ``max_dsv`` of about 7.5e-5, and would need some 90 sweeps to converge);
+    this keeps the test short and costs it nothing, as the property under test
+    holds sweep by sweep.
     """
     opts_si = {'enabled': True, 'oversampling': 4, 'niter': 10,
                'tol': 1e-3, 'warmup': 5}
@@ -1042,5 +1087,5 @@ def test_si_updates_do_not_depend_on_tensordot_policy(config_kwargs, monkeypatch
         monkeypatch.undo()
 
     assert all(updates)
-    agreement = np.mean([a == b for a, b in zip(*updates)])
-    assert agreement >= 0.95
+    reference, *others = updates
+    assert all(other == reference for other in others)
