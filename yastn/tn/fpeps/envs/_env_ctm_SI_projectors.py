@@ -30,7 +30,7 @@ from typing import NamedTuple
 
 from ....initialize import rand, zeros, eye, block
 from ....sym import sym_none
-from ....tensor import Tensor, YastnError, Leg, diag, tensordot, qr, truncation_mask
+from ....tensor import Tensor, YastnError, Leg, LegMeta, diag, tensordot, qr, truncation_mask
 from ....tensor._auxiliary import _struct
 from ....tensor._contractions import _match_legs_tensordot
 from ...._profile import nsys_profile, nvtx_range
@@ -169,18 +169,20 @@ class _HalfPair(_Half):
 class SI_state(NamedTuple):
     r"""Recycling state of one SI projector pair.
 
-    ``age`` counts how many times the pair has been updated with SI; it drives
-    the correction schedule, see :func:`si_correction_due`.
-    ``niter`` and ``error`` describe the last update alone: the number of power
-    updates it made -- at most the ``niter`` budget of ``opts_si`` -- and the
-    subspace error between the last two X, Y iterates. A pair that has not been
-    updated yet reports ``niter=0`` with an infinite ``error``, since there is
-    no pair of successive subspaces to compare.
+    ``age`` counts how many times the pair has been updated with SI; 
+    used by redistribution schedule :func:`redistribute_due`.
+    ``niter`` and ``error`` describe the last update: the number of power
+    updates made and the subspace error between the last two X, Y iterates. 
+    ``bases`` records where the last update got its bases from:
+    ``'reused'`` when the incoming pair was used as it came, ``'rebased'`` when
+    it was carried onto changed corner row legs, see :func:`si_rebase_bases`,
+    and ``'reinitialized'`` when it was discarded for a fresh random start.
     """
     age: int = 0
     niter: int = 0
     error: float = float('inf')
     rank: int = 0
+    bases: str = 'reused'
 
 
 def _si_rank(opts_svd, opts_si):
@@ -538,16 +540,16 @@ def _distribute_si_rank_proportionally(sector_weights, rank):
             if dimension > 0}
 
 
-def _si_refinement_asvr(r0, r1, X, Y, opts_svd, opts_si):
+def _si_refinement_adaptive_spectrum(r0, r1, X, Y, opts_svd, opts_si):
     """Return a stable SI charge mapping estimated from dominant spectra."""
-    iterations = opts_si.get('asvr_iterations', 5)
+    iterations = opts_si.get('adaptive_spectrum_iterations', opts_si.get('asvr_iterations', 5))
     chip = _si_rank(opts_svd, opts_si)
     sector_capacity = _ctm_shared_sector_capacity(r0, r1)
     charge_mapping = dict(X.get_legs(1).tD)
 
     # A symmetry-preserving subspace iteration cannot generate a charge sector
     # absent from its input bases. Seed every sector shared by both corners so
-    # that ASVR can compare their spectra before refining the allocation.
+    # that adaptive-spectrum refinement can compare their spectra before refining the allocation.
     missing_charges = set(sector_capacity) - set(charge_mapping)
     if missing_charges:
         exploratory_mapping = _distribute_si_rank_with_capacity(
@@ -555,7 +557,8 @@ def _si_refinement_asvr(r0, r1, X, Y, opts_svd, opts_si):
         unexplored_charges = set(sector_capacity) - set(exploratory_mapping)
         if unexplored_charges:
             raise YastnError(
-                "ASVR cannot probe every shared charge sector with SI rank "
+                "Adaptive-spectrum refinement cannot probe every shared "
+                "charge sector with SI rank "
                 f"{chip}; increase D_total/D_block or oversampling. Missing "
                 f"sectors: {unexplored_charges}.")
         charge_mapping = exploratory_mapping
@@ -584,7 +587,7 @@ def _si_refinement_asvr(r0, r1, X, Y, opts_svd, opts_si):
     return charge_mapping
 
 
-def _si_refinement_rds(r0, r1, X, Y, opts_svd, opts_si):
+def _si_refinement_sector_dimensions(r0, r1, X, Y, opts_svd, opts_si):
     r"""Allocate SI rank from the relative sizes of CTM charge sectors.
 
     The auxiliary rank is distributed proportionally to the dimensions of the
@@ -600,7 +603,7 @@ def _si_refinement_rds(r0, r1, X, Y, opts_svd, opts_si):
     return charge_mapping
 
 
-def _si_refinement_cwo(r0, r1, X, Y, opts_svd, opts_si):
+def _si_refinement_per_sector_oversampling(r0, r1, X, Y, opts_svd, opts_si):
     """Return an SI charge mapping estimated by per-sector oversampling."""
     chip = _si_rank(opts_svd, opts_si)
     oversampled_sector_values = {}
@@ -625,7 +628,8 @@ def _si_refinement_cwo(r0, r1, X, Y, opts_svd, opts_si):
     for _, charge in top_values:
         charge_mapping[charge] = charge_mapping.get(charge, 0) + 1
     if not charge_mapping:
-        raise YastnError("CWO refinement found no singular values.")
+        raise YastnError(
+            "Per-sector-oversampling refinement found no singular values.")
     return charge_mapping
 
 @nsys_profile("si_refinement")
@@ -640,18 +644,23 @@ def si_refinement(r0, r1, X, Y, opts_svd, opts_si):
     """
     r0, r1 = _Half(r0), _Half(r1)
     _validate_ctm_corner_pair(r0, r1)
-    refinement = opts_si.get('refinement', 'cwo')
+    refinement = opts_si.get('refinement', 'per_sector_oversampling')
     refinements = {
-        'cwo': _si_refinement_cwo,
-        'asvr': _si_refinement_asvr,
-        'rds': _si_refinement_rds,
+        'per_sector_oversampling': _si_refinement_per_sector_oversampling,
+        'adaptive_spectrum': _si_refinement_adaptive_spectrum,
+        'sector_dimensions': _si_refinement_sector_dimensions,
+        # The former acronyms, kept so that a stored option still dispatches.
+        'cwo': _si_refinement_per_sector_oversampling,
+        'asvr': _si_refinement_adaptive_spectrum,
+        'rds': _si_refinement_sector_dimensions,
     }
     try:
         refine = refinements[refinement]
     except KeyError:
         raise YastnError(
             "Unknown SI refinement method "
-            f"{refinement!r}; expected 'cwo', 'asvr', or 'rds'.") from None
+            f"{refinement!r}; expected 'per_sector_oversampling', "
+            "'adaptive_spectrum', or 'sector_dimensions'.") from None
 
     sector_capacity = _ctm_shared_sector_capacity(r0, r1)
     target_rank = min(_si_rank(opts_svd, opts_si),
@@ -857,6 +866,115 @@ def isometry_shrinkage(V, dim):
     return _validated_isometry_result(V, V @ selector, dim)
 
 
+def _elementary_sublegs(leg):
+    """Elementary legs a hard-fused leg is a product of, in order.
+
+    Mirrors the recursion of :func:`yastn.eye` over fused legs, so the pairs it
+    forms are exactly the ones the embedding is built from.
+    """
+    if not leg.is_fused():
+        return (leg,)
+    return tuple(elementary
+                 for sub in leg.unfuse_leg()
+                 for elementary in _elementary_sublegs(sub))
+
+
+def _rows_embeddable(source, target):
+    r"""Whether ``source`` embeds into ``target`` sub-leg by sub-leg.
+
+    Only a hard-fused row leg qualifies. Its sub-legs are the CTM boundary bond
+    and the double-layer PEPS bond, so the embedding pads the boundary factor
+    and leaves the PEPS factor alone -- a correspondence that survives a change
+    of ``chi``. A leg without that structure, such as the ``R``-factor leg the
+    ``use_qr`` halves carry, only has an ordering induced by its own
+    factorization, which does not relate two different dimensions.
+    """
+    if isinstance(source, LegMeta) or isinstance(target, LegMeta):
+        return False  # eye() does not support meta-fused legs
+    if not (source.is_fused() and target.is_fused()):
+        return False
+    if not (source.s == target.s
+            and source.hf.tree == target.hf.tree
+            and source.hf.op == target.hf.op
+            and source.hf.s == target.hf.s):
+        return False
+    # The embedding can only produce charges the bases already carry, so a
+    # sub-leg that gained one would leave the fused row leg short of the
+    # corner's sector and the pair uncontractible.  Such a corner is left to a
+    # fresh start, which explores the new sector from the outset.
+    return all(set(tgt.tD) <= set(src.tD)
+               for src, tgt in zip(_elementary_sublegs(source),
+                                   _elementary_sublegs(target)))
+
+
+def _rows_embedding_is_injective(source, target):
+    """Whether every sector of ``source`` fits in ``target``.
+
+    The embedding is a product of the elementary ones, so it is injective --
+    plain zero-padding, which leaves columns orthonormal -- exactly when every
+    factor is.
+    """
+    for src, tgt in zip(_elementary_sublegs(source), _elementary_sublegs(target)):
+        tD = tgt.tD
+        if any(charge not in tD or tD[charge] < dimension
+               for charge, dimension in src.tD.items()):
+            return False
+    return True
+
+
+def isometry_rebase_rows(V, target_leg):
+    r"""Re-express a column isometry on a row leg of changed dimensions.
+
+    Leading rows of every elementary charge sector are kept. Sectors that grow
+    are zero-padded, which is exact: the columns stay orthonormal. Sectors that
+    shrink or disappear cost the columns their norm, so the result is
+    re-orthonormalized; the ``QR`` also completes directions the embedding
+    annihilated, which is what a fresh random column would have provided.
+
+    Returns ``None`` when the two legs are not related by such an embedding.
+    """
+    source = V.get_legs(0)
+    if source == target_leg:
+        return V
+    if not _rows_embeddable(source, target_leg):
+        return None
+    embedding = eye(
+        V.config, legs=(source.conj(), target_leg), isdiag=False,
+        dtype=V.yastn_dtype, device=V.device)
+    W = tensordot(embedding, V, axes=(0, 0))  # legs (target_leg, auxiliary)
+    if not _rows_embedding_is_injective(source, target_leg):
+        W, _ = qr(W, axes=(0, 1), sQ=V.get_legs(1).s)
+    return W
+
+
+def si_rebase_bases(r0, r1, X, Y):
+    r"""Carry SI bases onto corner row legs of changed dimensions.
+
+    The CTM row space grows over the first sweeps -- ``chi * D^2`` follows a
+    ``chi`` that has not saturated yet -- and charge-sector redistribution moves
+    it again later on. Both leave the recycled bases describing the right
+    subspace in the wrong space. Embedding them costs one sparse contraction
+    and keeps that description, where
+    :func:`initialize_si_bases` would replace it with noise.
+
+    The targets mirror :func:`initialize_si_bases`: ``X`` sits on the conjugate
+    of the external leg of ``r1``, and ``Y.H`` on the external leg of ``r0``.
+    Both have to rebase, since the two share an auxiliary leg; otherwise
+    ``(None, None)`` is returned, and so it is for corners the embedding does
+    not apply to, see :func:`_rows_embeddable`.
+    """
+    if X is None or Y is None:
+        return None, None
+    try:
+        X_new = isometry_rebase_rows(X, r1.get_legs(0).conj())
+        Yh_new = isometry_rebase_rows(Y.H, r0.get_legs(0))
+    except YastnError:
+        return None, None
+    if X_new is None or Yh_new is None:
+        return None, None
+    return X_new, Yh_new.H
+
+
 def symmetric_isometry_recycle(V, charges, left_leg=None):
     r"""Resize charge sectors on the right leg of an isometry.
 
@@ -990,7 +1108,8 @@ def _si_reduced_svd(r0, r1, X, Y, opts_si, spec_only=False, rank=None, cutoff=0)
             X_old, Yh_old = X, Yh
 
     rho = Y @ r0.mm(r1.mm_T(X))
-    info = {'niter': n_iter, 'error': error}
+    info = {'niter': n_iter}
+    if n_iter>0: info.update({'error': error})
     if spec_only:
         sall= rho.svd(axes=(0, 1), sU=rho.s[1], fix_signs=True, compute_uv=False)
         return X, Y, None, sall, None, info
@@ -1044,16 +1163,21 @@ def si_projector_svd(r0, r1, X, Y, opts_svd, opts_si,
     return u, s, v, X_new, Y_new, info
 
 
-def si_correction_due(age, opts_si):
-    r"""Whether a projector pair of the given ``age`` is due a sector redistribution.
+def redistribute_due(age, opts_si):
+    r"""Whether a projector pair of the given ``age`` is inside the schedule window.
 
     ``age`` counts how many times this projector pair has already been updated
-    with SI. A correction fires once at ``warmup``, and then every
-    ``correction_frequency`` updates if that option is positive.
+    with SI. The window covers every update up to ``warmup``, and then every
+    ``redistribute_frequency`` updates if that option is positive.
+
+    Two callers read it. It is the condition under which
+    ``redistribute_sectors`` actually redistributes; and its negation is one of
+    the conditions for skipping an SI update under ``skip_SI_update``, so that
+    a pair inside the window is never skipped.
     """
     warmup = opts_si.get('warmup', 5)
-    frequency = opts_si.get('correction_frequency', 0)
-    return (age == warmup
+    frequency = opts_si.get('redistribute_frequency', 0)
+    return (age <= warmup
             or (frequency > 0 and age > warmup
                 and (age - warmup) % frequency == 0))
 
@@ -1064,6 +1188,11 @@ def si_proj_corners(r0, r1, opts_svd, opts_si, X=None, Y=None, cutoff=0):
     Returns the projector pair ``p0, p1`` of the truncated decomposition,
     the refreshed bases ``X_new, Y_new`` to be recycled by the next update,
     and the ``info`` of the subspace iteration; see :func:`_si_reduced_svd`.
+    ``info['bases']`` reports where the bases came from, see :class:`SI_state`.
+
+    Bases that no longer fit the corners are first carried onto the new row
+    legs by :func:`si_rebase_bases`, and only redrawn from noise when that is
+    not possible. ``opts_si['rebase'] = False`` skips the attempt.
 
     Each half is either a tensor or a pair of enlarged corners; see :class:`_Half`.
     """
@@ -1074,15 +1203,33 @@ def si_proj_corners(r0, r1, opts_svd, opts_si, X=None, Y=None, cutoff=0):
     # yet accommodate chi + p rangefinder columns.  Use every currently
     # available shared direction; changed corner legs will invalidate and
     # enlarge the recycled bases on subsequent updates.
-    rank = min(_si_rank(opts_svd, opts_si),
-               sum(_ctm_shared_sector_capacity(r0, r1).values()))
+    capacity = _ctm_shared_sector_capacity(r0, r1)
+    rank = min(_si_rank(opts_svd, opts_si), sum(capacity.values()))
+    bases = 'reused'
     if not si_bases_compatible(r0, r1, X, Y):
-        X, Y = initialize_si_bases(r0, r1, rank)
-    if opts_si.get('correct', False):
+        # Corner row legs that changed do not invalidate what the bases
+        # describe, only the space they are written in; see si_rebase_bases.
+        if opts_si.get('rebase', True):
+            X_rebased, Y_rebased = si_rebase_bases(r0, r1, X, Y)
+            if si_bases_compatible(r0, r1, X_rebased, Y_rebased):
+                X, Y, bases = X_rebased, Y_rebased, 'rebased'
+        if bases == 'reused':
+            X, Y = initialize_si_bases(r0, r1, rank)
+            bases = 'reinitialized'
+        elif sum(X.get_legs(1).tD.values()) != rank or any(
+                dimension > capacity.get(charge, 0)
+                for charge, dimension in X.get_legs(1).tD.items()):
+            # The auxiliary rank follows the capacity of the corner legs, which
+            # moved along with them.
+            X, Y = _recycle_si_bases(
+                r0, r1, X, Y,
+                _distribute_si_rank_with_capacity(capacity, rank))
+    if opts_si.get('redistribute_sectors', False):
         X, Y = si_refinement(r0, r1, X, Y, opts_svd, opts_si)
 
     res= si_projector_svd(r0, r1, X, Y, opts_svd, opts_si, cutoff=cutoff)
     u, s, v, X_new, Y_new, info= res
+    info["bases"] = bases
 
     rs = s.rsqrt(cutoff=cutoff)
     info["rank"] = (rs>0).trace().item()

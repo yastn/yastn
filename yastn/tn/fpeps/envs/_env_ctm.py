@@ -18,7 +18,7 @@ import sys
 from typing import NamedTuple, Sequence, Union
 
 from ._env_contractions import identity_boundary, corner2x2, append_vec_tl, append_vec_br
-from ._env_ctm_SI_projectors import si_correction_due, si_proj_corners, SI_state
+from ._env_ctm_SI_projectors import redistribute_due, si_proj_corners, SI_state
 from ._env_dataclasses import EnvCTM_local, EnvCTM_projectors
 from .._evolution import BondMetric
 from .._geometry import Site, Lattice, is_site
@@ -34,6 +34,7 @@ logger = logging.getLogger(__name__)
 class CTMRG_out(NamedTuple):
     sweeps: int = 0
     max_dsv: float = None
+    max_de: float = None
     converged: bool = False
     max_D: int = 1
 
@@ -41,6 +42,10 @@ class CTMRG_out(NamedTuple):
 class EnvCTM():
 
     _default_corner_signature = (1, -1)
+    #: Transfer tensors each move rewrites.  The c4v ``'d'`` move is empty:
+    #: ``EnvCTM_c4v`` overrides ``_update_core_``.
+    _ts_updated_by_move= {'t': ('t',), 'l': ('l',), 'b': ('b',), 'r': ('r',),
+                          'h': ('l', 'r'), 'v': ('t', 'b'), 'd': ()}
 
     def __init__(self, psi, init='rand', leg=None, bra=None):
         r"""
@@ -85,6 +90,8 @@ class EnvCTM():
         self.psi = Peps2Layers(ket=psi, bra=bra) if psi.has_physical() else psi
         self.env = Lattice(self.geometry, objects={site: EnvCTM_local() for site in self.sites()})
         self.proj = Lattice(self.geometry, objects={site: EnvCTM_projectors() for site in self.sites()})
+        # element-wise diff of env tensors across updates. not serialized, holds plain numbers
+        self.elem_diff = Lattice(self.geometry, objects={site: EnvCTM_local() for site in self.sites()})
         self._reset_si_()
 
         if init not in (None, 'rand', 'eye', 'dl'):
@@ -117,7 +124,7 @@ class EnvCTM():
     def _load_si_(self, d, config=None):
         r""" De-serialize recycled subspace-iteration state; absent in older dictionaries. """
         self._reset_si_()
-        if 'si_X' in d:
+        if 'si_X' in d and 'si_Y' in d:
             self.si_X = Lattice.from_dict(d['si_X'], config=config)
             self.si_Y = Lattice.from_dict(d['si_Y'], config=config)
             self._si_age = {(tuple(x['index']) if isinstance(x['index'], list) else x['index'],
@@ -190,7 +197,7 @@ class EnvCTM():
         r"""
         Return a clone of the environment on specified device and/or dtype.
         Resulting environment is a part of the computational graph.
-        Data of environment tensors in the new environment is indepedent
+        Data of environment tensors in the new environment is independent
         from the originals.
         """
         #TODO Bra ?
@@ -594,18 +601,39 @@ class EnvCTM():
 
         opts_si: dict | None
             Enable recycled subspace-iteration projectors with ``{'enabled': True}``.
-            Supported options are ``oversampling`` (default 5), ``niter``
-            (default 1), ``tol`` (default 1e-3), ``warmup`` (default 5 projector updates),
-            ``correction_frequency`` (default 0, disabled), ``correct`` to
-            force an immediate sector redistribution, ``refinement``
-            (``'cwo'`` by default, or ``'asvr'``/``'rds'``), and
-            ``recycle_grad`` (default False). ``'rds'`` distributes SI vectors
-            proportionally to the charge-sector dimensions of the corners.
+            Supported options are
+                * ``oversampling`` (default 5),
+                * ``niter`` (default 1): Number of subspace iterations when adjusting range-finders,
+                * ``tol`` (default 1e-3): Desired subspace error of range-finders,
+                * ``warmup`` (default 5 projector updates),
+                * ``redistribute_sectors`` (default False): Reallocate the SI rank
+                    between charge sectors, on the schedule of :func:`redistribute_due`,
+                * ``redistribute_frequency`` (default 0, disabled): Redistribute every
+                    that many updates once past ``warmup``,
+                * ``refinement`` (``'per_sector_oversampling'`` by default, or
+                    ``'adaptive_spectrum'``/``'sector_dimensions'``): Algorithm
+                    for subspace sector refinement, see :func:`si_refinement`,
+                * ``skip_SI_update`` (default False): Skip the subspace iteration
+                    altogether on an update that is past ``warmup``, outside the
+                    redistribution schedule, and whose bases already report an
+                    error below ``tol``. A shortcut: it trades accuracy for speed,
+                    and leaves the bases exactly as they came in,
+                * ``rebase`` (default True): When changed corner legs invalidate the
+                    recycled bases, carry them onto the new row space instead of
+                    drawing fresh ones, see :func:`si_rebase_bases`,
+                * ``recycle_grad`` (default False).
+
+            ``'sector_dimensions'`` distributes SI vectors proportionally to the charge-sector dimensions of the corners.
             ``tol`` compares against a subspace error weighted by the singular
             value of each direction, see :func:`si_subspace_error`, so that
             oversampled directions at roundoff -- of which there are many once
             ``D_total + oversampling`` exceeds the numerical rank of the corners
             -- neither set the error nor decide the iteration count.
+
+        cutoff: float | None
+            Pseudo-inverse cutoff in projector construction, regularizing values close to floating-point precision. 
+            Note: This cutoff is an absolute value, not relative to the largest singular value. 
+            
 
         Returns
         -------
@@ -619,6 +647,9 @@ class EnvCTM():
             use_reentrant = True
         elif checkpoint_move == 'nonreentrant':
             use_reentrant = False
+        # Corners are rewritten by every move, to compare elemwise diff between the sweep we persist them here
+        corners = env._corner_snapshot()
+        
         for d in moves:
             if checkpoint_move:
                 def f_update_core_(move_d, loc_im, *inputs_t):
@@ -636,11 +667,16 @@ class EnvCTM():
                 else:
                     raise RuntimeError(f"CTM update: checkpointing not supported for backend {env.config.BACKEND_ID}")
 
-                # reconstruct env from output tensors
+                # under checkpoint, we take elemwise diff of T-tensors here, but only between T-tensors updated by the move
+                env_old = env.env
                 env.update_from_dict_(combine_data_and_meta(out_data, out_meta))
+                update_storage_(env.elem_diff, norm_diff(env_old, env.env, env._ts_updated_by_move[d]))
             else:
                 with nvtx_range(f"_update_core_ {d}"):
                     env._update_core_(d, opts_svd, method=method, **kwargs)
+        
+        # update elemwise difference of corners between the sweep
+        update_storage_(env.elem_diff, norm_diff(corners, env, ('tl', 'tr', 'bl', 'br')))
         return env
 
     
@@ -684,7 +720,14 @@ class EnvCTM():
             for site in sites:
                 with nvtx_range(f"_update_env_ {site}"):
                     env_tmp._update_env_(site, env, move)
+
+            # elemwise diff of the transfer tensors this move writes. During sweep, each transfer tensor is updated once
+            # Under checkpointing this env is a throwaway copy whose elem_diff is
+            # discarded, so update_ measures the transfer tensors itself instead.
+            if not kwargs.get('checkpoint_move', False):
+                update_storage_(env.elem_diff, norm_diff(env, env_tmp, ('t', 'l', 'b', 'r')))
             update_storage_(env, env_tmp)
+
 
     def update_bond_(env, bond: tuple, opts_svd: dict | None = None, method: str = '2x2 corner', **kwargs):
         r"""
@@ -753,12 +796,20 @@ class EnvCTM():
             si_states, key = env._si_age, (env.site2index(site0), name0)
         si_state = si_states.get(key, SI_state())
         opts_si = dict(opts_si)
-        opts_si['correct'] = (opts_si.get('correct', False)
-                              or si_correction_due(si_state.age, opts_si))
+        # sector redistribution
+        opts_si['redistribute_sectors'] = (opts_si.get('redistribute_sectors', False)
+                                           and redistribute_due(si_state.age, opts_si))
+        # optionally skip the SI update once the bases are already converged
+        if (opts_si.get('skip_SI_update', False)
+                and not redistribute_due(si_state.age, opts_si)
+                and si_state.error < opts_si.get('tol', 1e-3)):
+            opts_si.update({'niter': 0})
         with nvtx_range("si_proj_corners"):
             p0, p1, X, Y, info = si_proj_corners(r0, r1, opts_svd, opts_si,
                 X=getattr(env.si_X[site0], name0), Y=getattr(env.si_Y[site0], name0),
                 cutoff=kwargs.get('cutoff', 0))
+        if opts_si.get('niter', 5) == 0: # keep previous error if no SI iterations were performed 
+            info.update({'error': si_state.error})
         setattr(env.proj[site0], name0, p0)
         setattr(env.proj[site1], name1, p1)
         recycle_grad = opts_si.get('recycle_grad', False)
@@ -1031,6 +1082,7 @@ class EnvCTM():
 
                 * ``sweeps`` number of performed ctmrg updates.
                 * ``max_dsv`` norm of singular values change in the worst corner in the last sweep.
+                * ``max_de`` norm of elementwise difference of moduli of environment tensors elements in the last sweep.
                 * ``max_D`` largest bond dimension of environment tensors virtual legs.
                 * ``converged`` whether convergence based on ``corner_tol`` has been reached.
         """
@@ -1052,14 +1104,16 @@ class EnvCTM():
                 env.update_(opts_svd=opts_svd, moves=moves, method=method, **kwargs)
 
             # use default CTM convergence check
+            max_de = env.max_elem_diff()
             if corner_tol is not None:
                 converged, max_dsv, history = env.ctm_conv_corner_spec(history, corner_tol)
-                logging.info(f'Sweep = {sweep:03d}; max_diff_corner_singular_values = {max_dsv:0.2e}')
+                logging.info(f'Sweep = {sweep:03d}; max_diff_corner_singular_values = {max_dsv:0.2e};'
+                             f' max_elem_modulus_diff = {max_de:0.2e}')
                 if converged:
                     break
 
             if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
-                yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
+                yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_de=max_de, max_D=env.max_D(), converged=converged)
         yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
 
     def ctm_conv_corner_spec(env: EnvCTM,
@@ -1078,6 +1132,12 @@ class EnvCTM():
             history.append(corner_sv)
             converged = (corner_tol is not None) and (max_dsv < corner_tol)
         return converged, max_dsv, history
+
+    def max_elem_diff(env: EnvCTM) -> float:
+        diffs= [getattr(env.elem_diff[site], dirn) for site in env.elem_diff.sites() \
+                    for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']]
+        res= tuple(filter(lambda x: x is not None, diffs))
+        return max(res) if len(res)>0 else float('inf')
 
     def is_consistent(env, verbosity = 2):
         out = {}
@@ -1124,6 +1184,16 @@ class EnvCTM():
                     print(x)
         return len(not_consistent) == 0
 
+    def _corner_snapshot(env) -> Lattice[dict[Site,EnvCTM_local]]:
+        """ Detached corner tensors of the current sweep, in ``EnvCTM_local`` slots."""
+        snapshot = Lattice(env.geometry, objects={site: EnvCTM_local() for site in env.sites()})
+        for site in env.sites():
+            for dirn in ('tl', 'tr', 'bl', 'br'):
+                ten = getattr(env[site], dirn)
+                if ten is not None:
+                    setattr(snapshot[site], dirn, ten.detach())
+        return snapshot
+
     from ._env_ctm_measure import measure_1site, measure_nn, measure_2x2, measure_line, \
         measure_nsite, measure_2site, measure_nsite_exact, measure_nsite_exact_oe, \
         measure_nsite_norm_exact_oe, measure_nsite_numerator_exact_oe, \
@@ -1144,6 +1214,35 @@ def spec_diff(x, y):
     else:
         return float('Inf')
 
+
+def norm_diff(old: Lattice[dict[Site,EnvCTM_local]], new: Lattice[dict[Site,EnvCTM_local]],
+              dirns, p='inf')-> Lattice[dict[Site,EnvCTM_local]]:
+    """ Compute norms of changes of element moduli between two environments.
+
+    In general, environment tensors differ up to a gauge matrices of every bond.
+    This gauge can trivialize to a diagonal matrix of phases, in which case their moduli
+    will converge elementwise.
+
+    ``dirns`` selects which tensors to compare, because the two kinds are
+    compared over different spans. Transfer tensors t,l,b,r are compared across the
+    single moves that writes them, expecting the sweep to update every T-tensor once.
+    Corners tl,tr,bl,br are compared across the sweep, against a
+    :func:`_corner_snapshot`; as they are updated more than once per sweep.
+
+    ``old`` and ``new`` are anything with ``geometry``, ``sites()`` and
+    ``[site].dirn`` -- an ``EnvCTM`` or the ``Lattice`` behind one.
+    """
+    diffs= Lattice(old.geometry, objects={site: EnvCTM_local() for site in old.sites()})
+    for site in old.sites():
+        for dirn in dirns:
+            ten_x, ten_y = getattr(old[site], dirn), getattr(new[site], dirn)
+            if ten_x is not None and ten_y is not None:
+                try:
+                    diff= abs(ten_x.detach()) - abs(ten_y.detach())
+                except YastnError as e: # fail to take difference, e.g., because of different leg structure
+                    diff= None
+                setattr(diffs[site], dirn, diff.norm(p=p) if diff is not None else None)
+    return diffs
 
 _for_trivial = (('hlt', 'r', 'l', 'tl', 2, 0, 0),
                 ('hlb', 'r', 'l', 'bl', 0, 2, 1),

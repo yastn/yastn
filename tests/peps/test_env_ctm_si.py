@@ -421,7 +421,7 @@ def test_si_projectors_match_full_svd(config_kwargs, sym):
     # chi + p = 6, strictly below the corner-leg rank of 7.
     opts_svd = {'D_total': 5, 'tol': 0, 'fix_signs': True}
     opts_si = {'enabled': True, 'oversampling': 1,
-               'niter': 24, 'tol': 1e-12, 'correct': True}
+               'niter': 24, 'tol': 1e-12, 'redistribute_sectors': True}
     full = proj_corners(r0, r1, opts_svd=opts_svd)
     p0, p1, X, Y, _ = si_proj_corners(r0, r1, opts_svd, opts_si)
     assert X.get_shape(axes=1) == 6
@@ -446,7 +446,7 @@ def test_si_complex_u1_projectors_match_full_svd(config_kwargs):
     p0, p1, X, Y, _ = si_proj_corners(
         r0, r1, opts_svd,
         {'enabled': True, 'oversampling': 1,
-         'niter': 24, 'tol': 1e-12, 'correct': True})
+         'niter': 24, 'tol': 1e-12, 'redistribute_sectors': True})
 
     assert X.dtype == Y.dtype == config.backend.DTYPE['complex128']
     assert si_bases_compatible(r0, r1, X, Y)
@@ -545,7 +545,7 @@ def test_si_recycles_after_leg_dimension_change(config_kwargs):
     r0, r1 = _ctm_corner_pair(config, 'none')
     opts_svd = {'D_total': 4, 'tol': 0}
     opts_si = {'enabled': True, 'oversampling': 2,
-               'niter': 24, 'tol': 1e-12, 'correct': True}
+               'niter': 24, 'tol': 1e-12, 'redistribute_sectors': True}
     _, _, X0, Y0, _ = si_proj_corners(r0, r1, opts_svd, opts_si)
 
     # Change the external spaces while leaving the contracted corner leg valid.
@@ -584,7 +584,7 @@ def test_si_recycles_after_fusion_history_change(config_kwargs):
     assert external.hf != r1.get_legs(0).hf
     opts_svd = {'D_total': 4, 'tol': 1e-10}
     opts_si = {'enabled': True, 'oversampling': 0,
-               'niter': 24, 'tol': 1e-12, 'correct': True}
+               'niter': 24, 'tol': 1e-12, 'redistribute_sectors': True}
     reference = proj_corners(r0, r1_with_new_history, opts_svd)
     p0, p1, X_new, Y_new, _ = si_proj_corners(
         r0, r1_with_new_history, opts_svd, opts_si, X=X, Y=Y)
@@ -633,7 +633,7 @@ def test_si_rebuilds_basis_after_hard_fused_subleg_change(config_kwargs, monkeyp
     monkeypatch.setattr(si_module, 'si_projector_svd', counting)
     opts_svd = {'D_total': 4, 'tol': 0}
     opts_si = {'enabled': True, 'oversampling': 2,
-               'niter': 24, 'tol': 1e-12, 'correct': True}
+               'niter': 24, 'tol': 1e-12, 'redistribute_sectors': True}
     reference = proj_corners(r0_new, r1_new, opts_svd)
     p0, p1, X_new, Y_new, _ = si_proj_corners(
         r0_new, r1_new, opts_svd, opts_si, X=X, Y=Y)

@@ -18,7 +18,7 @@ from typing import Callable, Sequence
 
 from ._env_ctm import EnvCTM, proj_corners
 from ._env_contractions import *
-from ._env_dataclasses import EnvCTM_c4v_local, EnvCTM_c4v_projectors
+from ._env_dataclasses import EnvCTM_c4v_local, EnvCTM_c4v_projectors, EnvCTM_local
 from .._geometry import Lattice
 from .._peps import Peps2Layers
 from ....tensor import Leg, YastnError, tensordot
@@ -110,6 +110,7 @@ class EnvCTM_c4v(EnvCTM):
         self.psi = Peps2Layers(ket=psi, bra=bra) if psi.has_physical() else psi
         self.env = Lattice(self.geometry, objects={site: EnvCTM_c4v_local() for site in self.sites()})
         self.proj = Lattice(self.geometry, objects={site: EnvCTM_c4v_projectors() for site in self.sites()})
+        self.elem_diff = Lattice(self.geometry, objects={site: EnvCTM_local() for site in self.sites()}) # for consistency with parent
         self._reset_si_()  # c4v never recycles SI bases; the containers only keep inherited methods working
 
         if init not in (None, 'eye', 'dl'):

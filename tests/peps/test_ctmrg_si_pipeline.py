@@ -347,7 +347,8 @@ def test_si_reports_an_unconverged_budget_of_zero_updates(config_kwargs):
     """``niter=0`` makes no update, and has to report that instead of failing.
 
     The bases are then used exactly as they come in, so there is no pair of
-    successive subspaces to compare and no error to report.
+    successive subspaces to compare and no error to report: ``info`` carries no
+    ``error`` at all, and :class:`SI_state` falls back on its infinite default.
     """
     config = yastn.make_config(sym='none', **config_kwargs)
     config.backend.random_seed(seed=93)
@@ -356,8 +357,9 @@ def test_si_reports_an_unconverged_budget_of_zero_updates(config_kwargs):
     opts_si = {'enabled': True, 'oversampling': 1, 'niter': 0, 'tol': 0}
 
     *_, info = si_proj_corners(r0, r1, opts_svd, opts_si)
-    validate_info = lambda info: (info['niter']== 0 and info['error'] == float('inf'))
+    validate_info = lambda info: (info['niter'] == 0 and 'error' not in info)
     assert validate_info(info)
+    assert si_module.SI_state(**info).error == float('inf')
 
     # Every entry point has to survive an empty budget, spectrum mode included.
     X, Y = si_module.initialize_si_bases(r0, r1, 3)
@@ -497,32 +499,51 @@ def test_si_recycling_state_machine_across_updates(config_kwargs,
     _assert_si_bases_are_orthonormal(env)
 
 
-def test_si_warmup_and_periodic_correction_schedule(config_kwargs,
+def test_si_warmup_and_periodic_redistribution_schedule(config_kwargs,
                                                     monkeypatch):
-    """Correction runs at warmup age and then at the requested frequency."""
+    """Redistribution runs through warmup and then at the requested frequency.
+
+    ``redistribute_due`` covers every age up to ``warmup`` and then every
+    ``redistribute_frequency`` updates, so with ``warmup=2, frequency=2`` it
+    fires at ages 0, 1, 2 and 4, and not at 3.
+
+    The schedule is read from ``redistribute_due`` itself rather than from the
+    identity of the recycled bases: at age 0 the pair has not been stored in
+    ``env.si_X`` yet, so there is nothing to match it against.  A call counter
+    on ``si_refinement`` keeps the schedule tied to the work it gates.
+    """
     config = yastn.make_config(sym='Z2', **config_kwargs)
     config.backend.random_seed(seed=42)
     psi, _ = _classical_ising_peps(config)
     env = fpeps.EnvCTM(psi, init='eye')
     opts_svd = {'D_total': 2, 'tol': 0, 'fix_signs': True}
     opts_si = {'enabled': True, 'oversampling': 0, 'niter': 2,
-               'warmup': 2, 'correction_frequency': 2}
-    correction_ages = []
-    original = si_module.si_refinement
+               'warmup': 2, 'redistribute_frequency': 2,
+               'redistribute_sectors': True}
+    schedule = []
+    refinements = []
+    original_due = env_ctm_module.redistribute_due
+    original_refinement = si_module.si_refinement
 
-    def recording_correction(*args, **kwargs):
-        recycled_x = args[2]
-        key = next(key for key, value in _si_bases(env, env.si_X).items()
-                   if value is recycled_x)
-        correction_ages.append(env._si_age[key].age)
-        return original(*args, **kwargs)
+    def recording_due(age, opts):
+        due = original_due(age, opts)
+        schedule.append((age, due))
+        return due
 
-    monkeypatch.setattr(si_module, 'si_refinement',
-                        recording_correction)
+    def counting_refinement(*args, **kwargs):
+        refinements.append(None)
+        return original_refinement(*args, **kwargs)
+
+    # _env_ctm imports the predicate by name, so patch it where it is looked up.
+    monkeypatch.setattr(env_ctm_module, 'redistribute_due', recording_due)
+    monkeypatch.setattr(si_module, 'si_refinement', counting_refinement)
     for _ in range(5):
         env.update_(opts_svd, moves='h', method='2x2 corner', opts_si=opts_si)
 
-    assert set(correction_ages) == {2, 4}
+    assert {age for age, due in schedule if due} == {0, 1, 2, 4}
+    assert {age for age, due in schedule if not due} == {3}
+    # Every scheduled update, and only those, reaches the refinement.
+    assert len(refinements) == sum(due for _, due in schedule)
 
 
 def test_si_disabled_path_matches_full_svd(config_kwargs, monkeypatch):
@@ -759,13 +780,44 @@ def _j1j2_rdm1x1_check(psi, reference_eigenvalues):
     return check_observables
 
 
+def _report_sweep(info, env_si=None):
+    """Print one CTMRG sweep, and the SI recycling state behind it.
+
+    ``max_dsv`` is the convergence gate and ``max_D`` the environment bond it
+    reached; the latter is what grows over the first sweeps and moves the SI
+    row space with it.
+
+    With ``env_si``, one line follows per projector anchor, keyed as
+    ``(index, name)``:
+
+    * ``age``   -- how many SI updates this anchor has had, driving the
+      redistribution schedule of :func:`redistribute_due`;
+    * ``niter`` -- power updates the last one spent, out of its budget;
+    * ``err``   -- subspace error the last one reached, against ``tol``;
+    * ``rank``  -- directions the truncation kept;
+    * ``bases`` -- where they came from: ``reused`` when the incoming pair was
+      used as it came, ``rebased`` when it was carried onto changed corner
+      legs, ``reinitialized`` when it was discarded for a random restart.
+    """
+    if env_si is None:
+        return
+    for key, si_state in sorted(env_si._si_age.items(), key=repr):
+        index, name = key
+        print(f'      {str(index):>8} {name:<4} age={si_state.age:<3} '
+              f'niter={si_state.niter:<2} err={si_state.error:.3e} '
+              f'rank={si_state.rank:<3} bases={si_state.bases}')
+
+
+@pytest.mark.parametrize('rebase', (True, False), ids=('rebase', 'norebase'))
+@pytest.mark.parametrize('use_qr', (True, False), ids=('qr', 'noqr'))
 @pytest.mark.parametrize(
     'prepare_state',
     [_ising_acceptance_state,
      _honeycomb_complex_acceptance_state,
      _triangular_complex_acceptance_state],
     ids=('ising', 'honeycomb_complex', 'triangular_complex'))
-def test_si_ctmrg_matches_full_svd_on_reference_peps(config_kwargs, prepare_state):
+def test_si_ctmrg_matches_full_svd_on_reference_peps(
+        config_kwargs, prepare_state, use_qr, rebase):
     """SI and full-SVD CTMRG must give the same fixed-point physics.
 
     This covers a complete sequence of random SI initialization, power/QR
@@ -774,29 +826,54 @@ def test_si_ctmrg_matches_full_svd_on_reference_peps(config_kwargs, prepare_stat
     analytic network used by the standard CTMRG acceptance test; the honeycomb
     state additionally drives the whole loop with complex amplitudes, and the
     triangular state does so without symmetry at a larger bond dimension.
+
+    ``use_qr`` selects the projector route, as in ``_j1j2_cases``:
+    ``implicit_halves = use_si and not use_qr``, so ``use_qr=False`` hands the
+    corners on as pairs and keeps the fused ``chi x D^2`` row leg, while
+    ``use_qr=True`` hands on QR-regularized halves.  Both runs of a case share
+    it -- only the solver may differ between SI and the reference.
+
+    ``rebase`` decides what happens to the recycled bases when the growing
+    environment changes the corner row leg: carried onto the new row space, or
+    redrawn from noise.  Either way the fixed point has to come out the same,
+    which is what this asserts; the ``bases=`` column of the sweep report shows
+    which path each update took.  It only bites on the ``noqr`` route -- a
+    ``use_qr=True`` row leg carries no fusion structure to embed through, so
+    both settings reinitialize there and the two runs should agree closely.
     """
     config, psi, check_observables = prepare_state(config_kwargs)
     config.backend.random_seed(seed=2026)
 
+    case = (prepare_state.__name__.removeprefix('_').removesuffix('_acceptance_state')
+            + ('-qr' if use_qr else '-noqr')
+            + ('-rebase' if rebase else '-norebase'))
     chi = 12
-    opts_svd = {'D_total': chi, 'tol': 0, 'fix_signs': True}
+    opts_svd = {'D_total': chi, 'tol': 1.0e-10, 'fix_signs': True}
     # SI uses a finite subspace tolerance and therefore approaches the fixed
     # point with small stochastic fluctuations.  A 1e-9 corner-spectrum gate
     # is already substantially tighter than the observable checks below.
     common = dict(opts_svd=opts_svd, max_sweeps=100, corner_tol=1e-9,
-                  method='2x2 corner')
+                  method='2x2 corner', use_qr=use_qr, cutoff=1e-10)
 
+    # Both runs are stepped one sweep at a time so that the approach to the
+    # fixed point is on record; ``pytest -s`` shows it as it happens, and a
+    # failing run prints it in the captured output.  See _report_sweep for how
+    # to read the per-anchor SI line.
     env_full = fpeps.EnvCTM(psi, init='eye')
-    info_full = env_full.ctmrg_(**common)
+    print(f'\n=== {case}: full-SVD CTMRG ===')
+    for info_full in env_full.ctmrg_(**common, iterator_step=1):
+        _report_sweep(info_full)
 
     env_si = fpeps.EnvCTM(psi, init='eye')
-    info_si = env_si.ctmrg_(
-        **common,
-        opts_si={'enabled': True, 'oversampling': 4, 'niter': 1,
-                 'tol': 1e-3, 'warmup': 5})
+    print(f'=== {case}: SI CTMRG ===')
+    for info_si in env_si.ctmrg_(
+            **common, iterator_step=1,
+            opts_si={'enabled': True, 'oversampling': 4, 'niter': 1,
+                     'tol': 1e-3, 'warmup': 5, 'rebase': rebase}):
+        _report_sweep(info_si, env_si)
 
-    assert info_full.converged
-    assert info_si.converged
+    assert info_full.converged, f'full-SVD reference did not converge: {info_full}'
+    assert info_si.converged, f'SI did not converge: {info_si}'
     bases_x = _si_bases(env_si, env_si.si_X)
     assert bases_x.keys() == _si_bases(env_si, env_si.si_Y).keys() == env_si._si_age.keys()
     assert bases_x
@@ -843,7 +920,7 @@ def _j1j2_cases():
                 id=f'j1j2_D{D}_dense_{tag}', marks=marks))
             cases.append(pytest.param(
                 partial(_j1j2_u1_acceptance_state, D=D), chi, use_qr,
-                1e-8, {'correct': True}, 1e-8, 1e-11, 1e-6, svd_policy,
+                1e-8, {'redistribute_sectors': True}, 1e-8, 1e-11, 1e-6, svd_policy,
                 id=f'j1j2_D{D}_U1_{tag}', marks=marks))
     return cases
 
@@ -869,7 +946,7 @@ def test_si_ctmrg_matches_full_svd_on_j1j2(
 
     The two forms are gated differently on purpose.
 
-    The U(1) cases pass ``'correct': True``.  Where SI runs on a U(1) state
+    The U(1) cases pass ``'redistribute_sectors': True``.  Where SI runs on a U(1) state
     without it, it does not adjust charge sector distribution. There, 
     ``converged=True`` as the spectrum is self-consistent within the wrong allocation.
     """
@@ -953,7 +1030,7 @@ def test_si_updates_do_not_depend_on_tensordot_policy(config_kwargs, monkeypatch
     opts_si = {'enabled': True, 'oversampling': 4, 'niter': 10,
                'tol': 1e-3, 'warmup': 5}
     updates = []
-    for policy in ('fuse_contracted', 'no_fusion'):
+    for policy in ('fuse_contracted', 'no_fusion', 'fuse_to_matrix'):
         config, psi, _ = _ising_acceptance_state(
             {**config_kwargs, 'tensordot_policy': policy})
         config.backend.random_seed(seed=2026)
