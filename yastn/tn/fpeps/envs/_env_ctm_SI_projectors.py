@@ -26,6 +26,7 @@ This module is a leaf: it depends on the tensor layer only, never on the CTM
 environment classes that call into it.
 """
 from __future__ import annotations
+import sys
 from typing import NamedTuple
 
 from ....initialize import rand, zeros, eye, block
@@ -37,12 +38,16 @@ from ...._profile import nsys_profile, nvtx_range
 
 
 #: Smallest singular value, relative to the largest, that the SI convergence
-#: criterion will weigh fully, when the pseudo-inverse ``cutoff`` does not
-#: already say so.  Below it a direction is determined only to about
-#: ``eps * s_1 / s_i`` in angle, so its motion between iterates is roundoff
-#: rather than convergence.
+#: criterion will weigh fully, in addition to  pseudo-inverse ``cutoff``.
+#  Below it a direction is determined only to about ``eps * s_1 / s_i`` in angle, becoming a roundoff error.
 #:
-SI_WEIGHT_FLOOR = 1e-12
+#: The floor is relative in ``s``, because that is the scale of the weights:
+#: an SI iteration applies ``A.H A``, so the ``|R_ii|`` of its ``QR`` carry the
+#: squared singular values and the weights take their square root; see
+#: :func:`si_weights_from_triangular`.  ``A.H A`` resolves a direction only
+#: while ``(s_i / s_1) ** 2`` stays above an ulp, which puts the floor at
+#: ``sqrt(eps)``.
+SI_WEIGHT_FLOOR = sys.float_info.epsilon ** 0.5
 
 
 class _Half:
@@ -377,13 +382,10 @@ def si_bases_compatible(r0, r1, X, Y):
 def si_weights_from_triangular(R, rank=None, cutoff=0):
     r"""Significance of each SI direction, from the ``R`` of its ``QR``.
 
-    ``R`` is the triangular factor of the power-iterated ``Q R = A.H A Q_old``,
-    so ``|R_ii|`` grows like the squared singular value of direction ``i``.
-    The returned weights are ``sqrt(|R_ii|)``, i.e. proportional to the singular
-    value itself.
-
-    Directions that the halves annihilate come out at roundoff, six or more
-    orders of magnitude below the rest, and so carry essentially no weight.
+    ``R`` is the triangular factor of the power-iterated ``Q R = A.H A Q_old``.
+    An iteration applies the operator ``A.H A`` and hence ``|R_ii|`` grows as 
+    *squared* singular value of direction ``i``. The returned weights are ``sqrt(|R_ii|)``, 
+    i.e. proportional to the singular value itself.
 
     ``rank`` -- the number of directions the truncation keeps -- normalizes to
     the *smallest retained* weight and clips above, so that every retained
@@ -393,7 +395,10 @@ def si_weights_from_triangular(R, rank=None, cutoff=0):
     ``1 - N/D`` with ``N/D`` approaching one, so a direction is resolved only
     while ``(s_i/s_1)^2`` stays above an ulp, i.e. ``s_i/s_1 > sqrt(eps)``.  On a
     CTM half spanning nine or more decades that hides the very directions the
-    ``s^-1/2`` of the projectors amplifies most.
+    ``s^-1/2`` of the projectors amplifies most.  That argument reaches down to
+    ``sqrt(eps)`` and no further: below it ``A.H A`` no longer resolves the
+    direction at all, so what ``s^-1/2`` amplifies there is roundoff, and
+    :data:`SI_WEIGHT_FLOOR` rather than ``rank`` sets the boundary.
 
     ``cutoff`` is the pseudo-inverse cutoff the projectors will be built with.
     ``rsqrt`` zeroes every ``s_i <= cutoff``, so such a direction contributes
@@ -405,7 +410,12 @@ def si_weights_from_triangular(R, rank=None, cutoff=0):
     The normalization additionally never drops below :data:`SI_WEIGHT_FLOOR`
     times the largest weight, so that a ``chi`` reaching past what double
     precision resolves does not hand the iteration count back to roundoff even
-    when no ``cutoff`` is set.
+    when no ``cutoff`` is set.  This is the binding term whenever ``rank`` --
+    which comes from the *requested* ``D_total``, not from the half's numerical
+    rank -- reaches into the roundoff tail, as it does on any CTM half whose
+    spectrum decays faster than ``chi``.  Without it, ``values[rank-1]`` lands
+    at roundoff, every direction above clips to a weight of one, and the
+    criterion floors out at the level at which those directions re-randomize.
 
     Returns ``None`` when ``R`` vanishes identically -- every sampled direction
     is then annihilated and nothing distinguishes them -- which leaves
