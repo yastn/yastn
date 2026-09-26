@@ -17,6 +17,7 @@ import yastn.tn.fpeps.envs._env_ctm_SI_projectors as si_module
 from yastn.tn.fpeps._geometry import Site
 from yastn.tn.fpeps.envs._env_ctm_c4v import EnvCTM_c4v
 from yastn.tn.fpeps.envs._env_ctm import SI_state, proj_corners
+from yastn.tn.fpeps.envs._ctm_opts import make_ctm_opts
 from yastn.tn.fpeps.envs._env_ctm_SI_projectors import (
     initialize_si_bases,
     isometry_expansion,
@@ -750,7 +751,7 @@ def test_si_state_follows_patch(config_kwargs):
 
     def update(site):
         env._set_projector_pair_(site, name, env.nn_site(site, d='b'), 'hlt',
-                                 r0, r1, opts_svd, opts_si=opts_si)
+                                 r0, r1, make_ctm_opts(opts_svd=opts_svd, opts_si=opts_si))
         return (getattr(env.proj[site], name),
                 getattr(env.si_X[site], name), getattr(env.si_Y[site], name))
 

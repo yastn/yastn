@@ -49,6 +49,7 @@ from ....tensor import YastnError
 
 
 __all__ = ['SIOpts', 'CTMOpts', 'FixedPointOpts', 'make_si_opts', 'make_ctm_opts',
+           'DEFAULT_SVD_TOL', 'DEFAULT_FIX_SIGNS',
            'make_fixed_point_opts',
            'to_dict', 'from_dict', 'override', 'argspec']
 
@@ -56,6 +57,12 @@ __all__ = ['SIOpts', 'CTMOpts', 'FixedPointOpts', 'make_si_opts', 'make_ctm_opts
 # Default ``tol`` handed to svd_with_truncation when the caller pinned neither
 # 'tol' nor 'tol_block'. Previously duplicated in three modules.
 DEFAULT_SVD_TOL = 1e-14
+
+# CTM projectors want a deterministic SVD gauge, unlike linalg's own default of
+# False. Applied in two places -- CTMOpts.svd_kwargs for the converted paths and
+# proj_corners for callers that still hand it a raw dict -- so the value is
+# named here rather than written out at each.
+DEFAULT_FIX_SIGNS = True
 
 # Truncation keys the SI projector path forwards to ``truncation_mask``.
 # Deliberately narrower than the full opts_svd: the SI path has no use for
@@ -66,7 +73,11 @@ SI_TRUNCATION_KEYS = ('tol', 'tol_block', 'D_block', 'D_total', 'largest_gap',
 
 # Keys that are meaningful to CTM but are not svd_with_truncation arguments,
 # and so must be stripped before opts_svd is splatted into it.
-_CTM_ONLY_SVD_KEYS = ('verbosity',)
+# NOTE 'verbosity' is deliberately NOT here: yastn.linalg reads it out of its
+# own **kwargs (linalg.py:145, 247, 625, 864) to log spectra, and the
+# fixed-point tests set it inside opts_svd. Stripping it would silently
+# disable that. 'profiling_mode' by contrast is read nowhere in linalg.
+_CTM_ONLY_SVD_KEYS = ('profiling_mode',)
 
 # Renamed options still accepted on input. The canonical name is the value.
 # These exist purely as a deprecation shim; delete a row once no stored config
@@ -328,7 +339,8 @@ class CTMOpts:
         """
         kwargs = {k: v for k, v in self.opts_svd.items()
                   if k not in _CTM_ONLY_SVD_KEYS}
-        kwargs.setdefault('fix_signs', True)
+        kwargs.setdefault('fix_signs', DEFAULT_FIX_SIGNS)
+        # 'verbosity' stays in: linalg.svd reads it to log spectra.
         kwargs.update(overrides)
         return kwargs
 

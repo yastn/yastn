@@ -21,6 +21,7 @@ import yastn
 import yastn.tn.fpeps as fpeps
 import yastn.tn.fpeps.envs._env_ctm as env_ctm_module
 import yastn.tn.fpeps.envs._env_ctm_SI_projectors as si_module
+from yastn.tn.fpeps.envs._ctm_opts import make_ctm_opts
 from yastn.tn.fpeps._geometry import Site
 from yastn.tn.fpeps.envs._env_ctm import proj_corners
 from yastn.tn.fpeps.envs._env_ctm_SI_projectors import (
@@ -602,8 +603,8 @@ def test_si_disabled_path_matches_full_svd(config_kwargs, monkeypatch):
         pytest.fail("Disabled SI called si_proj_corners")
 
     monkeypatch.setattr(env_ctm_module, 'si_proj_corners', forbidden_si)
-    env._set_projector_pair_(site, 'hlb', site_b, 'hlt', r0, r1, opts_svd,
-                             opts_si={'enabled': False})
+    env._set_projector_pair_(site, 'hlb', site_b, 'hlt', r0, r1,
+                             make_ctm_opts(opts_svd=opts_svd, opts_si={'enabled': False}))
     disabled = (env.proj[site].hlb, env.proj[site_b].hlt)
     for actual, expected in zip(disabled, reference):
         assert yastn.allclose(actual, expected)

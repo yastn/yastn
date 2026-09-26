@@ -176,7 +176,7 @@ def test_si_rejects_unknown_refinement_selector(config_kwargs):
                'refinement': 'unknown'}
 
     with pytest.raises(yastn.YastnError,
-                       match='Unknown SI refinement method'):
+                       match="refinement='unknown' not recognized"):
         si_proj_corners(r0, r1, opts_svd, opts_si)
 
 

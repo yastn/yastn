@@ -229,11 +229,15 @@ def test_svd_kwargs_is_fresh_each_call():
 
 
 def test_svd_kwargs_defaults_and_strips():
-    o = make_ctm_opts(opts_svd={'D_total': 8, 'verbosity': 3})
+    o = make_ctm_opts(opts_svd={'D_total': 8, 'verbosity': 3,
+                                'profiling_mode': 'NVTX'})
     kw = o.svd_kwargs()
     assert kw['fix_signs'] is True          # CTM's default, not linalg's
-    assert 'verbosity' not in kw            # CTM-only, not an svd argument
     assert kw['D_total'] == 8
+    # linalg.svd reads verbosity out of its own **kwargs to log spectra, so it
+    # must survive; profiling_mode is read nowhere in linalg, so it is dropped.
+    assert kw['verbosity'] == 3
+    assert 'profiling_mode' not in kw
     assert o.svd_verbosity() == 3
     # an explicit fix_signs wins over the CTM default
     assert make_ctm_opts(opts_svd={'fix_signs': False}).svd_kwargs()['fix_signs'] is False
@@ -461,3 +465,15 @@ def test_refinement_constant_matches_the_literal():
 def test_none_uniformly_means_not_supplied():
     base = make_ctm_opts(opts_si={'enabled': True, 'niter': 3}, corner_tol=1e-8)
     assert make_ctm_opts(base, opts_si=None, corner_tol=None) == base
+
+
+def test_fix_signs_default_is_single_sourced():
+    """ CTM wants a deterministic SVD gauge, unlike linalg's own fix_signs=False.
+        proj_corners re-applies it for callers that still pass a raw dict, so the
+        value must be named once rather than written out at both sites. """
+    from yastn.tn.fpeps.envs import _env_ctm
+    from yastn.tn.fpeps.envs._ctm_opts import DEFAULT_FIX_SIGNS
+    import inspect
+    assert make_ctm_opts().svd_kwargs()['fix_signs'] is DEFAULT_FIX_SIGNS
+    src = inspect.getsource(_env_ctm.proj_corners)
+    assert 'DEFAULT_FIX_SIGNS' in src and "'fix_signs', True" not in src

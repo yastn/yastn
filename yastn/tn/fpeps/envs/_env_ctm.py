@@ -19,6 +19,7 @@ from typing import NamedTuple, Sequence, Union
 
 from ._env_contractions import identity_boundary, corner2x2, append_vec_tl, append_vec_br
 from ._env_ctm_SI_projectors import redistribute_due, si_proj_corners, SI_state
+from ._ctm_opts import CTMOpts, DEFAULT_FIX_SIGNS, make_ctm_opts
 from ._env_dataclasses import EnvCTM_local, EnvCTM_projectors
 from .._evolution import BondMetric
 from .._geometry import Site, Lattice, is_site
@@ -40,6 +41,11 @@ class CTMRG_out(NamedTuple):
 
 
 class EnvCTM():
+    #: Options used when a call supplies none; see :class:`CTMOpts`.
+    #: Class-level so that subclasses which do not chain __init__ still have it.
+    #: Supersedes the older, undocumented ``env.opts_svd`` attribute.
+    default_opts = None
+
 
     _default_corner_signature = (1, -1)
     #: Transfer tensors each move rewrites.  The c4v ``'d'`` move is empty:
@@ -565,7 +571,7 @@ class EnvCTM():
         l = leg0 if sU == leg0.s else leg1
         return {t: max(d + 10, int(d * 1.1)) for t, d in zip(l.t, l.D)}
 
-    def update_(env, opts_svd, moves='hv', method='2x2 corner', **kwargs):
+    def update_(env, opts_svd=None, moves=None, method=None, *, opts=None, **kwargs):
         r"""
         Perform one step of CTMRG update. Environment tensors are updated in place.
 
@@ -642,27 +648,18 @@ class EnvCTM():
         -------
         proj: Peps structure loaded with CTM projectors related to all lattice site.
         """
-        if 'tol' not in opts_svd and 'tol_block' not in opts_svd:
-            opts_svd['tol'] = 1e-14
-
-        checkpoint_move = kwargs.get('checkpoint_move', False)
-        if checkpoint_move == 'reentrant':
-            use_reentrant = True
-        elif checkpoint_move == 'nonreentrant':
-            use_reentrant = False
-        elif checkpoint_move:
-            # Any other truthy value would enter the checkpointing branch below
-            # with use_reentrant unbound.
-            raise YastnError(f"CTM update {checkpoint_move=} not recognized. "
-                             "Should be 'reentrant', 'nonreentrant', or False.")
+        opts = make_ctm_opts(opts if opts is not None else env.default_opts,
+                             opts_svd=opts_svd, moves=moves, method=method, **kwargs)
+        checkpoint_move = opts.checkpoint_move
+        use_reentrant = (checkpoint_move == 'reentrant')
         # Corners are rewritten by every move, to compare elemwise diff between the sweep we persist them here
         corners = env._corner_snapshot()
-        
-        for d in moves:
+
+        for d in opts.moves:
             if checkpoint_move:
                 def f_update_core_(move_d, loc_im, *inputs_t):
                     loc_env = type(env).from_dict(combine_data_and_meta(inputs_t, loc_im))
-                    loc_env._update_core_(move_d, opts_svd, method=method, **kwargs)
+                    loc_env._update_core_(move_d, opts)
                     out_data, out_meta = split_data_and_meta(loc_env.to_dict(level=0))
                     return out_meta, *out_data
 
@@ -681,14 +678,14 @@ class EnvCTM():
                 update_storage_(env.elem_diff, norm_diff(env_old, env.env, env._ts_updated_by_move[d]))
             else:
                 with nvtx_range(f"_update_core_ {d}"):
-                    env._update_core_(d, opts_svd, method=method, **kwargs)
+                    env._update_core_(d, opts)
         
         # update elemwise difference of corners between the sweep
         update_storage_(env.elem_diff, norm_diff(corners, env, ('tl', 'tr', 'bl', 'br')))
         return env
 
     
-    def _update_core_(env, move: str, opts_svd: dict, method: str, **kwargs):
+    def _update_core_(env, move: str, opts: CTMOpts):
         r"""
         Core function updating CTM environment tensors peforming specified move.
         """
@@ -719,7 +716,7 @@ class EnvCTM():
             # Projectors
             for site in sites_proj:
                 with nvtx_range(f"_update_projectors_ {site}"):
-                    env._update_projectors_(site, move, opts_svd, method, **kwargs)
+                    env._update_projectors_(site, move, opts)
             # fill (trivial) projectors on edges
             env._trivial_projectors_(move, sites_proj)
             #
@@ -732,12 +729,13 @@ class EnvCTM():
             # elemwise diff of the transfer tensors this move writes. During sweep, each transfer tensor is updated once
             # Under checkpointing this env is a throwaway copy whose elem_diff is
             # discarded, so update_ measures the transfer tensors itself instead.
-            if not kwargs.get('checkpoint_move', False):
+            if not opts.checkpoint_move:
                 update_storage_(env.elem_diff, norm_diff(env, env_tmp, ('t', 'l', 'b', 'r')))
             update_storage_(env, env_tmp)
 
 
-    def update_bond_(env, bond: tuple, opts_svd: dict | None = None, method: str = '2x2 corner', **kwargs):
+    def update_bond_(env, bond: tuple, opts_svd: dict | None = None, method: str | None = None,
+                     *, opts=None, **kwargs):
         r"""
         Update EnvCTM tensors related to a specific nearest-neighbor bond.
 
@@ -745,8 +743,14 @@ class EnvCTM():
         May require using a dictionary "D_block" specifying sectorial bond dimensions in
         opts_svd's passed to PEPS truncation and CTM.
         """
-        if opts_svd is None:
-            opts_svd = env.opts_svd
+        base = opts if opts is not None else env.default_opts
+        if base is None and opts_svd is None:
+            # back-compat: an opts_svd dict stashed on the environment
+            opts_svd = getattr(env, 'opts_svd', None)
+        if base is None and opts_svd is None:
+            raise YastnError(
+                "update_bond_ needs opts_svd, opts, or env.default_opts to be set.")
+        opts = make_ctm_opts(base, opts_svd=opts_svd, method=method, **kwargs)
 
         dirn = env.nn_bond_dirn(*bond)
         s0, s1 = bond if dirn in ['lr', 'tb'] else bond[::-1]
@@ -754,16 +758,16 @@ class EnvCTM():
         if dirn in 'lrl':
             env._update_env_(s0, env, move='r')
             env._update_env_(s1, env, move='l')
-            env._update_projectors_(s0, 't', opts_svd, method, **kwargs)
-            env._update_projectors_(env.nn_site(s0, d='t'), 'b', opts_svd, method, **kwargs)
+            env._update_projectors_(s0, 't', opts)
+            env._update_projectors_(env.nn_site(s0, d='t'), 'b', opts)
         else:  # 'tbt'
             env._update_env_(s0, env, move='b')
             env._update_env_(s1, env, move='t')
-            env._update_projectors_(s0, 'l', opts_svd, method, **kwargs)
-            env._update_projectors_(env.nn_site(s0, d='l'), 'r', opts_svd, method, **kwargs)
+            env._update_projectors_(s0, 'l', opts)
+            env._update_projectors_(env.nn_site(s0, d='l'), 'r', opts)
 
 
-    def _update_projectors_(env, site, move, opts_svd, method, **kwargs):
+    def _update_projectors_(env, site, move, opts: CTMOpts):
         r"""
         Calculate new projectors for CTM moves passing to specific method to create enlarged corners.
         """
@@ -772,16 +776,16 @@ class EnvCTM():
         if None in sites:
             return
 
+        method = opts.method
         if '1x2' in method or '2x1' in method or method == '1site':
-            return update_1x2_projectors_(env, *sites, move, opts_svd, **kwargs)
-        elif '2x2' in method or method == '2site':
-            return update_extended_2x2_projectors_(env, *sites, move, opts_svd, **kwargs)
-        else:
-            raise YastnError(f"CTM update {method=} not recognized. Should contain '1x2' or '2x2'")
+            return update_1x2_projectors_(env, *sites, move, opts)
+        # CTMOpts has already validated the name, so 2x2 is the only case left.
+        return update_extended_2x2_projectors_(env, *sites, move, opts)
 
 
     def _set_projector_pair_(env, site0, name0, site1, name1,
-                             r0: Union[Tensor,tuple[Tensor,Tensor]], r1: Union[Tensor,tuple[Tensor,Tensor]], opts_svd, **kwargs):
+                             r0: Union[Tensor,tuple[Tensor,Tensor]], r1: Union[Tensor,tuple[Tensor,Tensor]],
+                             opts: CTMOpts, k_block=None):
         """Update a projector pair and its recycled SI bases in place.
 
         Without SI, corner halves ``r0`` and ``r1`` are passed to :func:`proj_corners`.
@@ -791,36 +795,36 @@ class EnvCTM():
         The pair is anchored at ``(site0, name0)``, which also addresses the
         recycled bases in ``env.si_X`` / ``env.si_Y``.
         """
-        opts_si = kwargs.pop('opts_si', {})
-        if not opts_si.get('enabled', False):
-            p0, p1 = proj_corners(r0, r1, opts_svd=opts_svd, **kwargs)
+        svd_kwargs = opts.svd_kwargs() if k_block is None else opts.svd_kwargs(k_block=k_block)
+        if not opts.si_enabled:
+            p0, p1 = proj_corners(r0, r1, svd_kwargs, cutoff=opts.cutoff)
             setattr(env.proj[site0], name0, p0)
             setattr(env.proj[site1], name1, p1)
             return
+
+        opts_si = opts.opts_si
 
         if site0 in env._si_age_patch:
             si_states, key = env._si_age_patch[site0], name0
         else:
             si_states, key = env._si_age, (env.site2index(site0), name0)
         si_state = si_states.get(key, SI_state())
-        opts_si = dict(opts_si)
-        # sector redistribution
-        opts_si['redistribute_sectors'] = (opts_si.get('redistribute_sectors', False)
-                                           and redistribute_due(si_state.age, opts_si))
-        # optionally skip the SI update once the bases are already converged
-        if (opts_si.get('skip_SI_update', False)
-                and not redistribute_due(si_state.age, opts_si)
-                and si_state.error < opts_si.get('tol', 1e-3)):
-            opts_si.update({'niter': 0})
+        # Both decisions below combine user intent (options) with runtime state
+        # (this pair's age and last error), so they are derived here and passed
+        # explicitly -- rather than written back into the options dict.
+        due = redistribute_due(si_state.age, opts_si)
+        redistribute = opts_si.redistribute_sectors and due
+        skip = opts_si.skip_SI_update and not due and si_state.error < opts_si.tol
+        niter = 0 if skip else opts_si.niter
         with nvtx_range("si_proj_corners"):
-            p0, p1, X, Y, info = si_proj_corners(r0, r1, opts_svd, opts_si,
+            p0, p1, X, Y, info = si_proj_corners(r0, r1, svd_kwargs, opts_si,
                 X=getattr(env.si_X[site0], name0), Y=getattr(env.si_Y[site0], name0),
-                cutoff=kwargs.get('cutoff', 0))
-        if opts_si.get('niter', 5) == 0: # keep previous error if no SI iterations were performed 
+                cutoff=opts.cutoff, redistribute=redistribute, niter=niter)
+        if niter == 0:  # keep previous error if no SI iterations were performed
             info.update({'error': si_state.error})
         setattr(env.proj[site0], name0, p0)
         setattr(env.proj[site1], name1, p1)
-        recycle_grad = opts_si.get('recycle_grad', False)
+        recycle_grad = opts_si.recycle_grad
         setattr(env.si_X[site0], name0, X if recycle_grad else X.detach())
         setattr(env.si_Y[site0], name0, Y if recycle_grad else Y.detach())
         # The age accumulates; niter and error describe this update alone.
@@ -1030,7 +1034,8 @@ class EnvCTM():
                     dict_bond_dimension[site, corners_id[ii]].append(temp_D)
         return [dict_bond_dimension, dict_symmetric_sector]
 
-    def iterate_(env, opts_svd=None, moves='hv', method='2x2 corner', max_sweeps=1, iterator=False, corner_tol=None, **kwargs):
+    def iterate_(env, opts_svd=None, moves=None, method=None, max_sweeps=None,
+                 iterator=False, corner_tol=None, *, opts=None, **kwargs):
         r"""
         Perform CTMRG updates :meth:`yastn.tn.fpeps.EnvCTM.update_` until convergence.
         Convergence can be measured based on singular values of CTM environment corner tensors.
@@ -1094,32 +1099,35 @@ class EnvCTM():
                 * ``max_D`` largest bond dimension of environment tensors virtual legs.
                 * ``converged`` whether convergence based on ``corner_tol`` has been reached.
         """
-        kwargs["iterator_step"] = kwargs.get("iterator_step", int(iterator))
-        if ("checkpoint_move" in kwargs) and ("torch" in env.config.backend.BACKEND_ID):
-            assert kwargs["checkpoint_move"] in ['reentrant', 'nonreentrant', False], f"Invalid choice for {kwargs['checkpoint_move']}"
-        tmp = env._ctmrg_iterator_(opts_svd=opts_svd, moves=moves, method=method, max_sweeps=max_sweeps, corner_tol=corner_tol, **kwargs)
-        return tmp if kwargs["iterator_step"] else next(tmp)
+        opts = make_ctm_opts(opts if opts is not None else env.default_opts,
+                             opts_svd=opts_svd, moves=moves, method=method,
+                             max_sweeps=max_sweeps, iterator=iterator,
+                             corner_tol=corner_tol, **kwargs)
+        tmp = env._ctmrg_iterator_(opts)
+        return tmp if opts.iterator_step else next(tmp)
 
     ctmrg_ = iterate_   #  For backward compatibility, allow using EnvCtm.ctmrg_() instead of EnvCtm.iterate_().
 
-    def _ctmrg_iterator_(env, opts_svd, moves, method, max_sweeps, corner_tol, **kwargs):
+    def _ctmrg_iterator_(env, opts: CTMOpts):
         """ Generator for ctmrg_. """
-        iterator_step = kwargs.get("iterator_step", 0)
+        iterator_step = opts.iterator_step
+        # A custom check replaces the numeric corner_tol comparison.
+        check = opts.conv_check if opts.conv_check is not None else opts.corner_tol
         max_dsv, converged, history = None, False, []
-        for sweep in range(1, max_sweeps + 1):
+        for sweep in range(1, opts.max_sweeps + 1):
             with nvtx_range("update_"):
-                env.update_(opts_svd=opts_svd, moves=moves, method=method, **kwargs)
+                env.update_(opts=opts)
 
             # use default CTM convergence check
             max_de = env.max_elem_diff()
-            if corner_tol is not None:
-                converged, max_dsv, history = env.ctm_conv_corner_spec(history, corner_tol)
+            if check is not None:
+                converged, max_dsv, history = env.ctm_conv_corner_spec(history, check)
                 logging.info(f'Sweep = {sweep:03d}; max_diff_corner_singular_values = {max_dsv:0.2e};'
                              f' max_elem_modulus_diff = {max_de:0.2e}')
                 if converged:
                     break
 
-            if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
+            if iterator_step and sweep % iterator_step == 0 and sweep < opts.max_sweeps:
                 yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_de=max_de, max_D=env.max_D(), converged=converged)
         yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_de=max_de, max_D=env.max_D(), converged=converged)
 
@@ -1263,7 +1271,7 @@ _for_trivial = (('hlt', 'r', 'l', 'tl', 2, 0, 0),
                 ('vbr', 't', 'b', 'br', 0, 3, 1))
 
 
-def update_extended_2x2_projectors_(env, tl: Tensor, tr: Tensor, bl: Tensor, br: Tensor, move, opts_svd, **kwargs):
+def update_extended_2x2_projectors_(env, tl: Tensor, tr: Tensor, bl: Tensor, br: Tensor, move, opts: CTMOpts):
     r"""
     Calculate new projectors for CTM moves from 4x4 extended corners.
     
@@ -1274,12 +1282,14 @@ def update_extended_2x2_projectors_(env, tl: Tensor, tr: Tensor, bl: Tensor, br:
     avoiding contraction of the corners into halves.
     """
     psi = env.psi
-    use_qr = kwargs.get("use_qr", True)
-    use_si = kwargs.get("opts_si",{}).get('enabled', False)
-    implicit_halves = use_si and not use_qr
-    kwargs["profiling_mode"]= env.profiling_mode
+    use_qr = opts.use_qr
+    implicit_halves = opts.si_enabled and not use_qr
     psh = env.proj
-    svd_predict_spec= lambda s0,p0,s1,p1,sign: opts_svd.get('k_block', opts_svd.get('D_block', float('inf'))) \
+    # Predicted per-sector rank for the partial-SVD solvers. Returned to the
+    # caller rather than written into opts_svd, so one pair's prediction can
+    # neither reach the next pair nor survive into the next sweep.
+    _fallback = opts.opts_svd.get('k_block', opts.opts_svd.get('D_block', float('inf')))
+    svd_predict_spec= lambda s0,p0,s1,p1,sign: _fallback \
         if psh is None or (getattr(psh[s0],p0) is None or getattr(psh[s1],p1) is None) else \
         env._partial_svd_predict_spec(getattr(psh[s0],p0).get_legs(-1), getattr(psh[s1],p1).get_legs(-1), sign)
 
@@ -1317,8 +1327,8 @@ def update_extended_2x2_projectors_(env, tl: Tensor, tr: Tensor, bl: Tensor, br:
         with nvtx_range(f"qr 2x2proj {move}"):
             r_t = h1 if implicit_halves else (qr(h1, axes=(0, 1))[1] if use_qr else h1)
             r_b = (h2[1].T, h2[0].T) if implicit_halves else (qr(h2, axes=(1, 0))[1] if use_qr else h2.T)
-        opts_svd["k_block"]= svd_predict_spec(tr, "hrb", br, "hrt", (r_t[-1] if implicit_halves else r_t).s[1])
-        env._set_projector_pair_(tr, 'hrb', br, 'hrt', r_t, r_b, opts_svd, **kwargs)
+        k_block = svd_predict_spec(tr, "hrb", br, "hrt", (r_t[-1] if implicit_halves else r_t).s[1])
+        env._set_projector_pair_(tr, 'hrb', br, 'hrt', r_t, r_b, opts, k_block=k_block)
 
     if any(x in move for x in 'lh'):
         sr = psi[tr].get_shape(axes=2)
@@ -1345,8 +1355,8 @@ def update_extended_2x2_projectors_(env, tl: Tensor, tr: Tensor, bl: Tensor, br:
         with nvtx_range(f"qr 2x2proj {move}"):
             r_t = (h1[1].T, h1[0].T) if implicit_halves else (qr(h1, axes=(1, 0))[1] if use_qr else h1.T)
             r_b = h2 if implicit_halves else (qr(h2, axes=(0, 1))[1] if use_qr else h2)
-        opts_svd["k_block"]= svd_predict_spec(tl, "hlb", bl, "hlt", (r_t[-1] if implicit_halves else r_t).s[1])
-        env._set_projector_pair_(tl, 'hlb', bl, 'hlt', r_t, r_b, opts_svd, **kwargs)
+        k_block = svd_predict_spec(tl, "hlb", bl, "hlt", (r_t[-1] if implicit_halves else r_t).s[1])
+        env._set_projector_pair_(tl, 'hlb', bl, 'hlt', r_t, r_b, opts, k_block=k_block)
 
     if any(x in move for x in 'tbv'):
         cor_ll = (cor_bl, cor_tl) if implicit_halves else cor_bl @ cor_tl  # l(bottom) l(top)
@@ -1377,8 +1387,8 @@ def update_extended_2x2_projectors_(env, tl: Tensor, tr: Tensor, bl: Tensor, br:
         with nvtx_range(f"qr 2x2proj {move}"):
             r_l = h1 if implicit_halves else (qr(h1, axes=(0, 1))[1] if use_qr else h1)
             r_r = (h2[1].T, h2[0].T) if implicit_halves else (qr(h2, axes=(1, 0))[1] if use_qr else h2.T)
-        opts_svd["k_block"]= svd_predict_spec(tl, "vtr", tr, "vtl", (r_l[-1] if implicit_halves else r_l).s[1])
-        env._set_projector_pair_(tl, 'vtr', tr, 'vtl', r_l, r_r, opts_svd, **kwargs)
+        k_block = svd_predict_spec(tl, "vtr", tr, "vtl", (r_l[-1] if implicit_halves else r_l).s[1])
+        env._set_projector_pair_(tl, 'vtr', tr, 'vtl', r_l, r_r, opts, k_block=k_block)
 
     if any(x in move for x in 'bv'):
         st = psi[tl].get_shape(axes=3)
@@ -1405,11 +1415,11 @@ def update_extended_2x2_projectors_(env, tl: Tensor, tr: Tensor, bl: Tensor, br:
         with nvtx_range(f"qr 2x2proj {move}"):
             r_l = (h1[1].T, h1[0].T) if implicit_halves else (qr(h1, axes=(1, 0))[1] if use_qr else h1.T)
             r_r = h2 if implicit_halves else (qr(h2, axes=(0, 1))[1] if use_qr else h2)
-        opts_svd["k_block"]= svd_predict_spec(bl, "vbr", br, "vbl", (r_l[-1] if implicit_halves else r_l).s[1])
-        env._set_projector_pair_(bl, 'vbr', br, 'vbl', r_l, r_r, opts_svd, **kwargs)
+        k_block = svd_predict_spec(bl, "vbr", br, "vbl", (r_l[-1] if implicit_halves else r_l).s[1])
+        env._set_projector_pair_(bl, 'vbr', br, 'vbl', r_l, r_r, opts, k_block=k_block)
 
 
-def update_1x2_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwargs):
+def update_1x2_projectors_(env, tl, tr, bl, br, move, opts: CTMOpts):
     r"""
     Calculate new projectors for CTM moves from 4x2 extended corners.
     """
@@ -1422,10 +1432,10 @@ def update_1x2_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwargs):
         r_br, r_bl = regularize_1site_corners(cor_br, cor_bl)
 
     if move in 'lh':
-        env._set_projector_pair_(tr, 'hrb', br, 'hrt', r_tr, r_br, opts_svd, **kwargs)
+        env._set_projector_pair_(tr, 'hrb', br, 'hrt', r_tr, r_br, opts)
 
     if move in 'rh':
-        env._set_projector_pair_(tl, 'hlb', bl, 'hlt', r_tl, r_bl, opts_svd, **kwargs)
+        env._set_projector_pair_(tl, 'hlb', bl, 'hlt', r_tl, r_bl, opts)
 
     if move in 'tbv':
         cor_bl = (env[br].bl @ env[br].l).fuse_legs(axes=((0, 1), 2))
@@ -1436,10 +1446,10 @@ def update_1x2_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwargs):
         r_tr, r_br = regularize_1site_corners(cor_tr, cor_br)
 
     if move in 'tv':
-        env._set_projector_pair_(tl, 'vtr', tr, 'vtl', r_tl, r_tr, opts_svd, **kwargs)
+        env._set_projector_pair_(tl, 'vtr', tr, 'vtl', r_tl, r_tr, opts)
 
     if move in 'bv':
-        env._set_projector_pair_(bl, 'vbr', br, 'vbl', r_bl, r_br, opts_svd, **kwargs)
+        env._set_projector_pair_(bl, 'vbr', br, 'vbl', r_bl, r_br, opts)
 
 
 def regularize_1site_corners(cor_0, cor_1):
@@ -1453,14 +1463,21 @@ def regularize_1site_corners(cor_0, cor_1):
     return r_0, r_1
 
 
-def proj_corners(r0: Tensor, r1: Tensor, opts_svd, **kwargs)-> tuple[Tensor, Tensor]:
-    r""" Projectors in between r0 @ r1.T corners, from full SVD. """
+def proj_corners(r0: Tensor, r1: Tensor, opts_svd, cutoff=0, **kwargs)-> tuple[Tensor, Tensor]:
+    r""" Projectors in between r0 @ r1.T corners, from full SVD.
+
+    ``opts_svd`` are the keyword arguments of
+    :meth:`yastn.linalg.svd_with_truncation`; build them with
+    :meth:`CTMOpts.svd_kwargs` rather than by hand.
+
+    The fix_signs default is re-applied here for callers that still pass a raw
+    dict -- the distributed path and the tests that exercise this function
+    directly. Once those go through CTMOpts.svd_kwargs the line can go.
+    """
     # TODO: r1 matrix is defined as (right, left)
     opts_svd = dict(opts_svd)
-    opts_svd['fix_signs'] = opts_svd.get('fix_signs', True)
-    verbosity = opts_svd.get('verbosity', 0)
-    # only verbosity from opts_svd is to be passed down to svd_with_truncation
-    kwargs.pop('verbosity', None)
+    opts_svd.setdefault('fix_signs', DEFAULT_FIX_SIGNS)
+    verbosity = opts_svd.get('verbosity', 0)  # read for the log below; passed through as-is
 
     rr = tensordot(r0, r1, axes=(1, 1))
     with nvtx_range("svd_with_truncation"):
@@ -1471,7 +1488,6 @@ def proj_corners(r0: Tensor, r1: Tensor, opts_svd, **kwargs)-> tuple[Tensor, Ten
         fname = sys._getframe().f_code.co_name
         logger.info(f"{fname} S {s.get_legs(0)}")
 
-    cutoff = kwargs.get('cutoff', 0)
     rs = s.rsqrt(cutoff=cutoff)
     p0 = tensordot(r1, (rs @ v).conj(), axes=(0, 1)).unfuse_legs(axes=0)
     p1 = tensordot(r0, (u @ rs).conj(), axes=(0, 0)).unfuse_legs(axes=0)

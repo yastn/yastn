@@ -285,7 +285,11 @@ def _update_core_D_(ctmrg_mp_context, env, move: str, opts_svd: dict, **kwargs):
 
     corner_sites= lambda site: tuple(env.nn_site(site, d=d) for d in ((0, 0), (0, 1), (1, 0), (1, 1)))
 
-    svd_predict_spec= lambda s0,p0,s1,p1,sign: opts_svd.get('D_block', float('inf')) \
+    # Predicted per-sector rank for the partial-SVD solvers, mirroring the serial
+    # path in _env_ctm.update_extended_2x2_projectors_: it feeds 'k_block' (how
+    # many triples to solve for) and never 'D_block' (the truncation target).
+    _fallback = opts_svd.get('k_block', opts_svd.get('D_block', float('inf')))
+    svd_predict_spec= lambda s0,p0,s1,p1,sign: _fallback \
         if env.proj is None or (getattr(env.proj[s0],p0) is None or getattr(env.proj[s1],p1) is None) else \
         env._partial_svd_predict_spec(getattr(env.proj[s0],p0).get_legs(-1), getattr(env.proj[s1],p1).get_legs(-1), sign)
 
@@ -320,24 +324,30 @@ def _update_core_D_(ctmrg_mp_context, env, move: str, opts_svd: dict, **kwargs):
             tl,tr,bl,br= corner_sites(site)
 
             h1_d, h2_d = h1.to_dict(level=1), h2.to_dict(level=1)
+            # Each task carries its own opts_svd. The shared dict must not be
+            # mutated between the two put()s, because mp.Queue pickles on a
+            # background feeder thread.
+            def _task_opts(k_block):
+                return {**opts_svd, "k_block": k_block}
+
             if move in 'h':
-                opts_svd["D_blocks"]= svd_predict_spec(tr, "hrb", br, "hrt", h1.s[1])
                 task_queue.put( ("projectors_move_MP_",
                                  ( i, site, 'rh', h1_d, h2_d,
-                                   env.config.default_device, opts_svd), kwargs) )
-                opts_svd["D_blocks"]= svd_predict_spec(tl, "hlb", bl, "hlt", h1.s[0])
+                                   env.config.default_device,
+                                   _task_opts(svd_predict_spec(tr, "hrb", br, "hrt", h1.s[1]))), kwargs) )
                 task_queue.put( ("projectors_move_MP_",
                                  ( i, site, 'lh', h1_d, h2_d,
-                                   env.config.default_device, opts_svd), kwargs) )
+                                   env.config.default_device,
+                                   _task_opts(svd_predict_spec(tl, "hlb", bl, "hlt", h1.s[0]))), kwargs) )
             elif move in 'v':
-                opts_svd["D_block"]= svd_predict_spec(tl, "vtr", tr, "vtl", h1.s[1])
                 task_queue.put( ("projectors_move_MP_",
                                  ( i, site, 'tv', h1_d, h2_d,
-                                   env.config.default_device, opts_svd), kwargs) )
-                opts_svd["D_block"]= svd_predict_spec(bl, "vbr", br, "vbl", h1.s[0])
+                                   env.config.default_device,
+                                   _task_opts(svd_predict_spec(tl, "vtr", tr, "vtl", h1.s[1]))), kwargs) )
                 task_queue.put( ("projectors_move_MP_",
                                  ( i, site, 'bv', h1_d, h2_d,
-                                   env.config.default_device, opts_svd), kwargs) )
+                                   env.config.default_device,
+                                   _task_opts(svd_predict_spec(bl, "vbr", br, "vbl", h1.s[0]))), kwargs) )
             del h1, h2
 
         for _ in range(len(sites_proj)*2):

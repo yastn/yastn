@@ -35,6 +35,7 @@ from ....tensor import Tensor, YastnError, Leg, LegMeta, diag, tensordot, qr, tr
 from ....tensor._auxiliary import _struct
 from ....tensor._contractions import _match_legs_tensordot
 from ...._profile import nsys_profile, nvtx_range
+from ._ctm_opts import SIOpts, SI_TRUNCATION_KEYS, make_si_opts
 
 
 #: Smallest singular value, relative to the largest, that the SI convergence
@@ -190,9 +191,24 @@ class SI_state(NamedTuple):
     bases: str = 'reused'
 
 
+def _as_si_opts(opts_si) -> SIOpts:
+    """Accept a plain dict at the module boundary; use SIOpts within.
+
+    Every default of the subspace iteration lives on :class:`SIOpts`, so the
+    functions below read attributes and never re-default a key. A dict is
+    normalized here -- which is also where the legacy spellings
+    (``asvr_iterations``, ``refinement='cwo'/'asvr'/'rds'``) are resolved.
+    """
+    if isinstance(opts_si, SIOpts):
+        return opts_si
+    if opts_si is None:
+        return SIOpts()
+    return make_si_opts(**opts_si)
+
+
 def _si_rank(opts_svd, opts_si):
     """Total size of an SI basis, including oversampling."""
-    oversampling = opts_si.get('oversampling', 5)
+    oversampling = _as_si_opts(opts_si).oversampling
     D_total = opts_svd.get('D_total')
     if isinstance(D_total, int):
         return D_total + oversampling
@@ -552,7 +568,7 @@ def _distribute_si_rank_proportionally(sector_weights, rank):
 
 def _si_refinement_adaptive_spectrum(r0, r1, X, Y, opts_svd, opts_si):
     """Return a stable SI charge mapping estimated from dominant spectra."""
-    iterations = opts_si.get('adaptive_spectrum_iterations', opts_si.get('asvr_iterations', 5))
+    iterations = _as_si_opts(opts_si).adaptive_spectrum_iterations
     chip = _si_rank(opts_svd, opts_si)
     sector_capacity = _ctm_shared_sector_capacity(r0, r1)
     charge_mapping = dict(X.get_legs(1).tD)
@@ -654,23 +670,14 @@ def si_refinement(r0, r1, X, Y, opts_svd, opts_si):
     """
     r0, r1 = _Half(r0), _Half(r1)
     _validate_ctm_corner_pair(r0, r1)
-    refinement = opts_si.get('refinement', 'per_sector_oversampling')
-    refinements = {
+    opts_si = _as_si_opts(opts_si)
+    # SIOpts validates the name and resolves the former acronyms, so the table
+    # below only ever needs the canonical keys.
+    refine = {
         'per_sector_oversampling': _si_refinement_per_sector_oversampling,
         'adaptive_spectrum': _si_refinement_adaptive_spectrum,
         'sector_dimensions': _si_refinement_sector_dimensions,
-        # The former acronyms, kept so that a stored option still dispatches.
-        'cwo': _si_refinement_per_sector_oversampling,
-        'asvr': _si_refinement_adaptive_spectrum,
-        'rds': _si_refinement_sector_dimensions,
-    }
-    try:
-        refine = refinements[refinement]
-    except KeyError:
-        raise YastnError(
-            "Unknown SI refinement method "
-            f"{refinement!r}; expected 'per_sector_oversampling', "
-            "'adaptive_spectrum', or 'sector_dimensions'.") from None
+    }[opts_si.refinement]
 
     sector_capacity = _ctm_shared_sector_capacity(r0, r1)
     target_rank = min(_si_rank(opts_svd, opts_si),
@@ -1072,7 +1079,8 @@ def _recycle_si_bases(r0, r1, X, Y, charge_mapping):
 
 
 @nsys_profile("_si_reduced_svd")
-def _si_reduced_svd(r0, r1, X, Y, opts_si, spec_only=False, rank=None, cutoff=0):
+def _si_reduced_svd(r0, r1, X, Y, opts_si, spec_only=False, rank=None, cutoff=0,
+                    niter=None):
     r"""Subspace-iterate the bases and  ``rho = Y A X``.
 
     Halves ``r0`` and ``r1`` are :class:`_Half` instances, built by the caller.
@@ -1083,8 +1091,12 @@ def _si_reduced_svd(r0, r1, X, Y, opts_si, spec_only=False, rank=None, cutoff=0)
     of ``opts_si``) and the subspace ``error`` they reached. 
     """
     _validate_ctm_corner_pair(r0, r1)
-    niter = opts_si.get('niter', 5)
-    tol = opts_si.get('tol', 1e-3)
+    opts_si = _as_si_opts(opts_si)
+    # ``niter`` may be overridden per call -- notably to 0, when the caller has
+    # determined the bases are already converged. That decision depends on
+    # runtime state (SI_state.age / .error) and so cannot live in the options.
+    niter = opts_si.niter if niter is None else niter
+    tol = opts_si.tol
     X_old, Yh_old = X, Y.H
     # With niter=0 the bases are used as they come in; no update is made and no
     # subspace error is available.
@@ -1135,7 +1147,7 @@ def _si_spectrum(r0, r1, X, Y, opts_si):
 
 @nsys_profile("si_projector_svd")
 def si_projector_svd(r0, r1, X, Y, opts_svd, opts_si,
-                     return_spectrum=False, cutoff=0):
+                     return_spectrum=False, cutoff=0, niter=None):
     """Approximate the SVD of ``r0 @ r1.T`` using recycled subspaces.
 
     Each half is either a tensor or a pair of enlarged corners; see :class:`_Half`.
@@ -1153,20 +1165,20 @@ def si_projector_svd(r0, r1, X, Y, opts_svd, opts_si,
     rank = _si_truncation_rank(opts_svd)
     if return_spectrum:
         res = _si_reduced_svd(r0, r1, X, Y, opts_si, spec_only=True,
-                              rank=rank, cutoff=cutoff)
+                              rank=rank, cutoff=cutoff, niter=niter)
         return None, res[3], None, None, None, res[5]
 
     X, Y, us, sall, vs, info = _si_reduced_svd(r0, r1, X, Y, opts_si,
-                                               rank=rank, cutoff=cutoff)
+                                               rank=rank, cutoff=cutoff, niter=niter)
 
     X_new = X @ vs.H
     Y_new = us.H @ Y
     u = Y_new.H #Y.H @ us
     v = X_new.H #vs @ X.H
 
-    trunc_opts = {k: opts_svd[k] for k in (
-        'tol', 'tol_block', 'D_block', 'D_total', 'largest_gap',
-        'eps_multiplet', 'hermitian', 'mask_f') if k in opts_svd}
+    # The SI path truncates on a narrower set than the full opts_svd; the set
+    # is named once, in _ctm_opts, so the divergence stays reviewable.
+    trunc_opts = {k: opts_svd[k] for k in SI_TRUNCATION_KEYS if k in opts_svd}
     mask = truncation_mask(sall, **trunc_opts)
     u, s, v = mask.apply_mask(u, sall, v, axes=(-1, 0, 0))
 
@@ -1185,14 +1197,15 @@ def redistribute_due(age, opts_si):
     the conditions for skipping an SI update under ``skip_SI_update``, so that
     a pair inside the window is never skipped.
     """
-    warmup = opts_si.get('warmup', 5)
-    frequency = opts_si.get('redistribute_frequency', 0)
+    opts_si = _as_si_opts(opts_si)
+    warmup, frequency = opts_si.warmup, opts_si.redistribute_frequency
     return (age <= warmup
             or (frequency > 0 and age > warmup
                 and (age - warmup) % frequency == 0))
 
 
-def si_proj_corners(r0, r1, opts_svd, opts_si, X=None, Y=None, cutoff=0):
+def si_proj_corners(r0, r1, opts_svd, opts_si, X=None, Y=None, cutoff=0,
+                    redistribute=None, niter=None):
     r"""Truncated SVD of ``r0 @ r1.T`` from recycled subspace-iteration bases.
 
     Returns the projector pair ``p0, p1`` of the truncated decomposition,
@@ -1202,10 +1215,19 @@ def si_proj_corners(r0, r1, opts_svd, opts_si, X=None, Y=None, cutoff=0):
 
     Bases that no longer fit the corners are first carried onto the new row
     legs by :func:`si_rebase_bases`, and only redrawn from noise when that is
-    not possible. ``opts_si['rebase'] = False`` skips the attempt.
+    not possible. ``opts_si.rebase = False`` skips the attempt.
 
     Each half is either a tensor or a pair of enlarged corners; see :class:`_Half`.
+
+    ``redistribute`` and ``niter`` override the corresponding options for this
+    one call. Both decisions depend on the pair's accumulated ``SI_state``,
+    which is runtime state rather than user intent, so the caller derives them
+    and passes them explicitly rather than rewriting the options.  They default
+    to ``opts_si.redistribute_sectors`` and ``opts_si.niter``.
     """
+    opts_si = _as_si_opts(opts_si)
+    if redistribute is None:
+        redistribute = opts_si.redistribute_sectors
     r0, r1 = _Half(r0), _Half(r1)
     _validate_ctm_corner_pair(r0, r1)
     # An eye-initialized CTM starts below its requested chi and grows over
@@ -1219,7 +1241,7 @@ def si_proj_corners(r0, r1, opts_svd, opts_si, X=None, Y=None, cutoff=0):
     if not si_bases_compatible(r0, r1, X, Y):
         # Corner row legs that changed do not invalidate what the bases
         # describe, only the space they are written in; see si_rebase_bases.
-        if opts_si.get('rebase', True):
+        if opts_si.rebase:
             X_rebased, Y_rebased = si_rebase_bases(r0, r1, X, Y)
             if si_bases_compatible(r0, r1, X_rebased, Y_rebased):
                 X, Y, bases = X_rebased, Y_rebased, 'rebased'
@@ -1234,10 +1256,10 @@ def si_proj_corners(r0, r1, opts_svd, opts_si, X=None, Y=None, cutoff=0):
             X, Y = _recycle_si_bases(
                 r0, r1, X, Y,
                 _distribute_si_rank_with_capacity(capacity, rank))
-    if opts_si.get('redistribute_sectors', False):
+    if redistribute:
         X, Y = si_refinement(r0, r1, X, Y, opts_svd, opts_si)
 
-    res= si_projector_svd(r0, r1, X, Y, opts_svd, opts_si, cutoff=cutoff)
+    res= si_projector_svd(r0, r1, X, Y, opts_svd, opts_si, cutoff=cutoff, niter=niter)
     u, s, v, X_new, Y_new, info= res
     info["bases"] = bases
 
