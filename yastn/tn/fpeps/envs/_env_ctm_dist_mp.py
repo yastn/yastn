@@ -221,6 +221,9 @@ def update_D_(ctmrg_mp_context, env, opts_svd, moves='hv', method='2x2', **kwarg
                     use_reentrant = True
                 elif checkpoint_move == 'nonreentrant':
                     use_reentrant = False
+                else:
+                    raise YastnError(f"CTM update {checkpoint_move=} not recognized. "
+                                     "Should be 'reentrant', 'nonreentrant', or False.")
                 checkpoint_F = env.config.backend.checkpoint
                 out_meta, *out_data = checkpoint_F(f_update_core_, d, inputs_meta, *inputs_t, \
                                     **{'use_reentrant': use_reentrant, 'debug': False})

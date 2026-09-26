@@ -274,7 +274,7 @@ class EnvCTM():
         """
         if 'dict_ver' not in d:
             psi = PEPS_CLASSES["Peps"].from_dict(d['psi'], config)
-            env = EnvCTM(psi, init=None)
+            env = cls(psi, init=None)
             for site in env.sites():
                 for dirn, v in d['data'][site].items():
                     setattr(env[site], dirn, Tensor.from_dict(v, config))
@@ -603,7 +603,7 @@ class EnvCTM():
             Enable recycled subspace-iteration projectors with ``{'enabled': True}``.
             Supported options are
                 * ``oversampling`` (default 5),
-                * ``niter`` (default 1): Number of subspace iterations when adjusting range-finders,
+                * ``niter`` (default 5): Number of subspace iterations when adjusting range-finders,
                 * ``tol`` (default 1e-3): Desired subspace error of range-finders,
                 * ``warmup`` (default 5 projector updates),
                 * ``redistribute_sectors`` (default False): Reallocate the SI rank
@@ -613,6 +613,9 @@ class EnvCTM():
                 * ``refinement`` (``'per_sector_oversampling'`` by default, or
                     ``'adaptive_spectrum'``/``'sector_dimensions'``): Algorithm
                     for subspace sector refinement, see :func:`si_refinement`,
+                * ``adaptive_spectrum_iterations`` (default 5): Number of refinement
+                    passes used by ``refinement='adaptive_spectrum'``; ignored by the
+                    other refinements,
                 * ``skip_SI_update`` (default False): Skip the subspace iteration
                     altogether on an update that is past ``warmup``, outside the
                     redistribution schedule, and whose bases already report an
@@ -647,6 +650,11 @@ class EnvCTM():
             use_reentrant = True
         elif checkpoint_move == 'nonreentrant':
             use_reentrant = False
+        elif checkpoint_move:
+            # Any other truthy value would enter the checkpointing branch below
+            # with use_reentrant unbound.
+            raise YastnError(f"CTM update {checkpoint_move=} not recognized. "
+                             "Should be 'reentrant', 'nonreentrant', or False.")
         # Corners are rewritten by every move, to compare elemwise diff between the sweep we persist them here
         corners = env._corner_snapshot()
         
@@ -716,7 +724,7 @@ class EnvCTM():
             env._trivial_projectors_(move, sites_proj)
             #
             # Update move
-            env_tmp = EnvCTM(env.psi, init=None)  # empty environments
+            env_tmp = type(env)(env.psi, init=None)  # empty environments
             for site in sites:
                 with nvtx_range(f"_update_env_ {site}"):
                     env_tmp._update_env_(site, env, move)
@@ -1089,7 +1097,6 @@ class EnvCTM():
         kwargs["iterator_step"] = kwargs.get("iterator_step", int(iterator))
         if ("checkpoint_move" in kwargs) and ("torch" in env.config.backend.BACKEND_ID):
             assert kwargs["checkpoint_move"] in ['reentrant', 'nonreentrant', False], f"Invalid choice for {kwargs['checkpoint_move']}"
-        kwargs["iterator_step"] = kwargs.get("iterator_step", int(iterator))
         tmp = env._ctmrg_iterator_(opts_svd=opts_svd, moves=moves, method=method, max_sweeps=max_sweeps, corner_tol=corner_tol, **kwargs)
         return tmp if kwargs["iterator_step"] else next(tmp)
 
@@ -1114,14 +1121,16 @@ class EnvCTM():
 
             if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
                 yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_de=max_de, max_D=env.max_D(), converged=converged)
-        yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
+        yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_de=max_de, max_D=env.max_D(), converged=converged)
 
     def ctm_conv_corner_spec(env: EnvCTM,
-                             history: Sequence[dict[tuple[Site, str], Tensor]]=[],
+                             history: None | Sequence[dict[tuple[Site, str], Tensor]]=None,
                              corner_tol: None | float=1.0e-8) -> tuple[bool, float, Sequence[dict[tuple[Site, str], Tensor]]]:
         """
         Evaluate convergence of CTM by computing the difference of environment corner spectra between consecutive CTM steps.
         """
+        if history is None:  # a mutable default would be shared across calls
+            history = []
         if hasattr(corner_tol, '__call__'):
             converged, history = corner_tol(env, history)
             max_dsv = 0
