@@ -335,8 +335,11 @@ def svd(data, meta, sizes, fullrank_uv=False, ad_decomp_reg=1.0e-12, diagnostics
 def svdvals(data, meta, sizeS, **kwargss):
     real_dtype = data.real.dtype if data.is_complex() else data.dtype
     Sdata = torch.zeros((sizeS,), dtype=real_dtype, device=data.device)
+    
+    _loc_svd_vals= lambda block: torch.linalg.svdvals(block.cpu()).to(block.device) if block.device.type == 'mps' else torch.linalg.svdvals(block)
+    
     for (slo, Do, _, _, slS, _, _) in meta:
-        Sdata[slice(*slS)] = torch.linalg.svdvals(data[slice(*slo)].view(tuple(Do)))
+        Sdata[slice(*slS)] = _loc_svd_vals(data[slice(*slo)].view(tuple(Do)))
     return Sdata
 
 
@@ -390,7 +393,11 @@ def eigh(data, meta=None, sizes=(1, 1), order_by_magnitude=False, ad_decomp_reg=
             reg = torch.as_tensor(ad_decomp_reg, dtype=real_dtype, device=data.device)
             f = lambda x: SYMEIG.apply(x, reg)
         else:
-            f = lambda x: torch.linalg.eigh(x)
+            def f(x):
+                if x.device.type == 'mps':
+                    S, U = torch.linalg.eigh(x.cpu())
+                    return S.to(x.device), U.to(x.device)
+                return torch.linalg.eigh(x)
         for slo, Do, slU, DU, slS in meta:
             S, U = f(data[slice(*slo)].view(tuple(Do)))
             Sdata[slice(*slS)] = S
@@ -493,8 +500,15 @@ def eigvals(data, meta, sizeS, **kwargs):
 def qr(data, meta, sizes):
     Qdata = torch.zeros((sizes[0],), dtype=data.dtype, device=data.device)
     Rdata = torch.zeros((sizes[1],), dtype=data.dtype, device=data.device)
+    
+    def _loc_qr(block):
+        if block.device.type == 'mps':
+            Q, R = torch.linalg.qr(block.cpu())
+            return Q.to(block.device), R.to(block.device)
+        return torch.linalg.qr(block)
+    
     for slo, Do, slQ, DQ, slR, DR in meta:
-        Q, R = torch.linalg.qr(data[slice(*slo)].view(tuple(Do)))
+        Q, R = _loc_qr(data[slice(*slo)].view(tuple(Do)))
         sR = torch.sign(real(R.diag()))
         sR[sR == 0] = 1
         Qdata[slice(*slQ)].view(tuple(DQ))[:] = Q * sR  # positive diag of R
@@ -503,6 +517,16 @@ def qr(data, meta, sizes):
 
 
 def pinv(A, rcond=None, hermitian=False, out=None, atol=None, rtol=None):
+    if A.device.type == 'mps':
+        result = torch.linalg.pinv(
+            A.cpu(), atol=atol,
+            rtol=rtol if rtol is not None else rcond,
+            hermitian=hermitian,
+        ).to(A.device)
+        if out is not None:
+            out.copy_(result)
+            return out
+        return result
     return torch.linalg.pinv(A, atol=atol, rtol=rtol if not rtol is None else rcond, hermitian=hermitian, out=out)
 
 

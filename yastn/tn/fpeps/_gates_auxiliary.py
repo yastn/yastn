@@ -136,7 +136,16 @@ def fill_eye_in_gate(peps, G, sites):
     g0, g1 = G
     G = [g0]
     leg = g0.get_legs(axes=2)
-    vb = eye(g0.config, legs=(leg.conj(), leg), isdiag=False)
+    try:
+        vb = eye(g0.config, legs=(leg.conj(), leg), isdiag=False)
+    except YastnError as exc:
+        if "not a result of outer_product" not in str(exc):
+            raise
+        # A compact sum-of-products gate has a direct-sum auxiliary leg.
+        # Its block history need not be an outer product; the propagating
+        # identity depends only on its charge sectors and dimensions.
+        leg = leg.drop_history()
+        vb = eye(g0.config, legs=(leg.conj(), leg), isdiag=False)
     for site in sites[1:-1]:
         leg = peps[site].get_legs(axes=-1)
         if leg.is_fused():  # unfuse to get system leg
