@@ -116,12 +116,16 @@ class _struct(NamedTuple):
     @classmethod
     def from_dict(cls, d):
         r""" De-serializes _struct from the dictionary ``d``. """
+        if 'dict_ver' not in d:  # struct stored before it carried its own version tag
+            legs = tuple(LegBasic.from_dict(leg) for leg in d['legs'])
+            return cls(legs=legs, n=d['n'], isdiag=d['isdiag'], mask=HashedMask(d.get('mask')))
         if d['dict_ver'] == 1:
             if cls.__name__ != d['type']:
                 raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
             legs = tuple(LegBasic.from_dict(leg) for leg in d['legs'])
             mask = HashedMask(d['mask'])
             return cls(legs=legs, n=d['n'], isdiag=d['isdiag'], mask=mask)
+        raise YastnError(f"_struct.to_dict with dict_ver = {d['dict_ver']} not supported")
 
     def is_consistent(self):
         assert isinstance(self, _struct)

@@ -143,9 +143,9 @@ class _HalfPair(_Half):
                                 n=f.struct.n, isdiag=False)
                         for f in (self.f0, self.f1))
         # The last output carries the block structure of the product.
-        bl_c = _match_legs_tensordot(self.config.sym, *structs, [0], [1], [0], [1])[-1]
+        struct_c = _match_legs_tensordot(self.config.sym, *structs, (0,), (1,), (0,), (1,))[-1]
         return tuple(self._with_charges(leg, basic)
-                     for leg, basic in zip(corner_legs, bl_c.struct.legs))
+                     for leg, basic in zip(corner_legs, struct_c.legs))
 
     @staticmethod
     def _with_charges(leg, basic):
@@ -910,10 +910,13 @@ def _rows_embeddable(source, target):
         return False  # eye() does not support meta-fused legs
     if not (source.is_fused() and target.is_fused()):
         return False
+    # Only the signatures of the fusion nodes are compared:  the charges and
+    # dimensions they carry are exactly what differs between the two bases.
     if not (source.s == target.s
             and source.hf.tree == target.hf.tree
             and source.hf.op == target.hf.op
-            and source.hf.s == target.hf.s):
+            and tuple(leg.s for leg in source.hf.legs)
+                == tuple(leg.s for leg in target.hf.legs)):
         return False
     # The embedding can only produce charges the bases already carry, so a
     # sub-leg that gained one would leave the fused row leg short of the

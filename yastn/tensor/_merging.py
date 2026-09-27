@@ -95,6 +95,7 @@ class _Fusion(NamedTuple):
             if cls.__name__ != d['type']:
                 raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
             return cls(tree=d['tree'], op=d['op'], legs=tuple(LegBasic.from_dict(x) for x in d['legs']))
+        raise YastnError(f"_Fusion.to_dict with dict_ver = {d['dict_ver']} not supported")
 
     def is_consistent(self):
         assert isinstance(self, _Fusion)
