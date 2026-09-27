@@ -31,7 +31,7 @@ from . import Tensor, ncon, split_data_and_meta, combine_data_and_meta
 from .._profile import nvtx, nsys_profile
 from ..initialize import block as yastn_block
 from ._legs import Leg
-from ._einsum import ncon_prefilter
+from ._einsum import ncon_prefilter, _apply_charge_swaps_
 from ._auxiliary import _clear_axes, get_blocks, get_trimmed_struct
 from ._merging import _meta_mask
 from ._tests import YastnError
@@ -1339,8 +1339,19 @@ def contract_with_unroll(*args, **kwargs):
         are ignored. See :mod:`._oe_blocksparse_dist`. A single-rank group falls
         back to serial. Optional ``distributed_group`` selects a non-default
         process group.
+    :param charge_swap: sequence of pairs ``(label, charge)``: a swap gate between the
+        leg ``label`` and a one-dimensional leg of fixed ``charge``, as in
+        :meth:`yastn.ncon`.  Applied to the input tensors before the path search and
+        any unrolling, which it commutes with.
     """
     _cfg = args[0].config
+    charge_swap = kwargs.pop("charge_swap", None)
+    if charge_swap:
+        args = list(args)
+        ts, inds = args[0: 2 * (len(args) // 2): 2], args[1: 2 * (len(args) // 2): 2]
+        _apply_charge_swaps_(ts, inds, charge_swap)
+        args[0: 2 * (len(args) // 2): 2] = ts
+        args = tuple(args)
     checkpoint_loop = kwargs.pop("checkpoint_loop", False)
     who = kwargs.pop("who", None)
     kwargs.pop("verbosity", None)

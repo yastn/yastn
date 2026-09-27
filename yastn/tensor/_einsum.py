@@ -30,7 +30,7 @@ __all__ = ['ncon', 'einsum']
 if TYPE_CHECKING:
     from . import Tensor
 
-def einsum(subscripts, *operands, order=None, swap=None) -> 'Tensor':
+def einsum(subscripts, *operands, order=None, swap=None, charge_swap=None) -> 'Tensor':
     r"""
     Execute a series of tensor contractions.
 
@@ -50,6 +50,10 @@ def einsum(subscripts, *operands, order=None, swap=None) -> 'Tensor':
     swap: str
         Comma-separated pairs of subscript characters identifying pairs of legs
         where swap gate is applied, e.g., ``swap='ab,cd'``.
+
+    charge_swap: Sequence[tuple[str, Sequence[int]]]
+        Pairs of a subscript character and a charge, e.g., ``[('a', (1,))]``;
+        see ``charge_swap`` in :meth:`yastn.ncon`.
 
     Example
     -------
@@ -112,13 +116,17 @@ def einsum(subscripts, *operands, order=None, swap=None) -> 'Tensor':
     inds = [tuple(d[v] for v in ss) for ss in sin.split(',')]
     if swap is not None:
         swap = [tuple(d[v] for v in ss) for ss in swap.split(',')]
+    if charge_swap is not None:
+        if any(v not in d for v, _ in charge_swap):
+            raise YastnError('charge_swap should name legs by their subscript characters.')
+        charge_swap = [(d[v], charge) for v, charge in charge_swap]
 
     ts = list(operands)
-    return ncon(ts, inds, conjs=conjs, swap=swap)
+    return ncon(ts, inds, conjs=conjs, swap=swap, charge_swap=charge_swap)
 
 
 def ncon(ts, inds, conjs=None, order=None, swap=None, release_cuda_cache=False,
-         oom_retry=False) -> 'Tensor':
+         oom_retry=False, charge_swap=None) -> 'Tensor':
     r"""
     Execute a series of tensor contractions.
 
@@ -144,6 +152,13 @@ def ncon(ts, inds, conjs=None, order=None, swap=None, release_cuda_cache=False,
 
     swap: Sequence[Sequence[int]]
         Sequence of two-element tuples identifying pairs of legs where swap gate is applied.
+
+    charge_swap: Sequence[tuple[int, Sequence[int]]]
+        Sequence of pairs ``(ind, charge)``: a swap gate between the leg labelled ``ind``
+        and a one-dimensional leg of fixed ``charge``, e.g., a fermionic string crossing
+        that leg (see ``charge`` in :meth:`yastn.swap_gate`).  A contracted leg is named by
+        its label; the gate acts on one of its two ends, which is equivalent.  Pairs naming
+        the same leg multiply.
 
     conjs: Sequence[int]
         For each tensor in ``ts`` contains either ``0`` or ``1``.
@@ -184,6 +199,9 @@ def ncon(ts, inds, conjs=None, order=None, swap=None, release_cuda_cache=False,
             if to_conj:
                 ts[t] = ts[t].conj()
     #
+    if charge_swap:
+        _apply_charge_swaps_(ts, inds, charge_swap)
+    #
     inds = tuple(_clear_axes(*inds))
     if order is not None:
         order = tuple(order)
@@ -195,6 +213,29 @@ def ncon(ts, inds, conjs=None, order=None, swap=None, release_cuda_cache=False,
                            oom_retry=oom_retry)
     assert len(ts) == 1, "Sanity check. Contact developers."
     return ts.popitem()[1]
+
+
+def _apply_charge_swaps_(ts, inds, charge_swap):
+    """Apply the swap gates between legs and fixed charges of ``charge_swap`` to the
+    input tensors carrying those legs.  They act on a single leg each and leave the
+    tensors' charges unchanged, so they commute with the contraction plan."""
+    where = {}
+    for ten, ind in enumerate(inds):
+        for leg, label in enumerate(ind):
+            where.setdefault(label, (ten, leg))
+    by_ten = {}
+    for item in charge_swap:
+        if len(item) != 2:
+            raise YastnError("charge_swap should be a sequence of pairs (ind, charge).")
+        ind, charge = item
+        if ind not in where:
+            raise YastnError(f"charge_swap: index {ind} does not label any leg.")
+        ten, leg = where[ind]
+        axes, charges = by_ten.setdefault(ten, ([], []))
+        axes.append(leg)
+        charges.append(tuple(charge))
+    for ten, (axes, charges) in by_ten.items():
+        ts[ten] = swap_gate(ts[ten], axes=tuple(axes), charge=tuple(charges))
 
 
 def _fermionic_components(config):

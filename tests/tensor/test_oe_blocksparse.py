@@ -218,6 +218,28 @@ def test_sliced_unroll_contracted_index(config_kwargs):
     assert yastn.norm(result_is - expected) < tol
 
 
+def test_contract_with_unroll_charge_swap(config_kwargs):
+    """
+    charge_swap gives the same result with and without unrolling, and matches
+    ncon with the swap gates applied by hand.
+    """
+    cfg = yastn.make_config(sym='U1', fermionic=True, **config_kwargs)
+    leg_i = yastn.Leg(cfg, s=1, t=(-1, 0, 1), D=(1, 2, 1))
+    leg_j = yastn.Leg(cfg, s=1, t=(-1, 0, 1), D=(2, 4, 2))
+    leg_k = yastn.Leg(cfg, s=1, t=(-1, 0, 1), D=(1, 2, 1))
+    A = yastn.rand(config=cfg, legs=[leg_i, leg_j.conj()], n=0)
+    B = yastn.rand(config=cfg, legs=[leg_j, leg_k.conj()], n=0)
+    charge_swap = [('j', (1,)), ('k', (1,))]
+    expected = yastn.ncon([A.swap_gate(axes=(1,), charge=(1,)), B.swap_gate(axes=(1,), charge=(1,))],
+                          [[-1, 1], [1, -2]])
+    for unroll in (None, {'j': yastn.make_sliced_legs(leg_j)}, {'j': 2}):
+        result = yastn.contract_with_unroll(A, ('i', 'j'), B, ('j', 'k'), ('i', 'k'),
+                                            unroll=unroll, charge_swap=charge_swap)
+        assert yastn.norm(result - expected) < tol * yastn.norm(expected), unroll
+    with pytest.raises(yastn.YastnError, match="does not label any leg"):
+        yastn.contract_with_unroll(A, ('i', 'j'), B, ('j', 'k'), ('i', 'k'), charge_swap=[('x', (1,))])
+
+
 # ---------------------------------------------------------------------------
 # 5. Sliced unrolling of multiple contracted indices across several tensors
 # ---------------------------------------------------------------------------

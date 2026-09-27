@@ -688,6 +688,38 @@ def test_ncon_gadget_result_size(config_kwargs):
     assert (yastn.trace(R, axes=(3, 4)) - plain).norm() < tol * plain.norm()
 
 
+@pytest.mark.parametrize('sym, charge', [('Z2', (1,)), ('U1', (1,)), ('U1', (2,))])
+def test_ncon_charge_swap(config_kwargs, sym, charge):
+    """charge_swap applies a swap gate between a leg and a fixed charge, on contracted and open legs."""
+    config = yastn.make_config(sym=sym, fermionic=True, **config_kwargs)
+    t = (0, 1) if sym == 'Z2' else (-1, 0, 1)
+    D = (2, 3) if sym == 'Z2' else (1, 2, 1)
+    la, lb, lc = (yastn.Leg(config, s=1, t=t, D=D) for _ in range(3))
+    A = yastn.rand(config=config, legs=[la, lb])
+    B = yastn.rand(config=config, legs=[lb.conj(), lc])
+
+    # on the contracted leg 1, and on the open leg -1
+    x = yastn.ncon([A, B], ((-0, 1), (1, -1)), charge_swap=[(1, charge), (-1, charge)])
+    ref = yastn.tensordot(A.swap_gate(axes=(1,), charge=charge), B.swap_gate(axes=(1,), charge=charge), axes=(1, 0))
+    assert (x - ref).norm() < tol * ref.norm()
+    # the same through einsum
+    y = yastn.einsum('ab,bc->ac', A, B, charge_swap=[('b', charge), ('c', charge)])
+    assert (y - ref).norm() < tol * ref.norm()
+    # the gate may sit on either end of a contracted leg
+    x = yastn.ncon([A, B], ((-0, 1), (1, -1)), charge_swap=[(1, charge)])
+    ref = yastn.tensordot(A, B.swap_gate(axes=(0,), charge=charge), axes=(1, 0))
+    assert (x - ref).norm() < tol * ref.norm()
+    # two gates on one leg multiply: an odd charge twice is no gate
+    x = yastn.ncon([A, B], ((-0, 1), (1, -1)), charge_swap=[(1, charge), (1, charge)])
+    ref = yastn.tensordot(A, B, axes=(1, 0))
+    assert (x - ref).norm() < tol * ref.norm()
+
+    with pytest.raises(yastn.YastnError, match="does not label any leg"):
+        yastn.ncon([A, B], ((-0, 1), (1, -1)), charge_swap=[(7, charge)])
+    with pytest.raises(yastn.YastnError, match="subscript characters"):
+        yastn.einsum('ab,bc->ac', A, B, charge_swap=[('z', charge)])
+
+
 if __name__ == '__main__':
     pytest.main([__file__, "--durations=0", "--tensordot_policy", "fuse_to_matrix"])
     # pytest.main([__file__, "--durations=0", "--tensordot_policy", "fuse_contracted"])

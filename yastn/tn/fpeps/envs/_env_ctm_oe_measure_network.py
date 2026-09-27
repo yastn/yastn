@@ -17,15 +17,20 @@
 Builds the interleaved ``(tensor, labels, ...)`` argument list that
 ``contract_with_unroll`` consumes for one rectangular window of the double
 layer (corners, edges, site tensors, optional projectors and operators), the
-unroll-label translation, and the fermionic-sign bookkeeping: Jordan-Wigner
-string paths for plain charged operators (``_charge_strings``) and per-block
-bond crossings for MPO tensors (``_mpo_bond_swaps``).  ``_env_ctm_measure``
-orchestrates the contraction itself.  Bond labels and both sign mechanisms are
-described in ``docs/source/fpeps/measurement_oe.rst``.
+unroll-label translation, and the fermionic-sign bookkeeping: the swap gates of
+the bonds of an MPO (``_mpo_path_swaps``), which also carry the charge of plain
+operators.  ``_env_ctm_measure`` orchestrates the contraction itself.  Bond
+labels and fermionic signs are described in ``docs/source/fpeps/measurement_oe.rst``.
 """
+import itertools
 from .._geometry import Site
-from ....tensor import YastnError, tensordot
+from .._gates_auxiliary import BOND_FUSION, ordering_swaps, ordering_swap_axes
+from ....tensor import YastnError
 from ....tensor._auxiliary import get_blocks
+
+# In the double layer the ket's left leg crosses the bra's top leg, and the ket's bottom leg
+# the bra's right leg; a bond fused into one of those ket legs crosses the same bra leg.
+_KET_BRA = {1: 'b0', 2: 'b3'}
 
 
 def _translate_unroll(unroll, Nx, Ny):
@@ -189,34 +194,6 @@ def _boundary_args(env, peps_legs, Nx, Ny, minx, miny, maxx, maxy, tl, tr, bl, b
     return args
 
 
-def _build_ketbra_contracted(env, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, bl, br):
-    r"""
-    Window network with ket and bra of every site pre-contracted on the
-    physical leg, through the site's plain operator if any, into one 8-leg
-    tensor ``[t_k, t_b, l_k, l_b, b_k, b_b, r_k, r_b]``; the ket x bra
-    crossings are applied as ``swap_gate``, as in ``fuse_layers``.  Plain
-    operators only: their strings are already folded into the site tensors.
-
-    Returns ``(tn_args, swap_pairs)``; there are no swap pairs.
-    """
-    site_args, peps_legs = [], {}
-    for i in range(Nx):
-        for j in range(Ny):
-            dpt = tens[Site(minx + i, miny + j)]
-            Ab, Ak = dpt.Ab_Ak_with_charge_swap()
-            if dpt.op is not None:
-                Ak = tensordot(Ak, dpt.op, axes=(4, 1))
-            tt = tensordot(Ak, Ab.conj(), axes=(4, 4))  # (t_k, l_k, b_k, r_k, t_b, l_b, b_b, r_b)
-            tt = tt.swap_gate(axes=((1, 5), 4, (2, 6), 7))  # (l_k, l_b) x t_b and (b_k, b_b) x r_b
-            tt = tt.transpose(axes=(0, 4, 1, 5, 2, 6, 3, 7))  # interleave ket and bra
-            tt = tt.transpose(axes=tuple(2 * k + h for k in dpt.trans for h in (0, 1))).drop_leg_history()
-            peps_legs[i, j] = (tt.get_legs(axes=(0, 2, 4, 6)), tt.get_legs(axes=(1, 3, 5, 7)))
-            site_args += [tt, [b + (layer,) for b in _bond_labels(i, j) for layer in ('k', 'b')]]
-    args = _boundary_args(env, peps_legs, Nx, Ny, minx, miny, maxx, maxy, tl, tr, bl, br)
-    return tuple(args + site_args + [()]), []
-
-
-# slot[-2:] of a half-projector -> (kind, di, dj of the env bond, di, dj of the D bond, side)
 _CUT = {'lt': ('v', 0, -1, 0, 0, 'b'), 'rt': ('v', 0, 1, 0, 0, 'b'),
         'lb': ('v', 1, -1, 1, 0, 't'), 'rb': ('v', 1, 1, 1, 0, 't'),
         'tl': ('h', -1, -1, 0, -1, 'r'), 'bl': ('h', 1, -1, 0, -1, 'r'),
@@ -248,7 +225,7 @@ def _norm_slots(slots):
 
 
 def _build_ketbra_separate(env, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, bl, br,
-                           projectors=None, op_bonds=None, bond_crossings=(), probe=None):
+                           projectors=None, op_bonds=None, bond_crossings=(), bond_pairs=(), probe=None):
     r"""
     Window network with separate ket and bra tensors (5 legs each) per site,
     joined by a shared physical-leg label, and the operator, if any, as a
@@ -256,9 +233,11 @@ def _build_ketbra_separate(env, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, bl
     ``swap_gate``; ket x bra crossings are returned as ncon swap pairs.
 
     ``op_bonds`` maps a site to the network labels of its MPO tensor's bond
-    legs.  ``bond_crossings`` lists ``(bond_label, (site, axis))`` pairs from
-    :func:`_mpo_bond_swaps`; each becomes a swap pair between the bond and the
-    network leg of that axis.
+    legs, left then right, the chain's ends having one; an MPO tensor enters in
+    the leg order of a gate, ``(phys_out, phys_in, left, right)``, absent bonds
+    dropped.  ``bond_crossings`` lists ``(bond_label, (site, axis))`` pairs from
+    :func:`_mpo_path_swaps`; each becomes a swap pair between the bond and the network
+    leg of that axis.  ``bond_pairs`` are further swap pairs of network labels.
 
     ``projectors`` maps a site to one slot name, a sequence of slot names, or a
     ``{slot: tensor}`` dict, the slots of :class:`EnvCTM_projectors` (``"hlt"``,
@@ -321,10 +300,13 @@ def _build_ketbra_separate(env, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, bl
         for j in range(Ny):
             s = Site(minx + i, miny + j)
             dpt = tens[s]
-            Ab, Ak = dpt.Ab_Ak_with_charge_swap()
+            Ab, Ak = dpt.bra, dpt.ket
             Ab = Ab.conj().swap_gate(axes=(1, 0, 2, 3))  # inside the bra: l_b x t_b, b_b x r_b
-            Ak = Ak.transpose(axes=dpt.trans + (4,)).drop_leg_history()  # to position order
-            Ab = Ab.transpose(axes=dpt.trans + (4,)).drop_leg_history()
+            # history is dropped on the virtual legs, to match the padded edges, but kept on the
+            # physical leg: for a purification it is a fusion of system and ancilla, and the
+            # operator, matched to it by `match_ancilla`, lines up only through that history.
+            Ak = Ak.transpose(axes=dpt.trans + (4,)).drop_leg_history(axes=(0, 1, 2, 3))
+            Ab = Ab.transpose(axes=dpt.trans + (4,)).drop_leg_history(axes=(0, 1, 2, 3))
             peps_legs[i, j] = (Ak.get_legs(axes=(0, 1, 2, 3)), Ab.get_legs(axes=(0, 1, 2, 3)))
 
             # The operator, if any, stays a separate network tensor so the path
@@ -333,8 +315,9 @@ def _build_ketbra_separate(env, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, bl
             ket_p = ('pin', i, j) if dpt.op is not None else ('p', i, j)
             site_args += [Ak, [tag(lb + ('k',), i, j) for lb in lbls] + [ket_p],
                           Ab, [tag(lb + ('b',), i, j) for lb in lbls] + [('p', i, j)]]
-            if dpt.op is not None:  # (phys_out, phys_in, bond legs...)
-                site_args += [dpt.op.drop_leg_history(), [('p', i, j), ket_p, *op_bonds.get(s, ())]]
+            if dpt.op is not None:  # Gate leg order (phys_out, phys_in, left, right), ends trimmed
+                op = dpt.op.drop_leg_history(axes=tuple(range(2, dpt.op.ndim)))  # bond legs only
+                site_args += [op, [('p', i, j), ket_p, *op_bonds.get(s, ())]]
 
             inv = [dpt.trans.index(d) for d in range(4)]  # canonical direction -> label index
 
@@ -342,12 +325,15 @@ def _build_ketbra_separate(env, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, bl
                 """Network label of an axis of the site's own (pre-transpose) ket/bra."""
                 if axis == 'k4':
                     return ket_p  # the ket's bare physical leg, before any operator
+                if axis == 'p':
+                    return ('p', i, j)  # the physical leg after the operator
                 return tag(lbls[inv[int(axis[1])]] + (axis[0],), i, j)
 
             # ket x bra crossings in canonical order: l_k x t_b and b_k x r_b
-            swap_pairs += [(leg('k1'), leg('b0')), (leg('k2'), leg('b3'))]
-            # an MPO bond swapped against the legs its Jordan-Wigner string crosses
+            swap_pairs += [(leg(f'k{k}'), leg(b)) for k, b in _KET_BRA.items()]
+            # an MPO bond swapped against the legs of this site it crosses
             swap_pairs += [(b, leg(axis)) for b, (site_x, axis) in bond_crossings if site_x == s]
+    swap_pairs += list(bond_pairs)
 
     args = _boundary_args(env, peps_legs, Nx, Ny, minx, miny, maxx, maxy, tl, tr, bl, br, tag=tag)
     out = ()  # scalar output, unless the probe leaves the partner side open
@@ -371,58 +357,158 @@ def _window_bounds(env, sites):
     return minx, miny, maxx, maxy
 
 
-def _string_path(site, minx, miny):
-    """Legs crossed by the Jordan-Wigner string of ``site`` on its way to the
-    top-left corner of the window: up the site's own column, then left along
-    the top row.  ``(site, axis)`` pairs in the axis names of
-    :meth:`DoublePepsTensor.add_charge_swaps_`; ``'k4'`` is a ket's bare
-    physical leg, before the operator sitting there acts (why: "Strings of
-    plain charged operators" in ``docs/source/fpeps/measurement_oe.rst``).
-    Same path as in :func:`measure_nsite_exact`."""
-    x, y = site
-    path = []
-    if x > minx:
-        path.append((Site(x, y), 'k1'))
-        for x1 in range(x - 1, minx, -1):
-            path += [(Site(x1, y), ax) for ax in ('b3', 'k4', 'k1')]
-        path += [(Site(minx, y), ax) for ax in ('b3', 'k4')]
-    if y > miny:
-        path.append((Site(minx, y), 'b0'))
-        for y1 in range(y - 1, miny, -1):
-            path += [(Site(minx, y1), ax) for ax in ('k2', 'k4', 'b0')]
-        path += [(Site(minx, miny), ax) for ax in ('k2', 'k4')]
-    return path
+# The layer a line running along a cut lattice bond moves outside of, to pass its
+# half-projectors on the side away from their environment leg, by that side: in the
+# projected double layer the bra line lies left of and below the ket line.
+_JUMP_LAYER = {'l': 'k', 'r': 'b', 't': 'b', 'b': 'k'}
 
 
-def _charge_strings(tens, ops, minx, miny):
-    """Plain operators: attach each to its site and route its charge as a
-    fixed-charge swap along :func:`_string_path`.  The sign of reordering the
-    operators into canonical order is not included (``sign_canonical_order``)."""
-    for site, op in ops.items():
-        tens[site].set_operator_(op)
-        if op.n != op.config.sym.zero():
-            for s, ax in _string_path(site, minx, miny):
-                tens[s].add_charge_swaps_(op.n, axes=ax)
+def _cut_bonds(projectors, probe, minx, miny):
+    """Lattice bonds, as sets of their two sites, that the half-projectors of
+    ``projectors`` and ``probe`` cut, mapped to the side of the window, ``'l'``,
+    ``'r'``, ``'t'`` or ``'b'``, whose environment leg the half-projectors take in."""
+    halves = [(site, slot) for site, slots in (projectors or {}).items() for slot in _norm_slots(slots)]
+    halves += [probe[:2]] if probe else []
+    cut = {}
+    for site, slot in halves:
+        _, (kind, i, j), _ = _compress_bond_side(site[0] - minx, site[1] - miny, slot)
+        a, b = ((i - 1, j), (i, j)) if kind == 'v' else ((i, j), (i, j + 1))
+        cut[frozenset((Site(a[0] + minx, a[1] + miny), Site(b[0] + minx, b[1] + miny)))] = slot[1]
+    return cut
 
 
-def _mpo_bond_swaps(tens, ops, bonds, minx, miny):
-    """Attach the MPO tensors and return the swap pairs that replace their
-    Jordan-Wigner strings, a sorted list of ``(bond_label, (site, axis))``.
+def _route(a, b):
+    """The nearest-neighbour route from site ``a`` to site ``b``, both included: along the
+    column of ``a`` first, then along the row of ``b``."""
+    (x0, y0), (x1, y1) = a, b
+    dx, dy = (1 if x1 >= x0 else -1), (1 if y1 >= y0 else -1)
+    column = [Site(x, y0) for x in range(x0, x1 + dx, dx)]
+    return column + [Site(x1, y) for y in range(y0 + dy, y1 + dy, dy)]
 
-    ``bonds`` maps a site to the labels of its MPO tensor's bond legs.  In each
-    block of a neutral MPO tensor the parity of the physical charge is the sum
-    of its bond parities, so the fixed-charge string of a plain operator splits
-    into swaps (bond, leg) for each bond of the site and each leg on its path.
-    A bond collects pairs from the paths of both its sites; a pair present
-    twice cancels (``^=``), leaving the bond swapped against the legs between
-    its two sites.  See "Swap gates of MPO" in ``docs/source/fpeps/measurement_oe.rst``.
+
+# The direction of a step between neighbouring window sites, as :meth:`SquareLattice.nn_bond_dirn`
+# names it, read from the window coordinates: a step never crosses a periodic boundary there.
+_STEP = {(0, 1): 'lr', (1, 0): 'tb', (0, -1): 'rl', (-1, 0): 'bt'}
+
+
+def _mpo_path_swaps(tens, ops, chain, f_ordered, cut):
     """
-    crossings = set()
-    for site, labels in bonds.items():
-        tens[site].set_operator_(ops[site])
-        for b in labels:
-            crossings ^= {(b, leg) for leg in _string_path(site, minx, miny)}
-    return sorted(crossings)
+    Attach the MPO tensors of ``chain`` to their sites and return the swap gates their
+    bonds need, ``(crossings, pairs)``: ``crossings`` lists ``(bond_label, (site, axis))``,
+    a bond against a leg of a site, axis ``'p'`` being the output leg of the site's
+    operator, and ``pairs`` lists pairs of bond labels.  ``f_ordered`` is the lattice's
+    fermionic order.
+
+    Each bond joins its two MPO tensors directly, and its swap gates are those that
+    applying the MPO to the ket along a path, as :meth:`Peps.apply_gate_` does, would
+    produce -- replayed instead of performed.  The walk from one chain site to the next
+    follows :func:`_route`, so the chain may list its sites in any order and they need not
+    be adjacent.  At every step :func:`ordering_swaps` adapts the tensors to the step's
+    direction and fermionic order.  At every site the bond is fused into a ket leg as in
+    :func:`apply_gate_onsite`, crossing the leg of :data:`BOND_FUSION` and every bond
+    already fused into it, and inheriting the ket x bra crossing of that leg.  When a
+    lattice bond carries several MPO bonds, fused in different orders at its two ends,
+    they cross.  A site the walk only passes carries an identity, as in
+    :meth:`Peps.apply_gate_`, whose two bond legs are the same bond; where the replay
+    swaps them, the swap is that bond's parity.  The bond carries one charge sector per
+    block along its whole length, so its parity is applied to the tensor it leaves.
+    See "Building the MPO" in ``docs/source/fpeps/measurement_oe.rst``.
+
+    ``cut`` maps the lattice bonds cut by half-projectors to the side of the window
+    their environment leg comes from (:func:`_cut_bonds`).  Half-projectors compress
+    the environment leg and the ket and bra legs of a lattice bond together, so a bond
+    running along a cut lattice bond, between its ket and bra lines, would pass through
+    them.  Where the walk runs along a cut lattice bond, the bond of the MPO passes the
+    half-projectors on the side away from their environment leg instead: it crosses the
+    ket or the bra leg of the cut lattice bond at both of its ends, which moves it
+    outside that line.  This gives the same contraction as a walk around the cut, so
+    the walk need not avoid cut lattice bonds, even where half-projectors cut every
+    lattice bond between two rows or columns of the window.  In the projected double
+    layer the bra lies left of and below the ket, so the leg crossed follows from the
+    environment side (:data:`_JUMP_LAYER`)::
+
+        half-projectors   environment side   leg crossed
+        hlt, hlb          left               ket
+        hrt, hrb          right              bra
+        vtl, vtr          top                bra
+        vbl, vbr          bottom             ket
+    """
+    G = [ops[s] for s in chain]
+    walk, walk_bond = [(chain[0], 0)], []  # (site, chain index or None where only passed)
+    for k in range(len(chain) - 1):
+        route = _route(chain[k], chain[k + 1])
+        walk += [(u, None) for u in route[1:-1]] + [(chain[k + 1], k + 1)]
+        walk_bond += [k + 1] * (len(route) - 1)
+    own = {u: i for i, (u, c) in enumerate(walk) if c is not None}
+    dirns = [_STEP[(v[0] - u[0], v[1] - u[1])] for (u, _), (v, _) in zip(walk, walk[1:])]
+
+    toggled, parity = set(), set()  # a swap gate applied twice is none
+
+    def toggle(m, target):
+        toggled.symmetric_difference_update({(m, target)})
+
+    def cross_bonds(m, x):
+        if m == x:  # the two bond legs of an identity at a passed site: the bond's parity
+            parity.symmetric_difference_update({m})
+        else:
+            toggle(min(m, x), ('opb', max(m, x)))
+
+    def cross_physical(m, u, i):  # below u's operator if the walk reaches u first, above it if later
+        toggle(m, ('leg', u, 'p' if own.get(u, i) < i else 'k4'))
+
+    for i, (u, c) in enumerate(walk):  # the bond x physical swap of an identity passed through
+        if c is None:
+            cross_physical(walk_bond[i - 1], u, i)
+    for i, dirn in enumerate(dirns):
+        m = walk_bond[i]
+        for tensor, leg in ordering_swaps(dirn, f_ordered(walk[i][0], walk[i + 1][0])):
+            u, c = walk[i + tensor]
+            if c is not None:
+                G[c] = G[c].swap_gate(axes=ordering_swap_axes(tensor, leg))
+            elif leg == 'bond':
+                parity.symmetric_difference_update({m})
+            else:  # the in and out legs of an identity are both the physical line
+                cross_physical(m, u, i + tensor)
+
+    for i, dirn in enumerate(dirns):  # a step along a cut lattice bond
+        side = cut.get(frozenset((walk[i][0], walk[i + 1][0])))
+        if side is not None:  # pass the half-projectors outside the layer facing away from their environment
+            layer = _JUMP_LAYER[side]
+            toggle(walk_bond[i], ('leg', walk[i][0], f'{layer}{BOND_FUSION[dirn[0]][0]}'))
+            toggle(walk_bond[i], ('leg', walk[i + 1][0], f'{layer}{BOND_FUSION[dirn[1]][0]}'))
+
+    fused = {}  # (site, ket leg) -> the bonds fused into it, in order
+    for i, (u, c) in enumerate(walk):
+        steps = [(dirns[i][0], walk_bond[i])] if i < len(dirns) else []
+        steps += [(dirns[i - 1][1], walk_bond[i - 1])] if i > 0 else []
+        for role, m in steps:  # the outgoing bond first, as in apply_gate_onsite
+            leg, crossed = BOND_FUSION[role]
+            if crossed is not None:
+                toggle(m, ('leg', u, f'k{crossed}'))
+                for x in fused.get((u, crossed), []):
+                    cross_bonds(m, x)
+            fused.setdefault((u, leg), []).append(m)
+            if leg in _KET_BRA:
+                toggle(m, ('leg', u, _KET_BRA[leg]))
+    for (u, leg), ms in fused.items():  # the two ends of a lattice bond, in fusion order
+        if leg in (2, 3):
+            v = Site(u[0] + 1, u[1]) if leg == 2 else Site(u[0], u[1] + 1)
+            other = fused.get((v, leg - 2), [])
+            for a, b in itertools.combinations([m for m in ms if m in other], 2):
+                if (ms.index(a) < ms.index(b)) != (other.index(a) < other.index(b)):
+                    cross_bonds(a, b)
+
+    for m in parity:
+        ax = G[m - 1].ndim - 1
+        G[m - 1] = G[m - 1].swap_gate(axes=(ax, ax))
+    for k, s in enumerate(chain):
+        i = own[s]
+        roles = (dirns[i - 1][1] if i > 0 else '') + (dirns[i][0] if i < len(dirns) else '')
+        tens[s].set_operator_(G[k], dirn=roles)
+
+    crossings = sorted((('opb', m), target[1:]) for m, target in toggled if target[0] == 'leg')
+    pairs = sorted((('opb', m), target) for m, target in toggled if target[0] == 'opb')
+    return crossings, pairs
 
 
 def _build_fused(env, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, bl, br):

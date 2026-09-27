@@ -14,19 +14,19 @@
 # ==============================================================================
 """ Common measure functions for EnvCTM and EnvBoundaryMPS """
 
-import warnings
 import scipy.sparse.linalg as sla
 
 from ._env_window import EnvWindow, _measure_2site, _measure_nsite, _sample
-from .._gates_auxiliary import gate_fix_swap_gate, clear_operator_input
+from .._gates_auxiliary import gate_fix_swap_gate, clear_operator_input, gate_from_mpo
 from .._doublePepsTensor import DoublePepsTensor
 from .._geometry import Site, is_bond, is_site
 from ... import mps
 from ....initialize import rand
 from ....tensor import YastnError, Tensor, tensordot, vdot, split_data_and_meta, combine_data_and_meta, sign_canonical_order
 from ....tensor.oe_blocksparse import contract_with_unroll
-from ._env_ctm_oe_measure_network import (_translate_unroll, _build_ketbra_contracted, _build_ketbra_separate,
-                                          _window_bounds, _charge_strings, _mpo_bond_swaps, _build_fused)
+from ._env_ctm_oe_measure_network import (_translate_unroll, _build_ketbra_separate,
+                                          _window_bounds, _mpo_path_swaps, _cut_bonds,
+                                          _build_fused)
 
 
 def measure_1site(self, O, site=None) -> dict:
@@ -727,40 +727,74 @@ def sample(env, projectors, number=1, xrange=None, yrange=None, dirn='v', opts_s
 def _parse_operators(env, operators, sites):
     """Sort the operators of a measurement into plain operators and MPO tensors.
 
+    ``operators`` is either one plain two-leg operator per site, or a single
+    :class:`yastn.tn.mps.MpsMpoOBC` with one tensor per site, built e.g. with
+    :func:`yastn.tn.mps.generate_mpo`.
+
     Returns ``(ops, bonds, sign)``: ``ops`` maps a site to its operator (plain
     operators on the same site are multiplied), ``bonds`` maps a site to the
-    network labels of its MPO tensor's bond legs, ``('opb', k)`` between MPO
-    tensors ``k-1`` and ``k`` of the chain (= listing order), and ``sign`` is
-    the sign of bringing plain operators into the lattice's fermionic order.
-    A measurement uses one kind or the other.  MPO tensors must be listed in
-    fermionic order and get ``sign = 1``: they are neutral, and the caller has
-    folded the reordering sign of every term into its coefficient.
+    network labels of its MPO tensor's bond legs, left then right, ``('opb', k)``
+    between MPO tensors ``k-1`` and ``k`` of the chain, its keys being the chain in
+    order, and ``sign`` is the sign of bringing plain
+    operators into the lattice's fermionic order.  An MPO gets ``sign = 1``:
+    its build already applies the sign of every term.  On a ``DoublePepsTensor``
+    PEPS, a product of plain operators with a charged one becomes an MPO of bond
+    dimension one, its chain the sites in the order listed, so its charge travels
+    along MPO bonds; ``ops`` and ``bonds`` then describe that MPO, and ``sign``
+    groups the operators of a repeated site.
     """
+    if len(operators) == 1 and isinstance(operators[0], mps.MpsMpoOBC):
+        return _parse_mpo(operators[0], sites)
     if sites is None or len(operators) != len(sites):
         raise YastnError("Number of operators and sites should match.")
     # unpack operators if operators provided as a Lattice or dict
     operators = [op[site] if not isinstance(op, Tensor) else op for op, site in zip(operators, sites)]
-    ops, bonds = {}, {}
-    nop = len(operators)
-    for k, (site, op) in enumerate(zip(sites, operators)):
+    ops = {}
+    for site, op in zip(sites, operators):
         if op.ndim > 2:
-            labels = (('opb', k),) * (k > 0) + (('opb', k + 1),) * (k < nop - 1)
-            if len(labels) != op.ndim - 2:
-                raise YastnError(f"operator {k} of {nop} carries {op.ndim - 2} bond legs, "
-                                 f"but its position in the chain allows {len(labels)}.")
-            bonds[site] = labels
-        elif site in ops:
+            raise YastnError("Operators with bond legs should be passed as one "
+                             "yastn.tn.mps.MpsMpoOBC, e.g. from yastn.tn.mps.generate_mpo.")
+        if site in ops:
             op = ops[site] @ op
         ops[site] = op
-    if bonds and (len(bonds) < nop or len(ops) < nop):
-        raise YastnError("MPO tensors: one per site and no plain operators alongside.")
-    if bonds and not all(env.f_ordered(s0, s1) for s0, s1 in zip(sites, sites[1:])):
-        raise YastnError("MPO tensors must be listed in the lattice's fermionic order of their sites.")
-    sign = 1 if bonds else sign_canonical_order(*operators, sites=sites, f_ordered=env.f_ordered)
-    return ops, bonds, sign
+    if isinstance(env.psi[sites[0]], DoublePepsTensor) and any(op.n != op.config.sym.zero() for op in ops.values()):
+        # the charge of plain operators travels along the bonds of an MPO of bond dimension one,
+        # its chain the sites in listed order; the sign groups the operators of a repeated site
+        chain = list(ops)
+        sign = sign_canonical_order(*operators, sites=sites, f_ordered=lambda a, b: chain.index(a) <= chain.index(b))
+        return (*_parse_mpo(mps.product_mpo([ops[s] for s in chain]), chain)[:2], sign)
+    return ops, {}, sign_canonical_order(*operators, sites=sites, f_ordered=env.f_ordered)
 
 
-def _contract_window(self, ops, bonds, sites, unroll=None, separate_layers=True, projectors=None, probe=None,
+def _parse_mpo(H, sites):
+    """Per-site tensors and bond labels of an MPO measured on ``sites``.
+
+    ``H[k]`` acts on ``sites[k]``: the chain is ``sites`` in the order listed, which
+    need not follow the lattice's fermionic order and whose consecutive sites need
+    not be adjacent; :func:`_mpo_path_swaps` works out the swap gates.
+
+    The tensors come from :func:`yastn.tn.fpeps._gates_auxiliary.gate_from_mpo`,
+    in the leg order of a :class:`yastn.tn.fpeps.Gate`, ``(phys_out, phys_in,
+    left, right)`` with absent bonds dropped, so that
+    :func:`yastn.tn.fpeps._gates_auxiliary.match_ancilla` recognises them.  It
+    trims the dimension-one bonds at the ends of the chain and folds ``H.factor``;
+    a central block is absorbed here first, as both are part of the MPO's value.
+    """
+    if sites is None or len(H) != len(sites):
+        raise YastnError("Number of MPO tensors and sites should match.")
+    if len(set(sites)) != len(sites):
+        raise YastnError("MPO tensors: each site can appear only once.")
+    if H.pC is not None:  # a canonical form keeps a central block outside of H[k]
+        H = H.shallow_copy()
+        H.absorb_central_()
+    ops, bonds = {}, {}
+    for k, (site, op) in enumerate(zip(sites, gate_from_mpo(H))):
+        ops[site] = op.drop_leg_history()
+        bonds[site] = tuple(('opb', j) for j in (k, k + 1) if 0 < j < len(sites))
+    return ops, bonds, 1
+
+
+def _contract_window(self, ops, bonds, sites, unroll=None, projectors=None, probe=None,
                      optimizer="default", per_combo_path=False, combo_path_kwargs=None, **kwargs):
     r"""Contract the window of ``sites`` once, with ``ops, bonds`` from :func:`_parse_operators`.
 
@@ -788,26 +822,17 @@ def _contract_window(self, ops, bonds, sites, unroll=None, separate_layers=True,
         tens.update(ops)
         tn, swap = _build_fused(self, tens, *geom), None
     else:
-        if projectors is not None and not separate_layers:
-            raise YastnError("projectors-based compression requires separate_layers=True.")
-        if bonds and not separate_layers:
-            # The contracted builder absorbs the operator into the site tensor, so the
-            # bare ket leg the MPO bonds cross is no longer a network leg.
-            warnings.warn("MPO tensors need the operator kept as a separate network tensor; "
-                          "using separate_layers=True.", stacklevel=3)
-            separate_layers = True
-        # fresh shells: the operators and strings attached below never touch self.psi
+        # fresh shells: the operators attached below never touch self.psi
         tens = {s: DoublePepsTensor(bra=t.bra, ket=t.ket, trans=t.trans) for s, t in tens.items()}
-        crossings = ()
-        if bonds:
-            crossings = _mpo_bond_swaps(tens, ops, bonds, minx, miny)
+        crossings, pairs = (), ()
+        if bonds:  # its keys are the chain, in order
+            cut = _cut_bonds(projectors, probe, minx, miny)
+            crossings, pairs = _mpo_path_swaps(tens, ops, list(bonds), self.f_ordered, cut)
         else:
-            _charge_strings(tens, ops, minx, miny)
-        if separate_layers:
-            tn, swap = _build_ketbra_separate(self, tens, *geom, projectors=projectors, op_bonds=bonds,
-                                              bond_crossings=crossings, probe=probe)
-        else:
-            tn, swap = _build_ketbra_contracted(self, tens, *geom)
+            for site, op in ops.items():
+                tens[site].set_operator_(op)
+        tn, swap = _build_ketbra_separate(self, tens, *geom, projectors=projectors, op_bonds=bonds,
+                                          bond_crossings=crossings, bond_pairs=pairs, probe=probe)
         unroll = _translate_unroll(unroll, Nx, Ny)
 
     if per_combo_path and unroll:  # tunes the path per slice-combo; only meaningful with an unroll
@@ -817,18 +842,15 @@ def _contract_window(self, ops, bonds, sites, unroll=None, separate_layers=True,
     return out if probe else out.to_number()
 
 
-def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint_loop=False, separate_layers=True, optimizer="default", devices=None, mp_workers_per_device=0, projectors=None, per_combo_path=False, combo_path_kwargs=None) -> float:
+def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint_loop=False, optimizer="default", devices=None, mp_workers_per_device=0, projectors=None, per_combo_path=False, combo_path_kwargs=None) -> float:
     r"""
     Memory-efficient version of :meth:`measure_nsite_exact` using opt_einsum
     contraction path optimization, optional block-sparse index unrolling,
     and checkpointing.
 
     For ``DoublePepsTensor`` PEPS, ket, operator and bra of every site enter
-    the network as separate tensors (``separate_layers=True``, the default),
-    with the fermionic crossings between them as ``ncon`` swap pairs; edge
-    middle legs are unfused to match.  With ``separate_layers=False`` ket and
-    bra are pre-contracted on the physical leg into 8-leg site tensors first,
-    which is possible for plain two-leg operators only.
+    the network as separate tensors, with the fermionic crossings between them
+    as ``ncon`` swap pairs; edge middle legs are unfused to match.
 
     For single-layer PEPS, falls back to the fused double-layer approach.
 
@@ -841,13 +863,13 @@ def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint
 
     Parameters
     ----------
-    operators : Sequence[yastn.Tensor]
-        Local operators of ``<O0_s0 O1_s1 ...>``, one per site: either plain
-        two-leg operators, or the tensors of one MPO, with one bond leg at the
-        two ends of the list and two in the middle.  The two kinds are not
-        mixed in one call.  MPO input requires ``sites`` in the lattice's
-        fermionic order, and applies no reordering sign of its own; build it
-        with :func:`yastn.tn.fpeps.mpo_from_products`, see
+    operators : Sequence[yastn.Tensor] | yastn.tn.mps.MpsMpoOBC
+        Local operators of ``<O0_s0 O1_s1 ...>``, one plain two-leg operator
+        per site.  Alternatively a single MPO with one tensor per site, e.g.
+        from :func:`yastn.tn.mps.generate_mpo`, which measures a sum of
+        operator products in one contraction.  Its chain is ``sites`` as listed,
+        in any order and not necessarily adjacent; it applies no reordering sign
+        of its own, the sign of each term being part of the MPO.  See
         :ref:`oe-mpo-operators`.
 
     sites : Sequence[tuple[int, int]]
@@ -861,13 +883,6 @@ def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint
         If ``True`` and ``unroll`` is not ``None``, each unroll iteration
         is wrapped in :func:`torch.utils.checkpoint.checkpoint`, trading
         recomputation for lower peak memory.
-
-    separate_layers : bool
-        If ``True`` (default) and the PEPS uses ``DoublePepsTensor``, keep
-        ket, operator and bra as separate tensors in the ncon network; this
-        is required for MPO tensors and gives the path optimizer the most
-        freedom.  ``False`` pre-contracts ket and bra into 8-leg site tensors
-        (plain operators only).
 
     optimizer : str or opt_einsum.paths.PathOptimizer
         Contraction-path optimizer passed to :func:`opt_einsum.contract_path`.
@@ -903,14 +918,14 @@ def measure_nsite_exact_oe(self, *operators, sites=None, unroll=None, checkpoint
         ``{"optimizer": optimizer}``.
     """
     ops, bonds, sign = _parse_operators(self, operators, sites)
-    kw = dict(unroll=unroll, checkpoint_loop=checkpoint_loop, separate_layers=separate_layers,
-              optimizer=optimizer, devices=devices, mp_workers_per_device=mp_workers_per_device,
+    kw = dict(unroll=unroll, checkpoint_loop=checkpoint_loop, optimizer=optimizer,
+              devices=devices, mp_workers_per_device=mp_workers_per_device,
               projectors=projectors, per_combo_path=per_combo_path, combo_path_kwargs=combo_path_kwargs)
     val_no = _contract_window(self, {}, {}, sites, **kw)
     return sign * _contract_window(self, ops, bonds, sites, **kw) / val_no
 
 
-def measure_nsite_norm_exact_oe(self, *, sites, unroll=None, checkpoint_loop=False, separate_layers=True, optimizer="default", devices=None, mp_workers_per_device=0, projectors=None, per_combo_path=False, combo_path_kwargs=None):
+def measure_nsite_norm_exact_oe(self, *, sites, unroll=None, checkpoint_loop=False, optimizer="default", devices=None, mp_workers_per_device=0, projectors=None, per_combo_path=False, combo_path_kwargs=None):
     """Contract only the norm <psi|psi> over the bounding window of ``sites``.
 
     Same contraction backend and options as :func:`measure_nsite_exact_oe`,
@@ -919,12 +934,12 @@ def measure_nsite_norm_exact_oe(self, *, sites, unroll=None, checkpoint_loop=Fal
     multiple numerator evaluations (see :func:`measure_nsite_numerator_exact_oe`).
     """
     return _contract_window(self, {}, {}, sites, unroll=unroll, checkpoint_loop=checkpoint_loop,
-                            separate_layers=separate_layers, optimizer=optimizer, devices=devices,
+                            optimizer=optimizer, devices=devices,
                             mp_workers_per_device=mp_workers_per_device, projectors=projectors,
                             per_combo_path=per_combo_path, combo_path_kwargs=combo_path_kwargs)
 
 
-def measure_nsite_numerator_exact_oe(self, *operators, sites, unroll=None, checkpoint_loop=False, separate_layers=True, optimizer="default", devices=None, mp_workers_per_device=0, projectors=None, per_combo_path=False, combo_path_kwargs=None):
+def measure_nsite_numerator_exact_oe(self, *operators, sites, unroll=None, checkpoint_loop=False, optimizer="default", devices=None, mp_workers_per_device=0, projectors=None, per_combo_path=False, combo_path_kwargs=None):
     """Contract only the unnormalized numerator ``sign * <psi| O0_s0 ... |psi>``.
 
     Same contraction backend and options as :func:`measure_nsite_exact_oe`;
@@ -934,7 +949,7 @@ def measure_nsite_numerator_exact_oe(self, *operators, sites, unroll=None, check
     """
     ops, bonds, sign = _parse_operators(self, operators, sites)
     return sign * _contract_window(self, ops, bonds, sites, unroll=unroll, checkpoint_loop=checkpoint_loop,
-                                   separate_layers=separate_layers, optimizer=optimizer, devices=devices,
+                                   optimizer=optimizer, devices=devices,
                                    mp_workers_per_device=mp_workers_per_device, projectors=projectors,
                                    per_combo_path=per_combo_path, combo_path_kwargs=combo_path_kwargs)
 
@@ -950,8 +965,8 @@ def measure_nsite_cut_map_oe(self, *operators, sites, probe_site, probe_slot, pr
     ``Y = M . Omega`` as a 4-leg tensor.
 
     With ``operators`` empty this contracts the norm window; with operators
-    given it contracts the numerator window (Jordan-Wigner strings or MPO
-    bond crossings included, same as :meth:`measure_nsite_numerator_exact_oe`).  The
+    given it contracts the numerator window (MPO bond crossings included, same
+    as :meth:`measure_nsite_numerator_exact_oe`).  The
     ``probe`` tensor, in the stored 3-leg projector form (env chi, fused
     ket-D x bra-D, thin), is inserted at ``(probe_site, probe_slot)`` as one
     half-projector.  Its partner is not inserted: the severed bonds on the

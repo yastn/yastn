@@ -266,6 +266,18 @@ def test_generate_random_mps(config_kwargs):
         mps.random_mpo(I, D_total=1, sigma=4, method='rand')
 
 
+
+@pytest.mark.parametrize('sym', ['Z2', 'U1'])
+def test_product_mpo_fermionic(config_kwargs, sym):
+    """ product_mpo of charged fermionic operators equals the single-term generate_mpo """
+    ops = yastn.operators.SpinlessFermions(sym=sym, **config_kwargs)
+    c, cp, n, I = ops.c(), ops.cp(), ops.n(), ops.I()
+    for term in ([cp, c], [c, n, cp], [cp, cp, c, c], [c, I, cp, n]):
+        N = len(term)
+        ref = mps.generate_mpo(mps.product_mpo(I, N=N), [mps.Hterm(1, list(range(N)), term)])
+        H = mps.product_mpo(term)
+        assert (H.to_tensor() - ref.to_tensor()).norm() < 1e-12 * ref.to_tensor().norm()
+
 def test_mixed_dims_mpo_and_transpose(config_kwargs):
     N = 5
     config = yastn.make_config(sym='none', **config_kwargs)

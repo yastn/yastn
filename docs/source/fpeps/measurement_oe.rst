@@ -84,59 +84,23 @@ Examples for a 2 x 3 window (``Nx = 2``, ``Ny = 3``)::
     from yastn.tensor.oe_blocksparse import make_sliced_legs
     unroll = {('h', 0, 0): make_sliced_legs(leg)}
 
-With the default ``separate_layers=True`` the ket, the operator and the bra
-of every site stay separate network tensors (:func:`_build_ketbra_separate`);
-with ``separate_layers=False`` each site's ket and bra are pre-contracted
-through the operator into one 8-leg tensor (:func:`_build_ketbra_contracted`).
-The latter is only possible for plain two-leg operators, whose Jordan-Wigner
-strings carry a fixed charge and can be applied to the site tensors before
-the contraction; see the next section.
+The ket, the operator and the bra of every site stay separate network tensors
+(:func:`_build_ketbra_separate`), with the fermionic crossings between them as swap
+pairs of the contraction.
 
 
-Strings of plain charged operators
-----------------------------------
+Plain charged operators
+-----------------------
 
-A plain operator of non-zero charge :math:`q` (a single :math:`c` or
-:math:`c^\dagger`) is the MPO case with a bond of dimension one: its
-virtual leg carries the fixed charge :math:`q` and has to be routed to a
-common reference point, the top-left corner of the window, so that the
-Jordan-Wigner strings of all operators in the product meet there and every
-crossing between them is accounted for.  The measurement takes the product in
-the lattice's fermionic order, :math:`O_{s_1} O_{s_2} \cdots O_{s_n}` with
-:math:`s_1 < s_2 < \cdots` (``sign_canonical_order`` supplies the sign of
-bringing the listed order into this one).  The rightmost operator acts first,
-and the string of :math:`O_s` runs over the sites *earlier* than :math:`s`,
-whose operators have not acted yet.  Every string therefore sees the
-occupation of the state before any operator, i.e. the bare ket physical leg.
-
-Sites earlier than :math:`s = (x, y)` in the fermionic order are those above
-it in column :math:`y` and all sites in the columns to its left.  The string
-of :math:`O_s` is routed accordingly (:func:`_string_path`): up its own
-column to the top row of the window, then left along the top row to the
-corner.  Along the way it crosses the following legs of the double-layer site
-tensors, named ``k`` (ket) or ``b`` (bra) plus the leg index
-``0 = top, 1 = left, 2 = bottom, 3 = right, 4 = physical``::
-
-    corner                         top row                       column y
-    (minx, miny)     (minx, y1), miny < y1 < y      (minx, y)     (x1, y), minx < x1 < x      (x, y)
-
-      k2, k4   <---   b0, k2, k4   <---   b0   <---  b3, k4  <---  k1, b3, k4  <---  k1
-
-``k4`` is the ket's own physical leg, before the operator sitting on that
-site acts.  Only the physical legs on the top row and in the site's own
-column are crossed explicitly; the parity of the sites lower in the left
-columns enters through the vertical ket and bra legs ``k2``, ``b0`` that the
-line crosses on the top row, since the site tensors below the line are
-neutral and their parity flows through those legs.
-
-Each crossing is a swap gate with the fixed charge :math:`q`,
-:math:`(-1)^{p(q)\,p(\mathrm{leg})}` block by block
-(:meth:`yastn.tn.fpeps.DoublePepsTensor.add_charge_swaps_`).  Because the
-charge is fixed, no extra network leg is needed: the gates are multiplied
-into the ket and bra tensors of the crossed sites before the contraction, in
-both builders.  Strings of several operators may overlap; on a shared leg the
-charges add, so two strings of opposite charge cancel there.  This is the
-same path :meth:`yastn.tn.fpeps.EnvCTM.measure_nsite_exact` uses.
+A product of plain operators :math:`O_{s_1} O_{s_2} \cdots O_{s_n}`, listed in any
+order, is measured as an MPO of bond dimension one if any of the operators is charged
+(a single :math:`c` or :math:`c^\dagger`): :func:`yastn.tn.mps.product_mpo` of the
+operators, its chain the sites in the order listed.  The bond between two neighbouring
+operators of the chain carries the total charge of the operators after it, and the
+charge travels along the MPO bonds exactly as the bonds of an MPO passed by the caller
+do (next section).  Operators listed on the same site are multiplied, with the sign of
+bringing them together.  A product of operators of zero charge needs no bonds; they sit
+on their sites as they are.
 
 
 .. _oe-mpo-operators:
@@ -154,115 +118,25 @@ A sum of operator products on one set of sites,
     O = \sum_t c_t \, o^{(t)}_{s_0} \, o^{(t)}_{s_1} \cdots o^{(t)}_{s_{L-1}},
 
 can be measured in a single contraction instead of one contraction per term.
-Build an MPO from the terms and pass it in place of the plain operators::
+Build it with :func:`yastn.tn.mps.generate_mpo` and pass the MPO in place of the
+plain operators::
 
-    mpo, bond_dims = fpeps.mpo_from_products(terms, tol=1e-12)
-    value = env.measure_nsite_exact_oe(*mpo, sites=sites)
+    import yastn.tn.mps as mps
 
-``terms`` is a list of ``(coeff, ops)`` pairs with one two-leg operator per
-site; the leg order of the returned tensors is given in
-:func:`yastn.tn.fpeps.mpo_from_products` below.
+    H = mps.generate_mpo(mps.product_mpo(I, N=len(sites)),
+                         [mps.Hterm(coeff, list(range(len(sites))), ops) for coeff, ops in terms])
+    value = env.measure_nsite_exact_oe(H, sites=sites)
 
-What the measurement requires
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+The chain of the MPO is ``sites`` as listed: position ``k`` of an
+:class:`yastn.tn.mps.Hterm` is the operator acting on ``sites[k]``, and ``I`` is the
+local identity, which fills the positions a term does not list.  The sites may be
+listed in any order, and neighbouring positions of the chain need not be
+neighbouring sites of the lattice.
 
-* An operator of rank greater than two is read as an MPO tensor.  Its number
-  of bond legs must match its position in the list: one for the two ends,
-  two in the middle.
-* Either every site carries an MPO tensor or every site carries a plain
-  two-leg operator; the two kinds are never mixed in one call, and each site
-  appears exactly once.
-* ``sites`` must be listed in the lattice's fermionic order
-  (:meth:`yastn.tn.fpeps.SquareLattice.f_ordered`); otherwise the call
-  raises.  The operators inside every term handed to ``mpo_from_products``
-  follow the same order.
-* For MPO input the measurement applies no reordering sign of its own.  The
-  commutation sign of each term must already sit in its coefficient.
-
-To evaluate a term written in another order, permute it first::
-
-    sign, perm = fpeps.canonical_order(term_ops, term_sites, env.f_ordered)
-    term_sites = [term_sites[p] for p in perm]
-    term_ops = [term_ops[p] for p in perm]
-    coeff = sign * coeff
-
-:func:`yastn.tn.fpeps.canonical_order` returns the permutation that sorts the
-sites into fermionic order and the sign of commuting the operators along with it.
-
-Operator bonds and unrolling
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-The bond between MPO tensors ``k-1`` and ``k`` is labelled ``('opb', k)``.
-It is unrolled like any other bond, e.g. ``unroll={('opb', 1): 2}``, or one
-charge sector at a time with
-:func:`yastn.tensor.oe_blocksparse.make_sliced_legs`.  The norm network
-contains no operator bonds, so these entries are dropped when the norm is
-contracted.  MPO tensors need ``separate_layers=True``, the default; a call
-with ``separate_layers=False`` is switched over with a warning.
-
-Example
-^^^^^^^
-
-Hopping plus density-density interaction on one bond of a fermionic PEPS with
-CTM environment ``env``::
-
-    import yastn
-    import yastn.tn.fpeps as fpeps
-
-    ops = yastn.operators.SpinlessFermions(sym='U1')
-    c, cp, n = ops.c(), ops.cp(), ops.n()
-    sites = [(0, 0), (0, 1)]                        # in fermionic order
-    terms = [(-1.0, [cp, c]), (-1.0, [c, cp]), (0.5, [n, n])]
-    mpo, bond_dims = fpeps.mpo_from_products(terms)   # bond_dims == [3]
-
-    norm = env.measure_nsite_norm_exact_oe(sites=sites)
-    num = env.measure_nsite_numerator_exact_oe(*mpo, sites=sites, unroll={('opb', 1): 1})
-    value = num / norm                              # == sum of the three plain measurements
-
-.. autofunction:: yastn.tn.fpeps.mpo_from_products
-.. autofunction:: yastn.tn.fpeps.sum_of_products
-.. autofunction:: yastn.tn.fpeps.canonical_order
-
-Swap gates of MPO
-^^^^^^^^^^^^^^^^^
-
-``sum_of_products`` forms plain outer products and applies no swap gate.  Its
-entries are therefore the coefficients of :math:`O` in the *interleaved word*
-``(out_0, in_0, out_1, in_1, ...)``, the order in which the outer product stacks
-the legs, and the MPO tensors inherit that meaning.  The measurement, in
-contrast, works in the Fock basis throughout, where the matrix elements of the
-same operator are indexed by the *nested word*
-``(out_0, ..., out_{L-1}, in_{L-1}, ..., in_0)``.
-
-The two words order the same legs differently, i.e. the same number multiplies
-two different basis elements,
-
-.. math::
-
-   \text{interleaved:}\quad
-   |o_0\rangle\langle i_0| \otimes |o_1\rangle\langle i_1| \otimes \cdots
-   \otimes |o_{L-1}\rangle\langle i_{L-1}| ,
-
-.. math::
-
-   \text{Fock:}\quad
-   |o_0 o_1 \cdots o_{L-1}\rangle\langle i_0 i_1 \cdots i_{L-1}| ,
-
-where the Fock bra, the adjoint of :math:`|i_0 i_1 \cdots i_{L-1}\rangle`, meets
-its legs in the reverse order :math:`i_{L-1}, \dots, i_0`.  For fermions the two
-elements differ by the sign of reordering the creation operators; producing that
-sign is the whole task.
-
-Going from one word to the other changes nothing in the tensors.
-:func:`yastn.tn.fpeps.mpo_from_products` returns one set of numbers, and the
-measurement never permutes, conjugates or rescales them.  What changes is only
-the picture we read them in: at which port each leg leaves its tensor, and hence
-in which order the legs are met.  The fermionic order lives in the drawing, not
-in the entries.
-
-The interleaved word is the picture the outer product draws.  Every bond runs
-straight from one tensor to the next and crosses nothing, and the legs of a
-tensor are met as the pair ``(out_k, in_k)`` before the next tensor begins::
+:func:`yastn.tn.mps.generate_mpo` returns the operator in the Fock basis: the
+entries of its tensors are the matrix elements of :math:`O`, the string of the
+chain among them.  On the chain it is then an ordinary MPO, bonds running
+straight from one tensor to the next and crossing nothing::
 
                i0             i1             i2             i3
                 |              |              |              |
@@ -272,52 +146,85 @@ tensor are met as the pair ``(out_k, in_k)`` before the next tensor begins::
                 |              |              |              |
                o0             o1             o2             o3
 
-           basis element  |o0><i0| (x) |o1><i1| (x) |o2><i2| (x) |o3><i3|
-           legs met as    o0, i0, o1, i1, o2, i2, o3, i3
-
-The Fock word keeps the same tensors and only re-routes the bonds: every bond
-leaves its tensor at the upper-left port, passes over the top of that tensor and
-enters the next tensor at the lower-left port.  On the way it crosses exactly one
-line, the ``in`` leg of the tensor it left; bonds cross neither each other nor
-any ``out`` leg.  Bond ``k`` in the picture carries the network label
-``('opb', k)``::
-
-               i0             i1             i2              i3
-                |              |              |               |
-           +----X----+    +----X----+    +----X----+          |
-           |    |    |    |    |    |    |    |    |          |
-           |  +-+--+ |    |  +-+--+ |    |  +-+--+ |        +-+--+
-           +--| M0 | |    +--| M1 | |    +--| M2 | |        | M3 |
-              |    | +--1----|    | +--2----|    | +--3-----|    |
-              +-+--+         +-+--+         +-+--+          +-+--+
-                |               |               |             |
-               o0              o1              o2             o3
-
-           basis element  |o0 o1 o2 o3> <i0 i1 i2 i3|
-           legs met as    o0, o1, o2, o3, i3, i2, i1, i0
-                          (along the bottom, then back along the top)
-           X = swap gate between the bond and the in leg it crosses
+           matrix element  <o0 o1 o2 o3| O |i0 i1 i2 i3>
            1, 2, 3 = network labels ('opb', 1), ('opb', 2), ('opb', 3)
 
-Each crossing ``X`` is one swap gate, :math:`(-1)^{p(\mathrm{bond})\,p(\mathrm{in})}`
-block by block, and the product of all of them is exactly the Jordan-Wigner
-string of :math:`O`, i.e. the sign that turns the interleaved-word coefficients
-into Fock-basis matrix elements.  The redrawing and the crossings it creates are
-the whole conversion; nothing has to be baked into the MPO.
+In the window each bond joins its two MPO tensors directly, and it gets the swap
+gates that applying the MPO to the ket along a path, as
+:meth:`yastn.tn.fpeps.Peps.apply_gate_` does, would produce -- worked out rather
+than performed, so the operator is never absorbed into the ket.  The path runs along
+the lattice from each site of the chain to the next, and a site it only passes
+contributes the swap gates an identity there would, without any tensor being added.
+At every step the function the gates use,
+:func:`yastn.tn.fpeps._gates_auxiliary.ordering_swaps`, adapts the tensors to a step
+that runs against the lattice or the fermionic order; at every site the bond crosses
+the legs it would meet on being fused into the ket
+(:func:`yastn.tn.fpeps._gates_auxiliary.apply_gate_onsite`).  Two bonds sharing a
+lattice bond cross once if they are fused into it in different orders at its two
+ends.  A bond has no fixed charge, so these swap gates are evaluated block by block
+during the contraction.  The path from one site to the next is a shortest one along
+the lattice.
 
-Why the crossings generate that string: in the block where site ``j`` carries the
-local operator charge :math:`q_j`, the bond leaving tensor ``k`` carries the
-cumulative charge :math:`\sum_{j \le k} q_j`.  Every term of :math:`O` is
-charge-neutral, so that is the same parity as :math:`\sum_{j > k} q_j`, and the
-crossing at site ``k`` contributes :math:`(-1)^{p(n_k)\, p(\sum_{j > k} q_j)}`
-with :math:`n_k` the occupation on the ``in`` leg of site ``k``.  That is
-precisely the sign of commuting all later operators past site ``k``.  Because the
-charge is resolved sector by sector on the bond, terms of different fermion
-parity can share one MPO.
+What the measurement requires
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-On the lattice the same crossings are routed through the double layer to the
-top-left corner of the window, along the string path of plain charged
-operators (previous section).  A bond leg has no fixed charge, so its
-crossings cannot be folded into the site tensors; they become swap pairs
-between the bond leg and the crossed network legs, evaluated block by block
-during the contraction.
+* Either plain operators, one per listed site, or one MPO, passed as a single
+  :class:`yastn.tn.mps.MpsMpoOBC`; the two kinds are never mixed in one call.
+* Plain operators may list their sites in any order, and a site more than once.
+  The product is taken as written, :math:`O_{s_1} O_{s_2} \cdots O_{s_n}` with the
+  rightmost operator acting first, whatever the lattice's fermionic order.
+* The chain of an MPO is ``sites`` as listed: ``H[k]`` acts on ``sites[k]``.  Any
+  order works, neighbouring positions of the chain need not be neighbouring sites,
+  and each site appears once.
+* The measurement applies no sign of its own to an MPO: ``generate_mpo`` puts the
+  sign of every term into the MPO, from the order in which that term lists its
+  operators, with the same convention as plain operators.
+
+A term may list its sites in any order, independently of the chain and of the other
+terms: each operator takes the position of its site in the chain, and
+``generate_mpo`` sorts the term by those positions and multiplies it by the sign of
+that commutation::
+
+    H = mps.generate_mpo(mps.product_mpo(I, N=len(sites)),
+                         [mps.Hterm(coeff, [sites.index(s) for s in term_sites], term_ops)
+                          for coeff, term_sites, term_ops in terms])
+    value = env.measure_nsite_exact_oe(H, sites=sites)
+
+Operator bonds and unrolling
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The bond between MPO tensors ``k-1`` and ``k`` is labelled ``('opb', k)``.
+It is unrolled like any other bond, e.g. ``unroll={('opb', 1): 2}``, or one
+charge sector at a time with
+:func:`yastn.tensor.oe_blocksparse.make_sliced_legs`.  The dimension-one bonds
+at the two ends of the chain are dropped and have no label.  A product of plain
+charged operators has such bonds too, of dimension one, along its sites in the
+order listed.  The norm network contains no operator bonds, so these entries
+are dropped when the norm is contracted.
+
+Example
+^^^^^^^
+
+Hopping in both directions plus density-density interaction on a diagonal pair of
+sites of a fermionic PEPS with CTM environment ``env``.  The chain lists the sites
+against the lattice's fermionic order, the sites are not neighbours, and the two
+hopping terms list their sites in opposite orders::
+
+    import yastn
+    import yastn.tn.mps as mps
+
+    ops = yastn.operators.SpinlessFermions(sym='U1')
+    c, cp, n, I = ops.c(), ops.cp(), ops.n(), ops.I()
+    sites = [(0, 1), (1, 0)]
+    terms = [(-1.0, [(0, 1), (1, 0)], [cp, c]),   # c+_(0,1) c_(1,0)
+             (-1.0, [(1, 0), (0, 1)], [cp, c]),   # c+_(1,0) c_(0,1)
+             (0.5, [(0, 1), (1, 0)], [n, n])]
+    H = mps.generate_mpo(mps.product_mpo(I, N=len(sites)),
+                         [mps.Hterm(co, [sites.index(s) for s in ss], oo) for co, ss, oo in terms])
+
+    norm = env.measure_nsite_norm_exact_oe(sites=sites)
+    num = env.measure_nsite_numerator_exact_oe(H, sites=sites, unroll={('opb', 1): 1})
+    value = num / norm
+
+    # the same as the plain measurements, each term with its sites as it lists them
+    ref = sum(co * env.measure_nsite_numerator_exact_oe(*oo, sites=ss) for co, ss, oo in terms) / norm
