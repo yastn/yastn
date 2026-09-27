@@ -632,25 +632,34 @@ def fp_ctmrg(env: EnvCTM,
     with respect to the state parameters, via `Neumann series expansion
     <https://en.wikipedia.org/wiki/Neumann_series>`_ of the fixed-point iteration.
 
-    Args:
-        env (EnvCTM): CTM environment
-        ctm_opts_fwd (dict): Options for forward CTMRG convergence.
-            See :class:`CTMOpts` for the accepted keys.
-        ctm_opts_fp (dict): Overrides for the gauge-fixing CTM step. Applied on
-            top of ``ctm_opts_fwd``, which it otherwise inherits -- including
-            ``max_sweeps`` and ``corner_tol``, which the Neumann backward loop
-            then uses as its iteration budget and gradient tolerance.
-        opts (FixedPointOpts | None): The two above, pre-resolved. Takes
-            precedence over the dicts when given.
-        devices (list[str] | None): Device list for the CTM step. With one device,
-            everything runs serially (single-device path). With more than one,
-            forward CTMRG convergence, the FP CTM step, and the Neumann
-            backward all use the AD-aware distributed dispatch on those devices.
-            Default ``None`` falls back to ``[env.config.default_device]``.
+    Parameters
+    ----------
+    env: EnvCTM
+        CTM environment.
 
-    Returns:
-        EnvCTM: Environment at fixed point.
-        Sequence[Tensor]: raw environment data for the backward pass.
+    ctm_opts_fwd: dict | None
+        Options for the forward CTMRG convergence.
+        See :class:`yastn.tn.fpeps.envs.CTMOpts` for the accepted keys.
+
+    ctm_opts_fp: dict | None
+        Overrides for the gauge-fixing CTM step. Applied on top of
+        ``ctm_opts_fwd``, which it otherwise inherits -- including ``max_sweeps``
+        and ``corner_tol``, which the Neumann backward loop then uses as its
+        iteration budget and gradient tolerance.
+
+    devices: list[str] | None
+        Device list for the CTM step. With one device everything runs serially.
+        With more than one, the forward convergence, the fixed-point CTM step and
+        the Neumann backward all use the AD-aware distributed dispatch on those
+        devices. ``None`` falls back to ``[env.config.default_device]``.
+
+    opts: FixedPointOpts | None
+        The two option dicts above, pre-resolved. Takes precedence when given.
+
+    Returns
+    -------
+    EnvCTM
+        Environment at the fixed point.
     """
     if opts is None:
         opts = FixedPointOpts.from_legacy_dicts(ctm_opts_fwd, ctm_opts_fp, devices)

@@ -112,19 +112,28 @@ def fp_ctmrg_c4v(env: EnvCTM_c4v,
     with respect to the state parameters, via `Neumann series expansion
     <https://en.wikipedia.org/wiki/Neumann_series>`_ of the fixed-point iteration.
 
-    Args:
-        env (EnvCTM_c4v): CTM environment
-        ctm_opts_fwd (dict): Options for forward CTMRG convergence.
-            See :class:`CTMOpts` for the accepted keys.
-        ctm_opts_fp (dict): Overrides for the gauge-fixing CTM step, applied on
-            top of ``ctm_opts_fwd`` which it otherwise inherits -- including
-            ``max_sweeps`` and ``corner_tol``, which the Neumann backward loop
-            then uses as its budget and tolerance.
-        opts (FixedPointOpts | None): the two above, pre-resolved.
+    Parameters
+    ----------
+    env: EnvCTM_c4v
+        C4v-symmetric CTM environment.
 
-    Returns:
-        EnvCTM_c4v: Environment at fixed point.
-        Sequence[Tensor]: raw environment data for the backward pass.
+    ctm_opts_fwd: dict | None
+        Options for the forward CTMRG convergence.
+        See :class:`yastn.tn.fpeps.envs.CTMOpts` for the accepted keys.
+
+    ctm_opts_fp: dict | None
+        Overrides for the gauge-fixing CTM step, applied on top of
+        ``ctm_opts_fwd`` which it otherwise inherits -- including ``max_sweeps``
+        and ``corner_tol``, which the Neumann backward loop then uses as its
+        budget and tolerance.
+
+    opts: FixedPointOpts | None
+        The two option dicts above, pre-resolved.
+
+    Returns
+    -------
+    EnvCTM_c4v
+        Environment at the fixed point.
     """
     if opts is None:
         opts = FixedPointOpts.from_legacy_dicts(ctm_opts_fwd, ctm_opts_fp)

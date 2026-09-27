@@ -605,39 +605,12 @@ class EnvCTM():
         checkpoint_move: bool
             Whether to use (reentrant) checkpointing for the move. The default is ``False``
 
-        opts_si: dict | None
+        opts_si: dict | SIOpts | None
             Enable recycled subspace-iteration projectors with ``{'enabled': True}``.
-            Supported options are
-                * ``oversampling`` (default 5),
-                * ``niter`` (default 5): Number of subspace iterations when adjusting range-finders,
-                * ``tol`` (default 1e-3): Desired subspace error of range-finders,
-                * ``warmup`` (default 5 projector updates),
-                * ``redistribute_sectors`` (default False): Reallocate the SI rank
-                    between charge sectors, on the schedule of :func:`redistribute_due`,
-                * ``redistribute_frequency`` (default 0, disabled): Redistribute every
-                    that many updates once past ``warmup``,
-                * ``refinement`` (``'per_sector_oversampling'`` by default, or
-                    ``'adaptive_spectrum'``/``'sector_dimensions'``): Algorithm
-                    for subspace sector refinement, see :func:`si_refinement`,
-                * ``adaptive_spectrum_iterations`` (default 5): Number of refinement
-                    passes used by ``refinement='adaptive_spectrum'``; ignored by the
-                    other refinements,
-                * ``skip_SI_update`` (default False): Skip the subspace iteration
-                    altogether on an update that is past ``warmup``, outside the
-                    redistribution schedule, and whose bases already report an
-                    error below ``tol``. A shortcut: it trades accuracy for speed,
-                    and leaves the bases exactly as they came in,
-                * ``rebase`` (default True): When changed corner legs invalidate the
-                    recycled bases, carry them onto the new row space instead of
-                    drawing fresh ones, see :func:`si_rebase_bases`,
-                * ``recycle_grad`` (default False).
-
-            ``'sector_dimensions'`` distributes SI vectors proportionally to the charge-sector dimensions of the corners.
-            ``tol`` compares against a subspace error weighted by the singular
-            value of each direction, see :func:`si_subspace_error`, so that
-            oversampled directions at roundoff -- of which there are many once
-            ``D_total + oversampling`` exceeds the numerical rank of the corners
-            -- neither set the error nor decide the iteration count.
+            See :class:`yastn.tn.fpeps.envs.SIOpts` for the full list of fields and
+            their defaults, and the *Subspace-iteration mode* section of the
+            :ref:`CTM environment page<fpeps/environment_ctm:Environment CTM>` for
+            how they combine over a sweep.
 
         cutoff: float | None
             Pseudo-inverse cutoff in projector construction, regularizing values close to floating-point precision. 

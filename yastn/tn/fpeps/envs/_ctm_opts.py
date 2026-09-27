@@ -15,20 +15,9 @@
 r"""
 Structured options for the PEPS CTM environment routines.
 
-This module is deliberately a **leaf**: it imports nothing from ``yastn.backend``
-and nothing from any other ``envs/*`` module, so it can be imported by
-:mod:`_env_ctm`, :mod:`_env_ctm_SI_projectors`, :mod:`_env_ctm_c4v`,
-:mod:`_env_ctm_dist_mp`, :mod:`_env_ctm_dist_mp_AD`, :mod:`fixed_pt` and
-:mod:`fixed_pt_c4v` without any risk of an import cycle.
-
-Three frozen dataclasses hold what the *user* asked for:
-
-* :class:`SIOpts` -- subspace-iteration options. Not to be confused with
-  ``SI_state`` in :mod:`_env_ctm_SI_projectors`, which is per-projector-pair
-  *runtime* state (``age``, ``error``, ...) accumulated by a run.
-* :class:`CTMOpts` -- everything a CTM sweep needs.
-* :class:`FixedPointOpts` -- the forward/fixed-point pair plus the Neumann
-  backward controls.
+* :class:`CTMOpts` -- main CTM algorithm options.
+* :class:`SIOpts` -- subspace-iteration options (optionally used to accelerate CTM).
+* :class:`FixedPointOpts` -- the CTM with fixed-point gradient algorithm.
 
 All three are plain stdlib dataclasses carrying only config-representable
 types, so a downstream application can build them from a YAML/TOML/JSON file
@@ -36,9 +25,8 @@ with :func:`from_dict`, layer command-line overrides on top with
 :func:`override`, and generate its own CLI flags from :func:`argspec` -- without
 YASTN depending on any configuration framework.
 
-Defaults live here and nowhere else. :func:`make_ctm_opts` is the single
-boundary that accepts loose keyword arguments; it rejects unknown names rather
-than letting a typo ride an untyped ``**kwargs`` down into ``svd``.
+Single point of reference for default values. :func:`make_ctm_opts` is the single
+boundary that accepts loose keyword arguments; it rejects unknown names.
 """
 from __future__ import annotations
 
@@ -55,19 +43,14 @@ __all__ = ['SIOpts', 'CTMOpts', 'FixedPointOpts', 'make_si_opts', 'make_ctm_opts
 
 
 # Default ``tol`` handed to svd_with_truncation when the caller pinned neither
-# 'tol' nor 'tol_block'. Previously duplicated in three modules.
+# 'tol' nor 'tol_block'.
 DEFAULT_SVD_TOL = 1e-14
 
-# CTM projectors want a deterministic SVD gauge, unlike linalg's own default of
-# False. Applied in two places -- CTMOpts.svd_kwargs for the converted paths and
-# proj_corners for callers that still hand it a raw dict -- so the value is
-# named here rather than written out at each.
+# Force deterministic (CTM) projectors SVD gauge.
 DEFAULT_FIX_SIGNS = True
 
 # Truncation keys the SI projector path forwards to ``truncation_mask``.
-# Deliberately narrower than the full opts_svd: the SI path has no use for
-# 'policy', 'k_block', 'svds_thresh', 'which' or 'Uaxis'/'Vaxis', and fixes
-# 'fix_signs' itself. Naming the set is what makes that divergence reviewable.
+# Narrower than the full opts_svd since SI path always uses full-rank SVD.
 SI_TRUNCATION_KEYS = ('tol', 'tol_block', 'D_block', 'D_total', 'largest_gap',
                       'eps_multiplet', 'hermitian', 'mask_f')
 
@@ -81,9 +64,7 @@ _CTM_ONLY_SVD_KEYS = ('profiling_mode',)
 
 # Renamed options still accepted on input. The canonical name is the value.
 # These exist purely as a deprecation shim; delete a row once no stored config
-# can carry the old name. Note that 'correct' and 'correction_frequency' are
-# deliberately absent -- they were renamed without a shim, so a config using
-# them is better served by a hard error than by a silent behaviour change.
+# can carry the old name.
 _SI_ALIASES = {'asvr_iterations': 'adaptive_spectrum_iterations'}
 _REFINEMENT_ALIASES = {'cwo': 'per_sector_oversampling',
                        'asvr': 'adaptive_spectrum',
@@ -105,10 +86,6 @@ def _unknown(name, allowed, what):
 class SIOpts:
     r"""
     Options of the recycled subspace-iteration (SI) projectors.
-
-    Holds only what the caller asked for. Per-projector-pair runtime state --
-    how many times a pair has been updated, the subspace error it last
-    reported -- lives in ``SI_state`` on the environment instead.
 
     Parameters
     ----------
@@ -196,7 +173,7 @@ class CTMOpts:
     Construct with :func:`make_ctm_opts`, which accepts the legacy keyword
     spellings and reports unknown names. Direct construction is fine too; all
     normalization and validation happens in ``__post_init__``, so
-    :func:`dataclasses.replace` and :func:`from_dict` are equally safe.
+    ``dataclasses.replace`` and :func:`from_dict` are equally safe.
 
     Parameters
     ----------
@@ -349,7 +326,7 @@ class CTMOpts:
         The subset of ``opts_svd`` the SI path forwards to ``truncation_mask``.
 
         Narrower than :meth:`svd_kwargs` by design; see
-        :data:`SI_TRUNCATION_KEYS`.
+        ``SI_TRUNCATION_KEYS``.
         """
         return {k: self.opts_svd[k] for k in SI_TRUNCATION_KEYS if k in self.opts_svd}
 
@@ -361,7 +338,7 @@ class CTMOpts:
 @dataclass(frozen=True, kw_only=True)
 class FixedPointOpts:
     r"""
-    Options of the fixed-point CTM (:func:`fp_ctmrg`).
+    Options of the fixed-point CTM, see :func:`yastn.tn.fpeps.envs.fixed_pt.fp_ctmrg`.
 
     ``FixedPoint`` reverses the CTM, so the forward settings carry over
     to the backward path by design: ``fp`` is ``fwd`` with selective overrides,
@@ -412,23 +389,22 @@ class FixedPointOpts:
     # ------------------------------------------------------------------
     @property
     def neumann_max_iter(self) -> int:
-        """Neumann iteration budget: the FP step's sweep budget, carried over."""
+        """Neumann iteration budget, carried over from the FP step's sweep budget."""
         return self.fp.max_sweeps
 
     @property
     def neumann_tol(self) -> float:
-        """Neumann gradient tolerance: the FP step's corner tolerance, carried over."""
+        """Neumann gradient tolerance, carried over from the FP step's corner tolerance."""
         return self.fp.corner_tol
 
     @classmethod
     def from_legacy_dicts(cls, ctm_opts_fwd=None, ctm_opts_fp=None, devices=None):
         r"""
-        Build from the ``ctm_opts_fwd`` / ``ctm_opts_fp`` dicts of :func:`fp_ctmrg`.
+        Build from the ``ctm_opts_fwd`` / ``ctm_opts_fp`` dicts of ``fp_ctmrg``.
 
         Reproduces the historical derivation exactly: ``fp`` starts as a copy of
         ``fwd`` and is then overridden selectively, with ``opts_svd`` merged key
-        by key rather than replaced. :func:`make_ctm_opts` already has both of
-        those semantics, so the merge needs no second implementation.
+        by key rather than replaced.
 
         Keys that are not CTM options (``neumann_patience``, and the legacy
         ``fp_devices``) are lifted out before the rest is handed to
