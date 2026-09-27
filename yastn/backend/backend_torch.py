@@ -506,13 +506,14 @@ def eig(data, meta=None, sizes=(1, 1), biorth_tol=None, **kwargs):
             V = V + (Id - V @ U) @ V
             err = torch.abs(torch.sum(V.T * U, axis=0) - 1).max()
 
-        if biorth_tol is None:
-            # The attainable residual is O(eps * cond(U)) -- no amount of refinement beats it.
-            # ||U||_1 ||V||_1 upper-bounds cond(U) in O(n^2), reusing the inverse computed above.
-            biorth_tol = 10 * eps * torch.linalg.matrix_norm(U, 1) * torch.linalg.matrix_norm(V, 1)
-        if err > biorth_tol:
+        # The attainable residual is O(eps * cond(U)) -- no amount of refinement beats it.
+        # ||U||_1 ||V||_1 upper-bounds cond(U) in O(n^2), reusing the inverse computed above.
+        # NOTE keep this per-block; assigning to biorth_tol would judge later blocks by the first block's bound.
+        tol = biorth_tol if biorth_tol is not None else \
+              10 * eps * torch.linalg.matrix_norm(U, 1) * torch.linalg.matrix_norm(V, 1)
+        if err > tol:
             raise ValueError("Biorthonormalization of left/right eigenvector pairs failed: residual "
-                            f"{err.item():.3e} exceeds tolerance {float(biorth_tol):.3e}. The matrix of right "
+                            f"{err.item():.3e} exceeds tolerance {float(tol):.3e}. The matrix of right "
                             "eigenvectors is numerically singular (defective or nearly-defective input).")
 
         s_order= argsort_which(S, which=kwargs.get('which', 'LM'))
