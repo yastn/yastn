@@ -50,6 +50,8 @@ import queue
 import threading
 import time
 
+from ._ctm_opts import CTMOpts, make_ctm_opts
+
 
 log = logging.getLogger(__name__)
 
@@ -948,7 +950,7 @@ def _stage_apply_batched(pool, stage, jobs):
 # Top-level orchestration
 # ===========================================================================
 
-def update_core_AD_(env, move, opts_svd, devices, **kwargs):
+def update_core_AD_(env, opts, move, devices):
     """One CTM move, AD-aware distributed.
 
     Mirrors ``_env_ctm_dist_mp.py::_update_core_D_`` but builds an
@@ -967,11 +969,6 @@ def update_core_AD_(env, move, opts_svd, devices, **kwargs):
 
     pool = get_or_create_pool(devices, env.config)
 
-    # Don't mutate caller's dict; default 'tol' if neither tol nor tol_block set.
-    opts_svd = dict(opts_svd)
-    if 'tol' not in opts_svd and 'tol_block' not in opts_svd:
-        opts_svd['tol'] = 1e-14
-
     # 'h'/'v' moves use one site group containing all sites.
     sites_proj = list(env.sites())
 
@@ -983,13 +980,12 @@ def update_core_AD_(env, move, opts_svd, devices, **kwargs):
             site_to_rank[site] = len(site_to_rank) % pool.n_workers
         return site_to_rank[site]
 
-    # Forward all caller kwargs to the projector path -- mirrors the
-    # non-AD _env_ctm_dist_mp.py. proj_corners / svd_with_truncation
-    # consume what they need (truncation_f, svd_policy, svds_thresh,
-    # use_qr, fix_signs, verbosity, profiling_mode, ...) and ignore
-    # the rest. Earlier this filtered to {'use_qr'} only and silently
-    # dropped svd_policy / truncation_f, changing FP CTM behaviour.
-    kw_proj = dict(kwargs)
+    # What the worker-side projector path reads. opts_svd carries the full
+    # truncation contract of svd_with_truncation (policy, svds_thresh,
+    # fix_signs, verbosity, ...); use_qr and cutoff are CTM-level.
+    opts_svd = opts.svd_kwargs()
+    kw_proj = {'use_qr': opts.use_qr, 'cutoff': opts.cutoff,
+               'profiling_mode': opts.profiling_mode}
 
     # ----- Fused halves + projectors per site.  One worker job holds a
     # single autograd graph from the 16 env leaves through halves to
@@ -1082,18 +1078,26 @@ def _assign_stage3_outs(env, site, mv, outs):
             env[site].br = res_corner_b
 
 
-def update_AD_(env, opts_svd, moves='hv', method='2x2', devices=None,
-               **kwargs):
-    """One CTM sweep, AD-aware distributed."""
+def update_AD_(env, opts_svd=None, moves=None, method=None, devices=None,
+               *, opts=None, **kwargs):
+    """One CTM sweep, AD-aware distributed.
+
+    ``method`` is accepted for signature parity with the other update
+    entry points; this path is hardwired to the fused 2x2 halves.
+    """
+    opts = make_ctm_opts(opts if opts is not None else env.default_opts,
+                         opts_svd=opts_svd, moves=moves, method=method,
+                         devices=devices, **kwargs)
+    devices = list(opts.devices) if opts.devices else None
     if devices is None:
         raise ValueError("update_AD_ requires devices=...")
-    for mv in moves:
-        update_core_AD_(env, mv, opts_svd, devices, **kwargs)
+    for mv in opts.moves:
+        update_core_AD_(env, opts, mv, devices)
     return env
 
 
-def iterate_AD_(env, opts_svd, moves='hv', method='2x2', max_sweeps=1,
-                devices=None, **kwargs):
+def iterate_AD_(env, opts_svd=None, moves=None, method=None, max_sweeps=None,
+                devices=None, *, opts=None, **kwargs):
     """Generator: forward CTMRG convergence loop, AD-aware distributed.
 
     Drop-in replacement for ``_env_ctm_dist_mp.iterate_D_`` at the
@@ -1117,20 +1121,18 @@ def iterate_AD_(env, opts_svd, moves='hv', method='2x2', max_sweeps=1,
     import torch
     from ._env_ctm import CTMRG_out
 
-    if devices is None or len(devices) < 1:
+    opts = make_ctm_opts(opts if opts is not None else env.default_opts,
+                         opts_svd=opts_svd, moves=moves, method=method,
+                         max_sweeps=max_sweeps, devices=devices, **kwargs)
+    if not opts.devices:
         raise ValueError("iterate_AD_ requires devices=...")
 
-    # Strip control kwargs that don't belong on update_AD_'s projector path.
-    # corner_tol / iterator_step belong to the iterate_D_ generator API;
-    # checkpoint_move is a backward-graph option, irrelevant for no_grad fwd.
-    update_kwargs = {k: v for k, v in kwargs.items()
-                     if k not in ('iterator_step', 'corner_tol',
-                                   'iterator', 'checkpoint_move')}
-
-    for sweep in range(1, max_sweeps + 1):
+    # Sweep-loop controls (corner_tol, iterator_step, checkpoint_move) are
+    # fields of CTMOpts rather than stray kwargs, so update_AD_ simply ignores
+    # what does not concern it; no deny-list is needed.
+    for sweep in range(1, opts.max_sweeps + 1):
         with torch.no_grad():
-            update_AD_(env, opts_svd=opts_svd, moves=moves,
-                       method=method, devices=devices, **update_kwargs)
+            update_AD_(env, opts=opts)
         yield CTMRG_out(sweeps=sweep, max_dsv=None,
                         max_D=env.max_D(), converged=False)
 
@@ -1142,9 +1144,18 @@ def iterate_AD_(env, opts_svd, moves='hv', method='2x2', max_sweeps=1,
 def fp_update_(env_in, ctm_opts_fp):
     """Honor ``ctm_opts_fp['fp_devices']`` to switch between serial and
     distributed-AD updates.
+
+    Still takes the plain dict that ``fixed_pt`` builds; it is normalized to
+    :class:`CTMOpts` here. ``fixed_pt`` itself moves to ``FixedPointOpts``
+    separately, at which point ``fp_devices`` becomes a declared field.
     """
-    fp_devices = ctm_opts_fp.get('fp_devices', None)
-    opts = {k: v for k, v in ctm_opts_fp.items() if k != 'fp_devices'}
+    if isinstance(ctm_opts_fp, CTMOpts):
+        opts = ctm_opts_fp
+        fp_devices = list(opts.devices) if opts.devices else None
+    else:
+        fp_devices = ctm_opts_fp.get('fp_devices', None)
+        opts = make_ctm_opts(**{k: v for k, v in ctm_opts_fp.items()
+                                if k != 'fp_devices'})
     if fp_devices is None:
-        return env_in.update_(**opts)
-    return update_AD_(env_in, devices=fp_devices, **opts)
+        return env_in.update_(opts=opts)
+    return update_AD_(env_in, opts=opts, devices=fp_devices)

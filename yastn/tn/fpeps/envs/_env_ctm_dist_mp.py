@@ -18,6 +18,7 @@ from typing import Callable, Sequence
 
 from ._env_contractions import halves_4x4_lhr, halves_4x4_tvb, update_env_fetch_args, update_env_dir
 from ._env_ctm import CTMRG_out, EnvCTM, proj_corners
+from ._ctm_opts import CTMOpts, make_ctm_opts
 from .. import Site, DoublePepsTensor
 
 from ...._from_dict import from_dict
@@ -37,7 +38,8 @@ def _validate_devices_list(devices: list[str] | None) -> None:
         raise YastnError("At least two devices must be provided for distributed CTM.")
 
 
-def iterate_D_(env, opts_svd=None, moves='hv', method='2x2', max_sweeps=1, iterator=False, corner_tol=None, **kwargs):
+def iterate_D_(env, opts_svd=None, moves=None, method=None, max_sweeps=None,
+               iterator=False, corner_tol=None, *, opts=None, **kwargs):
         r"""
         Perform CTMRG updates :meth:`yastn.tn.fpeps.EnvCTM.update_` until convergence.
         Convergence can be measured based on singular values of CTM environment corner tensors.
@@ -100,20 +102,21 @@ def iterate_D_(env, opts_svd=None, moves='hv', method='2x2', max_sweeps=1, itera
                 * ``max_D`` largest bond dimension of environment tensors virtual legs.
                 * ``converged`` whether convergence based on ``corner_tol`` has been reached.
         """
-        if "checkpoint_move" in kwargs:
-            if "torch" in env.config.backend.BACKEND_ID:
-                assert kwargs["checkpoint_move"] in ['reentrant', 'nonreentrant', False], f"Invalid choice for {kwargs['checkpoint_move']}"
-        kwargs["iterator_step"] = kwargs.get("iterator_step", int(iterator))
-        tmp = _ctmrg_iterator_D_(env, opts_svd, moves, method, max_sweeps, corner_tol, **kwargs)
-        return tmp if kwargs["iterator_step"] else next(tmp)
+        opts = make_ctm_opts(opts if opts is not None else env.default_opts,
+                             opts_svd=opts_svd, moves=moves, method=method,
+                             max_sweeps=max_sweeps, iterator=iterator,
+                             corner_tol=corner_tol, **kwargs)
+        tmp = _ctmrg_iterator_D_(env, opts)
+        return tmp if opts.iterator_step else next(tmp)
 
 
-def _ctmrg_iterator_D_(env, opts_svd, moves, method, max_sweeps, corner_tol, **kwargs):
+def _ctmrg_iterator_D_(env, opts: CTMOpts):
     """ Generator for iterate_ (or its alias ctmrg_). """
-    iterator_step = kwargs.get("iterator_step", 0)
-    max_dsv, converged, prev_corner_sv = None, False, None
+    iterator_step = opts.iterator_step
+    check = opts.conv_check if opts.conv_check is not None else opts.corner_tol
+    max_dsv, converged, history = None, False, []
 
-    devices= kwargs.get('devices', None)
+    devices = list(opts.devices) if opts.devices else None
     _validate_devices_list(devices)
 
     mp= env.config.backend.mp
@@ -130,24 +133,20 @@ def _ctmrg_iterator_D_(env, opts_svd, moves, method, max_sweeps, corner_tol, **k
 
     try:
         logger.info(f"ctmrg_T main loop max_workers={max_workers} on devices={devices}")
-        for sweep in range(1, max_sweeps + 1):
+        for sweep in range(1, opts.max_sweeps + 1):
             if env.profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.range_push(f"update_")
-            update_D_(ctmrg_mp_context, env, opts_svd=opts_svd, moves=moves, method=method, **kwargs)
+            update_D_(ctmrg_mp_context, env, opts=opts)
             if env.profiling_mode in ["NVTX",]: env.config.backend.cuda.nvtx.range_pop()
 
-            # use default CTM convergence check
-            if corner_tol is not None:
-                # Evaluate convergence of CTM by computing the difference of environment corner spectra between consecutive CTM steps.
-                corner_sv = env.calculate_corner_svd()
-                max_dsv = max((corner_sv[k] - prev_corner_sv[k]).norm().item() for k in corner_sv) if prev_corner_sv is not None else float('Nan')
-                prev_corner_sv = corner_sv
-                converged = max_dsv < corner_tol
+            # Same convergence check as the serial path, which also accepts a
+            # callable and handles corner_tol=None.
+            if check is not None:
+                converged, max_dsv, history = env.ctm_conv_corner_spec(history, check)
                 logging.info(f'Sweep = {sweep:03d}; max_diff_corner_singular_values = {max_dsv:0.2e}')
-
                 if converged:
                     break
 
-            if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
+            if iterator_step and sweep % iterator_step == 0 and sweep < opts.max_sweeps:
                 yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
     except Exception as e:
         logger.error(f"ctmrg_T main loop exception: {e}")
@@ -164,7 +163,7 @@ def _ctmrg_iterator_D_(env, opts_svd, moves, method, max_sweeps, corner_tol, **k
     yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
 
 
-def update_D_(ctmrg_mp_context, env, opts_svd, moves='hv', method='2x2', **kwargs):
+def update_D_(ctmrg_mp_context, env, opts_svd=None, moves=None, method=None, *, opts=None, **kwargs):
     r"""
     Perform one step of CTMRG update. Environment tensors are updated in place.
 
@@ -202,28 +201,21 @@ def update_D_(ctmrg_mp_context, env, opts_svd, moves='hv', method='2x2', **kwarg
     -------
     proj: Peps structure loaded with CTM projectors related to all lattice site.
     """
-    if 'tol' not in opts_svd and 'tol_block' not in opts_svd:
-        opts_svd['tol'] = 1e-14
-
-    checkpoint_move = kwargs.get('checkpoint_move', False)
-    for d in moves:
+    opts = make_ctm_opts(opts if opts is not None else env.default_opts,
+                         opts_svd=opts_svd, moves=moves, method=method, **kwargs)
+    checkpoint_move = opts.checkpoint_move
+    for d in opts.moves:
         if checkpoint_move:
             def f_update_core_(move_d, loc_im, *inputs_t):
                 loc_env = EnvCTM.from_dict(combine_data_and_meta(inputs_t, loc_im))
-                _update_core_D_(ctmrg_mp_context, loc_env, move_d, opts_svd, method=method, **kwargs)
+                _update_core_D_(ctmrg_mp_context, loc_env, move_d, opts)
                 out_data, out_meta = split_data_and_meta(loc_env.to_dict(level=0))
                 return out_meta, *out_data
 
             if "torch" in env.config.backend.BACKEND_ID:
                 inputs_t, inputs_meta = split_data_and_meta(env.to_dict(level=0))
 
-                if checkpoint_move == 'reentrant':
-                    use_reentrant = True
-                elif checkpoint_move == 'nonreentrant':
-                    use_reentrant = False
-                else:
-                    raise YastnError(f"CTM update {checkpoint_move=} not recognized. "
-                                     "Should be 'reentrant', 'nonreentrant', or False.")
+                use_reentrant = (checkpoint_move == 'reentrant')
                 checkpoint_F = env.config.backend.checkpoint
                 out_meta, *out_data = checkpoint_F(f_update_core_, d, inputs_meta, *inputs_t, \
                                     **{'use_reentrant': use_reentrant, 'debug': False})
@@ -233,11 +225,11 @@ def update_D_(ctmrg_mp_context, env, opts_svd, moves='hv', method='2x2', **kwarg
             # reconstruct env from output tensors
             env.update_from_dict_(combine_data_and_meta(out_data, out_meta))
         else:
-            _update_core_D_(ctmrg_mp_context, env, d, opts_svd, method=method, **kwargs)
+            _update_core_D_(ctmrg_mp_context, env, d, opts)
     return env
 
 
-def _update_core_D_(ctmrg_mp_context, env, move: str, opts_svd: dict, **kwargs):
+def _update_core_D_(ctmrg_mp_context, env, move: str, opts: CTMOpts):
     r"""
     Core function updating CTM environment tensors pefrorming specified move.
 
@@ -272,7 +264,7 @@ def _update_core_D_(ctmrg_mp_context, env, move: str, opts_svd: dict, **kwargs):
         jobs = [[Site(nx, ny) for ny in range(env.Ny)] for nx in range(env.Nx-1, -1, -1)]
 
     def _partition_devices(num_jobs : int) -> Sequence[Sequence[str]]:
-        devices = kwargs.get('devices', None)
+        devices = list(opts.devices) if opts.devices else None
 
         # TODO load-balancing
         if len(devices) <= num_jobs:
@@ -288,7 +280,7 @@ def _update_core_D_(ctmrg_mp_context, env, move: str, opts_svd: dict, **kwargs):
     # Predicted per-sector rank for the partial-SVD solvers, mirroring the serial
     # path in _env_ctm.update_extended_2x2_projectors_: it feeds 'k_block' (how
     # many triples to solve for) and never 'D_block' (the truncation target).
-    _fallback = opts_svd.get('k_block', opts_svd.get('D_block', float('inf')))
+    _fallback = opts.opts_svd.get('k_block', opts.opts_svd.get('D_block', float('inf')))
     svd_predict_spec= lambda s0,p0,s1,p1,sign: _fallback \
         if env.proj is None or (getattr(env.proj[s0],p0) is None or getattr(env.proj[s1],p1) is None) else \
         env._partial_svd_predict_spec(getattr(env.proj[s0],p0).get_legs(-1), getattr(env.proj[s1],p1).get_legs(-1), sign)
@@ -314,7 +306,8 @@ def _update_core_D_(ctmrg_mp_context, env, move: str, opts_svd: dict, **kwargs):
                 env[tr].t, env[tr].tr, env[tr].r, env.psi[tr],
                 env[br].r, env[br].br, env[br].b, env.psi[br]))
             task_queue.put( ("projectors_stage1",
-                             (i, site, ts_d, move), kwargs) )
+                             (i, site, ts_d, move),
+                             {'profiling_mode': opts.profiling_mode}) )
 
         # blocking wait for all stage-1 to complete
         for _ in range(len(sites_proj)):
@@ -324,30 +317,33 @@ def _update_core_D_(ctmrg_mp_context, env, move: str, opts_svd: dict, **kwargs):
             tl,tr,bl,br= corner_sites(site)
 
             h1_d, h2_d = h1.to_dict(level=1), h2.to_dict(level=1)
-            # Each task carries its own opts_svd. The shared dict must not be
+            # Only what the worker-side projector helpers actually read.
+            task_kw = {'use_qr': opts.use_qr, 'cutoff': opts.cutoff,
+                       'profiling_mode': opts.profiling_mode}
+            # Each task carries its own svd kwargs. Nothing shared may be
             # mutated between the two put()s, because mp.Queue pickles on a
             # background feeder thread.
             def _task_opts(k_block):
-                return {**opts_svd, "k_block": k_block}
+                return opts.svd_kwargs(k_block=k_block)
 
             if move in 'h':
                 task_queue.put( ("projectors_move_MP_",
                                  ( i, site, 'rh', h1_d, h2_d,
                                    env.config.default_device,
-                                   _task_opts(svd_predict_spec(tr, "hrb", br, "hrt", h1.s[1]))), kwargs) )
+                                   _task_opts(svd_predict_spec(tr, "hrb", br, "hrt", h1.s[1]))), task_kw) )
                 task_queue.put( ("projectors_move_MP_",
                                  ( i, site, 'lh', h1_d, h2_d,
                                    env.config.default_device,
-                                   _task_opts(svd_predict_spec(tl, "hlb", bl, "hlt", h1.s[0]))), kwargs) )
+                                   _task_opts(svd_predict_spec(tl, "hlb", bl, "hlt", h1.s[0]))), task_kw) )
             elif move in 'v':
                 task_queue.put( ("projectors_move_MP_",
                                  ( i, site, 'tv', h1_d, h2_d,
                                    env.config.default_device,
-                                   _task_opts(svd_predict_spec(tl, "vtr", tr, "vtl", h1.s[1]))), kwargs) )
+                                   _task_opts(svd_predict_spec(tl, "vtr", tr, "vtl", h1.s[1]))), task_kw) )
                 task_queue.put( ("projectors_move_MP_",
                                  ( i, site, 'bv', h1_d, h2_d,
                                    env.config.default_device,
-                                   _task_opts(svd_predict_spec(bl, "vbr", br, "vbl", h1.s[0]))), kwargs) )
+                                   _task_opts(svd_predict_spec(bl, "vbr", br, "vbl", h1.s[0]))), task_kw) )
             del h1, h2
 
         for _ in range(len(sites_proj)*2):
@@ -384,7 +380,7 @@ def _update_core_D_(ctmrg_mp_context, env, move: str, opts_svd: dict, **kwargs):
                 job_ts_d= tuple(t.detach().to_dict(level=1) if isinstance(t,(Tensor,DoublePepsTensor)) else t for t in job_ts)
                 task_queue.put( ("update_env_move_MP_",
                     (i, site, mv, env.config.default_device, job_ts_d), \
-                        {'profiling_mode': kwargs.get('profiling_mode', None)}) )
+                        {'profiling_mode': opts.profiling_mode}) )
 
         # blocking wait for all updates to complete; write results directly into env
         for i,_s in enumerate(site_group):
@@ -483,8 +479,7 @@ def projectors_move_MP_(out_queue, device, i, site, proj_pair, h1_d, h2_d,
     if profiling_mode in ["NVTX",]: h1.config.backend.cuda.nvtx.range_pop()
     del h1, h2, res
 
-def projectors_move_rh(cor_tt, cor_bb, opts_svd, **kwargs):
-    use_qr = kwargs.get("use_qr", True)
+def projectors_move_rh(cor_tt, cor_bb, opts_svd, use_qr=True, **kwargs):
 
     _, r_t = qr(cor_tt, axes=(0, 1)) if use_qr else (None, cor_tt)
     _, r_b = qr(cor_bb, axes=(1, 0)) if use_qr else (None, cor_bb.T)
@@ -492,8 +487,7 @@ def projectors_move_rh(cor_tt, cor_bb, opts_svd, **kwargs):
     hrb, hrt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
     return hrb, hrt
 
-def projectors_move_lh(cor_tt, cor_bb, opts_svd, **kwargs):
-    use_qr = kwargs.get("use_qr", True)
+def projectors_move_lh(cor_tt, cor_bb, opts_svd, use_qr=True, **kwargs):
 
     _, r_t = qr(cor_tt, axes=(1, 0)) if use_qr else (None, cor_tt.T)
     _, r_b = qr(cor_bb, axes=(0, 1)) if use_qr else (None, cor_bb)
@@ -501,8 +495,7 @@ def projectors_move_lh(cor_tt, cor_bb, opts_svd, **kwargs):
     hlb, hlt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
     return hlb, hlt
 
-def projectors_move_tv(cor_ll, cor_rr, opts_svd, **kwargs):
-    use_qr = kwargs.get("use_qr", True)
+def projectors_move_tv(cor_ll, cor_rr, opts_svd, use_qr=True, **kwargs):
 
     _, r_l = qr(cor_ll, axes=(0, 1)) if use_qr else (None, cor_ll)
     _, r_r = qr(cor_rr, axes=(1, 0)) if use_qr else (None, cor_rr.T)
@@ -510,8 +503,7 @@ def projectors_move_tv(cor_ll, cor_rr, opts_svd, **kwargs):
     vtr, vtl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
     return vtr, vtl
 
-def projectors_move_bv(cor_ll, cor_rr, opts_svd, **kwargs):
-    use_qr = kwargs.get("use_qr", True)
+def projectors_move_bv(cor_ll, cor_rr, opts_svd, use_qr=True, **kwargs):
 
     _, r_l = qr(cor_ll, axes=(1, 0)) if use_qr else (None, cor_ll.T)
     _, r_r = qr(cor_rr, axes=(0, 1)) if use_qr else (None, cor_rr)
