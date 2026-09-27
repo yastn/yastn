@@ -17,8 +17,9 @@ import logging
 from typing import Callable, Sequence
 
 from ._env_ctm import EnvCTM, proj_corners
+from ._ctm_opts import CTMOpts
 from ._env_contractions import *
-from ._env_dataclasses import EnvCTM_c4v_local, EnvCTM_c4v_projectors
+from ._env_dataclasses import EnvCTM_c4v_local, EnvCTM_c4v_projectors, EnvCTM_local
 from .._geometry import Lattice
 from .._peps import Peps2Layers
 from ....tensor import Leg, YastnError, tensordot
@@ -110,6 +111,8 @@ class EnvCTM_c4v(EnvCTM):
         self.psi = Peps2Layers(ket=psi, bra=bra) if psi.has_physical() else psi
         self.env = Lattice(self.geometry, objects={site: EnvCTM_c4v_local() for site in self.sites()})
         self.proj = Lattice(self.geometry, objects={site: EnvCTM_c4v_projectors() for site in self.sites()})
+        self.elem_diff = Lattice(self.geometry, objects={site: EnvCTM_local() for site in self.sites()}) # for consistency with parent
+        self._reset_si_()  # c4v never recycles SI bases; the containers only keep inherited methods working
 
         if init not in (None, 'eye', 'dl'):
             raise YastnError(f"{type(self).__name__} {init=} not recognized. Should be 'rand', 'eye', 'dl', or None.")
@@ -147,27 +150,31 @@ class EnvCTM_c4v(EnvCTM):
         assert init in ['eye', 'dl'], "Invalid initialization type. Should be 'eye' or 'dl'."
         super().reset_(init=init)
 
-    def iterate_(env, opts_svd=None, method='2x2', max_sweeps=1, iterator=False, corner_tol=None, **kwargs):
-        return super().iterate_(opts_svd=opts_svd, moves='d', method=method, max_sweeps=max_sweeps, iterator=iterator, corner_tol=corner_tol, **kwargs)
-        # move = 'd' has len(move) == 1, as iterate_ will for loop over the string move
+    def iterate_(env, opts_svd=None, method=None, max_sweeps=None, iterator=None,
+                 corner_tol=None, *, opts=None, **kwargs):
+        # 'd' is a single move, so iterate_'s loop over the string runs once.
+        return super().iterate_(opts_svd=opts_svd, moves='d', method=method,
+                                max_sweeps=max_sweeps, iterator=iterator,
+                                corner_tol=corner_tol, opts=opts, **kwargs)
 
     ctmrg_ = iterate_
 
-    def update_(env, opts_svd, method='2x2', **kwargs):
-        kwargs['moves'] = 'd'
-        return super().update_(opts_svd=opts_svd, method=method, **kwargs)
+    def update_(env, opts_svd=None, method=None, *, opts=None, **kwargs):
+        # c4v has only the diagonal move; 'moves' is not the caller's to choose.
+        return super().update_(opts_svd=opts_svd, moves='d', method=method,
+                               opts=opts, **kwargs)
 
-    def _update_core_(env, move: str, opts_svd: dict, method: str, **kwargs):
+    def _update_core_(env, move: str, opts: CTMOpts):
         assert move in ['d'], "Invalid move"
+        method = opts.method
         if '2x2' in method:
-            env._update_2x2_(opts_svd, **kwargs)
+            env._update_2x2_(opts)
         elif '1x2' in method or '2x1' in method:
-            svd_proj = ('svd' in method)
-            env._update_1x2_(svd_proj=svd_proj, **kwargs)
+            env._update_1x2_(opts, svd_proj=('svd' in method))
         else:
             raise YastnError(f"Unsupported {method=} for c4v-symmetric corner projector.")
 
-    def _update_1x2_(env, svd_proj=False, **kwargs):
+    def _update_1x2_(env, opts: CTMOpts, svd_proj=False):
         #
         s0 = env.psi.sites()[0]
         #
@@ -195,7 +202,9 @@ class EnvCTM_c4v(EnvCTM):
             r0 = env[s0].t @ env[s0].tl
             r0 = r0.fuse_legs(axes=(0, (2, 1))).flip_signature()
             r1 = r1.fuse_legs(axes=(2, (0, 1)))
-            p0, p1 = proj_corners(r0, r1, opts_svd={}, cutoff=1e-10, **kwargs)  # TODO: cutoff set by hand; can we make it inverse-free?
+            # Honour the caller's truncation, and their cutoff when they set one.
+            p0, p1 = proj_corners(r0, r1, opts.svd_kwargs(),
+                                  cutoff=opts.cutoff or 1e-10)  # TODO: can we make it inverse-free?
             p0 = p0.unfuse_legs(axes=0)
             p1 = p1.unfuse_legs(axes=0)
             p0 = p0.flip_signature()
@@ -212,21 +221,28 @@ class EnvCTM_c4v(EnvCTM):
         env[s0].tl = new_tl / new_tl.norm(p='inf')
         env[s0].t = new_t / new_t.norm(p='inf')
 
-    def _update_2x2_(env, opts_svd, **kwargs):
+    def _update_2x2_(env, opts: CTMOpts):
         #
         s0 = env.psi.sites()[0]
         #
+        # Predicted per-sector rank, derived per call rather than written back
+        # into the caller's opts_svd.
+        opts_svd = opts.opts_svd
         policy = opts_svd.get('policy', 'fullrank')
         if policy != 'fullrank' and env.proj[s0].vtl is not None and env.proj[s0].vtr is not None:
-            opts_svd["k_block"] = env._partial_svd_predict_spec(env.proj[s0].vtl.get_legs(-1), env.proj[s0].vtr.get_legs(0), sU=1)
-        elif "k_block" not in opts_svd:
-            opts_svd["k_block"] = float('inf')
-        #
+            k_block = env._partial_svd_predict_spec(env.proj[s0].vtl.get_legs(-1), env.proj[s0].vtr.get_legs(0), sU=1)
+        else:
+            k_block = opts_svd.get("k_block", float('inf'))
         #
         cor_tl = env[s0].t @ (env[s0].tl @ env[s0].t)
         cor_tl = tensordot(cor_tl, env.psi[s0], axes=((2, 1), (0, 1)))
         #
-        U, S, V = cor_tl.svd_with_truncation(axes=((0, 2), (1, 3)), sU=1, **opts_svd)
+        # Called directly rather than through proj_corners, so linalg's own
+        # fix_signs default applies here.
+        U, S, V = cor_tl.svd_with_truncation(
+            axes=((0, 2), (1, 3)), sU=1,
+            **opts.svd_kwargs(k_block=k_block,
+                              fix_signs=opts_svd.get('fix_signs', False)))
         env.proj[s0].vtl, env.proj[s0].vtr = U, V
         #
         new_tl = tensordot(V.conj(), U, axes=((1, 2), (0, 1))) @ S

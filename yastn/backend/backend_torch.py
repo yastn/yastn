@@ -39,7 +39,7 @@ __all__= ['DTYPE', 'get_dtype', 'get_yastn_dtype',
     'imag', 'max_abs', 'maximum', 'norm_matrix', 'delete', 'insert',
     'expm', 'first_element', 'item', 'sum_elements', 'norm', 'entropy',
     'zeros', 'ones', 'rand', 'to_tensor', 'to_mask', 'square_matrix_from_dict',
-    'trace', 'rsqrt', 'reciprocal', 'exp', 'sqrt', 'absolute', 'permute_dims',
+    'trace', 'rsqrt', 'reciprocal', 'exp', 'sqrt', 'absolute', 'clip', 'permute_dims',
     'fix_svd_signs', 'svdvals', 'svd_lowrank', 'svd', 'svd_randomized', 'svds_scipy', 'nonzero_blocks',
     'eigh', 'qr', 'pinv', 'eig', 'eigh_lowrank', 'eigvals',
     'argsort', 'argsort_which', 'argmax', 'flip', 'allclose',
@@ -309,6 +309,10 @@ def bitwise_not(data):
     return torch.bitwise_not(data)
 
 
+def clip(data, a_min=None, a_max=None):
+    return torch.clamp(data, min=a_min, max=a_max)
+
+
 def svd_lowrank(data, meta, sizes, **kwargs):
     return svds_scipy(data, meta, sizes, solver='arpack', **kwargs)
 
@@ -324,20 +328,18 @@ def dtype_to_complex(data):
     return tmp.dtype
 
 
-def svd(data, meta, sizes, fullrank_uv=False, ad_decomp_reg=1.0e-12, diagnostics=None, **kwargs):
-    return kernel_svd.apply(data, meta, sizes, fullrank_uv, ad_decomp_reg, diagnostics)
+def svd(data, meta, sizes, fullrank_uv=False, ad_decomp_reg=1.0e-12, diagnostics=None, driver=None, **kwargs):
+    return kernel_svd.apply(data, meta, sizes, fullrank_uv, ad_decomp_reg, driver, diagnostics)
 
 
 def svdvals(data, meta, sizeS, **kwargss):
     real_dtype = data.real.dtype if data.is_complex() else data.dtype
     Sdata = torch.zeros((sizeS,), dtype=real_dtype, device=data.device)
+    
+    _loc_svd_vals= lambda block: torch.linalg.svdvals(block.cpu()).to(block.device) if block.device.type == 'mps' else torch.linalg.svdvals(block)
+    
     for (slo, Do, _, _, slS, _, _) in meta:
-        block = data[slice(*slo)].view(tuple(Do))
-        if block.device.type == 'mps':
-            values = torch.linalg.svdvals(block.cpu()).to(block.device)
-        else:
-            values = torch.linalg.svdvals(block)
-        Sdata[slice(*slS)] = values
+        Sdata[slice(*slS)] = _loc_svd_vals(data[slice(*slo)].view(tuple(Do)))
     return Sdata
 
 
@@ -498,13 +500,15 @@ def eigvals(data, meta, sizeS, **kwargs):
 def qr(data, meta, sizes):
     Qdata = torch.zeros((sizes[0],), dtype=data.dtype, device=data.device)
     Rdata = torch.zeros((sizes[1],), dtype=data.dtype, device=data.device)
-    for slo, Do, slQ, DQ, slR, DR in meta:
-        block = data[slice(*slo)].view(tuple(Do))
+    
+    def _loc_qr(block):
         if block.device.type == 'mps':
             Q, R = torch.linalg.qr(block.cpu())
-            Q, R = Q.to(block.device), R.to(block.device)
-        else:
-            Q, R = torch.linalg.qr(block)
+            return Q.to(block.device), R.to(block.device)
+        return torch.linalg.qr(block)
+    
+    for slo, Do, slQ, DQ, slR, DR in meta:
+        Q, R = _loc_qr(data[slice(*slo)].view(tuple(Do)))
         sR = torch.sign(real(R.diag()))
         sR[sR == 0] = 1
         Qdata[slice(*slQ)].view(tuple(DQ))[:] = Q * sR  # positive diag of R

@@ -39,7 +39,7 @@ def _project_grad_dtype(grad, target_dtype):
 
 class kernel_svd(torch.autograd.Function):
     @staticmethod
-    def forward(data_in, meta, sizes, fullrank_uv=False, ad_decomp_reg=1.0e-12, diagnostics=None):
+    def forward(data_in, meta, sizes, fullrank_uv=False, ad_decomp_reg=1.0e-12, driver=None, diagnostics=None):
         real_dtype = data_in.real.dtype if data_in.is_complex() else data_in.dtype
         Udata = torch.empty((sizes[0],), dtype=data_in.dtype, device=data_in.device)
         Sdata = torch.empty((sizes[1],), dtype=real_dtype, device=data_in.device)
@@ -47,7 +47,7 @@ class kernel_svd(torch.autograd.Function):
         reg = torch.as_tensor(ad_decomp_reg, dtype=real_dtype, device=data_in.device)
         for slo, Do, slU, DU, slS, slV, DV in meta:
             Do, DU, DV = tuple(Do), tuple(DU), tuple(DV)
-            U, S, Vh = SVDGESDD.forward(data_in[slice(*slo)].view(Do), reg, fullrank_uv, diagnostics)
+            U, S, Vh = SVDGESDD.forward(data_in[slice(*slo)].view(Do), reg, fullrank_uv, driver, diagnostics)
             Udata[slice(*slU)].reshape(DU)[:] = U
             Sdata[slice(*slS)] = S
             Vhdata[slice(*slV)].reshape(DV)[:] = Vh
@@ -57,7 +57,7 @@ class kernel_svd(torch.autograd.Function):
     # inputs is a Tuple of all of the inputs passed to forward.
     # output is the output of the forward().
     def setup_context(ctx, inputs, output):
-        data_in, meta, _, _, ad_decomp_reg, diagnostics = inputs
+        data_in, meta, _, _, ad_decomp_reg, _, diagnostics = inputs
         reg = torch.as_tensor(ad_decomp_reg, dtype=data_in.real.dtype, device=data_in.device)
         Udata, Sdata, Vhdata = output
         ctx.save_for_backward(Udata, Sdata, Vhdata, reg)
@@ -74,9 +74,9 @@ class kernel_svd(torch.autograd.Function):
             Do, DU, DV = tuple(Do), tuple(DU), tuple(DV)
             loc_ctx = SimpleNamespace(diagnostics=ctx.diagnostics,
                 saved_tensors = (Udata[slice(*slU)].view(DU), Sdata[slice(*slS)], Vhdata[slice(*slV)].view(DV), reg, Smax))
-            data_b[slice(*slo)].view(Do)[:], _, _, _ = SVDGESDD.backward(loc_ctx, \
+            data_b[slice(*slo)].view(Do)[:], _, _, _, _ = SVDGESDD.backward(loc_ctx, \
                 Udata_b[slice(*slU)].view(DU), Sdata_b[slice(*slS)], Vhdata_b[slice(*slV)].view(DV))
-        return data_b, None, None, None, None, None
+        return data_b, None, None, None, None, None, None
 
 
 class kernel_svds_scipy(torch.autograd.Function):

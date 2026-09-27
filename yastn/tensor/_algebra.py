@@ -28,7 +28,7 @@ from ._tests import YastnError, _test_can_be_combined, _unpack_trans_test_axes_p
 if TYPE_CHECKING:
     from . import Tensor
 
-__all__ = ['add', 'real', 'imag', 'sqrt', 'rsqrt', 'reciprocal', 'exp', 'bitwise_not', 'allclose']
+__all__ = ['add', 'real', 'imag', 'sqrt', 'rsqrt', 'reciprocal', 'exp', 'bitwise_not', 'clip', 'allclose']
 
 
 def __add__(a, b) -> 'Tensor':
@@ -361,4 +361,34 @@ def bitwise_not(a) -> 'Tensor[bool]':
         masks used to truncate tensor legs.
     """
     data = a.config.backend.bitwise_not(a._data)
+    return a._replace(data=data)
+
+
+def clip(a, a_min=None, a_max=None) -> 'Tensor':
+    r"""
+    Return element-wise `min(max(tensor, a_min), a_max)`,
+    limiting tensor elements to the interval `[a_min, a_max]`.
+
+    At least one of the bounds has to be provided; the other one is then not applied.
+    For `a_min > a_max`, the upper bound takes precedence and all elements are set to `a_max`.
+
+    Not supported for complex and bool tensors.
+
+    .. note::
+        This applies only to non-empty blocks of tensor.
+        In particular, `a_min` does not raise the elements of structurally absent blocks,
+        which remain zero.
+
+    Parameters
+    ----------
+    a_min, a_max: real scalar
+        lower and upper bound for tensor elements
+    """
+    if a_min is None and a_max is None:
+        raise YastnError("clip requires at least one of a_min, a_max.")
+    if a.is_complex():
+        raise YastnError("clip is not supported for complex tensors.")
+    if a.yastn_dtype == 'bool':
+        raise YastnError("clip is not supported for bool tensors.")
+    data = a.config.backend.clip(a._data, a_min=a_min, a_max=a_max)
     return a._replace(data=data)

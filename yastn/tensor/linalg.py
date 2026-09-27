@@ -235,6 +235,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     # 1. validation
     if policy not in POLICIES:
        raise YastnError(f"Invalid SVD solver/policy {policy}. Choose one of {POLICIES}.")
+    driver= kwargs.get('driver', None)  # default
     _test_axes_all(a, axes)
     #
     #  non-default D_block provides defaults for k_block
@@ -284,7 +285,8 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     ls_s = _LegSlices_trivial(struct_S.legs[0])
 
     if compute_uv and policy == 'fullrank':
-        Udata, Sdata, Vdata = a.config.backend.svd(data, meta, sizes, diagnostics=kwargs.get('diagnostics', None))
+        Udata, Sdata, Vdata = a.config.backend.svd(data, meta, sizes, 
+            driver=driver, diagnostics=kwargs.get('diagnostics', None))
     elif not compute_uv and policy == 'fullrank':
         Sdata = a.config.backend.svdvals(data, meta, sizes[1])
     elif compute_uv and policy == 'lowrank':
