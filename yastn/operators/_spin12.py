@@ -71,6 +71,13 @@ class Spin12(meta_operators):
             leg = Leg(self.config, s=1, t=(-1, 1), D=(1, 1))
         return leg
 
+    def key(self) -> Callable | None:
+        r""" Provide consistent block ordering for all symmetries when cast to_nonsymmetric. """
+        if self._sym in ('dense', 'Z2'):
+            return None
+        if self._sym == 'U1':
+            return lambda t: -t[0]
+
     def I(self) -> Tensor:
         r""" Identity operator. """
         if self._sym == 'dense':

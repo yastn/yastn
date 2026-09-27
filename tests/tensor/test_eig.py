@@ -66,8 +66,8 @@ def test_eig_basic(config_kwargs):
 
     # test eig of empty Tensor
     for config in [config_dense, config_U1]:
-        a = yastn.Tensor(config, s=(1, -1, 1))
-        U, S, V = yastn.linalg.eig(a, axes=((0, 1), 2))
+        a = yastn.Tensor(config, s=(-1, 1))
+        U, S, V = yastn.linalg.eig(a, axes=(0, 1))
         assert U.size == S.size == V.size == 0
 
 
@@ -99,9 +99,9 @@ def test_eig_degeneracy_fail(config_kwargs):
     # Z2xU1
     config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
     legs = [yastn.Leg(config_Z2xU1, s=-1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(1, 2, 3, 1)),
-            yastn.Leg(config_Z2xU1, s=-1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(1, 2, 3, 1)),
             yastn.Leg(config_Z2xU1, s=1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(1, 2, 3, 1)),
-            yastn.Leg(config_Z2xU1, s=1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(1, 2, 3, 1))]
+            yastn.Leg(config_Z2xU1, s=1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(1, 2, 3, 1)),
+            yastn.Leg(config_Z2xU1, s=-1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(1, 2, 3, 1))]
     a = yastn.ones(config=config_Z2xU1, legs=legs)
     with pytest.raises(ValueError):
         eig_combine(a)
@@ -114,7 +114,7 @@ def test_eig_complex(config_kwargs):
     config_dense = yastn.make_config(sym='none', **config_kwargs)
     config_dense.backend.random_seed(seed=seed)
 
-    a = yastn.rand(config=config_dense, s=(-1, 1, -1, 1), D=[11, 11, 11, 11], dtype='complex128')
+    a = yastn.rand(config=config_dense, s=(-1, 1, 1, -1), D=[11, 11, 11, 11], dtype='complex128')
     U, S, V = yastn.linalg.eig(a, axes=((0, 1), (2, 3)), sU=-1)
     assert U.yastn_dtype == 'complex128'
     assert S.yastn_dtype == 'complex128'

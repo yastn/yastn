@@ -15,71 +15,97 @@
 """ Dynamical changing of lru_cache maxsize. """
 from functools import lru_cache
 
-from . import _algebra, _merging, _contractions, _einsum, _auxiliary
+from . import _algebra, _merging, _contractions, _contractions_cutensor, _einsum, _auxiliary
+from .._cache_registry import clear_registered, registered_info, set_registered_maxsize
 
 __all__ = ['clear_cache', 'get_cache_info', 'set_cache_maxsize']
 
 
 def set_cache_maxsize(maxsize=0):
-    """Change maxsize of lru_cache to reuse some metadata."""
+    """
+    Rebind every yastn metadata cache with a new ``lru_cache`` ``maxsize``, discarding
+    whatever those caches currently hold.
+
+    Each builder is created with ``maxsize=1024``. Note the default here is ``0``:
+    a bare ``set_cache_maxsize()`` *disables* caching, since ``lru_cache(0)`` stores nothing.
+    Pass ``maxsize=None`` for unbounded caches.
+
+    Caches of backend modules that are not loaded yet are covered too -- the requested size
+    is remembered and applied when such a backend registers (see :mod:`yastn._cache_registry`).
+    """
     _contractions._meta_broadcast = lru_cache(maxsize)(_contractions._meta_broadcast.__wrapped__)
     _contractions._meta_tensordot_f2m = lru_cache(maxsize)(_contractions._meta_tensordot_f2m.__wrapped__)
     _contractions._meta_tensordot_fc = lru_cache(maxsize)(_contractions._meta_tensordot_fc.__wrapped__)
     _contractions._meta_tensordot_nf = lru_cache(maxsize)(_contractions._meta_tensordot_nf.__wrapped__)
-    _contractions._meta_tensordot_cutensor = lru_cache(maxsize)(_contractions._meta_tensordot_cutensor.__wrapped__)
+    _contractions._meta_tensordot_cutensor_cpu = lru_cache(maxsize)(_contractions._meta_tensordot_cutensor_cpu.__wrapped__)
+    _contractions_cutensor._meta_tensordot_cutensor_gpu = lru_cache(maxsize)(_contractions_cutensor._meta_tensordot_cutensor_gpu.__wrapped__)
+    _contractions_cutensor._get_trimmed_struct_engine_gpu = lru_cache(maxsize)(_contractions_cutensor._get_trimmed_struct_engine_gpu.__wrapped__)
     _contractions._meta_mask = lru_cache(maxsize)(_contractions._meta_mask.__wrapped__)
     _contractions._meta_swap_gate = lru_cache(maxsize)(_contractions._meta_swap_gate.__wrapped__)
     _contractions._meta_swap_gate_charge = lru_cache(maxsize)(_contractions._meta_swap_gate_charge.__wrapped__)
     _contractions._meta_trace = lru_cache(maxsize)(_contractions._meta_trace.__wrapped__)
     _contractions._meta_vdot = lru_cache(maxsize)(_contractions._meta_vdot.__wrapped__)
     _einsum._meta_ncon = lru_cache(maxsize)(_einsum._meta_ncon.__wrapped__)
-    _merging._meta_merge_to_matrix = lru_cache(maxsize)(_merging._meta_merge_to_matrix.__wrapped__)
-    _merging._meta_unmerge_matrix = lru_cache(maxsize)(_merging._meta_unmerge_matrix.__wrapped__)
     _merging._masks_hfs_intersection = lru_cache(maxsize)(_merging._masks_hfs_intersection.__wrapped__)
     _merging._leg_structure_combine_charges_prod = lru_cache(maxsize)(_merging._leg_structure_combine_charges_prod.__wrapped__)
     _merging._meta_fuse_hard = lru_cache(maxsize)(_merging._meta_fuse_hard.__wrapped__)
     _merging._meta_unfuse_hard = lru_cache(maxsize)(_merging._meta_unfuse_hard.__wrapped__)
     _algebra._meta_addition = lru_cache(maxsize)(_algebra._meta_addition.__wrapped__)
     _auxiliary.get_blocks = lru_cache(maxsize)(_auxiliary.get_blocks.__wrapped__)
-    _auxiliary.get_blocks_charges = lru_cache(maxsize)(_auxiliary.get_blocks_charges.__wrapped__)
+    _auxiliary.get_blocks_charges_all = lru_cache(maxsize)(_auxiliary.get_blocks_charges_all.__wrapped__)
+    _auxiliary.get_trimmed_struct_engine = lru_cache(maxsize)(_auxiliary.get_trimmed_struct_engine.__wrapped__)
+    set_registered_maxsize(maxsize)  # caches of whichever backends are loaded
 
 
 def clear_cache():
-    """Change maxsize of lru_cache to reuse some metadata."""
+    """
+    Drop the contents of every yastn metadata cache, leaving their ``maxsize`` unchanged.
+
+    Besides freeing host memory, this releases the device-resident index tensors that the
+    torch backend's fusion cache pins after its first GPU use.
+    """
     _contractions._meta_broadcast.cache_clear()
     _contractions._meta_tensordot_f2m.cache_clear()
     _contractions._meta_tensordot_fc.cache_clear()
     _contractions._meta_tensordot_nf.cache_clear()
-    _contractions._meta_tensordot_cutensor.cache_clear()
+    _contractions._meta_tensordot_cutensor_cpu.cache_clear()
+    _contractions_cutensor._meta_tensordot_cutensor_gpu.cache_clear()
+    _contractions_cutensor._get_trimmed_struct_engine_gpu.cache_clear()
     _contractions._meta_mask.cache_clear()
     _contractions._meta_swap_gate.cache_clear()
     _contractions._meta_swap_gate_charge.cache_clear()
     _contractions._meta_trace.cache_clear()
     _contractions._meta_vdot.cache_clear()
     _einsum._meta_ncon.cache_clear()
-    _merging._meta_merge_to_matrix.cache_clear()
-    _merging._meta_unmerge_matrix.cache_clear()
     _merging._masks_hfs_intersection.cache_clear()
     _merging._leg_structure_combine_charges_prod.cache_clear()
     _merging._meta_fuse_hard.cache_clear()
     _merging._meta_unfuse_hard.cache_clear()
     _algebra._meta_addition.cache_clear()
     _auxiliary.get_blocks.cache_clear()
-    _auxiliary.get_blocks_charges.cache_clear()
+    _auxiliary.get_blocks_charges_all.cache_clear()
+    _auxiliary.get_trimmed_struct_engine.cache_clear()
+    clear_registered()  # caches of whichever backends are loaded
 
 
 def get_cache_info():
-    """Return statistics of lru_caches used in yastn."""
-    return {"merge_to_matrix": _merging._meta_merge_to_matrix.cache_info(),
-            "unmerge_from_matrix": _merging._meta_unmerge_matrix.cache_info(),
-            "fuse_hard": _merging._meta_fuse_hard.cache_info(),
+    """
+    Return statistics of lru_caches used in yastn.
+
+    Backend-side entries (registered via :func:`yastn._cache_registry.register_cache`)
+    are present only for backends that are actually loaded, so the key set depends on
+    which backend is in use.
+    """
+    return {"fuse_hard": _merging._meta_fuse_hard.cache_info(),
             "unfuse_hard": _merging._meta_unfuse_hard.cache_info(),
             "intersect_hfs": _merging._masks_hfs_intersection.cache_info(),
             "combine_leg_structure": _merging._leg_structure_combine_charges_prod.cache_info(),
             "tensordot_f2m": _contractions._meta_tensordot_f2m.cache_info(),
             "tensordot_fc": _contractions._meta_tensordot_fc.cache_info(),
             "tensordot_nf": _contractions._meta_tensordot_nf.cache_info(),
-            "tensordot_cutensor": _contractions._meta_tensordot_cutensor.cache_info(),
+            "tensordot_cutensor_cpu": _contractions._meta_tensordot_cutensor_cpu.cache_info(),
+            "tensordot_cutensor_gpu": _contractions_cutensor._meta_tensordot_cutensor_gpu.cache_info(),
+            "get_trimmed_struct_engine_gpu": _contractions_cutensor._get_trimmed_struct_engine_gpu.cache_info(),
             "broadcast": _contractions._meta_broadcast.cache_info(),
             "mask": _contractions._meta_mask.cache_info(),
             "trace": _contractions._meta_trace.cache_info(),
@@ -89,5 +115,7 @@ def get_cache_info():
             "ncon": _einsum._meta_ncon.cache_info(),
             "addition": _algebra._meta_addition.cache_info(),
             "get_blocks": _auxiliary.get_blocks.cache_info(),
-            "get_blocks_charges": _auxiliary.get_blocks_charges.cache_info(),
+            "get_blocks_charges_all": _auxiliary.get_blocks_charges_all.cache_info(),
+            "get_trimmed_struct_engine": _auxiliary.get_trimmed_struct_engine.cache_info(),
+            **registered_info(),
             }

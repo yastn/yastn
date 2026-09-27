@@ -17,6 +17,8 @@ import numpy as np
 import pytest
 import yastn
 
+# On cuda, run every test under scatter / tiled / forced-loop fuse paths (see conftest.py).
+pytestmark = pytest.mark.usefixtures("fuse_scatter_path")
 
 tol = {"float64": 1e-12, "complex128": 1e-12,  #pylint: disable=invalid-name
        "float32": 1e-6, "complex64": 1e-6}  #pylint: disable=invalid-name
@@ -118,7 +120,8 @@ def _test_tensordot_grad_mixed_dtype(a, b, axes):
 
 @torch_test
 @pytest.mark.parametrize("dtype", ["float64", "complex128", "float32", "complex64"])
-def test_tensordot_fuse_hard_backward_0(config_kwargs, dtype):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_tensordot_fuse_hard_backward_0(config_kwargs, dtype, remove_blocks):
     import torch
     torch.manual_seed(1)
     # U1
@@ -133,8 +136,10 @@ def test_tensordot_fuse_hard_backward_0(config_kwargs, dtype):
     #
     a = yastn.rand(config=config_U1, s=(-1, 1, 1),
                 t=(t1, t1, t1), D=(D1, D1, D1), dtype=dtype)
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     b = yastn.rand(config=config_U1, s=(1, 1, 1),
                 t=(t1, t1, t1), D=(D1, D1, D1), dtype=dtype)
+    b = b.remove_random_blocks(number=remove_blocks, keep_legs=True)
 
     _test_tensordot_grad(a, b.conj(), axes=((2, 1), (1, 2)), dtype=dtype)
 
@@ -229,6 +234,7 @@ def test_tensordot_fuse_hard_backward_12(config_kwargs):
 
     _test_tensordot_grad(a, b, axes=(0, 0), dtype=dtype)
 
+
 @torch_test
 def test_tensordot_fuse_hard_backward_13(config_kwargs):
     # U1
@@ -251,7 +257,8 @@ def test_tensordot_fuse_hard_backward_13(config_kwargs):
 
 
 @torch_test
-def test_tensordot_fuse_hard_backward_2(config_kwargs):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_tensordot_fuse_hard_backward_2(config_kwargs, remove_blocks):
     import torch
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
@@ -266,14 +273,17 @@ def test_tensordot_fuse_hard_backward_2(config_kwargs):
     dtype = 'float64'
     a = yastn.rand(config=config_U1, s=(-1, 1, 1),
                 t=(t1, t1, t2), D=(D1, D2, D1), dtype=dtype)
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     b = yastn.rand(config=config_U1, s=(1, 1, 1),
                 t=(t1, t1, t2), D=(D1, D2, D1), dtype=dtype)
+    b = b.remove_random_blocks(number=remove_blocks, keep_legs=True)
 
     _test_tensordot_grad(a, b.conj(), axes=((2, 1), (0, 1)), dtype=dtype)
 
 
 @torch_test
-def test_tensordot_fuse_hard_backward_mixed_dtype(config_kwargs):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_tensordot_fuse_hard_backward_mixed_dtype(config_kwargs, remove_blocks):
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
 
     config_U1.backend.random_seed(seed=0)
@@ -284,14 +294,17 @@ def test_tensordot_fuse_hard_backward_mixed_dtype(config_kwargs):
 
     a = yastn.rand(config=config_U1, s=(-1, 1, 1),
                 t=(t1, t1, t2), D=(D1, D2, D1), dtype='float64')
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     b = yastn.rand(config=config_U1, s=(1, 1, 1),
                 t=(t1, t1, t2), D=(D1, D2, D1), dtype='complex128')
+    b = b.remove_random_blocks(number=remove_blocks, keep_legs=True)
 
     _test_tensordot_grad_mixed_dtype(a, b.conj(), axes=((2, 1), (0, 1)))
 
 
 @torch_test
-def test_tensordot_fuse_hard_backward_22(config_kwargs):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_tensordot_fuse_hard_backward_22(config_kwargs, remove_blocks):
     import torch
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
@@ -306,13 +319,17 @@ def test_tensordot_fuse_hard_backward_22(config_kwargs):
     dtype = 'float64'
     a = yastn.rand(config=config_U1, s=(-1, 1, 1),
                 t=(t1, t1, t1), D=(D1, D2, D1), dtype=dtype)
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     b = yastn.rand(config=config_U1, s=(1, -1, 1),
                 t=(t1, t1, t1), D=(D1, D2, D1), dtype=dtype)
+    b = b.remove_random_blocks(number=remove_blocks, keep_legs=True)
 
     _test_tensordot_grad(a, b, axes=((0, 1), (0, 1)), dtype=dtype)
 
+
 @torch_test
-def test_tensordot_fuse_hard_backward_23(config_kwargs):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_tensordot_fuse_hard_backward_23(config_kwargs, remove_blocks):
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
 
@@ -326,15 +343,18 @@ def test_tensordot_fuse_hard_backward_23(config_kwargs):
     dtype = 'float64'
     a = yastn.rand(config=config_U1, s=(-1, 1, 1),
                 t=(t1, t1, t2), D=(D1, D2, D1), dtype=dtype)
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     b = yastn.rand(config=config_U1, s=(1, -1, 1),
                 t=(t1, t1, t2), D=(D1, D2, D1), dtype=dtype)
+    b = b.remove_random_blocks(number=remove_blocks, keep_legs=True)
 
     _test_tensordot_grad(a, b, axes=((0, 1), (0, 1)), dtype=dtype)
 
 
 @torch_test
 @pytest.mark.parametrize("dtype", ["float64", "complex128", "float32", "complex64"])
-def test_tensordot_fuse_hard_backward_3(config_kwargs,dtype):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_tensordot_fuse_hard_backward_3(config_kwargs, dtype, remove_blocks):
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
 
@@ -347,8 +367,10 @@ def test_tensordot_fuse_hard_backward_3(config_kwargs,dtype):
 
     a = yastn.rand(config=config_U1, s=(-1, 1, 1),
                 t=(t1, t1, t2), D=(D1, D2, D2), dtype=dtype)
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     b = yastn.rand(config=config_U1, s=(1, 1, 1),
                 t=(t1, t1, t2), D=(D1, D2, D2), dtype=dtype)
+    b = b.remove_random_blocks(number=remove_blocks, keep_legs=True)
 
     _test_tensordot_grad(a, b.conj(), axes=((2, 1), (1, 0)), dtype=dtype)
 
@@ -367,11 +389,13 @@ def test_tensordot_fuse_hard_backward_mixed_dtype(config_kwargs):
                 t=(t1, t1, t2), D=(D1, D2, D2), dtype='complex128')
 
     _test_tensordot_grad_mixed(a, b.conj(), axes=((2, 1), (1, 0))) # transpose_dot_sum
-    _test_tensordot_grad_mixed(a, b.conj(), axes=((1, 2), (0, 1))) # dot_som 
+    _test_tensordot_grad_mixed(a, b.conj(), axes=((1, 2), (0, 1))) # dot_som
+
 
 @torch_test
-@pytest.mark.parametrize("extent", [1,2])
-def test_tensordot_fuse_hard_backward_4(config_kwargs,extent):
+@pytest.mark.parametrize("extent", [1, 2])
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_tensordot_fuse_hard_backward_4(config_kwargs, extent, remove_blocks):
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
 
@@ -385,11 +409,14 @@ def test_tensordot_fuse_hard_backward_4(config_kwargs,extent):
     dtype = 'float64'
     a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1, 1),
                 t=(t1, t1, t2, t2, t3, t3), D=(D1, D2, D2, D1, D1, D2), dtype=dtype)
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     b = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1, 1),
                 t=(t2, t2, t3, t3, t1, t1), D=(D2, D3, D1, D3, D1, D2), dtype=dtype)
+    b = b.remove_random_blocks(number=remove_blocks, keep_legs=True)
 
     axes = ((1, 5, 2, 3), (1, 4, 2, 0))
     _test_tensordot_grad(a, b.conj(), axes=axes, dtype=dtype)
+
 
 @torch_test
 def test_tensordot_fuse_hard_Z2xU1(config_kwargs):
@@ -425,52 +452,58 @@ def test_tensordot_fuse_hard_Z2xU1(config_kwargs):
 
 
 @torch_test
+@pytest.mark.exclude_fusion_scatter_tiled
 @pytest.mark.parametrize("dtype", ["float64", "complex128", "float32", "complex64"])
-def test_tensordot_fuse_hard_gradcheck(config_kwargs,dtype):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_tensordot_fuse_hard_gradcheck(config_kwargs, dtype, remove_blocks):
     import torch
     # U1
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
 
     config_U1.backend.random_seed(seed=0)
     t1, t2, t3 = (-1, 0, 1), (-2, 0, 2), (-3, 0, 3)
-    D1, D2, D3 = (1, 2, 2), (2, 2, 2), (2, 2, 2)
+    D1, D2, D3 = (1, 2, 2), (2, 2, 1), (1, 2, 1)
     #
-
     a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1, 1),
                 t=(t1, t1, t2, t2, t3, t3), D=(D1, D2, D2, D1, D1, D2), dtype=dtype)
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     b = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1, 1),
                 t=(t2, t2, t3, t3, t1, t1), D=(D2, D3, D1, D3, D1, D2), dtype=dtype)
+    b = b.remove_random_blocks(number=remove_blocks, keep_legs=True)
     fb = yastn.fuse_legs(b, axes=(0, (4, 3, 1), (5, 2)), mode='hard')
     ffb = yastn.fuse_legs(fb, axes=(0, (2, 1)), mode='hard')
 
     target_block = (0, 0, 0, 0, 0, 0)
-    target_block_size = a[target_block].size()
+    if target_block in a:  # can be removed by remove_blocks
+        target_block_size = a[target_block].size()
 
-    def test_f_native(block):
-        a.set_block(ts=target_block, val=block)
-        ab = yastn.tensordot(a, b.conj(), axes=((1, 2, 3, 4, 5), (1, 2, 3, 4, 5)))
-        ab = ab.norm()
-        return ab
+        def test_f_native(block):
+            a.set_block(ts=target_block, val=block)
+            ab = yastn.tensordot(a, b.conj(), axes=((1, 2, 3, 4, 5), (1, 2, 3, 4, 5)))
+            ab = ab.norm()
+            return ab
 
-    def test_f_fused(block):
-        a.set_block(ts=target_block, val=block)
-        fa = yastn.fuse_legs(a, axes=(0, (4, 3, 1), (5, 2)), mode='hard')
-        ffa = yastn.fuse_legs(fa, axes=(0, (2, 1)), mode='hard')
-        ffab = yastn.tensordot(ffa.conj(), ffb, axes=(1, 1))
-        ffab = ffab.norm()
-        return ffab
+        def test_f_fused(block):
+            a.set_block(ts=target_block, val=block)
+            fa = yastn.fuse_legs(a, axes=(0, (4, 3, 1), (5, 2)), mode='hard')
+            ffa = yastn.fuse_legs(fa, axes=(0, (2, 1)), mode='hard')
+            ffab = yastn.tensordot(ffa.conj(), ffb, axes=(1, 1))
+            ffab = ffab.norm()
+            return ffab
 
-    tt = tol_ad[dtype]
-    op_args = (torch.randn(target_block_size, dtype=a.get_dtype(), requires_grad=True),)
-    assert torch.autograd.gradcheck(test_f_native, op_args, eps=tt * 100, atol=tt, check_undefined_grad=False)  # TODO check_undefined_grad=True
+        tt = tol_ad[dtype]
+        op_args = (torch.randn(target_block_size, dtype=a.get_dtype(), requires_grad=True),)
+        assert torch.autograd.gradcheck(test_f_native, op_args, eps=tt * 100, atol=tt, check_undefined_grad=False)  # TODO check_undefined_grad=True
 
-    op_args = (torch.randn(target_block_size, dtype=a.get_dtype(), requires_grad=True),)
-    assert torch.autograd.gradcheck(test_f_fused, op_args, eps=tt * 100, atol=tt,  check_undefined_grad=False)  # TODO check_undefined_grad=True
+        op_args = (torch.randn(target_block_size, dtype=a.get_dtype(), requires_grad=True),)
+        assert torch.autograd.gradcheck(test_f_fused, op_args, eps=tt * 100, atol=tt,  check_undefined_grad=False)  # TODO check_undefined_grad=True
 
 
 @torch_test
+@pytest.mark.exclude_fusion_scatter_tiled
 @pytest.mark.parametrize("dtype", ["float64", "complex128", "float32", "complex64"])
-def test_tensordot_gradcheck(config_kwargs,dtype):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_tensordot_gradcheck(config_kwargs, dtype, remove_blocks):
     import torch
 
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
@@ -479,34 +512,37 @@ def test_tensordot_gradcheck(config_kwargs,dtype):
     a = yastn.rand(config=config_U1, s=(-1, -1, 1, 1),
                 t=[(0, 1), (0, 1), (0, 1), (0, 1)],
                 D=[(2, 3), (4, 5), (4, 3), (2, 1)], dtype=dtype)
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     b1 = yastn.rand(config=config_U1, s=(1, 1, -1, -1),  # charges match exactly
                 t=[(0, 1), (0, 1), (0, 1), (0, 1)],
                 D=[(2, 3), (4, 5), (4, 3), (2, 1)], dtype=dtype)
+    b1 = b1.remove_random_blocks(number=remove_blocks, keep_legs=True)
     b2 = yastn.rand(config=config_U1, s=(1, 1, -1, -1),  # some block mismatches
                 t=[(0, 2), (1, 2), (0, 1, 2), (0, 1, 2)],
                 D=[(2, 3), (5, 6), (4, 3, 4), (2, 1, 3)], dtype=dtype)
+    b2 = b2.remove_random_blocks(number=remove_blocks, keep_legs=True)
     b3 = yastn.rand(config=config_U1, s=(1, 1, -1, -1),  # no matching blocks in a @ b
                 t=[(0, 2), (-1, 2), (-1,  2), (0, 1, 2)],
                 D=[(2, 3), (5, 6), (4, 4), (2, 1, 3)], dtype=dtype)
+    b3 = b3.remove_random_blocks(number=remove_blocks, keep_legs=True)
 
     for b in [b1, b2, b3]:
         target_block = (0, 1, 1, 0)
-        target_block_size = a[target_block].size()
+        if target_block in a:  # can be removed by remove_blocks
+            target_block_size = a[target_block].size()
 
-        def test_f(block):
-            a.set_block(ts=target_block, val=block)
-            ab = yastn.tensordot(a, b, axes=((1, 2), (1, 2)))  # 2 outgoing legs are a problem
-            ab = ab.norm()
-            return ab
+            def test_f(block):
+                a.set_block(ts=target_block, val=block)
+                ab = yastn.tensordot(a, b, axes=((1, 2), (1, 2)))  # 2 outgoing legs are a problem
+                ab = ab.norm()
+                return ab
 
-        op_args = (torch.randn(target_block_size, dtype=a.get_dtype(), requires_grad=True),)
-        tt = tol_ad[dtype]
-        assert torch.autograd.gradcheck(test_f, op_args, eps=tt * 100, atol=tt, check_undefined_grad=False)  # TODO check_undefined_grad=True
+            op_args = (torch.randn(target_block_size, dtype=a.get_dtype(), requires_grad=True),)
+            tt = tol_ad[dtype]
+            assert torch.autograd.gradcheck(test_f, op_args, eps=tt * 100, atol=tt, check_undefined_grad=False)  # TODO check_undefined_grad=True
 
 
 if __name__ == '__main__':
-    test_tensordot_fuse_hard_backward_4({"backend": "torch", "tensordot_policy": "fuse_to_matrix"}, 2)
-
-    # pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--tensordot_policy", "fuse_to_matrix"])
+    pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--tensordot_policy", "fuse_to_matrix"])
     # pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--tensordot_policy", "fuse_contracted"])
     # pytest.main([__file__, "-vs", "--durations=0", "--backend", "torch", "--tensordot_policy", "no_fusion"])

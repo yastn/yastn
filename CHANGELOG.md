@@ -1,3 +1,22 @@
+29-07-2026
+- backend-agnostic GPU builder of the cuTensor tensordot metadata: `_meta_tensordot_cutensor_gpu`
+  no longer calls torch directly. The array backend is loaded from `backend_id` and injected into
+  its helpers, so the GPU meta path can run on any numpy-like backend (torch now; cupy/jax in future).
+- new `yastn.backend.import_backend(backend_id)` returning the backend module for a `BACKEND_ID`
+  ('np', 'torch', 'torch_cutensor'); `make_config` now uses it to resolve string backends.
+- new `make_config` option `meta_tensordot_policy` ('cpu' | 'gpu' | 'auto', default 'auto') selecting
+  the algorithm that builds the block-sparsity metadata for `tensordot`; 'auto' uses the GPU builder
+  when a GPU device is present, otherwise the CPU builder. Can be overridden with the environment
+  variable `YASTN_META_CUTENSOR` = 'GPU' | 'CPU'.
+- new `make_config` option `lazy_threshold` (float) controlling lazy initialization of contraction
+  outputs — only the blocks actually needed are created instead of all symmetry-allowed blocks —
+  based on the fraction of blocks involved; `0` disables lazy evaluation (default for the cuTensor
+  backend), values toward `1` enable it more aggressively, and it defaults to `0.5` on other backends.
+- backends expose low-level, numpy-aligned array primitives used by the GPU meta:
+  `unique`, `searchsorted`, `isin`, `nonzero`, `cumsum`, `concatenate`, `repeat`, `where`,
+  `zeros_like`, `full_like`, `arange`; backend `DTYPE` gains `int32` and `int64`.
+
+
 20-07-2026
 - renaming torch_cpp to torch_cutensor backend
 

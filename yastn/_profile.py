@@ -15,13 +15,14 @@
 """ Optional NVTX instrumentation, controlled by the YASTN_PROFILE env variable. """
 from __future__ import annotations
 
+import contextvars
 import os
 import warnings
 from contextlib import contextmanager
 from functools import wraps
 from types import SimpleNamespace
 
-__all__ = ['nsys_profile', 'nvtx', 'profiling_enabled']
+__all__ = ['nsys_profile', 'nvtx', 'profiling_enabled', 'trace_flops', 'active_flop_tracer']
 
 
 def profiling_enabled() -> bool:
@@ -105,3 +106,62 @@ def nsys_profile(arg=None):
     if callable(arg):  # used as @nsys_profile
         return decorator(arg)
     return lambda f: decorator(f, arg)  # used as @nsys_profile("name")
+
+
+#####################################################
+#     metadata-only FLOP tracing of contractions     #
+#####################################################
+
+
+class _FlopTracer:
+    """Accumulator for the FLOPs of the tensordots executed in a tracing context.
+
+    ``gemm`` counts the block GEMM multiply-adds (``2 M N K``, ``8`` for complex);
+    ``sum`` counts the ``+=`` accumulation adds (``M N``, ``2 M N`` for complex).
+    """
+    __slots__ = ('gemm', 'sum')
+
+    def __init__(self):
+        self.gemm = 0
+        self.sum = 0
+
+    @property
+    def total(self):
+        return self.gemm + self.sum
+
+    def __repr__(self):
+        return f"_FlopTracer(gemm={self.gemm}, sum={self.sum}, total={self.total})"
+
+
+#: Context-local slot holding the active :class:`_FlopTracer`, or ``None`` when not tracing.
+_flop_tracer: contextvars.ContextVar = contextvars.ContextVar("yastn_flop_tracer", default=None)
+
+
+def active_flop_tracer():
+    """ The :class:`_FlopTracer` for the current dynamic context, or ``None`` when not tracing. """
+    return _flop_tracer.get()
+
+
+@contextmanager
+def trace_flops():
+    """
+    Run contractions in metadata-only *tracing* mode: accumulate the FLOPs of tensordots
+    while skipping all operations on tensor data. Tensors produced inside the context are
+    empty (length-0 data) but carry correct structs, so struct propagation through a network
+    (e.g. via :func:`yastn.ncon`) is exact.
+
+    Yields the :class:`_FlopTracer`, whose ``gemm``, ``sum`` and ``total`` attributes hold the
+    accumulated counts and remain readable after the context exits::
+
+        with yastn.trace_flops() as tr:
+            out = yastn.ncon(tensors, inds)
+        print(tr.total, tr.gemm, tr.sum)  # out.data is empty; out.struct is correct
+
+    Nested ``with trace_flops()`` blocks each get an independent fresh tracer.
+    """
+    tracer = _FlopTracer()  # created here, discarded on exit -- not a global
+    token = _flop_tracer.set(tracer)
+    try:
+        yield tracer
+    finally:
+        _flop_tracer.reset(token)  # slot returns to its previous value (None / outer tracer)

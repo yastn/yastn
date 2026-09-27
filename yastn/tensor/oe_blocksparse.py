@@ -13,10 +13,10 @@
 # limitations under the License.
 # ==============================================================================
 import logging
+import os
 from functools import lru_cache
 from contextlib import nullcontext
 from itertools import product, accumulate
-import gc, subprocess
 import time
 from typing import Hashable, Mapping, Sequence, Union
 
@@ -28,16 +28,28 @@ try:
 except:
     _VALID_CONTRACT_KWARGS = {'optimize', 'memory_limit', 'einsum_call', 'use_blas', 'shapes'}
 from . import Tensor, ncon, split_data_and_meta, combine_data_and_meta
-from .._profile import nvtx
+from .._profile import nvtx, nsys_profile
 from ..initialize import block as yastn_block
 from ._legs import Leg
 from ._einsum import ncon_prefilter
-from ._auxiliary import _clear_axes, get_blocks
-from ._contractions import _apply_mask_axes
-from ._merging import _meta_mask, _mask_nonzero
+from ._auxiliary import _clear_axes, get_blocks, get_trimmed_struct
+from ._merging import _meta_mask
 from ._tests import YastnError
 
 log = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=8)
+def _cache_release_level(raw):
+    r"""Parse ``YASTN_OE_CUDA_CACHE_RELEASE_LEVEL`` robustly. If invalid, warn and pass 0."""
+    if not raw:
+        return 0
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        log.warning("Ignoring invalid YASTN_OE_CUDA_CACHE_RELEASE_LEVEL=%r "
+                    "(expected integer); using 0.", raw)
+        return 0
 
 
 class SlicedLeg:
@@ -223,22 +235,13 @@ def _checkpointed_call(tensors, do_contract):
 
 def _filter_tensor_blocks(tensor, block_indices):
     r"""
-    Restrict ``tensor`` to the charge sectors spanned by ``block_indices``.
+    Restrict ``tensor`` to exactly the blocks in ``block_indices``.
 
-    leg_first note
-    --------------
-    On leg_first a tensor's block set is *fully determined by its legs*:
-    :func:`get_blocks` enumerates every symmetry-allowed charge combination and
-    ``_data`` is dense over them.  An arbitrary subset of blocks (as returned by
-    :func:`ncon_prefilter`) is therefore **not directly representable**.  We
-    instead restrict every native leg to the *union* of charge sectors that
-    appear in the retained blocks and drop the other sectors with
-    :func:`_apply_mask_axes` (which rebuilds ``struct``/``_data``/``hfs``
-    consistently).  The regenerated block set is a charge-wise subset of the
-    original, so the result is **always correct**; it is at worst a *superset*
-    of ``block_indices`` (leg-sector granularity is coarser than an exact,
-    joint-charge index subset).  Any reintroduced block that has no contraction
-    partner simply contributes zero downstream.
+    leg_first: the kept subset is recorded in ``struct.mask`` over the
+    leg-derived block enumeration (``get_trimmed_struct`` also drops leg
+    charges that no kept block uses and re-expresses the mask over the trimmed
+    enumeration), and ``_data`` is compacted to the kept blocks' segments,
+    whose canonical order a subset preserves.
 
     ``block_indices`` index into ``get_blocks(sym, tensor.struct).t`` order
     (the same order fed to :func:`ncon_prefilter`).  ``None`` keeps all blocks.
@@ -255,25 +258,19 @@ def _filter_tensor_blocks(tensor, block_indices):
     if not indices:
         # zero contraction: strip all charges from every native leg
         empty_legs = tuple(leg._replace(t=(), D=()) for leg in tensor.struct.legs)
-        new_struct = tensor.struct._replace(legs=empty_legs)
+        new_struct = get_trimmed_struct(sym, tensor.struct, empty_legs)
         return tensor._replace(struct=new_struct, data=tensor._data[:0])
 
-    ndim_n = len(tensor.struct.legs)
-    kept_t = bl.t[indices]                        # (nkept, ndim_n, nsym)
-
-    masks = []
-    for ax, leg in enumerate(tensor.struct.legs):
-        surviving = {tuple(map(int, c)) for c in kept_t[:, ax, :]}
-        if len(surviving) >= len(leg.t):
-            masks.append(None)                    # nothing dropped on this leg
-            continue
-        bmask = {t: (np.ones(d, dtype=bool) if t in surviving else np.zeros(d, dtype=bool))
-                 for t, d in zip(leg.t, leg.D)}
-        masks.append(_mask_nonzero(bmask))
-
-    if all(m is None for m in masks):
-        return tensor
-    return _apply_mask_axes(tensor, tuple(range(ndim_n)), masks)
+    # lift kept indices onto the full leg-derived enumeration that struct.mask
+    # is defined over (present blocks are its True positions)
+    mask_arr = tensor.struct.mask.array
+    nfull = bl.nblocks if mask_arr is None else len(mask_arr)
+    present = np.arange(nfull) if mask_arr is None else np.flatnonzero(mask_arr)
+    keep = np.zeros(nfull, dtype=bool)
+    keep[present[indices]] = True
+    new_struct = get_trimmed_struct(sym, tensor.struct.replace(mask=keep))
+    data = tensor.config.backend.gather_slices(tensor._data, bl.slc[indices])
+    return tensor._replace(struct=new_struct, data=data)
 
 
 def _meta_filter_struct(sym, struct, kept_indices):
@@ -287,7 +284,8 @@ def _meta_filter_struct(sym, struct, kept_indices):
     bl = get_blocks(sym, struct)
     if not kept_indices:
         empty_legs = tuple(leg._replace(t=(), D=()) for leg in struct.legs)
-        return struct._replace(legs=empty_legs)
+        return get_trimmed_struct(sym, struct, empty_legs)
+
     if len(kept_indices) >= bl.nblocks:
         return struct
     indices = sorted(kept_indices)
@@ -298,7 +296,7 @@ def _meta_filter_struct(sym, struct, kept_indices):
         new_t = tuple(t for t in leg.t if t in surviving)
         new_D = tuple(d for t, d in zip(leg.t, leg.D) if t in surviving)
         new_legs.append(leg._replace(t=new_t, D=new_D))
-    return struct._replace(legs=tuple(new_legs))
+    return get_trimmed_struct(sym, struct, tuple(new_legs))
 
 
 def _post_trim_label_dims(masked_meta_tensors, index_groups, pf_trim):
@@ -413,7 +411,7 @@ def _meta_combo_check(masked_meta_tensors, tensor_unroll_info, unroll_labels, pf
     pf_trim = ncon_prefilter(ts_meta, pf_inds, nsym)
     return (pf_trim is not None), pf_trim
 
-
+@nsys_profile
 def _metadata_filter_combos(tensors, index_groups, out_ig, unroll, optimize, swap=None,
                              collect_dim_overrides=False):
     r"""Run the metadata-only prefilter over every combo of ``unroll``.
@@ -467,11 +465,13 @@ def _metadata_filter_combos(tensors, index_groups, out_ig, unroll, optimize, swa
 
 
 def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False, swap=None, devices=None,
+                                  distributed=False, distributed_group=None,
                                   _combo_indices=None, _return_partials=False,
                                   mp_workers_per_device=0,
                                   per_combo_path=False, combo_path_kwargs=None,
                                   _precomputed_pf_trim=None,
                                   _precomputed_dim_overrides=None,
+                                  oom_retry:bool|None=None,
                                   **kwargs):
     r"""
     Contract a tensor network with block-sparse index unrolling.
@@ -524,6 +524,13 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
         Forwarded to :func:`_get_contraction_path_cached` when
         ``per_combo_path=True``. Keys may include ``optimizer``,
         ``memory_limit``, ``names``, ``who``.
+    oom_retry : bool, optional
+        If True, on torch, retry a single OOM failure.
+        This is a workaround for caching-allocator fragmentation that appears
+        under expandable_segments:False. Enable it only where that regime is
+        effectively forced: a torch/CUDA backend on a system lacking the
+        pidfd_open syscall, where multi-device MP must run under expandable_segments:False.
+        Set globally via env variable ``YASTN_OE_OOM_RETRY"="1"`` or per-call via this argument (priority).
     **kwargs :
         Forwarded to ``ncon``.
 
@@ -535,12 +542,27 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
         "_contract_with_sliced_unroll requires explicit output index group"
 
     # ---- Dispatch routing ----
+    # distributed=True                          -> SPMD over torch.distributed
     # devices=None                              -> serial on tensors[0].device
     # devices=[X] where X == tensors[0].device  -> serial (demoted)
     # devices=[X] + mp_workers_per_device==1    -> serial on X (move + restore)
     # devices=[...] + mp_workers_per_device==0  -> error
     # otherwise                                 -> multiprocess pool
     # Worker-mode calls (_combo_indices / _return_partials) skip routing.
+
+    # Distributed (multi-node) SPMD path takes precedence over the single-node
+    # `devices`/MP routing. Only worthwhile with world_size > 1; a degenerate
+    # single-rank group falls through to the serial/MP logic below.
+    if distributed and _combo_indices is None and not _return_partials:
+        from ._oe_blocksparse_dist import (_contract_with_sliced_unroll_dist,
+                                           _dist_world_size)
+        if _dist_world_size(distributed_group) > 1:
+            return _contract_with_sliced_unroll_dist(
+                *args, unroll=unroll, optimize=optimize,
+                checkpoint_loop=checkpoint_loop, swap=swap,
+                group=distributed_group, per_combo_path=per_combo_path,
+                combo_path_kwargs=combo_path_kwargs, oom_retry=oom_retry, **kwargs)
+
     _restore_device = None
     if devices is not None and _combo_indices is None and not _return_partials:
         if not isinstance(devices, (list, tuple)):
@@ -602,12 +624,21 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
 
     original_device = tensors[0].device
 
+    # torch+CUDA specific
     # External allocators (e.g. cuTENSOR via torch_cutensor) need PyTorch's
     # caching allocator released so they can reclaim freed memory; pure
     # PyTorch on CUDA already reuses internally and empty_cache() is a
     # net loss.
-    _needs_cache_release = getattr(tensors[0].config.backend, 'BACKEND_ID', '') == 'torch_cutensor'
-
+    #
+    # YASTN_OE_CUDA_CACHE_RELEASE_LEVEL (default 0) tunes how often the blocking
+    # empty_cache runs. A release point tagged `level` fires only when the env
+    # value is >= level, so higher = more frequent (and more blocking):
+    #   0 = never; 
+    #   1 = once per _contract_with_sliced_unroll, before processing combos; 
+    #   2 = + after processing each combo; 3 = + per tensordot.
+    _needs_cache_release = lambda level: \
+        getattr(tensors[0].config.backend, 'BACKEND_ID', '') == 'torch_cutensor' \
+        and _cache_release_level(os.getenv("YASTN_OE_CUDA_CACHE_RELEASE_LEVEL")) >= level
     def _release_cuda_cache(devs):
         r"""Release PyTorch's cached-but-unused GPU memory on *devs*."""
         import torch as _torch
@@ -615,6 +646,11 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
             if 'cuda' in str(d):
                 with _torch.cuda.device(d):
                     _torch.cuda.empty_cache()
+
+    _torch_cuda_backend = ('torch' in getattr(tensors[0].config.backend, 'BACKEND_ID', '')
+                           and 'cuda' in str(original_device))
+    _oom_retry = _torch_cuda_backend and (oom_retry or (os.environ.get("YASTN_OE_OOM_RETRY", "0") == "1"))\
+        and (oom_retry is not False)
 
     # Build mask tensors once per (tensor, label, sliced_leg, device) so the
     # combo loop just looks them up.
@@ -647,6 +683,8 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
     _combo_path_kwargs = dict(combo_path_kwargs or {})
     if isinstance(_combo_path_kwargs.get("names"), list):
         _combo_path_kwargs["names"] = tuple(_combo_path_kwargs["names"])
+    if isinstance(_combo_path_kwargs.get("optimizer_kwargs"), dict):
+        _combo_path_kwargs["optimizer_kwargs"] = tuple(sorted(_combo_path_kwargs["optimizer_kwargs"].items()))
 
     # expr depends only on index labels — build it once; per-combo `shapes`
     # is assembled directly from dim_overrides below.
@@ -660,11 +698,11 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
         # Short-circuit: nothing to per-combo-tune when no axis is unrolled
         # or when dim_overrides wasn't collected (degenerate / cache-quirk).
         if not per_combo_path or not unroll_labels or not dim_overrides:
-            return optimize
+            return optimize, None
         shapes = tuple(tuple(dim_overrides[lbl] for lbl in seq)
                        for seq in _all_label_seqs)
-        path, _ = _get_contraction_path_cached(_combo_expr, shapes, **_combo_path_kwargs)
-        return path
+        path, path_info = _get_contraction_path_cached(_combo_expr, shapes, **_combo_path_kwargs)
+        return path, path_info
 
     # Single-process: run the prefilter once. Worker mode: the MP parent has
     # already prefiltered and passes the result via _precomputed_*, so the
@@ -683,6 +721,7 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
     sl_to_idx = {u: {id(sl): i for i, sl in enumerate(unroll[u])}
                  for u in output_unroll_labels}
 
+    @nsys_profile
     def _apply_masks_for_combo(base_tensors, sl_map, target_device):
         masked = list(base_tensors)
         for k in range(len(base_tensors)):
@@ -706,9 +745,14 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
         opk = tuple(sl_to_idx[u][id(sl_map[u])] for u in output_unroll_labels)
         assigned.append((n, sl_map, opk))
 
-    def _contract_single_combo(base_tensors, sl_map, pf_trim=None, use_checkpoint=False, dim_overrides=None):
-        combo_path = _path_for_combo(dim_overrides)
+    def _contract_single_combo(base_tensors, sl_map, pf_trim=None, use_checkpoint=False, dim_overrides=None, tag=None):
+        combo_path, path_info = _path_for_combo(dim_overrides)
         cur_igs, cur_conjs, cur_order, cur_swap = _ncon_args_for_path(combo_path)
+        # if os.environ.get("YASTN_PROFILE","0") == "1":
+        #     msg=f"_contract_single_combo {tag}\n"
+        #     msg+=f"combo_path ncon {cur_igs} swaps {len(cur_swap)} {cur_swap}\n"
+        #     msg+=str(path_info)
+        #     print(msg)
 
         def _do_contract(masked_input):
             masked = _apply_masks_for_combo(masked_input, sl_map, masked_input[0].device)
@@ -718,7 +762,7 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
                     if trim_k is not None:
                         masked[k] = _filter_tensor_blocks(masked[k], trim_k)
             return ncon(masked, cur_igs, conjs=cur_conjs, order=cur_order, swap=cur_swap,
-                        release_cuda_cache=_needs_cache_release)
+                        release_cuda_cache=_needs_cache_release(3), oom_retry=_oom_retry)
 
         return _checkpointed_call(base_tensors, _do_contract) if use_checkpoint else _do_contract(base_tensors)
 
@@ -731,10 +775,10 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
         _cfg = iter_tensors[0].config
         for n, sl_map, output_pos_key in assigned:
             with stream_ctx:
+                tag = f"_contract_with_sliced_unroll {n}"
+                if dev is not None:
+                    tag += f" [device={dev}]"
                 if nvtx.enabled:
-                    tag = f"_contract_with_sliced_unroll {n}"
-                    if dev is not None:
-                        tag += f" [device={dev}]"
                     nvtx.range_push(tag)
 
                 pf_trim = pf_trim_per_combo[n]
@@ -742,7 +786,8 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
                                        if dim_overrides_per_combo is not None else None)
                 partial = _contract_single_combo(iter_tensors, sl_map, pf_trim=pf_trim,
                                                  use_checkpoint=checkpoint_loop,
-                                                 dim_overrides=combo_dim_overrides)
+                                                 dim_overrides=combo_dim_overrides,
+                                                 tag=tag)
 
                 prev = local_partials.get(output_pos_key)
                 local_partials[output_pos_key] = partial if prev is None else prev + partial
@@ -751,11 +796,11 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
 
                 # Release per-combo cache to keep cuTENSOR / external allocators
                 # from fragmenting when intermediates churn (no-op for pure torch).
-                if _needs_cache_release:
+                if _needs_cache_release(2):
                     _release_cuda_cache([dev] if dev is not None else [original_device])
         return local_partials
 
-    if _needs_cache_release:
+    if _needs_cache_release(1):
         _release_cuda_cache([original_device])
 
     output_pos_partials = _process_combos(assigned, tensors, None, nullcontext())
@@ -975,6 +1020,18 @@ def get_contraction_path(*tn_to_contract, unroll=None,
     :param names: string labels for tensors used for more readable logging. The order of
                   names has to follow order of tensors as they appear in ``tn_to_contract``
     :param who: string id for logging identifying this optimal contraction path search
+    :param optimizer: str or ``opt_einsum.paths.PathOptimizer``, optional
+        The optimizer to use for contraction path search. See
+        https://optimized-einsum.readthedocs.io/en/stable/optimal_path.html for details.
+        Options are:
+        - None (or 'default', 'dp', 'dynamic-programming'): use the default ``DynamicProgramming`` optimizer
+        - user-provided ``PathOptimizer`` instance
+    :param optimizer_kwargs: dict, optional
+        Additional keyword arguments to pass to the optimizer. For the default ``DynamicProgramming`` optimizer,
+        you can specify ``minimize``, ``search_outer``, and ``cost_cap``. Where ``minimize`` can be
+        - 'write' (default) total amount of data written to memory
+        - 'flops' total number of floating point operations
+        - 'size' maximum size of any intermediate tensor
 
     Returns
     -------
@@ -995,6 +1052,8 @@ def get_contraction_path(*tn_to_contract, unroll=None,
     # documented form names=['A', 'B', ...] is a list — normalise to tuple.
     if isinstance(names, list):
         names = tuple(names)
+    if isinstance(kwargs.get("optimizer_kwargs"), dict):
+        kwargs["optimizer_kwargs"] = tuple(sorted(kwargs["optimizer_kwargs"].items()))
 
     # TODO how to report block-sparse memory footprint & shape
     #      Here, we pass shape of the underlying 1D data array
@@ -1038,10 +1097,10 @@ def get_contraction_path(*tn_to_contract, unroll=None,
 
 @lru_cache(maxsize=128)
 def _get_contraction_path_cached(
-    expr, shapes, names=None, who=None, **kwargs
+    expr, shapes, names=None, who=None, optimizer=None, optimizer_kwargs=(), **kwargs
 ):
     r"""Cachable function finding optimal contraction path for tensor network contraction
-    specified in default einsum format with shapes only.
+    specified in default einsum format with shapes only. All arguments must be hashable (lru_cache).
 
     :param expr: input to einsum in default format
     :param shapes: shapes of tensors to be contracted; last entry is the output shape.
@@ -1049,14 +1108,14 @@ def _get_contraction_path_cached(
     :param names: string labels for tensors used for more readable logging. The order of
                   names has to follow order of tensors as they appear in ``tn_to_contract``
     :param who: string id for logging identifying this optimal contraction path search
+    :param optimizer_kwargs: tuple of ``(key, value)`` items with kwargs for the optimizer
+                             to be created; overlaid on the built-in defaults (caller values win)
     """
-    optimizer = kwargs.pop("optimizer", None)
+    default_optimizer_kwargs = {'dp': {'minimize': 'write', 'search_outer': False, 'cost_cap': True}}
     if optimizer in [None, "default", "dp", "dynamic-programming"]:
-        optimizer = oe.DynamicProgramming(
-            minimize="write",  # 'size' optimize for largest intermediate tensor size, 'flops' for computation complexity
-            search_outer=False,  # search through outer products as well
-            cost_cap=True,  # don't use cost-capping strategy
-        )
+        # Merge caller-supplied kwargs over the defaults; optimizer_kwargs wins on conflicts.
+        dp_kwargs = {**default_optimizer_kwargs.get("dp", {}), **dict(optimizer_kwargs)}
+        optimizer = oe.DynamicProgramming(**dp_kwargs)
 
     in_shapes = shapes[:-1]
     path = kwargs.pop("path", None)
@@ -1267,6 +1326,14 @@ def contract_with_unroll(*args, **kwargs):
     :param checkpoint_loop: if True, each unrolled loop iteration is wrapped in
         :func:`torch.utils.checkpoint.checkpoint`, avoiding storage of masking
         and ncon intermediates across all iterations simultaneously.
+    :param distributed: if True, dispatch the unrolled-combo sum across an
+        already-initialised ``torch.distributed`` process group (SPMD, one rank
+        per GPU, scales across nodes via NCCL). Every rank must reach this call
+        with a structurally identical copy of the inputs. Requires a dict
+        ``unroll`` and a torch backend; ``devices``/``mp_workers_per_device``
+        are ignored. See :mod:`._oe_blocksparse_dist`. A single-rank group falls
+        back to serial. Optional ``distributed_group`` selects a non-default
+        process group.
     """
     _cfg = args[0].config
     checkpoint_loop = kwargs.pop("checkpoint_loop", False)
@@ -1275,12 +1342,14 @@ def contract_with_unroll(*args, **kwargs):
     unroll = kwargs.pop("unroll", None)
     swap = kwargs.pop("swap", None)
     devices = kwargs.pop("devices", None)
+    distributed = kwargs.pop("distributed", False)
+    distributed_group = kwargs.pop("distributed_group", None)
     unroll = _validate_and_resolve_unroll(*args, unroll=unroll)
 
     optimize = kwargs.pop("optimize", None)
     if optimize is None:
-        path_search_kwargs = {k: kwargs[k] for k in ("optimizer", "memory_limit", "names")
-                                if k in kwargs}
+        path_search_kwargs = {k: kwargs[k] for k in ("optimizer", "optimizer_kwargs",
+                                "memory_limit", "names") if k in kwargs}
         if who is not None:
             path_search_kwargs["who"] = who
         optimize, _ = get_contraction_path(*args, unroll=unroll, **path_search_kwargs)
@@ -1308,7 +1377,8 @@ def contract_with_unroll(*args, **kwargs):
         # block-sparse sliced unrolling: unroll is {label: [SlicedLeg, ...]}
         return _contract_with_sliced_unroll(*args, unroll=unroll, optimize=optimize,
                                             checkpoint_loop=checkpoint_loop, swap=swap,
-                                            devices=devices, **kwargs)
+                                            devices=devices, distributed=distributed,
+                                            distributed_group=distributed_group, **kwargs)
 
     raise NotImplementedError(
         "contract_with_unroll: unsupported unroll type. "

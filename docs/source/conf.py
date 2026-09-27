@@ -39,13 +39,13 @@ extensions = [
     'sphinx.ext.graphviz'
 ]
 
-# SVG keeps the CTM/SI flow chart crisp and its text selectable.
-# Requires the 'dot' binary (graphviz), installed in .github/workflows/docs.yml.
+# Diagrams requires the 'dot' binary (graphviz) on PATH at build time (e.g. ``conda install graphviz`` or
+# ``apt-get install graphviz``); It is installed in .github/workflows/docs.yml.
 graphviz_output_format = 'svg'
 
 # torch is an optional extra (pyproject: [project.optional-dependencies] torch),
 # not a docs-build dependency. The fixed-point CTM module imports it at module
-# level, so mock it rather than pulling ~1GB into the docs job.
+# level, so mock it rather than pulling torch into the docs job.
 autodoc_mock_imports = ['torch']
 autoclass_content = 'both'
 #autodoc_class_signature = "separated"

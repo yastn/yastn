@@ -48,9 +48,11 @@ def test_U1(config_kwargs):
     assert (-2, 0, -2, 0) in c
     assert c.get_shape() == (6, 3, 6, 1)
     assert pytest.approx(c.norm().item() ** 2, rel=tol) == 29
+    assert c.nblocks == 5
     c.set_block(ts=(2, 0, 0, 2), Ds=(3, 1, 2, 3), val='ones')  # adds a new block changing tensor shape
     assert c.get_shape() == (6, 3, 6, 4)
     assert pytest.approx(c.norm().item() ** 2, rel=tol) == 47
+    assert c.nblocks == 6
 
     # 0-dim tensor
     a = yastn.ones(config=config_U1)  # s=() # t=(), D=()
@@ -71,7 +73,8 @@ def test_U1(config_kwargs):
     assert np.linalg.norm(np.diag(np.diag(npa)) - npa) < tol  # == 0.0
 
 
-def test_Z2xU1(config_kwargs):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_Z2xU1(config_kwargs, remove_blocks):
     """ initialization of tensor with more complicated symmetry indexed by 2 numbers"""
     config_Z2xU1 = yastn.make_config(sym=yastn.sym.sym_Z2xU1, **config_kwargs)
     # 3-dim tensor
@@ -79,6 +82,7 @@ def test_Z2xU1(config_kwargs):
             yastn.Leg(config_Z2xU1, s=1, t=[(0, -2), (0, 2)], D=[1, 2]),
             yastn.Leg(config_Z2xU1, s=1, t=[(0, -2), (0, 0), (0, 2), (1, -2), (1, 0), (1, 2)], D=[2, 4, 6, 3, 6, 9])]
     a = yastn.ones(config=config_Z2xU1, legs=legs)
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     assert a.get_shape() == (9, 3, 30)
     assert pytest.approx(a.norm().item() ** 2, rel=tol) == a.size == 104
 

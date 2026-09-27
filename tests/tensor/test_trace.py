@@ -47,7 +47,8 @@ def trace_vs_numpy(a, axes):
     return c
 
 
-def test_trace_basic(config_kwargs):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_trace_basic(config_kwargs, remove_blocks):
     """ test trace for different symmetries. """
     # dense
     config_dense = yastn.make_config(sym='none', **config_kwargs)
@@ -105,6 +106,8 @@ def test_trace_basic(config_kwargs):
     leg1 = yastn.Leg(config_Z2xU1, s=1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(6, 4, 9, 6))
     leg2 = yastn.Leg(config_Z2xU1, s=1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(20, 16, 25, 20))
     a = yastn.randC(config=config_Z2xU1, legs=[leg1.conj(), leg2.conj(), leg2, leg1])
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
+
     b = trace_vs_numpy(a, axes=(0, 3))
     b = trace_vs_numpy(b, axes=(1, 0))
     c = a.trace(axes=((0, 1), (3, 2)))
@@ -133,7 +136,8 @@ def test_trace_transpose_meta(config_kwargs):
     assert yastn.norm(aft - at.T) < tol  # == 0.0
 
 
-def test_trace_fusions(config_kwargs):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_trace_fusions(config_kwargs, remove_blocks):
     """ test trace of meta-fused and hard-fused tensors. """
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     leg1 = yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(1, 2, 3))
@@ -142,6 +146,7 @@ def test_trace_fusions(config_kwargs):
     # meta-fusion
 
     a = yastn.randR(config=config_U1, legs=[leg1.conj(), leg2, leg1, leg2.conj(), leg1, leg2.conj()])
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     af = yastn.fuse_legs(a, axes=((1, 2), (3, 0), (4, 5)), mode='meta')
     b = trace_vs_numpy(a, axes=((1, 2), (3, 0)))
     bf = trace_vs_numpy(af, axes=(0, 1)).unfuse_legs(axes=0)
@@ -150,6 +155,7 @@ def test_trace_fusions(config_kwargs):
     # hard-fusion
 
     a = yastn.randC(config=config_U1, legs=[leg1.conj(), leg2, leg1, leg2.conj(), leg1, leg2.conj()])
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     af = yastn.fuse_legs(a, axes=((1, 2), (3, 0), (4, 5)), mode='hard')
     b = trace_vs_numpy(a, axes=((1, 2), (3, 0)))
     bf = trace_vs_numpy(af, axes=(0, 1)).unfuse_legs(axes=0)
@@ -161,6 +167,7 @@ def test_trace_fusions(config_kwargs):
             yastn.Leg(config_U1, s=-1, t=(1, 2), D=(5, 6)),
             yastn.Leg(config_U1, s=1, t=(1, 2), D=(3, 4))]
     a = yastn.rand(config=config_U1, legs=legs)
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     af = yastn.fuse_legs(a, axes=((1, 2), (3, 0), 4), mode='hard')
     b = trace_vs_numpy(a, axes=((1, 2), (3, 0)))
     bf = trace_vs_numpy(af, axes=(0, 1))
@@ -242,12 +249,15 @@ def test_trace_exceptions(config_kwargs):
 
 
 @pytest.mark.skipif("'torch' not in config.getoption('--backend')", reason="Uses torch.autograd.gradcheck().")
-def test_trace_backward(config_kwargs):
+@pytest.mark.parametrize('remove_blocks', [0, 5])
+def test_trace_backward(config_kwargs, remove_blocks):
     import torch
 
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     leg0 =  yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 4))
     a = yastn.rand(config=config_U1, legs=[leg0, leg0, leg0.conj(), leg0.conj()])
+    a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
+    a.set_block(ts=(0, 0, 0, 0), val='rand')
 
     target_block = (0, 0, 0, 0)
     target_block_size = a[target_block].size()

@@ -24,7 +24,7 @@ from operator import itemgetter
 import numpy as np
 
 from .tensor import Tensor, YastnError, ncon
-from .tensor._auxiliary import _clear_axes, _unpack_legs, get_blocks, find_matching_indices
+from .tensor._auxiliary import _clear_axes, _unpack_legs, get_blocks, find_matching_indices, get_trimmed_struct, _struct
 from .tensor._legbasic import LegBasic
 from .tensor._legs import Leg, LegMeta, legs_union, _legs_mask_needed
 from .tensor._merging import _embed_tensor, _combine_hfs_sum
@@ -125,7 +125,8 @@ def randR(config=None, distribution=(-1, 1), legs=(), n=None, isdiag=False, **kw
         kwargs['dtype'] = 'float64'
     if kwargs['dtype'] == 'complex64':
         kwargs['dtype'] = 'float32'
-    return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='rand', distribution=distribution, **kwargs)
+    val = distribution if distribution == 'normal' else ('rand', distribution)
+    return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val=val, **kwargs)
 
 
 def randC(config=None, distribution=(-1, 1), legs=(), n=None, isdiag=False, **kwargs) -> Tensor:
@@ -389,7 +390,10 @@ def block(tensors, common_legs=None) -> Tensor:
         DDn = tuple(ltDtot_leg[t] for t in ttn)
         legs_new.append(LegBasic(s=tn0.struct.legs[n].s, t=ttn, D=DDn))
 
-    bl_new = get_blocks(sym, tn0.struct._replace(legs=tuple(legs_new)))
+
+    struct_new = _struct(legs=tuple(legs_new), n=tn0.struct.n, isdiag=tn0.struct.isdiag)
+    struct_new = get_trimmed_struct(sym, struct_new)
+    bl_new = get_blocks(sym, struct_new)
 
     for pa in tensors.keys():
         if any(_legs_mask_needed(ulegs[n][pa[n]], leg) for n, leg in enumerate(legs_tn[pa])):
@@ -405,17 +409,15 @@ def block(tensors, common_legs=None) -> Tensor:
             meta.append((sln, Dn, pa, sla, Da, Dslcs))
 
     data = tn0.config.backend.merge_super_blocks(tensors, meta, bl_new.size)
-    out = tn0._replace(struct=bl_new.struct, data=data, hfs=tuple(hfs))
+    out = tn0._replace(struct=struct_new, data=data, hfs=tuple(hfs))
     return out
 
 
 def _sum_legs_hfs(legs):
     """ sum hfs based on info in legs"""
     hfs = [leg.hf for leg in legs]
-    t_in = [leg.t for leg in legs]
-    D_in = [leg.D for leg in legs]
-    s_out = legs[0].s
-    return _combine_hfs_sum(hfs, t_in, D_in, s_out)
+    legs_basic = tuple(leg.basic() for leg in legs)
+    return _combine_hfs_sum(hfs, legs_basic)
 
 
 @dataclass

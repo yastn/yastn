@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-""" basic autograd operations """
+"""Basic autograd operations."""
 import pytest
 import yastn
 
@@ -25,8 +25,8 @@ no_numpy_test = pytest.mark.skipif("'np' in config.getoption('--backend')",
 @no_numpy_test
 def test_requires_grad(config_kwargs):
     #
-    # create a random U1 symmetric tensor. By default, such tensor
-    # does not have autograd active. Activate it
+    # Create a random U1-symmetric tensor. By default, it does not have
+    # autograd enabled, so enable it explicitly.
     #
     config = yastn.make_config(sym='U1', **config_kwargs)
     leg1 = yastn.Leg(config, s=1, t=(-1, 0, 1), D=(2, 3, 4))
@@ -36,8 +36,7 @@ def test_requires_grad(config_kwargs):
     a.requires_grad_(True)
 
     #
-    # verify, that outputs of functions operating on tensor a return
-    # tensors, which also have autograd active
+    # Verify that outputs of functions operating on tensor a also have autograd enabled.
     b = yastn.rand(config=config, legs=[leg1, leg1.conj()])
     c = yastn.tensordot(a, b, axes=((2, 3), (0, 1)))
     assert c.requires_grad
@@ -46,7 +45,7 @@ def test_requires_grad(config_kwargs):
 @no_numpy_test
 def test_clone_copy(config_kwargs):
     #
-    # create random U1 symmetric tensor and flag it for autograd
+    # Create a random U1-symmetric tensor and enable autograd tracking.
     #
     config = yastn.make_config(sym='U1', **config_kwargs)
     leg1 = yastn.Leg(config, s=1, t=(-1, 0, 1), D=(2, 3, 4))
@@ -55,26 +54,25 @@ def test_clone_copy(config_kwargs):
     a.requires_grad_(True)
 
     #
-    # Clone the tensor a resulting in a new, numerically identical, tensor b.
-    # However, tensors a and b do not share data - their blocks are independent.
-    # Further operations on b would be correctly differentiated when computing gradients
+    # Clone tensor a to obtain a new tensor b with identical values.
+    # The tensors a and b do not share data, so their blocks are independent.
+    # Further operations on b are differentiated correctly when computing gradients
     # with respect to a.
     b = a.clone()
     assert b.requires_grad
     assert yastn.are_independent(a, b)
 
     #
-    # Tensor tracked by autograd can be "detached" from the computational
-    # graph. This might be useful, if one wishes to perform some computations
-    # with the tensor outside of autograd.
-    # The original and detached tensor still share data (blocks).
+    # A tensor tracked by autograd can be detached from the computational
+    # graph. This is useful when one wants to perform computations outside
+    # autograd. The original tensor and the detached tensor still share data blocks.
     c = a.detach()
     assert not c.requires_grad
     assert not yastn.are_independent(a, c)
 
     #
-    # Copy of tensor is both detached from the computational graph
-    # and does not share data with the original
+    # A copy of the tensor is detached from the computational graph and does
+    # not share data with the original tensor.
     d = a.copy()
     assert not d.requires_grad
     assert yastn.are_independent(a, d)
