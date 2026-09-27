@@ -23,6 +23,8 @@ from .backend_torch import *
 
 BACKEND_ID = "torch_cutensor"
 
+from tapp_torch.ops import descriptor_cache_stats, plan_cache_stats
+
 
 def tensordot_bs(Adata, Bdata, *args):
     dtype = torch.promote_types(Bdata.dtype, Adata.dtype)

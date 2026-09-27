@@ -363,24 +363,23 @@ class FixedPointOpts:
     r"""
     Options of the fixed-point CTM (:func:`fp_ctmrg`).
 
-    Separates concerns that ``ctm_opts_fp`` used to carry at once: the CTM
-    options of the gauge-fixing step, the Neumann backward budget, and the
-    device routing that was smuggled in under an ``fp_devices`` key.
-
+    ``FixedPoint`` reverses the CTM, so the forward settings carry over
+    to the backward path by design: ``fp`` is ``fwd`` with selective overrides,
+    and the Neumann series in the backward pass takes its iteration budget from
+    ``fp.max_sweeps`` and its gradient tolerance from ``fp.corner_tol``.
+    The additional configuration specific to fixed point approach is defined here.
+    
     Parameters
     ----------
     fwd: CTMOpts
         Options of the forward CTMRG convergence.
     fp: CTMOpts
-        Options of the single gauge-fixing CTM step.
-    neumann_max_iter: int
-        Iteration budget of the Neumann series in the backward pass.
-        Was ``ctm_opts_fp['max_sweeps']``.
-    neumann_tol: float
-        Gradient tolerance terminating the Neumann series.
-        Was ``ctm_opts_fp['corner_tol']``.
+        Options of the single gauge-fixing CTM step, and -- through
+        ``max_sweeps`` and ``corner_tol`` -- of the Neumann backward loop.
+        Built from ``fwd`` with overrides applied.
     neumann_patience: int
         Iterations without improvement before the Neumann series gives up.
+        Unlike the budget and tolerance, this has no forward counterpart.
     devices: tuple[str, ...] | None
         Devices for the distributed fixed-point path. Was ``fp_devices``.
     verbosity: int
@@ -389,13 +388,9 @@ class FixedPointOpts:
     fwd: CTMOpts = field(default_factory=CTMOpts, metadata={
         'help': 'options of the forward CTMRG convergence'})
     fp: CTMOpts = field(default_factory=CTMOpts, metadata={
-        'help': 'options of the gauge-fixing CTM step'})
-    neumann_max_iter: int = field(default=100, metadata={
-        'help': 'Neumann series iteration budget in the backward pass'})
-    neumann_tol: float = field(default=1e-8, metadata={
-        'help': 'gradient tolerance terminating the Neumann series'})
+        'help': 'options of the gauge-fixing CTM step; inherits from fwd'})
     neumann_patience: int = field(default=10, metadata={
-        'help': 'iterations without improvement before giving up'})
+        'help': 'Neumann iterations without improvement before giving up'})
     devices: tuple[str, ...] | None = field(default=None, metadata={
         'help': 'devices for the distributed fixed-point path'})
     verbosity: int = field(default=0, metadata={'help': 'diagnostic verbosity'})
@@ -411,8 +406,51 @@ class FixedPointOpts:
                     f"got {type(value).__name__}.")
         if self.devices is not None:
             object.__setattr__(self, 'devices', tuple(self.devices))
-        if self.neumann_max_iter < 0 or self.neumann_patience < 0:
-            raise YastnError("neumann_max_iter and neumann_patience must be non-negative.")
+        if self.neumann_patience < 0:
+            raise YastnError("neumann_patience must be non-negative.")
+
+    # ------------------------------------------------------------------
+    @property
+    def neumann_max_iter(self) -> int:
+        """Neumann iteration budget: the FP step's sweep budget, carried over."""
+        return self.fp.max_sweeps
+
+    @property
+    def neumann_tol(self) -> float:
+        """Neumann gradient tolerance: the FP step's corner tolerance, carried over."""
+        return self.fp.corner_tol
+
+    @classmethod
+    def from_legacy_dicts(cls, ctm_opts_fwd=None, ctm_opts_fp=None, devices=None):
+        r"""
+        Build from the ``ctm_opts_fwd`` / ``ctm_opts_fp`` dicts of :func:`fp_ctmrg`.
+
+        Reproduces the historical derivation exactly: ``fp`` starts as a copy of
+        ``fwd`` and is then overridden selectively, with ``opts_svd`` merged key
+        by key rather than replaced. :func:`make_ctm_opts` already has both of
+        those semantics, so the merge needs no second implementation.
+
+        Keys that are not CTM options (``neumann_patience``, and the legacy
+        ``fp_devices``) are lifted out before the rest is handed to
+        :func:`make_ctm_opts`, which would otherwise reject them.
+        """
+        fwd_kwargs = dict(ctm_opts_fwd) if ctm_opts_fwd else {}
+        fp_kwargs = dict(ctm_opts_fp) if ctm_opts_fp else {}
+
+        # Not CTM options: make_ctm_opts would reject them.
+        patience = fp_kwargs.pop('neumann_patience',
+                                 fwd_kwargs.pop('neumann_patience', 10))
+        legacy_devices = fp_kwargs.pop('fp_devices', None)
+
+        # The diagnostic verbosity of the backward pass came from ctm_opts_fp
+        # alone, defaulting to 0 -- it did NOT inherit fwd's. Keep that: it is
+        # distinct from fp.verbosity, which is the merged CTM-level setting.
+        verbosity = fp_kwargs.get('verbosity', 0)
+
+        fwd = make_ctm_opts(**fwd_kwargs)
+        fp = make_ctm_opts(fwd, **fp_kwargs)  # inherit everything, override selectively
+        return cls(fwd=fwd, fp=fp, devices=devices or legacy_devices,
+                   neumann_patience=patience, verbosity=verbosity)
 
 
 # ----------------------------------------------------------------------
@@ -491,11 +529,17 @@ def make_ctm_opts(base: CTMOpts | None = None, **kwargs) -> CTMOpts:
     allowed = {f.name for f in fields(CTMOpts)}
     resolved = _resolve(kwargs, _CTM_ALIASES, allowed, 'CTM option')
 
-    # A nested SIOpts is merged field-wise rather than replaced wholesale, so
-    # make_ctm_opts(base, opts_si={'niter': 3}) keeps the rest of base's SIOpts.
+    # Nested bundles are merged into the base's rather than replacing them, so
+    # make_ctm_opts(base, opts_si={'niter': 3}) keeps the rest of base's SIOpts
+    # and make_ctm_opts(base, opts_svd={'policy': ...}) keeps base's truncation.
+    # This is what the fixed-point layer's fp-derived-from-fwd merge needs, and
+    # it is the same rule for both bundles.
     if isinstance(resolved.get('opts_si'), dict):
         current = base.opts_si if base is not None else None
         resolved['opts_si'] = make_si_opts(current, **resolved['opts_si'])
+
+    if base is not None and isinstance(resolved.get('opts_svd'), dict):
+        resolved['opts_svd'] = {**base.opts_svd, **resolved['opts_svd']}
 
     if base is None:
         return CTMOpts(**resolved)

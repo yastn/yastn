@@ -401,26 +401,81 @@ def test_pickle_fixed_point_opts():
 # FixedPointOpts
 # ----------------------------------------------------------------------
 
-def test_fixed_point_opts_separates_concerns():
-    """ ctm_opts_fp used to mean CTM options, the Neumann budget, the Neumann
-        tolerance and device routing all at once. """
+def test_fixed_point_opts_carries_forward_settings():
+    """ FixedPoint reverses the CTM by hand, so forward settings carry over to
+        the backward path. The Neumann budget IS the FP step's sweep budget. """
     fp = make_fixed_point_opts(
         fwd={'opts_svd': {'D_total': 64}, 'max_sweeps': 100, 'corner_tol': 1e-8},
         fp={'opts_svd': {'policy': 'fullrank'}},
-        neumann_max_iter=200, neumann_tol=1e-10, devices=['cuda:0', 'cuda:1'])
+        devices=['cuda:0', 'cuda:1'])
     assert fp.fwd.max_sweeps == 100 and fp.fwd.corner_tol == 1e-8
     assert fp.fp.opts_svd['policy'] == 'fullrank'
-    assert fp.neumann_max_iter == 200 and fp.neumann_tol == 1e-10
     assert fp.devices == ('cuda:0', 'cuda:1')
-    # the forward sweep budget is no longer entangled with the backward one
-    assert fp.fwd.max_sweeps != fp.neumann_max_iter
+    # the Neumann loop reads its budget/tolerance from the FP step, by design
+    assert fp.neumann_max_iter == fp.fp.max_sweeps
+    assert fp.neumann_tol == fp.fp.corner_tol
+
+
+def test_from_legacy_dicts_reproduces_the_historical_merge():
+    """ fp = deepcopy(fwd), then opts_svd merged key-by-key and the rest
+        overridden -- the derivation the backward pass depends on. """
+    fwd_d = {'method': '2x1', 'max_sweeps': 7, 'use_qr': False,
+             'corner_tol': 1e-9, 'opts_svd': {'D_total': 8}}
+    fp_d = {'opts_svd': {'policy': 'fullrank'}}
+    o = FixedPointOpts.from_legacy_dicts(fwd_d, fp_d)
+
+    # carried over from fwd
+    assert o.fp.method == '2x1' and o.fp.use_qr is False
+    assert o.fp.max_sweeps == 7 and o.fp.corner_tol == 1e-9
+    # opts_svd merged, not replaced
+    assert o.fp.opts_svd['D_total'] == 8 and o.fp.opts_svd['policy'] == 'fullrank'
+    # and therefore the Neumann loop inherits the forward budget
+    assert o.neumann_max_iter == 7 and o.neumann_tol == 1e-9
+    # caller dicts untouched
+    assert fwd_d['opts_svd'] == {'D_total': 8} and fp_d['opts_svd'] == {'policy': 'fullrank'}
+
+
+def test_from_legacy_dicts_fp_overrides_win():
+    o = FixedPointOpts.from_legacy_dicts(
+        {'max_sweeps': 7, 'corner_tol': 1e-9, 'opts_svd': {'D_total': 8}},
+        {'max_sweeps': 3, 'corner_tol': 1e-12})
+    assert o.fp.max_sweeps == 3 and o.fp.corner_tol == 1e-12
+    assert o.neumann_max_iter == 3 and o.neumann_tol == 1e-12
+    assert o.fwd.max_sweeps == 7, "overriding fp must not touch fwd"
+
+
+def test_from_legacy_dicts_lifts_non_ctm_keys():
+    """ neumann_patience and fp_devices are not CTM options; before they were
+        lifted out, make_ctm_opts rejected them (a Phase-2 regression). """
+    o = FixedPointOpts.from_legacy_dicts(
+        {'opts_svd': {'D_total': 8}, 'max_sweeps': 5},
+        {'neumann_patience': 3, 'fp_devices': ['cuda:0', 'cuda:1']})
+    assert o.neumann_patience == 3
+    assert o.devices == ('cuda:0', 'cuda:1')
+
+
+def test_from_legacy_dicts_backward_verbosity_does_not_inherit():
+    """ ctx.verbosity came from ctm_opts_fp alone, defaulting to 0 -- distinct
+        from fp.verbosity, which is the merged CTM-level setting. """
+    o = FixedPointOpts.from_legacy_dicts({'verbosity': 3, 'opts_svd': {}}, {})
+    assert o.verbosity == 0, "backward verbosity must not inherit fwd's"
+    assert o.fp.verbosity == 3, "the CTM-level setting still carries over"
+    o2 = FixedPointOpts.from_legacy_dicts({'verbosity': 3, 'opts_svd': {}},
+                                          {'verbosity': 1})
+    assert o2.verbosity == 1 and o2.fp.verbosity == 1
+
+
+def test_from_legacy_dicts_defaults():
+    o = FixedPointOpts.from_legacy_dicts()
+    assert o.fwd == CTMOpts() and o.fp == CTMOpts()
+    assert o.neumann_patience == 10 and o.devices is None and o.verbosity == 0
 
 
 def test_fixed_point_opts_round_trip_and_override():
     fp = make_fixed_point_opts(fwd={'opts_svd': {'D_total': 8}})
     assert from_dict(FixedPointOpts, to_dict(fp)) == fp
-    out = override(fp, {'fwd.opts_svd.D_total': 32, 'neumann_tol': 1e-12})
-    assert out.fwd.opts_svd['D_total'] == 32 and out.neumann_tol == 1e-12
+    out = override(fp, {'fwd.opts_svd.D_total': 32, 'neumann_patience': 4})
+    assert out.fwd.opts_svd['D_total'] == 32 and out.neumann_patience == 4
     assert fp.fwd.opts_svd['D_total'] == 8
 
 
@@ -477,3 +532,49 @@ def test_fix_signs_default_is_single_sourced():
     assert make_ctm_opts().svd_kwargs()['fix_signs'] is DEFAULT_FIX_SIGNS
     src = inspect.getsource(_env_ctm.proj_corners)
     assert 'DEFAULT_FIX_SIGNS' in src and "'fix_signs', True" not in src
+
+
+def test_nested_bundles_merge_into_the_base():
+    """ opts_svd and opts_si follow the same rule: deriving from a base merges
+        into it rather than replacing it. The fixed-point layer's
+        fp-derived-from-fwd relationship depends on this for opts_svd. """
+    base = make_ctm_opts(opts_svd={'D_total': 8, 'tol': 1e-10},
+                         opts_si={'enabled': True, 'oversampling': 2, 'niter': 4})
+    derived = make_ctm_opts(base, opts_svd={'policy': 'fullrank'},
+                            opts_si={'niter': 1})
+    assert derived.opts_svd == {'D_total': 8, 'tol': 1e-10, 'policy': 'fullrank'}
+    assert derived.opts_si.oversampling == 2 and derived.opts_si.niter == 1
+    # base untouched
+    assert 'policy' not in base.opts_svd and base.opts_si.niter == 4
+    # with no base there is nothing to merge into
+    assert make_ctm_opts(opts_svd={'policy': 'fullrank'}).opts_svd == {
+        'policy': 'fullrank', 'tol': DEFAULT_SVD_TOL}
+
+
+def test_fixed_point_opts_pickles():
+    """ The FP step ships these to worker processes on the distributed path. """
+    o = FixedPointOpts.from_legacy_dicts(
+        {'opts_svd': {'D_total': 8}, 'max_sweeps': 5},
+        {'opts_svd': {'policy': 'fullrank'}, 'neumann_patience': 4},
+        devices=['cpu', 'cpu'])
+    assert pickle.loads(pickle.dumps(o)) == o
+
+
+def test_fixed_point_opts_frozen_and_derivable():
+    o = FixedPointOpts.from_legacy_dicts({'max_sweeps': 5, 'opts_svd': {}})
+    with pytest.raises(FrozenInstanceError):
+        o.neumann_patience = 1
+    tighter = make_fixed_point_opts(o, neumann_patience=2)
+    assert tighter.neumann_patience == 2 and o.neumann_patience == 10
+    assert tighter.fwd == o.fwd and tighter.fp == o.fp
+
+
+def test_iterator_default_does_not_clobber_a_supplied_base():
+    """ iterator=False is a signature default, not a caller's choice -- it must
+        not override iterator_step coming from `opts=`. A non-None default here
+        silently turned a generator call back into an eager one. """
+    base = make_ctm_opts(opts_svd={'D_total': 4}, iterator_step=1)
+    assert make_ctm_opts(base, iterator=None).iterator_step == 1
+    # an explicit choice still wins
+    assert make_ctm_opts(base, iterator=False).iterator_step == 0
+    assert make_ctm_opts(base, iterator=True).iterator_step == 1

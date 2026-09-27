@@ -20,8 +20,9 @@ import numpy as np
 from scipy.optimize import minimize
 from scipy.sparse.linalg import LinearOperator, eigsh, eigs, ArpackNoConvergence
 import torch
+from dataclasses import replace
 
-from ._env_ctm_dist_mp import iterate_D_
+from ._ctm_opts import CTMOpts, FixedPointOpts
 from ._env_dataclasses import Gauge
 from .rdm import *
 from .._geometry import Lattice
@@ -618,18 +619,29 @@ def find_gauge_multi_sites(env_old, env, verbose=False):
     return env_gauge, phase_dict
 
 
-def fp_ctmrg(env: EnvCTM, \
-            ctm_opts_fwd : dict= {'method': "2x2", 'corner_tol': 1e-8, 'max_sweeps': 100, 'opts_svd': {}, 'verbosity': 0},
-            ctm_opts_fp: dict= {'opts_svd': {'policy':'fullrank'}, "verbosity": 0}, devices=None)->tuple[EnvCTM,Sequence[torch.Tensor],Sequence[slice]]:
+def fp_ctmrg(env: EnvCTM,
+            ctm_opts_fwd: dict | None = None,
+            ctm_opts_fp: dict | None = None,
+            devices=None, *,
+            opts: FixedPointOpts | None = None)->tuple[EnvCTM,Sequence[torch.Tensor],Sequence[slice]]:
     r"""
     Compute the fixed-point environment for the given state using CTMRG.
     First, run CTMRG until convergence then find the gauge transformation guaranteeing element-wise
     convergence of the environment tensors.
+    Enables backward differentiation through the fixed-point iteration to compute the gradients of the environment tensors 
+    with respect to the state parameters, via `Neumann series expansion
+    <https://en.wikipedia.org/wiki/Neumann_series>`_ of the fixed-point iteration.
 
     Args:
         env (EnvCTM): CTM environment
         ctm_opts_fwd (dict): Options for forward CTMRG convergence.
-        ctm_opts_fp (dict): Options for fixing the gauge transformation.
+            See :class:`CTMOpts` for the accepted keys.
+        ctm_opts_fp (dict): Overrides for the gauge-fixing CTM step. Applied on
+            top of ``ctm_opts_fwd``, which it otherwise inherits -- including
+            ``max_sweeps`` and ``corner_tol``, which the Neumann backward loop
+            then uses as its iteration budget and gradient tolerance.
+        opts (FixedPointOpts | None): The two above, pre-resolved. Takes
+            precedence over the dicts when given.
         devices (list[str] | None): Device list for the CTM step. With one device,
             everything runs serially (single-device path). With more than one,
             forward CTMRG convergence, the FP CTM step, and the Neumann
@@ -640,13 +652,13 @@ def fp_ctmrg(env: EnvCTM, \
         EnvCTM: Environment at fixed point.
         Sequence[Tensor]: raw environment data for the backward pass.
     """
-    # Multi-device: route the FP step + backward through the AD path.
-    # Single device: leave ctm_opts_fp untouched (serial path).
-    if devices is not None and len(devices) > 1:
-        ctm_opts_fp = {**ctm_opts_fp, 'fp_devices': list(devices)}
+    if opts is None:
+        opts = FixedPointOpts.from_legacy_dicts(ctm_opts_fwd, ctm_opts_fp, devices)
+    elif devices is not None:
+        opts = replace(opts, devices=tuple(devices))
     ket = env.psi.ket
     raw_peps_params= tuple( ket[s]._data for s in sorted(ket.sites(), key=ket.site2index) )
-    env, env_t_meta, env_slices, env_1d = FixedPoint.apply(env, ctm_opts_fwd, ctm_opts_fp, devices, *raw_peps_params)
+    env, env_t_meta, env_slices, env_1d = FixedPoint.apply(env, opts, *raw_peps_params)
     env_t_dict = _assemble_dict_from_1d(env_t_meta, env_1d, env_slices)
     env.env = Lattice.from_dict(env_t_dict)
     return env
@@ -672,15 +684,15 @@ class FixedPoint(torch.autograd.Function):
         return rdms
 
     @staticmethod
-    def fixed_point_iter(env_gauge, phase_dict, ctm_opts_fp, env_dict, env_meta, env_slices, psi_meta, env_data, psi_data):
+    def fixed_point_iter(env_gauge, phase_dict, opts, env_dict, env_meta, env_slices, psi_meta, env_data, psi_data):
         env_t_dict = _assemble_dict_from_1d(env_meta, env_data, env_slices)
         psi_dict = combine_data_and_meta(psi_data, psi_meta)
         env_dict['env'], env_dict['psi'] = env_t_dict, psi_dict
         env_in = EnvCTM.from_dict(env_dict)
-        # Opt-in distributed AD-aware update via ctm_opts_fp['fp_devices'].
+        # Opt-in distributed AD-aware update via opts.devices.
         # Default keeps single-device env_in.update_(...) untouched.
         from ._env_ctm_dist_mp_AD import fp_update_
-        fp_update_(env_in, ctm_opts_fp)
+        fp_update_(env_in, opts.fp, devices=list(opts.devices) if opts.devices else None)
 
         for site in env_in.sites():
             site_t, site_l, site_b, site_r = env_in.nn_site(site, "t"), env_in.nn_site(site, "l"), env_in.nn_site(site, "b"), env_in.nn_site(site, "r")
@@ -735,40 +747,42 @@ class FixedPoint(torch.autograd.Function):
         env_t_data, _ = split_data_and_meta(env_out_dict['env'])
         return (_concat_data(env_t_data)[0], )
 
-    def get_converged_env(
-        env,
-        method="2x2",
-        max_sweeps=100,
-        opts_svd=None,
-        corner_tol=1e-8,
-        devices=None,
-        **kwargs
-    ):
+    def get_converged_env(env, opts: CTMOpts, devices=None):
+        r"""
+        Run forward CTMRG to convergence, on one device or several.
+
+        The inner iterator is driven with no convergence test of its own, so the
+        test happens here, once, on the environment itself -- which is what makes
+        ``conv_history`` available to the caller.
+        """
         t_ctm, t_check = 0.0, 0.0
-        converged, conv_history = False, []
+        converged, conv_history, max_dsv = False, [], None
+        check = opts.conv_check if opts.conv_check is not None else opts.corner_tol
         if devices is None:
             devices = [env.config.default_device]
         if len(devices) == 1:
-            ctm_itr = env.ctmrg_(iterator=True, method=method,  max_sweeps=max_sweeps,
-                    opts_svd=opts_svd, corner_tol=None, **kwargs)
-        elif len(devices) > 1:
+            ctm_itr = env.ctmrg_(opts=replace(opts, corner_tol=None, conv_check=None,
+                                              iterator_step=1))
+        else:
             # Use AD module's persistent-pool generator for the multi-device
             # forward convergence loop. Saves the spawn-per-call cost of
-            # iterate_D_ across many fp_ctmrg invocations.
+            # a fresh worker pool across many fp_ctmrg invocations.
+            # Forward settings -- method, moves, use_qr -- come from the caller
+            # here, as on every other path.
             from ._env_ctm_dist_mp_AD import iterate_AD_
-            ctm_itr = iterate_AD_(env, opts_svd=opts_svd, moves='hv', method='2x2',
-                        max_sweeps=max_sweeps, use_qr=False, devices=devices)
+            ctm_itr = iterate_AD_(env, opts=opts, devices=devices)
 
-        for sweep in range(max_sweeps):
+        sweep = 0
+        for sweep in range(opts.max_sweeps):
             t0 = time.perf_counter()
-            ctm_out_info= next(ctm_itr)
+            next(ctm_itr)
             t1 = time.perf_counter()
             t_ctm += t1-t0
 
             t2 = time.perf_counter()
-            converged, max_dsv, conv_history = env.ctm_conv_corner_spec(conv_history, corner_tol)
+            converged, max_dsv, conv_history = env.ctm_conv_corner_spec(conv_history, check)
             t_check += time.perf_counter()-t2
-            if kwargs.get('verbosity',0)>2:
+            if opts.verbosity > 2:
                 log.log(logging.INFO, f"CTM iter {len(conv_history)} |delta_C| {max_dsv} t {t1-t0} [s]")
 
             if converged:
@@ -780,7 +794,7 @@ class FixedPoint(torch.autograd.Function):
         return env, converged, conv_history, t_ctm, t_check
 
     @staticmethod
-    def forward(ctx, env: EnvCTM, ctm_opts_fwd : dict, ctm_opts_fp: dict, devices, *state_params):
+    def forward(ctx, env: EnvCTM, opts: FixedPointOpts, *state_params):
         r"""
         Compute the fixed-point environment for the given state using CTMRG.
         First, run CTMRG until convergence then find the gauge transformation guaranteeing element-wise
@@ -788,11 +802,10 @@ class FixedPoint(torch.autograd.Function):
 
         Args:
             env (EnvCTM): Current environment to converge.
-            ctm_opts_fwd (dict): Options for forward CTMRG convergence. The options should include:
-                - opts_svd (dict): SVD options for the CTMRG step.
-            ctm_opts_fp (dict): Options for fixed-point CTMRG step and for fixing the gauge transformation.
-                - opts_svd (dict): SVD options for the fixed-point CTMRG step.
-                                   Currently only 'policy': 'fullrank' is supported.
+            opts (FixedPointOpts): resolved options. ``opts.fwd`` drives the forward
+                convergence; ``opts.fp`` -- which inherits from ``opts.fwd`` -- drives
+                the gauge-fixing step and, through its ``max_sweeps`` / ``corner_tol``,
+                the Neumann backward loop.
             state_params (Sequence[Tensor]): tensors of underlying Peps state
 
         Returns:
@@ -815,10 +828,9 @@ class FixedPoint(torch.autograd.Function):
             torch.cuda.set_device(_env_dev)
 
         # 1. Converge the environment using CTMRG
+        devices = list(opts.devices) if opts.devices else None
         ctm_env_out, converged, *FixedPoint.ctm_log, FixedPoint.t_ctm, FixedPoint.t_check = FixedPoint.get_converged_env(
-            env,
-            **ctm_opts_fwd,
-            devices=devices,
+            env, opts.fwd, devices=devices,
         )
         if not converged:
             raise NoFixedPointError(code=1, message="No fixed point found: CTM forward does not converge!")
@@ -826,23 +838,17 @@ class FixedPoint(torch.autograd.Function):
         # 2. Perform 1 extra CTM step to find the gauge transformation under which we have element-wise convergence
         #
         # TODO Use partial SVDs with appropriate backward
-        _ctm_opts_fp = copy.deepcopy(ctm_opts_fwd)
-        if ctm_opts_fp is not None:
-            # NOTE svd is governed solely by opts_svd, expected under 'opts_svd' key in ctm_opts_fwd and ctm_opts_fp
-            #      If ctm_opts_fp['opts_svd'] is set, we update ctm_opts_fwd['opts_svd'] with it.
-            ctx.verbosity = ctm_opts_fp.get('verbosity', 0)
-            _ctm_opts_fp['opts_svd'].update(ctm_opts_fp.get('opts_svd', {}))
-            _ctm_opts_fp.update({k:v for k,v in ctm_opts_fp.items() if k not in ['opts_svd']})
+        # opts.fp already inherits from opts.fwd, with the fp overrides merged in.
+        ctx.verbosity = opts.verbosity
 
         env_converged = ctm_env_out.copy()
         t0 = time.perf_counter()
-        # Use fp_update_ so that 'fp_devices' (when set) routes the FP CTM
-        # step through the distributed AD path in main's forward too.
-        # No backward fires through this call, but the distributed dispatch
-        # alone gives the same multi-GPU forward speedup. fp_update_ also
-        # strips 'fp_devices' when calling the serial env.update_ path.
+        # fp_update_ routes through the distributed AD path when devices are
+        # given, and the serial env.update_ otherwise. No backward fires through
+        # this call, but the distributed dispatch alone gives the same
+        # multi-GPU forward speedup.
         from ._env_ctm_dist_mp_AD import fp_update_
-        fp_update_(ctm_env_out, _ctm_opts_fp)
+        fp_update_(ctm_env_out, opts.fp, devices=devices if opts.devices else None)
         t1 = time.perf_counter()
         log.info(f"{type(ctx).__name__}.forward FP CTM step t {t1-t0} [s]")
 
@@ -866,11 +872,11 @@ class FixedPoint(torch.autograd.Function):
         ctx.save_for_backward(*env_data, *g_data)
         ctx.env_data_num = len(env_data)
         ctx.env_meta, ctx.g_meta = env_meta, g_meta
-        ctx.ctm_opts_fp = _ctm_opts_fp
+        ctx.opts = opts
         ctx.phase_dict = phase_dict
 
         # Release cache after forward to prepare space for energy eval
-        if 'fp_devices' in _ctm_opts_fp:
+        if opts.devices:
             try:
                 from ._env_ctm_dist_mp_AD import release_pool_cache
                 release_pool_cache()
@@ -901,14 +907,14 @@ class FixedPoint(torch.autograd.Function):
 
         prev_grad_tmp = None
 
-        # When fp_devices is set, the FP CTM step uses our distributed
+        # With devices set, the FP CTM step uses our distributed
         # AD-aware implementation (workers) -- but torch.func.vjp wraps
         # tensors in a way the workers can't pickle (TensorWrapper
         # without storage). Build the linearization graph with regular
         # autograd instead, which produces real tensors that pickle
         # cleanly. retain_graph=True lets us reuse the captured graph
         # across the Neumann iterations.
-        _use_autograd_grad = 'fp_devices' in ctx.ctm_opts_fp
+        _use_autograd_grad = bool(ctx.opts.devices)
 
         with torch.enable_grad():
             time0 = time.perf_counter()
@@ -917,7 +923,7 @@ class FixedPoint(torch.autograd.Function):
                 _psi_data_g = tuple(
                     p.detach().requires_grad_(True) for p in _psi_data)
                 _out_tuple = FixedPoint.fixed_point_iter(
-                    env_gauge, ctx.phase_dict, ctx.ctm_opts_fp, env_dict,
+                    env_gauge, ctx.phase_dict, ctx.opts, env_dict,
                     _env_meta, _env_slices, _psi_meta,
                     _env_ts_g, _psi_data_g)
                 _out_t = _out_tuple[0]
@@ -940,7 +946,7 @@ class FixedPoint(torch.autograd.Function):
                                 for r, t in zip(res, _psi_data_g))
                     return (res,)
             else:
-                _, df_vjp = torch.func.vjp(lambda x,y: FixedPoint.fixed_point_iter(env_gauge, ctx.phase_dict, ctx.ctm_opts_fp, env_dict, _env_meta, _env_slices, _psi_meta, x, y), _env_ts, _psi_data)
+                _, df_vjp = torch.func.vjp(lambda x,y: FixedPoint.fixed_point_iter(env_gauge, ctx.phase_dict, ctx.opts, env_dict, _env_meta, _env_slices, _psi_meta, x, y), _env_ts, _psi_data)
                 dfdC_vjp= lambda x: (df_vjp(x)[0],)
                 dfdA_vjp= lambda x: (df_vjp(x)[1],)
             time1 = time.perf_counter()
@@ -955,14 +961,17 @@ class FixedPoint(torch.autograd.Function):
         # that produced it; once grad_diff fails to improve for `patience`
         # consecutive steps the series is no longer contracting -> stop and
         # return that best estimate, not the diverged tail.
-        patience = ctx.ctm_opts_fp.get('neumann_patience', 10)
+        # Budget and tolerance are the FP step's, carried over from the forward
+        # by design: this loop reverses that CTM step.
+        neumann_max_iter, neumann_tol = ctx.opts.fp.max_sweeps, ctx.opts.fp.corner_tol
+        patience = ctx.opts.neumann_patience
         best_grad_diff = float('inf')
         best_dA = dA
         stall = 0
         time0 = time.perf_counter()
-        for step in range(ctx.ctm_opts_fp['max_sweeps']):
+        for step in range(neumann_max_iter):
             grads = dfdC_vjp(grads)
-            if all([torch.norm(grad, p=torch.inf) < ctx.ctm_opts_fp["corner_tol"] for grad in grads]):
+            if all([torch.norm(grad, p=torch.inf) < neumann_tol for grad in grads]):
                 break
             dA = tuple(dA[i] + grads[i] for i in range(len(grads)))
 
@@ -970,9 +979,9 @@ class FixedPoint(torch.autograd.Function):
             if prev_grad_tmp is not None:
                 grad_diff = torch.norm(grad_tmp - prev_grad_tmp).item()
                 print("full grad diff", grad_diff)
-                if grad_diff < ctx.ctm_opts_fp["corner_tol"]:
+                if grad_diff < neumann_tol:
                     best_dA = dA
-                    log.log(logging.INFO, f"Fixed_pt: The norm of the full grad diff is below {ctx.ctm_opts_fp['corner_tol']}.")
+                    log.log(logging.INFO, f"Fixed_pt: The norm of the full grad diff is below {neumann_tol}.")
                     break
 
                 if grad_diff < best_grad_diff:
@@ -1038,4 +1047,5 @@ class FixedPoint(torch.autograd.Function):
         # with torch.enable_grad():
         #   dA = torch.autograd.grad(FixedPoint.fixed_point_iter(ctx.env, ctx.env_gauge, ctx.opts_svd, ctx.slices, env_data), ctx.env.psi.ket.get_parameters(), grad_outputs=u)
 
-        return None, None, None, None, *dA
+        # one grad per forward input: (env, opts, *state_params)
+        return None, None, *dA

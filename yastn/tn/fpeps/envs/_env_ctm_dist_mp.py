@@ -39,7 +39,7 @@ def _validate_devices_list(devices: list[str] | None) -> None:
 
 
 def iterate_D_(env, opts_svd=None, moves=None, method=None, max_sweeps=None,
-               iterator=False, corner_tol=None, *, opts=None, **kwargs):
+               iterator=None, corner_tol=None, *, opts=None, **kwargs):
         r"""
         Perform CTMRG updates :meth:`yastn.tn.fpeps.EnvCTM.update_` until convergence.
         Convergence can be measured based on singular values of CTM environment corner tensors.

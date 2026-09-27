@@ -1128,8 +1128,7 @@ def iterate_AD_(env, opts_svd=None, moves=None, method=None, max_sweeps=None,
         raise ValueError("iterate_AD_ requires devices=...")
 
     # Sweep-loop controls (corner_tol, iterator_step, checkpoint_move) are
-    # fields of CTMOpts rather than stray kwargs, so update_AD_ simply ignores
-    # what does not concern it; no deny-list is needed.
+    # fields of CTMOpts, update_AD_ simply ignores what does not concern it; no deny-list is needed.
     for sweep in range(1, opts.max_sweeps + 1):
         with torch.no_grad():
             update_AD_(env, opts=opts)
@@ -1141,21 +1140,20 @@ def iterate_AD_(env, opts_svd=None, moves=None, method=None, max_sweeps=None,
 # Drop-in replacement for env.update_(...) inside fixed_point_iter
 # ===========================================================================
 
-def fp_update_(env_in, ctm_opts_fp):
-    """Honor ``ctm_opts_fp['fp_devices']`` to switch between serial and
-    distributed-AD updates.
+def fp_update_(env_in, ctm_opts_fp, devices=None):
+    """The gauge-fixing CTM step, serial or distributed-AD.
 
-    Still takes the plain dict that ``fixed_pt`` builds; it is normalized to
-    :class:`CTMOpts` here. ``fixed_pt`` itself moves to ``FixedPointOpts``
-    separately, at which point ``fp_devices`` becomes a declared field.
+    ``devices`` selects between the two. A plain dict is still accepted for
+    ``ctm_opts_fp`` -- normalized to :class:`CTMOpts` here, with the legacy
+    ``fp_devices`` key honoured as a fallback for ``devices``.
     """
     if isinstance(ctm_opts_fp, CTMOpts):
         opts = ctm_opts_fp
-        fp_devices = list(opts.devices) if opts.devices else None
+        devices = devices or (list(opts.devices) if opts.devices else None)
     else:
-        fp_devices = ctm_opts_fp.get('fp_devices', None)
+        devices = devices or ctm_opts_fp.get('fp_devices', None)
         opts = make_ctm_opts(**{k: v for k, v in ctm_opts_fp.items()
                                 if k != 'fp_devices'})
-    if fp_devices is None:
+    if not devices:
         return env_in.update_(opts=opts)
-    return update_AD_(env_in, opts=opts, devices=fp_devices)
+    return update_AD_(env_in, opts=opts, devices=devices)

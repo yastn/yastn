@@ -150,7 +150,7 @@ class EnvCTM_c4v(EnvCTM):
         assert init in ['eye', 'dl'], "Invalid initialization type. Should be 'eye' or 'dl'."
         super().reset_(init=init)
 
-    def iterate_(env, opts_svd=None, method=None, max_sweeps=None, iterator=False,
+    def iterate_(env, opts_svd=None, method=None, max_sweeps=None, iterator=None,
                  corner_tol=None, *, opts=None, **kwargs):
         # 'd' is a single move, so iterate_'s loop over the string runs once.
         return super().iterate_(opts_svd=opts_svd, moves='d', method=method,
