@@ -389,7 +389,7 @@ def test_prefilter_nonzero_output_trims_blocks(config_kwargs):
 
 
 def test_output_unroll_all_prefiltered_zero(config_kwargs):
-    """All-skipped output-unrolled slices should raise a no-valid-charges error."""
+    """All-skipped output-unrolled slices give zero, the value ncon gives."""
     cfg = yastn.make_config(sym='U1', **config_kwargs)
 
     leg_i = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 1))
@@ -408,11 +408,15 @@ def test_output_unroll_all_prefiltered_zero(config_kwargs):
         a, ('i', 'j'), b, ('j', 'k'), ('i', 'k'), unroll=unroll
     )
 
-    with pytest.raises(yastn.YastnError, match="No valid charge sectors found"):
-        yastn.contract_with_unroll(
-            a, ('i', 'j'), b, ('j', 'k'), ('i', 'k'),
-            unroll=unroll, optimize=path,
-        )
+    result = yastn.contract_with_unroll(
+        a, ('i', 'j'), b, ('j', 'k'), ('i', 'k'),
+        unroll=unroll, optimize=path,
+    )
+    # Structurally identical to the unsliced path, not merely equal in value:
+    # ncon returns a blockless tensor here and so must the sliced sum.
+    assert float((result - expected).norm()) < tol
+    assert result.get_legs() == expected.get_legs()
+    assert len(result.get_blocks_charge()) == 0
 
 
 def test_output_unroll_partial_prefiltered_zero(config_kwargs):
@@ -442,8 +446,44 @@ def test_output_unroll_partial_prefiltered_zero(config_kwargs):
     assert float((result - expected).norm()) < tol
 
 
-def test_contracted_unroll_all_skipped_raises(config_kwargs, monkeypatch):
-    """All skipped contracted-only slices should raise a no-valid-charges error."""
+def test_covering_unroll_empty_chain_matches_ncon(config_kwargs):
+    """A COVERING unroll whose every combo is skipped must return exactly what
+    the unsliced path returns -- same legs, no blocks -- not a zero-filled
+    tensor over every charge-allowed block.
+
+    The chain is genuinely empty while the output legs could still host the
+    total charge: A carries both j sectors, B only j=0 -> k=0, C only k=1.
+    That combination is what makes the two paths disagree if the zero is
+    materialised with blocks.
+    """
+    cfg = yastn.make_config(sym='U1', **config_kwargs)
+
+    A = yastn.Tensor(config=cfg, s=(1, -1), n=0)
+    for t in (0, 1):
+        A.set_block(ts=(t, t), Ds=(2, 2), val='rand')
+    B = yastn.Tensor(config=cfg, s=(1, -1), n=0)
+    B.set_block(ts=(0, 0), Ds=(2, 2), val='rand')
+    C = yastn.Tensor(config=cfg, s=(1, -1), n=0)
+    C.set_block(ts=(1, 1), Ds=(2, 2), val='rand')
+
+    expected = yastn.ncon([A, B, C], [[-1, 1], [1, 2], [2, -2]])
+    assert len(expected.get_blocks_charge()) == 0  # the chain really is empty
+
+    path, _ = yastn.get_contraction_path(
+        A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), ('i', 'l'))
+    result = yastn.contract_with_unroll(
+        A, ('i', 'j'), B, ('j', 'k'), C, ('k', 'l'), ('i', 'l'),
+        unroll={'j': yastn.make_sliced_legs(A.get_legs(1).conj()),
+                'k': yastn.make_sliced_legs(C.get_legs(0))}, optimize=path)
+
+    assert result.get_legs() == expected.get_legs()
+    assert result.get_shape() == expected.get_shape()
+    assert len(result.get_blocks_charge()) == 0
+    assert float((result - expected).norm()) < tol
+
+
+def test_contracted_unroll_all_skipped_gives_zero(config_kwargs, monkeypatch):
+    """All skipped contracted-only slices give zero, the value ncon gives."""
     cfg = yastn.make_config(sym='U1', **config_kwargs)
 
     leg_i = yastn.Leg(cfg, s=1, t=(0, 1), D=(1, 1))
@@ -459,11 +499,15 @@ def test_contracted_unroll_all_skipped_raises(config_kwargs, monkeypatch):
     path, _ = yastn.get_contraction_path(
         a, ('i', 'j'), b, ('j', 'k'), ('i', 'k'), unroll=unroll
     )
-    with pytest.raises(yastn.YastnError, match="No valid charge sectors found"):
-        yastn.contract_with_unroll(
-            a, ('i', 'j'), b, ('j', 'k'), ('i', 'k'),
-            unroll=unroll, optimize=path,
-        )
+    result = yastn.contract_with_unroll(
+        a, ('i', 'j'), b, ('j', 'k'), ('i', 'k'),
+        unroll=unroll, optimize=path,
+    )
+    # Only the VALUE is defined here: the tensors do have valid charge sectors
+    # and the prefilter was monkeypatched into skipping them, so the struct is
+    # whatever evaluating one combo yields, not necessarily blockless.
+    assert float(result.norm()) < tol
+    assert float((result - yastn.ncon([a, b], [[-1, 1], [1, -2]])).norm()) < tol
 
 
 def test_contracted_unroll_natural_skips_preserve_numeric_result(config_kwargs, monkeypatch):
@@ -802,14 +846,17 @@ def test_partial_block_structure(config_kwargs):
         A3, ('i', 'j'), B3, ('j', 'k'), C3, ('k', 'l'), ('i', 'l')
     )
     expected3 = yastn.ncon([A3, B3, C3], [[-1, 1], [1, 2], [2, -2]])
-    # (j=sector0, k=sector1) is incompatible with B3 (n=0 requires j==k)
+    # (j=sector0, k=sector1) is incompatible with B3 (n=0 requires j==k), so
+    # the only combo is skipped and the unrolled sum is zero — with the legs
+    # the full contraction would have produced.
     sl_j0 = yastn.SlicedLeg(t=[(0,)], D=[4])
     sl_k1 = yastn.SlicedLeg(t=[(1,)], D=[3])
-    with pytest.raises(yastn.YastnError, match="No valid charge sectors found"):
-        yastn.contract_with_unroll(
-            A3, ('i', 'j'), B3, ('j', 'k'), C3, ('k', 'l'), ('i', 'l'),
-            unroll={'j': [sl_j0], 'k': [sl_k1]}, optimize=path3,
-        )
+    zero3 = yastn.contract_with_unroll(
+        A3, ('i', 'j'), B3, ('j', 'k'), C3, ('k', 'l'), ('i', 'l'),
+        unroll={'j': [sl_j0], 'k': [sl_k1]}, optimize=path3,
+    )
+    assert yastn.norm(zero3) < tol
+    assert zero3.s == expected3.s and zero3.ndim == expected3.ndim
     result3 = yastn.contract_with_unroll(
         A3, ('i', 'j'), B3, ('j', 'k'), C3, ('k', 'l'), ('i', 'l'),
         unroll={'j': yastn.make_sliced_legs(leg_j3), 'k': yastn.make_sliced_legs(leg_k3)},

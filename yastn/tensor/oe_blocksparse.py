@@ -34,7 +34,6 @@ from ._legs import Leg
 from ._einsum import ncon_prefilter, _apply_charge_swaps_
 from ._auxiliary import _clear_axes, get_blocks, get_trimmed_struct
 from ._merging import _meta_mask
-from ._tests import YastnError
 
 log = logging.getLogger(__name__)
 
@@ -633,8 +632,8 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
     # YASTN_OE_CUDA_CACHE_RELEASE_LEVEL (default 0) tunes how often the blocking
     # empty_cache runs. A release point tagged `level` fires only when the env
     # value is >= level, so higher = more frequent (and more blocking):
-    #   0 = never; 
-    #   1 = once per _contract_with_sliced_unroll, before processing combos; 
+    #   0 = never;
+    #   1 = once per _contract_with_sliced_unroll, before processing combos;
     #   2 = + after processing each combo; 3 = + per tensordot.
     _needs_cache_release = lambda level: \
         getattr(tensors[0].config.backend, 'BACKEND_ID', '') == 'torch_cutensor' \
@@ -809,16 +808,21 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
     if _return_partials:
         return output_pos_partials
 
+    if not output_pos_partials and all_combos:
+        log.debug("no valid charge sectors in any of %d combos -> zero",
+                  len(all_combos))
+        # EVERY combo was skipped by the charge prefilter, so the sum over
+        # combos is empty and the contraction is zero. We return the first combo
+        # evaluation, which is empty.
+        result = _contract_single_combo(
+            tensors, dict(zip(unroll_labels, all_combos[0])))
+        return result if _restore_device is None else result.to(_restore_device)
+
     if not output_unroll_info:
         result = output_pos_partials.get((), None)
-        if result is None and all_combos:
-            raise YastnError("No valid charge sectors found for contraction.")
         if result is not None and _restore_device is not None:
             result = result.to(_restore_device)
         return result
-
-    if not output_pos_partials and all_combos:
-        raise YastnError("No valid charge sectors found for contraction.")
 
     # Assemble: output-unrolled axes are blocked; all others are common_legs.
     blocked_axes = sorted(output_unroll_info.keys())
