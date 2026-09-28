@@ -85,7 +85,8 @@ def test_ctmrg_measure_product(config_kwargs, boundary):
         assert abs(vals[s1] * vals[s2] - v) < tol
         v = env.measure_nsite_exact(sz, sz, sites=(s1, s2))
         assert abs(vals[s1] * vals[s2] - v) < tol
-        v_oe = env.measure_nsite_exact_oe(sz, sz, sites=(s1, s2))
+        # on this all-dimension-1 network the DP path search prunes nothing and stalls
+        v_oe = env.measure_nsite_exact_oe(sz, sz, sites=(s1, s2), optimizer="greedy")
         assert abs(v - v_oe) < tol
         s0, op= s_elem[1]
         v_rdm = measure_rdm_2x2(s0,psi,env,op)
@@ -97,7 +98,7 @@ def test_ctmrg_measure_product(config_kwargs, boundary):
     assert abs(vals[s1] * vals[s2] * vals[s3] - v) < tol
     v = env.measure_nsite_exact(sz, sz, sz, sites=(s1, s2, s3))
     assert abs(vals[s1] * vals[s2] * vals[s3] - v) < tol
-    v_oe = env.measure_nsite_exact_oe(sz, sz, sz, sites=(s1, s2, s3))
+    v_oe = env.measure_nsite_exact_oe(sz, sz, sz, sites=(s1, s2, s3), optimizer="greedy")
     assert abs(v - v_oe) < tol
     v_rdm= measure_rdm_2x2((1,1),psi,env,(I,sz,sz,sz))
     assert abs(v - v_rdm) < tol
@@ -297,11 +298,10 @@ def test_measure_nsite_exact_oe_unroll(config_kwargs, boundary):
 
     sz = ops.sz()
 
-    def _check(ref, *operators, sites, unroll, checkpoint_loop=False, separate_layers=False):
+    def _check(ref, *operators, sites, unroll, checkpoint_loop=False):
         v = env.measure_nsite_exact_oe(*operators, sites=sites,
                                        unroll=unroll,
                                        checkpoint_loop=checkpoint_loop,
-                                       separate_layers=separate_layers,
                                        optimizer="greedy")
         assert abs(ref - v) < tol
 
@@ -311,9 +311,6 @@ def test_measure_nsite_exact_oe_unroll(config_kwargs, boundary):
         assert abs(vals[s1] * vals[s2] - ref) < tol
         _check(ref, sz, sz, sites=(s1, s2), unroll={('h', 0, 0): 1})
         _check(ref, sz, sz, sites=(s1, s2), unroll={('h', 0, 0): 1}, checkpoint_loop=use_checkpoint)
-        # separate_layers
-        _check(ref, sz, sz, sites=(s1, s2), unroll=None, separate_layers=True)
-        _check(ref, sz, sz, sites=(s1, s2), unroll={('h', 0, 0): 1}, separate_layers=True)
 
     # --- 3-site in 2x2 window ---
     s1, s2, s3 = (1, 2), (2, 1), (2, 2)
@@ -325,9 +322,6 @@ def test_measure_nsite_exact_oe_unroll(config_kwargs, boundary):
     _check(ref, sz, sz, sz, sites=(s1, s2, s3), unroll={('h', 0, 0): 1}, checkpoint_loop=use_checkpoint)
     # unroll multiple bonds
     _check(ref, sz, sz, sz, sites=(s1, s2, s3), unroll={('v', 0, 0): 1, ('h', 0, 0): 1})
-    # separate_layers
-    _check(ref, sz, sz, sz, sites=(s1, s2, s3), unroll=None, separate_layers=True)
-    _check(ref, sz, sz, sz, sites=(s1, s2, s3), unroll={('h', 0, 0): 1}, separate_layers=True)
 
     # --- 3-site horizontal line (Nx=1, Ny=3 window) ---
     s1, s2, s3 = (1, 0), (1, 1), (1, 2)
@@ -337,8 +331,6 @@ def test_measure_nsite_exact_oe_unroll(config_kwargs, boundary):
     _check(ref, sz, sz, sz, sites=(s1, s2, s3), unroll={('h', 0, 0): 1})
     _check(ref, sz, sz, sz, sites=(s1, s2, s3), unroll={('h', 0, 1): 1})
     _check(ref, sz, sz, sz, sites=(s1, s2, s3), unroll={('h', 0, 0): 1}, checkpoint_loop=use_checkpoint)
-    # separate_layers
-    _check(ref, sz, sz, sz, sites=(s1, s2, s3), unroll=None, separate_layers=True)
 
     # --- 3-site vertical line (Nx=3, Ny=1 window) ---
     s1, s2, s3 = (0, 2), (1, 2), (2, 2)
@@ -347,9 +339,6 @@ def test_measure_nsite_exact_oe_unroll(config_kwargs, boundary):
     # unroll vertical PEPS bond
     _check(ref, sz, sz, sz, sites=(s1, s2, s3), unroll={('v', 1, 0): 1})
     _check(ref, sz, sz, sz, sites=(s1, s2, s3), unroll={('v', 1, 0): 1}, checkpoint_loop=use_checkpoint)
-    # separate_layers
-    _check(ref, sz, sz, sz, sites=(s1, s2, s3), unroll=None, separate_layers=True)
-    _check(ref, sz, sz, sz, sites=(s1, s2, s3), unroll={('v', 1, 0): 1}, separate_layers=True)
 
     # --- 4-site 2x2 window ---
     s1, s2, s3, s4 = (0, 0), (0, 1), (1, 0), (1, 1)
@@ -364,9 +353,6 @@ def test_measure_nsite_exact_oe_unroll(config_kwargs, boundary):
            unroll={('h', 0, 0): 1, ('v', 1, 0): 1}, checkpoint_loop=use_checkpoint)
     # unroll a chi (boundary) bond
     _check(ref, sz, sz, sz, sz, sites=(s1, s2, s3, s4), unroll={('v', 0, -1): 1})
-    # separate_layers
-    _check(ref, sz, sz, sz, sz, sites=(s1, s2, s3, s4), unroll=None, separate_layers=True)
-    _check(ref, sz, sz, sz, sz, sites=(s1, s2, s3, s4), unroll={('h', 0, 0): 1}, separate_layers=True)
 
     # --- 6-site 2x3 window ---
     s_all = ((1, 0), (1, 1), (1, 2), (2, 0), (2, 1), (2, 2))
@@ -384,9 +370,6 @@ def test_measure_nsite_exact_oe_unroll(config_kwargs, boundary):
     # unroll multiple bonds in the 2x3 window
     _check(ref, *(sz,) * 6, sites=s_all,
            unroll={('h', 0, 0): 1, ('h', 0, 1): 1, ('v', 1, 0): 1})
-    # separate_layers
-    _check(ref, *(sz,) * 6, sites=s_all, unroll=None, separate_layers=True)
-    _check(ref, *(sz,) * 6, sites=s_all, unroll={('h', 0, 1): 1}, separate_layers=True)
 
 
 @pytest.mark.parametrize("dims", [(1, 2), (2, 1)])
@@ -452,15 +435,7 @@ def test_measure_nsite_exact_oe_unroll_fermionic(config_kwargs, dims):
                               checkpoint_loop=use_checkpoint)
             assert abs(ref - v_ckpt) < tol
 
-            # separate_layers
-            v_sep = _measure(ops.cp(s), ops.c(s), sites=bond,
-                             separate_layers=True)
-            assert abs(ref - v_sep) < tol
 
-            v_sep_unroll = _measure(ops.cp(s), ops.c(s), sites=bond,
-                                    unroll={('h', 0, 0): 1},
-                                    separate_layers=True)
-            assert abs(ref - v_sep_unroll) < tol
 
             # also test reverse bond
             ref_rev = _measure(ops.c(s), ops.cp(s), sites=bond[::-1])
@@ -474,10 +449,6 @@ def test_measure_nsite_exact_oe_unroll_fermionic(config_kwargs, dims):
                                         unroll={('h', 0, 0, 'k'): 1})
             assert abs(ref_rev - v_unroll_rev_ket) < tol
 
-            # separate_layers for reverse bond
-            v_sep_rev = _measure(ops.c(s), ops.cp(s), sites=bond[::-1],
-                                 separate_layers=True)
-            assert abs(ref_rev - v_sep_rev) < tol
 
 
 def test_measure_nsite_exact_oe_unroll_fermionic_large(config_kwargs):
@@ -541,15 +512,7 @@ def test_measure_nsite_exact_oe_unroll_fermionic_large(config_kwargs):
                           checkpoint_loop=use_checkpoint)
         assert abs(ref - v_ckpt) < tol
 
-        # separate_layers
-        v_sep = _measure(n_op, n_op, sites=(s1, s2),
-                         separate_layers=True)
-        assert abs(ref - v_sep) < tol
 
-        v_sep_unroll = _measure(n_op, n_op, sites=(s1, s2),
-                                unroll={('h', 0, 0): 1},
-                                separate_layers=True)
-        assert abs(ref - v_sep_unroll) < tol
 
     # --- 1x3 horizontal window: 3-point density correlator ---
     s1, s2, s3 = (1, 0), (1, 1), (1, 2)
@@ -566,10 +529,6 @@ def test_measure_nsite_exact_oe_unroll_fermionic_large(config_kwargs):
                       checkpoint_loop=use_checkpoint)
     assert abs(ref - v_ckpt) < tol
 
-    # separate_layers
-    v_sep = _measure(n_op, n_op, n_op, sites=(s1, s2, s3),
-                     separate_layers=True)
-    assert abs(ref - v_sep) < tol
 
     # --- 3x1 vertical window: 3-point density correlator ---
     s1, s2, s3 = (0, 1), (1, 1), (2, 1)
@@ -590,10 +549,6 @@ def test_measure_nsite_exact_oe_unroll_fermionic_large(config_kwargs):
                       checkpoint_loop=use_checkpoint)
     assert abs(ref - v_ckpt) < tol
 
-    # separate_layers
-    v_sep = _measure(n_op, n_op, n_op, sites=(s1, s2, s3),
-                     separate_layers=True)
-    assert abs(ref - v_sep) < tol
 
     # --- 2x2 window: fermionic hopping correlator (cp, c) with charge swaps ---
     for (s1, s2) in [((0, 0), (1, 1)), ((1, 0), (2, 1))]:
@@ -610,15 +565,7 @@ def test_measure_nsite_exact_oe_unroll_fermionic_large(config_kwargs):
                           checkpoint_loop=use_checkpoint)
         assert abs(ref - v_ckpt) < tol
 
-        # separate_layers with charge-carrying operators
-        v_sep = _measure(cp_op, c_op, sites=(s1, s2),
-                         separate_layers=True)
-        assert abs(ref - v_sep) < tol
 
-        v_sep_unroll = _measure(cp_op, c_op, sites=(s1, s2),
-                                unroll={('h', 0, 0): 1},
-                                separate_layers=True)
-        assert abs(ref - v_sep_unroll) < tol
 
     # --- full 3x3 window: 4-point correlator ---
     sites_4pt = ((0, 0), (0, 2), (2, 0), (2, 2))
@@ -639,15 +586,7 @@ def test_measure_nsite_exact_oe_unroll_fermionic_large(config_kwargs):
                       checkpoint_loop=use_checkpoint)
     assert abs(ref - v_ckpt) < tol
 
-    # separate_layers on full 3x3 window
-    v_sep = _measure(n_op, n_op, n_op, n_op, sites=sites_4pt,
-                     separate_layers=True)
-    assert abs(ref - v_sep) < tol
 
-    v_sep_unroll = _measure(n_op, n_op, n_op, n_op, sites=sites_4pt,
-                            unroll={('h', 0, 0): 1},
-                            separate_layers=True)
-    assert abs(ref - v_sep_unroll) < tol
 
 
 if __name__ == '__main__':

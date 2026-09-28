@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 430 303" width="430" height="303" font-family="Helvetica, Arial, sans-serif">
+<title>Case 2, step 2: column jump over A with partner line 5</title>
+<rect width="430" height="303" rx="10" fill="#ffffff"/>
+<text x="215" y="20" fill="#555555" font-size="14" text-anchor="middle" font-style="italic">2. column jump over A, partner line 5</text>
+<g transform="translate(0,28)">
+<path d="M60,50 Q180,-10 300,50" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M60.0,50.0 L236.0,50.0 Q250.0,50.0 250.0,64.0 L250.0,81.0 Q250.0,95.0 264.0,95.0 L321.0,95.0 Q335.0,95.0 335.0,81.0 L335.0,64.0 Q335.0,50.0 321.0,50.0 L300.0,50.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M60.0,50.0 L60.0,200.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M300.0,50.0 L300.0,200.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M300.0,200.0 L114.0,200.0 Q100.0,200.0 100.0,186.0 L100.0,99.0 Q100.0,85.0 86.0,85.0 L39.0,85.0 Q25.0,85.0 25.0,99.0 L25.0,186.0 Q25.0,200.0 39.0,200.0 L60.0,200.0" fill="none" stroke="#e07000" stroke-width="2.2" stroke-linejoin="round"/>
+<circle cx="300.0" cy="95.0" r="5.5" fill="#c62828"/>
+<circle cx="60.0" cy="85.0" r="5.5" fill="#c62828"/>
+<rect x="124" y="44" width="12" height="12" fill="#1f5fbf"/>
+<rect x="194" y="194" width="12" height="12" fill="#1f5fbf"/>
+<circle cx="60" cy="50" r="17" fill="#fde3c4" stroke="#222222" stroke-width="2.2"/>
+<circle cx="300" cy="50" r="17" fill="#ffffff" stroke="#222222" stroke-width="2.2"/>
+<circle cx="60" cy="200" r="17" fill="#ffffff" stroke="#222222" stroke-width="2.2"/>
+<circle cx="300" cy="200" r="17" fill="#ffffff" stroke="#222222" stroke-width="2.2"/>
+<text x="130" y="76" fill="#1f5fbf" font-size="14" text-anchor="middle" font-style="italic">P<tspan dy="4" font-size="10">D</tspan></text>
+<text x="200" y="188" fill="#1f5fbf" font-size="14" text-anchor="middle" font-style="italic">P<tspan dy="4" font-size="10">A</tspan></text>
+<text x="180" y="13" fill="#555555" font-size="13" text-anchor="middle" >1</text>
+<text x="180" y="42" fill="#555555" font-size="13" text-anchor="middle" >2</text>
+<text x="48" y="150" fill="#555555" font-size="13" text-anchor="end" >3</text>
+<text x="312" y="150" fill="#555555" font-size="13" text-anchor="start" >4</text>
+<text x="250" y="193" fill="#555555" font-size="13" text-anchor="middle" >5</text>
+<text x="60" y="55" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">A</text>
+<text x="300" y="55" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">B</text>
+<text x="60" y="205" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">C</text>
+<text x="300" y="205" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">D</text>
+</g>
+</svg>

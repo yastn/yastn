@@ -51,6 +51,8 @@ def product_mpo(operators, N=None) -> MpsMpoOBC:
     operators: Sequence[yastn.Tensor] | yastn.Tensor
         Tensors will be attributed to consecutive MPS sites.
         They can have non-zero charges, that will be converted into matching MPO virtual legs.
+        Fermionic operators are multiplied in the order of the sites, the first acting last,
+        as for a single term of :meth:`generate_mpo`.
         Each tensor should have ``ndim=2``.
 
     N: Optional[int]
@@ -101,6 +103,8 @@ def _product_MpsMpoOBC(vectors, N=None, nr_phys=1) -> MpsMpoOBC:
 
     rt = vectors[0].config.sym.zero()
     for n, vec in zip(psi.sweep(to='first'), vectors[::-1]):
+        if nr_phys == 2:  # the operators to the right, of total charge rt, act first
+            vec = vec.swap_gate(axes=1, charge=rt)
         vec = vec.add_leg(axis=1, s=1, t=rt)
         rt = vec.n
         psi[n] = vec.add_leg(axis=0, s=-1)

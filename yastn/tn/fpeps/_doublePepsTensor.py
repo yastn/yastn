@@ -58,14 +58,16 @@ class DoublePepsTensor(SpecialTensor):
     def ndim(self):
         return 4
 
-    def set_operator_(self, op, reset=True):
+    def set_operator_(self, op, reset=True, dirn=None):
         """
         Include the operator that is applied on the physical leg of the ket tensor during contraction.
 
         By default, it resets the previous operator (if present)
         Otherwise, multiply the previous operator from the left, i.e., apply it after the one in self.op.
+        ``dirn`` gives, for an operator with bond legs, the roles of the site in the steps of its
+        path, as in :func:`apply_gate_onsite`, for the swap of the bonds with an ancilla.
         """
-        op = match_ancilla(self.ket, op)
+        op = match_ancilla(self.ket, op, dirn=dirn)
         self.op = op if (reset or self.op is None) else op @ self.op
 
     def del_operator_(self):
