@@ -2,9 +2,10 @@ Einsum
 ======
 
 :meth:`yastn.ncon` and :meth:`yastn.einsum` (which differ only by syntax) contract a network of
-tensors pairwise.  This page describes how they place the fermionic swap gates requested by their
-``swap`` argument, including gates on lines that are about to be contracted, so that the result
-does not depend on the order of contractions.
+tensors pairwise.  Two kinds of fermionic swap gate can be requested: between two lines of the
+network (``swap``), and between a line and a fixed charge (``charge_swap``).  This page introduces
+the arguments, and then describes how the gates of ``swap`` are placed, including gates on lines
+that are about to be contracted, so that the result does not depend on the order of contractions.
 
 
 einsum and ncon
@@ -22,7 +23,7 @@ outgoing legs in that order, while ``conjs`` conjugates individual tensors.  ``e
 its letters into such labels and calls ``ncon``, so the rest of this page speaks of lines labelled
 by their ``ncon`` index.
 
-Two further arguments are used throughout this page.
+Three further arguments shape the contraction.
 
 ``order``
    The sequence in which the contracted lines are consumed: a string of letters for ``einsum``,
@@ -34,6 +35,15 @@ Two further arguments are used throughout this page.
    fermionic swap gate: a comma-separated string of letter pairs for ``einsum``, such as
    ``swap='ab,cd'``, or a sequence of label pairs for ``ncon``, such as ``swap=[(1, 2)]``.
 
+``charge_swap``
+   Swap gates between a line and a fixed charge, e.g. a fermionic string of charge :math:`q`
+   crossing that line: a sequence of pairs ``(line, charge)``, the line named by its letter for
+   ``einsum``, such as ``charge_swap=[('a', (1,))]``, or by its label for ``ncon``, such as
+   ``charge_swap=[(1, (1,))]``.  The charge is read in the symmetry of the tensors, like the
+   total charge ``n`` of a tensor, and the ``fermionic`` flag of their configuration selects the
+   components that enter the sign.  Each gate multiplies the blocks by
+   :math:`(-1)^{p(q) \cdot p(\mathrm{line})}`, the same as :meth:`yastn.swap_gate` with ``charge``.
+
 ::
 
     # matrix multiplication with the first tensor conjugated
@@ -44,12 +54,16 @@ Two further arguments are used throughout this page.
     yastn.einsum('ij,ji', a, b, swap='ij')
     yastn.ncon([a, b], [(1, 2), (2, 1)], swap=[(1, 2)])
 
+    # a string of charge 1 crossing the contracted line j and the outgoing line k
+    yastn.einsum('ij,jk->ik', a, b, charge_swap=[('j', (1,)), ('k', (1,))])
+    yastn.ncon([a, b], [(-0, 1), (1, -1)], charge_swap=[(1, (1,)), (-1, (1,))])
+
 
 Mechanism
 ---------
 
-The rest of this page describes how ``ncon`` places the swap gates.  It is not needed to
-use :meth:`yastn.einsum` or :meth:`yastn.ncon`.
+The rest of this page describes how ``ncon`` places the swap gates of ``swap``.  It is not
+needed to use :meth:`yastn.einsum` or :meth:`yastn.ncon`.
 
 
 Plan and execution

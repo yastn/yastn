@@ -156,7 +156,9 @@ def ncon(ts, inds, conjs=None, order=None, swap=None, release_cuda_cache=False,
     charge_swap: Sequence[tuple[int, Sequence[int]]]
         Sequence of pairs ``(ind, charge)``: a swap gate between the leg labelled ``ind``
         and a one-dimensional leg of fixed ``charge``, e.g., a fermionic string crossing
-        that leg (see ``charge`` in :meth:`yastn.swap_gate`).  A contracted leg is named by
+        that leg (see ``charge`` in :meth:`yastn.swap_gate`).  The charge is read in the
+        symmetry of the tensors, and the ``fermionic`` flag of their configuration selects the
+        components that enter the sign.  A contracted leg is named by
         its label; the gate acts on one of its two ends, which is equivalent.  Pairs naming
         the same leg multiply.
 

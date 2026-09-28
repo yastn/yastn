@@ -95,10 +95,9 @@ Plain charged operators
 A product of plain operators :math:`O_{s_1} O_{s_2} \cdots O_{s_n}`, listed in any
 order, is measured as an MPO of bond dimension one if any of the operators is charged
 (a single :math:`c` or :math:`c^\dagger`): :func:`yastn.tn.mps.product_mpo` of the
-operators, its chain the sites in the order listed.  The bond between two neighbouring
-operators of the chain carries the total charge of the operators after it, and the
-charge travels along the MPO bonds exactly as the bonds of an MPO passed by the caller
-do (next section).  Operators listed on the same site are multiplied, with the sign of
+operators.  The bond between two neighbouring operators of the chain carries the total
+charge of the operators after it, and the charge travels along the MPO bonds exactly
+as the bonds of an MPO passed by the caller do (next section).  Operators listed on the same site are multiplied, with the sign of
 bringing them together.  A product of operators of zero charge needs no bonds; they sit
 on their sites as they are.
 
@@ -149,21 +148,14 @@ straight from one tensor to the next and crossing nothing::
            matrix element  <o0 o1 o2 o3| O |i0 i1 i2 i3>
            1, 2, 3 = network labels ('opb', 1), ('opb', 2), ('opb', 3)
 
-In the window each bond joins its two MPO tensors directly, and it gets the swap
-gates that applying the MPO to the ket along a path, as
-:meth:`yastn.tn.fpeps.Peps.apply_gate_` does, would produce -- worked out rather
-than performed, so the operator is never absorbed into the ket.  The path runs along
-the lattice from each site of the chain to the next, and a site it only passes
-contributes the swap gates an identity there would, without any tensor being added.
-At every step the function the gates use,
-:func:`yastn.tn.fpeps._gates_auxiliary.ordering_swaps`, adapts the tensors to a step
-that runs against the lattice or the fermionic order; at every site the bond crosses
-the legs it would meet on being fused into the ket
-(:func:`yastn.tn.fpeps._gates_auxiliary.apply_gate_onsite`).  Two bonds sharing a
-lattice bond cross once if they are fused into it in different orders at its two
-ends.  A bond has no fixed charge, so these swap gates are evaluated block by block
-during the contraction.  The path from one site to the next is a shortest one along
-the lattice.
+In the window each bond joins its two MPO tensors directly.  Its swap gates are
+the ones the same operator would pick up if it were applied to the ket as a gate,
+the way :meth:`yastn.tn.fpeps.Peps.apply_gate_` applies an MPO in time evolution:
+along a path of nearest-neighbour sites, each MPO tensor is contracted with the ket
+of its site and each bond becomes part of the ket's virtual leg towards the next site
+of the path, with an identity on every site the path only passes.  The measurement
+keeps the MPO tensors separate from the ket instead, and gives each bond the swap
+gates with the legs it would cross in that application.
 
 What the measurement requires
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -206,16 +198,17 @@ Example
 ^^^^^^^
 
 Hopping in both directions plus density-density interaction on a diagonal pair of
-sites of a fermionic PEPS with CTM environment ``env``.  The chain lists the sites
-against the lattice's fermionic order, the sites are not neighbours, and the two
-hopping terms list their sites in opposite orders::
+sites of a fermionic PEPS with CTM environment ``env``.  The sites shared by all terms
+are listed in ``sites``, in any order.  Every term names the site of each of its
+operators; to pass the terms to :func:`yastn.tn.mps.generate_mpo`, those sites are
+turned into positions in ``sites`` with ``sites.index``::
 
     import yastn
     import yastn.tn.mps as mps
 
     ops = yastn.operators.SpinlessFermions(sym='U1')
     c, cp, n, I = ops.c(), ops.cp(), ops.n(), ops.I()
-    sites = [(0, 1), (1, 0)]
+    sites = [(1, 0), (0, 1)]
     terms = [(-1.0, [(0, 1), (1, 0)], [cp, c]),   # c+_(0,1) c_(1,0)
              (-1.0, [(1, 0), (0, 1)], [cp, c]),   # c+_(1,0) c_(0,1)
              (0.5, [(0, 1), (1, 0)], [n, n])]
@@ -228,3 +221,10 @@ hopping terms list their sites in opposite orders::
 
     # the same as the plain measurements, each term with its sites as it lists them
     ref = sum(co * env.measure_nsite_numerator_exact_oe(*oo, sites=ss) for co, ss, oo in terms) / norm
+
+Listing ``sites`` in another order, with the same terms, gives the same value::
+
+    sites_r = [(0, 1), (1, 0)]
+    H_r = mps.generate_mpo(mps.product_mpo(I, N=len(sites_r)),
+                           [mps.Hterm(co, [sites_r.index(s) for s in ss], oo) for co, ss, oo in terms])
+    value_r = env.measure_nsite_numerator_exact_oe(H_r, sites=sites_r) / norm   # == value
