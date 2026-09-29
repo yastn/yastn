@@ -71,7 +71,7 @@ jobs:
   # runs basic tests on torch backend.
   test-basic-torch-peps:
     if: |
-      contains(fromJson('["refs/heads/tests", "refs/heads/feat_fp_refactor", "refs/heads/feat_fp_tests2"]'), github.ref) ||
+      contains(fromJson('["refs/heads/fp_parallel"]'), github.ref) ||
       ( github.event_name == 'pull_request' && contains(fromJson('["master",]'), github.base_ref) )
 
     runs-on: ubuntu-latest
@@ -114,7 +114,7 @@ jobs:
         run: |
           pytest -v --backend torch --tensordot_policy fuse_to_matrix  ./tests/tensor;
           pytest -v --backend torch --tensordot_policy no_fusion ./tests/tensor;
-          pytest -v --backend torch ./tests/peps;
+          pytest -n 4 -v --backend torch ./tests/peps;
 
 
   deploy-docs:
@@ -192,7 +192,7 @@ jobs:
       # Run tests
       - name: tests
         run: |
-          pytest -v --backend ${{ matrix.backend }} ./tests;
+          pytest -n 4 -v --backend ${{ matrix.backend }} ./tests;
           pytest -v --backend ${{ matrix.backend }} --tensordot_policy fuse_to_matrix ./tests/tensor;
           pytest -v --backend ${{ matrix.backend }} --tensordot_policy no_fusion ./tests/tensor;
 
@@ -233,7 +233,7 @@ jobs:
 
       - name: Run tests and collect coverage
         run: |
-          pytest -v --cov=yastn --cov-report=xml --backend torch ./tests;
+          pytest -n 4 -v --cov=yastn --cov-report=xml --backend torch ./tests;
           pytest -v --cov=yastn --cov-report=xml --backend torch --tensordot_policy no_fusion --cov-append ./tests/tensor;
           pytest -v --cov=yastn --cov-report=xml --backend torch --tensordot_policy fuse_to_matrix --cov-append ./tests/tensor;
           pytest -v --cov=yastn --cov-report=xml --backend np --tensordot_policy no_fusion --cov-append ./tests/tensor;
