@@ -15,10 +15,9 @@
 """ Common measure functions for EnvCTM and EnvBoundaryMPS """
 
 import scipy.sparse.linalg as sla
-from yastn.tn.fpeps.envs._ctm_opts import override
 
 from ._env_window import EnvWindow, _measure_2site, _measure_nsite, _sample
-from ._ctm_opts import CTMOpts
+from ._ctm_opts import CTMOpts, override
 from .._gates_auxiliary import gate_fix_swap_gate, clear_operator_input, gate_from_mpo
 from .._doublePepsTensor import DoublePepsTensor
 from .._geometry import Site, is_bond, is_site
