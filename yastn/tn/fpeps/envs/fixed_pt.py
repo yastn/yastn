@@ -623,7 +623,7 @@ def fp_ctmrg(env: EnvCTM,
             ctm_opts_fwd: dict | None = None,
             ctm_opts_fp: dict | None = None,
             devices=None, *,
-            opts: FixedPointOpts | None = None)->tuple[EnvCTM,Sequence[torch.Tensor],Sequence[slice]]:
+            opts: FixedPointOpts | None = None) -> EnvCTM:
     r"""
     Compute the fixed-point environment for the given state using CTMRG.
     First, run CTMRG until convergence then find the gauge transformation guaranteeing element-wise
@@ -661,10 +661,42 @@ def fp_ctmrg(env: EnvCTM,
     EnvCTM
         Environment at the fixed point.
     """
+    # TEMPORARY (pytorch/pytorch#170834, open; fix deferred upstream by maintainers).
+    # A SINGLE device leaves 'fp_devices' unset, so the backward takes the
+    # torch.func.vjp branch below (_use_autograd_grad keys off its presence).
+    # functorch rejects every op registered via torch.library.register_autograd:
+    # torch builds the wrapper as
+    #     Generated = type(name, (autograd.Function,), {"forward":..., "backward":...})
+    # with no setup_context, so autograd.Function.apply raises. This affects ONLY
+    # custom-op backends (torch_cutensor); the plain 'torch' backend is pure ATen
+    # and single-device works there, so leave it alone.
+    # Duplicating the device restores the torch.autograd.grad path on ONE physical
+    # GPU -- the '--devices <d> <d>' form verified in job 4586706.
+    # REMOVE once torch generates a setup_context.
+    if devices is not None and len(devices) == 1 and \
+            getattr(env.config.backend, 'BACKEND_ID', '') != 'torch':
+        _d = list(devices)[0]
+        log.warning(
+            "backend %r with a single CTM device (%s): the fixed-point backward would "
+            "use torch.func.vjp, which rejects torch.library.register_autograd custom "
+            "ops (pytorch/pytorch#170834). Duplicating the device to keep the "
+            "torch.autograd.grad path. Pass devices=['%s', '%s'] explicitly to silence "
+            "this; a single device is fine on the plain 'torch' backend.",
+            getattr(env.config.backend, 'BACKEND_ID', '?'), _d, _d, _d)
+        devices = [_d, _d]
     if opts is None:
         opts = FixedPointOpts.from_legacy_dicts(ctm_opts_fwd, ctm_opts_fp, devices)
     elif devices is not None:
         opts = replace(opts, devices=tuple(devices))
+    # NOTE order MUST match the backward's gradient order. FixedPoint.backward
+    # returns dA in the order of _psi_data = split_data_and_meta(env.to_dict()['psi']),
+    # which walks _site_data with sorted() keys, i.e. sorted by site2index (the unique
+    # tensor label). ket.sites() instead yields the unique-site *coordinate* order. The
+    # two coincide only when the sorted representatives already run in label order; for
+    # patterns where they don't (e.g. 3x3_2_3_N9_second_shift2) the gradient tuple would
+    # be permuted relative to these leaves -- crashing on a shape mismatch when a permuted
+    # pair differs in block size, or (worse) silently mis-assigning grads when it doesn't.
+    # Order the leaves by site2index so apply-inputs and returned dA are the same layout.
     ket = env.psi.ket
     raw_peps_params= tuple( ket[s]._data for s in sorted(ket.sites(), key=ket.site2index) )
     env, env_t_meta, env_slices, env_1d = FixedPoint.apply(env, opts, *raw_peps_params)
@@ -756,16 +788,45 @@ class FixedPoint(torch.autograd.Function):
         env_t_data, _ = split_data_and_meta(env_out_dict['env'])
         return (_concat_data(env_t_data)[0], )
 
-    def get_converged_env(env, opts: CTMOpts, devices=None):
-        r"""
-        Run forward CTMRG to convergence, on one device or several.
 
-        The inner iterator is driven with no convergence test of its own, so the
-        test happens here, once, on the environment itself -- which is what makes
-        ``conv_history`` available to the caller.
+    def get_converged_env(env, opts: CTMOpts, devices=None,
+                          stuck_block=0, stuck_window=3, stuck_factor=2.0, stuck_min_sweeps=60):
+        r"""
+        Run the forward CTMRG loop until the corner spectra stop changing
+        (``corner_tol``) or ``max_sweeps`` is reached.
+
+        **Early no-fixed-point detection** (``stuck_block > 0``).
+        A CTM solve that will never converge is not distinguishable from a slow
+        one by ``|delta_C|`` alone: on marginal states ``|delta_C|`` oscillates over a
+        decade sweep-to-sweep, so the raw running minimum is pinned by lucky
+        outliers. What DOES separate them is the running minimum over BLOCKS of
+        sweeps: a converging solve drives it down geometrically, a stuck one
+        leaves it flat (or rising).
+
+        The rule: after ``stuck_min_sweeps``, at the end of every block of
+        ``stuck_block`` sweeps, the block minimum must have improved by at least
+        a factor ``stuck_factor`` relative to ``stuck_window`` blocks earlier.
+        If it has not, the solve is declared non-convergent and the loop stops,
+        leaving ``converged=False`` -- which the caller turns into
+        ``NoFixedPointError``, and the optimizer's existing handler recovers by
+        perturbing the state. ``stuck_block=0`` disables the check entirely.
+
+        Args:
+            env (EnvCTM): Current environment to converge.
+            opts (FixedPointOpts): resolved options. ``opts.fwd`` drives the forward
+                convergence; ``opts.fp`` -- which inherits from ``opts.fwd`` -- drives
+                the gauge-fixing step and, through its ``max_sweeps`` / ``corner_tol``,
+                the Neumann backward loop.
+            devices (list[str] | None): Device list for the CTM step. With one device everything runs serially.
+            stuck_block (int): Number of sweeps per block for the stuck-block check. 0 disables the check.
+            stuck_window (int): Number of blocks to look back for the stuck-block check.
+            stuck_factor (float): Minimum improvement factor for the stuck-block check.
+            stuck_min_sweeps (int): Minimum number of sweeps before the stuck-block check is applied.
+        
         """
         t_ctm, t_check = 0.0, 0.0
         converged, conv_history, max_dsv = False, [], None
+        blk_mins, blk_count = [], 0
         check = opts.conv_check if opts.conv_check is not None else opts.corner_tol
         if devices is None:
             devices = [env.config.default_device]
@@ -797,6 +858,27 @@ class FixedPoint(torch.autograd.Function):
             if converged:
                 break
 
+            # Early no-fixed-point detection (see docstring). max_dsv is NaN on
+            # the first sweep (no history to diff against) -- skip it so it
+            # cannot poison a block minimum.
+            if stuck_block and max_dsv == max_dsv:
+                if blk_count % stuck_block == 0:
+                    blk_mins.append(max_dsv)
+                else:
+                    blk_mins[-1] = min(blk_mins[-1], max_dsv)
+                blk_count += 1
+                if (blk_count % stuck_block == 0 and len(blk_mins) > stuck_window
+                        and len(conv_history) >= stuck_min_sweeps):
+                    ref = blk_mins[-1 - stuck_window]
+                    if blk_mins[-1] > ref / stuck_factor:
+                        log.log(logging.INFO,
+                                f"CTM STUCK: block-min |delta_C| {blk_mins[-1]:.3e} vs "
+                                f"{ref:.3e} {stuck_window * stuck_block} sweeps earlier "
+                                f"(< {stuck_factor}x improvement) at sweep {len(conv_history)}; "
+                                f"declaring no fixed point.")
+                        converged = False
+                        break
+
         log.info(f"CTM: convergence: {converged}, sweeps {sweep+1}, t_ctm {t_ctm} [s], t_check {t_check} [s]\n"
                 +f"history {[r['max_dsv'] for r in conv_history]}.")
 
@@ -817,9 +899,11 @@ class FixedPoint(torch.autograd.Function):
                 the Neumann backward loop.
             state_params (Sequence[Tensor]): tensors of underlying Peps state
 
-        Returns:
-            EnvCTM: Environment at fixed point.
-            Sequence[Tensor]: raw environment data for the backward pass.
+        Returns
+        -------
+        env, env_t_meta, env_slices, env_1d
+            Converged environment, metadata and slices to rebuild its tensors, and the
+            environment data as one flat tensor (the output autograd tracks).
         """
 
         # Pin main-process current CUDA device to where the ENV TENSORS live

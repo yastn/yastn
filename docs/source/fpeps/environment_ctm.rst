@@ -40,6 +40,9 @@ One can stop the CTM after a fixed number of iterations or, e.g., convergence of
 Stopping criteria can also be set based on the convergence of one or more observables, e.g., total energy.
 Once the CTMRG converges, it is straightforward to obtain one-site :meth:`yastn.tn.fpeps.EnvCTM.measure_1site` and
 two-site nearest-neighbor observables :meth:`yastn.tn.fpeps.EnvCTM.measure_nn`, or other expectation values of interests.
+Products of operators on a rectangular window of sites are contracted exactly by :meth:`yastn.tn.fpeps.EnvCTM.measure_nsite_exact`
+and, with contraction-path optimization, bond unrolling and MPO-valued operators, by
+:meth:`yastn.tn.fpeps.EnvCTM.measure_nsite_exact_oe`; see :doc:`measurement_oe`.
 
 
 The CTMRG iteration
@@ -175,7 +178,8 @@ API
 ---
 
 .. autoclass:: yastn.tn.fpeps.EnvCTM
-    :members: to_dict, from_dict, reset_, bond_metric, update_, update_bond_, iterate_, ctmrg_, measure_1site, measure_nn, sample, measure_2x2, measure_line, measure_nsite, measure_2site, transfer_matrix_spectrum
+    :members: to_dict, from_dict, reset_, bond_metric, update_, update_bond_, iterate_, ctmrg_, measure_1site, measure_nn, 
+              sample, measure_2x2, measure_line, measure_nsite, measure_nsite_exact, measure_2site, transfer_matrix_spectrum
 
 .. autoclass:: yastn.tn.fpeps.envs.EnvCTM_local
 

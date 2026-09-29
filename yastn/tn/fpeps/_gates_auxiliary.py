@@ -71,6 +71,14 @@ def match_ancilla(ten, G, dirn=None):
         return Gnew.fuse_legs(axes=((0, 4), (1, 5), 2, 3))
 
 
+# How the bond of a gate tensor meets the PEPS tensor it is absorbed into, by the role of the
+# site in a step of the gate's path ('t', 'b', 'l', 'r': the site is the top, bottom, left or
+# right end of the lattice bond, see :meth:`SquareLattice.nn_bond_dirn`).  The bond is fused
+# into one virtual leg (0 = top, 1 = left, 2 = bottom, 3 = right) and, on the way there, crosses
+# the leg given second, if any.
+BOND_FUSION = {'t': (2, None), 'b': (0, 1), 'l': (3, 2), 'r': (1, None)}
+
+
 def apply_gate_onsite(ten, G, dirn=None):
     """
     Applies operator to the physical leg of (ket) PEPS tensor.
@@ -90,17 +98,11 @@ def apply_gate_onsite(ten, G, dirn=None):
         tmp = tmp.fuse_legs(axes=(0, 1, 2, 3, (4, 5), 6), mode='meta')
         fuse_one = True
 
-    for dd in dirn[::-1]:
-        if dd == 't':
-            tmp = tmp.fuse_legs(axes=(0, 1, (2, 5), 3, 4))  # t l [b c] r [s a]
-        if dd == 'b':
-            tmp = tmp.swap_gate(axes=(1, 5))  # l X c
-            tmp = tmp.fuse_legs(axes=((0, 5), 1, 2, 3, 4))  # [t c] l b r [s a]
-        if dd == 'l':
-            tmp = tmp.swap_gate(axes=(2, 5))  # b X c
-            tmp = tmp.fuse_legs(axes=(0, 1, 2, (3, 5), 4))  # t l b [r c] [s a]
-        if dd == 'r':
-            tmp = tmp.fuse_legs(axes=(0, (1, 5), 2, 3, 4))  # t [l c] b r [s a]
+    for dd in dirn[::-1]:  # the outgoing bond first, the incoming one waiting in the physical leg
+        leg, crossed = BOND_FUSION[dd]
+        if crossed is not None:
+            tmp = tmp.swap_gate(axes=(crossed, 5))
+        tmp = tmp.fuse_legs(axes=tuple((ax, 5) if ax == leg else ax for ax in range(5)))
         if fuse_one:
             fuse_one = False
             tmp = tmp.unfuse_legs(axes=4)
@@ -108,20 +110,70 @@ def apply_gate_onsite(ten, G, dirn=None):
     # raise YastnError("dirn should be equal to 'l', 'r', 't', 'b', or None")
 
 
+def ordering_swaps(dirn, f_ordered):
+    """
+    Swap gates that adapt a step of a gate, built as if it ran forward -- its first
+    tensor left of or above the second, and first in the fermionic order -- to a step
+    in direction ``dirn`` (:meth:`SquareLattice.nn_bond_dirn`) whose two sites are in
+    fermionic order ``f_ordered``.
+
+    Returns ``(tensor, leg)`` pairs, each a swap of the bond joining the two tensors
+    with ``leg`` of ``tensor``: ``tensor`` is 0 for the first, which the bond leaves,
+    or 1 for the second, which it enters; ``leg`` is ``'out'`` or ``'in'`` for a
+    physical leg, or ``'bond'`` for the bond itself, i.e. its parity.  Lattice and
+    fermionic order disagree only across the periodic boundary of a cylinder.
+    """
+    swaps = []
+    if dirn in ('rl', 'bt'):  # the step runs against the lattice order
+        swaps += [(0, 'in'), (1, 'out')]
+    if f_ordered ^ (dirn in ('lr', 'tb')):  # only across the periodic boundary of a cylinder
+        swaps.append((1, 'bond'))
+    return swaps
+
+
+def ordering_swap_axes(tensor, leg):
+    """Axes of the swap gate realizing an :func:`ordering_swaps` entry on a gate tensor
+    with legs ``(out, in, bonds...)``: the joining bond is the last leg of the first
+    tensor and the third of the second."""
+    bond = -1 if tensor == 0 else 2  # -1: outgoing bond (right side), 2: incoming bond (left side)
+    return (bond if leg == 'bond' else {'out': 0, 'in': 1}[leg], bond)
+
+
 def gate_fix_swap_gate(G0, G1, dirn, f_ordered):
     """
-    Modifies two gate tensors, that were generated consistently with fermionic order 0->1.
-    Apply swap_gates to make them consistent with provided orders.
+    Modifies two gate tensors, that were generated consistently with fermionic order 0->1,
+    to make them consistent with the step ``dirn`` and the fermionic order ``f_ordered``;
+    see :func:`ordering_swaps`.
 
-    Lattice order (dirn=='lr' or 'tb') and f_ordered typically coincide.
-    They do not coincide in a special case of cylindric geometry across the periodic boundary.
+    The bond ``v`` leaves ``G0`` on its right side and enters ``G1`` on its left side.
+    In a forward step, ``'lr'`` (or ``'tb'``, rotated), this matches the lattice and no
+    swap gate is needed::
+
+        out0              out1
+         │                 │
+         G0 ───── v ────── G1
+         │                 │
+        in0               in1
+
+    In a backward step, ``'rl'`` (or ``'bt'``, rotated), ``G1`` sits on the other side.
+    The bond passes below ``G0``, crossing ``in0``, and over ``G1``, crossing ``out1``::
+
+                    out1
+            ┌────────┼────────┐
+            │        │        │             out0
+            └── v ── G1       │              │
+                     │        │              G0 ── v ──┐
+                    in1       │              │         │
+                              └──────────────┼─────────┘
+                                            in0
+
+    Across the periodic boundary of a cylinder, the swap gate of ``v`` with itself, i.e.
+    its parity, is applied to ``G1``.
     """
-    if dirn in ['rl', 'bt']:
-        G0 = G0.swap_gate(axes=(1, -1))
-        G1 = G1.swap_gate(axes=(0, 2))
-    if f_ordered ^ (dirn in ['lr', 'tb']):  # for cylinder
-        G1 = G1.swap_gate(axes=(2, 2))
-    return G0, G1
+    G = [G0, G1]
+    for tensor, leg in ordering_swaps(dirn, f_ordered):
+        G[tensor] = G[tensor].swap_gate(axes=ordering_swap_axes(tensor, leg))
+    return G[0], G[1]
 
 
 def gate_from_mpo(op):
@@ -130,6 +182,12 @@ def gate_from_mpo(op):
         G.append(op[n].transpose(axes=(1, 3, 0, 2)))
     G[-1] = G[-1].remove_leg(axis=-1)
     return G
+
+
+def system_leg(ten):
+    """Physical leg of a PEPS tensor, without the ancilla of a purification."""
+    leg = ten.get_legs(axes=-1)
+    return leg.unfuse_leg()[0] if leg.is_fused() else leg
 
 
 def fill_eye_in_gate(peps, G, sites):
@@ -147,9 +205,7 @@ def fill_eye_in_gate(peps, G, sites):
         leg = leg.drop_history()
         vb = eye(g0.config, legs=(leg.conj(), leg), isdiag=False)
     for site in sites[1:-1]:
-        leg = peps[site].get_legs(axes=-1)
-        if leg.is_fused():  # unfuse to get system leg
-            leg, _ = leg.unfuse_leg()
+        leg = system_leg(peps[site])
         vp = eye(g0.config, legs=(leg, leg.conj()), isdiag=False)
         ten = vp.tensordot(vb, axes=((), ()))
         ten = ten.swap_gate(axes=(1, 2))
