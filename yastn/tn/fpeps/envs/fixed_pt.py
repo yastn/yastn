@@ -811,18 +811,49 @@ class FixedPoint(torch.autograd.Function):
         ``NoFixedPointError``, and the optimizer's existing handler recovers by
         perturbing the state. ``stuck_block=0`` disables the check entirely.
 
-        Args:
-            env (EnvCTM): Current environment to converge.
-            opts (FixedPointOpts): resolved options. ``opts.fwd`` drives the forward
-                convergence; ``opts.fp`` -- which inherits from ``opts.fwd`` -- drives
-                the gauge-fixing step and, through its ``max_sweeps`` / ``corner_tol``,
-                the Neumann backward loop.
-            devices (list[str] | None): Device list for the CTM step. With one device everything runs serially.
-            stuck_block (int): Number of sweeps per block for the stuck-block check. 0 disables the check.
-            stuck_window (int): Number of blocks to look back for the stuck-block check.
-            stuck_factor (float): Minimum improvement factor for the stuck-block check.
-            stuck_min_sweeps (int): Minimum number of sweeps before the stuck-block check is applied.
-        
+        Parameters
+        ----------
+        env: yastn.tn.fpeps.EnvCTM
+            Current environment to converge.
+
+        opts: CTMOpts
+            Options driving the forward convergence, i.e. the ``fwd`` field of the
+            resolved :class:`yastn.tn.fpeps.envs.FixedPointOpts`. Its ``corner_tol``
+            (or ``conv_check``, when given) is the convergence test applied here, and
+            its ``max_sweeps`` bounds the loop.
+
+        devices: list[str] | None
+            Device list for the CTM step. With one device everything runs serially.
+
+        stuck_block: int
+            Number of sweeps per block for the stuck-block check. 0 disables the check.
+
+        stuck_window: int
+            Number of blocks to look back for the stuck-block check.
+
+        stuck_factor: float
+            Minimum improvement factor for the stuck-block check.
+
+        stuck_min_sweeps: int
+            Minimum number of sweeps before the stuck-block check is applied.
+
+        Returns
+        -------
+        env: yastn.tn.fpeps.EnvCTM
+            The converged environment.
+
+        converged: bool
+            Whether the convergence test was met. ``False`` also when the stuck-block
+            check stopped the loop; the caller turns this into ``NoFixedPointError``.
+
+        conv_history: list
+            Per-sweep ``CTMRG_out`` records of the forward loop.
+
+        t_ctm: float
+            Seconds spent in the CTM sweeps.
+
+        t_check: float
+            Seconds spent in the convergence test.
         """
         t_ctm, t_check = 0.0, 0.0
         converged, conv_history, max_dsv = False, [], None
@@ -891,19 +922,33 @@ class FixedPoint(torch.autograd.Function):
         First, run CTMRG until convergence then find the gauge transformation guaranteeing element-wise
         convergence of the environment tensors.
 
-        Args:
-            env (EnvCTM): Current environment to converge.
-            opts (FixedPointOpts): resolved options. ``opts.fwd`` drives the forward
-                convergence; ``opts.fp`` -- which inherits from ``opts.fwd`` -- drives
-                the gauge-fixing step and, through its ``max_sweeps`` / ``corner_tol``,
-                the Neumann backward loop.
-            state_params (Sequence[Tensor]): tensors of underlying Peps state
+        Parameters
+        ----------
+        env: yastn.tn.fpeps.EnvCTM
+            Current environment to converge.
+
+        opts: FixedPointOpts
+            Resolved options. ``opts.fwd`` drives the forward convergence;
+            ``opts.fp`` -- which inherits from ``opts.fwd`` -- drives the
+            gauge-fixing step and, through its ``max_sweeps`` / ``corner_tol``,
+            the Neumann backward loop.
+
+        state_params: Sequence[torch.Tensor]
+            Tensors of the underlying Peps state.
 
         Returns
         -------
-        env, env_t_meta, env_slices, env_1d
-            Converged environment, metadata and slices to rebuild its tensors, and the
-            environment data as one flat tensor (the output autograd tracks).
+        env_converged: yastn.tn.fpeps.EnvCTM
+            The gauge-fixed converged environment.
+
+        env_t_meta: Sequence
+            Metadata needed to rebuild the environment tensors.
+
+        env_slices: Sequence[slice]
+            Slices locating each environment tensor within ``env_1d``.
+
+        env_1d: torch.Tensor
+            The environment data as one flat tensor, the output autograd tracks.
         """
 
         # Pin main-process current CUDA device to where the ENV TENSORS live

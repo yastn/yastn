@@ -114,4 +114,4 @@ Reference
 .. seealso::
 
     :doc:`environment_ctm` for the CTMRG iteration and its SI mode, and
-    :doc:`fixed_point_ctm` for the differentiable fixed point.
+    :doc:`fixed_point` for the differentiable fixed point.

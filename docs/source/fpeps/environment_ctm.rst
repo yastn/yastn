@@ -73,7 +73,8 @@ Subspace-iteration mode
 -----------------------
 
 By default each projector pair comes from a truncated SVD of the enlarged corners, computed from
-scratch on every sweep. In **subspace-iteration (SI) mode**<https://arxiv.org/abs/2607.15158>_ the pair is instead obtained from a pair
+scratch on every sweep. In **subspace-iteration (SI) mode**
+(`arXiv:2607.15158 <https://arxiv.org/abs/2607.15158>`_) the pair is instead obtained from a pair
 of recycled range-finder bases :math:`X, Y`, refreshed by a few power iterations and carried over to
 the next sweep. Successive CTMRG environments differ little once the iteration settles, so the bases
 from the previous sweep are already a good starting guess, and the full decomposition can be
@@ -188,4 +189,4 @@ API
 .. seealso::
 
     :doc:`ctm_options` for every option accepted above, and
-    :doc:`fixed_point_ctm` for the differentiable fixed-point variant.
+    :doc:`fixed_point` for the differentiable fixed-point variant.

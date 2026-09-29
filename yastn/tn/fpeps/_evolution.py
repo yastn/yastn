@@ -91,7 +91,7 @@ def evolution_step_(env, gates, opts_svd, method='mpo', fix_metric=0,
         Tested initializations of iterative optimization. The one resulting in the smallest error is selected.
         Possible options are 'SVD' (svd initialization only), 'EAT' (EAT optimization only), 'SVD_EAT' (tries both).
     opts_post_truncation: None | dict
-        Arguments passed to post_truncation_ function of the environment. The default is None.
+        Arguments passed to the ``post_truncation_`` method of the environment. The default is None.
 
     Returns
     -------
@@ -189,7 +189,7 @@ def truncate_(env, opts_svd, bond=None,
         Tested initializations of iterative optimization. The one resulting in the smallest error is selected.
         Possible options are 'SVD' (svd initialization only), 'EAT' (EAT optimization only), 'SVD_EAT' (tries both).
     opts_post_truncation: None | dict
-        Arguments passed to post_truncation_ function of the environment. The default is None.
+        Arguments passed to the ``post_truncation_`` method of the environment. The default is None.
 
     Returns
     -------

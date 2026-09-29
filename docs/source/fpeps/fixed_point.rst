@@ -39,6 +39,12 @@ does the following.
    (``corner_tol``) or ``max_sweeps`` is reached.  An optional stall detector
    (``stuck_block``) declares a solve non-convergent when the running minimum
    of the corner change stops improving across blocks of sweeps.
+   Importantly, ``max_de`` -- the largest change in environment element moduli
+   between consecutive sweeps -- can stay finite while ``max_dsv``, which
+   compares corner spectra, has already reached ``corner_tol``.  Both are
+   fields of the ``CTMRG_out`` returned by
+   :meth:`yastn.tn.fpeps.EnvCTM.iterate_`.
+   This is due to residual gauge freedom, which is why the next step is needed.
 2. **One more sweep.**  A single CTM step with the options in ``ctm_opts_fp``
    (full-rank SVD, so that the step has a well-defined derivative) produces
    ``env_new`` from the converged ``env_old``.
@@ -67,10 +73,11 @@ Backward pass
 ``sigma`` and phase transformations, as a function of the environment data
 and the PEPS data, and takes its vector-Jacobian products.  The gauge transformation part
 is detached from the computation graph.
-The `Neumann series <https://en.wikipedia.org/wiki/Neumann_series>`_ is summed until 
-the increment falls below ``corner_tol``, or it has not decreased for ``neumann_patience`` consecutive steps 
-(the best estimate so far is then kept), or until ``max_sweeps`` steps.  The result is the gradient
-with respect to the raw PEPS tensors in the order of ``site2index``.
+The `Neumann series <https://en.wikipedia.org/wiki/Neumann_series>`_ is summed until
+the increment falls below ``corner_tol``, or it has not decreased for ``neumann_patience`` consecutive steps
+(the best estimate so far is then kept), or until ``max_sweeps`` steps.
+The series converges only when the spectral radius of :math:`\partial f/\partial C` is below one, which is not guaranteed by the forward convergence.
+The result is the gradient with respect to the raw PEPS tensors in the order of ``site2index``.
 
 
 Forward options carry over to the backward
@@ -114,10 +121,11 @@ directly as ``opts=`` instead of the two dicts. See :doc:`ctm_options`.
 Running on several devices: single-node multi-gpu
 -------------------------------------------------
 
-For multi-site unit cells, CTM can be parallelized across the unit-cell sites.  
+For multi-site unit cells, CTM can be parallelized across the unit-cell sites.
 Such multi-device runs, passing ``devices=[...]`` with more than one entry, route the forward
 convergence, the extra CTM step and the Neumann iterations through the
 distributed CTM workers of :mod:`yastn.tn.fpeps.envs._env_ctm_dist_mp_AD`.
+Note that ``devices=['cpu', 'cpu']`` is a legitimate configuration and exercises the full multiprocess path.
 
 
 C4v-symmetric variant
@@ -205,6 +213,8 @@ API
 .. autoclass:: yastn.tn.fpeps.envs.fixed_pt.FixedPoint
     :members: forward, backward, get_converged_env, fixed_point_iter
 
+.. autofunction:: yastn.tn.fpeps.envs.fixed_pt_c4v.fp_ctmrg_c4v
+
 .. autoclass:: yastn.tn.fpeps.envs.fixed_pt.NoFixedPointError
 
 .. autoclass:: yastn.tn.fpeps.envs.fixed_pt.EnvGauge
@@ -215,3 +225,8 @@ API
 .. autofunction:: yastn.tn.fpeps.envs.fixed_pt.apply_sigma
 .. autofunction:: yastn.tn.fpeps.envs.fixed_pt.U1_phase
 .. autofunction:: yastn.tn.fpeps.envs.fixed_pt.apply_U1_
+
+.. seealso::
+
+    :doc:`environment_ctm` for the CTMRG iteration being differentiated, and
+    :doc:`ctm_options` for the option objects.
