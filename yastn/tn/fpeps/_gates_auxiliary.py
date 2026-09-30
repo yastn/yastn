@@ -48,9 +48,12 @@ def match_ancilla(ten, G, dirn=None):
     Identity is read from the ancilla leg of the tensor.
     Can perform a swap gate of the auxiliary operator leg (if present) with an ancilla.
     """
-    leg = ten.get_legs(axes=-1)
+    if G is None:
+        return G
 
-    if not leg.is_fused():
+    leg = ten.get_legs(axes=-1)
+    legG = G.get_legs(axes=1)
+    if leg.hf.tree == legG.hf.tree:
         return G
 
     _, leg = leg.unfuse_leg()  # unfuse to get ancilla leg
