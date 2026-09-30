@@ -15,6 +15,8 @@
 """ Generator of basic local spin-1 operators. """
 from __future__ import annotations
 
+from typing import Callable
+
 import numpy as np
 
 from ._meta_operators import meta_operators
@@ -47,10 +49,6 @@ class Spin1(meta_operators):
             * For :code:`sym='Z3'`, charge t=0 :math:`\rightarrow` sz=+1, t=1 :math:`\rightarrow` sz=0; t=2 :math:`\rightarrow` sz=-1.
             * For :code:`sym='U1'`, charge t=-1 :math:`\rightarrow` sz=-1, t=0 :math:`\rightarrow` sz=0, t=1 :math:`\rightarrow` sz=1; i.e., sz = t.
 
-        When using :meth:`yastn.to_numpy` to recover usual dense representation of the algebra
-        for :code:`sym='U1'` symmetry, :code:`reverse=True` is required
-        since by default the charges are ordered in the increasing order.
-
         Default configuration sets :code:`fermionic` to :code:`False`.
         """
         super().__init__(**kwargs)
@@ -69,6 +67,17 @@ class Spin1(meta_operators):
         if self._sym == 'U1':
             leg = Leg(self.config, s=1, t=(-1, 0, 1), D=(1, 1, 1))
         return leg
+
+    def key(self) -> Callable | None:
+        r"""
+        Provide key parameter for :meth:`yastn.to_nonsymmetric`,
+        used while sorting block charges,
+        so that all symmetries result in the same dense representation of physical space.
+        """
+        if self._sym in ('dense', 'Z3'):
+            return None
+        if self._sym == 'U1':
+            return lambda t: -t[0]
 
     def I(self) -> Tensor:
         r""" Identity operator. """

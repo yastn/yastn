@@ -46,7 +46,7 @@ __all__= ['DTYPE', 'get_dtype', 'get_yastn_dtype',
     'imag', 'max_abs', 'maximum', 'norm_matrix', 'delete', 'insert',
     'expm', 'first_element', 'item', 'sum_elements', 'norm', 'entropy',
     'zeros', 'ones', 'rand', 'to_tensor', 'to_mask', 'square_matrix_from_dict',
-    'trace', 'rsqrt', 'reciprocal', 'exp', 'sqrt', 'absolute', 'permute_dims',
+    'trace', 'rsqrt', 'reciprocal', 'exp', 'sqrt', 'absolute', 'clip', 'permute_dims',
     'fix_svd_signs', 'svdvals', 'svd_lowrank', 'svd', 'svd_randomized', 'svds_scipy', 'nonzero_blocks',
     'eigh', 'qr', 'pinv', 'eig', 'eigh_lowrank', 'eigvals',
     'argsort', 'argsort_which', 'argmax', 'flip', 'allclose',
@@ -326,6 +326,9 @@ def bitwise_not(data):
     return torch.bitwise_not(data)
 
 
+def clip(data, a_min=None, a_max=None):
+    return torch.clamp(data, min=a_min, max=a_max)
+
 ##############################################################
 #   low-level integer/index array primitives (numpy-aligned) #
 #   backend-agnostic building blocks for the GPU meta path   #
@@ -393,15 +396,18 @@ def dtype_to_complex(data):
     return tmp.dtype
 
 
-def svd(data, meta, sizes, fullrank_uv=False, ad_decomp_reg=1.0e-12, diagnostics=None, **kwargs):
-    return kernel_svd.apply(data, meta, sizes, fullrank_uv, ad_decomp_reg, diagnostics)
+def svd(data, meta, sizes, fullrank_uv=False, ad_decomp_reg=1.0e-12, diagnostics=None, driver=None, **kwargs):
+    return kernel_svd.apply(data, meta, sizes, fullrank_uv, ad_decomp_reg, driver, diagnostics)
 
 
 def svdvals(data, meta, sizeS, **kwargss):
     real_dtype = data.real.dtype if data.is_complex() else data.dtype
     Sdata = torch.zeros((sizeS,), dtype=real_dtype, device=data.device)
+    
+    _loc_svd_vals= lambda block: torch.linalg.svdvals(block.cpu()).to(block.device) if block.device.type == 'mps' else torch.linalg.svdvals(block)
+    
     for (slo, Do, _, _, slS, _, _) in meta:
-        Sdata[slS] = torch.linalg.svdvals(data[slo].view(Do))
+        Sdata[slS] = _loc_svd_vals(data[slo].view(Do))
     return Sdata
 
 
@@ -453,7 +459,11 @@ def eigh(data, meta=None, sizes=(1, 1), order_by_magnitude=False, ad_decomp_reg=
             reg = torch.as_tensor(ad_decomp_reg, dtype=real_dtype, device=data.device)
             f = lambda x: SYMEIG.apply(x, reg)
         else:
-            f = lambda x: torch.linalg.eigh(x)
+            def f(x):
+                if x.device.type == 'mps':
+                    S, U = torch.linalg.eigh(x.cpu())
+                    return S.to(x.device), U.to(x.device)
+                return torch.linalg.eigh(x)
         for slo, Do, slU, DU, slS in meta:
             S, U = f(data[slo].view(Do))
             Sdata[slS] = S
@@ -496,13 +506,14 @@ def eig(data, meta=None, sizes=(1, 1), biorth_tol=None, **kwargs):
             V = V + (Id - V @ U) @ V
             err = torch.abs(torch.sum(V.T * U, axis=0) - 1).max()
 
-        if biorth_tol is None:
-            # The attainable residual is O(eps * cond(U)) -- no amount of refinement beats it.
-            # ||U||_1 ||V||_1 upper-bounds cond(U) in O(n^2), reusing the inverse computed above.
-            biorth_tol = 10 * eps * torch.linalg.matrix_norm(U, 1) * torch.linalg.matrix_norm(V, 1)
-        if err > biorth_tol:
+        # The attainable residual is O(eps * cond(U)) -- no amount of refinement beats it.
+        # ||U||_1 ||V||_1 upper-bounds cond(U) in O(n^2), reusing the inverse computed above.
+        # NOTE keep this per-block; assigning to biorth_tol would judge later blocks by the first block's bound.
+        tol = biorth_tol if biorth_tol is not None else \
+              10 * eps * torch.linalg.matrix_norm(U, 1) * torch.linalg.matrix_norm(V, 1)
+        if err > tol:
             raise ValueError("Biorthonormalization of left/right eigenvector pairs failed: residual "
-                            f"{err.item():.3e} exceeds tolerance {float(biorth_tol):.3e}. The matrix of right "
+                            f"{err.item():.3e} exceeds tolerance {float(tol):.3e}. The matrix of right "
                             "eigenvectors is numerically singular (defective or nearly-defective input).")
 
         s_order= argsort_which(S, which=kwargs.get('which', 'LM'))
@@ -567,8 +578,15 @@ def eigvals(data, meta, sizeS, **kwargs):
 def qr(data, meta, sizes):
     Qdata = torch.zeros((sizes[0],), dtype=data.dtype, device=data.device)
     Rdata = torch.zeros((sizes[1],), dtype=data.dtype, device=data.device)
+    
+    def _loc_qr(block):
+        if block.device.type == 'mps':
+            Q, R = torch.linalg.qr(block.cpu())
+            return Q.to(block.device), R.to(block.device)
+        return torch.linalg.qr(block)
+    
     for slo, Do, slQ, DQ, slR, DR in meta:
-        Q, R = torch.linalg.qr(data[slo].view(Do))
+        Q, R = _loc_qr(data[slo].view(Do))
         sR = torch.sign(real(R.diag()))
         sR[sR == 0] = 1
         Qdata[slQ].view(DQ)[:] = Q * sR  # positive diag of R
@@ -577,6 +595,16 @@ def qr(data, meta, sizes):
 
 
 def pinv(A, rcond=None, hermitian=False, out=None, atol=None, rtol=None):
+    if A.device.type == 'mps':
+        result = torch.linalg.pinv(
+            A.cpu(), atol=atol,
+            rtol=rtol if rtol is not None else rcond,
+            hermitian=hermitian,
+        ).to(A.device)
+        if out is not None:
+            out.copy_(result)
+            return out
+        return result
     return torch.linalg.pinv(A, atol=atol, rtol=rtol if not rtol is None else rcond, hermitian=hermitian, out=out)
 
 

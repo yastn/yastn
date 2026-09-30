@@ -16,6 +16,8 @@
 import pytest
 import yastn
 
+seed = 22  #pylint: disable=invalid-name
+
 
 def test_syntax_tensor_creation_operations(config_kwargs):
     #
@@ -120,6 +122,9 @@ def test_syntax_basic_algebra(config_kwargs):
     tensor = abs(a).rsqrt(cutoff=1e-12)
     tensor = yastn.rsqrt(abs(a), cutoff=1e-12)
 
+    tensor = a.clip(a_min=0., a_max=1.)
+    tensor = yastn.clip(a, a_min=0., a_max=1.)
+    
     tensor = a.real()
     tensor = a.imag()
 
@@ -272,6 +277,7 @@ def test_syntax_other(config_kwargs):
         cfg_U1 = yastn.make_config(sym=yastn.sym.sym_U1, backend=yastn.backend.backend_torch_cutensor, default_device=config_U1.default_device)
     else:
         raise RuntimeError('Unsupported backend')
+    cfg_U1.backend.random_seed(seed=seed)
 
     legs = [yastn.Leg(cfg_U1, s=-1, t=(-1, 1, 0), D=(1, 2, 3)),
             yastn.Leg(cfg_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6)),

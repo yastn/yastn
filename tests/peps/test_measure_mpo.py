@@ -16,6 +16,7 @@
 import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
+from yastn.tn.fpeps.envs._ctm_opts import make_ctm_opts
 import yastn.tn.mps as mps
 from yastn.tensor.oe_blocksparse import make_sliced_legs
 from yastn.tn.fpeps.envs._env_ctm_measure import _eval_projectors
@@ -254,8 +255,9 @@ def test_cut_map_mpo(config_kwargs, sites, probe, opened):
     """
     ops, c, cp, n, I = _fermions(config_kwargs)  # noqa: E741
     env = _random_fermionic_peps(ops)
+    ctm_opts= make_ctm_opts(method='2x2', opts_svd={'D_total': 8},)
     for move in 'hv':  # projectors matching the current environment
-        _eval_projectors(env, move, {'D_total': 8})
+        _eval_projectors(env, move, ctm_opts)
     sites = [fpeps.Site(*s) for s in sites]
     terms = [(1.0, [cp, c]), (0.7, [c, cp]), (-0.3, [n, n]), (0.5, [n, I])]
     H = _mpo(terms, I)

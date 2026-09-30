@@ -29,40 +29,39 @@ def test_spin12(config_kwargs):
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     ops_U1 = yastn.operators.Spin12(**config_U1._asdict())
 
-    rs = (False, False, True) # reverse option for to_numpy/to_dense/to_nonsymmetric
+    opss = [ops_dense, ops_Z2, ops_U1]
+    assert all(ops.config.fermionic == False for ops in opss)
 
-    assert all(ops.config.fermionic == False for ops in (ops_dense, ops_Z2, ops_U1))
+    legs = [ops.space() for ops in opss]
 
-    Is = [ops_dense.I(), ops_Z2.I(), ops_U1.I()]
-    legs = [ops_dense.space(), ops_Z2.space(), ops_U1.space()]
-
-    assert all(leg == I.get_legs(axes=0) for (leg, I) in zip(legs, Is))
-    assert all(np.allclose(I.to_numpy(reverse=r), np.eye(2)) for (I, r) in zip(Is, rs))
+    assert all(leg == ops.I().get_legs(axes=0) for (leg, ops) in zip(legs, opss))
+    assert all(np.allclose(ops.I().to_numpy(key=ops.key()), np.eye(2)) for ops in opss)
+    assert all(np.allclose(ops.z().to_numpy(key=ops.key()), np.diag([1, -1])) for ops in opss)
 
     zs = [ops_dense.z(), ops_Z2.z(), ops_U1.z()]
     szs = [ops_dense.sz(), ops_Z2.sz(), ops_U1.sz()]
-    assert all(np.allclose(z.to_numpy(reverse=r), np.array([[1, 0], [0, -1]])) for (z, r) in zip(zs, rs))
+    assert all(np.allclose(z.to_numpy(key=ops.key()), np.array([[1, 0], [0, -1]])) for (z, ops) in zip(zs, opss))
 
     xs = [ops_dense.x(), ops_Z2.x()]
     sxs = [ops_dense.sx(), ops_Z2.sx()]
-    assert all(np.allclose(x.to_numpy(reverse=r), np.array([[0, 1], [1, 0]])) for (x, r) in zip(xs, rs))
+    assert all(np.allclose(x.to_numpy(key=ops.key()), np.array([[0, 1], [1, 0]])) for (x, ops) in zip(xs, opss))
 
     ys = [ops_dense.y(), ops_Z2.y()]
     sys = [ops_dense.sy(), ops_Z2.sy()]
-    assert all(np.allclose(y.to_numpy(reverse=r), np.array([[0, -1j], [1j, 0]])) for (y, r) in zip(ys, rs))
+    assert all(np.allclose(y.to_numpy(key=ops.key()), np.array([[0, -1j], [1j, 0]])) for (y, ops) in zip(ys, opss))
 
     iys = [ops_dense.iy(), ops_Z2.iy()]
     isys = [ops_dense.isy(), ops_Z2.isy()]
     assert all((1j * y - iy).norm() < tol for (y, iy) in zip(ys, iys))
     assert all((1j * sy - isy).norm() < tol for (sy, isy) in zip(sys, isys))
 
-    lss = [{0: I.get_legs(0), 1: I.get_legs(1)} for I in Is]
+    lss = [dict(enumerate(ops.I().get_legs())) for ops in opss]
 
     sps = [ops_dense.sp(), ops_Z2.sp(), ops_U1.sp()]
-    assert all(np.allclose(sp.to_numpy(legs=ls, reverse=r), np.array([[0, 1], [0, 0]])) for sp, ls, r in zip(sps, lss, rs))
+    assert all(np.allclose(sp.to_numpy(legs=ls, key=ops.key()), np.array([[0, 1], [0, 0]])) for sp, ls, ops in zip(sps, lss, opss))
 
     sms = [ops_dense.sm(), ops_Z2.sm(), ops_U1.sm()]
-    assert all(np.allclose(Sm.to_numpy(legs=ls, reverse=r), np.array([[0, 0], [1, 0]])) for Sm, ls, r in zip(sms, lss, rs))
+    assert all(np.allclose(Sm.to_numpy(legs=ls, key=ops.key()), np.array([[0, 0], [1, 0]])) for Sm, ls, ops in zip(sms, lss, opss))
 
     assert all(yastn.norm(sx + 1j * sy - sp) < tol for sx, sy, sp in zip(sxs, sys, sps))
     assert all(yastn.norm(sx - 1j * sy - sm) < tol for sx, sy, sm in zip(sxs, sys, sms))

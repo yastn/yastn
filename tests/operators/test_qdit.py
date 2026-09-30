@@ -31,6 +31,8 @@ def test_qdit(config_kwargs, d=5):
     assert np.allclose(I.to_numpy(), np.eye(d))
     assert config_kwargs["default_device"] in I.device  # accept 'cuda' in 'cuda:0'
 
+    assert ops_dense.key() is None  # Qdit has no symmetry, so key is None
+
     # used in mps Generator
     dictionary = ops_dense.to_dict()
     (dictionary["I"](3) - I).norm() < tol  # here 3 is a posible position in the mps

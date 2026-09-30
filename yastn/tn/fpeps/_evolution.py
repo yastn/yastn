@@ -91,7 +91,7 @@ def evolution_step_(env, gates, opts_svd, method='mpo', fix_metric=0,
         Tested initializations of iterative optimization. The one resulting in the smallest error is selected.
         Possible options are 'SVD' (svd initialization only), 'EAT' (EAT optimization only), 'SVD_EAT' (tries both).
     opts_post_truncation: None | dict
-        Arguments passed to post_truncation_ function of the environment. The default is None.
+        Arguments passed to the ``post_truncation_`` method of the environment. The default is None.
 
     Returns
     -------
@@ -189,7 +189,7 @@ def truncate_(env, opts_svd, bond=None,
         Tested initializations of iterative optimization. The one resulting in the smallest error is selected.
         Possible options are 'SVD' (svd initialization only), 'EAT' (EAT optimization only), 'SVD_EAT' (tries both).
     opts_post_truncation: None | dict
-        Arguments passed to post_truncation_ function of the environment. The default is None.
+        Arguments passed to the ``post_truncation_`` method of the environment. The default is None.
 
     Returns
     -------
@@ -585,9 +585,11 @@ def truncate_optimize_(g, R0, R1, opts_svd, fix_metric, pinv_cutoffs, max_iter, 
             key = 'svd'
             Ms[key] = symmetrized_svd(M0, M1, opts, normalize=False)
             error2s[key] = calculate_truncation_error2(Ms[key][0] @ Ms[key][1], fgf, fRR, RRgRR)
-            key = 'svd_opt'
-            Ms[key], error2s[key], pinvs[key], iters[key] = optimize_truncation(*Ms['svd'], error2s['svd'], fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter)
             truncated_sectors[key] = Ms[key][0].get_legs()[1].D
+            if initialization != 'SVD_ONLY':
+                key = 'svd_opt'
+                Ms[key], error2s[key], pinvs[key], iters[key] = optimize_truncation(*Ms['svd'], error2s['svd'], fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter)
+                truncated_sectors[key] = Ms[key][0].get_legs()[1].D
         if 'ZMT10' in initialization:
             key = "ZMT1"
             Ms[key], error2s[key], loopiness = initial_truncation_ZMT1(M0, M1, fgf, opts_svd, fRR, RRgRR, pinv_cutoffs)

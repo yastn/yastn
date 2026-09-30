@@ -29,13 +29,20 @@ def test_spinful_fermions(config_kwargs):
     config_U1 = yastn.make_config(fermionic=True, sym="U1", **config_kwargs)
     ops_U1 = yastn.operators.SpinfulFermions(**config_U1._asdict())
 
-    Is = [ops_Z2.I(), ops_U1.I(), ops_U1xU1_ind.I(), ops_U1xU1_dis.I()]
-    legs = [ops_Z2.space(), ops_U1.space(), ops_U1xU1_ind.space(), ops_U1xU1_dis.space()]
+    opss = [ops_Z2, ops_U1, ops_U1xU1_ind, ops_U1xU1_dis]
+    Is = [ops.I() for ops in opss]
+    legs = [ops.space() for ops in opss]
 
     assert all(leg == I.get_legs(axes=0) for (leg, I) in zip(legs, Is))
     assert all(np.allclose(I.to_numpy(), np.eye(4)) for I in Is)
 
     assert all(ops.config.fermionic == fs for ops, fs in zip((ops_Z2, ops_U1, ops_U1xU1_ind, ops_U1xU1_dis), (True, True, (False, False, True), True)))
+
+    lss = [dict(enumerate(ops.I().get_legs())) for ops in opss]
+    for ls, ops in zip(lss, opss):
+        # order as (|00>, |11>, |10>, |01>) for |spin_up, spin_dn>.
+        assert np.allclose(ops.n(spin='u').to_numpy(legs=ls, key=ops.key()), np.diag([0, 1, 1, 0]))
+        assert np.allclose(ops.n(spin='d').to_numpy(legs=ls, key=ops.key()), np.diag([0, 1, 0, 1]))
 
     for ops, inter_sgn in [(ops_Z2, 1), (ops_U1, 1), (ops_U1xU1_ind, 1), (ops_U1xU1_dis, -1)]:
         for s in ('u', 'd'):

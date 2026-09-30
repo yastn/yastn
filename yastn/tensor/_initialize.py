@@ -98,9 +98,11 @@ def make_config(**kwargs) -> _config:
         not all blocks allowed by the symmetry need to exist in the resulting tensor.
         If the fraction (retained blocks / all allowed blocks) < ``lazy_threshold``, then blocks are initialized lazily,
         i.e., only when they are needed. On ``cuTensor`` backend, defaults to 0, otherwise 0.5
+
         Impact:
             Decreases memory usage and flop count in contractions. The block-sparsity algebra is more expensive.
-        Revelant scenarious:
+
+        Relevant scenarios:
             Outer-product-like contractions, where number of legs of resulting tensor is larger than the number of legs of the input tensors.
             In such cases, the number of allowed blocks can be much larger than the number of retained blocks.
 
@@ -273,7 +275,8 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
         can be used provided it is supported by :doc:`tensor's backend </tensor/configuration>`.
     """
     if a.trans != tuple(range(a.ndim_n)):
-        raise YastnError("Setting block of transpoded tensor is not supported.")
+        raise YastnError("Setting block of tensor with deferred transpose is not supported, " \
+            "consume_transpose() first.")
     ts = np.array(ts, dtype=np.int64).ravel()
     nsym = a.config.sym.NSYM
     if a.isdiag and len(ts) == nsym:

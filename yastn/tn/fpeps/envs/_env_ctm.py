@@ -15,30 +15,43 @@
 from __future__ import annotations
 import logging
 import sys
-from typing import NamedTuple, Sequence
+from typing import NamedTuple, Sequence, Union
 
 from ._env_contractions import identity_boundary, corner2x2, append_vec_tl, append_vec_br
+from ._env_ctm_SI_projectors import redistribute_due, si_proj_corners, SI_state
+from ._ctm_opts import CTMOpts, DEFAULT_FIX_SIGNS, make_ctm_opts
 from ._env_dataclasses import EnvCTM_local, EnvCTM_projectors
 from .._evolution import BondMetric
-from .._geometry import Site, Lattice
+from .._geometry import Site, Lattice, is_site
 from .._peps import PEPS_CLASSES, Peps2Layers
 from ... import mps
 from ....initialize import rand, ones, eye
 from ....tensor import Tensor, YastnError, Leg, tensordot, qr, ncon
 from ...._split_combine_dict import split_data_and_meta, combine_data_and_meta
+from ...._profile import nvtx_range, nsys_profile
 
 logger = logging.getLogger(__name__)
 
 class CTMRG_out(NamedTuple):
     sweeps: int = 0
     max_dsv: float = None
+    max_de: float = None
     converged: bool = False
     max_D: int = 1
 
 
 class EnvCTM():
+    #: Options used when a call supplies none; see :class:`CTMOpts`.
+    #: Class-level so that subclasses which do not chain __init__ still have it.
+    #: Supersedes the older, undocumented ``env.opts_svd`` attribute.
+    default_opts = None
+
 
     _default_corner_signature = (1, -1)
+    #: Transfer tensors each move rewrites.  The c4v ``'d'`` move is empty:
+    #: ``EnvCTM_c4v`` overrides ``_update_core_``.
+    _ts_updated_by_move= {'t': ('t',), 'l': ('l',), 'b': ('b',), 'r': ('r',),
+                          'h': ('l', 'r'), 'v': ('t', 'b'), 'd': ()}
 
     def __init__(self, psi, init='rand', leg=None, bra=None):
         r"""
@@ -83,6 +96,9 @@ class EnvCTM():
         self.psi = Peps2Layers(ket=psi, bra=bra) if psi.has_physical() else psi
         self.env = Lattice(self.geometry, objects={site: EnvCTM_local() for site in self.sites()})
         self.proj = Lattice(self.geometry, objects={site: EnvCTM_projectors() for site in self.sites()})
+        # element-wise diff of env tensors across updates. not serialized, holds plain numbers
+        self.elem_diff = Lattice(self.geometry, objects={site: EnvCTM_local() for site in self.sites()})
+        self._reset_si_()
 
         if init not in (None, 'rand', 'eye', 'dl'):
             raise YastnError(f"{type(self).__name__} {init=} not recognized. Should be 'rand', 'eye', 'dl', or None.")
@@ -90,6 +106,35 @@ class EnvCTM():
             self.reset_(init=init, leg=leg)
 
         self.profiling_mode = None
+
+    def _reset_si_(self):
+        r"""
+        (Re)initialize storage for recycled subspace-iteration bases.
+
+        ``si_X`` and ``si_Y`` mirror ``self.proj``: a :class:`Lattice` of
+        :class:`EnvCTM_projectors`, so the bases follow the same ``site2index``
+        aliasing and inherit copy/clone/detach/to/serialization. Only the four
+        anchor fields ``hlb``, ``hrb``, ``vtr``, ``vbr`` are ever assigned.
+        ``_si_age`` holds a :class:`SI_state` per projector pair, keyed by
+        ``(index, name)``; Only its ``age`` is serialized -- ``niter`` and ``error``
+        describe a single past update and are restored to their defaults.
+        ``_si_age_patch`` holds ``{site: {name: SI_state}}`` for sites moved to
+        a patch, so that the state follows the patched bases; see
+        :meth:`move_to_patch`.
+        """
+        self.si_X = Lattice(self.geometry, objects={site: EnvCTM_projectors() for site in self.sites()})
+        self.si_Y = Lattice(self.geometry, objects={site: EnvCTM_projectors() for site in self.sites()})
+        self._si_age = {}
+        self._si_age_patch = {}
+
+    def _load_si_(self, d, config=None):
+        r""" De-serialize recycled subspace-iteration state; absent in older dictionaries. """
+        self._reset_si_()
+        if 'si_X' in d and 'si_Y' in d:
+            self.si_X = Lattice.from_dict(d['si_X'], config=config)
+            self.si_Y = Lattice.from_dict(d['si_Y'], config=config)
+            self._si_age = {(tuple(x['index']) if isinstance(x['index'], list) else x['index'],
+                             x['pair']): SI_state(age=x['age']) for x in d['si_age']}
 
     def __repr__(self) -> str:
         return f"EnvCTM(envs={super().__repr__()},\nproj={self.proj})"
@@ -139,6 +184,9 @@ class EnvCTM():
         env = cls(self.psi, init=None)
         env.env = self.env.copy()
         env.proj = self.proj.copy()
+        env.si_X = self.si_X.copy()
+        env.si_Y = self.si_Y.copy()
+        env._si_age = self._si_age.copy()
         return env
 
     def shallow_copy(self) -> EnvCTM:
@@ -146,19 +194,25 @@ class EnvCTM():
         env = cls(self.psi, init=None)
         env.env = self.env.shallow_copy()
         env.proj = self.proj.shallow_copy()
+        env.si_X = self.si_X.shallow_copy()
+        env.si_Y = self.si_Y.shallow_copy()
+        env._si_age = self._si_age.copy()
         return env
 
     def to(self, device: str=None, dtype: str=None, **kwargs) -> EnvCTM:
         r"""
         Return a clone of the environment on specified device and/or dtype.
         Resulting environment is a part of the computational graph.
-        Data of environment tensors in the new environment is indepedent
+        Data of environment tensors in the new environment is independent
         from the originals.
         """
         #TODO Bra ?
         env = type(self)(psi=self.psi.ket.to(device=device, dtype=dtype, **kwargs), init=None)
         env.env = self.env.to(device=device, dtype=dtype, **kwargs)
         env.proj = self.proj.to(device=device, dtype=dtype, **kwargs)
+        env.si_X = self.si_X.to(device=device, dtype=dtype, **kwargs)
+        env.si_Y = self.si_Y.to(device=device, dtype=dtype, **kwargs)
+        env._si_age = self._si_age.copy()
         return env
 
     def clone(self) -> EnvCTM:
@@ -171,6 +225,9 @@ class EnvCTM():
         env = cls(self.psi.clone(), init=None)
         env.env = self.env.clone()
         env.proj = self.proj.clone()
+        env.si_X = self.si_X.clone()
+        env.si_Y = self.si_Y.clone()
+        env._si_age = self._si_age.copy()
         return env
 
     def detach(self) -> EnvCTM:
@@ -183,6 +240,9 @@ class EnvCTM():
         env = cls(self.psi, init=None)
         env.env = self.env.detach()
         env.proj = self.proj.detach()
+        env.si_X = self.si_X.detach()
+        env.si_Y = self.si_Y.detach()
+        env._si_age = self._si_age.copy()
         return env
 
     def detach_(self):
@@ -192,6 +252,8 @@ class EnvCTM():
         """
         self.env.detach_()
         self.proj.detach_()
+        self.si_X.detach_()
+        self.si_Y.detach_()
 
     def to_dict(self, level=2, resolve_ops=False):
         r"""
@@ -203,7 +265,12 @@ class EnvCTM():
                 'dict_ver': 1,
                 'psi': self.psi.to_dict(level=level, resolve_ops=resolve_ops),
                 'env': self.env.to_dict(level=level, resolve_ops=resolve_ops),
-                'proj': self.proj.to_dict(level=level, resolve_ops=resolve_ops)}
+                'proj': self.proj.to_dict(level=level, resolve_ops=resolve_ops),
+                'si_X': self.si_X.to_dict(level=level, resolve_ops=resolve_ops),
+                'si_Y': self.si_Y.to_dict(level=level, resolve_ops=resolve_ops),
+                'si_age': [dict(index=list(index) if isinstance(index, tuple) else index,
+                                pair=pair, age=state.age)
+                           for (index, pair), state in self._si_age.items()]}
 
     @classmethod
     def from_dict(cls, d, config=None):
@@ -213,7 +280,7 @@ class EnvCTM():
         """
         if 'dict_ver' not in d:
             psi = PEPS_CLASSES["Peps"].from_dict(d['psi'], config)
-            env = EnvCTM(psi, init=None)
+            env = cls(psi, init=None)
             for site in env.sites():
                 for dirn, v in d['data'][site].items():
                     setattr(env[site], dirn, Tensor.from_dict(v, config))
@@ -226,6 +293,7 @@ class EnvCTM():
             env = cls(psi, init=None)
             env.env = Lattice.from_dict(d['env'], config=config)
             env.proj = Lattice.from_dict(d['proj'], config=config)
+            env._load_si_(d, config=config)
             return env
 
     def update_from_dict_(self, d):
@@ -234,6 +302,7 @@ class EnvCTM():
         self.psi = tmp.psi
         self.env = Lattice.from_dict(d['env'])
         self.proj = Lattice.from_dict(d['proj'])
+        self._load_si_(d)
 
 
     def reset_(self, init='rand', leg=None, **kwargs):
@@ -254,6 +323,7 @@ class EnvCTM():
             Leg signature is fixed to the default values.
         """
         normalize = kwargs.get('normalize', 'inf')
+        self._reset_si_()
 
         if init == 'dl':
             self.reset_(init='eye')
@@ -501,7 +571,7 @@ class EnvCTM():
         l = leg0 if sU == leg0.s else leg1
         return {t: max(d + 10, int(d * 1.1)) for t, d in zip(l.t, l.D)}
 
-    def update_(env, opts_svd, moves='hv', method='2x2 corner', **kwargs):
+    def update_(env, opts_svd=None, moves=None, method=None, *, opts=None, **kwargs):
         r"""
         Perform one step of CTMRG update. Environment tensors are updated in place.
 
@@ -535,23 +605,34 @@ class EnvCTM():
         checkpoint_move: bool
             Whether to use (reentrant) checkpointing for the move. The default is ``False``
 
+        opts_si: dict | SIOpts | None
+            Enable recycled subspace-iteration projectors with ``{'enabled': True}``.
+            See :class:`yastn.tn.fpeps.envs.SIOpts` for the full list of fields and
+            their defaults, and the *Subspace-iteration mode* section of the
+            :ref:`CTM environment page<fpeps/environment_ctm:Environment CTM>` for
+            how they combine over a sweep.
+
+        cutoff: float | None
+            Pseudo-inverse cutoff in projector construction, regularizing values close to floating-point precision. 
+            Note: This cutoff is an absolute value, not relative to the largest singular value. 
+            
+
         Returns
         -------
         proj: Peps structure loaded with CTM projectors related to all lattice site.
         """
-        if 'tol' not in opts_svd and 'tol_block' not in opts_svd:
-            opts_svd['tol'] = 1e-14
+        opts = make_ctm_opts(opts if opts is not None else env.default_opts,
+                             opts_svd=opts_svd, moves=moves, method=method, **kwargs)
+        checkpoint_move = opts.checkpoint_move
+        use_reentrant = (checkpoint_move == 'reentrant')
+        # Corners are rewritten by every move, to compare elemwise diff between the sweep we persist them here
+        corners = env._corner_snapshot()
 
-        checkpoint_move = kwargs.get('checkpoint_move', False)
-        if checkpoint_move == 'reentrant':
-            use_reentrant = True
-        elif checkpoint_move == 'nonreentrant':
-            use_reentrant = False
-        for d in moves:
+        for d in opts.moves:
             if checkpoint_move:
                 def f_update_core_(move_d, loc_im, *inputs_t):
                     loc_env = type(env).from_dict(combine_data_and_meta(inputs_t, loc_im))
-                    loc_env._update_core_(move_d, opts_svd, method=method, **kwargs)
+                    loc_env._update_core_(move_d, opts)
                     out_data, out_meta = split_data_and_meta(loc_env.to_dict(level=0))
                     return out_meta, *out_data
 
@@ -564,15 +645,22 @@ class EnvCTM():
                 else:
                     raise RuntimeError(f"CTM update: checkpointing not supported for backend {env.config.BACKEND_ID}")
 
-                # reconstruct env from output tensors
+                # under checkpoint, we take elemwise diff of T-tensors here, but only between T-tensors updated by the move
+                env_old = env.env
                 env.update_from_dict_(combine_data_and_meta(out_data, out_meta))
+                update_storage_(env.elem_diff, norm_diff(env_old, env.env, env._ts_updated_by_move[d]))
             else:
-                env._update_core_(d, opts_svd, method=method, **kwargs)
+                with nvtx_range(f"_update_core_ {d}"):
+                    env._update_core_(d, opts)
+        
+        # update elemwise difference of corners between the sweep
+        update_storage_(env.elem_diff, norm_diff(corners, env, ('tl', 'tr', 'bl', 'br')))
         return env
 
-    def _update_core_(env, move: str, opts_svd: dict, method: str, **kwargs):
+    
+    def _update_core_(env, move: str, opts: CTMOpts):
         r"""
-        Core function updating CTM environment tensors pefrorming specified move.
+        Core function updating CTM environment tensors peforming specified move.
         """
         assert move in ['h', 'v', 'l', 'r', 't', 'b'], "Invalid move"
         if (move in 'hv') or (len(env.sites()) < env.Nx * env.Ny):
@@ -600,17 +688,27 @@ class EnvCTM():
             #
             # Projectors
             for site in sites_proj:
-                env._update_projectors_(site, move, opts_svd, method, **kwargs)
+                with nvtx_range(f"_update_projectors_ {site}"):
+                    env._update_projectors_(site, move, opts)
             # fill (trivial) projectors on edges
             env._trivial_projectors_(move, sites_proj)
             #
             # Update move
-            env_tmp = EnvCTM(env.psi, init=None)  # empty environments
+            env_tmp = type(env)(env.psi, init=None)  # empty environments
             for site in sites:
-                env_tmp._update_env_(site, env, move)
+                with nvtx_range(f"_update_env_ {site}"):
+                    env_tmp._update_env_(site, env, move)
+
+            # elemwise diff of the transfer tensors this move writes. During sweep, each transfer tensor is updated once
+            # Under checkpointing this env is a throwaway copy whose elem_diff is
+            # discarded, so update_ measures the transfer tensors itself instead.
+            if not opts.checkpoint_move:
+                update_storage_(env.elem_diff, norm_diff(env, env_tmp, ('t', 'l', 'b', 'r')))
             update_storage_(env, env_tmp)
 
-    def update_bond_(env, bond: tuple, opts_svd: dict | None = None, method: str = '2x2 corner', **kwargs):
+
+    def update_bond_(env, bond: tuple, opts_svd: dict | None = None, method: str | None = None,
+                     *, opts=None, **kwargs):
         r"""
         Update EnvCTM tensors related to a specific nearest-neighbor bond.
 
@@ -618,8 +716,14 @@ class EnvCTM():
         May require using a dictionary "D_block" specifying sectorial bond dimensions in
         opts_svd's passed to PEPS truncation and CTM.
         """
-        if opts_svd is None:
-            opts_svd = env.opts_svd
+        base = opts if opts is not None else env.default_opts
+        if base is None and opts_svd is None:
+            # back-compat: an opts_svd dict stashed on the environment
+            opts_svd = getattr(env, 'opts_svd', None)
+        if base is None and opts_svd is None:
+            raise YastnError(
+                "update_bond_ needs opts_svd, opts, or env.default_opts to be set.")
+        opts = make_ctm_opts(base, opts_svd=opts_svd, method=method, **kwargs)
 
         dirn = env.nn_bond_dirn(*bond)
         s0, s1 = bond if dirn in ['lr', 'tb'] else bond[::-1]
@@ -627,16 +731,16 @@ class EnvCTM():
         if dirn in 'lrl':
             env._update_env_(s0, env, move='r')
             env._update_env_(s1, env, move='l')
-            env._update_projectors_(s0, 't', opts_svd, method, **kwargs)
-            env._update_projectors_(env.nn_site(s0, d='t'), 'b', opts_svd, method, **kwargs)
+            env._update_projectors_(s0, 't', opts)
+            env._update_projectors_(env.nn_site(s0, d='t'), 'b', opts)
         else:  # 'tbt'
             env._update_env_(s0, env, move='b')
             env._update_env_(s1, env, move='t')
-            env._update_projectors_(s0, 'l', opts_svd, method, **kwargs)
-            env._update_projectors_(env.nn_site(s0, d='l'), 'r', opts_svd, method, **kwargs)
+            env._update_projectors_(s0, 'l', opts)
+            env._update_projectors_(env.nn_site(s0, d='l'), 'r', opts)
 
 
-    def _update_projectors_(env, site, move, opts_svd, method, **kwargs):
+    def _update_projectors_(env, site, move, opts: CTMOpts):
         r"""
         Calculate new projectors for CTM moves passing to specific method to create enlarged corners.
         """
@@ -645,12 +749,59 @@ class EnvCTM():
         if None in sites:
             return
 
+        method = opts.method
         if '1x2' in method or '2x1' in method or method == '1site':
-            return update_1x2_projectors_(env, *sites, move, opts_svd, **kwargs)
-        elif '2x2' in method or method == '2site':
-            return update_extended_2x2_projectors_(env, *sites, move, opts_svd, **kwargs)
+            return update_1x2_projectors_(env, *sites, move, opts)
+        # CTMOpts has already validated the name, so 2x2 is the only case left.
+        return update_extended_2x2_projectors_(env, *sites, move, opts)
+
+
+    def _set_projector_pair_(env, site0, name0, site1, name1,
+                             r0: Union[Tensor,tuple[Tensor,Tensor]], r1: Union[Tensor,tuple[Tensor,Tensor]],
+                             opts: CTMOpts, k_block=None):
+        """Update a projector pair and its recycled SI bases in place.
+
+        Without SI, corner halves ``r0`` and ``r1`` are passed to :func:`proj_corners`.
+        With SI enabled in ``opts_si``, they are passed to :func:`si_proj_corners`,
+        which also accepts each half as a tuple of its factors, e.g., a pair of enlarged corners.
+
+        The pair is anchored at ``(site0, name0)``, which also addresses the
+        recycled bases in ``env.si_X`` / ``env.si_Y``.
+        """
+        svd_kwargs = opts.svd_kwargs() if k_block is None else opts.svd_kwargs(k_block=k_block)
+        if not opts.si_enabled:
+            p0, p1 = proj_corners(r0, r1, svd_kwargs, cutoff=opts.cutoff)
+            setattr(env.proj[site0], name0, p0)
+            setattr(env.proj[site1], name1, p1)
+            return
+
+        opts_si = opts.opts_si
+
+        if site0 in env._si_age_patch:
+            si_states, key = env._si_age_patch[site0], name0
         else:
-            raise YastnError(f"CTM update {method=} not recognized. Should contain '1x2' or '2x2'")
+            si_states, key = env._si_age, (env.site2index(site0), name0)
+        si_state = si_states.get(key, SI_state())
+        # Both decisions below combine user intent (options) with runtime state
+        # (this pair's age and last error), so they are derived here and passed
+        # explicitly -- rather than written back into the options dict.
+        due = redistribute_due(si_state.age, opts_si)
+        redistribute = opts_si.redistribute_sectors and due
+        skip = opts_si.skip_SI_update and not due and si_state.error < opts_si.tol
+        niter = 0 if skip else opts_si.niter
+        with nvtx_range("si_proj_corners"):
+            p0, p1, X, Y, info = si_proj_corners(r0, r1, svd_kwargs, opts_si,
+                X=getattr(env.si_X[site0], name0), Y=getattr(env.si_Y[site0], name0),
+                cutoff=opts.cutoff, redistribute=redistribute, niter=niter)
+        if niter == 0:  # keep previous error if no SI iterations were performed
+            info.update({'error': si_state.error})
+        setattr(env.proj[site0], name0, p0)
+        setattr(env.proj[site1], name1, p1)
+        recycle_grad = opts_si.recycle_grad
+        setattr(env.si_X[site0], name0, X if recycle_grad else X.detach())
+        setattr(env.si_Y[site0], name0, Y if recycle_grad else Y.detach())
+        # The age accumulates; niter and error describe this update alone.
+        si_states[key] = SI_state(age=si_state.age + 1, **info)
 
     def _trivial_projectors_(env, move, sites):
         r"""
@@ -753,12 +904,30 @@ class EnvCTM():
                 env_tmp[site].br = tmp / tmp.norm(p='inf')
 
     def apply_patch(self):
-        self.env.apply_patch()
-        self.proj.apply_patch()
+        for lattice in (self.env, self.proj, self.si_X, self.si_Y):
+            lattice.apply_patch()
+        # As in Lattice.apply_patch, the last patched site of a unit-cell index
+        # wins, so each committed state stays with the basis and projector it describes.
+        for site, si_states in self._si_age_patch.items():
+            index = self.site2index(site)
+            self._si_age = {k: v for k, v in self._si_age.items() if k[0] != index}
+            self._si_age.update(((index, name), si_state) for name, si_state in si_states.items())
+        self._si_age_patch = {}
 
     def move_to_patch(self, sites):
-        self.env.move_to_patch(sites)
-        self.proj.move_to_patch(sites)
+        r"""
+        Give ``sites`` private copies of environment tensors, projectors and
+        recycled SI state (bases and :class:`SI_state`) until :meth:`apply_patch`.
+        """
+        for lattice in (self.env, self.proj, self.si_X, self.si_Y):
+            lattice.move_to_patch(sites)
+        if not sites:
+            return
+        if is_site(sites):
+            sites = [sites]
+        for site in sites:
+            index = self.site2index(site)
+            self._si_age_patch[site] = {name: si_state for (ind, name), si_state in self._si_age.items() if ind == index}
 
     def pre_truncation_(env, bond):
         pass
@@ -838,7 +1007,8 @@ class EnvCTM():
                     dict_bond_dimension[site, corners_id[ii]].append(temp_D)
         return [dict_bond_dimension, dict_symmetric_sector]
 
-    def iterate_(env, opts_svd=None, moves='hv', method='2x2 corner', max_sweeps=1, iterator=False, corner_tol=None, **kwargs):
+    def iterate_(env, opts_svd=None, moves=None, method=None, max_sweeps=None,
+                 iterator=None, corner_tol=None, *, opts=None, **kwargs):
         r"""
         Perform CTMRG updates :meth:`yastn.tn.fpeps.EnvCTM.update_` until convergence.
         Convergence can be measured based on singular values of CTM environment corner tensors.
@@ -898,47 +1068,50 @@ class EnvCTM():
 
                 * ``sweeps`` number of performed ctmrg updates.
                 * ``max_dsv`` norm of singular values change in the worst corner in the last sweep.
+                * ``max_de`` norm of elementwise difference of moduli of environment tensors elements in the last sweep.
                 * ``max_D`` largest bond dimension of environment tensors virtual legs.
                 * ``converged`` whether convergence based on ``corner_tol`` has been reached.
         """
-        kwargs["iterator_step"] = kwargs.get("iterator_step", int(iterator))
-        if ("checkpoint_move" in kwargs) and ("torch" in env.config.backend.BACKEND_ID):
-            assert kwargs["checkpoint_move"] in ['reentrant', 'nonreentrant', False], f"Invalid choice for {kwargs['checkpoint_move']}"
-        kwargs["iterator_step"] = kwargs.get("iterator_step", int(iterator))
-        tmp = env._ctmrg_iterator_(opts_svd=opts_svd, moves=moves, method=method, max_sweeps=max_sweeps, corner_tol=corner_tol, **kwargs)
-        return tmp if kwargs["iterator_step"] else next(tmp)
+        opts = make_ctm_opts(opts if opts is not None else env.default_opts,
+                             opts_svd=opts_svd, moves=moves, method=method,
+                             max_sweeps=max_sweeps, iterator=iterator,
+                             corner_tol=corner_tol, **kwargs)
+        tmp = env._ctmrg_iterator_(opts)
+        return tmp if opts.iterator_step else next(tmp)
 
     ctmrg_ = iterate_   #  For backward compatibility, allow using EnvCtm.ctmrg_() instead of EnvCtm.iterate_().
 
-    def _ctmrg_iterator_(env, opts_svd, moves, method, max_sweeps, corner_tol, **kwargs):
+    def _ctmrg_iterator_(env, opts: CTMOpts):
         """ Generator for ctmrg_. """
-        iterator_step = kwargs.get("iterator_step", 0)
+        iterator_step = opts.iterator_step
+        # A custom check replaces the numeric corner_tol comparison.
+        check = opts.conv_check if opts.conv_check is not None else opts.corner_tol
         max_dsv, converged, history = None, False, []
-        for sweep in range(1, max_sweeps + 1):
-            if env.profiling_mode in ["NVTX",]:
-                env.config.backend.cuda.nvtx.range_push(f"update_")
-                env.update_(opts_svd=opts_svd, moves=moves, method=method, **kwargs)
-                env.config.backend.cuda.nvtx.range_pop()
-            else:
-                env.update_(opts_svd=opts_svd, moves=moves, method=method, **kwargs)
+        for sweep in range(1, opts.max_sweeps + 1):
+            with nvtx_range("update_"):
+                env.update_(opts=opts)
 
             # use default CTM convergence check
-            if corner_tol is not None:
-                converged, max_dsv, history = env.ctm_conv_corner_spec(history, corner_tol)
-                logging.info(f'Sweep = {sweep:03d}; max_diff_corner_singular_values = {max_dsv:0.2e}')
+            max_de = env.max_elem_diff()
+            if check is not None:
+                converged, max_dsv, history = env.ctm_conv_corner_spec(history, check)
+                logging.info(f'Sweep = {sweep:03d}; max_diff_corner_singular_values = {max_dsv:0.2e};'
+                             f' max_elem_modulus_diff = {max_de:0.2e}')
                 if converged:
                     break
 
-            if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
-                yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
-        yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_D=env.max_D(), converged=converged)
+            if iterator_step and sweep % iterator_step == 0 and sweep < opts.max_sweeps:
+                yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_de=max_de, max_D=env.max_D(), converged=converged)
+        yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, max_de=max_de, max_D=env.max_D(), converged=converged)
 
     def ctm_conv_corner_spec(env: EnvCTM,
-                             history: Sequence[dict[tuple[Site, str], Tensor]]=[],
+                             history: None | Sequence[dict[tuple[Site, str], Tensor]]=None,
                              corner_tol: None | float=1.0e-8) -> tuple[bool, float, Sequence[dict[tuple[Site, str], Tensor]]]:
         """
         Evaluate convergence of CTM by computing the difference of environment corner spectra between consecutive CTM steps.
         """
+        if history is None:  # a mutable default would be shared across calls
+            history = []
         if hasattr(corner_tol, '__call__'):
             converged, history = corner_tol(env, history)
             max_dsv = 0
@@ -949,6 +1122,12 @@ class EnvCTM():
             history.append(corner_sv)
             converged = (corner_tol is not None) and (max_dsv < corner_tol)
         return converged, max_dsv, history
+
+    def max_elem_diff(env: EnvCTM) -> float:
+        diffs= [getattr(env.elem_diff[site], dirn) for site in env.elem_diff.sites() \
+                    for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']]
+        res= tuple(filter(lambda x: x is not None, diffs))
+        return max(res) if len(res)>0 else float('inf')
 
     def is_consistent(env, verbosity = 2):
         out = {}
@@ -995,6 +1174,16 @@ class EnvCTM():
                     print(x)
         return len(not_consistent) == 0
 
+    def _corner_snapshot(env) -> Lattice[dict[Site,EnvCTM_local]]:
+        """ Detached corner tensors of the current sweep, in ``EnvCTM_local`` slots."""
+        snapshot = Lattice(env.geometry, objects={site: EnvCTM_local() for site in env.sites()})
+        for site in env.sites():
+            for dirn in ('tl', 'tr', 'bl', 'br'):
+                ten = getattr(env[site], dirn)
+                if ten is not None:
+                    setattr(snapshot[site], dirn, ten.detach())
+        return snapshot
+
     from ._env_ctm_measure import measure_1site, measure_nn, measure_2x2, measure_line, \
         measure_nsite, measure_2site, measure_nsite_exact, measure_nsite_exact_oe, \
         measure_nsite_norm_exact_oe, measure_nsite_numerator_exact_oe, \
@@ -1016,6 +1205,35 @@ def spec_diff(x, y):
         return float('Inf')
 
 
+def norm_diff(old: Lattice[dict[Site,EnvCTM_local]], new: Lattice[dict[Site,EnvCTM_local]],
+              dirns, p='inf')-> Lattice[dict[Site,EnvCTM_local]]:
+    """ Compute norms of changes of element moduli between two environments.
+
+    In general, environment tensors differ up to a gauge matrices of every bond.
+    This gauge can trivialize to a diagonal matrix of phases, in which case their moduli
+    will converge elementwise.
+
+    ``dirns`` selects which tensors to compare, because the two kinds are
+    compared over different spans. Transfer tensors t,l,b,r are compared across the
+    single moves that writes them, expecting the sweep to update every T-tensor once.
+    Corners tl,tr,bl,br are compared across the sweep, against a
+    :func:`_corner_snapshot`; as they are updated more than once per sweep.
+
+    ``old`` and ``new`` are anything with ``geometry``, ``sites()`` and
+    ``[site].dirn`` -- an ``EnvCTM`` or the ``Lattice`` behind one.
+    """
+    diffs= Lattice(old.geometry, objects={site: EnvCTM_local() for site in old.sites()})
+    for site in old.sites():
+        for dirn in dirns:
+            ten_x, ten_y = getattr(old[site], dirn), getattr(new[site], dirn)
+            if ten_x is not None and ten_y is not None:
+                try:
+                    diff= abs(ten_x.detach()) - abs(ten_y.detach())
+                except YastnError as e: # fail to take difference, e.g., because of different leg structure
+                    diff= None
+                setattr(diffs[site], dirn, diff.norm(p=p) if diff is not None else None)
+    return diffs
+
 _for_trivial = (('hlt', 'r', 'l', 'tl', 2, 0, 0),
                 ('hlb', 'r', 'l', 'bl', 0, 2, 1),
                 ('hrt', 'l', 'r', 'tr', 0, 0, 1),
@@ -1026,17 +1244,25 @@ _for_trivial = (('hlt', 'r', 'l', 'tl', 2, 0, 0),
                 ('vbr', 't', 'b', 'br', 0, 3, 1))
 
 
-def update_extended_2x2_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwargs):
+def update_extended_2x2_projectors_(env, tl: Tensor, tr: Tensor, bl: Tensor, br: Tensor, move, opts: CTMOpts):
     r"""
-    Calculate new projectors for CTM moves from 4x4 extended corners
-    which are enlarged to 5x4 if some virtual bond is one.
-    Intended for a hexagonal lattice embedded on a square lattice.
+    Calculate new projectors for CTM moves from 4x4 extended corners.
+    
+    * On hexagonal lattice embedded on a square lattice with dummy bonds (D=1), instead 3x2 / 2x3 corners are used.
+    * If ``use_qr`` is True, intermediate QR decomposition is used to regularize the halves of the system 
+    approximated by 2x2 patch embedded in the environment.
+    Otherwise, with SI enabled in ``opts_si``, halves are passed on as pairs of enlarged corners, 
+    avoiding contraction of the corners into halves.
     """
     psi = env.psi
-    use_qr = kwargs.get("use_qr", True)
-    kwargs["profiling_mode"]= env.profiling_mode
+    use_qr = opts.use_qr
+    implicit_halves = opts.si_enabled and not use_qr
     psh = env.proj
-    svd_predict_spec= lambda s0,p0,s1,p1,sign: opts_svd.get('k_block', opts_svd.get('D_block', float('inf'))) \
+    # Predicted per-sector rank for the partial-SVD solvers. Returned to the
+    # caller rather than written into opts_svd, so one pair's prediction can
+    # neither reach the next pair nor survive into the next sweep.
+    _fallback = opts.opts_svd.get('k_block', opts.opts_svd.get('D_block', float('inf')))
+    svd_predict_spec= lambda s0,p0,s1,p1,sign: _fallback \
         if psh is None or (getattr(psh[s0],p0) is None or getattr(psh[s1],p1) is None) else \
         env._partial_svd_predict_spec(getattr(psh[s0],p0).get_legs(-1), getattr(psh[s1],p1).get_legs(-1), sign)
 
@@ -1046,8 +1272,8 @@ def update_extended_2x2_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwarg
     cor_br = corner2x2('br', env[br].r, env[br].br, env[br].b, psi[br])
 
     if any(x in move for x in 'lrh'):
-        cor_tt = cor_tl @ cor_tr  # b(left) b(right)
-        cor_bb = cor_br @ cor_bl  # t(right) t(left)
+        cor_tt = (cor_tl, cor_tr) if implicit_halves else cor_tl @ cor_tr  # b(left) b(right)
+        cor_bb = (cor_br, cor_bl) if implicit_halves else cor_br @ cor_bl  # t(right) t(left)
 
     if any(x in move for x in 'rh'):
         sl = psi[tl].get_shape(axes=2)
@@ -1066,15 +1292,16 @@ def update_extended_2x2_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwarg
             cor_lbl = tensordot(cor_lbl, psi[bl], axes=((4, 1), (1, 2)))
             cor_lbl = cor_lbl.fuse_legs(axes=((0, 4), (1, 2, 3)))
 
-            h1 = cor_ltl @ cor_tr  # b(left) b(right)
-            h2 = cor_br @ cor_lbl  # t(right) t(left)
+            h1 = (cor_ltl, cor_tr) if implicit_halves else cor_ltl @ cor_tr  # b(left) b(right)
+            h2 = (cor_br, cor_lbl) if implicit_halves else cor_br @ cor_lbl  # t(right) t(left)
         else:
             h1,h2= cor_tt, cor_bb
 
-        _, r_t = qr(h1, axes=(0, 1)) if use_qr else (None, h1)
-        _, r_b = qr(h2, axes=(1, 0)) if use_qr else (None, h2.T)
-        opts_svd["k_block"]= svd_predict_spec(tr, "hrb", br, "hrt", r_t.s[1])
-        env.proj[tr].hrb, env.proj[br].hrt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
+        with nvtx_range(f"qr 2x2proj {move}"):
+            r_t = h1 if implicit_halves else (qr(h1, axes=(0, 1))[1] if use_qr else h1)
+            r_b = (h2[1].T, h2[0].T) if implicit_halves else (qr(h2, axes=(1, 0))[1] if use_qr else h2.T)
+        k_block = svd_predict_spec(tr, "hrb", br, "hrt", (r_t[-1] if implicit_halves else r_t).s[1])
+        env._set_projector_pair_(tr, 'hrb', br, 'hrt', r_t, r_b, opts, k_block=k_block)
 
     if any(x in move for x in 'lh'):
         sr = psi[tr].get_shape(axes=2)
@@ -1093,19 +1320,20 @@ def update_extended_2x2_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwarg
             cor_rbr = tensordot(cor_rbr, psi[br], axes=((3, 2), (2, 3)))
             cor_rbr = cor_rbr.fuse_legs(axes=((0, 1, 3), (2, 4)))
 
-            h1 = cor_tl @ cor_rtr  # b(left) b(right)
-            h2 = cor_rbr @ cor_bl  # t(right) t(left)
+            h1 = (cor_tl, cor_rtr) if implicit_halves else cor_tl @ cor_rtr  # b(left) b(right)
+            h2 = (cor_rbr, cor_bl) if implicit_halves else cor_rbr @ cor_bl  # t(right) t(left)
         else:
             h1,h2= cor_tt, cor_bb
 
-        _, r_t = qr(h1, axes=(1, 0)) if use_qr else (None, h1.T)
-        _, r_b = qr(h2, axes=(0, 1)) if use_qr else (None, h2)
-        opts_svd["k_block"]= svd_predict_spec(tl, "hlb", bl, "hlt", r_t.s[1])
-        env.proj[tl].hlb, env.proj[bl].hlt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
+        with nvtx_range(f"qr 2x2proj {move}"):
+            r_t = (h1[1].T, h1[0].T) if implicit_halves else (qr(h1, axes=(1, 0))[1] if use_qr else h1.T)
+            r_b = h2 if implicit_halves else (qr(h2, axes=(0, 1))[1] if use_qr else h2)
+        k_block = svd_predict_spec(tl, "hlb", bl, "hlt", (r_t[-1] if implicit_halves else r_t).s[1])
+        env._set_projector_pair_(tl, 'hlb', bl, 'hlt', r_t, r_b, opts, k_block=k_block)
 
     if any(x in move for x in 'tbv'):
-        cor_ll = cor_bl @ cor_tl  # l(bottom) l(top)
-        cor_rr = cor_tr @ cor_br  # r(top) r(bottom)
+        cor_ll = (cor_bl, cor_tl) if implicit_halves else cor_bl @ cor_tl  # l(bottom) l(top)
+        cor_rr = (cor_tr, cor_br) if implicit_halves else cor_tr @ cor_br  # r(top) r(bottom)
 
     if any(x in move for x in 'tv'):
         sb = psi[bl].get_shape(axes=3)
@@ -1124,15 +1352,16 @@ def update_extended_2x2_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwarg
             cor_bbr = tensordot(cor_bbr, psi[br], axes=((3, 1), (2, 3)))
             cor_bbr = cor_bbr.fuse_legs(axes=((0, 3), (1, 2, 4)))
 
-            h1 = cor_bbl @ cor_tl  # l(bottom) l(top)
-            h2 = cor_tr @ cor_bbr  # r(top) r(bottom)
+            h1 = (cor_bbl, cor_tl) if implicit_halves else cor_bbl @ cor_tl  # l(bottom) l(top)
+            h2 = (cor_tr, cor_bbr) if implicit_halves else cor_tr @ cor_bbr  # r(top) r(bottom)
         else:
             h1,h2= cor_ll, cor_rr
 
-        _, r_l = qr(h1, axes=(0, 1)) if use_qr else (None, h1)
-        _, r_r = qr(h2, axes=(1, 0)) if use_qr else (None, h2.T)
-        opts_svd["k_block"]= svd_predict_spec(tl, "vtr", tr, "vtl", r_l.s[1])
-        env.proj[tl].vtr, env.proj[tr].vtl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
+        with nvtx_range(f"qr 2x2proj {move}"):
+            r_l = h1 if implicit_halves else (qr(h1, axes=(0, 1))[1] if use_qr else h1)
+            r_r = (h2[1].T, h2[0].T) if implicit_halves else (qr(h2, axes=(1, 0))[1] if use_qr else h2.T)
+        k_block = svd_predict_spec(tl, "vtr", tr, "vtl", (r_l[-1] if implicit_halves else r_l).s[1])
+        env._set_projector_pair_(tl, 'vtr', tr, 'vtl', r_l, r_r, opts, k_block=k_block)
 
     if any(x in move for x in 'bv'):
         st = psi[tl].get_shape(axes=3)
@@ -1151,18 +1380,19 @@ def update_extended_2x2_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwarg
             cor_ttr = tensordot(cor_ttr, psi[tr], axes=((2, 3), (0, 3)))
             cor_ttr = cor_ttr.fuse_legs(axes=((0, 1, 3), (2, 4)))
 
-            h1 = cor_bl @ cor_ttl  # l(bottom) l(top)
-            h2 = cor_ttr @ cor_br  # r(top) r(bottom)
+            h1 = (cor_bl, cor_ttl) if implicit_halves else cor_bl @ cor_ttl  # l(bottom) l(top)
+            h2 = (cor_ttr, cor_br) if implicit_halves else cor_ttr @ cor_br  # r(top) r(bottom)
         else:
             h1,h2= cor_ll, cor_rr
 
-        _, r_l = qr(h1, axes=(1, 0)) if use_qr else (None, h1.T)
-        _, r_r = qr(h2, axes=(0, 1)) if use_qr else (None, h2)
-        opts_svd["k_block"]= svd_predict_spec(bl, "vbr", br, "vbl", r_l.s[1])
-        env.proj[bl].vbr, env.proj[br].vbl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
+        with nvtx_range(f"qr 2x2proj {move}"):
+            r_l = (h1[1].T, h1[0].T) if implicit_halves else (qr(h1, axes=(1, 0))[1] if use_qr else h1.T)
+            r_r = h2 if implicit_halves else (qr(h2, axes=(0, 1))[1] if use_qr else h2)
+        k_block = svd_predict_spec(bl, "vbr", br, "vbl", (r_l[-1] if implicit_halves else r_l).s[1])
+        env._set_projector_pair_(bl, 'vbr', br, 'vbl', r_l, r_r, opts, k_block=k_block)
 
 
-def update_1x2_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwargs):
+def update_1x2_projectors_(env, tl, tr, bl, br, move, opts: CTMOpts):
     r"""
     Calculate new projectors for CTM moves from 4x2 extended corners.
     """
@@ -1175,10 +1405,10 @@ def update_1x2_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwargs):
         r_br, r_bl = regularize_1site_corners(cor_br, cor_bl)
 
     if move in 'lh':
-        env.proj[tr].hrb, env.proj[br].hrt = proj_corners(r_tr, r_br, opts_svd=opts_svd, **kwargs)
+        env._set_projector_pair_(tr, 'hrb', br, 'hrt', r_tr, r_br, opts)
 
     if move in 'rh':
-        env.proj[tl].hlb, env.proj[bl].hlt = proj_corners(r_tl, r_bl, opts_svd=opts_svd, **kwargs)
+        env._set_projector_pair_(tl, 'hlb', bl, 'hlt', r_tl, r_bl, opts)
 
     if move in 'tbv':
         cor_bl = (env[br].bl @ env[br].l).fuse_legs(axes=((0, 1), 2))
@@ -1189,10 +1419,10 @@ def update_1x2_projectors_(env, tl, tr, bl, br, move, opts_svd, **kwargs):
         r_tr, r_br = regularize_1site_corners(cor_tr, cor_br)
 
     if move in 'tv':
-        env.proj[tl].vtr, env.proj[tr].vtl = proj_corners(r_tl, r_tr, opts_svd=opts_svd, **kwargs)
+        env._set_projector_pair_(tl, 'vtr', tr, 'vtl', r_tl, r_tr, opts)
 
     if move in 'bv':
-        env.proj[bl].vbr, env.proj[br].vbl = proj_corners(r_bl, r_br, opts_svd=opts_svd, **kwargs)
+        env._set_projector_pair_(bl, 'vbr', br, 'vbl', r_bl, r_br, opts)
 
 
 def regularize_1site_corners(cor_0, cor_1):
@@ -1206,30 +1436,31 @@ def regularize_1site_corners(cor_0, cor_1):
     return r_0, r_1
 
 
-def proj_corners(r0, r1, opts_svd, **kwargs):
-    r""" Projectors in between r0 @ r1.T corners. """
-    rr = tensordot(r0, r1, axes=(1, 1))
+def proj_corners(r0: Tensor, r1: Tensor, opts_svd, cutoff=0, **kwargs)-> tuple[Tensor, Tensor]:
+    r""" Projectors in between r0 @ r1.T corners, from full SVD.
 
+    ``opts_svd`` are the keyword arguments of
+    :meth:`yastn.linalg.svd_with_truncation`; build them with
+    :meth:`CTMOpts.svd_kwargs` rather than by hand.
+
+    The fix_signs default is re-applied here for callers that still pass a raw
+    dict -- the distributed path and the tests that exercise this function
+    directly. Once those go through CTMOpts.svd_kwargs the line can go.
+    """
+    # TODO: r1 matrix is defined as (right, left)
     opts_svd = dict(opts_svd)
-    opts_svd['fix_signs'] = opts_svd.get('fix_signs', True)
-    verbosity = opts_svd.get('verbosity', 0)
-    # only verbosity from opts_svd is to be passed down to svd_with_truncation
-    kwargs.pop('verbosity', None)
-    profiling_mode= kwargs.get('profiling_mode', None)
+    opts_svd.setdefault('fix_signs', DEFAULT_FIX_SIGNS)
+    verbosity = opts_svd.get('verbosity', 0)  # read for the log below; passed through as-is
 
-    # import pdb; pdb.set_trace()
-    if profiling_mode in ["NVTX",]:
-        rr.config.backend.cuda.nvtx.range_push(f"svd_with_truncation")
-        u, s, v = rr.svd_with_truncation(axes=(0, 1), sU=r0.s[1], **opts_svd, **kwargs)
-        rr.config.backend.cuda.nvtx.range_pop()
-    else:
-        u, s, v = rr.svd_with_truncation(axes=(0, 1), sU=r0.s[1], **opts_svd, **kwargs)
+    rr = tensordot(r0, r1, axes=(1, 1))
+    with nvtx_range("svd_with_truncation"):
+        u, s, v = rr.svd_with_truncation(
+            axes=(0, 1), sU=r0.s[1], **opts_svd, **kwargs)
 
     if verbosity > 2:
         fname = sys._getframe().f_code.co_name
         logger.info(f"{fname} S {s.get_legs(0)}")
 
-    cutoff = kwargs.get('cutoff', 0)
     rs = s.rsqrt(cutoff=cutoff)
     p0 = tensordot(r1, (rs @ v).conj(), axes=(0, 1)).unfuse_legs(axes=0)
     p1 = tensordot(r0, (u @ rs).conj(), axes=(0, 0)).unfuse_legs(axes=0)

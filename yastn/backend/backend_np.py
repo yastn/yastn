@@ -282,6 +282,9 @@ def bitwise_not(data):
     return np.bitwise_not(data)
 
 
+def clip(data, a_min=None, a_max=None):
+    return np.clip(data, a_min, a_max)
+
 ##############################################################
 #   low-level integer/index array primitives (numpy-aligned) #
 #   backend-agnostic building blocks for the GPU meta path   #
@@ -423,10 +426,16 @@ def eig_lowrank(data, meta, sizes, **kwargs):
     return Udata, Sdata, Vdata
 
 
-def eig(data, meta=None, sizes=(1, 1), **kwargs):
+def eig(data, meta=None, sizes=(1, 1), biorth_tol=None, **kwargs):
     if meta is None:
         return np.linalg.eig(data)  # S, U
+    # NOTE Unlike backend_torch.eig, which has access to right eigenvectors only and thus
+    # takes V = U^{-1} leaving U as normalized by the eigensolver, here LAPACK provides both
+    # left and right eigenvectors. They are scaled symmetrically, U -> U / sqrt(d) and
+    # V -> V / conj(sqrt(d)). The two backends hence differ in how the overall scale is split
+    # between U and V, while the product U @ diag(S) @ V agrees.
     dtype = dtype_to_complex(data)  # Assume worst case ?
+    eps = np.finfo(data.dtype).eps
     Udata = np.empty((sizes[0],), dtype=dtype)
     Sdata = np.empty((sizes[1],), dtype=dtype)
     Vdata = np.empty((sizes[2],), dtype=dtype)
@@ -446,14 +455,16 @@ def eig(data, meta=None, sizes=(1, 1), **kwargs):
         # TODO
         # If matrix has repeated/clustered eigenvalues or is defective, plain diagonal rescaling may be ill‑conditioned.
 
-        tol = 1e-12 if np.iscomplexobj(data) else 1e-14
+        overlap_tol = 1e-12 if np.iscomplexobj(data) else 1e-14
         try:
             # Column-wise overlaps d_j = v_j^H u_j
             d = np.sum(np.conjugate(V) * U, axis=0)
 
             # Guard against (near-)defective cases where an overlap is ~0
-            # (cannot biorthonormalize a pair with zero overlap via diagonal scaling)
-            if np.any(np.abs(d) < tol):
+            # (cannot biorthonormalize a pair with zero overlap via diagonal scaling).
+            # |d_j| <= 1 by Cauchy-Schwarz for the unit-norm columns returned by LAPACK,
+            # so an absolute floor is meaningful here.
+            if np.any(np.abs(d) < overlap_tol):
                 raise ValueError("At least one left/right eigenvector pair has ~zero overlap; "
                             "biorthonormalization by simple scaling is ill-conditioned. "
                             "Matrix may be defective or numerically close to defective.")
@@ -472,8 +483,20 @@ def eig(data, meta=None, sizes=(1, 1), **kwargs):
             except (scipy.linalg.LinAlgError, np.linalg.LinAlgError) as e:
                 raise ValueError("Biorthonormalization of left/right eigenvector pairs failed.") from e
 
-        if any(np.abs(np.sum(_V.T * _U, axis=0) - 1) > tol):
-            raise ValueError("Biorthonormalization of left/right eigenvector pairs failed.")
+        err = np.max(np.abs(np.sum(_V.T * _U, axis=0) - 1))
+        if err > 8 * eps:
+            # V <- V + (I - V @ U) @ V; two matmuls, error is squared so a single step suffices (Newton-Schulz refinement)
+            _V = _V + (np.eye(len(S), dtype=_V.dtype) - _V @ _U) @ _V
+            err = np.max(np.abs(np.sum(_V.T * _U, axis=0) - 1))
+
+        # The attainable residual is O(eps * cond(U)) -- no amount of refinement beats it.
+        # ||U||_1 ||V||_1 upper-bounds cond(U) in O(n^2), reusing the pair computed above.
+        tol = biorth_tol if biorth_tol is not None else \
+              10 * eps * np.linalg.norm(_U, 1) * np.linalg.norm(_V, 1)
+        if err > tol:
+            raise ValueError("Biorthonormalization of left/right eigenvector pairs failed: residual "
+                            f"{err:.3e} exceeds tolerance {float(tol):.3e}. The matrix of right "
+                            "eigenvectors is numerically singular (defective or nearly-defective input).")
 
         s_order = argsort_which(S, which=kwargs.get('which', 'LM'))
         Udata[slU].reshape(DU)[:] = _U[:,s_order]

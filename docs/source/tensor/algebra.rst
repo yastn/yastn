@@ -20,6 +20,7 @@ Simple element-wise operations
 .. automethod:: yastn.Tensor.rsqrt
 .. automethod:: yastn.Tensor.reciprocal
 .. automethod:: yastn.Tensor.exp
+.. automethod:: yastn.Tensor.clip
 
 .. automethod:: yastn.Tensor.__mul__
 .. automethod:: yastn.Tensor.__pow__
