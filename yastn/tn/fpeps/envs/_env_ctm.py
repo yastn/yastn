@@ -1095,7 +1095,7 @@ class EnvCTM():
             max_de = env.max_elem_diff()
             if check is not None:
                 converged, max_dsv, history = env.ctm_conv_corner_spec(history, check)
-                logging.info(f'Sweep = {sweep:03d}; max_diff_corner_singular_values = {max_dsv:0.2e};'
+                logger.info(f'Sweep = {sweep:03d}; max_diff_corner_singular_values = {max_dsv:0.2e};'
                              f' max_elem_modulus_diff = {max_de:0.2e}')
                 if converged:
                     break
@@ -1128,6 +1128,11 @@ class EnvCTM():
                     for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']]
         res= tuple(filter(lambda x: x is not None, diffs))
         return max(res) if len(res)>0 else float('inf')
+
+    def max_si_error(env: EnvCTM):
+        """Return the (key, SI_state) with largest error, or 'N/A' if absent."""
+        si_states = getattr(env, '_si_age', None) or {}
+        return max(si_states.items(), key=lambda item: item[1].error, default='N/A')
 
     def is_consistent(env, verbosity = 2):
         out = {}

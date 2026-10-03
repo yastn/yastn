@@ -14,7 +14,9 @@
 # ==============================================================================
 import copy
 import logging
+import math
 import time
+import warnings
 
 import numpy as np
 from scipy.optimize import minimize
@@ -876,7 +878,7 @@ class FixedPoint(torch.autograd.Function):
         sweep = 0
         for sweep in range(opts.max_sweeps):
             t0 = time.perf_counter()
-            next(ctm_itr)
+            itr_out= next(ctm_itr)
             t1 = time.perf_counter()
             t_ctm += t1-t0
 
@@ -884,7 +886,7 @@ class FixedPoint(torch.autograd.Function):
             converged, max_dsv, conv_history = env.ctm_conv_corner_spec(conv_history, check)
             t_check += time.perf_counter()-t2
             if opts.verbosity > 2:
-                log.log(logging.INFO, f"CTM iter {len(conv_history)} |delta_C| {max_dsv} t {t1-t0} [s]")
+                log.log(logging.INFO, f"CTM iter {len(conv_history)} |delta_C| {max_dsv} max_de {itr_out.max_de} t {t1-t0} [s]")
 
             if converged:
                 break
@@ -911,7 +913,7 @@ class FixedPoint(torch.autograd.Function):
                         break
 
         log.info(f"CTM: convergence: {converged}, sweeps {sweep+1}, t_ctm {t_ctm} [s], t_check {t_check} [s]\n"
-                +f"history {[r['max_dsv'] for r in conv_history]}.")
+                +f"max_de {itr_out.max_de} max_si_error {env.max_si_error()} history {[r['max_dsv'] for r in conv_history]}.")
 
         return env, converged, conv_history, t_ctm, t_check
 
@@ -990,6 +992,18 @@ class FixedPoint(torch.autograd.Function):
         t1 = time.perf_counter()
         log.info(f"{type(ctx).__name__}.forward FP CTM step t {t1-t0} [s]")
 
+        # Keep errors with the saved, pre-gauge X/Y bases: ordinary environment
+        # serialization deliberately resets these per-update diagnostics. Age
+        # increases identify the pairs used by this step without duplicating
+        # the projector routing for different methods, moves, or geometries.
+        ctx.si_errors = {}
+        if opts.fp.si_enabled and opts.fp.opts_si.skip_SI_update:
+            for key, state in ctm_env_out._si_age.items():
+                previous = env_converged._si_age.get(key)
+                if state.age > (previous.age if previous is not None else 0):
+                    ctx.si_errors[key] = (previous.error if previous is not None
+                                          else float('inf'))
+
         # 3. Find the gauge transformation
         t0 = time.perf_counter()
         # find_gauge_multi_sites returns a bare None (not a 2-tuple) when no gauge is
@@ -1045,6 +1059,27 @@ class FixedPoint(torch.autograd.Function):
 
         prev_grad_tmp = None
 
+        backward_opts = ctx.opts
+        if ctx.opts.fp.si_enabled and ctx.opts.fp.opts_si.skip_SI_update:
+            si_opts = ctx.opts.fp.opts_si
+            unconverged = [(key, error) for key, error in ctx.si_errors.items()
+                           if not (math.isfinite(error) and error < si_opts.tol)]
+            if unconverged:
+                errors = ", ".join(f"{key!r}: error={error!r}"
+                                   for key, error in unconverged)
+                warnings.warn(
+                    "fixed-point gradient step attempted with unconverged X,Y "
+                    f"projectors (requested tolerance={si_opts.tol!r}; {errors}). "
+                    "Cached X/Y subspaces remain frozen (niter=0, "
+                    "redistribute_sectors=False).",
+                    RuntimeWarning, stacklevel=2)
+            # X/Y are constants in this VJP, so neither power iterations nor
+            # sector redistribution may adjust their subspaces. Derive local
+            # options even when saved errors are unavailable or unconverged.
+            backward_opts = replace(ctx.opts, fp=replace(
+                ctx.opts.fp, opts_si=replace(
+                    si_opts, niter=0, redistribute_sectors=False)))
+
         # With devices set, the FP CTM step uses our distributed
         # AD-aware implementation (workers) -- but torch.func.vjp wraps
         # tensors in a way the workers can't pickle (TensorWrapper
@@ -1061,7 +1096,7 @@ class FixedPoint(torch.autograd.Function):
                 _psi_data_g = tuple(
                     p.detach().requires_grad_(True) for p in _psi_data)
                 _out_tuple = FixedPoint.fixed_point_iter(
-                    env_gauge, ctx.phase_dict, ctx.opts, env_dict,
+                    env_gauge, ctx.phase_dict, backward_opts, env_dict,
                     _env_meta, _env_slices, _psi_meta,
                     _env_ts_g, _psi_data_g)
                 _out_t = _out_tuple[0]
@@ -1084,7 +1119,7 @@ class FixedPoint(torch.autograd.Function):
                                 for r, t in zip(res, _psi_data_g))
                     return (res,)
             else:
-                _, df_vjp = torch.func.vjp(lambda x,y: FixedPoint.fixed_point_iter(env_gauge, ctx.phase_dict, ctx.opts, env_dict, _env_meta, _env_slices, _psi_meta, x, y), _env_ts, _psi_data)
+                _, df_vjp = torch.func.vjp(lambda x,y: FixedPoint.fixed_point_iter(env_gauge, ctx.phase_dict, backward_opts, env_dict, _env_meta, _env_slices, _psi_meta, x, y), _env_ts, _psi_data)
                 dfdC_vjp= lambda x: (df_vjp(x)[0],)
                 dfdA_vjp= lambda x: (df_vjp(x)[1],)
             time1 = time.perf_counter()
