@@ -975,13 +975,14 @@ def update_core_AD_(env, opts, move, devices):
     have ``_data`` carrying autograd tracking, so backward through
     ``env``'s output env tensors flows to the original input tensors.
 
-    ``intra_site_parallel`` controls whether a single-site unit cell may
-    use two workers for the two projector pairs and the two directional
-    environment updates. The default, ``'auto'``, enables this whenever
-    two eligible ranks are available; ``False`` preserves the one-worker
-    path. Repeated CPU ranks are eligible, while repeated CUDA device
-    strings are not (two processes on one GPU do not provide useful
-    device-level parallelism and substantially increase memory pressure).
+    ``intra_site_parallel`` controls whether directional environment updates
+    are balanced independently across workers. For a single-site unit cell,
+    it also lets the two projector pairs run as separate fused jobs. The
+    default, ``'auto'``, enables this whenever two eligible ranks are
+    available; ``False`` preserves the original site-affine scheduling.
+    Repeated CPU ranks are eligible, while repeated CUDA device strings are
+    not (two processes on one GPU do not provide useful device-level
+    parallelism and substantially increase memory pressure).
     """
     from ._env_contractions import (
         update_env_fetch_args,
@@ -1014,10 +1015,12 @@ def update_core_AD_(env, opts, move, devices):
             seen_cuda_devices.add(device_string)
         eligible_intra_ranks.append(rank)
 
-    use_intra_site_parallel = (
+    parallelize_directions = (
         intra_site_parallel is not False and
-        len(sites_proj) == 1 and
         len(eligible_intra_ranks) >= 2
+    )
+    split_single_site_projectors = (
+        parallelize_directions and len(sites_proj) == 1
     )
     intra_ranks = eligible_intra_ranks[:2]
 
@@ -1047,7 +1050,7 @@ def update_core_AD_(env, opts, move, devices):
     pairs = ('rh', 'lh') if move == 'h' else ('tv', 'bv')
     stage12_jobs = []
     stage12_meta = []
-    pair_to_rank = {}
+    projector_ranks = {}
     for site in sites_proj:
         tl, tr, bl, br = (env.nn_site(site, d=d)
                           for d in ((0, 0), (0, 1), (1, 0), (1, 1)))
@@ -1057,18 +1060,21 @@ def update_core_AD_(env, opts, move, devices):
             env[tr].t, env[tr].tr, env[tr].r, env.psi[tr],
             env[br].r, env[br].br, env[br].b, env.psi[br],
         ]
-        if use_intra_site_parallel:
+        if split_single_site_projectors:
             for pair, rank in zip(pairs, intra_ranks):
                 extra = {'move': move, 'pairs': (pair,),
                          'opts_svd': opts_svd, 'kwargs': kw_proj}
                 stage12_jobs.append((rank, extra, ts_args))
                 stage12_meta.append((site, (pair,)))
-                pair_to_rank[pair] = rank
+                projector_ranks[(site, pair)] = rank
         else:
             extra = {'move': move, 'pairs': pairs,
                      'opts_svd': opts_svd, 'kwargs': kw_proj}
-            stage12_jobs.append((_rank_for(site), extra, ts_args))
+            rank = _rank_for(site)
+            stage12_jobs.append((rank, extra, ts_args))
             stage12_meta.append((site, pairs))
+            for pair in pairs:
+                projector_ranks[(site, pair)] = rank
     stage12_results = _stage_apply_batched(pool, 'stage12', stage12_jobs)
 
     for (site, job_pairs), outs in zip(stage12_meta, stage12_results):
@@ -1093,14 +1099,23 @@ def update_core_AD_(env, opts, move, devices):
     sub_moves = 'lr' if move == 'h' else 'tb'
     stage3_jobs = []
     stage3_meta = []
+    stage3_rank_load = {rank: 0 for rank in eligible_intra_ranks}
     for site in sites_proj:
         for mv in sub_moves:
             args = list(update_env_fetch_args(site, env, mv))
-            if use_intra_site_parallel:
+            if parallelize_directions:
                 projector_pair = {
                     'l': 'lh', 'r': 'rh', 't': 'tv', 'b': 'bv'
                 }[mv]
-                rank = pair_to_rank[projector_pair]
+                producer_rank = projector_ranks[(site, projector_pair)]
+                min_load = min(stage3_rank_load.values())
+                least_loaded = [
+                    rank for rank in eligible_intra_ranks
+                    if stage3_rank_load[rank] == min_load
+                ]
+                rank = (producer_rank if producer_rank in least_loaded
+                        else least_loaded[0])
+                stage3_rank_load[rank] += 1
             else:
                 rank = _rank_for(site)
             stage3_jobs.append((rank, {'move': mv}, args))

@@ -216,10 +216,10 @@ class CTMOpts:
     profiling_mode: str | None
         Profiling instrumentation, e.g. ``'NVTX'``.
     intra_site_parallel: True | False | 'auto'
-        For a single-site unit cell, dispatch the two projector pairs and the
-        two directional env updates to two ranks. ``'auto'`` enables it
-        whenever two eligible ranks exist; repeated CUDA device strings do
-        not count as eligible.
+        Balance the independent directional environment updates across
+        workers. For a single-site unit cell, also dispatch the two projector
+        pairs to separate ranks. ``'auto'`` enables this whenever two eligible
+        ranks exist; repeated CUDA device strings do not count as eligible.
     verbosity: int
         Diagnostic verbosity.
     """
@@ -252,7 +252,7 @@ class CTMOpts:
     profiling_mode: str | None = field(default=None, metadata={
         'help': "profiling instrumentation, e.g. 'NVTX'"})
     intra_site_parallel: Literal[True, False, 'auto'] = field(default='auto', metadata={
-        'help': "1-site cell: split the two projector pairs over two ranks"})
+        'help': "balance directional updates; split 1-site projector pairs"})
     verbosity: int = field(default=0, metadata={'help': 'diagnostic verbosity'})
     def __post_init__(self):
         st = lambda name, value: object.__setattr__(self, name, value)
