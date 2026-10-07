@@ -955,6 +955,14 @@ def update_core_AD_(env, move, opts_svd, devices, **kwargs):
     autograd graph in main. Mutates ``env`` in place; the new tensors
     have ``_data`` carrying autograd tracking, so backward through
     ``env``'s output env tensors flows to the original input tensors.
+
+    ``intra_site_parallel`` controls whether a single-site unit cell may
+    use two workers for the two projector pairs and the two directional
+    environment updates. The default, ``'auto'``, enables this whenever
+    two eligible ranks are available; ``False`` preserves the one-worker
+    path. Repeated CPU ranks are eligible, while repeated CUDA device
+    strings are not (two processes on one GPU do not provide useful
+    device-level parallelism and substantially increase memory pressure).
     """
     from ._env_contractions import (
         update_env_fetch_args,
@@ -975,6 +983,37 @@ def update_core_AD_(env, move, opts_svd, devices, **kwargs):
     # 'h'/'v' moves use one site group containing all sites.
     sites_proj = list(env.sites())
 
+    # This is an orchestration option, not a projector/SVD option. Pop it
+    # before constructing kw_proj below so it cannot leak into that stack.
+    intra_site_parallel = kwargs.pop('intra_site_parallel', 'auto')
+    if (intra_site_parallel is not True and
+            intra_site_parallel is not False and
+            intra_site_parallel != 'auto'):
+        raise ValueError(
+            "intra_site_parallel must be True, False, or 'auto'")
+
+    # A CPU device may intentionally have multiple worker processes, so all
+    # of its ranks are useful. For CUDA, retain only the first rank for each
+    # device string: fixed_pt.py can deliberately pass [cuda:0, cuda:0] to
+    # select the distributed-autograd path on one physical GPU, and that
+    # compatibility case must not turn into intra-GPU process contention.
+    eligible_intra_ranks = []
+    seen_cuda_devices = set()
+    for rank, device in enumerate(pool.devices):
+        device_string = str(device)
+        if device_string.startswith('cuda'):
+            if device_string in seen_cuda_devices:
+                continue
+            seen_cuda_devices.add(device_string)
+        eligible_intra_ranks.append(rank)
+
+    use_intra_site_parallel = (
+        intra_site_parallel is not False and
+        len(sites_proj) == 1 and
+        len(eligible_intra_ranks) >= 2
+    )
+    intra_ranks = eligible_intra_ranks[:2]
+
     # Round-robin over workers per site (deterministic given env.sites() order).
     site_to_rank = {}
 
@@ -991,13 +1030,18 @@ def update_core_AD_(env, move, opts_svd, devices, **kwargs):
     # dropped svd_policy / truncation_f, changing FP CTM behaviour.
     kw_proj = dict(kwargs)
 
-    # ----- Fused halves + projectors per site.  One worker job holds a
-    # single autograd graph from the 16 env leaves through halves to
-    # the (p1, p2) projectors of both pairs, eliminating the previous
-    # design's two-graph worker state and the halves IPC round-trip.
+    # ----- Fused halves + projectors per site. Normally one worker job holds
+    # a single autograd graph from the 16 env leaves through halves to both
+    # projector pairs, eliminating the previous design's two-graph worker
+    # state and the halves IPC round-trip. For a single-site unit cell with
+    # two eligible ranks, issue one fused halves + single-pair job per rank.
+    # This duplicates the halves computation, but avoids transferring the
+    # large halves and lets the independent projector SVDs run concurrently.
     # 'h' move -> pairs (rh, lh); 'v' move -> (tv, bv).
     pairs = ('rh', 'lh') if move == 'h' else ('tv', 'bv')
     stage12_jobs = []
+    stage12_meta = []
+    pair_to_rank = {}
     for site in sites_proj:
         tl, tr, bl, br = (env.nn_site(site, d=d)
                           for d in ((0, 0), (0, 1), (1, 0), (1, 1)))
@@ -1007,15 +1051,24 @@ def update_core_AD_(env, move, opts_svd, devices, **kwargs):
             env[tr].t, env[tr].tr, env[tr].r, env.psi[tr],
             env[br].r, env[br].br, env[br].b, env.psi[br],
         ]
-        extra = {'move': move, 'pairs': pairs,
-                 'opts_svd': opts_svd, 'kwargs': kw_proj}
-        stage12_jobs.append((_rank_for(site), extra, ts_args))
+        if use_intra_site_parallel:
+            for pair, rank in zip(pairs, intra_ranks):
+                extra = {'move': move, 'pairs': (pair,),
+                         'opts_svd': opts_svd, 'kwargs': kw_proj}
+                stage12_jobs.append((rank, extra, ts_args))
+                stage12_meta.append((site, (pair,)))
+                pair_to_rank[pair] = rank
+        else:
+            extra = {'move': move, 'pairs': pairs,
+                     'opts_svd': opts_svd, 'kwargs': kw_proj}
+            stage12_jobs.append((_rank_for(site), extra, ts_args))
+            stage12_meta.append((site, pairs))
     stage12_results = _stage_apply_batched(pool, 'stage12', stage12_jobs)
 
-    for site, outs in zip(sites_proj, stage12_results):
+    for (site, job_pairs), outs in zip(stage12_meta, stage12_results):
         tl, tr, bl, br = (env.nn_site(site, d=d)
                           for d in ((0, 0), (0, 1), (1, 0), (1, 1)))
-        for k, pair in enumerate(pairs):
+        for k, pair in enumerate(job_pairs):
             p1, p2 = outs[2 * k], outs[2 * k + 1]
             if pair == 'rh':
                 env.proj[tr].hrb, env.proj[br].hrt = p1, p2
@@ -1037,7 +1090,14 @@ def update_core_AD_(env, move, opts_svd, devices, **kwargs):
     for site in sites_proj:
         for mv in sub_moves:
             args = list(update_env_fetch_args(site, env, mv))
-            stage3_jobs.append((_rank_for(site), {'move': mv}, args))
+            if use_intra_site_parallel:
+                projector_pair = {
+                    'l': 'lh', 'r': 'rh', 't': 'tv', 'b': 'bv'
+                }[mv]
+                rank = pair_to_rank[projector_pair]
+            else:
+                rank = _rank_for(site)
+            stage3_jobs.append((rank, {'move': mv}, args))
             stage3_meta.append((site, mv))
     stage3_results = _stage_apply_batched(pool, 'stage3', stage3_jobs)
     for (site, mv), outs in zip(stage3_meta, stage3_results):
