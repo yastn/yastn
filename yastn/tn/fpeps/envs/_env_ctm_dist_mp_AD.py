@@ -997,14 +997,7 @@ def update_core_AD_(env, opts, move, devices):
     # 'h'/'v' moves use one site group containing all sites.
     sites_proj = list(env.sites())
 
-    # This is an orchestration option, not a projector/SVD option. Pop it
-    # before constructing kw_proj below so it cannot leak into that stack.
-    intra_site_parallel = kwargs.pop('intra_site_parallel', 'auto')
-    if (intra_site_parallel is not True and
-            intra_site_parallel is not False and
-            intra_site_parallel != 'auto'):
-        raise ValueError(
-            "intra_site_parallel must be True, False, or 'auto'")
+    intra_site_parallel = opts.intra_site_parallel
 
     # A CPU device may intentionally have multiple worker processes, so all
     # of its ranks are useful. For CUDA, retain only the first rank for each
