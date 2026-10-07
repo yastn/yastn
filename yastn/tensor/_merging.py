@@ -95,6 +95,7 @@ class _Fusion(NamedTuple):
             if cls.__name__ != d['type']:
                 raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
             return cls(tree=d['tree'], op=d['op'], legs=tuple(LegBasic.from_dict(x) for x in d['legs']))
+        raise YastnError(f"_Fusion.to_dict with dict_ver = {d['dict_ver']} not supported")
 
     def is_consistent(self):
         assert isinstance(self, _Fusion)
@@ -765,7 +766,7 @@ def _masks_hfs_intersection(sym, lega, legb, hfa, hfb):
     r"""
     Calculate two masks that project onto intersection of two spaces.
     ts = tuple[ts0, ts1], where ts0, ts1 are top-layer charges in two intersected legs.
-    Ds = tuple[Ds0, Ds1] with corresponding top-lyer bond dimensions.
+    Ds = tuple[Ds0, Ds1] with corresponding top-layer bond dimensions.
     hfs = tuple[hfs0, hfs1], where hfs0, hfs1 are hard fusion data for two spaces
     """
     teff = tuple(sorted(set(lega.t) & set(legb.t)))

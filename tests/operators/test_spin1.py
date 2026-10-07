@@ -29,7 +29,7 @@ def test_spin1(config_kwargs):
     config_U1 = yastn.make_config(sym='U1', **config_kwargs)
     ops_U1 = yastn.operators.Spin1(**config_U1._asdict())
 
-    rs = (False, False, True) # reverse option for to_numpy/to_dense/to_nonsymmetric
+    opss = [ops_dense, ops_Z3, ops_U1]
 
     assert all(ops.config.fermionic == False for ops in (ops_dense, ops_Z3, ops_U1))
 
@@ -37,68 +37,40 @@ def test_spin1(config_kwargs):
     legs = [ops_dense.space(), ops_Z3.space(), ops_U1.space()]
 
     assert all(leg == I.get_legs(axes=0) for (leg, I) in zip(legs, Is))
-    assert all(np.allclose(I.to_numpy(reverse=r), np.eye(3)) for (I, r) in zip(Is, rs))
+    assert all(np.allclose(ops.I().to_numpy(key=ops.key()), np.eye(3)) for ops in opss)
+    assert all(np.allclose(ops.sz().to_numpy(key=ops.key()), np.diag([1, 0, -1])) for ops in opss)
 
-    Szs = [ops_dense.sz(), ops_Z3.sz(), ops_U1.sz()]
-    assert all(np.allclose(Sz.to_numpy(reverse=r), np.array([[1, 0, 0], [0, 0, 0], [0, 0, -1]])) for (Sz, r) in zip(Szs, rs))
+    lss = [dict(enumerate(ops.I().get_legs())) for ops in opss]
+    assert all(np.allclose(ops.sp().to_numpy(legs=ls, key=ops.key()), np.array([[0, 1, 0], [0, 0, 1], [0, 0, 0]]) * np.sqrt(2)) for ops, ls in zip(opss, lss))
+    assert all(np.allclose(ops.sm().to_numpy(legs=ls, key=ops.key()), np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]]) * np.sqrt(2)) for ops, ls in zip(opss, lss))
 
-    Sxs = [ops_dense.sx()]
-    assert all(np.allclose(Sx.to_numpy(reverse=r), np.array([[0, 1, 0], [1, 0, 1], [0, 1, 0]]) / np.sqrt(2)) for (Sx, r) in zip(Sxs, rs))
+    # dense only
+    assert np.allclose(ops_dense.sx().to_numpy(), np.array([[0, 1, 0], [1, 0, 1], [0, 1, 0]]) / np.sqrt(2))
+    assert np.allclose(ops_dense.sy().to_numpy(), np.array([[0, -1j, 0], [1j, 0, -1j], [0, 1j, 0]]) / np.sqrt(2))
+    assert (1j * ops_dense.sy() - ops_dense.isy()).norm() < tol
+    assert (ops_dense.sx() + 1j * ops_dense.sy() - ops_dense.sp()).norm() < tol
+    assert (ops_dense.sx() - 1j * ops_dense.sy() - ops_dense.sm()).norm() < tol
 
-    Sys = [ops_dense.sy()]
-    assert all(np.allclose(Sy.to_numpy(reverse=r), np.array([[0, -1j, 0], [1j, 0, -1j], [0, 1j, 0]]) / np.sqrt(2)) for (Sy, r) in zip(Sys, rs))
+    assert all(yastn.norm(ops.sp() @ ops.sm() - ops.sm() @ ops.sp() - 2 * ops.sz()) < tol for ops in opss)
+    assert all(yastn.norm(ops.sz() @ ops.sp() - ops.sp() @ ops.sz() - ops.sp()) < tol for ops in opss)
+    assert all(yastn.norm(ops.sz() @ ops.sm() - ops.sm() @ ops.sz() + ops.sm()) < tol for ops in opss)
 
-    iSys = [ops_dense.isy()]
-    assert all((1j * sy - isy).norm() < tol for (sy, isy) in zip(Sys, iSys))
+    sz_vecs = [(ops.sz(), ops.vec_z(val=val), val) for ops in opss for val in (+1, 0, -1)]
+    assert all(yastn.norm(O @ v - val * v) < tol for O, v, val in sz_vecs)
+    sx_vecs = [(ops_dense.sx(), ops_dense.vec_x(val=val), val) for val in (+1, 0, -1)]
+    assert all(yastn.norm(O @ v - val * v) < tol for O, v, val in sx_vecs)
+    sy_vecs = [(ops_dense.sy(), ops_dense.vec_y(val=val), val) for val in (+1, 0, -1)]
+    assert all(yastn.norm(O @ v - val * v) < tol for O, v, val in sy_vecs)
+    assert all(abs(v.norm() - 1) < tol for _, v, _ in chain(sz_vecs, sx_vecs, sy_vecs))
 
-
-    lss = [{0: I.get_legs(0), 1: I.get_legs(1)} for I in Is]
-
-    Sps = [ops_dense.sp(), ops_Z3.sp(), ops_U1.sp()]
-    assert all(np.allclose(Sp.to_numpy(legs=ls, reverse=r), np.array([[0, 1, 0], [0, 0, 1], [0, 0, 0]]) * np.sqrt(2)) for Sp, ls, r in zip(Sps, lss, rs))
-
-    Sms = [ops_dense.sm(), ops_Z3.sm(), ops_U1.sm()]
-    assert all(np.allclose(Sm.to_numpy(legs=ls, reverse=r), np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]]) * np.sqrt(2)) for Sm, ls, r in zip(Sms, lss, rs))
-
-    assert all(yastn.norm(Sx + 1j * Sy - Sp) < tol for Sx, Sy, Sp in zip(Sxs, Sys, Sps))
-    assert all(yastn.norm(Sx - 1j * Sy - Sm) < tol for Sx, Sy, Sm in zip(Sxs, Sys, Sms))
-
-    assert all(yastn.norm(Sp @ Sm - Sm @ Sp - 2 * Sz) < tol for Sp, Sm, Sz in zip(Sps, Sms, Szs))
-    assert all(yastn.norm(Sx @ Sy - Sy @ Sx - 1j * Sz) < tol for Sx, Sy, Sz in zip(Sxs, Sys, Szs))
-    assert all(yastn.norm(Sz @ Sp - Sp @ Sz - Sp) < tol for Sz, Sp in zip(Szs, Sps))
-    assert all(yastn.norm(Sz @ Sm - Sm @ Sz + Sm) < tol for Sz, Sm in zip(Szs, Sms))
-
-    zp1s = [ops_dense.vec_z(val=+1), ops_Z3.vec_z(val=+1), ops_U1.vec_z(val=+1)]
-    z0s = [ops_dense.vec_z(val=0), ops_Z3.vec_z(val=0), ops_U1.vec_z(val=0)]
-    zm1s = [ops_dense.vec_z(val=-1), ops_Z3.vec_z(val=-1), ops_U1.vec_z(val=-1)]
-    xp1s = [ops_dense.vec_x(val=+1)]
-    x0s = [ops_dense.vec_x(val=0)]
-    xm1s = [ops_dense.vec_x(val=-1)]
-    yp1s = [ops_dense.vec_y(val=+1)]
-    y0s = [ops_dense.vec_y(val=0)]
-    ym1s = [ops_dense.vec_y(val=-1)]
-
-    assert all(yastn.norm(Sz @ v - v) < tol for Sz, v in zip(Szs, zp1s))
-    assert all(yastn.norm(Sz @ v) < tol for Sz, v in zip(Szs, z0s))
-    assert all(yastn.norm(Sz @ v + v) < tol for Sz, v in zip(Szs, zm1s))
-    assert all(yastn.norm(Sx @ v - v) < tol for Sx, v in zip(Sxs, xp1s))
-    assert all(yastn.norm(Sx @ v) < tol for Sx, v in zip(Sxs, x0s))
-    assert all(yastn.norm(Sx @ v + v) < tol for Sx, v in zip(Sxs, xm1s))
-    assert all(yastn.norm(Sy @ v - v) < tol for Sy, v in zip(Sys, yp1s))
-    assert all(yastn.norm(Sy @ v) < tol for Sy, v in zip(Sys, y0s))
-    assert all(yastn.norm(Sy @ v + v) < tol for Sy, v in zip(Sys, ym1s))
-    assert all(abs(v.norm() -1) < tol for v in chain(zp1s, z0s, zm1s, xp1s, x0s, xm1s, yp1s, y0s, ym1s))
-
-
-    vecss = [ops_dense.vec_s(), ops_Z3.vec_s(), ops_U1.vec_s()]
-    gs = [ops_dense.g(), ops_Z3.g(), ops_U1.g()]
+    vecss = [ops.vec_s() for ops in opss]
+    gs = [ops.g() for ops in opss]
     assert all(vs.s == (-1, 1, -1) and vs.get_shape() == (3, 3, 3) for vs in vecss)
     assert all(g.s == (1, 1) and g.get_shape() == (3, 3) for g in gs)
-
+    #
     S = 1
     for vs, g, I in zip(vecss, gs, Is):
         assert (yastn.ncon((vs, g, vs), ((1, -0, 3), (1, 2), (2, 3, -1))) - S * (S + 1) * I).norm() < tol
-
 
     with pytest.raises(yastn.YastnError):
         _ = ops_U1.sx()

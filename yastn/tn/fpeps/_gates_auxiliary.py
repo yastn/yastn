@@ -48,9 +48,12 @@ def match_ancilla(ten, G, dirn=None):
     Identity is read from the ancilla leg of the tensor.
     Can perform a swap gate of the auxiliary operator leg (if present) with an ancilla.
     """
-    leg = ten.get_legs(axes=-1)
+    if G is None:
+        return G
 
-    if not leg.is_fused():
+    leg = ten.get_legs(axes=-1)
+    legG = G.get_legs(axes=1)
+    if leg.hf.tree == legG.hf.tree:
         return G
 
     _, leg = leg.unfuse_leg()  # unfuse to get ancilla leg
@@ -194,7 +197,16 @@ def fill_eye_in_gate(peps, G, sites):
     g0, g1 = G
     G = [g0]
     leg = g0.get_legs(axes=2)
-    vb = eye(g0.config, legs=(leg.conj(), leg), isdiag=False)
+    try:
+        vb = eye(g0.config, legs=(leg.conj(), leg), isdiag=False)
+    except YastnError as exc:
+        if "not a result of outer_product" not in str(exc):
+            raise
+        # A compact sum-of-products gate has a direct-sum auxiliary leg.
+        # Its block history need not be an outer product; the propagating
+        # identity depends only on its charge sectors and dimensions.
+        leg = leg.drop_history()
+        vb = eye(g0.config, legs=(leg.conj(), leg), isdiag=False)
     for site in sites[1:-1]:
         leg = system_leg(peps[site])
         vp = eye(g0.config, legs=(leg, leg.conj()), isdiag=False)

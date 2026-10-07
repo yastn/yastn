@@ -17,6 +17,7 @@
 import scipy.sparse.linalg as sla
 
 from ._env_window import EnvWindow, _measure_2site, _measure_nsite, _sample
+from ._ctm_opts import CTMOpts, override
 from .._gates_auxiliary import gate_fix_swap_gate, clear_operator_input, gate_from_mpo
 from .._doublePepsTensor import DoublePepsTensor
 from .._geometry import Site, is_bond, is_site
@@ -1009,11 +1010,12 @@ def measure_nsite_cut_map_oe(self, *operators, sites, probe_site, probe_slot, pr
                                    per_combo_path=per_combo_path, combo_path_kwargs=combo_path_kwargs)
 
 
-def _eval_projectors(env, move, opts_svd):
+def _eval_projectors(env, move,  opts: CTMOpts):
     """Construct the projectors using the converged env.
 
     ``opts_svd`` carries the truncation options (notably ``D_total``);
     it is passed through to ``_update_projectors_`` unchanged.
     """
+    opts= override(opts, {'method': '2x2'})
     for site in env.sites():
-        env._update_projectors_(site, move, opts_svd, method='2x2')
+        env._update_projectors_(site, move, opts)

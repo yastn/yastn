@@ -36,16 +36,17 @@ extensions = [
     'sphinx.ext.viewcode',
     'sphinx.ext.napoleon',
     'sphinx.ext.mathjax',
-    'sphinx.ext.graphviz',
+    'sphinx.ext.graphviz'
 ]
 
-# -- graphviz (sphinx.ext.graphviz) ------------------------------------------
-# Render implementation graphs (e.g. the sliced/unrolled contraction engine in
-# tensor/large_contractions) as inline SVG. Requires the Graphviz ``dot``
-# executable on PATH at build time (e.g. ``conda install graphviz`` or
-# ``apt-get install graphviz``); set ``graphviz_dot`` to an explicit path if it
-# is installed elsewhere.
+# Diagrams requires the 'dot' binary (graphviz) on PATH at build time (e.g. ``conda install graphviz`` or
+# ``apt-get install graphviz``); It is installed in .github/workflows/docs.yml.
 graphviz_output_format = 'svg'
+
+# torch is an optional extra (pyproject: [project.optional-dependencies] torch),
+# not a docs-build dependency. The fixed-point CTM module imports it at module
+# level, so mock it rather than pulling torch into the docs job.
+autodoc_mock_imports = ['torch']
 autoclass_content = 'both'
 #autodoc_class_signature = "separated"
 

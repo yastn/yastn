@@ -44,10 +44,13 @@ class LegBasic(NamedTuple):
     @classmethod
     def from_dict(cls, d):
         r""" De-serializes LegBasic from the dictionary ``d``. """
+        if 'dict_ver' not in d:  # leg stored before it carried its own version tag
+            return cls(s=d['s'], t=d['t'], D=d['D'])
         if d['dict_ver'] == 1:
             if cls.__name__ != d['type']:
                 raise YastnError(f"{cls.__name__} does not match d['type'] == {d['type']}")
             return cls(s=d['s'], t=d['t'], D=d['D'])
+        raise YastnError(f"LegBasic.to_dict with dict_ver = {d['dict_ver']} not supported")
 
     def __getitem__(self, t) -> int:
         r"""

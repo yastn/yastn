@@ -15,6 +15,8 @@
 """ Generator of basic local spinless-fermion operators. """
 from __future__ import annotations
 
+from typing import Callable
+
 from ._meta_operators import meta_operators
 from ..tensor import YastnError, Tensor, Leg
 
@@ -51,6 +53,15 @@ class SpinlessFermions(meta_operators):
     def space(self) -> Leg:
         r""" :class:`yastn.Leg` object describing local Hilbert space. """
         return Leg(self.config, s=1, t=(0, 1), D=(1, 1))  # the same for U1 and Z2
+
+    def key(self) -> Callable | None:
+        r"""
+        Provide key parameter for :meth:`yastn.to_nonsymmetric`,
+        used while sorting block charges,
+        so that all symmetries result in the same dense representation of physical space,
+        using the order (|0>, |1>).
+        """
+        return None
 
     def I(self) -> Tensor:
         r""" Identity operator. """

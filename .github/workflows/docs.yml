@@ -45,6 +45,12 @@ jobs:
       - name: setup deps
         run: pip install .[docbuild]
 
+      # sphinx.ext.graphviz shells out to `dot`, which is a system package
+      # rather than a pip one. Without it the CTM/SI flow chart degrades to a
+      # broken image and a build warning.
+      - name: setup graphviz
+        run: sudo apt-get update && sudo apt-get install -y graphviz
+
       - name: build docs
         run: |
           cd docs;

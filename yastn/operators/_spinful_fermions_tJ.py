@@ -68,6 +68,18 @@ class SpinfulFermions_tJ(meta_operators):
         if self._sym == 'U1xU1':  # charges == (occ_u, occ_d)
             return Leg(self.config, s=1, t=((0, 0), (0, 1), (1, 0)), D=(1, 1, 1))
 
+    def key(self) -> None:
+        r"""
+        Provide key parameter for :meth:`yastn.to_nonsymmetric`,
+        used while sorting block charges,
+        so that all symmetries result in the same dense representation of physical space,
+        using the order (|00>, |10>, |01>).
+        """
+        if self._sym in ('Z2', 'U1'):
+            return lambda t: (t[0] % 2, t[0])
+        if self._sym in ('U1xU1', 'U1xU1xZ2'):
+            return lambda t: ((t[0] + t[1]) % 2, t[1], t[0])
+
     def vec_n(self, val=(0, 0)) -> Tensor:
         r""" Vector with occupation (u, d). """
         if val == (0, 0):

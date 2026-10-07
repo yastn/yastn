@@ -49,6 +49,9 @@ class Qdit(meta_operators):
         r""" :class:`yastn.Leg` object describing local Hilbert space. Can override default dimension by providing d. """
         return Leg(self.config, s=1, D=(self._d if d is None else d,))
 
+    def key(self) -> None:
+        return None
+
     def I(self, d=None) -> Tensor:
         """ Identity operator. Can override default dimension by providing d."""
         return diag(eye(config=self.config, s=self.s, D=self._d if d is None else d))

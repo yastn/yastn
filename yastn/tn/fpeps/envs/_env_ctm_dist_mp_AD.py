@@ -50,6 +50,8 @@ import queue
 import threading
 import time
 
+from ._ctm_opts import CTMOpts, make_ctm_opts
+
 
 log = logging.getLogger(__name__)
 
@@ -489,7 +491,7 @@ def _recv_payload(p, device=None):
 
 def _worker_main(rank, device, config_desc, cmd_q, res_q, parent_sys_path,
                  log_queue=None, log_level=logging.INFO, logger_levels=None):
-    import sys, torch
+    import os, sys, torch
 
     for p in reversed(parent_sys_path):
         if p and p not in sys.path:
@@ -531,6 +533,23 @@ def _worker_main(rank, device, config_desc, cmd_q, res_q, parent_sys_path,
                 saved_graphs.pop(gid, None)
             continue
         if cmd == 'empty_cache':
+            # True allocator high-water mark for THIS process. Issued once per
+            # step at the one moment the worker is idle and its peak is final,
+            # so it costs nothing and cannot be confused with a mid-stage
+            # reading. Nothing else sees this number: the energy_mp probe is a
+            # DIFFERENT process with its own allocator, and the FixedPoint
+            # backward's large tensors live here, not there. Logged BEFORE
+            # empty_cache, which would otherwise wipe the reserve figure.
+            if os.environ.get('YASTN_MEM_PROBE') and str(device).startswith('cuda'):
+                try:
+                    log.warning(
+                        "MEMPROBE ctm rank %d dev %s alloc_peak_MiB %.1f reserved_MiB %.1f",
+                        rank, device,
+                        torch.cuda.max_memory_allocated(device) / 2**20,
+                        torch.cuda.max_memory_reserved(device) / 2**20)
+                    torch.cuda.reset_peak_memory_stats(device)
+                except Exception:
+                    pass
             # Return this worker's cached-but-unused GPU blocks to the driver.
             # Issued when the worker is idle (after the FP backward's stage
             # work + drop_graphs), so the next step's forward -- which runs in
@@ -948,7 +967,7 @@ def _stage_apply_batched(pool, stage, jobs):
 # Top-level orchestration
 # ===========================================================================
 
-def update_core_AD_(env, move, opts_svd, devices, **kwargs):
+def update_core_AD_(env, opts, move, devices):
     """One CTM move, AD-aware distributed.
 
     Mirrors ``_env_ctm_dist_mp.py::_update_core_D_`` but builds an
@@ -974,11 +993,6 @@ def update_core_AD_(env, move, opts_svd, devices, **kwargs):
             f"only moves 'h' and 'v' are supported; got '{move}'")
 
     pool = get_or_create_pool(devices, env.config)
-
-    # Don't mutate caller's dict; default 'tol' if neither tol nor tol_block set.
-    opts_svd = dict(opts_svd)
-    if 'tol' not in opts_svd and 'tol_block' not in opts_svd:
-        opts_svd['tol'] = 1e-14
 
     # 'h'/'v' moves use one site group containing all sites.
     sites_proj = list(env.sites())
@@ -1022,13 +1036,12 @@ def update_core_AD_(env, move, opts_svd, devices, **kwargs):
             site_to_rank[site] = len(site_to_rank) % pool.n_workers
         return site_to_rank[site]
 
-    # Forward all caller kwargs to the projector path -- mirrors the
-    # non-AD _env_ctm_dist_mp.py. proj_corners / svd_with_truncation
-    # consume what they need (truncation_f, svd_policy, svds_thresh,
-    # use_qr, fix_signs, verbosity, profiling_mode, ...) and ignore
-    # the rest. Earlier this filtered to {'use_qr'} only and silently
-    # dropped svd_policy / truncation_f, changing FP CTM behaviour.
-    kw_proj = dict(kwargs)
+    # What the worker-side projector path reads. opts_svd carries the full
+    # truncation contract of svd_with_truncation (policy, svds_thresh,
+    # fix_signs, verbosity, ...); use_qr and cutoff are CTM-level.
+    opts_svd = opts.svd_kwargs()
+    kw_proj = {'use_qr': opts.use_qr, 'cutoff': opts.cutoff,
+               'profiling_mode': opts.profiling_mode}
 
     # ----- Fused halves + projectors per site. Normally one worker job holds
     # a single autograd graph from the 16 env leaves through halves to both
@@ -1142,18 +1155,26 @@ def _assign_stage3_outs(env, site, mv, outs):
             env[site].br = res_corner_b
 
 
-def update_AD_(env, opts_svd, moves='hv', method='2x2', devices=None,
-               **kwargs):
-    """One CTM sweep, AD-aware distributed."""
+def update_AD_(env, opts_svd=None, moves=None, method=None, devices=None,
+               *, opts=None, **kwargs):
+    """One CTM sweep, AD-aware distributed.
+
+    ``method`` is accepted for signature parity with the other update
+    entry points; this path is hardwired to the fused 2x2 halves.
+    """
+    opts = make_ctm_opts(opts if opts is not None else env.default_opts,
+                         opts_svd=opts_svd, moves=moves, method=method,
+                         devices=devices, **kwargs)
+    devices = list(opts.devices) if opts.devices else None
     if devices is None:
         raise ValueError("update_AD_ requires devices=...")
-    for mv in moves:
-        update_core_AD_(env, mv, opts_svd, devices, **kwargs)
+    for mv in opts.moves:
+        update_core_AD_(env, opts, mv, devices)
     return env
 
 
-def iterate_AD_(env, opts_svd, moves='hv', method='2x2', max_sweeps=1,
-                devices=None, **kwargs):
+def iterate_AD_(env, opts_svd=None, moves=None, method=None, max_sweeps=None,
+                devices=None, *, opts=None, **kwargs):
     """Generator: forward CTMRG convergence loop, AD-aware distributed.
 
     Drop-in replacement for ``_env_ctm_dist_mp.iterate_D_`` at the
@@ -1177,20 +1198,17 @@ def iterate_AD_(env, opts_svd, moves='hv', method='2x2', max_sweeps=1,
     import torch
     from ._env_ctm import CTMRG_out
 
-    if devices is None or len(devices) < 1:
+    opts = make_ctm_opts(opts if opts is not None else env.default_opts,
+                         opts_svd=opts_svd, moves=moves, method=method,
+                         max_sweeps=max_sweeps, devices=devices, **kwargs)
+    if not opts.devices:
         raise ValueError("iterate_AD_ requires devices=...")
 
-    # Strip control kwargs that don't belong on update_AD_'s projector path.
-    # corner_tol / iterator_step belong to the iterate_D_ generator API;
-    # checkpoint_move is a backward-graph option, irrelevant for no_grad fwd.
-    update_kwargs = {k: v for k, v in kwargs.items()
-                     if k not in ('iterator_step', 'corner_tol',
-                                   'iterator', 'checkpoint_move')}
-
-    for sweep in range(1, max_sweeps + 1):
+    # Sweep-loop controls (corner_tol, iterator_step, checkpoint_move) are
+    # fields of CTMOpts, update_AD_ simply ignores what does not concern it; no deny-list is needed.
+    for sweep in range(1, opts.max_sweeps + 1):
         with torch.no_grad():
-            update_AD_(env, opts_svd=opts_svd, moves=moves,
-                       method=method, devices=devices, **update_kwargs)
+            update_AD_(env, opts=opts)
         yield CTMRG_out(sweeps=sweep, max_dsv=None,
                         max_D=env.max_D(), converged=False)
 
@@ -1199,12 +1217,40 @@ def iterate_AD_(env, opts_svd, moves='hv', method='2x2', max_sweeps=1,
 # Drop-in replacement for env.update_(...) inside fixed_point_iter
 # ===========================================================================
 
-def fp_update_(env_in, ctm_opts_fp):
-    """Honor ``ctm_opts_fp['fp_devices']`` to switch between serial and
-    distributed-AD updates.
+def fp_update_(env_in, ctm_opts_fp, devices=None):
+    """The gauge-fixing CTM step, serial or distributed-AD.
+
+    ``devices`` selects between the two. A plain dict is still accepted for
+    ``ctm_opts_fp`` -- normalized to :class:`CTMOpts` here, with the legacy
+    ``fp_devices`` key honoured as a fallback for ``devices``.
     """
-    fp_devices = ctm_opts_fp.get('fp_devices', None)
-    opts = {k: v for k, v in ctm_opts_fp.items() if k != 'fp_devices'}
-    if fp_devices is None:
-        return env_in.update_(**opts)
-    return update_AD_(env_in, devices=fp_devices, **opts)
+    if isinstance(ctm_opts_fp, CTMOpts):
+        opts = ctm_opts_fp
+        devices = devices or (list(opts.devices) if opts.devices else None)
+    else:
+        devices = devices or ctm_opts_fp.get('fp_devices', None)
+        opts = make_ctm_opts(**{k: v for k, v in ctm_opts_fp.items()
+                                if k != 'fp_devices'})
+    # SI projectors are implemented ONLY on the serial env.update_ path; this
+    # module never reads opts_si. Routing an SI run through update_AD_ therefore
+    # builds the FP step's T tensors with the DENSE SVD while the forward loop
+    # built T_old with SI (fixed_pt.py:863 picks env.ctmrg_ when len(devices)==1).
+    # The two truncations choose different per-sector dims, so the fixed-point
+    # check at fixed_pt.py:370 rejects every step with
+    #   "T tensors' symmetry sectors change after a CTM step"
+    # -- MEASURED 8/8 and then 3/3 (jobs 4979024, 4983840).
+    #
+    # When the devices all name ONE physical card the distributed path buys no
+    # parallelism anyway (it shards over SITE GROUPS, and a 1-site cell has one),
+    # so fall back to serial and keep SI self-consistent. This also covers the
+    # '--devices <d> <d>' duplicate form that fp_ctmrg synthesises.
+    distinct = len(set(devices)) if devices else 0
+    if not devices or (opts.si_enabled and distinct == 1):
+        return env_in.update_(opts=opts)
+    if opts.si_enabled:
+        log.warning(
+            "SI projectors requested but the FP CTM step is dispatching to the "
+            "distributed path on %d distinct devices, which ignores opts_si. The "
+            "fixed-point sector check will fail. Use one device, or wire opts_si "
+            "through this module.", distinct)
+    return update_AD_(env_in, opts=opts, devices=devices)
