@@ -491,7 +491,7 @@ def _recv_payload(p, device=None):
 
 def _worker_main(rank, device, config_desc, cmd_q, res_q, parent_sys_path,
                  log_queue=None, log_level=logging.INFO, logger_levels=None):
-    import sys, torch
+    import os, sys, torch
 
     for p in reversed(parent_sys_path):
         if p and p not in sys.path:
@@ -533,6 +533,23 @@ def _worker_main(rank, device, config_desc, cmd_q, res_q, parent_sys_path,
                 saved_graphs.pop(gid, None)
             continue
         if cmd == 'empty_cache':
+            # True allocator high-water mark for THIS process. Issued once per
+            # step at the one moment the worker is idle and its peak is final,
+            # so it costs nothing and cannot be confused with a mid-stage
+            # reading. Nothing else sees this number: the energy_mp probe is a
+            # DIFFERENT process with its own allocator, and the FixedPoint
+            # backward's large tensors live here, not there. Logged BEFORE
+            # empty_cache, which would otherwise wipe the reserve figure.
+            if os.environ.get('YASTN_MEM_PROBE') and str(device).startswith('cuda'):
+                try:
+                    log.warning(
+                        "MEMPROBE ctm rank %d dev %s alloc_peak_MiB %.1f reserved_MiB %.1f",
+                        rank, device,
+                        torch.cuda.max_memory_allocated(device) / 2**20,
+                        torch.cuda.max_memory_reserved(device) / 2**20)
+                    torch.cuda.reset_peak_memory_stats(device)
+                except Exception:
+                    pass
             # Return this worker's cached-but-unused GPU blocks to the driver.
             # Issued when the worker is idle (after the FP backward's stage
             # work + drop_graphs), so the next step's forward -- which runs in
@@ -1154,6 +1171,26 @@ def fp_update_(env_in, ctm_opts_fp, devices=None):
         devices = devices or ctm_opts_fp.get('fp_devices', None)
         opts = make_ctm_opts(**{k: v for k, v in ctm_opts_fp.items()
                                 if k != 'fp_devices'})
-    if not devices:
+    # SI projectors are implemented ONLY on the serial env.update_ path; this
+    # module never reads opts_si. Routing an SI run through update_AD_ therefore
+    # builds the FP step's T tensors with the DENSE SVD while the forward loop
+    # built T_old with SI (fixed_pt.py:863 picks env.ctmrg_ when len(devices)==1).
+    # The two truncations choose different per-sector dims, so the fixed-point
+    # check at fixed_pt.py:370 rejects every step with
+    #   "T tensors' symmetry sectors change after a CTM step"
+    # -- MEASURED 8/8 and then 3/3 (jobs 4979024, 4983840).
+    #
+    # When the devices all name ONE physical card the distributed path buys no
+    # parallelism anyway (it shards over SITE GROUPS, and a 1-site cell has one),
+    # so fall back to serial and keep SI self-consistent. This also covers the
+    # '--devices <d> <d>' duplicate form that fp_ctmrg synthesises.
+    distinct = len(set(devices)) if devices else 0
+    if not devices or (opts.si_enabled and distinct == 1):
         return env_in.update_(opts=opts)
+    if opts.si_enabled:
+        log.warning(
+            "SI projectors requested but the FP CTM step is dispatching to the "
+            "distributed path on %d distinct devices, which ignores opts_si. The "
+            "fixed-point sector check will fail. Use one device, or wire opts_si "
+            "through this module.", distinct)
     return update_AD_(env_in, opts=opts, devices=devices)

@@ -247,7 +247,6 @@ class CTMOpts:
     profiling_mode: str | None = field(default=None, metadata={
         'help': "profiling instrumentation, e.g. 'NVTX'"})
     verbosity: int = field(default=0, metadata={'help': 'diagnostic verbosity'})
-
     def __post_init__(self):
         st = lambda name, value: object.__setattr__(self, name, value)
 
@@ -371,6 +370,25 @@ class FixedPointOpts:
     devices: tuple[str, ...] | None = field(default=None, metadata={
         'help': 'devices for the distributed fixed-point path'})
     verbosity: int = field(default=0, metadata={'help': 'diagnostic verbosity'})
+    # Forward-CTM block-min stagnation early-stop. The logic lives in
+    # FixedPoint.get_converged_env; without these fields fp_ctmrg had no way to
+    # reach it, so the detector was unreachable (stuck_block defaulted to 0 =
+    # off) even though its keyword arguments were still implemented.
+    stuck_block: int = field(default=0, metadata={
+        'help': 'sweeps per block for the stuck detector; 0 disables it'})
+    stuck_window: int = field(default=3, metadata={
+        'help': 'how many blocks back the block minimum is compared against'})
+    stuck_factor: float = field(default=2.0, metadata={
+        'help': 'improvement factor the block minimum must beat'})
+    stuck_min_sweeps: int = field(default=60, metadata={
+        'help': 'sweeps before the stuck detector may fire'})
+
+    @property
+    def stuck_kwargs(self) -> dict:
+        """The stuck-detector keyword arguments of ``get_converged_env``."""
+        return {'stuck_block': self.stuck_block, 'stuck_window': self.stuck_window,
+                'stuck_factor': self.stuck_factor,
+                'stuck_min_sweeps': self.stuck_min_sweeps}
 
     def __post_init__(self):
         for name in ('fwd', 'fp'):
@@ -418,6 +436,16 @@ class FixedPointOpts:
                                  fwd_kwargs.pop('neumann_patience', 10))
         legacy_devices = fp_kwargs.pop('fp_devices', None)
 
+        # Forward-CTM stuck detector: get_converged_env keyword arguments, not CTM
+        # options. Taken from fwd (that is the only loop they act on); a copy in fp
+        # is accepted and ignored so an inherited dict does not raise.
+        stuck = {}
+        for _k, _d in (('stuck_block', 0), ('stuck_window', 3),
+                       ('stuck_factor', 2.0), ('stuck_min_sweeps', 60)):
+            _v = fwd_kwargs.pop(_k, _d)
+            fp_kwargs.pop(_k, None)
+            stuck[_k] = _v
+
         # The diagnostic verbosity of the backward pass came from ctm_opts_fp
         # alone, defaulting to 0 -- it did NOT inherit fwd's. Keep that: it is
         # distinct from fp.verbosity, which is the merged CTM-level setting.
@@ -426,7 +454,7 @@ class FixedPointOpts:
         fwd = make_ctm_opts(**fwd_kwargs)
         fp = make_ctm_opts(fwd, **fp_kwargs)  # inherit everything, override selectively
         return cls(fwd=fwd, fp=fp, devices=devices or legacy_devices,
-                   neumann_patience=patience, verbosity=verbosity)
+                   neumann_patience=patience, verbosity=verbosity, **stuck)
 
 
 # ----------------------------------------------------------------------
