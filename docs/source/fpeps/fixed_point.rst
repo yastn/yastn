@@ -121,10 +121,14 @@ directly as ``opts=`` instead of the two dicts. See :doc:`ctm_options`.
 Running on several devices: single-node multi-gpu
 -------------------------------------------------
 
-For multi-site unit cells, CTM can be parallelized across the unit-cell sites.
-Such multi-device runs, passing ``devices=[...]`` with more than one entry, route the forward
-convergence, the extra CTM step and the Neumann iterations through the
-distributed CTM workers of :mod:`yastn.tn.fpeps.envs._env_ctm_dist_mp_AD`.
+CTM projector work is parallelized across unit-cell sites, and the directional
+environment updates are balanced independently across workers.  For a
+single-site cell, the two projector branches and the two directional updates
+can use two workers.  Passing ``devices=[...]`` with more than one entry routes
+the forward convergence, the extra CTM step and the Neumann iterations through
+the distributed CTM workers of :mod:`yastn.tn.fpeps.envs._env_ctm_dist_mp_AD`.
+Recycled subspace-iteration projectors currently remain on the serial CTM path,
+even when several devices are supplied.
 Note that ``devices=['cpu', 'cpu']`` is a legitimate configuration and exercises the full multiprocess path.
 
 
@@ -202,8 +206,10 @@ needs the usual ``if __name__ == '__main__'`` guard::
     if __name__ == '__main__':
         main()
 
-With ``devices=[home]`` (or ``devices=None``) the same script runs serially
-in the main process without spawning workers.
+With ``devices=[home]`` (or ``devices=None``) CTM computation remains serial in
+the main process without spawning workers.  An explicit one-device list selects
+the ordinary ``torch.autograd.grad`` fixed-point linearization; ``None`` keeps
+the ``torch.func.vjp`` implementation.
 
 API
 ---

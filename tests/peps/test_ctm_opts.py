@@ -46,6 +46,7 @@ def test_ctm_opts_defaults():
     assert o.checkpoint_move is False
     assert o.devices is None
     assert o.profiling_mode is None
+    assert o.intra_site_parallel == 'auto'
     assert o.verbosity == 0
 
 
@@ -286,9 +287,37 @@ def test_opts_si_accepts_dict_or_object():
 
 def test_devices_normalized_to_tuple():
     assert make_ctm_opts(devices=['cuda:0', 'cuda:1']).devices == ('cuda:0', 'cuda:1')
+    assert make_ctm_opts(devices='cuda').devices == ('cuda:0',)
+    assert make_ctm_opts(devices=['cuda', 'cuda:00', 'cuda:1', 'cuda:01']).devices == (
+        'cuda:0', 'cuda:1')
+    assert make_ctm_opts(devices=['cpu', 'cpu', 7]).devices == ('cpu', 'cpu', '7')
     assert make_ctm_opts().devices is None
     with pytest.raises(YastnError, match='devices'):
         make_ctm_opts(devices=[])
+
+
+def test_fixed_point_devices_use_the_same_normalization():
+    o = make_fixed_point_opts(devices=['cuda', 'cuda:0', 'cpu', 'cpu'])
+    assert o.devices == ('cuda:0', 'cpu', 'cpu')
+    with pytest.raises(YastnError, match='devices'):
+        make_fixed_point_opts(devices=[])
+
+
+@pytest.mark.parametrize('value', [True, False, 'auto'])
+def test_accepted_intra_site_parallel(value):
+    assert make_ctm_opts(intra_site_parallel=value).intra_site_parallel == value
+
+
+@pytest.mark.parametrize('value', [None, 0, 1, 'yes', 'Auto'])
+def test_bad_intra_site_parallel_raises(value):
+    if value is None:
+        # A direct constructor/override can carry an explicit None; the factory
+        # reserves None for "not supplied".
+        with pytest.raises(YastnError, match='intra_site_parallel'):
+            CTMOpts(intra_site_parallel=value)
+    else:
+        with pytest.raises(YastnError, match='intra_site_parallel'):
+            make_ctm_opts(intra_site_parallel=value)
 
 
 # ----------------------------------------------------------------------
@@ -444,14 +473,18 @@ def test_from_legacy_dicts_fp_overrides_win():
     assert o.fwd.max_sweeps == 7, "overriding fp must not touch fwd"
 
 
-def test_from_legacy_dicts_lifts_non_ctm_keys():
-    """ neumann_patience and fp_devices are not CTM options; before they were
-        lifted out, make_ctm_opts rejected them (a Phase-2 regression). """
+def test_from_legacy_dicts_lifts_neumann_patience():
     o = FixedPointOpts.from_legacy_dicts(
         {'opts_svd': {'D_total': 8}, 'max_sweeps': 5},
-        {'neumann_patience': 3, 'fp_devices': ['cuda:0', 'cuda:1']})
+        {'neumann_patience': 3})
     assert o.neumann_patience == 3
-    assert o.devices == ('cuda:0', 'cuda:1')
+
+
+def test_from_legacy_dicts_rejects_fp_devices():
+    with pytest.raises(YastnError, match='not recognized'):
+        FixedPointOpts.from_legacy_dicts(
+            {'opts_svd': {'D_total': 8}},
+            {'fp_devices': ['cuda:0', 'cuda:1']})
 
 
 def test_from_legacy_dicts_backward_verbosity_does_not_inherit():

@@ -45,7 +45,6 @@ def _fp_basis_policy_case(config_kwargs, monkeypatch, *, errors=None,
         pytest.skip('torch.func.vjp does not support torch_cutensor custom ops')
     from yastn.tn.fpeps.envs import make_ctm_opts, make_fixed_point_opts
     from yastn.tn.fpeps.envs import fixed_pt
-    from yastn.tn.fpeps.envs import _env_ctm_dist_mp_AD as dispatch
 
     config = yastn.make_config(sym='none', **config_kwargs)
     config.backend.random_seed(seed=91)
@@ -122,14 +121,6 @@ def _fp_basis_policy_case(config_kwargs, monkeypatch, *, errors=None,
                         staticmethod(record_forward))
     monkeypatch.setattr(fixed_pt.FixedPoint, 'fixed_point_iter',
                         staticmethod(record_iter))
-    # Select the real autograd.grad branch without starting worker processes;
-    # the distributed projector implementation does not support SI yet.
-    if use_autograd:
-        monkeypatch.setattr(dispatch, 'fp_update_',
-                            lambda current, current_opts, **_kwargs:
-                            current.update_(opts=current_opts))
-        monkeypatch.setattr(dispatch, 'release_pool_cache', lambda: None)
-
     with warnings.catch_warnings(record=True) as forward_warnings:
         warnings.simplefilter('always')
         result = fixed_pt.fp_ctmrg(env, opts=opts)

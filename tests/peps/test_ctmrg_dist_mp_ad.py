@@ -185,3 +185,22 @@ def test_two_site_directional_parallel_cpu_forward_and_backward(move):
     assert len(gradients_parallel) == len(gradients_ref)
     for actual, expected in zip(gradients_parallel, gradients_ref):
         torch.testing.assert_close(actual, expected, rtol=1e-9, atol=1e-10)
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"moves": "l"}, "simultaneous 'h' and 'v' moves"),
+        ({"method": "1x2"}, "2x2 projector method"),
+        ({"checkpoint_move": "nonreentrant"}, "checkpoint_move"),
+        ({"opts_si": {"enabled": True}}, "does not support opts_si"),
+    ],
+)
+def test_distributed_ad_rejects_unsupported_options_before_dispatch(
+        kwargs, message):
+    """The AD path must not silently ignore serial-only CTM features."""
+    from yastn.tn.fpeps.envs._env_ctm_dist_mp_AD import update_AD_
+
+    env = _make_env()
+    with pytest.raises(yastn.YastnError, match=message):
+        update_AD_(env, devices=["cpu", "cpu"], **kwargs)
