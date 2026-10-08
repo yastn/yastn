@@ -250,12 +250,12 @@ class CTMOpts:
         devices are removed; repeated CPU entries remain separate worker ranks.
     profiling_mode: str | None
         Profiling instrumentation, e.g. ``'NVTX'``.
-    intra_site_parallel: True | False | 'auto'
-        Balance the independent directional environment updates across
-        workers. For a single-site unit cell, also dispatch the two projector
-        pairs to separate ranks. ``True`` and ``'auto'`` enable this whenever
-        two eligible ranks exist; ``False`` preserves site-affine scheduling.
-        Repeated CUDA device strings do not count as eligible.
+    parallelism: 'auto' | 'sites' | 'intra_site'
+        Scheduling policy for distributed CTM. ``'sites'`` keeps each site's
+        projector and directional jobs on one worker. ``'intra_site'`` treats
+        projector branches and directions as independent jobs. ``'auto'``
+        prefers site scheduling and uses otherwise-idle workers for intra-site
+        jobs.
     verbosity: int
         Diagnostic verbosity.
     """
@@ -287,8 +287,8 @@ class CTMOpts:
         'help': 'devices for the distributed CTM paths'})
     profiling_mode: str | None = field(default=None, metadata={
         'help': "profiling instrumentation, e.g. 'NVTX'"})
-    intra_site_parallel: Literal[True, False, 'auto'] = field(default='auto', metadata={
-        'help': "balance directional updates; split 1-site projector pairs"})
+    parallelism: Literal['auto', 'sites', 'intra_site'] = field(default='auto', metadata={
+        'help': "distributed scheduling: 'auto', 'sites', or 'intra_site'"})
     verbosity: int = field(default=0, metadata={'help': 'diagnostic verbosity'})
     def __post_init__(self):
         st = lambda name, value: object.__setattr__(self, name, value)
@@ -315,12 +315,10 @@ class CTMOpts:
 
         st('devices', _normalize_devices(self.devices))
 
-        if not (self.intra_site_parallel is True or
-                self.intra_site_parallel is False or
-                self.intra_site_parallel == 'auto'):
+        if self.parallelism not in ('auto', 'sites', 'intra_site'):
             raise YastnError(
-                f"intra_site_parallel={self.intra_site_parallel!r} not recognized. "
-                "Should be True, False, or 'auto'.")
+                f"parallelism={self.parallelism!r} not recognized. Should be "
+                "'auto', 'sites', or 'intra_site'.")
 
         if not self.checkpoint_move:  # normalize 0/None/'' to False
             st('checkpoint_move', False)

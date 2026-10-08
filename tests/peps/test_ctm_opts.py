@@ -46,7 +46,7 @@ def test_ctm_opts_defaults():
     assert o.checkpoint_move is False
     assert o.devices is None
     assert o.profiling_mode is None
-    assert o.intra_site_parallel == 'auto'
+    assert o.parallelism == 'auto'
     assert o.verbosity == 0
 
 
@@ -303,21 +303,26 @@ def test_fixed_point_devices_use_the_same_normalization():
         make_fixed_point_opts(devices=[])
 
 
-@pytest.mark.parametrize('value', [True, False, 'auto'])
-def test_accepted_intra_site_parallel(value):
-    assert make_ctm_opts(intra_site_parallel=value).intra_site_parallel == value
+@pytest.mark.parametrize('value', ['auto', 'sites', 'intra_site'])
+def test_accepted_parallelism(value):
+    assert make_ctm_opts(parallelism=value).parallelism == value
 
 
-@pytest.mark.parametrize('value', [None, 0, 1, 'yes', 'Auto'])
-def test_bad_intra_site_parallel_raises(value):
+@pytest.mark.parametrize('value', [None, True, False, 'yes', 'Auto'])
+def test_bad_parallelism_raises(value):
     if value is None:
         # A direct constructor/override can carry an explicit None; the factory
         # reserves None for "not supplied".
-        with pytest.raises(YastnError, match='intra_site_parallel'):
-            CTMOpts(intra_site_parallel=value)
+        with pytest.raises(YastnError, match='parallelism'):
+            CTMOpts(parallelism=value)
     else:
-        with pytest.raises(YastnError, match='intra_site_parallel'):
-            make_ctm_opts(intra_site_parallel=value)
+        with pytest.raises(YastnError, match='parallelism'):
+            make_ctm_opts(parallelism=value)
+
+
+def test_removed_intra_site_parallel_is_rejected():
+    with pytest.raises(YastnError, match='not recognized'):
+        make_ctm_opts(intra_site_parallel=True)
 
 
 # ----------------------------------------------------------------------
@@ -397,6 +402,7 @@ def test_argspec_covers_schema_with_dotted_nested_names():
     assert spec['opts_si.niter'][0] == 5
     # choices come from the Literal annotations, not a hand-kept list
     assert spec['checkpoint_move'][2] == (False, 'reentrant', 'nonreentrant')
+    assert spec['parallelism'][2] == ('auto', 'sites', 'intra_site')
     assert spec['opts_si.refinement'][2] == (
         'per_sector_oversampling', 'adaptive_spectrum', 'sector_dimensions')
     assert spec['max_sweeps'][2] is None

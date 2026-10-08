@@ -201,6 +201,10 @@ class _DistCTMPool:
             p.join(timeout=10)
             if p.is_alive():
                 p.terminate()
+                # A terminated non-daemon child must still be reaped. Leaving
+                # it unjoined makes multiprocessing's interpreter-exit hook
+                # wait on the worker after our own shutdown has returned.
+                p.join(timeout=10)
         # Stop the listener only after workers are joined, so any record they
         # emitted has been enqueued before the listener drains and stops.
         from ...._mp_logging import stop_parent_log_listener
@@ -973,11 +977,8 @@ def update_core_AD_(env, opts, move, devices):
     have ``_data`` carrying autograd tracking, so backward through
     ``env``'s output env tensors flows to the original input tensors.
 
-    ``intra_site_parallel`` controls whether directional environment updates
-    are balanced independently across active workers. For a single-site unit
-    cell, it also lets the two projector pairs run as separate fused jobs. The
-    default, ``'auto'``, enables this whenever two active ranks are available;
-    ``False`` preserves the original site-affine scheduling.
+    ``parallelism`` selects site-affine scheduling, independent intra-site
+    jobs, or automatic use of workers left idle by site parallelism.
     """
     from ._env_contractions import (
         update_env_fetch_args,
@@ -993,21 +994,17 @@ def update_core_AD_(env, opts, move, devices):
     # 'h'/'v' moves use one site group containing all sites.
     sites_proj = list(env.sites())
 
-    intra_site_parallel = opts.intra_site_parallel
+    parallelism = opts.parallelism
 
     # Device normalization has already removed duplicate CUDA devices while
     # preserving deliberately repeated CPU entries. Every pool worker is
     # therefore active and participates in the same scheduling policy.
     active_ranks = list(range(pool.n_workers))
 
-    parallelize_directions = (
-        intra_site_parallel is not False and
-        len(active_ranks) >= 2
+    use_intra_jobs = len(active_ranks) >= 2 and (
+        parallelism == 'intra_site' or
+        (parallelism == 'auto' and len(sites_proj) < len(active_ranks))
     )
-    split_single_site_projectors = (
-        parallelize_directions and len(sites_proj) == 1
-    )
-    projector_split_ranks = active_ranks[:2]
 
     # Round-robin over workers per site (deterministic given env.sites() order).
     site_to_rank = {}
@@ -1025,18 +1022,30 @@ def update_core_AD_(env, opts, move, devices):
     kw_proj = {'use_qr': opts.use_qr, 'cutoff': opts.cutoff,
                'profiling_mode': opts.profiling_mode}
 
-    # ----- Fused halves + projectors per site. Normally one worker job holds
-    # a single autograd graph from the 16 env leaves through halves to both
-    # projector pairs, eliminating the previous design's two-graph worker
-    # state and the halves IPC round-trip. For a single-site unit cell with
-    # two active ranks, issue one fused halves + single-pair job per rank.
-    # This duplicates the halves computation, but avoids transferring the
-    # large halves and lets the independent projector SVDs run concurrently.
+    # ----- Fused halves + projectors per site. Site scheduling keeps both
+    # projector pairs in one job and one autograd graph. Intra-site scheduling
+    # emits one job per pair; this duplicates the halves computation but lets
+    # the two independent projector SVDs run concurrently. Auto scheduling
+    # splits only enough sites to occupy workers left idle by the site jobs.
     # 'h' move -> pairs (rh, lh); 'v' move -> (tv, bv).
     pairs = ('rh', 'lh') if move == 'h' else ('tv', 'bv')
     stage12_jobs = []
     stage12_meta = []
     projector_ranks = {}
+    stage12_rank_load = {rank: 0 for rank in active_ranks}
+    auto_split_sites = set()
+    if parallelism == 'auto':
+        spare_ranks = max(0, len(active_ranks) - len(sites_proj))
+        auto_split_sites.update(sites_proj[:spare_ranks])
+
+    def _least_loaded_stage12_rank(preferred=None):
+        min_load = min(stage12_rank_load.values())
+        candidates = [rank for rank in active_ranks
+                      if stage12_rank_load[rank] == min_load]
+        rank = preferred if preferred in candidates else candidates[0]
+        stage12_rank_load[rank] += 1
+        return rank
+
     for site in sites_proj:
         tl, tr, bl, br = (env.nn_site(site, d=d)
                           for d in ((0, 0), (0, 1), (1, 0), (1, 1)))
@@ -1046,8 +1055,11 @@ def update_core_AD_(env, opts, move, devices):
             env[tr].t, env[tr].tr, env[tr].r, env.psi[tr],
             env[br].r, env[br].br, env[br].b, env.psi[br],
         ]
-        if split_single_site_projectors:
-            for pair, rank in zip(pairs, projector_split_ranks):
+        split_projectors = use_intra_jobs and (
+            parallelism == 'intra_site' or site in auto_split_sites)
+        if split_projectors:
+            for pair in pairs:
+                rank = _least_loaded_stage12_rank()
                 extra = {'move': move, 'pairs': (pair,),
                          'opts_svd': opts_svd, 'kwargs': kw_proj}
                 stage12_jobs.append((rank, extra, ts_args))
@@ -1056,7 +1068,7 @@ def update_core_AD_(env, opts, move, devices):
         else:
             extra = {'move': move, 'pairs': pairs,
                      'opts_svd': opts_svd, 'kwargs': kw_proj}
-            rank = _rank_for(site)
+            rank = _least_loaded_stage12_rank(_rank_for(site))
             stage12_jobs.append((rank, extra, ts_args))
             stage12_meta.append((site, pairs))
             for pair in pairs:
@@ -1089,7 +1101,7 @@ def update_core_AD_(env, opts, move, devices):
     for site in sites_proj:
         for mv in sub_moves:
             args = list(update_env_fetch_args(site, env, mv))
-            if parallelize_directions:
+            if use_intra_jobs:
                 projector_pair = {
                     'l': 'lh', 'r': 'rh', 't': 'tv', 'b': 'bv'
                 }[mv]

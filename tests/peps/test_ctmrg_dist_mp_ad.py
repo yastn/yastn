@@ -77,8 +77,7 @@ def _weighted_loss(outputs):
     return loss
 
 
-def _run_update(base_env, *, move, intra_site_parallel,
-                devices=("cpu", "cpu")):
+def _run_update(base_env, *, move, parallelism, devices=("cpu", "cpu")):
     from yastn.tn.fpeps.envs._env_ctm_dist_mp_AD import (
         get_or_create_pool, update_AD_)
 
@@ -107,7 +106,7 @@ def _run_update(base_env, *, move, intra_site_parallel,
             method="2x2",
             devices=devices,
             use_qr=False,
-            intra_site_parallel=intra_site_parallel,
+            parallelism=parallelism,
         )
         outputs = _output_data(env)
         _weighted_loss(outputs).backward()
@@ -121,7 +120,9 @@ def _run_update(base_env, *, move, intra_site_parallel,
 
 
 @pytest.mark.parametrize("move", ["h", "v"])
-def test_one_site_intra_site_parallel_cpu_forward_and_backward(move):
+@pytest.mark.parametrize("parallelism", ["auto", "intra_site"])
+def test_one_site_intra_site_parallel_cpu_forward_and_backward(
+        move, parallelism):
     """Intra-site dispatch preserves one-site CTM outputs and gradients."""
     torch = pytest.importorskip("torch")
     base_env = _make_env()
@@ -129,11 +130,11 @@ def test_one_site_intra_site_parallel_cpu_forward_and_backward(move):
     # Finish backward before enabling the alternative dispatch.  Dropping the
     # first graph also lets the persistent workers release their saved graphs.
     outputs_ref, gradients_ref, jobs_ref = _run_update(
-        base_env, move=move, intra_site_parallel=False)
+        base_env, move=move, parallelism="sites")
     gc.collect()
 
     outputs_parallel, gradients_parallel, jobs_parallel = _run_update(
-        base_env, move=move, intra_site_parallel=True)
+        base_env, move=move, parallelism=parallelism)
 
     assert {rank for jobs in jobs_ref.values() for rank, _ in jobs} == {0}
     assert {rank for jobs in jobs_parallel.values() for rank, _ in jobs} == {0, 1}
@@ -147,36 +148,60 @@ def test_one_site_intra_site_parallel_cpu_forward_and_backward(move):
         torch.testing.assert_close(actual, expected, rtol=1e-9, atol=1e-10)
 
 
+def test_intra_site_policy_degrades_to_sites_with_one_worker():
+    """Do not duplicate the fused halves when no second worker can help."""
+    base_env = _make_env()
+    _, _, jobs = _run_update(
+        base_env, move="h", parallelism="intra_site", devices=("cpu",))
+
+    assert jobs["stage12"] == [(0, ("rh", "lh"))]
+    assert jobs["stage3"] == [(0, "l"), (0, "r")]
+
+
 @pytest.mark.parametrize("move", ["h", "v"])
-def test_two_site_directional_parallel_cpu_forward_and_backward(move):
+@pytest.mark.parametrize("parallelism", ["auto", "intra_site"])
+def test_two_site_directional_parallel_cpu_forward_and_backward(
+        move, parallelism):
     """Directional Stage-3 jobs use spare ranks without changing the map."""
     torch = pytest.importorskip("torch")
     base_env = _make_env(n_sites=2)
     devices = ("cpu", "cpu", "cpu")
 
     outputs_ref, gradients_ref, jobs_ref = _run_update(
-        base_env, move=move, intra_site_parallel=False, devices=devices)
+        base_env, move=move, parallelism="sites", devices=devices)
     gc.collect()
 
     outputs_parallel, gradients_parallel, jobs_parallel = _run_update(
-        base_env, move=move, intra_site_parallel=True, devices=devices)
+        base_env, move=move, parallelism=parallelism, devices=devices)
 
-    # Stage 1/2 has one job per site. The baseline pins each site's two
-    # directional Stage-3 jobs to that site's rank. Load-aware directional
-    # scheduling assigns the third job to the otherwise idle rank 2, then
-    # keeps the fourth job on its equally-loaded projector-producing rank 1.
+    # Site scheduling has one Stage-12 job per site and pins both directional
+    # Stage-3 jobs to that rank. Auto splits only enough projector jobs to use
+    # the spare worker; intra_site splits both sites into independent pairs.
     pairs = ("rh", "lh") if move == "h" else ("tv", "bv")
     submoves = ("l", "r") if move == "h" else ("t", "b")
     assert jobs_ref["stage12"] == [(0, pairs), (1, pairs)]
-    assert jobs_parallel["stage12"] == [(0, pairs), (1, pairs)]
+    if parallelism == "auto":
+        assert jobs_parallel["stage12"] == [
+            (0, (pairs[0],)), (1, (pairs[1],)), (2, pairs)]
+    else:
+        assert jobs_parallel["stage12"] == [
+            (0, (pairs[0],)), (1, (pairs[1],)),
+            (2, (pairs[0],)), (0, (pairs[1],)),
+        ]
     assert jobs_ref["stage3"] == [
         (0, submoves[0]), (0, submoves[1]),
         (1, submoves[0]), (1, submoves[1]),
     ]
-    assert jobs_parallel["stage3"] == [
-        (0, submoves[0]), (1, submoves[1]),
-        (2, submoves[0]), (1, submoves[1]),
-    ]
+    if move == "h":
+        expected_stage3 = [
+            (1, "l"), (0, "r"), (2, "l"), (2, "r")]
+    elif parallelism == "auto":
+        expected_stage3 = [
+            (0, "t"), (1, "b"), (2, "t"), (2, "b")]
+    else:
+        expected_stage3 = [
+            (0, "t"), (1, "b"), (2, "t"), (0, "b")]
+    assert jobs_parallel["stage3"] == expected_stage3
 
     assert len(outputs_parallel) == len(outputs_ref)
     for actual, expected in zip(outputs_parallel, outputs_ref):

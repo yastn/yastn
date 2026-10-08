@@ -121,12 +121,15 @@ directly as ``opts=`` instead of the two dicts. See :doc:`ctm_options`.
 Running on several devices: single-node multi-gpu
 -------------------------------------------------
 
-CTM projector work is parallelized across unit-cell sites, and the directional
-environment updates are balanced independently across workers.  For a
-single-site cell, the two projector branches and the two directional updates
-can use two workers.  Passing ``devices=[...]`` with more than one entry routes
-the forward convergence, the extra CTM step and the Neumann iterations through
-the distributed CTM workers of :mod:`yastn.tn.fpeps.envs._env_ctm_dist_mp_AD`.
+Passing ``devices=[...]`` with more than one entry routes the forward
+convergence, the extra CTM step and the Neumann iterations through the
+distributed CTM workers of :mod:`yastn.tn.fpeps.envs._env_ctm_dist_mp_AD`.
+The ``parallelism`` option controls their scheduling: ``'sites'`` keeps each
+site's work together, ``'intra_site'`` schedules projector branches and
+directions independently, and the default ``'auto'`` first parallelizes sites
+and then uses otherwise-idle workers for intra-site operations.  Thus, a
+single-site cell can use two workers for its projector branches and directional
+updates without a separate device list.
 Recycled subspace-iteration projectors currently remain on the serial CTM path,
 even when several devices are supplied.
 Note that ``devices=['cpu', 'cpu']`` is a legitimate configuration and exercises the full multiprocess path.

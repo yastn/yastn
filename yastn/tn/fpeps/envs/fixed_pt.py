@@ -1075,11 +1075,14 @@ class FixedPoint(torch.autograd.Function):
                     si_opts, niter=0, redistribute_sectors=False)))
 
         # An explicit device selection uses regular autograd for the fixed-point
-        # linearization. This supports custom-op backends that torch.func.vjp
-        # cannot transform; with two or more devices it also produces ordinary
-        # tensors that the workers can pickle. With no explicit devices, retain
-        # the serial torch.func.vjp path. retain_graph=True lets regular autograd
-        # reuse the captured graph across the Neumann iterations.
+        # linearization. In particular, devices=['cuda:0'] is the single-device
+        # torch_cutensor workaround: CTM computation remains serial, while
+        # torch.autograd.grad avoids applying torch.func.vjp to custom operators
+        # registered through torch.library.register_autograd. With two or more
+        # devices, ordinary tensors are also required because worker processes
+        # cannot pickle functorch TensorWrappers. With no explicit devices,
+        # retain the serial torch.func.vjp path. retain_graph=True lets regular
+        # autograd reuse the captured graph across the Neumann iterations.
         _use_autograd_grad = bool(ctx.opts.devices)
         _use_distributed = bool(
             ctx.opts.devices and len(ctx.opts.devices) >= 2 and
