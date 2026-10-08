@@ -215,6 +215,11 @@ class CTMOpts:
         Devices for the distributed CTM paths. A list is accepted and converted.
     profiling_mode: str | None
         Profiling instrumentation, e.g. ``'NVTX'``.
+    log_sectors: bool
+        Log the environment legs' charge-sector dimensions whenever the
+        truncation reallocates them (``CTM SECTORS iter N ...``). Off by
+        default. CTM does not converge while that allocation keeps changing,
+        so this is the diagnostic for a stalled or jumping ``|delta_C|``.
     intra_site_parallel: True | False | 'auto'
         For a single-site unit cell, dispatch the two projector pairs and the
         two directional env updates to two ranks. ``'auto'`` enables it
@@ -253,6 +258,8 @@ class CTMOpts:
         'help': "profiling instrumentation, e.g. 'NVTX'"})
     intra_site_parallel: Literal[True, False, 'auto'] = field(default='auto', metadata={
         'help': "1-site cell: split the two projector pairs over two ranks"})
+    log_sectors: bool = field(default=False, metadata={
+        'help': "log env charge-sector dims whenever the truncation reallocates them"})
     verbosity: int = field(default=0, metadata={'help': 'diagnostic verbosity'})
     def __post_init__(self):
         st = lambda name, value: object.__setattr__(self, name, value)

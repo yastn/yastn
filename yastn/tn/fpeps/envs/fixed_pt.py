@@ -716,6 +716,33 @@ def fp_ctmrg(env: EnvCTM,
     return env
 
 
+
+def _env_sector_dims(env):
+    """Charge -> dim of the CORNER spectra, as a hashable signature.
+
+    MUST mirror what the convergence metric measures: ctm_conv_corner_spec ->
+    calculate_corner_svd takes the SVD spectrum of the four CORNER tensors
+    (tl, tr, bl, br), and spec_diff differences those spectra BLOCK BY CHARGE.
+    When the block structure differs between two sweeps that difference is not
+    a meaningful number, which is the thing this signature exists to detect.
+
+    (Logging the transfer tensors t/r/b/l instead looks similar but is a
+    DIFFERENT object -- their legs can change on sweeps where the corner
+    spectra do not, and vice versa.)
+    """
+    out = []
+    for site in env.sites():
+        for dirn in ('tl', 'tr', 'bl', 'br'):
+            ten = getattr(env[site], dirn, None)
+            if ten is None:
+                out.append(())
+                continue
+            lg = ten.get_legs()[0]
+            out.append(tuple((t[0] if len(t) == 1 else t, D)
+                             for t, D in zip(lg.t, lg.D)))
+    return tuple(out)
+
+
 class FixedPoint(torch.autograd.Function):
     ctm_log, t_ctm, t_check = None, None, None
 
@@ -885,6 +912,7 @@ class FixedPoint(torch.autograd.Function):
             ctm_itr = iterate_AD_(env, opts=opts, devices=devices)
 
         sweep = 0
+        prev_sectors = None
         for sweep in range(opts.max_sweeps):
             t0 = time.perf_counter()
             itr_out= next(ctm_itr)
@@ -894,8 +922,20 @@ class FixedPoint(torch.autograd.Function):
             t2 = time.perf_counter()
             converged, max_dsv, conv_history = env.ctm_conv_corner_spec(conv_history, check)
             t_check += time.perf_counter()-t2
+            # Charge-sector structure of the environment legs.  MEASURED (D=9 1x1,
+            # 2026-10-08): CTM does not converge at all while this keeps changing --
+            # |delta_C| sits at O(0.1) and oscillates -- and starts decaying
+            # geometrically on the FIRST sweep after it freezes.  A mid-solve jump in
+            # |delta_C| is the structure moving again.  So the sector signature, not
+            # just |delta_C|, is what a CTM log has to carry to be diagnosable.
+            env_dims = _env_sector_dims(env) if opts.log_sectors else None
+            if env_dims is not None and env_dims != prev_sectors:
+                log.log(logging.INFO, f"CTM SECTORS iter {len(conv_history)} {env_dims}")
+                prev_sectors = env_dims
             if opts.verbosity > 2:
-                log.log(logging.INFO, f"CTM iter {len(conv_history)} |delta_C| {max_dsv} max_de {itr_out.max_de} t {t1-t0} [s]")
+                extra = (f" env_dims {[sum(d for _, d in lg) for lg in env_dims]}"
+                         if env_dims is not None else "")
+                log.log(logging.INFO, f"CTM iter {len(conv_history)} |delta_C| {max_dsv} max_de {itr_out.max_de}{extra} t {t1-t0} [s]")
 
             if converged:
                 break
