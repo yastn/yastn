@@ -5,40 +5,39 @@
 """[PROTOTYPE] AD-aware distributed CTM step.
 
 ``_env_ctm_dist_mp.py`` parallelizes the *forward* CTM step but detaches
-tensors at the worker boundary -- backward through it is broken. This
-module is a from-scratch reimplementation that mirrors the same three-
-stage decomposition (halves -> projectors -> env update) but **preserves
-the autograd graph in the main process** by wrapping each per-site per-
-stage computation in a custom ``torch.autograd.Function``.
+tensors at the worker boundary -- backward through it is broken. This module
+uses two dispatched stages: fused halves + projectors (Stage 12), followed by
+the environment update (Stage 3). It preserves differentiation across worker
+boundaries with custom ``torch.autograd.Function`` nodes in the main process
+and saved graphs in the workers.
 
-Pattern (same for all three stages)
------------------------------------
-1. ``apply(...)`` builds a serialized payload, dispatches a ``stageN_fwd``
-   task to a worker, and synchronously gets back output data tensors +
-   metas.
-2. ``apply(...)`` then constructs an ad-hoc ``torch.autograd.Function``
-   whose ``forward`` returns the precomputed output tensors (after
-   ``save_for_backward`` of the inputs) and whose ``backward``
-   dispatches a ``stageN_bwd`` task to the *same* worker. The worker
-   re-runs the per-site computation under ``torch.enable_grad()`` and
-   returns input gradients via ``torch.autograd.grad``.
-3. Cross-site projector flow (Stage 2 outputs feed Stage 3 inputs at
+Pattern (same for both dispatched stages)
+-----------------------------------------
+1. The main process serializes inputs and dispatches a forward task. With
+   gradients enabled, the worker computes the outputs and retains its live
+   input-to-output graph.
+2. The main process returns the precomputed outputs through a custom
+   ``torch.autograd.Function``. Its backward sends cotangents to the same
+   worker, which applies ``torch.autograd.grad`` to the saved graph.
+3. Cross-site projector flow (Stage 12 outputs feed Stage 3 inputs at
    neighboring sites) is handled by main-process autograd: the same
    yastn Tensor object is consumed by multiple Stage 3 calls, so
    gradients accumulate naturally on its ``_data`` and route back to
-   the producing Stage 2 call.
+   the producing Stage 12 call.
 
 Worker stays alive across CTM calls (and across the Neumann loop in
 ``FixedPoint.backward``), so spawn cost is paid once per optimization.
 
 Scope
 -----
-- Stages 1, 2, 3 implemented (workers + main-side Functions).
-- ``update_core_AD_`` orchestrates one CTM move via the three stages.
+- Fused Stage 12 and environment-update Stage 3 are implemented in workers
+  and bridged by main-side autograd Functions.
+- ``update_core_AD_`` orchestrates one CTM move via those two stages.
 - ``update_AD_`` runs a multi-move sweep (one CTM step in
   ``fixed_point_iter`` is one sweep with the standard 'hv' moves).
 - ``fp_update_`` is the drop-in for ``env_in.update_(...)`` inside
-  ``fixed_point_iter`` -- opt-in via ``ctm_opts_fp['fp_devices']``.
+  ``fixed_point_iter`` and selects serial or distributed execution from its
+  resolved device list.
 - DoublePepsTensor handling: serialized as bra+ket pair (op currently
   unsupported -- raises if encountered).
 """
@@ -51,6 +50,7 @@ import threading
 import time
 
 from ._ctm_opts import CTMOpts, make_ctm_opts
+from ....tensor import YastnError
 
 
 log = logging.getLogger(__name__)
@@ -201,6 +201,10 @@ class _DistCTMPool:
             p.join(timeout=10)
             if p.is_alive():
                 p.terminate()
+                # A terminated non-daemon child must still be reaped. Leaving
+                # it unjoined makes multiprocessing's interpreter-exit hook
+                # wait on the worker after our own shutdown has returned.
+                p.join(timeout=10)
         # Stop the listener only after workers are joined, so any record they
         # emitted has been enqueued before the listener drains and stops.
         from ...._mp_logging import stop_parent_log_listener
@@ -912,8 +916,6 @@ def _stage_apply_batched(pool, stage, jobs):
 
         batch_meta.append({
             'rank': rank,
-            'skeleton': skeleton,
-            'bwd_payload_extra': extra,
             'input_range': (in_start, in_end),
             'output_metas': live_metas_only,
             'output_global_indices': live_global_indices,
@@ -975,13 +977,8 @@ def update_core_AD_(env, opts, move, devices):
     have ``_data`` carrying autograd tracking, so backward through
     ``env``'s output env tensors flows to the original input tensors.
 
-    ``intra_site_parallel`` controls whether a single-site unit cell may
-    use two workers for the two projector pairs and the two directional
-    environment updates. The default, ``'auto'``, enables this whenever
-    two eligible ranks are available; ``False`` preserves the one-worker
-    path. Repeated CPU ranks are eligible, while repeated CUDA device
-    strings are not (two processes on one GPU do not provide useful
-    device-level parallelism and substantially increase memory pressure).
+    ``parallelism`` selects site-affine scheduling, independent intra-site
+    jobs, or automatic use of workers left idle by site parallelism.
     """
     from ._env_contractions import (
         update_env_fetch_args,
@@ -997,36 +994,25 @@ def update_core_AD_(env, opts, move, devices):
     # 'h'/'v' moves use one site group containing all sites.
     sites_proj = list(env.sites())
 
-    intra_site_parallel = opts.intra_site_parallel
+    parallelism = opts.parallelism
 
-    # A CPU device may intentionally have multiple worker processes, so all
-    # of its ranks are useful. For CUDA, retain only the first rank for each
-    # device string: fixed_pt.py can deliberately pass [cuda:0, cuda:0] to
-    # select the distributed-autograd path on one physical GPU, and that
-    # compatibility case must not turn into intra-GPU process contention.
-    eligible_intra_ranks = []
-    seen_cuda_devices = set()
-    for rank, device in enumerate(pool.devices):
-        device_string = str(device)
-        if device_string.startswith('cuda'):
-            if device_string in seen_cuda_devices:
-                continue
-            seen_cuda_devices.add(device_string)
-        eligible_intra_ranks.append(rank)
+    # Device normalization has already removed duplicate CUDA devices while
+    # preserving deliberately repeated CPU entries. Every pool worker is
+    # therefore active and participates in the same scheduling policy.
+    active_ranks = list(range(pool.n_workers))
 
-    use_intra_site_parallel = (
-        intra_site_parallel is not False and
-        len(sites_proj) == 1 and
-        len(eligible_intra_ranks) >= 2
+    use_intra_jobs = len(active_ranks) >= 2 and (
+        parallelism == 'intra_site' or
+        (parallelism == 'auto' and len(sites_proj) < len(active_ranks))
     )
-    intra_ranks = eligible_intra_ranks[:2]
 
     # Round-robin over workers per site (deterministic given env.sites() order).
     site_to_rank = {}
 
     def _rank_for(site):
         if site not in site_to_rank:
-            site_to_rank[site] = len(site_to_rank) % pool.n_workers
+            site_to_rank[site] = active_ranks[
+                len(site_to_rank) % len(active_ranks)]
         return site_to_rank[site]
 
     # What the worker-side projector path reads. opts_svd carries the full
@@ -1036,18 +1022,30 @@ def update_core_AD_(env, opts, move, devices):
     kw_proj = {'use_qr': opts.use_qr, 'cutoff': opts.cutoff,
                'profiling_mode': opts.profiling_mode}
 
-    # ----- Fused halves + projectors per site. Normally one worker job holds
-    # a single autograd graph from the 16 env leaves through halves to both
-    # projector pairs, eliminating the previous design's two-graph worker
-    # state and the halves IPC round-trip. For a single-site unit cell with
-    # two eligible ranks, issue one fused halves + single-pair job per rank.
-    # This duplicates the halves computation, but avoids transferring the
-    # large halves and lets the independent projector SVDs run concurrently.
+    # ----- Fused halves + projectors per site. Site scheduling keeps both
+    # projector pairs in one job and one autograd graph. Intra-site scheduling
+    # emits one job per pair; this duplicates the halves computation but lets
+    # the two independent projector SVDs run concurrently. Auto scheduling
+    # splits only enough sites to occupy workers left idle by the site jobs.
     # 'h' move -> pairs (rh, lh); 'v' move -> (tv, bv).
     pairs = ('rh', 'lh') if move == 'h' else ('tv', 'bv')
     stage12_jobs = []
     stage12_meta = []
-    pair_to_rank = {}
+    projector_ranks = {}
+    stage12_rank_load = {rank: 0 for rank in active_ranks}
+    auto_split_sites = set()
+    if parallelism == 'auto':
+        spare_ranks = max(0, len(active_ranks) - len(sites_proj))
+        auto_split_sites.update(sites_proj[:spare_ranks])
+
+    def _least_loaded_stage12_rank(preferred=None):
+        min_load = min(stage12_rank_load.values())
+        candidates = [rank for rank in active_ranks
+                      if stage12_rank_load[rank] == min_load]
+        rank = preferred if preferred in candidates else candidates[0]
+        stage12_rank_load[rank] += 1
+        return rank
+
     for site in sites_proj:
         tl, tr, bl, br = (env.nn_site(site, d=d)
                           for d in ((0, 0), (0, 1), (1, 0), (1, 1)))
@@ -1057,18 +1055,24 @@ def update_core_AD_(env, opts, move, devices):
             env[tr].t, env[tr].tr, env[tr].r, env.psi[tr],
             env[br].r, env[br].br, env[br].b, env.psi[br],
         ]
-        if use_intra_site_parallel:
-            for pair, rank in zip(pairs, intra_ranks):
+        split_projectors = use_intra_jobs and (
+            parallelism == 'intra_site' or site in auto_split_sites)
+        if split_projectors:
+            for pair in pairs:
+                rank = _least_loaded_stage12_rank()
                 extra = {'move': move, 'pairs': (pair,),
                          'opts_svd': opts_svd, 'kwargs': kw_proj}
                 stage12_jobs.append((rank, extra, ts_args))
                 stage12_meta.append((site, (pair,)))
-                pair_to_rank[pair] = rank
+                projector_ranks[(site, pair)] = rank
         else:
             extra = {'move': move, 'pairs': pairs,
                      'opts_svd': opts_svd, 'kwargs': kw_proj}
-            stage12_jobs.append((_rank_for(site), extra, ts_args))
+            rank = _least_loaded_stage12_rank(_rank_for(site))
+            stage12_jobs.append((rank, extra, ts_args))
             stage12_meta.append((site, pairs))
+            for pair in pairs:
+                projector_ranks[(site, pair)] = rank
     stage12_results = _stage_apply_batched(pool, 'stage12', stage12_jobs)
 
     for (site, job_pairs), outs in zip(stage12_meta, stage12_results):
@@ -1093,14 +1097,23 @@ def update_core_AD_(env, opts, move, devices):
     sub_moves = 'lr' if move == 'h' else 'tb'
     stage3_jobs = []
     stage3_meta = []
+    stage3_rank_load = {rank: 0 for rank in active_ranks}
     for site in sites_proj:
         for mv in sub_moves:
             args = list(update_env_fetch_args(site, env, mv))
-            if use_intra_site_parallel:
+            if use_intra_jobs:
                 projector_pair = {
                     'l': 'lh', 'r': 'rh', 't': 'tv', 'b': 'bv'
                 }[mv]
-                rank = pair_to_rank[projector_pair]
+                producer_rank = projector_ranks[(site, projector_pair)]
+                min_load = min(stage3_rank_load.values())
+                least_loaded = [
+                    rank for rank in active_ranks
+                    if stage3_rank_load[rank] == min_load
+                ]
+                rank = (producer_rank if producer_rank in least_loaded
+                        else least_loaded[0])
+                stage3_rank_load[rank] += 1
             else:
                 rank = _rank_for(site)
             stage3_jobs.append((rank, {'move': mv}, args))
@@ -1148,19 +1161,40 @@ def _assign_stage3_outs(env, site, mv, outs):
             env[site].br = res_corner_b
 
 
+def _validate_ad_opts(opts, caller):
+    """Validate the subset implemented by the AD worker path."""
+    bad_moves = sorted(set(opts.moves) - set('hv'))
+    if bad_moves:
+        raise YastnError(
+            f"{caller} supports only simultaneous 'h' and 'v' moves; "
+            f"got moves={opts.moves!r}.")
+    if '2x2' not in opts.method:
+        raise YastnError(
+            f"{caller} supports only a 2x2 projector method; "
+            f"got method={opts.method!r}.")
+    if opts.checkpoint_move is not False:
+        raise YastnError(
+            f"{caller} does not support checkpoint_move; "
+            f"got checkpoint_move={opts.checkpoint_move!r}.")
+    if opts.si_enabled:
+        raise YastnError(
+            f"{caller} does not support opts_si; use the serial CTM path.")
+
+
 def update_AD_(env, opts_svd=None, moves=None, method=None, devices=None,
                *, opts=None, **kwargs):
-    """One CTM sweep, AD-aware distributed.
+    """One distributed, AD-aware CTM sweep using 2x2 ``h``/``v`` moves.
 
-    ``method`` is accepted for signature parity with the other update
-    entry points; this path is hardwired to the fused 2x2 halves.
+    Unsupported serial-path features are rejected before a worker pool is
+    created, rather than being silently ignored.
     """
     opts = make_ctm_opts(opts if opts is not None else env.default_opts,
                          opts_svd=opts_svd, moves=moves, method=method,
                          devices=devices, **kwargs)
+    _validate_ad_opts(opts, 'update_AD_')
     devices = list(opts.devices) if opts.devices else None
     if devices is None:
-        raise ValueError("update_AD_ requires devices=...")
+        raise YastnError("update_AD_ requires a non-empty devices list.")
     for mv in opts.moves:
         update_core_AD_(env, opts, mv, devices)
     return env
@@ -1181,12 +1215,9 @@ def iterate_AD_(env, opts_svd=None, moves=None, method=None, max_sweeps=None,
       - Per-rank command queues (no shared-task-queue contention).
       - Batched per-stage dispatch.
 
-    Runs each sweep under ``torch.no_grad()`` because this is the
-    forward CTMRG convergence loop -- no backward fires through it.
-    The autograd machinery in ``update_AD_`` still runs (workers
-    capture per-stage graphs), but the corresponding ``_BatchedFn``
-    ctxs are GC'd at the end of each sweep, firing the saved-graph
-    cleanup so workers don't accumulate activations across sweeps.
+    Runs each sweep under ``torch.no_grad()`` because this is the forward
+    CTMRG convergence loop. Workers therefore skip differentiable leaves and
+    saved graphs, and the main process skips the custom autograd wrapper.
     """
     import torch
     from ._env_ctm import CTMRG_out
@@ -1194,11 +1225,12 @@ def iterate_AD_(env, opts_svd=None, moves=None, method=None, max_sweeps=None,
     opts = make_ctm_opts(opts if opts is not None else env.default_opts,
                          opts_svd=opts_svd, moves=moves, method=method,
                          max_sweeps=max_sweeps, devices=devices, **kwargs)
+    _validate_ad_opts(opts, 'iterate_AD_')
     if not opts.devices:
-        raise ValueError("iterate_AD_ requires devices=...")
+        raise YastnError("iterate_AD_ requires a non-empty devices list.")
 
-    # Sweep-loop controls (corner_tol, iterator_step, checkpoint_move) are
-    # fields of CTMOpts, update_AD_ simply ignores what does not concern it; no deny-list is needed.
+    # Convergence is checked by the outer fixed-point loop; this generator only
+    # performs and reports the requested CTM sweeps.
     for sweep in range(1, opts.max_sweeps + 1):
         with torch.no_grad():
             update_AD_(env, opts=opts)
@@ -1213,37 +1245,22 @@ def iterate_AD_(env, opts_svd=None, moves=None, method=None, max_sweeps=None,
 def fp_update_(env_in, ctm_opts_fp, devices=None):
     """The gauge-fixing CTM step, serial or distributed-AD.
 
-    ``devices`` selects between the two. A plain dict is still accepted for
-    ``ctm_opts_fp`` -- normalized to :class:`CTMOpts` here, with the legacy
-    ``fp_devices`` key honoured as a fallback for ``devices``.
+    ``devices`` selects between the two. Zero or one device uses the serial
+    environment update; two or more use the AD worker path. A plain options
+    dict is accepted and normalized to :class:`CTMOpts` here.
     """
     if isinstance(ctm_opts_fp, CTMOpts):
         opts = ctm_opts_fp
         devices = devices or (list(opts.devices) if opts.devices else None)
     else:
-        devices = devices or ctm_opts_fp.get('fp_devices', None)
-        opts = make_ctm_opts(**{k: v for k, v in ctm_opts_fp.items()
-                                if k != 'fp_devices'})
-    # SI projectors are implemented ONLY on the serial env.update_ path; this
-    # module never reads opts_si. Routing an SI run through update_AD_ therefore
-    # builds the FP step's T tensors with the DENSE SVD while the forward loop
-    # built T_old with SI (fixed_pt.py:863 picks env.ctmrg_ when len(devices)==1).
-    # The two truncations choose different per-sector dims, so the fixed-point
-    # check at fixed_pt.py:370 rejects every step with
-    #   "T tensors' symmetry sectors change after a CTM step"
-    # -- MEASURED 8/8 and then 3/3 (jobs 4979024, 4983840).
-    #
-    # When the devices all name ONE physical card the distributed path buys no
-    # parallelism anyway (it shards over SITE GROUPS, and a 1-site cell has one),
-    # so fall back to serial and keep SI self-consistent. This also covers the
-    # '--devices <d> <d>' duplicate form that fp_ctmrg synthesises.
-    distinct = len(set(devices)) if devices else 0
-    if not devices or (opts.si_enabled and distinct == 1):
+        opts = make_ctm_opts(**ctm_opts_fp)
+        devices = devices or (list(opts.devices) if opts.devices else None)
+
+    if not devices or len(devices) <= 1:
         return env_in.update_(opts=opts)
     if opts.si_enabled:
         log.warning(
-            "SI projectors requested but the FP CTM step is dispatching to the "
-            "distributed path on %d distinct devices, which ignores opts_si. The "
-            "fixed-point sector check will fail. Use one device, or wire opts_si "
-            "through this module.", distinct)
+            "SI projectors require the serial FP CTM path; ignoring the "
+            "requested %d-device distributed execution.", len(devices))
+        return env_in.update_(opts=opts)
     return update_AD_(env_in, opts=opts, devices=devices)
