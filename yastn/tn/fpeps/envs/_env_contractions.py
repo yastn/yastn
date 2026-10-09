@@ -363,7 +363,7 @@ def append_vec_bl(Ac, A, vecbl, op=None, mode='old', in_b=(2, 1), out_a=(0, 3)):
     return vecbl.unfuse_legs(axes=axes2)
 
 
-def halves_4x4_lhr(ts:Sequence[Tensor]):
+def halves_4x4_lhr(ts:Sequence[Tensor], *, implicit=False):
     """
     Contract top and bottom halves of 4x4 network of PEPS and its CTM environment, i.e. a 2x2 patch
     of PEPS with its CTM boundary::
@@ -382,6 +382,8 @@ def halves_4x4_lhr(ts:Sequence[Tensor]):
              t_t_2, c_tr, t_r_2, a_2,
              t_b_3, c_br, t_r_3, a_3]
 
+    ``implicit=True`` returns each half as its pair of enlarged corner factors.
+
     Returns::
         top_half, bottom_half: Tensor
     """
@@ -390,11 +392,13 @@ def halves_4x4_lhr(ts:Sequence[Tensor]):
     cor_tr = corner2x2('tr',*ts[8:12])
     cor_br = corner2x2('br',*ts[12:16])
 
+    if implicit:
+        return (cor_tl, cor_tr), (cor_br, cor_bl)
     top_half = cor_tl @ cor_tr     # b(left) b(right)
     bottom_half = cor_br @ cor_bl  # t(right) t(left)
     return top_half, bottom_half
 
-def halves_4x4_tvb(ts):
+def halves_4x4_tvb(ts, *, implicit=False):
     """
     Contract left and right halves of 4x4 network of PEPS and its CTM environment, i.e. a 2x2 patch
     of PEPS with its CTM boundary::
@@ -414,6 +418,8 @@ def halves_4x4_tvb(ts):
              t_t_2, c_tr, t_r_2, a_2,
              t_b_3, c_br, t_r_3, a_3]
 
+    ``implicit=True`` returns each half as its pair of enlarged corner factors.
+
     Returns::
         left_half, right_half: Tensor
     """
@@ -422,6 +428,8 @@ def halves_4x4_tvb(ts):
     cor_tr = corner2x2('tr',*ts[8:12])
     cor_br = corner2x2('br',*ts[12:16])
 
+    if implicit:
+        return (cor_bl, cor_tl), (cor_tr, cor_br)
     cor_ll = cor_bl @ cor_tl  # l(bottom) l(top)
     cor_rr = cor_tr @ cor_br  # r(top) r(bottom)
     return cor_ll, cor_rr

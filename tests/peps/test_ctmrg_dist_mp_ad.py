@@ -26,14 +26,15 @@ ENV_FIELDS = ("tl", "t", "tr", "r", "br", "b", "bl", "l")
 PROJ_FIELDS = ("hlt", "hlb", "hrt", "hrb", "vtl", "vtr", "vbl", "vbr")
 
 
-def _make_env(n_sites=1):
+def _make_env(n_sites=1, sym='none'):
     """Return a deterministic, nontrivial 1-by-n environment on CPU."""
     config = yastn.make_config(
-        backend="torch", sym="none", default_device="cpu",
+        backend="torch", sym=sym, default_device="cpu",
         default_dtype="float64")
     config.backend.random_seed(seed=20261007)
 
-    leg = yastn.Leg(config, s=1, D=(2,))
+    leg = (yastn.Leg(config, s=1, D=(2,)) if sym == 'none'
+           else yastn.Leg(config, s=1, t=(0, 1), D=(1, 1)))
     geometry = fpeps.SquareLattice(dims=(1, n_sites), boundary="infinite")
     tensors = {
         site: yastn.rand(
@@ -218,7 +219,6 @@ def test_two_site_directional_parallel_cpu_forward_and_backward(
         ({"moves": "l"}, "simultaneous 'h' and 'v' moves"),
         ({"method": "1x2"}, "2x2 projector method"),
         ({"checkpoint_move": "nonreentrant"}, "checkpoint_move"),
-        ({"opts_si": {"enabled": True}}, "does not support opts_si"),
     ],
 )
 def test_distributed_ad_rejects_unsupported_options_before_dispatch(
@@ -229,3 +229,139 @@ def test_distributed_ad_rejects_unsupported_options_before_dispatch(
     env = _make_env()
     with pytest.raises(yastn.YastnError, match=message):
         update_AD_(env, devices=["cpu", "cpu"], **kwargs)
+
+
+def _basis_data(env):
+    return [getattr(lattice[site], name)._data
+            for lattice in (env.si_X, env.si_Y)
+            for site in env.sites() for name in PROJ_FIELDS
+            if getattr(lattice[site], name) is not None]
+
+
+@pytest.mark.parametrize('use_qr', [False, True])
+@pytest.mark.parametrize('recycle_grad', [False, True])
+@pytest.mark.parametrize('parallelism', ['sites', 'intra_site', 'auto'])
+def test_si_recycled_sweeps_match_serial_outputs_and_gradients(
+        use_qr, recycle_grad, parallelism):
+    """Recycled bases and their gradients survive worker/rank boundaries."""
+    from yastn.tn.fpeps.envs import make_ctm_opts
+    from yastn.tn.fpeps.envs._env_ctm_dist_mp_AD import update_AD_
+
+    torch = pytest.importorskip('torch')
+    base = _make_env(n_sites=2)
+    opts = make_ctm_opts(
+        opts_svd={'D_total': 2, 'tol': 1e-12, 'fix_signs': True},
+        moves='hv', method='2x2', use_qr=use_qr,
+        opts_si={'enabled': True, 'oversampling': 1, 'niter': 2,
+                 'tol': 0., 'recycle_grad': recycle_grad})
+    # Give both paths identical initial subspaces, independent of worker RNG.
+    with torch.no_grad():
+        base.update_(opts=opts)
+
+    results = []
+    for distributed in (False, True):
+        env = base.clone()
+        leaves = _input_leaves(env)
+        for _ in range(2):
+            if distributed:
+                update_AD_(env, opts=opts, devices=['cpu'] * 3,
+                           parallelism=parallelism)
+            else:
+                env.update_(opts=opts)
+        bases = _basis_data(env)
+        assert all(x.requires_grad == recycle_grad for x in bases)
+        outputs = _output_data(env)
+        loss = _weighted_loss(outputs + (bases if recycle_grad else []))
+        # FP Neumann iterations reuse the same saved worker graphs.
+        gradients = torch.autograd.grad(loss, leaves, retain_graph=True)
+        repeated = torch.autograd.grad(loss, leaves)
+        for actual, expected in zip(repeated, gradients):
+            torch.testing.assert_close(actual, expected)
+        results.append(([x.detach().clone() for x in outputs + bases],
+                        gradients, env._si_age.copy()))
+
+    actual, expected = results[1], results[0]
+    for a, e in zip(actual[0], expected[0]):
+        torch.testing.assert_close(a, e, rtol=1e-9, atol=1e-10)
+    for a, e in zip(actual[1], expected[1]):
+        torch.testing.assert_close(a, e, rtol=1e-8, atol=1e-9)
+    assert actual[2].keys() == expected[2].keys()
+    for key, state in actual[2].items():
+        reference = expected[2][key]
+        assert state.age == reference.age == 3
+        assert state.niter == reference.niter
+        assert state.rank == reference.rank
+        assert state.bases == reference.bases
+        assert state.error == pytest.approx(reference.error, abs=1e-12)
+
+
+def test_si_fresh_bases_and_skip_schedule_in_distributed_iteration():
+    """No-grad convergence initializes X/Y and returns diagnostics each sweep."""
+    from yastn.tn.fpeps.envs._env_ctm_dist_mp_AD import iterate_AD_, fp_update_
+    from yastn.tn.fpeps.envs import make_ctm_opts
+
+    env = _make_env()
+    opts = make_ctm_opts(
+        opts_svd={'D_total': 2}, devices=['cpu', 'cpu'], max_sweeps=2,
+        use_qr=False, opts_si={'enabled': True, 'oversampling': 1,
+                              'niter': 2, 'warmup': 0, 'tol': 1e100,
+                              'skip_SI_update': True})
+    iterator = iterate_AD_(env, opts=opts)
+    assert next(iterator).sweeps == 1
+    assert len(env._si_age) == 4
+    first = env._si_age.copy()
+    assert all(s.age == 1 and s.niter > 0 for s in first.values())
+    assert all(not x.requires_grad for x in _basis_data(env))
+    assert next(iterator).sweeps == 2
+    assert all(s.age == 2 and s.niter == 0 for s in env._si_age.values())
+    assert all(s.error == first[key].error for key, s in env._si_age.items())
+    # The FP dispatcher must honor SI with multiple devices, too.
+    fp_update_(env, opts)
+    assert all(s.age == 3 for s in env._si_age.values())
+
+
+def test_si_symmetric_redistribution_matches_serial():
+    """Worker serialization preserves charge sectors and redistribution state."""
+    from yastn.tn.fpeps.envs import make_ctm_opts
+    from yastn.tn.fpeps.envs._env_ctm_dist_mp_AD import update_AD_
+
+    torch = pytest.importorskip('torch')
+    base = _make_env(sym='Z2')
+    opts = make_ctm_opts(
+        opts_svd={'D_total': 2, 'tol': 0}, use_qr=False,
+        opts_si={'enabled': True, 'oversampling': 4, 'niter': 3,
+                 'tol': 0, 'redistribute_sectors': True,
+                 'refinement': 'sector_dimensions',
+                 'warmup': 0, 'redistribute_frequency': 1})
+    with torch.no_grad():
+        base.update_(opts=opts)
+        serial, distributed = base.clone(), base.clone()
+        for _ in range(2):
+            serial.update_(opts=opts)
+            update_AD_(distributed, opts=opts, devices=['cpu', 'cpu'])
+    assert distributed.is_consistent()
+    for actual, expected in zip(_output_data(distributed), _output_data(serial)):
+        torch.testing.assert_close(actual, expected, rtol=1e-8, atol=1e-9)
+    for key, state in distributed._si_age.items():
+        assert state.age == serial._si_age[key].age == 3
+        assert state.rank == serial._si_age[key].rank
+
+
+def test_fp_si_convergence_uses_distributed_workers(monkeypatch):
+    """SI forward convergence must honor an explicit multi-device selection."""
+    from yastn.tn.fpeps.envs import make_ctm_opts
+    from yastn.tn.fpeps.envs.fixed_pt import FixedPoint
+
+    env = _make_env()
+    opts = make_ctm_opts(
+        opts_svd={'D_total': 2}, max_sweeps=2, corner_tol=None,
+        use_qr=False, opts_si={'enabled': True, 'niter': 2})
+
+    def unexpected_serial(*args, **kwargs):
+        pytest.fail('SI convergence fell back to serial CTM')
+
+    monkeypatch.setattr(env, 'ctmrg_', unexpected_serial)
+    result, _, _, _, _ = FixedPoint.get_converged_env(
+        env, opts, devices=['cpu', 'cpu'])
+    assert result is env
+    assert all(state.age == 2 for state in env._si_age.values())

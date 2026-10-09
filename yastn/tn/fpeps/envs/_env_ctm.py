@@ -32,6 +32,24 @@ from ...._profile import nvtx_range, nsys_profile
 
 logger = logging.getLogger(__name__)
 
+
+def _si_projector_pair(r0, r1, svd_kwargs, opts_si, state, X, Y, cutoff):
+    """Shared serial/worker SI update, including recycling and scheduling."""
+    due = redistribute_due(state.age, opts_si)
+    redistribute = opts_si.redistribute_sectors and due
+    skip = opts_si.skip_SI_update and not due and state.error < opts_si.tol
+    niter = 0 if skip else opts_si.niter
+    with nvtx_range("si_proj_corners"):
+        p0, p1, X, Y, info = si_proj_corners(
+            r0, r1, svd_kwargs, opts_si, X=X, Y=Y, cutoff=cutoff,
+            redistribute=redistribute, niter=niter)
+    if niter == 0:
+        info.update({'error': state.error})
+    if not opts_si.recycle_grad:
+        X, Y = X.detach(), Y.detach()
+    return p0, p1, X, Y, SI_state(age=state.age + 1, **info)
+
+
 class CTMRG_out(NamedTuple):
     sweeps: int = 0
     max_dsv: float = None
@@ -782,26 +800,16 @@ class EnvCTM():
         else:
             si_states, key = env._si_age, (env.site2index(site0), name0)
         si_state = si_states.get(key, SI_state())
-        # Both decisions below combine user intent (options) with runtime state
-        # (this pair's age and last error), so they are derived here and passed
-        # explicitly -- rather than written back into the options dict.
-        due = redistribute_due(si_state.age, opts_si)
-        redistribute = opts_si.redistribute_sectors and due
-        skip = opts_si.skip_SI_update and not due and si_state.error < opts_si.tol
-        niter = 0 if skip else opts_si.niter
-        with nvtx_range("si_proj_corners"):
-            p0, p1, X, Y, info = si_proj_corners(r0, r1, svd_kwargs, opts_si,
-                X=getattr(env.si_X[site0], name0), Y=getattr(env.si_Y[site0], name0),
-                cutoff=opts.cutoff, redistribute=redistribute, niter=niter)
-        if niter == 0:  # keep previous error if no SI iterations were performed
-            info.update({'error': si_state.error})
+        p0, p1, X, Y, state = _si_projector_pair(
+            r0, r1, svd_kwargs, opts_si, si_state,
+            getattr(env.si_X[site0], name0), getattr(env.si_Y[site0], name0),
+            opts.cutoff)
         setattr(env.proj[site0], name0, p0)
         setattr(env.proj[site1], name1, p1)
-        recycle_grad = opts_si.recycle_grad
-        setattr(env.si_X[site0], name0, X if recycle_grad else X.detach())
-        setattr(env.si_Y[site0], name0, Y if recycle_grad else Y.detach())
+        setattr(env.si_X[site0], name0, X)
+        setattr(env.si_Y[site0], name0, Y)
         # The age accumulates; niter and error describe this update alone.
-        si_states[key] = SI_state(age=si_state.age + 1, **info)
+        si_states[key] = state
 
     def _trivial_projectors_(env, move, sites):
         r"""

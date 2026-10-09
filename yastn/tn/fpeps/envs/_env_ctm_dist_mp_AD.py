@@ -590,12 +590,15 @@ def _worker_main(rank, device, config_desc, cmd_q, res_q, parent_sys_path,
 def _stage12_compute(args, extra):
     """Per-site fused halves -> projectors compute.
 
-    args = the 16 env tensors for one site's 2x2 patch.
+    args = the 16 env tensors for one site's 2x2 patch, followed by
+    recycled X/Y bases per pair when SI is enabled.
     extra = {'move': str, 'pairs': tuple[str, ...],
              'opts_svd': dict, 'kwargs': dict}.
 
     Returns a flat tuple ``(p1_pair0, p2_pair0, p1_pair1, p2_pair1, ...)``
     with two projectors per pair, in the order given by ``pairs``.
+    With SI, each pair returns ``(p0, p1, X, Y)`` and writes its updated
+    diagnostics to ``extra['si_states_out']`` for the non-tensor reply.
 
     Fusing halves and projectors into one worker call keeps a single
     autograd graph rooted at the 16 env leaves (halves are intermediate
@@ -610,24 +613,43 @@ def _stage12_compute(args, extra):
         projectors_move_rh, projectors_move_lh,
         projectors_move_tv, projectors_move_bv,
     )
+    from ._env_ctm import _si_projector_pair
+    from ....tensor import qr
 
+    opts_si = extra.get('opts_si')
+    kwargs = extra.get('kwargs', {})
+    implicit = opts_si is not None and not kwargs['use_qr']
     move = extra['move']
     if any(x in move for x in 'lrh'):
-        h1, h2 = halves_4x4_lhr(args)
+        h1, h2 = halves_4x4_lhr(args[:16], implicit=implicit)
     else:
-        h1, h2 = halves_4x4_tvb(args)
+        h1, h2 = halves_4x4_tvb(args[:16], implicit=implicit)
 
     PROJ = {
         'rh': projectors_move_rh, 'lh': projectors_move_lh,
         'tv': projectors_move_tv, 'bv': projectors_move_bv,
     }
     opts_svd = extra['opts_svd']
-    kwargs = extra.get('kwargs', {})
+
+    def oriented(half, transpose):
+        if implicit:
+            return (half[1].T, half[0].T) if transpose else half
+        return qr(half, axes=(1, 0) if transpose else (0, 1))[1]
+
     outs = []
-    for pair in extra['pairs']:
-        p1, p2 = PROJ[pair](h1, h2, opts_svd, **kwargs)
-        outs.append(p1)
-        outs.append(p2)
+    states = []
+    for k, pair in enumerate(extra['pairs']):
+        if opts_si is None:
+            outs.extend(PROJ[pair](h1, h2, opts_svd, **kwargs))
+            continue
+        reverse = pair in ('lh', 'bv')
+        r0, r1 = oriented(h1, reverse), oriented(h2, not reverse)
+        p0, p1, X, Y, state = _si_projector_pair(
+            r0, r1, opts_svd, opts_si, extra['si_states'][k],
+            args[16 + 2 * k], args[17 + 2 * k], kwargs['cutoff'])
+        outs.extend((p0, p1, X, Y))
+        states.append(state)
+    extra['si_states_out'] = states if opts_si is not None else None
     return tuple(outs)
 
 
@@ -706,7 +728,7 @@ def _stage_fwd_worker_impl(cfg, device, args, compute_fn, graph_id,
         yargs = _deserialize_args(skeleton, flat_data, cfg)
         with torch.no_grad():
             outs = compute_fn(yargs, extra)
-    return _serialize_outputs(outs)
+    return (*_serialize_outputs(outs), extra.get('si_states_out'))
 
 
 # ===========================================================================
@@ -734,7 +756,7 @@ def _stage_bwd_via_saved(args, saved_graphs, device):
     cot_data = []
     for out, out_resolved, (cot_p, out_meta) in zip(
             outs, out_data_resolved, cot_payload):
-        if out is None or out_meta is None:
+        if out is None or out_meta is None or not out_resolved.requires_grad:
             continue
         out_data_pairs.append(out_resolved)
         cot_data.append(_recv_payload(cot_p, device))
@@ -845,11 +867,12 @@ def _make_batched_stage_fn(pool, stage):
     return _BatchedFn
 
 
-def _stage_apply_batched(pool, stage, jobs):
+def _stage_apply_batched(pool, stage, jobs, *, return_info=False):
     """Dispatch many per-site stage tasks concurrently and finalize.
 
     ``jobs``: list of (rank, extra, args) tuples. Returns a list of
     yastn-output lists (one per job, preserving order).
+    With ``return_info=True``, also returns per-job SI diagnostics.
 
     Forward phase: submit all per-site fwd tasks concurrently, wait
     for all results. Backward parallelism is unlocked by bundling all
@@ -885,6 +908,7 @@ def _stage_apply_batched(pool, stage, jobs):
     job_output_metas_full = []   # per-job, with None entries for boundaries
     job_live_global_idx = []     # per-job: live-output-position -> global idx (or None)
     job_args = []
+    job_info = []
 
     for rank, extra, args, skeleton, flat_data, txn in submitted:
         msg = pool.wait(txn)
@@ -892,6 +916,7 @@ def _stage_apply_batched(pool, stage, jobs):
             raise RuntimeError(f"{stage} fwd failed: {msg}")
         output_payload = msg[1]
         output_metas = msg[2]
+        job_info.append(msg[3])
         output_data = [None if a is None else _recv_payload(a)
                        for a in output_payload]
 
@@ -962,12 +987,29 @@ def _stage_apply_batched(pool, stage, jobs):
             out_yastn.append(Tensor.from_dict(d, config=ref_config))
         out_lists.append(out_yastn)
 
-    return out_lists
+    return (out_lists, job_info) if return_info else out_lists
 
 
 # ===========================================================================
 # Top-level orchestration
 # ===========================================================================
+
+def _projector_pair_sites(env, site, pair):
+    """Projector destinations; the first also anchors the recycled SI state."""
+    tl, tr, bl, br = (env.nn_site(site, d=d)
+                      for d in ((0, 0), (0, 1), (1, 0), (1, 1)))
+    return {'rh': (tr, 'hrb', br, 'hrt'),
+            'lh': (tl, 'hlb', bl, 'hlt'),
+            'tv': (tl, 'vtr', tr, 'vtl'),
+            'bv': (bl, 'vbr', br, 'vbl')}[pair]
+
+
+def _si_state_slot(env, site, name):
+    """Respect uncommitted device patches just as the serial path does."""
+    if site in env._si_age_patch:
+        return env._si_age_patch[site], name
+    return env._si_age, (env.site2index(site), name)
+
 
 def update_core_AD_(env, opts, move, devices):
     """One CTM move, AD-aware distributed.
@@ -1046,6 +1088,25 @@ def update_core_AD_(env, opts, move, devices):
         stage12_rank_load[rank] += 1
         return rank
 
+    def stage12_job(rank, site, job_pairs, ts_args):
+        extra = {'move': move, 'pairs': job_pairs,
+                 'opts_svd': opts_svd, 'kwargs': kw_proj}
+        args = list(ts_args)
+        if opts.si_enabled:
+            from ._env_ctm_SI_projectors import SI_state
+            extra['opts_si'] = opts.opts_si
+            extra['si_states'] = []
+            for pair in job_pairs:
+                s0, name0, _, _ = _projector_pair_sites(env, site, pair)
+                states, key = _si_state_slot(env, s0, name0)
+                extra['si_states'].append(states.get(key, SI_state()))
+                args.extend((getattr(env.si_X[s0], name0),
+                             getattr(env.si_Y[s0], name0)))
+        stage12_jobs.append((rank, extra, args))
+        stage12_meta.append((site, job_pairs))
+        for pair in job_pairs:
+            projector_ranks[(site, pair)] = rank
+
     for site in sites_proj:
         tl, tr, bl, br = (env.nn_site(site, d=d)
                           for d in ((0, 0), (0, 1), (1, 0), (1, 1)))
@@ -1060,34 +1121,29 @@ def update_core_AD_(env, opts, move, devices):
         if split_projectors:
             for pair in pairs:
                 rank = _least_loaded_stage12_rank()
-                extra = {'move': move, 'pairs': (pair,),
-                         'opts_svd': opts_svd, 'kwargs': kw_proj}
-                stage12_jobs.append((rank, extra, ts_args))
-                stage12_meta.append((site, (pair,)))
-                projector_ranks[(site, pair)] = rank
+                stage12_job(rank, site, (pair,), ts_args)
         else:
-            extra = {'move': move, 'pairs': pairs,
-                     'opts_svd': opts_svd, 'kwargs': kw_proj}
             rank = _least_loaded_stage12_rank(_rank_for(site))
-            stage12_jobs.append((rank, extra, ts_args))
-            stage12_meta.append((site, pairs))
-            for pair in pairs:
-                projector_ranks[(site, pair)] = rank
-    stage12_results = _stage_apply_batched(pool, 'stage12', stage12_jobs)
+            stage12_job(rank, site, pairs, ts_args)
+    stage12_results, stage12_info = _stage_apply_batched(
+        pool, 'stage12', stage12_jobs, return_info=True)
 
-    for (site, job_pairs), outs in zip(stage12_meta, stage12_results):
-        tl, tr, bl, br = (env.nn_site(site, d=d)
-                          for d in ((0, 0), (0, 1), (1, 0), (1, 1)))
+    for (site, job_pairs), outs, info in zip(
+            stage12_meta, stage12_results, stage12_info):
+        stride = 4 if opts.si_enabled else 2
         for k, pair in enumerate(job_pairs):
-            p1, p2 = outs[2 * k], outs[2 * k + 1]
-            if pair == 'rh':
-                env.proj[tr].hrb, env.proj[br].hrt = p1, p2
-            elif pair == 'lh':
-                env.proj[tl].hlb, env.proj[bl].hlt = p1, p2
-            elif pair == 'tv':
-                env.proj[tl].vtr, env.proj[tr].vtl = p1, p2
-            elif pair == 'bv':
-                env.proj[bl].vbr, env.proj[br].vbl = p1, p2
+            s0, name0, s1, name1 = _projector_pair_sites(env, site, pair)
+            offset = stride * k
+            setattr(env.proj[s0], name0, outs[offset])
+            setattr(env.proj[s1], name1, outs[offset + 1])
+            if opts.si_enabled:
+                X, Y = outs[offset + 2:offset + 4]
+                if not opts.opts_si.recycle_grad:
+                    X, Y = X.detach(), Y.detach()
+                setattr(env.si_X[s0], name0, X)
+                setattr(env.si_Y[s0], name0, Y)
+                states, key = _si_state_slot(env, s0, name0)
+                states[key] = info[k]
 
     env._trivial_projectors_(move, sites_proj)
 
@@ -1176,9 +1232,6 @@ def _validate_ad_opts(opts, caller):
         raise YastnError(
             f"{caller} does not support checkpoint_move; "
             f"got checkpoint_move={opts.checkpoint_move!r}.")
-    if opts.si_enabled:
-        raise YastnError(
-            f"{caller} does not support opts_si; use the serial CTM path.")
 
 
 def update_AD_(env, opts_svd=None, moves=None, method=None, devices=None,
@@ -1257,10 +1310,5 @@ def fp_update_(env_in, ctm_opts_fp, devices=None):
         devices = devices or (list(opts.devices) if opts.devices else None)
 
     if not devices or len(devices) <= 1:
-        return env_in.update_(opts=opts)
-    if opts.si_enabled:
-        log.warning(
-            "SI projectors require the serial FP CTM path; ignoring the "
-            "requested %d-device distributed execution.", len(devices))
         return env_in.update_(opts=opts)
     return update_AD_(env_in, opts=opts, devices=devices)

@@ -874,12 +874,7 @@ class FixedPoint(torch.autograd.Function):
         check = opts.conv_check if opts.conv_check is not None else opts.corner_tol
         if devices is None:
             devices = [env.config.default_device]
-        if len(devices) == 1 or opts.si_enabled:
-            if len(devices) >= 2 and opts.si_enabled:
-                log.warning(
-                    "SI projectors require the serial CTM path; ignoring the "
-                    "requested %d-device distributed forward execution.",
-                    len(devices))
+        if len(devices) == 1:
             ctm_itr = env.ctmrg_(opts=replace(opts, corner_tol=None, conv_check=None,
                                               iterator_step=1))
         else:
@@ -1125,8 +1120,7 @@ class FixedPoint(torch.autograd.Function):
         # autograd reuse the captured graph across the Neumann iterations.
         _use_autograd_grad = bool(ctx.opts.devices)
         _use_distributed = bool(
-            ctx.opts.devices and len(ctx.opts.devices) >= 2 and
-            not ctx.opts.fp.si_enabled)
+            ctx.opts.devices and len(ctx.opts.devices) >= 2)
 
         with torch.enable_grad():
             time0 = time.perf_counter()
