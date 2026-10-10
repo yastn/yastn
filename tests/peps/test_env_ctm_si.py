@@ -577,11 +577,12 @@ def test_si_recycles_after_leg_dimension_change(config_kwargs):
     _assert_projectors_equivalent(reference, (p0, p1))
 
 
-def test_si_recycles_after_fusion_history_change(config_kwargs):
+def test_si_reinitializes_after_fusion_history_change(config_kwargs):
     """Fusion-history changes do not alter the resulting projectors."""
     config = yastn.make_config(sym='Z2', **config_kwargs)
+    config.backend.random_seed(seed=13)
     r0, r1 = _ctm_corner_pair(config, 'Z2')
-    X, Y = initialize_si_bases(r0, r1, rank=4)
+    X, Y = initialize_si_bases(r0, r1, rank=6)
 
     external = r1.get_legs(0).drop_history()
     contracted = r1.get_legs(1)
@@ -590,7 +591,9 @@ def test_si_recycles_after_fusion_history_change(config_kwargs):
     assert external.tD == r1.get_legs(0).tD
     assert external.hf != r1.get_legs(0).hf
     opts_svd = {'D_total': 4, 'tol': 1e-10}
-    opts_si = {'enabled': True, 'oversampling': 0,
+    # chi + p = 6, below the corner-leg rank of 7. Without oversampling SI
+    # converges as (s_{chi+1}/s_chi)^niter, too slowly for ~3% of random corners.
+    opts_si = {'enabled': True, 'oversampling': 2,
                'niter': 24, 'tol': 1e-12, 'redistribute_sectors': True}
     reference = proj_corners(r0, r1_with_new_history, opts_svd)
     p0, p1, X_new, Y_new, _ = si_proj_corners(
