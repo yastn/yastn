@@ -10,7 +10,7 @@ maintainers = [{name = "Marek Rams", email = "marek.rams@uj.edu.pl"},
                {name = "Juraj Hasik", email = "juraj.hasik.sk@gmail.com"},]
 readme = "README.md"
 requires-python = ">=3.10"
-license = "Apache-2.0"
+license = "GPL-3.0-or-later"
 license-files = ["LICENSE"]
 classifiers = [
     "Programming Language :: Python :: 3",
