@@ -67,9 +67,8 @@ def _run_heisenberg(config_kwargs, symmetry, D=4, beta=0.04,
             qdim = charge[0] + 1
             spin = charge[0] / 2
             sector_energy = 0.5 * J * (spin * (spin + 1) - 1.5)
-            # Hard fusion uses normalized CG intertwiners.  Recover the
-            # magnetic trace of the two spin-1/2 legs from the reduced block.
-            sector_weight = np.sqrt(qdim) * multiplicity
+            # Each reduced eigenvalue represents qdim magnetic states.
+            sector_weight = qdim * multiplicity
             weights += sector_weight
             weighted_energy += sector_energy * sector_weight
         energy = weighted_energy / weights

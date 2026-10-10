@@ -56,8 +56,8 @@ def _run_hubbard(config_kwargs, symmetry, D, betas, dbeta=0.02, max_sweeps=4):
             # The two spin-component hopping terms commute and together form
             # an SU(2) scalar.  The local term is exactly
             # U (n_up - 1/2) (n_dn - 1/2) - mu * n_total.
-            gates_nn = [fpeps.gates.gate_nn_Hubbard_SU2xU1(
-                t, 0, 0, half_step, I)]
+            gate_builder = getattr(fpeps.gates, 'gate_nn_Hubbard_' + symmetry)
+            gates_nn = [gate_builder(t, 0, 0, half_step, I)]
             h_local = U * (double_occ - n_total / 2 + I / 4) - mu * n_total
             gate_local = fpeps.gates.gate_local_exp(half_step, I, h_local)
 

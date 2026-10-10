@@ -59,17 +59,20 @@ class SpinfulFermions(meta_operators):
         sym = self._sym
         fer = self.config.fermionic
 
-        if sym not in ('Z2', 'U1', 'U1xU1', 'U1xU1xZ2', 'SU2xU1'):
-            raise YastnError("For SpinfulFermions sym should be in ('Z2', 'U1', 'U1xU1', 'U1xU1xZ2', 'SU2xU1').")
+        if sym not in ('Z2', 'U1', 'U1xU1', 'U1xU1xZ2', 'SU2', 'SU2xU1'):
+            raise YastnError("For SpinfulFermions sym should be in ('Z2', 'U1', 'U1xU1', 'U1xU1xZ2', 'SU2', 'SU2xU1').")
         if (sym == 'U1xU1xZ2' and fer != (False, False, True)) or \
-           (sym in ('Z2', 'U1') and fer != True) or \
+           (sym in ('Z2', 'U1', 'SU2') and fer != True) or \
            (sym == 'U1xU1' and fer not in (True, (True, True))) or \
            (sym == 'SU2xU1' and fer != (False, True)):
             raise YastnError("For SpinfulFermions config.sym does not match config.fermionic.")
-        self.operators = ('I', 'n', 'c', 'cp')
+        self.operators = (('I', 'n_total', 'h') + ('d',)
+                          if sym in ('SU2', 'SU2xU1') else ('I', 'n', 'c', 'cp'))
 
     def space(self) -> Leg:
         r""" :class:`yastn.Leg` object describing local Hilbert space. """
+        if self._sym == 'SU2':
+            return Leg(self.config, s=1, t=(0, 1), D=(2, 1))
         if self._sym == 'Z2':  # charges: 0 = (|00>, |11>); 1 = (|10>, |01>)  |occ_u occ_d>
             return Leg(self.config, s=1, t=(0, 1), D=(2, 2))
         if self._sym == 'U1':  # charges: 0 = |00>; 1 = (|10>, |01>); 2 = |11>  |occ_u occ_d>
@@ -83,7 +86,7 @@ class SpinfulFermions(meta_operators):
 
     def vec_n(self, val=(0, 0)) -> Tensor:
         r""" State with occupation given by tuple (nu, nd). """
-        if self._sym == 'SU2xU1':
+        if self._sym in ('SU2', 'SU2xU1'):
             raise YastnError("A spin-resolved basis vector is not SU(2)-invariant.")
         if val == (0, 0):
             if self._sym == 'Z2':  # charges: 0 = (|00>, |11>); 1 = (|10>, |01>)  |occ_u occ_d>
@@ -160,10 +163,18 @@ class SpinfulFermions(meta_operators):
         elif self._sym == 'SU2xU1':
             for t in ((0, 0), (1, 1), (0, 2)):
                 I.set_block(ts=(t, t), Ds=(1, 1), val=1)
+        elif self._sym == 'SU2':
+            I.set_block(ts=(0, 0), Ds=(2, 2), val=[[1, 0], [0, 1]])
+            I.set_block(ts=(1, 1), Ds=(1, 1), val=1)
         return I
 
     def n_total(self) -> Tensor:
         """SU(2)-scalar total particle number operator."""
+        if self._sym == 'SU2':
+            n = Tensor(config=self.config, s=self.s)
+            n.set_block(ts=(1, 1), Ds=(1, 1), val=1)
+            n.set_block(ts=(0, 0), Ds=(2, 2), val=[[0, 0], [0, 2]])
+            return n
         if self._sym != 'SU2xU1':
             return self.n('u') + self.n('d')
         n = Tensor(config=self.config, s=self.s)
@@ -173,6 +184,10 @@ class SpinfulFermions(meta_operators):
 
     def d(self) -> Tensor:
         """Double-occupancy projector, an SU(2)-scalar operator."""
+        if self._sym == 'SU2':
+            d = Tensor(config=self.config, s=self.s)
+            d.set_block(ts=(0, 0), Ds=(2, 2), val=[[0, 0], [0, 1]])
+            return d
         if self._sym != 'SU2xU1':
             return self.n('u') @ self.n('d')
         d = Tensor(config=self.config, s=self.s)
@@ -189,7 +204,7 @@ class SpinfulFermions(meta_operators):
 
     def n(self, spin='u') -> Tensor:
         r""" Particle number operator, with :code:`spin='u'` for spin-up, and :code:`spin='d'` for spin-down. """
-        if self._sym == 'SU2xU1':
+        if self._sym in ('SU2', 'SU2xU1'):
             raise YastnError("Spin-resolved density is not an SU(2) scalar; use n_total() or d().")
         n = Tensor(config=self.config, s=self.s)
         if spin == 'u':
@@ -224,7 +239,7 @@ class SpinfulFermions(meta_operators):
 
     def cp(self, spin='u') -> Tensor:
         r""" Creation operator, with :code:`spin='u'` for spin-up, and :code:`spin='d'` for spin-down. """
-        if self._sym == 'SU2xU1':
+        if self._sym in ('SU2', 'SU2xU1'):
             raise YastnError("A spinor creation component is not an SU(2)-scalar operator.")
         # |ud>; |11> = cu+ cd+ |00>;
         # cu |11> =  |01>; cu |10> = |00>
@@ -269,7 +284,7 @@ class SpinfulFermions(meta_operators):
 
     def c(self, spin='u') -> Tensor:
         r""" Annihilation operator, with :code:`spin='u'` for spin-up, and :code:`spin='d'` for spin-down. """
-        if self._sym == 'SU2xU1':
+        if self._sym in ('SU2', 'SU2xU1'):
             raise YastnError("A spinor annihilation component is not an SU(2)-scalar operator.")
         # |ud>; |11> = cu+ cd+ |00>;
         # cu |11> =  |01>; cu |10> = |00>
@@ -325,6 +340,8 @@ class SpinfulFermions(meta_operators):
         return self.cp('d') @ self.c('u')
 
     def to_dict(self):
+        if self._sym in ('SU2', 'SU2xU1'):
+            return {name: (lambda j, name=name: getattr(self, name)()) for name in self.operators}
         return {'I': lambda j: self.I(),
                 'nu': lambda j: self.n(spin='u'),
                 'cu': lambda j: self.c(spin='u'),

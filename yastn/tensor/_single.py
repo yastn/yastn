@@ -248,12 +248,14 @@ def conj(a) -> 'Tensor':
     hfs = tuple(hf.conj() for hf in a.hfs)
     data = a.config.backend.conj(a._data)
     if (not getattr(a.config.sym, 'IS_ABELIAN', True)
-            and a.struct.n == a.config.sym.zero() and a.ndim_n >= 3):
+            and a.struct.n == a.config.sym.zero() and a.ndim_n >= 2):
         blocks = get_blocks(a.config.sym, a.struct)
         pieces = []
         negative = [i for i, leg in enumerate(a.struct.legs) if leg.s == -1]
         for charges, slc in zip(blocks.t, blocks.slc):
             phase = (-1) ** sum(int(charges[i, 0]) for i in negative)
+            if a.ndim_n == 2:
+                phase *= (-1) ** int(charges[0, 0])
             pieces.append(phase * data[slice(*slc)])
         data = a.config.backend.concatenate(pieces) if pieces else data
     return a._replace(hfs=hfs, struct=struct, data=data)
@@ -597,7 +599,18 @@ def add_leg(a, axis=-1, s=-1, t=None, leg=None) -> 'Tensor':
     legs = a.struct.legs[:haxis] + (LegBasic(s=s, t=(t,), D=(1,)),) + a.struct.legs[haxis:]
     struct = a.struct.replace(legs=legs, n=newn)
     hfs = a.hfs[:haxis] + (hfsa,) + a.hfs[haxis:]
-    return a._replace(mfs=mfs, hfs=hfs, struct=struct, trans=trans)
+    data = a._data
+    if not getattr(a.config.sym, 'IS_ABELIAN', True) and a.config.sym.irrep_dimension(t) == 1 and a.ndim_n in (2, 3):
+        from ._nonabelian import scale
+        blocks = get_blocks(a.config.sym, a.struct)
+        pieces = []
+        for cs, slc in zip(blocks.t, blocks.slc):
+            cs = tuple(map(tuple, cs))
+            cs_new = cs[:haxis] + (t,) + cs[haxis:]
+            factor = scale(a.config.sym, cs, tuple(l.s for l in a.struct.legs), a.struct.n) / scale(a.config.sym, cs_new, tuple(l.s for l in struct.legs), struct.n)
+            pieces.append(data[slice(*slc)] * factor)
+        data = a.config.backend.concatenate(pieces) if pieces else data
+    return a._replace(mfs=mfs, hfs=hfs, struct=struct, trans=trans, data=data)
 
 
 def remove_leg(a, axis=-1) -> 'Tensor':
@@ -641,7 +654,18 @@ def remove_leg(a, axis=-1) -> 'Tensor':
         new_legs = a.struct.legs[:haxis] + a.struct.legs[haxis + 1:]
         struct = a.struct.replace(legs=new_legs, n=new_n)
         hfs = a.hfs[:haxis] + a.hfs[haxis + 1:]
-        a = a._replace(mfs=mfs, hfs=hfs, struct=struct, trans=trans)
+        data = a._data
+        if not getattr(a.config.sym, 'IS_ABELIAN', True) and a.config.sym.irrep_dimension(t) == 1 and a.ndim_n in (2, 3):
+            from ._nonabelian import scale
+            blocks = get_blocks(a.config.sym, a.struct)
+            pieces = []
+            for cs, slc in zip(blocks.t, blocks.slc):
+                cs = tuple(map(tuple, cs))
+                cs_new = cs[:haxis] + cs[haxis+1:]
+                factor = scale(a.config.sym, cs, tuple(l.s for l in a.struct.legs), a.struct.n) / scale(a.config.sym, cs_new, tuple(l.s for l in struct.legs), struct.n)
+                pieces.append(data[slice(*slc)] * factor)
+            data = a.config.backend.concatenate(pieces) if pieces else data
+        a = a._replace(mfs=mfs, hfs=hfs, struct=struct, trans=trans, data=data)
     return a
 
 

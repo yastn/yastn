@@ -52,6 +52,13 @@ def norm(a, p='fro') -> Number:
     """
     if p not in ('fro', 'inf'):
         raise YastnError("p should be 'fro', or 'inf'.")
+    if (p == 'fro' and not getattr(a.config.sym, 'IS_ABELIAN', True)
+            and a.ndim_n == 2 and a.n == a.config.sym.zero()):
+        blocks = get_blocks(a.config.sym, a.struct)
+        pieces = [a._data[slice(*slc)] * np.sqrt(a.config.sym.irrep_dimension(tuple(charges[0])))
+                  for charges, slc in zip(blocks.t, blocks.slc)]
+        data = a.config.backend.concatenate(pieces) if pieces else a._data
+        return a.config.backend.norm(data, p)
     return a.config.backend.norm(a._data, p)
 
 

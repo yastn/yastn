@@ -204,7 +204,8 @@ def _fuse_legs_hard(a, axes, order):
     order = tuple(a.trans[ax] for ax in order)
     axes = tuple(tuple(a.trans[ax] for ax in group) for group in axes)
     if (not getattr(a.config.sym, 'IS_ABELIAN', True)
-            and sum(len(group) > 1 for group in axes) > 1
+            and (sum(len(group) > 1 for group in axes) > 1
+                 or any(len(group) > 1 and group != tuple(range(len(group))) for group in axes))
             and all(group for group in axes)):
         return _fuse_disjoint_nonabelian_groups(a, axes)
     if (not getattr(a.config.sym, 'IS_ABELIAN', True) and _has_nontrivial_irreps(a)
@@ -229,7 +230,9 @@ def _fuse_legs_hard(a, axes, order):
             # hard-fusion signature convention used by PEPS environments.
             return _fuse_disjoint_nonabelian_groups(a, axes)
         raise
-    data = a.config.backend.transpose_and_merge(a._data, order, meta_mrg, size)
+    from ._nonabelian import fusion_scale
+    source = fusion_scale(a.config, a._data, a.struct, struct_new, axes, meta_mrg)
+    data = a.config.backend.transpose_and_merge(source, order, meta_mrg, size)
 
     mfs = ((1,),) * len(struct_new.legs)
     hfs = []
@@ -514,6 +517,8 @@ def _fuse_blocks(config, data, struct, axes, struct_sub=None, connector_first=Tr
     order = sum(axes, start=())
     sub_legs = struct_sub.legs if struct_sub is not None else None
     meta_mrg, size, struct_mrg, legs_group = _meta_fuse_hard(config.sym, struct, axes, sub_legs, connector_first, lazy_threshold)
+    from ._nonabelian import fusion_scale
+    data = fusion_scale(config, data, struct, struct_mrg, axes, meta_mrg)
     data = config.backend.transpose_and_merge(data, order, meta_mrg, size)
     hfs = []
     for legs in legs_group:
@@ -859,8 +864,16 @@ def _unfuse_nonabelian_axis(a, axis):
 def _unfuse_blocks(config, data, struct, axes, hfsm, return_hfs=False, lazy_threshold=None):
     axes_trim = tuple(ax for ax in axes if hfsm[ax].tree[0] > 1)
     if axes_trim:
+        old_struct = struct
         meta, size, struct, nlegs, hfs = _meta_unfuse_hard(config.sym, struct, axes_trim, hfsm, lazy_threshold)
         data = config.backend.unmerge(data, meta, size)
+        if not getattr(config.sym, 'IS_ABELIAN', True):
+            from ._nonabelian import fusion_scale
+            counts = dict(zip(axes_trim, nlegs))
+            starts = np.cumsum((0,) + tuple(counts.get(i, 1) for i in range(len(old_struct.legs))))
+            groups = tuple(tuple(range(starts[i], starts[i+1])) for i in range(len(old_struct.legs)))
+            reverse_meta = tuple((m[2], m[3], m[0], (), m[4], ()) for m in meta)
+            data = fusion_scale(config, data, struct, old_struct, groups, reverse_meta, inverse=True)
     if return_hfs:
         return data, struct, nlegs, hfs
     return data, struct

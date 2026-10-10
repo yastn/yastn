@@ -89,12 +89,10 @@ def _contraction_recoupling(sym, charges_a, signs_a, total_a, channel_a,
                             charges_b, signs_b, total_b, channel_b,
                             nin_a, nin_b, charges_c, signs_c, total_c, channel_c):
     """Overlap of a glued pair of CG trees with a canonical output tree."""
-    ta = _fusion_intertwiner(sym, tuple(charges_a), tuple(signs_a), tuple(total_a), tuple(channel_a))
-    tb = _fusion_intertwiner(sym, tuple(charges_b), tuple(signs_b), tuple(total_b), tuple(channel_b))
-    glued = np.tensordot(ta, tb, axes=(tuple(nin_a), tuple(nin_b)))
-    tc = _fusion_intertwiner(sym, tuple(charges_c), tuple(signs_c), tuple(total_c), tuple(channel_c))
-    den = np.vdot(tc, tc)
-    return float(np.real_if_close(np.vdot(tc, glued) / den)) if den else 0.0
+    from ._nonabelian import contraction_coefficient
+    return contraction_coefficient(sym, charges_a, signs_a, total_a, channel_a,
+                                   charges_b, signs_b, total_b, channel_b,
+                                   nin_a, nin_b, charges_c, signs_c, total_c, channel_c)
 
 
 class SpecialTensor(metaclass=abc.ABCMeta):
@@ -562,20 +560,10 @@ def _meta_tensordot_nf(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b, la
             allowed = tuple(tuple(x for charge in path for x in
                                   (charge if isinstance(charge, tuple) else (charge,)))
                             for path in paths)
-            if candidate in allowed and len(nin_a) <= 1:
-                channel_pairs.append(candidate)
-                valid_pairs.append(ipair)
-                coefficients.append(1.0)
-                continue
             if len(allowed) == 0:
                 # Matching individual contracted charges is necessary but not
                 # sufficient: their fusion channel can be incompatible. Such
                 # block pairs have an identically zero categorical contraction.
-                continue
-            if len(allowed) == 1 and len(nin_a) <= 1:
-                channel_pairs.append(allowed[0])
-                valid_pairs.append(ipair)
-                coefficients.append(1.0)
                 continue
             charges_a = tuple(map(tuple, bl_a.t[ia]))
             charges_b = tuple(map(tuple, bl_b.t[ib]))
@@ -587,13 +575,6 @@ def _meta_tensordot_nf(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b, la
                     charges_b, signs_b, struct_b.n, bl_b.channels[ib],
                     nin_a, nin_b, tuple(map(tuple, charges)), signatures_c,
                     struct_c.n, output_channel)
-                if len(nin_a) > 1 and nout_a:
-                    if len(nout_a) == 1:
-                        shared = charges_a[nout_a[0]]
-                    else:
-                        k = (len(nout_a) - 2) * sym.NSYM
-                        shared = bl_a.channels[ia][k:k + sym.NSYM]
-                    coefficient *= np.sqrt(sym.irrep_dimension(shared))
                 if abs(coefficient) > 1e-14:
                     channel_pairs.append(output_channel)
                     valid_pairs.append(ipair)
@@ -1069,6 +1050,12 @@ def vdot(a, b, conj=(1, 0)) -> Number:
     # axes = (tuple(range(a.ndim)), tuple(range(b.ndim)))
     # return tensordot(a, b, axes=axes, conj=conj).to_number()
     _test_can_be_combined(a, b)
+    if not getattr(a.config.sym, 'IS_ABELIAN', True):
+        if a.isdiag:
+            a = a.diag()
+        if b.isdiag:
+            b = b.diag()
+        return tensordot(a, b, axes=(tuple(range(a.ndim)), tuple(range(b.ndim))), conj=conj).to_number()
     if conj[0] == 1:
         a = a.conj()
     if conj[1] == 1:
@@ -1139,6 +1126,17 @@ def trace(a, axes=(0, 1), lazy_threshold=None) -> 'Tensor':
     in_0, in_1 = _clear_axes(*axes)  # contracted legs
     if set(in_0) & set(in_1):
         raise YastnError('The same axis in axes[0] and axes[1].')
+    if not getattr(a.config.sym, 'IS_ABELIAN', True):
+        from ..initialize import eye
+        if a.isdiag:
+            a = a.diag()
+        remaining = list(range(a.ndim))
+        for i, j in zip(in_0, in_1):
+            ai, aj = remaining.index(i), remaining.index(j)
+            pairing = eye(config=a.config, legs=(a.get_legs(ai).conj(), a.get_legs(aj).conj()), isdiag=False)
+            a = tensordot(a, pairing, axes=((ai, aj), (0, 1)))
+            remaining = [k for k in remaining if k not in (i, j)]
+        return a
     mask_needed, (nin_0, nin_1) = _unpack_trans_test_axes_pair(a, a, sgn=-1, axes=(in_0, in_1))
     # nin_0, nin_1 take into account a.trans
 

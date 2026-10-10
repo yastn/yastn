@@ -209,6 +209,38 @@ def _gate_nn_from_coupled_blocks(I, blocks, step, bond=None):
     return decompose_nn_gate(gate, bond)
 
 
+def gate_nn_Hubbard_SU2(t, U, mu, step, I, bond=None) -> Gate:
+    r"""Hubbard gate conserving spin, with empty/double singlet multiplicity.
+
+    The Hamiltonian is hopping plus ``U d - mu n`` on each site.
+    Pure SU2 uses fermion parity ``2j mod 2``.
+    """
+    if I.config.sym.SYM_ID != 'SU2' or I.config.fermionic != True:
+        raise YastnError("gate_nn_Hubbard_SU2 requires fermionic SU2 tensors.")
+    if I.get_legs(0).tD != {(0,): 2, (1,): 1}:
+        raise YastnError("Unexpected local Hubbard SU2 space.")
+    singlet = np.diag([0., U - 2 * mu, U - 2 * mu, 2 * U - 4 * mu, -2 * mu])
+    singlet[1, 4] = singlet[4, 1] = -np.sqrt(2) * t
+    singlet[2, 4] = singlet[4, 2] = -np.sqrt(2) * t
+    spinor = np.diag([-mu, U - 3 * mu, -mu, U - 3 * mu])
+    spinor[0, 2] = spinor[2, 0] = -t
+    spinor[1, 3] = spinor[3, 1] = -t
+    return _gate_nn_from_coupled_blocks(I, {(0,): singlet, (1,): spinor,
+                                           (2,): [[-2 * mu]]}, step, bond)
+
+
+def gate_nn_tJ_SU2(J, t, mu0, mu1, step, I, bond=None) -> Gate:
+    r"""Projected t-J gate conserving SU2 spin; no double occupancy."""
+    if I.config.sym.SYM_ID != 'SU2' or I.config.fermionic != True:
+        raise YastnError("gate_nn_tJ_SU2 requires fermionic SU2 tensors.")
+    if I.get_legs(0).tD != {(0,): 1, (1,): 1}:
+        raise YastnError("Unexpected local t-J SU2 space.")
+    blocks = {(0,): [[0., 0.], [0., -mu0 - mu1 - J]],
+              (1,): [[-mu1, -t], [-t, -mu0]],
+              (2,): [[-mu0 - mu1]]}
+    return _gate_nn_from_coupled_blocks(I, blocks, step, bond)
+
+
 def gate_nn_Hubbard_SU2xU1(t, U, mu, step, I, bond=None) -> Gate:
     r"""Spin-rotation-invariant Hubbard gate in an SU(2)xU(1) basis.
 
