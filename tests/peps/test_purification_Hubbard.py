@@ -174,10 +174,10 @@ def test_NTU_spinful_infinite(config_kwargs):
     info = env.ctmrg_(opts_svd=opts_svd_ctm, corner_tol=1e-4, max_sweeps=4)
     print(info)
 
-    opts_post_truncation = {'opts_svd': opts_svd_ctm, 'method': '1site'}
+    opts_post_truncation = {'opts_svd': opts_svd_ctm, 'method': '2site'}
     for step in range(init_steps, steps):
         print(f"beta = {(step + 1) * dbeta:0.3f}" )
-        info = fpeps.evolution_step_(env, gates, opts_svd=opts_svd_evol, opts_post_truncation=opts_post_truncation)
+        info = fpeps.evolution_step_(env, gates, opts_svd=opts_svd_evol, opts_post_truncation=opts_post_truncation, initialization='EAT')
         infos.append(info)
 
     print(f"Delta_mean: {fpeps.accumulated_truncation_error(infos, statistics='mean'):0.4f}")

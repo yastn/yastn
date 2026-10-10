@@ -17,6 +17,23 @@ def _charges(sym):
 
 
 @pytest.mark.parametrize('sym', ['SU2', 'SU2xU1'])
+@pytest.mark.parametrize('axes', [((1, 0), (3, 2)), ((3, 0), (2, 1))])
+@pytest.mark.parametrize('transpose', [False, True])
+def test_ordered_disjoint_fusion(config_kwargs, sym, axes, transpose):
+    config = _config(config_kwargs, sym)
+    charges = ((0,), (1,)) if sym == 'SU2' else ((0, 0), (1, 1))
+    leg = yastn.Leg(config, t=charges, D=(1, 2))
+    a = yastn.rand(config, legs=(leg, leg.conj(), leg, leg.conj()))
+    if transpose:
+        a = a.transpose((2, 0, 3, 1))
+    order = tuple(i for group in axes for i in group)
+    fused = a.fuse_legs(axes, mode='hard')
+    restored = fused.unfuse_legs((0, 1))
+    assert restored.get_legs() == a.transpose(order).get_legs()
+    assert (restored - a.transpose(order)).norm() < tol
+
+
+@pytest.mark.parametrize('sym', ['SU2', 'SU2xU1'])
 def test_multiblock_multisignature_fuse_tree(config_kwargs, sym):
     """Three disjoint fusion subtrees retain every channel and signature."""
     config = _config(config_kwargs, sym)

@@ -43,6 +43,8 @@ def _fusion_intertwiner(sym, charges, signatures, total, channel):
     """Dense normalized CG tree for one reduced non-Abelian block."""
     oriented = tuple(sym.canonical_charge(t) if s == 1 else sym.conj_charge(t)
                      for t, s in zip(charges, signatures))
+    if not oriented:
+        return np.array(1.)
     if len(oriented) == 1:
         out = np.eye(sym.irrep_dimension(oriented[0]))
     else:
@@ -82,6 +84,7 @@ def _split_channel_flat(channel, nsym):
     return tuple(tuple(channel[n:n + nsym]) for n in range(0, len(channel), nsym))
 
 
+@lru_cache(maxsize=4096)
 def _contraction_recoupling(sym, charges_a, signs_a, total_a, channel_a,
                             charges_b, signs_b, total_b, channel_b,
                             nin_a, nin_b, charges_c, signs_c, total_c, channel_c):
@@ -559,7 +562,7 @@ def _meta_tensordot_nf(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b, la
             allowed = tuple(tuple(x for charge in path for x in
                                   (charge if isinstance(charge, tuple) else (charge,)))
                             for path in paths)
-            if candidate in allowed:
+            if candidate in allowed and len(nin_a) <= 1:
                 channel_pairs.append(candidate)
                 valid_pairs.append(ipair)
                 coefficients.append(1.0)
@@ -569,7 +572,7 @@ def _meta_tensordot_nf(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b, la
                 # sufficient: their fusion channel can be incompatible. Such
                 # block pairs have an identically zero categorical contraction.
                 continue
-            if len(allowed) == 1:
+            if len(allowed) == 1 and len(nin_a) <= 1:
                 channel_pairs.append(allowed[0])
                 valid_pairs.append(ipair)
                 coefficients.append(1.0)
@@ -584,6 +587,13 @@ def _meta_tensordot_nf(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b, la
                     charges_b, signs_b, struct_b.n, bl_b.channels[ib],
                     nin_a, nin_b, tuple(map(tuple, charges)), signatures_c,
                     struct_c.n, output_channel)
+                if len(nin_a) > 1 and nout_a:
+                    if len(nout_a) == 1:
+                        shared = charges_a[nout_a[0]]
+                    else:
+                        k = (len(nout_a) - 2) * sym.NSYM
+                        shared = bl_a.channels[ia][k:k + sym.NSYM]
+                    coefficient *= np.sqrt(sym.irrep_dimension(shared))
                 if abs(coefficient) > 1e-14:
                     channel_pairs.append(output_channel)
                     valid_pairs.append(ipair)

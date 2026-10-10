@@ -169,6 +169,18 @@ def test_full_multibond_ntu_then_ctm(config_kwargs):
                    for value in env.measure_1site(ops.I()).values())
 
 
+@pytest.mark.parametrize('sym', ['SU2', 'SU2xU1'])
+def test_SU2_onsite_identity_on_purification(config_kwargs, sym):
+    from yastn.tn.fpeps._gates_auxiliary import apply_gate_onsite
+
+    ops = (yastn.operators.Spin12(sym=sym, **config_kwargs) if sym == 'SU2'
+           else yastn.operators.SpinfulFermions(sym=sym, **config_kwargs))
+    geometry = fpeps.SquareLattice((1, 1), boundary='obc')
+    psi = fpeps.product_peps(geometry, ops.I())
+    tensor = psi[(0, 0)]
+    assert (apply_gate_onsite(tensor, ops.I()) - tensor).norm() < 1e-12
+
+
 def test_SU2xU1_operator_parity_uses_particle_number(config_kwargs):
     """PEPS measurements must not infer fermionic parity from the SU(2) label."""
     config = yastn.make_config(sym='SU2xU1', fermionic=(False, True), **config_kwargs)

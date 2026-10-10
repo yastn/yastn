@@ -252,12 +252,15 @@ def _fuse_disjoint_nonabelian_groups(a, axes):
     a = a._replace(trans=tuple(range(a.ndim_n)))
     tokens = [frozenset((i,)) for i in range(a.ndim_n)]
     desired = [frozenset(group) for group in axes]
-    for group in desired:
+    for ordered_group, group in zip(axes, desired):
         if len(group) < 2:
             continue
         positions = [i for i, token in enumerate(tokens) if token <= group]
         if frozenset().union(*(tokens[i] for i in positions)) != group:
             raise YastnError("Overlapping or inconsistent non-Abelian fusion groups.")
+        # The order within each group fixes its CG basis and signature.
+        # Membership alone would silently replace (1, 0) with (0, 1).
+        positions.sort(key=lambda i: min(ordered_group.index(leaf) for leaf in tokens[i]))
         permutation = tuple(positions + [i for i in range(len(tokens)) if i not in positions])
         if permutation != tuple(range(len(tokens))):
             a = _apply_fusion_tree_transpose(a, permutation)

@@ -59,7 +59,8 @@ class Spin12(meta_operators):
             raise YastnError("For Spin12 sym should be in ('dense', 'Z2', 'U1', 'SU2').")
         if self.config.fermionic != False:
             raise YastnError("For Spin12 config.fermionic should be False.")
-        self.operators = ('I', 'x', 'y', 'iy', 'z', 'sx', 'sy', 'isy', 'sz', 'sp', 'sm')
+        self.operators = (('I',) if self._sym == 'SU2' else
+                          ('I', 'x', 'y', 'iy', 'z', 'sx', 'sy', 'isy', 'sz', 'sp', 'sm'))
 
     def space(self) -> Leg:
         r""" :class:`yastn.Leg` object describing local Hilbert space. """
@@ -100,6 +101,8 @@ class Spin12(meta_operators):
 
     def x(self) -> Tensor:
         r""" Pauli :math:`\sigma^x` operator. """
+        if self._sym == 'SU2':
+            raise YastnError("Spin components are not SU2 scalars; use an SU2-invariant operator.")
         if self._sym == 'dense':
             x = Tensor(config=self.config, s=self.s)
             x.set_block(val=[[0, 1], [1, 0]], Ds=(2, 2))
@@ -113,6 +116,8 @@ class Spin12(meta_operators):
 
     def y(self) -> Tensor:
         r""" Pauli :math:`\sigma^y` operator. """
+        if self._sym == 'SU2':
+            raise YastnError("Spin components are not SU2 scalars; use an SU2-invariant operator.")
         if self._sym == 'dense':
             y = Tensor(config=self.config, s=self.s, dtype='complex128')
             y.set_block(val=[[0, -1j], [1j, 0]], Ds=(2, 2))
@@ -126,6 +131,8 @@ class Spin12(meta_operators):
 
     def iy(self) -> Tensor:
         r""" :math:`i \cdot \sigma^y` operator with real representation. """
+        if self._sym == 'SU2':
+            raise YastnError("Spin components are not SU2 scalars; use an SU2-invariant operator.")
         if self._sym == 'dense':
             y = Tensor(config=self.config, s=self.s)
             y.set_block(val=[[0, 1], [-1, 0]], Ds=(2, 2))
@@ -139,6 +146,8 @@ class Spin12(meta_operators):
 
     def z(self) -> Tensor:
         r""" Pauli :math:`\sigma^z` operator. """
+        if self._sym == 'SU2':
+            raise YastnError("Spin components are not SU2 scalars; use an SU2-invariant operator.")
         if self._sym == 'dense':
             z = Tensor(config=self.config, s=self.s)
             z.set_block(val=[[1, 0], [0, -1]], Ds=(2, 2))
@@ -220,6 +229,8 @@ class Spin12(meta_operators):
 
     def sp(self) -> Tensor:
         r""" Spin-1/2 raising operator :math:`S^+=S^x + iS^y`. """
+        if self._sym == 'SU2':
+            raise YastnError("Spin components are not SU2 scalars; use an SU2-invariant operator.")
         if self._sym == 'dense':
             sp = Tensor(config=self.config, s=self.s)
             sp.set_block(val=[[0, 1], [0, 0]], Ds=(2, 2))
@@ -233,6 +244,8 @@ class Spin12(meta_operators):
 
     def sm(self) -> Tensor:
         r""" Spin-1/2 lowering operator :math:`S^-=S^x - iS^y`. """
+        if self._sym == 'SU2':
+            raise YastnError("Spin components are not SU2 scalars; use an SU2-invariant operator.")
         if self._sym == 'dense':
             sm = Tensor(config=self.config, s=self.s)
             sm.set_block(val=[[0, 0], [1, 0]], Ds=(2, 2))
@@ -251,6 +264,8 @@ class Spin12(meta_operators):
         dict(str,yastn.Tensor)
             a map from strings to operators
         """
+        if self._sym == 'SU2':
+            return {'I': lambda j: self.I()}
         return {'I': lambda j: self.I(),
                 'x': lambda j: self.x(),
                 'y': lambda j: self.y(),

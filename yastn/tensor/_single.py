@@ -247,6 +247,15 @@ def conj(a) -> 'Tensor':
     struct = a.struct.replace(legs=new_legs, n=new_n)
     hfs = tuple(hf.conj() for hf in a.hfs)
     data = a.config.backend.conj(a._data)
+    if (not getattr(a.config.sym, 'IS_ABELIAN', True)
+            and a.struct.n == a.config.sym.zero() and a.ndim_n >= 3):
+        blocks = get_blocks(a.config.sym, a.struct)
+        pieces = []
+        negative = [i for i, leg in enumerate(a.struct.legs) if leg.s == -1]
+        for charges, slc in zip(blocks.t, blocks.slc):
+            phase = (-1) ** sum(int(charges[i, 0]) for i in negative)
+            pieces.append(phase * data[slice(*slc)])
+        data = a.config.backend.concatenate(pieces) if pieces else data
     return a._replace(hfs=hfs, struct=struct, data=data)
 
 

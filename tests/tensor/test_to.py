@@ -21,7 +21,7 @@ from ._nonabelian_utils import four_leg_tensor
 def _run_to_nonabelian(config_kwargs, sym):
     a = four_leg_tensor(yastn.make_config(sym=sym, **config_kwargs))
     b = a.to(dtype='complex128')
-    assert b.get_dtype() == 'complex128'
+    assert b.yastn_dtype == 'complex128'
     assert (b - a).norm() < 1e-12
 
 
