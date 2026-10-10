@@ -37,7 +37,6 @@ from yastn.tn.fpeps.envs._env_ctm import proj_corners
 from yastn.tn.fpeps.envs._env_ctm_SI_projectors import (
     si_proj_corners,
     si_projector_svd,
-    svd_charge_sector_values,
 )
 from yastn.tn.fpeps.envs.rdm import rdm1x1
 
@@ -257,9 +256,7 @@ def test_si_projector_identity_and_optimal_residual(config_kwargs,
 
     # Check the spectrum itself in addition to the reconstruction error, which
     # alone would not identify incorrectly ordered retained singular values.
-    si_values = np.concatenate(tuple(
-        np.asarray(values) for values in
-        svd_charge_sector_values(s_all).values()))
+    si_values = s_all.to_numpy().diagonal()
     assert np.allclose(np.sort(si_values)[::-1][:chi], values_ref[:chi],
                        rtol=2e-9, atol=2e-12)
 

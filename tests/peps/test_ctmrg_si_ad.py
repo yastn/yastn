@@ -20,6 +20,8 @@ import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
 import yastn.tn.fpeps.envs._env_ctm as env_ctm_module
+from yastn.tn.fpeps.envs._env_ctm_SI_projectors import (
+    initialize_si_bases, si_proj_corners)
 
 torch = pytest.importorskip("torch")
 pytestmark = pytest.mark.skipif(
@@ -284,3 +286,93 @@ def test_si_checkpoint_move(config_kwargs, checkpoint_move, monkeypatch):
     assert gradient is not None
     assert np.isfinite(float(gradient.norm()))
     assert float(gradient.norm()) > 1e-12
+
+
+# ---------------------------------------------------------------------------
+# Functorch transforms, as used by the fixed-point backward
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def forbid_functorch_host_reads(monkeypatch):
+    """Fail on ``.tolist()`` and ``.numpy()`` of a functorch-wrapped tensor.
+
+    The fixed-point backward differentiates a CTM step with ``torch.func.vjp``,
+    whose tensors have no storage: ``.tolist()`` of a CUDA tensor and
+    ``.numpy()`` of any tensor fail there. On CPU ``.tolist()`` happens to
+    work, so this guard makes such a read fail on every device. ``.item()``
+    works under the transform and stays allowed.
+    """
+    is_wrapped = torch._C._functorch.is_functorch_wrapped_tensor
+
+    def guarded(method):
+        def read(self, *args, **kwargs):
+            if is_wrapped(self):
+                raise AssertionError(
+                    f"Tensor.{method.__name__}() of a functorch-wrapped tensor.")
+            return method(self, *args, **kwargs)
+        return read
+
+    monkeypatch.setattr(torch.Tensor, 'tolist', guarded(torch.Tensor.tolist))
+    monkeypatch.setattr(torch.Tensor, 'numpy', guarded(torch.Tensor.numpy))
+
+
+def _skip_torch_cutensor(config_kwargs):
+    if config_kwargs['backend'] == 'torch_cutensor':
+        pytest.skip('torch.func.vjp rejects the custom ops of torch_cutensor')
+
+
+@pytest.mark.parametrize('recycled', [False, True],
+                         ids=('fresh_bases', 'recycled_detached_bases'))
+def test_si_gradient_under_functorch_vjp_matches_autograd(
+        config_kwargs, recycled, forbid_functorch_host_reads):
+    """torch.func.vjp of an SI CTM step agrees with ordinary autograd."""
+    _skip_torch_cutensor(config_kwargs)
+    beta = torch.tensor(0.37, dtype=torch.float64)
+    value, vjp = torch.func.vjp(
+        lambda b: _ising_nn_objective(
+            config_kwargs, b, method='si', recycled=recycled), beta)
+    gradient_vjp, = vjp(torch.ones_like(value))
+
+    beta_ad = beta.clone().requires_grad_(True)
+    _ising_nn_objective(
+        config_kwargs, beta_ad, method='si', recycled=recycled).backward()
+
+    assert np.isclose(gradient_vjp.item(), beta_ad.grad.item(),
+                      rtol=1e-10, atol=0)
+
+
+@pytest.mark.parametrize('refinement', ('per_sector_oversampling',
+                                        'adaptive_spectrum',
+                                        'sector_dimensions'))
+def test_si_refinements_under_functorch_vjp(
+        config_kwargs, refinement, forbid_functorch_host_reads):
+    """Sector refinement and SI projectors differentiate under torch.func.vjp."""
+    _skip_torch_cutensor(config_kwargs)
+    from tests.peps.test_ctmrg_si_symmetry_oracle import _biased_z2_corners
+
+    config = yastn.make_config(sym='Z2', **config_kwargs)
+    r0, r1 = _biased_z2_corners(config)
+    opts_svd = {'D_total': 4, 'tol': 0, 'fix_signs': True}
+    opts_si = {'oversampling': 2, 'niter': 3, 'tol': 0,
+               'refinement': refinement}
+
+    def loss(data0, data1):
+        # Refinement draws random probes; reseed so that both passes agree.
+        config.backend.random_seed(seed=37)
+        X, Y = initialize_si_bases(r0, r1, rank=6,
+                                   charges={(0,): 3, (1,): 3})
+        p0, p1, _, _, _ = si_proj_corners(
+            r0._replace(data=data0), r1._replace(data=data1),
+            opts_svd, opts_si, X=X, Y=Y, redistribute=True)
+        return p0.norm() ** 2 + p1.norm() ** 2
+
+    value, vjp = torch.func.vjp(loss, r0.data, r1.data)
+    gradients_vjp = vjp(torch.ones_like(value))
+
+    data = [x.detach().clone().requires_grad_(True) for x in (r0.data, r1.data)]
+    gradients_ad = torch.autograd.grad(loss(*data), data)
+
+    for gradient_vjp, gradient_ad in zip(gradients_vjp, gradients_ad):
+        assert torch.isfinite(gradient_vjp).all()
+        assert torch.allclose(gradient_vjp, gradient_ad, rtol=1e-10, atol=1e-12)
