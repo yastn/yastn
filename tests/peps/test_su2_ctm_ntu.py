@@ -71,7 +71,7 @@ def test_Hubbard_SU2xU1_infinite_temperature_weights(config_kwargs):
         psi = fpeps.product_peps(fpeps.CheckerboardLattice(), ops.I())
         env = fpeps.EnvCTM(psi, init='eye')
         env.ctmrg_(opts_svd={'D_total': 20}, max_sweeps=1)
-        mean = lambda values: sum(values.values()) / len(values)
+        mean = lambda values: (sum(values.values()) / len(values)).item()
         results[sym] = (mean(env.measure_1site(ops.n_total())),
                         mean(env.measure_1site(ops.d())))
 

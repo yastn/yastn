@@ -37,6 +37,7 @@ runs as subprocesses; it is skipped unless the torch backend is selected.
 import os
 import sys
 import subprocess
+import socket
 
 import pytest
 
@@ -209,9 +210,14 @@ def test_distributed_via_torchrun(request, nproc):
     # GPU and otherwise falls back to gloo/CPU, so it runs on any box.
     env = dict(os.environ)
     env.setdefault("MASTER_ADDR", "127.0.0.1")
-    env.setdefault("MASTER_PORT", "29555")
+    if "MASTER_PORT" not in env:
+        # Independent pytest-xdist workers must not share a rendezvous port.
+        with socket.socket() as listener:
+            listener.bind(("127.0.0.1", 0))
+            env["MASTER_PORT"] = str(listener.getsockname()[1])
     env["PYTHONPATH"] = _REPO_ROOT + os.pathsep + env.get("PYTHONPATH", "")
     cmd = [sys.executable, "-m", "torch.distributed.run",
+           f"--master_addr={env['MASTER_ADDR']}", f"--master_port={env['MASTER_PORT']}",
            f"--nproc_per_node={nproc}", "--nnodes=1", os.path.abspath(__file__)]
     proc = subprocess.run(cmd, env=env, cwd=os.getcwd(),
                           capture_output=True, text=True, timeout=600)

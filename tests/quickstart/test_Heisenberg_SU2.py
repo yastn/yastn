@@ -80,9 +80,8 @@ def _run_heisenberg(config_kwargs, symmetry, D=4, beta=0.04,
 def test_checkerboard_heisenberg_SU2_matches_U1(config_kwargs):
     reference = _run_heisenberg(config_kwargs, 'U1')
     su2 = _run_heisenberg(config_kwargs, 'SU2')
-    # At D=4 the SU2 update discards about 2e-2 in norm; at this deliberately
-    # tiny CI cutoff the leading high-temperature energy is only O(1e-2).
-    assert su2['energy'] == pytest.approx(reference['energy'], abs=1e-2)
+    assert su2['energy'] == pytest.approx(reference['energy'], abs=1e-5)
+
 
 
 if __name__ == '__main__':

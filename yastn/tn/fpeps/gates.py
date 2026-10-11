@@ -74,14 +74,9 @@ def gate_nn_exp(step, I, H, bond=None) -> Gate:
         H = H.fuse_legs(((0, 2), (1, 3)), mode='hard')
         dtype = 'complex128' if np.iscomplexobj(step) or H.is_complex() else H.yastn_dtype
         H = H.to(dtype=dtype)
-        identity = identity.fuse_legs(((0, 2), (1, 3)), mode='hard').to(dtype=dtype)
         G = H.copy()
-        backend = H.config.backend
         for key in H.get_blocks_charge():
-            metric = identity[key]
-            # H and the identity share the same signed fusion metric M.
-            # M exp(-step M^-1 H) retains that metric, including at step=0.
-            block = metric @ backend.expm(-step * (backend.pinv(metric) @ H[key]))
+            block = H.config.backend.expm(-step * H[key])
             G.set_block(ts=key, Ds=block.shape, val=block)
         G = G.unfuse_legs((0, 1)).transpose((0, 2, 1, 3))
         return decompose_nn_gate(G, bond)
@@ -170,19 +165,22 @@ def gate_nn_Heisenberg(J, step, I, Sz, Sp, Sm, bond=None) -> Gate:
 
 
 def gate_nn_Heisenberg_SU2(J, step, I, bond=None) -> Gate:
-    r"""SU(2)-reduced nearest-neighbor spin-1/2 Heisenberg gate.
+    r"""SU(2)-reduced nearest-neighbor Heisenberg gate for one spin irrep.
 
-    The gate is constructed directly in the coupled two-spin basis.  The
-    singlet and triplet energies are ``-3 J / 4`` and ``J / 4``, respectively.
+    The gate is constructed directly in the coupled two-spin basis. For
+    spin-1/2 the singlet/triplet energies are ``-3 J / 4`` and ``J / 4``;
+    for spin-1 the spin-0/1/2 energies are ``-2 J``, ``-J``, and ``J``.
     This avoids expressing the scalar Hamiltonian through the non-invariant
     components ``Sx``, ``Sy`` and ``Sz``.
     """
     if I.config.sym.SYM_ID != 'SU2':
         raise YastnError("gate_nn_Heisenberg_SU2 requires SU2 symmetry.")
     leg = I.get_legs(axes=0)
-    if leg.t != ((1,),) or leg.D != (1,):
-        raise YastnError("gate_nn_Heisenberg_SU2 requires a single spin-1/2 irrep.")
-    blocks = {(0,): [[-3 * J / 4]], (2,): [[J / 4]]}
+    if len(leg.t) != 1 or leg.D != (1,):
+        raise YastnError("gate_nn_Heisenberg_SU2 requires a single spin irrep.")
+    spin = leg.t[0][0] / 2
+    blocks = {charge: [[J * (charge[0] / 2 * (charge[0] / 2 + 1) - 2 * spin * (spin + 1)) / 2]]
+              for charge in I.config.sym.fusion_outcomes(leg.t[0], leg.t[0])}
     return _gate_nn_from_coupled_blocks(I, blocks, step, bond)
 
 
@@ -192,18 +190,11 @@ def _gate_nn_from_coupled_blocks(I, blocks, step, bond=None):
     coupled = leg_product(leg, leg)
     dtype = 'complex128' if np.iscomplexobj(step) or I.is_complex() else I.yastn_dtype
     gate_fused = zeros(config=I.config, legs=(coupled, coupled.conj()), dtype=dtype)
-    # Hard fusion carries both normalization factors and duality phases.
-    # Write M = P |M| for the fused identity.  The reduced operator is
-    # P sqrt(|M|) exp(-step H) sqrt(|M|); retaining P is essential in
-    # half-integer sectors, where M can be negative.
-    identity_fused = fkron(I, I).fuse_legs(
-        axes=((0, 2), (1, 3)), mode='hard')
+    # Hard-fused operator blocks are ordinary matrices in the coupled basis.
     for charge, dim in coupled.tD.items():
         H = np.asarray(blocks[charge], dtype=float).reshape(dim, dim)
         eigvals, eigvecs = np.linalg.eigh(H)
         block = (eigvecs * np.exp(-step * eigvals)) @ eigvecs.T.conj()
-        metric = I.config.backend.to_numpy(identity_fused[charge + charge])
-        block = block @ metric
         gate_fused.set_block(ts=charge + charge, Ds=(dim, dim), val=block)
     gate = gate_fused.unfuse_legs(axes=(0, 1)).transpose(axes=(0, 2, 1, 3))
     return decompose_nn_gate(gate, bond)
@@ -224,7 +215,7 @@ def gate_nn_Hubbard_SU2(t, U, mu, step, I, bond=None) -> Gate:
     singlet[2, 4] = singlet[4, 2] = -np.sqrt(2) * t
     spinor = np.diag([-mu, U - 3 * mu, -mu, U - 3 * mu])
     spinor[0, 2] = spinor[2, 0] = -t
-    spinor[1, 3] = spinor[3, 1] = -t
+    spinor[1, 3] = spinor[3, 1] = t
     return _gate_nn_from_coupled_blocks(I, {(0,): singlet, (1,): spinor,
                                            (2,): [[-2 * mu]]}, step, bond)
 
@@ -261,12 +252,9 @@ def gate_nn_Hubbard_SU2xU1(t, U, mu, step, I, bond=None) -> Gate:
                  [0, U - 2 * mu, -rt2 * t],
                  [-rt2 * t, -rt2 * t, -2 * mu]],
         (2, 2): [[-2 * mu]],
-        # multiplicity order: |D,sigma>, |sigma,D>.  The two states differ by
-        # moving one fermion across the occupied opposite-spin mode, but the
-        # graded site tensor product contributes the compensating exchange
-        # sign.  In the Fock convention used by fkron the matrix element is
-        # therefore -t, exactly as in the one-particle sector.
-        (1, 3): [[U - 3 * mu, -t], [-t, U - 3 * mu]],
+        # Moving a fermion past the occupied opposite-spin mode reverses
+        # the hopping sign in the three-particle sector (canonical Fock basis).
+        (1, 3): [[U - 3 * mu, t], [t, U - 3 * mu]],
         (0, 4): [[2 * U - 4 * mu]],
     }
     return _gate_nn_from_coupled_blocks(I, blocks, step, bond)

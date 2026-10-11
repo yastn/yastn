@@ -7,6 +7,34 @@ from yastn.tn import fpeps
 from yastn.tn.fpeps.envs.rdm import rdm1x2
 
 
+def _expand_magnetic(a):
+    """Expand a small test tensor; multiplicities precede magnetic indices."""
+    from yastn.tensor._auxiliary import get_blocks
+    from yastn.tensor._nonabelian import intertwiner
+
+    a = a.consume_transpose()
+    sym, maps, shape = a.config.sym, [], []
+    for leg in a.get_legs():
+        sectors, start = {}, 0
+        for charge, dimension in zip(leg.t, leg.D):
+            size = dimension * sym.irrep_dimension(charge)
+            sectors[charge] = slice(start, start + size)
+            start += size
+        maps.append(sectors)
+        shape.append(start)
+    out = np.zeros(shape, dtype=complex)
+    blocks = get_blocks(sym, a.struct)
+    for charges, path, dimensions, slc in zip(blocks.t, blocks.channels, blocks.D, blocks.slc):
+        charges = tuple(map(tuple, charges))
+        cg = intertwiner(sym, charges, a.s, a.n, tuple(path))
+        data = a.config.backend.to_numpy(a._data[slice(*slc)]).reshape(dimensions)
+        order = tuple(i for axis in range(a.ndim) for i in (axis, axis + a.ndim))
+        values = np.tensordot(data, cg, axes=0).transpose(order)
+        values = values.reshape(tuple(d * sym.irrep_dimension(t) for d, t in zip(dimensions, charges)))
+        out[tuple(sectors[t] for sectors, t in zip(maps, charges))] += values
+    return out
+
+
 def _fock_operators():
     annihilation = []
     for mode in range(4):
@@ -57,6 +85,13 @@ def test_fermionic_SU2_thermal_against_ED(config_kwargs, sym, model, step):
         H -= t * (hopping + hopping.T)
     H = H[np.ix_(keep, keep)]
     propagator = expm(-step * H)
+    # Compare every complex matrix element, including the three-particle
+    # hopping sign which thermal densities and spectra alone cannot detect.
+    full = yastn.ncon(gate.G, [(0, -1, 1), (-2, -3, 1)])
+    local_states = [0, 3, 2, 1] if model == 'Hubbard' else [0, 2, 1]
+    order = [list(keep).index(left + 4 * right) for left in local_states for right in local_states]
+    actual = _expand_magnetic(full).transpose(0, 2, 1, 3).reshape(len(keep), len(keep))
+    assert np.allclose(actual, propagator[np.ix_(order, order)], atol=2e-12, rtol=0)
     rho = propagator @ propagator.conj().T
     rho /= np.trace(rho)
     _, env = _thermal_peps(ops, gate, config_kwargs)
@@ -72,21 +107,29 @@ def test_fermionic_SU2_thermal_against_ED(config_kwargs, sym, model, step):
 
 
 @pytest.mark.parametrize('step', [0.17, 0.17j])
-def test_heisenberg_SU2_thermal_energy(config_kwargs, step):
-    ops = yastn.operators.Spin12(sym='SU2', **config_kwargs)
+@pytest.mark.parametrize('spin', [0.5, 1])
+def test_heisenberg_SU2_thermal_energy(config_kwargs, step, spin):
+    factory = yastn.operators.Spin12 if spin == 0.5 else yastn.operators.Spin1
+    ops = factory(sym='SU2', **config_kwargs)
     J = 1.3
     gate = fpeps.gates.gate_nn_Heisenberg_SU2(J, step, ops.I())
     psi, env = _thermal_peps(ops, gate, config_kwargs)
     rho, _ = rdm1x2((0, 0), psi, env)
     rho = rho.fuse_legs(((0, 2), (1, 3)), mode='hard')
-    weights = {j: (j + 1) * np.trace(rho.config.backend.to_numpy(rho[(j, j)])) for j in (0, 2)}
-    energy = J * (-0.75 * weights[0] + 0.25 * weights[2]) / sum(weights.values())
-    # Independent Pauli-matrix Hamiltonian, as in peps-torch groups/su2.py SS().
-    sx = np.array([[0., 1.], [1., 0.]]) / 2
-    sy = np.array([[0., -1j], [1j, 0.]]) / 2
-    sz = np.diag([1., -1.]) / 2
+    weights = {j: (j + 1) * np.trace(rho.config.backend.to_numpy(rho[(j, j)]))
+               for j in range(0, int(4 * spin) + 1, 2)}
+    energy = sum(J * (j / 2 * (j / 2 + 1) - 2 * spin * (spin + 1)) / 2 * weight
+                 for j, weight in weights.items()) / sum(weights.values())
+    # Independent magnetic spin matrices, as in peps-torch groups/su2.py SS().
+    magnetic = np.arange(-spin, spin + 1)
+    raising = np.diag(np.sqrt(spin * (spin + 1) - magnetic[:-1] * (magnetic[:-1] + 1)), -1)
+    sx, sy, sz = (raising + raising.T) / 2, (raising - raising.T) / (2j), np.diag(magnetic)
     H = J * sum(np.kron(s, s) for s in (sx, sy, sz))
     propagator = expm(-step * H)
+    full = yastn.ncon(gate.G, [(0, -1, 1), (-2, -3, 1)])
+    dimension = int(2 * spin + 1) ** 2
+    actual = _expand_magnetic(full).transpose(0, 2, 1, 3).reshape(dimension, dimension)
+    assert np.allclose(actual, propagator, atol=2e-12, rtol=0)
     exact = propagator @ propagator.conj().T
     expected = np.trace(exact @ H) / np.trace(exact)
     assert energy == pytest.approx(expected, abs=2e-11)

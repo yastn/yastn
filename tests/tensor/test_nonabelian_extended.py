@@ -75,16 +75,13 @@ def test_multiblock_mixed_signature_svd_qr(config_kwargs, sym):
     assert (U @ S @ V - target).norm() < tol
     gram_u = yastn.tensordot(U.conj(), U, axes=((0, 1), (0, 1)))
     eye_u = yastn.eye(config, legs=U.get_legs(-1).conj(), isdiag=False)
-    # Half-integer SU(2) sectors carry the Frobenius--Schur sign in the
-    # categorical cup/cap convention.  The magnitude is the ordinary Gram
-    # identity; its sign is independently covered by swap/duality tests.
-    assert (abs(gram_u) - eye_u).norm() < tol
+    assert (gram_u - eye_u).norm() < tol
 
     Q, R = a.qr(axes=axes)
     assert (Q @ R - target).norm() < tol
     gram_q = yastn.tensordot(Q.conj(), Q, axes=((0, 1), (0, 1)))
     eye_q = yastn.eye(config, legs=Q.get_legs(-1).conj(), isdiag=False)
-    assert (abs(gram_q) - eye_q).norm() < tol
+    assert (gram_q - eye_q).norm() < tol
 
 
 @pytest.mark.parametrize('sym', ['SU2', 'SU2xU1'])
@@ -97,4 +94,4 @@ def test_multiblock_eigh_reconstruction(config_kwargs, sym):
     assert (U @ S @ U.H - h).norm() < tol
     gram = yastn.tensordot(U.conj(), U, axes=((0,), (0,)))
     eye = yastn.eye(config, legs=U.get_legs(-1).conj(), isdiag=False)
-    assert (abs(gram) - eye).norm() < tol
+    assert (gram - eye).norm() < tol

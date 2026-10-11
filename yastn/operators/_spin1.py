@@ -36,7 +36,7 @@ class Spin1(meta_operators):
         Parameters
         ----------
         sym : str
-            Explicit symmetry to be used. Allowed options are :code:`'dense'`, ``'Z3'``, or ``'U1'``.
+            Explicit symmetry to be used. Allowed options are :code:`'dense'`, ``'Z3'``, ``'U1'``, or ``'SU2'``.
 
         kwargs
             Other YASTN configuration parameters can be provided, see :meth:`yastn.make_config`.
@@ -48,15 +48,17 @@ class Spin1(meta_operators):
             * For :code:`sym='dense'`, the basis order is (sz=+1, sz=0, sz=-1).
             * For :code:`sym='Z3'`, charge t=0 :math:`\rightarrow` sz=+1, t=1 :math:`\rightarrow` sz=0; t=2 :math:`\rightarrow` sz=-1.
             * For :code:`sym='U1'`, charge t=-1 :math:`\rightarrow` sz=-1, t=0 :math:`\rightarrow` sz=0, t=1 :math:`\rightarrow` sz=1; i.e., sz = t.
+            * For :code:`sym='SU2'`, charge t=2 labels one spin-1 irrep with multiplicity one.
+              Only the invariant identity is provided; individual spin components and eigenvectors are not scalar SU(2) tensors.
 
         Default configuration sets :code:`fermionic` to :code:`False`.
         """
         super().__init__(**kwargs)
-        if self._sym not in ('dense', 'Z3', 'U1'):
-            raise YastnError("For Spin1 sym should be in ('dense', 'Z3', 'U1').")
+        if self._sym not in ('dense', 'Z3', 'U1', 'SU2'):
+            raise YastnError("For Spin1 sym should be in ('dense', 'Z3', 'U1', 'SU2').")
         if self.config.fermionic != False:
             raise YastnError("For Spin1 config.fermionic should be False.")
-        self.operators = ('I', 'sx', 'sy', 'isy', 'sz', 'sp', 'sm')
+        self.operators = ('I',) if self._sym == 'SU2' else ('I', 'sx', 'sy', 'isy', 'sz', 'sp', 'sm')
 
     def space(self) -> Leg:
         r""" :class:`yastn.Leg` object describing local Hilbert space. """
@@ -66,6 +68,8 @@ class Spin1(meta_operators):
             leg = Leg(self.config, s=1, t=(0, 1, 2), D=(1, 1, 1))
         if self._sym == 'U1':
             leg = Leg(self.config, s=1, t=(-1, 0, 1), D=(1, 1, 1))
+        if self._sym == 'SU2':
+            leg = Leg(self.config, s=1, t=(2,), D=(1,))
         return leg
 
     def key(self) -> Callable | None:
@@ -94,10 +98,15 @@ class Spin1(meta_operators):
             I.set_block(ts=(1, 1), Ds=(1, 1), val=1)
             I.set_block(ts=(0, 0), Ds=(1, 1), val=1)
             I.set_block(ts=(-1, -1), Ds=(1, 1), val=1)
+        if self._sym == 'SU2':
+            I = Tensor(config=self.config, s=self.s)
+            I.set_block(ts=(2, 2), Ds=(1, 1), val=1)
         return I
 
     def sx(self) -> Tensor:
         r""" Spin-1 :math:`S^x` operator. """
+        if self._sym == 'SU2':
+            raise YastnError('Individual spin components are not SU(2)-invariant scalar tensors.')
         isq2 = 1 / np.sqrt(2)
         if self._sym == 'dense':
             sx = Tensor(config=self.config, s=self.s)
@@ -108,6 +117,8 @@ class Spin1(meta_operators):
 
     def sy(self) -> Tensor:
         r""" Spin-1 :math:`S^y` operator. """
+        if self._sym == 'SU2':
+            raise YastnError('Individual spin components are not SU(2)-invariant scalar tensors.')
         iisq2 = 1j / np.sqrt(2)
         if self._sym == 'dense':
             sy = Tensor(config=self.config, s=self.s, dtype='complex128')
@@ -118,6 +129,8 @@ class Spin1(meta_operators):
 
     def isy(self) -> Tensor:
         r""" Spin-1 :math:`i \cdot S^y` operator with real representation. """
+        if self._sym == 'SU2':
+            raise YastnError('Individual spin components are not SU(2)-invariant scalar tensors.')
         isq2 = 1 / np.sqrt(2)
         if self._sym == 'dense':
             sy = Tensor(config=self.config, s=self.s)
@@ -128,6 +141,8 @@ class Spin1(meta_operators):
 
     def sz(self) -> Tensor:
         r""" Spin-1 :math:`S^z` operator. """
+        if self._sym == 'SU2':
+            raise YastnError('Individual spin components are not SU(2)-invariant scalar tensors.')
         if self._sym == 'dense':
             sz = Tensor(config=self.config, s=self.s)
             sz.set_block(val=[[1, 0, 0], [0, 0, 0], [0, 0, -1]], Ds=(3, 3))
@@ -145,6 +160,8 @@ class Spin1(meta_operators):
 
     def vec_z(self, val=1) -> Tensor:
         r""" Normalized eigenvectors of :math:`S^z`. """
+        if self._sym == 'SU2':
+            raise YastnError('Individual spin components are not SU(2)-invariant scalar tensors.')
         if self._sym == 'dense' and val == 1:
             vec = Tensor(config=self.config, s=(1,))
             vec.set_block(val=[1, 0, 0], Ds=(3,))
@@ -178,6 +195,8 @@ class Spin1(meta_operators):
 
     def vec_x(self, val=1) -> Tensor:
         r""" Normalized eigenvectors of :math:`S^x`. """
+        if self._sym == 'SU2':
+            raise YastnError('Individual spin components are not SU(2)-invariant scalar tensors.')
         isq2 = 1 / np.sqrt(2)
         if self._sym == 'dense' and val == 1:
             vec = Tensor(config=self.config, s=(1,))
@@ -194,6 +213,8 @@ class Spin1(meta_operators):
 
     def vec_y(self, val=1) -> Tensor:
         r""" Normalized eigenvectors of :math:`S^y`. """
+        if self._sym == 'SU2':
+            raise YastnError('Individual spin components are not SU(2)-invariant scalar tensors.')
         isq2 = 1 / np.sqrt(2)
         if self._sym == 'dense' and val == 1:
             vec = Tensor(config=self.config, s=(1,), dtype='complex128')
@@ -210,6 +231,8 @@ class Spin1(meta_operators):
 
     def sp(self) -> Tensor:
         r""" Spin-1 raising operator :math:`S^+=S^x + iS^y`. """
+        if self._sym == 'SU2':
+            raise YastnError('Individual spin components are not SU(2)-invariant scalar tensors.')
         sq2 = np.sqrt(2)
         if self._sym == 'dense':
             sp = Tensor(config=self.config, s=self.s)
@@ -226,6 +249,8 @@ class Spin1(meta_operators):
 
     def sm(self) -> Tensor:
         r""" Spin-1 lowering operator :math:`S^-=S^x - iS^y`. """
+        if self._sym == 'SU2':
+            raise YastnError('Individual spin components are not SU(2)-invariant scalar tensors.')
         sq2 = np.sqrt(2)
         if self._sym == 'dense':
             sm = Tensor(config=self.config, s=self.s)
@@ -254,6 +279,8 @@ class Spin1(meta_operators):
                    |
                    1(+1)
         """
+        if self._sym == 'SU2':
+            raise YastnError('Individual spin components are not SU(2)-invariant scalar tensors.')
         vec_s= block({i: t.add_leg(axis=0, s=-1) for i, t in enumerate(
                         [self.sz(), self.sp(), self.sm()])}, common_legs=(1, 2))
         vec_s= vec_s.drop_leg_history(axes=0)
@@ -268,6 +295,8 @@ class Spin1(meta_operators):
 
             0(+1)--g--1(+1)
         """
+        if self._sym == 'SU2':
+            raise YastnError('Individual spin components are not SU(2)-invariant scalar tensors.')
         if self._sym == 'dense':
             g = Tensor(config=self.config, s=(1, 1))
             g.set_block(val=[[1, 0, 0], [0, 0, 0.5], [0, 0.5, 0]], Ds=(3, 3))
@@ -290,6 +319,8 @@ class Spin1(meta_operators):
         dict(str,yastn.Tensor)
             a map from strings to operators
         """
+        if self._sym == 'SU2':
+            return {'I': lambda j: self.I()}
         return {'I': lambda j: self.I(),
                 'sx': lambda j: self.sx(),
                 'sy': lambda j: self.sy(),

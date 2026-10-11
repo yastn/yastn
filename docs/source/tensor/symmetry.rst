@@ -35,16 +35,13 @@ Example symmetries defined in YASTN
 Non-Abelian symmetries
 ---------------------
 
-The reduced SU2/SU2xU1 implementation is experimental. Tensor and gate
-regressions are available for NumPy and Torch, but PEPS evolution and
-measurement still have a numerical consistency gap: the untruncated two-site
-Hubbard comparison against exact diagonalization does not yet agree at
-machine precision. This is tracked by
-``tests/quickstart/test_Hubbard_SU2.py::test_two_site_hubbard_SU2_against_ED``
-(run with ``--quickstart``). The checkerboard Hubbard quickstart also fails
-its comparison with U1xU1, with substantial errors in double occupancy and
-nearest-neighbor density correlations. Passing the tensor and gate tests
-does not yet establish the correctness of non-Abelian PEPS simulations.
+The reduced SU2/SU2xU1 implementation supports invariant tensors and PEPS
+purification. Independent two-site exact-diagonalization tests cover Hubbard,
+t-J, and spin-1/2 and spin-1 Heisenberg evolution, including complex time steps,
+NTU truncation without discarded states, and CTM observables. Checkerboard
+quickstarts compare high-temperature scalar observables with Abelian simulations;
+run them with ``--quickstart``. These small-system/high-temperature checks do not
+establish convergence at low temperature or at large bond dimension.
 
 ``sym='SU2'`` labels irreducible representations by the non-negative integer
 ``2*j``. ``sym='SU2xU1'`` uses pairs ``(2*j, q)``, where ``q`` is an integer
@@ -72,14 +69,19 @@ classes also provide Clebsch--Gordan fusion isometries and F/R coefficients.
 Scalar operators and evolution gates
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-``Spin12(sym='SU2')`` provides the identity on a spin doublet. Individual spin
+``Spin12(sym='SU2')`` and ``Spin1(sym='SU2')`` provide the identity on a spin
+doublet and triplet, respectively. Individual spin
 components are not invariant scalar operators and raise ``YastnError``.
-``SpinfulFermions(sym='SU2xU1')`` provides ``I()``, ``n_total()``, ``d()``
+``SpinfulFermions(sym='SU2')`` and ``SpinfulFermions(sym='SU2xU1')`` provide ``I()``, ``n_total()``, ``d()``
 (double occupancy), and ``h()`` (empty-site projector). Its fermionic grading
-is ``(False, True)``, determined by particle-number parity.
+is ``(False, True)`` for SU2xU1, determined by particle-number parity. For pure
+SU2 it is ``True``: ``2*j mod 2`` is the fermion parity. The pure SU2 Hubbard
+space has two spin-zero copies (empty, doubly occupied) and one spin doublet.
+``SpinfulFermions_tJ`` supports both symmetries with double occupancy excluded.
 
 The PEPS gate constructors ``gate_nn_Heisenberg_SU2``,
-``gate_nn_Hubbard_SU2xU1``, and ``gate_nn_tJ_SU2xU1`` build invariant two-site
+``gate_nn_Hubbard_SU2``, ``gate_nn_Hubbard_SU2xU1``, ``gate_nn_tJ_SU2``, and
+``gate_nn_tJ_SU2xU1`` build invariant two-site
 gates. They accept real ``step`` for imaginary-time evolution or imaginary
 ``step`` for real-time evolution. For example::
 
@@ -89,7 +91,17 @@ gates. They accept real ``step`` for imaginary-time evolution or imaginary
     gate = fpeps.gates.gate_nn_Hubbard_SU2xU1(
         t=1, U=4, mu=2, step=0.01j, I=ops.I())
 
-Reduced fused operator blocks include CG normalization and duality phases;
-their identity blocks need not be unit matrices or positive definite.
-``gate_nn_exp`` accounts for this convention when exponentiating an invariant
-Hamiltonian, and a zero time step reproduces ``fkron(I, I)``.
+Hard-fused operator blocks are ordinary matrices in an orthonormal coupled
+basis. Fusion/unfusion accounts for CG normalization and duality phases;
+``gate_nn_exp`` exponentiates those matrices, and a zero time step reproduces
+``fkron(I, I)``. Traces and Frobenius norms of rank-two maps include the irrep
+dimension. Higher-rank invariant tensors use normalized CG trees.
+
+The implementation separates structural CG data from multiplicity coefficients.
+CG contractions use small vertex networks, and SU2xU1 shares numerical spin
+coefficients across particle-number sectors. This avoids expanding whole
+magnetic tensors for contractions. The fixed-basis/variable-coefficient separation
+can also be seen in `peps-torch IPEPS_LC
+<https://github.com/jurajHasik/peps-torch/blob/master/ipeps/ipeps_lc.py>`_; its
+`groups/su2.py <https://github.com/jurajHasik/peps-torch/blob/master/groups/su2.py>`_
+constructs explicit magnetic spin matrices, whereas YASTN stores reduced blocks.

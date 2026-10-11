@@ -136,33 +136,26 @@ def test_Heisenberg_gate(config_kwargs):
 
 
 @pytest.mark.parametrize('step', [0.07, 0.07j])
-def test_Heisenberg_gate_SU2(config_kwargs, step):
-    """SU2 gate has the exact singlet/triplet Boltzmann factors."""
-    ops = yastn.operators.Spin12(sym='SU2', **config_kwargs)
+@pytest.mark.parametrize('factory, energies', [
+    (yastn.operators.Spin12, (-0.75, 0.25)),
+    (yastn.operators.Spin1, (-2, -1, 1)),
+])
+def test_Heisenberg_gate_SU2(config_kwargs, step, factory, energies):
+    """SU2 gates have the exact Boltzmann factors in each total-spin sector."""
+    ops = factory(sym='SU2', **config_kwargs)
     J = 1.3
     gate = fpeps.gates.gate_nn_Heisenberg_SU2(J, step, ops.I())
     fused = _reconstruct_coupled_gate(gate, ops.I())
-    assert np.allclose(fused[(0, 0)], [[np.exp(3 * J * step / 4)]])
-    assert np.allclose(fused[(2, 2)], [[np.exp(-J * step / 4)]])
+    for spin, energy in enumerate(energies):
+        block = fused.config.backend.to_numpy(fused[(2 * spin, 2 * spin)])
+        assert np.allclose(block, [[np.exp(-J * step * energy)]])
 
 
 def _reconstruct_coupled_gate(gate, I=None):
     full = yastn.ncon(gate.G, [(-0, -1, 1), (-2, -3, 1)])
     fused = full.transpose((0, 2, 1, 3)).fuse_legs(
         ((0, 1), (2, 3)), mode='hard')
-    if I is None:
-        return fused
-    metric = yastn.fkron(I, I).fuse_legs(
-        ((0, 2), (1, 3)), mode='hard')
-    physical = fused.copy()
-    for key in fused.get_blocks_charge():
-        vals, vecs = np.linalg.eigh(metric.config.backend.to_numpy(metric[key]))
-        invsqrt = ((vecs * (1 / np.sqrt(np.abs(vals)))) @ vecs.T.conj())
-        phase = (vecs * np.sign(vals)) @ vecs.T.conj()
-        block = fused.config.backend.to_numpy(fused[key])
-        physical.set_block(ts=key, Ds=block.shape,
-                           val=invsqrt @ phase @ block @ invsqrt)
-    return physical
+    return fused
 
 
 def _matrix_exp(H, step):
@@ -170,10 +163,11 @@ def _matrix_exp(H, step):
     return (u * np.exp(-step * d)) @ u.T
 
 
-@pytest.mark.parametrize('model', ['Heisenberg', 'Hubbard', 'tJ'])
+@pytest.mark.parametrize('model', ['Heisenberg', 'Heisenberg_spin1', 'Hubbard', 'tJ'])
 def test_SU2_zero_step_gate(config_kwargs, model):
-    if model == 'Heisenberg':
-        ops = yastn.operators.Spin12(sym='SU2', **config_kwargs)
+    if model in ('Heisenberg', 'Heisenberg_spin1'):
+        factory = yastn.operators.Spin12 if model == 'Heisenberg' else yastn.operators.Spin1
+        ops = factory(sym='SU2', **config_kwargs)
         gate = fpeps.gates.gate_nn_Heisenberg_SU2(1.3, 0, ops.I())
     elif model == 'Hubbard':
         ops = yastn.operators.SpinfulFermions(sym='SU2xU1', **config_kwargs)
@@ -199,7 +193,7 @@ def test_Hubbard_gate_SU2xU1(config_kwargs, step):
                  [0, U - 2 * mu, -rt2 * t],
                  [-rt2 * t, -rt2 * t, -2 * mu]],
         (2, 2): [[-2 * mu]],
-        (1, 3): [[U - 3 * mu, -t], [-t, U - 3 * mu]],
+        (1, 3): [[U - 3 * mu, t], [t, U - 3 * mu]],
         (0, 4): [[2 * U - 4 * mu]],
     }
     for charge, H in expected.items():
@@ -208,7 +202,7 @@ def test_Hubbard_gate_SU2xU1(config_kwargs, step):
     # Independent fermionic reference in the explicit
     # |0>, |down>, |up>, |up down> Fock basis.  In particular this checks the
     # N=3 hopping sign, which cannot be detected from gate eigenvalues alone.
-    ops_u1 = yastn.operators.SpinfulFermions(sym='U1xU1', **config_kwargs)
+    ops_u1 = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', **config_kwargs)
     Iu = ops_u1.I()
     cu, cpu = ops_u1.c('u'), ops_u1.cp('u')
     cd, cpd = ops_u1.c('d'), ops_u1.cp('d')
@@ -224,12 +218,12 @@ def test_Hubbard_gate_SU2xU1(config_kwargs, step):
     dense = dense.to_numpy().transpose(0, 2, 1, 3).reshape(16, 16)
     assert np.allclose(fused[(1, 1, 1, 1)], dense[np.ix_([1, 4], [1, 4])],
                        atol=1e-12)
-    # With the graded site tensor product the SU(2) singlet made of two
-    # singly occupied sites is (|down,up> + |up,down>) / sqrt(2).
+    # In the canonical Fock basis the CG singlet is
+    # (|up,down> - |down,up>) / sqrt(2).
     projector_n2 = np.zeros((16, 3))
     projector_n2[3, 0] = 1       # |0,D>
     projector_n2[12, 1] = 1      # |D,0>
-    projector_n2[[6, 9], 2] = 1 / np.sqrt(2)
+    projector_n2[[6, 9], 2] = np.array([-1, 1]) / np.sqrt(2)
     assert np.allclose(fused[(0, 2, 0, 2)],
                        projector_n2.T @ dense @ projector_n2, atol=1e-12)
     # One fixed spin component spans |D,sigma>, |sigma,D>; SU(2) guarantees
@@ -269,7 +263,7 @@ def test_Hubbard_SU2xU1_second_order_trotter_against_ED(config_kwargs):
     import scipy.linalg
 
     t, U, step = 0.7, 3.2, 0.04
-    ops = yastn.operators.SpinfulFermions(sym='U1xU1', **config_kwargs)
+    ops = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', **config_kwargs)
     I = ops.I()
     cu, cpu = ops.c('u'), ops.cp('u')
     cd, cpd = ops.c('d'), ops.cp('d')
@@ -313,7 +307,7 @@ def test_Hubbard_SU2xU1_second_order_trotter_against_ED(config_kwargs):
         (0, 0): np.eye(16)[:, [0]],
         (1, 1): np.eye(16)[:, [1, 4]],
         (0, 2): np.column_stack((np.eye(16)[:, 3], np.eye(16)[:, 12],
-                                 (np.eye(16)[:, 6] + np.eye(16)[:, 9]) / rt2)),
+                                 (-np.eye(16)[:, 6] + np.eye(16)[:, 9]) / rt2)),
         (2, 2): np.eye(16)[:, [5]],  # one triplet component
         (1, 3): np.eye(16)[:, [13, 7]],
         (0, 4): np.eye(16)[:, [15]],

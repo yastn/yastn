@@ -90,6 +90,15 @@ def _contraction_recoupling(sym, charges_a, signs_a, total_a, channel_a,
                             nin_a, nin_b, charges_c, signs_c, total_c, channel_c):
     """Overlap of a glued pair of CG trees with a canonical output tree."""
     from ._nonabelian import contraction_coefficient
+    if sym.SYM_ID == 'SU2xU1':
+        # U(1) selects allowed blocks above; the numerical CG network depends
+        # only on spin. Share its cache across particle-number sectors.
+        from ..sym import sym_SU2
+        spin_charges = lambda charges: tuple((t[0],) for t in charges)
+        return contraction_coefficient(
+            sym_SU2, spin_charges(charges_a), signs_a, (total_a[0],), tuple(channel_a[::2]),
+            spin_charges(charges_b), signs_b, (total_b[0],), tuple(channel_b[::2]),
+            nin_a, nin_b, spin_charges(charges_c), signs_c, (total_c[0],), tuple(channel_c[::2]))
     return contraction_coefficient(sym, charges_a, signs_a, total_a, channel_a,
                                    charges_b, signs_b, total_b, channel_b,
                                    nin_a, nin_b, charges_c, signs_c, total_c, channel_c)
@@ -543,19 +552,13 @@ def _meta_tensordot_nf(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b, la
     if not getattr(sym, 'IS_ABELIAN', True):
         tn_pairs = np.concatenate((bl_a.t[ind_a][:, nout_a, :],
                                    bl_b.t[ind_b][:, nout_b, :]), axis=1)
-        # With contracted subtrees exposed, the output left-associated path
-        # consists of the prefix path of a through its complete outgoing
-        # group, followed by b's path after its contracted prefix.
-        cut_a = max(len(nout_a) - 1, 0) * sym.NSYM
-        cut_b = max(len(nin_b) - 1, 0) * sym.NSYM
-        proposed = tuple(tuple(bl_a.channels[ia][:cut_a]) +
-                         tuple(bl_b.channels[ib][cut_b:])
-                         for ia, ib in zip(ind_a, ind_b))
+        # Project every compatible gluing onto the complete output channel
+        # basis; matching external charges alone does not fix an intertwiner.
         signatures_c = tuple(leg.s for leg in struct_c.legs)
         channel_pairs = []
         valid_pairs = []
         coefficients = []
-        for ipair, (charges, candidate, ia, ib) in enumerate(zip(tn_pairs, proposed, ind_a, ind_b)):
+        for ipair, (charges, ia, ib) in enumerate(zip(tn_pairs, ind_a, ind_b)):
             paths = sym.signed_fusion_paths(tuple(map(tuple, charges)), struct_c.n, signatures_c)
             allowed = tuple(tuple(x for charge in path for x in
                                   (charge if isinstance(charge, tuple) else (charge,)))
@@ -1126,6 +1129,7 @@ def trace(a, axes=(0, 1), lazy_threshold=None) -> 'Tensor':
     in_0, in_1 = _clear_axes(*axes)  # contracted legs
     if set(in_0) & set(in_1):
         raise YastnError('The same axis in axes[0] and axes[1].')
+    mask_needed, (nin_0, nin_1) = _unpack_trans_test_axes_pair(a, a, sgn=-1, axes=(in_0, in_1))
     if not getattr(a.config.sym, 'IS_ABELIAN', True):
         from ..initialize import eye
         if a.isdiag:
@@ -1137,7 +1141,6 @@ def trace(a, axes=(0, 1), lazy_threshold=None) -> 'Tensor':
             a = tensordot(a, pairing, axes=((ai, aj), (0, 1)))
             remaining = [k for k in remaining if k not in (i, j)]
         return a
-    mask_needed, (nin_0, nin_1) = _unpack_trans_test_axes_pair(a, a, sgn=-1, axes=(in_0, in_1))
     # nin_0, nin_1 take into account a.trans
 
     if len(nin_0) == 0:

@@ -218,19 +218,7 @@ def _fuse_legs_hard(a, axes, order):
         axes = tuple(tuple(range(starts[n], starts[n + 1]))
                      for n in range(len(group_sizes)))
         order = tuple(range(a.ndim_n))
-    try:
-        meta_mrg, size, struct_new, legs_old = _meta_fuse_hard(a.config.sym, a.struct, axes)
-    except YastnError as exc:
-        if (not getattr(a.config.sym, 'IS_ABELIAN', True)
-                and "explicit fusion channel" in str(exc)
-                and any(len(group) > 1 for group in axes)):
-            # A non-prefix group is not a subtree of the canonical
-            # left-associated basis.  Materialize that subtree with F/R moves
-            # only when direct fusion is genuinely ambiguous.  Keeping the
-            # direct path for uniquely determined groups preserves the legacy
-            # hard-fusion signature convention used by PEPS environments.
-            return _fuse_disjoint_nonabelian_groups(a, axes)
-        raise
+    meta_mrg, size, struct_new, legs_old = _meta_fuse_hard(a.config.sym, a.struct, axes)
     from ._nonabelian import fusion_scale
     source = fusion_scale(a.config, a._data, a.struct, struct_new, axes, meta_mrg)
     data = a.config.backend.transpose_and_merge(source, order, meta_mrg, size)
@@ -405,7 +393,7 @@ def _swap_adjacent_fusion_leaves(a, position):
     data = a.config.backend.concatenate(pieces) if pieces else a._data[:0]
     return a._replace(struct=struct_new, data=data,
                       hfs=tuple(a.hfs[i] for i in order),
-                      mfs=tuple(a.mfs[i] for i in order), trans=None)
+                      mfs=((1,),) * a.ndim_n, trans=None)
 
 
 def _r_move_01_and_transpose(a, order):
@@ -447,7 +435,7 @@ def _r_move_01_and_transpose(a, order):
     data = a.config.backend.concatenate(pieces) if pieces else a._data[:0]
     return a._replace(struct=struct_new, data=data,
                       hfs=tuple(a.hfs[i] for i in order),
-                      mfs=tuple(a.mfs[i] for i in order), trans=None)
+                      mfs=((1,),) * a.ndim_n, trans=None)
 
 
 def _f_move_12_to_23_and_transpose(a, order):
@@ -510,7 +498,7 @@ def _f_move_12_to_23_and_transpose(a, order):
     data = a.config.backend.concatenate(pieces) if pieces else a._data
     return a._replace(struct=struct_new, data=data,
                       hfs=tuple(a.hfs[i] for i in order),
-                      mfs=tuple(a.mfs[i] for i in order), trans=None)
+                      mfs=((1,),) * a.ndim_n, trans=None)
 
 
 @nsys_profile

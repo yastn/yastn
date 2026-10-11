@@ -4,7 +4,7 @@ import numpy as np
 import opt_einsum
 
 
-def tree_network(sym, charges, signs, total, channel, labels, fresh):
+def tree_network(sym, charges, signs, total, channel, labels, fresh, root=None):
     """Small CG vertices, leaving only external magnetic indices open.
 
     Keeping the tree factorized avoids constructing arrays whose sizes grow
@@ -29,7 +29,9 @@ def tree_network(sym, charges, signs, total, channel, labels, fresh):
             factors.extend((dual, [internal, label]))
             leaves.append(internal)
     if len(charges) == 1:
-        factors.extend((np.ones(sym.irrep_dimension(charges[0])), [leaves[0]]))
+        dimension = sym.irrep_dimension(charges[0])
+        factors.extend((np.ones(dimension), [leaves[0]]) if root is None
+                       else (np.eye(dimension), [root, leaves[0]]))
     else:
         left, left_label = oriented[0], leaves[0]
         for i in range(1, len(charges)):
@@ -38,7 +40,8 @@ def tree_network(sym, charges, signs, total, channel, labels, fresh):
             vertex = sym.fusion_isometry(left, right, target).reshape(
                 sym.irrep_dimension(target), sym.irrep_dimension(left), sym.irrep_dimension(right))
             if i == len(charges) - 1:
-                factors.extend((vertex[0], [left_label, leaves[i]]))
+                factors.extend((vertex[0], [left_label, leaves[i]]) if root is None
+                               else (vertex, [root, left_label, leaves[i]]))
             else:
                 label = next(fresh)
                 factors.extend((vertex, [label, left_label, leaves[i]]))
@@ -47,6 +50,7 @@ def tree_network(sym, charges, signs, total, channel, labels, fresh):
     return factors
 
 
+@lru_cache(maxsize=16384)
 def contraction_coefficient(sym, charges_a, signs_a, total_a, channel_a,
                             charges_b, signs_b, total_b, channel_b,
                             nin_a, nin_b, charges_c, signs_c, total_c, channel_c):
@@ -63,11 +67,31 @@ def contraction_coefficient(sym, charges_a, signs_a, total_a, channel_a,
     factors = tree_network(sym, charges_a, signs_a, total_a, channel_a, la, fresh)
     factors += tree_network(sym, charges_b, signs_b, total_b, channel_b, lb, fresh)
     factors += tree_network(sym, charges_c, signs_c, total_c, channel_c, lc, fresh)
-    value = float(opt_einsum.contract(*factors, [], optimize='greedy')) if factors else 1.
+    value = _contract_scalar(factors)
     return value * scale(sym, charges_a, signs_a, total_a) * scale(sym, charges_b, signs_b, total_b) / scale(sym, charges_c, signs_c, total_c)
 
 
+def _contract_scalar(factors):
+    if not factors:
+        return 1.
+    topology = tuple((tuple(a.shape), tuple(labels)) for a, labels in zip(factors[::2], factors[1::2]))
+    return float(opt_einsum.contract(*factors, [], optimize=_network_path(topology)))
+
+
+@lru_cache(maxsize=1024)
+def _network_path(topology):
+    expression = ','.join(''.join(opt_einsum.get_symbol(i) for i in labels)
+                          for _, labels in topology) + '->'
+    shapes = [shape for shape, _ in topology]
+    return opt_einsum.contract_path(expression, *shapes, shapes=True, optimize='greedy')[0]
+
+
 def scale(sym, charges, signs, total):
+    """Convert a normalized invariant CG tree to an ordinary rank-two map.
+
+    For signatures (+,-) this gives an identity in magnetic space; for
+    (-,+) the dual-basis phase cancels the Frobenius--Schur sign.
+    """
     if len(charges) == 2 and total == sym.zero():
         return np.sqrt(sym.irrep_dimension(charges[0])) * (-1.) ** (charges[0][0] if signs[0] == -1 else 0)
     return 1.
@@ -81,22 +105,21 @@ def intertwiner(sym, charges, signs, total, channel):
 
 @lru_cache(maxsize=4096)
 def fusion_coefficient(sym, charges, signs, total, channel, grouped, out_charges, out_signs, out_channel, paths):
-    from ._contractions import _fusion_intertwiner
-    old = intertwiner(sym, charges, signs, total, channel)
-    new = intertwiner(sym, out_charges, out_signs, total, out_channel)
-    args = [old, list(range(len(charges))) ]
+    from itertools import count
+    fresh = count()
+    old_labels = [next(fresh) for _ in charges]
+    new_labels = [next(fresh) for _ in out_charges]
+    factors = tree_network(sym, charges, signs, total, channel, old_labels, fresh)
+    factors += tree_network(sym, out_charges, out_signs, total, out_channel, new_labels, fresh)
     for i, group in enumerate(grouped):
         if not group:
-            u = np.ones((1,))
+            factors.extend((np.ones((1,)), [new_labels[i]]))
         else:
             relative = tuple(signs[j] * out_signs[i] for j in group)
-            cg = _fusion_intertwiner(sym, tuple(charges[j] for j in group), relative,
-                                     out_charges[i], paths[i])
-            u = cg.reshape((sym.irrep_dimension(out_charges[i]),) + tuple(sym.irrep_dimension(charges[j]) for j in group))
-        args.extend((u, [len(charges) + i] + list(group)))
-    args.append(list(range(len(charges), len(charges) + len(grouped))))
-    transformed = np.einsum(*args, optimize=True)
-    coefficient = float(np.vdot(new, transformed) / np.vdot(new, new))
+            factors += tree_network(sym, tuple(charges[j] for j in group), relative,
+                                    out_charges[i], paths[i], [old_labels[j] for j in group],
+                                    fresh, root=new_labels[i])
+    coefficient = _contract_scalar(factors) * scale(sym, charges, signs, total) / scale(sym, out_charges, out_signs, total)
     if abs(coefficient) < 1e-13:
         raise ValueError('Inconsistent non-Abelian fusion basis')
     return coefficient
@@ -109,10 +132,12 @@ def fusion_scale(config, data, struct, fused, axes, meta, inverse=False):
         if isinstance(x, slice):
             return (x.start, x.stop)
         return tuple(freeze(y) for y in x) if isinstance(x, (list, tuple)) else x
-    weights = fusion_weights(config.sym, struct, fused, axes, freeze(meta))
+    weights, lengths = fusion_weights(config.sym, struct, fused, axes, freeze(meta))
     if inverse:
         weights = 1 / weights
-    return data * config.backend.to_tensor(weights, device=config.backend.get_device(data))
+    weights = np.repeat(weights, lengths)
+    return data * config.backend.to_tensor(weights, dtype=config.backend.get_yastn_dtype(data),
+                                         device=config.backend.get_device(data))
 
 
 @lru_cache(maxsize=1024)
@@ -127,7 +152,8 @@ def fusion_weights(sym, struct, fused, axes, meta):
     decompositions = []
     for group, leg in zip(axes, fused.legs):
         decompositions.append(_leg_structure_combine_charges_prod(sym, tuple(struct.legs[j] for j in group), leg.t, leg.s) if len(group) > 1 else None)
-    weights = np.ones(old.size)
+    # Cache one scalar per reduced block, not per multiplicity entry.
+    weights = np.ones(old.nblocks)
     for sln, _, slo, _, subslices, _ in meta:
         ia, ic = old_lookup[tuple(slo)], new_lookup[tuple(sln)]
         charges, out_charges = tuple(map(tuple, old.t[ia])), tuple(map(tuple, new.t[ic]))
@@ -141,5 +167,5 @@ def fusion_weights(sym, struct, fused, axes, meta):
                 paths.append(next(d.channel for d in candidates if d.t == flat and d.Dslc == tuple(subslices[i])))
         coef = fusion_coefficient(sym, charges, signs, struct.n, tuple(old.channels[ia]), axes,
                                   out_charges, out_signs, tuple(new.channels[ic]), tuple(paths))
-        weights[slice(*slo)] = coef
-    return weights
+        weights[ia] = coef
+    return weights, old.slc[:, 1] - old.slc[:, 0]

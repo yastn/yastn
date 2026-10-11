@@ -64,6 +64,12 @@ def clear_cache():
     Besides freeing host memory, this releases the device-resident index tensors that the
     torch backend's fusion cache pins after its first GPU use.
     """
+    from . import _nonabelian
+    for function in (_nonabelian.contraction_coefficient, _nonabelian._network_path,
+                     _nonabelian.intertwiner, _nonabelian.fusion_coefficient,
+                     _nonabelian.fusion_weights, _contractions._fusion_intertwiner,
+                     _contractions._contraction_recoupling):
+        function.cache_clear()
     _contractions._meta_broadcast.cache_clear()
     _contractions._meta_tensordot_f2m.cache_clear()
     _contractions._meta_tensordot_fc.cache_clear()

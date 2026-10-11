@@ -277,12 +277,16 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     order = out_hl + out_hr
     if (not getattr(sym, 'IS_ABELIAN', True) and _has_nontrivial_irreps(a)
             and order != tuple(range(a.ndim_n))):
+        logical_mfs = tuple(a.mfs[i] for i in out_ml + out_mr)
+        nleft_meta = len(out_ml)
         a = (_apply_s3_transpose(a, order) if order in _s3_orders(a.ndim_n)
              else _apply_fusion_tree_transpose(a, order))
+        a = a._replace(mfs=logical_mfs)
         nl = len(out_hl)
         out_hl = tuple(range(nl))
         out_hr = tuple(range(nl, a.ndim_n))
-        out_ml, out_mr = out_hl, out_hr
+        out_ml = tuple(range(nleft_meta))
+        out_mr = tuple(range(nleft_meta, len(logical_mfs)))
     #
     data, struct_am, hfsm = _fuse_blocks(a.config, a._data, a.struct, (out_hl, out_hr))
     #
@@ -801,12 +805,16 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0) -> tuple['Tensor', 'Tensor']:
     order = out_hl + out_hr
     if (not getattr(sym, 'IS_ABELIAN', True) and _has_nontrivial_irreps(a)
             and order != tuple(range(a.ndim_n))):
+        logical_mfs = tuple(a.mfs[i] for i in out_ml + out_mr)
+        nleft_meta = len(out_ml)
         a = (_apply_s3_transpose(a, order) if order in _s3_orders(a.ndim_n)
              else _apply_fusion_tree_transpose(a, order))
+        a = a._replace(mfs=logical_mfs)
         nl = len(out_hl)
         out_hl = tuple(range(nl))
         out_hr = tuple(range(nl, a.ndim_n))
-        out_ml, out_mr = out_hl, out_hr
+        out_ml = tuple(range(nleft_meta))
+        out_mr = tuple(range(nleft_meta, len(logical_mfs)))
 
     data, struct_am, hfsm = _fuse_blocks(a.config, a._data, a.struct, (out_hl, out_hr))
 

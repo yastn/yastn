@@ -79,17 +79,6 @@ def match_ancilla(ten, G, dirn=None):
 
     if G.ndim == 2:
         out = Gnew.fuse_legs(axes=((0, 2), (1, 3)))
-        if not getattr(ten.config.sym, 'IS_ABELIAN', True):
-            identity = eye(config=ten.config,
-                           legs=(G.get_legs(0), G.get_legs(1)), isdiag=False)
-            metric = tensordot(identity, one, axes=((), ())).fuse_legs(
-                axes=((0, 2), (1, 3)))
-            metric_inv = metric.copy()
-            for key in metric.get_blocks_charge():
-                metric_block = metric[key]
-                metric_inv.set_block(ts=key, Ds=metric_block.shape,
-                                     val=ten.config.backend.pinv(metric_block))
-            out = metric_inv @ out
         return out
     elif G.ndim == 3:
         if dirn and dirn in 'tl':

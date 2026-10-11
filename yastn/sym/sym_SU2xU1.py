@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from numbers import Integral
+import numpy as np
 
 from .sym_nonabelian import sym_nonabelian
 from .sym_SU2 import sym_SU2
@@ -22,10 +23,9 @@ class sym_SU2xU1(sym_nonabelian):
 
     @classmethod
     def canonical_charge(cls, charge):
-        try:
-            two_j, q = charge
-        except (TypeError, ValueError) as exc:
-            raise ValueError("An SU2xU1 charge must be a (2*j, q) pair.") from exc
+        if not isinstance(charge, (tuple, list, np.ndarray)) or np.ndim(charge) != 1 or len(charge) != 2:
+            raise ValueError("An SU2xU1 charge must be a (2*j, q) pair.")
+        two_j, q = charge
         if isinstance(two_j, bool) or not isinstance(two_j, Integral) or two_j < 0:
             raise ValueError(f"The SU2 label must be a non-negative integer 2*j; got {charge}.")
         if isinstance(q, bool) or not isinstance(q, Integral):

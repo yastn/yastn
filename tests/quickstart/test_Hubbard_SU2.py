@@ -133,16 +133,17 @@ def test_two_site_hubbard_SU2_against_ED(config_kwargs):
 
 @pytest.mark.skipif("not config.getoption('quickstart')")
 @pytest.mark.parametrize('D, betas, dbeta', [(8, [0.04], 0.02)])
-def test_quickstart_hubbard_SU2_matches_U1xU1(config_kwargs, D, betas, dbeta):
+@pytest.mark.parametrize('sym', ['SU2', 'SU2xU1'])
+def test_quickstart_hubbard_SU2_matches_U1xU1(config_kwargs, D, betas, dbeta, sym):
     """SU2xU1 and U1xU1 give the same scalar Hubbard observables."""
     reference = _run_hubbard(config_kwargs, 'U1xU1', D, betas, dbeta=dbeta)
-    su2 = _run_hubbard(config_kwargs, 'SU2xU1', D, betas, dbeta=dbeta)
+    su2 = _run_hubbard(config_kwargs, sym, D, betas, dbeta=dbeta)
 
     # The two runs use the same physical gates and numerical cutoffs, but
     # organize the retained states into different symmetry multiplets.
-    assert su2['density'] == pytest.approx(reference['density'], abs=2e-3)
-    assert su2['double_occ'] == pytest.approx(reference['double_occ'], abs=3e-3)
-    assert su2['density_nn'] == pytest.approx(reference['density_nn'], abs=3e-3)
+    assert su2['density'] == pytest.approx(reference['density'], abs=1e-4)
+    assert su2['double_occ'] == pytest.approx(reference['double_occ'], abs=1e-4)
+    assert su2['density_nn'] == pytest.approx(reference['density_nn'], abs=1e-4)
 
 
 if __name__ == '__main__':
