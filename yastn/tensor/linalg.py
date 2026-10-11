@@ -571,6 +571,10 @@ def truncation_mask(S, which='LR',
     Generate a mask tensor from a diagonal tensor ``S``.
     The mask can then be used for truncation.
 
+    For non-Abelian symmetries, exact irreps are already preserved, so
+    ``largest_gap`` and ``eps_multiplet`` are ignored, including their
+    restrictions on other truncation parameters.
+
     Parameters
     ----------
     S: yastn.Tensor
@@ -627,6 +631,9 @@ def truncation_mask(S, which='LR',
 
     if not S.isdiag:
         raise YastnError("truncation_mask() requires S to be diagonal.")
+
+    if not getattr(S.config.sym, 'IS_ABELIAN', True):
+        largest_gap, eps_multiplet = False, None
 
     verbosity = kwargs.get('verbosity', 0)
     if verbosity > 2:
@@ -685,8 +692,6 @@ def truncation_mask(S, which='LR',
     # irrep.  D_total is consistently interpreted as the dense dimension, so
     # a value in sector j consumes dim(j), never a fraction of a multiplet.
     if not getattr(S.config.sym, 'IS_ABELIAN', True):
-        if largest_gap or eps_multiplet is not None:
-            raise YastnError("SU2 truncation already preserves exact irreps; largest_gap and eps_multiplet are not applicable.")
         if which in ['LR', 'LM']:
             above_tol = ff(S.data) > tol * backend.max_abs(S.data)
             Smask._data[:] = Smask.data * above_tol

@@ -45,6 +45,32 @@ def test_truncation_mask_SU2xU1_counts_complete_irreps(config_kwargs):
     assert mask[charges[0] + charges[0]].item()
     assert not mask[charges[2] + charges[2]].item()
 
+@pytest.mark.parametrize('sym', ['SU2', 'SU2xU1'])
+@pytest.mark.parametrize('which', ['LR', 'LM', 'SR', 'SM'])
+@pytest.mark.parametrize('multiplet_opts', [
+    {'largest_gap': True},
+    {'eps_multiplet': 0.1},
+    {'eps_multiplet': 0},
+    {'largest_gap': True, 'eps_multiplet': 0.1},
+])
+def test_nonabelian_truncation_ignores_multiplet_options(config_kwargs, sym, which, multiplet_opts):
+    config = yastn.make_config(sym=sym, **config_kwargs)
+    charges = ((0,), (1,), (2,)) if sym == 'SU2' else ((0, 0), (1, 1), (2, 2))
+    leg = yastn.Leg(config, s=1, t=charges, D=(2, 2, 2))
+    spectrum = yastn.zeros(config, legs=(leg, leg.conj()), isdiag=True)
+    for charge, values in zip(charges, ([0.8, -0.2], [1.0, 0.4], [-0.9, 0.3])):
+        spectrum.set_block(ts=charge + charge, Ds=2, val=values)
+
+    block_opts = {'D_block': 1}
+    if which in ('LR', 'LM'):
+        block_opts['tol_block'] = 0.5
+    for opts in ({'D_total': 5}, {'D_total': 5, **block_opts}, block_opts):
+        expected = spectrum.truncation_mask(which=which, **opts)
+        actual = spectrum.truncation_mask(which=which, **opts, **multiplet_opts)
+        np.testing.assert_array_equal(config.backend.to_numpy(actual.data),
+                                      config.backend.to_numpy(expected.data))
+
+
 tol = 1e-12
 
 
