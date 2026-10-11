@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 228" width="600" height="228" font-family="Helvetica, Arial, sans-serif">
+<title>Case 1: a single bad swap removed by a jump over A</title>
+<rect width="600" height="228" rx="10" fill="#ffffff"/>
+<text x="145" y="20" fill="#555555" font-size="14" text-anchor="middle" font-style="italic">before: swap (1, 2)</text>
+<text x="465" y="20" fill="#555555" font-size="14" text-anchor="middle" font-style="italic">after: jump over A</text>
+<g transform="translate(0,28)">
+<path d="M50.0,100.0 L240.0,100.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M145.0,25.0 L145.0,175.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M370.0,100.0 L560.0,100.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M465.0,25.0 L344.0,25.0 Q330.0,25.0 330.0,39.0 L330.0,161.0 Q330.0,175.0 344.0,175.0 L465.0,175.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<circle cx="145.0" cy="100.0" r="5.5" fill="#c62828"/>
+<rect x="394" y="169" width="12" height="12" fill="#1f5fbf"/>
+<circle cx="50" cy="100" r="17" fill="#ffffff" stroke="#222222" stroke-width="2.2"/>
+<circle cx="240" cy="100" r="17" fill="#ffffff" stroke="#222222" stroke-width="2.2"/>
+<circle cx="145" cy="25" r="17" fill="#ffffff" stroke="#222222" stroke-width="2.2"/>
+<circle cx="145" cy="175" r="17" fill="#ffffff" stroke="#222222" stroke-width="2.2"/>
+<circle cx="370" cy="100" r="17" fill="#ffffff" stroke="#222222" stroke-width="2.2"/>
+<circle cx="560" cy="100" r="17" fill="#ffffff" stroke="#222222" stroke-width="2.2"/>
+<circle cx="465" cy="25" r="17" fill="#ffffff" stroke="#222222" stroke-width="2.2"/>
+<circle cx="465" cy="175" r="17" fill="#ffffff" stroke="#222222" stroke-width="2.2"/>
+<text x="95" y="92" fill="#555555" font-size="13" text-anchor="middle" >1</text>
+<text x="153" y="62" fill="#555555" font-size="13" text-anchor="start" >2</text>
+<text x="292" y="108" fill="#222222" font-size="28" text-anchor="middle" >=</text>
+<text x="400" y="163" fill="#1f5fbf" font-size="14" text-anchor="middle" font-style="italic">P<tspan dy="4" font-size="10">A</tspan></text>
+<text x="415" y="92" fill="#555555" font-size="13" text-anchor="middle" >1</text>
+<text x="338" y="62" fill="#555555" font-size="13" text-anchor="start" >2</text>
+<text x="50" y="105" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">A</text>
+<text x="240" y="105" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">B</text>
+<text x="145" y="30" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">D</text>
+<text x="145" y="180" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">C</text>
+<text x="370" y="105" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">A</text>
+<text x="560" y="105" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">B</text>
+<text x="465" y="30" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">D</text>
+<text x="465" y="180" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">C</text>
+</g>
+</svg>

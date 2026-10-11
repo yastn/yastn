@@ -29,7 +29,7 @@ from ._tests import YastnError, _test_can_be_combined, _unpack_trans_test_axes_p
 if TYPE_CHECKING:
     from . import Tensor
 
-__all__ = ['add', 'real', 'imag', 'sqrt', 'rsqrt', 'reciprocal', 'exp', 'bitwise_not', 'allclose']
+__all__ = ['add', 'real', 'imag', 'sqrt', 'rsqrt', 'reciprocal', 'exp', 'bitwise_not', 'clip', 'allclose']
 
 
 def __add__(a, b) -> 'Tensor':
@@ -39,7 +39,8 @@ def __add__(a, b) -> 'Tensor':
     Signatures and total charges of two tensors should match.
     """
     (a, b), hfs = _pre_addition(a, b)
-    metas, size, struct_new = _meta_addition(a.config.sym, a.struct, b.struct)
+    metas, size, struct_new = _meta_addition(a.config.sym, a.struct, b.struct,
+                                             lazy_threshold=a.config.lazy_threshold)
     data = a.config.backend.add((a._data, b._data), metas, size)
     out = a._replace(hfs=hfs, struct=struct_new, data=data)
     return out
@@ -52,13 +53,14 @@ def __sub__(a, b) -> 'Tensor':
     Signatures and total charges of two tensors should match.
     """
     (a, b), hfs = _pre_addition(a, b)
-    metas, size, struct_new = _meta_addition(a.config.sym, a.struct, b.struct)
+    metas, size, struct_new = _meta_addition(a.config.sym, a.struct, b.struct,
+                                             lazy_threshold=a.config.lazy_threshold)
     data = a.config.backend.sub(a._data, b._data, metas, size)
     out = a._replace(hfs=hfs, struct=struct_new, data=data)
     return out
 
 
-def add(*tensors, amplitudes=None, **kwargs) -> 'Tensor':
+def add(*tensors, amplitudes=None, lazy_threshold=None, **kwargs) -> 'Tensor':
     r"""
     Linear combination of tensors with given amplitudes, :math:`\sum_i amplitudes[i] tensors[i]`.
 
@@ -72,6 +74,11 @@ def add(*tensors, amplitudes=None, **kwargs) -> 'Tensor':
         Otherwise, the number of tensors and amplitudes should be the same.
         Individual amplitude can be ``None``, which gives the same result as ``1``
         but without an extra multiplication.
+
+    lazy_threshold: None | float
+        As in :meth:`yastn.tensordot`: if the blocks filled by the ``tensors`` are fewer than this
+        fraction of the blocks allowed by the merged legs, the result stores only the filled ones.
+        ``None`` takes the value from the tensors' config.
     """
     if amplitudes is not None:
         if len(tensors) != len(amplitudes):
@@ -83,7 +90,9 @@ def add(*tensors, amplitudes=None, **kwargs) -> 'Tensor':
 
     tensors, hfs = _pre_addition(*tensors)
     structs = [a.struct for a in tensors]
-    metas, size, struct_new = _meta_addition(tensors[0].config.sym, *structs)
+    if lazy_threshold is None:
+        lazy_threshold = tensors[0].config.lazy_threshold
+    metas, size, struct_new = _meta_addition(tensors[0].config.sym, *structs, lazy_threshold=lazy_threshold)
     data = tensors[0].config.backend.add([v._data for v in tensors], metas, size)
     out = tensors[0]._replace(hfs=hfs, struct=struct_new, data=data)
     return out
@@ -119,8 +128,12 @@ def _pre_addition(*tensors):
 
 
 @lru_cache(maxsize=1024)
-def _meta_addition(sym, *structs):
-    """Prepare backend metadata and the resulting tensor structure for addition."""
+def _meta_addition(sym, *structs, lazy_threshold=None):
+    """Prepare backend metadata and the resulting tensor structure for addition.
+
+    The result's legs are the union of the inputs' legs.  With ``lazy_threshold`` the rule of
+    tensordot applies: if the blocks the inputs fill are fewer than that fraction of the blocks
+    the legs allow, the result keeps only those (a mask) instead of zero blocks for the rest."""
     if all(structs[0] == struct for struct in structs[1:]):
         bl_new = get_blocks(sym, structs[0])
         size = bl_new.size
@@ -142,16 +155,21 @@ def _meta_addition(sym, *structs):
     struct_new = _struct(legs=tuple(legs_new), n=structs[0].n, isdiag=structs[0].isdiag)
     struct_new = get_trimmed_struct(sym, struct_new)
     bl_new = get_blocks(sym, struct_new)
+    bls_old = [get_blocks(sym, struct) for struct in structs]
+    matches = [find_matching_block_keys(bl_new.t, bl_new.channels, bl.t, bl.channels) for bl in bls_old]  # (in the result, in the input)
+    if lazy_threshold and not struct_new.isdiag and bl_new.nblocks:
+        filled = np.unique(np.concatenate([ind_n for ind_n, _ in matches]))
+        if 0 < len(filled) < lazy_threshold * bl_new.nblocks:
+            struct_new = get_trimmed_struct(sym, struct_new.mask_from_ind(bl_new.nblocks, filled))
+            bl_new = get_blocks(sym, struct_new)
+            matches = [find_matching_block_keys(bl_new.t, bl_new.channels, bl.t, bl.channels) for bl in bls_old]  # the result's slices moved
 
     meta_dt = np.dtype([
         ('sln', np.int64, (2,)),
         ('slo', np.int64, (2,))])
 
     metas = []
-    for struct in structs:
-        bl_old = get_blocks(sym, struct)
-        ind_n, ind_o = find_matching_block_keys(bl_new.t, bl_new.channels,
-                                                bl_old.t, bl_old.channels)
+    for struct, bl_old, (ind_n, ind_o) in zip(structs, bls_old, matches):
         meta = np.column_stack([bl_new.slc[ind_n], bl_old.slc[ind_o]])
         if struct.isdiag:
             dd = np.minimum(meta[:, 1] - meta[:, 0], meta[:, 3] - meta[:, 2])
@@ -365,4 +383,34 @@ def bitwise_not(a) -> 'Tensor[bool]':
         masks used to truncate tensor legs.
     """
     data = a.config.backend.bitwise_not(a._data)
+    return a._replace(data=data)
+
+
+def clip(a, a_min=None, a_max=None) -> 'Tensor':
+    r"""
+    Return element-wise `min(max(tensor, a_min), a_max)`,
+    limiting tensor elements to the interval `[a_min, a_max]`.
+
+    At least one of the bounds has to be provided; the other one is then not applied.
+    For `a_min > a_max`, the upper bound takes precedence and all elements are set to `a_max`.
+
+    Not supported for complex and bool tensors.
+
+    .. note::
+        This applies only to non-empty blocks of tensor.
+        In particular, `a_min` does not raise the elements of structurally absent blocks,
+        which remain zero.
+
+    Parameters
+    ----------
+    a_min, a_max: real scalar
+        lower and upper bound for tensor elements
+    """
+    if a_min is None and a_max is None:
+        raise YastnError("clip requires at least one of a_min, a_max.")
+    if a.is_complex():
+        raise YastnError("clip is not supported for complex tensors.")
+    if a.yastn_dtype == 'bool':
+        raise YastnError("clip is not supported for bool tensors.")
+    data = a.config.backend.clip(a._data, a_min=a_min, a_max=a_max)
     return a._replace(data=data)

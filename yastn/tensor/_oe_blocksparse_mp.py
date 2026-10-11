@@ -622,9 +622,6 @@ class _MultiprocSlicedUnrollFunction(torch.autograd.Function):
                     merged_data[key] = merged_data[key] + d
                 else:
                     merged_data[key] = d
-        if not merged_data:
-            from . import YastnError
-            raise YastnError("No valid charge sectors found for contraction.")
         merged_keys = sorted(merged_data.keys())
         if common_legs_axes is None:
             out_data = merged_data[()]
@@ -795,6 +792,15 @@ def _contract_with_sliced_unroll_mp(*args, unroll, optimize, checkpoint_loop=Fal
             tensors, ig_list, out_ig, unroll, surviving, parent_config)
         pool.cache_put(cache_key, (per_key_struct, full_struct, common_legs_axes,
                                    surviving, pf_trim_per_combo, dim_overrides_per_combo))
+
+    if not surviving:
+        # No combo survived the charge prefilter: there is nothing to
+        # distribute and the result is zero. The serial path produces it by
+        # evaluating one combo, so it needs no struct derivation here.
+        from .oe_blocksparse import _contract_with_sliced_unroll
+        return _contract_with_sliced_unroll(
+            *args, unroll=unroll, optimize=optimize, checkpoint_loop=checkpoint_loop,
+            swap=swap, mp_workers_per_device=0, **kwargs)
 
     # Distribute SURVIVING combo indices round-robin across workers
     worker_assignments = [[] for _ in range(pool.n_workers)]

@@ -320,7 +320,7 @@ def _contract_with_sliced_unroll_dist(*args, unroll, optimize, checkpoint_loop=F
     from .oe_blocksparse import _metadata_filter_combos
     from ._oe_blocksparse_mp import _derive_output_structs, _config_descriptor
     from ._initialize import make_config
-    from . import Tensor, YastnError
+    from . import Tensor
 
     tensors = args[0:2 * (len(args) // 2):2]
     ig_list = list(args[1:2 * (len(args) // 2):2])
@@ -345,8 +345,13 @@ def _contract_with_sliced_unroll_dist(*args, unroll, optimize, checkpoint_loop=F
     surviving, pf_trim_per_combo, dim_overrides_per_combo = _metadata_filter_combos(
         tensors, ig_list, out_ig, unroll, optimize, swap, collect_dim_overrides=True)
     if not surviving:
-        # Raised identically on all ranks *before* any collective — no deadlock.
-        raise YastnError("No valid charge sectors found for contraction.")
+        # No combo survived: the result is zero and there is nothing to split
+        # across ranks. Every rank takes the serial path identically, *before*
+        # any collective — no deadlock.
+        from .oe_blocksparse import _contract_with_sliced_unroll
+        return _contract_with_sliced_unroll(
+            *args, unroll=unroll, optimize=optimize,
+            checkpoint_loop=checkpoint_loop, swap=swap, **kwargs)
 
     costs = _combo_costs(tensors, ig_list, out_ig, surviving, dim_overrides_per_combo)
     my_bin = _lpt_partition(surviving, costs, world_size)[rank]

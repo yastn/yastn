@@ -33,7 +33,7 @@ include = ["yastn*"]
 exclude = ["docs*", "tests*", "experimental*"]
 
 [project.optional-dependencies]
-test = ["pytest", "pytest-cov", "pytest-randomly", "numpy!=2.4.5"]
+test = ["pytest", "pytest-cov", "pytest-randomly", "numpy!=2.4.5", "pytest-xdist"]
 docbuild = ["sphinx", "sphinxcontrib-napoleon", "pydata-sphinx-theme", "graphviz", ]
 torch = ["torch>=2.10"]
 

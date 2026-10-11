@@ -177,6 +177,15 @@ def test_algebra_functions(config_kwargs):
     b = yastn.exp(1j * a)
     assert pytest.approx(b.norm().item(), rel=tol) == np.sqrt(6)
 
+    b = yastn.clip(a, a_min=0.005)
+    assert pytest.approx(b.norm().item(), rel=tol) == np.sqrt(2 * (1 + 0.01 ** 2 + 0.005 ** 2))
+    b = a.clip(a_max=0.05)
+    assert pytest.approx(b.norm().item(), rel=tol) == np.sqrt(2 * (0.05 ** 2 + 0.01 ** 2 + 0.0001 ** 2))
+    b = a.clip(a_min=0.005, a_max=0.05)
+    assert pytest.approx(b.norm().item(), rel=tol) == np.sqrt(2 * (0.05 ** 2 + 0.01 ** 2 + 0.005 ** 2))
+    # clip applies only to non-empty blocks; it does not raise structural zeros to a_min
+    assert yastn.clip(a, a_min=0.005).to_numpy()[0, 1] == 0.
+
     c = a * (4j + 3)
     assert yastn.norm(c.imag() - 4 * a) < tol
     assert yastn.norm(c.real() - 3 * a) < tol
@@ -365,6 +374,18 @@ def test_algebra_exceptions(config_kwargs):
                        match="p should be 'fro', or 'inf'."):
         a = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1], n=0)
         _ = yastn.norm(a, p='wrong_order')
+    with pytest.raises(yastn.YastnError,
+                       match="clip requires at least one of a_min, a_max."):
+        a = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1])
+        _ = yastn.clip(a)
+    with pytest.raises(yastn.YastnError,
+                       match="clip is not supported for complex tensors."):
+        a = yastn.randC(config=config_U1, legs=[leg1.conj(), leg2, leg1])
+        _ = yastn.clip(a, a_min=0.)
+    with pytest.raises(yastn.YastnError,
+                       match="clip is not supported for bool tensors."):
+        a = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1])
+        _ = yastn.clip(a > 0, a_min=0.)
 
 
 
@@ -447,6 +468,23 @@ def test_auxiliary():
     slices = np.array([[0, 10], [20, 30], [30, 40]])
     slices2 = yastn.tensor._auxiliary._compress_slices(slices)
     assert slices2.tolist() == [[0, 10], [20, 40]]
+
+
+def test_add_lazy_threshold(config_kwargs):
+    """ With lazy_threshold, a sum stores only the blocks its terms fill; values are unchanged. """
+    config_U1 = yastn.make_config(sym='U1', **config_kwargs)
+    leg = yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(1, 2, 3))
+    x = yastn.rand(config=config_U1, legs=[leg, leg.conj()])
+    y = yastn.rand(config=config_U1, legs=[leg, leg.conj()])
+    # terms differing in the charge of a neutral pair of one-dimensional legs, as in ncon's parity gadget;
+    # the merged legs also allow blocks in which the pair's two charges differ
+    a = x.add_leg(axis=2, s=1, t=(0,)).add_leg(axis=3, s=-1, t=(0,))
+    b = y.add_leg(axis=2, s=1, t=(1,)).add_leg(axis=3, s=-1, t=(1,))
+    dense = yastn.add(a, b, lazy_threshold=0)
+    lazy = yastn.add(a, b, lazy_threshold=1)
+    assert lazy.size == a.size + b.size < dense.size
+    assert (lazy - dense).norm() < tol * dense.norm()
+    assert (a + b - dense).norm() < tol * dense.norm()  # the operator takes lazy_threshold from the config
 
 
 if __name__ == '__main__':

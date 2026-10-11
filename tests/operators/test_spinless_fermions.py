@@ -29,9 +29,11 @@ def test_spinless_fermions(config_kwargs):
 
     assert all(ops.config.fermionic == True for ops in (ops_Z2, ops_U1))
 
-    Is = [ops_Z2.I(), ops_U1.I()]
-    legs = [ops_Z2.space(), ops_U1.space()]
+    opss = [ops_Z2, ops_U1]
+    Is = [ops.I() for ops in opss]
+    legs = [ops.space() for ops in opss]
 
+    assert all(ops.key() is None for ops in opss) # SpinlessFermions charge are naturally ordered for all symmetries, so key is None
     assert all(leg == I.get_legs(axes=0) for (leg, I) in zip(legs, Is))
     assert all(np.allclose(I.to_numpy(), np.eye(2)) for I in Is)
 

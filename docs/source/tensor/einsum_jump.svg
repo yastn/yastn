@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 470 195" width="470" height="195" font-family="Helvetica, Arial, sans-serif">
+<title>Jump move of line d over tensor T</title>
+<rect width="470" height="195" rx="10" fill="#ffffff"/>
+<g transform="translate(0,0)">
+<path d="M100.0,95.0 L100.0,182.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M100.0,95.0 L55.0,15.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M100.0,95.0 L145.0,15.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M350.0,95.0 L350.0,182.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M350.0,95.0 L305.0,15.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M350.0,95.0 L395.0,15.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M20.0,140.0 L185.0,140.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M265.0,45.0 L440.0,45.0" fill="none" stroke="#222222" stroke-width="2.2" stroke-linejoin="round"/>
+<circle cx="100.0" cy="140.0" r="5.5" fill="#c62828"/>
+<circle cx="321.9" cy="45.0" r="5.5" fill="#c62828"/>
+<circle cx="378.1" cy="45.0" r="5.5" fill="#c62828"/>
+<rect x="272" y="39" width="12" height="12" fill="#1f5fbf"/>
+<circle cx="100" cy="95" r="17" fill="#ffffff" stroke="#222222" stroke-width="2.2"/>
+<circle cx="350" cy="95" r="17" fill="#ffffff" stroke="#222222" stroke-width="2.2"/>
+<text x="100" y="100" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">T</text>
+<text x="108" y="178" fill="#222222" font-size="15" text-anchor="start" font-style="italic">l<tspan dy="4" font-size="10">1</tspan></text>
+<text x="50" y="22" fill="#222222" font-size="15" text-anchor="end" font-style="italic">l<tspan dy="4" font-size="10">2</tspan></text>
+<text x="150" y="22" fill="#222222" font-size="15" text-anchor="start" font-style="italic">l<tspan dy="4" font-size="10">3</tspan></text>
+<text x="350" y="100" fill="#222222" font-size="15" text-anchor="middle" font-weight="bold">T</text>
+<text x="358" y="178" fill="#222222" font-size="15" text-anchor="start" font-style="italic">l<tspan dy="4" font-size="10">1</tspan></text>
+<text x="300" y="22" fill="#222222" font-size="15" text-anchor="end" font-style="italic">l<tspan dy="4" font-size="10">2</tspan></text>
+<text x="400" y="22" fill="#222222" font-size="15" text-anchor="start" font-style="italic">l<tspan dy="4" font-size="10">3</tspan></text>
+<text x="192" y="145" fill="#222222" font-size="15" text-anchor="start" font-style="italic">d</text>
+<text x="225" y="104" fill="#222222" font-size="28" text-anchor="middle" >=</text>
+<text x="278" y="70" fill="#1f5fbf" font-size="14" text-anchor="middle" font-style="italic">P<tspan dy="4" font-size="10">T</tspan></text>
+<text x="447" y="50" fill="#222222" font-size="15" text-anchor="start" font-style="italic">d</text>
+</g>
+</svg>

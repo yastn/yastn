@@ -31,10 +31,9 @@ from . import Tensor, ncon, split_data_and_meta, combine_data_and_meta
 from .._profile import nvtx, nsys_profile
 from ..initialize import block as yastn_block
 from ._legs import Leg
-from ._einsum import ncon_prefilter
+from ._einsum import ncon_prefilter, _apply_charge_swaps_
 from ._auxiliary import _clear_axes, get_blocks, get_trimmed_struct
 from ._merging import _meta_mask
-from ._tests import YastnError
 
 log = logging.getLogger(__name__)
 
@@ -633,8 +632,8 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
     # YASTN_OE_CUDA_CACHE_RELEASE_LEVEL (default 0) tunes how often the blocking
     # empty_cache runs. A release point tagged `level` fires only when the env
     # value is >= level, so higher = more frequent (and more blocking):
-    #   0 = never; 
-    #   1 = once per _contract_with_sliced_unroll, before processing combos; 
+    #   0 = never;
+    #   1 = once per _contract_with_sliced_unroll, before processing combos;
     #   2 = + after processing each combo; 3 = + per tensordot.
     _needs_cache_release = lambda level: \
         getattr(tensors[0].config.backend, 'BACKEND_ID', '') == 'torch_cutensor' \
@@ -809,16 +808,21 @@ def _contract_with_sliced_unroll(*args, unroll, optimize, checkpoint_loop=False,
     if _return_partials:
         return output_pos_partials
 
+    if not output_pos_partials and all_combos:
+        log.debug("no valid charge sectors in any of %d combos -> zero",
+                  len(all_combos))
+        # EVERY combo was skipped by the charge prefilter, so the sum over
+        # combos is empty and the contraction is zero. We return the first combo
+        # evaluation, which is empty.
+        result = _contract_single_combo(
+            tensors, dict(zip(unroll_labels, all_combos[0])))
+        return result if _restore_device is None else result.to(_restore_device)
+
     if not output_unroll_info:
         result = output_pos_partials.get((), None)
-        if result is None and all_combos:
-            raise YastnError("No valid charge sectors found for contraction.")
         if result is not None and _restore_device is not None:
             result = result.to(_restore_device)
         return result
-
-    if not output_pos_partials and all_combos:
-        raise YastnError("No valid charge sectors found for contraction.")
 
     # Assemble: output-unrolled axes are blocked; all others are common_legs.
     blocked_axes = sorted(output_unroll_info.keys())
@@ -1130,7 +1134,12 @@ def _get_contraction_path_cached(
     )
     # Concise summary at INFO; full PathInfo table only at DEBUG (opt-in via
     # raising this module's logger to DEBUG, e.g. --log_oe_path).
-    log.info(f"{who} optimizer {optimizer} peak-mem {max(mem_list):4.3e}")
+    # opt_cost is the path's total FLOP estimate; peak-mem is only its largest
+    # intermediate. The two can disagree by orders of magnitude, so a contraction
+    # that looks cheap by peak-mem may still dominate the runtime.
+    _cost = getattr(path_info, "opt_cost", None)
+    log.info(f"{who} optimizer {optimizer} peak-mem {max(mem_list):4.3e}"
+             + (f" opt-cost {_cost:4.3e}" if _cost is not None else ""))
     if log.isEnabledFor(logging.DEBUG):
         log.debug(
             f"{who} optimizer {optimizer}"
@@ -1334,8 +1343,19 @@ def contract_with_unroll(*args, **kwargs):
         are ignored. See :mod:`._oe_blocksparse_dist`. A single-rank group falls
         back to serial. Optional ``distributed_group`` selects a non-default
         process group.
+    :param charge_swap: sequence of pairs ``(label, charge)``: a swap gate between the
+        leg ``label`` and a one-dimensional leg of fixed ``charge``, as in
+        :meth:`yastn.ncon`.  Applied to the input tensors before the path search and
+        any unrolling, which it commutes with.
     """
     _cfg = args[0].config
+    charge_swap = kwargs.pop("charge_swap", None)
+    if charge_swap:
+        args = list(args)
+        ts, inds = args[0: 2 * (len(args) // 2): 2], args[1: 2 * (len(args) // 2): 2]
+        _apply_charge_swaps_(ts, inds, charge_swap)
+        args[0: 2 * (len(args) // 2): 2] = ts
+        args = tuple(args)
     checkpoint_loop = kwargs.pop("checkpoint_loop", False)
     who = kwargs.pop("who", None)
     kwargs.pop("verbosity", None)

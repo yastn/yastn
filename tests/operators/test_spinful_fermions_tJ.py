@@ -29,14 +29,21 @@ def test_spinful_fermions_tJ(config_kwargs):
     ops_Z2_tJ = yastn.operators.SpinfulFermions_tJ(**config_Z2._asdict())
     ops_U1_tJ = yastn.operators.SpinfulFermions_tJ(sym='U1', **config_kwargs)
 
-    Is = [ops_Z2_tJ.I(), ops_U1_tJ.I(), ops_U1xU1xZ2_tJ.I(), ops_U1xU1_tJ.I(), ]
-    legs = [ops_Z2_tJ.space(), ops_U1_tJ.space(), ops_U1xU1xZ2_tJ.space(), ops_U1xU1_tJ.space()]
+    opss = [ops_Z2_tJ, ops_U1_tJ, ops_U1xU1xZ2_tJ, ops_U1xU1_tJ]
+    Is = [ops.I() for ops in opss]
+    legs = [ops.space() for ops in opss]
 
     assert all(leg == I.get_legs(axes=0) for (leg, I) in zip(legs, Is))
     assert all(np.allclose(I.to_numpy(), np.eye(3)) for I in Is)
     assert all(ops.config.fermionic == fs for ops, fs in zip((ops_Z2_tJ, ops_U1_tJ, ops_U1xU1_tJ, ops_U1xU1xZ2_tJ), (True, True, True, (False, False, True))))
 
-    for ops in [ops_Z2_tJ, ops_U1_tJ, ops_U1xU1xZ2_tJ, ops_U1xU1_tJ]:
+    lss = [dict(enumerate(ops.I().get_legs())) for ops in opss]
+    for ls, ops in zip(lss, opss):
+        # order as (|00>, |10>, |01>) for |spin_up, spin_dn>.
+        assert np.allclose(ops.n(spin='u').to_numpy(legs=ls, key=ops.key()), np.diag([0, 1, 0]))
+        assert np.allclose(ops.n(spin='d').to_numpy(legs=ls, key=ops.key()), np.diag([0, 0, 1]))
+
+    for ops in opss:
         for s in ('u', 'd'):
             # check c^2 = 0
             assert yastn.norm(ops.c(s) @ ops.c(s)) < tol

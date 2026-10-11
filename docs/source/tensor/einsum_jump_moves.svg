@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 400" width="1000" height="400" font-family="Helvetica, Arial, sans-serif">
+<title>One configuration under a row jump and under a column jump</title>
+<rect width="1000" height="400" rx="10" fill="#ffffff"/>
+<text x="165" y="19" fill="#555555" font-size="14" text-anchor="middle" font-style="italic">the configuration</text>
+<text x="500" y="19" fill="#555555" font-size="14" text-anchor="middle" font-style="italic">row jump over T, partner e₂</text>
+<text x="835" y="19" fill="#555555" font-size="14" text-anchor="middle" font-style="italic">column jump over P, partner a</text>
+<g transform="translate(0,28)">
+<path d="M40.0,150.0 L69.3,95.6 Q75.0,85.0 87.0,85.0 L233.0,85.0 Q245.0,85.0 250.7,95.6 L280.0,150.0" fill="none" stroke="#222222" stroke-width="2" stroke-linejoin="round"/>
+<path d="M40.0,150.0 L69.3,204.4 Q75.0,215.0 87.0,215.0 L233.0,215.0 Q245.0,215.0 250.7,204.4 L280.0,150.0" fill="none" stroke="#222222" stroke-width="2" stroke-linejoin="round"/>
+<path d="M160.0,30.0 L160.0,150.0" fill="none" stroke="#222222" stroke-width="2" stroke-linejoin="round"/>
+<path d="M160.0,150.0 L225.0,270.0" fill="none" stroke="#222222" stroke-width="2" stroke-linejoin="round"/>
+<path d="M160.0,30.0 L293.0,30.0 Q305.0,30.0 305.0,42.0 L305.0,258.0 Q305.0,270.0 293.0,270.0 L225.0,270.0" fill="none" stroke="#222222" stroke-width="2" stroke-linejoin="round"/>
+<path d="M160.0,150.0 L280.0,150.0" fill="none" stroke="#222222" stroke-width="2" stroke-linejoin="round"/>
+<path d="M40.0,150.0 L6.0,210.0" fill="none" stroke="#222222" stroke-width="2" stroke-linejoin="round"/>
+<circle cx="160.0" cy="85.0" r="5" fill="#c62828"/>
+<circle cx="195.2" cy="215.0" r="5" fill="#c62828"/>
+<circle cx="40" cy="150" r="15" fill="#ffffff" stroke="#222222" stroke-width="2"/>
+<text x="40" y="155" fill="#222222" font-size="14" text-anchor="middle" font-weight="bold">P</text>
+<circle cx="280" cy="150" r="15" fill="#ffffff" stroke="#222222" stroke-width="2"/>
+<text x="280" y="155" fill="#222222" font-size="14" text-anchor="middle" font-weight="bold">Q</text>
+<circle cx="160" cy="30" r="15" fill="#ffffff" stroke="#222222" stroke-width="2"/>
+<text x="160" y="35" fill="#222222" font-size="14" text-anchor="middle" font-weight="bold">S</text>
+<circle cx="160" cy="150" r="15" fill="#ffffff" stroke="#222222" stroke-width="2"/>
+<text x="160" y="155" fill="#222222" font-size="14" text-anchor="middle" font-weight="bold">T</text>
+<circle cx="225" cy="270" r="15" fill="#ffffff" stroke="#222222" stroke-width="2"/>
+<text x="225" y="275" fill="#222222" font-size="14" text-anchor="middle" font-weight="bold">U</text>
+<text x="110" y="78" fill="#222222" font-size="14" text-anchor="middle" font-style="italic">e<tspan dy="4" font-size="9">1</tspan></text>
+<text x="110" y="236" fill="#222222" font-size="14" text-anchor="middle" font-style="italic">e<tspan dy="4" font-size="9">2</tspan></text>
+<text x="313" y="150" fill="#222222" font-size="14" text-anchor="middle" font-style="italic">c</text>
+<text x="216" y="142" fill="#222222" font-size="14" text-anchor="middle" font-style="italic">m</text>
+<text x="12" y="228" fill="#222222" font-size="14" text-anchor="middle" font-style="italic">u</text>
+<text x="168" y="62" fill="#222222" font-size="14" text-anchor="start" font-style="italic">a</text>
+<text x="178" y="200" fill="#222222" font-size="14" text-anchor="start" font-style="italic">b</text>
+<text x="146.0" y="315" fill="#222222" font-size="13" text-anchor="middle" font-style="italic">a</text>
+<text x="170.0" y="315" fill="#222222" font-size="13" text-anchor="middle" font-style="italic">b</text>
+<text x="194.0" y="315" fill="#222222" font-size="13" text-anchor="middle" font-style="italic">c</text>
+<text x="128" y="339" fill="#222222" font-size="13" text-anchor="end" font-style="italic">e<tspan dy="4" font-size="9">1</tspan></text>
+<rect x="134" y="322" width="24" height="24" fill="#ffffff" stroke="#999999" stroke-width="1"/>
+<circle cx="146.0" cy="334.0" r="4.5" fill="#c62828"/>
+<rect x="158" y="322" width="24" height="24" fill="#ffffff" stroke="#999999" stroke-width="1"/>
+<rect x="182" y="322" width="24" height="24" fill="#ffffff" stroke="#999999" stroke-width="1"/>
+<text x="128" y="363" fill="#222222" font-size="13" text-anchor="end" font-style="italic">e<tspan dy="4" font-size="9">2</tspan></text>
+<rect x="134" y="346" width="24" height="24" fill="#ffffff" stroke="#999999" stroke-width="1"/>
+<rect x="158" y="346" width="24" height="24" fill="#ffffff" stroke="#999999" stroke-width="1"/>
+<circle cx="170.0" cy="358.0" r="4.5" fill="#c62828"/>
+<rect x="182" y="346" width="24" height="24" fill="#ffffff" stroke="#999999" stroke-width="1"/>
+<path d="M375.0,150.0 L404.3,95.6 Q410.0,85.0 422.0,85.0 L568.0,85.0 Q580.0,85.0 585.7,95.6 L615.0,150.0" fill="none" stroke="#222222" stroke-width="2" stroke-linejoin="round"/>
+<path d="M375.0,150.0 L402.1,119.0 Q410.0,110.0 422.0,110.0 L528.0,110.0 Q540.0,110.0 540.0,122.0 L540.0,173.0 Q540.0,185.0 550.9,179.9 L615.0,150.0" fill="none" stroke="#e07000" stroke-width="2" stroke-linejoin="round"/>
+<path d="M495.0,30.0 L495.0,150.0" fill="none" stroke="#222222" stroke-width="2" stroke-linejoin="round"/>
+<path d="M495.0,150.0 L560.0,270.0" fill="none" stroke="#222222" stroke-width="2" stroke-linejoin="round"/>
+<path d="M495.0,30.0 L628.0,30.0 Q640.0,30.0 640.0,42.0 L640.0,258.0 Q640.0,270.0 628.0,270.0 L560.0,270.0" fill="none" stroke="#222222" stroke-width="2" stroke-linejoin="round"/>
+<path d="M495.0,150.0 L615.0,150.0" fill="none" stroke="#222222" stroke-width="2" stroke-linejoin="round"/>
+<path d="M375.0,150.0 L341.0,210.0" fill="none" stroke="#222222" stroke-width="2" stroke-linejoin="round"/>
+<circle cx="495.0" cy="85.0" r="5" fill="#c62828"/>
+<circle cx="495.0" cy="110.0" r="5" fill="#c62828"/>
+<circle cx="540.0" cy="150.0" r="5" fill="#c62828"/>
+<rect x="429.5" y="104.5" width="11" height="11" fill="#1f5fbf"/>
+<text x="435" y="100" fill="#1f5fbf" font-size="13" text-anchor="middle" font-style="italic">P<tspan dy="4" font-size="9">T</tspan></text>
+<circle cx="375" cy="150" r="15" fill="#ffffff" stroke="#222222" stroke-width="2"/>
+<text x="375" y="155" fill="#222222" font-size="14" text-anchor="middle" font-weight="bold">P</text>
+<circle cx="615" cy="150" r="15" fill="#ffffff" stroke="#222222" stroke-width="2"/>
+<text x="615" y="155" fill="#222222" font-size="14" text-anchor="middle" font-weight="bold">Q</text>
+<circle cx="495" cy="30" r="15" fill="#ffffff" stroke="#222222" stroke-width="2"/>
+<text x="495" y="35" fill="#222222" font-size="14" text-anchor="middle" font-weight="bold">S</text>
+<circle cx="495" cy="150" r="15" fill="#fde3c4" stroke="#222222" stroke-width="2"/>
+<text x="495" y="155" fill="#222222" font-size="14" text-anchor="middle" font-weight="bold">T</text>
+<circle cx="560" cy="270" r="15" fill="#ffffff" stroke="#222222" stroke-width="2"/>
+<text x="560" y="275" fill="#222222" font-size="14" text-anchor="middle" font-weight="bold">U</text>
+<text x="445" y="78" fill="#222222" font-size="14" text-anchor="middle" font-style="italic">e<tspan dy="4" font-size="9">1</tspan></text>
+<text x="551" y="168" fill="#222222" font-size="14" text-anchor="middle" font-style="italic">e<tspan dy="4" font-size="9">2</tspan></text>
+<text x="648" y="150" fill="#222222" font-size="14" text-anchor="middle" font-style="italic">c</text>
+<text x="551" y="142" fill="#222222" font-size="14" text-anchor="middle" font-style="italic">m</text>
+<text x="347" y="228" fill="#222222" font-size="14" text-anchor="middle" font-style="italic">u</text>
+<text x="503" y="62" fill="#222222" font-size="14" text-anchor="start" font-style="italic">a</text>
+<text x="513" y="200" fill="#222222" font-size="14" text-anchor="start" font-style="italic">b</text>
+<text x="481.0" y="315" fill="#222222" font-size="13" text-anchor="middle" font-style="italic">a</text>
+<text x="505.0" y="315" fill="#222222" font-size="13" text-anchor="middle" font-style="italic">b</text>
+<text x="529.0" y="315" fill="#222222" font-size="13" text-anchor="middle" font-style="italic">c</text>
+<text x="463" y="339" fill="#222222" font-size="13" text-anchor="end" font-style="italic">e<tspan dy="4" font-size="9">1</tspan></text>
+<rect x="469" y="322" width="24" height="24" fill="#ffffff" stroke="#999999" stroke-width="1"/>
+<circle cx="481.0" cy="334.0" r="4.5" fill="#c62828"/>
+<rect x="493" y="322" width="24" height="24" fill="#ffffff" stroke="#999999" stroke-width="1"/>
+<rect x="517" y="322" width="24" height="24" fill="#ffffff" stroke="#999999" stroke-width="1"/>
+<text x="463" y="363" fill="#222222" font-size="13" text-anchor="end" font-style="italic">e<tspan dy="4" font-size="9">2</tspan></text>
+<rect x="469" y="346" width="24" height="24" fill="#fde3c4" stroke="#999999" stroke-width="1"/>
+<circle cx="481.0" cy="358.0" r="4.5" fill="#c62828"/>
+<rect x="493" y="346" width="24" height="24" fill="#fde3c4" stroke="#999999" stroke-width="1"/>
+<rect x="517" y="346" width="24" height="24" fill="#ffffff" stroke="#999999" stroke-width="1"/>
+<path d="M710.0,150.0 L739.3,95.6 Q745.0,85.0 757.0,85.0 L903.0,85.0 Q915.0,85.0 920.7,95.6 L950.0,150.0" fill="none" stroke="#222222" stroke-width="2" stroke-linejoin="round"/>
+<path d="M710.0,150.0 L739.3,204.4 Q745.0,215.0 757.0,215.0 L903.0,215.0 Q915.0,215.0 920.7,204.4 L950.0,150.0" fill="none" stroke="#222222" stroke-width="2" stroke-linejoin="round"/>
+<path d="M830.0,30.0 L702.0,30.0 Q690.0,30.0 690.0,42.0 L690.0,238.0 Q690.0,250.0 702.0,250.0 L818.0,250.0 Q830.0,250.0 830.0,238.0 L830.0,150.0" fill="none" stroke="#e07000" stroke-width="2" stroke-linejoin="round"/>
+<path d="M830.0,150.0 L895.0,270.0" fill="none" stroke="#222222" stroke-width="2" stroke-linejoin="round"/>
+<path d="M830.0,30.0 L963.0,30.0 Q975.0,30.0 975.0,42.0 L975.0,258.0 Q975.0,270.0 963.0,270.0 L895.0,270.0" fill="none" stroke="#222222" stroke-width="2" stroke-linejoin="round"/>
+<path d="M830.0,150.0 L950.0,150.0" fill="none" stroke="#222222" stroke-width="2" stroke-linejoin="round"/>
+<path d="M710.0,150.0 L676.0,210.0" fill="none" stroke="#222222" stroke-width="2" stroke-linejoin="round"/>
+<circle cx="865.2" cy="215.0" r="5" fill="#c62828"/>
+<circle cx="830.0" cy="215.0" r="5" fill="#c62828"/>
+<circle cx="690.0" cy="185.3" r="5" fill="#c62828"/>
+<rect x="684.5" y="89.5" width="11" height="11" fill="#1f5fbf"/>
+<text x="702" y="99" fill="#1f5fbf" font-size="13" text-anchor="middle" font-style="italic">P<tspan dy="4" font-size="9">P</tspan></text>
+<circle cx="710" cy="150" r="15" fill="#fde3c4" stroke="#222222" stroke-width="2"/>
+<text x="710" y="155" fill="#222222" font-size="14" text-anchor="middle" font-weight="bold">P</text>
+<circle cx="950" cy="150" r="15" fill="#ffffff" stroke="#222222" stroke-width="2"/>
+<text x="950" y="155" fill="#222222" font-size="14" text-anchor="middle" font-weight="bold">Q</text>
+<circle cx="830" cy="30" r="15" fill="#ffffff" stroke="#222222" stroke-width="2"/>
+<text x="830" y="35" fill="#222222" font-size="14" text-anchor="middle" font-weight="bold">S</text>
+<circle cx="830" cy="150" r="15" fill="#ffffff" stroke="#222222" stroke-width="2"/>
+<text x="830" y="155" fill="#222222" font-size="14" text-anchor="middle" font-weight="bold">T</text>
+<circle cx="895" cy="270" r="15" fill="#ffffff" stroke="#222222" stroke-width="2"/>
+<text x="895" y="275" fill="#222222" font-size="14" text-anchor="middle" font-weight="bold">U</text>
+<text x="780" y="78" fill="#222222" font-size="14" text-anchor="middle" font-style="italic">e<tspan dy="4" font-size="9">1</tspan></text>
+<text x="780" y="236" fill="#222222" font-size="14" text-anchor="middle" font-style="italic">e<tspan dy="4" font-size="9">2</tspan></text>
+<text x="983" y="150" fill="#222222" font-size="14" text-anchor="middle" font-style="italic">c</text>
+<text x="886" y="142" fill="#222222" font-size="14" text-anchor="middle" font-style="italic">m</text>
+<text x="682" y="228" fill="#222222" font-size="14" text-anchor="middle" font-style="italic">u</text>
+<text x="698" y="62" fill="#222222" font-size="14" text-anchor="start" font-style="italic">a</text>
+<text x="848" y="200" fill="#222222" font-size="14" text-anchor="start" font-style="italic">b</text>
+<text x="816.0" y="315" fill="#222222" font-size="13" text-anchor="middle" font-style="italic">a</text>
+<text x="840.0" y="315" fill="#222222" font-size="13" text-anchor="middle" font-style="italic">b</text>
+<text x="864.0" y="315" fill="#222222" font-size="13" text-anchor="middle" font-style="italic">c</text>
+<text x="798" y="339" fill="#222222" font-size="13" text-anchor="end" font-style="italic">e<tspan dy="4" font-size="9">1</tspan></text>
+<rect x="804" y="322" width="24" height="24" fill="#fde3c4" stroke="#999999" stroke-width="1"/>
+<rect x="828" y="322" width="24" height="24" fill="#ffffff" stroke="#999999" stroke-width="1"/>
+<rect x="852" y="322" width="24" height="24" fill="#ffffff" stroke="#999999" stroke-width="1"/>
+<text x="798" y="363" fill="#222222" font-size="13" text-anchor="end" font-style="italic">e<tspan dy="4" font-size="9">2</tspan></text>
+<rect x="804" y="346" width="24" height="24" fill="#fde3c4" stroke="#999999" stroke-width="1"/>
+<circle cx="816.0" cy="358.0" r="4.5" fill="#c62828"/>
+<rect x="828" y="346" width="24" height="24" fill="#ffffff" stroke="#999999" stroke-width="1"/>
+<circle cx="840.0" cy="358.0" r="4.5" fill="#c62828"/>
+<rect x="852" y="346" width="24" height="24" fill="#ffffff" stroke="#999999" stroke-width="1"/>
+</g>
+</svg>
