@@ -46,10 +46,11 @@ def _prepare_open_corner(Ac, A, trace_auxiliary, swap_auxiliary):
 
 
 # utility functions for corner contractions, leaving the physical indices uncontracted.
-def _append_vec_tl_open(Ac, A, vectl, trace_auxiliary=False, swap_auxiliary=False):
+def _append_vec_tl_open(Ac, A, vectl, trace_auxiliary=False, swap_auxiliary=False, physical_swaps=()):
     """
     Append the A and Ac tensors to the top-left vector with open and unswapped physical indices [s s'].
     A = t l b r s;  Ac = t' l' b' r' s';  vectl = x [l l'] [t t'] y
+    physical_swaps: legs crossing the physical pair in b r s [x y] b' r' s'.
     """
     Ac, A, traced = _prepare_open_corner(Ac, A, trace_auxiliary, swap_auxiliary)
     vectl = vectl.fuse_legs(axes=(2, (0, 3), 1))  # [t t'] [x y] [l l']
@@ -59,16 +60,19 @@ def _append_vec_tl_open(Ac, A, vectl, trace_auxiliary=False, swap_auxiliary=Fals
     axes = ((0, 1, 5), (0, 2, 6)) if traced else ((0, 1), (0, 2))
     vectl = tensordot(A, vectl, axes=axes)  # b r s [x y] b' r' s'
     vectl = vectl.swap_gate(axes=((0, 4), 5))  # b b' X r'
+    if physical_swaps:
+        vectl = vectl.swap_gate(axes=(physical_swaps, (2, 6)))
     vectl = vectl.fuse_legs(axes=((0, 4), 3, (1, 5), (2, 6)))  # [b b'] [x y] [r r'] [s s']
     vectl = vectl.unfuse_legs(axes=1)  # [b b'] x y [r r'] [s s']
     vectl = vectl.transpose(axes=(1, 0, 2, 3, 4))  # x [b b'] y [r r'] [s s']
     return _materialize_open_corner(vectl)
 
 
-def _append_vec_br_open(Ac, A, vecbr, trace_auxiliary=False, swap_auxiliary=False):
+def _append_vec_br_open(Ac, A, vecbr, trace_auxiliary=False, swap_auxiliary=False, physical_swaps=()):
     """
     Append the A and Ac tensors to the bottom-right vector with open and unswapped physical indices [s s'].
     A = t l b r s;  Ac = t' l' b' r' s';  vecbr = x [r r'] [b b'] y
+    physical_swaps: legs crossing the physical pair in t l s [x y] t' l' s'.
     """
     Ac, A, traced = _prepare_open_corner(Ac, A, trace_auxiliary, swap_auxiliary)
     vecbr = vecbr.fuse_legs(axes=(2, (0, 3), 1))  # [b b'] [x y] [r r']
@@ -78,6 +82,8 @@ def _append_vec_br_open(Ac, A, vecbr, trace_auxiliary=False, swap_auxiliary=Fals
     axes = ((2, 3, 5), (0, 2, 6)) if traced else ((2, 3), (0, 2))
     vecbr = tensordot(A, vecbr, axes=axes)  # t l s [x y] t' l' s'
     vecbr = vecbr.swap_gate(axes=((1, 5), 4))  # l l' X t'
+    if physical_swaps:
+        vecbr = vecbr.swap_gate(axes=(physical_swaps, (2, 6)))
     vecbr = vecbr.fuse_legs(axes=((0, 4), 3, (1, 5), (2, 6)))  # [t t'] [x y] [l l'] [s s']
     vecbr = vecbr.unfuse_legs(axes=1)  # [t t'] x y [l l'] [s s']
     vecbr = vecbr.transpose(axes=(1, 0, 2, 3, 4))  # x [t t'] y [l l'] [s s']
@@ -360,22 +366,15 @@ def rdm2x1(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scala
     vect = (env0.l @ env0.tl) @ (env0.t @ env0.tr)
     vecb = (env1.r @ env1.br) @ (env1.b @ env1.bl)
 
-    tmp0 = _append_vec_tl_open(ten0.bra, ten0.ket, vect, trace_auxiliary=True, swap_auxiliary=True)
-    tmp0 = tmp0.unfuse_legs(axes=(1, 3, 4))  # x b b' y r r' s s'
-    tmp0 = tmp0.swap_gate(axes=(5, (6, 7)))  # r' X s s'
-    tmp0 = tmp0.swap_gate(axes=(2, (6, 7)))  # b' X s s'
-    tmp0 = tmp0.fuse_legs(
-        axes=(0, (1, 2), 3, (4, 5), (6, 7))
-    )  # x [b b'] y [r r'] [s s']
+    # Apply b', r' X s,s' while those legs are still exposed inside the
+    # corner. This avoids expanding and recoupling an eight-leg tensor just
+    # to apply diagonal fermionic signs.
+    tmp0 = _append_vec_tl_open(ten0.bra, ten0.ket, vect, trace_auxiliary=True,
+                               swap_auxiliary=True, physical_swaps=(4, 5))
     tmp0 = env0.r.tensordot(tmp0, axes=((0, 1), (2, 3)))
 
-    tmp1 = _append_vec_br_open(ten1.bra, ten1.ket, vecb, trace_auxiliary=True)
-    tmp1 = tmp1.unfuse_legs(axes=(1, 3, 4))  # x t t' y l l' s s'
-    tmp1 = tmp1.swap_gate(axes=(2, (6, 7)))  # t' X s s'
-    tmp1 = tmp1.swap_gate(axes=(4, (6, 7)))  # l X s s'
-    tmp1 = tmp1.fuse_legs(
-        axes=(0, (1, 2), 3, (4, 5), (6, 7))
-    )  # x [b b'] y [r r'] [s s']
+    tmp1 = _append_vec_br_open(ten1.bra, ten1.ket, vecb, trace_auxiliary=True,
+                               physical_swaps=(4, 1))  # t', l X s,s'
     tmp1 = env1.l.tensordot(tmp1, axes=((0, 1), (2, 3)))
 
     res = tmp0.tensordot(tmp1, axes=((0, 1, 2), (1, 0, 2)))  # [s0 s0'] [s1 s1']
