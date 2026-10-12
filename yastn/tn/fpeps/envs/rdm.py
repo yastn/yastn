@@ -364,16 +364,15 @@ def rdm1x2(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scala
     # Each corner unfuses p,a locally, includes the requested p X a signs,
     # and contracts a,a' together with the virtual legs. Later pair crossings
     # are unchanged because the closed auxiliary pair has even parity.
-    tmp0 = _append_vec_tl_open(ten0.bra, ten0.ket, vecl, trace_auxiliary=True, swap_auxiliary=True)
-    tmp0 = tmp0.unfuse_legs(axes=(1, 4))  # x b b' y [r r'] s s'
-    tmp0 = tmp0.swap_gate(axes=(1, (5, 6)))  # b X s s'
-    tmp0 = tmp0.fuse_legs(axes=(0, (1, 2), 3, 4, (5, 6)))  # x [b b'] y [r r'] [s s']
+    # Apply b X s,s' inside TL, where b is axis 0 and s,s' are (2,6).
+    # This replaces the post-corner unfuse/swap/fuse sequence, as in rdm2x1.
+    tmp0 = _append_vec_tl_open(ten0.bra, ten0.ket, vecl, trace_auxiliary=True,
+                               swap_auxiliary=True, physical_swaps=(0,))
     tmp0 = env0.b.tensordot(tmp0, axes=((2, 1), (0, 1)))
 
-    tmp1 = _append_vec_br_open(ten1.bra, ten1.ket, vecr, trace_auxiliary=True)
-    tmp1 = tmp1.unfuse_legs(axes=(1, 4))  # x t t' y [l l'] s s'
-    tmp1 = tmp1.swap_gate(axes=(2, (5, 6)))  # t' X s s'
-    tmp1 = tmp1.fuse_legs(axes=(0, (1, 2), 3, 4, (5, 6)))  # x [t t'] y [l l'] [s s']
+    # Apply t' X s,s' inside BR: t' is axis 4 and s,s' are (2,6).
+    tmp1 = _append_vec_br_open(ten1.bra, ten1.ket, vecr, trace_auxiliary=True,
+                               physical_swaps=(4,))
     tmp1 = env1.t.tensordot(tmp1, axes=((2, 1), (0, 1)))
 
     res = tmp0.tensordot(tmp1, axes=((0, 1, 2), (1, 0, 2)))  # [s0 s0'] [s1 s1']
