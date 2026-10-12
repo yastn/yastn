@@ -72,6 +72,20 @@ Unlike Abelian charge addition, fusion can have several outcomes. Use
 ``add_charges`` only accepts products with a unique outcome. The symmetry
 classes also provide Clebsch--Gordan fusion isometries and F/R coefficients.
 
+The ``sym_nonabelian`` base class declares the group-specific methods
+``canonical_charge``, ``conj_charge``, ``fusion_outcomes``, ``irrep_dimension``,
+``fusion_isometry``, ``f_symbol``, and ``braiding_phase`` as abstract interfaces.
+It supplies generic left-associated ``fusion_paths``, signed fusion helpers,
+multiplicity and selection checks, and unique-outcome ``add_charges``/``fuse``.
+Signatures must contain one entry per input charge, with values +1 or -1.
+The empty product is the identity irrep returned by ``zero()``.
+
+Generic paths contain canonical intermediate charge tuples and preserve
+repeated channels, including multiplicity at the final fusion vertex.
+SU2 and SU2xU1 retain their optimized path enumerators and existing label
+formats. Implementing selection rules alone does not supply the CG and F/R
+data needed by tensor contractions.
+
 Scalar operators and evolution gates
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

@@ -81,24 +81,6 @@ class sym_SU2(sym_nonabelian):
     def irrep_dimension(cls, charge) -> int:
         return cls._label(charge) + 1
 
-    @classmethod
-    def add_charges(cls, *charges, signatures=None, new_signature=1):
-        """Combine tensor *total* charges.
-
-        Legacy callers require a single charge.  Permit that operation when
-        the non-Abelian fusion outcome is unique (in particular, adding any
-        number of singlets); ambiguous products still require an explicit
-        fusion channel.
-        """
-        if not charges:
-            return cls.zero()
-        if signatures is None:
-            signatures = (1,) * len(charges)
-        outcomes = set(cls.signed_fusion_outcomes(charges, signatures, new_signature))
-        if len(outcomes) == 1:
-            return outcomes.pop()
-        raise TypeError("Adding non-singlet SU2 tensor charges requires an explicit fusion channel.")
-
     @staticmethod
     def _triangle(a, b, c):
         return abs(a - b) <= c <= a + b and (a + b + c) % 2 == 0

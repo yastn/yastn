@@ -78,17 +78,6 @@ class sym_SU2xU1(sym_nonabelian):
         return two_j + 1
 
     @classmethod
-    def add_charges(cls, *charges, signatures=None, new_signature=1):
-        if not charges:
-            return cls.zero()
-        if signatures is None:
-            signatures = (1,) * len(charges)
-        outcomes = set(cls.signed_fusion_outcomes(charges, signatures, new_signature))
-        if len(outcomes) == 1:
-            return outcomes.pop()
-        raise TypeError("Adding non-singlet SU2xU1 tensor charges requires an explicit fusion channel.")
-
-    @classmethod
     def fusion_isometry(cls, left, right, target=None):
         """CG isometry; U(1) contributes only its charge-selection delta."""
         j1, q1 = cls.canonical_charge(left)
