@@ -26,6 +26,14 @@ log = logging.getLogger(__name__)
 Scalar = TypeVar('Scalar')
 
 
+def _materialize_open_corner(vector):
+    # Non-Abelian fusion histories follow native legs. Materialize the corner's
+    # final permutation before callers unfuse several logical legs together.
+    if not getattr(vector.config.sym, 'IS_ABELIAN', True):
+        return vector.consume_transpose()
+    return vector
+
+
 # utility functions for corner contractions, leaving the physical indices uncontracted.
 def _append_vec_tl_open(Ac, A, vectl):
     """
@@ -41,7 +49,7 @@ def _append_vec_tl_open(Ac, A, vectl):
     vectl = vectl.fuse_legs(axes=((0, 4), 3, (1, 5), (2, 6)))  # [b b'] [x y] [r r'] [s s']
     vectl = vectl.unfuse_legs(axes=1)  # [b b'] x y [r r'] [s s']
     vectl = vectl.transpose(axes=(1, 0, 2, 3, 4))  # x [b b'] y [r r'] [s s']
-    return vectl
+    return _materialize_open_corner(vectl)
 
 
 def _append_vec_br_open(Ac, A, vecbr):
@@ -58,7 +66,7 @@ def _append_vec_br_open(Ac, A, vecbr):
     vecbr = vecbr.fuse_legs(axes=((0, 4), 3, (1, 5), (2, 6)))  # [t t'] [x y] [l l'] [s s']
     vecbr = vecbr.unfuse_legs(axes=1)  # [t t'] x y [l l'] [s s']
     vecbr = vecbr.transpose(axes=(1, 0, 2, 3, 4))  # x [t t'] y [l l'] [s s']
-    return vecbr
+    return _materialize_open_corner(vecbr)
 
 
 def _append_vec_tr_open(Ac, A, vectr):
@@ -75,7 +83,7 @@ def _append_vec_tr_open(Ac, A, vectr):
     vectr = vectr.fuse_legs(axes=(3, (0, 4), (1, 5), (2, 6)))  # [x y] [l l'] [b b'] [s s']
     vectr = vectr.unfuse_legs(axes=0)  # x y [l l'] [b b'] [s s']
     vectr = vectr.transpose(axes=(0, 2, 1, 3, 4))  # x [l l'] y [b b'] [s s']
-    return vectr
+    return _materialize_open_corner(vectr)
 
 
 def _append_vec_bl_open(Ac, A, vecbl):
@@ -93,7 +101,7 @@ def _append_vec_bl_open(Ac, A, vecbl):
     vecbl = vecbl.fuse_legs(axes=((3, (1, 5), (0, 4), (2, 6))))  # [x y] [r r'] [t t'] [s s']
     vecbl = vecbl.unfuse_legs(axes=0)  # x y [r r'] [t t'] [s s']
     vecbl = vecbl.transpose(axes=(0, 2, 1, 3, 4))  # x [r r'] y [t t'] [s s']
-    return vecbl
+    return _materialize_open_corner(vecbl)
 
 
 # utility functions to regularize RDMs and log warnings in case of unphysical RDMs
@@ -281,19 +289,12 @@ def rdm1x2(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scala
     vecr = (env1.tr @ env1.r) @ (env1.br @ env1.b)
 
     tmp0 = _append_vec_tl_open(ten0.bra, ten0.ket, vecl)  # x [b b'] y [r r'] [s s']
-    # Non-Abelian fusion histories follow native legs.  Materialize the lazy
-    # permutation before unfusing two separate logical legs, otherwise only
-    # one history can be selected after the first native-axis remapping.
-    if not getattr(tmp0.config.sym, 'IS_ABELIAN', True):
-        tmp0 = tmp0.consume_transpose()
     tmp0 = tmp0.unfuse_legs(axes=(1, 4))  # x b b' y [r r'] s s'
     tmp0 = tmp0.swap_gate(axes=(1, (5, 6)))  # b X s s'
     tmp0 = tmp0.fuse_legs(axes=(0, (1, 2), 3, 4, (5, 6)))  # x [b b'] y [r r'] [s s']
     tmp0 = env0.b.tensordot(tmp0, axes=((2, 1), (0, 1)))
 
     tmp1 = _append_vec_br_open(ten1.bra, ten1.ket, vecr)  # x [t t'] y [l l'] [s s']
-    if not getattr(tmp1.config.sym, 'IS_ABELIAN', True):
-        tmp1 = tmp1.consume_transpose()
     tmp1 = tmp1.unfuse_legs(axes=(1, 4))  # x t t' y [l l'] s s'
     tmp1 = tmp1.swap_gate(axes=(2, (5, 6)))  # t' X s s'
     tmp1 = tmp1.fuse_legs(axes=(0, (1, 2), 3, 4, (5, 6)))  # x [t t'] y [l l'] [s s']
@@ -474,6 +475,11 @@ def rdm2x2(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scala
 
     The index convention for reduced density matrix is `[s0, s0', ..., s3, s3']`,
     where s_i,s_i' is bra,ket pair.
+
+    For fermions, this tensor retains the graded crossings used by
+    :func:`measure_rdm_2x2`. Simply grouping all ket and bra axes does not
+    produce an ordinary Hermitian Fock-space matrix; the corresponding
+    fermionic swap signs must also be included.
 
     TODO: Optionally symmetrize and make non-negative
 

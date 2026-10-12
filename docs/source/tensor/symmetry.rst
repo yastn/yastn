@@ -38,10 +38,16 @@ Non-Abelian symmetries
 The reduced SU2/SU2xU1 implementation supports invariant tensors and PEPS
 purification. Independent two-site exact-diagonalization tests cover Hubbard,
 t-J, and spin-1/2 and spin-1 Heisenberg evolution, including complex time steps,
-NTU truncation without discarded states, and CTM observables. Checkerboard
-quickstarts compare high-temperature scalar observables with Abelian simulations;
-run them with ``--quickstart``. These small-system/high-temperature checks do not
-establish convergence at low temperature or at large bond dimension.
+NTU truncation without discarded states, and CTM observables. Finite-patch RDM
+tests also compare single-site, nearest-neighbor, diagonal, and full 2x2 density
+matrices with independent magnetic/Fock-basis references. The checkerboard
+Hubbard benchmark reports energy, double occupancy, and nearest-neighbor spin
+correlations against the METTS cylinder data in ``test_Hubbard.py`` at beta=2
+(also available at beta=4 and 6). Heisenberg and t-J quickstarts compare with
+Abelian simulations at beta=0.5. All three use a purification time step of 0.05;
+run them with ``--quickstart``. Bond dimension, time step, CTM convergence, and
+the difference between cylinder and infinite-plane geometries must be assessed
+separately from the METTS statistical errors.
 
 ``sym='SU2'`` labels irreducible representations by the non-negative integer
 ``2*j``. ``sym='SU2xU1'`` uses pairs ``(2*j, q)``, where ``q`` is an integer
