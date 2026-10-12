@@ -45,6 +45,15 @@ def _prepare_open_corner(Ac, A, trace_auxiliary, swap_auxiliary):
     ``swap_auxiliary`` supplies p X a and p' X a', as in trace_aux(swap=True)
     for the left/top site. It is separate from the virtual/physical crossings
     selected by the corner helpers' ``physical_swaps`` argument.
+
+    Together with the corner's traced tensordot branch, this replaces the
+    late trace_aux(rdm, axis, swap=swap_auxiliary) in rdm1x2/rdm2x1:
+      1. Unfuse A and Ac locally instead of unfusing the assembled RDM pair.
+      2. Apply the same p X a and p' X a' signs locally when swap is True.
+      3. Contract a(5) with a'(6) in the corner's tensordot, replacing the
+         final trace over that auxiliary pair. Only p,p' remain open.
+    Thus trace_aux must not be applied again to that site's output. Keeping
+    auxiliary legs out of later intermediates reduces the contraction cost.
     """
     traced = trace_auxiliary and A.get_legs(4).is_fused()
     if traced:
@@ -74,6 +83,8 @@ def _append_vec_tl_open(Ac, A, vectl, trace_auxiliary=False, swap_auxiliary=Fals
     # Not traced: A = t l b r s;     vectl = t [x y] l b' r' s'.
     # Traced:     A = t l b r p a;   vectl = t [x y] l b' r' p' a'.
     # Both contract A's t,l with vectl's t,l; traced also closes a(5),a'(6).
+    # This extra contracted pair performs the trace part of trace_aux;
+    # _prepare_open_corner has already supplied its unfusion and swap parts.
     axes = ((0, 1, 5), (0, 2, 6)) if traced else ((0, 1), (0, 2))
     vectl = tensordot(A, vectl, axes=axes)  # b r s [x y] b' r' s'
     # Closing the extra auxiliary pair restores the same seven positions,
@@ -105,6 +116,7 @@ def _append_vec_br_open(Ac, A, vecbr, trace_auxiliary=False, swap_auxiliary=Fals
     # Not traced: A = t l b r s;     vecbr = b [x y] r t' l' s'.
     # Traced:     A = t l b r p a;   vecbr = b [x y] r t' l' p' a'.
     # Both contract A's b,r with vecbr's b,r; traced also closes a(5),a'(6).
+    # As in TL, this extra pair replaces trace_aux's final auxiliary trace.
     axes = ((2, 3, 5), (0, 2, 6)) if traced else ((2, 3), (0, 2))
     vecbr = tensordot(A, vecbr, axes=axes)  # t l s [x y] t' l' s'
     # Both branches now share this layout: l,l' X t' is always (1,5),4.
@@ -206,6 +218,12 @@ def trace_aux(rdm : Tensor, axis : int, swap : bool = False) -> Tensor:
     where p_i,p_i' is a bra,ket pair of indices.
 
     Trace out *auxiliary* physical index pair. Include swap gate if `swap`.
+
+    This function remains the explicit late-trace path for callers that keep
+    fused physical/auxiliary legs until the RDM is assembled. rdm1x2/rdm2x1
+    instead perform these same unfuse/swap/trace steps inside their TL/BR
+    corner contractions; see _prepare_open_corner. Their output already has
+    the auxiliary pairs removed and does not need another trace_aux call.
 
     Args:
         rdm: reduced density matrix
@@ -340,9 +358,12 @@ def rdm1x2(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scala
     vecl = (env0.bl @ env0.l) @ (env0.tl @ env0.t)
     vecr = (env1.tr @ env1.r) @ (env1.br @ env1.b)
 
-    # Close auxiliary legs locally; the left site's physical/auxiliary
-    # crossing is included before contraction. Later pair crossings are
-    # unchanged because the closed auxiliary pair has even parity.
+    # Replace the two late calls on the assembled RDM:
+    #   trace_aux(rdm, 0, swap=True)  -> TL trace_auxiliary=True, swap_auxiliary=True
+    #   trace_aux(rdm, 2, swap=False) -> BR trace_auxiliary=True, swap_auxiliary=False
+    # Each corner unfuses p,a locally, includes the requested p X a signs,
+    # and contracts a,a' together with the virtual legs. Later pair crossings
+    # are unchanged because the closed auxiliary pair has even parity.
     tmp0 = _append_vec_tl_open(ten0.bra, ten0.ket, vecl, trace_auxiliary=True, swap_auxiliary=True)
     tmp0 = tmp0.unfuse_legs(axes=(1, 4))  # x b b' y [r r'] s s'
     tmp0 = tmp0.swap_gate(axes=(1, (5, 6)))  # b X s s'
@@ -359,6 +380,7 @@ def rdm1x2(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scala
 
     rdm = res.unfuse_legs (axes=(0, 1))  # s0 s0' s1 s1'
 
+    # The corners already replaced both trace_aux calls; s0,s1 are physical.
     rdm, rdm_norm = _normalize_and_regularize_rdm(rdm, who=rdm1x2.__name__)
 
     return rdm, rdm_norm
@@ -397,6 +419,9 @@ def rdm2x1(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scala
     vect = (env0.l @ env0.tl) @ (env0.t @ env0.tr)
     vecb = (env1.r @ env1.br) @ (env1.b @ env1.bl)
 
+    # As in rdm1x2, replace trace_aux(rdm, 0, swap=True) for the top site
+    # with TL's local unfuse/swap/auxiliary contraction, and replace
+    # trace_aux(rdm, 2, swap=False) for the bottom site with BR's local trace.
     # Apply b', r' X s,s' while those legs are still exposed inside the
     # corner. This avoids expanding and recoupling an eight-leg tensor just
     # to apply diagonal fermionic signs. In the TL seven-leg layout b',r'
@@ -413,6 +438,7 @@ def rdm2x1(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scala
     res = tmp0.tensordot(tmp1, axes=((0, 1, 2), (1, 0, 2)))  # [s0 s0'] [s1 s1']
 
     rdm = res.unfuse_legs(axes=(0, 1))  # s0 s0' s1 s1'
+    # Both auxiliary pairs were closed in the corners: no late trace_aux here.
     rdm, rdm_norm= _normalize_and_regularize_rdm(rdm, who=rdm2x1.__name__)
 
     return rdm, rdm_norm
