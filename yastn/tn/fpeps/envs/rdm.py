@@ -35,7 +35,17 @@ def _materialize_open_corner(vector):
 
 
 def _prepare_open_corner(Ac, A, trace_auxiliary, swap_auxiliary):
-    """Expose purification legs so they can close in the local contraction."""
+    """Expose purification legs so they can close in the local contraction.
+
+    When ``traced`` is True, split s=[p a] at axis 4 into physical p (4)
+    and auxiliary a (5), and similarly for Ac. The corner contraction will
+    close a with a'; this helper only exposes them. Otherwise A and Ac keep
+    their five-leg layout, including the original s and s' at axis 4.
+
+    ``swap_auxiliary`` supplies p X a and p' X a', as in trace_aux(swap=True)
+    for the left/top site. It is separate from the virtual/physical crossings
+    selected by the corner helpers' ``physical_swaps`` argument.
+    """
     traced = trace_auxiliary and A.get_legs(4).is_fused()
     if traced:
         Ac, A = _materialize_open_corner(Ac), _materialize_open_corner(A)
@@ -50,15 +60,24 @@ def _append_vec_tl_open(Ac, A, vectl, trace_auxiliary=False, swap_auxiliary=Fals
     """
     Append the A and Ac tensors to the top-left vector with open and unswapped physical indices [s s'].
     A = t l b r s;  Ac = t' l' b' r' s';  vectl = x [l l'] [t t'] y
-    physical_swaps: legs crossing the physical pair in b r s [x y] b' r' s'.
+
+    After the local contraction, both branches have the same seven-leg layout:
+    0:b, 1:r, 2:s, 3:[x y], 4:b', 5:r', 6:s'. Here s means the surviving
+    open leg: the original s if not traced, or physical p after closing a,a'.
+    physical_swaps selects virtual legs in this layout to cross with (2,6).
     """
     Ac, A, traced = _prepare_open_corner(Ac, A, trace_auxiliary, swap_auxiliary)
     vectl = vectl.fuse_legs(axes=(2, (0, 3), 1))  # [t t'] [x y] [l l']
     vectl = vectl.unfuse_legs(axes=(0, 2))  # t t' [x y] l l'
     vectl = vectl.swap_gate(axes=(1, (3, 4)))  # t' X l l'
-    vectl = tensordot(vectl, Ac.conj(), axes=((1, 4), (0, 1)))  # t [x y] l b' r' s'
+    vectl = tensordot(vectl, Ac.conj(), axes=((1, 4), (0, 1)))
+    # Not traced: A = t l b r s;     vectl = t [x y] l b' r' s'.
+    # Traced:     A = t l b r p a;   vectl = t [x y] l b' r' p' a'.
+    # Both contract A's t,l with vectl's t,l; traced also closes a(5),a'(6).
     axes = ((0, 1, 5), (0, 2, 6)) if traced else ((0, 1), (0, 2))
     vectl = tensordot(A, vectl, axes=axes)  # b r s [x y] b' r' s'
+    # Closing the extra auxiliary pair restores the same seven positions,
+    # so b,b' X r' uses (0,4),5 in either branch; no traced-dependent swap.
     vectl = vectl.swap_gate(axes=((0, 4), 5))  # b b' X r'
     if physical_swaps:
         vectl = vectl.swap_gate(axes=(physical_swaps, (2, 6)))
@@ -72,15 +91,23 @@ def _append_vec_br_open(Ac, A, vecbr, trace_auxiliary=False, swap_auxiliary=Fals
     """
     Append the A and Ac tensors to the bottom-right vector with open and unswapped physical indices [s s'].
     A = t l b r s;  Ac = t' l' b' r' s';  vecbr = x [r r'] [b b'] y
-    physical_swaps: legs crossing the physical pair in t l s [x y] t' l' s'.
+
+    After the local contraction, both branches have the same seven-leg layout:
+    0:t, 1:l, 2:s, 3:[x y], 4:t', 5:l', 6:s'. Here s is the original open
+    leg if not traced, or physical p after closing the auxiliary pair a,a'.
+    physical_swaps selects virtual legs in this layout to cross with (2,6).
     """
     Ac, A, traced = _prepare_open_corner(Ac, A, trace_auxiliary, swap_auxiliary)
     vecbr = vecbr.fuse_legs(axes=(2, (0, 3), 1))  # [b b'] [x y] [r r']
     vecbr = vecbr.unfuse_legs(axes=(0, 2))  # b b' [x y] r r'
     vecbr = vecbr.swap_gate(axes=((0, 1), 4))  # b b' X r'
-    vecbr = tensordot(vecbr, Ac.conj(), axes=((1, 4), (2, 3)))  # b [x y] r t' l' s'
+    vecbr = tensordot(vecbr, Ac.conj(), axes=((1, 4), (2, 3)))
+    # Not traced: A = t l b r s;     vecbr = b [x y] r t' l' s'.
+    # Traced:     A = t l b r p a;   vecbr = b [x y] r t' l' p' a'.
+    # Both contract A's b,r with vecbr's b,r; traced also closes a(5),a'(6).
     axes = ((2, 3, 5), (0, 2, 6)) if traced else ((2, 3), (0, 2))
     vecbr = tensordot(A, vecbr, axes=axes)  # t l s [x y] t' l' s'
+    # Both branches now share this layout: l,l' X t' is always (1,5),4.
     vecbr = vecbr.swap_gate(axes=((1, 5), 4))  # l l' X t'
     if physical_swaps:
         vecbr = vecbr.swap_gate(axes=(physical_swaps, (2, 6)))
@@ -94,6 +121,8 @@ def _append_vec_tr_open(Ac, A, vectr):
     """
     Append the A and Ac tensors to the top-right vector with open physical indices [s s'], swapped with t'.
     A = t l b r s;  Ac = t' l' b' r' s';  vectr = x [t t'] [r r'] y
+    This helper keeps s,s' intact, including any fused auxiliary legs;
+    auxiliary tracing is performed by the caller after assembling the patch.
     """
     vectr = vectr.fuse_legs(axes=(1, (0, 3), 2))  # [t t'] [x y] [r r']
     vectr = vectr.unfuse_legs(axes=(0, 2))  # t t' [x y] r r'
@@ -111,6 +140,8 @@ def _append_vec_bl_open(Ac, A, vecbl):
     """
     Append the A and Ac tensors to the bottom-left vector with open physical indices, swapped with b.
     A = t l b r s;  Ac = t' l' b' r' s';  vecbl = x [b b'] [l l'] y
+    This helper keeps s,s' intact, including any fused auxiliary legs;
+    auxiliary tracing is performed by the caller after assembling the patch.
     """
     vecbl = vecbl.fuse_legs(axes=(1, (0, 3), 2))  # [b b'] [x y] [l l']
     vecbl = vecbl.unfuse_legs(axes=(0, 2))  # b b' [x y] l l'
@@ -368,11 +399,13 @@ def rdm2x1(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scala
 
     # Apply b', r' X s,s' while those legs are still exposed inside the
     # corner. This avoids expanding and recoupling an eight-leg tensor just
-    # to apply diagonal fermionic signs.
+    # to apply diagonal fermionic signs. In the TL seven-leg layout b',r'
+    # are (4,5), and the surviving physical pair s,s' is (2,6).
     tmp0 = _append_vec_tl_open(ten0.bra, ten0.ket, vect, trace_auxiliary=True,
                                swap_auxiliary=True, physical_swaps=(4, 5))
     tmp0 = env0.r.tensordot(tmp0, axes=((0, 1), (2, 3)))
 
+    # In the BR seven-leg layout t',l are (4,1); s,s' remains (2,6).
     tmp1 = _append_vec_br_open(ten1.bra, ten1.ket, vecb, trace_auxiliary=True,
                                physical_swaps=(4, 1))  # t', l X s,s'
     tmp1 = env1.l.tensordot(tmp1, axes=((0, 1), (2, 3)))
