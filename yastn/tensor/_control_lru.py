@@ -50,6 +50,7 @@ def set_cache_maxsize(maxsize=0):
     _merging._leg_structure_combine_charges_prod = lru_cache(maxsize)(_merging._leg_structure_combine_charges_prod.__wrapped__)
     _merging._meta_fuse_hard = lru_cache(maxsize)(_merging._meta_fuse_hard.__wrapped__)
     _merging._meta_unfuse_hard = lru_cache(maxsize)(_merging._meta_unfuse_hard.__wrapped__)
+    _merging._adjacent_swap_coefficient = lru_cache(maxsize)(_merging._adjacent_swap_coefficient.__wrapped__)
     _algebra._meta_addition = lru_cache(maxsize)(_algebra._meta_addition.__wrapped__)
     _auxiliary.get_blocks = lru_cache(maxsize)(_auxiliary.get_blocks.__wrapped__)
     _auxiliary.get_blocks_charges_all = lru_cache(maxsize)(_auxiliary.get_blocks_charges_all.__wrapped__)
@@ -65,7 +66,7 @@ def clear_cache():
     torch backend's fusion cache pins after its first GPU use.
     """
     from . import _nonabelian
-    for function in (_nonabelian.contraction_coefficient, _nonabelian._network_path,
+    for function in (_nonabelian.contraction_coefficient,
                      _nonabelian.intertwiner, _nonabelian.fusion_coefficient,
                      _nonabelian.fusion_weights, _contractions._fusion_intertwiner,
                      _contractions._contraction_recoupling):
@@ -87,6 +88,7 @@ def clear_cache():
     _merging._leg_structure_combine_charges_prod.cache_clear()
     _merging._meta_fuse_hard.cache_clear()
     _merging._meta_unfuse_hard.cache_clear()
+    _merging._adjacent_swap_coefficient.cache_clear()
     _algebra._meta_addition.cache_clear()
     _auxiliary.get_blocks.cache_clear()
     _auxiliary.get_blocks_charges_all.cache_clear()
@@ -103,6 +105,7 @@ def get_cache_info():
     which backend is in use.
     """
     return {"fuse_hard": _merging._meta_fuse_hard.cache_info(),
+            "adjacent_swap_coefficient": _merging._adjacent_swap_coefficient.cache_info(),
             "unfuse_hard": _merging._meta_unfuse_hard.cache_info(),
             "intersect_hfs": _merging._masks_hfs_intersection.cache_info(),
             "combine_leg_structure": _merging._leg_structure_combine_charges_prod.cache_info(),

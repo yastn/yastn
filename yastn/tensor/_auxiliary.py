@@ -513,13 +513,29 @@ def _get_blocks_charges_nonabelian(sym, taxes, signatures, n):
     if 0 in sizes:
         return (np.zeros((0, ndim, nsym), dtype=np.int64),
                 np.zeros((0, ndim), dtype=np.int64))
-    iblocks = _product_indices(sizes)
+    if sym.SYM_ID == 'SU2xU1':
+        # Select additive charges before constructing the spin-sector product.
+        # The Abelian enumerator also preserves repeated q labels and leg order.
+        from ..sym import sym_U1
+        particle_taxes = tuple(tuple((t[1],) for t in tax) for tax in taxes)
+        _, iblocks = get_blocks_charges_all(sym_U1, particle_taxes, signatures, (n[1],))
+    else:
+        iblocks = _product_indices(sizes)
     tblocks = np.empty((len(iblocks), ndim, nsym), dtype=np.int64)
     for axis, tax in enumerate(taxes):
         values = np.asarray(tax, dtype=np.int64).reshape(len(tax), nsym)
         tblocks[:, axis, :] = values[iblocks[:, axis]]
-    keep = np.fromiter((sym.can_fuse(tuple(map(tuple, row)), n, signatures=signatures) for row in tblocks),
-                       dtype=bool, count=len(tblocks))
+    if sym.SYM_ID in ('SU2', 'SU2xU1'):
+        # A product of spins contains every doubled spin between the polygon
+        # lower bound and their sum, in steps of two. No path enumeration is
+        # needed to decide whether an external-sector combination is allowed.
+        spins = tblocks[:, :, 0]
+        total = np.sum(spins, axis=1)
+        lower = np.maximum(2 * np.max(spins, axis=1, initial=0) - total, total % 2)
+        keep = (lower <= n[0]) & (n[0] <= total) & ((total - n[0]) % 2 == 0)
+    else:
+        keep = np.fromiter((sym.can_fuse(tuple(map(tuple, row)), n, signatures=signatures) for row in tblocks),
+                           dtype=bool, count=len(tblocks))
     return tblocks[keep], iblocks[keep]
 
 

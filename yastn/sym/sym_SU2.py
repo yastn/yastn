@@ -32,7 +32,8 @@ class sym_SU2(sym_nonabelian):
             if len(charge) != 1:
                 raise ValueError("An SU2 charge must contain one 2*j label.")
             charge = charge[0]
-        if isinstance(charge, bool) or not isinstance(charge, Integral) or charge < 0:
+        if (isinstance(charge, bool)
+                or not (isinstance(charge, (int, np.integer)) or isinstance(charge, Integral)) or charge < 0):
             raise ValueError("SU2 charges are non-negative integer 2*j labels.")
         return int(charge)
 

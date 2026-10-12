@@ -2,6 +2,7 @@
 from functools import lru_cache
 import numpy as np
 import opt_einsum
+from .._cache_registry import register_cache
 
 
 def tree_network(sym, charges, signs, total, channel, labels, fresh, root=None):
@@ -74,16 +75,35 @@ def contraction_coefficient(sym, charges_a, signs_a, total_a, channel_a,
 def _contract_scalar(factors):
     if not factors:
         return 1.
-    topology = tuple((tuple(a.shape), tuple(labels)) for a, labels in zip(factors[::2], factors[1::2]))
-    return float(opt_einsum.contract(*factors, [], optimize=_network_path(topology)))
+    # Singlet magnetic axes have dimension one. Remove them before planning:
+    # otherwise equivalent CG networks generate many distinct large paths.
+    scalar, operands, topology, relabel = 1., [], [], {}
+    for array, labels in zip(factors[::2], factors[1::2]):
+        axes = tuple(i for i, size in enumerate(array.shape) if size != 1)
+        if not axes:
+            scalar *= array.reshape(()).item()
+            continue
+        shape = tuple(array.shape[i] for i in axes)
+        labels = tuple(relabel.setdefault(labels[i], len(relabel)) for i in axes)
+        operands.append(array.reshape(shape))
+        topology.append(labels)
+    if not operands or scalar == 0:
+        return float(scalar)
+    return float(scalar * _network_contraction(tuple(topology))(*operands, backend='numpy'))
 
 
-@lru_cache(maxsize=1024)
-def _network_path(topology):
+@register_cache(key='nonabelian_network_contraction')
+@lru_cache(maxsize=4096)
+def _network_contraction(topology):
+    # Cache the executable contraction, not only its path: contract(...,
+    # optimize=path) still rebuilds contraction metadata on every invocation.
+    # ContractExpression supports varying dimensions at fixed ranks. These
+    # small CG networks share connectivity across many spin sectors, so plan
+    # with uniform nontrivial dimensions instead of caching every spin size.
     expression = ','.join(''.join(opt_einsum.get_symbol(i) for i in labels)
-                          for _, labels in topology) + '->'
-    shapes = [shape for shape, _ in topology]
-    return opt_einsum.contract_path(expression, *shapes, shapes=True, optimize='greedy')[0]
+                          for labels in topology) + '->'
+    shapes = [(2,) * len(labels) for labels in topology]
+    return opt_einsum.contract_expression(expression, *shapes, optimize='greedy')
 
 
 def scale(sym, charges, signs, total):

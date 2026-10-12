@@ -324,6 +324,15 @@ def _split_channel(channel, nsym):
                  for n in range(0, len(channel), nsym))
 
 
+@lru_cache(maxsize=16384)
+def _adjacent_swap_coefficient(sym, x, left, right, z, y, yp):
+    """F^-1 R F depends on six irreps, independently of block multiplicities."""
+    return sum(sym.f_symbol(x, left, right, z, y, middle)
+               * sym.braiding_phase(left, right, middle)
+               * sym.f_symbol(x, right, left, z, yp, middle)
+               for middle in sym.fusion_outcomes(left, right))
+
+
 def _swap_adjacent_fusion_leaves(a, position):
     """Exchange leaves ``position`` and ``position + 1`` by ``R`` or ``F^-1 R F``."""
     sym = a.config.sym
@@ -373,11 +382,7 @@ def _swap_adjacent_fusion_leaves(a, position):
                 left, right = oriented[position], oriented[position + 1]
                 y, yp = path_old[changed], path_new[changed]
                 z = path_old[position] if position < ndim - 2 else tuple(a.struct.n)
-                coefficient = 0.0
-                for middle in sym.fusion_outcomes(left, right):
-                    coefficient += (sym.f_symbol(x, left, right, z, y, middle)
-                                    * sym.braiding_phase(left, right, middle)
-                                    * sym.f_symbol(x, right, left, z, yp, middle))
+                coefficient = _adjacent_swap_coefficient(sym, x, left, right, z, y, yp)
             if abs(coefficient) < 1e-15:
                 continue
             block = a._data[slice(*bl_old.slc[in_index])]

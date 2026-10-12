@@ -23,12 +23,17 @@ class sym_SU2xU1(sym_nonabelian):
 
     @classmethod
     def canonical_charge(cls, charge):
-        if not isinstance(charge, (tuple, list, np.ndarray)) or np.ndim(charge) != 1 or len(charge) != 2:
+        if (type(charge) is tuple and len(charge) == 2
+                and type(charge[0]) is int and type(charge[1]) is int and charge[0] >= 0):
+            return charge
+        if (not isinstance(charge, (tuple, list, np.ndarray))
+                or (isinstance(charge, np.ndarray) and charge.ndim != 1) or len(charge) != 2):
             raise ValueError("An SU2xU1 charge must be a (2*j, q) pair.")
         two_j, q = charge
-        if isinstance(two_j, bool) or not isinstance(two_j, Integral) or two_j < 0:
+        if (isinstance(two_j, bool)
+                or not (isinstance(two_j, (int, np.integer)) or isinstance(two_j, Integral)) or two_j < 0):
             raise ValueError(f"The SU2 label must be a non-negative integer 2*j; got {charge}.")
-        if isinstance(q, bool) or not isinstance(q, Integral):
+        if isinstance(q, bool) or not (isinstance(q, (int, np.integer)) or isinstance(q, Integral)):
             raise ValueError("The U1 charge must be an integer.")
         return int(two_j), int(q)
 

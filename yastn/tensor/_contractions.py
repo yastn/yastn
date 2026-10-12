@@ -550,58 +550,47 @@ def _meta_tensordot_nf(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b, la
         slc_c = bl_c.slc
     #
     if not getattr(sym, 'IS_ABELIAN', True):
-        tn_pairs = np.concatenate((bl_a.t[ind_a][:, nout_a, :],
-                                   bl_b.t[ind_b][:, nout_b, :]), axis=1)
-        # Project every compatible gluing onto the complete output channel
-        # basis; matching external charges alone does not fix an intertwiner.
-        signatures_c = tuple(leg.s for leg in struct_c.legs)
-        channel_pairs = []
-        valid_pairs = []
-        coefficients = []
-        for ipair, (charges, ia, ib) in enumerate(zip(tn_pairs, ind_a, ind_b)):
-            paths = sym.signed_fusion_paths(tuple(map(tuple, charges)), struct_c.n, signatures_c)
-            allowed = tuple(tuple(x for charge in path for x in
-                                  (charge if isinstance(charge, tuple) else (charge,)))
-                            for path in paths)
-            if len(allowed) == 0:
-                # Matching individual contracted charges is necessary but not
-                # sufficient: their fusion channel can be incompatible. Such
-                # block pairs have an identically zero categorical contraction.
+        # Output charges and fusion paths already exist in bl_c. Reuse them
+        # for all input pairs in the same output class instead of enumerating
+        # the same paths separately for every pair.
+        # The untouched outgoing prefix of A keeps its coupling channels in C.
+        # Orthogonality makes all other output prefixes identically zero.
+        prefix_width = max(0, na - 1) * nsym if nin_a and nout_b else 0
+        output_classes = {}
+        for index, (key, charges, channel) in enumerate(zip(c_keys, bl_c.t, bl_c.channels)):
+            if key < 0:
                 continue
-            charges_a = tuple(map(tuple, bl_a.t[ia]))
-            charges_b = tuple(map(tuple, bl_b.t[ib]))
-            signs_a = tuple(leg.s for leg in struct_a.legs)
-            signs_b = tuple(leg.s for leg in struct_b.legs)
-            for output_channel in allowed:
+            channel_key = (key, tuple(channel[:prefix_width]))
+            if channel_key not in output_classes:
+                output_classes[channel_key] = (tuple(map(tuple, charges)), [])
+            output_classes[channel_key][1].append((index, tuple(channel)))
+        charges_a = tuple(tuple(map(tuple, charges)) for charges in bl_a.t)
+        charges_b = tuple(tuple(map(tuple, charges)) for charges in bl_b.t)
+        signs_a = tuple(leg.s for leg in struct_a.legs)
+        signs_b = tuple(leg.s for leg in struct_b.legs)
+        signatures_c = tuple(leg.s for leg in struct_c.legs)
+        valid_pairs, output_indices, coefficients = [], [], []
+        for ipair, (key, ia, ib) in enumerate(zip(pk, ind_a, ind_b)):
+            output_class = output_classes.get((key, tuple(bl_a.channels[ia][:prefix_width])))
+            if output_class is None:
+                continue
+            charges, allowed = output_class
+            for output_index, output_channel in allowed:
                 coefficient = _contraction_recoupling(
-                    sym, charges_a, signs_a, struct_a.n, bl_a.channels[ia],
-                    charges_b, signs_b, struct_b.n, bl_b.channels[ib],
-                    nin_a, nin_b, tuple(map(tuple, charges)), signatures_c,
-                    struct_c.n, output_channel)
+                    sym, charges_a[ia], signs_a, struct_a.n, bl_a.channels[ia],
+                    charges_b[ib], signs_b, struct_b.n, bl_b.channels[ib],
+                    nin_a, nin_b, charges, signatures_c, struct_c.n, output_channel)
                 if abs(coefficient) > 1e-14:
-                    channel_pairs.append(output_channel)
                     valid_pairs.append(ipair)
+                    output_indices.append(output_index)
                     coefficients.append(coefficient)
-        channel_pairs = tuple(channel_pairs)
         valid_pairs = np.asarray(valid_pairs, dtype=np.int64)
         coefficients = np.asarray(coefficients, dtype=np.float64)
         ind_a = ind_a[valid_pairs]
         ind_b = ind_b[valid_pairs]
-        tn_pairs = tn_pairs[valid_pairs]
-        output_lookup = {
-            (tuple(charges.reshape(-1).tolist()), tuple(channel)): index
-            for index, (charges, channel) in enumerate(zip(bl_c.t, bl_c.channels))
-        }
-        pair_c = np.asarray([
-            output_lookup.get((tuple(charges.reshape(-1).tolist()), tuple(channel)), -1)
-            for charges, channel in zip(tn_pairs, channel_pairs)
-        ], dtype=np.int64)
-        if np.any(pair_c < 0):
-            raise YastnError(
-                "Cannot match non-Abelian output fusion channels in tensordot. "
-                f"charges={tuple(map(tuple, tn_pairs.reshape(len(tn_pairs), -1)))}, "
-                f"channels={channel_pairs}.")
-        output_slc = bl_c.slc[pair_c]
+        # Only retain nonzero gluing contributions, without materializing a
+        # wide array of external charges for every (mostly zero) input pair.
+        output_slc = bl_c.slc[np.asarray(output_indices, dtype=np.int64)]
     else:
         output_slc = slc_c[inv_c]
         coefficients = np.ones(len(ind_a), dtype=np.float64)
