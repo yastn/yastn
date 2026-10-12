@@ -65,10 +65,12 @@ class sym_SU2xU1(sym_nonabelian):
         if len(charges) < 2:
             return ((),) if (not charges and target == cls.zero()) or (charges and charges[0] == target) else ()
         states = ((charges[0], ()),)
-        for right in charges[1:-1]:
-            states = tuple((out, path + (out,)) for left, path in states
-                           for out in cls.fusion_outcomes(left, right))
-        return tuple(path for left, path in states if target in cls.fusion_outcomes(left, charges[-1]))
+        for right_j, right_q in charges[1:-1]:
+            states = tuple((out, path + (out,)) for (left_j, left_q), path in states
+                           for j in range(abs(left_j - right_j), left_j + right_j + 1, 2)
+                           for out in ((j, left_q + right_q),))
+        return tuple(path for (left_j, _), path in states
+                     if sym_SU2._triangle(left_j, charges[-1][0], target[0]))
 
     @classmethod
     def irrep_dimension(cls, charge):

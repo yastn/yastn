@@ -348,36 +348,41 @@ def _swap_adjacent_fusion_leaves(a, position):
     bl_new = get_blocks(sym, struct_new)
     inverse = tuple(np.argsort(order))
 
-    old_by_charges = {}
-    for index, charges in enumerate(bl_old.t):
-        old_by_charges.setdefault(tuple(charges.reshape(-1).tolist()), []).append(index)
+    # A swap only mixes one intermediate channel. Index by all unchanged
+    # channels so large fusion spaces do not require a quadratic scan.
+    changed = position - 1
+    old_by_channels, orientations = {}, {}
+    for index, (charges, channel) in enumerate(zip(bl_old.t, bl_old.channels)):
+        charge_key = tuple(charges.reshape(-1).tolist())
+        path = _split_channel(channel, sym.NSYM)
+        fixed = path if position == 0 else path[:changed] + path[changed + 1:]
+        old_by_channels.setdefault((charge_key, fixed), []).append((index, path))
+        if charge_key not in orientations:
+            orientations[charge_key] = tuple(
+                sym.canonical_charge(t) if leg.s == 1 else sym.conj_charge(t)
+                for t, leg in zip(map(tuple, charges), a.struct.legs))
 
     pieces, keep = [], []
     for out_index, (charges_new, channel_new_flat) in enumerate(zip(bl_new.t, bl_new.channels)):
         charges_old = charges_new[np.asarray(inverse)]
-        candidates = old_by_charges.get(tuple(charges_old.reshape(-1).tolist()), ())
+        charge_key = tuple(charges_old.reshape(-1).tolist())
+        path_new = _split_channel(channel_new_flat, sym.NSYM)
+        fixed = (path_new if position == 0
+                 else path_new[:changed] + path_new[changed + 1:])
+        candidates = old_by_channels.get((charge_key, fixed), ())
         if not candidates:
             continue
-        oriented = tuple(sym.canonical_charge(t) if leg.s == 1 else sym.conj_charge(t)
-                         for t, leg in zip(map(tuple, charges_old), a.struct.legs))
-        path_new = _split_channel(channel_new_flat, sym.NSYM)
+        oriented = orientations[charge_key]
         value = None
-        for in_index in candidates:
-            path_old = _split_channel(bl_old.channels[in_index], sym.NSYM)
+        for in_index, path_old in candidates:
             if position == 0:
-                same_tail = path_old == path_new
                 total = path_old[0] if path_old else tuple(a.struct.n)
-                coefficient = (sym.braiding_phase(oriented[0], oriented[1], total)
-                               if same_tail else 0.0)
+                coefficient = sym.braiding_phase(oriented[0], oriented[1], total)
                 if ndim == 2 and a.struct.legs[0].s != a.struct.legs[1].s:
-                    coefficient = 1.0 if same_tail else 0.0
+                    coefficient = 1.0
             else:
                 # Prefix and suffix channels are unchanged. Only the channel
                 # directly below the exchanged pair can mix.
-                changed = position - 1
-                if (path_old[:changed] != path_new[:changed]
-                        or path_old[changed + 1:] != path_new[changed + 1:]):
-                    continue
                 x = oriented[0] if position == 1 else path_old[position - 2]
                 left, right = oriented[position], oriented[position + 1]
                 y, yp = path_old[changed], path_new[changed]
@@ -553,30 +558,30 @@ def _meta_fuse_hard(sym, struct, axes, legs_sub=None, connector_first=True, lazy
         # channel (e.g. rank-three intertwiners and binary fusion steps).
         for ib, block_t in enumerate(st.t):
             grouped = []
+            source_channel = st.channels[ib]
+            fixed_prefix = False
             for axs, signs, sout in zip(axes, slegs, s_eff):
                 if not axs:
                     grouped.append((sym.zero(),))
+                elif len(axs) == 1:
+                    grouped.append((tuple(block_t[axs[0]]),))
+                elif tuple(axs) == tuple(range(len(axs))) and source_channel:
+                    # The source tree already fixes this prefix irrep. Select
+                    # it before enumerating other fusion outcomes.
+                    pos = (len(axs) - 2) * sym.NSYM
+                    expected = tuple(source_channel[pos: pos + sym.NSYM])
+                    if sout == -1:
+                        expected = sym.conj_charge(expected)
+                    grouped.append((expected,))
+                    fixed_prefix = True
                 else:
                     charges = tuple(map(tuple, block_t[list(axs), :]))
                     grouped.append(sym.signed_fusion_outcomes(charges, signs, sout))
             allowed = [candidate for candidate in product(*grouped)
                        if sym.can_fuse(candidate, struct.n, signatures=s_eff)]
-            # The canonical tensor basis is left-associated. A fused prefix
-            # therefore has its outgoing irrep explicitly recorded in the
-            # source channel and can be selected without an F move.
-            source_channel = st.channels[ib]
-            for n, axs in enumerate(axes):
-                if len(axs) > 1 and tuple(axs) == tuple(range(len(axs))) and source_channel:
-                    pos = (len(axs) - 2) * sym.NSYM
-                    expected = tuple(source_channel[pos: pos + sym.NSYM])
-                    if s_eff[n] == -1:
-                        expected = sym.conj_charge(expected)
-                    allowed = [candidate for candidate in allowed if tuple(candidate[n]) == expected]
-                    # ``signed_fusion_outcomes`` retains path multiplicities.
-                    # Here that path is already fixed by ``source_channel``;
-                    # repeated outgoing irreps are the same candidate, not an
-                    # unresolved ambiguity.
-                    allowed = list(dict.fromkeys(allowed))
+            if fixed_prefix:
+                # The source channel also fixes path multiplicities.
+                allowed = list(dict.fromkeys(allowed))
             # Repeated candidates are distinct outer-multiplicity channels.
             if len(allowed) != 1:
                 raise YastnError(

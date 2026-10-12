@@ -4,6 +4,7 @@
 """Benchmark SU2 Hubbard purification against the METTS data in test_Hubbard."""
 import numpy as np
 import pytest
+from time import perf_counter
 
 
 def _mean(values):
@@ -100,10 +101,15 @@ def _run_hubbard(config_kwargs, symmetry, D, betas, dbeta=0.05, max_sweeps=50):
 
         env_ctm = fpeps.EnvCTM(psi, init='eye')
         old_energy, converged = None, False
+        started = perf_counter()
         for info in env_ctm.ctmrg_(opts_svd={'D_total': 5 * D, 'tol': 1e-10},
                                    iterator=True, max_sweeps=max_sweeps):
+            updated = perf_counter()
+            print(f'beta={beta:g} CTM sweep={info.sweeps} update={updated - started:.2f}s; measuring RDM', flush=True)
             result = _measure_hubbard(psi, env_ctm, ops, observables, U)
-            print(f"beta={beta:g} CTM sweep={info.sweeps} energy={result['energy']:.8f}", flush=True)
+            started = perf_counter()
+            print(f"beta={beta:g} CTM sweep={info.sweeps} energy={result['energy']:.8f} "
+                  f"measurement={started - updated:.2f}s", flush=True)
             if old_energy is not None and abs(result['energy'] - old_energy) < 1e-7:
                 converged = True
                 break

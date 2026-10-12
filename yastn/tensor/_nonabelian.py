@@ -5,6 +5,25 @@ import opt_einsum
 from .._cache_registry import register_cache
 
 
+@register_cache(key='nonabelian_cg_vertex')
+@lru_cache(maxsize=4096)
+def _cg_vertex(sym, left, right, target):
+    vertex = sym.fusion_isometry(left, right, target).reshape(
+        sym.irrep_dimension(target), sym.irrep_dimension(left), sym.irrep_dimension(right))
+    vertex.setflags(write=False)
+    return vertex
+
+
+@register_cache(key='nonabelian_dual_metric')
+@lru_cache(maxsize=256)
+def _dual_metric(j):
+    dual = np.zeros((j + 1, j + 1))
+    for m in range(j + 1):
+        dual[j - m, m] = (-1.) ** (j - m)
+    dual.setflags(write=False)
+    return dual
+
+
 def tree_network(sym, charges, signs, total, channel, labels, fresh, root=None):
     """Small CG vertices, leaving only external magnetic indices open.
 
@@ -23,11 +42,7 @@ def tree_network(sym, charges, signs, total, channel, labels, fresh, root=None):
             leaves.append(label)
         else:
             internal = next(fresh)
-            j = charge[0]
-            dual = np.zeros((j + 1, j + 1))
-            for m in range(j + 1):
-                dual[j - m, m] = (-1.) ** (j - m)
-            factors.extend((dual, [internal, label]))
+            factors.extend((_dual_metric(charge[0]), [internal, label]))
             leaves.append(internal)
     if len(charges) == 1:
         dimension = sym.irrep_dimension(charges[0])
@@ -38,8 +53,7 @@ def tree_network(sym, charges, signs, total, channel, labels, fresh, root=None):
         for i in range(1, len(charges)):
             target = path[i - 1]
             right = oriented[i]
-            vertex = sym.fusion_isometry(left, right, target).reshape(
-                sym.irrep_dimension(target), sym.irrep_dimension(left), sym.irrep_dimension(right))
+            vertex = _cg_vertex(sym, left, right, target)
             if i == len(charges) - 1:
                 factors.extend((vertex[0], [left_label, leaves[i]]) if root is None
                                else (vertex, [root, left_label, leaves[i]]))
@@ -125,6 +139,14 @@ def intertwiner(sym, charges, signs, total, channel):
 
 @lru_cache(maxsize=4096)
 def fusion_coefficient(sym, charges, signs, total, channel, grouped, out_charges, out_signs, out_channel, paths):
+    if sym.SYM_ID == 'SU2xU1':
+        # Charge conservation is enforced by fusion metadata. Its numerical
+        # isometry is SU(2), so share coefficients across U(1) sectors.
+        from ..sym import sym_SU2
+        return fusion_coefficient(
+            sym_SU2, tuple((t[0],) for t in charges), signs, (total[0],), channel[::2], grouped,
+            tuple((t[0],) for t in out_charges), out_signs, out_channel[::2],
+            tuple(path[::2] for path in paths))
     from itertools import count
     fresh = count()
     old_labels = [next(fresh) for _ in charges]

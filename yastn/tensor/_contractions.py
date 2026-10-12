@@ -562,20 +562,39 @@ def _meta_tensordot_nf(sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b, la
                 continue
             channel_key = (key, tuple(channel[:prefix_width]))
             if channel_key not in output_classes:
-                output_classes[channel_key] = (tuple(map(tuple, charges)), [])
-            output_classes[channel_key][1].append((index, tuple(channel)))
+                output_classes[channel_key] = (tuple(map(tuple, charges)), {})
+            output_classes[channel_key][1][tuple(channel)] = index
         charges_a = tuple(tuple(map(tuple, charges)) for charges in bl_a.t)
         charges_b = tuple(tuple(map(tuple, charges)) for charges in bl_b.t)
         signs_a = tuple(leg.s for leg in struct_a.legs)
         signs_b = tuple(leg.s for leg in struct_b.legs)
         signatures_c = tuple(leg.s for leg in struct_c.legs)
+        scalar_gluing = struct_a.n == sym.zero() and na > 0 and len(nin_a) > 0 and nb > 0
+        if scalar_gluing:
+            nc = len(nin_a)
+            # An invariant A identifies its outgoing prefix irrep with the
+            # contracted prefix of B. The rest of B's tree is untouched; this
+            # determines one output path, without projecting onto zero paths.
+            roots_a = (tuple(c[0] if signs_a[0] == 1 else sym.conj_charge(c[0]) for c in charges_a)
+                       if na == 1 else tuple(tuple(p[(na - 2) * nsym:(na - 1) * nsym]) for p in bl_a.channels))
+            roots_b = (tuple(c[0] if signs_b[0] == 1 else sym.conj_charge(c[0]) for c in charges_b)
+                       if nc == 1 else tuple(tuple(p[(nc - 2) * nsym:(nc - 1) * nsym]) for p in bl_b.channels))
         valid_pairs, output_indices, coefficients = [], [], []
         for ipair, (key, ia, ib) in enumerate(zip(pk, ind_a, ind_b)):
+            if scalar_gluing and roots_a[ia] != roots_b[ib]:
+                continue
             output_class = output_classes.get((key, tuple(bl_a.channels[ia][:prefix_width])))
             if output_class is None:
                 continue
             charges, allowed = output_class
-            for output_index, output_channel in allowed:
+            if scalar_gluing:
+                channel = tuple(bl_a.channels[ia][:prefix_width]) + tuple(bl_b.channels[ib][(nc - 1) * nsym:])
+                if channel not in allowed:
+                    continue
+                candidates = ((channel, allowed[channel]),)
+            else:
+                candidates = allowed.items()
+            for output_channel, output_index in candidates:
                 coefficient = _contraction_recoupling(
                     sym, charges_a[ia], signs_a, struct_a.n, bl_a.channels[ia],
                     charges_b[ib], signs_b, struct_b.n, bl_b.channels[ib],
@@ -869,7 +888,8 @@ def get_blocks_and_subslices(sym, struct_sub, struct_full):
         slc = bl.slc
     else:
         bl_full = get_blocks(sym, struct_full)
-        slc = bl_full.slc[find_matching_indices(bl_full.t, bl.t, both=False)]
+        slc = bl_full.slc[find_matching_block_keys(
+            bl_full.t, bl_full.channels, bl.t, bl.channels, both=False)]
     return bl, slc
 
 

@@ -177,6 +177,22 @@ def trace_aux(rdm : Tensor, axis : int, swap : bool = False) -> Tensor:
     return rdm
 
 
+def _trace_open_corner_aux(corner, swap):
+    """Close local purification legs before joining two open corners.
+
+    The left/top site's auxiliary leg crosses its physical leg (``swap``).
+    Later crossings with the entire bra/ket pair are unchanged: the traced
+    auxiliary pair has even total fermionic parity.
+    """
+    physical = corner.get_legs(-1).unfuse_leg()
+    if not physical[0].is_fused():
+        return corner
+    corner = corner.unfuse_legs(axes=4)
+    corner = trace_aux(corner, 4, swap=swap)
+    corner = corner.fuse_legs(axes=(0, 1, 2, 3, (4, 5)))
+    return _materialize_open_corner(corner)
+
+
 # def f_ordered(s0, s1) -> bool:
 #     """Check if (s0, s1) appear in fermionic order.
 #     The convention is consistent with the PEPS diagrams in https://arxiv.org/abs/0912.0646.
@@ -289,12 +305,14 @@ def rdm1x2(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scala
     vecr = (env1.tr @ env1.r) @ (env1.br @ env1.b)
 
     tmp0 = _append_vec_tl_open(ten0.bra, ten0.ket, vecl)  # x [b b'] y [r r'] [s s']
+    tmp0 = _trace_open_corner_aux(tmp0, swap=True)
     tmp0 = tmp0.unfuse_legs(axes=(1, 4))  # x b b' y [r r'] s s'
     tmp0 = tmp0.swap_gate(axes=(1, (5, 6)))  # b X s s'
     tmp0 = tmp0.fuse_legs(axes=(0, (1, 2), 3, 4, (5, 6)))  # x [b b'] y [r r'] [s s']
     tmp0 = env0.b.tensordot(tmp0, axes=((2, 1), (0, 1)))
 
     tmp1 = _append_vec_br_open(ten1.bra, ten1.ket, vecr)  # x [t t'] y [l l'] [s s']
+    tmp1 = _trace_open_corner_aux(tmp1, swap=False)
     tmp1 = tmp1.unfuse_legs(axes=(1, 4))  # x t t' y [l l'] s s'
     tmp1 = tmp1.swap_gate(axes=(2, (5, 6)))  # t' X s s'
     tmp1 = tmp1.fuse_legs(axes=(0, (1, 2), 3, 4, (5, 6)))  # x [t t'] y [l l'] [s s']
@@ -304,10 +322,6 @@ def rdm1x2(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scala
 
     rdm = res.unfuse_legs (axes=(0, 1))  # s0 s0' s1 s1'
 
-    # We pick a convention such that the aux. leg of the
-    # left or top site needs to be swapped with the physical legs
-    rdm = trace_aux(rdm, 0, swap=True)
-    rdm = trace_aux(rdm, 2, swap=False)
     rdm, rdm_norm = _normalize_and_regularize_rdm(rdm, who=rdm1x2.__name__)
 
     return rdm, rdm_norm
@@ -347,6 +361,7 @@ def rdm2x1(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scala
     vecb = (env1.r @ env1.br) @ (env1.b @ env1.bl)
 
     tmp0 = _append_vec_tl_open(ten0.bra, ten0.ket, vect)  # x [b b'] y [r r'] [s s']
+    tmp0 = _trace_open_corner_aux(tmp0, swap=True)
     tmp0 = tmp0.unfuse_legs(axes=(1, 3, 4))  # x b b' y r r' s s'
     tmp0 = tmp0.swap_gate(axes=(5, (6, 7)))  # r' X s s'
     tmp0 = tmp0.swap_gate(axes=(2, (6, 7)))  # b' X s s'
@@ -356,6 +371,7 @@ def rdm2x1(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scala
     tmp0 = env0.r.tensordot(tmp0, axes=((0, 1), (2, 3)))
 
     tmp1 = _append_vec_br_open(ten1.bra, ten1.ket, vecb)  # x [t t'] y [l l'] [s s']
+    tmp1 = _trace_open_corner_aux(tmp1, swap=False)
     tmp1 = tmp1.unfuse_legs(axes=(1, 3, 4))  # x t t' y l l' s s'
     tmp1 = tmp1.swap_gate(axes=(2, (6, 7)))  # t' X s s'
     tmp1 = tmp1.swap_gate(axes=(4, (6, 7)))  # l X s s'
@@ -367,8 +383,6 @@ def rdm2x1(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scala
     res = tmp0.tensordot(tmp1, axes=((0, 1, 2), (1, 0, 2)))  # [s0 s0'] [s1 s1']
 
     rdm = res.unfuse_legs(axes=(0, 1))  # s0 s0' s1 s1'
-    rdm = trace_aux(rdm, 0, swap=True)
-    rdm = trace_aux(rdm, 2, swap=False)
     rdm, rdm_norm= _normalize_and_regularize_rdm(rdm, who=rdm2x1.__name__)
 
     return rdm, rdm_norm
