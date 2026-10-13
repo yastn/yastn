@@ -1073,7 +1073,6 @@ class FixedPoint(torch.autograd.Function):
     def backward(ctx, none0, none1, none2, *grad_env):
         verbosity= ctx.verbosity
         grads = grad_env
-        dA = grad_env
 
         env_data = ctx.saved_tensors[:ctx.env_data_num]
         g_data = ctx.saved_tensors[ctx.env_data_num:]
@@ -1134,27 +1133,29 @@ class FixedPoint(torch.autograd.Function):
                     _env_ts_g, _psi_data_g)
                 _out_t = _out_tuple[0]
 
-                def dfdC_vjp(x):
-                    g, = x
-                    res, = torch.autograd.grad(
-                        _out_t, _env_ts_g, grad_outputs=g,
-                        retain_graph=True, allow_unused=True)
-                    if res is None:
-                        res = torch.zeros_like(_env_ts_g)
-                    return (res,)
-
-                def dfdA_vjp(x):
+                def dfdCA_vjp(x):
+                    # BOTH VJPs from ONE traversal of the shared graph: the
+                    # env-space (df/dC)^T g that advances the Neumann series,
+                    # and the A-space (df/dA)^T g that accumulates the answer.
+                    # autograd.grad takes a tuple of inputs and backprops once,
+                    # scattering into every requested leaf; asking for the two
+                    # leaf sets separately walks the same CTM-step graph twice.
                     g, = x
                     res = torch.autograd.grad(
-                        _out_t, _psi_data_g, grad_outputs=g,
-                        retain_graph=True, allow_unused=True)
-                    res = tuple(r if r is not None else torch.zeros_like(t)
-                                for r, t in zip(res, _psi_data_g))
-                    return (res,)
+                        _out_t, (_env_ts_g,) + tuple(_psi_data_g),
+                        grad_outputs=g, retain_graph=True, allow_unused=True)
+                    dC = res[0]
+                    if dC is None:
+                        dC = torch.zeros_like(_env_ts_g)
+                    dA = tuple(r if r is not None else torch.zeros_like(t)
+                               for r, t in zip(res[1:], _psi_data_g))
+                    return (dC,), dA
             else:
                 _, df_vjp = torch.func.vjp(lambda x,y: FixedPoint.fixed_point_iter(env_gauge, ctx.phase_dict, backward_opts, env_dict, _env_meta, _env_slices, _psi_meta, x, y), _env_ts, _psi_data)
-                dfdC_vjp= lambda x: (df_vjp(x)[0],)
-                dfdA_vjp= lambda x: (df_vjp(x)[1],)
+
+                def dfdCA_vjp(x):
+                    dC, dA = df_vjp(x)
+                    return (dC,), dA
             time1 = time.perf_counter()
             log.info(f"{type(ctx).__name__}.backward t_vjp {time1-time0} [s]")
 
@@ -1163,35 +1164,52 @@ class FixedPoint(torch.autograd.Function):
         # the increment grad_diff = ||grad_tmp_k - grad_tmp_{k-1}|| of the
         # running A-space gradient estimate.
         #
-        # Track the smallest grad_diff seen and the dA
+        # Track the smallest grad_diff seen and the estimate
         # that produced it; once grad_diff fails to improve for `patience`
         # consecutive steps the series is no longer contracting -> stop and
         # return that best estimate, not the diverged tail.
         # Budget and tolerance are the FP step's, carried over from the forward
         # by design: this loop reverses that CTM step.
+        #
+        # The answer is (df/dA)^T sum_k (df/dC)^(T k) v. Because (df/dA)^T is
+        # LINEAR it commutes with the sum, so instead of accumulating the
+        # series in env space and re-applying (df/dA)^T to the whole partial
+        # sum every step (which was then thrown away -- it only fed grad_diff
+        # -- and recomputed once more after the loop), accumulate S, the sum of
+        # (df/dA)^T applied to each individual term. Both VJPs then act on the
+        # SAME cotangent and come out of one dfdCA_vjp pass: N traversals
+        # instead of 2N+1, and S is the answer, no final apply.
+        #
+        # Consequence to remember when comparing runs: S after step s equals
+        # the old grad_tmp at step s-1, so the convergence test reads the same
+        # sequence one index earlier and the recorded step count shifts by one.
         neumann_max_iter, neumann_tol = ctx.opts.fp.max_sweeps, ctx.opts.fp.corner_tol
         patience = ctx.opts.neumann_patience
         best_grad_diff = float('inf')
-        best_dA = dA
+        best_S = None
+        S = None
         stall = 0
         time0 = time.perf_counter()
         for step in range(neumann_max_iter):
-            grads = dfdC_vjp(grads)
+            nxt, dA_term = dfdCA_vjp(grads)
+            S = dA_term if S is None else tuple(a + b for a, b in zip(S, dA_term))
+            if best_S is None:
+                best_S = S
+            grads = nxt
             if all([torch.norm(grad, p=torch.inf) < neumann_tol for grad in grads]):
                 break
-            dA = tuple(dA[i] + grads[i] for i in range(len(grads)))
 
-            grad_tmp = torch.cat(dfdA_vjp(dA)[0])
+            grad_tmp = torch.cat(S)
             if prev_grad_tmp is not None:
                 grad_diff = torch.norm(grad_tmp - prev_grad_tmp).item()
                 print("full grad diff", grad_diff)
                 if grad_diff < neumann_tol:
-                    best_dA = dA
+                    best_S = S
                     log.log(logging.INFO, f"Fixed_pt: The norm of the full grad diff is below {neumann_tol}.")
                     break
 
                 if grad_diff < best_grad_diff:
-                    best_grad_diff, best_dA, stall = grad_diff, dA, 0
+                    best_grad_diff, best_S, stall = grad_diff, S, 0
                 else:
                     stall += 1
                     if stall >= patience:
@@ -1201,7 +1219,7 @@ class FixedPoint(torch.autograd.Function):
 
             prev_grad_tmp = grad_tmp
 
-        dA = dfdA_vjp(best_dA)[0]
+        dA = best_S
         time1 = time.perf_counter()
         log.info(f"{type(ctx).__name__}.backward t_gradsum {time1-time0} [s], steps {step+1}")
 
