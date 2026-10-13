@@ -17,10 +17,12 @@ from __future__ import annotations
 from tqdm import tqdm
 
 from .._doublePepsTensor import DoublePepsTensor
-from .._gates_auxiliary import clear_operator_input, clear_projectors
+from .._gates_auxiliary import clear_operator_input, clear_projectors, system_leg
 from .._geometry import Site
 from ... import mps
-from ....tensor import Tensor, YastnError, add as tensor_add, sign_canonical_order
+from ....operators._multiplets import _is_multiplet, _multiplet_pair, _operator_factors
+from ....initialize import eye
+from ....tensor import tensordot, Tensor, YastnError, add as tensor_add, sign_canonical_order, swap_charges
 
 
 class EnvWindow:
@@ -121,13 +123,135 @@ class EnvWindow:
         raise YastnError(f"{dirn=} not recognized. Should be 't', 'h' 'b', 'r', 'v', or 'l'.")
 
 
-def set_operator_(tm, n, op, horizontal=True):
-    """ helper function to cover 2-layers and 1-layer peps """
-    if isinstance(tm[n], DoublePepsTensor):
-        tm[n].set_operator_(op)
+def set_operator_(tm, n, op, horizontal=True, *, dirn=None, string=None, reset=True):
+    """Insert a local operator, reusing its auxiliary leg when present.
+
+    ``string`` is the existing outgoing leg of an operator. With ``op=None``,
+    pass that leg through the site using its identity. Directions describe the
+    incoming/outgoing legs of the current contraction sweep, not a new path.
+    """
+    ten = tm[n]
+    if isinstance(ten, DoublePepsTensor):
+        if op is None:
+            wire = eye(ten.config, legs=(string.conj(), string), isdiag=False)
+            physical = eye(ten.config, legs=system_leg(ten.ket), isdiag=False)
+            op = tensordot(physical, wire, axes=((), ()))
+        if dirn:
+            # Physical legs precede the existing auxiliary leg(s). Parity
+            # swaps depend only on their fixed charges.
+            if op.ndim == 3:
+                if dirn in 'lt':
+                    op = op.swap_gate(axes=1 if op.s[2] == 1 else 0,
+                                      charge=op.get_legs(2).t[0])
+            else:
+                op = op.swap_gate(axes=1, charge=op.get_legs(2).t[0])
+                if dirn[0] in 'lt':
+                    op = op.swap_gate(axes=0, charge=op.get_legs(2).t[0])
+                if dirn[1] in 'rb':
+                    op = op.swap_gate(axes=1, charge=op.get_legs(3).t[0])
+        ten.set_operator_(op, reset=reset, dirn=dirn)
     else:
+        if dirn or string is not None:
+            raise YastnError('Operator strings require a two-layer PEPS.')
         axes = (1, 2, 3, 0) if horizontal else (0, 3, 2, 1)
         tm[n] = op.transpose(axes=axes)
+
+
+def insert_operator_product_(tens, operators, sites, origin, f_ordered):
+    """Decorate a patch with an ordered operator product, without contracting it.
+
+    ``tens`` maps sites to double tensors (or replacement single-layer tensors).
+    ``operators[k]`` acts at ``sites[k]``; repeated sites retain multiplication
+    order, with the rightmost operator acting first. ``origin`` is the top-left
+    site of the patch. The caller must include the intervening sites on its
+    columns and top row, and supplies the PEPS fermionic ordering ``f_ordered``.
+
+    Rank-two operators use the original charge-swap strings toward ``origin``.
+    Consecutive rank-three multiplets form singlet pairs, e.g. (S, S) or
+    (cp_spinor, c_spinor). Their auxiliary legs follow the same string tree;
+    no additional Abelian charge leg is attached. Its common root segment
+    cancels, leaving a path between the two endpoints. The irrep identities
+    on that path retain SU2 fusion channels: multiplicity D=1 does not make
+    an irrep one-dimensional. Only the parity swaps can use a fixed charge.
+
+    Return the canonical-order sign for the rank-two factors. Multiplet pairs
+    are even as a whole; their internal spherical metric and fermionic swaps
+    are included in the endpoint tensors and their insertion, respectively.
+    The caller still uses its own line, corner, or full-patch contraction.
+    """
+    if not isinstance(next(iter(tens.values())), DoublePepsTensor):
+        ops = {}
+        for site, op in zip(sites, operators):
+            ops[site] = ops[site] @ op if site in ops else op
+        tens.update(ops)
+        return sign_canonical_order(*operators, sites=sites, f_ordered=f_ordered)
+    factors = _operator_factors(operators, sites)
+    local = [factor for factor in factors if len(factor) == 2]
+    sign = sign_canonical_order(*(op for op, _ in local),
+                                sites=[site for _, site in local], f_ordered=f_ordered)
+    # Each singlet pair is an even factor, so moving a scalar factor past a
+    # whole pair adds no fermionic sign. Keep the pair endpoints together;
+    # sorting all individual operators by site would change overlapping
+    # products such as (cp_i c_j)(cp_j c_k).
+    # set_operator_(reset=False) composes from the left, hence reverse order.
+    for factor in reversed(factors):
+        if len(factor) == 2:
+            op, (x, y) = factor
+            set_operator_(tens, (x, y), op, reset=False)
+            x0, y0 = origin
+            # Original scalar string: up column y, then left on row x0.
+            # k/b name ket/bra axes in the native (t,l,b,r,physical) ordering.
+            # Shared string segments accumulate charge swaps as before.
+            add_charge_swaps_(tens, (x, y), op.n, axes='b0' if x == x0 else 'k1')
+            for xx in range(x0 + 1, x):
+                add_charge_swaps_(tens, (xx, y), op.n, axes=['k1', 'k4', 'b3'])
+            if x > x0:
+                add_charge_swaps_(tens, (x0, y), op.n, axes=['b0', 'k4', 'b3'])
+            for yy in range(y0, y):
+                add_charge_swaps_(tens, (x0, yy), op.n, axes=['b0', 'k2', 'k4'])
+            continue
+        O, P, (xa, ya), (xb, yb) = factor
+        A, B = _multiplet_pair(O, P)
+        if (xa, ya) == (xb, yb):
+            # Close both the physical multiplication index and the irrep at
+            # this site. The result is rank two, e.g. sum_sigma cp c = n.
+            set_operator_(tens, (xa, ya), tensordot(A, B, axes=((1, 2), (0, 2))), reset=False)
+            continue
+        # Cancel the common portion of the original strings to the top-left
+        # corner. The remainder follows the column(s) and their top row.
+        string = A.get_legs(2)
+        if ya == yb:
+            # A--B lies on one column; the segment above both sites cancels.
+            # dirn uses apply_gate_onsite's site-role convention: 't' is the
+            # top site of a vertical step, 'l' the left site of a horizontal
+            # step. For intermediate sites the two letters give the roles
+            # on the incoming and outgoing steps, in auxiliary-leg order.
+            step = 1 if xa < xb else -1
+            first, last = ('t', 'b') if step == 1 else ('b', 't')
+            set_operator_(tens, (xa, ya), A, dirn=first, reset=False)
+            for x in range(xa + step, xb, step):
+                set_operator_(tens, (x, ya), None, dirn=last + first, string=string, reset=False)
+            set_operator_(tens, (xb, yb), B, dirn=last, reset=False)
+        else:
+            # Different columns: A -> (top, ya) -> (top, yb) -> B. The common
+            # route from origin to the nearer top-row endpoint cancels.
+            top = origin[0]
+            step = 1 if ya < yb else -1
+            first, last = ('l', 'r') if step == 1 else ('r', 'l')
+            set_operator_(tens, (xa, ya), A, dirn='b' if xa > top else first, reset=False)
+            for x in range(xa - 1, top, -1):
+                set_operator_(tens, (x, ya), None, dirn='tb', string=string, reset=False)
+            if xa > top:
+                set_operator_(tens, (top, ya), None, dirn='t' + first, string=string, reset=False)
+            for y in range(ya + step, yb, step):
+                set_operator_(tens, (top, y), None, dirn=last + first, string=string, reset=False)
+            if xb > top:
+                set_operator_(tens, (top, yb), None, dirn=last + 't', string=string, reset=False)
+            for x in range(top + 1, xb):
+                set_operator_(tens, (x, yb), None, dirn='bt', string=string, reset=False)
+            set_operator_(tens, (xb, yb), B, dirn='b' if xb > top else last, reset=False)
+    return sign
+
 
 def restore_old_tensor_(tm, n, old_ten):
     """ helper function to cover 2-layers and 1-layer peps """
@@ -283,21 +407,35 @@ def _measure_2site(env, O0, O1, xrange, yrange, offset, pairs="corner <=", dirn=
             pairs_select += [(s0, s1) for s0, s1 in pairs_all if s0 == s1]
         pairs = pairs_select
 
-    # All O0 should have the same charge; the same for O1; this is added for fermionic systems
-    n0 = next(iter(O0dict[sites[0]].values())).n
-    n1 = next(iter(O1dict[sites[0]].values())).n
+    # Multiplets are invariant tensors (n=0), but their third leg carries
+    # the fixed operator charge used by fermionic swaps.
+    op0 = next(iter(O0dict[sites[0]].values()))
+    op1 = next(iter(O1dict[sites[0]].values()))
+    n0 = op0.get_legs(2).t[0] if _is_multiplet(op0) else op0.n
+    n1 = op1.get_legs(2).t[0] if _is_multiplet(op1) else op1.n
     if env.psi.config.fermionic and \
-       (any(x.n != n0 for d in O0dict.values() for x in d.values()) or \
-        any(x.n != n1 for d in O1dict.values() for x in d.values())):
+       (any((op.get_legs(2).t[0] if _is_multiplet(op) else op.n) != n0 for d in O0dict.values() for op in d.values()) or \
+        any((op.get_legs(2).t[0] if _is_multiplet(op) else op.n) != n1 for d in O1dict.values() for op in d.values())):
             raise YastnError("All O0 (O1) operators should have the same charge.")
 
     if opts_var is None:
         opts_var = {'max_sweeps': 2}
 
-    if dirn == 'v':
-        return _measure_2site_columns(env, O0dict, O1dict, xrange, yrange, offset, pairs, opts_svd, opts_var)
-    else:  # dirn == 'h':
-        return _measure_2site_rows(env, O0dict, O1dict, xrange, yrange, offset, pairs, opts_svd, opts_var)
+    # Native sweeps visit targets after the source in scan order. For an
+    # explicitly requested reversed pair, swap the operator families, then
+    # restore the requested keys and the fermionic exchange sign. String
+    # selections ('corner <=', etc.) already follow scan order.
+    worker = _measure_2site_columns if dirn == 'v' else _measure_2site_rows
+    order = (lambda s: s[::-1]) if dirn == 'v' else (lambda s: s)
+    forward = [(s0, s1) for s0, s1 in pairs if order(s0) <= order(s1)]
+    backward = [(s1, s0) for s0, s1 in pairs if order(s0) > order(s1)]
+    out = worker(env, O0dict, O1dict, xrange, yrange, offset, forward, opts_svd, opts_var) if forward else {}
+    if backward:
+        reverse = worker(env, O1dict, O0dict, xrange, yrange, offset, backward, opts_svd, opts_var)
+        sign = swap_charges([n0], [n1], env.psi.config.fermionic)
+        for (s1, s0), value in reverse.items():
+            out[s0, s1] = value * sign
+    return out
 
 
 def _measure_2site_rows(self, O0dict, O1dict, xrange, yrange, offset, pairs, opts_svd=None, opts_var=None):
@@ -327,33 +465,61 @@ def _measure_2site_rows(self, O0dict, O1dict, xrange, yrange, offset, pairs, opt
                 env.setup_(to=iy0)
                 norm_env = env.measure(bd=(iy0-1, iy0+1))
 
+                wire = _is_multiplet(o0)
+                if wire:
+                    reference = next(iter(O1dict[nx0, ny0].values()))
+                    source_op, _ = _multiplet_pair(o0, reference)
+                    string = source_op.get_legs(2)
+
                 # calculate on-site correlations
                 nx1, ny1 = nx0, ny0
                 if ((nx0, ny0), (nx1, ny1)) in pairs:
                     for nz1, o1 in O1dict[nx0, ny0].items():
                         if not isinstance(tm[iy0], DoublePepsTensor):
                             raise YastnError("Cannot calculate same-site correlator in 1-layer Peps; remove '=' from pairs.")
-                        set_operator_(tm, iy0, o0 @ o1, horizontal=True)
+                        if wire:
+                            A, B = _multiplet_pair(o0, o1)
+                            onsite = tensordot(A, B, axes=((1, 2), (0, 2)))
+                        else:
+                            onsite = o0 @ o1
+                        set_operator_(tm, iy0, onsite, horizontal=True)
                         out[(nx0, ny0) + nz0, (nx1, ny1) + nz1] = env.measure(bd=(iy0-1, iy0+1)) / norm_env
 
-                set_operator_(tm, iy0, o0, horizontal=True)
-                add_charge_swaps_(tm, iy0, o0.n, axes=['k4', 'k2'])
+                if wire:
+                    end = yrange[1] - yrange[0] - 1 + offset
+                    set_operator_(tm, iy0, source_op, dirn='l' if iy0 < end else 't')
+                    for i in range(iy0 + 1, end + 1):
+                        set_operator_(tm, i, None, string=string,
+                                      dirn='rl' if i < end else 'rt')
+                else:
+                    set_operator_(tm, iy0, o0, horizontal=True)
+                    add_charge_swaps_(tm, iy0, o0.n, axes=['k4', 'k2'])
 
                 for ny1 in range(ny0 + 1, yrange[1]):
                     iy1 = ny1 - yrange[0] + offset
                     env.update_env_(iy1 - 1, to='last')
                     if ((nx0, ny0), (nx1, ny1)) in pairs:
-                        old_tensor = tm[iy1]
-                        add_charge_swaps_(tm, iy1, o0.n, axes='b0')
+                        old_tensor = tm[iy1].copy() if wire else tm[iy1]
+                        if not wire:
+                            add_charge_swaps_(tm, iy1, o0.n, axes='b0')
                         for nz1, o1 in O1dict[nx1, ny1].items():
-                            set_operator_(tm, iy1, o1, horizontal=True)
+                            if wire:
+                                _, target_op = _multiplet_pair(o0, o1)
+                                set_operator_(tm, iy1, target_op, dirn='r')
+                            else:
+                                set_operator_(tm, iy1, o1, horizontal=True)
                             out[(nx0, ny0) + nz0, (nx1, ny1) + nz1] = env.measure(bd=(iy1-1, iy1+1)) / norm_env
-                        restore_old_tensor_(tm, iy1, old_tensor)
-                        add_charge_swaps_(tm, iy1, o0.n, axes=['k4', 'k2'])
+                        if wire:
+                            tm[iy1] = old_tensor
+                        else:
+                            restore_old_tensor_(tm, iy1, old_tensor)
+                        if not wire:
+                            add_charge_swaps_(tm, iy1, o0.n, axes=['k4', 'k2'])
 
                 iy_end = yrange[1] - 1 - yrange[0] + offset  # the last index in iy loops
                 if nx0 < xrange[1] - 1:
-                    add_charge_swaps_(tm, iy_end, o0.n, axes='b3')
+                    if not wire:
+                        add_charge_swaps_(tm, iy_end, o0.n, axes='b3')
                     vec_o0_next = mps.zipper(tm, vec, opts_svd=opts_svd)
                     mps.compression_(vec_o0_next, (tm, vec), method='1site', normalize=False, **opts_var)
 
@@ -363,14 +529,30 @@ def _measure_2site_rows(self, O0dict, O1dict, xrange, yrange, offset, pairs, opt
                     norm_env = mps.vdot(vecc, tm, vec)
 
                     if nx1 < xrange[1] - 1:
-                        add_charge_swaps_(tm, iy_end, o0.n, axes=['k3', 'b3'])  # iy1 follows from the end of previous loop
+                        old_edge = tm[iy_end].copy() if wire else tm[iy_end]
+                        if wire:
+                            set_operator_(tm, iy_end, None, string=string, dirn='bt')
+                        if not wire:
+                            add_charge_swaps_(tm, iy_end, o0.n, axes=['k3', 'b3'])  # iy1 follows from the end of previous loop
                         vec_o0_next = mps.zipper(tm, vec_o0, opts_svd=opts_svd)
                         mps.compression_(vec_o0_next, (tm, vec_o0), method='1site', normalize=False, **opts_var)
-                        del_charge_swaps_(tm, iy_end)
+                        if wire:
+                            tm[iy_end] = old_edge
+                        else:
+                            del_charge_swaps_(tm, iy_end)
 
-                    add_charge_swaps_(tm, iy_end, o0.n, axes='k3')  # iy1 follows from the end of previous loop
+                    if not wire:
+                        add_charge_swaps_(tm, iy_end, o0.n, axes='k3')  # iy1 follows from the end of previous loop
                     env = mps.Env(vecc, [tm, vec_o0])
                     env.setup_(to=iy_end)
+                    if wire:
+                        for i in range(offset, iy_end + 1):
+                            if i == offset:
+                                _, target_op = _multiplet_pair(o0, reference)
+                                set_operator_(tm, i, target_op, dirn='b' if i == iy_end else 'l')
+                            else:
+                                set_operator_(tm, i, None, string=string,
+                                              dirn='br' if i == iy_end else 'lr')
 
                     for ny1 in range(yrange[1] - 1, yrange[0] - 1, -1):
                         iy1 = ny1 - yrange[0] + offset
@@ -378,13 +560,23 @@ def _measure_2site_rows(self, O0dict, O1dict, xrange, yrange, offset, pairs, opt
                             env.update_env_(iy1 + 1, to='first')
 
                         if ((nx0, ny0), (nx1, ny1)) in pairs:
-                            old_tensor = tm[iy1]
-                            add_charge_swaps_(tm, iy1, o0.n, axes=['k2', 'k4'])
+                            old_tensor = tm[iy1].copy() if wire else tm[iy1]
+                            if not wire:
+                                add_charge_swaps_(tm, iy1, o0.n, axes=['k2', 'k4'])
                             for nz1, o1 in O1dict[nx1, ny1].items():
-                                set_operator_(tm, iy1, o1, horizontal=True)
+                                if wire:
+                                    _, target_op = _multiplet_pair(o0, o1)
+                                    set_operator_(tm, iy1, target_op,
+                                                  dirn='b' if iy1 == iy_end else 'l')
+                                else:
+                                    set_operator_(tm, iy1, o1, horizontal=True)
                                 out[(nx0, ny0) + nz0, (nx1, ny1) + nz1] = env.measure(bd=(iy1-1, iy1+1)) / norm_env
-                            restore_old_tensor_(tm, iy1, old_tensor)
-                            add_charge_swaps_(tm, iy1, o0.n, axes='b0')
+                            if wire:
+                                tm[iy1] = old_tensor
+                            else:
+                                restore_old_tensor_(tm, iy1, old_tensor)
+                            if not wire:
+                                add_charge_swaps_(tm, iy1, o0.n, axes='b0')
     return out
 
 
@@ -415,33 +607,61 @@ def _measure_2site_columns(self, O0dict, O1dict, xrange, yrange, offset, pairs, 
                 env.setup_(to=ix0)
                 norm_env = env.measure(bd=(ix0-1, ix0+1))
 
+                wire = _is_multiplet(o0)
+                if wire:
+                    reference = next(iter(O1dict[nx0, ny0].values()))
+                    source_op, _ = _multiplet_pair(o0, reference)
+                    string = source_op.get_legs(2)
+
                 # calculate on-site correlations
                 nx1, ny1 = nx0, ny0
                 if ((nx0, ny0), (nx1, ny1)) in pairs:
                     for nz1, o1 in O1dict[nx0, ny0].items():
                         if not isinstance(tm[ix0], DoublePepsTensor):
                             raise YastnError("Cannot calculate same-site correlator in 1-layer Peps; remove '=' from pairs.")
-                        set_operator_(tm, ix0, o0 @ o1, horizontal=False)
+                        if wire:
+                            A, B = _multiplet_pair(o0, o1)
+                            onsite = tensordot(A, B, axes=((1, 2), (0, 2)))
+                        else:
+                            onsite = o0 @ o1
+                        set_operator_(tm, ix0, onsite, horizontal=False)
                         out[(nx0, ny0) + nz0, (nx1, ny1) + nz1] = env.measure(bd=(ix0-1, ix0+1)) / norm_env
 
-                set_operator_(tm, ix0, o0, horizontal=False)
-                add_charge_swaps_(tm, ix0, o0.n, axes=['k4', 'b3'])
+                if wire:
+                    end = xrange[1] - xrange[0] - 1 + offset
+                    set_operator_(tm, ix0, source_op, dirn='t' if ix0 < end else 'l')
+                    for i in range(ix0 + 1, end + 1):
+                        set_operator_(tm, i, None, string=string,
+                                      dirn='bt' if i < end else 'bl')
+                else:
+                    set_operator_(tm, ix0, o0, horizontal=False)
+                    add_charge_swaps_(tm, ix0, o0.n, axes=['k4', 'b3'])
 
                 for nx1 in range(nx0 + 1, xrange[1]):
                     ix1 = nx1 - xrange[0] + offset
                     env.update_env_(ix1 - 1, to='last')
                     if ((nx0, ny0), (nx1, ny1)) in pairs:
-                        old_tensor = tm[ix1]
-                        add_charge_swaps_(tm, ix1, o0.n, axes='k1')
+                        old_tensor = tm[ix1].copy() if wire else tm[ix1]
+                        if not wire:
+                            add_charge_swaps_(tm, ix1, o0.n, axes='k1')
                         for nz1, o1 in O1dict[nx1, ny1].items():
-                            set_operator_(tm, ix1, o1, horizontal=False)
+                            if wire:
+                                _, target_op = _multiplet_pair(o0, o1)
+                                set_operator_(tm, ix1, target_op, dirn='b')
+                            else:
+                                set_operator_(tm, ix1, o1, horizontal=False)
                             out[(nx0, ny0) + nz0, (nx1, ny1) + nz1] = env.measure(bd=(ix1-1, ix1+1)) / norm_env
-                        restore_old_tensor_(tm, ix1, old_tensor)
-                        add_charge_swaps_(tm, ix1, o0.n, axes=['b4', 'b3'])
+                        if wire:
+                            tm[ix1] = old_tensor
+                        else:
+                            restore_old_tensor_(tm, ix1, old_tensor)
+                        if not wire:
+                            add_charge_swaps_(tm, ix1, o0.n, axes=['b4', 'b3'])
 
                 ix_end = xrange[1] - 1 - xrange[0] + offset  # the last index in iy loops
                 if ny0 < yrange[1] - 1:
-                    add_charge_swaps_(tm, ix_end, o0.n, axes='k2')
+                    if not wire:
+                        add_charge_swaps_(tm, ix_end, o0.n, axes='k2')
                     vec_o0_next = mps.zipper(tm, vec, opts_svd=opts_svd)
                     mps.compression_(vec_o0_next, [tm, vec], method='1site', normalize=False, **opts_var)
 
@@ -451,14 +671,30 @@ def _measure_2site_columns(self, O0dict, O1dict, xrange, yrange, offset, pairs, 
                     norm_env = mps.vdot(vecc, tm, vec)
 
                     if ny1 < yrange[1] - 1:
-                        add_charge_swaps_(tm, ix_end, o0.n, axes=['b2', 'k2'])  # iy1 follows from the end of previous loop
+                        old_edge = tm[ix_end].copy() if wire else tm[ix_end]
+                        if wire:
+                            set_operator_(tm, ix_end, None, string=string, dirn='rl')
+                        if not wire:
+                            add_charge_swaps_(tm, ix_end, o0.n, axes=['b2', 'k2'])  # iy1 follows from the end of previous loop
                         vec_o0_next = mps.zipper(tm, vec_o0, opts_svd=opts_svd)
                         mps.compression_(vec_o0_next, (tm, vec_o0), method='1site', normalize=False, **opts_var)
-                        del_charge_swaps_(tm, ix_end)
+                        if wire:
+                            tm[ix_end] = old_edge
+                        else:
+                            del_charge_swaps_(tm, ix_end)
 
-                    add_charge_swaps_(tm, ix_end, o0.n, axes='b2')  # iy1 follows from the end of previous loop
+                    if not wire:
+                        add_charge_swaps_(tm, ix_end, o0.n, axes='b2')  # iy1 follows from the end of previous loop
                     env = mps.Env(vecc, [tm, vec_o0])
                     env.setup_(to=ix_end)
+                    if wire:
+                        for i in range(offset, ix_end + 1):
+                            if i == offset:
+                                _, target_op = _multiplet_pair(o0, reference)
+                                set_operator_(tm, i, target_op, dirn='r' if i == ix_end else 't')
+                            else:
+                                set_operator_(tm, i, None, string=string,
+                                              dirn='rb' if i == ix_end else 'tb')
 
                     for nx1 in range(xrange[1]-1, xrange[0]-1, -1):
                         ix1 = nx1 - xrange[0] + offset
@@ -466,13 +702,23 @@ def _measure_2site_columns(self, O0dict, O1dict, xrange, yrange, offset, pairs, 
                             env.update_env_(ix1 + 1, to='first')
 
                         if ((nx0, ny0), (nx1, ny1)) in pairs:
-                            old_tensor = tm[ix1]
-                            add_charge_swaps_(tm, ix1, o0.n, axes=['b3', 'b4'])
+                            old_tensor = tm[ix1].copy() if wire else tm[ix1]
+                            if not wire:
+                                add_charge_swaps_(tm, ix1, o0.n, axes=['b3', 'b4'])
                             for nz1, o1 in O1dict[nx1, ny1].items():
-                                set_operator_(tm, ix1, o1, horizontal=False)
+                                if wire:
+                                    _, target_op = _multiplet_pair(o0, o1)
+                                    set_operator_(tm, ix1, target_op,
+                                                  dirn='r' if ix1 == ix_end else 't')
+                                else:
+                                    set_operator_(tm, ix1, o1, horizontal=False)
                                 out[(nx0, ny0) + nz0, (nx1, ny1) + nz1] = env.measure(bd=(ix1-1, ix1+1)) / norm_env
-                            restore_old_tensor_(tm, ix1, old_tensor)
-                            add_charge_swaps_(tm, ix1, o0.n, axes='k1')
+                            if wire:
+                                tm[ix1] = old_tensor
+                            else:
+                                restore_old_tensor_(tm, ix1, old_tensor)
+                            if not wire:
+                                add_charge_swaps_(tm, ix1, o0.n, axes='k1')
 
     return out
 
@@ -490,11 +736,6 @@ def _measure_nsite(env, *operators, sites=None, dirn='tb', opts_svd=None, opts_v
 
     # unpack operators if operators provided as a Lattice or dict
     operators = [op[site] if not isinstance(op, Tensor) else op for op, site in zip(operators, sites)]
-
-    sign = sign_canonical_order(*operators, sites=sites, f_ordered=env.psi.f_ordered)
-    ops = {}
-    for n, op in zip(sites, operators):
-        ops[n] = ops[n] @ op if n in ops else op
 
     if opts_var is None:
         opts_var = {'max_sweeps': 2}
@@ -520,16 +761,8 @@ def _measure_nsite(env, *operators, sites=None, dirn='tb', opts_svd=None, opts_v
 
     val_no = contract_window(bra, tms, ket, i0, i1, opts_svd, opts_var)
 
-    nx0, ny0 = env.xrange[0], env.yrange[0]
-    for (nx, ny), op in ops.items():
-        set_operator_(tens, (nx, ny), op)
-        add_charge_swaps_(tens, (nx, ny), op.n, axes=('b0' if nx == nx0 else 'k1'))
-        for ii in range(nx0 + 1, nx):
-            add_charge_swaps_(tens, (ii, ny), op.n, axes=['k1', 'k4', 'b3'])
-        if nx > nx0:
-            add_charge_swaps_(tens, (nx0, ny), op.n, axes=['b0', 'k4', 'b3'])
-        for jj in range(ny0, ny):
-            add_charge_swaps_(tens, (nx0, jj), op.n, axes=['b0', 'k2', 'k4'])
+    sign = insert_operator_product_(tens, operators, sites,
+                                    (env.xrange[0], env.yrange[0]), env.psi.f_ordered)
 
     val_op = contract_window(bra, tms, ket, i0, i1, opts_svd, opts_var)
     return sign * val_op / val_no

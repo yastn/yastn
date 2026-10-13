@@ -6,6 +6,7 @@ import yastn
 from yastn.tn import fpeps
 from yastn.tn.fpeps.envs import rdm
 from .test_su2_models_ed import _expand_magnetic, _fock_operators
+from ._multiplet_models import hubbard_hamiltonian, tj_hamiltonian
 
 
 def _partial_trace(matrix, dimension, keep):
@@ -39,7 +40,7 @@ def test_su2_patch_density_matrices(config_kwargs, model, sym, column):
         dimension = int(2 * spin + 1)
         vectors = {site: ops.I() for site in sites}
         local = [np.eye(dimension) / dimension for _ in sites]
-        gate = fpeps.gates.gate_nn_Heisenberg_SU2(1., step, ops.I(), bond=bond)
+        gate = fpeps.gates.gate_nn_Heisenberg(1., step, ops.I(), ops.S(), bond=bond)
     else:
         c, n = _fock_operators()
         t, U, J, mu = 0.7, 0.6, 0.3, 0.2
@@ -51,7 +52,7 @@ def test_su2_patch_density_matrices(config_kwargs, model, sym, column):
             ops = yastn.operators.SpinfulFermions(sym=sym, **config_kwargs)
             H += U * (n[0] @ n[1] + n[2] @ n[3])
             states = [0, 3, 2, 1]
-            gate = getattr(fpeps.gates, 'gate_nn_Hubbard_' + sym)(t, U, mu, step, ops.I(), bond=bond)
+            gate = fpeps.gates.gate_nn_exp(step, ops.I(), hubbard_hamiltonian(ops, t, U, mu), bond=bond)
         else:
             ops = yastn.operators.SpinfulFermions_tJ(sym=sym, **config_kwargs)
             sz0, sz1 = (n[0] - n[1]) / 2, (n[2] - n[3]) / 2
@@ -59,7 +60,7 @@ def test_su2_patch_density_matrices(config_kwargs, model, sym, column):
             H += J * (sz0 @ sz1 + (sp0 @ sp1.T + sp0.T @ sp1) / 2
                       - (n[0] + n[1]) @ (n[2] + n[3]) / 4)
             states = [0, 2, 1]
-            gate = getattr(fpeps.gates, 'gate_nn_tJ_' + sym)(J, t, mu, mu, step, ops.I(), bond=bond)
+            gate = fpeps.gates.gate_nn_exp(step, ops.I(), tj_hamiltonian(ops, J, t, mu, mu), bond=bond)
         order = [left + 4 * right for left in states for right in states]
         H = H[np.ix_(order, order)]
         dimension = len(states)

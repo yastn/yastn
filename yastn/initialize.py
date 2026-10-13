@@ -24,7 +24,7 @@ from operator import itemgetter
 import numpy as np
 
 from .tensor import Tensor, YastnError, ncon
-from .tensor._auxiliary import _clear_axes, _unpack_legs, get_blocks, find_matching_indices, get_trimmed_struct, _struct
+from .tensor._auxiliary import find_matching_block_keys, _clear_axes, _unpack_legs, get_blocks, get_trimmed_struct, _struct
 from .tensor._legbasic import LegBasic
 from .tensor._legs import Leg, LegMeta, legs_union, _legs_mask_needed
 from .tensor._merging import _embed_tensor, _combine_hfs_sum
@@ -403,7 +403,7 @@ def block(tensors, common_legs=None) -> Tensor:
     meta = []
     for pa, a in tensors.items():
         bl_a = get_blocks(sym, a.struct)
-        indc, inda = find_matching_indices(bl_new.t, bl_a.t)
+        indc, inda = find_matching_block_keys(bl_new.t, bl_new.channels, bl_a.t, bl_a.channels)
         for sln, Dn, ta, sla, Da in zip(bl_new.slc[indc], bl_new.D[indc], bl_a.t[inda], bl_a.slc[inda], bl_a.D[inda]):
             Dslcs = tuple(tDslc[tuple(ta[n].tolist())][pa[n]] for n, tDslc in enumerate(ltDslc))
             meta.append((sln, Dn, pa, sla, Da, Dslcs))

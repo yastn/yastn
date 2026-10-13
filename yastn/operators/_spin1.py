@@ -58,7 +58,22 @@ class Spin1(meta_operators):
             raise YastnError("For Spin1 sym should be in ('dense', 'Z3', 'U1', 'SU2').")
         if self.config.fermionic != False:
             raise YastnError("For Spin1 config.fermionic should be False.")
-        self.operators = ('I',) if self._sym == 'SU2' else ('I', 'sx', 'sy', 'isy', 'sz', 'sp', 'sm')
+        self.operators = ('I', 'S') if self._sym == 'SU2' else ('I', 'sx', 'sy', 'isy', 'sz', 'sp', 'sm')
+
+    def S(self) -> Tensor:
+        """Spin-1 spherical multiplet with legs (out, in, string), s=(+,-,-).
+
+        Magnetic order is (Sm/sqrt(2), Sz, -Sp/sqrt(2)); the string carries
+        doubled spin charge 2.
+        """
+        if self._sym != 'SU2':
+            raise YastnError('S() requires SU2 symmetry.')
+        S = Tensor(config=self.config, s=(1, -1, -1))
+        # Reduced matrix element sqrt(j(j+1)(2j+1)), normalized CG convention.
+        j = 1
+        S.set_block(ts=(2, 2, 2), Ds=(1, 1, 1), val=(j * (j + 1) * (2 * j + 1)) ** 0.5)
+        return S
+
 
     def space(self) -> Leg:
         r""" :class:`yastn.Leg` object describing local Hilbert space. """
@@ -320,7 +335,7 @@ class Spin1(meta_operators):
             a map from strings to operators
         """
         if self._sym == 'SU2':
-            return {'I': lambda j: self.I()}
+            return {'I': lambda j: self.I(), 'S': lambda j: self.S()}
         return {'I': lambda j: self.I(),
                 'sx': lambda j: self.sx(),
                 'sy': lambda j: self.sy(),

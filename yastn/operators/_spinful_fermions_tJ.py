@@ -61,8 +61,48 @@ class SpinfulFermions_tJ(meta_operators):
            (sym == 'U1xU1' and fer not in (True, (True, True))) or \
            (sym == 'SU2xU1' and fer != (False, True)):
             raise YastnError("For SpinfulFermions_tJ config.sym does not match config.fermionic.")
-        self.operators = (('I', 'n_total', 'h')
+        self.operators = (('I', 'n_total', 'h', 'S', 'c_spinor', 'cp_spinor')
                           if sym in ('SU2', 'SU2xU1') else ('I', 'n', 'c', 'cp'))
+
+    def S(self) -> Tensor:
+        """Spin-1 spherical multiplet with legs (out, in, string), s=(+,-,-).
+
+        Magnetic order is (Sm/sqrt(2), Sz, -Sp/sqrt(2)); the string carries
+        doubled spin 2, and zero particle charge for SU2xU1.
+        """
+        if self._sym not in ('SU2', 'SU2xU1'):
+            raise YastnError('S() requires SU2 or SU2xU1 symmetry.')
+        S = Tensor(config=self.config, s=(1, -1, -1))
+        charges = (1, 1, 2) if self._sym == 'SU2' else ((1, 1), (1, 1), (2, 0))
+        # Only the singly occupied doublet carries spin. The reduced element
+        # sqrt(j(j+1)(2j+1)) = sqrt(3/2) uses YASTN's normalized CG tensor.
+        S.set_block(ts=charges, Ds=(1, 1, 1), val=(3 / 2) ** 0.5)
+        return S
+
+
+    def cp_spinor(self) -> Tensor:
+        """Creation multiplet (cd†, cu†), legs (out,in,string), s=(+,-,-).
+
+        The string charge is 1 for SU2 and (1,+1) for SU2xU1.
+        """
+        if self._sym not in ('SU2', 'SU2xU1'):
+            raise YastnError('Spinor operators require SU2 or SU2xU1 symmetry.')
+        op = Tensor(config=self.config, s=(1, -1, -1))
+        sq2 = 2 ** 0.5
+        # Projected local space: |0>, |down>, |up>; no double occupancy.
+        charges = (1, 0, 1) if self._sym == 'SU2' else ((1, 1), (0, 0), (1, 1))
+        op.set_block(ts=charges, Ds=(1, 1, 1), val=sq2)
+        return op
+
+
+    def c_spinor(self) -> Tensor:
+        """Dual annihilation spinor (cd,cu), with legs (out,in,string).
+
+        Signatures are (+,-,+), opposite to cp_spinor() on the string.
+        Thus cp_spinor() and c_spinor() contract to the spin-summed hopping
+        without magnetic-component labels or an extra conjugation phase.
+        """
+        return self.cp_spinor().conj().transpose((1, 0, 2)).consume_transpose()
 
     def space(self) -> Leg:
         r""" :class:`yastn.Leg` object describing local Hilbert space. """

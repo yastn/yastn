@@ -21,6 +21,7 @@ from .._geometry import Site
 from .._peps import Peps, Peps2Layers
 from ....tensor import ncon, tensordot, Tensor, YastnError
 from ....tensor._auxiliary import swap_charges
+from ....operators._multiplets import _is_multiplet, _multiplet_pair
 
 log = logging.getLogger(__name__)
 Scalar = TypeVar('Scalar')
@@ -262,6 +263,13 @@ def op_order(Oi, Oj, ordered, fermionic=True):
     :param Oj: YASTN tensor
     :param ordered: whether the product Oi Oj is consistent with the fermionic ordering
     """
+
+    if _is_multiplet(Oi) or _is_multiplet(Oj):
+        Oi, Oj = _multiplet_pair(Oi, Oj)
+        if not ordered:
+            charge = Oi.get_legs(2).t[0]
+            Oi = Oi * swap_charges([charge], [charge], Oi.config.fermionic)
+        return Oi.swap_gate(axes=(1, 2)), Oj
 
     if not ordered:
         # if fermionic:

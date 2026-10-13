@@ -24,6 +24,7 @@ from .._evolution import BipartiteBondMetric, BondMetric
 from .._gates_auxiliary import gate_fix_swap_gate, match_ancilla, clear_projectors, clear_operator_input
 from .._geometry import Bond, Site, Lattice
 from .._peps import Peps2Layers, DoublePepsTensor, PEPS_CLASSES
+from ....operators._multiplets import _is_multiplet, _multiplet_pair
 from ....initialize import eye
 from ....tensor import YastnError, tensordot, vdot, ncon, Tensor, add as tensor_add
 
@@ -231,6 +232,10 @@ class EnvBP():
                 return out
             else:
                 return {bond: self.measure_nn(O, P, bond) for bond in self.bonds()}
+
+        if _is_multiplet(O) or _is_multiplet(P):
+            O, P = _multiplet_pair(O, P)
+            O = O.swap_gate(axes=(1, 2))
 
         if O.ndim == 2 and P.ndim == 2:
             O = O.add_leg(s=1, axis=2)

@@ -22,6 +22,9 @@ import numpy as np
 
 from ._env import Env, Env2
 from ._mps_obc import MpsMpoOBC
+from ...operators._multiplets import _is_multiplet
+from ._generate_mpo import generate_mpo, Hterm, _pair_mpo
+from ._initialize import product_mpo
 from ...initialize import eye
 from ...tensor import YastnError, Tensor, qr, swap_charges, sign_canonical_order, tensordot
 
@@ -199,6 +202,10 @@ def measure_2site(bra, O, P, ket, bonds='<') -> dict[tuple[int, int], float] | f
         P0 = P
         P = {k: P for k in range(ket.N)}
 
+    if any(_is_multiplet(op) for mapping in (O, P) for op in mapping.values()):
+        results = _measure_2site_multiplets(bra, O, P, ket, pairs)
+        return results.popitem()[1] if return_float and results else results
+
     n_left = O0.config.sym.add_charges(O0.n, P0.n, new_signature=-1)
 
     pairs = [(n0, n1) for n0, n1 in pairs if (n0 in O and n1 in P)]
@@ -251,6 +258,46 @@ def measure_2site(bra, O, P, ket, bonds='<') -> dict[tuple[int, int], float] | f
     return results.popitem()[1] if return_float and len(results) > 0 else results
 
 
+def _measure_2site_multiplets(bra, O, P, ket, pairs):
+    """Reuse left/right environments while carrying the complete irrep wire."""
+    identities = [eye(ket.config, legs=ket[n].get_legs(1), isdiag=False) for n in ket.sweep()]
+    identity = product_mpo(identities)
+    env0 = Env(bra, [identity, ket]).setup_(to='first').setup_(to='last')
+    groups, results = {}, {}
+    for i, j in pairs:
+        if i not in O or j not in P:
+            continue
+        if not (_is_multiplet(O[i]) or _is_multiplet(P[j])):
+            results[i, j] = measure_2site(bra, O[i], P[j], ket, bonds=(i, j))
+            continue
+        key = min(i, j), id(O[i]), id(P[j]), i > j
+        groups.setdefault(key, []).append((i, j))
+    for (source, _, _, reverse), group in groups.items():
+        group = sorted(group, key=max)
+        i, j = group[-1]
+        mpo = _pair_mpo(identities, O[i], P[j], i, j)
+        env = env0.shallow_copy()
+        env.op = mpo
+        n = source
+        for i, j in group:
+            target = max(i, j)
+            if source == target:
+                local = _pair_mpo(identities, O[i], P[j], i, j)
+                same = env0.shallow_copy()
+                same.op = local
+                results[i, j] = same.measure(bd=(source - 1, source + 1))
+                continue
+            while n < target:
+                env.update_env_(n, to='last')
+                n += 1
+            endpoint = _pair_mpo(identities, O[i], P[j], i, j)[target]
+            old = mpo[target]
+            mpo[target] = endpoint
+            results[i, j] = env.measure(bd=(target - 1, target + 1))
+            mpo[target] = old
+    return results
+
+
 def _parse_2site_bonds(bonds, N):
     if 'a' in bonds:
         return [(i, j) for i in range(N) for j in range(N)]
@@ -301,6 +348,14 @@ def measure_nsite(bra, *operators, ket, sites=None) -> float:
     """
     if sites is None or len(operators) != len(sites):
         raise YastnError("Number of operators and sites should match.")
+    if any(_is_multiplet(op) for op in operators):
+        identities = [eye(ket.config, legs=ket[n].get_legs(1), isdiag=False) for n in ket.sweep()]
+        mpo = generate_mpo(identities, [Hterm(1, sites, operators)])
+        env = Env(bra, [mpo, ket])
+        for n in bra.sweep(to='last'):
+            env.update_env_(n, to='last')
+        return env.measure(bd=(bra.N - 1, bra.N))
+
     sign = sign_canonical_order(*operators, sites=sites, f_ordered=lambda s0, s1: s0 <= s1)
     n_left = bra.config.sym.add_charges(*(op.n for op in operators), new_signature=-1)
 

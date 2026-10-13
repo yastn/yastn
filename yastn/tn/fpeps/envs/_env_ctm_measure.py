@@ -16,12 +16,13 @@
 
 import scipy.sparse.linalg as sla
 
-from ._env_window import EnvWindow, _measure_2site, _measure_nsite, _sample
+from ._env_window import insert_operator_product_, EnvWindow, _measure_2site, _measure_nsite, _sample
 from ._ctm_opts import CTMOpts, override
 from .._gates_auxiliary import gate_fix_swap_gate, clear_operator_input, gate_from_mpo
 from .._doublePepsTensor import DoublePepsTensor
 from .._geometry import Site, is_bond, is_site
 from ... import mps
+from ....operators._multiplets import _is_multiplet, _multiplet_pair
 from ....initialize import rand
 from ....tensor import YastnError, Tensor, tensordot, vdot, split_data_and_meta, combine_data_and_meta, sign_canonical_order
 from ....tensor.oe_blocksparse import contract_with_unroll
@@ -121,8 +122,13 @@ def measure_nn(self, O, P, bond=None) -> dict:
 
     out = {}
     for bond in bonds:
-        for nz0, O in Odict[bond[0]].items():
-            for nz1, P in Pdict[bond[1]].items():
+        for nz0, op0 in Odict[bond[0]].items():
+            for nz1, op1 in Pdict[bond[1]].items():
+                O, P = op0, op1
+
+                if _is_multiplet(O) or _is_multiplet(P):
+                    O, P = _multiplet_pair(O, P)
+                    O = O.swap_gate(axes=(1, 2))
 
                 if O.ndim == 2 and P.ndim == 2:
                     O = O.add_leg(s=1, axis=2)
@@ -206,10 +212,6 @@ def measure_2x2(self, *operators, sites=None) -> float:
     # unpack operators if operators provided as a Lattice or dict
     operators = [op[site] if not isinstance(op, Tensor) else op for op, site in zip(operators, sites)]
 
-    sign = sign_canonical_order(*operators, sites=sites, f_ordered=self.f_ordered)
-    ops = {}
-    for n, op in zip(sites, operators):
-        ops[n] = ops[n] @ op if n in ops else op
 
     minx = min(site[0] for site in sites)  # tl corner
     miny = min(site[1] for site in sites)
@@ -252,36 +254,12 @@ def measure_2x2(self, *operators, sites=None) -> float:
 
     val_no = vdot(cor_tl @ cor_tr, tensordot(cor_bl, cor_br, axes=(0, 1)), conj=(0, 0))
 
-    up_tl, up_bl, up_tr, up_br = False, False, False, False
-    if isinstance(ten_tl, DoublePepsTensor):
-        if tl in ops:
-            ten_tl.set_operator_(ops[tl])
-        if bl in ops:
-            ten_bl.set_operator_(ops[bl])
-            ten_bl.add_charge_swaps_(ops[bl].n, axes='k1')
-            ten_tl.add_charge_swaps_(ops[bl].n, axes=['b3', 'k4'])
-        if tr in ops:
-            ten_tr.set_operator_(ops[tr])
-            ten_tr.add_charge_swaps_(ops[tr].n, axes='b0')
-            ten_tl.add_charge_swaps_(ops[tr].n, axes=['k2', 'k4'])
-        if br in ops:
-            ten_br.set_operator_(ops[br])
-            ten_br.add_charge_swaps_(ops[br].n, axes='k1')
-            ten_tr.add_charge_swaps_(ops[br].n, axes=['b3', 'b0', 'k4'])
-            ten_tl.add_charge_swaps_(ops[br].n, axes=['k2', 'k4'])
-        up_tl = ten_tl.has_operator_or_swap()
-        up_bl = ten_bl.has_operator_or_swap()
-        up_tr = ten_tr.has_operator_or_swap()
-        up_br = ten_br.has_operator_or_swap()
-    else:  # single-layer Peps
-        if tl in ops:
-            ten_tl, up_tl = ops[tl], True
-        if bl in ops:
-            ten_bl, up_bl = ops[bl], True
-        if tr in ops:
-            ten_tr, up_tr = ops[tr], True
-        if br in ops:
-            ten_br, up_br = ops[br], True
+    tens = {tl: ten_tl, tr: ten_tr, br: ten_br, bl: ten_bl}
+    sign = insert_operator_product_(tens, operators, sites, tl, self.f_ordered)
+    ten_tl, ten_tr, ten_br, ten_bl = (tens[s] for s in (tl, tr, br, bl))
+    up_tl, up_bl, up_tr, up_br = (tens[s].has_operator_or_swap()
+                                  if isinstance(tens[s], DoublePepsTensor) else s in sites
+                                  for s in (tl, bl, tr, br))
 
     if up_tl:
         cor_tl = tensordot(vec_tl, ten_tl, axes=((2, 1), (0, 1)))
@@ -328,21 +306,12 @@ def measure_nsite_exact(self, *operators, sites=None) -> float:
     # unpack operators if operators provided as a Lattice or dict
     operators = [op[site] if not isinstance(op, Tensor) else op for op, site in zip(operators, sites)]
 
-    sign = sign_canonical_order(*operators, sites=sites, f_ordered=self.f_ordered)
-    ops = {}
-    for n, op in zip(sites, operators):
-        ops[n] = ops[n] @ op if n in ops else op
 
     minx = min(site[0] for site in sites)  # tl corner
     miny = min(site[1] for site in sites)
 
     maxx = max(site[0] for site in sites)  # br corner
     maxy = max(site[1] for site in sites)
-
-    if minx == maxx and self.nn_site((minx, miny), 'b') is None:
-        minx -= 1  # for a finite system
-    if miny == maxy and self.nn_site((minx, miny), 'r') is None:
-        miny -= 1  # for a finite system
 
     Nx, Ny = maxx - minx + 1, maxy - miny + 1
 
@@ -436,33 +405,7 @@ def measure_nsite_exact(self, *operators, sites=None) -> float:
     contract_fn = _contract_patch_horz if Nx <= Ny else _contract_patch_vert
     val_no = contract_fn(tens)
 
-    # Insert operators
-    axes_string_x = ['b3', 'k4', 'k1']
-    axes_string_y = ['k2', 'k4', 'b0']
-    if isinstance(tens[tl], DoublePepsTensor):
-        for y in range(miny, maxy+1):
-            for x in range(minx, maxx+1):
-                site = Site(x, y)
-                if site in ops:
-                    tens[site].set_operator_(ops[site])
-                    if x > minx:
-                        tens[site].add_charge_swaps_(ops[site].n, axes='k1')
-                        for x1 in range(x-1, minx, -1):
-                            tens[Site(x1, y)].add_charge_swaps_(ops[site].n, axes=axes_string_x)
-                        tens[Site(minx, y)].add_charge_swaps_(ops[site].n, axes=['b3', 'k4'])
-
-                    if y > miny:
-                        tens[Site(minx, y)].add_charge_swaps_(ops[site].n, axes='b0')
-                        for y1 in range(y-1, miny, -1):
-                            tens[Site(minx, y1)].add_charge_swaps_(ops[site].n, axes=axes_string_y)
-                        tens[Site(minx, miny)].add_charge_swaps_(ops[site].n, axes=['k2', 'k4'])
-
-    else:  # single-layer Peps
-        for y in range(miny, maxy+1):
-            for x in range(minx, maxx+1):
-                site = Site(x, y)
-                if site in ops:
-                    tens[site] = ops[site]
+    sign = insert_operator_product_(tens, operators, sites, tl, self.f_ordered)
 
     val_op = contract_fn(tens)
 
@@ -493,10 +436,6 @@ def measure_line(self, *operators, sites=None) -> float:
     # unpack operators if operators provided as a Lattice or dict
     operators = [op[site] if not isinstance(op, Tensor) else op for op, site in zip(operators, sites)]
 
-    sign = sign_canonical_order(*operators, sites=sites, f_ordered=self.f_ordered)
-    ops = {}
-    for n, op in zip(sites, operators):
-        ops[n] = ops[n] @ op if n in ops else op
 
     xs = sorted(set(site[0] for site in sites))
     ys = sorted(set(site[1] for site in sites))
@@ -509,27 +448,21 @@ def measure_line(self, *operators, sites=None) -> float:
         vr = env_win[xs[0], 't']
         tm = env_win[xs[0], 'h']
         vl = env_win[xs[0], 'b'].conj()
-        axes_op = 'b0'
-        axes_string = ('b0', 'k2', 'k4')
     else:  # vertical
         vr = env_win[ys[0], 'l']
         tm = env_win[ys[0], 'v']
         vl = env_win[ys[0], 'r'].conj()
-        axes_op = 'k1'
-        axes_string = ('k1', 'k4', 'b3')
 
     val_no = mps.vdot(vl, tm, vr)
 
-    for site, op in ops.items():
-        ind = site[0] - xs[0] + site[1] - ys[0] + 1
-        if isinstance(tm[ind], DoublePepsTensor):  # 2-layers PEPS
-            tm[ind].set_operator_(op)
-            tm[ind].add_charge_swaps_(op.n, axes=axes_op)
-            for ii in range(1, ind):
-                tm[ii].add_charge_swaps_(op.n, axes=axes_string)
-        else:  # 1-layer PEPS
-            axes = (1, 2, 3, 0) if horizontal else (0, 3, 2, 1)
-            tm[ind] = op.transpose(axes=axes)
+    window_sites = ([Site(xs[0], y) for y in range(ys[0], ys[-1] + 1)] if horizontal
+                    else [Site(x, ys[0]) for x in range(xs[0], xs[-1] + 1)])
+    tens = {site: tm[i + 1] for i, site in enumerate(window_sites)}
+    sign = insert_operator_product_(tens, operators, sites, (xs[0], ys[0]), self.f_ordered)
+    for i, site in enumerate(window_sites):
+        ten = tens[site]
+        tm[i + 1] = (ten if isinstance(ten, DoublePepsTensor) or site not in sites
+                     else ten.transpose((1, 2, 3, 0) if horizontal else (0, 3, 2, 1)))
 
     val_op = mps.vdot(vl, tm, vr)
 
@@ -541,10 +474,10 @@ def measure_line(self, *operators, sites=None) -> float:
     return sign * val_op / val_no
 
 
-def measure_nsite(self, *operators, sites=None) -> float:
+def measure_nsite(self, *operators, sites=None, opts_svd=None, opts_var=None) -> float:
     r"""
     Calculate expectation value of a product of local operators.
-    Perform approximate contraction of a windows of PEPS sites
+    Perform approximate contraction of a window of PEPS sites
     within CTM environment using boundary MPS.
     The size of the window is taken to include provided sites.
 
@@ -555,12 +488,19 @@ def measure_nsite(self, *operators, sites=None) -> float:
 
     sites: Sequence[int]
         A list of sites [s0, s1, ...] matching corresponding operators.
+
+    opts_svd: dict | None
+        Boundary-MPS truncation options. By default, use the largest boundary
+        bond dimension in the contraction direction.
+
+    opts_var: dict | None
+        Boundary-MPS variational compression options; defaults to two sweeps.
     """
     xrange = (min(site[0] for site in sites), max(site[0] for site in sites) + 1)
     yrange = (min(site[1] for site in sites), max(site[1] for site in sites) + 1)
     env_win = EnvWindow(self, xrange, yrange)
     dirn = 'lr' if (xrange[1] - xrange[0]) >= (yrange[1] - yrange[0]) else 'tb'
-    return _measure_nsite(env_win, *operators, sites=sites, dirn=dirn)
+    return _measure_nsite(env_win, *operators, sites=sites, dirn=dirn, opts_svd=opts_svd, opts_var=opts_var)
 
 
 def measure_2site(self, O, P, xrange=None, yrange=None, pairs='corner <=', dirn='v', opts_svd=None, opts_var=None) -> dict[Site, float]:

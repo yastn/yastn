@@ -112,7 +112,7 @@ def test_spin1_SU2(config_kwargs):
     assert ops.I().trace().to_number() == pytest.approx(3)
     assert (ops.I() @ ops.I() - ops.I()).norm() < 1e-12
     assert ops.I().norm() ** 2 == pytest.approx(3)
-    assert set(ops.to_dict()) == {'I'}
+    assert set(ops.to_dict()) == {'I', 'S'}
     for name in ('sx', 'sy', 'sz', 'isy', 'sp', 'sm', 'vec_x', 'vec_y', 'vec_z', 'vec_s', 'g'):
         with pytest.raises(yastn.YastnError, match='SU'):
             getattr(ops, name)()

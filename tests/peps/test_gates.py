@@ -17,6 +17,7 @@ import pytest
 import numpy as np
 import yastn
 import yastn.tn.fpeps as fpeps
+from ._multiplet_models import hubbard_hamiltonian, tj_hamiltonian
 
 tol = 1e-12  #pylint: disable=invalid-name
 
@@ -144,7 +145,7 @@ def test_Heisenberg_gate_SU2(config_kwargs, step, factory, energies):
     """SU2 gates have the exact Boltzmann factors in each total-spin sector."""
     ops = factory(sym='SU2', **config_kwargs)
     J = 1.3
-    gate = fpeps.gates.gate_nn_Heisenberg_SU2(J, step, ops.I())
+    gate = fpeps.gates.gate_nn_Heisenberg(J, step, ops.I(), ops.S())
     fused = _reconstruct_coupled_gate(gate, ops.I())
     for spin, energy in enumerate(energies):
         block = fused.config.backend.to_numpy(fused[(2 * spin, 2 * spin)])
@@ -168,13 +169,13 @@ def test_SU2_zero_step_gate(config_kwargs, model):
     if model in ('Heisenberg', 'Heisenberg_spin1'):
         factory = yastn.operators.Spin12 if model == 'Heisenberg' else yastn.operators.Spin1
         ops = factory(sym='SU2', **config_kwargs)
-        gate = fpeps.gates.gate_nn_Heisenberg_SU2(1.3, 0, ops.I())
+        gate = fpeps.gates.gate_nn_Heisenberg(1.3, 0, ops.I(), ops.S())
     elif model == 'Hubbard':
         ops = yastn.operators.SpinfulFermions(sym='SU2xU1', **config_kwargs)
-        gate = fpeps.gates.gate_nn_Hubbard_SU2xU1(0.7, 3.2, -0.15, 0, ops.I())
+        gate = fpeps.gates.gate_nn_exp(0, ops.I(), hubbard_hamiltonian(ops, 0.7, 3.2, -0.15))
     else:
         ops = yastn.operators.SpinfulFermions_tJ(sym='SU2xU1', **config_kwargs)
-        gate = fpeps.gates.gate_nn_tJ_SU2xU1(0.4, 0.8, -0.1, 0.2, 0, ops.I())
+        gate = fpeps.gates.gate_nn_exp(0, ops.I(), tj_hamiltonian(ops, 0.4, 0.8, -0.1, 0.2))
     full = yastn.ncon(gate.G, [(0, -1, 1), (-2, -3, 1)])
     assert (full - yastn.fkron(ops.I(), ops.I())).norm() < 1e-12
 
@@ -183,7 +184,7 @@ def test_SU2_zero_step_gate(config_kwargs, model):
 def test_Hubbard_gate_SU2xU1(config_kwargs, step):
     ops = yastn.operators.SpinfulFermions(sym='SU2xU1', **config_kwargs)
     t, U, mu = 0.7, 3.2, -0.15
-    gate = fpeps.gates.gate_nn_Hubbard_SU2xU1(t, U, mu, step, ops.I())
+    gate = fpeps.gates.gate_nn_exp(step, ops.I(), hubbard_hamiltonian(ops, t, U, mu))
     fused = _reconstruct_coupled_gate(gate, ops.I())
     rt2 = np.sqrt(2.0)
     expected = {
@@ -297,7 +298,7 @@ def test_Hubbard_SU2xU1_second_order_trotter_against_ED(config_kwargs):
     rt2 = np.sqrt(2.0)
     ops_su2 = yastn.operators.SpinfulFermions(sym='SU2xU1', **config_kwargs)
     I_su2 = ops_su2.I()
-    hopping_gate = fpeps.gates.gate_nn_Hubbard_SU2xU1(t, 0, 0, step / 2, I_su2)
+    hopping_gate = fpeps.gates.gate_nn_hopping(t, step / 2, I_su2, ops_su2.c_spinor(), ops_su2.cp_spinor())
     hop_reduced = _reconstruct_coupled_gate(hopping_gate, I_su2)
     local_su2 = U * (ops_su2.d() - ops_su2.n_total() / 2 + I_su2 / 4)
     local_gate = fpeps.gates.gate_local_exp(step, I_su2, local_su2).G[0]
@@ -324,7 +325,7 @@ def test_Hubbard_SU2xU1_second_order_trotter_against_ED(config_kwargs):
 def test_tJ_gate_SU2xU1(config_kwargs, step):
     ops = yastn.operators.SpinfulFermions_tJ(sym='SU2xU1', **config_kwargs)
     J, t, mu0, mu1 = 0.4, 0.8, -0.1, 0.2
-    gate = fpeps.gates.gate_nn_tJ_SU2xU1(J, t, mu0, mu1, step, ops.I())
+    gate = fpeps.gates.gate_nn_exp(step, ops.I(), tj_hamiltonian(ops, J, t, mu0, mu1))
     fused = _reconstruct_coupled_gate(gate, ops.I())
     expected = {
         (0, 0): [[0]],

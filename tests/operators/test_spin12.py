@@ -25,8 +25,8 @@ def test_spin12_SU2(config_kwargs):
     ops = yastn.operators.Spin12(sym='SU2', **config_kwargs)
     assert ops.space().tD == {(1,): 1}
     assert (ops.I() @ ops.I() - ops.I()).norm() < tol
-    assert ops.operators == ('I',)
-    assert tuple(ops.to_dict()) == ('I',)
+    assert ops.operators == ('I', 'S')
+    assert tuple(ops.to_dict()) == ('I', 'S')
     for name in ('x', 'y', 'iy', 'z', 'sx', 'sy', 'isy', 'sz', 'sp', 'sm'):
         with pytest.raises(yastn.YastnError, match='not SU2 scalars'):
             getattr(ops, name)()

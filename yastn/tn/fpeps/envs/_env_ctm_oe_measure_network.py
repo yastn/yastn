@@ -24,7 +24,7 @@ labels and fermionic signs are described in ``docs/source/fpeps/measurement_oe.r
 """
 import itertools
 from .._geometry import Site
-from .._gates_auxiliary import BOND_FUSION, ordering_swaps, ordering_swap_axes
+from .._gates_auxiliary import BOND_FUSION, ordering_swaps, ordering_swap_axes, match_ancilla
 from ....tensor import YastnError
 from ....tensor._auxiliary import get_blocks
 
@@ -316,7 +316,8 @@ def _build_ketbra_separate(env, tens, Nx, Ny, minx, miny, maxx, maxy, tl, tr, bl
             site_args += [Ak, [tag(lb + ('k',), i, j) for lb in lbls] + [ket_p],
                           Ab, [tag(lb + ('b',), i, j) for lb in lbls] + [('p', i, j)]]
             if dpt.op is not None:  # Gate leg order (phys_out, phys_in, left, right), ends trimmed
-                op = dpt.op.drop_leg_history(axes=tuple(range(2, dpt.op.ndim)))  # bond legs only
+                op = match_ancilla(dpt.ket, dpt.op, dirn=dpt.op_dirn) if dpt.op_dirn else dpt.op
+                op = op.drop_leg_history(axes=tuple(range(2, op.ndim)))  # bond legs only
                 site_args += [op, [('p', i, j), ket_p, *op_bonds.get(s, ())]]
 
             inv = [dpt.trans.index(d) for d in range(4)]  # canonical direction -> label index

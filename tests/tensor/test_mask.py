@@ -15,7 +15,7 @@
 """ Test yastn.mask() """
 import pytest
 import yastn
-from ._nonabelian_utils import matrix_tensor
+from ._nonabelian_utils import matrix_tensor, four_leg_tensor
 
 tol = 1e-12  #pylint: disable=invalid-name
 
@@ -35,6 +35,26 @@ def test_mask_SU2(config_kwargs):
 
 def test_mask_SU2xU1(config_kwargs):
     _run_mask_nonabelian(config_kwargs, 'SU2xU1')
+
+
+@pytest.mark.parametrize('sym', ['SU2', 'SU2xU1'])
+@pytest.mark.parametrize('axis', [0, 2])
+def test_mask_preserves_fusion_channels(config_kwargs, sym, axis):
+    config = yastn.make_config(sym=sym, **config_kwargs)
+    config.backend.random_seed(seed=17)
+    a = four_leg_tensor(config, D=2)
+    leg = a.get_legs(axis)
+    projector = yastn.eye(config, legs=leg)
+    charge = leg.t[0]
+    projector.set_block(ts=(charge, charge), Ds=(2, 2), val=[1, 0])
+    mask = projector > 0
+    first = mask.apply_mask(a, axes=axis)
+    second = mask.bitwise_not().apply_mask(a, axes=axis)
+    # Partitioning multiplicities must preserve every independent singlet
+    # channel, even when their external charge labels are identical.
+    assert first.norm() ** 2 + second.norm() ** 2 == pytest.approx(a.norm() ** 2, abs=tol)
+    restored = yastn.block({(0,): first, (1,): second}, common_legs=tuple(i for i in range(4) if i != axis))
+    assert (restored.drop_leg_history(axes=axis) - a).norm() < tol
 
 
 def test_mask_basic(config_kwargs):

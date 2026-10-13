@@ -2,6 +2,7 @@ import pytest
 import yastn
 from yastn.tn import fpeps
 from yastn.tn.fpeps.envs.rdm import _fermionic_exchange
+from ._multiplet_models import hubbard_hamiltonian, tj_hamiltonian
 
 
 def _scalar_nonabelian_peps(config):
@@ -53,13 +54,13 @@ def _run_model_ctm(ops, gate):
 def test_ctm_Heisenberg_SU2_nontrivial(config_kwargs):
     opts = {**config_kwargs, 'lazy_threshold': 0}
     ops = yastn.operators.Spin12(sym='SU2', **opts)
-    _run_model_ctm(ops, fpeps.gates.gate_nn_Heisenberg_SU2(1.0, 0.02, ops.I()))
+    _run_model_ctm(ops, fpeps.gates.gate_nn_Heisenberg(1.0, 0.02, ops.I(), ops.S()))
 
 
 def test_ctm_Hubbard_SU2xU1_nontrivial(config_kwargs):
     opts = {**config_kwargs, 'lazy_threshold': 0}
     ops = yastn.operators.SpinfulFermions(sym='SU2xU1', **opts)
-    gate = fpeps.gates.gate_nn_Hubbard_SU2xU1(0.7, 3.2, -0.15, 0.02, ops.I())
+    gate = fpeps.gates.gate_nn_exp(0.02, ops.I(), hubbard_hamiltonian(ops, 0.7, 3.2, -0.15))
     _run_model_ctm(ops, gate)
 
 
@@ -82,7 +83,7 @@ def test_Hubbard_SU2xU1_infinite_temperature_weights(config_kwargs):
 def test_ctm_tJ_SU2xU1_nontrivial(config_kwargs):
     opts = {**config_kwargs, 'lazy_threshold': 0}
     ops = yastn.operators.SpinfulFermions_tJ(sym='SU2xU1', **opts)
-    gate = fpeps.gates.gate_nn_tJ_SU2xU1(0.3, 0.7, -0.1, 0.2, 0.02, ops.I())
+    gate = fpeps.gates.gate_nn_exp(0.02, ops.I(), tj_hamiltonian(ops, 0.3, 0.7, -0.1, 0.2))
     _run_model_ctm(ops, gate)
 
 
@@ -127,21 +128,21 @@ def _run_model_ntu(ops, gate):
 def test_ntu_Heisenberg_SU2(config_kwargs):
     opts = {**config_kwargs, 'lazy_threshold': 0}
     ops = yastn.operators.Spin12(sym='SU2', **opts)
-    gate = fpeps.gates.gate_nn_Heisenberg_SU2(1.0, 0.04, ops.I())
+    gate = fpeps.gates.gate_nn_Heisenberg(1.0, 0.04, ops.I(), ops.S())
     _run_model_ntu(ops, gate)
 
 
 def test_ntu_Hubbard_SU2xU1(config_kwargs):
     opts = {**config_kwargs, 'lazy_threshold': 0}
     ops = yastn.operators.SpinfulFermions(sym='SU2xU1', **opts)
-    gate = fpeps.gates.gate_nn_Hubbard_SU2xU1(0.7, 3.2, -0.15, 0.04, ops.I())
+    gate = fpeps.gates.gate_nn_exp(0.04, ops.I(), hubbard_hamiltonian(ops, 0.7, 3.2, -0.15))
     _run_model_ntu(ops, gate)
 
 
 def test_ntu_tJ_SU2xU1(config_kwargs):
     opts = {**config_kwargs, 'lazy_threshold': 0}
     ops = yastn.operators.SpinfulFermions_tJ(sym='SU2xU1', **opts)
-    gate = fpeps.gates.gate_nn_tJ_SU2xU1(0.3, 0.7, -0.1, 0.2, 0.04, ops.I())
+    gate = fpeps.gates.gate_nn_exp(0.04, ops.I(), tj_hamiltonian(ops, 0.3, 0.7, -0.1, 0.2))
     _run_model_ntu(ops, gate)
 
 
@@ -150,11 +151,11 @@ def test_full_multibond_ntu_then_ctm(config_kwargs):
     opts = {**config_kwargs, 'lazy_threshold': 0}
     cases = []
     ops = yastn.operators.Spin12(sym='SU2', **opts)
-    cases.append((ops, fpeps.gates.gate_nn_Heisenberg_SU2(1.0, 0.02, ops.I())))
+    cases.append((ops, fpeps.gates.gate_nn_Heisenberg(1.0, 0.02, ops.I(), ops.S())))
     ops = yastn.operators.SpinfulFermions(sym='SU2xU1', **opts)
-    cases.append((ops, fpeps.gates.gate_nn_Hubbard_SU2xU1(0.7, 3.2, -0.15, 0.02, ops.I())))
+    cases.append((ops, fpeps.gates.gate_nn_exp(0.02, ops.I(), hubbard_hamiltonian(ops, 0.7, 3.2, -0.15))))
     ops = yastn.operators.SpinfulFermions_tJ(sym='SU2xU1', **opts)
-    cases.append((ops, fpeps.gates.gate_nn_tJ_SU2xU1(0.3, 0.7, -0.1, 0.2, 0.02, ops.I())))
+    cases.append((ops, fpeps.gates.gate_nn_exp(0.02, ops.I(), tj_hamiltonian(ops, 0.3, 0.7, -0.1, 0.2))))
 
     for ops, gate in cases:
         geometry = fpeps.SquareLattice(dims=(2, 2), boundary='obc')

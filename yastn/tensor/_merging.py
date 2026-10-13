@@ -1002,7 +1002,9 @@ def _meta_mask(sym, struct, mask_t, mask_D, axis):
     D_a = bl_a.D[:, :1] if struct.isdiag else bl_a.D
     taxis = bl_a.t[:, axis, :]
 
-    ind_a = find_matching_indices(bl_a.t, bl_c.t, both=False)
+    # Equal external charges can label several SU2 fusion channels. Keep
+    # those blocks distinct when masking or embedding into a larger space.
+    ind_a = find_matching_block_keys(bl_a.t, bl_a.channels, bl_c.t, bl_c.channels, both=False)
     meta = np.column_stack([bl_c.slc, D_c, bl_a.slc[ind_a], D_a[ind_a], taxis[ind_a]])
     meta_dt = np.dtype([
         ('sln', np.int64, (2,)),

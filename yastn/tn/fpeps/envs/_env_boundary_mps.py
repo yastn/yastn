@@ -17,10 +17,11 @@ from itertools import accumulate
 from tqdm import tqdm
 
 from ._env_contractions import identity_boundary
-from ._env_window import _measure_nsite, _measure_2site, _sample
+from ._env_window import set_operator_, _measure_nsite, _measure_2site, _sample
 from .._gates_auxiliary import clear_operator_input
 from .._peps import PEPS_CLASSES, Peps2Layers
 from ... import mps
+from ....operators._multiplets import _is_multiplet, _multiplet_pair
 from ....tensor import YastnError
 
 
@@ -278,10 +279,17 @@ class EnvBoundaryMPS():
                 s0, s1 = bond
                 nx = s0[0]
                 for nz, (op1, op2) in ops.items():
-                    tm[nx].set_operator_(op1)
-                    tm[nx + 1].set_operator_(op2)
+                    original = tm[nx], tm[nx + 1]
+                    if _is_multiplet(op1) or _is_multiplet(op2):
+                        first, second = _multiplet_pair(op1, op2)
+                        set_operator_(tm, nx, first, dirn='t')
+                        set_operator_(tm, nx + 1, second, dirn='b')
+                    else:
+                        tm[nx].set_operator_(op1)
+                        tm[nx + 1].set_operator_(op2)
                     env.update_env_(nx + 1, to='first')
                     env.update_env_(nx, to='first')
+                    tm[nx], tm[nx + 1] = original
                     tm[nx].del_operator_()
                     tm[nx + 1].del_operator_()
                     out[(s0, s1) + nz] = env.measure(bd=(nx - 1, nx)) / norm_env
@@ -296,10 +304,17 @@ class EnvBoundaryMPS():
                 s0, s1 = bond
                 ny = s0[1]
                 for nz, (op1, op2) in ops.items():
-                    tm[ny].set_operator_(op1)
-                    tm[ny + 1].set_operator_(op2)
+                    original = tm[ny], tm[ny + 1]
+                    if _is_multiplet(op1) or _is_multiplet(op2):
+                        first, second = _multiplet_pair(op1, op2)
+                        set_operator_(tm, ny, first, dirn='l')
+                        set_operator_(tm, ny + 1, second, dirn='r')
+                    else:
+                        tm[ny].set_operator_(op1)
+                        tm[ny + 1].set_operator_(op2)
                     env.update_env_(ny + 1, to='first')
                     env.update_env_(ny, to='first')
+                    tm[ny], tm[ny + 1] = original
                     tm[ny].del_operator_()
                     tm[ny + 1].del_operator_()
                     out[(s0, s1) + nz] = env.measure(bd=(ny - 1, ny)) / norm_env

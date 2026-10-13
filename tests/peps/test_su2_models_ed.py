@@ -4,7 +4,7 @@ import pytest
 from scipy.linalg import expm
 import yastn
 from yastn.tn import fpeps
-from yastn.tn.fpeps.envs.rdm import rdm1x2
+from ._multiplet_models import hubbard_hamiltonian, tj_hamiltonian
 
 
 def _expand_magnetic(a):
@@ -69,7 +69,7 @@ def test_fermionic_SU2_thermal_against_ED(config_kwargs, sym, model, step):
         mu0 = mu1 = 0.55
         H = U * (n[0] @ n[1] + n[2] @ n[3])
         ops = yastn.operators.SpinfulFermions(sym=sym, **config_kwargs)
-        gate = getattr(fpeps.gates, 'gate_nn_Hubbard_' + sym)(t, U, mu0, step, ops.I())
+        gate = fpeps.gates.gate_nn_exp(step, ops.I(), hubbard_hamiltonian(ops, t, U, mu0))
         keep = np.arange(16)
     else:
         sz0, sz1 = (n[0] - n[1]) / 2, (n[2] - n[3]) / 2
@@ -77,7 +77,7 @@ def test_fermionic_SU2_thermal_against_ED(config_kwargs, sym, model, step):
         H = J * (sz0 @ sz1 + (sp0 @ sp1.T + sp0.T @ sp1) / 2
                  - (n[0] + n[1]) @ (n[2] + n[3]) / 4)
         ops = yastn.operators.SpinfulFermions_tJ(sym=sym, **config_kwargs)
-        gate = getattr(fpeps.gates, 'gate_nn_tJ_' + sym)(J, t, mu0, mu1, step, ops.I())
+        gate = fpeps.gates.gate_nn_exp(step, ops.I(), tj_hamiltonian(ops, J, t, mu0, mu1))
         keep = np.array([s for s in range(16) if s & 3 != 3 and (s >> 2) & 3 != 3])
     H -= mu0 * (n[0] + n[1]) + mu1 * (n[2] + n[3])
     for left, right in ((0, 2), (1, 3)):
@@ -95,6 +95,17 @@ def test_fermionic_SU2_thermal_against_ED(config_kwargs, sym, model, step):
     rho = propagator @ propagator.conj().T
     rho /= np.trace(rho)
     _, env = _thermal_peps(ops, gate, config_kwargs)
+    hopping = c[0].T @ c[2] + c[1].T @ c[3]
+    sz0, sz1 = (n[0] - n[1]) / 2, (n[2] - n[3]) / 2
+    sp0, sp1 = c[0].T @ c[1], c[2].T @ c[3]
+    spin = sz0 @ sz1 + (sp0 @ sp1.T + sp0.T @ sp1) / 2
+    for pair, observable in (
+            ((ops.cp_spinor(), ops.c_spinor()), hopping),
+            ((ops.c_spinor(), ops.cp_spinor()), -hopping.T),
+            ((ops.S(), ops.S()), spin)):
+        expected = np.trace(rho @ observable[np.ix_(keep, keep)])
+        for value in env.measure_nn(*pair).values():
+            assert value == pytest.approx(expected, abs=2e-11)
     for site, value in env.measure_1site(ops.n_total()).items():
         number = n[2 * site[1]] + n[2 * site[1] + 1]
         assert value == pytest.approx(np.trace(rho @ number[np.ix_(keep, keep)]), abs=2e-11)
@@ -112,14 +123,9 @@ def test_heisenberg_SU2_thermal_energy(config_kwargs, step, spin):
     factory = yastn.operators.Spin12 if spin == 0.5 else yastn.operators.Spin1
     ops = factory(sym='SU2', **config_kwargs)
     J = 1.3
-    gate = fpeps.gates.gate_nn_Heisenberg_SU2(J, step, ops.I())
+    gate = fpeps.gates.gate_nn_Heisenberg(J, step, ops.I(), ops.S())
     psi, env = _thermal_peps(ops, gate, config_kwargs)
-    rho, _ = rdm1x2((0, 0), psi, env)
-    rho = rho.fuse_legs(((0, 2), (1, 3)), mode='hard')
-    weights = {j: (j + 1) * np.trace(rho.config.backend.to_numpy(rho[(j, j)]))
-               for j in range(0, int(4 * spin) + 1, 2)}
-    energy = sum(J * (j / 2 * (j / 2 + 1) - 2 * spin * (spin + 1)) / 2 * weight
-                 for j, weight in weights.items()) / sum(weights.values())
+    energy = J * env.measure_nn(ops.S(), ops.S(), bond=((0, 0), (0, 1)))
     # Independent magnetic spin matrices, as in peps-torch groups/su2.py SS().
     magnetic = np.arange(-spin, spin + 1)
     raising = np.diag(np.sqrt(spin * (spin + 1) - magnetic[:-1] * (magnetic[:-1] + 1)), -1)

@@ -86,8 +86,8 @@ SU2 and SU2xU1 retain their optimized path enumerators and existing label
 formats. Implementing selection rules alone does not supply the CG and F/R
 data needed by tensor contractions.
 
-Scalar operators and evolution gates
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Scalar operators, multiplets, and evolution gates
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ``Spin12(sym='SU2')`` and ``Spin1(sym='SU2')`` provide the identity on a spin
 doublet and triplet, respectively. Individual spin
@@ -99,17 +99,78 @@ SU2 it is ``True``: ``2*j mod 2`` is the fermion parity. The pure SU2 Hubbard
 space has two spin-zero copies (empty, doubly occupied) and one spin doublet.
 ``SpinfulFermions_tJ`` supports both symmetries with double occupancy excluded.
 
-The PEPS gate constructors ``gate_nn_Heisenberg_SU2``,
-``gate_nn_Hubbard_SU2``, ``gate_nn_Hubbard_SU2xU1``, ``gate_nn_tJ_SU2``, and
-``gate_nn_tJ_SU2xU1`` build invariant two-site
-gates. They accept real ``step`` for imaginary-time evolution or imaginary
-``step`` for real-time evolution. For example::
+All four operator families provide ``S()``, an invariant rank-three tensor
+with legs ``(out, in, irrep)`` and signatures ``(+1, -1, -1)``. The third leg
+has charge ``(2,)`` for SU2 or ``(2, 0)`` for SU2xU1. Its magnetic components
+are ``(Sm/sqrt(2), Sz, -Sp/sqrt(2))``.
+
+The fermionic families also provide ``cp_spinor()`` with signatures
+``(+1, -1, -1)`` and its dual ``c_spinor()`` with ``(+1, -1, +1)``.
+Their third legs carry charge ``(1,)`` or ``(1, +1)``; the opposite signatures
+encode creation versus annihilation. All multiplets are ordinary ``Tensor``
+objects with total charge zero. The third leg has multiplicity one, but its
+SU2 representation has dimension two for spinors and three for ``S()``.
+Pair contractions retain this representation as well as its fixed parity.
+
+``mps.generate_mpo`` accepts consecutive pairs of multiplets in each ``Hterm``.
+``(S(), S())`` means the spin dot product, and
+``(cp_spinor(), c_spinor())`` means spin-summed hopping, without factors of
+``1/3`` or ``1/2``. Pairs follow operator order, including reversed or repeated
+sites. Scalar factors and multiple pairs may appear in the same term::
+
+    from yastn.tn import mps
+
+    ops = yastn.operators.SpinfulFermions(sym='SU2xU1')
+    H = mps.generate_mpo(ops.I(), [
+        mps.Hterm(-1, (0, 1), (ops.cp_spinor(), ops.c_spinor())),
+        mps.Hterm(-1, (1, 0), (ops.cp_spinor(), ops.c_spinor())),
+    ], N=2)
+
+The MPS ``measure_2site`` and ``measure_nsite`` interfaces accept the same
+pairs, as do the CTM ``measure_nn``, ``measure_line``, ``measure_2site``, and
+``measure_nsite`` interfaces. CTM ``measure_nsite`` accepts ``opts_svd`` and
+``opts_var`` to control boundary-MPS compression. ``measure_line``,
+``measure_2x2`` and ``measure_nsite_exact`` retain their respective exact
+contractions, without boundary-MPS truncation. ``measure_2site`` propagates
+the fixed-irrep wire within its row/column sweep and reuses source environments. Boundary-MPS and belief-propagation environments also
+support nearest-neighbor multiplet pairs.
+
+``gate_nn_exp(step, I, H)`` accepts a two-site Hamiltonian MPO, including the
+example above. ``gate_nn_Heisenberg(J, step, I, S)`` accepts a spin multiplet,
+and ``gate_nn_hopping(t, step, I, c, cdag)`` accepts annihilation and creation
+spinors to build spin-summed hopping gates.
+
+The same gate constructors work with SU2 and SU2xU1 multiplets. Real ``step``
+gives imaginary-time evolution and imaginary ``step`` gives real-time evolution.
+For a complete Hubbard bond, add the scalar on-site interactions before
+exponentiating::
 
     from yastn.tn import fpeps
 
-    ops = yastn.operators.SpinfulFermions(sym='SU2xU1')
-    gate = fpeps.gates.gate_nn_Hubbard_SU2xU1(
-        t=1, U=4, mu=2, step=0.01j, I=ops.I())
+    t, U, mu = 1, 4, 2
+    c, cp = ops.c_spinor(), ops.cp_spinor()
+    local = U * ops.d() - mu * ops.n_total()
+    H = mps.generate_mpo(ops.I(), [
+        mps.Hterm(-t, (0, 1), (cp, c)),
+        mps.Hterm(-t, (1, 0), (cp, c)),
+        mps.Hterm(1, (0,), (local,)),
+        mps.Hterm(1, (1,), (local,)),
+    ], N=2)
+    gate = fpeps.gates.gate_nn_exp(0.01j, ops.I(), H)
+
+For t-J, use ``SpinfulFermions_tJ`` and replace the Hubbard interaction with
+``Hterm(J, (0, 1), (S, S))`` and ``Hterm(-J/4, (0, 1), (n, n))``, where
+``S = ops.S()`` and ``n = ops.n_total()``; include the desired on-site chemical
+potentials as scalar terms. This uses the same ``gate_nn_exp`` interface.
+
+Observables use the multiplets directly::
+
+    hopping = env.measure_nn(ops.cp_spinor(), ops.c_spinor())
+    spin_dot = env.measure_nn(ops.S(), ops.S())
+
+For a spin-rotation-invariant state, ``SzSz`` is ``spin_dot / 3`` on each bond.
+The reverse ordering ``measure_nn(c, cp)`` gives the negative of the reverse
+hopping on distinct sites, due to fermionic anticommutation.
 
 Hard-fused operator blocks are ordinary matrices in an orthonormal coupled
 basis. Fusion/unfusion accounts for CG normalization and duality phases;

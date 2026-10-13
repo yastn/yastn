@@ -21,10 +21,11 @@ from typing import NamedTuple
 
 import numpy as np
 
+from ...operators._multiplets import _is_multiplet, _multiplet_pair, _operator_factors
 from ._initialize import product_mpo
-from ._mps_obc import Mpo, MpsMpoOBC
-from ...initialize import zeros, block
-from ...tensor import ncon, Leg, YastnError, Tensor, svd_with_truncation, sign_canonical_order
+from ._mps_obc import Mpo, MpsMpoOBC, add
+from ...initialize import zeros, block, eye
+from ...tensor import ncon, Leg, YastnError, Tensor, svd_with_truncation, sign_canonical_order, tensordot, swap_charges
 
 
 class Hterm(NamedTuple):
@@ -44,7 +45,11 @@ class Hterm(NamedTuple):
     operators: Sequence[yastn.Tensor]
         local operators in the product that are different than the identity.
         *i*-th operator is acting at ``positions[i]``.
-        Each operator should have ``ndim=2`` and signature matching local identity.
+        Scalar operators have ``ndim=2`` and signature matching local identity.
+        SU2/SU2xU1 rank-three multiplets are supplied as consecutive singlet
+        pairs: ``(S(), S())`` contracts to the spin dot product, while
+        ``(cp_spinor(), c_spinor())`` contracts to spin-summed hopping.
+        Pairing follows operator order, independently of site order.
     """
     amplitude: float = 1.0
     positions: tuple = ()
@@ -147,6 +152,35 @@ def generate_mpo(I, terms=None, opts_svd=None, N=None, f_map=None) -> MpsMpoOBC:
     M = len(terms)
     config = unique_ops[0].config
     sym = config.sym
+    for term in terms:
+        if any(not isinstance(site, numbers.Integral) or site < 0 or site >= N for site in term.positions):
+            raise YastnError("Hterm: positions should be in 0, 1, ..., N-1.")
+
+    if any(_is_multiplet(op) for term in terms for op in term.operators):
+        # The scalar builder below accumulates a unique charge on each bond.
+        # Multiplets instead carry explicit irreps, whose products can have
+        # several fusion channels. Build each singlet pair as an MPO and use
+        # ordinary MPO multiplication/addition to retain those channels.
+        # Factor order matters for pairs sharing sites; do not sort by site.
+        identities = [unique_ops[ind] for ind in Iind]
+        states = []
+        for term in terms:
+            result = None
+            for factor in _operator_factors(term.operators, term.positions):
+                if len(factor) == 4:
+                    O, P, i, j = factor
+                    mpo = _pair_mpo(identities, O, P, i, j, f_map)
+                else:
+                    op, site = factor
+                    mpo = generate_mpo(identities, [Hterm(1, (site,), (op,))], f_map=f_map)
+                result = mpo if result is None else result @ mpo
+            states.append(product_mpo(identities) if result is None else result)
+        result = (add(*states, amplitudes=[term.amplitude for term in terms]) if M > 1
+                  else states[0] * terms[0].amplitude)
+        if M > 1 or opts_svd is not None:
+            result.canonize_(to='first', normalize=False)
+            result.truncate_(opts_svd={'tol': 1e-13} if opts_svd is None else opts_svd, normalize=False)
+        return result
     #
     # generator will assume operators in each term to be in fermionic order,
     # i.e., operators at later sites in the chain are applied first
@@ -154,8 +188,6 @@ def generate_mpo(I, terms=None, opts_svd=None, N=None, f_map=None) -> MpsMpoOBC:
     f_ordered = lambda s0, s1: s0 <= s1
     signs, sitess, opss, op_patterns = [], [], [], []
     for term in terms:
-        if any(site < 0 or site > N or not isinstance(site, numbers.Integral) for site in term.positions):
-            raise YastnError("Hterm: positions should be in 0, 1, ..., N-1.")
         if any(op.s != unique_ops[Iind[site]].s for op, site in zip(term.operators, term.positions)):
             raise YastnError("Hterm: operator should be a Tensor with ndim=2 and signature matching identity I at the corresponding site.")
         #
@@ -296,3 +328,38 @@ def generate_mpo(I, terms=None, opts_svd=None, N=None, f_map=None) -> MpsMpoOBC:
             J = (S / nS) @ V
         O[n] = nJ.transpose(axes=(0, 1, 3, 2))
     return O
+
+
+def _pair_mpo(identities, O, P, i, j, f_map=None):
+    """Propagate the irrep through MPO bonds and only its parity through swaps."""
+    A, B = _multiplet_pair(O, P)
+    if i == j:
+        local = tensordot(A, B, axes=((1, 2), (0, 2)))
+        ops = list(identities)
+        ops[i] = local + 0 * ops[i]
+        return product_mpo(ops)
+    N = len(identities)
+    f_map = list(range(N)) if f_map is None else f_map
+    charge = A.get_legs(2).t[0]
+    sign = swap_charges([charge], [charge], A.config.fermionic) if f_map[i] > f_map[j] else 1
+    if i > j:
+        A, B, i, j = B.switch_signature(2), A.switch_signature(2), j, i
+        A = A * (-1) ** charge[0]
+    bond = A.get_legs(2)
+    wire = eye(A.config, legs=(bond.conj(), bond), isdiag=False)
+    result = product_mpo(identities)
+    lo, hi = sorted((f_map[i], f_map[j]))
+    for n in range(N):
+        if n == i:
+            op = A.add_leg(axis=0, s=-1).transpose((0, 1, 3, 2))
+        elif n == j:
+            op = B.add_leg(axis=2, s=1).transpose((3, 0, 2, 1))
+        elif i < n < j:
+            op = tensordot(identities[n], wire, axes=((), ())).transpose((2, 0, 3, 1))
+        else:
+            op = result[n]
+        if lo <= f_map[n] < hi:
+            op = op.swap_gate(axes=3, charge=charge)
+        result[n] = op
+    result.factor = sign
+    return result
