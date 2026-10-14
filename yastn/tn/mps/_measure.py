@@ -22,8 +22,8 @@ import numpy as np
 
 from ._env import Env, Env2
 from ._mps_obc import MpsMpoOBC
-from ...operators._multiplets import _is_multiplet
-from ._generate_mpo import generate_mpo, Hterm, _pair_mpo
+from ...operators._multiplets import _is_multiplet, _multiplet_pair
+from ._generate_mpo import generate_mpo, Hterm
 from ._initialize import product_mpo
 from ...initialize import eye
 from ...tensor import YastnError, Tensor, qr, swap_charges, sign_canonical_order, tensordot
@@ -158,7 +158,8 @@ def measure_2site(bra, O, P, ket, bonds='<') -> dict[tuple[int, int], float] | f
         An MPS which will be conjugated.
 
     O, P: yastn.Tensor or dict
-        Operators with signature (1, -1).
+        Rank-two operators with signature (1, -1), or a compatible pair of
+        rank-three multiplets whose auxiliary legs are contracted to a singlet.
         Each can also be a dictionary {site: operator} with all operators of the same charge.
 
     ket: yastn.tn.mps.MpsMpoOBC
@@ -202,99 +203,89 @@ def measure_2site(bra, O, P, ket, bonds='<') -> dict[tuple[int, int], float] | f
         P0 = P
         P = {k: P for k in range(ket.N)}
 
-    if any(_is_multiplet(op) for mapping in (O, P) for op in mapping.values()):
-        results = _measure_2site_multiplets(bra, O, P, ket, pairs)
-        return results.popitem()[1] if return_float and results else results
-
-    n_left = O0.config.sym.add_charges(O0.n, P0.n, new_signature=-1)
-
-    pairs = [(n0, n1) for n0, n1 in pairs if (n0 in O and n1 in P)]
-    s0s1 = [pair for pair in pairs if pair[0] < pair[1]]
-    s1s0 = [pair[::-1] for pair in pairs if pair[0] > pair[1]]
-    s0s0 = sorted(pair[0] for pair in pairs if pair[0] == pair[1])
-
-    s1s = sorted(set(pair[1] for pair in s0s1))
-    s0s1 = sorted(s0s1, key=lambda x: (-x[0], x[1]))
-
-    s0s = sorted(set(pair[1] for pair in s1s0))
-    s1s0 = sorted(s1s0, key=lambda x: (-x[0], x[1]))
-
-    env0 = Env2(bra, ket, n_left=n_left)
-    env0.setup_(to='first').setup_(to='last')
-    results = {}
-
-    # here <O P> in desired order
-    env = env0.shallow_copy()
-    for n1 in s1s:
-        env.update_env_op_(n1, P[n1], to='first')
-    for n0, n01s in groupby(s0s1, key=lambda x: x[0]):
-        env.update_env_op_(n0, O[n0], to='last')
-        n = n0
-        for _, n1 in n01s:
-            while n + 1 < n1:
-                n += 1
-                env.update_env_(n, to='last')
-            results[(n0, n1)] = env.measure(bd=(n, n1))
-
-    # here <P O>, and we need to correct by the sign derived from swapping the operators.
-    sign = swap_charges([O0.n], [P0.n], O0.config.fermionic)
-    env = env0.shallow_copy()
-    for n1 in s0s:
-        env.update_env_op_(n1, O[n1], to='first')
-    for n0, n01s in groupby(s1s0, key=lambda x: x[0]):
-        env.update_env_op_(n0, P[n0], to='last')
-        n = n0
-        for _, n1 in n01s:
-            while n + 1 < n1:
-                n += 1
-                env.update_env_(n, to='last')
-            results[(n1, n0)] = sign * env.measure(bd=(n, n1))
-
-    env = env0.shallow_copy()
-    for n0 in s0s0:
-        env.update_env_op_(n0, O[n0] @ P[n0], to='first')
-        results[(n0, n0)] = env.measure(bd=(n0 - 1, n0))
-
-    return results.popitem()[1] if return_float and len(results) > 0 else results
-
-
-def _measure_2site_multiplets(bra, O, P, ket, pairs):
-    """Reuse left/right environments while carrying the complete irrep wire."""
-    identities = [eye(ket.config, legs=ket[n].get_legs(1), isdiag=False) for n in ket.sweep()]
-    identity = product_mpo(identities)
-    env0 = Env(bra, [identity, ket]).setup_(to='first').setup_(to='last')
-    groups, results = {}, {}
+    # Group only by the representation carried between endpoints and scan
+    # direction. Site-dependent operator values share the same environments.
+    # Rank-two operators retain the cheaper Env2 contractions; multiplets use
+    # an MPO bond carrying the irrep. Both follow exactly the same sweep below.
+    groups = {}
     for i, j in pairs:
         if i not in O or j not in P:
             continue
-        if not (_is_multiplet(O[i]) or _is_multiplet(P[j])):
-            results[i, j] = measure_2site(bra, O[i], P[j], ket, bonds=(i, j))
-            continue
-        key = min(i, j), id(O[i]), id(P[j]), i > j
-        groups.setdefault(key, []).append((i, j))
-    for (source, _, _, reverse), group in groups.items():
-        group = sorted(group, key=max)
-        i, j = group[-1]
-        mpo = _pair_mpo(identities, O[i], P[j], i, j)
-        env = env0.shallow_copy()
-        env.op = mpo
-        n = source
-        for i, j in group:
-            target = max(i, j)
-            if source == target:
-                local = _pair_mpo(identities, O[i], P[j], i, j)
-                same = env0.shallow_copy()
-                same.op = local
-                results[i, j] = same.measure(bd=(source - 1, source + 1))
-                continue
-            while n < target:
-                env.update_env_(n, to='last')
+        legs = tuple(op.get_legs(2) if _is_multiplet(op) else None for op in (O[i], P[j]))
+        groups.setdefault((*legs, i > j), []).append((i, j))
+
+    envs, results = {}, {}
+    for (leg0, leg1, reverse), group in groups.items():
+        multiplet = leg0 is not None or leg1 is not None
+        left, right = (P, O) if reverse else (O, P)
+        ordered = [(j, i) if reverse else (i, j) for i, j in group]
+        left = {i: left[i] for i, _ in ordered}
+        right = {j: right[j] for _, j in ordered}
+        L, R = next(iter(left.values())), next(iter(right.values()))
+        if multiplet:
+            A, _ = _multiplet_pair(L, R)
+            charge = A.get_legs(2).t[0]
+            sign = swap_charges([charge], [charge], ket.config.fermionic) if reverse else 1
+            left = {i: _multiplet_pair(op, R)[0] for i, op in left.items()}
+            right = {j: _multiplet_pair(L, op)[1] for j, op in right.items()}
+            onsite = {i: tensordot(left[i], right[i], axes=((1, 2), (0, 2)))
+                      for i, j in ordered if i == j}
+            if True not in envs:
+                identities = [eye(ket.config, legs=ket[n].get_legs(1), isdiag=False) for n in ket.sweep()]
+                identity = product_mpo(identities)
+                envs[True] = Env(bra, [identity, ket]).setup_(to='first').setup_(to='last')
+            env = envs[True].shallow_copy()
+            env.op = identity.shallow_copy()
+            # An open irrep crosses physical inputs between the endpoints.
+            # This is the same MPO convention used by generate_mpo: the left
+            # endpoint includes the parity swap, the right endpoint does not.
+            wire = eye(ket.config, legs=(A.get_legs(2).conj(), A.get_legs(2)), isdiag=False)
+            for n, local in enumerate(identities):
+                env.op[n] = tensordot(local, wire, axes=((), ())).transpose((2, 0, 3, 1)).swap_gate(axes=3, charge=charge)
+            left = {i: op.add_leg(axis=0, s=-1).transpose((0, 1, 3, 2)).swap_gate(axes=3, charge=charge)
+                    for i, op in left.items()}
+            right = {j: op.add_leg(axis=2, s=1).transpose((3, 0, 2, 1)) for j, op in right.items()}
+            onsite = {i: op.add_leg(axis=0, s=-1).add_leg(axis=2, s=1) for i, op in onsite.items()}
+        else:
+            if False not in envs:
+                n_left = O0.config.sym.add_charges(O0.n, P0.n, new_signature=-1)
+                envs[False] = Env2(bra, ket, n_left=n_left).setup_(to='first').setup_(to='last')
+            env = envs[False].shallow_copy()
+            sign = swap_charges([L.n], [R.n], ket.config.fermionic) if reverse else 1
+            onsite = {i: left[i] @ right[i] for i, j in ordered if i == j}
+        values = _measure_2site_sweep(env, left, right, onsite, ordered)
+        for (i, j), value in values.items():
+            results[(j, i) if reverse else (i, j)] = sign * value
+    return results.popitem()[1] if return_float and results else results
+
+
+def _measure_2site_sweep(env, left, right, onsite, pairs):
+    """Cache each right endpoint, then propagate each left endpoint once.
+
+    Descending source order preserves the bare left environments needed by
+    the next source. Right endpoints are prepared in ascending order so that
+    each starts from the bare environment on its right. In-between updates
+    transport either the Env2 charge or the explicit MPO irrep, using the
+    environment's own contraction kernels. No MPO is rebuilt per pair.
+    """
+    results = {}
+    # On-site products must use the bare environments, before either side
+    # acquires a separated endpoint.
+    local = env.shallow_copy()
+    for i in sorted(onsite):
+        local.update_env_op_(i, onsite[i], to='first')
+        results[i, i] = local.measure(bd=(i - 1, i))
+    separated = [(i, j) for i, j in pairs if i < j]
+    for j in sorted({j for _, j in separated}):
+        env.update_env_op_(j, right[j], to='first')
+    for i, targets in groupby(sorted(separated, key=lambda pair: (-pair[0], pair[1])), key=lambda pair: pair[0]):
+        env.update_env_op_(i, left[i], to='last')
+        n = i
+        for _, j in targets:
+            while n + 1 < j:
                 n += 1
-            endpoint = _pair_mpo(identities, O[i], P[j], i, j)[target]
-            old = mpo[target]
-            mpo[target] = endpoint
-            results[i, j] = env.measure(bd=(target - 1, target + 1))
-            mpo[target] = old
+                env.update_env_(n, to='last')
+            results[i, j] = env.measure(bd=(n, j))
     return results
 
 
@@ -350,6 +341,11 @@ def measure_nsite(bra, *operators, ket, sites=None) -> float:
         raise YastnError("Number of operators and sites should match.")
     if any(_is_multiplet(op) for op in operators):
         identities = [eye(ket.config, legs=ket[n].get_legs(1), isdiag=False) for n in ket.sweep()]
+        # generate_mpo includes endpoint-exchange signs and Jordan-Wigner
+        # swaps for each multiplet pair, and preserves the order of products
+        # of pairs (including overlapping sites). Their invariant total n=0
+        # is NOT their fermionic parity. Applying sign_canonical_order here
+        # would either miss that parity or count the exchange sign twice.
         mpo = generate_mpo(identities, [Hterm(1, sites, operators)])
         env = Env(bra, [mpo, ket])
         for n in bra.sweep(to='last'):

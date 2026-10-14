@@ -211,6 +211,13 @@ def insert_operator_product_(tens, operators, sites, origin, f_ordered):
                 add_charge_swaps_(tens, (x0, yy), op.n, axes=['b0', 'k2', 'k4'])
             continue
         O, P, (xa, ya), (xb, yb) = factor
+        # Keep the requested endpoint order, even when B precedes A in
+        # the PEPS fermionic ordering. set_operator_ supplies the physical/
+        # auxiliary-leg crossings and apply_gate_onsite routes those legs
+        # through the graded PEPS. Together they include the exchange sign;
+        # do not add another endpoint-permutation sign here. The invariant
+        # tensor charge n=0 cannot be used to infer an endpoint's parity.
+        # _multiplet_pair itself only fixes the SU2 dual metric.
         A, B = _multiplet_pair(O, P)
         if (xa, ya) == (xb, yb):
             # Close both the physical multiplication index and the irrep at
@@ -384,6 +391,11 @@ def _measure_2site(env, O0, O1, xrange, yrange, offset, pairs="corner <=", dirn=
     """
     Worker function for measure_2site; works for EnvBoundaryMPS and EnvWindow (derived from EnvCTM).
     See docstring of :meth:`EnvCTM.measure_2site`.
+
+    Both operator types use the same row/column environment sweeps below.
+    Their local insertions differ: Abelian charge swaps can use a fixed
+    charge, while multiplets also transport an explicit SU2 irrep. The
+    environment updates, normalization, zipper and compression are shared.
     """
     sites = [Site(nx, ny) for nx in range(*xrange) for ny in range(*yrange)]
     O0dict = clear_operator_input(O0, sites)

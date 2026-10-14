@@ -305,6 +305,29 @@ def test_multiplet_mps_pair_sweep(config_kwargs, monkeypatch, sym):
                 matrix = sum(c[i][s] @ c[j][s].T for s in (0, 1))
             assert value == pytest.approx(np.trace(rho @ matrix), abs=3e-12), (i, j, pair[0] is cp, pair[0] is S)
 
+    # Site-dependent values must share the sweep without reusing a previous
+    # site's endpoint. Include complex coefficients and reversed/site-local
+    # bonds; compare against the independently constructed Fock matrices.
+    O = {i: (i + 1j) * cp for i in range(3)}
+    P = {j: (2 - j) * annihilate for j in range(3)}
+    result = mps.measure_2site(psi, O, P, psi, bonds='a')
+    for (i, j), value in result.items():
+        matrix = (i + 1j) * (2 - j) * sum(c[i][s].T @ c[j][s] for s in (0, 1))
+        assert value == pytest.approx(np.trace(rho @ matrix), abs=5e-12)
+    # Distinct irreps (and rank-two scalars) can coexist in sparse dictionaries
+    # provided the requested bonds form compatible pairs.
+    O = {0: cp, 1: S, 2: ops.n_total()}
+    P = {0: S, 1: annihilate, 2: ops.n_total()}
+    result = mps.measure_2site(psi, O, P, psi, bonds=[(0, 1), (1, 0), (2, 2)])
+    density = sum(c[2][s].T @ c[2][s] for s in (0, 1))
+    matrices = {(0, 1): sum(c[0][s].T @ c[1][s] for s in (0, 1)),
+                (1, 0): sum(_embed(s, 1, 3) @ _embed(s, 0, 3) for s in spin),
+                (2, 2): density @ density}
+    for bond, value in result.items():
+        assert value == pytest.approx(np.trace(rho @ matrices[bond]), abs=5e-12)
+    with pytest.raises(yastn.YastnError, match='compatible pairs'):
+        mps.measure_2site(psi, cp, ops.n_total(), psi, bonds=(0, 1))
+
 
 @pytest.mark.parametrize('sym', ['SU2', 'SU2xU1'])
 def test_set_operator_existing_string(config_kwargs, sym):
@@ -349,6 +372,14 @@ def _multiple_multiplet_cases(ops, model, N):
         ('six_spins', (S,) * 6, (0, 1, 1, last, last, 0),
          ss(0, 1) @ ss(1, last) @ ss(last, 0)),
         ('four_spinors', (cp, annihilate) * 2, (0, 1, 1, last),
+         hopping(0, 1) @ hopping(1, last)),
+        # Swap the endpoints of one or both off-site spinor pairs. The
+        # four_spinors result must acquire respectively one or two minus
+        # signs. This catches missing as well as double-counted fermionic
+        # exchange signs in nsite/line insertion and MPO construction.
+        ('exchange_one_pair', (annihilate, cp, cp, annihilate), (1, 0, 1, last),
+         -hopping(0, 1) @ hopping(1, last)),
+        ('exchange_both_pairs', (annihilate, cp) * 2, (1, 0, last, 1),
          hopping(0, 1) @ hopping(1, last)),
         ('six_spinors', (cp, annihilate) * 3, (0, 1, 1, last, last, 0),
          hopping(0, 1) @ hopping(1, last) @ hopping(last, 0)),

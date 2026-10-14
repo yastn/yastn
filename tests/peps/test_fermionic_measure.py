@@ -350,3 +350,43 @@ def test_measure_lbp(config_kwargs, sym, L=3):
 
 if __name__ == '__main__':
     pytest.main([__file__, "-vs", "--backend", "np"]) #, "torch", "--device", "cuda"])
+
+
+@pytest.mark.parametrize('direction', ['h', 'v'])
+def test_measure_2site_u1_ccdag(config_kwargs, direction):
+    """Both PEPS environments: c_i cdag_j, including reverse and on-site bonds."""
+    import numpy as np
+    from scipy.linalg import expm
+
+    ops = yastn.operators.SpinlessFermions(sym='U1', **config_kwargs)
+    psi = fpeps.product_peps(fpeps.SquareLattice((2, 2), boundary='obc'), ops.I())
+    sites = tuple(sorted(psi.sites(), key=lambda s: s[::-1]))
+    # Independent Jordan-Wigner matrices in the PEPS fermionic site order.
+    annihilate = np.array([[0., 1.], [0., 0.]])
+    parity = np.diag([1., -1.])
+    c = []
+    for i in range(4):
+        matrix = np.ones((1, 1))
+        for j in range(4):
+            matrix = np.kron(matrix, parity if j < i else annihilate if j == i else np.eye(2))
+        c.append(matrix)
+    U = np.eye(16)
+    for i, j in ((0, 1), (1, 3), (3, 2)):
+        gate = fpeps.gates.gate_nn_hopping(.7, .21, ops.I(), ops.c(), ops.cp(), bond=(sites[i], sites[j]))
+        psi.apply_gate_(gate)
+        U = expm(.7 * .21 * (c[i].T @ c[j] + c[j].T @ c[i])) @ U
+    rho = U @ U.T
+    rho /= np.trace(rho)
+    opts_svd = {'D_total': 64, 'tol': 1e-13}
+    ctm = fpeps.EnvCTM(psi, init='eye')
+    ctm.ctmrg_(opts_svd=opts_svd, max_sweeps=2)
+    boundary = fpeps.EnvBoundaryMPS(psi, opts_svd=opts_svd, setup='lrbt')
+    pairs = [(a, b) for a in sites for b in sites]
+    expected = {(a, b): np.trace(rho @ c[i] @ c[j].T)
+                for i, a in enumerate(sites) for j, b in enumerate(sites)}
+    assert abs(expected[sites[0], sites[1]]) > 1e-3
+    for env in (ctm, boundary):
+        values = env.measure_2site(ops.c(), ops.cp(), pairs=pairs, dirn=direction, opts_svd=opts_svd)
+        assert set(values) == set(expected)
+        for pair, value in values.items():
+            assert value == pytest.approx(expected[pair], abs=3e-12), (direction, pair)

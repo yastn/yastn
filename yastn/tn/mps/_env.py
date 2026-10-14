@@ -454,6 +454,20 @@ class EnvParent_3(EnvParent):
     def factor(self) -> float:
         return self.bra.factor * self.op.factor * self.ket.factor
 
+    def update_env_op_(self, n, op, to='first'):
+        """Update one environment with a replacement local MPO tensor.
+
+        Restore the transfer tensor afterwards, so cached endpoint insertions
+        do not change subsequent propagation through this site. This mirrors
+        Env2.update_env_op_, with an explicit MPO bond instead of a charge.
+        """
+        previous = self.op.A[n]
+        self.op.A[n] = op
+        try:
+            self.update_env_(n, to=to)
+        finally:
+            self.op.A[n] = previous
+
     def charges_missing(self, n):
         op_t = self.op.A[n].get_legs(axes=1).t
         psi_t = self.bra.A[n].get_legs(axes=1).t
