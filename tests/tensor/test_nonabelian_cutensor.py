@@ -3,7 +3,10 @@
 The CPU oracle evaluates the emitted descriptors as ordinary dense matrices.
 CUDA cases exercise the actual TAPP forward/backward when it is installed.
 """
-from types import SimpleNamespace
+import importlib.util
+from pathlib import Path
+import sys
+from types import ModuleType, SimpleNamespace
 
 import pytest
 import yastn
@@ -11,7 +14,6 @@ import yastn
 torch = pytest.importorskip('torch')
 
 from yastn.backend import backend_torch
-from yastn.backend._backend_torch_cutensor_nonabelian import contract
 from .test_nonabelian_metadata import test_nonabelian_gluing_against_magnetic_basis as _magnetic_check
 
 
@@ -50,20 +52,50 @@ def _dense_descriptor_oracle(a, b, axes_a, axes_b, *args):
     return torch.cat([product[region].reshape(-1) for region in regions])
 
 
+@pytest.fixture(scope='module')
+def oracle_backend():
+    """Load the production backend with only its external TAPP imports stubbed.
+
+    A separate module name keeps CPU oracle tests from replacing the real CUDA
+    backend. Keeping it in sys.modules lets the cache registry resize/clear it.
+    """
+    if importlib.util.find_spec('tapp_torch') is not None:
+        from yastn.backend import backend_torch_cutensor
+        yield backend_torch_cutensor
+        return
+
+    name = 'yastn.backend._cutensor_test_oracle'
+    path = Path(backend_torch.__file__).with_name('backend_torch_cutensor.py')
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    with pytest.MonkeyPatch.context() as loaded:
+        loaded.setitem(sys.modules, name, module)
+        with pytest.MonkeyPatch.context() as imports:
+            tapp = ModuleType('tapp_torch')
+            tapp.ops = ModuleType('tapp_torch.ops')
+            tapp.ops.descriptor_cache_stats = lambda: {}
+            tapp.ops.plan_cache_stats = lambda: {}
+            imports.setitem(sys.modules, 'tapp_torch', tapp)
+            imports.setitem(sys.modules, 'tapp_torch.ops', tapp.ops)
+            spec.loader.exec_module(module)
+        yield module
+
+
 @pytest.fixture(params=['oracle', 'cuda'])
-def accelerated(request):
+def accelerated(request, monkeypatch):
     calls = []
     if request.param == 'cuda':
         if not torch.cuda.is_available():
             pytest.skip('CUDA is required for the real cuTENSOR test')
         pytest.importorskip('tapp_torch')
         from yastn.backend import backend_torch_cutensor
-        backend = SimpleNamespace(**vars(backend_torch_cutensor))
+        implementation = backend_torch_cutensor
+        backend = SimpleNamespace(**vars(implementation))
         operation = backend_torch_cutensor.tensordot_bs_v2
         device = 'cuda'
     else:
-        backend = SimpleNamespace(**vars(backend_torch))
-        backend.BACKEND_ID = 'torch_cutensor'
+        implementation = request.getfixturevalue('oracle_backend')
+        backend = SimpleNamespace(**vars(implementation))
         # Exercise production dispatch without requiring the external CUDA op.
         backend.is_cpu_device = lambda device: False
         operation = _dense_descriptor_oracle
@@ -73,7 +105,9 @@ def accelerated(request):
         calls.append(1)
         return operation(*args)
 
-    backend.tensordot_nonabelian = lambda a, b, plan: contract(a, b, plan, counted)
+    # Patch the external operation at its production lookup site; packing,
+    # contraction dispatch and cache handling all run in the merged backend.
+    monkeypatch.setattr(implementation, 'tensordot_bs_v2', counted)
     return backend, device, calls
 
 

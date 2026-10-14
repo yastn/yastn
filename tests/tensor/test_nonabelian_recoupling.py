@@ -23,7 +23,7 @@ def test_fusion_tree_cache_reuses_structure(config_kwargs, sym):
 @pytest.mark.parametrize('dtype', ['float64', 'complex128'])
 def test_recoupling_kernel_and_adjoint(config_kwargs, dtype):
     torch = pytest.importorskip('torch')
-    from yastn.backend._backend_torch_nonabelian import _Recouple, _recoupling_plan
+    from yastn.backend.backend_torch import _Recouple, _recoupling_plan
     # Two input channels, unequal axes, both mixed into two output channels.
     shape, order = (2, 3, 2), (2, 0, 1)
     meta = ((0, 0, shape, 0.6), (0, 12, shape, 0.8),
@@ -43,7 +43,7 @@ def test_recoupling_kernel_and_adjoint(config_kwargs, dtype):
 
 def test_recoupling_tiled_and_unused_entries(config_kwargs):
     torch = pytest.importorskip('torch')
-    from yastn.backend._backend_torch_nonabelian import _Recouple, _recoupling_plan
+    from yastn.backend.backend_torch import _Recouple, _recoupling_plan
     # Cross the tile boundary, with uncovered input and output entries.
     shape = (1025, 1024)
     size = int(np.prod(shape))
@@ -62,7 +62,7 @@ def test_recoupling_gpu_matches_magnetic_basis(config_kwargs, monkeypatch):
     """Run the vectorized kernel on CPU too, using the independent CG oracle."""
     pytest.importorskip('torch')
     from yastn.backend import backend_torch
-    from yastn.backend._backend_torch_nonabelian import _Recouple, _recoupling_plan
+    from yastn.backend.backend_torch import _Recouple, _recoupling_plan
     from .test_nonabelian_metadata import test_nonabelian_adjacent_swaps_against_magnetic_basis
 
     def vectorized(data, order, meta, size):
