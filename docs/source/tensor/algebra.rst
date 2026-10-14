@@ -81,6 +81,31 @@ or composition of such operations over several tensors.
    :meth:`~yastn.Tensor.fuse_legs` calls.
 
 
+Non-Abelian contractions with cuTENSOR
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+With ``backend='torch_cutensor'`` and a CUDA device, non-Abelian contractions
+(including ``SU2`` and ``SU2xU1``) use channel-aware reduced-block metadata.
+Each nonzero gluing contribution becomes a separate contracted section of a
+block-sparse matrix product. The input packing applies its recoupling coefficient,
+and one ``tensordot_bs_v2`` call sums the products into their output channels.
+No expansion into the magnetic basis is needed. PyTorch autograd propagates
+through the packing, cuTENSOR contraction, and output embedding, including sums
+of gradients for reused input blocks.
+
+This path is selected independently of ``tensordot_policy``. Channel planning
+runs on the CPU and is cached; ``meta_tensordot_policy`` still controls the
+Abelian cuTENSOR path. Non-Abelian tensors on CPU use the ordinary PyTorch kernel.
+
+Packing duplicates reduced blocks that contribute more than once, so temporary
+memory depends on the number of nonzero gluing contributions. Compact device
+metadata is cached, while element-sized gather indices are temporary. Combining
+many block products into one call can reduce launch overhead, but packing and
+cuTENSOR planning can outweigh that benefit for small contractions. Measure the
+workload with ``python autotune/bench_nonabelian_cutensor.py`` on the target GPU;
+the script checks values and gradients before reporting warmed-up timings.
+
+
 Transposition
 -------------
 

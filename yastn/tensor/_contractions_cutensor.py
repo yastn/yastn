@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import os
 from functools import lru_cache
+from typing import NamedTuple
 
 import numpy as np
 
@@ -37,6 +38,79 @@ from ._contractions import (_convert_bl_for_cutensor, _cutensor_meta, _match_leg
                             get_blocks_and_subslices, _matched_pair_indices,)
 from ._tests import YastnError
 from ..backend import import_backend
+from .._cache_registry import register_cache
+
+
+class _NonabelianCutensorPlan(NamedTuple):
+    struct: object
+    size: int
+    slices_a: tuple
+    slices_b: tuple
+    slices_c: tuple
+    coefficients: tuple
+    descriptors: tuple
+    hashes: tuple
+
+
+@register_cache(key='tensordot_nonabelian_cutensor')
+@lru_cache(maxsize=1024)
+def _meta_tensordot_nonabelian_cutensor(sym, struct_a, struct_b,
+                                       nout_a, nin_a, nin_b, nout_b, lazy_threshold):
+    """Lower weighted reduced-block products to one block-sparse matrix product.
+
+    Each nonzero gluing contribution has its own contracted section r. For its
+    output block c, store A at (c, r), B at (r, c), and C at (c, c). Consequently
+    only the intended pairs multiply, and cuTENSOR sums contributions to each c.
+    The coefficient is applied while packing A. Fusion channels never share a
+    coordinate, even when their external charges coincide.
+
+    tensordot has already recoupled both inputs into canonical gluing order;
+    every reduced block can therefore be viewed as a contiguous matrix.
+    """
+    from . import _contractions  # use the current cache wrapper after set_cache_maxsize
+    assert nout_a + nin_a == tuple(range(len(struct_a.legs)))
+    assert nin_b + nout_b == tuple(range(len(struct_b.legs)))
+    meta, reshape_a, reshape_b, size, struct = _contractions._meta_tensordot_nf(
+        sym, struct_a, struct_b, nout_a, nin_a, nin_b, nout_b, lazy_threshold)
+    if not meta:
+        return _NonabelianCutensorPlan(struct, size, (), (), (), (), (), ())
+
+    outputs = sorted({(sl.start, sl.stop, tuple(shape)) for sl, shape, *_ in meta})
+    output_ids = {(start, stop): i for i, (start, stop, _) in enumerate(outputs)}
+    # Sorting gives lexicographic coordinates for both input descriptors.
+    records = sorted(meta, key=lambda record: record[0].start)
+    rows = [shape[0] for _, _, shape in outputs]
+    cols = [shape[1] for _, _, shape in outputs]
+    inner, coords_a, coords_b, slices_a, slices_b, coefficients = [], [], [], [], [], []
+    for r, (sl, shape, ia, ib, coefficient) in enumerate(records):
+        sa, _, ma, ka = reshape_a[ia]
+        sb, _, kb, nb = reshape_b[ib]
+        assert ka == kb and tuple(shape) == (ma, nb)
+        c = output_ids[sl.start, sl.stop]
+        inner.append(ka)
+        coords_a.append((c, r))
+        coords_b.append((r, c))
+        slices_a.append((sa.start, sa.stop))
+        slices_b.append((sb.start, sb.stop))
+        coefficients.append(coefficient)
+
+    def descriptor(extents0, extents1, coordinates):
+        coordinates = np.asarray(coordinates, dtype=np.int64)
+        dims0 = np.asarray(extents0, dtype=np.int64)[coordinates[:, 0]]
+        dims1 = np.asarray(extents1, dtype=np.int64)[coordinates[:, 1]]
+        sizes = dims0 * dims1
+        offsets = np.cumsum(sizes) - sizes
+        strides = np.column_stack((dims1, np.ones(len(sizes), dtype=np.int64))).reshape(-1)
+        return ([len(extents0), len(extents1)], extents0 + extents1,
+                coordinates.reshape(-1), strides, offsets)
+
+    descriptors = (descriptor(rows, inner, coords_a), descriptor(inner, cols, coords_b),
+                   descriptor(rows, cols, [(c, c) for c in range(len(outputs))]))
+    hashes = tuple(int(v) for desc in descriptors
+                   for v in np.frombuffer(hash_blocks(_cutensor_meta(*desc[:4]), out=bytes), dtype=np.int64))
+    return _NonabelianCutensorPlan(
+        struct, size, tuple(slices_a), tuple(slices_b),
+        tuple((start, stop) for start, stop, _ in outputs), tuple(coefficients), descriptors, hashes)
 
 #: Below this many rows the GPU matcher / mask fall back to numpy (launch+transfer
 #: overhead dominates). Tunable via env ``YASTN_META_CUTENSOR_GPU_MIN``.

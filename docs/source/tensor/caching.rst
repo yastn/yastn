@@ -67,7 +67,8 @@ The entries, grouped by the area they serve:
      - ``fuse_hard``, ``unfuse_hard``, ``intersect_hfs``, ``combine_leg_structure``
    * - Contraction
      - ``tensordot_f2m``, ``tensordot_fc``, ``tensordot_nf``, ``tensordot_cutensor_cpu``,
-       ``tensordot_cutensor_gpu``, ``broadcast``, ``mask``, ``trace``, ``vdot``,
+       ``tensordot_cutensor_gpu``, ``tensordot_nonabelian_cutensor``,
+       ``broadcast``, ``mask``, ``trace``, ``vdot``,
        ``swap_gate``, ``swap_gate_charge``, ``ncon``
    * - Algebra
      - ``addition``
@@ -76,6 +77,8 @@ The entries, grouped by the area they serve:
        ``get_trimmed_struct_engine_gpu``
    * - Backend (``torch`` only)
      - ``pack_transpose_and_merge_params``
+   * - Non-Abelian cuTENSOR packing
+     - ``cutensor_nonabelian_packing``, ``cutensor_nonabelian_coefficients``
 
 The key set depends on the backend
 ----------------------------------

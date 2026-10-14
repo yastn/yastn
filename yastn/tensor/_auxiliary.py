@@ -363,7 +363,7 @@ def get_trimmed_struct(sym, struct, sub_legs=None):
         old = get_blocks(sym, struct)
         candidate = get_trimmed_struct(
             sym, _struct(legs=tuple(sub_legs), n=struct.n,
-                         isdiag=struct.isdiag, mask=None))
+                         isdiag=struct.isdiag))
         new = get_blocks(sym, candidate)
         old_keys = {(tuple(t.reshape(-1).tolist()), tuple(c))
                     for t, c in zip(old.t, old.channels)}
