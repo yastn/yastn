@@ -55,7 +55,7 @@ __all__= ['DTYPE', 'get_dtype', 'get_yastn_dtype',
     'merge_to_dense', 'merge_super_blocks', 'is_independent',
     'apply_mask', 'embed_mask', 'embed_slices',
     'embed_transpose', 'transpose_and_merge', 'unmerge',
-    'negate_blocks', 'gather_slices', 'bitwise_not',
+    'negate_blocks', 'gather_slices', 'bitwise_not', 'recouple', 'scale_blocks',
     'unique', 'searchsorted', 'isin', 'nonzero', 'cumsum', 'concatenate',
     'repeat', 'where', 'zeros_like', 'full_like', 'arange']
 
@@ -73,6 +73,17 @@ DTYPE = {'float32': torch.float32,
 
 def cuda_is_available():
     return torch.cuda.is_available()
+
+
+def recouple(data, order, meta, size):
+    """Apply cached fusion-tree coefficients to permuted reduced blocks."""
+    from ._backend_torch_nonabelian import recouple as execute
+    return execute(data, order, meta, size)
+
+
+def scale_blocks(data, weights, lengths, inverse=False):
+    from ._backend_torch_nonabelian import scale_blocks as execute
+    return execute(data, weights, lengths, inverse)
 
 
 def get_dtype(t):

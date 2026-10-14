@@ -22,6 +22,7 @@ from typing import NamedTuple, TYPE_CHECKING
 
 import numpy as np
 from .._profile import nsys_profile
+from .._cache_registry import register_cache
 
 from ._auxiliary import _struct, _flatten, _clear_axes, _unpack_legs, get_blocks, _product_indices
 from ._auxiliary import find_matching_indices, find_matching_block_keys, get_trimmed_struct, convert_to_tuples_and_slices
@@ -333,18 +334,19 @@ def _adjacent_swap_coefficient(sym, x, left, right, z, y, yp):
                for middle in sym.fusion_outcomes(left, right))
 
 
-def _swap_adjacent_fusion_leaves(a, position):
+@register_cache(key='fusion_tree_adjacent_swap')
+@lru_cache(maxsize=1024)
+def _meta_swap_adjacent_fusion_leaves(sym, struct, position):
     """Exchange leaves ``position`` and ``position + 1`` by ``R`` or ``F^-1 R F``."""
-    sym = a.config.sym
-    ndim = a.ndim_n
+    ndim = len(struct.legs)
     if not 0 <= position < ndim - 1:
         raise YastnError("Adjacent fusion-tree swap is outside tensor rank.")
     order = list(range(ndim))
     order[position], order[position + 1] = order[position + 1], order[position]
     order = tuple(order)
-    bl_old = get_blocks(sym, a.struct)
-    legs_new = tuple(a.struct.legs[i] for i in order)
-    struct_new = a.struct.replace(legs=legs_new, channels=(), mask=None)
+    bl_old = get_blocks(sym, struct)
+    legs_new = tuple(struct.legs[i] for i in order)
+    struct_new = struct.replace(legs=legs_new, channels=(), mask=None)
     bl_new = get_blocks(sym, struct_new)
     inverse = tuple(np.argsort(order))
 
@@ -360,9 +362,9 @@ def _swap_adjacent_fusion_leaves(a, position):
         if charge_key not in orientations:
             orientations[charge_key] = tuple(
                 sym.canonical_charge(t) if leg.s == 1 else sym.conj_charge(t)
-                for t, leg in zip(map(tuple, charges), a.struct.legs))
+                for t, leg in zip(map(tuple, charges), struct.legs))
 
-    pieces, keep = [], []
+    meta, keep, offset = [], [], 0
     for out_index, (charges_new, channel_new_flat) in enumerate(zip(bl_new.t, bl_new.channels)):
         charges_old = charges_new[np.asarray(inverse)]
         charge_key = tuple(charges_old.reshape(-1).tolist())
@@ -373,12 +375,12 @@ def _swap_adjacent_fusion_leaves(a, position):
         if not candidates:
             continue
         oriented = orientations[charge_key]
-        value = None
+        terms = []
         for in_index, path_old in candidates:
             if position == 0:
-                total = path_old[0] if path_old else tuple(a.struct.n)
+                total = path_old[0] if path_old else tuple(struct.n)
                 coefficient = sym.braiding_phase(oriented[0], oriented[1], total)
-                if ndim == 2 and a.struct.legs[0].s != a.struct.legs[1].s:
+                if ndim == 2 and struct.legs[0].s != struct.legs[1].s:
                     coefficient = 1.0
             else:
                 # Prefix and suffix channels are unchanged. Only the channel
@@ -386,69 +388,39 @@ def _swap_adjacent_fusion_leaves(a, position):
                 x = oriented[0] if position == 1 else path_old[position - 2]
                 left, right = oriented[position], oriented[position + 1]
                 y, yp = path_old[changed], path_new[changed]
-                z = path_old[position] if position < ndim - 2 else tuple(a.struct.n)
+                z = path_old[position] if position < ndim - 2 else tuple(struct.n)
                 coefficient = _adjacent_swap_coefficient(sym, x, left, right, z, y, yp)
             if abs(coefficient) < 1e-15:
                 continue
-            block = a._data[slice(*bl_old.slc[in_index])]
-            block = a.config.backend.permute_dims(block, bl_old.D[in_index], order).reshape(-1)
-            term = coefficient * block
-            value = term if value is None else value + term
-        if value is not None:
-            pieces.append(value)
+            terms.append((int(bl_old.slc[in_index, 0]), tuple(bl_old.D[in_index]), float(coefficient)))
+        if terms:
+            meta.extend((offset, source, shape, coefficient) for source, shape, coefficient in terms)
+            offset += int(np.prod(bl_new.D[out_index]))
             keep.append(out_index)
 
     if len(keep) != bl_new.nblocks:
         struct_new = struct_new.mask_from_ind(bl_new.nblocks, keep)
-    data = a.config.backend.concatenate(pieces) if pieces else a._data[:0]
-    return a._replace(struct=struct_new, data=data,
+    return struct_new, order, tuple(meta), offset
+
+
+def _apply_recoupling(a, struct, order, meta, size):
+    data = a.config.backend.recouple(a._data, order, meta, size)
+    return a._replace(struct=struct, data=data,
                       hfs=tuple(a.hfs[i] for i in order),
                       mfs=((1,),) * a.ndim_n, trans=None)
+
+
+def _swap_adjacent_fusion_leaves(a, position):
+    return _apply_recoupling(a, *_meta_swap_adjacent_fusion_leaves(a.config.sym, a.struct, position))
 
 
 def _r_move_01_and_transpose(a, order):
-    """Exchange the first two leaves using the CG swap phase."""
-    sym = a.config.sym
-    bl_old = get_blocks(sym, a.struct)
-    legs_new = tuple(a.struct.legs[i] for i in order)
-    struct_new = a.struct.replace(legs=legs_new, channels=(), mask=None)
-    bl_new = get_blocks(sym, struct_new)
-    inverse = tuple(np.argsort(order))
-    old_lookup = {(tuple(t.reshape(-1).tolist()), channel): i
-                  for i, (t, channel) in enumerate(zip(bl_old.t, bl_old.channels))}
-    pieces, keep = [], []
-    for out_i, (charges_new, channel) in enumerate(zip(bl_new.t, bl_new.channels)):
-        charges_old = charges_new[np.asarray(inverse)]
-        key = (tuple(charges_old.reshape(-1).tolist()), channel)
-        in_i = old_lookup.get(key)
-        if in_i is None:
-            continue
-        oriented = tuple(sym.canonical_charge(t) if leg.s == 1 else sym.conj_charge(t)
-                         for t, leg in zip(map(tuple, charges_old), a.struct.legs))
-        total = (tuple(channel[:sym.NSYM]) if a.ndim_n > 2
-                 else tuple(a.struct.n))
-        # A rank-two endomorphism has one incoming and one outgoing leg.  Its
-        # transpose is the ordinary reduced-block transpose; the CG exchange
-        # phase belongs to a fusion vertex (equal orientations), not to the
-        # operator identity/evaluation pairing.
-        if a.ndim_n == 2 and a.struct.legs[0].s != a.struct.legs[1].s:
-            coefficient = 1.0
-        else:
-            coefficient = sym.braiding_phase(oriented[0], oriented[1], total)
-        block = a._data[slice(*bl_old.slc[in_i])]
-        block = a.config.backend.permute_dims(block, bl_old.D[in_i], order).reshape(-1)
-        pieces.append(coefficient * block)
-        keep.append(out_i)
-    if len(keep) != bl_new.nblocks:
-        struct_new = struct_new.mask_from_ind(bl_new.nblocks, keep)
-        bl_new = get_blocks(sym, struct_new)
-    data = a.config.backend.concatenate(pieces) if pieces else a._data[:0]
-    return a._replace(struct=struct_new, data=data,
-                      hfs=tuple(a.hfs[i] for i in order),
-                      mfs=((1,),) * a.ndim_n, trans=None)
+    return _swap_adjacent_fusion_leaves(a, 0)
 
 
-def _f_move_12_to_23_and_transpose(a, order):
+@register_cache(key='fusion_tree_f_move')
+@lru_cache(maxsize=1024)
+def _meta_f_move_12_to_23(sym, struct, order):
     """Recouple the first three legs and put ``(j2, j3)`` first.
 
     This constructs the destination blocks from the permuted legs instead of
@@ -456,13 +428,13 @@ def _f_move_12_to_23_and_transpose(a, order):
     symmetries: in SU2xU1 the old channel carries ``q1 + q2`` whereas the new
     channel carries ``q2 + q3``.
     """
-    sym = a.config.sym
-    bl_old = get_blocks(sym, a.struct)
-    path_size = (a.ndim_n - 2) * sym.NSYM
-    if a.ndim_n < 3 or any(len(path) != path_size for path in bl_old.channels):
+    ndim = len(struct.legs)
+    bl_old = get_blocks(sym, struct)
+    path_size = (ndim - 2) * sym.NSYM
+    if ndim < 3 or any(len(path) != path_size for path in bl_old.channels):
         raise YastnError("F move requires a canonical left-associated fusion tree.")
-    legs_new = tuple(a.struct.legs[i] for i in order)
-    struct_new = a.struct.replace(legs=legs_new, channels=(), mask=None)
+    legs_new = tuple(struct.legs[i] for i in order)
+    struct_new = struct.replace(legs=legs_new, channels=(), mask=None)
     bl_new = get_blocks(sym, struct_new)
     inverse = tuple(np.argsort(order))
     old_keys = {tuple(charges.reshape(-1).tolist()) for charges in bl_old.t}
@@ -478,7 +450,7 @@ def _f_move_12_to_23_and_transpose(a, order):
     old_by_charges = {}
     for i, charges in enumerate(bl_old.t):
         old_by_charges.setdefault(tuple(charges.reshape(-1).tolist()), []).append(i)
-    pieces = []
+    meta = []
     for out_i, charges_new in enumerate(bl_new.t):
         charges_old = charges_new[np.asarray(inverse)]
         key = tuple(charges_old.reshape(-1).tolist())
@@ -486,11 +458,11 @@ def _f_move_12_to_23_and_transpose(a, order):
         j23 = tuple(path23[:sym.NSYM])
         suffix = tuple(path23[sym.NSYM:])
         J = (tuple(path23[sym.NSYM:2 * sym.NSYM])
-             if a.ndim_n > 3 else tuple(a.struct.n))
+             if ndim > 3 else tuple(struct.n))
         oriented = tuple(sym.canonical_charge(t) if leg.s == 1 else sym.conj_charge(t)
-                         for t, leg in zip(map(tuple, charges_old), a.struct.legs))
+                         for t, leg in zip(map(tuple, charges_old), struct.legs))
         j1, j2, j3 = oriented[:3]
-        value = None
+        matched = False
         for in_i in old_by_charges.get(key, ()):
             path12 = bl_old.channels[in_i]
             if tuple(path12[sym.NSYM:]) != suffix:
@@ -498,17 +470,16 @@ def _f_move_12_to_23_and_transpose(a, order):
             j12 = tuple(path12[:sym.NSYM])
             coefficient = (sym.f_symbol(j1, j2, j3, J, j12, j23)
                            * sym.braiding_phase(j23, j1, J))
-            block = a._data[slice(*bl_old.slc[in_i])]
-            block = a.config.backend.permute_dims(block, bl_old.D[in_i], order).reshape(-1)
-            term = coefficient * block
-            value = term if value is None else value + term
-        if value is None:
+            meta.append((int(bl_new.slc[out_i, 0]), int(bl_old.slc[in_i, 0]),
+                         tuple(bl_old.D[in_i]), float(coefficient)))
+            matched = True
+        if not matched:
             raise YastnError("Cannot match SU2 fusion channels after leg permutation.")
-        pieces.append(value)
-    data = a.config.backend.concatenate(pieces) if pieces else a._data
-    return a._replace(struct=struct_new, data=data,
-                      hfs=tuple(a.hfs[i] for i in order),
-                      mfs=((1,),) * a.ndim_n, trans=None)
+    return struct_new, order, tuple(meta), bl_new.size
+
+
+def _f_move_12_to_23_and_transpose(a, order):
+    return _apply_recoupling(a, *_meta_f_move_12_to_23(a.config.sym, a.struct, tuple(order)))
 
 
 @nsys_profile

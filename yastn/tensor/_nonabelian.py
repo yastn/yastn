@@ -65,7 +65,8 @@ def tree_network(sym, charges, signs, total, channel, labels, fresh, root=None):
     return factors
 
 
-@lru_cache(maxsize=16384)
+@register_cache(key='nonabelian_contraction_coefficient')
+@lru_cache(maxsize=65536)
 def contraction_coefficient(sym, charges_a, signs_a, total_a, channel_a,
                             charges_b, signs_b, total_b, channel_b,
                             nin_a, nin_b, charges_c, signs_c, total_c, channel_c):
@@ -117,7 +118,43 @@ def _network_contraction(topology):
     expression = ','.join(''.join(opt_einsum.get_symbol(i) for i in labels)
                           for labels in topology) + '->'
     shapes = [(2,) * len(labels) for labels in topology]
-    return opt_einsum.contract_expression(expression, *shapes, optimize='greedy')
+    planned = opt_einsum.contract_expression(expression, *shapes, optimize='greedy')
+    program = []
+    alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    for positions, removed, equation, _, blas in planned.contraction_list:
+        inputs, output = equation.split('->')
+        labels = dict.fromkeys(inputs.replace(',', '') + output)
+        if len(labels) > len(alphabet):
+            return planned
+        renamed = dict(zip(labels, alphabet))
+        local_equation = ''.join(renamed.get(c, c) for c in equation)
+        axes, transpose = None, None
+        if blas and 'EINSUM' not in blas:
+            left, right = inputs.split(',')
+            contracted = tuple(c for c in left if c in removed)
+            axes = (tuple(left.index(c) for c in contracted),
+                    tuple(right.index(c) for c in contracted))
+            remaining = ''.join(c for c in left + right if c not in removed)
+            if remaining != output:
+                transpose = tuple(remaining.index(c) for c in output)
+        program.append((positions, local_equation, axes, transpose))
+
+    def evaluate(*arrays, backend='numpy'):
+        # CG vertices are tiny arrays. Avoid re-parsing backend dispatch,
+        # contraction axes and permutations for every coefficient evaluation.
+        operands = list(arrays)
+        for positions, equation, axes, transpose in program:
+            values = [operands.pop(i) for i in positions]
+            if axes is not None and max(a.size for a in values) > 256:
+                value = np.tensordot(*values, axes=axes)
+                if transpose is not None:
+                    value = value.transpose(transpose)
+            else:
+                value = np.einsum(equation, *values, optimize=False)
+            operands.append(value)
+        return operands[0]
+
+    return evaluate
 
 
 def scale(sym, charges, signs, total):
@@ -137,7 +174,8 @@ def intertwiner(sym, charges, signs, total, channel):
     return scale(sym, charges, signs, total) * _fusion_intertwiner(sym, charges, signs, total, channel)
 
 
-@lru_cache(maxsize=4096)
+@register_cache(key='nonabelian_fusion_coefficient')
+@lru_cache(maxsize=65536)
 def fusion_coefficient(sym, charges, signs, total, channel, grouped, out_charges, out_signs, out_channel, paths):
     if sym.SYM_ID == 'SU2xU1':
         # Charge conservation is enforced by fusion metadata. Its numerical
@@ -175,11 +213,7 @@ def fusion_scale(config, data, struct, fused, axes, meta, inverse=False):
             return (x.start, x.stop)
         return tuple(freeze(y) for y in x) if isinstance(x, (list, tuple)) else x
     weights, lengths = fusion_weights(config.sym, struct, fused, axes, freeze(meta))
-    if inverse:
-        weights = 1 / weights
-    weights = np.repeat(weights, lengths)
-    return data * config.backend.to_tensor(weights, dtype=config.backend.get_yastn_dtype(data),
-                                         device=config.backend.get_device(data))
+    return config.backend.scale_blocks(data, tuple(weights), tuple(lengths), inverse)
 
 
 @lru_cache(maxsize=1024)

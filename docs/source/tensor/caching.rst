@@ -65,6 +65,10 @@ The entries, grouped by the area they serve:
      - Keys
    * - Fusion
      - ``fuse_hard``, ``unfuse_hard``, ``intersect_hfs``, ``combine_leg_structure``
+   * - Non-Abelian fusion trees
+     - ``fusion_tree_adjacent_swap``, ``fusion_tree_f_move``,
+       ``nonabelian_contraction_coefficient``, ``nonabelian_fusion_coefficient``,
+       ``nonabelian_network_contraction``
    * - Contraction
      - ``tensordot_f2m``, ``tensordot_fc``, ``tensordot_nf``, ``tensordot_cutensor_cpu``,
        ``tensordot_cutensor_gpu``, ``tensordot_nonabelian_cutensor``,
@@ -76,7 +80,7 @@ The entries, grouped by the area they serve:
      - ``get_blocks``, ``get_blocks_charges_all``, ``get_trimmed_struct_engine``,
        ``get_trimmed_struct_engine_gpu``
    * - Backend (``torch`` only)
-     - ``pack_transpose_and_merge_params``
+     - ``pack_transpose_and_merge_params``, ``torch_recoupling_plan``, ``torch_fusion_scale``
    * - Non-Abelian cuTENSOR packing
      - ``cutensor_nonabelian_packing``, ``cutensor_nonabelian_coefficients``
 
@@ -112,3 +116,11 @@ proportional to the size of the fused buffers it has seen.
 :func:`yastn.clear_cache` is the lever for releasing them — worth calling between phases of
 a calculation that use very different tensor sizes, and worth knowing about when several
 worker processes each accumulate their own copy.
+
+Non-Abelian fusion-tree plans cache channel matching and recoupling coefficients,
+never tensor values. The scalar contraction and fusion coefficient caches each
+default to 65536 entries, since many spin networks recur across different charge
+sectors and bond multiplicities. ``torch_recoupling_plan`` and
+``torch_fusion_scale`` each default to 128 entries and hold compact device metadata
+per contribution or block; their element-sized index maps are temporary.
+These caches obey :func:`yastn.clear_cache` and :func:`yastn.set_cache_maxsize`.

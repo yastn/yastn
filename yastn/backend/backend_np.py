@@ -36,6 +36,23 @@ def cuda_is_available():
     return False
 
 
+def recouple(data, order, meta, size):
+    """Apply a cached sparse fusion-tree basis change and axis permutation."""
+    result = np.zeros(size, dtype=data.dtype)
+    for destination, source, shape, coefficient in meta:
+        count = int(np.prod(shape))
+        block = data[source:source + count].reshape(shape).transpose(order).reshape(-1)
+        result[destination:destination + count] += coefficient * block
+    return result
+
+
+def scale_blocks(data, weights, lengths, inverse=False):
+    weights = np.asarray(weights, dtype=data.dtype)
+    if inverse:
+        weights = 1 / weights
+    return data * np.repeat(weights, lengths)
+
+
 def get_dtype(t):
     return t.dtype
 

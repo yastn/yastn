@@ -200,6 +200,28 @@ invalid setting never raises.
 All regimes produce bit-identical results; the choice is purely one of performance.
 
 
+Non-Abelian fusion-tree transformations
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Permuting non-Abelian legs requires a change of fusion basis as well as a dense
+axis permutation. The channel matching and F/R coefficients for adjacent swaps
+and three-leg F moves are cached by symmetry, tensor structure, and permutation.
+Changing numerical tensor entries reuses these plans without caching their values.
+
+The PyTorch CUDA backend batches transformations with at least 32 small
+contributions (each below 65536 elements) using weighted gather/scatter kernels.
+Larger contributions and smaller plans use block loops. Temporary index maps are
+built in tiles of at most ``2**20`` contributions' elements, and backward applies
+the adjoint map while summing gradients for reused input blocks. This accumulation
+can change floating-point rounding; it preserves the fusion transformation within
+numerical precision. CPU and NumPy use the same cached coefficients with block loops.
+
+Hard fusion and unfusion also cache compact block-normalization weights on the
+PyTorch device. They expand those weights there instead of repeatedly transferring
+an element-sized array from the host. This path uses ordinary PyTorch and does not
+require cuTENSOR.
+
+
 Conjugation of symmetric tensors
 --------------------------------
 
