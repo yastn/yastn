@@ -1,6 +1,17 @@
 # Copyright 2025 The YASTN Authors. All Rights Reserved.
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
 # ==============================================================================
 """[PROTOTYPE] AD-aware distributed CTM step.
 
@@ -314,9 +325,10 @@ _CACHE_LIMIT = 8192
 def _shape_key(t):
     """Hashable identifier for a yastn.Tensor's structural meta. On leg_first
     the block layout (slices) is fully determined by ``struct`` (the legs);
-    together with trans/hfs/mfs this fixes the level=1 meta dict (modulo the
-    data field), so Tensors with the same key share a cache entry."""
-    return (t.struct, t.trans, t.hfs, t.mfs)
+    together with config/trans/hfs/mfs this fixes the level=1 meta dict (modulo
+    the data field). Configuration is essential: identical leg layouts can
+    describe different symmetries or fermionic statistics."""
+    return (t.config, t.struct, t.trans, t.hfs, t.mfs)
 
 
 def _split_tensor(t):

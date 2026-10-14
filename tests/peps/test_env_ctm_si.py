@@ -1,11 +1,17 @@
 # Copyright 2026 The YASTN Authors. All Rights Reserved.
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
 #
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """Unit and environment-state tests for recycled SI-CTM projectors."""
 
 import numpy as np
@@ -20,15 +26,18 @@ from yastn.tn.fpeps.envs._env_ctm import SI_state, proj_corners
 from yastn.tn.fpeps.envs._ctm_opts import make_ctm_opts
 from yastn.tn.fpeps.envs._env_ctm_SI_projectors import (
     initialize_si_bases,
-    isometry_expansion,
-    isometry_shrinkage,
     si_bases_compatible,
     si_proj_corners,
     si_projector_svd,
     si_refinement,
     symmetric_isometry_recycle,
-    svd_charge_sector_values,
 )
+
+
+def _sector_values(s):
+    """Values of a diagonal tensor, by charge sector."""
+    return {charge: s.config.backend.to_numpy(s[charge + charge])
+            for charge in s.get_legs(0).t}
 
 
 def _si_ages(env):
@@ -123,39 +132,11 @@ def test_dense_isometry_expansion_preserves_existing_basis(config_kwargs):
     config = yastn.make_config(sym='none', **config_kwargs)
     basis = _dense_isometry(config)
 
-    expanded = isometry_expansion(basis, 5)
+    expanded = symmetric_isometry_recycle(basis, {(): 5})
 
     assert expanded.get_shape() == (7, 5)
     assert _isometry_error(expanded) < 1e-12
     assert np.allclose(expanded.to_numpy()[:, :3], basis.to_numpy())
-
-
-@pytest.mark.parametrize('added_dimension', [1, 2])
-def test_dense_isometry_expansion_uses_candidate_subspace(
-        config_kwargs, added_dimension):
-    """One or several candidate columns determine the added subspace."""
-    config = yastn.make_config(sym='none', **config_kwargs)
-    basis = _dense_isometry(config)
-    left = basis.get_legs(0)
-    addition_leg = yastn.Leg(config, s=-1, D=(added_dimension,))
-    candidate = yastn.rand(
-        config, legs=(left, addition_leg), distribution='normal')
-
-    expanded = isometry_expansion(
-        basis, 3 + added_dimension, u=candidate)
-
-    assert expanded.get_shape() == (7, 3 + added_dimension)
-    assert _isometry_error(expanded) < 1e-12
-    assert np.allclose(expanded.to_numpy()[:, :3], basis.to_numpy())
-
-    basis_array = basis.to_numpy()
-    candidate_array = candidate.to_numpy()
-    residual = candidate_array - basis_array @ (
-        basis_array.conj().T @ candidate_array)
-    expected, _ = np.linalg.qr(residual, mode='reduced')
-    actual = expanded.to_numpy()[:, 3:]
-    assert np.allclose(actual @ actual.conj().T,
-                       expected @ expected.conj().T)
 
 
 def test_dense_isometry_shrinkage_keeps_leading_columns(config_kwargs):
@@ -163,25 +144,21 @@ def test_dense_isometry_shrinkage_keeps_leading_columns(config_kwargs):
     config = yastn.make_config(sym='none', **config_kwargs)
     basis = _dense_isometry(config, columns=5)
 
-    shrunk = isometry_shrinkage(basis, 2)
+    shrunk = symmetric_isometry_recycle(basis, {(): 2})
 
     assert shrunk.get_shape() == (7, 2)
     assert _isometry_error(shrunk) < 1e-12
     assert np.allclose(shrunk.to_numpy(), basis.to_numpy()[:, :2])
-    assert isometry_shrinkage(basis, 5) is basis
+    assert symmetric_isometry_recycle(basis, {(): 5}) is basis
 
 
 def test_dense_isometry_resize_rejects_impossible_dimensions(config_kwargs):
-    """Resize operations reject targets outside their mathematical domain."""
+    """A dense isometry cannot hold more columns than it has rows."""
     config = yastn.make_config(sym='none', **config_kwargs)
     basis = _dense_isometry(config)
 
-    with pytest.raises(yastn.YastnError):
-        isometry_expansion(basis, 3)
-    with pytest.raises(yastn.YastnError):
-        isometry_expansion(basis, 8)
-    with pytest.raises(yastn.YastnError):
-        isometry_shrinkage(basis, 4)
+    with pytest.raises(yastn.YastnError, match='row-space capacity 7'):
+        symmetric_isometry_recycle(basis, {(): 8})
 
 
 def _u1_isometry(config, right_charges=(-1, 0, 1),
@@ -296,6 +273,39 @@ def test_symmetric_isometry_recycle_uses_expanded_left_leg(config_kwargs):
     assert np.allclose(
         basis.config.backend.to_numpy(basis[(-1, -1)]),
         basis.config.backend.to_numpy(resized[(-1, -1)]))
+
+
+def test_symmetric_isometry_recycle_takes_row_history_from_left_leg(config_kwargs):
+    """Rows take the fusion history of left_leg, also for a transposed basis."""
+    config = yastn.make_config(sym='U1', **config_kwargs)
+    config.backend.random_seed(seed=21)
+
+    def leg(D):
+        return yastn.Leg(config, s=1, t=(0, 1), D=D)
+
+    right = yastn.Leg(config, s=-1, t=(0, 1, 2), D=(2, 3, 1))
+    basis = yastn.qr(
+        yastn.rand(config, legs=(leg((2, 2)), leg((2, 1)), right), distribution='normal'),
+        axes=((0, 1), 2), sQ=-1)[0].fuse_legs(axes=((0, 1), 2), mode='hard')
+    # The same sector dimensions, built from sub-legs of other dimensions.
+    left_leg = yastn.rand(config, legs=(leg((2, 1)), leg((2, 2)), right)).fuse_legs(
+        axes=((0, 1), 2), mode='hard').get_legs(0)
+    assert basis.get_legs(0).tD == left_leg.tD
+    assert basis.get_legs(0).hf != left_leg.hf
+
+    # Y.H in SI is stored with its auxiliary leg first and a deferred transpose.
+    for V in (basis, basis.H.consume_transpose().H):
+        for charges in ({0: 1, 1: 2, 2: 1}, {0: 3, 1: 4, 2: 2}):
+            resized = symmetric_isometry_recycle(V, charges, left_leg=left_leg)
+
+            assert resized.get_legs(0) == left_leg
+            assert resized.get_legs(1).tD == {(q,): d for q, d in charges.items()}
+            assert _isometry_error(resized) < 1e-12
+            for q, dimension in charges.items():
+                retained = min(dimension, right[(q,)])
+                assert np.allclose(
+                    V.config.backend.to_numpy(V[(q, q)][:, :retained]),
+                    V.config.backend.to_numpy(resized[(q, q)][:, :retained]))
 
 
 @pytest.mark.parametrize(
@@ -477,9 +487,9 @@ def test_si_spectrum_matches_full_svd(config_kwargs, sym):
     rr = yastn.tensordot(r0, r1, axes=(1, 1))
     _, s_ref, _ = rr.svd_with_truncation(
         axes=(0, 1), sU=r0.s[1], **opts_svd)
-    ref = svd_charge_sector_values(s_ref)
-    initial = svd_charge_sector_values(s_initial)
-    actual = svd_charge_sector_values(s_si)
+    ref = _sector_values(s_ref)
+    initial = _sector_values(s_initial)
+    actual = _sector_values(s_si)
 
     assert ref.keys() == actual.keys()
     initial_error = 0.0
@@ -571,11 +581,12 @@ def test_si_recycles_after_leg_dimension_change(config_kwargs):
     _assert_projectors_equivalent(reference, (p0, p1))
 
 
-def test_si_recycles_after_fusion_history_change(config_kwargs):
+def test_si_reinitializes_after_fusion_history_change(config_kwargs):
     """Fusion-history changes do not alter the resulting projectors."""
     config = yastn.make_config(sym='Z2', **config_kwargs)
+    config.backend.random_seed(seed=13)
     r0, r1 = _ctm_corner_pair(config, 'Z2')
-    X, Y = initialize_si_bases(r0, r1, rank=4)
+    X, Y = initialize_si_bases(r0, r1, rank=6)
 
     external = r1.get_legs(0).drop_history()
     contracted = r1.get_legs(1)
@@ -584,7 +595,9 @@ def test_si_recycles_after_fusion_history_change(config_kwargs):
     assert external.tD == r1.get_legs(0).tD
     assert external.hf != r1.get_legs(0).hf
     opts_svd = {'D_total': 4, 'tol': 1e-10}
-    opts_si = {'enabled': True, 'oversampling': 0,
+    # chi + p = 6, below the corner-leg rank of 7. Without oversampling SI
+    # converges as (s_{chi+1}/s_chi)^niter, too slowly for ~3% of random corners.
+    opts_si = {'enabled': True, 'oversampling': 2,
                'niter': 24, 'tol': 1e-12, 'redistribute_sectors': True}
     reference = proj_corners(r0, r1_with_new_history, opts_svd)
     p0, p1, X_new, Y_new, _ = si_proj_corners(

@@ -238,6 +238,19 @@ def _basis_data(env):
             if getattr(lattice[site], name) is not None]
 
 
+def test_metadata_cache_roundtrips_symmetries_and_statistics():
+    """Same-shaped tensors retain their own configuration in worker payloads."""
+    from yastn.tn.fpeps.envs._env_ctm_dist_mp_AD import _split_tensor
+
+    for sym, fermionic in (('U1', False), ('Z2', False), ('Z2', True)):
+        config = yastn.make_config(backend='torch', sym=sym, fermionic=fermionic)
+        leg = yastn.Leg(config, s=1, t=(0, 1), D=(1, 1))
+        tensor = yastn.eye(config, legs=leg, isdiag=False)
+        data, meta = _split_tensor(tensor)
+        restored = yastn.Tensor.from_dict({**meta, 'data': data}, config=config)
+        assert (restored - tensor).norm().item() == 0
+
+
 @pytest.mark.parametrize('use_qr', [False, True])
 @pytest.mark.parametrize('recycle_grad', [False, True])
 @pytest.mark.parametrize('parallelism', ['sites', 'intra_site', 'auto'])
@@ -320,15 +333,17 @@ def test_si_fresh_bases_and_skip_schedule_in_distributed_iteration():
     assert all(s.age == 3 for s in env._si_age.values())
 
 
-def test_si_symmetric_redistribution_matches_serial():
+@pytest.mark.parametrize('sym', ['Z2', 'U1'])
+@pytest.mark.parametrize('use_qr', [False, True])
+def test_si_symmetric_redistribution_matches_serial(sym, use_qr):
     """Worker serialization preserves charge sectors and redistribution state."""
     from yastn.tn.fpeps.envs import make_ctm_opts
     from yastn.tn.fpeps.envs._env_ctm_dist_mp_AD import update_AD_
 
     torch = pytest.importorskip('torch')
-    base = _make_env(sym='Z2')
+    base = _make_env(sym=sym)
     opts = make_ctm_opts(
-        opts_svd={'D_total': 2, 'tol': 0}, use_qr=False,
+        opts_svd={'D_total': 2, 'tol': 0}, use_qr=use_qr,
         opts_si={'enabled': True, 'oversampling': 4, 'niter': 3,
                  'tol': 0, 'redistribute_sectors': True,
                  'refinement': 'sector_dimensions',

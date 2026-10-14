@@ -1,7 +1,17 @@
 # Copyright 2026 The YASTN Authors. All Rights Reserved.
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """Generic projector and end-to-end tests for recycled SI-CTMRG.
 
 The final acceptance test uses physical CTMRG output as the oracle.  Testing
@@ -27,7 +37,6 @@ from yastn.tn.fpeps.envs._env_ctm import proj_corners
 from yastn.tn.fpeps.envs._env_ctm_SI_projectors import (
     si_proj_corners,
     si_projector_svd,
-    svd_charge_sector_values,
 )
 from yastn.tn.fpeps.envs.rdm import rdm1x1
 
@@ -247,9 +256,7 @@ def test_si_projector_identity_and_optimal_residual(config_kwargs,
 
     # Check the spectrum itself in addition to the reconstruction error, which
     # alone would not identify incorrectly ordered retained singular values.
-    si_values = np.concatenate(tuple(
-        np.asarray(values) for values in
-        svd_charge_sector_values(s_all).values()))
+    si_values = s_all.to_numpy().diagonal()
     assert np.allclose(np.sort(si_values)[::-1][:chi], values_ref[:chi],
                        rtol=2e-9, atol=2e-12)
 

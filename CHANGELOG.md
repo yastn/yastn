@@ -1,3 +1,8 @@
+10-10-2026
+- license changed from Apache-2.0 to GPL-3.0-or-later; LICENSE, package metadata and
+  source-file headers updated accordingly.
+
+
 29-07-2026
 - backend-agnostic GPU builder of the cuTensor tensordot metadata: `_meta_tensordot_cutensor_gpu`
   no longer calls torch directly. The array backend is loaded from `backend_id` and injected into

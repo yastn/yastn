@@ -1,5 +1,17 @@
 # Copyright 2026 The YASTN Authors. All Rights Reserved.
-# Licensed under the Apache License, Version 2.0 (the "License");
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """Block-sparse oracle and dispatch tests for SI projector refinement."""
 
 import numpy as np
@@ -14,9 +26,13 @@ from yastn.tn.fpeps.envs._env_ctm_SI_projectors import (
     si_proj_corners,
     si_projector_svd,
     si_refinement,
-    svd_charge_sector_dimensions,
-    svd_charge_sector_values,
 )
+
+
+def _sector_values(s):
+    """Values of a diagonal tensor, by charge sector."""
+    return {charge: s.config.backend.to_numpy(s[charge + charge])
+            for charge in s.get_legs(0).t}
 
 
 def _charge_tuple(charge):
@@ -55,13 +71,13 @@ def _full_sector_dimensions(r0, r1, opts_svd):
     rho = yastn.tensordot(r0, r1, axes=(1, 1))
     _, s, _ = rho.svd_with_truncation(
         axes=(0, 1), sU=r0.s[1], **opts_svd)
-    return svd_charge_sector_dimensions(s)
+    return dict(s.get_legs(0).tD)
 
 
 def _si_sector_dimensions(r0, r1, X, Y, opts_svd, opts_si):
     _, s, _, X, Y, _ = si_projector_svd(
         r0, r1, X, Y, opts_svd, opts_si)
-    return svd_charge_sector_dimensions(s), X, Y
+    return dict(s.get_legs(0).tD), X, Y
 
 
 def _biased_z2_corners(config):
@@ -79,8 +95,8 @@ def _assert_refined_si_spectrum(r0, r1, X, Y, opts_svd, opts_si):
     rho = yastn.tensordot(r0, r1, axes=(1, 1))
     _, s_full, _ = rho.svd_with_truncation(
         axes=(0, 1), sU=r0.s[1], **opts_svd)
-    actual = svd_charge_sector_values(s_si)
-    expected = svd_charge_sector_values(s_full)
+    actual = _sector_values(s_si)
+    expected = _sector_values(s_full)
     assert actual.keys() == expected.keys()
     for charge in expected:
         assert np.allclose(actual[charge], expected[charge],
@@ -283,10 +299,8 @@ def test_si_refinement_accepts_corner_pairs(config_kwargs, refinement):
         pair0, pair1, X_pair, Y_pair, opts_svd, opts_si)
     _, s_half, _, _, _, _ = si_projector_svd(
         half0, half1, X_half, Y_half, opts_svd, opts_si)
-    assert np.allclose(np.sort(np.concatenate(tuple(
-                           np.asarray(v) for v in svd_charge_sector_values(s_pair).values()))),
-                       np.sort(np.concatenate(tuple(
-                           np.asarray(v) for v in svd_charge_sector_values(s_half).values()))))
+    assert np.allclose(np.sort(s_pair.to_numpy().diagonal()),
+                       np.sort(s_half.to_numpy().diagonal()))
 
 
 def test_si_corner_pairs_keep_recycled_bases(config_kwargs):
@@ -462,6 +476,74 @@ def test_adaptive_spectrum_rejects_rank_too_small_to_probe_every_sector(config_k
     with pytest.raises(yastn.YastnError,
                        match='cannot probe every shared charge sector'):
         si_refinement(r0, r1, X, Y, opts_svd, opts_si)
+
+
+def _assert_allocation_within_capacity(X, r0, r1, chip):
+    allocation = X.get_legs(1).tD
+    capacity = si_module._ctm_shared_sector_capacity(_Half(r0), _Half(r1))
+    assert all(dimension <= capacity[charge] for charge, dimension in allocation.items())
+    assert sum(allocation.values()) == min(chip, sum(capacity.values()))
+
+
+@pytest.mark.parametrize(('D_total', 'oversampling', 'expected'), [
+    (20, 4, {(-2,): 2, (0,): 5, (2,): 2}),
+    # The +2/-2 split of the overflow follows _charge_order (+q before -q).
+    (6, 2, {(-2,): 1, (0,): 5, (2,): 2}),
+], ids=('chip_above_capacity', 'chip_below_capacity'))
+def test_adaptive_spectrum_caps_a_dominant_sector_at_its_capacity(
+        config_kwargs, D_total, oversampling, expected):
+    """The rank a full dominant sector cannot hold goes to the other sectors."""
+    config = yastn.make_config(sym='U1', **config_kwargs)
+    config.backend.random_seed(seed=41)
+    r0, r1 = _corners_with_sector_spectra(config, {
+        (-2,): (.1, .05), (0,): (10., 9., 8., 7., 6.), (2,): (.1, .05)})
+    opts_svd = {'D_total': D_total, 'tol': 0, 'fix_signs': True}
+    opts_si = {'enabled': True, 'oversampling': oversampling, 'niter': 4,
+               'tol': 1e-12, 'redistribute_sectors': True,
+               'refinement': 'adaptive_spectrum'}
+
+    _, _, X, Y, _ = si_proj_corners(r0, r1, opts_svd, opts_si)
+
+    assert X.get_legs(1).tD == Y.get_legs(0).tD == expected
+    _assert_allocation_within_capacity(X, r0, r1, D_total + oversampling)
+
+
+def test_adaptive_spectrum_explores_with_rank_above_capacity(config_kwargs):
+    """Seeding missing sectors uses every available direction, not chi + p."""
+    config = yastn.make_config(sym='U1', **config_kwargs)
+    config.backend.random_seed(seed=42)
+    r0, r1 = _corners_with_sector_spectra(config, {
+        (-1,): (3., 1.), (0,): (4., 2.), (1,): (5., .5)})
+    opts_svd = {'D_total': 8, 'tol': 0, 'fix_signs': True}
+    opts_si = {'enabled': True, 'oversampling': 2, 'niter': 4,
+               'tol': 1e-12, 'redistribute_sectors': True,
+               'refinement': 'adaptive_spectrum'}
+    X, Y = initialize_si_bases(r0, r1, rank=4, charges={(0,): 2, (1,): 2})
+
+    _, _, X, Y, _ = si_proj_corners(r0, r1, opts_svd, opts_si, X=X, Y=Y)
+
+    assert X.get_legs(1).tD == {(-1,): 2, (0,): 2, (1,): 2}
+    _assert_refined_si_spectrum(r0, r1, X, Y, opts_svd, opts_si)
+
+
+@pytest.mark.parametrize('seed', range(6))
+def test_adaptive_spectrum_respects_capacity_on_random_corners(config_kwargs, seed):
+    """Proportional reallocation never exceeds what a sector can hold."""
+    config = yastn.make_config(sym='U1', **config_kwargs)
+    config.backend.random_seed(seed=seed)
+    external = yastn.Leg(config, s=1, t=(-1, 0, 1, 2), D=(1, 2, 3, 2))
+    inner = yastn.Leg(config, s=-1, t=(-1, 0, 1, 2), D=(3, 3, 3, 3))
+    r0 = yastn.rand(config, legs=(external, inner))
+    r1 = yastn.rand(config, legs=(external.conj(), inner.conj()))
+    opts_svd = {'D_total': 4, 'tol': 0, 'fix_signs': True}
+    opts_si = {'enabled': True, 'oversampling': 2, 'niter': 4,
+               'tol': 1e-12, 'redistribute_sectors': True,
+               'refinement': 'adaptive_spectrum'}
+
+    _, _, X, Y, _ = si_proj_corners(r0, r1, opts_svd, opts_si)
+
+    assert X.get_legs(1).tD == Y.get_legs(0).tD
+    _assert_allocation_within_capacity(X, r0, r1, 6)
 
 
 # ---------------------------------------------------------------------------
@@ -687,3 +769,94 @@ def test_si_forwards_custom_truncation_mask(config_kwargs):
 
     assert mask_calls == [(5, 5), (5, 5)]
     assert actual == reference == {(): 2}
+
+
+# ---------------------------------------------------------------------------
+# Halves with equal external signatures
+# ---------------------------------------------------------------------------
+
+
+def _equal_signature_halves(config, charges, dimensions):
+    """Halves whose external legs share a signature, as R factors of use_qr do.
+
+    Charge q of ``r1`` then pairs with the conjugate charge of ``r0`` (-q for
+    U1), and both legs are consistent under that pairing although not under
+    equal labels.
+    """
+    inner = yastn.Leg(config, s=-1, t=charges, D=(4,) * len(charges))
+    external0 = yastn.Leg(config, s=1, t=charges, D=dimensions)
+    conjugate = tuple(config.sym.add_charges(q, signatures=(-1,)) for q in charges)
+    external1 = yastn.Leg(config, s=1, t=conjugate, D=dimensions)
+    r0 = yastn.rand(config, legs=(external0, inner))
+    r1 = yastn.rand(config, legs=(external1, inner.conj()))
+    return r0, r1
+
+
+def _sorted_values(s):
+    """All values of a diagonal tensor, sorted.
+
+    For equal external signatures, SI labels the truncated bond by the charges
+    of ``r1`` and the full SVD by those of ``r0``, which differ in sign, so
+    spectra are compared without their labels.
+    """
+    return np.sort(s.to_numpy().diagonal())
+
+
+_EQUAL_SIGNATURE_CASES = pytest.mark.parametrize(('sym', 'charges', 'dimensions', 'capacity'), [
+    ('U1', ((-1,), (0,), (1,)), (1, 2, 3), {(-1,): 3, (0,): 2, (1,): 1}),
+    ('U1', ((0,), (1,), (2,)), (2, 3, 4), {(-2,): 4, (-1,): 3, (0,): 2}),
+    ('Z3', ((0,), (1,), (2,)), (1, 2, 3), {(0,): 1, (1,): 3, (2,): 2}),
+    ('U1xU1', ((0, 0), (1, 0), (0, 1)), (1, 2, 3), {(-1, 0): 2, (0, -1): 3, (0, 0): 1}),
+], ids=('U1_asymmetric_dimensions', 'U1_asymmetric_charges', 'Z3', 'U1xU1'))
+
+
+@_EQUAL_SIGNATURE_CASES
+def test_si_pairs_equal_signature_sectors_by_the_fusion_rule(
+        config_kwargs, sym, charges, dimensions, capacity):
+    """Every sector of the half product is available, and SI spans it exactly."""
+    config = yastn.make_config(sym=sym, **config_kwargs)
+    config.backend.random_seed(seed=43)
+    r0, r1 = _equal_signature_halves(config, charges, dimensions)
+    assert si_module._ctm_shared_sector_capacity(r0, r1) == capacity
+
+    # SI bases with every available direction reproduce the full SVD.
+    rank = sum(dimensions)
+    opts_svd = {'D_total': rank, 'tol': 0, 'fix_signs': True}
+    opts_si = {'enabled': True, 'oversampling': 0, 'niter': 2, 'tol': 1e-12}
+    _, _, X, Y, _ = si_proj_corners(r0, r1, opts_svd, opts_si)
+    _, s_si, _, _, _, _ = si_projector_svd(r0, r1, X, Y, opts_svd, opts_si)
+    rho = yastn.tensordot(r0, r1, axes=(1, 1))
+    _, s_full, _ = rho.svd_with_truncation(axes=(0, 1), sU=r0.s[1], **opts_svd)
+
+    assert X.get_legs(1).tD == capacity
+    assert np.allclose(_sorted_values(s_si), _sorted_values(s_full),
+                       rtol=1e-10, atol=1e-12)
+
+
+@_EQUAL_SIGNATURE_CASES
+@pytest.mark.parametrize('refinement', ('per_sector_oversampling',
+                                        'adaptive_spectrum',
+                                        'sector_dimensions'))
+def test_si_refinements_handle_equal_signature_halves(
+        config_kwargs, sym, charges, dimensions, capacity, refinement):
+    """Redistribution allocates within the fusion-rule capacity of every sector."""
+    config = yastn.make_config(sym=sym, **config_kwargs)
+    config.backend.random_seed(seed=44)
+    r0, r1 = _equal_signature_halves(config, charges, dimensions)
+    opts_svd = {'D_total': 3, 'tol': 0, 'fix_signs': True}
+    opts_si = {'enabled': True, 'oversampling': 2, 'niter': 4, 'tol': 1e-12,
+               'redistribute_sectors': True, 'refinement': refinement}
+
+    _, _, X, Y, _ = si_proj_corners(r0, r1, opts_svd, opts_si)
+
+    assert si_bases_compatible(_Half(r0), _Half(r1), X, Y)
+    allocation = X.get_legs(1).tD
+    assert all(dimension <= capacity[charge] for charge, dimension in allocation.items())
+    assert sum(allocation.values()) == 5
+    if refinement == 'per_sector_oversampling':
+        # Probing every sector finds the globally dominant spectrum.
+        _, s_si, _, _, _, _ = si_projector_svd(r0, r1, X, Y, opts_svd, opts_si)
+        rho = yastn.tensordot(r0, r1, axes=(1, 1))
+        _, s_full, _ = rho.svd_with_truncation(axes=(0, 1), sU=r0.s[1], **opts_svd)
+        assert np.allclose(_sorted_values(s_si), _sorted_values(s_full),
+                           rtol=1e-10, atol=1e-12)
