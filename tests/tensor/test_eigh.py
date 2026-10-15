@@ -152,3 +152,73 @@ def test_eigh_exceptions(config_kwargs):
 
 if __name__ == '__main__':
     pytest.main([__file__, "-vs", "--durations=0"])
+
+
+def test_eigh_retries_transient_cusolver_failure(config_kwargs, monkeypatch):
+    """ A transient cuSOLVER failure must be retried, not abort a long evolution run. """
+    if config_kwargs.get('backend') != 'torch':
+        pytest.skip('backend_torch.eigh is exercised with the torch backend')
+    import torch
+
+    genuine = torch.linalg.eigh
+    calls = []
+
+    def flaky(x, *args, **kwargs):
+        calls.append(tuple(x.shape))
+        if len(calls) == 1:
+            raise RuntimeError('cusolver error: CUSOLVER_STATUS_INTERNAL_ERROR, when calling '
+                               'cusolverDnXsyevd')
+        return genuine(x, *args, **kwargs)
+
+    config = yastn.make_config(sym='SU2xU1', **config_kwargs)
+    a = matrix_tensor(config)
+    a = a + a.H
+
+    monkeypatch.setattr(torch.linalg, 'eigh', flaky)
+    S, U = yastn.eigh(a, axes=(0, 1))
+    assert len(calls) > 1, 'the failing solve was not retried'
+    assert (U @ S @ U.H - a).norm() < tol
+
+    def broken(x, *args, **kwargs):
+        raise RuntimeError('some unrelated failure')
+
+    monkeypatch.setattr(torch.linalg, 'eigh', broken)
+    with pytest.raises(RuntimeError, match='some unrelated failure'):
+        yastn.eigh(a, axes=(0, 1))
+
+
+def test_with_cusolver_retry_fallback_chain():
+    """ The fallback chain is walked: failing call -> fresh copy -> (MAGMA) -> CPU. """
+    import torch
+    from yastn.backend.backend_torch import _with_cusolver_retry
+
+    x = torch.eye(2)
+    calls = []
+
+    def flaky(t):
+        calls.append(t)
+        if len(calls) == 1:
+            raise RuntimeError('cusolver error: CUSOLVER_STATUS_INTERNAL_ERROR')
+        return t
+
+    assert _with_cusolver_retry(flaky, x) is not None
+    assert len(calls) == 2  # the failing solve was retried on a copy
+
+    def always_broken(t):
+        calls.append(t)
+        raise RuntimeError('cusolver error: CUSOLVER_STATUS_INTERNAL_ERROR')
+
+    calls.clear()
+    with pytest.raises(RuntimeError):
+        _with_cusolver_retry(always_broken, x)
+    assert len(calls) == 2  # original and fresh copy; a CPU input has no CPU fallback left
+
+    calls.clear()
+
+    def unrelated(t):
+        calls.append(t)
+        raise RuntimeError('some unrelated failure')
+
+    with pytest.raises(RuntimeError, match='some unrelated failure'):
+        _with_cusolver_retry(unrelated, x)
+    assert len(calls) == 1  # not a cuSOLVER failure: no retry

@@ -29,6 +29,54 @@ mp.set_start_method('spawn', force=True) # to avoid issues with ''fork' and shar
 from .._cache_registry import register_cache
 from .linalg.torch_eig_sym import SYMEIG
 
+
+def _linalg_backend_name(backend):
+    """ The string accepted by :func:`torch.backends.cuda.preferred_linalg_library`. """
+    name = str(backend).lower()
+    for option in ('magma', 'cusolver', 'default'):
+        if option in name:
+            return option
+    return 'default'
+
+
+def _with_cusolver_retry(solve, x):
+    r"""Run a cuSOLVER-backed decomposition, recovering from a library failure.
+
+    cuSOLVER raises ``CUSOLVER_STATUS_INTERNAL_ERROR`` on matrices it cannot handle -- long
+    fPEPS evolution runs on Hopper abort once their gauge-fixing metric becomes rank
+    deficient and extremely ill conditioned (rank 326/696 and cond 7e17 in one observed
+    case), while LAPACK and MAGMA solve the very same block. The call is retried on a fresh
+    (16-byte aligned) copy, then with MAGMA, and finally on the CPU, each a different
+    implementation than the failing cuSOLVER path.
+
+    MAGMA is selected only around this call and restored immediately afterwards: leaving the
+    process-wide preference on MAGMA breaks the SVD calls that pass ``driver=``, which only
+    cuSOLVER supports. ``solve`` must accept one tensor and return a tensor or a tuple of
+    tensors.
+    """
+    try:
+        return solve(x)
+    except RuntimeError as exc:
+        if 'cusolver' not in str(exc).lower():
+            raise
+        try:
+            return solve(x.clone())
+        except RuntimeError:
+            if not x.is_cuda:
+                raise
+        previous = torch.backends.cuda.preferred_linalg_library()
+        try:
+            torch.backends.cuda.preferred_linalg_library('magma')
+            return solve(x)
+        except RuntimeError:
+            pass
+        finally:
+            torch.backends.cuda.preferred_linalg_library(_linalg_backend_name(previous))
+        result = solve(x.cpu())
+        if isinstance(result, tuple):
+            return type(result)(v.to(x.device) if torch.is_tensor(v) else v for v in result)
+        return result.to(x.device)
+
 from ._backend_torch_backwards import kernel_svd, kernel_svds_scipy
 from ._backend_torch_backwards import kernel_dot, kernel_transpose_dot_sum, kernel_negate_blocks
 from ._backend_torch_backwards import kernel_apply_mask, kernel_embed_mask
@@ -515,7 +563,7 @@ def svdvals(data, meta, sizeS, **kwargss):
     real_dtype = data.real.dtype if data.is_complex() else data.dtype
     Sdata = torch.zeros((sizeS,), dtype=real_dtype, device=data.device)
     
-    _loc_svd_vals= lambda block: torch.linalg.svdvals(block.cpu()).to(block.device) if block.device.type == 'mps' else torch.linalg.svdvals(block)
+    _loc_svd_vals= lambda block: torch.linalg.svdvals(block.cpu()).to(block.device) if block.device.type == 'mps' else _with_cusolver_retry(torch.linalg.svdvals, block)
     
     for (slo, Do, _, _, slS, _, _) in meta:
         Sdata[slS] = _loc_svd_vals(data[slo].view(Do))
@@ -534,7 +582,7 @@ def svd_randomized(data, meta, sizes, q=None, niter=3, **kwargs):
     for slo, Do, slU, DU, slS, slV, DV in meta:
         k = slS.stop - slS.start
         q = max(k, min(2 * k, *Do))
-        U, S, V = torch.svd_lowrank(data[slo].view(Do), q=q, niter=niter)
+        U, S, V = _with_cusolver_retry(lambda block: torch.svd_lowrank(block, q=q, niter=niter), data[slo].view(Do))
         Udata[slU].reshape(DU)[:] = U[:,:k]
         Sdata[slS] = S[:k]
         Vdata[slV].reshape(DV)[:] = V[:,:k].t().conj()
@@ -574,13 +622,13 @@ def eigh(data, meta=None, sizes=(1, 1), order_by_magnitude=False, ad_decomp_reg=
                 if x.device.type == 'mps':
                     S, U = torch.linalg.eigh(x.cpu())
                     return S.to(x.device), U.to(x.device)
-                return torch.linalg.eigh(x)
+                return _with_cusolver_retry(torch.linalg.eigh, x)
         for slo, Do, slU, DU, slS in meta:
             S, U = f(data[slo].view(Do))
             Sdata[slS] = S
             Udata[slU].view(DU)[:] = U
         return Sdata, Udata
-    return torch.linalg.eigh(data)  # S, U
+    return _with_cusolver_retry(torch.linalg.eigh, data)  # S, U
 
 
 def eig(data, meta=None, sizes=(1, 1), biorth_tol=None, **kwargs):
@@ -689,12 +737,12 @@ def eigvals(data, meta, sizeS, **kwargs):
 def qr(data, meta, sizes):
     Qdata = torch.zeros((sizes[0],), dtype=data.dtype, device=data.device)
     Rdata = torch.zeros((sizes[1],), dtype=data.dtype, device=data.device)
-    
+
     def _loc_qr(block):
         if block.device.type == 'mps':
             Q, R = torch.linalg.qr(block.cpu())
             return Q.to(block.device), R.to(block.device)
-        return torch.linalg.qr(block)
+        return _with_cusolver_retry(torch.linalg.qr, block)
     
     for slo, Do, slQ, DQ, slR, DR in meta:
         Q, R = _loc_qr(data[slo].view(Do))
