@@ -289,6 +289,11 @@ def test_hard_transpose(config_kwargs, remove_blocks):
     a = yastn.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
                   t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
                   D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
+    # remove_random_blocks() draws from the global numpy RNG, so which blocks survive --
+    # and with them the dimensions asserted below, e.g. the fused dim of 99 -- depends on
+    # the ambient random state. Seed it: a few percent of random states drop a whole fused
+    # sector (giving 69/79/... instead of 99) and used to fail this test at random.
+    np.random.seed(0)
     a = a.remove_random_blocks(number=remove_blocks, keep_legs=True)
     assert a.get_shape() == (3, 5, 7, 9, 11, 13)
     #
