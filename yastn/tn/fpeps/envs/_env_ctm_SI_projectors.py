@@ -1114,6 +1114,23 @@ def redistribute_due(age, opts_si):
                 and (age - warmup) % frequency == 0))
 
 
+def _si_projector_pair(r0, r1, svd_kwargs, opts_si, state, X, Y, cutoff):
+    """Shared serial/worker SI update, including recycling and scheduling."""
+    due = redistribute_due(state.age, opts_si)
+    redistribute = opts_si.redistribute_sectors and due
+    skip = opts_si.skip_SI_update and not due and state.error < opts_si.tol
+    niter = 0 if skip else opts_si.niter
+    with nvtx_range("si_proj_corners"):
+        p0, p1, X, Y, info = si_proj_corners(
+            r0, r1, svd_kwargs, opts_si, X=X, Y=Y, cutoff=cutoff,
+            redistribute=redistribute, niter=niter)
+    if niter == 0:
+        info.update({'error': state.error})
+    if not opts_si.recycle_grad:
+        X, Y = X.detach(), Y.detach()
+    return p0, p1, X, Y, SI_state(age=state.age + 1, **info)
+
+
 def si_proj_corners(r0, r1, opts_svd, opts_si, X=None, Y=None, cutoff=0,
                     redistribute=None, niter=None):
     r"""Truncated SVD of ``r0 @ r1.T`` from recycled subspace-iteration bases.

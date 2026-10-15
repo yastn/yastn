@@ -373,7 +373,7 @@ def test_fp_si_convergence_uses_distributed_workers(monkeypatch):
     env = _make_env()
     opts = make_ctm_opts(
         opts_svd={'D_total': 2}, max_sweeps=2, corner_tol=None,
-        use_qr=False, opts_si={'enabled': True, 'niter': 2})
+        log_sectors=True, use_qr=False, opts_si={'enabled': True, 'niter': 2})
 
     def unexpected_serial(*args, **kwargs):
         pytest.fail('SI convergence fell back to serial CTM')

@@ -19,7 +19,7 @@ import sys
 from typing import NamedTuple, Sequence, Union
 
 from ._env_contractions import identity_boundary, corner2x2, append_vec_tl, append_vec_br
-from ._env_ctm_SI_projectors import redistribute_due, si_proj_corners, SI_state
+from ._env_ctm_SI_projectors import _si_projector_pair, SI_state
 from ._ctm_opts import CTMOpts, DEFAULT_FIX_SIGNS, make_ctm_opts
 from ._env_dataclasses import EnvCTM_local, EnvCTM_projectors
 from .._evolution import BondMetric
@@ -32,23 +32,6 @@ from ...._split_combine_dict import split_data_and_meta, combine_data_and_meta
 from ...._profile import nvtx_range, nsys_profile
 
 logger = logging.getLogger(__name__)
-
-
-def _si_projector_pair(r0, r1, svd_kwargs, opts_si, state, X, Y, cutoff):
-    """Shared serial/worker SI update, including recycling and scheduling."""
-    due = redistribute_due(state.age, opts_si)
-    redistribute = opts_si.redistribute_sectors and due
-    skip = opts_si.skip_SI_update and not due and state.error < opts_si.tol
-    niter = 0 if skip else opts_si.niter
-    with nvtx_range("si_proj_corners"):
-        p0, p1, X, Y, info = si_proj_corners(
-            r0, r1, svd_kwargs, opts_si, X=X, Y=Y, cutoff=cutoff,
-            redistribute=redistribute, niter=niter)
-    if niter == 0:
-        info.update({'error': state.error})
-    if not opts_si.recycle_grad:
-        X, Y = X.detach(), Y.detach()
-    return p0, p1, X, Y, SI_state(age=state.age + 1, **info)
 
 
 class CTMRG_out(NamedTuple):
@@ -1131,6 +1114,25 @@ class EnvCTM():
             history.append(corner_sv)
             converged = (corner_tol is not None) and (max_dsv < corner_tol)
         return converged, max_dsv, history
+
+    def _corner_sector_dims(env):
+        """Hashable charge/dimension signature of the environment corners.
+
+        Use the same corners as ``calculate_corner_svd`` and
+        ``ctm_conv_corner_spec``; transfer-tensor sectors can change on
+        different sweeps. Missing corners contribute an empty tuple.
+        """
+        out = []
+        for site in env.sites():
+            for dirn in ('tl', 'tr', 'bl', 'br'):
+                ten = getattr(env[site], dirn, None)
+                if ten is None:
+                    out.append(())
+                    continue
+                lg = ten.get_legs()[0]
+                out.append(tuple((t[0] if len(t) == 1 else t, D)
+                                 for t, D in zip(lg.t, lg.D)))
+        return tuple(out)
 
     def max_elem_diff(env: EnvCTM) -> float:
         diffs= [getattr(env.elem_diff[site], dirn) for site in env.elem_diff.sites() \

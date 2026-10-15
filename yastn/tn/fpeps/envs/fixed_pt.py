@@ -687,33 +687,6 @@ def fp_ctmrg(env: EnvCTM,
     return env
 
 
-
-def _env_sector_dims(env):
-    """Charge -> dim of the CORNER spectra, as a hashable signature.
-
-    MUST mirror what the convergence metric measures: ctm_conv_corner_spec ->
-    calculate_corner_svd takes the SVD spectrum of the four CORNER tensors
-    (tl, tr, bl, br), and spec_diff differences those spectra BLOCK BY CHARGE.
-    When the block structure differs between two sweeps that difference is not
-    a meaningful number, which is the thing this signature exists to detect.
-
-    (Logging the transfer tensors t/r/b/l instead looks similar but is a
-    DIFFERENT object -- their legs can change on sweeps where the corner
-    spectra do not, and vice versa.)
-    """
-    out = []
-    for site in env.sites():
-        for dirn in ('tl', 'tr', 'bl', 'br'):
-            ten = getattr(env[site], dirn, None)
-            if ten is None:
-                out.append(())
-                continue
-            lg = ten.get_legs()[0]
-            out.append(tuple((t[0] if len(t) == 1 else t, D)
-                             for t, D in zip(lg.t, lg.D)))
-    return tuple(out)
-
-
 class FixedPoint(torch.autograd.Function):
     ctm_log, t_ctm, t_check = None, None, None
 
@@ -900,7 +873,7 @@ class FixedPoint(torch.autograd.Function):
             t_check += time.perf_counter()-t2
 
             # Charge-sector structure of the environment legs.
-            env_dims = _env_sector_dims(env) if opts.log_sectors else None
+            env_dims = env._corner_sector_dims() if opts.log_sectors else None
             if env_dims is not None and env_dims != prev_sectors:
                 log.log(logging.INFO, f"CTM SECTORS iter {len(conv_history)} {env_dims}")
                 prev_sectors = env_dims

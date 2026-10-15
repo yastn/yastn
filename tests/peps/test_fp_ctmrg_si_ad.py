@@ -11,7 +11,7 @@ import pytest
 
 import yastn
 import yastn.tn.fpeps as fpeps
-import yastn.tn.fpeps.envs._env_ctm as env_ctm_module
+import yastn.tn.fpeps.envs._env_ctm_SI_projectors as si_module
 
 torch = pytest.importorskip("torch")
 pytestmark = pytest.mark.skipif(
@@ -94,7 +94,7 @@ def _fp_basis_policy_case(config_kwargs, monkeypatch, *, errors=None,
                 updated._si_age[key] = state._replace(error=post_gauge_error)
         return gauge, phases
 
-    original_projectors = env_ctm_module.si_proj_corners
+    original_projectors = si_module.si_proj_corners
 
     def record_projectors(*args, **kwargs):
         calls.append((torch.is_grad_enabled(), kwargs['niter'],
@@ -117,7 +117,7 @@ def _fp_basis_policy_case(config_kwargs, monkeypatch, *, errors=None,
     monkeypatch.setattr(fixed_pt.FixedPoint, 'get_converged_env',
                         staticmethod(converged_env))
     monkeypatch.setattr(fixed_pt, 'find_gauge_multi_sites', identity_gauge)
-    monkeypatch.setattr(env_ctm_module, 'si_proj_corners', record_projectors)
+    monkeypatch.setattr(si_module, 'si_proj_corners', record_projectors)
     monkeypatch.setattr(fixed_pt.FixedPoint, 'forward',
                         staticmethod(record_forward))
     monkeypatch.setattr(fixed_pt.FixedPoint, 'fixed_point_iter',

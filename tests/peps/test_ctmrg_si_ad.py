@@ -19,7 +19,7 @@ import pytest
 
 import yastn
 import yastn.tn.fpeps as fpeps
-import yastn.tn.fpeps.envs._env_ctm as env_ctm_module
+import yastn.tn.fpeps.envs._env_ctm_SI_projectors as si_module
 from yastn.tn.fpeps.envs._env_ctm_SI_projectors import (
     initialize_si_bases, si_proj_corners)
 
@@ -228,14 +228,14 @@ def test_recycle_grad_true_backpropagates_through_second_update(
     assert all(y.requires_grad for y in _si_bases(env, env.si_Y).values())
 
     recycled_inputs = []
-    original_si_proj_corners = env_ctm_module.si_proj_corners
+    original_si_proj_corners = si_module.si_proj_corners
 
     def recording_si_proj_corners(*args, **kwargs):
         recycled_inputs.append((kwargs.get('X'), kwargs.get('Y')))
         return original_si_proj_corners(*args, **kwargs)
 
     monkeypatch.setattr(
-        env_ctm_module, 'si_proj_corners', recording_si_proj_corners)
+        si_module, 'si_proj_corners', recording_si_proj_corners)
     env.update_(opts_svd, moves='h', method='2x2 corner', opts_si=opts_si)
 
     assert recycled_inputs

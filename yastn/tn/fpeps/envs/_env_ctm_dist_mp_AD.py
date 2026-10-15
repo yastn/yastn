@@ -625,7 +625,7 @@ def _stage12_compute(args, extra):
         projectors_move_rh, projectors_move_lh,
         projectors_move_tv, projectors_move_bv,
     )
-    from ._env_ctm import _si_projector_pair
+    from ._env_ctm_SI_projectors import _si_projector_pair
     from ....tensor import qr
 
     opts_si = extra.get('opts_si')
