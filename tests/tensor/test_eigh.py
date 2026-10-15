@@ -222,3 +222,38 @@ def test_with_cusolver_retry_fallback_chain():
     with pytest.raises(RuntimeError, match='some unrelated failure'):
         _with_cusolver_retry(unrelated, x)
     assert len(calls) == 1  # not a cuSOLVER failure: no retry
+
+
+def test_eigh_recovers_from_cusolver_failure():
+    """
+    The recorded gauge metric of a U1 fPEPS run: rank 326/696, condition number 7e17 and 609
+    eigenvalue gaps below 1e-10. cuSOLVER's syevd returns CUSOLVER_STATUS_INTERNAL_ERROR for
+    it on Hopper (deterministically, also after a fresh copy) while MAGMA and LAPACK solve the
+    same block, so backend_torch's fallback must return a usable decomposition.
+    """
+    import os
+
+    import numpy as np
+
+    torch = pytest.importorskip('torch')
+    if not torch.cuda.is_available():
+        pytest.skip('the recorded failure is a CUDA cuSOLVER failure')
+    from yastn.backend.backend_torch import _with_cusolver_retry
+
+    fname = os.path.join(os.path.dirname(__file__), 'inputs/cusolver_break_696.npy')
+    a = torch.from_numpy(np.load(fname)).cuda()
+
+    # Whether the raw cuSOLVER call fails depends on the CUDA stack; when it does, it must be
+    # a cuSOLVER error (that is what the fallback keys on), and either way the guarded call
+    # has to return a valid decomposition.
+    try:
+        torch.linalg.eigh(a)
+        print('note: raw torch.linalg.eigh succeeded on this block in this environment')
+    except RuntimeError as exc:
+        assert 'cusolver' in str(exc).lower()
+
+    S, U = _with_cusolver_retry(torch.linalg.eigh, a)
+    assert S.shape == (a.shape[0],) and U.shape == a.shape
+    assert torch.isfinite(S).all() and torch.isfinite(U).all()
+    assert torch.all(S[1:] >= S[:-1])  # eigenvalues are returned in ascending order
+    assert torch.allclose(S.cpu(), torch.linalg.eigvalsh(a.cpu()), atol=1e-12)
