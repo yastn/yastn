@@ -130,8 +130,9 @@ directions independently, and the default ``'auto'`` first parallelizes sites
 and then uses otherwise-idle workers for intra-site operations.  Thus, a
 single-site cell can use two workers for its projector branches and directional
 updates without a separate device list.
-Recycled subspace-iteration projectors currently remain on the serial CTM path,
-even when several devices are supplied.
+Recycled subspace-iteration projectors also use the distributed workers for
+``'2x2'`` methods with simultaneous ``'h'`` and ``'v'`` moves, preserving the
+``recycle_grad`` policy across worker boundaries.
 Note that ``devices=['cpu', 'cpu']`` is a legitimate configuration and exercises the full multiprocess path.
 
 

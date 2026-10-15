@@ -898,12 +898,8 @@ class FixedPoint(torch.autograd.Function):
             t2 = time.perf_counter()
             converged, max_dsv, conv_history = env.ctm_conv_corner_spec(conv_history, check)
             t_check += time.perf_counter()-t2
-            # Charge-sector structure of the environment legs.  MEASURED (D=9 1x1,
-            # 2026-10-08): CTM does not converge at all while this keeps changing --
-            # |delta_C| sits at O(0.1) and oscillates -- and starts decaying
-            # geometrically on the FIRST sweep after it freezes.  A mid-solve jump in
-            # |delta_C| is the structure moving again.  So the sector signature, not
-            # just |delta_C|, is what a CTM log has to carry to be diagnosable.
+
+            # Charge-sector structure of the environment legs.
             env_dims = _env_sector_dims(env) if opts.log_sectors else None
             if env_dims is not None and env_dims != prev_sectors:
                 log.log(logging.INFO, f"CTM SECTORS iter {len(conv_history)} {env_dims}")

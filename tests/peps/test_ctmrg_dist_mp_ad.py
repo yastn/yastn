@@ -22,6 +22,9 @@ import yastn
 import yastn.tn.fpeps as fpeps
 
 
+pytest.importorskip('torch', reason='AD-aware distributed CTM requires PyTorch')
+
+
 ENV_FIELDS = ("tl", "t", "tr", "r", "br", "b", "bl", "l")
 PROJ_FIELDS = ("hlt", "hlb", "hrt", "hrb", "vtl", "vtr", "vbl", "vbr")
 
