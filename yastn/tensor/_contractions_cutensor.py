@@ -52,6 +52,30 @@ class _NonabelianCutensorPlan(NamedTuple):
     hashes: tuple
 
 
+#: The cuTENSOR plan cache below fronts ``_contractions._meta_tensordot_nf`` for
+#: every non-Abelian contraction on GPU, so the no-fusion metadata cache only
+#: ever sees each structure pair once (at D=18 over 20 steps it recorded 0 hits
+#: against 1079 misses, while the plan cache recorded 34093 hits for the same
+#: 1079 keys). Keep a working set of roughly one NTU step instead of the default
+#: 1024 entries, which at large bond dimensions retain megabytes of metadata
+#: that are never requested again. Only applied on the GPU cutensor path.
+_NO_FUSION_TRIM_MAXSIZE = 128
+_no_fusion_trimmed = False
+
+
+def _trim_no_fusion_metadata_cache():
+    """Shrink ``_meta_tensordot_nf`` once, on the first GPU plan build."""
+    global _no_fusion_trimmed
+    if _no_fusion_trimmed:
+        return
+    _no_fusion_trimmed = True
+    from . import _contractions
+    function = _contractions._meta_tensordot_nf
+    wrapped = getattr(function, '__wrapped__', None)
+    if wrapped is not None and function.cache_info().maxsize != _NO_FUSION_TRIM_MAXSIZE:
+        _contractions._meta_tensordot_nf = lru_cache(_NO_FUSION_TRIM_MAXSIZE)(wrapped)
+
+
 @register_cache(key='tensordot_nonabelian_cutensor')
 @lru_cache(maxsize=1024)
 def _meta_tensordot_nonabelian_cutensor(sym, struct_a, struct_b,
@@ -67,6 +91,7 @@ def _meta_tensordot_nonabelian_cutensor(sym, struct_a, struct_b,
     tensordot has already recoupled both inputs into canonical gluing order;
     every reduced block can therefore be viewed as a contiguous matrix.
     """
+    _trim_no_fusion_metadata_cache()
     from . import _contractions  # use the current cache wrapper after set_cache_maxsize
     assert nout_a + nin_a == tuple(range(len(struct_a.legs)))
     assert nin_b + nout_b == tuple(range(len(struct_b.legs)))
