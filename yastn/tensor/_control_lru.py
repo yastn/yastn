@@ -55,6 +55,8 @@ def set_cache_maxsize(maxsize=0):
     _auxiliary.get_blocks = lru_cache(maxsize)(_auxiliary.get_blocks.__wrapped__)
     _auxiliary.get_blocks_charges_all = lru_cache(maxsize)(_auxiliary.get_blocks_charges_all.__wrapped__)
     _auxiliary.get_trimmed_struct_engine = lru_cache(maxsize)(_auxiliary.get_trimmed_struct_engine.__wrapped__)
+    from . import _nonabelian
+    _nonabelian._fusion_weights_cache.set_maxsize(maxsize)
     set_registered_maxsize(maxsize)  # caches of whichever backends are loaded
 
 
@@ -68,9 +70,10 @@ def clear_cache():
     from . import _nonabelian
     for function in (_nonabelian.contraction_coefficient,
                      _nonabelian.intertwiner, _nonabelian.fusion_coefficient,
-                     _nonabelian.fusion_weights, _contractions._fusion_intertwiner,
+                     _contractions._fusion_intertwiner,
                      _contractions._contraction_recoupling):
         function.cache_clear()
+    _nonabelian._fusion_weights_cache.cache_clear()
     _contractions._meta_broadcast.cache_clear()
     _contractions._meta_tensordot_f2m.cache_clear()
     _contractions._meta_tensordot_fc.cache_clear()
@@ -104,7 +107,9 @@ def get_cache_info():
     are present only for backends that are actually loaded, so the key set depends on
     which backend is in use.
     """
-    return {"fuse_hard": _merging._meta_fuse_hard.cache_info(),
+    from . import _nonabelian
+    return {"fusion_weights": _nonabelian._fusion_weights_cache.cache_info(),
+            "fuse_hard": _merging._meta_fuse_hard.cache_info(),
             "adjacent_swap_coefficient": _merging._adjacent_swap_coefficient.cache_info(),
             "unfuse_hard": _merging._meta_unfuse_hard.cache_info(),
             "intersect_hfs": _merging._masks_hfs_intersection.cache_info(),

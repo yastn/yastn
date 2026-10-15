@@ -1,4 +1,6 @@
 """Magnetic-basis normalization at reduced tensor interfaces."""
+from array import array
+from collections import namedtuple
 from functools import lru_cache
 import numpy as np
 import opt_einsum
@@ -208,19 +210,161 @@ def fusion_coefficient(sym, charges, signs, total, channel, grouped, out_charges
 def fusion_scale(config, data, struct, fused, axes, meta, inverse=False):
     if getattr(config.sym, 'IS_ABELIAN', True):
         return data
-    def freeze(x):
-        # Consumers require the (start, stop) form, and slices are only
-        # hashable from Python 3.12 on, so the recursion cannot be skipped by
-        # a hashability probe.
-        if isinstance(x, slice):
-            return (x.start, x.stop)
-        return tuple(freeze(y) for y in x) if isinstance(x, (list, tuple)) else x
-    weights, lengths = fusion_weights(config.sym, struct, fused, axes, freeze(meta))
+    weights, lengths = fusion_weights(config.sym, struct, fused, axes, meta)
     return config.backend.scale_blocks(data, tuple(weights), tuple(lengths), inverse)
 
 
-@lru_cache(maxsize=1024)
+#: Merging metas are nested tuples of slices, integer tuples and tuples of slices. They are
+#: encoded below as fixed-width int64 fields, each container prefixed by its length and each
+#: element by a type tag, which makes the encoding injective: distinct metas can never share a
+#: byte string, so the bytes serve as an exact dict key (the cache compares keys by value,
+#: never by hash alone).
+_TAG_INT, _TAG_SEQ, _TAG_NONE, _TAG_SLICE = 1, 2, 3, 4
+
+
+def _freeze_pair(x):
+    """ ``(start, stop)`` of a slice; containers are frozen element-wise.
+
+    Reproduces the old ``freeze`` applied to the meta field being looked up, where a
+    subslices entry is either one slice or a (possibly empty) tuple of them.
+    """
+    if isinstance(x, slice):
+        return (x.start, x.stop)
+    if isinstance(x, (tuple, list)):
+        return tuple(_freeze_pair(y) for y in x)
+    return x
+
+
+def _encode_meta(flat, meta) -> bool:
+    """ Append ``meta`` to the int64 buffer; ``False`` if it has no lossless encoding.
+
+    Written flat (no recursion, no intermediate tuples) because it runs on every
+    ``fusion_weights`` call, including cache hits: the specialized encoding must stay
+    cheaper than the nested tuple it replaces.
+    """
+    append, extend = flat.append, flat.extend
+    if not isinstance(meta, (tuple, list)):
+        return False
+    extend((_TAG_SEQ, len(meta)))  # self-delimiting: the record count is part of the key
+    for record in meta:
+        if isinstance(record, (tuple, list)):
+            extend((_TAG_SEQ, len(record)))
+        else:
+            return False
+        for field in record:
+            if isinstance(field, (tuple, list)):
+                extend((_TAG_SEQ, len(field)))
+                for value in field:
+                    if type(value) is int:
+                        append(_TAG_INT)
+                        append(value)
+                    elif type(value) is slice:
+                        extend((_TAG_SLICE, value.start, value.stop))
+                    elif isinstance(value, np.integer):
+                        append(_TAG_INT)
+                        append(int(value))
+                    else:
+                        return False
+            elif type(field) is slice:
+                extend((_TAG_SLICE, field.start, field.stop))
+            elif type(field) is int:
+                append(_TAG_INT)
+                append(field)
+            elif isinstance(field, np.integer):
+                append(_TAG_INT)
+                append(int(field))
+            elif field is None:
+                append(_TAG_NONE)
+            else:
+                return False
+    return True
+
+
+def meta_key(meta):
+    """ Compact lossless key of a merging meta: 8 bytes per scalar instead of a nested tuple.
+
+    The meta is needed to compute the fusion weights but must not be retained with them, so
+    the cache keys on this encoding and drops the meta itself. Distinct metas always encode to
+    distinct byte strings; should a value not fit int64 (or have an unexpected type), the frozen
+    form of the meta is returned instead -- equally exact and hashable on every supported Python,
+    but larger.
+    """
+    flat = array('q')
+    try:
+        if _encode_meta(flat, meta):
+            return flat.tobytes()
+    except (OverflowError, TypeError, ValueError):
+        pass
+    return _freeze_pair(meta)
+
+
+#: Same shape as ``functools.lru_cache().cache_info()``, so ``yastn.get_cache_info()``
+#: reports every cache uniformly.
+CacheInfo = namedtuple('CacheInfo', ['hits', 'misses', 'maxsize', 'currsize'])
+
+
+class _FusionWeightsCache:
+    """ Bounded LRU cache for :func:`_compute_fusion_weights`, keyed by :func:`meta_key`.
+
+    ``functools.lru_cache`` cannot express this cache: the meta is an argument but must not be
+    part of the retained key, since the frozen nested tuple it used to key on costs about 36
+    bytes per scalar (one Python object per integer) as against 8 bytes encoded.
+    """
+    __slots__ = ('_entries', '_maxsize', 'hits', 'misses')
+
+    def __init__(self, maxsize=1024):
+        self._entries: dict = {}
+        self._maxsize = maxsize
+        self.hits = 0
+        self.misses = 0
+
+    def lookup(self, key):
+        """ Cached value, or ``None`` on a miss -- entries are never ``None``. """
+        try:
+            value = self._entries.pop(key)
+        except KeyError:
+            self.misses += 1
+            return None
+        self._entries[key] = value  # reinserted last: most recently used
+        self.hits += 1
+        return value
+
+    def store(self, key, value):
+        if self._maxsize == 0:
+            return
+        if self._maxsize is not None:
+            while len(self._entries) >= self._maxsize:
+                self._entries.pop(next(iter(self._entries)))
+        self._entries[key] = value
+
+    def cache_clear(self):
+        self._entries.clear()
+        self.hits = self.misses = 0
+
+    def set_maxsize(self, maxsize):
+        self._maxsize = maxsize
+        if maxsize is not None:
+            while len(self._entries) > maxsize:
+                self._entries.pop(next(iter(self._entries)))
+
+    def cache_info(self):
+        return CacheInfo(self.hits, self.misses, self._maxsize, len(self._entries))
+
+
+_fusion_weights_cache = _FusionWeightsCache(maxsize=1024)
+
+
 def fusion_weights(sym, struct, fused, axes, meta):
+    """ Fusion weights of one hard-fusion scale step, cached under the encoded meta. """
+    key = (sym, struct, fused, axes, meta_key(meta))
+    value = _fusion_weights_cache.lookup(key)
+    if value is None:
+        value = _compute_fusion_weights(sym, struct, fused, axes, meta)
+        _fusion_weights_cache.store(key, value)
+    return value
+
+
+def _compute_fusion_weights(sym, struct, fused, axes, meta):
     from ._auxiliary import get_blocks
     from ._merging import _leg_structure_combine_charges_prod
     old, new = get_blocks(sym, struct), get_blocks(sym, fused)
@@ -234,7 +378,7 @@ def fusion_weights(sym, struct, fused, axes, meta):
     # Cache one scalar per reduced block, not per multiplicity entry.
     weights = np.ones(old.nblocks)
     for sln, _, slo, _, subslices, _ in meta:
-        ia, ic = old_lookup[tuple(slo)], new_lookup[tuple(sln)]
+        ia, ic = old_lookup[_freeze_pair(slo)], new_lookup[_freeze_pair(sln)]
         charges, out_charges = tuple(map(tuple, old.t[ia])), tuple(map(tuple, new.t[ic]))
         paths = []
         for i, (group, dec) in enumerate(zip(axes, decompositions)):
@@ -243,7 +387,8 @@ def fusion_weights(sym, struct, fused, axes, meta):
             else:
                 candidates = dec.dec[dec.t.index(out_charges[i])]
                 flat = sum((charges[j] for j in group), ())
-                paths.append(next(d.channel for d in candidates if d.t == flat and d.Dslc == tuple(subslices[i])))
+                slcs = _freeze_pair(subslices[i])
+                paths.append(next(d.channel for d in candidates if d.t == flat and d.Dslc == slcs))
         coef = fusion_coefficient(sym, charges, signs, struct.n, tuple(old.channels[ia]), axes,
                                   out_charges, out_signs, tuple(new.channels[ic]), tuple(paths))
         weights[ia] = coef

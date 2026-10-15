@@ -70,6 +70,99 @@ def test_cache(config_kwargs):
     assert cache_info["broadcast"] == (0, 0, 10, 0)
 
 
+def test_fusion_weights_cache(config_kwargs):
+    """The fusion-weights cache keys on an encoded meta: no aliasing, same values."""
+    from array import array
+    from yastn.tensor import _nonabelian
+
+    def _freeze(x):
+        if isinstance(x, slice):
+            return (x.start, x.stop)
+        return tuple(_freeze(y) for y in x) if isinstance(x, (tuple, list)) else x
+
+    def _decode(key):
+        flat = array('q')
+        flat.frombytes(key)
+        pos = 0
+
+        def read():
+            nonlocal pos
+            tag = flat[pos]
+            pos += 1
+            if tag == _nonabelian._TAG_NONE:
+                return None
+            if tag == _nonabelian._TAG_SLICE:
+                start, stop = flat[pos], flat[pos + 1]
+                pos += 2
+                return slice(start, stop)
+            if tag == _nonabelian._TAG_SEQ:
+                count = flat[pos]
+                pos += 1
+                return tuple(read() for _ in range(count))
+            assert tag == _nonabelian._TAG_INT
+            value = flat[pos]
+            pos += 1
+            return value
+
+        value = _freeze(read())
+        assert pos == len(flat), "encoded key has trailing fields"
+        return value
+
+    # collect the (sym, struct, fused, axes, meta) of every hard fuse/unfuse step
+    calls, scale = [], _nonabelian.fusion_scale
+
+    def probe(config, data, struct, fused, axes, meta, inverse=False):
+        calls.append((config.sym, struct, fused, axes, meta))
+        return scale(config, data, struct, fused, axes, meta, inverse=inverse)
+
+    _nonabelian.fusion_scale = probe
+    try:
+        a = four_leg_tensor(yastn.make_config(sym='SU2xU1', **config_kwargs))
+        b = a.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
+        b.unfuse_legs(axes=(0, 1))
+    finally:
+        _nonabelian.fusion_scale = scale
+    assert calls
+
+    keys = []
+    for sym, struct, fused, axes, meta in calls:
+        key = _nonabelian.meta_key(meta)
+        assert isinstance(key, bytes), "real metas must encode, not fall back to the tuple key"
+        assert _decode(key) == _freeze(meta), "encoding must be lossless"
+        # the cached value must equal the uncached computation
+        cached = _nonabelian.fusion_weights(sym, struct, fused, axes, meta)
+        direct = _nonabelian._compute_fusion_weights(sym, struct, fused, axes, meta)
+        assert all(wc == wd for wc, wd in zip(cached[0], direct[0]))
+        assert all(lc == ld for lc, ld in zip(cached[1], direct[1]))
+        keys.append(key)
+
+    # distinct metas must not share a key
+    assert len(set(keys)) == len({_freeze(meta) for *_, meta in calls})
+    assert _nonabelian._fusion_weights_cache.cache_info().hits > 0
+
+    # structural equality: list/tuple and int/np.integer spellings encode identically
+    meta = calls[0][4]
+    assert _nonabelian.meta_key(meta) == _nonabelian.meta_key(tuple(list(rec) for rec in meta))
+    assert _nonabelian.meta_key((np.int64(5),)) == _nonabelian.meta_key((5,))
+
+    # a field that cannot be encoded falls back to the exact tuple, which never aliases
+    plain = ((slice(0, 2), (1, 2), slice(0, 1), (), (slice(0, 1),), ()),)
+    assert isinstance(_nonabelian.meta_key(plain), bytes)
+    assert _nonabelian.meta_key(plain) == _nonabelian.meta_key(list(plain))
+    assert _decode(_nonabelian.meta_key(plain)) == _freeze(plain)
+    out_of_range = ((slice(0, 2), (1 << 70,)),)
+    assert _nonabelian.meta_key(out_of_range) == _freeze(out_of_range)  # frozen fallback
+    assert isinstance(hash(_nonabelian.meta_key(out_of_range)), int)
+    assert _decode(_nonabelian.meta_key(((None,),))) == ((None,),)  # None has its own tag
+
+    variants = []
+    for shift in range(6):
+        record = list(plain[0])
+        record[shift] = (shift + 7,)
+        variants.append((tuple(record),))
+    assert len({_nonabelian.meta_key(v) for v in variants}) == len(variants)
+
+
 #: Child program for test_import_and_cache_api_without_torch. Runs in a subprocess so the
 #: torch blocker cannot pollute the sys.modules of the test session itself.
 _NO_TORCH_PROGRAM = """
