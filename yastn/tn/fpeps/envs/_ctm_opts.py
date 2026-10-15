@@ -32,6 +32,7 @@ boundary that accepts loose keyword arguments; it rejects unknown names.
 from __future__ import annotations
 
 from dataclasses import MISSING, dataclass, field, fields, is_dataclass, replace
+import re
 from typing import Any, Callable, Literal, get_args, get_origin, get_type_hints
 
 from ....tensor import YastnError
@@ -76,6 +77,37 @@ REFINEMENTS = ('per_sector_oversampling', 'adaptive_spectrum', 'sector_dimension
 _CTM_ALIASES = {'opts_svd_ctm': 'opts_svd'}
 
 _MOVES = 'hvlrtbd'
+
+
+def _normalize_devices(devices):
+    r"""Return a canonical device tuple without importing a tensor backend."""
+    if devices is None:
+        return None
+    if isinstance(devices, str):
+        devices = (devices,)
+
+    out = []
+    seen_cuda = set()
+    for value in devices:
+        device = str(value)
+        if device == 'cuda':
+            device = 'cuda:0'
+        else:
+            match = re.fullmatch(r'cuda:([0-9]+)', device)
+            if match is not None:
+                device = f"cuda:{int(match.group(1))}"
+
+        # Repeated CPU entries intentionally represent separate worker ranks.
+        # Repeated CUDA entries would instead target the same physical device.
+        if re.fullmatch(r'cuda:[0-9]+', device):
+            if device in seen_cuda:
+                continue
+            seen_cuda.add(device)
+        out.append(device)
+
+    if not out:
+        raise YastnError("devices must be a non-empty sequence, or None.")
+    return tuple(out)
 
 
 def _unknown(name, allowed, what):
@@ -213,9 +245,23 @@ class CTMOpts:
         ``'reentrant'`` or ``'nonreentrant'`` to checkpoint each move on the
         PyTorch backend; ``False`` disables checkpointing.
     devices: tuple[str, ...] | None
-        Devices for the distributed CTM paths. A list is accepted and converted.
+        Devices for explicit distributed CTM paths. Ordinary :class:`EnvCTM`
+        serial entry points do not dispatch based on this field. Entries are
+        stringified, bare ``'cuda'`` becomes ``'cuda:0'``, and repeated CUDA
+        devices are removed; repeated CPU entries remain separate worker ranks.
     profiling_mode: str | None
         Profiling instrumentation, e.g. ``'NVTX'``.
+    parallelism: 'auto' | 'sites' | 'intra_site'
+        Scheduling policy for distributed CTM. ``'sites'`` keeps each site's
+        projector and directional jobs on one worker. ``'intra_site'`` treats
+        projector branches and directions as independent jobs. ``'auto'``
+        prefers site scheduling and uses otherwise-idle workers for intra-site
+        jobs.
+    log_sectors: bool
+        Log the environment legs' charge-sector dimensions whenever the
+        truncation reallocates them (``CTM SECTORS iter N ...``). Off by
+        default. CTM does not converge while that allocation keeps changing,
+        so this is the diagnostic for a stalled or jumping ``|delta_C|``.
     verbosity: int
         Diagnostic verbosity.
     """
@@ -247,8 +293,11 @@ class CTMOpts:
         'help': 'devices for the distributed CTM paths'})
     profiling_mode: str | None = field(default=None, metadata={
         'help': "profiling instrumentation, e.g. 'NVTX'"})
+    parallelism: Literal['auto', 'sites', 'intra_site'] = field(default='auto', metadata={
+        'help': "distributed scheduling: 'auto', 'sites', or 'intra_site'"})
+    log_sectors: bool = field(default=False, metadata={
+        'help': "log env charge-sector dims whenever the truncation reallocates them"})
     verbosity: int = field(default=0, metadata={'help': 'diagnostic verbosity'})
-
     def __post_init__(self):
         st = lambda name, value: object.__setattr__(self, name, value)
 
@@ -272,10 +321,12 @@ class CTMOpts:
         elif self.opts_si is not None and not isinstance(self.opts_si, SIOpts):
             raise YastnError(f"opts_si must be a dict or SIOpts, got {type(self.opts_si).__name__}.")
 
-        if self.devices is not None:
-            st('devices', tuple(self.devices))
-            if not self.devices:
-                raise YastnError("devices must be a non-empty sequence, or None.")
+        st('devices', _normalize_devices(self.devices))
+
+        if self.parallelism not in ('auto', 'sites', 'intra_site'):
+            raise YastnError(
+                f"parallelism={self.parallelism!r} not recognized. Should be "
+                "'auto', 'sites', or 'intra_site'.")
 
         if not self.checkpoint_move:  # normalize 0/None/'' to False
             st('checkpoint_move', False)
@@ -359,7 +410,8 @@ class FixedPointOpts:
         Iterations without improvement before the Neumann series gives up.
         Unlike the budget and tolerance, this has no forward counterpart.
     devices: tuple[str, ...] | None
-        Devices for the distributed fixed-point path. Was ``fp_devices``.
+        Devices for the distributed fixed-point path. Entries use the same
+        normalization as :attr:`CTMOpts.devices`.
     verbosity: int
         Diagnostic verbosity.
     """
@@ -372,6 +424,25 @@ class FixedPointOpts:
     devices: tuple[str, ...] | None = field(default=None, metadata={
         'help': 'devices for the distributed fixed-point path'})
     verbosity: int = field(default=0, metadata={'help': 'diagnostic verbosity'})
+    # Forward-CTM block-min stagnation early-stop. The logic lives in
+    # FixedPoint.get_converged_env; without these fields fp_ctmrg had no way to
+    # reach it, so the detector was unreachable (stuck_block defaulted to 0 =
+    # off) even though its keyword arguments were still implemented.
+    stuck_block: int = field(default=0, metadata={
+        'help': 'sweeps per block for the stuck detector; 0 disables it'})
+    stuck_window: int = field(default=3, metadata={
+        'help': 'how many blocks back the block minimum is compared against'})
+    stuck_factor: float = field(default=2.0, metadata={
+        'help': 'improvement factor the block minimum must beat'})
+    stuck_min_sweeps: int = field(default=60, metadata={
+        'help': 'sweeps before the stuck detector may fire'})
+
+    @property
+    def stuck_kwargs(self) -> dict:
+        """The stuck-detector keyword arguments of ``get_converged_env``."""
+        return {'stuck_block': self.stuck_block, 'stuck_window': self.stuck_window,
+                'stuck_factor': self.stuck_factor,
+                'stuck_min_sweeps': self.stuck_min_sweeps}
 
     def __post_init__(self):
         for name in ('fwd', 'fp'):
@@ -382,8 +453,7 @@ class FixedPointOpts:
                 raise YastnError(
                     f"FixedPointOpts.{name} must be a dict or CTMOpts, "
                     f"got {type(value).__name__}.")
-        if self.devices is not None:
-            object.__setattr__(self, 'devices', tuple(self.devices))
+        object.__setattr__(self, 'devices', _normalize_devices(self.devices))
         if self.neumann_patience < 0:
             raise YastnError("neumann_patience must be non-negative.")
 
@@ -407,9 +477,9 @@ class FixedPointOpts:
         ``fwd`` and is then overridden selectively, with ``opts_svd`` merged key
         by key rather than replaced.
 
-        Keys that are not CTM options (``neumann_patience``, and the legacy
-        ``fp_devices``) are lifted out before the rest is handed to
-        :func:`make_ctm_opts`, which would otherwise reject them.
+        ``neumann_patience`` is lifted out before the rest is handed to
+        :func:`make_ctm_opts`. Unknown keys, including the former
+        ``fp_devices``, are rejected.
         """
         fwd_kwargs = dict(ctm_opts_fwd) if ctm_opts_fwd else {}
         fp_kwargs = dict(ctm_opts_fp) if ctm_opts_fp else {}
@@ -417,7 +487,16 @@ class FixedPointOpts:
         # Not CTM options: make_ctm_opts would reject them.
         patience = fp_kwargs.pop('neumann_patience',
                                  fwd_kwargs.pop('neumann_patience', 10))
-        legacy_devices = fp_kwargs.pop('fp_devices', None)
+
+        # Forward-CTM stuck detector: get_converged_env keyword arguments, not CTM
+        # options. Taken from fwd (that is the only loop they act on); a copy in fp
+        # is accepted and ignored so an inherited dict does not raise.
+        stuck = {}
+        for _k, _d in (('stuck_block', 0), ('stuck_window', 3),
+                       ('stuck_factor', 2.0), ('stuck_min_sweeps', 60)):
+            _v = fwd_kwargs.pop(_k, _d)
+            fp_kwargs.pop(_k, None)
+            stuck[_k] = _v
 
         # The diagnostic verbosity of the backward pass came from ctm_opts_fp
         # alone, defaulting to 0 -- it did NOT inherit fwd's. Keep that: it is
@@ -426,8 +505,8 @@ class FixedPointOpts:
 
         fwd = make_ctm_opts(**fwd_kwargs)
         fp = make_ctm_opts(fwd, **fp_kwargs)  # inherit everything, override selectively
-        return cls(fwd=fwd, fp=fp, devices=devices or legacy_devices,
-                   neumann_patience=patience, verbosity=verbosity)
+        return cls(fwd=fwd, fp=fp, devices=devices,
+                   neumann_patience=patience, verbosity=verbosity, **stuck)
 
 
 # ----------------------------------------------------------------------

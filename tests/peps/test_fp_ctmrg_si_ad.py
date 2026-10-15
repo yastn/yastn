@@ -11,7 +11,7 @@ import pytest
 
 import yastn
 import yastn.tn.fpeps as fpeps
-import yastn.tn.fpeps.envs._env_ctm as env_ctm_module
+import yastn.tn.fpeps.envs._env_ctm_SI_projectors as si_module
 
 torch = pytest.importorskip("torch")
 pytestmark = pytest.mark.skipif(
@@ -34,7 +34,8 @@ def _dense_product_env(config):
 
 def _fp_basis_policy_case(config_kwargs, monkeypatch, *, errors=None,
                           mode='si_skip', method='2x2 corner', moves='hv',
-                          use_autograd=False, post_gauge_error=None):
+                          use_autograd=False, post_gauge_error=None,
+                          devices=None):
     """Exercise real FP linearization with a controlled convergence snapshot.
 
     Gauge fitting and the convergence loop are independent of the basis policy:
@@ -45,7 +46,6 @@ def _fp_basis_policy_case(config_kwargs, monkeypatch, *, errors=None,
         pytest.skip('torch.func.vjp does not support torch_cutensor custom ops')
     from yastn.tn.fpeps.envs import make_ctm_opts, make_fixed_point_opts
     from yastn.tn.fpeps.envs import fixed_pt
-    from yastn.tn.fpeps.envs import _env_ctm_dist_mp_AD as dispatch
 
     config = yastn.make_config(sym='none', **config_kwargs)
     config.backend.random_seed(seed=91)
@@ -72,7 +72,7 @@ def _fp_basis_policy_case(config_kwargs, monkeypatch, *, errors=None,
                       max_sweeps=1, corner_tol=1e-10)
     opts = make_fixed_point_opts(
         fwd=warmup_opts, fp=fp_opts,
-        devices=(config.default_device,) if use_autograd else None)
+        devices=devices or ((config.default_device,) if use_autograd else None))
     calls, contexts, linearization_opts = [], [], []
 
     def converged_env(current, *_args, **_kwargs):
@@ -94,7 +94,7 @@ def _fp_basis_policy_case(config_kwargs, monkeypatch, *, errors=None,
                 updated._si_age[key] = state._replace(error=post_gauge_error)
         return gauge, phases
 
-    original_projectors = env_ctm_module.si_proj_corners
+    original_projectors = si_module.si_proj_corners
 
     def record_projectors(*args, **kwargs):
         calls.append((torch.is_grad_enabled(), kwargs['niter'],
@@ -117,19 +117,11 @@ def _fp_basis_policy_case(config_kwargs, monkeypatch, *, errors=None,
     monkeypatch.setattr(fixed_pt.FixedPoint, 'get_converged_env',
                         staticmethod(converged_env))
     monkeypatch.setattr(fixed_pt, 'find_gauge_multi_sites', identity_gauge)
-    monkeypatch.setattr(env_ctm_module, 'si_proj_corners', record_projectors)
+    monkeypatch.setattr(si_module, 'si_proj_corners', record_projectors)
     monkeypatch.setattr(fixed_pt.FixedPoint, 'forward',
                         staticmethod(record_forward))
     monkeypatch.setattr(fixed_pt.FixedPoint, 'fixed_point_iter',
                         staticmethod(record_iter))
-    # Select the real autograd.grad branch without starting worker processes;
-    # the distributed projector implementation does not support SI yet.
-    if use_autograd:
-        monkeypatch.setattr(dispatch, 'fp_update_',
-                            lambda current, current_opts, **_kwargs:
-                            current.update_(opts=current_opts))
-        monkeypatch.setattr(dispatch, 'release_pool_cache', lambda: None)
-
     with warnings.catch_warnings(record=True) as forward_warnings:
         warnings.simplefilter('always')
         result = fixed_pt.fp_ctmrg(env, opts=opts)
@@ -144,6 +136,37 @@ def _fp_basis_policy_case(config_kwargs, monkeypatch, *, errors=None,
                            opts=opts,
                            original_si=si_opts, original_fp=fp_opts,
                            original_fwd=warmup_opts)
+
+
+@pytest.mark.parametrize('mode', ['si_skip', 'si'])
+def test_fp_si_distributed_linearization_matches_serial(config_kwargs,
+                                                       monkeypatch, mode):
+    """Actual FP forward/backward dispatch preserves the serial SI gradient."""
+    import yastn.tn.fpeps.envs._env_ctm_dist_mp_AD as dist
+
+    if config_kwargs['backend'] != 'torch' or config_kwargs['default_device'] != 'cpu':
+        pytest.skip('CPU multiprocessing oracle requires the torch CPU backend')
+    results = []
+    dispatches = []
+    original_apply = dist._stage_apply_batched
+
+    def record_dispatch(*args, **kwargs):
+        dispatches.append((args[1], torch.is_grad_enabled()))
+        return original_apply(*args, **kwargs)
+
+    for devices in (['cpu'], ['cpu', 'cpu']):
+        with monkeypatch.context() as local_patch:
+            local_patch.setattr(dist, '_stage_apply_batched', record_dispatch)
+            case = _fp_basis_policy_case(
+                config_kwargs, local_patch, mode=mode, use_autograd=True,
+                devices=devices)
+            case.loss.backward()
+            results.append((case.loss.detach(), case.source.grad()._data.detach()))
+    for actual, expected in zip(results[1], results[0]):
+        torch.testing.assert_close(actual, expected, rtol=1e-7, atol=1e-9)
+    assert ('stage12', False) in dispatches
+    assert ('stage12', True) in dispatches
+    assert ('stage3', True) in dispatches
 
 
 @pytest.mark.parametrize('use_autograd', [False, True],

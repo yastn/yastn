@@ -651,10 +651,12 @@ def fp_ctmrg(env: EnvCTM,
         iteration budget and gradient tolerance.
 
     devices: list[str] | None
-        Device list for the CTM step. With one device everything runs serially.
-        With more than one, the forward convergence, the fixed-point CTM step and
-        the Neumann backward all use the AD-aware distributed dispatch on those
-        devices. ``None`` falls back to ``[env.config.default_device]``.
+        Device list controlling CTM dispatch and fixed-point differentiation.
+        With ``None``, CTM computation is serial and the backward uses
+        ``torch.func.vjp``. One explicit device keeps CTM computation serial but
+        selects the ``torch.autograd.grad`` backward. With two or more devices,
+        the forward convergence, fixed-point CTM step, and Neumann backward use
+        the AD-aware distributed dispatch on those devices.
 
     opts: FixedPointOpts | None
         The two option dicts above, pre-resolved. Takes precedence when given.
@@ -664,29 +666,6 @@ def fp_ctmrg(env: EnvCTM,
     EnvCTM
         Environment at the fixed point.
     """
-    # TEMPORARY (pytorch/pytorch#170834, open; fix deferred upstream by maintainers).
-    # A SINGLE device leaves 'fp_devices' unset, so the backward takes the
-    # torch.func.vjp branch below (_use_autograd_grad keys off its presence).
-    # functorch rejects every op registered via torch.library.register_autograd:
-    # torch builds the wrapper as
-    #     Generated = type(name, (autograd.Function,), {"forward":..., "backward":...})
-    # with no setup_context, so autograd.Function.apply raises. This affects ONLY
-    # custom-op backends (torch_cutensor); the plain 'torch' backend is pure ATen
-    # and single-device works there, so leave it alone.
-    # Duplicating the device restores the torch.autograd.grad path on ONE physical
-    # GPU -- the '--devices <d> <d>' form verified in job 4586706.
-    # REMOVE once torch generates a setup_context.
-    if devices is not None and len(devices) == 1 and \
-            getattr(env.config.backend, 'BACKEND_ID', '') != 'torch':
-        _d = list(devices)[0]
-        log.warning(
-            "backend %r with a single CTM device (%s): the fixed-point backward would "
-            "use torch.func.vjp, which rejects torch.library.register_autograd custom "
-            "ops (pytorch/pytorch#170834). Duplicating the device to keep the "
-            "torch.autograd.grad path. Pass devices=['%s', '%s'] explicitly to silence "
-            "this; a single device is fine on the plain 'torch' backend.",
-            getattr(env.config.backend, 'BACKEND_ID', '?'), _d, _d, _d)
-        devices = [_d, _d]
     if opts is None:
         opts = FixedPointOpts.from_legacy_dicts(ctm_opts_fwd, ctm_opts_fp, devices)
     elif devices is not None:
@@ -733,10 +712,15 @@ class FixedPoint(torch.autograd.Function):
         psi_dict = combine_data_and_meta(psi_data, psi_meta)
         env_dict['env'], env_dict['psi'] = env_t_dict, psi_dict
         env_in = EnvCTM.from_dict(env_dict)
-        # Opt-in distributed AD-aware update via opts.devices.
-        # Default keeps single-device env_in.update_(...) untouched.
-        from ._env_ctm_dist_mp_AD import fp_update_
-        fp_update_(env_in, opts.fp, devices=list(opts.devices) if opts.devices else None)
+        # No device or one explicit device keeps the fixed-point map serial.
+        # Two or more devices use the AD-aware worker implementation. The
+        # backward's choice between torch.func.vjp and torch.autograd.grad is
+        # independent of this compute routing and is made below.
+        if opts.devices and len(opts.devices) >= 2:
+            from ._env_ctm_dist_mp_AD import fp_update_
+            fp_update_(env_in, opts.fp, devices=list(opts.devices))
+        else:
+            env_in.update_(opts=opts.fp)
 
         for site in env_in.sites():
             site_t, site_l, site_b, site_r = env_in.nn_site(site, "t"), env_in.nn_site(site, "l"), env_in.nn_site(site, "b"), env_in.nn_site(site, "r")
@@ -877,6 +861,7 @@ class FixedPoint(torch.autograd.Function):
             ctm_itr = iterate_AD_(env, opts=opts, devices=devices)
 
         sweep = 0
+        prev_sectors = None
         for sweep in range(opts.max_sweeps):
             t0 = time.perf_counter()
             itr_out= next(ctm_itr)
@@ -886,8 +871,16 @@ class FixedPoint(torch.autograd.Function):
             t2 = time.perf_counter()
             converged, max_dsv, conv_history = env.ctm_conv_corner_spec(conv_history, check)
             t_check += time.perf_counter()-t2
+
+            # Charge-sector structure of the environment legs.
+            env_dims = env._corner_sector_dims() if opts.log_sectors else None
+            if env_dims is not None and env_dims != prev_sectors:
+                log.log(logging.INFO, f"CTM SECTORS iter {len(conv_history)} {env_dims}")
+                prev_sectors = env_dims
             if opts.verbosity > 2:
-                log.log(logging.INFO, f"CTM iter {len(conv_history)} |delta_C| {max_dsv} max_de {itr_out.max_de} t {t1-t0} [s]")
+                extra = (f" env_dims {[sum(d for _, d in lg) for lg in env_dims]}"
+                         if env_dims is not None else "")
+                log.log(logging.INFO, f"CTM iter {len(conv_history)} |delta_C| {max_dsv} max_de {itr_out.max_de}{extra} t {t1-t0} [s]")
 
             if converged:
                 break
@@ -971,7 +964,7 @@ class FixedPoint(torch.autograd.Function):
         # 1. Converge the environment using CTMRG
         devices = list(opts.devices) if opts.devices else None
         ctm_env_out, converged, *FixedPoint.ctm_log, FixedPoint.t_ctm, FixedPoint.t_check = FixedPoint.get_converged_env(
-            env, opts.fwd, devices=devices,
+            env, opts.fwd, devices=devices, **opts.stuck_kwargs,
         )
         if not converged:
             raise NoFixedPointError(code=1, message="No fixed point found: CTM forward does not converge!")
@@ -984,12 +977,15 @@ class FixedPoint(torch.autograd.Function):
 
         env_converged = ctm_env_out.copy()
         t0 = time.perf_counter()
-        # fp_update_ routes through the distributed AD path when devices are
-        # given, and the serial env.update_ otherwise. No backward fires through
-        # this call, but the distributed dispatch alone gives the same
-        # multi-GPU forward speedup.
-        from ._env_ctm_dist_mp_AD import fp_update_
-        fp_update_(ctm_env_out, opts.fp, devices=devices if opts.devices else None)
+        # Keep this extra fixed-point CTM step serial for zero or one explicit
+        # device. Two or more devices use the distributed AD path; no backward
+        # fires through this particular call, but dispatch still provides the
+        # multi-device forward speedup.
+        if devices is not None and len(devices) >= 2:
+            from ._env_ctm_dist_mp_AD import fp_update_
+            fp_update_(ctm_env_out, opts.fp, devices=devices)
+        else:
+            ctm_env_out.update_(opts=opts.fp)
         t1 = time.perf_counter()
         log.info(f"{type(ctx).__name__}.forward FP CTM step t {t1-t0} [s]")
 
@@ -1028,8 +1024,10 @@ class FixedPoint(torch.autograd.Function):
         ctx.opts = opts
         ctx.phase_dict = phase_dict
 
-        # Release cache after forward to prepare space for energy eval
-        if opts.devices:
+        # Distributed workers retain their own allocator caches. Release them
+        # after the forward to prepare space for the energy evaluation. Serial
+        # zero/one-device execution creates no CTM worker pool.
+        if opts.devices and len(opts.devices) >= 2:
             try:
                 from ._env_ctm_dist_mp_AD import release_pool_cache
                 release_pool_cache()
@@ -1045,7 +1043,6 @@ class FixedPoint(torch.autograd.Function):
     def backward(ctx, none0, none1, none2, *grad_env):
         verbosity= ctx.verbosity
         grads = grad_env
-        dA = grad_env
 
         env_data = ctx.saved_tensors[:ctx.env_data_num]
         g_data = ctx.saved_tensors[ctx.env_data_num:]
@@ -1081,14 +1078,18 @@ class FixedPoint(torch.autograd.Function):
                 ctx.opts.fp, opts_si=replace(
                     si_opts, niter=0, redistribute_sectors=False)))
 
-        # With devices set, the FP CTM step uses our distributed
-        # AD-aware implementation (workers) -- but torch.func.vjp wraps
-        # tensors in a way the workers can't pickle (TensorWrapper
-        # without storage). Build the linearization graph with regular
-        # autograd instead, which produces real tensors that pickle
-        # cleanly. retain_graph=True lets us reuse the captured graph
-        # across the Neumann iterations.
+        # An explicit device selection uses regular autograd for the fixed-point
+        # linearization. In particular, devices=['cuda:0'] is the single-device
+        # torch_cutensor workaround: CTM computation remains serial, while
+        # torch.autograd.grad avoids applying torch.func.vjp to custom operators
+        # registered through torch.library.register_autograd. With two or more
+        # devices, ordinary tensors are also required because worker processes
+        # cannot pickle functorch TensorWrappers. With no explicit devices,
+        # retain the serial torch.func.vjp path. retain_graph=True lets regular
+        # autograd reuse the captured graph across the Neumann iterations.
         _use_autograd_grad = bool(ctx.opts.devices)
+        _use_distributed = bool(
+            ctx.opts.devices and len(ctx.opts.devices) >= 2)
 
         with torch.enable_grad():
             time0 = time.perf_counter()
@@ -1102,27 +1103,29 @@ class FixedPoint(torch.autograd.Function):
                     _env_ts_g, _psi_data_g)
                 _out_t = _out_tuple[0]
 
-                def dfdC_vjp(x):
-                    g, = x
-                    res, = torch.autograd.grad(
-                        _out_t, _env_ts_g, grad_outputs=g,
-                        retain_graph=True, allow_unused=True)
-                    if res is None:
-                        res = torch.zeros_like(_env_ts_g)
-                    return (res,)
-
-                def dfdA_vjp(x):
+                def dfdCA_vjp(x):
+                    # BOTH VJPs from ONE traversal of the shared graph: the
+                    # env-space (df/dC)^T g that advances the Neumann series,
+                    # and the A-space (df/dA)^T g that accumulates the answer.
+                    # autograd.grad takes a tuple of inputs and backprops once,
+                    # scattering into every requested leaf; asking for the two
+                    # leaf sets separately walks the same CTM-step graph twice.
                     g, = x
                     res = torch.autograd.grad(
-                        _out_t, _psi_data_g, grad_outputs=g,
-                        retain_graph=True, allow_unused=True)
-                    res = tuple(r if r is not None else torch.zeros_like(t)
-                                for r, t in zip(res, _psi_data_g))
-                    return (res,)
+                        _out_t, (_env_ts_g,) + tuple(_psi_data_g),
+                        grad_outputs=g, retain_graph=True, allow_unused=True)
+                    dC = res[0]
+                    if dC is None:
+                        dC = torch.zeros_like(_env_ts_g)
+                    dA = tuple(r if r is not None else torch.zeros_like(t)
+                               for r, t in zip(res[1:], _psi_data_g))
+                    return (dC,), dA
             else:
                 _, df_vjp = torch.func.vjp(lambda x,y: FixedPoint.fixed_point_iter(env_gauge, ctx.phase_dict, backward_opts, env_dict, _env_meta, _env_slices, _psi_meta, x, y), _env_ts, _psi_data)
-                dfdC_vjp= lambda x: (df_vjp(x)[0],)
-                dfdA_vjp= lambda x: (df_vjp(x)[1],)
+
+                def dfdCA_vjp(x):
+                    dC, dA = df_vjp(x)
+                    return (dC,), dA
             time1 = time.perf_counter()
             log.info(f"{type(ctx).__name__}.backward t_vjp {time1-time0} [s]")
 
@@ -1131,35 +1134,52 @@ class FixedPoint(torch.autograd.Function):
         # the increment grad_diff = ||grad_tmp_k - grad_tmp_{k-1}|| of the
         # running A-space gradient estimate.
         #
-        # Track the smallest grad_diff seen and the dA
+        # Track the smallest grad_diff seen and the estimate
         # that produced it; once grad_diff fails to improve for `patience`
         # consecutive steps the series is no longer contracting -> stop and
         # return that best estimate, not the diverged tail.
         # Budget and tolerance are the FP step's, carried over from the forward
         # by design: this loop reverses that CTM step.
+        #
+        # The answer is (df/dA)^T sum_k (df/dC)^(T k) v. Because (df/dA)^T is
+        # LINEAR it commutes with the sum, so instead of accumulating the
+        # series in env space and re-applying (df/dA)^T to the whole partial
+        # sum every step (which was then thrown away -- it only fed grad_diff
+        # -- and recomputed once more after the loop), accumulate S, the sum of
+        # (df/dA)^T applied to each individual term. Both VJPs then act on the
+        # SAME cotangent and come out of one dfdCA_vjp pass: N traversals
+        # instead of 2N+1, and S is the answer, no final apply.
+        #
+        # Consequence to remember when comparing runs: S after step s equals
+        # the old grad_tmp at step s-1, so the convergence test reads the same
+        # sequence one index earlier and the recorded step count shifts by one.
         neumann_max_iter, neumann_tol = ctx.opts.fp.max_sweeps, ctx.opts.fp.corner_tol
         patience = ctx.opts.neumann_patience
         best_grad_diff = float('inf')
-        best_dA = dA
+        best_S = None
+        S = None
         stall = 0
         time0 = time.perf_counter()
         for step in range(neumann_max_iter):
-            grads = dfdC_vjp(grads)
+            nxt, dA_term = dfdCA_vjp(grads)
+            S = dA_term if S is None else tuple(a + b for a, b in zip(S, dA_term))
+            if best_S is None:
+                best_S = S
+            grads = nxt
             if all([torch.norm(grad, p=torch.inf) < neumann_tol for grad in grads]):
                 break
-            dA = tuple(dA[i] + grads[i] for i in range(len(grads)))
 
-            grad_tmp = torch.cat(dfdA_vjp(dA)[0])
+            grad_tmp = torch.cat(S)
             if prev_grad_tmp is not None:
                 grad_diff = torch.norm(grad_tmp - prev_grad_tmp).item()
                 print("full grad diff", grad_diff)
                 if grad_diff < neumann_tol:
-                    best_dA = dA
+                    best_S = S
                     log.log(logging.INFO, f"Fixed_pt: The norm of the full grad diff is below {neumann_tol}.")
                     break
 
                 if grad_diff < best_grad_diff:
-                    best_grad_diff, best_dA, stall = grad_diff, dA, 0
+                    best_grad_diff, best_S, stall = grad_diff, S, 0
                 else:
                     stall += 1
                     if stall >= patience:
@@ -1169,20 +1189,19 @@ class FixedPoint(torch.autograd.Function):
 
             prev_grad_tmp = grad_tmp
 
-        dA = dfdA_vjp(best_dA)[0]
+        dA = best_S
         time1 = time.perf_counter()
         log.info(f"{type(ctx).__name__}.backward t_gradsum {time1-time0} [s], steps {step+1}")
 
-        # Multi-device path only: the Neumann stage-backwards ran in the CTM
+        # Distributed path only: the Neumann stage-backwards ran in the CTM
         # worker pool, which is now idle (all stages done, drop_graphs issued)
         # but still holds this backward's peak (fullrank-SVD activations) in
         # each worker's per-process caching allocator. Return it to the driver
         # so the next optimization step's forward -- CTM convergence + energy
         # eval, in other processes sharing these GPUs -- does not OOM against
-        # it. release_pool_cache() is a no-op on the single-device path (no
-        # pool); the serial backward ran in main, whose cache the optimizer's
-        # own empty_cache between steps reclaims.
-        if _use_autograd_grad:
+        # it. The serial zero/one-device backward ran in main, whose cache the
+        # optimizer's own empty_cache between steps reclaims.
+        if _use_distributed:
             try:
                 from ._env_ctm_dist_mp_AD import release_pool_cache
                 release_pool_cache()
