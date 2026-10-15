@@ -139,12 +139,19 @@ def _operator_pairs(ops):
     return out
 
 
+def _scalar(value):
+    """Host-side scalar for torch tensors (cpu or cuda) and numpy scalars."""
+    if hasattr(value, 'item'):
+        value = value.item()
+    return float(value)
+
+
 def _check(values, expected, label, atol=ATOL):
     assert values.keys() == expected.keys()
-    errors = {key: abs(values[key] - expected[key]) for key in values}
+    errors = {key: _scalar(abs(values[key] - expected[key])) for key in values}
     worst = max(errors, key=errors.get)
     print(f'{label}: max error={errors[worst]:.3e}, at {worst}, '
-          f'PEPS={values[worst]:.9g}, ED={expected[worst]:.9g}', flush=True)
+          f'PEPS={_scalar(values[worst]):.9g}, ED={expected[worst]:.9g}', flush=True)
     assert errors[worst] < atol, (label, worst, values[worst], expected[worst])
 
 
@@ -180,13 +187,13 @@ def test_correlator_tJ(config_kwargs, exact_tj, sym):
     # In particular sum_s c_s cp_s = 2*(1-n), not 2-n: doublons are excluded.
     for direction in ('h', 'v'):
         for a in sites:
-            n = density[a]
+            n = _scalar(density[a])
             for name, expected in (('nn', n), ('SS', .75 * n), ('cp_c', n), ('c_cp', 2 * (1 - n))):
-                assert correlations[name, direction][a, a] == pytest.approx(expected, abs=1e-8, rel=0)
+                assert _scalar(correlations[name, direction][a, a]) == pytest.approx(expected, abs=1e-8, rel=0)
             for b in sites:
                 if a != b:
-                    assert correlations['c_cp', direction][a, b] == pytest.approx(
-                        -correlations['cp_c', direction][b, a], abs=1e-8, rel=0)
+                    assert _scalar(correlations['c_cp', direction][a, b]) == pytest.approx(
+                        -_scalar(correlations['cp_c', direction][b, a]), abs=1e-8, rel=0)
     # Reconstruct the extensive energy using all seven open-lattice bonds.
     energy = -MU * sum(density.values())
     for a, b in env.psi.bonds():
@@ -226,7 +233,7 @@ def test_correlator_tJ_reuses_boundary_mps(config_kwargs, monkeypatch, sym, dire
                               opts_svd={'D_total': 16, 'tol': 1e-12})
     assert set(values) == set(pairs)
     for (a, b), value in values.items():
-        assert value == pytest.approx(onsite if a == b else 0, abs=1e-12, rel=0)
+        assert _scalar(value) == pytest.approx(onsite if a == b else 0, abs=1e-12, rel=0)
     assert len(calls) <= max_calls
 
 
