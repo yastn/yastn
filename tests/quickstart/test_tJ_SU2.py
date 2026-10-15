@@ -1,7 +1,14 @@
 """Finite-temperature t-J checkerboard comparison with explicit spin components."""
 import pytest
 import yastn
-from yastn.tn import fpeps
+from yastn.tn import fpeps, mps
+
+
+def _scalar(value):
+    """Host-side scalar for torch tensors (cpu or cuda) and numpy scalars."""
+    if hasattr(value, 'item'):
+        value = value.item()
+    return float(value)
 
 
 def _run_tj(config_kwargs, symmetry, D=8, beta=0.5, dbeta=0.05, max_sweeps=50):
@@ -17,7 +24,16 @@ def _run_tj(config_kwargs, symmetry, D=8, beta=0.5, dbeta=0.05, max_sweeps=50):
         gate = fpeps.gates.gate_nn_tJ(J, t, t, mu / 4, mu / 4, mu / 4, mu / 4,
                                      step, I, ops.c('u'), ops.cp('u'), ops.c('d'), ops.cp('d'))
     else:
-        gate = getattr(fpeps.gates, 'gate_nn_tJ_' + symmetry)(J, t, mu / 4, mu / 4, step, I)
+        # Same tJ bond Hamiltonian as gate_nn_tJ (hopping, J(S.S - n n/4) and
+        # mu/4 per site), written in the multiplet basis and exponentiated with
+        # the MPO recipe also used by the tJ checkerboard benchmark.
+        cp, c, S, n = ops.cp_spinor(), ops.c_spinor(), ops.S(), ops.n_total()
+        H = mps.generate_mpo(I, [
+            mps.Hterm(-t, (0, 1), (cp, c)), mps.Hterm(-t, (1, 0), (cp, c)),
+            mps.Hterm(J, (0, 1), (S, S)), mps.Hterm(-J / 4, (0, 1), (n, n)),
+            mps.Hterm(-mu / 4, (0,), (n,)), mps.Hterm(-mu / 4, (1,), (n,)),
+        ], N=2)
+        gate = fpeps.gates.gate_nn_exp(step, I, H)
     gates = fpeps.gates.distribute(geometry, gates_nn=gate)
     env_ntu = fpeps.EnvNTU(psi, which='NN')
     infos = []
@@ -26,7 +42,7 @@ def _run_tj(config_kwargs, symmetry, D=8, beta=0.5, dbeta=0.05, max_sweeps=50):
                                           opts_svd={'D_total': D, 'tol': 1e-12}))
     env = fpeps.EnvCTM(psi, init='eye')
     env.ctmrg_(opts_svd={'D_total': 5 * D, 'tol': 1e-10}, max_sweeps=max_sweeps, corner_tol=1e-8)
-    mean = lambda values: sum(values) / len(values)
+    mean = lambda values: _scalar(sum(values) / len(values))
     return {'density': mean(env.measure_1site(ops.n_total()).values()),
             'density_nn': mean(env.measure_nn(ops.n_total(), ops.n_total()).values()),
             'truncation_error': fpeps.accumulated_truncation_error(infos)}

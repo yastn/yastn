@@ -13,19 +13,26 @@ def _mean(values):
     return sum(values) / len(values)
 
 
+def _scalar(value):
+    """Host-side scalar for torch tensors (cpu or cuda) and numpy scalars."""
+    if hasattr(value, 'item'):
+        value = value.item()
+    return float(np.real_if_close(value))
+
+
 def _measure_hubbard(env, ops, t, U):
     """Measure scalar densities and invariant spinor/vector contractions."""
     cp, c, S = ops.cp_spinor(), ops.c_spinor(), ops.S()
     forward = env.measure_nn(cp, c)
     reverse = env.measure_nn(c, cp)
     # c_i c_j^dagger = -c_j^dagger c_i for distinct sites.
-    kinetic = -t * _mean([forward[bond] - reverse[bond] for bond in forward])
+    kinetic = -t * _mean([float(forward[bond]) - float(reverse[bond]) for bond in forward])
     spin = _mean(env.measure_nn(S, S).values())
     density = _mean(env.measure_1site(ops.n_total()).values())
     double_occ = _mean(env.measure_1site(ops.d()).values())
     # Square lattice: two bonds per site; particle-hole-symmetric convention.
     energy = 2 * kinetic + U * (double_occ - density / 2 + 0.25)
-    return {name: float(np.real_if_close(value)) for name, value in
+    return {name: _scalar(value) for name, value in
             {'energy': energy, 'density': density, 'double_occ': double_occ,
              'SzSz_NN': spin / 3}.items()}
 
@@ -122,7 +129,7 @@ def test_two_site_hubbard_SU2_against_ED(config_kwargs, sym, dims, step):
     env = fpeps.EnvCTM(psi, init='eye')
     env.ctmrg_(opts_svd={'D_total': 32}, max_sweeps=2)
     for value in env.measure_1site(ops.d()).values():
-        assert value == pytest.approx(expected, abs=1e-10)
+        assert _scalar(value) == pytest.approx(expected, abs=1e-10)
     measured = _measure_hubbard(env, ops, t, U)
     kinetic = np.trace(rho @ hopping)
     szsz = (number[0] - number[1]) @ (number[2] - number[3]) / 4
@@ -145,14 +152,20 @@ def test_hubbard_SU2_temperature_schedule(config_kwargs, sym):
 
 
 @pytest.mark.skipif("not config.getoption('quickstart')")
-@pytest.mark.parametrize('D, betas, dbeta', [(12, [2.0], 0.05)])
+@pytest.mark.parametrize('D, betas, dbeta, tolerance', [
+    (14, [2.0], 0.05, {'energy': 0.015, 'double_occ': 0.005, 'SzSz_NN': 0.005})])
 @pytest.mark.parametrize('sym', ['SU2', 'SU2xU1'])
-def test_quickstart_hubbard_SU2_against_METTS(config_kwargs, D, betas, dbeta, sym):
-    """Compare with the 4 x 16 cylinder METTS reference, including its error bars.
+def test_quickstart_hubbard_SU2_against_METTS(config_kwargs, D, betas, dbeta, sym, tolerance):
+    """Compare with the 4 x 16 cylinder METTS reference at D >= 14.
 
+    METTS sampling errors only cover Monte Carlo noise. PEPS results carry
+    additional truncation, Trotter, CTM and geometry errors which shrink with D,
+    so the comparison needs a larger bond dimension than the D=12 defaults used
+    for the cheaper cross-checks. The PEPS values recorded in the comment of
+    test_Hubbard.py (e.g. D=16, beta=2.0: energy -2.8002 versus METTS
+    -2.8040 +/- 0.0026; double_occ 0.0295 versus 0.0282 +/- 0.0001) set the
+    scale of the remaining systematic differences tolerated here.
     Extend betas to [2.0, 4.0, 6.0] for the full reference temperature range.
-    METTS sampling errors do not include PEPS truncation, Trotter, CTM, or
-    geometry errors, so they are reported rather than used as pass thresholds.
     """
     from .test_Hubbard import metts_values
 
@@ -166,7 +179,7 @@ def test_quickstart_hubbard_SU2_against_METTS(config_kwargs, D, betas, dbeta, sy
             reference, error = metts_values[name, beta]
             print(f'{name:12s} PEPS={value:.8f} METTS={reference:.8f} +/- {error:.4g} '
                   f'difference={value - reference:+.8f}')
-            assert np.isfinite(value)
+            assert value == pytest.approx(reference, abs=tolerance[name]), name
 
 
 if __name__ == '__main__':
