@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from numbers import Integral
+from functools import lru_cache
 import numpy as np
 
 from .sym_nonabelian import sym_nonabelian
@@ -39,6 +40,11 @@ class sym_SU2xU1(sym_nonabelian):
 
     @classmethod
     def conj_charge(cls, charge):
+        # Fast path mirrors canonical_charge: heavy internal callers pass exact
+        # (int, int) tuples, and this avoids the extra canonicalization call.
+        if (type(charge) is tuple and len(charge) == 2
+                and type(charge[0]) is int and type(charge[1]) is int and charge[0] >= 0):
+            return charge[0], -charge[1]
         two_j, q = cls.canonical_charge(charge)
         return two_j, -q
 
@@ -60,6 +66,11 @@ class sym_SU2xU1(sym_nonabelian):
         """SU(2) intermediate labels with the additive U(1) charge attached."""
         charges = tuple(cls.canonical_charge(c) for c in charges)
         target = cls.canonical_charge(target)
+        return cls._fusion_paths_cached(charges, target)
+
+    @classmethod
+    @lru_cache(maxsize=1 << 15)
+    def _fusion_paths_cached(cls, charges, target):
         if sum(q for _, q in charges) != target[1]:
             return ()
         if len(charges) < 2:

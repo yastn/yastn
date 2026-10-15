@@ -183,7 +183,9 @@ class kernel_transpose_dot_sum(torch.autograd.Function):
         for record in meta:
             sln, Dn, ta, tb = record[:4]
             coef = record[4] if len(record) > 4 else 1
-            data_C[sln].view(Dn)[:] += coef * (At[ta] @ Bt[tb])
+            # In-place accumulation through the view: one fused addmm instead of
+            # matmul + scaling + slice assignment (the latter copies the block back).
+            data_C[sln].view(Dn).addmm_(At[ta], Bt[tb], alpha=coef)
         return data_C
 
     @staticmethod

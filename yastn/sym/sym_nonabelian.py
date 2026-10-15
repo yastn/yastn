@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
+from functools import lru_cache
 import numpy as np
 
 from .sym_abelian import sym_meta
@@ -139,9 +140,21 @@ class sym_nonabelian(metaclass=_nonabelian_meta):
 
     @classmethod
     def signed_fusion_paths(cls, charges, target, signatures=None, new_signature=1):
-        """Fusion paths after applying leg orientations through duality."""
+        """Fusion paths after applying leg orientations through duality.
+
+        Validation and canonicalization run before the cache: bools are invalid
+        yet compare equal to ints, so they must not share a cache entry with the
+        corresponding valid call. Pure in its canonical arguments; caching pays
+        off because block-table construction calls this hundreds of thousands of
+        times with repeated charge tuples.
+        """
         oriented = cls._oriented_charges(charges, signatures, new_signature)
         target = cls.canonical_charge(target)
+        return cls._signed_fusion_paths_cached(oriented, target)
+
+    @classmethod
+    @lru_cache(maxsize=1 << 15)
+    def _signed_fusion_paths_cached(cls, oriented, target):
         return cls.fusion_paths(oriented, target)
 
     @classmethod

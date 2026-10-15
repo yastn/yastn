@@ -700,7 +700,10 @@ def transpose_dot_sum(Adata, Bdata, meta_dot, Areshape, Breshape, Aorder, Border
     for record in meta_dot:
         sln, Dn, ta, tb = record[:4]
         coef = record[4] if len(record) > 4 else 1
-        newdata[sln].reshape(Dn)[:] += coef * np.dot(Ad[ta], Bd[tb])
+        # In-place accumulation through the view avoids the extra slice-assignment
+        # copy that ``newdata[sln].reshape(Dn)[:] += ...`` performs.
+        view = newdata[sln].reshape(Dn)
+        view += coef * np.dot(Ad[ta], Bd[tb])
     return newdata
 
 

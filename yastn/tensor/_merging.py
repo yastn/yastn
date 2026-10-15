@@ -320,6 +320,7 @@ def _apply_fusion_tree_transpose(a, order):
     return a
 
 
+@lru_cache(maxsize=1 << 18)
 def _split_channel(channel, nsym):
     return tuple(tuple(channel[n:n + nsym])
                  for n in range(0, len(channel), nsym))
@@ -332,6 +333,20 @@ def _adjacent_swap_coefficient(sym, x, left, right, z, y, yp):
                * sym.braiding_phase(left, right, middle)
                * sym.f_symbol(x, right, left, z, yp, middle)
                for middle in sym.fusion_outcomes(left, right))
+
+
+@lru_cache(maxsize=1 << 16)
+def _oriented_block_charges(sym, flat_charges, signs):
+    """Oriented per-leg charges of one reduced block, indexed by flattened charges.
+
+    Fusion-tree swaps canonicalize the same block charges many times within a
+    step (different swap positions and evolving structures), so the result is
+    shared through the cache.
+    """
+    nsym = sym.NSYM
+    per_leg = tuple(tuple(flat_charges[i:i + nsym]) for i in range(0, len(flat_charges), nsym))
+    return tuple(sym.canonical_charge(t) if s == 1 else sym.conj_charge(t)
+                 for t, s in zip(per_leg, signs))
 
 
 @register_cache(key='fusion_tree_adjacent_swap')
@@ -353,6 +368,7 @@ def _meta_swap_adjacent_fusion_leaves(sym, struct, position):
     # A swap only mixes one intermediate channel. Index by all unchanged
     # channels so large fusion spaces do not require a quadratic scan.
     changed = position - 1
+    signs = tuple(leg.s for leg in struct.legs)
     old_by_channels, orientations = {}, {}
     for index, (charges, channel) in enumerate(zip(bl_old.t, bl_old.channels)):
         charge_key = tuple(charges.reshape(-1).tolist())
@@ -360,9 +376,7 @@ def _meta_swap_adjacent_fusion_leaves(sym, struct, position):
         fixed = path if position == 0 else path[:changed] + path[changed + 1:]
         old_by_channels.setdefault((charge_key, fixed), []).append((index, path))
         if charge_key not in orientations:
-            orientations[charge_key] = tuple(
-                sym.canonical_charge(t) if leg.s == 1 else sym.conj_charge(t)
-                for t, leg in zip(map(tuple, charges), struct.legs))
+            orientations[charge_key] = _oriented_block_charges(sym, charge_key, signs)
 
     meta, keep, offset = [], [], 0
     for out_index, (charges_new, channel_new_flat) in enumerate(zip(bl_new.t, bl_new.channels)):

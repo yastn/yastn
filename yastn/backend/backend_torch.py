@@ -83,27 +83,31 @@ def cuda_is_available():
 @lru_cache(maxsize=128)
 def _recoupling_plan(order, meta, dtype, device):
     """Cache offsets and permutation strides in O(terms * rank) device storage."""
-    offsets, ends, sources, destinations, coefficients = [], [], [], [], []
-    output_strides, input_strides = [], []
-    offset = 0
-    for destination, source, shape, coefficient in meta:
-        count = prod(shape)
-        offsets.append(offset)
-        offset += count
-        ends.append(offset)
-        sources.append(source)
-        destinations.append(destination)
-        coefficients.append(coefficient)
-        original = tuple(prod(shape[i + 1:]) for i in range(len(shape)))
-        permuted = tuple(shape[i] for i in order)
-        output_strides.append(tuple(prod(permuted[i + 1:]) for i in range(len(shape))))
-        input_strides.append(tuple(original[i] for i in order))
-    integers = torch.tensor([offsets, sources, destinations,
-                             *zip(*output_strides), *zip(*input_strides)],
-                            dtype=torch.int64, device=device)
-    ends = torch.tensor(ends, dtype=torch.int64, device=device)
-    coefficients = torch.tensor(coefficients, dtype=dtype, device=device)
-    return integers, ends, coefficients, offset, len(order)
+    ndim = len(order)
+    shapes = np.asarray([record[2] for record in meta], dtype=np.int64)
+    counts = shapes.prod(axis=1)
+    ends = np.cumsum(counts)
+    offsets = ends - counts
+    sources = np.fromiter((record[1] for record in meta), dtype=np.int64, count=len(meta))
+    destinations = np.fromiter((record[0] for record in meta), dtype=np.int64, count=len(meta))
+    coefficients = np.fromiter((record[3] for record in meta), dtype=np.float64, count=len(meta))
+    # C-order strides, vectorized: strides[:, i] = prod(shape[:, i + 1:]).
+    def c_order_strides(shape):
+        reversed_cumprod = np.cumprod(shape[:, ::-1], axis=1)[:, ::-1]
+        strides = np.empty_like(shape)
+        strides[:, :-1] = reversed_cumprod[:, 1:]
+        strides[:, -1] = 1
+        return strides
+    original = c_order_strides(shapes)
+    permuted = shapes[:, list(order)]
+    output_strides = c_order_strides(permuted)
+    input_strides = original[:, list(order)]
+    integers = np.vstack((offsets, sources, destinations, output_strides.T, input_strides.T))
+    integers = torch.from_numpy(np.ascontiguousarray(integers)).to(device)
+    ends = torch.from_numpy(ends).to(device)
+    coefficients = torch.from_numpy(coefficients).to(dtype=dtype, device=device)
+    offset = int(ends[-1].item()) if ends.numel() else 0
+    return integers, ends, coefficients, offset, ndim
 
 
 def _recoupling_indices(plan, lo, hi):

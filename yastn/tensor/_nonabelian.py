@@ -209,6 +209,9 @@ def fusion_scale(config, data, struct, fused, axes, meta, inverse=False):
     if getattr(config.sym, 'IS_ABELIAN', True):
         return data
     def freeze(x):
+        # Consumers require the (start, stop) form, and slices are only
+        # hashable from Python 3.12 on, so the recursion cannot be skipped by
+        # a hashability probe.
         if isinstance(x, slice):
             return (x.start, x.stop)
         return tuple(freeze(y) for y in x) if isinstance(x, (list, tuple)) else x
