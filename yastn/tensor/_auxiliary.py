@@ -288,6 +288,36 @@ def sign_canonical_order(*operators, sites=None, f_ordered=None) -> int:
     return swap_charges(charges_0, charges_1, operators[0].config.fermionic)
 
 
+#: Identical fusion-channel rows recur across the block tables of sibling
+#: structures (permuted legs, revised masks, evolving bonds), so the rows are
+#: deduplicated through a bounded insertion-ordered pool and shared as the same
+#: immutable tuple objects. This keeps the ``channels`` API and its hashing
+#: semantics unchanged while avoiding one Python-int tuple per block per table.
+_channel_rows: dict = {}
+_CHANNEL_ROWS_MAX = 1 << 20
+_channel_row_hits = 0
+
+
+def intern_channel_row(row):
+    """Return the shared tuple equal to ``row`` (bounded insertion-ordered pool)."""
+    global _channel_row_hits
+    pooled = _channel_rows.get(row)
+    if pooled is not None:
+        _channel_row_hits += 1
+        return pooled
+    if len(_channel_rows) >= _CHANNEL_ROWS_MAX:
+        # Drop the oldest half; tuples are immutable, so eviction is safe at any time.
+        for key in list(_channel_rows)[: _CHANNEL_ROWS_MAX // 2]:
+            del _channel_rows[key]
+    _channel_rows[row] = row
+    return row
+
+
+def channel_rows_stats():
+    """``(hits, pooled_rows)`` of the channel-row pool; diagnostics only."""
+    return _channel_row_hits, len(_channel_rows)
+
+
 @lru_cache(maxsize=1024)
 @nsys_profile
 def get_blocks(sym, struct) -> _blocks:
@@ -308,8 +338,9 @@ def get_blocks(sym, struct) -> _blocks:
                 expanded_t.append(charges)
                 expanded_i.append(coords)
                 # Flatten product-symmetry intermediate charges into a stable key.
-                channels.append(tuple(x for charge in path
-                                      for x in (charge if isinstance(charge, tuple) else (charge,))))
+                channels.append(intern_channel_row(tuple(
+                    x for charge in path
+                    for x in (charge if isinstance(charge, tuple) else (charge,)))))
         tblocks = np.asarray(expanded_t, dtype=np.int64).reshape(len(expanded_t), len(struct.legs), sym.NSYM)
         iblocks = np.asarray(expanded_i, dtype=np.int64).reshape(len(expanded_i), len(struct.legs))
         channels = tuple(channels)
