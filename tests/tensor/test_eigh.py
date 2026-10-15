@@ -189,7 +189,7 @@ def test_eigh_retries_transient_cusolver_failure(config_kwargs, monkeypatch):
 
 def test_with_cusolver_retry_fallback_chain():
     """ The fallback chain is walked: failing call -> fresh copy -> (MAGMA) -> CPU. """
-    import torch
+    torch = pytest.importorskip('torch')  # the np-only CI environment has no torch
     from yastn.backend.backend_torch import _with_cusolver_retry
 
     x = torch.eye(2)
