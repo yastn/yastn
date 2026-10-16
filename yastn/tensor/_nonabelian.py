@@ -235,8 +235,13 @@ def _freeze_pair(x):
     return x
 
 
-def _encode_meta(flat, meta) -> bool:
+def _encode_meta(flat, meta, fields=None) -> bool:
     """ Append ``meta`` to the int64 buffer; ``False`` if it has no lossless encoding.
+
+    ``fields`` selects which positions of every record are encoded; the default encodes all of
+    them.  Encoding only the positions a consumer reads makes the key canonical for the *result*
+    rather than for the raw meta, so inputs that differ solely in ignored positions share one
+    cached value instead of splitting it into several -- fewer misses, less encoding, smaller keys.
 
     Written flat (no recursion, no intermediate tuples) because it runs on every
     ``fusion_weights`` call, including cache hits: the specialized encoding must stay
@@ -247,11 +252,11 @@ def _encode_meta(flat, meta) -> bool:
         return False
     extend((_TAG_SEQ, len(meta)))  # self-delimiting: the record count is part of the key
     for record in meta:
-        if isinstance(record, (tuple, list)):
-            extend((_TAG_SEQ, len(record)))
-        else:
+        if not isinstance(record, (tuple, list)):
             return False
-        for field in record:
+        selected = record if fields is None else [record[i] for i in fields]
+        extend((_TAG_SEQ, len(selected)))
+        for field in selected:
             if isinstance(field, (tuple, list)):
                 extend((_TAG_SEQ, len(field)))
                 for value in field:
@@ -280,7 +285,7 @@ def _encode_meta(flat, meta) -> bool:
     return True
 
 
-def meta_key(meta):
+def meta_key(meta, fields=None):
     """ Compact lossless key of a merging meta: 8 bytes per scalar instead of a nested tuple.
 
     The meta is needed to compute the fusion weights but must not be retained with them, so
@@ -288,14 +293,23 @@ def meta_key(meta):
     distinct byte strings; should a value not fit int64 (or have an unexpected type), the frozen
     form of the meta is returned instead -- equally exact and hashable on every supported Python,
     but larger.
+
+    ``fields`` restricts the encoding to those record positions; two metas agreeing on them then
+    share a key.  That is exact whenever the consumer ignores the remaining positions, and it keeps
+    one value from being recomputed and stored once per irrelevant variation.
     """
     flat = array('q')
     try:
-        if _encode_meta(flat, meta):
+        if _encode_meta(flat, meta, fields):
             return flat.tobytes()
     except (OverflowError, TypeError, ValueError):
         pass
-    return _freeze_pair(meta)
+    try:
+        if fields is None:
+            return _freeze_pair(meta)
+        return _freeze_pair([[record[i] for i in fields] for record in meta])
+    except (TypeError, IndexError):
+        return _freeze_pair(meta)          # finer key than asked for, never a wrong one
 
 
 #: Same shape as ``functools.lru_cache().cache_info()``, so ``yastn.get_cache_info()``
@@ -354,9 +368,16 @@ class _FusionWeightsCache:
 _fusion_weights_cache = _FusionWeightsCache(maxsize=1024)
 
 
+#: Record positions of a merging meta that :func:`_compute_fusion_weights` reads: ``sln``,
+#: ``slo`` and ``subslices``.  The other three slots carry decompositions and channel labels
+#: that never enter the weights, so encoding them would split a single cached value across
+#: several keys -- more misses, more encoding, and larger keys for no gain.
+_WEIGHTS_META_FIELDS = (0, 2, 4)
+
+
 def fusion_weights(sym, struct, fused, axes, meta):
     """ Fusion weights of one hard-fusion scale step, cached under the encoded meta. """
-    key = (sym, struct, fused, axes, meta_key(meta))
+    key = (sym, struct, fused, axes, meta_key(meta, _WEIGHTS_META_FIELDS))
     value = _fusion_weights_cache.lookup(key)
     if value is None:
         value = _compute_fusion_weights(sym, struct, fused, axes, meta)
@@ -377,6 +398,8 @@ def _compute_fusion_weights(sym, struct, fused, axes, meta):
         decompositions.append(_leg_structure_combine_charges_prod(sym, tuple(struct.legs[j] for j in group), leg.t, leg.s) if len(group) > 1 else None)
     # Cache one scalar per reduced block, not per multiplicity entry.
     weights = np.ones(old.nblocks)
+    # Only these three slots are read; the cache key encodes exactly them
+    # (see _WEIGHTS_META_FIELDS -- keep the two in sync if this loop changes).
     for sln, _, slo, _, subslices, _ in meta:
         ia, ic = old_lookup[_freeze_pair(slo)], new_lookup[_freeze_pair(sln)]
         charges, out_charges = tuple(map(tuple, old.t[ia])), tuple(map(tuple, new.t[ic]))
