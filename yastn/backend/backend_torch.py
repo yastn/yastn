@@ -201,9 +201,11 @@ class _Recouple(torch.autograd.Function):
 
 def recouple(data, order, meta, size):
     """Apply cached fusion-tree coefficients to permuted reduced blocks."""
-    # Large blocks already amortize a kernel launch; indexing every element
-    # there would add bandwidth and scratch-memory overhead. Batch small ones.
-    small = tuple(record for record in meta if prod(record[2]) < (1 << 16)) if data.is_cuda else ()
+    # Batch the small blocks into one index_add_ plan; the large ones already amortize a launch
+    # and would only pay for a wide index.  Measured on CPU (D=8 t-J, 4 threads) the plan is worth
+    # ~2.8x on a warm step (110.5 s -> 39.4 s) with bit-identical truncation errors, so it is no
+    # longer restricted to CUDA -- the scratch stays bounded by the small blocks either way.
+    small = tuple(record for record in meta if prod(record[2]) < (1 << 16))
     if len(small) >= 32:
         plan = _recoupling_plan(order, small, data.real.dtype, data.device)
         result = _Recouple.apply(data, plan, size)
