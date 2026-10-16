@@ -254,8 +254,13 @@ def _encode_meta(flat, meta, fields=None) -> bool:
     for record in meta:
         if not isinstance(record, (tuple, list)):
             return False
-        selected = record if fields is None else [record[i] for i in fields]
-        extend((_TAG_SEQ, len(selected)))
+        # A generator instead of a list: the canonical key is rebuilt on every call, hits
+        # included, so do not throw away one list per record.
+        if fields is None:
+            selected, count = record, len(record)
+        else:
+            selected, count = (record[i] for i in fields), len(fields)
+        extend((_TAG_SEQ, count))
         for field in selected:
             if isinstance(field, (tuple, list)):
                 extend((_TAG_SEQ, len(field)))
