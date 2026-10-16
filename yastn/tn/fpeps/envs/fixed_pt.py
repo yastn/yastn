@@ -1132,7 +1132,7 @@ class FixedPoint(torch.autograd.Function):
         # Neumann series for the implicit-function-theorem gradient. It
         # converges only when the spectral radius of df/dC is < 1; we monitor
         # the increment grad_diff = ||grad_tmp_k - grad_tmp_{k-1}|| of the
-        # running A-space gradient estimate.
+        # running A-space gradient estimate S.
         #
         # Track the smallest grad_diff seen and the estimate
         # that produced it; once grad_diff fails to improve for `patience`
@@ -1166,8 +1166,6 @@ class FixedPoint(torch.autograd.Function):
             if best_S is None:
                 best_S = S
             grads = nxt
-            if all([torch.norm(grad, p=torch.inf) < neumann_tol for grad in grads]):
-                break
 
             grad_tmp = torch.cat(S)
             if prev_grad_tmp is not None:
