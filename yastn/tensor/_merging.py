@@ -363,38 +363,48 @@ def _meta_swap_adjacent_fusion_leaves(sym, struct, position):
     legs_new = tuple(struct.legs[i] for i in order)
     struct_new = struct.replace(legs=legs_new, channels=(), mask=None)
     bl_new = get_blocks(sym, struct_new)
-    inverse = tuple(np.argsort(order))
+    inverse = np.asarray(np.argsort(order))
 
     # A swap only mixes one intermediate channel. Index by all unchanged
     # channels so large fusion spaces do not require a quadratic scan.
+    #
+    # This body is python-loop bound, so everything loop invariant is hoisted and block charges
+    # are keyed by their raw bytes -- the same dictionary job as a tuple of python ints, without
+    # building one object per charge component per block.
+    nsym = sym.NSYM
+    n_total = tuple(struct.n)
     changed = position - 1
+    at_front = position == 0
     signs = tuple(leg.s for leg in struct.legs)
+    braid_trivial = ndim == 2 and struct.legs[0].s != struct.legs[1].s
+    t_old, t_new = (np.ascontiguousarray(bl.t, dtype=np.int64) for bl in (bl_old, bl_new))
+    slc_old, D_old, D_new = bl_old.slc[:, 0].tolist(), bl_old.D.tolist(), bl_new.D.tolist()
     old_by_channels, orientations = {}, {}
-    for index, (charges, channel) in enumerate(zip(bl_old.t, bl_old.channels)):
-        charge_key = tuple(charges.reshape(-1).tolist())
-        path = _split_channel(channel, sym.NSYM)
-        fixed = path if position == 0 else path[:changed] + path[changed + 1:]
+    for index, (charges, channel) in enumerate(zip(t_old, bl_old.channels)):
+        charge_key = charges.tobytes()
+        path = _split_channel(channel, nsym)
+        fixed = path if at_front else path[:changed] + path[changed + 1:]
         old_by_channels.setdefault((charge_key, fixed), []).append((index, path))
         if charge_key not in orientations:
-            orientations[charge_key] = _oriented_block_charges(sym, charge_key, signs)
+            orientations[charge_key] = _oriented_block_charges(
+                sym, tuple(charges.reshape(-1).tolist()), signs)
 
     meta, keep, offset = [], [], 0
-    for out_index, (charges_new, channel_new_flat) in enumerate(zip(bl_new.t, bl_new.channels)):
-        charges_old = charges_new[np.asarray(inverse)]
-        charge_key = tuple(charges_old.reshape(-1).tolist())
-        path_new = _split_channel(channel_new_flat, sym.NSYM)
-        fixed = (path_new if position == 0
+    for out_index, (charges_new, channel_new_flat) in enumerate(zip(t_new, bl_new.channels)):
+        charge_key = charges_new[inverse].tobytes()
+        path_new = _split_channel(channel_new_flat, nsym)
+        fixed = (path_new if at_front
                  else path_new[:changed] + path_new[changed + 1:])
-        candidates = old_by_channels.get((charge_key, fixed), ())
+        candidates = old_by_channels.get((charge_key, fixed))
         if not candidates:
             continue
         oriented = orientations[charge_key]
         terms = []
         for in_index, path_old in candidates:
-            if position == 0:
-                total = path_old[0] if path_old else tuple(struct.n)
+            if at_front:
+                total = path_old[0] if path_old else n_total
                 coefficient = sym.braiding_phase(oriented[0], oriented[1], total)
-                if ndim == 2 and struct.legs[0].s != struct.legs[1].s:
+                if braid_trivial:
                     coefficient = 1.0
             else:
                 # Prefix and suffix channels are unchanged. Only the channel
@@ -402,14 +412,15 @@ def _meta_swap_adjacent_fusion_leaves(sym, struct, position):
                 x = oriented[0] if position == 1 else path_old[position - 2]
                 left, right = oriented[position], oriented[position + 1]
                 y, yp = path_old[changed], path_new[changed]
-                z = path_old[position] if position < ndim - 2 else tuple(struct.n)
+                z = path_old[position] if position < ndim - 2 else n_total
                 coefficient = _adjacent_swap_coefficient(sym, x, left, right, z, y, yp)
             if abs(coefficient) < 1e-15:
                 continue
-            terms.append((int(bl_old.slc[in_index, 0]), tuple(bl_old.D[in_index]), float(coefficient)))
+            terms.append((slc_old[in_index], tuple(D_old[in_index]), float(coefficient)))
         if terms:
-            meta.extend((offset, source, shape, coefficient) for source, shape, coefficient in terms)
-            offset += int(np.prod(bl_new.D[out_index]))
+            for source, shape, coefficient in terms:
+                meta.append((offset, source, shape, coefficient))
+            offset += int(np.prod(D_new[out_index]))
             keep.append(out_index)
 
     if len(keep) != bl_new.nblocks:
