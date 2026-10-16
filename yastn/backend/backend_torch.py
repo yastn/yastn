@@ -132,13 +132,17 @@ def cuda_is_available():
 def _recoupling_plan(order, meta, dtype, device):
     """Cache offsets and permutation strides in O(terms * rank) device storage."""
     ndim = len(order)
-    shapes = np.asarray([record[2] for record in meta], dtype=np.int64)
+    # One C-level unzip of the records instead of four python-level passes: this runs once per
+    # distinct (order, meta) per step, and the generator-driven np.fromiter calls showed up as
+    # ~1.4 s of a D=8 step.  Values and layout are unchanged (np.asarray casts like fromiter).
+    dst_t, src_t, shapes_t, coef_t = zip(*meta)
+    shapes = np.asarray(shapes_t, dtype=np.int64)
     counts = shapes.prod(axis=1)
     ends = np.cumsum(counts)
     offsets = ends - counts
-    sources = np.fromiter((record[1] for record in meta), dtype=np.int64, count=len(meta))
-    destinations = np.fromiter((record[0] for record in meta), dtype=np.int64, count=len(meta))
-    coefficients = np.fromiter((record[3] for record in meta), dtype=np.float64, count=len(meta))
+    sources = np.asarray(src_t, dtype=np.int64)
+    destinations = np.asarray(dst_t, dtype=np.int64)
+    coefficients = np.asarray(coef_t, dtype=np.float64)
     # C-order strides, vectorized: strides[:, i] = prod(shape[:, i + 1:]).
     def c_order_strides(shape):
         reversed_cumprod = np.cumprod(shape[:, ::-1], axis=1)[:, ::-1]
