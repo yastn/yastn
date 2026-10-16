@@ -11,8 +11,10 @@ Double occupancy is excluded. Purification evolves I through beta/2, so its
 physical density matrix approximates exp(-beta H) / Z. Defaults are beta=0.2,
 4 Strang steps, PEPS bond dimension D=9 and environment dimension chi=32.
 All 36 ordered pairs are checked in both scan directions, including on-site,
-reverse, nearest-neighbor and longer-range correlators. The ED reference uses
-independent projected Fock-space matrices, not YASTN gates or MPOs.
+reverse, nearest-neighbor and longer-range correlators. The 28 ordered pairs
+that fit in a 2 x 2 window are also checked with measure_2x2, without forming
+the full ket/bra double layer. The ED reference uses independent projected
+Fock-space matrices, not YASTN gates or MPOs.
 """
 from itertools import product
 from time import perf_counter
@@ -157,16 +159,33 @@ def _check(values, expected, label, atol=ATOL):
 
 @pytest.mark.skipif("not config.getoption('quickstart')", reason='run with --quickstart')
 @pytest.mark.parametrize('sym', ['U1xU1', 'SU2xU1'])
-def test_correlator_tJ(config_kwargs, exact_tj, sym):
+def test_correlator_tJ(config_kwargs, exact_tj, monkeypatch, sym):
     ops = yastn.operators.SpinfulFermions_tJ(sym=sym, **config_kwargs)
     env = _thermal_peps(ops)
     sites = tuple(sorted(env.psi.sites(), key=lambda site: site[::-1]))
     pairs = [(a, b) for a in sites for b in sites]  # includes reverse and on-site pairs
+    pairs_2x2 = [(a, b) for a, b in pairs
+                 if abs(a[0] - b[0]) <= 1 and abs(a[1] - b[1]) <= 1]
+    assert len(pairs_2x2) == 28
+
+    def forbid_fuse_layers(*args, **kwargs):
+        raise AssertionError('measure_2x2 must not materialize the full ket/bra double layer.')
+
     opts_svd = {'D_total': CHI, 'tol': 1e-12}
     density = env.measure_1site(ops.n_total())
     _check(density, exact_tj['density'], f'{sym} density')
     correlations = {}
     for name, components in _operator_pairs(ops).items():
+        # Cover both windows, all four corners, and both operator orders.
+        # Reuse the thermal state and compare directly with independent ED.
+        with monkeypatch.context() as guard:
+            guard.setattr(fpeps.DoublePepsTensor, 'fuse_layers', forbid_fuse_layers)
+            values = {pair: sum(coefficient * env.measure_2x2(O, P, sites=pair)
+                                for coefficient, O, P in components)
+                      for pair in pairs_2x2}
+        _check(values, {pair: exact_tj[name][pair] for pair in pairs_2x2},
+               f'{sym} {name} measure_2x2 ({len(values)} pairs)')
+        correlations[name, '2x2'] = values
         for direction in ('h', 'v'):
             values = dict.fromkeys(pairs, 0.)
             for coefficient, O, P in components:
@@ -185,13 +204,13 @@ def test_correlator_tJ(config_kwargs, exact_tj, sym):
     # These are exact algebraic identities of projected fermions, so they
     # must hold much more accurately than the thermal/ED error tolerance.
     # In particular sum_s c_s cp_s = 2*(1-n), not 2-n: doublons are excluded.
-    for direction in ('h', 'v'):
+    for direction in ('h', 'v', '2x2'):
         for a in sites:
             n = _scalar(density[a])
             for name, expected in (('nn', n), ('SS', .75 * n), ('cp_c', n), ('c_cp', 2 * (1 - n))):
                 assert _scalar(correlations[name, direction][a, a]) == pytest.approx(expected, abs=1e-8, rel=0)
             for b in sites:
-                if a != b:
+                if a != b and (a, b) in correlations['c_cp', direction]:
                     assert _scalar(correlations['c_cp', direction][a, b]) == pytest.approx(
                         -_scalar(correlations['cp_c', direction][b, a]), abs=1e-8, rel=0)
     # Reconstruct the extensive energy using all seven open-lattice bonds.

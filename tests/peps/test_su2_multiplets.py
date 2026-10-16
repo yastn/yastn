@@ -424,8 +424,9 @@ def test_measure_multiple_multiplets_peps(config_kwargs, monkeypatch, sym, dims)
     for name, operators, indices, matrix in cases:
         at = tuple(sites[i] for i in indices)
         expected = np.trace(rho @ matrix)
-        # Exact/line/2x2 must keep their native contraction algorithms.
+        # Exact/line/2x2 must contract the environment before combining ket and bra.
         with monkeypatch.context() as guard:
+            guard.setattr(fpeps.DoublePepsTensor, 'fuse_layers', _forbid_window_contraction)
             guard.setattr(mps, 'generate_mpo', _forbid_window_contraction)
             guard.setattr(mps, 'zipper', _forbid_window_contraction)
             guard.setattr(mps, 'compression_', _forbid_window_contraction)

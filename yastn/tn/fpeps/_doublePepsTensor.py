@@ -301,14 +301,8 @@ class DoublePepsTensor(SpecialTensor):
         if sa0 - set(range(self.ndim)) or sa1 - set(range(b.ndim)):
             raise YastnError('DoublePepsTensor.tensordot axes outside of tensor ndim.')
 
-        if (self.op_dirn is not None or self.op_chain or
-                (self.op is not None and not getattr(self.config.sym, 'IS_ABELIAN', True))):
-            if tuple(sorted(self.trans[ax] for ax in in_a)) not in ((0, 1), (0, 3), (1, 2), (2, 3)):
-                raise YastnError('DoublePepsTensor.tensordot, 2 axes of self should be neighbouring.')
-            # Keep all coupled channels of the operator and its string in
-            # the local double tensor before contracting the environment.
-            return (tensordot(b, self.fuse_layers(), axes=(in_b, in_a)) if reverse
-                    else tensordot(self.fuse_layers(), b, axes=(in_a, in_b)))
+        if tuple(sorted(self.trans[ax] for ax in in_a)) not in ((0, 1), (0, 3), (1, 2), (2, 3)):
+            raise YastnError('DoublePepsTensor.tensordot, 2 axes of self should be neighbouring.')
 
         in_a = tuple(self.trans[ax] for ax in in_a)
         out_a = tuple(ax for ax in self.trans if ax not in in_a)
@@ -318,15 +312,20 @@ class DoublePepsTensor(SpecialTensor):
             in_b = in_b[::-1]
 
         Ab, Ak = self.Ab_Ak_with_charge_swap()
+        # Always contract the environment with one layer before adding the other;
+        # never materialize the full ket/bra double layer here, even for operators.
+        # Ab_Ak_with_charge_swap() applies op_chain and the current string operator
+        # to the ket only. Pass only a pending local operator to append_vec_*.
+        op = None if self.op_dirn is not None else self.op
 
         if in_a == (0, 1):
-            return append_vec_tl(Ab, Ak, b, op=self.op, mode=mode, in_b=in_b, out_a=out_a)
+            return append_vec_tl(Ab, Ak, b, op=op, mode=mode, in_b=in_b, out_a=out_a)
         elif in_a == (2, 3):
-            return append_vec_br(Ab, Ak, b, op=self.op, mode=mode, in_b=in_b, out_a=out_a)
+            return append_vec_br(Ab, Ak, b, op=op, mode=mode, in_b=in_b, out_a=out_a)
         elif in_a == (0, 3):
-            return append_vec_tr(Ab, Ak, b, op=self.op, mode=mode, in_b=in_b, out_a=out_a)
+            return append_vec_tr(Ab, Ak, b, op=op, mode=mode, in_b=in_b, out_a=out_a)
         elif in_a == (1, 2):
-            return append_vec_bl(Ab, Ak, b, op=self.op, mode=mode, in_b=in_b, out_a=out_a)
+            return append_vec_bl(Ab, Ak, b, op=op, mode=mode, in_b=in_b, out_a=out_a)
         raise YastnError('DoublePepsTensor.tensordot, 2 axes of self should be neighbouring.')
 
     def fuse_layers(self):
