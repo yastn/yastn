@@ -198,7 +198,8 @@ def test_Hubbard_gate_SU2xU1(config_kwargs, step):
         (0, 4): [[2 * U - 4 * mu]],
     }
     for charge, H in expected.items():
-        assert np.allclose(fused[charge + charge], _matrix_exp(H, step), atol=1e-12)
+        assert np.allclose(fused.config.backend.to_numpy(fused[charge + charge]),
+                           _matrix_exp(H, step), atol=1e-12)
 
     # Independent fermionic reference in the explicit
     # |0>, |down>, |up>, |up down> Fock basis.  In particular this checks the
@@ -217,7 +218,7 @@ def test_Hubbard_gate_SU2xU1(config_kwargs, step):
     gate_u1 = fpeps.gates.gate_nn_exp(step, Iu, Hu)
     dense = yastn.ncon(gate_u1.G, [(-0, -1, 1), (-2, -3, 1)])
     dense = dense.to_numpy().transpose(0, 2, 1, 3).reshape(16, 16)
-    assert np.allclose(fused[(1, 1, 1, 1)], dense[np.ix_([1, 4], [1, 4])],
+    assert np.allclose(fused.config.backend.to_numpy(fused[(1, 1, 1, 1)]), dense[np.ix_([1, 4], [1, 4])],
                        atol=1e-12)
     # In the canonical Fock basis the CG singlet is
     # (|up,down> - |down,up>) / sqrt(2).
@@ -225,11 +226,11 @@ def test_Hubbard_gate_SU2xU1(config_kwargs, step):
     projector_n2[3, 0] = 1       # |0,D>
     projector_n2[12, 1] = 1      # |D,0>
     projector_n2[[6, 9], 2] = np.array([-1, 1]) / np.sqrt(2)
-    assert np.allclose(fused[(0, 2, 0, 2)],
+    assert np.allclose(fused.config.backend.to_numpy(fused[(0, 2, 0, 2)]),
                        projector_n2.T @ dense @ projector_n2, atol=1e-12)
     # One fixed spin component spans |D,sigma>, |sigma,D>; SU(2) guarantees
     # the other component has the same reduced matrix.
-    assert np.allclose(fused[(1, 3, 1, 3)], dense[np.ix_([13, 7], [13, 7])],
+    assert np.allclose(fused.config.backend.to_numpy(fused[(1, 3, 1, 3)]), dense[np.ix_([13, 7], [13, 7])],
                        atol=1e-12)
 
 
@@ -244,7 +245,7 @@ def test_local_exp_SU2xU1_is_positive(config_kwargs, step):
                 (1, 1): np.exp(2.5 * step),
                 (0, 2): np.exp(-2.5 * step)}
     for charge, value in expected.items():
-        assert np.allclose(gate[charge + charge], [[value]])
+        assert np.allclose(gate.config.backend.to_numpy(gate[charge + charge]), [[value]])
 
 
 @pytest.mark.parametrize('step', [0, 0.04, 0.04j])
@@ -334,7 +335,8 @@ def test_tJ_gate_SU2xU1(config_kwargs, step):
         (2, 2): [[-mu0 - mu1]],
     }
     for charge, H in expected.items():
-        assert np.allclose(fused[charge + charge], _matrix_exp(H, step), atol=1e-12)
+        assert np.allclose(fused.config.backend.to_numpy(fused[charge + charge]),
+                           _matrix_exp(H, step), atol=1e-12)
 
 
 def test_occupation_gate(config_kwargs):

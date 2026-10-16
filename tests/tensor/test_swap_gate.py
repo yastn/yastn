@@ -82,7 +82,7 @@ def test_swap_gate_nonabelian(config_kwargs, sym, fermionic, charges, odd):
     for charge in charges:
         key = charge + charge if sym == 'SU2' else (charge, charge)
         sign = -1 if charge == odd else 1
-        assert np.linalg.norm(b[key] - sign * a[key]) < tol
+        assert np.linalg.norm(b.config.backend.to_numpy(b[key] - sign * a[key])) < tol
     assert yastn.norm(b.swap_gate(axes=(0, 1)) - a) < tol
 
     config_b = yastn.make_config(sym=sym, fermionic=False, **config_kwargs)
@@ -116,7 +116,8 @@ def test_swap_gate_SU2xU1_particle_parity_and_groups(config_kwargs):
     for key in a.get_blocks_charge():
         q0, q1 = key[:2], key[2:4]
         sign = -1 if (q0[1] * q1[1]) % 2 else 1
-        assert np.allclose(swapped[key], sign * a[key])
+        assert np.allclose(swapped.config.backend.to_numpy(swapped[key]),
+                           sign * a.config.backend.to_numpy(a[key]))
 
     grouped = a.swap_gate(axes=((0, 1), (2, 3)))
     elementary = a.swap_gate(axes=(0, 2, 0, 3, 1, 2, 1, 3))

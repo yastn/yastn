@@ -52,7 +52,7 @@ def test_mask_preserves_fusion_channels(config_kwargs, sym, axis):
     second = mask.bitwise_not().apply_mask(a, axes=axis)
     # Partitioning multiplicities must preserve every independent singlet
     # channel, even when their external charge labels are identical.
-    assert first.norm() ** 2 + second.norm() ** 2 == pytest.approx(a.norm() ** 2, abs=tol)
+    assert first.norm().item() ** 2 + second.norm().item() ** 2 == pytest.approx(a.norm().item() ** 2, abs=tol)
     restored = yastn.block({(0,): first, (1,): second}, common_legs=tuple(i for i in range(4) if i != axis))
     assert (restored.drop_leg_history(axes=axis) - a).norm() < tol
 

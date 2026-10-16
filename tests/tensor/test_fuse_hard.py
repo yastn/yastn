@@ -56,7 +56,7 @@ def test_fuse_hard_SU2xU1_rebuilds_u1_channel(config_kwargs):
     assert get_blocks(config.sym, a.struct).channels == ((0, 4, 1, 2), (2, 4, 1, 2))
     fused = a.fuse_legs(axes=((1, 2), 0, 3), mode='hard')
     assert fused.get_legs(0).t == ((0, 0), (2, 0))
-    assert np.isclose(fused.norm(), a.norm(), atol=1e-13)
+    assert np.isclose(float(fused.norm()), float(a.norm()), atol=1e-13)
 
 
 def _run_fuse_hard_abelian_api_order(config_kwargs, sym):

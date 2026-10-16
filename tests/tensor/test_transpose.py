@@ -30,7 +30,7 @@ def _run_transpose_first_three(config_kwargs, sym):
         inverse = tuple(np.argsort(order))
         moved = a.transpose(order).consume_transpose()
         restored = moved.transpose(inverse).consume_transpose()
-        assert np.isclose(moved.norm(), a.norm(), atol=1e-13)
+        assert np.isclose(moved.norm().item(), a.norm().item(), atol=1e-13)
         assert (restored - a).norm() < tol
 
 

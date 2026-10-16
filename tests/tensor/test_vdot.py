@@ -22,7 +22,7 @@ from ._nonabelian_utils import four_leg_tensor
 def _run_vdot_nonabelian(config_kwargs, sym):
     config = yastn.make_config(sym=sym, **config_kwargs)
     a = four_leg_tensor(config)
-    assert np.isclose(yastn.vdot(a, a).real, a.norm() ** 2)
+    assert np.isclose(yastn.vdot(a, a).item().real, a.norm().item() ** 2)
 
 
 def test_vdot_SU2(config_kwargs):

@@ -23,7 +23,7 @@ def test_multiplet_operators(config_kwargs, sym, factory):
         # Multiplicity one is not an Abelian scalar: closing the identity on
         # this irrep sums over all magnetic states, giving 2j+1, not one.
         identity = yastn.eye(op.config, legs=(leg.conj(), leg), isdiag=False)
-        assert identity.trace(axes=(0, 1)).to_number() == pytest.approx(charge[0] + 1)
+        assert identity.trace(axes=(0, 1)).to_number().item() == pytest.approx(charge[0] + 1)
     A, B = _multiplet_pair(cp, c)
     assert (yastn.tensordot(A, B, axes=((1, 2), (0, 2))) - ops.n_total()).norm() < 3e-12
     assert (cp.conj().transpose((1, 0, 2)) - c).norm() < 2e-12

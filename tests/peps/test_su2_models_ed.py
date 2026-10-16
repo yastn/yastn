@@ -105,16 +105,16 @@ def test_fermionic_SU2_thermal_against_ED(config_kwargs, sym, model, step):
             ((ops.S(), ops.S()), spin)):
         expected = np.trace(rho @ observable[np.ix_(keep, keep)])
         for value in env.measure_nn(*pair).values():
-            assert value == pytest.approx(expected, abs=2e-11)
+            assert value.item() == pytest.approx(expected, abs=2e-11)
     for site, value in env.measure_1site(ops.n_total()).items():
         number = n[2 * site[1]] + n[2 * site[1] + 1]
-        assert value == pytest.approx(np.trace(rho @ number[np.ix_(keep, keep)]), abs=2e-11)
+        assert value.item() == pytest.approx(np.trace(rho @ number[np.ix_(keep, keep)]), abs=2e-11)
     for value in env.measure_nn(ops.n_total(), ops.n_total()).values():
         number_pair = (n[0] + n[1]) @ (n[2] + n[3])
-        assert value == pytest.approx(np.trace(rho @ number_pair[np.ix_(keep, keep)]), abs=2e-11)
+        assert value.item() == pytest.approx(np.trace(rho @ number_pair[np.ix_(keep, keep)]), abs=2e-11)
     if model == 'Hubbard':
         for value in env.measure_1site(ops.d()).values():
-            assert value == pytest.approx(np.trace(rho @ n[0] @ n[1]), abs=2e-11)
+            assert value.item() == pytest.approx(np.trace(rho @ n[0] @ n[1]), abs=2e-11)
 
 
 @pytest.mark.parametrize('step', [0.17, 0.17j])
@@ -138,4 +138,4 @@ def test_heisenberg_SU2_thermal_energy(config_kwargs, step, spin):
     assert np.allclose(actual, propagator, atol=2e-12, rtol=0)
     exact = propagator @ propagator.conj().T
     expected = np.trace(exact @ H) / np.trace(exact)
-    assert energy == pytest.approx(expected, abs=2e-11)
+    assert energy.item() == pytest.approx(expected, abs=2e-11)

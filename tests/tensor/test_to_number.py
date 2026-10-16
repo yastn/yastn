@@ -21,7 +21,7 @@ from ._nonabelian_utils import four_leg_tensor
 def _run_to_number_nonabelian(config_kwargs, sym):
     a = four_leg_tensor(yastn.make_config(sym=sym, **config_kwargs))
     scalar = yastn.vdot(a, a)
-    assert scalar.item() == pytest.approx(a.norm() ** 2)
+    assert scalar.item() == pytest.approx(a.norm().item() ** 2)
 
 
 def test_to_number_SU2(config_kwargs):

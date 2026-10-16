@@ -83,7 +83,7 @@ def _normalized_corner_spectra(env):
     return {
         key: {
             charge: np.sort(np.abs(np.asarray(
-                value[charge + charge]).reshape(-1)))[::-1]
+                value.config.backend.to_numpy(value[charge + charge])).reshape(-1)))[::-1]
             for charge in value.get_legs(0).t
         }
         for key, value in spectra.items()

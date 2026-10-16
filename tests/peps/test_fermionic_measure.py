@@ -389,4 +389,4 @@ def test_measure_2site_u1_ccdag(config_kwargs, direction):
         values = env.measure_2site(ops.c(), ops.cp(), pairs=pairs, dirn=direction, opts_svd=opts_svd)
         assert set(values) == set(expected)
         for pair, value in values.items():
-            assert value == pytest.approx(expected[pair], abs=3e-12), (direction, pair)
+            assert value.item() == pytest.approx(expected[pair], abs=3e-12), (direction, pair)

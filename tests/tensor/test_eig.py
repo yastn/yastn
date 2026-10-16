@@ -28,8 +28,8 @@ torch_test = pytest.mark.skipif("'torch' not in config.getoption('--backend')",
 def _assert_same_eigenvalues(left, right):
     assert left.get_blocks_charge() == right.get_blocks_charge()
     for charge in left.get_blocks_charge():
-        assert np.allclose(np.sort_complex(left[charge]),
-                           np.sort_complex(right[charge]), atol=tol)
+        assert np.allclose(np.sort_complex(left.config.backend.to_numpy(left[charge])),
+                           np.sort_complex(right.config.backend.to_numpy(right[charge])), atol=tol)
 
 
 def _run_eig_nonabelian(config_kwargs, sym):

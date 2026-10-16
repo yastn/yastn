@@ -1,8 +1,14 @@
+import os
+
 import pytest
 
 
 def pytest_addoption(parser):
     parser.addoption("--backend", help='backend', default='np', choices=['np','torch','torch_cutensor'], action='store')
+    parser.addoption("--strict-host-conversion", action='store_true', default=False,
+                     help="fail every implicit tensor->numpy conversion, as cuda does; catches tests "
+                          "that only pass on cpu (see _install_strict_host_conversion, or set "
+                          "YASTN_STRICT_HOST_CONVERSION=1)")
     parser.addoption("--device", help='cpu or cuda', default='cpu', action='store')
     parser.addoption("--tensordot_policy", choices=['fuse_to_matrix', 'fuse_contracted', 'no_fusion'], default='fuse_to_matrix', action='store')
     parser.addoption("--lazy_threshold", type=float, default=0.5, action='store')
@@ -22,12 +28,42 @@ def config_kwargs(request):
             'lazy_threshold': request.config.getoption("--lazy_threshold")}
 
 
+def _install_strict_host_conversion():
+    """Make implicit tensor->numpy conversions fail on cpu exactly as they do on cuda.
+
+    ``np.isclose(a.norm(), ...)`` and friends work for a cpu torch tensor but raise
+    ``TypeError: can't convert cuda:0 device type tensor to numpy`` for a cuda one, so a
+    test written that way breaks only in GPU runs -- which CI does not have.  Patching
+    ``torch.Tensor.__array__``, the hook numpy uses for implicit conversion, reproduces
+    the cuda behaviour on cpu and lets CI catch this class of mistakes.  Explicit
+    conversion (``.to_numpy()``, ``.item()``, ``backend.to_numpy``) keeps working.
+    """
+    import traceback
+
+    import torch
+
+    def __array__(self, dtype=None):
+        caller = ''
+        for frame in reversed(traceback.extract_stack()[:-1]):
+            if any(part in frame.filename for part in ('/numpy/', '/torch/', '/_pytest/')):
+                continue
+            caller = f' (implicitly converted at {frame.filename}:{frame.lineno})'
+            break
+        raise TypeError(
+            "implicit conversion of a backend tensor to numpy; this raises on cuda. "
+            "Use .to_numpy() on host tensors, or .item() for scalars." + caller)
+
+    torch.Tensor.__array__ = __array__
+
+
 def pytest_configure(config):
     config.addinivalue_line(
         "markers",
         "exclude_fusion_scatter_tiled: skip the 'tiled' fuse-scatter path variant for this test "
         "(e.g. gradcheck tests, which rerun forward O(numel) times so a small tile chunk is "
         "pathologically slow).")
+    if config.getoption("--strict-host-conversion") or os.environ.get("YASTN_STRICT_HOST_CONVERSION"):
+        _install_strict_host_conversion()
 
 
 @pytest.fixture(params=['scatter', 'tiled', 'hybrid', 'loop'], ids=['scatter', 'tiled', 'hybrid', 'loop'])

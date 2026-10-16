@@ -25,7 +25,7 @@ def _run_to_numpy_nonabelian(config_kwargs, sym):
     a = matrix_tensor(yastn.make_config(sym=sym, **config_kwargs))
     dense = a.to_numpy()
     assert dense.shape == a.get_shape()
-    assert np.allclose(dense, np.asarray(a.to_dense()))
+    assert np.allclose(dense, a.config.backend.to_numpy(a.to_dense()))
 
 
 def test_to_numpy_SU2(config_kwargs):

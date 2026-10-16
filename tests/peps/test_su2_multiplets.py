@@ -101,10 +101,10 @@ def test_multiplet_mps_singlet(config_kwargs, spin):
     casimir = spin * (spin + 1)
     pairs = mps.measure_2site(psi, ops.S(), ops.S(), psi, bonds='a')
     for (i, j), value in pairs.items():
-        assert value / norm == pytest.approx(casimir if i == j else -casimir, abs=2e-12)
-    assert mps.measure_2site(psi, {1: ops.S()}, {0: ops.S()}, psi, bonds=(1, 0)) / norm == pytest.approx(-casimir)
+        assert (value / norm).item() == pytest.approx(casimir if i == j else -casimir, abs=2e-12)
+    assert (mps.measure_2site(psi, {1: ops.S()}, {0: ops.S()}, psi, bonds=(1, 0)) / norm).item() == pytest.approx(-casimir)
     value = mps.measure_nsite(psi, *(ops.S(),) * 4, ket=psi, sites=(0, 1, 1, 0))
-    assert value / norm == pytest.approx(casimir ** 2, abs=2e-12)
+    assert (value / norm).item() == pytest.approx(casimir ** 2, abs=2e-12)
 
 
 @pytest.mark.parametrize('sym', ['SU2', 'SU2xU1'])
@@ -129,9 +129,9 @@ def test_multiplet_boundary_and_bp(config_kwargs, sym, dims):
     bond = next(iter(psi.bonds()))
     for pair, matrix in cases:
         expected = np.trace(rho @ matrix)
-        assert boundary.measure_nn(*pair)[bond] == pytest.approx(expected, abs=3e-12)
-        assert boundary.measure_nn({bond: {('pair',): pair}})[bond + ('pair',)] == pytest.approx(expected, abs=3e-12)
-        assert bp.measure_nn(*pair)[bond] == pytest.approx(expected, abs=3e-12)
+        assert boundary.measure_nn(*pair)[bond].item() == pytest.approx(expected, abs=3e-12)
+        assert boundary.measure_nn({bond: {('pair',): pair}})[bond + ('pair',)].item() == pytest.approx(expected, abs=3e-12)
+        assert bp.measure_nn(*pair)[bond].item() == pytest.approx(expected, abs=3e-12)
     for site in sites:
         assert (psi[site] - original[site]).norm() == 0
 
@@ -166,15 +166,15 @@ def test_multiplet_measure_pair(config_kwargs, monkeypatch, sym, direction):
             with monkeypatch.context() as guard:
                 guard.setattr(mps, 'zipper', _forbid_window_contraction)
                 guard.setattr(mps, 'compression_', _forbid_window_contraction)
-                assert env.measure_line(*pair, sites=pair_sites) == pytest.approx(expected, abs=3e-11)
-                assert env.measure_nsite_exact(*pair, sites=pair_sites) == pytest.approx(expected, abs=3e-11)
-            assert env.measure_nsite(*pair, sites=pair_sites) == pytest.approx(expected, abs=3e-11)
+                assert env.measure_line(*pair, sites=pair_sites).item() == pytest.approx(expected, abs=3e-11)
+                assert env.measure_nsite_exact(*pair, sites=pair_sites).item() == pytest.approx(expected, abs=3e-11)
+            assert env.measure_nsite(*pair, sites=pair_sites).item() == pytest.approx(expected, abs=3e-11)
             if (i, j) == (0, 1):
-                assert env.measure_nn(*pair, bond=pair_sites) == pytest.approx(expected, abs=3e-11)
-                assert measure_rdm_nn(sites[0], direction, psi, env, pair) == pytest.approx(expected, abs=3e-11)
+                assert env.measure_nn(*pair, bond=pair_sites).item() == pytest.approx(expected, abs=3e-11)
+                assert measure_rdm_nn(sites[0], direction, psi, env, pair).item() == pytest.approx(expected, abs=3e-11)
         result = env.measure_2site(ops.cp_spinor(), ops.c_spinor(), pairs=[pair_sites])
         expected = np.trace(rho @ sum(c[i][s].T @ c[j][s] for s in (0, 1)))
-        assert result[pair_sites] == pytest.approx(expected, abs=3e-11)
+        assert result[pair_sites].item() == pytest.approx(expected, abs=3e-11)
 
 
 @pytest.mark.parametrize('sym', ['SU2', 'SU2xU1'])
@@ -199,26 +199,26 @@ def test_multiplet_turn_and_multiple_pairs(config_kwargs, monkeypatch, sym):
     for pair, matrix in cases:
         expected = np.trace(rho @ matrix)
         pair_sites = (sites[0], sites[3])
-        assert env.measure_nsite(*pair, sites=pair_sites, opts_svd={'D_total': 256, 'tol': 1e-13}) == pytest.approx(expected, abs=4e-11)
+        assert env.measure_nsite(*pair, sites=pair_sites, opts_svd={'D_total': 256, 'tol': 1e-13}).item() == pytest.approx(expected, abs=4e-11)
         with monkeypatch.context() as guard:
             guard.setattr(mps, 'zipper', _forbid_window_contraction)
             guard.setattr(mps, 'compression_', _forbid_window_contraction)
-            assert env.measure_nsite_exact(*pair, sites=pair_sites) == pytest.approx(expected, abs=4e-11)
-            assert env.measure_2x2(*pair, sites=pair_sites) == pytest.approx(expected, abs=4e-11)
+            assert env.measure_nsite_exact(*pair, sites=pair_sites).item() == pytest.approx(expected, abs=4e-11)
+            assert env.measure_2x2(*pair, sites=pair_sites).item() == pytest.approx(expected, abs=4e-11)
         result = env.measure_2site(*pair, pairs=[pair_sites], opts_svd={'D_total': 256, 'tol': 1e-13})
-        assert result[pair_sites] == pytest.approx(expected, abs=4e-11)
+        assert result[pair_sites].item() == pytest.approx(expected, abs=4e-11)
     # A spinor pair times a same-site spinor pair is hopping times density.
     operators = (ops.cp_spinor(), ops.c_spinor(), ops.cp_spinor(), ops.c_spinor())
     product = sum(c[0][s].T @ c[3][s] for s in (0, 1)) @ sum(x.T @ x for x in c[1])
     actual = env.measure_nsite(*operators, sites=(sites[0], sites[3], sites[1], sites[1]),
                               opts_svd={'D_total': 256, 'tol': 1e-13})
-    assert actual == pytest.approx(np.trace(rho @ product), abs=4e-11)
+    assert actual.item() == pytest.approx(np.trace(rho @ product), abs=4e-11)
     with monkeypatch.context() as guard:
         guard.setattr(mps, 'zipper', _forbid_window_contraction)
         guard.setattr(mps, 'compression_', _forbid_window_contraction)
         for measure in (env.measure_2x2, env.measure_nsite_exact):
             actual = measure(*operators, sites=(sites[0], sites[3], sites[1], sites[1]))
-            assert actual == pytest.approx(np.trace(rho @ product), abs=4e-11)
+            assert actual.item() == pytest.approx(np.trace(rho @ product), abs=4e-11)
 
     # Products retain operator order where the two pairs share a site.
     for indices in ((0, 1, 1, 3), (0, 3, 3, 0), (1, 1, 0, 3)):
@@ -229,7 +229,7 @@ def test_multiplet_turn_and_multiple_pairs(config_kwargs, monkeypatch, sym):
             guard.setattr(mps, 'generate_mpo', _forbid_window_contraction)
             for measure in (env.measure_2x2, env.measure_nsite_exact):
                 actual = measure(*operators, sites=tuple(sites[n] for n in indices))
-                assert actual == pytest.approx(np.trace(rho @ product), abs=4e-11)
+                assert actual.item() == pytest.approx(np.trace(rho @ product), abs=4e-11)
 
     # The row/column sweeps must share each open-source boundary between targets.
     from yastn.tn.fpeps.envs import _env_window
@@ -260,7 +260,7 @@ def test_multiplet_turn_and_multiple_pairs(config_kwargs, monkeypatch, sym):
                             matrix = sum(c[i][s].T @ c[j][s] for s in (0, 1))
                         else:
                             matrix = sum(c[i][s] @ c[j][s].T for s in (0, 1))
-                        assert result[sites[i], sites[j]] == pytest.approx(np.trace(rho @ matrix), abs=4e-11), (type(peps_env).__name__, direction, i, j, pair[0] is cp, pair[0] is S)
+                        assert result[sites[i], sites[j]].item() == pytest.approx(np.trace(rho @ matrix), abs=4e-11), (type(peps_env).__name__, direction, i, j, pair[0] is cp, pair[0] is S)
             # Labels and subwindows with a nonzero origin use the native indexing.
             selected = [(sites[1], sites[3]), (sites[3], sites[1])]
             labelled = peps_env.measure_2site([cp, 2 * cp], annihilate, pairs=selected, dirn=direction,
@@ -288,7 +288,7 @@ def test_multiplet_mps_pair_sweep(config_kwargs, monkeypatch, sym):
     psi = psi + .3 * H
     matrix_state = _matrix(psi, ops.I())
     rho = matrix_state @ matrix_state.conj().T
-    assert mps.vdot(psi, psi) == pytest.approx(np.trace(rho), abs=3e-12)
+    assert mps.vdot(psi, psi).item() == pytest.approx(np.trace(rho), abs=3e-12)
     cu, cd, spin = _local('Hubbard')
     c = [[_embed(x, i, 3, True) for x in (cu, cd)] for i in range(3)]
     from yastn.tn.mps import _measure
@@ -303,7 +303,7 @@ def test_multiplet_mps_pair_sweep(config_kwargs, monkeypatch, sym):
                 matrix = sum(c[i][s].T @ c[j][s] for s in (0, 1))
             else:
                 matrix = sum(c[i][s] @ c[j][s].T for s in (0, 1))
-            assert value == pytest.approx(np.trace(rho @ matrix), abs=3e-12), (i, j, pair[0] is cp, pair[0] is S)
+            assert value.item() == pytest.approx(np.trace(rho @ matrix), abs=3e-12), (i, j, pair[0] is cp, pair[0] is S)
 
     # Site-dependent values must share the sweep without reusing a previous
     # site's endpoint. Include complex coefficients and reversed/site-local
@@ -313,7 +313,7 @@ def test_multiplet_mps_pair_sweep(config_kwargs, monkeypatch, sym):
     result = mps.measure_2site(psi, O, P, psi, bonds='a')
     for (i, j), value in result.items():
         matrix = (i + 1j) * (2 - j) * sum(c[i][s].T @ c[j][s] for s in (0, 1))
-        assert value == pytest.approx(np.trace(rho @ matrix), abs=5e-12)
+        assert value.item() == pytest.approx(np.trace(rho @ matrix), abs=5e-12)
     # Distinct irreps (and rank-two scalars) can coexist in sparse dictionaries
     # provided the requested bonds form compatible pairs.
     O = {0: cp, 1: S, 2: ops.n_total()}
@@ -324,7 +324,7 @@ def test_multiplet_mps_pair_sweep(config_kwargs, monkeypatch, sym):
                 (1, 0): sum(_embed(s, 1, 3) @ _embed(s, 0, 3) for s in spin),
                 (2, 2): density @ density}
     for bond, value in result.items():
-        assert value == pytest.approx(np.trace(rho @ matrices[bond]), abs=5e-12)
+        assert value.item() == pytest.approx(np.trace(rho @ matrices[bond]), abs=5e-12)
     with pytest.raises(yastn.YastnError, match='compatible pairs'):
         mps.measure_2site(psi, cp, ops.n_total(), psi, bonds=(0, 1))
 
@@ -430,9 +430,9 @@ def test_measure_multiple_multiplets_peps(config_kwargs, monkeypatch, sym, dims)
             guard.setattr(mps, 'zipper', _forbid_window_contraction)
             guard.setattr(mps, 'compression_', _forbid_window_contraction)
             for measure in (env.measure_nsite_exact, local_measure):
-                assert measure(*operators, sites=at) == pytest.approx(expected, abs=5e-11), (name, measure.__name__)
+                assert measure(*operators, sites=at).item() == pytest.approx(expected, abs=5e-11), (name, measure.__name__)
         actual = env.measure_nsite(*operators, sites=at, opts_svd=opts_svd)
-        assert actual == pytest.approx(expected, abs=5e-11), name
+        assert actual.item() == pytest.approx(expected, abs=5e-11), name
     assert any(abs(np.trace(rho @ matrix)) > 1e-4 for _, _, _, matrix in cases)
     for site in sites:
         assert (psi[site] - original[site]).norm() == 0
@@ -451,13 +451,13 @@ def test_measure_multiple_multiplets_mps(config_kwargs, sym):
     dense = np.eye(4 ** N) + .3 * sum(c[i][a].T @ c[j][a] for i, j in bonds for a in (0, 1))
     rho = dense @ dense.T
     norm = mps.vdot(psi, psi)
-    assert norm == pytest.approx(np.trace(rho), abs=3e-12)
+    assert norm.item() == pytest.approx(np.trace(rho), abs=3e-12)
     terms, expected_sum = [], np.zeros_like(dense, dtype=complex)
     cases = _multiple_multiplet_cases(ops, 'Hubbard', N)
     for k, (name, operators, indices, matrix) in enumerate(cases):
         expected = np.trace(rho @ matrix) / np.trace(rho)
         actual = mps.measure_nsite(psi, *operators, ket=psi, sites=indices) / norm
-        assert actual == pytest.approx(expected, abs=5e-12), name
+        assert actual.item() == pytest.approx(expected, abs=5e-12), name
         # A multi-pair term, a sum of such terms, and a scalar-only term all
         # enter generate_mpo through the same public interface.
         amplitude = (k + 1) * .1 + .03j

@@ -136,8 +136,10 @@ def test_si_refinement_resizes_recycled_bases(config_kwargs, monkeypatch):
     assert recycle_calls == 2
     assert X.get_legs(1).tD == {(0,): 6}
     assert Y.get_legs(0).tD == {(0,): 6}
-    assert np.allclose(X0_even, X[(0, 0)][:, :3])
-    assert np.allclose(Yh0_even, Y.H[(0, 0)][:, :3])
+    assert np.allclose(config.backend.to_numpy(X0_even),
+                       config.backend.to_numpy(X[(0, 0)][:, :3]))
+    assert np.allclose(config.backend.to_numpy(Yh0_even),
+                       config.backend.to_numpy(Y.H[(0, 0)][:, :3]))
 
 
 def test_si_cwo_pipeline_clamps_rank_to_corner_capacity(config_kwargs,

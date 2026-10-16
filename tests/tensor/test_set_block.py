@@ -25,7 +25,7 @@ def _run_set_block_nonabelian(config_kwargs, sym):
     a = matrix_tensor(yastn.make_config(sym=sym, **config_kwargs))
     charge = a.get_blocks_charge()[0]
     a.set_block(ts=charge, val='zeros')
-    assert np.linalg.norm(a[charge]) == 0
+    assert np.linalg.norm(a.config.backend.to_numpy(a[charge])) == 0
     assert a.is_consistent()
 
 
