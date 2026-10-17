@@ -4,6 +4,12 @@ import yastn
 from yastn.tn import fpeps
 from yastn.tn.fpeps._evolution import symmetrized_svd
 
+# ~2 minutes locally because of the metric_chunk_size=1 cases; CI never passes --long_tests,
+# so test-basic stays fast. Run with: pytest tests/peps/test_ntu_metric_streaming.py --long_tests
+pytestmark = pytest.mark.skipif(
+    "not config.getoption('long_tests')",
+    reason="long duration tests are skipped; pass --long_tests to run them")
+
 
 def _state(config_kwargs, sym, prepare=False):
     if sym in ('U1', 'SU2xU1'):
